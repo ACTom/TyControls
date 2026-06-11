@@ -223,7 +223,70 @@ begin
 end;
 
 procedure TTyPainter.DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
+var
+  px: TBGRAPixel;
+  th: Single;
+  pad: Integer;
+  l, t, r, b, cx, cy, w, h, m: Single;
+  pts: array of TPointF;
 begin
+  if FBmp = nil then
+    Exit;
+  px := TyColorToBGRA(AColor);
+  th := Scale(AThicknessLogical);
+  if th < 1 then
+    th := 1;
+  pad := Scale(4);
+  l := ARect.Left + pad;
+  t := ARect.Top + pad;
+  r := ARect.Right - 1 - pad;
+  b := ARect.Bottom - 1 - pad;
+  cx := (l + r) / 2;
+  cy := (t + b) / 2;
+  w := r - l;
+  h := b - t;
+  m := w;
+  if h < m then
+    m := h;
+  case AGlyph of
+    tgClose:
+      begin
+        FBmp.DrawLineAntialias(l, t, r, b, px, th, True);
+        FBmp.DrawLineAntialias(r, t, l, b, px, th, True);
+      end;
+    tgMinimize:
+      FBmp.DrawLineAntialias(l, cy, r, cy, px, th, True);
+    tgMaximize:
+      FBmp.RectangleAntialias(l, t, r, b, px, th);
+    tgRestore:
+      begin
+        FBmp.RectangleAntialias(l, t + h * 0.25, r - w * 0.25, b, px, th);
+        FBmp.DrawPolyLineAntialias([PointF(l + w * 0.25, t + h * 0.25),
+          PointF(l + w * 0.25, t), PointF(r, t), PointF(r, b - h * 0.25),
+          PointF(r - w * 0.25, b - h * 0.25)], px, th);
+      end;
+    tgCheck:
+      FBmp.DrawPolyLineAntialias([PointF(l, cy), PointF(l + w * 0.35, b),
+        PointF(r, t)], px, th);
+    tgRadioDot:
+      FBmp.FillEllipseAntialias(cx, cy, m * 0.3, m * 0.3, px);
+    tgChevronDown:
+      FBmp.DrawPolyLineAntialias([PointF(l, t + h * 0.3),
+        PointF(cx, b - h * 0.2), PointF(r, t + h * 0.3)], px, th);
+    tgArrowUp:
+      begin
+        FBmp.DrawLineAntialias(cx, b, cx, t, px, th, True);
+        FBmp.DrawPolyLineAntialias([PointF(l + w * 0.25, t + h * 0.35),
+          PointF(cx, t), PointF(r - w * 0.25, t + h * 0.35)], px, th);
+      end;
+    tgArrowDown:
+      begin
+        FBmp.DrawLineAntialias(cx, t, cx, b, px, th, True);
+        FBmp.DrawPolyLineAntialias([PointF(l + w * 0.25, b - h * 0.35),
+          PointF(cx, b), PointF(r - w * 0.25, b - h * 0.35)], px, th);
+      end;
+  end;
+  pts := nil;
 end;
 
 procedure TTyPainter.NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);

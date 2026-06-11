@@ -28,6 +28,7 @@ type
     procedure TestBorderPixelColor;
     procedure TestDropShadowAlpha;
     procedure TestDrawTextRastersPixels;
+    procedure TestDrawGlyphAllKinds;
   end;
 
 implementation
@@ -176,6 +177,29 @@ begin
         Inc(hits);
     end;
   AssertTrue('glyph pixels rendered', hits > 0);
+end;
+
+procedure TPainterTest.TestDrawGlyphAllKinds;
+var
+  g: TTyGlyphKind;
+  x, y, hits: Integer;
+  px: TBGRAPixel;
+begin
+  for g := Low(TTyGlyphKind) to High(TTyGlyphKind) do
+  begin
+    MakePainter(24, 24, 96);
+    FPainter.DrawGlyph(Rect(0, 0, 24, 24), g, TyRGBA(0, 0, 0, 255), 2);
+    hits := 0;
+    for y := 0 to 23 do
+      for x := 0 to 23 do
+      begin
+        px := PixelAt(x, y);
+        if px.alpha > 100 then
+          Inc(hits);
+      end;
+    AssertTrue('glyph ' + IntToStr(Ord(g)) + ' painted', hits > 0);
+    FreePainter;
+  end;
 end;
 
 initialization
