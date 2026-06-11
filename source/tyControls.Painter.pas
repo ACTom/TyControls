@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Graphics, LCLType, BGRABitmap, BGRABitmapTypes,
-  tyControls.Types;
+  BGRAGradientScanner, tyControls.Types;
 
 type
   TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck,
@@ -18,6 +18,7 @@ type
     FCanvas: TCanvas;
     FRect: TRect;
     FPPI: Integer;
+    procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
   public
     procedure BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure EndPaint;
@@ -67,10 +68,30 @@ begin
   Result := MulDiv(ALogical, FPPI, 96);
 end;
 
+procedure TTyPainter.GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
+var
+  rad, dx, dy, cx, cy, hw, hh, t: Single;
+begin
+  rad := AAngleDeg * Pi / 180;
+  dx := Cos(rad);
+  dy := Sin(rad);
+  cx := (ARect.Left + ARect.Right) / 2;
+  cy := (ARect.Top + ARect.Bottom) / 2;
+  hw := (ARect.Right - ARect.Left) / 2;
+  hh := (ARect.Bottom - ARect.Top) / 2;
+  t := Abs(dx) * hw + Abs(dy) * hh;
+  P1.x := cx - dx * t;
+  P1.y := cy - dy * t;
+  P2.x := cx + dx * t;
+  P2.y := cy + dy * t;
+end;
+
 procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer);
 var
   r: Integer;
   px: TBGRAPixel;
+  p1f, p2f: TPointF;
+  grad: TBGRAGradientScanner;
 begin
   if FBmp = nil then
     Exit;
@@ -85,7 +106,19 @@ begin
           FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, px, []);
       end;
     tfkNone: ;
-    tfkLinearGradient: ;
+    tfkLinearGradient:
+      begin
+        GradientEndpoints(ARect, AFill.GradAngleDeg, p1f, p2f);
+        grad := TBGRAGradientScanner.Create(TyColorToBGRA(AFill.GradFrom), TyColorToBGRA(AFill.GradTo), gtLinear, p1f, p2f);
+        try
+          if r <= 0 then
+            FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, grad, dmDrawWithTransparency, daNearestNeighbor)
+          else
+            FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, grad, [rrDefault]);
+        finally
+          grad.Free;
+        end;
+      end;
     tfkNineSlice: ;
   end;
 end;

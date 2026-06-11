@@ -24,6 +24,7 @@ type
     procedure TestColorToBGRATransparent;
     procedure TestSolidFillCenter;
     procedure TestSolidFillCornerTransparent;
+    procedure TestLinearGradientVertical;
   end;
 
 implementation
@@ -106,6 +107,25 @@ begin
   FPainter.FillBackground(Rect(0, 0, 40, 40), fill, 16);
   px := PixelAt(0, 0);
   AssertEquals('corner alpha transparent', 0, px.alpha);
+end;
+
+procedure TPainterTest.TestLinearGradientVertical;
+var
+  fill: TTyFill;
+  top, bottom: TBGRAPixel;
+begin
+  MakePainter(20, 40, 96);
+  FillChar(fill, SizeOf(fill), 0);
+  fill.Kind := tfkLinearGradient;
+  fill.GradFrom := TyRGBA(0, 0, 0, 255);
+  fill.GradTo := TyRGBA(255, 255, 255, 255);
+  fill.GradAngleDeg := 90;
+  FPainter.FillBackground(Rect(0, 0, 20, 40), fill, 0);
+  top := PixelAt(10, 1);
+  bottom := PixelAt(10, 38);
+  AssertTrue('top dark', top.red < 60);
+  AssertTrue('bottom light', bottom.red > 195);
+  AssertEquals('top opaque', 255, top.alpha);
 end;
 
 initialization
