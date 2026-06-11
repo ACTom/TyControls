@@ -27,6 +27,7 @@ type
     procedure TestLinearGradientVertical;
     procedure TestBorderPixelColor;
     procedure TestDropShadowAlpha;
+    procedure TestDrawTextRastersPixels;
   end;
 
 implementation
@@ -156,6 +157,25 @@ begin
   px := PixelAt(44, 44);
   AssertTrue('shadow alpha present', px.alpha > 0);
   AssertTrue('shadow alpha partial', px.alpha < 200);
+end;
+
+procedure TPainterTest.TestDrawTextRastersPixels;
+var
+  x, y, hits: Integer;
+  px: TBGRAPixel;
+begin
+  MakePainter(120, 40, 96);
+  FPainter.DrawText(Rect(0, 0, 120, 40), 'Ty', 'DejaVu Sans', 14, 700,
+    TyRGBA(0, 0, 0, 255), taLeftJustify, tlCenter, False);
+  hits := 0;
+  for y := 0 to 39 do
+    for x := 0 to 119 do
+    begin
+      px := PixelAt(x, y);
+      if px.alpha > 100 then
+        Inc(hits);
+    end;
+  AssertTrue('glyph pixels rendered', hits > 0);
 end;
 
 initialization

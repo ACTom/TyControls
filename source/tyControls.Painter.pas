@@ -184,7 +184,42 @@ begin
 end;
 
 procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean);
+var
+  style: TTextStyle;
+  s: string;
+  sz: TSize;
+  px: TBGRAPixel;
+  fh: Integer;
 begin
+  if FBmp = nil then
+    Exit;
+  px := TyColorToBGRA(AColor);
+  FBmp.FontName := AFontName;
+  fh := Scale(Round(AFontSizeLogical * 96 / 72));
+  FBmp.FontHeight := fh;
+  FBmp.FontQuality := fqFineAntialiasing;
+  if AWeight >= 600 then
+    FBmp.FontStyle := [fsBold]
+  else
+    FBmp.FontStyle := [];
+  s := AText;
+  if AEllipsis then
+  begin
+    sz := FBmp.TextSize(s);
+    while (Length(s) > 1) and (sz.cx > (ARect.Right - ARect.Left)) do
+    begin
+      Delete(s, Length(s), 1);
+      sz := FBmp.TextSize(s + '...');
+    end;
+    if s <> AText then
+      s := s + '...';
+  end;
+  FillChar(style, SizeOf(style), 0);
+  style.Alignment := AHAlign;
+  style.Layout := AVAlign;
+  style.SingleLine := True;
+  style.Clipping := True;
+  FBmp.TextRect(ARect, ARect.Left, ARect.Top, s, style, px);
 end;
 
 procedure TTyPainter.DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
