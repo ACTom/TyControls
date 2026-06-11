@@ -149,7 +149,38 @@ begin
 end;
 
 procedure TTyPainter.DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
+var
+  r, blur, ox, oy: Integer;
+  shadow, blurred: TBGRABitmap;
+  px: TBGRAPixel;
 begin
+  if FBmp = nil then
+    Exit;
+  r := Scale(ARadiusLogical);
+  blur := Scale(ABlurLogical);
+  ox := Scale(AOffsetLogical.X);
+  oy := Scale(AOffsetLogical.Y);
+  px := TyColorToBGRA(AColor);
+  shadow := TBGRABitmap.Create(FBmp.Width, FBmp.Height, BGRAPixelTransparent);
+  try
+    if r <= 0 then
+      shadow.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, px, dmSet)
+    else
+      shadow.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, px, [rrDefault]);
+    if blur > 0 then
+    begin
+      blurred := shadow.FilterBlurRadial(blur, rbFast) as TBGRABitmap;
+      try
+        FBmp.PutImage(ox, oy, blurred, dmDrawWithTransparency);
+      finally
+        blurred.Free;
+      end;
+    end
+    else
+      FBmp.PutImage(ox, oy, shadow, dmDrawWithTransparency);
+  finally
+    shadow.Free;
+  end;
 end;
 
 procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean);

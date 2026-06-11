@@ -26,6 +26,7 @@ type
     procedure TestSolidFillCornerTransparent;
     procedure TestLinearGradientVertical;
     procedure TestBorderPixelColor;
+    procedure TestDropShadowAlpha;
   end;
 
 implementation
@@ -144,6 +145,17 @@ begin
   AssertTrue('border blue dominant', px.blue > 200);
   AssertTrue('border green low', px.green < 80);
   AssertEquals('border opaque', 255, px.alpha);
+end;
+
+procedure TPainterTest.TestDropShadowAlpha;
+var
+  px: TBGRAPixel;
+begin
+  MakePainter(60, 60, 96);
+  FPainter.DropShadow(Rect(10, 10, 40, 40), 4, TyRGBA(0, 0, 0, 200), 6, Point(4, 4));
+  px := PixelAt(44, 44);
+  AssertTrue('shadow alpha present', px.alpha > 0);
+  AssertTrue('shadow alpha partial', px.alpha < 200);
 end;
 
 initialization
