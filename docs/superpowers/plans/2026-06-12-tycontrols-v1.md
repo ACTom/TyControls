@@ -7232,7 +7232,7 @@ This section implements `/source/tyControls.Form.pas` (`TTyCaptionButton`, `TTyT
 **Files:**
 - Create: `/tycontrols.lpk`
 
-- [ ] **Step 1: Write `/tycontrols.lpk` listing every `/source` unit except `tyControls.Design`, requiring BGRABitmap.** Create the file with exactly this content:
+- [ ] **Step 1: Write `/tycontrols.lpk` listing every `/source` unit except `tyControls.Design`, requiring BGRABitmapPack.** Create the file with exactly this content:
   ```xml
   <?xml version="1.0" encoding="UTF-8"?>
   <CONFIG>
@@ -7266,7 +7266,7 @@ This section implements `/source/tyControls.Form.pas` (`TTyCaptionButton`, `TTyT
         <Item14><Filename Value="source/tyControls.Panel.pas"/><UnitName Value="tyControls.Panel"/></Item14>
       </Files>
       <RequiredPkgs Count="2">
-        <Item1><PackageName Value="BGRABitmap"/></Item1>
+        <Item1><PackageName Value="BGRABitmapPack"/></Item1>
         <Item2><PackageName Value="LCL"/></Item2>
       </RequiredPkgs>
     </Package>
