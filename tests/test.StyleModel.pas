@@ -22,6 +22,21 @@ type
     procedure TestLoadNineSliceBackgroundImage;
   end;
 
+  TTestStyleResolve = class(TTestCase)
+  private
+    FModel: TTyStyleModel;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestButtonNormal;
+    procedure TestButtonPrimary;
+    procedure TestButtonHover;
+    procedure TestButtonDisabled;
+    procedure TestPrimaryHoverCombo;
+    procedure TestStateOrderDisabledWinsOverHover;
+  end;
+
 implementation
 
 procedure TTestStyleMerge.TestMergeUnionPresent;
@@ -114,7 +129,112 @@ begin
   AssertEquals('slice left', 7, s.Background.SliceInsets.Left);
 end;
 
+const
+  CSS_RESOLVE =
+    ':root {' + LineEnding +
+    '  --accent: #3B82F6;' + LineEnding +
+    '  --surface: #404040;' + LineEnding +
+    '}' + LineEnding +
+    'TyButton {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: #FFFFFF;' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  border-radius: 6px;' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.primary {' + LineEnding +
+    '  background: var(--accent);' + LineEnding +
+    '}' + LineEnding +
+    'TyButton:hover {' + LineEnding +
+    '  background: lighten(var(--surface), 50%);' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.primary:hover {' + LineEnding +
+    '  border-width: 3px;' + LineEnding +
+    '}' + LineEnding +
+    'TyButton:disabled {' + LineEnding +
+    '  opacity: 0.5;' + LineEnding +
+    '  background: #111111;' + LineEnding +
+    '}' + LineEnding;
+
+procedure TTestStyleResolve.SetUp;
+begin
+  FModel := TTyStyleModel.Create;
+  FModel.LoadFromCss(CSS_RESOLVE);
+end;
+
+procedure TTestStyleResolve.TearDown;
+begin
+  FModel.Free;
+end;
+
+procedure TTestStyleResolve.TestButtonNormal;
+var s: TTyStyleSet;
+begin
+  s := FModel.ResolveStyle('TyButton', '', []);
+  AssertTrue('bg present', tpBackground in s.Present);
+  AssertTrue('color present', tpTextColor in s.Present);
+  AssertTrue('borderwidth present', tpBorderWidth in s.Present);
+  AssertTrue('radius present', tpBorderRadius in s.Present);
+  // surface #404040
+  AssertEquals('bg red', $40, TyRedOf(s.Background.Color));
+  AssertEquals('text white', $FF, TyRedOf(s.TextColor));
+  AssertEquals('borderwidth', 1, s.BorderWidth);
+  AssertEquals('radius', 6, s.BorderRadius);
+end;
+
+procedure TTestStyleResolve.TestButtonPrimary;
+var s: TTyStyleSet;
+begin
+  s := FModel.ResolveStyle('TyButton', 'primary', []);
+  // variant overrides background to accent #3B82F6 but keeps base color/border
+  AssertEquals('bg red accent', $3B, TyRedOf(s.Background.Color));
+  AssertEquals('bg green accent', $82, TyGreenOf(s.Background.Color));
+  AssertEquals('bg blue accent', $F6, TyBlueOf(s.Background.Color));
+  AssertEquals('inherited text white', $FF, TyRedOf(s.TextColor));
+  AssertEquals('inherited borderwidth', 1, s.BorderWidth);
+end;
+
+procedure TTestStyleResolve.TestButtonHover;
+var s: TTyStyleSet;
+begin
+  s := FModel.ResolveStyle('TyButton', '', [tysHover]);
+  // hover overrides bg to lighten(#404040,50%) = 160
+  AssertEquals('hover bg', 160, TyRedOf(s.Background.Color));
+  // base props still present
+  AssertEquals('text still white', $FF, TyRedOf(s.TextColor));
+end;
+
+procedure TTestStyleResolve.TestButtonDisabled;
+var s: TTyStyleSet;
+begin
+  s := FModel.ResolveStyle('TyButton', '', [tysDisabled]);
+  AssertTrue('opacity present', tpOpacity in s.Present);
+  AssertTrue('opacity 0.5', Abs(s.Opacity - 0.5) < 0.0001);
+  // disabled bg #111111
+  AssertEquals('disabled bg', $11, TyRedOf(s.Background.Color));
+end;
+
+procedure TTestStyleResolve.TestPrimaryHoverCombo;
+var s: TTyStyleSet;
+begin
+  s := FModel.ResolveStyle('TyButton', 'primary', [tysHover]);
+  // TyButton.primary sets bg=accent; TyButton:hover overrides bg to lighten(surface,50%)=160;
+  // TyButton.primary:hover then sets borderwidth=3 (no bg override there)
+  AssertEquals('combo borderwidth', 3, s.BorderWidth);
+  // TyButton:hover applies bg=lighten(#404040,50%)=160 AFTER TyButton.primary's accent bg
+  AssertEquals('combo hover bg red', 160, TyRedOf(s.Background.Color));
+end;
+
+procedure TTestStyleResolve.TestStateOrderDisabledWinsOverHover;
+var s: TTyStyleSet;
+begin
+  // both hover and disabled active: disabled is applied last -> bg #111111
+  s := FModel.ResolveStyle('TyButton', '', [tysHover, tysDisabled]);
+  AssertEquals('disabled bg wins', $11, TyRedOf(s.Background.Color));
+  AssertTrue('opacity from disabled', Abs(s.Opacity - 0.5) < 0.0001);
+end;
+
 initialization
   RegisterTest(TTestStyleMerge);
   RegisterTest(TTestStyleLoad);
+  RegisterTest(TTestStyleResolve);
 end.

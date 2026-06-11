@@ -417,17 +417,52 @@ end;
 
 function TTyStyleModel.ResolveStyle(const ATypeKey, AStyleClass: string;
   AStates: TTyStateSet): TTyStyleSet;
+const
+  // fixed state application order: hover, focused, active, disabled
+  cStateOrder: array[0..3] of TTyState = (tysHover, tysFocused, tysActive, tysDisabled);
 var
+  variants: TStringList;
   found: TTyStyleSet;
-  variant: string;
+  vi, si: Integer;
+  v: string;
+  st: TTyState;
 begin
   Result := EmptyStyleSet;
-  if FindStyle(ATypeKey, '', False, tysNormal, found) then
-    TyMergeStyleSet(Result, found);
-  variant := Trim(AStyleClass);
-  if variant <> '' then
-    if FindStyle(ATypeKey, variant, False, tysNormal, found) then
+  variants := TStringList.Create;
+  try
+    variants.Delimiter := ' ';
+    variants.StrictDelimiter := False; // collapse multiple spaces
+    variants.DelimitedText := Trim(AStyleClass);
+    // 1) type base rule (no variant, no state)
+    if FindStyle(ATypeKey, '', False, tysNormal, found) then
       TyMergeStyleSet(Result, found);
+    // 2) each variant token, in textual order, base-state rule (TypeName.variant)
+    for vi := 0 to variants.Count - 1 do
+    begin
+      v := Trim(variants[vi]);
+      if v = '' then Continue;
+      if FindStyle(ATypeKey, v, False, tysNormal, found) then
+        TyMergeStyleSet(Result, found);
+    end;
+    // 3) state layers present in AStates, in fixed order;
+    //    for each state apply TypeName:state then each TypeName.variant:state
+    for si := 0 to High(cStateOrder) do
+    begin
+      st := cStateOrder[si];
+      if not (st in AStates) then Continue;
+      if FindStyle(ATypeKey, '', True, st, found) then
+        TyMergeStyleSet(Result, found);
+      for vi := 0 to variants.Count - 1 do
+      begin
+        v := Trim(variants[vi]);
+        if v = '' then Continue;
+        if FindStyle(ATypeKey, v, True, st, found) then
+          TyMergeStyleSet(Result, found);
+      end;
+    end;
+  finally
+    variants.Free;
+  end;
 end;
 
 end.
