@@ -2,9 +2,15 @@ unit test.button;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Forms, Controls,
+  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics,
   tyControls.Base, tyControls.Button;
 type
+  // Expose protected RenderTo for testing
+  TTyButtonAccess = class(TTyButton)
+  public
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
   TButtonTest = class(TTestCase)
   private
     FClicked: Integer;
@@ -15,6 +21,11 @@ type
     procedure TestPaintSmoke;
   end;
 implementation
+
+procedure TTyButtonAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
+end;
 
 procedure TButtonTest.HandleClick(Sender: TObject);
 begin
@@ -54,17 +65,22 @@ end;
 procedure TButtonTest.TestPaintSmoke;
 var
   F: TCustomForm;
-  B: TTyButton;
+  B: TTyButtonAccess;
+  Bmp: TBitmap;
 begin
   F := TCustomForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
   try
-    B := TTyButton.Create(F);
+    B := TTyButtonAccess.Create(F);
     B.Parent := F;
-    B.SetBounds(0, 0, 80, 28);
     B.Caption := 'OK';
-    B.Repaint;
-    AssertTrue('button painted without crash', True);
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(80, 28);
+    // This actually executes paint code — if RenderTo raises, test fails
+    B.RenderTo(Bmp.Canvas, Rect(0, 0, 80, 28), 96);
+    AssertTrue('button RenderTo executed without exception', True);
   finally
+    Bmp.Free;
     F.Free;
   end;
 end;

@@ -2,16 +2,27 @@ unit test.radiobutton;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, ExtCtrls,
+  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, ExtCtrls, Graphics,
   tyControls.Base, tyControls.CheckBox;
 type
+  TTyRadioButtonAccess = class(TTyRadioButton)
+  public
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
   TRadioButtonTest = class(TTestCase)
   published
     procedure TestTypeKey;
     procedure TestClickClearsGroup;
     procedure TestSeparateParentsAreIndependent;
+    procedure TestPaintSmoke;
   end;
 implementation
+
+procedure TTyRadioButtonAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
+end;
 
 procedure TRadioButtonTest.TestTypeKey;
 var
@@ -63,6 +74,29 @@ begin
     AssertTrue('A stays checked in its own group', A.Checked);
     AssertTrue('B checked in its own group', B.Checked);
   finally
+    F.Free;
+  end;
+end;
+
+procedure TRadioButtonTest.TestPaintSmoke;
+var
+  F: TCustomForm;
+  R: TTyRadioButtonAccess;
+  Bmp: TBitmap;
+begin
+  F := TCustomForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    R := TTyRadioButtonAccess.Create(F);
+    R.Parent := F;
+    R.Caption := 'Option A';
+    R.Checked := True;
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(120, 22);
+    R.RenderTo(Bmp.Canvas, Rect(0, 0, 120, 22), 96);
+    AssertTrue('radiobutton RenderTo executed without exception', True);
+  finally
+    Bmp.Free;
     F.Free;
   end;
 end;

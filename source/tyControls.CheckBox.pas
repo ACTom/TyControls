@@ -11,8 +11,10 @@ type
     procedure SetChecked(const AValue: Boolean);
   protected
     function GetStyleTypeKey: string; override;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
   public
+    constructor Create(AOwner: TComponent); override;
     procedure Click; override;
   published
     property Checked: Boolean read FChecked write SetChecked default False;
@@ -33,8 +35,10 @@ type
     procedure UncheckSiblings;
   protected
     function GetStyleTypeKey: string; override;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
   public
+    constructor Create(AOwner: TComponent); override;
     procedure Click; override;
   published
     property Checked: Boolean read FChecked write SetChecked default False;
@@ -50,6 +54,12 @@ type
 implementation
 
 { TTyCheckBox }
+
+constructor TTyCheckBox.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  TabStop := True;
+end;
 
 function TTyCheckBox.GetStyleTypeKey: string;
 begin
@@ -69,19 +79,25 @@ begin
   inherited Click;
 end;
 
-procedure TTyCheckBox.Paint;
+procedure TTyCheckBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  R, ContentRect, BoxRect, TextRect: TRect;
+  ContentRect, BoxRect, TextRect: TRect;
   BoxSize, Gap: Integer;
 begin
   P := TTyPainter.Create;
   try
-    R := ClientRect;
-    P.BeginPaint(Canvas, R, Font.PixelsPerInch);
+    P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
-    ContentRect := Rect(0, 0, R.Right - R.Left, R.Bottom - R.Top);
+    ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    // Inset content rect by all four padding sides
+    ContentRect := Rect(
+      ContentRect.Left   + P.Scale(S.Padding.Left),
+      ContentRect.Top    + P.Scale(S.Padding.Top),
+      ContentRect.Right  - P.Scale(S.Padding.Right),
+      ContentRect.Bottom - P.Scale(S.Padding.Bottom)
+    );
     BoxSize := P.Scale(16);
     Gap := P.Scale(6);
     BoxRect := Rect(ContentRect.Left,
@@ -102,7 +118,18 @@ begin
   end;
 end;
 
+procedure TTyCheckBox.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
 { TTyRadioButton }
+
+constructor TTyRadioButton.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  TabStop := True;
+end;
 
 function TTyRadioButton.GetStyleTypeKey: string;
 begin
@@ -138,19 +165,25 @@ begin
   inherited Click;
 end;
 
-procedure TTyRadioButton.Paint;
+procedure TTyRadioButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  R, ContentRect, DotRect, TextRect: TRect;
+  ContentRect, DotRect, TextRect: TRect;
   BoxSize, Gap: Integer;
 begin
   P := TTyPainter.Create;
   try
-    R := ClientRect;
-    P.BeginPaint(Canvas, R, Font.PixelsPerInch);
+    P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
-    ContentRect := Rect(0, 0, R.Right - R.Left, R.Bottom - R.Top);
+    ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    // Inset content rect by all four padding sides
+    ContentRect := Rect(
+      ContentRect.Left   + P.Scale(S.Padding.Left),
+      ContentRect.Top    + P.Scale(S.Padding.Top),
+      ContentRect.Right  - P.Scale(S.Padding.Right),
+      ContentRect.Bottom - P.Scale(S.Padding.Bottom)
+    );
     BoxSize := P.Scale(16);
     Gap := P.Scale(6);
     DotRect := Rect(ContentRect.Left,
@@ -169,6 +202,11 @@ begin
   finally
     P.Free;
   end;
+end;
+
+procedure TTyRadioButton.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 end.

@@ -11,6 +11,7 @@ type
     procedure SetText(const AValue: string);
   protected
     function GetStyleTypeKey: string; override;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -59,12 +60,16 @@ begin
 end;
 
 procedure TTyEdit.InjectBackspace;
+var
+  i: Integer;
 begin
-  if FText <> '' then
-  begin
-    System.Delete(FText, Length(FText), 1);
-    Invalidate;
-  end;
+  if FText = '' then Exit;
+  i := Length(FText);
+  // Skip UTF-8 continuation bytes (10xxxxxx = $80..$BF)
+  while (i > 1) and ((Ord(FText[i]) and $C0) = $80) do
+    Dec(i);
+  System.Delete(FText, i, Length(FText) - i + 1);
+  Invalidate;
 end;
 
 procedure TTyEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
@@ -83,28 +88,31 @@ begin
   end;
 end;
 
-procedure TTyEdit.Paint;
+procedure TTyEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  R, ContentRect, CaretRect: TRect;
-  PadL: Integer;
+  ContentRect, CaretRect: TRect;
 begin
   P := TTyPainter.Create;
   try
-    R := ClientRect;
-    P.BeginPaint(Canvas, R, Font.PixelsPerInch);
+    P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
-    ContentRect := Rect(0, 0, R.Right - R.Left, R.Bottom - R.Top);
+    ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     DrawFrame(P, ContentRect, S);
-    PadL := P.Scale(S.Padding.Left);
-    P.DrawText(Rect(ContentRect.Left + PadL, ContentRect.Top,
-      ContentRect.Right, ContentRect.Bottom), FText, S.FontName, S.FontSize,
-      S.FontWeight, S.TextColor, taLeftJustify, tlCenter, True);
+    // Inset content by all four padding sides
+    ContentRect := Rect(
+      ContentRect.Left   + P.Scale(S.Padding.Left),
+      ContentRect.Top    + P.Scale(S.Padding.Top),
+      ContentRect.Right  - P.Scale(S.Padding.Right),
+      ContentRect.Bottom - P.Scale(S.Padding.Bottom)
+    );
+    P.DrawText(ContentRect, FText, S.FontName, S.FontSize, S.FontWeight,
+      S.TextColor, taLeftJustify, tlCenter, True);
     if Focused then
     begin
-      CaretRect := Rect(ContentRect.Left + PadL, ContentRect.Top + P.Scale(4),
-        ContentRect.Left + PadL + P.Scale(1), ContentRect.Bottom - P.Scale(4));
+      CaretRect := Rect(ContentRect.Left, ContentRect.Top + P.Scale(4),
+        ContentRect.Left + P.Scale(1), ContentRect.Bottom - P.Scale(4));
       P.FillBackground(CaretRect, Default(TTyFill), 0);
       P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
     end;
@@ -112,6 +120,11 @@ begin
   finally
     P.Free;
   end;
+end;
+
+procedure TTyEdit.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 end.

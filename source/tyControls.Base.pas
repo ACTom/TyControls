@@ -20,6 +20,8 @@ type
     procedure CMEnabledChanged(var Msg: TLMessage); message CM_ENABLEDCHANGED;
   protected
     FHover, FPressed: Boolean;
+    function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+    function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
     function ActiveController: TTyStyleController;
     function CurrentStates: TTyStateSet;
@@ -47,6 +49,8 @@ type
     procedure CMEnabledChanged(var Msg: TLMessage); message CM_ENABLEDCHANGED;
   protected
     FHover, FPressed: Boolean;
+    function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+    function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
     function ActiveController: TTyStyleController;
     function CurrentStates: TTyStateSet;
@@ -75,6 +79,16 @@ constructor TTyGraphicControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ActiveController.RegisterStyleable(Self);
+end;
+
+function TTyGraphicControl._AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+begin
+  Result := -1;
+end;
+
+function TTyGraphicControl._Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+begin
+  Result := -1;
 end;
 
 destructor TTyGraphicControl.Destroy;
@@ -206,6 +220,16 @@ constructor TTyCustomControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ActiveController.RegisterStyleable(Self);
+end;
+
+function TTyCustomControl._AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+begin
+  Result := -1;
+end;
+
+function TTyCustomControl._Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+begin
+  Result := -1;
 end;
 
 destructor TTyCustomControl.Destroy;
