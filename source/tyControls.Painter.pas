@@ -19,6 +19,7 @@ type
     FRect: TRect;
     FPPI: Integer;
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
+    procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect);
   public
     procedure BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure EndPaint;
@@ -119,7 +120,7 @@ begin
           grad.Free;
         end;
       end;
-    tfkNineSlice: ;
+    tfkNineSlice: NineSlice(ARect, AFill.ImagePath, AFill.SliceInsets);
   end;
 end;
 
@@ -289,8 +290,62 @@ begin
   pts := nil;
 end;
 
-procedure TTyPainter.NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
+procedure TTyPainter.BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect);
+var
+  part: TBGRABitmap;
 begin
+  if (ASrcR.Right <= ASrcR.Left) or (ASrcR.Bottom <= ASrcR.Top) then
+    Exit;
+  if (ADstR.Right <= ADstR.Left) or (ADstR.Bottom <= ADstR.Top) then
+    Exit;
+  part := ASrc.GetPart(ASrcR) as TBGRABitmap;
+  try
+    FBmp.StretchPutImage(ADstR, part, dmDrawWithTransparency);
+  finally
+    part.Free;
+  end;
+end;
+
+procedure TTyPainter.NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
+var
+  src: TBGRABitmap;
+  iw, ih: Integer;
+  sl, st, sr, sb: Integer;
+  dl, dt, dr, db: Integer;
+  sxL, sxR, syT, syB: Integer;
+begin
+  if FBmp = nil then
+    Exit;
+  if not FileExists(AImagePath) then
+    Exit;
+  src := TBGRABitmap.Create(AImagePath);
+  try
+    iw := src.Width;
+    ih := src.Height;
+    sl := AInsets.Left;
+    st := AInsets.Top;
+    sr := AInsets.Right;
+    sb := AInsets.Bottom;
+    sxL := sl;
+    sxR := iw - sr;
+    syT := st;
+    syB := ih - sb;
+    dl := ARect.Left;
+    dt := ARect.Top;
+    dr := ARect.Right;
+    db := ARect.Bottom;
+    BlitRegion(src, Rect(0, 0, sxL, syT), Rect(dl, dt, dl + sl, dt + st));
+    BlitRegion(src, Rect(sxL, 0, sxR, syT), Rect(dl + sl, dt, dr - sr, dt + st));
+    BlitRegion(src, Rect(sxR, 0, iw, syT), Rect(dr - sr, dt, dr, dt + st));
+    BlitRegion(src, Rect(0, syT, sxL, syB), Rect(dl, dt + st, dl + sl, db - sb));
+    BlitRegion(src, Rect(sxL, syT, sxR, syB), Rect(dl + sl, dt + st, dr - sr, db - sb));
+    BlitRegion(src, Rect(sxR, syT, iw, syB), Rect(dr - sr, dt + st, dr, db - sb));
+    BlitRegion(src, Rect(0, syB, sxL, ih), Rect(dl, db - sb, dl + sl, db));
+    BlitRegion(src, Rect(sxL, syB, sxR, ih), Rect(dl + sl, db - sb, dr - sr, db));
+    BlitRegion(src, Rect(sxR, syB, iw, ih), Rect(dr - sr, db - sb, dr, db));
+  finally
+    src.Free;
+  end;
 end;
 
 end.

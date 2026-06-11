@@ -17,6 +17,7 @@ type
     function MakePainter(AWidth, AHeight, APPI: Integer): TRect;
     procedure FreePainter;
     function PixelAt(X, Y: Integer): TBGRAPixel;
+    function WriteTempNineSlice: string;
   protected
     procedure TearDown; override;
   published
@@ -29,6 +30,7 @@ type
     procedure TestDropShadowAlpha;
     procedure TestDrawTextRastersPixels;
     procedure TestDrawGlyphAllKinds;
+    procedure TestNineSliceCenterRegion;
   end;
 
 implementation
@@ -199,6 +201,37 @@ begin
       end;
     AssertTrue('glyph ' + IntToStr(Ord(g)) + ' painted', hits > 0);
     FreePainter;
+  end;
+end;
+
+function TPainterTest.WriteTempNineSlice: string;
+var
+  bmp: TBGRABitmap;
+begin
+  Result := GetTempDir(False) + 'tyninetest.png';
+  bmp := TBGRABitmap.Create(9, 9, BGRA(0, 0, 255, 255));
+  try
+    bmp.FillRect(3, 3, 6, 6, BGRA(255, 0, 0, 255), dmSet);
+    bmp.SaveToFile(Result);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TPainterTest.TestNineSliceCenterRegion;
+var
+  fn: string;
+  px: TBGRAPixel;
+begin
+  fn := WriteTempNineSlice;
+  try
+    MakePainter(60, 60, 96);
+    FPainter.NineSlice(Rect(0, 0, 60, 60), fn, Rect(3, 3, 3, 3));
+    px := PixelAt(30, 30);
+    AssertTrue('center red', px.red > 200);
+    AssertTrue('center blue low', px.blue < 80);
+  finally
+    DeleteFile(fn);
   end;
 end;
 
