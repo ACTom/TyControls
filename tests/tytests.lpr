@@ -4,7 +4,7 @@ program tytests;
 
 uses
   consoletestrunner, test.Types, test.Css.Tokens, test.Css.Lexer, test.Css.Parser,
-  test.Css.Values;
+  test.Css.Values, test.StyleModel;
 
 type
   TTyTestRunner = class(TTestRunner)
