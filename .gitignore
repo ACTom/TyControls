@@ -1,0 +1,26 @@
+# Lazarus / FPC 编译产物
+lib/
+backup/
+*.ppu
+*.o
+*.a
+*.compiled
+*.dbg
+*.or
+*.res
+*.lps
+
+# 备份文件
+*.bak
+*.bak[0-9]
+*.~*
+
+# 可执行 / 库输出
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 操作系统
+.DS_Store
+Thumbs.db
