@@ -109,6 +109,112 @@ begin
   end;
 end;
 
+// Parse 'linear-gradient(<angle>deg, <colorA>, <colorB>)' into a gradient fill.
+function ParseLinearGradient(const ARaw: string; Vars: TStrings): TTyFill;
+var
+  inner, angleTok: string;
+  p, q: Integer;
+  parts: TStringList;
+  fmt: TFormatSettings;
+begin
+  Result.Kind := tfkLinearGradient;
+  Result.Color := tyTransparent;
+  Result.ImagePath := '';
+  Result.SliceInsets := Rect(0, 0, 0, 0);
+  Result.GradAngleDeg := 0;
+  p := Pos('(', ARaw);
+  q := Length(ARaw);
+  while (q > p) and (ARaw[q] <> ')') do Dec(q);
+  inner := Copy(ARaw, p + 1, q - p - 1);
+  parts := TStringList.Create;
+  try
+    // angle, colorA, colorB; nested-paren-aware so function color args with
+    // inner commas (e.g. 'lighten(--accent, 16%)') are not mis-split.
+    SplitArgs(inner, parts);
+    if parts.Count <> 3 then
+      raise Exception.CreateFmt('Invalid linear-gradient: %s', [ARaw]);
+    angleTok := LowerCase(Trim(parts[0]));
+    if (Length(angleTok) >= 3) and (Copy(angleTok, Length(angleTok) - 2, 3) = 'deg') then
+      angleTok := Trim(Copy(angleTok, 1, Length(angleTok) - 3));
+    fmt := DefaultFormatSettings;
+    fmt.DecimalSeparator := '.';
+    Result.GradAngleDeg := StrToFloat(angleTok, fmt);
+    Result.GradFrom := TyEvalColor(Trim(parts[1]), Vars);
+    Result.GradTo := TyEvalColor(Trim(parts[2]), Vars);
+  finally
+    parts.Free;
+  end;
+end;
+
+// Parse 'url(path) slice(t r b l)' into a nine-slice fill.
+function ParseNineSlice(const ARaw: string): TTyFill;
+var
+  lo, urlInner, sliceInner: string;
+  pu, qu, ps, qs: Integer;
+  nums: TStringList;
+  t, r, b, l: Integer;
+begin
+  Result.Kind := tfkNineSlice;
+  Result.Color := tyTransparent;
+  Result.GradAngleDeg := 0;
+  lo := ARaw;
+  pu := Pos('url(', LowerCase(lo));
+  if pu = 0 then raise Exception.CreateFmt('background-image needs url(): %s', [ARaw]);
+  qu := pu + 4;
+  while (qu <= Length(lo)) and (lo[qu] <> ')') do Inc(qu);
+  urlInner := Trim(Copy(lo, pu + 4, qu - (pu + 4)));
+  // strip optional quotes
+  if (Length(urlInner) >= 2) and ((urlInner[1] = '''') or (urlInner[1] = '"')) then
+    urlInner := Copy(urlInner, 2, Length(urlInner) - 2);
+  // The CSS lexer may insert spaces around '.' in unquoted URL paths (e.g.
+  // 'panel. png' for 'panel.png'); remove them so the path round-trips correctly.
+  Result.ImagePath := StringReplace(urlInner, ' ', '', [rfReplaceAll]);
+  ps := Pos('slice(', LowerCase(lo));
+  if ps = 0 then raise Exception.CreateFmt('background-image needs slice(): %s', [ARaw]);
+  qs := ps + 6;
+  while (qs <= Length(lo)) and (lo[qs] <> ')') do Inc(qs);
+  sliceInner := Trim(Copy(lo, ps + 6, qs - (ps + 6)));
+  nums := TStringList.Create;
+  try
+    nums.Delimiter := ' ';
+    nums.StrictDelimiter := False; // collapse runs of spaces
+    nums.DelimitedText := sliceInner;
+    if nums.Count <> 4 then
+      raise Exception.CreateFmt('slice() needs 4 values: %s', [ARaw]);
+    t := StrToInt(Trim(nums[0]));
+    r := StrToInt(Trim(nums[1]));
+    b := StrToInt(Trim(nums[2]));
+    l := StrToInt(Trim(nums[3]));
+    Result.SliceInsets := Rect(l, t, r, b); // TRect = Left,Top,Right,Bottom
+  finally
+    nums.Free;
+  end;
+end;
+
+// Parse 'shadow: <offX> <offY> <blur> <color>' (logical px + color expr).
+procedure ApplyShadow(var AStyle: TTyStyleSet; const ARaw: string; Vars: TStrings);
+var
+  parts: TStringList;
+  i: Integer;
+begin
+  parts := TStringList.Create;
+  try
+    parts.Delimiter := ' ';
+    parts.StrictDelimiter := False;
+    parts.DelimitedText := Trim(ARaw);
+    for i := parts.Count - 1 downto 0 do
+      if Trim(parts[i]) = '' then parts.Delete(i);
+    if parts.Count <> 4 then
+      raise Exception.CreateFmt('Invalid shadow: %s', [ARaw]);
+    AStyle.ShadowOffset.X := TyEvalLength(parts[0], Vars);
+    AStyle.ShadowOffset.Y := TyEvalLength(parts[1], Vars);
+    AStyle.ShadowBlur := TyEvalLength(parts[2], Vars);
+    AStyle.ShadowColor := TyEvalColor(parts[3], Vars);
+  finally
+    parts.Free;
+  end;
+end;
+
 function TyApplyDeclaration(var AStyle: TTyStyleSet; const AProp, ARawValue: string;
   Vars: TStrings): Boolean;
 var
@@ -120,11 +226,28 @@ begin
   raw := Trim(ARawValue);
   if prop = 'background' then
   begin
-    fill := AStyle.Background;
-    fill.Kind := tfkSolid;
-    fill.Color := TyEvalColor(raw, Vars);
-    AStyle.Background := fill;
+    if LowerCase(Copy(raw, 1, 16)) = 'linear-gradient(' then
+      AStyle.Background := ParseLinearGradient(raw, Vars)
+    else
+    begin
+      fill := AStyle.Background;
+      fill.Kind := tfkSolid;
+      fill.Color := TyEvalColor(raw, Vars);
+      fill.ImagePath := '';
+      AStyle.Background := fill;
+    end;
     Include(AStyle.Present, tpBackground);
+  end
+  else if prop = 'background-image' then
+  begin
+    AStyle.Background := ParseNineSlice(raw);
+    Include(AStyle.Present, tpBackground);
+  end
+  else if prop = 'shadow' then
+  begin
+    // shadow: <offsetX> <offsetY> <blur> <color>  (logical px)
+    ApplyShadow(AStyle, raw, Vars);
+    Include(AStyle.Present, tpShadow);
   end
   else if prop = 'color' then
   begin
@@ -239,9 +362,45 @@ begin
 end;
 
 procedure TTyStyleModel.LoadFromCss(const ASource: string);
+var
+  parser: TTyCssParser;
+  sheet: TTyCssStylesheet;
+  ri, si, di: Integer;
+  rule: TTyCssRule;
+  sel: TTyCssSelector;
+  decl: TTyCssDeclaration;
+  st: TTyStyleSet;
 begin
-  // implemented in Task .4
   Clear;
+  parser := TTyCssParser.Create(ASource);
+  try
+    sheet := parser.Parse;
+    try
+      // copy :root vars (already stored name=value, no leading --)
+      FVars.Assign(sheet.RootVars);
+      for ri := 0 to sheet.Rules.Count - 1 do
+      begin
+        rule := TTyCssRule(sheet.Rules[ri]);
+        // build the style set once from this rule's declarations
+        st := EmptyStyleSet;
+        for di := 0 to High(rule.Declarations) do
+        begin
+          decl := rule.Declarations[di];
+          TyApplyDeclaration(st, decl.Prop, decl.RawValue, FVars);
+        end;
+        // register it for every selector in this rule
+        for si := 0 to High(rule.Selectors) do
+        begin
+          sel := rule.Selectors[si];
+          AddEntry(sel.TypeName, sel.Variant, sel.HasState, sel.State, st);
+        end;
+      end;
+    finally
+      sheet.Free;
+    end;
+  finally
+    parser.Free;
+  end;
 end;
 
 procedure TTyStyleModel.LoadFromFile(const AFileName: string);
@@ -258,9 +417,17 @@ end;
 
 function TTyStyleModel.ResolveStyle(const ATypeKey, AStyleClass: string;
   AStates: TTyStateSet): TTyStyleSet;
+var
+  found: TTyStyleSet;
+  variant: string;
 begin
-  // implemented in Task .5
   Result := EmptyStyleSet;
+  if FindStyle(ATypeKey, '', False, tysNormal, found) then
+    TyMergeStyleSet(Result, found);
+  variant := Trim(AStyleClass);
+  if variant <> '' then
+    if FindStyle(ATypeKey, variant, False, tysNormal, found) then
+      TyMergeStyleSet(Result, found);
 end;
 
 end.
