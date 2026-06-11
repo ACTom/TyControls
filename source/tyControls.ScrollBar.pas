@@ -12,6 +12,10 @@ type
     FKind: TTyScrollBarKind;
     FMin, FMax, FPosition, FPageSize: Integer;
     FOnChange: TNotifyEvent;
+    FDragging: Boolean;
+    FDragGrabOffset: Integer;
+    FDragStartTop: Integer;
+    function TrackLength: Integer;
     procedure SetKind(const AValue: TTyScrollBarKind);
     procedure SetMin(const AValue: Integer);
     procedure SetMax(const AValue: Integer);
@@ -22,6 +26,9 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
+    procedure BeginThumbDrag(AGrabPosAlongTrack: Integer);
+    procedure DragThumbTo(APosAlongTrack: Integer);
+    procedure EndThumbDrag;
   published
     property Kind: TTyScrollBarKind read FKind write SetKind default sbVertical;
     property Min: Integer read FMin write SetMin default 0;
@@ -158,6 +165,55 @@ begin
   finally
     P.Free;
   end;
+end;
+
+function TTyScrollBar.TrackLength: Integer;
+begin
+  if FKind = sbVertical then
+    Result := Height
+  else
+    Result := Width;
+end;
+
+procedure TTyScrollBar.BeginThumbDrag(AGrabPosAlongTrack: Integer);
+var
+  ThumbR: TRect;
+  ThumbStart: Integer;
+begin
+  ThumbR := TyScrollThumbRect(ClientRect, FKind, FMin, FMax, FPosition, FPageSize);
+  if FKind = sbVertical then
+    ThumbStart := ThumbR.Top
+  else
+    ThumbStart := ThumbR.Left;
+  FDragging := True;
+  FDragStartTop := ThumbStart;
+  FDragGrabOffset := AGrabPosAlongTrack - ThumbStart;
+end;
+
+procedure TTyScrollBar.DragThumbTo(APosAlongTrack: Integer);
+var
+  ThumbR: TRect;
+  ThumbLen, FreeSpace, NewTop, Travel, NewPos: Integer;
+begin
+  if not FDragging then Exit;
+  ThumbR := TyScrollThumbRect(ClientRect, FKind, FMin, FMax, FPosition, FPageSize);
+  if FKind = sbVertical then
+    ThumbLen := ThumbR.Bottom - ThumbR.Top
+  else
+    ThumbLen := ThumbR.Right - ThumbR.Left;
+  FreeSpace := TrackLength - ThumbLen;
+  if FreeSpace < 1 then FreeSpace := 1;
+  NewTop := APosAlongTrack - FDragGrabOffset;
+  if NewTop < 0 then NewTop := 0;
+  if NewTop > FreeSpace then NewTop := FreeSpace;
+  Travel := FMax - FMin;
+  NewPos := FMin + (NewTop * Travel) div FreeSpace;
+  Position := NewPos;
+end;
+
+procedure TTyScrollBar.EndThumbDrag;
+begin
+  FDragging := False;
 end;
 
 end.

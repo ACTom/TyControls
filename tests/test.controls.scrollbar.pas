@@ -3,6 +3,7 @@ unit test.controls.scrollbar;
 interface
 uses
   Classes, SysUtils, Types, fpcunit, testregistry,
+  Forms, Controls,
   tyControls.ScrollBar;
 type
   TTyScrollGeometryTest = class(TTestCase)
@@ -12,6 +13,21 @@ type
     procedure TestVerticalThumbMidway;
     procedure TestHorizontalThumbAtTop;
     procedure TestZeroRangeFillsTrack;
+  end;
+
+  TTyScrollBarDragTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FBar: TTyScrollBar;
+    FChanges: Integer;
+    procedure OnBarChange(Sender: TObject);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestDragMovesPosition;
+    procedure TestDragFiresOnChange;
+    procedure TestDragClampsAtMax;
   end;
 implementation
 procedure TTyScrollGeometryTest.TestVerticalThumbAtTop;
@@ -63,6 +79,48 @@ begin
   AssertEquals('degenerate range: thumb top is track top', 0, R.Top);
   AssertEquals('degenerate range: thumb fills track', 200, R.Bottom);
 end;
+procedure TTyScrollBarDragTest.OnBarChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+procedure TTyScrollBarDragTest.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FBar := TTyScrollBar.Create(FForm);
+  FBar.Parent := FForm;
+  FBar.Kind := sbVertical;
+  FBar.SetBounds(0, 0, 16, 200);
+  FBar.Min := 0;
+  FBar.Max := 100;
+  FBar.PageSize := 25;
+  FBar.Position := 0;
+  FChanges := 0;
+  FBar.OnChange := @OnBarChange;
+end;
+procedure TTyScrollBarDragTest.TearDown;
+begin
+  FForm.Free;
+end;
+procedure TTyScrollBarDragTest.TestDragMovesPosition;
+begin
+  // grab at thumb top (y=0), drag down by 80px = half of free space (160) -> pos 50
+  FBar.BeginThumbDrag(0);
+  FBar.DragThumbTo(80);
+  AssertEquals('drag of half free-space moves to mid position', 50, FBar.Position);
+end;
+procedure TTyScrollBarDragTest.TestDragFiresOnChange;
+begin
+  FBar.BeginThumbDrag(0);
+  FBar.DragThumbTo(80);
+  AssertTrue('OnChange fired at least once during drag', FChanges >= 1);
+end;
+procedure TTyScrollBarDragTest.TestDragClampsAtMax;
+begin
+  FBar.BeginThumbDrag(0);
+  FBar.DragThumbTo(10000);
+  AssertEquals('drag past end clamps at Max', 100, FBar.Position);
+end;
 initialization
   RegisterTest(TTyScrollGeometryTest);
+  RegisterTest(TTyScrollBarDragTest);
 end.
