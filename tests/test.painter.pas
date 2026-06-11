@@ -22,6 +22,8 @@ type
   published
     procedure TestColorToBGRAChannels;
     procedure TestColorToBGRATransparent;
+    procedure TestSolidFillCenter;
+    procedure TestSolidFillCornerTransparent;
   end;
 
 implementation
@@ -73,6 +75,37 @@ var
 begin
   px := TyColorToBGRA(tyTransparent);
   AssertEquals('alpha zero', 0, px.alpha);
+end;
+
+procedure TPainterTest.TestSolidFillCenter;
+var
+  fill: TTyFill;
+  px: TBGRAPixel;
+begin
+  MakePainter(40, 40, 96);
+  FillChar(fill, SizeOf(fill), 0);
+  fill.Kind := tfkSolid;
+  fill.Color := TyRGBA(255, 0, 0, 255);
+  FPainter.FillBackground(Rect(0, 0, 40, 40), fill, 10);
+  px := PixelAt(20, 20);
+  AssertEquals('center red', 255, px.red);
+  AssertEquals('center green', 0, px.green);
+  AssertEquals('center blue', 0, px.blue);
+  AssertEquals('center alpha', 255, px.alpha);
+end;
+
+procedure TPainterTest.TestSolidFillCornerTransparent;
+var
+  fill: TTyFill;
+  px: TBGRAPixel;
+begin
+  MakePainter(40, 40, 96);
+  FillChar(fill, SizeOf(fill), 0);
+  fill.Kind := tfkSolid;
+  fill.Color := TyRGBA(255, 0, 0, 255);
+  FPainter.FillBackground(Rect(0, 0, 40, 40), fill, 16);
+  px := PixelAt(0, 0);
+  AssertEquals('corner alpha transparent', 0, px.alpha);
 end;
 
 initialization

@@ -68,7 +68,26 @@ begin
 end;
 
 procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer);
+var
+  r: Integer;
+  px: TBGRAPixel;
 begin
+  if FBmp = nil then
+    Exit;
+  r := Scale(ARadiusLogical);
+  case AFill.Kind of
+    tfkSolid:
+      begin
+        px := TyColorToBGRA(AFill.Color);
+        if r <= 0 then
+          FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, px, dmDrawWithTransparency)
+        else
+          FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, px, []);
+      end;
+    tfkNone: ;
+    tfkLinearGradient: ;
+    tfkNineSlice: ;
+  end;
 end;
 
 procedure TTyPainter.StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor);
