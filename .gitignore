@@ -20,6 +20,11 @@ backup/
 *.dll
 *.so
 *.dylib
+*.app/
+
+# 构建出的二进制（测试运行器 / 示例）
+/tests/tytests
+/examples/demo/demo
 
 # 操作系统
 .DS_Store
