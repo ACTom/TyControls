@@ -27,6 +27,12 @@
       <Item>
         <PackageName Value="FCL"/>
       </Item>
+      <Item>
+        <PackageName Value="BGRABitmapPack"/>
+      </Item>
+      <Item>
+        <PackageName Value="LCL"/>
+      </Item>
     </RequiredPackages>
     <Units>
       <Unit>
