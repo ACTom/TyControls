@@ -10,6 +10,13 @@ function TyDarken(c: TTyColor; Pct: Single): TTyColor;   // Pct 0..100
 function TyAlpha(c: TTyColor; A: Single): TTyColor;       // A 0..1
 function TyMix(c1, c2: TTyColor; Pct: Single): TTyColor;  // Pct 0..100 of c2
 
+function TyEvalColor(const Expr: string; Vars: TStrings): TTyColor;  // resolves var()/funcs
+function TyEvalLength(const Expr: string; Vars: TStrings): Integer;  // '6px'->6, var() ok
+function TyEvalFloat(const Expr: string; Vars: TStrings): Single;    // '0.5'
+// Exported so tyControls.StyleModel can split gradient/function arg lists with
+// nested parens (e.g. 'lighten(--accent, 16%)') without mis-splitting commas.
+procedure SplitArgs(const ArgStr: string; Args: TStrings);
+
 implementation
 
 // Clamp a real channel value into the 0..255 Byte range.
@@ -124,6 +131,136 @@ begin
     ClampByte(TyGreenOf(c1) * (1 - f) + TyGreenOf(c2) * f),
     ClampByte(TyBlueOf(c1)  * (1 - f) + TyBlueOf(c2)  * f),
     ClampByte(TyAlphaOf(c1) * (1 - f) + TyAlphaOf(c2) * f));
+end;
+
+// --- expression evaluation -------------------------------------------------
+
+// Resolve var(--name) -> the raw string from Vars (name without leading --).
+// Vars holds entries 'name=value'; var(--accent) looks up 'accent'.
+function ResolveVarRef(const Expr: string; Vars: TStrings): string;
+var
+  inner, key: string;
+begin
+  inner := Trim(Copy(Expr, 5, Length(Expr) - 5)); // strip 'var(' .. ')'
+  if (Length(inner) >= 2) and (inner[1] = '-') and (inner[2] = '-') then
+    key := Copy(inner, 3, Length(inner) - 2)
+  else
+    key := inner;
+  if Vars = nil then
+    raise Exception.CreateFmt('var(%s) but no vars provided', [inner]);
+  if Vars.IndexOfName(key) < 0 then
+    raise Exception.CreateFmt('Undefined variable: --%s', [key]);
+  Result := Vars.Values[key];
+end;
+
+// Split the comma-separated argument list of a function call, honoring nested parens.
+procedure SplitArgs(const ArgStr: string; Args: TStrings);
+var
+  i, depth, start: Integer;
+begin
+  Args.Clear;
+  depth := 0;
+  start := 1;
+  for i := 1 to Length(ArgStr) do
+  begin
+    case ArgStr[i] of
+      '(': Inc(depth);
+      ')': Dec(depth);
+      ',':
+        if depth = 0 then
+        begin
+          Args.Add(Trim(Copy(ArgStr, start, i - start)));
+          start := i + 1;
+        end;
+    end;
+  end;
+  if start <= Length(ArgStr) then
+    Args.Add(Trim(Copy(ArgStr, start, Length(ArgStr) - start + 1)));
+end;
+
+// Parse a percentage/number token like '8%' or '50' into a Single.
+function ParsePctOrNum(const S: string): Single;
+var
+  T: string;
+  fmt: TFormatSettings;
+begin
+  T := Trim(S);
+  if (T <> '') and (T[Length(T)] = '%') then
+    T := Trim(Copy(T, 1, Length(T) - 1));
+  fmt := DefaultFormatSettings;
+  fmt.DecimalSeparator := '.';
+  Result := StrToFloat(T, fmt);
+end;
+
+function TyEvalColor(const Expr: string; Vars: TStrings): TTyColor;
+var
+  E, fn, body: string;
+  p: Integer;
+  args: TStringList;
+begin
+  E := Trim(Expr);
+  if E = '' then
+    raise Exception.Create('Empty color expression');
+  // direct hex
+  if E[1] = '#' then
+    Exit(TyParseColor(E));
+  // var(...)
+  if (Length(E) >= 4) and (LowerCase(Copy(E, 1, 4)) = 'var(') and (E[Length(E)] = ')') then
+    Exit(TyEvalColor(ResolveVarRef(E, Vars), Vars));
+  // function call: name( args )
+  p := Pos('(', E);
+  if (p > 0) and (E[Length(E)] = ')') then
+  begin
+    fn := LowerCase(Trim(Copy(E, 1, p - 1)));
+    body := Copy(E, p + 1, Length(E) - p - 1);
+    args := TStringList.Create;
+    try
+      SplitArgs(body, args);
+      if (fn = 'lighten') and (args.Count = 2) then
+        Exit(TyLighten(TyEvalColor(args[0], Vars), ParsePctOrNum(args[1])));
+      if (fn = 'darken') and (args.Count = 2) then
+        Exit(TyDarken(TyEvalColor(args[0], Vars), ParsePctOrNum(args[1])));
+      if (fn = 'alpha') and (args.Count = 2) then
+        Exit(TyAlpha(TyEvalColor(args[0], Vars), ParsePctOrNum(args[1])));
+      if (fn = 'mix') and (args.Count = 3) then
+        Exit(TyMix(TyEvalColor(args[0], Vars), TyEvalColor(args[1], Vars), ParsePctOrNum(args[2])));
+      raise Exception.CreateFmt('Unknown color function: %s/%d', [fn, args.Count]);
+    finally
+      args.Free;
+    end;
+  end;
+  // bare '--name' leaf: look up in Vars and recurse
+  if (Length(E) >= 2) and (E[1] = '-') and (E[2] = '-') then
+    Exit(TyEvalColor(Vars.Values[Copy(E, 3, MaxInt)], Vars));
+  raise Exception.CreateFmt('Cannot evaluate color: %s', [Expr]);
+end;
+
+function TyEvalLength(const Expr: string; Vars: TStrings): Integer;
+var
+  E: string;
+begin
+  E := Trim(Expr);
+  if (Length(E) >= 4) and (LowerCase(Copy(E, 1, 4)) = 'var(') and (E[Length(E)] = ')') then
+    E := Trim(ResolveVarRef(E, Vars));
+  // bare '--name' leaf: look up in Vars and recurse
+  if (Length(E) >= 2) and (E[1] = '-') and (E[2] = '-') then
+    Exit(TyEvalLength(Vars.Values[Copy(E, 3, MaxInt)], Vars));
+  if (Length(E) >= 2) and (LowerCase(Copy(E, Length(E) - 1, 2)) = 'px') then
+    E := Trim(Copy(E, 1, Length(E) - 2));
+  Result := Round(ParsePctOrNum(E));
+end;
+
+function TyEvalFloat(const Expr: string; Vars: TStrings): Single;
+var
+  E: string;
+begin
+  E := Trim(Expr);
+  if (Length(E) >= 4) and (LowerCase(Copy(E, 1, 4)) = 'var(') and (E[Length(E)] = ')') then
+    E := Trim(ResolveVarRef(E, Vars));
+  // bare '--name' leaf: look up in Vars and recurse
+  if (Length(E) >= 2) and (E[1] = '-') and (E[2] = '-') then
+    Exit(TyEvalFloat(Vars.Values[Copy(E, 3, MaxInt)], Vars));
+  Result := ParsePctOrNum(E);
 end;
 
 end.

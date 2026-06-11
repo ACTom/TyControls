@@ -14,6 +14,22 @@ type
     procedure TestAlpha;
     procedure TestMix;
   end;
+
+  TTestCssValuesEval = class(TTestCase)
+  private
+    FVars: TStringList;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestEvalDirectColor;
+    procedure TestEvalVarColor;
+    procedure TestEvalNestedLightenVar;
+    procedure TestEvalMixVars;
+    procedure TestEvalLengthPx;
+    procedure TestEvalLengthVar;
+    procedure TestEvalFloat;
+  end;
 implementation
 
 procedure TTestCssValuesColors.TestParse3Digit;
@@ -89,6 +105,73 @@ begin
   AssertEquals('blue', 128, TyBlueOf(c));
 end;
 
+procedure TTestCssValuesEval.SetUp;
+begin
+  FVars := TStringList.Create;
+  FVars.Values['accent'] := '#3B82F6';
+  FVars.Values['surface'] := '#404040';
+  FVars.Values['radius'] := '6px';
+end;
+
+procedure TTestCssValuesEval.TearDown;
+begin
+  FVars.Free;
+end;
+
+procedure TTestCssValuesEval.TestEvalDirectColor;
+var c: TTyColor;
+begin
+  c := TyEvalColor('#FF8800', FVars);
+  AssertEquals('red', $FF, TyRedOf(c));
+  AssertEquals('green', $88, TyGreenOf(c));
+  AssertEquals('blue', $00, TyBlueOf(c));
+end;
+
+procedure TTestCssValuesEval.TestEvalVarColor;
+var c: TTyColor;
+begin
+  c := TyEvalColor('var(--accent)', FVars);
+  AssertEquals('red', $3B, TyRedOf(c));
+  AssertEquals('green', $82, TyGreenOf(c));
+  AssertEquals('blue', $F6, TyBlueOf(c));
+end;
+
+procedure TTestCssValuesEval.TestEvalNestedLightenVar;
+var c: TTyColor;
+begin
+  // surface=#404040=64; lighten 50% -> 64 + (255-64)*0.5 = 159.5 -> 160
+  c := TyEvalColor('lighten(var(--surface), 50%)', FVars);
+  AssertEquals('red', 160, TyRedOf(c));
+  AssertEquals('green', 160, TyGreenOf(c));
+  AssertEquals('blue', 160, TyBlueOf(c));
+end;
+
+procedure TTestCssValuesEval.TestEvalMixVars;
+var c: TTyColor;
+begin
+  // mix(#404040, #3B82F6, 0%) -> 0% of c2 -> equals c1
+  c := TyEvalColor('mix(var(--surface), var(--accent), 0%)', FVars);
+  AssertEquals('red', $40, TyRedOf(c));
+  AssertEquals('green', $40, TyGreenOf(c));
+  AssertEquals('blue', $40, TyBlueOf(c));
+end;
+
+procedure TTestCssValuesEval.TestEvalLengthPx;
+begin
+  AssertEquals('length', 12, TyEvalLength('12px', FVars));
+end;
+
+procedure TTestCssValuesEval.TestEvalLengthVar;
+begin
+  AssertEquals('var length', 6, TyEvalLength('var(--radius)', FVars));
+end;
+
+procedure TTestCssValuesEval.TestEvalFloat;
+begin
+  AssertTrue('float 0.5', Abs(TyEvalFloat('0.5', FVars) - 0.5) < 0.0001);
+end;
+
 initialization
   RegisterTest(TTestCssValuesColors);
+  RegisterTest(TTestCssValuesEval);
 end.
