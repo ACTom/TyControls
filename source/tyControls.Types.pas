@@ -46,7 +46,7 @@ type
   end;
 
 const
-  tyTransparent: TTyColor = $00000000;
+  tyTransparent = TTyColor($00000000);
 
 function TyRGB(R, G, B: Byte): TTyColor;
 function TyRGBA(R, G, B, A: Byte): TTyColor;

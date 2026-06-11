@@ -20,6 +20,7 @@ type
     procedure TestFullStylesheet;
     procedure TestErrorMissingBrace;
     procedure TestErrorMissingSemicolon;
+    procedure TestRawValueRoundTrips;
   end;
 
 implementation
@@ -189,6 +190,38 @@ begin
   finally
     p.Free;
   end;
+end;
+
+procedure TTestCssParser.TestRawValueRoundTrips;
+
+  function ParseRaw(const AValue: string): string;
+  var
+    p: TTyCssParser;
+    sheet: TTyCssStylesheet;
+  begin
+    p := TTyCssParser.Create('T { p: ' + AValue + '; }');
+    try
+      sheet := p.Parse;
+      try
+        Result := TTyCssRule(sheet.Rules[0]).Declarations[0].RawValue;
+      finally
+        sheet.Free;
+      end;
+    finally
+      p.Free;
+    end;
+  end;
+
+begin
+  AssertEquals('6px round-trips',                  '6px',                     ParseRaw('6px'));
+  AssertEquals('6.5px round-trips',                '6.5px',                   ParseRaw('6.5px'));
+  AssertEquals('0 auto round-trips',               '0 auto',                  ParseRaw('0 auto'));
+  AssertEquals('0 8px round-trips',                '0 8px',                   ParseRaw('0 8px'));
+  AssertEquals('8px 12px round-trips',             '8px 12px',                ParseRaw('8px 12px'));
+  AssertEquals('lighten(var(--accent), 8%) round-trips',
+                                                   'lighten(var(--accent), 8%)',
+                                                   ParseRaw('lighten(var(--accent), 8%)'));
+  AssertEquals('var(--surface) round-trips',       'var(--surface)',           ParseRaw('var(--surface)'));
 end;
 
 initialization

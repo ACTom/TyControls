@@ -198,10 +198,22 @@ begin
         if sb = '' then
           sb := tok.Text
         else if (tok.Kind = ctkIdent) and (Length(sb) > 0) and
-                ((sb[Length(sb)] = '(') or (sb[Length(sb)] in ['0'..'9'])) then
+                (sb[Length(sb)] = '(') then
+          // glue ident immediately after '(' — e.g. var(--x), url(foo)
+          sb := sb + tok.Text
+        else if (tok.Kind = ctkIdent) and (Length(sb) > 0) and
+                (sb[Length(sb)] in ['0'..'9']) and
+                (LowerCase(tok.Text) = 'px') then
+          // glue 'px' unit onto a preceding digit — e.g. 6px, 12px
           sb := sb + tok.Text
         else
-          sb := sb + ' ' + tok.Text;
+        begin
+          // insert a separating space, but never produce two consecutive spaces
+          // and never insert a space directly after '(' or after a space
+          if (sb[Length(sb)] <> ' ') and (sb[Length(sb)] <> '(') then
+            sb := sb + ' ';
+          sb := sb + tok.Text;
+        end;
       end;
     end;
   end;
