@@ -124,7 +124,28 @@ begin
 end;
 
 procedure TTyPainter.StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor);
+var
+  w, r: Integer;
+  half: Single;
+  px: TBGRAPixel;
+  l, t, rr, b: Single;
 begin
+  if FBmp = nil then
+    Exit;
+  w := Scale(AWidthLogical);
+  if w <= 0 then
+    Exit;
+  r := Scale(ARadiusLogical);
+  px := TyColorToBGRA(AColor);
+  half := w / 2;
+  l := ARect.Left + half;
+  t := ARect.Top + half;
+  rr := ARect.Right - 1 - half;
+  b := ARect.Bottom - 1 - half;
+  if r <= 0 then
+    FBmp.RectangleAntialias(l, t, rr, b, px, w)
+  else
+    FBmp.RoundRectAntialias(l, t, rr, b, r, r, px, w);
 end;
 
 procedure TTyPainter.DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);

@@ -25,6 +25,7 @@ type
     procedure TestSolidFillCenter;
     procedure TestSolidFillCornerTransparent;
     procedure TestLinearGradientVertical;
+    procedure TestBorderPixelColor;
   end;
 
 implementation
@@ -126,6 +127,23 @@ begin
   AssertTrue('top dark', top.red < 60);
   AssertTrue('bottom light', bottom.red > 195);
   AssertEquals('top opaque', 255, top.alpha);
+end;
+
+procedure TPainterTest.TestBorderPixelColor;
+var
+  fill: TTyFill;
+  px: TBGRAPixel;
+begin
+  MakePainter(40, 40, 96);
+  FillChar(fill, SizeOf(fill), 0);
+  fill.Kind := tfkSolid;
+  fill.Color := TyRGBA(0, 255, 0, 255);
+  FPainter.FillBackground(Rect(0, 0, 40, 40), fill, 0);
+  FPainter.StrokeBorder(Rect(0, 0, 40, 40), 0, 4, TyRGBA(0, 0, 255, 255));
+  px := PixelAt(20, 1);
+  AssertTrue('border blue dominant', px.blue > 200);
+  AssertTrue('border green low', px.green < 80);
+  AssertEquals('border opaque', 255, px.alpha);
 end;
 
 initialization
