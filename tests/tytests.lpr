@@ -3,7 +3,7 @@ program tytests;
 {$mode objfpc}{$H+}
 
 uses
-  consoletestrunner, test.Types, test.Css.Tokens;
+  consoletestrunner, test.Types, test.Css.Tokens, test.Css.Lexer;
 
 type
   TTyTestRunner = class(TTestRunner)
