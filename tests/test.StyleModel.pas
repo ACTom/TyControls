@@ -2,7 +2,8 @@ unit test.StyleModel;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, tyControls.Types, tyControls.StyleModel;
+  Classes, SysUtils, fpcunit, testregistry, tyControls.Types, tyControls.StyleModel,
+  tyControls.Css.Values;
 type
   TTestStyleMerge = class(TTestCase)
   published
@@ -35,6 +36,17 @@ type
     procedure TestButtonDisabled;
     procedure TestPrimaryHoverCombo;
     procedure TestStateOrderDisabledWinsOverHover;
+  end;
+
+  TTestStyleShadow = class(TTestCase)
+  published
+    procedure TestShadowLiteralColor;
+    procedure TestShadowWithVarColor;
+  end;
+
+  TTestStylePadding = class(TTestCase)
+  published
+    procedure TestPaddingWithVar;
   end;
 
 implementation
@@ -233,8 +245,78 @@ begin
   AssertTrue('opacity from disabled', Abs(s.Opacity - 0.5) < 0.0001);
 end;
 
+procedure TTestStyleShadow.TestShadowLiteralColor;
+var
+  model: TTyStyleModel;
+  s: TTyStyleSet;
+  expected: TTyColor;
+begin
+  model := TTyStyleModel.Create;
+  try
+    model.LoadFromCss('T { shadow: 2px 4px 8px #00000080; }');
+    s := model.ResolveStyle('T', '', []);
+    AssertTrue('shadow present', tpShadow in s.Present);
+    AssertEquals('shadow offset X', 2, s.ShadowOffset.X);
+    AssertEquals('shadow offset Y', 4, s.ShadowOffset.Y);
+    AssertEquals('shadow blur', 8, s.ShadowBlur);
+    expected := TyParseColor('#00000080');
+    AssertEquals('shadow color', Integer(expected), Integer(s.ShadowColor));
+  finally
+    model.Free;
+  end;
+end;
+
+procedure TTestStyleShadow.TestShadowWithVarColor;
+var
+  model: TTyStyleModel;
+  s: TTyStyleSet;
+  expected: TTyColor;
+begin
+  model := TTyStyleModel.Create;
+  try
+    model.LoadFromCss(
+      ':root { --shadow-color: #00000080; }' + LineEnding +
+      'T { shadow: 2px 4px 8px var(--shadow-color); }');
+    s := model.ResolveStyle('T', '', []);
+    AssertTrue('shadow present', tpShadow in s.Present);
+    AssertEquals('shadow offset X', 2, s.ShadowOffset.X);
+    AssertEquals('shadow offset Y', 4, s.ShadowOffset.Y);
+    AssertEquals('shadow blur', 8, s.ShadowBlur);
+    expected := TyParseColor('#00000080');
+    AssertEquals('shadow color via var', Integer(expected), Integer(s.ShadowColor));
+  finally
+    model.Free;
+  end;
+end;
+
+procedure TTestStylePadding.TestPaddingWithVar;
+var
+  model: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  model := TTyStyleModel.Create;
+  try
+    // 2-value padding: top/bottom=4, left/right=var(--gap)=10
+    // ParsePadding maps parts[0]=top/bottom=4, parts[1]=left/right=10
+    // Result = Rect(Left=10, Top=4, Right=10, Bottom=4)
+    model.LoadFromCss(
+      ':root { --gap: 10px; }' + LineEnding +
+      'T { padding: 4px var(--gap); }');
+    s := model.ResolveStyle('T', '', []);
+    AssertTrue('padding present', tpPadding in s.Present);
+    AssertEquals('padding top',    4,  s.Padding.Top);
+    AssertEquals('padding bottom', 4,  s.Padding.Bottom);
+    AssertEquals('padding left',   10, s.Padding.Left);
+    AssertEquals('padding right',  10, s.Padding.Right);
+  finally
+    model.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTestStyleMerge);
   RegisterTest(TTestStyleLoad);
   RegisterTest(TTestStyleResolve);
+  RegisterTest(TTestStyleShadow);
+  RegisterTest(TTestStylePadding);
 end.

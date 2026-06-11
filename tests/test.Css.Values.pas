@@ -29,6 +29,8 @@ type
     procedure TestEvalLengthPx;
     procedure TestEvalLengthVar;
     procedure TestEvalFloat;
+    procedure TestEvalBareVarColor;
+    procedure TestEvalLightenBareVar;
   end;
 implementation
 
@@ -169,6 +171,26 @@ end;
 procedure TTestCssValuesEval.TestEvalFloat;
 begin
   AssertTrue('float 0.5', Abs(TyEvalFloat('0.5', FVars) - 0.5) < 0.0001);
+end;
+
+procedure TTestCssValuesEval.TestEvalBareVarColor;
+var c: TTyColor;
+begin
+  // bare '--accent' (without var(...) wrapper) should resolve via Vars
+  c := TyEvalColor('--accent', FVars);
+  AssertEquals('bare var red',   $3B, TyRedOf(c));
+  AssertEquals('bare var green', $82, TyGreenOf(c));
+  AssertEquals('bare var blue',  $F6, TyBlueOf(c));
+end;
+
+procedure TTestCssValuesEval.TestEvalLightenBareVar;
+var c: TTyColor;
+begin
+  // lighten(--accent, 0%) must equal TyParseColor('#3B82F6') exactly
+  c := TyEvalColor('lighten(--accent, 0%)', FVars);
+  AssertEquals('lighten 0 red',   $3B, TyRedOf(c));
+  AssertEquals('lighten 0 green', $82, TyGreenOf(c));
+  AssertEquals('lighten 0 blue',  $F6, TyBlueOf(c));
 end;
 
 initialization

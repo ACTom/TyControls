@@ -168,6 +168,8 @@ begin
     urlInner := Copy(urlInner, 2, Length(urlInner) - 2);
   // The CSS lexer may insert spaces around '.' in unquoted URL paths (e.g.
   // 'panel. png' for 'panel.png'); remove them so the path round-trips correctly.
+  // v1 limitation: url() asset paths must not contain spaces, because spaces
+  // are stripped unconditionally here to reconstruct dotted filenames (e.g. foo.png).
   Result.ImagePath := StringReplace(urlInner, ' ', '', [rfReplaceAll]);
   ps := Pos('slice(', LowerCase(lo));
   if ps = 0 then raise Exception.CreateFmt('background-image needs slice(): %s', [ARaw]);
@@ -230,10 +232,9 @@ begin
       AStyle.Background := ParseLinearGradient(raw, Vars)
     else
     begin
-      fill := AStyle.Background;
+      fill := Default(TTyFill);
       fill.Kind := tfkSolid;
       fill.Color := TyEvalColor(raw, Vars);
-      fill.ImagePath := '';
       AStyle.Background := fill;
     end;
     Include(AStyle.Present, tpBackground);

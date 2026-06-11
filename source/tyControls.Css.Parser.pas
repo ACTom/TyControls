@@ -153,6 +153,16 @@ var
   tok: TTyCssToken;
   sb: string;
   depth: Integer;
+
+  // Insert a separating space when needed: only when sb is non-empty and the
+  // last character is neither a space nor an opening paren (so tokens inside
+  // function argument lists, and adjacent unit suffixes, are not separated).
+  procedure NeedSep;
+  begin
+    if (sb <> '') and (sb[Length(sb)] <> ' ') and (sb[Length(sb)] <> '(') then
+      sb := sb + ' ';
+  end;
+
 begin
   sb := '';
   depth := 0;
@@ -172,13 +182,13 @@ begin
           sb := sb + ':';
         end;
       ctkHash:
-        begin FLexer.Next; sb := sb + '#' + tok.Text; end;
+        begin FLexer.Next; NeedSep; sb := sb + '#' + tok.Text; end;
       ctkPercent:
         begin FLexer.Next; sb := sb + '%'; end;
       ctkFunction:
-        begin FLexer.Next; sb := sb + tok.Text + '('; Inc(depth); end;
+        begin FLexer.Next; NeedSep; sb := sb + tok.Text + '('; Inc(depth); end;
       ctkString:
-        begin FLexer.Next; sb := sb + '"' + tok.Text + '"'; end;
+        begin FLexer.Next; NeedSep; sb := sb + '"' + tok.Text + '"'; end;
       ctkComma:
         begin FLexer.Next; sb := sb + ', '; end;
       ctkLParen:
@@ -210,8 +220,7 @@ begin
         begin
           // insert a separating space, but never produce two consecutive spaces
           // and never insert a space directly after '(' or after a space
-          if (sb[Length(sb)] <> ' ') and (sb[Length(sb)] <> '(') then
-            sb := sb + ' ';
+          NeedSep;
           sb := sb + tok.Text;
         end;
       end;

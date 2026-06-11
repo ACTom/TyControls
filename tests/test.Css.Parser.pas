@@ -222,6 +222,16 @@ begin
                                                    'lighten(var(--accent), 8%)',
                                                    ParseRaw('lighten(var(--accent), 8%)'));
   AssertEquals('var(--surface) round-trips',       'var(--surface)',           ParseRaw('var(--surface)'));
+  // separator before hash/function/string tokens
+  AssertEquals('px then hash: space inserted',
+                                                   '2px 4px 8px #00000080',
+                                                   ParseRaw('2px 4px 8px #00000080'));
+  AssertEquals('px then var(): space inserted',
+                                                   '4px var(--gap)',
+                                                   ParseRaw('4px var(--gap)'));
+  AssertEquals('multi-px then var(): space inserted',
+                                                   '2px 4px 8px var(--c)',
+                                                   ParseRaw('2px 4px 8px var(--c)'));
 end;
 
 initialization
