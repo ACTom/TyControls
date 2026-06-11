@@ -21,6 +21,7 @@ type
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect);
   public
+    Opacity: Single;
     procedure BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure EndPaint;
     function Scale(ALogical: Integer): Integer;
@@ -50,6 +51,7 @@ begin
     FPPI := 96
   else
     FPPI := APPI;
+  Opacity := 1.0;
   FBmp := TBGRABitmap.Create(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
   FBmp.Fill(BGRAPixelTransparent);
 end;
@@ -59,7 +61,11 @@ begin
   if Assigned(FBmp) then
   begin
     if Assigned(FCanvas) then
+    begin
+      if Opacity < 1.0 then
+        FBmp.ApplyGlobalOpacity(Round(Opacity * 255));
       FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False);
+    end;
     FreeAndNil(FBmp);
   end;
 end;

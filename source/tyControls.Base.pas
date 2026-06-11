@@ -29,7 +29,9 @@ type
     procedure MouseLeave; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
+    constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   published
     property StyleClass: string read FStyleClass write SetStyleClass;
@@ -56,7 +58,9 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure DoEnter; override;
     procedure DoExit; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
+    constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   published
     property StyleClass: string read FStyleClass write SetStyleClass;
@@ -67,10 +71,19 @@ implementation
 
 { TTyGraphicControl }
 
+constructor TTyGraphicControl.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  ActiveController.RegisterStyleable(Self);
+end;
+
 destructor TTyGraphicControl.Destroy;
 begin
   if FController <> nil then
-    FController.UnregisterStyleable(Self)
+  begin
+    FController.RemoveFreeNotification(Self);
+    FController.UnregisterStyleable(Self);
+  end
   else
     TyDefaultController.UnregisterStyleable(Self);
   inherited Destroy;
@@ -86,18 +99,32 @@ end;
 procedure TTyGraphicControl.SetController(AValue: TTyStyleController);
 begin
   if FController = AValue then Exit;
+  { Unregister from current active controller and remove free-notification }
   if FController <> nil then
-    FController.UnregisterStyleable(Self)
+  begin
+    FController.RemoveFreeNotification(Self);
+    FController.UnregisterStyleable(Self);
+  end
   else
     TyDefaultController.UnregisterStyleable(Self);
   FController := AValue;
+  { Register with new active controller and wire free-notification }
+  if FController <> nil then
+    FController.FreeNotification(Self);
   ActiveController.RegisterStyleable(Self);
   Invalidate;
 end;
 
-procedure TTyGraphicControl.CMEnabledChanged(var Msg: TLMessage);
+procedure TTyGraphicControl.CMEnabledChanged(var Msg{%H-}: TLMessage);
 begin
   Invalidate;
+end;
+
+procedure TTyGraphicControl.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FController) then
+    FController := nil;
 end;
 
 function TTyGraphicControl.ActiveController: TTyStyleController;
@@ -129,6 +156,8 @@ end;
 
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
 begin
+  if tpOpacity in AStyle.Present then
+    APainter.Opacity := AStyle.Opacity;
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
   if tpBackground in AStyle.Present then
@@ -173,10 +202,19 @@ end;
 
 { TTyCustomControl }
 
+constructor TTyCustomControl.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  ActiveController.RegisterStyleable(Self);
+end;
+
 destructor TTyCustomControl.Destroy;
 begin
   if FController <> nil then
-    FController.UnregisterStyleable(Self)
+  begin
+    FController.RemoveFreeNotification(Self);
+    FController.UnregisterStyleable(Self);
+  end
   else
     TyDefaultController.UnregisterStyleable(Self);
   inherited Destroy;
@@ -192,18 +230,32 @@ end;
 procedure TTyCustomControl.SetController(AValue: TTyStyleController);
 begin
   if FController = AValue then Exit;
+  { Unregister from current active controller and remove free-notification }
   if FController <> nil then
-    FController.UnregisterStyleable(Self)
+  begin
+    FController.RemoveFreeNotification(Self);
+    FController.UnregisterStyleable(Self);
+  end
   else
     TyDefaultController.UnregisterStyleable(Self);
   FController := AValue;
+  { Register with new active controller and wire free-notification }
+  if FController <> nil then
+    FController.FreeNotification(Self);
   ActiveController.RegisterStyleable(Self);
   Invalidate;
 end;
 
-procedure TTyCustomControl.CMEnabledChanged(var Msg: TLMessage);
+procedure TTyCustomControl.CMEnabledChanged(var Msg{%H-}: TLMessage);
 begin
   Invalidate;
+end;
+
+procedure TTyCustomControl.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FController) then
+    FController := nil;
 end;
 
 function TTyCustomControl.ActiveController: TTyStyleController;
@@ -236,6 +288,8 @@ end;
 
 procedure TTyCustomControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
 begin
+  if tpOpacity in AStyle.Present then
+    APainter.Opacity := AStyle.Opacity;
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
   if tpBackground in AStyle.Present then

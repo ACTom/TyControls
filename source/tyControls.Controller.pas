@@ -85,7 +85,7 @@ procedure TTyStyleController.Changed;
 var
   i: Integer;
 begin
-  for i := 0 to FControls.Count - 1 do
+  for i := FControls.Count - 1 downto 0 do
     TControl(FControls[i]).Invalidate;
 end;
 
