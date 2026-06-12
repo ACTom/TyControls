@@ -2,25 +2,39 @@ unit tyControls.Edit;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 type
+  TTyIntArray = array of Integer;
+
   TTyEdit = class(TTyCustomControl)
   private
     FText: string;
     FCaret: Integer;      // codepoint index 0..UTF8Length(FText)
     FSelAnchor: Integer;  // codepoint index; no selection <=> FSelAnchor = FCaret
+    FMouseSelecting: Boolean;  // true while left button held for drag-select
     procedure SetText(const AValue: string);
     procedure SetCaretPos(AValue: Integer);
     // Selection helpers
     procedure DeleteSelection;
     procedure SetSelAnchorAndCaret(AAnchor, ACaret: Integer);
+    // Insert a raw UTF-8 string at the current caret position
+    procedure InjectStringAt(const AStr: string);
+    // Text measurement helper
+    function TextStartX(APPI: Integer): Integer;
+    function MeasureCodepointWidths(APPI: Integer): TTyIntArray;
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    // Clipboard virtual hooks (override in tests to avoid real clipboard)
+    function ReadClipboardText: string; virtual;
+    procedure WriteClipboardText(const S: string); virtual;
   public
     constructor Create(AOwner: TComponent); override;
     procedure InjectKey(const AChar: TUTF8Char);
@@ -33,6 +47,12 @@ type
     function SelText: string;
     procedure SelectAll;
     procedure ClearSelection;
+    // Mouse hit test
+    function CaretIndexAtX(AX: Integer): Integer;
+    // Clipboard API
+    procedure CopyToClipboard;
+    procedure CutToClipboard;
+    procedure PasteFromClipboard;
     property CaretPos: Integer read FCaret write SetCaretPos;
   published
     property Text: string read FText write SetText;
@@ -146,6 +166,242 @@ begin
   Invalidate;
 end;
 
+// ---- Text measurement helpers ----
+
+function TTyEdit.TextStartX(APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+begin
+  S := CurrentStyle;
+  // Same inset logic as RenderTo: left padding scaled at APPI
+  Result := MulDiv(S.Padding.Left, APPI, 96);
+end;
+
+function TTyEdit.MeasureCodepointWidths(APPI: Integer): TTyIntArray;
+// Returns an array of Length=UTF8Length(FText)+1 cumulative x positions (in px)
+// relative to the text start, measured on a temp bitmap matching current font.
+var
+  S: TTyStyleSet;
+  Bmp: TBitmap;
+  FontHeight: Integer;
+  i, Len: Integer;
+  CP: string;
+  CumW: Integer;
+  W: TSize;
+begin
+  Len := UTF8Length(FText);
+  SetLength(Result, Len + 1);
+  Result[0] := 0;
+  if Len = 0 then
+    Exit;
+
+  S := CurrentStyle;
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(1, 1);
+    Bmp.Canvas.Font.Name := S.FontName;
+    // FontSize in the style is logical pt; convert to px at APPI
+    if S.FontSize > 0 then
+      FontHeight := MulDiv(S.FontSize, APPI, 72)
+    else
+      FontHeight := MulDiv(12, APPI, 72);   // fallback 12pt
+    Bmp.Canvas.Font.Height := -FontHeight;
+    if S.FontWeight >= 600 then
+      Bmp.Canvas.Font.Style := [fsBold]
+    else
+      Bmp.Canvas.Font.Style := [];
+
+    CumW := 0;
+    for i := 1 to Len do
+    begin
+      CP := UTF8Copy(FText, i, 1);
+      W := Bmp.Canvas.TextExtent(CP);
+      CumW := CumW + W.cx;
+      Result[i] := CumW;
+    end;
+  finally
+    Bmp.Free;
+  end;
+end;
+
+// ---- Mouse caret hit-test ----
+
+function TTyEdit.CaretIndexAtX(AX: Integer): Integer;
+var
+  APPI: Integer;
+  Widths: TTyIntArray;
+  StartX: Integer;
+  RelX: Integer;
+  Len, i: Integer;
+  LeftEdge, RightEdge, MidPoint: Integer;
+begin
+  APPI := Font.PixelsPerInch;
+  StartX := TextStartX(APPI);
+  RelX := AX - StartX;
+  Len := UTF8Length(FText);
+
+  if RelX <= 0 then
+  begin
+    Result := 0;
+    Exit;
+  end;
+
+  Widths := MeasureCodepointWidths(APPI);
+
+  if RelX >= Widths[Len] then
+  begin
+    Result := Len;
+    Exit;
+  end;
+
+  // Walk codepoints: find the boundary nearest to RelX
+  // Widths[i] = cumulative width after i codepoints
+  // Boundary i lies at Widths[i]; pick the nearest
+  Result := 0;
+  for i := 0 to Len do
+  begin
+    if i = 0 then
+      LeftEdge := 0
+    else
+      LeftEdge := Widths[i - 1];
+
+    if i = Len then
+    begin
+      // Past last codepoint
+      if RelX >= LeftEdge then
+        Result := Len;
+      Break;
+    end;
+
+    RightEdge := Widths[i + 1];  // end of codepoint i+1
+    // We're between boundary i (at Widths[i]) and boundary i+1 (at Widths[i+1])
+    // But boundaries are: 0, Widths[1], Widths[2], ..., Widths[Len]
+    // Boundary at index i is at Widths[i]
+    // So boundary i and i+1 are at Widths[i] and Widths[i+1]
+    // The midpoint determines which boundary is nearest
+    if i < Len then
+    begin
+      MidPoint := (Widths[i] + Widths[i + 1]) div 2;
+      if RelX <= MidPoint then
+      begin
+        Result := i;
+        Break;
+      end
+      else
+        Result := i + 1;
+    end;
+  end;
+end;
+
+// ---- Clipboard implementation ----
+
+function TTyEdit.ReadClipboardText: string;
+begin
+  Result := Clipboard.AsText;
+end;
+
+procedure TTyEdit.WriteClipboardText(const S: string);
+begin
+  Clipboard.AsText := S;
+end;
+
+procedure TTyEdit.CopyToClipboard;
+begin
+  if not HasSelection then Exit;
+  WriteClipboardText(SelText);
+end;
+
+procedure TTyEdit.CutToClipboard;
+begin
+  if not HasSelection then Exit;
+  WriteClipboardText(SelText);
+  DeleteSelection;
+end;
+
+procedure TTyEdit.PasteFromClipboard;
+var
+  S: string;
+  i: Integer;
+  Filtered: string;
+begin
+  S := ReadClipboardText;
+  // Strip CR and LF characters (single-line control)
+  Filtered := '';
+  for i := 1 to Length(S) do
+    if (S[i] <> #13) and (S[i] <> #10) then
+      Filtered := Filtered + S[i];
+  if Filtered = '' then Exit;
+  // Replace selection if any, then insert at caret
+  if HasSelection then
+    DeleteSelection;
+  // Insert each codepoint
+  InjectStringAt(Filtered);
+end;
+
+procedure TTyEdit.InjectStringAt(const AStr: string);
+var
+  Before, After: string;
+  InsLen: Integer;
+begin
+  if AStr = '' then Exit;
+  Before := UTF8Copy(FText, 1, FCaret);
+  After  := UTF8Copy(FText, FCaret + 1, UTF8Length(FText) - FCaret);
+  FText  := Before + AStr + After;
+  InsLen := UTF8Length(AStr);
+  FCaret := FCaret + InsLen;
+  FSelAnchor := FCaret;
+  Invalidate;
+end;
+
+// ---- Mouse overrides ----
+
+procedure TTyEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  if Button = mbLeft then
+  begin
+    if ssDouble in Shift then
+    begin
+      // Double-click: select all
+      SelectAll;
+      FMouseSelecting := False;
+    end
+    else
+    begin
+      // Single click: position caret, collapse selection
+      FCaret := CaretIndexAtX(X);
+      FSelAnchor := FCaret;
+      FMouseSelecting := True;
+      Invalidate;
+    end;
+    try
+      if CanFocus then
+        SetFocus;
+    except
+      // Ignore focus errors in headless/test environments
+    end;
+  end;
+end;
+
+procedure TTyEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseMove(Shift, X, Y);
+  if FMouseSelecting then
+  begin
+    // Drag-select: move caret, keep anchor fixed
+    FCaret := CaretIndexAtX(X);
+    Invalidate;
+  end;
+end;
+
+procedure TTyEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  if Button = mbLeft then
+    FMouseSelecting := False;
+end;
+
 procedure TTyEdit.InjectKey(const AChar: TUTF8Char);
 var
   Before, After: string;
@@ -220,6 +476,30 @@ begin
   if (Key = VK_A) and ((ssCtrl in Shift) or (ssMeta in Shift)) then
   begin
     SelectAll;
+    Key := 0;
+    Exit;
+  end;
+
+  // Ctrl+C / Meta+C
+  if (Key = VK_C) and ((ssCtrl in Shift) or (ssMeta in Shift)) then
+  begin
+    CopyToClipboard;
+    Key := 0;
+    Exit;
+  end;
+
+  // Ctrl+X / Meta+X
+  if (Key = VK_X) and ((ssCtrl in Shift) or (ssMeta in Shift)) then
+  begin
+    CutToClipboard;
+    Key := 0;
+    Exit;
+  end;
+
+  // Ctrl+V / Meta+V
+  if (Key = VK_V) and ((ssCtrl in Shift) or (ssMeta in Shift)) then
+  begin
+    PasteFromClipboard;
     Key := 0;
     Exit;
   end;

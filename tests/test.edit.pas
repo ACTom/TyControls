@@ -10,6 +10,20 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure SimulateKeyDown(Key: Word);
     procedure SimulateKeyDownShift(Key: Word; Shift: TShiftState);
+    procedure SimulateMouseDown(X, Y: Integer; Shift: TShiftState = []);
+    procedure SimulateMouseMove(X, Y: Integer; Shift: TShiftState = []);
+    procedure SimulateMouseUp(X, Y: Integer);
+  end;
+
+  // Subclass with in-memory clipboard for headless testing
+  TTyEditClipboardAccess = class(TTyEditAccess)
+  private
+    FClipText: string;
+  protected
+    function ReadClipboardText: string; override;
+    procedure WriteClipboardText(const S: string); override;
+  public
+    property ClipText: string read FClipText write FClipText;
   end;
 
   TEditTest = class(TTestCase)
@@ -38,6 +52,19 @@ type
     procedure TestCollapseOnUnshiftedRight;
     procedure TestCtrlASelectsAll;
     procedure TestMetaASelectsAll;
+    // EDIT.3: mouse caret + clipboard
+    procedure TestCaretIndexAtXBounds;
+    procedure TestCaretIndexAtXMonotonic;
+    procedure TestMouseDownPositionsCaret;
+    procedure TestMouseDragSelects;
+    procedure TestDoubleClickSelectsAll;
+    procedure TestCopyToClipboard;
+    procedure TestCutToClipboard;
+    procedure TestPasteFromClipboard;
+    procedure TestPasteStripsNewlines;
+    procedure TestCtrlCCopies;
+    procedure TestCtrlXCuts;
+    procedure TestCtrlVPastes;
   end;
 implementation
 
@@ -57,6 +84,33 @@ end;
 procedure TTyEditAccess.SimulateKeyDownShift(Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
+end;
+
+procedure TTyEditAccess.SimulateMouseDown(X, Y: Integer; Shift: TShiftState);
+begin
+  MouseDown(mbLeft, Shift, X, Y);
+end;
+
+procedure TTyEditAccess.SimulateMouseMove(X, Y: Integer; Shift: TShiftState);
+begin
+  MouseMove(Shift, X, Y);
+end;
+
+procedure TTyEditAccess.SimulateMouseUp(X, Y: Integer);
+begin
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+// TTyEditClipboardAccess
+
+function TTyEditClipboardAccess.ReadClipboardText: string;
+begin
+  Result := FClipText;
+end;
+
+procedure TTyEditClipboardAccess.WriteClipboardText(const S: string);
+begin
+  FClipText := S;
 end;
 
 procedure TEditTest.TestTypeKey;
@@ -510,6 +564,270 @@ begin
     E.SimulateKeyDownShift(VK_A, [ssMeta]);
     AssertEquals('Meta+A: SelStart=0', 0, E.SelStart);
     AssertEquals('Meta+A: SelLength=4', 4, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+// ---- EDIT.3: mouse caret + clipboard tests ----
+
+procedure TEditTest.TestCaretIndexAtXBounds;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Hello';
+    // x=0 or below left padding → caret at 0
+    AssertEquals('x=0 → caret 0', 0, E.CaretIndexAtX(0));
+    // very large x → caret at end
+    AssertEquals('x=10000 → caret at len', 5, E.CaretIndexAtX(10000));
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestCaretIndexAtXMonotonic;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  PrevIdx, Idx: Integer;
+  X: Integer;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'abcde';
+    PrevIdx := -1;
+    X := 0;
+    while X <= 300 do
+    begin
+      Idx := E.CaretIndexAtX(X);
+      AssertTrue('CaretIndexAtX must be non-decreasing at x=' + IntToStr(X),
+        Idx >= PrevIdx);
+      PrevIdx := Idx;
+      Inc(X, 5);
+    end;
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestMouseDownPositionsCaret;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Hello';
+    // Click at x=0 should position caret at 0
+    E.SimulateMouseDown(0, 5);
+    AssertEquals('MouseDown at x=0 sets caret to 0', 0, E.CaretPos);
+    AssertEquals('MouseDown at x=0: no selection', 0, E.SelLength);
+    // Click at far right should position caret at end
+    E.SimulateMouseDown(10000, 5);
+    AssertEquals('MouseDown at far x sets caret to end', 5, E.CaretPos);
+    AssertEquals('MouseDown at far x: no selection', 0, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestMouseDragSelects;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Hello';
+    // Click at start, drag to end
+    E.SimulateMouseDown(0, 5);
+    AssertEquals('After MouseDown anchor=0', 0, E.SelLength);
+    // Move to far right while button is down
+    E.SimulateMouseMove(10000, 5);
+    // Should have a selection from 0 to end
+    AssertEquals('After drag SelStart=0', 0, E.SelStart);
+    AssertEquals('After drag SelLength=5', 5, E.SelLength);
+    // Release
+    E.SimulateMouseUp(10000, 5);
+    // Selection should remain after release
+    AssertEquals('Selection persists after MouseUp', 5, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestDoubleClickSelectsAll;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Hello';
+    // Simulate double-click: pass ssDouble in Shift
+    E.SimulateMouseDown(5, 5, [ssDouble]);
+    AssertEquals('Double-click SelStart=0', 0, E.SelStart);
+    AssertEquals('Double-click SelLength=5', 5, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestCopyToClipboard;
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Hello';
+    // Select 'ell'
+    E.CaretPos := 1;
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    AssertEquals('Pre: SelText=ell', 'ell', E.SelText);
+    E.CopyToClipboard;
+    AssertEquals('CopyToClipboard writes SelText to clipboard', 'ell', E.ClipText);
+    // Text unchanged
+    AssertEquals('Text unchanged after copy', 'Hello', E.Text);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestCutToClipboard;
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Hello';
+    E.CaretPos := 1;
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    AssertEquals('Pre: SelText=ell', 'ell', E.SelText);
+    E.CutToClipboard;
+    AssertEquals('CutToClipboard writes to clipboard', 'ell', E.ClipText);
+    AssertEquals('CutToClipboard removes selection from Text', 'Ho', E.Text);
+    AssertEquals('CutToClipboard: SelLength=0', 0, E.SelLength);
+    AssertEquals('CutToClipboard: CaretPos=1', 1, E.CaretPos);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestPasteFromClipboard;
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Hi';
+    E.CaretPos := 1;
+    E.ClipText := 'AB';
+    E.PasteFromClipboard;
+    AssertEquals('Paste inserts at caret', 'HABi', E.Text);
+    AssertEquals('Paste advances caret', 3, E.CaretPos);
+    AssertEquals('Paste: no selection', 0, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestPasteStripsNewlines;
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+    E.Text := '';
+    E.ClipText := 'ab' + #13#10 + 'cd';
+    E.PasteFromClipboard;
+    AssertEquals('Paste strips CR+LF', 'abcd', E.Text);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestCtrlCCopies;
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Test';
+    E.SelectAll;
+    E.SimulateKeyDownShift(VK_C, [ssCtrl]);
+    AssertEquals('Ctrl+C copies to clipboard', 'Test', E.ClipText);
+    AssertEquals('Ctrl+C: text unchanged', 'Test', E.Text);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestCtrlXCuts;
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Test';
+    E.SelectAll;
+    E.SimulateKeyDownShift(VK_X, [ssCtrl]);
+    AssertEquals('Ctrl+X copies to clipboard', 'Test', E.ClipText);
+    AssertEquals('Ctrl+X: text removed', '', E.Text);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestCtrlVPastes;
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'Bye';
+    E.CaretPos := 0;
+    E.ClipText := 'Hi ';
+    E.SimulateKeyDownShift(VK_V, [ssCtrl]);
+    AssertEquals('Ctrl+V pastes at caret', 'Hi Bye', E.Text);
+    AssertEquals('Ctrl+V advances caret', 3, E.CaretPos);
   finally
     F.Free;
   end;
