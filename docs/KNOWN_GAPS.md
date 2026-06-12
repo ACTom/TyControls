@@ -16,10 +16,10 @@ for a future Tier-2 native enhancement layer.
 - Cross-monitor DPI switching is not handled; moving a window between monitors
   with different scaling factors does not re-scale chrome metrics on the fly.
   PPI is sampled from the host form's font at paint time.
-- `TTyFormChrome.Active` is set-once at startup — setting `Active := False`
-  after the chrome has been applied clears the internal form reference but does
-  NOT restore the original `BorderStyle`; the window remains borderless. Treat
-  `Active` as a startup switch and leave it `True` for the lifetime of the form.
+- `TTyFormChrome.Active := False` restores the original `BorderStyle` and the
+  form's previous mouse handlers, but toggling chrome on/off repeatedly at
+  runtime is not a tested scenario. Recommended usage remains: activate once
+  at startup and leave it `True` for the lifetime of the form.
 
 ## Design-time rendering
 
@@ -43,8 +43,10 @@ for a future Tier-2 native enhancement layer.
   (`--x`). A comma-bearing color function such as `alpha(c, a)` or `mix(...)`
   cannot be used in `shadow` because the value is space-split into
   offset / blur / color; use hex-alpha notation instead (e.g. `#0000002E`).
-- Control-wide `opacity` dims framed controls (those that call `DrawFrame`);
-  a text-only control such as `TTyLabel` does not honor `opacity` in v1.
+- Control-wide `opacity` dims controls that render through `DrawFrame`
+  (Button, Label, Edit, Panel, ComboBox, ScrollBar, TitleBar, CaptionButton).
+  `TTyCheckBox` and `TTyRadioButton` draw only a glyph + caption without
+  `DrawFrame`, so `opacity` and `shadow` have no effect on them in v1.
 
 ## Package / build
 
