@@ -1,7 +1,7 @@
-# TyControls — Known Gaps (v1)
+# TyControls — Known Gaps (v1 / v1.1)
 
-These behaviors are intentionally NOT implemented in v1. They are tracked
-for a future Tier-2 native enhancement layer.
+These behaviors are intentionally NOT implemented or are tracked for a future
+Tier-2 native enhancement layer.
 
 ## Form chrome (TTyFormChrome) native window behavior
 
@@ -17,7 +17,9 @@ for a future Tier-2 native enhancement layer.
   environment is available to test or debug the DWM API path.
 - macOS traffic-light (red/yellow/green) caption buttons are not emulated;
   TyControls draws its own close/min/max glyphs (`TTyCaptionButton`) instead.
-  macOS users do not get platform-standard window controls.
+  macOS users do not get platform-standard window controls. A visual approximation
+  using `ShowGlyphOnHoverOnly` is documented in
+  [docs/recipes-traffic-lights.md](recipes-traffic-lights.md).
 - Cross-monitor DPI switching: **metrics now rescale on monitor-PPI change**
   (v1.1). `TTyFormChrome` stores `FInstalledPPI` at install time and chains the
   host form's `OnChangeBounds` event (previous handler is saved and restored on
@@ -26,10 +28,26 @@ for a future Tier-2 native enhancement layer.
   half-up rounding). The pure function and handler-chaining are unit-tested.
   Multi-monitor manual validation pending (only one physical monitor available
   in the build environment).
-- `TTyFormChrome.Active := False` restores the original `BorderStyle` and the
-  form's previous mouse handlers, but toggling chrome on/off repeatedly at
-  runtime is not a tested scenario. Recommended usage remains: activate once
-  at startup and leave it `True` for the lifetime of the form.
+- `TTyFormChrome.Active := False` restores the original `BorderStyle`, the
+  form's previous mouse handlers, and the `OnChangeBounds` chain. Toggling
+  chrome on/off repeatedly at runtime is not a tested scenario. Recommended
+  usage remains: activate once at startup and leave it `True` for the lifetime
+  of the form.
+
+## Controls
+
+- `TTyComboBox` has no true drop-down layer (v1/v1.1): clicking cycles through
+  items in-place. Floating list pop-up is a Tier-2 item.
+- `TTyEdit` has no horizontal scrolling (v1.1): when text is wider than the
+  control, content to the right is not visible and cannot be reached by mouse
+  click. The viewport is fixed at the text start.
+- `TTyEdit` has no word-level jump (v1.1): Ctrl/Cmd+Left/Right arrow does not
+  calculate word boundaries; the key event is passed through to the parent
+  window unmodified.
+- `TTyCheckBox` / `TTyRadioButton` `opacity` and `shadow`: **resolved in v1.1**.
+  The rendering path now routes through `DrawFrame` which applies both
+  properties; they are fully effective for all typeKeys including checkbox and
+  radiobutton.
 
 ## Design-time rendering
 
@@ -48,10 +66,6 @@ for a future Tier-2 native enhancement layer.
   (`--x`). A comma-bearing color function such as `alpha(c, a)` or `mix(...)`
   cannot be used in `shadow` because the value is space-split into
   offset / blur / color; use hex-alpha notation instead (e.g. `#0000002E`).
-- Control-wide `opacity` dims controls that render through `DrawFrame`
-  (Button, Label, Edit, Panel, ComboBox, ScrollBar, TitleBar, CaptionButton).
-  `TTyCheckBox` and `TTyRadioButton` draw only a glyph + caption without
-  `DrawFrame`, so `opacity` and `shadow` have no effect on them in v1.
 
 ## Package / build
 

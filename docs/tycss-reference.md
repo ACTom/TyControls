@@ -310,8 +310,7 @@ color: <颜色表达式> ;
 TyButton.primary { color: #FFFFFF; }
 ```
 
-注:内置主题为 `TyScrollBar` 写了 `color`,但 v1 滚动条绘制器并未使用该值
-(滑块与轨道同用 `background` 填充),详见第 9 节。
+注:`TyScrollBar` 的滑块颜色来自 `color`（TextColor），轨道背景来自 `background`。因此在主题中用 `color` 控制滑块颜色是正确写法（详见第 8.1 节）。
 
 ### 5.4 `border-color` / `border-width` — 边框
 
@@ -409,9 +408,9 @@ opacity: <0..1 小数> ;
 TyButton:disabled { opacity: 0.5; }
 ```
 
-限制:opacity 经由通用框架绘制路径(DrawFrame)生效。v1 中 **`TyCheckBox` 与
-`TyRadioButton` 的绘制不走该路径,因此对这两个控件 `opacity` 无效**;
-其余 8 个 typeKey(含 `TyLabel`)均生效。
+opacity 经由通用框架绘制路径（DrawFrame）生效。v1.1 中 `TyCheckBox` 与
+`TyRadioButton` 已通过修改渲染路径使 `opacity` 与 `shadow` 正常生效；
+所有 typeKey（含 `TyLabel`）均已支持。
 
 ### 5.11 `shadow` — 投影
 
@@ -526,27 +525,39 @@ TyButton.primary {
 
 ## 8. typeKey 与内置变体清单
 
-选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey,共 10 个:
+选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey,共 18 个（含子部件 typeKey）:
+
+### 8.1 控件 typeKey
 
 | typeKey | 控件类 | focus 状态 | 内置主题用到的变体 | 备注 |
 |---|---|---|---|---|
 | `TyButton` | `TTyButton` | ✓ | `primary`、`danger` | |
-| `TyLabel` | `TTyLabel` | ✗(GraphicControl,无焦点) | — | |
-| `TyEdit` | `TTyEdit` | ✓ | — | |
-| `TyCheckBox` | `TTyCheckBox` | ✓ | — | `opacity` / `shadow` 无效(见 5.10/5.11);勾选符用 `color` 绘制 |
-| `TyRadioButton` | `TTyRadioButton` | ✓ | — | 同上 |
-| `TyPanel` | `TTyPanel` | ✓ | — | 容器,`padding` 决定内容区内缩 |
+| `TyLabel` | `TTyLabel` | ✗（GraphicControl，无焦点） | — | |
+| `TyEdit` | `TTyEdit` | ✓ | — | 选区底色用 `:focus` 的 `border-color` 加 35% alpha |
+| `TyCheckBox` | `TTyCheckBox` | ✓ | — | `background`/`border` 作用于小方块；控件整体透明；`opacity`/`shadow` v1.1 起生效 |
+| `TyRadioButton` | `TTyRadioButton` | ✓ | — | 同上，`background`/`border` 作用于圆圈 |
+| `TyPanel` | `TTyPanel` | ✓ | — | 容器，`padding` 决定内容区内缩 |
 | `TyComboBox` | `TTyComboBox` | ✓ | — | 下拉箭头用 `color` 绘制 |
-| `TyScrollBar` | `TTyScrollBar` | ✓ | — | 滑块用 `background` 填充;`color` 在 v1 中未被绘制器使用 |
-| `TyTitleBar` | `TTyTitleBar` | ✓ | — | 自绘窗体标题栏(配合 `TTyFormChrome`) |
-| `TyCaptionButton` | `TTyCaptionButton` | ✓ | `close`、`min`、`max` | 标题栏 关闭/最小化/最大化 按钮 |
+| `TyScrollBar` | `TTyScrollBar` | ✓ | — | **滑块颜色来自 `color`（TextColor）**；轨道背景来自 `background` |
+| `TyListBox` | `TTyListBox` | ✓ | — | 行条目样式由子部件 typeKey `TyListItem` 决定 |
+| `TyProgressBar` | `TTyProgressBar` | ✗（GraphicControl，无交互） | — | 填充段样式由子部件 typeKey `TyProgressFill` 决定 |
+| `TyToggleSwitch` | `TTyToggleSwitch` | ✓ | — | `Checked=True` 时追加 `:active` 状态；旋钮颜色来自 `color` |
+| `TyTrackBar` | `TTyTrackBar` | ✓ | — | 滑块样式由子部件 typeKey `TyTrackThumb` 决定 |
+| `TyGroupBox` | `TTyGroupBox` | ✓ | — | **必须声明 `background`**（用于遮盖标题处边框线） |
+| `TyTitleBar` | `TTyTitleBar` | ✓ | — | 自绘窗体标题栏（配合 `TTyFormChrome`） |
+| `TyCaptionButton` | `TTyCaptionButton` | ✓ | `close`、`min`、`max` | 标题栏关闭/最小化/最大化按钮 |
 
-- 所有控件都支持 `hover`、`active`、`disabled` 三个状态;除 `TyLabel` 外都支持 `focus`;
-- **变体不是封闭集合**:任何标识符都可以作为变体,只要控件的 `StyleClass`
-  属性包含对应 token(空格分隔,可多个)即可匹配,例如
-  `StyleClass := 'primary large'` 会依次套用 `TyButton.primary` 与 `TyButton.large`;
-- 表中"内置变体"只是三个内置主题实际定义过的:`TyButton` 的 `primary` / `danger`,
-  `TyCaptionButton` 的 `close` / `min` / `max`(由窗体镶边自动赋给三个标题栏按钮)。
+### 8.2 子部件 typeKey（不对应独立控件，由父控件内部解析）
+
+| typeKey | 父控件 | 支持的状态 | 说明 |
+|---|---|---|---|
+| `TyListItem` | `TTyListBox` | `:hover`（悬停行）、`:active`（选中行）、无伪类（普通行） | 每行条目的独立样式，`background` 决定行背景，`color` 决定文字颜色 |
+| `TyProgressFill` | `TTyProgressBar` | 无状态（始终正常） | 进度条填充段，通常设置为强调色 |
+| `TyTrackThumb` | `TTyTrackBar` | `:hover`（鼠标在滑块上）、`:active`（拖动中）、无伪类（正常） | 滑块的独立样式，`background` 决定滑块颜色 |
+
+- 所有控件 typeKey 都支持 `hover`、`active`、`disabled` 三个状态；除 `TyLabel`、`TyProgressBar` 外都支持 `focus`；
+- **变体不是封闭集合**：任何标识符都可以作为变体，只要控件的 `StyleClass` 属性包含对应 token（空格分隔，可多个）即可匹配；
+- 表中"内置变体"只是三个内置主题实际定义过的：`TyButton` 的 `primary` / `danger`，`TyCaptionButton` 的 `close` / `min` / `max`（由窗体镶边自动赋给三个标题栏按钮）。
 
 ---
 
@@ -560,18 +571,14 @@ TyButton.primary {
    路径相对进程工作目录解析,缺失文件静默跳过。
 4. **`shadow` 颜色必须单 token**:`#hex` / `var(--x)` / 裸 `--x`,不能用带逗号的
    颜色函数;需要半透明用 `#rrggbbaa`(§5.11)。
-5. **`opacity` 与 `shadow` 对 `TyCheckBox` / `TyRadioButton` 无效**(v1 这两个控件
-   的绘制不经过通用 DrawFrame 路径);其余控件(含 `TyLabel`)均生效。
-   (注:KNOWN_GAPS.md 中"TyLabel 不支持 opacity"的描述已过时,以本条为准。)
+5. **`opacity` 与 `shadow` 全控件生效（v1.1）**：v1.1 修复了 `TyCheckBox` 与
+   `TyRadioButton` 的渲染路径，使其也支持 `opacity` 和 `shadow`；所有 typeKey 均已生效。
 6. **`alpha()` 第二参数是 0..1 小数**,写百分号不会按百分比换算(§6.3)。
 7. **渐变角度方向与 CSS 不同**:`0deg` 左→右,`90deg` 上→下(§7.1);
    只支持双色标线性渐变。
 8. **`font-size` 数值按 pt 解释**,`px` 后缀只是装饰(§5.8);`font-weight`
    渲染只分 ≥600 粗体 / 其余常规两档(§5.9)。
 9. **`font-family` 不要加引号**,引号会保留进字体名(§5.7)。
-10. **`TyScrollBar` 的 `color` 在 v1 中未被使用**:滑块与轨道都由 `background`
-    填充,悬停/按下想让滑块变色目前需改 `background`(内置主题中的
-    `TyScrollBar:hover { color: … }` 写法在 v1 下无可见效果)。
-11. `TyComboBox` v1 无真正的下拉弹层(点击就地轮换选项),样式上不存在
-    "弹出列表"可设的部分。
+10. **`TyScrollBar` 的 `color` 决定滑块颜色**：`RenderTo` 使用 `S.TextColor`（即 CSS `color` 属性）作为滑块填充色，轨道背景来自 `background`。内置主题中的 `TyScrollBar:hover { color: … }` 写法是正确用法。
+11. `TyComboBox` v1 无真正的下拉弹层（点击就地轮换选项），样式上不存在"弹出列表"可设的部分。
 12. 不支持 `@media`、`@import`、`!important`、转义字符串、`//` 行注释。

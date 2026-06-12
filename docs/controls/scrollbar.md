@@ -132,7 +132,7 @@ TTyScrollBar 继承 `TTyCustomControl` 的状态机制：
 ```css
 TyScrollBar {
   background: darken(--surface, 6%);  /* 轨道背景 */
-  color: var(--border);               /* thumb 颜色（通过 Background 渲染） */
+  color: var(--border);               /* thumb 颜色（通过 TextColor 渲染） */
   border-radius: 4px;
 }
 TyScrollBar:hover  { color: darken(--border, 15%); }
@@ -142,7 +142,14 @@ TyScrollBar:active { color: var(--accent); /* #3B82F6 */ }
 ### 渲染细节
 
 - `DrawFrame` 绘制轨道背景（使用样式的 `background`）。
-- Thumb 使用 `P.FillBackground(ThumbR, S.Background, S.BorderRadius)` 绘制——注意：`TyScrollBar` 样式中，滑块颜色通过 `color` 属性在 CSS 层面描述，但运行时 thumb 实际渲染使用的是当前样式的 `Background` 字段（因样式引擎将 `color` 解析为 `TextColor`，而 `background` 解析为 `Background`）。当前 light.tycss 中 `color` 字段对应 thumb 的 `Background` — 这是 CSS 语义与内部渲染字段的对应关系，请查阅 `tyControls.StyleModel.pas` 获取精确映射。
+- Thumb 颜色来自当前样式的 **`TextColor`**（即 CSS `color` 属性）。渲染器构造一个 `tfkSolid` 填充，颜色 = `S.TextColor`，然后以 `S.BorderRadius` 圆角绘制 thumb 矩形。因此在 `.tycss` 中用 `color` 控制滑块颜色是正确的写法：
+
+```css
+TyScrollBar         { color: var(--border); }       /* 滑块默认颜色 */
+TyScrollBar:hover   { color: darken(--border, 15%); }
+TyScrollBar:active  { color: var(--accent); }
+```
+
 - 没有内置命名变体（`.class`）。
 
 ## 6. 代码示例

@@ -21,6 +21,7 @@
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Kind` | `TTyCaptionButtonKind` | `cbkClose`（枚举第一个值） | 按钮种类，同时决定 StyleClass 变体和字形。写入时自动更新 `StyleClass := KindVariant` 并触发 `Invalidate`。 |
+| `ShowGlyphOnHoverOnly` | `Boolean` | `False` | 为 `True` 时，字形（关闭/最小化/最大化图标）仅在鼠标悬停（`FHover = True`）或按下（`FPressed = True`）时绘制；平时只显示背景。常用于 traffic-light 风格：圆圈始终可见，图标在悬停时才出现。详见 [docs/recipes-traffic-lights.md](../recipes-traffic-lights.md)。 |
 | `OnClick` | `TNotifyEvent` | `nil` | 点击事件（继承自 `TControl`，在 published 中显式声明）。 |
 
 ### 类型定义

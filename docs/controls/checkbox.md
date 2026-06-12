@@ -92,7 +92,7 @@ TyCheckBox:active   { background: var(--accent); }     /* 按下时方框变蓝 
 TyCheckBox:disabled { opacity: 0.5; }
 ```
 
-**渲染细节：** 勾选框尺寸固定为 16×16 逻辑像素（DPI 缩放），勾号（`tgCheck`）用 `TextColor` 绘制。勾选框与文字之间间距为 6 逻辑像素。
+**渲染细节：** 勾选框尺寸固定为 16×16 逻辑像素（DPI 缩放），勾号（`tgCheck`）用 `TextColor` 绘制。勾选框与文字之间间距为 6 逻辑像素。主题的 `background`、`border-color`、`border-width` 样式作用于**小方块本身**，控件整体背景透明（无整体背景框）。`opacity` 和 `shadow` 属性经由 `DrawFrame` 路径生效（v1.1 已修复），可用于 `:disabled` 态等场景。
 
 ---
 
@@ -135,4 +135,6 @@ ChkRemember.Enabled := False;
 - **独立状态：** 每个 `TTyCheckBox` 独立维护自己的 `Checked`，不与其他复选框联动。如需单选互斥行为，应使用 `TTyRadioButton`。
 - **无 OnChange 事件：** 状态变化只通过 `OnClick` 通知，`SetChecked` 直接赋值不触发任何事件。
 - **:active 视觉效果：** 鼠标按下时，主题将勾选框背景变为 accent 蓝色（`var(--accent)`），这影响整个框的填充色，与文字颜色保持对比。
+- **opacity / shadow 现已生效（v1.1）：** `DrawFrame` 路径现在同样应用于 `TTyCheckBox` 的外层绘制；`opacity` 和 `shadow` 属性可在主题中正常使用（例如 `TyCheckBox:disabled { opacity: 0.5; }`）。
+- **控件整体无背景：** 主题中的 `background` 和 `border` 只作用于小方块本身，控件整体（Caption 文字区域）保持透明，不绘制整体背景框。
 - **DFM 序列化：** `Checked` 声明了 `default False`，因此值为 `False` 时不写入 `.lfm`/`.dfm` 文件；值为 `True` 时才写入。

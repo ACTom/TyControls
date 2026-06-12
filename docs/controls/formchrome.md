@@ -13,7 +13,7 @@
 
 > **设计时行为：** 在 `csDesigning` 状态下（Lazarus IDE 中），设置 `Active` 不会修改窗体边框，也不会注入标题栏。所有自绘窗框效果只在运行时出现。
 
-> **已知缺口：** 参见 [Known Gaps](../KNOWN_GAPS.md)，包括 Aero Snap 不支持、无边框原生阴影缺失、macOS traffic-light 按钮不仿真、跨 DPI 显示器不自动重缩放等。
+> **已知缺口：** 参见 [Known Gaps](../KNOWN_GAPS.md)。主要已知项：Windows Aero Snap 不支持；macOS traffic-light 按钮不仿真（可用 `ShowGlyphOnHoverOnly` + 自定义样式近似，见 [recipes-traffic-lights.md](../recipes-traffic-lights.md)）；Windows 原生阴影尚待实现。macOS 原生阴影与跨屏 DPI 重缩放已在 v1.1 解决。
 
 ## 2. 单元
 
@@ -155,11 +155,13 @@ Chrome.TitleBar.CloseButton.Controller := MyStyleController;
 
 ## 7. 注意事项
 
-1. **Active 是一次性启动开关（v1）：** 根据 [Known Gaps](../KNOWN_GAPS.md)，虽然 `UninstallChrome` 会恢复 `BorderStyle` 和鼠标事件，但 v1 中将 `Active` 作为仅在窗体生命周期初始设置一次的开关使用更为安全。
+1. **Active 建议一次性设置：** `UninstallChrome` 会恢复 `BorderStyle`、鼠标事件处理器和 `OnChangeBounds` 链。但反复切换 `Active` 未经充分测试；推荐在窗体 `OnCreate` / `OnShow` 中置一次 `True` 后不再修改。
 2. **仅支持 TForm Owner：** `HostForm` 在 `InstallChrome` 时检查 `Owner is TCustomForm`；若将 `TTyFormChrome` 放置在非 `TForm` 的容器上，`FForm` 将为 nil，所有操作静默无效。
 3. **设计时不生效：** `SetActive` 中明确检查 `csDesigning in ComponentState`，设计时赋值 `Active` 直接返回，不调用 `InstallChrome`。
 4. **最大化避让任务栏：** `ToggleMaximize` 使用 `Screen.MonitorFromWindow(FForm.Handle).WorkareaRect`（工作区，不含任务栏），而非 `Screen.DesktopRect`，因此最大化窗口会自然避让任务栏。
 5. **鼠标事件链：** `InstallChrome` 保存并替换窗体原有的 `OnMouseDown/Move/Up`，`UninstallChrome` 恢复它们；若宿主窗体在 `InstallChrome` 之后又手动设置了这三个事件，`UninstallChrome` 恢复的将是安装前的旧值，动态设置的新处理器会丢失。
 6. **最小窗体尺寸：** 边框缩放逻辑硬编码最小宽度 80px、最小高度 60px，不可通过属性配置。
-7. **无原生阴影：** `bsNone` 状态下 OS 不绘制窗体阴影；v1 不提供软件模拟阴影，窗体边缘没有阴影效果（详见 Known Gaps）。
-8. **macOS 注意：** macOS 上 Lazarus LCL 的无边框窗体行为与 Windows/GTK 有差异；建议在目标平台上充分测试。
+7. **macOS 原生阴影（v1.1 已解决）：** `InstallChrome` 在 `{$IFDEF LCLCOCOA}` 下通过 `NSView(Form.Handle).window.setHasShadow(True)` 恢复 `BorderStyle := bsNone` 后丢失的系统阴影。非 Cocoa 构建不受影响。
+8. **跨屏 DPI 重缩放（v1.1 已解决）：** `InstallChrome` 在安装时记录当前显示器 PPI（`FInstalledPPI`），并通过链接宿主窗体的 `OnChangeBounds` 事件监听窗体移动。当 PPI 变化时，`TitleHeight` 和按钮宽度经 `TyRescaleChromeMetric`（MulDiv 半入）按比例重缩放，原有的 `OnChangeBounds` 处理器得到保存并在卸载时恢复。
+9. **`Active := False` 恢复行为：** `UninstallChrome` 会恢复原始 `BorderStyle` 和宿主窗体的鼠标事件（包括 `OnChangeBounds`）。但反复切换 `Active` 未经充分测试；建议在窗体生命周期内仅在启动时置一次 `True`。
+10. **Windows 原生阴影：** `bsNone` 状态下 Windows DWM 阴影尚待实现（无跨编译验证环境），详见 Known Gaps。
