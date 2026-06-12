@@ -16,7 +16,7 @@
       <Item1><PackageName Value="LCL"/></Item1>
       <Item2><PackageName Value="tycontrols"/></Item2>
     </RequiredPackages>
-    <Units Count="2">
+    <Units Count="3">
       <Unit0>
         <Filename Value="demo.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -28,6 +28,13 @@
         <ResourceBaseClass Value="Form"/>
         <UnitName Value="mainform"/>
       </Unit1>
+      <Unit2>
+          <Filename Value="chromeform.pas"/>
+          <IsPartOfProject Value="True"/>
+          <ComponentName Value="ChromeForm"/>
+          <ResourceBaseClass Value="Form"/>
+          <UnitName Value="chromeform"/>
+        </Unit2>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
