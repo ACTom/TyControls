@@ -51,7 +51,38 @@ type
     procedure TestActiveDefaultsFalse;
   end;
 
+  TCaptionButtonPaintTest = class(TTestCase)
+  published
+    procedure TestPaintSmoke;
+  end;
+
+  TTitleBarPaintTest = class(TTestCase)
+  published
+    procedure TestPaintSmoke;
+  end;
+
 implementation
+
+type
+  TCaptionButtonAccess = class(TTyCaptionButton)
+  public
+    procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+  TTitleBarAccess = class(TTyTitleBar)
+  public
+    procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+procedure TCaptionButtonAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TTitleBarAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
 
 const
   CR: TRect = (Left: 0; Top: 0; Right: 200; Bottom: 100);
@@ -316,10 +347,56 @@ begin
   end;
 end;
 
+procedure TCaptionButtonPaintTest.TestPaintSmoke;
+var
+  Acc: TCaptionButtonAccess;
+  Bmp: TBitmap;
+begin
+  Acc := TCaptionButtonAccess.Create(nil);
+  try
+    Acc.Kind := cbkClose;
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(46, 32);
+      Acc.SmokeRender(Bmp.Canvas, Rect(0, 0, 46, 32), 96);
+      AssertTrue('caption button RenderTo executed without exception', True);
+    finally
+      Bmp.Free;
+    end;
+  finally
+    Acc.Free;
+  end;
+end;
+
+procedure TTitleBarPaintTest.TestPaintSmoke;
+var
+  Acc: TTitleBarAccess;
+  Bmp: TBitmap;
+begin
+  Acc := TTitleBarAccess.Create(nil);
+  try
+    Acc.Caption := 'Test';
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(300, 32);
+      Acc.SmokeRender(Bmp.Canvas, Rect(0, 0, 300, 32), 96);
+      AssertTrue('titlebar RenderTo executed without exception', True);
+    finally
+      Bmp.Free;
+    end;
+  finally
+    Acc.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TCaptionButtonTest);
   RegisterTest(TTitleBarTest);
   RegisterTest(TFormChromeTest);
+  RegisterTest(TCaptionButtonPaintTest);
+  RegisterTest(TTitleBarPaintTest);
 
 end.

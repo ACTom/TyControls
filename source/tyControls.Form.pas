@@ -19,6 +19,7 @@ type
     FKind: TTyCaptionButtonKind;
     procedure SetKind(AValue: TTyCaptionButtonKind);
   protected
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure Click; override;
   public
@@ -40,6 +41,7 @@ type
     procedure SetCaption(const AValue: string);
     procedure LayoutButtons;
   protected
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Resize; override;
     procedure Paint; override;
   public
@@ -69,6 +71,10 @@ type
     FResizeStartMouse: TPoint;
     FSavedBounds: TRect;
     FMaximized: Boolean;
+    FOldBorderStyle: TFormBorderStyle;
+    FOldMouseDown: TMouseEvent;
+    FOldMouseMove: TMouseMoveEvent;
+    FOldMouseUp: TMouseEvent;
     procedure SetActive(AValue: Boolean);
     procedure SetTitleHeight(AValue: Integer);
     function HostForm: TCustomForm;
@@ -170,8 +176,6 @@ begin
     cbkMin: Result := 'min';
     cbkMax: Result := 'max';
     cbkRestore: Result := 'restore';
-  else
-    Result := 'close';
   end;
 end;
 
@@ -182,8 +186,6 @@ begin
     cbkMin: Result := tgMinimize;
     cbkMax: Result := tgMaximize;
     cbkRestore: Result := tgRestore;
-  else
-    Result := tgClose;
   end;
 end;
 
@@ -192,7 +194,7 @@ begin
   inherited Click;
 end;
 
-procedure TTyCaptionButton.Paint;
+procedure TTyCaptionButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -202,18 +204,23 @@ var
 begin
   P := TTyPainter.Create;
   try
-    P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+    P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
-    DrawFrame(P, ClientRect, S);
+    DrawFrame(P, ARect, S);
     GlyphSize := P.Scale(10);
-    CX := (ClientWidth - GlyphSize) div 2;
-    CY := (ClientHeight - GlyphSize) div 2;
+    CX := ARect.Left + (ARect.Right - ARect.Left - GlyphSize) div 2;
+    CY := ARect.Top + (ARect.Bottom - ARect.Top - GlyphSize) div 2;
     GlyphRect := Rect(CX, CY, CX + GlyphSize, CY + GlyphSize);
     P.DrawGlyph(GlyphRect, KindGlyph, S.TextColor, P.Scale(1));
     P.EndPaint;
   finally
     P.Free;
   end;
+end;
+
+procedure TTyCaptionButton.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 { TTyTitleBar }
@@ -270,24 +277,33 @@ begin
   LayoutButtons;
 end;
 
-procedure TTyTitleBar.Paint;
+procedure TTyTitleBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
   TextRect: TRect;
+  W, H: Integer;
 begin
+  W := ARect.Right - ARect.Left;
+  H := ARect.Bottom - ARect.Top;
   P := TTyPainter.Create;
   try
-    P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+    P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
-    DrawFrame(P, ClientRect, S);
-    TextRect := Rect(P.Scale(8), 0, ClientWidth - 3 * FButtonWidth, ClientHeight);
+    DrawFrame(P, ARect, S);
+    TextRect := Rect(ARect.Left + P.Scale(8), ARect.Top,
+                     ARect.Left + W - 3 * FButtonWidth, ARect.Top + H);
     P.DrawText(TextRect, FCaption, S.FontName, S.FontSize, S.FontWeight,
       S.TextColor, taLeftJustify, tlCenter, True);
     P.EndPaint;
   finally
     P.Free;
   end;
+end;
+
+procedure TTyTitleBar.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 { TTyFormChrome }
@@ -341,12 +357,16 @@ begin
   FForm := HostForm;
   if FForm = nil then
     Exit;
+  FOldBorderStyle := FForm.BorderStyle;
   FForm.BorderStyle := bsNone;
   FTitleBar.Parent := FForm;
   FTitleBar.Align := alTop;
   FTitleBar.SetBounds(0, 0, FForm.ClientWidth, FTitleHeight);
   FTitleBar.MinButton.Visible := FShowMinimize;
   FTitleBar.MaxButton.Visible := FShowMaximize;
+  FOldMouseDown := TForm(FForm).OnMouseDown;
+  FOldMouseMove := TForm(FForm).OnMouseMove;
+  FOldMouseUp := TForm(FForm).OnMouseUp;
   TForm(FForm).OnMouseDown := @FormMouseDown;
   TForm(FForm).OnMouseMove := @FormMouseMove;
   TForm(FForm).OnMouseUp := @FormMouseUp;
@@ -360,9 +380,12 @@ procedure TTyFormChrome.UninstallChrome;
 begin
   if FForm = nil then
     Exit;
-  TForm(FForm).OnMouseDown := nil;
-  TForm(FForm).OnMouseMove := nil;
-  TForm(FForm).OnMouseUp := nil;
+  TForm(FForm).OnMouseDown := FOldMouseDown;
+  TForm(FForm).OnMouseMove := FOldMouseMove;
+  TForm(FForm).OnMouseUp := FOldMouseUp;
+  FForm.BorderStyle := FOldBorderStyle;
+  FMaximized := False;
+  FTitleBar.MaxButton.Kind := cbkMax;
   FTitleBar.Parent := nil;
   FForm := nil;
 end;
@@ -427,6 +450,7 @@ begin
   DY := M.Y - FResizeStartMouse.Y;
   B := FResizeStartBounds;
   case FResizeHit of
+    bhNone: ;
     bhLeft: B.Left := B.Left + DX;
     bhRight: B.Right := B.Right + DX;
     bhTop: B.Top := B.Top + DY;
@@ -437,9 +461,17 @@ begin
     bhBottomRight: begin B.Right := B.Right + DX; B.Bottom := B.Bottom + DY; end;
   end;
   if B.Right - B.Left < 80 then
-    B.Right := B.Left + 80;
+    case FResizeHit of
+      bhLeft, bhTopLeft, bhBottomLeft: B.Left := B.Right - 80;
+    else
+      B.Right := B.Left + 80;
+    end;
   if B.Bottom - B.Top < 60 then
-    B.Bottom := B.Top + 60;
+    case FResizeHit of
+      bhTop, bhTopLeft, bhTopRight: B.Top := B.Bottom - 60;
+    else
+      B.Bottom := B.Top + 60;
+    end;
   FForm.BoundsRect := B;
 end;
 
