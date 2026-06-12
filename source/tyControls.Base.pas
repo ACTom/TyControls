@@ -24,7 +24,7 @@ type
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
     function ActiveController: TTyStyleController;
-    function CurrentStates: TTyStateSet;
+    function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     procedure MouseEnter; override;
@@ -53,7 +53,7 @@ type
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
     function ActiveController: TTyStyleController;
-    function CurrentStates: TTyStateSet;
+    function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     procedure MouseEnter; override;

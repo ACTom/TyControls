@@ -9,7 +9,8 @@ uses
   test.radiobutton, test.controls.panel, test.controls.combobox,
   test.controls.scrollbar, test.form, test.themes,
   test.listbox,
-  test.progressbar;
+  test.progressbar,
+  test.toggleswitch;
 
 type
   TTyTestRunner = class(TTestRunner)
