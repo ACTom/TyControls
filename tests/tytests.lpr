@@ -7,7 +7,7 @@ uses
   test.Css.Values, test.StyleModel, test.painter, test.controller, test.base,
   test.base.drawframe, test.button, test.tylabel, test.edit, test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
-  test.controls.scrollbar;
+  test.controls.scrollbar, test.form;
 
 type
   TTyTestRunner = class(TTestRunner)
