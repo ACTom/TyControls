@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="5">
+    <Name Value="tycontrols"/>
+    <Type Value="RunTime"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <SearchPaths>
+        <OtherUnitFiles Value="source"/>
+        <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+      </SearchPaths>
+      <SyntaxOptions>
+        <SyntaxMode Value="ObjFPC"/>
+      </SyntaxOptions>
+    </CompilerOptions>
+    <Files Count="17">
+      <Item1><Filename Value="source/tyControls.Types.pas"/><UnitName Value="tyControls.Types"/></Item1>
+      <Item2><Filename Value="source/tyControls.Css.Tokens.pas"/><UnitName Value="tyControls.Css.Tokens"/></Item2>
+      <Item3><Filename Value="source/tyControls.Css.Lexer.pas"/><UnitName Value="tyControls.Css.Lexer"/></Item3>
+      <Item4><Filename Value="source/tyControls.Css.Parser.pas"/><UnitName Value="tyControls.Css.Parser"/></Item4>
+      <Item5><Filename Value="source/tyControls.Css.Values.pas"/><UnitName Value="tyControls.Css.Values"/></Item5>
+      <Item6><Filename Value="source/tyControls.StyleModel.pas"/><UnitName Value="tyControls.StyleModel"/></Item6>
+      <Item7><Filename Value="source/tyControls.Painter.pas"/><UnitName Value="tyControls.Painter"/></Item7>
+      <Item8><Filename Value="source/tyControls.Controller.pas"/><UnitName Value="tyControls.Controller"/></Item8>
+      <Item9><Filename Value="source/tyControls.Base.pas"/><UnitName Value="tyControls.Base"/></Item9>
+      <Item10><Filename Value="source/tyControls.Button.pas"/><UnitName Value="tyControls.Button"/></Item10>
+      <Item11><Filename Value="source/tyControls.TyLabel.pas"/><UnitName Value="tyControls.TyLabel"/></Item11>
+      <Item12><Filename Value="source/tyControls.Edit.pas"/><UnitName Value="tyControls.Edit"/></Item12>
+      <Item13><Filename Value="source/tyControls.CheckBox.pas"/><UnitName Value="tyControls.CheckBox"/></Item13>
+      <Item14><Filename Value="source/tyControls.Panel.pas"/><UnitName Value="tyControls.Panel"/></Item14>
+      <Item15><Filename Value="source/tyControls.ComboBox.pas"/><UnitName Value="tyControls.ComboBox"/></Item15>
+      <Item16><Filename Value="source/tyControls.ScrollBar.pas"/><UnitName Value="tyControls.ScrollBar"/></Item16>
+      <Item17><Filename Value="source/tyControls.Form.pas"/><UnitName Value="tyControls.Form"/></Item17>
+    </Files>
+    <RequiredPkgs Count="2">
+      <Item1><PackageName Value="BGRABitmapPack"/></Item1>
+      <Item2><PackageName Value="LCL"/></Item2>
+    </RequiredPkgs>
+  </Package>
+</CONFIG>
