@@ -1,3 +1,7 @@
+> **Superseded.** This file has been consolidated into [`KNOWN_GAPS.md`](KNOWN_GAPS.md),
+> which covers all v1 limitations including form chrome, controls, style engine,
+> and package/build. Please refer to that file going forward.
+
 # TyControls — Known Gaps (Window Subsystem, v1)
 
 The v1 window subsystem (`TTyFormChrome` / `TTyTitleBar`) is a cross-platform
