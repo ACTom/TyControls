@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="5">
+    <Name Value="tycontrols_dt"/>
+    <Type Value="DesignTime"/>
+    <AddToProjectUsesSection Value="False"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <SearchPaths>
+        <OtherUnitFiles Value="source"/>
+        <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+      </SearchPaths>
+      <SyntaxOptions>
+        <SyntaxMode Value="ObjFPC"/>
+      </SyntaxOptions>
+    </CompilerOptions>
+    <Files Count="1">
+      <Item1>
+        <Filename Value="source/tyControls.Design.pas"/>
+        <HasRegisterProc Value="True"/>
+        <UnitName Value="tyControls.Design"/>
+      </Item1>
+    </Files>
+    <RequiredPkgs Count="2">
+      <Item1><PackageName Value="tycontrols"/></Item1>
+      <Item2><PackageName Value="IDEIntf"/></Item2>
+    </RequiredPkgs>
+  </Package>
+</CONFIG>
