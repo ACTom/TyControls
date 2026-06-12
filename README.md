@@ -19,7 +19,7 @@ TyButton:disabled { opacity: 0.5; }
 - **运行时热切换主题** —— `LoadTheme` 一行代码,全部控件即时重绘
 - **HiDPI** —— 所有长度按 PPI 缩放,矢量绘制天然清晰
 - **设计期集成** —— 组件面板 "TyControls" 分页,StyleClass 属性下拉
-- **148 个单元测试**,全套件内存零泄漏(heaptrc 验证)
+- **260+ 个单元测试**,全套件内存零泄漏(heaptrc 验证)
 
 ## 快速开始
 
@@ -79,7 +79,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 | [examples/checkbox](examples/checkbox/) | 勾选切换、禁用态 |
 | [examples/radiobutton](examples/radiobutton/) | 按 Parent 分组的单选互斥 |
 | [examples/panel](examples/panel/) | 容器承载子控件、嵌套面板 |
-| [examples/combobox](examples/combobox/) | Items/选择/OnChange(v1 点击循环切换) |
+| [examples/combobox](examples/combobox/) | Items/选择/OnChange、真实下拉弹层 |
 | [examples/scrollbar](examples/scrollbar/) | 垂直/水平滚动条、Position/OnChange |
 | [examples/listbox](examples/listbox/) | 条目列表、键盘导航、内嵌自动滚动条 |
 | [examples/progressbar](examples/progressbar/) | 进度更新、Min/Max/Position |
@@ -103,7 +103,7 @@ lazbuild tycontrols_dt.lpk       # 设计期包(IDE 安装用)
 # 全量构建矩阵(两个包 + 全部示例 + 测试运行器)
 bash scripts/build-matrix.sh
 
-# 运行单元测试(148 个)
+# 运行单元测试
 lazbuild tests/tytests.lpi && ./tests/tytests -a --format=plain
 ```
 
