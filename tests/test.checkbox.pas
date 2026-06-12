@@ -80,14 +80,14 @@ begin
 end;
 
 procedure TCheckBoxTest.TestDrawFrameOpacityApplied;
-{ Stylesheet: background #FF0000, opacity 0.5.
-  Render over a white-filled TBitmap.
-  The full control rect should be a ~50% blend of red over white:
-    R = 0.5*255 + 0.5*255 = 255 (high)
-    G = 0.5*0   + 0.5*255 = ~128 (between 100 and 160)
-    B = 0.5*0   + 0.5*255 = ~128 (between 100 and 160)
-  If DrawFrame was NOT called, opacity would not apply and the pixel
-  would be full red (G=0, B=0) because box rendering draws directly. }
+{ Stylesheet: background #FF0000, opacity 0.5. Render over white.
+  The theme background styles the BOX (not the whole control), so:
+  - a BOX-interior pixel must be a ~50% blend of red over white
+    (G and B between 100 and 160 — opacity applied via DrawFrame);
+  - a CAPTION-area pixel must stay pure white (no control-wide fill —
+    guards the regression where DrawFrame painted S.Background full-width).
+  If DrawFrame was not called at all, opacity would not apply and the
+  box pixel would be full red (G=0, B=0). }
 var
   Ctl: TTyStyleController;
   C: TTyCheckBoxAccess;
@@ -117,14 +117,18 @@ begin
 
     Reread := TBGRABitmap.Create(Bmp);
     try
-      // Sample a pixel in the top-left area that is clearly within ARect
-      // and covered by the DrawFrame background fill (the full control rect).
-      // We pick x=60, y=11 (center) which is well away from the box-square edge.
+      // Box interior: box is 16px @96ppi at the left edge, vertically
+      // centered in 22px -> spans (0,3)-(16,19); probe its middle.
+      Px := Reread.GetPixel(8, 11);
+      AssertTrue('box opacity: green > 100 (white bleeds through)',  Px.green > 100);
+      AssertTrue('box opacity: green < 160 (not fully white)',       Px.green < 160);
+      AssertTrue('box opacity: blue > 100 (white bleeds through)',   Px.blue > 100);
+      AssertTrue('box opacity: blue < 160 (not fully white)',        Px.blue < 160);
+      // Caption area: must remain untouched white (no control-wide fill).
       Px := Reread.GetPixel(60, 11);
-      AssertTrue('DrawFrame opacity: green > 100 (white bleeds through)',  Px.green > 100);
-      AssertTrue('DrawFrame opacity: green < 160 (not fully white)',       Px.green < 160);
-      AssertTrue('DrawFrame opacity: blue > 100 (white bleeds through)',   Px.blue > 100);
-      AssertTrue('DrawFrame opacity: blue < 160 (not fully white)',        Px.blue < 160);
+      AssertTrue('caption area stays white (R)', Px.red >= 250);
+      AssertTrue('caption area stays white (G)', Px.green >= 250);
+      AssertTrue('caption area stays white (B)', Px.blue >= 250);
     finally
       Reread.Free;
     end;

@@ -82,7 +82,7 @@ end;
 procedure TTyCheckBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S: TTyStyleSet;
+  S, FrameS: TTyStyleSet;
   ContentRect, BoxRect, TextRect: TRect;
   BoxSize, Gap: Integer;
 begin
@@ -90,7 +90,13 @@ begin
   try
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
-    DrawFrame(P, ARect, S);
+    // DrawFrame propagates opacity (and shadow) for the whole control, but the
+    // theme's background/border style the small BOX, not the control rect —
+    // so the frame copy clears them to keep the v1 transparent look.
+    FrameS := S;
+    FrameS.Background := Default(TTyFill);
+    FrameS.BorderWidth := 0;
+    DrawFrame(P, ARect, FrameS);
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     // Inset content rect by all four padding sides
     ContentRect := Rect(
@@ -169,7 +175,7 @@ end;
 procedure TTyRadioButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S: TTyStyleSet;
+  S, FrameS: TTyStyleSet;
   ContentRect, DotRect, TextRect: TRect;
   BoxSize, Gap: Integer;
 begin
@@ -177,7 +183,12 @@ begin
   try
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
-    DrawFrame(P, ARect, S);
+    // See TTyCheckBox.RenderTo: frame copy clears background/border so the
+    // theme's box styling doesn't paint a control-wide fill or outline.
+    FrameS := S;
+    FrameS.Background := Default(TTyFill);
+    FrameS.BorderWidth := 0;
+    DrawFrame(P, ARect, FrameS);
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     // Inset content rect by all four padding sides
     ContentRect := Rect(
