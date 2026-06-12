@@ -2,13 +2,15 @@ unit tyControls.Edit;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 type
   TTyEdit = class(TTyCustomControl)
   private
     FText: string;
+    FCaret: Integer;  // codepoint index 0..UTF8Length(FText)
     procedure SetText(const AValue: string);
+    procedure SetCaretPos(AValue: Integer);
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -19,6 +21,8 @@ type
     constructor Create(AOwner: TComponent); override;
     procedure InjectKey(const AChar: TUTF8Char);
     procedure InjectBackspace;
+    procedure InjectDelete;
+    property CaretPos: Integer read FCaret write SetCaretPos;
   published
     property Text: string read FText write SetText;
     property Enabled;
@@ -36,6 +40,7 @@ begin
   inherited Create(AOwner);
   TabStop := True;
   FText := '';
+  FCaret := 0;
 end;
 
 function TTyEdit.GetStyleTypeKey: string;
@@ -47,28 +52,60 @@ procedure TTyEdit.SetText(const AValue: string);
 begin
   if FText = AValue then Exit;
   FText := AValue;
+  // Caret moves to end on SetText
+  FCaret := UTF8Length(FText);
+  Invalidate;
+end;
+
+procedure TTyEdit.SetCaretPos(AValue: Integer);
+var
+  Len: Integer;
+begin
+  Len := UTF8Length(FText);
+  if AValue < 0 then AValue := 0;
+  if AValue > Len then AValue := Len;
+  if FCaret = AValue then Exit;
+  FCaret := AValue;
   Invalidate;
 end;
 
 procedure TTyEdit.InjectKey(const AChar: TUTF8Char);
+var
+  Before, After: string;
 begin
-  if (AChar <> '') and (AChar[1] >= #32) then
-  begin
-    FText := FText + AChar;
-    Invalidate;
-  end;
+  if (AChar = '') or (AChar[1] < #32) then Exit;
+  Before := UTF8Copy(FText, 1, FCaret);
+  After  := UTF8Copy(FText, FCaret + 1, UTF8Length(FText) - FCaret);
+  FText  := Before + AChar + After;
+  Inc(FCaret);
+  Invalidate;
 end;
 
 procedure TTyEdit.InjectBackspace;
 var
-  i: Integer;
+  Len: Integer;
+  Before, After: string;
 begin
-  if FText = '' then Exit;
-  i := Length(FText);
-  // Skip UTF-8 continuation bytes (10xxxxxx = $80..$BF)
-  while (i > 1) and ((Ord(FText[i]) and $C0) = $80) do
-    Dec(i);
-  System.Delete(FText, i, Length(FText) - i + 1);
+  if FCaret = 0 then Exit;
+  Len    := UTF8Length(FText);
+  Before := UTF8Copy(FText, 1, FCaret - 1);
+  After  := UTF8Copy(FText, FCaret + 1, Len - FCaret);
+  FText  := Before + After;
+  Dec(FCaret);
+  Invalidate;
+end;
+
+procedure TTyEdit.InjectDelete;
+var
+  Len: Integer;
+  Before, After: string;
+begin
+  Len := UTF8Length(FText);
+  if FCaret >= Len then Exit;  // no-op at end
+  Before := UTF8Copy(FText, 1, FCaret);
+  After  := UTF8Copy(FText, FCaret + 2, Len - FCaret - 1);
+  FText  := Before + After;
+  // caret stays in place
   Invalidate;
 end;
 
@@ -79,12 +116,42 @@ begin
 end;
 
 procedure TTyEdit.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  Len: Integer;
 begin
   inherited KeyDown(Key, Shift);
-  if Key = VK_BACK then
-  begin
-    InjectBackspace;
-    Key := 0;
+  Len := UTF8Length(FText);
+  case Key of
+    VK_BACK:
+    begin
+      InjectBackspace;
+      Key := 0;
+    end;
+    VK_DELETE:
+    begin
+      InjectDelete;
+      Key := 0;
+    end;
+    VK_LEFT:
+    begin
+      if FCaret > 0 then SetCaretPos(FCaret - 1);
+      Key := 0;
+    end;
+    VK_RIGHT:
+    begin
+      if FCaret < Len then SetCaretPos(FCaret + 1);
+      Key := 0;
+    end;
+    VK_HOME:
+    begin
+      SetCaretPos(0);
+      Key := 0;
+    end;
+    VK_END:
+    begin
+      SetCaretPos(Len);
+      Key := 0;
+    end;
   end;
 end;
 
