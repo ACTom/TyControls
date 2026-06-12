@@ -18,9 +18,14 @@ for a future Tier-2 native enhancement layer.
 - macOS traffic-light (red/yellow/green) caption buttons are not emulated;
   TyControls draws its own close/min/max glyphs (`TTyCaptionButton`) instead.
   macOS users do not get platform-standard window controls.
-- Cross-monitor DPI switching is not handled; moving a window between monitors
-  with different scaling factors does not re-scale chrome metrics on the fly.
-  PPI is sampled from the host form's font at paint time.
+- Cross-monitor DPI switching: **metrics now rescale on monitor-PPI change**
+  (v1.1). `TTyFormChrome` stores `FInstalledPPI` at install time and chains the
+  host form's `OnChangeBounds` event (previous handler is saved and restored on
+  uninstall). When the form's monitor PPI changes, `TitleHeight` and the title
+  bar's `FButtonWidth` are rescaled via `TyRescaleChromeMetric` (MulDiv with
+  half-up rounding). The pure function and handler-chaining are unit-tested.
+  Multi-monitor manual validation pending (only one physical monitor available
+  in the build environment).
 - `TTyFormChrome.Active := False` restores the original `BorderStyle` and the
   form's previous mouse handlers, but toggling chrome on/off repeatedly at
   runtime is not a tested scenario. Recommended usage remains: activate once

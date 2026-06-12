@@ -5,8 +5,10 @@ unit test.form;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, fpcunit, testregistry,
-  tyControls.Painter, tyControls.Form;
+  Classes, SysUtils, Types, Controls, Graphics, Forms,
+  BGRABitmap, BGRABitmapTypes,
+  fpcunit, testregistry,
+  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form;
 
 type
   TFormHelpersTest = class(TTestCase)
@@ -61,12 +63,34 @@ type
     procedure TestPaintSmoke;
   end;
 
+  TRescaleMetricTest = class(TTestCase)
+  published
+    procedure TestScaleUp;
+    procedure TestScaleDown;
+    procedure TestIdentity;
+    procedure TestRoundsHalfUp;
+  end;
+
+  TFormChromeChangeBoundsTest = class(TTestCase)
+  published
+    procedure TestChangeBoundsHookedOnInstall;
+    procedure TestChangeBoundsRestoredOnUninstall;
+  end;
+
+  TCaptionButtonHoverGlyphTest = class(TTestCase)
+  published
+    procedure TestGlyphRenderedByDefault;
+    procedure TestNoGlyphWhenHoverOnlyAndNotHovered;
+    procedure TestGlyphRenderedWhenHoverOnlyAndHovered;
+  end;
+
 implementation
 
 type
   TCaptionButtonAccess = class(TTyCaptionButton)
   public
     procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure SetHover(AValue: Boolean);
   end;
 
   TTitleBarAccess = class(TTyTitleBar)
@@ -74,14 +98,31 @@ type
     procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
+  { Probe object for tracking OnChangeBounds restoration }
+  TChangeBoundsProbe = class
+  public
+    WasCalled: Boolean;
+    procedure Handler(Sender: TObject);
+  end;
+
 procedure TCaptionButtonAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
 end;
 
+procedure TCaptionButtonAccess.SetHover(AValue: Boolean);
+begin
+  FHover := AValue;
+end;
+
 procedure TTitleBarAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TChangeBoundsProbe.Handler(Sender: TObject);
+begin
+  WasCalled := True;
 end;
 
 const
@@ -391,6 +432,228 @@ begin
   end;
 end;
 
+{ TRescaleMetricTest }
+
+procedure TRescaleMetricTest.TestScaleUp;
+begin
+  AssertEquals('32@96->144 = 48', 48, TyRescaleChromeMetric(32, 96, 144));
+end;
+
+procedure TRescaleMetricTest.TestScaleDown;
+begin
+  AssertEquals('48@144->96 = 32', 32, TyRescaleChromeMetric(48, 144, 96));
+end;
+
+procedure TRescaleMetricTest.TestIdentity;
+begin
+  AssertEquals('40@96->96 = 40', 40, TyRescaleChromeMetric(40, 96, 96));
+end;
+
+procedure TRescaleMetricTest.TestRoundsHalfUp;
+begin
+  { 33 * 144 / 96 = 49.5 → should round to 50
+    Formula: (33*144 + 96 div 2) div 96 = (4752 + 48) div 96 = 4800 div 96 = 50 }
+  AssertEquals('33@96->144 rounds half-up to 50', 50, TyRescaleChromeMetric(33, 96, 144));
+end;
+
+{ TFormChromeChangeBoundsTest }
+
+procedure TFormChromeChangeBoundsTest.TestChangeBoundsHookedOnInstall;
+var
+  F: TForm;
+  C: TTyFormChrome;
+begin
+  F := TForm.CreateNew(nil);
+  C := TTyFormChrome.Create(F);
+  try
+    C.Active := True;
+    AssertTrue('OnChangeBounds should be hooked after install',
+      Assigned(TForm(F).OnChangeBounds));
+  finally
+    C.Active := False;
+    F.Free;
+  end;
+end;
+
+procedure TFormChromeChangeBoundsTest.TestChangeBoundsRestoredOnUninstall;
+var
+  F: TForm;
+  C: TTyFormChrome;
+  Probe: TChangeBoundsProbe;
+begin
+  Probe := TChangeBoundsProbe.Create;
+  F := TForm.CreateNew(nil);
+  C := TTyFormChrome.Create(F);
+  try
+    { Assign probe before installing }
+    TForm(F).OnChangeBounds := @Probe.Handler;
+    C.Active := True;
+    { Uninstall should restore the probe }
+    C.Active := False;
+    AssertTrue('OnChangeBounds should be restored to probe after uninstall',
+      TForm(F).OnChangeBounds = @Probe.Handler);
+  finally
+    F.Free;
+    Probe.Free;
+  end;
+end;
+
+{ TCaptionButtonHoverGlyphTest }
+
+procedure TCaptionButtonHoverGlyphTest.TestGlyphRenderedByDefault;
+var
+  Ctl: TTyStyleController;
+  Btn: TCaptionButtonAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  CX, CY: Integer;
+  DarkFound: Boolean;
+  X, Y: Integer;
+  Px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Btn := TCaptionButtonAccess.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyCaptionButton { background: #FFFFFF; color: #000000; border-width: 0px; border-radius: 0px; }');
+    Btn.Controller := Ctl;
+    Btn.Kind := cbkClose;
+    Btn.ShowGlyphOnHoverOnly := False;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(24, 24);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 24, 24);
+    Btn.SmokeRender(Bmp.Canvas, Rect(0, 0, 24, 24), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      { Glyph is centered at 12x12 area (10px). Check 5x5 center for dark px }
+      CX := 12;
+      CY := 12;
+      DarkFound := False;
+      for X := CX - 5 to CX + 5 do
+        for Y := CY - 5 to CY + 5 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          if (Px.red < 128) or (Px.green < 128) or (Px.blue < 128) then
+            DarkFound := True;
+        end;
+      AssertTrue('Default: glyph strokes should be visible', DarkFound);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Btn.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TCaptionButtonHoverGlyphTest.TestNoGlyphWhenHoverOnlyAndNotHovered;
+var
+  Ctl: TTyStyleController;
+  Btn: TCaptionButtonAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  CX, CY: Integer;
+  DarkFound: Boolean;
+  X, Y: Integer;
+  Px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Btn := TCaptionButtonAccess.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyCaptionButton { background: #FFFFFF; color: #000000; border-width: 0px; border-radius: 0px; }');
+    Btn.Controller := Ctl;
+    Btn.Kind := cbkClose;
+    Btn.ShowGlyphOnHoverOnly := True;
+    Btn.SetHover(False);  { explicitly not hovered }
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(24, 24);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 24, 24);
+    Btn.SmokeRender(Bmp.Canvas, Rect(0, 0, 24, 24), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      CX := 12;
+      CY := 12;
+      DarkFound := False;
+      for X := CX - 5 to CX + 5 do
+        for Y := CY - 5 to CY + 5 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          if (Px.red < 128) or (Px.green < 128) or (Px.blue < 128) then
+            DarkFound := True;
+        end;
+      AssertFalse('HoverOnly+not hovered: glyph must not appear', DarkFound);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Btn.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TCaptionButtonHoverGlyphTest.TestGlyphRenderedWhenHoverOnlyAndHovered;
+var
+  Ctl: TTyStyleController;
+  Btn: TCaptionButtonAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  CX, CY: Integer;
+  DarkFound: Boolean;
+  X, Y: Integer;
+  Px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Btn := TCaptionButtonAccess.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyCaptionButton { background: #FFFFFF; color: #000000; border-width: 0px; border-radius: 0px; }' +
+      'TyCaptionButton:hover { background: #FFFFFF; color: #000000; border-width: 0px; }');
+    Btn.Controller := Ctl;
+    Btn.Kind := cbkClose;
+    Btn.ShowGlyphOnHoverOnly := True;
+    Btn.SetHover(True);  { simulated hover }
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(24, 24);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 24, 24);
+    Btn.SmokeRender(Bmp.Canvas, Rect(0, 0, 24, 24), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      CX := 12;
+      CY := 12;
+      DarkFound := False;
+      for X := CX - 5 to CX + 5 do
+        for Y := CY - 5 to CY + 5 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          if (Px.red < 128) or (Px.green < 128) or (Px.blue < 128) then
+            DarkFound := True;
+        end;
+      AssertTrue('HoverOnly+hovered: glyph should appear', DarkFound);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Btn.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TCaptionButtonTest);
@@ -398,5 +661,8 @@ initialization
   RegisterTest(TFormChromeTest);
   RegisterTest(TCaptionButtonPaintTest);
   RegisterTest(TTitleBarPaintTest);
+  RegisterTest(TRescaleMetricTest);
+  RegisterTest(TFormChromeChangeBoundsTest);
+  RegisterTest(TCaptionButtonHoverGlyphTest);
 
 end.
