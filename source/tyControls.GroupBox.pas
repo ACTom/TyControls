@@ -2,17 +2,21 @@ unit tyControls.GroupBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 type
   TTyGroupBox = class(TTyCustomControl)
   private
     FCaption: string;
     procedure SetCaption(const AValue: string);
+    { Shared caption-band height: 16 logical px scaled to APPI.
+      Used by both RenderTo and AdjustClientRect so they stay in sync. }
+    function CapHAtPPI(APPI: Integer): Integer;
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    procedure AdjustClientRect(var ARect: TRect); override;
   public
     constructor Create(AOwner: TComponent); override;
   published
@@ -26,6 +30,18 @@ type
 implementation
 
 { TTyGroupBox }
+
+function TTyGroupBox.CapHAtPPI(APPI: Integer): Integer;
+begin
+  Result := MulDiv(16, APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+procedure TTyGroupBox.AdjustClientRect(var ARect: TRect);
+begin
+  inherited AdjustClientRect(ARect);
+  Inc(ARect.Top, CapHAtPPI(Font.PixelsPerInch));
+end;
 
 constructor TTyGroupBox.Create(AOwner: TComponent);
 begin
@@ -55,6 +71,7 @@ var
   FrameRect, BandRect, TextRect: TRect;
   BandFill: TTyFill;
   TextW: Integer;
+  MeasBmp: TBitmap;
 begin
   P := TTyPainter.Create;
   try
@@ -64,8 +81,8 @@ begin
     W := ARect.Right - ARect.Left;
     H := ARect.Bottom - ARect.Top;
 
-    // Caption band height: Scale(16) logical pixels
-    CapH := P.Scale(16);
+    // Caption band height: 16 logical pixels (matches AdjustClientRect inset)
+    CapH := CapHAtPPI(APPI);
     if CapH < 1 then CapH := 1;
 
     // Draw the frame rect inset from caption mid-line
@@ -75,17 +92,24 @@ begin
     // Draw caption text with a background band behind it
     if FCaption <> '' then
     begin
-      // Estimate text width: Scale(FontSize) * char_count roughly, or use a simple formula.
-      // Simple conservative approximation: char_count * Scale(S.FontSize * 0.6 + 2)
-      // For simplicity, we paint the full caption area and let text clip itself.
-      // Band x-start at Scale(8), text at Scale(12).
-      TextW := Length(FCaption) * P.Scale(8);
-      if TextW < P.Scale(8) then TextW := P.Scale(8);
+      // Measure actual text width using a scratch bitmap canvas so CJK and
+      // variable-width fonts are handled correctly (avoids byte-Length * 8).
+      MeasBmp := TBitmap.Create;
+      try
+        MeasBmp.SetSize(1, 1);
+        MeasBmp.Canvas.Font.Name := S.FontName;
+        MeasBmp.Canvas.Font.Size := MulDiv(S.FontSize, APPI, 96);
+        TextW := MeasBmp.Canvas.TextWidth(FCaption);
+      finally
+        MeasBmp.Free;
+      end;
+      if TextW < 1 then TextW := 1;
 
-      // Fill a background-colored band behind the text to hide the border line
+      // Fill a background-colored band behind the text to hide the border line.
+      // Band: Scale(8) left margin, text width, Scale(8) right margin.
       BandRect := Rect(P.Scale(8), 0, P.Scale(8) + TextW + P.Scale(8), CapH);
       BandFill := S.Background;
-      // If no background set, use a solid transparent fill to avoid painting garbage
+      // If no background set, use a solid black fill as fallback
       if not (tpBackground in S.Present) then
       begin
         BandFill := Default(TTyFill);

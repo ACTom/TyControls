@@ -27,6 +27,7 @@ type
     procedure TestSelectedRowRendersActiveStyle;
     procedure TestScrollBarAppearsWhenOverflow;
     procedure TestScrollBarSyncsTopIndex;
+    procedure TestItemsShrinkClampsTopIndex;
   end;
 implementation
 
@@ -404,6 +405,43 @@ begin
     // Moving TopIndex changes scrollbar
     LB.TopIndex := 0;
     AssertEquals('TopIndex 0 -> scrollbar pos = 0', 0, SB.Position);
+  finally
+    F.Free;
+  end;
+end;
+
+{ TestItemsShrinkClampsTopIndex
+  Setup: 10 items, height=100 (4 visible rows), TopIndex=6.
+  Then: Items.Clear, add 3 items, CallUpdateScrollBar.
+  With 3 items and 4 visible rows, MaxTop=0 → TopIndex must be clamped to 0. }
+procedure TTyListBoxTest.TestItemsShrinkClampsTopIndex;
+var
+  LB: TListBoxAccess;
+  F: TForm;
+  I: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    LB := TListBoxAccess.Create(F);
+    LB.Parent := F;
+    LB.Font.PixelsPerInch := 96;
+    LB.ItemHeight := 24;
+    LB.SetBounds(0, 0, 160, 100);  // VisibleRows = 4
+    for I := 0 to 9 do
+      LB.Items.Add('item' + IntToStr(I));
+    LB.CallUpdateScrollBar;
+    LB.TopIndex := 6;  // max valid for 10 items, 4 rows
+    AssertEquals('TopIndex=6 before shrink', 6, LB.TopIndex);
+
+    // Mutate items directly (bypassing SetItems)
+    LB.Items.Clear;
+    LB.Items.Add('a');
+    LB.Items.Add('b');
+    LB.Items.Add('c');
+    // Now 3 items, 4 rows -> MaxTop=0; FTopIndex is still stale at 6
+    LB.CallUpdateScrollBar;
+
+    AssertEquals('TopIndex clamped to 0 after shrink to 3 items', 0, LB.TopIndex);
   finally
     F.Free;
   end;

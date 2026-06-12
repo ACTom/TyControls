@@ -45,6 +45,7 @@ type
     procedure TestVKRightIncrement;
     procedure TestVKLeftClampsAtMin;
     procedure TestVKRightClampsAtMax;
+    procedure TestDragRoundTrip;
   end;
 
   TTyTrackBarPixelTest = class(TTestCase)
@@ -290,6 +291,45 @@ begin
     AssertEquals('VK_RIGHT at Max stays at Max', 100, Probe.Position);
   finally
     Probe.Free;
+  end;
+end;
+
+procedure TTyTrackBarControlTest.TestDragRoundTrip;
+{ For every Pos in [0..100] with bounds 200x24 @96ppi:
+  set Position := Pos, get ThumbRect, DragTo center of thumb,
+  assert Position is unchanged (zero mismatches allowed). }
+var
+  Bar: TTyTrackBar;
+  Form: TForm;
+  Pos, Mismatches, FirstBad, CX: Integer;
+  R: TRect;
+begin
+  Form := TForm.CreateNew(nil);
+  try
+    Bar := TTyTrackBar.Create(Form);
+    Bar.Parent := Form;
+    Bar.SetBounds(0, 0, 200, 24);
+    Bar.Font.PixelsPerInch := 96;
+    Bar.Min := 0;
+    Bar.Max := 100;
+    Mismatches := 0;
+    FirstBad := -1;
+    for Pos := 0 to 100 do
+    begin
+      Bar.Position := Pos;
+      R := Bar.ThumbRect;
+      CX := (R.Left + R.Right) div 2;
+      Bar.DragTo(CX);
+      if Bar.Position <> Pos then
+      begin
+        Inc(Mismatches);
+        if FirstBad < 0 then FirstBad := Pos;
+      end;
+    end;
+    AssertEquals(Format('DragTo(ThumbRect center) is identity for all 0..100 (mismatches=%d firstBad=%d)',
+      [Mismatches, FirstBad]), 0, Mismatches);
+  finally
+    Form.Free;
   end;
 end;
 

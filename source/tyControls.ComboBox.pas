@@ -2,7 +2,7 @@ unit tyControls.ComboBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType, LCLIntf,
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.ListBox;
 type
@@ -24,6 +24,11 @@ type
     procedure PopupDeactivate(Sender: TObject);
     procedure PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
   protected
+    { Guard: tick at last CloseUp. Click reopens only if > 200ms have passed.
+      This prevents the click-while-open reopen race where PopupDeactivate fires
+      CloseUp BEFORE Click runs, so Click would see DroppedDown=False and reopen.
+      Protected so test subclasses can manipulate it for headless logic tests. }
+    FCloseUpTick: QWord;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure Click; override;
@@ -202,15 +207,20 @@ begin
     FPopup.Hide;
     FPopup.OnDeactivate := @PopupDeactivate;
   end;
+  FCloseUpTick := GetTickCount64;
   Invalidate;
 end;
 
 procedure TTyComboBox.Click;
 begin
   inherited Click;
+  { If dropped down, close. Otherwise open — but guard the reopen race:
+    clicking the combo while it is open fires PopupDeactivate→CloseUp BEFORE
+    this Click handler runs, so DroppedDown is already False here. We suppress
+    reopen if CloseUp happened within the last 200 ms. }
   if DroppedDown then
     CloseUp
-  else
+  else if GetTickCount64 - FCloseUpTick > 200 then
     DropDown;
 end;
 

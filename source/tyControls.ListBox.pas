@@ -208,9 +208,13 @@ end;
 
 procedure TTyListBox.UpdateScrollBar;
 var
-  VR, MaxPos: Integer;
+  VR, MaxPos, MaxTop: Integer;
 begin
   VR := VisibleRows;
+  // Clamp FTopIndex in case Items were mutated directly (Clear/Add without SetItems)
+  MaxTop := FItems.Count - VR;
+  if MaxTop < 0 then MaxTop := 0;
+  if FTopIndex > MaxTop then FTopIndex := MaxTop;
   if FItems.Count > VR then
   begin
     // Ensure scrollbar created

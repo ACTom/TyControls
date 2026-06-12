@@ -10,6 +10,7 @@ type
   TTyGroupBoxProbe = class(TTyGroupBox)
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure CallAdjustClientRect(var ARect: TRect);
   end;
 
   TTyGroupBoxTest = class(TTestCase)
@@ -25,6 +26,7 @@ type
     procedure TestHostsChild;
     procedure TestPaintSmoke;
     procedure TestCaptionRowHasNonTransparentPixel;
+    procedure TestClientRectInsetBelowCaption;
   end;
 
 implementation
@@ -32,6 +34,11 @@ implementation
 procedure TTyGroupBoxProbe.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TTyGroupBoxProbe.CallAdjustClientRect(var ARect: TRect);
+begin
+  AdjustClientRect(ARect);
 end;
 
 procedure TTyGroupBoxTest.SetUp;
@@ -135,6 +142,29 @@ begin
     Bmp.Free;
     Form.Free;
     Ctl.Free;
+  end;
+end;
+
+{ TestClientRectInsetBelowCaption
+  PPI pinned to 96. CapH = MulDiv(16, 96, 96) = 16.
+  Start with Rect(0, 0, 185, 105), call AdjustClientRect directly,
+  assert ARect.Top = 16 (inset by exactly the caption band height). }
+procedure TTyGroupBoxTest.TestClientRectInsetBelowCaption;
+var
+  Probe: TTyGroupBoxProbe;
+  ARect: TRect;
+begin
+  Probe := TTyGroupBoxProbe.Create(FForm);
+  Probe.Parent := FForm;
+  Probe.Font.PixelsPerInch := 96;
+  Probe.SetBounds(0, 0, 185, 105);
+  try
+    ARect := Rect(0, 0, 185, 105);
+    Probe.CallAdjustClientRect(ARect);
+    AssertEquals('AdjustClientRect insets Top by caption band height (16px@96ppi)',
+      16, ARect.Top);
+  finally
+    Probe.Free;
   end;
 end;
 

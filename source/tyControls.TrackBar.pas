@@ -87,7 +87,7 @@ begin
   if (FMax <= FMin) or (Tr <= 0) then
     ThumbLeft := 0
   else
-    ThumbLeft := (Tr * (FPosition - FMin)) div (FMax - FMin);
+    ThumbLeft := (Tr * (FPosition - FMin) + (FMax - FMin) div 2) div (FMax - FMin);
   Result := Rect(ThumbLeft, 0, ThumbLeft + TW, ClientHeight);
 end;
 
@@ -105,7 +105,7 @@ begin
   if Tr <= 0 then
     NewPos := FMin
   else
-    NewPos := FMin + (NewLeft * (FMax - FMin)) div Tr;
+    NewPos := FMin + (NewLeft * (FMax - FMin) + Tr div 2) div Tr;
   Position := NewPos;
 end;
 
@@ -203,7 +203,8 @@ procedure TTyTrackBar.MouseLeave;
 begin
   inherited MouseLeave;
   FThumbHover := False;
-  FDragging := False;
+  // FDragging is NOT cleared here: drag ends on MouseUp only, so dragging
+  // outside the control bounds and back stays consistent.
   Invalidate;
 end;
 
@@ -230,7 +231,7 @@ begin
     if (FMax <= FMin) or (Tr <= 0) then
       ThumbLeft := 0
     else
-      ThumbLeft := (Tr * (FPosition - FMin)) div (FMax - FMin);
+      ThumbLeft := (Tr * (FPosition - FMin) + (FMax - FMin) div 2) div (FMax - FMin);
     ThumbR := Rect(R.Left + ThumbLeft, R.Top, R.Left + ThumbLeft + TW, R.Bottom);
 
     // Resolve thumb style with hover/drag states

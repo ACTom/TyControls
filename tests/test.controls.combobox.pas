@@ -2,7 +2,7 @@ unit test.controls.combobox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLIntf, fpcunit, testregistry,
   tyControls.Base, tyControls.ComboBox, tyControls.ListBox;
 type
   { Expose protected Click and RenderTo for tests }
@@ -10,6 +10,8 @@ type
   public
     procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure DoClick;
+    { Allow tests to rewind the close-up tick so Click thinks enough time has passed }
+    procedure AgeCloseUpTick;
   end;
 
   TChangeProbe = class
@@ -40,6 +42,9 @@ type
     procedure TestPopupSelectionUpdatesCombo;
     procedure TestCloseUpIdempotent;
     procedure TestDropDownEmptyItemsNoop;
+    { --- race guard tests --- }
+    procedure TestCloseUpThenImmediateClickStaysClosed;
+    procedure TestCloseUpThenAgedClickReopens;
   end;
 implementation
 
@@ -56,6 +61,13 @@ end;
 procedure TComboAccess.DoClick;
 begin
   Click;
+end;
+
+procedure TComboAccess.AgeCloseUpTick;
+begin
+  { Set FCloseUpTick to a value 1000ms in the past so the next Click
+    sees enough elapsed time and will proceed to DropDown. }
+  FCloseUpTick := GetTickCount64 - 1000;
 end;
 
 procedure TTyComboBoxTest.SetUp;
@@ -204,6 +216,37 @@ begin
   finally
     EmptyCombo.Free;
   end;
+end;
+
+{ TestCloseUpThenImmediateClickStaysClosed
+  Simulate the deactivate-then-click race: call CloseUp (records tick=now),
+  then immediately DoClick. Since CloseUp just happened (<200ms), Click must
+  NOT reopen the dropdown. DroppedDown stays False. }
+procedure TTyComboBoxTest.TestCloseUpThenImmediateClickStaysClosed;
+begin
+  FCombo.DropDown;
+  AssertTrue('dropped down before test', FCombo.DroppedDown);
+  FCombo.CloseUp;
+  AssertFalse('closed after CloseUp', FCombo.DroppedDown);
+  { Simulate click arriving immediately after CloseUp (race scenario) }
+  FCombo.DoClick;
+  AssertFalse('DroppedDown stays False when Click arrives within 200ms of CloseUp',
+    FCombo.DroppedDown);
+end;
+
+{ TestCloseUpThenAgedClickReopens
+  After ageing FCloseUpTick by 1000ms, a DoClick must reopen the dropdown
+  (the guard does not block it). }
+procedure TTyComboBoxTest.TestCloseUpThenAgedClickReopens;
+begin
+  FCombo.DropDown;
+  FCombo.CloseUp;
+  AssertFalse('closed after CloseUp', FCombo.DroppedDown);
+  { Age the tick so next Click is allowed to open }
+  FCombo.AgeCloseUpTick;
+  FCombo.DoClick;
+  AssertTrue('DroppedDown=True after Click with aged close-up tick', FCombo.DroppedDown);
+  FCombo.CloseUp; // cleanup
 end;
 
 initialization
