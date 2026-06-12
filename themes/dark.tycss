@@ -122,3 +122,65 @@ TyCaptionButton.close:hover  { background: var(--danger); color: #0B1120; }
 TyCaptionButton.close:active { background: darken(--danger, 10%); color: #0B1120; }
 TyCaptionButton.min:hover    { background: lighten(--surface, 16%); }
 TyCaptionButton.max:hover    { background: lighten(--surface, 16%); }
+
+/* ── v1.1 controls ─────────────────────────────────────────────────────── */
+
+TyListBox {
+  background: lighten(--surface, 4%);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 2px;
+}
+TyListBox:focus   { border-color: var(--accent); }
+TyListBox:disabled { opacity: 0.5; }
+
+TyListItem {
+  background: alpha(#000000, 0);
+  color: var(--on-surface);
+  padding: 4px;
+}
+TyListItem:hover  { background: lighten(--surface, 10%); }
+TyListItem:active { background: var(--accent); color: #0B1120; }
+
+TyProgressBar {
+  background: darken(--surface, 4%);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+}
+
+TyProgressFill {
+  background: var(--accent);
+  border-radius: var(--radius);
+}
+
+TyToggleSwitch {
+  background: lighten(--surface, 20%);
+  color: #FFFFFF;
+  border-radius: 12px;
+}
+TyToggleSwitch:active   { background: var(--accent); }
+TyToggleSwitch:disabled { opacity: 0.5; }
+
+TyTrackBar {
+  background: darken(--surface, 4%);
+  border-radius: 3px;
+  padding: 0px;
+}
+
+TyTrackThumb {
+  background: var(--accent);
+  border-radius: 8px;
+}
+TyTrackThumb:hover  { background: lighten(--accent, 8%); }
+TyTrackThumb:active { background: darken(--accent, 8%); }
+
+TyGroupBox {
+  background: alpha(#000000, 0);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+}
