@@ -7,9 +7,14 @@ for a future Tier-2 native enhancement layer.
 
 - Windows Aero Snap (edge tiling) is not supported; dragging to a screen edge
   moves the form but does not trigger snap-to-half or snap-to-quadrant tiling.
-- Borderless-window native drop shadow is not provided. Because the form uses
-  `BorderStyle := bsNone` the OS-provided window shadow is lost; v1 renders no
-  substitute shadow around the form frame.
+- Borderless-window native drop shadow: **resolved on macOS** (v1.1). After
+  `BorderStyle := bsNone`, `InstallChrome` now calls
+  `NSView(Form.Handle).window.setHasShadow(True)` via the LCL-Cocoa handle
+  convention (`Form.Handle` is a `TCocoaWindowContent` NSView; `.window` gives
+  the backing `NSWindow`). The call is wrapped in `{$IFDEF LCLCOCOA}` so
+  non-Cocoa builds are unaffected.
+  Windows DWM drop shadow remains pending — no cross-compile verification
+  environment is available to test or debug the DWM API path.
 - macOS traffic-light (red/yellow/green) caption buttons are not emulated;
   TyControls draws its own close/min/max glyphs (`TTyCaptionButton`) instead.
   macOS users do not get platform-standard window controls.

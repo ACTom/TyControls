@@ -1,6 +1,9 @@
 unit tyControls.Form;
 
 {$mode objfpc}{$H+}
+{$IFDEF LCLCOCOA}
+{$modeswitch objectivec1}
+{$ENDIF}
 
 interface
 
@@ -17,7 +20,9 @@ type
   TTyCaptionButton = class(TTyCustomControl)
   private
     FKind: TTyCaptionButtonKind;
+    FShowGlyphOnHoverOnly: Boolean;
     procedure SetKind(AValue: TTyCaptionButtonKind);
+    procedure SetShowGlyphOnHoverOnly(AValue: Boolean);
   protected
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -28,6 +33,8 @@ type
     function KindGlyph: TTyGlyphKind;
   published
     property Kind: TTyCaptionButtonKind read FKind write SetKind;
+    property ShowGlyphOnHoverOnly: Boolean read FShowGlyphOnHoverOnly
+      write SetShowGlyphOnHoverOnly default False;
     property OnClick;
   end;
 
@@ -75,6 +82,8 @@ type
     FOldMouseDown: TMouseEvent;
     FOldMouseMove: TMouseMoveEvent;
     FOldMouseUp: TMouseEvent;
+    FOldChangeBounds: TNotifyEvent;
+    FInstalledPPI: Integer;
     procedure SetActive(AValue: Boolean);
     procedure SetTitleHeight(AValue: Integer);
     function HostForm: TCustomForm;
@@ -85,6 +94,7 @@ type
     procedure FormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
     procedure FormMouseUp(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
+    procedure FormChangeBounds(Sender: TObject);
     procedure TitleBarMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure TitleBarMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
@@ -108,8 +118,14 @@ type
 
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
 function TyMaximizedBounds(const AWorkArea: TRect): TRect;
+function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
 
 implementation
+
+{$IFDEF LCLCOCOA}
+uses
+  CocoaAll;
+{$ENDIF}
 
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
 var
@@ -153,6 +169,16 @@ begin
   Result.Bottom := AWorkArea.Bottom;
 end;
 
+function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
+begin
+  if AFromPPI <= 0 then
+  begin
+    Result := AValue;
+    Exit;
+  end;
+  Result := (AValue * AToPPI + AFromPPI div 2) div AFromPPI;
+end;
+
 { TTyCaptionButton }
 
 procedure TTyCaptionButton.SetKind(AValue: TTyCaptionButtonKind);
@@ -189,6 +215,14 @@ begin
   end;
 end;
 
+procedure TTyCaptionButton.SetShowGlyphOnHoverOnly(AValue: Boolean);
+begin
+  if FShowGlyphOnHoverOnly = AValue then
+    Exit;
+  FShowGlyphOnHoverOnly := AValue;
+  Invalidate;
+end;
+
 procedure TTyCaptionButton.Click;
 begin
   inherited Click;
@@ -201,17 +235,26 @@ var
   GlyphRect: TRect;
   GlyphSize: Integer;
   CX, CY: Integer;
+  DrawGlyph: Boolean;
 begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, ARect, S);
-    GlyphSize := P.Scale(10);
-    CX := ARect.Left + (ARect.Right - ARect.Left - GlyphSize) div 2;
-    CY := ARect.Top + (ARect.Bottom - ARect.Top - GlyphSize) div 2;
-    GlyphRect := Rect(CX, CY, CX + GlyphSize, CY + GlyphSize);
-    P.DrawGlyph(GlyphRect, KindGlyph, S.TextColor, P.Scale(1));
+    { Determine whether glyph should be drawn }
+    if FShowGlyphOnHoverOnly then
+      DrawGlyph := FHover or FPressed
+    else
+      DrawGlyph := True;
+    if DrawGlyph then
+    begin
+      GlyphSize := P.Scale(10);
+      CX := ARect.Left + (ARect.Right - ARect.Left - GlyphSize) div 2;
+      CY := ARect.Top + (ARect.Bottom - ARect.Top - GlyphSize) div 2;
+      GlyphRect := Rect(CX, CY, CX + GlyphSize, CY + GlyphSize);
+      P.DrawGlyph(GlyphRect, KindGlyph, S.TextColor, P.Scale(1));
+    end;
     P.EndPaint;
   finally
     P.Free;
@@ -359,6 +402,21 @@ begin
     Exit;
   FOldBorderStyle := FForm.BorderStyle;
   FForm.BorderStyle := bsNone;
+  { After BorderStyle:=bsNone the window handle is recreated.
+    Ensure it exists before we access it. }
+  FForm.HandleNeeded;
+  {$IFDEF LCLCOCOA}
+  { Restore the native NSWindow shadow lost when BorderStyle is set to bsNone.
+    Form.Handle is a TCocoaWindowContent (NSView subclass); .window gives the
+    backing NSWindow. }
+  if FForm.HandleAllocated then
+    NSView(FForm.Handle).window.setHasShadow(True);
+  {$ENDIF}
+  { Sample PPI at install time for cross-monitor rescaling }
+  if FForm.Monitor <> nil then
+    FInstalledPPI := FForm.Monitor.PixelsPerInch
+  else
+    FInstalledPPI := Screen.PixelsPerInch;
   FTitleBar.Parent := FForm;
   FTitleBar.Align := alTop;
   FTitleBar.SetBounds(0, 0, FForm.ClientWidth, FTitleHeight);
@@ -367,9 +425,11 @@ begin
   FOldMouseDown := TForm(FForm).OnMouseDown;
   FOldMouseMove := TForm(FForm).OnMouseMove;
   FOldMouseUp := TForm(FForm).OnMouseUp;
+  FOldChangeBounds := TForm(FForm).OnChangeBounds;
   TForm(FForm).OnMouseDown := @FormMouseDown;
   TForm(FForm).OnMouseMove := @FormMouseMove;
   TForm(FForm).OnMouseUp := @FormMouseUp;
+  TForm(FForm).OnChangeBounds := @FormChangeBounds;
   FTitleBar.OnMouseDown := @TitleBarMouseDown;
   FTitleBar.OnMouseMove := @TitleBarMouseMove;
   FTitleBar.OnMouseUp := @TitleBarMouseUp;
@@ -383,6 +443,7 @@ begin
   TForm(FForm).OnMouseDown := FOldMouseDown;
   TForm(FForm).OnMouseMove := FOldMouseMove;
   TForm(FForm).OnMouseUp := FOldMouseUp;
+  TForm(FForm).OnChangeBounds := FOldChangeBounds;
   FForm.BorderStyle := FOldBorderStyle;
   FMaximized := False;
   FTitleBar.MaxButton.Kind := cbkMax;
@@ -480,6 +541,31 @@ procedure TTyFormChrome.FormMouseUp(Sender: TObject; Button: TMouseButton;
 begin
   FResizing := False;
   FResizeHit := bhNone;
+end;
+
+procedure TTyFormChrome.FormChangeBounds(Sender: TObject);
+var
+  CurPPI: Integer;
+begin
+  { Cross-monitor DPI rescale: when the form moves to a monitor with different
+    PPI, rescale TitleHeight and the title bar button width proportionally. }
+  if FForm <> nil then
+  begin
+    if FForm.Monitor <> nil then
+      CurPPI := FForm.Monitor.PixelsPerInch
+    else
+      CurPPI := Screen.PixelsPerInch;
+    if (FInstalledPPI > 0) and (CurPPI <> FInstalledPPI) then
+    begin
+      FTitleHeight := TyRescaleChromeMetric(FTitleHeight, FInstalledPPI, CurPPI);
+      FTitleBar.FButtonWidth := TyRescaleChromeMetric(FTitleBar.FButtonWidth, FInstalledPPI, CurPPI);
+      FInstalledPPI := CurPPI;
+      FTitleBar.SetBounds(0, 0, FForm.ClientWidth, FTitleHeight);
+      FForm.Invalidate;
+    end;
+  end;
+  if Assigned(FOldChangeBounds) then
+    FOldChangeBounds(Sender);
 end;
 
 procedure TTyFormChrome.ToggleMaximize;
