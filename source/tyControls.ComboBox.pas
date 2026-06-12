@@ -16,6 +16,7 @@ type
     procedure SetText(const AValue: string);
     function ButtonWidthLogical: Integer;
   protected
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure Click; override;
   public
@@ -106,7 +107,7 @@ begin
   else
     SelectItem(0);
 end;
-procedure TTyComboBox.Paint;
+procedure TTyComboBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -115,13 +116,16 @@ var
 begin
   P := TTyPainter.Create;
   try
-    R := ClientRect;
-    P.BeginPaint(Canvas, R, Font.PixelsPerInch);
+    R := ARect;
+    P.BeginPaint(ACanvas, R, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
     BtnW := P.Scale(ButtonWidthLogical);
     BtnR := Rect(R.Right - BtnW, R.Top, R.Right, R.Bottom);
-    TextR := Rect(R.Left + P.Scale(6), R.Top, R.Right - BtnW, R.Bottom);
+    // Content honours the resolved Padding (consistent with Button/Edit/Panel);
+    // the right edge stops at the chevron button zone.
+    TextR := Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
+      R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
     if FText <> '' then
       P.DrawText(TextR, FText, S.FontName, S.FontSize, S.FontWeight,
         S.TextColor, taLeftJustify, tlCenter, True);
@@ -130,5 +134,10 @@ begin
   finally
     P.Free;
   end;
+end;
+
+procedure TTyComboBox.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 end.

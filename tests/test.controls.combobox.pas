@@ -2,7 +2,7 @@ unit test.controls.combobox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
   tyControls.Base, tyControls.ComboBox;
 type
   TTyComboBoxTest = class(TTestCase)
@@ -18,9 +18,14 @@ type
     procedure TestSelectItemSetsIndexAndText;
     procedure TestSelectOutOfRangeClears;
     procedure TestChangeEventFires;
+    procedure TestPaintSmoke;
   end;
 implementation
 type
+  TComboAccess = class(TTyComboBox)
+  public
+    procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
   TChangeProbe = class
   public
     Count: Integer;
@@ -78,6 +83,29 @@ begin
     AssertEquals('OnChange does not fire when index unchanged', 1, Probe.Count);
   finally
     Probe.Free;
+  end;
+end;
+procedure TComboAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
+procedure TTyComboBoxTest.TestPaintSmoke;
+var
+  Acc: TComboAccess;
+  Bmp: TBitmap;
+begin
+  Acc := TComboAccess.Create(FForm);
+  Acc.Parent := FForm;
+  Acc.Items.Add('Apple');
+  Acc.SelectItem(0);
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(140, 28);
+    Acc.SmokeRender(Bmp.Canvas, Rect(0, 0, 140, 28), 96);
+    AssertTrue('combobox RenderTo executed without exception', True);
+  finally
+    Bmp.Free;
   end;
 end;
 initialization

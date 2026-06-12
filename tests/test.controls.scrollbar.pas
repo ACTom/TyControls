@@ -3,7 +3,7 @@ unit test.controls.scrollbar;
 interface
 uses
   Classes, SysUtils, Types, fpcunit, testregistry,
-  Forms, Controls,
+  Forms, Controls, Graphics,
   tyControls.ScrollBar;
 type
   TTyScrollGeometryTest = class(TTestCase)
@@ -28,8 +28,18 @@ type
     procedure TestDragMovesPosition;
     procedure TestDragFiresOnChange;
     procedure TestDragClampsAtMax;
+    procedure TestPaintSmoke;
   end;
 implementation
+type
+  TScrollAccess = class(TTyScrollBar)
+  public
+    procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+procedure TScrollAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
 procedure TTyScrollGeometryTest.TestVerticalThumbAtTop;
 var
   R: TRect;
@@ -119,6 +129,24 @@ begin
   FBar.BeginThumbDrag(0);
   FBar.DragThumbTo(10000);
   AssertEquals('drag past end clamps at Max', 100, FBar.Position);
+end;
+procedure TTyScrollBarDragTest.TestPaintSmoke;
+var
+  Acc: TScrollAccess;
+  Bmp: TBitmap;
+begin
+  Acc := TScrollAccess.Create(FForm);
+  Acc.Parent := FForm;
+  Acc.SetBounds(0, 0, 16, 160);
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(16, 160);
+    Acc.SmokeRender(Bmp.Canvas, Rect(0, 0, 16, 160), 96);
+    AssertTrue('scrollbar RenderTo executed without exception', True);
+  finally
+    Bmp.Free;
+  end;
 end;
 initialization
   RegisterTest(TTyScrollGeometryTest);

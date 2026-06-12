@@ -2,7 +2,7 @@ unit test.controls.panel;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls, StdCtrls, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, StdCtrls, fpcunit, testregistry,
   tyControls.Base, tyControls.Panel;
 type
   TTyPanelTest = class(TTestCase)
@@ -17,8 +17,18 @@ type
     procedure TestDefaultCaptionEmpty;
     procedure TestImplementsStyleable;
     procedure TestHostsChild;
+    procedure TestPaintSmoke;
   end;
 implementation
+type
+  TPanelAccess = class(TTyPanel)
+  public
+    procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+procedure TPanelAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
 procedure TTyPanelTest.SetUp;
 begin
   FForm := TForm.CreateNew(nil);
@@ -53,6 +63,24 @@ begin
   Child.Parent := FPanel;
   AssertSame('child parent must be the panel', FPanel, Child.Parent);
   AssertEquals('panel must report one child control', 1, FPanel.ControlCount);
+end;
+procedure TTyPanelTest.TestPaintSmoke;
+var
+  Acc: TPanelAccess;
+  Bmp: TBitmap;
+begin
+  Acc := TPanelAccess.Create(FForm);
+  Acc.Parent := FForm;
+  Acc.Caption := 'Panel';
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(120, 60);
+    Acc.SmokeRender(Bmp.Canvas, Rect(0, 0, 120, 60), 96);
+    AssertTrue('panel RenderTo executed without exception', True);
+  finally
+    Bmp.Free;
+  end;
 end;
 initialization
   RegisterTest(TTyPanelTest);

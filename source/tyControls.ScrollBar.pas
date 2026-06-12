@@ -22,6 +22,7 @@ type
     procedure SetPosition(const AValue: Integer);
     procedure SetPageSize(const AValue: Integer);
   protected
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -147,7 +148,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyScrollBar.Paint;
+procedure TTyScrollBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
@@ -155,8 +156,8 @@ var
 begin
   P := TTyPainter.Create;
   try
-    R := ClientRect;
-    P.BeginPaint(Canvas, R, Font.PixelsPerInch);
+    R := ARect;
+    P.BeginPaint(ACanvas, R, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
     ThumbR := TyScrollThumbRect(R, FKind, FMin, FMax, FPosition, FPageSize);
@@ -167,12 +168,19 @@ begin
   end;
 end;
 
+procedure TTyScrollBar.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
 function TTyScrollBar.TrackLength: Integer;
 begin
+  // Derive from ClientRect so drag and paint share the same rect basis
+  // (TyScrollThumbRect is computed against ClientRect).
   if FKind = sbVertical then
-    Result := Height
+    Result := ClientRect.Bottom - ClientRect.Top
   else
-    Result := Width;
+    Result := ClientRect.Right - ClientRect.Left;
 end;
 
 procedure TTyScrollBar.BeginThumbDrag(AGrabPosAlongTrack: Integer);
