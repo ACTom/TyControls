@@ -3,7 +3,8 @@ unit tyControls.ListBox;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Base,
+  tyControls.ScrollBar;
 type
   TTyListBox = class(TTyCustomControl)
   private
@@ -12,6 +13,9 @@ type
     FItemHeight: Integer;
     FTopIndex: Integer;
     FOnChange: TNotifyEvent;
+    FHoverRow: Integer;       // -1 = none; set in MouseMove, cleared in MouseLeave
+    FScrollBar: TTyScrollBar; // nil until first needed
+    FSyncingScroll: Boolean;  // reentrancy guard
     procedure SetItems(const AValue: TStringList);
     procedure SetItemIndex(const AValue: Integer);
     procedure SetItemHeight(const AValue: Integer);
@@ -19,14 +23,19 @@ type
     function ScaledItemHeight: Integer;
     function MaxTopIndex: Integer;
     procedure EnsureSelectionVisible;
+    procedure ScrollBarChange(Sender: TObject);
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
+    procedure Resize; override;
+    procedure UpdateScrollBar;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -58,6 +67,9 @@ begin
   FItemIndex := -1;
   FItemHeight := 24;
   FTopIndex := 0;
+  FHoverRow := -1;
+  FScrollBar := nil;
+  FSyncingScroll := False;
   TabStop := True;
   Width := 160;
   Height := 120;
@@ -66,6 +78,7 @@ end;
 destructor TTyListBox.Destroy;
 begin
   FItems.Free;
+  // FScrollBar is owned by Self (via Create(Self)) so it is freed by TComponent
   inherited Destroy;
 end;
 
@@ -86,6 +99,7 @@ begin
     if Assigned(FOnChange) then
       FOnChange(Self);
   end;
+  UpdateScrollBar;
   Invalidate;
 end;
 
@@ -99,6 +113,7 @@ begin
   if FItemHeight = AValue then Exit;
   FItemHeight := AValue;
   if FItemHeight < 1 then FItemHeight := 1;
+  UpdateScrollBar;
   Invalidate;
 end;
 
@@ -117,6 +132,16 @@ begin
   if Clamped > MaxTopIndex then Clamped := MaxTopIndex;
   if FTopIndex = Clamped then Exit;
   FTopIndex := Clamped;
+  // Sync scrollbar position (guard reentrancy)
+  if (not FSyncingScroll) and (FScrollBar <> nil) and FScrollBar.Visible then
+  begin
+    FSyncingScroll := True;
+    try
+      FScrollBar.Position := FTopIndex;
+    finally
+      FSyncingScroll := False;
+    end;
+  end;
   Invalidate;
 end;
 
@@ -164,9 +189,59 @@ begin
   if NewIndex = FItemIndex then Exit;
   FItemIndex := NewIndex;
   EnsureSelectionVisible;
+  UpdateScrollBar;
   Invalidate;
   if Assigned(FOnChange) then
     FOnChange(Self);
+end;
+
+procedure TTyListBox.ScrollBarChange(Sender: TObject);
+begin
+  if FSyncingScroll then Exit;
+  FSyncingScroll := True;
+  try
+    SetTopIndex(FScrollBar.Position);
+  finally
+    FSyncingScroll := False;
+  end;
+end;
+
+procedure TTyListBox.UpdateScrollBar;
+var
+  VR, MaxPos: Integer;
+begin
+  VR := VisibleRows;
+  if FItems.Count > VR then
+  begin
+    // Ensure scrollbar created
+    if FScrollBar = nil then
+    begin
+      FScrollBar := TTyScrollBar.Create(Self);
+      FScrollBar.Parent := Self;
+      FScrollBar.Kind := sbVertical;
+      FScrollBar.Align := alRight;
+      FScrollBar.Width := MulDiv(12, Font.PixelsPerInch, 96);
+      FScrollBar.Controller := Self.Controller;
+      FScrollBar.OnChange := @ScrollBarChange;
+    end;
+    MaxPos := FItems.Count - VR;
+    if MaxPos < 0 then MaxPos := 0;
+    FSyncingScroll := True;
+    try
+      FScrollBar.Min := 0;
+      FScrollBar.Max := MaxPos;
+      FScrollBar.PageSize := VR;
+      FScrollBar.Position := FTopIndex;
+    finally
+      FSyncingScroll := False;
+    end;
+    FScrollBar.Visible := True;
+  end
+  else
+  begin
+    if FScrollBar <> nil then
+      FScrollBar.Visible := False;
+  end;
 end;
 
 procedure TTyListBox.KeyDown(var Key: Word; Shift: TShiftState);
@@ -232,6 +307,32 @@ begin
   end;
 end;
 
+procedure TTyListBox.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  SH, NewRow: Integer;
+begin
+  inherited MouseMove(Shift, X, Y);
+  SH := ScaledItemHeight;
+  NewRow := FTopIndex + (Y div SH);
+  if (NewRow < 0) or (NewRow >= FItems.Count) then
+    NewRow := -1;
+  if NewRow <> FHoverRow then
+  begin
+    FHoverRow := NewRow;
+    Invalidate;
+  end;
+end;
+
+procedure TTyListBox.MouseLeave;
+begin
+  inherited MouseLeave;
+  if FHoverRow <> -1 then
+  begin
+    FHoverRow := -1;
+    Invalidate;
+  end;
+end;
+
 function TTyListBox.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
@@ -247,18 +348,88 @@ begin
   Result := True;
 end;
 
+procedure TTyListBox.Resize;
+begin
+  inherited Resize;
+  UpdateScrollBar;
+end;
+
 procedure TTyListBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S: TTyStyleSet;
-  R: TRect;
+  BoxStyle, RowStyle: TTyStyleSet;
+  R, ContentRect, RowRect: TRect;
+  SBWidth, SH, i, LastRow: Integer;
+  ItemStates: TTyStateSet;
 begin
+  // Keep scrollbar in sync (cheap; catches external Items.Add calls)
+  UpdateScrollBar;
+
   P := TTyPainter.Create;
   try
     R := ARect;
     P.BeginPaint(ACanvas, R, APPI);
-    S := CurrentStyle;
-    DrawFrame(P, R, S);
+    BoxStyle := CurrentStyle;
+    DrawFrame(P, R, BoxStyle);
+
+    // Content area = full rect inset by the LISTBOX style's Padding
+    ContentRect := Rect(
+      R.Left   + P.Scale(BoxStyle.Padding.Left),
+      R.Top    + P.Scale(BoxStyle.Padding.Top),
+      R.Right  - P.Scale(BoxStyle.Padding.Right),
+      R.Bottom - P.Scale(BoxStyle.Padding.Bottom)
+    );
+
+    // Subtract scrollbar width when visible
+    SBWidth := 0;
+    if (FScrollBar <> nil) and FScrollBar.Visible then
+      SBWidth := MulDiv(12, APPI, 96);
+
+    SH := MulDiv(FItemHeight, APPI, 96);
+    if SH < 1 then SH := 1;
+    LastRow := FTopIndex + VisibleRows - 1;
+    if LastRow >= FItems.Count - 1 then
+      LastRow := FItems.Count - 1;
+
+    for i := FTopIndex to LastRow do
+    begin
+      // Determine item states
+      ItemStates := [];
+      if i = FItemIndex then
+        Include(ItemStates, tysActive)
+      else if i = FHoverRow then
+        Include(ItemStates, tysHover)
+      else
+        Include(ItemStates, tysNormal);
+
+      // Resolve TyListItem style for this row
+      RowStyle := ActiveController.Model.ResolveStyle('TyListItem', '', ItemStates);
+
+      // Row rect: full content width minus scrollbar, height = scaledItemHeight
+      RowRect := Rect(
+        ContentRect.Left,
+        ContentRect.Top + (i - FTopIndex) * SH,
+        ContentRect.Right - SBWidth,
+        ContentRect.Top + (i - FTopIndex + 1) * SH
+      );
+
+      // Fill row background if the style has one
+      if tpBackground in RowStyle.Present then
+        P.FillBackground(RowRect, RowStyle.Background, RowStyle.BorderRadius);
+
+      // Draw item text, inset by item padding
+      P.DrawText(
+        Rect(RowRect.Left + P.Scale(RowStyle.Padding.Left),
+             RowRect.Top,
+             RowRect.Right - P.Scale(RowStyle.Padding.Right),
+             RowRect.Bottom),
+        FItems[i],
+        RowStyle.FontName, RowStyle.FontSize, RowStyle.FontWeight,
+        RowStyle.TextColor,
+        taLeftJustify, tlCenter, True
+      );
+    end;
+
     P.EndPaint;
   finally
     P.Free;

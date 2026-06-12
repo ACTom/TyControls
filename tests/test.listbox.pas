@@ -3,7 +3,9 @@ unit test.listbox;
 interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, fpcunit, testregistry,
-  tyControls.Base, tyControls.ListBox;
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Controller,
+  tyControls.Base, tyControls.ListBox, tyControls.ScrollBar;
 type
   TTyListBoxTest = class(TTestCase)
   private
@@ -22,6 +24,9 @@ type
     procedure TestTopIndexFollowsSelection;
     procedure TestTopIndexClamps;
     procedure TestWheelScrolls;
+    procedure TestSelectedRowRendersActiveStyle;
+    procedure TestScrollBarAppearsWhenOverflow;
+    procedure TestScrollBarSyncsTopIndex;
   end;
 implementation
 
@@ -30,6 +35,9 @@ type
   public
     function StyleTypeKey: string;
     procedure CallDoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint);
+    procedure CallUpdateScrollBar;
+    function FindScrollBar: TTyScrollBar;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
   TChangeProbe = class
@@ -52,6 +60,29 @@ procedure TListBoxAccess.CallDoMouseWheel(Shift: TShiftState; WheelDelta: Intege
   MousePos: TPoint);
 begin
   DoMouseWheel(Shift, WheelDelta, MousePos);
+end;
+
+procedure TListBoxAccess.CallUpdateScrollBar;
+begin
+  UpdateScrollBar;
+end;
+
+function TListBoxAccess.FindScrollBar: TTyScrollBar;
+var
+  I: Integer;
+begin
+  Result := nil;
+  for I := 0 to ControlCount - 1 do
+    if Controls[I] is TTyScrollBar then
+    begin
+      Result := TTyScrollBar(Controls[I]);
+      Exit;
+    end;
+end;
+
+procedure TListBoxAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
 end;
 
 { TTyListBoxTest }
@@ -235,6 +266,147 @@ begin
   Pt := Point(0, 0);
   Acc.CallDoMouseWheel([], -120, Pt);
   AssertEquals('negative delta scrolls down: TopIndex 0 -> 3', 3, Acc.TopIndex);
+end;
+
+{ TestSelectedRowRendersActiveStyle
+  Stylesheet: TyListBox dark bg, TyListItem:active blue.
+  3 items, ItemIndex=1 (row 1 selected). Render to 120x100 bitmap @96ppi.
+  Row 1 band is y=[24..48); row 0 band is y=[0..24).
+  Probe (10, 36) inside row 1 -> blue dominant (B>180, R<120).
+  Probe (10, 12) inside row 0 -> NOT blue dominant. }
+procedure TTyListBoxTest.TestSelectedRowRendersActiveStyle;
+var
+  Ctl: TTyStyleController;
+  LB: TListBoxAccess;
+  F: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  F := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyListBox { background: #101010; border-width: 0px; } ' +
+      'TyListItem { color: #CCCCCC; } ' +
+      'TyListItem:active { background: #3B82F6; }');
+    LB := TListBoxAccess.Create(F);
+    LB.Parent := F;
+    LB.Controller := Ctl;
+    LB.Font.PixelsPerInch := 96;
+    LB.ItemHeight := 24;
+    LB.SetBounds(0, 0, 120, 100);
+    LB.Items.Add('Alpha');
+    LB.Items.Add('Beta');
+    LB.Items.Add('Gamma');
+    LB.SelectItem(1);   // row 1 = active
+    LB.TopIndex := 0;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(120, 100);
+    Bmp.Canvas.Brush.Color := clBlack;
+    Bmp.Canvas.FillRect(0, 0, 120, 100);
+    LB.RenderTo(Bmp.Canvas, Rect(0, 0, 120, 100), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      // Row 1 (y=24..47): probe at (80, 36) — far right of text area, background only
+      // "Beta" at 12pt is ~30px wide; x=80 is beyond the text, shows row background
+      Px := Reread.GetPixel(80, 36);
+      AssertTrue(Format('row1 blue dominant: B > 180 (actual R=%d G=%d B=%d)',
+        [Px.red, Px.green, Px.blue]), Px.blue > 180);
+      AssertTrue(Format('row1 blue dominant: R < 120 (actual R=%d G=%d B=%d)',
+        [Px.red, Px.green, Px.blue]),  Px.red  < 120);
+      // Row 0 (y=0..23): probe at (80, 12) — background area, not selected
+      Px := Reread.GetPixel(80, 12);
+      AssertTrue('row0 not blue dominant: B < R+50 or B <= 180',
+        (Px.blue < 180) or (Px.blue <= Px.red + 50));
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ TestScrollBarAppearsWhenOverflow
+  10 items, height=100 (4 visible rows) -> scrollbar child exists and Visible.
+  Reduce to 3 items -> scrollbar not visible. }
+procedure TTyListBoxTest.TestScrollBarAppearsWhenOverflow;
+var
+  LB: TListBoxAccess;
+  F: TForm;
+  SB: TTyScrollBar;
+  I: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    LB := TListBoxAccess.Create(F);
+    LB.Parent := F;
+    LB.Font.PixelsPerInch := 96;
+    LB.ItemHeight := 24;
+    LB.SetBounds(0, 0, 120, 100);  // 4 visible rows
+    for I := 0 to 9 do
+      LB.Items.Add('Item ' + IntToStr(I));
+    LB.CallUpdateScrollBar;
+    SB := LB.FindScrollBar;
+    AssertNotNull('scrollbar child exists when overflow', SB);
+    AssertTrue('scrollbar visible when overflow', SB.Visible);
+
+    // Reduce items to 3 (< 4 visible rows)
+    LB.Items.Clear;
+    LB.Items.Add('A');
+    LB.Items.Add('B');
+    LB.Items.Add('C');
+    LB.CallUpdateScrollBar;
+    // Scrollbar should now be hidden (it may or may not be freed, but must be invisible)
+    SB := LB.FindScrollBar;
+    if SB <> nil then
+      AssertFalse('scrollbar hidden when not overflow', SB.Visible)
+    else
+      AssertTrue('scrollbar absent when not overflow: ok', True);
+  finally
+    F.Free;
+  end;
+end;
+
+{ TestScrollBarSyncsTopIndex
+  Overflow setup (10 items, 4 rows).
+  Set scrollbar Position := 3 -> TopIndex = 3.
+  Set TopIndex := 0 -> scrollbar Position = 0. }
+procedure TTyListBoxTest.TestScrollBarSyncsTopIndex;
+var
+  LB: TListBoxAccess;
+  F: TForm;
+  SB: TTyScrollBar;
+  I: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    LB := TListBoxAccess.Create(F);
+    LB.Parent := F;
+    LB.Font.PixelsPerInch := 96;
+    LB.ItemHeight := 24;
+    LB.SetBounds(0, 0, 120, 100);  // 4 visible rows
+    for I := 0 to 9 do
+      LB.Items.Add('Item ' + IntToStr(I));
+    LB.CallUpdateScrollBar;
+    SB := LB.FindScrollBar;
+    AssertNotNull('scrollbar present', SB);
+
+    // Moving scrollbar changes TopIndex
+    SB.Position := 3;
+    AssertEquals('scrollbar pos 3 -> TopIndex = 3', 3, LB.TopIndex);
+
+    // Moving TopIndex changes scrollbar
+    LB.TopIndex := 0;
+    AssertEquals('TopIndex 0 -> scrollbar pos = 0', 0, SB.Position);
+  finally
+    F.Free;
+  end;
 end;
 
 initialization
