@@ -7,8 +7,8 @@
     <CompilerOptions>
       <Version Value="11"/>
       <SearchPaths>
-        <OtherUnitFiles Value="source"/>
-        <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+        <OtherUnitFiles Value="designtime;lib/$(TargetCPU)-$(TargetOS)"/>
+        <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)/designtime"/>
       </SearchPaths>
       <SyntaxOptions>
         <SyntaxMode Value="ObjFPC"/>
@@ -16,7 +16,7 @@
     </CompilerOptions>
     <Files Count="1">
       <Item1>
-        <Filename Value="source/tyControls.Design.pas"/>
+        <Filename Value="designtime/tyControls.Design.pas"/>
         <HasRegisterProc Value="True"/>
         <UnitName Value="tyControls.Design"/>
       </Item1>
