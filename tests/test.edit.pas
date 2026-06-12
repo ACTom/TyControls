@@ -2,7 +2,8 @@ unit test.edit;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
+  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics, LCLType, LCLIntf,
+  LazUTF8,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Edit;
 type
@@ -11,6 +12,7 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure SimulateKeyDown(Key: Word);
     procedure SimulateKeyDownShift(Key: Word; Shift: TShiftState);
+    procedure SimulateKeyDownShiftRef(var Key: Word; Shift: TShiftState);
     procedure SimulateMouseDown(X, Y: Integer; Shift: TShiftState = []);
     procedure SimulateMouseMove(X, Y: Integer; Shift: TShiftState = []);
     procedure SimulateMouseUp(X, Y: Integer);
@@ -71,6 +73,19 @@ type
     // EDIT.4: caret + selection rendering
     procedure TestSelectionBandRendered;
     procedure TestCaretFollowsPosition;
+    // EDIT.5: fix 1 — measure/draw font-size agreement
+    procedure TestMeasureDrawFontSizeAgreement;
+    // EDIT.6: fix 2 — width cache perf
+    procedure TestWidthCachePerf;
+    // EDIT.7: fix 4 — paste empty/CRLF-only
+    procedure TestPasteEmptyClipboardNoOp;
+    procedure TestPasteCRLFOnlyDeletesSelection;
+    // EDIT.8: fix 5 — modifier+arrow falls through
+    procedure TestCtrlLeftDoesNotMove;
+    // EDIT.9: fuzz invariants
+    procedure TestFuzzInvariants;
+    // EDIT.10: hit-test round-trip
+    procedure TestHitTestRoundTrip;
   end;
 implementation
 
@@ -88,6 +103,11 @@ begin
 end;
 
 procedure TTyEditAccess.SimulateKeyDownShift(Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
+end;
+
+procedure TTyEditAccess.SimulateKeyDownShiftRef(var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
 end;
@@ -949,6 +969,319 @@ begin
       Curr := E.CaretPixelX(96);
       AssertTrue('CaretPixelX grows at pos ' + IntToStr(I), Curr > Prev);
       Prev := Curr;
+    end;
+  finally
+    F.Free;
+  end;
+end;
+
+// ---- EDIT.5: Fix 1 — measure/draw font-size agreement ----
+
+procedure TEditTest.TestMeasureDrawFontSizeAgreement;
+// Stylesheet WITHOUT font-size: exercises the EffectiveFontSize fallback.
+// Text 'WWWWWWWW'. Render to bitmap, pixel-scan rightmost non-white column.
+// Assert |rightEdge - CaretPixelXAt(8,96)| <= 6 (measure agrees with draw).
+// Also test WITH explicit font-size for regression.
+var
+  Ctl: TTyStyleController;
+  E: TTyEditAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  X, Y, RightEdge, MeasuredX: Integer;
+  Padding: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    // Test A: stylesheet without font-size (exercises the fallback path)
+    Ctl.LoadThemeCss('TyEdit { background: #FFFFFF; color: #000000; padding: 4px; }');
+    E := TTyEditAccess.Create(Form);
+    E.Parent := Form;
+    E.Controller := Ctl;
+    E.Text := 'WWWWWWWW';
+    E.ClearSelection;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(300, 28);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 300, 28);
+    E.RenderTo(Bmp.Canvas, Rect(0, 0, 300, 28), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      Padding := 4;  // px at 96ppi, matches padding:4px
+      RightEdge := -1;
+      for X := 299 downto 0 do
+      begin
+        for Y := 0 to 27 do
+          if Reread.GetPixel(X, Y).red < 200 then
+          begin
+            RightEdge := X;
+            Break;
+          end;
+        if RightEdge >= 0 then Break;
+      end;
+      MeasuredX := E.CaretPixelXAt(8, 96);
+      // The right edge of drawn text should be very close to the measured caret position
+      if RightEdge >= Padding then
+        AssertTrue(
+          'Without font-size: |rightEdge - measured| <= 6 (got rightEdge=' +
+          IntToStr(RightEdge) + ' measured=' + IntToStr(MeasuredX) + ')',
+          Abs(RightEdge - MeasuredX) <= 6
+        );
+    finally
+      Reread.Free;
+    end;
+    E.Free;
+
+    // Test B: stylesheet WITH explicit font-size (regression)
+    Ctl.LoadThemeCss('TyEdit { background: #FFFFFF; color: #000000; padding: 4px; font-size: 12px; }');
+    E := TTyEditAccess.Create(Form);
+    E.Parent := Form;
+    E.Controller := Ctl;
+    E.Text := 'WWWWWWWW';
+    E.ClearSelection;
+
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 300, 28);
+    E.RenderTo(Bmp.Canvas, Rect(0, 0, 300, 28), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      RightEdge := -1;
+      for X := 299 downto 0 do
+      begin
+        for Y := 0 to 27 do
+          if Reread.GetPixel(X, Y).red < 200 then
+          begin
+            RightEdge := X;
+            Break;
+          end;
+        if RightEdge >= 0 then Break;
+      end;
+      MeasuredX := E.CaretPixelXAt(8, 96);
+      if RightEdge >= Padding then
+        AssertTrue(
+          'With font-size: |rightEdge - measured| <= 6 (got rightEdge=' +
+          IntToStr(RightEdge) + ' measured=' + IntToStr(MeasuredX) + ')',
+          Abs(RightEdge - MeasuredX) <= 6
+        );
+    finally
+      Reread.Free;
+    end;
+    E.Free;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+// ---- EDIT.6: Fix 2 — width cache perf ----
+
+procedure TEditTest.TestWidthCachePerf;
+{ Build a 300-codepoint text, call CaretPixelXAt 200 times, assert < 500ms. }
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  s: string;
+  i: Integer;
+  T0: QWord;
+  Elapsed: QWord;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    s := '';
+    for i := 1 to 300 do
+      s := s + 'W';
+    E.Text := s;
+
+    T0 := GetTickCount64;
+    for i := 1 to 200 do
+      E.CaretPixelXAt(150, 96);
+    Elapsed := GetTickCount64 - T0;
+
+    AssertTrue(
+      '200x CaretPixelXAt on 300-cp text should be < 500ms (got ' +
+      IntToStr(Elapsed) + 'ms)',
+      Elapsed < 500
+    );
+  finally
+    F.Free;
+  end;
+end;
+
+// ---- EDIT.7: Fix 4 — paste empty/CRLF-only ----
+
+procedure TEditTest.TestPasteEmptyClipboardNoOp;
+{ Clipboard '' → true no-op: text unchanged, caret unchanged }
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'ab';
+    E.CaretPos := 1;
+    E.ClipText := '';
+    E.PasteFromClipboard;
+    AssertEquals('Empty clipboard: text unchanged', 'ab', E.Text);
+    AssertEquals('Empty clipboard: caret unchanged', 1, E.CaretPos);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestPasteCRLFOnlyDeletesSelection;
+{ Clipboard '#13#10' with active selection → selection deleted, text without it }
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'abcd';
+    // Select 'bc' (indices 1..3)
+    E.CaretPos := 1;
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    AssertEquals('Pre: SelLength=2', 2, E.SelLength);
+    E.ClipText := #13#10;
+    E.PasteFromClipboard;
+    // Selection deleted, nothing inserted → 'ad'
+    AssertEquals('CRLF paste deletes selection', 'ad', E.Text);
+    AssertEquals('CRLF paste: SelLength=0', 0, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+// ---- EDIT.8: Fix 5 — modifier+arrow falls through ----
+
+procedure TEditTest.TestCtrlLeftDoesNotMove;
+{ Ctrl+VK_LEFT must leave caret unchanged and must NOT zero Key }
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  Key: Word;
+  StartCaret: Integer;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'abc';
+    E.CaretPos := 2;
+    StartCaret := E.CaretPos;
+    Key := VK_LEFT;
+    E.SimulateKeyDownShiftRef(Key, [ssCtrl]);
+    AssertEquals('Ctrl+Left: caret unchanged', StartCaret, E.CaretPos);
+    // Key must NOT be zeroed (falls through unhandled)
+    AssertTrue('Ctrl+Left: Key not consumed (must be VK_LEFT not 0)',
+      Key = VK_LEFT);
+  finally
+    F.Free;
+  end;
+end;
+
+// ---- EDIT.9: fuzz invariants ----
+
+procedure TEditTest.TestFuzzInvariants;
+const
+  EMOJI_STR = #$F0#$9F#$98#$80;
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+  i, opn, L: Integer;
+  Keys: array[0..3] of Word;
+  InsChars: array[0..3] of string;
+  KW: Word;
+  OldSeed: LongInt;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+
+    Keys[0] := VK_LEFT;
+    Keys[1] := VK_RIGHT;
+    Keys[2] := VK_HOME;
+    Keys[3] := VK_END;
+    InsChars[0] := 'a';
+    InsChars[1] := '你';
+    InsChars[2] := EMOJI_STR;
+    InsChars[3] := 'W';
+
+    OldSeed := RandSeed;
+    RandSeed := 42;
+    E.Text := '';
+
+    for i := 1 to 300 do
+    begin
+      opn := Random(10);
+      case opn of
+        0: E.InjectKey(InsChars[Random(4)]);
+        1: E.InjectBackspace;
+        2: E.InjectDelete;
+        3: begin KW := Keys[Random(4)]; E.SimulateKeyDownShift(KW, []); end;
+        4: begin KW := Keys[Random(4)]; E.SimulateKeyDownShift(KW, [ssShift]); end;
+        5: E.SelectAll;
+        6: E.CaretPos := Random(10) - 2;
+        7: begin
+             E.ClipText := InsChars[Random(4)] + #13#10 + 'q';
+             E.SimulateKeyDownShift(VK_V, [ssCtrl]);
+           end;
+        8: E.SimulateKeyDownShift(VK_X, [ssCtrl]);
+        9: if Random(4) = 0 then E.Text := 'a你' + EMOJI_STR;
+      end;
+
+      L := UTF8Length(E.Text);
+      AssertTrue('fuzz #' + IntToStr(i) + ': SelStart >= 0', E.SelStart >= 0);
+      AssertTrue('fuzz #' + IntToStr(i) + ': SelStart + SelLength <= Len',
+        E.SelStart + E.SelLength <= L);
+      AssertTrue('fuzz #' + IntToStr(i) + ': CaretPos in [0,Len]',
+        (E.CaretPos >= 0) and (E.CaretPos <= L));
+
+      // Keep text bounded to avoid runaway growth
+      if L > 60 then E.Text := '';
+    end;
+
+    RandSeed := OldSeed;
+  finally
+    F.Free;
+  end;
+end;
+
+// ---- EDIT.10: hit-test round-trip ----
+
+procedure TEditTest.TestHitTestRoundTrip;
+// For 'iW你il', for each boundary b in 0..5,
+// CaretIndexAtX(CaretPixelXAt(b, PPI)) = b, using the same PPI both ways.
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  b, PPI, XPx, idx: Integer;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'iW你il';
+    // Use the same PPI that CaretIndexAtX uses internally (Font.PixelsPerInch)
+    PPI := E.Font.PixelsPerInch;
+    for b := 0 to 5 do
+    begin
+      XPx := E.CaretPixelXAt(b, PPI);
+      idx := E.CaretIndexAtX(XPx);
+      AssertEquals('HitTest round-trip boundary ' + IntToStr(b), b, idx);
     end;
   finally
     F.Free;

@@ -13,15 +13,24 @@ type
     FCaret: Integer;      // codepoint index 0..UTF8Length(FText)
     FSelAnchor: Integer;  // codepoint index; no selection <=> FSelAnchor = FCaret
     FMouseSelecting: Boolean;  // true while left button held for drag-select
+    // Width cache
+    FWidthCache: TTyIntArray;
+    FWidthCacheValid: Boolean;
+    FWidthCacheFontName: string;
+    FWidthCacheFontSize: Integer;   // effective pt (after EffectiveFontSize)
+    FWidthCachePPI: Integer;
+    // Lazy measuring bitmap (freed in Destroy)
+    FMeasureBmp: TBitmap;
     procedure SetText(const AValue: string);
     procedure SetCaretPos(AValue: Integer);
     // Selection helpers
     procedure DeleteSelection;
-    procedure SetSelAnchorAndCaret(AAnchor, ACaret: Integer);
     // Insert a raw UTF-8 string at the current caret position
     procedure InjectStringAt(const AStr: string);
     // Text measurement helper
     function TextStartX(APPI: Integer): Integer;
+    procedure InvalidateWidthCache;
+    function EffectiveFontSize(const S: TTyStyleSet): Integer;
     function MeasureCodepointWidths(APPI: Integer): TTyIntArray;
   protected
     function GetStyleTypeKey: string; override;
@@ -37,6 +46,7 @@ type
     procedure WriteClipboardText(const S: string); virtual;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     procedure InjectKey(const AChar: TUTF8Char);
     procedure InjectBackspace;
     procedure InjectDelete;
@@ -75,6 +85,14 @@ begin
   FText := '';
   FCaret := 0;
   FSelAnchor := 0;
+  FWidthCacheValid := False;
+  FMeasureBmp := nil;
+end;
+
+destructor TTyEdit.Destroy;
+begin
+  FMeasureBmp.Free;
+  inherited Destroy;
 end;
 
 function TTyEdit.GetStyleTypeKey: string;
@@ -122,13 +140,6 @@ end;
 
 // ---- Internal mutators ----
 
-procedure TTyEdit.SetSelAnchorAndCaret(AAnchor, ACaret: Integer);
-begin
-  FSelAnchor := AAnchor;
-  FCaret := ACaret;
-  Invalidate;
-end;
-
 procedure TTyEdit.DeleteSelection;
 var
   SS, SL: Integer;
@@ -142,6 +153,7 @@ begin
   FText  := Before + After;
   FCaret := SS;
   FSelAnchor := FCaret;
+  InvalidateWidthCache;
   Invalidate;
 end;
 
@@ -152,6 +164,7 @@ begin
   // Caret moves to end on SetText; collapse selection
   FCaret := UTF8Length(FText);
   FSelAnchor := FCaret;
+  InvalidateWidthCache;
   Invalidate;
 end;
 
@@ -168,6 +181,21 @@ begin
   Invalidate;
 end;
 
+// ---- Width cache helpers ----
+
+procedure TTyEdit.InvalidateWidthCache;
+begin
+  FWidthCacheValid := False;
+end;
+
+function TTyEdit.EffectiveFontSize(const S: TTyStyleSet): Integer;
+begin
+  if S.FontSize > 0 then
+    Result := S.FontSize
+  else
+    Result := 12;  // fallback 12pt
+end;
+
 // ---- Text measurement helpers ----
 
 function TTyEdit.TextStartX(APPI: Integer): Integer;
@@ -181,50 +209,76 @@ end;
 
 function TTyEdit.MeasureCodepointWidths(APPI: Integer): TTyIntArray;
 // Returns an array of Length=UTF8Length(FText)+1 cumulative x positions (in px)
-// relative to the text start, measured on a temp bitmap matching current font.
+// relative to the text start, measured on a shared lazy bitmap.
+// The result is cached; rebuilds when font/ppi/text change.
 var
   S: TTyStyleSet;
-  Bmp: TBitmap;
-  FontHeight: Integer;
-  i, Len: Integer;
-  CP: string;
+  FontHeight, EffSize: Integer;
+  i, Len, CPBytes: Integer;
+  P: PChar;
+  CP: string = '';
   CumW: Integer;
   W: TSize;
 begin
-  Len := UTF8Length(FText);
-  SetLength(Result, Len + 1);
-  Result[0] := 0;
-  if Len = 0 then
-    Exit;
-
   S := CurrentStyle;
-  Bmp := TBitmap.Create;
-  try
-    Bmp.PixelFormat := pf32bit;
-    Bmp.SetSize(1, 1);
-    Bmp.Canvas.Font.Name := S.FontName;
-    // FontSize in the style is logical pt; convert to px at APPI
-    if S.FontSize > 0 then
-      FontHeight := MulDiv(S.FontSize, APPI, 72)
-    else
-      FontHeight := MulDiv(12, APPI, 72);   // fallback 12pt
-    Bmp.Canvas.Font.Height := -FontHeight;
-    if S.FontWeight >= 600 then
-      Bmp.Canvas.Font.Style := [fsBold]
-    else
-      Bmp.Canvas.Font.Style := [];
+  EffSize := EffectiveFontSize(S);
+  Len := UTF8Length(FText);
 
+  // Check if cache is still valid
+  if FWidthCacheValid
+    and (FWidthCacheFontName = S.FontName)
+    and (FWidthCacheFontSize = EffSize)
+    and (FWidthCachePPI = APPI)
+    and (Length(FWidthCache) = Len + 1)
+  then
+  begin
+    Result := FWidthCache;
+    Exit;
+  end;
+
+  // (Re)build cache
+  SetLength(FWidthCache, Len + 1);
+  FWidthCache[0] := 0;
+
+  if Len > 0 then
+  begin
+    // Ensure measuring bitmap exists (lazy creation)
+    if FMeasureBmp = nil then
+    begin
+      FMeasureBmp := TBitmap.Create;
+      FMeasureBmp.PixelFormat := pf32bit;
+      FMeasureBmp.SetSize(1, 1);
+    end;
+
+    FMeasureBmp.Canvas.Font.Name := S.FontName;
+    // FontSize in the style is logical pt; convert to px at APPI
+    FontHeight := MulDiv(EffSize, APPI, 72);
+    FMeasureBmp.Canvas.Font.Height := -FontHeight;
+    if S.FontWeight >= 600 then
+      FMeasureBmp.Canvas.Font.Style := [fsBold]
+    else
+      FMeasureBmp.Canvas.Font.Style := [];
+
+    // Walk the string using a moving byte pointer to avoid O(n²) UTF8Copy
+    P := PChar(FText);
     CumW := 0;
     for i := 1 to Len do
     begin
-      CP := UTF8Copy(FText, i, 1);
-      W := Bmp.Canvas.TextExtent(CP);
+      CPBytes := UTF8CodepointSize(P);
+      SetLength(CP, CPBytes);
+      Move(P^, CP[1], CPBytes);
+      W := FMeasureBmp.Canvas.TextExtent(CP);
       CumW := CumW + W.cx;
-      Result[i] := CumW;
+      FWidthCache[i] := CumW;
+      Inc(P, CPBytes);
     end;
-  finally
-    Bmp.Free;
   end;
+
+  FWidthCacheFontName := S.FontName;
+  FWidthCacheFontSize := EffSize;
+  FWidthCachePPI := APPI;
+  FWidthCacheValid := True;
+  Result := FWidthCache;
 end;
 
 // ---- Mouse caret hit-test ----
@@ -236,7 +290,7 @@ var
   StartX: Integer;
   RelX: Integer;
   Len, i: Integer;
-  LeftEdge, RightEdge, MidPoint: Integer;
+  MidPoint: Integer;
 begin
   APPI := Font.PixelsPerInch;
   StartX := TextStartX(APPI);
@@ -258,41 +312,18 @@ begin
   end;
 
   // Walk codepoints: find the boundary nearest to RelX
-  // Widths[i] = cumulative width after i codepoints
-  // Boundary i lies at Widths[i]; pick the nearest
+  // Boundaries are at Widths[0]=0, Widths[1], ..., Widths[Len]
+  // Boundary i is at Widths[i]; for each inter-boundary gap pick the nearest
   Result := 0;
-  for i := 0 to Len do
+  for i := 0 to Len - 1 do
   begin
-    if i = 0 then
-      LeftEdge := 0
-    else
-      LeftEdge := Widths[i - 1];
-
-    if i = Len then
+    MidPoint := (Widths[i] + Widths[i + 1]) div 2;
+    if RelX <= MidPoint then
     begin
-      // Past last codepoint
-      if RelX >= LeftEdge then
-        Result := Len;
-      Break;
+      Result := i;
+      Exit;
     end;
-
-    RightEdge := Widths[i + 1];  // end of codepoint i+1
-    // We're between boundary i (at Widths[i]) and boundary i+1 (at Widths[i+1])
-    // But boundaries are: 0, Widths[1], Widths[2], ..., Widths[Len]
-    // Boundary at index i is at Widths[i]
-    // So boundary i and i+1 are at Widths[i] and Widths[i+1]
-    // The midpoint determines which boundary is nearest
-    if i < Len then
-    begin
-      MidPoint := (Widths[i] + Widths[i + 1]) div 2;
-      if RelX <= MidPoint then
-      begin
-        Result := i;
-        Break;
-      end
-      else
-        Result := i + 1;
-    end;
+    Result := i + 1;
   end;
 end;
 
@@ -345,16 +376,17 @@ var
   Filtered: string;
 begin
   S := ReadClipboardText;
+  if S = '' then Exit;  // truly empty clipboard: full no-op
   // Strip CR and LF characters (single-line control)
   Filtered := '';
   for i := 1 to Length(S) do
     if (S[i] <> #13) and (S[i] <> #10) then
       Filtered := Filtered + S[i];
-  if Filtered = '' then Exit;
-  // Replace selection if any, then insert at caret
+  // Even if Filtered='', the clipboard was non-empty so selection must be deleted
   if HasSelection then
     DeleteSelection;
-  // Insert each codepoint
+  if Filtered = '' then Exit;
+  // Insert at caret
   InjectStringAt(Filtered);
 end;
 
@@ -370,6 +402,7 @@ begin
   InsLen := UTF8Length(AStr);
   FCaret := FCaret + InsLen;
   FSelAnchor := FCaret;
+  InvalidateWidthCache;
   Invalidate;
 end;
 
@@ -434,6 +467,7 @@ begin
   FText  := Before + AChar + After;
   Inc(FCaret);
   FSelAnchor := FCaret;
+  InvalidateWidthCache;
   Invalidate;
 end;
 
@@ -454,6 +488,7 @@ begin
   FText  := Before + After;
   Dec(FCaret);
   FSelAnchor := FCaret;
+  InvalidateWidthCache;
   Invalidate;
 end;
 
@@ -474,6 +509,7 @@ begin
   FText  := Before + After;
   // caret stays; collapse anchor
   FSelAnchor := FCaret;
+  InvalidateWidthCache;
   Invalidate;
 end;
 
@@ -487,6 +523,7 @@ procedure TTyEdit.KeyDown(var Key: Word; Shift: TShiftState);
 var
   Len: Integer;
   Extending: Boolean;
+  HasModifier: Boolean;
 begin
   inherited KeyDown(Key, Shift);
   Len := UTF8Length(FText);
@@ -524,6 +561,8 @@ begin
   end;
 
   Extending := ssShift in Shift;
+  // Modifier combos (Ctrl/Alt/Meta without Shift) on navigation keys must fall through
+  HasModifier := (ssCtrl in Shift) or (ssAlt in Shift) or (ssMeta in Shift);
 
   case Key of
     VK_BACK:
@@ -538,91 +577,111 @@ begin
     end;
     VK_LEFT:
     begin
-      if Extending then
-      begin
-        // Shift held: move caret left (anchor stays)
-        if FCaret > 0 then
-        begin
-          Dec(FCaret);
-          Invalidate;
-        end;
-      end
+      if HasModifier and not Extending then
+        // modifier+arrow: do NOT consume the key; let it fall through
       else
       begin
-        // No shift: if selection exists collapse to left edge, else move
-        if HasSelection then
+        if Extending then
         begin
-          FCaret := SelStart;
-          FSelAnchor := FCaret;
-          Invalidate;
+          // Shift held: move caret left (anchor stays)
+          if FCaret > 0 then
+          begin
+            Dec(FCaret);
+            Invalidate;
+          end;
         end
-        else if FCaret > 0 then
+        else
         begin
-          Dec(FCaret);
-          FSelAnchor := FCaret;
-          Invalidate;
+          // No shift: if selection exists collapse to left edge, else move
+          if HasSelection then
+          begin
+            FCaret := SelStart;
+            FSelAnchor := FCaret;
+            Invalidate;
+          end
+          else if FCaret > 0 then
+          begin
+            Dec(FCaret);
+            FSelAnchor := FCaret;
+            Invalidate;
+          end;
         end;
+        Key := 0;
       end;
-      Key := 0;
     end;
     VK_RIGHT:
     begin
-      if Extending then
-      begin
-        // Shift held: move caret right (anchor stays)
-        if FCaret < Len then
-        begin
-          Inc(FCaret);
-          Invalidate;
-        end;
-      end
+      if HasModifier and not Extending then
+        // modifier+arrow: do NOT consume the key; let it fall through
       else
       begin
-        // No shift: if selection exists collapse to right edge, else move
-        if HasSelection then
+        if Extending then
         begin
-          FCaret := SelStart + SelLength;
-          FSelAnchor := FCaret;
-          Invalidate;
+          // Shift held: move caret right (anchor stays)
+          if FCaret < Len then
+          begin
+            Inc(FCaret);
+            Invalidate;
+          end;
         end
-        else if FCaret < Len then
+        else
         begin
-          Inc(FCaret);
-          FSelAnchor := FCaret;
-          Invalidate;
+          // No shift: if selection exists collapse to right edge, else move
+          if HasSelection then
+          begin
+            FCaret := SelStart + SelLength;
+            FSelAnchor := FCaret;
+            Invalidate;
+          end
+          else if FCaret < Len then
+          begin
+            Inc(FCaret);
+            FSelAnchor := FCaret;
+            Invalidate;
+          end;
         end;
+        Key := 0;
       end;
-      Key := 0;
     end;
     VK_HOME:
     begin
-      if Extending then
-      begin
-        FCaret := 0;
-        Invalidate;
-      end
+      if HasModifier and not Extending then
+        // modifier+home: fall through
       else
       begin
-        FCaret := 0;
-        FSelAnchor := 0;
-        Invalidate;
+        if Extending then
+        begin
+          FCaret := 0;
+          Invalidate;
+        end
+        else
+        begin
+          FCaret := 0;
+          FSelAnchor := 0;
+          Invalidate;
+        end;
+        Key := 0;
       end;
-      Key := 0;
     end;
     VK_END:
     begin
-      if Extending then
-      begin
-        FCaret := Len;
-        Invalidate;
-      end
+      if HasModifier and not Extending then
+        // modifier+end: fall through
       else
       begin
-        FCaret := Len;
-        FSelAnchor := Len;
-        Invalidate;
+        if Extending then
+        begin
+          FCaret := Len;
+          Invalidate;
+        end
+        else
+        begin
+          FCaret := Len;
+          FSelAnchor := Len;
+          Invalidate;
+        end;
+        Key := 0;
       end;
-      Key := 0;
     end;
   end;
 end;
@@ -638,11 +697,13 @@ var
   BandColor: TTyColor;
   BandAlpha: Byte;
   FocusBorderColor: TTyColor;
+  EffSize: Integer;
 begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
+    EffSize := EffectiveFontSize(S);
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     DrawFrame(P, ContentRect, S);
     // Inset content by all four padding sides
@@ -683,8 +744,8 @@ begin
       end;
     end;
 
-    // 2. Draw text (on top of selection band)
-    P.DrawText(ContentRect, FText, S.FontName, S.FontSize, S.FontWeight,
+    // 2. Draw text (on top of selection band) — use EffSize to match measurement
+    P.DrawText(ContentRect, FText, S.FontName, EffSize, S.FontWeight,
       S.TextColor, taLeftJustify, tlCenter, True);
 
     // 3. Caret (only when focused and no selection)
