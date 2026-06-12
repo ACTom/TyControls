@@ -30,6 +30,28 @@ type
     property OnClick;
   end;
 
+  TTyTitleBar = class(TTyCustomControl)
+  private
+    FCaption: string;
+    FMinButton: TTyCaptionButton;
+    FMaxButton: TTyCaptionButton;
+    FCloseButton: TTyCaptionButton;
+    FButtonWidth: Integer;
+    procedure SetCaption(const AValue: string);
+    procedure LayoutButtons;
+  protected
+    procedure Resize; override;
+    procedure Paint; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    function GetStyleTypeKey: string; override;
+    property MinButton: TTyCaptionButton read FMinButton;
+    property MaxButton: TTyCaptionButton read FMaxButton;
+    property CloseButton: TTyCaptionButton read FCloseButton;
+  published
+    property Caption: string read FCaption write SetCaption;
+  end;
+
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
 function TyMaximizedBounds(const AWorkArea: TRect): TRect;
 
@@ -140,6 +162,80 @@ begin
     CY := (ClientHeight - GlyphSize) div 2;
     GlyphRect := Rect(CX, CY, CX + GlyphSize, CY + GlyphSize);
     P.DrawGlyph(GlyphRect, KindGlyph, S.TextColor, P.Scale(1));
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+{ TTyTitleBar }
+
+constructor TTyTitleBar.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FButtonWidth := 46;
+  SetBounds(0, 0, 200, 32);
+  FMinButton := TTyCaptionButton.Create(Self);
+  FMinButton.Kind := cbkMin;
+  FMinButton.Parent := Self;
+  FMaxButton := TTyCaptionButton.Create(Self);
+  FMaxButton.Kind := cbkMax;
+  FMaxButton.Parent := Self;
+  FCloseButton := TTyCaptionButton.Create(Self);
+  FCloseButton.Kind := cbkClose;
+  FCloseButton.Parent := Self;
+  LayoutButtons;
+end;
+
+function TTyTitleBar.GetStyleTypeKey: string;
+begin
+  Result := 'TyTitleBar';
+end;
+
+procedure TTyTitleBar.SetCaption(const AValue: string);
+begin
+  if FCaption = AValue then
+    Exit;
+  FCaption := AValue;
+  Invalidate;
+end;
+
+procedure TTyTitleBar.LayoutButtons;
+var
+  W, H, X: Integer;
+begin
+  if (FCloseButton = nil) or (FMaxButton = nil) or (FMinButton = nil) then
+    Exit;
+  W := FButtonWidth;
+  H := ClientHeight;
+  X := ClientWidth - W;
+  FCloseButton.SetBounds(X, 0, W, H);
+  Dec(X, W);
+  FMaxButton.SetBounds(X, 0, W, H);
+  Dec(X, W);
+  FMinButton.SetBounds(X, 0, W, H);
+end;
+
+procedure TTyTitleBar.Resize;
+begin
+  inherited Resize;
+  LayoutButtons;
+end;
+
+procedure TTyTitleBar.Paint;
+var
+  P: TTyPainter;
+  S: TTyStyleSet;
+  TextRect: TRect;
+begin
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+    S := CurrentStyle;
+    DrawFrame(P, ClientRect, S);
+    TextRect := Rect(P.Scale(8), 0, ClientWidth - 3 * FButtonWidth, ClientHeight);
+    P.DrawText(TextRect, FCaption, S.FontName, S.FontSize, S.FontWeight,
+      S.TextColor, taLeftJustify, tlCenter, True);
     P.EndPaint;
   finally
     P.Free;

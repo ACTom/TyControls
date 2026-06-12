@@ -33,6 +33,15 @@ type
     procedure TestTypeKey;
   end;
 
+  TTitleBarTest = class(TTestCase)
+  published
+    procedure TestTypeKey;
+    procedure TestCaptionProperty;
+    procedure TestHasThreeButtons;
+    procedure TestButtonKinds;
+    procedure TestButtonsRightAlignedAfterResize;
+  end;
+
 implementation
 
 const
@@ -169,8 +178,77 @@ begin
   end;
 end;
 
+procedure TTitleBarTest.TestTypeKey;
+var
+  T: TTyTitleBar;
+begin
+  T := TTyTitleBar.Create(nil);
+  try
+    AssertEquals('typekey', 'TyTitleBar', T.GetStyleTypeKey);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTitleBarTest.TestCaptionProperty;
+var
+  T: TTyTitleBar;
+begin
+  T := TTyTitleBar.Create(nil);
+  try
+    T.Caption := 'Hello';
+    AssertEquals('caption', 'Hello', T.Caption);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTitleBarTest.TestHasThreeButtons;
+var
+  T: TTyTitleBar;
+begin
+  T := TTyTitleBar.Create(nil);
+  try
+    AssertTrue('min', T.MinButton <> nil);
+    AssertTrue('max', T.MaxButton <> nil);
+    AssertTrue('close', T.CloseButton <> nil);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTitleBarTest.TestButtonKinds;
+var
+  T: TTyTitleBar;
+begin
+  T := TTyTitleBar.Create(nil);
+  try
+    AssertTrue('min kind', T.MinButton.Kind = cbkMin);
+    AssertTrue('max kind', T.MaxButton.Kind = cbkMax);
+    AssertTrue('close kind', T.CloseButton.Kind = cbkClose);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTitleBarTest.TestButtonsRightAlignedAfterResize;
+var
+  T: TTyTitleBar;
+begin
+  T := TTyTitleBar.Create(nil);
+  try
+    T.SetBounds(0, 0, 300, 32);
+    AssertEquals('close at right', 300, T.CloseButton.Left + T.CloseButton.Width);
+    AssertTrue('max left of close', T.MaxButton.Left < T.CloseButton.Left);
+    AssertTrue('min left of max', T.MinButton.Left < T.MaxButton.Left);
+  finally
+    T.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TCaptionButtonTest);
+  RegisterTest(TTitleBarTest);
 
 end.
