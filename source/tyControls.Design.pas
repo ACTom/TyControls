@@ -3,7 +3,7 @@ unit tyControls.Design;
 interface
 uses
   Classes, SysUtils, PropEdits,
-  tyControls.Controller, tyControls.StyleModel,
+  tyControls.Base, tyControls.Controller, tyControls.StyleModel,
   tyControls.Button, tyControls.TyLabel, tyControls.Edit,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
   tyControls.ScrollBar, tyControls.Form;
@@ -38,7 +38,11 @@ begin
     [TTyButton, TTyLabel, TTyEdit, TTyCheckBox, TTyRadioButton,
      TTyPanel, TTyComboBox, TTyScrollBar, TTyTitleBar,
      TTyFormChrome, TTyStyleController]);
-  RegisterPropertyEditor(TypeInfo(string), TTyButton, 'StyleClass',
+  // StyleClass dropdown applies to ALL styleable controls: registering on the two
+  // base classes covers every TyControls control through inheritance.
+  RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',
+    TTyStyleClassPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomControl, 'StyleClass',
     TTyStyleClassPropertyEditor);
 end;
 
