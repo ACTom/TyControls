@@ -1,0 +1,124 @@
+/* TyControls — Dark theme */
+:root {
+  --accent:     #60A5FA;
+  --surface:    #1E1E1E;
+  --on-surface: #E5E7EB;
+  --border:     #3F3F46;
+  --danger:     #F87171;
+  --radius:     6px;
+}
+
+TyButton {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 6px;
+  font-size: 10px;
+  font-weight: 400;
+}
+TyButton:hover    { background: lighten(--surface, 8%); }
+TyButton:focus    { border-color: var(--accent); }
+TyButton:active   { background: darken(--surface, 6%); }
+TyButton:disabled { opacity: 0.5; }
+TyButton.primary  { background: var(--accent); color: #0B1120; border-color: var(--accent); }
+TyButton.primary:hover    { background: lighten(--accent, 8%); }
+TyButton.primary:active   { background: darken(--accent, 8%); }
+TyButton.danger   { background: var(--danger); color: #0B1120; border-color: var(--danger); }
+TyButton.danger:hover     { background: lighten(--danger, 8%); }
+TyButton.danger:active    { background: darken(--danger, 8%); }
+
+TyLabel {
+  background: alpha(#000000, 0);
+  color: var(--on-surface);
+  font-size: 10px;
+  font-weight: 400;
+}
+TyLabel:disabled { opacity: 0.5; }
+
+TyEdit {
+  background: lighten(--surface, 4%);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: 10px;
+}
+TyEdit:hover    { border-color: lighten(--border, 12%); }
+TyEdit:focus    { border-color: var(--accent); }
+TyEdit:disabled { opacity: 0.5; }
+
+TyCheckBox {
+  background: lighten(--surface, 4%);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: 3px;
+}
+TyCheckBox:hover    { border-color: var(--accent); }
+TyCheckBox:active   { background: var(--accent); }
+TyCheckBox:disabled { opacity: 0.5; }
+
+TyRadioButton {
+  background: lighten(--surface, 4%);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: 8px;
+}
+TyRadioButton:hover    { border-color: var(--accent); }
+TyRadioButton:active   { background: var(--accent); }
+TyRadioButton:disabled { opacity: 0.5; }
+
+TyPanel {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 8px;
+}
+
+TyComboBox {
+  background: lighten(--surface, 4%);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: 10px;
+}
+TyComboBox:hover    { border-color: lighten(--border, 12%); }
+TyComboBox:focus    { border-color: var(--accent); }
+TyComboBox:disabled { opacity: 0.5; }
+
+TyScrollBar {
+  background: darken(--surface, 4%);
+  color: lighten(--border, 10%);
+  border-radius: 4px;
+}
+TyScrollBar:hover  { color: lighten(--border, 25%); }
+TyScrollBar:active { color: var(--accent); }
+
+TyTitleBar {
+  background: lighten(--surface, 4%);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+TyCaptionButton {
+  background: alpha(#000000, 0);
+  color: var(--on-surface);
+  border-radius: 0px;
+}
+TyCaptionButton:hover  { background: lighten(--surface, 16%); }
+TyCaptionButton:active { background: lighten(--surface, 24%); }
+TyCaptionButton.close:hover  { background: var(--danger); color: #0B1120; }
+TyCaptionButton.close:active { background: darken(--danger, 10%); color: #0B1120; }
+TyCaptionButton.min:hover    { background: lighten(--surface, 16%); }
+TyCaptionButton.max:hover    { background: lighten(--surface, 16%); }
