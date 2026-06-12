@@ -8,7 +8,8 @@ uses
   test.base.drawframe, test.button, test.tylabel, test.edit, test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
   test.controls.scrollbar, test.form, test.themes,
-  test.listbox;
+  test.listbox,
+  test.progressbar;
 
 type
   TTyTestRunner = class(TTestRunner)
