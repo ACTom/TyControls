@@ -10,7 +10,8 @@ uses
   test.controls.scrollbar, test.form, test.themes,
   test.listbox,
   test.progressbar,
-  test.toggleswitch;
+  test.toggleswitch,
+  test.trackbar;
 
 type
   TTyTestRunner = class(TTestRunner)
