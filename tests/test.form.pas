@@ -5,8 +5,8 @@ unit test.form;
 interface
 
 uses
-  Classes, SysUtils, Types, fpcunit, testregistry,
-  tyControls.Form;
+  Classes, SysUtils, Types, Controls, Graphics, fpcunit, testregistry,
+  tyControls.Painter, tyControls.Form;
 
 type
   TFormHelpersTest = class(TTestCase)
@@ -22,6 +22,15 @@ type
     procedure TestBottomRightCorner;
     procedure TestZeroZoneIsNone;
     procedure TestMaximizedBoundsEqualsWorkArea;
+  end;
+
+  TCaptionButtonTest = class(TTestCase)
+  published
+    procedure TestCloseVariantAndGlyph;
+    procedure TestMinVariantAndGlyph;
+    procedure TestMaxVariantAndGlyph;
+    procedure TestRestoreVariantAndGlyph;
+    procedure TestTypeKey;
   end;
 
 implementation
@@ -92,7 +101,76 @@ begin
   AssertEquals('bottom', 1040, R.Bottom);
 end;
 
+procedure TCaptionButtonTest.TestCloseVariantAndGlyph;
+var
+  B: TTyCaptionButton;
+begin
+  B := TTyCaptionButton.Create(nil);
+  try
+    B.Kind := cbkClose;
+    AssertEquals('variant', 'close', B.KindVariant);
+    AssertTrue('glyph', B.KindGlyph = tgClose);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TCaptionButtonTest.TestMinVariantAndGlyph;
+var
+  B: TTyCaptionButton;
+begin
+  B := TTyCaptionButton.Create(nil);
+  try
+    B.Kind := cbkMin;
+    AssertEquals('variant', 'min', B.KindVariant);
+    AssertTrue('glyph', B.KindGlyph = tgMinimize);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TCaptionButtonTest.TestMaxVariantAndGlyph;
+var
+  B: TTyCaptionButton;
+begin
+  B := TTyCaptionButton.Create(nil);
+  try
+    B.Kind := cbkMax;
+    AssertEquals('variant', 'max', B.KindVariant);
+    AssertTrue('glyph', B.KindGlyph = tgMaximize);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TCaptionButtonTest.TestRestoreVariantAndGlyph;
+var
+  B: TTyCaptionButton;
+begin
+  B := TTyCaptionButton.Create(nil);
+  try
+    B.Kind := cbkRestore;
+    AssertEquals('variant', 'restore', B.KindVariant);
+    AssertTrue('glyph', B.KindGlyph = tgRestore);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TCaptionButtonTest.TestTypeKey;
+var
+  B: TTyCaptionButton;
+begin
+  B := TTyCaptionButton.Create(nil);
+  try
+    AssertEquals('typekey', 'TyCaptionButton', B.GetStyleTypeKey);
+  finally
+    B.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
+  RegisterTest(TCaptionButtonTest);
 
 end.
