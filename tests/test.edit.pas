@@ -9,6 +9,7 @@ type
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure SimulateKeyDown(Key: Word);
+    procedure SimulateKeyDownShift(Key: Word; Shift: TShiftState);
   end;
 
   TEditTest = class(TTestCase)
@@ -26,6 +27,17 @@ type
     procedure TestDeleteAtCaret;
     procedure TestDeleteAtEndIsNoop;
     procedure TestCaretKeys;
+    // EDIT.2: selection model
+    procedure TestSelLengthZeroInitially;
+    procedure TestShiftRightExtendsSelection;
+    procedure TestInjectKeyReplacesSelection;
+    procedure TestInjectBackspaceDeletesSelection;
+    procedure TestInjectDeleteDeletesSelection;
+    procedure TestSelectAll;
+    procedure TestCollapseOnUnshiftedLeft;
+    procedure TestCollapseOnUnshiftedRight;
+    procedure TestCtrlASelectsAll;
+    procedure TestMetaASelectsAll;
   end;
 implementation
 
@@ -39,6 +51,11 @@ var
   Shift: TShiftState;
 begin
   Shift := [];
+  KeyDown(Key, Shift);
+end;
+
+procedure TTyEditAccess.SimulateKeyDownShift(Key: Word; Shift: TShiftState);
+begin
   KeyDown(Key, Shift);
 end;
 
@@ -281,6 +298,218 @@ begin
     // VK_END
     E.SimulateKeyDown(VK_END);
     AssertEquals('VK_END -> 3', 3, E.CaretPos);
+  finally
+    F.Free;
+  end;
+end;
+
+// ---- EDIT.2: selection model tests ----
+
+procedure TEditTest.TestSelLengthZeroInitially;
+var
+  F: TCustomForm;
+  E: TTyEdit;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEdit.Create(F);
+    E.Parent := F;
+    E.Text := 'a你bc';
+    AssertEquals('SelLength is 0 after SetText', 0, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestShiftRightExtendsSelection;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'a你bc';
+    E.CaretPos := 0;
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    AssertEquals('SelStart=0 after Shift+Right x2', 0, E.SelStart);
+    AssertEquals('SelLength=2 after Shift+Right x2', 2, E.SelLength);
+    AssertEquals('SelText = a你', 'a你', E.SelText);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestInjectKeyReplacesSelection;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'a你bc';
+    E.CaretPos := 0;
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    // selection covers 'a你', inject 'X' should replace it
+    E.InjectKey('X');
+    AssertEquals('Text after replace selection', 'Xbc', E.Text);
+    AssertEquals('CaretPos after replace', 1, E.CaretPos);
+    AssertEquals('SelLength is 0 after replace', 0, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestInjectBackspaceDeletesSelection;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    // Build selection 1..3: caret at 1, Shift+Right x2
+    E.Text := 'a你bc';
+    E.CaretPos := 1;
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    AssertEquals('Pre: SelStart=1', 1, E.SelStart);
+    AssertEquals('Pre: SelLength=2', 2, E.SelLength);
+    E.InjectBackspace;
+    AssertEquals('Text after backspace-delete selection', 'ac', E.Text);
+    AssertEquals('CaretPos after backspace-delete', 1, E.CaretPos);
+    AssertEquals('SelLength=0 after backspace-delete', 0, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestInjectDeleteDeletesSelection;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    // Build selection 1..3: caret at 1, Shift+Right x2
+    E.Text := 'a你bc';
+    E.CaretPos := 1;
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.InjectDelete;
+    AssertEquals('Text after delete-delete selection', 'ac', E.Text);
+    AssertEquals('CaretPos after delete-delete', 1, E.CaretPos);
+    AssertEquals('SelLength=0 after delete-delete', 0, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestSelectAll;
+var
+  F: TCustomForm;
+  E: TTyEdit;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEdit.Create(F);
+    E.Parent := F;
+    E.Text := 'a你bc';
+    E.SelectAll;
+    AssertEquals('SelectAll: SelStart=0', 0, E.SelStart);
+    AssertEquals('SelectAll: SelLength=4', 4, E.SelLength);
+    AssertEquals('SelectAll: SelText=a你bc', 'a你bc', E.SelText);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestCollapseOnUnshiftedLeft;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'a你bc';
+    E.CaretPos := 0;
+    // Build selection: Shift+Right x2 -> SelStart=0, SelLength=2, caret=2
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    AssertEquals('Pre: SelLength=2', 2, E.SelLength);
+    // plain Left -> collapse to left (SelStart) edge, no extra movement
+    E.SimulateKeyDown(VK_LEFT);
+    AssertEquals('Caret collapsed to left edge', 0, E.CaretPos);
+    AssertEquals('SelLength=0 after collapse left', 0, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestCollapseOnUnshiftedRight;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'a你bc';
+    E.CaretPos := 0;
+    // Build selection: Shift+Right x2 -> SelStart=0, SelLength=2, caret=2
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
+    // plain Right -> collapse to right (SelStart+SelLength) edge, no extra movement
+    E.SimulateKeyDown(VK_RIGHT);
+    AssertEquals('Caret collapsed to right edge', 2, E.CaretPos);
+    AssertEquals('SelLength=0 after collapse right', 0, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestCtrlASelectsAll;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'a你bc';
+    E.SimulateKeyDownShift(VK_A, [ssCtrl]);
+    AssertEquals('Ctrl+A: SelStart=0', 0, E.SelStart);
+    AssertEquals('Ctrl+A: SelLength=4', 4, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestMetaASelectsAll;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'a你bc';
+    E.SimulateKeyDownShift(VK_A, [ssMeta]);
+    AssertEquals('Meta+A: SelStart=0', 0, E.SelStart);
+    AssertEquals('Meta+A: SelLength=4', 4, E.SelLength);
   finally
     F.Free;
   end;
