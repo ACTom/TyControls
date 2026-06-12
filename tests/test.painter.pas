@@ -31,6 +31,7 @@ type
     procedure TestDrawTextRastersPixels;
     procedure TestDrawGlyphAllKinds;
     procedure TestNineSliceCenterRegion;
+    procedure TestEraseRectMakesTransparent;
   end;
 
 implementation
@@ -233,6 +234,28 @@ begin
   finally
     DeleteFile(fn);
   end;
+end;
+
+procedure TPainterTest.TestEraseRectMakesTransparent;
+{ Fill the entire bitmap solid red, then EraseRect a sub-region.
+  Assert the erased sub-region pixel is fully transparent (alpha=0)
+  and a pixel outside the erased rect still has alpha=255. }
+var
+  fill: TTyFill;
+  pxInside, pxOutside: TBGRAPixel;
+begin
+  MakePainter(40, 40, 96);
+  FillChar(fill, SizeOf(fill), 0);
+  fill.Kind := tfkSolid;
+  fill.Color := TyRGBA(255, 0, 0, 255);
+  FPainter.FillBackground(Rect(0, 0, 40, 40), fill, 0);
+  // Erase a 10x10 sub-rect in the top-left
+  FPainter.EraseRect(Rect(5, 5, 15, 15));
+  pxInside := PixelAt(10, 10);
+  pxOutside := PixelAt(30, 30);
+  AssertEquals('erased pixel alpha = 0', 0, pxInside.alpha);
+  AssertEquals('outside pixel alpha = 255 (unchanged)', 255, pxOutside.alpha);
+  AssertEquals('outside pixel red = 255 (unchanged)', 255, pxOutside.red);
 end;
 
 initialization

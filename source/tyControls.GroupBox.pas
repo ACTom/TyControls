@@ -69,7 +69,6 @@ var
   S: TTyStyleSet;
   W, H, CapH: Integer;
   FrameRect, BandRect, TextRect: TRect;
-  BandFill: TTyFill;
   TextW: Integer;
   MeasBmp: TBitmap;
 begin
@@ -105,18 +104,10 @@ begin
       end;
       if TextW < 1 then TextW := 1;
 
-      // Fill a background-colored band behind the text to hide the border line.
-      // Band: Scale(8) left margin, text width, Scale(8) right margin.
+      // Erase the band pixels so the parent background shows through with no
+      // border segment. Band: Scale(8) left margin + text width + Scale(8) right.
       BandRect := Rect(P.Scale(8), 0, P.Scale(8) + TextW + P.Scale(8), CapH);
-      BandFill := S.Background;
-      // If no background set, use a solid black fill as fallback
-      if not (tpBackground in S.Present) then
-      begin
-        BandFill := Default(TTyFill);
-        BandFill.Kind := tfkSolid;
-        BandFill.Color := $FF000000; // opaque black fallback; themes should set background
-      end;
-      P.FillBackground(BandRect, BandFill, 0);
+      P.EraseRect(BandRect);
 
       // Draw caption text
       TextRect := Rect(P.Scale(12), 0, W - P.Scale(4), CapH);

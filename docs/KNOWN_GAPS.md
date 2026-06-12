@@ -36,8 +36,6 @@ Tier-2 native enhancement layer.
 
 ## Controls
 
-- `TTyComboBox` has no true drop-down layer (v1/v1.1): clicking cycles through
-  items in-place. Floating list pop-up is a Tier-2 item.
 - `TTyEdit` has no horizontal scrolling (v1.1): when text is wider than the
   control, content to the right is not visible and cannot be reached by mouse
   click. The viewport is fixed at the text start.

@@ -25,7 +25,7 @@ type
     procedure TestCaptionSettable;
     procedure TestHostsChild;
     procedure TestPaintSmoke;
-    procedure TestCaptionRowHasNonTransparentPixel;
+    procedure TestCaptionBandErasedBorderNotVisible;
     procedure TestClientRectInsetBelowCaption;
   end;
 
@@ -98,43 +98,61 @@ begin
   end;
 end;
 
-procedure TTyGroupBoxTest.TestCaptionRowHasNonTransparentPixel;
-{ When Caption <> '' with a styled background, at least one pixel in the
-  caption band (y ~ capH/2 = 8) should be visible (not black/transparent).
-  We use a bright red background to make it easy to detect.
-  Pixel at (50, 8) inside caption band should have some red presence. }
+procedure TTyGroupBoxTest.TestCaptionBandErasedBorderNotVisible;
+{ With a red border, transparent background, and caption '组' rendered over a
+  white bitmap:
+  (a) A border pixel on the top edge OUTSIDE the caption band x-range must be
+      red-dominant (border visible where no text erasing occurred).
+  (b) A pixel INSIDE the band at the border's y (capH div 2 = 8) must NOT be
+      red-dominant — the band was erased so the white backdrop shows through. }
 var
   Ctl: TTyStyleController;
   Form: TForm;
   Probe: TTyGroupBoxProbe;
   Bmp: TBitmap;
+  BgBmp: TBGRABitmap;
   Reread: TBGRABitmap;
-  PxCaption: TBGRAPixel;
+  PxOutside, PxInside: TBGRAPixel;
+  CapY: Integer;
 begin
   Ctl := TTyStyleController.Create(nil);
   Form := TForm.CreateNew(nil);
   Bmp := TBitmap.Create;
   try
     Ctl.LoadThemeCss(
-      'TyGroupBox { background: #FF0000; border-color: #FFFFFF; border-width: 1px; border-radius: 0px; color: #FFFFFF; font-size: 12px; }');
+      'TyGroupBox { border-color: #FF0000; border-width: 2px; border-radius: 0px; ' +
+      'background: alpha(#000000,0); color: #000000; font-size: 12px; }');
     Probe := TTyGroupBoxProbe.Create(Form);
     Probe.Parent := Form;
     Probe.Controller := Ctl;
-    Probe.Caption := 'Group';
+    Probe.Caption := '组';
     Probe.SetBounds(0, 0, 185, 105);
     Probe.Font.PixelsPerInch := 96;
 
+    // Fill canvas white so erased regions show white
     Bmp.PixelFormat := pf32bit;
     Bmp.SetSize(185, 105);
+    BgBmp := TBGRABitmap.Create(185, 105, BGRA(255, 255, 255, 255));
+    try
+      BgBmp.Draw(Bmp.Canvas, 0, 0, False);
+    finally
+      BgBmp.Free;
+    end;
+
     Probe.RenderTo(Bmp.Canvas, Rect(0, 0, 185, 105), 96);
 
     Reread := TBGRABitmap.Create(Bmp);
     try
-      // Caption band near y=8 (half of capH=16). Check pixel at x=50
-      PxCaption := Reread.GetPixel(50, 8);
-      // With red background, alpha must be > 0 and red > 0
-      AssertTrue('caption band: alpha > 0 (something painted)', PxCaption.alpha > 0);
-      AssertTrue('caption band: red > 100 (background color visible)', PxCaption.red > 100);
+      // CapH = MulDiv(16, 96, 96) = 16; border is at y = CapH div 2 = 8
+      CapY := 8;
+      // (a) Far-right pixel at border y — outside the caption band x-range
+      PxOutside := Reread.GetPixel(180, CapY);
+      AssertTrue('border outside band: red > 100 (border visible)', PxOutside.red > 100);
+      AssertTrue('border outside band: red > blue (red-dominant)', PxOutside.red > PxOutside.blue);
+      // (b) Pixel inside the erased band (x=20 is safely within the band gap)
+      PxInside := Reread.GetPixel(20, CapY);
+      AssertTrue('inside erased band: red < 100 (border not visible, white shows through)',
+        PxInside.red < 100);
     finally
       Reread.Free;
     end;

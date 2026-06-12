@@ -342,6 +342,12 @@ function TTyListBox.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   Delta: Integer;
 begin
+  // Let the user's OnMouseWheel handler run first; if it consumes the event, stop.
+  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
+  begin
+    Result := True;
+    Exit;
+  end;
   // WheelDelta > 0 = scroll up (TopIndex decreases)
   // WheelDelta < 0 = scroll down (TopIndex increases)
   if WheelDelta > 0 then
