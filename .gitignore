@@ -26,6 +26,13 @@ backup/
 /tests/tytests
 /examples/demo/demo
 
+# lazbuild 从 .lpk 自动生成的包注册单元（构建时重新生成）
+/tycontrols.pas
+/tycontrols_dt.pas
+
+# FPC 智能链接 / 临时产物
+*.fpc
+
 # 操作系统
 .DS_Store
 Thumbs.db
