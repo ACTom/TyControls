@@ -1,0 +1,67 @@
+/* TyControls — Custom 自定义主题（紫色强调色，暖白底色） */
+:root {
+  --accent:     #7C3AED;
+  --surface:    #FAF9F7;
+  --on-surface: #1C1917;
+  --border:     #C4B5FD;
+  --radius:     8px;
+}
+
+TyButton {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 6px;
+  font-size: 10px;
+  font-weight: 400;
+}
+TyButton:hover    { background: darken(--surface, 4%); }
+TyButton:focus    { border-color: var(--accent); }
+TyButton:active   { background: darken(--surface, 10%); }
+TyButton:disabled { opacity: 0.4; }
+TyButton.primary  { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+TyButton.primary:hover  { background: lighten(--accent, 8%); }
+TyButton.primary:active { background: darken(--accent, 8%); }
+
+TyLabel {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  font-size: 10px;
+  font-weight: 400;
+}
+TyLabel:disabled { opacity: 0.4; }
+
+TyEdit {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: 10px;
+}
+TyEdit:hover  { border-color: var(--accent); }
+TyEdit:focus  { border-color: var(--accent); }
+TyEdit:disabled { opacity: 0.4; }
+
+TyCheckBox {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: 4px;
+}
+TyCheckBox:hover   { border-color: var(--accent); }
+TyCheckBox:active  { background: var(--accent); }
+TyCheckBox:disabled { opacity: 0.4; }
+
+TyPanel {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 8px;
+}
