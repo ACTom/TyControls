@@ -53,6 +53,8 @@ type
     procedure CopyToClipboard;
     procedure CutToClipboard;
     procedure PasteFromClipboard;
+    // Rendering helpers (public for headless tests)
+    function CaretPixelXAt(ACaretIndex, APPI: Integer): Integer;
     property CaretPos: Integer read FCaret write SetCaretPos;
   published
     property Text: string read FText write SetText;
@@ -292,6 +294,23 @@ begin
         Result := i + 1;
     end;
   end;
+end;
+
+// ---- Caret pixel position helper ----
+
+function TTyEdit.CaretPixelXAt(ACaretIndex, APPI: Integer): Integer;
+var
+  Widths: TTyIntArray;
+  Len: Integer;
+begin
+  Len := UTF8Length(FText);
+  if ACaretIndex < 0 then ACaretIndex := 0;
+  if ACaretIndex > Len then ACaretIndex := Len;
+  Result := TextStartX(APPI);
+  if Len = 0 then
+    Exit;
+  Widths := MeasureCodepointWidths(APPI);
+  Result := Result + Widths[ACaretIndex];
 end;
 
 // ---- Clipboard implementation ----
@@ -611,8 +630,14 @@ end;
 procedure TTyEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S: TTyStyleSet;
-  ContentRect, CaretRect: TRect;
+  S, FS: TTyStyleSet;
+  ContentRect, BandRect, CaretRect: TRect;
+  Widths: TTyIntArray;
+  X1, X2, CaretX: Integer;
+  BandFill: TTyFill;
+  BandColor: TTyColor;
+  BandAlpha: Byte;
+  FocusBorderColor: TTyColor;
 begin
   P := TTyPainter.Create;
   try
@@ -627,15 +652,53 @@ begin
       ContentRect.Right  - P.Scale(S.Padding.Right),
       ContentRect.Bottom - P.Scale(S.Padding.Bottom)
     );
+
+    // 1. Selection band (drawn before text so glyphs appear on top)
+    if HasSelection then
+    begin
+      // Resolve focused style for border-color (used as band color)
+      FS := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysFocused]);
+      if tpBorderColor in FS.Present then
+        FocusBorderColor := FS.BorderColor
+      else
+        FocusBorderColor := S.TextColor;
+
+      Widths := MeasureCodepointWidths(APPI);
+      X1 := ContentRect.Left + Widths[SelStart];
+      X2 := ContentRect.Left + Widths[SelStart + SelLength];
+      // Clamp to content rect
+      if X1 < ContentRect.Left then X1 := ContentRect.Left;
+      if X2 > ContentRect.Right then X2 := ContentRect.Right;
+      if X1 < X2 then
+      begin
+        BandRect := Rect(X1, ContentRect.Top, X2, ContentRect.Bottom);
+        // ~35% alpha: $59 ≈ 255 * 0.35
+        BandAlpha := $59;
+        BandColor := TyRGBA(TyRedOf(FocusBorderColor), TyGreenOf(FocusBorderColor),
+          TyBlueOf(FocusBorderColor), BandAlpha);
+        BandFill := Default(TTyFill);
+        BandFill.Kind := tfkSolid;
+        BandFill.Color := BandColor;
+        P.FillBackground(BandRect, BandFill, 0);
+      end;
+    end;
+
+    // 2. Draw text (on top of selection band)
     P.DrawText(ContentRect, FText, S.FontName, S.FontSize, S.FontWeight,
       S.TextColor, taLeftJustify, tlCenter, True);
-    if Focused then
+
+    // 3. Caret (only when focused and no selection)
+    if Focused and not HasSelection then
     begin
-      CaretRect := Rect(ContentRect.Left, ContentRect.Top + P.Scale(4),
-        ContentRect.Left + P.Scale(1), ContentRect.Bottom - P.Scale(4));
+      if Length(Widths) = 0 then
+        Widths := MeasureCodepointWidths(APPI);
+      CaretX := ContentRect.Left + Widths[FCaret];
+      CaretRect := Rect(CaretX, ContentRect.Top + P.Scale(2),
+        CaretX + P.Scale(1), ContentRect.Bottom - P.Scale(2));
       P.FillBackground(CaretRect, Default(TTyFill), 0);
       P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
     end;
+
     P.EndPaint;
   finally
     P.Free;

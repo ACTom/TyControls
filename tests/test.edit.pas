@@ -3,7 +3,8 @@ unit test.edit;
 interface
 uses
   Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
-  tyControls.Base, tyControls.Edit;
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Edit;
 type
   TTyEditAccess = class(TTyEdit)
   public
@@ -13,6 +14,8 @@ type
     procedure SimulateMouseDown(X, Y: Integer; Shift: TShiftState = []);
     procedure SimulateMouseMove(X, Y: Integer; Shift: TShiftState = []);
     procedure SimulateMouseUp(X, Y: Integer);
+    // EDIT.4: expose CaretPixelX for headless caret-rendering tests
+    function CaretPixelX(APPI: Integer): Integer;
   end;
 
   // Subclass with in-memory clipboard for headless testing
@@ -65,6 +68,9 @@ type
     procedure TestCtrlCCopies;
     procedure TestCtrlXCuts;
     procedure TestCtrlVPastes;
+    // EDIT.4: caret + selection rendering
+    procedure TestSelectionBandRendered;
+    procedure TestCaretFollowsPosition;
   end;
 implementation
 
@@ -99,6 +105,11 @@ end;
 procedure TTyEditAccess.SimulateMouseUp(X, Y: Integer);
 begin
   MouseUp(mbLeft, [], X, Y);
+end;
+
+function TTyEditAccess.CaretPixelX(APPI: Integer): Integer;
+begin
+  Result := CaretPixelXAt(CaretPos, APPI);
 end;
 
 // TTyEditClipboardAccess
@@ -828,6 +839,117 @@ begin
     E.SimulateKeyDownShift(VK_V, [ssCtrl]);
     AssertEquals('Ctrl+V pastes at caret', 'Hi Bye', E.Text);
     AssertEquals('Ctrl+V advances caret', 3, E.CaretPos);
+  finally
+    F.Free;
+  end;
+end;
+
+// ---- EDIT.4: caret + selection rendering tests ----
+
+procedure TEditTest.TestSelectionBandRendered;
+{ Stylesheet: TyEdit { background: #FFFFFF; color: #000000; padding: 4px; }
+               TyEdit:focus { border-color: #0000FF; }
+  Text 'aaaa', SelectAll. Render into white-initialized bitmap.
+  The 35%-alpha blue band over white gives B≈255, R≈165 → blue > red.
+  At vertical centre, scan x range in the text area; assert at least one
+  pixel has blue > red (the band was drawn).
+  Control: render WITHOUT selection → no blue-dominant pixel. }
+var
+  Ctl: TTyStyleController;
+  E: TTyEditAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+  X, MidY: Integer;
+  FoundBlue: Boolean;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyEdit { background: #FFFFFF; color: #000000; padding: 4px; }' +
+      ' TyEdit:focus { border-color: #0000FF; }');
+    E := TTyEditAccess.Create(Form);
+    E.Parent := Form;
+    E.Controller := Ctl;
+    E.Text := 'aaaa';
+    E.SelectAll;  // has selection
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 28);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 200, 28);
+    E.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 28), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      MidY := 14;
+      FoundBlue := False;
+      for X := 5 to 195 do
+      begin
+        Px := Reread.GetPixel(X, MidY);
+        if Px.blue > Px.red then
+        begin
+          FoundBlue := True;
+          Break;
+        end;
+      end;
+      AssertTrue('Selection band: at least one blue-dominant pixel found', FoundBlue);
+
+      // Control: render without selection → no blue-dominant pixel
+      Bmp.Canvas.Brush.Color := clWhite;
+      Bmp.Canvas.FillRect(0, 0, 200, 28);
+      E.ClearSelection;
+      E.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 28), 96);
+    finally
+      Reread.Free;
+    end;
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      FoundBlue := False;
+      for X := 5 to 195 do
+      begin
+        Px := Reread.GetPixel(X, MidY);
+        if Px.blue > Px.red then
+        begin
+          FoundBlue := True;
+          Break;
+        end;
+      end;
+      AssertFalse('No selection: no blue-dominant pixel found', FoundBlue);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TEditTest.TestCaretFollowsPosition;
+{ CaretPixelX should grow strictly as CaretPos advances 0→4 for wide text 'WWWW'. }
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  Prev, Curr: Integer;
+  I: Integer;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'WWWW';
+    Prev := -1;
+    for I := 0 to 4 do
+    begin
+      E.CaretPos := I;
+      Curr := E.CaretPixelX(96);
+      AssertTrue('CaretPixelX grows at pos ' + IntToStr(I), Curr > Prev);
+      Prev := Curr;
+    end;
   finally
     F.Free;
   end;
