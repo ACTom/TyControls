@@ -153,6 +153,7 @@ var
   P: TTyPainter;
   S: TTyStyleSet;
   R, ThumbR: TRect;
+  ThumbFill: TTyFill;
 begin
   P := TTyPainter.Create;
   try
@@ -161,7 +162,10 @@ begin
     S := CurrentStyle;
     DrawFrame(P, R, S);
     ThumbR := TyScrollThumbRect(R, FKind, FMin, FMax, FPosition, FPageSize);
-    P.FillBackground(ThumbR, S.Background, S.BorderRadius);
+    ThumbFill := Default(TTyFill);
+    ThumbFill.Kind := tfkSolid;
+    ThumbFill.Color := S.TextColor;
+    P.FillBackground(ThumbR, ThumbFill, S.BorderRadius);
     P.EndPaint;
   finally
     P.Free;

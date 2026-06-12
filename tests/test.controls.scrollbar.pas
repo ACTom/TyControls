@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, fpcunit, testregistry,
   Forms, Controls, Graphics,
-  tyControls.ScrollBar;
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Controller, tyControls.ScrollBar;
 type
   TTyScrollGeometryTest = class(TTestCase)
   published
@@ -30,6 +31,12 @@ type
     procedure TestDragClampsAtMax;
     procedure TestPaintSmoke;
   end;
+
+  TTyScrollBarThumbColorTest = class(TTestCase)
+  published
+    procedure TestThumbPixelUsesTextColor;
+  end;
+
 implementation
 type
   TScrollAccess = class(TTyScrollBar)
@@ -148,7 +155,63 @@ begin
     Bmp.Free;
   end;
 end;
+{ TTyScrollBarThumbColorTest }
+
+procedure TTyScrollBarThumbColorTest.TestThumbPixelUsesTextColor;
+{ Stylesheet: track is near-black (#202020), thumb color is red (#FF0000).
+  Vertical scrollbar Min=0 Max=100 Page=25 Pos=0 in a 16x200 bitmap.
+  Thumb occupies top ~40px (25/125 of 200).
+  - Pixel at (8, 10) must be inside the thumb => red-dominant (R>200, G<80).
+  - Pixel at (8, 150) is in the track below the thumb => NOT red-dominant.
+}
+var
+  Ctl: TTyStyleController;
+  Bar: TScrollAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  PxThumb, PxTrack: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss('TyScrollBar { background: #202020; color: #FF0000; border-radius: 0px; }');
+    Bar := TScrollAccess.Create(Form);
+    Bar.Parent := Form;
+    Bar.Controller := Ctl;
+    Bar.Kind := sbVertical;
+    Bar.SetBounds(0, 0, 16, 200);
+    Bar.Min := 0;
+    Bar.Max := 100;
+    Bar.PageSize := 25;
+    Bar.Position := 0;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(16, 200);
+    Bar.SmokeRender(Bmp.Canvas, Rect(0, 0, 16, 200), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      PxThumb := Reread.GetPixel(8, 10);   // inside thumb (top 40px)
+      PxTrack := Reread.GetPixel(8, 150);  // in track below thumb
+
+      AssertTrue('thumb pixel R > 200 (red-dominant)',  PxThumb.red > 200);
+      AssertTrue('thumb pixel G < 80 (not greenish)',   PxThumb.green < 80);
+
+      AssertTrue('track pixel not red-dominant (R <= G+80)', PxTrack.red <= PxTrack.green + 80);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyScrollGeometryTest);
   RegisterTest(TTyScrollBarDragTest);
+  RegisterTest(TTyScrollBarThumbColorTest);
 end.
