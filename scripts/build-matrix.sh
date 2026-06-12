@@ -21,10 +21,13 @@ lazbuild $WS_ARG "$ROOT/tycontrols.lpk"
 echo "-- design-time package --"
 lazbuild $WS_ARG "$ROOT/tycontrols_dt.lpk"
 
-echo "-- demo project --"
-lazbuild $WS_ARG "$ROOT/examples/demo/demo.lpi"
+echo "-- example projects --"
+for LPI in "$ROOT"/examples/*/*.lpi; do
+  echo "   building ${LPI#$ROOT/}"
+  lazbuild $WS_ARG "$LPI"
+done
 
 echo "-- test runner --"
-lazbuild $WS_ARG "$ROOT/tests/tytests.lpr"
+lazbuild $WS_ARG "$ROOT/tests/tytests.lpi"
 
 echo "== matrix OK =="
