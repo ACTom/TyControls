@@ -90,6 +90,7 @@ begin
   try
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
+    DrawFrame(P, ARect, S);
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     // Inset content rect by all four padding sides
     ContentRect := Rect(
@@ -176,6 +177,7 @@ begin
   try
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
+    DrawFrame(P, ARect, S);
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     // Inset content rect by all four padding sides
     ContentRect := Rect(

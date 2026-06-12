@@ -51,7 +51,7 @@ TyEdit:focus    { border-color: var(--accent); }
 TyEdit:disabled { opacity: 0.5; }
 
 TyCheckBox {
-  background: lighten(--surface, 4%);
+  background: alpha(#000000, 0);
   color: var(--on-surface);
   border-color: var(--border);
   border-width: 1px;
@@ -62,7 +62,7 @@ TyCheckBox:active   { background: var(--accent); }
 TyCheckBox:disabled { opacity: 0.5; }
 
 TyRadioButton {
-  background: lighten(--surface, 4%);
+  background: alpha(#000000, 0);
   color: var(--on-surface);
   border-color: var(--border);
   border-width: 1px;
