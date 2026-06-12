@@ -36,9 +36,23 @@ implementation
 {$R *.lfm}
 
 function TDemoMainForm.ThemeDir: string;
+var
+  Dir: string;
+  i: Integer;
 begin
-  Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + '..' +
-    PathDelim + 'themes' + PathDelim;
+  // 从 exe 所在目录向上逐级查找 themes/，对以下位置均健壮：
+  //   <repo>/examples/demo/demo（工程目录）
+  //   <repo>/examples/demo/lib/<cpu>-<os>/demo（lazbuild 默认输出）
+  //   <repo>/examples/demo/demo.app/Contents/MacOS/demo（macOS 包）
+  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
+  for i := 1 to 8 do
+  begin
+    if DirectoryExists(Dir + 'themes') then
+      Exit(Dir + 'themes' + PathDelim);
+    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
+    if Dir = '' then Break;
+  end;
+  Result := 'themes' + PathDelim; // 兜底：相对当前目录
 end;
 
 procedure TDemoMainForm.ApplyTheme(const AFile: string);
