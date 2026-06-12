@@ -2,8 +2,9 @@ unit tyControls.ComboBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
+  tyControls.Types, tyControls.Painter, tyControls.Base,
+  tyControls.ListBox;
 type
   TTyComboBox = class(TTyCustomControl)
   private
@@ -11,19 +12,32 @@ type
     FItemIndex: Integer;
     FText: string;
     FOnChange: TNotifyEvent;
+    { Dropdown popup state }
+    FPopup: TForm;           // lazy; created on first DropDown; freed in Destroy
+    FPopupList: TTyListBox;  // owned by FPopup
     procedure SetItems(const AValue: TStringList);
     procedure SetItemIndex(const AValue: Integer);
     procedure SetText(const AValue: string);
     function ButtonWidthLogical: Integer;
+    { Popup event handlers }
+    procedure PopupListChange(Sender: TObject);
+    procedure PopupDeactivate(Sender: TObject);
+    procedure PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
   protected
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure Click; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetStyleTypeKey: string; override;
     procedure SelectItem(AIndex: Integer);
+    function DroppedDown: Boolean;
+    procedure DropDown;
+    procedure CloseUp;
+    { Expose popup list for headless tests and internal use }
+    function PopupList: TTyListBox;
   published
     property Items: TStringList read FItems write SetItems;
     property ItemIndex: Integer read FItemIndex write SetItemIndex;
@@ -36,44 +50,65 @@ type
     property Controller;
   end;
 implementation
+uses
+  Math;
+
 constructor TTyComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
   FItemIndex := -1;
   FText := '';
+  FPopup := nil;
+  FPopupList := nil;
   TabStop := True;
   Width := 145;
   Height := 26;
 end;
+
 destructor TTyComboBox.Destroy;
 begin
+  { Free popup (and its owned listbox) if it was ever created.
+    We must detach the OnDeactivate handler first to avoid re-entering CloseUp
+    from the TForm destruction path. }
+  if FPopup <> nil then
+  begin
+    FPopup.OnDeactivate := nil;
+    FreeAndNil(FPopup);
+    FPopupList := nil;  // freed by FPopup (was owned by it)
+  end;
   FItems.Free;
   inherited Destroy;
 end;
+
 function TTyComboBox.GetStyleTypeKey: string;
 begin
   Result := 'TyComboBox';
 end;
+
 procedure TTyComboBox.SetItems(const AValue: TStringList);
 begin
   FItems.Assign(AValue);
   Invalidate;
 end;
+
 procedure TTyComboBox.SetText(const AValue: string);
 begin
   if FText = AValue then Exit;
   FText := AValue;
   Invalidate;
 end;
+
 procedure TTyComboBox.SetItemIndex(const AValue: Integer);
 begin
   SelectItem(AValue);
 end;
+
 function TTyComboBox.ButtonWidthLogical: Integer;
 begin
   Result := 18;
 end;
+
 procedure TTyComboBox.SelectItem(AIndex: Integer);
 var
   NewIndex: Integer;
@@ -96,17 +131,127 @@ begin
   if Assigned(FOnChange) then
     FOnChange(Self);
 end;
+
+function TTyComboBox.DroppedDown: Boolean;
+begin
+  Result := (FPopup <> nil) and FPopup.Visible;
+end;
+
+{ Ensure the popup form and its TTyListBox child exist.
+  Called lazily on first DropDown. }
+procedure TTyComboBox.DropDown;
+var
+  PopupH, PopupW, ScaledIH: Integer;
+  P: TPoint;
+  ParentForm: TCustomForm;
+begin
+  if FItems.Count = 0 then Exit;
+
+  { Lazily create the popup form + listbox }
+  if FPopup = nil then
+  begin
+    FPopup := TForm.CreateNew(nil);
+    FPopup.BorderStyle := bsNone;
+    FPopup.ShowInTaskBar := stNever;
+    FPopup.FormStyle := fsStayOnTop;
+
+    ParentForm := GetParentForm(Self);
+    if ParentForm <> nil then
+    begin
+      FPopup.PopupParent := ParentForm;
+      FPopup.PopupMode := pmExplicit;
+    end;
+
+    FPopup.KeyPreview := True;
+    FPopup.OnDeactivate := @PopupDeactivate;
+    FPopup.OnKeyDown := @PopupKeyDown;
+
+    FPopupList := TTyListBox.Create(FPopup);
+    FPopupList.Parent := FPopup;
+    FPopupList.Align := alClient;
+    FPopupList.Controller := Self.Controller;
+    FPopupList.OnChange := @PopupListChange;
+  end;
+
+  { Sync items and selection — detach OnChange to prevent recursion }
+  FPopupList.OnChange := nil;
+  FPopupList.Items.Assign(FItems);
+  { Use the private field path via SelectItem with temp guard:
+    SelectItem won't fire our nil'd OnChange anyway }
+  FPopupList.SelectItem(FItemIndex);
+  FPopupList.OnChange := @PopupListChange;
+
+  { Size: height = min(8, Items.Count) rows }
+  ScaledIH := MulDiv(FPopupList.ItemHeight, Font.PixelsPerInch, 96);
+  PopupH := Min(8, FItems.Count) * ScaledIH + 2;
+  PopupW := Width;
+
+  { Position below the combo }
+  P := ControlToScreen(Point(0, Height));
+  FPopup.SetBounds(P.X, P.Y, PopupW, PopupH);
+
+  FPopup.Show;
+end;
+
+procedure TTyComboBox.CloseUp;
+begin
+  if (FPopup <> nil) and FPopup.Visible then
+  begin
+    { Detach deactivate to prevent re-entering CloseUp from Hide }
+    FPopup.OnDeactivate := nil;
+    FPopup.Hide;
+    FPopup.OnDeactivate := @PopupDeactivate;
+  end;
+  Invalidate;
+end;
+
 procedure TTyComboBox.Click;
 begin
   inherited Click;
-  if FItems.Count = 0 then Exit;
-  if FItemIndex < 0 then
-    SelectItem(0)
-  else if FItemIndex < FItems.Count - 1 then
-    SelectItem(FItemIndex + 1)
+  if DroppedDown then
+    CloseUp
   else
-    SelectItem(0);
+    DropDown;
 end;
+
+procedure TTyComboBox.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyDown(Key, Shift);
+  if (Key = VK_ESCAPE) and DroppedDown then
+  begin
+    CloseUp;
+    Key := 0;
+  end;
+end;
+
+{ Popup event handlers }
+
+procedure TTyComboBox.PopupListChange(Sender: TObject);
+begin
+  SelectItem(FPopupList.ItemIndex);
+  CloseUp;
+end;
+
+procedure TTyComboBox.PopupDeactivate(Sender: TObject);
+begin
+  CloseUp;
+end;
+
+procedure TTyComboBox.PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if Key = VK_ESCAPE then
+  begin
+    CloseUp;
+    Key := 0;
+  end;
+end;
+
+{ Protected accessor for headless tests }
+function TTyComboBox.PopupList: TTyListBox;
+begin
+  Result := FPopupList;
+end;
+
 procedure TTyComboBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
@@ -140,4 +285,5 @@ procedure TTyComboBox.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
+
 end.

@@ -27,11 +27,6 @@ for a future Tier-2 native enhancement layer.
   self-drawn window chrome appears only at runtime. This is the standard
   behavior for skin-window libraries and is expected.
 
-## Controls
-
-- `TTyComboBox` has no real dropdown popup in v1. Clicking the control cycles
-  through the `Items` list in place; a floating popup list is a Tier-2 item.
-
 ## Style engine
 
 - Nine-slice `url()` asset paths must not contain spaces. The style lexer splits

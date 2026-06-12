@@ -2,9 +2,7 @@
 
 ## 1. 概述
 
-`TTyComboBox` 是 TyControls 库中的下拉选择控件。它在一个带边框的矩形区域内显示当前选中项的文本，右侧固定渲染一个向下的 V 形字形（chevron）作为下拉指示。
-
-> **v1 重要限制：** TTyComboBox 在 v1 中**没有真正的弹出下拉层**。单击控件会**循环切换**到 `Items` 列表的下一项（到末尾后回到第 0 项）；浮动弹出列表是 Tier-2 计划项目。详见 [Known Gaps](../KNOWN_GAPS.md)。
+`TTyComboBox` 是 TyControls 库中的下拉选择控件。它在一个带边框的矩形区域内显示当前选中项的文本，右侧固定渲染一个向下的 V 形字形（chevron）作为下拉指示。单击控件会打开一个浮动弹出列表（`TTyListBox`），再次单击或选择列表项后自动关闭。
 
 ## 2. 单元与 typeKey
 
@@ -50,20 +48,46 @@
 - 若新索引与新文本均与当前值相同，**不触发任何操作**（防止重复刷新）。
 - 有效变化时：触发 `Invalidate`；若 `OnChange` 已赋值则调用之。
 
+#### `function DroppedDown: Boolean`
+
+只读属性函数。当弹出窗口已创建且可见时返回 `True`，否则返回 `False`。
+
+#### `procedure DropDown`
+
+打开下拉弹出列表。行为：
+
+- 若 `Items.Count = 0`，为空操作（无弹出）。
+- 首次调用时懒创建弹出 `TForm`（`BorderStyle=bsNone`，`ShowInTaskBar=stNever`，`PopupParent` 指向父窗体）。
+- 弹出窗口内嵌一个 `TTyListBox`（`Align=alClient`），内容从 `Items` 复制，`ItemIndex` 与当前选中项同步。
+- 弹出高度 = `Min(8, Items.Count)` 行 × 缩放后行高 + 2px 边距；宽度等于控件宽度；位置在控件下方（`ControlToScreen` 计算）。
+- 调用 `FPopup.Show` 显示弹出窗口（非模态）。
+
+#### `procedure CloseUp`
+
+关闭下拉弹出列表。幂等操作，在弹出窗口未打开时调用安全无副作用。
+
 #### `procedure Click`（override，protected）
 
-单击时循环切换：
+切换下拉状态：
 
 ```
-Items.Count = 0 → 无操作
-ItemIndex < 0   → SelectItem(0)           // 选第一项
-ItemIndex < Count-1 → SelectItem(ItemIndex+1)  // 选下一项
-ItemIndex = Count-1 → SelectItem(0)       // 绕回第一项
+DroppedDown = True  → CloseUp
+DroppedDown = False → DropDown
 ```
+
+不再循环切换列表项（v1 的循环行为已移除）。
 
 #### `function GetStyleTypeKey: string`（override）
 
 返回固定字符串 `'TyComboBox'`，用于主题样式查找。
+
+### 关闭路径
+
+弹出窗口通过以下三条路径关闭：
+
+1. **失焦关闭**：`FPopup.OnDeactivate` → `CloseUp`（点击弹出窗口外部时触发）。
+2. **ESC 键**：弹出窗口的 `KeyPreview=True`，`OnKeyDown` 捕获 `VK_ESCAPE` → `CloseUp`；组合框自身的 `KeyDown` 也处理 `VK_ESCAPE`（当 `DroppedDown=True` 时）。
+3. **列表项选中**：`TTyListBox.OnChange` 触发 → `SelectItem` + `CloseUp`。
 
 ### 事件
 
@@ -137,6 +161,17 @@ begin
 end;
 ```
 
+### 程序化控制弹出层
+
+```pascal
+// 手动打开下拉
+Combo.DropDown;
+
+// 检查是否打开
+if Combo.DroppedDown then
+  Combo.CloseUp;  // 手动关闭
+```
+
 ### 越界清空示例
 
 ```pascal
@@ -155,8 +190,9 @@ Combo.StyleClass := 'compact';
 
 ## 7. 注意事项
 
-1. **无弹出层（v1）：** 点击只是循环切换列表项，不会弹出任何浮层。用户无法通过鼠标直接跳转到指定项，只能逐项点击循环。
+1. **单击切换弹出层：** 单击控件会打开或关闭下拉列表，不再循环切换 `Items`。
 2. **Text 与 Items 独立：** 直接写 `Text` 属性不会修改 `ItemIndex`，也不触发 `OnChange`；应优先使用 `SelectItem` 或写 `ItemIndex`。
 3. **Items 赋值用 Assign：** 写入 `Items` 属性时内部调用 `FItems.Assign(AValue)`，原有内容被替换，`ItemIndex` 和 `Text` 不自动重置，需手动调用 `SelectItem(-1)` 清空选中状态。
 4. **OnChange 防重入：** 若 `SelectItem` 被调用但新值与旧值完全相同，则不触发 `OnChange`，无需在回调中判断是否重复。
 5. **TabStop 默认 True：** 控件默认可获得键盘焦点，会渲染 `:focus` 状态样式。
+6. **弹出窗口生命周期：** `FPopup` 在首次 `DropDown` 时懒创建，在控件 `Destroy` 时释放。`FPopupList` 由 `FPopup` 拥有，随之释放。

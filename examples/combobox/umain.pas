@@ -1,13 +1,10 @@
 unit umain;
 
 { TTyComboBox 最小示例：
-  - Items 填充（AddStrings）、SelectItem/ItemIndex 初始选中
+  - Items 填充、SelectItem/ItemIndex 初始选中
   - OnChange 事件更新 TTyLabel 显示选中文本
-  - Text 属性只读显示当前选中项
-  *** v1 限制说明 ***
-  TTyComboBox 目前尚无真正的下拉弹出层（popup）。
-  点击控件会循环切换到下一项（Click cycles items）：
-    第 0 项 → 第 1 项 → … → 最后一项 → 第 0 项。
+  - 单击控件打开真正的下拉弹出层（TTyListBox），再次单击或选择列表项后关闭
+  - 支持 DropDown/CloseUp/DroppedDown API；ESC 键和失焦均可关闭弹出层
   纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
 
 {$mode objfpc}{$H+}
@@ -66,7 +63,7 @@ begin
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := Self;
   Lbl.SetBounds(16, 16, 288, 20);
-  Lbl.Caption := '点击下拉框循环切换选项（v1 无弹层）';
+  Lbl.Caption := '点击下拉框打开列表，选择后自动关闭';
 
   { TTyComboBox：填充 Items，设置初始选中项 }
   FCombo := TTyComboBox.Create(Self);
