@@ -13,7 +13,7 @@
         <SyntaxMode Value="ObjFPC"/>
       </SyntaxOptions>
     </CompilerOptions>
-    <Files Count="17">
+    <Files Count="22">
       <Item1><Filename Value="source/tyControls.Types.pas"/><UnitName Value="tyControls.Types"/></Item1>
       <Item2><Filename Value="source/tyControls.Css.Tokens.pas"/><UnitName Value="tyControls.Css.Tokens"/></Item2>
       <Item3><Filename Value="source/tyControls.Css.Lexer.pas"/><UnitName Value="tyControls.Css.Lexer"/></Item3>
@@ -31,6 +31,11 @@
       <Item15><Filename Value="source/tyControls.ComboBox.pas"/><UnitName Value="tyControls.ComboBox"/></Item15>
       <Item16><Filename Value="source/tyControls.ScrollBar.pas"/><UnitName Value="tyControls.ScrollBar"/></Item16>
       <Item17><Filename Value="source/tyControls.Form.pas"/><UnitName Value="tyControls.Form"/></Item17>
+      <Item18><Filename Value="source/tyControls.ListBox.pas"/><UnitName Value="tyControls.ListBox"/></Item18>
+      <Item19><Filename Value="source/tyControls.ProgressBar.pas"/><UnitName Value="tyControls.ProgressBar"/></Item19>
+      <Item20><Filename Value="source/tyControls.ToggleSwitch.pas"/><UnitName Value="tyControls.ToggleSwitch"/></Item20>
+      <Item21><Filename Value="source/tyControls.TrackBar.pas"/><UnitName Value="tyControls.TrackBar"/></Item21>
+      <Item22><Filename Value="source/tyControls.GroupBox.pas"/><UnitName Value="tyControls.GroupBox"/></Item22>
     </Files>
     <RequiredPkgs Count="2">
       <Item1><PackageName Value="BGRABitmapPack"/></Item1>

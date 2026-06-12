@@ -6,7 +6,9 @@ uses
   tyControls.Base, tyControls.Controller, tyControls.StyleModel,
   tyControls.Button, tyControls.TyLabel, tyControls.Edit,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
-  tyControls.ScrollBar, tyControls.Form;
+  tyControls.ScrollBar, tyControls.Form,
+  tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
+  tyControls.TrackBar, tyControls.GroupBox;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -37,7 +39,8 @@ begin
   RegisterComponents('TyControls',
     [TTyButton, TTyLabel, TTyEdit, TTyCheckBox, TTyRadioButton,
      TTyPanel, TTyComboBox, TTyScrollBar, TTyTitleBar,
-     TTyFormChrome, TTyStyleController]);
+     TTyFormChrome, TTyStyleController,
+     TTyListBox, TTyProgressBar, TTyToggleSwitch, TTyTrackBar, TTyGroupBox]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',
