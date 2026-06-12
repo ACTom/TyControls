@@ -42,6 +42,15 @@ type
     procedure TestButtonsRightAlignedAfterResize;
   end;
 
+  TFormChromeTest = class(TTestCase)
+  published
+    procedure TestDefaultTitleHeight;
+    procedure TestDefaultBorderZone;
+    procedure TestDefaultShowFlags;
+    procedure TestTitleBarCreated;
+    procedure TestActiveDefaultsFalse;
+  end;
+
 implementation
 
 const
@@ -246,9 +255,71 @@ begin
   end;
 end;
 
+procedure TFormChromeTest.TestDefaultTitleHeight;
+var
+  C: TTyFormChrome;
+begin
+  C := TTyFormChrome.Create(nil);
+  try
+    AssertEquals('titleheight', 32, C.TitleHeight);
+  finally
+    C.Free;
+  end;
+end;
+
+procedure TFormChromeTest.TestDefaultBorderZone;
+var
+  C: TTyFormChrome;
+begin
+  C := TTyFormChrome.Create(nil);
+  try
+    AssertEquals('borderzone', 6, C.BorderZone);
+  finally
+    C.Free;
+  end;
+end;
+
+procedure TFormChromeTest.TestDefaultShowFlags;
+var
+  C: TTyFormChrome;
+begin
+  C := TTyFormChrome.Create(nil);
+  try
+    AssertTrue('min', C.ShowMinimize);
+    AssertTrue('max', C.ShowMaximize);
+  finally
+    C.Free;
+  end;
+end;
+
+procedure TFormChromeTest.TestTitleBarCreated;
+var
+  C: TTyFormChrome;
+begin
+  C := TTyFormChrome.Create(nil);
+  try
+    AssertTrue('titlebar', C.TitleBar <> nil);
+  finally
+    C.Free;
+  end;
+end;
+
+procedure TFormChromeTest.TestActiveDefaultsFalse;
+var
+  C: TTyFormChrome;
+begin
+  C := TTyFormChrome.Create(nil);
+  try
+    AssertFalse('active', C.Active);
+  finally
+    C.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TCaptionButtonTest);
   RegisterTest(TTitleBarTest);
+  RegisterTest(TFormChromeTest);
 
 end.
