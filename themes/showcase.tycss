@@ -210,3 +210,18 @@ TyTab {
 }
 TyTab:hover  { background: darken(--surface, 3%); }
 TyTab:active { background: var(--surface); color: var(--accent); }
+
+/* ── v1.9 controls ─────────────────────────────────────────────────────── */
+
+TySpinEdit {
+  background: #FFFFFF;
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 2px;
+  border-radius: var(--radius);
+  padding: 6px;
+  font-size: 10px;
+}
+TySpinEdit:hover    { border-color: lighten(--accent, 10%); }
+TySpinEdit:focus    { border-color: var(--accent); }
+TySpinEdit:disabled { opacity: 0.45; }

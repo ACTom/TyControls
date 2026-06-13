@@ -268,6 +268,7 @@ TyButton:disabled         { opacity: 0.5; }
 | `trackbar/` | `TTyTrackBar` 拖动滑块、方向键步进 | `lazbuild examples/trackbar/trackbar_example.lpi` |
 | `groupbox/` | `TTyGroupBox` 分组容器、RadioButton 分组 | `lazbuild examples/groupbox/groupbox_example.lpi` |
 | `tabcontrol/` | `TTyTabControl` 标签页切换、AddTab、键盘 ←/→ 导航 | `lazbuild examples/tabcontrol/tabcontrol_example.lpi` |
+| `spinedit/` | `TTySpinEdit` 数值微调、上/下箭头、方向键/滚轮步进、Min/Max/Increment | `lazbuild examples/spinedit/spinedit_example.lpi` |
 | `formchrome/` | `TTyFormChrome` 无边框自绘窗框窗口 | `lazbuild examples/formchrome/formchrome_example.lpi` |
 | `theming/` | 自定义 `.tycss` 主题 + 运行时热切换 | `lazbuild examples/theming/theming_example.lpi` |
 | `demo/` | 综合示例:所有控件 + 三主题运行时热切换 + 自绘窗框 | `lazbuild examples/demo/demo.lpi` |

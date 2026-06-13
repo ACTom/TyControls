@@ -14,7 +14,7 @@ TyButton:disabled { opacity: 0.5; }
 
 - **三层解耦架构** —— 控件层 / 样式引擎 / 绘图原语(`TTyPainter`),控件不写死任何颜色
 - **CSS-lite 主题语言** —— `:root` 变量、类型/变体/状态选择器、`rgb/rgba/lighten/darken/alpha/mix` 颜色函数、`border` 简写、线性渐变、9-slice 贴图
-- **16 个自绘控件** —— Button、Label、Edit、CheckBox、RadioButton、Panel、ComboBox、ScrollBar、ListBox、ProgressBar、ToggleSwitch、TrackBar、GroupBox、TitleBar、CaptionButton、TabControl
+- **17 个自绘控件** —— Button、Label、Edit、CheckBox、RadioButton、Panel、ComboBox、ScrollBar、ListBox、ProgressBar、ToggleSwitch、TrackBar、GroupBox、TitleBar、CaptionButton、TabControl、SpinEdit
 - **自绘窗框** —— `TTyFormChrome` 一个组件接管无边框窗口:标题栏、拖动、8 向缩放、最小/最大化/关闭、双击最大化(避让任务栏)
 - **零配置默认皮肤** —— 未加载主题或在设计器中拖放即有合理外观;主题在其之上按 typeKey 覆盖
 - **运行时热切换主题** —— `LoadTheme` 一行代码,全部控件即时重绘
@@ -47,7 +47,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 |---|---|
 | [getting-started.md](docs/getting-started.md) | 安装、第一个窗体、主题加载与切换、HiDPI |
 | [tycss-reference.md](docs/tycss-reference.md) | `.tycss` 样式语言权威参考:全部属性、函数、选择器、合并顺序 |
-| [controls/](docs/controls/) | 每控件 API 说明(18 篇:属性 / 事件 / 状态 / 主题变体 / 示例) |
+| [controls/](docs/controls/) | 每控件 API 说明(19 篇:属性 / 事件 / 状态 / 主题变体 / 示例) |
 | [KNOWN_GAPS.md](docs/KNOWN_GAPS.md) | 已知限制与 Tier-2 计划 |
 
 控件 API 速查:[Button](docs/controls/button.md) ·
@@ -67,7 +67,8 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 [CaptionButton](docs/controls/captionbutton.md) ·
 [FormChrome](docs/controls/formchrome.md) ·
 [StyleController](docs/controls/stylecontroller.md) ·
-[TabControl](docs/controls/tabcontrol.md)
+[TabControl](docs/controls/tabcontrol.md) ·
+[SpinEdit](docs/controls/spinedit.md)
 
 ## 示例
 
@@ -89,6 +90,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 | [examples/trackbar](examples/trackbar/) | 拖动滑块、方向键步进、TyTrackThumb 样式 |
 | [examples/groupbox](examples/groupbox/) | 分组容器、RadioButton 互斥分组 |
 | [examples/tabcontrol](examples/tabcontrol/) | 标签页切换、AddTab/RemoveTab、可关闭页签（× / OnTabClose）、键盘 ←/→ 导航 |
+| [examples/spinedit](examples/spinedit/) | 数值微调、上/下箭头按钮、方向键步进、鼠标滚轮、Min/Max/Increment |
 | [examples/formchrome](examples/formchrome/) | 无边框自绘窗框窗口 |
 | [examples/theming](examples/theming/) | 自定义 `.tycss` 主题 + 运行时热切换 |
 | [examples/demo](examples/demo/) | 综合 gallery:全部控件 + 三主题切换 + 自绘窗框 |
