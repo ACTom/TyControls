@@ -222,3 +222,16 @@ TySpinEdit {
 TySpinEdit:hover    { border-color: lighten(--border, 12%); }
 TySpinEdit:focus    { border-color: var(--accent); }
 TySpinEdit:disabled { opacity: 0.5; }
+
+TyMemo {
+  background: lighten(--surface, 4%);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: 10px;
+}
+TyMemo:hover    { border-color: lighten(--border, 12%); }
+TyMemo:focus    { border-color: var(--accent); }
+TyMemo:disabled { opacity: 0.5; }

@@ -9,7 +9,7 @@ uses
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
   tyControls.TrackBar, tyControls.GroupBox, tyControls.TabControl,
-  tyControls.SpinEdit;
+  tyControls.SpinEdit, tyControls.Memo;
 type
 
   { TDemoMainForm }
@@ -35,6 +35,7 @@ type
     TrackBar1: TTyTrackBar;
     Toggle1: TTyToggleSwitch;
     TabCtrl1: TTyTabControl;
+    TySpinEdit1: TTySpinEdit;
     procedure BtnDangerClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure BtnLightClick(Sender: TObject);
@@ -43,6 +44,7 @@ type
     procedure TrackBar1Change(Sender: TObject);
   private
     Spin1: TTySpinEdit;   // v1.9: created in code (gallery demo)
+    Memo1: TTyMemo;       // v1.9a: created in code (gallery demo)
     function ThemeDir: string;
     procedure ApplyTheme(const AFile: string);
   end;
@@ -125,6 +127,20 @@ begin
   Spin1.MaxValue := 10;
   Spin1.Value := 3;
   Spin1.Controller := Controller;
+
+  { TTyMemo (v1.9a): multi-line editor with auto vertical scrollbar, right column. }
+  Memo1 := TTyMemo.Create(Self);
+  Memo1.Parent := Self;
+  Memo1.SetBounds(460, 400, 165, 140);
+  Memo1.Controller := Controller;
+  Memo1.Lines.Text :=
+    'TTyMemo' + LineEnding +
+    'multi-line edit' + LineEnding +
+    'Enter / Backspace' + LineEnding +
+    'arrows / Home / End' + LineEnding +
+    'wheel scrolls' + LineEnding +
+    'when overflowing' + LineEnding +
+    'the visible rows.';
 end;
 
 procedure TDemoMainForm.BtnDangerClick(Sender: TObject);

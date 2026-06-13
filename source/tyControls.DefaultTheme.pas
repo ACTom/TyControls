@@ -239,7 +239,20 @@ begin
     '}' + LineEnding +
     'TySpinEdit:hover    { border-color: darken(--border, 10%); }' + LineEnding +
     'TySpinEdit:focus    { border-color: var(--accent); }' + LineEnding +
-    'TySpinEdit:disabled { opacity: 0.5; }' + LineEnding;
+    'TySpinEdit:disabled { opacity: 0.5; }' + LineEnding +
+    '' + LineEnding +
+    'TyMemo {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 4px;' + LineEnding +
+    '  font-size: 10px;' + LineEnding +
+    '}' + LineEnding +
+    'TyMemo:hover    { border-color: darken(--border, 10%); }' + LineEnding +
+    'TyMemo:focus    { border-color: var(--accent); }' + LineEnding +
+    'TyMemo:disabled { opacity: 0.5; }' + LineEnding;
 end;
 
 end.

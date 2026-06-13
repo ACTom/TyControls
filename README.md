@@ -14,7 +14,7 @@ TyButton:disabled { opacity: 0.5; }
 
 - **三层解耦架构** —— 控件层 / 样式引擎 / 绘图原语(`TTyPainter`),控件不写死任何颜色
 - **CSS-lite 主题语言** —— `:root` 变量、类型/变体/状态选择器、`rgb/rgba/lighten/darken/alpha/mix` 颜色函数、`border` 简写、线性渐变、9-slice 贴图
-- **17 个自绘控件** —— Button、Label、Edit、CheckBox、RadioButton、Panel、ComboBox、ScrollBar、ListBox、ProgressBar、ToggleSwitch、TrackBar、GroupBox、TitleBar、CaptionButton、TabControl、SpinEdit
+- **18 个自绘控件** —— Button、Label、Edit、CheckBox、RadioButton、Panel、ComboBox、ScrollBar、ListBox、ProgressBar、ToggleSwitch、TrackBar、GroupBox、TitleBar、CaptionButton、TabControl、SpinEdit、Memo
 - **自绘窗框** —— `TTyFormChrome` 一个组件接管无边框窗口:标题栏、拖动、8 向缩放、最小/最大化/关闭、双击最大化(避让任务栏)
 - **零配置默认皮肤** —— 未加载主题或在设计器中拖放即有合理外观;主题在其之上按 typeKey 覆盖
 - **运行时热切换主题** —— `LoadTheme` 一行代码,全部控件即时重绘
@@ -68,7 +68,8 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 [FormChrome](docs/controls/formchrome.md) ·
 [StyleController](docs/controls/stylecontroller.md) ·
 [TabControl](docs/controls/tabcontrol.md) ·
-[SpinEdit](docs/controls/spinedit.md)
+[SpinEdit](docs/controls/spinedit.md) ·
+[Memo](docs/controls/memo.md)
 
 ## 示例
 
@@ -91,6 +92,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 | [examples/groupbox](examples/groupbox/) | 分组容器、RadioButton 互斥分组 |
 | [examples/tabcontrol](examples/tabcontrol/) | 标签页切换、AddTab/RemoveTab、可关闭页签（× / OnTabClose）、键盘 ←/→ 导航 |
 | [examples/spinedit](examples/spinedit/) | 数值微调、上/下箭头按钮、方向键步进、鼠标滚轮、Min/Max/Increment |
+| [examples/memo](examples/memo/) | 多行文本编辑、回车换行、跨行退格/删除、方向键/Home/End 导航、内嵌垂直滚动条、鼠标滚轮 |
 | [examples/formchrome](examples/formchrome/) | 无边框自绘窗框窗口 |
 | [examples/theming](examples/theming/) | 自定义 `.tycss` 主题 + 运行时热切换 |
 | [examples/demo](examples/demo/) | 综合 gallery:全部控件 + 三主题切换 + 自绘窗框 |
