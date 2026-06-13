@@ -86,6 +86,12 @@ type
     procedure TestFuzzInvariants;
     // EDIT.10: hit-test round-trip
     procedure TestHitTestRoundTrip;
+    // EDIT.11: horizontal scroll
+    procedure TestEndScrollsCaretIntoView;
+    procedure TestHomeResetsScroll;
+    procedure TestClickMapsUnderScroll;
+    procedure TestScrollClampsOnShrink;
+    procedure TestRenderedTextShiftsWithScroll;
   end;
 implementation
 
@@ -1285,6 +1291,256 @@ begin
     end;
   finally
     F.Free;
+  end;
+end;
+
+// ---- EDIT.11: horizontal scroll tests ----
+
+procedure TEditTest.TestEndScrollsCaretIntoView;
+{ Narrow edit (width 80, padding 4px), long text (40 × 'W').
+  VK_END → ScrollX > 0 AND the effective caret pixel (CaretPixelXAt - ScrollX)
+  is within the visible window [0, 80]. }
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  Ctl: TTyStyleController;
+  PPI, EffCaretX, Len: Integer;
+begin
+  F := TCustomForm.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyEdit { background: #FFFFFF; color: #000000; padding: 4px; }');
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Controller := Ctl;
+    // Narrow control so text overflows
+    E.SetBounds(0, 0, 80, 24);
+    // Long text
+    E.Text := StringOfChar('W', 40);
+    E.CaretPos := 0;  // start at beginning, scroll=0
+
+    // Press END
+    E.SimulateKeyDown(VK_END);
+
+    Len := UTF8Length(E.Text);
+    AssertEquals('VK_END moves caret to end', Len, E.CaretPos);
+    AssertTrue('ScrollX > 0 after END on long text', E.ScrollX > 0);
+
+    // Effective caret pixel: CaretPixelXAt(len, ppi) - ScrollX
+    PPI := E.Font.PixelsPerInch;
+    EffCaretX := E.CaretPixelXAt(Len, PPI) - E.ScrollX;
+    AssertTrue(
+      'Effective caret x >= 0 (got ' + IntToStr(EffCaretX) + ')',
+      EffCaretX >= 0
+    );
+    AssertTrue(
+      'Effective caret x <= 80 (got ' + IntToStr(EffCaretX) + ')',
+      EffCaretX <= 80
+    );
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TEditTest.TestHomeResetsScroll;
+{ After scrolling to end via VK_END, VK_HOME must set ScrollX = 0. }
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  Ctl: TTyStyleController;
+begin
+  F := TCustomForm.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyEdit { background: #FFFFFF; color: #000000; padding: 4px; }');
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Controller := Ctl;
+    E.SetBounds(0, 0, 80, 24);
+    E.Text := StringOfChar('W', 40);
+    E.CaretPos := 0;
+
+    E.SimulateKeyDown(VK_END);
+    AssertTrue('Pre: ScrollX > 0 after END', E.ScrollX > 0);
+
+    E.SimulateKeyDown(VK_HOME);
+    AssertEquals('ScrollX = 0 after VK_HOME', 0, E.ScrollX);
+    AssertEquals('CaretPos = 0 after VK_HOME', 0, E.CaretPos);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TEditTest.TestClickMapsUnderScroll;
+{ Scroll to end, then verify CaretIndexAtX round-trips correctly for a
+  boundary near the caret (last char boundary): the click position accounts
+  for the scroll offset. }
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  Ctl: TTyStyleController;
+  PPI, Len, ClickX, HitIdx: Integer;
+begin
+  F := TCustomForm.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyEdit { background: #FFFFFF; color: #000000; padding: 4px; }');
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Controller := Ctl;
+    E.SetBounds(0, 0, 80, 24);
+    E.Text := StringOfChar('W', 40);
+    E.CaretPos := 0;
+
+    // Scroll to end
+    E.SimulateKeyDown(VK_END);
+    Len := UTF8Length(E.Text);
+    AssertTrue('Pre: ScrollX > 0', E.ScrollX > 0);
+
+    // The click position for boundary Len in control coords:
+    // CaretPixelXAt(Len, PPI) is the absolute pixel position;
+    // in control coords (accounting for scroll) it is: CaretPixelXAt(Len) - ScrollX
+    PPI := E.Font.PixelsPerInch;
+    ClickX := E.CaretPixelXAt(Len, PPI) - E.ScrollX;
+
+    // CaretIndexAtX should resolve that click back to boundary Len
+    HitIdx := E.CaretIndexAtX(ClickX);
+    AssertEquals(
+      'CaretIndexAtX round-trips at scrolled end (boundary ' + IntToStr(Len) + ')',
+      Len, HitIdx
+    );
+
+    // Also verify boundary Len-1 (one char back)
+    ClickX := E.CaretPixelXAt(Len - 1, PPI) - E.ScrollX;
+    HitIdx := E.CaretIndexAtX(ClickX);
+    AssertEquals(
+      'CaretIndexAtX round-trips at scrolled boundary ' + IntToStr(Len - 1),
+      Len - 1, HitIdx
+    );
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TEditTest.TestScrollClampsOnShrink;
+{ Scroll to end with long text, then SetText to a short string.
+  ScrollX must be clamped to new MaxScroll (likely 0 for short text). }
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  Ctl: TTyStyleController;
+  PPI, NewTextWidth, ViewWidth: Integer;
+  S: string;
+begin
+  F := TCustomForm.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyEdit { background: #FFFFFF; color: #000000; padding: 4px; }');
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Controller := Ctl;
+    E.SetBounds(0, 0, 80, 24);
+    E.Text := StringOfChar('W', 40);
+    E.CaretPos := 0;
+
+    // Scroll to end
+    E.SimulateKeyDown(VK_END);
+    AssertTrue('Pre: ScrollX > 0', E.ScrollX > 0);
+
+    // Replace with short text
+    E.Text := 'Hi';
+    PPI := E.Font.PixelsPerInch;
+    // For 'Hi' (width << 80), MaxScroll should be 0, so ScrollX clamped to 0
+    NewTextWidth := E.CaretPixelXAt(2, PPI) - E.CaretPixelXAt(0, PPI);
+    ViewWidth := 80 - 4 - 4;  // width - leftPad - rightPad
+    if NewTextWidth <= ViewWidth then
+      AssertEquals('ScrollX clamped to 0 after shrinking text', 0, E.ScrollX)
+    else
+      AssertTrue('ScrollX <= new MaxScroll', E.ScrollX <= (NewTextWidth - ViewWidth));
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TEditTest.TestRenderedTextShiftsWithScroll;
+{ Narrow edit (80px), long text (40×'W'), white background, black text.
+  Render at HOME (scroll=0) and after END (scrolled).
+  The two bitmaps must differ in the content area (scroll shifted content).
+  Also verify effective caret is within visible range after END. }
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  Ctl: TTyStyleController;
+  Bmp1, Bmp2: TBitmap;
+  BgraHome, BgraEnd: TBGRABitmap;
+  X, Y: Integer;
+  Differ: Boolean;
+  PPI, EffCaret: Integer;
+begin
+  F := TCustomForm.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  Bmp1 := TBitmap.Create;
+  Bmp2 := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss('TyEdit { background: #FFFFFF; color: #000000; padding: 4px; }');
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Controller := Ctl;
+    E.SetBounds(0, 0, 80, 24);
+    E.Text := StringOfChar('W', 40);
+    E.CaretPos := 0;
+    AssertEquals('Pre: ScrollX = 0 at HOME', 0, E.ScrollX);
+
+    // Render at HOME
+    Bmp1.PixelFormat := pf32bit;
+    Bmp1.SetSize(80, 24);
+    Bmp1.Canvas.Brush.Color := clWhite;
+    Bmp1.Canvas.FillRect(0, 0, 80, 24);
+    E.RenderTo(Bmp1.Canvas, Rect(0, 0, 80, 24), 96);
+
+    // Scroll to END
+    E.SimulateKeyDown(VK_END);
+    AssertTrue('ScrollX > 0 after END', E.ScrollX > 0);
+
+    // Render at END (scrolled)
+    Bmp2.PixelFormat := pf32bit;
+    Bmp2.SetSize(80, 24);
+    Bmp2.Canvas.Brush.Color := clWhite;
+    Bmp2.Canvas.FillRect(0, 0, 80, 24);
+    E.RenderTo(Bmp2.Canvas, Rect(0, 0, 80, 24), 96);
+
+    BgraHome := TBGRABitmap.Create(Bmp1);
+    BgraEnd  := TBGRABitmap.Create(Bmp2);
+    try
+      // Compare content area (skip padding columns)
+      Differ := False;
+      for X := 4 to 75 do
+        for Y := 4 to 19 do
+          if BgraHome.GetPixel(X, Y).red <> BgraEnd.GetPixel(X, Y).red then
+          begin
+            Differ := True;
+            Break;
+          end;
+      AssertTrue('Scrolled render differs from HOME render', Differ);
+    finally
+      BgraHome.Free;
+      BgraEnd.Free;
+    end;
+
+    // Effective caret pixel visible in [0, 80] after END
+    PPI := E.Font.PixelsPerInch;
+    EffCaret := E.CaretPixelXAt(E.CaretPos, PPI) - E.ScrollX;
+    AssertTrue('Effective caret >= 0 in scrolled state', EffCaret >= 0);
+    AssertTrue('Effective caret <= 80 in scrolled state', EffCaret <= 80);
+  finally
+    Bmp1.Free;
+    Bmp2.Free;
+    F.Free;
+    Ctl.Free;
   end;
 end;
 

@@ -36,9 +36,6 @@ Tier-2 native enhancement layer.
 
 ## Controls
 
-- `TTyEdit` has no horizontal scrolling (v1.1): when text is wider than the
-  control, content to the right is not visible and cannot be reached by mouse
-  click. The viewport is fixed at the text start.
 - `TTyEdit` has no word-level jump (v1.1): Ctrl/Cmd+Left/Right arrow does not
   calculate word boundaries; the key event is passed through to the parent
   window unmodified.

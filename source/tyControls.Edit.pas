@@ -13,6 +13,7 @@ type
     FCaret: Integer;      // codepoint index 0..UTF8Length(FText)
     FSelAnchor: Integer;  // codepoint index; no selection <=> FSelAnchor = FCaret
     FMouseSelecting: Boolean;  // true while left button held for drag-select
+    FScrollX: Integer;    // horizontal scroll offset in device px (>= 0)
     // Width cache
     FWidthCache: TTyIntArray;
     FWidthCacheValid: Boolean;
@@ -32,6 +33,9 @@ type
     procedure InvalidateWidthCache;
     function EffectiveFontSize(const S: TTyStyleSet): Integer;
     function MeasureCodepointWidths(APPI: Integer): TTyIntArray;
+    // Scroll helpers
+    procedure EnsureCaretVisible(APPI: Integer);
+    procedure ClampScrollX(APPI: Integer);
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -66,6 +70,8 @@ type
     // Rendering helpers (public for headless tests)
     function CaretPixelXAt(ACaretIndex, APPI: Integer): Integer;
     property CaretPos: Integer read FCaret write SetCaretPos;
+    // Scroll offset (device px, >= 0) — read-only for tests
+    property ScrollX: Integer read FScrollX;
   published
     property Text: string read FText write SetText;
     property Enabled;
@@ -85,6 +91,7 @@ begin
   FText := '';
   FCaret := 0;
   FSelAnchor := 0;
+  FScrollX := 0;
   FWidthCacheValid := False;
   FMeasureBmp := nil;
 end;
@@ -129,6 +136,7 @@ procedure TTyEdit.SelectAll;
 begin
   FSelAnchor := 0;
   FCaret := UTF8Length(FText);
+  EnsureCaretVisible(Font.PixelsPerInch);
   Invalidate;
 end;
 
@@ -144,6 +152,7 @@ procedure TTyEdit.DeleteSelection;
 var
   SS, SL: Integer;
   Before, After: string;
+  APPI: Integer;
 begin
   if not HasSelection then Exit;
   SS := SelStart;
@@ -154,10 +163,15 @@ begin
   FCaret := SS;
   FSelAnchor := FCaret;
   InvalidateWidthCache;
+  APPI := Font.PixelsPerInch;
+  ClampScrollX(APPI);
+  EnsureCaretVisible(APPI);
   Invalidate;
 end;
 
 procedure TTyEdit.SetText(const AValue: string);
+var
+  APPI: Integer;
 begin
   if FText = AValue then Exit;
   FText := AValue;
@@ -165,6 +179,9 @@ begin
   FCaret := UTF8Length(FText);
   FSelAnchor := FCaret;
   InvalidateWidthCache;
+  APPI := Font.PixelsPerInch;
+  ClampScrollX(APPI);
+  EnsureCaretVisible(APPI);
   Invalidate;
 end;
 
@@ -178,6 +195,7 @@ begin
   if (FCaret = AValue) and (FSelAnchor = AValue) then Exit;
   FCaret := AValue;
   FSelAnchor := AValue;  // direct CaretPos write collapses selection
+  EnsureCaretVisible(Font.PixelsPerInch);
   Invalidate;
 end;
 
@@ -281,6 +299,71 @@ begin
   Result := FWidthCache;
 end;
 
+// ---- Scroll helpers ----
+
+procedure TTyEdit.ClampScrollX(APPI: Integer);
+var
+  S: TTyStyleSet;
+  Widths: TTyIntArray;
+  TotalTextWidth, ViewWidth, MaxScroll: Integer;
+  RightPad, StartX: Integer;
+begin
+  if ClientWidth <= 0 then Exit;
+  S := CurrentStyle;
+  StartX := MulDiv(S.Padding.Left, APPI, 96);
+  RightPad := MulDiv(S.Padding.Right, APPI, 96);
+  ViewWidth := (ClientWidth - StartX - RightPad);
+  if ViewWidth < 0 then ViewWidth := 0;
+  Widths := MeasureCodepointWidths(APPI);
+  TotalTextWidth := Widths[Length(Widths) - 1];
+  MaxScroll := TotalTextWidth - ViewWidth;
+  if MaxScroll < 0 then MaxScroll := 0;
+  if FScrollX > MaxScroll then FScrollX := MaxScroll;
+  if FScrollX < 0 then FScrollX := 0;
+end;
+
+procedure TTyEdit.EnsureCaretVisible(APPI: Integer);
+var
+  S: TTyStyleSet;
+  Widths: TTyIntArray;
+  StartX, RightPad, ViewRight, ViewWidth, MaxScroll: Integer;
+  Margin, TotalTextWidth: Integer;
+  CaretPx: Integer;
+begin
+  if ClientWidth <= 0 then Exit;
+  S := CurrentStyle;
+  StartX := MulDiv(S.Padding.Left, APPI, 96);
+  RightPad := MulDiv(S.Padding.Right, APPI, 96);
+  ViewRight := ClientWidth - RightPad;
+  ViewWidth := ViewRight - StartX;
+  if ViewWidth < 0 then ViewWidth := 0;
+
+  Widths := MeasureCodepointWidths(APPI);
+  TotalTextWidth := Widths[Length(Widths) - 1];
+
+  // Margin: 2 scaled device px
+  Margin := MulDiv(2, APPI, 96);
+
+  // Clamp to valid max first
+  MaxScroll := TotalTextWidth - ViewWidth;
+  if MaxScroll < 0 then MaxScroll := 0;
+
+  // Caret position in control coordinates (before scroll adjustment)
+  CaretPx := StartX + Widths[FCaret];
+
+  // Scroll right if caret beyond right edge
+  if CaretPx - FScrollX > ViewRight - Margin then
+    FScrollX := CaretPx - (ViewRight - Margin);
+
+  // Scroll left if caret before left edge
+  if CaretPx - FScrollX < StartX + Margin then
+    FScrollX := CaretPx - (StartX + Margin);
+
+  // Clamp
+  if FScrollX > MaxScroll then FScrollX := MaxScroll;
+  if FScrollX < 0 then FScrollX := 0;
+end;
+
 // ---- Mouse caret hit-test ----
 
 function TTyEdit.CaretIndexAtX(AX: Integer): Integer;
@@ -294,7 +377,8 @@ var
 begin
   APPI := Font.PixelsPerInch;
   StartX := TextStartX(APPI);
-  RelX := AX - StartX;
+  // Account for horizontal scroll: clicks are in control coords, add FScrollX
+  RelX := AX - StartX + FScrollX;
   Len := UTF8Length(FText);
 
   if RelX <= 0 then
@@ -394,6 +478,7 @@ procedure TTyEdit.InjectStringAt(const AStr: string);
 var
   Before, After: string;
   InsLen: Integer;
+  APPI: Integer;
 begin
   if AStr = '' then Exit;
   Before := UTF8Copy(FText, 1, FCaret);
@@ -403,6 +488,8 @@ begin
   FCaret := FCaret + InsLen;
   FSelAnchor := FCaret;
   InvalidateWidthCache;
+  APPI := Font.PixelsPerInch;
+  EnsureCaretVisible(APPI);
   Invalidate;
 end;
 
@@ -425,6 +512,7 @@ begin
       FCaret := CaretIndexAtX(X);
       FSelAnchor := FCaret;
       FMouseSelecting := True;
+      EnsureCaretVisible(Font.PixelsPerInch);
       Invalidate;
     end;
     try
@@ -443,6 +531,7 @@ begin
   begin
     // Drag-select: move caret, keep anchor fixed
     FCaret := CaretIndexAtX(X);
+    EnsureCaretVisible(Font.PixelsPerInch);
     Invalidate;
   end;
 end;
@@ -457,6 +546,7 @@ end;
 procedure TTyEdit.InjectKey(const AChar: TUTF8Char);
 var
   Before, After: string;
+  APPI: Integer;
 begin
   if (AChar = '') or (AChar[1] < #32) then Exit;
   // Replace selection if any
@@ -468,6 +558,8 @@ begin
   Inc(FCaret);
   FSelAnchor := FCaret;
   InvalidateWidthCache;
+  APPI := Font.PixelsPerInch;
+  EnsureCaretVisible(APPI);
   Invalidate;
 end;
 
@@ -475,6 +567,7 @@ procedure TTyEdit.InjectBackspace;
 var
   Len: Integer;
   Before, After: string;
+  APPI: Integer;
 begin
   if HasSelection then
   begin
@@ -489,6 +582,9 @@ begin
   Dec(FCaret);
   FSelAnchor := FCaret;
   InvalidateWidthCache;
+  APPI := Font.PixelsPerInch;
+  ClampScrollX(APPI);
+  EnsureCaretVisible(APPI);
   Invalidate;
 end;
 
@@ -496,6 +592,7 @@ procedure TTyEdit.InjectDelete;
 var
   Len: Integer;
   Before, After: string;
+  APPI: Integer;
 begin
   if HasSelection then
   begin
@@ -510,6 +607,9 @@ begin
   // caret stays; collapse anchor
   FSelAnchor := FCaret;
   InvalidateWidthCache;
+  APPI := Font.PixelsPerInch;
+  ClampScrollX(APPI);
+  EnsureCaretVisible(APPI);
   Invalidate;
 end;
 
@@ -587,6 +687,7 @@ begin
           if FCaret > 0 then
           begin
             Dec(FCaret);
+            EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
           end;
         end
@@ -597,12 +698,14 @@ begin
           begin
             FCaret := SelStart;
             FSelAnchor := FCaret;
+            EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
           end
           else if FCaret > 0 then
           begin
             Dec(FCaret);
             FSelAnchor := FCaret;
+            EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
           end;
         end;
@@ -621,6 +724,7 @@ begin
           if FCaret < Len then
           begin
             Inc(FCaret);
+            EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
           end;
         end
@@ -631,12 +735,14 @@ begin
           begin
             FCaret := SelStart + SelLength;
             FSelAnchor := FCaret;
+            EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
           end
           else if FCaret < Len then
           begin
             Inc(FCaret);
             FSelAnchor := FCaret;
+            EnsureCaretVisible(Font.PixelsPerInch);
             Invalidate;
           end;
         end;
@@ -652,12 +758,14 @@ begin
         if Extending then
         begin
           FCaret := 0;
+          EnsureCaretVisible(Font.PixelsPerInch);
           Invalidate;
         end
         else
         begin
           FCaret := 0;
           FSelAnchor := 0;
+          EnsureCaretVisible(Font.PixelsPerInch);
           Invalidate;
         end;
         Key := 0;
@@ -672,12 +780,14 @@ begin
         if Extending then
         begin
           FCaret := Len;
+          EnsureCaretVisible(Font.PixelsPerInch);
           Invalidate;
         end
         else
         begin
           FCaret := Len;
           FSelAnchor := Len;
+          EnsureCaretVisible(Font.PixelsPerInch);
           Invalidate;
         end;
         Key := 0;
@@ -725,8 +835,9 @@ begin
         FocusBorderColor := S.TextColor;
 
       Widths := MeasureCodepointWidths(APPI);
-      X1 := ContentRect.Left + Widths[SelStart];
-      X2 := ContentRect.Left + Widths[SelStart + SelLength];
+      // Apply scroll offset: shift band left by FScrollX
+      X1 := ContentRect.Left + Widths[SelStart] - FScrollX;
+      X2 := ContentRect.Left + Widths[SelStart + SelLength] - FScrollX;
       // Clamp to content rect
       if X1 < ContentRect.Left then X1 := ContentRect.Left;
       if X2 > ContentRect.Right then X2 := ContentRect.Right;
@@ -745,15 +856,30 @@ begin
     end;
 
     // 2. Draw text (on top of selection band) — use EffSize to match measurement
-    P.DrawText(ContentRect, FText, S.FontName, EffSize, S.FontWeight,
-      S.TextColor, taLeftJustify, tlCenter, True);
+    // Shift the text rect left by FScrollX so the content scrolls; clipping
+    // is provided by the BGRA bitmap edges and the painter's content rect clip.
+    if FScrollX > 0 then
+    begin
+      if Length(Widths) = 0 then
+        Widths := MeasureCodepointWidths(APPI);
+      P.DrawText(
+        Rect(ContentRect.Left - FScrollX, ContentRect.Top,
+             ContentRect.Left - FScrollX + Widths[Length(Widths) - 1] + P.Scale(4),
+             ContentRect.Bottom),
+        FText, S.FontName, EffSize, S.FontWeight,
+        S.TextColor, taLeftJustify, tlCenter, True);
+    end
+    else
+      P.DrawText(ContentRect, FText, S.FontName, EffSize, S.FontWeight,
+        S.TextColor, taLeftJustify, tlCenter, True);
 
     // 3. Caret (only when focused and no selection)
     if Focused and not HasSelection then
     begin
       if Length(Widths) = 0 then
         Widths := MeasureCodepointWidths(APPI);
-      CaretX := ContentRect.Left + Widths[FCaret];
+      // Apply scroll offset to caret position
+      CaretX := ContentRect.Left + Widths[FCaret] - FScrollX;
       CaretRect := Rect(CaretX, ContentRect.Top + P.Scale(2),
         CaretX + P.Scale(1), ContentRect.Bottom - P.Scale(2));
       P.FillBackground(CaretRect, Default(TTyFill), 0);
