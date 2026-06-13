@@ -18,6 +18,7 @@ uses
   test.tabcontrol.streaming,
   test.tabcontrol.scroll,
   test.tabcontrol.reorder,
+  test.tabcontrol.closehover,
   test.defaulttheme, test.spinedit,
   test.animation,
   test.animation.toggle,

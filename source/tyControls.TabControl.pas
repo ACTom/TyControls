@@ -58,6 +58,7 @@ type
     FPendingTabIndex: Integer; // TabIndex captured during csLoading (-1 = none)
     FTabHeight: Integer;      // logical px, default 28
     FHoverTab: Integer;       // -1 = none
+    FHoverClose: Integer;     // tab index whose close (x) is hovered; -1 = none
     FOnChange: TNotifyEvent;
     FDestroying: Boolean;
     FTabsClosable: Boolean;
@@ -148,6 +149,12 @@ type
         last index when X is past every midpoint). }
     function TyDragThresholdPx(APPI: Integer): Integer;
     function TyDropIndexAt(X, APPI: Integer): Integer;
+
+    { The tab index whose close (x) button the pointer currently hovers, or -1
+      when none. Distinct from whole-tab hover (FHoverTab): the x lights up on
+      its own so the buyer's user sees a precise close affordance. Read-only;
+      driven by MouseMove/MouseLeave. }
+    property TyTabHoverClose: Integer read FHoverClose;
 
     property Pages[AIndex: Integer]: TTyPanel read GetPage;
   published
@@ -248,6 +255,7 @@ begin
   FPendingTabIndex := -1;
   FTabHeight := 28;
   FHoverTab  := -1;
+  FHoverClose := -1;
   FHeaderScroll := 0;
   FDragTab   := -1;
   FDragging  := False;
@@ -987,6 +995,7 @@ var
   W, H, TabH, I: Integer;
   HdrRect, CloseRect, TextRect, BandRect, SavedClip: TRect;
   TabStates: TTyStateSet;
+  CloseHi: TTyFill;
 begin
   P := TTyPainter.Create;
   try
@@ -1048,7 +1057,22 @@ begin
         taCenter, tlCenter, True);
 
       if FTabsClosable then
+      begin
+        { Independent close (x) hover highlight. Derived purely from the tab's
+          resolved text color (no extra theme token needed): a translucent
+          rounded chip behind the glyph plus the glyph at full opacity, so the
+          x lights up on its own when the pointer is precisely over it. }
+        if I = FHoverClose then
+        begin
+          CloseHi := Default(TTyFill);
+          CloseHi.Kind  := tfkSolid;
+          CloseHi.Color := TyRGBA(TyRedOf(TabStyle.TextColor),
+                                   TyGreenOf(TabStyle.TextColor),
+                                   TyBlueOf(TabStyle.TextColor), 48);
+          P.FillBackground(CloseRect, CloseHi, 3);
+        end;
         P.DrawGlyph(CloseRect, tgClose, TabStyle.TextColor, 1);
+      end;
     end;
 
     { Restore the clip and draw the prev/next arrow affordances on top so they
@@ -1147,8 +1171,8 @@ end;
 
 procedure TTyTabControl.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  PPI, TabH, NewHover, I, Target: Integer;
-  HdrRect: TRect;
+  PPI, TabH, NewHover, NewHoverClose, I, Target: Integer;
+  HdrRect, CloseRect: TRect;
   OverArrow: Boolean;
 begin
   inherited MouseMove(Shift, X, Y);
@@ -1172,11 +1196,18 @@ begin
         FTabs.Items[FDragTab].Index := Target; // -> TabsChanged re-syncs arrays
         FDragTab := Target;
       end;
+      { A live reorder drag is not a close-button hover; drop any stale highlight. }
+      if FHoverClose <> -1 then
+      begin
+        FHoverClose := -1;
+        Invalidate;
+      end;
       Exit; // skip hover scan while a drag is in progress
     end;
   end;
 
   NewHover := -1;
+  NewHoverClose := -1;
   if Y < TabH then
   begin
     RebuildLayout(PPI);
@@ -1191,9 +1222,25 @@ begin
         if (X >= HdrRect.Left) and (X < HdrRect.Right) then
         begin
           NewHover := I;
+          { Independent close (x) hover: only when closable and the pointer is
+            inside this tab's shifted close rect. Mirrors the MouseDown hit-test
+            so the highlight and the actual close target stay in lockstep. }
+          if FTabsClosable then
+          begin
+            CloseRect := FCloseRects[I];
+            OffsetRect(CloseRect, -FHeaderScroll, 0);
+            if (X >= CloseRect.Left) and (X < CloseRect.Right) and
+               (Y >= CloseRect.Top)  and (Y < CloseRect.Bottom) then
+              NewHoverClose := I;
+          end;
           Break;
         end;
       end;
+  end;
+  if NewHoverClose <> FHoverClose then
+  begin
+    FHoverClose := NewHoverClose;
+    Invalidate;
   end;
   if NewHover <> FHoverTab then
   begin
@@ -1219,9 +1266,10 @@ begin
   { Disarm any in-flight drag so a re-entry move without a fresh press is inert. }
   FDragTab  := -1;
   FDragging := False;
-  if FHoverTab <> -1 then
+  if (FHoverTab <> -1) or (FHoverClose <> -1) then
   begin
-    FHoverTab := -1;
+    FHoverTab   := -1;
+    FHoverClose := -1;
     Invalidate;
   end;
 end;
