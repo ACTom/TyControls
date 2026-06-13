@@ -243,7 +243,7 @@ TyButton:disabled         { opacity: 0.5; }
 | `checkbox/` | `TTyCheckBox` 勾选与禁用 | `lazbuild examples/checkbox/checkbox_example.lpi` |
 | `radiobutton/` | `TTyRadioButton` 单选组 | `lazbuild examples/radiobutton/radiobutton_example.lpi` |
 | `panel/` | `TTyPanel` 容器控件与标题(含嵌套面板) | `lazbuild examples/panel/panel_example.lpi` |
-| `combobox/` | `TTyComboBox` Items/选择/OnChange(v1 点击循环切换) | `lazbuild examples/combobox/combobox_example.lpi` |
+| `combobox/` | `TTyComboBox` Items/选择/OnChange、真实下拉弹层 | `lazbuild examples/combobox/combobox_example.lpi` |
 | `scrollbar/` | `TTyScrollBar` 垂直/水平、Position/OnChange | `lazbuild examples/scrollbar/scrollbar_example.lpi` |
 | `listbox/` | `TTyListBox` 条目列表、键盘导航、内嵌滚动条 | `lazbuild examples/listbox/listbox_example.lpi` |
 | `progressbar/` | `TTyProgressBar` 进度更新 | `lazbuild examples/progressbar/progressbar_example.lpi` |

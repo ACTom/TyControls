@@ -195,10 +195,12 @@ TyTabControl {
   border-radius: var(--radius);
 }
 
+/* 暗色下无法靠 darken 拉开与内容区的差异(surface 已接近黑),改用 lighten 让
+   未选中页签"抬起"于内容之上,选中页签回落到 surface 与内容融合。 */
 TyTab {
-  background: darken(--surface, 4%);
+  background: lighten(--surface, 12%);
   color: var(--on-surface);
   padding: 4px;
 }
-TyTab:hover  { background: lighten(--surface, 5%); }
+TyTab:hover  { background: lighten(--surface, 18%); }
 TyTab:active { background: var(--surface); color: var(--accent); }
