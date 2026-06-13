@@ -10,7 +10,7 @@ uses
 
 type
   TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck,
-    tgRadioDot, tgChevronDown, tgArrowUp, tgArrowDown);
+    tgRadioDot, tgChevronDown, tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight);
 
   TTyPainter = class
   private
@@ -297,6 +297,18 @@ begin
         FBmp.DrawLineAntialias(cx, t, cx, b, px, th, True);
         FBmp.DrawPolyLineAntialias([PointF(l + w * 0.25, b - h * 0.35),
           PointF(cx, b), PointF(r - w * 0.25, b - h * 0.35)], px, th);
+      end;
+    tgArrowLeft:
+      begin
+        FBmp.DrawLineAntialias(r, cy, l, cy, px, th, True);
+        FBmp.DrawPolyLineAntialias([PointF(l + w * 0.35, t + h * 0.25),
+          PointF(l, cy), PointF(l + w * 0.35, b - h * 0.25)], px, th);
+      end;
+    tgArrowRight:
+      begin
+        FBmp.DrawLineAntialias(l, cy, r, cy, px, th, True);
+        FBmp.DrawPolyLineAntialias([PointF(r - w * 0.35, t + h * 0.25),
+          PointF(r, cy), PointF(r - w * 0.35, b - h * 0.25)], px, th);
       end;
   end;
 end;

@@ -58,12 +58,21 @@ type
     FPendingTabIndex: Integer; // TabIndex captured during csLoading (-1 = none)
     FTabHeight: Integer;      // logical px, default 28
     FHoverTab: Integer;       // -1 = none
+    FHoverClose: Integer;     // tab index whose close (x) is hovered; -1 = none
     FOnChange: TNotifyEvent;
     FDestroying: Boolean;
     FTabsClosable: Boolean;
     FOnTabClose: TTyTabCloseEvent;
     FHeaderRects: array of TRect;
     FCloseRects:  array of TRect;
+
+    { Drag-reorder gesture state. FDragTab is the collection index of the tab a
+      press armed as a drag candidate (-1 = none). FDragStartX is the device-px X
+      of that press; FDragging flips True once the pointer travels past the drag
+      threshold, switching the gesture from a click into a live reorder. }
+    FDragTab:    Integer;
+    FDragStartX: Integer;
+    FDragging:   Boolean;
 
     procedure SetTabs(AValue: TTyTabCollection);
     procedure TabItemAdded(AItem: TTyTabItem);
@@ -82,6 +91,14 @@ type
                               const AStyle: TTyStyleSet; APPI: Integer): Integer;
     procedure ShowOnlyPage(AIndex: Integer);
   protected
+    { Header overflow scroll. FHeaderScroll is the device-px amount the header
+      strip is shifted left (>=0). FShowScrollAffordance and the two arrow rects
+      are recomputed at the end of RebuildLayout. Kept protected so white-box
+      tests can read them. }
+    FHeaderScroll: Integer;
+    FShowScrollAffordance: Boolean;
+    FScrollLeftRect:  TRect;
+    FScrollRightRect: TRect;
     function GetStyleTypeKey: string; override;
     procedure SetController(AValue: TTyStyleController); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -90,7 +107,11 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
                         X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState;
+                      X, Y: Integer); override;
     procedure MouseLeave; override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+                         MousePos: TPoint): Boolean; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
@@ -105,6 +126,35 @@ type
     { Public pure-ish geometry for tests: device px, (0,0)-local }
     function TyTabHeaderRect(AIndex: Integer): TRect;
     function TyTabCloseRect(AIndex: Integer): TRect;
+    { Header overflow scroll geometry (device px, (0,0)-local).
+      TyHeaderStripWidth: total unshifted width of all tab headers.
+      TyMaxHeaderScroll:  largest valid FHeaderScroll (0 when content fits).
+      TyTabScrollLeftRect/TyTabScrollRightRect: the prev/next arrow affordance
+        rects, or (0,0,0,0) when the strip fits.
+      HeaderRectShifted:  header rect translated by the current scroll offset. }
+    function TyHeaderStripWidth: Integer;
+    function TyMaxHeaderScroll: Integer;
+    function TyTabScrollLeftRect: TRect;
+    function TyTabScrollRightRect: TRect;
+    function HeaderRectShifted(AIndex: Integer): TRect;
+    procedure SetHeaderScroll(AValue: Integer);
+    procedure ScrollTabIntoView(AIndex: Integer);
+
+    { Drag-reorder helpers (pure, no mutation; device px).
+      TyDragThresholdPx: how far (in device px at APPI) a press must move before
+        a drag counts as a reorder rather than a click. Small + PPI-scaled.
+      TyDropIndexAt: the collection index a drag at device-X should drop into,
+        using shifted header midpoints. Returns the first index i whose shifted
+        midpoint lies to the right of X; clamped to [0, Count-1] (default the
+        last index when X is past every midpoint). }
+    function TyDragThresholdPx(APPI: Integer): Integer;
+    function TyDropIndexAt(X, APPI: Integer): Integer;
+
+    { The tab index whose close (x) button the pointer currently hovers, or -1
+      when none. Distinct from whole-tab hover (FHoverTab): the x lights up on
+      its own so the buyer's user sees a precise close affordance. Read-only;
+      driven by MouseMove/MouseLeave. }
+    property TyTabHoverClose: Integer read FHoverClose;
 
     property Pages[AIndex: Integer]: TTyPanel read GetPage;
   published
@@ -205,6 +255,10 @@ begin
   FPendingTabIndex := -1;
   FTabHeight := 28;
   FHoverTab  := -1;
+  FHoverClose := -1;
+  FHeaderScroll := 0;
+  FDragTab   := -1;
+  FDragging  := False;
   FTabsClosable := False;
   TabStop    := True;
   Width      := 300;
@@ -301,6 +355,7 @@ var
   TabH, Pad, MinW, CloseSize, Gap, CloseSlot, Margin: Integer;
   TabStyle: TTyStyleSet;
   I, X, TW, HW, Cy: Integer;
+  VisibleWidth, AffordanceW, ArrowW, MaxScroll: Integer;
 begin
   SetLength(FHeaderRects, FCaptions.Count);
   SetLength(FCloseRects, FCaptions.Count);
@@ -341,6 +396,35 @@ begin
 
     Inc(X, HW);
   end;
+
+  { X is now the total (unshifted) header strip width. Decide whether the strip
+    overflows the visible control width and, if so, reserve a left/right arrow
+    affordance band (two Scale(16) arrows) at the far ends of the header band. }
+  VisibleWidth := Width;
+  AffordanceW  := MulDiv(16, APPI, 96) * 2;
+  FShowScrollAffordance := X > VisibleWidth;
+  if FShowScrollAffordance then
+  begin
+    ArrowW := MulDiv(16, APPI, 96);
+    FScrollLeftRect  := Rect(0, 0, ArrowW, TabH);
+    FScrollRightRect := Rect(VisibleWidth - ArrowW, 0, VisibleWidth, TabH);
+  end
+  else
+  begin
+    FScrollLeftRect  := Rect(0, 0, 0, 0);
+    FScrollRightRect := Rect(0, 0, 0, 0);
+    AffordanceW := 0; // no band reserved when content fits
+  end;
+
+  { Clamp the current scroll to the new maximum. Max scroll is the overshoot of
+    the strip past the visible width minus the affordance band. }
+  if FShowScrollAffordance then
+    MaxScroll := X - (VisibleWidth - AffordanceW)
+  else
+    MaxScroll := 0;
+  if MaxScroll < 0 then MaxScroll := 0;
+  if FHeaderScroll > MaxScroll then FHeaderScroll := MaxScroll;
+  if FHeaderScroll < 0 then FHeaderScroll := 0;
 end;
 
 function TTyTabControl.TyTabHeaderRect(AIndex: Integer): TRect;
@@ -361,6 +445,146 @@ begin
     Result := Rect(0, 0, 0, 0)
   else
     Result := FCloseRects[AIndex];
+end;
+
+{ Total unshifted width of the header strip = right edge of the last header
+  (rebuilt at the control's current PPI). }
+function TTyTabControl.TyHeaderStripWidth: Integer;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  if Length(FHeaderRects) = 0 then
+    Result := 0
+  else
+    Result := FHeaderRects[High(FHeaderRects)].Right;
+end;
+
+{ Largest valid scroll: the overshoot of the strip past the visible width minus
+  the reserved arrow band. 0 when the strip fits. Mirrors RebuildLayout's clamp. }
+function TTyTabControl.TyMaxHeaderScroll: Integer;
+var
+  StripW, VisibleWidth, AffordanceW: Integer;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  if not FShowScrollAffordance then Exit(0);
+  if Length(FHeaderRects) = 0 then
+    StripW := 0
+  else
+    StripW := FHeaderRects[High(FHeaderRects)].Right;
+  VisibleWidth := Width;
+  AffordanceW  := MulDiv(16, Font.PixelsPerInch, 96) * 2;
+  Result := StripW - (VisibleWidth - AffordanceW);
+  if Result < 0 then Result := 0;
+end;
+
+function TTyTabControl.TyTabScrollLeftRect: TRect;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  Result := FScrollLeftRect;
+end;
+
+function TTyTabControl.TyTabScrollRightRect: TRect;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  Result := FScrollRightRect;
+end;
+
+{ Header rect translated left by the current scroll offset. }
+function TTyTabControl.HeaderRectShifted(AIndex: Integer): TRect;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  if (AIndex < 0) or (AIndex >= Length(FHeaderRects)) then
+    Exit(Rect(0, 0, 0, 0));
+  Result := FHeaderRects[AIndex];
+  OffsetRect(Result, -FHeaderScroll, 0);
+end;
+
+{ Clamp the requested scroll into [0, TyMaxHeaderScroll] and repaint. }
+procedure TTyTabControl.SetHeaderScroll(AValue: Integer);
+var
+  MaxScroll: Integer;
+begin
+  MaxScroll := TyMaxHeaderScroll;
+  if AValue < 0 then AValue := 0;
+  if AValue > MaxScroll then AValue := MaxScroll;
+  if AValue = FHeaderScroll then Exit;
+  FHeaderScroll := AValue;
+  Invalidate;
+end;
+
+{ Adjust FHeaderScroll (clamped) so the header at AIndex is fully inside the
+  visible band. Pure integer math on the unshifted rect vs the visible band:
+  the band is [VisLeft, VisRight], where the arrow affordance (when shown) eats
+  ArrowW off each side. Scroll right just enough if the tab's right edge is past
+  the band; scroll left just enough if its left edge is before the band. }
+procedure TTyTabControl.ScrollTabIntoView(AIndex: Integer);
+var
+  ArrowW, VisLeft, VisRight, L, R, Want: Integer;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  if (AIndex < 0) or (AIndex >= Length(FHeaderRects)) then Exit;
+
+  if FShowScrollAffordance then
+  begin
+    ArrowW   := MulDiv(16, Font.PixelsPerInch, 96);
+    { The left arrow overlays the start of the strip, so the leftmost tab can
+      legitimately sit at x=0 (scroll 0). Align "into view from the left" to the
+      true left edge; reserve only the right arrow on the trailing side. }
+    VisLeft  := 0;
+    VisRight := Width - ArrowW;
+  end
+  else
+  begin
+    VisLeft  := 0;
+    VisRight := Width;
+  end;
+
+  Want := FHeaderScroll;
+  L := FHeaderRects[AIndex].Left;
+  R := FHeaderRects[AIndex].Right;
+
+  { If the tab's right edge falls past the visible right, scroll so it aligns. }
+  if (R - Want) > VisRight then
+    Want := R - VisRight;
+  { If the tab's left edge falls before the visible left, scroll so it aligns. }
+  if (L - Want) < VisLeft then
+    Want := L - VisLeft;
+
+  SetHeaderScroll(Want);
+end;
+
+{ Device-px drag threshold at APPI: 6 logical px scaled. At 96 PPI this is 6. }
+function TTyTabControl.TyDragThresholdPx(APPI: Integer): Integer;
+begin
+  Result := MulDiv(6, APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+{ Resolve which collection index a drag at device-X should drop into, scanning
+  the shifted header midpoints left-to-right. Returns the first index whose
+  shifted midpoint lies strictly to the right of X; if X is past every midpoint
+  it defaults to the last index. Result is clamped to [0, Count-1]. Pure: it
+  rebuilds the (cached) layout for measurement but mutates no selection state. }
+function TTyTabControl.TyDropIndexAt(X, APPI: Integer): Integer;
+var
+  I, Mid: Integer;
+  HR: TRect;
+begin
+  if FCaptions.Count = 0 then Exit(0);
+  RebuildLayout(APPI);
+  Result := FCaptions.Count - 1; // default: past every midpoint -> last
+  for I := 0 to FCaptions.Count - 1 do
+  begin
+    HR := FHeaderRects[I];
+    OffsetRect(HR, -FHeaderScroll, 0); // shifted midpoint
+    Mid := (HR.Left + HR.Right) div 2;
+    if X < Mid then
+    begin
+      Result := I;
+      Break;
+    end;
+  end;
+  if Result < 0 then Result := 0;
+  if Result > FCaptions.Count - 1 then Result := FCaptions.Count - 1;
 end;
 
 procedure TTyTabControl.DoCloseTab(AIndex: Integer);
@@ -410,6 +634,8 @@ begin
   if Clamped = FTabIndex then Exit;
   FTabIndex := Clamped;
   ShowOnlyPage(FTabIndex);
+  if FTabIndex >= 0 then
+    ScrollTabIntoView(FTabIndex);
   Invalidate;
   if Assigned(FOnChange) then
     FOnChange(Self);
@@ -764,11 +990,12 @@ end;
 procedure TTyTabControl.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  BoxStyle, TabStyle: TTyStyleSet;
+  BoxStyle, TabStyle, ArrowStyle: TTyStyleSet;
   R: TRect;
   W, H, TabH, I: Integer;
-  HdrRect, TextRect: TRect;
+  HdrRect, CloseRect, TextRect, BandRect, SavedClip: TRect;
   TabStates: TTyStateSet;
+  CloseHi: TTyFill;
 begin
   P := TTyPainter.Create;
   try
@@ -787,9 +1014,22 @@ begin
     { Draw each tab header }
     RebuildLayout(APPI);
 
+    { When overflowing, clip the header strip to the band between the two arrow
+      affordances so shifted headers do not paint over the arrows or past the
+      control. When it fits, clip to the full header band (offset is 0 anyway). }
+    SavedClip := P.Bitmap.ClipRect;
+    if FShowScrollAffordance then
+      BandRect := Rect(FScrollLeftRect.Right, 0, FScrollRightRect.Left, TabH)
+    else
+      BandRect := Rect(0, 0, W, TabH);
+    P.Bitmap.ClipRect := BandRect;
+
     for I := 0 to FCaptions.Count - 1 do
     begin
-      HdrRect := FHeaderRects[I];
+      HdrRect   := HeaderRectShifted(I);
+      CloseRect := FCloseRects[I];
+      if FTabsClosable then
+        OffsetRect(CloseRect, -FHeaderScroll, 0);
 
       { Determine state }
       TabStates := [];
@@ -809,7 +1049,7 @@ begin
       { Draw caption centered in header (clipped to left of close glyph) }
       TextRect := HdrRect;
       if FTabsClosable then
-        TextRect.Right := FCloseRects[I].Left;
+        TextRect.Right := CloseRect.Left;
       P.DrawText(TextRect,
         FCaptions[I],
         TabStyle.FontName, TabStyle.FontSize, TabStyle.FontWeight,
@@ -817,7 +1057,37 @@ begin
         taCenter, tlCenter, True);
 
       if FTabsClosable then
-        P.DrawGlyph(FCloseRects[I], tgClose, TabStyle.TextColor, 1);
+      begin
+        { Independent close (x) hover highlight. Derived purely from the tab's
+          resolved text color (no extra theme token needed): a translucent
+          rounded chip behind the glyph plus the glyph at full opacity, so the
+          x lights up on its own when the pointer is precisely over it. }
+        if I = FHoverClose then
+        begin
+          CloseHi := Default(TTyFill);
+          CloseHi.Kind  := tfkSolid;
+          CloseHi.Color := TyRGBA(TyRedOf(TabStyle.TextColor),
+                                   TyGreenOf(TabStyle.TextColor),
+                                   TyBlueOf(TabStyle.TextColor), 48);
+          P.FillBackground(CloseRect, CloseHi, 3);
+        end;
+        P.DrawGlyph(CloseRect, tgClose, TabStyle.TextColor, 1);
+      end;
+    end;
+
+    { Restore the clip and draw the prev/next arrow affordances on top so they
+      are never overlapped by a shifted header. }
+    P.Bitmap.ClipRect := SavedClip;
+    if FShowScrollAffordance then
+    begin
+      ArrowStyle := ActiveController.Model.ResolveStyle('TyTab', '', [tysNormal]);
+      if tpBackground in ArrowStyle.Present then
+      begin
+        P.FillBackground(FScrollLeftRect,  ArrowStyle.Background, 0);
+        P.FillBackground(FScrollRightRect, ArrowStyle.Background, 0);
+      end;
+      P.DrawGlyph(FScrollLeftRect,  tgArrowLeft,  ArrowStyle.TextColor, 2);
+      P.DrawGlyph(FScrollRightRect, tgArrowRight, ArrowStyle.TextColor, 2);
     end;
 
     P.EndPaint;
@@ -835,7 +1105,8 @@ end;
 procedure TTyTabControl.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
-  PPI, TabH, I: Integer;
+  PPI, TabH, Step, I: Integer;
+  HdrRect, CloseRect: TRect;
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
@@ -846,16 +1117,46 @@ begin
     if Y < TabH then
     begin
       RebuildLayout(PPI);
+
+      { Affordance arrows take priority over the header scan. Each click nudges
+        the scroll by ~40 logical px (clamped inside SetHeaderScroll). }
+      if FShowScrollAffordance then
+      begin
+        Step := MulDiv(40, PPI, 96);
+        if (X >= FScrollLeftRect.Left) and (X < FScrollLeftRect.Right) and
+           (Y >= FScrollLeftRect.Top) and (Y < FScrollLeftRect.Bottom) then
+        begin
+          SetHeaderScroll(FHeaderScroll - Step);
+          Exit;
+        end;
+        if (X >= FScrollRightRect.Left) and (X < FScrollRightRect.Right) and
+           (Y >= FScrollRightRect.Top) and (Y < FScrollRightRect.Bottom) then
+        begin
+          SetHeaderScroll(FHeaderScroll + Step);
+          Exit;
+        end;
+      end;
+
       for I := 0 to FCaptions.Count - 1 do
       begin
-        if (X >= FHeaderRects[I].Left) and (X < FHeaderRects[I].Right) then
+        HdrRect := HeaderRectShifted(I);
+        if (X >= HdrRect.Left) and (X < HdrRect.Right) then
         begin
+          CloseRect := FCloseRects[I];
+          OffsetRect(CloseRect, -FHeaderScroll, 0);
           if FTabsClosable and
-             (X >= FCloseRects[I].Left) and (X < FCloseRects[I].Right) and
-             (Y >= FCloseRects[I].Top) and (Y < FCloseRects[I].Bottom) then
+             (X >= CloseRect.Left) and (X < CloseRect.Right) and
+             (Y >= CloseRect.Top) and (Y < CloseRect.Bottom) then
             DoCloseTab(I)
           else
+          begin
             TabIndex := I;
+            { Arm a drag-reorder candidate. A plain press+release stays a click
+              (FDragging never flips); only a move past the threshold reorders. }
+            FDragTab    := I;
+            FDragStartX := X;
+            FDragging   := False;
+          end;
           Break;
         end;
       end;
@@ -870,21 +1171,76 @@ end;
 
 procedure TTyTabControl.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  PPI, TabH, NewHover, I: Integer;
+  PPI, TabH, NewHover, NewHoverClose, I, Target: Integer;
+  HdrRect, CloseRect: TRect;
+  OverArrow: Boolean;
 begin
   inherited MouseMove(Shift, X, Y);
   PPI  := Font.PixelsPerInch;
   TabH := TabHPx(PPI);
+
+  { Drag-reorder gesture. While a candidate is armed and the left button is held,
+    a move past the threshold flips into live reorder mode. Each subsequent move
+    drops the dragged tab at the index its current X resolves to (shifted-midpoint
+    rule) by reseating the backing collection item, which re-syncs the parallel
+    arrays via TabsChanged. Skip the hover scan while dragging. }
+  if (FDragTab >= 0) and (ssLeft in Shift) then
+  begin
+    if (not FDragging) and (Abs(X - FDragStartX) >= TyDragThresholdPx(PPI)) then
+      FDragging := True;
+    if FDragging then
+    begin
+      Target := TyDropIndexAt(X, PPI);
+      if (Target >= 0) and (Target <> FDragTab) then
+      begin
+        FTabs.Items[FDragTab].Index := Target; // -> TabsChanged re-syncs arrays
+        FDragTab := Target;
+      end;
+      { A live reorder drag is not a close-button hover; drop any stale highlight. }
+      if FHoverClose <> -1 then
+      begin
+        FHoverClose := -1;
+        Invalidate;
+      end;
+      Exit; // skip hover scan while a drag is in progress
+    end;
+  end;
+
   NewHover := -1;
+  NewHoverClose := -1;
   if Y < TabH then
   begin
     RebuildLayout(PPI);
-    for I := 0 to FCaptions.Count - 1 do
-      if (X >= FHeaderRects[I].Left) and (X < FHeaderRects[I].Right) then
+    { Over an affordance arrow counts as no tab hover. }
+    OverArrow := FShowScrollAffordance and
+      (((X >= FScrollLeftRect.Left)  and (X < FScrollLeftRect.Right)) or
+       ((X >= FScrollRightRect.Left) and (X < FScrollRightRect.Right)));
+    if not OverArrow then
+      for I := 0 to FCaptions.Count - 1 do
       begin
-        NewHover := I;
-        Break;
+        HdrRect := HeaderRectShifted(I);
+        if (X >= HdrRect.Left) and (X < HdrRect.Right) then
+        begin
+          NewHover := I;
+          { Independent close (x) hover: only when closable and the pointer is
+            inside this tab's shifted close rect. Mirrors the MouseDown hit-test
+            so the highlight and the actual close target stay in lockstep. }
+          if FTabsClosable then
+          begin
+            CloseRect := FCloseRects[I];
+            OffsetRect(CloseRect, -FHeaderScroll, 0);
+            if (X >= CloseRect.Left) and (X < CloseRect.Right) and
+               (Y >= CloseRect.Top)  and (Y < CloseRect.Bottom) then
+              NewHoverClose := I;
+          end;
+          Break;
+        end;
       end;
+  end;
+  if NewHoverClose <> FHoverClose then
+  begin
+    FHoverClose := NewHoverClose;
+    Invalidate;
   end;
   if NewHover <> FHoverTab then
   begin
@@ -893,13 +1249,58 @@ begin
   end;
 end;
 
+{ End any drag-reorder gesture. The reorder itself already happened live during
+  MouseMove (each crossed midpoint reseated the item), so MouseUp only disarms
+  the candidate so a later move without a fresh press cannot reorder. }
+procedure TTyTabControl.MouseUp(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  FDragTab  := -1;
+  FDragging := False;
+end;
+
 procedure TTyTabControl.MouseLeave;
 begin
   inherited MouseLeave;
-  if FHoverTab <> -1 then
+  { Disarm any in-flight drag so a re-entry move without a fresh press is inert. }
+  FDragTab  := -1;
+  FDragging := False;
+  if (FHoverTab <> -1) or (FHoverClose <> -1) then
   begin
-    FHoverTab := -1;
+    FHoverTab   := -1;
+    FHoverClose := -1;
     Invalidate;
+  end;
+end;
+
+{ Mouse wheel over the header band scrolls the overflowing strip. Mirrors
+  ListBox.DoMouseWheel: bail when disabled, let a user handler consume first,
+  then act only when the pointer is in the header band and the strip overflows.
+  WheelDelta>0 (scroll up/back) decreases the offset; WheelDelta<0 increases it.
+  SetHeaderScroll clamps to [0, TyMaxHeaderScroll]. }
+function TTyTabControl.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var
+  PPI, TabH, Step: Integer;
+begin
+  if not Enabled then Exit(False);
+  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
+    Exit(True);
+
+  PPI  := Font.PixelsPerInch;
+  TabH := TabHPx(PPI);
+  RebuildLayout(PPI);
+
+  Result := False;
+  if (MousePos.Y < TabH) and FShowScrollAffordance then
+  begin
+    Step := MulDiv(40, PPI, 96);
+    if WheelDelta > 0 then
+      SetHeaderScroll(FHeaderScroll - Step)
+    else
+      SetHeaderScroll(FHeaderScroll + Step);
+    Result := True;
   end;
 end;
 
@@ -928,6 +1329,10 @@ begin
       Key := 0;
     end;
   end;
+  { Ensure the (possibly unchanged) selection stays in view: SetTabIndex
+    early-exits when the index does not change, so scroll it in explicitly. }
+  if FTabIndex >= 0 then
+    ScrollTabIntoView(FTabIndex);
 end;
 
 end.

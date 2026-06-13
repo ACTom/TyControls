@@ -13,7 +13,7 @@
         <SyntaxMode Value="ObjFPC"/>
       </SyntaxOptions>
     </CompilerOptions>
-    <Files Count="26">
+    <Files Count="27">
       <Item1><Filename Value="source/tyControls.Types.pas"/><UnitName Value="tyControls.Types"/></Item1>
       <Item2><Filename Value="source/tyControls.Css.Tokens.pas"/><UnitName Value="tyControls.Css.Tokens"/></Item2>
       <Item3><Filename Value="source/tyControls.Css.Lexer.pas"/><UnitName Value="tyControls.Css.Lexer"/></Item3>
@@ -40,6 +40,7 @@
       <Item24><Filename Value="source/tyControls.DefaultTheme.pas"/><UnitName Value="tyControls.DefaultTheme"/></Item24>
       <Item25><Filename Value="source/tyControls.SpinEdit.pas"/><UnitName Value="tyControls.SpinEdit"/></Item25>
       <Item26><Filename Value="source/tyControls.Memo.pas"/><UnitName Value="tyControls.Memo"/></Item26>
+      <Item27><Filename Value="source/tyControls.Animation.pas"/><UnitName Value="tyControls.Animation"/></Item27>
     </Files>
     <RequiredPkgs Count="2">
       <Item1><PackageName Value="BGRABitmapPack"/></Item1>

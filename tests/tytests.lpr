@@ -16,7 +16,13 @@ uses
   test.tabcontrol,
   test.tabcontrol.collection,
   test.tabcontrol.streaming,
-  test.defaulttheme, test.spinedit, test.memo;
+  test.tabcontrol.scroll,
+  test.tabcontrol.reorder,
+  test.tabcontrol.closehover,
+  test.defaulttheme, test.spinedit, test.memo,
+  test.animation,
+  test.animation.toggle,
+  test.animation.button;
 
 type
   TTyTestRunner = class(TTestRunner)
