@@ -24,6 +24,10 @@ type
   TTyVisualRowArray = array of TTyVisualRow;
 
   TTyMemo = class(TTyCustomControl)
+  protected
+    // Pixel x where text begins (left padding scaled). Promoted from private so
+    // the horizontal-scroll geometry is testable through the access subclass.
+    function TextStartX(APPI: Integer): Integer;
   private
     // Logical text model: one TStrings line per logical line. Exposed (read-only
     // direction) via the published Lines:TStrings; writes go through SetLines.
@@ -43,6 +47,12 @@ type
     FMouseSelecting: Boolean;
     // Index of the first logical line painted (top of the visible window).
     FTopLine: Integer;
+    // Horizontal scroll offset in device px (>= 0). Only meaningful when
+    // WordWrap=False: the whole rendered text/selection-band/caret shift left by
+    // FScrollX so a long line follows the caret horizontally (mirrors
+    // TTyEdit.FScrollX). When WordWrap=True the layout flows across visual rows
+    // instead, so FScrollX is forced to 0 (ClampScrollX/EnsureCaretXVisible no-op).
+    FScrollX: Integer;
     // Soft-wrap toggle (published WordWrap). Default False = no wrap: each logical
     // line is exactly one full-width visual row (today's behaviour; horizontal
     // scroll lands in a later task). True = soft wrap at word boundaries into
@@ -79,7 +89,6 @@ type
     function GetLines: TStrings;
     procedure SetLines(AValue: TStrings);
     function EffectiveFontSize(const S: TTyStyleSet): Integer;
-    function TextStartX(APPI: Integer): Integer;
     // WordWrap published setter (no-op if unchanged; repaints when toggled).
     procedure SetWordWrap(AValue: Boolean);
     // Fire OnChange (after a model mutation).
@@ -230,6 +239,18 @@ type
     procedure UpdateScrollBar;
     // Scroll FTopLine so the caret line sits inside the visible window.
     procedure EnsureCaretLineVisible(APPI: Integer);
+    // --- Horizontal scroll (WordWrap=False only; mirrors TTyEdit.ClampScrollX /
+    // EnsureCaretVisible generalised to the multi-line model). ---
+    // Widest logical line width in px (drives MaxScroll so any line can scroll
+    // fully into view). 0 for an empty document.
+    function WidestLineWidth(APPI: Integer): Integer;
+    // Clamp FScrollX into [0, widestLineWidth - ViewWidth]. When WordWrap=True the
+    // max is forced to 0 (no horizontal scroll in wrap mode).
+    procedure ClampScrollX(APPI: Integer);
+    // Scroll FScrollX so the CARET-LINE caret x stays inside the content viewport
+    // [StartX+Margin, ViewRight-Margin]. No-op (clamped to 0) when WordWrap=True or
+    // when the caret already fits (so fitting text never leaves ScrollX = 0).
+    procedure EnsureCaretXVisible(APPI: Integer);
     // Paint into ACanvas at ARect (RenderTo convention: draw local Rect(0,0,W,H),
     // EndPaint blits at ARect origin). APPI scales padding/line metrics.
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -276,6 +297,9 @@ type
     procedure Redo;
     function CanUndo: Boolean;
     function CanRedo: Boolean;
+    // Horizontal scroll offset in device px (>= 0; WordWrap=False only). Mirrors
+    // TTyEdit.ScrollX. Read-only: it is driven by EnsureCaretXVisible/ClampScrollX.
+    property ScrollX: Integer read FScrollX;
   published
     property Lines: TStrings read GetLines write SetLines;
     // Soft word-wrap toggle. Default False (no wrap; long lines later gain
@@ -306,6 +330,7 @@ begin
   FSelAnchorCol := 0;
   FMouseSelecting := False;
   FTopLine := 0;
+  FScrollX := 0;
   FWordWrap := False;
   FVisualRows := nil;
   FVisualRowsValid := False;
@@ -715,6 +740,82 @@ begin
   if FTopLine < 0 then FTopLine := 0;
 end;
 
+// ---- Horizontal scrolling (WordWrap=False only) ----
+// TTyEdit's FScrollX idiom generalised to the multi-line model: a single
+// per-memo horizontal pixel offset. MaxScroll is driven by the WIDEST logical
+// line (so the longest line can scroll fully into view), while EnsureCaretXVisible
+// measures the CARET'S line to keep the caret inside the viewport. With short text
+// that fits, neither method ever raises FScrollX above 0, so the no-wrap render
+// stays byte-identical to today (FScrollX = 0 collapses every X term).
+
+function TTyMemo.WidestLineWidth(APPI: Integer): Integer;
+var
+  i, W: Integer;
+  Widths: TTyIntArray;
+begin
+  Result := 0;
+  for i := 0 to FLines.Count - 1 do
+  begin
+    Widths := MeasureLineWidths(FLines[i], APPI);
+    W := Widths[Length(Widths) - 1];
+    if W > Result then Result := W;
+  end;
+end;
+
+procedure TTyMemo.ClampScrollX(APPI: Integer);
+var
+  ViewWidth, MaxScroll: Integer;
+begin
+  // Wrap mode never scrolls horizontally: pin to 0.
+  if FWordWrap then
+  begin
+    FScrollX := 0;
+    Exit;
+  end;
+  ViewWidth := ContentWidthFor(APPI);
+  if ViewWidth < 0 then ViewWidth := 0;
+  MaxScroll := WidestLineWidth(APPI) - ViewWidth;
+  if MaxScroll < 0 then MaxScroll := 0;
+  if FScrollX > MaxScroll then FScrollX := MaxScroll;
+  if FScrollX < 0 then FScrollX := 0;
+end;
+
+procedure TTyMemo.EnsureCaretXVisible(APPI: Integer);
+var
+  StartX, ViewWidth, ViewRight, Margin, MaxScroll, CaretPx: Integer;
+  CaretLineStr: string;
+begin
+  // Wrap mode never scrolls horizontally: pin to 0.
+  if FWordWrap then
+  begin
+    FScrollX := 0;
+    Exit;
+  end;
+  StartX := TextStartX(APPI);
+  ViewWidth := ContentWidthFor(APPI);
+  if ViewWidth < 0 then ViewWidth := 0;
+  ViewRight := StartX + ViewWidth;
+  // 2 scaled device px margin (mirrors TTyEdit.EnsureCaretVisible).
+  Margin := MulDiv(2, APPI, 96);
+  // Caret x on its OWN line (absolute, before the scroll shift).
+  if FCaretLine < FLines.Count then
+    CaretLineStr := FLines[FCaretLine]
+  else
+    CaretLineStr := '';
+  CaretPx := ColPixelXAt(CaretLineStr, FCaretCol, APPI);
+  // Scroll right when the caret is past the right edge.
+  if CaretPx - FScrollX > ViewRight - Margin then
+    FScrollX := CaretPx - (ViewRight - Margin);
+  // Scroll left when the caret is before the left edge.
+  if CaretPx - FScrollX < StartX + Margin then
+    FScrollX := CaretPx - (StartX + Margin);
+  // Clamp into [0, widestLineWidth - ViewWidth].
+  MaxScroll := WidestLineWidth(APPI) - ViewWidth;
+  if MaxScroll < 0 then MaxScroll := 0;
+  if FScrollX > MaxScroll then FScrollX := MaxScroll;
+  if FScrollX < 0 then FScrollX := 0;
+end;
+
 // ---- Vertical scrolling (sections 3-6 lifted from TTyListBox; FItems.Count ->
 // LineCountLogical, ScaledItemHeight -> LineHeight) ----
 
@@ -921,6 +1022,8 @@ begin
   // when the scrollbar visibility flipped).
   InvalidateVisualRows;
   UpdateScrollBar;
+  // A width change alters the horizontal viewport: re-clamp the scroll offset.
+  ClampScrollX(Font.PixelsPerInch);
 end;
 
 procedure TTyMemo.AfterEdit(APPI: Integer);
@@ -929,6 +1032,8 @@ begin
   // The text model changed: any cached wrap layout is stale.
   InvalidateVisualRows;
   EnsureCaretLineVisible(APPI);
+  // Keep the caret inside the horizontal viewport (no-op for fitting text / wrap).
+  EnsureCaretXVisible(APPI);
   UpdateScrollBar;
   Invalidate;
   DoChange;
@@ -938,6 +1043,8 @@ procedure TTyMemo.AfterCaretMove(APPI: Integer);
 begin
   ClampCaret;
   EnsureCaretLineVisible(APPI);
+  // Keep the caret inside the horizontal viewport (no-op for fitting text / wrap).
+  EnsureCaretXVisible(APPI);
   Invalidate;
   // Pure caret motion ends any typing-coalesce run: the next typed character
   // starts a fresh undo step. AfterCaretMove is the shared post-routine for all
@@ -1506,6 +1613,10 @@ begin
   if FWordWrap = AValue then Exit;
   FWordWrap := AValue;
   InvalidateVisualRows;
+  // Switching INTO wrap mode pins the horizontal offset to 0 (no h-scroll in wrap);
+  // switching OUT re-clamps it (still 0 until the caret moves). ClampScrollX
+  // handles both via its FWordWrap branch.
+  ClampScrollX(Font.PixelsPerInch);
   Invalidate;
 end;
 
@@ -1569,14 +1680,16 @@ begin
 end;
 
 function TTyMemo.ColIndexAtX(const ALine: string; AX, APPI: Integer): Integer;
-// Midpoint-nearest codepoint boundary (lifted from TTyEdit.CaretIndexAtX,
-// without horizontal-scroll handling — that belongs to the painting task).
+// Midpoint-nearest codepoint boundary (lifted from TTyEdit.CaretIndexAtX). AX is a
+// device x in control coordinates; add FScrollX so a click while horizontally
+// scrolled resolves to the correct (scrolled-away) column. FScrollX is 0 when the
+// text fits or WordWrap=True, so this reduces to the un-scrolled hit-test exactly.
 var
   Widths: TTyIntArray;
   StartX, RelX, Len, i, MidPoint: Integer;
 begin
   StartX := TextStartX(APPI);
-  RelX := AX - StartX;
+  RelX := AX - StartX + FScrollX;
   Len := UTF8Length(ALine);
   if RelX <= 0 then
     Exit(0);
@@ -1685,7 +1798,13 @@ begin
       // (RS=0, RE=LineLen) this is the whole line (identity with the old render).
       Seg := UTF8Copy(Line, RS + 1, RE - RS);
       y := ContentTop + (vr - FTopLine) * LH;
-      LineRect := Rect(ContentRect.Left, y, ContentRect.Right - SBWidth, y + LH);
+      // Horizontal scroll: shift the row's left edge left by FScrollX so a long
+      // line follows the caret; the Right edge stays clipped at the content
+      // right (DrawText clips to LineRect), so glyphs never spill past it. With
+      // FScrollX = 0 (fitting text or WordWrap=True) LineRect.Left is unchanged,
+      // so the no-wrap render is byte-identical to today.
+      LineRect := Rect(ContentRect.Left - FScrollX, y,
+        ContentRect.Right - SBWidth, y + LH);
 
       // Selection band for this row, drawn BENEATH the text (band first so the
       // glyphs sit on top). Reuse the SAME line widths the row draws with so band
@@ -1724,11 +1843,18 @@ begin
           bandEndCol := -1;           // sentinel: extend to the content right edge
         if DrawBand then
         begin
-          X1 := ContentRect.Left + (Widths[bandStartCol] - RowBaseW);
+          // Shift the band left by FScrollX (same as the text). The right-edge
+          // sentinel (bandEndCol < 0) already means "extend to the viewport right"
+          // so it is NOT shifted. Clamp both edges into the content rect so the
+          // band never paints over the padding/scrollbar when scrolled. FScrollX=0
+          // leaves the band geometry byte-identical to today.
+          X1 := ContentRect.Left + (Widths[bandStartCol] - RowBaseW) - FScrollX;
           if bandEndCol < 0 then
             X2 := ContentRect.Right - SBWidth
           else
-            X2 := ContentRect.Left + (Widths[bandEndCol] - RowBaseW);
+            X2 := ContentRect.Left + (Widths[bandEndCol] - RowBaseW) - FScrollX;
+          if X1 < ContentRect.Left then X1 := ContentRect.Left;
+          if X2 > ContentRect.Right - SBWidth then X2 := ContentRect.Right - SBWidth;
           if X1 < X2 then
           begin
             BandRect := Rect(X1, y, X2, y + LH);
@@ -1767,9 +1893,11 @@ begin
         else
           Line := '';
         // Segment-relative caret X: full-line ColPixelXAt minus the row's base
-        // offset (= 0 when RS=0, so identical to the old caret X for no-wrap).
+        // offset (= 0 when RS=0, so identical to the old caret X for no-wrap),
+        // then shifted left by FScrollX so the caret tracks the scrolled text.
+        // FScrollX = 0 (fitting text / WordWrap=True) leaves this byte-identical.
         CaretX := R.Left + ColPixelXAt(Line, FCaretCol, APPI)
-          - (ColPixelXAt(Line, RS, APPI) - TextStartX(APPI));
+          - (ColPixelXAt(Line, RS, APPI) - TextStartX(APPI)) - FScrollX;
         y := ContentTop + (CaretVRow - FTopLine) * LH;
         CaretRect := Rect(CaretX, y + P.Scale(2),
           CaretX + P.Scale(1), y + LH - P.Scale(2));
