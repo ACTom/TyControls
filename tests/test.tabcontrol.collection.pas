@@ -50,6 +50,10 @@ type
     procedure TestLoadedMaterializesStreamedItems;
     procedure TestLoadedAppliesSavedTabIndex;
     procedure TestTabIndexPublishedDefaultMinusOne;
+    // Reorder: moving a collection item (TCollectionItem.SetIndex -> Changed(True)
+    // -> Update(nil)) must re-sync the parallel page/caption arrays to the new
+    // item order and keep the same page object active.
+    procedure TestReorderItemsReordersPages;
   end;
 
 implementation
@@ -294,6 +298,35 @@ begin
   finally
     Fresh.Free;
   end;
+end;
+
+{ Reorder: add A,B,C; move C (index 2) to the front via Items[2].Index := 0.
+  TCollectionItem.SetIndex moves the item then Changed(True) -> Update(nil),
+  which must rebuild FPages/FCaptions to the new order. The active page object
+  (A was active via the first-add auto-select) must remain the active page after
+  the move, just at its new index. }
+procedure TTyTabCollectionTest.TestReorderItemsReordersPages;
+var
+  PA, PB, PC, ActiveBefore: TTyPanel;
+begin
+  FTab.AddTab('A');
+  FTab.AddTab('B');
+  FTab.AddTab('C');
+  PA := FTab.Pages[0];
+  PB := FTab.Pages[1];
+  PC := FTab.Pages[2];
+  ActiveBefore := FTab.Pages[FTab.TabIndex];
+
+  FTab.Tabs.Items[2].Index := 0;   // move C to the front
+
+  AssertEquals('caption[0] now C', 'C', FTab.TabCaption(0));
+  AssertEquals('caption[1] now A', 'A', FTab.TabCaption(1));
+  AssertEquals('caption[2] still B', 'B', FTab.TabCaption(2));
+  AssertSame('Pages[0] = C page', PC, FTab.Pages[0]);
+  AssertSame('Pages[1] = A page', PA, FTab.Pages[1]);
+  AssertSame('Pages[2] = B page', PB, FTab.Pages[2]);
+  AssertSame('active page object unchanged after reorder',
+    ActiveBefore, FTab.Pages[FTab.TabIndex]);
 end;
 
 initialization

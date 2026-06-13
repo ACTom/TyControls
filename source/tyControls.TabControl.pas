@@ -507,19 +507,74 @@ begin
   end;
 end;
 
-{ An item changed (e.g. Caption edited): re-sync the parallel caption array to
-  the current item captions and repaint. }
+{ An item changed: re-sync the parallel arrays to the current item order. A
+  plain Caption edit (Changed(False) -> Update(Self)) leaves the order intact,
+  but a reorder (TCollectionItem.SetIndex -> Changed(True) -> Update(nil)) moves
+  the item within the collection without touching FPages/FCaptions, so we rebuild
+  both arrays from the collection in its current order, reading each item's
+  hosting page (FPage) and Caption.
+
+  The active selection follows the page OBJECT, not the index: we snapshot the
+  active page before the rebuild and recompute FTabIndex to point at wherever
+  that same page now lives. OnChange is fired only if the active page object
+  actually changed (mirroring RemovePageInternal). }
 procedure TTyTabControl.TabsChanged(AItem: TTyTabItem);
 var
   I: Integer;
+  OldActive, NewActive: TTyPanel;
+  CanRebuild: Boolean;
 begin
   if FDestroying then Exit;
   if csLoading in ComponentState then Exit;
-  { Captions array length tracks the page array; only sync overlapping slots. }
-  for I := 0 to FTabs.Count - 1 do
-    if I < FCaptions.Count then
+
+  if (FTabIndex >= 0) and (FTabIndex < Length(FPages)) then
+    OldActive := FPages[FTabIndex]
+  else
+    OldActive := nil;
+
+  { Only rebuild the page array when the collection is fully wired to pages
+    (every item has a live FPage and the counts line up). This holds for normal
+    caption edits and reorders; it skips any transient mid-mutation state. }
+  CanRebuild := (FTabs.Count = Length(FPages));
+  if CanRebuild then
+    for I := 0 to FTabs.Count - 1 do
+      if FTabs.Items[I].FPage = nil then
+      begin
+        CanRebuild := False;
+        Break;
+      end;
+
+  if CanRebuild then
+  begin
+    for I := 0 to FTabs.Count - 1 do
+    begin
+      FPages[I] := FTabs.Items[I].FPage;
       FCaptions[I] := FTabs.Items[I].Caption;
+    end;
+    { Recompute FTabIndex so it still points at the same active page object. }
+    if OldActive <> nil then
+    begin
+      FTabIndex := IndexOfPage(OldActive);
+      if FTabIndex < 0 then
+        FTabIndex := -1;
+    end;
+    ShowOnlyPage(FTabIndex);
+  end
+  else
+    { Fallback: only the overlapping caption slots are safe to touch. }
+    for I := 0 to FTabs.Count - 1 do
+      if I < FCaptions.Count then
+        FCaptions[I] := FTabs.Items[I].Caption;
+
   Invalidate;
+
+  if (FTabIndex >= 0) and (FTabIndex < Length(FPages)) then
+    NewActive := FPages[FTabIndex]
+  else
+    NewActive := nil;
+
+  if (NewActive <> OldActive) and Assigned(FOnChange) then
+    FOnChange(Self);
 end;
 
 function TTyTabControl.IndexOfPage(APage: TTyPanel): Integer;
