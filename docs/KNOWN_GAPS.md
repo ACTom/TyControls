@@ -51,6 +51,25 @@ Tier-2 native enhancement layer.
   The rendering path now routes through `DrawFrame` which applies both
   properties; they are fully effective for all typeKeys including checkbox and
   radiobutton.
+- `TTyMemo` v1 editing core, deferred features (v1.9): the multi-line editor
+  ships a reliable per-codepoint editing core (Enter/Backspace/Delete with
+  cross-line merge, 2-D arrow + Home/End navigation, vertical scrollbar/wheel)
+  but intentionally **defers** the following to a future Tier-2 layer:
+  - **No selection**: single insertion caret only; no selection anchor,
+    Shift+navigation / mouse-drag highlight, or "selected text" concept.
+  - **No range clipboard**: no `Ctrl/Cmd+C/X/V` copy/cut/paste of text ranges
+    (KeyDown has no clipboard branch; `Ctrl`/`Cmd` only retargets `Home`/`End`).
+  - **No word-wrap**: lines render with `WordBreak=False`; one logical line is
+    always one visual row, never reflowed to the control width.
+  - **No horizontal scroll / long lines clipped**: no horizontal scrollbar or
+    auto-scroll; lines wider than the content area are clipped at the right
+    edge and the caret can move off-screen horizontally without following.
+  - **No undo/redo**: no edit-history stack; `Ctrl/Cmd+Z` / `Y` are inert.
+  - **No word-nav**: `Ctrl/Cmd+Left/Right` does not jump by word boundary
+    (same gap as `TTyEdit`); plain arrows always move one codepoint.
+  - **No caret blink**: the caret is a static 1px bar drawn only when focused
+    and the caret line is visible; there is no `TTimer`-driven blink.
+  See [controls/memo.md](controls/memo.md) §10 for the per-control writeup.
 
 ## Design-time rendering
 

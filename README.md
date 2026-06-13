@@ -47,7 +47,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 |---|---|
 | [getting-started.md](docs/getting-started.md) | 安装、第一个窗体、主题加载与切换、HiDPI |
 | [tycss-reference.md](docs/tycss-reference.md) | `.tycss` 样式语言权威参考:全部属性、函数、选择器、合并顺序 |
-| [controls/](docs/controls/) | 每控件 API 说明(19 篇:属性 / 事件 / 状态 / 主题变体 / 示例) |
+| [controls/](docs/controls/) | 每控件 API 说明(20 篇:属性 / 事件 / 状态 / 主题变体 / 示例) |
 | [KNOWN_GAPS.md](docs/KNOWN_GAPS.md) | 已知限制与 Tier-2 计划 |
 
 控件 API 速查:[Button](docs/controls/button.md) ·
