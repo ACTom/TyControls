@@ -108,6 +108,10 @@ type
     // disabled, KeyDown does NOT consume Key so navigation falls through.
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    // Left-click caret hit-test: Y -> logical line, X -> codepoint column. Early
+    // Exit when not Enabled (v1.5 policy). try/except SetFocus like Edit/ListBox.
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer); override;
     // Wheel scrolls +/-3 logical lines via SetTopLine (after the user's handler).
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
@@ -378,6 +382,38 @@ begin
     if FScrollBar <> nil then
       FScrollBar.Visible := False;
   end;
+end;
+
+procedure TTyMemo.MouseDown(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+var
+  APPI, LH, Line: Integer;
+  S: string;
+begin
+  if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
+  inherited MouseDown(Button, Shift, X, Y);
+  if Button <> mbLeft then Exit;
+  APPI := Font.PixelsPerInch;
+  LH := LineHeight(APPI);
+  // Y -> logical line (mirror TTyListBox row math), clamped to the last line.
+  Line := FTopLine + (Y div LH);
+  if Line < 0 then Line := 0;
+  if Line > LineCountLogical - 1 then Line := LineCountLogical - 1;
+  if Line < FLines.Count then
+    S := FLines[Line]
+  else
+    S := '';
+  FCaretLine := Line;
+  // X -> nearest codepoint boundary on the resolved line (per-line ColIndexAtX).
+  FCaretCol := ColIndexAtX(S, X, APPI);
+  FDesiredCol := FCaretCol;
+  try
+    if CanFocus then
+      SetFocus;
+  except
+    // Ignore focus errors in headless/test environments.
+  end;
+  Invalidate;
 end;
 
 function TTyMemo.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;

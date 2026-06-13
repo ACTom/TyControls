@@ -34,6 +34,8 @@ type
     function ProbeScrollBar: TTyScrollBar;
     function ProbeDoMouseWheel(AWheelDelta: Integer): Boolean;
     procedure ProbeScrollBarChange;
+    // --- T5 mouse caret hit-test ---
+    procedure ProbeMouseDown(X, Y: Integer);
   end;
 
   TTyMemoTest = class(TTestCase)
@@ -84,6 +86,12 @@ type
     procedure TestSetTopLineClamps;
     procedure TestEnsureCaretLineVisibleScrollsDown;
     procedure TestScrollSyncNoPingPong;
+    // --- T5 mouse caret hit-test ---
+    procedure TestClickSelectsLineByY;
+    procedure TestClickColumnByX;
+    procedure TestClickWithScroll;
+    procedure TestClickPastLastLineClamps;
+    procedure TestDisabledMouseIgnored;
   end;
 
 implementation
@@ -202,6 +210,11 @@ begin
   SB := ProbeScrollBar;
   if (SB <> nil) and Assigned(SB.OnChange) then
     SB.OnChange(SB);
+end;
+
+procedure TTyMemoProbe.ProbeMouseDown(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
 end;
 
 { TTyMemoTest }
@@ -912,6 +925,94 @@ begin
   // And another SetTopLine still works after the round-trip.
   FMemo.ProbeSetTopLine(7);
   AssertEquals('SetTopLine still functions after sync', 7, FMemo.ProbeTopLine);
+end;
+
+{ --- T5 mouse caret hit-test tests --- }
+
+{ TestClickSelectsLineByY
+  Three lines, TopLine 0; a click whose Y lands inside row 1's band selects
+  caret line 1. }
+procedure TTyMemoTest.TestClickSelectsLineByY;
+var
+  LH, Y: Integer;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['AAAA', 'BBBB', 'CCCC']);
+  FMemo.ProbeSetTopLine(0);
+  LH := FMemo.ProbeLineHeight(96);
+  Y := LH + (LH div 2);   // mid-band of row 1
+  FMemo.ProbeMouseDown(2, Y);
+  AssertEquals('click in row-1 band selects caret line 1', 1, FMemo.ProbeCaretLine);
+end;
+
+{ TestClickColumnByX
+  Click near a known ColPixelXAt(line, k) X selects column k (midpoint-nearest). }
+procedure TTyMemoTest.TestClickColumnByX;
+const
+  Line = 'Hello World';
+var
+  k, px: Integer;
+begin
+  SetUpWithPadding(4);
+  LoadLines([Line]);
+  FMemo.ProbeSetTopLine(0);
+  for k := 0 to UTF8Length(Line) do
+  begin
+    px := FMemo.ProbeColPixelXAt(Line, k, 96);
+    FMemo.ProbeMouseDown(px, 1);  // y in row-0 band
+    AssertEquals('click at ColPixelXAt(line,' + IntToStr(k) + ') -> col ' + IntToStr(k),
+      k, FMemo.ProbeCaretCol);
+  end;
+end;
+
+{ TestClickWithScroll
+  TopLine 2; a click in the row-0 band selects the logical line at TopLine (=2). }
+procedure TTyMemoTest.TestClickWithScroll;
+var
+  i: Integer;
+  L: TStringList;
+begin
+  SetUpWithPadding(0);
+  L := TStringList.Create;
+  try
+    for i := 0 to 49 do
+      L.Add('line ' + IntToStr(i));
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+  FMemo.ProbeSetTopLine(2);
+  FMemo.ProbeMouseDown(2, 1);  // row-0 band
+  AssertEquals('click row-0 band with TopLine=2 selects line 2', 2, FMemo.ProbeCaretLine);
+end;
+
+{ TestClickPastLastLineClamps
+  Click far below the content -> caret clamps onto the last logical line. }
+procedure TTyMemoTest.TestClickPastLastLineClamps;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['AAAA', 'BBBB', 'CCCC']);
+  FMemo.ProbeSetTopLine(0);
+  FMemo.ProbeMouseDown(2, 10000);  // far below content
+  AssertEquals('click past last line clamps to last logical line',
+    FMemo.ProbeLineCountLogical - 1, FMemo.ProbeCaretLine);
+end;
+
+{ TestDisabledMouseIgnored
+  Enabled := False -> MouseDown leaves the caret unchanged. }
+procedure TTyMemoTest.TestDisabledMouseIgnored;
+var
+  LH: Integer;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['AAAA', 'BBBB', 'CCCC']);
+  FMemo.ProbeSetTopLine(0);
+  FMemo.ProbeSetCaret(0, 0);
+  FMemo.Enabled := False;
+  LH := FMemo.ProbeLineHeight(96);
+  FMemo.ProbeMouseDown(2, LH + (LH div 2));  // would otherwise select line 1
+  AssertEquals('disabled mouse leaves caret line unchanged', 0, FMemo.ProbeCaretLine);
+  AssertEquals('disabled mouse leaves caret col unchanged', 0, FMemo.ProbeCaretCol);
 end;
 
 initialization
