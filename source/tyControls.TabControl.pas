@@ -602,6 +602,13 @@ begin
   begin
     Idx := IndexOfPage(TTyPanel(AComponent));
     if Idx >= 0 then
+      { External free of a hosting page: LCL is already freeing the panel, so we
+        MUST pass AFree=False (re-freeing it would be a double-free). We also do
+        NOT pre-set FUpdatingTabs here: leaving it False lets RemovePageInternal
+        locate and delete the owning TTyTabItem in lockstep (it nils the item's
+        FPage first so the resulting TabItemDeleting is an inert no-op rather than
+        a second RemovePageInternal/Page.Free). Net effect: caption + item + page
+        all compact exactly once and the page is never re-freed. }
       RemovePageInternal(Idx, False);
   end;
 end;
