@@ -56,6 +56,7 @@ begin
   if tpTextColor    in AOver.Present then ABase.TextColor    := AOver.TextColor;
   if tpBorderColor  in AOver.Present then ABase.BorderColor  := AOver.BorderColor;
   if tpBorderWidth  in AOver.Present then ABase.BorderWidth  := AOver.BorderWidth;
+  if tpBorderStyle  in AOver.Present then ABase.BorderStyle  := AOver.BorderStyle;
   if tpBorderRadius in AOver.Present then ABase.BorderRadius := AOver.BorderRadius;
   if tpPadding      in AOver.Present then ABase.Padding      := AOver.Padding;
   if tpFontName     in AOver.Present then ABase.FontName     := AOver.FontName;
@@ -284,6 +285,14 @@ begin
   begin
     AStyle.BorderRadius := TyEvalLength(raw, Vars);
     Include(AStyle.Present, tpBorderRadius);
+  end
+  else if prop = 'border-style' then
+  begin
+    if LowerCase(raw) = 'none' then
+      AStyle.BorderStyle := tbsNone
+    else
+      AStyle.BorderStyle := tbsSolid;
+    Include(AStyle.Present, tpBorderStyle);
   end
   else if prop = 'padding' then
   begin

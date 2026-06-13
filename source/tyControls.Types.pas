@@ -15,6 +15,8 @@ type
 
   TTyFillKind = (tfkNone, tfkSolid, tfkLinearGradient, tfkNineSlice);
 
+  TTyBorderStyle = (tbsSolid, tbsNone);
+
   TTyFill = record
     Kind: TTyFillKind;
     Color: TTyColor;
@@ -25,7 +27,8 @@ type
   end;
 
   TTyProp = (tpBackground, tpTextColor, tpBorderColor, tpBorderWidth, tpBorderRadius,
-             tpPadding, tpFontName, tpFontSize, tpFontWeight, tpOpacity, tpShadow);
+             tpPadding, tpFontName, tpFontSize, tpFontWeight, tpOpacity, tpShadow,
+             tpBorderStyle);
   TTyPropSet = set of TTyProp;
 
   TTyStyleSet = record
@@ -34,6 +37,7 @@ type
     TextColor: TTyColor;
     BorderColor: TTyColor;
     BorderWidth: Integer;
+    BorderStyle: TTyBorderStyle;
     BorderRadius: Integer;
     Padding: TRect;
     FontName: string;

@@ -52,6 +52,12 @@ type
     procedure TestPaddingThreeValues;
   end;
 
+  TTestStyleBorderStyle = class(TTestCase)
+  published
+    procedure TestBorderStyleNoneParsed;
+    procedure TestBorderStyleSolidDefault;
+  end;
+
 implementation
 
 procedure TTestStyleMerge.TestMergeUnionPresent;
@@ -352,10 +358,34 @@ begin
   finally m.Free; end;
 end;
 
+procedure TTestStyleBorderStyle.TestBorderStyleNoneParsed;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T { border-style: none; border-width: 2px; border-color: #FF0000; }');
+    s := m.ResolveStyle('T','',[]);
+    AssertTrue('border-style present', tpBorderStyle in s.Present);
+    AssertTrue('border-style none', s.BorderStyle = tbsNone);
+  finally m.Free; end;
+end;
+
+procedure TTestStyleBorderStyle.TestBorderStyleSolidDefault;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T { border-style: solid; }');
+    s := m.ResolveStyle('T','',[]);
+    AssertTrue('border-style solid', s.BorderStyle = tbsSolid);
+  finally m.Free; end;
+end;
+
 initialization
   RegisterTest(TTestStyleMerge);
   RegisterTest(TTestStyleLoad);
   RegisterTest(TTestStyleResolve);
   RegisterTest(TTestStyleShadow);
   RegisterTest(TTestStylePadding);
+  RegisterTest(TTestStyleBorderStyle);
 end.

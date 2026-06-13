@@ -176,7 +176,8 @@ begin
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
   if tpBackground in AStyle.Present then
     APainter.FillBackground(ARect, AStyle.Background, AStyle.BorderRadius);
-  if (tpBorderColor in AStyle.Present) and (AStyle.BorderWidth > 0) then
+  if (tpBorderColor in AStyle.Present) and (AStyle.BorderWidth > 0)
+     and not ((tpBorderStyle in AStyle.Present) and (AStyle.BorderStyle = tbsNone)) then
     APainter.StrokeBorder(ARect, AStyle.BorderRadius, AStyle.BorderWidth, AStyle.BorderColor);
 end;
 
@@ -318,7 +319,8 @@ begin
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
   if tpBackground in AStyle.Present then
     APainter.FillBackground(ARect, AStyle.Background, AStyle.BorderRadius);
-  if (tpBorderColor in AStyle.Present) and (AStyle.BorderWidth > 0) then
+  if (tpBorderColor in AStyle.Present) and (AStyle.BorderWidth > 0)
+     and not ((tpBorderStyle in AStyle.Present) and (AStyle.BorderStyle = tbsNone)) then
     APainter.StrokeBorder(ARect, AStyle.BorderRadius, AStyle.BorderWidth, AStyle.BorderColor);
 end;
 
