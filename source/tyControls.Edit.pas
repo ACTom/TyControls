@@ -3,6 +3,7 @@ unit tyControls.Edit;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
+  BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 type
   TTyIntArray = array of Integer;
@@ -21,7 +22,7 @@ type
     FWidthCacheFontSize: Integer;   // effective pt (after EffectiveFontSize)
     FWidthCachePPI: Integer;
     // Lazy measuring bitmap (freed in Destroy)
-    FMeasureBmp: TBitmap;
+    FMeasureBmp: TBGRABitmap;
     procedure SetText(const AValue: string);
     procedure SetCaretPos(AValue: Integer);
     // Selection helpers
@@ -231,12 +232,8 @@ function TTyEdit.MeasureCodepointWidths(APPI: Integer): TTyIntArray;
 // The result is cached; rebuilds when font/ppi/text change.
 var
   S: TTyStyleSet;
-  FontHeight, EffSize: Integer;
-  i, Len, CPBytes: Integer;
-  P: PChar;
-  CP: string = '';
-  CumW: Integer;
-  W: TSize;
+  EffSize: Integer;
+  i, Len: Integer;
 begin
   S := CurrentStyle;
   EffSize := EffectiveFontSize(S);
@@ -262,34 +259,16 @@ begin
   begin
     // Ensure measuring bitmap exists (lazy creation)
     if FMeasureBmp = nil then
-    begin
-      FMeasureBmp := TBitmap.Create;
-      FMeasureBmp.PixelFormat := pf32bit;
-      FMeasureBmp.SetSize(1, 1);
-    end;
+      FMeasureBmp := TBGRABitmap.Create(1, 1);
 
-    FMeasureBmp.Canvas.Font.Name := S.FontName;
-    // FontSize in the style is logical pt; convert to px at APPI
-    FontHeight := MulDiv(EffSize, APPI, 72);
-    FMeasureBmp.Canvas.Font.Height := -FontHeight;
-    if S.FontWeight >= 600 then
-      FMeasureBmp.Canvas.Font.Style := [fsBold]
-    else
-      FMeasureBmp.Canvas.Font.Style := [];
+    // Configure the font identically to TTyPainter.DrawText so measured glyph
+    // widths match what is actually drawn (same BGRA engine + height semantics).
+    TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
 
-    // Walk the string using a moving byte pointer to avoid O(n²) UTF8Copy
-    P := PChar(FText);
-    CumW := 0;
+    // Cumulative widths via PREFIX measurement: matches the whole-string draw,
+    // capturing kerning/hinting between glyphs the way DrawText sees it.
     for i := 1 to Len do
-    begin
-      CPBytes := UTF8CodepointSize(P);
-      SetLength(CP, CPBytes);
-      Move(P^, CP[1], CPBytes);
-      W := FMeasureBmp.Canvas.TextExtent(CP);
-      CumW := CumW + W.cx;
-      FWidthCache[i] := CumW;
-      Inc(P, CPBytes);
-    end;
+      FWidthCache[i] := FMeasureBmp.TextSize(UTF8Copy(FText, 1, i)).cx;
   end;
 
   FWidthCacheFontName := S.FontName;
@@ -812,6 +791,7 @@ var
   BandAlpha: Byte;
   FocusBorderColor: TTyColor;
   EffSize: Integer;
+  TextClipRight: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -861,15 +841,18 @@ begin
 
     // 2. Draw text (on top of selection band) — use EffSize to match measurement
     // Shift the text rect left by FScrollX so the content scrolls; Right is
-    // clamped to ContentRect.Right so glyphs never paint over the right
-    // padding or border.
+    // clamped just inside the border so glyphs (incl. their antialias fringe)
+    // never paint over the right padding or border strip.
     if FScrollX > 0 then
     begin
       if Length(Widths) = 0 then
         Widths := MeasureCodepointWidths(APPI);
+      TextClipRight := ContentRect.Right;
+      if (tpBorderColor in S.Present) and (S.BorderWidth > 0) then
+        TextClipRight := TextClipRight - P.Scale(S.BorderWidth);
       P.DrawText(
         Rect(ContentRect.Left - FScrollX, ContentRect.Top,
-             ContentRect.Right,
+             TextClipRight,
              ContentRect.Bottom),
         FText, S.FontName, EffSize, S.FontWeight,
         S.TextColor, taLeftJustify, tlCenter, True);

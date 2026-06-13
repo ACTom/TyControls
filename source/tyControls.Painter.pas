@@ -37,7 +37,21 @@ type
 
 function TyColorToBGRA(c: TTyColor): TBGRAPixel;
 
+// Shared font setup so text measurement (in controls) matches text drawing
+// (in TTyPainter.DrawText) exactly: same BGRA engine, same height semantics.
+procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
+  AFontSizeLogical, AWeight, APPI: Integer);
+
 implementation
+
+procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
+  AFontSizeLogical, AWeight, APPI: Integer);
+begin
+  ABmp.FontName := AFontName;
+  ABmp.FontHeight := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
+  ABmp.FontQuality := fqFineAntialiasing;
+  if AWeight >= 600 then ABmp.FontStyle := [fsBold] else ABmp.FontStyle := [];
+end;
 
 function TyColorToBGRA(c: TTyColor): TBGRAPixel;
 begin
@@ -197,19 +211,11 @@ var
   s: string;
   sz: TSize;
   px: TBGRAPixel;
-  fh: Integer;
 begin
   if FBmp = nil then
     Exit;
   px := TyColorToBGRA(AColor);
-  FBmp.FontName := AFontName;
-  fh := Scale(Round(AFontSizeLogical * 96 / 72));
-  FBmp.FontHeight := fh;
-  FBmp.FontQuality := fqFineAntialiasing;
-  if AWeight >= 600 then
-    FBmp.FontStyle := [fsBold]
-  else
-    FBmp.FontStyle := [];
+  TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
   s := AText;
   if AEllipsis then
   begin

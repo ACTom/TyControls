@@ -94,6 +94,8 @@ type
     procedure TestRenderedTextShiftsWithScroll;
     // EDIT.12: fix — scrolled text must not bleed past right padding/border
     procedure TestScrolledTextDoesNotBleedPastRightPadding;
+    // EDIT.13: fix — caret aligns with drawn text end (measure uses painter BGRA engine)
+    procedure TestCaretAlignsWithDrawnTextEnd;
   end;
 implementation
 
@@ -1617,6 +1619,72 @@ begin
     Bmp.Free;
     Form.Free;
     Ctl.Free;
+  end;
+end;
+
+// ---- EDIT.13: caret aligns with drawn text end ----
+
+procedure TEditTest.TestCaretAlignsWithDrawnTextEnd;
+{ The caret-x for the end boundary must sit within a few px of the actual
+  right edge of the drawn text. Measurement (LCL TBitmap) used to disagree
+  with the painter's BGRA engine, so the caret drifted right of the ink and
+  the gap grew with text length. With a longish string that fits (no scroll)
+  the rightmost ink column should match CaretPixelXAt(end). }
+var
+  Ctl: TTyStyleController;
+  E: TTyEditAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  caretX, rightmostInk, x, y, Len: Integer;
+  foundInk: Boolean;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss('TyEdit { background:#FFFFFF; color:#000000; padding:4px; font-size:12px; }');
+    E := TTyEditAccess.Create(nil);
+    E.Controller := Ctl;
+    E.Font.PixelsPerInch := 96;
+    // Wide control so a long string fits without horizontal scroll; the longer
+    // the string the more the (per-glyph) measure/draw mismatch accumulates,
+    // pushing the end-caret well past the ink under the old measurement.
+    E.SetBounds(0, 0, 1200, 28);
+    E.Text := 'abcdefghijklmnopqrstuvwxyz0123456789' +
+              'abcdefghijklmnopqrstuvwxyz0123456789' +
+              'abcdefghijklmnopqrstuvwxyz0123456789';
+    Len := UTF8Length(E.Text);
+    E.CaretPos := Len;  // caret at end
+    // Guard: this text must fit at width 1200 (no horizontal scroll)
+    AssertEquals('text fits, no horizontal scroll', 0, E.ScrollX);
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(1200, 28);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 1200, 28);
+    E.RenderTo(Bmp.Canvas, Rect(0, 0, 1200, 28), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      // rightmost column containing dark (text) ink
+      rightmostInk := -1;
+      for x := 1199 downto 0 do
+      begin
+        foundInk := False;
+        for y := 4 to 23 do
+          if Reread.GetPixel(x, y).red < 128 then begin foundInk := True; Break; end;
+        if foundInk then begin rightmostInk := x; Break; end;
+      end;
+      caretX := E.CaretPixelXAt(Len, 96);  // end-caret x
+      // caret must sit within a few px of the last drawn glyph's right edge
+      AssertTrue(Format('caret(%d) near rightmost ink(%d)', [caretX, rightmostInk]),
+        Abs(caretX - rightmostInk) <= 6);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Ctl.Free;
+    E.Free;
   end;
 end;
 
