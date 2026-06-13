@@ -43,6 +43,10 @@ Tier-2 native enhancement layer.
   combined width of all tab headers exceeds the control width, the overflowing
   tabs are clipped by the canvas. There is no horizontal scrolling tab strip.
   A scrollable tab bar is a Tier-2 item.
+- `TTyTabControl` tabs cannot be reordered by dragging (v1.4): tab order is
+  fixed at insertion order. There is no drag-to-reorder of tab headers; pages
+  can only be added (`AddTab`) and removed (`RemoveTab` / closable `×`), not
+  rearranged. Drag-reorder is a Tier-2 item.
 - `TTyCheckBox` / `TTyRadioButton` `opacity` and `shadow`: **resolved in v1.1**.
   The rendering path now routes through `DrawFrame` which applies both
   properties; they are fully effective for all typeKeys including checkbox and

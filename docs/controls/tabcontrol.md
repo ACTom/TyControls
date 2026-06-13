@@ -29,6 +29,8 @@ uses tyControls.TabControl;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `TabHeight` | `Integer` | `28` | 页签头条带的逻辑高度（96 DPI 基准像素），绘制时按实际 PPI 自动缩放 |
+| `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染一个关闭 × 字形；点击该字形触发 `OnTabClose`。默认关闭，页签头不显示 × |
+| `OnTabClose` | `TTyTabCloseEvent` | `nil` | 点击页签关闭 × 字形时触发；签名 `procedure(Sender: TObject; AIndex: Integer; var AllowClose: Boolean)`。详见第 4、11 节 |
 | `OnChange` | `TNotifyEvent` | `nil` | 仅当 `TabIndex` 发生真实变化时触发，相同值重复赋值不触发 |
 | `TabStop` | `Boolean` | `True` | 控件可通过 Tab 键获得键盘焦点 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |
@@ -41,9 +43,11 @@ uses tyControls.TabControl;
 | `TabIndex` | `Integer`（读写） | 当前选中页签的零基索引；-1 表示无选中页；赋值时自动裁剪越界值（低于 -1 → -1，大于末尾 → 末尾）；真变化才触发 `OnChange` |
 | `Pages[AIndex: Integer]` | `TTyPanel`（只读，indexed property） | 返回指定索引处的页面板；越界返回 `nil` |
 | `AddTab(const ACaption: string): TTyPanel` | 方法 | 追加一个新页签，返回对应的 `TTyPanel` 页面板；第一个页签被追加时自动选中（`TabIndex := 0`），不触发 `OnChange` |
+| `RemoveTab(AIndex: Integer): void` | 方法 | 移除指定索引的页签及其页面板（连同释放页面板）；自动修正 `TabIndex`；仅当当前活动页因此改变时才触发 `OnChange`。详见第 11 节 |
 | `TabCount: Integer` | 方法 | 当前页签数量 |
 | `TabCaption(AIndex: Integer): string` | 方法 | 返回指定索引的页签标题；越界返回空字符串 |
 | `TyTabHeaderRect(AIndex: Integer): TRect` | 方法 | 返回指定页签头的设备像素矩形（以控件 (0,0) 为原点），主要用于测试与自定义命中检测 |
+| `TyTabCloseRect(AIndex: Integer): TRect` | 方法 | 返回指定页签关闭 × 字形的命中矩形（设备像素，控件 (0,0) 本地坐标）；`TabsClosable = False` 或索引越界时返回空矩形 `(0,0,0,0)`，主要用于测试与自定义命中检测 |
 
 ### 继承的通用成员
 
@@ -61,10 +65,24 @@ uses tyControls.TabControl;
 | 事件/方法 | 类型/签名 | 触发时机/说明 |
 |-----------|-----------|---------------|
 | `OnChange` | `TNotifyEvent` | `TabIndex` 发生真实变化后触发（相同值重复赋值不触发） |
+| `OnTabClose` | `TTyTabCloseEvent` | 点击页签关闭 × 字形时触发；通过 `var AllowClose` 决定是否真正移除（置 `False` 即否决） |
 | `AddTab(const ACaption): TTyPanel` | 函数 | 见属性表；追加页签并返回页面板 |
+| `RemoveTab(AIndex)` | 过程 | 移除指定页签及其页面板并释放之；修正 `TabIndex`，必要时触发 `OnChange`（详见第 11 节） |
 | `TabCount` | `Integer` 函数 | 返回当前页签数量 |
 | `TabCaption(AIndex)` | `string` 函数 | 返回指定页签的标题文字 |
 | `TyTabHeaderRect(AIndex)` | `TRect` 函数 | 返回指定页签头的几何矩形（设备像素，控件本地坐标） |
+| `TyTabCloseRect(AIndex)` | `TRect` 函数 | 返回指定页签关闭 × 字形的命中矩形（设备像素，控件本地坐标）；非可关闭或越界时为空矩形 |
+
+### TTyTabCloseEvent 签名
+
+```pascal
+TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
+  var AllowClose: Boolean) of object;
+```
+
+- `AIndex`：被点击关闭的页签索引（零基）。
+- `AllowClose`：进入回调时为 `True`。保持 `True` 则控件随后自动调用 `RemoveTab(AIndex)` 移除该页签；在回调中置 `False` 即否决本次关闭，页签保持不变。
+- 未赋 `OnTabClose` 时，点击 × 等同于直接放行（自动 `RemoveTab`）。
 
 ---
 
@@ -203,3 +221,55 @@ TC.TabIndex := 1;
 - **页面板由 TabControl 拥有**：`AddTab` 创建的 `TTyPanel` 以 `TTyTabControl` 为 Owner，无需也不应手动释放它们——TabControl 析构时会自动释放。
 - **`TabIndex = -1`**：赋值为 -1 时所有页面板均隐藏；正常使用时无需主动赋 -1（添加第一个页签后控件会自动选中第 0 页）。
 - **子部件 `TyTab` 的 `:active` 含义**：指"被选中"，而非通用控件中的"鼠标按下"。主题作者为 `TyTab:active` 设置样式即可控制当前选中页签的高亮外观。
+
+---
+
+## 11. 可关闭页签与运行时移除（v1.4）
+
+### TabsClosable 与关闭 × 字形
+
+将 `TabsClosable` 置为 `True` 后，每个页签头右侧绘制一个关闭 × 字形。`TabsClosable` 默认为 `False`，此时页签头不显示 ×。用户点击某个页签的 × 时，控件触发 `OnTabClose`。
+
+`TyTabCloseRect(AIndex)` 返回该 × 字形的命中矩形（设备像素，控件 (0,0) 本地坐标），主要供测试与自定义命中检测使用；当 `TabsClosable = False` 或索引越界时返回空矩形 `(0,0,0,0)`。
+
+### OnTabClose 与否决关闭
+
+`OnTabClose` 签名为 `procedure(Sender: TObject; AIndex: Integer; var AllowClose: Boolean)`：
+
+- 进入回调时 `AllowClose = True`；
+- 保持 `True`（或未挂接 `OnTabClose`）→ 控件随后自动调用 `RemoveTab(AIndex)` 移除该页；
+- 在回调中将 `AllowClose := False` → **否决**本次关闭，页签保持不变。
+
+```pascal
+procedure TForm1.TabClosing(Sender: TObject; AIndex: Integer;
+  var AllowClose: Boolean);
+begin
+  // 禁止关闭第 0 页（例如"常规"页常驻）
+  if AIndex = 0 then
+    AllowClose := False;
+end;
+
+// 启用可关闭页签并挂接回调
+TC.TabsClosable := True;
+TC.OnTabClose   := @TabClosing;
+```
+
+### RemoveTab(AIndex)
+
+`RemoveTab(AIndex)` 移除指定索引的页签及其页面板（连同 `Free` 释放页面板）。其行为：
+
+- **修正 `TabIndex`**：
+  - 全部页签删完 → `TabIndex` 变为 `-1`；
+  - 删除位置在当前选中页之前（`AIndex < TabIndex`）→ `TabIndex` 自动减 1，保持选中同一页；
+  - 删除的正是当前选中页（`AIndex = TabIndex`）且它是末尾页 → `TabIndex` 回退到新的末尾页。
+- **`OnChange` 触发条件**：仅当移除导致**当前活动页面板发生改变**时才触发 `OnChange`；若移除的是非活动页（活动页面板不变），不触发。
+
+也可不依赖 ×，直接在代码中调用 `RemoveTab` 进行运行时移除：
+
+```pascal
+TC.RemoveTab(2);   // 移除第 3 个页签（0-based）及其页面板
+```
+
+### 外部释放页面板的安全处理
+
+即便绕过 `RemoveTab`、在外部直接 `Free` 某个页面板，控件也能安全处理：`TTyTabControl` 重写了 `Notification`，在收到 `opRemove` 通知时自动把该页面板从内部数组中摘除（修正 `TabIndex`、刷新显示），**不会留下悬挂指针**。因此外部释放页面板与调用 `RemoveTab` 在数据结构层面是一致且安全的（区别仅在于是否由控件代为 `Free`）。

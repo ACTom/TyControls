@@ -4,6 +4,9 @@ unit umain;
   - 三个标签页：常规 / 外观 / 关于
   - 每个页面放置若干控件（标签、按钮、复选框）
   - OnChange 事件：底部状态栏实时显示当前标签页
+  - TabsClosable：页签头显示关闭 × 字形，点击触发 OnTabClose
+  - OnTabClose 事件：可通过 AllowClose := False 否决关闭；默认放行后
+    控件自动调用 RemoveTab 移除该页签及其页面板
   纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
 
 {$mode objfpc}{$H+}
@@ -21,6 +24,7 @@ type
     FTabCtrl: TTyTabControl;
     FStatus:  TTyLabel;
     procedure TabChanged(Sender: TObject);
+    procedure TabClosing(Sender: TObject; AIndex: Integer; var AllowClose: Boolean);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -64,6 +68,10 @@ begin
   FTabCtrl.Parent   := Self;
   FTabCtrl.SetBounds(16, 16, 448, 240);
   FTabCtrl.OnChange := @TabChanged;
+
+  { 启用可关闭页签：每个页签头右侧出现关闭 × 字形，点击触发 OnTabClose }
+  FTabCtrl.TabsClosable := True;
+  FTabCtrl.OnTabClose   := @TabClosing;
 
   { ── 第一页：常规 ─────────────────────────────────────────────────────── }
   Page := FTabCtrl.AddTab('常规');
@@ -151,6 +159,18 @@ procedure TMainForm.TabChanged(Sender: TObject);
 begin
   FStatus.Caption := Format('当前标签页：%s',
     [FTabCtrl.TabCaption(FTabCtrl.TabIndex)]);
+end;
+
+{ 页签关闭回调：点击页签头的关闭 × 字形时触发。
+  默认放行（AllowClose 进入时为 True），控件随后自动 RemoveTab 移除该页。
+  如需否决某些页签的关闭，可在此置 AllowClose := False，例如：
+    if AIndex = 0 then AllowClose := False;  // 禁止关闭"常规"页 }
+procedure TMainForm.TabClosing(Sender: TObject; AIndex: Integer;
+  var AllowClose: Boolean);
+begin
+  FStatus.Caption := Format('正在关闭标签页：%s', [FTabCtrl.TabCaption(AIndex)]);
+  { 保持默认放行；如要演示否决，取消下一行注释： }
+  // if AIndex = 0 then AllowClose := False;
 end;
 
 end.

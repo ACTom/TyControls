@@ -88,7 +88,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 | [examples/toggleswitch](examples/toggleswitch/) | 开关切换、ON/OFF 主题（`:active` 状态） |
 | [examples/trackbar](examples/trackbar/) | 拖动滑块、方向键步进、TyTrackThumb 样式 |
 | [examples/groupbox](examples/groupbox/) | 分组容器、RadioButton 互斥分组 |
-| [examples/tabcontrol](examples/tabcontrol/) | 标签页切换、AddTab、键盘 ←/→ 导航 |
+| [examples/tabcontrol](examples/tabcontrol/) | 标签页切换、AddTab/RemoveTab、可关闭页签（× / OnTabClose）、键盘 ←/→ 导航 |
 | [examples/formchrome](examples/formchrome/) | 无边框自绘窗框窗口 |
 | [examples/theming](examples/theming/) | 自定义 `.tycss` 主题 + 运行时热切换 |
 | [examples/demo](examples/demo/) | 综合 gallery:全部控件 + 三主题切换 + 自绘窗框 |
