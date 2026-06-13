@@ -2,7 +2,7 @@ unit tyControls.ToggleSwitch;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 
 { Pure knob-X geometry (device pixels). Progress is clamped to [0,1]:
@@ -17,17 +17,32 @@ type
   private
     FChecked: Boolean;
     FOnChange: TNotifyEvent;
+    FKnobAnim: TTyAnimator;
+    FAnimationsEnabled: Boolean;
+    FTimer: TTimer;
     procedure SetChecked(const AValue: Boolean);
+    procedure EnsureTimer;
+    procedure HandleTimer(Sender: TObject);
+    function GetKnobAnimProgress: Single;
   protected
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    // Steppable animation seam (no wall-clock): advance the knob slide by AMs
+    // and return True iff the eased progress changed. Tests drive this directly
+    // via an access subclass; the lazy TTimer drives it at runtime.
+    function AdvanceAnimation(AMs: Integer): Boolean;
+    // Raw (un-eased) knob progress, 0..1. Exposed for deterministic tests.
+    property KnobAnimProgress: Single read GetKnobAnimProgress;
   public
     constructor Create(AOwner: TComponent); override;
     procedure Toggle;
     procedure Click; override;
+    // When enabled and the control has a window handle, flipping Checked
+    // animates the knob slide; otherwise it snaps (the headless/test default).
+    property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default False;
   published
     property Checked: Boolean read FChecked write SetChecked default False;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
@@ -59,6 +74,12 @@ begin
   inherited Create(AOwner);
   TabStop := True;
   FChecked := False;
+  FAnimationsEnabled := False;
+  // Knob slide animator: rest at 0 (off), ~120ms full traversal, decelerating.
+  FKnobAnim.Progress := 0;
+  FKnobAnim.Target := 0;
+  FKnobAnim.DurationMs := 120;
+  FKnobAnim.Easing := teEaseOutCubic;
   Width := 44;
   Height := 24;
 end;
@@ -79,9 +100,54 @@ procedure TTyToggleSwitch.SetChecked(const AValue: Boolean);
 begin
   if FChecked = AValue then Exit;
   FChecked := AValue;
+  FKnobAnim.Target := Ord(AValue);
+  if FAnimationsEnabled then
+  begin
+    // Animate: keep the current raw progress and let the driver step the knob
+    // toward the new target. At runtime (window handle present) a lazy TTimer
+    // owns the clock; tests step AdvanceAnimation manually. Do NOT snap here.
+    if HandleAllocated then
+    begin
+      EnsureTimer;
+      FTimer.Enabled := True;
+    end;
+  end
+  else
+    // Animations off (the headless/test default): snap so paint is correct
+    // immediately — this preserves the existing exact-pixel toggle tests.
+    FKnobAnim.SetTargetImmediate(Ord(AValue));
   Invalidate;
   if Assigned(FOnChange) then
     FOnChange(Self);
+end;
+
+procedure TTyToggleSwitch.EnsureTimer;
+begin
+  if FTimer = nil then
+  begin
+    FTimer := TTimer.Create(Self);
+    FTimer.Enabled := False;
+    FTimer.Interval := 16;  // ~60fps
+    FTimer.OnTimer := @HandleTimer;
+  end;
+end;
+
+procedure TTyToggleSwitch.HandleTimer(Sender: TObject);
+begin
+  if AdvanceAnimation(FTimer.Interval) then
+    Invalidate;
+  if not FKnobAnim.Running then
+    FTimer.Enabled := False;
+end;
+
+function TTyToggleSwitch.AdvanceAnimation(AMs: Integer): Boolean;
+begin
+  Result := FKnobAnim.Advance(AMs);
+end;
+
+function TTyToggleSwitch.GetKnobAnimProgress: Single;
+begin
+  Result := FKnobAnim.Progress;
 end;
 
 procedure TTyToggleSwitch.Toggle;
@@ -140,9 +206,10 @@ begin
     KnobSide := DevH - 2 * Margin;
     if KnobSide < 1 then KnobSide := 1;
 
-    // Pure geometry seam: Progress = Ord(FChecked) (no animator yet, so the
-    // knob snaps to Off/On exactly as before).
-    KnobX := TyToggleKnobX(R.Right - R.Left, Margin, KnobSide, Ord(FChecked));
+    // Pure geometry seam: Progress = eased knob-animator position. With
+    // animations off (the headless/test default) SetChecked snaps the animator,
+    // so this equals Ord(FChecked) and the knob lands exactly on Off/On.
+    KnobX := TyToggleKnobX(R.Right - R.Left, Margin, KnobSide, FKnobAnim.Eased);
 
     KnobRect := Rect(KnobX, Margin, KnobX + KnobSide, Margin + KnobSide);
 

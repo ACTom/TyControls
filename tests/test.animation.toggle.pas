@@ -2,7 +2,9 @@ unit test.animation.toggle;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Controls, fpcunit, testregistry,
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Controller,
   tyControls.ToggleSwitch;
 type
   { Pure-geometry tests for TyToggleKnobX (no LCL controls, no wall-clock).
@@ -17,6 +19,26 @@ type
     procedure TestKnobXMidpointAtProgressHalf;
     procedure TestKnobXClampsBelowZeroToOff;
     procedure TestKnobXClampsAboveOneToOn;
+  end;
+
+  { Probe subclass re-exposes RenderTo, lets tests force-enable animations
+    (no wall-clock), step the knob animator a fixed number of milliseconds, and
+    read back the raw knob progress. }
+  TTyToggleAnimProbe = class(TTyToggleSwitch)
+  public
+    procedure SetAnimationsEnabled(AValue: Boolean);
+    function StepAnimation(AMs: Integer): Boolean;
+    function KnobProgress: Single;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+  { Steppable knob-slide tests (deterministic, no real timers). }
+  TTyToggleKnobAnimTest = class(TTestCase)
+  published
+    procedure TestAnimatedCheckDoesNotSnap;
+    procedure TestAnimatedAdvanceHalfwayMovesKnob;
+    procedure TestAnimatedAdvanceFullReachesOnPosition;
+    procedure TestHeadlessDefaultSnapsImmediately;
   end;
 
 implementation
@@ -59,6 +81,199 @@ begin
     TyToggleKnobX(TrackWidthDev, MarginDev, KnobSideDev, 1.5));
 end;
 
+{ TTyToggleAnimProbe }
+
+procedure TTyToggleAnimProbe.SetAnimationsEnabled(AValue: Boolean);
+begin
+  AnimationsEnabled := AValue;
+end;
+
+function TTyToggleAnimProbe.StepAnimation(AMs: Integer): Boolean;
+begin
+  Result := AdvanceAnimation(AMs);
+end;
+
+function TTyToggleAnimProbe.KnobProgress: Single;
+begin
+  Result := KnobAnimProgress;
+end;
+
+procedure TTyToggleAnimProbe.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+{ Helper: build a probe with the standard test stylesheet, parented to AForm,
+  with the supplied controller. Caller owns nothing extra (Form owns probe). }
+
+function RenderKnobBitmap(ASw: TTyToggleAnimProbe): TBGRABitmap;
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(44, 24);
+    ASw.RenderTo(Bmp.Canvas, Rect(0, 0, 44, 24), 96);
+    Result := TBGRABitmap.Create(Bmp);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+{ TTyToggleKnobAnimTest }
+
+procedure TTyToggleKnobAnimTest.TestAnimatedCheckDoesNotSnap;
+{ With animations enabled, flipping Checked True must NOT snap the knob to the
+  on-position: raw progress stays at 0 until the animation is advanced. }
+var
+  Ctl: TTyStyleController;
+  Sw: TTyToggleAnimProbe;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Sw := TTyToggleAnimProbe.Create(nil);
+    try
+      Sw.Controller := Ctl;
+      Sw.SetAnimationsEnabled(True);
+      Sw.Checked := False;
+      AssertTrue('progress starts at 0', Abs(Sw.KnobProgress - 0.0) < 1e-6);
+      Sw.Checked := True;  // animations on, no HandleAllocated -> stays at 0
+      AssertTrue('Checked is True', Sw.Checked);
+      AssertTrue('animated check does NOT snap (progress still ~0)',
+        Abs(Sw.KnobProgress - 0.0) < 1e-6);
+    finally
+      Sw.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyToggleKnobAnimTest.TestAnimatedAdvanceHalfwayMovesKnob;
+{ Advancing 60ms of the 120ms slide takes raw progress to ~0.5 and moves the
+  knob off the left margin (it has visibly slid toward the on-position). }
+var
+  Ctl: TTyStyleController;
+  Sw: TTyToggleAnimProbe;
+  Reread: TBGRABitmap;
+  PxLeft: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(
+      'TyToggleSwitch { background: #444444; color: #FFFFFF; border-width: 0px; }' +
+      'TyToggleSwitch:active { background: #3B82F6; }');
+    Sw := TTyToggleAnimProbe.Create(nil);
+    try
+      Sw.Controller := Ctl;
+      Sw.SetAnimationsEnabled(True);
+      Sw.Checked := True;
+      Sw.StepAnimation(60);  // half of 120ms
+      AssertTrue('raw progress ~0.5 after 60ms',
+        Abs(Sw.KnobProgress - 0.5) < 1e-6);
+
+      { The off-position knob centre is at x=12 (covers x=3..21). After sliding
+        halfway the knob has left the far-left, so the formerly-knob-edge pixel
+        at x=5 is no longer white (the track shows through there). }
+      Reread := RenderKnobBitmap(Sw);
+      try
+        PxLeft := Reread.GetPixel(5, 12);
+        AssertFalse('knob has slid off the far-left (x=5 no longer white)',
+          (PxLeft.red > 200) and (PxLeft.green > 200) and (PxLeft.blue > 200));
+      finally
+        Reread.Free;
+      end;
+    finally
+      Sw.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyToggleKnobAnimTest.TestAnimatedAdvanceFullReachesOnPosition;
+{ Advancing the full 120ms lands raw progress exactly on 1.0 and the knob sits
+  at the on-position: the right side (x=32) is knob-white. }
+var
+  Ctl: TTyStyleController;
+  Sw: TTyToggleAnimProbe;
+  Reread: TBGRABitmap;
+  PxRight: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(
+      'TyToggleSwitch { background: #444444; color: #FFFFFF; border-width: 0px; }' +
+      'TyToggleSwitch:active { background: #3B82F6; }');
+    Sw := TTyToggleAnimProbe.Create(nil);
+    try
+      Sw.Controller := Ctl;
+      Sw.SetAnimationsEnabled(True);
+      Sw.Checked := True;
+      Sw.StepAnimation(60);
+      Sw.StepAnimation(60);  // total 120ms -> 1.0
+      AssertTrue('raw progress exactly 1.0 after 120ms',
+        Abs(Sw.KnobProgress - 1.0) < 1e-9);
+
+      Reread := RenderKnobBitmap(Sw);
+      try
+        PxRight := Reread.GetPixel(32, 12);
+        AssertTrue('ON-position knob R > 200 (white)',   PxRight.red > 200);
+        AssertTrue('ON-position knob G > 200 (white)',   PxRight.green > 200);
+        AssertTrue('ON-position knob B > 200 (white)',   PxRight.blue > 200);
+      finally
+        Reread.Free;
+      end;
+    finally
+      Sw.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyToggleKnobAnimTest.TestHeadlessDefaultSnapsImmediately;
+{ Default (animations off / headless): setting Checked True snaps raw progress
+  to 1.0 immediately, so RenderTo draws the on-position right away. This is the
+  snap that keeps the existing pixel tests green. }
+var
+  Ctl: TTyStyleController;
+  Sw: TTyToggleAnimProbe;
+  Reread: TBGRABitmap;
+  PxRight: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss(
+      'TyToggleSwitch { background: #444444; color: #FFFFFF; border-width: 0px; }' +
+      'TyToggleSwitch:active { background: #3B82F6; }');
+    Sw := TTyToggleAnimProbe.Create(nil);
+    try
+      Sw.Controller := Ctl;
+      // do NOT enable animations -> default off
+      Sw.Checked := True;
+      AssertTrue('headless snap: raw progress = 1.0 immediately',
+        Abs(Sw.KnobProgress - 1.0) < 1e-9);
+
+      Reread := RenderKnobBitmap(Sw);
+      try
+        PxRight := Reread.GetPixel(32, 12);
+        AssertTrue('snapped ON knob R > 200', PxRight.red > 200);
+        AssertTrue('snapped ON knob G > 200', PxRight.green > 200);
+        AssertTrue('snapped ON knob B > 200', PxRight.blue > 200);
+      finally
+        Reread.Free;
+      end;
+    finally
+      Sw.Free;
+    end;
+  finally
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyToggleKnobXTest);
+  RegisterTest(TTyToggleKnobAnimTest);
 end.
