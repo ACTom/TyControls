@@ -79,6 +79,29 @@ type
     procedure TestCtrlShiftRightStillSingleChar;
   end;
 
+  // WORD.4: Ctrl/Alt+Backspace deletes the previous word; Ctrl/Alt+Delete
+  // deletes the next word. Selection present -> delete selection only (no
+  // word-delete). Plain (unmodified) VK_BACK/VK_DELETE still delete one cp.
+  TEditWordDeleteTest = class(TTestCase)
+  private
+    FForm: TCustomForm;
+    FEdit: TTyEditWordKeyAccess;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestCtrlBackspaceDeletesPrevWord;
+    procedure TestAltBackspaceDeletesPrevWord;
+    procedure TestCtrlBackspaceStopsAtPunct;
+    procedure TestAltDeleteDeletesNextWord;
+    procedure TestSelectionWinsOverWordBackspace;
+    procedure TestSelectionWinsOverWordDelete;
+    procedure TestCtrlBackspaceAtStartIsNoOp;
+    procedure TestCtrlDeleteAtEndIsNoOp;
+    procedure TestCtrlBackspaceMultibyte;
+    procedure TestPlainBackspaceStillDeletesOne;
+  end;
+
 implementation
 
 function TTyEditWordAccess.NextWordBoundary(AIdx: Integer): Integer;
@@ -414,8 +437,133 @@ begin
   AssertEquals('Ctrl+Shift+Right single char', 1, FEdit.SelLength);
 end;
 
+// ---- WORD.4: Ctrl/Alt+Backspace/Delete word-wise deletion ----
+
+procedure TEditWordDeleteTest.SetUp;
+begin
+  FForm := TCustomForm.CreateNew(nil);
+  FEdit := TTyEditWordKeyAccess.Create(FForm);
+  FEdit.Parent := FForm;
+end;
+
+procedure TEditWordDeleteTest.TearDown;
+begin
+  FForm.Free;
+  FForm := nil;
+  FEdit := nil;
+end;
+
+// 'foo bar baz', caret 11: Ctrl+Back -> 'foo bar ' caret 8; again -> 'foo ' caret 4.
+procedure TEditWordDeleteTest.TestCtrlBackspaceDeletesPrevWord;
+begin
+  FEdit.Text := 'foo bar baz';
+  FEdit.CaretPos := 11;
+  FEdit.SimulateKeyDownShift(VK_BACK, [ssCtrl]);
+  AssertEquals('1st Ctrl+Back text', 'foo bar ', FEdit.Text);
+  AssertEquals('1st Ctrl+Back caret', 8, FEdit.CaretPos);
+  FEdit.SimulateKeyDownShift(VK_BACK, [ssCtrl]);
+  AssertEquals('2nd Ctrl+Back text', 'foo ', FEdit.Text);
+  AssertEquals('2nd Ctrl+Back caret', 4, FEdit.CaretPos);
+end;
+
+// Same as above but with Alt — proves both modifiers trigger word-delete.
+procedure TEditWordDeleteTest.TestAltBackspaceDeletesPrevWord;
+begin
+  FEdit.Text := 'foo bar baz';
+  FEdit.CaretPos := 11;
+  FEdit.SimulateKeyDownShift(VK_BACK, [ssAlt]);
+  AssertEquals('Alt+Back text', 'foo bar ', FEdit.Text);
+  AssertEquals('Alt+Back caret', 8, FEdit.CaretPos);
+end;
+
+// 'foo.bar' caret 7: Ctrl+Back -> 'foo.' caret 4 (stops at punct boundary).
+procedure TEditWordDeleteTest.TestCtrlBackspaceStopsAtPunct;
+begin
+  FEdit.Text := 'foo.bar';
+  FEdit.CaretPos := 7;
+  FEdit.SimulateKeyDownShift(VK_BACK, [ssCtrl]);
+  AssertEquals('Ctrl+Back stops at punct text', 'foo.', FEdit.Text);
+  AssertEquals('Ctrl+Back stops at punct caret', 4, FEdit.CaretPos);
+end;
+
+// 'foo bar baz', caret 0: Alt+Delete -> 'bar baz' caret 0; again -> 'baz' caret 0.
+procedure TEditWordDeleteTest.TestAltDeleteDeletesNextWord;
+begin
+  FEdit.Text := 'foo bar baz';
+  FEdit.CaretPos := 0;
+  FEdit.SimulateKeyDownShift(VK_DELETE, [ssAlt]);
+  AssertEquals('1st Alt+Delete text', 'bar baz', FEdit.Text);
+  AssertEquals('1st Alt+Delete caret', 0, FEdit.CaretPos);
+  FEdit.SimulateKeyDownShift(VK_DELETE, [ssAlt]);
+  AssertEquals('2nd Alt+Delete text', 'baz', FEdit.Text);
+  AssertEquals('2nd Alt+Delete caret', 0, FEdit.CaretPos);
+end;
+
+// Selection wins: SelectAll, Ctrl+Back -> deletes selection only -> '' caret 0.
+procedure TEditWordDeleteTest.TestSelectionWinsOverWordBackspace;
+begin
+  FEdit.Text := 'foo bar';
+  FEdit.SelectAll;
+  FEdit.SimulateKeyDownShift(VK_BACK, [ssCtrl]);
+  AssertEquals('selection deleted text', '', FEdit.Text);
+  AssertEquals('selection deleted caret', 0, FEdit.CaretPos);
+  AssertEquals('no selection after', 0, FEdit.SelLength);
+end;
+
+// Selection wins: SelectAll, Ctrl+Delete -> deletes selection only -> '' caret 0.
+procedure TEditWordDeleteTest.TestSelectionWinsOverWordDelete;
+begin
+  FEdit.Text := 'foo bar';
+  FEdit.SelectAll;
+  FEdit.SimulateKeyDownShift(VK_DELETE, [ssCtrl]);
+  AssertEquals('selection deleted text', '', FEdit.Text);
+  AssertEquals('selection deleted caret', 0, FEdit.CaretPos);
+  AssertEquals('no selection after', 0, FEdit.SelLength);
+end;
+
+// No-op edge: caret 0, Ctrl+Back -> text unchanged.
+procedure TEditWordDeleteTest.TestCtrlBackspaceAtStartIsNoOp;
+begin
+  FEdit.Text := 'foo bar';
+  FEdit.CaretPos := 0;
+  FEdit.SimulateKeyDownShift(VK_BACK, [ssCtrl]);
+  AssertEquals('Ctrl+Back at start no-op', 'foo bar', FEdit.Text);
+  AssertEquals('caret stays 0', 0, FEdit.CaretPos);
+end;
+
+// No-op edge: caret at end, Ctrl+Delete -> text unchanged.
+procedure TEditWordDeleteTest.TestCtrlDeleteAtEndIsNoOp;
+begin
+  FEdit.Text := 'foo bar';
+  FEdit.CaretPos := 7;
+  FEdit.SimulateKeyDownShift(VK_DELETE, [ssCtrl]);
+  AssertEquals('Ctrl+Delete at end no-op', 'foo bar', FEdit.Text);
+  AssertEquals('caret stays at end', 7, FEdit.CaretPos);
+end;
+
+// Multibyte: 'café bàr' caret at end (8 cp), Ctrl+Back -> 'café ' caret 5.
+procedure TEditWordDeleteTest.TestCtrlBackspaceMultibyte;
+begin
+  FEdit.Text := 'café bàr';
+  FEdit.CaretPos := UTF8Length(FEdit.Text);
+  FEdit.SimulateKeyDownShift(VK_BACK, [ssCtrl]);
+  AssertEquals('Ctrl+Back multibyte text', 'café ', FEdit.Text);
+  AssertEquals('Ctrl+Back multibyte caret', 5, FEdit.CaretPos);
+end;
+
+// Regression guard: plain VK_BACK [] on 'abc' caret 3 deletes one char -> 'ab'.
+procedure TEditWordDeleteTest.TestPlainBackspaceStillDeletesOne;
+begin
+  FEdit.Text := 'abc';
+  FEdit.CaretPos := 3;
+  FEdit.SimulateKeyDownShift(VK_BACK, []);
+  AssertEquals('plain Back deletes one', 'ab', FEdit.Text);
+  AssertEquals('plain Back caret', 2, FEdit.CaretPos);
+end;
+
 initialization
   RegisterTest(TEditWordTest);
   RegisterTest(TEditWordKeyTest);
   RegisterTest(TEditWordExtendTest);
+  RegisterTest(TEditWordDeleteTest);
 end.

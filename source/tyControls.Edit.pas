@@ -27,6 +27,9 @@ type
     procedure SetCaretPos(AValue: Integer);
     // Selection helpers
     procedure DeleteSelection;
+    // Word-wise deletion (splice modelled on DeleteSelection)
+    procedure DeleteWordBackward;
+    procedure DeleteWordForward;
     // Insert a raw UTF-8 string at the current caret position
     procedure InjectStringAt(const AStr: string);
     // Text measurement helper
@@ -169,6 +172,48 @@ begin
   After  := UTF8Copy(FText, SS + SL + 1, UTF8Length(FText) - SS - SL);
   FText  := Before + After;
   FCaret := SS;
+  FSelAnchor := FCaret;
+  InvalidateWidthCache;
+  APPI := Font.PixelsPerInch;
+  ClampScrollX(APPI);
+  EnsureCaretVisible(APPI);
+  Invalidate;
+end;
+
+procedure TTyEdit.DeleteWordBackward;
+var
+  t, Len: Integer;
+  Before, After: string;
+  APPI: Integer;
+begin
+  if FCaret = 0 then Exit;
+  Len := UTF8Length(FText);
+  t := PrevWordBoundary(FCaret);
+  Before := UTF8Copy(FText, 1, t);
+  After  := UTF8Copy(FText, FCaret + 1, Len - FCaret);
+  FText  := Before + After;
+  FCaret := t;
+  FSelAnchor := FCaret;
+  InvalidateWidthCache;
+  APPI := Font.PixelsPerInch;
+  ClampScrollX(APPI);
+  EnsureCaretVisible(APPI);
+  Invalidate;
+end;
+
+procedure TTyEdit.DeleteWordForward;
+var
+  t, Len: Integer;
+  Before, After: string;
+  APPI: Integer;
+begin
+  Len := UTF8Length(FText);
+  if FCaret >= Len then Exit;
+  t := NextWordBoundary(FCaret);
+  Before := UTF8Copy(FText, 1, FCaret);
+  After  := UTF8Copy(FText, t + 1, Len - t);
+  FText  := Before + After;
+  // caret stays; collapse anchor
   FSelAnchor := FCaret;
   InvalidateWidthCache;
   APPI := Font.PixelsPerInch;
@@ -714,12 +759,24 @@ begin
   case Key of
     VK_BACK:
     begin
-      InjectBackspace;
+      // Selection present -> delete selection only (no word-delete).
+      // Else Ctrl/Alt -> delete previous word; otherwise delete one cp.
+      if HasSelection then
+        InjectBackspace
+      else if (ssCtrl in Shift) or (ssAlt in Shift) then
+        DeleteWordBackward
+      else
+        InjectBackspace;
       Key := 0;
     end;
     VK_DELETE:
     begin
-      InjectDelete;
+      if HasSelection then
+        InjectDelete
+      else if (ssCtrl in Shift) or (ssAlt in Shift) then
+        DeleteWordForward
+      else
+        InjectDelete;
       Key := 0;
     end;
     VK_LEFT:
