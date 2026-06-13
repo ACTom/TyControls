@@ -937,6 +937,12 @@ begin
   if FTopRow > MaxTop then FTopRow := MaxTop;
   if Total > VR then
   begin
+    // Capture the bar's prior visibility BEFORE creating/flipping it. A bar that
+    // does not yet exist counts as previously-hidden: TControl.Visible defaults
+    // to True, so reading FScrollBar.Visible AFTER creation would falsely report
+    // the first-ever creation as "already visible" and skip the narrow rebuild
+    // below — undersizing Max by the rows the stolen SBWidth pushes off-screen.
+    WasVisible := (FScrollBar <> nil) and FScrollBar.Visible;
     // Ensure scrollbar created.
     if FScrollBar = nil then
     begin
@@ -957,7 +963,6 @@ begin
     // so the range below covers EVERY settled row — otherwise the last wrapped
     // rows could never scroll into view. No-op for WordWrap=False (content width
     // is independent of the bar there, so the recomputed Total is unchanged).
-    WasVisible := FScrollBar.Visible;
     if not WasVisible then
     begin
       FScrollBar.Visible := True;

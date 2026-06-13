@@ -57,6 +57,7 @@ type
     procedure TestOverLongTokenCharBreaksAcrossRows;   // (c)
     procedure TestToggleWrapReflowsThenRestores;       // (d)
     procedure TestSingleFlipScrollbarRangeCoversAllRows; // (e)
+    procedure TestFirstCreationScrollbarRangeCoversAllRows; // (e2)
   end;
 
 implementation
@@ -486,6 +487,51 @@ begin
   AssertTrue('flip: still overflows after narrowing', TotalNarrow > VR);
   // The single-call range must already account for the narrowed wrap.
   AssertEquals('flip: scrollbar Max == settled TotalVisualRows - VisibleRows',
+    TotalNarrow - VR, SB.Max);
+end;
+
+// (e2) The GENUINE first-ever creation flip: the scrollbar does NOT exist going
+// into the layout (FScrollBar=nil), so this exercises the path test (e) cannot —
+// (e) hides an ALREADY-created bar before flipping, so WasVisible is genuinely
+// False there regardless of how the code reads it. Here the bar is created inside
+// the very first UpdateScrollBar (driven by assigning Lines on a fresh memo).
+// TControl.Visible defaults to True, so a flip detector that reads Visible AFTER
+// creation would treat this as "already visible", skip the narrow rebuild, and
+// size Max from the WIDE pre-scrollbar Total — undersized by exactly the rows the
+// stolen SBWidth pushes off-screen (the last wrapped row can never scroll in).
+// The fix captures WasVisible BEFORE creating the bar (nil == previously-hidden),
+// so the range must cover EVERY settled narrow-width row after that single call.
+procedure TTyMemoWrapTest.TestFirstCreationScrollbarRangeCoversAllRows;
+var
+  Line: string;
+  i, W, H, VR, TotalNarrow, SBWidth: Integer;
+  SB: TTyScrollBar;
+begin
+  W := 160;
+  H := 120;
+  SetUpMemo('TyMemo { background:#101010; color:#F0F0F0; border-width:0px; padding:0px; font-size:14px; }',
+    W, H);
+  FMemo.ProbeSetWordWrap(True);
+  // Long no-space token so the wrap count is SENSITIVE to the SBWidth narrowing.
+  Line := '';
+  for i := 0 to 199 do
+    Line := Line + 'X';
+  // FIRST creation: no scrollbar exists before this; assigning Lines runs
+  // SetLines -> UpdateScrollBar with FScrollBar=nil exactly once.
+  AssertTrue('first-creation: no scrollbar exists beforehand',
+    FMemo.ProbeScrollBar = nil);
+  LoadLines([Line]);
+  SB := FMemo.ProbeScrollBar;
+  AssertTrue('first-creation: scrollbar created', SB <> nil);
+  AssertTrue('first-creation: scrollbar visible', SB.Visible);
+  SBWidth := FMemo.ProbeSBWidth(96);
+  AssertTrue('first-creation: SBWidth > 0', SBWidth > 0);
+  // Rows the model actually has at the SETTLED (narrow, scrollbar-visible) width.
+  TotalNarrow := FMemo.ProbeTotalVisualRows(96);
+  VR := FMemo.ProbeVisibleRows;
+  AssertTrue('first-creation: still overflows after narrowing', TotalNarrow > VR);
+  // Without the fix this is undersized by the SBWidth-induced extra row(s).
+  AssertEquals('first-creation: scrollbar Max == settled TotalVisualRows - VisibleRows',
     TotalNarrow - VR, SB.Max);
 end;
 
