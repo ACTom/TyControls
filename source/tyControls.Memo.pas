@@ -866,11 +866,18 @@ procedure TTyMemo.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 // real scrollbar (T4) will subtract it from the right edge.
 var
   P: TTyPainter;
-  S: TTyStyleSet;
-  R, ContentRect, LineRect, CaretRect: TRect;
+  S, FS: TTyStyleSet;
+  R, ContentRect, LineRect, CaretRect, BandRect: TRect;
   SBWidth, LH, ContentTop, LastVisible, i, y: Integer;
   EffSize, CaretX: Integer;
   Line: string;
+  // Selection-band state (resolved once before the visible-line loop).
+  SL, SC, EL, EC, X1, X2: Integer;
+  Widths: TTyIntArray;
+  BandFill: TTyFill;
+  BandColor: TTyColor;
+  BandAlpha: Byte;
+  FocusBorderColor: TTyColor;
 begin
   // Keep the scrollbar in sync (cheap; catches external Lines mutations).
   UpdateScrollBar;
@@ -899,6 +906,21 @@ begin
     LH := LineHeight(APPI);
     ContentTop := ContentRect.Top;
 
+    // Resolve the focus band color ONCE before the visible-line loop (verbatim
+    // from TTyEdit): the :focus border-color, or the text color if absent. Only
+    // needed when a selection exists; the band is filled per visible line below.
+    SL := 0; SC := 0; EL := 0; EC := 0;
+    FocusBorderColor := S.TextColor;
+    if HasSelection then
+    begin
+      FS := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysFocused]);
+      if tpBorderColor in FS.Present then
+        FocusBorderColor := FS.BorderColor
+      else
+        FocusBorderColor := S.TextColor;
+      GetOrderedSel(SL, SC, EL, EC);
+    end;
+
     // Last visible logical line: fill the content height with LH-tall cells.
     LastVisible := FTopLine + (ContentRect.Bottom - ContentTop) div LH;
     if LastVisible > LineCountLogical - 1 then
@@ -912,13 +934,62 @@ begin
         Line := '';
       y := ContentTop + (i - FTopLine) * LH;
       LineRect := Rect(ContentRect.Left, y, ContentRect.Right - SBWidth, y + LH);
+
+      // Selection band for this row, drawn BENEATH the text (band first so the
+      // glyphs sit on top). Reuse the SAME Line/MeasureLineWidths the row draws
+      // with so band geometry matches the drawn text exactly. No FScrollX term.
+      if HasSelection and (i >= SL) and (i <= EL) then
+      begin
+        Widths := MeasureLineWidths(Line, APPI);
+        // X-range rules per row position within [SL..EL].
+        if (i > SL) and (i < EL) then
+        begin
+          // Interior line: full content width.
+          X1 := ContentRect.Left;
+          X2 := ContentRect.Right - SBWidth;
+        end
+        else if (SL = EL) then
+        begin
+          // Single selected line: [SC..EC] on this line.
+          X1 := ContentRect.Left + Widths[SC];
+          X2 := ContentRect.Left + Widths[EC];
+        end
+        else if i = SL then
+        begin
+          // First line of a multi-line selection: from SC to the right edge.
+          X1 := ContentRect.Left + Widths[SC];
+          X2 := ContentRect.Right - SBWidth;
+        end
+        else
+        begin
+          // Last line (i = EL, EL > SL): from the left edge to EC.
+          X1 := ContentRect.Left;
+          X2 := ContentRect.Left + Widths[EC];
+        end;
+        if X1 < X2 then
+        begin
+          BandRect := Rect(X1, y, X2, y + LH);
+          // ~35% alpha band tinted with the focus border color (verbatim TTyEdit).
+          BandAlpha := $59;
+          BandColor := TyRGBA(TyRedOf(FocusBorderColor), TyGreenOf(FocusBorderColor),
+            TyBlueOf(FocusBorderColor), BandAlpha);
+          BandFill := Default(TTyFill);
+          BandFill.Kind := tfkSolid;
+          BandFill.Color := BandColor;
+          P.FillBackground(BandRect, BandFill, 0);
+        end;
+      end;
+
       P.DrawText(LineRect, Line, S.FontName, EffSize, S.FontWeight,
         S.TextColor, taLeftJustify, tlTop, False);
     end;
 
-    // Static caret: only when focused (or headless-forced) and the caret line is
-    // currently visible. 1px bar like TTyEdit, inset 2px top/bottom in the cell.
-    if (Focused or FForceFocused)
+    // Static caret: only when focused (or headless-forced), no active selection,
+    // and the caret line is currently visible. 1px bar like TTyEdit, inset 2px
+    // top/bottom in the cell. Gated on not HasSelection so the caret hides while
+    // a selection band is shown (matches TTyEdit; additive — existing single-caret
+    // tests never set a selection).
+    if (Focused or FForceFocused) and not HasSelection
       and (FCaretLine >= FTopLine) and (FCaretLine <= LastVisible) then
     begin
       if FCaretLine < FLines.Count then
