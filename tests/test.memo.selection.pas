@@ -68,6 +68,11 @@ type
     procedure TestSelectionBandSingleLine;
     procedure TestSelectionBandFullInteriorLine;
     procedure TestNoCaretDuringSelection;
+    // --- T4: Shift-extend navigation (anchor fixed; unshifted nav collapses) ---
+    procedure TestShiftRightExtends;
+    procedure TestShiftDownExtendsAcrossLines;
+    procedure TestShiftHomeEndExtendLineLocal;
+    procedure TestUnshiftedArrowCollapses;
   end;
 
 implementation
@@ -620,6 +625,94 @@ begin
     [RunNoSel, LH]), RunNoSel >= LH div 2);
   AssertTrue(Format('selection hides caret: run shorter than no-selection ' +
     '(withSel=%d, noSel=%d)', [RunWithSel, RunNoSel]), RunWithSel < RunNoSel);
+end;
+
+// --- T4: Shift-extend navigation (Shift keeps anchor; unshifted nav collapses) ---
+
+{ TestShiftRightExtends
+  Over ['abcde'], caret(0,1). Shift+Right twice extends the caret to (0,3) while
+  the anchor stays at (0,1): a forward selection of 'bc'. }
+procedure TTyMemoSelectionTest.TestShiftRightExtends;
+var
+  SL, SC, EL, EC: Integer;
+begin
+  SetUpMemo;
+  LoadLines(['abcde']);
+  FMemo.ProbeSetCaret(0, 1);
+  FMemo.InjectKey(VK_RIGHT, [ssShift]);
+  FMemo.InjectKey(VK_RIGHT, [ssShift]);
+  AssertTrue('selection present after Shift+Right x2', FMemo.ProbeHasSelection);
+  AssertEquals('SelText bc', 'bc', FMemo.ProbeSelText);
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 3', 3, FMemo.ProbeCaretCol);
+  // Anchor must remain at (0,1): the selection start is (0,1).
+  FMemo.ProbeSelStart(SL, SC);
+  FMemo.ProbeSelEnd(EL, EC);
+  AssertEquals('SelStartLine 0', 0, SL);
+  AssertEquals('SelStartCol 1 (anchor fixed)', 1, SC);
+  AssertEquals('SelEndLine 0', 0, EL);
+  AssertEquals('SelEndCol 3', 3, EC);
+end;
+
+{ TestShiftDownExtendsAcrossLines
+  Over ['abcd','efgh'], caret(0,2). Shift+Down extends to (1,2) keeping anchor at
+  (0,2): a multi-line selection of 'cd' + LineEnding + 'ef'. }
+procedure TTyMemoSelectionTest.TestShiftDownExtendsAcrossLines;
+var
+  SL, SC, EL, EC: Integer;
+begin
+  SetUpMemo;
+  LoadLines(['abcd', 'efgh']);
+  FMemo.ProbeSetCaret(0, 2);
+  FMemo.InjectKey(VK_DOWN, [ssShift]);
+  AssertTrue('selection present after Shift+Down', FMemo.ProbeHasSelection);
+  FMemo.ProbeSelStart(SL, SC);
+  FMemo.ProbeSelEnd(EL, EC);
+  AssertEquals('SelStartLine 0', 0, SL);
+  AssertEquals('SelStartCol 2', 2, SC);
+  AssertEquals('SelEndLine 1', 1, EL);
+  AssertEquals('SelEndCol 2', 2, EC);
+  AssertEquals('SelText cd<LE>ef', 'cd' + LineEnding + 'ef', FMemo.ProbeSelText);
+end;
+
+{ TestShiftHomeEndExtendLineLocal
+  Over ['hello world'], caret(0,5). Shift+Home extends to (0,0) keeping anchor at
+  (0,5): SelText 'hello'. Then from the SAME anchor Shift+End extends to (0,11):
+  selection (0,5)..(0,11), SelText ' world'. }
+procedure TTyMemoSelectionTest.TestShiftHomeEndExtendLineLocal;
+var
+  SL, SC, EL, EC: Integer;
+begin
+  SetUpMemo;
+  LoadLines(['hello world']);
+  FMemo.ProbeSetCaret(0, 5);
+  FMemo.InjectKey(VK_HOME, [ssShift]);
+  AssertTrue('selection present after Shift+Home', FMemo.ProbeHasSelection);
+  AssertEquals('Shift+Home SelText hello', 'hello', FMemo.ProbeSelText);
+  // Same anchor (0,5) still fixed; now Shift+End to the line end (col 11).
+  FMemo.InjectKey(VK_END, [ssShift]);
+  AssertTrue('selection present after Shift+End', FMemo.ProbeHasSelection);
+  FMemo.ProbeSelStart(SL, SC);
+  FMemo.ProbeSelEnd(EL, EC);
+  AssertEquals('SelStartLine 0', 0, SL);
+  AssertEquals('SelStartCol 5 (anchor fixed)', 5, SC);
+  AssertEquals('SelEndLine 0', 0, EL);
+  AssertEquals('SelEndCol 11', 11, EC);
+  AssertEquals('Shift+End SelText  world', ' world', FMemo.ProbeSelText);
+end;
+
+{ TestUnshiftedArrowCollapses
+  Establish a selection anchor(0,0)..caret(0,3), then an UNSHIFTED VK_RIGHT must
+  collapse the selection (anchor glued back onto the caret). }
+procedure TTyMemoSelectionTest.TestUnshiftedArrowCollapses;
+begin
+  SetUpMemo;
+  LoadLines(['abcde']);
+  FMemo.ProbeSetCaret(0, 3);
+  FMemo.ProbeSetAnchor(0, 0);
+  AssertTrue('selection present before unshifted nav', FMemo.ProbeHasSelection);
+  FMemo.InjectKey(VK_RIGHT, []);
+  AssertFalse('unshifted arrow collapses selection', FMemo.ProbeHasSelection);
 end;
 
 initialization

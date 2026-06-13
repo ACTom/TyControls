@@ -1035,7 +1035,7 @@ end;
 procedure TTyMemo.KeyDown(var Key: Word; Shift: TShiftState);
 var
   APPI, L, MaxLine: Integer;
-  CtrlLike: Boolean;
+  CtrlLike, Extending: Boolean;
 begin
   if not Enabled then Exit;          // when disabled, do NOT consume Key
   inherited KeyDown(Key, Shift);
@@ -1043,6 +1043,11 @@ begin
   MaxLine := LineCountLogical - 1;
   // Ctrl (Win/Linux) or Meta/Cmd (macOS) modifies Home/End to document extents.
   CtrlLike := (ssCtrl in Shift) or (ssMeta in Shift);
+  // Shift extends the selection: navigation moves the caret but keeps the anchor.
+  // When NOT extending, each nav branch collapses the anchor onto the new caret
+  // (mirrors TTyEdit; additive — existing single-caret nav never passes ssShift,
+  // so the collapse path runs with anchor already glued to the caret).
+  Extending := ssShift in Shift;
 
   case Key of
     VK_RETURN:
@@ -1111,6 +1116,11 @@ begin
         FCaretCol := LineLen(FCaretLine);
       end;
       FDesiredCol := FCaretCol;
+      if not Extending then
+      begin
+        FSelAnchorLine := FCaretLine;
+        FSelAnchorCol := FCaretCol;
+      end;
       AfterCaretMove(APPI);
       Key := 0;
     end;
@@ -1125,6 +1135,11 @@ begin
         FCaretCol := 0;
       end;
       FDesiredCol := FCaretCol;
+      if not Extending then
+      begin
+        FSelAnchorLine := FCaretLine;
+        FSelAnchorCol := FCaretCol;
+      end;
       AfterCaretMove(APPI);
       Key := 0;
     end;
@@ -1139,6 +1154,11 @@ begin
           FCaretCol := LineLen(FCaretLine);
       end;
       // FDesiredCol preserved across vertical motion.
+      if not Extending then
+      begin
+        FSelAnchorLine := FCaretLine;
+        FSelAnchorCol := FCaretCol;
+      end;
       AfterCaretMove(APPI);
       Key := 0;
     end;
@@ -1152,6 +1172,11 @@ begin
           FCaretCol := LineLen(FCaretLine);
       end;
       // FDesiredCol preserved across vertical motion.
+      if not Extending then
+      begin
+        FSelAnchorLine := FCaretLine;
+        FSelAnchorCol := FCaretCol;
+      end;
       AfterCaretMove(APPI);
       Key := 0;
     end;
@@ -1165,6 +1190,11 @@ begin
       else
         FCaretCol := 0;          // line-local
       FDesiredCol := FCaretCol;
+      if not Extending then
+      begin
+        FSelAnchorLine := FCaretLine;
+        FSelAnchorCol := FCaretCol;
+      end;
       AfterCaretMove(APPI);
       Key := 0;
     end;
@@ -1178,6 +1208,11 @@ begin
       else
         FCaretCol := LineLen(FCaretLine);  // line-local
       FDesiredCol := FCaretCol;
+      if not Extending then
+      begin
+        FSelAnchorLine := FCaretLine;
+        FSelAnchorCol := FCaretCol;
+      end;
       AfterCaretMove(APPI);
       Key := 0;
     end;
