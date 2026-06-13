@@ -1177,12 +1177,13 @@ end;
 // ---- EDIT.8: Fix 5 — modifier+arrow falls through ----
 
 procedure TEditTest.TestCtrlLeftDoesNotMove;
-{ Ctrl+VK_LEFT must leave caret unchanged and must NOT zero Key }
+{ v1.8: Ctrl+VK_LEFT is now word-wise (Win/Linux convention; macOS uses
+  Option=ssAlt). On 'abc' caret 2 -> jumps to word start 0 and consumes Key.
+  (Method name kept for history; behavior intentionally updated in v1.8.) }
 var
   F: TCustomForm;
   E: TTyEditAccess;
   Key: Word;
-  StartCaret: Integer;
 begin
   F := TCustomForm.CreateNew(nil);
   try
@@ -1190,13 +1191,10 @@ begin
     E.Parent := F;
     E.Text := 'abc';
     E.CaretPos := 2;
-    StartCaret := E.CaretPos;
     Key := VK_LEFT;
     E.SimulateKeyDownShiftRef(Key, [ssCtrl]);
-    AssertEquals('Ctrl+Left: caret unchanged', StartCaret, E.CaretPos);
-    // Key must NOT be zeroed (falls through unhandled)
-    AssertTrue('Ctrl+Left: Key not consumed (must be VK_LEFT not 0)',
-      Key = VK_LEFT);
+    AssertEquals('Ctrl+Left: word-wise to start', 0, E.CaretPos);
+    AssertTrue('Ctrl+Left: Key consumed (0)', Key = 0);
   finally
     F.Free;
   end;

@@ -781,10 +781,11 @@ begin
     end;
     VK_LEFT:
     begin
-      if (ssAlt in Shift) then
+      if (ssAlt in Shift) or (ssCtrl in Shift) then
       begin
-        // Alt+Left: word-wise. Extending keeps the anchor and moves only the
-        // caret to the previous word boundary; otherwise collapse selection.
+        // Word-wise left: Alt+Left (macOS Option) or Ctrl+Left (Win/Linux).
+        // Extending keeps the anchor and moves only the caret to the previous
+        // word boundary; otherwise collapse selection. (Cmd/ssMeta falls through.)
         if Extending then
           FCaret := PrevWordBoundary(FCaret)
         else
@@ -797,7 +798,7 @@ begin
         Key := 0;
       end
       else if HasModifier and not Extending then
-        // other modifier+arrow (e.g. Ctrl): do NOT consume the key; fall through
+        // remaining modifier+arrow (e.g. Cmd/Meta): do NOT consume; fall through
       else
       begin
         if Extending then
@@ -833,10 +834,11 @@ begin
     end;
     VK_RIGHT:
     begin
-      if (ssAlt in Shift) then
+      if (ssAlt in Shift) or (ssCtrl in Shift) then
       begin
-        // Alt+Right: word-wise. Extending keeps the anchor and moves only the
-        // caret to the next word boundary; otherwise collapse selection.
+        // Word-wise right: Alt+Right (macOS Option) or Ctrl+Right (Win/Linux).
+        // Extending keeps the anchor and moves only the caret to the next word
+        // boundary; otherwise collapse selection. (Cmd/ssMeta falls through.)
         if Extending then
           FCaret := NextWordBoundary(FCaret)
         else
@@ -849,7 +851,7 @@ begin
         Key := 0;
       end
       else if HasModifier and not Extending then
-        // other modifier+arrow (e.g. Ctrl): do NOT consume the key; fall through
+        // remaining modifier+arrow (e.g. Cmd/Meta): do NOT consume; fall through
       else
       begin
         if Extending then

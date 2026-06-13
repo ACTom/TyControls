@@ -347,7 +347,8 @@ begin
   AssertEquals('SelLength', 0, FEdit.SelLength);
 end;
 
-// Regression guard: bare Ctrl+Left must NOT move caret and must NOT consume Key.
+// v1.8: Ctrl+Left is word-wise too (Win/Linux); jumps to word start and
+// consumes Key. (macOS Option=ssAlt covered by the Alt tests.)
 procedure TEditWordKeyTest.TestCtrlLeftStillFallsThrough;
 var
   Key: Word;
@@ -356,8 +357,8 @@ begin
   FEdit.CaretPos := 2;
   Key := VK_LEFT;
   FEdit.SimulateKeyDownShiftRef(Key, [ssCtrl]);
-  AssertEquals('Ctrl+Left caret unchanged', 2, FEdit.CaretPos);
-  AssertTrue('Ctrl+Left Key not consumed', Key = VK_LEFT);
+  AssertEquals('Ctrl+Left word-wise to start', 0, FEdit.CaretPos);
+  AssertTrue('Ctrl+Left Key consumed', Key = 0);
 end;
 
 // Sanity: plain VK_LEFT (no modifier) still moves one codepoint.
@@ -428,13 +429,14 @@ begin
   AssertEquals('collapse SelLength', 0, FEdit.SelLength);
 end;
 
-// Regression guard: Ctrl+Shift+Right is NOT word-wise; it extends one char.
+// v1.8: Ctrl+Shift+Right is word-wise (Win/Linux); extends to next word
+// boundary. 'foo bar' from 0 -> selects 'foo ' (4).
 procedure TEditWordExtendTest.TestCtrlShiftRightStillSingleChar;
 begin
   FEdit.Text := 'foo bar';
   FEdit.CaretPos := 0;
   FEdit.SimulateKeyDownShift(VK_RIGHT, [ssCtrl, ssShift]);
-  AssertEquals('Ctrl+Shift+Right single char', 1, FEdit.SelLength);
+  AssertEquals('Ctrl+Shift+Right word-wise', 4, FEdit.SelLength);
 end;
 
 // ---- WORD.4: Ctrl/Alt+Backspace/Delete word-wise deletion ----
