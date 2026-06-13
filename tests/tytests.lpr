@@ -13,7 +13,8 @@ uses
   test.toggleswitch,
   test.trackbar,
   test.groupbox,
-  test.tabcontrol;
+  test.tabcontrol,
+  test.defaulttheme;
 
 type
   TTyTestRunner = class(TTestRunner)
