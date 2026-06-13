@@ -15,7 +15,10 @@ type
     FTabHeight: Integer;      // logical px, default 28
     FHoverTab: Integer;       // -1 = none
     FOnChange: TNotifyEvent;
+    FDestroying: Boolean;
 
+    function  IndexOfPage(APage: TTyPanel): Integer;
+    procedure RemovePageInternal(AIndex: Integer; AFree: Boolean);
     procedure SetTabIndex(AValue: Integer);
     procedure SetTabHeight(AValue: Integer);
     function  TabHPx(APPI: Integer): Integer;
@@ -34,11 +37,13 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
 
     function AddTab(const ACaption: string): TTyPanel;
+    procedure RemoveTab(AIndex: Integer);
     function TabCount: Integer;
     function TabCaption(AIndex: Integer): string;
     { Public pure-ish geometry for tests: device px, (0,0)-local }
@@ -74,6 +79,7 @@ end;
 
 destructor TTyTabControl.Destroy;
 begin
+  FDestroying := True;
   FCaptions.Free;
   { Pages are owned components (Owner=Self) so freed by TComponent.Destroy }
   inherited Destroy;
@@ -243,6 +249,78 @@ begin
   end;
 
   Result := Page;
+end;
+
+function TTyTabControl.IndexOfPage(APage: TTyPanel): Integer;
+var I: Integer;
+begin
+  Result := -1;
+  for I := 0 to High(FPages) do
+    if FPages[I] = APage then
+      Exit(I);
+end;
+
+procedure TTyTabControl.RemovePageInternal(AIndex: Integer; AFree: Boolean);
+var
+  OldActive, NewActive, Page: TTyPanel;
+  J: Integer;
+begin
+  if (AIndex < 0) or (AIndex >= Length(FPages)) then Exit;
+
+  if (FTabIndex >= 0) and (FTabIndex < Length(FPages)) then
+    OldActive := FPages[FTabIndex]
+  else
+    OldActive := nil;
+
+  Page := FPages[AIndex];
+
+  FCaptions.Delete(AIndex);
+  for J := AIndex to High(FPages) - 1 do
+    FPages[J] := FPages[J + 1];
+  SetLength(FPages, Length(FPages) - 1);
+
+  if Length(FPages) = 0 then
+    FTabIndex := -1
+  else if AIndex < FTabIndex then
+    Dec(FTabIndex)
+  else if AIndex = FTabIndex then
+  begin
+    if FTabIndex > High(FPages) then
+      FTabIndex := High(FPages);
+  end;
+
+  if AFree and (Page <> nil) then
+    Page.Free;
+
+  ShowOnlyPage(FTabIndex);
+  Invalidate;
+
+  if (FTabIndex >= 0) and (FTabIndex < Length(FPages)) then
+    NewActive := FPages[FTabIndex]
+  else
+    NewActive := nil;
+
+  if (NewActive <> OldActive) and Assigned(FOnChange) then
+    FOnChange(Self);
+end;
+
+procedure TTyTabControl.RemoveTab(AIndex: Integer);
+begin
+  RemovePageInternal(AIndex, True);
+end;
+
+procedure TTyTabControl.Notification(AComponent: TComponent; Operation: TOperation);
+var
+  Idx: Integer;
+begin
+  inherited Notification(AComponent, Operation);
+  if FDestroying then Exit;
+  if (Operation = opRemove) and (AComponent is TTyPanel) then
+  begin
+    Idx := IndexOfPage(TTyPanel(AComponent));
+    if Idx >= 0 then
+      RemovePageInternal(Idx, False);
+  end;
 end;
 
 procedure TTyTabControl.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

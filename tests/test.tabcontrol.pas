@@ -49,6 +49,11 @@ type
     // TAB.C: Controller propagation to pages
     procedure TestControllerPropagatedOnSetAfterAddTab;
     procedure TestControllerPropagatedOnAddTabAfterSet;
+    procedure TestRemoveTabCompactsAndAdjustsIndex;
+    procedure TestRemoveActiveTabSelectsNeighborFiresOnChange;
+    procedure TestRemoveTabBeforeActiveKeepsActivePageNoOnChange;
+    procedure TestRemoveTabOutOfRangeNoOp;
+    procedure TestExternalFreePageHardensArrays;
   end;
 
 implementation
@@ -402,6 +407,76 @@ begin
   finally
     Ctl.Free;
   end;
+end;
+
+procedure TTyTabControlTest.TestRemoveTabCompactsAndAdjustsIndex;
+begin
+  FTab.AddTab('A');
+  FTab.AddTab('B');
+  FTab.AddTab('C');
+  AssertEquals('3 tabs', 3, FTab.TabCount);
+  FTab.RemoveTab(1);
+  AssertEquals('2 tabs after remove', 2, FTab.TabCount);
+  AssertEquals('caption[0] still A', 'A', FTab.TabCaption(0));
+  AssertEquals('caption[1] now C', 'C', FTab.TabCaption(1));
+end;
+
+procedure TTyTabControlTest.TestRemoveActiveTabSelectsNeighborFiresOnChange;
+var Probe: TTabChangeProbe;
+begin
+  FTab.AddTab('A'); FTab.AddTab('B'); FTab.AddTab('C');
+  FTab.TabIndex := 2;
+  Probe := TTabChangeProbe.Create;
+  try
+    FTab.OnChange := @Probe.Handle;
+    FTab.RemoveTab(2);
+    AssertEquals('TabIndex falls back to new last (1)', 1, FTab.TabIndex);
+    AssertTrue('new active page visible', FTab.Pages[1].Visible);
+    AssertEquals('OnChange fired once (active page changed)', 1, Probe.Count);
+  finally
+    Probe.Free;
+  end;
+end;
+
+procedure TTyTabControlTest.TestRemoveTabBeforeActiveKeepsActivePageNoOnChange;
+var Probe: TTabChangeProbe; ActivePageBefore: TTyPanel;
+begin
+  FTab.AddTab('A'); FTab.AddTab('B'); FTab.AddTab('C');
+  FTab.TabIndex := 2;
+  ActivePageBefore := FTab.Pages[2];
+  Probe := TTabChangeProbe.Create;
+  try
+    FTab.OnChange := @Probe.Handle;
+    FTab.RemoveTab(0);
+    AssertEquals('index shifts 2 -> 1', 1, FTab.TabIndex);
+    AssertSame('same page object still active', ActivePageBefore, FTab.Pages[1]);
+    AssertTrue('still visible', FTab.Pages[1].Visible);
+    AssertEquals('OnChange NOT fired (same page active)', 0, Probe.Count);
+  finally
+    Probe.Free;
+  end;
+end;
+
+procedure TTyTabControlTest.TestRemoveTabOutOfRangeNoOp;
+begin
+  FTab.AddTab('A');
+  FTab.RemoveTab(5);
+  FTab.RemoveTab(-1);
+  AssertEquals('still 1 tab', 1, FTab.TabCount);
+end;
+
+procedure TTyTabControlTest.TestExternalFreePageHardensArrays;
+var PageB: TTyPanel;
+begin
+  FTab.AddTab('A');
+  PageB := FTab.AddTab('B');
+  FTab.AddTab('C');
+  AssertEquals('3 tabs', 3, FTab.TabCount);
+  PageB.Free;
+  AssertEquals('2 tabs after external free', 2, FTab.TabCount);
+  AssertEquals('caption[0] A', 'A', FTab.TabCaption(0));
+  AssertEquals('caption[1] C (B detached)', 'C', FTab.TabCaption(1));
+  FTab.Invalidate;
 end;
 
 initialization
