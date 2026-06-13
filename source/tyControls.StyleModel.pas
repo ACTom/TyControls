@@ -385,6 +385,12 @@ begin
 end;
 
 function TTyStyleModel.UserHasTypeKey(const ATypeKey: string): Boolean;
+{ True if the user layer has ANY rule for this typeKey (base, variant or state).
+  A single match suppresses the ENTIRE built-in layer for the typeKey — including
+  base-state defaults the user didn't override. This is intentional (the theme
+  owns the control's look once it touches it; no built-in property bleeds in).
+  Repo themes always ship a base rule per typeKey, so a variant-only/state-only
+  block — which would leave the plain base state empty — does not occur. }
 var
   i: Integer;
   e: TTyStyleRuleEntry;
