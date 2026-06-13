@@ -22,6 +22,11 @@ type
   protected
     function GetDisplayName: string; override;
   public
+    { Copy the streamable state (Caption). The hosting page is created by the
+      destination collection's TabItemAdded, so it is intentionally NOT copied
+      from the source item. Without this override, Collection.Assign raises
+      "Cannot assign a TTyTabItem to a TTyTabItem". }
+    procedure Assign(Source: TPersistent); override;
     property Page: TTyPanel read FPage;
   published
     property Caption: string read FCaption write SetCaption;
@@ -87,6 +92,7 @@ type
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -131,6 +137,14 @@ begin
     Result := FCaption
   else
     Result := inherited GetDisplayName;
+end;
+
+procedure TTyTabItem.Assign(Source: TPersistent);
+begin
+  if Source is TTyTabItem then
+    Caption := TTyTabItem(Source).Caption  // setter -> Update -> TabsChanged sync
+  else
+    inherited Assign(Source);
 end;
 
 { TTyTabCollection }
@@ -420,14 +434,18 @@ begin
 end;
 
 { Create the hosting page for a freshly-added collection item and wire it into
-  the parallel arrays. During csLoading the page is created but selection is
-  deferred to Loaded/streaming so we don't fight the streamer. }
+  the parallel arrays. During csLoading we must NOT create the page: the pages
+  are owned child components and are streamed in their own right as nested
+  `object TTyPanel` blocks, so creating one here would double them. Instead we
+  defer all page wiring (and FCaptions/FTabIndex reconciliation) to Loaded,
+  which pairs the streamed child panels back to the loaded items. }
 procedure TTyTabControl.TabItemAdded(AItem: TTyTabItem);
 var
   Page: TTyPanel;
   IsFirst: Boolean;
 begin
   if AItem.FPage <> nil then Exit; // already wired (defensive)
+  if csLoading in ComponentState then Exit; // page+sync deferred to Loaded
 
   IsFirst := (FCaptions.Count = 0);
   FCaptions.Add(AItem.Caption);
@@ -586,6 +604,80 @@ begin
     if Idx >= 0 then
       RemovePageInternal(Idx, False);
   end;
+end;
+
+{ Reconcile streaming results. TabItemAdded was suppressed during csLoading, so
+  the loaded Tabs collection has captions but no pages, FPages/FCaptions are
+  empty, and the pages exist only as the streamed child TTyPanel controls. Here
+  we pair each loaded item with one streamed page (in child-control order),
+  rebuild the parallel arrays, and re-establish the selection so the displayed
+  captions match the items. Any item without a streamed page (e.g. a hand-authored
+  LFM with captions only) gets a fresh page; any surplus streamed panel that has
+  no item is left untouched (it is still an owned child, but not part of a tab). }
+procedure TTyTabControl.Loaded;
+var
+  StreamedPages: array of TTyPanel;
+  I, PageCursor: Integer;
+  Ctrl: TControl;
+  Page: TTyPanel;
+  Item: TTyTabItem;
+begin
+  inherited Loaded;
+
+  { Collect already-existing child panels (the streamed pages), in control order. }
+  SetLength(StreamedPages, 0);
+  for I := 0 to ControlCount - 1 do
+  begin
+    Ctrl := Controls[I];
+    if Ctrl is TTyPanel then
+    begin
+      SetLength(StreamedPages, Length(StreamedPages) + 1);
+      StreamedPages[High(StreamedPages)] := TTyPanel(Ctrl);
+    end;
+  end;
+
+  { Rebuild the parallel arrays purely from the loaded collection. }
+  FCaptions.Clear;
+  SetLength(FPages, 0);
+  PageCursor := 0;
+  for I := 0 to FTabs.Count - 1 do
+  begin
+    Item := FTabs.Items[I];
+    if Item.FPage <> nil then
+      Page := Item.FPage                 // defensive: already wired
+    else if PageCursor <= High(StreamedPages) then
+    begin
+      Page := StreamedPages[PageCursor]; // reuse a streamed page
+      Inc(PageCursor);
+    end
+    else
+    begin
+      { No streamed page for this item (e.g. captions-only LFM): create one. }
+      Page := TTyPanel.Create(Self);
+      Page.Parent := Self;
+    end;
+
+    Page.Align := alClient;
+    Page.Visible := False;
+    Page.Controller := Self.Controller;
+    Item.FPage := Page;
+
+    FCaptions.Add(Item.Caption);
+    SetLength(FPages, Length(FPages) + 1);
+    FPages[High(FPages)] := Page;
+  end;
+
+  { Re-establish selection. If a TabIndex was streamed it is honored (clamped);
+    otherwise default to the first tab as the in-memory path does. }
+  if Length(FPages) = 0 then
+    FTabIndex := -1
+  else
+  begin
+    if (FTabIndex < 0) or (FTabIndex > High(FPages)) then
+      FTabIndex := 0;
+    ShowOnlyPage(FTabIndex);
+  end;
+  Invalidate;
 end;
 
 procedure TTyTabControl.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

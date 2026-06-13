@@ -15,6 +15,7 @@ uses
   test.groupbox,
   test.tabcontrol,
   test.tabcontrol.collection,
+  test.tabcontrol.streaming,
   test.defaulttheme;
 
 type
