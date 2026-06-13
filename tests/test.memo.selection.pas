@@ -32,6 +32,10 @@ type
     // --- T6 word-navigation probes ---
     function ProbeNextWordBoundary(const ALine: string; AIdx: Integer): Integer;
     function ProbePrevWordBoundary(const ALine: string; AIdx: Integer): Integer;
+    // --- T7 mouse drag-select probes (drive the protected mouse handlers) ---
+    procedure ProbeMouseDown(X, Y: Integer);
+    procedure ProbeMouseMove(X, Y: Integer);
+    procedure ProbeMouseUp(X, Y: Integer);
   end;
 
   { Clipboard probe: routes the virtual clipboard hooks to an in-memory string so
@@ -112,6 +116,11 @@ type
     procedure TestCtrlBackspaceAtCol0Merges;
     procedure TestCtrlDeleteDeletesWord;
     procedure TestWordNavCJK;
+    // --- T7: mouse drag-select (MouseDown anchor + MouseMove/MouseUp) ---
+    procedure TestDragSelectsAcrossColumns;
+    procedure TestDragSelectsAcrossLines;
+    procedure TestMouseUpEndsDrag;
+    procedure TestDisabledMouseMoveIgnored;
   end;
 
 implementation
@@ -213,6 +222,23 @@ end;
 function TTyMemoSelProbe.ProbePrevWordBoundary(const ALine: string; AIdx: Integer): Integer;
 begin
   Result := PrevWordBoundary(ALine, AIdx);
+end;
+
+procedure TTyMemoSelProbe.ProbeMouseDown(X, Y: Integer);
+begin
+  // Left-button press at (X,Y): positions caret + sets anchor + starts dragging.
+  MouseDown(mbLeft, [ssLeft], X, Y);
+end;
+
+procedure TTyMemoSelProbe.ProbeMouseMove(X, Y: Integer);
+begin
+  // Drag with the left button held (Shift carries ssLeft like a real drag).
+  MouseMove([ssLeft], X, Y);
+end;
+
+procedure TTyMemoSelProbe.ProbeMouseUp(X, Y: Integer);
+begin
+  MouseUp(mbLeft, [], X, Y);
 end;
 
 { TTyMemoClipboardProbe }
@@ -1070,6 +1096,114 @@ begin
   AssertEquals('Ctrl+Right past CJK word to col 3', 3, FMemo.ProbeCaretCol);
   // Prev from col 6 (end) -> col 3 (start of 'abc').
   AssertEquals('Prev(6)=3', 3, FMemo.ProbePrevWordBoundary(LINE, 6));
+end;
+
+// --- T7: mouse drag-select (MouseDown anchor + MouseMove/MouseUp) ---
+
+{ TestDragSelectsAcrossColumns
+  ['ABCDEFGH'], MouseDown at the col-2 boundary then MouseMove to the col-6
+  boundary on the same row. The press sets anchor(0,2); the drag moves the caret
+  to (0,6), leaving SelText 'CDEF' with the anchor fixed at col 2. }
+procedure TTyMemoSelectionTest.TestDragSelectsAcrossColumns;
+const
+  LINE = 'ABCDEFGH';
+var
+  X2, X6, LH, midY: Integer;
+  SL, SC, EL, EC: Integer;
+begin
+  SetUpMemo;
+  LoadLines([LINE]);
+  LH := FMemo.ProbeLineHeight(96);
+  midY := LH div 2;
+  X2 := FMemo.ProbeColPixelXAt(LINE, 2, 96);
+  X6 := FMemo.ProbeColPixelXAt(LINE, 6, 96);
+  FMemo.ProbeMouseDown(X2, midY);
+  AssertEquals('press positions caret at col 2', 2, FMemo.ProbeCaretCol);
+  AssertFalse('fresh press collapses selection', FMemo.ProbeHasSelection);
+  FMemo.ProbeMouseMove(X6, midY);
+  AssertTrue('drag yields a selection', FMemo.ProbeHasSelection);
+  AssertEquals('drag SelText CDEF', 'CDEF', FMemo.ProbeSelText);
+  FMemo.ProbeSelStart(SL, SC);
+  FMemo.ProbeSelEnd(EL, EC);
+  AssertEquals('anchor col fixed at 2', 2, SC);
+  AssertEquals('caret col 6', 6, EC);
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 6 (read)', 6, FMemo.ProbeCaretCol);
+end;
+
+{ TestDragSelectsAcrossLines
+  ['AAAA','BBBB','CCCC'], MouseDown row 0 col 1, then MouseMove into row 2's band
+  at col 2. The selection spans SelStart=(0,1)..SelEnd=(2,2). }
+procedure TTyMemoSelectionTest.TestDragSelectsAcrossLines;
+var
+  LH, X1row0, X2row2, y0, y2: Integer;
+  SL, SC, EL, EC: Integer;
+begin
+  SetUpMemo;
+  LoadLines(['AAAA', 'BBBB', 'CCCC']);
+  LH := FMemo.ProbeLineHeight(96);
+  X1row0 := FMemo.ProbeColPixelXAt('AAAA', 1, 96);
+  X2row2 := FMemo.ProbeColPixelXAt('CCCC', 2, 96);
+  y0 := LH div 2;             // mid row 0
+  y2 := 2 * LH + LH div 2;    // mid row 2
+  FMemo.ProbeMouseDown(X1row0, y0);
+  AssertEquals('press caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('press caret col 1', 1, FMemo.ProbeCaretCol);
+  FMemo.ProbeMouseMove(X2row2, y2);
+  AssertTrue('cross-line drag yields a selection', FMemo.ProbeHasSelection);
+  FMemo.ProbeSelStart(SL, SC);
+  FMemo.ProbeSelEnd(EL, EC);
+  AssertEquals('SelStartLine 0', 0, SL);
+  AssertEquals('SelStartCol 1', 1, SC);
+  AssertEquals('SelEndLine 2', 2, EL);
+  AssertEquals('SelEndCol 2', 2, EC);
+end;
+
+{ TestMouseUpEndsDrag
+  After MouseUp, a further MouseMove must NOT change the caret or selection. }
+procedure TTyMemoSelectionTest.TestMouseUpEndsDrag;
+const
+  LINE = 'ABCDEFGH';
+var
+  X2, X4, X6, LH, midY: Integer;
+begin
+  SetUpMemo;
+  LoadLines([LINE]);
+  LH := FMemo.ProbeLineHeight(96);
+  midY := LH div 2;
+  X2 := FMemo.ProbeColPixelXAt(LINE, 2, 96);
+  X4 := FMemo.ProbeColPixelXAt(LINE, 4, 96);
+  X6 := FMemo.ProbeColPixelXAt(LINE, 6, 96);
+  FMemo.ProbeMouseDown(X2, midY);
+  FMemo.ProbeMouseMove(X4, midY);
+  AssertEquals('caret col 4 during drag', 4, FMemo.ProbeCaretCol);
+  FMemo.ProbeMouseUp(X4, midY);
+  // Drag is over: this move must be ignored.
+  FMemo.ProbeMouseMove(X6, midY);
+  AssertEquals('caret col still 4 after MouseUp', 4, FMemo.ProbeCaretCol);
+  AssertEquals('SelText still CD after MouseUp', 'CD', FMemo.ProbeSelText);
+end;
+
+{ TestDisabledMouseMoveIgnored
+  A disabled memo ignores MouseMove: the caret stays where it was set. (MouseDown
+  is also gated on Enabled, so we set the caret directly, disable, then drag.) }
+procedure TTyMemoSelectionTest.TestDisabledMouseMoveIgnored;
+const
+  LINE = 'ABCDEFGH';
+var
+  X6, LH, midY: Integer;
+begin
+  SetUpMemo;
+  LoadLines([LINE]);
+  LH := FMemo.ProbeLineHeight(96);
+  midY := LH div 2;
+  X6 := FMemo.ProbeColPixelXAt(LINE, 6, 96);
+  FMemo.ProbeSetCaret(0, 2);
+  FMemo.Enabled := False;
+  FMemo.ProbeMouseMove(X6, midY);
+  AssertEquals('disabled: caret line unchanged', 0, FMemo.ProbeCaretLine);
+  AssertEquals('disabled: caret col unchanged', 2, FMemo.ProbeCaretCol);
+  AssertFalse('disabled: no selection', FMemo.ProbeHasSelection);
 end;
 
 initialization

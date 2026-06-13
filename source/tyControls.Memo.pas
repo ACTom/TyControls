@@ -25,6 +25,9 @@ type
     // equals the caret. Mirrors TTyEdit.FSelAnchor generalised to (line,col).
     FSelAnchorLine: Integer;
     FSelAnchorCol: Integer;
+    // True while the left button is held for drag-select (set in MouseDown,
+    // cleared in MouseUp). Mirrors TTyEdit.FMouseSelecting.
+    FMouseSelecting: Boolean;
     // Index of the first logical line painted (top of the visible window).
     FTopLine: Integer;
     // Embedded vertical scrollbar, lazily created on first overflow (owned by
@@ -160,6 +163,13 @@ type
     // Exit when not Enabled (v1.5 policy). try/except SetFocus like Edit/ListBox.
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer); override;
+    // Drag-select while the left button is held: re-hit-test (line,col) under the
+    // pointer using the SAME math as MouseDown, moving the caret while leaving the
+    // anchor fixed. Mirrors TTyEdit.MouseMove. Early Exit when not Enabled.
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    // End the drag on left-button release (no Enabled guard, matching TTyEdit).
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer); override;
     // Wheel scrolls +/-3 logical lines via SetTopLine (after the user's handler).
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
@@ -205,6 +215,7 @@ begin
   FDesiredCol := 0;
   FSelAnchorLine := 0;
   FSelAnchorCol := 0;
+  FMouseSelecting := False;
   FTopLine := 0;
   FScrollBar := nil;
   FSyncingScroll := False;
@@ -597,6 +608,12 @@ begin
   // X -> nearest codepoint boundary on the resolved line (per-line ColIndexAtX).
   FCaretCol := ColIndexAtX(S, X, APPI);
   FDesiredCol := FCaretCol;
+  // A fresh left-click sets the anchor onto the caret (collapsing any prior
+  // selection) and begins a drag (mirrors TTyEdit.MouseDown). This is additive:
+  // existing click tests assert only the resolved caret position, unaffected.
+  FSelAnchorLine := FCaretLine;
+  FSelAnchorCol := FCaretCol;
+  FMouseSelecting := True;
   try
     if CanFocus then
       SetFocus;
@@ -604,6 +621,39 @@ begin
     // Ignore focus errors in headless/test environments.
   end;
   Invalidate;
+end;
+
+procedure TTyMemo.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  APPI, LH, Line: Integer;
+  S: string;
+begin
+  if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
+  inherited MouseMove(Shift, X, Y);
+  if not FMouseSelecting then Exit;
+  // Re-hit-test under the pointer using the SAME math as MouseDown; move the
+  // caret only — the anchor stays fixed so the selection extends as we drag.
+  APPI := Font.PixelsPerInch;
+  LH := LineHeight(APPI);
+  Line := FTopLine + (Y div LH);
+  if Line < 0 then Line := 0;
+  if Line > LineCountLogical - 1 then Line := LineCountLogical - 1;
+  if Line < FLines.Count then
+    S := FLines[Line]
+  else
+    S := '';
+  FCaretLine := Line;
+  FCaretCol := ColIndexAtX(S, X, APPI);
+  FDesiredCol := FCaretCol;
+  Invalidate;
+end;
+
+procedure TTyMemo.MouseUp(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  if Button = mbLeft then
+    FMouseSelecting := False;
 end;
 
 function TTyMemo.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
