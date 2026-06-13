@@ -10,10 +10,45 @@ type
   TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
     var AllowClose: Boolean) of object;
 
+  TTyTabControl = class;
+
+  { Streamable backing item for one tab page. Caption is published so it
+    survives LFM streaming; the hosting TTyPanel is exposed read-only as Page. }
+  TTyTabItem = class(TCollectionItem)
+  private
+    FCaption: string;
+    FPage: TTyPanel;
+    procedure SetCaption(const AValue: string);
+  protected
+    function GetDisplayName: string; override;
+  public
+    property Page: TTyPanel read FPage;
+  published
+    property Caption: string read FCaption write SetCaption;
+  end;
+
+  { Owned collection of TTyTabItem. Routes add/delete/update notifications to
+    the owning TTyTabControl so the parallel page/caption arrays stay in sync. }
+  TTyTabCollection = class(TOwnedCollection)
+  private
+    FTabControl: TTyTabControl;
+    function GetItem(AIndex: Integer): TTyTabItem;
+    procedure SetItem(AIndex: Integer; const AValue: TTyTabItem);
+  protected
+    procedure Notify(Item: TCollectionItem; Action: TCollectionNotification); override;
+    procedure Update(Item: TCollectionItem); override;
+  public
+    constructor Create(ATabControl: TTyTabControl);
+    function Add: TTyTabItem;
+    property Items[AIndex: Integer]: TTyTabItem read GetItem write SetItem; default;
+  end;
+
   TTyTabControl = class(TTyCustomControl)
   private
     FCaptions: TStringList;   // parallel arrays
     FPages:    array of TTyPanel;
+    FTabs:     TTyTabCollection;
+    FUpdatingTabs: Boolean;   // guards re-entrant collection<->array sync
     FTabIndex: Integer;       // -1 = none
     FTabHeight: Integer;      // logical px, default 28
     FHoverTab: Integer;       // -1 = none
@@ -24,6 +59,10 @@ type
     FHeaderRects: array of TRect;
     FCloseRects:  array of TRect;
 
+    procedure SetTabs(AValue: TTyTabCollection);
+    procedure TabItemAdded(AItem: TTyTabItem);
+    procedure TabItemDeleting(AItem: TTyTabItem);
+    procedure TabsChanged(AItem: TTyTabItem);
     function  IndexOfPage(APage: TTyPanel): Integer;
     procedure RemovePageInternal(AIndex: Integer; AFree: Boolean);
     procedure SetTabIndex(AValue: Integer);
@@ -63,6 +102,7 @@ type
     property TabIndex: Integer read FTabIndex write SetTabIndex;
     property Pages[AIndex: Integer]: TTyPanel read GetPage;
   published
+    property Tabs: TTyTabCollection read FTabs write SetTabs;
     property TabHeight: Integer read FTabHeight write SetTabHeight default 28;
     property TabsClosable: Boolean read FTabsClosable write SetTabsClosable default False;
     property OnTabClose: TTyTabCloseEvent read FOnTabClose write FOnTabClose;
@@ -76,12 +116,73 @@ type
 
 implementation
 
+{ TTyTabItem }
+
+procedure TTyTabItem.SetCaption(const AValue: string);
+begin
+  if FCaption = AValue then Exit;
+  FCaption := AValue;
+  Changed(False);
+end;
+
+function TTyTabItem.GetDisplayName: string;
+begin
+  if FCaption <> '' then
+    Result := FCaption
+  else
+    Result := inherited GetDisplayName;
+end;
+
+{ TTyTabCollection }
+
+constructor TTyTabCollection.Create(ATabControl: TTyTabControl);
+begin
+  inherited Create(ATabControl, TTyTabItem);
+  FTabControl := ATabControl;
+end;
+
+function TTyTabCollection.GetItem(AIndex: Integer): TTyTabItem;
+begin
+  Result := TTyTabItem(inherited Items[AIndex]);
+end;
+
+procedure TTyTabCollection.SetItem(AIndex: Integer; const AValue: TTyTabItem);
+begin
+  inherited Items[AIndex] := AValue;
+end;
+
+function TTyTabCollection.Add: TTyTabItem;
+begin
+  Result := TTyTabItem(inherited Add);
+end;
+
+procedure TTyTabCollection.Notify(Item: TCollectionItem;
+  Action: TCollectionNotification);
+begin
+  inherited Notify(Item, Action);
+  if FTabControl = nil then Exit;
+  case Action of
+    cnAdded:
+      FTabControl.TabItemAdded(TTyTabItem(Item));
+    cnDeleting, cnExtracting:
+      FTabControl.TabItemDeleting(TTyTabItem(Item));
+  end;
+end;
+
+procedure TTyTabCollection.Update(Item: TCollectionItem);
+begin
+  inherited Update(Item);
+  if FTabControl <> nil then
+    FTabControl.TabsChanged(TTyTabItem(Item));
+end;
+
 { TTyTabControl }
 
 constructor TTyTabControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FCaptions := TStringList.Create;
+  FTabs     := TTyTabCollection.Create(Self);
   FTabIndex  := -1;
   FTabHeight := 28;
   FHoverTab  := -1;
@@ -94,6 +195,8 @@ end;
 destructor TTyTabControl.Destroy;
 begin
   FDestroying := True;
+  { FDestroying is set so the collection's Notify is inert while it tears down. }
+  FTabs.Free;
   FCaptions.Free;
   { Pages are owned components (Owner=Self) so freed by TComponent.Destroy }
   inherited Destroy;
@@ -294,13 +397,40 @@ begin
   Invalidate;
 end;
 
+{ Public convenience: add a tab through the collection (so the page/caption
+  arrays stay in sync) and return its hosting page. The collection's Add fires
+  TabItemAdded which creates the page; setting Caption then syncs FCaptions. }
 function TTyTabControl.AddTab(const ACaption: string): TTyPanel;
+var
+  Item: TTyTabItem;
+begin
+  FUpdatingTabs := True;
+  try
+    Item := FTabs.Add;          // -> TabItemAdded creates page + caption slot
+    Item.Caption := ACaption;   // -> TabsChanged re-syncs FCaptions
+  finally
+    FUpdatingTabs := False;
+  end;
+  Result := Item.Page;
+end;
+
+procedure TTyTabControl.SetTabs(AValue: TTyTabCollection);
+begin
+  FTabs.Assign(AValue);
+end;
+
+{ Create the hosting page for a freshly-added collection item and wire it into
+  the parallel arrays. During csLoading the page is created but selection is
+  deferred to Loaded/streaming so we don't fight the streamer. }
+procedure TTyTabControl.TabItemAdded(AItem: TTyTabItem);
 var
   Page: TTyPanel;
   IsFirst: Boolean;
 begin
+  if AItem.FPage <> nil then Exit; // already wired (defensive)
+
   IsFirst := (FCaptions.Count = 0);
-  FCaptions.Add(ACaption);
+  FCaptions.Add(AItem.Caption);
 
   Page := TTyPanel.Create(Self);
   Page.Parent := Self;
@@ -308,6 +438,7 @@ begin
   Page.Visible := False;
   { Propagate controller so the page renders with the same style as the tab. }
   Page.Controller := Self.Controller;
+  AItem.FPage := Page;
 
   SetLength(FPages, Length(FPages) + 1);
   FPages[High(FPages)] := Page;
@@ -321,8 +452,44 @@ begin
     Page.Visible := True;
     Invalidate;
   end;
+end;
 
-  Result := Page;
+{ A collection item is being deleted/extracted: remove its page (find it via
+  the page object so we are robust to reordering). FUpdatingTabs marks that the
+  removal originates from the collection so RemovePageInternal does not try to
+  delete the item again. }
+procedure TTyTabControl.TabItemDeleting(AItem: TTyTabItem);
+var
+  Idx: Integer;
+  SavedUpdating: Boolean;
+begin
+  if FDestroying then Exit;
+  if AItem.FPage = nil then Exit;
+  Idx := IndexOfPage(AItem.FPage);
+  if Idx < 0 then Exit;
+  AItem.FPage := nil;
+  SavedUpdating := FUpdatingTabs;
+  FUpdatingTabs := True;
+  try
+    RemovePageInternal(Idx, True);
+  finally
+    FUpdatingTabs := SavedUpdating;
+  end;
+end;
+
+{ An item changed (e.g. Caption edited): re-sync the parallel caption array to
+  the current item captions and repaint. }
+procedure TTyTabControl.TabsChanged(AItem: TTyTabItem);
+var
+  I: Integer;
+begin
+  if FDestroying then Exit;
+  if csLoading in ComponentState then Exit;
+  { Captions array length tracks the page array; only sync overlapping slots. }
+  for I := 0 to FTabs.Count - 1 do
+    if I < FCaptions.Count then
+      FCaptions[I] := FTabs.Items[I].Caption;
+  Invalidate;
 end;
 
 function TTyTabControl.IndexOfPage(APage: TTyPanel): Integer;
@@ -337,7 +504,7 @@ end;
 procedure TTyTabControl.RemovePageInternal(AIndex: Integer; AFree: Boolean);
 var
   OldActive, NewActive, Page: TTyPanel;
-  J: Integer;
+  J, ItemIdx: Integer;
 begin
   if (AIndex < 0) or (AIndex >= Length(FPages)) then Exit;
 
@@ -347,6 +514,30 @@ begin
     OldActive := nil;
 
   Page := FPages[AIndex];
+
+  { Keep the backing collection in sync when the removal originated outside it
+    (RemoveTab/close-glyph/external page free). FUpdatingTabs is set when the
+    removal already came from the collection, so we skip to avoid recursion. }
+  if (not FUpdatingTabs) and (FTabs <> nil) and (not FDestroying) then
+  begin
+    ItemIdx := -1;
+    for J := 0 to FTabs.Count - 1 do
+      if FTabs.Items[J].FPage = Page then
+      begin
+        ItemIdx := J;
+        Break;
+      end;
+    if ItemIdx >= 0 then
+    begin
+      FUpdatingTabs := True;
+      try
+        FTabs.Items[ItemIdx].FPage := nil; // make TabItemDeleting a no-op
+        FTabs.Delete(ItemIdx);
+      finally
+        FUpdatingTabs := False;
+      end;
+    end;
+  end;
 
   FCaptions.Delete(AIndex);
   for J := AIndex to High(FPages) - 1 do

@@ -14,6 +14,7 @@ uses
   test.trackbar,
   test.groupbox,
   test.tabcontrol,
+  test.tabcontrol.collection,
   test.defaulttheme;
 
 type
