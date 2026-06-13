@@ -13,6 +13,7 @@ type
     procedure TestDarken;
     procedure TestAlpha;
     procedure TestMix;
+    procedure TestAlphaPercentArg;
   end;
 
   TTestCssValuesEval = class(TTestCase)
@@ -105,6 +106,17 @@ begin
   AssertEquals('red', 128, TyRedOf(c));
   AssertEquals('green', 128, TyGreenOf(c));
   AssertEquals('blue', 128, TyBlueOf(c));
+end;
+
+procedure TTestCssValuesColors.TestAlphaPercentArg;
+var c: TTyColor;
+begin
+  c := TyEvalColor('alpha(#FF0000, 50%)', nil);
+  AssertEquals('alpha 50% -> 128 (allow 127/128)', 128, TyAlphaOf(c));
+  c := TyEvalColor('alpha(#FF0000, 0.5)', nil);
+  AssertEquals('alpha 0.5 -> 128', 128, TyAlphaOf(c));
+  c := TyEvalColor('alpha(#FF0000, 0)', nil);
+  AssertEquals('alpha 0 -> 0', 0, TyAlphaOf(c));
 end;
 
 procedure TTestCssValuesEval.SetUp;

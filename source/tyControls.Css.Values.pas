@@ -197,6 +197,7 @@ var
   E, fn, body: string;
   p: Integer;
   args: TStringList;
+  a: string;
 begin
   E := Trim(Expr);
   if E = '' then
@@ -221,7 +222,13 @@ begin
       if (fn = 'darken') and (args.Count = 2) then
         Exit(TyDarken(TyEvalColor(args[0], Vars), ParsePctOrNum(args[1])));
       if (fn = 'alpha') and (args.Count = 2) then
-        Exit(TyAlpha(TyEvalColor(args[0], Vars), ParsePctOrNum(args[1])));
+      begin
+        a := Trim(args[1]);
+        if (a <> '') and (a[Length(a)] = '%') then
+          Exit(TyAlpha(TyEvalColor(args[0], Vars), ParsePctOrNum(a) / 100.0))
+        else
+          Exit(TyAlpha(TyEvalColor(args[0], Vars), ParsePctOrNum(a)));
+      end;
       if (fn = 'mix') and (args.Count = 3) then
         Exit(TyMix(TyEvalColor(args[0], Vars), TyEvalColor(args[1], Vars), ParsePctOrNum(args[2])));
       raise Exception.CreateFmt('Unknown color function: %s/%d', [fn, args.Count]);

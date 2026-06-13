@@ -3,7 +3,7 @@ unit test.StyleModel;
 interface
 uses
   Classes, SysUtils, fpcunit, testregistry, tyControls.Types, tyControls.StyleModel,
-  tyControls.Css.Values;
+  tyControls.Css.Values, tyControls.Css.Parser;
 type
   TTestStyleMerge = class(TTestCase)
   published
@@ -21,6 +21,8 @@ type
     procedure TestLoadSolidBackgroundResolvesVar;
     procedure TestLoadGradientBackground;
     procedure TestLoadNineSliceBackgroundImage;
+    procedure TestLoadFromCssParseErrorPreservesPrevious;
+    procedure TestDuplicateRuleLastWins;
   end;
 
   TTestStyleResolve = class(TTestCase)
@@ -47,6 +49,7 @@ type
   TTestStylePadding = class(TTestCase)
   published
     procedure TestPaddingWithVar;
+    procedure TestPaddingThreeValues;
   end;
 
 implementation
@@ -139,6 +142,30 @@ begin
   AssertEquals('slice right', 5, s.Background.SliceInsets.Right);
   AssertEquals('slice bottom', 6, s.Background.SliceInsets.Bottom);
   AssertEquals('slice left', 7, s.Background.SliceInsets.Left);
+end;
+
+procedure TTestStyleLoad.TestLoadFromCssParseErrorPreservesPrevious;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyButton { color: #112233; border-width: 9px; }');
+    try m.LoadFromCss('TyButton { @@@ broken'); except on ETyCssError do ; end;
+    s := m.ResolveStyle('TyButton','',[]);
+    AssertEquals('previous color preserved', $11, TyRedOf(s.TextColor));
+    AssertEquals('previous border-width preserved', 9, s.BorderWidth);
+  finally m.Free; end;
+end;
+
+procedure TTestStyleLoad.TestDuplicateRuleLastWins;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyButton { color:#111111; } TyButton { color:#222222; }');
+    s := m.ResolveStyle('TyButton','',[]);
+    AssertEquals('later duplicate wins', $22, TyRedOf(s.TextColor));
+  finally m.Free; end;
 end;
 
 const
@@ -311,6 +338,18 @@ begin
   finally
     model.Free;
   end;
+end;
+
+procedure TTestStylePadding.TestPaddingThreeValues;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T { padding: 1px 2px 3px; }');
+    s := m.ResolveStyle('T','',[]);
+    AssertEquals('top',1,s.Padding.Top); AssertEquals('right',2,s.Padding.Right);
+    AssertEquals('bottom',3,s.Padding.Bottom); AssertEquals('left',2,s.Padding.Left);
+  finally m.Free; end;
 end;
 
 initialization

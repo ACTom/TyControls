@@ -101,6 +101,13 @@ begin
           v[0] := TyEvalLength(parts[1], Vars); // left
           v[2] := v[0];                          // right
         end;
+      3:
+        begin
+          v[1] := TyEvalLength(parts[0], Vars); // top
+          v[0] := TyEvalLength(parts[1], Vars); // left
+          v[2] := v[0];                          // right
+          v[3] := TyEvalLength(parts[2], Vars); // bottom
+        end;
       4:
         begin
           v[1] := TyEvalLength(parts[0], Vars); // top
@@ -371,7 +378,7 @@ var
 begin
   Result := False;
   AStyle := EmptyStyleSet;
-  for i := 0 to ARules.Count - 1 do
+  for i := ARules.Count - 1 downto 0 do
   begin
     e := TTyStyleRuleEntry(ARules[i]);
     if SameText(e.TypeName, ATypeName) and SameText(e.Variant, AVariant)
@@ -406,42 +413,50 @@ end;
 
 procedure TTyStyleModel.LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string);
 var
-  parser: TTyCssParser;
-  sheet: TTyCssStylesheet;
-  ri, si, di: Integer;
-  rule: TTyCssRule;
-  sel: TTyCssSelector;
-  decl: TTyCssDeclaration;
-  st: TTyStyleSet;
+  parser: TTyCssParser; sheet: TTyCssStylesheet;
+  tmpRules: TFPList; tmpVars: TStringList;
+  ri, si, di: Integer; rule: TTyCssRule; sel: TTyCssSelector; decl: TTyCssDeclaration; st: TTyStyleSet;
 begin
-  ClearList(ARules);
-  AVars.Clear;
-  parser := TTyCssParser.Create(ASource);
+  tmpRules := TFPList.Create;
+  tmpVars := TStringList.Create;
   try
-    sheet := parser.Parse;
+    parser := TTyCssParser.Create(ASource);
     try
-      AVars.Assign(sheet.RootVars);
-      for ri := 0 to sheet.Rules.Count - 1 do
-      begin
-        rule := TTyCssRule(sheet.Rules[ri]);
-        st := EmptyStyleSet;
-        for di := 0 to High(rule.Declarations) do
+      sheet := parser.Parse;
+      try
+        tmpVars.Assign(sheet.RootVars);
+        for ri := 0 to sheet.Rules.Count - 1 do
         begin
-          decl := rule.Declarations[di];
-          TyApplyDeclaration(st, decl.Prop, decl.RawValue, AVars);
+          rule := TTyCssRule(sheet.Rules[ri]);
+          st := EmptyStyleSet;
+          for di := 0 to High(rule.Declarations) do
+          begin
+            decl := rule.Declarations[di];
+            TyApplyDeclaration(st, decl.Prop, decl.RawValue, tmpVars);
+          end;
+          for si := 0 to High(rule.Selectors) do
+          begin
+            sel := rule.Selectors[si];
+            AddEntryTo(tmpRules, sel.TypeName, sel.Variant, sel.HasState, sel.State, st);
+          end;
         end;
-        for si := 0 to High(rule.Selectors) do
-        begin
-          sel := rule.Selectors[si];
-          AddEntryTo(ARules, sel.TypeName, sel.Variant, sel.HasState, sel.State, st);
-        end;
+      finally
+        sheet.Free;
       end;
     finally
-      sheet.Free;
+      parser.Free;
     end;
-  finally
-    parser.Free;
+    ClearList(ARules);
+    AVars.Clear;
+    for ri := 0 to tmpRules.Count - 1 do ARules.Add(tmpRules[ri]);
+    tmpRules.Clear;   // ownership of entries transferred to ARules; clear list only (do NOT free entries)
+    AVars.Assign(tmpVars);
+  except
+    ClearList(tmpRules);  // free entries built before the failure
+    tmpRules.Free; tmpVars.Free;
+    raise;
   end;
+  tmpRules.Free; tmpVars.Free;
 end;
 
 procedure TTyStyleModel.LoadFromCss(const ASource: string);
