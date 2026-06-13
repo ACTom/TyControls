@@ -410,11 +410,19 @@ begin
 end;
 
 procedure TTyFormChrome.InstallChrome;
+var
+  LSavedBounds: TRect;
 begin
   FForm := HostForm;
   if FForm = nil then
     Exit;
   FOldBorderStyle := FForm.BorderStyle;
+  { Capture bounds before the border change: setting BorderStyle:=bsNone recreates
+    the window handle and the widgetset re-places the window. On a multi-monitor
+    virtual desktop with negative coordinates the window can land off-screen, so
+    we restore the original bounds after the handle is rebuilt. Use a LOCAL var,
+    not FSavedBounds (that's reserved for maximize/restore). }
+  LSavedBounds := FForm.BoundsRect;
   FForm.BorderStyle := bsNone;
   { After BorderStyle:=bsNone the window handle is recreated.
     Ensure it exists before we access it. }
@@ -426,6 +434,8 @@ begin
   if FForm.HandleAllocated then
     NSView(FForm.Handle).window.setHasShadow(True);
   {$ENDIF}
+  { Restore the position/size lost when the handle was recreated. }
+  FForm.BoundsRect := LSavedBounds;
   { Sample PPI at install time for cross-monitor rescaling }
   if FForm.Monitor <> nil then
     FInstalledPPI := FForm.Monitor.PixelsPerInch

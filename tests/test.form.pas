@@ -76,6 +76,7 @@ type
     procedure TestChangeBoundsHookedOnInstall;
     procedure TestChangeBoundsRestoredOnUninstall;
     procedure TestFormChromeFreeWhileActiveNoDangling;
+    procedure TestFormChromeInstallPreservesBounds;
   end;
 
   TCaptionButtonHoverGlyphTest = class(TTestCase)
@@ -529,6 +530,38 @@ begin
       Assigned(TForm(F).OnChangeBounds));
   finally
     F.Free;
+  end;
+end;
+
+procedure TFormChromeChangeBoundsTest.TestFormChromeInstallPreservesBounds;
+var
+  F: TForm;
+  Chrome: TTyFormChrome;
+  B: TRect;
+begin
+  { InstallChrome sets BorderStyle:=bsNone, which recreates the window handle.
+    The widgetset then re-places the window; on a multi-monitor virtual desktop
+    with negative coordinates (a monitor above/left of the primary) the window
+    can land off-screen (negative Top). The fix captures BoundsRect before the
+    border change and restores it after HandleNeeded.
+
+    NOTE: in this headless test env changing BorderStyle may not actually move
+    the window, so this assertion can pass even before the fix. The fix's real
+    purpose is the multi-monitor (negative virtual coords) case, which cannot be
+    reproduced headlessly. This test is kept as a regression guard that install
+    never DISTURBS the form's bounds. }
+  F := TForm.CreateNew(nil);
+  try
+    F.SetBounds(120, 80, 400, 300);
+    B := F.BoundsRect;
+    Chrome := TTyFormChrome.Create(F);
+    Chrome.Active := True;     { InstallChrome changes BorderStyle -> must restore bounds }
+    AssertEquals('Left preserved', B.Left, F.BoundsRect.Left);
+    AssertEquals('Top preserved',  B.Top,  F.BoundsRect.Top);
+    AssertEquals('Width preserved', B.Right - B.Left, F.BoundsRect.Right - F.BoundsRect.Left);
+    AssertEquals('Height preserved', B.Bottom - B.Top, F.BoundsRect.Bottom - F.BoundsRect.Top);
+  finally
+    F.Free;  { chrome owned by F, freed with it; its destructor uninstalls }
   end;
 end;
 
