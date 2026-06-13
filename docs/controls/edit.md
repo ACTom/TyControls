@@ -87,8 +87,9 @@ TTyEdit 继承自 `TTyCustomControl`（`tyControls.Base`），与其他 TyContro
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
 | `OnClick` | `TNotifyEvent` | 鼠标点击控件时 |
+| `OnChange` | `TNotifyEvent` | **（v1.12 新增）** 文本内容因键盘编辑、剪贴板操作或撤销/重做发生变化时触发；通过 `Text :=` 直接赋值（`SetText`）**不**触发。 |
 
-> **注意：** 当前版本没有 `OnChange` 事件。文本通过按键实时变化，但没有回调通知。若需要监听内容变化，可继承 `TTyEdit` 并重写 `UTF8KeyPress` / `KeyDown`，或在用户完成输入后主动读取 `Text` 属性。
+> **OnChange（v1.12 新增）：** 自 v1.12 起 TTyEdit 提供 published 的 `OnChange` 事件（早前版本没有）。它在文本因按键编辑、剪贴板或撤销/重做变化时触发；纯光标移动以及 `Text :=` 赋值不触发。详见上方「撤销 / 重做」节末的「`OnChange` 事件」小节。
 
 ### 键盘表
 
@@ -104,6 +105,8 @@ TTyEdit 继承自 `TTyCustomControl`（`tyControls.Base`），与其他 TyContro
 | `C` | — | — | 复制选区到剪贴板（Ctrl/Cmd+C） | — | 复制选区到剪贴板 |
 | `X` | — | — | 剪切选区到剪贴板（Ctrl/Cmd+X） | — | 剪切选区到剪贴板 |
 | `V` | — | — | 粘贴（剥离换行后插入，Ctrl/Cmd+V） | — | 粘贴（剥离换行后插入） |
+| `Z` | — | — | **撤销**（Undo，Ctrl/Cmd+Z，无 Shift） | **重做**（Redo，Ctrl/Cmd+Shift+Z） | **撤销**（Undo） |
+| `Y` | — | — | **重做**（Redo，Ctrl/Cmd+Y） | — | **重做**（Redo） |
 | 其他可打印字符 | 插入字符（经 `UTF8KeyPress`） | — | — | — | — |
 
 > **修饰键+方向键说明：** 自 v1.8 起，`Ctrl`（Windows/Linux）或 `Alt`（macOS Option，`ssAlt`）与左/右方向键组合实现**词级导航**（详见下方「词级导航」小节）；带 Shift 时为词级扩展选区。`Cmd`（macOS Command，`ssMeta`，无 Shift）+方向键事件**不被消费**（`Key` 不置 0），透传给父窗口/系统，留作整行移动/系统快捷键。`Home`/`End` 在带 `Ctrl/Alt/Meta`（无 Shift）时同样透传不拦截。
@@ -172,6 +175,39 @@ foo bar baz
 多字节示例 `café bàr`（8 个码点）：光标在 0 按 `Ctrl/Alt+→` 落在码点索引 5（跳过 `café` 的 4 个码点再跳过空格）；末尾按 `Ctrl/Alt+Backspace` → `'café '`（光标 5）。
 
 CJK 示例 `你好 世界`（5 个码点，每个汉字 1 码点）：光标在 0 按 `Ctrl/Alt+→` 落在码点索引 3（落在 `世` 起点）。
+
+---
+
+## 撤销 / 重做（Undo / Redo，v1.12）
+
+自 v1.12 起，TTyEdit 内置基于**快照**（snapshot）的撤销/重做历史。
+
+### 模型
+
+- **快照式历史：** 每次会改变可编辑状态的操作（mutation）**之前**，控件先把完整的可编辑状态——光标位置、选区锚点与文本——序列化为一个不透明字符串快照压入撤销栈。撤销即恢复上一个快照（并把当前状态移入重做栈），重做则重新应用。序列化由 protected 的 `CaptureState: string` / `RestoreState(const S: string)` 完成，复用同一个可单元测试的 `TTyUndoStack`（`tyControls.UndoStack`）。
+- **有界栈：** 撤销/重做栈各自上限约 **200** 步（`TTyUndoStack.FCap = 200`）；超出后丢弃最旧的条目。
+- **输入合并（typing coalescing）：** 连续的**单字符插入**合并为**一个**撤销步——连打一串字符后一次撤销即可全部回退。任何**非输入**类操作会开启一个全新步：删除 / 退格 / 词级删除 / 粘贴 / 剪切 / 通过 `Text :=` 赋值。此外，任何**光标导航或选区变化**（方向键、Home/End、点击/拖选、词级移动等）都会**打断**当前的合并串，使下一次输入从新的步开始。
+- **新编辑清空重做栈：** 撤销之后若再产生任何新编辑，重做栈立即被清空（标准编辑器语义）。
+- **复合操作单步可逆：** 粘贴 / 剪切等内部包含「先删选区再插入」的复合操作，在操作开始处只捕获**一个**撤销步（内部子操作被 `FSuspendUndo` 抑制），因此一次撤销即整体回退。
+
+### 键位
+
+| 操作 | 键位 |
+|------|------|
+| 撤销（Undo） | `Ctrl+Z`（Windows/Linux）或 `Cmd+Z`（macOS，`ssMeta`），**不带** Shift |
+| 重做（Redo） | `Ctrl+Y` / `Cmd+Y`，**或** `Ctrl/Cmd+Shift+Z` |
+
+重做分支先于撤销分支判定，确保 `Ctrl/Cmd+Shift+Z` 不会被普通 `Ctrl/Cmd+Z` 误吞。两者均会消费按键（`Key := 0`）。
+
+### 行为说明
+
+- **受 `Enabled` 守卫：** 与所有其他键盘输入一致，`Enabled = False` 时撤销/重做快捷键不生效；`Undo` / `Redo` 方法本身在禁用时也是空操作。
+- **触发 `OnChange`：** 撤销/重做会改变文本状态，因此 `RestoreState` 末尾调用 `DoChange`，**触发 `OnChange`**（见下方「`OnChange` 事件」）。
+- **公开 API：** `procedure Undo; procedure Redo; function CanUndo: Boolean; function CanRedo: Boolean;`。
+
+### `OnChange` 事件（v1.12 新增）
+
+> **v1.12 新增：** 早前版本的 TTyEdit **没有** `OnChange`（见旧版「注意事项」）。自 v1.12 起新增 published 事件 `OnChange: TNotifyEvent`，在文本内容因键盘编辑、剪贴板操作、撤销/重做等发生变化时触发。**注意：** 通过 `Text :=` 直接赋值（`SetText`）**不**触发 `OnChange`（仅更新字段、记一个撤销步并重绘），与历史行为保持一致；若需在赋值后得到通知请自行调用。
 
 ---
 
@@ -245,7 +281,7 @@ end;
 ## 7. 注意事项
 
 - **UTF-8 安全操作：** 退格、删除、光标移动、选区均按 UTF-8 码点（字符）操作，不会截断多字节序列。内部使用 `LazUTF8` 函数库。
-- **无 OnChange 事件：** 当前实现不提供 `OnChange`，如需监听输入变化，参考上方事件节的替代方案。
+- **OnChange 事件（v1.12 新增）：** 自 v1.12 起提供 published `OnChange`，文本因键盘编辑/剪贴板/撤销/重做变化时触发；`Text :=` 赋值不触发。详见「撤销 / 重做」节。
 - **鼠标操作：** 单击定位光标（`CaretIndexAtX` 计算最近码点边界）；左键按住拖动扩展选区；双击全选（`SelectAll`）。
 - **选区底色：** 选区使用 `:focus` 规则的 `border-color` 加 35% alpha（约 `$59` alpha byte），在浅色主题下表现为半透明蓝色带。
 - **粘贴剥离换行：** `PasteFromClipboard` 会过滤掉剪贴板文本中所有的 CR（`#13`）和 LF（`#10`）字符，因为这是单行控件。

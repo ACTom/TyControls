@@ -71,6 +71,8 @@ TTyMemo 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制
 | `Ctrl/Alt+←` / `Ctrl/Alt+→` | **按词移动**光标（行内复用 `TTyEdit` 的 `IsWordCodepoint`/`NextWordBoundary`/`PrevWordBoundary`）；位于行首/行尾时跨到上一行末尾 / 下一行行首；配合 `Shift` 则按词扩展选区 |
 | `Ctrl/Alt+Backspace` | 删除**前一个词**（行内）；位于行首（列 0）时退化为跨行合并到上一行末尾；触发 `OnChange` |
 | `Ctrl/Alt+Delete` | 删除**后一个词**（行内）；位于行尾时退化为把下一行上提合并；触发 `OnChange` |
+| `Ctrl/Cmd+Z`（无 Shift） | **撤销**（Undo）：恢复上一个快照；触发 `OnChange`（v1.12，见 §11） |
+| `Ctrl/Cmd+Y` 或 `Ctrl/Cmd+Shift+Z` | **重做**（Redo）：重新应用被撤销的快照；触发 `OnChange`（v1.12，见 §11） |
 | 鼠标按下 / 拖拽 | 在指针下的 `(行, 列)` 落下光标并置选区锚点；按住左键拖拽时 `MouseMove` 把选区扩展到指针下的 `(行, 列)`，松开结束 |
 | 鼠标滚轮 | 上滚 `TopLine -= 3`、下滚 `TopLine += 3`（先调用 `inherited`，即用户的 `OnMouseWheel`，若已消费则不再滚动） |
 
@@ -167,7 +169,38 @@ end;
 |------|------|
 | **无自动换行（no word-wrap）** | 渲染时 `WordBreak = False`：一条逻辑行始终绘制为一行，不会按控件宽度回绕到下一行。逻辑行与可见行严格一一对应。 |
 | **无水平滚动 / 长行被裁剪（no horizontal scroll, long lines clipped）** | 没有水平滚动条，也没有水平自动滚动。超出内容区宽度的长行在右缘被画布**直接裁剪**；当光标移动到可见区右侧之外时也不会水平滚动跟随（光标可能被画到内容区外而不可见）。仅垂直方向有滚动条/滚轮。 |
-| **无撤销 / 重做（no undo/redo）** | 没有编辑历史栈，`Ctrl/Cmd+Z` / `Ctrl/Cmd+Y` 无效。每次编辑都是不可撤销的就地修改。 |
 | **无光标闪烁（no caret blink）** | 光标是一根**静态** 1px 竖条，仅在控件获得焦点且光标行可见时绘制；没有 `TTimer` 驱动的闪烁动画，光标不会周期性隐现。 |
 
-> **v1.11 已交付：** 文本选区、区间剪贴板（`Ctrl/Cmd+A/C/X/V`）、以及按词 / `Shift` 扩展导航均已落地（见 §5），不再是缺口。以上剩余条目均为可在后续 Tier-2 增强层补齐的项；当前不实现它们是经过权衡的范围决策，而非缺陷。`TTyEdit` 的相关说明亦记录于 [docs/KNOWN_GAPS.md](../KNOWN_GAPS.md)。
+> **v1.11 已交付：** 文本选区、区间剪贴板（`Ctrl/Cmd+A/C/X/V`）、以及按词 / `Shift` 扩展导航均已落地（见 §5），不再是缺口。
+> **v1.12 已交付：** 基于快照的**撤销 / 重做**（`Ctrl/Cmd+Z`、`Ctrl/Cmd+Y` / `Ctrl/Cmd+Shift+Z`）已落地（见 §11），不再是缺口。
+> 以上剩余条目均为可在后续 Tier-2 增强层补齐的项；当前不实现它们是经过权衡的范围决策，而非缺陷。`TTyEdit` 的相关说明亦记录于 [docs/KNOWN_GAPS.md](../KNOWN_GAPS.md)。
+
+---
+
+## 11. 撤销 / 重做（Undo / Redo，v1.12）
+
+自 v1.12 起，`TTyMemo` 内置基于**快照**（snapshot）的撤销/重做历史，模型与 `TTyEdit` 同源，但快照覆盖**多行**状态。
+
+### 模型
+
+- **快照式历史：** 每次会改变可编辑状态的操作之前，控件先把完整可编辑状态序列化为一个不透明字符串快照压入撤销栈。对 Memo，快照包含二维光标 `(CaretLine, CaretCol)`、二维选区锚点 `(AnchorLine, AnchorCol)`、以及全部逻辑行内容（连同行数）。撤销恢复上一个快照（并把当前状态移入重做栈），重做重新应用。序列化由 protected 的 `CaptureState: string` / `RestoreState(const S: string)` 完成，复用同一个可单元测试的 `TTyUndoStack`（`tyControls.UndoStack`）。
+- **多行 / 尾随空行保真：** 快照头部显式记录**行数**（`FLines.Count`），正文按 `#10` 拼接所有行；`RestoreState` 按行数逐行重建 `FLines`，**不**依赖 `TStrings.Text`（后者会丢弃尾随空行）。因此一个以空逻辑行结尾的文档——例如末尾按了一次回车——经撤销/重做后能**逐字精确还原**，包括尾随的空行数量。
+- **有界栈：** 撤销/重做栈各自上限约 **200** 步（`TTyUndoStack.FCap = 200`）；超出后丢弃最旧的条目。
+- **输入合并（typing coalescing）：** 连续的**单字符插入**合并为**一个**撤销步。任何**非输入**类操作开启全新步：删除 / 退格 / 回车（`Enter`，拆行）/ 词级删除 / 粘贴 / 剪切 / 通过 `Lines :=`（`SetLines`）赋值。此外，任何**光标导航或选区变化**（方向键、Home/End、点击/拖选、词级移动等）都会**打断**当前的合并串。
+- **新编辑清空重做栈：** 撤销之后若再产生任何新编辑，重做栈立即被清空。
+- **复合操作单步可逆：** 回车拆行、粘贴（多行拆分并入）、剪切等内部含「先删选区再插入/合并」的复合操作，在操作开始处只捕获**一个**撤销步（内部子操作被 `FSuspendUndo` 抑制），因此一次撤销即整体回退。
+
+### 键位
+
+| 操作 | 键位 |
+|------|------|
+| 撤销（Undo） | `Ctrl+Z`（Windows/Linux）或 `Cmd+Z`（macOS，`ssMeta`），**不带** Shift |
+| 重做（Redo） | `Ctrl+Y` / `Cmd+Y`，**或** `Ctrl/Cmd+Shift+Z` |
+
+重做分支先于撤销分支判定，确保 `Ctrl/Cmd+Shift+Z` 不会被普通 `Ctrl/Cmd+Z` 误吞。两者均会消费按键（`Key := 0`）。
+
+### 行为说明
+
+- **受 `Enabled` 守卫：** `Enabled = False` 时撤销/重做快捷键不生效；`Undo` / `Redo` 方法本身在禁用时也是空操作。
+- **触发 `OnChange`：** `RestoreState` 末尾经由 `AfterEdit` 统一处理（夹紧光标、保持可见、刷新滚动条、重绘）并**触发 `OnChange`**——撤销/重做被视为一次状态变化，与正常编辑一致。
+- **公开 API：** `procedure Undo; procedure Redo; function CanUndo: Boolean; function CanRedo: Boolean;`。

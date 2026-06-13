@@ -50,17 +50,21 @@ Tier-2 native enhancement layer.
   same virtual `ReadClipboardText`/`WriteClipboardText` hooks as `TTyEdit`), and
   **word navigation** (`Ctrl/Alt+Left/Right` move by word, crossing line
   boundaries; `Ctrl/Alt+Backspace/Delete` delete the adjacent word and fall back to
-  the cross-line merge at a line edge). The following remain intentionally
+  the cross-line merge at a line edge). As of **v1.12** both text controls also
+  ship snapshot-based **undo/redo** (`Ctrl/Cmd+Z` undo; `Ctrl/Cmd+Y` or
+  `Ctrl/Cmd+Shift+Z` redo) with a bounded (~200-step) history and typing
+  coalescing — `TTyEdit` additionally gained an `OnChange` event, which (like
+  `TTyMemo.OnChange`) fires on undo/redo. The following remain intentionally
   **deferred** to a future Tier-2 layer:
   - **No word-wrap**: lines render with `WordBreak=False`; one logical line is
     always one visual row, never reflowed to the control width.
   - **No horizontal scroll / long lines clipped**: no horizontal scrollbar or
     auto-scroll; lines wider than the content area are clipped at the right
     edge and the caret can move off-screen horizontally without following.
-  - **No undo/redo**: no edit-history stack; `Ctrl/Cmd+Z` / `Y` are inert.
   - **No caret blink**: the caret is a static 1px bar drawn only when focused
     and the caret line is visible; there is no `TTimer`-driven blink.
-  See [controls/memo.md](controls/memo.md) §10 for the per-control writeup.
+  See [controls/memo.md](controls/memo.md) §10 (gaps) and §11 (undo/redo) for
+  the per-control writeup.
 
 ## Design-time rendering
 
