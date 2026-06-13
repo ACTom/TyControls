@@ -12,6 +12,7 @@ type
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure SimulateKeyDown(var Key: Word);
+    procedure SimulateMouseDown(X, Y: Integer);
   end;
 
   TChangeCounter = class
@@ -46,6 +47,7 @@ type
     procedure TestVKLeftClampsAtMin;
     procedure TestVKRightClampsAtMax;
     procedure TestDragRoundTrip;
+    procedure TestDisabledMouseIgnored;
   end;
 
   TTyTrackBarPixelTest = class(TTestCase)
@@ -73,6 +75,11 @@ var
 begin
   Shift := [];
   KeyDown(Key, Shift);
+end;
+
+procedure TTyTrackBarProbe.SimulateMouseDown(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
 end;
 
 { TTyTrackBarGeometryTest }
@@ -332,6 +339,27 @@ begin
       [Mismatches, FirstBad]), 0, Mismatches);
   finally
     Form.Free;
+  end;
+end;
+
+procedure TTyTrackBarControlTest.TestDisabledMouseIgnored;
+var
+  Bar: TTyTrackBarProbe;
+begin
+  Bar := TTyTrackBarProbe.Create(FForm);
+  Bar.Parent := FForm;
+  Bar.SetBounds(0, 30, 200, 24);
+  Bar.Font.PixelsPerInch := 96;
+  Bar.Min := 0;
+  Bar.Max := 100;
+  Bar.Position := 0;
+  try
+    Bar.Enabled := False;
+    // MouseDown at far right would normally drag thumb to Max
+    Bar.SimulateMouseDown(200, 12);
+    AssertEquals('disabled trackbar mouse ignored', 0, Bar.Position);
+  finally
+    Bar.Free;
   end;
 end;
 

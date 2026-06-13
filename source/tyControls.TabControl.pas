@@ -473,6 +473,7 @@ procedure TTyTabControl.MouseDown(Button: TMouseButton; Shift: TShiftState;
 var
   PPI, TabH, I: Integer;
 begin
+  if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -543,6 +544,7 @@ procedure TTyTabControl.KeyDown(var Key: Word; Shift: TShiftState);
 var
   NewIndex: Integer;
 begin
+  if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
   if FCaptions.Count = 0 then Exit;
   case Key of

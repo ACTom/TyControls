@@ -71,12 +71,14 @@ end;
 
 procedure TTyToggleSwitch.Click;
 begin
+  if not Enabled then Exit;
   Toggle;
   inherited Click;
 end;
 
 procedure TTyToggleSwitch.KeyDown(var Key: Word; Shift: TShiftState);
 begin
+  if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
   if Key = VK_SPACE then
   begin

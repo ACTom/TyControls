@@ -141,6 +141,7 @@ end;
 
 procedure TTyTrackBar.KeyDown(var Key: Word; Shift: TShiftState);
 begin
+  if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
   case Key of
     VK_LEFT:
@@ -158,6 +159,7 @@ end;
 
 procedure TTyTrackBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
+  if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -172,6 +174,7 @@ var
   HoverRect: TRect;
   WasHover: Boolean;
 begin
+  if not Enabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragging then
   begin

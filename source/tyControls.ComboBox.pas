@@ -215,6 +215,7 @@ end;
 
 procedure TTyComboBox.Click;
 begin
+  if not Enabled then Exit;
   inherited Click;
   { If dropped down, close. Otherwise open — but guard the reopen race:
     clicking the combo while it is open fires PopupDeactivate→CloseUp BEFORE
@@ -228,6 +229,7 @@ end;
 
 procedure TTyComboBox.KeyDown(var Key: Word; Shift: TShiftState);
 begin
+  if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
   if (Key = VK_ESCAPE) and DroppedDown then
   begin

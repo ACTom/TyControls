@@ -75,6 +75,7 @@ end;
 
 procedure TTyCheckBox.Click;
 begin
+  if not Enabled then Exit;
   SetChecked(not FChecked);
   inherited Click;
 end;
@@ -168,6 +169,7 @@ end;
 
 procedure TTyRadioButton.Click;
 begin
+  if not Enabled then Exit;
   SetChecked(True);
   inherited Click;
 end;

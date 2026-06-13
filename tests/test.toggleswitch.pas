@@ -38,6 +38,7 @@ type
     procedure TestSpaceKeyToggle;
     procedure TestCurrentStatesContainsActiveWhenChecked;
     procedure TestCurrentStatesNoActiveWhenUnchecked;
+    procedure TestDisabledIgnoresToggle;
   end;
 
   TTyToggleSwitchPixelTest = class(TTestCase)
@@ -180,6 +181,29 @@ begin
       tysActive in Probe.ExposedCurrentStates);
   finally
     Probe.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchTest.TestDisabledIgnoresToggle;
+var
+  Sw: TTyToggleSwitchProbe;
+  Key: Word;
+begin
+  Sw := TTyToggleSwitchProbe.Create(FForm);
+  Sw.Parent := FForm;
+  Sw.SetBounds(120, 0, 44, 24);
+  try
+    Sw.Enabled := False;
+    Sw.Checked := False;
+    // Space key must NOT toggle when disabled
+    Key := VK_SPACE;
+    Sw.SimulateKeyDown(Key);
+    AssertFalse('disabled space-key toggle ignored', Sw.Checked);
+    // Click must NOT toggle when disabled
+    Sw.Click;
+    AssertFalse('disabled click toggle ignored', Sw.Checked);
+  finally
+    Sw.Free;
   end;
 end;
 

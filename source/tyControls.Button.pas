@@ -26,6 +26,7 @@ implementation
 
 procedure TTyButton.Click;
 begin
+  if not Enabled then Exit;
   inherited Click;
 end;
 

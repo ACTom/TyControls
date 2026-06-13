@@ -497,6 +497,7 @@ end;
 
 procedure TTyEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
+  if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -526,6 +527,7 @@ end;
 
 procedure TTyEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
+  if not Enabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FMouseSelecting then
   begin
@@ -615,6 +617,7 @@ end;
 
 procedure TTyEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
+  if not Enabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
   InjectKey(UTF8Key);
 end;
@@ -625,6 +628,7 @@ var
   Extending: Boolean;
   HasModifier: Boolean;
 begin
+  if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
   Len := UTF8Length(FText);
 

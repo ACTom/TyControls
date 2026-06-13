@@ -17,6 +17,7 @@ type
     procedure TestClickTogglesChecked;
     procedure TestPaintSmoke;
     procedure TestDrawFrameOpacityApplied;
+    procedure TestDisabledClickIgnored;
   end;
 implementation
 
@@ -136,6 +137,29 @@ begin
     Bmp.Free;
     Form.Free;
     Ctl.Free;
+  end;
+end;
+
+procedure TCheckBoxTest.TestDisabledClickIgnored;
+var
+  C: TTyCheckBox;
+  R: TTyRadioButton;
+begin
+  C := TTyCheckBox.Create(nil);
+  try
+    C.Enabled := False;
+    C.Click;
+    AssertFalse('disabled checkbox click ignored', C.Checked);
+  finally
+    C.Free;
+  end;
+  R := TTyRadioButton.Create(nil);
+  try
+    R.Enabled := False;
+    R.Click;
+    AssertFalse('disabled radiobutton click ignored', R.Checked);
+  finally
+    R.Free;
   end;
 end;
 

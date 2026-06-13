@@ -28,6 +28,7 @@ type
     procedure TestScrollBarAppearsWhenOverflow;
     procedure TestScrollBarSyncsTopIndex;
     procedure TestItemsShrinkClampsTopIndex;
+    procedure TestDisabledKeyIgnored;
   end;
 
   { A2 regression: embedded scrollbar must inherit controller and DPI width }
@@ -452,6 +453,20 @@ begin
   finally
     F.Free;
   end;
+end;
+
+procedure TTyListBoxTest.TestDisabledKeyIgnored;
+var
+  I: Integer;
+begin
+  for I := 0 to 4 do
+    FList.Items.Add(IntToStr(I));
+  FList.SelectItem(0);
+  AssertEquals('ItemIndex 0 before disable', 0, FList.ItemIndex);
+  FList.Enabled := False;
+  // VK_DOWN would normally move ItemIndex to 1
+  FList.SimulateKeyDown(VK_DOWN);
+  AssertEquals('disabled listbox arrow key ignored', 0, FList.ItemIndex);
 end;
 
 { TTyListBoxScrollBarPropTest }

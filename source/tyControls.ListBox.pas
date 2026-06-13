@@ -253,6 +253,7 @@ procedure TTyListBox.KeyDown(var Key: Word; Shift: TShiftState);
 var
   Count, NewIndex: Integer;
 begin
+  if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
   Count := FItems.Count;
   if Count = 0 then Exit;
@@ -296,6 +297,7 @@ var
   Row: Integer;
   SH: Integer;
 begin
+  if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -343,6 +345,7 @@ function TTyListBox.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   Delta: Integer;
 begin
+  if not Enabled then Exit(False);
   // Let the user's OnMouseWheel handler run first; if it consumes the event, stop.
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
   begin
