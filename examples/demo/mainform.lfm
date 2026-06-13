@@ -1,10 +1,10 @@
 object DemoMainForm: TDemoMainForm
   Left = 200
-  Height = 480
+  Height = 560
   Top = 120
   Width = 640
   Caption = 'TyControls Demo'
-  ClientHeight = 480
+  ClientHeight = 560
   ClientWidth = 640
   LCLVersion = '4.99.0.0'
   OnCreate = FormCreate
@@ -13,6 +13,7 @@ object DemoMainForm: TDemoMainForm
     Height = 30
     Top = 16
     Width = 90
+    Controller = Controller
     Caption = 'Light'
     OnClick = BtnLightClick
   end
@@ -21,6 +22,7 @@ object DemoMainForm: TDemoMainForm
     Height = 30
     Top = 16
     Width = 90
+    Controller = Controller
     Caption = 'Dark'
     OnClick = BtnDarkClick
   end
@@ -29,6 +31,7 @@ object DemoMainForm: TDemoMainForm
     Height = 30
     Top = 16
     Width = 110
+    Controller = Controller
     Caption = 'Showcase'
     OnClick = BtnShowcaseClick
   end
@@ -82,7 +85,7 @@ object DemoMainForm: TDemoMainForm
     Caption = 'Option One'
   end
   object PanelBox: TTyPanel
-    Left = 240
+    Left = 256
     Height = 160
     Top = 60
     Width = 200
@@ -97,10 +100,64 @@ object DemoMainForm: TDemoMainForm
     ItemIndex = -1
   end
   object ScrollV: TTyScrollBar
-    Left = 460
+    Left = 476
     Height = 160
     Top = 60
     Width = 18
+    Controller = Controller
+  end
+  object GroupBox1: TTyGroupBox
+    Left = 460
+    Height = 110
+    Top = 240
+    Width = 160
+    Controller = Controller
+    Caption = 'Options'
+  end
+  object ListBox1: TTyListBox
+    Left = 16
+    Height = 110
+    Top = 270
+    Width = 200
+    Controller = Controller
+    Items.Strings = (
+      'Alpha'
+      'Beta'
+      'Gamma'
+      'Delta'
+    )
+    ItemIndex = 0
+  end
+  object Progress1: TTyProgressBar
+    Left = 240
+    Height = 22
+    Top = 240
+    Width = 200
+    Controller = Controller
+    Position = 60
+  end
+  object TrackBar1: TTyTrackBar
+    Left = 240
+    Height = 30
+    Top = 278
+    Width = 200
+    Controller = Controller
+    Position = 60
+    OnChange = TrackBar1Change
+  end
+  object Toggle1: TTyToggleSwitch
+    Left = 240
+    Height = 28
+    Top = 324
+    Width = 56
+    Controller = Controller
+    Checked = True
+  end
+  object TabCtrl1: TTyTabControl
+    Left = 16
+    Height = 130
+    Top = 400
+    Width = 604
     Controller = Controller
   end
   object Controller: TTyStyleController

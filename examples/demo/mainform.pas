@@ -24,18 +24,18 @@ type
     PanelBox: TTyPanel;
     ComboKind: TTyComboBox;
     ScrollV: TTyScrollBar;
+    GroupBox1: TTyGroupBox;
+    ListBox1: TTyListBox;
+    Progress1: TTyProgressBar;
+    TrackBar1: TTyTrackBar;
+    Toggle1: TTyToggleSwitch;
+    TabCtrl1: TTyTabControl;
     procedure FormCreate(Sender: TObject);
     procedure BtnLightClick(Sender: TObject);
     procedure BtnDarkClick(Sender: TObject);
     procedure BtnShowcaseClick(Sender: TObject);
-  private
-    ListBox1: TTyListBox;
-    Progress1: TTyProgressBar;
-    Toggle1: TTyToggleSwitch;
-    TrackBar1: TTyTrackBar;
-    GroupBox1: TTyGroupBox;
-    TabCtrl1: TTyTabControl;
     procedure TrackBar1Change(Sender: TObject);
+  private
     function ThemeDir: string;
     procedure ApplyTheme(const AFile: string);
   end;
@@ -80,72 +80,9 @@ procedure TDemoMainForm.FormCreate(Sender: TObject);
 begin
   ApplyTheme('light.tycss');
 
-  { -- v1.1 gallery controls, created entirely in code -- }
-
-  { TTyGroupBox: hosts the existing radio and a new label; sits right column }
-  GroupBox1 := TTyGroupBox.Create(Self);
-  GroupBox1.Parent := Self;
-  GroupBox1.Caption := 'Options';
-  GroupBox1.Left   := 460;
-  GroupBox1.Top    := 240;
-  GroupBox1.Width  := 160;
-  GroupBox1.Height := 110;
-  GroupBox1.Controller := Controller;
-
-  { TTyListBox: a few items, left column below ComboBox }
-  ListBox1 := TTyListBox.Create(Self);
-  ListBox1.Parent := Self;
-  ListBox1.Left   := 16;
-  ListBox1.Top    := 270;
-  ListBox1.Width  := 200;
-  ListBox1.Height := 110;
-  ListBox1.Controller := Controller;
-  ListBox1.Items.Add('Alpha');
-  ListBox1.Items.Add('Beta');
-  ListBox1.Items.Add('Gamma');
-  ListBox1.Items.Add('Delta');
-  ListBox1.ItemIndex := 0;
-
-  { TTyProgressBar: horizontal, middle column }
-  Progress1 := TTyProgressBar.Create(Self);
-  Progress1.Parent := Self;
-  Progress1.Left     := 240;
-  Progress1.Top      := 240;
-  Progress1.Width    := 200;
-  Progress1.Height   := 22;
-  Progress1.Position := 60;
-  Progress1.Controller := Controller;
-
-  { TTyTrackBar: below the progress bar; OnChange drives the progress bar }
-  TrackBar1 := TTyTrackBar.Create(Self);
-  TrackBar1.Parent := Self;
-  TrackBar1.Left     := 240;
-  TrackBar1.Top      := 278;
-  TrackBar1.Width    := 200;
-  TrackBar1.Height   := 30;
-  TrackBar1.Position := 60;
-  TrackBar1.OnChange := @TrackBar1Change;
-  TrackBar1.Controller := Controller;
-
-  { TTyToggleSwitch: below trackbar }
-  Toggle1 := TTyToggleSwitch.Create(Self);
-  Toggle1.Parent := Self;
-  Toggle1.Left    := 240;
-  Toggle1.Top     := 324;
-  Toggle1.Width   := 56;
-  Toggle1.Height  := 28;
-  Toggle1.Checked := True;
-  Toggle1.Controller := Controller;
-
-  { TTyTabControl: v1.2 gallery — 2 tabs with children on the first page }
-  TabCtrl1 := TTyTabControl.Create(Self);
-  TabCtrl1.Parent := Self;
-  TabCtrl1.Left   := 16;
-  TabCtrl1.Top    := 400;
-  TabCtrl1.Width  := 604;
-  TabCtrl1.Height := 130;
-  TabCtrl1.Controller := Controller;
-
+  { 多数 gallery 控件已放到 .lfm 中（与顶部控件一致）。TTyTabControl 的页签由
+    AddTab 在运行时创建对应的 TTyPanel，尚无法在设计器中定义，故控件本身放在
+    .lfm，其页签在此添加。 }
   with TabCtrl1.AddTab('General') do
   begin
     with TTyLabel.Create(Self) do
@@ -153,21 +90,18 @@ begin
       Parent  := TabCtrl1.Pages[0];
       Caption := 'Name:';
       SetBounds(8, 8, 60, 20);
-      Controller := self.Controller;
+      Controller := Self.Controller;
     end;
     with TTyButton.Create(Self) do
     begin
       Parent  := TabCtrl1.Pages[0];
       Caption := 'OK';
       SetBounds(8, 36, 80, 28);
-      Controller := self.Controller;
+      Controller := Self.Controller;
     end;
   end;
   TabCtrl1.AddTab('Appearance');
   TabCtrl1.AddTab('About');
-
-  { Enlarge form to accommodate new row of controls }
-  Height := 560;
 end;
 
 procedure TDemoMainForm.BtnLightClick(Sender: TObject);
