@@ -16,6 +16,7 @@ uses
   test.tabcontrol,
   test.tabcontrol.collection,
   test.tabcontrol.streaming,
+  test.tabcontrol.scroll,
   test.defaulttheme, test.spinedit,
   test.animation,
   test.animation.toggle,
