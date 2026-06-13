@@ -74,29 +74,49 @@ begin
 end;
 
 procedure TTabScrollGlyphTest.TestArrowLeftPointsLeft;
-{ tgArrowLeft: the chevron tip sits at the left-mid edge. Assert a glyph pixel
-  exists in the left-mid region and the far-right column near the top stays
-  background (alpha 0). }
+{ tgArrowLeft must POINT LEFT: its chevron arms diverge on the LEFT half, well
+  above the horizontal shaft. The discriminating assertions sample boxes in the
+  rows y=7..10 -- strictly ABOVE the shaft rows (y=cy=11..12 at PPI=96, Rect
+  0,0,24,24) -- so the full-width shaft cannot satisfy them. A left-pointing
+  chevron paints in the LEFT off-shaft box and leaves the RIGHT off-shaft box
+  empty; a wrongly right-pointing chevron would fail BOTH. }
 begin
   MakePainter(24, 24, 96);
   FPainter.DrawGlyph(Rect(0, 0, 24, 24), tgArrowLeft, TyRGBA(0, 0, 0, 255), 2);
-  AssertTrue('left-mid is glyph-colored',
-    GlyphInBox(0, 8, 8, 16));
-  AssertEquals('far-right top is background',
-    0, PixelAt(23, 1).alpha);
+  // Chevron arm present on the left, above the shaft.
+  AssertTrue('left chevron arm is glyph-colored (off-shaft)',
+    GlyphInBox(4, 7, 10, 10));
+  // No chevron on the right above the shaft: proves the tip is NOT to the right.
+  AssertFalse('right region above shaft is background (chevron does not point right)',
+    GlyphInBox(14, 7, 19, 10));
+  // Cross-check the mirrored rows below the shaft behave the same way.
+  AssertTrue('left chevron arm present below shaft',
+    GlyphInBox(4, 13, 10, 16));
+  AssertFalse('right region below shaft is background',
+    GlyphInBox(14, 13, 19, 16));
 end;
 
 procedure TTabScrollGlyphTest.TestArrowRightPointsRight;
-{ tgArrowRight mirrors tgArrowLeft: the chevron tip sits at the right-mid edge.
-  Assert a glyph pixel exists in the right-mid region and the far-left column
-  near the top stays background (alpha 0). }
+{ tgArrowRight mirrors tgArrowLeft and must POINT RIGHT: its chevron arms
+  diverge on the RIGHT half, above/below the shaft. Same off-shaft sampling
+  strategy (rows y=7..10 and y=13..16, away from the y=cy shaft) so the
+  full-width shaft is irrelevant to the directional verdict. A right-pointing
+  chevron paints in the RIGHT off-shaft box and leaves the LEFT off-shaft box
+  empty; a wrongly left-pointing chevron would fail BOTH. }
 begin
   MakePainter(24, 24, 96);
   FPainter.DrawGlyph(Rect(0, 0, 24, 24), tgArrowRight, TyRGBA(0, 0, 0, 255), 2);
-  AssertTrue('right-mid is glyph-colored',
-    GlyphInBox(16, 8, 23, 16));
-  AssertEquals('far-left top is background',
-    0, PixelAt(0, 1).alpha);
+  // Chevron arm present on the right, above the shaft.
+  AssertTrue('right chevron arm is glyph-colored (off-shaft)',
+    GlyphInBox(14, 7, 19, 10));
+  // No chevron on the left above the shaft: proves the tip is NOT to the left.
+  AssertFalse('left region above shaft is background (chevron does not point left)',
+    GlyphInBox(4, 7, 10, 10));
+  // Cross-check the mirrored rows below the shaft.
+  AssertTrue('right chevron arm present below shaft',
+    GlyphInBox(14, 13, 19, 16));
+  AssertFalse('left region below shaft is background',
+    GlyphInBox(4, 13, 10, 16));
 end;
 
 initialization
