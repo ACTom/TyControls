@@ -16,6 +16,7 @@ type
     FDragGrabOffset: Integer;
     FDragStartTop: Integer;
     function TrackLength: Integer;
+    function PosAlong(X, Y: Integer): Integer;
     procedure SetKind(const AValue: TTyScrollBarKind);
     procedure SetMin(const AValue: Integer);
     procedure SetMax(const AValue: Integer);
@@ -24,6 +25,9 @@ type
   protected
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
@@ -226,6 +230,65 @@ end;
 procedure TTyScrollBar.EndThumbDrag;
 begin
   FDragging := False;
+end;
+
+function TTyScrollBar.PosAlong(X, Y: Integer): Integer;
+begin
+  if FKind = sbVertical then
+    Result := Y
+  else
+    Result := X;
+end;
+
+procedure TTyScrollBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  ThumbR: TRect;
+begin
+  if not Enabled then Exit;
+  inherited MouseDown(Button, Shift, X, Y);
+  if Button = mbLeft then
+  begin
+    ThumbR := TyScrollThumbRect(ClientRect, FKind, FMin, FMax, FPosition, FPageSize);
+    if PtInRect(ThumbR, Point(X, Y)) then
+    begin
+      BeginThumbDrag(PosAlong(X, Y));
+      MouseCapture := True;
+    end
+    else
+    begin
+      // click on the track: page one PageSize toward the click
+      if (FKind = sbVertical) and (Y < ThumbR.Top) then
+        Position := Position - FPageSize
+      else if (FKind = sbVertical) and (Y >= ThumbR.Bottom) then
+        Position := Position + FPageSize
+      else if (FKind = sbHorizontal) and (X < ThumbR.Left) then
+        Position := Position - FPageSize
+      else if (FKind = sbHorizontal) and (X >= ThumbR.Right) then
+        Position := Position + FPageSize;
+    end;
+    try
+      if CanFocus then SetFocus;
+    except
+    end;
+  end;
+end;
+
+procedure TTyScrollBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  if not Enabled then Exit;
+  inherited MouseMove(Shift, X, Y);
+  if FDragging then
+    DragThumbTo(PosAlong(X, Y));
+end;
+
+procedure TTyScrollBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  if Button = mbLeft then
+  begin
+    EndThumbDrag;
+    MouseCapture := False;
+  end;
 end;
 
 end.

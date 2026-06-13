@@ -29,6 +29,7 @@ type
     procedure TestScrollBarSyncsTopIndex;
     procedure TestItemsShrinkClampsTopIndex;
     procedure TestDisabledKeyIgnored;
+    procedure TestEmbeddedScrollbarDragScrollsList;
   end;
 
   { A2 regression: embedded scrollbar must inherit controller and DPI width }
@@ -49,11 +50,34 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
+  { Hard-cast target to drive the embedded scrollbar's protected mouse handlers. }
+  TScrollBarAccess = class(TTyScrollBar)
+  public
+    procedure CallMouseDown(Btn: TMouseButton; X, Y: Integer);
+    procedure CallMouseMove(X, Y: Integer);
+    procedure CallMouseUp(Btn: TMouseButton; X, Y: Integer);
+  end;
+
   TChangeProbe = class
   public
     Count: Integer;
     procedure Handle(Sender: TObject);
   end;
+
+procedure TScrollBarAccess.CallMouseDown(Btn: TMouseButton; X, Y: Integer);
+begin
+  MouseDown(Btn, [], X, Y);
+end;
+
+procedure TScrollBarAccess.CallMouseMove(X, Y: Integer);
+begin
+  MouseMove([], X, Y);
+end;
+
+procedure TScrollBarAccess.CallMouseUp(Btn: TMouseButton; X, Y: Integer);
+begin
+  MouseUp(Btn, [], X, Y);
+end;
 
 procedure TChangeProbe.Handle(Sender: TObject);
 begin
@@ -467,6 +491,58 @@ begin
   // VK_DOWN would normally move ItemIndex to 1
   FList.SimulateKeyDown(VK_DOWN);
   AssertEquals('disabled listbox arrow key ignored', 0, FList.ItemIndex);
+end;
+
+{ TestEmbeddedScrollbarDragScrollsList
+  Overflow listbox (20 items, 4 visible rows). Drive the embedded scrollbar's
+  mouse handlers (down on the thumb, move toward the bottom of the track, up)
+  and assert ListBox.TopIndex follows the scrollbar drag via the OnChange sync.
+  This is the regression that the dead mouse handling previously broke: before
+  the fix the scrollbar's Position never moved on mouse, so TopIndex stayed 0. }
+procedure TTyListBoxTest.TestEmbeddedScrollbarDragScrollsList;
+var
+  LB: TListBoxAccess;
+  F: TForm;
+  SB: TTyScrollBar;
+  SBA: TScrollBarAccess;
+  I, ThumbCenterY: Integer;
+  ThumbR, TrackR: TRect;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    LB := TListBoxAccess.Create(F);
+    LB.Parent := F;
+    LB.Font.PixelsPerInch := 96;
+    LB.ItemHeight := 24;
+    LB.SetBounds(0, 0, 120, 100);  // 4 visible rows
+    for I := 0 to 19 do
+      LB.Items.Add('Item ' + IntToStr(I));
+    LB.CallUpdateScrollBar;
+    SB := LB.FindScrollBar;
+    AssertNotNull('scrollbar present for overflow list', SB);
+    AssertTrue('scrollbar visible for overflow list', SB.Visible);
+    AssertEquals('TopIndex starts at 0', 0, LB.TopIndex);
+
+    // Drive a drag from the thumb toward the bottom of the scrollbar's track.
+    SBA := TScrollBarAccess(SB);
+    TrackR := SB.ClientRect;
+    ThumbR := TyScrollThumbRect(TrackR, sbVertical, SB.Min, SB.Max,
+      SB.Position, SB.PageSize);
+    ThumbCenterY := (ThumbR.Top + ThumbR.Bottom) div 2;
+
+    SBA.CallMouseDown(mbLeft, SB.Width div 2, ThumbCenterY);
+    SBA.CallMouseMove(SB.Width div 2, TrackR.Bottom - 1);
+    SBA.CallMouseUp(mbLeft, SB.Width div 2, TrackR.Bottom - 1);
+
+    // Scrollbar should now be near its Max, and TopIndex must follow it.
+    AssertTrue(Format('scrollbar Position advanced toward Max (actual %d, max %d)',
+      [SB.Position, SB.Max]), SB.Position >= SB.Max - 1);
+    AssertEquals('list TopIndex follows scrollbar Position', SB.Position, LB.TopIndex);
+    AssertTrue(Format('list scrolled substantially via scrollbar drag (TopIndex %d)',
+      [LB.TopIndex]), LB.TopIndex > 0);
+  finally
+    F.Free;
+  end;
 end;
 
 { TTyListBoxScrollBarPropTest }

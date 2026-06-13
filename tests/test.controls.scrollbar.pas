@@ -37,15 +37,42 @@ type
     procedure TestThumbPixelUsesTextColor;
   end;
 
+  TTyScrollBarMouseTest = class(TTestCase)
+  private
+    FForm: TForm;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestThumbDragMovesPosition;
+    procedure TestTrackClickBelowThumbPagesDown;
+    procedure TestDisabledScrollbarMouseIgnored;
+  end;
+
 implementation
 type
   TScrollAccess = class(TTyScrollBar)
   public
     procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure CallMouseDown(Btn: TMouseButton; X, Y: Integer);
+    procedure CallMouseMove(X, Y: Integer);
+    procedure CallMouseUp(Btn: TMouseButton; X, Y: Integer);
   end;
 procedure TScrollAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+procedure TScrollAccess.CallMouseDown(Btn: TMouseButton; X, Y: Integer);
+begin
+  MouseDown(Btn, [], X, Y);
+end;
+procedure TScrollAccess.CallMouseMove(X, Y: Integer);
+begin
+  MouseMove([], X, Y);
+end;
+procedure TScrollAccess.CallMouseUp(Btn: TMouseButton; X, Y: Integer);
+begin
+  MouseUp(Btn, [], X, Y);
 end;
 procedure TTyScrollGeometryTest.TestVerticalThumbAtTop;
 var
@@ -210,8 +237,96 @@ begin
   end;
 end;
 
+{ TTyScrollBarMouseTest }
+
+procedure TTyScrollBarMouseTest.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+end;
+
+procedure TTyScrollBarMouseTest.TearDown;
+begin
+  FForm.Free;
+end;
+
+procedure TTyScrollBarMouseTest.TestThumbDragMovesPosition;
+var
+  Bar: TScrollAccess;
+  ThumbR: TRect;
+  CenterY: Integer;
+begin
+  Bar := TScrollAccess.Create(FForm);
+  Bar.Parent := FForm;
+  Bar.Font.PixelsPerInch := 96;
+  Bar.Kind := sbVertical;
+  Bar.SetBounds(0, 0, 16, 160);
+  Bar.Min := 0;
+  Bar.Max := 100;
+  Bar.PageSize := 10;
+  Bar.Position := 0;
+
+  ThumbR := TyScrollThumbRect(Rect(0, 0, 16, 160), sbVertical, 0, 100, 0, 10);
+  CenterY := (ThumbR.Top + ThumbR.Bottom) div 2;
+
+  Bar.CallMouseDown(mbLeft, 8, CenterY);
+  Bar.CallMouseMove(8, 140);
+  Bar.CallMouseUp(mbLeft, 8, 140);
+
+  AssertTrue(Format('thumb drag toward bottom moves Position substantially (actual %d)',
+    [Bar.Position]), Bar.Position > 50);
+end;
+
+procedure TTyScrollBarMouseTest.TestTrackClickBelowThumbPagesDown;
+var
+  Bar: TScrollAccess;
+begin
+  Bar := TScrollAccess.Create(FForm);
+  Bar.Parent := FForm;
+  Bar.Font.PixelsPerInch := 96;
+  Bar.Kind := sbVertical;
+  Bar.SetBounds(0, 0, 16, 160);
+  Bar.Min := 0;
+  Bar.Max := 100;
+  Bar.PageSize := 10;
+  Bar.Position := 0;
+
+  // y=150 is in the track below the thumb (thumb top ~0, short page)
+  Bar.CallMouseDown(mbLeft, 8, 150);
+
+  AssertTrue(Format('track click below thumb pages down by ~PageSize (actual %d)',
+    [Bar.Position]), Abs(Bar.Position - 10) <= 2);
+end;
+
+procedure TTyScrollBarMouseTest.TestDisabledScrollbarMouseIgnored;
+var
+  Bar: TScrollAccess;
+  ThumbR: TRect;
+  CenterY: Integer;
+begin
+  Bar := TScrollAccess.Create(FForm);
+  Bar.Parent := FForm;
+  Bar.Font.PixelsPerInch := 96;
+  Bar.Kind := sbVertical;
+  Bar.SetBounds(0, 0, 16, 160);
+  Bar.Min := 0;
+  Bar.Max := 100;
+  Bar.PageSize := 10;
+  Bar.Position := 0;
+  Bar.Enabled := False;
+
+  ThumbR := TyScrollThumbRect(Rect(0, 0, 16, 160), sbVertical, 0, 100, 0, 10);
+  CenterY := (ThumbR.Top + ThumbR.Bottom) div 2;
+
+  Bar.CallMouseDown(mbLeft, 8, CenterY);
+  Bar.CallMouseMove(8, 140);
+  Bar.CallMouseUp(mbLeft, 8, 140);
+
+  AssertEquals('disabled scrollbar ignores mouse: Position unchanged', 0, Bar.Position);
+end;
+
 initialization
   RegisterTest(TTyScrollGeometryTest);
   RegisterTest(TTyScrollBarDragTest);
   RegisterTest(TTyScrollBarThumbColorTest);
+  RegisterTest(TTyScrollBarMouseTest);
 end.
