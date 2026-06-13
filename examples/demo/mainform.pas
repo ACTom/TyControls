@@ -8,7 +8,8 @@ uses
   tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
-  tyControls.TrackBar, tyControls.GroupBox, tyControls.TabControl;
+  tyControls.TrackBar, tyControls.GroupBox, tyControls.TabControl,
+  tyControls.SpinEdit;
 type
 
   { TDemoMainForm }
@@ -41,6 +42,7 @@ type
     procedure BtnShowcaseClick(Sender: TObject);
     procedure TrackBar1Change(Sender: TObject);
   private
+    Spin1: TTySpinEdit;   // v1.9: created in code (gallery demo)
     function ThemeDir: string;
     procedure ApplyTheme(const AFile: string);
   end;
@@ -114,6 +116,15 @@ begin
   end;
   TabCtrl1.AddTab('Appearance');
   TabCtrl1.AddTab('About');
+
+  { TTySpinEdit (v1.9): numeric up/down, right column below the group box. }
+  Spin1 := TTySpinEdit.Create(Self);
+  Spin1.Parent := Self;
+  Spin1.SetBounds(460, 362, 120, 28);
+  Spin1.MinValue := 0;
+  Spin1.MaxValue := 10;
+  Spin1.Value := 3;
+  Spin1.Controller := Controller;
 end;
 
 procedure TDemoMainForm.BtnDangerClick(Sender: TObject);
