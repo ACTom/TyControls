@@ -22,7 +22,8 @@ uses
   test.defaulttheme, test.spinedit, test.memo, test.memo.selection,
   test.animation,
   test.animation.toggle,
-  test.animation.button;
+  test.animation.button,
+  test.undostack;
 
 type
   TTyTestRunner = class(TTestRunner)
