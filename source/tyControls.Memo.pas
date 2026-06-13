@@ -63,6 +63,11 @@ type
     procedure DoSplitLine;
     procedure DoBackspace;
     procedure DoDelete;
+    // --- Word-delete mutators (pure UTF8 splice; route through AfterEdit at the
+    // call site, like DoBackspace/DoDelete). At a line boundary they fall back to
+    // the cross-line merge (DoBackspace / DoDelete). ---
+    procedure DeleteWordBackward;
+    procedure DeleteWordForward;
   protected
     function GetStyleTypeKey: string; override;
     // Remove the current selection (SelStart..SelEnd): single-line splice, or
@@ -86,6 +91,14 @@ type
     function ColPixelXAt(const ALine: string; ACol, APPI: Integer): Integer;
     // Nearest codepoint boundary to device-x AX on ALine (midpoint rule).
     function ColIndexAtX(const ALine: string; AX, APPI: Integer): Integer;
+    // --- Per-line word-boundary helpers (pure codepoint logic; no paint state).
+    // Ported verbatim from TTyEdit (IsWordCodepoint identical; Next/PrevWordBoundary
+    // generalised to operate on a passed line string rather than FText). Protected
+    // so the headless probe can expose them. Indices are codepoint counts in
+    // 0..UTF8Length(ALine). ---
+    function IsWordCodepoint(const CP: string): Boolean;
+    function NextWordBoundary(const ALine: string; AIdx: Integer): Integer;
+    function PrevWordBoundary(const ALine: string; AIdx: Integer): Integer;
     // Caret read/write for tests and later tasks.
     function CaretLine: Integer;
     function CaretCol: Integer;
@@ -735,6 +748,108 @@ begin
   end;
 end;
 
+// ---- Per-line word-boundary helpers (ported from TTyEdit) ----
+
+function TTyMemo.IsWordCodepoint(const CP: string): Boolean;
+// Verbatim from TTyEdit.IsWordCodepoint. A word codepoint is anything that is
+// not whitespace and not ASCII punctuation. Whitespace: #32, #9, U+00A0. ASCII
+// punctuation: ! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] ^ ` { | } ~
+// All other codepoints (letters, digits, CJK, emoji, combining marks) are words.
+const
+  ASCII_PUNCT = '!"#$%&''()*+,-./:;<=>?@[\]^`{|}~';
+  NBSP = #$C2#$A0;  // U+00A0 in UTF-8
+begin
+  if CP = '' then
+    Exit(False);
+  // Whitespace
+  if (CP = #32) or (CP = #9) or (CP = NBSP) then
+    Exit(False);
+  // ASCII punctuation (single-byte codepoints only)
+  if (Length(CP) = 1) and (Pos(CP[1], ASCII_PUNCT) > 0) then
+    Exit(False);
+  Result := True;
+end;
+
+function TTyMemo.NextWordBoundary(const ALine: string; AIdx: Integer): Integer;
+// TTyEdit.NextWordBoundary generalised to a passed line string.
+var
+  i, Len: Integer;
+begin
+  Len := UTF8Length(ALine);
+  if AIdx < 0 then AIdx := 0;
+  if AIdx > Len then AIdx := Len;
+  i := AIdx;
+  // Skip the current word run, then skip the following non-word run.
+  while (i < Len) and IsWordCodepoint(UTF8Copy(ALine, i + 1, 1)) do
+    Inc(i);
+  while (i < Len) and not IsWordCodepoint(UTF8Copy(ALine, i + 1, 1)) do
+    Inc(i);
+  Result := i;
+end;
+
+function TTyMemo.PrevWordBoundary(const ALine: string; AIdx: Integer): Integer;
+// TTyEdit.PrevWordBoundary generalised to a passed line string.
+var
+  i, Len: Integer;
+begin
+  Len := UTF8Length(ALine);
+  if AIdx < 0 then AIdx := 0;
+  if AIdx > Len then AIdx := Len;
+  i := AIdx;
+  // Skip the preceding non-word run, then skip the preceding word run.
+  while (i > 0) and not IsWordCodepoint(UTF8Copy(ALine, i, 1)) do
+    Dec(i);
+  while (i > 0) and IsWordCodepoint(UTF8Copy(ALine, i, 1)) do
+    Dec(i);
+  Result := i;
+end;
+
+// ---- Word-delete mutators (pure UTF8 splice on the caret line; fall back to the
+// cross-line merge at the line boundary). Callers route through AfterEdit. ----
+
+procedure TTyMemo.DeleteWordBackward;
+var
+  Cur, Before, After: string;
+  t, L: Integer;
+begin
+  if FLines.Count = 0 then Exit;
+  Cur := FLines[FCaretLine];
+  t := PrevWordBoundary(Cur, FCaretCol);
+  if t < FCaretCol then
+  begin
+    // Splice [t, FCaretCol) out of the line; caret lands at t.
+    L := UTF8Length(Cur);
+    Before := UTF8Copy(Cur, 1, t);
+    After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
+    FLines[FCaretLine] := Before + After;
+    FCaretCol := t;
+  end
+  else
+    // At col 0: fall back to the cross-line merge (caller guards (0,0) earlier).
+    DoBackspace;
+end;
+
+procedure TTyMemo.DeleteWordForward;
+var
+  Cur, Before, After: string;
+  t, L: Integer;
+begin
+  if FLines.Count = 0 then Exit;
+  Cur := FLines[FCaretLine];
+  t := NextWordBoundary(Cur, FCaretCol);
+  if t > FCaretCol then
+  begin
+    // Splice [FCaretCol, t) out of the line; caret stays.
+    L := UTF8Length(Cur);
+    Before := UTF8Copy(Cur, 1, FCaretCol);
+    After  := UTF8Copy(Cur, t + 1, L - t);
+    FLines[FCaretLine] := Before + After;
+  end
+  else
+    // At line end: fall back to the cross-line merge (caller guards end-of-doc).
+    DoDelete;
+end;
+
 procedure TTyMemo.DeleteSelection;
 // 2D generalisation of TTyEdit.DeleteSelection. Single line: splice within the
 // line. Multi-line: keep SL's head (codepoints 1..SC) + EL's tail (codepoints
@@ -1150,8 +1265,9 @@ end;
 
 procedure TTyMemo.KeyDown(var Key: Word; Shift: TShiftState);
 var
-  APPI, L, MaxLine: Integer;
+  APPI, L, MaxLine, WordT: Integer;
   CtrlLike, Extending: Boolean;
+  CurLine: string;
 begin
   if not Enabled then Exit;          // when disabled, do NOT consume Key
   inherited KeyDown(Key, Shift);
@@ -1220,7 +1336,13 @@ begin
         Key := 0;
         Exit;
       end;
-      DoBackspace;
+      // Ctrl/Alt+Backspace deletes the previous word (within the line; at col 0 it
+      // falls back to the cross-line merge inside DeleteWordBackward). Precedence
+      // selection > word > single, mirroring TTyEdit.
+      if (ssCtrl in Shift) or (ssAlt in Shift) then
+        DeleteWordBackward
+      else
+        DoBackspace;
       FDesiredCol := FCaretCol;
       AfterEdit(APPI);
       Key := 0;
@@ -1244,14 +1366,36 @@ begin
         Key := 0;
         Exit;
       end;
-      DoDelete;
+      // Ctrl/Alt+Delete deletes the next word (within the line; at line end it
+      // falls back to the cross-line merge inside DeleteWordForward).
+      if (ssCtrl in Shift) or (ssAlt in Shift) then
+        DeleteWordForward
+      else
+        DoDelete;
       FDesiredCol := FCaretCol;
       AfterEdit(APPI);
       Key := 0;
     end;
     VK_LEFT:
     begin
-      if FCaretCol > 0 then
+      // Word-wise left: Alt+Left (macOS Option) or Ctrl+Left (Win/Linux), placed
+      // ABOVE the plain-arrow logic. t < FCaretCol => move within the line to the
+      // previous word boundary; else (at col 0) move to the END of the previous
+      // line. Honors Extending (keep anchor) like the plain arrows. (Cmd/ssMeta
+      // does NOT trigger word nav — mirrors TTyEdit.)
+      if (ssAlt in Shift) or (ssCtrl in Shift) then
+      begin
+        if FCaretLine < FLines.Count then CurLine := FLines[FCaretLine] else CurLine := '';
+        WordT := PrevWordBoundary(CurLine, FCaretCol);
+        if WordT < FCaretCol then
+          FCaretCol := WordT
+        else if (FCaretCol = 0) and (FCaretLine > 0) then
+        begin
+          Dec(FCaretLine);
+          FCaretCol := LineLen(FCaretLine);
+        end;
+      end
+      else if FCaretCol > 0 then
         Dec(FCaretCol)
       else if FCaretLine > 0 then
       begin
@@ -1270,7 +1414,22 @@ begin
     VK_RIGHT:
     begin
       L := LineLen(FCaretLine);
-      if FCaretCol < L then
+      // Word-wise right: Alt+Right or Ctrl+Right. t > FCaretCol => move within the
+      // line to the next word boundary; else (at line end) move to the START of
+      // the next line.
+      if (ssAlt in Shift) or (ssCtrl in Shift) then
+      begin
+        if FCaretLine < FLines.Count then CurLine := FLines[FCaretLine] else CurLine := '';
+        WordT := NextWordBoundary(CurLine, FCaretCol);
+        if WordT > FCaretCol then
+          FCaretCol := WordT
+        else if (FCaretCol >= L) and (FCaretLine < MaxLine) then
+        begin
+          Inc(FCaretLine);
+          FCaretCol := 0;
+        end;
+      end
+      else if FCaretCol < L then
         Inc(FCaretCol)
       else if FCaretLine < MaxLine then
       begin

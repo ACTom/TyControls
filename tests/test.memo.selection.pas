@@ -29,6 +29,9 @@ type
     procedure ProbeSetForceFocused(AValue: Boolean);
     function ProbeColPixelXAt(const ALine: string; ACol, APPI: Integer): Integer;
     function ProbeLineHeight(APPI: Integer): Integer;
+    // --- T6 word-navigation probes ---
+    function ProbeNextWordBoundary(const ALine: string; AIdx: Integer): Integer;
+    function ProbePrevWordBoundary(const ALine: string; AIdx: Integer): Integer;
   end;
 
   { Clipboard probe: routes the virtual clipboard hooks to an in-memory string so
@@ -99,6 +102,16 @@ type
     procedure TestPasteCRLFNormalizes;
     procedure TestSelectAllKey;
     procedure TestPasteEmptyNoOp;
+    // --- T6: word navigation (move/extend/delete; per-line + cross-line) ---
+    procedure TestPrevNextWordBoundaryPerLine;
+    procedure TestCtrlLeftMovesByWord;
+    procedure TestCtrlLeftAtCol0CrossesLine;
+    procedure TestCtrlRightAtLineEndCrossesLine;
+    procedure TestShiftCtrlRightExtendsByWord;
+    procedure TestCtrlBackspaceDeletesWord;
+    procedure TestCtrlBackspaceAtCol0Merges;
+    procedure TestCtrlDeleteDeletesWord;
+    procedure TestWordNavCJK;
   end;
 
 implementation
@@ -190,6 +203,16 @@ end;
 function TTyMemoSelProbe.ProbeLineHeight(APPI: Integer): Integer;
 begin
   Result := LineHeight(APPI);
+end;
+
+function TTyMemoSelProbe.ProbeNextWordBoundary(const ALine: string; AIdx: Integer): Integer;
+begin
+  Result := NextWordBoundary(ALine, AIdx);
+end;
+
+function TTyMemoSelProbe.ProbePrevWordBoundary(const ALine: string; AIdx: Integer): Integer;
+begin
+  Result := PrevWordBoundary(ALine, AIdx);
 end;
 
 { TTyMemoClipboardProbe }
@@ -911,6 +934,142 @@ begin
   AssertEquals('line count unchanged', 1, FClip.ProbeLineCount);
   AssertEquals('line unchanged', 'hello', FClip.ProbeLine(0));
   AssertEquals('empty paste fires no OnChange', 0, FChangeCount);
+end;
+
+// --- T6: word navigation (move/extend/delete; per-line + cross-line) ---
+
+{ TestPrevNextWordBoundaryPerLine
+  On the line 'foo bar.baz' the per-line word boundaries are: from col 0 forward to
+  4 (skip 'foo', skip ' '); from 4 forward to 8 (skip 'bar', skip '.'); backward
+  from 11 to 8 (skip 'baz' back to after '.'); backward from 8 to 4 (skip '.bar'?
+  no — '.' is ASCII punct so Prev(8) skips non-word '.'? Actually Prev skips a
+  trailing non-word run then a word run: from 8, char@7='.'? indices: f0 o1 o2 ' '3
+  b4 a5 r6 .7 b8 a9 z10. Prev(8): skip non-word run going back (char@7='.'? char at
+  i=8 means UTF8Copy(line,8,1)='.', a non-word) -> i=7; then word run 'bar' -> i=4. }
+procedure TTyMemoSelectionTest.TestPrevNextWordBoundaryPerLine;
+const
+  LINE = 'foo bar.baz';
+begin
+  SetUpMemo;
+  AssertEquals('Next(0)=4', 4, FMemo.ProbeNextWordBoundary(LINE, 0));
+  AssertEquals('Next(4)=8', 8, FMemo.ProbeNextWordBoundary(LINE, 4));
+  AssertEquals('Prev(11)=8', 8, FMemo.ProbePrevWordBoundary(LINE, 11));
+  AssertEquals('Prev(8)=4', 4, FMemo.ProbePrevWordBoundary(LINE, 8));
+end;
+
+{ TestCtrlLeftMovesByWord
+  ['hello world'], caret(0,11). Ctrl+Left jumps to the start of 'world' (col 6). }
+procedure TTyMemoSelectionTest.TestCtrlLeftMovesByWord;
+begin
+  SetUpMemo;
+  LoadLines(['hello world']);
+  FMemo.ProbeSetCaret(0, 11);
+  FMemo.InjectKey(VK_LEFT, [ssCtrl]);
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('Ctrl+Left to word start col 6', 6, FMemo.ProbeCaretCol);
+  AssertFalse('no selection after unshifted word move', FMemo.ProbeHasSelection);
+end;
+
+{ TestCtrlLeftAtCol0CrossesLine
+  ['abc','def'], caret(1,0). Ctrl+Left at col 0 moves to the END of the previous
+  line: caret(0,3). }
+procedure TTyMemoSelectionTest.TestCtrlLeftAtCol0CrossesLine;
+begin
+  SetUpMemo;
+  LoadLines(['abc', 'def']);
+  FMemo.ProbeSetCaret(1, 0);
+  FMemo.InjectKey(VK_LEFT, [ssCtrl]);
+  AssertEquals('caret line 0 (prev line)', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 3 (prev line end)', 3, FMemo.ProbeCaretCol);
+end;
+
+{ TestCtrlRightAtLineEndCrossesLine
+  ['abc','def'], caret(0,3). Ctrl+Right at line end moves to the START of the next
+  line: caret(1,0). }
+procedure TTyMemoSelectionTest.TestCtrlRightAtLineEndCrossesLine;
+begin
+  SetUpMemo;
+  LoadLines(['abc', 'def']);
+  FMemo.ProbeSetCaret(0, 3);
+  FMemo.InjectKey(VK_RIGHT, [ssCtrl]);
+  AssertEquals('caret line 1 (next line)', 1, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 0 (next line start)', 0, FMemo.ProbeCaretCol);
+end;
+
+{ TestShiftCtrlRightExtendsByWord
+  ['foo bar'], caret(0,0). Shift+Ctrl+Right extends by one word keeping the anchor
+  at (0,0): SelText 'foo '. }
+procedure TTyMemoSelectionTest.TestShiftCtrlRightExtendsByWord;
+begin
+  SetUpMemo;
+  LoadLines(['foo bar']);
+  FMemo.ProbeSetCaret(0, 0);
+  FMemo.InjectKey(VK_RIGHT, [ssShift, ssCtrl]);
+  AssertTrue('selection present after Shift+Ctrl+Right', FMemo.ProbeHasSelection);
+  AssertEquals('SelText foo (with trailing space)', 'foo ', FMemo.ProbeSelText);
+  AssertEquals('caret col 4', 4, FMemo.ProbeCaretCol);
+end;
+
+{ TestCtrlBackspaceDeletesWord
+  ['foo bar'], caret(0,7). Ctrl+Backspace deletes the previous word 'bar' leaving
+  'foo ' with caret at col 4. }
+procedure TTyMemoSelectionTest.TestCtrlBackspaceDeletesWord;
+begin
+  SetUpMemo;
+  LoadLines(['foo bar']);
+  FMemo.ProbeSetCaret(0, 7);
+  FMemo.InjectKey(VK_BACK, [ssCtrl]);
+  AssertEquals('line 0 = foo (trailing space)', 'foo ', FMemo.ProbeLine(0));
+  AssertEquals('caret col 4', 4, FMemo.ProbeCaretCol);
+  AssertEquals('OnChange fired once', 1, FChangeCount);
+end;
+
+{ TestCtrlBackspaceAtCol0Merges
+  ['ab','cd'], caret(1,0). Ctrl+Backspace at col 0 falls back to the cross-line
+  merge: ['abcd'] caret(0,2). }
+procedure TTyMemoSelectionTest.TestCtrlBackspaceAtCol0Merges;
+begin
+  SetUpMemo;
+  LoadLines(['ab', 'cd']);
+  FMemo.ProbeSetCaret(1, 0);
+  FMemo.InjectKey(VK_BACK, [ssCtrl]);
+  AssertEquals('one line after merge', 1, FMemo.ProbeLineCount);
+  AssertEquals('merged abcd', 'abcd', FMemo.ProbeLine(0));
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 2 (join)', 2, FMemo.ProbeCaretCol);
+end;
+
+{ TestCtrlDeleteDeletesWord
+  ['foo bar'], caret(0,0). Ctrl+Delete deletes the next word forward ('foo ')
+  leaving 'bar'. }
+procedure TTyMemoSelectionTest.TestCtrlDeleteDeletesWord;
+begin
+  SetUpMemo;
+  LoadLines(['foo bar']);
+  FMemo.ProbeSetCaret(0, 0);
+  FMemo.InjectKey(VK_DELETE, [ssCtrl]);
+  AssertEquals('line 0 = bar', 'bar', FMemo.ProbeLine(0));
+  AssertEquals('caret col 0', 0, FMemo.ProbeCaretCol);
+  AssertEquals('OnChange fired once', 1, FChangeCount);
+end;
+
+{ TestWordNavCJK
+  ['中文 abc']: a CJK run is treated as a word (IsWordCodepoint true for CJK). From
+  col 0 Ctrl+Right skips '中文' + the space to col 3 (start of 'abc'). }
+procedure TTyMemoSelectionTest.TestWordNavCJK;
+const
+  LINE = '中文 abc';
+begin
+  SetUpMemo;
+  LoadLines([LINE]);
+  // Next(0): skip the CJK word '中文' (2 cp) then the space -> col 3.
+  AssertEquals('Next(0)=3 (CJK run + space)', 3,
+    FMemo.ProbeNextWordBoundary(LINE, 0));
+  FMemo.ProbeSetCaret(0, 0);
+  FMemo.InjectKey(VK_RIGHT, [ssCtrl]);
+  AssertEquals('Ctrl+Right past CJK word to col 3', 3, FMemo.ProbeCaretCol);
+  // Prev from col 6 (end) -> col 3 (start of 'abc').
+  AssertEquals('Prev(6)=3', 3, FMemo.ProbePrevWordBoundary(LINE, 6));
 end;
 
 initialization
