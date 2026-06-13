@@ -5,6 +5,7 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LazUTF8, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
+  tyControls.ScrollBar,
   tyControls.Memo;
 type
   { Probe subclass: exposes protected helpers/fields for headless geometry tests }
@@ -23,6 +24,16 @@ type
     // Drives the protected KeyDown so tests can inspect whether Key was consumed
     // (set to 0) or left intact (e.g. when disabled it must pass through).
     procedure ProbeKeyDown(var AKey: Word; AShift: TShiftState);
+    // --- T4 vertical scroll accessors ---
+    function ProbeVisibleRows: Integer;
+    function ProbeMaxTopLine: Integer;
+    function ProbeTopLine: Integer;
+    procedure ProbeSetTopLine(AValue: Integer);
+    procedure ProbeUpdateScrollBar;
+    procedure ProbeEnsureCaretLineVisible(APPI: Integer);
+    function ProbeScrollBar: TTyScrollBar;
+    function ProbeDoMouseWheel(AWheelDelta: Integer): Boolean;
+    procedure ProbeScrollBarChange;
   end;
 
   TTyMemoTest = class(TTestCase)
@@ -65,6 +76,14 @@ type
     procedure TestCJKBackspace;
     procedure TestDisabledIgnoresKeys;
     procedure TestOnChangeFiresOnEdit;
+    // --- T4 vertical scroll ---
+    procedure TestVisibleRowsFromHeight;
+    procedure TestScrollBarAppearsWhenOverflow;
+    procedure TestScrollBarHiddenWhenFits;
+    procedure TestWheelScrollsThreeLines;
+    procedure TestSetTopLineClamps;
+    procedure TestEnsureCaretLineVisibleScrollsDown;
+    procedure TestScrollSyncNoPingPong;
   end;
 
 implementation
@@ -124,6 +143,65 @@ end;
 procedure TTyMemoProbe.ProbeKeyDown(var AKey: Word; AShift: TShiftState);
 begin
   KeyDown(AKey, AShift);
+end;
+
+function TTyMemoProbe.ProbeVisibleRows: Integer;
+begin
+  Result := VisibleRows;
+end;
+
+function TTyMemoProbe.ProbeMaxTopLine: Integer;
+begin
+  Result := MaxTopLine;
+end;
+
+function TTyMemoProbe.ProbeTopLine: Integer;
+begin
+  Result := TopLine;
+end;
+
+procedure TTyMemoProbe.ProbeSetTopLine(AValue: Integer);
+begin
+  SetTopLine(AValue);
+end;
+
+procedure TTyMemoProbe.ProbeUpdateScrollBar;
+begin
+  UpdateScrollBar;
+end;
+
+procedure TTyMemoProbe.ProbeEnsureCaretLineVisible(APPI: Integer);
+begin
+  EnsureCaretLineVisible(APPI);
+end;
+
+function TTyMemoProbe.ProbeScrollBar: TTyScrollBar;
+var
+  i: Integer;
+begin
+  Result := nil;
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyScrollBar then
+    begin
+      Result := TTyScrollBar(Controls[i]);
+      Exit;
+    end;
+end;
+
+function TTyMemoProbe.ProbeDoMouseWheel(AWheelDelta: Integer): Boolean;
+begin
+  Result := DoMouseWheel([], AWheelDelta, Point(0, 0));
+end;
+
+procedure TTyMemoProbe.ProbeScrollBarChange;
+var
+  SB: TTyScrollBar;
+begin
+  // Re-fire the scrollbar's OnChange (= TTyMemo.ScrollBarChange) without changing
+  // the scrollbar position, to exercise the reentrancy guard path directly.
+  SB := ProbeScrollBar;
+  if (SB <> nil) and Assigned(SB.OnChange) then
+    SB.OnChange(SB);
 end;
 
 { TTyMemoTest }
@@ -665,6 +743,175 @@ begin
   FMemo.InjectKey(VK_UP, []);
   FMemo.InjectKey(VK_DOWN, []);
   AssertEquals('OnChange NOT fired on pure caret moves', 0, FChangeCount);
+end;
+
+{ --- T4 vertical scroll tests --- }
+
+{ TestVisibleRowsFromHeight
+  VisibleRows must be Height div LineHeight(96), floored at 1 (uses Height, not
+  ClientHeight, per the headless ListBox note). }
+procedure TTyMemoTest.TestVisibleRowsFromHeight;
+var
+  LH, ExpectedVR: Integer;
+begin
+  SetUpWithPadding(0);
+  FMemo.SetBounds(0, 0, 200, 137);   // odd height -> floor matters
+  LH := FMemo.ProbeLineHeight(96);
+  ExpectedVR := 137 div LH;
+  if ExpectedVR < 1 then ExpectedVR := 1;
+  AssertEquals('VisibleRows = Height div LineHeight(96)',
+    ExpectedVR, FMemo.ProbeVisibleRows);
+end;
+
+{ TestScrollBarAppearsWhenOverflow
+  With VR+5 lines, after UpdateScrollBar the embedded scrollbar exists, is Visible,
+  and Max = LineCount - VR. }
+procedure TTyMemoTest.TestScrollBarAppearsWhenOverflow;
+var
+  VR, n, i, j: Integer;
+  L: TStringList;
+  SB: TTyScrollBar;
+begin
+  SetUpWithPadding(0);
+  VR := FMemo.ProbeVisibleRows;
+  n := VR + 5;
+  L := TStringList.Create;
+  try
+    for i := 0 to n - 1 do
+      L.Add('line ' + IntToStr(i));
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+  FMemo.ProbeUpdateScrollBar;
+  SB := FMemo.ProbeScrollBar;
+  AssertTrue('scrollbar created when content overflows', SB <> nil);
+  AssertTrue('scrollbar visible when content overflows', SB.Visible);
+  j := FMemo.ProbeLineCountLogical - VR;
+  AssertEquals('scrollbar Max = LineCount - VR', j, SB.Max);
+end;
+
+{ TestScrollBarHiddenWhenFits
+  A few lines (< VR) -> scrollbar not visible (either nil or Visible=False). }
+procedure TTyMemoTest.TestScrollBarHiddenWhenFits;
+var
+  SB: TTyScrollBar;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['a', 'b']);
+  FMemo.ProbeUpdateScrollBar;
+  SB := FMemo.ProbeScrollBar;
+  if SB <> nil then
+    AssertFalse('scrollbar hidden when content fits', SB.Visible);
+end;
+
+{ TestWheelScrollsThreeLines
+  Many lines, TopLine 0; one wheel-down step -> TopLine 3; wheel-up -> back to 0. }
+procedure TTyMemoTest.TestWheelScrollsThreeLines;
+var
+  i: Integer;
+  L: TStringList;
+begin
+  SetUpWithPadding(0);
+  L := TStringList.Create;
+  try
+    for i := 0 to 49 do
+      L.Add('line ' + IntToStr(i));
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+  FMemo.ProbeSetTopLine(0);
+  AssertEquals('TopLine starts at 0', 0, FMemo.ProbeTopLine);
+  // WheelDelta < 0 => scroll down => TopLine += 3
+  FMemo.ProbeDoMouseWheel(-120);
+  AssertEquals('wheel down scrolls 3 lines', 3, FMemo.ProbeTopLine);
+  // WheelDelta > 0 => scroll up => TopLine -= 3
+  FMemo.ProbeDoMouseWheel(120);
+  AssertEquals('wheel up scrolls back to 0', 0, FMemo.ProbeTopLine);
+end;
+
+{ TestSetTopLineClamps
+  SetTopLine(9999) clamps to MaxTopLine; SetTopLine(-5) clamps to 0. }
+procedure TTyMemoTest.TestSetTopLineClamps;
+var
+  i: Integer;
+  L: TStringList;
+begin
+  SetUpWithPadding(0);
+  L := TStringList.Create;
+  try
+    for i := 0 to 29 do
+      L.Add('line ' + IntToStr(i));
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+  FMemo.ProbeSetTopLine(9999);
+  AssertEquals('SetTopLine(9999) clamps to MaxTopLine',
+    FMemo.ProbeMaxTopLine, FMemo.ProbeTopLine);
+  FMemo.ProbeSetTopLine(-5);
+  AssertEquals('SetTopLine(-5) clamps to 0', 0, FMemo.ProbeTopLine);
+end;
+
+{ TestEnsureCaretLineVisibleScrollsDown
+  Caret on the last line of a tall doc -> FTopLine adjusts so the caret line is
+  within [FTopLine, FTopLine+VR). }
+procedure TTyMemoTest.TestEnsureCaretLineVisibleScrollsDown;
+var
+  i, VR, Last: Integer;
+  L: TStringList;
+begin
+  SetUpWithPadding(0);
+  L := TStringList.Create;
+  try
+    for i := 0 to 49 do
+      L.Add('line ' + IntToStr(i));
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+  FMemo.ProbeSetTopLine(0);
+  VR := FMemo.ProbeVisibleRows;
+  Last := FMemo.ProbeLineCountLogical - 1;
+  FMemo.ProbeSetCaret(Last, 0);
+  FMemo.ProbeEnsureCaretLineVisible(96);
+  AssertTrue('caret line >= TopLine after EnsureCaretLineVisible',
+    Last >= FMemo.ProbeTopLine);
+  AssertTrue('caret line < TopLine + VR after EnsureCaretLineVisible',
+    Last < FMemo.ProbeTopLine + VR);
+end;
+
+{ TestScrollSyncNoPingPong
+  Drive ScrollBarChange and SetTopLine alternately; the FSyncingScroll guard must
+  prevent infinite recursion and leave a stable value. }
+procedure TTyMemoTest.TestScrollSyncNoPingPong;
+var
+  i: Integer;
+  L: TStringList;
+  Before: Integer;
+begin
+  SetUpWithPadding(0);
+  L := TStringList.Create;
+  try
+    for i := 0 to 49 do
+      L.Add('line ' + IntToStr(i));
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+  FMemo.ProbeUpdateScrollBar;
+  // Move via SetTopLine -> syncs scrollbar position.
+  FMemo.ProbeSetTopLine(5);
+  AssertEquals('TopLine set to 5', 5, FMemo.ProbeTopLine);
+  // Re-fire ScrollBarChange (scrollbar position already 5): must not change/recurse.
+  Before := FMemo.ProbeTopLine;
+  FMemo.ProbeScrollBarChange;
+  AssertEquals('ScrollBarChange leaves TopLine stable (no ping-pong)',
+    Before, FMemo.ProbeTopLine);
+  // And another SetTopLine still works after the round-trip.
+  FMemo.ProbeSetTopLine(7);
+  AssertEquals('SetTopLine still functions after sync', 7, FMemo.ProbeTopLine);
 end;
 
 initialization

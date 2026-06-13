@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Base,
+  tyControls.ScrollBar;
 type
   // Cumulative-prefix pixel widths, length = codepoints+1 (shared name with Edit).
   TTyIntArray = array of Integer;
@@ -21,8 +22,13 @@ type
     FCaretCol: Integer;
     FDesiredCol: Integer;
     // Index of the first logical line painted (top of the visible window).
-    // 0 until vertical scrolling lands in T4; the visible-line loop reads it now.
     FTopLine: Integer;
+    // Embedded vertical scrollbar, lazily created on first overflow (owned by
+    // Self via Create(Self), so freed by TComponent). nil until first needed.
+    FScrollBar: TTyScrollBar;
+    // Reentrancy guard: TopLine->scrollbar.Position and scrollbar OnChange->
+    // SetTopLine would otherwise ping-pong.
+    FSyncingScroll: Boolean;
     // Lazy measuring bitmap (freed in Destroy). Shared by all per-line measures.
     FMeasureBmp: TBGRABitmap;
     // Headless-only override of the LCL focused state. Real focus is unavailable
@@ -46,6 +52,8 @@ type
     // Shared post-move routine for pure caret motion: clamp, keep visible, repaint.
     // Never fires OnChange.
     procedure AfterCaretMove(APPI: Integer);
+    // Scrollbar OnChange handler -> SetTopLine (guarded against ping-pong).
+    procedure ScrollBarChange(Sender: TObject);
     // --- Model mutators (pure UTF8 splice; no key/paint dependency) ---
     procedure DoInsertText(const AStr: string);
     procedure DoSplitLine;
@@ -76,6 +84,20 @@ type
     procedure SetForceFocused(AValue: Boolean);
     // Visible-line count for the current bounds at APPI (>= 1).
     function VisibleLineCount(APPI: Integer): Integer;
+    // Whole visible rows = Height div LineHeight(Font.PixelsPerInch), floored 1.
+    // Uses Height (not ClientHeight) per the headless ListBox note — for this
+    // borderless control Height = ClientHeight at runtime, but ClientHeight can
+    // lag SetBounds in headless tests without a native handle.
+    function VisibleRows: Integer;
+    // Highest valid FTopLine = LineCountLogical - VisibleRows, floored 0.
+    function MaxTopLine: Integer;
+    // Read accessor for FTopLine (tests / property).
+    function TopLine: Integer;
+    // Top-of-window setter with clamp + guarded scrollbar sync + repaint.
+    procedure SetTopLine(AValue: Integer);
+    // Create/update/hide the embedded vertical scrollbar (verbatim from ListBox,
+    // FItems.Count -> LineCountLogical).
+    procedure UpdateScrollBar;
     // Scroll FTopLine so the caret line sits inside the visible window.
     procedure EnsureCaretLineVisible(APPI: Integer);
     // Paint into ACanvas at ARect (RenderTo convention: draw local Rect(0,0,W,H),
@@ -86,6 +108,11 @@ type
     // disabled, KeyDown does NOT consume Key so navigation falls through.
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    // Wheel scrolls +/-3 logical lines via SetTopLine (after the user's handler).
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
+    // Keep the scrollbar in sync when the control is resized.
+    procedure Resize; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -118,6 +145,8 @@ begin
   FCaretCol := 0;
   FDesiredCol := 0;
   FTopLine := 0;
+  FScrollBar := nil;
+  FSyncingScroll := False;
   FMeasureBmp := nil;
   FForceFocused := False;
   Width := 200;
@@ -145,6 +174,10 @@ procedure TTyMemo.SetLines(AValue: TStrings);
 begin
   FLines.Assign(AValue);
   ClampCaret;
+  // Clamp the window and refresh the scrollbar in case the line count changed.
+  if FTopLine > MaxTopLine then FTopLine := MaxTopLine;
+  if FTopLine < 0 then FTopLine := 0;
+  UpdateScrollBar;
   Invalidate;
 end;
 
@@ -228,26 +261,158 @@ end;
 
 procedure TTyMemo.EnsureCaretLineVisible(APPI: Integer);
 var
-  VisLines, MaxTop: Integer;
+  VR, MaxTop: Integer;
 begin
-  VisLines := VisibleLineCount(APPI);
+  VR := VisibleRows;
   // Scroll up so the caret line is the new top.
   if FCaretLine < FTopLine then
     FTopLine := FCaretLine;
-  // Scroll down so the caret line is the last fully visible line.
-  if FCaretLine > FTopLine + VisLines - 1 then
-    FTopLine := FCaretLine - VisLines + 1;
-  // Never scroll past the last line / below 0.
-  MaxTop := LineCountLogical - 1;
+  // Scroll down so the caret line is the last fully visible line: caret in
+  // [FTopLine, FTopLine+VR).
+  if FCaretLine > FTopLine + VR - 1 then
+    FTopLine := FCaretLine - VR + 1;
+  // Never scroll past the last valid window / below 0.
+  MaxTop := MaxTopLine;
   if FTopLine > MaxTop then FTopLine := MaxTop;
   if FTopLine < 0 then FTopLine := 0;
+end;
+
+// ---- Vertical scrolling (sections 3-6 lifted from TTyListBox; FItems.Count ->
+// LineCountLogical, ScaledItemHeight -> LineHeight) ----
+
+function TTyMemo.VisibleRows: Integer;
+var
+  LH: Integer;
+begin
+  LH := LineHeight(Font.PixelsPerInch);
+  if LH < 1 then LH := 1;
+  // Use Height rather than ClientHeight so the result is testable headlessly
+  // (in headless LCL without a native handle, ClientHeight can lag behind
+  // SetBounds). For this borderless control Height = ClientHeight at runtime.
+  Result := Height div LH;
+  if Result < 1 then Result := 1;
+end;
+
+function TTyMemo.MaxTopLine: Integer;
+begin
+  Result := LineCountLogical - VisibleRows;
+  if Result < 0 then Result := 0;
+end;
+
+function TTyMemo.TopLine: Integer;
+begin
+  Result := FTopLine;
+end;
+
+procedure TTyMemo.SetTopLine(AValue: Integer);
+var
+  Clamped: Integer;
+begin
+  Clamped := AValue;
+  if Clamped < 0 then Clamped := 0;
+  if Clamped > MaxTopLine then Clamped := MaxTopLine;
+  if FTopLine = Clamped then Exit;
+  FTopLine := Clamped;
+  // Sync scrollbar position (guard reentrancy).
+  if (not FSyncingScroll) and (FScrollBar <> nil) and FScrollBar.Visible then
+  begin
+    FSyncingScroll := True;
+    try
+      FScrollBar.Position := FTopLine;
+    finally
+      FSyncingScroll := False;
+    end;
+  end;
+  Invalidate;
+end;
+
+procedure TTyMemo.ScrollBarChange(Sender: TObject);
+begin
+  if FSyncingScroll then Exit;
+  FSyncingScroll := True;
+  try
+    SetTopLine(FScrollBar.Position);
+  finally
+    FSyncingScroll := False;
+  end;
+end;
+
+procedure TTyMemo.UpdateScrollBar;
+var
+  VR, MaxPos, MaxTop: Integer;
+begin
+  VR := VisibleRows;
+  // Clamp FTopLine in case Lines were mutated directly (without SetLines).
+  MaxTop := LineCountLogical - VR;
+  if MaxTop < 0 then MaxTop := 0;
+  if FTopLine > MaxTop then FTopLine := MaxTop;
+  if LineCountLogical > VR then
+  begin
+    // Ensure scrollbar created.
+    if FScrollBar = nil then
+    begin
+      FScrollBar := TTyScrollBar.Create(Self);
+      FScrollBar.Parent := Self;
+      FScrollBar.Kind := sbVertical;
+      FScrollBar.Align := alRight;
+      FScrollBar.OnChange := @ScrollBarChange;
+    end;
+    // Update DPI-dependent width and controller every call so DPI changes take effect.
+    FScrollBar.Width := MulDiv(12, Font.PixelsPerInch, 96);
+    FScrollBar.Controller := Self.Controller;
+    MaxPos := LineCountLogical - VR;
+    if MaxPos < 0 then MaxPos := 0;
+    FSyncingScroll := True;
+    try
+      FScrollBar.Min := 0;
+      FScrollBar.Max := MaxPos;
+      FScrollBar.PageSize := VR;
+      FScrollBar.Position := FTopLine;
+    finally
+      FSyncingScroll := False;
+    end;
+    FScrollBar.Visible := True;
+  end
+  else
+  begin
+    if FScrollBar <> nil then
+      FScrollBar.Visible := False;
+  end;
+end;
+
+function TTyMemo.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var
+  Delta: Integer;
+begin
+  if not Enabled then Exit(False);
+  // Let the user's OnMouseWheel handler run first; if it consumes the event, stop.
+  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  // WheelDelta > 0 = scroll up (TopLine decreases)
+  // WheelDelta < 0 = scroll down (TopLine increases)
+  if WheelDelta > 0 then
+    Delta := -3
+  else
+    Delta := 3;
+  SetTopLine(FTopLine + Delta);
+  Result := True;
+end;
+
+procedure TTyMemo.Resize;
+begin
+  inherited Resize;
+  UpdateScrollBar;
 end;
 
 procedure TTyMemo.AfterEdit(APPI: Integer);
 begin
   ClampCaret;
   EnsureCaretLineVisible(APPI);
-  // UpdateScrollBar lands with the real scrollbar in T4.
+  UpdateScrollBar;
   Invalidate;
   DoChange;
 end;
@@ -471,6 +636,9 @@ var
   EffSize, CaretX: Integer;
   Line: string;
 begin
+  // Keep the scrollbar in sync (cheap; catches external Lines mutations).
+  UpdateScrollBar;
+
   P := TTyPainter.Create;
   try
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
@@ -487,8 +655,10 @@ begin
       R.Bottom - P.Scale(S.Padding.Bottom)
     );
 
-    // Scrollbar width arrives in T4; none yet.
+    // Subtract scrollbar width when visible (mirrors TTyListBox.RenderTo).
     SBWidth := 0;
+    if (FScrollBar <> nil) and FScrollBar.Visible then
+      SBWidth := MulDiv(12, APPI, 96);
 
     LH := LineHeight(APPI);
     ContentTop := ContentRect.Top;
