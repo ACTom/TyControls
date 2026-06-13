@@ -8,6 +8,9 @@
   --radius:     6px;
 }
 
+/* Window/form backdrop — the dark surface so the whole window reads as dark. */
+TyForm { background: var(--surface); }
+
 TyButton {
   background: var(--surface);
   color: var(--on-surface);

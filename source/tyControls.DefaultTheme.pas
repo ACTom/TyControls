@@ -28,6 +28,9 @@ begin
     '  --radius:     6px;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
+    '/* Window/form backdrop — a soft off-white behind the white controls. */' + LineEnding +
+    'TyForm { background: darken(--surface, 4%); }' + LineEnding +
+    '' + LineEnding +
     'TyButton {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +

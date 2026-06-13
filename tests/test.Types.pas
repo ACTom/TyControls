@@ -5,7 +5,7 @@ unit test.Types;
 interface
 
 uses
-  Classes, SysUtils, fpcunit, testregistry, tyControls.Types;
+  Classes, SysUtils, fpcunit, testregistry, Graphics, tyControls.Types;
 
 type
   TTestTypes = class(TTestCase)
@@ -16,6 +16,7 @@ type
     procedure TestTyChannelOf;
     procedure TestTransparentConst;
     procedure TestEmptyStyleSet;
+    procedure TestColorToLCL;
   end;
 
 implementation
@@ -56,6 +57,12 @@ begin
   AssertTrue('present empty', s.Present = []);
   AssertEquals('opacity default', Single(1.0), s.Opacity, 0.0001);
   AssertTrue('bg none', s.Background.Kind = tfkNone);
+end;
+
+procedure TTestTypes.TestColorToLCL;
+begin
+  AssertEquals('TyColorToLCL drops alpha, maps RGB',
+    Integer(RGBToColor($11, $22, $33)), Integer(TyColorToLCL(TTyColor($FF112233))));
 end;
 
 initialization

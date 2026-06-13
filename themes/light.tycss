@@ -8,6 +8,9 @@
   --radius:     6px;
 }
 
+/* Window/form backdrop — a soft off-white behind the white controls. */
+TyForm { background: darken(--surface, 4%); }
+
 TyButton {
   background: var(--surface);
   color: var(--on-surface);

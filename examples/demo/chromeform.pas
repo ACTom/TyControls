@@ -2,7 +2,8 @@ unit chromeform;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms,
+  Classes, SysUtils, Forms, Graphics,
+  tyControls.Types, tyControls.StyleModel,
   tyControls.Controller, tyControls.TyLabel, tyControls.Form;
 type
   TChromeForm = class(TForm)
@@ -41,12 +42,19 @@ end;
 procedure TChromeForm.FormCreate(Sender: TObject);
 var
   ThemeFile: string;
+  bg: TTyStyleSet;
 begin
   // 仅当解析到的主题文件存在时才加载，避免从构建输出目录运行时
   // 因找不到 themes/ 而抛出 EFOpenError；缺失时回退到内置皮肤。
   ThemeFile := ThemeDir + 'showcase.tycss';
   if FileExists(ThemeFile) then
+  begin
     Controller.LoadTheme(ThemeFile);
+    // Window follows theme: tint the chrome window from the TyForm token.
+    bg := Controller.Model.ResolveStyle('TyForm', '', []);
+    if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
+      Self.Color := TyColorToLCL(bg.Background.Color);
+  end;
   Chrome.TitleBar.Caption := 'Custom Chrome Window';
   Controller.Changed;
 end;

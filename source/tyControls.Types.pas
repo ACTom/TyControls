@@ -5,7 +5,7 @@ unit tyControls.Types;
 interface
 
 uses
-  Classes, SysUtils, Types;
+  Classes, SysUtils, Types, Graphics;
 
 type
   TTyColor = type Cardinal;            // $AARRGGBB
@@ -54,6 +54,7 @@ function TyAlphaOf(c: TTyColor): Byte;
 function TyRedOf(c: TTyColor): Byte;
 function TyGreenOf(c: TTyColor): Byte;
 function TyBlueOf(c: TTyColor): Byte;
+function TyColorToLCL(c: TTyColor): TColor;
 function EmptyStyleSet: TTyStyleSet;
 
 implementation
@@ -88,6 +89,12 @@ end;
 function TyBlueOf(c: TTyColor): Byte;
 begin
   Result := Byte(Cardinal(c) and $FF);
+end;
+
+function TyColorToLCL(c: TTyColor): TColor;
+begin
+  // LCL TColor is $00BBGGRR (alpha-less); drop the TTyColor alpha channel.
+  Result := RGBToColor(TyRedOf(c), TyGreenOf(c), TyBlueOf(c));
 end;
 
 function EmptyStyleSet: TTyStyleSet;

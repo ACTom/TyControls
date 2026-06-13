@@ -8,6 +8,9 @@
   --radius:     10px;
 }
 
+/* Window/form backdrop — a slightly deeper tint of the lavender surface. */
+TyForm { background: darken(--surface, 4%); }
+
 TyButton {
   background: linear-gradient(90deg, var(--surface), darken(--surface, 6%));
   color: var(--on-surface);

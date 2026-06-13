@@ -11,6 +11,7 @@ type
     procedure CheckTheme(const AName: string);
     procedure CheckThemeNewTypeKeys(const AName: string);
     procedure CheckThemeTabControlTypeKeys(const AName: string);
+    procedure CheckThemeFormTypeKey(const AName: string);
   published
     procedure TestLightLoadsAndResolvesButton;
     procedure TestDarkLoadsAndResolvesButton;
@@ -23,6 +24,10 @@ type
     procedure TestLightStylesTabControlTypeKeys;
     procedure TestDarkStylesTabControlTypeKeys;
     procedure TestShowcaseStylesTabControlTypeKeys;
+    { v1.5.1 typeKey assertions — TyForm window background }
+    procedure TestLightStylesFormTypeKey;
+    procedure TestDarkStylesFormTypeKey;
+    procedure TestShowcaseStylesFormTypeKey;
   end;
 implementation
 
@@ -174,6 +179,45 @@ end;
 procedure TTestThemes.TestShowcaseStylesTabControlTypeKeys;
 begin
   CheckThemeTabControlTypeKeys('showcase.tycss');
+end;
+
+{ v1.5.1: assert TyForm defines a solid window background in the given theme }
+procedure TTestThemes.CheckThemeFormTypeKey(const AName: string);
+var
+  model: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  model := TTyStyleModel.Create;
+  try
+    AssertTrue('theme file must exist: ' + AName,
+      FileExists(ThemePath(AName)));
+    model.LoadFromFile(ThemePath(AName));
+
+    { TyForm base: must have Background (the window/form backdrop) }
+    s := model.ResolveStyle('TyForm', '', []);
+    AssertTrue('TyForm base must set Background: ' + AName,
+      tpBackground in s.Present);
+    AssertTrue('TyForm background must be solid: ' + AName,
+      s.Background.Kind = tfkSolid);
+
+  finally
+    model.Free;
+  end;
+end;
+
+procedure TTestThemes.TestLightStylesFormTypeKey;
+begin
+  CheckThemeFormTypeKey('light.tycss');
+end;
+
+procedure TTestThemes.TestDarkStylesFormTypeKey;
+begin
+  CheckThemeFormTypeKey('dark.tycss');
+end;
+
+procedure TTestThemes.TestShowcaseStylesFormTypeKey;
+begin
+  CheckThemeFormTypeKey('showcase.tycss');
 end;
 
 initialization

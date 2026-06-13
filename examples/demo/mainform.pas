@@ -2,13 +2,17 @@ unit mainform;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls,
+  Classes, SysUtils, Forms, Controls, Dialogs, Graphics,
+  tyControls.Types, tyControls.StyleModel,
   tyControls.Controller, tyControls.Button, tyControls.TyLabel,
   tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
   tyControls.TrackBar, tyControls.GroupBox, tyControls.TabControl;
 type
+
+  { TDemoMainForm }
+
   TDemoMainForm = class(TForm)
     Controller: TTyStyleController;
     Chrome: TTyFormChrome;
@@ -30,6 +34,7 @@ type
     TrackBar1: TTyTrackBar;
     Toggle1: TTyToggleSwitch;
     TabCtrl1: TTyTabControl;
+    procedure BtnDangerClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure BtnLightClick(Sender: TObject);
     procedure BtnDarkClick(Sender: TObject);
@@ -65,9 +70,16 @@ begin
 end;
 
 procedure TDemoMainForm.ApplyTheme(const AFile: string);
+var
+  bg: TTyStyleSet;
 begin
   Controller.LoadTheme(ThemeDir + AFile);
   Controller.Changed;
+
+  // Window follows theme: tint the plain TForm from the theme's TyForm token.
+  bg := Controller.Model.ResolveStyle('TyForm', '', []);
+  if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
+    Self.Color := TyColorToLCL(bg.Background.Color);
 end;
 
 procedure TDemoMainForm.TrackBar1Change(Sender: TObject);
@@ -102,6 +114,11 @@ begin
   end;
   TabCtrl1.AddTab('Appearance');
   TabCtrl1.AddTab('About');
+end;
+
+procedure TDemoMainForm.BtnDangerClick(Sender: TObject);
+begin
+  ShowMessage('Danger');
 end;
 
 procedure TDemoMainForm.BtnLightClick(Sender: TObject);
