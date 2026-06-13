@@ -21,14 +21,19 @@ type
     function ProbeCaretCol: Integer;
     procedure ProbeSelStart(out SL, SC: Integer);
     procedure ProbeSelEnd(out EL, EC: Integer);
+    procedure ProbeDeleteSelection;
+    function ProbeLineCount: Integer;
+    function ProbeLine(AIndex: Integer): string;
   end;
 
   TTyMemoSelectionTest = class(TTestCase)
   private
     FCtl: TTyStyleController;
     FMemo: TTyMemoSelProbe;
+    FChangeCount: Integer;
     procedure SetUpMemo;
     procedure LoadLines(const AItems: array of string);
+    procedure OnMemoChange(Sender: TObject);
   protected
     procedure TearDown; override;
   published
@@ -38,6 +43,13 @@ type
     procedure TestSelTextMultiLineJoinedByLineEnding;
     procedure TestOrderedSelLexicographic;
     procedure TestClearSelectionCollapses;
+    // --- T2: DeleteSelection 2D + typing/Enter/Backspace/Delete routing ---
+    procedure TestDeleteSelectionWithinLine;
+    procedure TestDeleteSelectionMultiLineMergesHeadTail;
+    procedure TestTypingReplacesSelection;
+    procedure TestEnterReplacesSelection;
+    procedure TestBackspaceDeletesSelectionNotPrevChar;
+    procedure TestBackspaceNoSelectionStillNoopAtOrigin;
   end;
 
 implementation
@@ -96,6 +108,21 @@ begin
   EC := SelEndCol;
 end;
 
+procedure TTyMemoSelProbe.ProbeDeleteSelection;
+begin
+  DeleteSelection;
+end;
+
+function TTyMemoSelProbe.ProbeLineCount: Integer;
+begin
+  Result := Lines.Count;
+end;
+
+function TTyMemoSelProbe.ProbeLine(AIndex: Integer): string;
+begin
+  Result := Lines[AIndex];
+end;
+
 { TTyMemoSelectionTest }
 
 procedure TTyMemoSelectionTest.SetUpMemo;
@@ -107,6 +134,13 @@ begin
   FMemo.Controller := FCtl;
   FMemo.Font.PixelsPerInch := 96;
   FMemo.SetBounds(0, 0, 200, 120);
+  FChangeCount := 0;
+  FMemo.OnChange := @OnMemoChange;
+end;
+
+procedure TTyMemoSelectionTest.OnMemoChange(Sender: TObject);
+begin
+  Inc(FChangeCount);
 end;
 
 procedure TTyMemoSelectionTest.LoadLines(const AItems: array of string);
@@ -202,6 +236,86 @@ begin
   AssertFalse('no selection after clear', FMemo.ProbeHasSelection);
   AssertEquals('caret line unchanged after clear', 1, FMemo.ProbeCaretLine);
   AssertEquals('caret col unchanged after clear', 2, FMemo.ProbeCaretCol);
+end;
+
+// --- T2: DeleteSelection 2D + typing/Enter/Backspace/Delete routing ---
+
+procedure TTyMemoSelectionTest.TestDeleteSelectionWithinLine;
+begin
+  SetUpMemo;
+  LoadLines(['abcdef']);
+  FMemo.ProbeSetAnchor(0, 1);
+  FMemo.ProbeSetCaret(0, 4);  // SetCaret collapses; re-anchor after
+  FMemo.ProbeSetAnchor(0, 1);
+  AssertTrue('selection present', FMemo.ProbeHasSelection);
+  FMemo.ProbeDeleteSelection;
+  AssertEquals('line spliced to aef', 'aef', FMemo.ProbeLine(0));
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 1', 1, FMemo.ProbeCaretCol);
+  AssertFalse('selection collapsed', FMemo.ProbeHasSelection);
+end;
+
+procedure TTyMemoSelectionTest.TestDeleteSelectionMultiLineMergesHeadTail;
+begin
+  SetUpMemo;
+  LoadLines(['hello', 'middle', 'world']);
+  FMemo.ProbeSetCaret(2, 3);
+  FMemo.ProbeSetAnchor(0, 2);
+  AssertTrue('selection present', FMemo.ProbeHasSelection);
+  FMemo.ProbeDeleteSelection;
+  AssertEquals('collapsed to single line', 1, FMemo.ProbeLineCount);
+  AssertEquals('head he + tail ld', 'held', FMemo.ProbeLine(0));
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 2', 2, FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoSelectionTest.TestTypingReplacesSelection;
+begin
+  SetUpMemo;
+  LoadLines(['abc', 'def']);
+  FMemo.ProbeSetCaret(1, 1);
+  FMemo.ProbeSetAnchor(0, 1);
+  FMemo.InjectChar('X');
+  AssertEquals('collapsed to single line', 1, FMemo.ProbeLineCount);
+  AssertEquals('aXef', 'aXef', FMemo.ProbeLine(0));
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 2', 2, FMemo.ProbeCaretCol);
+  AssertEquals('OnChange fired once', 1, FChangeCount);
+end;
+
+procedure TTyMemoSelectionTest.TestEnterReplacesSelection;
+begin
+  SetUpMemo;
+  LoadLines(['abc', 'def']);
+  FMemo.ProbeSetCaret(1, 1);
+  FMemo.ProbeSetAnchor(0, 1);
+  FMemo.InjectKey(VK_RETURN, []);
+  AssertEquals('two lines after split', 2, FMemo.ProbeLineCount);
+  AssertEquals('line 0 = a', 'a', FMemo.ProbeLine(0));
+  AssertEquals('line 1 = ef', 'ef', FMemo.ProbeLine(1));
+end;
+
+procedure TTyMemoSelectionTest.TestBackspaceDeletesSelectionNotPrevChar;
+begin
+  SetUpMemo;
+  LoadLines(['abcd']);
+  FMemo.ProbeSetCaret(0, 3);
+  FMemo.ProbeSetAnchor(0, 1);
+  FMemo.InjectBackspace;
+  AssertEquals('selection deleted to ad', 'ad', FMemo.ProbeLine(0));
+  AssertEquals('caret col 1', 1, FMemo.ProbeCaretCol);
+  AssertFalse('selection collapsed', FMemo.ProbeHasSelection);
+end;
+
+procedure TTyMemoSelectionTest.TestBackspaceNoSelectionStillNoopAtOrigin;
+begin
+  SetUpMemo;
+  LoadLines(['abc']);
+  FMemo.ProbeSetCaret(0, 0);  // no anchor diff -> no selection
+  AssertFalse('no selection', FMemo.ProbeHasSelection);
+  FMemo.InjectBackspace;
+  AssertEquals('line unchanged', 'abc', FMemo.ProbeLine(0));
+  AssertEquals('OnChange not fired (additivity)', 0, FChangeCount);
 end;
 
 initialization

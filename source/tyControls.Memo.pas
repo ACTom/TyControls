@@ -65,6 +65,12 @@ type
     procedure DoDelete;
   protected
     function GetStyleTypeKey: string; override;
+    // Remove the current selection (SelStart..SelEnd): single-line splice, or
+    // multi-line merge of first-line head + last-line tail with middle lines
+    // dropped. Caret -> SelStart; anchor collapses. Pure mutator — callers route
+    // through AfterEdit (matching the Memo's mutator/AfterEdit split). Protected
+    // so headless probe subclasses can exercise it directly (like HasSelection).
+    procedure DeleteSelection;
     // --- Pure per-line geometry helpers (headless-testable; no paint state) ---
     // Floored at 1 so vertical layout never divides by zero.
     function LineHeight(APPI: Integer): Integer;
@@ -717,6 +723,41 @@ begin
   end;
 end;
 
+procedure TTyMemo.DeleteSelection;
+// 2D generalisation of TTyEdit.DeleteSelection. Single line: splice within the
+// line. Multi-line: keep SL's head (codepoints 1..SC) + EL's tail (codepoints
+// EC+1..end), drop the interior lines. Caret -> SelStart; anchor collapses.
+var
+  SL, SC, EL, EC, i: Integer;
+  Line, Before, After, Head, Tail: string;
+begin
+  if not HasSelection then Exit;
+  GetOrderedSel(SL, SC, EL, EC);
+  if SL = EL then
+  begin
+    // Splice within a single line.
+    Line   := FLines[SL];
+    Before := UTF8Copy(Line, 1, SC);
+    After  := UTF8Copy(Line, EC + 1, UTF8Length(Line) - EC);
+    FLines[SL] := Before + After;
+  end
+  else
+  begin
+    // Merge SL's head with EL's tail, then delete the interior + EL lines.
+    Head := UTF8Copy(FLines[SL], 1, SC);
+    Tail := UTF8Copy(FLines[EL], EC + 1, UTF8Length(FLines[EL]) - EC);
+    FLines[SL] := Head + Tail;
+    // Lines SL+1..EL inclusive all shift to index SL+1 as they are removed.
+    for i := 1 to EL - SL do
+      FLines.Delete(SL + 1);
+  end;
+  FCaretLine := SL;
+  FCaretCol  := SC;
+  // Collapse the selection onto the new caret position.
+  FSelAnchorLine := FCaretLine;
+  FSelAnchorCol  := FCaretCol;
+end;
+
 function TTyMemo.EffectiveFontSize(const S: TTyStyleSet): Integer;
 begin
   // Verbatim from TTyEdit.EffectiveFontSize.
@@ -912,6 +953,9 @@ begin
   // Printable codepoints only; control chars (Enter/Tab/etc.) are handled in
   // KeyDown or ignored here.
   if (UTF8Key = '') or (UTF8Key[1] < #32) then Exit;
+  // A selection is replaced by the typed text (delete-then-insert, like
+  // TTyEdit.InjectKey 643 — NOT an early exit).
+  if HasSelection then DeleteSelection;
   DoInsertText(UTF8Key);
   FDesiredCol := FCaretCol;          // horizontal edit refreshes desired column
   AfterEdit(Font.PixelsPerInch);
@@ -932,6 +976,8 @@ begin
   case Key of
     VK_RETURN:
     begin
+      // Enter on a selection replaces it with a line break (delete-then-split).
+      if HasSelection then DeleteSelection;
       DoSplitLine;
       FDesiredCol := FCaretCol;
       AfterEdit(APPI);
@@ -939,6 +985,16 @@ begin
     end;
     VK_BACK:
     begin
+      // A selection is deleted wholesale (never falls to the prev-char path),
+      // checked BEFORE the (0,0) no-op guard so a selection always mutates.
+      if HasSelection then
+      begin
+        DeleteSelection;
+        FDesiredCol := FCaretCol;
+        AfterEdit(APPI);
+        Key := 0;
+        Exit;
+      end;
       // (0,0): no model change, no OnChange, but key is consumed.
       if (FCaretCol = 0) and (FCaretLine = 0) then
       begin
@@ -952,6 +1008,16 @@ begin
     end;
     VK_DELETE:
     begin
+      // A selection is deleted wholesale, checked BEFORE the end-of-doc guard
+      // so a selection always mutates regardless of caret position.
+      if HasSelection then
+      begin
+        DeleteSelection;
+        FDesiredCol := FCaretCol;
+        AfterEdit(APPI);
+        Key := 0;
+        Exit;
+      end;
       L := LineLen(FCaretLine);
       // End of document (last line, last col): no change, no OnChange.
       if (FCaretCol >= L) and (FCaretLine >= MaxLine) then
