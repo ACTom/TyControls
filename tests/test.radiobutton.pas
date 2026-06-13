@@ -3,7 +3,8 @@ unit test.radiobutton;
 interface
 uses
   Classes, SysUtils, fpcunit, testregistry, Forms, Controls, ExtCtrls, Graphics,
-  tyControls.Base, tyControls.CheckBox;
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.CheckBox;
 type
   TTyRadioButtonAccess = class(TTyRadioButton)
   public
@@ -16,6 +17,7 @@ type
     procedure TestClickClearsGroup;
     procedure TestSeparateParentsAreIndependent;
     procedure TestPaintSmoke;
+    procedure TestRadioButtonShadowLocalRectAtOffset;
   end;
 implementation
 
@@ -98,6 +100,64 @@ begin
   finally
     Bmp.Free;
     F.Free;
+  end;
+end;
+
+procedure TRadioButtonTest.TestRadioButtonShadowLocalRectAtOffset;
+{ Same offset-origin regression as the checkbox: RenderTo must pass a (0,0)-local
+  rect to DrawFrame so the shadow lands inside the W x H painter bitmap, not at
+  the absolute ARect origin where it is shifted and clipped. }
+var
+  Ctl: TTyStyleController;
+  R: TTyRadioButtonAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+  X, Y, MaxRedInside: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyRadioButton { shadow: 0px 0px 0px #FF0000FF; border-width: 0px; ' +
+      'background: alpha(#000000, 0); }');
+    R := TTyRadioButtonAccess.Create(Form);
+    R.Parent := Form;
+    R.Controller := Ctl;
+    R.Font.PixelsPerInch := 96;
+    R.Caption := '';
+    R.Checked := False;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(120, 40);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 120, 40);
+    R.RenderTo(Bmp.Canvas, Rect(20, 5, 100, 33), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      Px := Reread.GetPixel(24, 9);
+      AssertTrue('local box interior must be red-dominant (shadow at local rect)',
+        (Px.red > 200) and (Px.green < 80) and (Px.blue < 80));
+
+      MaxRedInside := 0;
+      for Y := 6 to 31 do
+        for X := 21 to 99 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          if (Px.green < 80) and (Px.blue < 80) and (Px.red > MaxRedInside) then
+            MaxRedInside := Px.red;
+        end;
+      AssertTrue('max red intensity inside the control rect > 200', MaxRedInside > 200);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
   end;
 end;
 

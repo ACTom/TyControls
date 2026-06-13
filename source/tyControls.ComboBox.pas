@@ -3,7 +3,7 @@ unit tyControls.ComboBox;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType, LCLIntf,
-  tyControls.Types, tyControls.Painter, tyControls.Base,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.ListBox;
 type
   TTyComboBox = class(TTyCustomControl)
@@ -29,6 +29,7 @@ type
       CloseUp BEFORE Click runs, so Click would see DroppedDown=False and reopen.
       Protected so test subclasses can manipulate it for headless logic tests. }
     FCloseUpTick: QWord;
+    procedure SetController(AValue: TTyStyleController); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure Click; override;
@@ -89,6 +90,15 @@ end;
 function TTyComboBox.GetStyleTypeKey: string;
 begin
   Result := 'TyComboBox';
+end;
+
+procedure TTyComboBox.SetController(AValue: TTyStyleController);
+begin
+  inherited SetController(AValue);
+  { Keep an already-created popup list in sync when the controller is reassigned;
+    otherwise FPopupList keeps the old controller until the next DropDown. }
+  if FPopupList <> nil then
+    FPopupList.Controller := AValue;
 end;
 
 procedure TTyComboBox.SetItems(const AValue: TStringList);

@@ -84,7 +84,7 @@ procedure TTyCheckBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integ
 var
   P: TTyPainter;
   S, FrameS: TTyStyleSet;
-  ContentRect, BoxRect, TextRect: TRect;
+  ContentRect, BoxRect, TextRect, FullRect: TRect;
   BoxSize, Gap: Integer;
 begin
   P := TTyPainter.Create;
@@ -97,7 +97,10 @@ begin
     FrameS := S;
     FrameS.Background := Default(TTyFill);
     FrameS.BorderWidth := 0;
-    DrawFrame(P, ARect, FrameS);
+    // Use a (0,0)-local rect: the painter builds a (W x H) bitmap and blits it
+    // at ARect.Left/Top, so a non-zero ARect origin would shift/clip the frame.
+    FullRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    DrawFrame(P, FullRect, FrameS);
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     // Inset content rect by all four padding sides
     ContentRect := Rect(
@@ -178,7 +181,7 @@ procedure TTyRadioButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: In
 var
   P: TTyPainter;
   S, FrameS: TTyStyleSet;
-  ContentRect, DotRect, TextRect: TRect;
+  ContentRect, DotRect, TextRect, FullRect: TRect;
   BoxSize, Gap: Integer;
 begin
   P := TTyPainter.Create;
@@ -190,7 +193,10 @@ begin
     FrameS := S;
     FrameS.Background := Default(TTyFill);
     FrameS.BorderWidth := 0;
-    DrawFrame(P, ARect, FrameS);
+    // Use a (0,0)-local rect (see TTyCheckBox.RenderTo) so a non-zero ARect
+    // origin doesn't shift/clip the frame within the painter's local bitmap.
+    FullRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    DrawFrame(P, FullRect, FrameS);
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     // Inset content rect by all four padding sides
     ContentRect := Rect(

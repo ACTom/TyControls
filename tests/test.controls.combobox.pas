@@ -47,6 +47,9 @@ type
     procedure TestCloseUpThenAgedClickReopens;
     { A2 regression: DropDown must sync Controller to popup list every call }
     procedure TestDropDownSyncsControllerToPopup;
+    { Bug #9: reassigning Controller after the popup exists must propagate
+      immediately, without waiting for the next DropDown }
+    procedure TestSetControllerPropagatesToPopup;
   end;
 implementation
 
@@ -280,6 +283,36 @@ begin
       FCombo.PopupList.Controller = Ctl);
 
     FCombo.CloseUp; // cleanup
+  finally
+    Ctl.Free;
+  end;
+end;
+
+{ TestSetControllerPropagatesToPopup
+  Bug #9: SetController must forward the new controller to an already-created
+  popup list. Without the override, FPopupList keeps the old controller until
+  the next DropDown.
+
+  Approach:
+   1. DropDown once so the popup + listbox exist (combo Controller is nil).
+   2. CloseUp.
+   3. Assign a real TTyStyleController to combo.Controller.
+   4. WITHOUT calling DropDown again, the popup list must already reflect it. }
+procedure TTyComboBoxTest.TestSetControllerPropagatesToPopup;
+var
+  Ctl: TTyStyleController;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    FCombo.DropDown;
+    FCombo.CloseUp;
+    AssertTrue('popup list exists after DropDown', FCombo.PopupList <> nil);
+
+    { Reassign controller while the popup already exists; do NOT DropDown again }
+    FCombo.Controller := Ctl;
+
+    AssertTrue('popup list Controller propagated immediately on reassignment',
+      FCombo.PopupList.Controller = Ctl);
   finally
     Ctl.Free;
   end;
