@@ -261,7 +261,9 @@ TC.OnTabClose   := @TabClosing;
 - **修正 `TabIndex`**：
   - 全部页签删完 → `TabIndex` 变为 `-1`；
   - 删除位置在当前选中页之前（`AIndex < TabIndex`）→ `TabIndex` 自动减 1，保持选中同一页；
-  - 删除的正是当前选中页（`AIndex = TabIndex`）且它是末尾页 → `TabIndex` 回退到新的末尾页。
+  - 删除的正是当前选中页（`AIndex = TabIndex`）且它是末尾页 → `TabIndex` 回退到新的末尾页；
+  - 删除的正是当前选中页且它不是末尾页（中间页）→ `TabIndex` 数值不变，原本其后一页移入该索引并成为新的活动页；
+  - 删除位置在当前选中页之后（`AIndex > TabIndex`）→ `TabIndex` 不变，仍选中同一页。
 - **`OnChange` 触发条件**：仅当移除导致**当前活动页面板发生改变**时才触发 `OnChange`；若移除的是非活动页（活动页面板不变），不触发。
 
 也可不依赖 ×，直接在代码中调用 `RemoveTab` 进行运行时移除：
