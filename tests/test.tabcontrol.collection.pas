@@ -54,6 +54,10 @@ type
     // -> Update(nil)) must re-sync the parallel page/caption arrays to the new
     // item order and keep the same page object active.
     procedure TestReorderItemsReordersPages;
+    // Full text-format round-trip: WriteComponent -> ObjectBinaryToText asserts the
+    // serialized Tabs <...> block + saved TabIndex; ObjectTextToBinary ->
+    // ReadComponent into a FRESH owner rehydrates the collection, pages, selection.
+    procedure TestStreamRoundTrip;
   end;
 
 implementation
@@ -329,6 +333,95 @@ begin
     ActiveBefore, FTab.Pages[FTab.TabIndex]);
 end;
 
+{ Full headless streaming round-trip via the RTL Classes APIs, proving the
+  published Tabs collection + TabIndex persist and rehydrate without an IDE.
+
+  Phase 1 (write + text assertions): a TTyTabControl with two tabs and a saved
+  selection is serialized with WriteComponent into a binary TMemoryStream, then
+  ObjectBinaryToText'd into a human-readable DFM/LFM text form. We assert the
+  text carries the `Tabs = <` items block with both item captions and the saved
+  `TabIndex = 1`.
+
+  Phase 2 (read back into a FRESH owner): the text is turned back to binary with
+  ObjectTextToBinary and ReadComponent'd. The reader drives the csLoading ->
+  Loaded lifecycle, so the rehydrated control must expose 2 tabs with the right
+  captions, the restored selection, and a visible active page. }
+procedure TTyTabCollectionTest.TestStreamRoundTrip;
+var
+  Root: TForm;
+  Src: TTyTabControl;
+  BinStream, TextStream, RehydStream: TMemoryStream;
+  TextStr: string;
+  NewRoot: TForm;
+  Loaded: TTyTabControl;
+begin
+  Root := TForm.CreateNew(nil);
+  BinStream := TMemoryStream.Create;
+  TextStream := TMemoryStream.Create;
+  try
+    { Build the source tree: control must be owned by the root so it streams as
+      a top-level component whose child pages are nested owned objects. }
+    Src := TTyTabControl.Create(Root);
+    Src.Parent := Root;
+    Src.AddTab('General');
+    Src.AddTab('Network');
+    Src.TabIndex := 1;
+
+    { Write to a BINARY stream, then convert to TEXT for content assertions. }
+    BinStream.WriteComponent(Src);
+    BinStream.Position := 0;
+    ObjectBinaryToText(BinStream, TextStream);
+    TextStream.Position := 0;
+    SetLength(TextStr, TextStream.Size);
+    if TextStream.Size > 0 then
+      TextStream.ReadBuffer(TextStr[1], TextStream.Size);
+
+    AssertTrue('serialized text has an object block',
+      Pos('object ', TextStr) > 0);
+    AssertTrue('serialized text has a Tabs = < items block',
+      Pos('Tabs = <', TextStr) > 0);
+    AssertTrue('serialized General caption present',
+      Pos('Caption = ''General''', TextStr) > 0);
+    AssertTrue('serialized Network caption present',
+      Pos('Caption = ''Network''', TextStr) > 0);
+    AssertTrue('serialized TabIndex = 1 present',
+      Pos('TabIndex = 1', TextStr) > 0);
+
+    { Phase 2: rehydrate from TEXT back to BINARY into a fresh owner. }
+    RehydStream := TMemoryStream.Create;
+    NewRoot := TForm.CreateNew(nil);
+    try
+      TextStream.Position := 0;
+      ObjectTextToBinary(TextStream, RehydStream);
+      RehydStream.Position := 0;
+
+      { ReadComponent with nil instance constructs a fresh TTyTabControl and
+        drives csLoading -> Loaded; owner is assigned via the InsertComponent
+        the reader performs. We parent it under a fresh root form. }
+      Loaded := RehydStream.ReadComponent(nil) as TTyTabControl;
+      NewRoot.InsertComponent(Loaded);
+      Loaded.Parent := NewRoot;
+
+      AssertEquals('rehydrated TabCount = 2', 2, Loaded.TabCount);
+      AssertEquals('rehydrated TabCaption(0) = General', 'General', Loaded.TabCaption(0));
+      AssertEquals('rehydrated TabCaption(1) = Network', 'Network', Loaded.TabCaption(1));
+      AssertEquals('rehydrated TabIndex = 1', 1, Loaded.TabIndex);
+      AssertNotNull('rehydrated Pages[1] exists', Loaded.Pages[1]);
+      AssertTrue('rehydrated active Pages[1] visible', Loaded.Pages[1].Visible);
+    finally
+      RehydStream.Free;
+      NewRoot.Free;     // frees the rehydrated control (owned after InsertComponent)
+    end;
+  finally
+    TextStream.Free;
+    BinStream.Free;
+    Root.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyTabCollectionTest);
+  { Streaming needs RTTI class lookup for the reader to construct nested objects. }
+  RegisterClass(TTyTabControl);
+  RegisterClass(TTyPanel);
 end.
