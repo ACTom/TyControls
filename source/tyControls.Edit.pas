@@ -37,8 +37,15 @@ type
     // Scroll helpers
     procedure EnsureCaretVisible(APPI: Integer);
     procedure ClampScrollX(APPI: Integer);
+    // Word-classifier helper (pure codepoint logic; no widget dependency)
+    function IsWordCodepoint(const CP: string): Boolean;
   protected
     function GetStyleTypeKey: string; override;
+    // Word-boundary helpers (pure codepoint logic on FText; unit-testable like
+    // TyScrollThumbRect). Protected so headless access subclasses can expose
+    // them; they have no widget/paint dependency. Indices are codepoint counts.
+    function NextWordBoundary(AIdx: Integer): Integer;
+    function PrevWordBoundary(AIdx: Integer): Integer;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
@@ -341,6 +348,63 @@ begin
   // Clamp
   if FScrollX > MaxScroll then FScrollX := MaxScroll;
   if FScrollX < 0 then FScrollX := 0;
+end;
+
+// ---- Word-boundary helpers ----
+// Pure codepoint logic over FText (no widget/paint dependency) so they are
+// unit-testable like TyScrollThumbRect. Indices are codepoint counts in
+// 0..UTF8Length(FText). cp@k denotes UTF8Copy(FText, k+1, 1).
+
+function TTyEdit.IsWordCodepoint(const CP: string): Boolean;
+// A word codepoint is anything that is not whitespace and not ASCII punctuation.
+// Whitespace: #32 (space), #9 (tab), U+00A0 (no-break space).
+// ASCII punctuation: ! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] ^ ` { | } ~
+// All other codepoints (letters, digits, CJK, emoji, combining marks) are words.
+const
+  ASCII_PUNCT = '!"#$%&''()*+,-./:;<=>?@[\]^`{|}~';
+  NBSP = #$C2#$A0;  // U+00A0 in UTF-8
+begin
+  if CP = '' then
+    Exit(False);
+  // Whitespace
+  if (CP = #32) or (CP = #9) or (CP = NBSP) then
+    Exit(False);
+  // ASCII punctuation (single-byte codepoints only)
+  if (Length(CP) = 1) and (Pos(CP[1], ASCII_PUNCT) > 0) then
+    Exit(False);
+  Result := True;
+end;
+
+function TTyEdit.NextWordBoundary(AIdx: Integer): Integer;
+var
+  i, Len: Integer;
+begin
+  Len := UTF8Length(FText);
+  if AIdx < 0 then AIdx := 0;
+  if AIdx > Len then AIdx := Len;
+  i := AIdx;
+  // Skip the current word run, then skip the following non-word run.
+  while (i < Len) and IsWordCodepoint(UTF8Copy(FText, i + 1, 1)) do
+    Inc(i);
+  while (i < Len) and not IsWordCodepoint(UTF8Copy(FText, i + 1, 1)) do
+    Inc(i);
+  Result := i;
+end;
+
+function TTyEdit.PrevWordBoundary(AIdx: Integer): Integer;
+var
+  i, Len: Integer;
+begin
+  Len := UTF8Length(FText);
+  if AIdx < 0 then AIdx := 0;
+  if AIdx > Len then AIdx := Len;
+  i := AIdx;
+  // Skip the preceding non-word run, then skip the preceding word run.
+  while (i > 0) and not IsWordCodepoint(UTF8Copy(FText, i, 1)) do
+    Dec(i);
+  while (i > 0) and IsWordCodepoint(UTF8Copy(FText, i, 1)) do
+    Dec(i);
+  Result := i;
 end;
 
 // ---- Mouse caret hit-test ----
