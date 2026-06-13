@@ -15,6 +15,16 @@ type
     procedure Handle(Sender: TObject);
   end;
 
+  { Access subclass exposing the protected streaming lifecycle hooks so the
+    csLoading -> Loaded sequence can be driven headlessly without an IDE/reader.
+    Loading/Loaded are protected virtual TComponent methods; Loading sets
+    csLoading, Loaded (inherited) clears it. }
+  TTyTabControlAccess = class(TTyTabControl)
+  public
+    procedure SetLoadingState(AValue: Boolean);
+    procedure CallLoaded;
+  end;
+
   TTyTabCollectionTest = class(TTestCase)
   private
     FForm: TForm;
@@ -35,6 +45,11 @@ type
     procedure TestRemoveActiveFiresOnChangeOnce;
     procedure TestExternalFreePageDeletesItem;
     procedure TestRemoveTabOutOfRangeNoOp;
+    // Streaming lifecycle: TabItemAdded defers page creation during csLoading,
+    // and Loaded materializes the streamed items and applies the saved TabIndex.
+    procedure TestLoadedMaterializesStreamedItems;
+    procedure TestLoadedAppliesSavedTabIndex;
+    procedure TestTabIndexPublishedDefaultMinusOne;
   end;
 
 implementation
@@ -44,6 +59,21 @@ implementation
 procedure TTabChangeProbe.Handle(Sender: TObject);
 begin
   Inc(Count);
+end;
+
+{ TTyTabControlAccess }
+
+procedure TTyTabControlAccess.SetLoadingState(AValue: Boolean);
+begin
+  if AValue then
+    Loading            // protected: Include(csLoading)
+  else
+    Loaded;            // protected: clears csLoading (+ our materialization)
+end;
+
+procedure TTyTabControlAccess.CallLoaded;
+begin
+  Loaded;
 end;
 
 procedure TTyTabCollectionTest.SetUp;
@@ -201,6 +231,69 @@ begin
   FTab.RemoveTab(5);
   FTab.RemoveTab(-1);
   AssertEquals('still 1 tab in collection', 1, FTab.Tabs.Count);
+end;
+
+{ Streaming (a): items added to the Tabs collection while csLoading is active
+  must NOT get a page yet (TabItemAdded defers). After Loaded the parallel
+  arrays are rebuilt: TabCount reflects the items, each item has a live page,
+  and Pages[i] is the same object as Tabs.Items[i].Page. }
+procedure TTyTabCollectionTest.TestLoadedMaterializesStreamedItems;
+var
+  Acc: TTyTabControlAccess;
+begin
+  Acc := TTyTabControlAccess.Create(FForm);
+  try
+    Acc.Parent := FForm;
+    Acc.SetLoadingState(True);
+    Acc.Tabs.Add.Caption := 'S1';
+    Acc.Tabs.Add.Caption := 'S2';
+    // page creation deferred while loading
+    Acc.CallLoaded;
+    AssertEquals('2 tabs after Loaded', 2, Acc.TabCount);
+    AssertNotNull('Pages[0] materialized', Acc.Pages[0]);
+    AssertNotNull('Pages[1] materialized', Acc.Pages[1]);
+    AssertSame('Tabs.Items[0].Page = Pages[0]', Acc.Pages[0], Acc.Tabs.Items[0].Page);
+    AssertSame('Tabs.Items[1].Page = Pages[1]', Acc.Pages[1], Acc.Tabs.Items[1].Page);
+  finally
+    Acc.Free;
+  end;
+end;
+
+{ Streaming (b): a TabIndex written during csLoading is captured (pending) and
+  applied in Loaded so the saved selection is restored. }
+procedure TTyTabCollectionTest.TestLoadedAppliesSavedTabIndex;
+var
+  Acc: TTyTabControlAccess;
+begin
+  Acc := TTyTabControlAccess.Create(FForm);
+  try
+    Acc.Parent := FForm;
+    Acc.SetLoadingState(True);
+    Acc.Tabs.Add.Caption := 'S1';
+    Acc.Tabs.Add.Caption := 'S2';
+    Acc.TabIndex := 1;          // stored as pending while loading
+    Acc.CallLoaded;
+    AssertEquals('saved TabIndex applied', 1, Acc.TabIndex);
+    AssertTrue('Pages[1] visible', Acc.Pages[1].Visible);
+    AssertFalse('Pages[0] hidden', Acc.Pages[0].Visible);
+  finally
+    Acc.Free;
+  end;
+end;
+
+{ Streaming (c): TabIndex is published with default -1 so a fresh control reads
+  -1 (RTTI default honored). }
+procedure TTyTabCollectionTest.TestTabIndexPublishedDefaultMinusOne;
+var
+  Fresh: TTyTabControl;
+begin
+  Fresh := TTyTabControl.Create(FForm);
+  try
+    Fresh.Parent := FForm;
+    AssertEquals('fresh TabIndex default -1', -1, Fresh.TabIndex);
+  finally
+    Fresh.Free;
+  end;
 end;
 
 initialization

@@ -55,6 +55,7 @@ type
     FTabs:     TTyTabCollection;
     FUpdatingTabs: Boolean;   // guards re-entrant collection<->array sync
     FTabIndex: Integer;       // -1 = none
+    FPendingTabIndex: Integer; // TabIndex captured during csLoading (-1 = none)
     FTabHeight: Integer;      // logical px, default 28
     FHoverTab: Integer;       // -1 = none
     FOnChange: TNotifyEvent;
@@ -105,10 +106,13 @@ type
     function TyTabHeaderRect(AIndex: Integer): TRect;
     function TyTabCloseRect(AIndex: Integer): TRect;
 
-    property TabIndex: Integer read FTabIndex write SetTabIndex;
     property Pages[AIndex: Integer]: TTyPanel read GetPage;
   published
     property Tabs: TTyTabCollection read FTabs write SetTabs;
+    { Published so the active selection round-trips through LFM streaming. A
+      value written during csLoading is captured (FPendingTabIndex) and applied
+      in Loaded; default -1 lets the RTTI default suppress writing -1. }
+    property TabIndex: Integer read FTabIndex write SetTabIndex default -1;
     property TabHeight: Integer read FTabHeight write SetTabHeight default 28;
     property TabsClosable: Boolean read FTabsClosable write SetTabsClosable default False;
     property OnTabClose: TTyTabCloseEvent read FOnTabClose write FOnTabClose;
@@ -198,6 +202,7 @@ begin
   FCaptions := TStringList.Create;
   FTabs     := TTyTabCollection.Create(Self);
   FTabIndex  := -1;
+  FPendingTabIndex := -1;
   FTabHeight := 28;
   FHoverTab  := -1;
   FTabsClosable := False;
@@ -389,6 +394,13 @@ procedure TTyTabControl.SetTabIndex(AValue: Integer);
 var
   Clamped: Integer;
 begin
+  { During csLoading the pages do not exist yet, so clamping against the empty
+    page list would lose a streamed selection. Capture it and apply in Loaded. }
+  if csLoading in ComponentState then
+  begin
+    FPendingTabIndex := AValue;
+    Exit;
+  end;
   if AValue < -1 then
     Clamped := -1
   else if AValue >= FCaptions.Count then
@@ -674,16 +686,23 @@ begin
     FPages[High(FPages)] := Page;
   end;
 
-  { Re-establish selection. If a TabIndex was streamed it is honored (clamped);
-    otherwise default to the first tab as the in-memory path does. }
-  if Length(FPages) = 0 then
-    FTabIndex := -1
-  else
+  { Re-establish selection. inherited Loaded has already cleared csLoading, so
+    SetTabIndex now clamps and shows the page normally. A TabIndex written
+    during loading is captured in FPendingTabIndex; apply it. Otherwise, when
+    nothing was streamed and there are pages, default to the first tab to
+    preserve the legacy in-memory auto-select. }
+  if FPendingTabIndex <> -1 then
   begin
-    if (FTabIndex < 0) or (FTabIndex > High(FPages)) then
-      FTabIndex := 0;
-    ShowOnlyPage(FTabIndex);
-  end;
+    SetTabIndex(FPendingTabIndex);
+    FPendingTabIndex := -1;
+  end
+  else if (FTabIndex = -1) and (Length(FPages) > 0) then
+    FTabIndex := 0;
+
+  if Length(FPages) = 0 then
+    FTabIndex := -1;
+
+  ShowOnlyPage(FTabIndex);
   Invalidate;
 end;
 
