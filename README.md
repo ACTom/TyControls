@@ -14,7 +14,7 @@ TyButton:disabled { opacity: 0.5; }
 
 - **三层解耦架构** —— 控件层 / 样式引擎 / 绘图原语(`TTyPainter`),控件不写死任何颜色
 - **CSS-lite 主题语言** —— `:root` 变量、类型/变体/状态选择器、`lighten/darken/alpha/mix` 颜色函数、线性渐变、9-slice 贴图
-- **15 个自绘控件** —— Button、Label、Edit、CheckBox、RadioButton、Panel、ComboBox、ScrollBar、ListBox、ProgressBar、ToggleSwitch、TrackBar、GroupBox、TitleBar、CaptionButton
+- **16 个自绘控件** —— Button、Label、Edit、CheckBox、RadioButton、Panel、ComboBox、ScrollBar、ListBox、ProgressBar、ToggleSwitch、TrackBar、GroupBox、TitleBar、CaptionButton、TabControl
 - **自绘窗框** —— `TTyFormChrome` 一个组件接管无边框窗口:标题栏、拖动、8 向缩放、最小/最大化/关闭、双击最大化(避让任务栏)
 - **运行时热切换主题** —— `LoadTheme` 一行代码,全部控件即时重绘
 - **HiDPI** —— 所有长度按 PPI 缩放,矢量绘制天然清晰
@@ -46,7 +46,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 |---|---|
 | [getting-started.md](docs/getting-started.md) | 安装、第一个窗体、主题加载与切换、HiDPI |
 | [tycss-reference.md](docs/tycss-reference.md) | `.tycss` 样式语言权威参考:全部属性、函数、选择器、合并顺序 |
-| [controls/](docs/controls/) | 每控件 API 说明(17 篇:属性 / 事件 / 状态 / 主题变体 / 示例) |
+| [controls/](docs/controls/) | 每控件 API 说明(18 篇:属性 / 事件 / 状态 / 主题变体 / 示例) |
 | [KNOWN_GAPS.md](docs/KNOWN_GAPS.md) | 已知限制与 Tier-2 计划 |
 
 控件 API 速查:[Button](docs/controls/button.md) ·
@@ -65,7 +65,8 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 [TitleBar](docs/controls/titlebar.md) ·
 [CaptionButton](docs/controls/captionbutton.md) ·
 [FormChrome](docs/controls/formchrome.md) ·
-[StyleController](docs/controls/stylecontroller.md)
+[StyleController](docs/controls/stylecontroller.md) ·
+[TabControl](docs/controls/tabcontrol.md)
 
 ## 示例
 
@@ -86,6 +87,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 | [examples/toggleswitch](examples/toggleswitch/) | 开关切换、ON/OFF 主题（`:active` 状态） |
 | [examples/trackbar](examples/trackbar/) | 拖动滑块、方向键步进、TyTrackThumb 样式 |
 | [examples/groupbox](examples/groupbox/) | 分组容器、RadioButton 互斥分组 |
+| [examples/tabcontrol](examples/tabcontrol/) | 标签页切换、AddTab、键盘 ←/→ 导航 |
 | [examples/formchrome](examples/formchrome/) | 无边框自绘窗框窗口 |
 | [examples/theming](examples/theming/) | 自定义 `.tycss` 主题 + 运行时热切换 |
 | [examples/demo](examples/demo/) | 综合 gallery:全部控件 + 三主题切换 + 自绘窗框 |

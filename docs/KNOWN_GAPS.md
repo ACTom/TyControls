@@ -39,6 +39,10 @@ Tier-2 native enhancement layer.
 - `TTyEdit` has no word-level jump (v1.1): Ctrl/Cmd+Left/Right arrow does not
   calculate word boundaries; the key event is passed through to the parent
   window unmodified.
+- `TTyTabControl` tab overflow is clipped, not scrollable (v1.2): when the
+  combined width of all tab headers exceeds the control width, the overflowing
+  tabs are clipped by the canvas. There is no horizontal scrolling tab strip.
+  A scrollable tab bar is a Tier-2 item.
 - `TTyCheckBox` / `TTyRadioButton` `opacity` and `shadow`: **resolved in v1.1**.
   The rendering path now routes through `DrawFrame` which applies both
   properties; they are fully effective for all typeKeys including checkbox and

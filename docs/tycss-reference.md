@@ -525,7 +525,7 @@ TyButton.primary {
 
 ## 8. typeKey 与内置变体清单
 
-选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey,共 18 个（含子部件 typeKey）:
+选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey,共 20 个（含子部件 typeKey）:
 
 ### 8.1 控件 typeKey
 
@@ -546,6 +546,7 @@ TyButton.primary {
 | `TyGroupBox` | `TTyGroupBox` | ✓ | — | **必须声明 `background`**（用于遮盖标题处边框线） |
 | `TyTitleBar` | `TTyTitleBar` | ✓ | — | 自绘窗体标题栏（配合 `TTyFormChrome`） |
 | `TyCaptionButton` | `TTyCaptionButton` | ✓ | `close`、`min`、`max` | 标题栏关闭/最小化/最大化按钮 |
+| `TyTabControl` | `TTyTabControl` | ✓ | — | 标签页控件外框；页签子部件样式由 `TyTab` 决定 |
 
 ### 8.2 子部件 typeKey（不对应独立控件，由父控件内部解析）
 
@@ -554,6 +555,7 @@ TyButton.primary {
 | `TyListItem` | `TTyListBox` | `:hover`（悬停行）、`:active`（选中行）、无伪类（普通行） | 每行条目的独立样式，`background` 决定行背景，`color` 决定文字颜色 |
 | `TyProgressFill` | `TTyProgressBar` | 无状态（始终正常） | 进度条填充段，通常设置为强调色 |
 | `TyTrackThumb` | `TTyTrackBar` | `:hover`（鼠标在滑块上）、`:active`（拖动中）、无伪类（正常） | 滑块的独立样式，`background` 决定滑块颜色 |
+| `TyTab` | `TTyTabControl` | `:hover`（鼠标悬停在该页签上）、`:active`（该页签当前被选中）、无伪类（普通未选中） | 单个页签头的独立样式；注意 `:active` 在此表示"选中态"而非"鼠标按下" |
 
 - 所有控件 typeKey 都支持 `hover`、`active`、`disabled` 三个状态；除 `TyLabel`、`TyProgressBar` 外都支持 `focus`；
 - **变体不是封闭集合**：任何标识符都可以作为变体，只要控件的 `StyleClass` 属性包含对应 token（空格分隔，可多个）即可匹配；
@@ -580,5 +582,5 @@ TyButton.primary {
    渲染只分 ≥600 粗体 / 其余常规两档(§5.9)。
 9. **`font-family` 不要加引号**,引号会保留进字体名(§5.7)。
 10. **`TyScrollBar` 的 `color` 决定滑块颜色**：`RenderTo` 使用 `S.TextColor`（即 CSS `color` 属性）作为滑块填充色，轨道背景来自 `background`。内置主题中的 `TyScrollBar:hover { color: … }` 写法是正确用法。
-11. `TyComboBox` v1 无真正的下拉弹层（点击就地轮换选项），样式上不存在"弹出列表"可设的部分。
+11. `TyTabControl` 页签溢出不滚动：所有页签宽度之和超过控件宽度时，超出部分被画布裁剪，不提供可横向滚动的页签条（v1.2 已知限制）。
 12. 不支持 `@media`、`@import`、`!important`、转义字符串、`//` 行注释。
