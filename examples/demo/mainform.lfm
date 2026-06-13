@@ -1,10 +1,10 @@
 object DemoMainForm: TDemoMainForm
   Left = 200
-  Height = 560
+  Height = 660
   Top = 120
   Width = 640
   Caption = 'TyControls Demo'
-  ClientHeight = 560
+  ClientHeight = 660
   ClientWidth = 640
   LCLVersion = '4.99.0.0'
   OnCreate = FormCreate
@@ -153,12 +153,47 @@ object DemoMainForm: TDemoMainForm
     Controller = Controller
     Checked = True
   end
+  object SpinKind: TTySpinEdit
+    Left = 328
+    Height = 28
+    Top = 324
+    Width = 120
+    Controller = Controller
+    MinValue = 0
+    MaxValue = 10
+    Value = 3
+  end
   object TabCtrl1: TTyTabControl
     Left = 16
     Height = 130
     Top = 400
     Width = 604
     Controller = Controller
+    Tabs = <
+      item
+        Caption = 'Tab 1'
+      end
+      item
+        Caption = 'Tab 2'
+      end
+      item
+        Caption = 'Tab 3'
+      end>
+    TabIndex = 0
+    TabsClosable = True
+  end
+  object Memo1: TTyMemo
+    Left = 16
+    Height = 100
+    Top = 540
+    Width = 604
+    Controller = Controller
+    Lines.Strings = (
+      'TTyMemo — multi-line editor'
+      'Enter splits a line; Backspace/Delete merge across lines.'
+      'Arrows / Home / End move the caret; the wheel scrolls'
+      'when the text overflows the visible rows.'
+    )
   end
   object Controller: TTyStyleController
     Left = 16

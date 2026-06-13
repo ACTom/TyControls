@@ -2,7 +2,7 @@ unit mainform;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls, Dialogs, Graphics,
+  Classes, SysUtils, Forms, Controls, Graphics,
   tyControls.Types, tyControls.StyleModel,
   tyControls.Controller, tyControls.Button, tyControls.TyLabel,
   tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
@@ -12,7 +12,9 @@ uses
   tyControls.SpinEdit, tyControls.Memo;
 type
 
-  { TDemoMainForm }
+  { TDemoMainForm — all controls are placed in the designer (mainform.lfm),
+    including the TabControl's tabs (v1.7 design-time Tabs collection),
+    TTySpinEdit and TTyMemo. }
 
   TDemoMainForm = class(TForm)
     Controller: TTyStyleController;
@@ -35,16 +37,14 @@ type
     TrackBar1: TTyTrackBar;
     Toggle1: TTyToggleSwitch;
     TabCtrl1: TTyTabControl;
-    TySpinEdit1: TTySpinEdit;
-    procedure BtnDangerClick(Sender: TObject);
+    SpinKind: TTySpinEdit;
+    Memo1: TTyMemo;
     procedure FormCreate(Sender: TObject);
     procedure BtnLightClick(Sender: TObject);
     procedure BtnDarkClick(Sender: TObject);
     procedure BtnShowcaseClick(Sender: TObject);
     procedure TrackBar1Change(Sender: TObject);
   private
-    Spin1: TTySpinEdit;   // v1.9: created in code (gallery demo)
-    Memo1: TTyMemo;       // v1.9a: created in code (gallery demo)
     function ThemeDir: string;
     procedure ApplyTheme(const AFile: string);
   end;
@@ -94,58 +94,8 @@ end;
 
 procedure TDemoMainForm.FormCreate(Sender: TObject);
 begin
+  // Controls (incl. tabs/spin/memo) come from the .lfm; just load the theme.
   ApplyTheme('light.tycss');
-
-  { 多数 gallery 控件已放到 .lfm 中（与顶部控件一致）。TTyTabControl 的页签由
-    AddTab 在运行时创建对应的 TTyPanel，尚无法在设计器中定义，故控件本身放在
-    .lfm，其页签在此添加。 }
-  with TabCtrl1.AddTab('General') do
-  begin
-    with TTyLabel.Create(Self) do
-    begin
-      Parent  := TabCtrl1.Pages[0];
-      Caption := 'Name:';
-      SetBounds(8, 8, 60, 20);
-      Controller := Self.Controller;
-    end;
-    with TTyButton.Create(Self) do
-    begin
-      Parent  := TabCtrl1.Pages[0];
-      Caption := 'OK';
-      SetBounds(8, 36, 80, 28);
-      Controller := Self.Controller;
-    end;
-  end;
-  TabCtrl1.AddTab('Appearance');
-  TabCtrl1.AddTab('About');
-
-  { TTySpinEdit (v1.9): numeric up/down, right column below the group box. }
-  Spin1 := TTySpinEdit.Create(Self);
-  Spin1.Parent := Self;
-  Spin1.SetBounds(460, 362, 120, 28);
-  Spin1.MinValue := 0;
-  Spin1.MaxValue := 10;
-  Spin1.Value := 3;
-  Spin1.Controller := Controller;
-
-  { TTyMemo (v1.9a): multi-line editor with auto vertical scrollbar, right column. }
-  Memo1 := TTyMemo.Create(Self);
-  Memo1.Parent := Self;
-  Memo1.SetBounds(460, 400, 165, 140);
-  Memo1.Controller := Controller;
-  Memo1.Lines.Text :=
-    'TTyMemo' + LineEnding +
-    'multi-line edit' + LineEnding +
-    'Enter / Backspace' + LineEnding +
-    'arrows / Home / End' + LineEnding +
-    'wheel scrolls' + LineEnding +
-    'when overflowing' + LineEnding +
-    'the visible rows.';
-end;
-
-procedure TDemoMainForm.BtnDangerClick(Sender: TObject);
-begin
-  ShowMessage('Danger');
 end;
 
 procedure TDemoMainForm.BtnLightClick(Sender: TObject);
