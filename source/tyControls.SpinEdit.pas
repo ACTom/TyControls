@@ -17,6 +17,10 @@ type
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
   published
@@ -150,6 +154,58 @@ end;
 procedure TTySpinEdit.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+procedure TTySpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if not Enabled then Exit;
+  inherited KeyDown(Key, Shift);
+  case Key of
+    VK_UP:
+      begin
+        Value := FValue + FIncrement;
+        Key := 0;
+      end;
+    VK_DOWN:
+      begin
+        Value := FValue - FIncrement;
+        Key := 0;
+      end;
+  end;
+end;
+
+function TTySpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+begin
+  if not Enabled then Exit(False);
+  // Let the user's OnMouseWheel handler run first; if it consumes the event, stop.
+  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if WheelDelta > 0 then
+    Value := FValue + FIncrement
+  else
+    Value := FValue - FIncrement;
+  Result := True;
+end;
+
+procedure TTySpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  if not Enabled then Exit;
+  inherited MouseDown(Button, Shift, X, Y);
+  if Button = mbLeft then
+  begin
+    if PtInRect(TySpinUpButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
+      Value := FValue + FIncrement
+    else if PtInRect(TySpinDownButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
+      Value := FValue - FIncrement;
+    try
+      if CanFocus then SetFocus;
+    except
+    end;
+  end;
 end;
 
 end.
