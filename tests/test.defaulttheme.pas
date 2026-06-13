@@ -3,7 +3,9 @@ unit test.defaulttheme;
 interface
 uses
   Classes, SysUtils, fpcunit, testregistry,
-  tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme;
+  tyControls.Types, tyControls.StyleModel, tyControls.DefaultTheme,
+  Controls, Graphics, BGRABitmap, BGRABitmapTypes,
+  tyControls.Controller, tyControls.Base, tyControls.Button;
 type
   TBuiltinThemeTest = class(TTestCase)
   private
@@ -14,8 +16,19 @@ type
     procedure TestEmptyModelFallsBackToBuiltin;
     procedure TestUserTypeKeySuppressesBuiltinNoBleed;
     procedure TestUnstyledTypeKeyStillGetsBuiltin;
+    procedure TestControlVisibleWithoutTheme;
+  end;
+
+  TTyButtonRenderAccess = class(TTyButton)
+  public
+    procedure DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 implementation
+
+procedure TTyButtonRenderAccess.DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
 
 function TBuiltinThemeTest.NormalizeCss(const S: string): string;
 { Robust to line-ending and trailing-whitespace differences. }
@@ -154,6 +167,51 @@ begin
       tpBackground in s.Present);
   finally
     m.Free;
+  end;
+end;
+
+procedure TBuiltinThemeTest.TestControlVisibleWithoutTheme;
+{ End-to-end fix for the reported bug: a control whose controller has NO theme
+  loaded must still render its background (built-in skin), not blank. Mirrors
+  what the Lazarus designer does (Paint -> RenderTo, no LoadTheme ever run). }
+var
+  Ctl: TTyStyleController;
+  Btn: TTyButtonRenderAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil); // deliberately NO LoadTheme
+  Bmp := TBitmap.Create;
+  try
+    Btn := TTyButtonRenderAccess.Create(nil);
+    try
+      Btn.Controller := Ctl;
+      Btn.Caption := '';                 // no glyph at center
+      Btn.Font.PixelsPerInch := 96;      // pin PPI (macOS defaults to 72)
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(100, 40);
+      { Distinct magenta backdrop so an unpainted control stays detectable. }
+      Bmp.Canvas.Brush.Color := TColor($FF00FF);
+      Bmp.Canvas.FillRect(0, 0, 100, 40);
+      Btn.DoRenderTo(Bmp.Canvas, Rect(0, 0, 100, 40), 96);
+
+      Reread := TBGRABitmap.Create(Bmp);
+      try
+        Px := Reread.GetPixel(50, 20);   // center: built-in surface = white
+        AssertTrue('center painted white-ish (built-in bg drawn), not backdrop: R',
+          Px.red > 240);
+        AssertTrue('center painted white-ish (built-in bg drawn): G', Px.green > 240);
+        AssertTrue('center painted white-ish (built-in bg drawn): B', Px.blue > 240);
+      finally
+        Reread.Free;
+      end;
+    finally
+      Btn.Free;
+    end;
+  finally
+    Bmp.Free;
+    Ctl.Free;
   end;
 end;
 
