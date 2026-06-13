@@ -20,14 +20,21 @@ type
     procedure ProbeSetCaret(ALine, ACol: Integer);
     procedure ProbeRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure ProbeSetForceFocused(AValue: Boolean);
+    // Drives the protected KeyDown so tests can inspect whether Key was consumed
+    // (set to 0) or left intact (e.g. when disabled it must pass through).
+    procedure ProbeKeyDown(var AKey: Word; AShift: TShiftState);
   end;
 
   TTyMemoTest = class(TTestCase)
   private
     FCtl: TTyStyleController;
     FMemo: TTyMemoProbe;
+    FChangeCount: Integer;
     procedure SetUpWithPadding(APaddingLeft: Integer);
     procedure SetUpWithCss(const ACss: string);
+    procedure OnMemoChange(Sender: TObject);
+    // Load FMemo with the given lines (replaces existing content).
+    procedure LoadLines(const AItems: array of string);
     // True if any pixel in horizontal band [x0..x1] at row Y is "light" (all
     // channels above AThresh) — i.e. text/caret drew over the dark background.
     function BandHasLightPixel(ABmp: TBGRABitmap; Y, X0, X1, AThresh: Integer): Boolean;
@@ -44,6 +51,20 @@ type
     procedure TestRendersAllVisibleLinesText;
     procedure TestCaretDrawnWhenFocused;
     procedure TestSecondLineYOffset;
+    // --- T3 keyboard editing ---
+    procedure TestInsertPrintable;
+    procedure TestEnterSplits;
+    procedure TestBackspaceMergesLines;
+    procedure TestBackspaceNoopAtOrigin;
+    procedure TestDeleteMergesNextLine;
+    procedure TestLeftWrapsToPrevLineEnd;
+    procedure TestRightWrapsToNextLineStart;
+    procedure TestUpDownDesiredColumn;
+    procedure TestHomeEnd;
+    procedure TestCtrlHomeEnd;
+    procedure TestCJKBackspace;
+    procedure TestDisabledIgnoresKeys;
+    procedure TestOnChangeFiresOnEdit;
   end;
 
 implementation
@@ -100,6 +121,11 @@ begin
   SetForceFocused(AValue);
 end;
 
+procedure TTyMemoProbe.ProbeKeyDown(var AKey: Word; AShift: TShiftState);
+begin
+  KeyDown(AKey, AShift);
+end;
+
 { TTyMemoTest }
 
 procedure TTyMemoTest.SetUpWithPadding(APaddingLeft: Integer);
@@ -122,6 +148,26 @@ begin
   FMemo.Controller := FCtl;
   FMemo.Font.PixelsPerInch := 96;
   FMemo.SetBounds(0, 0, 200, 120);
+end;
+
+procedure TTyMemoTest.OnMemoChange(Sender: TObject);
+begin
+  Inc(FChangeCount);
+end;
+
+procedure TTyMemoTest.LoadLines(const AItems: array of string);
+var
+  L: TStringList;
+  i: Integer;
+begin
+  L := TStringList.Create;
+  try
+    for i := Low(AItems) to High(AItems) do
+      L.Add(AItems[i]);
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
 end;
 
 function TTyMemoTest.BandHasLightPixel(ABmp: TBGRABitmap; Y, X0, X1, AThresh: Integer): Boolean;
@@ -428,6 +474,197 @@ begin
   finally
     Bmp.Free;
   end;
+end;
+
+{ --- T3 keyboard editing tests --- }
+
+procedure TTyMemoTest.TestInsertPrintable;
+begin
+  SetUpWithPadding(0);
+  FMemo.ProbeSetCaret(0, 0);
+  FMemo.InjectChar('a');
+  AssertEquals('Lines[0] = a', 'a', FMemo.Lines[0]);
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 1', 1, FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestEnterSplits;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['abcd']);
+  FMemo.ProbeSetCaret(0, 2);
+  FMemo.InjectKey(VK_RETURN, []);
+  AssertEquals('LineCount = 2', 2, FMemo.ProbeLineCountLogical);
+  AssertEquals('Lines[0] = ab', 'ab', FMemo.Lines[0]);
+  AssertEquals('Lines[1] = cd', 'cd', FMemo.Lines[1]);
+  AssertEquals('caret line 1', 1, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 0', 0, FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestBackspaceMergesLines;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['ab', 'cd']);
+  FMemo.ProbeSetCaret(1, 0);
+  FMemo.InjectBackspace;
+  AssertEquals('LineCount = 1', 1, FMemo.ProbeLineCountLogical);
+  AssertEquals('Lines[0] = abcd', 'abcd', FMemo.Lines[0]);
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 2', 2, FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestBackspaceNoopAtOrigin;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['abc']);
+  FMemo.ProbeSetCaret(0, 0);
+  FChangeCount := 0;
+  FMemo.OnChange := @OnMemoChange;
+  FMemo.InjectBackspace;
+  AssertEquals('Lines[0] unchanged', 'abc', FMemo.Lines[0]);
+  AssertEquals('LineCount unchanged', 1, FMemo.ProbeLineCountLogical);
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 0', 0, FMemo.ProbeCaretCol);
+  AssertEquals('OnChange NOT fired', 0, FChangeCount);
+end;
+
+procedure TTyMemoTest.TestDeleteMergesNextLine;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['ab', 'cd']);
+  FMemo.ProbeSetCaret(0, 2);
+  FMemo.InjectDelete;
+  AssertEquals('LineCount = 1', 1, FMemo.ProbeLineCountLogical);
+  AssertEquals('Lines[0] = abcd', 'abcd', FMemo.Lines[0]);
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 2', 2, FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestLeftWrapsToPrevLineEnd;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['ab', 'cd']);
+  FMemo.ProbeSetCaret(1, 0);
+  FMemo.InjectKey(VK_LEFT, []);
+  AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 2 (end of ab)', 2, FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestRightWrapsToNextLineStart;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['ab', 'cd']);
+  FMemo.ProbeSetCaret(0, 2);  // end of 'ab'
+  FMemo.InjectKey(VK_RIGHT, []);
+  AssertEquals('caret line 1', 1, FMemo.ProbeCaretLine);
+  AssertEquals('caret col 0', 0, FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestUpDownDesiredColumn;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['abcde', 'xy', 'zzzzz']);
+  FMemo.ProbeSetCaret(0, 4);
+  FMemo.InjectKey(VK_DOWN, []);
+  AssertEquals('down1 line 1', 1, FMemo.ProbeCaretLine);
+  AssertEquals('down1 col clamped to len(xy)=2', 2, FMemo.ProbeCaretCol);
+  FMemo.InjectKey(VK_DOWN, []);
+  AssertEquals('down2 line 2', 2, FMemo.ProbeCaretLine);
+  AssertEquals('down2 col desired restored to 4', 4, FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestHomeEnd;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['hello world']);
+  FMemo.ProbeSetCaret(0, 5);
+  FMemo.InjectKey(VK_HOME, []);
+  AssertEquals('home -> col 0', 0, FMemo.ProbeCaretCol);
+  FMemo.InjectKey(VK_END, []);
+  AssertEquals('end -> col len', UTF8Length('hello world'), FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestCtrlHomeEnd;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['alpha', 'beta', 'gamma']);
+  FMemo.ProbeSetCaret(1, 2);
+  FMemo.InjectKey(VK_HOME, [ssCtrl]);
+  AssertEquals('ctrl+home line 0', 0, FMemo.ProbeCaretLine);
+  AssertEquals('ctrl+home col 0', 0, FMemo.ProbeCaretCol);
+  FMemo.InjectKey(VK_END, [ssCtrl]);
+  AssertEquals('ctrl+end last line', 2, FMemo.ProbeCaretLine);
+  AssertEquals('ctrl+end last col', UTF8Length('gamma'), FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestCJKBackspace;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['a中b']);
+  FMemo.ProbeSetCaret(0, 2);  // after '中'
+  FMemo.InjectBackspace;
+  AssertEquals('whole CJK codepoint removed', 'ab', FMemo.Lines[0]);
+  AssertEquals('caret col 1', 1, FMemo.ProbeCaretCol);
+end;
+
+procedure TTyMemoTest.TestDisabledIgnoresKeys;
+var
+  K: Word;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['abcd']);
+  FMemo.ProbeSetCaret(0, 2);
+  FMemo.Enabled := False;
+  FChangeCount := 0;
+  FMemo.OnChange := @OnMemoChange;
+
+  // Printable insert: no-op
+  FMemo.InjectChar('z');
+  AssertEquals('insert ignored when disabled', 'abcd', FMemo.Lines[0]);
+
+  // VK keys must NOT be consumed (Key stays non-zero)
+  K := VK_RETURN;
+  FMemo.ProbeKeyDown(K, []);
+  AssertEquals('VK_RETURN not consumed when disabled', VK_RETURN, K);
+  K := VK_BACK;
+  FMemo.ProbeKeyDown(K, []);
+  AssertEquals('VK_BACK not consumed when disabled', VK_BACK, K);
+  K := VK_LEFT;
+  FMemo.ProbeKeyDown(K, []);
+  AssertEquals('VK_LEFT not consumed when disabled', VK_LEFT, K);
+
+  AssertEquals('model unchanged when disabled', 'abcd', FMemo.Lines[0]);
+  AssertEquals('LineCount unchanged when disabled', 1, FMemo.ProbeLineCountLogical);
+  AssertEquals('caret unchanged line', 0, FMemo.ProbeCaretLine);
+  AssertEquals('caret unchanged col', 2, FMemo.ProbeCaretCol);
+  AssertEquals('OnChange NOT fired when disabled', 0, FChangeCount);
+end;
+
+procedure TTyMemoTest.TestOnChangeFiresOnEdit;
+begin
+  SetUpWithPadding(0);
+  LoadLines(['abcd']);
+  FMemo.ProbeSetCaret(0, 2);
+  FMemo.OnChange := @OnMemoChange;
+
+  // Edit fires OnChange
+  FChangeCount := 0;
+  FMemo.InjectChar('x');
+  AssertEquals('OnChange fired on insert', 1, FChangeCount);
+
+  FChangeCount := 0;
+  FMemo.InjectKey(VK_RETURN, []);
+  AssertEquals('OnChange fired on split', 1, FChangeCount);
+
+  // Pure caret moves do NOT fire OnChange
+  FChangeCount := 0;
+  FMemo.InjectKey(VK_LEFT, []);
+  FMemo.InjectKey(VK_RIGHT, []);
+  FMemo.InjectKey(VK_HOME, []);
+  FMemo.InjectKey(VK_END, []);
+  FMemo.InjectKey(VK_UP, []);
+  FMemo.InjectKey(VK_DOWN, []);
+  AssertEquals('OnChange NOT fired on pure caret moves', 0, FChangeCount);
 end;
 
 initialization

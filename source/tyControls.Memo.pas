@@ -29,10 +29,28 @@ type
     // when rendering offscreen, so tests can force the caret to draw. Production
     // paint uses (Focused or FForceFocused) so this is a no-op unless set.
     FForceFocused: Boolean;
+    // Fired after any mutation of the text model (insert/split/delete/merge).
+    // Pure caret moves do NOT fire it.
+    FOnChange: TNotifyEvent;
     function GetLines: TStrings;
     procedure SetLines(AValue: TStrings);
     function EffectiveFontSize(const S: TTyStyleSet): Integer;
     function TextStartX(APPI: Integer): Integer;
+    // Codepoint length of a logical line index (0 for the synthetic empty line).
+    function LineLen(ALineIndex: Integer): Integer;
+    // Fire OnChange (after a model mutation).
+    procedure DoChange;
+    // Shared post-mutation routine: clamp caret, keep its line visible, repaint,
+    // and fire OnChange. (UpdateScrollBar lands with the real scrollbar in T4.)
+    procedure AfterEdit(APPI: Integer);
+    // Shared post-move routine for pure caret motion: clamp, keep visible, repaint.
+    // Never fires OnChange.
+    procedure AfterCaretMove(APPI: Integer);
+    // --- Model mutators (pure UTF8 splice; no key/paint dependency) ---
+    procedure DoInsertText(const AStr: string);
+    procedure DoSplitLine;
+    procedure DoBackspace;
+    procedure DoDelete;
   protected
     function GetStyleTypeKey: string; override;
     // --- Pure per-line geometry helpers (headless-testable; no paint state) ---
@@ -56,13 +74,27 @@ type
     procedure SetCaret(ALine, ACol: Integer);
     // Headless focus override (see FForceFocused). Triggers a repaint.
     procedure SetForceFocused(AValue: Boolean);
+    // Visible-line count for the current bounds at APPI (>= 1).
+    function VisibleLineCount(APPI: Integer): Integer;
+    // Scroll FTopLine so the caret line sits inside the visible window.
+    procedure EnsureCaretLineVisible(APPI: Integer);
     // Paint into ACanvas at ARect (RenderTo convention: draw local Rect(0,0,W,H),
     // EndPaint blits at ARect origin). APPI scales padding/line metrics.
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    // Input handlers. Both early-Exit when not Enabled (v1.5 policy); when
+    // disabled, KeyDown does NOT consume Key so navigation falls through.
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    // Headless input helpers (mirror TTyEdit.Inject*). InjectChar simulates a
+    // printable keypress; InjectKey simulates a VK_* KeyDown.
+    procedure InjectChar(const AChar: TUTF8Char);
+    procedure InjectKey(AKey: Word; AShift: TShiftState);
+    procedure InjectBackspace;
+    procedure InjectDelete;
   published
     property Lines: TStrings read GetLines write SetLines;
     property Enabled;
@@ -72,6 +104,7 @@ type
     property StyleClass;
     property Controller;
     property OnClick;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
 implementation
@@ -125,18 +158,15 @@ end;
 
 procedure TTyMemo.ClampCaret;
 var
-  MaxLine, LineLen: Integer;
+  MaxLine, CurLen: Integer;
 begin
   MaxLine := LineCountLogical - 1;
   if FCaretLine < 0 then FCaretLine := 0;
   if FCaretLine > MaxLine then FCaretLine := MaxLine;
   // Length of the caret's line in codepoints (0 for the synthetic empty line).
-  if FCaretLine < FLines.Count then
-    LineLen := UTF8Length(FLines[FCaretLine])
-  else
-    LineLen := 0;
+  CurLen := LineLen(FCaretLine);
   if FCaretCol < 0 then FCaretCol := 0;
-  if FCaretCol > LineLen then FCaretCol := LineLen;
+  if FCaretCol > CurLen then FCaretCol := CurLen;
   if FDesiredCol < 0 then FDesiredCol := 0;
 end;
 
@@ -164,6 +194,167 @@ begin
   if FForceFocused = AValue then Exit;
   FForceFocused := AValue;
   Invalidate;
+end;
+
+function TTyMemo.LineLen(ALineIndex: Integer): Integer;
+begin
+  if (ALineIndex >= 0) and (ALineIndex < FLines.Count) then
+    Result := UTF8Length(FLines[ALineIndex])
+  else
+    Result := 0;  // synthetic empty line (model has zero lines)
+end;
+
+procedure TTyMemo.DoChange;
+begin
+  if Assigned(FOnChange) then
+    FOnChange(Self);
+end;
+
+function TTyMemo.VisibleLineCount(APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+  ContentH, LH: Integer;
+begin
+  S := CurrentStyle;
+  // Content height = client height minus top+bottom padding (scaled).
+  ContentH := ClientHeight - MulDiv(S.Padding.Top, APPI, 96)
+    - MulDiv(S.Padding.Bottom, APPI, 96);
+  LH := LineHeight(APPI);
+  if LH < 1 then LH := 1;
+  Result := ContentH div LH;
+  if Result < 1 then
+    Result := 1;
+end;
+
+procedure TTyMemo.EnsureCaretLineVisible(APPI: Integer);
+var
+  VisLines, MaxTop: Integer;
+begin
+  VisLines := VisibleLineCount(APPI);
+  // Scroll up so the caret line is the new top.
+  if FCaretLine < FTopLine then
+    FTopLine := FCaretLine;
+  // Scroll down so the caret line is the last fully visible line.
+  if FCaretLine > FTopLine + VisLines - 1 then
+    FTopLine := FCaretLine - VisLines + 1;
+  // Never scroll past the last line / below 0.
+  MaxTop := LineCountLogical - 1;
+  if FTopLine > MaxTop then FTopLine := MaxTop;
+  if FTopLine < 0 then FTopLine := 0;
+end;
+
+procedure TTyMemo.AfterEdit(APPI: Integer);
+begin
+  ClampCaret;
+  EnsureCaretLineVisible(APPI);
+  // UpdateScrollBar lands with the real scrollbar in T4.
+  Invalidate;
+  DoChange;
+end;
+
+procedure TTyMemo.AfterCaretMove(APPI: Integer);
+begin
+  ClampCaret;
+  EnsureCaretLineVisible(APPI);
+  Invalidate;
+end;
+
+// ---- Model mutators (pure UTF8 splice on FLines) ----
+
+procedure TTyMemo.DoInsertText(const AStr: string);
+// Splice AStr into the current line at FCaretCol (codepoint index); advance the
+// caret past the inserted text. Mirrors TTyEdit.InjectStringAt per-line.
+var
+  Cur, Before, After: string;
+  L: Integer;
+begin
+  if AStr = '' then Exit;
+  // Ensure the model has a backing line for the caret.
+  if FLines.Count = 0 then
+    FLines.Add('');
+  Cur := FLines[FCaretLine];
+  L := UTF8Length(Cur);
+  if FCaretCol > L then FCaretCol := L;
+  Before := UTF8Copy(Cur, 1, FCaretCol);
+  After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
+  FLines[FCaretLine] := Before + AStr + After;
+  FCaretCol := FCaretCol + UTF8Length(AStr);
+end;
+
+procedure TTyMemo.DoSplitLine;
+// Split the current line at FCaretCol into two logical lines; caret moves to the
+// start of the new (lower) line.
+var
+  Cur, Before, After: string;
+  L: Integer;
+begin
+  if FLines.Count = 0 then
+    FLines.Add('');
+  Cur := FLines[FCaretLine];
+  L := UTF8Length(Cur);
+  if FCaretCol > L then FCaretCol := L;
+  Before := UTF8Copy(Cur, 1, FCaretCol);
+  After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
+  FLines[FCaretLine] := Before;
+  FLines.Insert(FCaretLine + 1, After);
+  Inc(FCaretLine);
+  FCaretCol := 0;
+end;
+
+procedure TTyMemo.DoBackspace;
+// At col>0: delete the previous codepoint on the current line.
+// At col 0, line>0: merge the current line onto the end of the previous line,
+// caret landing at the join. At (0,0): no-op (caller checks and skips OnChange).
+var
+  Cur, Prev, Before, After: string;
+  L, PrevLen: Integer;
+begin
+  if FCaretCol > 0 then
+  begin
+    Cur := FLines[FCaretLine];
+    L := UTF8Length(Cur);
+    Before := UTF8Copy(Cur, 1, FCaretCol - 1);
+    After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
+    FLines[FCaretLine] := Before + After;
+    Dec(FCaretCol);
+  end
+  else
+  begin
+    // col = 0, must be line > 0 (caller guards the (0,0) no-op).
+    Prev := FLines[FCaretLine - 1];
+    Cur  := FLines[FCaretLine];
+    PrevLen := UTF8Length(Prev);
+    FLines[FCaretLine - 1] := Prev + Cur;
+    FLines.Delete(FCaretLine);
+    Dec(FCaretLine);
+    FCaretCol := PrevLen;
+  end;
+end;
+
+procedure TTyMemo.DoDelete;
+// Before line end: delete the next codepoint on the current line.
+// At line end with a following line: merge the next line up (caret stays).
+// At the very end of the document: no-op (caller checks and skips OnChange).
+var
+  Cur, Nxt, Before, After: string;
+  L: Integer;
+begin
+  Cur := FLines[FCaretLine];
+  L := UTF8Length(Cur);
+  if FCaretCol < L then
+  begin
+    Before := UTF8Copy(Cur, 1, FCaretCol);
+    After  := UTF8Copy(Cur, FCaretCol + 2, L - FCaretCol - 1);
+    FLines[FCaretLine] := Before + After;
+  end
+  else
+  begin
+    // At end of line; merge the following line up (caller guards end-of-doc).
+    Nxt := FLines[FCaretLine + 1];
+    FLines[FCaretLine] := Cur + Nxt;
+    FLines.Delete(FCaretLine + 1);
+    // caret stays at (FCaretLine, FCaretCol = L)
+  end;
 end;
 
 function TTyMemo.EffectiveFontSize(const S: TTyStyleSet): Integer;
@@ -345,6 +536,178 @@ end;
 procedure TTyMemo.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+// ---- Input handlers ----
+
+procedure TTyMemo.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
+  inherited UTF8KeyPress(UTF8Key);
+  // Printable codepoints only; control chars (Enter/Tab/etc.) are handled in
+  // KeyDown or ignored here.
+  if (UTF8Key = '') or (UTF8Key[1] < #32) then Exit;
+  DoInsertText(UTF8Key);
+  FDesiredCol := FCaretCol;          // horizontal edit refreshes desired column
+  AfterEdit(Font.PixelsPerInch);
+end;
+
+procedure TTyMemo.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  APPI, L, MaxLine: Integer;
+  CtrlLike: Boolean;
+begin
+  if not Enabled then Exit;          // when disabled, do NOT consume Key
+  inherited KeyDown(Key, Shift);
+  APPI := Font.PixelsPerInch;
+  MaxLine := LineCountLogical - 1;
+  // Ctrl (Win/Linux) or Meta/Cmd (macOS) modifies Home/End to document extents.
+  CtrlLike := (ssCtrl in Shift) or (ssMeta in Shift);
+
+  case Key of
+    VK_RETURN:
+    begin
+      DoSplitLine;
+      FDesiredCol := FCaretCol;
+      AfterEdit(APPI);
+      Key := 0;
+    end;
+    VK_BACK:
+    begin
+      // (0,0): no model change, no OnChange, but key is consumed.
+      if (FCaretCol = 0) and (FCaretLine = 0) then
+      begin
+        Key := 0;
+        Exit;
+      end;
+      DoBackspace;
+      FDesiredCol := FCaretCol;
+      AfterEdit(APPI);
+      Key := 0;
+    end;
+    VK_DELETE:
+    begin
+      L := LineLen(FCaretLine);
+      // End of document (last line, last col): no change, no OnChange.
+      if (FCaretCol >= L) and (FCaretLine >= MaxLine) then
+      begin
+        Key := 0;
+        Exit;
+      end;
+      DoDelete;
+      FDesiredCol := FCaretCol;
+      AfterEdit(APPI);
+      Key := 0;
+    end;
+    VK_LEFT:
+    begin
+      if FCaretCol > 0 then
+        Dec(FCaretCol)
+      else if FCaretLine > 0 then
+      begin
+        Dec(FCaretLine);
+        FCaretCol := LineLen(FCaretLine);
+      end;
+      FDesiredCol := FCaretCol;
+      AfterCaretMove(APPI);
+      Key := 0;
+    end;
+    VK_RIGHT:
+    begin
+      L := LineLen(FCaretLine);
+      if FCaretCol < L then
+        Inc(FCaretCol)
+      else if FCaretLine < MaxLine then
+      begin
+        Inc(FCaretLine);
+        FCaretCol := 0;
+      end;
+      FDesiredCol := FCaretCol;
+      AfterCaretMove(APPI);
+      Key := 0;
+    end;
+    VK_UP:
+    begin
+      if FCaretLine > 0 then
+      begin
+        Dec(FCaretLine);
+        // Restore desired column, clamped to the new line length.
+        FCaretCol := FDesiredCol;
+        if FCaretCol > LineLen(FCaretLine) then
+          FCaretCol := LineLen(FCaretLine);
+      end;
+      // FDesiredCol preserved across vertical motion.
+      AfterCaretMove(APPI);
+      Key := 0;
+    end;
+    VK_DOWN:
+    begin
+      if FCaretLine < MaxLine then
+      begin
+        Inc(FCaretLine);
+        FCaretCol := FDesiredCol;
+        if FCaretCol > LineLen(FCaretLine) then
+          FCaretCol := LineLen(FCaretLine);
+      end;
+      // FDesiredCol preserved across vertical motion.
+      AfterCaretMove(APPI);
+      Key := 0;
+    end;
+    VK_HOME:
+    begin
+      if CtrlLike then
+      begin
+        FCaretLine := 0;
+        FCaretCol := 0;
+      end
+      else
+        FCaretCol := 0;          // line-local
+      FDesiredCol := FCaretCol;
+      AfterCaretMove(APPI);
+      Key := 0;
+    end;
+    VK_END:
+    begin
+      if CtrlLike then
+      begin
+        FCaretLine := MaxLine;
+        FCaretCol := LineLen(FCaretLine);
+      end
+      else
+        FCaretCol := LineLen(FCaretLine);  // line-local
+      FDesiredCol := FCaretCol;
+      AfterCaretMove(APPI);
+      Key := 0;
+    end;
+  end;
+end;
+
+// ---- Headless input helpers ----
+
+procedure TTyMemo.InjectChar(const AChar: TUTF8Char);
+var
+  K: TUTF8Char;
+begin
+  K := AChar;
+  UTF8KeyPress(K);
+end;
+
+procedure TTyMemo.InjectKey(AKey: Word; AShift: TShiftState);
+var
+  K: Word;
+begin
+  K := AKey;
+  KeyDown(K, AShift);
+end;
+
+procedure TTyMemo.InjectBackspace;
+begin
+  InjectKey(VK_BACK, []);
+end;
+
+procedure TTyMemo.InjectDelete;
+begin
+  InjectKey(VK_DELETE, []);
 end;
 
 end.
