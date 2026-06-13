@@ -65,6 +65,14 @@ type
     FHeaderRects: array of TRect;
     FCloseRects:  array of TRect;
 
+    { Drag-reorder gesture state. FDragTab is the collection index of the tab a
+      press armed as a drag candidate (-1 = none). FDragStartX is the device-px X
+      of that press; FDragging flips True once the pointer travels past the drag
+      threshold, switching the gesture from a click into a live reorder. }
+    FDragTab:    Integer;
+    FDragStartX: Integer;
+    FDragging:   Boolean;
+
     procedure SetTabs(AValue: TTyTabCollection);
     procedure TabItemAdded(AItem: TTyTabItem);
     procedure TabItemDeleting(AItem: TTyTabItem);
@@ -98,6 +106,8 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
                         X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState;
+                      X, Y: Integer); override;
     procedure MouseLeave; override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
                          MousePos: TPoint): Boolean; override;
@@ -239,6 +249,8 @@ begin
   FTabHeight := 28;
   FHoverTab  := -1;
   FHeaderScroll := 0;
+  FDragTab   := -1;
+  FDragging  := False;
   FTabsClosable := False;
   TabStop    := True;
   Width      := 300;
@@ -1113,7 +1125,14 @@ begin
              (Y >= CloseRect.Top) and (Y < CloseRect.Bottom) then
             DoCloseTab(I)
           else
+          begin
             TabIndex := I;
+            { Arm a drag-reorder candidate. A plain press+release stays a click
+              (FDragging never flips); only a move past the threshold reorders. }
+            FDragTab    := I;
+            FDragStartX := X;
+            FDragging   := False;
+          end;
           Break;
         end;
       end;
@@ -1128,13 +1147,35 @@ end;
 
 procedure TTyTabControl.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  PPI, TabH, NewHover, I: Integer;
+  PPI, TabH, NewHover, I, Target: Integer;
   HdrRect: TRect;
   OverArrow: Boolean;
 begin
   inherited MouseMove(Shift, X, Y);
   PPI  := Font.PixelsPerInch;
   TabH := TabHPx(PPI);
+
+  { Drag-reorder gesture. While a candidate is armed and the left button is held,
+    a move past the threshold flips into live reorder mode. Each subsequent move
+    drops the dragged tab at the index its current X resolves to (shifted-midpoint
+    rule) by reseating the backing collection item, which re-syncs the parallel
+    arrays via TabsChanged. Skip the hover scan while dragging. }
+  if (FDragTab >= 0) and (ssLeft in Shift) then
+  begin
+    if (not FDragging) and (Abs(X - FDragStartX) >= TyDragThresholdPx(PPI)) then
+      FDragging := True;
+    if FDragging then
+    begin
+      Target := TyDropIndexAt(X, PPI);
+      if (Target >= 0) and (Target <> FDragTab) then
+      begin
+        FTabs.Items[FDragTab].Index := Target; // -> TabsChanged re-syncs arrays
+        FDragTab := Target;
+      end;
+      Exit; // skip hover scan while a drag is in progress
+    end;
+  end;
+
   NewHover := -1;
   if Y < TabH then
   begin
@@ -1161,9 +1202,23 @@ begin
   end;
 end;
 
+{ End any drag-reorder gesture. The reorder itself already happened live during
+  MouseMove (each crossed midpoint reseated the item), so MouseUp only disarms
+  the candidate so a later move without a fresh press cannot reorder. }
+procedure TTyTabControl.MouseUp(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  FDragTab  := -1;
+  FDragging := False;
+end;
+
 procedure TTyTabControl.MouseLeave;
 begin
   inherited MouseLeave;
+  { Disarm any in-flight drag so a re-entry move without a fresh press is inert. }
+  FDragTab  := -1;
+  FDragging := False;
   if FHoverTab <> -1 then
   begin
     FHoverTab := -1;

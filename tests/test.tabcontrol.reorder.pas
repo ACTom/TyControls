@@ -11,10 +11,15 @@ uses
 type
   { Fresh white-box access subclass for the drag-reorder helpers. Kept separate
     from the locked subclasses in the other tabcontrol test units so the existing
-    suite stays untouched. It only needs the two new public pure helpers, but
-    declares a subclass anyway to mirror the established access-subclass pattern
-    and keep room for future protected probes. }
+    suite stays untouched. It exposes the two new public pure helpers plus the
+    protected mouse handlers (down/move/up) so the gesture-integration tests can
+    drive a full press-drag-release sequence headlessly. }
   TTyTabReorderAccess = class(TTyTabControl)
+  public
+    procedure CallMouseDown(Btn: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure CallMouseMove(Shift: TShiftState; X, Y: Integer);
+    procedure CallMouseUp(Btn: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure CallMouseLeave;
   end;
 
   { Pure-helper tests for tab drag-reorder: the drag threshold (in device px,
@@ -37,9 +42,40 @@ type
     procedure TestDropIndexJustPastFirstMidpoint;
     procedure TestDropIndexFarRightClampsToLast;
     procedure TestDropIndexAtExactMidpoints;
+    // Gesture integration (full press-drag-release sequences)
+    procedure TestDragPastNeighborMidpointReorders;
+    procedure TestDragLeftAdjacentMidpointSwaps;
+    procedure TestSubThresholdMoveDoesNotReorder;
+    procedure TestPlainPressReleaseSelectsAndDoesNotReorder;
+    procedure TestMouseUpClearsDragState;
+    procedure TestMouseLeaveClearsDragState;
   end;
 
 implementation
+
+{ TTyTabReorderAccess }
+
+procedure TTyTabReorderAccess.CallMouseDown(Btn: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  MouseDown(Btn, Shift, X, Y);
+end;
+
+procedure TTyTabReorderAccess.CallMouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  MouseMove(Shift, X, Y);
+end;
+
+procedure TTyTabReorderAccess.CallMouseUp(Btn: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  MouseUp(Btn, Shift, X, Y);
+end;
+
+procedure TTyTabReorderAccess.CallMouseLeave;
+begin
+  MouseLeave;
+end;
 
 { TTyTabReorderTest }
 
@@ -141,6 +177,153 @@ begin
   AssertEquals('mid1 -> 2', 2, FTab.TyDropIndexAt(M1, 96));
   { X exactly at mid2 -> no midpoint is right of X, clamp to last (2). }
   AssertEquals('mid2 -> 2 (clamp)', 2, FTab.TyDropIndexAt(M2, 96));
+end;
+
+{ Helper: vertical mid of a header rect (any tab; the band height is shared). }
+function HeaderMidY(ATab: TTyTabReorderAccess): Integer;
+var R: TRect;
+begin
+  R := ATab.HeaderRectShifted(0);
+  Result := (R.Top + R.Bottom) div 2;
+end;
+
+{ (G1) Press on header 0, then move past header 1's midpoint with ssLeft held,
+  reorders the collection. TyDropIndexAt(just past mid1) resolves to index 2, so
+  dragging the index-0 tab there reseats it last: [T1,T2,T3] -> [T2,T3,T1]. The
+  load-bearing assertion (reuse TestReorderItemsReordersPages style) is that the
+  drag moved tab 0 off the front, so caption(0) becomes the OLD caption[1]. }
+procedure TTyTabReorderTest.TestDragPastNeighborMidpointReorders;
+var
+  Cap0Before, Cap1Before, Cap2Before: string;
+  Y: Integer;
+begin
+  AddTabs(3);
+  Cap0Before := FTab.TabCaption(0); // 'Tab 1'
+  Cap1Before := FTab.TabCaption(1); // 'Tab 2'
+  Cap2Before := FTab.TabCaption(2); // 'Tab 3'
+  Y := HeaderMidY(FTab);
+
+  { Press on header 0 (records the drag candidate + selects it). }
+  FTab.CallMouseDown(mbLeft, [ssLeft], MidOf(0), Y);
+  { Drag right, past header 1's midpoint, with the left button held. }
+  FTab.CallMouseMove([ssLeft], MidOf(1) + 1, Y);
+  FTab.CallMouseUp(mbLeft, [ssLeft], MidOf(1) + 1, Y);
+
+  { Tab 0 dragged off the front -> caption(0) is the old caption[1]. }
+  AssertEquals('caption[0] now old caption[1]', Cap1Before, FTab.TabCaption(0));
+  AssertEquals('caption[1] now old caption[2]', Cap2Before, FTab.TabCaption(1));
+  AssertEquals('caption[2] now old caption[0]', Cap0Before, FTab.TabCaption(2));
+end;
+
+{ (G1b) Dragging the last tab leftward just before header 1's midpoint resolves
+  to index 1, a clean adjacent move: [T1,T2,T3] -> [T1,T3,T2]. Tab 0 is untouched
+  while the dragged tab swaps with its left neighbor. }
+procedure TTyTabReorderTest.TestDragLeftAdjacentMidpointSwaps;
+var
+  Cap0Before, Cap1Before, Cap2Before: string;
+  Y: Integer;
+begin
+  AddTabs(3);
+  Cap0Before := FTab.TabCaption(0); // 'Tab 1'
+  Cap1Before := FTab.TabCaption(1); // 'Tab 2'
+  Cap2Before := FTab.TabCaption(2); // 'Tab 3'
+  Y := HeaderMidY(FTab);
+
+  FTab.CallMouseDown(mbLeft, [ssLeft], MidOf(2), Y);
+  FTab.CallMouseMove([ssLeft], MidOf(1) - 1, Y);
+  FTab.CallMouseUp(mbLeft, [ssLeft], MidOf(1) - 1, Y);
+
+  AssertEquals('caption[0] unchanged', Cap0Before, FTab.TabCaption(0));
+  AssertEquals('caption[1] now old caption[2]', Cap2Before, FTab.TabCaption(1));
+  AssertEquals('caption[2] now old caption[1]', Cap1Before, FTab.TabCaption(2));
+end;
+
+{ (G2) A sub-threshold move (|dx| < TyDragThresholdPx) does NOT reorder: the
+  press selects header 0, the tiny move never crosses the drag threshold, so the
+  collection order is untouched. }
+procedure TTyTabReorderTest.TestSubThresholdMoveDoesNotReorder;
+var
+  Cap0Before, Cap1Before: string;
+  Y, X0: Integer;
+begin
+  AddTabs(3);
+  Cap0Before := FTab.TabCaption(0);
+  Cap1Before := FTab.TabCaption(1);
+  Y := HeaderMidY(FTab);
+  X0 := MidOf(0);
+
+  FTab.CallMouseDown(mbLeft, [ssLeft], X0, Y);
+  { Move by less than the threshold (threshold is 6 at 96 PPI). }
+  FTab.CallMouseMove([ssLeft], X0 + (FTab.TyDragThresholdPx(96) - 1), Y);
+  FTab.CallMouseUp(mbLeft, [ssLeft], X0 + (FTab.TyDragThresholdPx(96) - 1), Y);
+
+  AssertEquals('caption[0] unchanged', Cap0Before, FTab.TabCaption(0));
+  AssertEquals('caption[1] unchanged', Cap1Before, FTab.TabCaption(1));
+end;
+
+{ (G3) A plain press + release (no move) still SELECTS the pressed tab and does
+  not reorder. Protects TestMouseDownSelectsTab / the closable click path. }
+procedure TTyTabReorderTest.TestPlainPressReleaseSelectsAndDoesNotReorder;
+var
+  Cap0Before, Cap1Before, Cap2Before: string;
+  Y: Integer;
+begin
+  AddTabs(3);
+  Cap0Before := FTab.TabCaption(0);
+  Cap1Before := FTab.TabCaption(1);
+  Cap2Before := FTab.TabCaption(2);
+  Y := HeaderMidY(FTab);
+
+  FTab.CallMouseDown(mbLeft, [ssLeft], MidOf(2), Y);
+  FTab.CallMouseUp(mbLeft, [ssLeft], MidOf(2), Y);
+
+  AssertEquals('plain press selects pressed tab', 2, FTab.TabIndex);
+  AssertEquals('caption[0] unchanged', Cap0Before, FTab.TabCaption(0));
+  AssertEquals('caption[1] unchanged', Cap1Before, FTab.TabCaption(1));
+  AssertEquals('caption[2] unchanged', Cap2Before, FTab.TabCaption(2));
+end;
+
+{ (G4a) MouseUp clears the drag state: a subsequent MouseMove (with ssLeft but no
+  preceding press) must NOT reorder. }
+procedure TTyTabReorderTest.TestMouseUpClearsDragState;
+var
+  Cap0Before, Cap1Before: string;
+  Y: Integer;
+begin
+  AddTabs(3);
+  Y := HeaderMidY(FTab);
+
+  FTab.CallMouseDown(mbLeft, [ssLeft], MidOf(0), Y);
+  FTab.CallMouseUp(mbLeft, [ssLeft], MidOf(0), Y);
+
+  Cap0Before := FTab.TabCaption(0);
+  Cap1Before := FTab.TabCaption(1);
+  { Drag-like move after release: no candidate is armed, so order is untouched. }
+  FTab.CallMouseMove([ssLeft], MidOf(2), Y);
+
+  AssertEquals('caption[0] unchanged after release+move', Cap0Before, FTab.TabCaption(0));
+  AssertEquals('caption[1] unchanged after release+move', Cap1Before, FTab.TabCaption(1));
+end;
+
+{ (G4b) MouseLeave clears the drag state too: a subsequent MouseMove must NOT
+  reorder once the pointer has left and re-entered without a fresh press. }
+procedure TTyTabReorderTest.TestMouseLeaveClearsDragState;
+var
+  Cap0Before, Cap1Before: string;
+  Y: Integer;
+begin
+  AddTabs(3);
+  Y := HeaderMidY(FTab);
+
+  FTab.CallMouseDown(mbLeft, [ssLeft], MidOf(0), Y);
+  FTab.CallMouseLeave;
+
+  Cap0Before := FTab.TabCaption(0);
+  Cap1Before := FTab.TabCaption(1);
+  FTab.CallMouseMove([ssLeft], MidOf(2), Y);
+
+  AssertEquals('caption[0] unchanged after leave+move', Cap0Before, FTab.TabCaption(0));
+  AssertEquals('caption[1] unchanged after leave+move', Cap1Before, FTab.TabCaption(1));
 end;
 
 initialization
