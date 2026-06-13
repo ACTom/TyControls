@@ -64,6 +64,11 @@ type
     FOnTabClose: TTyTabCloseEvent;
     FHeaderRects: array of TRect;
     FCloseRects:  array of TRect;
+    { Header overflow scroll. FHeaderScroll is the device-px amount the header
+      strip is shifted left (>=0). FShowScrollAffordance and the two arrow rects
+      are recomputed at the end of RebuildLayout. Kept protected so white-box
+      tests can read them. }
+    FHeaderScroll: Integer;
 
     procedure SetTabs(AValue: TTyTabCollection);
     procedure TabItemAdded(AItem: TTyTabItem);
@@ -82,6 +87,9 @@ type
                               const AStyle: TTyStyleSet; APPI: Integer): Integer;
     procedure ShowOnlyPage(AIndex: Integer);
   protected
+    FShowScrollAffordance: Boolean;
+    FScrollLeftRect:  TRect;
+    FScrollRightRect: TRect;
     function GetStyleTypeKey: string; override;
     procedure SetController(AValue: TTyStyleController); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -105,6 +113,19 @@ type
     { Public pure-ish geometry for tests: device px, (0,0)-local }
     function TyTabHeaderRect(AIndex: Integer): TRect;
     function TyTabCloseRect(AIndex: Integer): TRect;
+    { Header overflow scroll geometry (device px, (0,0)-local).
+      TyHeaderStripWidth: total unshifted width of all tab headers.
+      TyMaxHeaderScroll:  largest valid FHeaderScroll (0 when content fits).
+      TyTabScrollLeftRect/TyTabScrollRightRect: the prev/next arrow affordance
+        rects, or (0,0,0,0) when the strip fits.
+      HeaderRectShifted:  header rect translated by the current scroll offset. }
+    function TyHeaderStripWidth: Integer;
+    function TyMaxHeaderScroll: Integer;
+    function TyTabScrollLeftRect: TRect;
+    function TyTabScrollRightRect: TRect;
+    function HeaderRectShifted(AIndex: Integer): TRect;
+    procedure SetHeaderScroll(AValue: Integer);
+    procedure ScrollTabIntoView(AIndex: Integer);
 
     property Pages[AIndex: Integer]: TTyPanel read GetPage;
   published
@@ -205,6 +226,7 @@ begin
   FPendingTabIndex := -1;
   FTabHeight := 28;
   FHoverTab  := -1;
+  FHeaderScroll := 0;
   FTabsClosable := False;
   TabStop    := True;
   Width      := 300;
@@ -301,6 +323,7 @@ var
   TabH, Pad, MinW, CloseSize, Gap, CloseSlot, Margin: Integer;
   TabStyle: TTyStyleSet;
   I, X, TW, HW, Cy: Integer;
+  VisibleWidth, AffordanceW, ArrowW, MaxScroll: Integer;
 begin
   SetLength(FHeaderRects, FCaptions.Count);
   SetLength(FCloseRects, FCaptions.Count);
@@ -341,6 +364,35 @@ begin
 
     Inc(X, HW);
   end;
+
+  { X is now the total (unshifted) header strip width. Decide whether the strip
+    overflows the visible control width and, if so, reserve a left/right arrow
+    affordance band (two Scale(16) arrows) at the far ends of the header band. }
+  VisibleWidth := Width;
+  AffordanceW  := MulDiv(16, APPI, 96) * 2;
+  FShowScrollAffordance := X > VisibleWidth;
+  if FShowScrollAffordance then
+  begin
+    ArrowW := MulDiv(16, APPI, 96);
+    FScrollLeftRect  := Rect(0, 0, ArrowW, TabH);
+    FScrollRightRect := Rect(VisibleWidth - ArrowW, 0, VisibleWidth, TabH);
+  end
+  else
+  begin
+    FScrollLeftRect  := Rect(0, 0, 0, 0);
+    FScrollRightRect := Rect(0, 0, 0, 0);
+    AffordanceW := 0; // no band reserved when content fits
+  end;
+
+  { Clamp the current scroll to the new maximum. Max scroll is the overshoot of
+    the strip past the visible width minus the affordance band. }
+  if FShowScrollAffordance then
+    MaxScroll := X - (VisibleWidth - AffordanceW)
+  else
+    MaxScroll := 0;
+  if MaxScroll < 0 then MaxScroll := 0;
+  if FHeaderScroll > MaxScroll then FHeaderScroll := MaxScroll;
+  if FHeaderScroll < 0 then FHeaderScroll := 0;
 end;
 
 function TTyTabControl.TyTabHeaderRect(AIndex: Integer): TRect;
@@ -361,6 +413,111 @@ begin
     Result := Rect(0, 0, 0, 0)
   else
     Result := FCloseRects[AIndex];
+end;
+
+{ Total unshifted width of the header strip = right edge of the last header
+  (rebuilt at the control's current PPI). }
+function TTyTabControl.TyHeaderStripWidth: Integer;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  if Length(FHeaderRects) = 0 then
+    Result := 0
+  else
+    Result := FHeaderRects[High(FHeaderRects)].Right;
+end;
+
+{ Largest valid scroll: the overshoot of the strip past the visible width minus
+  the reserved arrow band. 0 when the strip fits. Mirrors RebuildLayout's clamp. }
+function TTyTabControl.TyMaxHeaderScroll: Integer;
+var
+  StripW, VisibleWidth, AffordanceW: Integer;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  if not FShowScrollAffordance then Exit(0);
+  if Length(FHeaderRects) = 0 then
+    StripW := 0
+  else
+    StripW := FHeaderRects[High(FHeaderRects)].Right;
+  VisibleWidth := Width;
+  AffordanceW  := MulDiv(16, Font.PixelsPerInch, 96) * 2;
+  Result := StripW - (VisibleWidth - AffordanceW);
+  if Result < 0 then Result := 0;
+end;
+
+function TTyTabControl.TyTabScrollLeftRect: TRect;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  Result := FScrollLeftRect;
+end;
+
+function TTyTabControl.TyTabScrollRightRect: TRect;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  Result := FScrollRightRect;
+end;
+
+{ Header rect translated left by the current scroll offset. }
+function TTyTabControl.HeaderRectShifted(AIndex: Integer): TRect;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  if (AIndex < 0) or (AIndex >= Length(FHeaderRects)) then
+    Exit(Rect(0, 0, 0, 0));
+  Result := FHeaderRects[AIndex];
+  OffsetRect(Result, -FHeaderScroll, 0);
+end;
+
+{ Clamp the requested scroll into [0, TyMaxHeaderScroll] and repaint. }
+procedure TTyTabControl.SetHeaderScroll(AValue: Integer);
+var
+  MaxScroll: Integer;
+begin
+  MaxScroll := TyMaxHeaderScroll;
+  if AValue < 0 then AValue := 0;
+  if AValue > MaxScroll then AValue := MaxScroll;
+  if AValue = FHeaderScroll then Exit;
+  FHeaderScroll := AValue;
+  Invalidate;
+end;
+
+{ Adjust FHeaderScroll (clamped) so the header at AIndex is fully inside the
+  visible band. Pure integer math on the unshifted rect vs the visible band:
+  the band is [VisLeft, VisRight], where the arrow affordance (when shown) eats
+  ArrowW off each side. Scroll right just enough if the tab's right edge is past
+  the band; scroll left just enough if its left edge is before the band. }
+procedure TTyTabControl.ScrollTabIntoView(AIndex: Integer);
+var
+  ArrowW, VisLeft, VisRight, L, R, Want: Integer;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  if (AIndex < 0) or (AIndex >= Length(FHeaderRects)) then Exit;
+
+  if FShowScrollAffordance then
+  begin
+    ArrowW   := MulDiv(16, Font.PixelsPerInch, 96);
+    { The left arrow overlays the start of the strip, so the leftmost tab can
+      legitimately sit at x=0 (scroll 0). Align "into view from the left" to the
+      true left edge; reserve only the right arrow on the trailing side. }
+    VisLeft  := 0;
+    VisRight := Width - ArrowW;
+  end
+  else
+  begin
+    VisLeft  := 0;
+    VisRight := Width;
+  end;
+
+  Want := FHeaderScroll;
+  L := FHeaderRects[AIndex].Left;
+  R := FHeaderRects[AIndex].Right;
+
+  { If the tab's right edge falls past the visible right, scroll so it aligns. }
+  if (R - Want) > VisRight then
+    Want := R - VisRight;
+  { If the tab's left edge falls before the visible left, scroll so it aligns. }
+  if (L - Want) < VisLeft then
+    Want := L - VisLeft;
+
+  SetHeaderScroll(Want);
 end;
 
 procedure TTyTabControl.DoCloseTab(AIndex: Integer);
