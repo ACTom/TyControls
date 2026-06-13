@@ -13,7 +13,7 @@ TyButton:disabled { opacity: 0.5; }
 ## 特性
 
 - **三层解耦架构** —— 控件层 / 样式引擎 / 绘图原语(`TTyPainter`),控件不写死任何颜色
-- **CSS-lite 主题语言** —— `:root` 变量、类型/变体/状态选择器、`lighten/darken/alpha/mix` 颜色函数、线性渐变、9-slice 贴图
+- **CSS-lite 主题语言** —— `:root` 变量、类型/变体/状态选择器、`rgb/rgba/lighten/darken/alpha/mix` 颜色函数、`border` 简写、线性渐变、9-slice 贴图
 - **16 个自绘控件** —— Button、Label、Edit、CheckBox、RadioButton、Panel、ComboBox、ScrollBar、ListBox、ProgressBar、ToggleSwitch、TrackBar、GroupBox、TitleBar、CaptionButton、TabControl
 - **自绘窗框** —— `TTyFormChrome` 一个组件接管无边框窗口:标题栏、拖动、8 向缩放、最小/最大化/关闭、双击最大化(避让任务栏)
 - **零配置默认皮肤** —— 未加载主题或在设计器中拖放即有合理外观;主题在其之上按 typeKey 覆盖

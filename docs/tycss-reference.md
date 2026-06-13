@@ -26,7 +26,7 @@
 - 选择器只有一种形态:`类型 [.变体] [:状态]`,可用逗号并列多个;
 - **不支持**后代选择器、子选择器、通配符等任何组合选择器;
 - 变量在使用处惰性求值,支持 `var(--x)` 与裸 `--x` 两种写法;
-- 颜色支持 `lighten` / `darken` / `alpha` / `mix` 四个函数,可任意嵌套。
+- 颜色支持 `rgb` / `rgba` 构造函数,以及 `lighten` / `darken` / `alpha` / `mix` 调整函数,可任意嵌套。
 
 下面是一个可直接使用的最小完整主题:
 
@@ -267,7 +267,7 @@ TyButton { background: #00FF00; }   /* 被忽略 */
 
 ## 5. 属性参考
 
-引擎可识别的属性共 12 个,其余属性名一律被静默忽略。
+引擎可识别的属性共 14 个(另有 `background-color` 作为 `background` 的别名),其余属性名一律被静默忽略。
 所有长度均为**逻辑像素**(96 DPI 基准),绘制时按控件实际 DPI 缩放。
 长度值可写 `6px` 或裸 `6`(`px` 后缀可省略),也可用 `var(--x)` / 裸 `--x`。
 
@@ -284,6 +284,12 @@ background: linear-gradient(<角度>deg, <起始色>, <终止色>) ;
 ```css
 TyPanel  { background: var(--surface); }
 TyButton { background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent)); }
+```
+
+`background-color` 是 `background` 的**别名**(仅纯色语义,不接受渐变),二者效果相同:
+
+```css
+TyEdit { background-color: rgb(255, 255, 255); }   /* 等价于 background: rgb(255, 255, 255); */
 ```
 
 ### 5.2 `background-image` — 九宫格贴图
@@ -320,22 +326,43 @@ TyButton.primary { color: #FFFFFF; }
 
 注:`TyScrollBar` 的滑块颜色来自 `color`（TextColor），轨道背景来自 `background`。因此在主题中用 `color` 控制滑块颜色是正确写法（详见第 8.1 节）。
 
-### 5.4 `border-color` / `border-width` — 边框
+### 5.4 `border-color` / `border-width` / `border-style` — 边框
 
 ```
 border-color: <颜色表达式> ;
 border-width: <长度> ;
+border-style: none | solid ;
 ```
 
-二者配合:`border-width` 为 0(或未声明 `border-color`)时不描边。
+三者配合:`border-width` 为 0(或未声明 `border-color`)时不描边。
 边框沿圆角矩形内侧描绘。
+
+`border-style` 取 `none` 或 `solid`,**默认 `solid`**;`none` 会**强制不描边**,
+即便 `border-width > 0` 也不绘制边框。仅此两种取值,**不支持** `dashed`、`dotted` 等。
 
 ```css
 TyEdit       { border-color: var(--border); border-width: 1px; }
 TyEdit:focus { border-color: var(--accent); }
+TyPanel      { border-style: none; }   /* 显式去掉边框,即便有 border-width */
 ```
 
-### 5.5 `border-radius` — 圆角半径
+### 5.5 `border` — 边框简写
+
+```
+border: <宽度> [<样式>] <颜色> ;
+```
+
+一次性设置 `border-width`、`border-style`、`border-color` 三者,**完全等价**于分别书写它们。
+顺序为宽度在前、颜色在后,中间可选写 `solid` / `none` 样式(省略时为 `solid`)。
+颜色可用任意颜色表达式(`#hex`、`var(--x)`、`rgb(...)` / `rgba(...)`,见第 6 节):
+
+```css
+TyButton { border: 2px solid var(--accent); }   /* width=2px, style=solid, color=accent */
+TyEdit   { border: 1px var(--border); }          /* 省略样式,等价于 solid */
+TyPanel  { border: 0px none var(--border); }     /* style=none → 强制不描边 */
+```
+
+### 5.6 `border-radius` — 圆角半径
 
 ```
 border-radius: <长度> ;
@@ -347,7 +374,7 @@ border-radius: <长度> ;
 TyButton { border-radius: var(--radius); }
 ```
 
-### 5.6 `padding` — 内边距
+### 5.7 `padding` — 内边距
 
 ```
 padding: <全部> ;
@@ -363,7 +390,7 @@ TyPanel  { padding: 8px 12px; }
 TyEdit   { padding: 4px 8px 4px 8px; }
 ```
 
-### 5.7 `font-family` — 字体名
+### 5.8 `font-family` — 字体名
 
 ```
 font-family: <字体名> ;
@@ -377,7 +404,7 @@ TyLabel { font-family: Noto Sans CJK SC; }   /* 正确 */
 /* font-family: "Noto Sans CJK SC";  错误:引号会成为名字的一部分 */
 ```
 
-### 5.8 `font-size` — 字号(注意:数值是 pt)
+### 5.9 `font-size` — 字号(注意:数值是 pt)
 
 ```
 font-size: <数值>[px] ;
@@ -391,7 +418,7 @@ font-size: <数值>[px] ;
 TyButton { font-size: 10px; }   /* = 10pt */
 ```
 
-### 5.9 `font-weight` — 字重
+### 5.10 `font-weight` — 字重
 
 ```
 font-weight: bold | normal | <数值> ;
@@ -404,7 +431,7 @@ font-weight: bold | normal | <数值> ;
 TyTitleBar { font-weight: 700; }
 ```
 
-### 5.10 `opacity` — 整体不透明度
+### 5.11 `opacity` — 整体不透明度
 
 ```
 opacity: <0..1 小数> ;
@@ -420,7 +447,7 @@ opacity 经由通用框架绘制路径（DrawFrame）生效。v1.1 中 `TyCheckB
 `TyRadioButton` 已通过修改渲染路径使 `opacity` 与 `shadow` 正常生效；
 所有 typeKey（含 `TyLabel`）均已支持。
 
-### 5.11 `shadow` — 投影
+### 5.12 `shadow` — 投影
 
 ```
 shadow: <X偏移> <Y偏移> <模糊半径> <颜色> ;
@@ -442,9 +469,12 @@ TyPanel  { shadow: 0px 1px 3px var(--shadow-color); }
 
 ## 6. 颜色函数参考
 
-颜色表达式 = `#hex` | `var(--x)` | 裸 `--x` | 以下四个函数(参数本身又是颜色表达式,
+颜色表达式 = `#hex` | `var(--x)` | 裸 `--x` | `rgb(...)` / `rgba(...)` | 以下函数(参数本身又是颜色表达式,
 **可任意嵌套**)。函数名不区分大小写。百分比参数的 `%` 后缀可写可不写
 (`8%` 与 `8` 等价)——**唯一例外是 `alpha`,见下**。
+
+任何接受颜色的位置(`color`、`background` / `background-color`、`border-color`、`border:` 简写、
+颜色函数的参数等)都可使用上述全部形式。
 
 ### 6.1 `lighten(<颜色>, <百分比 0..100>)`
 
@@ -484,7 +514,19 @@ RGB 与 alpha 四个通道都参与混合。
 :root { --tint: mix(--surface, --accent, 20%); }   /* 80% surface + 20% accent */
 ```
 
-### 6.5 嵌套与变量
+### 6.5 `rgb(<r>, <g>, <b>)` / `rgba(<r>, <g>, <b>, <a>)`
+
+按 RGB 分量构造颜色。`r` / `g` / `b` 为 0..255 的整数;`rgba` 的第四个参数 `a` 是
+不透明度,既可写 0..1 的小数,也可写带 `%` 的百分比(`0.6` 与 `60%` 等价)。
+`rgb(...)` 等价于 alpha 为 1 的 `rgba(...)`。可用在任何接受颜色的位置(含 `border:` 与 `background`)。
+
+```css
+TyEdit  { background-color: rgb(255, 255, 255); }
+TyLabel { color: rgba(0, 0, 0, 0.6); }          /* 60% 不透明的黑 */
+TyButton { border: 2px solid rgb(59, 130, 246); }
+```
+
+### 6.6 嵌套与变量
 
 ```css
 TyButton:hover {
@@ -580,15 +622,19 @@ TyButton.primary {
 3. **`url()` 路径不能含空格**:重建文件名时空格被无条件删除(§5.2);
    路径相对进程工作目录解析,缺失文件静默跳过。
 4. **`shadow` 颜色必须单 token**:`#hex` / `var(--x)` / 裸 `--x`,不能用带逗号的
-   颜色函数;需要半透明用 `#rrggbbaa`(§5.11)。
+   颜色函数;需要半透明用 `#rrggbbaa`(§5.12)。
 5. **`opacity` 与 `shadow` 全控件生效（v1.1）**：v1.1 修复了 `TyCheckBox` 与
    `TyRadioButton` 的渲染路径，使其也支持 `opacity` 和 `shadow`；所有 typeKey 均已生效。
 6. **`alpha()` 第二参数是 0..1 小数**,写百分号不会按百分比换算(§6.3)。
 7. **渐变角度方向与 CSS 不同**:`0deg` 左→右,`90deg` 上→下(§7.1);
    只支持双色标线性渐变。
-8. **`font-size` 数值按 pt 解释**,`px` 后缀只是装饰(§5.8);`font-weight`
-   渲染只分 ≥600 粗体 / 其余常规两档(§5.9)。
-9. **`font-family` 不要加引号**,引号会保留进字体名(§5.7)。
+8. **`font-size` 数值按 pt 解释**,`px` 后缀只是装饰(§5.9);`font-weight`
+   渲染只分 ≥600 粗体 / 其余常规两档(§5.10)。
+9. **`font-family` 不要加引号**,引号会保留进字体名(§5.8)。
 10. **`TyScrollBar` 的 `color` 决定滑块颜色**：`RenderTo` 使用 `S.TextColor`（即 CSS `color` 属性）作为滑块填充色，轨道背景来自 `background`。内置主题中的 `TyScrollBar:hover { color: … }` 写法是正确用法。
 11. `TyTabControl` 页签溢出不滚动：所有页签宽度之和超过控件宽度时，超出部分被画布裁剪，不提供可横向滚动的页签条（v1.2 已知限制）。
 12. 不支持 `@media`、`@import`、`!important`、转义字符串、`//` 行注释。
+13. **边框/盒模型的取舍(v1.6)**:`border-style` 仅支持 `none` / `solid`,**无** `dashed`、
+    `dotted` 等;**不存在 `margin` 属性**(外边距请用容器布局实现);`border-radius` 是单一半径,
+    **不支持四角分别设置**(无 `border-top-left-radius` 等)。`border` 简写只是
+    `border-width` / `border-style` / `border-color` 三者的合写,并不引入额外能力。
