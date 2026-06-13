@@ -38,6 +38,18 @@ type
     FCaretLine: Integer;
     FCaretCol: Integer;
     FDesiredCol: Integer;
+    // Desired device-x for VERTICAL caret motion under WordWrap=True. Mirrors
+    // FDesiredCol but in pixels: visual-row Up/Down preserve the on-screen x and
+    // resolve the target row's column under it via VisualToCaret. Refreshed on
+    // every horizontal move (Left/Right/Home/End/typing/click) alongside
+    // FDesiredCol. Only consulted on the wrap path; the no-wrap Up/Down keeps the
+    // FDesiredCol column-restore idiom so its behaviour is byte-identical to today.
+    FDesiredX: Integer;
+    // Set for the duration of a VERTICAL caret move (Up/Down) so the shared post-
+    // move routine (AfterCaretMove) does NOT refresh FDesiredX — the desired x must
+    // survive a run of Up/Down. Every other move leaves it False, so AfterCaretMove/
+    // AfterEdit refresh FDesiredX from the (horizontally-moved) caret.
+    FInVerticalMove: Boolean;
     // 2D selection anchor (codepoint index per line). No selection <=> anchor
     // equals the caret. Mirrors TTyEdit.FSelAnchor generalised to (line,col).
     FSelAnchorLine: Integer;
@@ -143,6 +155,27 @@ type
     function LineCountLogical: Integer;
     // Clamp the caret into the current model (line then col).
     procedure ClampCaret;
+    // Refresh FDesiredX (the desired device-x for wrap Up/Down) from the caret's
+    // current position. Called on every HORIZONTAL move so a later vertical move
+    // tracks the on-screen x; vertical moves themselves never call it, so the x is
+    // preserved across a run of Up/Down. No-op-ish for the no-wrap path (FDesiredX
+    // is only consulted under WordWrap=True).
+    procedure UpdateDesiredX(APPI: Integer);
+    // Absolute (full-line) device-x where a visual row's segment begins (its
+    // StartCol's caret x). The on-screen x of a caret within a row is its absolute
+    // x minus this; FDesiredX stores that screen-relative form for wrap Up/Down.
+    function RowBaseAbsX(AVisualRow, APPI: Integer): Integer;
+    // WordWrap=True vertical motion: move the caret by ADelta visual rows (+1 down,
+    // -1 up), preserving FDesiredX. Resolves the target row's column under the
+    // desired x via VisualToCaret. Guards: at the top row Up is a no-op; at the
+    // bottom row Down is a no-op (mirrors the no-wrap FCaretLine guards). Does NOT
+    // refresh FDesiredX, so a run of Up/Down keeps tracking the original x.
+    procedure MoveCaretByVisualRow(ADelta, APPI: Integer);
+    // StartCol / EndCol of the caret's OWNING visual row (under WordWrap=True);
+    // used by the wrap-mode Home/End. CaretToVisual's boundary tie-break decides
+    // which row owns a caret sitting on a shared wrap-boundary column.
+    function CaretRowStartCol(APPI: Integer): Integer;
+    function CaretRowEndCol(APPI: Integer): Integer;
     // Cumulative prefix widths for ALine, measured on the shared BGRA bitmap so
     // measurement matches drawing (lifted from TTyEdit.MeasureCodepointWidths,
     // generalised to take the line as a parameter — no per-line cache).
@@ -342,6 +375,8 @@ begin
   FCaretLine := 0;
   FCaretCol := 0;
   FDesiredCol := 0;
+  FDesiredX := 0;
+  FInVerticalMove := False;
   FSelAnchorLine := 0;
   FSelAnchorCol := 0;
   FMouseSelecting := False;
@@ -545,6 +580,91 @@ begin
   if FDesiredCol < 0 then FDesiredCol := 0;
 end;
 
+function TTyMemo.RowBaseAbsX(AVisualRow, APPI: Integer): Integer;
+// Absolute (full-line) device-x at which visual row AVisualRow's segment BEGINS,
+// i.e. ColPixelXAt(line, StartCol). A continuation segment is drawn shifted left by
+// this minus TextStartX so its first codepoint sits at the content left; the
+// difference between a caret's absolute x and this base is the on-SCREEN x of the
+// caret within the row. For a full-width row (StartCol=0) this is TextStartX.
+var
+  Line: string;
+begin
+  EnsureVisualRows(APPI);
+  if (AVisualRow < 0) or (AVisualRow > High(FVisualRows)) then
+    Exit(TextStartX(APPI));
+  if FVisualRows[AVisualRow].Line < FLines.Count then
+    Line := FLines[FVisualRows[AVisualRow].Line]
+  else
+    Line := '';
+  Result := ColPixelXAt(Line, FVisualRows[AVisualRow].StartCol, APPI);
+end;
+
+procedure TTyMemo.UpdateDesiredX(APPI: Integer);
+var
+  CW, VRow, CaretAbsX: Integer;
+begin
+  // FDesiredX is the caret's on-SCREEN x within its visual row = the caret's
+  // absolute full-line x MINUS the row's base absolute x. This screen-relative
+  // form is stable across rows (the quantity a user perceives as "the column"),
+  // so a wrap Up/Down can re-project it onto a different row's coordinate frame.
+  CW := ContentWidthFor(APPI);
+  CaretToVisual(FCaretLine, FCaretCol, CW, APPI, VRow, CaretAbsX);
+  FDesiredX := CaretAbsX - RowBaseAbsX(VRow, APPI);
+  if FDesiredX < 0 then FDesiredX := 0;
+end;
+
+procedure TTyMemo.MoveCaretByVisualRow(ADelta, APPI: Integer);
+var
+  CW, CurRow, CaretAbsX, TargetRow, MaxRow, TargetAbsX, NewLine, NewCol: Integer;
+begin
+  CW := ContentWidthFor(APPI);
+  EnsureVisualRows(APPI);
+  MaxRow := High(FVisualRows);
+  if MaxRow < 0 then Exit;   // no rows (defensive)
+  // Current owning visual row.
+  CaretToVisual(FCaretLine, FCaretCol, CW, APPI, CurRow, CaretAbsX);
+  TargetRow := CurRow + ADelta;
+  // Guards mirror the no-wrap FCaretLine>0 / <MaxLine: clamp into [0, MaxRow] so a
+  // top-row Up or bottom-row Down is a no-op (the caret stays put).
+  if TargetRow < 0 then TargetRow := 0;
+  if TargetRow > MaxRow then TargetRow := MaxRow;
+  // Re-project the preserved on-SCREEN desired-x onto the TARGET row's coordinate
+  // frame: target absolute x = screen x + target row base. VisualToCaret then
+  // resolves the column in its (absolute-x) contract and clamps into the segment,
+  // so the caret lands at the same on-screen column on the target row.
+  TargetAbsX := FDesiredX + RowBaseAbsX(TargetRow, APPI);
+  VisualToCaret(TargetRow, TargetAbsX, CW, APPI, NewLine, NewCol);
+  FCaretLine := NewLine;
+  FCaretCol := NewCol;
+  // FDesiredX intentionally NOT refreshed: a run of Up/Down tracks the original x.
+end;
+
+function TTyMemo.CaretRowStartCol(APPI: Integer): Integer;
+var
+  CW, VRow, CaretX: Integer;
+begin
+  CW := ContentWidthFor(APPI);
+  EnsureVisualRows(APPI);
+  CaretToVisual(FCaretLine, FCaretCol, CW, APPI, VRow, CaretX);
+  if (VRow >= 0) and (VRow <= High(FVisualRows)) then
+    Result := FVisualRows[VRow].StartCol
+  else
+    Result := 0;
+end;
+
+function TTyMemo.CaretRowEndCol(APPI: Integer): Integer;
+var
+  CW, VRow, CaretX: Integer;
+begin
+  CW := ContentWidthFor(APPI);
+  EnsureVisualRows(APPI);
+  CaretToVisual(FCaretLine, FCaretCol, CW, APPI, VRow, CaretX);
+  if (VRow >= 0) and (VRow <= High(FVisualRows)) then
+    Result := FVisualRows[VRow].EndCol
+  else
+    Result := LineLen(FCaretLine);
+end;
+
 function TTyMemo.CaretLine: Integer;
 begin
   Result := FCaretLine;
@@ -564,6 +684,9 @@ begin
   FSelAnchorLine := FCaretLine;
   FSelAnchorCol := FCaretCol;
   FDesiredCol := FCaretCol;
+  // A deliberate caret placement is a horizontal move: refresh the desired x so a
+  // following wrap Up/Down tracks the placed caret's x (not a stale value).
+  UpdateDesiredX(Font.PixelsPerInch);
   Invalidate;
 end;
 
@@ -1016,6 +1139,8 @@ begin
   FCaretLine := NewLine;
   FCaretCol := NewCol;
   FDesiredCol := FCaretCol;
+  // A click is a horizontal move: refresh the desired x for a following wrap Up/Down.
+  UpdateDesiredX(APPI);
   // A fresh left-click sets the anchor onto the caret (collapsing any prior
   // selection) and begins a drag (mirrors TTyEdit.MouseDown). This is additive:
   // existing click tests assert only the resolved caret position, unaffected.
@@ -1052,6 +1177,8 @@ begin
   FCaretLine := NewLine;
   FCaretCol := NewCol;
   FDesiredCol := FCaretCol;
+  // A drag is a horizontal move: refresh the desired x for a following wrap Up/Down.
+  UpdateDesiredX(APPI);
   Invalidate;
 end;
 
@@ -1105,6 +1232,10 @@ begin
   EnsureCaretLineVisible(APPI);
   // Keep the caret inside the horizontal viewport (no-op for fitting text / wrap).
   EnsureCaretXVisible(APPI);
+  // An edit is a horizontal move: refresh the desired x so a later wrap Up/Down
+  // tracks the new caret x (rebuild the layout first via the invalidate above).
+  if not FInVerticalMove then
+    UpdateDesiredX(APPI);
   UpdateScrollBar;
   Invalidate;
   DoChange;
@@ -1116,6 +1247,10 @@ begin
   EnsureCaretLineVisible(APPI);
   // Keep the caret inside the horizontal viewport (no-op for fitting text / wrap).
   EnsureCaretXVisible(APPI);
+  // Refresh the desired x for wrap Up/Down on every HORIZONTAL move; a vertical
+  // move (FInVerticalMove) preserves it so a run of Up/Down tracks the original x.
+  if not FInVerticalMove then
+    UpdateDesiredX(APPI);
   Invalidate;
   // Pure caret motion ends any typing-coalesce run: the next typed character
   // starts a fresh undo step. AfterCaretMove is the shared post-routine for all
@@ -2236,51 +2371,73 @@ begin
     end;
     VK_UP:
     begin
-      if FCaretLine > 0 then
-      begin
-        Dec(FCaretLine);
-        // Restore desired column, clamped to the new line length.
-        FCaretCol := FDesiredCol;
-        if FCaretCol > LineLen(FCaretLine) then
-          FCaretCol := LineLen(FCaretLine);
+      // FInVerticalMove suppresses the FDesiredX refresh in AfterCaretMove so the
+      // desired x survives a run of Up/Down (wrap path). The no-wrap path uses the
+      // FDesiredCol column-restore idiom and is byte-identical to today.
+      FInVerticalMove := True;
+      try
+        if FWordWrap then
+          MoveCaretByVisualRow(-1, APPI)
+        else if FCaretLine > 0 then
+        begin
+          Dec(FCaretLine);
+          // Restore desired column, clamped to the new line length.
+          FCaretCol := FDesiredCol;
+          if FCaretCol > LineLen(FCaretLine) then
+            FCaretCol := LineLen(FCaretLine);
+        end;
+        // FDesiredCol / FDesiredX preserved across vertical motion.
+        if not Extending then
+        begin
+          FSelAnchorLine := FCaretLine;
+          FSelAnchorCol := FCaretCol;
+        end;
+        AfterCaretMove(APPI);
+      finally
+        FInVerticalMove := False;
       end;
-      // FDesiredCol preserved across vertical motion.
-      if not Extending then
-      begin
-        FSelAnchorLine := FCaretLine;
-        FSelAnchorCol := FCaretCol;
-      end;
-      AfterCaretMove(APPI);
       Key := 0;
     end;
     VK_DOWN:
     begin
-      if FCaretLine < MaxLine then
-      begin
-        Inc(FCaretLine);
-        FCaretCol := FDesiredCol;
-        if FCaretCol > LineLen(FCaretLine) then
-          FCaretCol := LineLen(FCaretLine);
+      FInVerticalMove := True;
+      try
+        if FWordWrap then
+          MoveCaretByVisualRow(+1, APPI)
+        else if FCaretLine < MaxLine then
+        begin
+          Inc(FCaretLine);
+          FCaretCol := FDesiredCol;
+          if FCaretCol > LineLen(FCaretLine) then
+            FCaretCol := LineLen(FCaretLine);
+        end;
+        // FDesiredCol / FDesiredX preserved across vertical motion.
+        if not Extending then
+        begin
+          FSelAnchorLine := FCaretLine;
+          FSelAnchorCol := FCaretCol;
+        end;
+        AfterCaretMove(APPI);
+      finally
+        FInVerticalMove := False;
       end;
-      // FDesiredCol preserved across vertical motion.
-      if not Extending then
-      begin
-        FSelAnchorLine := FCaretLine;
-        FSelAnchorCol := FCaretCol;
-      end;
-      AfterCaretMove(APPI);
       Key := 0;
     end;
     VK_HOME:
     begin
       if CtrlLike then
       begin
+        // Document-wide, in BOTH wrap modes.
         FCaretLine := 0;
         FCaretCol := 0;
       end
+      else if FWordWrap then
+        // Visual-row-local: jump to the caret's visual-row START col.
+        FCaretCol := CaretRowStartCol(APPI)
       else
-        FCaretCol := 0;          // line-local
+        FCaretCol := 0;          // line-local (no-wrap; unchanged)
       FDesiredCol := FCaretCol;
+      // FDesiredX is refreshed in AfterCaretMove (horizontal move).
       if not Extending then
       begin
         FSelAnchorLine := FCaretLine;
@@ -2293,12 +2450,19 @@ begin
     begin
       if CtrlLike then
       begin
+        // Document-wide, in BOTH wrap modes.
         FCaretLine := MaxLine;
         FCaretCol := LineLen(FCaretLine);
       end
+      else if FWordWrap then
+        // Visual-row-local: jump to the caret's visual-row END col. At a soft-wrap
+        // boundary CaretToVisual binds EndCol to THIS (earlier) row, so the caret
+        // stays visually at the end of the current row.
+        FCaretCol := CaretRowEndCol(APPI)
       else
-        FCaretCol := LineLen(FCaretLine);  // line-local
+        FCaretCol := LineLen(FCaretLine);  // line-local (no-wrap; unchanged)
       FDesiredCol := FCaretCol;
+      // FDesiredX is refreshed in AfterCaretMove (horizontal move).
       if not Extending then
       begin
         FSelAnchorLine := FCaretLine;

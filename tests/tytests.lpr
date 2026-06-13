@@ -23,6 +23,7 @@ uses
   test.memo.visualrows,
   test.memo.hscroll,
   test.memo.wrap,
+  test.memo.wrap.nav,
   test.animation,
   test.animation.toggle,
   test.animation.button,
