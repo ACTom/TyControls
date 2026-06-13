@@ -2,7 +2,7 @@ unit tyControls.Memo;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.ScrollBar;
@@ -110,6 +110,11 @@ type
     procedure SelectAll;
     // Collapse the selection onto the caret (anchor := caret).
     procedure ClearSelection;
+    // Clipboard virtual hooks (override in tests to avoid the real OS clipboard;
+    // verbatim from TTyEdit). SelText is already LineEnding-joined, so the same
+    // copy/cut bodies as Edit work unchanged for the multi-line model.
+    function ReadClipboardText: string; virtual;
+    procedure WriteClipboardText(const S: string); virtual;
     // Headless focus override (see FForceFocused). Triggers a repaint.
     procedure SetForceFocused(AValue: Boolean);
     // Visible-line count for the current bounds at APPI (>= 1).
@@ -156,6 +161,13 @@ type
     procedure InjectKey(AKey: Word; AShift: TShiftState);
     procedure InjectBackspace;
     procedure InjectDelete;
+    // Clipboard API. Copy/Cut require a selection; Cut and Paste route through
+    // AfterEdit so OnChange fires. Paste splits the clipboard text on CR/LF and
+    // inserts it as one-or-more logical lines (the multi-line generalisation of
+    // TTyEdit.PasteFromClipboard, which strips newlines for its single line).
+    procedure CopyToClipboard;
+    procedure CutToClipboard;
+    procedure PasteFromClipboard;
   published
     property Lines: TStrings read GetLines write SetLines;
     property Enabled;
@@ -758,6 +770,110 @@ begin
   FSelAnchorCol  := FCaretCol;
 end;
 
+// ---- Clipboard implementation ----
+// Virtual hooks lifted verbatim from TTyEdit so headless tests can override them
+// with an in-memory string.
+
+function TTyMemo.ReadClipboardText: string;
+begin
+  Result := Clipboard.AsText;
+end;
+
+procedure TTyMemo.WriteClipboardText(const S: string);
+begin
+  Clipboard.AsText := S;
+end;
+
+procedure TTyMemo.CopyToClipboard;
+begin
+  // Identical to TTyEdit.CopyToClipboard: SelText is already LineEnding-joined,
+  // so the multi-line case needs no special handling here.
+  if not HasSelection then Exit;
+  WriteClipboardText(SelText);
+end;
+
+procedure TTyMemo.CutToClipboard;
+begin
+  if not HasSelection then Exit;
+  WriteClipboardText(SelText);
+  DeleteSelection;
+  // Route through AfterEdit so OnChange fires (DeleteSelection is a pure mutator).
+  AfterEdit(Font.PixelsPerInch);
+end;
+
+procedure TTyMemo.PasteFromClipboard;
+// Multi-line paste: read the clipboard, normalise line breaks, split into
+// segments and splice them into the model. A truly-empty clipboard is a full
+// no-op (mirrors TTyEdit). A non-empty-but-CRLF-only clipboard (e.g. #10) still
+// deletes any selection and inserts the resulting (possibly empty) segments,
+// which mutates the model and fires OnChange.
+var
+  S, Norm, Cur, Head, Tail: string;
+  Segs: TStringList;
+  i, InsertAt: Integer;
+begin
+  S := ReadClipboardText;
+  if S = '' then Exit;  // truly-empty clipboard: full no-op (Edit 551)
+  if HasSelection then DeleteSelection;
+
+  // Normalise CR/LF: CRLF -> LF, lone CR -> LF, so each remaining LF is one break.
+  Norm := StringReplace(S, #13#10, #10, [rfReplaceAll]);
+  Norm := StringReplace(Norm, #13, #10, [rfReplaceAll]);
+
+  // Split into segments on LF. A single segment (no break) is a plain insert.
+  // Build the segment list manually (rather than via TStringList.Text) so a
+  // trailing break's empty segment is preserved: 'a'#10 -> ['a',''] (two lines),
+  // matching the Enter semantics.
+  Segs := TStringList.Create;
+  try
+    Head := '';
+    for i := 1 to Length(Norm) do
+    begin
+      if Norm[i] = #10 then
+      begin
+        Segs.Add(Head);
+        Head := '';
+      end
+      else
+        Head := Head + Norm[i];
+    end;
+    Segs.Add(Head);
+
+    if Segs.Count = 1 then
+    begin
+      // No line breaks: a plain in-line insert at the caret.
+      DoInsertText(Segs[0]);
+    end
+    else
+    begin
+      // Split the caret line into head (before caret) + tail (after caret).
+      if FLines.Count = 0 then
+        FLines.Add('');
+      Cur  := FLines[FCaretLine];
+      Head := UTF8Copy(Cur, 1, FCaretCol);
+      Tail := UTF8Copy(Cur, FCaretCol + 1, UTF8Length(Cur) - FCaretCol);
+      // First segment joins the head on the caret line.
+      FLines[FCaretLine] := Head + Segs[0];
+      // Interior segments become whole new lines after the caret line.
+      InsertAt := FCaretLine + 1;
+      for i := 1 to Segs.Count - 2 do
+      begin
+        FLines.Insert(InsertAt, Segs[i]);
+        Inc(InsertAt);
+      end;
+      // Final segment + the preserved tail becomes the last inserted line; caret
+      // lands at the end of the final segment, before the preserved tail.
+      FLines.Insert(InsertAt, Segs[Segs.Count - 1] + Tail);
+      FCaretLine := InsertAt;
+      FCaretCol  := UTF8Length(Segs[Segs.Count - 1]);
+    end;
+    FDesiredCol := FCaretCol;
+    AfterEdit(Font.PixelsPerInch);
+  finally
+    Segs.Free;
+  end;
+end;
+
 function TTyMemo.EffectiveFontSize(const S: TTyStyleSet): Integer;
 begin
   // Verbatim from TTyEdit.EffectiveFontSize.
@@ -1048,6 +1164,33 @@ begin
   // (mirrors TTyEdit; additive — existing single-caret nav never passes ssShift,
   // so the collapse path runs with anchor already glued to the caret).
   Extending := ssShift in Shift;
+
+  // Clipboard shortcuts (Ctrl on Win/Linux, Meta/Cmd on macOS), handled BEFORE
+  // the navigation case so they take precedence. Each consumes Key and Exits.
+  if CtrlLike and (Key = VK_A) then
+  begin
+    SelectAll;
+    Key := 0;
+    Exit;
+  end;
+  if CtrlLike and (Key = VK_C) then
+  begin
+    CopyToClipboard;
+    Key := 0;
+    Exit;
+  end;
+  if CtrlLike and (Key = VK_X) then
+  begin
+    CutToClipboard;
+    Key := 0;
+    Exit;
+  end;
+  if CtrlLike and (Key = VK_V) then
+  begin
+    PasteFromClipboard;
+    Key := 0;
+    Exit;
+  end;
 
   case Key of
     VK_RETURN:

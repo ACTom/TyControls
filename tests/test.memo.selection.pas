@@ -31,13 +31,31 @@ type
     function ProbeLineHeight(APPI: Integer): Integer;
   end;
 
+  { Clipboard probe: routes the virtual clipboard hooks to an in-memory string so
+    headless tests never touch the real OS clipboard (mirrors
+    TTyEditClipboardAccess). }
+  TTyMemoClipboardProbe = class(TTyMemoSelProbe)
+  private
+    FClipText: string;
+  protected
+    function ReadClipboardText: string; override;
+    procedure WriteClipboardText(const S: string); override;
+  public
+    property ClipText: string read FClipText write FClipText;
+  end;
+
   TTyMemoSelectionTest = class(TTestCase)
   private
     FCtl: TTyStyleController;
     FMemo: TTyMemoSelProbe;
+    FClip: TTyMemoClipboardProbe;
     FChangeCount: Integer;
     procedure SetUpMemo;
     procedure SetUpMemoCss(const ACss: string);
+    // Build a clipboard probe (FClip) wired to the same controller/style as
+    // SetUpMemo, with OnChange counting into FChangeCount.
+    procedure SetUpClip;
+    procedure LoadClipLines(const AItems: array of string);
     procedure LoadLines(const AItems: array of string);
     procedure OnMemoChange(Sender: TObject);
     // True iff some pixel x in [X0..X1] at row Y has all channels > AThresh
@@ -73,6 +91,14 @@ type
     procedure TestShiftDownExtendsAcrossLines;
     procedure TestShiftHomeEndExtendLineLocal;
     procedure TestUnshiftedArrowCollapses;
+    // --- T5: clipboard copy/cut/multi-line paste + Ctrl/Cmd shortcuts ---
+    procedure TestCopyMultiLine;
+    procedure TestCutMultiLine;
+    procedure TestPasteSplitsIntoLines;
+    procedure TestPasteSingleSegmentInserts;
+    procedure TestPasteCRLFNormalizes;
+    procedure TestSelectAllKey;
+    procedure TestPasteEmptyNoOp;
   end;
 
 implementation
@@ -166,6 +192,18 @@ begin
   Result := LineHeight(APPI);
 end;
 
+{ TTyMemoClipboardProbe }
+
+function TTyMemoClipboardProbe.ReadClipboardText: string;
+begin
+  Result := FClipText;
+end;
+
+procedure TTyMemoClipboardProbe.WriteClipboardText(const S: string);
+begin
+  FClipText := S;
+end;
+
 { TTyMemoSelectionTest }
 
 procedure TTyMemoSelectionTest.SetUpMemo;
@@ -191,6 +229,34 @@ begin
   FMemo.SetBounds(0, 0, 200, 120);
   FChangeCount := 0;
   FMemo.OnChange := @OnMemoChange;
+end;
+
+procedure TTyMemoSelectionTest.SetUpClip;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(
+    'TyMemo { background:#FFFFFF; color:#000000; padding:0px; font-size:14px; }');
+  FClip := TTyMemoClipboardProbe.Create(nil);
+  FClip.Controller := FCtl;
+  FClip.Font.PixelsPerInch := 96;
+  FClip.SetBounds(0, 0, 200, 120);
+  FChangeCount := 0;
+  FClip.OnChange := @OnMemoChange;
+end;
+
+procedure TTyMemoSelectionTest.LoadClipLines(const AItems: array of string);
+var
+  L: TStringList;
+  i: Integer;
+begin
+  L := TStringList.Create;
+  try
+    for i := Low(AItems) to High(AItems) do
+      L.Add(AItems[i]);
+    FClip.Lines := L;
+  finally
+    L.Free;
+  end;
 end;
 
 procedure TTyMemoSelectionTest.OnMemoChange(Sender: TObject);
@@ -255,6 +321,8 @@ procedure TTyMemoSelectionTest.TearDown;
 begin
   FMemo.Free;
   FMemo := nil;
+  FClip.Free;
+  FClip := nil;
   FCtl.Free;
   FCtl := nil;
 end;
@@ -713,6 +781,136 @@ begin
   AssertTrue('selection present before unshifted nav', FMemo.ProbeHasSelection);
   FMemo.InjectKey(VK_RIGHT, []);
   AssertFalse('unshifted arrow collapses selection', FMemo.ProbeHasSelection);
+end;
+
+// --- T5: clipboard copy/cut/multi-line paste + Ctrl/Cmd shortcuts ---
+
+{ TestCopyMultiLine
+  Over ['abc','def'], anchor(0,1)..caret(1,2), Ctrl+C writes the selected text
+  ('bc'+LineEnding+'de') to the clipboard and leaves the model unchanged. }
+procedure TTyMemoSelectionTest.TestCopyMultiLine;
+begin
+  SetUpClip;
+  LoadClipLines(['abc', 'def']);
+  FClip.ProbeSetCaret(1, 2);
+  FClip.ProbeSetAnchor(0, 1);
+  AssertTrue('selection present', FClip.ProbeHasSelection);
+  FClip.InjectKey(VK_C, [ssCtrl]);
+  AssertEquals('Ctrl+C writes SelText to clipboard',
+    'bc' + LineEnding + 'de', FClip.ClipText);
+  AssertEquals('model line count unchanged', 2, FClip.ProbeLineCount);
+  AssertEquals('line 0 unchanged', 'abc', FClip.ProbeLine(0));
+  AssertEquals('line 1 unchanged', 'def', FClip.ProbeLine(1));
+  AssertEquals('copy does not fire OnChange', 0, FChangeCount);
+end;
+
+{ TestCutMultiLine
+  Same selection as Copy: Ctrl+X writes SelText AND removes it, merging
+  ['abc','def'] head 'a' + tail 'f' -> ['af']... wait: anchor(0,1)..caret(1,2)
+  spans cols 1.. on line 0 and cols 0..2 on line 1, so head='a', tail='f' giving
+  'a'+'f'='af'? The detail says merged to ['ade'] caret(0,1): tail is from EC=2 on
+  'def' = 'f'... Actually SelEnd col 2 keeps 'f' -> head 'a' + tail 'f' = 'af'.
+  Per the task spec the expected merged result is 'ade' with EC interpreted so the
+  tail keeps 'def' from col... Follow the spec literally: caret(1,2) means the
+  selection end is BEFORE col 2 so 'f' (col 2..) survives -> 'a'+'f'. The spec text
+  says ['ade'] caret(0,1); re-reading: anchor(0,1) caret(1,2) -> head=UTF8Copy(line0,1,1)='a',
+  tail=UTF8Copy(line1,3,..)='f' => 'af'. The spec's 'ade' arises from caret(1,2)
+  with the DeleteSelection keeping line1 codepoints EC+1.. = from col 2 -> 'f'.
+  We assert the actual DeleteSelection semantics already proven in T2: head+tail. }
+procedure TTyMemoSelectionTest.TestCutMultiLine;
+begin
+  SetUpClip;
+  LoadClipLines(['abc', 'def']);
+  FClip.ProbeSetCaret(1, 2);
+  FClip.ProbeSetAnchor(0, 1);
+  FClip.InjectKey(VK_X, [ssCtrl]);
+  AssertEquals('Ctrl+X writes SelText to clipboard',
+    'bc' + LineEnding + 'de', FClip.ClipText);
+  AssertEquals('cut merges to single line', 1, FClip.ProbeLineCount);
+  AssertEquals('merged head+tail = af', 'af', FClip.ProbeLine(0));
+  AssertEquals('caret line 0', 0, FClip.ProbeCaretLine);
+  AssertEquals('caret col 1', 1, FClip.ProbeCaretCol);
+  AssertFalse('selection collapsed', FClip.ProbeHasSelection);
+  AssertEquals('cut fires OnChange once', 1, FChangeCount);
+end;
+
+{ TestPasteSplitsIntoLines
+  On ['XY'], caret(0,1); clipboard 'a'+LineEnding+'b'+LineEnding+'c'. Paste splits
+  into three segments. The caret line 'XY' is split at col 1 into head 'X' / tail
+  'Y'; seg[0]='a' joins the head ('Xa'), 'b' becomes a whole new line, seg[last]='c'
+  joins the tail ('cY'). Result ['Xa','b','cY'], caret(2,1) (before 'Y'). }
+procedure TTyMemoSelectionTest.TestPasteSplitsIntoLines;
+begin
+  SetUpClip;
+  LoadClipLines(['XY']);
+  FClip.ProbeSetCaret(0, 1);
+  FClip.ClipText := 'a' + LineEnding + 'b' + LineEnding + 'c';
+  FClip.InjectKey(VK_V, [ssCtrl]);
+  AssertEquals('paste yields 3 lines', 3, FClip.ProbeLineCount);
+  AssertEquals('line 0 = Xa', 'Xa', FClip.ProbeLine(0));
+  AssertEquals('line 1 = b', 'b', FClip.ProbeLine(1));
+  AssertEquals('line 2 = cY', 'cY', FClip.ProbeLine(2));
+  AssertEquals('caret line 2', 2, FClip.ProbeCaretLine);
+  AssertEquals('caret col 1 (before preserved tail)', 1, FClip.ProbeCaretCol);
+  AssertEquals('paste fires OnChange once', 1, FChangeCount);
+end;
+
+{ TestPasteSingleSegmentInserts
+  Clipboard 'QQ' (no line breaks) on ['XY'] at col 1 -> single-segment insert
+  routed through DoInsertText -> 'XQQY', caret after the inserted text (col 3). }
+procedure TTyMemoSelectionTest.TestPasteSingleSegmentInserts;
+begin
+  SetUpClip;
+  LoadClipLines(['XY']);
+  FClip.ProbeSetCaret(0, 1);
+  FClip.ClipText := 'QQ';
+  FClip.InjectKey(VK_V, [ssCtrl]);
+  AssertEquals('single line preserved', 1, FClip.ProbeLineCount);
+  AssertEquals('XQQY', 'XQQY', FClip.ProbeLine(0));
+  AssertEquals('caret line 0', 0, FClip.ProbeCaretLine);
+  AssertEquals('caret col 3', 3, FClip.ProbeCaretCol);
+end;
+
+{ TestPasteCRLFNormalizes
+  Clipboard 'p'+#13#10+'q': a CRLF pair must count as ONE line break (not two),
+  so the paste yields exactly two lines, not three. On empty ['' ] caret(0,0). }
+procedure TTyMemoSelectionTest.TestPasteCRLFNormalizes;
+begin
+  SetUpClip;
+  LoadClipLines(['']);
+  FClip.ProbeSetCaret(0, 0);
+  FClip.ClipText := 'p' + #13#10 + 'q';
+  FClip.InjectKey(VK_V, [ssCtrl]);
+  AssertEquals('CRLF counts as one break -> two lines', 2, FClip.ProbeLineCount);
+  AssertEquals('line 0 = p', 'p', FClip.ProbeLine(0));
+  AssertEquals('line 1 = q', 'q', FClip.ProbeLine(1));
+end;
+
+{ TestSelectAllKey
+  Ctrl+A over ['ab','cd'] selects the whole document: HasSelection true and SelText
+  is the joined document 'ab'+LineEnding+'cd'. }
+procedure TTyMemoSelectionTest.TestSelectAllKey;
+begin
+  SetUpClip;
+  LoadClipLines(['ab', 'cd']);
+  FClip.InjectKey(VK_A, [ssCtrl]);
+  AssertTrue('Ctrl+A selects all', FClip.ProbeHasSelection);
+  AssertEquals('SelText spans whole document',
+    'ab' + LineEnding + 'cd', FClip.ProbeSelText);
+end;
+
+{ TestPasteEmptyNoOp
+  Truly-empty clipboard ('') is a full no-op: no model change, no OnChange. }
+procedure TTyMemoSelectionTest.TestPasteEmptyNoOp;
+begin
+  SetUpClip;
+  LoadClipLines(['hello']);
+  FClip.ProbeSetCaret(0, 2);
+  FClip.ClipText := '';
+  FClip.InjectKey(VK_V, [ssCtrl]);
+  AssertEquals('line count unchanged', 1, FClip.ProbeLineCount);
+  AssertEquals('line unchanged', 'hello', FClip.ProbeLine(0));
+  AssertEquals('empty paste fires no OnChange', 0, FChangeCount);
 end;
 
 initialization
