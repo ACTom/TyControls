@@ -145,7 +145,42 @@ BtnDanger.Enabled := False;
 
 ---
 
-## 7. 注意事项
+## 7. 状态过渡动画 (v1.10)
+
+`TTyButton` 支持悬停/离开时背景色在 普通态 与 `:hover` 态之间平滑渐变的过渡动画，由 `tyControls.Animation` 单元的 `TTyAnimator` 驱动。
+
+### 开关属性
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `AnimationsEnabled` | `Boolean` | `False` | 是否启用背景色悬停渐变动画。**public 属性，不 published**（不写入 `.lfm`），需在代码中设置。 |
+
+> 这是唯一的动画开关。**没有**单独的时长 / 缓动曲线属性可供配置——时长与缓动在控件内部固定（见下）。
+
+### 行为
+
+- **默认关闭（`False`）：** 鼠标进入/离开时背景色**瞬间切换**到目标颜色。这是无窗口（headless）/ 测试场景的默认行为，保证逐像素绘制结果与状态严格对应。
+- **启用（`True`）且控件已分配窗口句柄（`HandleAllocated`）时：** `MouseEnter` 让背景色由普通态颜色平滑渐变到 `:hover` 态颜色，`MouseLeave` 反向渐变回普通态。
+- 启用了动画但控件尚无窗口句柄时，仍按"瞬间切换"处理。
+
+### 实现细节
+
+- **驱动方式：** 启用动画后，控件按需创建一个内部 `TTimer`（`Interval = 16`，约 60fps），在 `OnTimer` 中按经过的毫秒数推进动画；动画走完（背景色抵达目标）后定时器自动停止。`TTyAnimator` 本身不持有时钟，只接受显式的毫秒步进，因此动画逻辑可在测试中确定性地驱动。
+- **时长：** 一次完整的 普通↔悬停 渐变约 **120ms**（与 `TTyToggleSwitch` 旋钮滑动同节奏）。
+- **缓动曲线：** `teEaseOutCubic`（先快后慢的减速曲线 `1 - (1 - t)³`）。
+- **颜色插值：** 渲染时通过 `TyLerpColor` 在普通态背景色与 `:hover` 态背景色之间按缓动进度（`Eased`）混合。仅当两个状态的背景均为**纯色填充**（`tfkSolid`）时才进行渐变插值；渐变中间帧（`0 < Eased < 1`）会显式解析普通态与 `:hover` 态两套样式取色，使可见颜色完全由动画进度驱动，与 `FHover` 字段无关。`:focus`、`:active`、`:disabled` 等其它状态不参与此背景渐变。
+
+```pascal
+var Btn: TTyButton;
+Btn := TTyButton.Create(Self);
+Btn.Parent := Self;
+Btn.Caption := '悬停我';
+Btn.AnimationsEnabled := True;   // 启用悬停背景色渐变（需在有窗口句柄时生效）
+```
+
+---
+
+## 8. 注意事项
 
 - `Caption` 文字在渲染时水平和垂直均居中，文本超出宽度时会裁剪（`clipping = True`）。
 - `StyleClass` 区分大小写，须与 `.tycss` 文件中的类名完全一致（如 `'primary'`、`'danger'`）。

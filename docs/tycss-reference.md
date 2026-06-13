@@ -632,7 +632,7 @@ TyButton.primary {
    渲染只分 ≥600 粗体 / 其余常规两档(§5.10)。
 9. **`font-family` 不要加引号**,引号会保留进字体名(§5.8)。
 10. **`TyScrollBar` 的 `color` 决定滑块颜色**：`RenderTo` 使用 `S.TextColor`（即 CSS `color` 属性）作为滑块填充色，轨道背景来自 `background`。内置主题中的 `TyScrollBar:hover { color: … }` 写法是正确用法。
-11. `TyTabControl` 页签溢出不滚动：所有页签宽度之和超过控件宽度时，超出部分被画布裁剪，不提供可横向滚动的页签条（v1.2 已知限制）。
+11. **`TyTabControl` 页签溢出可横向滚动（v1.10）**：所有页签头宽度之和超过控件宽度时，页签头条带进入溢出模式可横向滚动——条带左右两端渲染 `tgArrowLeft` / `tgArrowRight` 箭头按钮，鼠标在条带上滚轮也能滚动，且切换选中页时会自动把目标页签滚入可见区。绘制时页签头被裁剪到两个箭头之间的可见带（箭头始终绘制在最上层）。详见 [controls/tabcontrol.md](controls/tabcontrol.md) 第 13 节。
 12. 不支持 `@media`、`@import`、`!important`、转义字符串、`//` 行注释。
 13. **边框/盒模型的取舍(v1.6)**:`border-style` 仅支持 `none` / `solid`,**无** `dashed`、
     `dotted` 等;**不存在 `margin` 属性**(外边距请用容器布局实现);`border-radius` 是单一半径,

@@ -28,6 +28,8 @@ uses tyControls.TabControl;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
+| `Tabs` | `TTyTabCollection` | 空集合 | 页签设计期集合（`TOwnedCollection`，元素为 `TTyTabItem`，各项有 published `Caption`）。可在 IDE 对象检查器 / 集合编辑器中增删页签，并随 `.lfm` 持久化；运行时的 `AddTab`/`RemoveTab` 也通过该集合工作。详见第 12 节 |
+| `TabIndex` | `Integer` | `-1` | 当前选中页签的零基索引；-1 表示无选中页；赋值时自动裁剪越界值（低于 -1 → -1，大于末尾 → 末尾）；真变化才触发 `OnChange`。published，随 `.lfm` 持久化（载入期写入的值会延迟到 `Loaded` 应用）|
 | `TabHeight` | `Integer` | `28` | 页签头条带的逻辑高度（96 DPI 基准像素），绘制时按实际 PPI 自动缩放 |
 | `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染一个关闭 × 字形；点击该字形触发 `OnTabClose`。默认关闭，页签头不显示 × |
 | `OnTabClose` | `TTyTabCloseEvent` | `nil` | 点击页签关闭 × 字形时触发；签名 `procedure(Sender: TObject; AIndex: Integer; var AllowClose: Boolean)`。详见第 4、11 节 |
@@ -40,7 +42,6 @@ uses tyControls.TabControl;
 
 | 成员 | 类型/签名 | 说明 |
 |------|-----------|------|
-| `TabIndex` | `Integer`（读写） | 当前选中页签的零基索引；-1 表示无选中页；赋值时自动裁剪越界值（低于 -1 → -1，大于末尾 → 末尾）；真变化才触发 `OnChange` |
 | `Pages[AIndex: Integer]` | `TTyPanel`（只读，indexed property） | 返回指定索引处的页面板；越界返回 `nil` |
 | `AddTab(const ACaption: string): TTyPanel` | 方法 | 追加一个新页签，返回对应的 `TTyPanel` 页面板；第一个页签被追加时自动选中（`TabIndex := 0`），不触发 `OnChange` |
 | `RemoveTab(AIndex: Integer): void` | 方法 | 移除指定索引的页签及其页面板（连同释放页面板）；自动修正 `TabIndex`；仅当当前活动页因此改变时才触发 `OnChange`。详见第 11 节 |
@@ -48,6 +49,15 @@ uses tyControls.TabControl;
 | `TabCaption(AIndex: Integer): string` | 方法 | 返回指定索引的页签标题；越界返回空字符串 |
 | `TyTabHeaderRect(AIndex: Integer): TRect` | 方法 | 返回指定页签头的设备像素矩形（以控件 (0,0) 为原点），主要用于测试与自定义命中检测 |
 | `TyTabCloseRect(AIndex: Integer): TRect` | 方法 | 返回指定页签关闭 × 字形的命中矩形（设备像素，控件 (0,0) 本地坐标）；`TabsClosable = False` 或索引越界时返回空矩形 `(0,0,0,0)`，主要用于测试与自定义命中检测 |
+| `TyTabHoverClose` | `Integer`（只读 property） | 鼠标当前悬停其关闭 × 的页签索引；无则为 -1。由 `MouseMove`/`MouseLeave` 驱动，独立于整页签悬停。详见第 14 节 |
+| `TyHeaderStripWidth: Integer` | 方法 | 所有页签头未偏移时的总宽度（设备像素）。详见第 13 节 |
+| `TyMaxHeaderScroll: Integer` | 方法 | 当前 PPI 下页签头条带最大可滚动量（设备像素）；条带未溢出时为 0 |
+| `TyTabScrollLeftRect / TyTabScrollRightRect: TRect` | 方法 | 溢出时左/右滚动箭头按钮的矩形（设备像素，控件 (0,0) 本地坐标）；条带未溢出时为空矩形 `(0,0,0,0)` |
+| `HeaderRectShifted(AIndex: Integer): TRect` | 方法 | 指定页签头按当前滚动偏移平移后的矩形（设备像素）；越界返回空矩形 |
+| `SetHeaderScroll(AValue: Integer): void` | 方法 | 设置页签头条带的滚动偏移（设备像素），自动裁剪到 `[0, TyMaxHeaderScroll]` 并重绘 |
+| `ScrollTabIntoView(AIndex: Integer): void` | 方法 | 调整滚动偏移，使指定页签头完整落入可见带内 |
+| `TyDragThresholdPx(APPI: Integer): Integer` | 方法 | 按下后判定为拖拽重排（而非点击）所需的最小移动距离（设备像素，按 PPI 缩放；96 DPI 下为 6）|
+| `TyDropIndexAt(X, APPI: Integer): Integer` | 方法 | 给定设备像素横坐标 X，返回拖拽应落入的集合索引（以平移后页签头中点判定，纯计算不改状态）|
 
 ### 继承的通用成员
 
@@ -216,7 +226,7 @@ TC.TabIndex := 1;
 
 ## 10. 注意事项
 
-- **页签溢出不滚动**：当所有页签标题的宽度之和超过控件宽度时，超出部分会被画布裁剪，不提供滚动页签条。这是 v1.2 已知限制，参见 [docs/KNOWN_GAPS.md](../KNOWN_GAPS.md)。
+- **页签溢出可横向滚动**（v1.10）：当所有页签头宽度之和超过控件宽度时，页签头条带可横向滚动——条带两端显示 ◀ / ▶ 滚动箭头按钮，鼠标在条带上滚轮也能滚动，且切换选中页时会自动把该页签滚入可见区。详见第 13 节。
 - **`AddTab` 第一个页签自动选中**：首次调用 `AddTab` 时，控件会直接将 `FTabIndex` 置为 0 并显示该页，不经过 `SetTabIndex` 设置器，因此不触发 `OnChange`。后续调用 `AddTab` 追加更多页签时，当前选中页不变。
 - **页面板由 TabControl 拥有**：`AddTab` 创建的 `TTyPanel` 以 `TTyTabControl` 为 Owner，无需也不应手动释放它们——TabControl 析构时会自动释放。
 - **`TabIndex = -1`**：赋值为 -1 时所有页面板均隐藏；正常使用时无需主动赋 -1（添加第一个页签后控件会自动选中第 0 页）。
@@ -275,3 +285,90 @@ TC.RemoveTab(2);   // 移除第 3 个页签（0-based）及其页面板
 ### 外部释放页面板的安全处理
 
 即便绕过 `RemoveTab`、在外部直接 `Free` 某个页面板，控件也能安全处理：`TTyTabControl` 重写了 `Notification`，在收到 `opRemove` 通知时自动把该页面板从内部数组中摘除（修正 `TabIndex`、刷新显示），**不会留下悬挂指针**。因此外部释放页面板与调用 `RemoveTab` 在数据结构层面是一致且安全的（区别仅在于是否由控件代为 `Free`）。
+
+---
+
+## 12. 设计期页签（v1.7）
+
+### Tabs 集合
+
+`TTyTabControl` 暴露了一个 published 的 `Tabs` 集合属性，用于在 IDE 中直接编辑页签，而无需在代码里调用 `AddTab`：
+
+- `Tabs` 的类型是 `TTyTabCollection`（继承自 `TOwnedCollection`），其元素类型为 `TTyTabItem`。
+- `TTyTabItem` 有一个 published 的 `Caption: string` 属性（即页签标题），并通过 `GetDisplayName` 在集合编辑器中以标题显示；其托管的页面板以只读属性 `Page: TTyPanel` 暴露（不参与流式化，由控件按需创建）。
+- 集合会随 `.lfm` 持久化：每个页签项的 `Caption` 写入流，对应的页面板作为嵌套的 `object TTyPanel` 子控件块单独流式化。
+- 选中页通过 published `TabIndex`（默认 -1）同样随 `.lfm` 往返；载入期写入的 `TabIndex` 会被捕获并在 `Loaded` 中应用。
+
+### 在 IDE 中编辑页签
+
+设计期注册（`tyControls.Design`）为 `Tabs` 提供了两条访问途径：
+
+1. **集合属性编辑器**：在对象检查器中为 `Tabs` 属性注册了标准的 `TCollectionPropertyEditor`，点击 `Tabs` 旁的 `...` 即可打开标准集合编辑对话框，增删页签、编辑各项 `Caption`。
+2. **"Edit Tabs..." 组件动词**：注册了组件编辑器 `TTyTabControlEditor`，在控件右键上下文菜单中提供 **"Edit Tabs..."** 项，直接打开同一个集合编辑器（`EditCollection(..., Tabs, 'Tabs')`）。
+
+> 在演示工程中，页签即定义在 `.lfm` 里（而非运行时代码）。
+
+### 集合与运行时 API 的关系
+
+`Tabs` 集合是页签的**唯一权威来源**，内部的标题数组与页面板数组始终与它保持同步：
+
+- `AddTab(caption)` 实际上是向 `Tabs` 集合 `Add` 一个新项并设置其 `Caption`，集合的 `Notify(cnAdded)` 创建对应页面板，返回值仍是该页面板（`Item.Page`）。
+- `RemoveTab(AIndex)` 删除对应页面板时，会同步从 `Tabs` 集合删除对应项（反之，从集合删除某项也会摘除并释放其页面板）。
+- 因此无论是设计期通过集合编辑器增删，还是运行时调用 `AddTab` / `RemoveTab`，最终都经过同一条同步路径，二者可以混用。
+
+```pascal
+// 运行时也可直接操作 Tabs 集合
+var Item: TTyTabItem;
+Item := TC.Tabs.Add;
+Item.Caption := '新页';
+// Item.Page 即该页签的页面板
+```
+
+---
+
+## 13. 页签溢出横向滚动（v1.10）
+
+当所有页签头的宽度之和超过控件宽度时，页签头条带进入溢出模式，可横向滚动：
+
+- **滚动箭头按钮**：条带左右两端各渲染一个箭头字形按钮（`tgArrowLeft` / `tgArrowRight`）。点击左/右箭头按当前 PPI 缩放后的 ~40 逻辑像素步进滚动条带（自动裁剪到合法范围）。
+- **鼠标滚轮**：鼠标位于页签头条带上方时滚动滚轮即可横向滚动条带（向上/向后滚减小偏移，向下/向前滚增大偏移）；步进同样约 40 逻辑像素。用户挂接的滚轮处理器优先消费。
+- **自动滚入可见区**：切换选中页时（含键盘 ← / →），若目标页签头不完整可见，控件会自动调整滚动偏移把它滚入可见带内（`ScrollTabIntoView`）。
+- 溢出时绘制会将页签头裁剪到两个箭头之间的可见带，箭头按钮始终绘制在最上层，不会被平移后的页签头覆盖；条带未溢出时不保留箭头带、滚动偏移恒为 0。
+
+相关只读几何方法（设备像素、控件 (0,0) 本地坐标），主要供测试与自定义命中检测：
+
+| 方法 | 含义 |
+|------|------|
+| `TyHeaderStripWidth` | 所有页签头未偏移时的总宽度 |
+| `TyMaxHeaderScroll` | 最大可滚动量；未溢出时为 0 |
+| `TyTabScrollLeftRect` / `TyTabScrollRightRect` | 左 / 右箭头按钮矩形；未溢出时为空矩形 |
+| `HeaderRectShifted(AIndex)` | 指定页签头按当前滚动偏移平移后的矩形 |
+
+也可在代码中直接控制滚动：`SetHeaderScroll(AValue)` 设置偏移（裁剪到 `[0, TyMaxHeaderScroll]`），`ScrollTabIntoView(AIndex)` 把指定页签滚入可见区。
+
+---
+
+## 14. 拖拽重排与关闭 × 独立高亮（v1.10）
+
+### 拖拽重排页签
+
+可通过按住并拖拽页签头来重排页签顺序：
+
+- 在某页签头上按下左键时，控件先将其选中，并把它**预备**为拖拽候选（记下按下位置）。
+- 若指针随后移动超过拖拽阈值（`TyDragThresholdPx`，按 PPI 缩放的小阈值，96 DPI 下为 6 设备像素），手势从"点击"切换为实时重排；移动不足阈值即松开则仍是一次普通点击（只选中、不重排）。
+- 进入重排后，每次移动会按指针当前 X 解析出的落点索引（以平移后页签头中点判定，见 `TyDropIndexAt`）重新落位被拖页签——通过把对应 `Tabs` 集合项的 `Index` 改为目标位置实现，集合随即同步内部数组（活动选中跟随页面板对象本身，而非索引）。
+- 松开左键（`MouseUp`）或指针离开控件（`MouseLeave`）即解除拖拽候选，避免无新按下时的误触重排。
+
+```pascal
+// 阈值与落点为纯计算，可用于测试或自定义命中
+PxThreshold := TC.TyDragThresholdPx(96);   // 96 DPI 下 = 6
+DropIdx     := TC.TyDropIndexAt(X, 96);     // X 处应落入的页签索引
+```
+
+### 关闭 × 的独立 :hover 高亮
+
+当 `TabsClosable = True` 时，关闭 × 字形拥有**独立于整页签**的悬停高亮：
+
+- 仅当指针精确落在某页签的关闭 × 命中矩形内时，该 × 才点亮——在 × 后面绘制一块基于页签文字色的半透明圆角底片，× 字形本身以全不透明度叠加，使关闭目标一目了然。
+- 当前被悬停其 × 的页签索引可通过只读属性 `TyTabHoverClose` 读取（无则为 -1），由 `MouseMove` / `MouseLeave` 驱动；它与整页签悬停（影响 `TyTab:hover` 外观）相互独立。
+- 拖拽重排进行中不视为关闭 × 悬停，任何残留高亮会被清除。

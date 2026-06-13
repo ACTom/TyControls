@@ -36,17 +36,6 @@ Tier-2 native enhancement layer.
 
 ## Controls
 
-- `TTyEdit` has no word-level jump (v1.1): Ctrl/Cmd+Left/Right arrow does not
-  calculate word boundaries; the key event is passed through to the parent
-  window unmodified.
-- `TTyTabControl` tab overflow is clipped, not scrollable (v1.2): when the
-  combined width of all tab headers exceeds the control width, the overflowing
-  tabs are clipped by the canvas. There is no horizontal scrolling tab strip.
-  A scrollable tab bar is a Tier-2 item.
-- `TTyTabControl` tabs cannot be reordered by dragging (v1.4): tab order is
-  fixed at insertion order. There is no drag-to-reorder of tab headers; pages
-  can only be added (`AddTab`) and removed (`RemoveTab` / closable `×`), not
-  rearranged. Drag-reorder is a Tier-2 item.
 - `TTyCheckBox` / `TTyRadioButton` `opacity` and `shadow`: **resolved in v1.1**.
   The rendering path now routes through `DrawFrame` which applies both
   properties; they are fully effective for all typeKeys including checkbox and
@@ -66,7 +55,9 @@ Tier-2 native enhancement layer.
     edge and the caret can move off-screen horizontally without following.
   - **No undo/redo**: no edit-history stack; `Ctrl/Cmd+Z` / `Y` are inert.
   - **No word-nav**: `Ctrl/Cmd+Left/Right` does not jump by word boundary
-    (same gap as `TTyEdit`); plain arrows always move one codepoint.
+    (unlike `TTyEdit`, which supports word navigation); in `TTyMemo`,
+    `Ctrl`/`Cmd` only retargets `Home`/`End` to the document start/end, and
+    plain arrows always move one codepoint.
   - **No caret blink**: the caret is a static 1px bar drawn only when focused
     and the caret line is visible; there is no `TTimer`-driven blink.
   See [controls/memo.md](controls/memo.md) §10 for the per-control writeup.

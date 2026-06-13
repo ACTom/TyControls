@@ -131,7 +131,42 @@ SW.Checked := True; // 直接设为 ON
 
 ---
 
-## 7. 注意事项
+## 7. 状态过渡动画 (v1.10)
+
+`TTyToggleSwitch` 支持旋钮在 关/开 之间平滑滑动的过渡动画，由 `tyControls.Animation` 单元的 `TTyAnimator` 驱动。
+
+### 开关属性
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `AnimationsEnabled` | `Boolean` | `False` | 是否启用旋钮滑动动画。**public 属性，不 published**（不写入 `.lfm`），需在代码中设置。 |
+
+> 这是唯一的动画开关。**没有**单独的时长 / 缓动曲线属性可供配置——时长与缓动在控件内部固定（见下）。
+
+### 行为
+
+- **默认关闭（`False`）：** 切换 `Checked` 时旋钮**瞬间吸附**到目标位置（关→左、开→右）。这是无窗口（headless）/ 测试场景的默认行为，保证逐像素绘制结果与状态严格对应。
+- **启用（`True`）且控件已分配窗口句柄（`HandleAllocated`）时：** 切换 `Checked` 会让旋钮从当前位置平滑滑向新位置，而不是瞬间跳变。
+- 启用了动画但控件尚无窗口句柄时，仍按"瞬间吸附"处理。
+
+### 实现细节
+
+- **驱动方式：** 启用动画后，控件按需创建一个内部 `TTimer`（`Interval = 16`，约 60fps），在 `OnTimer` 中按经过的毫秒数推进动画；动画走完（旋钮抵达目标）后定时器自动停止。`TTyAnimator` 本身不持有时钟，只接受显式的毫秒步进，因此动画逻辑可在测试中确定性地驱动。
+- **时长：** 一次完整的 关↔开 滑动约 **120ms**。
+- **缓动曲线：** `teEaseOutCubic`（先快后慢的减速曲线 `1 - (1 - t)³`），旋钮接近终点时减速，手感更自然。
+- 旋钮几何位置由纯函数 `TyToggleKnobX` 在 关位（OffX）与 开位（OnX）之间按动画的缓动进度（`Eased`）线性插值得到。
+
+```pascal
+var SW: TTyToggleSwitch;
+SW := TTyToggleSwitch.Create(Self);
+SW.Parent := Self;
+SW.AnimationsEnabled := True;   // 启用旋钮滑动动画（需在有窗口句柄时生效）
+SW.Checked := True;             // 旋钮平滑滑到右侧（约 120ms）
+```
+
+---
+
+## 8. 注意事项
 
 1. **ON 状态映射 `:active`：** `CurrentStates` 重写会在 `Checked = True` 时加入 `tysActive`，因此主题中 `TyToggleSwitch:active { }` 规则同时覆盖"鼠标按下"和"已选中 ON"两种情形。需要在主题中区分时，建议通过 `StyleClass` 变体实现（如 `.on`），但需在代码中手动同步 `StyleClass`。
 2. **旋钮颜色来自 `color`：** 旋钮的填充色固定读取 `TextColor`（CSS `color`），不受 `background` 影响。常见配置为 `color: #FFFFFF`（白色旋钮）以在彩色轨道上提供对比。
