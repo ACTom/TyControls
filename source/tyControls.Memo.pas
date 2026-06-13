@@ -927,6 +927,7 @@ end;
 procedure TTyMemo.UpdateScrollBar;
 var
   VR, MaxPos, MaxTop, Total: Integer;
+  WasVisible: Boolean;
 begin
   VR := VisibleRows;
   Total := TotalVisualRows(Font.PixelsPerInch);
@@ -948,6 +949,27 @@ begin
     // Update DPI-dependent width and controller every call so DPI changes take effect.
     FScrollBar.Width := MulDiv(12, Font.PixelsPerInch, 96);
     FScrollBar.Controller := Self.Controller;
+    // SBWidth feedback (matters when WordWrap=True): making the bar visible steals
+    // SBWidth from the content width, which narrows the wrap and can yield MORE
+    // visual rows than the (wider) pre-scrollbar Total we just computed. If the
+    // visibility is flipping hidden->visible now, flip it FIRST, invalidate the
+    // row cache (so it rebuilds at the narrowed content width) and recompute Total
+    // so the range below covers EVERY settled row — otherwise the last wrapped
+    // rows could never scroll into view. No-op for WordWrap=False (content width
+    // is independent of the bar there, so the recomputed Total is unchanged).
+    WasVisible := FScrollBar.Visible;
+    if not WasVisible then
+    begin
+      FScrollBar.Visible := True;
+      if FWordWrap then
+      begin
+        InvalidateVisualRows;
+        Total := TotalVisualRows(Font.PixelsPerInch);
+        MaxTop := Total - VR;
+        if MaxTop < 0 then MaxTop := 0;
+        if FTopRow > MaxTop then FTopRow := MaxTop;
+      end;
+    end;
     MaxPos := Total - VR;
     if MaxPos < 0 then MaxPos := 0;
     FSyncingScroll := True;

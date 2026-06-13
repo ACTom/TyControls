@@ -22,6 +22,7 @@ uses
   test.defaulttheme, test.spinedit, test.memo, test.memo.selection, test.memo.undo,
   test.memo.visualrows,
   test.memo.hscroll,
+  test.memo.wrap,
   test.animation,
   test.animation.toggle,
   test.animation.button,
