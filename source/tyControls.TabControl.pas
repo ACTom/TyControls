@@ -129,6 +129,16 @@ type
     procedure SetHeaderScroll(AValue: Integer);
     procedure ScrollTabIntoView(AIndex: Integer);
 
+    { Drag-reorder helpers (pure, no mutation; device px).
+      TyDragThresholdPx: how far (in device px at APPI) a press must move before
+        a drag counts as a reorder rather than a click. Small + PPI-scaled.
+      TyDropIndexAt: the collection index a drag at device-X should drop into,
+        using shifted header midpoints. Returns the first index i whose shifted
+        midpoint lies to the right of X; clamped to [0, Count-1] (default the
+        last index when X is past every midpoint). }
+    function TyDragThresholdPx(APPI: Integer): Integer;
+    function TyDropIndexAt(X, APPI: Integer): Integer;
+
     property Pages[AIndex: Integer]: TTyPanel read GetPage;
   published
     property Tabs: TTyTabCollection read FTabs write SetTabs;
@@ -520,6 +530,41 @@ begin
     Want := L - VisLeft;
 
   SetHeaderScroll(Want);
+end;
+
+{ Device-px drag threshold at APPI: 6 logical px scaled. At 96 PPI this is 6. }
+function TTyTabControl.TyDragThresholdPx(APPI: Integer): Integer;
+begin
+  Result := MulDiv(6, APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+{ Resolve which collection index a drag at device-X should drop into, scanning
+  the shifted header midpoints left-to-right. Returns the first index whose
+  shifted midpoint lies strictly to the right of X; if X is past every midpoint
+  it defaults to the last index. Result is clamped to [0, Count-1]. Pure: it
+  rebuilds the (cached) layout for measurement but mutates no selection state. }
+function TTyTabControl.TyDropIndexAt(X, APPI: Integer): Integer;
+var
+  I, Mid: Integer;
+  HR: TRect;
+begin
+  if FCaptions.Count = 0 then Exit(0);
+  RebuildLayout(APPI);
+  Result := FCaptions.Count - 1; // default: past every midpoint -> last
+  for I := 0 to FCaptions.Count - 1 do
+  begin
+    HR := FHeaderRects[I];
+    OffsetRect(HR, -FHeaderScroll, 0); // shifted midpoint
+    Mid := (HR.Left + HR.Right) div 2;
+    if X < Mid then
+    begin
+      Result := I;
+      Break;
+    end;
+  end;
+  if Result < 0 then Result := 0;
+  if Result > FCaptions.Count - 1 then Result := FCaptions.Count - 1;
 end;
 
 procedure TTyTabControl.DoCloseTab(AIndex: Integer);
