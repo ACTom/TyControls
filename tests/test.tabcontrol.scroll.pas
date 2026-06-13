@@ -21,6 +21,10 @@ type
     function ShowScrollAffordance: Boolean;
     function VisibleLeft: Integer;
     function VisibleRight: Integer;
+    function HeaderScroll: Integer;
+    procedure CallMouseDown(X, Y: Integer);
+    procedure CallMouseMove(X, Y: Integer);
+    function CallDoMouseWheel(WheelDelta, X, Y: Integer): Boolean;
   end;
 
   { Geometry tests for header overflow scroll: strip width, clamp, affordance
@@ -40,6 +44,27 @@ type
     procedure TestAffordanceRectsNonEmptyOnOverflowEmptyWhenFits;
     procedure TestScrollLastIntoViewThenFirstIntoView;
     procedure TestNoOverflowRegressionUnshifted;
+  end;
+
+  { Interactive input tests for header overflow scroll: mouse-wheel over the
+    header band, clicks on the affordance arrow rects, auto-into-view from
+    SetTabIndex, and a regression that an unshifted header still selects on
+    click. Uses the same fresh access subclass which now exposes the protected
+    input entry points and the internal FHeaderScroll. }
+  TTyTabScrollInputTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FTab: TTyTabScrollAccess;
+    procedure AddTabs(ACount: Integer);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestWheelOverHeaderScrolls;
+    procedure TestWheelWhenDisabledNoChangeReturnsFalse;
+    procedure TestClickRightArrowScrollsRightLeftArrowScrollsLeft;
+    procedure TestSetTabIndexLastScrollsIntoView;
+    procedure TestMouseDownSelectsTabUnshiftedRegression;
   end;
 
   { Painter probe for the new tab-scroll arrow glyphs. The directional asserts
@@ -85,6 +110,26 @@ begin
     Result := FScrollRightRect.Left
   else
     Result := Width;
+end;
+
+function TTyTabScrollAccess.HeaderScroll: Integer;
+begin
+  Result := FHeaderScroll;
+end;
+
+procedure TTyTabScrollAccess.CallMouseDown(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TTyTabScrollAccess.CallMouseMove(X, Y: Integer);
+begin
+  MouseMove([], X, Y);
+end;
+
+function TTyTabScrollAccess.CallDoMouseWheel(WheelDelta, X, Y: Integer): Boolean;
+begin
+  Result := DoMouseWheel([], WheelDelta, Point(X, Y));
 end;
 
 { TTyTabScrollGeometryTest }
@@ -213,6 +258,121 @@ begin
   end;
 end;
 
+{ TTyTabScrollInputTest }
+
+procedure TTyTabScrollInputTest.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 600, 400);
+  FTab := TTyTabScrollAccess.Create(FForm);
+  FTab.Parent := FForm;
+  FTab.Font.PixelsPerInch := 96;
+end;
+
+procedure TTyTabScrollInputTest.TearDown;
+begin
+  FForm.Free;
+end;
+
+procedure TTyTabScrollInputTest.AddTabs(ACount: Integer);
+var
+  I: Integer;
+begin
+  for I := 1 to ACount do
+    FTab.AddTab('Tab ' + IntToStr(I));
+end;
+
+{ Wheel over the header band: a downward wheel (WheelDelta<0) increases the
+  scroll (clamped), an upward wheel (WheelDelta>0) decreases it, and the event
+  is consumed (Result True) in both directions. }
+procedure TTyTabScrollInputTest.TestWheelOverHeaderScrolls;
+var
+  AfterDown, Consumed: Integer;
+  Res: Boolean;
+begin
+  FTab.SetBounds(0, 0, 120, 200);
+  AddTabs(12);
+  AssertTrue('precondition: overflow', FTab.TyMaxHeaderScroll > 0);
+  AssertEquals('precondition: scroll starts at 0', 0, FTab.HeaderScroll);
+
+  // Wheel down over the header band -> scroll increases, event consumed.
+  Res := FTab.CallDoMouseWheel(-120, 10, 5);
+  AssertTrue('wheel-down over header consumed', Res);
+  AfterDown := FTab.HeaderScroll;
+  AssertTrue('wheel-down increases header scroll', AfterDown > 0);
+
+  // Wheel up over the header band -> scroll decreases, event consumed.
+  Res := FTab.CallDoMouseWheel(120, 10, 5);
+  AssertTrue('wheel-up over header consumed', Res);
+  Consumed := FTab.HeaderScroll;
+  AssertTrue('wheel-up decreases header scroll', Consumed < AfterDown);
+end;
+
+{ A disabled control ignores the wheel: no scroll change and the event is not
+  consumed (Result False). }
+procedure TTyTabScrollInputTest.TestWheelWhenDisabledNoChangeReturnsFalse;
+var
+  Res: Boolean;
+begin
+  FTab.SetBounds(0, 0, 120, 200);
+  AddTabs(12);
+  FTab.Enabled := False;
+  Res := FTab.CallDoMouseWheel(-120, 10, 5);
+  AssertFalse('disabled wheel not consumed', Res);
+  AssertEquals('disabled wheel leaves scroll unchanged', 0, FTab.HeaderScroll);
+end;
+
+{ Clicking the right affordance arrow increases the scroll (clamped to max);
+  clicking the left arrow afterwards decreases it. }
+procedure TTyTabScrollInputTest.TestClickRightArrowScrollsRightLeftArrowScrollsLeft;
+var
+  RR, LR: TRect;
+  AfterRight: Integer;
+begin
+  FTab.SetBounds(0, 0, 120, 200);
+  AddTabs(12);
+  AssertTrue('precondition: overflow', FTab.TyMaxHeaderScroll > 0);
+
+  RR := FTab.TyTabScrollRightRect;
+  FTab.CallMouseDown((RR.Left + RR.Right) div 2, (RR.Top + RR.Bottom) div 2);
+  AfterRight := FTab.HeaderScroll;
+  AssertTrue('click right arrow increases scroll', AfterRight > 0);
+
+  LR := FTab.TyTabScrollLeftRect;
+  FTab.CallMouseDown((LR.Left + LR.Right) div 2, (LR.Top + LR.Bottom) div 2);
+  AssertTrue('click left arrow decreases scroll', FTab.HeaderScroll < AfterRight);
+end;
+
+{ Setting TabIndex to the last tab auto-scrolls so the last header's shifted
+  right edge falls within the visible right edge. }
+procedure TTyTabScrollInputTest.TestSetTabIndexLastScrollsIntoView;
+var
+  Last: Integer;
+begin
+  FTab.SetBounds(0, 0, 120, 200);
+  AddTabs(12);
+  Last := FTab.TabCount - 1;
+  FTab.TabIndex := Last;
+  AssertTrue('last header scrolled into view',
+    FTab.HeaderRectShifted(Last).Right <= FTab.VisibleRight);
+end;
+
+{ REGRESSION: with no overflow (offset 0, shifted == unshifted), a click on a
+  header still selects that tab. }
+procedure TTyTabScrollInputTest.TestMouseDownSelectsTabUnshiftedRegression;
+var
+  HR: TRect;
+begin
+  FTab.SetBounds(0, 0, 300, 200);
+  AddTabs(3);
+  AssertFalse('precondition: no affordance', FTab.ShowScrollAffordance);
+  AssertEquals('precondition: scroll 0', 0, FTab.HeaderScroll);
+
+  HR := FTab.HeaderRectShifted(2);
+  FTab.CallMouseDown((HR.Left + HR.Right) div 2, (HR.Top + HR.Bottom) div 2);
+  AssertEquals('clicking header 2 selects it', 2, FTab.TabIndex);
+end;
+
 procedure TTabScrollGlyphTest.MakePainter(AWidth, AHeight, APPI: Integer);
 begin
   FHost := TBitmap.Create;
@@ -301,6 +461,7 @@ end;
 
 initialization
   RegisterTest(TTyTabScrollGeometryTest);
+  RegisterTest(TTyTabScrollInputTest);
   RegisterTest(TTabScrollGlyphTest);
 
 end.

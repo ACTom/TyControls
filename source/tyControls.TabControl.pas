@@ -64,11 +64,6 @@ type
     FOnTabClose: TTyTabCloseEvent;
     FHeaderRects: array of TRect;
     FCloseRects:  array of TRect;
-    { Header overflow scroll. FHeaderScroll is the device-px amount the header
-      strip is shifted left (>=0). FShowScrollAffordance and the two arrow rects
-      are recomputed at the end of RebuildLayout. Kept protected so white-box
-      tests can read them. }
-    FHeaderScroll: Integer;
 
     procedure SetTabs(AValue: TTyTabCollection);
     procedure TabItemAdded(AItem: TTyTabItem);
@@ -87,6 +82,11 @@ type
                               const AStyle: TTyStyleSet; APPI: Integer): Integer;
     procedure ShowOnlyPage(AIndex: Integer);
   protected
+    { Header overflow scroll. FHeaderScroll is the device-px amount the header
+      strip is shifted left (>=0). FShowScrollAffordance and the two arrow rects
+      are recomputed at the end of RebuildLayout. Kept protected so white-box
+      tests can read them. }
+    FHeaderScroll: Integer;
     FShowScrollAffordance: Boolean;
     FScrollLeftRect:  TRect;
     FScrollRightRect: TRect;
@@ -99,6 +99,8 @@ type
                         X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+                         MousePos: TPoint): Boolean; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
@@ -567,6 +569,8 @@ begin
   if Clamped = FTabIndex then Exit;
   FTabIndex := Clamped;
   ShowOnlyPage(FTabIndex);
+  if FTabIndex >= 0 then
+    ScrollTabIntoView(FTabIndex);
   Invalidate;
   if Assigned(FOnChange) then
     FOnChange(Self);
@@ -921,10 +925,10 @@ end;
 procedure TTyTabControl.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  BoxStyle, TabStyle: TTyStyleSet;
+  BoxStyle, TabStyle, ArrowStyle: TTyStyleSet;
   R: TRect;
   W, H, TabH, I: Integer;
-  HdrRect, TextRect: TRect;
+  HdrRect, CloseRect, TextRect, BandRect, SavedClip: TRect;
   TabStates: TTyStateSet;
 begin
   P := TTyPainter.Create;
@@ -944,9 +948,22 @@ begin
     { Draw each tab header }
     RebuildLayout(APPI);
 
+    { When overflowing, clip the header strip to the band between the two arrow
+      affordances so shifted headers do not paint over the arrows or past the
+      control. When it fits, clip to the full header band (offset is 0 anyway). }
+    SavedClip := P.Bitmap.ClipRect;
+    if FShowScrollAffordance then
+      BandRect := Rect(FScrollLeftRect.Right, 0, FScrollRightRect.Left, TabH)
+    else
+      BandRect := Rect(0, 0, W, TabH);
+    P.Bitmap.ClipRect := BandRect;
+
     for I := 0 to FCaptions.Count - 1 do
     begin
-      HdrRect := FHeaderRects[I];
+      HdrRect   := HeaderRectShifted(I);
+      CloseRect := FCloseRects[I];
+      if FTabsClosable then
+        OffsetRect(CloseRect, -FHeaderScroll, 0);
 
       { Determine state }
       TabStates := [];
@@ -966,7 +983,7 @@ begin
       { Draw caption centered in header (clipped to left of close glyph) }
       TextRect := HdrRect;
       if FTabsClosable then
-        TextRect.Right := FCloseRects[I].Left;
+        TextRect.Right := CloseRect.Left;
       P.DrawText(TextRect,
         FCaptions[I],
         TabStyle.FontName, TabStyle.FontSize, TabStyle.FontWeight,
@@ -974,7 +991,22 @@ begin
         taCenter, tlCenter, True);
 
       if FTabsClosable then
-        P.DrawGlyph(FCloseRects[I], tgClose, TabStyle.TextColor, 1);
+        P.DrawGlyph(CloseRect, tgClose, TabStyle.TextColor, 1);
+    end;
+
+    { Restore the clip and draw the prev/next arrow affordances on top so they
+      are never overlapped by a shifted header. }
+    P.Bitmap.ClipRect := SavedClip;
+    if FShowScrollAffordance then
+    begin
+      ArrowStyle := ActiveController.Model.ResolveStyle('TyTab', '', [tysNormal]);
+      if tpBackground in ArrowStyle.Present then
+      begin
+        P.FillBackground(FScrollLeftRect,  ArrowStyle.Background, 0);
+        P.FillBackground(FScrollRightRect, ArrowStyle.Background, 0);
+      end;
+      P.DrawGlyph(FScrollLeftRect,  tgArrowLeft,  ArrowStyle.TextColor, 2);
+      P.DrawGlyph(FScrollRightRect, tgArrowRight, ArrowStyle.TextColor, 2);
     end;
 
     P.EndPaint;
@@ -992,7 +1024,8 @@ end;
 procedure TTyTabControl.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
-  PPI, TabH, I: Integer;
+  PPI, TabH, Step, I: Integer;
+  HdrRect, CloseRect: TRect;
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
@@ -1003,13 +1036,36 @@ begin
     if Y < TabH then
     begin
       RebuildLayout(PPI);
+
+      { Affordance arrows take priority over the header scan. Each click nudges
+        the scroll by ~40 logical px (clamped inside SetHeaderScroll). }
+      if FShowScrollAffordance then
+      begin
+        Step := MulDiv(40, PPI, 96);
+        if (X >= FScrollLeftRect.Left) and (X < FScrollLeftRect.Right) and
+           (Y >= FScrollLeftRect.Top) and (Y < FScrollLeftRect.Bottom) then
+        begin
+          SetHeaderScroll(FHeaderScroll - Step);
+          Exit;
+        end;
+        if (X >= FScrollRightRect.Left) and (X < FScrollRightRect.Right) and
+           (Y >= FScrollRightRect.Top) and (Y < FScrollRightRect.Bottom) then
+        begin
+          SetHeaderScroll(FHeaderScroll + Step);
+          Exit;
+        end;
+      end;
+
       for I := 0 to FCaptions.Count - 1 do
       begin
-        if (X >= FHeaderRects[I].Left) and (X < FHeaderRects[I].Right) then
+        HdrRect := HeaderRectShifted(I);
+        if (X >= HdrRect.Left) and (X < HdrRect.Right) then
         begin
+          CloseRect := FCloseRects[I];
+          OffsetRect(CloseRect, -FHeaderScroll, 0);
           if FTabsClosable and
-             (X >= FCloseRects[I].Left) and (X < FCloseRects[I].Right) and
-             (Y >= FCloseRects[I].Top) and (Y < FCloseRects[I].Bottom) then
+             (X >= CloseRect.Left) and (X < CloseRect.Right) and
+             (Y >= CloseRect.Top) and (Y < CloseRect.Bottom) then
             DoCloseTab(I)
           else
             TabIndex := I;
@@ -1028,6 +1084,8 @@ end;
 procedure TTyTabControl.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   PPI, TabH, NewHover, I: Integer;
+  HdrRect: TRect;
+  OverArrow: Boolean;
 begin
   inherited MouseMove(Shift, X, Y);
   PPI  := Font.PixelsPerInch;
@@ -1036,11 +1094,19 @@ begin
   if Y < TabH then
   begin
     RebuildLayout(PPI);
-    for I := 0 to FCaptions.Count - 1 do
-      if (X >= FHeaderRects[I].Left) and (X < FHeaderRects[I].Right) then
+    { Over an affordance arrow counts as no tab hover. }
+    OverArrow := FShowScrollAffordance and
+      (((X >= FScrollLeftRect.Left)  and (X < FScrollLeftRect.Right)) or
+       ((X >= FScrollRightRect.Left) and (X < FScrollRightRect.Right)));
+    if not OverArrow then
+      for I := 0 to FCaptions.Count - 1 do
       begin
-        NewHover := I;
-        Break;
+        HdrRect := HeaderRectShifted(I);
+        if (X >= HdrRect.Left) and (X < HdrRect.Right) then
+        begin
+          NewHover := I;
+          Break;
+        end;
       end;
   end;
   if NewHover <> FHoverTab then
@@ -1057,6 +1123,36 @@ begin
   begin
     FHoverTab := -1;
     Invalidate;
+  end;
+end;
+
+{ Mouse wheel over the header band scrolls the overflowing strip. Mirrors
+  ListBox.DoMouseWheel: bail when disabled, let a user handler consume first,
+  then act only when the pointer is in the header band and the strip overflows.
+  WheelDelta>0 (scroll up/back) decreases the offset; WheelDelta<0 increases it.
+  SetHeaderScroll clamps to [0, TyMaxHeaderScroll]. }
+function TTyTabControl.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var
+  PPI, TabH, Step: Integer;
+begin
+  if not Enabled then Exit(False);
+  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
+    Exit(True);
+
+  PPI  := Font.PixelsPerInch;
+  TabH := TabHPx(PPI);
+  RebuildLayout(PPI);
+
+  Result := False;
+  if (MousePos.Y < TabH) and FShowScrollAffordance then
+  begin
+    Step := MulDiv(40, PPI, 96);
+    if WheelDelta > 0 then
+      SetHeaderScroll(FHeaderScroll - Step)
+    else
+      SetHeaderScroll(FHeaderScroll + Step);
+    Result := True;
   end;
 end;
 
@@ -1085,6 +1181,10 @@ begin
       Key := 0;
     end;
   end;
+  { Ensure the (possibly unchanged) selection stays in view: SetTabIndex
+    early-exits when the index does not change, so scroll it in explicitly. }
+  if FTabIndex >= 0 then
+    ScrollTabIntoView(FTabIndex);
 end;
 
 end.
