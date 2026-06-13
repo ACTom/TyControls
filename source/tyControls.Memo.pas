@@ -48,6 +48,14 @@ type
     // scroll lands in a later task). True = soft wrap at word boundaries into
     // multiple visual rows. Affects BuildVisualRows and (later) render/nav/click.
     FWordWrap: Boolean;
+    // Cached visual-row layout for the current content width + wrap mode, rebuilt
+    // lazily by EnsureVisualRows. FVisualRowsValid is cleared whenever something
+    // that affects layout changes (WordWrap toggle, edits, resize, Lines assign).
+    // FVisualRowsWidth records the content width the cache was built at so a
+    // resize/scrollbar change forces a rebuild even when FVisualRowsValid was set.
+    FVisualRows: TTyVisualRowArray;
+    FVisualRowsValid: Boolean;
+    FVisualRowsWidth: Integer;
     // Embedded vertical scrollbar, lazily created on first overflow (owned by
     // Self via Create(Self), so freed by TComponent). nil until first needed.
     FScrollBar: TTyScrollBar;
@@ -148,6 +156,17 @@ type
     // logical line (an empty line emits one zero-width row). Pure: depends only
     // on FLines, FWordWrap, AContentWidth, APPI and the (pure) measurement.
     function BuildVisualRows(AContentWidth, APPI: Integer): TTyVisualRowArray;
+    // Pixel width available for text on a row: client width minus left+right
+    // padding and the (visible) scrollbar width, all scaled to APPI. This is the
+    // width fed to BuildVisualRows so the wrap layout matches the render clip.
+    function ContentWidthFor(APPI: Integer): Integer;
+    // Rebuild FVisualRows from the current model/wrap mode at the current content
+    // width if the cache is stale (invalid or built at a different width). Cheap
+    // no-op when already valid for this width. Drives the render loop and the
+    // caret/selection-band visual-row resolution.
+    procedure EnsureVisualRows(APPI: Integer);
+    // Mark the visual-row cache stale (next EnsureVisualRows rebuilds it).
+    procedure InvalidateVisualRows;
     // Map a logical caret (ALine,ACol) to the visual row index that owns it plus
     // the device-x of the caret on that row. At a soft-wrap boundary column the
     // caret binds to the EARLIER (line-end) row (tie-break), so a caret typed at
@@ -288,6 +307,9 @@ begin
   FMouseSelecting := False;
   FTopLine := 0;
   FWordWrap := False;
+  FVisualRows := nil;
+  FVisualRowsValid := False;
+  FVisualRowsWidth := -1;
   FScrollBar := nil;
   FSyncingScroll := False;
   FMeasureBmp := nil;
@@ -451,6 +473,8 @@ begin
     BeginUndoStep(uskNone);
   FLines.Assign(AValue);
   ClampCaret;
+  // The text model changed: any cached wrap layout is stale.
+  InvalidateVisualRows;
   // Clamp the window and refresh the scrollbar in case the line count changed.
   if FTopLine > MaxTopLine then FTopLine := MaxTopLine;
   if FTopLine < 0 then FTopLine := 0;
@@ -892,12 +916,18 @@ end;
 procedure TTyMemo.Resize;
 begin
   inherited Resize;
+  // A width change alters the wrap layout (EnsureVisualRows also re-checks the
+  // width, but invalidate explicitly so a same-width re-layout is never skipped
+  // when the scrollbar visibility flipped).
+  InvalidateVisualRows;
   UpdateScrollBar;
 end;
 
 procedure TTyMemo.AfterEdit(APPI: Integer);
 begin
   ClampCaret;
+  // The text model changed: any cached wrap layout is stale.
+  InvalidateVisualRows;
   EnsureCaretLineVisible(APPI);
   UpdateScrollBar;
   Invalidate;
@@ -1154,6 +1184,39 @@ begin
   // Defensive: a non-empty FLines must always yield at least one row.
   if n = 0 then
     AddRow(0, 0, 0);
+end;
+
+function TTyMemo.ContentWidthFor(APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+  SBWidth: Integer;
+begin
+  S := CurrentStyle;
+  SBWidth := 0;
+  if (FScrollBar <> nil) and FScrollBar.Visible then
+    SBWidth := MulDiv(12, APPI, 96);
+  // Use Width (not ClientWidth) to match VisibleRows' headless-safe convention:
+  // for this borderless control Width = ClientWidth at runtime, but ClientWidth
+  // can lag SetBounds in headless tests without a native handle.
+  Result := Width - MulDiv(S.Padding.Left, APPI, 96)
+    - MulDiv(S.Padding.Right, APPI, 96) - SBWidth;
+  if Result < 0 then Result := 0;
+end;
+
+procedure TTyMemo.EnsureVisualRows(APPI: Integer);
+var
+  CW: Integer;
+begin
+  CW := ContentWidthFor(APPI);
+  if FVisualRowsValid and (FVisualRowsWidth = CW) then Exit;
+  FVisualRows := BuildVisualRows(CW, APPI);
+  FVisualRowsWidth := CW;
+  FVisualRowsValid := True;
+end;
+
+procedure TTyMemo.InvalidateVisualRows;
+begin
+  FVisualRowsValid := False;
 end;
 
 procedure TTyMemo.CaretToVisual(ALine, ACol, AContentWidth, APPI: Integer;
@@ -1442,6 +1505,7 @@ procedure TTyMemo.SetWordWrap(AValue: Boolean);
 begin
   if FWordWrap = AValue then Exit;
   FWordWrap := AValue;
+  InvalidateVisualRows;
   Invalidate;
 end;
 
@@ -1530,27 +1594,38 @@ begin
 end;
 
 procedure TTyMemo.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-// Visible-line loop + static caret. Mirrors TTyListBox.RenderTo but uses the
-// MEMO's own style for every line (no per-row TyListItem resolve) and draws text
-// top-aligned in fixed LineHeight cells. Scrollbar width is 0 in this task; the
-// real scrollbar (T4) will subtract it from the right edge.
+// Visible visual-ROW loop + static caret. Each painted row is one TTyVisualRow
+// segment [StartCol,EndCol) of a logical line: when WordWrap=False the cache holds
+// exactly one full-width row (StartCol=0, EndCol=LineLen) per logical line, so the
+// loop reduces to the legacy per-logical-line render and is BYTE-IDENTICAL (the
+// segment substring is the whole line, drawn at ContentRect.Left). When WordWrap=
+// True a long line yields several rows; each continuation segment is drawn at the
+// content left in its own LH-tall cell. FTopLine is the top VISUAL-ROW index.
+//
+// Identity note: for a row with StartCol=0 the segment substring equals the line
+// and RowBaseW (= Widths[StartCol]) is 0, so every X (band + caret) collapses to
+// today's per-line math. Horizontal scroll (FScrollX) is added in T3.
 var
   P: TTyPainter;
   S, FS: TTyStyleSet;
   R, ContentRect, LineRect, CaretRect, BandRect: TRect;
-  SBWidth, LH, ContentTop, LastVisible, i, y: Integer;
-  EffSize, CaretX: Integer;
-  Line: string;
-  // Selection-band state (resolved once before the visible-line loop).
+  SBWidth, LH, ContentTop, LastVisible, vr, y: Integer;
+  EffSize, CaretX, CaretVRow: Integer;
+  Line, Seg: string;
+  RL, RS, RE, RowBaseW, bandStartCol, bandEndCol: Integer;
+  // Selection-band state (resolved once before the visible-row loop).
   SL, SC, EL, EC, X1, X2: Integer;
   Widths: TTyIntArray;
   BandFill: TTyFill;
   BandColor: TTyColor;
   BandAlpha: Byte;
   FocusBorderColor: TTyColor;
+  DrawBand: Boolean;
 begin
   // Keep the scrollbar in sync (cheap; catches external Lines mutations).
   UpdateScrollBar;
+  // Build/refresh the visual-row cache for the current content width + wrap mode.
+  EnsureVisualRows(APPI);
 
   P := TTyPainter.Create;
   try
@@ -1576,9 +1651,9 @@ begin
     LH := LineHeight(APPI);
     ContentTop := ContentRect.Top;
 
-    // Resolve the focus band color ONCE before the visible-line loop (verbatim
+    // Resolve the focus band color ONCE before the visible-row loop (verbatim
     // from TTyEdit): the :focus border-color, or the text color if absent. Only
-    // needed when a selection exists; the band is filled per visible line below.
+    // needed when a selection exists; the band is filled per visible row below.
     SL := 0; SC := 0; EL := 0; EC := 0;
     FocusBorderColor := S.TextColor;
     if HasSelection then
@@ -1591,87 +1666,116 @@ begin
       GetOrderedSel(SL, SC, EL, EC);
     end;
 
-    // Last visible logical line: fill the content height with LH-tall cells.
+    // Last visible visual row: fill the content height with LH-tall cells.
     LastVisible := FTopLine + (ContentRect.Bottom - ContentTop) div LH;
-    if LastVisible > LineCountLogical - 1 then
-      LastVisible := LineCountLogical - 1;
+    if LastVisible > High(FVisualRows) then
+      LastVisible := High(FVisualRows);
 
-    for i := FTopLine to LastVisible do
+    for vr := FTopLine to LastVisible do
     begin
-      if i < FLines.Count then
-        Line := FLines[i]
+      if (vr < 0) or (vr > High(FVisualRows)) then Continue;
+      RL := FVisualRows[vr].Line;
+      RS := FVisualRows[vr].StartCol;
+      RE := FVisualRows[vr].EndCol;
+      if RL < FLines.Count then
+        Line := FLines[RL]
       else
         Line := '';
-      y := ContentTop + (i - FTopLine) * LH;
+      // Segment substring for this row: codepoints [RS, RE). For a full-width row
+      // (RS=0, RE=LineLen) this is the whole line (identity with the old render).
+      Seg := UTF8Copy(Line, RS + 1, RE - RS);
+      y := ContentTop + (vr - FTopLine) * LH;
       LineRect := Rect(ContentRect.Left, y, ContentRect.Right - SBWidth, y + LH);
 
       // Selection band for this row, drawn BENEATH the text (band first so the
-      // glyphs sit on top). Reuse the SAME Line/MeasureLineWidths the row draws
-      // with so band geometry matches the drawn text exactly. No FScrollX term.
-      if HasSelection and (i >= SL) and (i <= EL) then
+      // glyphs sit on top). Reuse the SAME line widths the row draws with so band
+      // geometry matches the drawn text exactly. No FScrollX term (added in T3).
+      // Generalised per visual row: with RS=0 it reduces to the legacy per-line
+      // band exactly. RowBaseW shifts the row's columns so the segment's first
+      // codepoint sits at ContentRect.Left.
+      if HasSelection and (RL >= SL) and (RL <= EL) then
       begin
         Widths := MeasureLineWidths(Line, APPI);
-        // X-range rules per row position within [SL..EL].
-        if (i > SL) and (i < EL) then
+        RowBaseW := Widths[RS];
+        DrawBand := True;
+        // Left edge: selection start column on this row.
+        if (RL = SL) and (SC > RS) then
         begin
-          // Interior line: full content width.
-          X1 := ContentRect.Left;
-          X2 := ContentRect.Right - SBWidth;
-        end
-        else if (SL = EL) then
-        begin
-          // Single selected line: [SC..EC] on this line.
-          X1 := ContentRect.Left + Widths[SC];
-          X2 := ContentRect.Left + Widths[EC];
-        end
-        else if i = SL then
-        begin
-          // First line of a multi-line selection: from SC to the right edge.
-          X1 := ContentRect.Left + Widths[SC];
-          X2 := ContentRect.Right - SBWidth;
+          // Selection begins partway through this logical line.
+          if SC > RE then
+            DrawBand := False         // selection starts after this row's segment
+          else
+            bandStartCol := SC;
         end
         else
+          bandStartCol := RS;         // selection covers the row's left edge
+        // Right edge: either ends within this line (clamp to RE) or extends to the
+        // content right edge because the selection continues onto a later line.
+        if RL = EL then
         begin
-          // Last line (i = EL, EL > SL): from the left edge to EC.
-          X1 := ContentRect.Left;
-          X2 := ContentRect.Left + Widths[EC];
-        end;
-        if X1 < X2 then
+          if EC < RS then
+            DrawBand := False         // selection ends before this row's segment
+          else if EC < RE then
+            bandEndCol := EC
+          else
+            bandEndCol := RE;
+        end
+        else
+          bandEndCol := -1;           // sentinel: extend to the content right edge
+        if DrawBand then
         begin
-          BandRect := Rect(X1, y, X2, y + LH);
-          // ~35% alpha band tinted with the focus border color (verbatim TTyEdit).
-          BandAlpha := $59;
-          BandColor := TyRGBA(TyRedOf(FocusBorderColor), TyGreenOf(FocusBorderColor),
-            TyBlueOf(FocusBorderColor), BandAlpha);
-          BandFill := Default(TTyFill);
-          BandFill.Kind := tfkSolid;
-          BandFill.Color := BandColor;
-          P.FillBackground(BandRect, BandFill, 0);
+          X1 := ContentRect.Left + (Widths[bandStartCol] - RowBaseW);
+          if bandEndCol < 0 then
+            X2 := ContentRect.Right - SBWidth
+          else
+            X2 := ContentRect.Left + (Widths[bandEndCol] - RowBaseW);
+          if X1 < X2 then
+          begin
+            BandRect := Rect(X1, y, X2, y + LH);
+            // ~35% alpha band tinted with the focus border color (verbatim TTyEdit).
+            BandAlpha := $59;
+            BandColor := TyRGBA(TyRedOf(FocusBorderColor), TyGreenOf(FocusBorderColor),
+              TyBlueOf(FocusBorderColor), BandAlpha);
+            BandFill := Default(TTyFill);
+            BandFill.Kind := tfkSolid;
+            BandFill.Color := BandColor;
+            P.FillBackground(BandRect, BandFill, 0);
+          end;
         end;
       end;
 
-      P.DrawText(LineRect, Line, S.FontName, EffSize, S.FontWeight,
+      P.DrawText(LineRect, Seg, S.FontName, EffSize, S.FontWeight,
         S.TextColor, taLeftJustify, tlTop, False);
     end;
 
     // Static caret: only when focused (or headless-forced), no active selection,
-    // and the caret line is currently visible. 1px bar like TTyEdit, inset 2px
-    // top/bottom in the cell. Gated on not HasSelection so the caret hides while
-    // a selection band is shown (matches TTyEdit; additive — existing single-caret
-    // tests never set a selection).
-    if (Focused or FForceFocused) and not HasSelection
-      and (FCaretLine >= FTopLine) and (FCaretLine <= LastVisible) then
+    // and the caret's VISUAL ROW is currently visible. 1px bar like TTyEdit, inset
+    // 2px top/bottom in the cell. Gated on not HasSelection so the caret hides
+    // while a selection band is shown (matches TTyEdit). CaretToVisual binds a
+    // wrap-boundary caret to the earlier (line-end) row; X is segment-relative so
+    // a full-width row (RS=0) reproduces today's caret X exactly.
+    if (Focused or FForceFocused) and not HasSelection then
     begin
-      if FCaretLine < FLines.Count then
-        Line := FLines[FCaretLine]
-      else
-        Line := '';
-      CaretX := R.Left + ColPixelXAt(Line, FCaretCol, APPI);
-      y := ContentTop + (FCaretLine - FTopLine) * LH;
-      CaretRect := Rect(CaretX, y + P.Scale(2),
-        CaretX + P.Scale(1), y + LH - P.Scale(2));
-      P.FillBackground(CaretRect, Default(TTyFill), 0);
-      P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
+      CaretToVisual(FCaretLine, FCaretCol, FVisualRowsWidth, APPI, CaretVRow, CaretX);
+      if (CaretVRow >= FTopLine) and (CaretVRow <= LastVisible)
+        and (CaretVRow >= 0) and (CaretVRow <= High(FVisualRows)) then
+      begin
+        RL := FVisualRows[CaretVRow].Line;
+        RS := FVisualRows[CaretVRow].StartCol;
+        if RL < FLines.Count then
+          Line := FLines[RL]
+        else
+          Line := '';
+        // Segment-relative caret X: full-line ColPixelXAt minus the row's base
+        // offset (= 0 when RS=0, so identical to the old caret X for no-wrap).
+        CaretX := R.Left + ColPixelXAt(Line, FCaretCol, APPI)
+          - (ColPixelXAt(Line, RS, APPI) - TextStartX(APPI));
+        y := ContentTop + (CaretVRow - FTopLine) * LH;
+        CaretRect := Rect(CaretX, y + P.Scale(2),
+          CaretX + P.Scale(1), y + LH - P.Scale(2));
+        P.FillBackground(CaretRect, Default(TTyFill), 0);
+        P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
+      end;
     end;
 
     P.EndPaint;

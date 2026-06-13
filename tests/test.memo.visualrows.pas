@@ -2,7 +2,8 @@ unit test.memo.visualrows;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, LCLType, LazUTF8, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, LCLType, LazUTF8, TypInfo,
+  BGRABitmap, BGRABitmapTypes, fpcunit, testregistry,
   tyControls.Types, tyControls.Controller, tyControls.Base,
   tyControls.Memo;
 type
@@ -22,6 +23,9 @@ type
     function ProbeColPixelXAt(const ALine: string; ACol, APPI: Integer): Integer;
     function ProbeMeasureLineWidths(const ALine: string; APPI: Integer): TTyIntArray;
     function ProbeLineLen(ALineIndex: Integer): Integer;
+    // T2 render-loop probes.
+    function ProbeLineHeight(APPI: Integer): Integer;
+    procedure ProbeRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
   TTyMemoVisualRowsTest = class(TTestCase)
@@ -40,6 +44,13 @@ type
     procedure TestEmptyLineEmitsOneRow;           // (e)
     procedure TestCaretVisualRoundTrip;           // (f)
     procedure TestWrapPointTieBreakBindsEarlier;  // (g)
+    // --- T2 render loop over visual rows + published WordWrap ---
+    procedure TestWordWrapDefaultsFalseAndPublished;  // (h)
+    procedure TestNoWrapRenderIdentity;               // (i)
+    procedure TestWrapRendersSecondVisualRow;         // (j)
+  private
+    // True if any pixel in horizontal band [X0..X1] at row Y is "light".
+    function BandHasLightPixel(ABmp: TBGRABitmap; Y, X0, X1, AThresh: Integer): Boolean;
   end;
 
 implementation
@@ -91,6 +102,16 @@ end;
 function TTyMemoVRProbe.ProbeLineLen(ALineIndex: Integer): Integer;
 begin
   Result := LineLen(ALineIndex);
+end;
+
+function TTyMemoVRProbe.ProbeLineHeight(APPI: Integer): Integer;
+begin
+  Result := LineHeight(APPI);
+end;
+
+procedure TTyMemoVRProbe.ProbeRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
 end;
 
 { TTyMemoVisualRowsTest }
@@ -346,6 +367,128 @@ begin
     breakCol, Rows[vr].EndCol);
   AssertTrue('tie-break: bound row is not the continuation row',
     Rows[vr].StartCol < breakCol);
+end;
+
+function TTyMemoVisualRowsTest.BandHasLightPixel(ABmp: TBGRABitmap; Y, X0, X1, AThresh: Integer): Boolean;
+var
+  x: Integer;
+  Px: TBGRAPixel;
+begin
+  Result := False;
+  if (Y < 0) or (Y >= ABmp.Height) then Exit;
+  if X0 < 0 then X0 := 0;
+  if X1 >= ABmp.Width then X1 := ABmp.Width - 1;
+  for x := X0 to X1 do
+  begin
+    Px := ABmp.GetPixel(x, Y);
+    if (Px.red > AThresh) and (Px.green > AThresh) and (Px.blue > AThresh) then
+      Exit(True);
+  end;
+end;
+
+// (h) WordWrap is published (RTTI-visible / streamable) and reads back False on a
+// fresh memo (the default). After SetWordWrap(True) the getter reflects the new
+// value. Asserts the property exists in published RTTI so it survives streaming.
+procedure TTyMemoVisualRowsTest.TestWordWrapDefaultsFalseAndPublished;
+var
+  PI: PPropInfo;
+begin
+  SetUpMemo('TyMemo { background:#FFFFFF; color:#000000; padding:0px; font-size:14px; }');
+  AssertFalse('WordWrap defaults False on a fresh memo', FMemo.ProbeWordWrap);
+  // RTTI: the published property must be discoverable (so it streams to .lfm).
+  PI := GetPropInfo(FMemo, 'WordWrap');
+  AssertTrue('WordWrap is a published property (RTTI-visible)', PI <> nil);
+  AssertEquals('WordWrap RTTI type is Boolean', Ord(tkBool), Ord(PI^.PropType^.Kind));
+  // Toggling through the published setter is observed by the getter.
+  FMemo.ProbeSetWordWrap(True);
+  AssertTrue('WordWrap reads back True after SetWordWrap(True)', FMemo.ProbeWordWrap);
+end;
+
+// (i) RENDER-EQUIVALENCE GUARD (PPI 96): WordWrap=False with short fitting text
+// renders the SAME light-pixel bands as the legacy logical-line render — a row at
+// y=ContentTop+i*LH still has text. ContentTop = 0 (padding 0). This guards the
+// existing TestRendersAllVisibleLinesText / TestSecondLineYOffset expectations
+// against the render-loop rewrite.
+procedure TTyMemoVisualRowsTest.TestNoWrapRenderIdentity;
+var
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  LH, Y0, Y1: Integer;
+begin
+  SetUpMemo('TyMemo { background:#101010; color:#F0F0F0; border-width:0px; padding:0px; font-size:14px; }');
+  FMemo.ProbeSetWordWrap(False);
+  LoadLines(['AAA', 'BBB']);
+  LH := FMemo.ProbeLineHeight(96);
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 120);
+    Bmp.Canvas.Brush.Color := clBlack;
+    Bmp.Canvas.FillRect(0, 0, 200, 120);
+    FMemo.ProbeRenderTo(Bmp.Canvas, Rect(0, 0, 200, 120), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      Y0 := LH div 2;            // visual row 0 == logical line 0 band
+      Y1 := LH + (LH div 2);     // visual row 1 == logical line 1 band
+      AssertTrue('no-wrap: row 0 drew text at ContentTop+0*LH',
+        BandHasLightPixel(Reread, Y0, 0, 60, 120));
+      AssertTrue('no-wrap: row 1 drew text at ContentTop+1*LH',
+        BandHasLightPixel(Reread, Y1, 0, 60, 120));
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+  end;
+end;
+
+// (j) WRAP RENDER (PPI 96): WordWrap=True with ONE long logical line that wraps
+// into >= 2 visual rows must DRAW the continuation segment in the SECOND visual
+// row's y band (ContentTop+1*LH). The legacy logical-line render draws the line
+// only once (in row 0) and clips the rest, so this FAILS before the render loop
+// iterates visual rows and PASSES after.
+procedure TTyMemoVisualRowsTest.TestWrapRendersSecondVisualRow;
+var
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Rows: TTyVisualRowArray;
+  Line: string;
+  W: TTyIntArray;
+  LH, CW, Y0, Y1: Integer;
+begin
+  // Padding 0 so ContentTop = 0 and the content width == control width.
+  SetUpMemo('TyMemo { background:#101010; color:#F0F0F0; border-width:0px; padding:0px; font-size:14px; }');
+  FMemo.ProbeSetWordWrap(True);
+  Line := 'aaa bbb ccc ddd eee fff';
+  LoadLines([Line]);
+  W := FMemo.ProbeMeasureLineWidths(Line, 96);
+  // Content width that fits only part of the line -> forces a wrap.
+  CW := (W[7] + W[High(W)]) div 2;
+  FMemo.SetBounds(0, 0, CW, 120);   // control width == content width (padding 0)
+  Rows := FMemo.ProbeBuildVisualRows(CW, 96);
+  AssertTrue('wrap setup needs >= 2 visual rows', Length(Rows) >= 2);
+  LH := FMemo.ProbeLineHeight(96);
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(CW, 120);
+    Bmp.Canvas.Brush.Color := clBlack;
+    Bmp.Canvas.FillRect(0, 0, CW, 120);
+    FMemo.ProbeRenderTo(Bmp.Canvas, Rect(0, 0, CW, 120), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      Y0 := LH div 2;            // visual row 0 band
+      Y1 := LH + (LH div 2);     // visual row 1 (continuation) band
+      AssertTrue('wrap: row 0 drew text',
+        BandHasLightPixel(Reread, Y0, 0, CW - 1, 120));
+      AssertTrue('wrap: continuation drew in row 1 band (ContentTop+LH)',
+        BandHasLightPixel(Reread, Y1, 0, CW - 1, 120));
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+  end;
 end;
 
 initialization
