@@ -63,6 +63,22 @@ type
     procedure TestPlainLeftStillMovesOne;
   end;
 
+  // WORD.3: Alt+Shift+Left/Alt+Shift+Right extend selection to word boundary
+  // (move only FCaret, keep FSelAnchor); Ctrl+Shift+arrow stays single-char.
+  TEditWordExtendTest = class(TTestCase)
+  private
+    FForm: TCustomForm;
+    FEdit: TTyEditWordKeyAccess;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAltShiftRightExtendsForward;
+    procedure TestAltShiftLeftExtendsBackward;
+    procedure TestAltExtendThenCollapse;
+    procedure TestCtrlShiftRightStillSingleChar;
+  end;
+
 implementation
 
 function TTyEditWordAccess.NextWordBoundary(AIdx: Integer): Integer;
@@ -330,7 +346,76 @@ begin
   AssertEquals('plain Left moves one', 1, FEdit.CaretPos);
 end;
 
+// ---- WORD.3: Alt+Shift+Left/Right word-wise selection extension ----
+
+procedure TEditWordExtendTest.SetUp;
+begin
+  FForm := TCustomForm.CreateNew(nil);
+  FEdit := TTyEditWordKeyAccess.Create(FForm);
+  FEdit.Parent := FForm;
+end;
+
+procedure TEditWordExtendTest.TearDown;
+begin
+  FForm.Free;
+  FForm := nil;
+  FEdit := nil;
+end;
+
+// 'foo bar baz', from 0: Alt+Shift+Right -> anchor 0, caret 4, sel 0..4 'foo '.
+// Again -> caret 8, sel 0..8.
+procedure TEditWordExtendTest.TestAltShiftRightExtendsForward;
+begin
+  FEdit.Text := 'foo bar baz';
+  FEdit.CaretPos := 0;
+  FEdit.SimulateKeyDownShift(VK_RIGHT, [ssAlt, ssShift]);
+  AssertEquals('1st SelStart', 0, FEdit.SelStart);
+  AssertEquals('1st SelLength', 4, FEdit.SelLength);
+  AssertEquals('1st SelText', 'foo ', FEdit.SelText);
+  FEdit.SimulateKeyDownShift(VK_RIGHT, [ssAlt, ssShift]);
+  AssertEquals('2nd SelStart', 0, FEdit.SelStart);
+  AssertEquals('2nd SelLength', 8, FEdit.SelLength);
+end;
+
+// 'foo bar baz', from 11: Alt+Shift+Left -> anchor 11, caret 8, sel 8..11 'baz'.
+// Again -> caret 4, sel 4..11.
+procedure TEditWordExtendTest.TestAltShiftLeftExtendsBackward;
+begin
+  FEdit.Text := 'foo bar baz';
+  FEdit.CaretPos := 11;
+  FEdit.SimulateKeyDownShift(VK_LEFT, [ssAlt, ssShift]);
+  AssertEquals('1st SelStart', 8, FEdit.SelStart);
+  AssertEquals('1st SelLength', 3, FEdit.SelLength);
+  AssertEquals('1st SelText', 'baz', FEdit.SelText);
+  FEdit.SimulateKeyDownShift(VK_LEFT, [ssAlt, ssShift]);
+  AssertEquals('2nd SelStart', 4, FEdit.SelStart);
+  AssertEquals('2nd SelLength', 7, FEdit.SelLength);
+end;
+
+// 'foo bar baz', from 0: Alt+Shift+Right (sel 0..4), then Alt+Left ([ssAlt])
+// collapses to caret=PrevWordBoundary(4)=0, SelLength=0.
+procedure TEditWordExtendTest.TestAltExtendThenCollapse;
+begin
+  FEdit.Text := 'foo bar baz';
+  FEdit.CaretPos := 0;
+  FEdit.SimulateKeyDownShift(VK_RIGHT, [ssAlt, ssShift]);
+  AssertEquals('extended SelLength', 4, FEdit.SelLength);
+  FEdit.SimulateKeyDownShift(VK_LEFT, [ssAlt]);
+  AssertEquals('collapse caret', 0, FEdit.CaretPos);
+  AssertEquals('collapse SelLength', 0, FEdit.SelLength);
+end;
+
+// Regression guard: Ctrl+Shift+Right is NOT word-wise; it extends one char.
+procedure TEditWordExtendTest.TestCtrlShiftRightStillSingleChar;
+begin
+  FEdit.Text := 'foo bar';
+  FEdit.CaretPos := 0;
+  FEdit.SimulateKeyDownShift(VK_RIGHT, [ssCtrl, ssShift]);
+  AssertEquals('Ctrl+Shift+Right single char', 1, FEdit.SelLength);
+end;
+
 initialization
   RegisterTest(TEditWordTest);
   RegisterTest(TEditWordKeyTest);
+  RegisterTest(TEditWordExtendTest);
 end.

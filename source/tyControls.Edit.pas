@@ -724,11 +724,17 @@ begin
     end;
     VK_LEFT:
     begin
-      if (ssAlt in Shift) and not Extending then
+      if (ssAlt in Shift) then
       begin
-        // Alt+Left: move caret to previous word boundary, collapse selection.
-        FCaret := PrevWordBoundary(FCaret);
-        FSelAnchor := FCaret;
+        // Alt+Left: word-wise. Extending keeps the anchor and moves only the
+        // caret to the previous word boundary; otherwise collapse selection.
+        if Extending then
+          FCaret := PrevWordBoundary(FCaret)
+        else
+        begin
+          FCaret := PrevWordBoundary(FCaret);
+          FSelAnchor := FCaret;
+        end;
         EnsureCaretVisible(Font.PixelsPerInch);
         Invalidate;
         Key := 0;
@@ -770,11 +776,17 @@ begin
     end;
     VK_RIGHT:
     begin
-      if (ssAlt in Shift) and not Extending then
+      if (ssAlt in Shift) then
       begin
-        // Alt+Right: move caret to next word boundary, collapse selection.
-        FCaret := NextWordBoundary(FCaret);
-        FSelAnchor := FCaret;
+        // Alt+Right: word-wise. Extending keeps the anchor and moves only the
+        // caret to the next word boundary; otherwise collapse selection.
+        if Extending then
+          FCaret := NextWordBoundary(FCaret)
+        else
+        begin
+          FCaret := NextWordBoundary(FCaret);
+          FSelAnchor := FCaret;
+        end;
         EnsureCaretVisible(Font.PixelsPerInch);
         Invalidate;
         Key := 0;
