@@ -233,6 +233,67 @@ begin
   end;
 end;
 
+// Parse the 'border' shorthand: 'border: <width> [style] <color>'. Tokens are
+// split on TOP-LEVEL whitespace but paren-aware, so function/var() values such
+// as 'var(--a)' or 'rgb(0, 0, 0)' survive as a single token despite inner
+// spaces and commas. Each token is classified by shape: 'solid'/'none' -> style;
+// a leading digit -> width; anything else -> color. A border shorthand always
+// implies a style, so an omitted style defaults to solid (and is marked present).
+procedure ApplyBorderShorthand(var AStyle: TTyStyleSet; const ARaw: string; Vars: TStrings);
+var
+  toks: TStringList;
+  i, depth, start: Integer;
+  ch: Char;
+  tok, lc: string;
+begin
+  toks := TStringList.Create;
+  try
+    depth := 0; start := 1;
+    for i := 1 to Length(ARaw) do
+    begin
+      ch := ARaw[i];
+      if ch = '(' then Inc(depth)
+      else if ch = ')' then Dec(depth)
+      else if (ch in [' ', #9]) and (depth = 0) then
+      begin
+        tok := Trim(Copy(ARaw, start, i - start));
+        if tok <> '' then toks.Add(tok);
+        start := i + 1;
+      end;
+    end;
+    tok := Trim(Copy(ARaw, start, Length(ARaw) - start + 1));
+    if tok <> '' then toks.Add(tok);
+    for i := 0 to toks.Count - 1 do
+    begin
+      tok := toks[i];
+      lc := LowerCase(tok);
+      if (lc = 'solid') or (lc = 'none') then
+      begin
+        if lc = 'none' then AStyle.BorderStyle := tbsNone else AStyle.BorderStyle := tbsSolid;
+        Include(AStyle.Present, tpBorderStyle);
+      end
+      else if (tok <> '') and (tok[1] in ['0'..'9']) then
+      begin
+        AStyle.BorderWidth := TyEvalLength(tok, Vars);
+        Include(AStyle.Present, tpBorderWidth);
+      end
+      else
+      begin
+        AStyle.BorderColor := TyEvalColor(tok, Vars);
+        Include(AStyle.Present, tpBorderColor);
+      end;
+    end;
+    // shorthand implies a style even if omitted -> default solid present
+    if not (tpBorderStyle in AStyle.Present) then
+    begin
+      AStyle.BorderStyle := tbsSolid;
+      Include(AStyle.Present, tpBorderStyle);
+    end;
+  finally
+    toks.Free;
+  end;
+end;
+
 function TyApplyDeclaration(var AStyle: TTyStyleSet; const AProp, ARawValue: string;
   Vars: TStrings): Boolean;
 var
@@ -270,6 +331,11 @@ begin
   begin
     AStyle.TextColor := TyEvalColor(raw, Vars);
     Include(AStyle.Present, tpTextColor);
+  end
+  else if prop = 'border' then
+  begin
+    // shorthand: border: <width> [style] <color>
+    ApplyBorderShorthand(AStyle, raw, Vars);
   end
   else if prop = 'border-color' then
   begin

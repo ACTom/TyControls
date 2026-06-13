@@ -58,6 +58,13 @@ type
     procedure TestBorderStyleSolidDefault;
   end;
 
+  TTestStyleBorderShorthand = class(TTestCase)
+  published
+    procedure TestBorderShorthand;
+    procedure TestBorderShorthandNone;
+    procedure TestBorderShorthandVarColor;
+  end;
+
 implementation
 
 procedure TTestStyleMerge.TestMergeUnionPresent;
@@ -381,6 +388,49 @@ begin
   finally m.Free; end;
 end;
 
+procedure TTestStyleBorderShorthand.TestBorderShorthand;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T { border: 2px solid #3B82F6; }');
+    s := m.ResolveStyle('T','',[]);
+    AssertEquals('width', 2, s.BorderWidth);
+    AssertTrue('width present', tpBorderWidth in s.Present);
+    AssertTrue('color present', tpBorderColor in s.Present);
+    AssertEquals('color r', $3B, TyRedOf(s.BorderColor));
+    AssertEquals('color g', $82, TyGreenOf(s.BorderColor));
+    AssertTrue('style present', tpBorderStyle in s.Present);
+    AssertTrue('style solid', s.BorderStyle = tbsSolid);
+  finally m.Free; end;
+end;
+
+procedure TTestStyleBorderShorthand.TestBorderShorthandNone;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T { border: 1px none #000000; }');
+    s := m.ResolveStyle('T','',[]);
+    AssertEquals('width', 1, s.BorderWidth);
+    AssertTrue('color present', tpBorderColor in s.Present);
+    AssertTrue('style none', s.BorderStyle = tbsNone);
+    AssertTrue('style present', tpBorderStyle in s.Present);
+  finally m.Free; end;
+end;
+
+procedure TTestStyleBorderShorthand.TestBorderShorthandVarColor;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(':root { --a: #112233; }'#10'T { border: 1px solid var(--a); }');
+    s := m.ResolveStyle('T','',[]);
+    AssertEquals('var color r', $11, TyRedOf(s.BorderColor));
+    AssertEquals('width', 1, s.BorderWidth);
+  finally m.Free; end;
+end;
+
 initialization
   RegisterTest(TTestStyleMerge);
   RegisterTest(TTestStyleLoad);
@@ -388,4 +438,5 @@ initialization
   RegisterTest(TTestStyleShadow);
   RegisterTest(TTestStylePadding);
   RegisterTest(TTestStyleBorderStyle);
+  RegisterTest(TTestStyleBorderShorthand);
 end.
