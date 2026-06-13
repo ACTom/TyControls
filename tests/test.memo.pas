@@ -45,6 +45,9 @@ type
     FChangeCount: Integer;
     procedure SetUpWithPadding(APaddingLeft: Integer);
     procedure SetUpWithCss(const ACss: string);
+    // Resolve a theme file path relative to the test executable (in /tests),
+    // independent of the current working directory.
+    function ThemePath(const AName: string): string;
     procedure OnMemoChange(Sender: TObject);
     // Load FMemo with the given lines (replaces existing content).
     procedure LoadLines(const AItems: array of string);
@@ -92,6 +95,8 @@ type
     procedure TestClickWithScroll;
     procedure TestClickPastLastLineClamps;
     procedure TestDisabledMouseIgnored;
+    // --- T6 theme integration smoke ---
+    procedure TestThemedMemoResolvesStyle;
   end;
 
 implementation
@@ -239,6 +244,12 @@ begin
   FMemo.Controller := FCtl;
   FMemo.Font.PixelsPerInch := 96;
   FMemo.SetBounds(0, 0, 200, 120);
+end;
+
+function TTyMemoTest.ThemePath(const AName: string): string;
+begin
+  Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim
+    + 'themes' + PathDelim + AName;
 end;
 
 procedure TTyMemoTest.OnMemoChange(Sender: TObject);
@@ -1013,6 +1024,34 @@ begin
   FMemo.ProbeMouseDown(2, LH + (LH div 2));  // would otherwise select line 1
   AssertEquals('disabled mouse leaves caret line unchanged', 0, FMemo.ProbeCaretLine);
   AssertEquals('disabled mouse leaves caret col unchanged', 0, FMemo.ProbeCaretCol);
+end;
+
+{ --- T6 theme integration smoke --- }
+
+{ TestThemedMemoResolvesStyle
+  Load the shipped light theme into a real controller and assert that the
+  TyMemo style block resolves with both a Background fill and a TextColor
+  present. A missing theme entry would leave these absent — the control would
+  render invisible (the v1.3 invisible-control bug class). This guards that the
+  TyMemo block actually reaches the resolver via a from-disk theme load. }
+procedure TTyMemoTest.TestThemedMemoResolvesStyle;
+var
+  Ctl: TTyStyleController;
+  S: TTyStyleSet;
+begin
+  AssertTrue('light.tycss must exist for the themed smoke test',
+    FileExists(ThemePath('light.tycss')));
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadTheme(ThemePath('light.tycss'));
+    S := Ctl.Model.ResolveStyle('TyMemo', '', []);
+    AssertTrue('themed TyMemo base must set Background (visible control)',
+      tpBackground in S.Present);
+    AssertTrue('themed TyMemo base must set TextColor (visible content)',
+      tpTextColor in S.Present);
+  finally
+    Ctl.Free;
+  end;
 end;
 
 initialization
