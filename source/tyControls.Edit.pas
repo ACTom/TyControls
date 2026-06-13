@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.UndoStack;
 type
   TTyIntArray = array of Integer;
 
@@ -23,6 +23,10 @@ type
     FWidthCachePPI: Integer;
     // Lazy measuring bitmap (freed in Destroy)
     FMeasureBmp: TBGRABitmap;
+    // Undo/redo infrastructure
+    FUndoStack: TTyUndoStack;
+    FSuspendUndo: Boolean;   // true while a composite op pushes its own step
+    FOnChange: TNotifyEvent;
     procedure SetText(const AValue: string);
     procedure SetCaretPos(AValue: Integer);
     // Selection helpers
@@ -44,6 +48,13 @@ type
     function IsWordCodepoint(const CP: string): Boolean;
   protected
     function GetStyleTypeKey: string; override;
+    procedure DoChange;
+    // Undo/redo state serialization (protected so headless access subclasses
+    // can expose them; pure logic, no widget dependency beyond geometry resync).
+    function CaptureState: string;
+    procedure RestoreState(const S: string);
+    procedure BeginUndoStep(AKind: Byte);
+    procedure BreakCoalescing;
     // Word-boundary helpers (pure codepoint logic on FText; unit-testable like
     // TyScrollThumbRect). Protected so headless access subclasses can expose
     // them; they have no widget/paint dependency. Indices are codepoint counts.
@@ -80,6 +91,11 @@ type
     procedure PasteFromClipboard;
     // Rendering helpers (public for headless tests)
     function CaretPixelXAt(ACaretIndex, APPI: Integer): Integer;
+    // Undo/redo API
+    procedure Undo;
+    procedure Redo;
+    function CanUndo: Boolean;
+    function CanRedo: Boolean;
     property CaretPos: Integer read FCaret write SetCaretPos;
     // Scroll offset (device px, >= 0) — read-only for tests
     property ScrollX: Integer read FScrollX;
@@ -92,6 +108,7 @@ type
     property StyleClass;
     property Controller;
     property OnClick;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 implementation
 
@@ -105,10 +122,13 @@ begin
   FScrollX := 0;
   FWidthCacheValid := False;
   FMeasureBmp := nil;
+  FUndoStack := TTyUndoStack.Create;
+  FSuspendUndo := False;
 end;
 
 destructor TTyEdit.Destroy;
 begin
+  FUndoStack.Free;
   FMeasureBmp.Free;
   inherited Destroy;
 end;
@@ -116,6 +136,95 @@ end;
 function TTyEdit.GetStyleTypeKey: string;
 begin
   Result := 'TyEdit';
+end;
+
+// ---- Change notification ----
+
+procedure TTyEdit.DoChange;
+begin
+  if Assigned(FOnChange) then
+    FOnChange(Self);
+end;
+
+// ---- Undo/redo machinery ----
+
+function TTyEdit.CaptureState: string;
+begin
+  // header: caret<TAB>anchor<LF>  then verbatim text
+  Result := IntToStr(FCaret) + #9 + IntToStr(FSelAnchor) + #10 + FText;
+end;
+
+procedure TTyEdit.RestoreState(const S: string);
+var
+  NL, TabPos: Integer;
+  Header, CaretStr, AnchorStr: string;
+  Len: Integer;
+  APPI: Integer;
+begin
+  NL := Pos(#10, S);
+  if NL = 0 then Exit;  // malformed; ignore
+  Header := Copy(S, 1, NL - 1);
+  FText := Copy(S, NL + 1, Length(S) - NL);
+  TabPos := Pos(#9, Header);
+  if TabPos > 0 then
+  begin
+    CaretStr := Copy(Header, 1, TabPos - 1);
+    AnchorStr := Copy(Header, TabPos + 1, Length(Header) - TabPos);
+  end
+  else
+  begin
+    CaretStr := Header;
+    AnchorStr := Header;
+  end;
+  FCaret := StrToIntDef(CaretStr, 0);
+  FSelAnchor := StrToIntDef(AnchorStr, FCaret);
+  // Clamp to current text bounds
+  Len := UTF8Length(FText);
+  if FCaret < 0 then FCaret := 0;
+  if FCaret > Len then FCaret := Len;
+  if FSelAnchor < 0 then FSelAnchor := 0;
+  if FSelAnchor > Len then FSelAnchor := Len;
+  InvalidateWidthCache;
+  APPI := Font.PixelsPerInch;
+  ClampScrollX(APPI);
+  EnsureCaretVisible(APPI);
+  Invalidate;
+  DoChange;
+end;
+
+procedure TTyEdit.BeginUndoStep(AKind: Byte);
+begin
+  if FSuspendUndo then Exit;
+  FUndoStack.Push(CaptureState, AKind);
+end;
+
+procedure TTyEdit.BreakCoalescing;
+begin
+  FUndoStack.BreakCoalescing;
+end;
+
+procedure TTyEdit.Undo;
+begin
+  if not Enabled then Exit;
+  if FUndoStack.CanUndo then
+    RestoreState(FUndoStack.Undo(CaptureState));
+end;
+
+procedure TTyEdit.Redo;
+begin
+  if not Enabled then Exit;
+  if FUndoStack.CanRedo then
+    RestoreState(FUndoStack.Redo(CaptureState));
+end;
+
+function TTyEdit.CanUndo: Boolean;
+begin
+  Result := FUndoStack.CanUndo;
+end;
+
+function TTyEdit.CanRedo: Boolean;
+begin
+  Result := FUndoStack.CanRedo;
 end;
 
 // ---- Selection read helpers ----
@@ -145,6 +254,7 @@ end;
 
 procedure TTyEdit.SelectAll;
 begin
+  BreakCoalescing;
   FSelAnchor := 0;
   FCaret := UTF8Length(FText);
   EnsureCaretVisible(Font.PixelsPerInch);
@@ -153,6 +263,7 @@ end;
 
 procedure TTyEdit.ClearSelection;
 begin
+  BreakCoalescing;
   FSelAnchor := FCaret;
   Invalidate;
 end;
@@ -166,6 +277,7 @@ var
   APPI: Integer;
 begin
   if not HasSelection then Exit;
+  BeginUndoStep(uskDelete);
   SS := SelStart;
   SL := SelLength;
   Before := UTF8Copy(FText, 1, SS);
@@ -187,6 +299,7 @@ var
   APPI: Integer;
 begin
   if FCaret = 0 then Exit;
+  BeginUndoStep(uskDelete);
   Len := UTF8Length(FText);
   t := PrevWordBoundary(FCaret);
   Before := UTF8Copy(FText, 1, t);
@@ -209,6 +322,7 @@ var
 begin
   Len := UTF8Length(FText);
   if FCaret >= Len then Exit;
+  BeginUndoStep(uskDelete);
   t := NextWordBoundary(FCaret);
   Before := UTF8Copy(FText, 1, FCaret);
   After  := UTF8Copy(FText, t + 1, Len - t);
@@ -227,6 +341,7 @@ var
   APPI: Integer;
 begin
   if FText = AValue then Exit;
+  BeginUndoStep(uskNone);  // SetText is a distinct (non-typing) undo step
   FText := AValue;
   // Caret moves to end on SetText; collapse selection
   FCaret := UTF8Length(FText);
@@ -246,6 +361,7 @@ begin
   if AValue < 0 then AValue := 0;
   if AValue > Len then AValue := Len;
   if (FCaret = AValue) and (FSelAnchor = AValue) then Exit;
+  BreakCoalescing;
   FCaret := AValue;
   FSelAnchor := AValue;  // direct CaretPos write collapses selection
   EnsureCaretVisible(Font.PixelsPerInch);
@@ -537,8 +653,14 @@ end;
 procedure TTyEdit.CutToClipboard;
 begin
   if not HasSelection then Exit;
+  BeginUndoStep(uskCut);
   WriteClipboardText(SelText);
-  DeleteSelection;
+  FSuspendUndo := True;
+  try
+    DeleteSelection;
+  finally
+    FSuspendUndo := False;
+  end;
 end;
 
 procedure TTyEdit.PasteFromClipboard;
@@ -549,17 +671,25 @@ var
 begin
   S := ReadClipboardText;
   if S = '' then Exit;  // truly empty clipboard: full no-op
-  // Strip CR and LF characters (single-line control)
-  Filtered := '';
-  for i := 1 to Length(S) do
-    if (S[i] <> #13) and (S[i] <> #10) then
-      Filtered := Filtered + S[i];
-  // Even if Filtered='', the clipboard was non-empty so selection must be deleted
-  if HasSelection then
-    DeleteSelection;
-  if Filtered = '' then Exit;
-  // Insert at caret
-  InjectStringAt(Filtered);
+  // Capture ONE undo step up front; suppress the inner DeleteSelection /
+  // InjectStringAt steps so the whole paste reverts in a single undo.
+  BeginUndoStep(uskPaste);
+  FSuspendUndo := True;
+  try
+    // Strip CR and LF characters (single-line control)
+    Filtered := '';
+    for i := 1 to Length(S) do
+      if (S[i] <> #13) and (S[i] <> #10) then
+        Filtered := Filtered + S[i];
+    // Even if Filtered='', the clipboard was non-empty so selection must be deleted
+    if HasSelection then
+      DeleteSelection;
+    if Filtered = '' then Exit;
+    // Insert at caret
+    InjectStringAt(Filtered);
+  finally
+    FSuspendUndo := False;
+  end;
 end;
 
 procedure TTyEdit.InjectStringAt(const AStr: string);
@@ -569,6 +699,7 @@ var
   APPI: Integer;
 begin
   if AStr = '' then Exit;
+  BeginUndoStep(uskPaste);
   Before := UTF8Copy(FText, 1, FCaret);
   After  := UTF8Copy(FText, FCaret + 1, UTF8Length(FText) - FCaret);
   FText  := Before + AStr + After;
@@ -598,6 +729,7 @@ begin
     else
     begin
       // Single click: position caret, collapse selection
+      BreakCoalescing;
       FCaret := CaretIndexAtX(X);
       FSelAnchor := FCaret;
       FMouseSelecting := True;
@@ -620,6 +752,7 @@ begin
   if FMouseSelecting then
   begin
     // Drag-select: move caret, keep anchor fixed
+    BreakCoalescing;
     FCaret := CaretIndexAtX(X);
     EnsureCaretVisible(Font.PixelsPerInch);
     Invalidate;
@@ -639,9 +772,18 @@ var
   APPI: Integer;
 begin
   if (AChar = '') or (AChar[1] < #32) then Exit;
-  // Replace selection if any
+  BeginUndoStep(uskTyping);
+  // Replace selection if any (suppress the inner DeleteSelection's own step:
+  // the snapshot we just took covers the whole replace-via-typing operation).
   if HasSelection then
-    DeleteSelection;
+  begin
+    FSuspendUndo := True;
+    try
+      DeleteSelection;
+    finally
+      FSuspendUndo := False;
+    end;
+  end;
   Before := UTF8Copy(FText, 1, FCaret);
   After  := UTF8Copy(FText, FCaret + 1, UTF8Length(FText) - FCaret);
   FText  := Before + AChar + After;
@@ -665,6 +807,7 @@ begin
     Exit;
   end;
   if FCaret = 0 then Exit;
+  BeginUndoStep(uskBackspace);
   Len    := UTF8Length(FText);
   Before := UTF8Copy(FText, 1, FCaret - 1);
   After  := UTF8Copy(FText, FCaret + 1, Len - FCaret);
@@ -691,6 +834,7 @@ begin
   end;
   Len := UTF8Length(FText);
   if FCaret >= Len then Exit;  // no-op at end
+  BeginUndoStep(uskDelete);
   Before := UTF8Copy(FText, 1, FCaret);
   After  := UTF8Copy(FText, FCaret + 2, Len - FCaret - 1);
   FText  := Before + After;
@@ -752,6 +896,24 @@ begin
     Exit;
   end;
 
+  // Redo: Ctrl/Cmd+Shift+Z OR Ctrl+Y. Check redo BEFORE undo so the Shift+Z
+  // variant is not swallowed by the plain Ctrl+Z branch below.
+  if ( (Key = VK_Z) and ((ssCtrl in Shift) or (ssMeta in Shift)) and (ssShift in Shift) )
+     or ( (Key = VK_Y) and ((ssCtrl in Shift) or (ssMeta in Shift)) ) then
+  begin
+    Redo;
+    Key := 0;
+    Exit;
+  end;
+
+  // Undo: Ctrl/Cmd+Z (no Shift)
+  if (Key = VK_Z) and ((ssCtrl in Shift) or (ssMeta in Shift)) and not (ssShift in Shift) then
+  begin
+    Undo;
+    Key := 0;
+    Exit;
+  end;
+
   Extending := ssShift in Shift;
   // Modifier combos (Ctrl/Alt/Meta without Shift) on navigation keys must fall through
   HasModifier := (ssCtrl in Shift) or (ssAlt in Shift) or (ssMeta in Shift);
@@ -781,6 +943,7 @@ begin
     end;
     VK_LEFT:
     begin
+      BreakCoalescing;  // any caret nav ends a typing-coalesce run
       if (ssAlt in Shift) or (ssCtrl in Shift) then
       begin
         // Word-wise left: Alt+Left (macOS Option) or Ctrl+Left (Win/Linux).
@@ -834,6 +997,7 @@ begin
     end;
     VK_RIGHT:
     begin
+      BreakCoalescing;  // any caret nav ends a typing-coalesce run
       if (ssAlt in Shift) or (ssCtrl in Shift) then
       begin
         // Word-wise right: Alt+Right (macOS Option) or Ctrl+Right (Win/Linux).
@@ -887,6 +1051,7 @@ begin
     end;
     VK_HOME:
     begin
+      BreakCoalescing;  // any caret nav ends a typing-coalesce run
       if HasModifier and not Extending then
         // modifier+home: fall through
       else
@@ -909,6 +1074,7 @@ begin
     end;
     VK_END:
     begin
+      BreakCoalescing;  // any caret nav ends a typing-coalesce run
       if HasModifier and not Extending then
         // modifier+end: fall through
       else
