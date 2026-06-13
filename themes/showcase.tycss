@@ -221,6 +221,7 @@ TySpinEdit {
   border-radius: var(--radius);
   padding: 6px;
   font-size: 10px;
+  shadow: 0px 1px 3px #0000001F;
 }
 TySpinEdit:hover    { border-color: lighten(--accent, 10%); }
 TySpinEdit:focus    { border-color: var(--accent); }
