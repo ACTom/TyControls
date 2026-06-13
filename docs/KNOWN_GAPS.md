@@ -50,9 +50,11 @@ Tier-2 native enhancement layer.
 
 ## Design-time rendering
 
-- The Lazarus form designer shows the native (non-skinned) frame; full
-  self-drawn window chrome appears only at runtime. This is the standard
-  behavior for skin-window libraries and is expected.
+- Controls dropped onto a form now render with the **built-in default skin**
+  in the Lazarus designer (zero-config, visible without running). Only the full
+  self-drawn window chrome (`TTyFormChrome`) remains runtime-only: the designer
+  shows the native (non-skinned) window frame. This is the standard behavior for
+  skin-window libraries and is expected.
 
 ## Style engine
 

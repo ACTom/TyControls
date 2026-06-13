@@ -16,6 +16,7 @@ TyButton:disabled { opacity: 0.5; }
 - **CSS-lite 主题语言** —— `:root` 变量、类型/变体/状态选择器、`lighten/darken/alpha/mix` 颜色函数、线性渐变、9-slice 贴图
 - **16 个自绘控件** —— Button、Label、Edit、CheckBox、RadioButton、Panel、ComboBox、ScrollBar、ListBox、ProgressBar、ToggleSwitch、TrackBar、GroupBox、TitleBar、CaptionButton、TabControl
 - **自绘窗框** —— `TTyFormChrome` 一个组件接管无边框窗口:标题栏、拖动、8 向缩放、最小/最大化/关闭、双击最大化(避让任务栏)
+- **零配置默认皮肤** —— 未加载主题或在设计器中拖放即有合理外观;主题在其之上按 typeKey 覆盖
 - **运行时热切换主题** —— `LoadTheme` 一行代码,全部控件即时重绘
 - **HiDPI** —— 所有长度按 PPI 缩放,矢量绘制天然清晰
 - **设计期集成** —— 组件面板 "TyControls" 分页,StyleClass 属性下拉
