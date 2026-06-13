@@ -106,6 +106,7 @@ type
     procedure DoClose(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     property TitleBar: TTyTitleBar read FTitleBar;
     procedure ToggleMaximize;
   published
@@ -366,6 +367,17 @@ begin
   FTitleBar.MinButton.OnClick := @DoMinimize;
   FTitleBar.MaxButton.OnClick := @DoMaxRestore;
   FTitleBar.CloseButton.OnClick := @DoClose;
+end;
+
+destructor TTyFormChrome.Destroy;
+begin
+  { When freed while Active, the host form still holds method pointers into this
+    chrome (OnMouseDown/Move/Up/ChangeBounds). UninstallChrome restores the
+    host's original handlers and border style. FForm is nil when chrome was
+    never installed, so UninstallChrome early-exits -> safe no-op. }
+  if FForm <> nil then
+    UninstallChrome;
+  inherited Destroy;
 end;
 
 function TTyFormChrome.HostForm: TCustomForm;

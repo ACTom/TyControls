@@ -75,6 +75,7 @@ type
   published
     procedure TestChangeBoundsHookedOnInstall;
     procedure TestChangeBoundsRestoredOnUninstall;
+    procedure TestFormChromeFreeWhileActiveNoDangling;
   end;
 
   TCaptionButtonHoverGlyphTest = class(TTestCase)
@@ -495,6 +496,39 @@ begin
   finally
     F.Free;
     Probe.Free;
+  end;
+end;
+
+procedure TFormChromeChangeBoundsTest.TestFormChromeFreeWhileActiveNoDangling;
+var
+  F: TForm;
+  Chrome: TTyFormChrome;
+begin
+  { Observed in this headless env: TTyFormChrome.Create(F) makes F the Owner,
+    so HostForm <> nil and InstallChrome DOES run on Active := True, hijacking
+    F.OnMouseDown/OnMouseMove/OnMouseUp/OnChangeBounds with the chrome's own
+    methods (same path verified by TestChangeBoundsHookedOnInstall).
+    Without a destructor, freeing the chrome while Active=True leaves F holding
+    method pointers into freed memory -> dangling handlers. The destructor must
+    call UninstallChrome to restore them. }
+  F := TForm.CreateNew(nil);
+  try
+    Chrome := TTyFormChrome.Create(F);
+    Chrome.Active := True;     { InstallChrome hijacks F.OnMouseDown etc. }
+    { Sanity: confirm the hijack actually happened in this env }
+    AssertTrue('precondition: chrome hijacked OnMouseDown on install',
+      Assigned(TForm(F).OnMouseDown));
+    Chrome.Free;               { destructor must UninstallChrome }
+    AssertFalse('host OnMouseDown cleared after chrome free',
+      Assigned(TForm(F).OnMouseDown));
+    AssertFalse('host OnMouseMove cleared after chrome free',
+      Assigned(TForm(F).OnMouseMove));
+    AssertFalse('host OnMouseUp cleared after chrome free',
+      Assigned(TForm(F).OnMouseUp));
+    AssertFalse('host OnChangeBounds cleared after chrome free',
+      Assigned(TForm(F).OnChangeBounds));
+  finally
+    F.Free;
   end;
 end;
 
