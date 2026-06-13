@@ -20,8 +20,15 @@ type
     FCaretLine: Integer;
     FCaretCol: Integer;
     FDesiredCol: Integer;
+    // Index of the first logical line painted (top of the visible window).
+    // 0 until vertical scrolling lands in T4; the visible-line loop reads it now.
+    FTopLine: Integer;
     // Lazy measuring bitmap (freed in Destroy). Shared by all per-line measures.
     FMeasureBmp: TBGRABitmap;
+    // Headless-only override of the LCL focused state. Real focus is unavailable
+    // when rendering offscreen, so tests can force the caret to draw. Production
+    // paint uses (Focused or FForceFocused) so this is a no-op unless set.
+    FForceFocused: Boolean;
     function GetLines: TStrings;
     procedure SetLines(AValue: TStrings);
     function EffectiveFontSize(const S: TTyStyleSet): Integer;
@@ -47,6 +54,12 @@ type
     function CaretLine: Integer;
     function CaretCol: Integer;
     procedure SetCaret(ALine, ACol: Integer);
+    // Headless focus override (see FForceFocused). Triggers a repaint.
+    procedure SetForceFocused(AValue: Boolean);
+    // Paint into ACanvas at ARect (RenderTo convention: draw local Rect(0,0,W,H),
+    // EndPaint blits at ARect origin). APPI scales padding/line metrics.
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -71,7 +84,9 @@ begin
   FCaretLine := 0;
   FCaretCol := 0;
   FDesiredCol := 0;
+  FTopLine := 0;
   FMeasureBmp := nil;
+  FForceFocused := False;
   Width := 200;
   Height := 120;
 end;
@@ -141,6 +156,13 @@ begin
   FCaretCol := ACol;
   ClampCaret;
   FDesiredCol := FCaretCol;
+  Invalidate;
+end;
+
+procedure TTyMemo.SetForceFocused(AValue: Boolean);
+begin
+  if FForceFocused = AValue then Exit;
+  FForceFocused := AValue;
   Invalidate;
 end;
 
@@ -243,6 +265,86 @@ begin
       Exit(i);
     Result := i + 1;
   end;
+end;
+
+procedure TTyMemo.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+// Visible-line loop + static caret. Mirrors TTyListBox.RenderTo but uses the
+// MEMO's own style for every line (no per-row TyListItem resolve) and draws text
+// top-aligned in fixed LineHeight cells. Scrollbar width is 0 in this task; the
+// real scrollbar (T4) will subtract it from the right edge.
+var
+  P: TTyPainter;
+  S: TTyStyleSet;
+  R, ContentRect, LineRect, CaretRect: TRect;
+  SBWidth, LH, ContentTop, LastVisible, i, y: Integer;
+  EffSize, CaretX: Integer;
+  Line: string;
+begin
+  P := TTyPainter.Create;
+  try
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI);
+    S := CurrentStyle;
+    EffSize := EffectiveFontSize(S);
+    DrawFrame(P, R, S);
+
+    // Content area = full rect inset by the MEMO style's Padding.
+    ContentRect := Rect(
+      R.Left   + P.Scale(S.Padding.Left),
+      R.Top    + P.Scale(S.Padding.Top),
+      R.Right  - P.Scale(S.Padding.Right),
+      R.Bottom - P.Scale(S.Padding.Bottom)
+    );
+
+    // Scrollbar width arrives in T4; none yet.
+    SBWidth := 0;
+
+    LH := LineHeight(APPI);
+    ContentTop := ContentRect.Top;
+
+    // Last visible logical line: fill the content height with LH-tall cells.
+    LastVisible := FTopLine + (ContentRect.Bottom - ContentTop) div LH;
+    if LastVisible > LineCountLogical - 1 then
+      LastVisible := LineCountLogical - 1;
+
+    for i := FTopLine to LastVisible do
+    begin
+      if i < FLines.Count then
+        Line := FLines[i]
+      else
+        Line := '';
+      y := ContentTop + (i - FTopLine) * LH;
+      LineRect := Rect(ContentRect.Left, y, ContentRect.Right - SBWidth, y + LH);
+      P.DrawText(LineRect, Line, S.FontName, EffSize, S.FontWeight,
+        S.TextColor, taLeftJustify, tlTop, False);
+    end;
+
+    // Static caret: only when focused (or headless-forced) and the caret line is
+    // currently visible. 1px bar like TTyEdit, inset 2px top/bottom in the cell.
+    if (Focused or FForceFocused)
+      and (FCaretLine >= FTopLine) and (FCaretLine <= LastVisible) then
+    begin
+      if FCaretLine < FLines.Count then
+        Line := FLines[FCaretLine]
+      else
+        Line := '';
+      CaretX := R.Left + ColPixelXAt(Line, FCaretCol, APPI);
+      y := ContentTop + (FCaretLine - FTopLine) * LH;
+      CaretRect := Rect(CaretX, y + P.Scale(2),
+        CaretX + P.Scale(1), y + LH - P.Scale(2));
+      P.FillBackground(CaretRect, Default(TTyFill), 0);
+      P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
+    end;
+
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyMemo.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 end.
