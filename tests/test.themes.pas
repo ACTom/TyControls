@@ -10,6 +10,7 @@ type
     function ThemePath(const AName: string): string;
     procedure CheckTheme(const AName: string);
     procedure CheckThemeNewTypeKeys(const AName: string);
+    procedure CheckThemeTabControlTypeKeys(const AName: string);
   published
     procedure TestLightLoadsAndResolvesButton;
     procedure TestDarkLoadsAndResolvesButton;
@@ -18,6 +19,10 @@ type
     procedure TestLightStylesNewTypeKeys;
     procedure TestDarkStylesNewTypeKeys;
     procedure TestShowcaseStylesNewTypeKeys;
+    { v1.2 typeKey assertions — TabControl }
+    procedure TestLightStylesTabControlTypeKeys;
+    procedure TestDarkStylesTabControlTypeKeys;
+    procedure TestShowcaseStylesTabControlTypeKeys;
   end;
 implementation
 
@@ -127,6 +132,48 @@ end;
 procedure TTestThemes.TestShowcaseStylesNewTypeKeys;
 begin
   CheckThemeNewTypeKeys('showcase.tycss');
+end;
+
+{ v1.2: assert TyTabControl base and TyTab:active are styled in the given theme }
+procedure TTestThemes.CheckThemeTabControlTypeKeys(const AName: string);
+var
+  model: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  model := TTyStyleModel.Create;
+  try
+    AssertTrue('theme file must exist: ' + AName,
+      FileExists(ThemePath(AName)));
+    model.LoadFromFile(ThemePath(AName));
+
+    { TyTabControl base: must have Background (content area surface) }
+    s := model.ResolveStyle('TyTabControl', '', []);
+    AssertTrue('TyTabControl base must set Background: ' + AName,
+      tpBackground in s.Present);
+
+    { TyTab:active: must have Background (selected tab highlight) }
+    s := model.ResolveStyle('TyTab', '', [tysActive]);
+    AssertTrue('TyTab:active must set Background: ' + AName,
+      tpBackground in s.Present);
+
+  finally
+    model.Free;
+  end;
+end;
+
+procedure TTestThemes.TestLightStylesTabControlTypeKeys;
+begin
+  CheckThemeTabControlTypeKeys('light.tycss');
+end;
+
+procedure TTestThemes.TestDarkStylesTabControlTypeKeys;
+begin
+  CheckThemeTabControlTypeKeys('dark.tycss');
+end;
+
+procedure TTestThemes.TestShowcaseStylesTabControlTypeKeys;
+begin
+  CheckThemeTabControlTypeKeys('showcase.tycss');
 end;
 
 initialization

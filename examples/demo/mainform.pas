@@ -7,7 +7,7 @@ uses
   tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
-  tyControls.TrackBar, tyControls.GroupBox;
+  tyControls.TrackBar, tyControls.GroupBox, tyControls.TabControl;
 type
   TDemoMainForm = class(TForm)
     Controller: TTyStyleController;
@@ -34,6 +34,7 @@ type
     Toggle1: TTyToggleSwitch;
     TrackBar1: TTyTrackBar;
     GroupBox1: TTyGroupBox;
+    TabCtrl1: TTyTabControl;
     procedure TrackBar1Change(Sender: TObject);
     function ThemeDir: string;
     procedure ApplyTheme(const AFile: string);
@@ -136,8 +137,37 @@ begin
   Toggle1.Checked := True;
   Toggle1.Controller := Controller;
 
+  { TTyTabControl: v1.2 gallery — 2 tabs with children on the first page }
+  TabCtrl1 := TTyTabControl.Create(Self);
+  TabCtrl1.Parent := Self;
+  TabCtrl1.Left   := 16;
+  TabCtrl1.Top    := 400;
+  TabCtrl1.Width  := 604;
+  TabCtrl1.Height := 130;
+  TabCtrl1.Controller := Controller;
+
+  with TabCtrl1.AddTab('General') do
+  begin
+    with TTyLabel.Create(Self) do
+    begin
+      Parent  := TabCtrl1.Pages[0];
+      Caption := 'Name:';
+      SetBounds(8, 8, 60, 20);
+      Controller := self.Controller;
+    end;
+    with TTyButton.Create(Self) do
+    begin
+      Parent  := TabCtrl1.Pages[0];
+      Caption := 'OK';
+      SetBounds(8, 36, 80, 28);
+      Controller := self.Controller;
+    end;
+  end;
+  TabCtrl1.AddTab('Appearance');
+  TabCtrl1.AddTab('About');
+
   { Enlarge form to accommodate new row of controls }
-  Height := 420;
+  Height := 560;
 end;
 
 procedure TDemoMainForm.BtnLightClick(Sender: TObject);

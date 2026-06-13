@@ -184,3 +184,21 @@ TyGroupBox {
   border-width: 1px;
   border-radius: var(--radius);
 }
+
+/* ── v1.2 controls ─────────────────────────────────────────────────────── */
+
+TyTabControl {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+}
+
+TyTab {
+  background: darken(--surface, 5%);
+  color: var(--on-surface);
+  padding: 4px;
+}
+TyTab:hover  { background: darken(--surface, 2%); }
+TyTab:active { background: var(--surface); color: var(--accent); }
