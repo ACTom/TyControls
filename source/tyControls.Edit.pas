@@ -724,8 +724,17 @@ begin
     end;
     VK_LEFT:
     begin
-      if HasModifier and not Extending then
-        // modifier+arrow: do NOT consume the key; let it fall through
+      if (ssAlt in Shift) and not Extending then
+      begin
+        // Alt+Left: move caret to previous word boundary, collapse selection.
+        FCaret := PrevWordBoundary(FCaret);
+        FSelAnchor := FCaret;
+        EnsureCaretVisible(Font.PixelsPerInch);
+        Invalidate;
+        Key := 0;
+      end
+      else if HasModifier and not Extending then
+        // other modifier+arrow (e.g. Ctrl): do NOT consume the key; fall through
       else
       begin
         if Extending then
@@ -761,8 +770,17 @@ begin
     end;
     VK_RIGHT:
     begin
-      if HasModifier and not Extending then
-        // modifier+arrow: do NOT consume the key; let it fall through
+      if (ssAlt in Shift) and not Extending then
+      begin
+        // Alt+Right: move caret to next word boundary, collapse selection.
+        FCaret := NextWordBoundary(FCaret);
+        FSelAnchor := FCaret;
+        EnsureCaretVisible(Font.PixelsPerInch);
+        Invalidate;
+        Key := 0;
+      end
+      else if HasModifier and not Extending then
+        // other modifier+arrow (e.g. Ctrl): do NOT consume the key; fall through
       else
       begin
         if Extending then

@@ -13,6 +13,14 @@ type
     function PrevWordBoundary(AIdx: Integer): Integer;
   end;
 
+  // Access subclass exposing KeyDown simulation for word-wise caret movement.
+  // CaretPos/SelStart/SelLength are already public on TTyEdit.
+  TTyEditWordKeyAccess = class(TTyEdit)
+  public
+    procedure SimulateKeyDownShift(Key: Word; Shift: TShiftState);
+    procedure SimulateKeyDownShiftRef(var Key: Word; Shift: TShiftState);
+  end;
+
   TEditWordTest = class(TTestCase)
   private
     FForm: TCustomForm;
@@ -35,6 +43,26 @@ type
     procedure TestCJK;
     procedure TestOutOfRangeClamp;
   end;
+
+  // WORD.2: Alt+Left/Alt+Right move caret by word (collapse selection);
+  // Ctrl+arrow keeps falling through unchanged.
+  TEditWordKeyTest = class(TTestCase)
+  private
+    FForm: TCustomForm;
+    FEdit: TTyEditWordKeyAccess;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAltRightWalksForward;
+    procedure TestAltLeftWalksBackward;
+    procedure TestAltLeftCollapsesSelection;
+    procedure TestAltRightCollapsesSelection;
+    procedure TestAltRightMultibyte;
+    procedure TestCtrlLeftStillFallsThrough;
+    procedure TestPlainLeftStillMovesOne;
+  end;
+
 implementation
 
 function TTyEditWordAccess.NextWordBoundary(AIdx: Integer): Integer;
@@ -45,6 +73,16 @@ end;
 function TTyEditWordAccess.PrevWordBoundary(AIdx: Integer): Integer;
 begin
   Result := inherited PrevWordBoundary(AIdx);
+end;
+
+procedure TTyEditWordKeyAccess.SimulateKeyDownShift(Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
+end;
+
+procedure TTyEditWordKeyAccess.SimulateKeyDownShiftRef(var Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
 end;
 
 procedure TEditWordTest.SetText(const S: string);
@@ -184,6 +222,115 @@ begin
   AssertEquals('Prev(999) == Prev(Len)', 4, FEdit.PrevWordBoundary(999));
 end;
 
+// ---- WORD.2: Alt+Left/Alt+Right word-wise caret movement ----
+
+procedure TEditWordKeyTest.SetUp;
+begin
+  FForm := TCustomForm.CreateNew(nil);
+  FEdit := TTyEditWordKeyAccess.Create(FForm);
+  FEdit.Parent := FForm;
+end;
+
+procedure TEditWordKeyTest.TearDown;
+begin
+  FForm.Free;
+  FForm := nil;
+  FEdit := nil;
+end;
+
+// 'foo bar baz', from 0: Alt+Right -> 4 -> 8 -> 11 -> 11 (clamp). SelLength=0 throughout.
+procedure TEditWordKeyTest.TestAltRightWalksForward;
+begin
+  FEdit.Text := 'foo bar baz';
+  FEdit.CaretPos := 0;
+  FEdit.SimulateKeyDownShift(VK_RIGHT, [ssAlt]);
+  AssertEquals('1st Alt+Right', 4, FEdit.CaretPos);
+  AssertEquals('1st SelLength', 0, FEdit.SelLength);
+  FEdit.SimulateKeyDownShift(VK_RIGHT, [ssAlt]);
+  AssertEquals('2nd Alt+Right', 8, FEdit.CaretPos);
+  AssertEquals('2nd SelLength', 0, FEdit.SelLength);
+  FEdit.SimulateKeyDownShift(VK_RIGHT, [ssAlt]);
+  AssertEquals('3rd Alt+Right', 11, FEdit.CaretPos);
+  AssertEquals('3rd SelLength', 0, FEdit.SelLength);
+  FEdit.SimulateKeyDownShift(VK_RIGHT, [ssAlt]);
+  AssertEquals('4th Alt+Right clamp', 11, FEdit.CaretPos);
+  AssertEquals('4th SelLength', 0, FEdit.SelLength);
+end;
+
+// 'foo bar baz', from 11: Alt+Left -> 8 -> 4 -> 0 -> 0 (clamp). SelLength=0 throughout.
+procedure TEditWordKeyTest.TestAltLeftWalksBackward;
+begin
+  FEdit.Text := 'foo bar baz';
+  FEdit.CaretPos := 11;
+  FEdit.SimulateKeyDownShift(VK_LEFT, [ssAlt]);
+  AssertEquals('1st Alt+Left', 8, FEdit.CaretPos);
+  AssertEquals('1st SelLength', 0, FEdit.SelLength);
+  FEdit.SimulateKeyDownShift(VK_LEFT, [ssAlt]);
+  AssertEquals('2nd Alt+Left', 4, FEdit.CaretPos);
+  AssertEquals('2nd SelLength', 0, FEdit.SelLength);
+  FEdit.SimulateKeyDownShift(VK_LEFT, [ssAlt]);
+  AssertEquals('3rd Alt+Left', 0, FEdit.CaretPos);
+  AssertEquals('3rd SelLength', 0, FEdit.SelLength);
+  FEdit.SimulateKeyDownShift(VK_LEFT, [ssAlt]);
+  AssertEquals('4th Alt+Left clamp', 0, FEdit.CaretPos);
+  AssertEquals('4th SelLength', 0, FEdit.SelLength);
+end;
+
+// 'foo bar', SelectAll (Sel 0..7), Alt+Left -> caret=PrevWordBoundary(7)=4, selection collapsed.
+procedure TEditWordKeyTest.TestAltLeftCollapsesSelection;
+begin
+  FEdit.Text := 'foo bar';
+  FEdit.SelectAll;
+  AssertEquals('pre SelLength', 7, FEdit.SelLength);
+  FEdit.SimulateKeyDownShift(VK_LEFT, [ssAlt]);
+  AssertEquals('Alt+Left caret = PrevWordBoundary(7)', 4, FEdit.CaretPos);
+  AssertEquals('selection collapsed', 0, FEdit.SelLength);
+end;
+
+// 'foo bar', SelectAll (Sel 0..7), Alt+Right -> caret=NextWordBoundary(7)=7, selection collapsed.
+procedure TEditWordKeyTest.TestAltRightCollapsesSelection;
+begin
+  FEdit.Text := 'foo bar';
+  FEdit.SelectAll;
+  AssertEquals('pre SelLength', 7, FEdit.SelLength);
+  FEdit.SimulateKeyDownShift(VK_RIGHT, [ssAlt]);
+  AssertEquals('Alt+Right caret = NextWordBoundary(7)', 7, FEdit.CaretPos);
+  AssertEquals('selection collapsed', 0, FEdit.SelLength);
+end;
+
+// 'café bàr' (multibyte), from 0: Alt+Right -> 5 (codepoint count past 'café'+space).
+procedure TEditWordKeyTest.TestAltRightMultibyte;
+begin
+  FEdit.Text := 'café bàr';
+  FEdit.CaretPos := 0;
+  FEdit.SimulateKeyDownShift(VK_RIGHT, [ssAlt]);
+  AssertEquals('Alt+Right past café+space', 5, FEdit.CaretPos);
+  AssertEquals('SelLength', 0, FEdit.SelLength);
+end;
+
+// Regression guard: bare Ctrl+Left must NOT move caret and must NOT consume Key.
+procedure TEditWordKeyTest.TestCtrlLeftStillFallsThrough;
+var
+  Key: Word;
+begin
+  FEdit.Text := 'abc';
+  FEdit.CaretPos := 2;
+  Key := VK_LEFT;
+  FEdit.SimulateKeyDownShiftRef(Key, [ssCtrl]);
+  AssertEquals('Ctrl+Left caret unchanged', 2, FEdit.CaretPos);
+  AssertTrue('Ctrl+Left Key not consumed', Key = VK_LEFT);
+end;
+
+// Sanity: plain VK_LEFT (no modifier) still moves one codepoint.
+procedure TEditWordKeyTest.TestPlainLeftStillMovesOne;
+begin
+  FEdit.Text := 'abc';
+  FEdit.CaretPos := 2;
+  FEdit.SimulateKeyDownShift(VK_LEFT, []);
+  AssertEquals('plain Left moves one', 1, FEdit.CaretPos);
+end;
+
 initialization
   RegisterTest(TEditWordTest);
+  RegisterTest(TEditWordKeyTest);
 end.
