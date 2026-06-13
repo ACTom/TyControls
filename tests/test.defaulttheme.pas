@@ -11,6 +11,9 @@ type
   published
     procedure TestBuiltinMatchesLightTheme;
     procedure TestBuiltinCoversAllTypeKeys;
+    procedure TestEmptyModelFallsBackToBuiltin;
+    procedure TestUserTypeKeySuppressesBuiltinNoBleed;
+    procedure TestUnstyledTypeKeyStillGetsBuiltin;
   end;
 implementation
 
@@ -83,6 +86,72 @@ begin
       tpBorderColor in m.ResolveStyle('TyGroupBox', '', []).Present);
     AssertTrue('TyLabel must set TextColor',
       tpTextColor in m.ResolveStyle('TyLabel', '', []).Present);
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TBuiltinThemeTest.TestEmptyModelFallsBackToBuiltin;
+{ A fresh model with NO theme loaded must resolve the built-in default skin
+  (the core fix: controls are visible with zero configuration). }
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    s := m.ResolveStyle('TyButton', '', []);
+    AssertTrue('empty model: TyButton Background present (built-in)',
+      tpBackground in s.Present);
+    AssertTrue('empty model: TyButton TextColor present (built-in)',
+      tpTextColor in s.Present);
+    AssertTrue('empty model: solid background', s.Background.Kind = tfkSolid);
+    AssertEquals('built-in surface red', $FF, TyRedOf(s.Background.Color));
+    AssertEquals('built-in surface green', $FF, TyGreenOf(s.Background.Color));
+    AssertEquals('built-in surface blue', $FF, TyBlueOf(s.Background.Color));
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TBuiltinThemeTest.TestUserTypeKeySuppressesBuiltinNoBleed;
+{ When the user theme defines ANY rule for a typeKey, the built-in layer for
+  that typeKey is suppressed entirely — no property bleeds through. }
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyButton { background: #FF0000; }');
+    s := m.ResolveStyle('TyButton', '', []);
+    AssertTrue('user background present', tpBackground in s.Present);
+    AssertEquals('user red wins', $FF, TyRedOf(s.Background.Color));
+    AssertEquals('user red wins (green 0)', $00, TyGreenOf(s.Background.Color));
+    AssertFalse('no built-in border-width bleed', tpBorderWidth in s.Present);
+    AssertFalse('no built-in padding bleed', tpPadding in s.Present);
+    AssertFalse('no built-in font-size bleed', tpFontSize in s.Present);
+  finally
+    m.Free;
+  end;
+end;
+
+procedure TBuiltinThemeTest.TestUnstyledTypeKeyStillGetsBuiltin;
+{ A partial theme that styles only TyButton must still leave OTHER controls
+  with the built-in default look (robustness for partial themes). }
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyButton { background: #FF0000; }');
+    s := m.ResolveStyle('TyLabel', '', []);
+    AssertTrue('unstyled TyLabel still gets built-in TextColor',
+      tpTextColor in s.Present);
+    s := m.ResolveStyle('TyPanel', '', []);
+    AssertTrue('unstyled TyPanel still gets built-in Background',
+      tpBackground in s.Present);
   finally
     m.Free;
   end;

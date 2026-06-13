@@ -3,17 +3,25 @@ unit tyControls.StyleModel;
 interface
 uses
   Classes, SysUtils, Types,
-  tyControls.Types, tyControls.Css.Parser, tyControls.Css.Values;
+  tyControls.Types, tyControls.Css.Parser, tyControls.Css.Values,
+  tyControls.DefaultTheme;
 
 type
   TTyStyleModel = class
   private
-    FRules: TFPList;          // owns TTyStyleRuleEntry
-    FVars: TStringList;       // name=value, no leading --
-    procedure AddEntry(const ATypeName, AVariant: string; AHasState: Boolean;
-      AState: TTyState; const AStyle: TTyStyleSet);
-    function FindStyle(const ATypeName, AVariant: string; AHasState: Boolean;
-      AState: TTyState; out AStyle: TTyStyleSet): Boolean;
+    FRules: TFPList;          // user layer — owns TTyStyleRuleEntry
+    FVars: TStringList;       // user :root vars, name=value (no leading --)
+    FBaseRules: TFPList;      // built-in default layer — owns TTyStyleRuleEntry
+    FBaseVars: TStringList;   // built-in :root vars
+    procedure ClearList(ARules: TFPList);
+    procedure LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string);
+    procedure AddEntryTo(ARules: TFPList; const ATypeName, AVariant: string;
+      AHasState: Boolean; AState: TTyState; const AStyle: TTyStyleSet);
+    function FindStyleIn(ARules: TFPList; const ATypeName, AVariant: string;
+      AHasState: Boolean; AState: TTyState; out AStyle: TTyStyleSet): Boolean;
+    function ResolveLayer(ARules: TFPList; const ATypeKey, AStyleClass: string;
+      AStates: TTyStateSet): TTyStyleSet;
+    function UserHasTypeKey(const ATypeKey: string): Boolean;
   public
     constructor Create;
     destructor Destroy; override;
@@ -309,27 +317,41 @@ begin
   inherited Create;
   FRules := TFPList.Create;
   FVars := TStringList.Create;
+  FBaseRules := TFPList.Create;
+  FBaseVars := TStringList.Create;
+  { Seed the built-in default skin once. It is never cleared by user theme
+    loads — it only applies (per-typeKey) when the user layer is silent. }
+  LoadInto(FBaseRules, FBaseVars, TyBuiltinThemeCss);
 end;
 
 destructor TTyStyleModel.Destroy;
 begin
-  Clear;
+  ClearList(FRules);
+  ClearList(FBaseRules);
   FRules.Free;
+  FBaseRules.Free;
   FVars.Free;
+  FBaseVars.Free;
   inherited Destroy;
 end;
 
 procedure TTyStyleModel.Clear;
-var i: Integer;
+{ Clears only the USER layer; the built-in base layer is permanent. }
 begin
-  for i := 0 to FRules.Count - 1 do
-    TObject(FRules[i]).Free;
-  FRules.Clear;
+  ClearList(FRules);
   FVars.Clear;
 end;
 
-procedure TTyStyleModel.AddEntry(const ATypeName, AVariant: string; AHasState: Boolean;
-  AState: TTyState; const AStyle: TTyStyleSet);
+procedure TTyStyleModel.ClearList(ARules: TFPList);
+var i: Integer;
+begin
+  for i := 0 to ARules.Count - 1 do
+    TObject(ARules[i]).Free;
+  ARules.Clear;
+end;
+
+procedure TTyStyleModel.AddEntryTo(ARules: TFPList; const ATypeName, AVariant: string;
+  AHasState: Boolean; AState: TTyState; const AStyle: TTyStyleSet);
 var e: TTyStyleRuleEntry;
 begin
   e := TTyStyleRuleEntry.Create;
@@ -338,20 +360,20 @@ begin
   e.HasState := AHasState;
   e.State := AState;
   e.Style := AStyle;
-  FRules.Add(e);
+  ARules.Add(e);
 end;
 
-function TTyStyleModel.FindStyle(const ATypeName, AVariant: string; AHasState: Boolean;
-  AState: TTyState; out AStyle: TTyStyleSet): Boolean;
+function TTyStyleModel.FindStyleIn(ARules: TFPList; const ATypeName, AVariant: string;
+  AHasState: Boolean; AState: TTyState; out AStyle: TTyStyleSet): Boolean;
 var
   i: Integer;
   e: TTyStyleRuleEntry;
 begin
   Result := False;
   AStyle := EmptyStyleSet;
-  for i := 0 to FRules.Count - 1 do
+  for i := 0 to ARules.Count - 1 do
   begin
-    e := TTyStyleRuleEntry(FRules[i]);
+    e := TTyStyleRuleEntry(ARules[i]);
     if SameText(e.TypeName, ATypeName) and SameText(e.Variant, AVariant)
        and (e.HasState = AHasState) and ((not AHasState) or (e.State = AState)) then
     begin
@@ -362,7 +384,21 @@ begin
   end;
 end;
 
-procedure TTyStyleModel.LoadFromCss(const ASource: string);
+function TTyStyleModel.UserHasTypeKey(const ATypeKey: string): Boolean;
+var
+  i: Integer;
+  e: TTyStyleRuleEntry;
+begin
+  Result := False;
+  for i := 0 to FRules.Count - 1 do
+  begin
+    e := TTyStyleRuleEntry(FRules[i]);
+    if SameText(e.TypeName, ATypeKey) then
+      Exit(True);
+  end;
+end;
+
+procedure TTyStyleModel.LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string);
 var
   parser: TTyCssParser;
   sheet: TTyCssStylesheet;
@@ -372,28 +408,26 @@ var
   decl: TTyCssDeclaration;
   st: TTyStyleSet;
 begin
-  Clear;
+  ClearList(ARules);
+  AVars.Clear;
   parser := TTyCssParser.Create(ASource);
   try
     sheet := parser.Parse;
     try
-      // copy :root vars (already stored name=value, no leading --)
-      FVars.Assign(sheet.RootVars);
+      AVars.Assign(sheet.RootVars);
       for ri := 0 to sheet.Rules.Count - 1 do
       begin
         rule := TTyCssRule(sheet.Rules[ri]);
-        // build the style set once from this rule's declarations
         st := EmptyStyleSet;
         for di := 0 to High(rule.Declarations) do
         begin
           decl := rule.Declarations[di];
-          TyApplyDeclaration(st, decl.Prop, decl.RawValue, FVars);
+          TyApplyDeclaration(st, decl.Prop, decl.RawValue, AVars);
         end;
-        // register it for every selector in this rule
         for si := 0 to High(rule.Selectors) do
         begin
           sel := rule.Selectors[si];
-          AddEntry(sel.TypeName, sel.Variant, sel.HasState, sel.State, st);
+          AddEntryTo(ARules, sel.TypeName, sel.Variant, sel.HasState, sel.State, st);
         end;
       end;
     finally
@@ -402,6 +436,11 @@ begin
   finally
     parser.Free;
   end;
+end;
+
+procedure TTyStyleModel.LoadFromCss(const ASource: string);
+begin
+  LoadInto(FRules, FVars, ASource);
 end;
 
 procedure TTyStyleModel.LoadFromFile(const AFileName: string);
@@ -416,7 +455,7 @@ begin
   end;
 end;
 
-function TTyStyleModel.ResolveStyle(const ATypeKey, AStyleClass: string;
+function TTyStyleModel.ResolveLayer(ARules: TFPList; const ATypeKey, AStyleClass: string;
   AStates: TTyStateSet): TTyStyleSet;
 const
   // fixed state application order: hover, focused, active, disabled
@@ -435,14 +474,14 @@ begin
     variants.StrictDelimiter := False; // collapse multiple spaces
     variants.DelimitedText := Trim(AStyleClass);
     // 1) type base rule (no variant, no state)
-    if FindStyle(ATypeKey, '', False, tysNormal, found) then
+    if FindStyleIn(ARules, ATypeKey, '', False, tysNormal, found) then
       TyMergeStyleSet(Result, found);
     // 2) each variant token, in textual order, base-state rule (TypeName.variant)
     for vi := 0 to variants.Count - 1 do
     begin
       v := Trim(variants[vi]);
       if v = '' then Continue;
-      if FindStyle(ATypeKey, v, False, tysNormal, found) then
+      if FindStyleIn(ARules, ATypeKey, v, False, tysNormal, found) then
         TyMergeStyleSet(Result, found);
     end;
     // 3) state layers present in AStates, in fixed order;
@@ -451,19 +490,34 @@ begin
     begin
       st := cStateOrder[si];
       if not (st in AStates) then Continue;
-      if FindStyle(ATypeKey, '', True, st, found) then
+      if FindStyleIn(ARules, ATypeKey, '', True, st, found) then
         TyMergeStyleSet(Result, found);
       for vi := 0 to variants.Count - 1 do
       begin
         v := Trim(variants[vi]);
         if v = '' then Continue;
-        if FindStyle(ATypeKey, v, True, st, found) then
+        if FindStyleIn(ARules, ATypeKey, v, True, st, found) then
           TyMergeStyleSet(Result, found);
       end;
     end;
   finally
     variants.Free;
   end;
+end;
+
+function TTyStyleModel.ResolveStyle(const ATypeKey, AStyleClass: string;
+  AStates: TTyStateSet): TTyStyleSet;
+var
+  userLayer: TTyStyleSet;
+begin
+  Result := EmptyStyleSet;
+  { Built-in default layer applies only when the user theme defines NO rule for
+    this typeKey — so a fully-themed control is untouched (no property bleed),
+    while an unstyled/partially-themed control still gets a sensible default. }
+  if not UserHasTypeKey(ATypeKey) then
+    Result := ResolveLayer(FBaseRules, ATypeKey, AStyleClass, AStates);
+  userLayer := ResolveLayer(FRules, ATypeKey, AStyleClass, AStates);
+  TyMergeStyleSet(Result, userLayer);
 end;
 
 end.
