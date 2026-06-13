@@ -46,6 +46,9 @@ type
     procedure TestMouseDownSelectsTab;
     procedure TestActiveTabRendersActiveStyle;
     procedure TestPagesHostChildren;
+    // TAB.C: Controller propagation to pages
+    procedure TestControllerPropagatedOnSetAfterAddTab;
+    procedure TestControllerPropagatedOnAddTabAfterSet;
   end;
 
 implementation
@@ -363,6 +366,42 @@ begin
   Btn := TButton.Create(FTab.Pages[0]);
   Btn.Parent := FTab.Pages[0];
   AssertEquals('Pages[0].ControlCount = 1', 1, FTab.Pages[0].ControlCount);
+end;
+
+{ TestControllerPropagatedOnSetAfterAddTab:
+  Add 2 tabs first, then set Controller -> both existing pages get the controller. }
+procedure TTyTabControlTest.TestControllerPropagatedOnSetAfterAddTab;
+var
+  Ctl: TTyStyleController;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    FTab.AddTab('One');
+    FTab.AddTab('Two');
+    FTab.Controller := Ctl;
+    AssertSame('Pages[0].Controller = Ctl after set', Ctl, FTab.Pages[0].Controller);
+    AssertSame('Pages[1].Controller = Ctl after set', Ctl, FTab.Pages[1].Controller);
+  finally
+    Ctl.Free;
+  end;
+end;
+
+{ TestControllerPropagatedOnAddTabAfterSet:
+  Set Controller first, then AddTab -> new page gets the controller. }
+procedure TTyTabControlTest.TestControllerPropagatedOnAddTabAfterSet;
+var
+  Ctl: TTyStyleController;
+  Page: TTyPanel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    FTab.Controller := Ctl;
+    Page := FTab.AddTab('New');
+    AssertSame('New page gets Controller when AddTab called after set',
+      Ctl, Page.Controller);
+  finally
+    Ctl.Free;
+  end;
 end;
 
 initialization

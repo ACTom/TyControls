@@ -92,6 +92,8 @@ type
     procedure TestClickMapsUnderScroll;
     procedure TestScrollClampsOnShrink;
     procedure TestRenderedTextShiftsWithScroll;
+    // EDIT.12: fix — scrolled text must not bleed past right padding/border
+    procedure TestScrolledTextDoesNotBleedPastRightPadding;
   end;
 implementation
 
@@ -1540,6 +1542,80 @@ begin
     Bmp1.Free;
     Bmp2.Free;
     F.Free;
+    Ctl.Free;
+  end;
+end;
+
+// ---- EDIT.12: regression — scrolled text must not bleed past right padding/border ----
+
+procedure TEditTest.TestScrolledTextDoesNotBleedPastRightPadding;
+{ Setup: narrow edit (width=120), padding=4px, border-width=2px via stylesheet,
+  white text on black background, long text, then VK_END to scroll.
+  Render to a black bitmap. The right-padding strip x in [ContentRight..Width-1]
+  (i.e., pixels right of the content area) must contain no white glyph pixels.
+  ContentRight = Width - padding(4) - borderWidth(2) = 120 - 4 - 2 = 114.
+  Pre-fix the DrawText rect Right was far past ContentRect.Right so glyphs bled
+  into the padding/border strip; post-fix they are clamped. }
+var
+  Ctl: TTyStyleController;
+  E: TTyEditAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  X, Y: Integer;
+  StrayCount: Integer;
+  Px: TBGRAPixel;
+  W, ContentRight: Integer;
+begin
+  W := 120;
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyEdit { background: #000000; color: #FFFFFF; padding: 4px; border-width: 2px; border-color: #333333; }');
+    E := TTyEditAccess.Create(Form);
+    E.Parent := Form;
+    E.Controller := Ctl;
+    E.Font.PixelsPerInch := 96;
+    E.SetBounds(0, 0, W, 24);
+    // Long text to force horizontal scroll
+    E.Text := StringOfChar('W', 40);
+    E.CaretPos := 0;
+    // Scroll to the end so FScrollX > 0
+    E.SimulateKeyDown(VK_END);
+    AssertTrue('Pre: ScrollX > 0 after VK_END', E.ScrollX > 0);
+
+    // Render onto a black bitmap
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(W, 24);
+    Bmp.Canvas.Brush.Color := clBlack;
+    Bmp.Canvas.FillRect(0, 0, W, 24);
+    E.RenderTo(Bmp.Canvas, Rect(0, 0, W, 24), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      // ContentRight = Width - right-padding(4) - border-width(2)
+      ContentRight := W - 4 - 2;
+      StrayCount := 0;
+      for X := ContentRight to W - 1 do
+        for Y := 0 to 23 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          // A white glyph pixel has all channels >= 200
+          if (Px.red >= 200) and (Px.green >= 200) and (Px.blue >= 200) then
+            Inc(StrayCount);
+        end;
+      AssertEquals(
+        'No white glyph pixels should exist in the right padding/border strip ' +
+        '(x in [' + IntToStr(ContentRight) + '..' + IntToStr(W - 1) + '])',
+        0, StrayCount);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
     Ctl.Free;
   end;
 end;

@@ -45,10 +45,10 @@ type
     FStyleClass: string;
     FController: TTyStyleController;
     procedure SetStyleClass(const AValue: string);
-    procedure SetController(AValue: TTyStyleController);
     procedure CMEnabledChanged(var Msg: TLMessage); message CM_ENABLEDCHANGED;
   protected
     FHover, FPressed: Boolean;
+    procedure SetController(AValue: TTyStyleController); virtual;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;

@@ -3,7 +3,7 @@ unit tyControls.TabControl;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base,
+  tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
   tyControls.Panel;
 
 type
@@ -25,6 +25,7 @@ type
     procedure ShowOnlyPage(AIndex: Integer);
   protected
     function GetStyleTypeKey: string; override;
+    procedure SetController(AValue: TTyStyleController); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure AdjustClientRect(var ARect: TRect); override;
@@ -81,6 +82,18 @@ end;
 function TTyTabControl.GetStyleTypeKey: string;
 begin
   Result := 'TyTabControl';
+end;
+
+{ When the TabControl's Controller changes, propagate it to all existing pages
+  so they render with the same style controller rather than the default one. }
+procedure TTyTabControl.SetController(AValue: TTyStyleController);
+var
+  I: Integer;
+begin
+  inherited SetController(AValue);
+  for I := 0 to High(FPages) do
+    if FPages[I] <> nil then
+      FPages[I].Controller := AValue;
 end;
 
 { Shared tab-header-band height: TabHeight logical px → device px at APPI. }
@@ -213,6 +226,8 @@ begin
   Page.Parent := Self;
   Page.Align  := alClient;
   Page.Visible := False;
+  { Propagate controller so the page renders with the same style as the tab. }
+  Page.Controller := Self.Controller;
 
   SetLength(FPages, Length(FPages) + 1);
   FPages[High(FPages)] := Page;

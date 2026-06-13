@@ -856,15 +856,16 @@ begin
     end;
 
     // 2. Draw text (on top of selection band) — use EffSize to match measurement
-    // Shift the text rect left by FScrollX so the content scrolls; clipping
-    // is provided by the BGRA bitmap edges and the painter's content rect clip.
+    // Shift the text rect left by FScrollX so the content scrolls; Right is
+    // clamped to ContentRect.Right so glyphs never paint over the right
+    // padding or border.
     if FScrollX > 0 then
     begin
       if Length(Widths) = 0 then
         Widths := MeasureCodepointWidths(APPI);
       P.DrawText(
         Rect(ContentRect.Left - FScrollX, ContentRect.Top,
-             ContentRect.Left - FScrollX + Widths[Length(Widths) - 1] + P.Scale(4),
+             ContentRect.Right,
              ContentRect.Bottom),
         FText, S.FontName, EffSize, S.FontWeight,
         S.TextColor, taLeftJustify, tlCenter, True);
