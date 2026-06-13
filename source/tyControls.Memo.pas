@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
-  tyControls.ScrollBar;
+  tyControls.ScrollBar, tyControls.UndoStack;
 type
   // Cumulative-prefix pixel widths, length = codepoints+1 (shared name with Edit).
   TTyIntArray = array of Integer;
@@ -45,6 +45,11 @@ type
     // Fired after any mutation of the text model (insert/split/delete/merge).
     // Pure caret moves do NOT fire it.
     FOnChange: TNotifyEvent;
+    // Snapshot-based undo/redo (one stack per control). FSuspendUndo is set
+    // while a composite op (cut/paste/typing-over-selection) pushes its own
+    // single step, so nested mutators do not add extra steps.
+    FUndoStack: TTyUndoStack;
+    FSuspendUndo: Boolean;
     function GetLines: TStrings;
     procedure SetLines(AValue: TStrings);
     function EffectiveFontSize(const S: TTyStyleSet): Integer;
@@ -73,6 +78,17 @@ type
     procedure DeleteWordForward;
   protected
     function GetStyleTypeKey: string; override;
+    // --- Undo/redo state serialization (protected so headless access subclasses
+    // can drive them directly, mirroring TTyEdit). CaptureState serializes the
+    // full editable state (caret/anchor header + raw lines) to one opaque string;
+    // RestoreState parses it back and routes through AfterEdit so OnChange fires.
+    function CaptureState: string;
+    procedure RestoreState(const S: string);
+    // Push the current state as one undo step (no-op while FSuspendUndo). New
+    // pushes clear the redo stack; consecutive uskTyping pushes coalesce.
+    procedure BeginUndoStep(AKind: Byte);
+    // End a typing-coalesce run (caret nav / selection change / clipboard copy).
+    procedure BreakCoalescing;
     // Remove the current selection (SelStart..SelEnd): single-line splice, or
     // multi-line merge of first-line head + last-line tail with middle lines
     // dropped. Caret -> SelStart; anchor collapses. Pure mutator — callers route
@@ -191,6 +207,12 @@ type
     procedure CopyToClipboard;
     procedure CutToClipboard;
     procedure PasteFromClipboard;
+    // Undo/redo API. Both honor the Enabled guard. Undo restores the previous
+    // snapshot (and moves the current state onto the redo stack); Redo re-applies.
+    procedure Undo;
+    procedure Redo;
+    function CanUndo: Boolean;
+    function CanRedo: Boolean;
   published
     property Lines: TStrings read GetLines write SetLines;
     property Enabled;
@@ -221,12 +243,15 @@ begin
   FSyncingScroll := False;
   FMeasureBmp := nil;
   FForceFocused := False;
+  FUndoStack := TTyUndoStack.Create;
+  FSuspendUndo := False;
   Width := 200;
   Height := 120;
 end;
 
 destructor TTyMemo.Destroy;
 begin
+  FUndoStack.Free;
   FMeasureBmp.Free;
   FLines.Free;
   inherited Destroy;
@@ -237,6 +262,132 @@ begin
   Result := 'TyMemo';
 end;
 
+// ---- Undo/redo machinery ----
+
+function TTyMemo.CaptureState: string;
+// Header line: 'caretLine,caretCol,anchorLine,anchorCol,lineCount'#10, then the
+// raw FLines joined by #10. We serialize Count (not FLines.Text) so a document
+// ending in an empty logical line round-trips exactly: RestoreState rebuilds the
+// list line by line and never relies on TStrings.Text dropping trailing breaks.
+var
+  i: Integer;
+begin
+  Result := IntToStr(FCaretLine) + ',' + IntToStr(FCaretCol) + ','
+    + IntToStr(FSelAnchorLine) + ',' + IntToStr(FSelAnchorCol) + ','
+    + IntToStr(FLines.Count) + #10;
+  for i := 0 to FLines.Count - 1 do
+  begin
+    if i > 0 then
+      Result := Result + #10;
+    Result := Result + FLines[i];
+  end;
+end;
+
+procedure TTyMemo.RestoreState(const S: string);
+var
+  NL, FieldStart, i, LineCount: Integer;
+  Header, Body: string;
+  Fields: array[0..4] of Integer;
+  fi, cp: Integer;
+  Num: string;
+begin
+  NL := Pos(#10, S);
+  if NL = 0 then Exit;  // malformed; ignore
+  Header := Copy(S, 1, NL - 1);
+  Body := Copy(S, NL + 1, Length(S) - NL);
+  // Parse the five comma-separated header fields.
+  for fi := 0 to 4 do Fields[fi] := 0;
+  fi := 0;
+  Num := '';
+  for cp := 1 to Length(Header) do
+  begin
+    if Header[cp] = ',' then
+    begin
+      if fi <= 4 then Fields[fi] := StrToIntDef(Num, 0);
+      Inc(fi);
+      Num := '';
+    end
+    else
+      Num := Num + Header[cp];
+  end;
+  if fi <= 4 then Fields[fi] := StrToIntDef(Num, 0);
+  LineCount := Fields[4];
+  // Rebuild FLines from the body by splitting on #10. We add exactly LineCount
+  // lines so a document with trailing empty line(s) round-trips (do NOT use
+  // FLines.Text, which drops trailing empty lines). When LineCount is 0 the body
+  // is empty and FLines ends up Count=0 (the empty-document state).
+  FLines.Clear;
+  if LineCount > 0 then
+  begin
+    FieldStart := 1;
+    i := 1;
+    while i <= Length(Body) do
+    begin
+      if Body[i] = #10 then
+      begin
+        FLines.Add(Copy(Body, FieldStart, i - FieldStart));
+        FieldStart := i + 1;
+      end;
+      Inc(i);
+    end;
+    FLines.Add(Copy(Body, FieldStart, Length(Body) - FieldStart + 1));
+    // Defensive: clamp to the recorded line count (the body always has exactly
+    // LineCount-1 separators, so this matches, but stay safe against malformed S).
+    while FLines.Count > LineCount do
+      FLines.Delete(FLines.Count - 1);
+    while FLines.Count < LineCount do
+      FLines.Add('');
+  end;
+  FCaretLine := Fields[0];
+  FCaretCol := Fields[1];
+  FSelAnchorLine := Fields[2];
+  FSelAnchorCol := Fields[3];
+  FDesiredCol := FCaretCol;
+  // Clamp anchor into the restored model (caret is clamped inside AfterEdit).
+  if FSelAnchorLine < 0 then FSelAnchorLine := 0;
+  if FSelAnchorLine > LineCountLogical - 1 then FSelAnchorLine := LineCountLogical - 1;
+  if FSelAnchorCol < 0 then FSelAnchorCol := 0;
+  if FSelAnchorCol > LineLen(FSelAnchorLine) then FSelAnchorCol := LineLen(FSelAnchorLine);
+  // AfterEdit clamps the caret, keeps it visible, refreshes the scrollbar,
+  // repaints and fires OnChange (so undo/redo report a state change for free).
+  AfterEdit(Font.PixelsPerInch);
+end;
+
+procedure TTyMemo.BeginUndoStep(AKind: Byte);
+begin
+  if FSuspendUndo then Exit;
+  FUndoStack.Push(CaptureState, AKind);
+end;
+
+procedure TTyMemo.BreakCoalescing;
+begin
+  FUndoStack.BreakCoalescing;
+end;
+
+procedure TTyMemo.Undo;
+begin
+  if not Enabled then Exit;
+  if FUndoStack.CanUndo then
+    RestoreState(FUndoStack.Undo(CaptureState));
+end;
+
+procedure TTyMemo.Redo;
+begin
+  if not Enabled then Exit;
+  if FUndoStack.CanRedo then
+    RestoreState(FUndoStack.Redo(CaptureState));
+end;
+
+function TTyMemo.CanUndo: Boolean;
+begin
+  Result := FUndoStack.CanUndo;
+end;
+
+function TTyMemo.CanRedo: Boolean;
+begin
+  Result := FUndoStack.CanRedo;
+end;
+
 function TTyMemo.GetLines: TStrings;
 begin
   Result := FLines;
@@ -244,6 +395,11 @@ end;
 
 procedure TTyMemo.SetLines(AValue: TStrings);
 begin
+  // Capture a fresh (non-typing) undo step only when the assignment actually
+  // changes the content, so a no-op reassign does not push a spurious step and
+  // TestSetLinesClampsCaret (which never touches undo) is unaffected.
+  if (AValue = nil) or (AValue.Text <> FLines.Text) then
+    BeginUndoStep(uskNone);
   FLines.Assign(AValue);
   ClampCaret;
   // Clamp the window and refresh the scrollbar in case the line count changed.
@@ -418,6 +574,8 @@ begin
   FDesiredCol := FCaretCol;
   EnsureCaretLineVisible(Font.PixelsPerInch);
   Invalidate;
+  // A selection change ends a typing-coalesce run.
+  BreakCoalescing;
 end;
 
 procedure TTyMemo.ClearSelection;
@@ -425,6 +583,8 @@ begin
   FSelAnchorLine := FCaretLine;
   FSelAnchorCol := FCaretCol;
   Invalidate;
+  // A selection change ends a typing-coalesce run.
+  BreakCoalescing;
 end;
 
 procedure TTyMemo.SetForceFocused(AValue: Boolean);
@@ -614,6 +774,8 @@ begin
   FSelAnchorLine := FCaretLine;
   FSelAnchorCol := FCaretCol;
   FMouseSelecting := True;
+  // A mouse-driven caret move ends a typing-coalesce run.
+  BreakCoalescing;
   try
     if CanFocus then
       SetFocus;
@@ -698,6 +860,11 @@ begin
   ClampCaret;
   EnsureCaretLineVisible(APPI);
   Invalidate;
+  // Pure caret motion ends any typing-coalesce run: the next typed character
+  // starts a fresh undo step. AfterCaretMove is the shared post-routine for all
+  // keyboard navigation branches (VK_LEFT/RIGHT/UP/DOWN/HOME/END), so breaking
+  // here covers them uniformly.
+  BreakCoalescing;
 end;
 
 // ---- Model mutators (pure UTF8 splice on FLines) ----
@@ -955,13 +1122,23 @@ begin
   // so the multi-line case needs no special handling here.
   if not HasSelection then Exit;
   WriteClipboardText(SelText);
+  // Copy does not mutate, but it ends a typing-coalesce run (mirrors TTyEdit).
+  BreakCoalescing;
 end;
 
 procedure TTyMemo.CutToClipboard;
 begin
   if not HasSelection then Exit;
   WriteClipboardText(SelText);
-  DeleteSelection;
+  // Capture ONE undo step (uskCut); suppress the inner DeleteSelection's own step
+  // so the whole cut reverts in a single undo.
+  BeginUndoStep(uskCut);
+  FSuspendUndo := True;
+  try
+    DeleteSelection;
+  finally
+    FSuspendUndo := False;
+  end;
   // Route through AfterEdit so OnChange fires (DeleteSelection is a pure mutator).
   AfterEdit(Font.PixelsPerInch);
 end;
@@ -979,6 +1156,14 @@ var
 begin
   S := ReadClipboardText;
   if S = '' then Exit;  // truly-empty clipboard: full no-op (Edit 551)
+  // Capture ONE undo step (uskPaste) covering the whole paste — both the
+  // selection delete and the multi-line splice revert in a single undo. The
+  // inner mutators are pure (no BeginUndoStep of their own), so FSuspendUndo is
+  // not strictly required, but set it for symmetry with cut and to guard against
+  // any future BeginUndoStep added to the inner helpers.
+  BeginUndoStep(uskPaste);
+  FSuspendUndo := True;
+  try
   if HasSelection then DeleteSelection;
 
   // Normalise CR/LF: CRLF -> LF, lone CR -> LF, so each remaining LF is one break.
@@ -1036,6 +1221,9 @@ begin
     AfterEdit(Font.PixelsPerInch);
   finally
     Segs.Free;
+  end;
+  finally
+    FSuspendUndo := False;
   end;
 end;
 
@@ -1306,9 +1494,22 @@ begin
   // KeyDown or ignored here.
   if (UTF8Key = '') or (UTF8Key[1] < #32) then Exit;
   // A selection is replaced by the typed text (delete-then-insert, like
-  // TTyEdit.InjectKey 643 — NOT an early exit).
+  // TTyEdit.InjectKey 643 — NOT an early exit). Capture ONE undo step up front:
+  // replacing a selection is a fresh (non-typing) step, so a later coalescing
+  // typing run does not fold the deletion into it. When there is no selection it
+  // is a plain typing insert (coalesces with adjacent single-char inserts).
+  if HasSelection then
+    BeginUndoStep(uskDelete)
+  else
+    BeginUndoStep(uskTyping);
   if HasSelection then DeleteSelection;
   DoInsertText(UTF8Key);
+  // Collapse the selection anchor onto the new caret so consecutive typing keeps
+  // inserting (rather than the stale anchor making HasSelection true and the next
+  // char replacing the just-typed run). Mirrors TTyEdit.InjectStringAt, which
+  // sets FSelAnchor := FCaret after every insert.
+  FSelAnchorLine := FCaretLine;
+  FSelAnchorCol := FCaretCol;
   FDesiredCol := FCaretCol;          // horizontal edit refreshes desired column
   AfterEdit(Font.PixelsPerInch);
 end;
@@ -1358,12 +1559,38 @@ begin
     Exit;
   end;
 
+  // Redo: Ctrl/Cmd+Shift+Z OR Ctrl/Cmd+Y. Check redo BEFORE undo so the Shift+Z
+  // variant is not swallowed by the plain Ctrl+Z branch below (same idiom as
+  // TTyEdit). CtrlLike already covers Ctrl (Win/Linux) and Meta/Cmd (macOS).
+  if ( (Key = VK_Z) and CtrlLike and (ssShift in Shift) )
+     or ( (Key = VK_Y) and CtrlLike ) then
+  begin
+    Redo;
+    Key := 0;
+    Exit;
+  end;
+  // Undo: Ctrl/Cmd+Z (no Shift).
+  if (Key = VK_Z) and CtrlLike and not (ssShift in Shift) then
+  begin
+    Undo;
+    Key := 0;
+    Exit;
+  end;
+
   case Key of
     VK_RETURN:
     begin
       // Enter on a selection replaces it with a line break (delete-then-split).
-      if HasSelection then DeleteSelection;
-      DoSplitLine;
+      // Capture ONE undo step (uskNewline) covering both the selection delete and
+      // the split, so the whole Enter reverts in a single undo.
+      BeginUndoStep(uskNewline);
+      FSuspendUndo := True;
+      try
+        if HasSelection then DeleteSelection;
+        DoSplitLine;
+      finally
+        FSuspendUndo := False;
+      end;
       FDesiredCol := FCaretCol;
       AfterEdit(APPI);
       Key := 0;
@@ -1374,13 +1601,15 @@ begin
       // checked BEFORE the (0,0) no-op guard so a selection always mutates.
       if HasSelection then
       begin
+        BeginUndoStep(uskDelete);
         DeleteSelection;
         FDesiredCol := FCaretCol;
         AfterEdit(APPI);
         Key := 0;
         Exit;
       end;
-      // (0,0): no model change, no OnChange, but key is consumed.
+      // (0,0): no model change, no OnChange, but key is consumed. No undo step
+      // is captured here since nothing mutates.
       if (FCaretCol = 0) and (FCaretLine = 0) then
       begin
         Key := 0;
@@ -1388,7 +1617,9 @@ begin
       end;
       // Ctrl/Alt+Backspace deletes the previous word (within the line; at col 0 it
       // falls back to the cross-line merge inside DeleteWordBackward). Precedence
-      // selection > word > single, mirroring TTyEdit.
+      // selection > word > single, mirroring TTyEdit. Capture the pre-mutation
+      // state as a fresh (non-typing) undo step.
+      BeginUndoStep(uskBackspace);
       if (ssCtrl in Shift) or (ssAlt in Shift) then
         DeleteWordBackward
       else
@@ -1403,6 +1634,7 @@ begin
       // so a selection always mutates regardless of caret position.
       if HasSelection then
       begin
+        BeginUndoStep(uskDelete);
         DeleteSelection;
         FDesiredCol := FCaretCol;
         AfterEdit(APPI);
@@ -1410,14 +1642,17 @@ begin
         Exit;
       end;
       L := LineLen(FCaretLine);
-      // End of document (last line, last col): no change, no OnChange.
+      // End of document (last line, last col): no change, no OnChange. No undo
+      // step is captured here since nothing mutates.
       if (FCaretCol >= L) and (FCaretLine >= MaxLine) then
       begin
         Key := 0;
         Exit;
       end;
       // Ctrl/Alt+Delete deletes the next word (within the line; at line end it
-      // falls back to the cross-line merge inside DeleteWordForward).
+      // falls back to the cross-line merge inside DeleteWordForward). Capture the
+      // pre-mutation state as a fresh (non-typing) undo step.
+      BeginUndoStep(uskDelete);
       if (ssCtrl in Shift) or (ssAlt in Shift) then
         DeleteWordForward
       else

@@ -19,7 +19,7 @@ uses
   test.tabcontrol.scroll,
   test.tabcontrol.reorder,
   test.tabcontrol.closehover,
-  test.defaulttheme, test.spinedit, test.memo, test.memo.selection,
+  test.defaulttheme, test.spinedit, test.memo, test.memo.selection, test.memo.undo,
   test.animation,
   test.animation.toggle,
   test.animation.button,
