@@ -63,9 +63,20 @@ TTyMemo 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制
 | `←` / `→` | 行内左右移动；越过行首/行尾时跳到上一行末尾 / 下一行行首 |
 | `↑` / `↓` | 上下移动，按记忆的期望列定位（夹紧到目标行长度） |
 | `Home` / `End` | 行首 / 行尾；配合 `Ctrl`（或 macOS `Cmd`/Meta）跳到文档开头 / 末尾 |
+| `Shift+方向键` / `Shift+Home/End` | 在保持选区锚点的同时移动光标，**扩展二维选区**（与上面的导航一一对应，包括 `Shift+Ctrl/Cmd+Home/End` 扩展到文档首尾、`Shift+Ctrl/Alt+←/→` 按词扩展）；任何不带 `Shift` 的普通导航会**折叠选区**到光标处 |
+| `Ctrl/Cmd+A` | 全选整个文档（锚点置于 `(0,0)`、光标置于末行末尾） |
+| `Ctrl/Cmd+C` | 复制选区文本到剪贴板（多行以 `LineEnding` 连接；经虚方法 `WriteClipboardText`，便于无头测试覆写）；无选区时为空操作 |
+| `Ctrl/Cmd+X` | 剪切选区（先复制再 `DeleteSelection`，触发 `OnChange`）；无选区时为空操作 |
+| `Ctrl/Cmd+V` | 在光标处粘贴剪贴板文本（经虚方法 `ReadClipboardText`）；若文本含 `CR`/`LF` 则**按行拆分插入为多行**（首段并入当前行光标前缀、中间段成为新行、末段拼接原光标后缀）；有选区时先删除选区再插入；触发 `OnChange` |
+| `Ctrl/Alt+←` / `Ctrl/Alt+→` | **按词移动**光标（行内复用 `TTyEdit` 的 `IsWordCodepoint`/`NextWordBoundary`/`PrevWordBoundary`）；位于行首/行尾时跨到上一行末尾 / 下一行行首；配合 `Shift` 则按词扩展选区 |
+| `Ctrl/Alt+Backspace` | 删除**前一个词**（行内）；位于行首（列 0）时退化为跨行合并到上一行末尾；触发 `OnChange` |
+| `Ctrl/Alt+Delete` | 删除**后一个词**（行内）；位于行尾时退化为把下一行上提合并；触发 `OnChange` |
+| 鼠标按下 / 拖拽 | 在指针下的 `(行, 列)` 落下光标并置选区锚点；按住左键拖拽时 `MouseMove` 把选区扩展到指针下的 `(行, 列)`，松开结束 |
 | 鼠标滚轮 | 上滚 `TopLine -= 3`、下滚 `TopLine += 3`（先调用 `inherited`，即用户的 `OnMouseWheel`，若已消费则不再滚动） |
 
 > **注意：** 当 `Enabled = False` 时所有键盘/滚轮输入都不生效，且 `KeyDown` 不消费按键（导航可下传）。
+>
+> **选区渲染：** 存在选区时，每条可见逻辑行在文本下方绘制一条**选区高亮带**（selection band）——内部整行的覆盖整行宽度，起始行/结束行只覆盖选中的 x 区间（与 `TTyEdit` 同源）；选区存在期间不绘制光标。剪贴板的读写经由可被测试覆写的虚方法 `ReadClipboardText` / `WriteClipboardText`（与 `TTyEdit` 一致，便于无头环境断言）。
 
 ---
 
@@ -150,16 +161,13 @@ end;
 
 ## 10. v1 限制 / 缺口（Gaps）
 
-`TTyMemo` 的 v1 版本聚焦于一个**可靠的多行编辑核心**（逐码点编辑、跨行合并、二维导航、垂直滚动）。为了把范围收敛到可在 v1.9 内可靠交付并通过完整测试套件的功能集，以下条目被**有意推迟**（deferred），当前版本**尚未**实现。下游开发者在选型/集成时应知悉这些缺口：
+`TTyMemo` 在可靠的多行编辑核心（逐码点编辑、跨行合并、二维导航、垂直滚动）之上，于 **v1.11** 补齐了对标 `TTyEdit` 的**二维文本选区**层：选区锚点（`Shift`+方向键/Home/End 扩展、鼠标拖拽高亮、逐行选区带、`SelText`/`SelectAll`/`ClearSelection`）、**区间剪贴板**（`Ctrl/Cmd+A/C/X/V`，粘贴按 CR/LF 拆分为多行，复制/剪切经与 `TTyEdit` 同源的虚方法 `ReadClipboardText`/`WriteClipboardText`）、以及**按词导航**（`Ctrl/Alt+←/→` 跨行按词移动，`Ctrl/Alt+Backspace/Delete` 按词删除并在行边界退化为跨行合并）。下列条目仍被**有意推迟**（deferred），当前版本**尚未**实现，下游开发者在选型/集成时应知悉：
 
 | 缺口 | 说明 / 当前行为 |
 |------|------|
-| **无文本选区（no selection）** | 控件只有单个插入光标，没有选区锚点。`Shift+方向键`、`Shift+Home/End`、鼠标拖拽**不会**产生高亮选区；不存在“选中文本”的概念，因此也无“替换选区”“删除选区”等操作。 |
-| **无区间剪贴板（no clipboard of ranges）** | 不支持 `Ctrl/Cmd+C/X/V` 对**文本区间**的复制 / 剪切 / 粘贴。`KeyDown` 中没有任何剪贴板分支（`Ctrl`/`Cmd` 仅用于把 `Home`/`End` 改为跳到文档首尾）。需要导入大段文本请直接赋值 `Lines.Text`。 |
 | **无自动换行（no word-wrap）** | 渲染时 `WordBreak = False`：一条逻辑行始终绘制为一行，不会按控件宽度回绕到下一行。逻辑行与可见行严格一一对应。 |
 | **无水平滚动 / 长行被裁剪（no horizontal scroll, long lines clipped）** | 没有水平滚动条，也没有水平自动滚动。超出内容区宽度的长行在右缘被画布**直接裁剪**；当光标移动到可见区右侧之外时也不会水平滚动跟随（光标可能被画到内容区外而不可见）。仅垂直方向有滚动条/滚轮。 |
 | **无撤销 / 重做（no undo/redo）** | 没有编辑历史栈，`Ctrl/Cmd+Z` / `Ctrl/Cmd+Y` 无效。每次编辑都是不可撤销的就地修改。 |
-| **无按词导航（no word-nav）** | `Ctrl/Cmd+Left/Right` **不会**按单词边界跳转（与 `TTyEdit` 的同名缺口一致）；`Ctrl`/`Cmd` 仅作用于 `Home`/`End`（跳到文档首/末）。普通 `←`/`→` 始终按单个码点移动。 |
 | **无光标闪烁（no caret blink）** | 光标是一根**静态** 1px 竖条，仅在控件获得焦点且光标行可见时绘制；没有 `TTimer` 驱动的闪烁动画，光标不会周期性隐现。 |
 
-> 以上均为可在后续 Tier-2 增强层补齐的项；v1.9 不实现它们是经过权衡的范围决策，而非缺陷。`TTyEdit` 的“无按词导航”缺口亦记录于 [docs/KNOWN_GAPS.md](../KNOWN_GAPS.md)。
+> **v1.11 已交付：** 文本选区、区间剪贴板（`Ctrl/Cmd+A/C/X/V`）、以及按词 / `Shift` 扩展导航均已落地（见 §5），不再是缺口。以上剩余条目均为可在后续 Tier-2 增强层补齐的项；当前不实现它们是经过权衡的范围决策，而非缺陷。`TTyEdit` 的相关说明亦记录于 [docs/KNOWN_GAPS.md](../KNOWN_GAPS.md)。
