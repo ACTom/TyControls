@@ -21,6 +21,10 @@ type
     FCaretLine: Integer;
     FCaretCol: Integer;
     FDesiredCol: Integer;
+    // 2D selection anchor (codepoint index per line). No selection <=> anchor
+    // equals the caret. Mirrors TTyEdit.FSelAnchor generalised to (line,col).
+    FSelAnchorLine: Integer;
+    FSelAnchorCol: Integer;
     // Index of the first logical line painted (top of the visible window).
     FTopLine: Integer;
     // Embedded vertical scrollbar, lazily created on first overflow (owned by
@@ -80,6 +84,26 @@ type
     function CaretLine: Integer;
     function CaretCol: Integer;
     procedure SetCaret(ALine, ACol: Integer);
+    // Direct write of the selection anchor (tests / later tasks). Does NOT move
+    // the caret, so it can establish a non-empty selection.
+    procedure SetSelAnchor(ALine, ACol: Integer);
+    // --- 2D selection read helpers (pure; no paint state) ---
+    // A selection exists when the anchor differs from the caret.
+    function HasSelection: Boolean;
+    // Order the anchor/caret endpoints lexicographically: (L1,C1) < (L2,C2) iff
+    // (L1<L2) or (L1=L2 and C1<C2). Returns the smaller endpoint as start.
+    procedure GetOrderedSel(out SL, SC, EL, EC: Integer);
+    function SelStartLine: Integer;
+    function SelStartCol: Integer;
+    function SelEndLine: Integer;
+    function SelEndCol: Integer;
+    // Selected text: single line -> the spanned slice; multi-line -> first-line
+    // tail + whole interior lines + last-line head, joined by LineEnding.
+    function SelText: string;
+    // Select the whole document (anchor->(0,0), caret->end of last line).
+    procedure SelectAll;
+    // Collapse the selection onto the caret (anchor := caret).
+    procedure ClearSelection;
     // Headless focus override (see FForceFocused). Triggers a repaint.
     procedure SetForceFocused(AValue: Boolean);
     // Visible-line count for the current bounds at APPI (>= 1).
@@ -148,6 +172,8 @@ begin
   FCaretLine := 0;
   FCaretCol := 0;
   FDesiredCol := 0;
+  FSelAnchorLine := 0;
+  FSelAnchorCol := 0;
   FTopLine := 0;
   FScrollBar := nil;
   FSyncingScroll := False;
@@ -222,7 +248,140 @@ begin
   FCaretLine := ALine;
   FCaretCol := ACol;
   ClampCaret;
+  // A direct caret write collapses any selection (mirrors TTyEdit.SetCaretPos).
+  FSelAnchorLine := FCaretLine;
+  FSelAnchorCol := FCaretCol;
   FDesiredCol := FCaretCol;
+  Invalidate;
+end;
+
+procedure TTyMemo.SetSelAnchor(ALine, ACol: Integer);
+var
+  MaxLine, CurLen: Integer;
+begin
+  // Clamp the anchor into the model exactly like the caret (line then col).
+  MaxLine := LineCountLogical - 1;
+  if ALine < 0 then ALine := 0;
+  if ALine > MaxLine then ALine := MaxLine;
+  CurLen := LineLen(ALine);
+  if ACol < 0 then ACol := 0;
+  if ACol > CurLen then ACol := CurLen;
+  FSelAnchorLine := ALine;
+  FSelAnchorCol := ACol;
+  Invalidate;
+end;
+
+// ---- 2D selection read/mutate helpers ----
+
+function TTyMemo.HasSelection: Boolean;
+begin
+  Result := (FSelAnchorLine <> FCaretLine) or (FSelAnchorCol <> FCaretCol);
+end;
+
+procedure TTyMemo.GetOrderedSel(out SL, SC, EL, EC: Integer);
+var
+  AnchorFirst: Boolean;
+begin
+  // (FSelAnchorLine,FSelAnchorCol) <= (FCaretLine,FCaretCol) lexicographically?
+  AnchorFirst := (FSelAnchorLine < FCaretLine)
+    or ((FSelAnchorLine = FCaretLine) and (FSelAnchorCol <= FCaretCol));
+  if AnchorFirst then
+  begin
+    SL := FSelAnchorLine; SC := FSelAnchorCol;
+    EL := FCaretLine;     EC := FCaretCol;
+  end
+  else
+  begin
+    SL := FCaretLine;     SC := FCaretCol;
+    EL := FSelAnchorLine; EC := FSelAnchorCol;
+  end;
+end;
+
+function TTyMemo.SelStartLine: Integer;
+var
+  SL, SC, EL, EC: Integer;
+begin
+  GetOrderedSel(SL, SC, EL, EC);
+  Result := SL;
+end;
+
+function TTyMemo.SelStartCol: Integer;
+var
+  SL, SC, EL, EC: Integer;
+begin
+  GetOrderedSel(SL, SC, EL, EC);
+  Result := SC;
+end;
+
+function TTyMemo.SelEndLine: Integer;
+var
+  SL, SC, EL, EC: Integer;
+begin
+  GetOrderedSel(SL, SC, EL, EC);
+  Result := EL;
+end;
+
+function TTyMemo.SelEndCol: Integer;
+var
+  SL, SC, EL, EC: Integer;
+begin
+  GetOrderedSel(SL, SC, EL, EC);
+  Result := EC;
+end;
+
+function TTyMemo.SelText: string;
+var
+  SL, SC, EL, EC, i: Integer;
+  Head, Tail: string;
+begin
+  Result := '';
+  if not HasSelection then Exit;
+  GetOrderedSel(SL, SC, EL, EC);
+  if SL = EL then
+  begin
+    // Single line: the slice from SC..EC on that line.
+    if SL < FLines.Count then
+      Result := UTF8Copy(FLines[SL], SC + 1, EC - SC);
+    Exit;
+  end;
+  // Multi-line: first-line tail + whole interior lines + last-line head.
+  if SL < FLines.Count then
+    Tail := UTF8Copy(FLines[SL], SC + 1, LineLen(SL) - SC)
+  else
+    Tail := '';
+  Result := Tail;
+  for i := SL + 1 to EL - 1 do
+  begin
+    if i < FLines.Count then
+      Result := Result + LineEnding + FLines[i]
+    else
+      Result := Result + LineEnding;
+  end;
+  if EL < FLines.Count then
+    Head := UTF8Copy(FLines[EL], 1, EC)
+  else
+    Head := '';
+  Result := Result + LineEnding + Head;
+end;
+
+procedure TTyMemo.SelectAll;
+var
+  LastLine: Integer;
+begin
+  FSelAnchorLine := 0;
+  FSelAnchorCol := 0;
+  LastLine := LineCountLogical - 1;
+  FCaretLine := LastLine;
+  FCaretCol := LineLen(LastLine);
+  FDesiredCol := FCaretCol;
+  EnsureCaretLineVisible(Font.PixelsPerInch);
+  Invalidate;
+end;
+
+procedure TTyMemo.ClearSelection;
+begin
+  FSelAnchorLine := FCaretLine;
+  FSelAnchorCol := FCaretCol;
   Invalidate;
 end;
 
