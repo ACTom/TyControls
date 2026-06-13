@@ -17,7 +17,8 @@ uses
   test.tabcontrol.collection,
   test.tabcontrol.streaming,
   test.defaulttheme, test.spinedit,
-  test.animation;
+  test.animation,
+  test.animation.toggle;
 
 type
   TTyTestRunner = class(TTestRunner)

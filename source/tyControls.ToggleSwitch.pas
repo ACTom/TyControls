@@ -3,7 +3,15 @@ unit tyControls.ToggleSwitch;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
+
+{ Pure knob-X geometry (device pixels). Progress is clamped to [0,1]:
+    OffX = AMarginDev (knob at left margin)
+    OnX  = ATrackWidthDev - AMarginDev - AKnobSideDev (knob at right margin)
+  Result interpolates OffX..OnX by AProgress via TyLerpI. }
+function TyToggleKnobX(ATrackWidthDev, AMarginDev, AKnobSideDev: Integer;
+  AProgress: Single): Integer;
+
 type
   TTyToggleSwitch = class(TTyCustomControl)
   private
@@ -31,6 +39,18 @@ type
   end;
 
 implementation
+
+function TyToggleKnobX(ATrackWidthDev, AMarginDev, AKnobSideDev: Integer;
+  AProgress: Single): Integer;
+var
+  OffX, OnX: Integer;
+begin
+  OffX := AMarginDev;
+  OnX := ATrackWidthDev - AMarginDev - AKnobSideDev;
+  if AProgress < 0 then AProgress := 0
+  else if AProgress > 1 then AProgress := 1;
+  Result := TyLerpI(OffX, OnX, AProgress);
+end;
 
 { TTyToggleSwitch }
 
@@ -120,10 +140,9 @@ begin
     KnobSide := DevH - 2 * Margin;
     if KnobSide < 1 then KnobSide := 1;
 
-    if FChecked then
-      KnobX := (R.Right - R.Left) - Margin - KnobSide
-    else
-      KnobX := Margin;
+    // Pure geometry seam: Progress = Ord(FChecked) (no animator yet, so the
+    // knob snaps to Off/On exactly as before).
+    KnobX := TyToggleKnobX(R.Right - R.Left, Margin, KnobSide, Ord(FChecked));
 
     KnobRect := Rect(KnobX, Margin, KnobX + KnobSide, Margin + KnobSide);
 
