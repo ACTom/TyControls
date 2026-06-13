@@ -20,6 +20,7 @@ uses
   test.tabcontrol.reorder,
   test.tabcontrol.closehover,
   test.defaulttheme, test.spinedit, test.memo, test.memo.selection, test.memo.undo,
+  test.memo.visualrows,
   test.animation,
   test.animation.toggle,
   test.animation.button,

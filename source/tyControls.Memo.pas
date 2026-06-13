@@ -10,6 +10,19 @@ type
   // Cumulative-prefix pixel widths, length = codepoints+1 (shared name with Edit).
   TTyIntArray = array of Integer;
 
+  // A "visual row" is one painted text row. It is a half-open codepoint segment
+  // [StartCol, EndCol) of one logical line (Line). When WordWrap=False each
+  // logical line maps to exactly one visual row spanning the whole line
+  // (StartCol=0, EndCol=LineLen). When WordWrap=True a long logical line yields
+  // 1..N segments split at word boundaries (char-break for an over-long word).
+  // An empty logical line emits one zero-width row (StartCol=EndCol=0).
+  TTyVisualRow = record
+    Line: Integer;      // logical line index
+    StartCol: Integer;  // first codepoint column of this segment (inclusive)
+    EndCol: Integer;    // one-past-last codepoint column (exclusive)
+  end;
+  TTyVisualRowArray = array of TTyVisualRow;
+
   TTyMemo = class(TTyCustomControl)
   private
     // Logical text model: one TStrings line per logical line. Exposed (read-only
@@ -30,6 +43,11 @@ type
     FMouseSelecting: Boolean;
     // Index of the first logical line painted (top of the visible window).
     FTopLine: Integer;
+    // Soft-wrap toggle (published WordWrap). Default False = no wrap: each logical
+    // line is exactly one full-width visual row (today's behaviour; horizontal
+    // scroll lands in a later task). True = soft wrap at word boundaries into
+    // multiple visual rows. Affects BuildVisualRows and (later) render/nav/click.
+    FWordWrap: Boolean;
     // Embedded vertical scrollbar, lazily created on first overflow (owned by
     // Self via Create(Self), so freed by TComponent). nil until first needed.
     FScrollBar: TTyScrollBar;
@@ -54,8 +72,8 @@ type
     procedure SetLines(AValue: TStrings);
     function EffectiveFontSize(const S: TTyStyleSet): Integer;
     function TextStartX(APPI: Integer): Integer;
-    // Codepoint length of a logical line index (0 for the synthetic empty line).
-    function LineLen(ALineIndex: Integer): Integer;
+    // WordWrap published setter (no-op if unchanged; repaints when toggled).
+    procedure SetWordWrap(AValue: Boolean);
     // Fire OnChange (after a model mutation).
     procedure DoChange;
     // Shared post-mutation routine: clamp caret, keep its line visible, repaint,
@@ -96,6 +114,8 @@ type
     // so headless probe subclasses can exercise it directly (like HasSelection).
     procedure DeleteSelection;
     // --- Pure per-line geometry helpers (headless-testable; no paint state) ---
+    // Codepoint length of a logical line index (0 for the synthetic empty line).
+    function LineLen(ALineIndex: Integer): Integer;
     // Floored at 1 so vertical layout never divides by zero.
     function LineHeight(APPI: Integer): Integer;
     // Always >= 1 (an empty model is one logical, visually present line).
@@ -118,6 +138,30 @@ type
     function IsWordCodepoint(const CP: string): Boolean;
     function NextWordBoundary(const ALine: string; AIdx: Integer): Integer;
     function PrevWordBoundary(const ALine: string; AIdx: Integer): Integer;
+    // --- Pure visual-row model (no paint/window state; tested headless) ---
+    // Build the ordered visual-row list for the whole document at the given
+    // content width (pixels available for text, padding already removed) and
+    // APPI. WordWrap=False: one full-width row per logical line. WordWrap=True:
+    // each logical line is greedily packed into [StartCol,EndCol) segments that
+    // fit AContentWidth, broken at the last word boundary at/before the fit point
+    // (char-break a single over-long word/CJK run). Always emits >= 1 row per
+    // logical line (an empty line emits one zero-width row). Pure: depends only
+    // on FLines, FWordWrap, AContentWidth, APPI and the (pure) measurement.
+    function BuildVisualRows(AContentWidth, APPI: Integer): TTyVisualRowArray;
+    // Map a logical caret (ALine,ACol) to the visual row index that owns it plus
+    // the device-x of the caret on that row. At a soft-wrap boundary column the
+    // caret binds to the EARLIER (line-end) row (tie-break), so a caret typed at
+    // end-of-row stays visually at the end of that row rather than jumping to the
+    // start of the next. AX is the same TextStartX-relative pixel x that
+    // ColPixelXAt would give for (line,col) — visual rows do not change the
+    // horizontal origin (horizontal scroll is applied later by the renderer).
+    procedure CaretToVisual(ALine, ACol, AContentWidth, APPI: Integer;
+      out AVisualRow, AX: Integer);
+    // Inverse of CaretToVisual: given a visual row index and a device-x, return
+    // the logical (line,col) under that x, clamped to the row's [StartCol,EndCol]
+    // segment so a click never escapes the row it landed on.
+    procedure VisualToCaret(AVisualRow, AX, AContentWidth, APPI: Integer;
+      out ALine, ACol: Integer);
     // Caret read/write for tests and later tasks.
     function CaretLine: Integer;
     function CaretCol: Integer;
@@ -215,6 +259,10 @@ type
     function CanRedo: Boolean;
   published
     property Lines: TStrings read GetLines write SetLines;
+    // Soft word-wrap toggle. Default False (no wrap; long lines later gain
+    // horizontal scrolling). True wraps long logical lines into multiple visual
+    // rows at word boundaries.
+    property WordWrap: Boolean read FWordWrap write SetWordWrap default False;
     property Enabled;
     property Font;
     property Align;
@@ -239,6 +287,7 @@ begin
   FSelAnchorCol := 0;
   FMouseSelecting := False;
   FTopLine := 0;
+  FWordWrap := False;
   FScrollBar := nil;
   FSyncingScroll := False;
   FMeasureBmp := nil;
@@ -1021,6 +1070,151 @@ begin
   Result := i;
 end;
 
+// ---- Pure visual-row model ----
+
+function TTyMemo.BuildVisualRows(AContentWidth, APPI: Integer): TTyVisualRowArray;
+// Greedy wrap. For each logical line, when WordWrap=False emit one full-width
+// row [0,LineLen). When WordWrap=True pack codepoints into the content width:
+//   - measure cumulative prefix widths once per line;
+//   - from a segment StartCol, find Fit = the largest col whose width relative to
+//     StartCol still fits AContentWidth (at least StartCol+1 so progress is
+//     guaranteed even for an over-long single glyph);
+//   - prefer to break at the last WORD boundary in (StartCol, Fit] so we cut at a
+//     space, not mid-word; if there is no boundary past StartCol within the fit
+//     (one long word / a CJK run), char-break at Fit.
+// An empty logical line (or a degenerate non-positive width) emits one row.
+var
+  li, n, Len, StartCol, Fit, BreakCol, Cand, BaseX: Integer;
+  Line: string;
+  Widths: TTyIntArray;
+
+  procedure AddRow(ALine, ASC, AEC: Integer);
+  begin
+    SetLength(Result, n + 1);
+    Result[n].Line := ALine;
+    Result[n].StartCol := ASC;
+    Result[n].EndCol := AEC;
+    Inc(n);
+  end;
+
+begin
+  Result := nil;
+  n := 0;
+  for li := 0 to LineCountLogical - 1 do
+  begin
+    if li < FLines.Count then
+      Line := FLines[li]
+    else
+      Line := '';
+    Len := UTF8Length(Line);
+
+    if (not FWordWrap) or (Len = 0) or (AContentWidth <= 0) then
+    begin
+      // No-wrap (identity), empty line, or unusable width => one full row.
+      AddRow(li, 0, Len);
+      Continue;
+    end;
+
+    Widths := MeasureLineWidths(Line, APPI);
+    StartCol := 0;
+    while StartCol < Len do
+    begin
+      BaseX := Widths[StartCol];
+      // Largest Fit in (StartCol, Len] with (Widths[Fit]-BaseX) <= AContentWidth.
+      Fit := StartCol;
+      while (Fit < Len) and (Widths[Fit + 1] - BaseX <= AContentWidth) do
+        Inc(Fit);
+      // Guarantee progress: at least one codepoint per row even if it overflows.
+      if Fit = StartCol then
+        Fit := StartCol + 1;
+      if Fit >= Len then
+      begin
+        AddRow(li, StartCol, Len);
+        StartCol := Len;
+        Continue;
+      end;
+      // Prefer the last word boundary in (StartCol, Fit]. NextWordBoundary walks
+      // forward to the end of the next word run; collect candidates up to Fit.
+      BreakCol := 0;
+      Cand := NextWordBoundary(Line, StartCol);
+      while (Cand <= Fit) and (Cand > StartCol) do
+      begin
+        BreakCol := Cand;
+        if Cand >= Len then Break;
+        Cand := NextWordBoundary(Line, Cand);
+        if Cand <= BreakCol then Break;   // no further progress (defensive)
+      end;
+      if (BreakCol > StartCol) and (BreakCol <= Fit) then
+        AddRow(li, StartCol, BreakCol)    // break at the word boundary
+      else
+        AddRow(li, StartCol, Fit);        // char-break (over-long word / CJK)
+      StartCol := Result[n - 1].EndCol;
+    end;
+  end;
+  // Defensive: a non-empty FLines must always yield at least one row.
+  if n = 0 then
+    AddRow(0, 0, 0);
+end;
+
+procedure TTyMemo.CaretToVisual(ALine, ACol, AContentWidth, APPI: Integer;
+  out AVisualRow, AX: Integer);
+var
+  Rows: TTyVisualRowArray;
+  i: Integer;
+  Line: string;
+begin
+  AVisualRow := 0;
+  AX := TextStartX(APPI);
+  Rows := BuildVisualRows(AContentWidth, APPI);
+  if Length(Rows) = 0 then Exit;
+  // Find the owning row. Tie-break: a caret at a soft-wrap boundary column binds
+  // to the EARLIER row (the one whose EndCol == ACol) rather than the next row
+  // whose StartCol == ACol. We accept a row when ACol is within [StartCol,EndCol];
+  // because we scan in order and accept the FIRST such row, the earlier row wins
+  // the tie at a shared boundary column.
+  AVisualRow := High(Rows);   // default: last row (handles col == final EndCol)
+  for i := 0 to High(Rows) do
+    if (Rows[i].Line = ALine) and (ACol >= Rows[i].StartCol)
+       and (ACol <= Rows[i].EndCol) then
+    begin
+      AVisualRow := i;
+      Break;
+    end;
+  // Device-x is identical to the plain per-line caret x (visual rows do not move
+  // the horizontal origin; horizontal scroll is applied later by the renderer).
+  if ALine < FLines.Count then
+    Line := FLines[ALine]
+  else
+    Line := '';
+  AX := ColPixelXAt(Line, ACol, APPI);
+end;
+
+procedure TTyMemo.VisualToCaret(AVisualRow, AX, AContentWidth, APPI: Integer;
+  out ALine, ACol: Integer);
+var
+  Rows: TTyVisualRowArray;
+  Line: string;
+  Col: Integer;
+begin
+  ALine := 0;
+  ACol := 0;
+  Rows := BuildVisualRows(AContentWidth, APPI);
+  if Length(Rows) = 0 then Exit;
+  if AVisualRow < 0 then AVisualRow := 0;
+  if AVisualRow > High(Rows) then AVisualRow := High(Rows);
+  ALine := Rows[AVisualRow].Line;
+  if ALine < FLines.Count then
+    Line := FLines[ALine]
+  else
+    Line := '';
+  // Resolve x to a codepoint on the logical line, then clamp into the row's
+  // [StartCol,EndCol] segment so the result never escapes the clicked row.
+  Col := ColIndexAtX(Line, AX, APPI);
+  if Col < Rows[AVisualRow].StartCol then Col := Rows[AVisualRow].StartCol;
+  if Col > Rows[AVisualRow].EndCol then Col := Rows[AVisualRow].EndCol;
+  ACol := Col;
+end;
+
 // ---- Word-delete mutators (pure UTF8 splice on the caret line; fall back to the
 // cross-line merge at the line boundary). Callers route through AfterEdit. ----
 
@@ -1242,6 +1436,13 @@ var
 begin
   S := CurrentStyle;
   Result := MulDiv(S.Padding.Left, APPI, 96);
+end;
+
+procedure TTyMemo.SetWordWrap(AValue: Boolean);
+begin
+  if FWordWrap = AValue then Exit;
+  FWordWrap := AValue;
+  Invalidate;
 end;
 
 function TTyMemo.LineHeight(APPI: Integer): Integer;
