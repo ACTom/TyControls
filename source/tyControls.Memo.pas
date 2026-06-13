@@ -45,8 +45,12 @@ type
     // True while the left button is held for drag-select (set in MouseDown,
     // cleared in MouseUp). Mirrors TTyEdit.FMouseSelecting.
     FMouseSelecting: Boolean;
-    // Index of the first logical line painted (top of the visible window).
-    FTopLine: Integer;
+    // Index of the first VISUAL ROW painted (top of the visible window). Indexes
+    // FVisualRows, not FLines: when WordWrap=False each logical line is exactly
+    // one visual row so FTopRow == the top logical line (identity with the old
+    // FTopLine); when WordWrap=True a long line spans several rows and FTopRow
+    // tracks the visual row. TopLine maps it back to a logical line for callers.
+    FTopRow: Integer;
     // Horizontal scroll offset in device px (>= 0). Only meaningful when
     // WordWrap=False: the whole rendered text/selection-band/caret shift left by
     // FScrollX so a long line follows the caret horizontally (mirrors
@@ -228,16 +232,28 @@ type
     // borderless control Height = ClientHeight at runtime, but ClientHeight can
     // lag SetBounds in headless tests without a native handle.
     function VisibleRows: Integer;
-    // Highest valid FTopLine = LineCountLogical - VisibleRows, floored 0.
+    // Total painted visual rows for the current model/wrap mode/content width
+    // (rebuilds the cache if stale). WordWrap=False: == LineCountLogical (one row
+    // per logical line). WordWrap=True: the sum of each line's wrap-segment count.
+    function TotalVisualRows(APPI: Integer): Integer;
+    // Highest valid FTopRow = TotalVisualRows - VisibleRows, floored 0. For
+    // WordWrap=False this equals LineCountLogical - VisibleRows (the old value).
     function MaxTopLine: Integer;
-    // Read accessor for FTopLine (tests / property).
+    // Raw FTopRow visual-row index (tests). TopLine maps it back to a logical line.
+    function TopRow: Integer;
+    // Logical line of the top visual row: FVisualRows[FTopRow].Line. For
+    // WordWrap=False FTopRow == the top logical line, so this is identity.
     function TopLine: Integer;
-    // Top-of-window setter with clamp + guarded scrollbar sync + repaint.
+    // The visual row index that currently owns the caret (via CaretToVisual).
+    function CaretVisualRow(APPI: Integer): Integer;
+    // Top-of-window setter with clamp + guarded scrollbar sync + repaint. AValue
+    // is a VISUAL-ROW index (so the scrollbar's Position feeds straight in).
     procedure SetTopLine(AValue: Integer);
-    // Create/update/hide the embedded vertical scrollbar (verbatim from ListBox,
-    // FItems.Count -> LineCountLogical).
+    // Create/update/hide the embedded vertical scrollbar. Range/position are over
+    // VISUAL ROWS now (TotalVisualRows, not LineCountLogical), so a wrapped single
+    // line can overflow and show the bar.
     procedure UpdateScrollBar;
-    // Scroll FTopLine so the caret line sits inside the visible window.
+    // Scroll FTopRow so the caret's VISUAL ROW sits inside the visible window.
     procedure EnsureCaretLineVisible(APPI: Integer);
     // --- Horizontal scroll (WordWrap=False only; mirrors TTyEdit.ClampScrollX /
     // EnsureCaretVisible generalised to the multi-line model). ---
@@ -329,7 +345,7 @@ begin
   FSelAnchorLine := 0;
   FSelAnchorCol := 0;
   FMouseSelecting := False;
-  FTopLine := 0;
+  FTopRow := 0;
   FScrollX := 0;
   FWordWrap := False;
   FVisualRows := nil;
@@ -500,9 +516,9 @@ begin
   ClampCaret;
   // The text model changed: any cached wrap layout is stale.
   InvalidateVisualRows;
-  // Clamp the window and refresh the scrollbar in case the line count changed.
-  if FTopLine > MaxTopLine then FTopLine := MaxTopLine;
-  if FTopLine < 0 then FTopLine := 0;
+  // Clamp the window and refresh the scrollbar in case the row count changed.
+  if FTopRow > MaxTopLine then FTopRow := MaxTopLine;
+  if FTopRow < 0 then FTopRow := 0;
   UpdateScrollBar;
   Invalidate;
 end;
@@ -724,20 +740,22 @@ end;
 
 procedure TTyMemo.EnsureCaretLineVisible(APPI: Integer);
 var
-  VR, MaxTop: Integer;
+  VR, MaxTop, CaretVR: Integer;
 begin
   VR := VisibleRows;
-  // Scroll up so the caret line is the new top.
-  if FCaretLine < FTopLine then
-    FTopLine := FCaretLine;
-  // Scroll down so the caret line is the last fully visible line: caret in
-  // [FTopLine, FTopLine+VR).
-  if FCaretLine > FTopLine + VR - 1 then
-    FTopLine := FCaretLine - VR + 1;
+  // Resolve the caret's VISUAL ROW (WordWrap=False: == FCaretLine, identity).
+  CaretVR := CaretVisualRow(APPI);
+  // Scroll up so the caret row is the new top.
+  if CaretVR < FTopRow then
+    FTopRow := CaretVR;
+  // Scroll down so the caret row is the last fully visible row: caret in
+  // [FTopRow, FTopRow+VR).
+  if CaretVR > FTopRow + VR - 1 then
+    FTopRow := CaretVR - VR + 1;
   // Never scroll past the last valid window / below 0.
   MaxTop := MaxTopLine;
-  if FTopLine > MaxTop then FTopLine := MaxTop;
-  if FTopLine < 0 then FTopLine := 0;
+  if FTopRow > MaxTop then FTopRow := MaxTop;
+  if FTopRow < 0 then FTopRow := 0;
 end;
 
 // ---- Horizontal scrolling (WordWrap=False only) ----
@@ -832,15 +850,45 @@ begin
   if Result < 1 then Result := 1;
 end;
 
+function TTyMemo.TotalVisualRows(APPI: Integer): Integer;
+begin
+  EnsureVisualRows(APPI);
+  Result := Length(FVisualRows);
+  if Result < 1 then Result := 1;   // a non-empty model always has >= 1 row
+end;
+
 function TTyMemo.MaxTopLine: Integer;
 begin
-  Result := LineCountLogical - VisibleRows;
+  // Row-based: TotalVisualRows - VisibleRows. For WordWrap=False this equals the
+  // old LineCountLogical - VisibleRows (one visual row per logical line).
+  Result := TotalVisualRows(Font.PixelsPerInch) - VisibleRows;
   if Result < 0 then Result := 0;
+end;
+
+function TTyMemo.TopRow: Integer;
+begin
+  Result := FTopRow;
 end;
 
 function TTyMemo.TopLine: Integer;
 begin
-  Result := FTopLine;
+  // Map the top visual row back to its logical line. WordWrap=False: FTopRow is
+  // the top logical line (identity). Guard against a stale/empty cache.
+  EnsureVisualRows(Font.PixelsPerInch);
+  if (FTopRow >= 0) and (FTopRow <= High(FVisualRows)) then
+    Result := FVisualRows[FTopRow].Line
+  else
+    Result := 0;
+end;
+
+function TTyMemo.CaretVisualRow(APPI: Integer): Integer;
+var
+  CW, VRow, CaretX: Integer;
+begin
+  EnsureVisualRows(APPI);
+  CW := ContentWidthFor(APPI);
+  CaretToVisual(FCaretLine, FCaretCol, CW, APPI, VRow, CaretX);
+  Result := VRow;
 end;
 
 procedure TTyMemo.SetTopLine(AValue: Integer);
@@ -850,14 +898,14 @@ begin
   Clamped := AValue;
   if Clamped < 0 then Clamped := 0;
   if Clamped > MaxTopLine then Clamped := MaxTopLine;
-  if FTopLine = Clamped then Exit;
-  FTopLine := Clamped;
+  if FTopRow = Clamped then Exit;
+  FTopRow := Clamped;
   // Sync scrollbar position (guard reentrancy).
   if (not FSyncingScroll) and (FScrollBar <> nil) and FScrollBar.Visible then
   begin
     FSyncingScroll := True;
     try
-      FScrollBar.Position := FTopLine;
+      FScrollBar.Position := FTopRow;
     finally
       FSyncingScroll := False;
     end;
@@ -878,14 +926,15 @@ end;
 
 procedure TTyMemo.UpdateScrollBar;
 var
-  VR, MaxPos, MaxTop: Integer;
+  VR, MaxPos, MaxTop, Total: Integer;
 begin
   VR := VisibleRows;
-  // Clamp FTopLine in case Lines were mutated directly (without SetLines).
-  MaxTop := LineCountLogical - VR;
+  Total := TotalVisualRows(Font.PixelsPerInch);
+  // Clamp FTopRow in case Lines were mutated directly (without SetLines).
+  MaxTop := Total - VR;
   if MaxTop < 0 then MaxTop := 0;
-  if FTopLine > MaxTop then FTopLine := MaxTop;
-  if LineCountLogical > VR then
+  if FTopRow > MaxTop then FTopRow := MaxTop;
+  if Total > VR then
   begin
     // Ensure scrollbar created.
     if FScrollBar = nil then
@@ -899,14 +948,14 @@ begin
     // Update DPI-dependent width and controller every call so DPI changes take effect.
     FScrollBar.Width := MulDiv(12, Font.PixelsPerInch, 96);
     FScrollBar.Controller := Self.Controller;
-    MaxPos := LineCountLogical - VR;
+    MaxPos := Total - VR;
     if MaxPos < 0 then MaxPos := 0;
     FSyncingScroll := True;
     try
       FScrollBar.Min := 0;
       FScrollBar.Max := MaxPos;
       FScrollBar.PageSize := VR;
-      FScrollBar.Position := FTopLine;
+      FScrollBar.Position := FTopRow;
     finally
       FSyncingScroll := False;
     end;
@@ -922,25 +971,23 @@ end;
 procedure TTyMemo.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
-  APPI, LH, Line: Integer;
-  S: string;
+  APPI, LH, Row, CW, NewLine, NewCol: Integer;
 begin
   if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   APPI := Font.PixelsPerInch;
   LH := LineHeight(APPI);
-  // Y -> logical line (mirror TTyListBox row math), clamped to the last line.
-  Line := FTopLine + (Y div LH);
-  if Line < 0 then Line := 0;
-  if Line > LineCountLogical - 1 then Line := LineCountLogical - 1;
-  if Line < FLines.Count then
-    S := FLines[Line]
-  else
-    S := '';
-  FCaretLine := Line;
-  // X -> nearest codepoint boundary on the resolved line (per-line ColIndexAtX).
-  FCaretCol := ColIndexAtX(S, X, APPI);
+  CW := ContentWidthFor(APPI);
+  EnsureVisualRows(APPI);
+  // Y -> VISUAL ROW (mirror TTyListBox row math, but over visual rows). For
+  // WordWrap=False FTopRow == the top logical line and each row is a full line,
+  // so this reduces to the legacy logical-line hit-test exactly. VisualToCaret
+  // resolves the (line,col) under X clamped to the row's segment.
+  Row := FTopRow + (Y div LH);
+  VisualToCaret(Row, X, CW, APPI, NewLine, NewCol);
+  FCaretLine := NewLine;
+  FCaretCol := NewCol;
   FDesiredCol := FCaretCol;
   // A fresh left-click sets the anchor onto the caret (collapsing any prior
   // selection) and begins a drag (mirrors TTyEdit.MouseDown). This is additive:
@@ -961,25 +1008,22 @@ end;
 
 procedure TTyMemo.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  APPI, LH, Line: Integer;
-  S: string;
+  APPI, LH, Row, CW, NewLine, NewCol: Integer;
 begin
   if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
   inherited MouseMove(Shift, X, Y);
   if not FMouseSelecting then Exit;
-  // Re-hit-test under the pointer using the SAME math as MouseDown; move the
-  // caret only — the anchor stays fixed so the selection extends as we drag.
+  // Re-hit-test under the pointer using the SAME visual-row math as MouseDown;
+  // move the caret only — the anchor stays fixed so the selection extends as we
+  // drag.
   APPI := Font.PixelsPerInch;
   LH := LineHeight(APPI);
-  Line := FTopLine + (Y div LH);
-  if Line < 0 then Line := 0;
-  if Line > LineCountLogical - 1 then Line := LineCountLogical - 1;
-  if Line < FLines.Count then
-    S := FLines[Line]
-  else
-    S := '';
-  FCaretLine := Line;
-  FCaretCol := ColIndexAtX(S, X, APPI);
+  CW := ContentWidthFor(APPI);
+  EnsureVisualRows(APPI);
+  Row := FTopRow + (Y div LH);
+  VisualToCaret(Row, X, CW, APPI, NewLine, NewCol);
+  FCaretLine := NewLine;
+  FCaretCol := NewCol;
   FDesiredCol := FCaretCol;
   Invalidate;
 end;
@@ -1004,13 +1048,13 @@ begin
     Result := True;
     Exit;
   end;
-  // WheelDelta > 0 = scroll up (TopLine decreases)
-  // WheelDelta < 0 = scroll down (TopLine increases)
+  // WheelDelta > 0 = scroll up (FTopRow decreases)
+  // WheelDelta < 0 = scroll down (FTopRow increases). Scrolls +/-3 VISUAL ROWS.
   if WheelDelta > 0 then
     Delta := -3
   else
     Delta := 3;
-  SetTopLine(FTopLine + Delta);
+  SetTopLine(FTopRow + Delta);
   Result := True;
 end;
 
@@ -1713,7 +1757,7 @@ procedure TTyMemo.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 // loop reduces to the legacy per-logical-line render and is BYTE-IDENTICAL (the
 // segment substring is the whole line, drawn at ContentRect.Left). When WordWrap=
 // True a long line yields several rows; each continuation segment is drawn at the
-// content left in its own LH-tall cell. FTopLine is the top VISUAL-ROW index.
+// content left in its own LH-tall cell. FTopRow is the top VISUAL-ROW index.
 //
 // Identity note: for a row with StartCol=0 the segment substring equals the line
 // and RowBaseW (= Widths[StartCol]) is 0, so every X (band + caret) collapses to
@@ -1780,11 +1824,11 @@ begin
     end;
 
     // Last visible visual row: fill the content height with LH-tall cells.
-    LastVisible := FTopLine + (ContentRect.Bottom - ContentTop) div LH;
+    LastVisible := FTopRow + (ContentRect.Bottom - ContentTop) div LH;
     if LastVisible > High(FVisualRows) then
       LastVisible := High(FVisualRows);
 
-    for vr := FTopLine to LastVisible do
+    for vr := FTopRow to LastVisible do
     begin
       if (vr < 0) or (vr > High(FVisualRows)) then Continue;
       RL := FVisualRows[vr].Line;
@@ -1797,7 +1841,7 @@ begin
       // Segment substring for this row: codepoints [RS, RE). For a full-width row
       // (RS=0, RE=LineLen) this is the whole line (identity with the old render).
       Seg := UTF8Copy(Line, RS + 1, RE - RS);
-      y := ContentTop + (vr - FTopLine) * LH;
+      y := ContentTop + (vr - FTopRow) * LH;
       // Horizontal scroll: shift the row's left edge left by FScrollX so a long
       // line follows the caret; the Right edge stays clipped at the content
       // right (DrawText clips to LineRect), so glyphs never spill past it. With
@@ -1883,7 +1927,7 @@ begin
     if (Focused or FForceFocused) and not HasSelection then
     begin
       CaretToVisual(FCaretLine, FCaretCol, FVisualRowsWidth, APPI, CaretVRow, CaretX);
-      if (CaretVRow >= FTopLine) and (CaretVRow <= LastVisible)
+      if (CaretVRow >= FTopRow) and (CaretVRow <= LastVisible)
         and (CaretVRow >= 0) and (CaretVRow <= High(FVisualRows)) then
       begin
         RL := FVisualRows[CaretVRow].Line;
@@ -1898,7 +1942,7 @@ begin
         // FScrollX = 0 (fitting text / WordWrap=True) leaves this byte-identical.
         CaretX := R.Left + ColPixelXAt(Line, FCaretCol, APPI)
           - (ColPixelXAt(Line, RS, APPI) - TextStartX(APPI)) - FScrollX;
-        y := ContentTop + (CaretVRow - FTopLine) * LH;
+        y := ContentTop + (CaretVRow - FTopRow) * LH;
         CaretRect := Rect(CaretX, y + P.Scale(2),
           CaretX + P.Scale(1), y + LH - P.Scale(2));
         P.FillBackground(CaretRect, Default(TTyFill), 0);

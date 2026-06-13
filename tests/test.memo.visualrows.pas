@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Graphics, LCLType, LazUTF8, TypInfo,
   BGRABitmap, BGRABitmapTypes, fpcunit, testregistry,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.Memo;
+  tyControls.ScrollBar, tyControls.Memo;
 type
   { Probe subclass exposing the pure visual-row model surface for headless tests.
     No window/paint needed: BuildVisualRows / CaretToVisual / VisualToCaret are
@@ -26,6 +26,19 @@ type
     // T2 render-loop probes.
     function ProbeLineHeight(APPI: Integer): Integer;
     procedure ProbeRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    // T4 vertical-scroll-over-visual-rows probes.
+    function ProbeVisibleRows: Integer;
+    function ProbeTotalVisualRows(APPI: Integer): Integer;
+    function ProbeMaxTopLine: Integer;
+    function ProbeTopRow: Integer;        // raw FTopRow visual-row index
+    function ProbeTopLine: Integer;       // mapped logical line of FTopRow
+    procedure ProbeSetTopLine(AValue: Integer);
+    procedure ProbeUpdateScrollBar;
+    procedure ProbeEnsureCaretLineVisible(APPI: Integer);
+    procedure ProbeSetCaret(ALine, ACol: Integer);
+    function ProbeCaretVisualRow(APPI: Integer): Integer;
+    function ProbeScrollBar: TTyScrollBar;
+    function ProbeDoMouseWheel(AWheelDelta: Integer): Boolean;
   end;
 
   TTyMemoVisualRowsTest = class(TTestCase)
@@ -48,6 +61,11 @@ type
     procedure TestWordWrapDefaultsFalseAndPublished;  // (h)
     procedure TestNoWrapRenderIdentity;               // (i)
     procedure TestWrapRendersSecondVisualRow;         // (j)
+    // --- T4 vertical scroll / scrollbar / wheel over visual rows ---
+    procedure TestNoWrapScrollIdentityRowsEqualLogical;  // (k) compat
+    procedure TestWrapScrollBarRangeOverVisualRows;      // (l)
+    procedure TestWrapWheelScrollsVisualRows;            // (m)
+    procedure TestWrapEnsureCaretRowVisible;             // (n)
   private
     // True if any pixel in horizontal band [X0..X1] at row Y is "light".
     function BandHasLightPixel(ABmp: TBGRABitmap; Y, X0, X1, AThresh: Integer): Boolean;
@@ -112,6 +130,74 @@ end;
 procedure TTyMemoVRProbe.ProbeRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+function TTyMemoVRProbe.ProbeVisibleRows: Integer;
+begin
+  Result := VisibleRows;
+end;
+
+function TTyMemoVRProbe.ProbeTotalVisualRows(APPI: Integer): Integer;
+begin
+  Result := TotalVisualRows(APPI);
+end;
+
+function TTyMemoVRProbe.ProbeMaxTopLine: Integer;
+begin
+  Result := MaxTopLine;
+end;
+
+function TTyMemoVRProbe.ProbeTopRow: Integer;
+begin
+  Result := TopRow;
+end;
+
+function TTyMemoVRProbe.ProbeTopLine: Integer;
+begin
+  Result := TopLine;
+end;
+
+procedure TTyMemoVRProbe.ProbeSetTopLine(AValue: Integer);
+begin
+  SetTopLine(AValue);
+end;
+
+procedure TTyMemoVRProbe.ProbeUpdateScrollBar;
+begin
+  UpdateScrollBar;
+end;
+
+procedure TTyMemoVRProbe.ProbeEnsureCaretLineVisible(APPI: Integer);
+begin
+  EnsureCaretLineVisible(APPI);
+end;
+
+procedure TTyMemoVRProbe.ProbeSetCaret(ALine, ACol: Integer);
+begin
+  SetCaret(ALine, ACol);
+end;
+
+function TTyMemoVRProbe.ProbeCaretVisualRow(APPI: Integer): Integer;
+begin
+  Result := CaretVisualRow(APPI);
+end;
+
+function TTyMemoVRProbe.ProbeScrollBar: TTyScrollBar;
+var
+  i: Integer;
+begin
+  Result := nil;
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyScrollBar then
+    begin
+      Result := TTyScrollBar(Controls[i]);
+      Exit;
+    end;
+end;
+
+function TTyMemoVRProbe.ProbeDoMouseWheel(AWheelDelta: Integer): Boolean;
+begin
+  Result := DoMouseWheel([], AWheelDelta, Point(0, 0));
 end;
 
 { TTyMemoVisualRowsTest }
@@ -489,6 +575,117 @@ begin
   finally
     Bmp.Free;
   end;
+end;
+
+// (k) COMPAT: WordWrap=False over N single-row logical lines (N > VisibleRows).
+// TotalVisualRows == LineCountLogical, MaxTopLine == LineCount-VR, and FTopRow
+// indexes a row whose .Line equals the row index (identity). This is the
+// assertion that the existing scroll tests stay green under the row rename.
+procedure TTyMemoVisualRowsTest.TestNoWrapScrollIdentityRowsEqualLogical;
+var
+  L: TStringList;
+  i, VR, Total, N: Integer;
+begin
+  SetUpMemo('TyMemo { background:#FFFFFF; color:#000000; padding:0px; font-size:14px; }');
+  FMemo.ProbeSetWordWrap(False);
+  VR := FMemo.ProbeVisibleRows;
+  N := VR + 10;
+  L := TStringList.Create;
+  try
+    for i := 0 to N - 1 do
+      L.Add('line ' + IntToStr(i));   // each fits at width 200 -> one row
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+  Total := FMemo.ProbeTotalVisualRows(96);
+  AssertEquals('no-wrap: TotalVisualRows == LineCountLogical', N, Total);
+  AssertEquals('no-wrap: MaxTopLine == LineCount - VR', N - VR, FMemo.ProbeMaxTopLine);
+  // Set FTopRow to 3; the mapped TopLine must equal 3 (row index == logical line).
+  FMemo.ProbeSetTopLine(3);
+  AssertEquals('no-wrap: FTopRow == 3', 3, FMemo.ProbeTopRow);
+  AssertEquals('no-wrap: TopLine maps to logical line 3', 3, FMemo.ProbeTopLine);
+end;
+
+// (l) WRAP: a SINGLE logical line wrapping to > VisibleRows visual rows makes the
+// scrollbar visible with Max == TotalVisualRows - VisibleRows (it was 0 before,
+// since one logical line never overflowed the logical-line count).
+procedure TTyMemoVisualRowsTest.TestWrapScrollBarRangeOverVisualRows;
+var
+  Line: string;
+  i, VR, Total: Integer;
+  SB: TTyScrollBar;
+begin
+  SetUpMemo('TyMemo { background:#FFFFFF; color:#000000; padding:0px; font-size:14px; }');
+  FMemo.ProbeSetWordWrap(True);
+  // Build a single long line of many short words so it wraps into many rows.
+  Line := '';
+  for i := 0 to 79 do
+    Line := Line + 'wo' + IntToStr(i) + ' ';
+  LoadLines([Line]);
+  VR := FMemo.ProbeVisibleRows;
+  Total := FMemo.ProbeTotalVisualRows(96);
+  AssertTrue('wrap: one logical line wraps to > VisibleRows rows', Total > VR);
+  FMemo.ProbeUpdateScrollBar;
+  SB := FMemo.ProbeScrollBar;
+  AssertTrue('wrap: scrollbar created for wrapped overflow', SB <> nil);
+  AssertTrue('wrap: scrollbar visible for wrapped overflow', SB.Visible);
+  AssertEquals('wrap: scrollbar Max == TotalVisualRows - VisibleRows',
+    Total - VR, SB.Max);
+  AssertEquals('wrap: MaxTopLine == TotalVisualRows - VisibleRows',
+    Total - VR, FMemo.ProbeMaxTopLine);
+end;
+
+// (m) WRAP: wheel scrolls +/-3 VISUAL rows; scrollbar Position tracks FTopRow.
+procedure TTyMemoVisualRowsTest.TestWrapWheelScrollsVisualRows;
+var
+  Line: string;
+  i, VR, Total: Integer;
+  SB: TTyScrollBar;
+begin
+  SetUpMemo('TyMemo { background:#FFFFFF; color:#000000; padding:0px; font-size:14px; }');
+  FMemo.ProbeSetWordWrap(True);
+  Line := '';
+  for i := 0 to 79 do
+    Line := Line + 'wo' + IntToStr(i) + ' ';
+  LoadLines([Line]);
+  VR := FMemo.ProbeVisibleRows;
+  Total := FMemo.ProbeTotalVisualRows(96);
+  AssertTrue('wrap-wheel setup needs > VisibleRows rows', Total > VR);
+  FMemo.ProbeUpdateScrollBar;
+  FMemo.ProbeSetTopLine(0);
+  AssertEquals('wrap: FTopRow starts at 0', 0, FMemo.ProbeTopRow);
+  FMemo.ProbeDoMouseWheel(-120);            // wheel down
+  AssertEquals('wrap: wheel down scrolls 3 visual rows', 3, FMemo.ProbeTopRow);
+  SB := FMemo.ProbeScrollBar;
+  AssertEquals('wrap: scrollbar Position tracks FTopRow', 3, SB.Position);
+  FMemo.ProbeDoMouseWheel(120);             // wheel up
+  AssertEquals('wrap: wheel up scrolls back to 0', 0, FMemo.ProbeTopRow);
+end;
+
+// (n) WRAP: EnsureCaretLineVisible keeps the caret's VISUAL ROW inside the
+// visible window [FTopRow, FTopRow+VR-1]. Caret at end-of-(long-)line sits on a
+// late visual row; ensuring visibility scrolls FTopRow down to include it.
+procedure TTyMemoVisualRowsTest.TestWrapEnsureCaretRowVisible;
+var
+  Line: string;
+  i, VR, CaretVR, Top: Integer;
+begin
+  SetUpMemo('TyMemo { background:#FFFFFF; color:#000000; padding:0px; font-size:14px; }');
+  FMemo.ProbeSetWordWrap(True);
+  Line := '';
+  for i := 0 to 79 do
+    Line := Line + 'wo' + IntToStr(i) + ' ';
+  LoadLines([Line]);
+  VR := FMemo.ProbeVisibleRows;
+  FMemo.ProbeSetTopLine(0);
+  // Caret to end of the single long line: it lives on the last visual row.
+  FMemo.ProbeSetCaret(0, UTF8Length(Line));
+  FMemo.ProbeEnsureCaretLineVisible(96);
+  CaretVR := FMemo.ProbeCaretVisualRow(96);
+  Top := FMemo.ProbeTopRow;
+  AssertTrue('wrap: caret visual row >= FTopRow', CaretVR >= Top);
+  AssertTrue('wrap: caret visual row <= FTopRow + VR - 1', CaretVR <= Top + VR - 1);
 end;
 
 initialization
