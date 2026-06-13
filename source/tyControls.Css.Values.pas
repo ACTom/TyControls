@@ -198,6 +198,7 @@ var
   p: Integer;
   args: TStringList;
   a: string;
+  aF: Single;
 begin
   E := Trim(Expr);
   if E = '' then
@@ -231,6 +232,22 @@ begin
       end;
       if (fn = 'mix') and (args.Count = 3) then
         Exit(TyMix(TyEvalColor(args[0], Vars), TyEvalColor(args[1], Vars), ParsePctOrNum(args[2])));
+      if (fn = 'rgb') and (args.Count = 3) then
+        Exit(TyRGB(ClampByte(ParsePctOrNum(args[0])),
+                   ClampByte(ParsePctOrNum(args[1])),
+                   ClampByte(ParsePctOrNum(args[2]))));
+      if (fn = 'rgba') and (args.Count = 4) then
+      begin
+        a := Trim(args[3]);
+        if (a <> '') and (a[Length(a)] = '%') then
+          aF := ParsePctOrNum(a) / 100.0
+        else
+          aF := ParsePctOrNum(a);
+        Exit(TyRGBA(ClampByte(ParsePctOrNum(args[0])),
+                    ClampByte(ParsePctOrNum(args[1])),
+                    ClampByte(ParsePctOrNum(args[2])),
+                    ClampByte(aF * 255)));
+      end;
       raise Exception.CreateFmt('Unknown color function: %s/%d', [fn, args.Count]);
     finally
       args.Free;

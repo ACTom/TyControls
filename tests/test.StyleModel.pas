@@ -23,6 +23,8 @@ type
     procedure TestLoadNineSliceBackgroundImage;
     procedure TestLoadFromCssParseErrorPreservesPrevious;
     procedure TestDuplicateRuleLastWins;
+    procedure TestBackgroundColorAlias;
+    procedure TestBackgroundColorRgb;
   end;
 
   TTestStyleResolve = class(TTestCase)
@@ -178,6 +180,31 @@ begin
     m.LoadFromCss('TyButton { color:#111111; } TyButton { color:#222222; }');
     s := m.ResolveStyle('TyButton','',[]);
     AssertEquals('later duplicate wins', $22, TyRedOf(s.TextColor));
+  finally m.Free; end;
+end;
+
+procedure TTestStyleLoad.TestBackgroundColorAlias;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T { background-color: #FF0000; }');
+    s := m.ResolveStyle('T','',[]);
+    AssertTrue('bg present', tpBackground in s.Present);
+    AssertTrue('solid', s.Background.Kind = tfkSolid);
+    AssertEquals('r', $FF, TyRedOf(s.Background.Color));
+  finally m.Free; end;
+end;
+
+procedure TTestStyleLoad.TestBackgroundColorRgb;   // alias + rgb together
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T { background-color: rgb(0, 128, 255); }');
+    s := m.ResolveStyle('T','',[]);
+    AssertEquals('g', 128, TyGreenOf(s.Background.Color));
+    AssertEquals('b', 255, TyBlueOf(s.Background.Color));
   finally m.Free; end;
 end;
 

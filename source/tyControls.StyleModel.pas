@@ -303,7 +303,7 @@ begin
   Result := True;
   prop := LowerCase(Trim(AProp));
   raw := Trim(ARawValue);
-  if prop = 'background' then
+  if (prop = 'background') or (prop = 'background-color') then
   begin
     if LowerCase(Copy(raw, 1, 16)) = 'linear-gradient(' then
       AStyle.Background := ParseLinearGradient(raw, Vars)

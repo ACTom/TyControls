@@ -14,6 +14,7 @@ type
     procedure TestAlpha;
     procedure TestMix;
     procedure TestAlphaPercentArg;
+    procedure TestRgbRgbaFuncs;
   end;
 
   TTestCssValuesEval = class(TTestCase)
@@ -117,6 +118,21 @@ begin
   AssertEquals('alpha 0.5 -> 128', 128, TyAlphaOf(c));
   c := TyEvalColor('alpha(#FF0000, 0)', nil);
   AssertEquals('alpha 0 -> 0', 0, TyAlphaOf(c));
+end;
+
+procedure TTestCssValuesColors.TestRgbRgbaFuncs;
+var c: TTyColor;
+begin
+  c := TyEvalColor('rgb(18, 52, 86)', nil);     // 18=$12 52=$34 86=$56
+  AssertEquals('rgb r', $12, TyRedOf(c));
+  AssertEquals('rgb g', $34, TyGreenOf(c));
+  AssertEquals('rgb b', $56, TyBlueOf(c));
+  AssertEquals('rgb opaque', $FF, TyAlphaOf(c));
+  c := TyEvalColor('rgba(255, 0, 0, 0.5)', nil);
+  AssertEquals('rgba r', $FF, TyRedOf(c));
+  AssertEquals('rgba a ~128', 128, TyAlphaOf(c));
+  c := TyEvalColor('rgba(0, 0, 0, 50%)', nil);   // percent alpha
+  AssertEquals('rgba pct a ~128', 128, TyAlphaOf(c));
 end;
 
 procedure TTestCssValuesEval.SetUp;
