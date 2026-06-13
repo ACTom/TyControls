@@ -1,0 +1,370 @@
+unit test.tabcontrol;
+{$mode objfpc}{$H+}
+interface
+uses
+  Classes, SysUtils, Types, Graphics, Forms, Controls, StdCtrls, LCLType,
+  fpcunit, testregistry,
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Controller,
+  tyControls.Base, tyControls.Panel, tyControls.TabControl;
+
+type
+  { Subclass that exposes protected/private helpers for white-box tests }
+  TTyTabControlAccess = class(TTyTabControl)
+  public
+    function StyleTypeKey: string;
+    procedure CallAdjustClientRect(var ARect: TRect);
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure CallMouseDown(Button: TMouseButton; X, Y: Integer);
+    procedure CallMouseMove(X, Y: Integer);
+    procedure CallMouseLeave;
+    procedure SimulateKeyDown(AKey: Word);
+  end;
+
+  { Change-count probe }
+  TTabChangeProbe = class
+  public
+    Count: Integer;
+    procedure Handle(Sender: TObject);
+  end;
+
+  TTyTabControlTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FTab: TTyTabControl;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTypeKey;
+    procedure TestAddTabReturnsPageAndAutoSelectsFirst;
+    procedure TestTabIndexSwitchesPageVisibility;
+    procedure TestTabIndexClamps;
+    procedure TestKeyboardSwitchesTabs;
+    procedure TestHeaderRectsLayout;
+    procedure TestAdjustClientRectInset;
+    procedure TestMouseDownSelectsTab;
+    procedure TestActiveTabRendersActiveStyle;
+    procedure TestPagesHostChildren;
+  end;
+
+implementation
+
+{ TTabChangeProbe }
+
+procedure TTabChangeProbe.Handle(Sender: TObject);
+begin
+  Inc(Count);
+end;
+
+{ TTyTabControlAccess }
+
+function TTyTabControlAccess.StyleTypeKey: string;
+begin
+  Result := GetStyleTypeKey;
+end;
+
+procedure TTyTabControlAccess.CallAdjustClientRect(var ARect: TRect);
+begin
+  AdjustClientRect(ARect);
+end;
+
+procedure TTyTabControlAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TTyTabControlAccess.CallMouseDown(Button: TMouseButton; X, Y: Integer);
+begin
+  MouseDown(Button, [], X, Y);
+end;
+
+procedure TTyTabControlAccess.CallMouseMove(X, Y: Integer);
+begin
+  MouseMove([], X, Y);
+end;
+
+procedure TTyTabControlAccess.CallMouseLeave;
+begin
+  MouseLeave;
+end;
+
+procedure TTyTabControlAccess.SimulateKeyDown(AKey: Word);
+begin
+  KeyDown(AKey, []);
+end;
+
+{ TTyTabControlTest }
+
+procedure TTyTabControlTest.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 400, 300);
+  FTab := TTyTabControl.Create(FForm);
+  FTab.Parent := FForm;
+  FTab.SetBounds(0, 0, 300, 200);
+  FTab.Font.PixelsPerInch := 96;
+end;
+
+procedure TTyTabControlTest.TearDown;
+begin
+  FForm.Free;
+end;
+
+{ TestTypeKey: GetStyleTypeKey returns 'TyTabControl' }
+procedure TTyTabControlTest.TestTypeKey;
+var
+  Acc: TTyTabControlAccess;
+begin
+  Acc := TTyTabControlAccess.Create(FForm);
+  Acc.Parent := FForm;
+  try
+    AssertEquals('TyTabControl', Acc.StyleTypeKey);
+  finally
+    Acc.Free;
+  end;
+end;
+
+{ TestAddTabReturnsPageAndAutoSelectsFirst:
+  AddTab x2 -> TabCount=2; first add sets TabIndex=0; Pages[0].Visible=True; Pages[1].Visible=False }
+procedure TTyTabControlTest.TestAddTabReturnsPageAndAutoSelectsFirst;
+var
+  P0, P1: TTyPanel;
+begin
+  P0 := FTab.AddTab('First');
+  P1 := FTab.AddTab('Second');
+  AssertEquals('TabCount = 2', 2, FTab.TabCount);
+  AssertEquals('TabIndex = 0 after first add', 0, FTab.TabIndex);
+  AssertNotNull('Pages[0] not nil', FTab.Pages[0]);
+  AssertNotNull('Pages[1] not nil', FTab.Pages[1]);
+  AssertSame('AddTab returns same panel as Pages[0]', FTab.Pages[0], P0);
+  AssertSame('AddTab returns same panel as Pages[1]', FTab.Pages[1], P1);
+  AssertTrue('Pages[0] visible (active)', FTab.Pages[0].Visible);
+  AssertFalse('Pages[1] hidden (inactive)', FTab.Pages[1].Visible);
+end;
+
+{ TestTabIndexSwitchesPageVisibility:
+  TabIndex:=1 -> Pages[1] visible, Pages[0] hidden; OnChange fired once;
+  setting same index again -> no extra fire. }
+procedure TTyTabControlTest.TestTabIndexSwitchesPageVisibility;
+var
+  Probe: TTabChangeProbe;
+begin
+  FTab.AddTab('A');
+  FTab.AddTab('B');
+  Probe := TTabChangeProbe.Create;
+  try
+    FTab.OnChange := @Probe.Handle;
+    FTab.TabIndex := 1;
+    AssertTrue('Pages[1] visible after TabIndex:=1', FTab.Pages[1].Visible);
+    AssertFalse('Pages[0] hidden after TabIndex:=1', FTab.Pages[0].Visible);
+    AssertEquals('OnChange fired once', 1, Probe.Count);
+    FTab.TabIndex := 1;
+    AssertEquals('OnChange not fired again for same index', 1, Probe.Count);
+  finally
+    Probe.Free;
+  end;
+end;
+
+{ TestTabIndexClamps:
+  TabIndex:=99 -> 1 (last); TabIndex:=-1 -> allowed, no page visible }
+procedure TTyTabControlTest.TestTabIndexClamps;
+begin
+  FTab.AddTab('A');
+  FTab.AddTab('B');
+  FTab.TabIndex := 99;
+  AssertEquals('99 clamps to 1 (last)', 1, FTab.TabIndex);
+  AssertTrue('Pages[1] visible after clamped 99', FTab.Pages[1].Visible);
+
+  FTab.TabIndex := -1;
+  AssertEquals('-1 allowed', -1, FTab.TabIndex);
+  AssertFalse('Pages[0] not visible when TabIndex=-1', FTab.Pages[0].Visible);
+  AssertFalse('Pages[1] not visible when TabIndex=-1', FTab.Pages[1].Visible);
+end;
+
+{ TestKeyboardSwitchesTabs:
+  VK_RIGHT/VK_LEFT via SimulateKeyDown; clamping at ends }
+procedure TTyTabControlTest.TestKeyboardSwitchesTabs;
+var
+  Acc: TTyTabControlAccess;
+begin
+  Acc := TTyTabControlAccess.Create(FForm);
+  Acc.Parent := FForm;
+  Acc.Font.PixelsPerInch := 96;
+  Acc.SetBounds(0, 0, 300, 200);
+  try
+    Acc.AddTab('A');
+    Acc.AddTab('B');
+    Acc.AddTab('C');
+    AssertEquals('initial TabIndex = 0', 0, Acc.TabIndex);
+
+    Acc.SimulateKeyDown(VK_RIGHT);
+    AssertEquals('RIGHT: 0 -> 1', 1, Acc.TabIndex);
+
+    Acc.SimulateKeyDown(VK_RIGHT);
+    AssertEquals('RIGHT: 1 -> 2', 2, Acc.TabIndex);
+
+    Acc.SimulateKeyDown(VK_RIGHT);
+    AssertEquals('RIGHT clamps at last (2)', 2, Acc.TabIndex);
+
+    Acc.SimulateKeyDown(VK_LEFT);
+    AssertEquals('LEFT: 2 -> 1', 1, Acc.TabIndex);
+
+    Acc.SimulateKeyDown(VK_LEFT);
+    AssertEquals('LEFT: 1 -> 0', 0, Acc.TabIndex);
+
+    Acc.SimulateKeyDown(VK_LEFT);
+    AssertEquals('LEFT clamps at 0', 0, Acc.TabIndex);
+  finally
+    Acc.Free;
+  end;
+end;
+
+{ TestHeaderRectsLayout:
+  Two tabs 'AB' and 'CD' @96ppi.
+  rect(0).Left=0; rect(1).Left=rect(0).Right; both heights=28; widths >= 48 }
+procedure TTyTabControlTest.TestHeaderRectsLayout;
+var
+  R0, R1: TRect;
+begin
+  FTab.AddTab('AB');
+  FTab.AddTab('CD');
+  R0 := FTab.TyTabHeaderRect(0);
+  R1 := FTab.TyTabHeaderRect(1);
+
+  AssertEquals('rect(0).Left = 0', 0, R0.Left);
+  AssertEquals('rect(0).Top = 0', 0, R0.Top);
+  AssertEquals('rect(0).Bottom = 28 (TabHeight@96ppi)', 28, R0.Bottom);
+  AssertEquals('rect(1).Left = rect(0).Right', R0.Right, R1.Left);
+  AssertEquals('rect(1).Bottom = 28', 28, R1.Bottom);
+  AssertTrue('rect(0).Width >= 48', (R0.Right - R0.Left) >= 48);
+  AssertTrue('rect(1).Width >= 48', (R1.Right - R1.Left) >= 48);
+end;
+
+{ TestAdjustClientRectInset:
+  Direct call; @96ppi TabHeight=28 -> ARect.Top increases by 28 }
+procedure TTyTabControlTest.TestAdjustClientRectInset;
+var
+  Acc: TTyTabControlAccess;
+  ARect: TRect;
+begin
+  Acc := TTyTabControlAccess.Create(FForm);
+  Acc.Parent := FForm;
+  Acc.Font.PixelsPerInch := 96;
+  Acc.SetBounds(0, 0, 300, 200);
+  try
+    ARect := Rect(0, 0, 300, 200);
+    Acc.CallAdjustClientRect(ARect);
+    AssertEquals('ARect.Top inset by 28 (TabHeight 28 @96ppi)', 28, ARect.Top);
+  finally
+    Acc.Free;
+  end;
+end;
+
+{ TestMouseDownSelectsTab:
+  Simulate MouseDown at a point inside rect(1) -> TabIndex=1 }
+procedure TTyTabControlTest.TestMouseDownSelectsTab;
+var
+  Acc: TTyTabControlAccess;
+  R1: TRect;
+  MidX, MidY: Integer;
+begin
+  Acc := TTyTabControlAccess.Create(FForm);
+  Acc.Parent := FForm;
+  Acc.Font.PixelsPerInch := 96;
+  Acc.SetBounds(0, 0, 300, 200);
+  try
+    Acc.AddTab('Alpha');
+    Acc.AddTab('Beta');
+    R1 := Acc.TyTabHeaderRect(1);
+    MidX := (R1.Left + R1.Right) div 2;
+    MidY := (R1.Top + R1.Bottom) div 2;
+    Acc.CallMouseDown(mbLeft, MidX, MidY);
+    AssertEquals('MouseDown in header 1 -> TabIndex=1', 1, Acc.TabIndex);
+  finally
+    Acc.Free;
+  end;
+end;
+
+{ TestActiveTabRendersActiveStyle:
+  CSS: TyTabControl dark bg; TyTab transparent; TyTab:active blue.
+  2 tabs, TabIndex=0 -> probe inside header 0 -> blue-dominant; header 1 -> not. }
+procedure TTyTabControlTest.TestActiveTabRendersActiveStyle;
+var
+  Ctl: TTyStyleController;
+  Acc: TTyTabControlAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+  R0, R1: TRect;
+  ProbeX0, ProbeY0, ProbeX1, ProbeY1: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  Acc := TTyTabControlAccess.Create(FForm);
+  Acc.Parent := FForm;
+  try
+    Ctl.LoadThemeCss(
+      'TyTabControl { background: #181818; border-width: 0px; } ' +
+      'TyTab { background: alpha(#000000,0); color: #AAAAAA; } ' +
+      'TyTab:active { background: #3B82F6; color: #FFFFFF; }');
+    Acc.Controller := Ctl;
+    Acc.Font.PixelsPerInch := 96;
+    Acc.SetBounds(0, 0, 300, 200);
+    Acc.AddTab('Left');
+    Acc.AddTab('Right');
+    { TabIndex = 0 (already set by AddTab first) }
+    AssertEquals('TabIndex=0 before render', 0, Acc.TabIndex);
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(300, 200);
+    Bmp.Canvas.Brush.Color := clBlack;
+    Bmp.Canvas.FillRect(0, 0, 300, 200);
+
+    Acc.RenderTo(Bmp.Canvas, Rect(0, 0, 300, 200), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      R0 := Acc.TyTabHeaderRect(0);
+      R1 := Acc.TyTabHeaderRect(1);
+      { Probe well inside each header, away from text area }
+      ProbeX0 := R0.Left + (R0.Right - R0.Left) * 3 div 4;
+      ProbeY0 := (R0.Top + R0.Bottom) div 2;
+      ProbeX1 := R1.Left + (R1.Right - R1.Left) * 3 div 4;
+      ProbeY1 := (R1.Top + R1.Bottom) div 2;
+
+      Px := Reread.GetPixel(ProbeX0, ProbeY0);
+      AssertTrue(Format('active tab0 blue dominant: B > 180 (R=%d G=%d B=%d)',
+        [Px.red, Px.green, Px.blue]), Px.blue > 180);
+      AssertTrue(Format('active tab0: R < 120 (R=%d G=%d B=%d)',
+        [Px.red, Px.green, Px.blue]), Px.red < 120);
+
+      Px := Reread.GetPixel(ProbeX1, ProbeY1);
+      AssertTrue(Format('inactive tab1 not blue-dominant: B <= 180 or B <= R+50 (R=%d G=%d B=%d)',
+        [Px.red, Px.green, Px.blue]),
+        (Px.blue <= 180) or (Px.blue <= Px.red + 50));
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ TestPagesHostChildren:
+  A TButton parented to Pages[0] -> Pages[0].ControlCount = 1 }
+procedure TTyTabControlTest.TestPagesHostChildren;
+var
+  Btn: TButton;
+begin
+  FTab.AddTab('Tab1');
+  FTab.AddTab('Tab2');
+  Btn := TButton.Create(FTab.Pages[0]);
+  Btn.Parent := FTab.Pages[0];
+  AssertEquals('Pages[0].ControlCount = 1', 1, FTab.Pages[0].ControlCount);
+end;
+
+initialization
+  RegisterTest(TTyTabControlTest);
+end.

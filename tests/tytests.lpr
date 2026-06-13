@@ -12,7 +12,8 @@ uses
   test.progressbar,
   test.toggleswitch,
   test.trackbar,
-  test.groupbox;
+  test.groupbox,
+  test.tabcontrol;
 
 type
   TTyTestRunner = class(TTestRunner)
