@@ -7,6 +7,9 @@ uses
   tyControls.Panel;
 
 type
+  TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
+    var AllowClose: Boolean) of object;
+
   TTyTabControl = class(TTyCustomControl)
   private
     FCaptions: TStringList;   // parallel arrays
@@ -16,11 +19,18 @@ type
     FHoverTab: Integer;       // -1 = none
     FOnChange: TNotifyEvent;
     FDestroying: Boolean;
+    FTabsClosable: Boolean;
+    FOnTabClose: TTyTabCloseEvent;
+    FHeaderRects: array of TRect;
+    FCloseRects:  array of TRect;
 
     function  IndexOfPage(APage: TTyPanel): Integer;
     procedure RemovePageInternal(AIndex: Integer; AFree: Boolean);
     procedure SetTabIndex(AValue: Integer);
     procedure SetTabHeight(AValue: Integer);
+    procedure SetTabsClosable(AValue: Boolean);
+    procedure RebuildLayout(APPI: Integer);
+    procedure DoCloseTab(AIndex: Integer);
     function  TabHPx(APPI: Integer): Integer;
     function  GetPage(AIndex: Integer): TTyPanel;
     function  TabCaptionWidth(const ACaption: string;
@@ -48,11 +58,14 @@ type
     function TabCaption(AIndex: Integer): string;
     { Public pure-ish geometry for tests: device px, (0,0)-local }
     function TyTabHeaderRect(AIndex: Integer): TRect;
+    function TyTabCloseRect(AIndex: Integer): TRect;
 
     property TabIndex: Integer read FTabIndex write SetTabIndex;
     property Pages[AIndex: Integer]: TTyPanel read GetPage;
   published
     property TabHeight: Integer read FTabHeight write SetTabHeight default 28;
+    property TabsClosable: Boolean read FTabsClosable write SetTabsClosable default False;
+    property OnTabClose: TTyTabCloseEvent read FOnTabClose write FOnTabClose;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property TabStop default True;
     property Align;
@@ -72,6 +85,7 @@ begin
   FTabIndex  := -1;
   FTabHeight := 28;
   FHoverTab  := -1;
+  FTabsClosable := False;
   TabStop    := True;
   Width      := 300;
   Height     := 200;
@@ -149,34 +163,94 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-{ Geometry: device px, (0,0)-local.
-  Headers laid left-to-right; width = text width + 2×Scale(12), minimum Scale(48). }
-function TTyTabControl.TyTabHeaderRect(AIndex: Integer): TRect;
-var
-  PPI, TabH, MinW, Pad, TW, X, I: Integer;
-  TabStyle: TTyStyleSet;
+procedure TTyTabControl.SetTabsClosable(AValue: Boolean);
 begin
-  PPI   := Font.PixelsPerInch;
-  TabH  := TabHPx(PPI);
-  Pad   := MulDiv(12, PPI, 96);    // padding each side
-  MinW  := MulDiv(48, PPI, 96);    // minimum width
+  if FTabsClosable = AValue then Exit;
+  FTabsClosable := AValue;
+  Invalidate;
+end;
+
+{ Single-pass cached layout. Builds FHeaderRects/FCloseRects for all tabs.
+  Geometry: device px, (0,0)-local. Headers laid left-to-right;
+  width = text width + 2×Scale(12), minimum Scale(48). When closable, a
+  close-glyph slot is reserved on the right of each header. }
+procedure TTyTabControl.RebuildLayout(APPI: Integer);
+var
+  TabH, Pad, MinW, CloseSize, Gap, CloseSlot, Margin: Integer;
+  TabStyle: TTyStyleSet;
+  I, X, TW, HW, Cy: Integer;
+begin
+  SetLength(FHeaderRects, FCaptions.Count);
+  SetLength(FCloseRects, FCaptions.Count);
+
+  TabH      := TabHPx(APPI);
+  Pad       := MulDiv(12, APPI, 96);
+  MinW      := MulDiv(48, APPI, 96);
+  CloseSize := MulDiv(14, APPI, 96);
+  Gap       := MulDiv(6,  APPI, 96);
+  Margin    := MulDiv(6,  APPI, 96);
+  CloseSlot := CloseSize + Gap;
 
   TabStyle := ActiveController.Model.ResolveStyle('TyTab', '', [tysNormal]);
 
   X := 0;
-  for I := 0 to AIndex do
+  for I := 0 to FCaptions.Count - 1 do
   begin
-    TW := TabCaptionWidth(FCaptions[I], TabStyle, PPI);
-    TW := TW + 2 * Pad;
-    if TW < MinW then TW := MinW;
-    if I = AIndex then
+    TW := TabCaptionWidth(FCaptions[I], TabStyle, APPI) + 2 * Pad;
+    if FTabsClosable then
     begin
-      Result := Rect(X, 0, X + TW, TabH);
-      Exit;
-    end;
-    Inc(X, TW);
+      Inc(TW, CloseSlot);
+      if TW < (MinW + CloseSlot) then TW := MinW + CloseSlot;
+    end
+    else
+      if TW < MinW then TW := MinW;
+
+    HW := TW;
+    FHeaderRects[I] := Rect(X, 0, X + HW, TabH);
+
+    if FTabsClosable then
+    begin
+      Cy := (TabH - CloseSize) div 2;
+      FCloseRects[I] := Rect(X + HW - Margin - CloseSize, Cy,
+                             X + HW - Margin, Cy + CloseSize);
+    end
+    else
+      FCloseRects[I] := Rect(0, 0, 0, 0);
+
+    Inc(X, HW);
   end;
-  Result := Rect(0, 0, 0, 0); // should not reach here
+end;
+
+function TTyTabControl.TyTabHeaderRect(AIndex: Integer): TRect;
+begin
+  RebuildLayout(Font.PixelsPerInch);
+  if (AIndex < 0) or (AIndex >= Length(FHeaderRects)) then
+    Result := Rect(0, 0, 0, 0)
+  else
+    Result := FHeaderRects[AIndex];
+end;
+
+function TTyTabControl.TyTabCloseRect(AIndex: Integer): TRect;
+begin
+  if not FTabsClosable then
+    Exit(Rect(0, 0, 0, 0));
+  RebuildLayout(Font.PixelsPerInch);
+  if (AIndex < 0) or (AIndex >= Length(FCloseRects)) then
+    Result := Rect(0, 0, 0, 0)
+  else
+    Result := FCloseRects[AIndex];
+end;
+
+procedure TTyTabControl.DoCloseTab(AIndex: Integer);
+var
+  AllowClose: Boolean;
+begin
+  if (AIndex < 0) or (AIndex >= FCaptions.Count) then Exit;
+  AllowClose := True;
+  if Assigned(FOnTabClose) then
+    FOnTabClose(Self, AIndex, AllowClose);
+  if AllowClose then
+    RemoveTab(AIndex);
 end;
 
 procedure TTyTabControl.AdjustClientRect(var ARect: TRect);
@@ -329,7 +403,7 @@ var
   BoxStyle, TabStyle: TTyStyleSet;
   R: TRect;
   W, H, TabH, I: Integer;
-  HdrRect: TRect;
+  HdrRect, TextRect: TRect;
   TabStates: TTyStateSet;
 begin
   P := TTyPainter.Create;
@@ -347,10 +421,11 @@ begin
     DrawFrame(P, Rect(0, TabH - MulDiv(1, APPI, 96), W, H), BoxStyle);
 
     { Draw each tab header }
+    RebuildLayout(APPI);
+
     for I := 0 to FCaptions.Count - 1 do
     begin
-      { Build local rect for this header (reuse geometry logic inline) }
-      HdrRect := TyTabHeaderRect(I);
+      HdrRect := FHeaderRects[I];
 
       { Determine state }
       TabStates := [];
@@ -367,12 +442,18 @@ begin
       if tpBackground in TabStyle.Present then
         P.FillBackground(HdrRect, TabStyle.Background, 0);
 
-      { Draw caption centered in header }
-      P.DrawText(HdrRect,
+      { Draw caption centered in header (clipped to left of close glyph) }
+      TextRect := HdrRect;
+      if FTabsClosable then
+        TextRect.Right := FCloseRects[I].Left;
+      P.DrawText(TextRect,
         FCaptions[I],
         TabStyle.FontName, TabStyle.FontSize, TabStyle.FontWeight,
         TabStyle.TextColor,
         taCenter, tlCenter, True);
+
+      if FTabsClosable then
+        P.DrawGlyph(FCloseRects[I], tgClose, TabStyle.TextColor, 1);
     end;
 
     P.EndPaint;
@@ -391,7 +472,6 @@ procedure TTyTabControl.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   PPI, TabH, I: Integer;
-  HdrRect: TRect;
 begin
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
@@ -400,12 +480,17 @@ begin
     TabH := TabHPx(PPI);
     if Y < TabH then
     begin
+      RebuildLayout(PPI);
       for I := 0 to FCaptions.Count - 1 do
       begin
-        HdrRect := TyTabHeaderRect(I);
-        if (X >= HdrRect.Left) and (X < HdrRect.Right) then
+        if (X >= FHeaderRects[I].Left) and (X < FHeaderRects[I].Right) then
         begin
-          TabIndex := I;
+          if FTabsClosable and
+             (X >= FCloseRects[I].Left) and (X < FCloseRects[I].Right) and
+             (Y >= FCloseRects[I].Top) and (Y < FCloseRects[I].Bottom) then
+            DoCloseTab(I)
+          else
+            TabIndex := I;
           Break;
         end;
       end;
@@ -421,7 +506,6 @@ end;
 procedure TTyTabControl.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   PPI, TabH, NewHover, I: Integer;
-  HdrRect: TRect;
 begin
   inherited MouseMove(Shift, X, Y);
   PPI  := Font.PixelsPerInch;
@@ -429,15 +513,13 @@ begin
   NewHover := -1;
   if Y < TabH then
   begin
+    RebuildLayout(PPI);
     for I := 0 to FCaptions.Count - 1 do
-    begin
-      HdrRect := TyTabHeaderRect(I);
-      if (X >= HdrRect.Left) and (X < HdrRect.Right) then
+      if (X >= FHeaderRects[I].Left) and (X < FHeaderRects[I].Right) then
       begin
         NewHover := I;
         Break;
       end;
-    end;
   end;
   if NewHover <> FHoverTab then
   begin

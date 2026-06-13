@@ -54,9 +54,39 @@ type
     procedure TestRemoveTabBeforeActiveKeepsActivePageNoOnChange;
     procedure TestRemoveTabOutOfRangeNoOp;
     procedure TestExternalFreePageHardensArrays;
+    procedure TestNonClosableGeometryUnchanged;
+    procedure TestClosableWidensHeaderAndCloseRectInside;
+    procedure TestClickCloseFiresEventAndRemoves;
+    procedure TestClickCloseCanceledKeepsTab;
+    procedure TestClickHeaderBodyStillSelectsWhenClosable;
   end;
 
 implementation
+
+type
+  TTabCloseProbe = class
+  public
+    LastIndex: Integer;
+    Count: Integer;
+    Cancel: Boolean;
+    constructor Create;
+    procedure Handle(Sender: TObject; AIndex: Integer; var AllowClose: Boolean);
+  end;
+
+constructor TTabCloseProbe.Create;
+begin
+  inherited Create;
+  LastIndex := -99;
+  Count := 0;
+  Cancel := False;
+end;
+
+procedure TTabCloseProbe.Handle(Sender: TObject; AIndex: Integer; var AllowClose: Boolean);
+begin
+  Inc(Count);
+  LastIndex := AIndex;
+  if Cancel then AllowClose := False;
+end;
 
 { TTabChangeProbe }
 
@@ -477,6 +507,99 @@ begin
   AssertEquals('caption[0] A', 'A', FTab.TabCaption(0));
   AssertEquals('caption[1] C (B detached)', 'C', FTab.TabCaption(1));
   FTab.Invalidate;
+end;
+
+procedure TTyTabControlTest.TestNonClosableGeometryUnchanged;
+var R0, R1, C0: TRect;
+begin
+  FTab.AddTab('AB');
+  FTab.AddTab('CD');
+  AssertFalse('default not closable', FTab.TabsClosable);
+  R0 := FTab.TyTabHeaderRect(0);
+  R1 := FTab.TyTabHeaderRect(1);
+  AssertEquals('rect(0).Left=0', 0, R0.Left);
+  AssertEquals('rect(0).Bottom=28', 28, R0.Bottom);
+  AssertEquals('rect(1).Left = rect(0).Right', R0.Right, R1.Left);
+  AssertTrue('width >= 48', (R0.Right - R0.Left) >= 48);
+  C0 := FTab.TyTabCloseRect(0);
+  AssertTrue('close rect empty when not closable', (C0.Right - C0.Left) = 0);
+end;
+
+procedure TTyTabControlTest.TestClosableWidensHeaderAndCloseRectInside;
+var WNarrow, WClosable: Integer; R0, C0: TRect;
+begin
+  FTab.AddTab('AB');
+  WNarrow := FTab.TyTabHeaderRect(0).Right - FTab.TyTabHeaderRect(0).Left;
+  FTab.TabsClosable := True;
+  R0 := FTab.TyTabHeaderRect(0);
+  WClosable := R0.Right - R0.Left;
+  AssertTrue('closable header wider', WClosable > WNarrow);
+  C0 := FTab.TyTabCloseRect(0);
+  AssertTrue('close rect non-empty', (C0.Right - C0.Left) > 0);
+  AssertTrue('close left >= header left', C0.Left >= R0.Left);
+  AssertTrue('close right <= header right', C0.Right <= R0.Right);
+  AssertTrue('close within header vertically', (C0.Top >= R0.Top) and (C0.Bottom <= R0.Bottom));
+end;
+
+procedure TTyTabControlTest.TestClickCloseFiresEventAndRemoves;
+var Acc: TTyTabControlAccess; Probe: TTabCloseProbe; C1: TRect;
+begin
+  Acc := TTyTabControlAccess.Create(FForm);
+  Acc.Parent := FForm; Acc.Font.PixelsPerInch := 96; Acc.SetBounds(0,0,300,200);
+  Probe := TTabCloseProbe.Create;
+  try
+    Acc.TabsClosable := True;
+    Acc.OnTabClose := @Probe.Handle;
+    Acc.AddTab('A'); Acc.AddTab('B'); Acc.AddTab('C');
+    C1 := Acc.TyTabCloseRect(1);
+    Acc.CallMouseDown(mbLeft, (C1.Left+C1.Right) div 2, (C1.Top+C1.Bottom) div 2);
+    AssertEquals('OnTabClose fired once', 1, Probe.Count);
+    AssertEquals('event index = 1', 1, Probe.LastIndex);
+    AssertEquals('tab removed -> 2 tabs', 2, Acc.TabCount);
+    AssertEquals('caption[1] now C', 'C', Acc.TabCaption(1));
+  finally
+    Probe.Free; Acc.Free;
+  end;
+end;
+
+procedure TTyTabControlTest.TestClickCloseCanceledKeepsTab;
+var Acc: TTyTabControlAccess; Probe: TTabCloseProbe; C0: TRect;
+begin
+  Acc := TTyTabControlAccess.Create(FForm);
+  Acc.Parent := FForm; Acc.Font.PixelsPerInch := 96; Acc.SetBounds(0,0,300,200);
+  Probe := TTabCloseProbe.Create;
+  try
+    Acc.TabsClosable := True;
+    Probe.Cancel := True;
+    Acc.OnTabClose := @Probe.Handle;
+    Acc.AddTab('A'); Acc.AddTab('B');
+    C0 := Acc.TyTabCloseRect(0);
+    Acc.CallMouseDown(mbLeft, (C0.Left+C0.Right) div 2, (C0.Top+C0.Bottom) div 2);
+    AssertEquals('event fired', 1, Probe.Count);
+    AssertEquals('canceled -> still 2 tabs', 2, Acc.TabCount);
+  finally
+    Probe.Free; Acc.Free;
+  end;
+end;
+
+procedure TTyTabControlTest.TestClickHeaderBodyStillSelectsWhenClosable;
+var Acc: TTyTabControlAccess; R1, C1: TRect; BodyX: Integer;
+begin
+  Acc := TTyTabControlAccess.Create(FForm);
+  Acc.Parent := FForm; Acc.Font.PixelsPerInch := 96; Acc.SetBounds(0,0,300,200);
+  try
+    Acc.TabsClosable := True;
+    Acc.AddTab('Alpha'); Acc.AddTab('Beta');
+    R1 := Acc.TyTabHeaderRect(1);
+    C1 := Acc.TyTabCloseRect(1);
+    BodyX := R1.Left + 4;
+    AssertTrue('body x left of close rect', BodyX < C1.Left);
+    Acc.CallMouseDown(mbLeft, BodyX, (R1.Top+R1.Bottom) div 2);
+    AssertEquals('header body click selects tab 1', 1, Acc.TabIndex);
+    AssertEquals('no tab removed', 2, Acc.TabCount);
+  finally
+    Acc.Free;
+  end;
 end;
 
 initialization
