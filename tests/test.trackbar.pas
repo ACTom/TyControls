@@ -51,6 +51,8 @@ type
   TTyTrackBarPixelTest = class(TTestCase)
   published
     procedure TestThumbPixelBlueAtPos0;
+    { A1 regression: non-zero origin ARect must not displace thumb relative to track }
+    procedure TestOffsetOriginThumbPositionConsistent;
   end;
 
 implementation
@@ -378,6 +380,83 @@ begin
       AssertTrue('thumb pixel R < 120 (not red)',        PxThumb.red < 120);
 
       AssertTrue('groove pixel NOT blue-dominant (B <= R+80)', PxGroove.blue <= PxGroove.red + 80);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ TestOffsetOriginThumbPositionConsistent
+  Regression for A1: TrackBar RenderTo used ARect-absolute coords, so a
+  non-zero origin would displace the thumb rectangle on the local bitmap.
+
+  ARect = Rect(20, 5, 220, 29) — a 200x24 control starting at (20,5).
+  Render into a 240x34 bitmap.  Position=0 → thumb covers local x=0..12.
+
+  At 96 ppi, thumb centre in local bitmap: (6, 12).
+  In destination bitmap: (20+6, 5+12) = (26, 17).
+
+  Assert (26, 17) is blue-dominant (thumb).
+  Assert (20+100, 5+12) = (120, 17) is NOT blue-dominant (groove).
+  Before the fix, with ARect-absolute, ThumbR would use R.Left=20 as offset,
+  so the thumb would appear at local x=20..32 → blit destination (40..52),
+  and (26,17) would be groove-dark. }
+procedure TTyTrackBarPixelTest.TestOffsetOriginThumbPositionConsistent;
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Bar: TTyTrackBarProbe;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  PxThumb, PxGroove: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyTrackBar { background: #202020; border-width: 0px; border-radius: 0px; }' +
+      'TyTrackThumb { background: #3B82F6; border-radius: 0px; }');
+    Bar := TTyTrackBarProbe.Create(Form);
+    Bar.Parent := Form;
+    Bar.Controller := Ctl;
+    Bar.SetBounds(0, 0, 200, 24);
+    Bar.Font.PixelsPerInch := 96;
+    Bar.Min := 0;
+    Bar.Max := 100;
+    Bar.Position := 0;
+
+    { Render into a 240x34 bitmap with ARect starting at (20, 5). }
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(240, 34);
+    Bmp.Canvas.Brush.Color := clBlack;
+    Bmp.Canvas.FillRect(0, 0, 240, 34);
+    Bar.RenderTo(Bmp.Canvas, Rect(20, 5, 220, 29), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      { (20+6, 5+12) = (26, 17): inside thumb (local x=0..12) → blue }
+      PxThumb := Reread.GetPixel(26, 17);
+      { (20+100, 5+12) = (120, 17): groove (local x=100) → dark }
+      PxGroove := Reread.GetPixel(120, 17);
+
+      AssertTrue(
+        Format('offset-origin thumb B > 180 (blue, got R=%d G=%d B=%d)',
+          [PxThumb.red, PxThumb.green, PxThumb.blue]),
+        PxThumb.blue > 180);
+      AssertTrue(
+        Format('offset-origin thumb R < 120 (not red, got R=%d G=%d B=%d)',
+          [PxThumb.red, PxThumb.green, PxThumb.blue]),
+        PxThumb.red < 120);
+
+      AssertTrue(
+        Format('offset-origin groove NOT blue-dominant (got R=%d G=%d B=%d)',
+          [PxGroove.red, PxGroove.green, PxGroove.blue]),
+        PxGroove.blue <= PxGroove.red + 80);
     finally
       Reread.Free;
     end;

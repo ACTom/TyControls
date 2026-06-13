@@ -107,17 +107,21 @@ procedure TTyProgressBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: In
 var
   P: TTyPainter;
   S, FillS: TTyStyleSet;
-  R, FillR: TRect;
+  R, TrackR, FillR: TRect;
+  BW: Integer;
 begin
   P := TTyPainter.Create;
   try
-    R := ARect;
-    P.BeginPaint(ACanvas, R, APPI);
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
+    // Inset the fill track by the border width so the fill doesn't paint over the border
+    BW := P.Scale(S.BorderWidth);
+    TrackR := Rect(R.Left + BW, R.Top + BW, R.Right - BW, R.Bottom - BW);
     // Resolve fill style for the progress fill
     FillS := ActiveController.Model.ResolveStyle('TyProgressFill', '', []);
-    FillR := TyProgressFillRect(R, FMin, FMax, FPosition);
+    FillR := TyProgressFillRect(TrackR, FMin, FMax, FPosition);
     if FillR.Right > FillR.Left then
       P.FillBackground(FillR, FillS.Background, FillS.BorderRadius);
     P.EndPaint;

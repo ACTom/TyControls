@@ -224,10 +224,11 @@ begin
       FScrollBar.Parent := Self;
       FScrollBar.Kind := sbVertical;
       FScrollBar.Align := alRight;
-      FScrollBar.Width := MulDiv(12, Font.PixelsPerInch, 96);
-      FScrollBar.Controller := Self.Controller;
       FScrollBar.OnChange := @ScrollBarChange;
     end;
+    // Update DPI-dependent width and controller every call so DPI changes take effect
+    FScrollBar.Width := MulDiv(12, Font.PixelsPerInch, 96);
+    FScrollBar.Controller := Self.Controller;
     MaxPos := FItems.Count - VR;
     if MaxPos < 0 then MaxPos := 0;
     FSyncingScroll := True;
@@ -377,8 +378,8 @@ begin
 
   P := TTyPainter.Create;
   try
-    R := ARect;
-    P.BeginPaint(ACanvas, R, APPI);
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI);
     BoxStyle := CurrentStyle;
     DrawFrame(P, R, BoxStyle);
 

@@ -232,16 +232,17 @@ procedure TTyCaptionButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: 
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  GlyphRect: TRect;
+  R, GlyphRect: TRect;
   GlyphSize: Integer;
   CX, CY: Integer;
   DrawGlyph: Boolean;
 begin
   P := TTyPainter.Create;
   try
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
-    DrawFrame(P, ARect, S);
+    DrawFrame(P, R, S);
     { Determine whether glyph should be drawn }
     if FShowGlyphOnHoverOnly then
       DrawGlyph := FHover or FPressed
@@ -250,8 +251,8 @@ begin
     if DrawGlyph then
     begin
       GlyphSize := P.Scale(10);
-      CX := ARect.Left + (ARect.Right - ARect.Left - GlyphSize) div 2;
-      CY := ARect.Top + (ARect.Bottom - ARect.Top - GlyphSize) div 2;
+      CX := R.Left + (R.Right - R.Left - GlyphSize) div 2;
+      CY := R.Top + (R.Bottom - R.Top - GlyphSize) div 2;
       GlyphRect := Rect(CX, CY, CX + GlyphSize, CY + GlyphSize);
       P.DrawGlyph(GlyphRect, KindGlyph, S.TextColor, P.Scale(1));
     end;
@@ -324,18 +325,19 @@ procedure TTyTitleBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integ
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  TextRect: TRect;
+  R, TextRect: TRect;
   W, H: Integer;
 begin
   W := ARect.Right - ARect.Left;
   H := ARect.Bottom - ARect.Top;
   P := TTyPainter.Create;
   try
+    R := Rect(0, 0, W, H);
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
-    DrawFrame(P, ARect, S);
-    TextRect := Rect(ARect.Left + P.Scale(8), ARect.Top,
-                     ARect.Left + W - 3 * FButtonWidth, ARect.Top + H);
+    DrawFrame(P, R, S);
+    TextRect := Rect(R.Left + P.Scale(8), R.Top,
+                     R.Left + W - 3 * FButtonWidth, R.Top + H);
     P.DrawText(TextRect, FCaption, S.FontName, S.FontSize, S.FontWeight,
       S.TextColor, taLeftJustify, tlCenter, True);
     P.EndPaint;

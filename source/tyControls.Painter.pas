@@ -222,7 +222,7 @@ begin
     if s <> AText then
       s := s + '...';
   end;
-  FillChar(style, SizeOf(style), 0);
+  style := Default(TTextStyle);
   style.Alignment := AHAlign;
   style.Layout := AVAlign;
   style.SingleLine := True;
@@ -236,7 +236,6 @@ var
   th: Single;
   pad: Integer;
   l, t, r, b, cx, cy, w, h, m: Single;
-  pts: array of TPointF;
 begin
   if FBmp = nil then
     Exit;
@@ -294,7 +293,6 @@ begin
           PointF(cx, b), PointF(r - w * 0.25, b - h * 0.35)], px, th);
       end;
   end;
-  pts := nil;
 end;
 
 procedure TTyPainter.BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect);

@@ -44,6 +44,8 @@ type
   published
     procedure TestOffKnobPixelWhite;
     procedure TestOnKnobPixelWhiteAndTrackBlue;
+    { A1 regression: non-zero origin ARect must not displace knob relative to track }
+    procedure TestOffsetOriginKnobPositionConsistent;
   end;
 
 implementation
@@ -275,6 +277,86 @@ begin
 
       AssertTrue('ON track left: B > 180 (blue dominant)', PxTrack.blue > 180);
       AssertTrue('ON track left: R < 120 (not red)',       PxTrack.red < 120);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ TestOffsetOriginKnobPositionConsistent
+  Regression for the A1 split-bug: frame used ARect-absolute coords while knob
+  used (0,0)-local coords, so a non-zero ARect.Left/Top would misplace the knob.
+
+  Setup: ARect = Rect(10, 10, 54, 34) — a 44x24 control starting at (10,10).
+  Render into a 64x44 bitmap.  BeginPaint creates a 44x24 local bitmap; EndPaint
+  blits it at (10,10) on the 64x44 canvas.
+
+  At 96 ppi, OFF state:
+    Margin = Scale(3) = 3 dev-px  →  knob covers local x=3..21, y=3..21.
+    Centre of knob in local bitmap: (12, 12).
+    Centre of knob in destination  : (10+12, 10+12) = (22, 22).
+
+  Assert (22, 22) is knob-white (R,G,B all > 200).
+  Assert (10+36, 10+12) = (46, 22) is track-dark (R < 100).
+  Before the fix, the frame would have been painted offset by +10,+10 inside the
+  44x24 local bitmap (mostly outside it), so pixel (22,22) would be track-dark,
+  not knob-white. }
+procedure TTyToggleSwitchPixelTest.TestOffsetOriginKnobPositionConsistent;
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Sw: TTyToggleSwitchProbe;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  PxKnob, PxTrack: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyToggleSwitch { background: #444444; color: #FFFFFF; border-width: 0px; }' +
+      'TyToggleSwitch:active { background: #3B82F6; }');
+    Sw := TTyToggleSwitchProbe.Create(Form);
+    Sw.Parent := Form;
+    Sw.Controller := Ctl;
+    Sw.Checked := False;
+
+    { Render into a 64x44 bitmap with ARect starting at (10,10). }
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(64, 44);
+    Bmp.Canvas.Brush.Color := clBlack;
+    Bmp.Canvas.FillRect(0, 0, 64, 44);
+    Sw.RenderTo(Bmp.Canvas, Rect(10, 10, 54, 34), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      { (10+12, 10+12) = (22,22): knob centre — must be white }
+      PxKnob  := Reread.GetPixel(22, 22);
+      { (10+36, 10+12) = (46,22): right-side track — must be dark }
+      PxTrack := Reread.GetPixel(46, 22);
+
+      AssertTrue(
+        Format('offset-origin OFF knob R > 200 (white, got R=%d G=%d B=%d)',
+          [PxKnob.red, PxKnob.green, PxKnob.blue]),
+        PxKnob.red > 200);
+      AssertTrue(
+        Format('offset-origin OFF knob G > 200 (white, got R=%d G=%d B=%d)',
+          [PxKnob.red, PxKnob.green, PxKnob.blue]),
+        PxKnob.green > 200);
+      AssertTrue(
+        Format('offset-origin OFF knob B > 200 (white, got R=%d G=%d B=%d)',
+          [PxKnob.red, PxKnob.green, PxKnob.blue]),
+        PxKnob.blue > 200);
+
+      AssertTrue(
+        Format('offset-origin track right: R < 100 (dark, got R=%d G=%d B=%d)',
+          [PxTrack.red, PxTrack.green, PxTrack.blue]),
+        PxTrack.red < 100);
     finally
       Reread.Free;
     end;

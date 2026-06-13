@@ -174,9 +174,11 @@ begin
     FPopupList := TTyListBox.Create(FPopup);
     FPopupList.Parent := FPopup;
     FPopupList.Align := alClient;
-    FPopupList.Controller := Self.Controller;
     FPopupList.OnChange := @PopupListChange;
   end;
+
+  { Sync controller every DropDown so DPI/theme changes take effect }
+  FPopupList.Controller := Self.Controller;
 
   { Sync items and selection — detach OnChange to prevent recursion }
   FPopupList.OnChange := nil;
@@ -271,8 +273,8 @@ var
 begin
   P := TTyPainter.Create;
   try
-    R := ARect;
-    P.BeginPaint(ACanvas, R, APPI);
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
     BtnW := P.Scale(ButtonWidthLogical);

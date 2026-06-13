@@ -97,8 +97,8 @@ var
 begin
   P := TTyPainter.Create;
   try
-    R := ARect;
-    P.BeginPaint(ACanvas, R, APPI);
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
 
     // Build a track style with a pill border-radius.

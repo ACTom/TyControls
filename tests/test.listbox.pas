@@ -29,6 +29,13 @@ type
     procedure TestScrollBarSyncsTopIndex;
     procedure TestItemsShrinkClampsTopIndex;
   end;
+
+  { A2 regression: embedded scrollbar must inherit controller and DPI width }
+  TTyListBoxScrollBarPropTest = class(TTestCase)
+  published
+    procedure TestScrollBarInheritsController;
+    procedure TestScrollBarWidthUpdatesOnDPIChange;
+  end;
 implementation
 
 type
@@ -447,6 +454,82 @@ begin
   end;
 end;
 
+{ TTyListBoxScrollBarPropTest }
+
+{ TestScrollBarInheritsController
+  A2 regression: after UpdateScrollBar the embedded scrollbar's Controller
+  must equal the listbox's Controller (not nil from stale creation-time value).
+
+  Setup: 10-item listbox (needs scrollbar), assign a fresh TTyStyleController,
+  call CallUpdateScrollBar, assert FindScrollBar.Controller = the controller. }
+procedure TTyListBoxScrollBarPropTest.TestScrollBarInheritsController;
+var
+  Ctl: TTyStyleController;
+  LB: TListBoxAccess;
+  F: TForm;
+  SB: TTyScrollBar;
+  I: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  F := TForm.CreateNew(nil);
+  try
+    LB := TListBoxAccess.Create(F);
+    LB.Parent := F;
+    LB.Font.PixelsPerInch := 96;
+    LB.ItemHeight := 24;
+    LB.SetBounds(0, 0, 120, 100);
+    for I := 0 to 9 do
+      LB.Items.Add('Item ' + IntToStr(I));
+    { Assign controller BEFORE UpdateScrollBar so we test the propagation path }
+    LB.Controller := Ctl;
+    LB.CallUpdateScrollBar;
+    SB := LB.FindScrollBar;
+    AssertNotNull('scrollbar must exist for overflow list', SB);
+    AssertTrue('embedded scrollbar Controller must equal listbox Controller',
+      SB.Controller = Ctl);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ TestScrollBarWidthUpdatesOnDPIChange
+  A2 regression: scrollbar width must be recomputed on every UpdateScrollBar call
+  so a DPI change takes effect without a recreation.
+
+  Simulate DPI change by changing Font.PixelsPerInch from 96 to 192, then call
+  CallUpdateScrollBar, and assert the scrollbar width = MulDiv(12, 192, 96) = 24. }
+procedure TTyListBoxScrollBarPropTest.TestScrollBarWidthUpdatesOnDPIChange;
+var
+  LB: TListBoxAccess;
+  F: TForm;
+  SB: TTyScrollBar;
+  I: Integer;
+begin
+  F := TForm.CreateNew(nil);
+  try
+    LB := TListBoxAccess.Create(F);
+    LB.Parent := F;
+    LB.Font.PixelsPerInch := 96;
+    LB.ItemHeight := 24;
+    LB.SetBounds(0, 0, 120, 100);
+    for I := 0 to 9 do
+      LB.Items.Add('Item ' + IntToStr(I));
+    LB.CallUpdateScrollBar;
+    SB := LB.FindScrollBar;
+    AssertNotNull('scrollbar must exist', SB);
+    AssertEquals('scrollbar width at 96 ppi = 12', 12, SB.Width);
+
+    { Simulate DPI change to 192 ppi }
+    LB.Font.PixelsPerInch := 192;
+    LB.CallUpdateScrollBar;
+    AssertEquals('scrollbar width at 192 ppi = 24', 24, SB.Width);
+  finally
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyListBoxTest);
+  RegisterTest(TTyListBoxScrollBarPropTest);
 end.

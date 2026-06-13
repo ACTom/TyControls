@@ -3,7 +3,7 @@ unit test.controls.combobox;
 interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLIntf, fpcunit, testregistry,
-  tyControls.Base, tyControls.ComboBox, tyControls.ListBox;
+  tyControls.Base, tyControls.Controller, tyControls.ComboBox, tyControls.ListBox;
 type
   { Expose protected Click and RenderTo for tests }
   TComboAccess = class(TTyComboBox)
@@ -45,6 +45,8 @@ type
     { --- race guard tests --- }
     procedure TestCloseUpThenImmediateClickStaysClosed;
     procedure TestCloseUpThenAgedClickReopens;
+    { A2 regression: DropDown must sync Controller to popup list every call }
+    procedure TestDropDownSyncsControllerToPopup;
   end;
 implementation
 
@@ -247,6 +249,40 @@ begin
   FCombo.DoClick;
   AssertTrue('DroppedDown=True after Click with aged close-up tick', FCombo.DroppedDown);
   FCombo.CloseUp; // cleanup
+end;
+
+{ TestDropDownSyncsControllerToPopup
+  A2 regression: DropDown must propagate Controller to the popup listbox every
+  time it is called, not only at popup-creation time.  This ensures a controller
+  assigned after the first DropDown (or changed between drops) is honoured.
+
+  Approach:
+   1. DropDown once so the popup is created (Controller is nil at that point).
+   2. CloseUp.
+   3. Assign a real TTyStyleController.
+   4. DropDown again.
+   5. PopupList.Controller must equal the combo's Controller. }
+procedure TTyComboBoxTest.TestDropDownSyncsControllerToPopup;
+var
+  Ctl: TTyStyleController;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    { First open with no controller — creates the popup form + listbox }
+    FCombo.DropDown;
+    FCombo.CloseUp;
+
+    { Assign controller after the popup already exists }
+    FCombo.Controller := Ctl;
+    FCombo.DropDown;
+
+    AssertTrue('PopupList.Controller must equal combo Controller after second DropDown',
+      FCombo.PopupList.Controller = Ctl);
+
+    FCombo.CloseUp; // cleanup
+  finally
+    Ctl.Free;
+  end;
 end;
 
 initialization
