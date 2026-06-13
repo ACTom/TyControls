@@ -38,6 +38,7 @@ type
     property KnobAnimProgress: Single read GetKnobAnimProgress;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     procedure Toggle;
     procedure Click; override;
     // When enabled and the control has a window handle, flipping Checked
@@ -82,6 +83,14 @@ begin
   FKnobAnim.Easing := teEaseOutCubic;
   Width := 44;
   Height := 24;
+end;
+
+destructor TTyToggleSwitch.Destroy;
+begin
+  // FTimer is owned by Self (would be freed by DestroyComponents), but free it
+  // explicitly first so the OnTimer callback can never fire mid-teardown.
+  FreeAndNil(FTimer);
+  inherited Destroy;
 end;
 
 function TTyToggleSwitch.GetStyleTypeKey: string;
