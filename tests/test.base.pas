@@ -2,8 +2,9 @@ unit test.base;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Controls, fpcunit, testregistry,
-  tyControls.Types, tyControls.Base;
+  Classes, SysUtils, Controls, TypInfo, fpcunit, testregistry,
+  tyControls.Types, tyControls.Base,
+  tyControls.Panel, tyControls.GroupBox, tyControls.ComboBox;
 type
   TTestStyleControl = class(TTyCustomControl)
   protected
@@ -21,6 +22,7 @@ type
     procedure TestPressedAddsActive;
     procedure TestDisabledState;
     procedure TestStyleTypeKey;
+    procedure TestBaselinePropertiesPublished;
   end;
 implementation
 
@@ -107,6 +109,25 @@ begin
   finally
     ctl.Free;
   end;
+end;
+
+procedure TBaseTest.TestBaselinePropertiesPublished;
+{ Baseline props must be PUBLISHED (streamable + Object Inspector) on controls
+  that previously omitted them. RTTI: GetPropInfo returns nil for a non-published
+  property. }
+var P: TTyPanel; G: TTyGroupBox; C: TTyComboBox;
+begin
+  P := TTyPanel.Create(nil);
+  G := TTyGroupBox.Create(nil);
+  C := TTyComboBox.Create(nil);
+  try
+    AssertTrue('Panel.Font published',     GetPropInfo(P, 'Font') <> nil);
+    AssertTrue('Panel.Hint published',     GetPropInfo(P, 'Hint') <> nil);
+    AssertTrue('Panel.ShowHint published', GetPropInfo(P, 'ShowHint') <> nil);
+    AssertTrue('GroupBox.Font published',  GetPropInfo(G, 'Font') <> nil);
+    AssertTrue('ComboBox.Font published',  GetPropInfo(C, 'Font') <> nil);
+    AssertTrue('Panel.TabOrder published (TWinControl)', GetPropInfo(P, 'TabOrder') <> nil);
+  finally P.Free; G.Free; C.Free; end;
 end;
 
 initialization

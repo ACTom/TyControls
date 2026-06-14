@@ -36,6 +36,10 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   published
+    property Enabled;
+    property Font;
+    property Hint;
+    property ShowHint;
     property StyleClass: string read FStyleClass write SetStyleClass;
     property Controller: TTyStyleController read FController write SetController;
   end;
@@ -67,6 +71,12 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   published
+    property Enabled;
+    property Font;
+    property Hint;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
     property StyleClass: string read FStyleClass write SetStyleClass;
     property Controller: TTyStyleController read FController write SetController;
   end;
