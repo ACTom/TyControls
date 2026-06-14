@@ -2,13 +2,14 @@ unit test.checkbox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics,
+  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.CheckBox;
 type
   TTyCheckBoxAccess = class(TTyCheckBox)
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure DoKeyDown(var Key: Word; Shift: TShiftState);
   end;
 
   TCheckBoxTest = class(TTestCase)
@@ -19,12 +20,19 @@ type
     procedure TestDrawFrameOpacityApplied;
     procedure TestDisabledClickIgnored;
     procedure TestCheckBoxShadowLocalRectAtOffset;
+    procedure TestSpaceTogglesChecked;
+    procedure TestDisabledSpaceNoToggle;
   end;
 implementation
 
 procedure TTyCheckBoxAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TTyCheckBoxAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
 end;
 
 procedure TCheckBoxTest.TestTypeKey;
@@ -245,6 +253,30 @@ begin
     Form.Free;
     Ctl.Free;
   end;
+end;
+
+procedure TCheckBoxTest.TestSpaceTogglesChecked;
+var F: TCustomForm; C: TTyCheckBoxAccess; K: Word;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    C := TTyCheckBoxAccess.Create(F); C.Parent := F;
+    AssertFalse('starts unchecked', C.Checked);
+    K := VK_SPACE; C.DoKeyDown(K, []);
+    AssertTrue('space checked it', C.Checked);
+    AssertEquals('space consumed', 0, Integer(K));
+  finally F.Free; end;
+end;
+
+procedure TCheckBoxTest.TestDisabledSpaceNoToggle;
+var F: TCustomForm; C: TTyCheckBoxAccess; K: Word;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    C := TTyCheckBoxAccess.Create(F); C.Parent := F; C.Enabled := False;
+    K := VK_SPACE; C.DoKeyDown(K, []);
+    AssertFalse('disabled: not toggled', C.Checked);
+  finally F.Free; end;
 end;
 
 initialization

@@ -13,6 +13,7 @@ type
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
     constructor Create(AOwner: TComponent); override;
     procedure Click; override;
@@ -37,6 +38,7 @@ type
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
     constructor Create(AOwner: TComponent); override;
     procedure Click; override;
@@ -78,6 +80,17 @@ begin
   if not Enabled then Exit;
   SetChecked(not FChecked);
   inherited Click;
+end;
+
+procedure TTyCheckBox.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if not Enabled then Exit;
+  inherited KeyDown(Key, Shift);
+  if Key = VK_SPACE then
+  begin
+    Click;
+    Key := 0;
+  end;
 end;
 
 procedure TTyCheckBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -175,6 +188,17 @@ begin
   if not Enabled then Exit;
   SetChecked(True);
   inherited Click;
+end;
+
+procedure TTyRadioButton.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if not Enabled then Exit;
+  inherited KeyDown(Key, Shift);
+  if Key = VK_SPACE then
+  begin
+    Click;
+    Key := 0;
+  end;
 end;
 
 procedure TTyRadioButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

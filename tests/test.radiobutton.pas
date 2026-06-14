@@ -2,13 +2,14 @@ unit test.radiobutton;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, ExtCtrls, Graphics,
+  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, ExtCtrls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.CheckBox;
 type
   TTyRadioButtonAccess = class(TTyRadioButton)
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure DoKeyDown(var Key: Word; Shift: TShiftState);
   end;
 
   TRadioButtonTest = class(TTestCase)
@@ -18,12 +19,18 @@ type
     procedure TestSeparateParentsAreIndependent;
     procedure TestPaintSmoke;
     procedure TestRadioButtonShadowLocalRectAtOffset;
+    procedure TestSpaceSelectsRadio;
   end;
 implementation
 
 procedure TTyRadioButtonAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TTyRadioButtonAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
 end;
 
 procedure TRadioButtonTest.TestTypeKey;
@@ -159,6 +166,19 @@ begin
     Form.Free;
     Ctl.Free;
   end;
+end;
+
+procedure TRadioButtonTest.TestSpaceSelectsRadio;
+var F: TCustomForm; R: TTyRadioButtonAccess; K: Word;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    R := TTyRadioButtonAccess.Create(F); R.Parent := F;
+    AssertFalse('starts unchecked', R.Checked);
+    K := VK_SPACE; R.DoKeyDown(K, []);
+    AssertTrue('space selected it', R.Checked);
+    AssertEquals('space consumed', 0, Integer(K));
+  finally F.Free; end;
 end;
 
 initialization
