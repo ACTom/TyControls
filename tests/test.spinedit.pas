@@ -491,25 +491,35 @@ end;
 { TTySpinEditRenderTest }
 
 procedure TTySpinEditRenderTest.TestSpinRendersBufferNotValue;
-var S: TTySpinAccess; bmp: TBitmap; reread: TBGRABitmap; foundInk: Boolean; x,y: Integer; px: TBGRAPixel;
+  function InkCount(S: TTySpinAccess): Integer;
+  var bmp: TBitmap; reread: TBGRABitmap; x,y: Integer; px: TBGRAPixel;
+  begin
+    Result := 0;
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit; bmp.SetSize(120,28);
+      bmp.Canvas.Brush.Color := clWhite; bmp.Canvas.FillRect(0,0,120,28);
+      S.RenderToForTest(bmp.Canvas, Rect(0,0,120,28), 96);
+      reread := TBGRABitmap.Create(bmp);
+      try
+        for x := 2 to 80 do for y := 4 to 24 do
+        begin px := reread.GetPixel(x,y);
+          if (px.red < 160) and (px.green < 160) and (px.blue < 160) then Inc(Result); end;
+      finally reread.Free; end;
+    finally bmp.Free; end;
+  end;
+var S: TTySpinAccess; ink789, ink0: Integer;
 begin
   S := TTySpinAccess.Create(nil);
-  bmp := TBitmap.Create;
   try
     S.MinValue:=0; S.MaxValue:=1000; S.Value:=0; S.Font.PixelsPerInch:=96;
-    S.FocusBufferForTest; S.SetEditTextForTest('789');   // uncommitted buffer differs from Value(0)
-    bmp.PixelFormat:=pf32bit; bmp.SetSize(120,28);
-    bmp.Canvas.Brush.Color:=clWhite; bmp.Canvas.FillRect(0,0,120,28);
-    S.RenderToForTest(bmp.Canvas, Rect(0,0,120,28), 96);
-    reread := TBGRABitmap.Create(bmp);
-    try
-      foundInk := False;
-      for x := 2 to 60 do for y := 6 to 22 do
-      begin px := reread.GetPixel(x,y);
-        if (px.red<200) and (px.green<200) then foundInk := True; end;
-      AssertTrue('buffer text rendered (ink present)', foundInk);
-    finally reread.Free; end;
-  finally bmp.Free; S.Free; end;
+    S.SetEditTextForTest('789');
+    ink789 := InkCount(S);
+    S.SetEditTextForTest('0');
+    ink0 := InkCount(S);
+    AssertTrue('some ink for buffer', ink789 > 0);
+    AssertTrue('3-digit buffer renders more ink than 1-digit (buffer is drawn, not value)', ink789 > ink0);
+  finally S.Free; end;
 end;
 
 procedure TTySpinEditRenderTest.TestSpinCaretXMonotonic;
