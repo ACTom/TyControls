@@ -514,6 +514,8 @@ begin
     AssertTrue('present', tpBorderRadius in s.Present);
     AssertEquals('uniform border-radius', 6, s.BorderRadius);
     AssertEquals('corner tl', 6, s.Radius.TL);
+    AssertEquals('corner tr', 6, s.Radius.TR);
+    AssertEquals('corner br', 6, s.Radius.BR);
     AssertEquals('corner bl', 6, s.Radius.BL);
   finally m.Free; end;
 end;

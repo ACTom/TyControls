@@ -314,7 +314,7 @@ begin
   parts := TStringList.Create;
   try
     parts.Delimiter := ' ';
-    parts.StrictDelimiter := False;       // collapse runs of spaces
+    parts.StrictDelimiter := True;
     parts.DelimitedText := Trim(ARaw);
     for i := parts.Count - 1 downto 0 do
       if Trim(parts[i]) = '' then parts.Delete(i);
