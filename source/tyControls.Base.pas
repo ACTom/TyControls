@@ -247,6 +247,10 @@ end;
 constructor TTyCustomControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  // Render to one offscreen buffer and blit once: eliminates the background-erase
+  // flash on every repaint (notably the 530ms caret-blink Invalidate). Pixel output
+  // is unchanged; only the on-screen WMPaint path is affected (RenderTo bypasses it).
+  DoubleBuffered := True;
   ActiveController.RegisterStyleable(Self);
 end;
 
