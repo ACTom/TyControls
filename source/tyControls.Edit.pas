@@ -26,9 +26,11 @@ type
     // Undo/redo infrastructure
     FUndoStack: TTyUndoStack;
     FSuspendUndo: Boolean;   // true while a composite op pushes its own step
+    FReadOnly: Boolean;
     FOnChange: TNotifyEvent;
     procedure SetText(const AValue: string);
     procedure SetCaretPos(AValue: Integer);
+    procedure SetReadOnly(const AValue: Boolean);
     // Selection helpers
     procedure DeleteSelection;
     // Word-wise deletion (splice modelled on DeleteSelection)
@@ -101,6 +103,7 @@ type
     property ScrollX: Integer read FScrollX;
   published
     property Text: string read FText write SetText;
+    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property Enabled;
     property Font;
     property Align;
@@ -298,6 +301,7 @@ var
   Before, After: string;
   APPI: Integer;
 begin
+  if FReadOnly then Exit;
   if FCaret = 0 then Exit;
   BeginUndoStep(uskDelete);
   Len := UTF8Length(FText);
@@ -320,6 +324,7 @@ var
   Before, After: string;
   APPI: Integer;
 begin
+  if FReadOnly then Exit;
   Len := UTF8Length(FText);
   if FCaret >= Len then Exit;
   BeginUndoStep(uskDelete);
@@ -365,6 +370,13 @@ begin
   FCaret := AValue;
   FSelAnchor := AValue;  // direct CaretPos write collapses selection
   EnsureCaretVisible(Font.PixelsPerInch);
+  Invalidate;
+end;
+
+procedure TTyEdit.SetReadOnly(const AValue: Boolean);
+begin
+  if FReadOnly = AValue then Exit;
+  FReadOnly := AValue;
   Invalidate;
 end;
 
@@ -652,6 +664,7 @@ end;
 
 procedure TTyEdit.CutToClipboard;
 begin
+  if FReadOnly then begin CopyToClipboard; Exit; end;
   if not HasSelection then Exit;
   BeginUndoStep(uskCut);
   WriteClipboardText(SelText);
@@ -669,6 +682,7 @@ var
   i: Integer;
   Filtered: string;
 begin
+  if FReadOnly then Exit;
   S := ReadClipboardText;
   if S = '' then Exit;  // truly empty clipboard: full no-op
   // Capture ONE undo step up front; suppress the inner DeleteSelection /
@@ -698,6 +712,7 @@ var
   InsLen: Integer;
   APPI: Integer;
 begin
+  if FReadOnly then Exit;
   if AStr = '' then Exit;
   BeginUndoStep(uskPaste);
   Before := UTF8Copy(FText, 1, FCaret);
@@ -771,6 +786,7 @@ var
   Before, After: string;
   APPI: Integer;
 begin
+  if FReadOnly then Exit;
   if (AChar = '') or (AChar[1] < #32) then Exit;
   BeginUndoStep(uskTyping);
   // Replace selection if any (suppress the inner DeleteSelection's own step:
@@ -801,6 +817,7 @@ var
   Before, After: string;
   APPI: Integer;
 begin
+  if FReadOnly then Exit;
   if HasSelection then
   begin
     DeleteSelection;
@@ -827,6 +844,7 @@ var
   Before, After: string;
   APPI: Integer;
 begin
+  if FReadOnly then Exit;
   if HasSelection then
   begin
     DeleteSelection;

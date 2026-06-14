@@ -96,6 +96,9 @@ type
     procedure TestScrolledTextDoesNotBleedPastRightPadding;
     // EDIT.13: fix — caret aligns with drawn text end (measure uses painter BGRA engine)
     procedure TestCaretAlignsWithDrawnTextEnd;
+    // EDIT.14: ReadOnly property
+    procedure TestReadOnlyBlocksEditingButAllowsCopy;
+    procedure TestReadOnlyCutActsAsCopy;
   end;
 implementation
 
@@ -1684,6 +1687,44 @@ begin
     Ctl.Free;
     E.Free;
   end;
+end;
+
+// ---- EDIT.14: ReadOnly property tests ----
+
+procedure TEditTest.TestReadOnlyBlocksEditingButAllowsCopy;
+var E: TTyEditClipboardAccess;
+begin
+  E := TTyEditClipboardAccess.Create(nil);
+  try
+    E.Text := 'abc';
+    E.ReadOnly := True;
+    E.CaretPos := 3;
+    E.InjectKey('x');           // typing blocked
+    AssertEquals('typing blocked', 'abc', E.Text);
+    E.InjectBackspace;          // backspace blocked
+    AssertEquals('backspace blocked', 'abc', E.Text);
+    E.CaretPos := 0; E.InjectDelete;
+    AssertEquals('delete blocked', 'abc', E.Text);
+    E.SelectAll;                // selection still works
+    E.CopyToClipboard;
+    AssertEquals('copy works in readonly', 'abc', E.ClipText);
+    E.ClipText := 'ZZ'; E.PasteFromClipboard;   // paste blocked
+    AssertEquals('paste blocked', 'abc', E.Text);
+    E.Text := 'def';            // programmatic SetText still works
+    AssertEquals('SetText still works', 'def', E.Text);
+  finally E.Free; end;
+end;
+
+procedure TEditTest.TestReadOnlyCutActsAsCopy;
+var E: TTyEditClipboardAccess;
+begin
+  E := TTyEditClipboardAccess.Create(nil);
+  try
+    E.Text := 'abc'; E.ReadOnly := True; E.SelectAll;
+    E.CutToClipboard;
+    AssertEquals('cut copied', 'abc', E.ClipText);
+    AssertEquals('cut did not delete (readonly)', 'abc', E.Text);
+  finally E.Free; end;
 end;
 
 initialization
