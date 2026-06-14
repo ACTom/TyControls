@@ -24,6 +24,9 @@ type
     procedure TestAnimatorSetTargetImmediate;
     procedure TestAnimatorEasedMatchesEase;
     procedure TestAnimatorAdvanceReturnsChanged;
+    // caret blink
+    procedure TestCaretVisibleHalfPeriodToggles;
+    procedure TestCaretVisibleGuardsZeroPeriod;
   end;
 implementation
 
@@ -164,6 +167,19 @@ begin
   AssertTrue('advance changes -> True', a.Advance(50));
   a.Advance(50); // reaches 1.0
   AssertFalse('advance at target -> False (no change)', a.Advance(50));
+end;
+
+procedure TTyAnimationCoreTest.TestCaretVisibleHalfPeriodToggles;
+begin
+  AssertTrue ('t=0 visible',         TyCaretVisible(0, 530));
+  AssertTrue ('mid first half',      TyCaretVisible(200, 530));
+  AssertFalse('second half hidden',  TyCaretVisible(600, 530));   // 600 div 530 =1 -> odd -> hidden
+  AssertTrue ('third half visible',  TyCaretVisible(1100, 530));  // 1100 div 530 =2 -> even
+end;
+
+procedure TTyAnimationCoreTest.TestCaretVisibleGuardsZeroPeriod;
+begin
+  AssertTrue('zero/neg period -> always visible', TyCaretVisible(999, 0));
 end;
 
 initialization

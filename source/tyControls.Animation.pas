@@ -48,6 +48,10 @@ function TyLerpColor(c1, c2: TTyColor; t: Single): TTyColor;
 // Convenience constructor: Progress=0, Target=1, given duration/easing.
 function TyAnimatorInit(ADurationMs: Integer; AEasing: TTyEasing): TTyAnimator;
 
+// Square-wave caret visibility: visible during even half-periods, hidden during
+// odd ones. A non-positive half-period means "always visible" (degenerate guard).
+function TyCaretVisible(AElapsedMs, AHalfPeriodMs: Integer): Boolean;
+
 implementation
 
 uses
@@ -130,6 +134,13 @@ procedure TTyAnimator.SetTargetImmediate(v: Single);
 begin
   Target := v;
   Progress := v;
+end;
+
+function TyCaretVisible(AElapsedMs, AHalfPeriodMs: Integer): Boolean;
+begin
+  if AHalfPeriodMs <= 0 then Exit(True);
+  if AElapsedMs < 0 then AElapsedMs := 0;
+  Result := (AElapsedMs div AHalfPeriodMs) mod 2 = 0;
 end;
 
 end.
