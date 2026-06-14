@@ -264,8 +264,8 @@ procedure TPainterTest.TestPerCornerTopRoundBottomSquare;
   bottom corners square (green fill reaches the corner). Read directly from the
   internal BGRA bitmap before EndPaint, consistent with all other painter tests.
   Discriminate on alpha/red:
-    top-left  alpha = 0   (rounded corner cut away, transparent)
-    bottom-left red < 128 (square corner, solid green fill R=$20) }
+    top-left   alpha = 0   (rounded corner cut away, transparent)
+    bottom-left alpha = 255, red = $20 (square corner, fully-opaque green fill) }
 var
   fill: TTyFill;
   r: TRect;
@@ -278,9 +278,10 @@ begin
   fill.Color := TyRGB($20, $C0, $40);       // green, red channel = $20
   FPainter.FillBackground(r, fill, TyCorners(6, 6, 0, 0));
   pxTL := FPainter.Bitmap.GetPixel(0, 0);   // top-left: rounded -> transparent
-  pxBL := FPainter.Bitmap.GetPixel(0, 39);  // bottom-left: square -> green
+  pxBL := FPainter.Bitmap.GetPixel(2, 37);  // bottom-left: square -> fully-opaque green (2px interior avoids antialias boundary)
   AssertEquals('top-left rounded (transparent): alpha = 0', 0, pxTL.alpha);
-  AssertTrue('bottom-left square (green fill): red < 128', pxBL.red < 128);
+  AssertEquals('bottom-left square: alpha opaque', 255, pxBL.alpha);
+  AssertEquals('bottom-left green fill: red = $20', $20, pxBL.red);
 end;
 
 initialization
