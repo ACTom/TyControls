@@ -103,6 +103,7 @@ type
     procedure TestMaxLengthCapsTyping;
     procedure TestMaxLengthTruncatesPaste;
     procedure TestMaxLengthZeroUnlimited;
+    procedure TestMaxLengthSelectionReplaceAtCap;
   end;
 implementation
 
@@ -1764,6 +1765,21 @@ begin
     E.MaxLength := 0;
     for i := 1 to 20 do E.InjectKey('z');
     AssertEquals('unlimited', 20, UTF8Length(E.Text));
+  finally E.Free; end;
+end;
+
+procedure TEditTest.TestMaxLengthSelectionReplaceAtCap;
+{ A full buffer at cap can still have a selection replaced by typing (delete frees room). }
+var E: TTyEditClipboardAccess;
+begin
+  E := TTyEditClipboardAccess.Create(nil);
+  try
+    E.MaxLength := 3; E.Text := 'abc';        // at cap
+    E.CaretPos := 0;
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);  // select 'a' (caret 0->1, anchor 0)
+    E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);  // select 'ab'
+    E.InjectKey('Z');                          // replace selection with 'Z'
+    AssertEquals('selection replaced at cap', 'Zc', E.Text);
   finally E.Free; end;
 end;
 

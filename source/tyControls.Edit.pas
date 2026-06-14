@@ -801,6 +801,8 @@ var
 begin
   if FReadOnly then Exit;
   if (AChar = '') or (AChar[1] < #32) then Exit;
+  // At cap with no selection: block before pushing an undo step (no state change).
+  if (FMaxLength > 0) and (not HasSelection) and (UTF8Length(FText) >= FMaxLength) then Exit;
   BeginUndoStep(uskTyping);
   // Replace selection if any (suppress the inner DeleteSelection's own step:
   // the snapshot we just took covers the whole replace-via-typing operation).
