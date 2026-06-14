@@ -30,6 +30,8 @@ type
     procedure TestItemsShrinkClampsTopIndex;
     procedure TestDisabledKeyIgnored;
     procedure TestEmbeddedScrollbarDragScrollsList;
+    procedure TestMultiSelectSelectedAndSelCount;
+    procedure TestSingleSelectSelectedReflectsItemIndex;
   end;
 
   { A2 regression: embedded scrollbar must inherit controller and DPI width }
@@ -618,6 +620,37 @@ begin
   finally
     F.Free;
   end;
+end;
+
+procedure TTyListBoxTest.TestMultiSelectSelectedAndSelCount;
+begin
+  FList.Items.Clear;
+  FList.Items.Add('a'); FList.Items.Add('b'); FList.Items.Add('c'); FList.Items.Add('d');
+  FList.MultiSelect := True;
+  AssertEquals('empty selcount', 0, FList.SelCount);
+  FList.Selected[1] := True;
+  FList.Selected[3] := True;
+  AssertTrue('1 selected', FList.Selected[1]);
+  AssertFalse('0 not selected', FList.Selected[0]);
+  AssertEquals('selcount 2', 2, FList.SelCount);
+  FList.Selected[1] := False;
+  AssertEquals('selcount 1', 1, FList.SelCount);
+  FList.SelectAll;
+  AssertEquals('select all', 4, FList.SelCount);
+  FList.ClearSelection;
+  AssertEquals('cleared', 0, FList.SelCount);
+end;
+
+procedure TTyListBoxTest.TestSingleSelectSelectedReflectsItemIndex;
+begin
+  FList.Items.Clear; FList.Items.Add('a'); FList.Items.Add('b');
+  FList.MultiSelect := False;
+  FList.ItemIndex := 1;
+  AssertTrue('Selected[1] true in single', FList.Selected[1]);
+  AssertFalse('Selected[0] false', FList.Selected[0]);
+  AssertEquals('selcount 1 in single', 1, FList.SelCount);
+  FList.SelectAll;   // no-op in single mode
+  AssertEquals('SelectAll no-op single', 1, FList.SelCount);
 end;
 
 initialization

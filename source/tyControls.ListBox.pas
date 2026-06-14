@@ -16,6 +16,9 @@ type
     FHoverRow: Integer;       // -1 = none; set in MouseMove, cleared in MouseLeave
     FScrollBar: TTyScrollBar; // nil until first needed
     FSyncingScroll: Boolean;  // reentrancy guard
+    FMultiSelect: Boolean;
+    FSelected: array of Boolean;
+    FSelAnchor: Integer;
     procedure SetItems(const AValue: TStringList);
     procedure SetItemIndex(const AValue: Integer);
     procedure SetItemHeight(const AValue: Integer);
@@ -24,6 +27,10 @@ type
     function MaxTopIndex: Integer;
     procedure EnsureSelectionVisible;
     procedure ScrollBarChange(Sender: TObject);
+    procedure EnsureSelectedLen;
+    function GetSelected(AIndex: Integer): Boolean;
+    procedure SetSelected(AIndex: Integer; AValue: Boolean);
+    procedure SetMultiSelect(AValue: Boolean);
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -43,9 +50,14 @@ type
     function VisibleRows: Integer;
     // Public helper for headless keyboard tests
     procedure SimulateKeyDown(AKey: Word);
+    function SelCount: Integer;
+    procedure ClearSelection;
+    procedure SelectAll;
+    property Selected[AIndex: Integer]: Boolean read GetSelected write SetSelected;
   published
     property Items: TStringList read FItems write SetItems;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
+    property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
     property ItemHeight: Integer read FItemHeight write SetItemHeight default 24;
     property TopIndex: Integer read FTopIndex write SetTopIndex default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
@@ -70,6 +82,7 @@ begin
   FHoverRow := -1;
   FScrollBar := nil;
   FSyncingScroll := False;
+  FSelAnchor := -1;
   TabStop := True;
   Width := 160;
   Height := 120;
@@ -99,6 +112,7 @@ begin
     if Assigned(FOnChange) then
       FOnChange(Self);
   end;
+  SetLength(FSelected, FItems.Count);
   UpdateScrollBar;
   Invalidate;
 end;
@@ -204,6 +218,80 @@ begin
   finally
     FSyncingScroll := False;
   end;
+end;
+
+procedure TTyListBox.EnsureSelectedLen;
+begin
+  if Length(FSelected) <> FItems.Count then
+    SetLength(FSelected, FItems.Count);   // new slots default False
+end;
+
+function TTyListBox.GetSelected(AIndex: Integer): Boolean;
+begin
+  if (AIndex < 0) or (AIndex >= FItems.Count) then Exit(False);
+  if FMultiSelect then
+  begin
+    EnsureSelectedLen;
+    Result := FSelected[AIndex];
+  end
+  else
+    Result := (AIndex = FItemIndex);
+end;
+
+procedure TTyListBox.SetSelected(AIndex: Integer; AValue: Boolean);
+begin
+  if (AIndex < 0) or (AIndex >= FItems.Count) then Exit;
+  if FMultiSelect then
+  begin
+    EnsureSelectedLen;
+    if FSelected[AIndex] = AValue then Exit;
+    FSelected[AIndex] := AValue;
+    Invalidate;
+    if Assigned(FOnChange) then FOnChange(Self);
+  end
+  else if AValue then
+    SelectItem(AIndex);   // single mode: setting True selects it
+end;
+
+procedure TTyListBox.SetMultiSelect(AValue: Boolean);
+begin
+  if FMultiSelect = AValue then Exit;
+  FMultiSelect := AValue;
+  EnsureSelectedLen;
+  Invalidate;
+end;
+
+function TTyListBox.SelCount: Integer;
+var i: Integer;
+begin
+  if FMultiSelect then
+  begin
+    EnsureSelectedLen;
+    Result := 0;
+    for i := 0 to High(FSelected) do if FSelected[i] then Inc(Result);
+  end
+  else if (FItemIndex >= 0) and (FItemIndex < FItems.Count) then Result := 1
+  else Result := 0;
+end;
+
+procedure TTyListBox.ClearSelection;
+var i: Integer;
+begin
+  if not FMultiSelect then Exit;   // ClearSelection is a multi-select op
+  EnsureSelectedLen;
+  for i := 0 to High(FSelected) do FSelected[i] := False;
+  Invalidate;
+  if Assigned(FOnChange) then FOnChange(Self);
+end;
+
+procedure TTyListBox.SelectAll;
+var i: Integer;
+begin
+  if not FMultiSelect then Exit;   // no-op in single mode
+  EnsureSelectedLen;
+  for i := 0 to High(FSelected) do FSelected[i] := True;
+  Invalidate;
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyListBox.UpdateScrollBar;
@@ -409,7 +497,7 @@ begin
     begin
       // Determine item states
       ItemStates := [];
-      if i = FItemIndex then
+      if (FMultiSelect and GetSelected(i)) or ((not FMultiSelect) and (i = FItemIndex)) then
         Include(ItemStates, tysActive)
       else if i = FHoverRow then
         Include(ItemStates, tysHover)
