@@ -21,7 +21,7 @@ type
     procedure TestOnClickFires;
     procedure TestPaintSmoke;
     procedure TestSpaceKeyFiresClick;
-    procedure TestDisabledSwallowsKeyNoClick;
+    procedure TestDisabledKeyNotConsumedNoClick;
   end;
 implementation
 
@@ -108,7 +108,7 @@ begin
   finally F.Free; end;
 end;
 
-procedure TButtonTest.TestDisabledSwallowsKeyNoClick;
+procedure TButtonTest.TestDisabledKeyNotConsumedNoClick;
 var F: TCustomForm; B: TTyButtonAccess; K: Word;
 begin
   FClicked := 0;
@@ -118,6 +118,7 @@ begin
     B.Enabled := False;
     K := VK_SPACE; B.DoKeyDown(K, []);
     AssertEquals('disabled: no click', 0, FClicked);
+    AssertEquals('disabled: key NOT consumed', VK_SPACE, K);
   finally F.Free; end;
 end;
 

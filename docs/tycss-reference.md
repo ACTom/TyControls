@@ -493,7 +493,7 @@ outline-offset: <长度> ;
   与 `border` 独立,不影响布局与 `padding`。设置此属性会将 `tpOutline` 加入 `Present` 集;
 - `outline-offset: <长度>`:焦点环距控件外边缘的内缩距离,默认 `0`(贴着控件边缘)。
   `outline-offset` **单独不设置** `tpOutline`——必须同时有 `outline` 规则焦点环才会绘制;
-- `outline-width: 0` 或 `outline: 0 <任意色>` 可在特定规则里禁用焦点环;
+- `outline: 0` 可在特定规则里禁用焦点环(引擎只处理 `outline` 简写与 `outline-offset`,`outline-width` 属性不被识别、静默忽略);
 - 焦点环的圆角跟随 `border-radius` 的四角设置(各角减去 `outline-offset` 后箍合,最小为 0)。
 
 通常写在 `:focus` 规则内,且引用 `--focus-ring` 语义令牌:
@@ -521,8 +521,8 @@ TyEdit:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); ou
 | 目的 | 写法 |
 |---|---|
 | 改变焦点环颜色 | `:root { --focus-ring: #FF8800; }` |
-| 全局禁用焦点环 | 各 `:focus` 规则中写 `outline: 0 var(--focus-ring);` 或省略 `outline` |
-| 单控件禁用焦点环 | `TyEdit:focus { outline: 0 var(--focus-ring); }` |
+| 全局禁用焦点环 | 各 `:focus` 规则中写 `outline: 0;` 或省略 `outline` |
+| 单控件禁用焦点环 | `TyEdit:focus { outline: 0; }` |
 | 回归直角焦点环 | 对应控件写 `border-radius: 0;` |
 
 ---
