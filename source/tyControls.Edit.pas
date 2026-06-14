@@ -30,8 +30,10 @@ type
     FReadOnly: Boolean;
     FMaxLength: Integer;
     FPasswordChar: string;
+    FTextHint: string;
     FOnChange: TNotifyEvent;
     procedure SetText(const AValue: string);
+    procedure SetTextHint(const AValue: string);
     procedure SetCaretPos(AValue: Integer);
     procedure SetReadOnly(const AValue: Boolean);
     procedure SetMaxLength(const AValue: Integer);
@@ -114,6 +116,7 @@ type
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
     property PasswordChar: string read FPasswordChar write SetPasswordChar;
+    property TextHint: string read FTextHint write SetTextHint;
     property Enabled;
     property Font;
     property Align;
@@ -404,6 +407,13 @@ begin
     FPasswordChar := AValue;
   InvalidateWidthCache;
   Invalidate;
+end;
+
+procedure TTyEdit.SetTextHint(const AValue: string);
+begin
+  if FTextHint = AValue then Exit;
+  FTextHint := AValue;
+  if FText = '' then Invalidate;
 end;
 
 // ---- Width cache helpers ----
@@ -1186,6 +1196,7 @@ var
   FocusBorderColor: TTyColor;
   EffSize: Integer;
   TextClipRight: Integer;
+  HintColor: TTyColor;
 begin
   P := TTyPainter.Create;
   try
@@ -1237,23 +1248,33 @@ begin
     // Shift the text rect left by FScrollX so the content scrolls; Right is
     // clamped just inside the border so glyphs (incl. their antialias fringe)
     // never paint over the right padding or border strip.
-    if FScrollX > 0 then
+    // When no text is entered and a hint is set, draw the hint in a dim color.
+    if (FText = '') and (FTextHint <> '') then
     begin
-      if Length(Widths) = 0 then
-        Widths := MeasureCodepointWidths(APPI);
-      TextClipRight := ContentRect.Right;
-      if (tpBorderColor in S.Present) and (S.BorderWidth > 0) then
-        TextClipRight := TextClipRight - P.Scale(S.BorderWidth);
-      P.DrawText(
-        Rect(ContentRect.Left - FScrollX, ContentRect.Top,
-             TextClipRight,
-             ContentRect.Bottom),
-        DisplayText, S.FontName, EffSize, S.FontWeight,
-        S.TextColor, taLeftJustify, tlCenter, True);
+      HintColor := TyRGBA(TyRedOf(S.TextColor), TyGreenOf(S.TextColor), TyBlueOf(S.TextColor), $80);
+      P.DrawText(ContentRect, FTextHint, S.FontName, EffSize, S.FontWeight,
+        HintColor, taLeftJustify, tlCenter, True);
     end
     else
-      P.DrawText(ContentRect, DisplayText, S.FontName, EffSize, S.FontWeight,
-        S.TextColor, taLeftJustify, tlCenter, True);
+    begin
+      if FScrollX > 0 then
+      begin
+        if Length(Widths) = 0 then
+          Widths := MeasureCodepointWidths(APPI);
+        TextClipRight := ContentRect.Right;
+        if (tpBorderColor in S.Present) and (S.BorderWidth > 0) then
+          TextClipRight := TextClipRight - P.Scale(S.BorderWidth);
+        P.DrawText(
+          Rect(ContentRect.Left - FScrollX, ContentRect.Top,
+               TextClipRight,
+               ContentRect.Bottom),
+          DisplayText, S.FontName, EffSize, S.FontWeight,
+          S.TextColor, taLeftJustify, tlCenter, True);
+      end
+      else
+        P.DrawText(ContentRect, DisplayText, S.FontName, EffSize, S.FontWeight,
+          S.TextColor, taLeftJustify, tlCenter, True);
+    end;
 
     // 3. Caret (only when focused and no selection)
     if Focused and not HasSelection then

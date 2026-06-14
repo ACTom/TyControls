@@ -22,6 +22,8 @@ type
     function DisplayTextForTest: string;
     function CaretPixelX2(AIdx: Integer): Integer;
     function TextStartXForTest: Integer;
+    // EDIT.17: TextHint helper
+    function HintVisibleForTest: Boolean;
   end;
 
   // Subclass with in-memory clipboard for headless testing
@@ -112,6 +114,9 @@ type
     procedure TestPasswordCharMasksDisplayText;
     procedure TestPasswordCharDisablesCopy;
     procedure TestPasswordCharCaretAlignsToMaskWidth;
+    // EDIT.17: TextHint
+    procedure TestTextHintRendersWhenEmpty;
+    procedure TestTextHintHiddenWhenNonEmpty;
   end;
 implementation
 
@@ -171,6 +176,11 @@ end;
 function TTyEditAccess.TextStartXForTest: Integer;
 begin
   Result := TextStartX(96);
+end;
+
+function TTyEditAccess.HintVisibleForTest: Boolean;
+begin
+  Result := (Text = '') and (TextHint <> '');
 end;
 
 // TTyEditClipboardAccess
@@ -1849,6 +1859,42 @@ begin
     AssertTrue('caret@2 < caret@4', E.CaretPixelX2(2) < E.CaretPixelX2(4));
     AssertTrue('caret@2 ~ half of caret@4 (uniform mask)',
       Abs((E.CaretPixelX2(4) - E.TextStartXForTest) - 2*(E.CaretPixelX2(2) - E.TextStartXForTest)) <= 2);
+  finally E.Free; end;
+end;
+
+// ---- EDIT.17: TextHint tests ----
+
+procedure TEditTest.TestTextHintRendersWhenEmpty;
+var E: TTyEditClipboardAccess; bmp: TBitmap; reread: TBGRABitmap; foundInk: Boolean; x,y: Integer; px: TBGRAPixel;
+begin
+  E := TTyEditClipboardAccess.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    E.Text := ''; E.TextHint := 'Search...'; E.Font.PixelsPerInch := 96;
+    E.SetBounds(0,0,160,28);
+    bmp.PixelFormat := pf32bit; bmp.SetSize(160,28);
+    bmp.Canvas.Brush.Color := clWhite; bmp.Canvas.FillRect(0,0,160,28);
+    E.RenderTo(bmp.Canvas, Rect(0,0,160,28), 96);
+    reread := TBGRABitmap.Create(bmp);
+    try
+      foundInk := False;
+      for x := 4 to 80 do for y := 6 to 22 do
+      begin
+        px := reread.GetPixel(x,y);
+        if (px.red < 230) or (px.green < 230) or (px.blue < 230) then foundInk := True;
+      end;
+      AssertTrue('hint ink present when empty', foundInk);
+    finally reread.Free; end;
+  finally bmp.Free; E.Free; end;
+end;
+
+procedure TEditTest.TestTextHintHiddenWhenNonEmpty;
+var E: TTyEditAccess;
+begin
+  E := TTyEditAccess.Create(nil);
+  try
+    E.Text := 'x'; E.TextHint := 'Search...';
+    AssertTrue('hint suppressed when text present', E.HintVisibleForTest = False);
   finally E.Free; end;
 end;
 
