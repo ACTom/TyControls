@@ -12,6 +12,12 @@ type
     procedure DoKeyDown(var Key: Word; Shift: TShiftState);
   end;
 
+  TCheckBoxFontAccess = class(TTyCheckBox)
+  public
+    function RFS: Integer;        // ResolveFontSize(CurrentStyle)
+    function StyleFontSize: Integer; // CurrentStyle.FontSize
+  end;
+
   TCheckBoxTest = class(TTestCase)
   published
     procedure TestTypeKey;
@@ -22,6 +28,8 @@ type
     procedure TestCheckBoxShadowLocalRectAtOffset;
     procedure TestSpaceTogglesChecked;
     procedure TestDisabledSpaceNoToggle;
+    procedure TestFontSizeResolvesReadableWhenThemeOmitsIt;
+    procedure TestFontSizeHonorsControlFontWhenThemeOmitsIt;
   end;
 implementation
 
@@ -34,6 +42,9 @@ procedure TTyCheckBoxAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
 end;
+
+function TCheckBoxFontAccess.RFS: Integer; begin Result := ResolveFontSize(CurrentStyle); end;
+function TCheckBoxFontAccess.StyleFontSize: Integer; begin Result := CurrentStyle.FontSize; end;
 
 procedure TCheckBoxTest.TestTypeKey;
 var
@@ -277,6 +288,29 @@ begin
     K := VK_SPACE; C.DoKeyDown(K, []);
     AssertFalse('disabled: not toggled', C.Checked);
   finally F.Free; end;
+end;
+
+procedure TCheckBoxTest.TestFontSizeResolvesReadableWhenThemeOmitsIt;
+var C: TCheckBoxFontAccess;
+begin
+  C := TCheckBoxFontAccess.Create(nil);
+  try
+    C.Font.PixelsPerInch := 96;
+    // Built-in/default skin has no font-size for TyCheckBox -> style size 0 (the bug source).
+    AssertEquals('default skin TyCheckBox font-size is 0', 0, C.StyleFontSize);
+    // The control must NOT draw with size 0 -> resolves a readable size.
+    AssertTrue('effective font size is readable (>0)', C.RFS > 0);
+  finally C.Free; end;
+end;
+
+procedure TCheckBoxTest.TestFontSizeHonorsControlFontWhenThemeOmitsIt;
+var C: TCheckBoxFontAccess;
+begin
+  C := TCheckBoxFontAccess.Create(nil);
+  try
+    C.Font.Size := 14;   // OI-set font, theme has no font-size for checkbox
+    AssertEquals('control Font.Size honored when theme omits font-size', 14, C.RFS);
+  finally C.Free; end;
 end;
 
 initialization

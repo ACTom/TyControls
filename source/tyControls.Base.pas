@@ -59,6 +59,7 @@ type
     function ActiveController: TTyStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
+    function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
     procedure MouseEnter; override;
     procedure MouseLeave; override;
@@ -335,6 +336,19 @@ end;
 function TTyCustomControl.CurrentStyle: TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle(GetStyleTypeKey, FStyleClass, CurrentStates);
+end;
+
+function TTyCustomControl.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+begin
+  // Text size priority: theme font-size, then the control's own Font.Size, then a
+  // readable default — so a typeKey without a font-size rule (or an unstyled Font)
+  // never renders zero-height text.
+  if AStyle.FontSize > 0 then
+    Result := AStyle.FontSize
+  else if Font.Size > 0 then
+    Result := Font.Size
+  else
+    Result := 10;
 end;
 
 procedure TTyCustomControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);

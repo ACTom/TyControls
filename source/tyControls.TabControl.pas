@@ -1052,7 +1052,7 @@ begin
         TextRect.Right := CloseRect.Left;
       P.DrawText(TextRect,
         FCaptions[I],
-        TabStyle.FontName, TabStyle.FontSize, TabStyle.FontWeight,
+        TabStyle.FontName, ResolveFontSize(TabStyle), TabStyle.FontWeight,
         TabStyle.TextColor,
         taCenter, tlCenter, True);
 

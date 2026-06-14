@@ -136,7 +136,7 @@ begin
       P.DrawGlyph(BoxRect, tgCheck, S.TextColor, 2);
     TextRect := Rect(BoxRect.Right + Gap, ContentRect.Top,
       ContentRect.Right, ContentRect.Bottom);
-    P.DrawText(TextRect, Caption, S.FontName, S.FontSize, S.FontWeight,
+    P.DrawText(TextRect, Caption, S.FontName, ResolveFontSize(S), S.FontWeight,
       S.TextColor, taLeftJustify, tlCenter, True);
     P.EndPaint;
   finally
@@ -244,7 +244,7 @@ begin
       P.DrawGlyph(DotRect, tgRadioDot, S.TextColor, 2);
     TextRect := Rect(DotRect.Right + Gap, ContentRect.Top,
       ContentRect.Right, ContentRect.Bottom);
-    P.DrawText(TextRect, Caption, S.FontName, S.FontSize, S.FontWeight,
+    P.DrawText(TextRect, Caption, S.FontName, ResolveFontSize(S), S.FontWeight,
       S.TextColor, taLeftJustify, tlCenter, True);
     P.EndPaint;
   finally

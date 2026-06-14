@@ -621,7 +621,7 @@ begin
              RowRect.Right - P.Scale(RowStyle.Padding.Right),
              RowRect.Bottom),
         FItems[i],
-        RowStyle.FontName, RowStyle.FontSize, RowStyle.FontWeight,
+        RowStyle.FontName, ResolveFontSize(RowStyle), RowStyle.FontWeight,
         RowStyle.TextColor,
         taLeftJustify, tlCenter, True
       );

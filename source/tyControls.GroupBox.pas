@@ -97,7 +97,9 @@ begin
       try
         MeasBmp.SetSize(1, 1);
         MeasBmp.Canvas.Font.Name := S.FontName;
-        MeasBmp.Canvas.Font.Size := MulDiv(S.FontSize, APPI, 96);
+        // Measure with the same effective size the caption is drawn at, so the
+        // erased band matches the now-readable text (ResolveFontSize fallback).
+        MeasBmp.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
         TextW := MeasBmp.Canvas.TextWidth(FCaption);
       finally
         MeasBmp.Free;
@@ -111,7 +113,7 @@ begin
 
       // Draw caption text
       TextRect := Rect(P.Scale(12), 0, W - P.Scale(4), CapH);
-      P.DrawText(TextRect, FCaption, S.FontName, S.FontSize, S.FontWeight,
+      P.DrawText(TextRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
         S.TextColor, taLeftJustify, tlCenter, True);
     end;
 

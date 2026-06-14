@@ -60,7 +60,7 @@ begin
       ContentRect.Bottom - P.Scale(S.Padding.Bottom)
     );
     if FCaption <> '' then
-      P.DrawText(ContentRect, FCaption, S.FontName, S.FontSize, S.FontWeight,
+      P.DrawText(ContentRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
         S.TextColor, taLeftJustify, tlCenter, True);
     P.EndPaint;
   finally
