@@ -2,13 +2,14 @@ unit test.button;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics,
+  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   tyControls.Base, tyControls.Button;
 type
   // Expose protected RenderTo for testing
   TTyButtonAccess = class(TTyButton)
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure DoKeyDown(var Key: Word; Shift: TShiftState);
   end;
 
   TButtonTest = class(TTestCase)
@@ -19,12 +20,19 @@ type
     procedure TestTypeKey;
     procedure TestOnClickFires;
     procedure TestPaintSmoke;
+    procedure TestSpaceKeyFiresClick;
+    procedure TestDisabledSwallowsKeyNoClick;
   end;
 implementation
 
 procedure TTyButtonAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TTyButtonAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
 end;
 
 procedure TButtonTest.HandleClick(Sender: TObject);
@@ -83,6 +91,34 @@ begin
     Bmp.Free;
     F.Free;
   end;
+end;
+
+procedure TButtonTest.TestSpaceKeyFiresClick;
+var F: TCustomForm; B: TTyButtonAccess; K: Word;
+begin
+  FClicked := 0;
+  F := TCustomForm.CreateNew(nil);
+  try
+    B := TTyButtonAccess.Create(F); B.Parent := F; B.OnClick := @HandleClick;
+    K := VK_SPACE; B.DoKeyDown(K, []);
+    AssertEquals('space fired click', 1, FClicked);
+    AssertEquals('space consumed', 0, K);
+    K := VK_RETURN; B.DoKeyDown(K, []);
+    AssertEquals('enter fired click', 2, FClicked);
+  finally F.Free; end;
+end;
+
+procedure TButtonTest.TestDisabledSwallowsKeyNoClick;
+var F: TCustomForm; B: TTyButtonAccess; K: Word;
+begin
+  FClicked := 0;
+  F := TCustomForm.CreateNew(nil);
+  try
+    B := TTyButtonAccess.Create(F); B.Parent := F; B.OnClick := @HandleClick;
+    B.Enabled := False;
+    K := VK_SPACE; B.DoKeyDown(K, []);
+    AssertEquals('disabled: no click', 0, FClicked);
+  finally F.Free; end;
 end;
 
 initialization

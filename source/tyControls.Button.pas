@@ -19,6 +19,7 @@ type
     procedure Paint; override;
     procedure MouseEnter; override;
     procedure MouseLeave; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     // Steppable animation seam (no wall-clock): advance the hover bg-fade by AMs
     // and return True iff the eased progress changed. Tests drive this directly
     // via an access subclass; the lazy TTimer drives it at runtime.
@@ -69,6 +70,17 @@ procedure TTyButton.Click;
 begin
   if not Enabled then Exit;
   inherited Click;
+end;
+
+procedure TTyButton.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if not Enabled then Exit;
+  inherited KeyDown(Key, Shift);
+  if (Key = VK_SPACE) or (Key = VK_RETURN) then
+  begin
+    Click;            // Click already guards Enabled and fires OnClick
+    Key := 0;
+  end;
 end;
 
 function TTyButton.GetStyleTypeKey: string;
