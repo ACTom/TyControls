@@ -304,6 +304,88 @@ begin
   end;
 end;
 
+// Parse 'border-radius': 1 value (all corners) or 4 values (TL TR BR BL).
+procedure ApplyBorderRadius(var AStyle: TTyStyleSet; const ARaw: string; Vars: TStrings);
+var
+  parts: TStringList;
+  i, mx: Integer;
+  v: array[0..3] of Integer;
+begin
+  parts := TStringList.Create;
+  try
+    parts.Delimiter := ' ';
+    parts.StrictDelimiter := False;       // collapse runs of spaces
+    parts.DelimitedText := Trim(ARaw);
+    for i := parts.Count - 1 downto 0 do
+      if Trim(parts[i]) = '' then parts.Delete(i);
+    case parts.Count of
+      1:
+        begin
+          v[0] := TyEvalLength(parts[0], Vars);
+          AStyle.Radius := TyCorners(v[0], v[0], v[0], v[0]);
+          AStyle.BorderRadius := v[0];
+        end;
+      4:
+        begin
+          v[0] := TyEvalLength(parts[0], Vars); // TL
+          v[1] := TyEvalLength(parts[1], Vars); // TR
+          v[2] := TyEvalLength(parts[2], Vars); // BR
+          v[3] := TyEvalLength(parts[3], Vars); // BL
+          AStyle.Radius := TyCorners(v[0], v[1], v[2], v[3]);
+          // uniform fallback for legacy consumers (e.g. DropShadow): the max corner
+          mx := v[0];
+          for i := 1 to 3 do if v[i] > mx then mx := v[i];
+          AStyle.BorderRadius := mx;
+        end;
+    else
+      raise Exception.CreateFmt('border-radius needs 1 or 4 values: %s', [ARaw]);
+    end;
+    Include(AStyle.Present, tpBorderRadius);
+  finally
+    parts.Free;
+  end;
+end;
+
+// Parse 'outline: <width> <color>'. Paren-aware top-level whitespace split (so a
+// var()/rgb() color survives). Leading-digit token = width; the rest = color.
+procedure ApplyOutline(var AStyle: TTyStyleSet; const ARaw: string; Vars: TStrings);
+var
+  toks: TStringList;
+  i, depth, start: Integer;
+  ch: Char;
+  tok: string;
+begin
+  toks := TStringList.Create;
+  try
+    depth := 0; start := 1;
+    for i := 1 to Length(ARaw) do
+    begin
+      ch := ARaw[i];
+      if ch = '(' then Inc(depth)
+      else if ch = ')' then Dec(depth)
+      else if (ch in [' ', #9]) and (depth = 0) then
+      begin
+        tok := Trim(Copy(ARaw, start, i - start));
+        if tok <> '' then toks.Add(tok);
+        start := i + 1;
+      end;
+    end;
+    tok := Trim(Copy(ARaw, start, Length(ARaw) - start + 1));
+    if tok <> '' then toks.Add(tok);
+    for i := 0 to toks.Count - 1 do
+    begin
+      tok := toks[i];
+      if (tok <> '') and (tok[1] in ['0'..'9']) then
+        AStyle.OutlineWidth := TyEvalLength(tok, Vars)
+      else
+        AStyle.OutlineColor := TyEvalColor(tok, Vars);
+    end;
+    Include(AStyle.Present, tpOutline);
+  finally
+    toks.Free;
+  end;
+end;
+
 function TyApplyDeclaration(var AStyle: TTyStyleSet; const AProp, ARawValue: string;
   Vars: TStrings): Boolean;
 var
@@ -359,8 +441,7 @@ begin
   end
   else if prop = 'border-radius' then
   begin
-    AStyle.BorderRadius := TyEvalLength(raw, Vars);
-    Include(AStyle.Present, tpBorderRadius);
+    ApplyBorderRadius(AStyle, raw, Vars);
   end
   else if prop = 'border-style' then
   begin
@@ -394,6 +475,15 @@ begin
     else
       AStyle.FontWeight := TyEvalLength(raw, Vars);
     Include(AStyle.Present, tpFontWeight);
+  end
+  else if prop = 'outline' then
+  begin
+    ApplyOutline(AStyle, raw, Vars);
+  end
+  else if prop = 'outline-offset' then
+  begin
+    AStyle.OutlineOffset := TyEvalLength(raw, Vars);
+    // offset is meaningful only alongside 'outline'; it does not itself set tpOutline
   end
   else if prop = 'opacity' then
   begin

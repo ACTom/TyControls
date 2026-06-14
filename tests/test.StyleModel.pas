@@ -69,6 +69,20 @@ type
     procedure TestBorderShorthandVarColor;
   end;
 
+  TTestStyleBorderRadius = class(TTestCase)
+  published
+    procedure TestBorderRadiusSingleValueUniform;
+    procedure TestBorderRadiusFourValuesTopOnly;
+    procedure TestBorderRadiusFourValuesWithVar;
+  end;
+
+  TTestStyleOutline = class(TTestCase)
+  published
+    procedure TestOutlineParsed;
+    procedure TestOutlineAbsentWhenNotFocused;
+    procedure TestOutlineOffsetParsed;
+  end;
+
 implementation
 
 procedure TTestStyleMerge.TestMergeUnionPresent;
@@ -490,6 +504,81 @@ begin
   finally m.Free; end;
 end;
 
+procedure TTestStyleBorderRadius.TestBorderRadiusSingleValueUniform;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T { border-radius: 6px; }');
+    s := m.ResolveStyle('T', '', []);
+    AssertTrue('present', tpBorderRadius in s.Present);
+    AssertEquals('uniform border-radius', 6, s.BorderRadius);
+    AssertEquals('corner tl', 6, s.Radius.TL);
+    AssertEquals('corner bl', 6, s.Radius.BL);
+  finally m.Free; end;
+end;
+
+procedure TTestStyleBorderRadius.TestBorderRadiusFourValuesTopOnly;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T { border-radius: 6px 6px 0 0; }');
+    s := m.ResolveStyle('T', '', []);
+    AssertEquals('tl', 6, s.Radius.TL);
+    AssertEquals('tr', 6, s.Radius.TR);
+    AssertEquals('br', 0, s.Radius.BR);
+    AssertEquals('bl', 0, s.Radius.BL);
+  finally m.Free; end;
+end;
+
+procedure TTestStyleBorderRadius.TestBorderRadiusFourValuesWithVar;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(':root{--r:8px;} T { border-radius: var(--r) var(--r) 0 0; }');
+    s := m.ResolveStyle('T', '', []);
+    AssertEquals('tl from var', 8, s.Radius.TL);
+    AssertEquals('br', 0, s.Radius.BR);
+  finally m.Free; end;
+end;
+
+procedure TTestStyleOutline.TestOutlineParsed;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T:focus { outline: 2px #FF0000; }');
+    s := m.ResolveStyle('T', '', [tysFocused]);
+    AssertTrue('outline present on focus', tpOutline in s.Present);
+    AssertEquals('outline width', 2, s.OutlineWidth);
+    AssertEquals('outline color r', $FF, TyRedOf(s.OutlineColor));
+  finally m.Free; end;
+end;
+
+procedure TTestStyleOutline.TestOutlineAbsentWhenNotFocused;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T:focus { outline: 2px #FF0000; }');
+    s := m.ResolveStyle('T', '', []);   // no focus state
+    AssertFalse('outline absent without focus', tpOutline in s.Present);
+  finally m.Free; end;
+end;
+
+procedure TTestStyleOutline.TestOutlineOffsetParsed;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('T:focus { outline: 2px #FF0000; outline-offset: 3px; }');
+    s := m.ResolveStyle('T', '', [tysFocused]);
+    AssertEquals('outline offset', 3, s.OutlineOffset);
+  finally m.Free; end;
+end;
+
 initialization
   RegisterTest(TTestStyleMerge);
   RegisterTest(TTestStyleLoad);
@@ -498,4 +587,6 @@ initialization
   RegisterTest(TTestStylePadding);
   RegisterTest(TTestStyleBorderStyle);
   RegisterTest(TTestStyleBorderShorthand);
+  RegisterTest(TTestStyleBorderRadius);
+  RegisterTest(TTestStyleOutline);
 end.
