@@ -17,6 +17,8 @@ type
     procedure TestUserTypeKeySuppressesBuiltinNoBleed;
     procedure TestUnstyledTypeKeyStillGetsBuiltin;
     procedure TestControlVisibleWithoutTheme;
+    procedure TestBuiltinTitleBarTopRoundedTab;
+    procedure TestBuiltinFocusRingOnButton;
   end;
 
   TTyButtonRenderAccess = class(TTyButton)
@@ -213,6 +215,33 @@ begin
     Bmp.Free;
     Ctl.Free;
   end;
+end;
+
+procedure TBuiltinThemeTest.TestBuiltinTitleBarTopRoundedTab;
+var m: TTyStyleModel; sTitle, sTab: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(TyBuiltinThemeCss);
+    sTitle := m.ResolveStyle('TyTitleBar', '', []);
+    AssertTrue('titlebar tl rounded', sTitle.Radius.TL > 0);
+    AssertEquals('titlebar bl square', 0, sTitle.Radius.BL);
+    sTab := m.ResolveStyle('TyTab', '', []);
+    AssertTrue('tab tr rounded', sTab.Radius.TR > 0);
+    AssertEquals('tab br square', 0, sTab.Radius.BR);
+  finally m.Free; end;
+end;
+
+procedure TBuiltinThemeTest.TestBuiltinFocusRingOnButton;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(TyBuiltinThemeCss);
+    s := m.ResolveStyle('TyButton', '', [tysFocused]);
+    AssertTrue('button focus outline present', tpOutline in s.Present);
+    AssertTrue('focus outline width > 0', s.OutlineWidth > 0);
+  finally m.Free; end;
 end;
 
 initialization

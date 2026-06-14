@@ -6,6 +6,7 @@
   --border:     #C4B5FD;
   --danger:     #DB2777;
   --radius:     10px;
+  --focus-ring: var(--accent);
 }
 
 /* Window/form backdrop — a slightly deeper tint of the lavender surface. */
@@ -23,7 +24,7 @@ TyButton {
   shadow: 0px 2px 4px #0000002E;
 }
 TyButton:hover    { background: linear-gradient(90deg, lighten(--surface, 3%), darken(--surface, 4%)); }
-TyButton:focus    { border-color: var(--accent); }
+TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyButton:active   { background: darken(--surface, 10%); }
 TyButton:disabled { opacity: 0.45; }
 TyButton.primary  { background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent)); color: #FFFFFF; border-color: var(--accent); }
@@ -51,7 +52,7 @@ TyEdit {
   font-size: 10px;
 }
 TyEdit:hover    { border-color: lighten(--accent, 10%); }
-TyEdit:focus    { border-color: var(--accent); }
+TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyEdit:disabled { opacity: 0.45; }
 
 TyCheckBox {
@@ -63,6 +64,7 @@ TyCheckBox {
 }
 TyCheckBox:hover    { border-color: var(--accent); }
 TyCheckBox:active   { background: var(--accent); }
+TyCheckBox:focus    { outline: 2px var(--focus-ring); }
 TyCheckBox:disabled { opacity: 0.45; }
 
 TyRadioButton {
@@ -74,6 +76,7 @@ TyRadioButton {
 }
 TyRadioButton:hover    { border-color: var(--accent); }
 TyRadioButton:active   { background: var(--accent); }
+TyRadioButton:focus { outline: 2px var(--focus-ring); }
 TyRadioButton:disabled { opacity: 0.45; }
 
 TyPanel {
@@ -96,7 +99,7 @@ TyComboBox {
   font-size: 10px;
 }
 TyComboBox:hover    { border-color: lighten(--accent, 10%); }
-TyComboBox:focus    { border-color: var(--accent); }
+TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyComboBox:disabled { opacity: 0.45; }
 
 TyScrollBar {
@@ -112,6 +115,7 @@ TyTitleBar {
   color: #FFFFFF;
   border-color: var(--accent);
   border-width: 0px;
+  border-radius: var(--radius) var(--radius) 0 0;
   font-size: 11px;
   font-weight: 700;
 }
@@ -139,7 +143,7 @@ TyListBox {
   padding: 2px;
   shadow: 0px 1px 3px #0000001F;
 }
-TyListBox:focus   { border-color: var(--accent); }
+TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyListBox:disabled { opacity: 0.45; }
 
 TyListItem {
@@ -168,6 +172,7 @@ TyToggleSwitch {
   border-radius: 12px;
 }
 TyToggleSwitch:active   { background: var(--accent); }
+TyToggleSwitch:focus { outline: 2px var(--focus-ring); }
 TyToggleSwitch:disabled { opacity: 0.45; }
 
 TyTrackBar {
@@ -175,6 +180,7 @@ TyTrackBar {
   border-radius: 3px;
   padding: 0px;
 }
+TyTrackBar:focus    { outline: 2px var(--focus-ring); }
 
 TyTrackThumb {
   background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent));
@@ -201,12 +207,14 @@ TyTabControl {
   border-radius: var(--radius);
   shadow: 0px 1px 3px #0000001F;
 }
+TyTabControl:focus  { outline: 2px var(--focus-ring); }
 
 TyTab {
   background: darken(--surface, 6%);
   color: var(--on-surface);
   padding: 6px;
   font-weight: 700;
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 TyTab:hover  { background: darken(--surface, 3%); }
 TyTab:active { background: var(--surface); color: var(--accent); }
@@ -224,7 +232,7 @@ TySpinEdit {
   shadow: 0px 1px 3px #0000001F;
 }
 TySpinEdit:hover    { border-color: lighten(--accent, 10%); }
-TySpinEdit:focus    { border-color: var(--accent); }
+TySpinEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TySpinEdit:disabled { opacity: 0.45; }
 
 TyMemo {
@@ -238,5 +246,5 @@ TyMemo {
   shadow: 0px 1px 3px #0000001F;
 }
 TyMemo:hover    { border-color: lighten(--accent, 10%); }
-TyMemo:focus    { border-color: var(--accent); }
+TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyMemo:disabled { opacity: 0.45; }

@@ -6,6 +6,7 @@
   --border:     #D1D5DB;
   --danger:     #EF4444;
   --radius:     6px;
+  --focus-ring: var(--accent);
 }
 
 /* Window/form backdrop — a soft off-white behind the white controls. */
@@ -22,7 +23,7 @@ TyButton {
   font-weight: 400;
 }
 TyButton:hover    { background: darken(--surface, 4%); }
-TyButton:focus    { border-color: var(--accent); }
+TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyButton:active   { background: darken(--surface, 10%); }
 TyButton:disabled { opacity: 0.5; }
 TyButton.primary  { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
@@ -50,7 +51,7 @@ TyEdit {
   font-size: 10px;
 }
 TyEdit:hover    { border-color: darken(--border, 10%); }
-TyEdit:focus    { border-color: var(--accent); }
+TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyEdit:disabled { opacity: 0.5; }
 
 TyCheckBox {
@@ -62,6 +63,7 @@ TyCheckBox {
 }
 TyCheckBox:hover    { border-color: var(--accent); }
 TyCheckBox:active   { background: var(--accent); }
+TyCheckBox:focus    { outline: 2px var(--focus-ring); }
 TyCheckBox:disabled { opacity: 0.5; }
 
 TyRadioButton {
@@ -73,6 +75,7 @@ TyRadioButton {
 }
 TyRadioButton:hover    { border-color: var(--accent); }
 TyRadioButton:active   { background: var(--accent); }
+TyRadioButton:focus { outline: 2px var(--focus-ring); }
 TyRadioButton:disabled { opacity: 0.5; }
 
 TyPanel {
@@ -94,7 +97,7 @@ TyComboBox {
   font-size: 10px;
 }
 TyComboBox:hover    { border-color: darken(--border, 10%); }
-TyComboBox:focus    { border-color: var(--accent); }
+TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyComboBox:disabled { opacity: 0.5; }
 
 TyScrollBar {
@@ -110,6 +113,7 @@ TyTitleBar {
   color: var(--on-surface);
   border-color: var(--border);
   border-width: 1px;
+  border-radius: var(--radius) var(--radius) 0 0;
   font-size: 10px;
   font-weight: 700;
 }
@@ -136,7 +140,7 @@ TyListBox {
   border-radius: var(--radius);
   padding: 2px;
 }
-TyListBox:focus   { border-color: var(--accent); }
+TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyListBox:disabled { opacity: 0.5; }
 
 TyListItem {
@@ -165,6 +169,7 @@ TyToggleSwitch {
   border-radius: 12px;
 }
 TyToggleSwitch:active   { background: var(--accent); }
+TyToggleSwitch:focus { outline: 2px var(--focus-ring); }
 TyToggleSwitch:disabled { opacity: 0.5; }
 
 TyTrackBar {
@@ -172,6 +177,7 @@ TyTrackBar {
   border-radius: 3px;
   padding: 0px;
 }
+TyTrackBar:focus    { outline: 2px var(--focus-ring); }
 
 TyTrackThumb {
   background: var(--accent);
@@ -197,11 +203,13 @@ TyTabControl {
   border-width: 1px;
   border-radius: var(--radius);
 }
+TyTabControl:focus  { outline: 2px var(--focus-ring); }
 
 TyTab {
   background: darken(--surface, 5%);
   color: var(--on-surface);
   padding: 4px;
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 TyTab:hover  { background: darken(--surface, 2%); }
 TyTab:active { background: var(--surface); color: var(--accent); }
@@ -218,7 +226,7 @@ TySpinEdit {
   font-size: 10px;
 }
 TySpinEdit:hover    { border-color: darken(--border, 10%); }
-TySpinEdit:focus    { border-color: var(--accent); }
+TySpinEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TySpinEdit:disabled { opacity: 0.5; }
 
 TyMemo {
@@ -231,5 +239,5 @@ TyMemo {
   font-size: 10px;
 }
 TyMemo:hover    { border-color: darken(--border, 10%); }
-TyMemo:focus    { border-color: var(--accent); }
+TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyMemo:disabled { opacity: 0.5; }

@@ -26,6 +26,7 @@ begin
     '  --border:     #D1D5DB;' + LineEnding +
     '  --danger:     #EF4444;' + LineEnding +
     '  --radius:     6px;' + LineEnding +
+    '  --focus-ring: var(--accent);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window/form backdrop — a soft off-white behind the white controls. */' + LineEnding +
@@ -42,7 +43,7 @@ begin
     '  font-weight: 400;' + LineEnding +
     '}' + LineEnding +
     'TyButton:hover    { background: darken(--surface, 4%); }' + LineEnding +
-    'TyButton:focus    { border-color: var(--accent); }' + LineEnding +
+    'TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyButton:active   { background: darken(--surface, 10%); }' + LineEnding +
     'TyButton:disabled { opacity: 0.5; }' + LineEnding +
     'TyButton.primary  { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }' + LineEnding +
@@ -70,7 +71,7 @@ begin
     '  font-size: 10px;' + LineEnding +
     '}' + LineEnding +
     'TyEdit:hover    { border-color: darken(--border, 10%); }' + LineEnding +
-    'TyEdit:focus    { border-color: var(--accent); }' + LineEnding +
+    'TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyEdit:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyCheckBox {' + LineEnding +
@@ -82,6 +83,7 @@ begin
     '}' + LineEnding +
     'TyCheckBox:hover    { border-color: var(--accent); }' + LineEnding +
     'TyCheckBox:active   { background: var(--accent); }' + LineEnding +
+    'TyCheckBox:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyCheckBox:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyRadioButton {' + LineEnding +
@@ -93,6 +95,7 @@ begin
     '}' + LineEnding +
     'TyRadioButton:hover    { border-color: var(--accent); }' + LineEnding +
     'TyRadioButton:active   { background: var(--accent); }' + LineEnding +
+    'TyRadioButton:focus { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyRadioButton:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyPanel {' + LineEnding +
@@ -114,7 +117,7 @@ begin
     '  font-size: 10px;' + LineEnding +
     '}' + LineEnding +
     'TyComboBox:hover    { border-color: darken(--border, 10%); }' + LineEnding +
-    'TyComboBox:focus    { border-color: var(--accent); }' + LineEnding +
+    'TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyComboBox:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyScrollBar {' + LineEnding +
@@ -130,6 +133,7 @@ begin
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
     '  border-width: 1px;' + LineEnding +
+    '  border-radius: var(--radius) var(--radius) 0 0;' + LineEnding +
     '  font-size: 10px;' + LineEnding +
     '  font-weight: 700;' + LineEnding +
     '}' + LineEnding +
@@ -156,7 +160,7 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 2px;' + LineEnding +
     '}' + LineEnding +
-    'TyListBox:focus   { border-color: var(--accent); }' + LineEnding +
+    'TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyListBox:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyListItem {' + LineEnding +
@@ -185,6 +189,7 @@ begin
     '  border-radius: 12px;' + LineEnding +
     '}' + LineEnding +
     'TyToggleSwitch:active   { background: var(--accent); }' + LineEnding +
+    'TyToggleSwitch:focus { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyToggleSwitch:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyTrackBar {' + LineEnding +
@@ -192,6 +197,7 @@ begin
     '  border-radius: 3px;' + LineEnding +
     '  padding: 0px;' + LineEnding +
     '}' + LineEnding +
+    'TyTrackBar:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
     '' + LineEnding +
     'TyTrackThumb {' + LineEnding +
     '  background: var(--accent);' + LineEnding +
@@ -217,11 +223,13 @@ begin
     '  border-width: 1px;' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
+    'TyTabControl:focus  { outline: 2px var(--focus-ring); }' + LineEnding +
     '' + LineEnding +
     'TyTab {' + LineEnding +
     '  background: darken(--surface, 5%);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  padding: 4px;' + LineEnding +
+    '  border-radius: var(--radius) var(--radius) 0 0;' + LineEnding +
     '}' + LineEnding +
     'TyTab:hover  { background: darken(--surface, 2%); }' + LineEnding +
     'TyTab:active { background: var(--surface); color: var(--accent); }' + LineEnding +
@@ -238,7 +246,7 @@ begin
     '  font-size: 10px;' + LineEnding +
     '}' + LineEnding +
     'TySpinEdit:hover    { border-color: darken(--border, 10%); }' + LineEnding +
-    'TySpinEdit:focus    { border-color: var(--accent); }' + LineEnding +
+    'TySpinEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TySpinEdit:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyMemo {' + LineEnding +
@@ -251,7 +259,7 @@ begin
     '  font-size: 10px;' + LineEnding +
     '}' + LineEnding +
     'TyMemo:hover    { border-color: darken(--border, 10%); }' + LineEnding +
-    'TyMemo:focus    { border-color: var(--accent); }' + LineEnding +
+    'TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyMemo:disabled { opacity: 0.5; }' + LineEnding;
 end;
 
