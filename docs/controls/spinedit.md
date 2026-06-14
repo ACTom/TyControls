@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTySpinEdit` 是 TyControls 库中的主题化数值微调控件，继承自 `TTyCustomControl`。控件显示一个整数值，右侧有上/下两个小箭头按钮。用户可以点击箭头按钮、使用上/下方向键、或滚动鼠标滚轮来按 `Increment` 步进改变 `Value`；值始终被夹紧到 `[MinValue, MaxValue]` 区间，`Value` 真实变化时触发 `OnChange`。
+`TTySpinEdit` 是 TyControls 库中的主题化**可内联编辑的整数微调控件**，继承自 `TTyCustomControl`。控件显示一个整数值，右侧有上/下两个小箭头按钮。用户既可以**直接键入数字与前导 `-`**（轻量内联编辑缓冲，无选区/剪贴板），也可以点击箭头按钮、使用上/下方向键、或滚动鼠标滚轮来按 `Increment` 步进改变 `Value`。`Enter` 或失焦时**提交**编辑缓冲（解析 → 夹紧 `[MinValue, MaxValue]` → 写 `Value`）；`Esc` **还原**到当前 `Value`；非法输入（空串或仅 `-`）提交时退回当前 `Value`。值始终被夹紧到 `[MinValue, MaxValue]` 区间，`Value` 真实变化时触发 `OnChange`。
 
 ---
 
@@ -62,12 +62,23 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 
 | 操作 | 行为 |
 |------|------|
-| `↑`（Up） | `Value += Increment`（到达 `MaxValue` 后停止），并消费按键 |
-| `↓`（Down） | `Value -= Increment`（到达 `MinValue` 后停止），并消费按键 |
-| 鼠标左键点击上箭头 | `Value += Increment` |
-| 鼠标左键点击下箭头 | `Value -= Increment` |
-| 鼠标滚轮向上 | `Value += Increment` |
-| 鼠标滚轮向下 | `Value -= Increment` |
+| 数字键 `0`–`9` | 在光标处插入数字字符，更新内联编辑缓冲，重绘 |
+| `-` | 仅在光标位于位置 0 且缓冲中尚无 `-` 时插入（允许键入负数），其余位置忽略 |
+| `←` | 光标左移一码点（到达缓冲开头后停止） |
+| `→` | 光标右移一码点（到达缓冲末尾后停止） |
+| `Home` | 光标移到缓冲开头 |
+| `End` | 光标移到缓冲末尾 |
+| `Backspace` | 删除光标前一码点 |
+| `Delete` | 删除光标后一码点 |
+| `Enter` | **提交**：将缓冲解析为整数（`StrToIntDef`，无法解析时退回当前 `Value`）→ 夹紧 `[MinValue, MaxValue]` → 写入 `Value`（若变化则触发 `OnChange`）→ 回填缓冲 |
+| `Esc` | **还原**：丢弃编辑缓冲，重新同步到当前 `Value`（`SyncBufferToValue`），重绘；不触发 `OnChange` |
+| `↑`（Up） | `Value += Increment`（到达 `MaxValue` 后停止），同步回填缓冲，消费按键 |
+| `↓`（Down） | `Value -= Increment`（到达 `MinValue` 后停止），同步回填缓冲，消费按键 |
+| 鼠标左键点击上箭头 | `Value += Increment`，同步回填缓冲 |
+| 鼠标左键点击下箭头 | `Value -= Increment`，同步回填缓冲 |
+| 鼠标滚轮向上 | `Value += Increment`，同步回填缓冲 |
+| 鼠标滚轮向下 | `Value -= Increment`，同步回填缓冲 |
+| 失焦（`DoExit`） | 等同 `Enter`：自动提交当前缓冲 |
 
 > **注意：** 当 `Enabled = False` 时，`KeyDown` 不消费按键、`DoMouseWheel` 返回 `False`、`MouseDown` 直接返回——即禁用状态下所有输入都不生效。滚轮处理会先调用 `inherited`（即用户的 `OnMouseWheel`），若用户已消费事件则不再步进。
 
@@ -81,7 +92,7 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 | `:focus` | 获得键盘焦点 |
 | `:disabled` | `Enabled = False` |
 
-上/下箭头使用 `TTyPainter.DrawGlyph` 以 `tgArrowUp` / `tgArrowDown` 字形绘制，颜色取自解析样式的 `TextColor`。
+上/下箭头使用 `TTyPainter.DrawGlyph` 以 `tgArrowUp` / `tgArrowDown` 字形绘制，颜色取自解析样式的 `TextColor`。获得焦点时在编辑缓冲的光标位置绘制 1px 竖条光标，以约 530 ms 间隔**闪烁**（`TTimer` 懒创建，无头测试与设计器中光标保持静态）。
 
 ### light.tycss 示例规则
 
@@ -135,9 +146,11 @@ end;
 
 ## 8. 注意事项
 
-1. **值始终夹紧：** 任何修改 `Value` 的路径（属性赋值、按钮、方向键、滚轮）都通过同一 setter，自动夹紧到 `[MinValue, MaxValue]`。
+1. **值始终夹紧：** 任何修改 `Value` 的路径（属性赋值、按钮、方向键、滚轮、`Enter`/失焦提交）都通过同一 setter，自动夹紧到 `[MinValue, MaxValue]`。
 2. **OnChange 防重入：** setter 先夹紧值，若夹紧后与原值相同则不调用 `OnChange`，回调中无需过滤重复值。
 3. **Min/Max 修改时 Value 静默校正：** 修改范围后 `Value` 会被自动校正到新区间，但**不**触发 `OnChange`（仅触发 `Invalidate`）。
 4. **Increment 下限为 1：** 给 `Increment` 赋小于 1 的值会被强制置为 1。
 5. **按钮几何固定：** 上/下箭头按钮宽度固定为 18 逻辑像素（DPI 缩放后）、贴齐右缘，各占高度一半，不可通过属性调整。
-6. **v1 暂不支持自由文本键入：** 当前版本只能通过属性赋值、上/下箭头按钮、方向键或鼠标滚轮改变 `Value`，**尚不支持**直接在控件内键入数字（无内嵌可编辑文本框）。需要直接录入数字时，请用代码设置 `Value`。该缺口列于 [docs/KNOWN_GAPS.md](../KNOWN_GAPS.md)。
+6. **内联编辑缓冲轻量：** 编辑缓冲（`FEditText`/`FCaret`）无选区、无剪贴板、无撤销栈；步进操作（方向键/滚轮/按钮）总是立即提交并回填缓冲，不经过缓冲层。
+7. **非法输入安全退回：** 提交时若缓冲为空串或仅含 `-`（`StrToIntDef` 返回当前 `FValue` 作为默认值），则 `Value` 不变、`OnChange` 不触发，缓冲回填为当前 `Value` 的字符串表示。
+8. **光标闪烁：** 聚焦时以约 530 ms 间隔启动；`TTimer` 懒创建，仅在 `HandleAllocated` 后启动，无头测试与设计器中光标静态。

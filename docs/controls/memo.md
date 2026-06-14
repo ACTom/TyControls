@@ -28,6 +28,8 @@ uses tyControls.Memo;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Lines` | `TStrings` | 空 | 文本模型，一条 `TStrings` 行对应一条逻辑行。读取返回内部列表；写入通过 `SetLines` 进行 `Assign`，随后夹紧光标与滚动窗口并刷新滚动条。 |
+| `ReadOnly` | `Boolean` | `False` | 为 `True` 时拦截用户编辑（打字/回车/退格/删除/词级删除/粘贴），保留导航、选区、复制、全选；`Lines :=` 程序化写入仍可用；`CutToClipboard` 退化为 `CopyToClipboard`。 |
+| `MaxLength` | `Integer` | `0`（无限） | 按**全模型内容码点数**（所有逻辑行 `UTF8Length` 之和，**换行不计**）封顶；`0` 表示无限制；打字满则拒插；粘贴时截断到余量；回车/退格/删除/合并不受限。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 文本模型变化（插入/拆分/退格/删除/合并）后触发；纯光标移动不触发。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时键盘与滚轮输入一律被忽略（v1.5 策略：禁用时不消费按键、`DoMouseWheel` 返回 `False`）。 |
 | `Font` | `TFont` | — | 字体；其 `PixelsPerInch` 参与行高/列宽度量。 |
@@ -101,7 +103,7 @@ TTyMemo 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制
 | `:focus` | 获得键盘焦点 |
 | `:disabled` | `Enabled = False` |
 
-每条可见逻辑行用 Memo 自身解析出的样式绘制（无逐行条目解析），文本以固定行高 top 对齐绘制；光标为 1px 竖条（与 `TTyEdit` 一致），仅在获得焦点且光标行可见时绘制。
+每条可见逻辑行用 Memo 自身解析出的样式绘制（无逐行条目解析），文本以固定行高 top 对齐绘制；光标为 1px 竖条（与 `TTyEdit` 一致），仅在获得焦点且光标行可见时绘制，并以约 530 ms 间隔**闪烁**（`TTimer` 懒创建，无头测试与设计器中光标保持静态）。
 
 ### light.tycss 示例规则
 
@@ -158,6 +160,9 @@ end;
 3. **像素测试请固定 PPI=96：** macOS 下 `Font.PixelsPerInch` 默认 72；几何/像素断言需显式钉为 96 才能与设计基准对齐。
 4. **直接改 `Lines` 后窗口自动校正：** 通过 `SetLines`（即 `Lines :=` / `Lines.Assign`）写入会夹紧光标与 `TopLine` 并刷新滚动条；渲染时也会再调用一次 `UpdateScrollBar` 兜底外部直接 mutate 的情况。
 5. **`OnChange` 仅模型变化触发：** 纯光标移动（方向键/Home/End、(0,0) 退格、文档末尾删除）不触发 `OnChange`。
+6. **`ReadOnly`：** 打字/回车/退格/删除/词级删除/粘贴均被拦截；导航、选区、复制、全选仍可用；`Lines :=` 赋值不受限；`CutToClipboard` 退化为 `CopyToClipboard`。
+7. **`MaxLength`：** 基于 `ContentCodepointCount`（全行 `UTF8Length` 之和，换行不计）；打字满则拒插（`UTF8KeyPress` 早退）；粘贴时截断原始剪贴板字符串到余量码点数（截断发生在拆行**之前**，实际内容可能略低于上限，但绝不超过）；回车/退格/删除不受限。
+8. **光标闪烁：** 聚焦时约 530 ms 间隔启动；`TTimer` 懒创建，仅在 `HandleAllocated` 后启动，无头测试与设计器中光标静态。
 
 ---
 
@@ -169,10 +174,10 @@ end;
 |------|------|
 | **无自动换行（no word-wrap）** | 渲染时 `WordBreak = False`：一条逻辑行始终绘制为一行，不会按控件宽度回绕到下一行。逻辑行与可见行严格一一对应。 |
 | **无水平滚动 / 长行被裁剪（no horizontal scroll, long lines clipped）** | 没有水平滚动条，也没有水平自动滚动。超出内容区宽度的长行在右缘被画布**直接裁剪**；当光标移动到可见区右侧之外时也不会水平滚动跟随（光标可能被画到内容区外而不可见）。仅垂直方向有滚动条/滚轮。 |
-| **无光标闪烁（no caret blink）** | 光标是一根**静态** 1px 竖条，仅在控件获得焦点且光标行可见时绘制；没有 `TTimer` 驱动的闪烁动画，光标不会周期性隐现。 |
 
 > **v1.11 已交付：** 文本选区、区间剪贴板（`Ctrl/Cmd+A/C/X/V`）、以及按词 / `Shift` 扩展导航均已落地（见 §5），不再是缺口。
 > **v1.12 已交付：** 基于快照的**撤销 / 重做**（`Ctrl/Cmd+Z`、`Ctrl/Cmd+Y` / `Ctrl/Cmd+Shift+Z`）已落地（见 §11），不再是缺口。
+> **Batch ①（本批次）已交付：** `ReadOnly`、`MaxLength`（`published` 属性，见 §3）、运行期光标闪烁（约 530 ms，无头静态）均已落地，不再是缺口。
 > 以上剩余条目均为可在后续 Tier-2 增强层补齐的项；当前不实现它们是经过权衡的范围决策，而非缺陷。`TTyEdit` 的相关说明亦记录于 [docs/KNOWN_GAPS.md](../KNOWN_GAPS.md)。
 
 ---
