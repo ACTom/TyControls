@@ -74,6 +74,9 @@ type
 
 implementation
 
+function IfThenIdx(ACond: Boolean; ATrue, AFalse: Integer): Integer;
+begin if ACond then Result := ATrue else Result := AFalse; end;
+
 { TTyListBox }
 
 constructor TTyListBox.Create(AOwner: TComponent);
@@ -385,46 +388,65 @@ begin
 end;
 
 procedure TTyListBox.KeyDown(var Key: Word; Shift: TShiftState);
-var
-  Count, NewIndex: Integer;
+var Count, NewFocus, VR: Integer; Extend: Boolean;
+  procedure MoveFocus(ATarget: Integer);
+  begin
+    if ATarget < 0 then ATarget := 0;
+    if ATarget > Count - 1 then ATarget := Count - 1;
+    NewFocus := ATarget;
+  end;
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
   Count := FItems.Count;
   if Count = 0 then Exit;
+  VR := VisibleRows;
+  Extend := (ssShift in Shift) and FMultiSelect;
+  NewFocus := FItemIndex;
 
   case Key of
-    VK_UP:
-    begin
-      if FItemIndex <= 0 then
-        NewIndex := 0
-      else
-        NewIndex := FItemIndex - 1;
-      SelectItem(NewIndex);
-      Key := 0;
-    end;
-    VK_DOWN:
-    begin
-      if FItemIndex < 0 then
-        NewIndex := 0
-      else if FItemIndex < Count - 1 then
-        NewIndex := FItemIndex + 1
-      else
-        NewIndex := Count - 1;
-      SelectItem(NewIndex);
-      Key := 0;
-    end;
-    VK_HOME:
-    begin
-      SelectItem(0);
-      Key := 0;
-    end;
-    VK_END:
-    begin
-      SelectItem(Count - 1);
-      Key := 0;
-    end;
+    VK_UP:    MoveFocus(IfThenIdx(FItemIndex <= 0, 0, FItemIndex - 1));
+    VK_DOWN:  MoveFocus(IfThenIdx(FItemIndex < 0, 0, FItemIndex + 1));
+    VK_PRIOR: MoveFocus(IfThenIdx(FItemIndex < 0, 0, FItemIndex - VR));   // PageUp
+    VK_NEXT:  MoveFocus(IfThenIdx(FItemIndex < 0, 0, FItemIndex + VR));   // PageDown
+    VK_HOME:  MoveFocus(0);
+    VK_END:   MoveFocus(Count - 1);
+    VK_SPACE:
+      begin
+        if FMultiSelect and (FItemIndex >= 0) then
+        begin
+          EnsureSelectedLen;
+          FSelected[FItemIndex] := not FSelected[FItemIndex];
+          FSelAnchor := FItemIndex;
+          Invalidate; DoChangeSel;
+        end;
+        Key := 0; Exit;
+      end;
+  else
+    Exit;   // key not handled (leave Key unconsumed)
   end;
+  Key := 0;
+
+  if not FMultiSelect then
+  begin
+    SelectItem(NewFocus);   // single mode: existing behavior (clamps, OnChange, scrolls)
+    Exit;
+  end;
+
+  // Multi mode: move focus; extend range from anchor if Shift, else select-only.
+  FItemIndex := NewFocus;
+  EnsureSelectedLen;
+  if Extend then
+    ApplyRangeSelection(FSelAnchorOr(NewFocus), NewFocus)
+  else
+  begin
+    ClearAllBits;
+    FSelected[NewFocus] := True;
+    FSelAnchor := NewFocus;
+    Invalidate; DoChangeSel;
+  end;
+  EnsureSelectionVisible;
+  UpdateScrollBar;
 end;
 
 procedure TTyListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);

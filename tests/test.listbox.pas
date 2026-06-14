@@ -34,6 +34,8 @@ type
     procedure TestSingleSelectSelectedReflectsItemIndex;
     procedure TestClearSelectionNoOpInSingle;
     procedure TestMultiSelectMouseClicks;
+    procedure TestPageKeysSingleSelect;
+    procedure TestMultiSelectShiftDownExtends;
   end;
 
   { A2 regression: embedded scrollbar must inherit controller and DPI width }
@@ -53,6 +55,7 @@ type
     function FindScrollBar: TTyScrollBar;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure DoMouseDown(Shift: TShiftState; X, Y: Integer);
+    procedure DoKeyDown(Key: Word; Shift: TShiftState);
   end;
 
   { Hard-cast target to drive the embedded scrollbar's protected mouse handlers. }
@@ -126,6 +129,11 @@ end;
 procedure TListBoxAccess.DoMouseDown(Shift: TShiftState; X, Y: Integer);
 begin
   MouseDown(mbLeft, Shift, X, Y);
+end;
+
+procedure TListBoxAccess.DoKeyDown(Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
 end;
 
 { TTyListBoxTest }
@@ -691,6 +699,37 @@ begin
   LA.DoMouseDown([], 5, 0*24+2);                 // plain click row 0 -> only 0
   AssertEquals('plain resets to 1', 1, LA.SelCount);
   AssertTrue('row0', LA.Selected[0]);
+end;
+
+procedure TTyListBoxTest.TestPageKeysSingleSelect;
+var LA: TListBoxAccess; i: Integer;
+begin
+  LA := TListBoxAccess.Create(FForm); LA.Parent := FForm;
+  LA.Font.PixelsPerInch := 96; LA.SetBounds(0,0,160,120);  // 120/24 = 5 visible rows
+  for i := 0 to 19 do LA.Items.Add(IntToStr(i));
+  LA.MultiSelect := False; LA.ItemIndex := 0;
+  LA.DoKeyDown(VK_NEXT, []);                 // PageDown
+  AssertEquals('pagedown +VisibleRows', LA.VisibleRows, LA.ItemIndex);
+  LA.DoKeyDown(VK_PRIOR, []);                // PageUp
+  AssertEquals('pageup back to 0', 0, LA.ItemIndex);
+end;
+
+// Seed the anchor with a Task-5 mouse click (anchor=focus=1), then Shift+Down extends.
+procedure TTyListBoxTest.TestMultiSelectShiftDownExtends;
+var LA: TListBoxAccess;
+begin
+  LA := TListBoxAccess.Create(FForm); LA.Parent := FForm;
+  LA.Font.PixelsPerInch := 96; LA.SetBounds(0,0,160,240);
+  LA.Items.Add('0'); LA.Items.Add('1'); LA.Items.Add('2'); LA.Items.Add('3');
+  LA.MultiSelect := True;
+  LA.DoMouseDown([], 5, 1*24+2);             // anchor=focus=1, selects {1}
+  LA.DoKeyDown(VK_DOWN, [ssShift]);          // extend 1..2
+  AssertTrue('1..2 selected', LA.Selected[1] and LA.Selected[2]);
+  AssertFalse('3 not', LA.Selected[3]);
+  LA.DoKeyDown(VK_DOWN, [ssShift]);          // extend 1..3
+  AssertTrue('1..3 selected', LA.Selected[1] and LA.Selected[2] and LA.Selected[3]);
+  LA.DoKeyDown(VK_SPACE, []);                // toggle focus(3) off
+  AssertFalse('focus 3 toggled off', LA.Selected[3]);
 end;
 
 initialization
