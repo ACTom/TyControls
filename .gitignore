@@ -36,3 +36,6 @@ backup/
 # 操作系统
 .DS_Store
 Thumbs.db
+
+# Superpowers brainstorming 可视化助手临时产物
+.superpowers/
