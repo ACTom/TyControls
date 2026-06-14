@@ -2,7 +2,7 @@ unit test.spinedit;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LazUTF8, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
   tyControls.SpinEdit;
@@ -16,10 +16,32 @@ type
     function SimulateWheel(WheelDelta: Integer): Boolean;
   end;
 
+  { Access subclass for the inline edit model: exposes edit buffer + handlers }
+  TTySpinAccess = class(TTySpinEdit)
+  public
+    procedure DoKey(Key: Word; Shift: TShiftState);   // calls KeyDown
+    procedure TypeChar(const C: TUTF8Char);            // calls UTF8KeyPress
+    function EditTextForTest: string;
+    function CaretForTest: Integer;
+    procedure CommitForTest;
+    procedure FocusBufferForTest;
+    procedure SetEditTextForTest(const S: string);
+  end;
+
   TChangeCounter = class
   public
     Count: Integer;
     procedure Handle(Sender: TObject);
+  end;
+
+  TTySpinEditEditModelTest = class(TTestCase)
+  published
+    procedure TestSpinTypeDigitsIntoBuffer;
+    procedure TestSpinCommitParsesAndClamps;
+    procedure TestSpinEscRevertsBuffer;
+    procedure TestSpinEnterCommits;
+    procedure TestSpinArrowStepsAndResyncsBuffer;
+    procedure TestSpinInvalidCommitFallsBack;
   end;
 
   TTySpinEditGeometryTest = class(TTestCase)
@@ -70,6 +92,94 @@ implementation
 procedure TChangeCounter.Handle(Sender: TObject);
 begin
   Inc(Count);
+end;
+
+{ TTySpinAccess }
+
+procedure TTySpinAccess.DoKey(Key: Word; Shift: TShiftState); begin KeyDown(Key, Shift); end;
+procedure TTySpinAccess.TypeChar(const C: TUTF8Char); var k: TUTF8Char; begin k := C; UTF8KeyPress(k); end;
+function TTySpinAccess.EditTextForTest: string; begin Result := FEditText; end;
+function TTySpinAccess.CaretForTest: Integer; begin Result := FCaret; end;
+procedure TTySpinAccess.CommitForTest; begin CommitEdit; end;
+procedure TTySpinAccess.FocusBufferForTest; begin SyncBufferToValue; end;
+procedure TTySpinAccess.SetEditTextForTest(const S: string); begin FEditText := S; FCaret := UTF8Length(S); end;
+
+{ TTySpinEditEditModelTest }
+
+procedure TTySpinEditEditModelTest.TestSpinTypeDigitsIntoBuffer;
+var S: TTySpinAccess;
+begin
+  S := TTySpinAccess.Create(nil);
+  try
+    S.MinValue := 0; S.MaxValue := 1000; S.Value := 0;
+    S.FocusBufferForTest;
+    S.TypeChar('4'); S.TypeChar('2');
+    AssertTrue('digits in buffer', Pos('42', S.EditTextForTest) > 0);
+  finally S.Free; end;
+end;
+
+procedure TTySpinEditEditModelTest.TestSpinCommitParsesAndClamps;
+var S: TTySpinAccess;
+begin
+  S := TTySpinAccess.Create(nil);
+  try
+    S.MinValue := 0; S.MaxValue := 50; S.Value := 0;
+    S.FocusBufferForTest; S.SetEditTextForTest('999');
+    S.CommitForTest;
+    AssertEquals('clamped to max', 50, S.Value);
+    AssertEquals('buffer resynced', '50', S.EditTextForTest);
+  finally S.Free; end;
+end;
+
+procedure TTySpinEditEditModelTest.TestSpinEscRevertsBuffer;
+var S: TTySpinAccess;
+begin
+  S := TTySpinAccess.Create(nil);
+  try
+    S.MinValue := 0; S.MaxValue := 100; S.Value := 7;
+    S.FocusBufferForTest; S.SetEditTextForTest('99');
+    S.DoKey(VK_ESCAPE, []);
+    AssertEquals('value unchanged after Esc', 7, S.Value);
+    AssertEquals('buffer reverted', '7', S.EditTextForTest);
+  finally S.Free; end;
+end;
+
+procedure TTySpinEditEditModelTest.TestSpinEnterCommits;
+var S: TTySpinAccess;
+begin
+  S := TTySpinAccess.Create(nil);
+  try
+    S.MinValue := 0; S.MaxValue := 100; S.Value := 0;
+    S.FocusBufferForTest; S.SetEditTextForTest('33');
+    S.DoKey(VK_RETURN, []);
+    AssertEquals('enter committed', 33, S.Value);
+  finally S.Free; end;
+end;
+
+procedure TTySpinEditEditModelTest.TestSpinArrowStepsAndResyncsBuffer;
+var S: TTySpinAccess;
+begin
+  S := TTySpinAccess.Create(nil);
+  try
+    S.MinValue := 0; S.MaxValue := 100; S.Value := 5; S.Increment := 2;
+    S.FocusBufferForTest;
+    S.DoKey(VK_UP, []);
+    AssertEquals('value stepped', 7, S.Value);
+    AssertEquals('buffer resynced to value', '7', S.EditTextForTest);
+  finally S.Free; end;
+end;
+
+procedure TTySpinEditEditModelTest.TestSpinInvalidCommitFallsBack;
+var S: TTySpinAccess;
+begin
+  S := TTySpinAccess.Create(nil);
+  try
+    S.MinValue := 0; S.MaxValue := 100; S.Value := 9;
+    S.FocusBufferForTest; S.SetEditTextForTest('-');
+    S.CommitForTest;
+    AssertEquals('invalid falls back to current value', 9, S.Value);
+    AssertEquals('buffer resynced', '9', S.EditTextForTest);
+  finally S.Free; end;
 end;
 
 { TTySpinEditProbe }
@@ -370,4 +480,5 @@ initialization
   RegisterTest(TTySpinEditGeometryTest);
   RegisterTest(TTySpinEditControlTest);
   RegisterTest(TTySpinEditPixelTest);
+  RegisterTest(TTySpinEditEditModelTest);
 end.
