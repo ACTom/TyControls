@@ -352,7 +352,7 @@ begin
   else if Font.Size > 0 then
     Result := Font.Size
   else
-    Result := 10;
+    Result := 9;
 end;
 
 procedure TTyCustomControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);

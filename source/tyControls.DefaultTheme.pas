@@ -39,7 +39,7 @@ begin
     '  border-width: 1px;' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 6px;' + LineEnding +
-    '  font-size: 10px;' + LineEnding +
+    '  font-size: 9px;' + LineEnding +
     '  font-weight: 400;' + LineEnding +
     '}' + LineEnding +
     'TyButton:hover    { background: darken(--surface, 4%); }' + LineEnding +
@@ -56,7 +56,7 @@ begin
     'TyLabel {' + LineEnding +
     '  background: alpha(#FFFFFF, 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
-    '  font-size: 10px;' + LineEnding +
+    '  font-size: 9px;' + LineEnding +
     '  font-weight: 400;' + LineEnding +
     '}' + LineEnding +
     'TyLabel:disabled { opacity: 0.5; }' + LineEnding +
@@ -68,7 +68,7 @@ begin
     '  border-width: 1px;' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 4px;' + LineEnding +
-    '  font-size: 10px;' + LineEnding +
+    '  font-size: 9px;' + LineEnding +
     '}' + LineEnding +
     'TyEdit:hover    { border-color: darken(--border, 10%); }' + LineEnding +
     'TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
@@ -114,7 +114,7 @@ begin
     '  border-width: 1px;' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 4px;' + LineEnding +
-    '  font-size: 10px;' + LineEnding +
+    '  font-size: 9px;' + LineEnding +
     '}' + LineEnding +
     'TyComboBox:hover    { border-color: darken(--border, 10%); }' + LineEnding +
     'TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
@@ -134,7 +134,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: 1px;' + LineEnding +
     '  border-radius: var(--radius) var(--radius) 0 0;' + LineEnding +
-    '  font-size: 10px;' + LineEnding +
+    '  font-size: 9px;' + LineEnding +
     '  font-weight: 700;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -243,7 +243,7 @@ begin
     '  border-width: 1px;' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 4px;' + LineEnding +
-    '  font-size: 10px;' + LineEnding +
+    '  font-size: 9px;' + LineEnding +
     '}' + LineEnding +
     'TySpinEdit:hover    { border-color: darken(--border, 10%); }' + LineEnding +
     'TySpinEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
@@ -256,7 +256,7 @@ begin
     '  border-width: 1px;' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 4px;' + LineEnding +
-    '  font-size: 10px;' + LineEnding +
+    '  font-size: 9px;' + LineEnding +
     '}' + LineEnding +
     'TyMemo:hover    { border-color: darken(--border, 10%); }' + LineEnding +
     'TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +

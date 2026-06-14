@@ -19,7 +19,7 @@ TyButton {
   border-width: 1px;
   border-radius: var(--radius);
   padding: 8px;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   shadow: 0px 2px 4px #0000002E;
 }
@@ -37,7 +37,7 @@ TyButton.danger:active    { background: darken(--danger, 10%); }
 TyLabel {
   background: alpha(#FFFFFF,0);
   color: var(--on-surface);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 400;
 }
 TyLabel:disabled { opacity: 0.45; }
@@ -49,7 +49,7 @@ TyEdit {
   border-width: 2px;
   border-radius: var(--radius);
   padding: 6px;
-  font-size: 10px;
+  font-size: 9px;
 }
 TyEdit:hover    { border-color: lighten(--accent, 10%); }
 TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
@@ -96,7 +96,7 @@ TyComboBox {
   border-width: 2px;
   border-radius: var(--radius);
   padding: 6px;
-  font-size: 10px;
+  font-size: 9px;
 }
 TyComboBox:hover    { border-color: lighten(--accent, 10%); }
 TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
@@ -228,7 +228,7 @@ TySpinEdit {
   border-width: 2px;
   border-radius: var(--radius);
   padding: 6px;
-  font-size: 10px;
+  font-size: 9px;
   shadow: 0px 1px 3px #0000001F;
 }
 TySpinEdit:hover    { border-color: lighten(--accent, 10%); }
@@ -242,7 +242,7 @@ TyMemo {
   border-width: 2px;
   border-radius: var(--radius);
   padding: 6px;
-  font-size: 10px;
+  font-size: 9px;
   shadow: 0px 1px 3px #0000001F;
 }
 TyMemo:hover    { border-color: lighten(--accent, 10%); }
