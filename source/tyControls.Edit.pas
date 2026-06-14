@@ -3,8 +3,10 @@ unit tyControls.Edit;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
+  ExtCtrls,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.UndoStack;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.UndoStack,
+  tyControls.Animation;
 type
   TTyIntArray = array of Integer;
 
@@ -55,6 +57,18 @@ type
     // Word-classifier helper (pure codepoint logic; no widget dependency)
     function IsWordCodepoint(const CP: string): Boolean;
   protected
+    // Blinking caret (Task 10). FCaretVisible defaults True; the timer is created
+    // lazily and started ONLY when HandleAllocated, so headless tests never blink
+    // and the static-caret pixel tests stay deterministic. Protected so the
+    // headless access subclass can reach FCaretVisible.
+    FCaretVisible: Boolean;
+    FBlinkTimer: TTimer;
+    FBlinkElapsedMs: Integer;
+    procedure EnsureBlinkTimer;
+    procedure HandleBlink(Sender: TObject);
+    procedure ResetCaretBlink;
+    procedure DoEnter; override;
+    procedure DoExit; override;
     function GetStyleTypeKey: string; override;
     procedure DoChange;
     // Text measurement helper (protected so headless access subclasses can call it)
@@ -140,13 +154,64 @@ begin
   FMeasureBmp := nil;
   FUndoStack := TTyUndoStack.Create;
   FSuspendUndo := False;
+  FCaretVisible := True;       // solid caret until a real timer toggles it
+  FBlinkTimer := nil;          // lazy: created only when HandleAllocated
+  FBlinkElapsedMs := 0;
 end;
 
 destructor TTyEdit.Destroy;
 begin
+  // Free the timer first so its OnTimer callback can never fire mid-teardown
+  // (mirrors TTyButton.Destroy). It is owned by Self but we free it explicitly.
+  FreeAndNil(FBlinkTimer);
   FUndoStack.Free;
   FMeasureBmp.Free;
   inherited Destroy;
+end;
+
+// ---- Blinking caret (Task 10) ----
+
+procedure TTyEdit.EnsureBlinkTimer;
+begin
+  if FBlinkTimer = nil then
+  begin
+    FBlinkTimer := TTimer.Create(Self);
+    FBlinkTimer.Enabled := False;
+    FBlinkTimer.Interval := 530;
+    FBlinkTimer.OnTimer := @HandleBlink;
+  end;
+end;
+
+procedure TTyEdit.HandleBlink(Sender: TObject);
+begin
+  Inc(FBlinkElapsedMs, FBlinkTimer.Interval);
+  FCaretVisible := TyCaretVisible(FBlinkElapsedMs, FBlinkTimer.Interval);
+  Invalidate;
+end;
+
+procedure TTyEdit.ResetCaretBlink;
+begin
+  FCaretVisible := True;
+  FBlinkElapsedMs := 0;
+end;
+
+procedure TTyEdit.DoEnter;
+begin
+  inherited DoEnter;
+  ResetCaretBlink;
+  if HandleAllocated then
+  begin
+    EnsureBlinkTimer;
+    FBlinkTimer.Enabled := True;
+  end;
+end;
+
+procedure TTyEdit.DoExit;
+begin
+  inherited DoExit;
+  if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
+  FCaretVisible := True;
+  Invalidate;
 end;
 
 function TTyEdit.GetStyleTypeKey: string;
@@ -274,6 +339,7 @@ begin
   FSelAnchor := 0;
   FCaret := UTF8Length(FText);
   EnsureCaretVisible(Font.PixelsPerInch);
+  ResetCaretBlink;
   Invalidate;
 end;
 
@@ -281,6 +347,7 @@ procedure TTyEdit.ClearSelection;
 begin
   BreakCoalescing;
   FSelAnchor := FCaret;
+  ResetCaretBlink;
   Invalidate;
 end;
 
@@ -305,6 +372,7 @@ begin
   APPI := Font.PixelsPerInch;
   ClampScrollX(APPI);
   EnsureCaretVisible(APPI);
+  ResetCaretBlink;
   Invalidate;
 end;
 
@@ -328,6 +396,7 @@ begin
   APPI := Font.PixelsPerInch;
   ClampScrollX(APPI);
   EnsureCaretVisible(APPI);
+  ResetCaretBlink;
   Invalidate;
 end;
 
@@ -351,6 +420,7 @@ begin
   APPI := Font.PixelsPerInch;
   ClampScrollX(APPI);
   EnsureCaretVisible(APPI);
+  ResetCaretBlink;
   Invalidate;
 end;
 
@@ -383,6 +453,7 @@ begin
   FCaret := AValue;
   FSelAnchor := AValue;  // direct CaretPos write collapses selection
   EnsureCaretVisible(Font.PixelsPerInch);
+  ResetCaretBlink;
   Invalidate;
 end;
 
@@ -788,6 +859,7 @@ begin
   InvalidateWidthCache;
   APPI := Font.PixelsPerInch;
   EnsureCaretVisible(APPI);
+  ResetCaretBlink;
   Invalidate;
 end;
 
@@ -875,6 +947,7 @@ begin
   InvalidateWidthCache;
   APPI := Font.PixelsPerInch;
   EnsureCaretVisible(APPI);
+  ResetCaretBlink;
   Invalidate;
 end;
 
@@ -902,6 +975,7 @@ begin
   APPI := Font.PixelsPerInch;
   ClampScrollX(APPI);
   EnsureCaretVisible(APPI);
+  ResetCaretBlink;
   Invalidate;
 end;
 
@@ -929,6 +1003,7 @@ begin
   APPI := Font.PixelsPerInch;
   ClampScrollX(APPI);
   EnsureCaretVisible(APPI);
+  ResetCaretBlink;
   Invalidate;
 end;
 
@@ -947,6 +1022,8 @@ var
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
+  // Any key activity while focused makes the caret solid for one blink cycle.
+  ResetCaretBlink;
   Len := UTF8Length(FText);
 
   // Ctrl+A / Meta+A
@@ -1276,8 +1353,8 @@ begin
           S.TextColor, taLeftJustify, tlCenter, True);
     end;
 
-    // 3. Caret (only when focused and no selection)
-    if Focused and not HasSelection then
+    // 3. Caret (only when focused, no selection, and blink-visible)
+    if Focused and not HasSelection and FCaretVisible then
     begin
       if Length(Widths) = 0 then
         Widths := MeasureCodepointWidths(APPI);

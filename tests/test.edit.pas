@@ -24,6 +24,9 @@ type
     function TextStartXForTest: Integer;
     // EDIT.17: TextHint helper
     function HintVisibleForTest: Boolean;
+    // Task 10: blinking-caret field access (pure reset logic; no real timer)
+    function CaretVisibleForTest: Boolean;
+    procedure SetCaretVisibleForTest(b: Boolean);
   end;
 
   // Subclass with in-memory clipboard for headless testing
@@ -117,6 +120,8 @@ type
     // EDIT.17: TextHint
     procedure TestTextHintRendersWhenEmpty;
     procedure TestTextHintHiddenWhenNonEmpty;
+    // Task 10: blinking caret reset-on-activity
+    procedure TestEditActivityResetsCaretVisible;
   end;
 implementation
 
@@ -181,6 +186,16 @@ end;
 function TTyEditAccess.HintVisibleForTest: Boolean;
 begin
   Result := (Text = '') and (TextHint <> '');
+end;
+
+function TTyEditAccess.CaretVisibleForTest: Boolean;
+begin
+  Result := FCaretVisible;
+end;
+
+procedure TTyEditAccess.SetCaretVisibleForTest(b: Boolean);
+begin
+  FCaretVisible := b;
 end;
 
 // TTyEditClipboardAccess
@@ -1895,6 +1910,22 @@ begin
   try
     E.Text := 'x'; E.TextHint := 'Search...';
     AssertTrue('hint suppressed when text present', E.HintVisibleForTest = False);
+  finally E.Free; end;
+end;
+
+// ---- Task 10: blinking caret reset-on-activity ----
+
+procedure TEditTest.TestEditActivityResetsCaretVisible;
+var E: TTyEditAccess;
+begin
+  E := TTyEditAccess.Create(nil);
+  try
+    E.SetCaretVisibleForTest(False);  // pretend mid-blink off
+    E.InjectKey('a');                 // any edit must reset to visible
+    AssertTrue('edit resets caret to visible', E.CaretVisibleForTest);
+    E.SetCaretVisibleForTest(False);
+    E.CaretPos := 0;                  // caret move resets too
+    AssertTrue('nav resets caret to visible', E.CaretVisibleForTest);
   finally E.Free; end;
 end;
 

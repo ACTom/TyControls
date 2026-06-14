@@ -3,8 +3,9 @@ unit tyControls.SpinEdit;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8,
+  ExtCtrls,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 type
   TTySpinEdit = class(TTyCustomControl)
   private
@@ -20,6 +21,16 @@ type
     FEditText: string;
     FCaret: Integer;      // codepoint index 0..UTF8Length(FEditText)
     FMeasureBmp: TBGRABitmap;  // lazy; used only for text measurement
+    // Blinking caret (Task 10). FCaretVisible defaults True; the timer is created
+    // lazily and started ONLY when HandleAllocated, so headless tests never blink
+    // and the static-caret pixel tests stay deterministic.
+    FCaretVisible: Boolean;
+    FBlinkTimer: TTimer;
+    FBlinkElapsedMs: Integer;
+    procedure EnsureBlinkTimer;
+    procedure HandleBlink(Sender: TObject);
+    procedure ResetCaretBlink;
+    procedure DoEnter; override;
     // Edit-buffer helpers
     procedure SyncBufferToValue;
     procedure CommitEdit;
@@ -92,13 +103,55 @@ begin
   FIncrement := 1;
   Width := 120;
   Height := 28;
+  FCaretVisible := True;       // solid caret until a real timer toggles it
+  FBlinkTimer := nil;          // lazy: created only when HandleAllocated
+  FBlinkElapsedMs := 0;
   SyncBufferToValue;
 end;
 
 destructor TTySpinEdit.Destroy;
 begin
+  // Free the timer first so its OnTimer callback can never fire mid-teardown.
+  FreeAndNil(FBlinkTimer);
   FMeasureBmp.Free;
   inherited Destroy;
+end;
+
+// ---- Blinking caret (Task 10) ----
+
+procedure TTySpinEdit.EnsureBlinkTimer;
+begin
+  if FBlinkTimer = nil then
+  begin
+    FBlinkTimer := TTimer.Create(Self);
+    FBlinkTimer.Enabled := False;
+    FBlinkTimer.Interval := 530;
+    FBlinkTimer.OnTimer := @HandleBlink;
+  end;
+end;
+
+procedure TTySpinEdit.HandleBlink(Sender: TObject);
+begin
+  Inc(FBlinkElapsedMs, FBlinkTimer.Interval);
+  FCaretVisible := TyCaretVisible(FBlinkElapsedMs, FBlinkTimer.Interval);
+  Invalidate;
+end;
+
+procedure TTySpinEdit.ResetCaretBlink;
+begin
+  FCaretVisible := True;
+  FBlinkElapsedMs := 0;
+end;
+
+procedure TTySpinEdit.DoEnter;
+begin
+  inherited DoEnter;
+  ResetCaretBlink;
+  if HandleAllocated then
+  begin
+    EnsureBlinkTimer;
+    FBlinkTimer.Enabled := True;
+  end;
 end;
 
 function TTySpinEdit.GetStyleTypeKey: string;
@@ -154,6 +207,7 @@ procedure TTySpinEdit.SyncBufferToValue;
 begin
   FEditText := IntToStr(FValue);
   FCaret := UTF8Length(FEditText);
+  ResetCaretBlink;
 end;
 
 function TTySpinEdit.CaretPixelX(AIdx, APPI: Integer): Integer;
@@ -196,6 +250,7 @@ begin
   After  := UTF8Copy(FEditText, FCaret + 1, L - FCaret);
   FEditText := Before + C + After;
   Inc(FCaret);
+  ResetCaretBlink;
 end;
 
 procedure TTySpinEdit.EditBackspace;
@@ -209,6 +264,7 @@ begin
   After  := UTF8Copy(FEditText, FCaret + 1, L - FCaret);
   FEditText := Before + After;
   Dec(FCaret);
+  ResetCaretBlink;
 end;
 
 procedure TTySpinEdit.EditDelete;
@@ -221,6 +277,7 @@ begin
   Before := UTF8Copy(FEditText, 1, FCaret);
   After  := UTF8Copy(FEditText, FCaret + 2, L - FCaret - 1);
   FEditText := Before + After;
+  ResetCaretBlink;
 end;
 
 procedure TTySpinEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -246,7 +303,7 @@ begin
       S.TextColor, taLeftJustify, tlCenter, True);
     P.DrawGlyph(UpR, tgArrowUp, S.TextColor, 2);
     P.DrawGlyph(DownR, tgArrowDown, S.TextColor, 2);
-    if Focused then
+    if Focused and FCaretVisible then
     begin
       cx := CaretPixelX(FCaret, APPI);
       CaretRect := Rect(cx, TextR.Top + P.Scale(2), cx + P.Scale(1), TextR.Bottom - P.Scale(2));
@@ -290,10 +347,10 @@ begin
     VK_ESCAPE: begin SyncBufferToValue; Invalidate; Key := 0; end;
     VK_BACK:   begin EditBackspace; Invalidate; Key := 0; end;
     VK_DELETE: begin EditDelete; Invalidate; Key := 0; end;
-    VK_LEFT:   begin if FCaret > 0 then Dec(FCaret); Invalidate; Key := 0; end;
-    VK_RIGHT:  begin if FCaret < UTF8Length(FEditText) then Inc(FCaret); Invalidate; Key := 0; end;
-    VK_HOME:   begin FCaret := 0; Invalidate; Key := 0; end;
-    VK_END:    begin FCaret := UTF8Length(FEditText); Invalidate; Key := 0; end;
+    VK_LEFT:   begin if FCaret > 0 then Dec(FCaret); ResetCaretBlink; Invalidate; Key := 0; end;
+    VK_RIGHT:  begin if FCaret < UTF8Length(FEditText) then Inc(FCaret); ResetCaretBlink; Invalidate; Key := 0; end;
+    VK_HOME:   begin FCaret := 0; ResetCaretBlink; Invalidate; Key := 0; end;
+    VK_END:    begin FCaret := UTF8Length(FEditText); ResetCaretBlink; Invalidate; Key := 0; end;
   end;
 end;
 
@@ -301,6 +358,9 @@ procedure TTySpinEdit.DoExit;
 begin
   inherited DoExit;
   CommitEdit;
+  if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
+  FCaretVisible := True;
+  Invalidate;
 end;
 
 function TTySpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;

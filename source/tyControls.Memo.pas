@@ -3,9 +3,10 @@ unit tyControls.Memo;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
+  ExtCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
-  tyControls.ScrollBar, tyControls.UndoStack;
+  tyControls.ScrollBar, tyControls.UndoStack, tyControls.Animation;
 type
   // Cumulative-prefix pixel widths, length = codepoints+1 (shared name with Edit).
   TTyIntArray = array of Integer;
@@ -141,6 +142,17 @@ type
     procedure DeleteWordBackward;
     procedure DeleteWordForward;
   protected
+    // Blinking caret (Task 10). FCaretVisible defaults True; the timer is created
+    // lazily and started ONLY when HandleAllocated, so headless tests never blink
+    // and the static-caret pixel tests stay deterministic.
+    FCaretVisible: Boolean;
+    FBlinkTimer: TTimer;
+    FBlinkElapsedMs: Integer;
+    procedure EnsureBlinkTimer;
+    procedure HandleBlink(Sender: TObject);
+    procedure ResetCaretBlink;
+    procedure DoEnter; override;
+    procedure DoExit; override;
     function GetStyleTypeKey: string; override;
     // --- Undo/redo state serialization (protected so headless access subclasses
     // can drive them directly, mirroring TTyEdit). CaptureState serializes the
@@ -413,16 +425,66 @@ begin
   FUndoStack := TTyUndoStack.Create;
   FSuspendUndo := False;
   FReadOnly := False;
+  FCaretVisible := True;       // solid caret until a real timer toggles it
+  FBlinkTimer := nil;          // lazy: created only when HandleAllocated
+  FBlinkElapsedMs := 0;
   Width := 200;
   Height := 120;
 end;
 
 destructor TTyMemo.Destroy;
 begin
+  // Free the timer first so its OnTimer callback can never fire mid-teardown.
+  FreeAndNil(FBlinkTimer);
   FUndoStack.Free;
   FMeasureBmp.Free;
   FLines.Free;
   inherited Destroy;
+end;
+
+// ---- Blinking caret (Task 10) ----
+
+procedure TTyMemo.EnsureBlinkTimer;
+begin
+  if FBlinkTimer = nil then
+  begin
+    FBlinkTimer := TTimer.Create(Self);
+    FBlinkTimer.Enabled := False;
+    FBlinkTimer.Interval := 530;
+    FBlinkTimer.OnTimer := @HandleBlink;
+  end;
+end;
+
+procedure TTyMemo.HandleBlink(Sender: TObject);
+begin
+  Inc(FBlinkElapsedMs, FBlinkTimer.Interval);
+  FCaretVisible := TyCaretVisible(FBlinkElapsedMs, FBlinkTimer.Interval);
+  Invalidate;
+end;
+
+procedure TTyMemo.ResetCaretBlink;
+begin
+  FCaretVisible := True;
+  FBlinkElapsedMs := 0;
+end;
+
+procedure TTyMemo.DoEnter;
+begin
+  inherited DoEnter;
+  ResetCaretBlink;
+  if HandleAllocated then
+  begin
+    EnsureBlinkTimer;
+    FBlinkTimer.Enabled := True;
+  end;
+end;
+
+procedure TTyMemo.DoExit;
+begin
+  inherited DoExit;
+  if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
+  FCaretVisible := True;
+  Invalidate;
 end;
 
 function TTyMemo.GetStyleTypeKey: string;
@@ -1278,6 +1340,7 @@ begin
   if not FInVerticalMove then
     UpdateDesiredX(APPI);
   UpdateScrollBar;
+  ResetCaretBlink;
   Invalidate;
   DoChange;
 end;
@@ -1292,6 +1355,7 @@ begin
   // move (FInVerticalMove) preserves it so a run of Up/Down tracks the original x.
   if not FInVerticalMove then
     UpdateDesiredX(APPI);
+  ResetCaretBlink;
   Invalidate;
   // Pure caret motion ends any typing-coalesce run: the next typed character
   // starts a fresh undo step. AfterCaretMove is the shared post-routine for all
@@ -2145,7 +2209,7 @@ begin
     // while a selection band is shown (matches TTyEdit). CaretToVisual binds a
     // wrap-boundary caret to the earlier (line-end) row; X is segment-relative so
     // a full-width row (RS=0) reproduces today's caret X exactly.
-    if (Focused or FForceFocused) and not HasSelection then
+    if (Focused or FForceFocused) and not HasSelection and FCaretVisible then
     begin
       CaretToVisual(FCaretLine, FCaretCol, FVisualRowsWidth, APPI, CaretVRow, CaretX);
       if (CaretVRow >= FTopRow) and (CaretVRow <= LastVisible)
