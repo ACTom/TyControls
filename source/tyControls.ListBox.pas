@@ -31,6 +31,10 @@ type
     function GetSelected(AIndex: Integer): Boolean;
     procedure SetSelected(AIndex: Integer; AValue: Boolean);
     procedure SetMultiSelect(AValue: Boolean);
+    procedure DoChangeSel;
+    procedure ClearAllBits;
+    function FSelAnchorOr(ADefault: Integer): Integer;
+    procedure ApplyRangeSelection(ALo, AHi: Integer);
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -307,6 +311,36 @@ begin
   end;
 end;
 
+procedure TTyListBox.DoChangeSel;
+begin
+  if Assigned(FOnChange) then FOnChange(Self);
+end;
+
+procedure TTyListBox.ClearAllBits;
+var i: Integer;
+begin
+  EnsureSelectedLen;
+  for i := 0 to High(FSelected) do FSelected[i] := False;
+end;
+
+function TTyListBox.FSelAnchorOr(ADefault: Integer): Integer;
+begin
+  if (FSelAnchor >= 0) and (FSelAnchor < FItems.Count) then Result := FSelAnchor
+  else Result := ADefault;
+end;
+
+procedure TTyListBox.ApplyRangeSelection(ALo, AHi: Integer);
+var i, t: Integer;
+begin
+  EnsureSelectedLen;
+  if ALo > AHi then begin t := ALo; ALo := AHi; AHi := t; end;
+  ClearAllBits;
+  for i := ALo to AHi do
+    if (i >= 0) and (i < FItems.Count) then FSelected[i] := True;
+  Invalidate;
+  DoChangeSel;
+end;
+
 procedure TTyListBox.UpdateScrollBar;
 var
   VR, MaxPos, MaxTop: Integer;
@@ -405,7 +439,32 @@ begin
     SH := ScaledItemHeight;
     Row := FTopIndex + (Y div SH);
     if (Row >= 0) and (Row < FItems.Count) then
-      SelectItem(Row);
+    begin
+      if not FMultiSelect then
+        SelectItem(Row)
+      else
+      begin
+        EnsureSelectedLen;
+        if ssShift in Shift then
+        begin
+          ApplyRangeSelection(FSelAnchorOr(Row), Row);
+          FItemIndex := Row;
+        end
+        else if ssCtrl in Shift then
+        begin
+          FSelected[Row] := not FSelected[Row];
+          FItemIndex := Row; FSelAnchor := Row;
+          Invalidate; DoChangeSel;
+        end
+        else
+        begin
+          ClearAllBits;
+          FSelected[Row] := True;
+          FItemIndex := Row; FSelAnchor := Row;
+          Invalidate; DoChangeSel;
+        end;
+      end;
+    end;
     try
       if CanFocus then
         SetFocus;

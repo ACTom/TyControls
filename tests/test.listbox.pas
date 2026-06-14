@@ -33,6 +33,7 @@ type
     procedure TestMultiSelectSelectedAndSelCount;
     procedure TestSingleSelectSelectedReflectsItemIndex;
     procedure TestClearSelectionNoOpInSingle;
+    procedure TestMultiSelectMouseClicks;
   end;
 
   { A2 regression: embedded scrollbar must inherit controller and DPI width }
@@ -51,6 +52,7 @@ type
     procedure CallUpdateScrollBar;
     function FindScrollBar: TTyScrollBar;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure DoMouseDown(Shift: TShiftState; X, Y: Integer);
   end;
 
   { Hard-cast target to drive the embedded scrollbar's protected mouse handlers. }
@@ -119,6 +121,11 @@ end;
 procedure TListBoxAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TListBoxAccess.DoMouseDown(Shift: TShiftState; X, Y: Integer);
+begin
+  MouseDown(mbLeft, Shift, X, Y);
 end;
 
 { TTyListBoxTest }
@@ -662,6 +669,28 @@ begin
   FList.ClearSelection;                 // no-op in single mode
   AssertEquals('single ItemIndex unchanged by ClearSelection', 1, FList.ItemIndex);
   AssertEquals('selcount still 1', 1, FList.SelCount);
+end;
+
+procedure TTyListBoxTest.TestMultiSelectMouseClicks;
+var LA: TListBoxAccess;
+begin
+  LA := TListBoxAccess.Create(FForm); LA.Parent := FForm;
+  LA.Font.PixelsPerInch := 96; LA.SetBounds(0,0,160,240);
+  LA.Items.Add('0'); LA.Items.Add('1'); LA.Items.Add('2'); LA.Items.Add('3'); LA.Items.Add('4');
+  LA.MultiSelect := True;
+  LA.DoMouseDown([], 5, 1*24+2);                 // plain click row 1
+  AssertEquals('plain click selects 1', 1, LA.SelCount);
+  AssertTrue('row1 selected', LA.Selected[1]);
+  LA.DoMouseDown([ssCtrl], 5, 3*24+2);           // ctrl-click row 3 -> add
+  AssertEquals('ctrl adds -> 2', 2, LA.SelCount);
+  AssertTrue('row3 selected', LA.Selected[3]);
+  AssertTrue('row1 still selected', LA.Selected[1]);
+  LA.DoMouseDown([ssShift], 5, 4*24+2);          // shift-click row 4 -> range anchor(3)..4
+  AssertTrue('row3..4 selected', LA.Selected[3] and LA.Selected[4]);
+  AssertFalse('row1 cleared by shift-range', LA.Selected[1]);
+  LA.DoMouseDown([], 5, 0*24+2);                 // plain click row 0 -> only 0
+  AssertEquals('plain resets to 1', 1, LA.SelCount);
+  AssertTrue('row0', LA.Selected[0]);
 end;
 
 initialization
