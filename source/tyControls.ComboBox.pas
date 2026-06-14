@@ -40,7 +40,7 @@ type
     function GetStyleTypeKey: string; override;
     procedure SelectItem(AIndex: Integer);
     function DroppedDown: Boolean;
-    procedure DropDown;
+    procedure DropDown; virtual;
     procedure CloseUp;
     { Expose popup list for headless tests and internal use }
     function PopupList: TTyListBox;

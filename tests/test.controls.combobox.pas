@@ -21,6 +21,15 @@ type
     procedure Handle(Sender: TObject);
   end;
 
+  { Headless probe: overrides DropDown to record the call without creating a
+    win32 popup form (which fails in a headless / no-display environment). }
+  TComboKeyProbe = class(TTyComboBox)
+  public
+    Opened: Boolean;
+    procedure DropDown; override;   // record only; no popup window
+    procedure DoKeyDown(var Key: Word; Shift: TShiftState);
+  end;
+
   TTyComboBoxTest = class(TTestCase)
   private
     FForm: TForm;
@@ -80,6 +89,16 @@ begin
 end;
 
 procedure TComboAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
+end;
+
+procedure TComboKeyProbe.DropDown;
+begin
+  Opened := True;   // headless-safe: do NOT call inherited (which creates a win32 form)
+end;
+
+procedure TComboKeyProbe.DoKeyDown(var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
 end;
@@ -349,12 +368,22 @@ begin
 end;
 
 procedure TTyComboBoxTest.TestAltDownOpensDropdown;
-var K: Word;
+var C: TComboKeyProbe; K: Word;
 begin
-  FCombo.Items.Clear; FCombo.Items.Add('A'); FCombo.Items.Add('B');
-  AssertFalse('starts closed', FCombo.DroppedDown);
-  K := VK_DOWN; FCombo.DoKeyDown(K, [ssAlt]);
-  AssertTrue('Alt+Down opens dropdown', FCombo.DroppedDown);
+  C := TComboKeyProbe.Create(nil);
+  try
+    C.Items.Add('A'); C.Items.Add('B'); C.Items.Add('C');
+    C.ItemIndex := 0;
+    C.Opened := False;
+    K := VK_DOWN; C.DoKeyDown(K, [ssAlt]);          // Alt+Down -> DropDown (recorded)
+    AssertTrue('Alt+Down routed to DropDown', C.Opened);
+    AssertEquals('Alt+Down consumed key', 0, Integer(K));
+    AssertEquals('Alt+Down did NOT advance selection', 0, C.ItemIndex);
+    // F4 also toggles
+    C.Opened := False;
+    K := VK_F4; C.DoKeyDown(K, []);
+    AssertTrue('F4 routed to DropDown', C.Opened);
+  finally C.Free; end;
 end;
 
 initialization
