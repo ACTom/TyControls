@@ -238,13 +238,37 @@ begin
 end;
 
 procedure TTyComboBox.KeyDown(var Key: Word; Shift: TShiftState);
+var Cnt: Integer;
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
   if (Key = VK_ESCAPE) and DroppedDown then
   begin
-    CloseUp;
-    Key := 0;
+    CloseUp; Key := 0; Exit;
+  end;
+  { Alt+Down or F4 toggles the dropdown. Must precede the plain VK_DOWN case. }
+  if ((Key = VK_DOWN) and (ssAlt in Shift)) or (Key = VK_F4) then
+  begin
+    if DroppedDown then CloseUp else DropDown;
+    Key := 0; Exit;
+  end;
+  Cnt := FItems.Count;
+  if Cnt = 0 then Exit;
+  case Key of
+    VK_DOWN:
+      begin
+        if FItemIndex < 0 then SelectItem(0)
+        else if FItemIndex < Cnt - 1 then SelectItem(FItemIndex + 1);
+        Key := 0;
+      end;
+    VK_UP:
+      begin
+        if FItemIndex < 0 then SelectItem(0)
+        else if FItemIndex > 0 then SelectItem(FItemIndex - 1);
+        Key := 0;
+      end;
+    VK_HOME: begin SelectItem(0); Key := 0; end;
+    VK_END:  begin SelectItem(Cnt - 1); Key := 0; end;
   end;
 end;
 

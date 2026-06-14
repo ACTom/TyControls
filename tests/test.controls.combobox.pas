@@ -2,7 +2,7 @@ unit test.controls.combobox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLIntf, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLIntf, LCLType, fpcunit, testregistry,
   tyControls.Base, tyControls.Controller, tyControls.ComboBox, tyControls.ListBox;
 type
   { Expose protected Click and RenderTo for tests }
@@ -12,6 +12,7 @@ type
     procedure DoClick;
     { Allow tests to rewind the close-up tick so Click thinks enough time has passed }
     procedure AgeCloseUpTick;
+    procedure DoKeyDown(var Key: Word; Shift: TShiftState);
   end;
 
   TChangeProbe = class
@@ -50,6 +51,9 @@ type
     { Bug #9: reassigning Controller after the popup exists must propagate
       immediately, without waiting for the next DropDown }
     procedure TestSetControllerPropagatesToPopup;
+    { Task 2: closed-state keyboard selection }
+    procedure TestArrowKeysChangeSelectionClosed;
+    procedure TestAltDownOpensDropdown;
   end;
 implementation
 
@@ -73,6 +77,11 @@ begin
   { Set FCloseUpTick to a value 1000ms in the past so the next Click
     sees enough elapsed time and will proceed to DropDown. }
   FCloseUpTick := GetTickCount64 - 1000;
+end;
+
+procedure TComboAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
 end;
 
 procedure TTyComboBoxTest.SetUp;
@@ -316,6 +325,36 @@ begin
   finally
     Ctl.Free;
   end;
+end;
+
+procedure TTyComboBoxTest.TestArrowKeysChangeSelectionClosed;
+var K: Word;
+begin
+  FCombo.Items.Clear;
+  FCombo.Items.Add('Alpha'); FCombo.Items.Add('Beta'); FCombo.Items.Add('Gamma');
+  FCombo.ItemIndex := 0;
+  K := VK_DOWN; FCombo.DoKeyDown(K, []);
+  AssertEquals('down selects next', 1, FCombo.ItemIndex);
+  AssertFalse('did not open dropdown', FCombo.DroppedDown);
+  K := VK_DOWN; FCombo.DoKeyDown(K, []);
+  AssertEquals('down again', 2, FCombo.ItemIndex);
+  K := VK_DOWN; FCombo.DoKeyDown(K, []);
+  AssertEquals('down clamps at last', 2, FCombo.ItemIndex);
+  K := VK_UP; FCombo.DoKeyDown(K, []);
+  AssertEquals('up selects prev', 1, FCombo.ItemIndex);
+  K := VK_HOME; FCombo.DoKeyDown(K, []);
+  AssertEquals('home -> first', 0, FCombo.ItemIndex);
+  K := VK_END; FCombo.DoKeyDown(K, []);
+  AssertEquals('end -> last', 2, FCombo.ItemIndex);
+end;
+
+procedure TTyComboBoxTest.TestAltDownOpensDropdown;
+var K: Word;
+begin
+  FCombo.Items.Clear; FCombo.Items.Add('A'); FCombo.Items.Add('B');
+  AssertFalse('starts closed', FCombo.DroppedDown);
+  K := VK_DOWN; FCombo.DoKeyDown(K, [ssAlt]);
+  AssertTrue('Alt+Down opens dropdown', FCombo.DroppedDown);
 end;
 
 initialization
