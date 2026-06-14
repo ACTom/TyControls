@@ -113,6 +113,9 @@ type
     // --- Task 5: ReadOnly ---
     procedure TestMemoReadOnlyBlocksEditsAllowsNav;
     procedure TestMemoReadOnlyCutActsAsCopy;
+    // T6 MaxLength: content-codepoint cap on typing + paste truncation.
+    procedure TestMemoMaxLengthCapsTyping;
+    procedure TestMemoMaxLengthTruncatesPaste;
   end;
 
 implementation
@@ -1084,6 +1087,13 @@ end;
 
 { --- Task 5: ReadOnly --- }
 
+function MemoContentCodepoints(M: TTyMemo): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to M.Lines.Count - 1 do Inc(Result, UTF8Length(M.Lines[i]));
+end;
+
 procedure TTyMemoTest.TestMemoReadOnlyBlocksEditsAllowsNav;
 var M: TTyMemoClipAccess;
 begin
@@ -1117,6 +1127,32 @@ begin
     M.CutToClipboard;
     AssertTrue('cut copied something', Pos('abc', M.ClipText) > 0);
     AssertEquals('cut did not delete', 'abc', Trim(M.Lines.Text));
+  finally M.Free; end;
+end;
+
+procedure TTyMemoTest.TestMemoMaxLengthCapsTyping;
+var M: TTyMemoClipAccess;
+begin
+  M := TTyMemoClipAccess.Create(nil);
+  try
+    M.MaxLength := 3;
+    M.InjectChar('a'); M.InjectChar('b'); M.InjectChar('c');
+    M.InjectChar('d');                         // blocked at cap
+    AssertEquals('typing capped', 'abc', Trim(M.Lines.Text));
+    M.InjectKey(VK_RETURN, []);                // Enter allowed at cap (no content cp added)
+    AssertEquals('enter allowed at cap', 2, M.Lines.Count);
+  finally M.Free; end;
+end;
+
+procedure TTyMemoTest.TestMemoMaxLengthTruncatesPaste;
+var M: TTyMemoClipAccess;
+begin
+  M := TTyMemoClipAccess.Create(nil);
+  try
+    M.MaxLength := 5; M.Lines.Text := 'ab';
+    M.InjectKey(VK_END, [ssCtrl]);             // caret to doc end
+    M.ClipText := 'XXXXXXXX'; M.PasteFromClipboard;
+    AssertEquals('paste truncated to remaining room', 5, MemoContentCodepoints(M));
   finally M.Free; end;
 end;
 

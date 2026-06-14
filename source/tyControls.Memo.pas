@@ -106,7 +106,15 @@ type
     // delete/Paste) are blocked and Cut degrades to Copy; navigation, selection,
     // Copy, SelectAll and programmatic Lines := still work. Default False.
     FReadOnly: Boolean;
+    // MaxLength: caps the TOTAL content codepoint count (sum of UTF8Length over
+    // all logical lines; line breaks are NOT counted). 0 = unlimited. Blocks a
+    // new printable char at the cap and truncates paste to the remaining room;
+    // Enter/Backspace/Delete/merge are never limited. Default 0.
+    FMaxLength: Integer;
     procedure SetReadOnly(AValue: Boolean);
+    procedure SetMaxLength(AValue: Integer);
+    // Total content codepoints across all logical lines (line breaks excluded).
+    function ContentCodepointCount: Integer;
     function GetLines: TStrings;
     procedure SetLines(AValue: TStrings);
     function EffectiveFontSize(const S: TTyStyleSet): Integer;
@@ -364,6 +372,9 @@ type
     // navigation, Copy and SelectAll; programmatic Lines := still mutates. Cut
     // acts as Copy. Default False.
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+    // Caps total content codepoints (typing blocked at the cap; paste truncated
+    // to the remaining room). 0 = unlimited. Default 0.
+    property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
     property Enabled;
     property Font;
     property Align;
@@ -550,6 +561,19 @@ begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
   Invalidate;
+end;
+
+procedure TTyMemo.SetMaxLength(AValue: Integer);
+begin
+  if FMaxLength = AValue then Exit;
+  FMaxLength := AValue;
+end;
+
+function TTyMemo.ContentCodepointCount: Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to FLines.Count - 1 do Inc(Result, UTF8Length(FLines[i]));
 end;
 
 function TTyMemo.GetLines: TStrings;
@@ -1743,11 +1767,24 @@ procedure TTyMemo.PasteFromClipboard;
 var
   S, Norm, Cur, Head, Tail: string;
   Segs: TStringList;
-  i, InsertAt: Integer;
+  i, InsertAt, Room: Integer;
 begin
   if FReadOnly then Exit;            // ReadOnly: block paste
   S := ReadClipboardText;
   if S = '' then Exit;  // truly-empty clipboard: full no-op (Edit 551)
+  // MaxLength: truncate the payload to the remaining content room. When the doc
+  // is already at/over the cap there is no room -> full no-op (Exit before any
+  // mutation). Otherwise trim the RAW clipboard string to Room codepoints BEFORE
+  // the CR/LF split. This caps inserted content at Room; any CR/LF inside the
+  // trimmed prefix become line breaks (which don't count toward content), so the
+  // resulting content may be slightly UNDER Room — never over. Simple and safe.
+  if FMaxLength > 0 then
+  begin
+    Room := FMaxLength - ContentCodepointCount;
+    if Room <= 0 then Exit;
+    if UTF8Length(S) > Room then
+      S := UTF8Copy(S, 1, Room);
+  end;
   // Capture ONE undo step (uskPaste) covering the whole paste — both the
   // selection delete and the multi-line splice revert in a single undo. The
   // inner mutators are pure (no BeginUndoStep of their own), so FSuspendUndo is
@@ -2155,6 +2192,10 @@ begin
   // Printable codepoints only; control chars (Enter/Tab/etc.) are handled in
   // KeyDown or ignored here.
   if (UTF8Key = '') or (UTF8Key[1] < #32) then Exit;
+  // MaxLength: block a new printable char once the total content is at the cap.
+  // Guarded HERE (the typing caller) and NOT in DoInsertText, because paste also
+  // routes through DoInsertText but must truncate (not be blocked wholesale).
+  if (FMaxLength > 0) and (ContentCodepointCount >= FMaxLength) then Exit;
   // A selection is replaced by the typed text (delete-then-insert, like
   // TTyEdit.InjectKey 643 — NOT an early exit). Capture ONE undo step up front:
   // replacing a selection is a fresh (non-typing) step, so a later coalescing
