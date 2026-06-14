@@ -5,6 +5,8 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType, LCLIntf,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.ListBox;
+function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
+
 type
   TTyComboBox = class(TTyCustomControl)
   private
@@ -15,6 +17,9 @@ type
     { Dropdown popup state }
     FPopup: TForm;           // lazy; created on first DropDown; freed in Destroy
     FPopupList: TTyListBox;  // owned by FPopup
+    { Type-ahead state }
+    FTypeAhead: string;
+    FTypeAheadTick: QWord;
     procedure SetItems(const AValue: TStringList);
     procedure SetItemIndex(const AValue: Integer);
     procedure SetText(const AValue: string);
@@ -34,6 +39,7 @@ type
     procedure Paint; override;
     procedure Click; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -58,6 +64,22 @@ type
 implementation
 uses
   Math;
+
+function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
+var n, i, idx: Integer; pfx: string;
+begin
+  Result := -1;
+  n := AItems.Count;
+  if (n = 0) or (APrefix = '') then Exit;
+  pfx := LowerCase(APrefix);
+  for i := 1 to n do
+  begin
+    idx := (AStart + i) mod n;      // start searching AFTER AStart, wrapping
+    if idx < 0 then idx := idx + n;
+    if Copy(LowerCase(AItems[idx]), 1, Length(pfx)) = pfx then
+      Exit(idx);
+  end;
+end;
 
 constructor TTyComboBox.Create(AOwner: TComponent);
 begin
@@ -270,6 +292,20 @@ begin
     VK_HOME: begin SelectItem(0); Key := 0; end;
     VK_END:  begin SelectItem(Cnt - 1); Key := 0; end;
   end;
+end;
+
+procedure TTyComboBox.UTF8KeyPress(var UTF8Key: TUTF8Char);
+var nowTick: QWord; hit: Integer;
+begin
+  if not Enabled then Exit;
+  inherited UTF8KeyPress(UTF8Key);
+  if (UTF8Key = '') or (UTF8Key[1] < #32) then Exit;
+  nowTick := GetTickCount64;
+  if nowTick - FTypeAheadTick > 600 then FTypeAhead := '';   // restart after a pause
+  FTypeAheadTick := nowTick;
+  FTypeAhead := FTypeAhead + UTF8Key;
+  hit := TyComboTypeAheadMatch(FItems, FItemIndex, FTypeAhead);
+  if hit >= 0 then SelectItem(hit);
 end;
 
 { Popup event handlers }

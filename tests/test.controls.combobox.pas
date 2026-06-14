@@ -13,6 +13,7 @@ type
     { Allow tests to rewind the close-up tick so Click thinks enough time has passed }
     procedure AgeCloseUpTick;
     procedure DoKeyDown(var Key: Word; Shift: TShiftState);
+    procedure DoTypeChar(const C: TUTF8Char);
   end;
 
   TChangeProbe = class
@@ -63,6 +64,9 @@ type
     { Task 2: closed-state keyboard selection }
     procedure TestArrowKeysChangeSelectionClosed;
     procedure TestAltDownOpensDropdown;
+    { Task 3: type-ahead }
+    procedure TestTypeAheadMatchPureFunction;
+    procedure TestTypeAheadSelectsViaKeypress;
   end;
 implementation
 
@@ -91,6 +95,13 @@ end;
 procedure TComboAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
+end;
+
+procedure TComboAccess.DoTypeChar(const C: TUTF8Char);
+var k: TUTF8Char;
+begin
+  k := C;
+  UTF8KeyPress(k);
 end;
 
 procedure TComboKeyProbe.DropDown;
@@ -384,6 +395,30 @@ begin
     K := VK_F4; C.DoKeyDown(K, []);
     AssertTrue('F4 routed to DropDown', C.Opened);
   finally C.Free; end;
+end;
+
+procedure TTyComboBoxTest.TestTypeAheadMatchPureFunction;
+var L: TStringList;
+begin
+  L := TStringList.Create;
+  try
+    L.Add('Apple'); L.Add('Banana'); L.Add('Avocado'); L.Add('Cherry');
+    AssertEquals('from -1, prefix a -> Apple(0)', 0, TyComboTypeAheadMatch(L, -1, 'a'));
+    AssertEquals('from 0, prefix a -> Avocado(2)', 2, TyComboTypeAheadMatch(L, 0, 'a'));
+    AssertEquals('wrap: from 2, prefix a -> Apple(0)', 0, TyComboTypeAheadMatch(L, 2, 'a'));
+    AssertEquals('prefix av -> Avocado(2)', 2, TyComboTypeAheadMatch(L, -1, 'av'));
+    AssertEquals('no match -> -1', -1, TyComboTypeAheadMatch(L, -1, 'z'));
+    AssertEquals('case-insensitive', 1, TyComboTypeAheadMatch(L, -1, 'BAN'));
+  finally L.Free; end;
+end;
+
+procedure TTyComboBoxTest.TestTypeAheadSelectsViaKeypress;
+begin
+  FCombo.Items.Clear;
+  FCombo.Items.Add('Apple'); FCombo.Items.Add('Banana'); FCombo.Items.Add('Cherry');
+  FCombo.ItemIndex := -1;
+  FCombo.DoTypeChar('b');
+  AssertEquals('typing b selects Banana', 1, FCombo.ItemIndex);
 end;
 
 initialization
