@@ -81,6 +81,31 @@ DroppedDown = False → DropDown
 
 返回固定字符串 `'TyComboBox'`，用于主题样式查找。
 
+#### 关闭态键盘导航（`KeyDown` override）
+
+下拉列表**关闭**时，以下键直接在控件本身操作：
+
+| 按键 | 行为 |
+|------|------|
+| `↓`（Down） | 选中下一项（若无选中则选第 0 项；已到末项则停留） |
+| `↑`（Up） | 选中上一项（若无选中则选第 0 项；已到首项则停留） |
+| `Home` | 选中第 0 项 |
+| `End` | 选中最后一项 |
+| `Alt+↓` 或 `F4` | 打开下拉列表（已打开则关闭） |
+| `ESC` | 关闭下拉列表（未打开时无操作） |
+
+以上导航键直接调用 `SelectItem`，因此会触发 `OnChange`（仅当选项实际变化时）。此控件为**只读下拉**——关闭态不支持直接文本输入编辑（可编辑模式留后续 spec）。
+
+#### 类型超前（Type-ahead，`UTF8KeyPress` override）
+
+在控件获得焦点且下拉列表**关闭**时，按可打印字符键会累积前缀缓冲并自动跳选：
+
+- 按键追加到内部缓冲 `FTypeAhead`；
+- 在 `Items` 中从**当前选中项之后**开始循环搜索，找到第一个**前缀匹配**（不区分大小写）的项并调用 `SelectItem`；
+- 超过约 **600 ms** 无新按键后，下次按键会重置缓冲（从新字符重新开始匹配）。
+
+例：`Items = ['Apple', 'Apricot', 'Banana']`，当前选中 `Apple`，先按 `A` → 跳到 `Apricot`；再等待 600 ms 后按 `B` → 重置后跳到 `Banana`。
+
 ### 关闭路径
 
 弹出窗口通过以下三条路径关闭：
@@ -191,8 +216,10 @@ Combo.StyleClass := 'compact';
 ## 7. 注意事项
 
 1. **单击切换弹出层：** 单击控件会打开或关闭下拉列表，不再循环切换 `Items`。
-2. **Text 与 Items 独立：** 直接写 `Text` 属性不会修改 `ItemIndex`，也不触发 `OnChange`；应优先使用 `SelectItem` 或写 `ItemIndex`。
-3. **Items 赋值用 Assign：** 写入 `Items` 属性时内部调用 `FItems.Assign(AValue)`，原有内容被替换，`ItemIndex` 和 `Text` 不自动重置，需手动调用 `SelectItem(-1)` 清空选中状态。
-4. **OnChange 防重入：** 若 `SelectItem` 被调用但新值与旧值完全相同，则不触发 `OnChange`，无需在回调中判断是否重复。
-5. **TabStop 默认 True：** 控件默认可获得键盘焦点，会渲染 `:focus` 状态样式。
-6. **弹出窗口生命周期：** `FPopup` 在首次 `DropDown` 时懒创建，在控件 `Destroy` 时释放。`FPopupList` 由 `FPopup` 拥有，随之释放。
+2. **只读下拉：** 当前实现为只读模式，关闭态不接受任意文本输入；可编辑模式留后续 spec 实现。
+3. **Text 与 Items 独立：** 直接写 `Text` 属性不会修改 `ItemIndex`，也不触发 `OnChange`；应优先使用 `SelectItem` 或写 `ItemIndex`。
+4. **Items 赋值用 Assign：** 写入 `Items` 属性时内部调用 `FItems.Assign(AValue)`，原有内容被替换，`ItemIndex` 和 `Text` 不自动重置，需手动调用 `SelectItem(-1)` 清空选中状态。
+5. **OnChange 防重入：** 若 `SelectItem` 被调用但新值与旧值完全相同，则不触发 `OnChange`，无需在回调中判断是否重复。
+6. **TabStop 默认 True：** 控件默认可获得键盘焦点，会渲染 `:focus` 状态样式。
+7. **弹出窗口生命周期：** `FPopup` 在首次 `DropDown` 时懒创建，在控件 `Destroy` 时释放。`FPopupList` 由 `FPopup` 拥有，随之释放。
+8. **类型超前在下拉打开时不生效：** `UTF8KeyPress` 中无 `DroppedDown` 检查，但下拉打开时焦点转移至弹出窗口，实际键盘事件不会路由到组合框，因此 type-ahead 仅在关闭态有效。

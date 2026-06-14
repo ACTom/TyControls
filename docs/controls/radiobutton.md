@@ -27,7 +27,8 @@ uses tyControls.CheckBox;   // TTyRadioButton 与 TTyCheckBox 共用此单元
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Checked` | `Boolean` | `False` | 单选按钮当前选中状态；设为 `True` 时自动取消同一父容器下其他 `TTyRadioButton` 的选中状态（已定义 `default False`） |
+| `Checked` | `Boolean` | `False` | 单选按钮当前选中状态；设为 `True` 时自动取消同一父容器下**相同 `GroupIndex`** 的其他 `TTyRadioButton` 的选中状态（已定义 `default False`） |
+| `GroupIndex` | `Integer` | `0` | 分组索引。同一 `Parent` 内，只有 `GroupIndex` 相同的 `TTyRadioButton` 之间互斥。不同 `GroupIndex` 的单选按钮彼此独立，从而允许同一父容器内并存多个互斥组，无需为每组使用独立容器。 |
 | `Caption` | `string` | `''` | 单选按钮右侧显示的文字标签 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled`，控件不响应交互 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制 |
@@ -139,13 +140,43 @@ begin
 end;
 ```
 
-完整可运行示例（含两组独立单选组）参见 `examples/radiobutton/umain.pas`。
+完整可运行示例参见 `examples/radiobutton/umain.pas`。
+
+### GroupIndex：同一 Parent 内多个独立单选组
+
+```pascal
+// 在同一 Panel 内放置两个互不干扰的单选组（GroupIndex 区分）
+var G1A, G1B, G2A, G2B: TTyRadioButton;
+
+G1A := TTyRadioButton.Create(PanelFruit);
+G1A.Parent := PanelFruit;
+G1A.GroupIndex := 0;          // 第一组
+G1A.Caption := '苹果';
+G1A.Checked := True;
+
+G1B := TTyRadioButton.Create(PanelFruit);
+G1B.Parent := PanelFruit;
+G1B.GroupIndex := 0;          // 同一组，与 G1A 互斥
+G1B.Caption := '香蕉';
+
+G2A := TTyRadioButton.Create(PanelFruit);
+G2A.Parent := PanelFruit;
+G2A.GroupIndex := 1;          // 第二组，与 GroupIndex=0 彼此独立
+G2A.Caption := '红色';
+G2A.Checked := True;
+
+G2B := TTyRadioButton.Create(PanelFruit);
+G2B.Parent := PanelFruit;
+G2B.GroupIndex := 1;
+G2B.Caption := '蓝色';
+// 选中 G2A 不影响 G1A/G1B；选中 G1B 不影响 G2A/G2B
+```
 
 ---
 
 ## 7. 注意事项
 
-- **按 Parent 分组互斥：** `UncheckSiblings` 方法遍历 `Parent.Controls`，将所有 `TTyRadioButton` 兄弟控件的 `Checked` 设为 `False`。**分组边界由 `Parent` 决定**，而非任何额外的 `GroupName` 属性。若要实现两个独立单选组，只需将它们分别放在两个不同的容器（如两个 `TTyPanel`）内。
+- **按 Parent × GroupIndex 分组互斥：** `UncheckSiblings` 方法遍历 `Parent.Controls`，仅将与自身 `GroupIndex` 相同的 `TTyRadioButton` 兄弟控件的 `Checked` 设为 `False`。**分组边界由 `Parent` 与 `GroupIndex` 共同决定**。若要在同一父容器下实现两个独立单选组，只需为每组设置不同的 `GroupIndex`（或将它们分别放在两个不同容器内）。
 - **点击只能选中，不能取消：** `Click` 方法始终调用 `SetChecked(True)`，点击已选中项不会取消选中。若需要"可取消"的单选行为，需自行扩展。
 - **`SetChecked(False)` 不触发互斥：** 直接通过代码将 `Checked` 设为 `False` 时，不会触发 `UncheckSiblings`，因为互斥逻辑只在 `SetChecked` 中 `FChecked = True` 时执行。
 - **OnClick 事件时序：** `Click` 先调用 `SetChecked(True)`（同步完成互斥），再调用 `inherited Click`（触发 `OnClick`），因此在 `OnClick` 处理器中读取 `Checked` 已为最终值，同组其他按钮也已完成取消。
