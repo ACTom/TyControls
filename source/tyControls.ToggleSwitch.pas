@@ -175,7 +175,7 @@ procedure TTyToggleSwitch.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
-  if Key = VK_SPACE then
+  if (Key = VK_SPACE) or (Key = VK_RETURN) then
   begin
     Toggle;
     Key := 0;

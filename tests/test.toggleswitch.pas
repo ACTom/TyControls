@@ -21,6 +21,11 @@ type
     procedure Handle(Sender: TObject);
   end;
 
+  TTyToggleSwitchAccess = class(TTyToggleSwitch)
+  public
+    procedure DoKeyDown(var Key: Word; Shift: TShiftState);
+  end;
+
   TTyToggleSwitchTest = class(TTestCase)
   private
     FForm: TForm;
@@ -36,6 +41,7 @@ type
     procedure TestSetSameValueNoChange;
     procedure TestClickCallsToggle;
     procedure TestSpaceKeyToggle;
+    procedure TestEnterTogglesChecked;
     procedure TestCurrentStatesContainsActiveWhenChecked;
     procedure TestCurrentStatesNoActiveWhenUnchecked;
     procedure TestDisabledIgnoresToggle;
@@ -50,6 +56,11 @@ type
   end;
 
 implementation
+
+procedure TTyToggleSwitchAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
+end;
 
 procedure TChangeCounter.Handle(Sender: TObject);
 begin
@@ -149,6 +160,26 @@ begin
     AssertEquals('Key should be set to 0 (consumed)', 0, Integer(Key));
   finally
     Probe.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchTest.TestEnterTogglesChecked;
+var
+  F: TCustomForm;
+  T: TTyToggleSwitchAccess;
+  K: Word;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    T := TTyToggleSwitchAccess.Create(F);
+    T.Parent := F;
+    AssertFalse('off', T.Checked);
+    K := VK_RETURN;
+    T.DoKeyDown(K, []);
+    AssertTrue('enter toggled on', T.Checked);
+    AssertEquals('enter consumed', 0, K);
+  finally
+    F.Free;
   end;
 end;
 
