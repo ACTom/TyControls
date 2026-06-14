@@ -32,6 +32,7 @@ type
   TTyRadioButton = class(TTyCustomControl)
   private
     FChecked: Boolean;
+    FGroupIndex: Integer;
     procedure SetChecked(const AValue: Boolean);
     procedure UncheckSiblings;
   protected
@@ -44,6 +45,7 @@ type
     procedure Click; override;
   published
     property Checked: Boolean read FChecked write SetChecked default False;
+    property GroupIndex: Integer read FGroupIndex write FGroupIndex default 0;
     property Caption;
     property Enabled;
     property Font;
@@ -178,7 +180,8 @@ begin
   for I := 0 to Parent.ControlCount - 1 do
   begin
     Sib := Parent.Controls[I];
-    if (Sib <> Self) and (Sib is TTyRadioButton) then
+    if (Sib <> Self) and (Sib is TTyRadioButton)
+       and (TTyRadioButton(Sib).GroupIndex = FGroupIndex) then
       TTyRadioButton(Sib).SetChecked(False);
   end;
 end;

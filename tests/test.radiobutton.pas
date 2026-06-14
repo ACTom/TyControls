@@ -20,6 +20,7 @@ type
     procedure TestPaintSmoke;
     procedure TestRadioButtonShadowLocalRectAtOffset;
     procedure TestSpaceSelectsRadio;
+    procedure TestGroupIndexSeparatesGroups;
   end;
 implementation
 
@@ -178,6 +179,28 @@ begin
     K := VK_SPACE; R.DoKeyDown(K, []);
     AssertTrue('space selected it', R.Checked);
     AssertEquals('space consumed', 0, Integer(K));
+  finally F.Free; end;
+end;
+
+procedure TRadioButtonTest.TestGroupIndexSeparatesGroups;
+var F: TCustomForm; A, B, C, D: TTyRadioButton;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    // group 0: A,B ; group 1: C,D ; all under the SAME parent F
+    A := TTyRadioButton.Create(F); A.Parent := F; A.GroupIndex := 0;
+    B := TTyRadioButton.Create(F); B.Parent := F; B.GroupIndex := 0;
+    C := TTyRadioButton.Create(F); C.Parent := F; C.GroupIndex := 1;
+    D := TTyRadioButton.Create(F); D.Parent := F; D.GroupIndex := 1;
+    A.Click; C.Click;
+    AssertTrue('A checked', A.Checked);
+    AssertTrue('C checked (other group)', C.Checked);
+    B.Click;
+    AssertFalse('A cleared by B (same group)', A.Checked);
+    AssertTrue('C still checked (different group)', C.Checked);
+    D.Click;
+    AssertFalse('C cleared by D (same group)', C.Checked);
+    AssertTrue('B still checked (different group)', B.Checked);
   finally F.Free; end;
 end;
 
