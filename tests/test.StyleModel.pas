@@ -9,6 +9,8 @@ type
   published
     procedure TestMergeUnionPresent;
     procedure TestMergeOverlaysOnlyPresent;
+    procedure TestMergeRadiusCornersOverrides;
+    procedure TestMergeOutlineOverrides;
   end;
 
   TTestStyleLoad = class(TTestCase)
@@ -96,6 +98,36 @@ begin
   over.BorderWidth := 99;
   TyMergeStyleSet(base, over);
   AssertEquals('borderwidth unchanged', 1, base.BorderWidth);
+end;
+
+procedure TTestStyleMerge.TestMergeRadiusCornersOverrides;
+var base, over: TTyStyleSet;
+begin
+  base := EmptyStyleSet;
+  over := EmptyStyleSet;
+  over.Radius := TyCorners(6, 6, 0, 0);
+  over.BorderRadius := 6;
+  Include(over.Present, tpBorderRadius);
+  TyMergeStyleSet(base, over);
+  AssertTrue('radius present after merge', tpBorderRadius in base.Present);
+  AssertEquals('tl merged', 6, base.Radius.TL);
+  AssertEquals('bl merged', 0, base.Radius.BL);
+end;
+
+procedure TTestStyleMerge.TestMergeOutlineOverrides;
+var base, over: TTyStyleSet;
+begin
+  base := EmptyStyleSet;
+  over := EmptyStyleSet;
+  over.OutlineColor := TyRGB($FF, $00, $00);
+  over.OutlineWidth := 2;
+  over.OutlineOffset := 1;
+  Include(over.Present, tpOutline);
+  TyMergeStyleSet(base, over);
+  AssertTrue('outline present', tpOutline in base.Present);
+  AssertEquals('outline width', 2, base.OutlineWidth);
+  AssertEquals('outline offset', 1, base.OutlineOffset);
+  AssertEquals('outline color r', $FF, TyRedOf(base.OutlineColor));
 end;
 
 const

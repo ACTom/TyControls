@@ -57,7 +57,11 @@ begin
   if tpBorderColor  in AOver.Present then ABase.BorderColor  := AOver.BorderColor;
   if tpBorderWidth  in AOver.Present then ABase.BorderWidth  := AOver.BorderWidth;
   if tpBorderStyle  in AOver.Present then ABase.BorderStyle  := AOver.BorderStyle;
-  if tpBorderRadius in AOver.Present then ABase.BorderRadius := AOver.BorderRadius;
+  if tpBorderRadius in AOver.Present then
+  begin
+    ABase.BorderRadius := AOver.BorderRadius;
+    ABase.Radius       := AOver.Radius;
+  end;
   if tpPadding      in AOver.Present then ABase.Padding      := AOver.Padding;
   if tpFontName     in AOver.Present then ABase.FontName     := AOver.FontName;
   if tpFontSize     in AOver.Present then ABase.FontSize     := AOver.FontSize;
@@ -68,6 +72,12 @@ begin
     ABase.ShadowColor  := AOver.ShadowColor;
     ABase.ShadowBlur   := AOver.ShadowBlur;
     ABase.ShadowOffset := AOver.ShadowOffset;
+  end;
+  if tpOutline in AOver.Present then
+  begin
+    ABase.OutlineColor  := AOver.OutlineColor;
+    ABase.OutlineWidth  := AOver.OutlineWidth;
+    ABase.OutlineOffset := AOver.OutlineOffset;
   end;
   ABase.Present := ABase.Present + AOver.Present;
 end;
