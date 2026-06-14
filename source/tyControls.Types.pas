@@ -17,6 +17,10 @@ type
 
   TTyBorderStyle = (tbsSolid, tbsNone);
 
+  TTyCorners = record
+    TL, TR, BR, BL: Integer;   // per-corner radii, logical px
+  end;
+
   TTyFill = record
     Kind: TTyFillKind;
     Color: TTyColor;
@@ -28,7 +32,7 @@ type
 
   TTyProp = (tpBackground, tpTextColor, tpBorderColor, tpBorderWidth, tpBorderRadius,
              tpPadding, tpFontName, tpFontSize, tpFontWeight, tpOpacity, tpShadow,
-             tpBorderStyle);
+             tpBorderStyle, tpOutline);
   TTyPropSet = set of TTyProp;
 
   TTyStyleSet = record
@@ -39,6 +43,7 @@ type
     BorderWidth: Integer;
     BorderStyle: TTyBorderStyle;
     BorderRadius: Integer;
+    Radius: TTyCorners;          // per-corner; falls back to BorderRadius when all 0
     Padding: TRect;
     FontName: string;
     FontSize: Integer;
@@ -47,6 +52,9 @@ type
     ShadowColor: TTyColor;
     ShadowBlur: Integer;
     ShadowOffset: TPoint;
+    OutlineColor: TTyColor;
+    OutlineWidth: Integer;
+    OutlineOffset: Integer;
   end;
 
 const
@@ -59,6 +67,9 @@ function TyRedOf(c: TTyColor): Byte;
 function TyGreenOf(c: TTyColor): Byte;
 function TyBlueOf(c: TTyColor): Byte;
 function TyColorToLCL(c: TTyColor): TColor;
+function TyCorners(ATL, ATR, ABR, ABL: Integer): TTyCorners;
+function TyUniformCorners(R: Integer): TTyCorners;
+function TyEffectiveCorners(const AStyle: TTyStyleSet): TTyCorners;
 function EmptyStyleSet: TTyStyleSet;
 
 implementation
@@ -99,6 +110,27 @@ function TyColorToLCL(c: TTyColor): TColor;
 begin
   // LCL TColor is $00BBGGRR (alpha-less); drop the TTyColor alpha channel.
   Result := RGBToColor(TyRedOf(c), TyGreenOf(c), TyBlueOf(c));
+end;
+
+function TyCorners(ATL, ATR, ABR, ABL: Integer): TTyCorners;
+begin
+  Result.TL := ATL; Result.TR := ATR; Result.BR := ABR; Result.BL := ABL;
+end;
+
+function TyUniformCorners(R: Integer): TTyCorners;
+begin
+  Result.TL := R; Result.TR := R; Result.BR := R; Result.BL := R;
+end;
+
+function TyEffectiveCorners(const AStyle: TTyStyleSet): TTyCorners;
+begin
+  // Per-corner Radius wins; if it was never set (all zero) but a uniform
+  // BorderRadius was (e.g. a code-built style), derive uniform corners from it.
+  if (AStyle.Radius.TL = 0) and (AStyle.Radius.TR = 0) and
+     (AStyle.Radius.BR = 0) and (AStyle.Radius.BL = 0) and (AStyle.BorderRadius > 0) then
+    Result := TyUniformCorners(AStyle.BorderRadius)
+  else
+    Result := AStyle.Radius;
 end;
 
 function EmptyStyleSet: TTyStyleSet;
