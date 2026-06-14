@@ -419,8 +419,9 @@ begin
           FSelected[FItemIndex] := not FSelected[FItemIndex];
           FSelAnchor := FItemIndex;
           Invalidate; DoChangeSel;
+          Key := 0;
         end;
-        Key := 0; Exit;
+        Exit;   // single-select: do NOT consume Space (parent/form may handle it)
       end;
   else
     Exit;   // key not handled (leave Key unconsumed)

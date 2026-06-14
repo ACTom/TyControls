@@ -36,6 +36,7 @@ type
     procedure TestMultiSelectMouseClicks;
     procedure TestPageKeysSingleSelect;
     procedure TestMultiSelectShiftDownExtends;
+    procedure TestSpaceNotConsumedInSingleSelect;
   end;
 
   { A2 regression: embedded scrollbar must inherit controller and DPI width }
@@ -56,6 +57,7 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure DoMouseDown(Shift: TShiftState; X, Y: Integer);
     procedure DoKeyDown(Key: Word; Shift: TShiftState);
+    function PressKey(Key: Word; Shift: TShiftState): Word;
   end;
 
   { Hard-cast target to drive the embedded scrollbar's protected mouse handlers. }
@@ -134,6 +136,12 @@ end;
 procedure TListBoxAccess.DoKeyDown(Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
+end;
+
+function TListBoxAccess.PressKey(Key: Word; Shift: TShiftState): Word;
+begin
+  KeyDown(Key, Shift);
+  Result := Key;
 end;
 
 { TTyListBoxTest }
@@ -730,6 +738,21 @@ begin
   AssertTrue('1..3 selected', LA.Selected[1] and LA.Selected[2] and LA.Selected[3]);
   LA.DoKeyDown(VK_SPACE, []);                // toggle focus(3) off
   AssertFalse('focus 3 toggled off', LA.Selected[3]);
+end;
+
+procedure TTyListBoxTest.TestSpaceNotConsumedInSingleSelect;
+var LA: TListBoxAccess;
+begin
+  LA := TListBoxAccess.Create(FForm); LA.Parent := FForm;
+  LA.Font.PixelsPerInch := 96; LA.SetBounds(0,0,160,120);
+  LA.Items.Add('a'); LA.Items.Add('b');
+  // single-select: Space must NOT be consumed (Key unchanged)
+  LA.MultiSelect := False; LA.ItemIndex := 0;
+  AssertEquals('single-select Space not consumed', VK_SPACE, Integer(LA.PressKey(VK_SPACE, [])));
+  // multi-select: Space toggles row and consumes key (Key = 0)
+  LA.MultiSelect := True; LA.ItemIndex := 0;
+  AssertEquals('multi-select Space consumed', 0, Integer(LA.PressKey(VK_SPACE, [])));
+  AssertTrue('multi Space toggled row 0 on', LA.Selected[0]);
 end;
 
 initialization
