@@ -1044,7 +1044,7 @@ begin
 
       { Fill header background }
       if tpBackground in TabStyle.Present then
-        P.FillBackground(HdrRect, TabStyle.Background, 0);
+        P.FillBackground(HdrRect, TabStyle.Background, TyEffectiveCorners(TabStyle));
 
       { Draw caption centered in header (clipped to left of close glyph) }
       TextRect := HdrRect;

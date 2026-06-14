@@ -59,6 +59,7 @@ type
     procedure TestClickCloseFiresEventAndRemoves;
     procedure TestClickCloseCanceledKeepsTab;
     procedure TestClickHeaderBodyStillSelectsWhenClosable;
+    procedure TestTabHeaderTopCornerRoundedFromTheme;
   end;
 
 implementation
@@ -599,6 +600,89 @@ begin
     AssertEquals('no tab removed', 2, Acc.TabCount);
   finally
     Acc.Free;
+  end;
+end;
+
+{ TestTabHeaderTopCornerRoundedFromTheme:
+  CSS gives TyTab a border-radius:8px 8px 0 0 (top rounded, bottom square) with
+  pure BLUE fill (#0000FF) so the fill is unambiguous.  After the fix the
+  painter calls FillBackground(..., TyEffectiveCorners(TabStyle)) instead of
+  FillBackground(..., 0), so the top-left corner pixel is rounded away and shows
+  the white backdrop (red=255, green=255), while the interior of the header
+  remains solidly blue (red=0, green=0, blue=255).
+
+  Discrimination:
+    - corner pixel:   red > 128  (white=255; blue-fill=0  -> FAILS when radius=0)
+    - body pixel:     blue > 128 AND red < 128  (blue=255 red=0; white blue=255 red=255)
+}
+procedure TTyTabControlTest.TestTabHeaderTopCornerRoundedFromTheme;
+var
+  Ctl: TTyStyleController;
+  Acc: TTyTabControlAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  CornerPx, BodyPx: TBGRAPixel;
+  R0: TRect;
+  BodyX, BodyY: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  Acc := TTyTabControlAccess.Create(FForm);
+  Acc.Parent := FForm;
+  try
+    Ctl.LoadThemeCss(
+      'TyTabControl { background:#FFFFFF; border-color:#000000; border-width:1px; }' +
+      'TyTab { background:#0000FF; color:#000000; padding:4px; border-radius:8px 8px 0 0; }');
+    Acc.Controller := Ctl;
+    Acc.Font.PixelsPerInch := 96;
+    Acc.SetBounds(0, 0, 200, 120);
+    Acc.AddTab('AAAA');
+    Acc.AddTab('BBBB');
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 120);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 200, 120);
+
+    Acc.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 120), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      { First tab header rect: Left=0, Top=0, Bottom=28 at 96ppi (TabHeight=28).
+        Corner probe: (0,0) — the extreme top-left pixel of the first header.
+        With r=8, the arc clips this corner -> white backdrop (red=255).
+        With r=0 (old code), this corner is solid blue (red=0) -> assertion FAILS.  }
+      CornerPx := Reread.GetPixel(0, 0);
+      AssertTrue(
+        Format('tab top-left corner rounded away (red>128): R=%d G=%d B=%d',
+          [CornerPx.red, CornerPx.green, CornerPx.blue]),
+        CornerPx.red > 128);
+
+      { Body probe: inside the first header, left of centre, below any corner arc.
+        At y=TabH/2 (vertical mid) and x=4, we are past the r=8 top-left arc
+        (arc only clips the top-left 8x8 box) and clear of the centred caption,
+        so this pixel should be solid blue fill.
+        R0 is rebuilt by TyTabHeaderRect at the correct ppi. }
+      R0 := Acc.TyTabHeaderRect(0);
+      BodyX := R0.Left + 4;           // left edge + 4 px: past arc, before text
+      BodyY := (R0.Top + R0.Bottom) div 2;  // vertical midpoint: y=14 at 96ppi
+      BodyPx := Reread.GetPixel(BodyX, BodyY);
+      { Blue fill #0000FF: blue=255, red=0.  White would be red=255.
+        No caption text at (4, 14) so blue should be full. }
+      AssertTrue(
+        Format('tab body is blue fill (blue>128): R=%d G=%d B=%d',
+          [BodyPx.red, BodyPx.green, BodyPx.blue]),
+        BodyPx.blue > 128);
+      AssertTrue(
+        Format('tab body not white (red<128): R=%d G=%d B=%d',
+          [BodyPx.red, BodyPx.green, BodyPx.blue]),
+        BodyPx.red < 128);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Ctl.Free;
   end;
 end;
 
