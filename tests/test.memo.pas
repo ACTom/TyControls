@@ -1097,6 +1097,10 @@ begin
     AssertEquals('enter blocked (still 1 line)', 1, M.Lines.Count);
     M.InjectBackspace; M.InjectDelete;  // blocked
     AssertEquals('bksp/del blocked', 'abc', Trim(M.Lines.Text));
+    M.InjectKey(VK_BACK, []);           // real-keyboard backspace path (inline KeyDown branch)
+    AssertEquals('keydown backspace blocked', 'abc', Trim(M.Lines.Text));
+    M.InjectKey(VK_DELETE, []);          // real-keyboard delete path (inline KeyDown branch)
+    AssertEquals('keydown delete blocked', 'abc', Trim(M.Lines.Text));
     M.ClipText := 'ZZ'; M.PasteFromClipboard;   // paste blocked
     AssertEquals('paste blocked', 'abc', Trim(M.Lines.Text));
     M.Lines.Text := 'def';             // programmatic still works
