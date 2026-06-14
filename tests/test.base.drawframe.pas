@@ -18,6 +18,8 @@ type
     procedure TestSolidBackgroundCenterPixel;
     procedure TestOpacityDimsControl;
     procedure TestBorderStyleNoneSuppressesBorder;
+    procedure TestPerCornerBackgroundViaDrawFrame;
+    procedure TestFocusRingDrawnWhenOutlinePresent;
   end;
 implementation
 
@@ -220,6 +222,89 @@ begin
     probe.Free;
     bmp.Free;
   end;
+end;
+
+procedure TDrawFrameTest.TestPerCornerBackgroundViaDrawFrame;
+{ Radius TL=6, TR=6, BR=0, BL=0 on a 40x40 bitmap with white backdrop.
+  Probe (0,0): outside the TL arc (distance ~8.5 from arc center at (6,6)) -> white.
+  Probe (2,37): inside the BL corner (BL=0 means square, so filled green).
+    If BL were rounded r=6, center would be at (6,33); (2,37) is ~5.7 from center,
+    which would be OUTSIDE a r=6 arc -> white. Since BL=0 (square), it IS filled green.
+    Using (2,37) not (1,38) to stay clear of AA at the very corner pixel. }
+var
+  probe: TDrawFrameProbe; painter: TTyPainter; bmp: TBitmap;
+  style: TTyStyleSet; r: TRect; pxTL, pxBL: TBGRAPixel; reread: TBGRABitmap;
+begin
+  bmp := TBitmap.Create; probe := TDrawFrameProbe.Create(nil); painter := TTyPainter.Create;
+  try
+    bmp.SetSize(40, 40);
+    r := Rect(0, 0, 40, 40);
+    bmp.Canvas.Brush.Color := clWhite; bmp.Canvas.FillRect(r);
+    style := EmptyStyleSet;
+    style.Background.Kind := tfkSolid;
+    style.Background.Color := TyRGB($20, $C0, $40);   // green, red=$20
+    Include(style.Present, tpBackground);
+    style.Radius := TyCorners(6, 6, 0, 0);
+    Include(style.Present, tpBorderRadius);
+    painter.BeginPaint(bmp.Canvas, r, 96);
+    probe.RunDrawFrame(painter, r, style);
+    painter.EndPaint;
+    reread := TBGRABitmap.Create(bmp);
+    try
+      pxTL := reread.GetPixel(0, 0);    // top-left rounded -> white backdrop
+      pxBL := reread.GetPixel(2, 37);   // near bottom-left corner: filled green when square
+      AssertTrue('DrawFrame top-left rounded (white): red>200', pxTL.red > 200);
+      AssertTrue('DrawFrame bottom-left square (green): red<128', pxBL.red < 128);
+      AssertTrue('DrawFrame bottom-left square (green): green>128', pxBL.green > 128);
+    finally reread.Free; end;
+  finally painter.Free; probe.Free; bmp.Free; end;
+end;
+
+procedure TDrawFrameTest.TestFocusRingDrawnWhenOutlinePresent;
+{ Outline present -> StrokeBorder draws a red ring.
+  With OutlineOffset=0 and OutlineWidth=2, StrokeBorder is called with ARect=(0,0,40,40).
+  StrokeBorder centers a width-2 stroke: left edge center at x=1.
+  Probe (1,20) = center of left stroke -> red ring (green<128).
+  Absent case: white backdrop at same point -> green>128. }
+var
+  probe: TDrawFrameProbe; painter: TTyPainter; bmp: TBitmap;
+  style: TTyStyleSet; r: TRect; px: TBGRAPixel; reread: TBGRABitmap;
+begin
+  // ring present
+  bmp := TBitmap.Create; probe := TDrawFrameProbe.Create(nil); painter := TTyPainter.Create;
+  try
+    bmp.SetSize(40, 40); r := Rect(0, 0, 40, 40);
+    bmp.Canvas.Brush.Color := clWhite; bmp.Canvas.FillRect(r);
+    style := EmptyStyleSet;
+    style.OutlineColor := TyRGB($FF, $00, $00);
+    style.OutlineWidth := 2;
+    style.OutlineOffset := 0;
+    Include(style.Present, tpOutline);
+    painter.BeginPaint(bmp.Canvas, r, 96);
+    probe.RunDrawFrame(painter, r, style);
+    painter.EndPaint;
+    reread := TBGRABitmap.Create(bmp);
+    try
+      px := reread.GetPixel(1, 20);
+      AssertTrue('focus ring drawn: green<128 (red ring)', px.green < 128);
+    finally reread.Free; end;
+  finally painter.Free; probe.Free; bmp.Free; end;
+
+  // ring absent
+  bmp := TBitmap.Create; probe := TDrawFrameProbe.Create(nil); painter := TTyPainter.Create;
+  try
+    bmp.SetSize(40, 40); r := Rect(0, 0, 40, 40);
+    bmp.Canvas.Brush.Color := clWhite; bmp.Canvas.FillRect(r);
+    style := EmptyStyleSet;   // no tpOutline
+    painter.BeginPaint(bmp.Canvas, r, 96);
+    probe.RunDrawFrame(painter, r, style);
+    painter.EndPaint;
+    reread := TBGRABitmap.Create(bmp);
+    try
+      px := reread.GetPixel(1, 20);
+      AssertTrue('no ring: green>128 (white)', px.green > 128);
+    finally reread.Free; end;
+  finally painter.Free; probe.Free; bmp.Free; end;
 end;
 
 initialization

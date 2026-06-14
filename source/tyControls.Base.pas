@@ -169,16 +169,32 @@ begin
 end;
 
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
+var
+  corners, ringCorners: TTyCorners;
+  off: Integer;
+  ringRect: TRect;
 begin
   if tpOpacity in AStyle.Present then
     APainter.Opacity := AStyle.Opacity;
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
+  corners := TyEffectiveCorners(AStyle);
   if tpBackground in AStyle.Present then
-    APainter.FillBackground(ARect, AStyle.Background, AStyle.BorderRadius);
+    APainter.FillBackground(ARect, AStyle.Background, corners);
   if (tpBorderColor in AStyle.Present) and (AStyle.BorderWidth > 0)
      and not ((tpBorderStyle in AStyle.Present) and (AStyle.BorderStyle = tbsNone)) then
-    APainter.StrokeBorder(ARect, AStyle.BorderRadius, AStyle.BorderWidth, AStyle.BorderColor);
+    APainter.StrokeBorder(ARect, corners, AStyle.BorderWidth, AStyle.BorderColor);
+  // Focus ring: only present when a ':focus { outline: ... }' rule resolved.
+  if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
+  begin
+    off := APainter.Scale(AStyle.OutlineOffset);
+    ringRect := Rect(ARect.Left + off, ARect.Top + off, ARect.Right - off, ARect.Bottom - off);
+    ringCorners.TL := corners.TL - AStyle.OutlineOffset; if ringCorners.TL < 0 then ringCorners.TL := 0;
+    ringCorners.TR := corners.TR - AStyle.OutlineOffset; if ringCorners.TR < 0 then ringCorners.TR := 0;
+    ringCorners.BR := corners.BR - AStyle.OutlineOffset; if ringCorners.BR < 0 then ringCorners.BR := 0;
+    ringCorners.BL := corners.BL - AStyle.OutlineOffset; if ringCorners.BL < 0 then ringCorners.BL := 0;
+    APainter.StrokeBorder(ringRect, ringCorners, AStyle.OutlineWidth, AStyle.OutlineColor);
+  end;
 end;
 
 procedure TTyGraphicControl.MouseEnter;
@@ -312,16 +328,32 @@ begin
 end;
 
 procedure TTyCustomControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
+var
+  corners, ringCorners: TTyCorners;
+  off: Integer;
+  ringRect: TRect;
 begin
   if tpOpacity in AStyle.Present then
     APainter.Opacity := AStyle.Opacity;
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
+  corners := TyEffectiveCorners(AStyle);
   if tpBackground in AStyle.Present then
-    APainter.FillBackground(ARect, AStyle.Background, AStyle.BorderRadius);
+    APainter.FillBackground(ARect, AStyle.Background, corners);
   if (tpBorderColor in AStyle.Present) and (AStyle.BorderWidth > 0)
      and not ((tpBorderStyle in AStyle.Present) and (AStyle.BorderStyle = tbsNone)) then
-    APainter.StrokeBorder(ARect, AStyle.BorderRadius, AStyle.BorderWidth, AStyle.BorderColor);
+    APainter.StrokeBorder(ARect, corners, AStyle.BorderWidth, AStyle.BorderColor);
+  // Focus ring: only present when a ':focus { outline: ... }' rule resolved.
+  if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
+  begin
+    off := APainter.Scale(AStyle.OutlineOffset);
+    ringRect := Rect(ARect.Left + off, ARect.Top + off, ARect.Right - off, ARect.Bottom - off);
+    ringCorners.TL := corners.TL - AStyle.OutlineOffset; if ringCorners.TL < 0 then ringCorners.TL := 0;
+    ringCorners.TR := corners.TR - AStyle.OutlineOffset; if ringCorners.TR < 0 then ringCorners.TR := 0;
+    ringCorners.BR := corners.BR - AStyle.OutlineOffset; if ringCorners.BR < 0 then ringCorners.BR := 0;
+    ringCorners.BL := corners.BL - AStyle.OutlineOffset; if ringCorners.BL < 0 then ringCorners.BL := 0;
+    APainter.StrokeBorder(ringRect, ringCorners, AStyle.OutlineWidth, AStyle.OutlineColor);
+  end;
 end;
 
 procedure TTyCustomControl.MouseEnter;
