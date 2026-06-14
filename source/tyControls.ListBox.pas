@@ -254,10 +254,13 @@ begin
 end;
 
 procedure TTyListBox.SetMultiSelect(AValue: Boolean);
+var i: Integer;
 begin
   if FMultiSelect = AValue then Exit;
   FMultiSelect := AValue;
   EnsureSelectedLen;
+  // Clean slate on any mode switch so stale multi-select bits never resurface.
+  for i := 0 to High(FSelected) do FSelected[i] := False;
   Invalidate;
 end;
 
@@ -275,23 +278,33 @@ begin
 end;
 
 procedure TTyListBox.ClearSelection;
-var i: Integer;
+var i: Integer; AnyChanged: Boolean;
 begin
-  if not FMultiSelect then Exit;   // ClearSelection is a multi-select op
+  if not FMultiSelect then Exit;
   EnsureSelectedLen;
-  for i := 0 to High(FSelected) do FSelected[i] := False;
-  Invalidate;
-  if Assigned(FOnChange) then FOnChange(Self);
+  AnyChanged := False;
+  for i := 0 to High(FSelected) do
+    if FSelected[i] then begin FSelected[i] := False; AnyChanged := True; end;
+  if AnyChanged then
+  begin
+    Invalidate;
+    if Assigned(FOnChange) then FOnChange(Self);
+  end;
 end;
 
 procedure TTyListBox.SelectAll;
-var i: Integer;
+var i: Integer; AnyChanged: Boolean;
 begin
-  if not FMultiSelect then Exit;   // no-op in single mode
+  if not FMultiSelect then Exit;
   EnsureSelectedLen;
-  for i := 0 to High(FSelected) do FSelected[i] := True;
-  Invalidate;
-  if Assigned(FOnChange) then FOnChange(Self);
+  AnyChanged := False;
+  for i := 0 to High(FSelected) do
+    if not FSelected[i] then begin FSelected[i] := True; AnyChanged := True; end;
+  if AnyChanged then
+  begin
+    Invalidate;
+    if Assigned(FOnChange) then FOnChange(Self);
+  end;
 end;
 
 procedure TTyListBox.UpdateScrollBar;

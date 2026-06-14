@@ -32,6 +32,7 @@ type
     procedure TestEmbeddedScrollbarDragScrollsList;
     procedure TestMultiSelectSelectedAndSelCount;
     procedure TestSingleSelectSelectedReflectsItemIndex;
+    procedure TestClearSelectionNoOpInSingle;
   end;
 
   { A2 regression: embedded scrollbar must inherit controller and DPI width }
@@ -651,6 +652,16 @@ begin
   AssertEquals('selcount 1 in single', 1, FList.SelCount);
   FList.SelectAll;   // no-op in single mode
   AssertEquals('SelectAll no-op single', 1, FList.SelCount);
+end;
+
+procedure TTyListBoxTest.TestClearSelectionNoOpInSingle;
+begin
+  FList.Items.Clear; FList.Items.Add('a'); FList.Items.Add('b');
+  FList.MultiSelect := False;
+  FList.ItemIndex := 1;
+  FList.ClearSelection;                 // no-op in single mode
+  AssertEquals('single ItemIndex unchanged by ClearSelection', 1, FList.ItemIndex);
+  AssertEquals('selcount still 1', 1, FList.SelCount);
 end;
 
 initialization
