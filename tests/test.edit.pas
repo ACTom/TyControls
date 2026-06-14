@@ -18,6 +18,10 @@ type
     procedure SimulateMouseUp(X, Y: Integer);
     // EDIT.4: expose CaretPixelX for headless caret-rendering tests
     function CaretPixelX(APPI: Integer): Integer;
+    // EDIT.16: PasswordChar access helpers
+    function DisplayTextForTest: string;
+    function CaretPixelX2(AIdx: Integer): Integer;
+    function TextStartXForTest: Integer;
   end;
 
   // Subclass with in-memory clipboard for headless testing
@@ -104,6 +108,10 @@ type
     procedure TestMaxLengthTruncatesPaste;
     procedure TestMaxLengthZeroUnlimited;
     procedure TestMaxLengthSelectionReplaceAtCap;
+    // EDIT.16: PasswordChar
+    procedure TestPasswordCharMasksDisplayText;
+    procedure TestPasswordCharDisablesCopy;
+    procedure TestPasswordCharCaretAlignsToMaskWidth;
   end;
 implementation
 
@@ -148,6 +156,21 @@ end;
 function TTyEditAccess.CaretPixelX(APPI: Integer): Integer;
 begin
   Result := CaretPixelXAt(CaretPos, APPI);
+end;
+
+function TTyEditAccess.DisplayTextForTest: string;
+begin
+  Result := DisplayText;
+end;
+
+function TTyEditAccess.CaretPixelX2(AIdx: Integer): Integer;
+begin
+  Result := CaretPixelXAt(AIdx, 96);
+end;
+
+function TTyEditAccess.TextStartXForTest: Integer;
+begin
+  Result := TextStartX(96);
 end;
 
 // TTyEditClipboardAccess
@@ -1780,6 +1803,52 @@ begin
     E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);  // select 'ab'
     E.InjectKey('Z');                          // replace selection with 'Z'
     AssertEquals('selection replaced at cap', 'Zc', E.Text);
+  finally E.Free; end;
+end;
+
+// ---- EDIT.16: PasswordChar tests ----
+
+procedure TEditTest.TestPasswordCharMasksDisplayText;
+var E: TTyEditAccess;
+begin
+  E := TTyEditAccess.Create(nil);
+  try
+    E.Text := 'abc';
+    E.PasswordChar := '*';
+    AssertEquals('display masked', '***', E.DisplayTextForTest);
+    E.PasswordChar := '';
+    AssertEquals('display plain when off', 'abc', E.DisplayTextForTest);
+  finally E.Free; end;
+end;
+
+procedure TEditTest.TestPasswordCharDisablesCopy;
+var E: TTyEditClipboardAccess;
+begin
+  E := TTyEditClipboardAccess.Create(nil);
+  try
+    E.Text := 'secret'; E.PasswordChar := '*'; E.SelectAll;
+    E.ClipText := 'sentinel';
+    E.CopyToClipboard;
+    AssertEquals('copy disabled under mask', 'sentinel', E.ClipText);
+    E.CutToClipboard;
+    AssertEquals('cut disabled under mask (clip unchanged)', 'sentinel', E.ClipText);
+    AssertEquals('cut did not delete under mask', 'secret', E.Text);
+  finally E.Free; end;
+end;
+
+procedure TEditTest.TestPasswordCharCaretAlignsToMaskWidth;
+{ With masking, all glyphs are '*'; caret at 2 should be 2 * one-'*' advance,
+  i.e. half of caret-at-4. Proves measurement uses the masked string, not 'WiWi'. }
+var E: TTyEditAccess;
+begin
+  E := TTyEditAccess.Create(nil);
+  try
+    E.Text := 'WiWi';
+    E.PasswordChar := '*';
+    E.Font.PixelsPerInch := 96;
+    AssertTrue('caret@2 < caret@4', E.CaretPixelX2(2) < E.CaretPixelX2(4));
+    AssertTrue('caret@2 ~ half of caret@4 (uniform mask)',
+      Abs((E.CaretPixelX2(4) - E.TextStartXForTest) - 2*(E.CaretPixelX2(2) - E.TextStartXForTest)) <= 2);
   finally E.Free; end;
 end;
 

@@ -21,6 +21,7 @@ type
     FWidthCacheFontName: string;
     FWidthCacheFontSize: Integer;   // effective pt (after EffectiveFontSize)
     FWidthCachePPI: Integer;
+    FWidthCachePassword: string;    // password char active when cache was built
     // Lazy measuring bitmap (freed in Destroy)
     FMeasureBmp: TBGRABitmap;
     // Undo/redo infrastructure
@@ -28,11 +29,13 @@ type
     FSuspendUndo: Boolean;   // true while a composite op pushes its own step
     FReadOnly: Boolean;
     FMaxLength: Integer;
+    FPasswordChar: string;
     FOnChange: TNotifyEvent;
     procedure SetText(const AValue: string);
     procedure SetCaretPos(AValue: Integer);
     procedure SetReadOnly(const AValue: Boolean);
     procedure SetMaxLength(const AValue: Integer);
+    procedure SetPasswordChar(const AValue: string);
     // Selection helpers
     procedure DeleteSelection;
     // Word-wise deletion (splice modelled on DeleteSelection)
@@ -40,8 +43,7 @@ type
     procedure DeleteWordForward;
     // Insert a raw UTF-8 string at the current caret position
     procedure InjectStringAt(const AStr: string);
-    // Text measurement helper
-    function TextStartX(APPI: Integer): Integer;
+    // Text measurement helper (moved to protected so subclasses can expose it)
     procedure InvalidateWidthCache;
     function EffectiveFontSize(const S: TTyStyleSet): Integer;
     function MeasureCodepointWidths(APPI: Integer): TTyIntArray;
@@ -53,6 +55,10 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure DoChange;
+    // Text measurement helper (protected so headless access subclasses can call it)
+    function TextStartX(APPI: Integer): Integer;
+    // Display text: masked when PasswordChar is set, otherwise FText
+    function DisplayText: string;
     // Undo/redo state serialization (protected so headless access subclasses
     // can expose them; pure logic, no widget dependency beyond geometry resync).
     function CaptureState: string;
@@ -107,6 +113,7 @@ type
     property Text: string read FText write SetText;
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
+    property PasswordChar: string read FPasswordChar write SetPasswordChar;
     property Enabled;
     property Font;
     property Align;
@@ -389,6 +396,16 @@ begin
   FMaxLength := AValue;
 end;
 
+procedure TTyEdit.SetPasswordChar(const AValue: string);
+begin
+  if UTF8Length(AValue) > 1 then
+    FPasswordChar := UTF8Copy(AValue, 1, 1)
+  else
+    FPasswordChar := AValue;
+  InvalidateWidthCache;
+  Invalidate;
+end;
+
 // ---- Width cache helpers ----
 
 procedure TTyEdit.InvalidateWidthCache;
@@ -415,24 +432,43 @@ begin
   Result := MulDiv(S.Padding.Left, APPI, 96);
 end;
 
+function TTyEdit.DisplayText: string;
+var
+  i, n: Integer;
+begin
+  if FPasswordChar = '' then
+  begin
+    Result := FText;
+    Exit;
+  end;
+  n := UTF8Length(FText);
+  Result := '';
+  for i := 1 to n do
+    Result := Result + FPasswordChar;
+end;
+
 function TTyEdit.MeasureCodepointWidths(APPI: Integer): TTyIntArray;
 // Returns an array of Length=UTF8Length(FText)+1 cumulative x positions (in px)
 // relative to the text start, measured on a shared lazy bitmap.
-// The result is cached; rebuilds when font/ppi/text change.
+// The result is cached; rebuilds when font/ppi/text/passwordchar change.
+// When PasswordChar is active, measurement is done on the masked string so that
+// caret positions stay 1:1 with the displayed glyphs.
 var
   S: TTyStyleSet;
   EffSize: Integer;
   i, Len: Integer;
+  Disp: string;
 begin
   S := CurrentStyle;
   EffSize := EffectiveFontSize(S);
   Len := UTF8Length(FText);
 
-  // Check if cache is still valid
+  // Check if cache is still valid (includes password char so toggling invalidates)
   if FWidthCacheValid
     and (FWidthCacheFontName = S.FontName)
     and (FWidthCacheFontSize = EffSize)
     and (FWidthCachePPI = APPI)
+    and (FWidthCachePassword = FPasswordChar)
     and (Length(FWidthCache) = Len + 1)
   then
   begin
@@ -440,7 +476,9 @@ begin
     Exit;
   end;
 
-  // (Re)build cache
+  // (Re)build cache — measure using the display (masked) string
+  Disp := DisplayText;
+
   SetLength(FWidthCache, Len + 1);
   FWidthCache[0] := 0;
 
@@ -454,15 +492,16 @@ begin
     // widths match what is actually drawn (same BGRA engine + height semantics).
     TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
 
-    // Cumulative widths via PREFIX measurement: matches the whole-string draw,
-    // capturing kerning/hinting between glyphs the way DrawText sees it.
+    // Cumulative widths via PREFIX measurement on the display string:
+    // matches the whole-string draw, capturing kerning/hinting between glyphs.
     for i := 1 to Len do
-      FWidthCache[i] := FMeasureBmp.TextSize(UTF8Copy(FText, 1, i)).cx;
+      FWidthCache[i] := FMeasureBmp.TextSize(UTF8Copy(Disp, 1, i)).cx;
   end;
 
   FWidthCacheFontName := S.FontName;
   FWidthCacheFontSize := EffSize;
   FWidthCachePPI := APPI;
+  FWidthCachePassword := FPasswordChar;
   FWidthCacheValid := True;
   Result := FWidthCache;
 end;
@@ -667,12 +706,14 @@ end;
 
 procedure TTyEdit.CopyToClipboard;
 begin
+  if FPasswordChar <> '' then Exit;
   if not HasSelection then Exit;
   WriteClipboardText(SelText);
 end;
 
 procedure TTyEdit.CutToClipboard;
 begin
+  if FPasswordChar <> '' then Exit;
   if FReadOnly then begin CopyToClipboard; Exit; end;
   if not HasSelection then Exit;
   BeginUndoStep(uskCut);
@@ -1207,11 +1248,11 @@ begin
         Rect(ContentRect.Left - FScrollX, ContentRect.Top,
              TextClipRight,
              ContentRect.Bottom),
-        FText, S.FontName, EffSize, S.FontWeight,
+        DisplayText, S.FontName, EffSize, S.FontWeight,
         S.TextColor, taLeftJustify, tlCenter, True);
     end
     else
-      P.DrawText(ContentRect, FText, S.FontName, EffSize, S.FontWeight,
+      P.DrawText(ContentRect, DisplayText, S.FontName, EffSize, S.FontWeight,
         S.TextColor, taLeftJustify, tlCenter, True);
 
     // 3. Caret (only when focused and no selection)
