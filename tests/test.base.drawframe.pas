@@ -227,10 +227,10 @@ end;
 procedure TDrawFrameTest.TestPerCornerBackgroundViaDrawFrame;
 { Radius TL=6, TR=6, BR=0, BL=0 on a 40x40 bitmap with white backdrop.
   Probe (0,0): outside the TL arc (distance ~8.5 from arc center at (6,6)) -> white.
-  Probe (2,37): inside the BL corner (BL=0 means square, so filled green).
-    If BL were rounded r=6, center would be at (6,33); (2,37) is ~5.7 from center,
-    which would be OUTSIDE a r=6 arc -> white. Since BL=0 (square), it IS filled green.
-    Using (2,37) not (1,38) to stay clear of AA at the very corner pixel. }
+  Probe (1,38): outside the hypothetical BL r=6 arc (center (6,33), distance ~7.07 > 6).
+    If BL were wrongly rounded, (1,38) would be outside the arc -> white backdrop (red=255).
+    Since BL=0 (square), (1,38) is inside the filled rect -> green (red=$20 < 128).
+    This point truly discriminates square vs rounded; 1px inside both straight edges avoids AA. }
 var
   probe: TDrawFrameProbe; painter: TTyPainter; bmp: TBitmap;
   style: TTyStyleSet; r: TRect; pxTL, pxBL: TBGRAPixel; reread: TBGRABitmap;
@@ -252,7 +252,7 @@ begin
     reread := TBGRABitmap.Create(bmp);
     try
       pxTL := reread.GetPixel(0, 0);    // top-left rounded -> white backdrop
-      pxBL := reread.GetPixel(2, 37);   // near bottom-left corner: filled green when square
+      pxBL := reread.GetPixel(1, 38);   // bottom-left: (1,38) is outside r=6 arc centered at (6,33), green only when corner is truly square
       AssertTrue('DrawFrame top-left rounded (white): red>200', pxTL.red > 200);
       AssertTrue('DrawFrame bottom-left square (green): red<128', pxBL.red < 128);
       AssertTrue('DrawFrame bottom-left square (green): green>128', pxBL.green > 128);
