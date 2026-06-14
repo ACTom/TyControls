@@ -38,6 +38,19 @@ type
     procedure ProbeMouseDown(X, Y: Integer);
   end;
 
+  { Clipboard-access subclass: routes the virtual clipboard hooks to an in-memory
+    string so the headless ReadOnly tests never touch the real OS clipboard
+    (mirrors TTyMemoClipboardProbe in test.memo.selection). }
+  TTyMemoClipAccess = class(TTyMemo)
+  private
+    FClipText: string;
+  protected
+    function ReadClipboardText: string; override;
+    procedure WriteClipboardText(const S: string); override;
+  public
+    property ClipText: string read FClipText write FClipText;
+  end;
+
   TTyMemoTest = class(TTestCase)
   private
     FCtl: TTyStyleController;
@@ -97,6 +110,9 @@ type
     procedure TestDisabledMouseIgnored;
     // --- T6 theme integration smoke ---
     procedure TestThemedMemoResolvesStyle;
+    // --- Task 5: ReadOnly ---
+    procedure TestMemoReadOnlyBlocksEditsAllowsNav;
+    procedure TestMemoReadOnlyCutActsAsCopy;
   end;
 
 implementation
@@ -220,6 +236,18 @@ end;
 procedure TTyMemoProbe.ProbeMouseDown(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);
+end;
+
+{ TTyMemoClipAccess }
+
+function TTyMemoClipAccess.ReadClipboardText: string;
+begin
+  Result := FClipText;
+end;
+
+procedure TTyMemoClipAccess.WriteClipboardText(const S: string);
+begin
+  FClipText := S;
 end;
 
 { TTyMemoTest }
@@ -1052,6 +1080,40 @@ begin
   finally
     Ctl.Free;
   end;
+end;
+
+{ --- Task 5: ReadOnly --- }
+
+procedure TTyMemoTest.TestMemoReadOnlyBlocksEditsAllowsNav;
+var M: TTyMemoClipAccess;
+begin
+  M := TTyMemoClipAccess.Create(nil);
+  try
+    M.Lines.Text := 'abc';
+    M.ReadOnly := True;
+    M.InjectChar('x');                 // typing blocked
+    AssertEquals('typing blocked', 'abc', Trim(M.Lines.Text));
+    M.InjectKey(VK_RETURN, []);         // Enter (split) blocked
+    AssertEquals('enter blocked (still 1 line)', 1, M.Lines.Count);
+    M.InjectBackspace; M.InjectDelete;  // blocked
+    AssertEquals('bksp/del blocked', 'abc', Trim(M.Lines.Text));
+    M.ClipText := 'ZZ'; M.PasteFromClipboard;   // paste blocked
+    AssertEquals('paste blocked', 'abc', Trim(M.Lines.Text));
+    M.Lines.Text := 'def';             // programmatic still works
+    AssertEquals('Lines:= still works', 'def', Trim(M.Lines.Text));
+  finally M.Free; end;
+end;
+
+procedure TTyMemoTest.TestMemoReadOnlyCutActsAsCopy;
+var M: TTyMemoClipAccess;
+begin
+  M := TTyMemoClipAccess.Create(nil);
+  try
+    M.Lines.Text := 'abc'; M.ReadOnly := True; M.SelectAll;
+    M.CutToClipboard;
+    AssertTrue('cut copied something', Pos('abc', M.ClipText) > 0);
+    AssertEquals('cut did not delete', 'abc', Trim(M.Lines.Text));
+  finally M.Free; end;
 end;
 
 initialization

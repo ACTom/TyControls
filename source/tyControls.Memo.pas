@@ -102,6 +102,11 @@ type
     // single step, so nested mutators do not add extra steps.
     FUndoStack: TTyUndoStack;
     FSuspendUndo: Boolean;
+    // ReadOnly: when True, all USER edits (typing/Enter/Backspace/Delete/word-
+    // delete/Paste) are blocked and Cut degrades to Copy; navigation, selection,
+    // Copy, SelectAll and programmatic Lines := still work. Default False.
+    FReadOnly: Boolean;
+    procedure SetReadOnly(AValue: Boolean);
     function GetLines: TStrings;
     procedure SetLines(AValue: TStrings);
     function EffectiveFontSize(const S: TTyStyleSet): Integer;
@@ -355,6 +360,10 @@ type
     // horizontal scrolling). True wraps long logical lines into multiple visual
     // rows at word boundaries.
     property WordWrap: Boolean read FWordWrap write SetWordWrap default False;
+    // When True, the memo ignores all user edits but still allows caret/selection
+    // navigation, Copy and SelectAll; programmatic Lines := still mutates. Cut
+    // acts as Copy. Default False.
+    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property Enabled;
     property Font;
     property Align;
@@ -392,6 +401,7 @@ begin
   FForceFocused := False;
   FUndoStack := TTyUndoStack.Create;
   FSuspendUndo := False;
+  FReadOnly := False;
   Width := 200;
   Height := 120;
 end;
@@ -533,6 +543,13 @@ end;
 function TTyMemo.CanRedo: Boolean;
 begin
   Result := FUndoStack.CanRedo;
+end;
+
+procedure TTyMemo.SetReadOnly(AValue: Boolean);
+begin
+  if FReadOnly = AValue then Exit;
+  FReadOnly := AValue;
+  Invalidate;
 end;
 
 function TTyMemo.GetLines: TStrings;
@@ -1599,6 +1616,7 @@ var
   Cur, Before, After: string;
   t, L: Integer;
 begin
+  if FReadOnly then Exit;            // ReadOnly: block word-backward delete
   if FLines.Count = 0 then Exit;
   Cur := FLines[FCaretLine];
   t := PrevWordBoundary(Cur, FCaretCol);
@@ -1621,6 +1639,7 @@ var
   Cur, Before, After: string;
   t, L: Integer;
 begin
+  if FReadOnly then Exit;            // ReadOnly: block word-forward delete
   if FLines.Count = 0 then Exit;
   Cur := FLines[FCaretLine];
   t := NextWordBoundary(Cur, FCaretCol);
@@ -1698,6 +1717,8 @@ end;
 
 procedure TTyMemo.CutToClipboard;
 begin
+  // ReadOnly: a cut may not delete; degrade to a plain copy.
+  if FReadOnly then begin CopyToClipboard; Exit; end;
   if not HasSelection then Exit;
   WriteClipboardText(SelText);
   // Capture ONE undo step (uskCut); suppress the inner DeleteSelection's own step
@@ -1724,6 +1745,7 @@ var
   Segs: TStringList;
   i, InsertAt: Integer;
 begin
+  if FReadOnly then Exit;            // ReadOnly: block paste
   S := ReadClipboardText;
   if S = '' then Exit;  // truly-empty clipboard: full no-op (Edit 551)
   // Capture ONE undo step (uskPaste) covering the whole paste — both the
@@ -2128,6 +2150,7 @@ end;
 procedure TTyMemo.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
   if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
+  if FReadOnly then Exit;            // ReadOnly: block printable typing
   inherited UTF8KeyPress(UTF8Key);
   // Printable codepoints only; control chars (Enter/Tab/etc.) are handled in
   // KeyDown or ignored here.
@@ -2221,21 +2244,31 @@ begin
     begin
       // Enter on a selection replaces it with a line break (delete-then-split).
       // Capture ONE undo step (uskNewline) covering both the selection delete and
-      // the split, so the whole Enter reverts in a single undo.
-      BeginUndoStep(uskNewline);
-      FSuspendUndo := True;
-      try
-        if HasSelection then DeleteSelection;
-        DoSplitLine;
-      finally
-        FSuspendUndo := False;
+      // the split, so the whole Enter reverts in a single undo. ReadOnly blocks the
+      // mutation entirely (the key is still consumed so it never falls through).
+      if not FReadOnly then
+      begin
+        BeginUndoStep(uskNewline);
+        FSuspendUndo := True;
+        try
+          if HasSelection then DeleteSelection;
+          DoSplitLine;
+        finally
+          FSuspendUndo := False;
+        end;
+        FDesiredCol := FCaretCol;
+        AfterEdit(APPI);
       end;
-      FDesiredCol := FCaretCol;
-      AfterEdit(APPI);
       Key := 0;
     end;
     VK_BACK:
     begin
+      // ReadOnly: consume the key but make no model change.
+      if FReadOnly then
+      begin
+        Key := 0;
+        Exit;
+      end;
       // A selection is deleted wholesale (never falls to the prev-char path),
       // checked BEFORE the (0,0) no-op guard so a selection always mutates.
       if HasSelection then
@@ -2269,6 +2302,12 @@ begin
     end;
     VK_DELETE:
     begin
+      // ReadOnly: consume the key but make no model change.
+      if FReadOnly then
+      begin
+        Key := 0;
+        Exit;
+      end;
       // A selection is deleted wholesale, checked BEFORE the end-of-doc guard
       // so a selection always mutates regardless of caret position.
       if HasSelection then
@@ -2480,6 +2519,7 @@ procedure TTyMemo.InjectChar(const AChar: TUTF8Char);
 var
   K: TUTF8Char;
 begin
+  if FReadOnly then Exit;            // ReadOnly: block typed insert
   K := AChar;
   UTF8KeyPress(K);
 end;
@@ -2494,11 +2534,13 @@ end;
 
 procedure TTyMemo.InjectBackspace;
 begin
+  if FReadOnly then Exit;            // ReadOnly: block backspace edit
   InjectKey(VK_BACK, []);
 end;
 
 procedure TTyMemo.InjectDelete;
 begin
+  if FReadOnly then Exit;            // ReadOnly: block delete edit
   InjectKey(VK_DELETE, []);
 end;
 
