@@ -26,6 +26,8 @@ type
     procedure CommitForTest;
     procedure FocusBufferForTest;
     procedure SetEditTextForTest(const S: string);
+    procedure RenderToForTest(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    function CaretXForTest(AIdx: Integer): Integer;
   end;
 
   TChangeCounter = class
@@ -87,6 +89,12 @@ type
     procedure TestUpArrowGlyphRendered;
   end;
 
+  TTySpinEditRenderTest = class(TTestCase)
+  published
+    procedure TestSpinRendersBufferNotValue;
+    procedure TestSpinCaretXMonotonic;
+  end;
+
 implementation
 
 procedure TChangeCounter.Handle(Sender: TObject);
@@ -103,6 +111,10 @@ function TTySpinAccess.CaretForTest: Integer; begin Result := FCaret; end;
 procedure TTySpinAccess.CommitForTest; begin CommitEdit; end;
 procedure TTySpinAccess.FocusBufferForTest; begin SyncBufferToValue; end;
 procedure TTySpinAccess.SetEditTextForTest(const S: string); begin FEditText := S; FCaret := UTF8Length(S); end;
+procedure TTySpinAccess.RenderToForTest(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin RenderTo(ACanvas, ARect, APPI); end;
+function TTySpinAccess.CaretXForTest(AIdx: Integer): Integer;
+begin Result := CaretPixelX(AIdx, 96); end;
 
 { TTySpinEditEditModelTest }
 
@@ -476,9 +488,45 @@ begin
   end;
 end;
 
+{ TTySpinEditRenderTest }
+
+procedure TTySpinEditRenderTest.TestSpinRendersBufferNotValue;
+var S: TTySpinAccess; bmp: TBitmap; reread: TBGRABitmap; foundInk: Boolean; x,y: Integer; px: TBGRAPixel;
+begin
+  S := TTySpinAccess.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    S.MinValue:=0; S.MaxValue:=1000; S.Value:=0; S.Font.PixelsPerInch:=96;
+    S.FocusBufferForTest; S.SetEditTextForTest('789');   // uncommitted buffer differs from Value(0)
+    bmp.PixelFormat:=pf32bit; bmp.SetSize(120,28);
+    bmp.Canvas.Brush.Color:=clWhite; bmp.Canvas.FillRect(0,0,120,28);
+    S.RenderToForTest(bmp.Canvas, Rect(0,0,120,28), 96);
+    reread := TBGRABitmap.Create(bmp);
+    try
+      foundInk := False;
+      for x := 2 to 60 do for y := 6 to 22 do
+      begin px := reread.GetPixel(x,y);
+        if (px.red<200) and (px.green<200) then foundInk := True; end;
+      AssertTrue('buffer text rendered (ink present)', foundInk);
+    finally reread.Free; end;
+  finally bmp.Free; S.Free; end;
+end;
+
+procedure TTySpinEditRenderTest.TestSpinCaretXMonotonic;
+var S: TTySpinAccess;
+begin
+  S := TTySpinAccess.Create(nil);
+  try
+    S.MinValue:=0; S.MaxValue:=100000; S.Font.PixelsPerInch:=96;
+    S.FocusBufferForTest; S.SetEditTextForTest('12345');
+    AssertTrue('caret x grows with index', S.CaretXForTest(1) < S.CaretXForTest(4));
+  finally S.Free; end;
+end;
+
 initialization
   RegisterTest(TTySpinEditGeometryTest);
   RegisterTest(TTySpinEditControlTest);
   RegisterTest(TTySpinEditPixelTest);
   RegisterTest(TTySpinEditEditModelTest);
+  RegisterTest(TTySpinEditRenderTest);
 end.

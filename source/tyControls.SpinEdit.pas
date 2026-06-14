@@ -3,6 +3,7 @@ unit tyControls.SpinEdit;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8,
+  BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 type
   TTySpinEdit = class(TTyCustomControl)
@@ -18,12 +19,14 @@ type
     // headless access subclasses (tests) can reach the buffer + helpers.
     FEditText: string;
     FCaret: Integer;      // codepoint index 0..UTF8Length(FEditText)
+    FMeasureBmp: TBGRABitmap;  // lazy; used only for text measurement
     // Edit-buffer helpers
     procedure SyncBufferToValue;
     procedure CommitEdit;
     procedure InsertEditChar(const C: TUTF8Char);
     procedure EditBackspace;
     procedure EditDelete;
+    function CaretPixelX(AIdx, APPI: Integer): Integer;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -35,6 +38,7 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
   published
     property MinValue: Integer read FMinValue write SetMinValue default 0;
     property MaxValue: Integer read FMaxValue write SetMaxValue default 100;
@@ -91,6 +95,12 @@ begin
   SyncBufferToValue;
 end;
 
+destructor TTySpinEdit.Destroy;
+begin
+  FMeasureBmp.Free;
+  inherited Destroy;
+end;
+
 function TTySpinEdit.GetStyleTypeKey: string;
 begin
   Result := 'TySpinEdit';
@@ -144,6 +154,21 @@ procedure TTySpinEdit.SyncBufferToValue;
 begin
   FEditText := IntToStr(FValue);
   FCaret := UTF8Length(FEditText);
+end;
+
+function TTySpinEdit.CaretPixelX(AIdx, APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+  EffSize: Integer;
+begin
+  S := CurrentStyle;
+  EffSize := S.FontSize; if EffSize <= 0 then EffSize := 12;
+  Result := MulDiv(S.Padding.Left, APPI, 96);   // local-left text start
+  if (FEditText = '') or (AIdx <= 0) then Exit;
+  if AIdx > UTF8Length(FEditText) then AIdx := UTF8Length(FEditText);
+  if FMeasureBmp = nil then FMeasureBmp := TBGRABitmap.Create(1, 1);
+  TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
+  Result := Result + FMeasureBmp.TextSize(UTF8Copy(FEditText, 1, AIdx)).cx;
 end;
 
 procedure TTySpinEdit.CommitEdit;
@@ -202,8 +227,8 @@ procedure TTySpinEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integ
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  R, TextR, UpR, DownR: TRect;
-  BtnW: Integer;
+  R, TextR, UpR, DownR, CaretRect: TRect;
+  BtnW, EffSize, cx: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -216,10 +241,17 @@ begin
     BtnW := P.Scale(18);
     TextR := Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
-    P.DrawText(TextR, IntToStr(FValue), S.FontName, S.FontSize, S.FontWeight,
+    EffSize := S.FontSize; if EffSize <= 0 then EffSize := 12;
+    P.DrawText(TextR, FEditText, S.FontName, EffSize, S.FontWeight,
       S.TextColor, taLeftJustify, tlCenter, True);
     P.DrawGlyph(UpR, tgArrowUp, S.TextColor, 2);
     P.DrawGlyph(DownR, tgArrowDown, S.TextColor, 2);
+    if Focused then
+    begin
+      cx := CaretPixelX(FCaret, APPI);
+      CaretRect := Rect(cx, TextR.Top + P.Scale(2), cx + P.Scale(1), TextR.Bottom - P.Scale(2));
+      P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
+    end;
     P.EndPaint;
   finally
     P.Free;
