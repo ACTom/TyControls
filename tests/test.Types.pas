@@ -79,22 +79,27 @@ begin
 end;
 
 procedure TTestTypes.TestEffectiveCornersFromRadiusField;
-var s: TTyStyleSet;
+var s: TTyStyleSet; c: TTyCorners;
 begin
   s := EmptyStyleSet;
   s.Radius := TyCorners(6, 6, 0, 0);
-  AssertEquals('tl', 6, TyEffectiveCorners(s).TL);
-  AssertEquals('bl', 0, TyEffectiveCorners(s).BL);
+  c := TyEffectiveCorners(s);
+  AssertEquals('tl', 6, c.TL);
+  AssertEquals('bl', 0, c.BL);
 end;
 
 procedure TTestTypes.TestEffectiveCornersFallsBackToUniformBorderRadius;
 { Styles built in CODE (e.g. ToggleSwitch track) set only BorderRadius and leave
   Radius all-zero. TyEffectiveCorners must then derive uniform corners from it. }
-var s: TTyStyleSet;
+var s: TTyStyleSet; c: TTyCorners;
 begin
   s := EmptyStyleSet;
   s.BorderRadius := 12;          // Radius stays (0,0,0,0)
-  AssertEquals('uniform from BorderRadius', 12, TyEffectiveCorners(s).TR);
+  c := TyEffectiveCorners(s);
+  AssertEquals('tl', 12, c.TL);
+  AssertEquals('tr', 12, c.TR);
+  AssertEquals('br', 12, c.BR);
+  AssertEquals('bl', 12, c.BL);
 end;
 
 initialization

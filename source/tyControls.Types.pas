@@ -43,7 +43,8 @@ type
     BorderWidth: Integer;
     BorderStyle: TTyBorderStyle;
     BorderRadius: Integer;
-    Radius: TTyCorners;          // per-corner; falls back to BorderRadius when all 0
+    Radius: TTyCorners;          // per-corner radii; falls back to BorderRadius when all 0.
+                                 // Carried under tpBorderRadius (not a separate Present flag).
     Padding: TRect;
     FontName: string;
     FontSize: Integer;
