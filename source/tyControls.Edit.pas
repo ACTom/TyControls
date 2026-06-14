@@ -27,10 +27,12 @@ type
     FUndoStack: TTyUndoStack;
     FSuspendUndo: Boolean;   // true while a composite op pushes its own step
     FReadOnly: Boolean;
+    FMaxLength: Integer;
     FOnChange: TNotifyEvent;
     procedure SetText(const AValue: string);
     procedure SetCaretPos(AValue: Integer);
     procedure SetReadOnly(const AValue: Boolean);
+    procedure SetMaxLength(const AValue: Integer);
     // Selection helpers
     procedure DeleteSelection;
     // Word-wise deletion (splice modelled on DeleteSelection)
@@ -104,6 +106,7 @@ type
   published
     property Text: string read FText write SetText;
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+    property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
     property Enabled;
     property Font;
     property Align;
@@ -378,6 +381,12 @@ begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
   Invalidate;
+end;
+
+procedure TTyEdit.SetMaxLength(const AValue: Integer);
+begin
+  if FMaxLength = AValue then Exit;
+  FMaxLength := AValue;
 end;
 
 // ---- Width cache helpers ----
@@ -707,18 +716,22 @@ begin
 end;
 
 procedure TTyEdit.InjectStringAt(const AStr: string);
-var
-  Before, After: string;
-  InsLen: Integer;
-  APPI: Integer;
+var Before, After, Ins: string; InsLen, room, APPI: Integer;
 begin
-  if FReadOnly then Exit;
   if AStr = '' then Exit;
+  if FReadOnly then Exit;
+  Ins := AStr;
+  if FMaxLength > 0 then
+  begin
+    room := FMaxLength - UTF8Length(FText);
+    if room <= 0 then Exit;
+    if UTF8Length(Ins) > room then Ins := UTF8Copy(Ins, 1, room);
+  end;
   BeginUndoStep(uskPaste);
   Before := UTF8Copy(FText, 1, FCaret);
   After  := UTF8Copy(FText, FCaret + 1, UTF8Length(FText) - FCaret);
-  FText  := Before + AStr + After;
-  InsLen := UTF8Length(AStr);
+  FText  := Before + Ins + After;
+  InsLen := UTF8Length(Ins);
   FCaret := FCaret + InsLen;
   FSelAnchor := FCaret;
   InvalidateWidthCache;
@@ -800,6 +813,7 @@ begin
       FSuspendUndo := False;
     end;
   end;
+  if (FMaxLength > 0) and (UTF8Length(FText) >= FMaxLength) then Exit;
   Before := UTF8Copy(FText, 1, FCaret);
   After  := UTF8Copy(FText, FCaret + 1, UTF8Length(FText) - FCaret);
   FText  := Before + AChar + After;

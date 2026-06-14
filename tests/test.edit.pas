@@ -99,6 +99,10 @@ type
     // EDIT.14: ReadOnly property
     procedure TestReadOnlyBlocksEditingButAllowsCopy;
     procedure TestReadOnlyCutActsAsCopy;
+    // EDIT.15: MaxLength property
+    procedure TestMaxLengthCapsTyping;
+    procedure TestMaxLengthTruncatesPaste;
+    procedure TestMaxLengthZeroUnlimited;
   end;
 implementation
 
@@ -1724,6 +1728,42 @@ begin
     E.CutToClipboard;
     AssertEquals('cut copied', 'abc', E.ClipText);
     AssertEquals('cut did not delete (readonly)', 'abc', E.Text);
+  finally E.Free; end;
+end;
+
+// ---- EDIT.15: MaxLength property tests ----
+
+procedure TEditTest.TestMaxLengthCapsTyping;
+var E: TTyEditClipboardAccess;
+begin
+  E := TTyEditClipboardAccess.Create(nil);
+  try
+    E.MaxLength := 3;
+    E.InjectKey('a'); E.InjectKey('b'); E.InjectKey('c');
+    E.InjectKey('d');                         // blocked at cap
+    AssertEquals('typing capped', 'abc', E.Text);
+  finally E.Free; end;
+end;
+
+procedure TEditTest.TestMaxLengthTruncatesPaste;
+var E: TTyEditClipboardAccess;
+begin
+  E := TTyEditClipboardAccess.Create(nil);
+  try
+    E.MaxLength := 5; E.Text := 'ab'; E.CaretPos := 2;
+    E.ClipText := 'XXXXXXXX'; E.PasteFromClipboard;  // only 3 fit
+    AssertEquals('paste truncated to cap', 'abXXX', E.Text);
+  finally E.Free; end;
+end;
+
+procedure TEditTest.TestMaxLengthZeroUnlimited;
+var E: TTyEditClipboardAccess; i: Integer;
+begin
+  E := TTyEditClipboardAccess.Create(nil);
+  try
+    E.MaxLength := 0;
+    for i := 1 to 20 do E.InjectKey('z');
+    AssertEquals('unlimited', 20, UTF8Length(E.Text));
   finally E.Free; end;
 end;
 
