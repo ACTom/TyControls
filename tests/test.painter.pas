@@ -32,6 +32,7 @@ type
     procedure TestDrawGlyphAllKinds;
     procedure TestNineSliceCenterRegion;
     procedure TestEraseRectMakesTransparent;
+    procedure TestPerCornerTopRoundBottomSquare;
   end;
 
 implementation
@@ -256,6 +257,30 @@ begin
   AssertEquals('erased pixel alpha = 0', 0, pxInside.alpha);
   AssertEquals('outside pixel alpha = 255 (unchanged)', 255, pxOutside.alpha);
   AssertEquals('outside pixel red = 255 (unchanged)', 255, pxOutside.red);
+end;
+
+procedure TPainterTest.TestPerCornerTopRoundBottomSquare;
+{ border-radius 6 6 0 0: top corners rounded away (transparent in BGRA bitmap),
+  bottom corners square (green fill reaches the corner). Read directly from the
+  internal BGRA bitmap before EndPaint, consistent with all other painter tests.
+  Discriminate on alpha/red:
+    top-left  alpha = 0   (rounded corner cut away, transparent)
+    bottom-left red < 128 (square corner, solid green fill R=$20) }
+var
+  fill: TTyFill;
+  r: TRect;
+  pxTL, pxBL: TBGRAPixel;
+begin
+  MakePainter(40, 40, 96);
+  r := Rect(0, 0, 40, 40);
+  fill := Default(TTyFill);
+  fill.Kind := tfkSolid;
+  fill.Color := TyRGB($20, $C0, $40);       // green, red channel = $20
+  FPainter.FillBackground(r, fill, TyCorners(6, 6, 0, 0));
+  pxTL := FPainter.Bitmap.GetPixel(0, 0);   // top-left: rounded -> transparent
+  pxBL := FPainter.Bitmap.GetPixel(0, 39);  // bottom-left: square -> green
+  AssertEquals('top-left rounded (transparent): alpha = 0', 0, pxTL.alpha);
+  AssertTrue('bottom-left square (green fill): red < 128', pxBL.red < 128);
 end;
 
 initialization

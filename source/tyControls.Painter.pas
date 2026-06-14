@@ -25,8 +25,10 @@ type
     procedure BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure EndPaint;
     function Scale(ALogical: Integer): Integer;
-    procedure FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer);
-    procedure StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor);
+    procedure FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer); overload;
+    procedure FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners); overload;
+    procedure StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor); overload;
+    procedure StrokeBorder(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor); overload;
     procedure DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
     procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean);
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
@@ -109,15 +111,29 @@ begin
 end;
 
 procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer);
+begin
+  FillBackground(ARect, AFill, TyUniformCorners(ARadiusLogical));
+end;
+
+procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners);
 var
   r: Integer;
+  opts: TRoundRectangleOptions;
   px: TBGRAPixel;
   p1f, p2f: TPointF;
   grad: TBGRAGradientScanner;
 begin
-  if FBmp = nil then
-    Exit;
-  r := Scale(ARadiusLogical);
+  if FBmp = nil then Exit;
+  r := ACorners.TL;
+  if ACorners.TR > r then r := ACorners.TR;
+  if ACorners.BR > r then r := ACorners.BR;
+  if ACorners.BL > r then r := ACorners.BL;
+  r := Scale(r);
+  opts := [];
+  if ACorners.TL <= 0 then Include(opts, rrTopLeftSquare);
+  if ACorners.TR <= 0 then Include(opts, rrTopRightSquare);
+  if ACorners.BR <= 0 then Include(opts, rrBottomRightSquare);
+  if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
   case AFill.Kind of
     tfkSolid:
       begin
@@ -125,7 +141,7 @@ begin
         if r <= 0 then
           FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, px, dmDrawWithTransparency)
         else
-          FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, px, []);
+          FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, px, opts);
       end;
     tfkNone: ;
     tfkLinearGradient:
@@ -136,7 +152,7 @@ begin
           if r <= 0 then
             FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, grad, dmDrawWithTransparency, daNearestNeighbor)
           else
-            FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, grad, [rrDefault]);
+            FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, grad, opts + [rrDefault]);
         finally
           grad.Free;
         end;
@@ -146,18 +162,31 @@ begin
 end;
 
 procedure TTyPainter.StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor);
+begin
+  StrokeBorder(ARect, TyUniformCorners(ARadiusLogical), AWidthLogical, AColor);
+end;
+
+procedure TTyPainter.StrokeBorder(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor);
 var
   w, r: Integer;
+  opts: TRoundRectangleOptions;
   half: Single;
   px: TBGRAPixel;
   l, t, rr, b: Single;
 begin
-  if FBmp = nil then
-    Exit;
+  if FBmp = nil then Exit;
   w := Scale(AWidthLogical);
-  if w <= 0 then
-    Exit;
-  r := Scale(ARadiusLogical);
+  if w <= 0 then Exit;
+  r := ACorners.TL;
+  if ACorners.TR > r then r := ACorners.TR;
+  if ACorners.BR > r then r := ACorners.BR;
+  if ACorners.BL > r then r := ACorners.BL;
+  r := Scale(r);
+  opts := [];
+  if ACorners.TL <= 0 then Include(opts, rrTopLeftSquare);
+  if ACorners.TR <= 0 then Include(opts, rrTopRightSquare);
+  if ACorners.BR <= 0 then Include(opts, rrBottomRightSquare);
+  if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
   px := TyColorToBGRA(AColor);
   half := w / 2;
   l := ARect.Left + half;
@@ -167,7 +196,7 @@ begin
   if r <= 0 then
     FBmp.RectangleAntialias(l, t, rr, b, px, w)
   else
-    FBmp.RoundRectAntialias(l, t, rr, b, r, r, px, w);
+    FBmp.RoundRectAntialias(l, t, rr, b, r, r, px, w, opts);
 end;
 
 procedure TTyPainter.DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
