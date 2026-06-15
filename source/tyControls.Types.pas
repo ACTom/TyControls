@@ -71,6 +71,10 @@ function TyColorToLCL(c: TTyColor): TColor;
 function TyCorners(ATL, ATR, ABR, ABL: Integer): TTyCorners;
 function TyUniformCorners(R: Integer): TTyCorners;
 function TyEffectiveCorners(const AStyle: TTyStyleSet): TTyCorners;
+{ Caps a (theme-token) corner radius at a sub-element's half-side so a smaller
+  theme radius is honored but the geometry can never exceed a perfect circle.
+  ARadius and AHalf MUST be in the SAME unit (both logical or both device). }
+function TyClampRadius(ARadius, AHalf: Integer): Integer;
 function EmptyStyleSet: TTyStyleSet;
 
 implementation
@@ -121,6 +125,12 @@ end;
 function TyUniformCorners(R: Integer): TTyCorners;
 begin
   Result.TL := R; Result.TR := R; Result.BR := R; Result.BL := R;
+end;
+
+function TyClampRadius(ARadius, AHalf: Integer): Integer;
+begin
+  if ARadius < AHalf then Result := ARadius else Result := AHalf;
+  if Result < 0 then Result := 0;
 end;
 
 function TyEffectiveCorners(const AStyle: TTyStyleSet): TTyCorners;

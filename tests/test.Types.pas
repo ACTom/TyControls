@@ -20,6 +20,7 @@ type
     procedure TestUniformCornersAllEqual;
     procedure TestEffectiveCornersFromRadiusField;
     procedure TestEffectiveCornersFallsBackToUniformBorderRadius;
+    procedure TestClampRadius;
   end;
 
 implementation
@@ -100,6 +101,19 @@ begin
   AssertEquals('tr', 12, c.TR);
   AssertEquals('br', 12, c.BR);
   AssertEquals('bl', 12, c.BL);
+end;
+
+procedure TTestTypes.TestClampRadius;
+{ TyClampRadius caps a token border-radius at the sub-element's half-side so a
+  smaller theme radius wins but the geometry can never exceed a perfect circle.
+  Default-circle cases (radio 8/8, toggle 12/9) must return the half unchanged,
+  guaranteeing zero pixel change under the default theme. }
+begin
+  AssertEquals('default radio circle: 8 capped at half 8', 8, TyClampRadius(8, 8));
+  AssertEquals('default toggle circle: token 12 capped at half 9', 9, TyClampRadius(12, 9));
+  AssertEquals('small theme radius wins', 2, TyClampRadius(2, 8));
+  AssertEquals('oversize token capped at half', 8, TyClampRadius(20, 8));
+  AssertEquals('negative result floored to 0', 0, TyClampRadius(-3, 8));
 end;
 
 initialization

@@ -209,7 +209,7 @@ var
   P: TTyPainter;
   S, FrameS: TTyStyleSet;
   ContentRect, DotRect, TextRect, FullRect: TRect;
-  BoxSize, Gap: Integer;
+  BoxSize, Gap, DotRadiusLogical: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -238,8 +238,14 @@ begin
       ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2),
       ContentRect.Left + BoxSize,
       ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2) + BoxSize);
-    P.FillBackground(DotRect, S.Background, BoxSize div 2);
-    P.StrokeBorder(DotRect, BoxSize div 2, S.BorderWidth, S.BorderColor);
+    // FillBackground/StrokeBorder take a LOGICAL radius (they Scale() internally),
+    // so cap the token (S.BorderRadius, logical) against the dot's LOGICAL half-side.
+    // The dot box is P.Scale(16) device wide → logical half = MulDiv(BoxSize,96,APPI) div 2,
+    // which is 8 at 96ppi. Default TyRadioButton border-radius:8px → Min(8,8)=8 → circle
+    // unchanged; only a SMALLER theme radius squares the corners.
+    DotRadiusLogical := TyClampRadius(S.BorderRadius, MulDiv(BoxSize, 96, APPI) div 2);
+    P.FillBackground(DotRect, S.Background, DotRadiusLogical);
+    P.StrokeBorder(DotRect, DotRadiusLogical, S.BorderWidth, S.BorderColor);
     if FChecked then
       P.DrawGlyph(DotRect, tgRadioDot, S.TextColor, 2);
     TextRect := Rect(DotRect.Right + Gap, ContentRect.Top,

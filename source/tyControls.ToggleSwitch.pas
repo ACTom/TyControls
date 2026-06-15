@@ -222,9 +222,12 @@ begin
 
     KnobRect := Rect(KnobX, Margin, KnobX + KnobSide, Margin + KnobSide);
 
-    // Logical knob values for FillBackground (which calls Scale internally)
+    // Logical knob values for FillBackground (which calls Scale internally).
+    // Cap the token (S.BorderRadius, logical) against the knob's logical half-side;
+    // both are logical so Min is unit-safe. Default TyToggleSwitch border-radius:12px
+    // with a 44x24 toggle → KnobLogical div 2 = 9 → Min(12,9)=9 → circle unchanged.
     KnobLogical := MulDiv(KnobSide, 96, APPI);
-    KnobRadiusLogical := KnobLogical div 2;
+    KnobRadiusLogical := TyClampRadius(S.BorderRadius, KnobLogical div 2);
 
     // Knob fill: solid TextColor (white in the spec)
     KnobFill := Default(TTyFill);
