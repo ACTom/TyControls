@@ -8,7 +8,9 @@ type
   TTyPanel = class(TTyCustomControl)
   private
     FCaption: string;
+    FAlignment: TAlignment;
     procedure SetCaption(const AValue: string);
+    procedure SetAlignment(AValue: TAlignment);
   protected
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -17,6 +19,7 @@ type
     function GetStyleTypeKey: string; override;
   published
     property Caption: string read FCaption write SetCaption;
+    property Alignment: TAlignment read FAlignment write SetAlignment default taCenter;
     property Align;
     property Anchors;
     property StyleClass;
@@ -27,6 +30,7 @@ constructor TTyPanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FCaption := '';
+  FAlignment := taCenter;
   Width := 185;
   Height := 41;
 end;
@@ -38,6 +42,12 @@ procedure TTyPanel.SetCaption(const AValue: string);
 begin
   if FCaption = AValue then Exit;
   FCaption := AValue;
+  Invalidate;
+end;
+procedure TTyPanel.SetAlignment(AValue: TAlignment);
+begin
+  if FAlignment = AValue then Exit;
+  FAlignment := AValue;
   Invalidate;
 end;
 procedure TTyPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -61,7 +71,7 @@ begin
     );
     if FCaption <> '' then
       P.DrawText(ContentRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
-        S.TextColor, taLeftJustify, tlCenter, True);
+        S.TextColor, FAlignment, tlCenter, True);
     P.EndPaint;
   finally
     P.Free;
