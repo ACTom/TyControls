@@ -107,6 +107,7 @@ TyScrollBar {
 }
 TyScrollBar:hover  { color: lighten(--border, 25%); }
 TyScrollBar:active { color: var(--accent); }
+TyScrollBar:disabled { opacity: 0.5; }
 
 TyTitleBar {
   background: lighten(--surface, 4%);
@@ -157,6 +158,7 @@ TyProgressBar {
   border-width: 1px;
   border-radius: var(--radius);
 }
+TyProgressBar:disabled { opacity: 0.5; }
 
 TyProgressFill {
   background: var(--accent);
@@ -178,6 +180,7 @@ TyTrackBar {
   padding: 0px;
 }
 TyTrackBar:focus    { outline: 2px var(--focus-ring); }
+TyTrackBar:disabled { opacity: 0.5; }
 
 TyTrackThumb {
   background: var(--accent);
@@ -204,6 +207,7 @@ TyTabControl {
   border-radius: var(--radius);
 }
 TyTabControl:focus  { outline: 2px var(--focus-ring); }
+TyTabControl:disabled { opacity: 0.5; }
 
 /* 暗色下无法靠 darken 拉开与内容区的差异(surface 已接近黑),改用 lighten 让
    未选中页签"抬起"于内容之上,选中页签回落到 surface 与内容融合。 */

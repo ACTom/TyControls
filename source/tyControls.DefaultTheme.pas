@@ -127,6 +127,7 @@ begin
     '}' + LineEnding +
     'TyScrollBar:hover  { color: darken(--border, 15%); }' + LineEnding +
     'TyScrollBar:active { color: var(--accent); }' + LineEnding +
+    'TyScrollBar:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyTitleBar {' + LineEnding +
     '  background: darken(--surface, 6%);' + LineEnding +
@@ -177,6 +178,7 @@ begin
     '  border-width: 1px;' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
+    'TyProgressBar:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyProgressFill {' + LineEnding +
     '  background: var(--accent);' + LineEnding +
@@ -198,6 +200,7 @@ begin
     '  padding: 0px;' + LineEnding +
     '}' + LineEnding +
     'TyTrackBar:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyTrackBar:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyTrackThumb {' + LineEnding +
     '  background: var(--accent);' + LineEnding +
@@ -224,6 +227,7 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
     'TyTabControl:focus  { outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyTabControl:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyTab {' + LineEnding +
     '  background: darken(--surface, 5%);' + LineEnding +

@@ -109,6 +109,7 @@ TyScrollBar {
 }
 TyScrollBar:hover  { color: var(--accent); }
 TyScrollBar:active { color: darken(--accent, 8%); }
+TyScrollBar:disabled { opacity: 0.45; }
 
 TyTitleBar {
   background: linear-gradient(90deg, lighten(--accent, 8%), var(--accent));
@@ -160,6 +161,7 @@ TyProgressBar {
   border-width: 1px;
   border-radius: var(--radius);
 }
+TyProgressBar:disabled { opacity: 0.45; }
 
 TyProgressFill {
   background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent));
@@ -181,6 +183,7 @@ TyTrackBar {
   padding: 0px;
 }
 TyTrackBar:focus    { outline: 2px var(--focus-ring); }
+TyTrackBar:disabled { opacity: 0.45; }
 
 TyTrackThumb {
   background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent));
@@ -208,6 +211,7 @@ TyTabControl {
   shadow: 0px 1px 3px #0000001F;
 }
 TyTabControl:focus  { outline: 2px var(--focus-ring); }
+TyTabControl:disabled { opacity: 0.45; }
 
 TyTab {
   background: darken(--surface, 6%);

@@ -19,6 +19,7 @@ type
     procedure TestControlVisibleWithoutTheme;
     procedure TestBuiltinTitleBarTopRoundedTab;
     procedure TestBuiltinFocusRingOnButton;
+    procedure TestDisabledOpacityParity;
   end;
 
   TTyButtonRenderAccess = class(TTyButton)
@@ -241,6 +242,22 @@ begin
     s := m.ResolveStyle('TyButton', '', [tysFocused]);
     AssertTrue('button focus outline present', tpOutline in s.Present);
     AssertTrue('focus outline width > 0', s.OutlineWidth > 0);
+  finally m.Free; end;
+end;
+
+procedure TBuiltinThemeTest.TestDisabledOpacityParity;
+var m: TTyStyleModel; s: TTyStyleSet;
+  procedure Chk(const K: string);
+  begin
+    s := m.ResolveStyle(K, '', [tysDisabled]);
+    AssertTrue(K + ' has opacity flag', tpOpacity in s.Present);
+    AssertTrue(K + ' opacity < 1', s.Opacity < 0.99);
+  end;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(TyBuiltinThemeCss);
+    Chk('TyScrollBar'); Chk('TyTrackBar'); Chk('TyTabControl'); Chk('TyProgressBar');
   finally m.Free; end;
 end;
 
