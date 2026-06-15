@@ -19,6 +19,7 @@ type
     procedure CallMouseMove(X, Y: Integer);
     procedure CallMouseLeave;
     procedure SimulateKeyDown(AKey: Word);
+    procedure DoKeyDown(var Key: Word; Shift: TShiftState);
   end;
 
   { Change-count probe }
@@ -41,6 +42,7 @@ type
     procedure TestTabIndexSwitchesPageVisibility;
     procedure TestTabIndexClamps;
     procedure TestKeyboardSwitchesTabs;
+    procedure TestTabKeyboardNav;
     procedure TestHeaderRectsLayout;
     procedure TestAdjustClientRectInset;
     procedure TestMouseDownSelectsTab;
@@ -131,6 +133,11 @@ end;
 procedure TTyTabControlAccess.SimulateKeyDown(AKey: Word);
 begin
   KeyDown(AKey, []);
+end;
+
+procedure TTyTabControlAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
 end;
 
 { TTyTabControlTest }
@@ -256,6 +263,37 @@ begin
     AssertEquals('LEFT clamps at 0', 0, Acc.TabIndex);
   finally
     Acc.Free;
+  end;
+end;
+
+{ TestTabKeyboardNav:
+  Ctrl+Tab (next, wrap), Ctrl+Shift+Tab (prev, wrap), Ctrl+PageDown (next, clamp),
+  Home (first), End (last). }
+procedure TTyTabControlTest.TestTabKeyboardNav;
+var
+  T: TTyTabControlAccess;
+  K: Word;
+begin
+  T := TTyTabControlAccess.Create(FForm);
+  T.Parent := FForm;
+  T.Font.PixelsPerInch := 96;
+  T.SetBounds(0, 0, 300, 200);
+  try
+    T.AddTab('A'); T.AddTab('B'); T.AddTab('C'); T.TabIndex := 0;
+    K := VK_TAB; T.DoKeyDown(K, [ssCtrl]);                 // Ctrl+Tab -> next
+    AssertEquals('ctrl+tab next', 1, T.TabIndex);
+    K := VK_END; T.DoKeyDown(K, []);
+    AssertEquals('end -> last', 2, T.TabIndex);
+    K := VK_TAB; T.DoKeyDown(K, [ssCtrl]);                 // wrap last->first
+    AssertEquals('ctrl+tab wraps', 0, T.TabIndex);
+    K := VK_TAB; T.DoKeyDown(K, [ssCtrl, ssShift]);        // Ctrl+Shift+Tab wraps first->last
+    AssertEquals('ctrl+shift+tab wraps back', 2, T.TabIndex);
+    K := VK_HOME; T.DoKeyDown(K, []);
+    AssertEquals('home -> first', 0, T.TabIndex);
+    K := VK_NEXT; T.DoKeyDown(K, [ssCtrl]);                // Ctrl+PageDown -> next (clamp)
+    AssertEquals('ctrl+pgdn next', 1, T.TabIndex);
+  finally
+    T.Free;
   end;
 end;
 

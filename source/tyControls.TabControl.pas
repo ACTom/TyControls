@@ -1304,35 +1304,52 @@ begin
   end;
 end;
 
-{ Keyboard: VK_LEFT/VK_RIGHT move TabIndex; clamp at ends; consume key }
+{ Keyboard: standard tab navigation.
+  Ctrl+Tab / Ctrl+Shift+Tab cycle the selection WITH wrap; Ctrl+PageDown /
+  Ctrl+PageUp step next/prev clamped at the ends; Home/End jump to first/last;
+  VK_LEFT/VK_RIGHT step prev/next clamped (legacy). Every handled key is
+  consumed (Key := 0). TabIndex := routes through SetTabIndex, which clamps,
+  shows the page, scrolls it into view, and fires OnChange. }
 procedure TTyTabControl.KeyDown(var Key: Word; Shift: TShiftState);
-var
-  NewIndex: Integer;
+var NewIndex, Cnt: Integer;
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
-  if FCaptions.Count = 0 then Exit;
-  case Key of
-    VK_RIGHT:
-    begin
-      NewIndex := FTabIndex + 1;
-      if NewIndex >= FCaptions.Count then
-        NewIndex := FCaptions.Count - 1;
-      TabIndex := NewIndex;
-      Key := 0;
-    end;
-    VK_LEFT:
-    begin
-      NewIndex := FTabIndex - 1;
-      if NewIndex < 0 then NewIndex := 0;
-      TabIndex := NewIndex;
-      Key := 0;
-    end;
+  Cnt := FCaptions.Count;
+  if Cnt = 0 then Exit;
+  // Ctrl+Tab / Ctrl+Shift+Tab: cycle with wrap.
+  if (Key = VK_TAB) and (ssCtrl in Shift) then
+  begin
+    if ssShift in Shift then NewIndex := FTabIndex - 1 else NewIndex := FTabIndex + 1;
+    if NewIndex < 0 then NewIndex := Cnt - 1;
+    if NewIndex > Cnt - 1 then NewIndex := 0;
+    TabIndex := NewIndex; Key := 0; Exit;
   end;
-  { Ensure the (possibly unchanged) selection stays in view: SetTabIndex
-    early-exits when the index does not change, so scroll it in explicitly. }
-  if FTabIndex >= 0 then
-    ScrollTabIntoView(FTabIndex);
+  // Ctrl+PageDown / Ctrl+PageUp: next/prev, clamp.
+  if (Key = VK_NEXT) and (ssCtrl in Shift) then
+  begin
+    if FTabIndex < Cnt - 1 then TabIndex := FTabIndex + 1; Key := 0; Exit;
+  end;
+  if (Key = VK_PRIOR) and (ssCtrl in Shift) then
+  begin
+    if FTabIndex > 0 then TabIndex := FTabIndex - 1; Key := 0; Exit;
+  end;
+  case Key of
+    VK_HOME:  begin TabIndex := 0; Key := 0; end;
+    VK_END:   begin TabIndex := Cnt - 1; Key := 0; end;
+    VK_RIGHT:
+      begin
+        NewIndex := FTabIndex + 1;
+        if NewIndex > Cnt - 1 then NewIndex := Cnt - 1;
+        TabIndex := NewIndex; Key := 0;
+      end;
+    VK_LEFT:
+      begin
+        NewIndex := FTabIndex - 1;
+        if NewIndex < 0 then NewIndex := 0;
+        TabIndex := NewIndex; Key := 0;
+      end;
+  end;
 end;
 
 end.
