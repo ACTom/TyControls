@@ -2,7 +2,7 @@ unit tyControls.ScrollBar;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 type
   TTyScrollBarKind = (sbHorizontal, sbVertical);
@@ -32,6 +32,7 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
@@ -407,6 +408,41 @@ begin
     EndThumbDrag;
     MouseCapture := False;
   end;
+end;
+
+procedure TTyScrollBar.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  Dec1, Inc1: Word;
+begin
+  if not Enabled then Exit;
+  inherited KeyDown(Key, Shift);
+  if FKind = sbVertical then
+  begin
+    Dec1 := VK_UP;
+    Inc1 := VK_DOWN;
+  end
+  else
+  begin
+    Dec1 := VK_LEFT;
+    Inc1 := VK_RIGHT;
+  end;
+  if Key = Dec1 then
+  begin
+    Position := Position - FSmallChange;
+    Key := 0;
+  end
+  else if Key = Inc1 then
+  begin
+    Position := Position + FSmallChange;
+    Key := 0;
+  end
+  else
+    case Key of
+      VK_PRIOR: begin Position := Position - FPageSize; Key := 0; end;
+      VK_NEXT:  begin Position := Position + FPageSize; Key := 0; end;
+      VK_HOME:  begin Position := FMin; Key := 0; end;
+      VK_END:   begin Position := FMax; Key := 0; end;
+    end;
 end;
 
 end.

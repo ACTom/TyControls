@@ -3,7 +3,7 @@ unit test.controls.scrollbar;
 interface
 uses
   Classes, SysUtils, Types, fpcunit, testregistry,
-  Forms, Controls, Graphics,
+  Forms, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.ScrollBar;
 type
@@ -49,6 +49,7 @@ type
     procedure TestTrackClickBelowThumbPagesDown;
     procedure TestDisabledScrollbarMouseIgnored;
     procedure TestArrowButtonsStepSmallChange;
+    procedure TestScrollBarKeyboard;
   end;
 
 implementation
@@ -60,6 +61,7 @@ type
     procedure CallMouseMove(X, Y: Integer);
     procedure CallMouseUp(Btn: TMouseButton; X, Y: Integer);
     procedure DoMouseDown(Shift: TShiftState; X, Y: Integer);
+    procedure DoKeyDown(Key: Word; Shift: TShiftState);
   end;
 procedure TScrollAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -80,6 +82,10 @@ end;
 procedure TScrollAccess.DoMouseDown(Shift: TShiftState; X, Y: Integer);
 begin
   MouseDown(mbLeft, Shift, X, Y);
+end;
+procedure TScrollAccess.DoKeyDown(Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
 end;
 procedure TTyScrollGeometryTest.TestVerticalThumbAtTop;
 var
@@ -378,6 +384,26 @@ begin
   AssertEquals('top arrow -SmallChange', 45, SA.Position);
   SA.DoMouseDown([], 8, 156);        // bottom arrow button (y in [144,160))
   AssertEquals('bottom arrow +SmallChange', 50, SA.Position);
+end;
+
+procedure TTyScrollBarMouseTest.TestScrollBarKeyboard;
+var
+  SA: TScrollAccess;
+begin
+  SA := TScrollAccess.Create(FForm);
+  SA.Parent := FForm;
+  SA.Kind := sbVertical;
+  SA.Min := 0;
+  SA.Max := 100;
+  SA.PageSize := 10;
+  SA.SmallChange := 1;
+  SA.Position := 50;
+  SA.DoKeyDown(VK_DOWN, []);  AssertEquals('down +small', 51, SA.Position);
+  SA.DoKeyDown(VK_UP, []);    AssertEquals('up -small', 50, SA.Position);
+  SA.DoKeyDown(VK_NEXT, []);  AssertEquals('pgdn +page', 60, SA.Position);
+  SA.DoKeyDown(VK_PRIOR, []); AssertEquals('pgup -page', 50, SA.Position);
+  SA.DoKeyDown(VK_HOME, []);  AssertEquals('home min', 0, SA.Position);
+  SA.DoKeyDown(VK_END, []);   AssertEquals('end max', 100, SA.Position);
 end;
 
 initialization
