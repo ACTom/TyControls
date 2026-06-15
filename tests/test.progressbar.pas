@@ -12,6 +12,17 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
+  // Test seam for the fill animation: exposes DisplayPos + the stepping seam and
+  // a helper that forces the *animating* path without needing a window handle
+  // (headless SetPosition would otherwise snap). Tests step it deterministically.
+  TProgAccess = class(TTyProgressBar)
+  public
+    function DisplayPos: Single;
+    function AdvanceAnimation(AMs: Integer): Boolean;
+    procedure SetPositionAnimating(AValue: Integer);
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
   TTyProgressBarGeometryTest = class(TTestCase)
   published
     procedure TestPosZeroGivesWidthZero;
@@ -41,11 +52,40 @@ type
     procedure TestFillPixelBlueAt50Percent;
     procedure TestPartialFillRoundsLeadingLeftCornersOnly;
     procedure TestFullFillRoundsTrailingCorners;
+    procedure TestHeadlessSnapsFillToFinalImmediately;
+  end;
+
+  TTyProgressBarAnimationTest = class(TTestCase)
+  published
+    procedure TestProgressFillAnimatesMidwayThenSettles;
+    procedure TestAnimationsEnabledDefaultsTrue;
   end;
 
 implementation
 
 procedure TProgressBarAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+{ TProgAccess }
+
+function TProgAccess.DisplayPos: Single;
+begin
+  Result := inherited DisplayPos;
+end;
+
+function TProgAccess.AdvanceAnimation(AMs: Integer): Boolean;
+begin
+  Result := inherited AdvanceAnimation(AMs);
+end;
+
+procedure TProgAccess.SetPositionAnimating(AValue: Integer);
+begin
+  inherited SetPositionAnimating(AValue);
+end;
+
+procedure TProgAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
 end;
@@ -306,8 +346,87 @@ begin
   end;
 end;
 
+procedure TTyProgressBarPixelTest.TestHeadlessSnapsFillToFinalImmediately;
+{ Headless (no window handle): setting Position must snap the fill to the final
+  value with no animation, so a plain TTyProgressBar paints exactly as before.
+  Track 200x20, Pos jumps 0->100 (full fill). The right-half pixel must be fill
+  immediately (blue-dominant), proving DisplayPos == FPosition after the set. }
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Bar: TProgressBarAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  PxRight: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyProgressBar { background: #202020; border-width: 0px; border-radius: 0px; }' +
+      'TyProgressFill { background: #3B82F6; border-radius: 0px; }');
+    Bar := TProgressBarAccess.Create(Form);
+    Bar.Parent := Form;
+    Bar.Controller := Ctl;
+    Bar.Min := 0;
+    Bar.Max := 100;
+    Bar.Position := 0;
+    Bar.Position := 100;  // headless => must snap, not animate
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 20);
+    Bar.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 20), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      PxRight := Reread.GetPixel(150, 10);  // right half: only fill if snapped to 100
+      AssertTrue('headless snap: right-half pixel is fill (blue) immediately',
+        PxRight.blue > 180);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ TTyProgressBarAnimationTest }
+
+procedure TTyProgressBarAnimationTest.TestProgressFillAnimatesMidwayThenSettles;
+var
+  P: TProgAccess;
+begin
+  P := TProgAccess.Create(nil);
+  try
+    P.Min := 0; P.Max := 100; P.Position := 0;  // settled at 0 (headless snap)
+    P.SetPositionAnimating(100);                 // arm animation 0->100
+    P.AdvanceAnimation(60);                       // ~half of 120ms
+    AssertTrue('midway', (P.DisplayPos > 10) and (P.DisplayPos < 90));
+    P.AdvanceAnimation(120);
+    AssertTrue('settled', Abs(P.DisplayPos - 100) < 0.5);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyProgressBarAnimationTest.TestAnimationsEnabledDefaultsTrue;
+var
+  P: TTyProgressBar;
+begin
+  P := TTyProgressBar.Create(nil);
+  try
+    AssertTrue('AnimationsEnabled defaults True', P.AnimationsEnabled);
+  finally
+    P.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyProgressBarGeometryTest);
   RegisterTest(TTyProgressBarControlTest);
   RegisterTest(TTyProgressBarPixelTest);
+  RegisterTest(TTyProgressBarAnimationTest);
 end.
