@@ -2,8 +2,18 @@ unit tyControls.Controller;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Controls,
-  tyControls.Types, tyControls.StyleModel;
+  Classes, SysUtils, Controls, Forms,
+  tyControls.Types, tyControls.StyleModel, tyControls.Painter;
+
+var
+  // When True (default), the first TTyStyleController created in a GUI context
+  // sets TyFallbackFontName (tyControls.Painter) from the real system font, so
+  // text with no themed font-family renders with a concrete name instead of ''
+  // (BGRA's empty-name path drops the last glyph / mis-advances in the real GUI).
+  // Headless test harnesses set this False BEFORE creating any controller, so
+  // TyFallbackFontName stays '' and headless rendering remains deterministic.
+  TyAutoSystemFontFallback: Boolean = True;
+
 type
   TTyStyleController = class(TComponent)
   private
@@ -36,6 +46,18 @@ begin
   inherited Create(AOwner);
   FModel := TTyStyleModel.Create;
   FControls := TFPList.Create;
+  // One-time: derive a concrete fallback font from the real system font when a
+  // GUI app first creates a controller and the theme provides no font-family.
+  // Only a FALLBACK (still token-driven: a themed font-family always wins). The
+  // try/except keeps headless/widgetset-less contexts safe.
+  if TyAutoSystemFontFallback and (TyFallbackFontName = '') then
+    try
+      if (Screen <> nil) and (Screen.SystemFont <> nil)
+         and (Screen.SystemFont.Name <> '') then
+        TyFallbackFontName := Screen.SystemFont.Name;
+    except
+      // ignore: leave fallback empty in non-GUI / unavailable-Screen contexts
+    end;
 end;
 
 destructor TTyStyleController.Destroy;

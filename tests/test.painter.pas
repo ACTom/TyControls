@@ -33,6 +33,7 @@ type
     procedure TestNineSliceCenterRegion;
     procedure TestEraseRectMakesTransparent;
     procedure TestPerCornerTopRoundBottomSquare;
+    procedure TestFallbackFontNameApplied;
   end;
 
 implementation
@@ -282,6 +283,32 @@ begin
   AssertEquals('top-left rounded (transparent): alpha = 0', 0, pxTL.alpha);
   AssertEquals('bottom-left square: alpha opaque', 255, pxBL.alpha);
   AssertEquals('bottom-left green fill: red = $20', $20, pxBL.red);
+end;
+
+procedure TPainterTest.TestFallbackFontNameApplied;
+{ Mechanism guard for the empty-FontName fix (no real GUI needed):
+  - With TyFallbackFontName set, an empty AFontName is replaced by it.
+  - A non-empty AFontName always passes through unchanged.
+  - With no fallback, the empty name is preserved (original behavior). }
+var
+  bmp: TBGRABitmap;
+  saved: string;
+begin
+  saved := TyFallbackFontName;
+  bmp := TBGRABitmap.Create(4, 4);
+  try
+    TyFallbackFontName := 'Arial';
+    TyConfigureTextFont(bmp, '', 9, 400, 96);
+    AssertEquals('empty name uses fallback', 'Arial', bmp.FontName);
+    TyConfigureTextFont(bmp, 'Verdana', 9, 400, 96);
+    AssertEquals('explicit name preserved', 'Verdana', bmp.FontName);
+    TyFallbackFontName := '';
+    TyConfigureTextFont(bmp, '', 9, 400, 96);
+    AssertEquals('no fallback => empty preserved', '', bmp.FontName);
+  finally
+    bmp.Free;
+    TyFallbackFontName := saved;
+  end;
 end;
 
 initialization

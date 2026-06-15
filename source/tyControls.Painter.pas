@@ -44,12 +44,24 @@ function TyColorToBGRA(c: TTyColor): TBGRAPixel;
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 
+var
+  // Concrete font used when a style/theme provides no font-family.
+  // When AFontName='' and this is non-empty, it is passed to BGRA instead of ''.
+  // ''=leave empty (default; unchanged behavior). The controller may set this
+  // from the real system font for GUI apps -- see tyControls.Controller. Passing
+  // an empty name to BGRA triggers a fallback path that drops the last glyph and
+  // mis-advances text in the real GUI, so substituting a concrete name fixes it.
+  TyFallbackFontName: string;
+
 implementation
 
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 begin
-  ABmp.FontName := AFontName;
+  if (AFontName = '') and (TyFallbackFontName <> '') then
+    ABmp.FontName := TyFallbackFontName
+  else
+    ABmp.FontName := AFontName;
   ABmp.FontHeight := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
   ABmp.FontQuality := fqFineAntialiasing;
   if AWeight >= 600 then ABmp.FontStyle := [fsBold] else ABmp.FontStyle := [];
@@ -405,5 +417,11 @@ begin
   if FBmp = nil then Exit;
   FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, BGRA(0,0,0,0), dmSet);
 end;
+
+initialization
+  // Default: leave font name empty when no font-family is themed (unchanged
+  // behavior). The controller opts into a concrete system-font fallback for
+  // real GUI apps; headless contexts (tests) keep this empty for determinism.
+  TyFallbackFontName := '';
 
 end.
