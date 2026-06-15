@@ -22,6 +22,7 @@ type
     procedure TestDisabledOpacityParity;
     procedure TestStateRuleParity;
     procedure TestBatch4Tokens;
+    procedure TestBatch4ThumbKnobTypeKeys;
   end;
 
   TTyButtonRenderAccess = class(TTyButton)
@@ -305,6 +306,39 @@ begin
     item := m.ResolveStyle('TyListItem','',[]);
     AssertTrue('TyListItem has radius', tpBorderRadius in item.Present);
     AssertTrue('TyListItem radius > 0', item.BorderRadius > 0);
+  finally m.Free; end;
+end;
+
+procedure TBuiltinThemeTest.TestBatch4ThumbKnobTypeKeys;
+{ Batch4 Task 9: sub-element color typeKeys. The scrollbar thumb and toggle
+  knob borrow no longer the parent's TextColor — they resolve dedicated
+  typeKeys whose DEFAULTS equal today's borrowed colors (zero visual change).
+    TyScrollThumb       background = var(--border)  = #D1D5DB
+    TyScrollThumb:active background = var(--accent)  = #3B82F6
+    TyToggleKnob        background = #FFFFFF }
+var
+  m: TTyStyleModel;
+  st0, stA, kn: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(TyBuiltinThemeCss);
+    st0 := m.ResolveStyle('TyScrollThumb', '', []);
+    AssertTrue('TyScrollThumb has background', tpBackground in st0.Present);
+    AssertEquals('scroll thumb default R = --border $D1', $D1, TyRedOf(st0.Background.Color));
+    AssertEquals('scroll thumb default G = --border $D5', $D5, TyGreenOf(st0.Background.Color));
+    AssertEquals('scroll thumb default B = --border $DB', $DB, TyBlueOf(st0.Background.Color));
+
+    stA := m.ResolveStyle('TyScrollThumb', '', [tysActive]);
+    AssertEquals('scroll thumb active R = --accent $3B', $3B, TyRedOf(stA.Background.Color));
+    AssertEquals('scroll thumb active G = --accent $82', $82, TyGreenOf(stA.Background.Color));
+    AssertEquals('scroll thumb active B = --accent $F6', $F6, TyBlueOf(stA.Background.Color));
+
+    kn := m.ResolveStyle('TyToggleKnob', '', []);
+    AssertTrue('TyToggleKnob has background', tpBackground in kn.Present);
+    AssertEquals('toggle knob R = white', $FF, TyRedOf(kn.Background.Color));
+    AssertEquals('toggle knob G = white', $FF, TyGreenOf(kn.Background.Color));
+    AssertEquals('toggle knob B = white', $FF, TyBlueOf(kn.Background.Color));
   finally m.Free; end;
 end;
 

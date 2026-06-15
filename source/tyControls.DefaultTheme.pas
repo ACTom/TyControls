@@ -276,7 +276,12 @@ begin
     '' + LineEnding +
     'TyTextSelection { background: var(--selection); }' + LineEnding +
     'TyTextHint      { color: var(--muted); }' + LineEnding +
-    'TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }' + LineEnding;
+    'TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }' + LineEnding +
+    '' + LineEnding +
+    'TyScrollThumb { background: var(--border); border-radius: 4px; }' + LineEnding +
+    'TyScrollThumb:hover  { background: darken(--border, 15%); }' + LineEnding +
+    'TyScrollThumb:active { background: var(--accent); }' + LineEnding +
+    'TyToggleKnob  { background: #FFFFFF; border-radius: 12px; }' + LineEnding;
 end;
 
 end.

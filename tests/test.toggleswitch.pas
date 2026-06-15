@@ -53,6 +53,8 @@ type
     procedure TestOnKnobPixelWhiteAndTrackBlue;
     { A1 regression: non-zero origin ARect must not displace knob relative to track }
     procedure TestOffsetOriginKnobPositionConsistent;
+    { Batch4 Task 9: knob fill sourced from the dedicated TyToggleKnob typeKey }
+    procedure TestKnobPixelUsesKnobTypeKey;
   end;
 
 implementation
@@ -412,6 +414,50 @@ begin
         Format('offset-origin track right: R < 100 (dark, got R=%d G=%d B=%d)',
           [PxTrack.red, PxTrack.green, PxTrack.blue]),
         PxTrack.red < 100);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchPixelTest.TestKnobPixelUsesKnobTypeKey;
+{ Batch4 Task 9: the knob fill comes from the dedicated TyToggleKnob typeKey,
+  not the parent's TyToggleSwitch.color. Style TyToggleKnob to a distinct
+  green (#00FF00) and assert the OFF knob centre is green-dominant. The track
+  TextColor is set to red to prove it is NOT what paints the knob anymore. }
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Sw: TTyToggleSwitchProbe;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  PxKnob: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyToggleSwitch { background: #444444; color: #FF0000; border-width: 0px; }' +
+      'TyToggleKnob { background: #00FF00; border-radius: 12px; }');
+    Sw := TTyToggleSwitchProbe.Create(Form);
+    Sw.Parent := Form;
+    Sw.Controller := Ctl;
+    Sw.Checked := False;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(44, 24);
+    Sw.RenderTo(Bmp.Canvas, Rect(0, 0, 44, 24), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      PxKnob := Reread.GetPixel(12, 12);  // left side: knob centre
+      AssertTrue('knob from TyToggleKnob: G > 200 (green-dominant)', PxKnob.green > 200);
+      AssertTrue('knob from TyToggleKnob: R < 80 (not red TextColor)', PxKnob.red < 80);
     finally
       Reread.Free;
     end;

@@ -264,3 +264,8 @@ TyMemo:disabled { opacity: 0.45; }
 TyTextSelection { background: var(--selection); }
 TyTextHint      { color: var(--muted); }
 TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }
+
+TyScrollThumb { background: var(--border); border-radius: 6px; }
+TyScrollThumb:hover  { background: var(--accent); }
+TyScrollThumb:active { background: darken(--accent, 8%); }
+TyToggleKnob  { background: #FFFFFF; border-radius: 12px; }

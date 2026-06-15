@@ -35,7 +35,8 @@ type
 
   TTyScrollBarThumbColorTest = class(TTestCase)
   published
-    procedure TestThumbPixelUsesTextColor;
+    procedure TestThumbPixelUsesThumbTypeKey;
+    procedure TestThumbDefaultPixelIsBorderColor;
   end;
 
   TTyScrollBarMouseTest = class(TTestCase)
@@ -214,8 +215,11 @@ begin
 end;
 { TTyScrollBarThumbColorTest }
 
-procedure TTyScrollBarThumbColorTest.TestThumbPixelUsesTextColor;
-{ Stylesheet: track is near-black (#202020), thumb color is red (#FF0000).
+procedure TTyScrollBarThumbColorTest.TestThumbPixelUsesThumbTypeKey;
+{ Batch4 Task 9: the thumb fill is sourced from the dedicated TyScrollThumb
+  typeKey (no longer the parent's TyScrollBar.color).
+  Stylesheet: track is near-black (#202020), thumb color is red (#FF0000) via
+  TyScrollThumb.background.
   Vertical scrollbar Min=0 Max=100 Page=25 Pos=0 in a 16x200 bitmap.
   Track is inset by a 16px button-size at each end (Task 4), so the track is
   y in [16,184), len 168, and the thumb (25/125 of 168 ~= 33px) occupies the
@@ -235,7 +239,9 @@ begin
   Form := TForm.CreateNew(nil);
   Bmp := TBitmap.Create;
   try
-    Ctl.LoadThemeCss('TyScrollBar { background: #202020; color: #FF0000; border-radius: 0px; }');
+    Ctl.LoadThemeCss(
+      'TyScrollBar { background: #202020; border-radius: 0px; }' +
+      'TyScrollThumb { background: #FF0000; border-radius: 0px; }');
     Bar := TScrollAccess.Create(Form);
     Bar.Parent := Form;
     Bar.Controller := Ctl;
@@ -259,6 +265,57 @@ begin
       AssertTrue('thumb pixel G < 80 (not greenish)',   PxThumb.green < 80);
 
       AssertTrue('track pixel not red-dominant (R <= G+80)', PxTrack.red <= PxTrack.green + 80);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyScrollBarThumbColorTest.TestThumbDefaultPixelIsBorderColor;
+{ Batch4 Task 9: default zero visual change. With the built-in theme loaded,
+  the thumb fill defaults to TyScrollThumb.background = var(--border) = #D1D5DB
+  (= the old borrowed TyScrollBar.color = S.TextColor). Same vertical bar.
+  Thumb pixel at (8,30) must be light gray (R,G,B all ~ 0xD1..0xDB > 180 and
+  nearly equal), proving the migration kept the look. }
+var
+  Ctl: TTyStyleController;
+  Bar: TScrollAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  PxThumb: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil); // NO LoadTheme -> built-in skin
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Bar := TScrollAccess.Create(Form);
+    Bar.Parent := Form;
+    Bar.Controller := Ctl;
+    Bar.Kind := sbVertical;
+    Bar.SetBounds(0, 0, 16, 200);
+    Bar.Min := 0;
+    Bar.Max := 100;
+    Bar.PageSize := 25;
+    Bar.Position := 0;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(16, 200);
+    Bar.SmokeRender(Bmp.Canvas, Rect(0, 0, 16, 200), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      PxThumb := Reread.GetPixel(8, 30);   // inside thumb (inset track ~[16,49))
+      // var(--border) #D1D5DB: light gray, all channels high and close together.
+      AssertTrue('default thumb R ~ border $D1 (>180)', PxThumb.red > 180);
+      AssertTrue('default thumb G ~ border $D5 (>180)', PxThumb.green > 180);
+      AssertTrue('default thumb B ~ border $DB (>180)', PxThumb.blue > 180);
+      AssertTrue('default thumb is gray (|R-B| small)',
+        Abs(Integer(PxThumb.red) - Integer(PxThumb.blue)) < 30);
     finally
       Reread.Free;
     end;

@@ -202,7 +202,7 @@ end;
 procedure TTyScrollBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S: TTyStyleSet;
+  S, ThumbS: TTyStyleSet;
   R, Track, ThumbR, LoR, HiR: TRect;
   ThumbFill: TTyFill;
 begin
@@ -214,10 +214,14 @@ begin
     DrawFrame(P, R, S);
     Track := TyScrollTrackRect(R, FKind, TyScrollButtonSize(R, FKind));
     ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, FPosition, FPageSize);
+    // Thumb fill is its own sub-element typeKey (TyScrollThumb), not the parent's
+    // TextColor. The scrollbar tracks no distinct per-thumb hover/active state, so
+    // resolve the normal state — its default (var(--border)) equals the old borrow.
+    ThumbS := ActiveController.Model.ResolveStyle('TyScrollThumb', '', []);
     ThumbFill := Default(TTyFill);
     ThumbFill.Kind := tfkSolid;
-    ThumbFill.Color := S.TextColor;
-    P.FillBackground(ThumbR, ThumbFill, S.BorderRadius);
+    ThumbFill.Color := ThumbS.Background.Color;
+    P.FillBackground(ThumbR, ThumbFill, ThumbS.BorderRadius);
     ButtonRects(R, LoR, HiR);
     if (LoR.Right > LoR.Left) then   // buttons exist
     begin

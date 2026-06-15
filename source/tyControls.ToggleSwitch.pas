@@ -185,7 +185,7 @@ end;
 procedure TTyToggleSwitch.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S, TrackS: TTyStyleSet;
+  S, TrackS, KnobStyle: TTyStyleSet;
   R: TRect;
   TrackRadius: Integer;
   DevH, Margin, KnobSide, KnobLogical, KnobX, KnobRadiusLogical: Integer;
@@ -222,17 +222,22 @@ begin
 
     KnobRect := Rect(KnobX, Margin, KnobX + KnobSide, Margin + KnobSide);
 
-    // Logical knob values for FillBackground (which calls Scale internally).
-    // Cap the token (S.BorderRadius, logical) against the knob's logical half-side;
-    // both are logical so Min is unit-safe. Default TyToggleSwitch border-radius:12px
-    // with a 44x24 toggle → KnobLogical div 2 = 9 → Min(12,9)=9 → circle unchanged.
-    KnobLogical := MulDiv(KnobSide, 96, APPI);
-    KnobRadiusLogical := TyClampRadius(S.BorderRadius, KnobLogical div 2);
+    // Knob is its own sub-element typeKey (TyToggleKnob): both its fill color and
+    // its border-radius come from there, not the parent's TextColor/BorderRadius.
+    KnobStyle := ActiveController.Model.ResolveStyle('TyToggleKnob', '', []);
 
-    // Knob fill: solid TextColor (white in the spec)
+    // Logical knob values for FillBackground (which calls Scale internally).
+    // Cap the token (TyToggleKnob.BorderRadius, logical) against the knob's logical
+    // half-side; both are logical so Min is unit-safe. Default TyToggleKnob
+    // border-radius:12px with a 44x24 toggle → KnobLogical div 2 = 9 →
+    // Min(12,9)=9 → circle unchanged.
+    KnobLogical := MulDiv(KnobSide, 96, APPI);
+    KnobRadiusLogical := TyClampRadius(KnobStyle.BorderRadius, KnobLogical div 2);
+
+    // Knob fill: solid TyToggleKnob.background (white in the default theme).
     KnobFill := Default(TTyFill);
     KnobFill.Kind := tfkSolid;
-    KnobFill.Color := S.TextColor;
+    KnobFill.Color := KnobStyle.Background.Color;
 
     P.FillBackground(KnobRect, KnobFill, KnobRadiusLogical);
 
