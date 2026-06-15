@@ -7,6 +7,9 @@
   --danger:     #DB2777;
   --radius:     10px;
   --focus-ring: var(--accent);
+  --selection:     alpha(var(--accent), 0.30);
+  --muted:         alpha(var(--on-surface), 0.5);
+  --overlay-hover: alpha(#FFFFFF, 0.18);
 }
 
 /* Window/form backdrop — a slightly deeper tint of the lavender surface. */
@@ -256,3 +259,7 @@ TyMemo {
 TyMemo:hover    { border-color: lighten(--accent, 10%); }
 TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyMemo:disabled { opacity: 0.45; }
+
+TyTextSelection { background: var(--selection); }
+TyTextHint      { color: var(--muted); }
+TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }

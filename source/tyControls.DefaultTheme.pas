@@ -27,6 +27,9 @@ begin
     '  --danger:     #EF4444;' + LineEnding +
     '  --radius:     6px;' + LineEnding +
     '  --focus-ring: var(--accent);' + LineEnding +
+    '  --selection:     alpha(var(--accent), 0.30);' + LineEnding +
+    '  --muted:         alpha(var(--on-surface), 0.5);' + LineEnding +
+    '  --overlay-hover: alpha(var(--on-surface), 0.12);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window/form backdrop — a soft off-white behind the white controls. */' + LineEnding +
@@ -268,7 +271,11 @@ begin
     '}' + LineEnding +
     'TyMemo:hover    { border-color: darken(--border, 10%); }' + LineEnding +
     'TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyMemo:disabled { opacity: 0.5; }' + LineEnding;
+    'TyMemo:disabled { opacity: 0.5; }' + LineEnding +
+    '' + LineEnding +
+    'TyTextSelection { background: var(--selection); }' + LineEnding +
+    'TyTextHint      { color: var(--muted); }' + LineEnding +
+    'TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }' + LineEnding;
 end;
 
 end.

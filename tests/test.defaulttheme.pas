@@ -21,6 +21,7 @@ type
     procedure TestBuiltinFocusRingOnButton;
     procedure TestDisabledOpacityParity;
     procedure TestStateRuleParity;
+    procedure TestBatch4Tokens;
   end;
 
   TTyButtonRenderAccess = class(TTyButton)
@@ -280,6 +281,25 @@ begin
     btnH := m.ResolveStyle('TyButton','',[tysHover]);
     AssertTrue('listbox hover border = input hover border', lbH.BorderColor = edH.BorderColor);
     AssertTrue('button hover border = input hover border', btnH.BorderColor = edH.BorderColor);
+  finally m.Free; end;
+end;
+
+procedure TBuiltinThemeTest.TestBatch4Tokens;
+var m: TTyStyleModel; sel, hint, tab: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(TyBuiltinThemeCss);
+    sel := m.ResolveStyle('TyTextSelection','',[]);
+    AssertTrue('TyTextSelection has background', tpBackground in sel.Present);
+    // selection = alpha(accent,0.30): RGB ~ #3B82F6, alpha < opaque
+    AssertTrue('selection alpha < 255', TyAlphaOf(sel.Background.Color) < 250);
+    hint := m.ResolveStyle('TyTextHint','',[]);
+    AssertTrue('TyTextHint has text color', tpTextColor in hint.Present);
+    AssertTrue('hint alpha < 255 (muted)', TyAlphaOf(hint.TextColor) < 250);
+    tab := m.ResolveStyle('TyTabClose','',[]);
+    AssertTrue('TyTabClose has background', tpBackground in tab.Present);
+    AssertTrue('TyTabClose has radius', tpBorderRadius in tab.Present);
   finally m.Free; end;
 end;
 

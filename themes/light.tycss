@@ -7,6 +7,9 @@
   --danger:     #EF4444;
   --radius:     6px;
   --focus-ring: var(--accent);
+  --selection:     alpha(var(--accent), 0.30);
+  --muted:         alpha(var(--on-surface), 0.5);
+  --overlay-hover: alpha(var(--on-surface), 0.12);
 }
 
 /* Window/form backdrop — a soft off-white behind the white controls. */
@@ -249,3 +252,7 @@ TyMemo {
 TyMemo:hover    { border-color: darken(--border, 10%); }
 TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyMemo:disabled { opacity: 0.5; }
+
+TyTextSelection { background: var(--selection); }
+TyTextHint      { color: var(--muted); }
+TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }
