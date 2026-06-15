@@ -10,6 +10,7 @@ type
   TTyGroupBoxProbe = class(TTyGroupBox)
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure CallAdjustClientRect(var ARect: TRect);
   end;
 
@@ -27,11 +28,17 @@ type
     procedure TestPaintSmoke;
     procedure TestCaptionBandErasedBorderNotVisible;
     procedure TestClientRectInsetBelowCaption;
+    procedure TestGroupBoxAlignmentMovesCaption;
   end;
 
 implementation
 
 procedure TTyGroupBoxProbe.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TTyGroupBoxProbe.DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
 end;
@@ -184,6 +191,34 @@ begin
   finally
     Probe.Free;
   end;
+end;
+
+procedure TTyGroupBoxTest.TestGroupBoxAlignmentMovesCaption;
+  function InkCentroidX(A: TAlignment): Double;
+  var G: TTyGroupBoxProbe; bmp: TBitmap; reread: TBGRABitmap; x,y,n: Integer; sx: Double; px: TBGRAPixel;
+  begin
+    G := TTyGroupBoxProbe.Create(nil); bmp := TBitmap.Create;
+    try
+      G.Caption := 'Hi'; G.Alignment := A; G.Font.PixelsPerInch := 96;
+      bmp.PixelFormat := pf32bit; bmp.SetSize(200, 60);
+      bmp.Canvas.Brush.Color := clWhite; bmp.Canvas.FillRect(0,0,200,60);
+      G.DoRenderTo(bmp.Canvas, Rect(0,0,200,60), 96);
+      reread := TBGRABitmap.Create(bmp);
+      try
+        sx := 0; n := 0;
+        for x := 0 to 199 do for y := 0 to 15 do
+        begin px := reread.GetPixel(x,y);
+          if (px.red<160) and (px.green<160) then begin sx := sx + x; Inc(n); end; end;
+        if n = 0 then Result := -1 else Result := sx / n;
+      finally reread.Free; end;
+    finally bmp.Free; G.Free; end;
+  end;
+var cl, cr: Double;
+begin
+  cl := InkCentroidX(taLeftJustify);
+  cr := InkCentroidX(taRightJustify);
+  AssertTrue('left caption ink present', cl > 0);
+  AssertTrue('right-aligned caption further right', cr > cl + 20);
 end;
 
 initialization

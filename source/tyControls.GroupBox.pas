@@ -8,7 +8,9 @@ type
   TTyGroupBox = class(TTyCustomControl)
   private
     FCaption: string;
+    FAlignment: TAlignment;
     procedure SetCaption(const AValue: string);
+    procedure SetAlignment(AValue: TAlignment);
     { Shared caption-band height: 16 logical px scaled to APPI.
       Used by both RenderTo and AdjustClientRect so they stay in sync. }
     function CapHAtPPI(APPI: Integer): Integer;
@@ -21,6 +23,7 @@ type
     constructor Create(AOwner: TComponent); override;
   published
     property Caption: string read FCaption write SetCaption;
+    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     property Align;
     property Anchors;
     property StyleClass;
@@ -47,6 +50,7 @@ constructor TTyGroupBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FCaption := '';
+  FAlignment := taLeftJustify;
   Width := 185;
   Height := 105;
 end;
@@ -63,13 +67,20 @@ begin
   Invalidate;
 end;
 
+procedure TTyGroupBox.SetAlignment(AValue: TAlignment);
+begin
+  if FAlignment = AValue then Exit;
+  FAlignment := AValue;
+  Invalidate;
+end;
+
 procedure TTyGroupBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
   W, H, CapH: Integer;
   FrameRect, BandRect, TextRect: TRect;
-  TextW: Integer;
+  TextW, BandLeft: Integer;
   MeasBmp: TBitmap;
 begin
   P := TTyPainter.Create;
@@ -106,15 +117,24 @@ begin
       end;
       if TextW < 1 then TextW := 1;
 
+      // Position the erase band AND the text from the SAME BandLeft per
+      // Alignment, so the erased gap stays centered on the caption ink.
+      case FAlignment of
+        taCenter:      BandLeft := (W - (TextW + P.Scale(16))) div 2;
+        taRightJustify:BandLeft := W - (TextW + P.Scale(16)) - P.Scale(4);
+      else             BandLeft := P.Scale(4);   // taLeftJustify (current look: band starts ~Scale(8))
+      end;
+      if BandLeft < 0 then BandLeft := 0;
+
       // Erase the band pixels so the parent background shows through with no
-      // border segment. Band: Scale(8) left margin + text width + Scale(8) right.
-      BandRect := Rect(P.Scale(8), 0, P.Scale(8) + TextW + P.Scale(8), CapH);
+      // border segment. Band: Scale(8) margin + text width + Scale(8) margin.
+      BandRect := Rect(BandLeft, 0, BandLeft + TextW + P.Scale(16), CapH);
       P.EraseRect(BandRect);
 
-      // Draw caption text
-      TextRect := Rect(P.Scale(12), 0, W - P.Scale(4), CapH);
+      // Draw caption text within the band, aligned per FAlignment.
+      TextRect := Rect(BandLeft + P.Scale(4), 0, BandLeft + P.Scale(4) + TextW + P.Scale(8), CapH);
       P.DrawText(TextRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
-        S.TextColor, taLeftJustify, tlCenter, True);
+        S.TextColor, FAlignment, tlCenter, True);
     end;
 
     P.EndPaint;
