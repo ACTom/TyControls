@@ -2,8 +2,8 @@ unit tyControls.TrackBar;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 type
   TTyTrackOrientation = (toHorizontal, toVertical);
 
@@ -14,8 +14,11 @@ type
     FFrequency: Integer;
     FLineSize, FPageSize: Integer;
     FOnChange: TNotifyEvent;
-    FDragging: Boolean;
     FThumbHover: Boolean;
+    FAnimEnabled: Boolean;
+    FPosAnim: TTyAnimator;      // 0..1 traversal driving FAnimFrom -> FAnimTo
+    FAnimFrom, FAnimTo: Single; // displayed-thumb-position endpoints (Min..Max units)
+    FTimer: TTimer;             // lazy; only created when actually animating
     procedure SetMin(const AValue: Integer);
     procedure SetMax(const AValue: Integer);
     procedure SetPosition(const AValue: Integer);
@@ -26,7 +29,10 @@ type
     function ThumbWAtPPI(APPI: Integer): Integer;
     function MainLen: Integer;
     function Inverted: Boolean;
+    procedure EnsureTimer;
+    procedure HandleTimer(Sender: TObject);
   protected
+    FDragging: Boolean;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -35,10 +41,27 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
+    // Current displayed (possibly mid-animation) thumb position, eased between
+    // the from/to endpoints. At rest this equals the logical FPosition.
+    function DisplayPos: Single;
+    // Steppable animation seam (no wall-clock): advance the thumb ease by AMs and
+    // return True iff the eased progress changed. The lazy TTimer drives it at
+    // runtime; tests drive it directly via an access subclass.
+    function AdvanceAnimation(AMs: Integer): Boolean;
+    // Force the *animating* path toward AValue (clamped) regardless of handle
+    // state. Runtime always routes through SetPosition (which snaps headless);
+    // this is the test seam so the animation is reachable without a window.
+    procedure SetPositionAnimating(AValue: Integer);
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     function ThumbRect: TRect;
     procedure DragTo(APos: Integer);
+    // On by default. When enabled and the control has a window handle, a
+    // PROGRAMMATIC Position change (keyboard/wheel) eases the painted thumb to
+    // the new value; with no handle (every render test) or while dragging it
+    // snaps, preserving exact-pixel tests and live mouse tracking.
+    property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
   published
     property Min: Integer read FMin write SetMin default 0;
     property Max: Integer read FMax write SetMax default 100;
@@ -100,8 +123,25 @@ begin
   FPageSize := 10;
   FDragging := False;
   FThumbHover := False;
+  FAnimEnabled := True;
+  // Thumb-glide animator: 0..1 traversal in ~120ms, decelerating. Start settled
+  // at the rest endpoint so DisplayPos == FPosition before any change.
+  FPosAnim.Progress := 1;
+  FPosAnim.Target := 1;
+  FPosAnim.DurationMs := 120;
+  FPosAnim.Easing := teEaseOutCubic;
+  FAnimFrom := FPosition;
+  FAnimTo := FPosition;
   Width := 160;
   Height := 24;
+end;
+
+destructor TTyTrackBar.Destroy;
+begin
+  // FTimer is owned by Self (would be freed by DestroyComponents), but free it
+  // explicitly first so the OnTimer callback can never fire mid-teardown.
+  FreeAndNil(FTimer);
+  inherited Destroy;
 end;
 
 function TTyTrackBar.GetStyleTypeKey: string;
@@ -124,6 +164,53 @@ end;
 function TTyTrackBar.Inverted: Boolean;
 begin
   Result := (FOrientation = toVertical);
+end;
+
+procedure TTyTrackBar.EnsureTimer;
+begin
+  if FTimer = nil then
+  begin
+    FTimer := TTimer.Create(Self);
+    FTimer.Enabled := False;
+    FTimer.Interval := 16;  // ~60fps
+    FTimer.OnTimer := @HandleTimer;
+  end;
+end;
+
+procedure TTyTrackBar.HandleTimer(Sender: TObject);
+begin
+  if AdvanceAnimation(FTimer.Interval) then
+    Invalidate;
+  if not FPosAnim.Running then
+    FTimer.Enabled := False;
+end;
+
+function TTyTrackBar.AdvanceAnimation(AMs: Integer): Boolean;
+begin
+  Result := FPosAnim.Advance(AMs);
+end;
+
+function TTyTrackBar.DisplayPos: Single;
+begin
+  Result := TyLerpF(FAnimFrom, FAnimTo, FPosAnim.Eased);
+end;
+
+procedure TTyTrackBar.SetPositionAnimating(AValue: Integer);
+var
+  Clamped: Integer;
+begin
+  Clamped := AValue;
+  if Clamped < FMin then Clamped := FMin;
+  if Clamped > FMax then Clamped := FMax;
+  // Arm the ease from the currently displayed thumb position to the new target,
+  // independent of handle state (test seam). FPosition still tracks the logical
+  // value for Min/Max/value semantics.
+  FAnimFrom := DisplayPos;
+  FAnimTo := Clamped;
+  FPosAnim.Progress := 0;
+  FPosAnim.Target := 1;
+  FPosition := Clamped;
+  Invalidate;
 end;
 
 function TTyTrackBar.ThumbRect: TRect;
@@ -175,6 +262,33 @@ begin
   if Clamped < FMin then Clamped := FMin;
   if Clamped > FMax then Clamped := FMax;
   if FPosition = Clamped then Exit;
+  // Decide how the PAINTED thumb reaches the new value:
+  if FDragging then
+  begin
+    // Live drag: the thumb must track the mouse, so snap instantly.
+    FAnimFrom := Clamped;
+    FAnimTo := Clamped;
+    FPosAnim.SetTargetImmediate(1);
+  end
+  else if FAnimEnabled and HandleAllocated then
+  begin
+    // Programmatic change with a window: ease the thumb from where it is now to
+    // the new value. (Headless render tests have no handle -> they snap below.)
+    FAnimFrom := DisplayPos;
+    FAnimTo := Clamped;
+    FPosAnim.Progress := 0;
+    FPosAnim.Target := 1;
+    EnsureTimer;
+    FTimer.Enabled := True;
+  end
+  else
+  begin
+    // Headless (no handle) or animations off: snap so DisplayPos == new
+    // immediately, keeping the existing exact-pixel trackbar tests green.
+    FAnimFrom := Clamped;
+    FAnimTo := Clamped;
+    FPosAnim.SetTargetImmediate(1);
+  end;
   FPosition := Clamped;
   Invalidate;
   if Assigned(FOnChange) then
@@ -345,7 +459,11 @@ begin
       MLen := R.Bottom - R.Top
     else
       MLen := R.Right - R.Left;
-    Off := TyTrackThumbOffset(MLen, TW, FMin, FMax, FPosition, Inverted);
+    // The PAINTED thumb uses the displayed (possibly mid-animation) position; at
+    // rest DisplayPos == FPosition so headless renders are pixel-identical. The
+    // hover hit-test (ThumbRect), DragTo, hit math and keyboard keep using
+    // FPosition for exact value semantics.
+    Off := TyTrackThumbOffset(MLen, TW, FMin, FMax, Round(DisplayPos), Inverted);
     if FOrientation = toVertical then
       ThumbR := Rect(R.Left, R.Top + Off, R.Right, R.Top + Off + TW)
     else

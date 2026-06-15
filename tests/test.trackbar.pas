@@ -13,6 +13,12 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure SimulateKeyDown(var Key: Word);
     procedure SimulateMouseDown(X, Y: Integer);
+    // Animation seams (mirror ScrollBar's TScrollAccess) so tests can step the
+    // thumb ease without a wall clock and force the animating/dragging paths.
+    function DisplayPos: Single;
+    function AdvanceAnimation(AMs: Integer): Boolean;
+    procedure SetPositionAnimating(AValue: Integer);
+    procedure SetDraggingState(AValue: Boolean);
   end;
 
   TChangeCounter = class
@@ -62,6 +68,13 @@ type
     procedure TestFrequencyDrawsTicks;
   end;
 
+  TTyTrackBarAnimationTest = class(TTestCase)
+  published
+    procedure TestThumbAnimatesMidwayThenSettles;
+    procedure TestDragSnapsThumbImmediately;
+    procedure TestAnimationsEnabledDefaultsTrue;
+  end;
+
 implementation
 
 procedure TChangeCounter.Handle(Sender: TObject);
@@ -85,6 +98,26 @@ end;
 procedure TTyTrackBarProbe.SimulateMouseDown(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);
+end;
+
+function TTyTrackBarProbe.DisplayPos: Single;
+begin
+  Result := inherited DisplayPos;
+end;
+
+function TTyTrackBarProbe.AdvanceAnimation(AMs: Integer): Boolean;
+begin
+  Result := inherited AdvanceAnimation(AMs);
+end;
+
+procedure TTyTrackBarProbe.SetPositionAnimating(AValue: Integer);
+begin
+  inherited SetPositionAnimating(AValue);
+end;
+
+procedure TTyTrackBarProbe.SetDraggingState(AValue: Boolean);
+begin
+  FDragging := AValue;
 end;
 
 { TTyTrackBarGeometryTest }
@@ -643,8 +676,61 @@ begin
   AssertTrue('ticks present when Frequency=20', HasTickInk(20));
 end;
 
+{ TTyTrackBarAnimationTest }
+
+procedure TTyTrackBarAnimationTest.TestThumbAnimatesMidwayThenSettles;
+{ Arm the animating path 0->100 (headless seam, no handle needed), step the
+  ease ~half of 120ms -> the displayed thumb position is strictly between old
+  and new; another 120ms -> it settles exactly at the target. }
+var
+  Bar: TTyTrackBarProbe;
+begin
+  Bar := TTyTrackBarProbe.Create(nil);
+  try
+    Bar.Min := 0; Bar.Max := 100; Bar.Position := 0;
+    Bar.SetPositionAnimating(100);   // arm animation 0->100
+    Bar.AdvanceAnimation(60);         // ~half of 120ms
+    AssertTrue('midway', (Bar.DisplayPos > 10) and (Bar.DisplayPos < 90));
+    Bar.AdvanceAnimation(120);
+    AssertTrue('settled', Abs(Bar.DisplayPos - 100) < 0.5);
+  finally
+    Bar.Free;
+  end;
+end;
+
+procedure TTyTrackBarAnimationTest.TestDragSnapsThumbImmediately;
+{ While dragging, the thumb must track the mouse instantly: a Position change
+  with FDragging=True snaps DisplayPos to the new value with no animation. }
+var
+  Bar: TTyTrackBarProbe;
+begin
+  Bar := TTyTrackBarProbe.Create(nil);
+  try
+    Bar.Min := 0; Bar.Max := 100; Bar.Position := 0;
+    Bar.SetDraggingState(True);
+    Bar.Position := 70;
+    AssertTrue('drag snaps thumb to new position immediately',
+      Abs(Bar.DisplayPos - 70) < 0.5);
+  finally
+    Bar.Free;
+  end;
+end;
+
+procedure TTyTrackBarAnimationTest.TestAnimationsEnabledDefaultsTrue;
+var
+  Bar: TTyTrackBar;
+begin
+  Bar := TTyTrackBar.Create(nil);
+  try
+    AssertTrue('AnimationsEnabled defaults True', Bar.AnimationsEnabled);
+  finally
+    Bar.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyTrackBarGeometryTest);
   RegisterTest(TTyTrackBarControlTest);
   RegisterTest(TTyTrackBarPixelTest);
+  RegisterTest(TTyTrackBarAnimationTest);
 end.
