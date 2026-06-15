@@ -73,7 +73,7 @@ function TySpinUpButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 var
   BtnW, X0, HalfY: Integer;
 begin
-  BtnW := MulDiv(18, APPI, 96);
+  BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
   if BtnW < 1 then BtnW := 1;
   X0 := ALocal.Right - BtnW;
   HalfY := ALocal.Top + (ALocal.Bottom - ALocal.Top) div 2;
@@ -84,7 +84,7 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 var
   BtnW, X0, HalfY: Integer;
 begin
-  BtnW := MulDiv(18, APPI, 96);
+  BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
   if BtnW < 1 then BtnW := 1;
   X0 := ALocal.Right - BtnW;
   HalfY := ALocal.Top + (ALocal.Bottom - ALocal.Top) div 2;
@@ -295,7 +295,7 @@ begin
     DrawFrame(P, R, S);
     UpR := TySpinUpButtonRect(R, APPI);
     DownR := TySpinDownButtonRect(R, APPI);
-    BtnW := P.Scale(18);
+    BtnW := P.Scale(TyFieldButtonWidth);
     TextR := Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
     EffSize := ResolveFontSize(S);   // same size feeds DrawText and CaretPixelX (caret alignment)

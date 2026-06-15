@@ -61,6 +61,20 @@ type
 const
   tyTransparent = TTyColor($00000000);
 
+  // Shared logical-px spacing/size constants (96-PPI baseline). Promoted from
+  // duplicated hard-coded literals so they cannot silently drift; each call site
+  // still scales them via MulDiv(..., APPI, 96) / TTyPainter.Scale().
+  TyFieldButtonWidth = 18;   // SpinEdit up/down button width; ComboBox dropdown button width
+  TyScrollbarSize    = 12;   // embedded vertical scrollbar width (Memo, ListBox)
+  TyCheckBoxBox      = 16;   // CheckBox/RadioButton box (indicator) size
+  TyCheckBoxGap      = 6;    // gap between the box and the caption
+  TyTabPad           = 12;   // TabControl header horizontal padding (each side)
+  TyTabMinWidth      = 48;   // TabControl header minimum width
+  TyTabCloseSize     = 14;   // TabControl close-glyph slot size
+  TyTabGap           = 6;    // TabControl gap between caption/close slot
+  TyTabMargin        = 6;    // TabControl close-glyph right margin
+  TyTabArrowBand     = 16;   // TabControl overflow scroll-arrow width
+
 function TyRGB(R, G, B: Byte): TTyColor;
 function TyRGBA(R, G, B, A: Byte): TTyColor;
 function TyAlphaOf(c: TTyColor): Byte;

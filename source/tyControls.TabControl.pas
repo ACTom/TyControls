@@ -361,11 +361,11 @@ begin
   SetLength(FCloseRects, FCaptions.Count);
 
   TabH      := TabHPx(APPI);
-  Pad       := MulDiv(12, APPI, 96);
-  MinW      := MulDiv(48, APPI, 96);
-  CloseSize := MulDiv(14, APPI, 96);
-  Gap       := MulDiv(6,  APPI, 96);
-  Margin    := MulDiv(6,  APPI, 96);
+  Pad       := MulDiv(TyTabPad, APPI, 96);
+  MinW      := MulDiv(TyTabMinWidth, APPI, 96);
+  CloseSize := MulDiv(TyTabCloseSize, APPI, 96);
+  Gap       := MulDiv(TyTabGap,  APPI, 96);
+  Margin    := MulDiv(TyTabMargin,  APPI, 96);
   CloseSlot := CloseSize + Gap;
 
   TabStyle := ActiveController.Model.ResolveStyle('TyTab', '', [tysNormal]);
@@ -401,11 +401,11 @@ begin
     overflows the visible control width and, if so, reserve a left/right arrow
     affordance band (two Scale(16) arrows) at the far ends of the header band. }
   VisibleWidth := Width;
-  AffordanceW  := MulDiv(16, APPI, 96) * 2;
+  AffordanceW  := MulDiv(TyTabArrowBand, APPI, 96) * 2;
   FShowScrollAffordance := X > VisibleWidth;
   if FShowScrollAffordance then
   begin
-    ArrowW := MulDiv(16, APPI, 96);
+    ArrowW := MulDiv(TyTabArrowBand, APPI, 96);
     FScrollLeftRect  := Rect(0, 0, ArrowW, TabH);
     FScrollRightRect := Rect(VisibleWidth - ArrowW, 0, VisibleWidth, TabH);
   end

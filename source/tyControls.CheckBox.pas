@@ -143,8 +143,8 @@ begin
       ContentRect.Right  - P.Scale(S.Padding.Right),
       ContentRect.Bottom - P.Scale(S.Padding.Bottom)
     );
-    BoxSize := P.Scale(16);
-    Gap := P.Scale(6);
+    BoxSize := P.Scale(TyCheckBoxBox);
+    Gap := P.Scale(TyCheckBoxGap);
     BoxRect := Rect(ContentRect.Left,
       ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2),
       ContentRect.Left + BoxSize,
@@ -266,8 +266,8 @@ begin
       ContentRect.Right  - P.Scale(S.Padding.Right),
       ContentRect.Bottom - P.Scale(S.Padding.Bottom)
     );
-    BoxSize := P.Scale(16);
-    Gap := P.Scale(6);
+    BoxSize := P.Scale(TyCheckBoxBox);
+    Gap := P.Scale(TyCheckBoxGap);
     DotRect := Rect(ContentRect.Left,
       ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2),
       ContentRect.Left + BoxSize,

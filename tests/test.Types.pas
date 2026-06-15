@@ -21,6 +21,7 @@ type
     procedure TestEffectiveCornersFromRadiusField;
     procedure TestEffectiveCornersFallsBackToUniformBorderRadius;
     procedure TestClampRadius;
+    procedure TestSpacingConstants;
   end;
 
 implementation
@@ -114,6 +115,20 @@ begin
   AssertEquals('small theme radius wins', 2, TyClampRadius(2, 8));
   AssertEquals('oversize token capped at half', 8, TyClampRadius(20, 8));
   AssertEquals('negative result floored to 0', 0, TyClampRadius(-3, 8));
+end;
+
+procedure TTestTypes.TestSpacingConstants;
+{ Guards the shared spacing/size constants against silent drift after the
+  duplicated-literal dedupe. Values MUST match the original hard-coded literals
+  (zero behavior change). }
+begin
+  AssertEquals(18, TyFieldButtonWidth);
+  AssertEquals(12, TyScrollbarSize);
+  AssertEquals(16, TyCheckBoxBox);
+  AssertEquals(6,  TyCheckBoxGap);
+  AssertEquals(14, TyTabCloseSize);
+  AssertEquals(48, TyTabMinWidth);
+  AssertEquals(16, TyTabArrowBand);
 end;
 
 initialization

@@ -143,7 +143,7 @@ end;
 
 function TTyComboBox.ButtonWidthLogical: Integer;
 begin
-  Result := 18;
+  Result := TyFieldButtonWidth;
 end;
 
 procedure TTyComboBox.SelectItem(AIndex: Integer);

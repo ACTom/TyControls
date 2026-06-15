@@ -1179,7 +1179,7 @@ begin
       FScrollBar.OnChange := @ScrollBarChange;
     end;
     // Update DPI-dependent width and controller every call so DPI changes take effect.
-    FScrollBar.Width := MulDiv(12, Font.PixelsPerInch, 96);
+    FScrollBar.Width := MulDiv(TyScrollbarSize, Font.PixelsPerInch, 96);
     FScrollBar.Controller := Self.Controller;
     // SBWidth feedback (matters when WordWrap=True): making the bar visible steals
     // SBWidth from the content width, which narrows the wrap and can yield MORE
