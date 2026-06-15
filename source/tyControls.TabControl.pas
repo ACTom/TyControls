@@ -330,7 +330,7 @@ begin
   MeasBmp := TBitmap.Create;
   try
     MeasBmp.SetSize(1, 1);
-    MeasBmp.Canvas.Font.Name := AStyle.FontName;
+    MeasBmp.Canvas.Font.Name := TyEffectiveFontName(AStyle.FontName);
     MeasBmp.Canvas.Font.Size := MulDiv(ResolveFontSize(AStyle), APPI, 96);
     Result := MeasBmp.Canvas.TextWidth(ACaption);
   finally

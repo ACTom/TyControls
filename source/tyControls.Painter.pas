@@ -44,6 +44,12 @@ function TyColorToBGRA(c: TTyColor): TBGRAPixel;
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 
+// Resolves the concrete font name to use: the style's font-family if set,
+// otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
+// few LCL-canvas caption-width measures (GroupBox/TabControl) go through this so
+// measured width matches drawn glyphs even when the theme sets no font-family.
+function TyEffectiveFontName(const AName: string): string;
+
 var
   // Concrete font used when a style/theme provides no font-family.
   // When AFontName='' and this is non-empty, it is passed to BGRA instead of ''.
@@ -55,13 +61,18 @@ var
 
 implementation
 
+function TyEffectiveFontName(const AName: string): string;
+begin
+  if (AName = '') and (TyFallbackFontName <> '') then
+    Result := TyFallbackFontName
+  else
+    Result := AName;
+end;
+
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 begin
-  if (AFontName = '') and (TyFallbackFontName <> '') then
-    ABmp.FontName := TyFallbackFontName
-  else
-    ABmp.FontName := AFontName;
+  ABmp.FontName := TyEffectiveFontName(AFontName);
   ABmp.FontHeight := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
   ABmp.FontQuality := fqFineAntialiasing;
   if AWeight >= 600 then ABmp.FontStyle := [fsBold] else ABmp.FontStyle := [];
