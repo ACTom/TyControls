@@ -20,6 +20,13 @@ type
     procedure CallMouseLeave;
     procedure SimulateKeyDown(AKey: Word);
     procedure DoKeyDown(var Key: Word; Shift: TShiftState);
+    { Active-tab cross-fade test seams. AdvanceAnimation steps the header fade by
+      AMs with no wall clock. SetTabIndexAnimating selects a tab and ARMS the fade
+      (Progress:=0; Target:=1) WITHOUT snapping, so AdvanceAnimation can interpolate
+      it even with no window handle. TabFadeEased exposes the eased 0..1 progress. }
+    function AdvanceTabFade(AMs: Integer): Boolean;
+    procedure SetTabIndexAnimating(AIndex: Integer);
+    function TabFadeEased: Single;
   end;
 
   { Change-count probe }
@@ -63,6 +70,9 @@ type
     procedure TestClickHeaderBodyStillSelectsWhenClosable;
     procedure TestTabHeaderTopCornerRoundedFromTheme;
     procedure TestCloseChipUsesTyTabCloseToken;
+    // batch⑥: active-tab header cross-fade
+    procedure TestActiveTabHeaderCrossFades;
+    procedure TestAnimationsEnabledDefaultsTrue;
   end;
 
 implementation
@@ -139,6 +149,25 @@ end;
 procedure TTyTabControlAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
+end;
+
+function TTyTabControlAccess.AdvanceTabFade(AMs: Integer): Boolean;
+begin
+  Result := AdvanceAnimation(AMs);
+end;
+
+procedure TTyTabControlAccess.SetTabIndexAnimating(AIndex: Integer);
+begin
+  { Select the tab through the normal setter (which, headless, snaps the fade to
+    1), then re-arm the fade WITHOUT snapping so AdvanceAnimation can interpolate
+    it in a handle-less test. }
+  TabIndex := AIndex;
+  ArmTabFade;
+end;
+
+function TTyTabControlAccess.TabFadeEased: Single;
+begin
+  Result := GetTabFadeEased;
 end;
 
 { TTyTabControlTest }
@@ -811,6 +840,117 @@ begin
   finally
     Bmp.Free;
     Ctl.Free;
+  end;
+end;
+
+{ TestActiveTabHeaderCrossFades:
+  When the selection moves to a new tab, the newly-active tab's header background
+  cross-fades from the inactive TyTab style to the active TyTab:active style over
+  120ms (easeOutCubic). Theme makes the two backgrounds maximally distinct:
+    - TyTab          background = pure GREEN (#00FF00)  -> inactive
+    - TyTab:active   background = pure RED   (#FF0000)  -> active
+  Drive the fade via the handle-less seam: settle on tab 0, arm the fade to tab 1,
+  step it half-way and assert the active(tab 1) header pixel is a blend (neither
+  exactly green nor exactly red); step it to/past full and assert it equals the
+  settled active red. The TabFadeEased seam is asserted in lockstep so the test
+  genuinely discriminates the interpolation. }
+procedure TTyTabControlTest.TestActiveTabHeaderCrossFades;
+var
+  Ctl: TTyStyleController;
+  Acc: TTyTabControlAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+  R1: TRect;
+  PX1, PY1: Integer;
+  EasedMid, EasedEnd: Single;
+
+  procedure RenderHeader;
+  begin
+    Bmp.Canvas.Brush.Color := clBlack;
+    Bmp.Canvas.FillRect(0, 0, 300, 200);
+    Acc.RenderTo(Bmp.Canvas, Rect(0, 0, 300, 200), 96);
+    if Reread <> nil then Reread.Free;
+    Reread := TBGRABitmap.Create(Bmp);
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  Reread := nil;
+  Acc := TTyTabControlAccess.Create(FForm);
+  Acc.Parent := FForm;
+  try
+    { Active text is BLACK too: the caption ink can never read as a false red or
+      a false white, so a green/red/blend probe on the fill is unambiguous. }
+    Ctl.LoadThemeCss(
+      'TyTabControl { background:#181818; border-width:0px; } ' +
+      'TyTab { background:#00FF00; color:#000000; } ' +
+      'TyTab:active { background:#FF0000; color:#000000; }');
+    Acc.Controller := Ctl;
+    Acc.Font.PixelsPerInch := 96;
+    Acc.SetBounds(0, 0, 300, 200);
+    Acc.AddTab('Left');
+    Acc.AddTab('Right');
+
+    Acc.TabIndex := 0; // settle on tab 0 (headless snap -> fade=1 for whatever active)
+    Acc.SetTabIndexAnimating(1); // switch to tab 1 + arm fade WITHOUT snapping
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(300, 200);
+
+    { Probe near the header's right edge at the top: clear of the vertically- and
+      horizontally-centred caption, so the pixel is the header fill only. }
+    R1 := Acc.TyTabHeaderRect(1);
+    PX1 := R1.Right - 3;
+    PY1 := R1.Top + 3;
+
+    { Half-way: 60ms of a 120ms fade. Eased must be strictly between 0 and 1, and
+      the active-tab header pixel must be a blend of green and red (red rising,
+      green falling) -- neither pure green nor pure red. }
+    Acc.AdvanceTabFade(60);
+    EasedMid := Acc.TabFadeEased;
+    AssertTrue(Format('mid fade eased in (0,1): %.4f', [EasedMid]),
+      (EasedMid > 0.0) and (EasedMid < 1.0));
+
+    RenderHeader;
+    Px := Reread.GetPixel(PX1, PY1);
+    AssertTrue(Format('active tab1 mid-fade NOT pure green (R=%d G=%d B=%d)',
+      [Px.red, Px.green, Px.blue]), Px.red > 16);
+    AssertTrue(Format('active tab1 mid-fade NOT pure red (R=%d G=%d B=%d)',
+      [Px.red, Px.green, Px.blue]), Px.green > 16);
+
+    { Drive to/past full: 120ms more lands Progress on Target -> Eased=1 -> the
+      active header equals the settled active style (pure red). }
+    Acc.AdvanceTabFade(120);
+    EasedEnd := Acc.TabFadeEased;
+    AssertTrue(Format('settled fade eased = 1: %.4f', [EasedEnd]),
+      Abs(EasedEnd - 1.0) < 0.001);
+
+    RenderHeader;
+    Px := Reread.GetPixel(PX1, PY1);
+    AssertTrue(Format('settled active tab1 = red (R>200): R=%d G=%d B=%d',
+      [Px.red, Px.green, Px.blue]), Px.red > 200);
+    AssertTrue(Format('settled active tab1 green gone (G<64): R=%d G=%d B=%d',
+      [Px.red, Px.green, Px.blue]), Px.green < 64);
+  finally
+    if Reread <> nil then Reread.Free;
+    Bmp.Free;
+    Acc.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ TestAnimationsEnabledDefaultsTrue: the active-tab cross-fade is on by default. }
+procedure TTyTabControlTest.TestAnimationsEnabledDefaultsTrue;
+var
+  T: TTyTabControl;
+begin
+  T := TTyTabControl.Create(nil);
+  try
+    AssertTrue('AnimationsEnabled defaults True', T.AnimationsEnabled);
+  finally
+    T.Free;
   end;
 end;
 

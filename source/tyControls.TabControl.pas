@@ -2,9 +2,9 @@ unit tyControls.TabControl;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
-  tyControls.Panel;
+  tyControls.Panel, tyControls.Animation;
 
 type
   TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
@@ -74,6 +74,18 @@ type
     FDragStartX: Integer;
     FDragging:   Boolean;
 
+    { Active-tab header cross-fade. FTabFade eases 0->1 when the selection moves
+      to a new tab: the newly-active header blends from the inactive TyTab style
+      to the active TyTab:active style. FAnimationsEnabled gates it (default True);
+      with no window handle it snaps so headless pixel tests see the final style.
+      FTimer is the lazy ~60fps driver. ONLY the header colour fades — the page
+      child controls switch instantly (they are separate LCL controls). }
+    FTabFade: TTyAnimator;
+    FAnimationsEnabled: Boolean;
+    FTimer: TTimer;
+    procedure EnsureTimer;
+    procedure HandleTimer(Sender: TObject);
+
     procedure SetTabs(AValue: TTyTabCollection);
     procedure TabItemAdded(AItem: TTyTabItem);
     procedure TabItemDeleting(AItem: TTyTabItem);
@@ -115,6 +127,17 @@ type
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
+    { Steppable animation seam (no wall clock): advance the active-tab header
+      cross-fade by AMs and return True iff the eased progress changed. Tests
+      drive this directly via an access subclass; the lazy TTimer drives it at
+      runtime. }
+    function AdvanceAnimation(AMs: Integer): Boolean;
+    { Arm the header fade toward the active style WITHOUT snapping (Progress:=0;
+      Target:=1) so AdvanceAnimation can interpolate it even handle-less. Test
+      seam only — at runtime SetTabIndex arms it. }
+    procedure ArmTabFade;
+    { Eased 0..1 header-fade progress. Exposed for deterministic tests. }
+    function GetTabFadeEased: Single;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -157,6 +180,12 @@ type
     property TyTabHoverClose: Integer read FHoverClose;
 
     property Pages[AIndex: Integer]: TTyPanel read GetPage;
+
+    { On by default. When enabled and the control has a window handle, switching
+      tabs cross-fades the newly-active header background from the inactive to the
+      active style; with no handle (every render test) it snaps, preserving the
+      existing exact-pixel header tests. Pages always switch instantly. }
+    property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default True;
   published
     property Tabs: TTyTabCollection read FTabs write SetTabs;
     { Published so the active selection round-trips through LFM streaming. A
@@ -260,6 +289,13 @@ begin
   FDragTab   := -1;
   FDragging  := False;
   FTabsClosable := False;
+  FAnimationsEnabled := True;
+  { Active-tab header cross-fade: rests at 1 (settled = active style), ~120ms full
+    traversal, decelerating. Mirrors the Button hover-fade timing. }
+  FTabFade.Progress := 1;
+  FTabFade.Target := 1;
+  FTabFade.DurationMs := 120;
+  FTabFade.Easing := teEaseOutCubic;
   TabStop    := True;
   Width      := 300;
   Height     := 200;
@@ -268,6 +304,9 @@ end;
 destructor TTyTabControl.Destroy;
 begin
   FDestroying := True;
+  { FTimer is owned by Self (would be freed by DestroyComponents), but free it
+    explicitly first so the OnTimer callback can never fire mid-teardown. }
+  FreeAndNil(FTimer);
   { FDestroying is set so the collection's Notify is inert while it tears down. }
   FTabs.Free;
   FCaptions.Free;
@@ -278,6 +317,41 @@ end;
 function TTyTabControl.GetStyleTypeKey: string;
 begin
   Result := 'TyTabControl';
+end;
+
+procedure TTyTabControl.EnsureTimer;
+begin
+  if FTimer = nil then
+  begin
+    FTimer := TTimer.Create(Self);
+    FTimer.Enabled := False;
+    FTimer.Interval := 16;  // ~60fps
+    FTimer.OnTimer := @HandleTimer;
+  end;
+end;
+
+procedure TTyTabControl.HandleTimer(Sender: TObject);
+begin
+  if AdvanceAnimation(FTimer.Interval) then
+    Invalidate;
+  if not FTabFade.Running then
+    FTimer.Enabled := False;
+end;
+
+function TTyTabControl.AdvanceAnimation(AMs: Integer): Boolean;
+begin
+  Result := FTabFade.Advance(AMs);
+end;
+
+procedure TTyTabControl.ArmTabFade;
+begin
+  FTabFade.Progress := 0;
+  FTabFade.Target := 1;
+end;
+
+function TTyTabControl.GetTabFadeEased: Single;
+begin
+  Result := FTabFade.Eased;
 end;
 
 { When the TabControl's Controller changes, propagate it to all existing pages
@@ -633,9 +707,25 @@ begin
     Clamped := AValue;
   if Clamped = FTabIndex then Exit;
   FTabIndex := Clamped;
+  { Pages switch instantly — only the header colour fades. }
   ShowOnlyPage(FTabIndex);
+  { Arm the active-tab header cross-fade when moving to a real tab. Animate when
+    enabled and a window handle exists; otherwise snap so headless paint (every
+    pixel test) shows the final active style immediately and existing tab tests
+    stay green. The -1 (none) case skips: nothing to fade in. }
   if FTabIndex >= 0 then
+  begin
+    FTabFade.Progress := 0;
+    FTabFade.Target := 1;
+    if FAnimationsEnabled and HandleAllocated then
+    begin
+      EnsureTimer;
+      FTimer.Enabled := True;
+    end
+    else
+      FTabFade.SetTargetImmediate(1);
     ScrollTabIntoView(FTabIndex);
+  end;
   Invalidate;
   if Assigned(FOnChange) then
     FOnChange(Self);
@@ -990,12 +1080,13 @@ end;
 procedure TTyTabControl.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  BoxStyle, TabStyle, ArrowStyle, CloseS: TTyStyleSet;
+  BoxStyle, TabStyle, ArrowStyle, CloseS, InactiveS, ActiveS: TTyStyleSet;
   R: TRect;
   W, H, TabH, I: Integer;
   HdrRect, CloseRect, TextRect, BandRect, SavedClip: TRect;
   TabStates: TTyStateSet;
   CloseHi: TTyFill;
+  FadeEased: Single;
 begin
   P := TTyPainter.Create;
   try
@@ -1041,6 +1132,26 @@ begin
         Include(TabStates, tysNormal);
 
       TabStyle := ActiveController.Model.ResolveStyle('TyTab', '', TabStates);
+
+      { Active-tab header cross-fade. For the newly-active tab only, while the
+        fade is mid-flight, blend the inactive TyTab background into the active
+        TyTab:active background. Resolving both states explicitly keeps the maths
+        independent of the live style and lets the eased animator drive the
+        visible colour. At Eased=1 (settled / headless-snapped) it is exactly the
+        active background, so existing tab pixel tests are unchanged. Only the
+        background fill is touched — text/close glyph/geometry are unaffected. }
+      if (I = FTabIndex) then
+      begin
+        FadeEased := FTabFade.Eased;
+        if (FadeEased > 0) and (FadeEased < 1) and (TabStyle.Background.Kind = tfkSolid) then
+        begin
+          InactiveS := ActiveController.Model.ResolveStyle('TyTab', '', [tysNormal]);
+          ActiveS   := ActiveController.Model.ResolveStyle('TyTab', '', [tysActive]);
+          if (InactiveS.Background.Kind = tfkSolid) and (ActiveS.Background.Kind = tfkSolid) then
+            TabStyle.Background.Color :=
+              TyLerpColor(InactiveS.Background.Color, ActiveS.Background.Color, FadeEased);
+        end;
+      end;
 
       { Fill header background }
       if tpBackground in TabStyle.Present then
