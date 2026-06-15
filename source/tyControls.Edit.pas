@@ -1263,14 +1263,12 @@ end;
 procedure TTyEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S, FS: TTyStyleSet;
+  S, SelStyle: TTyStyleSet;
   ContentRect, BandRect, CaretRect: TRect;
   Widths: TTyIntArray;
   X1, X2, CaretX: Integer;
   BandFill: TTyFill;
   BandColor: TTyColor;
-  BandAlpha: Byte;
-  FocusBorderColor: TTyColor;
   EffSize: Integer;
   TextClipRight: Integer;
   HintColor: TTyColor;
@@ -1293,12 +1291,10 @@ begin
     // 1. Selection band (drawn before text so glyphs appear on top)
     if HasSelection then
     begin
-      // Resolve focused style for border-color (used as band color)
-      FS := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysFocused]);
-      if tpBorderColor in FS.Present then
-        FocusBorderColor := FS.BorderColor
-      else
-        FocusBorderColor := S.TextColor;
+      // Band color comes from the TyTextSelection typeKey (accent-tinted via
+      // --selection = alpha(accent,0.30)), keeping it theme-overridable and
+      // matching selected list rows.
+      SelStyle := ActiveController.Model.ResolveStyle('TyTextSelection', '', []);
 
       Widths := MeasureCodepointWidths(APPI);
       // Apply scroll offset: shift band left by FScrollX
@@ -1310,10 +1306,7 @@ begin
       if X1 < X2 then
       begin
         BandRect := Rect(X1, ContentRect.Top, X2, ContentRect.Bottom);
-        // ~35% alpha: $59 ≈ 255 * 0.35
-        BandAlpha := $59;
-        BandColor := TyRGBA(TyRedOf(FocusBorderColor), TyGreenOf(FocusBorderColor),
-          TyBlueOf(FocusBorderColor), BandAlpha);
+        BandColor := SelStyle.Background.Color;
         BandFill := Default(TTyFill);
         BandFill.Kind := tfkSolid;
         BandFill.Color := BandColor;
@@ -1328,7 +1321,7 @@ begin
     // When no text is entered and a hint is set, draw the hint in a dim color.
     if (FText = '') and (FTextHint <> '') then
     begin
-      HintColor := TyRGBA(TyRedOf(S.TextColor), TyGreenOf(S.TextColor), TyBlueOf(S.TextColor), $80);
+      HintColor := ActiveController.Model.ResolveStyle('TyTextHint', '', []).TextColor;
       P.DrawText(ContentRect, FTextHint, S.FontName, EffSize, S.FontWeight,
         HintColor, taLeftJustify, tlCenter, True);
     end

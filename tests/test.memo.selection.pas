@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LazUTF8, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.Base,
+  tyControls.Types, tyControls.Controller, tyControls.StyleModel, tyControls.Base,
   tyControls.ScrollBar,
   tyControls.Memo;
 type
@@ -73,6 +73,12 @@ type
     // distinct from glyph ink (~240) and background (~16) — this lets band-presence
     // be detected independently of overlapping light text.
     function BandHasMidPixel(ABmp: TBGRABitmap; Y, X0, X1, ALo, AHi: Integer): Boolean;
+    // True iff some pixel x in [X0..X1] at row Y is "band-accent": brighter than
+    // the near-black bg AND blue-dominant (B>R by margin). The token-driven band
+    // is accent #3B82F6 @ 30% which over #101010 lands ~(29,50,85) — blue-leaning,
+    // distinct from glyph ink (~240) and the dark bg (~16). Replaces the old
+    // all-channel mid-grey detector now that the band is accent-tinted.
+    function BandHasAccentPixel(ABmp: TBGRABitmap; Y, X0, X1: Integer): Boolean;
   protected
     procedure TearDown; override;
   published
@@ -93,6 +99,8 @@ type
     procedure TestSelectionBandSingleLine;
     procedure TestSelectionBandFullInteriorLine;
     procedure TestNoCaretDuringSelection;
+    // Batch4 Task4: selection band derives from TyTextSelection typeKey
+    procedure TestSelectionBandUsesTextSelectionToken;
     // --- T4: Shift-extend navigation (anchor fixed; unshifted nav collapses) ---
     procedure TestShiftRightExtends;
     procedure TestShiftDownExtendsAcrossLines;
@@ -351,6 +359,27 @@ begin
   end;
 end;
 
+function TTyMemoSelectionTest.BandHasAccentPixel(ABmp: TBGRABitmap;
+  Y, X0, X1: Integer): Boolean;
+var
+  x: Integer;
+  Px: TBGRAPixel;
+begin
+  Result := False;
+  if (Y < 0) or (Y >= ABmp.Height) then Exit;
+  if X0 < 0 then X0 := 0;
+  if X1 >= ABmp.Width then X1 := ABmp.Width - 1;
+  for x := X0 to X1 do
+  begin
+    Px := ABmp.GetPixel(x, Y);
+    // Lit above the near-black bg (~16) and clearly blue-leaning (accent tint),
+    // while staying below glyph ink. The accent band over #101010 is ~(29,50,85).
+    if (Px.blue > 45) and (Px.blue < 200)
+      and (Integer(Px.blue) - Integer(Px.red) >= 20) then
+      Exit(True);
+  end;
+end;
+
 procedure TTyMemoSelectionTest.LoadLines(const AItems: array of string);
 var
   L: TStringList;
@@ -574,19 +603,20 @@ begin
 
     Reread := TBGRABitmap.Create(Bmp);
     try
-      // Band-bright = mid-grey (lo=40, hi=180): catches the ~99 band, ignores the
-      // ~240 glyph ink and the ~16 bg, so it works across the whole cell height.
-      // Scan strictly inside the band [ColX(2)+1 .. ColX(6)-3], staying clear of
-      // the 1px caret bar's antialias fringe at the band's right edge (ColX(6)).
+      // Band-accent = lit-and-blue-leaning: catches the token-driven accent band
+      // (accent #3B82F6 @ 30% over #101010 ≈ (29,50,85)), ignores the ~240 glyph
+      // ink and the ~16 bg, so it works across the whole cell height. Scan strictly
+      // inside the band [ColX(2)+1 .. ColX(6)-3], staying clear of the 1px caret
+      // bar's antialias fringe at the band's right edge (ColX(6)).
       FoundInBand := False;
       FoundLeft := False;
       for yy := 0 to LH - 1 do
       begin
         probeY := yy;
-        if BandHasMidPixel(Reread, probeY, X2 + 1, X6 - 3, 40, 180) then
+        if BandHasAccentPixel(Reread, probeY, X2 + 1, X6 - 3) then
           FoundInBand := True;
         if X2 - 2 >= 0 then
-          if BandHasMidPixel(Reread, probeY, 0, X2 - 2, 40, 180) then
+          if BandHasAccentPixel(Reread, probeY, 0, X2 - 2) then
             FoundLeft := True;
       end;
       AssertTrue('band-bright pixel exists in mid-band [ColX(2)..ColX(6)]', FoundInBand);
@@ -633,12 +663,12 @@ begin
     try
       // Row 1 occupies y in [LH..2*LH); scan near the right content edge
       // (x in [180..199]) where 'BBBB' has no glyph ink — only the full-width
-      // interior band reaches there. Mid-grey (40..180) = the band specifically.
+      // interior band reaches there. Band-accent (lit + blue-leaning) = the band.
       FoundRight := False;
       for yy := LH to (2 * LH) - 1 do
       begin
         probeY := yy;
-        if BandHasMidPixel(Reread, probeY, 180, 199, 40, 180) then
+        if BandHasAccentPixel(Reread, probeY, 180, 199) then
           FoundRight := True;
       end;
       AssertTrue('full-width interior band reaches the right content edge of row 1',
@@ -742,6 +772,83 @@ begin
     [RunNoSel, LH]), RunNoSel >= LH div 2);
   AssertTrue(Format('selection hides caret: run shorter than no-selection ' +
     '(withSel=%d, noSel=%d)', [RunWithSel, RunNoSel]), RunWithSel < RunNoSel);
+end;
+
+{ TestSelectionBandUsesTextSelectionToken (Batch4 Task4)
+  The Memo selection band must derive its color from the TyTextSelection typeKey
+  (background: alpha(accent,0.30)) rather than the old $59-over-focus-border
+  literal. The custom CSS defines a RED focus border so the OLD code would tint
+  the band red; the NEW token-driven band is accent-BLUE. Over a white field we
+  composite the resolved TyTextSelection.Background.Color and assert a band pixel
+  matches it within tolerance — proving the band is now accent-tinted/token-driven. }
+procedure TTyMemoSelectionTest.TestSelectionBandUsesTextSelectionToken;
+const
+  LINE = '        GH';
+var
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  X2, X6, MidY: Integer;
+  SelStyle: TTyStyleSet;
+  SrcR, SrcG, SrcB, A, ExpR, ExpG, ExpB: Integer;
+  BestErr, Err, x: Integer;
+  Px: TBGRAPixel;
+begin
+  SetUpMemoCss('TyMemo { background:#FFFFFF; color:#000000; border-width:0px; padding:0px; }' +
+    ' TyMemo:focus { border-color:#FF0000; }');
+  LoadLines([LINE]);
+  FMemo.ProbeSetCaret(0, 6);
+  FMemo.ProbeSetAnchor(0, 2);
+  AssertTrue('selection present', FMemo.ProbeHasSelection);
+  FMemo.ProbeSetForceFocused(True);
+
+  // Expected band color from the SAME model, composited over the white field.
+  SelStyle := FCtl.Model.ResolveStyle('TyTextSelection', '', []);
+  SrcR := TyRedOf(SelStyle.Background.Color);
+  SrcG := TyGreenOf(SelStyle.Background.Color);
+  SrcB := TyBlueOf(SelStyle.Background.Color);
+  A := TyAlphaOf(SelStyle.Background.Color);
+  ExpR := (SrcR * A + 255 * (255 - A)) div 255;
+  ExpG := (SrcG * A + 255 * (255 - A)) div 255;
+  ExpB := (SrcB * A + 255 * (255 - A)) div 255;
+  AssertTrue('expected band is accent-blue (ExpB>ExpR)', ExpB > ExpR);
+
+  X2 := FMemo.ProbeColPixelXAt(LINE, 2, 96);
+  X6 := FMemo.ProbeColPixelXAt(LINE, 6, 96);
+  MidY := FMemo.ProbeLineHeight(96) div 2;
+
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 120);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 200, 120);
+    FMemo.ProbeRenderTo(Bmp.Canvas, Rect(0, 0, 200, 120), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      // The band [ColX(2)..ColX(6)] lies over blank spaces (no glyph ink), so the
+      // mid-band pixel is the band color alone. Find the closest match.
+      BestErr := MaxInt;
+      for x := X2 + 1 to X6 - 2 do
+      begin
+        Px := Reread.GetPixel(x, MidY);
+        Err := Abs(Px.red - ExpR) + Abs(Px.green - ExpG) + Abs(Px.blue - ExpB);
+        if Err < BestErr then BestErr := Err;
+      end;
+      // Tolerance covers BGRA's source-over rounding (a few per channel) vs the
+      // integer composite above; the OLD red-focus-border band (~255,166,166)
+      // lands far outside, so this still proves the accent-source band color.
+      AssertTrue(
+        'band pixel matches resolved TyTextSelection composite (bestErr=' +
+        IntToStr(BestErr) + ' exp=' + IntToStr(ExpR) + ',' + IntToStr(ExpG) +
+        ',' + IntToStr(ExpB) + ')',
+        BestErr <= 28);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+  end;
 end;
 
 // --- T4: Shift-extend navigation (Shift keeps anchor; unshifted nav collapses) ---

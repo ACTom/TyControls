@@ -2049,7 +2049,7 @@ procedure TTyMemo.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 // today's per-line math. Horizontal scroll (FScrollX) is added in T3.
 var
   P: TTyPainter;
-  S, FS: TTyStyleSet;
+  S, SelStyle: TTyStyleSet;
   R, ContentRect, LineRect, CaretRect, BandRect: TRect;
   SBWidth, LH, ContentTop, LastVisible, vr, y: Integer;
   EffSize, CaretX, CaretVRow: Integer;
@@ -2060,8 +2060,6 @@ var
   Widths: TTyIntArray;
   BandFill: TTyFill;
   BandColor: TTyColor;
-  BandAlpha: Byte;
-  FocusBorderColor: TTyColor;
   DrawBand: Boolean;
 begin
   // Keep the scrollbar in sync (cheap; catches external Lines mutations).
@@ -2093,18 +2091,14 @@ begin
     LH := LineHeight(APPI);
     ContentTop := ContentRect.Top;
 
-    // Resolve the focus band color ONCE before the visible-row loop (verbatim
-    // from TTyEdit): the :focus border-color, or the text color if absent. Only
-    // needed when a selection exists; the band is filled per visible row below.
+    // Resolve the selection band color ONCE before the visible-row loop (mirrors
+    // TTyEdit): the TyTextSelection typeKey (accent-tinted via
+    // --selection = alpha(accent,0.30)). Only needed when a selection exists; the
+    // band is filled per visible row below.
     SL := 0; SC := 0; EL := 0; EC := 0;
-    FocusBorderColor := S.TextColor;
     if HasSelection then
     begin
-      FS := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysFocused]);
-      if tpBorderColor in FS.Present then
-        FocusBorderColor := FS.BorderColor
-      else
-        FocusBorderColor := S.TextColor;
+      SelStyle := ActiveController.Model.ResolveStyle('TyTextSelection', '', []);
       GetOrderedSel(SL, SC, EL, EC);
     end;
 
@@ -2187,10 +2181,9 @@ begin
           if X1 < X2 then
           begin
             BandRect := Rect(X1, y, X2, y + LH);
-            // ~35% alpha band tinted with the focus border color (verbatim TTyEdit).
-            BandAlpha := $59;
-            BandColor := TyRGBA(TyRedOf(FocusBorderColor), TyGreenOf(FocusBorderColor),
-              TyBlueOf(FocusBorderColor), BandAlpha);
+            // Band color from the TyTextSelection typeKey (accent-tinted; mirrors
+            // TTyEdit). Theme-overridable, matching selected list rows.
+            BandColor := SelStyle.Background.Color;
             BandFill := Default(TTyFill);
             BandFill.Kind := tfkSolid;
             BandFill.Color := BandColor;

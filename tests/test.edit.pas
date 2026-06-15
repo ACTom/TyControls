@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics, LCLType, LCLIntf,
   LazUTF8,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Edit;
+  tyControls.Types, tyControls.Controller, tyControls.StyleModel, tyControls.Base, tyControls.Edit;
 type
   TTyEditAccess = class(TTyEdit)
   public
@@ -120,6 +120,9 @@ type
     // EDIT.17: TextHint
     procedure TestTextHintRendersWhenEmpty;
     procedure TestTextHintHiddenWhenNonEmpty;
+    // Batch4 Task4: selection band + hint via TyTextSelection/TyTextHint tokens
+    procedure TestSelectionBandUsesTextSelectionToken;
+    procedure TestTextHintUsesMutedToken;
     // Task 10: blinking caret reset-on-activity
     procedure TestEditActivityResetsCaretVisible;
   end;
@@ -1927,6 +1930,191 @@ begin
     E.CaretPos := 0;                  // caret move resets too
     AssertTrue('nav resets caret to visible', E.CaretVisibleForTest);
   finally E.Free; end;
+end;
+
+// ---- Batch4 Task4: selection band + hint resolve theme tokens ----
+
+procedure TEditTest.TestSelectionBandUsesTextSelectionToken;
+{ The selection band must derive its color from the TyTextSelection typeKey
+  (background: alpha(accent,0.30)) instead of the old $59-over-focus-border
+  literal. We resolve the EXACT expected band color from the same model the
+  control paints with, composite it over the white field background, and assert
+  a band pixel matches that composite within tolerance. The custom CSS below does
+  NOT define TyTextSelection, so the permanent built-in base layer supplies it
+  (accent #3B82F6 @ 30%) — proving the band is now accent-tinted and token-driven. }
+var
+  Ctl: TTyStyleController;
+  E: TTyEditAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+  X, MidY: Integer;
+  SelStyle: TTyStyleSet;
+  SrcR, SrcG, SrcB, A: Integer;
+  ExpR, ExpG, ExpB: Integer;
+  BestErr, Err: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    // Field is white; focus border deliberately RED so the OLD code (band tinted
+    // from focus-border) would composite reddish — the NEW token-driven band is
+    // accent-BLUE, which is what we assert.
+    Ctl.LoadThemeCss(
+      'TyEdit { background: #FFFFFF; color: #000000; padding: 4px; }' +
+      ' TyEdit:focus { border-color: #FF0000; }');
+    E := TTyEditAccess.Create(Form);
+    E.Parent := Form;
+    E.Controller := Ctl;
+    E.Text := 'aaaa';
+    E.SelectAll;
+
+    // Expected band color from the SAME model, composited over white.
+    SelStyle := Ctl.Model.ResolveStyle('TyTextSelection', '', []);
+    SrcR := TyRedOf(SelStyle.Background.Color);
+    SrcG := TyGreenOf(SelStyle.Background.Color);
+    SrcB := TyBlueOf(SelStyle.Background.Color);
+    A := TyAlphaOf(SelStyle.Background.Color);
+    // source-over onto white (255): out = src*a + 255*(255-a) all /255
+    ExpR := (SrcR * A + 255 * (255 - A)) div 255;
+    ExpG := (SrcG * A + 255 * (255 - A)) div 255;
+    ExpB := (SrcB * A + 255 * (255 - A)) div 255;
+    // Sanity: the token must be accent-blue (B>R), not the red focus border.
+    AssertTrue('expected band is accent-blue (ExpB>ExpR)', ExpB > ExpR);
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 28);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 200, 28);
+    E.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 28), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      MidY := 14;
+      BestErr := MaxInt;
+      // Scan the band area; the glyphs sit on top, so the band-only pixels are the
+      // ones between glyph strokes. Find the closest-matching pixel.
+      for X := 5 to 60 do
+      begin
+        Px := Reread.GetPixel(X, MidY);
+        Err := Abs(Px.red - ExpR) + Abs(Px.green - ExpG) + Abs(Px.blue - ExpB);
+        if Err < BestErr then BestErr := Err;
+      end;
+      // Tolerance covers BGRA's source-over rounding (a few per channel) vs the
+      // integer composite above. The OLD red-focus-border band over white lands
+      // ~(255,166,166) — bestErr ~196, far outside this window — so the assertion
+      // still firmly proves the band is the accent-source color, not the literal.
+      AssertTrue(
+        'band pixel matches resolved TyTextSelection composite (bestErr=' +
+        IntToStr(BestErr) + ' exp=' + IntToStr(ExpR) + ',' + IntToStr(ExpG) +
+        ',' + IntToStr(ExpB) + ')',
+        BestErr <= 28);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TEditTest.TestTextHintUsesMutedToken;
+{ The placeholder/hint must take its color from the TyTextHint typeKey
+  (color: alpha(on-surface,0.5)) instead of the old $80-over-S.TextColor literal.
+  on-surface #1F2937 is blue-leaning (B=55 > R=31), so the muted hint composited
+  over white is a COOL grey (B noticeably > R). The OLD $80-over-#000000 hint was
+  NEUTRAL grey (R=G=B). BGRA preserves source hue at any antialias coverage, so we
+  assert: (1) hint ink is present and muted (darkest ink not pure black), and
+  (2) the darkest hint pixel is clearly blue-leaning — only possible from the
+  TyTextHint muted token, not the old neutral literal. We also sanity-check the
+  resolved token color itself is blue-leaning and alpha<255. }
+var
+  Ctl: TTyStyleController;
+  E: TTyEditAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+  X, Y: Integer;
+  HintStyle: TTyStyleSet;
+  A, SrcR, SrcB: Integer;
+  FoundInk: Boolean;
+  DarkSum, DarkR, DarkG, DarkB, Sum: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    // Larger font → thicker glyph strokes → darker, higher-coverage cores so the
+    // muted token's cool hue survives antialiasing strongly enough to read.
+    Ctl.LoadThemeCss(
+      'TyEdit { background: #FFFFFF; color: #000000; padding: 4px; font-size: 22px; }');
+    E := TTyEditAccess.Create(Form);
+    E.Parent := Form;
+    E.Controller := Ctl;
+    E.Text := '';
+    E.TextHint := 'Search...';
+
+    HintStyle := Ctl.Model.ResolveStyle('TyTextHint', '', []);
+    SrcR := TyRedOf(HintStyle.TextColor);
+    SrcB := TyBlueOf(HintStyle.TextColor);
+    A := TyAlphaOf(HintStyle.TextColor);
+    // The muted token must be partially transparent (alpha<255) and blue-leaning
+    // (B>R) — the defining traits the old neutral $80 literal lacked.
+    AssertTrue('hint token is muted (alpha<255)', A < 255);
+    AssertTrue('hint token is blue-leaning (B>R)', SrcB > SrcR);
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 40);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 200, 40);
+    E.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 40), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      FoundInk := False;
+      DarkSum := MaxInt;
+      DarkR := 0; DarkG := 0; DarkB := 0;
+      for X := 4 to 120 do
+        for Y := 4 to 36 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          // Ink: darker than the white field somewhere in the hint region.
+          if (Px.red < 230) or (Px.green < 230) or (Px.blue < 230) then
+          begin
+            FoundInk := True;
+            // Track the darkest (highest-coverage) hint pixel — closest to the
+            // pure muted color.
+            Sum := Px.red + Px.green + Px.blue;
+            if Sum < DarkSum then
+            begin
+              DarkSum := Sum;
+              DarkR := Px.red; DarkG := Px.green; DarkB := Px.blue;
+            end;
+          end;
+        end;
+      AssertTrue('hint ink present when empty', FoundInk);
+      // Muted, not pure black: the darkest hint pixel stays well above 0.
+      AssertTrue('hint ink is muted (darkest pixel not near-black, sum=' +
+        IntToStr(DarkSum) + ')', DarkSum > 180);
+      // Cool channel-ordering R <= G <= B with B strictly above R — the exact
+      // signature of on-surface #1F2937 (R=31,G=41,B=55) used by the muted token.
+      // The OLD $80-over-#000000 hint was neutral grey (R=G=B), so it could never
+      // satisfy B>R; antialiasing/gamma compress the gap but never invert it.
+      AssertTrue('hint ink is cool like the muted token (R=' +
+        IntToStr(DarkR) + ' G=' + IntToStr(DarkG) + ' B=' + IntToStr(DarkB) + ')',
+        (DarkG >= DarkR) and (DarkB >= DarkG) and (DarkB - DarkR >= 3));
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
 end;
 
 initialization
