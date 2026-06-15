@@ -12,6 +12,7 @@ type
     FMin, FMax, FPosition: Integer;
     FOrientation: TTyTrackOrientation;
     FFrequency: Integer;
+    FLineSize, FPageSize: Integer;
     FOnChange: TNotifyEvent;
     FDragging: Boolean;
     FThumbHover: Boolean;
@@ -20,6 +21,8 @@ type
     procedure SetPosition(const AValue: Integer);
     procedure SetOrientation(const AValue: TTyTrackOrientation);
     procedure SetFrequency(const AValue: Integer);
+    procedure SetLineSize(const AValue: Integer);
+    procedure SetPageSize(const AValue: Integer);
     function ThumbWAtPPI(APPI: Integer): Integer;
     function MainLen: Integer;
     function Inverted: Boolean;
@@ -42,6 +45,8 @@ type
     property Position: Integer read FPosition write SetPosition default 0;
     property Orientation: TTyTrackOrientation read FOrientation write SetOrientation default toHorizontal;
     property Frequency: Integer read FFrequency write SetFrequency default 0;
+    property LineSize: Integer read FLineSize write SetLineSize default 1;
+    property PageSize: Integer read FPageSize write SetPageSize default 10;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property Align;
     property Anchors;
@@ -91,6 +96,8 @@ begin
   FPosition := 0;
   FOrientation := toHorizontal;
   FFrequency := 0;
+  FLineSize := 1;
+  FPageSize := 10;
   FDragging := False;
   FThumbHover := False;
   Width := 160;
@@ -190,22 +197,71 @@ begin
   Invalidate;
 end;
 
+procedure TTyTrackBar.SetLineSize(const AValue: Integer);
+begin
+  if AValue < 1 then
+    FLineSize := 1
+  else
+    FLineSize := AValue;
+end;
+
+procedure TTyTrackBar.SetPageSize(const AValue: Integer);
+begin
+  if AValue < 1 then
+    FPageSize := 1
+  else
+    FPageSize := AValue;
+end;
+
 procedure TTyTrackBar.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  DecKey, IncKey: Word;
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
-  case Key of
-    VK_LEFT:
-      begin
-        Position := FPosition - 1;
-        Key := 0;
-      end;
-    VK_RIGHT:
-      begin
-        Position := FPosition + 1;
-        Key := 0;
-      end;
+  if FOrientation = toVertical then
+  begin
+    DecKey := VK_DOWN;
+    IncKey := VK_UP;   // up increases (top=max)
+  end
+  else
+  begin
+    DecKey := VK_LEFT;
+    IncKey := VK_RIGHT;
   end;
+  if Key = IncKey then
+  begin
+    Position := FPosition + FLineSize;
+    Key := 0;
+  end
+  else if Key = DecKey then
+  begin
+    Position := FPosition - FLineSize;
+    Key := 0;
+  end
+  else
+    case Key of
+      VK_PRIOR:   // PageUp increases
+        begin
+          Position := FPosition + FPageSize;
+          Key := 0;
+        end;
+      VK_NEXT:
+        begin
+          Position := FPosition - FPageSize;
+          Key := 0;
+        end;
+      VK_HOME:
+        begin
+          Position := FMin;
+          Key := 0;
+        end;
+      VK_END:
+        begin
+          Position := FMax;
+          Key := 0;
+        end;
+    end;
 end;
 
 procedure TTyTrackBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);

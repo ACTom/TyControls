@@ -50,6 +50,8 @@ type
     procedure TestVKRightClampsAtMax;
     procedure TestDragRoundTrip;
     procedure TestDisabledMouseIgnored;
+    procedure TestTrackBarKeyboardSteps;
+    procedure TestTrackBarVerticalUpIncreases;
   end;
 
   TTyTrackBarPixelTest = class(TTestCase)
@@ -406,6 +408,49 @@ begin
     AssertEquals('disabled trackbar mouse ignored', 0, Bar.Position);
   finally
     Bar.Free;
+  end;
+end;
+
+procedure TTyTrackBarControlTest.TestTrackBarKeyboardSteps;
+var
+  T: TTyTrackBarProbe;
+  K: Word;
+begin
+  T := TTyTrackBarProbe.Create(nil);
+  try
+    T.Orientation := toHorizontal;
+    T.Min := 0;
+    T.Max := 100;
+    T.LineSize := 2;
+    T.PageSize := 20;
+    T.Position := 50;
+    K := VK_RIGHT; T.SimulateKeyDown(K); AssertEquals('right +LineSize', 52, T.Position);
+    K := VK_LEFT;  T.SimulateKeyDown(K); AssertEquals('left -LineSize', 50, T.Position);
+    K := VK_NEXT;  T.SimulateKeyDown(K); AssertEquals('pgdn -PageSize', 30, T.Position);
+    K := VK_PRIOR; T.SimulateKeyDown(K); AssertEquals('pgup +PageSize', 50, T.Position);
+    K := VK_HOME;  T.SimulateKeyDown(K); AssertEquals('home min', 0, T.Position);
+    K := VK_END;   T.SimulateKeyDown(K); AssertEquals('end max', 100, T.Position);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTyTrackBarControlTest.TestTrackBarVerticalUpIncreases;
+var
+  T: TTyTrackBarProbe;
+  K: Word;
+begin
+  T := TTyTrackBarProbe.Create(nil);
+  try
+    T.Orientation := toVertical;
+    T.Min := 0;
+    T.Max := 100;
+    T.LineSize := 3;
+    T.Position := 50;
+    K := VK_UP;   T.SimulateKeyDown(K); AssertEquals('up +LineSize (top=max)', 53, T.Position);
+    K := VK_DOWN; T.SimulateKeyDown(K); AssertEquals('down -LineSize', 50, T.Position);
+  finally
+    T.Free;
   end;
 end;
 
