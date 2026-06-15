@@ -990,7 +990,7 @@ end;
 procedure TTyTabControl.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  BoxStyle, TabStyle, ArrowStyle: TTyStyleSet;
+  BoxStyle, TabStyle, ArrowStyle, CloseS: TTyStyleSet;
   R: TRect;
   W, H, TabH, I: Integer;
   HdrRect, CloseRect, TextRect, BandRect, SavedClip: TRect;
@@ -1058,18 +1058,18 @@ begin
 
       if FTabsClosable then
       begin
-        { Independent close (x) hover highlight. Derived purely from the tab's
-          resolved text color (no extra theme token needed): a translucent
-          rounded chip behind the glyph plus the glyph at full opacity, so the
-          x lights up on its own when the pointer is precisely over it. }
+        { Independent close (x) hover highlight: a token-driven chip behind the
+          glyph (TyTabClose = var(--overlay-hover) fill + var(--radius)) plus the
+          glyph at full opacity, so the x lights up on its own when the pointer
+          is precisely over it. The glyph itself correctly stays TextColor (the
+          tier-b "ink" of the convention). }
         if I = FHoverClose then
         begin
+          CloseS := ActiveController.Model.ResolveStyle('TyTabClose', '', []);
           CloseHi := Default(TTyFill);
           CloseHi.Kind  := tfkSolid;
-          CloseHi.Color := TyRGBA(TyRedOf(TabStyle.TextColor),
-                                   TyGreenOf(TabStyle.TextColor),
-                                   TyBlueOf(TabStyle.TextColor), 48);
-          P.FillBackground(CloseRect, CloseHi, 3);
+          CloseHi.Color := CloseS.Background.Color;
+          P.FillBackground(CloseRect, CloseHi, CloseS.BorderRadius);
         end;
         P.DrawGlyph(CloseRect, tgClose, TabStyle.TextColor, 1);
       end;

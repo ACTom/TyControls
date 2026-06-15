@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, StdCtrls, LCLType,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller,
+  tyControls.Types, tyControls.Controller, tyControls.StyleModel,
   tyControls.Base, tyControls.Panel, tyControls.TabControl;
 
 type
@@ -62,6 +62,7 @@ type
     procedure TestClickCloseCanceledKeepsTab;
     procedure TestClickHeaderBodyStillSelectsWhenClosable;
     procedure TestTabHeaderTopCornerRoundedFromTheme;
+    procedure TestCloseChipUsesTyTabCloseToken;
   end;
 
 implementation
@@ -715,6 +716,95 @@ begin
         Format('tab body not white (red<128): R=%d G=%d B=%d',
           [BodyPx.red, BodyPx.green, BodyPx.blue]),
         BodyPx.red < 128);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ TestCloseChipUsesTyTabCloseToken:
+  When a closable tab's close (x) is hovered, the highlight "chip" behind the
+  glyph must be painted from the resolved TyTabClose typeKey (token-driven), not
+  from a magic literal derived from TabStyle.TextColor at hard-coded alpha 48
+  with a hard-coded radius 3.
+
+  CSS makes the discrimination unambiguous:
+    - TyTab background = pure GREEN (#00FF00), text/ink = BLACK (#000000).
+    - TyTabClose background = fully-opaque MAGENTA (#FF00FF), radius 0 so the
+      whole CloseRect fills flat (no corner rounding to dodge the probe).
+
+  Old code would have filled the chip with BLACK@48 over green -> a dark-green
+  (R<48, G high, B<48).  Token-driven code fills it MAGENTA (R=255, B=255, G=0).
+  Probing the chip centre:
+    - token path: red>200 AND blue>200 AND green<64   (magenta)
+    - old path:   red<64  AND green>128 AND blue<64    (faded black over green)
+  The chip-centre pixel must be MAGENTA, proving the fill came from TyTabClose. }
+procedure TTyTabControlTest.TestCloseChipUsesTyTabCloseToken;
+var
+  Ctl: TTyStyleController;
+  Acc: TTyTabControlAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  ChipPx: TBGRAPixel;
+  CloseS: TTyStyleSet;
+  C0: TRect;
+  Cx, Cy: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  Acc := TTyTabControlAccess.Create(FForm);
+  Acc.Parent := FForm;
+  try
+    Ctl.LoadThemeCss(
+      'TyTabControl { background:#FFFFFF; border-color:#000000; border-width:1px; }' +
+      'TyTab { background:#00FF00; color:#000000; padding:4px; }' +
+      'TyTabClose { background:#FF00FF; border-radius:0; }');
+    Acc.Controller := Ctl;
+    Acc.Font.PixelsPerInch := 96;
+    Acc.SetBounds(0, 0, 200, 120);
+    Acc.TabsClosable := True;
+    Acc.AddTab('AAAA');
+    Acc.AddTab('BBBB');
+
+    { Sanity: the typeKey resolves to the token values the impl must read. }
+    CloseS := Ctl.Model.ResolveStyle('TyTabClose', '', []);
+    AssertTrue('TyTabClose background present', tpBackground in CloseS.Present);
+    AssertEquals('TyTabClose background = magenta',
+      Integer(TyRGB($FF, $00, $FF)), Integer(CloseS.Background.Color));
+
+    { Drive the close-hover state: move the pointer over tab 0's close rect so
+      the chip paints (I = FHoverClose path in RenderTo). }
+    C0 := Acc.TyTabCloseRect(0);
+    Cx := (C0.Left + C0.Right) div 2;
+    Cy := (C0.Top + C0.Bottom) div 2;
+    Acc.CallMouseMove(Cx, Cy);
+    { Probe a point inside the chip but OFF the glyph's X intersection (which sits
+      dead-centre): up-left of centre lands on the chip fill, clear of the strokes. }
+    Cx := C0.Left + 2;
+    Cy := C0.Top + 2;
+    AssertEquals('close-hover armed on tab 0', 0, Acc.TyTabHoverClose);
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 120);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 200, 120);
+
+    Acc.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 120), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      { Probe the chip centre. With TyTabClose=opaque magenta the chip is solid
+        magenta; the old TextColor@48-over-green path would be a dark green. The
+        glyph itself is a thin 1-weight ink stroke that does not cover the whole
+        rect, so the centre is dominated by the chip fill. }
+      ChipPx := Reread.GetPixel(Cx, Cy);
+      AssertTrue(
+        Format('close chip is TyTabClose magenta (R>200 B>200 G<64): R=%d G=%d B=%d',
+          [ChipPx.red, ChipPx.green, ChipPx.blue]),
+        (ChipPx.red > 200) and (ChipPx.blue > 200) and (ChipPx.green < 64));
     finally
       Reread.Free;
     end;
