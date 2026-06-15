@@ -27,7 +27,8 @@ uses tyControls.Panel;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Caption` | `string` | `''` | 面板标题文字，显示在内容区左上角（左对齐、垂直居中）；为空字符串时不绘制文字 |
+| `Caption` | `string` | `''` | 面板标题文字，显示在内容区顶部（按 `Alignment` 水平对齐、垂直居中）；为空字符串时不绘制文字 |
+| `Alignment` | `TAlignment` | `taCenter` | 标题文字在内容区内的水平对齐方式：`taLeftJustify`（左对齐）/ `taCenter`（居中，默认）/ `taRightJustify`（右对齐）；赋值时触发 `Invalidate` |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 随父控件调整大小时的锚点 |
 
@@ -142,6 +143,6 @@ R1.Checked := True;
 - **真容器，可承载子控件：** `TTyPanel` 继承自 `TCustomControl`（有窗口句柄），子控件可以将其设为 `Parent`，坐标系以面板左上角为原点。这与 `TGraphicControl` 类控件（如 `TTyLabel`）不同，后者无法作为父容器。
 - **子控件不受 padding 约束：** 面板的 `padding` 只影响 `Caption` 文字的绘制位置，不自动约束子控件布局。子控件坐标需手动设置，避免与边框/标题重叠。
 - **单选分组的关键：** `TTyRadioButton` 的互斥范围由 `Parent` 决定，将不同组的单选按钮放在不同 `TTyPanel` 内，是实现多个独立单选组的标准做法。
-- **Caption vs 子控件重叠：** 若同时使用 `Caption` 和子控件，需注意标题文字绘制在内容区域（经 `padding` 内缩后）的左对齐垂直居中位置，子控件的 `Top` 值应给标题文字留出足够空间。
+- **Caption vs 子控件重叠：** 若同时使用 `Caption` 和子控件，需注意标题文字绘制在内容区域（经 `padding` 内缩后）顶部、按 `Alignment` 水平对齐、垂直居中的位置（默认 `taCenter` 居中），子控件的 `Top` 值应给标题文字留出足够空间。
 - **默认尺寸较小：** 构造时 `Width=185, Height=41`，通常需要在创建后通过 `SetBounds` 调整为实际所需大小。
 - **无 Enabled/Font published：** `Enabled` 和 `Font` 未在 TTyPanel 的 `published` 节重声明，不会出现在 IDE 对象检视器中，但可在代码中通过继承的属性访问。

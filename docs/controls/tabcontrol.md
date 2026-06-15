@@ -176,10 +176,18 @@ TTyTabControl 重写了 `AdjustClientRect`，在客户区顶部保留 `TabHeight
 
 | 按键 | 行为 |
 |------|------|
-| `←`（VK_LEFT） | 切换到前一页签；已在第一个页签时不循环 |
-| `→`（VK_RIGHT） | 切换到后一页签；已在最后一个页签时不循环 |
+| `Ctrl+Tab` | 切换到后一页签；**循环**（在最后一个页签时回到第 0 页） |
+| `Ctrl+Shift+Tab` | 切换到前一页签；**循环**（在第 0 页时回到最后一页） |
+| `Ctrl+PageDown`（Ctrl+VK_NEXT） | 切换到后一页签；已在最后一个页签时不动（**钳制**，不循环） |
+| `Ctrl+PageUp`（Ctrl+VK_PRIOR） | 切换到前一页签；已在第一个页签时不动（**钳制**，不循环） |
+| `Home`（VK_HOME） | 跳到第一个页签（索引 0） |
+| `End`（VK_END） | 跳到最后一个页签 |
+| `←`（VK_LEFT） | 切换到前一页签；已在第一个页签时不动（钳制，不循环） |
+| `→`（VK_RIGHT） | 切换到后一页签；已在最后一个页签时不动（钳制，不循环） |
 
-键被消费后不再传递（`Key := 0`）。控件需要获得焦点（`TabStop = True`，默认启用）才能响应键盘。
+> `Ctrl+Tab` / `Ctrl+Shift+Tab` 循环换页；`Ctrl+PageDown` / `Ctrl+PageUp` 与 `←` / `→` 仅在两端之间步进、到端即止（不循环）。
+
+切换页签通过 `TabIndex :=` 路由到 `SetTabIndex`：钳制越界、显示目标页、将其滚入可见区（`ScrollTabIntoView`）并触发 `OnChange`。每个被处理的按键消费后不再传递（`Key := 0`）。控件需要获得焦点（`TabStop = True`，默认启用）才能响应键盘。
 
 ---
 

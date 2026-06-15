@@ -25,7 +25,8 @@
 | `Min` | `Integer` | `0` | 最小位置值。赋值时若 `Position < Min` 则自动夹紧 `Position := Min`。 |
 | `Max` | `Integer` | `100` | 最大位置值。赋值时若 `Position > Max` 则自动夹紧 `Position := Max`。 |
 | `Position` | `Integer` | `0` | 当前位置，范围 `[Min, Max]`。赋值时自动夹紧；仅在值真正变化时触发 `OnChange`。 |
-| `PageSize` | `Integer` | `10` | 页面大小（可见内容大小），决定 thumb 在轨道中的比例长度。不可为负（负值被夹为 0）。 |
+| `PageSize` | `Integer` | `10` | 页面大小（可见内容大小），决定 thumb 在轨道中的比例长度。不可为负（负值被夹为 0）。同时也是点击轨道空白处和 `PageUp`/`PageDown` 的步进量。 |
+| `SmallChange` | `Integer` | `1` | 单步步进量：点击端部箭头按钮、按方向键各步进 ±`SmallChange`。最小为 1（赋值 <1 被夹为 1）。 |
 | `OnChange` | `TNotifyEvent` | `nil` | Position 真实变化时触发（包括 `DragThumbTo` 引起的变化）。 |
 | `Align` | `TAlign` | — | 布局对齐方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
@@ -76,6 +77,37 @@ TTyScrollBarKind = (sbHorizontal, sbVertical);
 
 返回固定字符串 `'TyScrollBar'`。
 
+### 端部箭头按钮与交互
+
+控件在轨道两端各渲染一个箭头按钮（垂直：顶/底；水平：左/右）。为给按钮腾出空间，**轨道（track）从客户区两端各内缩一个按钮尺寸**：
+
+- 按钮尺寸 = 轨道横向厚度（`TyScrollButtonSize`：垂直取宽度，水平取高度）。
+- 轨道矩形由 `TyScrollTrackRect(Client, Kind, ButtonSize)` 计算；thumb 与点击命中均基于内缩后的轨道。
+- **退化：** 当控件主轴长度 `<= 2 × 按钮尺寸`（太短放不下两个按钮）时，不保留箭头带，整个客户区都是轨道。
+
+鼠标交互（`MouseDown`，仅左键）：
+
+| 命中位置 | 行为 |
+|----------|------|
+| 端部箭头按钮（Lo / Hi） | `Position ∓= SmallChange`（Lo 减、Hi 加），并尝试 `SetFocus` |
+| thumb 本体 | 开始拖动（`BeginThumbDrag` + `MouseCapture`） |
+| 轨道空白处（thumb 之外） | 朝点击方向翻一页 `Position ∓= PageSize` |
+
+### 键盘操作
+
+控件需获得焦点才响应（`TabStop` 默认 `False`，参见注意事项）。每个被处理的按键消费后不再传递（`Key := 0`）。
+
+| 按键 | 行为 |
+|------|------|
+| `↑` / `↓`（垂直） | `Position ∓= SmallChange`（↑ 减、↓ 加） |
+| `←` / `→`（水平） | `Position ∓= SmallChange`（← 减、→ 加） |
+| `PageUp`（VK_PRIOR） | `Position -= PageSize` |
+| `PageDown`（VK_NEXT） | `Position += PageSize` |
+| `Home`（VK_HOME） | `Position := Min` |
+| `End`（VK_END） | `Position := Max` |
+
+> 方向键按 `Kind` 区分主轴：垂直用 `↑`/`↓`，水平用 `←`/`→`。所有步进结果都经 `SetPosition` 钳制到 `[Min, Max]`。
+
 ### 独立几何函数
 
 #### `function TyScrollThumbRect(...): TRect`
@@ -106,6 +138,16 @@ ThumbLen / TrackLen ≈ PageSize / (Max - Min + PageSize)
 ```
 
 `PageSize` 越大，thumb 越长（代表可见内容比例大）；`Max - Min` 越大，thumb 越短。
+
+#### `function TyScrollButtonSize(...): Integer` / `function TyScrollTrackRect(...): TRect`
+
+```pascal
+function TyScrollButtonSize(const AClient: TRect; AKind: TTyScrollBarKind): Integer;
+function TyScrollTrackRect(const AClient: TRect; AKind: TTyScrollBarKind;
+  AButtonSize: Integer): TRect;
+```
+
+两个导出的纯几何函数，配合端部箭头按钮使用：`TyScrollButtonSize` 返回箭头按钮的尺寸（= 轨道横向厚度）；`TyScrollTrackRect` 返回从客户区两端各内缩一个按钮尺寸后的轨道矩形（主轴太短放不下两个按钮时返回整个客户区）。控件内部用它们定位 thumb 与命中检测，也可在自绘场景中单独调用。
 
 ### 事件
 
