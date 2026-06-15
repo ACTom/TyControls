@@ -152,6 +152,7 @@ TyListBox:disabled { opacity: 0.5; }
 TyListItem {
   background: alpha(#000000, 0);
   color: var(--on-surface);
+  border-radius: var(--radius);
   padding: 4px;
 }
 TyListItem:hover  { background: lighten(--surface, 10%); }

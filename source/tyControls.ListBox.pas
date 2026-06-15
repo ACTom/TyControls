@@ -555,7 +555,7 @@ procedure TTyListBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Intege
 var
   P: TTyPainter;
   BoxStyle, RowStyle: TTyStyleSet;
-  R, ContentRect, RowRect: TRect;
+  R, ContentRect, RowRect, RowFillRect: TRect;
   SBWidth, SH, i, LastRow: Integer;
   ItemStates: TTyStateSet;
 begin
@@ -610,9 +610,20 @@ begin
         ContentRect.Top + (i - FTopIndex + 1) * SH
       );
 
-      // Fill row background if the style has one
+      // Fill row background if the style has one. Inset the fill rect
+      // horizontally by the listbox padding so TyListItem's rounded corners
+      // sit inside the listbox interior and stay visible (otherwise a rounded
+      // fill flush against the border looks like a hard square).
       if tpBackground in RowStyle.Present then
-        P.FillBackground(RowRect, RowStyle.Background, RowStyle.BorderRadius);
+      begin
+        RowFillRect := Rect(
+          RowRect.Left  + P.Scale(BoxStyle.Padding.Left),
+          RowRect.Top,
+          RowRect.Right - P.Scale(BoxStyle.Padding.Right),
+          RowRect.Bottom
+        );
+        P.FillBackground(RowFillRect, RowStyle.Background, RowStyle.BorderRadius);
+      end;
 
       // Draw item text, inset by item padding
       P.DrawText(

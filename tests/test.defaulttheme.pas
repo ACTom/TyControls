@@ -285,7 +285,7 @@ begin
 end;
 
 procedure TBuiltinThemeTest.TestBatch4Tokens;
-var m: TTyStyleModel; sel, hint, tab: TTyStyleSet;
+var m: TTyStyleModel; sel, hint, tab, item: TTyStyleSet;
 begin
   m := TTyStyleModel.Create;
   try
@@ -300,6 +300,11 @@ begin
     tab := m.ResolveStyle('TyTabClose','',[]);
     AssertTrue('TyTabClose has background', tpBackground in tab.Present);
     AssertTrue('TyTabClose has radius', tpBorderRadius in tab.Present);
+    // Batch4 Task 6: TyListItem rows carry a border-radius token so the
+    // selected/hover fill rounds instead of filling hard squares.
+    item := m.ResolveStyle('TyListItem','',[]);
+    AssertTrue('TyListItem has radius', tpBorderRadius in item.Present);
+    AssertTrue('TyListItem radius > 0', item.BorderRadius > 0);
   finally m.Free; end;
 end;
 

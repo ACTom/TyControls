@@ -172,6 +172,7 @@ begin
     'TyListItem {' + LineEnding +
     '  background: alpha(#000000, 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
     '  padding: 4px;' + LineEnding +
     '}' + LineEnding +
     'TyListItem:hover  { background: darken(--surface, 5%); }' + LineEnding +
