@@ -274,7 +274,7 @@ begin
       ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2) + BoxSize);
     // FillBackground/StrokeBorder take a LOGICAL radius (they Scale() internally),
     // so cap the token (S.BorderRadius, logical) against the dot's LOGICAL half-side.
-    // The dot box is P.Scale(16) device wide → logical half = MulDiv(BoxSize,96,APPI) div 2,
+    // The dot box is P.Scale(TyCheckBoxBox) device wide → logical half = MulDiv(BoxSize,96,APPI) div 2,
     // which is 8 at 96ppi. Default TyRadioButton border-radius:8px → Min(8,8)=8 → circle
     // unchanged; only a SMALLER theme radius squares the corners.
     DotRadiusLogical := TyClampRadius(S.BorderRadius, MulDiv(BoxSize, 96, APPI) div 2);
