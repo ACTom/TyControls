@@ -189,11 +189,12 @@ begin
 end;
 
 procedure TTyTrackBar.SetFrequency(const AValue: Integer);
+var
+  Clamped: Integer;
 begin
-  if AValue < 0 then
-    FFrequency := 0
-  else
-    FFrequency := AValue;
+  if AValue < 0 then Clamped := 0 else Clamped := AValue;
+  if FFrequency = Clamped then Exit;
+  FFrequency := Clamped;
   Invalidate;
 end;
 
