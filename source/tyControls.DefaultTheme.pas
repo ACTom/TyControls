@@ -83,9 +83,10 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: 1px;' + LineEnding +
     '  border-radius: 3px;' + LineEnding +
+    '  padding: 4px;' + LineEnding +
     '}' + LineEnding +
     'TyCheckBox:hover    { border-color: var(--accent); }' + LineEnding +
-    'TyCheckBox:active   { background: var(--accent); }' + LineEnding +
+    'TyCheckBox:active   { background: var(--accent); color: #FFFFFF; }' + LineEnding +
     'TyCheckBox:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyCheckBox:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
@@ -95,9 +96,10 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: 1px;' + LineEnding +
     '  border-radius: 8px;' + LineEnding +
+    '  padding: 4px;' + LineEnding +
     '}' + LineEnding +
     'TyRadioButton:hover    { border-color: var(--accent); }' + LineEnding +
-    'TyRadioButton:active   { background: var(--accent); }' + LineEnding +
+    'TyRadioButton:active   { background: var(--accent); color: #FFFFFF; }' + LineEnding +
     'TyRadioButton:focus { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyRadioButton:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +

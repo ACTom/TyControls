@@ -63,9 +63,10 @@ TyCheckBox {
   border-color: var(--border);
   border-width: 1px;
   border-radius: 3px;
+  padding: 4px;
 }
 TyCheckBox:hover    { border-color: var(--accent); }
-TyCheckBox:active   { background: var(--accent); }
+TyCheckBox:active   { background: var(--accent); color: #FFFFFF; }
 TyCheckBox:focus    { outline: 2px var(--focus-ring); }
 TyCheckBox:disabled { opacity: 0.5; }
 
@@ -75,9 +76,10 @@ TyRadioButton {
   border-color: var(--border);
   border-width: 1px;
   border-radius: 8px;
+  padding: 4px;
 }
 TyRadioButton:hover    { border-color: var(--accent); }
-TyRadioButton:active   { background: var(--accent); }
+TyRadioButton:active   { background: var(--accent); color: #FFFFFF; }
 TyRadioButton:focus { outline: 2px var(--focus-ring); }
 TyRadioButton:disabled { opacity: 0.5; }
 

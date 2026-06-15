@@ -3,7 +3,7 @@ unit tyControls.CheckBox;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 type
   TTyCheckBox = class(TTyCustomControl)
   private
@@ -11,6 +11,7 @@ type
     procedure SetChecked(const AValue: Boolean);
   protected
     function GetStyleTypeKey: string; override;
+    function CurrentStates: TTyStateSet; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -37,6 +38,7 @@ type
     procedure UncheckSiblings;
   protected
     function GetStyleTypeKey: string; override;
+    function CurrentStates: TTyStateSet; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -70,6 +72,17 @@ begin
   Result := 'TyCheckBox';
 end;
 
+function TTyCheckBox.CurrentStates: TTyStateSet;
+begin
+  // A checked checkbox enters tysActive so the theme's :active rule (accent box
+  // fill + white glyph) actually resolves. The :active 'color' would whiten the
+  // CAPTION too, so RenderTo resolves the caption text from a separate
+  // active-free state set — keeping the accent + white-glyph effect box-only.
+  Result := inherited CurrentStates;
+  if FChecked and Enabled then
+    Include(Result, tysActive);
+end;
+
 procedure TTyCheckBox.SetChecked(const AValue: Boolean);
 begin
   if FChecked = AValue then Exit;
@@ -98,14 +111,20 @@ end;
 procedure TTyCheckBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S, FrameS: TTyStyleSet;
+  S, FrameS, CaptionS: TTyStyleSet;
   ContentRect, BoxRect, TextRect, FullRect: TRect;
   BoxSize, Gap: Integer;
 begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(ACanvas, ARect, APPI);
+    // S drives the BOX (and its glyph): when checked it carries tysActive so the
+    // :active accent fill + white glyph resolve. CaptionS is resolved WITHOUT the
+    // checked-derived tysActive so the :active 'color:#FFFFFF' never whitens the
+    // caption text — keeping the accent + white-glyph effect box-only.
     S := CurrentStyle;
+    CaptionS := ActiveController.Model.ResolveStyle(
+      GetStyleTypeKey, StyleClass, CurrentStates - [tysActive]);
     // DrawFrame propagates opacity (and shadow) for the whole control, but the
     // theme's background/border style the small BOX, not the control rect —
     // so the frame copy clears them to keep the v1 transparent look.
@@ -137,7 +156,7 @@ begin
     TextRect := Rect(BoxRect.Right + Gap, ContentRect.Top,
       ContentRect.Right, ContentRect.Bottom);
     P.DrawText(TextRect, Caption, S.FontName, ResolveFontSize(S), S.FontWeight,
-      S.TextColor, taLeftJustify, tlCenter, True);
+      CaptionS.TextColor, taLeftJustify, tlCenter, True);
     P.EndPaint;
   finally
     P.Free;
@@ -160,6 +179,16 @@ end;
 function TTyRadioButton.GetStyleTypeKey: string;
 begin
   Result := 'TyRadioButton';
+end;
+
+function TTyRadioButton.CurrentStates: TTyStateSet;
+begin
+  // See TTyCheckBox.CurrentStates: checked -> tysActive so :active accent fill +
+  // white dot resolve; the caption text is resolved active-free in RenderTo so
+  // the accent/white stays confined to the box (dot).
+  Result := inherited CurrentStates;
+  if FChecked and Enabled then
+    Include(Result, tysActive);
 end;
 
 procedure TTyRadioButton.SetChecked(const AValue: Boolean);
@@ -207,14 +236,19 @@ end;
 procedure TTyRadioButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S, FrameS: TTyStyleSet;
+  S, FrameS, CaptionS: TTyStyleSet;
   ContentRect, DotRect, TextRect, FullRect: TRect;
   BoxSize, Gap, DotRadiusLogical: Integer;
 begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(ACanvas, ARect, APPI);
+    // S drives the dot box (+ its glyph): checked -> tysActive -> :active accent
+    // fill + white dot. CaptionS is resolved WITHOUT the checked-derived tysActive
+    // so the caption text colour stays normal (box-only). See TTyCheckBox.RenderTo.
     S := CurrentStyle;
+    CaptionS := ActiveController.Model.ResolveStyle(
+      GetStyleTypeKey, StyleClass, CurrentStates - [tysActive]);
     // See TTyCheckBox.RenderTo: frame copy clears background/border so the
     // theme's box styling doesn't paint a control-wide fill or outline.
     FrameS := S;
@@ -251,7 +285,7 @@ begin
     TextRect := Rect(DotRect.Right + Gap, ContentRect.Top,
       ContentRect.Right, ContentRect.Bottom);
     P.DrawText(TextRect, Caption, S.FontName, ResolveFontSize(S), S.FontWeight,
-      S.TextColor, taLeftJustify, tlCenter, True);
+      CaptionS.TextColor, taLeftJustify, tlCenter, True);
     P.EndPaint;
   finally
     P.Free;

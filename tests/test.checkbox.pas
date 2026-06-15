@@ -10,6 +10,7 @@ type
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure DoKeyDown(var Key: Word; Shift: TShiftState);
+    function States: TTyStateSet;
   end;
 
   TCheckBoxFontAccess = class(TTyCheckBox)
@@ -30,6 +31,9 @@ type
     procedure TestDisabledSpaceNoToggle;
     procedure TestFontSizeResolvesReadableWhenThemeOmitsIt;
     procedure TestFontSizeHonorsControlFontWhenThemeOmitsIt;
+    procedure TestCheckedEntersActiveState;
+    procedure TestCheckedBoxAccentWhiteGlyphCaptionNormal;
+    procedure TestBoxPaddingShiftsBoxRight;
   end;
 implementation
 
@@ -41,6 +45,11 @@ end;
 procedure TTyCheckBoxAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
+end;
+
+function TTyCheckBoxAccess.States: TTyStateSet;
+begin
+  Result := CurrentStates;
 end;
 
 function TCheckBoxFontAccess.RFS: Integer; begin Result := ResolveFontSize(CurrentStyle); end;
@@ -311,6 +320,188 @@ begin
     C.Font.Size := 14;   // OI-set font, theme has no font-size for checkbox
     AssertEquals('control Font.Size honored when theme omits font-size', 14, C.RFS);
   finally C.Free; end;
+end;
+
+procedure TCheckBoxTest.TestCheckedEntersActiveState;
+{ A checked checkbox must enter tysActive so the theme's :active rule
+  (accent fill + white glyph) actually resolves. Unchecked: no active. }
+var
+  F: TCustomForm;
+  C: TTyCheckBoxAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    C := TTyCheckBoxAccess.Create(F); C.Parent := F;
+    AssertFalse('unchecked: not active', tysActive in C.States);
+    C.Checked := True;
+    AssertTrue('checked: enters active', tysActive in C.States);
+    C.Checked := False;
+    AssertFalse('unchecked again: not active', tysActive in C.States);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxTest.TestCheckedBoxAccentWhiteGlyphCaptionNormal;
+{ Stylesheet gives TyCheckBox a known base (white box, dark caption text) and
+  :active accent fill + white glyph (mirrors the shipped theme). When checked,
+  the :active state must dye ONLY the box:
+  - box interior fill -> accent (#3B82F6);
+  - check glyph inside the box -> a near-white pixel exists;
+  - the CAPTION text colour stays DARK (NOT white) and the CAPTION background
+    stays the white backdrop (NOT accent) -> proves box-only. }
+var
+  Ctl: TTyStyleController;
+  C: TTyCheckBoxAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+  X, Y: Integer;
+  WhiteGlyphFound, DarkCaptionInkFound: Boolean;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    // Base: white box, dark (#101010) caption/glyph ink, no padding, no border.
+    // :active: accent (#3B82F6) box fill + white glyph.
+    Ctl.LoadThemeCss(
+      'TyCheckBox { background: #FFFFFF; color: #101010; border-width: 0px; padding: 0px; font-size: 12px; }' +
+      'TyCheckBox:active { background: #3B82F6; color: #FFFFFF; }');
+    C := TTyCheckBoxAccess.Create(Form);
+    C.Parent := Form;
+    C.Controller := Ctl;
+    C.Font.PixelsPerInch := 96;
+    C.Caption := 'XXXX';
+    C.Checked := True;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(120, 22);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 120, 22);
+    C.RenderTo(Bmp.Canvas, Rect(0, 0, 120, 22), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      // Box is 16px @96ppi at the left edge, vertically centered in 22px ->
+      // spans (0,3)-(16,19). Probe near a corner that the glyph does not cover.
+      Px := Reread.GetPixel(2, 5);
+      AssertTrue('box fill is accent: blue-dominant',
+        (Px.blue > 180) and (Px.red < 120) and (Px.green > 100) and (Px.green < 200));
+      AssertEquals('box fill red = accent #3B', $3B, Px.red);
+      AssertEquals('box fill green = accent #82', $82, Px.green);
+      AssertEquals('box fill blue = accent #F6', $F6, Px.blue);
+
+      // White glyph: somewhere inside the box there must be a near-white pixel
+      // (the check mark), which only exists if the glyph ink is white-on-accent.
+      WhiteGlyphFound := False;
+      for Y := 4 to 18 do
+        for X := 2 to 14 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          if (Px.red > 230) and (Px.green > 230) and (Px.blue > 230) then
+            WhiteGlyphFound := True;
+        end;
+      AssertTrue('white check glyph present inside accent box', WhiteGlyphFound);
+
+      // Caption area (x >= box.Right + gap). The caption background must stay
+      // the white backdrop (NOT accent) and the caption text ink must stay DARK
+      // (NOT white) -> :active did not bleed into the caption.
+      for X := 24 to 119 do
+        for Y := 0 to 21 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          // No accent-blue fill anywhere in the caption strip.
+          AssertFalse('caption strip free of accent fill',
+            (Px.blue > 180) and (Px.red < 120) and (Px.green < 200) and (Px.green > 100));
+        end;
+      // The dark caption ink must still render (text not whitened away).
+      DarkCaptionInkFound := False;
+      for X := 24 to 119 do
+        for Y := 0 to 21 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          if (Px.red < 80) and (Px.green < 80) and (Px.blue < 80) then
+            DarkCaptionInkFound := True;
+        end;
+      AssertTrue('dark caption text ink present (caption NOT whitened)', DarkCaptionInkFound);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TCheckBoxTest.TestBoxPaddingShiftsBoxRight;
+{ padding:4px must inset the box's left edge by ~Scale(4). With a coloured box
+  fill and a transparent left margin, the leftmost coloured column moves from
+  x=0 (no padding) to x=4 (padding:4px @96ppi). }
+var
+  Ctl: TTyStyleController;
+  C: TTyCheckBoxAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+  X, Y, FirstFillX: Integer;
+  RowHasFill: Boolean;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    // Solid accent box (checked -> :active fill), padding 4px, no border.
+    Ctl.LoadThemeCss(
+      'TyCheckBox { background: #FFFFFF; color: #101010; border-width: 0px; padding: 4px; }' +
+      'TyCheckBox:active { background: #3B82F6; color: #FFFFFF; }');
+    C := TTyCheckBoxAccess.Create(Form);
+    C.Parent := Form;
+    C.Controller := Ctl;
+    C.Font.PixelsPerInch := 96;
+    C.Caption := '';
+    C.Checked := True;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(120, 30);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 120, 30);
+    C.RenderTo(Bmp.Canvas, Rect(0, 0, 120, 30), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      // Find the leftmost column that contains any accent-blue fill pixel.
+      FirstFillX := -1;
+      for X := 0 to 40 do
+      begin
+        RowHasFill := False;
+        for Y := 0 to 29 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          if (Px.blue > 180) and (Px.red < 120) then
+            RowHasFill := True;
+        end;
+        if RowHasFill then
+        begin
+          FirstFillX := X;
+          Break;
+        end;
+      end;
+      AssertTrue('box fill found', FirstFillX >= 0);
+      // padding:4px @96ppi -> box left inset ~4 (allow 1px AA tolerance).
+      AssertTrue('box left edge shifted right by ~Scale(4)',
+        (FirstFillX >= 3) and (FirstFillX <= 5));
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
 end;
 
 initialization
