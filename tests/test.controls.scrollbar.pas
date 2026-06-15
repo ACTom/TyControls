@@ -54,6 +54,13 @@ type
     procedure TestScrollBarKeyboard;
   end;
 
+  TTyScrollBarAnimationTest = class(TTestCase)
+  published
+    procedure TestThumbAnimatesMidwayThenSettles;
+    procedure TestDragSnapsThumbImmediately;
+    procedure TestAnimationsEnabledDefaultsTrue;
+  end;
+
 implementation
 type
   TScrollAccess = class(TTyScrollBar)
@@ -66,6 +73,10 @@ type
     procedure DoKeyDown(Key: Word; Shift: TShiftState);
     procedure SetHoverState(AValue: Boolean);
     procedure SetPressedState(AValue: Boolean);
+    procedure SetDraggingState(AValue: Boolean);
+    function DisplayPos: Single;
+    function AdvanceAnimation(AMs: Integer): Boolean;
+    procedure SetPositionAnimating(AValue: Integer);
   end;
 procedure TScrollAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -98,6 +109,22 @@ end;
 procedure TScrollAccess.SetPressedState(AValue: Boolean);
 begin
   FPressed := AValue;
+end;
+procedure TScrollAccess.SetDraggingState(AValue: Boolean);
+begin
+  FDragging := AValue;
+end;
+function TScrollAccess.DisplayPos: Single;
+begin
+  Result := inherited DisplayPos;
+end;
+function TScrollAccess.AdvanceAnimation(AMs: Integer): Boolean;
+begin
+  Result := inherited AdvanceAnimation(AMs);
+end;
+procedure TScrollAccess.SetPositionAnimating(AValue: Integer);
+begin
+  inherited SetPositionAnimating(AValue);
 end;
 procedure TTyScrollGeometryTest.TestVerticalThumbAtTop;
 var
@@ -561,9 +588,62 @@ begin
   SA.DoKeyDown(VK_END, []);   AssertEquals('end max', 100, SA.Position);
 end;
 
+{ TTyScrollBarAnimationTest }
+
+procedure TTyScrollBarAnimationTest.TestThumbAnimatesMidwayThenSettles;
+{ Arm the animating path 0->100 (headless seam, no handle needed), step the
+  ease ~half of 120ms -> the displayed thumb position is strictly between old
+  and new; another 120ms -> it settles exactly at the target. }
+var
+  Bar: TScrollAccess;
+begin
+  Bar := TScrollAccess.Create(nil);
+  try
+    Bar.Min := 0; Bar.Max := 100; Bar.PageSize := 10; Bar.Position := 0;
+    Bar.SetPositionAnimating(100);   // arm animation 0->100
+    Bar.AdvanceAnimation(60);         // ~half of 120ms
+    AssertTrue('midway', (Bar.DisplayPos > 10) and (Bar.DisplayPos < 90));
+    Bar.AdvanceAnimation(120);
+    AssertTrue('settled', Abs(Bar.DisplayPos - 100) < 0.5);
+  finally
+    Bar.Free;
+  end;
+end;
+
+procedure TTyScrollBarAnimationTest.TestDragSnapsThumbImmediately;
+{ While dragging, the thumb must track the mouse instantly: a Position change
+  with FDragging=True snaps DisplayPos to the new value with no animation. }
+var
+  Bar: TScrollAccess;
+begin
+  Bar := TScrollAccess.Create(nil);
+  try
+    Bar.Min := 0; Bar.Max := 100; Bar.PageSize := 10; Bar.Position := 0;
+    Bar.SetDraggingState(True);
+    Bar.Position := 70;
+    AssertTrue('drag snaps thumb to new position immediately',
+      Abs(Bar.DisplayPos - 70) < 0.5);
+  finally
+    Bar.Free;
+  end;
+end;
+
+procedure TTyScrollBarAnimationTest.TestAnimationsEnabledDefaultsTrue;
+var
+  Bar: TTyScrollBar;
+begin
+  Bar := TTyScrollBar.Create(nil);
+  try
+    AssertTrue('AnimationsEnabled defaults True', Bar.AnimationsEnabled);
+  finally
+    Bar.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyScrollGeometryTest);
   RegisterTest(TTyScrollBarDragTest);
   RegisterTest(TTyScrollBarThumbColorTest);
   RegisterTest(TTyScrollBarMouseTest);
+  RegisterTest(TTyScrollBarAnimationTest);
 end.

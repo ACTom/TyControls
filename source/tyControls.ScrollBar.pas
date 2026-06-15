@@ -2,8 +2,8 @@ unit tyControls.ScrollBar;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 type
   TTyScrollBarKind = (sbHorizontal, sbVertical);
 
@@ -13,9 +13,12 @@ type
     FMin, FMax, FPosition, FPageSize: Integer;
     FSmallChange: Integer;
     FOnChange: TNotifyEvent;
-    FDragging: Boolean;
     FDragGrabOffset: Integer;
     FDragStartTop: Integer;
+    FAnimEnabled: Boolean;
+    FPosAnim: TTyAnimator;      // 0..1 traversal driving FAnimFrom -> FAnimTo
+    FAnimFrom, FAnimTo: Single; // displayed-thumb-position endpoints (Min..Max units)
+    FTimer: TTimer;            // lazy; only created when actually animating
     function TrackRect: TRect;
     function TrackLength: Integer;
     function PosAlong(X, Y: Integer): Integer;
@@ -26,19 +29,39 @@ type
     procedure SetPosition(const AValue: Integer);
     procedure SetPageSize(const AValue: Integer);
     procedure SetSmallChange(const AValue: Integer);
+    procedure EnsureTimer;
+    procedure HandleTimer(Sender: TObject);
   protected
+    FDragging: Boolean;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    // Current displayed (possibly mid-animation) thumb position, eased between
+    // the from/to endpoints. At rest this equals the logical FPosition.
+    function DisplayPos: Single;
+    // Steppable animation seam (no wall-clock): advance the thumb ease by AMs and
+    // return True iff the eased progress changed. The lazy TTimer drives it at
+    // runtime; tests drive it directly via an access subclass.
+    function AdvanceAnimation(AMs: Integer): Boolean;
+    // Force the *animating* path toward AValue (clamped) regardless of handle
+    // state. Runtime always routes through SetPosition (which snaps headless);
+    // this is the test seam so the animation is reachable without a window.
+    procedure SetPositionAnimating(AValue: Integer);
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     function GetStyleTypeKey: string; override;
     procedure BeginThumbDrag(AGrabPosAlongTrack: Integer);
     procedure DragThumbTo(APosAlongTrack: Integer);
     procedure EndThumbDrag;
+    // On by default. When enabled and the control has a window handle, a
+    // PROGRAMMATIC Position change (keyboard/wheel/track-click) eases the painted
+    // thumb to the new value; with no handle (every render test) or while
+    // dragging it snaps, preserving exact-pixel tests and live mouse tracking.
+    property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
   published
     property Kind: TTyScrollBarKind read FKind write SetKind default sbVertical;
     property Min: Integer read FMin write SetMin default 0;
@@ -135,13 +158,77 @@ begin
   FPosition := 0;
   FPageSize := 10;
   FSmallChange := 1;
+  FAnimEnabled := True;
+  // Thumb-glide animator: 0..1 traversal in ~120ms, decelerating. Start settled
+  // at the rest endpoint so DisplayPos == FPosition before any change.
+  FPosAnim.Progress := 1;
+  FPosAnim.Target := 1;
+  FPosAnim.DurationMs := 120;
+  FPosAnim.Easing := teEaseOutCubic;
+  FAnimFrom := FPosition;
+  FAnimTo := FPosition;
   Width := 16;
   Height := 160;
+end;
+
+destructor TTyScrollBar.Destroy;
+begin
+  // FTimer is owned by Self (would be freed by DestroyComponents), but free it
+  // explicitly first so the OnTimer callback can never fire mid-teardown.
+  FreeAndNil(FTimer);
+  inherited Destroy;
 end;
 
 function TTyScrollBar.GetStyleTypeKey: string;
 begin
   Result := 'TyScrollBar';
+end;
+
+procedure TTyScrollBar.EnsureTimer;
+begin
+  if FTimer = nil then
+  begin
+    FTimer := TTimer.Create(Self);
+    FTimer.Enabled := False;
+    FTimer.Interval := 16;  // ~60fps
+    FTimer.OnTimer := @HandleTimer;
+  end;
+end;
+
+procedure TTyScrollBar.HandleTimer(Sender: TObject);
+begin
+  if AdvanceAnimation(FTimer.Interval) then
+    Invalidate;
+  if not FPosAnim.Running then
+    FTimer.Enabled := False;
+end;
+
+function TTyScrollBar.AdvanceAnimation(AMs: Integer): Boolean;
+begin
+  Result := FPosAnim.Advance(AMs);
+end;
+
+function TTyScrollBar.DisplayPos: Single;
+begin
+  Result := TyLerpF(FAnimFrom, FAnimTo, FPosAnim.Eased);
+end;
+
+procedure TTyScrollBar.SetPositionAnimating(AValue: Integer);
+var
+  Clamped: Integer;
+begin
+  Clamped := AValue;
+  if Clamped < FMin then Clamped := FMin;
+  if Clamped > FMax then Clamped := FMax;
+  // Arm the ease from the currently displayed thumb position to the new target,
+  // independent of handle state (test seam). FPosition still tracks the logical
+  // value for Min/Max/value semantics.
+  FAnimFrom := DisplayPos;
+  FAnimTo := Clamped;
+  FPosAnim.Progress := 0;
+  FPosAnim.Target := 1;
+  FPosition := Clamped;
+  Invalidate;
 end;
 
 procedure TTyScrollBar.SetKind(const AValue: TTyScrollBarKind);
@@ -175,6 +262,33 @@ begin
   if Clamped < FMin then Clamped := FMin;
   if Clamped > FMax then Clamped := FMax;
   if FPosition = Clamped then Exit;
+  // Decide how the PAINTED thumb reaches the new value:
+  if FDragging then
+  begin
+    // Live drag: the thumb must track the mouse, so snap instantly.
+    FAnimFrom := Clamped;
+    FAnimTo := Clamped;
+    FPosAnim.SetTargetImmediate(1);
+  end
+  else if FAnimEnabled and HandleAllocated then
+  begin
+    // Programmatic change with a window: ease the thumb from where it is now to
+    // the new value. (Headless render tests have no handle -> they snap below.)
+    FAnimFrom := DisplayPos;
+    FAnimTo := Clamped;
+    FPosAnim.Progress := 0;
+    FPosAnim.Target := 1;
+    EnsureTimer;
+    FTimer.Enabled := True;
+  end
+  else
+  begin
+    // Headless (no handle) or animations off: snap so DisplayPos == new
+    // immediately, keeping the existing exact-pixel scrollbar tests green.
+    FAnimFrom := Clamped;
+    FAnimTo := Clamped;
+    FPosAnim.SetTargetImmediate(1);
+  end;
   FPosition := Clamped;
   Invalidate;
   if Assigned(FOnChange) then
@@ -214,7 +328,10 @@ begin
     S := CurrentStyle;
     DrawFrame(P, R, S);
     Track := TyScrollTrackRect(R, FKind, TyScrollButtonSize(R, FKind));
-    ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, FPosition, FPageSize);
+    // The PAINTED thumb uses the displayed (possibly mid-animation) position; at
+    // rest DisplayPos == FPosition so headless renders are pixel-identical. The
+    // track-paging hit math, drag math and BeginThumbDrag keep using FPosition.
+    ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, Round(DisplayPos), FPageSize);
     // Thumb fill is its own sub-element typeKey (TyScrollThumb). Feed the control's
     // hover/press state so TyScrollThumb:hover/:active render (matches the pre-typeKey
     // behavior where the thumb borrowed the parent's state-resolved TextColor).
@@ -313,6 +430,11 @@ begin
   FDragging := True;
   FDragStartTop := ThumbStart;
   FDragGrabOffset := AGrabPosAlongTrack - ThumbStart;
+  // Sync the displayed thumb to the logical position on grab so DisplayPos ==
+  // FPosition at drag start (subsequent drag SetPosition calls snap).
+  FAnimFrom := FPosition;
+  FAnimTo := FPosition;
+  FPosAnim.SetTargetImmediate(1);
 end;
 
 procedure TTyScrollBar.DragThumbTo(APosAlongTrack: Integer);
