@@ -11,7 +11,8 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ScrollBar` |
-| typeKey | `TyScrollBar` |
+| typeKey（轨道 / 端部箭头） | `TyScrollBar` |
+| typeKey（滑块子部件） | `TyScrollThumb` |
 | 基类 | `TTyCustomControl`（继承自 `TCustomControl`） |
 | 默认尺寸 | 16 × 160（垂直，逻辑像素） |
 
@@ -169,29 +170,39 @@ TTyScrollBar 继承 `TTyCustomControl` 的状态机制：
 | `tysFocused` | 键盘焦点（TabStop 默认继承，但 ScrollBar 通常不设 TabStop） |
 | `tysDisabled` | `Enabled = False` |
 
+### 支持的伪类状态（TyScrollBar 轨道）
+
+| 伪类 | 触发条件 |
+|------|----------|
+| `:hover` | 鼠标悬停在控件上 |
+| `:focus` | 控件获得键盘焦点（绘制焦点环；ScrollBar 通常不参与 Tab，需显式获焦才出现） |
+| `:active` | 鼠标左键按下 |
+| `:disabled` | `Enabled = False`（统一施加 `opacity` 半透明，与其余控件状态一致） |
+
 ### light.tycss 内置规则
 
 ```css
 TyScrollBar {
   background: darken(--surface, 6%);  /* 轨道背景 */
-  color: var(--border);               /* thumb 颜色（通过 TextColor 渲染） */
+  color: var(--border);               /* 端部箭头墨色（tier-b 字形） */
   border-radius: 4px;
 }
 TyScrollBar:hover  { color: darken(--border, 15%); }
 TyScrollBar:active { color: var(--accent); /* #3B82F6 */ }
+TyScrollBar:focus    { outline: 2px var(--focus-ring); }   /* 焦点环 */
+TyScrollBar:disabled { opacity: 0.5; }
+
+/* 滑块由独立子部件 typeKey 着色（tier-a 着色面） */
+TyScrollThumb        { background: var(--border); border-radius: 4px; }
+TyScrollThumb:hover  { background: darken(--border, 15%); }
+TyScrollThumb:active { background: var(--accent); }
 ```
 
 ### 渲染细节
 
-- `DrawFrame` 绘制轨道背景（使用样式的 `background`）。
-- Thumb 颜色来自当前样式的 **`TextColor`**（即 CSS `color` 属性）。渲染器构造一个 `tfkSolid` 填充，颜色 = `S.TextColor`，然后以 `S.BorderRadius` 圆角绘制 thumb 矩形。因此在 `.tycss` 中用 `color` 控制滑块颜色是正确的写法：
-
-```css
-TyScrollBar         { color: var(--border); }       /* 滑块默认颜色 */
-TyScrollBar:hover   { color: darken(--border, 15%); }
-TyScrollBar:active  { color: var(--accent); }
-```
-
+- `DrawFrame` 绘制轨道背景（使用 `TyScrollBar` 的 `background`），并施加 `:focus` 焦点环、`:disabled` 的 `opacity`。
+- **滑块（thumb）是独立子部件 typeKey `TyScrollThumb`**（tier-a 着色面）：渲染器解析 `TyScrollThumb` 的样式，用其 `background.Color` 构造 `tfkSolid` 填充、以其 `border-radius` 为圆角绘制 thumb 矩形——不再借用 `TyScrollBar` 的 `color`。`TyScrollThumb` 支持 `:hover` / `:active`，其内置默认（`var(--border)` / hover `darken(--border,15%)` / active `var(--accent)`、`border-radius:4px`）与旧版借用 `color` 时的渲染结果**逐字一致**，老主题升级后外观不变。
+- **端部箭头**仍是 tier-b 单色字形，墨色取 `TyScrollBar` 的 `color`（`TextColor`）。要单独改箭头颜色，改 `TyScrollBar { color: … }`；要改滑块颜色，改 `TyScrollThumb { background: … }`。详见 [tycss-reference.md](../tycss-reference.md) §8.3。
 - 没有内置命名变体（`.class`）。
 
 ## 6. 代码示例

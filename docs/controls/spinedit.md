@@ -92,7 +92,9 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 | `:focus` | 获得键盘焦点 |
 | `:disabled` | `Enabled = False` |
 
-上/下箭头使用 `TTyPainter.DrawGlyph` 以 `tgArrowUp` / `tgArrowDown` 字形绘制，颜色取自解析样式的 `TextColor`。获得焦点时在编辑缓冲的光标位置绘制 1px 竖条光标，以约 530 ms 间隔**闪烁**（`TTimer` 懒创建，无头测试与设计器中光标保持静态）。
+上/下箭头使用 `TTyPainter.DrawGlyph` 以 `tgArrowUp` / `tgArrowDown` 字形绘制（tier-b 单色字形），颜色取自解析样式的 `TextColor`。获得焦点时在编辑缓冲的光标位置绘制 1px 竖条光标，以约 530 ms 间隔**闪烁**（`TTimer` 懒创建，无头测试与设计器中光标保持静态）。
+
+**数值文字字号由主题 `font-size` 决定（Batch ④）：** 数值文字与光标定位统一经 `ResolveFontSize(S)` 取字号——优先用主题 `TySpinEdit { font-size }`（内置 9px），其次 `Font.Size`，再退到默认 9。绘制（`DrawText`）与光标横坐标测量（`CaretPixelX`）共用同一字号，保证光标始终对齐。早前写死的孤立字号 12 已移除。
 
 ### light.tycss 示例规则
 

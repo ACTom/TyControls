@@ -13,8 +13,9 @@ TTyTabControl 是 TyControls 库中的主题化标签页控件，继承自 `TTyC
 | 单元 | `tyControls.TabControl` |
 | `GetStyleTypeKey` 返回值 | `'TyTabControl'` |
 | 页签子部件 typeKey | `'TyTab'` |
+| 关闭 × 底片子部件 typeKey | `'TyTabClose'` |
 
-在 `.tycss` 文件中，控件外框对应选择器前缀 `TyTabControl`，各页签对应子部件选择器前缀 `TyTab`。
+在 `.tycss` 文件中，控件外框对应选择器前缀 `TyTabControl`，各页签对应子部件选择器前缀 `TyTab`，可关闭页签的关闭 × 悬停底片对应 `TyTabClose`。
 
 ```pascal
 uses tyControls.TabControl;
@@ -129,15 +130,24 @@ TyTabControl {
   border-width: 1px;
   border-radius: var(--radius);      /* 6px */
 }
+TyTabControl:hover    { border-color: darken(--border, 10%); }      /* 悬停描边加深（Batch ④） */
+TyTabControl:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }  /* 焦点边框 + 焦点环 */
+TyTabControl:disabled { opacity: 0.5; }                             /* 禁用半透明（Batch ④） */
 
 TyTab {
   background: darken(--surface, 5%);
   color: var(--on-surface);
   padding: 4px;
+  border-radius: var(--radius) var(--radius) 0 0;
 }
 TyTab:hover  { background: darken(--surface, 2%); }
 TyTab:active { background: var(--surface); color: var(--accent); }
+
+/* 可关闭页签的关闭 × 悬停底片（tier-a 着色面） */
+TyTabClose { background: var(--overlay-hover); border-radius: var(--radius); }
 ```
+
+> **状态等价性（Batch ④）：** `TyTabControl` 补齐了 `:hover`（描边加深）、`:focus`（蓝色边框 + 焦点环）、`:disabled`（`opacity` 半透明）三条规则，与 `TyEdit` / `TyListBox` 等控件的状态外观对齐。`:focus` 不仅改 `border-color`，还经 `outline` 绘制一圈焦点环。
 
 ---
 
@@ -377,6 +387,8 @@ DropIdx     := TC.TyDropIndexAt(X, 96);     // X 处应落入的页签索引
 
 当 `TabsClosable = True` 时，关闭 × 字形拥有**独立于整页签**的悬停高亮：
 
-- 仅当指针精确落在某页签的关闭 × 命中矩形内时，该 × 才点亮——在 × 后面绘制一块基于页签文字色的半透明圆角底片，× 字形本身以全不透明度叠加，使关闭目标一目了然。
+- 仅当指针精确落在某页签的关闭 × 命中矩形内时，该 × 才点亮——在 × 后面绘制一块圆角底片，× 字形本身以全不透明度叠加，使关闭目标一目了然。
+- **底片样式由子部件 typeKey `TyTabClose` 驱动（Batch ④，tier-a 着色面）：** 底片色取 `TyTabClose` 的 `background`（默认 `var(--overlay-hover)`——基于前景色的半透明叠加），圆角取其 `border-radius`（默认 `var(--radius)`）。这取代了早前写死的"半径 3 + alpha 48"两个魔法常量，使关闭底片的颜色与圆角可在主题中统一定制。
+- **× 笔画本身仍是 tier-b 单色字形，** 墨色取 `TyTab` 的 `color`（`TextColor`）。换言之关闭 × = `TyTabClose` 底片（tier-a）+ `TyTab.color` 墨迹（tier-b），详见 [tycss-reference.md](../tycss-reference.md) §8.3。
 - 当前被悬停其 × 的页签索引可通过只读属性 `TyTabHoverClose` 读取（无则为 -1），由 `MouseMove` / `MouseLeave` 驱动；它与整页签悬停（影响 `TyTab:hover` 外观）相互独立。
 - 拖拽重排进行中不视为关闭 × 悬停，任何残留高亮会被清除。

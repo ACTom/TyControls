@@ -73,8 +73,10 @@ TTyRadioButton 继承自 `TTyCustomControl`（`tyControls.Base`）：
 |------|----------|
 | `:hover` | 鼠标悬停 |
 | `:focus` | 获得键盘焦点 |
-| `:active` | 鼠标左键按下 |
+| `:active` | 鼠标左键按下，**或** `Checked = True`（已选中，Batch ④）|
 | `:disabled` | `Enabled = False` |
+
+> **`:active` 的双重含义（Batch ④）：** `TTyRadioButton` 与 `TTyCheckBox` 同源地重写了 `CurrentStates`——**`Checked = True` 且 `Enabled` 时额外加入 `tysActive`**。因此 `:active` 规则同时覆盖"鼠标按下"与"已选中"两种情形。
 
 ### light.tycss 内置规则摘要
 
@@ -85,13 +87,16 @@ TyRadioButton {
   border-color: var(--border);     /* #D1D5DB */
   border-width: 1px;
   border-radius: 8px;              /* 等于 BoxSize/2，呈现完整圆形 */
+  padding: 4px;                    /* Batch ④：内缩留白 */
 }
-TyRadioButton:hover    { border-color: var(--accent); }   /* 悬停时边框变蓝 */
-TyRadioButton:active   { background: var(--accent); }     /* 按下时圆圈变蓝 */
+TyRadioButton:hover    { border-color: var(--accent); }            /* 悬停时边框变蓝 */
+TyRadioButton:active   { background: var(--accent); color: #FFFFFF; }  /* 选中/按下：accent 圆圈 + 白点 */
 TyRadioButton:disabled { opacity: 0.5; }
 ```
 
 **渲染细节：** 圆形指示器（`DotRect`）尺寸固定为 16×16 逻辑像素，圆角半径为 `BoxSize div 2`，视觉上为完整圆圈。选中时，内部圆点用 `tgRadioDot` 字形、`TextColor` 颜色绘制。圆圈与文字之间间距为 6 逻辑像素。主题的 `background`、`border-color`、`border-width` 样式作用于**圆圈本身**，控件整体背景透明（无整体背景框）。`opacity` 和 `shadow` 属性经由 `DrawFrame` 路径生效（v1.1 已修复）。
+
+**选中 `:active` 复活（Batch ④）：** 选中后控件进入 `:active`，主题规则把圆圈填成 `var(--accent)`、并把 `color` 置为 `#FFFFFF` 使圆点（tier-b 字形）变白——**accent 圆圈 + 白点**。与 `TTyCheckBox` 一致，这是"框内"效果：渲染时 **Caption 文字用一份去掉了 `tysActive` 的样式解析**，因此标签文字不会被 `:active` 的白色染白，保持常规前景色；规则同时加 `padding: 4px` 内缩留白。
 
 ---
 

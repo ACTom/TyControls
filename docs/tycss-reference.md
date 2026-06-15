@@ -172,6 +172,28 @@ TyButton:focus { border-color: darken(var(--border), 10%); } /* var(--x) */
 
 注意:`var(...)` 形式只能整体作为一个值或一个函数参数使用,不存在字符串拼接。
 
+### 3.3 内置语义令牌
+
+除 `--focus-ring`(§5.14)外,内置主题在 `:root` 中还约定了若干**语义令牌**,供子部件
+typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作者整体覆盖:
+
+| 令牌 | 内置取值(light) | 语义 / 用途 |
+|---|---|---|
+| `--selection` | `alpha(var(--accent), 0.30)` | 文本选区高亮带底色(accent 着色的半透明);由 `TyTextSelection` 引用,使 Edit/Memo 的选区与列表选中行视觉同源 |
+| `--muted` | `alpha(var(--on-surface), 0.5)` | 弱化前景色(占位符 / 提示文字);由 `TyTextHint` 引用 |
+| `--overlay-hover` | `alpha(var(--on-surface), 0.12)` | 半透明悬停叠加层(如页签关闭 × 的圆角底片);由 `TyTabClose` 引用 |
+
+```css
+:root {
+  --selection:     alpha(var(--accent), 0.30);
+  --muted:         alpha(var(--on-surface), 0.5);
+  --overlay-hover: alpha(var(--on-surface), 0.12);
+}
+```
+
+> 改这三个令牌即可全局调整选区/占位符/悬停叠加的外观,无需逐个控件改写;它们与上面的
+> `--accent`、`--on-surface` 一样在使用处惰性求值,可引用其他变量。
+
 ---
 
 ## 4. 选择器与样式解析
@@ -319,13 +341,15 @@ TyPanel { background-image: url(assets/panel.png) slice(8 8 8 8); }
 color: <颜色表达式> ;
 ```
 
-用于文字以及 CheckBox 勾选符、ComboBox 下拉箭头等字形。
+用于文字以及 tier-b 单色字形(CheckBox 勾选符、ComboBox 下拉箭头、SpinEdit/ScrollBar 箭头、
+Tab 关闭 × 等,见 §8.3)。
 
 ```css
 TyButton.primary { color: #FFFFFF; }
 ```
 
-注:`TyScrollBar` 的滑块颜色来自 `color`（TextColor），轨道背景来自 `background`。因此在主题中用 `color` 控制滑块颜色是正确写法（详见第 8.1 节）。
+注:滑块/旋钮等 tier-a **着色面**不再借用本控件的 `color`,而由各自的子部件 typeKey
+(`TyScrollThumb`、`TyToggleKnob` 等)的 `background` 决定——详见第 8.2 / 8.3 节。轨道/轨条背景仍来自父控件 `background`。
 
 ### 5.4 `border-color` / `border-width` / `border-style` — 边框
 
@@ -635,7 +659,7 @@ TyButton.primary {
 
 ## 8. typeKey 与内置变体清单
 
-选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey,共 20 个（含子部件 typeKey）:
+选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey,共 25 个（含子部件 typeKey）:
 
 ### 8.1 控件 typeKey
 
@@ -648,10 +672,10 @@ TyButton.primary {
 | `TyRadioButton` | `TTyRadioButton` | ✓ | — | 同上，`background`/`border` 作用于圆圈 |
 | `TyPanel` | `TTyPanel` | ✓ | — | 容器，`padding` 决定内容区内缩 |
 | `TyComboBox` | `TTyComboBox` | ✓ | — | 下拉箭头用 `color` 绘制 |
-| `TyScrollBar` | `TTyScrollBar` | ✓ | — | **滑块颜色来自 `color`（TextColor）**；轨道背景来自 `background` |
+| `TyScrollBar` | `TTyScrollBar` | ✓ | — | 滑块样式由子部件 typeKey `TyScrollThumb` 决定(tier-a)；轨道背景来自 `background`；端部箭头墨色用 `color`(tier-b) |
 | `TyListBox` | `TTyListBox` | ✓ | — | 行条目样式由子部件 typeKey `TyListItem` 决定 |
 | `TyProgressBar` | `TTyProgressBar` | ✗（GraphicControl，无交互） | — | 填充段样式由子部件 typeKey `TyProgressFill` 决定 |
-| `TyToggleSwitch` | `TTyToggleSwitch` | ✓ | — | `Checked=True` 时追加 `:active` 状态；旋钮颜色来自 `color` |
+| `TyToggleSwitch` | `TTyToggleSwitch` | ✓ | — | `Checked=True` 时追加 `:active` 状态；旋钮样式由子部件 typeKey `TyToggleKnob` 决定(tier-a) |
 | `TyTrackBar` | `TTyTrackBar` | ✓ | — | 滑块样式由子部件 typeKey `TyTrackThumb` 决定 |
 | `TyGroupBox` | `TTyGroupBox` | ✓ | — | **必须声明 `background`**（用于遮盖标题处边框线） |
 | `TyTitleBar` | `TTyTitleBar` | ✓ | — | 自绘窗体标题栏（配合 `TTyFormChrome`） |
@@ -660,16 +684,40 @@ TyButton.primary {
 
 ### 8.2 子部件 typeKey（不对应独立控件，由父控件内部解析）
 
-| typeKey | 父控件 | 支持的状态 | 说明 |
+| typeKey | 父控件 | 支持的状态 | 说明 / 内置默认 |
 |---|---|---|---|
-| `TyListItem` | `TTyListBox` | `:hover`（悬停行）、`:active`（选中行）、无伪类（普通行） | 每行条目的独立样式，`background` 决定行背景，`color` 决定文字颜色 |
-| `TyProgressFill` | `TTyProgressBar` | 无状态（始终正常） | 进度条填充段，通常设置为强调色 |
-| `TyTrackThumb` | `TTyTrackBar` | `:hover`（鼠标在滑块上）、`:active`（拖动中）、无伪类（正常） | 滑块的独立样式，`background` 决定滑块颜色 |
+| `TyListItem` | `TTyListBox` | `:hover`（悬停行）、`:active`（选中行）、无伪类（普通行） | 每行条目的独立样式，`background` 决定行背景，`color` 决定文字颜色；内置 `border-radius:var(--radius)` + `padding:4px`，使行呈圆角并内缩 |
+| `TyProgressFill` | `TTyProgressBar` | 无状态（始终正常） | 进度条填充段，`background` 决定填充色（默认 `var(--accent)`）；部分填充时只圆**起始(左)角**、保留前缘直角（详见 [controls/progressbar.md](controls/progressbar.md)） |
+| `TyTrackThumb` | `TTyTrackBar` | `:hover`（鼠标在滑块上）、`:active`（拖动中）、无伪类（正常） | 滑块的独立样式，`background` 决定滑块颜色（默认 `var(--accent)`） |
 | `TyTab` | `TTyTabControl` | `:hover`（鼠标悬停在该页签上）、`:active`（该页签当前被选中）、无伪类（普通未选中） | 单个页签头的独立样式；注意 `:active` 在此表示"选中态"而非"鼠标按下" |
+| `TyScrollThumb` | `TTyScrollBar` | `:hover`（鼠标悬停滚动条上）、`:active`（按下）、无伪类（正常） | 滚动条滑块(thumb)的独立填充与圆角；`background` 决定滑块色、`border-radius` 决定滑块圆角。内置默认 `background:var(--border)`（hover→`darken(--border,15%)`、active→`var(--accent)`）、`border-radius:4px`——与旧版借用 `TyScrollBar` 的 `color` 渲染结果**逐字一致** |
+| `TyToggleKnob` | `TTyToggleSwitch` | 无状态（始终正常） | 开关旋钮的独立填充与圆角；`background` 决定旋钮色（默认 `#FFFFFF`）、`border-radius` 决定旋钮圆角(默认 `12px`，绘制时按 `TyClampRadius` 钳到旋钮半径,圆形不变) |
+| `TyTextSelection` | `TTyEdit` / `TTyMemo` | 无状态（始终正常） | 文本选区高亮带底色；只取 `background`(默认 `var(--selection)`，accent 着色的半透明)。与 `TyListItem:active` 视觉同源 |
+| `TyTextHint` | `TTyEdit` | 无状态（始终正常） | 占位符 / 提示文字颜色；只取 `color`（默认 `var(--muted)`，弱化前景） |
+| `TyTabClose` | `TTyTabControl` | 无状态（始终正常） | 页签关闭 × 悬停时其后的圆角底片；`background` 决定底片色(默认 `var(--overlay-hover)`)、`border-radius` 决定底片圆角(默认 `var(--radius)`)。× 字形本身仍用 `TyTab` 的 `color` 绘制(tier-b，见 §8.3) |
 
 - 所有控件 typeKey 都支持 `hover`、`active`、`disabled` 三个状态；除 `TyLabel`、`TyProgressBar` 外都支持 `focus`；
 - **变体不是封闭集合**：任何标识符都可以作为变体，只要控件的 `StyleClass` 属性包含对应 token（空格分隔，可多个）即可匹配；
 - 表中"内置变体"只是三个内置主题实际定义过的：`TyButton` 的 `primary` / `danger`，`TyCaptionButton` 的 `close` / `min` / `max`（由窗体镶边自动赋给三个标题栏按钮）。
+
+### 8.3 子部件着色的两层约定（tier-a / tier-b）
+
+控件内部那些不属于"控件本体框"的小部件，按其是不是一块**独立的着色面**分两类处理颜色,
+这是**官方约定**而非遗留缺口:
+
+- **tier-a — 着色面（colored surfaces）：** thumb / knob / fill / progress 等本身就是一块需要
+  独立配色的实心面。它们各有**专属子部件 typeKey**(`TyScrollThumb`、`TyToggleKnob`、
+  `TyTrackThumb`、`TyProgressFill`),颜色取该 typeKey 的 `background`、圆角取其 `border-radius`,
+  与父控件本体的 `background`/`color` 互不干扰。主题作者可单独为它们(及其 `:hover`/`:active`)配色。
+
+- **tier-b — 单色字形（monochrome glyphs）：** 复选框勾号 / 单选圆点、ComboBox 下拉箭头、
+  SpinEdit 上下箭头、ScrollBar 端部箭头、Tab 关闭 × 等只是一笔**单色墨迹**,没有独立的面。
+  它们**借用所属控件(或子部件)样式的 `color`(`TextColor`)作为墨色**——这是官方约定,
+  不是"应当各给一个 typeKey 却漏了"。为这类字形配色,直接改对应控件 typeKey 的 `color` 即可
+  (例如 `TyScrollBar { color: … }` 改端部箭头墨色、`TyTab { color: … }` 改关闭 × 墨色)。
+
+> 个别 tier-a 部件会同时叠加一个 tier-b 字形:页签关闭 × 的**底片**是 tier-a(`TyTabClose`
+> 的 `background`),其上的 **× 笔画**是 tier-b(`TyTab` 的 `color`)。
 
 ---
 
@@ -691,7 +739,7 @@ TyButton.primary {
 8. **`font-size` 数值按 pt 解释**,`px` 后缀只是装饰(§5.9);`font-weight`
    渲染只分 ≥600 粗体 / 其余常规两档(§5.10)。
 9. **`font-family` 不要加引号**,引号会保留进字体名(§5.8)。
-10. **`TyScrollBar` 的 `color` 决定滑块颜色**：`RenderTo` 使用 `S.TextColor`（即 CSS `color` 属性）作为滑块填充色，轨道背景来自 `background`。内置主题中的 `TyScrollBar:hover { color: … }` 写法是正确用法。
+10. **子部件着色分 tier-a / tier-b（Batch ④）**：thumb / knob / fill 等着色面由专属子部件 typeKey（`TyScrollThumb`、`TyToggleKnob`、`TyTrackThumb`、`TyProgressFill`）的 `background` 着色；勾号 / 箭头 / 关闭 × 等单色字形借用所属控件的 `color`(`TextColor`)作墨色。二者均为官方约定（§8.3）。`TyScrollThumb` / `TyToggleKnob` 的默认值与早前借用 `color` 渲染时**逐字一致**。
 11. **`TyTabControl` 页签溢出可横向滚动（v1.10）**：所有页签头宽度之和超过控件宽度时，页签头条带进入溢出模式可横向滚动——条带左右两端渲染 `tgArrowLeft` / `tgArrowRight` 箭头按钮，鼠标在条带上滚轮也能滚动，且切换选中页时会自动把目标页签滚入可见区。绘制时页签头被裁剪到两个箭头之间的可见带（箭头始终绘制在最上层）。详见 [controls/tabcontrol.md](controls/tabcontrol.md) 第 13 节。
 12. 不支持 `@media`、`@import`、`!important`、转义字符串、`//` 行注释。
 13. **边框/盒模型的取舍(v1.6)**:`border-style` 仅支持 `none` / `solid`,**无** `dashed`、

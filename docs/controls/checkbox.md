@@ -74,8 +74,10 @@ TTyCheckBox 继承自 `TTyCustomControl`（`tyControls.Base`）：
 |------|----------|
 | `:hover` | 鼠标悬停 |
 | `:focus` | 获得键盘焦点 |
-| `:active` | 鼠标左键按下 |
+| `:active` | 鼠标左键按下，**或** `Checked = True`（已勾选，Batch ④）|
 | `:disabled` | `Enabled = False` |
+
+> **`:active` 的双重含义（Batch ④）：** `TTyCheckBox` 重写了 `CurrentStates`——**`Checked = True` 且 `Enabled` 时额外加入 `tysActive`**（与 `TTyToggleSwitch` 的 ON↔`:active` 映射同源）。因此 `:active` 规则同时覆盖"鼠标按下"与"已勾选"两种情形，使主题能用 `:active` 表达勾选态的强调外观。
 
 ### light.tycss 内置规则摘要
 
@@ -86,13 +88,16 @@ TyCheckBox {
   border-color: var(--border);     /* #D1D5DB */
   border-width: 1px;
   border-radius: 3px;              /* 轻微圆角 */
+  padding: 4px;                    /* Batch ④：内缩留白 */
 }
-TyCheckBox:hover    { border-color: var(--accent); }   /* 悬停时边框变蓝 */
-TyCheckBox:active   { background: var(--accent); }     /* 按下时方框变蓝 */
+TyCheckBox:hover    { border-color: var(--accent); }            /* 悬停时边框变蓝 */
+TyCheckBox:active   { background: var(--accent); color: #FFFFFF; }  /* 勾选/按下：accent 方框 + 白勾 */
 TyCheckBox:disabled { opacity: 0.5; }
 ```
 
 **渲染细节：** 勾选框尺寸固定为 16×16 逻辑像素（DPI 缩放），勾号（`tgCheck`）用 `TextColor` 绘制。勾选框与文字之间间距为 6 逻辑像素。主题的 `background`、`border-color`、`border-width` 样式作用于**小方块本身**，控件整体背景透明（无整体背景框）。`opacity` 和 `shadow` 属性经由 `DrawFrame` 路径生效（v1.1 已修复），可用于 `:disabled` 态等场景。
+
+**勾选 `:active` 复活（Batch ④）：** 勾选后控件进入 `:active`，主题规则把小方块填成 `var(--accent)`、并把 `color` 置为 `#FFFFFF` 使勾号（tier-b 字形）变白——**accent 方框 + 白勾**。这是"框内"效果：渲染时 **Caption 文字用一份去掉了 `tysActive` 的样式解析**，因此 `:active` 的 `color: #FFFFFF` 不会把标签文字也染白，标签保持常规前景色。规则同时加了 `padding: 4px` 使方块与文字相对控件边缘内缩留白。
 
 ---
 
@@ -134,7 +139,7 @@ ChkRemember.Enabled := False;
 - **点击即切换：** `Click` 方法中调用 `SetChecked(not FChecked)`，`OnClick` 触发时 `Checked` 已经是新值，可直接在事件处理器中读取。
 - **独立状态：** 每个 `TTyCheckBox` 独立维护自己的 `Checked`，不与其他复选框联动。如需单选互斥行为，应使用 `TTyRadioButton`。
 - **无 OnChange 事件：** 状态变化只通过 `OnClick` 通知，`SetChecked` 直接赋值不触发任何事件。
-- **:active 视觉效果：** 鼠标按下时，主题将勾选框背景变为 accent 蓝色（`var(--accent)`），这影响整个框的填充色，与文字颜色保持对比。
+- **:active 视觉效果（Batch ④）：** `:active` 现同时由"鼠标按下"与"已勾选（`Checked = True`）"触发（`CurrentStates` 重写）。主题规则把方框填成 accent 蓝（`var(--accent)`）、勾号变白（`color: #FFFFFF`），形成 accent 方框 + 白勾；**Caption 标签不受影响**——其文字色由一份剔除了 `tysActive` 的样式解析提供，故标签保持常规前景色。
 - **opacity / shadow 现已生效（v1.1）：** `DrawFrame` 路径现在同样应用于 `TTyCheckBox` 的外层绘制；`opacity` 和 `shadow` 属性可在主题中正常使用（例如 `TyCheckBox:disabled { opacity: 0.5; }`）。
 - **控件整体无背景：** 主题中的 `background` 和 `border` 只作用于小方块本身，控件整体（Caption 文字区域）保持透明，不绘制整体背景框。
 - **DFM 序列化：** `Checked` 声明了 `default False`，因此值为 `False` 时不写入 `.lfm`/`.dfm` 文件；值为 `True` 时才写入。

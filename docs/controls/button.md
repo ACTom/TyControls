@@ -82,11 +82,11 @@ TyButton {
   border-width: 1px;
   border-radius: var(--radius);      /* 6px */
   padding: 6px;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 400;
 }
-TyButton:hover    { background: darken(--surface, 4%); }
-TyButton:focus    { border-color: var(--accent); }      /* #3B82F6 */
+TyButton:hover    { background: darken(--surface, 4%); border-color: darken(--border, 10%); }  /* 悬停背景变深 + 描边加深（Batch ④） */
+TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }      /* #3B82F6 + 焦点环 */
 TyButton:active   { background: darken(--surface, 10%); }
 TyButton:disabled { opacity: 0.5; }
 

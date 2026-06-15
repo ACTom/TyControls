@@ -99,17 +99,27 @@ end;
 
 ```css
 TyProgressBar {
-  background: darken(--surface, 6%);
+  background: darken(--surface, 8%);
   border-color: var(--border);
   border-width: 1px;
   border-radius: var(--radius);
 }
+TyProgressBar:disabled { opacity: 0.5; }   /* 禁用半透明（Batch ④，状态等价性） */
 
 TyProgressFill {
   background: var(--accent);
   border-radius: var(--radius);
 }
 ```
+
+> **`:disabled`（Batch ④）：** `TyProgressBar` 现支持 `:disabled` 伪类，与 `TyScrollBar` / `TyTrackBar` / `TyTabControl` 一道补齐状态等价性。虽然进度条无交互，但仍可在父级随表单禁用时让进度条随之变淡，外观与其余控件一致。
+
+### 部分填充只圆起始角（Batch ④）
+
+填充段的圆角按填充比例分两种绘制：
+
+- **满填充**（`Position >= Max`）：填充块与轨道首尾齐平，四角都用 `TyProgressFill` 的 `border-radius` 圆角。
+- **部分填充**（`Position < Max`）：填充块**左对齐**，其前缘（右边）落在轨道中段。此时只圆**起始(左)的两角**（左上、左下），保留**前缘(右边)直角**——否则未到尾的填充会看起来像一颗悬浮的胶囊。换言之只有起点跟随轨道圆角，进度的"当前位置"边是平的。
 
 ---
 
@@ -151,4 +161,4 @@ end;
 2. **Position 自动夹紧：** `SetPosition` 在内部将值夹取到 `[Min, Max]`，赋值超界不报错也不触发异常，夹紧后若值未变化则不触发重绘。
 3. **Min/Max 改变时 Position 自动校正：** 修改 `Min` 或 `Max` 会无声地校正 `Position`（不触发 `OnChange`，因为此控件没有 `OnChange`），然后触发 `Invalidate`。
 4. **退化情形：** 当 `Max <= Min` 时，`TyProgressFillRect` 返回宽度为 0 的矩形，即进度条始终显示空。
-5. **填充段圆角：** `TyProgressFill` 的 `border-radius` 只影响填充块本身的圆角，不受 `TyProgressBar` 的圆角约束；若两者不一致，填充块可能超出轨道圆角范围，需在主题中手动对齐。
+5. **填充段圆角：** `TyProgressFill` 的 `border-radius` 只影响填充块本身的圆角，不受 `TyProgressBar` 的圆角约束；若两者不一致，填充块可能超出轨道圆角范围，需在主题中手动对齐。**部分填充**时只圆起始(左)两角、保留前缘(右)直角（见上文“部分填充只圆起始角”）；**满填充**时四角都圆。

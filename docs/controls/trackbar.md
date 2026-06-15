@@ -118,12 +118,15 @@ TyTrackBar {
   background: darken(--surface, 6%);  /* 轨道背景 */
   border-radius: 4px;
 }
-TyTrackBar:focus { border-color: var(--accent); border-width: 1px; }
+TyTrackBar:focus    { outline: 2px var(--focus-ring); }
+TyTrackBar:disabled { opacity: 0.5; }   /* 禁用态半透明，与其余控件状态一致 */
 
 TyTrackThumb { background: var(--border); border-radius: 4px; }
 TyTrackThumb:hover  { background: darken(--border, 10%); }
 TyTrackThumb:active { background: var(--accent); }
 ```
+
+> **`:disabled`（Batch ④）：** `TyTrackBar` 现支持 `:disabled` 伪类，与 `TyScrollBar` / `TyTabControl` / `TyProgressBar` 一道补齐状态等价性——`Enabled = False` 时整条轨道（含滑块、刻度）按 `opacity` 统一变淡。滑块子部件 `TyTrackThumb`（tier-a 着色面）的颜色独立于轨道，详见 [tycss-reference.md](../tycss-reference.md) §8.3。
 
 ### 刻度线（ticks）
 

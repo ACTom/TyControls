@@ -31,7 +31,7 @@ uses tyControls.Edit;
 | `ReadOnly` | `Boolean` | `False` | 为 `True` 时拦截用户编辑（打字/退格/删除/词级删除/粘贴），保留光标移动、选区、复制、全选；程序化 `Text :=` 仍可写；`CutToClipboard` 退化为 `CopyToClipboard`。 |
 | `MaxLength` | `Integer` | `0`（无限） | 按**码点**封顶；`0` 表示无限制；满则不再插入；粘贴时截断到余量。 |
 | `PasswordChar` | `string` | `''`（关闭） | 单个 UTF-8 码点（如 `'●'`）；渲染与宽度测量都用掩码字符替代实际内容；掩码激活时**禁用复制/剪切**（防明文外泄）。 |
-| `TextHint` | `string` | `''` | 占位符文本；仅在 `Text` 为空时绘制，颜色由 `TextColor` 派生并附加约 50% alpha（`$80`）。 |
+| `TextHint` | `string` | `''` | 占位符文本；仅在 `Text` 为空时绘制，颜色取子部件 typeKey `TyTextHint` 的 `color`（默认 `var(--muted)`，弱化前景）。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled`，控件不响应键盘/鼠标输入 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |
@@ -236,14 +236,22 @@ TyEdit {
   border-width: 1px;
   border-radius: var(--radius);      /* 6px */
   padding: 4px;
-  font-size: 10px;
+  font-size: 9px;
 }
 TyEdit:hover    { border-color: darken(--border, 10%); }
-TyEdit:focus    { border-color: var(--accent); }   /* #3B82F6，蓝色高亮边框 */
+TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }   /* 蓝色高亮边框 + 焦点环 */
 TyEdit:disabled { opacity: 0.5; }
+
+/* 选区底色与占位符颜色由独立子部件 typeKey 决定（Batch ④） */
+TyTextSelection { background: var(--selection); }   /* accent 着色的半透明选区带 */
+TyTextHint      { color: var(--muted); }            /* 占位符 / 提示文字 */
 ```
 
-聚焦时除边框变蓝外，渲染器还会在光标位置绘制一条 1px 宽的竖线（颜色与 `TextColor` 相同）。光标在运行期**闪烁**（约 530 ms 间隔，`TTimer` 懒创建并仅在句柄分配后启动）；无头测试与设计器中计时器不启动，光标保持静态，确保像素测试确定性。有选区时，选区底色为 `:focus` 的 `border-color`（即 `var(--accent)`）加 35% alpha（约 `#59` 十六进制 alpha），文字在其上正常绘制。
+聚焦时除边框变蓝外，渲染器还会在光标位置绘制一条 1px 宽的竖线（颜色与 `TextColor` 相同）。光标在运行期**闪烁**（约 530 ms 间隔，`TTimer` 懒创建并仅在句柄分配后启动）；无头测试与设计器中计时器不启动，光标保持静态，确保像素测试确定性。
+
+**选区底色（Batch ④）：** 有选区时，选区高亮带底色取子部件 typeKey **`TyTextSelection`** 的 `background`（默认 `var(--selection)` = `alpha(var(--accent), 0.30)`，accent 着色的半透明蓝带），文字在其上正常绘制。这取代了早前写死的"`:focus` 的 `border-color` 加 35% alpha（`$59`）"，使选区底色与 `TyListItem:active`（列表选中行）视觉同源，并可在主题中统一定制。详见 [tycss-reference.md](../tycss-reference.md) §3.3 / §8.2。
+
+**占位符颜色（Batch ④）：** `TextHint` 占位符文字颜色取子部件 typeKey **`TyTextHint`** 的 `color`（默认 `var(--muted)`），取代早前对 `TextColor` 叠加 `$80` alpha 的写死做法。
 
 ---
 
@@ -288,11 +296,11 @@ end;
 - **ReadOnly：** `ReadOnly = True` 时拦截打字/退格/删除/词级删除/粘贴；导航、选区、复制、全选、撤销/重做快捷键仍可用（但撤销/重做历史在只读模式下不会产生新步）；`CutToClipboard` 退化为 `CopyToClipboard`；`Text :=` 程序化赋值不受限制。
 - **MaxLength：** 按码点数（`UTF8Length`）计算总文本长度；满则新打字被拦截；粘贴时截断到余量（`FMaxLength - UTF8Length(FText)`）；`0` 为无限制。
 - **PasswordChar：** 赋值超过 1 个码点时自动截取首个码点；掩码激活时 `CopyToClipboard`/`CutToClipboard` 为空操作（防止明文外泄）；光标位置测量基于掩码字符串，保持与显示一致。
-- **TextHint：** 仅在 `FText = ''` 时绘制；颜色为 `TextColor` 的 RGB 分量加 `$80`（约 50%）alpha 透明度。
+- **TextHint：** 仅在 `FText = ''` 时绘制；颜色取子部件 typeKey `TyTextHint` 的 `color`（默认 `var(--muted)`，弱化前景）——见上方「占位符颜色」。
 - **光标闪烁：** 聚焦时以约 530 ms 间隔启动闪烁；`TTimer` 懒创建，仅在 `HandleAllocated` 后启动，因此无头测试与设计器中光标静态、像素测试确定性不变。
 - **OnChange 事件（v1.12 新增）：** 自 v1.12 起提供 published `OnChange`，文本因键盘编辑/剪贴板/撤销/重做变化时触发；`Text :=` 赋值不触发。详见「撤销 / 重做」节。
 - **鼠标操作：** 单击定位光标（`CaretIndexAtX` 计算最近码点边界）；左键按住拖动扩展选区；双击全选（`SelectAll`）。
-- **选区底色：** 选区使用 `:focus` 规则的 `border-color` 加 35% alpha（约 `$59` alpha byte），在浅色主题下表现为半透明蓝色带。
+- **选区底色：** 选区底色取子部件 typeKey `TyTextSelection` 的 `background`（默认 `var(--selection)`，即 accent 着色的半透明），在浅色主题下表现为半透明蓝色带；与列表选中行（`TyListItem:active`）视觉同源。见上方「选区底色（Batch ④）」。
 - **粘贴剥离换行：** `PasteFromClipboard` 会过滤掉剪贴板文本中所有的 CR（`#13`）和 LF（`#10`）字符，因为这是单行控件。
 - **词级导航（v1.8）：** `Ctrl`（Windows/Linux）或 `Alt`（macOS Option，`ssAlt`）+左右键实现词级光标移动；带 Shift 时为词级扩展选区；`Ctrl/Alt`+`Backspace`/`Delete` 删除前一个/后一个词。词边界基于 Unicode 码点，词字符 = 非空白且非 ASCII 标点。详见上方「词级导航」小节。这些组合会消费按键，不再透传。
 - **`Cmd`/Meta+方向键透传：** 仅 `Cmd`（macOS Command，`ssMeta`，无 Shift）+方向键以及 `Ctrl/Alt/Meta`（无 Shift）+`Home`/`End` 不被消费（`Key` 不置 0），透传给父窗口/系统，留作整行移动等用途。

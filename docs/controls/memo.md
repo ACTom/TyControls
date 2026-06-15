@@ -80,7 +80,7 @@ TTyMemo 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制
 
 > **注意：** 当 `Enabled = False` 时所有键盘/滚轮输入都不生效，且 `KeyDown` 不消费按键（导航可下传）。
 >
-> **选区渲染：** 存在选区时，每条可见逻辑行在文本下方绘制一条**选区高亮带**（selection band）——内部整行的覆盖整行宽度，起始行/结束行只覆盖选中的 x 区间（与 `TTyEdit` 同源）；选区存在期间不绘制光标。剪贴板的读写经由可被测试覆写的虚方法 `ReadClipboardText` / `WriteClipboardText`（与 `TTyEdit` 一致，便于无头环境断言）。
+> **选区渲染：** 存在选区时，每条可见逻辑行在文本下方绘制一条**选区高亮带**（selection band）——内部整行的覆盖整行宽度，起始行/结束行只覆盖选中的 x 区间（与 `TTyEdit` 同源）；选区存在期间不绘制光标。选区带底色取子部件 typeKey **`TyTextSelection`** 的 `background`（默认 `var(--selection)`，accent 着色的半透明），与 `TTyEdit` 选区、`TyListItem:active` 选中行视觉同源（Batch ④，取代早前写死的 `:focus border-color + 35% alpha`）。剪贴板的读写经由可被测试覆写的虚方法 `ReadClipboardText` / `WriteClipboardText`（与 `TTyEdit` 一致，便于无头环境断言）。
 
 ---
 
@@ -115,11 +115,14 @@ TyMemo {
   border-width: 1px;
   border-radius: var(--radius);
   padding: 4px;
-  font-size: 10px;
+  font-size: 9px;
 }
 TyMemo:hover    { border-color: darken(--border, 10%); }
-TyMemo:focus    { border-color: var(--accent); }
+TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyMemo:disabled { opacity: 0.5; }
+
+/* 多行选区高亮带底色（与 TTyEdit 同源，Batch ④） */
+TyTextSelection { background: var(--selection); }
 ```
 
 > 该样式块同时存在于 `themes/light.tycss`、`themes/dark.tycss`、`themes/showcase.tycss`，并与内置兜底皮肤 `TyBuiltinThemeCss` 中的 `TyMemo` 块逐字一致——因此未加载任何主题、或在设计器中拖放时控件也有合理外观。

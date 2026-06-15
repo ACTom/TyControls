@@ -157,14 +157,23 @@ TyListBox {
   border-color: var(--border);
   border-width: 1px;
   border-radius: var(--radius);
-  padding: 4px;
+  padding: 2px;
 }
-TyListBox:focus { border-color: var(--accent); }
+TyListBox:hover    { border-color: darken(--border, 10%); }
+TyListBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyListBox:disabled { opacity: 0.5; }
 
-TyListItem { color: var(--on-surface); padding: 2px 4px; }
-TyListItem:hover  { background: darken(--surface, 4%); }
+TyListItem {
+  background: alpha(#000000, 0);   /* 普通行透明 */
+  color: var(--on-surface);
+  border-radius: var(--radius);    /* 圆角行（Batch ④） */
+  padding: 4px;                    /* 行内缩，使圆角行背景不贴满边缘 */
+}
+TyListItem:hover  { background: darken(--surface, 5%); }
 TyListItem:active { background: var(--accent); color: #FFFFFF; }
 ```
+
+> **圆角行（Batch ④）：** `TyListItem` 现内置 `border-radius: var(--radius)` 与 `padding: 4px`，使悬停 / 选中行呈现圆角胶囊外观（而非贴满整行宽度的直角条）。`padding` 让行背景沿四周内缩留白，与 `TyListBox` 自身的圆角风格一致。要回到旧版直角满宽行，把 `TyListItem { border-radius: 0; padding: 2px 4px; }` 即可。
 
 ### 内嵌滚动条
 
