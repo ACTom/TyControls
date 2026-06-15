@@ -11,6 +11,7 @@ type
   private
     FMin, FMax, FPosition: Integer;
     FOrientation: TTyTrackOrientation;
+    FFrequency: Integer;
     FOnChange: TNotifyEvent;
     FDragging: Boolean;
     FThumbHover: Boolean;
@@ -18,6 +19,7 @@ type
     procedure SetMax(const AValue: Integer);
     procedure SetPosition(const AValue: Integer);
     procedure SetOrientation(const AValue: TTyTrackOrientation);
+    procedure SetFrequency(const AValue: Integer);
     function ThumbWAtPPI(APPI: Integer): Integer;
     function MainLen: Integer;
     function Inverted: Boolean;
@@ -39,6 +41,7 @@ type
     property Max: Integer read FMax write SetMax default 100;
     property Position: Integer read FPosition write SetPosition default 0;
     property Orientation: TTyTrackOrientation read FOrientation write SetOrientation default toHorizontal;
+    property Frequency: Integer read FFrequency write SetFrequency default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property Align;
     property Anchors;
@@ -87,6 +90,7 @@ begin
   FMax := 100;
   FPosition := 0;
   FOrientation := toHorizontal;
+  FFrequency := 0;
   FDragging := False;
   FThumbHover := False;
   Width := 160;
@@ -177,6 +181,15 @@ begin
   Invalidate;
 end;
 
+procedure TTyTrackBar.SetFrequency(const AValue: Integer);
+begin
+  if AValue < 0 then
+    FFrequency := 0
+  else
+    FFrequency := AValue;
+  Invalidate;
+end;
+
 procedure TTyTrackBar.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
@@ -256,6 +269,8 @@ var
   R, ThumbR: TRect;
   ThumbStates: TTyStateSet;
   TW, MLen, Off: Integer;
+  TickFill: TTyFill;
+  TickLen, TickW, V, TickOff, C: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -291,6 +306,31 @@ begin
 
     if (tpBackground in ThumbS.Present) then
       P.FillBackground(ThumbR, ThumbS.Background, ThumbS.BorderRadius);
+
+    // Tick marks: one every FFrequency value-units, lined up with where the
+    // thumb centre would sit at value v. Theme-driven color (S.TextColor).
+    if (FFrequency > 0) and (FMax > FMin) then
+    begin
+      TickLen := P.Scale(4);
+      TickW := P.Scale(1);
+      if TickW < 1 then TickW := 1;
+      TickFill := Default(TTyFill);
+      TickFill.Kind := tfkSolid;
+      TickFill.Color := S.TextColor;
+      V := FMin;
+      while V <= FMax do
+      begin
+        TickOff := TyTrackThumbOffset(MLen, TW, FMin, FMax, V, Inverted);
+        C := TickOff + TW div 2;
+        if FOrientation = toVertical then
+          P.FillBackground(Rect(R.Right - TickLen, R.Top + C,
+            R.Right, R.Top + C + TickW), TickFill, 0)
+        else
+          P.FillBackground(Rect(R.Left + C, R.Bottom - TickLen,
+            R.Left + C + TickW, R.Bottom), TickFill, 0);
+        Inc(V, FFrequency);
+      end;
+    end;
 
     P.EndPaint;
   finally

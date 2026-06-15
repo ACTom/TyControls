@@ -57,6 +57,7 @@ type
     procedure TestThumbPixelBlueAtPos0;
     { A1 regression: non-zero origin ARect must not displace thumb relative to track }
     procedure TestOffsetOriginThumbPositionConsistent;
+    procedure TestFrequencyDrawsTicks;
   end;
 
 implementation
@@ -538,6 +539,63 @@ begin
     Form.Free;
     Ctl.Free;
   end;
+end;
+
+procedure TTyTrackBarPixelTest.TestFrequencyDrawsTicks;
+{ White track background + black tick color so the bottom strip is white when
+  Frequency=0 and gains dark tick ink when Frequency=20. (The default theme
+  paints the groove across the full control height, which would otherwise fill
+  the bottom strip regardless of Frequency.) }
+  function HasTickInk(F: Integer): Boolean;
+  var
+    Ctl: TTyStyleController;
+    T: TTyTrackBarProbe;
+    bmp: TBitmap;
+    reread: TBGRABitmap;
+    x, y: Integer;
+    px: TBGRAPixel;
+  begin
+    Result := False;
+    Ctl := TTyStyleController.Create(nil);
+    T := TTyTrackBarProbe.Create(nil);
+    bmp := TBitmap.Create;
+    try
+      Ctl.LoadThemeCss(
+        'TyTrackBar { background: #FFFFFF; color: #000000; border-width: 0px; border-radius: 0px; }' +
+        'TyTrackThumb { background: #FFFFFF; border-radius: 0px; }');
+      T.Controller := Ctl;
+      T.Orientation := toHorizontal;
+      T.Min := 0;
+      T.Max := 100;
+      T.Frequency := F;
+      T.Font.PixelsPerInch := 96;
+      T.SetBounds(0, 0, 160, 40);
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(160, 40);
+      bmp.Canvas.Brush.Color := clWhite;
+      bmp.Canvas.FillRect(0, 0, 160, 40);
+      T.RenderTo(bmp.Canvas, Rect(0, 0, 160, 40), 96);
+      reread := TBGRABitmap.Create(bmp);
+      try
+        for x := 0 to 159 do
+          for y := 30 to 39 do   // tick zone: bottom strip
+          begin
+            px := reread.GetPixel(x, y);
+            if (px.red < 200) or (px.green < 200) or (px.blue < 200) then
+              Result := True;
+          end;
+      finally
+        reread.Free;
+      end;
+    finally
+      bmp.Free;
+      T.Free;
+      Ctl.Free;
+    end;
+  end;
+begin
+  AssertFalse('no ticks when Frequency=0', HasTickInk(0));
+  AssertTrue('ticks present when Frequency=20', HasTickInk(20));
 end;
 
 initialization
