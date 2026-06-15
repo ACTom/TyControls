@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, LazUTF8, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.SpinEdit;
+  tyControls.DefaultTheme, tyControls.SpinEdit;
 type
   { Probe subclass: exposes protected RenderTo and input handlers }
   TTySpinEditProbe = class(TTySpinEdit)
@@ -28,6 +28,7 @@ type
     procedure SetEditTextForTest(const S: string);
     procedure RenderToForTest(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function CaretXForTest(AIdx: Integer): Integer;
+    function ResolvedFontSizeForTest: Integer;
   end;
 
   TChangeCounter = class
@@ -95,6 +96,14 @@ type
     procedure TestSpinCaretXMonotonic;
   end;
 
+  TTySpinEditFontSizeTest = class(TTestCase)
+  private
+    FCtl: TTyStyleController;
+  published
+    procedure TestResolvedFontSizeMatchesTheme;
+    procedure TestTextRenderedAtResolvedSizeNotOrphan12;
+  end;
+
 implementation
 
 procedure TChangeCounter.Handle(Sender: TObject);
@@ -115,6 +124,8 @@ procedure TTySpinAccess.RenderToForTest(ACanvas: TCanvas; const ARect: TRect; AP
 begin RenderTo(ACanvas, ARect, APPI); end;
 function TTySpinAccess.CaretXForTest(AIdx: Integer): Integer;
 begin Result := CaretPixelX(AIdx, 96); end;
+function TTySpinAccess.ResolvedFontSizeForTest: Integer;
+begin Result := ResolveFontSize(CurrentStyle); end;
 
 { TTySpinEditEditModelTest }
 
@@ -533,10 +544,106 @@ begin
   finally S.Free; end;
 end;
 
+{ TTySpinEditFontSizeTest }
+
+{ Measures the vertical extent (top..bottom span) of the digit ink that the
+  SpinEdit draws for its edit buffer, so a smaller font => a shorter span. }
+function SpinInkHeight(S: TTySpinAccess): Integer;
+var
+  bmp: TBitmap; reread: TBGRABitmap; x, y: Integer; px: TBGRAPixel;
+  minY, maxY: Integer;
+begin
+  minY := 9999; maxY := -1;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit; bmp.SetSize(120, 28);
+    bmp.Canvas.Brush.Color := clWhite; bmp.Canvas.FillRect(0, 0, 120, 28);
+    S.RenderToForTest(bmp.Canvas, Rect(0, 0, 120, 28), 96);
+    reread := TBGRABitmap.Create(bmp);
+    try
+      { scan the text column only (left of the spin buttons at x>=102) }
+      for x := 2 to 80 do
+        for y := 0 to 27 do
+        begin
+          px := reread.GetPixel(x, y);
+          if (px.red < 160) and (px.green < 160) and (px.blue < 160) then
+          begin
+            if y < minY then minY := y;
+            if y > maxY then maxY := y;
+          end;
+        end;
+    finally reread.Free; end;
+  finally bmp.Free; end;
+  if maxY < 0 then Result := 0 else Result := maxY - minY + 1;
+end;
+
+procedure TTySpinEditFontSizeTest.TestResolvedFontSizeMatchesTheme;
+{ Under the built-in theme (TySpinEdit font-size:9px), SpinEdit must route its
+  text size through ResolveFontSize and get 9 — NOT the orphan literal 12. }
+var
+  Form: TForm; S: TTySpinAccess;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  try
+    FCtl.LoadThemeCss(TyBuiltinThemeCss);
+    S := TTySpinAccess.Create(Form);
+    S.Parent := Form;
+    S.Controller := FCtl;
+    S.Font.PixelsPerInch := 96;
+    AssertEquals('SpinEdit resolves theme font-size 9 (not orphan 12)',
+      9, S.ResolvedFontSizeForTest);
+  finally
+    Form.Free;
+    FCtl.Free;
+  end;
+end;
+
+procedure TTySpinEditFontSizeTest.TestTextRenderedAtResolvedSizeNotOrphan12;
+{ With NO theme font-size and Font.Size=0, the old code fell back to the orphan
+  literal 12; the fix routes through ResolveFontSize -> default 9. A 9pt digit's
+  ink span must be shorter than the same digit measured at 12pt, proving the
+  rendered text (and the shared caret/measure path) now honor the resolved size. }
+var
+  Form: TForm; Ctl9, Ctl12: TTyStyleController; S9, S12: TTySpinAccess;
+  h9, h12: Integer;
+begin
+  Form := TForm.CreateNew(nil);
+  Ctl9 := TTyStyleController.Create(nil);
+  Ctl12 := TTyStyleController.Create(nil);
+  try
+    { themes carry no font-size => render must lean on ResolveFontSize (->9) }
+    Ctl9.LoadThemeCss(
+      'TySpinEdit { background: #FFFFFF; color: #000000; border-width: 0px; padding: 2px; }');
+    { an explicit 12px theme gives the reference extent for "the old orphan size" }
+    Ctl12.LoadThemeCss(
+      'TySpinEdit { background: #FFFFFF; color: #000000; border-width: 0px; padding: 2px; font-size: 12px; }');
+
+    S9 := TTySpinAccess.Create(Form);
+    S9.Parent := Form; S9.Controller := Ctl9; S9.Font.PixelsPerInch := 96;
+    S9.SetEditTextForTest('88');
+    h9 := SpinInkHeight(S9);
+
+    S12 := TTySpinAccess.Create(Form);
+    S12.Parent := Form; S12.Controller := Ctl12; S12.Font.PixelsPerInch := 96;
+    S12.SetEditTextForTest('88');
+    h12 := SpinInkHeight(S12);
+
+    AssertTrue('9px digit ink renders (some ink)', h9 > 0);
+    AssertTrue('9px digit ink span is shorter than 12px (text honors resolved size, not orphan 12)',
+      h9 < h12);
+  finally
+    Form.Free;
+    Ctl9.Free;
+    Ctl12.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTySpinEditGeometryTest);
   RegisterTest(TTySpinEditControlTest);
   RegisterTest(TTySpinEditPixelTest);
   RegisterTest(TTySpinEditEditModelTest);
   RegisterTest(TTySpinEditRenderTest);
+  RegisterTest(TTySpinEditFontSizeTest);
 end.

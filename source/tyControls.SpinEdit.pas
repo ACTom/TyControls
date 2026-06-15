@@ -216,7 +216,7 @@ var
   EffSize: Integer;
 begin
   S := CurrentStyle;
-  EffSize := S.FontSize; if EffSize <= 0 then EffSize := 12;
+  EffSize := ResolveFontSize(S);   // theme font-size > Font.Size > 9; shared with RenderTo so caret stays aligned
   Result := MulDiv(S.Padding.Left, APPI, 96);   // local-left text start
   if (FEditText = '') or (AIdx <= 0) then Exit;
   if AIdx > UTF8Length(FEditText) then AIdx := UTF8Length(FEditText);
@@ -298,7 +298,7 @@ begin
     BtnW := P.Scale(18);
     TextR := Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
-    EffSize := S.FontSize; if EffSize <= 0 then EffSize := 12;
+    EffSize := ResolveFontSize(S);   // same size feeds DrawText and CaretPixelX (caret alignment)
     P.DrawText(TextR, FEditText, S.FontName, EffSize, S.FontWeight,
       S.TextColor, taLeftJustify, tlCenter, True);
     P.DrawGlyph(UpR, tgArrowUp, S.TextColor, 2);
