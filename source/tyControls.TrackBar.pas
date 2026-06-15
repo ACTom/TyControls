@@ -5,17 +5,22 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 type
+  TTyTrackOrientation = (toHorizontal, toVertical);
+
   TTyTrackBar = class(TTyCustomControl)
   private
     FMin, FMax, FPosition: Integer;
+    FOrientation: TTyTrackOrientation;
     FOnChange: TNotifyEvent;
     FDragging: Boolean;
     FThumbHover: Boolean;
     procedure SetMin(const AValue: Integer);
     procedure SetMax(const AValue: Integer);
     procedure SetPosition(const AValue: Integer);
+    procedure SetOrientation(const AValue: TTyTrackOrientation);
     function ThumbWAtPPI(APPI: Integer): Integer;
-    function TravelAtPPI(APPI: Integer): Integer;
+    function MainLen: Integer;
+    function Inverted: Boolean;
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -28,11 +33,12 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     function ThumbRect: TRect;
-    procedure DragTo(AXAlongTrack: Integer);
+    procedure DragTo(APos: Integer);
   published
     property Min: Integer read FMin write SetMin default 0;
     property Max: Integer read FMax write SetMax default 100;
     property Position: Integer read FPosition write SetPosition default 0;
+    property Orientation: TTyTrackOrientation read FOrientation write SetOrientation default toHorizontal;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property Align;
     property Anchors;
@@ -42,7 +48,34 @@ type
     property OnClick;
   end;
 
+function TyTrackThumbOffset(AMainLen, AThumbLen, AMin, AMax, APos: Integer; AInvert: Boolean): Integer;
+function TyTrackPosFromOffset(AMainLen, AThumbLen, AMin, AMax, AOffset: Integer; AInvert: Boolean): Integer;
+
 implementation
+
+function TyTrackThumbOffset(AMainLen, AThumbLen, AMin, AMax, APos: Integer; AInvert: Boolean): Integer;
+var travel, span, eff: Integer;
+begin
+  travel := AMainLen - AThumbLen;
+  span := AMax - AMin;
+  if (travel <= 0) or (span <= 0) then Exit(0);
+  if APos < AMin then APos := AMin;
+  if APos > AMax then APos := AMax;
+  if AInvert then eff := AMax - APos else eff := APos - AMin;   // distance from the "0-offset" end
+  Result := (travel * eff + span div 2) div span;
+end;
+
+function TyTrackPosFromOffset(AMainLen, AThumbLen, AMin, AMax, AOffset: Integer; AInvert: Boolean): Integer;
+var travel, span, eff: Integer;
+begin
+  travel := AMainLen - AThumbLen;
+  span := AMax - AMin;
+  if (travel <= 0) or (span <= 0) then Exit(AMin);
+  if AOffset < 0 then AOffset := 0;
+  if AOffset > travel then AOffset := travel;
+  eff := (AOffset * span + travel div 2) div travel;
+  if AInvert then Result := AMax - eff else Result := AMin + eff;
+end;
 
 { TTyTrackBar }
 
@@ -53,6 +86,7 @@ begin
   FMin := 0;
   FMax := 100;
   FPosition := 0;
+  FOrientation := toHorizontal;
   FDragging := False;
   FThumbHover := False;
   Width := 160;
@@ -70,43 +104,40 @@ begin
   if Result < 1 then Result := 1;
 end;
 
-function TTyTrackBar.TravelAtPPI(APPI: Integer): Integer;
+function TTyTrackBar.MainLen: Integer;
 begin
-  Result := ClientWidth - ThumbWAtPPI(APPI);
-  if Result < 0 then Result := 0;
+  if FOrientation = toVertical then Result := ClientHeight
+  else Result := ClientWidth;
+end;
+
+function TTyTrackBar.Inverted: Boolean;
+begin
+  Result := (FOrientation = toVertical);
 end;
 
 function TTyTrackBar.ThumbRect: TRect;
 var
-  TW, Tr, ThumbLeft: Integer;
+  TW, Off: Integer;
   PPI: Integer;
 begin
   PPI := Font.PixelsPerInch;
   TW := ThumbWAtPPI(PPI);
-  Tr := TravelAtPPI(PPI);
-  if (FMax <= FMin) or (Tr <= 0) then
-    ThumbLeft := 0
+  Off := TyTrackThumbOffset(MainLen, TW, FMin, FMax, FPosition, Inverted);
+  if FOrientation = toVertical then
+    Result := Rect(0, Off, ClientWidth, Off + TW)
   else
-    ThumbLeft := (Tr * (FPosition - FMin) + (FMax - FMin) div 2) div (FMax - FMin);
-  Result := Rect(ThumbLeft, 0, ThumbLeft + TW, ClientHeight);
+    Result := Rect(Off, 0, Off + TW, ClientHeight);
 end;
 
-procedure TTyTrackBar.DragTo(AXAlongTrack: Integer);
+procedure TTyTrackBar.DragTo(APos: Integer);
 var
-  TW, Tr, NewLeft, NewPos: Integer;
+  TW, Off: Integer;
   PPI: Integer;
 begin
   PPI := Font.PixelsPerInch;
   TW := ThumbWAtPPI(PPI);
-  Tr := TravelAtPPI(PPI);
-  NewLeft := AXAlongTrack - TW div 2;
-  if NewLeft < 0 then NewLeft := 0;
-  if NewLeft > Tr then NewLeft := Tr;
-  if Tr <= 0 then
-    NewPos := FMin
-  else
-    NewPos := FMin + (NewLeft * (FMax - FMin) + Tr div 2) div Tr;
-  Position := NewPos;
+  Off := APos - TW div 2;
+  Position := TyTrackPosFromOffset(MainLen, TW, FMin, FMax, Off, Inverted);
 end;
 
 procedure TTyTrackBar.SetMin(const AValue: Integer);
@@ -139,6 +170,13 @@ begin
     FOnChange(Self);
 end;
 
+procedure TTyTrackBar.SetOrientation(const AValue: TTyTrackOrientation);
+begin
+  if FOrientation = AValue then Exit;
+  FOrientation := AValue;
+  Invalidate;
+end;
+
 procedure TTyTrackBar.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not Enabled then Exit;
@@ -164,7 +202,7 @@ begin
   if Button = mbLeft then
   begin
     FDragging := True;
-    DragTo(X);
+    if FOrientation = toVertical then DragTo(Y) else DragTo(X);
     Invalidate;
   end;
 end;
@@ -178,7 +216,7 @@ begin
   inherited MouseMove(Shift, X, Y);
   if FDragging then
   begin
-    DragTo(X);
+    if FOrientation = toVertical then DragTo(Y) else DragTo(X);
     Invalidate;
   end
   else
@@ -217,7 +255,7 @@ var
   S, ThumbS: TTyStyleSet;
   R, ThumbR: TRect;
   ThumbStates: TTyStateSet;
-  TW, Tr, ThumbLeft: Integer;
+  TW, MLen, Off: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -226,16 +264,20 @@ begin
     S := CurrentStyle;
     DrawFrame(P, R, S);
 
-    // Compute thumb geometry using APPI for pixel-exact rendering
+    // Compute thumb geometry using APPI for pixel-exact rendering.
+    // Horizontal goes through the non-inverted branch of TyTrackThumbOffset,
+    // which equals the legacy formula exactly (pixel regression).
     TW := MulDiv(12, APPI, 96);
     if TW < 1 then TW := 1;
-    Tr := (R.Right - R.Left) - TW;
-    if Tr < 0 then Tr := 0;
-    if (FMax <= FMin) or (Tr <= 0) then
-      ThumbLeft := 0
+    if FOrientation = toVertical then
+      MLen := R.Bottom - R.Top
     else
-      ThumbLeft := (Tr * (FPosition - FMin) + (FMax - FMin) div 2) div (FMax - FMin);
-    ThumbR := Rect(R.Left + ThumbLeft, R.Top, R.Left + ThumbLeft + TW, R.Bottom);
+      MLen := R.Right - R.Left;
+    Off := TyTrackThumbOffset(MLen, TW, FMin, FMax, FPosition, Inverted);
+    if FOrientation = toVertical then
+      ThumbR := Rect(R.Left, R.Top + Off, R.Right, R.Top + Off + TW)
+    else
+      ThumbR := Rect(R.Left + Off, R.Top, R.Left + Off + TW, R.Bottom);
 
     // Resolve thumb style with hover/drag states
     ThumbStates := [];

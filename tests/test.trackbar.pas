@@ -26,6 +26,8 @@ type
     procedure TestThumbRectPos0Left;
     procedure TestThumbRectPos100Right;
     procedure TestThumbRectPos50Centered;
+    procedure TestTrackThumbOffsetPureFns;
+    procedure TestVerticalThumbRectTopIsMax;
   end;
 
   TTyTrackBarControlTest = class(TTestCase)
@@ -153,6 +155,49 @@ begin
     AssertEquals('Pos=50: thumb Left = 94', 94, R.Left);
   finally
     Form.Free;
+  end;
+end;
+
+procedure TTyTrackBarGeometryTest.TestTrackThumbOffsetPureFns;
+var
+  off, pos: Integer;
+begin
+  // horizontal (invert=False): pos0 -> offset 0; posMax -> offset travel
+  AssertEquals('h pos=min off=0', 0, TyTrackThumbOffset(160, 12, 0, 100, 0, False));
+  AssertEquals('h pos=max off=travel', 148, TyTrackThumbOffset(160, 12, 0, 100, 100, False));
+  AssertEquals('h pos=50 mid', 74, TyTrackThumbOffset(160, 12, 0, 100, 50, False));
+  // vertical (invert=True): pos=max -> offset 0 (top), pos=min -> offset travel (bottom)
+  AssertEquals('v pos=max off=0(top)', 0, TyTrackThumbOffset(160, 12, 0, 100, 100, True));
+  AssertEquals('v pos=min off=travel(bottom)', 148, TyTrackThumbOffset(160, 12, 0, 100, 0, True));
+  // round-trip
+  off := TyTrackThumbOffset(160, 12, 0, 100, 37, False);
+  pos := TyTrackPosFromOffset(160, 12, 0, 100, off, False);
+  AssertTrue('h round-trip ~37', Abs(pos - 37) <= 1);
+  off := TyTrackThumbOffset(160, 12, 0, 100, 37, True);
+  pos := TyTrackPosFromOffset(160, 12, 0, 100, off, True);
+  AssertTrue('v round-trip ~37', Abs(pos - 37) <= 1);
+end;
+
+procedure TTyTrackBarGeometryTest.TestVerticalThumbRectTopIsMax;
+var
+  T: TTyTrackBarProbe;
+  r: TRect;
+begin
+  T := TTyTrackBarProbe.Create(nil);
+  try
+    T.Orientation := toVertical;
+    T.SetBounds(0, 0, 24, 160);
+    T.Font.PixelsPerInch := 96;
+    T.Min := 0;
+    T.Max := 100;
+    T.Position := 100;     // max -> thumb at TOP
+    r := T.ThumbRect;
+    AssertTrue('vertical max thumb near top', r.Top <= 2);
+    T.Position := 0;       // min -> thumb at BOTTOM
+    r := T.ThumbRect;
+    AssertTrue('vertical min thumb near bottom', r.Bottom >= 158);
+  finally
+    T.Free;
   end;
 end;
 
