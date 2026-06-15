@@ -34,6 +34,10 @@ type
     // and return True iff the eased progress changed. Tests drive this directly
     // via an access subclass; the lazy TTimer drives it at runtime.
     function AdvanceAnimation(AMs: Integer): Boolean;
+    // Arm the knob slide toward ATarget without snapping (Progress is left where
+    // it is so AdvanceAnimation can interpolate). Test seam only — at runtime
+    // the slide is driven by SetChecked + the lazy TTimer.
+    procedure ArmKnobAnim(ATarget: Single);
     // Raw (un-eased) knob progress, 0..1. Exposed for deterministic tests.
     property KnobAnimProgress: Single read GetKnobAnimProgress;
   public
@@ -41,9 +45,10 @@ type
     destructor Destroy; override;
     procedure Toggle;
     procedure Click; override;
-    // When enabled and the control has a window handle, flipping Checked
-    // animates the knob slide; otherwise it snaps (the headless/test default).
-    property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default False;
+    // On by default. When enabled and the control has a window handle, flipping
+    // Checked animates the knob slide; with no handle (every render test) it
+    // snaps, preserving the existing exact-pixel toggle tests.
+    property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default True;
   published
     property Checked: Boolean read FChecked write SetChecked default False;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
@@ -75,7 +80,7 @@ begin
   inherited Create(AOwner);
   TabStop := True;
   FChecked := False;
-  FAnimationsEnabled := False;
+  FAnimationsEnabled := True;
   // Knob slide animator: rest at 0 (off), ~120ms full traversal, decelerating.
   FKnobAnim.Progress := 0;
   FKnobAnim.Target := 0;
@@ -110,20 +115,17 @@ begin
   if FChecked = AValue then Exit;
   FChecked := AValue;
   FKnobAnim.Target := Ord(AValue);
-  if FAnimationsEnabled then
+  if FAnimationsEnabled and HandleAllocated then
   begin
-    // Animate: keep the current raw progress and let the driver step the knob
-    // toward the new target. At runtime (window handle present) a lazy TTimer
-    // owns the clock; tests step AdvanceAnimation manually. Do NOT snap here.
-    if HandleAllocated then
-    begin
-      EnsureTimer;
-      FTimer.Enabled := True;
-    end;
+    // Animate: keep the current raw progress and let the lazy TTimer step the
+    // knob toward the new target. Only reachable with a real window handle.
+    EnsureTimer;
+    FTimer.Enabled := True;
   end
   else
-    // Animations off (the headless/test default): snap so paint is correct
-    // immediately — this preserves the existing exact-pixel toggle tests.
+    // Headless (no window handle) or animations off: snap so paint is correct
+    // immediately. Because every render test runs handle-less, this keeps the
+    // existing exact-pixel toggle tests green regardless of the default.
     FKnobAnim.SetTargetImmediate(Ord(AValue));
   Invalidate;
   if Assigned(FOnChange) then
@@ -152,6 +154,11 @@ end;
 function TTyToggleSwitch.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   Result := FKnobAnim.Advance(AMs);
+end;
+
+procedure TTyToggleSwitch.ArmKnobAnim(ATarget: Single);
+begin
+  FKnobAnim.Target := ATarget;
 end;
 
 function TTyToggleSwitch.GetKnobAnimProgress: Single;

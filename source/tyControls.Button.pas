@@ -24,16 +24,20 @@ type
     // and return True iff the eased progress changed. Tests drive this directly
     // via an access subclass; the lazy TTimer drives it at runtime.
     function AdvanceAnimation(AMs: Integer): Boolean;
+    // Arm the bg-fade toward ATarget without snapping (Progress is left where it
+    // is so AdvanceAnimation can interpolate). Test seam only — at runtime the
+    // hover path is driven by MouseEnter/MouseLeave + the lazy TTimer.
+    procedure ArmBgAnim(ATarget: Single);
     // Raw (un-eased) fade progress, 0..1. Exposed for deterministic tests.
     property BgAnimProgress: Single read GetBgAnimProgress;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Click; override;
-    // When enabled and the control has a window handle, hovering fades the
-    // background between the normal and hover styles; otherwise it snaps (the
-    // headless/test default), preserving the existing exact-pixel paint tests.
-    property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default False;
+    // On by default. When enabled and the control has a window handle, hovering
+    // fades the background between the normal and hover styles; with no handle
+    // (every render test) it snaps, preserving the existing exact-pixel paint tests.
+    property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default True;
   published
     property Caption;
     property Enabled;
@@ -49,7 +53,7 @@ implementation
 constructor TTyButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FAnimationsEnabled := False;
+  FAnimationsEnabled := True;
   // Hover bg-fade animator: rest at 0 (normal), ~120ms full traversal,
   // decelerating. Mirrors the ToggleSwitch knob-slide timing.
   FBgAnim.Progress := 0;
@@ -112,6 +116,11 @@ begin
   Result := FBgAnim.Advance(AMs);
 end;
 
+procedure TTyButton.ArmBgAnim(ATarget: Single);
+begin
+  FBgAnim.Target := ATarget;
+end;
+
 function TTyButton.GetBgAnimProgress: Single;
 begin
   Result := FBgAnim.Progress;
@@ -121,20 +130,17 @@ procedure TTyButton.MouseEnter;
 begin
   inherited MouseEnter;  // sets FHover := True; Invalidate
   FBgAnim.Target := 1;
-  if FAnimationsEnabled then
+  if FAnimationsEnabled and HandleAllocated then
   begin
-    // Animate: keep the current raw progress and let the driver step the fade
-    // toward the hover target. At runtime (window handle present) a lazy TTimer
-    // owns the clock; tests step AdvanceAnimation manually. Do NOT snap here.
-    if HandleAllocated then
-    begin
-      EnsureTimer;
-      FTimer.Enabled := True;
-    end;
+    // Animate: keep the current raw progress and let the lazy TTimer step the
+    // fade toward the hover target. Only reachable with a real window handle.
+    EnsureTimer;
+    FTimer.Enabled := True;
   end
   else
-    // Animations off (the headless/test default): snap so paint is correct
-    // immediately — this preserves the existing exact-pixel button tests.
+    // Headless (no window handle) or animations off: snap so paint is correct
+    // immediately. Because every render test runs handle-less, this keeps the
+    // existing exact-pixel button tests green regardless of the default.
     FBgAnim.SetTargetImmediate(1);
 end;
 
@@ -142,13 +148,10 @@ procedure TTyButton.MouseLeave;
 begin
   inherited MouseLeave;  // sets FHover := False; Invalidate
   FBgAnim.Target := 0;
-  if FAnimationsEnabled then
+  if FAnimationsEnabled and HandleAllocated then
   begin
-    if HandleAllocated then
-    begin
-      EnsureTimer;
-      FTimer.Enabled := True;
-    end;
+    EnsureTimer;
+    FTimer.Enabled := True;
   end
   else
     FBgAnim.SetTargetImmediate(0);

@@ -28,6 +28,7 @@ type
   public
     procedure SetAnimationsEnabled(AValue: Boolean);
     function StepAnimation(AMs: Integer): Boolean;
+    procedure ArmTo(ATarget: Single);
     function KnobProgress: Single;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
@@ -39,6 +40,7 @@ type
     procedure TestAnimatedAdvanceHalfwayMovesKnob;
     procedure TestAnimatedAdvanceFullReachesOnPosition;
     procedure TestHeadlessDefaultSnapsImmediately;
+    procedure TestAnimationsEnabledDefaultsTrue;
   end;
 
 implementation
@@ -93,6 +95,11 @@ begin
   Result := AdvanceAnimation(AMs);
 end;
 
+procedure TTyToggleAnimProbe.ArmTo(ATarget: Single);
+begin
+  ArmKnobAnim(ATarget);
+end;
+
 function TTyToggleAnimProbe.KnobProgress: Single;
 begin
   Result := KnobAnimProgress;
@@ -124,8 +131,10 @@ end;
 { TTyToggleKnobAnimTest }
 
 procedure TTyToggleKnobAnimTest.TestAnimatedCheckDoesNotSnap;
-{ With animations enabled, flipping Checked True must NOT snap the knob to the
-  on-position: raw progress stays at 0 until the animation is advanced. }
+{ Arming the knob slide toward the on-position (the runtime animate path, modeled
+  here by ArmTo) must NOT snap: raw progress stays at 0 until the animation is
+  advanced. (ArmTo is the test seam for the SetChecked+timer path, which only
+  animates when the control has a window handle.) }
 var
   Ctl: TTyStyleController;
   Sw: TTyToggleAnimProbe;
@@ -136,11 +145,9 @@ begin
     try
       Sw.Controller := Ctl;
       Sw.SetAnimationsEnabled(True);
-      Sw.Checked := False;
       AssertTrue('progress starts at 0', Abs(Sw.KnobProgress - 0.0) < 1e-6);
-      Sw.Checked := True;  // animations on, no HandleAllocated -> stays at 0
-      AssertTrue('Checked is True', Sw.Checked);
-      AssertTrue('animated check does NOT snap (progress still ~0)',
+      Sw.ArmTo(1);  // arm toward on-position without snapping
+      AssertTrue('armed slide does NOT snap (progress still ~0)',
         Abs(Sw.KnobProgress - 0.0) < 1e-6);
     finally
       Sw.Free;
@@ -168,7 +175,7 @@ begin
     try
       Sw.Controller := Ctl;
       Sw.SetAnimationsEnabled(True);
-      Sw.Checked := True;
+      Sw.ArmTo(1);           // arm toward on-position without snapping
       Sw.StepAnimation(60);  // half of 120ms
       AssertTrue('raw progress ~0.5 after 60ms',
         Abs(Sw.KnobProgress - 0.5) < 1e-6);
@@ -210,7 +217,7 @@ begin
     try
       Sw.Controller := Ctl;
       Sw.SetAnimationsEnabled(True);
-      Sw.Checked := True;
+      Sw.ArmTo(1);           // arm toward on-position without snapping
       Sw.StepAnimation(60);
       Sw.StepAnimation(60);  // total 120ms -> 1.0
       AssertTrue('raw progress exactly 1.0 after 120ms',
@@ -234,9 +241,11 @@ begin
 end;
 
 procedure TTyToggleKnobAnimTest.TestHeadlessDefaultSnapsImmediately;
-{ Default (animations off / headless): setting Checked True snaps raw progress
-  to 1.0 immediately, so RenderTo draws the on-position right away. This is the
-  snap that keeps the existing pixel tests green. }
+{ Headless (no window handle): setting Checked True snaps raw progress to 1.0
+  immediately, so RenderTo draws the on-position right away. Animations now
+  default ON, but the snap is gated on HandleAllocated, so handle-less render
+  tests still settle to the final state — this keeps the existing pixel tests
+  green. }
 var
   Ctl: TTyStyleController;
   Sw: TTyToggleAnimProbe;
@@ -251,7 +260,7 @@ begin
     Sw := TTyToggleAnimProbe.Create(nil);
     try
       Sw.Controller := Ctl;
-      // do NOT enable animations -> default off
+      // animations default ON now; with no window handle SetChecked snaps
       Sw.Checked := True;
       AssertTrue('headless snap: raw progress = 1.0 immediately',
         Abs(Sw.KnobProgress - 1.0) < 1e-9);
@@ -270,6 +279,21 @@ begin
     end;
   finally
     Ctl.Free;
+  end;
+end;
+
+procedure TTyToggleKnobAnimTest.TestAnimationsEnabledDefaultsTrue;
+{ Motion is on out of the box: a freshly-created toggle switch has
+  AnimationsEnabled True by default. (Headless render tests stay green because
+  the state-change path still snaps when there is no window handle.) }
+var
+  Sw: TTyToggleSwitch;
+begin
+  Sw := TTyToggleSwitch.Create(nil);
+  try
+    AssertTrue('AnimationsEnabled defaults to True', Sw.AnimationsEnabled);
+  finally
+    Sw.Free;
   end;
 end;
 

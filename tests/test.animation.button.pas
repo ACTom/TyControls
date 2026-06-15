@@ -16,6 +16,7 @@ type
     procedure CallMouseEnter;
     procedure CallMouseLeave;
     function StepAnimation(AMs: Integer): Boolean;
+    procedure ArmTo(ATarget: Single);
     function BgProgress: Single;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
@@ -29,6 +30,7 @@ type
     procedure TestHoverFillAfterFullAdvance;
     procedure TestMidProgressBlendsBetween;
     procedure TestHeadlessDefaultSnapsToHover;
+    procedure TestAnimationsEnabledDefaultsTrue;
   end;
 
 implementation
@@ -86,6 +88,11 @@ begin
   Result := AdvanceAnimation(AMs);
 end;
 
+procedure TTyButtonAnimProbe.ArmTo(ATarget: Single);
+begin
+  ArmBgAnim(ATarget);
+end;
+
 function TTyButtonAnimProbe.BgProgress: Single;
 begin
   Result := BgAnimProgress;
@@ -133,8 +140,10 @@ begin
 end;
 
 procedure TTyButtonBgFadeTest.TestHoverFillAfterFullAdvance;
-{ Hovering (CallMouseEnter) sets the target to hover; advancing the full
-  duration lands Eased=1 so the centre pixel is the hover background #777777. }
+{ The settled hover state: MouseEnter (headless -> snaps the fade to Eased=1 and
+  sets FHover) lands the centre pixel on the hover background #777777. This is
+  the settled end-state of the slide; the interpolating midpoint is covered by
+  TestMidProgressBlendsBetween. }
 var
   Ctl: TTyStyleController;
   B: TTyButtonAnimProbe;
@@ -148,9 +157,8 @@ begin
       B.Controller := Ctl;
       B.SetAnimationsEnabled(True);
       B.Caption := '';
-      B.CallMouseEnter;
-      B.StepAnimation(120);  // full ~120ms duration
-      AssertTrue('fade reaches 1.0 after full advance',
+      B.CallMouseEnter;      // headless -> snaps to settled hover (Eased=1, FHover)
+      AssertTrue('fade reaches 1.0',
         Abs(B.BgProgress - 1.0) < 1e-6);
       Bmp := RenderBitmap(B);
       try
@@ -185,7 +193,7 @@ begin
       B.Controller := Ctl;
       B.SetAnimationsEnabled(True);
       B.Caption := '';
-      B.CallMouseEnter;
+      B.ArmTo(1);           // arm toward hover without snapping
       B.StepAnimation(40);  // partial -> between 0 and 1 (eased)
       AssertTrue('raw progress strictly between 0 and 1',
         (B.BgProgress > 0.0) and (B.BgProgress < 1.0));
@@ -206,9 +214,10 @@ begin
 end;
 
 procedure TTyButtonBgFadeTest.TestHeadlessDefaultSnapsToHover;
-{ Default (animations off / headless): MouseEnter snaps the fade straight to
-  hover so the centre pixel is #777777 with no advancing required. This is the
-  snap that keeps the existing button paint tests green. }
+{ Headless (no window handle): MouseEnter snaps the fade straight to hover so
+  the centre pixel is #777777 with no advancing required. Animations now default
+  ON, but the snap is gated on HandleAllocated, so handle-less render tests still
+  settle to the final state — this is what keeps the existing paint tests green. }
 var
   Ctl: TTyStyleController;
   B: TTyButtonAnimProbe;
@@ -220,7 +229,7 @@ begin
     B := TTyButtonAnimProbe.Create(nil);
     try
       B.Controller := Ctl;
-      // do NOT enable animations -> default off
+      // animations default ON now; with no window handle the hover path snaps
       B.Caption := '';
       B.CallMouseEnter;
       AssertTrue('headless snap: fade = 1.0 immediately',
@@ -237,6 +246,21 @@ begin
     end;
   finally
     Ctl.Free;
+  end;
+end;
+
+procedure TTyButtonBgFadeTest.TestAnimationsEnabledDefaultsTrue;
+{ Motion is on out of the box: a freshly-created button has AnimationsEnabled
+  True by default. (Headless render tests stay green because the state-change
+  path still snaps when there is no window handle.) }
+var
+  B: TTyButton;
+begin
+  B := TTyButton.Create(nil);
+  try
+    AssertTrue('AnimationsEnabled defaults to True', B.AnimationsEnabled);
+  finally
+    B.Free;
   end;
 end;
 
