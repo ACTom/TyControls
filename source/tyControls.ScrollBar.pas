@@ -19,6 +19,7 @@ type
     function TrackRect: TRect;
     function TrackLength: Integer;
     function PosAlong(X, Y: Integer): Integer;
+    procedure ButtonRects(const AClient: TRect; out ALo, AHi: TRect);
     procedure SetKind(const AValue: TTyScrollBarKind);
     procedure SetMin(const AValue: Integer);
     procedure SetMax(const AValue: Integer);
@@ -201,7 +202,7 @@ procedure TTyScrollBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Inte
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  R, Track, ThumbR: TRect;
+  R, Track, ThumbR, LoR, HiR: TRect;
   ThumbFill: TTyFill;
 begin
   P := TTyPainter.Create;
@@ -216,6 +217,20 @@ begin
     ThumbFill.Kind := tfkSolid;
     ThumbFill.Color := S.TextColor;
     P.FillBackground(ThumbR, ThumbFill, S.BorderRadius);
+    ButtonRects(R, LoR, HiR);
+    if (LoR.Right > LoR.Left) then   // buttons exist
+    begin
+      if FKind = sbVertical then
+      begin
+        P.DrawGlyph(LoR, tgArrowUp, S.TextColor, 2);
+        P.DrawGlyph(HiR, tgArrowDown, S.TextColor, 2);
+      end
+      else
+      begin
+        P.DrawGlyph(LoR, tgArrowLeft, S.TextColor, 2);
+        P.DrawGlyph(HiR, tgArrowRight, S.TextColor, 2);
+      end;
+    end;
     P.EndPaint;
   finally
     P.Free;
@@ -232,6 +247,33 @@ begin
   // Inset client by a button-size at each end so the thumb/drag/paging
   // operate on the track between the (Task 5) end arrow buttons.
   Result := TyScrollTrackRect(ClientRect, FKind, TyScrollButtonSize(ClientRect, FKind));
+end;
+
+procedure TTyScrollBar.ButtonRects(const AClient: TRect; out ALo, AHi: TRect);
+var
+  bs, mainLen: Integer;
+begin
+  bs := TyScrollButtonSize(AClient, FKind);
+  if FKind = sbVertical then
+    mainLen := AClient.Bottom - AClient.Top
+  else
+    mainLen := AClient.Right - AClient.Left;
+  if mainLen <= 2 * bs then
+  begin
+    ALo := Rect(0, 0, 0, 0);
+    AHi := Rect(0, 0, 0, 0);
+    Exit;   // no buttons
+  end;
+  if FKind = sbVertical then
+  begin
+    ALo := Rect(AClient.Left, AClient.Top, AClient.Right, AClient.Top + bs);
+    AHi := Rect(AClient.Left, AClient.Bottom - bs, AClient.Right, AClient.Bottom);
+  end
+  else
+  begin
+    ALo := Rect(AClient.Left, AClient.Top, AClient.Left + bs, AClient.Bottom);
+    AHi := Rect(AClient.Right - bs, AClient.Top, AClient.Right, AClient.Bottom);
+  end;
 end;
 
 function TTyScrollBar.TrackLength: Integer;
@@ -305,12 +347,25 @@ end;
 
 procedure TTyScrollBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
-  ThumbR: TRect;
+  ThumbR, LoR, HiR: TRect;
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
+    ButtonRects(ClientRect, LoR, HiR);
+    if PtInRect(LoR, Point(X, Y)) then
+    begin
+      Position := Position - FSmallChange;
+      try if CanFocus then SetFocus; except end;
+      Exit;
+    end;
+    if PtInRect(HiR, Point(X, Y)) then
+    begin
+      Position := Position + FSmallChange;
+      try if CanFocus then SetFocus; except end;
+      Exit;
+    end;
     ThumbR := TyScrollThumbRect(TrackRect, FKind, FMin, FMax, FPosition, FPageSize);
     if PtInRect(ThumbR, Point(X, Y)) then
     begin

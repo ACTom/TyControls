@@ -48,6 +48,7 @@ type
     procedure TestThumbDragMovesPosition;
     procedure TestTrackClickBelowThumbPagesDown;
     procedure TestDisabledScrollbarMouseIgnored;
+    procedure TestArrowButtonsStepSmallChange;
   end;
 
 implementation
@@ -58,6 +59,7 @@ type
     procedure CallMouseDown(Btn: TMouseButton; X, Y: Integer);
     procedure CallMouseMove(X, Y: Integer);
     procedure CallMouseUp(Btn: TMouseButton; X, Y: Integer);
+    procedure DoMouseDown(Shift: TShiftState; X, Y: Integer);
   end;
 procedure TScrollAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -74,6 +76,10 @@ end;
 procedure TScrollAccess.CallMouseUp(Btn: TMouseButton; X, Y: Integer);
 begin
   MouseUp(Btn, [], X, Y);
+end;
+procedure TScrollAccess.DoMouseDown(Shift: TShiftState; X, Y: Integer);
+begin
+  MouseDown(mbLeft, Shift, X, Y);
 end;
 procedure TTyScrollGeometryTest.TestVerticalThumbAtTop;
 var
@@ -353,6 +359,25 @@ begin
   Bar.CallMouseUp(mbLeft, 8, 140);
 
   AssertEquals('disabled scrollbar ignores mouse: Position unchanged', 0, Bar.Position);
+end;
+
+procedure TTyScrollBarMouseTest.TestArrowButtonsStepSmallChange;
+var
+  SA: TScrollAccess;
+begin
+  SA := TScrollAccess.Create(FForm);
+  SA.Parent := FForm;
+  SA.Kind := sbVertical;
+  SA.SetBounds(0, 0, 16, 160);
+  SA.Min := 0;
+  SA.Max := 100;
+  SA.PageSize := 10;
+  SA.SmallChange := 5;
+  SA.Position := 50;
+  SA.DoMouseDown([], 8, 4);          // top arrow button (y in [0,16))
+  AssertEquals('top arrow -SmallChange', 45, SA.Position);
+  SA.DoMouseDown([], 8, 156);        // bottom arrow button (y in [144,160))
+  AssertEquals('bottom arrow +SmallChange', 50, SA.Position);
 end;
 
 initialization
