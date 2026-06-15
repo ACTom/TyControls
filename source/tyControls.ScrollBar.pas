@@ -205,6 +205,7 @@ var
   S, ThumbS: TTyStyleSet;
   R, Track, ThumbR, LoR, HiR: TRect;
   ThumbFill: TTyFill;
+  ThumbStates: TTyStateSet;
 begin
   P := TTyPainter.Create;
   try
@@ -214,10 +215,15 @@ begin
     DrawFrame(P, R, S);
     Track := TyScrollTrackRect(R, FKind, TyScrollButtonSize(R, FKind));
     ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, FPosition, FPageSize);
-    // Thumb fill is its own sub-element typeKey (TyScrollThumb), not the parent's
-    // TextColor. The scrollbar tracks no distinct per-thumb hover/active state, so
-    // resolve the normal state — its default (var(--border)) equals the old borrow.
-    ThumbS := ActiveController.Model.ResolveStyle('TyScrollThumb', '', []);
+    // Thumb fill is its own sub-element typeKey (TyScrollThumb). Feed the control's
+    // hover/press state so TyScrollThumb:hover/:active render (matches the pre-typeKey
+    // behavior where the thumb borrowed the parent's state-resolved TextColor).
+    ThumbStates := [];
+    if FPressed then
+      Include(ThumbStates, tysActive)
+    else if FHover then
+      Include(ThumbStates, tysHover);
+    ThumbS := ActiveController.Model.ResolveStyle('TyScrollThumb', '', ThumbStates);
     ThumbFill := Default(TTyFill);
     ThumbFill.Kind := tfkSolid;
     ThumbFill.Color := ThumbS.Background.Color;

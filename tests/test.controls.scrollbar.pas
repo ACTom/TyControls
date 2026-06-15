@@ -37,6 +37,7 @@ type
   published
     procedure TestThumbPixelUsesThumbTypeKey;
     procedure TestThumbDefaultPixelIsBorderColor;
+    procedure TestThumbHoverActiveStatesDiscriminate;
   end;
 
   TTyScrollBarMouseTest = class(TTestCase)
@@ -63,6 +64,8 @@ type
     procedure CallMouseUp(Btn: TMouseButton; X, Y: Integer);
     procedure DoMouseDown(Shift: TShiftState; X, Y: Integer);
     procedure DoKeyDown(Key: Word; Shift: TShiftState);
+    procedure SetHoverState(AValue: Boolean);
+    procedure SetPressedState(AValue: Boolean);
   end;
 procedure TScrollAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -87,6 +90,14 @@ end;
 procedure TScrollAccess.DoKeyDown(Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
+end;
+procedure TScrollAccess.SetHoverState(AValue: Boolean);
+begin
+  FHover := AValue;
+end;
+procedure TScrollAccess.SetPressedState(AValue: Boolean);
+begin
+  FPressed := AValue;
 end;
 procedure TTyScrollGeometryTest.TestVerticalThumbAtTop;
 var
@@ -319,6 +330,93 @@ begin
     finally
       Reread.Free;
     end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyScrollBarThumbColorTest.TestThumbHoverActiveStatesDiscriminate;
+{ Batch4 follow-up: the thumb fill must react to the control's hover/press state
+  via the TyScrollThumb:hover / :active rules. With distinct known colors for
+  normal / hover / active, the thumb pixel must match the state-appropriate color:
+    normal #00FF00 (green), hover #0000FF (blue), active #FF0000 (red).
+  Same vertical bar (16x200, Min=0 Max=100 Page=25 Pos=0); the inset track is
+  y in [16,184) and the thumb (25/125 of 168 ~= 33px) sits at ~y in [16,49),
+  so sample at (8,30). Active takes precedence over hover (cascade).
+  This fails with the old empty-state resolve (all three would be green). }
+var
+  Ctl: TTyStyleController;
+  Bar: TScrollAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+
+  procedure RenderThumb;
+  begin
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(16, 200);
+    Bar.SmokeRender(Bmp.Canvas, Rect(0, 0, 16, 200), 96);
+  end;
+
+  function ThumbPixel: TBGRAPixel;
+  begin
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      Result := Reread.GetPixel(8, 30);
+    finally
+      Reread.Free;
+    end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyScrollBar { background: #202020; border-radius: 0px; }' +
+      'TyScrollThumb { background: #00FF00; border-radius: 0px; }' +
+      'TyScrollThumb:hover { background: #0000FF; border-radius: 0px; }' +
+      'TyScrollThumb:active { background: #FF0000; border-radius: 0px; }');
+    Bar := TScrollAccess.Create(Form);
+    Bar.Parent := Form;
+    Bar.Controller := Ctl;
+    Bar.Kind := sbVertical;
+    Bar.SetBounds(0, 0, 16, 200);
+    Bar.Min := 0;
+    Bar.Max := 100;
+    Bar.PageSize := 25;
+    Bar.Position := 0;
+
+    // idle: no hover, no press -> normal (green)
+    Bar.SetHoverState(False);
+    Bar.SetPressedState(False);
+    RenderThumb;
+    Px := ThumbPixel;
+    AssertTrue('idle thumb green-dominant (G>200)', Px.green > 200);
+    AssertTrue('idle thumb not red (R<80)',          Px.red < 80);
+    AssertTrue('idle thumb not blue (B<80)',         Px.blue < 80);
+
+    // hover: FHover=True -> :hover (blue)
+    Bar.SetHoverState(True);
+    Bar.SetPressedState(False);
+    RenderThumb;
+    Px := ThumbPixel;
+    AssertTrue('hover thumb blue-dominant (B>200)', Px.blue > 200);
+    AssertTrue('hover thumb not red (R<80)',         Px.red < 80);
+    AssertTrue('hover thumb not green (G<80)',       Px.green < 80);
+
+    // pressed: FPressed=True -> :active (red), takes precedence over hover
+    Bar.SetHoverState(True);
+    Bar.SetPressedState(True);
+    RenderThumb;
+    Px := ThumbPixel;
+    AssertTrue('pressed thumb red-dominant (R>200)', Px.red > 200);
+    AssertTrue('pressed thumb not green (G<80)',      Px.green < 80);
+    AssertTrue('pressed thumb not blue (B<80)',       Px.blue < 80);
   finally
     Bmp.Free;
     Form.Free;
