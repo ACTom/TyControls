@@ -26,6 +26,22 @@ type
     procedure TestMaximizedBoundsEqualsWorkArea;
   end;
 
+  { Pure mapping from a border-resize hit zone to the native resize cursor.
+    bhNone -> crDefault; left/right -> crSizeWE; top/bottom -> crSizeNS;
+    topLeft/bottomRight -> crSizeNWSE; topRight/bottomLeft -> crSizeNESW. }
+  TResizeCursorTest = class(TTestCase)
+  published
+    procedure TestNoneIsDefault;
+    procedure TestLeftIsSizeWE;
+    procedure TestRightIsSizeWE;
+    procedure TestTopIsSizeNS;
+    procedure TestBottomIsSizeNS;
+    procedure TestTopLeftIsSizeNWSE;
+    procedure TestBottomRightIsSizeNWSE;
+    procedure TestTopRightIsSizeNESW;
+    procedure TestBottomLeftIsSizeNESW;
+  end;
+
   TCaptionButtonTest = class(TTestCase)
   published
     procedure TestCloseVariantAndGlyph;
@@ -191,6 +207,53 @@ begin
   AssertEquals('top', 0, R.Top);
   AssertEquals('right', 1920, R.Right);
   AssertEquals('bottom', 1040, R.Bottom);
+end;
+
+{ TResizeCursorTest }
+
+procedure TResizeCursorTest.TestNoneIsDefault;
+begin
+  AssertEquals(crDefault, TyResizeCursor(bhNone));
+end;
+
+procedure TResizeCursorTest.TestLeftIsSizeWE;
+begin
+  AssertEquals(crSizeWE, TyResizeCursor(bhLeft));
+end;
+
+procedure TResizeCursorTest.TestRightIsSizeWE;
+begin
+  AssertEquals(crSizeWE, TyResizeCursor(bhRight));
+end;
+
+procedure TResizeCursorTest.TestTopIsSizeNS;
+begin
+  AssertEquals(crSizeNS, TyResizeCursor(bhTop));
+end;
+
+procedure TResizeCursorTest.TestBottomIsSizeNS;
+begin
+  AssertEquals(crSizeNS, TyResizeCursor(bhBottom));
+end;
+
+procedure TResizeCursorTest.TestTopLeftIsSizeNWSE;
+begin
+  AssertEquals(crSizeNWSE, TyResizeCursor(bhTopLeft));
+end;
+
+procedure TResizeCursorTest.TestBottomRightIsSizeNWSE;
+begin
+  AssertEquals(crSizeNWSE, TyResizeCursor(bhBottomRight));
+end;
+
+procedure TResizeCursorTest.TestTopRightIsSizeNESW;
+begin
+  AssertEquals(crSizeNESW, TyResizeCursor(bhTopRight));
+end;
+
+procedure TResizeCursorTest.TestBottomLeftIsSizeNESW;
+begin
+  AssertEquals(crSizeNESW, TyResizeCursor(bhBottomLeft));
 end;
 
 procedure TCaptionButtonTest.TestCloseVariantAndGlyph;
@@ -723,6 +786,7 @@ end;
 
 initialization
   RegisterTest(TFormHelpersTest);
+  RegisterTest(TResizeCursorTest);
   RegisterTest(TCaptionButtonTest);
   RegisterTest(TTitleBarTest);
   RegisterTest(TFormChromeTest);

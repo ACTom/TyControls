@@ -40,6 +40,11 @@ type
     property ClipText: string read FClipText write FClipText;
   end;
 
+  TEditCursorTest = class(TTestCase)
+  published
+    procedure TestEditUsesIBeam;
+  end;
+
   TEditTest = class(TTestCase)
   published
     procedure TestTypeKey;
@@ -2117,6 +2122,19 @@ begin
   end;
 end;
 
+procedure TEditCursorTest.TestEditUsesIBeam;
+var
+  E: TTyEdit;
+begin
+  E := TTyEdit.Create(nil);
+  try
+    AssertEquals(crIBeam, E.Cursor);
+  finally
+    E.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TEditTest);
+  RegisterTest(TEditCursorTest);
 end.

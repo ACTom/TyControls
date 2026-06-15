@@ -97,6 +97,7 @@ constructor TTySpinEdit.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
+  Cursor := crIBeam;
   FMinValue := 0;
   FMaxValue := 100;
   FValue := 0;

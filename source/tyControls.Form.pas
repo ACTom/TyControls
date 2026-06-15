@@ -118,6 +118,7 @@ type
   end;
 
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
+function TyResizeCursor(AHit: TTyBorderHit): TCursor;
 function TyMaximizedBounds(const AWorkArea: TRect): TRect;
 function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
 
@@ -160,6 +161,18 @@ begin
     Result := bhBottom
   else
     Result := bhNone;
+end;
+
+function TyResizeCursor(AHit: TTyBorderHit): TCursor;
+begin
+  case AHit of
+    bhLeft, bhRight: Result := crSizeWE;
+    bhTop, bhBottom: Result := crSizeNS;
+    bhTopLeft, bhBottomRight: Result := crSizeNWSE;
+    bhTopRight, bhBottomLeft: Result := crSizeNESW;
+  else
+    Result := crDefault;
+  end;
 end;
 
 function TyMaximizedBounds(const AWorkArea: TRect): TRect;
@@ -528,8 +541,18 @@ var
   DX, DY: Integer;
   B: TRect;
 begin
-  if not FResizing or (FForm = nil) then
+  if FForm = nil then
     Exit;
+  { Hover path (not actively resizing): reflect the border zone under the cursor
+    so the user sees the native resize cursor before pressing. While FResizing is
+    True the cursor was already set on the hit press and the form is being sized,
+    so we leave it alone and fall through to the resize-drag logic below. }
+  if not FResizing then
+  begin
+    FForm.Cursor := TyResizeCursor(TyHitTestBorder(
+      Rect(0, 0, FForm.Width, FForm.Height), Point(X, Y), FBorderZone));
+    Exit;
+  end;
   M := FForm.ClientToScreen(Point(X, Y));
   DX := M.X - FResizeStartMouse.X;
   DY := M.Y - FResizeStartMouse.Y;

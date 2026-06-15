@@ -146,6 +146,7 @@ constructor TTyEdit.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
+  Cursor := crIBeam;
   FText := '';
   FCaret := 0;
   FSelAnchor := 0;

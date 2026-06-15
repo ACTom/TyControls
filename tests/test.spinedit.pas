@@ -37,6 +37,11 @@ type
     procedure Handle(Sender: TObject);
   end;
 
+  TTySpinEditCursorTest = class(TTestCase)
+  published
+    procedure TestSpinEditUsesIBeam;
+  end;
+
   TTySpinEditEditModelTest = class(TTestCase)
   published
     procedure TestSpinTypeDigitsIntoBuffer;
@@ -639,6 +644,18 @@ begin
   end;
 end;
 
+procedure TTySpinEditCursorTest.TestSpinEditUsesIBeam;
+var
+  S: TTySpinEdit;
+begin
+  S := TTySpinEdit.Create(nil);
+  try
+    AssertEquals(crIBeam, S.Cursor);
+  finally
+    S.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTySpinEditGeometryTest);
   RegisterTest(TTySpinEditControlTest);
@@ -646,4 +663,5 @@ initialization
   RegisterTest(TTySpinEditEditModelTest);
   RegisterTest(TTySpinEditRenderTest);
   RegisterTest(TTySpinEditFontSizeTest);
+  RegisterTest(TTySpinEditCursorTest);
 end.

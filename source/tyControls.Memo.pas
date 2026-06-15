@@ -403,6 +403,7 @@ constructor TTyMemo.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
+  Cursor := crIBeam;
   FLines := TStringList.Create;
   FCaretLine := 0;
   FCaretCol := 0;

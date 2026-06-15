@@ -51,6 +51,11 @@ type
     property ClipText: string read FClipText write FClipText;
   end;
 
+  TTyMemoCursorTest = class(TTestCase)
+  published
+    procedure TestMemoUsesIBeam;
+  end;
+
   TTyMemoTest = class(TTestCase)
   private
     FCtl: TTyStyleController;
@@ -1156,6 +1161,19 @@ begin
   finally M.Free; end;
 end;
 
+procedure TTyMemoCursorTest.TestMemoUsesIBeam;
+var
+  M: TTyMemo;
+begin
+  M := TTyMemo.Create(nil);
+  try
+    AssertEquals(crIBeam, M.Cursor);
+  finally
+    M.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyMemoTest);
+  RegisterTest(TTyMemoCursorTest);
 end.
