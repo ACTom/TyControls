@@ -166,6 +166,7 @@ end;
 6. **`ReadOnly`：** 打字/回车/退格/删除/词级删除/粘贴均被拦截；导航、选区、复制、全选仍可用；`Lines :=` 赋值不受限；`CutToClipboard` 退化为 `CopyToClipboard`。
 7. **`MaxLength`：** 基于 `ContentCodepointCount`（全行 `UTF8Length` 之和，换行不计）；打字满则拒插（`UTF8KeyPress` 早退）；粘贴时截断原始剪贴板字符串到余量码点数（截断发生在拆行**之前**，实际内容可能略低于上限，但绝不超过）；回车/退格/删除不受限。
 8. **光标闪烁：** 聚焦时约 530 ms 间隔启动；`TTimer` 懒创建，仅在 `HandleAllocated` 后启动，无头测试与设计器中光标静态。
+9. **I-beam 光标（batch⑤+⑥）：** 构造时把 `Cursor` 设为 `crIBeam`，鼠标移到文本区域时呈现标准的文本输入「I 形」光标，与原生多行编辑框观感一致。
 
 ---
 

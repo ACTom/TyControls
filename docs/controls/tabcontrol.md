@@ -249,6 +249,7 @@ TC.TabIndex := 1;
 - **页面板由 TabControl 拥有**：`AddTab` 创建的 `TTyPanel` 以 `TTyTabControl` 为 Owner，无需也不应手动释放它们——TabControl 析构时会自动释放。
 - **`TabIndex = -1`**：赋值为 -1 时所有页面板均隐藏；正常使用时无需主动赋 -1（添加第一个页签后控件会自动选中第 0 页）。
 - **子部件 `TyTab` 的 `:active` 含义**：指"被选中"，而非通用控件中的"鼠标按下"。主题作者为 `TyTab:active` 设置样式即可控制当前选中页签的高亮外观。
+- **活动页签头切换交叉淡入（batch⑤+⑥）**：切换 `TabIndex` 时，**页签头**的活动高亮（`TyTab:active` 着色）会在新旧页签之间交叉淡入，而**页面板（内容）瞬间切换**。由 `AnimationsEnabled`（默认 `True`）控制；headless / 设计器下瞬间吸附。详见第 15 节。
 
 ---
 
@@ -392,3 +393,30 @@ DropIdx     := TC.TyDropIndexAt(X, 96);     // X 处应落入的页签索引
 - **× 笔画本身仍是 tier-b 单色字形，** 墨色取 `TyTab` 的 `color`（`TextColor`）。换言之关闭 × = `TyTabClose` 底片（tier-a）+ `TyTab.color` 墨迹（tier-b），详见 [tycss-reference.md](../tycss-reference.md) §8.3。
 - 当前被悬停其 × 的页签索引可通过只读属性 `TyTabHoverClose` 读取（无则为 -1），由 `MouseMove` / `MouseLeave` 驱动；它与整页签悬停（影响 `TyTab:hover` 外观）相互独立。
 - 拖拽重排进行中不视为关闭 × 悬停，任何残留高亮会被清除。
+
+---
+
+## 15. 活动页签头交叉淡入（batch⑤+⑥）
+
+切换选中页时，`TTyTabControl` 让**活动页签头**的高亮在新旧页签之间**交叉淡入**，由 `tyControls.Animation` 单元的 `TTyAnimator` 驱动。**仅页签头参与动画——页面板（内容区）瞬间切换**，不淡入淡出。
+
+### 开关属性
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `AnimationsEnabled` | `Boolean` | `True` | 是否启用活动页签头交叉淡入动画。**public 属性，不 published**（不写入 `.lfm`），需在代码中设置。 |
+
+> 这是唯一的动画开关，**没有**单独的时长 / 缓动曲线属性可供配置——时长与缓动在控件内部固定。
+
+### 行为
+
+- **启用（`True`，默认）且控件已分配窗口句柄（`HandleAllocated`）时：** 改变 `TabIndex`（点击 / 键盘 / 赋值）后，旧活动页签头的 `TyTab:active` 着色淡出、新活动页签头淡入，时长约 **120ms**，缓动曲线 `teEaseOutCubic`。页面板内容在切换的同一时刻立即显示/隐藏，**不**参与淡入。
+- **关闭（`False`）：** 页签头高亮瞬间切换到新活动页签。
+- 控件尚无窗口句柄（headless / 设计器）时，无论开关如何都**瞬间吸附到终态**（**headless-snap**）——因此既有的逐像素页签头测试不受影响。
+- 内部按需创建一个 `TTimer`（约 60fps）推进动画，抵达目标后自动停止；动画逻辑可在测试中以显式毫秒步进确定性驱动。
+
+```pascal
+// AnimationsEnabled 默认即为 True（活动页签头交叉淡入）；
+// 如需瞬时切换可显式关闭：TC.AnimationsEnabled := False;
+TC.TabIndex := 2;   // 第 3 页签头高亮交叉淡入（约 120ms）；对应页面板瞬间显示
+```

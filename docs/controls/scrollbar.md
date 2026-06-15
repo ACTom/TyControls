@@ -205,7 +205,29 @@ TyScrollThumb:active { background: var(--accent); }
 - **端部箭头**仍是 tier-b 单色字形，墨色取 `TyScrollBar` 的 `color`（`TextColor`）。要单独改箭头颜色，改 `TyScrollBar { color: … }`；要改滑块颜色，改 `TyScrollThumb { background: … }`。详见 [tycss-reference.md](../tycss-reference.md) §8.3。
 - 没有内置命名变体（`.class`）。
 
-## 6. 代码示例
+## 6. 状态过渡动画（batch⑤+⑥）
+
+`TTyScrollBar` 支持滑块（thumb）在 **程序化** `Position` 改变时平滑过渡到新位置，由 `tyControls.Animation` 单元的 `TTyAnimator` 驱动。
+
+### 开关属性
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `AnimationsEnabled` | `Boolean` | `True` | 是否启用滑块位置过渡动画。**public 属性，不 published**（不写入 `.lfm`），需在代码中设置。 |
+
+> 这是唯一的动画开关，**没有**单独的时长 / 缓动曲线属性可供配置——时长与缓动在控件内部固定。
+
+### 行为
+
+- **程序化变化才缓动：** 启用（`True`，默认）且有窗口句柄时，由**键盘 / 滚轮 / 点击轨道空白翻页 / 端部箭头**等引起的 `Position` 变化会让绘制的滑块从旧位置**缓动**到新位置（约 **120ms**，缓动曲线 `teEaseOutCubic`）。
+- **拖动始终瞬时：** 用户**拖动滑块**（`DragThumbTo`）时滑块**实时跟手、不缓动**——拖拽期间绘制即贴当前位置，避免延迟感。
+- **关闭（`False`）：** 所有 `Position` 变化都瞬间反映到滑块位置。
+- 控件尚无窗口句柄（headless / 设计器）时，无论开关如何都**瞬间吸附到终态**（**headless-snap**）——因此既有的逐像素 thumb 几何测试不受影响。
+- 内部按需创建一个 `TTimer`（约 60fps）推进动画，抵达目标后自动停止；动画逻辑可在测试中以显式毫秒步进确定性驱动。
+
+> **NOTE — 内嵌滚动条按设计为静态：** `TTyListBox` 与 `TTyMemo` 内部惰性创建的滚动条在创建时被显式设为 `AnimationsEnabled := False`。这是**有意为之**：列表 / 多行编辑器的内容跟随滚动需要即时反馈，滑块缓动反而会与内容产生位置错位，因此内嵌滚动条始终瞬时跟随，不参与缓动。独立使用 `TTyScrollBar` 时默认启用缓动，不受此影响。
+
+## 7. 代码示例
 
 ### 基本垂直滚动条
 
@@ -277,7 +299,7 @@ begin
 end;
 ```
 
-## 7. 注意事项
+## 8. 注意事项
 
 1. **OnChange 防重入：** `SetPosition` 先夹紧值，若夹紧后与原值相同则不调用 `OnChange`，无需在回调中过滤重复值。
 2. **SetMin/SetMax 自动夹紧 Position：** 修改 `Min` 或 `Max` 时若导致 `Position` 越界，会静默调整 `Position`（不触发 `OnChange`，仅触发 `Invalidate`）。
@@ -285,3 +307,4 @@ end;
 4. **退化情形：** 当 `Max <= Min` 或 `PageSize <= 0` 时，`TyScrollThumbRect` 返回整个轨道矩形（thumb 填满），此时拖动无意义。
 5. **TabStop：** ScrollBar 控件 `TabStop` 不在 `published` 列表中，默认继承 `TCustomControl` 的默认值（`False`），通常不参与焦点循环。
 6. **水平时默认尺寸不自动翻转：** `Kind` 改变后，控件的宽/高不会自动对调，需手动交换 `Width` 和 `Height`。
+7. **滑块过渡动画（batch⑤+⑥）：** `AnimationsEnabled` 默认 `True`，程序化 `Position` 变化（键盘/滚轮/翻页/箭头）时滑块缓动到新位置（约 120ms），**拖动则始终瞬时跟手**；headless / 设计器下瞬间吸附。`TTyListBox` / `TTyMemo` 的**内嵌滚动条按设计置为静态**（`AnimationsEnabled := False`）。详见上文「状态过渡动画」。

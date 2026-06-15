@@ -65,6 +65,15 @@ Tier-2 native enhancement layer.
     and the caret line is visible; there is no `TTimer`-driven blink.
   See [controls/memo.md](controls/memo.md) §10 (gaps) and §11 (undo/redo) for
   the per-control writeup.
+- **Drop shadows / elevation on embedded controls — deliberately deferred.**
+  Batch⑤+⑥ shipped per-control motion (cursors, hover-fade, knob-slide, eased
+  progress/scrollbar/trackbar position, tab-header cross-fade) but intentionally
+  did NOT add Material-style drop shadows or elevation to the controls. LCL clips
+  an embedded `TControl`'s painting to its own bounds, so a shadow drawn inside a
+  control's `Paint` cannot bleed past its edges into the parent — a faithful
+  elevation effect would require painting on the parent surface (or a separate
+  overlay window), which is out of scope for this batch. Deferred to a future
+  Tier-2 enhancement layer.
 
 ## Design-time rendering
 

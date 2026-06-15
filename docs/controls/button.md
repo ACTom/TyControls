@@ -153,15 +153,17 @@ BtnDanger.Enabled := False;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `AnimationsEnabled` | `Boolean` | `False` | 是否启用背景色悬停渐变动画。**public 属性，不 published**（不写入 `.lfm`），需在代码中设置。 |
+| `AnimationsEnabled` | `Boolean` | `True` | 是否启用背景色悬停渐变动画。**public 属性，不 published**（不写入 `.lfm`），需在代码中设置。 |
 
 > 这是唯一的动画开关。**没有**单独的时长 / 缓动曲线属性可供配置——时长与缓动在控件内部固定（见下）。
 
+> **默认值变更（batch⑤+⑥）：** `AnimationsEnabled` 的默认值由早前的 `False` 改为 **`True`**——开箱即有悬停渐变手感。需要完全静态的外观（例如自定义测试或追求极简）时在代码中显式置 `False` 即可。注意无窗口（headless）下无论开关与否都会**瞬间吸附到终态**（见「行为」），因此既有的逐像素测试不受默认值翻转影响。
+
 ### 行为
 
-- **默认关闭（`False`）：** 鼠标进入/离开时背景色**瞬间切换**到目标颜色。这是无窗口（headless）/ 测试场景的默认行为，保证逐像素绘制结果与状态严格对应。
-- **启用（`True`）且控件已分配窗口句柄（`HandleAllocated`）时：** `MouseEnter` 让背景色由普通态颜色平滑渐变到 `:hover` 态颜色，`MouseLeave` 反向渐变回普通态。
-- 启用了动画但控件尚无窗口句柄时，仍按"瞬间切换"处理。
+- **启用（`True`，默认）且控件已分配窗口句柄（`HandleAllocated`）时：** `MouseEnter` 让背景色由普通态颜色平滑渐变到 `:hover` 态颜色，`MouseLeave` 反向渐变回普通态。
+- **关闭（`False`）：** 鼠标进入/离开时背景色**瞬间切换**到目标颜色。逐像素绘制结果与状态严格对应。
+- 控件尚无窗口句柄（headless / 设计器）时，无论开关如何都按"瞬间切换"处理（**headless-snap**），保证测试确定性。
 
 ### 实现细节
 
@@ -175,7 +177,9 @@ var Btn: TTyButton;
 Btn := TTyButton.Create(Self);
 Btn.Parent := Self;
 Btn.Caption := '悬停我';
-Btn.AnimationsEnabled := True;   // 启用悬停背景色渐变（需在有窗口句柄时生效）
+// AnimationsEnabled 默认即为 True（悬停背景色渐变，需在有窗口句柄时生效）；
+// 如需静态外观可显式关闭：
+// Btn.AnimationsEnabled := False;
 ```
 
 ---

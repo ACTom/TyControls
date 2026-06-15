@@ -134,7 +134,38 @@ TyTrackThumb:active { background: var(--accent); }
 
 ---
 
-## 7. 代码示例
+## 7. 状态过渡动画（batch⑤+⑥）
+
+`TTyTrackBar` 支持滑块（thumb）在 **程序化** `Position` 改变时平滑过渡到新位置，由 `tyControls.Animation` 单元的 `TTyAnimator` 驱动。
+
+### 开关属性
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `AnimationsEnabled` | `Boolean` | `True` | 是否启用滑块位置过渡动画。**public 属性，不 published**（不写入 `.lfm`），需在代码中设置。 |
+
+> 这是唯一的动画开关，**没有**单独的时长 / 缓动曲线属性可供配置——时长与缓动在控件内部固定。
+
+### 行为
+
+- **程序化变化才缓动：** 启用（`True`，默认）且有窗口句柄时，由**方向键 / `PageUp`/`PageDown` / `Home`/`End` / 直接赋值**等引起的 `Position` 变化会让滑块从旧位置**缓动**到新位置（约 **120ms**，缓动曲线 `teEaseOutCubic`）。
+- **拖动 / 点击定位始终瞬时：** 鼠标拖动或点击轨道定位（`DragTo`）时滑块**实时跟手、不缓动**，避免延迟感。
+- **关闭（`False`）：** 所有 `Position` 变化都瞬间反映到滑块位置。
+- 控件尚无窗口句柄（headless / 设计器）时，无论开关如何都**瞬间吸附到终态**（**headless-snap**）——因此既有的逐像素 thumb 几何测试不受影响。
+- 内部按需创建一个 `TTimer`（约 60fps）推进动画，抵达目标后自动停止；动画逻辑可在测试中以显式毫秒步进确定性驱动。
+
+```pascal
+var TB: TTyTrackBar;
+TB := TTyTrackBar.Create(Self);
+TB.Parent := Self;
+// AnimationsEnabled 默认即为 True（程序化变化时滑块缓动）；
+// 如需瞬时更新可显式关闭：TB.AnimationsEnabled := False;
+TB.Position := 80;   // 滑块平滑滑向 80（约 120ms）
+```
+
+---
+
+## 8. 代码示例
 
 ```pascal
 uses
@@ -164,7 +195,7 @@ end;
 
 ---
 
-## 8. 注意事项
+## 9. 注意事项
 
 1. **ThumbRect 坐标系：** `ThumbRect` 返回的是**控件客户区坐标**（左上角为 `(0,0)`），不是屏幕坐标。
 2. **拖动跨出边界：** 鼠标移出控件范围时，`MouseLeave` 不会终止拖动（仅清除 hover 状态），这使得"按住不放，拖出后再拖回"的体验连贯。拖动只在 `MouseUp` 时结束。
@@ -173,3 +204,4 @@ end;
 5. **滑块沿主轴厚度固定：** 滑块沿主轴的厚度固定为 12 逻辑像素（DPI 缩放后），不可通过属性调整；横向尺寸跟随控件另一边（水平=控件高、垂直=控件宽）。如需更宽的滑块，需继承并重写渲染逻辑。
 6. **垂直方向约定：** `Orientation = toVertical` 时，**顶部为 `Max`、底部为 `Min`，值向上增大**——向上拖动、`↑`、`PageUp` 都增大 `Position`。切换 `Orientation` 后控件宽/高不会自动对调，需手动交换尺寸（垂直通常应高大于宽）。
 7. **刻度由 Frequency 驱动：** `Frequency = 0`（默认）不绘制刻度；`>0` 时每隔该值单位画一条刻度线，颜色取自主题 `TyTrackBar` 的 `color`。
+8. **滑块过渡动画（batch⑤+⑥）：** `AnimationsEnabled` 默认 `True`，程序化 `Position` 变化（方向键/翻页/Home/End/赋值）时滑块缓动到新位置（约 120ms），**拖动 / 点击定位则始终瞬时跟手**；headless / 设计器下瞬间吸附。详见上文「状态过渡动画」。
