@@ -14,6 +14,7 @@ type
     procedure TestVerticalThumbMidway;
     procedure TestHorizontalThumbAtTop;
     procedure TestZeroRangeFillsTrack;
+    procedure TestScrollTrackInsetGeometry;
   end;
 
   TTyScrollBarDragTest = class(TTestCase)
@@ -123,6 +124,17 @@ begin
   AssertEquals('degenerate range: thumb top is track top', 0, R.Top);
   AssertEquals('degenerate range: thumb fills track', 200, R.Bottom);
 end;
+procedure TTyScrollGeometryTest.TestScrollTrackInsetGeometry;
+begin
+  AssertEquals('vertical button size = width', 16, TyScrollButtonSize(Rect(0,0,16,160), sbVertical));
+  AssertEquals('horizontal button size = height', 12, TyScrollButtonSize(Rect(0,0,200,12), sbHorizontal));
+  // vertical: track insets top+bottom by button size
+  AssertEquals('v track top', 16, TyScrollTrackRect(Rect(0,0,16,160), sbVertical, 16).Top);
+  AssertEquals('v track bottom', 144, TyScrollTrackRect(Rect(0,0,16,160), sbVertical, 16).Bottom);
+  // degenerate: too short -> whole client (no buttons)
+  AssertEquals('degenerate keeps full', 0, TyScrollTrackRect(Rect(0,0,16,20), sbVertical, 16).Top);
+  AssertEquals('degenerate keeps full2', 20, TyScrollTrackRect(Rect(0,0,16,20), sbVertical, 16).Bottom);
+end;
 procedure TTyScrollBarDragTest.OnBarChange(Sender: TObject);
 begin
   Inc(FChanges);
@@ -147,20 +159,26 @@ begin
 end;
 procedure TTyScrollBarDragTest.TestDragMovesPosition;
 begin
-  // grab at thumb top (y=0), drag down by 80px = half of free space (160) -> pos 50
-  FBar.BeginThumbDrag(0);
-  FBar.DragThumbTo(80);
-  AssertEquals('drag of half free-space moves to mid position', 50, FBar.Position);
+  // Coords account for the inset track (16px buttons at each end on a 16x200
+  // vertical bar -> track y in [16,184), len 168, thumb ~33, FreeSpace ~135,
+  // TrackStart=16). Grab at thumb top (y=16, pos 0) and drag down into the
+  // track to land at the mid position: ((84-16)*100) div 135 = 50.
+  FBar.BeginThumbDrag(16);
+  FBar.DragThumbTo(84);
+  AssertEquals('drag of free-space moves to mid position', 50, FBar.Position);
 end;
 procedure TTyScrollBarDragTest.TestDragFiresOnChange;
 begin
-  FBar.BeginThumbDrag(0);
-  FBar.DragThumbTo(80);
+  // Grab the thumb at its top (y=16, the inset-track start) and drag down.
+  FBar.BeginThumbDrag(16);
+  FBar.DragThumbTo(84);
   AssertTrue('OnChange fired at least once during drag', FChanges >= 1);
 end;
 procedure TTyScrollBarDragTest.TestDragClampsAtMax;
 begin
-  FBar.BeginThumbDrag(0);
+  // Grab the thumb at its top (y=16, inset-track start) and drag far past the
+  // track end; clamping to TrackStart+FreeSpace still pins Position at Max.
+  FBar.BeginThumbDrag(16);
   FBar.DragThumbTo(10000);
   AssertEquals('drag past end clamps at Max', 100, FBar.Position);
 end;
@@ -187,8 +205,10 @@ end;
 procedure TTyScrollBarThumbColorTest.TestThumbPixelUsesTextColor;
 { Stylesheet: track is near-black (#202020), thumb color is red (#FF0000).
   Vertical scrollbar Min=0 Max=100 Page=25 Pos=0 in a 16x200 bitmap.
-  Thumb occupies top ~40px (25/125 of 200).
-  - Pixel at (8, 10) must be inside the thumb => red-dominant (R>200, G<80).
+  Track is inset by a 16px button-size at each end (Task 4), so the track is
+  y in [16,184), len 168, and the thumb (25/125 of 168 ~= 33px) occupies the
+  top of the track, roughly y in [16,49).
+  - Pixel at (8, 30) must be inside the thumb => red-dominant (R>200, G<80).
   - Pixel at (8, 150) is in the track below the thumb => NOT red-dominant.
 }
 var
@@ -220,7 +240,7 @@ begin
 
     Reread := TBGRABitmap.Create(Bmp);
     try
-      PxThumb := Reread.GetPixel(8, 10);   // inside thumb (top 40px)
+      PxThumb := Reread.GetPixel(8, 30);   // inside thumb (inset track ~[16,49))
       PxTrack := Reread.GetPixel(8, 150);  // in track below thumb
 
       AssertTrue('thumb pixel R > 200 (red-dominant)',  PxThumb.red > 200);
@@ -252,7 +272,7 @@ end;
 procedure TTyScrollBarMouseTest.TestThumbDragMovesPosition;
 var
   Bar: TScrollAccess;
-  ThumbR: TRect;
+  Track, ThumbR: TRect;
   CenterY: Integer;
 begin
   Bar := TScrollAccess.Create(FForm);
@@ -265,11 +285,16 @@ begin
   Bar.PageSize := 10;
   Bar.Position := 0;
 
-  ThumbR := TyScrollThumbRect(Rect(0, 0, 16, 160), sbVertical, 0, 100, 0, 10);
+  // The control now hit-tests/positions the thumb against the INSET track
+  // (16px buttons at each end -> track y in [16,144)), so compute the thumb
+  // against that same inset track to land the grab on it.
+  Track := TyScrollTrackRect(Rect(0, 0, 16, 160), sbVertical,
+    TyScrollButtonSize(Rect(0, 0, 16, 160), sbVertical));
+  ThumbR := TyScrollThumbRect(Track, sbVertical, 0, 100, 0, 10);
   CenterY := (ThumbR.Top + ThumbR.Bottom) div 2;
 
   Bar.CallMouseDown(mbLeft, 8, CenterY);
-  Bar.CallMouseMove(8, 140);
+  Bar.CallMouseMove(8, 140);   // toward bottom of the inset track
   Bar.CallMouseUp(mbLeft, 8, 140);
 
   AssertTrue(Format('thumb drag toward bottom moves Position substantially (actual %d)',
@@ -290,8 +315,10 @@ begin
   Bar.PageSize := 10;
   Bar.Position := 0;
 
-  // y=150 is in the track below the thumb (thumb top ~0, short page)
-  Bar.CallMouseDown(mbLeft, 8, 150);
+  // Track is inset by 16px buttons at each end -> track y in [16,144); the
+  // thumb at pos 0 sits at the top of it (~[16,27)). Click at y=100, which is
+  // in the inset track below the thumb, to page down by one PageSize.
+  Bar.CallMouseDown(mbLeft, 8, 100);
 
   AssertTrue(Format('track click below thumb pages down by ~PageSize (actual %d)',
     [Bar.Position]), Abs(Bar.Position - 10) <= 2);
@@ -300,7 +327,7 @@ end;
 procedure TTyScrollBarMouseTest.TestDisabledScrollbarMouseIgnored;
 var
   Bar: TScrollAccess;
-  ThumbR: TRect;
+  Track, ThumbR: TRect;
   CenterY: Integer;
 begin
   Bar := TScrollAccess.Create(FForm);
@@ -314,7 +341,11 @@ begin
   Bar.Position := 0;
   Bar.Enabled := False;
 
-  ThumbR := TyScrollThumbRect(Rect(0, 0, 16, 160), sbVertical, 0, 100, 0, 10);
+  // Thumb computed against the inset track (16px buttons each end); a disabled
+  // bar must ignore the mouse regardless, so Position stays 0.
+  Track := TyScrollTrackRect(Rect(0, 0, 16, 160), sbVertical,
+    TyScrollButtonSize(Rect(0, 0, 16, 160), sbVertical));
+  ThumbR := TyScrollThumbRect(Track, sbVertical, 0, 100, 0, 10);
   CenterY := (ThumbR.Top + ThumbR.Bottom) div 2;
 
   Bar.CallMouseDown(mbLeft, 8, CenterY);

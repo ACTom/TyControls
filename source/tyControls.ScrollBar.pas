@@ -11,10 +11,12 @@ type
   private
     FKind: TTyScrollBarKind;
     FMin, FMax, FPosition, FPageSize: Integer;
+    FSmallChange: Integer;
     FOnChange: TNotifyEvent;
     FDragging: Boolean;
     FDragGrabOffset: Integer;
     FDragStartTop: Integer;
+    function TrackRect: TRect;
     function TrackLength: Integer;
     function PosAlong(X, Y: Integer): Integer;
     procedure SetKind(const AValue: TTyScrollBarKind);
@@ -22,6 +24,7 @@ type
     procedure SetMax(const AValue: Integer);
     procedure SetPosition(const AValue: Integer);
     procedure SetPageSize(const AValue: Integer);
+    procedure SetSmallChange(const AValue: Integer);
   protected
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -40,6 +43,7 @@ type
     property Max: Integer read FMax write SetMax default 100;
     property Position: Integer read FPosition write SetPosition default 0;
     property PageSize: Integer read FPageSize write SetPageSize default 10;
+    property SmallChange: Integer read FSmallChange write SetSmallChange default 1;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property Align;
     property Anchors;
@@ -49,6 +53,10 @@ type
 
 function TyScrollThumbRect(const ATrack: TRect; AKind: TTyScrollBarKind;
   AMin, AMax, APosition, APageSize: Integer): TRect;
+
+function TyScrollButtonSize(const AClient: TRect; AKind: TTyScrollBarKind): Integer;
+function TyScrollTrackRect(const AClient: TRect; AKind: TTyScrollBarKind;
+  AButtonSize: Integer): TRect;
 
 implementation
 
@@ -88,6 +96,34 @@ begin
       ATrack.Left + Offset + ThumbLen, ATrack.Bottom);
 end;
 
+function TyScrollButtonSize(const AClient: TRect; AKind: TTyScrollBarKind): Integer;
+begin
+  if AKind = sbVertical then
+    Result := AClient.Right - AClient.Left
+  else
+    Result := AClient.Bottom - AClient.Top;
+  if Result < 1 then Result := 1;
+end;
+
+function TyScrollTrackRect(const AClient: TRect; AKind: TTyScrollBarKind;
+  AButtonSize: Integer): TRect;
+var
+  mainLen: Integer;
+begin
+  Result := AClient;
+  if AKind = sbVertical then
+    mainLen := AClient.Bottom - AClient.Top
+  else
+    mainLen := AClient.Right - AClient.Left;
+  if mainLen <= 2 * AButtonSize then Exit;   // too short for two buttons -> whole client, no buttons
+  if AKind = sbVertical then
+    Result := Rect(AClient.Left, AClient.Top + AButtonSize,
+      AClient.Right, AClient.Bottom - AButtonSize)
+  else
+    Result := Rect(AClient.Left + AButtonSize, AClient.Top,
+      AClient.Right - AButtonSize, AClient.Bottom);
+end;
+
 constructor TTyScrollBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -96,6 +132,7 @@ begin
   FMax := 100;
   FPosition := 0;
   FPageSize := 10;
+  FSmallChange := 1;
   Width := 16;
   Height := 160;
 end;
@@ -152,11 +189,19 @@ begin
   Invalidate;
 end;
 
+procedure TTyScrollBar.SetSmallChange(const AValue: Integer);
+begin
+  if AValue < 1 then
+    FSmallChange := 1
+  else
+    FSmallChange := AValue;
+end;
+
 procedure TTyScrollBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  R, ThumbR: TRect;
+  R, Track, ThumbR: TRect;
   ThumbFill: TTyFill;
 begin
   P := TTyPainter.Create;
@@ -165,7 +210,8 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
-    ThumbR := TyScrollThumbRect(R, FKind, FMin, FMax, FPosition, FPageSize);
+    Track := TyScrollTrackRect(R, FKind, TyScrollButtonSize(R, FKind));
+    ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, FPosition, FPageSize);
     ThumbFill := Default(TTyFill);
     ThumbFill.Kind := tfkSolid;
     ThumbFill.Color := S.TextColor;
@@ -181,14 +227,24 @@ begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
-function TTyScrollBar.TrackLength: Integer;
+function TTyScrollBar.TrackRect: TRect;
 begin
-  // Derive from ClientRect so drag and paint share the same rect basis
-  // (TyScrollThumbRect is computed against ClientRect).
+  // Inset client by a button-size at each end so the thumb/drag/paging
+  // operate on the track between the (Task 5) end arrow buttons.
+  Result := TyScrollTrackRect(ClientRect, FKind, TyScrollButtonSize(ClientRect, FKind));
+end;
+
+function TTyScrollBar.TrackLength: Integer;
+var
+  Track: TRect;
+begin
+  // Derive from the inset track so drag and paint share the same rect basis
+  // (TyScrollThumbRect is now computed against the inset track).
+  Track := TrackRect;
   if FKind = sbVertical then
-    Result := ClientRect.Bottom - ClientRect.Top
+    Result := Track.Bottom - Track.Top
   else
-    Result := ClientRect.Right - ClientRect.Left;
+    Result := Track.Right - Track.Left;
 end;
 
 procedure TTyScrollBar.BeginThumbDrag(AGrabPosAlongTrack: Integer);
@@ -196,7 +252,7 @@ var
   ThumbR: TRect;
   ThumbStart: Integer;
 begin
-  ThumbR := TyScrollThumbRect(ClientRect, FKind, FMin, FMax, FPosition, FPageSize);
+  ThumbR := TyScrollThumbRect(TrackRect, FKind, FMin, FMax, FPosition, FPageSize);
   if FKind = sbVertical then
     ThumbStart := ThumbR.Top
   else
@@ -208,22 +264,29 @@ end;
 
 procedure TTyScrollBar.DragThumbTo(APosAlongTrack: Integer);
 var
-  ThumbR: TRect;
-  ThumbLen, FreeSpace, NewTop, Travel, NewPos: Integer;
+  Track, ThumbR: TRect;
+  ThumbLen, FreeSpace, NewTop, Travel, NewPos, TrackStart: Integer;
 begin
   if not FDragging then Exit;
-  ThumbR := TyScrollThumbRect(ClientRect, FKind, FMin, FMax, FPosition, FPageSize);
+  Track := TrackRect;
+  ThumbR := TyScrollThumbRect(Track, FKind, FMin, FMax, FPosition, FPageSize);
   if FKind = sbVertical then
     ThumbLen := ThumbR.Bottom - ThumbR.Top
   else
     ThumbLen := ThumbR.Right - ThumbR.Left;
   FreeSpace := TrackLength - ThumbLen;
   if FreeSpace < 1 then FreeSpace := 1;
+  // The thumb lives in [TrackStart, TrackStart+FreeSpace] in CLIENT coords,
+  // because the track is inset by a button-size at each end.
+  if FKind = sbVertical then
+    TrackStart := Track.Top
+  else
+    TrackStart := Track.Left;
   NewTop := APosAlongTrack - FDragGrabOffset;
-  if NewTop < 0 then NewTop := 0;
-  if NewTop > FreeSpace then NewTop := FreeSpace;
+  if NewTop < TrackStart then NewTop := TrackStart;
+  if NewTop > TrackStart + FreeSpace then NewTop := TrackStart + FreeSpace;
   Travel := FMax - FMin;
-  NewPos := FMin + (NewTop * Travel) div FreeSpace;
+  NewPos := FMin + ((NewTop - TrackStart) * Travel) div FreeSpace;
   Position := NewPos;
 end;
 
@@ -248,7 +311,7 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
-    ThumbR := TyScrollThumbRect(ClientRect, FKind, FMin, FMax, FPosition, FPageSize);
+    ThumbR := TyScrollThumbRect(TrackRect, FKind, FMin, FMax, FPosition, FPageSize);
     if PtInRect(ThumbR, Point(X, Y)) then
     begin
       BeginThumbDrag(PosAlong(X, Y));
