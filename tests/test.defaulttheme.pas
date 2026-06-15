@@ -20,6 +20,7 @@ type
     procedure TestBuiltinTitleBarTopRoundedTab;
     procedure TestBuiltinFocusRingOnButton;
     procedure TestDisabledOpacityParity;
+    procedure TestStateRuleParity;
   end;
 
   TTyButtonRenderAccess = class(TTyButton)
@@ -258,6 +259,27 @@ begin
   try
     m.LoadFromCss(TyBuiltinThemeCss);
     Chk('TyScrollBar'); Chk('TyTrackBar'); Chk('TyTabControl'); Chk('TyProgressBar');
+  finally m.Free; end;
+end;
+
+procedure TBuiltinThemeTest.TestStateRuleParity;
+var m: TTyStyleModel; tog0, togH, edH, lbH, btnH, sbF, tcF: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(TyBuiltinThemeCss);
+    tog0 := m.ResolveStyle('TyToggleSwitch','',[]);
+    togH := m.ResolveStyle('TyToggleSwitch','',[tysHover]);
+    AssertTrue('toggle hover differs from normal', togH.Background.Color <> tog0.Background.Color);
+    sbF := m.ResolveStyle('TyScrollBar','',[tysFocused]);
+    AssertTrue('scrollbar focus has outline', (tpOutline in sbF.Present) and (sbF.OutlineWidth > 0));
+    tcF := m.ResolveStyle('TyTabControl','',[tysFocused]);
+    AssertTrue('tabcontrol focus sets border-color', tpBorderColor in tcF.Present);
+    edH := m.ResolveStyle('TyEdit','',[tysHover]);
+    lbH := m.ResolveStyle('TyListBox','',[tysHover]);
+    btnH := m.ResolveStyle('TyButton','',[tysHover]);
+    AssertTrue('listbox hover border = input hover border', lbH.BorderColor = edH.BorderColor);
+    AssertTrue('button hover border = input hover border', btnH.BorderColor = edH.BorderColor);
   finally m.Free; end;
 end;
 

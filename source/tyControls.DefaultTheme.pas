@@ -42,7 +42,7 @@ begin
     '  font-size: 9px;' + LineEnding +
     '  font-weight: 400;' + LineEnding +
     '}' + LineEnding +
-    'TyButton:hover    { background: darken(--surface, 4%); }' + LineEnding +
+    'TyButton:hover    { background: darken(--surface, 4%); border-color: darken(--border, 10%); }' + LineEnding +
     'TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyButton:active   { background: darken(--surface, 10%); }' + LineEnding +
     'TyButton:disabled { opacity: 0.5; }' + LineEnding +
@@ -127,6 +127,7 @@ begin
     '}' + LineEnding +
     'TyScrollBar:hover  { color: darken(--border, 15%); }' + LineEnding +
     'TyScrollBar:active { color: var(--accent); }' + LineEnding +
+    'TyScrollBar:focus  { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyScrollBar:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyTitleBar {' + LineEnding +
@@ -161,6 +162,7 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 2px;' + LineEnding +
     '}' + LineEnding +
+    'TyListBox:hover   { border-color: darken(--border, 10%); }' + LineEnding +
     'TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyListBox:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
@@ -190,6 +192,7 @@ begin
     '  color: #FFFFFF;' + LineEnding +
     '  border-radius: 12px;' + LineEnding +
     '}' + LineEnding +
+    'TyToggleSwitch:hover    { background: darken(--surface, 22%); }' + LineEnding +
     'TyToggleSwitch:active   { background: var(--accent); }' + LineEnding +
     'TyToggleSwitch:focus { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyToggleSwitch:disabled { opacity: 0.5; }' + LineEnding +
@@ -226,7 +229,8 @@ begin
     '  border-width: 1px;' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
-    'TyTabControl:focus  { outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyTabControl:hover  { border-color: darken(--border, 10%); }' + LineEnding +
+    'TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyTabControl:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     'TyTab {' + LineEnding +

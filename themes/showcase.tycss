@@ -23,7 +23,7 @@ TyButton {
   font-weight: 700;
   shadow: 0px 2px 4px #0000002E;
 }
-TyButton:hover    { background: linear-gradient(90deg, lighten(--surface, 3%), darken(--surface, 4%)); }
+TyButton:hover    { background: linear-gradient(90deg, lighten(--surface, 3%), darken(--surface, 4%)); border-color: lighten(--accent, 10%); }
 TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyButton:active   { background: darken(--surface, 10%); }
 TyButton:disabled { opacity: 0.45; }
@@ -109,6 +109,7 @@ TyScrollBar {
 }
 TyScrollBar:hover  { color: var(--accent); }
 TyScrollBar:active { color: darken(--accent, 8%); }
+TyScrollBar:focus  { outline: 2px var(--focus-ring); }
 TyScrollBar:disabled { opacity: 0.45; }
 
 TyTitleBar {
@@ -144,6 +145,7 @@ TyListBox {
   padding: 2px;
   shadow: 0px 1px 3px #0000001F;
 }
+TyListBox:hover   { border-color: lighten(--accent, 10%); }
 TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyListBox:disabled { opacity: 0.45; }
 
@@ -173,6 +175,7 @@ TyToggleSwitch {
   color: #FFFFFF;
   border-radius: 12px;
 }
+TyToggleSwitch:hover    { background: darken(--surface, 18%); }
 TyToggleSwitch:active   { background: var(--accent); }
 TyToggleSwitch:focus { outline: 2px var(--focus-ring); }
 TyToggleSwitch:disabled { opacity: 0.45; }
@@ -210,7 +213,8 @@ TyTabControl {
   border-radius: var(--radius);
   shadow: 0px 1px 3px #0000001F;
 }
-TyTabControl:focus  { outline: 2px var(--focus-ring); }
+TyTabControl:hover  { border-color: lighten(--accent, 10%); }
+TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyTabControl:disabled { opacity: 0.45; }
 
 TyTab {
