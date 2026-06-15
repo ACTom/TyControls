@@ -39,6 +39,8 @@ type
   TTyProgressBarPixelTest = class(TTestCase)
   published
     procedure TestFillPixelBlueAt50Percent;
+    procedure TestPartialFillRoundsLeadingLeftCornersOnly;
+    procedure TestFullFillRoundsTrailingCorners;
   end;
 
 implementation
@@ -188,6 +190,112 @@ begin
       AssertTrue('fill pixel: red < 120 (not red)',        PxFill.red < 120);
 
       AssertTrue('track pixel: NOT blue-dominant (B <= R+80)', PxTrack.blue <= PxTrack.red + 80);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyProgressBarPixelTest.TestPartialFillRoundsLeadingLeftCornersOnly;
+{ Partial fill (50%) with a large border-radius: only the LEFT (origin) corners
+  round; the RIGHT (leading) edge stays SQUARE so the mid-track edge is a clean
+  vertical line, not a floating pill.
+  Track 200x20, border-width 0, radius 10. At Pos=50/100 fill covers x=0..100.
+  - Fill LEFT-top corner (2,2) is rounded => track/bg shows => NOT blue-dominant.
+  - Fill RIGHT-top corner (97,2) is square => fill shows => blue-dominant.
+  - Center (50,10) is fill => blue-dominant. }
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Bar: TProgressBarAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  PxLeftCorner, PxRightCorner, PxCenter: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyProgressBar { background: #202020; border-width: 0px; border-radius: 10px; }' +
+      'TyProgressFill { background: #3B82F6; border-radius: 10px; }');
+    Bar := TProgressBarAccess.Create(Form);
+    Bar.Parent := Form;
+    Bar.Controller := Ctl;
+    Bar.Min := 0;
+    Bar.Max := 100;
+    Bar.Position := 50;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 20);
+    Bar.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 20), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      PxLeftCorner  := Reread.GetPixel(2, 2);    // rounded leading-from-origin corner
+      PxRightCorner := Reread.GetPixel(97, 2);   // square leading edge at mid-track
+      PxCenter      := Reread.GetPixel(50, 10);  // interior of fill
+
+      AssertTrue('left-top corner rounded => NOT blue (track shows)',
+        PxLeftCorner.blue <= PxLeftCorner.red + 80);
+      AssertTrue('right-top corner square => blue (fill shows)',
+        PxRightCorner.blue > 180);
+      AssertTrue('center is fill => blue',
+        PxCenter.blue > 180);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyProgressBarPixelTest.TestFullFillRoundsTrailingCorners;
+{ Full fill (100%): the fill matches the track, so ALL four corners round again.
+  The trailing (right-top) corner that was square at 50% is now rounded.
+  Track 200x20, radius 10, fill covers x=0..200.
+  - Fill RIGHT-top corner (197,2) is rounded => track/bg shows => NOT blue. }
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Bar: TProgressBarAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  PxRightCorner, PxCenter: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyProgressBar { background: #202020; border-width: 0px; border-radius: 10px; }' +
+      'TyProgressFill { background: #3B82F6; border-radius: 10px; }');
+    Bar := TProgressBarAccess.Create(Form);
+    Bar.Parent := Form;
+    Bar.Controller := Ctl;
+    Bar.Min := 0;
+    Bar.Max := 100;
+    Bar.Position := 100;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 20);
+    Bar.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 20), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      PxRightCorner := Reread.GetPixel(197, 2);  // now rounded trailing corner
+      PxCenter      := Reread.GetPixel(100, 10); // interior of fill
+
+      AssertTrue('right-top corner rounded at full => NOT blue (track shows)',
+        PxRightCorner.blue <= PxRightCorner.red + 80);
+      AssertTrue('center is fill => blue',
+        PxCenter.blue > 180);
     finally
       Reread.Free;
     end;

@@ -123,7 +123,17 @@ begin
     FillS := ActiveController.Model.ResolveStyle('TyProgressFill', '', []);
     FillR := TyProgressFillRect(TrackR, FMin, FMax, FPosition);
     if FillR.Right > FillR.Left then
-      P.FillBackground(FillR, FillS.Background, FillS.BorderRadius);
+    begin
+      // Full fill (Position >= Max) matches the track edge-to-edge, so round all
+      // four corners. A partial fill is left-anchored and its leading (right) edge
+      // sits mid-track, so round only the LEFT (origin) corners and keep the right
+      // edge square — otherwise the fill looks like a floating pill.
+      if FPosition >= FMax then
+        P.FillBackground(FillR, FillS.Background, TyUniformCorners(FillS.BorderRadius))
+      else
+        P.FillBackground(FillR, FillS.Background,
+          TyCorners(FillS.BorderRadius, 0, 0, FillS.BorderRadius)); // TL, TR, BR, BL
+    end;
     P.EndPaint;
   finally
     P.Free;
