@@ -471,7 +471,7 @@ begin
   else
     StripW := FHeaderRects[High(FHeaderRects)].Right;
   VisibleWidth := Width;
-  AffordanceW  := MulDiv(16, Font.PixelsPerInch, 96) * 2;
+  AffordanceW  := MulDiv(TyTabArrowBand, Font.PixelsPerInch, 96) * 2;
   Result := StripW - (VisibleWidth - AffordanceW);
   if Result < 0 then Result := 0;
 end;
@@ -525,7 +525,7 @@ begin
 
   if FShowScrollAffordance then
   begin
-    ArrowW   := MulDiv(16, Font.PixelsPerInch, 96);
+    ArrowW   := MulDiv(TyTabArrowBand, Font.PixelsPerInch, 96);
     { The left arrow overlays the start of the strip, so the leftmost tab can
       legitimately sit at x=0 (scroll 0). Align "into view from the left" to the
       true left edge; reserve only the right arrow on the trailing side. }

@@ -129,6 +129,9 @@ begin
   AssertEquals(14, TyTabCloseSize);
   AssertEquals(48, TyTabMinWidth);
   AssertEquals(16, TyTabArrowBand);
+  AssertEquals(12, TyTabPad);
+  AssertEquals(6,  TyTabGap);
+  AssertEquals(6,  TyTabMargin);
 end;
 
 initialization

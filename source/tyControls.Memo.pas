@@ -1612,7 +1612,7 @@ begin
   S := CurrentStyle;
   SBWidth := 0;
   if (FScrollBar <> nil) and FScrollBar.Visible then
-    SBWidth := MulDiv(12, APPI, 96);
+    SBWidth := MulDiv(TyScrollbarSize, APPI, 96);
   // Use Width (not ClientWidth) to match VisibleRows' headless-safe convention:
   // for this borderless control Width = ClientWidth at runtime, but ClientWidth
   // can lag SetBounds in headless tests without a native handle.
@@ -2086,7 +2086,7 @@ begin
     // Subtract scrollbar width when visible (mirrors TTyListBox.RenderTo).
     SBWidth := 0;
     if (FScrollBar <> nil) and FScrollBar.Visible then
-      SBWidth := MulDiv(12, APPI, 96);
+      SBWidth := MulDiv(TyScrollbarSize, APPI, 96);
 
     LH := LineHeight(APPI);
     ContentTop := ContentRect.Top;
