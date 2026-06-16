@@ -25,16 +25,32 @@ unit test.eventfiring;
   calls inherited near the top, before any branch that could Exit.)
 
   Matrix covered here:
-   - ALL 16 controls: MouseDown, MouseUp, MouseMove, MouseEnter, MouseLeave, Click.
-   - 14 windowed (TTyCustomControl) controls: + KeyDown, KeyUp.
+   - ALL 16 controls: MouseDown, MouseUp, MouseMove, MouseEnter, MouseLeave, Click,
+     DblClick, MouseWheel (via DoMouseWheel), ContextPopup (via DoContextPopup).
+   - 14 windowed (TTyCustomControl) controls: + KeyDown, KeyUp, Enter (via DoEnter),
+     Exit (via DoExit).
    - 4 text controls (Edit/Memo/SpinEdit/ComboBox): + UTF8KeyPress.
-  (TyLabel + ProgressBar are TTyGraphicControl: mouse + Click only, no key.) }
+  (TyLabel + ProgressBar are TTyGraphicControl: no key/focus dispatch, so they get
+   mouse + Click + DblClick + MouseWheel + ContextPopup only.)
+
+  EXTENDED EVENTS (branch event-matrix-complete):
+   - DblClick is TControl.DblClick (protected, virtual). Called directly on the
+     access subclass (same-unit protected visibility, like Click).
+   - MouseWheel fires from TControl.DoMouseWheel (protected). The override (if any)
+     guards `if not Enabled then Exit(False)` then calls inherited near the top, so
+     with Enabled:=True and WheelDelta=120 the OnMouseWheel handler runs.
+   - Enter/Exit fire from TWinControl.DoEnter/DoExit (protected) -> the tyControls
+     overrides call inherited first; HandleAllocated guards keep blink-timer setup
+     inert headlessly.
+   - ContextPopup fires from TControl.DoContextPopup(MousePos, Handled) which simply
+     calls FOnContextPopup if assigned -- no window handle needed, clean headlessly.
+     No tyControls control overrides it; it dispatches straight to the handler. }
 
 {$mode objfpc}{$H+}
 interface
 
 uses
-  Classes, SysUtils, Controls, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, Types, Controls, LCLType, fpcunit, testregistry,
   tyControls.TyLabel, tyControls.ProgressBar,
   tyControls.Button, tyControls.Edit, tyControls.Memo, tyControls.SpinEdit,
   tyControls.ComboBox, tyControls.CheckBox, tyControls.ListBox,
@@ -56,6 +72,8 @@ type
     procedure FMouseMove(S: TShiftState; X, Y: Integer);
     procedure FMouseEnter;
     procedure FMouseLeave;
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
   end;
 
   TPbAcc = class(TTyProgressBar)
@@ -65,6 +83,8 @@ type
     procedure FMouseMove(S: TShiftState; X, Y: Integer);
     procedure FMouseEnter;
     procedure FMouseLeave;
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
   end;
 
   TBtnAcc = class(TTyButton)
@@ -76,6 +96,10 @@ type
     procedure FMouseLeave;
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TEdAcc = class(TTyEdit)
@@ -88,6 +112,10 @@ type
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
     procedure FUTF8(var U: TUTF8Char);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TMemoAcc = class(TTyMemo)
@@ -100,6 +128,10 @@ type
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
     procedure FUTF8(var U: TUTF8Char);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TSpinAcc = class(TTySpinEdit)
@@ -112,6 +144,10 @@ type
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
     procedure FUTF8(var U: TUTF8Char);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TCmbAcc = class(TTyComboBox)
@@ -124,6 +160,10 @@ type
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
     procedure FUTF8(var U: TUTF8Char);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TChkAcc = class(TTyCheckBox)
@@ -135,6 +175,10 @@ type
     procedure FMouseLeave;
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TRadAcc = class(TTyRadioButton)
@@ -146,6 +190,10 @@ type
     procedure FMouseLeave;
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TLstAcc = class(TTyListBox)
@@ -157,6 +205,10 @@ type
     procedure FMouseLeave;
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TTabAcc = class(TTyTabControl)
@@ -168,6 +220,10 @@ type
     procedure FMouseLeave;
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TGrpAcc = class(TTyGroupBox)
@@ -179,6 +235,10 @@ type
     procedure FMouseLeave;
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TPnlAcc = class(TTyPanel)
@@ -190,6 +250,10 @@ type
     procedure FMouseLeave;
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TSbAcc = class(TTyScrollBar)
@@ -201,6 +265,10 @@ type
     procedure FMouseLeave;
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TTbAcc = class(TTyTrackBar)
@@ -212,6 +280,10 @@ type
     procedure FMouseLeave;
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   TTglAcc = class(TTyToggleSwitch)
@@ -223,6 +295,10 @@ type
     procedure FMouseLeave;
     procedure FKeyDown(var K: Word; S: TShiftState);
     procedure FKeyUp(var K: Word; S: TShiftState);
+    procedure FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint);
+    procedure FContextPopup(MP: TPoint; var H: Boolean);
+    procedure FDoEnter;
+    procedure FDoExit;
   end;
 
   { One test class. Each published method fires exactly one (control,event) cell
@@ -231,6 +307,7 @@ type
   TEventFiringMatrixTest = class(TTestCase)
   private
     FDown, FUp, FMove, FEnter, FLeave, FClick, FKeyDown, FKeyUp, FUTF8: Boolean;
+    FDblClick, FWheel, FDoEnter, FDoExit, FCtxPopup: Boolean;
     procedure Reset;
     procedure HMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure HMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -241,6 +318,11 @@ type
     procedure HKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure HKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure HUTF8(Sender: TObject; var UTF8Key: TUTF8Char);
+    procedure HDblClick(Sender: TObject);
+    procedure HWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+    procedure HDoEnter(Sender: TObject);
+    procedure HDoExit(Sender: TObject);
+    procedure HCtxPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
   published
     procedure Label_Mouse;
     procedure ProgressBar_Mouse;
@@ -396,12 +478,92 @@ procedure TTglAcc.FMouseLeave; begin MouseLeave; end;
 procedure TTglAcc.FKeyDown(var K: Word; S: TShiftState); begin KeyDown(K, S); end;
 procedure TTglAcc.FKeyUp(var K: Word; S: TShiftState); begin KeyUp(K, S); end;
 
+{ ---- extended forwarders: DoMouseWheel / DoContextPopup / DoEnter / DoExit ---- }
+
+procedure TLblAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TLblAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+
+procedure TPbAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TPbAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+
+procedure TBtnAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TBtnAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TBtnAcc.FDoEnter; begin DoEnter; end;
+procedure TBtnAcc.FDoExit; begin DoExit; end;
+
+procedure TEdAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TEdAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TEdAcc.FDoEnter; begin DoEnter; end;
+procedure TEdAcc.FDoExit; begin DoExit; end;
+
+procedure TMemoAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TMemoAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TMemoAcc.FDoEnter; begin DoEnter; end;
+procedure TMemoAcc.FDoExit; begin DoExit; end;
+
+procedure TSpinAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TSpinAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TSpinAcc.FDoEnter; begin DoEnter; end;
+procedure TSpinAcc.FDoExit; begin DoExit; end;
+
+procedure TCmbAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TCmbAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TCmbAcc.FDoEnter; begin DoEnter; end;
+procedure TCmbAcc.FDoExit; begin DoExit; end;
+
+procedure TChkAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TChkAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TChkAcc.FDoEnter; begin DoEnter; end;
+procedure TChkAcc.FDoExit; begin DoExit; end;
+
+procedure TRadAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TRadAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TRadAcc.FDoEnter; begin DoEnter; end;
+procedure TRadAcc.FDoExit; begin DoExit; end;
+
+procedure TLstAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TLstAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TLstAcc.FDoEnter; begin DoEnter; end;
+procedure TLstAcc.FDoExit; begin DoExit; end;
+
+procedure TTabAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TTabAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TTabAcc.FDoEnter; begin DoEnter; end;
+procedure TTabAcc.FDoExit; begin DoExit; end;
+
+procedure TGrpAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TGrpAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TGrpAcc.FDoEnter; begin DoEnter; end;
+procedure TGrpAcc.FDoExit; begin DoExit; end;
+
+procedure TPnlAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TPnlAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TPnlAcc.FDoEnter; begin DoEnter; end;
+procedure TPnlAcc.FDoExit; begin DoExit; end;
+
+procedure TSbAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TSbAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TSbAcc.FDoEnter; begin DoEnter; end;
+procedure TSbAcc.FDoExit; begin DoExit; end;
+
+procedure TTbAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TTbAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TTbAcc.FDoEnter; begin DoEnter; end;
+procedure TTbAcc.FDoExit; begin DoExit; end;
+
+procedure TTglAcc.FMouseWheel(S: TShiftState; WD: Integer; MP: TPoint); begin DoMouseWheel(S, WD, MP); end;
+procedure TTglAcc.FContextPopup(MP: TPoint; var H: Boolean); begin DoContextPopup(MP, H); end;
+procedure TTglAcc.FDoEnter; begin DoEnter; end;
+procedure TTglAcc.FDoExit; begin DoExit; end;
+
 { ---- handlers ---- }
 
 procedure TEventFiringMatrixTest.Reset;
 begin
   FDown := False; FUp := False; FMove := False; FEnter := False; FLeave := False;
   FClick := False; FKeyDown := False; FKeyUp := False; FUTF8 := False;
+  FDblClick := False; FWheel := False; FDoEnter := False; FDoExit := False;
+  FCtxPopup := False;
 end;
 
 procedure TEventFiringMatrixTest.HMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer); begin FDown := True; end;
@@ -413,11 +575,16 @@ procedure TEventFiringMatrixTest.HClick(Sender: TObject); begin FClick := True; 
 procedure TEventFiringMatrixTest.HKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState); begin FKeyDown := True; end;
 procedure TEventFiringMatrixTest.HKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState); begin FKeyUp := True; end;
 procedure TEventFiringMatrixTest.HUTF8(Sender: TObject; var UTF8Key: TUTF8Char); begin FUTF8 := True; end;
+procedure TEventFiringMatrixTest.HDblClick(Sender: TObject); begin FDblClick := True; end;
+procedure TEventFiringMatrixTest.HWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean); begin FWheel := True; end;
+procedure TEventFiringMatrixTest.HDoEnter(Sender: TObject); begin FDoEnter := True; end;
+procedure TEventFiringMatrixTest.HDoExit(Sender: TObject); begin FDoExit := True; end;
+procedure TEventFiringMatrixTest.HCtxPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean); begin FCtxPopup := True; end;
 
 { ---- per-control tests ---- }
 
 procedure TEventFiringMatrixTest.Label_Mouse;
-var C: TLblAcc;
+var C: TLblAcc; H: Boolean;
 begin
   C := TLblAcc.Create(nil);
   try
@@ -425,19 +592,23 @@ begin
     Reset;
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('Label OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('Label OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('Label OnMouseMove', FMove);
     C.FMouseEnter;                        AssertTrue('Label OnMouseEnter', FEnter);
     C.FMouseLeave;                        AssertTrue('Label OnMouseLeave', FLeave);
     C.Click;                              AssertTrue('Label OnClick', FClick);
+    C.DblClick;                           AssertTrue('Label OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('Label OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('Label OnContextPopup', FCtxPopup);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.ProgressBar_Mouse;
-var C: TPbAcc;
+var C: TPbAcc; H: Boolean;
 begin
   C := TPbAcc.Create(nil);
   try
@@ -445,19 +616,23 @@ begin
     Reset;
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('ProgressBar OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('ProgressBar OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('ProgressBar OnMouseMove', FMove);
     C.FMouseEnter;                        AssertTrue('ProgressBar OnMouseEnter', FEnter);
     C.FMouseLeave;                        AssertTrue('ProgressBar OnMouseLeave', FLeave);
     C.Click;                              AssertTrue('ProgressBar OnClick', FClick);
+    C.DblClick;                           AssertTrue('ProgressBar OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('ProgressBar OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('ProgressBar OnContextPopup', FCtxPopup);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.Button_All;
-var C: TBtnAcc; K: Word;
+var C: TBtnAcc; K: Word; H: Boolean;
 begin
   C := TBtnAcc.Create(nil);
   try
@@ -466,6 +641,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('Button OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('Button OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('Button OnMouseMove', FMove);
@@ -474,13 +651,18 @@ begin
     C.Click;                              AssertTrue('Button OnClick', FClick);
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('Button OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('Button OnKeyUp', FKeyUp);
+    C.DblClick;                           AssertTrue('Button OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('Button OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('Button OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('Button OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('Button OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.Edit_All;
-var C: TEdAcc; K: Word; U: TUTF8Char;
+var C: TEdAcc; K: Word; U: TUTF8Char; H: Boolean;
 begin
   C := TEdAcc.Create(nil);
   try
@@ -489,6 +671,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp; C.OnUTF8KeyPress := @HUTF8;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('Edit OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('Edit OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('Edit OnMouseMove', FMove);
@@ -498,13 +682,18 @@ begin
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('Edit OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('Edit OnKeyUp', FKeyUp);
     U := 'a'; C.FUTF8(U);                 AssertTrue('Edit OnUTF8KeyPress', FUTF8);
+    C.DblClick;                           AssertTrue('Edit OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('Edit OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('Edit OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('Edit OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('Edit OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.Memo_All;
-var C: TMemoAcc; K: Word; U: TUTF8Char;
+var C: TMemoAcc; K: Word; U: TUTF8Char; H: Boolean;
 begin
   C := TMemoAcc.Create(nil);
   try
@@ -514,6 +703,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp; C.OnUTF8KeyPress := @HUTF8;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('Memo OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('Memo OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('Memo OnMouseMove', FMove);
@@ -523,13 +714,18 @@ begin
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('Memo OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('Memo OnKeyUp', FKeyUp);
     U := 'a'; C.FUTF8(U);                 AssertTrue('Memo OnUTF8KeyPress', FUTF8);
+    C.DblClick;                           AssertTrue('Memo OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('Memo OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('Memo OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('Memo OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('Memo OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.SpinEdit_All;
-var C: TSpinAcc; K: Word; U: TUTF8Char;
+var C: TSpinAcc; K: Word; U: TUTF8Char; H: Boolean;
 begin
   C := TSpinAcc.Create(nil);
   try
@@ -538,6 +734,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp; C.OnUTF8KeyPress := @HUTF8;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('SpinEdit OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('SpinEdit OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('SpinEdit OnMouseMove', FMove);
@@ -547,13 +745,18 @@ begin
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('SpinEdit OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('SpinEdit OnKeyUp', FKeyUp);
     U := '1'; C.FUTF8(U);                 AssertTrue('SpinEdit OnUTF8KeyPress', FUTF8);
+    C.DblClick;                           AssertTrue('SpinEdit OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('SpinEdit OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('SpinEdit OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('SpinEdit OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('SpinEdit OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.ComboBox_All;
-var C: TCmbAcc; K: Word; U: TUTF8Char;
+var C: TCmbAcc; K: Word; U: TUTF8Char; H: Boolean;
 begin
   C := TCmbAcc.Create(nil);
   try
@@ -562,6 +765,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp; C.OnUTF8KeyPress := @HUTF8;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('ComboBox OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('ComboBox OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('ComboBox OnMouseMove', FMove);
@@ -571,13 +776,18 @@ begin
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('ComboBox OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('ComboBox OnKeyUp', FKeyUp);
     U := 'a'; C.FUTF8(U);                 AssertTrue('ComboBox OnUTF8KeyPress', FUTF8);
+    C.DblClick;                           AssertTrue('ComboBox OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('ComboBox OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('ComboBox OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('ComboBox OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('ComboBox OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.CheckBox_All;
-var C: TChkAcc; K: Word;
+var C: TChkAcc; K: Word; H: Boolean;
 begin
   C := TChkAcc.Create(nil);
   try
@@ -586,6 +796,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('CheckBox OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('CheckBox OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('CheckBox OnMouseMove', FMove);
@@ -594,13 +806,18 @@ begin
     C.Click;                              AssertTrue('CheckBox OnClick', FClick);
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('CheckBox OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('CheckBox OnKeyUp', FKeyUp);
+    C.DblClick;                           AssertTrue('CheckBox OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('CheckBox OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('CheckBox OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('CheckBox OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('CheckBox OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.RadioButton_All;
-var C: TRadAcc; K: Word;
+var C: TRadAcc; K: Word; H: Boolean;
 begin
   C := TRadAcc.Create(nil);
   try
@@ -609,6 +826,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('RadioButton OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('RadioButton OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('RadioButton OnMouseMove', FMove);
@@ -617,13 +836,18 @@ begin
     C.Click;                              AssertTrue('RadioButton OnClick', FClick);
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('RadioButton OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('RadioButton OnKeyUp', FKeyUp);
+    C.DblClick;                           AssertTrue('RadioButton OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('RadioButton OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('RadioButton OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('RadioButton OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('RadioButton OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.ListBox_All;
-var C: TLstAcc; K: Word;
+var C: TLstAcc; K: Word; H: Boolean;
 begin
   C := TLstAcc.Create(nil);
   try
@@ -632,6 +856,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('ListBox OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('ListBox OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('ListBox OnMouseMove', FMove);
@@ -640,13 +866,18 @@ begin
     C.Click;                              AssertTrue('ListBox OnClick', FClick);
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('ListBox OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('ListBox OnKeyUp', FKeyUp);
+    C.DblClick;                           AssertTrue('ListBox OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('ListBox OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('ListBox OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('ListBox OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('ListBox OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.TabControl_All;
-var C: TTabAcc; K: Word;
+var C: TTabAcc; K: Word; H: Boolean;
 begin
   C := TTabAcc.Create(nil);
   try
@@ -655,6 +886,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('TabControl OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('TabControl OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('TabControl OnMouseMove', FMove);
@@ -663,13 +896,18 @@ begin
     C.Click;                              AssertTrue('TabControl OnClick', FClick);
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('TabControl OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('TabControl OnKeyUp', FKeyUp);
+    C.DblClick;                           AssertTrue('TabControl OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('TabControl OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('TabControl OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('TabControl OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('TabControl OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.GroupBox_All;
-var C: TGrpAcc; K: Word;
+var C: TGrpAcc; K: Word; H: Boolean;
 begin
   C := TGrpAcc.Create(nil);
   try
@@ -678,6 +916,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('GroupBox OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('GroupBox OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('GroupBox OnMouseMove', FMove);
@@ -686,13 +926,18 @@ begin
     C.Click;                              AssertTrue('GroupBox OnClick', FClick);
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('GroupBox OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('GroupBox OnKeyUp', FKeyUp);
+    C.DblClick;                           AssertTrue('GroupBox OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('GroupBox OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('GroupBox OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('GroupBox OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('GroupBox OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.Panel_All;
-var C: TPnlAcc; K: Word;
+var C: TPnlAcc; K: Word; H: Boolean;
 begin
   C := TPnlAcc.Create(nil);
   try
@@ -701,6 +946,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('Panel OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('Panel OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('Panel OnMouseMove', FMove);
@@ -709,13 +956,18 @@ begin
     C.Click;                              AssertTrue('Panel OnClick', FClick);
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('Panel OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('Panel OnKeyUp', FKeyUp);
+    C.DblClick;                           AssertTrue('Panel OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('Panel OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('Panel OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('Panel OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('Panel OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.ScrollBar_All;
-var C: TSbAcc; K: Word;
+var C: TSbAcc; K: Word; H: Boolean;
 begin
   C := TSbAcc.Create(nil);
   try
@@ -724,6 +976,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('ScrollBar OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('ScrollBar OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('ScrollBar OnMouseMove', FMove);
@@ -732,13 +986,18 @@ begin
     C.Click;                              AssertTrue('ScrollBar OnClick', FClick);
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('ScrollBar OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('ScrollBar OnKeyUp', FKeyUp);
+    C.DblClick;                           AssertTrue('ScrollBar OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('ScrollBar OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('ScrollBar OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('ScrollBar OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('ScrollBar OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.TrackBar_All;
-var C: TTbAcc; K: Word;
+var C: TTbAcc; K: Word; H: Boolean;
 begin
   C := TTbAcc.Create(nil);
   try
@@ -747,6 +1006,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('TrackBar OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('TrackBar OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('TrackBar OnMouseMove', FMove);
@@ -755,13 +1016,18 @@ begin
     C.Click;                              AssertTrue('TrackBar OnClick', FClick);
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('TrackBar OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('TrackBar OnKeyUp', FKeyUp);
+    C.DblClick;                           AssertTrue('TrackBar OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('TrackBar OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('TrackBar OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('TrackBar OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('TrackBar OnExit', FDoExit);
   finally
     C.Free;
   end;
 end;
 
 procedure TEventFiringMatrixTest.ToggleSwitch_All;
-var C: TTglAcc; K: Word;
+var C: TTglAcc; K: Word; H: Boolean;
 begin
   C := TTglAcc.Create(nil);
   try
@@ -770,6 +1036,8 @@ begin
     C.OnMouseDown := @HMouseDown; C.OnMouseUp := @HMouseUp; C.OnMouseMove := @HMouseMove;
     C.OnMouseEnter := @HEnter; C.OnMouseLeave := @HLeave; C.OnClick := @HClick;
     C.OnKeyDown := @HKeyDown; C.OnKeyUp := @HKeyUp;
+    C.OnDblClick := @HDblClick; C.OnMouseWheel := @HWheel; C.OnContextPopup := @HCtxPopup;
+    C.OnEnter := @HDoEnter; C.OnExit := @HDoExit;
     C.FMouseDown(mbLeft, [], P11X, P11Y); AssertTrue('ToggleSwitch OnMouseDown', FDown);
     C.FMouseUp(mbLeft, [], P11X, P11Y);   AssertTrue('ToggleSwitch OnMouseUp', FUp);
     C.FMouseMove([], P11X, P11Y);         AssertTrue('ToggleSwitch OnMouseMove', FMove);
@@ -778,6 +1046,11 @@ begin
     C.Click;                              AssertTrue('ToggleSwitch OnClick', FClick);
     K := VK_F1; C.FKeyDown(K, []);        AssertTrue('ToggleSwitch OnKeyDown', FKeyDown);
     K := VK_F1; C.FKeyUp(K, []);          AssertTrue('ToggleSwitch OnKeyUp', FKeyUp);
+    C.DblClick;                           AssertTrue('ToggleSwitch OnDblClick', FDblClick);
+    C.FMouseWheel([], 120, Point(0,0));   AssertTrue('ToggleSwitch OnMouseWheel', FWheel);
+    H := False; C.FContextPopup(Point(0,0), H); AssertTrue('ToggleSwitch OnContextPopup', FCtxPopup);
+    C.FDoEnter;                           AssertTrue('ToggleSwitch OnEnter', FDoEnter);
+    C.FDoExit;                            AssertTrue('ToggleSwitch OnExit', FDoExit);
   finally
     C.Free;
   end;
