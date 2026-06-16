@@ -2,7 +2,7 @@ unit test.progressbar;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
+  Classes, SysUtils, Types, TypInfo, Graphics, Forms, Controls, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
   tyControls.ProgressBar;
@@ -37,6 +37,8 @@ type
   private
     FForm: TForm;
     FBar: TTyProgressBar;
+    FChanges: Integer;
+    procedure OnBarChange(Sender: TObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -45,6 +47,8 @@ type
     procedure TestPositionClampsToMax;
     procedure TestPositionClampsToMin;
     procedure TestSetSamePositionNoInvalidate;
+    procedure TestPositionFiresOnChange;
+    procedure TestSamePositionDoesNotFireOnChange;
   end;
 
   TTyProgressBarPixelTest = class(TTestCase)
@@ -59,6 +63,7 @@ type
   published
     procedure TestProgressFillAnimatesMidwayThenSettles;
     procedure TestAnimationsEnabledDefaultsTrue;
+    procedure TestAnimationsEnabledIsPublished;
   end;
 
 implementation
@@ -184,6 +189,28 @@ begin
   FBar.Position := 50;
   FBar.Position := 50;  // second set should not crash / be idempotent
   AssertEquals('Position stays 50', 50, FBar.Position);
+end;
+
+procedure TTyProgressBarControlTest.OnBarChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTyProgressBarControlTest.TestPositionFiresOnChange;
+begin
+  FChanges := 0;
+  FBar.OnChange := @OnBarChange;
+  FBar.Position := 40;
+  AssertEquals('Position change fires OnChange once', 1, FChanges);
+end;
+
+procedure TTyProgressBarControlTest.TestSamePositionDoesNotFireOnChange;
+begin
+  FBar.Position := 30;
+  FChanges := 0;
+  FBar.OnChange := @OnBarChange;
+  FBar.Position := 30;  // same value: must NOT fire
+  AssertEquals('same Position does not fire OnChange', 0, FChanges);
 end;
 
 { TTyProgressBarPixelTest }
@@ -419,6 +446,19 @@ begin
   P := TTyProgressBar.Create(nil);
   try
     AssertTrue('AnimationsEnabled defaults True', P.AnimationsEnabled);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyProgressBarAnimationTest.TestAnimationsEnabledIsPublished;
+var
+  P: TTyProgressBar;
+begin
+  P := TTyProgressBar.Create(nil);
+  try
+    AssertTrue('AnimationsEnabled is a published property (designer/streaming access)',
+      IsPublishedProp(P, 'AnimationsEnabled'));
   finally
     P.Free;
   end;

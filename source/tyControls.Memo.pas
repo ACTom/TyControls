@@ -98,6 +98,14 @@ type
     // Fired after any mutation of the text model (insert/split/delete/merge).
     // Pure caret moves do NOT fire it.
     FOnChange: TNotifyEvent;
+    // Fired whenever the caret position OR the selection range changes (arrow/click/
+    // shift-select, programmatic SetCaret, and after edits that move the caret). The
+    // funnel DoSelectionChange snapshots the last-reported (caret,anchor) and only
+    // fires when it differs, so a no-op caret set never fires and it never spams.
+    FOnSelectionChange: TNotifyEvent;
+    // Last (caret,anchor) reported to FOnSelectionChange (the guard snapshot).
+    FLastSelCaretLine, FLastSelCaretCol: Integer;
+    FLastSelAnchorLine, FLastSelAnchorCol: Integer;
     // Snapshot-based undo/redo (one stack per control). FSuspendUndo is set
     // while a composite op (cut/paste/typing-over-selection) pushes its own
     // single step, so nested mutators do not add extra steps.
@@ -123,6 +131,11 @@ type
     procedure SetWordWrap(AValue: Boolean);
     // Fire OnChange (after a model mutation).
     procedure DoChange;
+    // Fire OnSelectionChange iff the caret OR the selection anchor moved since the
+    // last fire (self-guarded so it never spams; a no-op move is silent). Called
+    // from every caret/selection funnel (AfterCaretMove/AfterEdit/SetCaret/drag/
+    // SelectAll/ClearSelection).
+    procedure DoSelectionChange;
     // Shared post-mutation routine: clamp caret, keep its line visible, repaint,
     // and fire OnChange. (UpdateScrollBar lands with the real scrollbar in T4.)
     procedure AfterEdit(APPI: Integer);
@@ -395,6 +408,10 @@ type
     property Controller;
     property OnClick;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    // Fired when the caret position or selection range changes without a text
+    // mutation (arrow keys, click, shift-select, programmatic SetCaret) and after
+    // edits that move the caret. Self-guarded: a no-op move never fires.
+    property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
   end;
 
 implementation
@@ -412,6 +429,12 @@ begin
   FInVerticalMove := False;
   FSelAnchorLine := 0;
   FSelAnchorCol := 0;
+  // Seed the OnSelectionChange guard at the initial caret/anchor so the first real
+  // move reports a change (and an initial no-op set stays silent).
+  FLastSelCaretLine := 0;
+  FLastSelCaretCol := 0;
+  FLastSelAnchorLine := 0;
+  FLastSelAnchorCol := 0;
   FMouseSelecting := False;
   FTopRow := 0;
   FScrollX := 0;
@@ -792,6 +815,9 @@ begin
   // following wrap Up/Down tracks the placed caret's x (not a stale value).
   UpdateDesiredX(Font.PixelsPerInch);
   Invalidate;
+  // A programmatic caret placement is a caret/selection change (self-guarded: a
+  // re-set to the same caret+anchor stays silent).
+  DoSelectionChange;
 end;
 
 procedure TTyMemo.SetSelAnchor(ALine, ACol: Integer);
@@ -917,6 +943,8 @@ begin
   Invalidate;
   // A selection change ends a typing-coalesce run.
   BreakCoalescing;
+  // Select-all extended the selection range: report it (self-guarded).
+  DoSelectionChange;
 end;
 
 procedure TTyMemo.ClearSelection;
@@ -926,6 +954,8 @@ begin
   Invalidate;
   // A selection change ends a typing-coalesce run.
   BreakCoalescing;
+  // Collapsing the selection (anchor->caret) is a selection-range change (guarded).
+  DoSelectionChange;
 end;
 
 procedure TTyMemo.SetForceFocused(AValue: Boolean);
@@ -947,6 +977,23 @@ procedure TTyMemo.DoChange;
 begin
   if Assigned(FOnChange) then
     FOnChange(Self);
+end;
+
+procedure TTyMemo.DoSelectionChange;
+begin
+  // Self-guard: only fire when the caret OR the anchor actually moved since the
+  // last fire. This lets every caret/selection funnel call DoSelectionChange
+  // unconditionally without double-firing (a no-op set stays silent) or spamming.
+  if (FCaretLine = FLastSelCaretLine) and (FCaretCol = FLastSelCaretCol)
+    and (FSelAnchorLine = FLastSelAnchorLine)
+    and (FSelAnchorCol = FLastSelAnchorCol) then
+    Exit;
+  FLastSelCaretLine := FCaretLine;
+  FLastSelCaretCol := FCaretCol;
+  FLastSelAnchorLine := FSelAnchorLine;
+  FLastSelAnchorCol := FSelAnchorCol;
+  if Assigned(FOnSelectionChange) then
+    FOnSelectionChange(Self);
 end;
 
 function TTyMemo.VisibleLineCount(APPI: Integer): Integer;
@@ -1263,6 +1310,8 @@ begin
     // Ignore focus errors in headless/test environments.
   end;
   Invalidate;
+  // A click moved the caret and collapsed the selection (self-guarded no-op safe).
+  DoSelectionChange;
 end;
 
 procedure TTyMemo.MouseMove(Shift: TShiftState; X, Y: Integer);
@@ -1287,6 +1336,8 @@ begin
   // A drag is a horizontal move: refresh the desired x for a following wrap Up/Down.
   UpdateDesiredX(APPI);
   Invalidate;
+  // A drag extended the selection (caret moved, anchor fixed): report it (guarded).
+  DoSelectionChange;
 end;
 
 procedure TTyMemo.MouseUp(Button: TMouseButton; Shift: TShiftState;
@@ -1347,6 +1398,8 @@ begin
   ResetCaretBlink;
   Invalidate;
   DoChange;
+  // An edit that moves the caret is also a selection/caret change (self-guarded).
+  DoSelectionChange;
 end;
 
 procedure TTyMemo.AfterCaretMove(APPI: Integer);
@@ -1366,6 +1419,8 @@ begin
   // keyboard navigation branches (VK_LEFT/RIGHT/UP/DOWN/HOME/END), so breaking
   // here covers them uniformly.
   BreakCoalescing;
+  // Keyboard navigation / shift-select changed the caret/selection (self-guarded).
+  DoSelectionChange;
 end;
 
 // ---- Model mutators (pure UTF8 splice on FLines) ----

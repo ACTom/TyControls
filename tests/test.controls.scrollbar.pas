@@ -2,7 +2,7 @@ unit test.controls.scrollbar;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, fpcunit, testregistry,
+  Classes, SysUtils, Types, TypInfo, fpcunit, testregistry,
   Forms, Controls, Graphics, LCLType, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.ScrollBar;
@@ -59,6 +59,7 @@ type
     procedure TestThumbAnimatesMidwayThenSettles;
     procedure TestDragSnapsThumbImmediately;
     procedure TestAnimationsEnabledDefaultsTrue;
+    procedure TestAnimationsEnabledIsPublished;
   end;
 
   { Task 5: OnScroll event + mouse-wheel stepping. }
@@ -668,6 +669,19 @@ begin
   Bar := TTyScrollBar.Create(nil);
   try
     AssertTrue('AnimationsEnabled defaults True', Bar.AnimationsEnabled);
+  finally
+    Bar.Free;
+  end;
+end;
+
+procedure TTyScrollBarAnimationTest.TestAnimationsEnabledIsPublished;
+var
+  Bar: TTyScrollBar;
+begin
+  Bar := TTyScrollBar.Create(nil);
+  try
+    AssertTrue('AnimationsEnabled is a published property (designer/streaming access)',
+      IsPublishedProp(Bar, 'AnimationsEnabled'));
   finally
     Bar.Free;
   end;

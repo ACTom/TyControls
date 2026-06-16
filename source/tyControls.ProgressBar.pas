@@ -9,6 +9,7 @@ type
   private
     FMin, FMax, FPosition: Integer;
     FAnimEnabled: Boolean;
+    FOnChange: TNotifyEvent;
     FPosAnim: TTyAnimator;     // 0..1 traversal driving FAnimFrom -> FAnimTo
     FAnimFrom, FAnimTo: Single; // displayed-position endpoints (in Min..Max units)
     FTimer: TTimer;            // lazy; only created when actually animating
@@ -35,14 +36,17 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    // On by default. When enabled and the control has a window handle, changing
-    // Position eases the fill from the old to the new value; with no handle
-    // (every render test) it snaps, preserving the existing exact-pixel tests.
-    property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
   published
     property Min: Integer read FMin write SetMin default 0;
     property Max: Integer read FMax write SetMax default 100;
     property Position: Integer read FPosition write SetPosition default 0;
+    // On by default. When enabled and the control has a window handle, changing
+    // Position eases the fill from the old to the new value; with no handle
+    // (every render test) it snaps, preserving the existing exact-pixel tests.
+    property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
+    // Fired whenever Position (or Min/Max) actually changes — i.e. after the
+    // "if = then Exit" guard in the setters, so a same-value set never fires.
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property Align;
     property Anchors;
     property StyleClass;
@@ -167,6 +171,7 @@ begin
   FMin := AValue;
   if FPosition < FMin then FPosition := FMin;
   Invalidate;
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyProgressBar.SetMax(const AValue: Integer);
@@ -175,6 +180,7 @@ begin
   FMax := AValue;
   if FPosition > FMax then FPosition := FMax;
   Invalidate;
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyProgressBar.SetPosition(const AValue: Integer);
@@ -210,6 +216,7 @@ begin
   end;
   FPosition := Clamped;
   Invalidate;
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyProgressBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

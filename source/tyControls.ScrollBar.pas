@@ -66,12 +66,12 @@ type
     procedure BeginThumbDrag(AGrabPosAlongTrack: Integer);
     procedure DragThumbTo(APosAlongTrack: Integer);
     procedure EndThumbDrag;
+  published
     // On by default. When enabled and the control has a window handle, a
     // PROGRAMMATIC Position change (keyboard/wheel/track-click) eases the painted
     // thumb to the new value; with no handle (every render test) or while
     // dragging it snaps, preserving exact-pixel tests and live mouse tracking.
     property AnimationsEnabled: Boolean read FAnimEnabled write FAnimEnabled default True;
-  published
     property Kind: TTyScrollBarKind read FKind write SetKind default sbVertical;
     property Min: Integer read FMin write SetMin default 0;
     property Max: Integer read FMax write SetMax default 100;

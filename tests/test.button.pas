@@ -2,7 +2,7 @@ unit test.button;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
+  Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   tyControls.Base, tyControls.Button;
 type
   // Expose protected RenderTo for testing
@@ -22,6 +22,7 @@ type
     procedure TestPaintSmoke;
     procedure TestSpaceKeyFiresClick;
     procedure TestDisabledKeyNotConsumedNoClick;
+    procedure TestAnimationsEnabledIsPublished;
   end;
 implementation
 
@@ -120,6 +121,19 @@ begin
     AssertEquals('disabled: no click', 0, FClicked);
     AssertEquals('disabled: key NOT consumed', VK_SPACE, K);
   finally F.Free; end;
+end;
+
+procedure TButtonTest.TestAnimationsEnabledIsPublished;
+var
+  B: TTyButton;
+begin
+  B := TTyButton.Create(nil);
+  try
+    AssertTrue('AnimationsEnabled is a published property (designer/streaming access)',
+      IsPublishedProp(B, 'AnimationsEnabled'));
+  finally
+    B.Free;
+  end;
 end;
 
 initialization

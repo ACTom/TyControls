@@ -131,6 +131,27 @@ type
     procedure TestDisabledMouseMoveIgnored;
   end;
 
+  { OnSelectionChange: fires whenever the caret OR selection range moves without a
+    no-op. A pure caret move (arrow key / SetCaret) fires it; a re-set to the SAME
+    caret position does NOT (the funnel self-guards against firing when nothing
+    changed, so it never spams). }
+  TTyMemoSelectionChangeTest = class(TTestCase)
+  private
+    FCtl: TTyStyleController;
+    FMemo: TTyMemoSelProbe;
+    FSelChangeCount: Integer;
+    procedure SetUpMemo;
+    procedure OnSelChange(Sender: TObject);
+    procedure LoadLines(const AItems: array of string);
+  protected
+    procedure TearDown; override;
+  published
+    procedure TestArrowKeyFiresSelectionChange;
+    procedure TestSetCaretFiresSelectionChange;
+    procedure TestNoOpCaretSetDoesNotFire;
+    procedure TestShiftSelectFiresSelectionChange;
+  end;
+
 implementation
 
 { TTyMemoSelProbe }
@@ -1313,6 +1334,96 @@ begin
   AssertFalse('disabled: no selection', FMemo.ProbeHasSelection);
 end;
 
+{ TTyMemoSelectionChangeTest }
+
+procedure TTyMemoSelectionChangeTest.SetUpMemo;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(
+    'TyMemo { background:#FFFFFF; color:#000000; padding:0px; font-size:14px; }');
+  FMemo := TTyMemoSelProbe.Create(nil);
+  FMemo.Controller := FCtl;
+  FMemo.Font.PixelsPerInch := 96;
+  FMemo.SetBounds(0, 0, 200, 120);
+  FSelChangeCount := 0;
+  FMemo.OnSelectionChange := @OnSelChange;
+end;
+
+procedure TTyMemoSelectionChangeTest.OnSelChange(Sender: TObject);
+begin
+  Inc(FSelChangeCount);
+end;
+
+procedure TTyMemoSelectionChangeTest.LoadLines(const AItems: array of string);
+var
+  L: TStringList;
+  i: Integer;
+begin
+  L := TStringList.Create;
+  try
+    for i := Low(AItems) to High(AItems) do
+      L.Add(AItems[i]);
+    FMemo.Lines := L;
+  finally
+    L.Free;
+  end;
+end;
+
+procedure TTyMemoSelectionChangeTest.TearDown;
+begin
+  FMemo.Free;
+  FMemo := nil;
+  FCtl.Free;
+  FCtl := nil;
+end;
+
+{ An arrow-key caret move (no text change) must fire OnSelectionChange exactly once. }
+procedure TTyMemoSelectionChangeTest.TestArrowKeyFiresSelectionChange;
+begin
+  SetUpMemo;
+  LoadLines(['abcde']);
+  FMemo.ProbeSetCaret(0, 1);
+  FSelChangeCount := 0;
+  FMemo.InjectKey(VK_RIGHT, []);
+  AssertEquals('arrow-key caret move fires OnSelectionChange once', 1, FSelChangeCount);
+  AssertEquals('caret advanced to col 2', 2, FMemo.ProbeCaretCol);
+end;
+
+{ A programmatic SetCaret to a NEW position fires OnSelectionChange. }
+procedure TTyMemoSelectionChangeTest.TestSetCaretFiresSelectionChange;
+begin
+  SetUpMemo;
+  LoadLines(['abcde']);
+  FMemo.ProbeSetCaret(0, 0);
+  FSelChangeCount := 0;
+  FMemo.ProbeSetCaret(0, 3);
+  AssertEquals('SetCaret to a new position fires OnSelectionChange', 1, FSelChangeCount);
+end;
+
+{ Re-setting the caret to the SAME position is a no-op and must NOT fire. }
+procedure TTyMemoSelectionChangeTest.TestNoOpCaretSetDoesNotFire;
+begin
+  SetUpMemo;
+  LoadLines(['abcde']);
+  FMemo.ProbeSetCaret(0, 2);
+  FSelChangeCount := 0;
+  FMemo.ProbeSetCaret(0, 2);  // same caret + same (collapsed) anchor: no change
+  AssertEquals('no-op caret set does not fire OnSelectionChange', 0, FSelChangeCount);
+end;
+
+{ Shift+Right extends the selection range (caret moves, anchor stays): fires. }
+procedure TTyMemoSelectionChangeTest.TestShiftSelectFiresSelectionChange;
+begin
+  SetUpMemo;
+  LoadLines(['abcde']);
+  FMemo.ProbeSetCaret(0, 1);
+  FSelChangeCount := 0;
+  FMemo.InjectKey(VK_RIGHT, [ssShift]);
+  AssertTrue('selection present after Shift+Right', FMemo.ProbeHasSelection);
+  AssertEquals('shift-select fires OnSelectionChange', 1, FSelChangeCount);
+end;
+
 initialization
   RegisterTest(TTyMemoSelectionTest);
+  RegisterTest(TTyMemoSelectionChangeTest);
 end.

@@ -34,11 +34,11 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Click; override;
+  published
     // On by default. When enabled and the control has a window handle, hovering
     // fades the background between the normal and hover styles; with no handle
     // (every render test) it snaps, preserving the existing exact-pixel paint tests.
     property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default True;
-  published
     property Caption;
     property Enabled;
     property Font;
