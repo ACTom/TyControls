@@ -2,7 +2,7 @@ unit tyControls.TyLabel;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.Base;
 type
   TTyLabel = class(TTyGraphicControl)
@@ -34,6 +34,14 @@ type
     procedure Click; override;
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
+    { Caption changes at runtime route here (CM_TEXTCHANGED). When AutoSize is on,
+      re-measure so the label grows/shrinks to the new text (mirrors native
+      TCustomLabel.TextChanged -> UpdateSize). }
+    procedure TextChanged; override;
+    { A WordWrap+AutoSize label's height depends on its width, so a width change must
+      re-wrap and re-fit. Guarded by WidthChanged (computed before inherited), which
+      settles once AdjustSize stops changing the width (native TCustomLabel idiom). }
+    procedure DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -133,6 +141,30 @@ begin
   inherited Click;
   if (FFocusControl <> nil) and FFocusControl.CanFocus then
     FFocusControl.SetFocus;
+end;
+
+procedure TTyLabel.TextChanged;
+begin
+  inherited TextChanged;
+  if AutoSize then
+  begin
+    InvalidatePreferredSize;
+    AdjustSize;
+  end;
+  Invalidate;
+end;
+
+procedure TTyLabel.DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer);
+var
+  WidthChanged: Boolean;
+begin
+  WidthChanged := AWidth <> Width;
+  inherited DoSetBounds(ALeft, ATop, AWidth, AHeight);
+  if WidthChanged and FWordWrap and AutoSize then
+  begin
+    InvalidatePreferredSize;
+    AdjustSize;
+  end;
 end;
 
 procedure TTyLabel.WrapText(const AText: string; AMaxWidthPx: Integer;
@@ -260,7 +292,7 @@ var
   ContentRect, LineRect: TRect;
   Meas: TBitmap;
   Lines: TStringList;
-  lineH, i, availW, fontSize: Integer;
+  lineH, i, availW, fontSize, contentH, blockH, yOff: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -300,10 +332,21 @@ begin
         if lineH < 1 then lineH := 1;
         availW := ContentRect.Right - ContentRect.Left;
         WrapText(Caption, availW, Meas.Canvas, Lines);
+        // Position the whole wrapped block per Layout (native vertically anchors
+        // the block, not each line): compute a one-off vertical offset, then draw
+        // each wrapped line top-anchored within its single-line rect.
+        contentH := ContentRect.Bottom - ContentRect.Top;
+        blockH := Lines.Count * lineH;
+        case FLayout of
+          tlCenter: yOff := Max(0, (contentH - blockH) div 2);
+          tlBottom: yOff := Max(0, contentH - blockH);
+        else
+          yOff := 0; // tlTop
+        end;
         for i := 0 to Lines.Count - 1 do
         begin
-          LineRect := Rect(ContentRect.Left, ContentRect.Top + i * lineH,
-            ContentRect.Right, ContentRect.Top + (i + 1) * lineH);
+          LineRect := Rect(ContentRect.Left, ContentRect.Top + yOff + i * lineH,
+            ContentRect.Right, ContentRect.Top + yOff + (i + 1) * lineH);
           if LineRect.Top >= ContentRect.Bottom then Break;
           P.DrawText(LineRect, Lines[i], S.FontName, fontSize, S.FontWeight,
             S.TextColor, FAlignment, tlCenter, False);

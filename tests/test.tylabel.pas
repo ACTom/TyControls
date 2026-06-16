@@ -29,7 +29,9 @@ type
     procedure TestPaintSmoke;
     procedure TestAlignmentLayoutRender;
     procedure TestAutoSizeFitsCaption;
+    procedure TestAutoSizeRefiresOnRuntimeCaption;
     procedure TestWordWrapWraps;
+    procedure TestWordWrapLayoutBottom;
     procedure TestFocusControlOnClick;
     procedure TestTransparentDefault;
   end;
@@ -184,6 +186,34 @@ begin
   end;
 end;
 
+{ Runtime Caption change must re-fire AutoSize: assigning a longer Caption after
+  the preferred size was already cached has to invalidate that cache (via TextChanged)
+  so the next GetPreferredSize returns a larger width. We never call
+  CalculatePreferredSize directly here — only the public GetPreferredSize cache path,
+  which is exactly what AdjustSize uses on-screen. }
+procedure TLabelTest.TestAutoSizeRefiresOnRuntimeCaption;
+var
+  L: TTyLabel; w0, h0, w1, h1: Integer;
+begin
+  L := TTyLabel.Create(nil);
+  try
+    L.Font.PixelsPerInch := 96;
+    L.AutoSize := True;
+    L.Caption := 'Hi';
+    // Prime + validate the preferred-size cache for the short caption.
+    w0 := 0; h0 := 0; L.GetPreferredSize(w0, h0);
+    AssertTrue('short caption preferred width > 0', w0 > 0);
+
+    // Assign a much longer caption at runtime; TextChanged must invalidate the cache.
+    L.Caption := 'A considerably wider runtime caption text';
+    w1 := 0; h1 := 0; L.GetPreferredSize(w1, h1);
+    AssertTrue('runtime longer Caption grows preferred width (TextChanged re-fired AutoSize)',
+      w1 > w0 + 40);
+  finally
+    L.Free;
+  end;
+end;
+
 procedure TLabelTest.TestWordWrapWraps;
   function InkBands(WordWrap: Boolean): Integer;
   var
@@ -220,6 +250,47 @@ procedure TLabelTest.TestWordWrapWraps;
 begin
   AssertEquals('no-wrap single ink band', 1, InkBands(False));
   AssertTrue('word-wrap produces >1 ink band', InkBands(True) >= 2);
+end;
+
+{ Under WordWrap the whole wrapped block must be positioned per Layout. In a tall
+  control a short caption wraps to fewer lines than the height, so tlBottom's ink
+  centroid sits lower than tlTop's. }
+procedure TLabelTest.TestWordWrapLayoutBottom;
+  function WrapCentroidY(L: TTextLayout): Double;
+  var
+    G: TTyLabelAccess; Bmp: TBitmap; Reread: TBGRABitmap;
+    x, y, n: Integer; sy: Double; px: TBGRAPixel;
+  begin
+    G := TTyLabelAccess.Create(nil); Bmp := TBitmap.Create;
+    try
+      G.Font.PixelsPerInch := 96;
+      G.WordWrap := True;
+      G.Layout := L;
+      // Wraps to ~2 lines at width 60, well short of the 120px tall control.
+      G.Caption := 'one two three four';
+      Bmp.PixelFormat := pf32bit; Bmp.SetSize(60, 120);
+      Bmp.Canvas.Brush.Color := clWhite; Bmp.Canvas.FillRect(0, 0, 60, 120);
+      G.RenderTo(Bmp.Canvas, Rect(0, 0, 60, 120), 96);
+      Reread := TBGRABitmap.Create(Bmp);
+      try
+        sy := 0; n := 0;
+        for x := 0 to 59 do for y := 0 to 119 do
+        begin
+          px := Reread.GetPixel(x, y);
+          if (px.red < 160) and (px.green < 160) then
+          begin sy := sy + y; Inc(n); end;
+        end;
+        if n = 0 then Result := -1 else Result := sy / n;
+      finally Reread.Free; end;
+    finally Bmp.Free; G.Free; end;
+  end;
+var
+  topY, bottomY: Double;
+begin
+  topY := WrapCentroidY(tlTop);
+  bottomY := WrapCentroidY(tlBottom);
+  AssertTrue('wrapped tlTop ink present', topY > 0);
+  AssertTrue('wrapped tlBottom block sits lower than tlTop', bottomY > topY + 15);
 end;
 
 procedure TLabelTest.TestFocusControlOnClick;
