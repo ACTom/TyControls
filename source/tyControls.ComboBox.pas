@@ -14,6 +14,9 @@ type
     FItemIndex: Integer;
     FText: string;
     FOnChange: TNotifyEvent;
+    FOnSelect: TNotifyEvent;
+    FOnDropDown: TNotifyEvent;
+    FOnCloseUp: TNotifyEvent;
     { Dropdown popup state }
     FPopup: TForm;           // lazy; created on first DropDown; freed in Destroy
     FPopupList: TTyListBox;  // owned by FPopup
@@ -24,6 +27,10 @@ type
     procedure SetItemIndex(const AValue: Integer);
     procedure SetText(const AValue: string);
     function ButtonWidthLogical: Integer;
+    { User-driven selection: applies AIndex via SelectItem and fires OnSelect
+      only when the selection actually changed. Distinct from the programmatic
+      ItemIndex setter, which fires OnChange but never OnSelect. }
+    procedure UserSelect(AIndex: Integer);
     { Popup event handlers }
     procedure PopupListChange(Sender: TObject);
     procedure PopupDeactivate(Sender: TObject);
@@ -35,6 +42,9 @@ type
       Protected so test subclasses can manipulate it for headless logic tests. }
     FCloseUpTick: QWord;
     procedure SetController(AValue: TTyStyleController); override;
+    procedure DoSelect; virtual;
+    procedure DoDropDown; virtual;
+    procedure DoCloseUp; virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure Click; override;
@@ -55,6 +65,9 @@ type
     property ItemIndex: Integer read FItemIndex write SetItemIndex;
     property Text: string read FText write SetText;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property OnSelect: TNotifyEvent read FOnSelect write FOnSelect;
+    property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
+    property OnCloseUp: TNotifyEvent read FOnCloseUp write FOnCloseUp;
     property TabStop default True;
     property Align;
     property Anchors;
@@ -121,6 +134,31 @@ begin
     otherwise FPopupList keeps the old controller until the next DropDown. }
   if FPopupList <> nil then
     FPopupList.Controller := AValue;
+end;
+
+procedure TTyComboBox.DoSelect;
+begin
+  if Assigned(FOnSelect) then FOnSelect(Self);
+end;
+
+procedure TTyComboBox.DoDropDown;
+begin
+  if Assigned(FOnDropDown) then FOnDropDown(Self);
+end;
+
+procedure TTyComboBox.DoCloseUp;
+begin
+  if Assigned(FOnCloseUp) then FOnCloseUp(Self);
+end;
+
+procedure TTyComboBox.UserSelect(AIndex: Integer);
+var
+  OldIndex: Integer;
+begin
+  OldIndex := FItemIndex;
+  SelectItem(AIndex);            // fires OnChange on a real change
+  if FItemIndex <> OldIndex then
+    DoSelect;                    // OnSelect = the user actually picked something
 end;
 
 procedure TTyComboBox.SetItems(const AValue: TStringList);
@@ -230,6 +268,7 @@ begin
   FPopup.SetBounds(P.X, P.Y, PopupW, PopupH);
 
   FPopup.Show;
+  DoDropDown;   // popup actually opened
 end;
 
 procedure TTyComboBox.CloseUp;
@@ -243,6 +282,7 @@ begin
   end;
   FCloseUpTick := GetTickCount64;
   Invalidate;
+  DoCloseUp;   // dropdown closed
 end;
 
 procedure TTyComboBox.Click;
@@ -279,18 +319,18 @@ begin
   case Key of
     VK_DOWN:
       begin
-        if FItemIndex < 0 then SelectItem(0)
-        else if FItemIndex < Cnt - 1 then SelectItem(FItemIndex + 1);
+        if FItemIndex < 0 then UserSelect(0)
+        else if FItemIndex < Cnt - 1 then UserSelect(FItemIndex + 1);
         Key := 0;
       end;
     VK_UP:
       begin
-        if FItemIndex < 0 then SelectItem(0)
-        else if FItemIndex > 0 then SelectItem(FItemIndex - 1);
+        if FItemIndex < 0 then UserSelect(0)
+        else if FItemIndex > 0 then UserSelect(FItemIndex - 1);
         Key := 0;
       end;
-    VK_HOME: begin SelectItem(0); Key := 0; end;
-    VK_END:  begin SelectItem(Cnt - 1); Key := 0; end;
+    VK_HOME: begin UserSelect(0); Key := 0; end;
+    VK_END:  begin UserSelect(Cnt - 1); Key := 0; end;
   end;
 end;
 
@@ -305,14 +345,15 @@ begin
   FTypeAheadTick := nowTick;
   FTypeAhead := FTypeAhead + UTF8Key;
   hit := TyComboTypeAheadMatch(FItems, FItemIndex, FTypeAhead);
-  if hit >= 0 then SelectItem(hit);
+  if hit >= 0 then UserSelect(hit);
 end;
 
 { Popup event handlers }
 
 procedure TTyComboBox.PopupListChange(Sender: TObject);
 begin
-  SelectItem(FPopupList.ItemIndex);
+  { User clicked / chose a row in the popup list -> a user-driven selection. }
+  UserSelect(FPopupList.ItemIndex);
   CloseUp;
 end;
 

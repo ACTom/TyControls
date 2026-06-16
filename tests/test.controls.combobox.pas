@@ -29,6 +29,15 @@ type
     Opened: Boolean;
     procedure DropDown; override;   // record only; no popup window
     procedure DoKeyDown(var Key: Word; Shift: TShiftState);
+    procedure DoTypeChar(const C: TUTF8Char);
+  end;
+
+  { Headless probe for OnDropDown: overrides DropDown so it fires the protected
+    DoDropDown hook WITHOUT creating a real win32 popup form (avoids the 1407
+    no-display error). Mirrors what inherited DropDown does on a real open. }
+  TComboDropDownProbe = class(TTyComboBox)
+  public
+    procedure DropDown; override;   // fire DoDropDown only; no popup window
   end;
 
   TTyComboBoxTest = class(TTestCase)
@@ -67,6 +76,9 @@ type
     { Task 3: type-ahead }
     procedure TestTypeAheadMatchPureFunction;
     procedure TestTypeAheadSelectsViaKeypress;
+    { Task 4 (events parity): OnSelect / OnDropDown / OnCloseUp }
+    procedure TestComboOnDropDownAndCloseUp;
+    procedure TestComboOnSelectOnUserPick;
   end;
 implementation
 
@@ -112,6 +124,21 @@ end;
 procedure TComboKeyProbe.DoKeyDown(var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
+end;
+
+procedure TComboKeyProbe.DoTypeChar(const C: TUTF8Char);
+var k: TUTF8Char;
+begin
+  k := C;
+  UTF8KeyPress(k);
+end;
+
+procedure TComboDropDownProbe.DropDown;
+begin
+  { Headless-safe: fire the OnDropDown hook exactly as a real open would, but
+    skip the inherited body that creates a win32 TForm popup (1407 in no-display
+    environments). }
+  DoDropDown;
 end;
 
 procedure TTyComboBoxTest.SetUp;
@@ -419,6 +446,77 @@ begin
   FCombo.ItemIndex := -1;
   FCombo.DoTypeChar('b');
   AssertEquals('typing b selects Banana', 1, FCombo.ItemIndex);
+end;
+
+{ Task 4: DropDown must fire OnDropDown; CloseUp must fire OnCloseUp.
+  Headless-safe: TComboDropDownProbe.DropDown fires DoDropDown without building
+  a real win32 popup form (avoids the 1407 no-display error). CloseUp is
+  headless-safe on its own (it no-ops the Hide path when FPopup is nil) so it is
+  driven on the real control. }
+procedure TTyComboBoxTest.TestComboOnDropDownAndCloseUp;
+var
+  C: TComboDropDownProbe;
+  Down, Up: TChangeProbe;
+begin
+  C := TComboDropDownProbe.Create(nil);
+  Down := TChangeProbe.Create;
+  Up := TChangeProbe.Create;
+  try
+    C.Items.Add('A'); C.Items.Add('B');
+    C.OnDropDown := @Down.Handle;
+    C.OnCloseUp := @Up.Handle;
+
+    C.DropDown;
+    AssertEquals('OnDropDown fired once on DropDown', 1, Down.Count);
+    AssertEquals('OnCloseUp not fired by DropDown', 0, Up.Count);
+
+    C.CloseUp;
+    AssertEquals('OnCloseUp fired once on CloseUp', 1, Up.Count);
+    AssertEquals('OnDropDown not re-fired by CloseUp', 1, Down.Count);
+  finally
+    Up.Free;
+    Down.Free;
+    C.Free;
+  end;
+end;
+
+{ Task 4: a USER pick (closed-state keyboard select) fires OnSelect.
+  A purely programmatic ItemIndex := must NOT fire OnSelect (matches LCL intent;
+  programmatic changes go through OnChange only). }
+procedure TTyComboBoxTest.TestComboOnSelectOnUserPick;
+var
+  C: TComboKeyProbe;
+  Sel, Chg: TChangeProbe;
+  K: Word;
+begin
+  C := TComboKeyProbe.Create(nil);
+  Sel := TChangeProbe.Create;
+  Chg := TChangeProbe.Create;
+  try
+    C.Items.Add('Alpha'); C.Items.Add('Beta'); C.Items.Add('Gamma');
+    C.OnSelect := @Sel.Handle;
+    C.OnChange := @Chg.Handle;
+
+    { Programmatic set fires OnChange but NOT OnSelect }
+    C.ItemIndex := 0;
+    AssertEquals('programmatic ItemIndex fires OnChange', 1, Chg.Count);
+    AssertEquals('programmatic ItemIndex does NOT fire OnSelect', 0, Sel.Count);
+
+    { User pick via closed-state Down arrow fires OnSelect }
+    K := VK_DOWN; C.DoKeyDown(K, []);
+    AssertEquals('keyboard Down advanced selection', 1, C.ItemIndex);
+    AssertEquals('keyboard user-pick fires OnSelect', 1, Sel.Count);
+    AssertEquals('keyboard user-pick also fires OnChange', 2, Chg.Count);
+
+    { Type-ahead user pick also fires OnSelect }
+    C.DoTypeChar('g');
+    AssertEquals('type-ahead selected Gamma', 2, C.ItemIndex);
+    AssertEquals('type-ahead user-pick fires OnSelect', 2, Sel.Count);
+  finally
+    Chg.Free;
+    Sel.Free;
+    C.Free;
+  end;
 end;
 
 initialization
