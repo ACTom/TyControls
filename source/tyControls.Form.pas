@@ -17,6 +17,8 @@ type
 
   TTyCaptionButtonKind = (cbkClose, cbkMin, cbkMax, cbkRestore);
 
+  TTyFormChrome = class;
+
   TTyCaptionButton = class(TTyCustomControl)
   private
     FKind: TTyCaptionButtonKind;
@@ -45,12 +47,21 @@ type
     FMaxButton: TTyCaptionButton;
     FCloseButton: TTyCaptionButton;
     FButtonWidth: Integer;
+    FChrome: TTyFormChrome;
     procedure SetCaption(const AValue: string);
     procedure LayoutButtons;
   protected
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Resize; override;
     procedure Paint; override;
+    { Window-drag / double-click-maximize are wired via these METHOD OVERRIDES
+      (each calls inherited first, so a user-assigned published OnMouseDown/Move/
+      Up/DblClick still fires) then delegates to the owning chrome. This frees the
+      mouse-event slots for user assignment without clobbering the chrome wiring. }
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure DblClick; override;
   public
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
@@ -69,21 +80,23 @@ type
     FShowMinimize: Boolean;
     FShowMaximize: Boolean;
     FTitleBar: TTyTitleBar;
-    FForm: TCustomForm;
-    FDragging: Boolean;
     FDragStart: TPoint;
     FResizeHit: TTyBorderHit;
     FResizing: Boolean;
     FResizeStartBounds: TRect;
     FResizeStartMouse: TPoint;
     FSavedBounds: TRect;
-    FMaximized: Boolean;
     FOldBorderStyle: TFormBorderStyle;
     FOldMouseDown: TMouseEvent;
     FOldMouseMove: TMouseMoveEvent;
     FOldMouseUp: TMouseEvent;
     FOldChangeBounds: TNotifyEvent;
     FInstalledPPI: Integer;
+    FOnCloseQuery: TCloseQueryEvent;
+    FOnClose: TNotifyEvent;
+    FOnMinimize: TNotifyEvent;
+    FOnMaximize: TNotifyEvent;
+    FOnRestore: TNotifyEvent;
     procedure SetActive(AValue: Boolean);
     procedure SetTitleHeight(AValue: Integer);
     function HostForm: TCustomForm;
@@ -95,12 +108,18 @@ type
     procedure FormMouseUp(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure FormChangeBounds(Sender: TObject);
-    procedure TitleBarMouseDown(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);
-    procedure TitleBarMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
-    procedure TitleBarMouseUp(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);
-    procedure TitleBarDblClick(Sender: TObject);
+  protected
+    { Host form + drag/maximize state — protected so TTyTitleBar's method overrides
+      (and test access subclasses) can drive them. }
+    FForm: TCustomForm;
+    FDragging: Boolean;
+    FMaximized: Boolean;
+    { Invoked by TTyTitleBar's MouseDown/Move/Up/DblClick overrides (which call
+      inherited first, preserving the user's published mouse events). }
+    procedure TitleBarMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure TitleBarMouseMove(Shift: TShiftState; X, Y: Integer);
+    procedure TitleBarMouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure TitleBarDblClick;
     procedure DoMinimize(Sender: TObject);
     procedure DoMaxRestore(Sender: TObject);
     procedure DoClose(Sender: TObject);
@@ -115,6 +134,11 @@ type
     property BorderZone: Integer read FBorderZone write FBorderZone default 6;
     property ShowMinimize: Boolean read FShowMinimize write FShowMinimize default True;
     property ShowMaximize: Boolean read FShowMaximize write FShowMaximize default True;
+    property OnCloseQuery: TCloseQueryEvent read FOnCloseQuery write FOnCloseQuery;
+    property OnClose: TNotifyEvent read FOnClose write FOnClose;
+    property OnMinimize: TNotifyEvent read FOnMinimize write FOnMinimize;
+    property OnMaximize: TNotifyEvent read FOnMaximize write FOnMaximize;
+    property OnRestore: TNotifyEvent read FOnRestore write FOnRestore;
   end;
 
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
@@ -365,6 +389,34 @@ begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
+procedure TTyTitleBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  if FChrome <> nil then
+    FChrome.TitleBarMouseDown(Button, Shift, X, Y);
+end;
+
+procedure TTyTitleBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseMove(Shift, X, Y);
+  if FChrome <> nil then
+    FChrome.TitleBarMouseMove(Shift, X, Y);
+end;
+
+procedure TTyTitleBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  if FChrome <> nil then
+    FChrome.TitleBarMouseUp(Button, Shift, X, Y);
+end;
+
+procedure TTyTitleBar.DblClick;
+begin
+  inherited DblClick;
+  if FChrome <> nil then
+    FChrome.TitleBarDblClick;
+end;
+
 { TTyFormChrome }
 
 constructor TTyFormChrome.Create(AOwner: TComponent);
@@ -377,6 +429,7 @@ begin
   FActive := False;
   FMaximized := False;
   FTitleBar := TTyTitleBar.Create(Self);
+  FTitleBar.FChrome := Self;
   FTitleBar.MinButton.OnClick := @DoMinimize;
   FTitleBar.MaxButton.OnClick := @DoMaxRestore;
   FTitleBar.CloseButton.OnClick := @DoClose;
@@ -467,10 +520,9 @@ begin
   TForm(FForm).OnMouseMove := @FormMouseMove;
   TForm(FForm).OnMouseUp := @FormMouseUp;
   TForm(FForm).OnChangeBounds := @FormChangeBounds;
-  FTitleBar.OnMouseDown := @TitleBarMouseDown;
-  FTitleBar.OnMouseMove := @TitleBarMouseMove;
-  FTitleBar.OnMouseUp := @TitleBarMouseUp;
-  FTitleBar.OnDblClick := @TitleBarDblClick;
+  { Window-drag + double-click-maximize are wired via TTyTitleBar method overrides
+    (set in the constructor through FTitleBar.FChrome), NOT via the event slots —
+    so the now-published OnMouseDown/Move/Up/DblClick remain free for the user. }
 end;
 
 procedure TTyFormChrome.UninstallChrome;
@@ -488,7 +540,7 @@ begin
   FForm := nil;
 end;
 
-procedure TTyFormChrome.TitleBarMouseDown(Sender: TObject; Button: TMouseButton;
+procedure TTyFormChrome.TitleBarMouseDown(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   if (Button = mbLeft) and (FForm <> nil) and not FMaximized then
@@ -498,8 +550,7 @@ begin
   end;
 end;
 
-procedure TTyFormChrome.TitleBarMouseMove(Sender: TObject; Shift: TShiftState;
-  X, Y: Integer);
+procedure TTyFormChrome.TitleBarMouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   if FDragging and (FForm <> nil) then
   begin
@@ -508,13 +559,13 @@ begin
   end;
 end;
 
-procedure TTyFormChrome.TitleBarMouseUp(Sender: TObject; Button: TMouseButton;
+procedure TTyFormChrome.TitleBarMouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 begin
   FDragging := False;
 end;
 
-procedure TTyFormChrome.TitleBarDblClick(Sender: TObject);
+procedure TTyFormChrome.TitleBarDblClick;
 begin
   ToggleMaximize;
 end;
@@ -626,6 +677,8 @@ begin
     FForm.BoundsRect := FSavedBounds;
     FMaximized := False;
     FTitleBar.MaxButton.Kind := cbkMax;
+    if Assigned(FOnRestore) then
+      FOnRestore(Self);
   end
   else
   begin
@@ -634,11 +687,15 @@ begin
     FForm.BoundsRect := TyMaximizedBounds(Wa);
     FMaximized := True;
     FTitleBar.MaxButton.Kind := cbkRestore;
+    if Assigned(FOnMaximize) then
+      FOnMaximize(Self);
   end;
 end;
 
 procedure TTyFormChrome.DoMinimize(Sender: TObject);
 begin
+  if Assigned(FOnMinimize) then
+    FOnMinimize(Self);
   if FForm <> nil then
     FForm.WindowState := wsMinimized;
 end;
@@ -649,7 +706,16 @@ begin
 end;
 
 procedure TTyFormChrome.DoClose(Sender: TObject);
+var
+  CanClose: Boolean;
 begin
+  CanClose := True;
+  if Assigned(FOnCloseQuery) then
+    FOnCloseQuery(Self, CanClose);
+  if not CanClose then
+    Exit;
+  if Assigned(FOnClose) then
+    FOnClose(Self);
   if FForm <> nil then
     FForm.Close;
 end;
