@@ -11,10 +11,16 @@ type
   private
     FMinValue, FMaxValue, FValue, FIncrement: Integer;
     FOnChange: TNotifyEvent;
+    FReadOnly: Boolean;
+    FAlignment: TAlignment;
+    FMaxLength: Integer;
     procedure SetMinValue(const AValue: Integer);
     procedure SetMaxValue(const AValue: Integer);
     procedure SetValue(const AValue: Integer);
     procedure SetIncrement(const AValue: Integer);
+    procedure SetReadOnly(const AValue: Boolean);
+    procedure SetAlignment(const AValue: TAlignment);
+    procedure SetMaxLength(const AValue: Integer);
   protected
     // Inline edit buffer (lightweight, no selection/clipboard). Protected so
     // headless access subclasses (tests) can reach the buffer + helpers.
@@ -38,6 +44,7 @@ type
     procedure EditBackspace;
     procedure EditDelete;
     function CaretPixelX(AIdx, APPI: Integer): Integer;
+    function AlignOffset(APPI: Integer): Integer;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -55,6 +62,14 @@ type
     property MaxValue: Integer read FMaxValue write SetMaxValue default 100;
     property Value: Integer read FValue write SetValue default 0;
     property Increment: Integer read FIncrement write SetIncrement default 1;
+    // ReadOnly locks the value entirely (LCL TSpinEdit semantics): it blocks
+    // both inline text editing AND +/- stepping (buttons/arrows/wheel).
+    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+    // Default taLeftJustify == the alignment RenderTo used before this property
+    // existed, so existing pixel tests stay unchanged.
+    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
+    // 0 == unlimited; caps the inline edit buffer length in codepoints on insert.
+    property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property Align;
     property Anchors;
@@ -102,6 +117,9 @@ begin
   FMaxValue := 100;
   FValue := 0;
   FIncrement := 1;
+  FReadOnly := False;
+  FAlignment := taLeftJustify;
+  FMaxLength := 0;
   Width := 120;
   Height := 28;
   FCaretVisible := True;       // solid caret until a real timer toggles it
@@ -204,11 +222,70 @@ begin
   Invalidate;
 end;
 
+procedure TTySpinEdit.SetReadOnly(const AValue: Boolean);
+begin
+  if FReadOnly = AValue then Exit;
+  FReadOnly := AValue;
+  Invalidate;
+end;
+
+procedure TTySpinEdit.SetAlignment(const AValue: TAlignment);
+begin
+  if FAlignment = AValue then Exit;
+  FAlignment := AValue;
+  // Alignment shifts the visual text start; the caret follows via AlignOffset.
+  Invalidate;
+end;
+
+procedure TTySpinEdit.SetMaxLength(const AValue: Integer);
+var
+  V: Integer;
+begin
+  V := AValue;
+  if V < 0 then V := 0;
+  if FMaxLength = V then Exit;
+  FMaxLength := V;
+  Invalidate;
+end;
+
 procedure TTySpinEdit.SyncBufferToValue;
 begin
   FEditText := IntToStr(FValue);
   FCaret := UTF8Length(FEditText);
   ResetCaretBlink;
+end;
+
+function TTySpinEdit.AlignOffset(APPI: Integer): Integer;
+{ Horizontal shift applied to the text (and caret) so the caret tracks the
+  DrawText H-alignment. 0 for taLeftJustify, or the slack inside the text rect
+  for center/right. Mirrors RenderTo's TextR (Padding.Left .. Right-BtnW-Padding.Right). }
+var
+  S: TTyStyleSet;
+  EffSize, StartX, RightPad, BtnW, ViewWidth, TextWidth, Slack: Integer;
+begin
+  Result := 0;
+  if FAlignment = taLeftJustify then Exit;
+  if ClientWidth <= 0 then Exit;
+  S := CurrentStyle;
+  EffSize := ResolveFontSize(S);
+  StartX := MulDiv(S.Padding.Left, APPI, 96);
+  RightPad := MulDiv(S.Padding.Right, APPI, 96);
+  BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
+  ViewWidth := ClientWidth - BtnW - StartX - RightPad;
+  if ViewWidth <= 0 then Exit;
+  TextWidth := 0;
+  if FEditText <> '' then
+  begin
+    if FMeasureBmp = nil then FMeasureBmp := TBGRABitmap.Create(1, 1);
+    TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
+    TextWidth := FMeasureBmp.TextSize(FEditText).cx;
+  end;
+  Slack := ViewWidth - TextWidth;
+  if Slack <= 0 then Exit;
+  case FAlignment of
+    taRightJustify: Result := Slack;
+    taCenter:       Result := Slack div 2;
+  end;
 end;
 
 function TTySpinEdit.CaretPixelX(AIdx, APPI: Integer): Integer;
@@ -218,7 +295,7 @@ var
 begin
   S := CurrentStyle;
   EffSize := ResolveFontSize(S);   // theme font-size > Font.Size > 9; shared with RenderTo so caret stays aligned
-  Result := MulDiv(S.Padding.Left, APPI, 96);   // local-left text start
+  Result := MulDiv(S.Padding.Left, APPI, 96) + AlignOffset(APPI);   // local-left text start + H-align shift
   if (FEditText = '') or (AIdx <= 0) then Exit;
   if AIdx > UTF8Length(FEditText) then AIdx := UTF8Length(FEditText);
   if FMeasureBmp = nil then FMeasureBmp := TBGRABitmap.Create(1, 1);
@@ -241,11 +318,14 @@ var
   Before, After: string;
   L: Integer;
 begin
+  if FReadOnly then Exit;
   // Accept digits 0..9 always; accept '-' only at position 0 and when no '-' yet.
   if C = '' then Exit;
   if not ( ((Length(C)=1) and (C[1] in ['0'..'9']))
            or ((C = '-') and (FCaret = 0) and (Pos('-', FEditText) = 0)) ) then Exit;
   L := UTF8Length(FEditText);
+  // MaxLength (0 = unlimited): cap the buffer length in codepoints on insert.
+  if (FMaxLength > 0) and (L >= FMaxLength) then Exit;
   if FCaret > L then FCaret := L;
   Before := UTF8Copy(FEditText, 1, FCaret);
   After  := UTF8Copy(FEditText, FCaret + 1, L - FCaret);
@@ -259,6 +339,7 @@ var
   Before, After: string;
   L: Integer;
 begin
+  if FReadOnly then Exit;
   if FCaret = 0 then Exit;
   L := UTF8Length(FEditText);
   Before := UTF8Copy(FEditText, 1, FCaret - 1);
@@ -273,6 +354,7 @@ var
   Before, After: string;
   L: Integer;
 begin
+  if FReadOnly then Exit;
   L := UTF8Length(FEditText);
   if FCaret >= L then Exit;
   Before := UTF8Copy(FEditText, 1, FCaret);
@@ -301,7 +383,7 @@ begin
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
     EffSize := ResolveFontSize(S);   // same size feeds DrawText and CaretPixelX (caret alignment)
     P.DrawText(TextR, FEditText, S.FontName, EffSize, S.FontWeight,
-      S.TextColor, taLeftJustify, tlCenter, True);
+      S.TextColor, FAlignment, tlCenter, True);
     P.DrawGlyph(UpR, tgArrowUp, S.TextColor, 2);
     P.DrawGlyph(DownR, tgArrowDown, S.TextColor, 2);
     if Focused and FCaretVisible then
@@ -336,12 +418,12 @@ begin
   case Key of
     VK_UP:
       begin
-        Value := FValue + FIncrement;
+        if not FReadOnly then Value := FValue + FIncrement;
         Key := 0;
       end;
     VK_DOWN:
       begin
-        Value := FValue - FIncrement;
+        if not FReadOnly then Value := FValue - FIncrement;
         Key := 0;
       end;
     VK_RETURN: begin CommitEdit; Key := 0; end;
@@ -374,6 +456,8 @@ begin
     Result := True;
     Exit;
   end;
+  // ReadOnly locks the value: don't step on the wheel.
+  if FReadOnly then Exit(False);
   if WheelDelta > 0 then
     Value := FValue + FIncrement
   else
@@ -387,10 +471,14 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
-    if PtInRect(TySpinUpButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
-      Value := FValue + FIncrement
-    else if PtInRect(TySpinDownButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
-      Value := FValue - FIncrement;
+    // ReadOnly locks the value: the +/- buttons don't step (focus still allowed).
+    if not FReadOnly then
+    begin
+      if PtInRect(TySpinUpButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
+        Value := FValue + FIncrement
+      else if PtInRect(TySpinDownButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
+        Value := FValue - FIncrement;
+    end;
     try
       if CanFocus then SetFocus;
     except

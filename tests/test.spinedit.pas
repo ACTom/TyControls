@@ -29,6 +29,8 @@ type
     procedure RenderToForTest(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function CaretXForTest(AIdx: Integer): Integer;
     function ResolvedFontSizeForTest: Integer;
+    procedure MouseDownForTest(X, Y: Integer);                // calls MouseDown
+    function WheelForTest(WheelDelta: Integer): Boolean;      // calls DoMouseWheel
   end;
 
   TChangeCounter = class
@@ -109,6 +111,14 @@ type
     procedure TestTextRenderedAtResolvedSizeNotOrphan12;
   end;
 
+  { ReadOnly / Alignment / MaxLength (Task 11) }
+  TTySpinEditPropsTest = class(TTestCase)
+  published
+    procedure TestReadOnlyBlocksEditAndStep;
+    procedure TestAlignmentRenders;
+    procedure TestMaxLengthCapsBuffer;
+  end;
+
 implementation
 
 procedure TChangeCounter.Handle(Sender: TObject);
@@ -131,6 +141,10 @@ function TTySpinAccess.CaretXForTest(AIdx: Integer): Integer;
 begin Result := CaretPixelX(AIdx, 96); end;
 function TTySpinAccess.ResolvedFontSizeForTest: Integer;
 begin Result := ResolveFontSize(CurrentStyle); end;
+procedure TTySpinAccess.MouseDownForTest(X, Y: Integer);
+begin MouseDown(mbLeft, [], X, Y); end;
+function TTySpinAccess.WheelForTest(WheelDelta: Integer): Boolean;
+begin Result := DoMouseWheel([], WheelDelta, Point(0, 0)); end;
 
 { TTySpinEditEditModelTest }
 
@@ -644,6 +658,116 @@ begin
   end;
 end;
 
+{ TTySpinEditPropsTest }
+
+procedure TTySpinEditPropsTest.TestReadOnlyBlocksEditAndStep;
+{ ReadOnly:=True must lock the value entirely (LCL TSpinEdit semantics):
+  typing a digit is a no-op, and the +button / VK_UP / wheel-up don't step. }
+var
+  S: TTySpinAccess;
+begin
+  S := TTySpinAccess.Create(nil);
+  try
+    S.MinValue := 0; S.MaxValue := 1000; S.Value := 50;
+    S.Font.PixelsPerInch := 96;
+    S.SetBounds(0, 0, 120, 28);
+    S.ReadOnly := True;
+    S.FocusBufferForTest;                 // buffer == '50'
+
+    { typing a digit must not change the buffer }
+    S.TypeChar('7');
+    AssertEquals('ReadOnly: typing does not change buffer', '50', S.EditTextForTest);
+
+    { VK_UP must not step the value }
+    S.DoKey(VK_UP, []);
+    AssertEquals('ReadOnly: VK_UP does not step', 50, S.Value);
+
+    { + button (up-button column 102..120, top half) must not step }
+    S.MouseDownForTest(110, 4);
+    AssertEquals('ReadOnly: +button does not step', 50, S.Value);
+
+    { wheel-up must not step }
+    S.WheelForTest(120);
+    AssertEquals('ReadOnly: wheel does not step', 50, S.Value);
+  finally S.Free; end;
+end;
+
+procedure TTySpinEditPropsTest.TestAlignmentRenders;
+{ Alignment round-trips and right-justify shifts the digit ink to the right.
+  Probe: with a short buffer in a wide field, the rightmost ink column under
+  taRightJustify must be further right than under taLeftJustify. }
+  function RightmostInkX(S: TTySpinAccess): Integer;
+  var bmp: TBitmap; reread: TBGRABitmap; x, y: Integer; px: TBGRAPixel;
+  begin
+    Result := -1;
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit; bmp.SetSize(120, 28);
+      bmp.Canvas.Brush.Color := clWhite; bmp.Canvas.FillRect(0, 0, 120, 28);
+      S.RenderToForTest(bmp.Canvas, Rect(0, 0, 120, 28), 96);
+      reread := TBGRABitmap.Create(bmp);
+      try
+        { scan the text column only (left of the spin buttons at x>=102) }
+        for x := 2 to 100 do
+          for y := 0 to 27 do
+          begin
+            px := reread.GetPixel(x, y);
+            if (px.red < 160) and (px.green < 160) and (px.blue < 160) then
+              if x > Result then Result := x;
+          end;
+      finally reread.Free; end;
+    finally bmp.Free; end;
+  end;
+var
+  Sl, Sr: TTySpinAccess;
+  rl, rr: Integer;
+begin
+  { prop round-trips }
+  Sl := TTySpinAccess.Create(nil);
+  try
+    AssertEquals('default Alignment is taLeftJustify', Ord(taLeftJustify), Ord(Sl.Alignment));
+    Sl.Alignment := taRightJustify;
+    AssertEquals('Alignment round-trips', Ord(taRightJustify), Ord(Sl.Alignment));
+  finally Sl.Free; end;
+
+  { pixel probe: right-justify pushes the ink rightward }
+  Sl := TTySpinAccess.Create(nil);
+  Sr := TTySpinAccess.Create(nil);
+  try
+    Sl.MinValue := 0; Sl.MaxValue := 1000; Sl.Font.PixelsPerInch := 96;
+    Sl.SetBounds(0, 0, 120, 28);
+    Sl.Alignment := taLeftJustify; Sl.SetEditTextForTest('7');
+    rl := RightmostInkX(Sl);
+
+    Sr.MinValue := 0; Sr.MaxValue := 1000; Sr.Font.PixelsPerInch := 96;
+    Sr.SetBounds(0, 0, 120, 28);
+    Sr.Alignment := taRightJustify; Sr.SetEditTextForTest('7');
+    rr := RightmostInkX(Sr);
+
+    AssertTrue('left-aligned digit drew ink', rl > 0);
+    AssertTrue('right-aligned digit drew ink', rr > 0);
+    AssertTrue('right-justify pushes ink further right than left-justify', rr > rl);
+  finally Sl.Free; Sr.Free; end;
+end;
+
+procedure TTySpinEditPropsTest.TestMaxLengthCapsBuffer;
+{ MaxLength:=3 caps the inline buffer at 3 codepoints; the 4th digit is dropped. }
+var
+  S: TTySpinAccess;
+begin
+  S := TTySpinAccess.Create(nil);
+  try
+    S.MinValue := 0; S.MaxValue := 100000; S.Value := 0;
+    S.Font.PixelsPerInch := 96;
+    S.MaxLength := 3;
+    S.FocusBufferForTest; S.SetEditTextForTest('');  // empty buffer, caret at 0
+    S.TypeChar('1'); S.TypeChar('2'); S.TypeChar('3');
+    AssertEquals('typed 3 digits up to MaxLength', '123', S.EditTextForTest);
+    S.TypeChar('4');
+    AssertEquals('4th digit blocked by MaxLength=3', '123', S.EditTextForTest);
+  finally S.Free; end;
+end;
+
 procedure TTySpinEditCursorTest.TestSpinEditUsesIBeam;
 var
   S: TTySpinEdit;
@@ -664,4 +788,5 @@ initialization
   RegisterTest(TTySpinEditRenderTest);
   RegisterTest(TTySpinEditFontSizeTest);
   RegisterTest(TTySpinEditCursorTest);
+  RegisterTest(TTySpinEditPropsTest);
 end.
