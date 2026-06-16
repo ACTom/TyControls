@@ -224,6 +224,12 @@ end;
 
 procedure TTyEdit.DoChange;
 begin
+  // Suppressed while a composite op (InjectKey-over-selection, Cut, Paste) runs
+  // its inner mutators under FSuspendUndo: the inner DeleteSelection /
+  // InjectStringAt must NOT fire OnChange — the composite op fires it once at the
+  // end. (FSuspendUndo gates undo-pushes for the same composite ops; OnChange
+  // reuses the same "inside a composite" signal so it fires exactly once.)
+  if FSuspendUndo then Exit;
   if Assigned(FOnChange) then
     FOnChange(Self);
 end;
@@ -375,6 +381,7 @@ begin
   EnsureCaretVisible(APPI);
   ResetCaretBlink;
   Invalidate;
+  DoChange;
 end;
 
 procedure TTyEdit.DeleteWordBackward;
@@ -399,6 +406,7 @@ begin
   EnsureCaretVisible(APPI);
   ResetCaretBlink;
   Invalidate;
+  DoChange;
 end;
 
 procedure TTyEdit.DeleteWordForward;
@@ -423,6 +431,7 @@ begin
   EnsureCaretVisible(APPI);
   ResetCaretBlink;
   Invalidate;
+  DoChange;
 end;
 
 procedure TTyEdit.SetText(const AValue: string);
@@ -440,6 +449,7 @@ begin
   ClampScrollX(APPI);
   EnsureCaretVisible(APPI);
   Invalidate;
+  DoChange;
 end;
 
 procedure TTyEdit.SetCaretPos(AValue: Integer);
@@ -806,6 +816,7 @@ begin
   finally
     FSuspendUndo := False;
   end;
+  DoChange;  // composite op fires OnChange once (inner DeleteSelection was suppressed)
 end;
 
 procedure TTyEdit.PasteFromClipboard;
@@ -813,10 +824,12 @@ var
   S: string;
   i: Integer;
   Filtered: string;
+  TextBefore: string;
 begin
   if FReadOnly then Exit;
   S := ReadClipboardText;
   if S = '' then Exit;  // truly empty clipboard: full no-op
+  TextBefore := FText;
   // Capture ONE undo step up front; suppress the inner DeleteSelection /
   // InjectStringAt steps so the whole paste reverts in a single undo.
   BeginUndoStep(uskPaste);
@@ -827,15 +840,20 @@ begin
     for i := 1 to Length(S) do
       if (S[i] <> #13) and (S[i] <> #10) then
         Filtered := Filtered + S[i];
-    // Even if Filtered='', the clipboard was non-empty so selection must be deleted
+    // Even if Filtered='', the clipboard was non-empty so selection must be deleted.
+    // (Don't Exit here: flow must reach the post-block DoChange so the deleted
+    // selection still notifies once.)
     if HasSelection then
       DeleteSelection;
-    if Filtered = '' then Exit;
-    // Insert at caret
-    InjectStringAt(Filtered);
+    if Filtered <> '' then
+      InjectStringAt(Filtered);  // insert at caret
   finally
     FSuspendUndo := False;
   end;
+  // Composite op fires OnChange exactly once, only if the text actually changed
+  // (inner DeleteSelection/InjectStringAt were suppressed via FSuspendUndo).
+  if FText <> TextBefore then
+    DoChange;
 end;
 
 procedure TTyEdit.InjectStringAt(const AStr: string);
@@ -862,6 +880,7 @@ begin
   EnsureCaretVisible(APPI);
   ResetCaretBlink;
   Invalidate;
+  DoChange;
 end;
 
 // ---- Mouse overrides ----
@@ -920,16 +939,19 @@ end;
 
 procedure TTyEdit.InjectKey(const AChar: TUTF8Char);
 var
-  Before, After: string;
+  Before, After, TextBefore: string;
   APPI: Integer;
 begin
   if FReadOnly then Exit;
   if (AChar = '') or (AChar[1] < #32) then Exit;
   // At cap with no selection: block before pushing an undo step (no state change).
   if (FMaxLength > 0) and (not HasSelection) and (UTF8Length(FText) >= FMaxLength) then Exit;
+  TextBefore := FText;
   BeginUndoStep(uskTyping);
   // Replace selection if any (suppress the inner DeleteSelection's own step:
   // the snapshot we just took covers the whole replace-via-typing operation).
+  // FSuspendUndo also suppresses the inner DeleteSelection's OnChange — this op
+  // fires OnChange once at the end (selection-replace = a single change).
   if HasSelection then
   begin
     FSuspendUndo := True;
@@ -939,7 +961,13 @@ begin
       FSuspendUndo := False;
     end;
   end;
-  if (FMaxLength > 0) and (UTF8Length(FText) >= FMaxLength) then Exit;
+  if (FMaxLength > 0) and (UTF8Length(FText) >= FMaxLength) then
+  begin
+    // At cap after deleting the selection: text changed (selection removed) even
+    // though the new char can't be inserted — still notify once.
+    if FText <> TextBefore then DoChange;
+    Exit;
+  end;
   Before := UTF8Copy(FText, 1, FCaret);
   After  := UTF8Copy(FText, FCaret + 1, UTF8Length(FText) - FCaret);
   FText  := Before + AChar + After;
@@ -950,6 +978,7 @@ begin
   EnsureCaretVisible(APPI);
   ResetCaretBlink;
   Invalidate;
+  DoChange;
 end;
 
 procedure TTyEdit.InjectBackspace;
@@ -978,6 +1007,7 @@ begin
   EnsureCaretVisible(APPI);
   ResetCaretBlink;
   Invalidate;
+  DoChange;
 end;
 
 procedure TTyEdit.InjectDelete;
@@ -1006,6 +1036,7 @@ begin
   EnsureCaretVisible(APPI);
   ResetCaretBlink;
   Invalidate;
+  DoChange;
 end;
 
 procedure TTyEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);

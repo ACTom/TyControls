@@ -130,6 +130,11 @@ type
     procedure TestTextHintUsesMutedToken;
     // Task 10: blinking caret reset-on-activity
     procedure TestEditActivityResetsCaretVisible;
+    // T2: OnChange fires on every user-facing text mutation (was: undo/redo only)
+    procedure TestOnChangeFiresOncePerEdit;
+  private
+    FOnChangeCount: Integer;
+    procedure CountOnChange(Sender: TObject);
   end;
 implementation
 
@@ -2119,6 +2124,83 @@ begin
     Bmp.Free;
     Form.Free;
     Ctl.Free;
+  end;
+end;
+
+procedure TEditTest.CountOnChange(Sender: TObject);
+begin
+  Inc(FOnChangeCount);
+end;
+
+procedure TEditTest.TestOnChangeFiresOncePerEdit;
+{ Native TEdit.OnChange fires on every edit. Assert TTyEdit fires it EXACTLY
+  once per user-facing text change across all mutation paths, never double-fires
+  on selection-replace (delete+insert = one change), and still fires on undo. }
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+    E.OnChange := @CountOnChange;
+
+    // Typing a char fires once
+    FOnChangeCount := 0;
+    E.InjectKey('a');
+    AssertEquals('typing fires once', 1, FOnChangeCount);
+
+    // Backspace fires once
+    FOnChangeCount := 0;
+    E.InjectBackspace;
+    AssertEquals('backspace fires once', 1, FOnChangeCount);
+
+    // SetText fires
+    FOnChangeCount := 0;
+    E.Text := 'hello world';
+    AssertEquals('SetText fires once', 1, FOnChangeCount);
+
+    // Delete (forward) fires once
+    E.CaretPos := 0;
+    FOnChangeCount := 0;
+    E.InjectDelete;
+    AssertEquals('delete fires once', 1, FOnChangeCount);
+
+    // Select-all + type = ONE change (replace), not two
+    E.Text := 'replace me';
+    E.SelectAll;
+    FOnChangeCount := 0;
+    E.InjectKey('x');
+    AssertEquals('selection-replace fires once', 1, FOnChangeCount);
+
+    // Cut (composite: copy + delete-selection) fires once
+    E.Text := 'cut this';
+    E.SelectAll;
+    FOnChangeCount := 0;
+    E.CutToClipboard;
+    AssertEquals('cut fires once', 1, FOnChangeCount);
+
+    // Paste over a selection (composite: delete + insert) fires once
+    E.Text := 'paste here';
+    E.SelectAll;
+    E.ClipText := 'NEW';
+    FOnChangeCount := 0;
+    E.PasteFromClipboard;
+    AssertEquals('paste fires once', 1, FOnChangeCount);
+
+    // Undo still fires (RestoreState path)
+    FOnChangeCount := 0;
+    E.Undo;
+    AssertTrue('undo still fires OnChange', FOnChangeCount >= 1);
+
+    // Setting the SAME text does NOT fire (no real change)
+    E.Text := 'same';
+    FOnChangeCount := 0;
+    E.Text := 'same';
+    AssertEquals('no-op SetText does not fire', 0, FOnChangeCount);
+  finally
+    F.Free;
   end;
 end;
 
