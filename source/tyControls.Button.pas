@@ -18,6 +18,11 @@ type
     function GetBgAnimProgress: Single;
     procedure SetCancel(AValue: Boolean);
     procedure SetDefault(AValue: Boolean);
+    // Register/unregister Self as the host form's Default/Cancel control. No-op
+    // when there is no parent form yet (e.g. Default/Cancel streamed from the LFM
+    // before Parent); Loaded re-applies it once the parent is known.
+    procedure RegisterDefaultWithForm;
+    procedure RegisterCancelWithForm;
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -43,6 +48,11 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    // Re-apply Default/Cancel registration after streaming: if Default/Cancel was
+    // loaded from the LFM before Parent was assigned, the setter's GetParentForm
+    // returned nil and the registration was dropped — redo it now that the parent
+    // form is known (mirrors native re-application in Loaded/CreateWnd).
+    procedure Loaded; override;
     procedure Click; override;
     // LCL-native default/cancel routing. A focused control's Enter/Esc make the
     // owning form invoke ExecuteDefaultAction / ExecuteCancelAction on its
@@ -100,49 +110,69 @@ var
   Form: TCustomForm;
 begin
   if not Enabled then Exit;
-  inherited Click;  // fires OnClick first
-  // After OnClick: a button with a ModalResult sets the host form's ModalResult,
-  // which closes a modal dialog with that result (native TButton semantics).
+  // Set the host form's ModalResult BEFORE OnClick (native TButton semantics,
+  // buttons.inc:160-170). This lets an OnClick handler veto/override the close by
+  // writing Form.ModalResult := mrNone; doing it after would clobber the handler.
   if FModalResult <> mrNone then
   begin
     Form := GetParentForm(Self);
     if Form <> nil then
       Form.ModalResult := FModalResult;
   end;
+  inherited Click;  // OnClick may now veto by resetting Form.ModalResult
 end;
 
-procedure TTyButton.SetDefault(AValue: Boolean);
+procedure TTyButton.RegisterDefaultWithForm;
 var
   Form: TCustomForm;
 begin
-  if FDefault = AValue then Exit;
-  FDefault := AValue;
   // Register/unregister with the host form so its Enter handling routes here.
   Form := GetParentForm(Self);
   if Form <> nil then
   begin
-    if AValue then
+    if FDefault then
       Form.DefaultControl := Self
     else if Form.DefaultControl = Self then
       Form.DefaultControl := nil;
   end;
 end;
 
-procedure TTyButton.SetCancel(AValue: Boolean);
+procedure TTyButton.RegisterCancelWithForm;
 var
   Form: TCustomForm;
 begin
-  if FCancel = AValue then Exit;
-  FCancel := AValue;
   // Register/unregister with the host form so its Esc handling routes here.
   Form := GetParentForm(Self);
   if Form <> nil then
   begin
-    if AValue then
+    if FCancel then
       Form.CancelControl := Self
     else if Form.CancelControl = Self then
       Form.CancelControl := nil;
   end;
+end;
+
+procedure TTyButton.Loaded;
+begin
+  inherited Loaded;
+  // Parent is assigned by now; re-apply registration dropped during streaming
+  // (Default/Cancel set before Parent => GetParentForm was nil in the setter).
+  if FDefault then RegisterDefaultWithForm;
+  if FCancel then RegisterCancelWithForm;
+end;
+
+procedure TTyButton.SetDefault(AValue: Boolean);
+begin
+  if FDefault = AValue then Exit;
+  FDefault := AValue;
+  RegisterDefaultWithForm;
+end;
+
+procedure TTyButton.SetCancel(AValue: Boolean);
+begin
+  if FCancel = AValue then Exit;
+  FCancel := AValue;
+  RegisterCancelWithForm;
 end;
 
 function TTyButton.WantsDialogKey(ACharCode: Word): Boolean;

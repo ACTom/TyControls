@@ -13,12 +13,19 @@ type
     // Drive the CM_DIALOGKEY handler headlessly: build a TCMDialogKey carrying
     // ACharCode and dispatch it, exercising the same routing a real form would.
     procedure DispatchDialogKey(ACharCode: Word);
+    // Invoke the protected Loaded override to exercise the streamed-before-Parent
+    // re-registration path without a full LFM load.
+    procedure DoLoaded;
   end;
 
   TButtonTest = class(TTestCase)
   private
     FClicked: Integer;
+    FVetoForm: TCustomForm;
     procedure HandleClick(Sender: TObject);
+    // OnClick handler that vetoes the modal close by clearing the form's
+    // ModalResult — used to prove ModalResult is set BEFORE OnClick.
+    procedure HandleClickVeto(Sender: TObject);
   published
     procedure TestTypeKey;
     procedure TestOnClickFires;
@@ -27,8 +34,10 @@ type
     procedure TestDisabledKeyNotConsumedNoClick;
     procedure TestAnimationsEnabledIsPublished;
     procedure TestModalResultSetOnClick;
+    procedure TestModalResultVetoableByOnClick;
     procedure TestDefaultRespondsToEnter;
     procedure TestCancelRespondsToEscape;
+    procedure TestDefaultReregisteredOnLoaded;
   end;
 implementation
 
@@ -52,9 +61,20 @@ begin
   Dispatch(Msg);
 end;
 
+procedure TTyButtonAccess.DoLoaded;
+begin
+  Loaded;
+end;
+
 procedure TButtonTest.HandleClick(Sender: TObject);
 begin
   Inc(FClicked);
+end;
+
+procedure TButtonTest.HandleClickVeto(Sender: TObject);
+begin
+  if FVetoForm <> nil then
+    FVetoForm.ModalResult := mrNone;
 end;
 
 procedure TButtonTest.TestTypeKey;
@@ -170,6 +190,30 @@ begin
   end;
 end;
 
+procedure TButtonTest.TestModalResultVetoableByOnClick;
+var
+  F: TCustomForm;
+  B: TTyButton;
+begin
+  // ModalResult must be applied to the form BEFORE OnClick fires, so an OnClick
+  // handler can veto the close by resetting Form.ModalResult to mrNone. This
+  // discriminates the correct order: with the old (set-after-OnClick) order the
+  // handler's mrNone would be clobbered back to mrOk and this would fail.
+  F := TCustomForm.CreateNew(nil);
+  try
+    FVetoForm := F;
+    B := TTyButton.Create(F);
+    B.Parent := F;
+    B.ModalResult := mrOk;
+    B.OnClick := @HandleClickVeto;  // resets F.ModalResult := mrNone
+    B.Click;
+    AssertEquals('OnClick veto of ModalResult survives', mrNone, F.ModalResult);
+  finally
+    FVetoForm := nil;
+    F.Free;
+  end;
+end;
+
 procedure TButtonTest.TestDefaultRespondsToEnter;
 var
   B: TTyButtonAccess;
@@ -212,6 +256,27 @@ begin
     AssertEquals('Escape clicks a Cancel button', 1, FClicked);
   finally
     B.Free;
+  end;
+end;
+
+procedure TButtonTest.TestDefaultReregisteredOnLoaded;
+var
+  F: TCustomForm;
+  B: TTyButtonAccess;
+begin
+  // Streaming order: Default is set BEFORE Parent (as an LFM loads Default while
+  // the button is still parentless). The setter's GetParentForm returns nil so
+  // registration is dropped; Loaded must re-apply it once Parent is known.
+  F := TCustomForm.CreateNew(nil);
+  try
+    B := TTyButtonAccess.Create(F);
+    B.Default := True;            // parentless: setter cannot register yet
+    AssertTrue('precondition: not yet registered', F.DefaultControl <> B);
+    B.Parent := F;                // parent now known, but Loaded not yet run
+    B.DoLoaded;                   // re-applies the dropped registration
+    AssertSame('Loaded re-registers DefaultControl', TControl(B), TControl(F.DefaultControl));
+  finally
+    F.Free;
   end;
 end;
 
