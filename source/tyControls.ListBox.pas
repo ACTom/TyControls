@@ -19,7 +19,19 @@ type
     FMultiSelect: Boolean;
     FSelected: array of Boolean;
     FSelAnchor: Integer;
+    FSorted: Boolean;
+    FSuppressItemsChanged: Boolean;  // guard while we drive a reorder ourselves
     procedure SetItems(const AValue: TStringList);
+    procedure SetSorted(const AValue: Boolean);
+    { Snapshot the currently-selected strings (single OR multi mode). }
+    function SnapshotSelectedTexts: TStringList;
+    { After the item list was reordered, re-mark exactly the items whose text
+      was selected before the reorder. Keeps the SAME logical selection without
+      firing OnChange (only positions shifted, not the selection set). }
+    procedure ResyncSelectionFromTexts(ASelTexts: TStringList);
+    { Fires when the underlying TStringList mutates (add/insert/delete). When
+      Sorted is on, an insert can reorder indices, so re-pin the selection. }
+    procedure ItemsChanged(Sender: TObject);
     procedure SetItemIndex(const AValue: Integer);
     procedure SetItemHeight(const AValue: Integer);
     procedure SetTopIndex(const AValue: Integer);
@@ -62,6 +74,10 @@ type
     property Items: TStringList read FItems write SetItems;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
     property MultiSelect: Boolean read FMultiSelect write SetMultiSelect default False;
+    { When True, Items are kept in ascending (case-insensitive) order. The
+      previously-selected item(s) stay selected, tracked by their text and
+      re-pinned to their new indices after each reorder. }
+    property Sorted: Boolean read FSorted write SetSorted default False;
     property ItemHeight: Integer read FItemHeight write SetItemHeight default 24;
     property TopIndex: Integer read FTopIndex write SetTopIndex default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
@@ -83,6 +99,9 @@ constructor TTyListBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
+  FItems.OnChange := @ItemsChanged;
+  FSorted := False;
+  FSuppressItemsChanged := False;
   FItemIndex := -1;
   FItemHeight := 24;
   FTopIndex := 0;
@@ -109,7 +128,18 @@ end;
 
 procedure TTyListBox.SetItems(const AValue: TStringList);
 begin
-  FItems.Assign(AValue);
+  // Drive the assignment ourselves; suppress the per-mutation ItemsChanged hook
+  // so we do the clamping/selection bookkeeping exactly once below.
+  FSuppressItemsChanged := True;
+  try
+    FItems.Assign(AValue);
+    // TStringList.Assign copies the source's Sorted flag, which would silently
+    // drop our Sorted state. Re-apply it so an externally-set list stays sorted.
+    if FItems.Sorted <> FSorted then
+      FItems.Sorted := FSorted;
+  finally
+    FSuppressItemsChanged := False;
+  end;
   // Clamp TopIndex and ItemIndex in case list shrank
   if FTopIndex > MaxTopIndex then
     FTopIndex := MaxTopIndex;
@@ -121,6 +151,105 @@ begin
   end;
   SetLength(FSelected, FItems.Count);
   UpdateScrollBar;
+  Invalidate;
+end;
+
+procedure TTyListBox.SetSorted(const AValue: Boolean);
+var
+  SelTexts: TStringList;
+begin
+  if FSorted = AValue then Exit;
+  FSorted := AValue;
+  // Snapshot the selected item text(s) BEFORE the reorder so we can re-pin the
+  // SAME logical selection afterwards (indices shift, the selection set does not).
+  SelTexts := SnapshotSelectedTexts;
+  try
+    // TStringList natively supports Sorted: setting it sorts in place (ascending,
+    // case-insensitive) and keeps subsequent Adds sorted. Suppress our OnChange
+    // hook while we flip it; we re-pin the selection explicitly below.
+    FSuppressItemsChanged := True;
+    try
+      FItems.Sorted := FSorted;
+    finally
+      FSuppressItemsChanged := False;
+    end;
+    ResyncSelectionFromTexts(SelTexts);
+  finally
+    SelTexts.Free;
+  end;
+  UpdateScrollBar;
+  Invalidate;
+end;
+
+function TTyListBox.SnapshotSelectedTexts: TStringList;
+var
+  i: Integer;
+begin
+  Result := TStringList.Create;
+  if FMultiSelect then
+  begin
+    EnsureSelectedLen;
+    for i := 0 to High(FSelected) do
+      if FSelected[i] and (i < FItems.Count) then
+        Result.Add(FItems[i]);
+  end
+  else if (FItemIndex >= 0) and (FItemIndex < FItems.Count) then
+    Result.Add(FItems[FItemIndex]);
+end;
+
+procedure TTyListBox.ResyncSelectionFromTexts(ASelTexts: TStringList);
+var
+  i, Idx: Integer;
+begin
+  // Re-mark exactly the items whose text was selected before the reorder. The
+  // selection set is logically unchanged (only positions moved) so we do NOT
+  // fire OnChange here.
+  if FMultiSelect then
+  begin
+    EnsureSelectedLen;
+    for i := 0 to High(FSelected) do FSelected[i] := False;
+    for i := 0 to ASelTexts.Count - 1 do
+    begin
+      Idx := FItems.IndexOf(ASelTexts[i]);
+      if (Idx >= 0) and (Idx < Length(FSelected)) then
+        FSelected[Idx] := True;
+    end;
+  end
+  else
+  begin
+    if ASelTexts.Count = 0 then Exit;        // nothing was selected
+    Idx := FItems.IndexOf(ASelTexts[0]);
+    if Idx >= 0 then
+      FItemIndex := Idx
+    else
+      FItemIndex := -1;                       // selected text no longer present
+  end;
+end;
+
+procedure TTyListBox.ItemsChanged(Sender: TObject);
+var
+  SelTexts: TStringList;
+begin
+  if FSuppressItemsChanged then Exit;
+  // Keep the FSelected bit-array length in step with the item count.
+  EnsureSelectedLen;
+  // When Sorted is on, an Add can land anywhere (reordering indices). Re-pin the
+  // existing selection to its text so it survives the shift. We can only do this
+  // meaningfully when the selected text(s) still resolve; capturing here would be
+  // post-reorder, so this primarily guards direct external mutation. The dominant
+  // reorder path (SetSorted) snapshots before flipping and re-pins explicitly.
+  if FSorted then
+  begin
+    SelTexts := SnapshotSelectedTexts;
+    try
+      ResyncSelectionFromTexts(SelTexts);
+    finally
+      SelTexts.Free;
+    end;
+  end;
+  // Clamp stale indices if the list shrank.
+  if FItemIndex >= FItems.Count then FItemIndex := -1;
+  if FTopIndex > MaxTopIndex then FTopIndex := MaxTopIndex;
   Invalidate;
 end;
 

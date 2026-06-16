@@ -38,6 +38,8 @@ type
     procedure TestPageKeysSingleSelect;
     procedure TestMultiSelectShiftDownExtends;
     procedure TestSpaceNotConsumedInSingleSelect;
+    procedure TestSortedSortsAndKeepsSelection;
+    procedure TestSortedKeepsMultiSelection;
   end;
 
   { A2 regression: embedded scrollbar must inherit controller and DPI width }
@@ -836,6 +838,75 @@ begin
   LA.MultiSelect := True; LA.ItemIndex := 0;
   AssertEquals('multi-select Space consumed', 0, Integer(LA.PressKey(VK_SPACE, [])));
   AssertTrue('multi Space toggled row 0 on', LA.Selected[0]);
+end;
+
+{ TestSortedSortsAndKeepsSelection
+  Single-select: add items out of order, select one, set Sorted:=True.
+  Items must be ascending (case-insensitive) and the SAME item must stay
+  selected (its index re-pinned by text). No spurious OnChange. }
+procedure TTyListBoxTest.TestSortedSortsAndKeepsSelection;
+var
+  Probe: TChangeProbe;
+begin
+  FList.Items.Clear;
+  FList.Items.Add('Gamma');
+  FList.Items.Add('Alpha');
+  FList.Items.Add('Beta');
+  FList.MultiSelect := False;
+  FList.SelectItem(0);                         // 'Gamma' selected (index 0)
+  AssertEquals('selected text before sort', 'Gamma', FList.Items[FList.ItemIndex]);
+
+  Probe := TChangeProbe.Create;
+  try
+    FList.OnChange := @Probe.Handle;
+    FList.Sorted := True;
+
+    // Items now ascending
+    AssertEquals('sorted item 0', 'Alpha', FList.Items[0]);
+    AssertEquals('sorted item 1', 'Beta',  FList.Items[1]);
+    AssertEquals('sorted item 2', 'Gamma', FList.Items[2]);
+
+    // Same item still selected (re-pinned to its new index)
+    AssertEquals('Gamma re-pinned to index 2', 2, FList.ItemIndex);
+    AssertEquals('selected text unchanged after sort', 'Gamma',
+      FList.Items[FList.ItemIndex]);
+
+    // The selection (text) did not logically change -> no spurious OnChange
+    AssertEquals('no spurious OnChange on index-shift', 0, Probe.Count);
+  finally
+    Probe.Free;
+  end;
+end;
+
+{ TestSortedKeepsMultiSelection
+  MultiSelect: select two items, set Sorted:=True, the SAME two items must
+  still be selected after the indices have been remapped by the sort. }
+procedure TTyListBoxTest.TestSortedKeepsMultiSelection;
+begin
+  FList.Items.Clear;
+  FList.Items.Add('Delta');
+  FList.Items.Add('Alpha');
+  FList.Items.Add('Charlie');
+  FList.Items.Add('Bravo');
+  FList.MultiSelect := True;
+  FList.Selected[0] := True;   // 'Delta'
+  FList.Selected[2] := True;   // 'Charlie'
+  AssertEquals('two selected before sort', 2, FList.SelCount);
+
+  FList.Sorted := True;
+
+  // Ascending order: Alpha, Bravo, Charlie, Delta
+  AssertEquals('sorted item 0', 'Alpha',   FList.Items[0]);
+  AssertEquals('sorted item 1', 'Bravo',   FList.Items[1]);
+  AssertEquals('sorted item 2', 'Charlie', FList.Items[2]);
+  AssertEquals('sorted item 3', 'Delta',   FList.Items[3]);
+
+  // The SAME two strings remain selected, at their NEW indices.
+  AssertEquals('still two selected after sort', 2, FList.SelCount);
+  AssertTrue('Charlie selected (now index 2)', FList.Selected[2]);
+  AssertTrue('Delta selected (now index 3)',   FList.Selected[3]);
+  AssertFalse('Alpha not selected (now index 0)', FList.Selected[0]);
+  AssertFalse('Bravo not selected (now index 1)', FList.Selected[1]);
 end;
 
 initialization
