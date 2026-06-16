@@ -234,21 +234,22 @@ end;
 procedure TChromeAccess.SetForm(AForm: TCustomForm);
 begin
   FForm := AForm;
+  FEngine.Form := AForm;
 end;
 
 procedure TChromeAccess.SetMaximized(AValue: Boolean);
 begin
-  FMaximized := AValue;
+  FEngine.Maximized := AValue;
 end;
 
 function TChromeAccess.IsDragging: Boolean;
 begin
-  Result := FDragging;
+  Result := FEngine.Dragging;
 end;
 
 function TChromeAccess.IsMaximized: Boolean;
 begin
-  Result := FMaximized;
+  Result := FEngine.Maximized;
 end;
 
 procedure TLifecycleProbe.OnCloseQuery(Sender: TObject; var CanClose: Boolean);
