@@ -3,7 +3,7 @@ unit tyControls.Edit;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
-  ExtCtrls,
+  ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.UndoStack,
   tyControls.Animation;
@@ -33,6 +33,9 @@ type
     FMaxLength: Integer;
     FPasswordChar: string;
     FTextHint: string;
+    FAlignment: TAlignment;
+    FCharCase: TEditCharCase;
+    FNumbersOnly: Boolean;
     FOnChange: TNotifyEvent;
     procedure SetText(const AValue: string);
     procedure SetTextHint(const AValue: string);
@@ -40,6 +43,17 @@ type
     procedure SetReadOnly(const AValue: Boolean);
     procedure SetMaxLength(const AValue: Integer);
     procedure SetPasswordChar(const AValue: string);
+    procedure SetAlignment(const AValue: TAlignment);
+    procedure SetCharCase(const AValue: TEditCharCase);
+    // Selection accessors (read = derived from FSelAnchor/FCaret; write = move selection)
+    function GetSelStart: Integer;
+    function GetSelLength: Integer;
+    function GetSelText: string;
+    procedure SetSelStart(const AValue: Integer);
+    procedure SetSelLength(const AValue: Integer);
+    procedure SetSelText(const AValue: string);
+    // Apply CharCase transform to an inserted UTF-8 fragment
+    function ApplyCharCase(const AStr: string): string;
     // Selection helpers
     procedure DeleteSelection;
     // Word-wise deletion (splice modelled on DeleteSelection)
@@ -73,6 +87,10 @@ type
     procedure DoChange;
     // Text measurement helper (protected so headless access subclasses can call it)
     function TextStartX(APPI: Integer): Integer;
+    // Horizontal alignment offset (device px) added to the text/caret/selection
+    // start under Alignment=taCenter/taRightJustify. Zero when left-aligned or
+    // when the text overflows the view (scroll governs; alignment is moot).
+    function AlignOffset(APPI: Integer): Integer;
     // Display text: masked when PasswordChar is set, otherwise FText
     function DisplayText: string;
     // Undo/redo state serialization (protected so headless access subclasses
@@ -104,9 +122,6 @@ type
     procedure InjectDelete;
     // Selection API
     function HasSelection: Boolean;
-    function SelStart: Integer;
-    function SelLength: Integer;
-    function SelText: string;
     procedure SelectAll;
     procedure ClearSelection;
     // Mouse hit test
@@ -125,12 +140,23 @@ type
     property CaretPos: Integer read FCaret write SetCaretPos;
     // Scroll offset (device px, >= 0) — read-only for tests
     property ScrollX: Integer read FScrollX;
+    // Selection accessors (runtime; mirror native TCustomEdit's public Sel*).
+    // SelStart = min(anchor,caret); SelLength = |caret-anchor|; SelText = the
+    // selected substring. Writing SelStart collapses the selection there;
+    // writing SelLength extends the caret from SelStart; writing SelText
+    // replaces the current selection (single OnChange).
+    property SelStart: Integer read GetSelStart write SetSelStart;
+    property SelLength: Integer read GetSelLength write SetSelLength;
+    property SelText: string read GetSelText write SetSelText;
   published
     property Text: string read FText write SetText;
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
     property PasswordChar: string read FPasswordChar write SetPasswordChar;
     property TextHint: string read FTextHint write SetTextHint;
+    property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
+    property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
+    property NumbersOnly: Boolean read FNumbersOnly write FNumbersOnly default False;
     property Enabled;
     property Font;
     property Align;
@@ -322,7 +348,7 @@ begin
   Result := FCaret <> FSelAnchor;
 end;
 
-function TTyEdit.SelStart: Integer;
+function TTyEdit.GetSelStart: Integer;
 begin
   if FCaret < FSelAnchor then
     Result := FCaret
@@ -330,14 +356,74 @@ begin
     Result := FSelAnchor;
 end;
 
-function TTyEdit.SelLength: Integer;
+function TTyEdit.GetSelLength: Integer;
 begin
   Result := Abs(FCaret - FSelAnchor);
 end;
 
-function TTyEdit.SelText: string;
+function TTyEdit.GetSelText: string;
 begin
   Result := UTF8Copy(FText, SelStart + 1, SelLength);
+end;
+
+procedure TTyEdit.SetSelStart(const AValue: Integer);
+var
+  V, Len: Integer;
+begin
+  Len := UTF8Length(FText);
+  V := AValue;
+  if V < 0 then V := 0;
+  if V > Len then V := Len;
+  // LCL semantics: setting SelStart moves the caret there and collapses the
+  // selection (a subsequent SelLength write re-extends it).
+  BreakCoalescing;
+  FCaret := V;
+  FSelAnchor := V;
+  EnsureCaretVisible(Font.PixelsPerInch);
+  ResetCaretBlink;
+  Invalidate;
+end;
+
+procedure TTyEdit.SetSelLength(const AValue: Integer);
+var
+  SS, V, Len: Integer;
+begin
+  Len := UTF8Length(FText);
+  // Extend the selection from the current SelStart by AValue codepoints; the
+  // anchor stays at SelStart, the caret moves to SelStart+AValue (clamped).
+  SS := SelStart;
+  V := AValue;
+  if V < 0 then V := 0;
+  if SS + V > Len then V := Len - SS;
+  BreakCoalescing;
+  FSelAnchor := SS;
+  FCaret := SS + V;
+  EnsureCaretVisible(Font.PixelsPerInch);
+  ResetCaretBlink;
+  Invalidate;
+end;
+
+procedure TTyEdit.SetSelText(const AValue: string);
+var
+  TextBefore: string;
+begin
+  if FReadOnly then Exit;
+  TextBefore := FText;
+  // Composite op: delete the current selection then insert AValue. Suppress the
+  // inner ops' undo-steps + OnChange so the whole replace is one undo and fires
+  // OnChange exactly once (mirrors InjectKey-over-selection / Paste).
+  BeginUndoStep(uskPaste);
+  FSuspendUndo := True;
+  try
+    if HasSelection then
+      DeleteSelection;
+    if AValue <> '' then
+      InjectStringAt(AValue);
+  finally
+    FSuspendUndo := False;
+  end;
+  if FText <> TextBefore then
+    DoChange;
 end;
 
 procedure TTyEdit.SelectAll;
@@ -498,6 +584,39 @@ begin
   if FText = '' then Invalidate;
 end;
 
+procedure TTyEdit.SetAlignment(const AValue: TAlignment);
+begin
+  if FAlignment = AValue then Exit;
+  FAlignment := AValue;
+  // Alignment shifts the visual text/caret/selection start; the width cache
+  // (relative offsets) is unaffected, only the draw start, so just repaint.
+  Invalidate;
+end;
+
+procedure TTyEdit.SetCharCase(const AValue: TEditCharCase);
+begin
+  if FCharCase = AValue then Exit;
+  FCharCase := AValue;
+  // Match LCL: re-case the existing buffer when CharCase changes (no caret move,
+  // no undo step — purely a display/content normalization).
+  if (FText <> '') and (FCharCase <> ecNormal) then
+  begin
+    FText := ApplyCharCase(FText);
+    InvalidateWidthCache;
+    Invalidate;
+  end;
+end;
+
+function TTyEdit.ApplyCharCase(const AStr: string): string;
+begin
+  case FCharCase of
+    ecUppercase: Result := UTF8UpperCase(AStr);
+    ecLowerCase: Result := UTF8LowerCase(AStr);
+  else
+    Result := AStr;
+  end;
+end;
+
 // ---- Width cache helpers ----
 
 procedure TTyEdit.InvalidateWidthCache;
@@ -522,6 +641,31 @@ begin
   S := CurrentStyle;
   // Same inset logic as RenderTo: left padding scaled at APPI
   Result := MulDiv(S.Padding.Left, APPI, 96);
+end;
+
+function TTyEdit.AlignOffset(APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+  Widths: TTyIntArray;
+  StartX, RightPad, ViewWidth, TotalTextWidth, Slack: Integer;
+begin
+  Result := 0;
+  if FAlignment = taLeftJustify then Exit;
+  if ClientWidth <= 0 then Exit;
+  S := CurrentStyle;
+  StartX := MulDiv(S.Padding.Left, APPI, 96);
+  RightPad := MulDiv(S.Padding.Right, APPI, 96);
+  ViewWidth := ClientWidth - StartX - RightPad;
+  if ViewWidth <= 0 then Exit;
+  Widths := MeasureCodepointWidths(APPI);
+  TotalTextWidth := Widths[Length(Widths) - 1];
+  // Overflowing text is left-pinned and scroll-driven; alignment is moot.
+  Slack := ViewWidth - TotalTextWidth;
+  if Slack <= 0 then Exit;
+  case FAlignment of
+    taRightJustify: Result := Slack;
+    taCenter:       Result := Slack div 2;
+  end;
 end;
 
 function TTyEdit.DisplayText: string;
@@ -733,8 +877,9 @@ var
 begin
   APPI := Font.PixelsPerInch;
   StartX := TextStartX(APPI);
-  // Account for horizontal scroll: clicks are in control coords, add FScrollX
-  RelX := AX - StartX + FScrollX;
+  // Account for horizontal scroll (add FScrollX) and alignment shift (subtract
+  // AlignOffset) so clicks map to the right codepoint under center/right align.
+  RelX := AX - StartX - AlignOffset(APPI) + FScrollX;
   Len := UTF8Length(FText);
 
   if RelX <= 0 then
@@ -861,7 +1006,8 @@ var Before, After, Ins: string; InsLen, room, APPI: Integer;
 begin
   if AStr = '' then Exit;
   if FReadOnly then Exit;
-  Ins := AStr;
+  // CharCase also applies to bulk insertion (paste / SelText write).
+  Ins := ApplyCharCase(AStr);
   if FMaxLength > 0 then
   begin
     room := FMaxLength - UTF8Length(FText);
@@ -939,11 +1085,16 @@ end;
 
 procedure TTyEdit.InjectKey(const AChar: TUTF8Char);
 var
-  Before, After, TextBefore: string;
+  Before, After, TextBefore, Ch: string;
   APPI: Integer;
 begin
   if FReadOnly then Exit;
   if (AChar = '') or (AChar[1] < #32) then Exit;
+  // NumbersOnly: reject any non-digit input (LCL TEdit.NumbersOnly = digits 0-9).
+  if FNumbersOnly and ((Length(AChar) <> 1) or (AChar[1] < '0') or (AChar[1] > '9')) then
+    Exit;
+  // CharCase: transform the inserted char on input.
+  Ch := ApplyCharCase(AChar);
   // At cap with no selection: block before pushing an undo step (no state change).
   if (FMaxLength > 0) and (not HasSelection) and (UTF8Length(FText) >= FMaxLength) then Exit;
   TextBefore := FText;
@@ -970,7 +1121,7 @@ begin
   end;
   Before := UTF8Copy(FText, 1, FCaret);
   After  := UTF8Copy(FText, FCaret + 1, UTF8Length(FText) - FCaret);
-  FText  := Before + AChar + After;
+  FText  := Before + Ch + After;
   Inc(FCaret);
   FSelAnchor := FCaret;
   InvalidateWidthCache;
@@ -1298,7 +1449,7 @@ var
   S, SelStyle: TTyStyleSet;
   ContentRect, BandRect, CaretRect: TRect;
   Widths: TTyIntArray;
-  X1, X2, CaretX: Integer;
+  X1, X2, CaretX, AOff: Integer;
   BandFill: TTyFill;
   BandColor: TTyColor;
   EffSize: Integer;
@@ -1320,6 +1471,12 @@ begin
       ContentRect.Bottom - P.Scale(S.Padding.Bottom)
     );
 
+    // Horizontal alignment offset: shifts the text-start / caret / selection
+    // band right by AOff under taCenter/taRightJustify (0 when left-aligned or
+    // when the text overflows and scroll governs). DrawText stays left-justified
+    // so this single offset keeps glyphs, caret and band geometry in lock-step.
+    AOff := AlignOffset(APPI);
+
     // 1. Selection band (drawn before text so glyphs appear on top)
     if HasSelection then
     begin
@@ -1329,9 +1486,9 @@ begin
       SelStyle := ActiveController.Model.ResolveStyle('TyTextSelection', '', []);
 
       Widths := MeasureCodepointWidths(APPI);
-      // Apply scroll offset: shift band left by FScrollX
-      X1 := ContentRect.Left + Widths[SelStart] - FScrollX;
-      X2 := ContentRect.Left + Widths[SelStart + SelLength] - FScrollX;
+      // Apply scroll + alignment offset: shift band left by FScrollX, right by AOff
+      X1 := ContentRect.Left + AOff + Widths[SelStart] - FScrollX;
+      X2 := ContentRect.Left + AOff + Widths[SelStart + SelLength] - FScrollX;
       // Clamp to content rect
       if X1 < ContentRect.Left then X1 := ContentRect.Left;
       if X2 > ContentRect.Right then X2 := ContentRect.Right;
@@ -1374,7 +1531,10 @@ begin
           S.TextColor, taLeftJustify, tlCenter, True);
       end
       else
-        P.DrawText(ContentRect, DisplayText, S.FontName, EffSize, S.FontWeight,
+        P.DrawText(
+          Rect(ContentRect.Left + AOff, ContentRect.Top,
+               ContentRect.Right, ContentRect.Bottom),
+          DisplayText, S.FontName, EffSize, S.FontWeight,
           S.TextColor, taLeftJustify, tlCenter, True);
     end;
 
@@ -1383,8 +1543,8 @@ begin
     begin
       if Length(Widths) = 0 then
         Widths := MeasureCodepointWidths(APPI);
-      // Apply scroll offset to caret position
-      CaretX := ContentRect.Left + Widths[FCaret] - FScrollX;
+      // Apply scroll + alignment offset to caret position
+      CaretX := ContentRect.Left + AOff + Widths[FCaret] - FScrollX;
       CaretRect := Rect(CaretX, ContentRect.Top + P.Scale(2),
         CaretX + P.Scale(1), ContentRect.Bottom - P.Scale(2));
       P.FillBackground(CaretRect, Default(TTyFill), 0);

@@ -3,6 +3,7 @@ unit test.edit;
 interface
 uses
   Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics, LCLType, LCLIntf,
+  StdCtrls,
   LazUTF8,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.StyleModel, tyControls.Base, tyControls.Edit;
@@ -132,6 +133,11 @@ type
     procedure TestEditActivityResetsCaretVisible;
     // T2: OnChange fires on every user-facing text mutation (was: undo/redo only)
     procedure TestOnChangeFiresOncePerEdit;
+    // Task 9: SelStart/SelLength/SelText write + Alignment/CharCase/NumbersOnly
+    procedure TestSelStartSelLengthSelText;
+    procedure TestAlignmentRendersRight;
+    procedure TestCharCaseUpper;
+    procedure TestNumbersOnlyRejectsLetters;
   private
     FOnChangeCount: Integer;
     procedure CountOnChange(Sender: TObject);
@@ -2199,6 +2205,194 @@ begin
     FOnChangeCount := 0;
     E.Text := 'same';
     AssertEquals('no-op SetText does not fire', 0, FOnChangeCount);
+  finally
+    F.Free;
+  end;
+end;
+
+// ---- Task 9: Edit properties (Sel* write + Alignment/CharCase/NumbersOnly) ----
+
+procedure TEditTest.TestSelStartSelLengthSelText;
+{ SelStart/SelLength/SelText read map to the FSelAnchor/FCaret model; writing
+  them moves the selection. Writing SelText replaces the current selection and
+  fires OnChange exactly once. }
+var
+  F: TCustomForm;
+  E: TTyEditClipboardAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditClipboardAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'hello world';
+
+    // Write SelStart/SelLength → read SelText
+    E.SelStart := 6;
+    E.SelLength := 5;
+    AssertEquals('SelStart=6', 6, E.SelStart);
+    AssertEquals('SelLength=5', 5, E.SelLength);
+    AssertEquals('SelText=world', 'world', E.SelText);
+
+    // SelStart write collapses selection (LCL: moves caret, no length)
+    E.SelStart := 2;
+    AssertEquals('SelStart=2 after collapse', 2, E.SelStart);
+    AssertEquals('SelLength=0 after SelStart write', 0, E.SelLength);
+
+    // SelStart clamps to [0, UTF8Length]
+    E.SelStart := 999;
+    AssertEquals('SelStart clamped to end', UTF8Length(E.Text), E.SelStart);
+    E.SelStart := -5;
+    AssertEquals('SelStart clamped to 0', 0, E.SelStart);
+
+    // SelLength clamps so SelStart+SelLength <= Len
+    E.SelStart := 8;
+    E.SelLength := 999;
+    AssertEquals('SelStart+SelLength <= Len',
+      UTF8Length(E.Text), E.SelStart + E.SelLength);
+
+    // SelText write replaces the selection and fires OnChange once
+    E.Text := 'hello world';
+    E.SelStart := 6;
+    E.SelLength := 5;             // select 'world'
+    E.OnChange := @CountOnChange;
+    FOnChangeCount := 0;
+    E.SelText := 'there';
+    AssertEquals('SelText write replaces selection', 'hello there', E.Text);
+    AssertEquals('SelText write fires OnChange once', 1, FOnChangeCount);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestAlignmentRendersRight;
+{ Alignment:=taRightJustify pushes a short caption's ink toward the right edge.
+  Compare the rightmost ink column under left vs right alignment: right must be
+  further right. }
+var
+  Ctl: TTyStyleController;
+  E: TTyEditAccess;
+  Form: TForm;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  W: Integer;
+  RightInkLeft, RightInkRight: Integer;
+
+  function RightmostInk: Integer;
+  var xx, yy: Integer;
+  begin
+    Result := -1;
+    for xx := W - 1 downto 0 do
+    begin
+      for yy := 0 to 27 do
+        if Reread.GetPixel(xx, yy).red < 128 then
+        begin
+          Result := xx;
+          Break;
+        end;
+      if Result >= 0 then Break;
+    end;
+  end;
+
+begin
+  W := 240;
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss('TyEdit { background:#FFFFFF; color:#000000; padding:4px; font-size:12px; }');
+    E := TTyEditAccess.Create(Form);
+    E.Parent := Form;
+    E.Controller := Ctl;
+    E.Font.PixelsPerInch := 96;
+    E.SetBounds(0, 0, W, 28);
+    E.Text := 'Hi';   // short, leaves slack on the right
+
+    // Left-aligned render
+    E.Alignment := taLeftJustify;
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(W, 28);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, W, 28);
+    E.RenderTo(Bmp.Canvas, Rect(0, 0, W, 28), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      RightInkLeft := RightmostInk;
+    finally
+      Reread.Free;
+    end;
+
+    // Right-aligned render
+    E.Alignment := taRightJustify;
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, W, 28);
+    E.RenderTo(Bmp.Canvas, Rect(0, 0, W, 28), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      RightInkRight := RightmostInk;
+    finally
+      Reread.Free;
+    end;
+
+    AssertTrue('both renders have ink',
+      (RightInkLeft >= 0) and (RightInkRight >= 0));
+    AssertTrue('right-aligned ink is further right (left=' +
+      IntToStr(RightInkLeft) + ' right=' + IntToStr(RightInkRight) + ')',
+      RightInkRight > RightInkLeft);
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TEditTest.TestCharCaseUpper;
+{ CharCase:=ecUppercase transforms inserted chars on input. }
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.CharCase := ecUppercase;
+    E.InjectKey('a');
+    E.InjectKey('b');
+    AssertEquals('uppercase on input', 'AB', E.Text);
+
+    E.Text := '';
+    E.CharCase := ecLowerCase;
+    E.InjectKey('X');
+    AssertEquals('lowercase on input', 'x', E.Text);
+
+    E.Text := '';
+    E.CharCase := ecNormal;
+    E.InjectKey('a');
+    AssertEquals('normal leaves char as-is', 'a', E.Text);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestNumbersOnlyRejectsLetters;
+{ NumbersOnly:=True rejects non-digit input, accepts digits. }
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.NumbersOnly := True;
+    E.InjectKey('a');
+    AssertEquals('letter rejected', '', E.Text);
+    E.InjectKey('5');
+    AssertEquals('digit accepted', '5', E.Text);
+    E.InjectKey('7');
+    AssertEquals('second digit accepted', '57', E.Text);
+    E.InjectKey('x');
+    AssertEquals('letter still rejected', '57', E.Text);
   finally
     F.Free;
   end;
