@@ -22,6 +22,7 @@ uses
   test.tabcontrol.reorder,
   test.tabcontrol.closehover,
   test.defaulttheme, test.spinedit, test.memo, test.memo.selection, test.memo.undo,
+  test.memo.props,
   test.memo.visualrows,
   test.memo.hscroll,
   test.memo.wrap,

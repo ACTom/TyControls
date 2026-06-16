@@ -3,7 +3,7 @@ unit tyControls.Memo;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
-  ExtCtrls,
+  ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.ScrollBar, tyControls.UndoStack, tyControls.Animation;
@@ -120,8 +120,44 @@ type
     // new printable char at the cap and truncates paste to the remaining room;
     // Enter/Backspace/Delete/merge are never limited. Default 0.
     FMaxLength: Integer;
+    // WantTabs: when True a Tab key inserts a literal tab char into the text;
+    // when False (default) Tab is left to propagate so it navigates between
+    // controls (the native TMemo default). Gated in KeyDown.
+    FWantTabs: Boolean;
+    // WantReturns: when True (default) Enter inserts a line break; when False
+    // Enter is NOT consumed so the form's default button can handle it. Gated on
+    // the VK_RETURN branch in KeyDown.
+    FWantReturns: Boolean;
+    // ScrollBars: which scrollbars the (vertical, optionally word-wrapping) memo
+    // shows. Default ssAutoVertical = the historical behaviour (the embedded
+    // vertical bar appears on overflow). ssNone hides it entirely; ssVertical
+    // forces it always-visible. Horizontal variants degrade to the vertical
+    // policy (this memo has no horizontal scrollbar — flagged, not implemented).
+    FScrollBars: TScrollStyle;
     procedure SetReadOnly(AValue: Boolean);
     procedure SetMaxLength(AValue: Integer);
+    procedure SetWantTabs(AValue: Boolean);
+    procedure SetWantReturns(AValue: Boolean);
+    procedure SetScrollBars(AValue: TScrollStyle);
+    // --- Flat codepoint-offset <-> (line,col) mapping. The flat offset counts one
+    // codepoint for the newline BETWEEN consecutive logical lines, so a document
+    // of N lines has Sum(LineLen)+ (N-1) addressable offsets. Mirrors a native
+    // TMemo's SelStart/SelLength/CaretPos integer addressing. ---
+    function LineColToFlat(ALine, ACol: Integer): Integer;
+    procedure FlatToLineCol(AOffset: Integer; out ALine, ACol: Integer);
+    // Flat-offset accessors over the (line,col) selection/caret model. The
+    // selected-text getter is the protected GetSelText (declared below alongside
+    // the 2D selection helpers); the SelText property reads it.
+    function GetSelStart: Integer;
+    function GetSelLength: Integer;
+    function GetCaretPos: Integer;
+    procedure SetSelStart(AValue: Integer);
+    procedure SetSelLength(AValue: Integer);
+    procedure SetSelText(const AValue: string);
+    procedure SetCaretPos(AValue: Integer);
+    // Whole-string Text accessor over Lines (TStrings.Text get/set semantics).
+    function GetText: string;
+    procedure SetText(const AValue: string);
     // Total content codepoints across all logical lines (line breaks excluded).
     function ContentCodepointCount: Integer;
     function GetLines: TStrings;
@@ -146,6 +182,12 @@ type
     procedure ScrollBarChange(Sender: TObject);
     // --- Model mutators (pure UTF8 splice; no key/paint dependency) ---
     procedure DoInsertText(const AStr: string);
+    // Insert AStr at the caret, splitting it into logical lines on CR/LF (CRLF and
+    // lone CR normalised to one break). A single segment is a plain in-line insert;
+    // multiple segments split the caret line and splice the interior lines in.
+    // Pure mutator: the caller routes through AfterEdit (one OnChange/undo step).
+    // Shared by PasteFromClipboard and the SelText writer.
+    procedure InsertTextMultiline(const AStr: string);
     procedure DoSplitLine;
     procedure DoBackspace;
     procedure DoDelete;
@@ -283,8 +325,9 @@ type
     function SelEndLine: Integer;
     function SelEndCol: Integer;
     // Selected text: single line -> the spanned slice; multi-line -> first-line
-    // tail + whole interior lines + last-line head, joined by LineEnding.
-    function SelText: string;
+    // tail + whole interior lines + last-line head, joined by LineEnding. Renamed
+    // from SelText so the published flat property SelText can read it.
+    function GetSelText: string;
     // Select the whole document (anchor->(0,0), caret->end of last line).
     procedure SelectAll;
     // Collapse the selection onto the caret (anchor := caret).
@@ -324,6 +367,10 @@ type
     // VISUAL ROWS now (TotalVisualRows, not LineCountLogical), so a wrapped single
     // line can overflow and show the bar.
     procedure UpdateScrollBar;
+    // True iff the embedded vertical scrollbar currently exists AND is visible.
+    // Protected so headless probes can assert the ScrollBars policy without
+    // reaching the private FScrollBar field.
+    function ScrollBarVisible: Boolean;
     // Scroll FTopRow so the caret's VISUAL ROW sits inside the visible window.
     procedure EnsureCaretLineVisible(APPI: Integer);
     // --- Horizontal scroll (WordWrap=False only; mirrors TTyEdit.ClampScrollX /
@@ -387,8 +434,38 @@ type
     // Horizontal scroll offset in device px (>= 0; WordWrap=False only). Mirrors
     // TTyEdit.ScrollX. Read-only: it is driven by EnsureCaretXVisible/ClampScrollX.
     property ScrollX: Integer read FScrollX;
+    // Flat codepoint-offset selection/caret accessors (runtime; mirror native
+    // TCustomMemo's public SelStart/SelLength/SelText/CaretPos integer addressing).
+    // The flat offset counts one codepoint for the newline between consecutive
+    // lines. SelStart = flat(ordered selection start); SelLength = |flat(caret) -
+    // flat(anchor)|; SelText = the selected text (spans newlines as LineEnding);
+    // CaretPos = flat(caret). Writing SelStart collapses the selection there;
+    // writing SelLength extends the caret from SelStart; writing SelText replaces
+    // the selection (single OnChange); writing CaretPos places the caret (collapse).
+    property SelStart: Integer read GetSelStart write SetSelStart;
+    property SelLength: Integer read GetSelLength write SetSelLength;
+    property SelText: string read GetSelText write SetSelText;
+    property CaretPos: Integer read GetCaretPos write SetCaretPos;
   published
     property Lines: TStrings read GetLines write SetLines;
+    // Whole-document text as one string with platform line breaks (TStrings.Text
+    // get/set). Writing replaces all lines, collapses the caret to the origin and
+    // fires OnChange.
+    property Text: string read GetText write SetText;
+    // When True, a Tab key inserts a literal tab char into the text; when False
+    // (default) Tab navigates between controls (native TMemo default).
+    property WantTabs: Boolean read FWantTabs write SetWantTabs default False;
+    // When True (default), Enter inserts a line break; when False, Enter is not
+    // consumed so the form's default button can handle it.
+    property WantReturns: Boolean read FWantReturns write SetWantReturns default True;
+    // Which scrollbars show. Default ssAutoVertical = the historical behaviour (the
+    // embedded vertical bar appears on overflow). ssNone hides it entirely;
+    // ssVertical/ssBoth force it always-visible. This memo has no HORIZONTAL
+    // scrollbar, so the horizontal variants (ssHorizontal/ssBoth/ssAutoHorizontal/
+    // ssAutoBoth) honour only their vertical half (horizontal scrolling is a
+    // flagged, unimplemented feature).
+    property ScrollBars: TScrollStyle read FScrollBars write SetScrollBars
+      default ssAutoVertical;
     // Soft word-wrap toggle. Default False (no wrap; long lines later gain
     // horizontal scrolling). True wraps long logical lines into multiple visual
     // rows at word boundaries.
@@ -449,6 +526,10 @@ begin
   FUndoStack := TTyUndoStack.Create;
   FSuspendUndo := False;
   FReadOnly := False;
+  FMaxLength := 0;
+  FWantTabs := False;          // Tab navigates by default (native TMemo default)
+  FWantReturns := True;        // Enter inserts a line break by default
+  FScrollBars := ssAutoVertical;  // historical behaviour: bar on overflow
   FCaretVisible := True;       // solid caret until a real timer toggles it
   FBlinkTimer := nil;          // lazy: created only when HandleAllocated
   FBlinkElapsedMs := 0;
@@ -653,6 +734,195 @@ procedure TTyMemo.SetMaxLength(AValue: Integer);
 begin
   if FMaxLength = AValue then Exit;
   FMaxLength := AValue;
+end;
+
+procedure TTyMemo.SetWantTabs(AValue: Boolean);
+begin
+  FWantTabs := AValue;
+end;
+
+procedure TTyMemo.SetWantReturns(AValue: Boolean);
+begin
+  FWantReturns := AValue;
+end;
+
+procedure TTyMemo.SetScrollBars(AValue: TScrollStyle);
+begin
+  if FScrollBars = AValue then Exit;
+  FScrollBars := AValue;
+  // Re-evaluate the embedded bar's visibility under the new policy.
+  UpdateScrollBar;
+  Invalidate;
+end;
+
+// ---- Flat codepoint-offset <-> (line,col) mapping ----
+
+function TTyMemo.LineColToFlat(ALine, ACol: Integer): Integer;
+// Sum of (LineLen + 1 newline) for every line strictly above ALine, plus ACol.
+// Clamped into the model so out-of-range inputs map to a valid offset.
+var
+  i, MaxLine: Integer;
+begin
+  MaxLine := LineCountLogical - 1;
+  if ALine < 0 then ALine := 0;
+  if ALine > MaxLine then ALine := MaxLine;
+  if ACol < 0 then ACol := 0;
+  if ACol > LineLen(ALine) then ACol := LineLen(ALine);
+  Result := 0;
+  for i := 0 to ALine - 1 do
+    Inc(Result, LineLen(i) + 1);  // +1 for the newline between lines i and i+1
+  Inc(Result, ACol);
+end;
+
+procedure TTyMemo.FlatToLineCol(AOffset: Integer; out ALine, ACol: Integer);
+// Walk lines accumulating (LineLen + 1) until AOffset lands within a line's
+// [0..LineLen] span (the trailing slot is the position before that line's
+// newline). Clamps a negative offset to (0,0) and an over-large offset to the
+// end of the last line.
+var
+  i, MaxLine, Remaining, Span: Integer;
+begin
+  ALine := 0;
+  ACol := 0;
+  if AOffset <= 0 then Exit;
+  MaxLine := LineCountLogical - 1;
+  Remaining := AOffset;
+  for i := 0 to MaxLine do
+  begin
+    Span := LineLen(i);
+    if Remaining <= Span then
+    begin
+      ALine := i;
+      ACol := Remaining;
+      Exit;
+    end;
+    // Consume this line plus its trailing newline and move on.
+    Dec(Remaining, Span + 1);
+    if Remaining < 0 then
+    begin
+      // AOffset fell on the newline slot itself: bind to end of this line.
+      ALine := i;
+      ACol := Span;
+      Exit;
+    end;
+  end;
+  // Past the end of the document: clamp to the end of the last line.
+  ALine := MaxLine;
+  ACol := LineLen(MaxLine);
+end;
+
+function TTyMemo.GetSelStart: Integer;
+begin
+  // Flat offset of the ORDERED selection start (lexicographically smaller end).
+  Result := LineColToFlat(SelStartLine, SelStartCol);
+end;
+
+function TTyMemo.GetSelLength: Integer;
+begin
+  // |flat(caret) - flat(anchor)| = the codepoint span of the selection.
+  Result := Abs(LineColToFlat(FCaretLine, FCaretCol)
+    - LineColToFlat(FSelAnchorLine, FSelAnchorCol));
+end;
+
+function TTyMemo.GetCaretPos: Integer;
+begin
+  Result := LineColToFlat(FCaretLine, FCaretCol);
+end;
+
+procedure TTyMemo.SetSelStart(AValue: Integer);
+var
+  L, C: Integer;
+begin
+  // Native semantics: setting SelStart moves the caret there and collapses the
+  // selection (a following SelLength write re-extends it).
+  FlatToLineCol(AValue, L, C);
+  FCaretLine := L;
+  FCaretCol := C;
+  ClampCaret;
+  FSelAnchorLine := FCaretLine;
+  FSelAnchorCol := FCaretCol;
+  FDesiredCol := FCaretCol;
+  BreakCoalescing;
+  UpdateDesiredX(Font.PixelsPerInch);
+  EnsureCaretLineVisible(Font.PixelsPerInch);
+  Invalidate;
+  DoSelectionChange;
+end;
+
+procedure TTyMemo.SetSelLength(AValue: Integer);
+var
+  SS, L, C: Integer;
+begin
+  // Extend the selection from the current SelStart by AValue codepoints: the
+  // anchor stays at SelStart, the caret moves to flat(SelStart)+AValue (clamped).
+  if AValue < 0 then AValue := 0;
+  SS := GetSelStart;
+  // Anchor at SelStart, caret at SelStart + length.
+  FlatToLineCol(SS, L, C);
+  FSelAnchorLine := L;
+  FSelAnchorCol := C;
+  FlatToLineCol(SS + AValue, L, C);
+  FCaretLine := L;
+  FCaretCol := C;
+  ClampCaret;
+  FDesiredCol := FCaretCol;
+  BreakCoalescing;
+  UpdateDesiredX(Font.PixelsPerInch);
+  EnsureCaretLineVisible(Font.PixelsPerInch);
+  Invalidate;
+  DoSelectionChange;
+end;
+
+procedure TTyMemo.SetSelText(const AValue: string);
+var
+  HadChange: Boolean;
+begin
+  if FReadOnly then Exit;
+  // Composite op: delete the current selection then insert AValue, all as one
+  // undo step firing OnChange exactly once (mirrors the Edit control). Route the
+  // insert through the multi-line paste splitter so a value with line breaks
+  // becomes multiple lines.
+  HadChange := HasSelection or (AValue <> '');
+  BeginUndoStep(uskPaste);
+  FSuspendUndo := True;
+  try
+    if HasSelection then DeleteSelection;
+    if AValue <> '' then
+      InsertTextMultiline(AValue);
+  finally
+    FSuspendUndo := False;
+  end;
+  // One OnChange + caret/scroll refresh for the whole replace.
+  if HadChange then
+    AfterEdit(Font.PixelsPerInch);
+end;
+
+procedure TTyMemo.SetCaretPos(AValue: Integer);
+var
+  L, C: Integer;
+begin
+  FlatToLineCol(AValue, L, C);
+  SetCaret(L, C);  // collapses the selection onto the caret (native semantics)
+end;
+
+function TTyMemo.GetText: string;
+begin
+  // Whole-document string with platform line breaks (TStrings.Text semantics).
+  Result := FLines.Text;
+end;
+
+procedure TTyMemo.SetText(const AValue: string);
+begin
+  // Replace all lines from the string (split on line breaks by TStrings.Text),
+  // collapse the caret/selection to the origin, refresh layout + fire OnChange.
+  BeginUndoStep(uskNone);
+  FLines.Text := AValue;
+  FCaretLine := 0;
+  FCaretCol := 0;
+  FSelAnchorLine := 0;
+  FSelAnchorCol := 0;
+  FDesiredCol := 0;
+  AfterEdit(Font.PixelsPerInch);
 end;
 
 function TTyMemo.ContentCodepointCount: Integer;
@@ -894,7 +1164,7 @@ begin
   Result := EC;
 end;
 
-function TTyMemo.SelText: string;
+function TTyMemo.GetSelText: string;
 var
   SL, SC, EL, EC, i: Integer;
   Head, Tail: string;
@@ -1201,7 +1471,7 @@ end;
 procedure TTyMemo.UpdateScrollBar;
 var
   VR, MaxPos, MaxTop, Total: Integer;
-  WasVisible: Boolean;
+  WasVisible, WantBar: Boolean;
 begin
   VR := VisibleRows;
   Total := TotalVisualRows(Font.PixelsPerInch);
@@ -1209,7 +1479,23 @@ begin
   MaxTop := Total - VR;
   if MaxTop < 0 then MaxTop := 0;
   if FTopRow > MaxTop then FTopRow := MaxTop;
-  if Total > VR then
+  // ScrollBars policy decides whether the embedded vertical bar shows:
+  //   ssNone                      -> never (hidden even under overflow);
+  //   ssVertical / ssBoth / ...   -> always (force visible even when it fits);
+  //   ssAutoVertical (default) and the horizontal variants we cannot honour
+  //                               -> on overflow only (the historical behaviour).
+  // This memo has NO horizontal scrollbar, so ssHorizontal/ssBoth/ssAutoHorizontal/
+  // ssAutoBoth degrade to the vertical policy (their horizontal half is a flagged,
+  // unimplemented feature). ssVertical/ssBoth force-show; the rest are auto.
+  case FScrollBars of
+    ssNone:
+      WantBar := False;
+    ssVertical, ssBoth:
+      WantBar := True;
+  else
+    WantBar := Total > VR;   // ssAutoVertical / ssAutoBoth / horizontal-only -> auto
+  end;
+  if WantBar then
   begin
     // Capture the bar's prior visibility BEFORE creating/flipping it. A bar that
     // does not yet exist counts as previously-hidden: TControl.Visible defaults
@@ -1270,6 +1556,11 @@ begin
     if FScrollBar <> nil then
       FScrollBar.Visible := False;
   end;
+end;
+
+function TTyMemo.ScrollBarVisible: Boolean;
+begin
+  Result := (FScrollBar <> nil) and FScrollBar.Visible;
 end;
 
 procedure TTyMemo.MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -1857,7 +2148,7 @@ begin
   // Identical to TTyEdit.CopyToClipboard: SelText is already LineEnding-joined,
   // so the multi-line case needs no special handling here.
   if not HasSelection then Exit;
-  WriteClipboardText(SelText);
+  WriteClipboardText(GetSelText);
   // Copy does not mutate, but it ends a typing-coalesce run (mirrors TTyEdit).
   BreakCoalescing;
 end;
@@ -1867,7 +2158,7 @@ begin
   // ReadOnly: a cut may not delete; degrade to a plain copy.
   if FReadOnly then begin CopyToClipboard; Exit; end;
   if not HasSelection then Exit;
-  WriteClipboardText(SelText);
+  WriteClipboardText(GetSelText);
   // Capture ONE undo step (uskCut); suppress the inner DeleteSelection's own step
   // so the whole cut reverts in a single undo.
   BeginUndoStep(uskCut);
@@ -1881,47 +2172,20 @@ begin
   AfterEdit(Font.PixelsPerInch);
 end;
 
-procedure TTyMemo.PasteFromClipboard;
-// Multi-line paste: read the clipboard, normalise line breaks, split into
-// segments and splice them into the model. A truly-empty clipboard is a full
-// no-op (mirrors TTyEdit). A non-empty-but-CRLF-only clipboard (e.g. #10) still
-// deletes any selection and inserts the resulting (possibly empty) segments,
-// which mutates the model and fires OnChange.
+procedure TTyMemo.InsertTextMultiline(const AStr: string);
+// Pure mutator: normalise CR/LF in AStr, split into segments, and splice them in
+// at the caret. A single segment is a plain in-line insert; multiple segments
+// split the caret line (head before caret / tail after) and insert the interior
+// lines, leaving the caret at the end of the final segment before the tail. The
+// caller routes through AfterEdit (one OnChange/undo step).
 var
-  S, Norm, Cur, Head, Tail: string;
+  Norm, Cur, Head, Tail: string;
   Segs: TStringList;
-  i, InsertAt, Room: Integer;
+  i, InsertAt: Integer;
 begin
-  if FReadOnly then Exit;            // ReadOnly: block paste
-  S := ReadClipboardText;
-  if S = '' then Exit;  // truly-empty clipboard: full no-op (Edit 551)
-  // MaxLength: truncate the payload to the remaining content room. When the doc
-  // is already at/over the cap there is no room -> full no-op (Exit before any
-  // mutation). Otherwise trim the RAW clipboard string to Room codepoints BEFORE
-  // the CR/LF split. This caps inserted content at Room; any CR/LF inside the
-  // trimmed prefix become line breaks (which don't count toward content), so the
-  // resulting content may be slightly UNDER Room — never over. Simple and safe.
-  if FMaxLength > 0 then
-  begin
-    Room := FMaxLength - ContentCodepointCount;
-    if Room <= 0 then Exit;
-    if UTF8Length(S) > Room then
-      S := UTF8Copy(S, 1, Room);
-  end;
-  // Capture ONE undo step (uskPaste) covering the whole paste — both the
-  // selection delete and the multi-line splice revert in a single undo. The
-  // inner mutators are pure (no BeginUndoStep of their own), so FSuspendUndo is
-  // not strictly required, but set it for symmetry with cut and to guard against
-  // any future BeginUndoStep added to the inner helpers.
-  BeginUndoStep(uskPaste);
-  FSuspendUndo := True;
-  try
-  if HasSelection then DeleteSelection;
-
   // Normalise CR/LF: CRLF -> LF, lone CR -> LF, so each remaining LF is one break.
-  Norm := StringReplace(S, #13#10, #10, [rfReplaceAll]);
+  Norm := StringReplace(AStr, #13#10, #10, [rfReplaceAll]);
   Norm := StringReplace(Norm, #13, #10, [rfReplaceAll]);
-
   // Split into segments on LF. A single segment (no break) is a plain insert.
   // Build the segment list manually (rather than via TStringList.Text) so a
   // trailing break's empty segment is preserved: 'a'#10 -> ['a',''] (two lines),
@@ -1969,11 +2233,50 @@ begin
       FCaretLine := InsertAt;
       FCaretCol  := UTF8Length(Segs[Segs.Count - 1]);
     end;
-    FDesiredCol := FCaretCol;
-    AfterEdit(Font.PixelsPerInch);
   finally
     Segs.Free;
   end;
+end;
+
+procedure TTyMemo.PasteFromClipboard;
+// Multi-line paste: read the clipboard, normalise line breaks, split into
+// segments and splice them into the model. A truly-empty clipboard is a full
+// no-op (mirrors TTyEdit). A non-empty-but-CRLF-only clipboard (e.g. #10) still
+// deletes any selection and inserts the resulting (possibly empty) segments,
+// which mutates the model and fires OnChange.
+var
+  S: string;
+  Room: Integer;
+begin
+  if FReadOnly then Exit;            // ReadOnly: block paste
+  S := ReadClipboardText;
+  if S = '' then Exit;  // truly-empty clipboard: full no-op (Edit 551)
+  // MaxLength: truncate the payload to the remaining content room. When the doc
+  // is already at/over the cap there is no room -> full no-op (Exit before any
+  // mutation). Otherwise trim the RAW clipboard string to Room codepoints BEFORE
+  // the CR/LF split. This caps inserted content at Room; any CR/LF inside the
+  // trimmed prefix become line breaks (which don't count toward content), so the
+  // resulting content may be slightly UNDER Room — never over. Simple and safe.
+  if FMaxLength > 0 then
+  begin
+    Room := FMaxLength - ContentCodepointCount;
+    if Room <= 0 then Exit;
+    if UTF8Length(S) > Room then
+      S := UTF8Copy(S, 1, Room);
+  end;
+  // Capture ONE undo step (uskPaste) covering the whole paste — both the
+  // selection delete and the multi-line splice revert in a single undo. The
+  // inner mutators are pure (no BeginUndoStep of their own), so FSuspendUndo is
+  // not strictly required, but set it for symmetry with cut and to guard against
+  // any future BeginUndoStep added to the inner helpers.
+  BeginUndoStep(uskPaste);
+  FSuspendUndo := True;
+  try
+    if HasSelection then DeleteSelection;
+    // Normalise + split + splice the payload into one-or-more logical lines.
+    InsertTextMultiline(S);
+    FDesiredCol := FCaretCol;
+    AfterEdit(Font.PixelsPerInch);
   finally
     FSuspendUndo := False;
   end;
@@ -2399,6 +2702,10 @@ begin
   case Key of
     VK_RETURN:
     begin
+      // WantReturns=False: do NOT consume Enter — leave Key intact so it propagates
+      // and the form's default button can handle it (native TMemo semantics). No
+      // model change. Exit before consuming the key.
+      if not FWantReturns then Exit;
       // Enter on a selection replaces it with a line break (delete-then-split).
       // Capture ONE undo step (uskNewline) covering both the selection delete and
       // the split, so the whole Enter reverts in a single undo. ReadOnly blocks the
@@ -2413,6 +2720,35 @@ begin
         finally
           FSuspendUndo := False;
         end;
+        FDesiredCol := FCaretCol;
+        AfterEdit(APPI);
+      end;
+      Key := 0;
+    end;
+    VK_TAB:
+    begin
+      // WantTabs=False (default): do NOT consume Tab — leave Key intact so it
+      // propagates and navigates between controls (native TMemo semantics).
+      if not FWantTabs then Exit;
+      // WantTabs=True: insert a literal tab character into the text (replacing any
+      // selection), as one undo step firing OnChange once. ReadOnly blocks the
+      // mutation but still consumes the key.
+      if not FReadOnly then
+      begin
+        if HasSelection then
+          BeginUndoStep(uskDelete)
+        else
+          BeginUndoStep(uskTyping);
+        FSuspendUndo := True;
+        try
+          if HasSelection then DeleteSelection;
+          DoInsertText(#9);
+        finally
+          FSuspendUndo := False;
+        end;
+        // Collapse the anchor onto the new caret (mirrors typed insertion).
+        FSelAnchorLine := FCaretLine;
+        FSelAnchorCol := FCaretCol;
         FDesiredCol := FCaretCol;
         AfterEdit(APPI);
       end;
