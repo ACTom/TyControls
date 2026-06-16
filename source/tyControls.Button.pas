@@ -2,7 +2,7 @@ unit tyControls.Button;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
+  Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, ExtCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 type
   TTyButton = class(TTyCustomControl)
@@ -10,9 +10,14 @@ type
     FBgAnim: TTyAnimator;
     FAnimationsEnabled: Boolean;
     FTimer: TTimer;
+    FDefault: Boolean;
+    FCancel: Boolean;
+    FModalResult: TModalResult;
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
     function GetBgAnimProgress: Single;
+    procedure SetCancel(AValue: Boolean);
+    procedure SetDefault(AValue: Boolean);
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -20,6 +25,11 @@ type
     procedure MouseEnter; override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    // VCL-style dialog-key path (CM_DIALOGKEY carries a VK_* CharCode). LCL marks
+    // CM_DIALOGKEY "unimplemented" so a real form drives the action methods above,
+    // not this handler; it exists so the same routing is exercisable headlessly
+    // through the directly-testable WantsDialogKey seam.
+    procedure CMDialogKey(var Message: TCMDialogKey); message CM_DIALOGKEY;
     // Steppable animation seam (no wall-clock): advance the hover bg-fade by AMs
     // and return True iff the eased progress changed. Tests drive this directly
     // via an access subclass; the lazy TTimer drives it at runtime.
@@ -34,11 +44,26 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Click; override;
+    // LCL-native default/cancel routing. A focused control's Enter/Esc make the
+    // owning form invoke ExecuteDefaultAction / ExecuteCancelAction on its
+    // DefaultControl / CancelControl (registered by SetDefault/SetCancel below).
+    procedure ExecuteDefaultAction; override;
+    procedure ExecuteCancelAction; override;
+    // Directly-testable dialog-key seam: True iff this button should activate for
+    // ACharCode — VK_RETURN when Default, VK_ESCAPE when Cancel. The CMDialogKey
+    // handler (and headless tests) route through here.
+    function WantsDialogKey(ACharCode: Word): Boolean;
   published
     // On by default. When enabled and the control has a window handle, hovering
     // fades the background between the normal and hover styles; with no handle
     // (every render test) it snaps, preserving the existing exact-pixel paint tests.
     property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default True;
+    // Native TButton parity. Default: Enter on the form activates this button.
+    // Cancel: Esc activates it. ModalResult: clicking sets the host form's
+    // ModalResult (closing a modal dialog).
+    property Default: Boolean read FDefault write SetDefault default False;
+    property Cancel: Boolean read FCancel write SetCancel default False;
+    property ModalResult: TModalResult read FModalResult write FModalResult default mrNone;
     property Caption;
     property Enabled;
     property Font;
@@ -71,9 +96,86 @@ begin
 end;
 
 procedure TTyButton.Click;
+var
+  Form: TCustomForm;
 begin
   if not Enabled then Exit;
-  inherited Click;
+  inherited Click;  // fires OnClick first
+  // After OnClick: a button with a ModalResult sets the host form's ModalResult,
+  // which closes a modal dialog with that result (native TButton semantics).
+  if FModalResult <> mrNone then
+  begin
+    Form := GetParentForm(Self);
+    if Form <> nil then
+      Form.ModalResult := FModalResult;
+  end;
+end;
+
+procedure TTyButton.SetDefault(AValue: Boolean);
+var
+  Form: TCustomForm;
+begin
+  if FDefault = AValue then Exit;
+  FDefault := AValue;
+  // Register/unregister with the host form so its Enter handling routes here.
+  Form := GetParentForm(Self);
+  if Form <> nil then
+  begin
+    if AValue then
+      Form.DefaultControl := Self
+    else if Form.DefaultControl = Self then
+      Form.DefaultControl := nil;
+  end;
+end;
+
+procedure TTyButton.SetCancel(AValue: Boolean);
+var
+  Form: TCustomForm;
+begin
+  if FCancel = AValue then Exit;
+  FCancel := AValue;
+  // Register/unregister with the host form so its Esc handling routes here.
+  Form := GetParentForm(Self);
+  if Form <> nil then
+  begin
+    if AValue then
+      Form.CancelControl := Self
+    else if Form.CancelControl = Self then
+      Form.CancelControl := nil;
+  end;
+end;
+
+function TTyButton.WantsDialogKey(ACharCode: Word): Boolean;
+begin
+  Result := (FDefault and (ACharCode = VK_RETURN)) or
+            (FCancel  and (ACharCode = VK_ESCAPE));
+end;
+
+procedure TTyButton.ExecuteDefaultAction;
+begin
+  if FDefault then
+    Click
+  else
+    inherited ExecuteDefaultAction;
+end;
+
+procedure TTyButton.ExecuteCancelAction;
+begin
+  if FCancel then
+    Click
+  else
+    inherited ExecuteCancelAction;
+end;
+
+procedure TTyButton.CMDialogKey(var Message: TCMDialogKey);
+begin
+  if WantsDialogKey(Message.CharCode) then
+  begin
+    if Enabled then Click;
+    Message.Result := 1;  // handled
+  end
+  else
+    inherited;
 end;
 
 procedure TTyButton.KeyDown(var Key: Word; Shift: TShiftState);

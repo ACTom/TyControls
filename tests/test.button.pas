@@ -10,6 +10,9 @@ type
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure DoKeyDown(var Key: Word; Shift: TShiftState);
+    // Drive the CM_DIALOGKEY handler headlessly: build a TCMDialogKey carrying
+    // ACharCode and dispatch it, exercising the same routing a real form would.
+    procedure DispatchDialogKey(ACharCode: Word);
   end;
 
   TButtonTest = class(TTestCase)
@@ -23,6 +26,9 @@ type
     procedure TestSpaceKeyFiresClick;
     procedure TestDisabledKeyNotConsumedNoClick;
     procedure TestAnimationsEnabledIsPublished;
+    procedure TestModalResultSetOnClick;
+    procedure TestDefaultRespondsToEnter;
+    procedure TestCancelRespondsToEscape;
   end;
 implementation
 
@@ -34,6 +40,16 @@ end;
 procedure TTyButtonAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
+end;
+
+procedure TTyButtonAccess.DispatchDialogKey(ACharCode: Word);
+var
+  Msg: TCMDialogKey;
+begin
+  FillChar(Msg, SizeOf(Msg), 0);
+  Msg.Msg := CM_DIALOGKEY;
+  Msg.CharCode := ACharCode;
+  Dispatch(Msg);
 end;
 
 procedure TButtonTest.HandleClick(Sender: TObject);
@@ -131,6 +147,69 @@ begin
   try
     AssertTrue('AnimationsEnabled is a published property (designer/streaming access)',
       IsPublishedProp(B, 'AnimationsEnabled'));
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TButtonTest.TestModalResultSetOnClick;
+var
+  F: TCustomForm;
+  B: TTyButton;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    B := TTyButton.Create(F);
+    B.Parent := F;
+    B.ModalResult := mrOk;
+    AssertEquals('form ModalResult starts unset', mrNone, F.ModalResult);
+    B.Click;
+    AssertEquals('click sets host form ModalResult', mrOk, F.ModalResult);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TButtonTest.TestDefaultRespondsToEnter;
+var
+  B: TTyButtonAccess;
+begin
+  // Default=True => the dialog-key seam wants VK_RETURN (Enter triggers Click),
+  // and does NOT want VK_ESCAPE.
+  FClicked := 0;
+  B := TTyButtonAccess.Create(nil);
+  try
+    B.OnClick := @HandleClick;
+    B.Default := True;
+    AssertTrue('Default wants VK_RETURN', B.WantsDialogKey(VK_RETURN));
+    AssertFalse('Default does NOT want VK_ESCAPE', B.WantsDialogKey(VK_ESCAPE));
+    // The seam-driven dialog-key dispatch fires Click for the wanted key only.
+    B.DispatchDialogKey(VK_ESCAPE);
+    AssertEquals('Escape does not click a Default button', 0, FClicked);
+    B.DispatchDialogKey(VK_RETURN);
+    AssertEquals('Enter clicks a Default button', 1, FClicked);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TButtonTest.TestCancelRespondsToEscape;
+var
+  B: TTyButtonAccess;
+begin
+  // Cancel=True => the dialog-key seam wants VK_ESCAPE (Esc triggers Click),
+  // and does NOT want VK_RETURN.
+  FClicked := 0;
+  B := TTyButtonAccess.Create(nil);
+  try
+    B.OnClick := @HandleClick;
+    B.Cancel := True;
+    AssertTrue('Cancel wants VK_ESCAPE', B.WantsDialogKey(VK_ESCAPE));
+    AssertFalse('Cancel does NOT want VK_RETURN', B.WantsDialogKey(VK_RETURN));
+    B.DispatchDialogKey(VK_RETURN);
+    AssertEquals('Enter does not click a Cancel button', 0, FClicked);
+    B.DispatchDialogKey(VK_ESCAPE);
+    AssertEquals('Escape clicks a Cancel button', 1, FClicked);
   finally
     B.Free;
   end;
