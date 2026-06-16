@@ -118,6 +118,12 @@ type
     procedure TestTitleBarDblClickEventFiresAndMaximizeStillWorks;
   end;
 
+  TContentPanelTest = class(TTestCase)
+  published
+    procedure TestTypeKey;
+    procedure TestPaintSmoke;
+  end;
+
 implementation
 
 type
@@ -133,6 +139,11 @@ type
     { Expose protected mouse entry points for headless injection. }
     procedure InjectMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure InjectDblClick;
+  end;
+
+  TContentPanelAccess = class(TTyContentPanel)
+  public
+    procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
   { Exposes the private DoClose path + the FDragging/FMaximized state so the
@@ -198,6 +209,11 @@ end;
 procedure TTitleBarAccess.InjectDblClick;
 begin
   DblClick;
+end;
+
+procedure TContentPanelAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
 end;
 
 procedure TChromeAccess.InjectClose;
@@ -1072,6 +1088,40 @@ begin
   end;
 end;
 
+{ TContentPanelTest }
+
+procedure TContentPanelTest.TestTypeKey;
+var P: TTyContentPanel;
+begin
+  P := TTyContentPanel.Create(nil);
+  try
+    AssertEquals('typekey', 'TyContentPanel', P.GetStyleTypeKey);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TContentPanelTest.TestPaintSmoke;
+var
+  P: TTyContentPanel;
+  Bmp: TBitmap;
+begin
+  P := TTyContentPanel.Create(nil);
+  try
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(100, 80);
+      TContentPanelAccess(P).SmokeRender(Bmp.Canvas, Rect(0, 0, 100, 80), 96);
+      AssertTrue('content panel RenderTo executed without exception', True);
+    finally
+      Bmp.Free;
+    end;
+  finally
+    P.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeCursorTest);
@@ -1084,5 +1134,6 @@ initialization
   RegisterTest(TFormChromeChangeBoundsTest);
   RegisterTest(TCaptionButtonHoverGlyphTest);
   RegisterTest(TFormChromeLifecycleTest);
+  RegisterTest(TContentPanelTest);
 
 end.

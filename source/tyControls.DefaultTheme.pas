@@ -135,6 +135,10 @@ begin
     'TyScrollBar:focus  { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyScrollBar:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
+    'TyContentPanel {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     'TyTitleBar {' + LineEnding +
     '  background: darken(--surface, 6%);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +

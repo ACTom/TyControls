@@ -17,6 +17,14 @@ type
 
   TTyCaptionButtonKind = (cbkClose, cbkMin, cbkMax, cbkRestore);
 
+  TTyContentPanel = class(TTyCustomControl)
+  protected
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure Paint; override;
+  public
+    function GetStyleTypeKey: string; override;
+  end;
+
   TTyFormChrome = class;
 
   TTyCaptionButton = class(TTyCustomControl)
@@ -301,6 +309,34 @@ begin
 end;
 
 procedure TTyCaptionButton.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+{ TTyContentPanel }
+
+function TTyContentPanel.GetStyleTypeKey: string;
+begin
+  Result := 'TyContentPanel';
+end;
+
+procedure TTyContentPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+var
+  P: TTyPainter;
+  S: TTyStyleSet;
+begin
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(ACanvas, ARect, APPI);
+    S := CurrentStyle;
+    DrawFrame(P, Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top), S);
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyContentPanel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
