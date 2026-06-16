@@ -7,6 +7,7 @@ uses
   test.Types, test.Css.Tokens, test.Css.Lexer, test.Css.Parser,
   test.Css.Values, test.StyleModel, test.painter, test.controller, test.base,
   test.baseevents,
+  test.eventfiring,
   test.base.drawframe, test.button, test.tylabel, test.edit, test.edit.word, test.edit.undo, test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
   test.controls.scrollbar, test.form, test.themes,
