@@ -13,6 +13,7 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure SimulateKeyDown(var Key: Word);
     procedure SimulateMouseDown(X, Y: Integer);
+    function SimulateMouseWheel(WheelDelta: Integer): Boolean;
     // Animation seams (mirror ScrollBar's TScrollAccess) so tests can step the
     // thumb ease without a wall clock and force the animating/dragging paths.
     function DisplayPos: Single;
@@ -75,6 +76,19 @@ type
     procedure TestAnimationsEnabledDefaultsTrue;
   end;
 
+  { Task 5: mouse-wheel stepping by LineSize. }
+  TTyTrackBarWheelTest = class(TTestCase)
+  private
+    FWheelEventFired: Boolean;
+    procedure OnWheelHandler(Sender: TObject; Shift: TShiftState;
+      WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+  published
+    procedure TestWheelUpIncreasesPosition;
+    procedure TestWheelDownDecreasesPosition;
+    procedure TestWheelStepsByLineSize;
+    procedure TestWheelStillFiresInheritedOnMouseWheel;
+  end;
+
 implementation
 
 procedure TChangeCounter.Handle(Sender: TObject);
@@ -98,6 +112,11 @@ end;
 procedure TTyTrackBarProbe.SimulateMouseDown(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);
+end;
+
+function TTyTrackBarProbe.SimulateMouseWheel(WheelDelta: Integer): Boolean;
+begin
+  Result := DoMouseWheel([], WheelDelta, Point(0, 0));
 end;
 
 function TTyTrackBarProbe.DisplayPos: Single;
@@ -728,9 +747,77 @@ begin
   end;
 end;
 
+{ TTyTrackBarWheelTest }
+
+procedure TTyTrackBarWheelTest.OnWheelHandler(Sender: TObject;
+  Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+begin
+  FWheelEventFired := True;
+end;
+
+procedure TTyTrackBarWheelTest.TestWheelUpIncreasesPosition;
+var
+  T: TTyTrackBarProbe;
+begin
+  T := TTyTrackBarProbe.Create(nil);
+  try
+    T.Min := 0; T.Max := 100; T.LineSize := 1; T.Position := 50;
+    // Match native TTrackBar: wheel up (WheelDelta>0) increases Position.
+    AssertTrue('wheel handled', T.SimulateMouseWheel(120));
+    AssertEquals('wheel-up increases Position by LineSize', 51, T.Position);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTyTrackBarWheelTest.TestWheelDownDecreasesPosition;
+var
+  T: TTyTrackBarProbe;
+begin
+  T := TTyTrackBarProbe.Create(nil);
+  try
+    T.Min := 0; T.Max := 100; T.LineSize := 1; T.Position := 50;
+    AssertTrue('wheel handled', T.SimulateMouseWheel(-120));
+    AssertEquals('wheel-down decreases Position by LineSize', 49, T.Position);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTyTrackBarWheelTest.TestWheelStepsByLineSize;
+var
+  T: TTyTrackBarProbe;
+begin
+  T := TTyTrackBarProbe.Create(nil);
+  try
+    T.Min := 0; T.Max := 100; T.LineSize := 4; T.Position := 50;
+    T.SimulateMouseWheel(120);
+    AssertEquals('wheel steps by LineSize (4)', 54, T.Position);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTyTrackBarWheelTest.TestWheelStillFiresInheritedOnMouseWheel;
+var
+  T: TTyTrackBarProbe;
+begin
+  T := TTyTrackBarProbe.Create(nil);
+  try
+    T.Min := 0; T.Max := 100; T.LineSize := 1; T.Position := 50;
+    FWheelEventFired := False;
+    T.OnMouseWheel := @OnWheelHandler;   // published via base class (Task 1)
+    T.SimulateMouseWheel(120);
+    AssertTrue('inherited DoMouseWheel ran so OnMouseWheel fired', FWheelEventFired);
+  finally
+    T.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyTrackBarGeometryTest);
   RegisterTest(TTyTrackBarControlTest);
   RegisterTest(TTyTrackBarPixelTest);
   RegisterTest(TTyTrackBarAnimationTest);
+  RegisterTest(TTyTrackBarWheelTest);
 end.

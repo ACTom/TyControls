@@ -3,7 +3,7 @@ unit test.controls.scrollbar;
 interface
 uses
   Classes, SysUtils, Types, fpcunit, testregistry,
-  Forms, Controls, Graphics, LCLType,
+  Forms, Controls, Graphics, LCLType, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.ScrollBar;
 type
@@ -61,6 +61,34 @@ type
     procedure TestAnimationsEnabledDefaultsTrue;
   end;
 
+  { Task 5: OnScroll event + mouse-wheel stepping. }
+  TTyScrollBarOnScrollTest = class(TTestCase)
+  private
+    FBar: TTyScrollBar;
+    FLastCode: TScrollCode;
+    FFired: Integer;
+    FClampTo: Integer;     // when >= 0, the handler overrides ScrollPos with it
+    FWheelEventFired: Boolean;
+    procedure OnScrollHandler(Sender: TObject; ScrollCode: TScrollCode;
+      var ScrollPos: Integer);
+    procedure OnWheelHandler(Sender: TObject; Shift: TShiftState;
+      WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestKeyDownFiresScLineDown;
+    procedure TestKeyUpFiresScLineUp;
+    procedure TestPageDownFiresScPageDown;
+    procedure TestHomeEndFireScTopScBottom;
+    procedure TestTrackPagingFiresScPageDown;
+    procedure TestVarScrollPosIsHonored;
+    procedure TestWheelDownDecreasesPosition;
+    procedure TestWheelUpIncreasesPosition;
+    procedure TestWheelStepsBySmallChange;
+    procedure TestWheelStillFiresInheritedOnMouseWheel;
+  end;
+
 implementation
 type
   TScrollAccess = class(TTyScrollBar)
@@ -71,6 +99,7 @@ type
     procedure CallMouseUp(Btn: TMouseButton; X, Y: Integer);
     procedure DoMouseDown(Shift: TShiftState; X, Y: Integer);
     procedure DoKeyDown(Key: Word; Shift: TShiftState);
+    function CallMouseWheel(WheelDelta: Integer): Boolean;
     procedure SetHoverState(AValue: Boolean);
     procedure SetPressedState(AValue: Boolean);
     procedure SetDraggingState(AValue: Boolean);
@@ -78,6 +107,10 @@ type
     function AdvanceAnimation(AMs: Integer): Boolean;
     procedure SetPositionAnimating(AValue: Integer);
   end;
+function TScrollAccess.CallMouseWheel(WheelDelta: Integer): Boolean;
+begin
+  Result := DoMouseWheel([], WheelDelta, Point(0, 0));
+end;
 procedure TScrollAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
@@ -640,10 +673,223 @@ begin
   end;
 end;
 
+{ TTyScrollBarOnScrollTest }
+
+procedure TTyScrollBarOnScrollTest.OnScrollHandler(Sender: TObject;
+  ScrollCode: TScrollCode; var ScrollPos: Integer);
+begin
+  Inc(FFired);
+  FLastCode := ScrollCode;
+  if FClampTo >= 0 then
+    ScrollPos := FClampTo;   // prove the var parameter is honored
+end;
+
+procedure TTyScrollBarOnScrollTest.OnWheelHandler(Sender: TObject;
+  Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+begin
+  FWheelEventFired := True;
+end;
+
+procedure TTyScrollBarOnScrollTest.SetUp;
+begin
+  FBar := TTyScrollBar.Create(nil);
+  FBar.Kind := sbVertical;
+  FBar.Min := 0;
+  FBar.Max := 100;
+  FBar.PageSize := 10;
+  FBar.SmallChange := 1;
+  FBar.Position := 50;
+  FFired := 0;
+  FClampTo := -1;
+  FBar.OnScroll := @OnScrollHandler;
+end;
+
+procedure TTyScrollBarOnScrollTest.TearDown;
+begin
+  FBar.Free;
+end;
+
+procedure TTyScrollBarOnScrollTest.TestKeyDownFiresScLineDown;
+var
+  SA: TScrollAccess;
+begin
+  SA := TScrollAccess.Create(nil);
+  try
+    SA.Kind := sbVertical; SA.Min := 0; SA.Max := 100; SA.SmallChange := 1;
+    SA.Position := 50;
+    SA.OnScroll := @OnScrollHandler;
+    SA.DoKeyDown(VK_DOWN, []);
+    AssertEquals('OnScroll fired once on VK_DOWN', 1, FFired);
+    AssertTrue('code is scLineDown', FLastCode = scLineDown);
+    AssertEquals('position increased by SmallChange', 51, SA.Position);
+  finally
+    SA.Free;
+  end;
+end;
+
+procedure TTyScrollBarOnScrollTest.TestKeyUpFiresScLineUp;
+var
+  SA: TScrollAccess;
+begin
+  SA := TScrollAccess.Create(nil);
+  try
+    SA.Kind := sbVertical; SA.Min := 0; SA.Max := 100; SA.SmallChange := 1;
+    SA.Position := 50;
+    SA.OnScroll := @OnScrollHandler;
+    SA.DoKeyDown(VK_UP, []);
+    AssertTrue('code is scLineUp', FLastCode = scLineUp);
+    AssertEquals('position decreased by SmallChange', 49, SA.Position);
+  finally
+    SA.Free;
+  end;
+end;
+
+procedure TTyScrollBarOnScrollTest.TestPageDownFiresScPageDown;
+var
+  SA: TScrollAccess;
+begin
+  SA := TScrollAccess.Create(nil);
+  try
+    SA.Kind := sbVertical; SA.Min := 0; SA.Max := 100; SA.PageSize := 10;
+    SA.Position := 50;
+    SA.OnScroll := @OnScrollHandler;
+    SA.DoKeyDown(VK_NEXT, []);
+    AssertTrue('code is scPageDown', FLastCode = scPageDown);
+    AssertEquals('position increased by PageSize', 60, SA.Position);
+    SA.DoKeyDown(VK_PRIOR, []);
+    AssertTrue('code is scPageUp', FLastCode = scPageUp);
+    AssertEquals('position decreased by PageSize', 50, SA.Position);
+  finally
+    SA.Free;
+  end;
+end;
+
+procedure TTyScrollBarOnScrollTest.TestHomeEndFireScTopScBottom;
+var
+  SA: TScrollAccess;
+begin
+  SA := TScrollAccess.Create(nil);
+  try
+    SA.Kind := sbVertical; SA.Min := 0; SA.Max := 100;
+    SA.Position := 50;
+    SA.OnScroll := @OnScrollHandler;
+    SA.DoKeyDown(VK_HOME, []);
+    AssertTrue('code is scTop', FLastCode = scTop);
+    AssertEquals('position at Min', 0, SA.Position);
+    SA.DoKeyDown(VK_END, []);
+    AssertTrue('code is scBottom', FLastCode = scBottom);
+    AssertEquals('position at Max', 100, SA.Position);
+  finally
+    SA.Free;
+  end;
+end;
+
+procedure TTyScrollBarOnScrollTest.TestTrackPagingFiresScPageDown;
+var
+  Form: TForm;
+  SA: TScrollAccess;
+begin
+  Form := TForm.CreateNew(nil);
+  try
+    SA := TScrollAccess.Create(Form);
+    SA.Parent := Form;
+    SA.Font.PixelsPerInch := 96;
+    SA.Kind := sbVertical;
+    SA.SetBounds(0, 0, 16, 160);
+    SA.Min := 0; SA.Max := 100; SA.PageSize := 10; SA.Position := 0;
+    SA.OnScroll := @OnScrollHandler;
+    // Track is inset 16px each end -> track y in [16,144); thumb at pos 0 sits
+    // at the top; click at y=100 (below thumb) pages down.
+    SA.CallMouseDown(mbLeft, 8, 100);
+    AssertTrue('track-paging-down fired OnScroll', FFired >= 1);
+    AssertTrue('code is scPageDown', FLastCode = scPageDown);
+  finally
+    Form.Free;
+  end;
+end;
+
+procedure TTyScrollBarOnScrollTest.TestVarScrollPosIsHonored;
+var
+  SA: TScrollAccess;
+begin
+  SA := TScrollAccess.Create(nil);
+  try
+    SA.Kind := sbVertical; SA.Min := 0; SA.Max := 100; SA.SmallChange := 1;
+    SA.Position := 50;
+    SA.OnScroll := @OnScrollHandler;
+    FClampTo := 5;   // handler overrides the proposed pos with 5
+    SA.DoKeyDown(VK_DOWN, []);
+    AssertEquals('var ScrollPos override is committed', 5, SA.Position);
+  finally
+    SA.Free;
+  end;
+end;
+
+procedure TTyScrollBarOnScrollTest.TestWheelDownDecreasesPosition;
+var
+  SA: TScrollAccess;
+begin
+  SA := TScrollAccess.Create(nil);
+  try
+    SA.Min := 0; SA.Max := 100; SA.SmallChange := 1; SA.Position := 50;
+    // wheel up (WheelDelta>0) scrolls content up -> scrollbar Position decreases.
+    AssertTrue('wheel handled', SA.CallMouseWheel(120));
+    AssertEquals('wheel-up decreases Position by SmallChange', 49, SA.Position);
+  finally
+    SA.Free;
+  end;
+end;
+
+procedure TTyScrollBarOnScrollTest.TestWheelUpIncreasesPosition;
+var
+  SA: TScrollAccess;
+begin
+  SA := TScrollAccess.Create(nil);
+  try
+    SA.Min := 0; SA.Max := 100; SA.SmallChange := 1; SA.Position := 50;
+    // wheel down (WheelDelta<0) -> Position increases.
+    AssertTrue('wheel handled', SA.CallMouseWheel(-120));
+    AssertEquals('wheel-down increases Position by SmallChange', 51, SA.Position);
+  finally
+    SA.Free;
+  end;
+end;
+
+procedure TTyScrollBarOnScrollTest.TestWheelStepsBySmallChange;
+var
+  SA: TScrollAccess;
+begin
+  SA := TScrollAccess.Create(nil);
+  try
+    SA.Min := 0; SA.Max := 100; SA.SmallChange := 7; SA.Position := 50;
+    SA.CallMouseWheel(-120);
+    AssertEquals('wheel steps by SmallChange (7)', 57, SA.Position);
+  finally
+    SA.Free;
+  end;
+end;
+
+procedure TTyScrollBarOnScrollTest.TestWheelStillFiresInheritedOnMouseWheel;
+var
+  SA: TScrollAccess;
+begin
+  SA := TScrollAccess.Create(nil);
+  try
+    SA.Min := 0; SA.Max := 100; SA.SmallChange := 1; SA.Position := 50;
+    FWheelEventFired := False;
+    SA.OnMouseWheel := @OnWheelHandler;   // published via base class (Task 1)
+    SA.CallMouseWheel(-120);
+    AssertTrue('inherited DoMouseWheel ran so OnMouseWheel fired', FWheelEventFired);
+  finally
+    SA.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTyScrollGeometryTest);
   RegisterTest(TTyScrollBarDragTest);
   RegisterTest(TTyScrollBarThumbColorTest);
   RegisterTest(TTyScrollBarMouseTest);
   RegisterTest(TTyScrollBarAnimationTest);
+  RegisterTest(TTyScrollBarOnScrollTest);
 end.

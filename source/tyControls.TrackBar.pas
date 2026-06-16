@@ -2,7 +2,7 @@ unit tyControls.TrackBar;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
+  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, ExtCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 type
   TTyTrackOrientation = (toHorizontal, toVertical);
@@ -41,6 +41,8 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
     // Current displayed (possibly mid-animation) thumb position, eased between
     // the from/to endpoints. At rest this equals the logical FPosition.
     function DisplayPos: Single;
@@ -431,6 +433,20 @@ begin
   // FDragging is NOT cleared here: drag ends on MouseUp only, so dragging
   // outside the control bounds and back stays consistent.
   Invalidate;
+end;
+
+function TTyTrackBar.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+begin
+  // Let the published OnMouseWheel/Up/Down events fire first; if a handler marks
+  // the wheel handled, honor that and do not step.
+  Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+  if Result then Exit;
+  if not Enabled then Exit;
+  // Convention: match the native LCL TTrackBar slider -> wheel-up
+  // (WheelDelta > 0) INCREASES Position by LineSize; wheel-down decreases it.
+  Position := Position + Sign(WheelDelta) * FLineSize;
+  Result := True;
 end;
 
 procedure TTyTrackBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

@@ -2,7 +2,7 @@ unit tyControls.ScrollBar;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
+  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, StdCtrls, ExtCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 type
   TTyScrollBarKind = (sbHorizontal, sbVertical);
@@ -13,6 +13,7 @@ type
     FMin, FMax, FPosition, FPageSize: Integer;
     FSmallChange: Integer;
     FOnChange: TNotifyEvent;
+    FOnScroll: TScrollEvent;
     FDragGrabOffset: Integer;
     FDragStartTop: Integer;
     FAnimEnabled: Boolean;
@@ -39,6 +40,14 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
+    // Fire OnScroll with ACode and the proposed APos (which the handler may
+    // override via the var parameter); then commit Position := APos. This keeps
+    // OnChange firing too (via the Position setter). Used by the user-driven
+    // keyboard/track-paging paths.
+    procedure DoScroll(ACode: TScrollCode; var APos: Integer);
+    procedure ScrollTo(ACode: TScrollCode; AProposed: Integer);
     // Current displayed (possibly mid-animation) thumb position, eased between
     // the from/to endpoints. At rest this equals the logical FPosition.
     function DisplayPos: Single;
@@ -70,6 +79,7 @@ type
     property PageSize: Integer read FPageSize write SetPageSize default 10;
     property SmallChange: Integer read FSmallChange write SetSmallChange default 1;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property OnScroll: TScrollEvent read FOnScroll write FOnScroll;
     property Align;
     property Anchors;
     property StyleClass;
@@ -313,6 +323,40 @@ begin
     FSmallChange := AValue;
 end;
 
+procedure TTyScrollBar.DoScroll(ACode: TScrollCode; var APos: Integer);
+begin
+  if Assigned(FOnScroll) then
+    FOnScroll(Self, ACode, APos);
+end;
+
+procedure TTyScrollBar.ScrollTo(ACode: TScrollCode; AProposed: Integer);
+var
+  P: Integer;
+begin
+  // Clamp the proposed value first, let the OnScroll handler optionally adjust
+  // it (honoring its var parameter), then commit through the Position setter
+  // (which clamps again and fires OnChange).
+  P := AProposed;
+  if P < FMin then P := FMin;
+  if P > FMax then P := FMax;
+  DoScroll(ACode, P);
+  Position := P;
+end;
+
+function TTyScrollBar.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+begin
+  // Let the published OnMouseWheel/Up/Down events fire first; if a handler marks
+  // the wheel handled, honor that and do not step.
+  Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
+  if Result then Exit;
+  if not Enabled then Exit;
+  // Convention: wheel-up (WheelDelta > 0) scrolls content up -> Position
+  // DECREASES by SmallChange; wheel-down increases it. (Standard scrollbar.)
+  Position := Position - Sign(WheelDelta) * FSmallChange;
+  Result := True;
+end;
+
 procedure TTyScrollBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
@@ -462,11 +506,30 @@ begin
   if NewTop > TrackStart + FreeSpace then NewTop := TrackStart + FreeSpace;
   Travel := FMax - FMin;
   NewPos := FMin + ((NewTop - TrackStart) * Travel) div FreeSpace;
+  // Live drag tracking fires scTrack with the proposed value (handler may
+  // adjust it); commit through the Position setter (clamps + OnChange).
+  if NewPos < FMin then NewPos := FMin;
+  if NewPos > FMax then NewPos := FMax;
+  DoScroll(scTrack, NewPos);
   Position := NewPos;
 end;
 
 procedure TTyScrollBar.EndThumbDrag;
+var
+  P: Integer;
 begin
+  if FDragging then
+  begin
+    // Final committed value of the drag: scPosition then scEndScroll.
+    P := FPosition;
+    DoScroll(scPosition, P);
+    if P <> FPosition then
+      Position := P;
+    P := FPosition;
+    DoScroll(scEndScroll, P);
+    if P <> FPosition then
+      Position := P;
+  end;
   FDragging := False;
 end;
 
@@ -489,13 +552,13 @@ begin
     ButtonRects(ClientRect, LoR, HiR);
     if PtInRect(LoR, Point(X, Y)) then
     begin
-      Position := Position - FSmallChange;
+      ScrollTo(scLineUp, Position - FSmallChange);
       try if CanFocus then SetFocus; except end;
       Exit;
     end;
     if PtInRect(HiR, Point(X, Y)) then
     begin
-      Position := Position + FSmallChange;
+      ScrollTo(scLineDown, Position + FSmallChange);
       try if CanFocus then SetFocus; except end;
       Exit;
     end;
@@ -509,13 +572,13 @@ begin
     begin
       // click on the track: page one PageSize toward the click
       if (FKind = sbVertical) and (Y < ThumbR.Top) then
-        Position := Position - FPageSize
+        ScrollTo(scPageUp, Position - FPageSize)
       else if (FKind = sbVertical) and (Y >= ThumbR.Bottom) then
-        Position := Position + FPageSize
+        ScrollTo(scPageDown, Position + FPageSize)
       else if (FKind = sbHorizontal) and (X < ThumbR.Left) then
-        Position := Position - FPageSize
+        ScrollTo(scPageUp, Position - FPageSize)
       else if (FKind = sbHorizontal) and (X >= ThumbR.Right) then
-        Position := Position + FPageSize;
+        ScrollTo(scPageDown, Position + FPageSize);
     end;
     try
       if CanFocus then SetFocus;
@@ -560,20 +623,20 @@ begin
   end;
   if Key = Dec1 then
   begin
-    Position := Position - FSmallChange;
+    ScrollTo(scLineUp, Position - FSmallChange);
     Key := 0;
   end
   else if Key = Inc1 then
   begin
-    Position := Position + FSmallChange;
+    ScrollTo(scLineDown, Position + FSmallChange);
     Key := 0;
   end
   else
     case Key of
-      VK_PRIOR: begin Position := Position - FPageSize; Key := 0; end;
-      VK_NEXT:  begin Position := Position + FPageSize; Key := 0; end;
-      VK_HOME:  begin Position := FMin; Key := 0; end;
-      VK_END:   begin Position := FMax; Key := 0; end;
+      VK_PRIOR: begin ScrollTo(scPageUp, Position - FPageSize); Key := 0; end;
+      VK_NEXT:  begin ScrollTo(scPageDown, Position + FPageSize); Key := 0; end;
+      VK_HOME:  begin ScrollTo(scTop, FMin); Key := 0; end;
+      VK_END:   begin ScrollTo(scBottom, FMax); Key := 0; end;
     end;
 end;
 
