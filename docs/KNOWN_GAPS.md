@@ -3,13 +3,21 @@
 These behaviors are intentionally NOT implemented or are tracked for a future
 Tier-2 native enhancement layer.
 
-## Form chrome (TTyFormChrome) native window behavior
+## Form chrome (TTyForm) native window behavior
+
+Custom window chrome is now obtained by descending from **`TTyForm = class(TForm)`**
+(the controller `TTyFormChrome` was removed; see
+[controls/ttyform.md](controls/ttyform.md)). `TTyForm` is born borderless
+(`BorderStyle := bsNone`) and delegates window behavior (drag-move, edge-resize,
+custom maximize/restore, DPI rescale) to a form-agnostic `TTyChromeEngine`. The
+following native behaviors remain intentionally NOT implemented and are tracked
+for a future Tier-2 native enhancement layer.
 
 - Windows Aero Snap (edge tiling) is not supported; dragging to a screen edge
   moves the form but does not trigger snap-to-half or snap-to-quadrant tiling.
 - Borderless-window native drop shadow: **resolved on macOS** (v1.1). After
-  `BorderStyle := bsNone`, `InstallChrome` now calls
-  `NSView(Form.Handle).window.setHasShadow(True)` via the LCL-Cocoa handle
+  `BorderStyle := bsNone`, the form restores the system shadow via
+  `NSView(Form.Handle).window.setHasShadow(True)` using the LCL-Cocoa handle
   convention (`Form.Handle` is a `TCocoaWindowContent` NSView; `.window` gives
   the backing `NSWindow`). The call is wrapped in `{$IFDEF LCLCOCOA}` so
   non-Cocoa builds are unaffected.
@@ -20,19 +28,12 @@ Tier-2 native enhancement layer.
   macOS users do not get platform-standard window controls. A visual approximation
   using `ShowGlyphOnHoverOnly` is documented in
   [docs/recipes-traffic-lights.md](recipes-traffic-lights.md).
-- Cross-monitor DPI switching: **metrics now rescale on monitor-PPI change**
-  (v1.1). `TTyFormChrome` stores `FInstalledPPI` at install time and chains the
-  host form's `OnChangeBounds` event (previous handler is saved and restored on
-  uninstall). When the form's monitor PPI changes, `TitleHeight` and the title
-  bar's `FButtonWidth` are rescaled via `TyRescaleChromeMetric` (MulDiv with
-  half-up rounding). The pure function and handler-chaining are unit-tested.
-  Multi-monitor manual validation pending (only one physical monitor available
-  in the build environment).
-- `TTyFormChrome.Active := False` restores the original `BorderStyle`, the
-  form's previous mouse handlers, and the `OnChangeBounds` chain. Toggling
-  chrome on/off repeatedly at runtime is not a tested scenario. Recommended
-  usage remains: activate once at startup and leave it `True` for the lifetime
-  of the form.
+- Cross-monitor DPI switching: **metrics rescale on monitor-PPI change** (v1.1).
+  The chrome engine handles the form's `ChangeBounds`; when the form's monitor
+  PPI changes, the title bar height and button width are rescaled via
+  `TyRescaleChromeMetric` (MulDiv with half-up rounding). The pure function and
+  the rescale path are unit-tested. Multi-monitor manual validation pending
+  (only one physical monitor available in the build environment).
 
 ## Controls
 
@@ -77,11 +78,16 @@ Tier-2 native enhancement layer.
 
 ## Design-time rendering
 
-- Controls dropped onto a form now render with the **built-in default skin**
-  in the Lazarus designer (zero-config, visible without running). Only the full
-  self-drawn window chrome (`TTyFormChrome`) remains runtime-only: the designer
-  shows the native (non-skinned) window frame. This is the standard behavior for
-  skin-window libraries and is expected.
+- Controls dropped onto a form render with the **built-in default skin** in the
+  Lazarus designer (zero-config, visible without running).
+- Window chrome is **no longer runtime-only**. A `TTyForm` reserves its content
+  area at design time: the title bar occupies the top band and the content panel
+  fills the area below it, so controls you drop into the content panel sit in
+  their final positions in the designer — **layout is WYSIWYG**. What remains a
+  design-time gap is that the title-bar **skin renders unthemed** in the
+  designer: the designer has no runtime theme context, so the self-drawn title
+  bar shows the built-in default appearance rather than your loaded `.tycss`
+  theme — exactly like every other tyControl. This is expected, not a bug.
 
 ## Style engine
 

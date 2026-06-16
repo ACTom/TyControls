@@ -15,7 +15,7 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `TTyGraphicControl` | `TGraphicControl` | **非窗口化**轻量控件（无句柄、不可获得键盘焦点） | 仅 **Tier A** |
 | `TTyCustomControl` | `TCustomControl` | **窗口化**可聚焦控件（有句柄、可 Tab 导航、接收键盘） | **Tier A + Tier B** |
 
-当前仅 **`TTyLabel`** 与 **`TTyProgressBar`** 继承自 `TTyGraphicControl`（因此只有 Tier A 事件）；**其余所有控件**（Button / Edit / Memo / SpinEdit / ComboBox / CheckBox / RadioButton / ScrollBar / TrackBar / TabControl / ToggleSwitch / ListBox / Panel / GroupBox / 以及 FormChrome 的 TitleBar/CaptionButton 等）继承自 `TTyCustomControl`，**Tier A + Tier B 全部具备**。
+当前仅 **`TTyLabel`** 与 **`TTyProgressBar`** 继承自 `TTyGraphicControl`（因此只有 Tier A 事件）；**其余所有控件**（Button / Edit / Memo / SpinEdit / ComboBox / CheckBox / RadioButton / ScrollBar / TrackBar / TabControl / ToggleSwitch / ListBox / Panel / GroupBox / ContentPanel / 以及 `TTyForm` 标题栏的 TitleBar/CaptionButton 等）继承自 `TTyCustomControl`，**Tier A + Tier B 全部具备**。
 
 ### Tier A —— 鼠标 / 通用事件与属性（两个基类都有，**全控件可用**）
 
@@ -81,15 +81,12 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `TTyTabControl` | `OnChanging` | `TTyTabChangingEvent` | 切换页签**之前**；签名 `(Sender; ANewIndex: Integer; var AllowChange: Boolean)`，把 `AllowChange := False` 即可**否决**切换 |
 | `TTyTabControl` | `OnReorder` | `TTyTabReorderEvent` | 拖拽重排松手后触发一次；签名 `(Sender; AFromIndex, AToIndex: Integer)` |
 | `TTyProgressBar` | `OnChange` | `TNotifyEvent` | `Position` / `Min` / `Max` 实际变化后 |
-| `TTyFormChrome` | `OnCloseQuery` | `TCloseQueryEvent` | 点击关闭按钮、执行关闭前；`(Sender; var CanClose: Boolean)`，`CanClose := False` 否决关闭 |
-| `TTyFormChrome` | `OnClose` | `TNotifyEvent` | 关闭被批准后 |
-| `TTyFormChrome` | `OnMinimize` | `TNotifyEvent` | 点击最小化按钮时 |
-| `TTyFormChrome` | `OnMaximize` | `TNotifyEvent` | 最大化切换完成后 |
-| `TTyFormChrome` | `OnRestore` | `TNotifyEvent` | 还原切换完成后 |
+
+> **`TTyForm` 使用标准 `TForm` 生命周期事件：** 自绘窗框窗口现在通过继承 `TTyForm = class(TForm)` 获得（旧的非可视控制器 `TTyFormChrome` 已**移除**）。`TTyForm` *就是*一个 `TForm`，因此 `OnCloseQuery` / `OnClose` / `OnShow` / `OnActivate` / `WindowState` 等都是标准的、已 published 的窗体事件，直接在对象查看器里挂接即可。旧 `TTyFormChrome` 的自定义 `OnMinimize` / `OnMaximize` / `OnRestore` 事件**已废弃**——标题栏最小化按钮设 `WindowState := wsMinimized`、最大化由引擎 `ToggleMaximize` 处理、关闭走标准 `Close`（`OnCloseQuery` → `OnClose`）。详见 [controls/ttyform.md](controls/ttyform.md)。
 
 > **滚轮步进：** `TTyScrollBar` 与 `TTyTrackBar` 现支持鼠标滚轮步进。约定与原生 LCL 一致：ScrollBar 滚轮上滚减小 `Position`（向上滚动内容）；TrackBar 滚轮上滚**增大** `Position`（与滑块方向一致，二者相反）。ScrollBar 滚轮直接改写 `Position`（触发 `OnChange`），**不**经过 `DoScroll`，因此**不**触发 `OnScroll`。
 
-> **TitleBar 鼠标事件已释放：** `TTyTitleBar`（FormChrome 注入的标题栏）原先把鼠标事件用于窗口拖动 / 双击最大化。现在改为**方法覆写**（`MouseDown/Move/Up`、`DblClick` 内先调 `inherited`、再委托给宿主 chrome），从而把**published 的 `OnMouseDown/OnMouseMove/OnMouseUp/OnDblClick` 事件槽位释放给用户**——挂接它们不会破坏 chrome 的拖动 / 最大化逻辑。
+> **TitleBar 鼠标事件已释放：** `TTyTitleBar`（`TTyForm` 的标题栏子组件）原先把鼠标事件用于窗口拖动 / 双击最大化。现在改为**方法覆写**（`MouseDown/Move/Up`、`DblClick` 内先调 `inherited`、再委托给 `TTyForm` 拥有的 `TTyChromeEngine`），从而把**published 的 `OnMouseDown/OnMouseMove/OnMouseUp/OnDblClick` 事件槽位释放给用户**——挂接它们不会破坏窗框的拖动 / 最大化逻辑。
 
 ---
 

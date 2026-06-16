@@ -203,4 +203,4 @@ ButtonOnFormA.Controller := ControllerA;
 4. **LoadThemeCss 不更新 ThemeFile 字段：** 调用 `LoadThemeCss` 后，`ThemeFile` 属性仍为旧值（或空字符串），不影响运行但需注意序列化/保存场景下的一致性。
 5. **Changed 遍历是倒序的：** `for i := FControls.Count - 1 downto 0` 保证在 `Invalidate` 回调中即使控件从列表删除自身也不会跳过其他控件。
 6. **控件 Controller 切换时注册迁移原子性：** `SetController` 先注销旧控制器、再注册新控制器，两个操作之间没有中间状态窗口，不会出现控件同时注册到两个控制器的情形。
-7. **TTyFormChrome 不注册：** `TTyFormChrome` 继承 `TComponent` 而非 TyControls 控件基类，不参与控制器注册机制；其内部的 `TTyTitleBar` 和 `TTyCaptionButton` 各自独立注册。
+7. **TTyForm 窗体本身不注册：** `TTyForm` 继承 `TForm` 而非 TyControls 控件基类，不参与控制器注册机制（窗体背景由 `ApplyChromeTheme` 从 `TyForm` 令牌应用）；其子组件 `TTyContentPanel`、`TTyTitleBar` 和 `TTyCaptionButton` 各自作为 `TTyCustomControl` 独立注册。（旧的非可视控制器 `TTyFormChrome` 已移除。）

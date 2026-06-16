@@ -659,7 +659,9 @@ TyButton.primary {
 
 ## 8. typeKey 与内置变体清单
 
-选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey,共 25 个（含子部件 typeKey）:
+选择器中的类型名即控件 `GetStyleTypeKey` 返回的 typeKey（含子部件 typeKey）:
+
+> **保留（未来 ribbon）：** typeKey `TyRibbon`、`TyRibbonTab`、`TyRibbonGroup` 已为未来的 ribbon 条带**预留命名**——目前不对应任何控件，也不应把这三个名字用于其它用途。未来的 `TTyRibbon`（基于 `TTyTabControl`、与窗框无关、docked `alTop`）落地时会启用它们。详见 [controls/ttyform.md](controls/ttyform.md) 第 8 节。
 
 ### 8.1 控件 typeKey
 
@@ -678,8 +680,10 @@ TyButton.primary {
 | `TyToggleSwitch` | `TTyToggleSwitch` | ✓ | — | `Checked=True` 时追加 `:active` 状态；旋钮样式由子部件 typeKey `TyToggleKnob` 决定(tier-a) |
 | `TyTrackBar` | `TTyTrackBar` | ✓ | — | 滑块样式由子部件 typeKey `TyTrackThumb` 决定 |
 | `TyGroupBox` | `TTyGroupBox` | ✓ | — | **必须声明 `background`**（用于遮盖标题处边框线） |
-| `TyTitleBar` | `TTyTitleBar` | ✓ | — | 自绘窗体标题栏（配合 `TTyFormChrome`） |
-| `TyCaptionButton` | `TTyCaptionButton` | ✓ | `close`、`min`、`max` | 标题栏关闭/最小化/最大化按钮 |
+| `TyForm` | `TTyForm` | — | — | 自绘窗框窗体背景；经 `ApplyChromeTheme` 应用到窗体 `Color`；内置 `background: darken(--surface, 4%)` |
+| `TyContentPanel` | `TTyContentPanel` | ✓ | — | `TTyForm` 的保留内容区背景；内置 `background: var(--surface)`（内容区表面色，比窗体背景 `darken(--surface, 4%)` 略浅） |
+| `TyTitleBar` | `TTyTitleBar` | ✓ | — | 自绘窗体标题栏（`TTyForm` 子组件，"条带 0"） |
+| `TyCaptionButton` | `TTyCaptionButton` | ✓ | `close`、`min`、`max` | 标题栏关闭/最小化/最大化系统按钮（`TTyTitleBar` 代码持有） |
 | `TyTabControl` | `TTyTabControl` | ✓ | — | 标签页控件外框；页签子部件样式由 `TyTab` 决定 |
 
 ### 8.2 子部件 typeKey（不对应独立控件，由父控件内部解析）

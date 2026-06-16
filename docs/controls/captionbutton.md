@@ -4,7 +4,7 @@
 
 `TTyCaptionButton` 是 TyControls 标题栏的功能按钮控件，对应窗口的关闭、最小化、最大化和还原操作。`Kind` 属性同时决定两件事：**StyleClass 变体**（控制外观）和**字形（Glyph）**（控制绘制的图标），两者联动，无需分别配置。
 
-`TTyCaptionButton` 通常由 `TTyTitleBar` 构造函数自动创建，每个标题栏自动持有三个实例。
+`TTyCaptionButton` 是 `TTyTitleBar` 的**代码持有子组件**：由标题栏构造函数自动创建，每个标题栏持有三个实例（最小化/最大化/关闭），**不单独出现在调色板上、不单独放置**。其种类（kinds）与样式变体未变。
 
 ## 2. 单元与 typeKey
 
@@ -67,14 +67,14 @@ TTyCaptionButtonKind = (cbkClose, cbkMin, cbkMax, cbkRestore);
 
 | 方法 | 说明 |
 |------|------|
-| `procedure Click` | 重写后调用 `inherited Click`（触发 `OnClick`），无额外逻辑——窗口操作由 `TTyFormChrome` 通过 `OnClick` 回调实现。 |
+| `procedure Click` | 重写后调用 `inherited Click`（触发 `OnClick`），无额外逻辑——系统按钮的窗口操作由 `TTyForm` 接线到各按钮的 `OnClick`。 |
 | `procedure RenderTo(...)` | 绘制背景框架，然后在居中的 10×10 逻辑像素区域内绘制对应字形，线宽 1 逻辑像素（DPI 缩放后）。 |
 
 ### 事件
 
 | 事件 | 类型 | 说明 |
 |------|------|------|
-| `OnClick` | `TNotifyEvent` | 用户点击按钮时触发。`TTyFormChrome` 在 `InstallChrome` 时绑定此事件来执行窗口操作。 |
+| `OnClick` | `TNotifyEvent` | 用户点击按钮时触发。作为 `TTyForm` 标题栏系统按钮时，`TTyForm` 把此事件接线到窗口操作（最小化 → `WindowState := wsMinimized`；最大化/还原 → 引擎 `ToggleMaximize`；关闭 → `Close`）。 |
 
 ## 5. 状态与主题
 
@@ -151,7 +151,7 @@ TitleBar.MaxButton.Kind := cbkRestore;  // StyleClass → 'restore'，字形 →
 TitleBar.MaxButton.Kind := cbkMax;      // StyleClass → 'max'，字形 → tgMaximize
 ```
 
-（`TTyFormChrome.ToggleMaximize` 内部即是此逻辑。）
+（`TTyChromeEngine.ToggleMaximize` 内部即是此逻辑。）
 
 ### 自定义 close 按钮悬停颜色
 
@@ -169,5 +169,5 @@ TyCaptionButton.close:hover {
 1. **Kind 自动维护 StyleClass：** 设置 `Kind` 时，内部会执行 `StyleClass := KindVariant`。若手动写入 `StyleClass`，下次写 `Kind` 时会再次覆盖——建议只通过 `Kind` 控制外观，不要手动设置 `StyleClass`。
 2. **cbkRestore 无专属主题规则：** light.tycss 中没有 `TyCaptionButton.restore` 的变体规则，还原按钮使用与普通按钮相同的 hover/active 颜色。如需区分，在自定义主题中添加 `TyCaptionButton.restore:hover { ... }` 规则。
 3. **按钮尺寸由 TTyTitleBar 控制：** 按钮宽度 46px、高度等于标题栏高度，由 `TTyTitleBar.LayoutButtons` 通过 `SetBounds` 强制设定，单独修改按钮的 `Width`/`Height` 在重新布局后会被覆盖。
-4. **OnClick 的窗口操作由 FormChrome 注入：** 在 `TTyFormChrome.Active := True` 的情况下，三个按钮的 `OnClick` 被 `InstallChrome` 绑定到窗口最小化/最大化/关闭操作；若独立使用这些按钮，需要自行绑定 `OnClick`。
+4. **OnClick 的窗口操作由 TTyForm 接线：** 作为 `TTyForm` 标题栏系统按钮时，三个按钮的 `OnClick` 被窗体接线到最小化/最大化/关闭操作；若在 `TTyForm` 之外独立使用这些按钮，需要自行绑定 `OnClick`。
 5. **tabStop 与焦点：** `TTyCaptionButton` 继承的 `TabStop` 默认为 `False`（标题按钮通常不参与键盘导航）。

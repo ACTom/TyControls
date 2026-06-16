@@ -65,30 +65,28 @@ TyCaptionButton.max:hover {
 
 ## 2. Pascal 代码：启用 ShowGlyphOnHoverOnly
 
-在窗体创建代码中，通过 `TTyFormChrome` 的 `TitleBar` 属性访问三个按钮并设置属性：
+窗体继承自 `TTyForm`，通过窗体只读的 `TitleBar` 属性访问三个系统按钮并设置属性：
 
 ```pascal
-uses
-  tyControls.Form;
+type
+  TMainForm = class(TTyForm)   // 自绘窗框窗口
+  end;
 
-// ...
-
-// Chrome 是你在窗体上放置的 TTyFormChrome 组件
-// 先激活 chrome（使 TitleBar 生效），再设置属性
-Chrome.Active := True;
-
-Chrome.TitleBar.CloseButton.ShowGlyphOnHoverOnly := True;
-Chrome.TitleBar.MinButton.ShowGlyphOnHoverOnly   := True;
-Chrome.TitleBar.MaxButton.ShowGlyphOnHoverOnly   := True;
+procedure TMainForm.FormCreate(Sender: TObject);
+begin
+  TitleBar.CloseButton.ShowGlyphOnHoverOnly := True;
+  TitleBar.MinButton.ShowGlyphOnHoverOnly   := True;
+  TitleBar.MaxButton.ShowGlyphOnHoverOnly   := True;
+end;
 ```
 
 **按钮访问器名称对照表：**
 
-| 按钮       | 访问路径                         | Kind       |
-|------------|----------------------------------|------------|
-| 关闭       | `Chrome.TitleBar.CloseButton`    | cbkClose   |
-| 最小化     | `Chrome.TitleBar.MinButton`      | cbkMin     |
-| 最大化     | `Chrome.TitleBar.MaxButton`      | cbkMax     |
+| 按钮       | 访问路径                  | Kind       |
+|------------|---------------------------|------------|
+| 关闭       | `TitleBar.CloseButton`    | cbkClose   |
+| 最小化     | `TitleBar.MinButton`      | cbkMin     |
+| 最大化     | `TitleBar.MaxButton`      | cbkMax     |
 
 ---
 
@@ -103,6 +101,9 @@ Chrome.TitleBar.MaxButton.ShowGlyphOnHoverOnly   := True;
 ## 4. 完整示例
 
 ```pascal
+// 窗体继承自 TTyForm：
+//   type TMainForm = class(TTyForm) ... end;
+
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
   // 加载主题
@@ -121,14 +122,13 @@ begin
     'TyCaptionButton.max:hover { background: #1BA02E; color: #003D0F; }'
   );
 
-  Chrome := TTyFormChrome.Create(Self);
-  Chrome.TitleBar.Caption := '我的应用';
-  Chrome.Active := True;
+  ApplyChromeTheme(StyleCtrl);     // 窗体背景取自 TyForm 主题令牌
+  TitleBar.Caption := '我的应用';
 
   // 启用 hover-only 图标显示
-  Chrome.TitleBar.CloseButton.ShowGlyphOnHoverOnly := True;
-  Chrome.TitleBar.MinButton.ShowGlyphOnHoverOnly   := True;
-  Chrome.TitleBar.MaxButton.ShowGlyphOnHoverOnly   := True;
+  TitleBar.CloseButton.ShowGlyphOnHoverOnly := True;
+  TitleBar.MinButton.ShowGlyphOnHoverOnly   := True;
+  TitleBar.MaxButton.ShowGlyphOnHoverOnly   := True;
 end;
 ```
 
@@ -138,5 +138,5 @@ end;
 
 - 本方案是视觉近似，不是原生 macOS traffic-light 实现。
 - macOS 原生按钮在光标离开窗口时会同时变灰，本方案仅处理单个按钮的悬停状态。
-- 如需更接近原生体验，可结合 `{$IFDEF LCLCOCOA}` 隐藏 TyControls 标题栏按钮并保留系统标题栏（即不激活 `TTyFormChrome`）。
+- 如需更接近原生体验，可在 macOS 上改用普通 `TForm`（原生路径，保留系统标题栏与红绿灯按钮），而不继承 `TTyForm`；可用 `{$IFDEF LCLCOCOA}` 条件编译选择窗体基类。
 - Windows 上不存在 traffic-light 按钮的设计规范；此样式仅适合跨平台应用的 macOS 变体或完全自定义风格的应用。
