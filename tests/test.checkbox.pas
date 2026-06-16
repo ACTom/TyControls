@@ -20,6 +20,13 @@ type
   end;
 
   TCheckBoxTest = class(TTestCase)
+  private
+    FChangeCount: Integer;       // generic OnChange counter (checkbox)
+    FRadioACount: Integer;       // radio A OnChange counter
+    FRadioBCount: Integer;       // radio B OnChange counter
+    procedure HChange(Sender: TObject);
+    procedure HRadioA(Sender: TObject);
+    procedure HRadioB(Sender: TObject);
   published
     procedure TestTypeKey;
     procedure TestClickTogglesChecked;
@@ -34,6 +41,8 @@ type
     procedure TestCheckedEntersActiveState;
     procedure TestCheckedBoxAccentWhiteGlyphCaptionNormal;
     procedure TestBoxPaddingShiftsBoxRight;
+    procedure TestCheckBoxOnChangeFires;
+    procedure TestRadioOnChangeAndSiblings;
   end;
 implementation
 
@@ -54,6 +63,10 @@ end;
 
 function TCheckBoxFontAccess.RFS: Integer; begin Result := ResolveFontSize(CurrentStyle); end;
 function TCheckBoxFontAccess.StyleFontSize: Integer; begin Result := CurrentStyle.FontSize; end;
+
+procedure TCheckBoxTest.HChange(Sender: TObject); begin Inc(FChangeCount); end;
+procedure TCheckBoxTest.HRadioA(Sender: TObject); begin Inc(FRadioACount); end;
+procedure TCheckBoxTest.HRadioB(Sender: TObject); begin Inc(FRadioBCount); end;
 
 procedure TCheckBoxTest.TestTypeKey;
 var
@@ -501,6 +514,66 @@ begin
     Bmp.Free;
     Form.Free;
     Ctl.Free;
+  end;
+end;
+
+procedure TCheckBoxTest.TestCheckBoxOnChangeFires;
+{ OnChange fires once when Checked actually changes; setting the SAME value does
+  NOT fire (the early-out guard); Click toggles and fires. }
+var
+  F: TCustomForm;
+  C: TTyCheckBox;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    C := TTyCheckBox.Create(F);
+    C.Parent := F;
+    C.OnChange := @HChange;        // fails to compile until OnChange is published
+
+    FChangeCount := 0;
+    C.Checked := True;
+    AssertEquals('Checked:=True fires once', 1, FChangeCount);
+
+    FChangeCount := 0;
+    C.Checked := True;             // same value -> no change, no fire
+    AssertEquals('Checked:=True again (same) does not fire', 0, FChangeCount);
+
+    FChangeCount := 0;
+    C.Click;                       // True -> False, fires once
+    AssertEquals('Click toggled off fires once', 1, FChangeCount);
+    AssertFalse('Click toggled it off', C.Checked);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxTest.TestRadioOnChangeAndSiblings;
+{ Checking radio B fires B.OnChange AND the previously-checked sibling A fires its
+  own OnChange (it became unchecked via UncheckSiblings). }
+var
+  F: TCustomForm;
+  A, B: TTyRadioButton;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    A := TTyRadioButton.Create(F); A.Parent := F;
+    B := TTyRadioButton.Create(F); B.Parent := F;
+    A.OnChange := @HRadioA;        // fails to compile until OnChange is published
+    B.OnChange := @HRadioB;
+
+    FRadioACount := 0;
+    A.Checked := True;
+    AssertEquals('A checked fires A.OnChange once', 1, FRadioACount);
+
+    FRadioACount := 0;
+    FRadioBCount := 0;
+    B.Checked := True;             // checks B, unchecks A
+    AssertTrue('A unchecked by B', not A.Checked);
+    AssertTrue('B checked', B.Checked);
+    AssertEquals('B checked fires B.OnChange once', 1, FRadioBCount);
+    AssertEquals('A unchecked (sibling) fires A.OnChange once', 1, FRadioACount);
+  finally
+    F.Free;
   end;
 end;
 

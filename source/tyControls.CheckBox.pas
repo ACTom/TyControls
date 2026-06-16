@@ -8,6 +8,7 @@ type
   TTyCheckBox = class(TTyCustomControl)
   private
     FChecked: Boolean;
+    FOnChange: TNotifyEvent;
     procedure SetChecked(const AValue: Boolean);
   protected
     function GetStyleTypeKey: string; override;
@@ -28,12 +29,14 @@ type
     property StyleClass;
     property Controller;
     property OnClick;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
   TTyRadioButton = class(TTyCustomControl)
   private
     FChecked: Boolean;
     FGroupIndex: Integer;
+    FOnChange: TNotifyEvent;
     procedure SetChecked(const AValue: Boolean);
     procedure UncheckSiblings;
   protected
@@ -56,6 +59,7 @@ type
     property StyleClass;
     property Controller;
     property OnClick;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 implementation
 
@@ -88,6 +92,7 @@ begin
   if FChecked = AValue then Exit;
   FChecked := AValue;
   Invalidate;
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyCheckBox.Click;
@@ -196,8 +201,10 @@ begin
   if FChecked = AValue then Exit;
   FChecked := AValue;
   if FChecked then
-    UncheckSiblings;
+    UncheckSiblings;          // each unchecked sibling routes through its own
+                             // SetChecked, so it fires ITS OnChange + Invalidates
   Invalidate;
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyRadioButton.UncheckSiblings;
