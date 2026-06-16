@@ -768,9 +768,18 @@ procedure TTyForm.ApplyChromeTheme(AController: TTyStyleController);
 var bg: TTyStyleSet;
 begin
   if AController = nil then Exit;
+  { Propagate the controller to every chrome sub-component FIRST, so the whole
+    window chrome themes from the SAME controller the app loaded its theme into
+    (each styleable control resolves its theme via its Controller). }
+  FTitleBar.Controller := AController;
+  FContent.Controller := AController;
+  FTitleBar.MinButton.Controller := AController;
+  FTitleBar.MaxButton.Controller := AController;
+  FTitleBar.CloseButton.Controller := AController;
   bg := AController.Model.ResolveStyle('TyForm', '', []);
   if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
     Color := TyColorToLCL(bg.Background.Color);
+  Invalidate;
 end;
 
 end.

@@ -103,6 +103,8 @@ type
     procedure TestChildOnContentSitsBelowBand;
     procedure TestDefensiveLoadedReparentsStrayChild;
     procedure TestApplyChromeThemeSetsColorFromToken;
+    procedure TestApplyChromeThemePropagatesController;
+    procedure TestSubComponentsSurviveStreamRoundTrip;
     procedure TestTitleBarDragArmsViaEngine;
     procedure TestDblClickMaximizeToggles;
   end;
@@ -179,6 +181,24 @@ end;
 
 function TTyFormAccess.TB: TTyTitleBar; begin Result := TitleBar; end;
 function TTyFormAccess.Content: TTyContentPanel; begin Result := ContentPanel; end;
+
+{ Counts the components owned by AOwner (recursively) whose class is exactly
+  AClass. Used to prove the sub-components are matched-by-name (not duplicated)
+  after a stream round-trip. }
+function CountByClass(AOwner: TComponent; AClass: TComponentClass): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  if AOwner = nil then Exit;
+  for i := 0 to AOwner.ComponentCount - 1 do
+  begin
+    if AOwner.Components[i].ClassType = AClass then
+      Inc(Result);
+    Inc(Result, CountByClass(AOwner.Components[i], AClass));
+  end;
+end;
+
 procedure TTyFormAccess.CallLoaded; begin Loaded; end;
 function TTyFormAccess.EngineDragging: Boolean; begin Result := FEngine.Dragging; end;
 function TTyFormAccess.EngineMaximized: Boolean; begin Result := FEngine.Maximized; end;
@@ -865,6 +885,104 @@ begin
   end;
 end;
 
+procedure TTyFormTest.TestApplyChromeThemePropagatesController;
+var
+  F: TTyFormAccess;
+  Ctl: TTyStyleController;
+begin
+  { ApplyChromeTheme must assign the SAME controller to every chrome
+    sub-component, so the whole window chrome themes from one controller. }
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyForm { background: #123456; }');
+    F.ApplyChromeTheme(Ctl);
+    AssertTrue('titlebar uses the passed controller', F.TB.Controller = Ctl);
+    AssertTrue('content uses the passed controller', F.Content.Controller = Ctl);
+    AssertTrue('min button uses the passed controller', F.TB.MinButton.Controller = Ctl);
+    AssertTrue('max button uses the passed controller', F.TB.MaxButton.Controller = Ctl);
+    AssertTrue('close button uses the passed controller', F.TB.CloseButton.Controller = Ctl);
+  finally
+    Ctl.Free;
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestSubComponentsSurviveStreamRoundTrip;
+var
+  Anc, Src, Dst: TTyFormAccess;
+  Stream: TMemoryStream;
+  Writer: TWriter;
+  Reader: TReader;
+  Child: TButton;
+begin
+  { Faithful headless analogue of the inherited-.lfm path.
+
+    In the Lazarus designer, a form descending from TTyForm is streamed as a
+    DESCENDENT of its ancestor (the TTyForm base, which already owns the
+    code-created TyTitleBar/TyContent sub-components). So the inherited .lfm
+    writes those sub-components with the ffInherited flag (matched by Name
+    against the ancestor), and reading it back INTO a fresh instance (whose
+    TyTitleBar/TyContent already exist from CreateNew) matches them by Name
+    instead of recreating them.
+
+    This test reproduces that exactly:
+      - Anc: the ancestor instance (its sub-components define the inherited set).
+      - Src: the descendant; UserBtn is the user-added child.
+      - WriteDescendent(Src, Anc): writes TyTitleBar/TyContent as ffInherited
+        (name-matched against Anc) and UserBtn as a normal new component.
+      - ReadRootComponent(Dst) into a pre-existing instance: ffInherited
+        children are resolved via FLookupRoot.FindComponent(Name) -> the
+        existing TyTitleBar/TyContent are reused (NOT duplicated), and UserBtn
+        is created fresh and re-parented under the content panel.
+
+    What this proves: the SetSubComponent + fixed-Name mechanism makes a
+    descendant's inherited stream match the code-created sub-components by name
+    (no duplicates), and a content child round-trips under TyContent. What it
+    does NOT itself exercise: the IDE's on-disk .lfm text parse/codegen, which
+    is additionally covered by the design spec's LCL analysis and the manual
+    designer verification checklist. }
+  Anc := TTyFormAccess.CreateNew(nil);
+  Src := TTyFormAccess.CreateNew(nil);
+  Stream := TMemoryStream.Create;
+  try
+    Child := TButton.Create(Src);
+    Child.Name := 'UserBtn';
+    Child.Parent := Src.Content;
+
+    Writer := TWriter.Create(Stream, 4096);
+    try
+      Writer.WriteDescendent(Src, Anc);
+    finally
+      Writer.Free;
+    end;
+    Stream.Position := 0;
+
+    Dst := TTyFormAccess.CreateNew(nil);  { already has its own TyTitleBar/TyContent }
+    try
+      Reader := TReader.Create(Stream, 4096);
+      try
+        Reader.ReadRootComponent(Dst);    { ffInherited children name-match -> no dup }
+      finally
+        Reader.Free;
+      end;
+      { exactly one of each sub-component (matched by name, not duplicated) }
+      AssertEquals('one title bar', 1, CountByClass(Dst, TTyTitleBar));
+      AssertEquals('one content panel', 1, CountByClass(Dst, TTyContentPanel));
+      { the user child round-tripped under the content panel }
+      AssertTrue('user child present', Dst.FindComponent('UserBtn') <> nil);
+      AssertTrue('user child parented to content',
+        TControl(Dst.FindComponent('UserBtn')).Parent = Dst.Content);
+    finally
+      Dst.Free;
+    end;
+  finally
+    Stream.Free;
+    Src.Free;
+    Anc.Free;
+  end;
+end;
+
 procedure TTyFormTest.TestTitleBarDragArmsViaEngine;
 var F: TTyFormAccess;
 begin
@@ -904,5 +1022,11 @@ initialization
   RegisterTest(TCaptionButtonHoverGlyphTest);
   RegisterTest(TContentPanelTest);
   RegisterTest(TTyFormTest);
+  { Streaming (TestSubComponentsSurviveStreamRoundTrip) resolves these child
+    classes by name during ReadComponent, so they must be class-registered. }
+  RegisterClass(TTyTitleBar);
+  RegisterClass(TTyContentPanel);
+  RegisterClass(TTyCaptionButton);
+  RegisterClass(TButton);  { the user-added content child created fresh on read }
 
 end.
