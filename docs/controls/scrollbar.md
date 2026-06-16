@@ -28,7 +28,9 @@
 | `Position` | `Integer` | `0` | 当前位置，范围 `[Min, Max]`。赋值时自动夹紧；仅在值真正变化时触发 `OnChange`。 |
 | `PageSize` | `Integer` | `10` | 页面大小（可见内容大小），决定 thumb 在轨道中的比例长度。不可为负（负值被夹为 0）。同时也是点击轨道空白处和 `PageUp`/`PageDown` 的步进量。 |
 | `SmallChange` | `Integer` | `1` | 单步步进量：点击端部箭头按钮、按方向键各步进 ±`SmallChange`。最小为 1（赋值 <1 被夹为 1）。 |
+| `AnimationsEnabled` | `Boolean` | `True` | **（API parity 新增 published）** 控制程序化 Position 变化（键盘 / 滚轮 / 轨道点击）时 thumb 的缓动动画（约 120 ms，EaseOutCubic）；实时拖拽与无头环境瞬时跟随。 |
 | `OnChange` | `TNotifyEvent` | `nil` | Position 真实变化时触发（包括 `DragThumbTo` 引起的变化）。 |
+| `OnScroll` | `TScrollEvent` | `nil` | **（API parity 新增）** 键盘 / 轨道点击 / 端部按钮触发的滚动；签名 `(Sender; ScrollCode: TScrollCode; var ScrollPos: Integer)`，可在 handler 中改写 `ScrollPos` 覆盖目标位置。**鼠标滚轮直接改写 Position（触发 `OnChange`），不经 `DoScroll`，因此不触发 `OnScroll`。** |
 | `Align` | `TAlign` | — | 布局对齐方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名。 |
@@ -155,6 +157,9 @@ function TyScrollTrackRect(const AClient: TRect; AKind: TTyScrollBarKind;
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
 | `OnChange` | `TNotifyEvent` | `Position` 属性值真实变化时（包括 `DragThumbTo` 间接触发） |
+| `OnScroll` | `TScrollEvent` | **（API parity 新增）** 键盘 / 轨道点击 / 端部按钮滚动时，经 `DoScroll` 分发；`var ScrollPos: Integer` 可被 handler 改写以覆盖目标位置。鼠标滚轮**不**触发此事件（仅触发 `OnChange`）。 |
+
+> **滚轮步进（API parity 新增）：** `TTyScrollBar` 现支持鼠标滚轮步进——滚轮上滚减小 `Position`（向上滚动内容），步进量为 `SmallChange`，直接改写 `Position` 并触发 `OnChange`。除上表外还暴露**基线事件集**（Tier A + Tier B），见 [../events.md](../events.md)。
 
 ## 5. 状态与主题
 

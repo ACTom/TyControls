@@ -29,6 +29,7 @@ uses tyControls.ToggleSwitch;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Checked` | `Boolean` | `False` | 当前开关状态。写入时若值变化则触发重绘并调用 `OnChange`（已定义 `default False`，可参与 DFM 差量存储）。 |
+| `Caption` | `string` | `''` | **（API parity 新增）** 开关**右侧**的文字标签。为空（默认）时只渲染裸开关；非空时开关被约束到左侧固定宽度区（按高度推导的 44:24 比例），文字在右侧左对齐、垂直居中绘制。 |
 | `OnChange` | `TNotifyEvent` | `nil` | `Checked` 值发生变化时触发（无论是点击、按键还是直接赋值）。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
@@ -38,7 +39,7 @@ uses tyControls.ToggleSwitch;
 
 ### 继承的通用成员
 
-TTyToggleSwitch 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制。**构造时自动设置 `TabStop := True`**，支持 Tab 键导航。
+TTyToggleSwitch 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制。**构造时自动设置 `TabStop := True`**，支持 Tab 键导航。**基线事件集**（Tier A + Tier B）全部暴露——见 [../events.md](../events.md)。
 
 ---
 

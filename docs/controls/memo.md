@@ -28,9 +28,14 @@ uses tyControls.Memo;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Lines` | `TStrings` | 空 | 文本模型，一条 `TStrings` 行对应一条逻辑行。读取返回内部列表；写入通过 `SetLines` 进行 `Assign`，随后夹紧光标与滚动窗口并刷新滚动条。 |
+| `Text` | `string` | `''` | **（API parity 新增）** 整段文本的扁平视图：读取拼接所有逻辑行（含换行）；写入重设全部行并收起光标。便于像单行控件一样整体存取。 |
 | `ReadOnly` | `Boolean` | `False` | 为 `True` 时拦截用户编辑（打字/回车/退格/删除/词级删除/粘贴），保留导航、选区、复制、全选；`Lines :=` 程序化写入仍可用；`CutToClipboard` 退化为 `CopyToClipboard`。 |
 | `MaxLength` | `Integer` | `0`（无限） | 按**全模型内容码点数**（所有逻辑行 `UTF8Length` 之和，**换行不计**）封顶；`0` 表示无限制；打字满则拒插；粘贴时截断到余量；回车/退格/删除/合并不受限。 |
+| `WantTabs` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时 Tab 键插入制表符（字面量）；为 `False` 时 Tab 用于焦点导航。 |
+| `WantReturns` | `Boolean` | `True` | **（API parity 新增）** 为 `True` 时回车插入换行；为 `False` 时回车不换行（留作提交语义）。 |
+| `ScrollBars` | `TScrollStyle` | `ssAutoVertical` | **（API parity 新增）** 滚动条策略。仅**垂直**策略被尊重（内嵌垂直滚动条按需出现）；横向变体退化为垂直策略——**横向滚动条尚未实现**（见 §10 缺口）。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 文本模型变化（插入/拆分/退格/删除/合并）后触发；纯光标移动不触发。 |
+| `OnSelectionChange` | `TNotifyEvent` | `nil` | **（API parity 新增）** 光标位置**或**选区范围变化时触发（方向键 / 点击 / Shift 选区 / 程序化设置光标 / 编辑导致光标移动）；自带去抖——caret 与 anchor 都未变则不触发。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时键盘与滚轮输入一律被忽略（v1.5 策略：禁用时不消费按键、`DoMouseWheel` 返回 `False`）。 |
 | `Font` | `TFont` | — | 字体；其 `PixelsPerInch` 参与行高/列宽度量。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
@@ -39,9 +44,20 @@ uses tyControls.Memo;
 | `Controller` | `TTyStyleController` | `nil`（全局默认） | 关联的样式控制器；内嵌滚动条会继承同一 Controller。 |
 | `OnClick` | `TNotifyEvent` | `nil` | 鼠标点击时触发。 |
 
+### public 扁平选区属性（非 published，API parity 新增）
+
+> 这些属性以**扁平码点偏移**（跨所有逻辑行的单一索引，换行计 1）表达光标与选区，对齐原生 `TMemo` 的扁平 `Sel*` 模型，与内部二维 `(CaretLine, CaretCol)` 之间自动换算。
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `SelStart` | `Integer`（读写） | 选区起始的扁平码点偏移；写入时收起选区到该处。 |
+| `SelLength` | `Integer`（读写） | 选区长度（扁平码点数）；写入时从 `SelStart` 起扩展光标。 |
+| `SelText` | `string`（读写） | 选区内容；写入时以新文本替换选区，仅触发一次 `OnChange`。 |
+| `CaretPos` | `Integer`（读写） | 光标的扁平码点偏移。 |
+
 ### 继承的通用成员
 
-TTyMemo 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制。`TabStop` 在构造时置为 `True`。
+TTyMemo 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制。`TabStop` 在构造时置为 `True`。**基线事件集**（Tier A 鼠标 / 通用 + Tier B 键盘 / 焦点）全部暴露——见 [../events.md](../events.md)。
 
 ---
 
@@ -177,7 +193,7 @@ end;
 | 缺口 | 说明 / 当前行为 |
 |------|------|
 | **无自动换行（no word-wrap）** | 渲染时 `WordBreak = False`：一条逻辑行始终绘制为一行，不会按控件宽度回绕到下一行。逻辑行与可见行严格一一对应。 |
-| **无水平滚动 / 长行被裁剪（no horizontal scroll, long lines clipped）** | 没有水平滚动条，也没有水平自动滚动。超出内容区宽度的长行在右缘被画布**直接裁剪**；当光标移动到可见区右侧之外时也不会水平滚动跟随（光标可能被画到内容区外而不可见）。仅垂直方向有滚动条/滚轮。 |
+| **无水平滚动条（no horizontal scrollbar，deferred）** | `ScrollBars` 属性（API parity 新增）仅尊重**垂直**策略；横向变体（`ssHorizontal`/`ssBoth`/`ssAutoHorizontal`/`ssAutoBoth`）退化为垂直策略——横向滚动条**尚未实现**。超出内容区宽度的长行在右缘被裁剪（`WordWrap = False` 时）。仅垂直方向有内嵌滚动条 / 滚轮。 |
 
 > **v1.11 已交付：** 文本选区、区间剪贴板（`Ctrl/Cmd+A/C/X/V`）、以及按词 / `Shift` 扩展导航均已落地（见 §5），不再是缺口。
 > **v1.12 已交付：** 基于快照的**撤销 / 重做**（`Ctrl/Cmd+Z`、`Ctrl/Cmd+Y` / `Ctrl/Cmd+Shift+Z`）已落地（见 §11），不再是缺口。

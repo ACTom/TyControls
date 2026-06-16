@@ -33,6 +33,7 @@ uses tyControls.ListBox;
 | `MultiSelect` | `Boolean` | `False` | 是否允许多选。`False` 时为单选模式，行为与旧版相同；`True` 时启用多选，`Selected[]`、`SelCount`、`ClearSelection`、`SelectAll` 等多选方法生效。切换此属性会清空所有选择位。 |
 | `ItemHeight` | `Integer` | `24` | 每行条目的逻辑像素高度（最小为 1）；写入时触发滚动条更新和重绘。实际像素高度在绘制时按 PPI 缩放。 |
 | `TopIndex` | `Integer` | `0` | 当前最顶部可见行的索引，范围 `[0, MaxTopIndex]`，写入时自动夹紧。直接改 `Items` 后 `TopIndex` 会在下次更新时自动收敛。 |
+| `Sorted` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时 `Items` 保持升序（不区分大小写）。切换时按**文本**快照当前选择（单选 / 多选均支持），重排后再依文本重新定位选中项——保持同一逻辑选择且**不**触发 `OnChange`。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 选中行变化时触发（`SelectItem` 中，仅当 `ItemIndex` 真正变化时触发）。 |
 | `TabStop` | `Boolean` | `True` | 是否参与 Tab 键导航（构造时自动置为 `True`）。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
@@ -42,7 +43,9 @@ uses tyControls.ListBox;
 
 ### 继承的通用成员
 
-TTyListBox 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制，参见 [stylecontroller.md](stylecontroller.md)。
+TTyListBox 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制，参见 [stylecontroller.md](stylecontroller.md)。**基线事件集**（Tier A + Tier B）全部暴露——见 [../events.md](../events.md)。
+
+> **`Columns` 已延后（deferred）：** 多列布局（原生 `TListBox.Columns`）**未实现**，本批次不提供该属性；当前 ListBox 始终为单列垂直布局。
 
 ---
 

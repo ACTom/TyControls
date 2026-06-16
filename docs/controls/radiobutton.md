@@ -62,6 +62,9 @@ TTyRadioButton 继承自 `TTyCustomControl`（`tyControls.Base`）：
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
 | `OnClick` | `TNotifyEvent` | 用户点击控件时（`Checked` 已在此时设为 `True`，同组其他按钮已取消选中） |
+| `OnChange` | `TNotifyEvent` | **（API parity 新增）** `Checked` 实际改变时触发。选中某个单选钮时：被取消选中的**同组兄弟**各自经过自己的 `SetChecked(False)`，因此**各自触发**其 `OnChange`；随后被选中的本钮再触发自己的 `OnChange`。设为当前值不触发。 |
+
+> 除上表外，TTyRadioButton 还暴露**基线事件集**（Tier A + Tier B，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。
 
 ---
 

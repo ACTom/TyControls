@@ -63,6 +63,9 @@ TTyCheckBox 继承自 `TTyCustomControl`（`tyControls.Base`）：
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
 | `OnClick` | `TNotifyEvent` | 用户点击控件时（`Checked` 已在此时完成切换） |
+| `OnChange` | `TNotifyEvent` | **（API parity 新增）** `Checked` 实际改变时触发（无论交互点击还是程序化 `Checked :=`）；设为当前值不触发。`SetChecked` 在 `FChecked` 变更并 `Invalidate` 后调用。 |
+
+> 除上表外，TTyCheckBox 还暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。
 
 ---
 

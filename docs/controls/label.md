@@ -27,7 +27,13 @@ uses tyControls.TyLabel;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Caption` | `string` | `''` | 标签显示文字，左对齐、垂直居中渲染 |
+| `Caption` | `string` | `''` | 标签显示文字；默认左对齐、垂直居中渲染（对齐方式现由 `Alignment` / `Layout` 控制）。 |
+| `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** 每行文字的**水平**对齐（左 / 右 / 居中）。 |
+| `Layout` | `TTextLayout` | `tlCenter` | **（API parity 新增）** 整段文字块的**垂直**对齐（顶 / 居中 / 底）；在 `WordWrap = True` 时按每行块高计算统一垂直偏移后应用。 |
+| `WordWrap` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时文字按控件宽度自动换行；写入会触发重新度量首选尺寸并（在 `AutoSize` 开启时）调整大小。 |
+| `AutoSize` | `Boolean`（继承重 published） | — | **（API parity 新增 published）** 由父类继承；**在 `Caption` 变更、以及 `WordWrap` 开启时宽度变更时重新触发**度量与 `AdjustSize`。 |
+| `Transparent` | `Boolean` | `True` | **（API parity 新增）** 为 `True`（默认）时**不**填充背景，透出父 / 窗体背景（`opacity` 仍被尊重）；为 `False` 时绘制主题 `background` 填充。 |
+| `FocusControl` | `TWinControl` | `nil` | **（API parity 新增）** 点击标签时将焦点设到该控件（若非空且可聚焦）；setter 安装 free notification，目标被销毁时自动清空引用。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled` 主题状态（通常降低不透明度） |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |
@@ -58,7 +64,9 @@ TTyLabel 继承自 `TTyGraphicControl`（`tyControls.Base`），与其他 TyCont
 
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
-| `OnClick` | `TNotifyEvent` | 鼠标点击时（`TGraphicControl` 内置支持） |
+| `OnClick` | `TNotifyEvent` | 鼠标点击时（`TGraphicControl` 内置支持）；若设置了 `FocusControl`，点击同时把焦点转移到该控件 |
+
+> **基线事件集：** TTyLabel 继承自 `TTyGraphicControl`（非窗口化），因此仅暴露 **Tier A** 基线事件（鼠标 / 通用），**无** Tier B 键盘 / 焦点事件（标签不可获得焦点）。完整清单见 [../events.md](../events.md)。
 
 ---
 

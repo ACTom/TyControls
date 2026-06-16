@@ -22,7 +22,14 @@
 | `Items` | `TStringList` | `[]`（空列表） | 可选项列表。赋值时调用 `Assign` 复制内容并触发 `Invalidate`。 |
 | `ItemIndex` | `Integer` | `-1` | 当前选中项的索引。写入时等价于调用 `SelectItem(AValue)`。读取返回当前索引；-1 表示无选中项。 |
 | `Text` | `string` | `''` | 当前显示的文本。独立于 `Items`，可手动赋值（不触发 `OnChange`）；`SelectItem` 同步更新此字段。 |
+| `DropDownCount` | `Integer` | `8` | **（API parity 新增）** 下拉列表滚动前可见的最大行数；写入时夹紧到 `>= 1`。同时供无头度量（`ComputePopupHeight`）使用。 |
+| `Sorted` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时 `Items` 保持升序（不区分大小写）；切换时按**文本**重新定位先前选中项，保持同一逻辑选中。 |
+| `MaxLength` | `Integer` | `0` | **（API parity 新增，存储但不生效）** 直接字段写入，**无任何效果**。本控件为只读下拉（`csDropDownList`），无可编辑文本可截断；该属性仅为**原生 API 对齐 / 流式往返**而 published，留待将来可编辑模式。 |
+| `CharCase` | `TEditCharCase` | `ecNormal` | **（API parity 新增，存储但不生效）** `SetCharCase` 仅赋值字段，**不**改写显示文本（只读下拉无可编辑文本）；同样仅为 API 对齐保留。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 选中项变化时触发（仅当 `ItemIndex` 或 `Text` 实际改变时）。 |
+| `OnSelect` | `TNotifyEvent` | `nil` | **（API parity 新增）** 仅 **用户驱动** 的选择（下拉选取 / 键盘导航）后触发；程序化设置 `ItemIndex` **不**触发。 |
+| `OnDropDown` | `TNotifyEvent` | `nil` | **（API parity 新增）** 下拉列表打开时触发。 |
+| `OnCloseUp` | `TNotifyEvent` | `nil` | **（API parity 新增）** 下拉列表收起时触发。 |
 | `TabStop` | `Boolean` | `True` | 是否参与键盘 Tab 焦点循环。 |
 | `Align` | `TAlign` | — | 布局对齐方式（继承自 `TControl`）。 |
 | `Anchors` | `TAnchors` | — | 锚点布局（继承自 `TControl`）。 |
@@ -118,7 +125,14 @@ DroppedDown = False → DropDown
 
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
-| `OnChange` | `TNotifyEvent` | `SelectItem` 引起 `ItemIndex` 或 `Text` 真实变化时 |
+| `OnChange` | `TNotifyEvent` | `SelectItem` 引起 `ItemIndex` 或 `Text` 真实变化时（含程序化） |
+| `OnSelect` | `TNotifyEvent` | **（API parity 新增）** 仅用户驱动的选择（下拉选取 / 关闭态键盘导航）实际改变选项后触发；程序化 `ItemIndex :=` 不触发。在 `OnChange` 之后发出。 |
+| `OnDropDown` | `TNotifyEvent` | **（API parity 新增）** `DropDown` 实际打开弹出列表时触发。 |
+| `OnCloseUp` | `TNotifyEvent` | **（API parity 新增）** `CloseUp` 关闭弹出列表时触发。 |
+
+> 除上表外，TTyComboBox 还暴露**基线事件集**（Tier A + Tier B，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。
+>
+> **`MaxLength` / `CharCase` 为何不生效：** 二者在原生组合框中作用于**可编辑文本框**。本控件是只读下拉（`csDropDownList`），没有可编辑文本，因此它们被 published 仅为**原生 API 对齐**与 DFM/LFM 流式往返，对显示的选中文本无任何影响，留作将来可编辑模式的预留接口。
 
 ## 5. 状态与主题
 

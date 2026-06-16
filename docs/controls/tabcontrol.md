@@ -35,6 +35,8 @@ uses tyControls.TabControl;
 | `TabsClosable` | `Boolean` | `False` | 为 `True` 时每个页签头右侧渲染一个关闭 × 字形；点击该字形触发 `OnTabClose`。默认关闭，页签头不显示 × |
 | `OnTabClose` | `TTyTabCloseEvent` | `nil` | 点击页签关闭 × 字形时触发；签名 `procedure(Sender: TObject; AIndex: Integer; var AllowClose: Boolean)`。详见第 4、11 节 |
 | `OnChange` | `TNotifyEvent` | `nil` | 仅当 `TabIndex` 发生真实变化时触发，相同值重复赋值不触发 |
+| `OnChanging` | `TTyTabChangingEvent` | `nil` | **（API parity 新增）** 切换页签**之前**触发；签名 `procedure(Sender: TObject; ANewIndex: Integer; var AllowChange: Boolean)`，把 `AllowChange := False` 即**否决**切换（不换页、不触发 `OnChange`、不播放淡入）。`csLoading` 期间流式选中不经此否决。详见第 4 节 |
+| `OnReorder` | `TTyTabReorderEvent` | `nil` | **（API parity 新增）** 拖拽重排松手后触发一次；签名 `procedure(Sender: TObject; AFromIndex, AToIndex: Integer)`，报告净起止索引（仅当确实移动时触发）。详见第 4、14 节 |
 | `TabStop` | `Boolean` | `True` | 控件可通过 Tab 键获得键盘焦点 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 随父控件调整大小时的锚点 |
@@ -76,6 +78,8 @@ uses tyControls.TabControl;
 | 事件/方法 | 类型/签名 | 触发时机/说明 |
 |-----------|-----------|---------------|
 | `OnChange` | `TNotifyEvent` | `TabIndex` 发生真实变化后触发（相同值重复赋值不触发） |
+| `OnChanging` | `TTyTabChangingEvent` | **（API parity 新增）** 切换**之前**触发；`var AllowChange` 置 `False` 否决切换 |
+| `OnReorder` | `TTyTabReorderEvent` | **（API parity 新增）** 拖拽重排松手后触发一次，报告 `AFromIndex` / `AToIndex` |
 | `OnTabClose` | `TTyTabCloseEvent` | 点击页签关闭 × 字形时触发；通过 `var AllowClose` 决定是否真正移除（置 `False` 即否决） |
 | `AddTab(const ACaption): TTyPanel` | 函数 | 见属性表；追加页签并返回页面板 |
 | `RemoveTab(AIndex)` | 过程 | 移除指定页签及其页面板并释放之；修正 `TabIndex`，必要时触发 `OnChange`（详见第 11 节） |
@@ -94,6 +98,20 @@ TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
 - `AIndex`：被点击关闭的页签索引（零基）。
 - `AllowClose`：进入回调时为 `True`。保持 `True` 则控件随后自动调用 `RemoveTab(AIndex)` 移除该页签；在回调中置 `False` 即否决本次关闭，页签保持不变。
 - 未赋 `OnTabClose` 时，点击 × 等同于直接放行（自动 `RemoveTab`）。
+
+### TTyTabChangingEvent / TTyTabReorderEvent 签名（API parity 新增）
+
+```pascal
+TTyTabChangingEvent = procedure(Sender: TObject; ANewIndex: Integer;
+  var AllowChange: Boolean) of object;
+TTyTabReorderEvent  = procedure(Sender: TObject; AFromIndex, AToIndex: Integer)
+  of object;
+```
+
+- **`OnChanging`** 在 `SetTabIndex` 中、真正切换**之前**触发，`AllowChange` 进入回调时为 `True`；置 `False` 即否决——不换页、不触发 `OnChange`、不播放页签头淡入。`csLoading` 期间（流式载入选中值）跳过此否决。
+- **`OnReorder`** 在 `MouseUp` 完成一次拖拽重排手势后触发**一次**，`AFromIndex`/`AToIndex` 为净起止索引；仅当最终索引与起点不同（确实发生移动）时触发。拖拽过程中集合已实时重排，`OnReorder` 仅宣告最终结果。
+
+> **基线事件集：** 除上述专有事件外，TTyTabControl 还暴露全部**基线事件**（Tier A + Tier B），见 [../events.md](../events.md)。
 
 ---
 

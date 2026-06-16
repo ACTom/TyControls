@@ -32,6 +32,9 @@ uses tyControls.Edit;
 | `MaxLength` | `Integer` | `0`（无限） | 按**码点**封顶；`0` 表示无限制；满则不再插入；粘贴时截断到余量。 |
 | `PasswordChar` | `string` | `''`（关闭） | 单个 UTF-8 码点（如 `'●'`）；渲染与宽度测量都用掩码字符替代实际内容；掩码激活时**禁用复制/剪切**（防明文外泄）。 |
 | `TextHint` | `string` | `''` | 占位符文本；仅在 `Text` 为空时绘制，颜色取子部件 typeKey `TyTextHint` 的 `color`（默认 `var(--muted)`，弱化前景）。 |
+| `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** 文本水平对齐（左 / 右 / 居中）；影响文本绘制起点，光标定位随对齐偏移。 |
+| `CharCase` | `TEditCharCase` | `ecNormal` | **（API parity 新增）** 输入字符大小写转换：`ecNormal`（原样） / `ecUpperCase`（转大写） / `ecLowerCase`（转小写）。 |
+| `NumbersOnly` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时仅接受数字字符输入（非数字键被拦截）。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled`，控件不响应键盘/鼠标输入 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |
@@ -43,14 +46,16 @@ uses tyControls.Edit;
 |------|------|------|
 | `CaretPos` | `Integer`（读写） | 光标的码点索引，范围 `[0, UTF8Length(Text)]`。写入时收起选区（`FSelAnchor := FCaretPos`）并重绘。 |
 
-### public 只读方法（选区 API）
+### public 选区 API（读写属性 + 只读方法）
 
-| 方法 | 说明 |
-|------|------|
-| `function SelStart: Integer` | 选区起始码点索引（`FCaret` 与 `FSelAnchor` 中较小者）；无选区时等于光标位置。 |
-| `function SelLength: Integer` | 选区长度（码点数，无选区时为 0）。 |
-| `function SelText: string` | 选区内容的 UTF-8 字符串；无选区时为空串。 |
-| `function HasSelection: Boolean` | 当前是否有非空选区（`FCaret <> FSelAnchor`）。 |
+> **（API parity 变更）** `SelStart` / `SelLength` / `SelText` 现为 **public 读写属性**（早前为只读方法），对齐原生 `TEdit` 的选区属性，便于程序化设置选区。仍为 public（非 published）。
+
+| 属性 / 方法 | 类型 | 说明 |
+|------|------|------|
+| `SelStart` | `Integer`（读写） | 选区起始码点索引（`FCaret` 与 `FSelAnchor` 中较小者）；无选区时等于光标位置。写入时移动选区起点。 |
+| `SelLength` | `Integer`（读写） | 选区长度（码点数，无选区时为 0）。写入时从 `SelStart` 起扩展选区到指定长度。 |
+| `SelText` | `string`（读写） | 选区内容的 UTF-8 字符串；无选区时为空串。写入时以新文本替换当前选区。 |
+| `function HasSelection: Boolean` | — | 当前是否有非空选区（`FCaret <> FSelAnchor`）。 |
 | `procedure SelectAll` | 全选：将选区锚点设为 0，光标移到末尾。 |
 | `procedure ClearSelection` | 收起选区：将 `FSelAnchor := FCaret`。 |
 
@@ -92,6 +97,9 @@ TTyEdit 继承自 `TTyCustomControl`（`tyControls.Base`），与其他 TyContro
 |------|------|----------|
 | `OnClick` | `TNotifyEvent` | 鼠标点击控件时 |
 | `OnChange` | `TNotifyEvent` | **（v1.12 新增）** 文本内容因键盘编辑、剪贴板操作或撤销/重做发生变化时触发；通过 `Text :=` 直接赋值（`SetText`）**不**触发。 |
+| `OnEditingDone` | `TNotifyEvent` | **（API parity 基线 Tier B）** 编辑完成（失焦或回车提交）时触发。 |
+
+> **基线事件集：** 除上表外，TTyEdit 还暴露全部**基线事件**（Tier A 鼠标 / 通用 + Tier B 键盘 / 焦点，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。
 
 > **OnChange（v1.12 新增）：** 自 v1.12 起 TTyEdit 提供 published 的 `OnChange` 事件（早前版本没有）。它在文本因按键编辑、剪贴板或撤销/重做变化时触发；纯光标移动以及 `Text :=` 赋值不触发。详见上方「撤销 / 重做」节末的「`OnChange` 事件」小节。
 

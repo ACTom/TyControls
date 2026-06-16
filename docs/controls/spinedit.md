@@ -31,6 +31,9 @@ uses tyControls.SpinEdit;
 | `MaxValue` | `Integer` | `100` | 最大值。赋值时若 `Value > MaxValue` 则静默夹紧，触发重绘（不触发 `OnChange`）。 |
 | `Value` | `Integer` | `0` | 当前值，范围 `[MinValue, MaxValue]`，赋值时自动夹紧；若值真正变化则触发 `OnChange` 和重绘。 |
 | `Increment` | `Integer` | `1` | 每步步进量。赋值小于 1 时被强制置为 1。 |
+| `ReadOnly` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时拦截内联文本编辑**与** ± 步进（箭头按钮 / 方向键 / 滚轮）；程序化 `Value :=` 不受限。 |
+| `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** 内联文本的水平对齐（左 / 右 / 居中）；光标随对齐偏移（`AlignOffset`）。 |
+| `MaxLength` | `Integer` | `0`（无限） | **（API parity 新增）** 按码点封顶内联编辑缓冲长度；`0` 表示无限制；插入时检查。 |
 | `OnChange` | `TNotifyEvent` | `nil` | `Value` 真实变化时触发（含箭头按钮、方向键、滚轮、直接赋值）。 |
 | `TabStop` | `Boolean` | `True` | 是否参与 Tab 键导航（构造时自动置为 `True`）。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
@@ -41,7 +44,7 @@ uses tyControls.SpinEdit;
 
 ### 继承的通用成员
 
-TTySpinEdit 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制。
+TTySpinEdit 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制。**基线事件集**（Tier A + Tier B，含 `OnEditingDone`）全部暴露——见 [../events.md](../events.md)。
 
 ---
 

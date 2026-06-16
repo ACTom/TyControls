@@ -28,6 +28,10 @@ uses tyControls.Button;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Caption` | `string` | `''` | 按钮显示文字，居中绘制 |
+| `Default` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时在宿主窗体上按 Enter 触发本按钮的 `Click`（注册到窗体 `DefaultControl`）；流式载入后在 `Loaded` 中重新注册（设置时 Parent 尚未就绪的情形）。 |
+| `Cancel` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时在宿主窗体上按 Esc 触发本按钮的 `Click`（注册到窗体 `CancelControl`）；同样在 `Loaded` 中重新注册。 |
+| `ModalResult` | `TModalResult` | `mrNone` | **（API parity 新增）** 非 `mrNone` 时，`Click` 在调用 `inherited Click`（即触发 `OnClick`）**之前**先把宿主窗体的 `ModalResult` 设为本值——遵循原生 `TButton` 语义，使 `OnClick` 处理器可通过 `Form.ModalResult := mrNone` 否决关闭。 |
+| `AnimationsEnabled` | `Boolean` | `True` | **（API parity 新增 published）** 控制悬停背景淡入动画（约 120 ms，EaseOutCubic）；详见第 7 节。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled` 主题状态，控件不响应交互 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |
@@ -58,6 +62,10 @@ uses tyControls.Button;
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
 | `OnClick` | `TNotifyEvent` | 鼠标点击或通过 `Click` 方法触发时 |
+
+> **`ModalResult` 与 `OnClick` 的次序：** 当 `ModalResult <> mrNone` 时，`Click` 先把宿主窗体 `ModalResult` 设为本值，**再**调用 `inherited Click`（触发 `OnClick`）。因此 `OnClick` 处理器可在事件中读取/改写 `Form.ModalResult`（如置 `mrNone` 否决关闭）。
+>
+> **基线事件集：** 除 `OnClick` 外，TTyButton 还暴露全部**基线事件**（Tier A + Tier B，因其为可聚焦的 `TTyCustomControl`），见 [../events.md](../events.md)。
 
 ---
 

@@ -34,6 +34,11 @@
 | `BorderZone` | `Integer` | `6` | 边框拖动感应区宽度（像素）。鼠标进入距窗体边缘此距离范围内视为命中边框，触发 8 向缩放。 |
 | `ShowMinimize` | `Boolean` | `True` | 控制最小化按钮的 `Visible`（在 `InstallChrome` 时生效）。 |
 | `ShowMaximize` | `Boolean` | `True` | 控制最大化按钮的 `Visible`（在 `InstallChrome` 时生效）。 |
+| `OnCloseQuery` | `TCloseQueryEvent` | `nil` | **（API parity 新增）** 点击关闭按钮、执行关闭**之前**触发；签名 `(Sender; var CanClose: Boolean)`，`CanClose` 进入时为 `True`，置 `False` 即**否决**关闭。 |
+| `OnClose` | `TNotifyEvent` | `nil` | **（API parity 新增）** 关闭被批准（`OnCloseQuery` 未否决）后触发。 |
+| `OnMinimize` | `TNotifyEvent` | `nil` | **（API parity 新增）** 点击最小化按钮时触发（在把窗体 `WindowState := wsMinimized` 之前）。 |
+| `OnMaximize` | `TNotifyEvent` | `nil` | **（API parity 新增）** 最大化切换完成后触发。 |
+| `OnRestore` | `TNotifyEvent` | `nil` | **（API parity 新增）** 还原切换完成后触发。 |
 
 ### public 只读属性（non-published）
 
@@ -65,7 +70,7 @@
 3. 将 `TitleBar.Parent := FForm`，`Align := alTop`，并调用 `SetBounds(0, 0, FForm.ClientWidth, FTitleHeight)`。
 4. 根据 `ShowMinimize`/`ShowMaximize` 设置对应按钮 `Visible`。
 5. 保存并替换窗体的 `OnMouseDown/OnMouseMove/OnMouseUp`（用于边框缩放逻辑）。
-6. 绑定 `TitleBar` 的 `OnMouseDown/OnMouseMove/OnMouseUp/OnDblClick`（用于拖动和双击最大化）。
+6. **（API parity 变更）** 窗口拖动 / 双击最大化不再占用 `TitleBar` 的 published 鼠标事件槽位——`TTyTitleBar` 改为**覆写** `MouseDown/MouseMove/MouseUp/DblClick`（各方法先调 `inherited`，再委托给宿主 chrome）。因此用户可自由挂接 `TitleBar.OnMouseDown/OnMouseMove/OnMouseUp/OnDblClick`，不会破坏拖动 / 最大化逻辑。
 7. 绑定三个 `TTyCaptionButton` 的 `OnClick`（最小化/最大还原/关闭）。
 
 #### `procedure UninstallChrome`
@@ -92,6 +97,22 @@
 - `TitleBarMouseMove`：`FDragging = True` 时，将窗体位置偏移 `(X - FDragStart.X, Y - FDragStart.Y)`（注意：拖动时 `FDragStart` 不更新，这是相对于按下时光标在标题栏内的位置的偏移）。
 - `TitleBarMouseUp`：`FDragging := False`。
 - `TitleBarDblClick`：调用 `ToggleMaximize`。
+
+> **（API parity 变更）** 上述 `TitleBarMouse*` / `TitleBarDblClick` 现由 `TTyTitleBar` 的**方法覆写**（先 `inherited` 再委托宿主 chrome）驱动，而非占用 `TitleBar` 的 published 事件槽位——这些事件槽位已释放给用户使用。
+
+### 生命周期事件（API parity 新增）
+
+`TTyFormChrome` 现暴露五个窗口生命周期事件，挂接在标题栏按钮 / 关闭流程上：
+
+| 事件 | 签名 | 触发时机与次序 |
+|------|------|----------------|
+| `OnCloseQuery` | `(Sender; var CanClose: Boolean)` | 点击关闭按钮、关闭**之前**；`CanClose` 进入为 `True`，置 `False` 否决关闭 |
+| `OnClose` | `(Sender)` | `OnCloseQuery` 未否决（`CanClose = True`）后触发 |
+| `OnMinimize` | `(Sender)` | 点击最小化按钮，设 `WindowState := wsMinimized` 之前 |
+| `OnMaximize` | `(Sender)` | `ToggleMaximize` 进入最大化、状态切换完成后 |
+| `OnRestore` | `(Sender)` | `ToggleMaximize` 从最大化还原、状态切换完成后 |
+
+> **基线事件集：** `TTyFormChrome` 是一个非可视组件（管理宿主窗体 chrome），其注入的 `TTyTitleBar` / `TTyCaptionButton`（均为 `TTyCustomControl`）暴露完整**基线事件集**（Tier A + Tier B）。全库基线约定见 [../events.md](../events.md)。
 
 ## 5. 状态与主题
 
