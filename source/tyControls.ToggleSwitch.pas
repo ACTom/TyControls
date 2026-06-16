@@ -16,11 +16,13 @@ type
   TTyToggleSwitch = class(TTyCustomControl)
   private
     FChecked: Boolean;
+    FCaption: string;
     FOnChange: TNotifyEvent;
     FKnobAnim: TTyAnimator;
     FAnimationsEnabled: Boolean;
     FTimer: TTimer;
     procedure SetChecked(const AValue: Boolean);
+    procedure SetCaption(const AValue: string);
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
     function GetKnobAnimProgress: Single;
@@ -51,6 +53,9 @@ type
     property AnimationsEnabled: Boolean read FAnimationsEnabled write FAnimationsEnabled default True;
   published
     property Checked: Boolean read FChecked write SetChecked default False;
+    // Optional text label drawn to the RIGHT of the switch (TToggleBox parity).
+    // Empty (the default) renders the bare switch unchanged.
+    property Caption: string read FCaption write SetCaption;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property Align;
     property Anchors;
@@ -132,6 +137,13 @@ begin
     FOnChange(Self);
 end;
 
+procedure TTyToggleSwitch.SetCaption(const AValue: string);
+begin
+  if FCaption = AValue then Exit;
+  FCaption := AValue;
+  Invalidate;
+end;
+
 procedure TTyToggleSwitch.EnsureTimer;
 begin
   if FTimer = nil then
@@ -193,22 +205,39 @@ procedure TTyToggleSwitch.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: I
 var
   P: TTyPainter;
   S, TrackS, KnobStyle: TTyStyleSet;
-  R: TRect;
+  R, FullR, CaptionRect: TRect;
   TrackRadius: Integer;
   DevH, Margin, KnobSide, KnobLogical, KnobX, KnobRadiusLogical: Integer;
+  SwitchW, Gap: Integer;
   KnobRect: TRect;
   KnobFill: TTyFill;
 begin
   P := TTyPainter.Create;
   try
-    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    // FullR = the whole client; R = the SWITCH zone. With no caption the switch
+    // fills the client (R = FullR) so existing exact-pixel toggle tests are
+    // unchanged. With a caption, the switch is constrained to a fixed-width zone
+    // on the LEFT (its natural 44:24 aspect relative to the device height) and
+    // the caption is drawn to the right of it.
+    FullR := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    R := FullR;
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
+
+    DevH := R.Bottom - R.Top;
+    if FCaption <> '' then
+    begin
+      // Natural switch width keeps the default 44:24 aspect (→ exactly 44 dev-px
+      // at the 24px default height), purely height-derived so it is theme-safe.
+      SwitchW := MulDiv(DevH, 44, 24);
+      if SwitchW > (FullR.Right - FullR.Left) then
+        SwitchW := FullR.Right - FullR.Left;
+      R.Right := R.Left + SwitchW;
+    end;
 
     // Build a track style with a pill border-radius.
     // If the theme supplies a BorderRadius, use it; otherwise half the device height.
     TrackS := S;
-    DevH := R.Bottom - R.Top;
     if TrackS.BorderRadius = 0 then
     begin
       // Compute logical radius so that Scale() → device half-height
@@ -247,6 +276,16 @@ begin
     KnobFill.Color := KnobStyle.Background.Color;
 
     P.FillBackground(KnobRect, KnobFill, KnobRadiusLogical);
+
+    // Caption: drawn to the RIGHT of the switch zone, vertically centred, using
+    // the same style tokens captioned controls use (font/size/weight/text-color).
+    if FCaption <> '' then
+    begin
+      Gap := P.Scale(TyCheckBoxGap);
+      CaptionRect := Rect(R.Right + Gap, FullR.Top, FullR.Right, FullR.Bottom);
+      P.DrawText(CaptionRect, FCaption, S.FontName, ResolveFontSize(S),
+        S.FontWeight, S.TextColor, taLeftJustify, tlCenter, True);
+    end;
 
     P.EndPaint;
   finally

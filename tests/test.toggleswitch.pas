@@ -55,6 +55,10 @@ type
     procedure TestOffsetOriginKnobPositionConsistent;
     { Batch4 Task 9: knob fill sourced from the dedicated TyToggleKnob typeKey }
     procedure TestKnobPixelUsesKnobTypeKey;
+    { Task 14: Caption text label drawn beside the switch }
+    procedure TestCaptionRendersBesideSwitch;
+    { Task 14: empty Caption leaves the switch rendering unchanged }
+    procedure TestNoCaptionUnchanged;
   end;
 
 implementation
@@ -458,6 +462,121 @@ begin
       PxKnob := Reread.GetPixel(12, 12);  // left side: knob centre
       AssertTrue('knob from TyToggleKnob: G > 200 (green-dominant)', PxKnob.green > 200);
       AssertTrue('knob from TyToggleKnob: R < 80 (not red TextColor)', PxKnob.red < 80);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchPixelTest.TestCaptionRendersBesideSwitch;
+{ Task 14: with Caption set, the text label is drawn to the RIGHT of the
+  fixed-width switch zone. The switch sits in a 44-wide zone on the left
+  (default 24px height → 44px zone). Render a 140x24 control with a green
+  caption colour and probe the caption zone (x > switch zone) for green ink.
+  Also confirm the switch still toggles its Checked state. }
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Sw: TTyToggleSwitchProbe;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  X, Y: Integer;
+  FoundInk: Boolean;
+  Px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    // Caption text colour bright green so ink is easy to detect against the
+    // white default background. Track grey, knob white (irrelevant here).
+    Ctl.LoadThemeCss(
+      'TyToggleSwitch { background: #444444; color: #00FF00; border-width: 0px; font-size: 12px; }');
+    Sw := TTyToggleSwitchProbe.Create(Form);
+    Sw.Parent := Form;
+    Sw.Controller := Ctl;
+    Sw.Caption := 'On';
+    Sw.Checked := False;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(140, 24);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 140, 24);
+    Sw.RenderTo(Bmp.Canvas, Rect(0, 0, 140, 24), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      // Scan the caption zone (x from 50 onward, right of the ~44px switch zone)
+      // for any green-dominant ink (the caption glyphs).
+      FoundInk := False;
+      for X := 50 to 139 do
+        for Y := 0 to 23 do
+        begin
+          Px := Reread.GetPixel(X, Y);
+          if (Px.green > 120) and (Px.red < 120) and (Px.blue < 120) then
+          begin
+            FoundInk := True;
+            Break;
+          end;
+        end;
+      AssertTrue('caption ink (green) present in the zone right of the switch', FoundInk);
+    finally
+      Reread.Free;
+    end;
+
+    // Switch still toggles.
+    AssertFalse('starts unchecked', Sw.Checked);
+    Sw.Toggle;
+    AssertTrue('checked after Toggle', Sw.Checked);
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyToggleSwitchPixelTest.TestNoCaptionUnchanged;
+{ Task 14: with Caption empty, the switch renders exactly as before — the
+  no-caption pixel layout (knob white at x=12, dark track right at x=36 on a
+  44x24 control) must be identical to the pre-Caption baseline. }
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Sw: TTyToggleSwitchProbe;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  PxKnob, PxTrack: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyToggleSwitch { background: #444444; color: #FFFFFF; border-width: 0px; }' +
+      'TyToggleSwitch:active { background: #3B82F6; }');
+    Sw := TTyToggleSwitchProbe.Create(Form);
+    Sw.Parent := Form;
+    Sw.Controller := Ctl;
+    Sw.Caption := '';          // empty caption → unchanged layout
+    Sw.Checked := False;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(44, 24);
+    Sw.RenderTo(Bmp.Canvas, Rect(0, 0, 44, 24), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      PxKnob  := Reread.GetPixel(12, 12);  // left side: knob, must be white
+      PxTrack := Reread.GetPixel(36, 12);  // right side: dark track
+
+      AssertTrue('no-caption OFF knob R > 200 (white)', PxKnob.red > 200);
+      AssertTrue('no-caption OFF knob G > 200 (white)', PxKnob.green > 200);
+      AssertTrue('no-caption OFF knob B > 200 (white)', PxKnob.blue > 200);
+      AssertTrue('no-caption OFF track right: R < 100 (dark)', PxTrack.red < 100);
     finally
       Reread.Free;
     end;
