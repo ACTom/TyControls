@@ -8,7 +8,7 @@ unit tyControls.Form;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller;
 
 type
@@ -58,10 +58,14 @@ type
     FButtonWidth: Integer;
     FEngine: TTyChromeEngine;
     procedure SetCaption(const AValue: string);
-    procedure LayoutButtons;
+    procedure SetButtonWidth(AValue: Integer);
+    function VisibleButtonCount: Integer;
+    function LeftInsetPx: Integer;
   protected
+    procedure LayoutButtons;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Resize; override;
+    procedure AdjustClientRect(var ARect: TRect); override;
     procedure Paint; override;
     { Window-drag / double-click-maximize are wired via these METHOD OVERRIDES
       (each calls inherited first, so a user-assigned published OnMouseDown/Move/
@@ -77,8 +81,12 @@ type
     property MinButton: TTyCaptionButton read FMinButton;
     property MaxButton: TTyCaptionButton read FMaxButton;
     property CloseButton: TTyCaptionButton read FCloseButton;
+    function RightInset: Integer;
   published
     property Caption: string read FCaption write SetCaption;
+    property Align;
+    property Anchors;
+    property ButtonWidth: Integer read FButtonWidth write SetButtonWidth;
   end;
 
   TTyChromeEngine = class(TObject)
@@ -404,7 +412,7 @@ end;
 constructor TTyTitleBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FButtonWidth := 46;
+  FButtonWidth := TyTitleButtonWidth;
   SetBounds(0, 0, 200, 32);
   FMinButton := TTyCaptionButton.Create(Self);
   FMinButton.Kind := cbkMin;
@@ -431,6 +439,32 @@ begin
   Invalidate;
 end;
 
+procedure TTyTitleBar.SetButtonWidth(AValue: Integer);
+begin
+  if FButtonWidth = AValue then
+    Exit;
+  FButtonWidth := AValue;
+  LayoutButtons;
+  Invalidate;
+end;
+
+function TTyTitleBar.VisibleButtonCount: Integer;
+begin
+  if (FCloseButton = nil) or (FMaxButton = nil) or (FMinButton = nil) then
+    Exit(0);
+  Result := Ord(FMinButton.Visible) + Ord(FMaxButton.Visible) + Ord(FCloseButton.Visible);
+end;
+
+function TTyTitleBar.RightInset: Integer;
+begin
+  Result := VisibleButtonCount * FButtonWidth;
+end;
+
+function TTyTitleBar.LeftInsetPx: Integer;
+begin
+  Result := MulDiv(TyTitleBarPad, Font.PixelsPerInch, 96);
+end;
+
 procedure TTyTitleBar.LayoutButtons;
 var
   W, H, X: Integer;
@@ -439,18 +473,24 @@ begin
     Exit;
   W := FButtonWidth;
   H := ClientHeight;
-  X := ClientWidth - W;
-  FCloseButton.SetBounds(X, 0, W, H);
-  Dec(X, W);
-  FMaxButton.SetBounds(X, 0, W, H);
-  Dec(X, W);
-  FMinButton.SetBounds(X, 0, W, H);
+  X := ClientWidth;
+  if FCloseButton.Visible then begin Dec(X, W); FCloseButton.SetBounds(X, 0, W, H); end;
+  if FMaxButton.Visible then begin Dec(X, W); FMaxButton.SetBounds(X, 0, W, H); end;
+  if FMinButton.Visible then begin Dec(X, W); FMinButton.SetBounds(X, 0, W, H); end;
 end;
 
 procedure TTyTitleBar.Resize;
 begin
   inherited Resize;
   LayoutButtons;
+end;
+
+procedure TTyTitleBar.AdjustClientRect(var ARect: TRect);
+begin
+  inherited AdjustClientRect(ARect);
+  Inc(ARect.Left, LeftInsetPx);
+  Dec(ARect.Right, RightInset);
+  if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
 end;
 
 procedure TTyTitleBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -468,8 +508,8 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
-    TextRect := Rect(R.Left + P.Scale(8), R.Top,
-                     R.Left + W - 3 * FButtonWidth, R.Top + H);
+    TextRect := Rect(R.Left + P.Scale(TyTitleBarPad), R.Top,
+                     R.Left + W - RightInset, R.Top + H);
     P.DrawText(TextRect, FCaption, S.FontName, S.FontSize, S.FontWeight,
       S.TextColor, taLeftJustify, tlCenter, True);
     P.EndPaint;
@@ -642,6 +682,7 @@ begin
   begin
     FTitleBar.Height := TyRescaleChromeMetric(FTitleBar.Height, FInstalledPPI, CurPPI);
     FTitleBar.FButtonWidth := TyRescaleChromeMetric(FTitleBar.FButtonWidth, FInstalledPPI, CurPPI);
+    FTitleBar.LayoutButtons;
     FInstalledPPI := CurPPI;
     FForm.Invalidate;
   end;
@@ -776,10 +817,10 @@ procedure TTyForm.SetTitleHeight(AValue: Integer);
 begin if FTitleBar.Height <> AValue then FTitleBar.Height := AValue; end;
 
 procedure TTyForm.SetShowMinimize(AValue: Boolean);
-begin FShowMinimize := AValue; FTitleBar.MinButton.Visible := AValue; end;
+begin FShowMinimize := AValue; FTitleBar.MinButton.Visible := AValue; FTitleBar.LayoutButtons; end;
 
 procedure TTyForm.SetShowMaximize(AValue: Boolean);
-begin FShowMaximize := AValue; FTitleBar.MaxButton.Visible := AValue; end;
+begin FShowMaximize := AValue; FTitleBar.MaxButton.Visible := AValue; FTitleBar.LayoutButtons; end;
 
 procedure TTyForm.ApplyChromeTheme(AController: TTyStyleController);
 var bg: TTyStyleSet;

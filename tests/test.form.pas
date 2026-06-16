@@ -58,6 +58,9 @@ type
     procedure TestHasThreeButtons;
     procedure TestButtonKinds;
     procedure TestButtonsRightAlignedAfterResize;
+    procedure TestRightInsetHonorsHiddenButtons;
+    procedure TestAdjustClientRectLeavesMiddleStrip;
+    procedure TestLayoutPacksRemainingVisibleButton;
   end;
 
   TFormChromeTest = class(TTestCase)
@@ -150,6 +153,8 @@ type
     { Expose protected mouse entry points for headless injection. }
     procedure InjectMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure InjectDblClick;
+    procedure CallAdjustClientRect(var ARect: TRect);
+    procedure CallLayoutButtons;
   end;
 
   TContentPanelAccess = class(TTyContentPanel)
@@ -228,6 +233,12 @@ procedure TTitleBarAccess.InjectDblClick;
 begin
   DblClick;
 end;
+
+procedure TTitleBarAccess.CallAdjustClientRect(var ARect: TRect);
+begin AdjustClientRect(ARect); end;
+
+procedure TTitleBarAccess.CallLayoutButtons;
+begin LayoutButtons; end;
 
 procedure TContentPanelAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -560,6 +571,55 @@ begin
     AssertEquals('close at right', 300, T.CloseButton.Left + T.CloseButton.Width);
     AssertTrue('max left of close', T.MaxButton.Left < T.CloseButton.Left);
     AssertTrue('min left of max', T.MinButton.Left < T.MaxButton.Left);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTitleBarTest.TestRightInsetHonorsHiddenButtons;
+var T: TTyTitleBar;
+begin
+  T := TTyTitleBar.Create(nil);
+  try
+    T.SetBounds(0, 0, 300, 32);
+    T.MinButton.Visible := False;
+    T.MaxButton.Visible := False;   { only close visible -> right inset = 1 button }
+    AssertEquals('close still flush right', 300, T.CloseButton.Left + T.CloseButton.Width);
+    AssertEquals('right inset = one button width', T.ButtonWidth, T.RightInset);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTitleBarTest.TestAdjustClientRectLeavesMiddleStrip;
+var T: TTyTitleBar; R: TRect;
+begin
+  T := TTyTitleBar.Create(nil);
+  try
+    T.SetBounds(0, 0, 300, 32);
+    R := Rect(0, 0, 300, 32);
+    TTitleBarAccess(T).CallAdjustClientRect(R);
+    AssertTrue('left inset applied', R.Left > 0);
+    AssertTrue('right inset applied', R.Right < 300);
+    AssertTrue('strip non-empty', R.Right > R.Left);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTitleBarTest.TestLayoutPacksRemainingVisibleButton;
+var T: TTitleBarAccess;
+begin
+  { Hiding the MIDDLE (max) button must re-pack right-to-left: min slides right to
+    abut close, proving LayoutButtons packs only visible buttons (not by slot). }
+  T := TTitleBarAccess.Create(nil);
+  try
+    T.SetBounds(0, 0, 300, 32);
+    T.MaxButton.Visible := False;
+    T.CallLayoutButtons;
+    AssertEquals('close flush right', 300, T.CloseButton.Left + T.CloseButton.Width);
+    AssertEquals('min packs into the freed middle slot (abuts close)',
+      T.CloseButton.Left, T.MinButton.Left + T.MinButton.Width);
   finally
     T.Free;
   end;

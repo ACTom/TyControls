@@ -74,6 +74,8 @@ const
   TyTabGap           = 6;    // TabControl gap between caption/close slot
   TyTabMargin        = 6;    // TabControl close-glyph right margin
   TyTabArrowBand     = 16;   // TabControl overflow scroll-arrow width
+  TyTitleBarPad      = 8;    // TitleBar caption + content-zone left margin
+  TyTitleButtonWidth = 46;   // TitleBar caption-button (min/max/close) width
 
 function TyRGB(R, G, B: Byte): TTyColor;
 function TyRGBA(R, G, B, A: Byte): TTyColor;

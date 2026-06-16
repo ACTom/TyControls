@@ -132,6 +132,8 @@ begin
   AssertEquals(12, TyTabPad);
   AssertEquals(6,  TyTabGap);
   AssertEquals(6,  TyTabMargin);
+  AssertEquals(8,  TyTitleBarPad);
+  AssertEquals(46, TyTitleButtonWidth);
 end;
 
 initialization
