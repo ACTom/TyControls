@@ -2,7 +2,7 @@ unit tyControls.ComboBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType, LCLIntf,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, StdCtrls, LCLType, LCLIntf,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.ListBox;
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
@@ -13,6 +13,10 @@ type
     FItems: TStringList;
     FItemIndex: Integer;
     FText: string;
+    FDropDownCount: Integer;
+    FSorted: Boolean;
+    FMaxLength: Integer;
+    FCharCase: TEditCharCase;
     FOnChange: TNotifyEvent;
     FOnSelect: TNotifyEvent;
     FOnDropDown: TNotifyEvent;
@@ -26,6 +30,15 @@ type
     procedure SetItems(const AValue: TStringList);
     procedure SetItemIndex(const AValue: Integer);
     procedure SetText(const AValue: string);
+    procedure SetDropDownCount(const AValue: Integer);
+    procedure SetSorted(const AValue: Boolean);
+    procedure SetCharCase(const AValue: TEditCharCase);
+    { Re-locate FItemIndex from the currently-selected text after the item list
+      has been reordered (e.g. by sorting). Keeps the SAME item selected. }
+    procedure ResyncIndexFromText;
+    { Fires when the underlying TStringList mutates (add/insert/delete). Lets us
+      keep FItemIndex pinned to its item while Sorted reorders insertions. }
+    procedure ItemsChanged(Sender: TObject);
     function ButtonWidthLogical: Integer;
     { User-driven selection: applies AIndex via SelectItem and fires OnSelect
       only when the selection actually changed. Distinct from the programmatic
@@ -42,6 +55,10 @@ type
       Protected so test subclasses can manipulate it for headless logic tests. }
     FCloseUpTick: QWord;
     procedure SetController(AValue: TTyStyleController); override;
+    { Headless-testable popup-height calculation: DropDownCount governs how many
+      rows are visible before the dropdown scrolls. Separated from DropDown so it
+      can be exercised without building a real win32 popup form. }
+    function ComputePopupHeight(APPI: Integer): Integer;
     procedure DoSelect; virtual;
     procedure DoDropDown; virtual;
     procedure DoCloseUp; virtual;
@@ -64,6 +81,17 @@ type
     property Items: TStringList read FItems write SetItems;
     property ItemIndex: Integer read FItemIndex write SetItemIndex;
     property Text: string read FText write SetText;
+    { Max number of rows visible in the dropdown before it scrolls (LCL default 8). }
+    property DropDownCount: Integer read FDropDownCount write SetDropDownCount default 8;
+    { When True, Items are kept in ascending (case-insensitive) order and the
+      previously-selected item stays selected (tracked by its text). }
+    property Sorted: Boolean read FSorted write SetSorted default False;
+    { MaxLength/CharCase apply to the edit field of an editable combo. This combo
+      is read-only (csDropDownList); they are published for native-API parity and
+      streaming round-trip, and are reserved for a future editable mode. They have
+      no effect on the displayed (read-only) selected text. }
+    property MaxLength: Integer read FMaxLength write FMaxLength default 0;
+    property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnSelect: TNotifyEvent read FOnSelect write FOnSelect;
     property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
@@ -98,8 +126,13 @@ constructor TTyComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
+  FItems.OnChange := @ItemsChanged;
   FItemIndex := -1;
   FText := '';
+  FDropDownCount := 8;
+  FSorted := False;
+  FMaxLength := 0;
+  FCharCase := ecNormal;
   FPopup := nil;
   FPopupList := nil;
   TabStop := True;
@@ -163,7 +196,11 @@ end;
 
 procedure TTyComboBox.SetItems(const AValue: TStringList);
 begin
+  { TStringList.Assign copies the source's Sorted flag, which would silently drop
+    our Sorted state. Re-apply it so an externally-set Items list stays sorted. }
   FItems.Assign(AValue);
+  if FItems.Sorted <> FSorted then
+    FItems.Sorted := FSorted;
   Invalidate;
 end;
 
@@ -177,6 +214,81 @@ end;
 procedure TTyComboBox.SetItemIndex(const AValue: Integer);
 begin
   SelectItem(AValue);
+end;
+
+procedure TTyComboBox.SetDropDownCount(const AValue: Integer);
+begin
+  if FDropDownCount = AValue then Exit;
+  { Clamp to at least 1 visible row, mirroring LCL behaviour. }
+  if AValue < 1 then
+    FDropDownCount := 1
+  else
+    FDropDownCount := AValue;
+  { If the popup is currently open, re-size it on the next DropDown. No live
+    resize here to keep the open popup stable. }
+end;
+
+procedure TTyComboBox.SetSorted(const AValue: Boolean);
+begin
+  if FSorted = AValue then Exit;
+  FSorted := AValue;
+  { TStringList natively supports Sorted: it sorts in place (ascending,
+    case-insensitive by default) and keeps subsequent Adds sorted. Setting it
+    reorders the items, so the selected index becomes stale — re-find it by text. }
+  FItems.OnChange := nil;        // avoid re-entrancy while we flip Sorted
+  FItems.Sorted := FSorted;
+  FItems.OnChange := @ItemsChanged;
+  ResyncIndexFromText;
+  Invalidate;
+end;
+
+procedure TTyComboBox.SetCharCase(const AValue: TEditCharCase);
+begin
+  { Stored for API parity; read-only combo has no edit text to transform. }
+  FCharCase := AValue;
+end;
+
+procedure TTyComboBox.ResyncIndexFromText;
+var
+  Idx: Integer;
+begin
+  { Keep the SAME item selected after the list was reordered: locate the current
+    selection text and pin FItemIndex to it. No OnChange — the selection (text)
+    did not change, only its position. }
+  if FItemIndex < 0 then Exit;        // nothing was selected
+  Idx := FItems.IndexOf(FText);
+  if Idx >= 0 then
+    FItemIndex := Idx
+  else
+  begin
+    { Selected text no longer present — clear selection. }
+    FItemIndex := -1;
+    FText := '';
+  end;
+end;
+
+procedure TTyComboBox.ItemsChanged(Sender: TObject);
+begin
+  { When items are added/removed (including a sorted insert that shifts indices),
+    keep FItemIndex pinned to the selected item's text. }
+  ResyncIndexFromText;
+  Invalidate;
+end;
+
+function TTyComboBox.ComputePopupHeight(APPI: Integer): Integer;
+const
+  { The dropdown popup uses a default TTyListBox, whose ItemHeight default is 24
+    (TTyListBox.ItemHeight default). The popup never overrides it. }
+  cPopupRowHeight = 24;
+var
+  ScaledIH, VisibleRows: Integer;
+begin
+  { Visible rows = min(Items.Count, DropDownCount); each row scaled to the given
+    PPI; plus the 2px popup frame chrome. Single source of the sizing formula —
+    DropDown calls this so the live popup and the headless calc stay in sync. }
+  ScaledIH := MulDiv(cPopupRowHeight, APPI, 96);
+  VisibleRows := Min(FItems.Count, FDropDownCount);
+  Result := VisibleRows * ScaledIH + 2;
 end;
 
 function TTyComboBox.ButtonWidthLogical: Integer;
@@ -216,7 +328,7 @@ end;
   Called lazily on first DropDown. }
 procedure TTyComboBox.DropDown;
 var
-  PopupH, PopupW, ScaledIH: Integer;
+  PopupH, PopupW: Integer;
   P: TPoint;
   ParentForm: TCustomForm;
 begin
@@ -258,9 +370,9 @@ begin
   FPopupList.SelectItem(FItemIndex);
   FPopupList.OnChange := @PopupListChange;
 
-  { Size: height = min(8, Items.Count) rows }
-  ScaledIH := MulDiv(FPopupList.ItemHeight, Font.PixelsPerInch, 96);
-  PopupH := Min(8, FItems.Count) * ScaledIH + 2;
+  { Size: height = min(DropDownCount, Items.Count) rows (+ frame chrome).
+    Shared with the headless ComputePopupHeight so sizing cannot drift. }
+  PopupH := ComputePopupHeight(Font.PixelsPerInch);
   PopupW := Width;
 
   { Position below the combo }

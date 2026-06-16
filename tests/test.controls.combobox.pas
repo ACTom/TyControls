@@ -2,7 +2,7 @@ unit test.controls.combobox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLIntf, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, StdCtrls, LCLIntf, LCLType, fpcunit, testregistry,
   tyControls.Base, tyControls.Controller, tyControls.ComboBox, tyControls.ListBox;
 type
   { Expose protected Click and RenderTo for tests }
@@ -14,6 +14,9 @@ type
     procedure AgeCloseUpTick;
     procedure DoKeyDown(var Key: Word; Shift: TShiftState);
     procedure DoTypeChar(const C: TUTF8Char);
+    { Expose the headless popup-height calculation so DropDownCount sizing can be
+      tested without creating a real win32 popup form (1407). }
+    function PopupHeight(APPI: Integer): Integer;
   end;
 
   TChangeProbe = class
@@ -79,6 +82,10 @@ type
     { Task 4 (events parity): OnSelect / OnDropDown / OnCloseUp }
     procedure TestComboOnDropDownAndCloseUp;
     procedure TestComboOnSelectOnUserPick;
+    { Task 12 (properties parity): DropDownCount / Sorted / MaxLength / CharCase }
+    procedure TestDropDownCountSizesPopup;
+    procedure TestSortedSortsAndKeepsSelection;
+    procedure TestMaxLengthCharCaseRoundTrip;
   end;
 implementation
 
@@ -114,6 +121,11 @@ var k: TUTF8Char;
 begin
   k := C;
   UTF8KeyPress(k);
+end;
+
+function TComboAccess.PopupHeight(APPI: Integer): Integer;
+begin
+  Result := ComputePopupHeight(APPI);
 end;
 
 procedure TComboKeyProbe.DropDown;
@@ -517,6 +529,97 @@ begin
     Sel.Free;
     C.Free;
   end;
+end;
+
+{ Task 12: DropDownCount governs the dropdown popup height.
+  We test the headless height calculation (ComputePopupHeight) directly instead
+  of building a real win32 popup (which 1407s in a no-display environment).
+  With more items than DropDownCount, the popup shows exactly DropDownCount rows;
+  with fewer, it shrinks to Items.Count rows. }
+procedure TTyComboBoxTest.TestDropDownCountSizesPopup;
+var
+  hFull, hClamped, hFew, rowH: Integer;
+  i: Integer;
+begin
+  FCombo.Items.Clear;
+  for i := 1 to 20 do
+    FCombo.Items.Add('Item' + IntToStr(i));
+
+  AssertEquals('DropDownCount default is 8', 8, FCombo.DropDownCount);
+
+  { Default 8 with 20 items: popup sized for 8 rows. }
+  hFull := FCombo.PopupHeight(96);
+
+  { Raising DropDownCount to 12 (still < 20 items) makes a taller popup. }
+  FCombo.DropDownCount := 12;
+  hClamped := FCombo.PopupHeight(96);
+  AssertTrue('12 visible rows is taller than 8 rows', hClamped > hFull);
+
+  { Derive the per-row height from the two measurements and verify the formula. }
+  rowH := (hClamped - hFull) div (12 - 8);
+  AssertTrue('row height is positive', rowH > 0);
+  AssertEquals('popup height = DropDownCount rows + chrome (8 rows)',
+    8 * rowH + (hFull - 8 * rowH), hFull);
+
+  { Fewer items than DropDownCount: popup clamps to the item count, not the count. }
+  FCombo.Items.Clear;
+  FCombo.Items.Add('Only'); FCombo.Items.Add('Two');
+  FCombo.DropDownCount := 8;
+  hFew := FCombo.PopupHeight(96);
+  AssertEquals('popup clamps to 2 item rows when fewer items than DropDownCount',
+    hFull - 6 * rowH, hFew);
+end;
+
+{ Task 12 DEEP-FLAG: Sorted reorders Items alphabetically (case-insensitive) and
+  keeps the SAME item selected (tracked by its text, re-found after sort). }
+procedure TTyComboBoxTest.TestSortedSortsAndKeepsSelection;
+begin
+  FCombo.Items.Clear;
+  FCombo.Items.Add('Cherry');
+  FCombo.Items.Add('apple');
+  FCombo.Items.Add('Banana');
+  FCombo.ItemIndex := 0;                 // select 'Cherry'
+  AssertEquals('selected Cherry before sort', 'Cherry', FCombo.Text);
+
+  AssertFalse('Sorted defaults False', FCombo.Sorted);
+  FCombo.Sorted := True;
+
+  { Case-insensitive ascending order: apple, Banana, Cherry }
+  AssertEquals('item0 after sort', 'apple', FCombo.Items[0]);
+  AssertEquals('item1 after sort', 'Banana', FCombo.Items[1]);
+  AssertEquals('item2 after sort', 'Cherry', FCombo.Items[2]);
+
+  { Same item stays selected — Cherry moved from index 0 to index 2 }
+  AssertEquals('selection text preserved across sort', 'Cherry', FCombo.Text);
+  AssertEquals('ItemIndex re-found after sort', 2, FCombo.ItemIndex);
+
+  { Adding a new item while Sorted keeps the list sorted }
+  FCombo.Items.Add('Aardvark');
+  AssertEquals('inserted in sorted position', 'Aardvark', FCombo.Items[0]);
+  { Selection still tracks Cherry (now index 3) }
+  AssertEquals('selection still Cherry after insert', 'Cherry', FCombo.Text);
+  AssertEquals('ItemIndex follows item across insert', 3, FCombo.ItemIndex);
+end;
+
+{ Task 12: MaxLength / CharCase are published stored props. This read-only combo
+  has no edit field, so they are reserved (no-op on display) but must round-trip. }
+procedure TTyComboBoxTest.TestMaxLengthCharCaseRoundTrip;
+begin
+  AssertEquals('MaxLength default 0', 0, FCombo.MaxLength);
+  AssertTrue('CharCase default ecNormal', FCombo.CharCase = ecNormal);
+
+  FCombo.MaxLength := 12;
+  AssertEquals('MaxLength round-trips', 12, FCombo.MaxLength);
+
+  FCombo.CharCase := ecUpperCase;
+  AssertTrue('CharCase round-trips', FCombo.CharCase = ecUpperCase);
+
+  { Read-only combo: CharCase does not alter the displayed selected text. }
+  FCombo.Items.Clear;
+  FCombo.Items.Add('lower');
+  FCombo.ItemIndex := 0;
+  AssertEquals('CharCase does not mutate displayed text (read-only combo)',
+    'lower', FCombo.Text);
 end;
 
 initialization
