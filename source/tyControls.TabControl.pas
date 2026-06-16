@@ -10,6 +10,17 @@ type
   TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
     var AllowClose: Boolean) of object;
 
+  { Pre-switch veto. Fired before the selection moves to ANewIndex (the clamped
+    proposed index); clearing AllowChange aborts the switch (no page change, no
+    OnChange, no fade). NOT fired during csLoading/streaming. }
+  TTyTabChangingEvent = procedure(Sender: TObject; ANewIndex: Integer;
+    var AllowChange: Boolean) of object;
+
+  { Drag-reorder notification, fired after a committed reorder gesture has moved
+    the dragged tab from AFromIndex to AToIndex. }
+  TTyTabReorderEvent = procedure(Sender: TObject; AFromIndex, AToIndex: Integer)
+    of object;
+
   TTyTabControl = class;
 
   { Streamable backing item for one tab page. Caption is published so it
@@ -60,6 +71,8 @@ type
     FHoverTab: Integer;       // -1 = none
     FHoverClose: Integer;     // tab index whose close (x) is hovered; -1 = none
     FOnChange: TNotifyEvent;
+    FOnChanging: TTyTabChangingEvent;
+    FOnReorder: TTyTabReorderEvent;
     FDestroying: Boolean;
     FTabsClosable: Boolean;
     FOnTabClose: TTyTabCloseEvent;
@@ -73,6 +86,11 @@ type
     FDragTab:    Integer;
     FDragStartX: Integer;
     FDragging:   Boolean;
+    { Collection index the dragged tab occupied when the press armed the gesture.
+      FDragTab tracks the live (current) index as the tab is reseated during the
+      drag; FDragOrigin is pinned so MouseUp can report the net from/to move and
+      fire OnReorder exactly once for the whole gesture (-1 = no armed drag). }
+    FDragOrigin: Integer;
 
     { Active-tab header cross-fade. FTabFade eases 0->1 when the selection moves
       to a new tab: the newly-active header blends from the inactive TyTab style
@@ -196,6 +214,8 @@ type
     property TabsClosable: Boolean read FTabsClosable write SetTabsClosable default False;
     property OnTabClose: TTyTabCloseEvent read FOnTabClose write FOnTabClose;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    property OnChanging: TTyTabChangingEvent read FOnChanging write FOnChanging;
+    property OnReorder: TTyTabReorderEvent read FOnReorder write FOnReorder;
     property TabStop default True;
     property Align;
     property Anchors;
@@ -288,6 +308,7 @@ begin
   FHeaderScroll := 0;
   FDragTab   := -1;
   FDragging  := False;
+  FDragOrigin := -1;
   FTabsClosable := False;
   FAnimationsEnabled := True;
   { Active-tab header cross-fade: rests at 1 (settled = active style), ~120ms full
@@ -691,9 +712,13 @@ end;
 procedure TTyTabControl.SetTabIndex(AValue: Integer);
 var
   Clamped: Integer;
+  Allow: Boolean;
 begin
   { During csLoading the pages do not exist yet, so clamping against the empty
-    page list would lose a streamed selection. Capture it and apply in Loaded. }
+    page list would lose a streamed selection. Capture it and apply in Loaded.
+    OnChanging is deliberately NOT consulted here: a streamed/loading selection
+    is not a user/programmatic runtime switch and must not be vetoable (mirrors
+    LCL, which does not fire OnChanging during loading). }
   if csLoading in ComponentState then
   begin
     FPendingTabIndex := AValue;
@@ -706,6 +731,13 @@ begin
   else
     Clamped := AValue;
   if Clamped = FTabIndex then Exit;
+  { Pre-switch veto: a handler may abort the switch by clearing AllowChange. When
+    vetoed we keep the old index and commit nothing (no ShowOnlyPage, no fade, no
+    OnChange). }
+  Allow := True;
+  if Assigned(FOnChanging) then
+    FOnChanging(Self, Clamped, Allow);
+  if not Allow then Exit;
   FTabIndex := Clamped;
   { Pages switch instantly — only the header colour fades. }
   ShowOnlyPage(FTabIndex);
@@ -1263,8 +1295,10 @@ begin
           begin
             TabIndex := I;
             { Arm a drag-reorder candidate. A plain press+release stays a click
-              (FDragging never flips); only a move past the threshold reorders. }
+              (FDragging never flips); only a move past the threshold reorders.
+              FDragOrigin pins the start index so MouseUp can report the net move. }
             FDragTab    := I;
+            FDragOrigin := I;
             FDragStartX := X;
             FDragging   := False;
           end;
@@ -1365,18 +1399,34 @@ end;
   the candidate so a later move without a fresh press cannot reorder. }
 procedure TTyTabControl.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
+var
+  FromIdx, ToIdx: Integer;
 begin
   inherited MouseUp(Button, Shift, X, Y);
-  FDragTab  := -1;
-  FDragging := False;
+  { A committed reorder fires OnReorder exactly once for the whole gesture, with
+    the net from (press) -> to (final) move. FDragging only flips True once the
+    pointer crossed the threshold and reseated the tab, so a plain click never
+    fires it; the move is real only when the final index differs from the start. }
+  if FDragging and (FDragOrigin >= 0) and (FDragTab >= 0) and
+     (FDragTab <> FDragOrigin) and Assigned(FOnReorder) then
+  begin
+    FromIdx := FDragOrigin;
+    ToIdx   := FDragTab;
+    FOnReorder(Self, FromIdx, ToIdx);
+  end;
+  FDragTab    := -1;
+  FDragOrigin := -1;
+  FDragging   := False;
 end;
 
 procedure TTyTabControl.MouseLeave;
 begin
   inherited MouseLeave;
-  { Disarm any in-flight drag so a re-entry move without a fresh press is inert. }
-  FDragTab  := -1;
-  FDragging := False;
+  { Disarm any in-flight drag so a re-entry move without a fresh press is inert.
+    No OnReorder here: a reorder is only committed/announced on a clean MouseUp. }
+  FDragTab    := -1;
+  FDragOrigin := -1;
+  FDragging   := False;
   if (FHoverTab <> -1) or (FHoverClose <> -1) then
   begin
     FHoverTab   := -1;

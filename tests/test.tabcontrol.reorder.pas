@@ -22,6 +22,16 @@ type
     procedure CallMouseLeave;
   end;
 
+  { Records OnReorder firings with the reported from/to indices. }
+  TReorderProbe = class
+  public
+    Count: Integer;
+    LastFrom: Integer;
+    LastTo: Integer;
+    constructor Create;
+    procedure Handle(Sender: TObject; AFromIndex, AToIndex: Integer);
+  end;
+
   { Pure-helper tests for tab drag-reorder: the drag threshold (in device px,
     PPI-scaled) and the drop-target index resolver (which collection index a
     given X coordinate should drop before/into, using shifted header midpoints).
@@ -49,9 +59,28 @@ type
     procedure TestPlainPressReleaseSelectsAndDoesNotReorder;
     procedure TestMouseUpClearsDragState;
     procedure TestMouseLeaveClearsDragState;
+    // OnReorder notification
+    procedure TestOnReorderFiresOnDragReorder;
   end;
 
 implementation
+
+{ TReorderProbe }
+
+constructor TReorderProbe.Create;
+begin
+  inherited Create;
+  Count := 0;
+  LastFrom := -99;
+  LastTo := -99;
+end;
+
+procedure TReorderProbe.Handle(Sender: TObject; AFromIndex, AToIndex: Integer);
+begin
+  Inc(Count);
+  LastFrom := AFromIndex;
+  LastTo := AToIndex;
+end;
 
 { TTyTabReorderAccess }
 
@@ -324,6 +353,40 @@ begin
 
   AssertEquals('caption[0] unchanged after leave+move', Cap0Before, FTab.TabCaption(0));
   AssertEquals('caption[1] unchanged after leave+move', Cap1Before, FTab.TabCaption(1));
+end;
+
+{ (R1) A committed drag-reorder fires OnReorder. Pressing header 0 and dragging
+  past header 1's midpoint reseats tab 0 to the last index (2): the gesture moves
+  the dragged tab, so OnReorder fires reporting the from/to indices of the move.
+  A plain press+release (no threshold-crossing move) must NOT fire it. }
+procedure TTyTabReorderTest.TestOnReorderFiresOnDragReorder;
+var
+  Probe: TReorderProbe;
+  Y: Integer;
+begin
+  AddTabs(3);
+  Y := HeaderMidY(FTab);
+
+  Probe := TReorderProbe.Create;
+  try
+    FTab.OnReorder := @Probe.Handle;
+
+    { Plain press + release on header 2 must not reorder -> no OnReorder. }
+    FTab.CallMouseDown(mbLeft, [ssLeft], MidOf(2), Y);
+    FTab.CallMouseUp(mbLeft, [ssLeft], MidOf(2), Y);
+    AssertEquals('plain click does not fire OnReorder', 0, Probe.Count);
+
+    { Drag header 0 past header 1's midpoint -> it reseats to index 2. }
+    FTab.CallMouseDown(mbLeft, [ssLeft], MidOf(0), Y);
+    FTab.CallMouseMove([ssLeft], MidOf(1) + 1, Y);
+    FTab.CallMouseUp(mbLeft, [ssLeft], MidOf(1) + 1, Y);
+
+    AssertTrue('OnReorder fired on drag-reorder', Probe.Count >= 1);
+    AssertEquals('reorder from index 0', 0, Probe.LastFrom);
+    AssertEquals('reorder to index 2', 2, Probe.LastTo);
+  finally
+    Probe.Free;
+  end;
 end;
 
 initialization

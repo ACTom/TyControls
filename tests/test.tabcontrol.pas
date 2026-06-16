@@ -36,6 +36,17 @@ type
     procedure Handle(Sender: TObject);
   end;
 
+  { Pre-switch veto probe. Records the proposed new index and, when Veto is set,
+    blocks the switch by clearing AllowChange. }
+  TTabChangingProbe = class
+  public
+    Count: Integer;
+    LastNewIndex: Integer;
+    Veto: Boolean;
+    constructor Create;
+    procedure Handle(Sender: TObject; ANewIndex: Integer; var AllowChange: Boolean);
+  end;
+
   TTyTabControlTest = class(TTestCase)
   private
     FForm: TForm;
@@ -73,6 +84,9 @@ type
     // batch⑥: active-tab header cross-fade
     procedure TestActiveTabHeaderCrossFades;
     procedure TestAnimationsEnabledDefaultsTrue;
+    // OnChanging (pre-switch veto)
+    procedure TestOnChangingVetoBlocksSwitch;
+    procedure TestOnChangingAllowsSwitch;
   end;
 
 implementation
@@ -107,6 +121,24 @@ end;
 procedure TTabChangeProbe.Handle(Sender: TObject);
 begin
   Inc(Count);
+end;
+
+{ TTabChangingProbe }
+
+constructor TTabChangingProbe.Create;
+begin
+  inherited Create;
+  Count := 0;
+  LastNewIndex := -99;
+  Veto := False;
+end;
+
+procedure TTabChangingProbe.Handle(Sender: TObject; ANewIndex: Integer;
+  var AllowChange: Boolean);
+begin
+  Inc(Count);
+  LastNewIndex := ANewIndex;
+  if Veto then AllowChange := False;
 end;
 
 { TTyTabControlAccess }
@@ -951,6 +983,72 @@ begin
     AssertTrue('AnimationsEnabled defaults True', T.AnimationsEnabled);
   finally
     T.Free;
+  end;
+end;
+
+{ TestOnChangingVetoBlocksSwitch:
+  A handler that clears AllowChange prevents the switch: TabIndex stays put, the
+  active page is unchanged, and OnChange does NOT fire. OnChanging is consulted
+  with the proposed (clamped) new index. }
+procedure TTyTabControlTest.TestOnChangingVetoBlocksSwitch;
+var
+  Changing: TTabChangingProbe;
+  Changed: TTabChangeProbe;
+begin
+  FTab.AddTab('A');
+  FTab.AddTab('B');
+  AssertEquals('start on tab 0', 0, FTab.TabIndex);
+
+  Changing := TTabChangingProbe.Create;
+  Changed := TTabChangeProbe.Create;
+  try
+    Changing.Veto := True;
+    FTab.OnChanging := @Changing.Handle;
+    FTab.OnChange := @Changed.Handle;
+
+    FTab.TabIndex := 1;
+
+    AssertEquals('OnChanging consulted once', 1, Changing.Count);
+    AssertEquals('OnChanging got proposed new index 1', 1, Changing.LastNewIndex);
+    AssertEquals('vetoed: TabIndex unchanged', 0, FTab.TabIndex);
+    AssertTrue('vetoed: page 0 still visible', FTab.Pages[0].Visible);
+    AssertFalse('vetoed: page 1 still hidden', FTab.Pages[1].Visible);
+    AssertEquals('vetoed: OnChange NOT fired', 0, Changed.Count);
+  finally
+    Changed.Free;
+    Changing.Free;
+  end;
+end;
+
+{ TestOnChangingAllowsSwitch:
+  When the handler leaves AllowChange True the switch proceeds normally and
+  OnChange fires afterward. }
+procedure TTyTabControlTest.TestOnChangingAllowsSwitch;
+var
+  Changing: TTabChangingProbe;
+  Changed: TTabChangeProbe;
+begin
+  FTab.AddTab('A');
+  FTab.AddTab('B');
+
+  Changing := TTabChangingProbe.Create;
+  Changed := TTabChangeProbe.Create;
+  try
+    Changing.Veto := False;
+    FTab.OnChanging := @Changing.Handle;
+    FTab.OnChange := @Changed.Handle;
+
+    FTab.TabIndex := 1;
+
+    AssertEquals('OnChanging consulted once', 1, Changing.Count);
+    AssertEquals('OnChanging got new index 1', 1, Changing.LastNewIndex);
+    AssertEquals('allowed: TabIndex switched to 1', 1, FTab.TabIndex);
+    AssertTrue('allowed: page 1 visible', FTab.Pages[1].Visible);
+    AssertFalse('allowed: page 0 hidden', FTab.Pages[0].Visible);
+    AssertEquals('allowed: OnChange fired once', 1, Changed.Count);
+  finally
+    Changed.Free;
+    Changing.Free;
   end;
 end;
 
