@@ -63,15 +63,6 @@ type
     procedure TestLayoutPacksRemainingVisibleButton;
   end;
 
-  TFormChromeTest = class(TTestCase)
-  published
-    procedure TestDefaultTitleHeight;
-    procedure TestDefaultBorderZone;
-    procedure TestDefaultShowFlags;
-    procedure TestTitleBarCreated;
-    procedure TestActiveDefaultsFalse;
-  end;
-
   TCaptionButtonPaintTest = class(TTestCase)
   published
     procedure TestPaintSmoke;
@@ -90,35 +81,11 @@ type
     procedure TestRoundsHalfUp;
   end;
 
-  TFormChromeChangeBoundsTest = class(TTestCase)
-  published
-    procedure TestChangeBoundsHookedOnInstall;
-    procedure TestChangeBoundsRestoredOnUninstall;
-    procedure TestFormChromeFreeWhileActiveNoDangling;
-    procedure TestFormChromeInstallPreservesBounds;
-  end;
-
   TCaptionButtonHoverGlyphTest = class(TTestCase)
   published
     procedure TestGlyphRenderedByDefault;
     procedure TestNoGlyphWhenHoverOnlyAndNotHovered;
     procedure TestGlyphRenderedWhenHoverOnlyAndHovered;
-  end;
-
-  { Lifecycle events (OnCloseQuery veto / OnClose) + TitleBar mouse-slot isolation:
-    after Task 1 published OnMouseDown/Move/Up/DblClick on the base classes,
-    TTyTitleBar exposes those slots to users. The chrome must NOT use the event
-    slots for its window-drag/double-click-maximize wiring (it now uses METHOD
-    OVERRIDES that call inherited), so a user-assigned OnMouseDown still fires
-    AND the chrome's drag still works. }
-  TFormChromeLifecycleTest = class(TTestCase)
-  published
-    procedure TestOnCloseQueryVetoBlocksClose;
-    procedure TestOnCloseQueryAllowFiresClose;
-    procedure TestOnMinimizeFires;
-    procedure TestOnRestoreFiresViaMaxRestoreAction;
-    procedure TestTitleBarMouseDownEventFiresAndDragStillWorks;
-    procedure TestTitleBarDblClickEventFiresAndMaximizeStillWorks;
   end;
 
   TContentPanelTest = class(TTestCase)
@@ -136,6 +103,8 @@ type
     procedure TestChildOnContentSitsBelowBand;
     procedure TestDefensiveLoadedReparentsStrayChild;
     procedure TestApplyChromeThemeSetsColorFromToken;
+    procedure TestTitleBarDragArmsViaEngine;
+    procedure TestDblClickMaximizeToggles;
   end;
 
 implementation
@@ -167,46 +136,9 @@ type
     function TB: TTyTitleBar;
     function Content: TTyContentPanel;
     procedure CallLoaded;
-  end;
-
-  { Exposes the private DoClose path + the FDragging/FMaximized state so the
-    chrome's lifecycle/veto logic can be driven headlessly. }
-  TChromeAccess = class(TTyFormChrome)
-  public
-    procedure InjectClose;
-    procedure InjectMinimize;
-    procedure InjectMaxRestore;
-    procedure SetForm(AForm: TCustomForm);
-    procedure SetMaximized(AValue: Boolean);
-    function IsDragging: Boolean;
-    function IsMaximized: Boolean;
-  end;
-
-  { Counts lifecycle/event callbacks for assertions. }
-  TLifecycleProbe = class
-  public
-    CloseFired: Integer;
-    MinimizeFired: Integer;
-    MaximizeFired: Integer;
-    RestoreFired: Integer;
-    MouseDownFired: Integer;
-    DblClickFired: Integer;
-    VetoClose: Boolean;
-    procedure OnCloseQuery(Sender: TObject; var CanClose: Boolean);
-    procedure OnClose(Sender: TObject);
-    procedure OnMinimize(Sender: TObject);
-    procedure OnMaximize(Sender: TObject);
-    procedure OnRestore(Sender: TObject);
-    procedure OnMouseDown(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);
-    procedure OnDblClick(Sender: TObject);
-  end;
-
-  { Probe object for tracking OnChangeBounds restoration }
-  TChangeBoundsProbe = class
-  public
-    WasCalled: Boolean;
-    procedure Handler(Sender: TObject);
+    function EngineDragging: Boolean;
+    function EngineMaximized: Boolean;
+    procedure SetEngineMaximized(AValue: Boolean);
   end;
 
 procedure TCaptionButtonAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -248,84 +180,9 @@ end;
 function TTyFormAccess.TB: TTyTitleBar; begin Result := TitleBar; end;
 function TTyFormAccess.Content: TTyContentPanel; begin Result := ContentPanel; end;
 procedure TTyFormAccess.CallLoaded; begin Loaded; end;
-
-procedure TChromeAccess.InjectClose;
-begin
-  DoClose(Self);
-end;
-
-procedure TChromeAccess.InjectMinimize;
-begin
-  DoMinimize(Self);
-end;
-
-procedure TChromeAccess.InjectMaxRestore;
-begin
-  DoMaxRestore(Self);
-end;
-
-procedure TChromeAccess.SetForm(AForm: TCustomForm);
-begin
-  FForm := AForm;
-  FEngine.Form := AForm;
-end;
-
-procedure TChromeAccess.SetMaximized(AValue: Boolean);
-begin
-  FEngine.Maximized := AValue;
-end;
-
-function TChromeAccess.IsDragging: Boolean;
-begin
-  Result := FEngine.Dragging;
-end;
-
-function TChromeAccess.IsMaximized: Boolean;
-begin
-  Result := FEngine.Maximized;
-end;
-
-procedure TLifecycleProbe.OnCloseQuery(Sender: TObject; var CanClose: Boolean);
-begin
-  if VetoClose then
-    CanClose := False;
-end;
-
-procedure TLifecycleProbe.OnClose(Sender: TObject);
-begin
-  Inc(CloseFired);
-end;
-
-procedure TLifecycleProbe.OnMinimize(Sender: TObject);
-begin
-  Inc(MinimizeFired);
-end;
-
-procedure TLifecycleProbe.OnMaximize(Sender: TObject);
-begin
-  Inc(MaximizeFired);
-end;
-
-procedure TLifecycleProbe.OnRestore(Sender: TObject);
-begin
-  Inc(RestoreFired);
-end;
-
-procedure TLifecycleProbe.OnMouseDown(Sender: TObject; Button: TMouseButton;
-  Shift: TShiftState; X, Y: Integer);
-begin
-  Inc(MouseDownFired);
-end;
-
-procedure TLifecycleProbe.OnDblClick(Sender: TObject);
-begin
-  Inc(DblClickFired);
-end;
-
-procedure TChangeBoundsProbe.Handler(Sender: TObject);
-begin
-  WasCalled := True;
-end;
+function TTyFormAccess.EngineDragging: Boolean; begin Result := FEngine.Dragging; end;
+function TTyFormAccess.EngineMaximized: Boolean; begin Result := FEngine.Maximized; end;
+procedure TTyFormAccess.SetEngineMaximized(AValue: Boolean); begin FEngine.Maximized := AValue; end;
 
 const
   CR: TRect = (Left: 0; Top: 0; Right: 200; Bottom: 100);
@@ -625,67 +482,6 @@ begin
   end;
 end;
 
-procedure TFormChromeTest.TestDefaultTitleHeight;
-var
-  C: TTyFormChrome;
-begin
-  C := TTyFormChrome.Create(nil);
-  try
-    AssertEquals('titleheight', 32, C.TitleHeight);
-  finally
-    C.Free;
-  end;
-end;
-
-procedure TFormChromeTest.TestDefaultBorderZone;
-var
-  C: TTyFormChrome;
-begin
-  C := TTyFormChrome.Create(nil);
-  try
-    AssertEquals('borderzone', 6, C.BorderZone);
-  finally
-    C.Free;
-  end;
-end;
-
-procedure TFormChromeTest.TestDefaultShowFlags;
-var
-  C: TTyFormChrome;
-begin
-  C := TTyFormChrome.Create(nil);
-  try
-    AssertTrue('min', C.ShowMinimize);
-    AssertTrue('max', C.ShowMaximize);
-  finally
-    C.Free;
-  end;
-end;
-
-procedure TFormChromeTest.TestTitleBarCreated;
-var
-  C: TTyFormChrome;
-begin
-  C := TTyFormChrome.Create(nil);
-  try
-    AssertTrue('titlebar', C.TitleBar <> nil);
-  finally
-    C.Free;
-  end;
-end;
-
-procedure TFormChromeTest.TestActiveDefaultsFalse;
-var
-  C: TTyFormChrome;
-begin
-  C := TTyFormChrome.Create(nil);
-  try
-    AssertFalse('active', C.Active);
-  finally
-    C.Free;
-  end;
-end;
-
 procedure TCaptionButtonPaintTest.TestPaintSmoke;
 var
   Acc: TCaptionButtonAccess;
@@ -752,113 +548,6 @@ begin
   { 33 * 144 / 96 = 49.5 → should round to 50
     Formula: (33*144 + 96 div 2) div 96 = (4752 + 48) div 96 = 4800 div 96 = 50 }
   AssertEquals('33@96->144 rounds half-up to 50', 50, TyRescaleChromeMetric(33, 96, 144));
-end;
-
-{ TFormChromeChangeBoundsTest }
-
-procedure TFormChromeChangeBoundsTest.TestChangeBoundsHookedOnInstall;
-var
-  F: TForm;
-  C: TTyFormChrome;
-begin
-  F := TForm.CreateNew(nil);
-  C := TTyFormChrome.Create(F);
-  try
-    C.Active := True;
-    AssertTrue('OnChangeBounds should be hooked after install',
-      Assigned(TForm(F).OnChangeBounds));
-  finally
-    C.Active := False;
-    F.Free;
-  end;
-end;
-
-procedure TFormChromeChangeBoundsTest.TestChangeBoundsRestoredOnUninstall;
-var
-  F: TForm;
-  C: TTyFormChrome;
-  Probe: TChangeBoundsProbe;
-begin
-  Probe := TChangeBoundsProbe.Create;
-  F := TForm.CreateNew(nil);
-  C := TTyFormChrome.Create(F);
-  try
-    { Assign probe before installing }
-    TForm(F).OnChangeBounds := @Probe.Handler;
-    C.Active := True;
-    { Uninstall should restore the probe }
-    C.Active := False;
-    AssertTrue('OnChangeBounds should be restored to probe after uninstall',
-      TForm(F).OnChangeBounds = @Probe.Handler);
-  finally
-    F.Free;
-    Probe.Free;
-  end;
-end;
-
-procedure TFormChromeChangeBoundsTest.TestFormChromeFreeWhileActiveNoDangling;
-var
-  F: TForm;
-  Chrome: TTyFormChrome;
-begin
-  { Observed in this headless env: TTyFormChrome.Create(F) makes F the Owner,
-    so HostForm <> nil and InstallChrome DOES run on Active := True, hijacking
-    F.OnMouseDown/OnMouseMove/OnMouseUp/OnChangeBounds with the chrome's own
-    methods (same path verified by TestChangeBoundsHookedOnInstall).
-    Without a destructor, freeing the chrome while Active=True leaves F holding
-    method pointers into freed memory -> dangling handlers. The destructor must
-    call UninstallChrome to restore them. }
-  F := TForm.CreateNew(nil);
-  try
-    Chrome := TTyFormChrome.Create(F);
-    Chrome.Active := True;     { InstallChrome hijacks F.OnMouseDown etc. }
-    { Sanity: confirm the hijack actually happened in this env }
-    AssertTrue('precondition: chrome hijacked OnMouseDown on install',
-      Assigned(TForm(F).OnMouseDown));
-    Chrome.Free;               { destructor must UninstallChrome }
-    AssertFalse('host OnMouseDown cleared after chrome free',
-      Assigned(TForm(F).OnMouseDown));
-    AssertFalse('host OnMouseMove cleared after chrome free',
-      Assigned(TForm(F).OnMouseMove));
-    AssertFalse('host OnMouseUp cleared after chrome free',
-      Assigned(TForm(F).OnMouseUp));
-    AssertFalse('host OnChangeBounds cleared after chrome free',
-      Assigned(TForm(F).OnChangeBounds));
-  finally
-    F.Free;
-  end;
-end;
-
-procedure TFormChromeChangeBoundsTest.TestFormChromeInstallPreservesBounds;
-var
-  F: TForm;
-  Chrome: TTyFormChrome;
-  B: TRect;
-begin
-  { InstallChrome sets BorderStyle:=bsNone, which recreates the window handle.
-    The widgetset then re-places the window; on a multi-monitor virtual desktop
-    with negative coordinates (a monitor above/left of the primary) the window
-    can land off-screen (negative Top). The fix captures BoundsRect before the
-    border change and restores it after HandleNeeded.
-
-    NOTE: in this headless test env changing BorderStyle may not actually move
-    the window, so this assertion can pass even before the fix. The fix's real
-    purpose is the multi-monitor (negative virtual coords) case, which cannot be
-    reproduced headlessly. This test is kept as a regression guard that install
-    never DISTURBS the form's bounds. }
-  F := TForm.CreateNew(nil);
-  try
-    F.SetBounds(120, 80, 400, 300);
-    B := F.BoundsRect;
-    Chrome := TTyFormChrome.Create(F);
-    Chrome.Active := True;     { InstallChrome changes BorderStyle -> must restore bounds }
-    AssertEquals('Left preserved', B.Left, F.BoundsRect.Left);
-    AssertEquals('Top preserved',  B.Top,  F.BoundsRect.Top);
-    AssertEquals('Width preserved', B.Right - B.Left, F.BoundsRect.Right - F.BoundsRect.Left);
-    AssertEquals('Height preserved', B.Bottom - B.Top, F.BoundsRect.Bottom - F.BoundsRect.Top);
-  finally
-    F.Free;  { chrome owned by F, freed with it; its destructor uninstalls }
-  end;
 end;
 
 { TCaptionButtonHoverGlyphTest }
@@ -1014,160 +703,6 @@ begin
     Bmp.Free;
     Btn.Free;
     Ctl.Free;
-  end;
-end;
-
-{ TFormChromeLifecycleTest }
-
-procedure TFormChromeLifecycleTest.TestOnCloseQueryVetoBlocksClose;
-var
-  C: TChromeAccess;
-  P: TLifecycleProbe;
-begin
-  { With OnCloseQuery returning CanClose:=False, DoClose must abort before the
-    OnClose event (and FForm.Close) — observe via the OnClose counter staying 0.
-    No real window needed: the veto path returns before touching FForm. }
-  C := TChromeAccess.Create(nil);
-  P := TLifecycleProbe.Create;
-  try
-    P.VetoClose := True;
-    C.OnCloseQuery := @P.OnCloseQuery;
-    C.OnClose := @P.OnClose;
-    C.InjectClose;
-    AssertEquals('veto: OnClose must NOT fire', 0, P.CloseFired);
-  finally
-    C.Free;
-    P.Free;
-  end;
-end;
-
-procedure TFormChromeLifecycleTest.TestOnCloseQueryAllowFiresClose;
-var
-  C: TChromeAccess;
-  P: TLifecycleProbe;
-begin
-  { CanClose left True -> OnClose fires (then FForm.Close, guarded by FForm<>nil
-    so harmless headlessly). }
-  C := TChromeAccess.Create(nil);
-  P := TLifecycleProbe.Create;
-  try
-    P.VetoClose := False;
-    C.OnCloseQuery := @P.OnCloseQuery;
-    C.OnClose := @P.OnClose;
-    C.InjectClose;
-    AssertEquals('allow: OnClose fires once', 1, P.CloseFired);
-  finally
-    C.Free;
-    P.Free;
-  end;
-end;
-
-procedure TFormChromeLifecycleTest.TestOnMinimizeFires;
-var
-  C: TChromeAccess;
-  P: TLifecycleProbe;
-begin
-  { DoMinimize fires OnMinimize before its 'if FForm<>nil' guard, so this needs no
-    real window: drive it on an un-installed chrome (FForm=nil). }
-  C := TChromeAccess.Create(nil);
-  P := TLifecycleProbe.Create;
-  try
-    C.OnMinimize := @P.OnMinimize;
-    C.InjectMinimize;
-    AssertEquals('OnMinimize fired once', 1, P.MinimizeFired);
-  finally
-    C.Free;
-    P.Free;
-  end;
-end;
-
-procedure TFormChromeLifecycleTest.TestOnRestoreFiresViaMaxRestoreAction;
-var
-  F: TForm;
-  C: TChromeAccess;
-  P: TLifecycleProbe;
-begin
-  { ToggleMaximize's restore branch (FMaximized=True) only re-applies saved bounds
-    and fires OnRestore — it never touches FForm.Handle, so it runs headlessly on a
-    handle-less injected form. We inject FForm + FMaximized=True directly (no
-    InstallChrome, so no win32 handle is forced). DoMaxRestore is the caption-button
-    action. }
-  F := TForm.CreateNew(nil);
-  C := TChromeAccess.Create(nil);
-  P := TLifecycleProbe.Create;
-  try
-    C.SetForm(F);
-    C.SetMaximized(True);
-    C.OnMaximize := @P.OnMaximize;
-    C.OnRestore := @P.OnRestore;
-    C.InjectMaxRestore;   { restore branch -> OnRestore }
-    AssertEquals('OnRestore fired once', 1, P.RestoreFired);
-    AssertEquals('OnMaximize not fired on restore', 0, P.MaximizeFired);
-    AssertFalse('no longer maximized after restore', C.IsMaximized);
-  finally
-    C.Free;
-    F.Free;
-    P.Free;
-  end;
-end;
-
-procedure TFormChromeLifecycleTest.TestTitleBarMouseDownEventFiresAndDragStillWorks;
-var
-  F: TForm;
-  C: TChromeAccess;
-  TB: TTitleBarAccess;
-  P: TLifecycleProbe;
-begin
-  { Critical isolation test: after the user assigns TTyTitleBar.OnMouseDown, the
-    chrome's window-drag (FDragging) must STILL be armed when the titlebar is
-    pressed — because chrome wires drag via a method override that calls inherited
-    (which fires the user's OnMouseDown), not by hijacking the event slot.
-    Headless: inject FForm directly (the drag-arm path reads no handle), so no
-    InstallChrome / win32 control is created. }
-  F := TForm.CreateNew(nil);
-  C := TChromeAccess.Create(nil);
-  P := TLifecycleProbe.Create;
-  try
-    C.SetForm(F);
-    TB := TTitleBarAccess(C.TitleBar);
-    TB.OnMouseDown := @P.OnMouseDown;   { user assigns the now-free slot }
-    TB.InjectMouseDown(mbLeft, [], 10, 5);
-    AssertEquals('user OnMouseDown fired (inherited called)', 1, P.MouseDownFired);
-    AssertTrue('chrome drag armed despite user OnMouseDown', C.IsDragging);
-  finally
-    C.Free;
-    F.Free;
-    P.Free;
-  end;
-end;
-
-procedure TFormChromeLifecycleTest.TestTitleBarDblClickEventFiresAndMaximizeStillWorks;
-var
-  F: TForm;
-  C: TChromeAccess;
-  TB: TTitleBarAccess;
-  P: TLifecycleProbe;
-begin
-  { Same isolation for DblClick: user OnDblClick fires AND the chrome's maximize
-    toggle (via the DblClick override -> ToggleMaximize) runs. Headless: start
-    FMaximized=True so ToggleMaximize takes the restore branch (no FForm.Handle
-    access) -> FMaximized flips to False, proving the chrome handler ran. }
-  F := TForm.CreateNew(nil);
-  C := TChromeAccess.Create(nil);
-  P := TLifecycleProbe.Create;
-  try
-    C.SetForm(F);
-    C.SetMaximized(True);
-    TB := TTitleBarAccess(C.TitleBar);
-    TB.OnDblClick := @P.OnDblClick;
-    TB.InjectDblClick;
-    AssertEquals('user OnDblClick fired (inherited called)', 1, P.DblClickFired);
-    AssertFalse('chrome maximize toggled (restored) despite user OnDblClick',
-      C.IsMaximized);
-  finally
-    C.Free;
-    F.Free;
-    P.Free;
   end;
 end;
 
@@ -1330,18 +865,43 @@ begin
   end;
 end;
 
+procedure TTyFormTest.TestTitleBarDragArmsViaEngine;
+var F: TTyFormAccess;
+begin
+  { Pressing the title bar arms the engine's window-drag (FForm is the form itself). }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    TTitleBarAccess(F.TB).InjectMouseDown(mbLeft, [], 10, 5);
+    AssertTrue('engine drag armed via title bar', F.EngineDragging);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestDblClickMaximizeToggles;
+var F: TTyFormAccess;
+begin
+  { Double-clicking the title bar toggles the engine maximize state. Start maximized
+    so ToggleMaximize takes the restore branch (no window handle needed headless). }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.SetEngineMaximized(True);
+    TTitleBarAccess(F.TB).InjectDblClick;
+    AssertFalse('dbl-click toggled maximize off', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeCursorTest);
   RegisterTest(TCaptionButtonTest);
   RegisterTest(TTitleBarTest);
-  RegisterTest(TFormChromeTest);
   RegisterTest(TCaptionButtonPaintTest);
   RegisterTest(TTitleBarPaintTest);
   RegisterTest(TRescaleMetricTest);
-  RegisterTest(TFormChromeChangeBoundsTest);
   RegisterTest(TCaptionButtonHoverGlyphTest);
-  RegisterTest(TFormChromeLifecycleTest);
   RegisterTest(TContentPanelTest);
   RegisterTest(TTyFormTest);
 

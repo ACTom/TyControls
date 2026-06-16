@@ -67,8 +67,7 @@ procedure Register;
 begin
   RegisterComponents('TyControls',
     [TTyButton, TTyLabel, TTyEdit, TTyCheckBox, TTyRadioButton,
-     TTyPanel, TTyComboBox, TTyScrollBar, TTyTitleBar,
-     TTyFormChrome, TTyStyleController,
+     TTyPanel, TTyComboBox, TTyScrollBar, TTyStyleController,
      TTyListBox, TTyProgressBar, TTyToggleSwitch, TTyTrackBar, TTyGroupBox,
      TTyTabControl, TTySpinEdit, TTyMemo]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
