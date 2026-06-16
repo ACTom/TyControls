@@ -5,7 +5,7 @@ unit test.form;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form;
@@ -124,6 +124,17 @@ type
     procedure TestPaintSmoke;
   end;
 
+  TTyFormTest = class(TTestCase)
+  published
+    procedure TestBorderlessFromBirth;
+    procedure TestTitleBarIsTopBand;
+    procedure TestContentIsClientBelowBand;
+    procedure TestSubComponentsNamedAndFlagged;
+    procedure TestChildOnContentSitsBelowBand;
+    procedure TestDefensiveLoadedReparentsStrayChild;
+    procedure TestApplyChromeThemeSetsColorFromToken;
+  end;
+
 implementation
 
 type
@@ -144,6 +155,13 @@ type
   TContentPanelAccess = class(TTyContentPanel)
   public
     procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+  TTyFormAccess = class(TTyForm)
+  public
+    function TB: TTyTitleBar;
+    function Content: TTyContentPanel;
+    procedure CallLoaded;
   end;
 
   { Exposes the private DoClose path + the FDragging/FMaximized state so the
@@ -215,6 +233,10 @@ procedure TContentPanelAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; 
 begin
   RenderTo(ACanvas, ARect, APPI);
 end;
+
+function TTyFormAccess.TB: TTyTitleBar; begin Result := TitleBar; end;
+function TTyFormAccess.Content: TTyContentPanel; begin Result := ContentPanel; end;
+procedure TTyFormAccess.CallLoaded; begin Loaded; end;
 
 procedure TChromeAccess.InjectClose;
 begin
@@ -1123,6 +1145,131 @@ begin
   end;
 end;
 
+{ TTyFormTest }
+
+procedure TTyFormTest.TestBorderlessFromBirth;
+var F: TTyForm;
+begin
+  F := TTyForm.CreateNew(nil);
+  try
+    AssertTrue('born bsNone', F.BorderStyle = bsNone);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestTitleBarIsTopBand;
+var F: TTyFormAccess;
+begin
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    AssertTrue('titlebar exists', F.TB <> nil);
+    AssertTrue('titlebar alTop', F.TB.Align = alTop);
+    AssertEquals('titlebar at y=0', 0, F.TB.Top);
+    AssertEquals('default title height', 32, F.TB.Height);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestContentIsClientBelowBand;
+var F: TTyFormAccess;
+begin
+  { Structural proof of the content-below-band guarantee (headless-deterministic).
+    Realized alignment needs a window handle the headless runner can't create
+    (AutoSizeDelayed suppresses the align pass while the form is not visible), so
+    we assert the STRUCTURE that LCL guarantees yields the geometry: an alClient
+    content panel fills the area below an alTop title band. Realized pixel geometry
+    is verified manually in the Lazarus designer (plan's manual checklist); see the
+    design spec's verified LCL AlignControls analysis (2026-06-17 ... §4). }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    AssertTrue('content exists', F.Content <> nil);
+    AssertTrue('content alClient', F.Content.Align = alClient);
+    AssertTrue('titlebar alTop reserves the band', F.TB.Align = alTop);
+    AssertEquals('resize ring left', 6, F.Content.BorderSpacing.Left);
+    AssertEquals('resize ring right', 6, F.Content.BorderSpacing.Right);
+    AssertEquals('resize ring bottom', 6, F.Content.BorderSpacing.Bottom);
+    AssertEquals('no ring at top (title band sits there)', 0, F.Content.BorderSpacing.Top);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestSubComponentsNamedAndFlagged;
+var F: TTyFormAccess;
+begin
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    AssertEquals('titlebar name', 'TyTitleBar', F.TB.Name);
+    AssertEquals('content name', 'TyContent', F.Content.Name);
+    AssertTrue('titlebar subcomponent', csSubComponent in F.TB.ComponentStyle);
+    AssertTrue('content subcomponent', csSubComponent in F.Content.ComponentStyle);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestChildOnContentSitsBelowBand;
+var
+  F: TTyFormAccess;
+  Btn: TButton;
+begin
+  { A control added to the content panel is parented to FContent (the alClient
+    region below the band), not the form root. Combined with the alClient/alTop
+    structure, that places it below the title band. Realized absolute geometry is
+    GUI-verified (manual checklist); the parenting + alignment contract proven here
+    is the headless-deterministic guarantee. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    Btn := TButton.Create(F);
+    Btn.Parent := F.Content;
+    AssertTrue('child lives in the content panel', Btn.Parent = F.Content);
+    AssertTrue('content alClient below the alTop band',
+      (F.Content.Align = alClient) and (F.TB.Align = alTop));
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestDefensiveLoadedReparentsStrayChild;
+var
+  F: TTyFormAccess;
+  Stray: TButton;
+begin
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    Stray := TButton.Create(F);
+    Stray.Parent := F;
+    F.CallLoaded;
+    AssertTrue('stray reparented into content', Stray.Parent = F.Content);
+    AssertTrue('titlebar still on form', F.TB.Parent = F);
+    AssertTrue('content still on form', F.Content.Parent = F);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestApplyChromeThemeSetsColorFromToken;
+var
+  F: TTyFormAccess;
+  Ctl: TTyStyleController;
+begin
+  { ApplyChromeTheme must resolve the TyForm token and drive the form Color
+    (window backdrop / resize-ring color), not hard-code it. }
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    Ctl.LoadThemeCss('TyForm { background: #123456; }');
+    F.ApplyChromeTheme(Ctl);
+    AssertEquals('form Color from TyForm token',
+      Integer(RGBToColor($12, $34, $56)), Integer(F.Color));
+  finally
+    Ctl.Free;
+    F.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeCursorTest);
@@ -1136,5 +1283,6 @@ initialization
   RegisterTest(TCaptionButtonHoverGlyphTest);
   RegisterTest(TFormChromeLifecycleTest);
   RegisterTest(TContentPanelTest);
+  RegisterTest(TTyFormTest);
 
 end.

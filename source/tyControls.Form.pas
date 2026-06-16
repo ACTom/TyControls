@@ -113,6 +113,43 @@ type
     property Dragging: Boolean read FDragging;
   end;
 
+  TTyForm = class(TForm)
+  private
+    FTitleBar: TTyTitleBar;
+    FContent: TTyContentPanel;
+    FResizeBorder: Integer;
+    FShowMinimize: Boolean;
+    FShowMaximize: Boolean;
+    procedure SetupChrome;
+    function GetTitleHeight: Integer;
+    procedure SetTitleHeight(AValue: Integer);
+    procedure SetShowMinimize(AValue: Boolean);
+    procedure SetShowMaximize(AValue: Boolean);
+    procedure DoMinimizeClick(Sender: TObject);
+    procedure DoMaxRestoreClick(Sender: TObject);
+    procedure DoCloseClick(Sender: TObject);
+  protected
+    { The window-behavior engine. Protected so a test access subclass can read its
+      drag/maximize state through it. }
+    FEngine: TTyChromeEngine;
+    procedure Loaded; override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure DoOnChangeBounds; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
+    destructor Destroy; override;
+    procedure ApplyChromeTheme(AController: TTyStyleController);
+    property TitleBar: TTyTitleBar read FTitleBar;
+    property ContentPanel: TTyContentPanel read FContent;
+  published
+    property TitleHeight: Integer read GetTitleHeight write SetTitleHeight default 32;
+    property ShowMinimize: Boolean read FShowMinimize write SetShowMinimize default True;
+    property ShowMaximize: Boolean read FShowMaximize write SetShowMaximize default True;
+  end;
+
   TTyFormChrome = class(TComponent)
   private
     FActive: Boolean;
@@ -630,6 +667,127 @@ begin
     FMaximized := True;
     FTitleBar.MaxButton.Kind := cbkRestore;
   end;
+end;
+
+{ TTyForm }
+
+procedure TTyForm.SetupChrome;
+begin
+  BorderStyle := bsNone;
+  FResizeBorder := 6;
+  FShowMinimize := True;
+  FShowMaximize := True;
+
+  FTitleBar := TTyTitleBar.Create(Self);
+  FTitleBar.Name := 'TyTitleBar';
+  FTitleBar.SetSubComponent(True);
+  FTitleBar.Parent := Self;
+  FTitleBar.Align := alTop;
+  FTitleBar.Height := 32;
+
+  FContent := TTyContentPanel.Create(Self);
+  FContent.Name := 'TyContent';
+  FContent.SetSubComponent(True);
+  FContent.Parent := Self;
+  FContent.Align := alClient;
+  FContent.BorderSpacing.Left := FResizeBorder;
+  FContent.BorderSpacing.Right := FResizeBorder;
+  FContent.BorderSpacing.Bottom := FResizeBorder;
+
+  FEngine := TTyChromeEngine.Create(FTitleBar);
+  FEngine.Form := Self;
+  FEngine.BorderZone := FResizeBorder;
+  FEngine.CaptureInstalledPPI;
+  FTitleBar.FEngine := FEngine;
+
+  FTitleBar.MinButton.OnClick := @DoMinimizeClick;
+  FTitleBar.MaxButton.OnClick := @DoMaxRestoreClick;
+  FTitleBar.CloseButton.OnClick := @DoCloseClick;
+end;
+
+constructor TTyForm.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  if FTitleBar = nil then SetupChrome;
+end;
+
+constructor TTyForm.CreateNew(AOwner: TComponent; Num: Integer);
+begin
+  inherited CreateNew(AOwner, Num);
+  if FTitleBar = nil then SetupChrome;
+end;
+
+destructor TTyForm.Destroy;
+begin
+  if FTitleBar <> nil then FTitleBar.FEngine := nil;
+  FEngine.Free;
+  inherited Destroy;
+end;
+
+procedure TTyForm.DoMinimizeClick(Sender: TObject);
+begin WindowState := wsMinimized; end;
+
+procedure TTyForm.DoMaxRestoreClick(Sender: TObject);
+begin if FEngine <> nil then FEngine.ToggleMaximize; end;
+
+procedure TTyForm.DoCloseClick(Sender: TObject);
+begin Close; end;
+
+procedure TTyForm.Loaded;
+var i: Integer; Ctl: TControl;
+begin
+  inherited Loaded;
+  for i := ControlCount - 1 downto 0 do
+  begin
+    Ctl := Controls[i];
+    if (Ctl <> FTitleBar) and (Ctl <> FContent) then
+      Ctl.Parent := FContent;
+  end;
+end;
+
+procedure TTyForm.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  if FEngine <> nil then FEngine.FormMouseDown(Button, Shift, X, Y);
+end;
+
+procedure TTyForm.MouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseMove(Shift, X, Y);
+  if FEngine <> nil then FEngine.FormMouseMove(Shift, X, Y);
+end;
+
+procedure TTyForm.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  if FEngine <> nil then FEngine.FormMouseUp(Button, Shift, X, Y);
+end;
+
+procedure TTyForm.DoOnChangeBounds;
+begin
+  inherited DoOnChangeBounds;
+  if FEngine <> nil then FEngine.HandleChangeBounds;
+end;
+
+function TTyForm.GetTitleHeight: Integer;
+begin Result := FTitleBar.Height; end;
+
+procedure TTyForm.SetTitleHeight(AValue: Integer);
+begin if FTitleBar.Height <> AValue then FTitleBar.Height := AValue; end;
+
+procedure TTyForm.SetShowMinimize(AValue: Boolean);
+begin FShowMinimize := AValue; FTitleBar.MinButton.Visible := AValue; end;
+
+procedure TTyForm.SetShowMaximize(AValue: Boolean);
+begin FShowMaximize := AValue; FTitleBar.MaxButton.Visible := AValue; end;
+
+procedure TTyForm.ApplyChromeTheme(AController: TTyStyleController);
+var bg: TTyStyleSet;
+begin
+  if AController = nil then Exit;
+  bg := AController.Model.ResolveStyle('TyForm', '', []);
+  if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
+    Color := TyColorToLCL(bg.Background.Color);
 end;
 
 { TTyFormChrome }
