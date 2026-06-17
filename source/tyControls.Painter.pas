@@ -36,7 +36,8 @@ type
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
     procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
     procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
-    procedure FillGlass(const ARect: TRect; ASharp, AGlass: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
+    procedure FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
+    procedure FillGlass(const ARect: TRect; AGlass: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
     procedure EraseRect(const ARect: TRect);
     property Bitmap: TBGRABitmap read FBmp;
   end;
@@ -428,18 +429,48 @@ begin
   end;
 end;
 
-procedure TTyPainter.FillGlass(const ARect: TRect; ASharp, AGlass: TBGRABitmap;
+procedure TTyPainter.FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap;
+  const ASrcOffset: TPoint);
+{ Blit a (clamped) slice of a backdrop bitmap 1:1 into ARect — used as the opaque
+  base behind ANY control on an image-backed form, so its corners read as the same
+  photo the form shows instead of a flat solid fill. }
+var
+  w, h, ovL, ovT, ovR, ovB: Integer;
+  part: TBGRABitmap;
+  oldClip: TRect;
+begin
+  if (FBmp = nil) or (ASrc = nil) then Exit;
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+  if (w <= 0) or (h <= 0) then Exit;
+  ovL := ASrcOffset.X; if ovL < 0 then ovL := 0;
+  ovT := ASrcOffset.Y; if ovT < 0 then ovT := 0;
+  ovR := ASrcOffset.X + w; if ovR > ASrc.Width then ovR := ASrc.Width;
+  ovB := ASrcOffset.Y + h; if ovB > ASrc.Height then ovB := ASrc.Height;
+  if (ovR <= ovL) or (ovB <= ovT) then Exit;
+  oldClip := FBmp.ClipRect;
+  FBmp.ClipRect := ARect;
+  try
+    part := ASrc.GetPart(Rect(ovL, ovT, ovR, ovB)) as TBGRABitmap;
+    try
+      FBmp.PutImage(ARect.Left + (ovL - ASrcOffset.X),
+                    ARect.Top  + (ovT - ASrcOffset.Y), part, dmSet);
+    finally
+      part.Free;
+    end;
+  finally
+    FBmp.ClipRect := oldClip;
+  end;
+end;
+
+procedure TTyPainter.FillGlass(const ARect: TRect; AGlass: TBGRABitmap;
   const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
-{ Frosted glass behind a control. First lay the SHARP backdrop slice across the
-  whole rect so the corners (outside the rounded shape) read as the same photo the
-  form shows — seamless, no stray solid corner. Then overlay the BLURRED slice +
-  tint, round-clipped to the control's corners, as the glass pane itself. Slices
-  are clamped so a control partly off the backdrop keeps the underlying fill. }
+{ The glass pane itself: the BLURRED backdrop slice + tint, round-clipped to the
+  control's corners and laid over the sharp base FillImageSlice already painted. }
 var
   w, h, ovL, ovT, ovR, ovB, r: Integer;
   opts: TRoundRectangleOptions;
   part, temp, mask: TBGRABitmap;
-  oldClip: TRect;
 begin
   if (FBmp = nil) or (AGlass = nil) then Exit;
   w := ARect.Right - ARect.Left;
@@ -450,24 +481,6 @@ begin
   ovR := ASrcOffset.X + w; if ovR > AGlass.Width then ovR := AGlass.Width;
   ovB := ASrcOffset.Y + h; if ovB > AGlass.Height then ovB := AGlass.Height;
   if (ovR <= ovL) or (ovB <= ovT) then Exit;  // control entirely off the backdrop
-  // 1. Sharp slice over the whole rect -> the corners blend into the form's photo.
-  if ASharp <> nil then
-  begin
-    oldClip := FBmp.ClipRect;
-    FBmp.ClipRect := ARect;
-    try
-      part := ASharp.GetPart(Rect(ovL, ovT, ovR, ovB)) as TBGRABitmap;
-      try
-        FBmp.PutImage(ARect.Left + (ovL - ASrcOffset.X),
-                      ARect.Top  + (ovT - ASrcOffset.Y), part, dmSet);
-      finally
-        part.Free;
-      end;
-    finally
-      FBmp.ClipRect := oldClip;
-    end;
-  end;
-  // 2. Blurred slice + tint, round-clipped, over the centre.
   temp := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
   try
     part := AGlass.GetPart(Rect(ovL, ovT, ovR, ovB)) as TBGRABitmap;

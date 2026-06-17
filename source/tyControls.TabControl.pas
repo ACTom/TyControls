@@ -1130,6 +1130,12 @@ begin
     BoxStyle := CurrentStyle;
     TabH := TabHPx(APPI);
 
+    { The header strip is only painted where tab headers land; the empty area to the
+      right of the last tab would otherwise be a stale gap. On an image theme fill
+      the whole strip with the form's photo first so that gap reads as the form's
+      background (no-op off-image: the strip composites the parent as before). }
+    FillSharpBackdrop(P, Rect(0, 0, W, TabH));
+
     { Draw content area frame below header strip.
       Overlap by 1px so the active tab can visually merge with the content panel. }
     DrawFrame(P, Rect(0, TabH - MulDiv(1, APPI, 96), W, H), BoxStyle);

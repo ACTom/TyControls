@@ -97,6 +97,12 @@ type
     function CurrentStyle: TTyStyleSet;
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
     procedure DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
+    { Paint ARect with the form's sharp photo slice ONLY when an image-backed glass
+      host is reachable; returns whether it painted. For control regions OUTSIDE the
+      styled frame (a group-box caption band, the empty part of a tab header strip)
+      so they read as the form's photo on image themes. A no-op (False) off-image and
+      headless, so the caller's existing opaque/transparent path is left untouched. }
+    function FillSharpBackdrop(APainter: TTyPainter; const ARect: TRect): Boolean;
     procedure MouseEnter; override;
     procedure MouseLeave; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -320,34 +326,33 @@ begin
   end;
 end;
 
-{ Frosted glass: when a control opted in (tpGlass) and an image-backed TTyForm is
-  above it, blit a slice of the form's pre-blurred backdrop behind the control and
-  tint it. Returns False (so the solid fill stands) whenever glass is not reachable
-  — headless/parentless/no-handle controls, plain forms, or the title-bar gate. }
-function TyFillGlassBg(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
-  const AStyle: TTyStyleSet): Boolean;
+{ True when AControl sits on an image-backed TTyForm (a glass host with a live
+  backdrop) AND passes the title-bar gate; then AOffset is the control's top-left in
+  the form's backdrop space. False -> caller uses the plain solid parent fill:
+  off-form, headless/no-backdrop, an unrealized window, or under-titlebar gated. }
+function TyResolveGlassHost(AControl: TControl; out AHost: ITyGlassHost;
+  out AOffset: TPoint): Boolean;
 var
-  host: ITyGlassHost;
-  tag: ITyTitleBarTag;
-  bmp: TBGRABitmap;
   p: TControl;
+  tag: ITyTitleBarTag;
   co, fo: TPoint;
   inTitle: Boolean;
 begin
   Result := False;
-  if not (tpGlass in AStyle.Present) then Exit;
+  AHost := nil;
   if (AControl = nil) or (AControl.Parent = nil) then Exit;
-  // ControlToScreen/ClientOrigin need a real window; non-windowed/headless controls
-  // fall back to the solid parent fill (no backdrop reachable anyway).
-  if not (AControl is TWinControl) or not TWinControl(AControl).HandleAllocated then Exit;
-  host := nil;
+  // A windowed control needs its handle for ClientOrigin; graphic controls resolve
+  // through their parent chain, so only gate the TWinControl case.
+  if (AControl is TWinControl) and not TWinControl(AControl).HandleAllocated then Exit;
   p := AControl;
-  while (p <> nil) and not Supports(p, ITyGlassHost, host) do p := p.Parent;
-  if host = nil then Exit;
-  bmp := host.GlassBackdrop;
-  if bmp = nil then Exit;
-  // Title-bar gate: a control that is (or sits inside) the title bar only glasses
-  // when the theme extended the image under the bar.
+  while (p <> nil) and not Supports(p, ITyGlassHost, AHost) do p := p.Parent;
+  if (AHost = nil) or (AHost.GlassSharpBackdrop = nil) then
+  begin
+    AHost := nil;  // no image backdrop (plain form / headless) — solid fill stands
+    Exit;
+  end;
+  // Title-bar gate: controls in the title bar only see the photo when the theme
+  // extended the background under the bar.
   inTitle := False;
   p := AControl;
   while p <> nil do
@@ -355,30 +360,38 @@ begin
     if Supports(p, ITyTitleBarTag, tag) then begin inTitle := True; Break; end;
     p := p.Parent;
   end;
-  if inTitle and not host.GlassUnderTitlebar then Exit;
+  if inTitle and not AHost.GlassUnderTitlebar then begin AHost := nil; Exit; end;
   co := AControl.ClientOrigin;    // control client (0,0) in screen px
-  fo := host.GlassClientOrigin;   // form client (0,0) in screen px
-  APainter.FillGlass(ARect, host.GlassSharpBackdrop, bmp, Point(co.X - fo.X, co.Y - fo.Y),
-    AStyle.Background.GlassTint, TyEffectiveCorners(AStyle));
+  fo := AHost.GlassClientOrigin;  // form client (0,0) in screen px
+  AOffset := Point(co.X - fo.X, co.Y - fo.Y);
   Result := True;
 end;
 
 procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
   const AStyle: TTyStyleSet);
 var
+  host: ITyGlassHost;
+  off: TPoint;
   c: TTyColor;
   f: TTyFill;
 begin
-  // Solid parent fill is the opaque base: off-form/no-backdrop safety, and it fills
-  // the corners outside a glass control's rounded tint.
-  if TyResolveParentBg(AControl, c) then
+  if TyResolveGlassHost(AControl, host, off) then
+  begin
+    // Image-backed form: the SHARP photo slice is the opaque base for EVERY control,
+    // so the corners outside its rounded shape read as the form's photo, not a flat
+    // fill. Glass controls then get the round-clipped blurred pane + tint on top.
+    APainter.FillImageSlice(ARect, host.GlassSharpBackdrop, off);
+    if tpGlass in AStyle.Present then
+      APainter.FillGlass(ARect, host.GlassBackdrop, off,
+        AStyle.Background.GlassTint, TyEffectiveCorners(AStyle));
+  end
+  else if TyResolveParentBg(AControl, c) then
   begin
     f := Default(TTyFill);
     f.Kind := tfkSolid;
     f.Color := c;
     APainter.FillBackground(ARect, f, 0);
   end;
-  TyFillGlassBg(AControl, APainter, ARect, AStyle);
 end;
 
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
@@ -586,6 +599,18 @@ begin
     ringCorners.BL := corners.BL - AStyle.OutlineOffset; if ringCorners.BL < 0 then ringCorners.BL := 0;
     APainter.StrokeBorder(ringRect, ringCorners, AStyle.OutlineWidth, AStyle.OutlineColor);
   end;
+end;
+
+function TTyCustomControl.FillSharpBackdrop(APainter: TTyPainter; const ARect: TRect): Boolean;
+var
+  host: ITyGlassHost;
+  off: TPoint;
+begin
+  Result := TyResolveGlassHost(Self, host, off);
+  if Result then
+    // ARect is control-local; shift the backdrop sample by the sub-rect's origin.
+    APainter.FillImageSlice(ARect, host.GlassSharpBackdrop,
+      Point(off.X + ARect.Left, off.Y + ARect.Top));
 end;
 
 procedure TTyCustomControl.MouseEnter;

@@ -99,6 +99,11 @@ begin
     FrameRect := Rect(0, CapH div 2, W, H);
     DrawFrame(P, FrameRect, S);
 
+    // The caption band strip sits ABOVE the frame, so DrawFrame never paints it.
+    // On an image theme fill it with the form's photo so it is not a white gap;
+    // off-image it is a no-op (the strip composites the parent as before).
+    FillSharpBackdrop(P, Rect(0, 0, W, CapH div 2));
+
     // Draw caption text with a background band behind it
     if FCaption <> '' then
     begin
@@ -126,10 +131,12 @@ begin
       end;
       if BandLeft < 0 then BandLeft := 0;
 
-      // Erase the band pixels so the parent background shows through with no
-      // border segment. Band: Scale(8) margin + text width + Scale(8) margin.
+      // Break the top border behind the caption. On an image theme show the
+      // form's photo through the gap; otherwise erase to transparent so a plain
+      // parent composites through (and headless pixel tests see the backdrop).
       BandRect := Rect(BandLeft, 0, BandLeft + TextW + P.Scale(16), CapH);
-      P.EraseRect(BandRect);
+      if not FillSharpBackdrop(P, BandRect) then
+        P.EraseRect(BandRect);
 
       // Draw caption text within the band, aligned per FAlignment.
       TextRect := Rect(BandLeft + P.Scale(4), 0, BandLeft + P.Scale(4) + TextW + P.Scale(8), CapH);
