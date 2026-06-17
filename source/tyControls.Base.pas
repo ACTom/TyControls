@@ -227,27 +227,34 @@ begin
   Result := ActiveController.Model.ResolveStyle(GetStyleTypeKey, FStyleClass, CurrentStates);
 end;
 
-{ A windowed child does NOT inherit its parent's painted background, so a control
-  with a transparent background or rounded corners (e.g. the caption buttons or any
-  control dropped onto a TTyTitleBar) would show its own window colour outside the
-  drawn shape instead of the host band. When the parent is itself a styleable
-  tyControl, resolve its background colour so the child can fill it first and
-  composite against the band. Returns False when the parent is a plain form/panel,
-  leaving the normal form-background behaviour untouched. }
-function TyParentStyleBg(AChild: TControl; out AColor: TTyColor): Boolean;
+{ Resolve the background a child should composite onto. A windowed child does NOT
+  inherit its parent's painted/erased background, so a transparent background or the
+  triangles OUTSIDE rounded corners would show the child's own window colour (a
+  stray patch / haloed AA edge) rather than what's behind it. When the parent is a
+  styleable tyControl, use its resolved style background; otherwise (a plain form or
+  panel) use the parent's window colour. Returns False only with no parent (e.g. a
+  control rendered offscreen in isolation), leaving that path untouched. }
+function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
 var
   st: TTyStyleSet;
+  r, g, b: Byte;
 begin
   Result := False;
   if (AChild = nil) or (AChild.Parent = nil) then Exit;
-  // Only a windowed control can be a parent; TTyCustomControl is the styleable
-  // container base (TTyGraphicControl is non-windowed and never a parent).
-  if not (AChild.Parent is TTyCustomControl) then Exit;
-  st := TTyCustomControl(AChild.Parent).CurrentStyle;
-  if not (tpBackground in st.Present) then Exit;
-  case st.Background.Kind of
-    tfkSolid:          begin AColor := st.Background.Color;  Result := True; end;
-    tfkLinearGradient: begin AColor := st.Background.GradTo; Result := True; end; // representative
+  if AChild.Parent is TTyCustomControl then
+  begin
+    st := TTyCustomControl(AChild.Parent).CurrentStyle;
+    if not (tpBackground in st.Present) then Exit;
+    case st.Background.Kind of
+      tfkSolid:          begin AColor := st.Background.Color;  Result := True; end;
+      tfkLinearGradient: begin AColor := st.Background.GradTo; Result := True; end; // representative
+    end;
+  end
+  else
+  begin
+    RedGreenBlue(ColorToRGB(AChild.Parent.Color), r, g, b);
+    AColor := TyRGB(r, g, b);
+    Result := True;
   end;
 end;
 
@@ -256,7 +263,7 @@ var
   c: TTyColor;
   f: TTyFill;
 begin
-  if not TyParentStyleBg(AControl, c) then Exit;
+  if not TyResolveParentBg(AControl, c) then Exit;
   f.Kind := tfkSolid;
   f.Color := c;
   APainter.FillBackground(ARect, f, 0);

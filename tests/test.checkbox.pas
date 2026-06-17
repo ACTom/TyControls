@@ -141,6 +141,9 @@ var
 begin
   Ctl := TTyStyleController.Create(nil);
   Form := TForm.CreateNew(nil);
+  // The control composites onto its parent's background, so the parent must match
+  // the white backdrop we render over (in a real app they're the same surface).
+  Form.Color := clWhite;
   Bmp := TBitmap.Create;
   try
     Ctl.LoadThemeCss(
