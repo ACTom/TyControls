@@ -50,7 +50,7 @@ begin
     // Window chrome + backdrop follow the theme via the TyForm token.
     ApplyChromeTheme(Controller);
   end;
-  TitleBar.Caption := 'Custom Chrome Window';
+  if TitleBar <> nil then TitleBar.Caption := 'Custom Chrome Window';
   Controller.Changed;
 end;
 

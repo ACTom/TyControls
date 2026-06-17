@@ -6,40 +6,54 @@ object DemoMainForm: TDemoMainForm
   Caption = 'TyControls Demo'
   ClientHeight = 692
   ClientWidth = 640
-  LCLVersion = '4.99.0.0'
+  LCLVersion = '4.4.0.0'
+  TitleBar = TyTitleBar1
   OnCreate = FormCreate
+  object TyTitleBar1: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 640
+    Align = alTop
+    Caption = 'TyControls Demo'
+    Controller = Controller
+  end
   object BtnLight: TTyButton
     Left = 16
     Height = 30
-    Top = 16
+    Top = 50
     Width = 90
+    TabOrder = 0
+    OnClick = BtnLightClick
     Controller = Controller
     Caption = 'Light'
-    OnClick = BtnLightClick
   end
   object BtnDark: TTyButton
     Left = 114
     Height = 30
-    Top = 16
+    Top = 50
     Width = 90
+    TabOrder = 1
+    OnClick = BtnDarkClick
     Controller = Controller
     Caption = 'Dark'
-    OnClick = BtnDarkClick
   end
   object BtnShowcase: TTyButton
     Left = 212
     Height = 30
-    Top = 16
+    Top = 50
     Width = 110
+    TabOrder = 2
+    OnClick = BtnShowcaseClick
     Controller = Controller
     Caption = 'Showcase'
-    OnClick = BtnShowcaseClick
   end
   object BtnPrimary: TTyButton
     Left = 16
     Height = 30
-    Top = 60
+    Top = 94
     Width = 110
+    TabOrder = 3
     StyleClass = 'primary'
     Controller = Controller
     Caption = 'Primary'
@@ -47,8 +61,9 @@ object DemoMainForm: TDemoMainForm
   object BtnDanger: TTyButton
     Left = 134
     Height = 30
-    Top = 60
+    Top = 94
     Width = 110
+    TabOrder = 4
     StyleClass = 'danger'
     Controller = Controller
     Caption = 'Danger'
@@ -56,69 +71,81 @@ object DemoMainForm: TDemoMainForm
   object LblHello: TTyLabel
     Left = 16
     Height = 20
-    Top = 104
+    Top = 138
     Width = 120
     Controller = Controller
     Caption = 'Hello TyControls'
   end
   object EditName: TTyEdit
+    Cursor = crIBeam
     Left = 16
     Height = 26
-    Top = 132
+    Top = 166
     Width = 200
+    TabOrder = 5
+    TabStop = True
     Controller = Controller
   end
   object ChkAgree: TTyCheckBox
     Left = 16
     Height = 22
-    Top = 168
+    Top = 202
     Width = 120
+    TabOrder = 6
+    TabStop = True
     Controller = Controller
     Caption = 'Agree'
   end
   object RadOne: TTyRadioButton
     Left = 16
     Height = 22
-    Top = 196
+    Top = 230
     Width = 120
+    TabOrder = 7
+    TabStop = True
     Controller = Controller
     Caption = 'Option One'
   end
   object PanelBox: TTyPanel
     Left = 256
     Height = 160
-    Top = 60
+    Top = 94
     Width = 200
+    TabOrder = 8
     Controller = Controller
   end
   object ComboKind: TTyComboBox
     Left = 16
     Height = 26
-    Top = 228
+    Top = 262
     Width = 200
+    TabOrder = 9
     Controller = Controller
     ItemIndex = -1
   end
   object ScrollV: TTyScrollBar
     Left = 476
     Height = 160
-    Top = 60
+    Top = 94
     Width = 18
+    TabOrder = 10
     Controller = Controller
   end
   object GroupBox1: TTyGroupBox
     Left = 460
     Height = 110
-    Top = 240
+    Top = 274
     Width = 160
+    TabOrder = 11
     Controller = Controller
     Caption = 'Options'
   end
   object ListBox1: TTyListBox
     Left = 16
     Height = 110
-    Top = 270
+    Top = 304
     Width = 200
+    TabOrder = 12
     Controller = Controller
     Items.Strings = (
       'Alpha'
@@ -131,7 +158,7 @@ object DemoMainForm: TDemoMainForm
   object Progress1: TTyProgressBar
     Left = 240
     Height = 22
-    Top = 240
+    Top = 274
     Width = 200
     Controller = Controller
     Position = 60
@@ -139,8 +166,9 @@ object DemoMainForm: TDemoMainForm
   object TrackBar1: TTyTrackBar
     Left = 240
     Height = 30
-    Top = 278
+    Top = 312
     Width = 200
+    TabOrder = 13
     Controller = Controller
     Position = 60
     OnChange = TrackBar1Change
@@ -148,26 +176,30 @@ object DemoMainForm: TDemoMainForm
   object Toggle1: TTyToggleSwitch
     Left = 240
     Height = 28
-    Top = 324
+    Top = 358
     Width = 56
+    TabOrder = 14
+    TabStop = True
     Controller = Controller
     Checked = True
   end
   object SpinKind: TTySpinEdit
+    Cursor = crIBeam
     Left = 328
     Height = 28
-    Top = 324
+    Top = 358
     Width = 120
+    TabOrder = 15
     Controller = Controller
-    MinValue = 0
     MaxValue = 10
     Value = 3
   end
   object TabCtrl1: TTyTabControl
     Left = 16
     Height = 130
-    Top = 400
+    Top = 434
     Width = 604
+    TabOrder = 16
     Controller = Controller
     Tabs = <
       item
@@ -183,10 +215,13 @@ object DemoMainForm: TDemoMainForm
     TabsClosable = True
   end
   object Memo1: TTyMemo
+    Cursor = crIBeam
     Left = 16
     Height = 100
-    Top = 540
+    Top = 574
     Width = 604
+    TabOrder = 17
+    TabStop = True
     Controller = Controller
     Lines.Strings = (
       'TTyMemo — multi-line editor'
@@ -194,6 +229,7 @@ object DemoMainForm: TDemoMainForm
       'Arrows / Home / End move the caret; the wheel scrolls'
       'when the text overflows the visible rows.'
     )
+    Text = 'TTyMemo — multi-line editor'#13#10'Enter splits a line; Backspace/Delete merge across lines.'#13#10'Arrows / Home / End move the caret; the wheel scrolls'#13#10'when the text overflows the visible rows.'#13#10
   end
   object Controller: TTyStyleController
     Left = 16

@@ -5,7 +5,7 @@ unit test.form;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, StdCtrls,
+  Classes, SysUtils, Types, Controls, Graphics, Forms,
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form;
@@ -91,11 +91,11 @@ type
   TTyFormTest = class(TTestCase)
   published
     procedure TestBorderlessFromBirth;
-    procedure TestTitleBarIsTopBand;
-    procedure TestSubComponentsNamedAndFlagged;
+    procedure TestStartsWithNoTitleBar;
+    procedure TestCreatingTitleBarAutoAssigns;
+    procedure TestFreeingTitleBarNilsProperty;
     procedure TestApplyChromeThemeSetsColorFromToken;
     procedure TestApplyChromeThemePropagatesController;
-    procedure TestSubComponentsSurviveStreamRoundTrip;
     procedure TestTitleBarDragArmsViaEngine;
     procedure TestDblClickMaximizeToggles;
   end;
@@ -122,6 +122,7 @@ type
   TTyFormAccess = class(TTyForm)
   public
     function TB: TTyTitleBar;
+    function MakeTitleBar: TTyTitleBar;
     function EngineDragging: Boolean;
     function EngineMaximized: Boolean;
     procedure SetEngineMaximized(AValue: Boolean);
@@ -160,22 +161,9 @@ begin LayoutButtons; end;
 
 function TTyFormAccess.TB: TTyTitleBar; begin Result := TitleBar; end;
 
-{ Counts the components owned by AOwner (recursively) whose class is exactly
-  AClass. Used to prove the sub-components are matched-by-name (not duplicated)
-  after a stream round-trip. }
-function CountByClass(AOwner: TComponent; AClass: TComponentClass): Integer;
-var
-  i: Integer;
-begin
-  Result := 0;
-  if AOwner = nil then Exit;
-  for i := 0 to AOwner.ComponentCount - 1 do
-  begin
-    if AOwner.Components[i].ClassType = AClass then
-      Inc(Result);
-    Inc(Result, CountByClass(AOwner.Components[i], AClass));
-  end;
-end;
+{ Creating a TTyTitleBar owned by the form triggers auto-assign via Notification. }
+function TTyFormAccess.MakeTitleBar: TTyTitleBar;
+begin Result := TTyTitleBar.Create(Self); end;
 
 function TTyFormAccess.EngineDragging: Boolean; begin Result := FEngine.Dragging; end;
 function TTyFormAccess.EngineMaximized: Boolean; begin Result := FEngine.Maximized; end;
@@ -716,27 +704,46 @@ begin
   end;
 end;
 
-procedure TTyFormTest.TestTitleBarIsTopBand;
+procedure TTyFormTest.TestStartsWithNoTitleBar;
 var F: TTyFormAccess;
 begin
   F := TTyFormAccess.CreateNew(nil);
   try
-    AssertTrue('titlebar exists', F.TB <> nil);
-    AssertTrue('titlebar alTop', F.TB.Align = alTop);
-    AssertEquals('titlebar at y=0', 0, F.TB.Top);
-    AssertEquals('default title height', 32, F.TB.Height);
+    AssertTrue('empty by default', F.TitleBar = nil);
   finally
     F.Free;
   end;
 end;
 
-procedure TTyFormTest.TestSubComponentsNamedAndFlagged;
-var F: TTyFormAccess;
+procedure TTyFormTest.TestCreatingTitleBarAutoAssigns;
+var
+  F: TTyFormAccess;
+  TB: TTyTitleBar;
 begin
+  { Creating a title bar owned by the form fires Notification(opInsert), which
+    routes through SetTitleBar and auto-assigns it (Menu pattern). The test form is
+    NOT csDesigning, so it also wires at runtime. }
   F := TTyFormAccess.CreateNew(nil);
   try
-    AssertEquals('titlebar name', 'TyTitleBar', F.TB.Name);
-    AssertTrue('titlebar subcomponent', csSubComponent in F.TB.ComponentStyle);
+    TB := TTyTitleBar.Create(F);
+    AssertTrue('auto-assigned', F.TitleBar = TB);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestFreeingTitleBarNilsProperty;
+var
+  F: TTyFormAccess;
+  TB: TTyTitleBar;
+begin
+  { Freeing the associated bar fires Notification(opRemove), nilling the property. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    TB := TTyTitleBar.Create(F);
+    AssertTrue('auto-assigned', F.TitleBar = TB);
+    TB.Free;
+    AssertTrue('nil after free', F.TitleBar = nil);
   finally
     F.Free;
   end;
@@ -752,6 +759,7 @@ begin
   F := TTyFormAccess.CreateNew(nil);
   Ctl := TTyStyleController.Create(nil);
   try
+    F.MakeTitleBar;  { associate a bar so the chrome block runs }
     Ctl.LoadThemeCss('TyForm { background: #123456; }');
     F.ApplyChromeTheme(Ctl);
     AssertEquals('form Color from TyForm token',
@@ -772,6 +780,7 @@ begin
   F := TTyFormAccess.CreateNew(nil);
   Ctl := TTyStyleController.Create(nil);
   try
+    F.MakeTitleBar;  { associate a bar so the chrome propagation runs }
     Ctl.LoadThemeCss('TyForm { background: #123456; }');
     F.ApplyChromeTheme(Ctl);
     AssertTrue('titlebar uses the passed controller', F.TB.Controller = Ctl);
@@ -784,86 +793,15 @@ begin
   end;
 end;
 
-procedure TTyFormTest.TestSubComponentsSurviveStreamRoundTrip;
-var
-  Anc, Src, Dst: TTyFormAccess;
-  Stream: TMemoryStream;
-  Writer: TWriter;
-  Reader: TReader;
-  Child: TButton;
-begin
-  { Faithful headless analogue of the inherited-.lfm path.
-
-    In the Lazarus designer, a form descending from TTyForm is streamed as a
-    DESCENDENT of its ancestor (the TTyForm base, which already owns the
-    code-created TyTitleBar sub-component). So the inherited .lfm writes that
-    sub-component with the ffInherited flag (matched by Name against the
-    ancestor), and reading it back INTO a fresh instance (whose TyTitleBar
-    already exists from CreateNew) matches it by Name instead of recreating it.
-
-    This test reproduces that exactly:
-      - Anc: the ancestor instance (its sub-component defines the inherited set).
-      - Src: the descendant; UserBtn is the user-added child.
-      - WriteDescendent(Src, Anc): writes TyTitleBar as ffInherited (name-matched
-        against Anc) and UserBtn as a normal new component.
-      - ReadRootComponent(Dst) into a pre-existing instance: ffInherited
-        children are resolved via FLookupRoot.FindComponent(Name) -> the
-        existing TyTitleBar is reused (NOT duplicated), and UserBtn is created
-        fresh on the form.
-
-    What this proves: the SetSubComponent + fixed-Name mechanism makes a
-    descendant's inherited stream match the code-created sub-component by name
-    (no duplicates), and a user child round-trips on the form. What it does NOT
-    itself exercise: the IDE's on-disk .lfm text parse/codegen, which is
-    additionally covered by the design spec's LCL analysis and the manual
-    designer verification checklist. }
-  Anc := TTyFormAccess.CreateNew(nil);
-  Src := TTyFormAccess.CreateNew(nil);
-  Stream := TMemoryStream.Create;
-  try
-    Child := TButton.Create(Src);
-    Child.Name := 'UserBtn';
-    Child.Parent := Src;
-
-    Writer := TWriter.Create(Stream, 4096);
-    try
-      Writer.WriteDescendent(Src, Anc);
-    finally
-      Writer.Free;
-    end;
-    Stream.Position := 0;
-
-    Dst := TTyFormAccess.CreateNew(nil);  { already has its own TyTitleBar }
-    try
-      Reader := TReader.Create(Stream, 4096);
-      try
-        Reader.ReadRootComponent(Dst);    { ffInherited child name-matches -> no dup }
-      finally
-        Reader.Free;
-      end;
-      { exactly one title bar (matched by name, not duplicated) }
-      AssertEquals('one title bar', 1, CountByClass(Dst, TTyTitleBar));
-      { the user child round-tripped on the form }
-      AssertTrue('user child present', Dst.FindComponent('UserBtn') <> nil);
-      AssertTrue('user child parented to form',
-        TControl(Dst.FindComponent('UserBtn')).Parent = Dst);
-    finally
-      Dst.Free;
-    end;
-  finally
-    Stream.Free;
-    Src.Free;
-    Anc.Free;
-  end;
-end;
-
 procedure TTyFormTest.TestTitleBarDragArmsViaEngine;
 var F: TTyFormAccess;
 begin
-  { Pressing the title bar arms the engine's window-drag (FForm is the form itself). }
+  { Pressing the title bar arms the engine's window-drag (FForm is the form itself).
+    The bar is created owned by the form, so it auto-assigns + wires at runtime. }
   F := TTyFormAccess.CreateNew(nil);
   try
-    TTitleBarAccess(F.TB).InjectMouseDown(mbLeft, [], 10, 5);
+    F.MakeTitleBar;
+    TTitleBarAccess(F.TitleBar).InjectMouseDown(mbLeft, [], 10, 5);
     AssertTrue('engine drag armed via title bar', F.EngineDragging);
   finally
     F.Free;
@@ -877,8 +815,9 @@ begin
     so ToggleMaximize takes the restore branch (no window handle needed headless). }
   F := TTyFormAccess.CreateNew(nil);
   try
+    F.MakeTitleBar;
     F.SetEngineMaximized(True);
-    TTitleBarAccess(F.TB).InjectDblClick;
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
     AssertFalse('dbl-click toggled maximize off', F.EngineMaximized);
   finally
     F.Free;
@@ -895,10 +834,5 @@ initialization
   RegisterTest(TRescaleMetricTest);
   RegisterTest(TCaptionButtonHoverGlyphTest);
   RegisterTest(TTyFormTest);
-  { Streaming (TestSubComponentsSurviveStreamRoundTrip) resolves these child
-    classes by name during ReadComponent, so they must be class-registered. }
-  RegisterClass(TTyTitleBar);
-  RegisterClass(TTyCaptionButton);
-  RegisterClass(TButton);  { the user-added content child created fresh on read }
 
 end.

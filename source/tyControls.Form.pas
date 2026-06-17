@@ -95,7 +95,7 @@ type
     FMaximized: Boolean;
     FSavedBounds: TRect;
   public
-    constructor Create(ATitleBar: TTyTitleBar);
+    constructor Create;
     procedure CaptureInstalledPPI;
     procedure TitleBarMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure TitleBarMouseMove(Shift: TShiftState; X, Y: Integer);
@@ -107,20 +107,26 @@ type
     procedure HandleChangeBounds;
     procedure ToggleMaximize;
     property Form: TCustomForm read FForm write FForm;
+    property TitleBar: TTyTitleBar read FTitleBar write FTitleBar;
     property BorderZone: Integer read FBorderZone write FBorderZone;
     property Maximized: Boolean read FMaximized write FMaximized;
     property Dragging: Boolean read FDragging;
   end;
 
-  { A borderless form that auto-adds a docked (alTop) title bar. Otherwise it
-    behaves like an ordinary TForm: drop your controls straight onto it (below the
-    title bar) and design them in place — no content panel, no reparenting. }
+  { A borderless form that owns a persistent chrome engine but is born EMPTY (no
+    title bar). Drop a palette TTyTitleBar onto it: the bar auto-associates via the
+    Notification(opInsert) hook (the LCL Form.Menu -> TMainMenu pattern), and the
+    engine + caption buttons wire to it at RUNTIME. Otherwise it behaves like an
+    ordinary TForm: drop your controls straight onto it and design them in place. }
   TTyForm = class(TForm)
   private
     FTitleBar: TTyTitleBar;
     FShowMinimize: Boolean;
     FShowMaximize: Boolean;
     procedure SetupChrome;
+    procedure SetTitleBar(AValue: TTyTitleBar);
+    procedure WireTitleBarButtons;
+    procedure ArmEngine;
     function GetTitleHeight: Integer;
     procedure SetTitleHeight(AValue: Integer);
     procedure SetShowMinimize(AValue: Boolean);
@@ -132,6 +138,8 @@ type
     { The window-behavior engine. Protected so a test access subclass can read its
       drag/maximize state through it. }
     FEngine: TTyChromeEngine;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure Loaded; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -141,8 +149,8 @@ type
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     destructor Destroy; override;
     procedure ApplyChromeTheme(AController: TTyStyleController);
-    property TitleBar: TTyTitleBar read FTitleBar;
   published
+    property TitleBar: TTyTitleBar read FTitleBar write SetTitleBar;
     property TitleHeight: Integer read GetTitleHeight write SetTitleHeight default 32;
     property ShowMinimize: Boolean read FShowMinimize write SetShowMinimize default True;
     property ShowMaximize: Boolean read FShowMaximize write SetShowMaximize default True;
@@ -329,6 +337,11 @@ begin
   FCloseButton.Kind := cbkClose;
   FCloseButton.Parent := Self;
   LayoutButtons;
+  { If the owner form auto-assigned this bar during InsertComponent (which fires
+    BEFORE this ctor body, so the buttons were nil then), wire them now that they
+    exist. The TTyForm-side method is design-time/nil guarded. }
+  if (AOwner is TTyForm) and (TTyForm(AOwner).TitleBar = Self) then
+    TTyForm(AOwner).WireTitleBarButtons;
 end;
 
 function TTyTitleBar.GetStyleTypeKey: string;
@@ -431,37 +444,36 @@ end;
 procedure TTyTitleBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseDown(Button, Shift, X, Y);
-  if FEngine <> nil then
+  if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarMouseDown(Button, Shift, X, Y);
 end;
 
 procedure TTyTitleBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
-  if FEngine <> nil then
+  if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarMouseMove(Shift, X, Y);
 end;
 
 procedure TTyTitleBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
-  if FEngine <> nil then
+  if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarMouseUp(Button, Shift, X, Y);
 end;
 
 procedure TTyTitleBar.DblClick;
 begin
   inherited DblClick;
-  if FEngine <> nil then
+  if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarDblClick;
 end;
 
 { TTyChromeEngine }
 
-constructor TTyChromeEngine.Create(ATitleBar: TTyTitleBar);
+constructor TTyChromeEngine.Create;
 begin
   inherited Create;
-  FTitleBar := ATitleBar;
   FBorderZone := 6;
   FMaximized := False;
 end;
@@ -579,6 +591,7 @@ var
   CurPPI: Integer;
 begin
   if FForm = nil then Exit;
+  if FTitleBar = nil then Exit;
   if FForm.Monitor <> nil then
     CurPPI := FForm.Monitor.PixelsPerInch
   else
@@ -603,7 +616,7 @@ begin
   begin
     FForm.BoundsRect := FSavedBounds;
     FMaximized := False;
-    FTitleBar.MaxButton.Kind := cbkMax;
+    if FTitleBar <> nil then FTitleBar.MaxButton.Kind := cbkMax;
   end
   else
   begin
@@ -611,7 +624,7 @@ begin
     Wa := Screen.MonitorFromWindow(FForm.Handle).WorkareaRect;
     FForm.BoundsRect := TyMaximizedBounds(Wa);
     FMaximized := True;
-    FTitleBar.MaxButton.Kind := cbkRestore;
+    if FTitleBar <> nil then FTitleBar.MaxButton.Kind := cbkRestore;
   end;
 end;
 
@@ -622,34 +635,20 @@ begin
   BorderStyle := bsNone;
   FShowMinimize := True;
   FShowMaximize := True;
-
-  FTitleBar := TTyTitleBar.Create(Self);
-  FTitleBar.Name := 'TyTitleBar';
-  FTitleBar.SetSubComponent(True);
-  FTitleBar.Parent := Self;
-  FTitleBar.Align := alTop;
-  FTitleBar.Height := 32;
-
-  FEngine := TTyChromeEngine.Create(FTitleBar);
+  FEngine := TTyChromeEngine.Create;
   FEngine.Form := Self;
-  FEngine.CaptureInstalledPPI;
-  FTitleBar.FEngine := FEngine;
-
-  FTitleBar.MinButton.OnClick := @DoMinimizeClick;
-  FTitleBar.MaxButton.OnClick := @DoMaxRestoreClick;
-  FTitleBar.CloseButton.OnClick := @DoCloseClick;
 end;
 
 constructor TTyForm.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  if FTitleBar = nil then SetupChrome;
+  if FEngine = nil then SetupChrome;
 end;
 
 constructor TTyForm.CreateNew(AOwner: TComponent; Num: Integer);
 begin
   inherited CreateNew(AOwner, Num);
-  if FTitleBar = nil then SetupChrome;
+  if FEngine = nil then SetupChrome;
 end;
 
 destructor TTyForm.Destroy;
@@ -657,6 +656,79 @@ begin
   if FTitleBar <> nil then FTitleBar.FEngine := nil;
   FEngine.Free;
   inherited Destroy;
+end;
+
+procedure TTyForm.SetTitleBar(AValue: TTyTitleBar);
+begin
+  if AValue = FTitleBar then Exit;
+  // unwire old bar
+  if FTitleBar <> nil then
+  begin
+    FTitleBar.FEngine := nil;
+    // The buttons are created in the bar's ctor body. When SetTitleBar runs from
+    // the owner-form Notification(opInsert) — which TComponent.Create fires BEFORE
+    // the bar's ctor body — they may still be nil, so guard every deref.
+    if FTitleBar.MinButton <> nil then FTitleBar.MinButton.OnClick := nil;
+    if FTitleBar.MaxButton <> nil then FTitleBar.MaxButton.OnClick := nil;
+    if FTitleBar.CloseButton <> nil then FTitleBar.CloseButton.OnClick := nil;
+  end;
+  FTitleBar := AValue;
+  if FEngine <> nil then FEngine.TitleBar := AValue;
+  if AValue <> nil then
+  begin
+    AValue.FreeNotification(Self);
+    // Arm the live engine ONLY at runtime — never in the designer (dragging the
+    // title bar would move/maximize the window instead of selecting it), and not
+    // mid-load: when the bar comes from the .lfm this setter runs at fixup time
+    // while csLoading is still set, and ArmEngine touches Monitor (premature handle
+    // realization). Loaded arms it once streaming has finished.
+    if not (csDesigning in ComponentState) and not (csLoading in ComponentState) then
+      ArmEngine;
+  end;
+end;
+
+{ Connect the title bar to the live engine: back-reference so the bar's mouse
+  events reach the engine, capture the install DPI, and wire the caption buttons.
+  Safe to call repeatedly; never runs in the designer or before load completes. }
+procedure TTyForm.ArmEngine;
+begin
+  if (FTitleBar = nil) or (csDesigning in ComponentState) then Exit;
+  FTitleBar.FEngine := FEngine;
+  if FEngine <> nil then FEngine.CaptureInstalledPPI;
+  WireTitleBarButtons;
+end;
+
+procedure TTyForm.Loaded;
+begin
+  inherited Loaded;
+  // A title bar associated from the .lfm had its engine-arming deferred (see
+  // SetTitleBar); now that streaming has finished, wire it to the live engine.
+  ArmEngine;
+end;
+
+{ Wire the caption-button click handlers. Split out so it can run both from
+  SetTitleBar and from the title bar's own ctor tail — because when the bar is
+  auto-assigned via Notification(opInsert) its buttons aren't created yet. }
+procedure TTyForm.WireTitleBarButtons;
+begin
+  if (FTitleBar = nil) or (csDesigning in ComponentState) then Exit;
+  if FTitleBar.MinButton <> nil then FTitleBar.MinButton.OnClick := @DoMinimizeClick;
+  if FTitleBar.MaxButton <> nil then FTitleBar.MaxButton.OnClick := @DoMaxRestoreClick;
+  if FTitleBar.CloseButton <> nil then FTitleBar.CloseButton.OnClick := @DoCloseClick;
+end;
+
+procedure TTyForm.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opInsert) and not (csLoading in ComponentState)
+     and (FTitleBar = nil) and (AComponent.Owner = Self)
+     and (AComponent is TTyTitleBar) then
+    TitleBar := TTyTitleBar(AComponent)          // routes through SetTitleBar
+  else if (Operation = opRemove) and (AComponent = FTitleBar) then
+  begin
+    FTitleBar := nil;
+    if FEngine <> nil then FEngine.TitleBar := nil;
+  end;
 end;
 
 procedure TTyForm.DoMinimizeClick(Sender: TObject);
@@ -671,38 +743,60 @@ begin Close; end;
 procedure TTyForm.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseDown(Button, Shift, X, Y);
-  if FEngine <> nil then FEngine.FormMouseDown(Button, Shift, X, Y);
+  if (FEngine <> nil) and not (csDesigning in ComponentState) then
+    FEngine.FormMouseDown(Button, Shift, X, Y);
 end;
 
 procedure TTyForm.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
-  if FEngine <> nil then FEngine.FormMouseMove(Shift, X, Y);
+  if (FEngine <> nil) and not (csDesigning in ComponentState) then
+    FEngine.FormMouseMove(Shift, X, Y);
 end;
 
 procedure TTyForm.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
-  if FEngine <> nil then FEngine.FormMouseUp(Button, Shift, X, Y);
+  if (FEngine <> nil) and not (csDesigning in ComponentState) then
+    FEngine.FormMouseUp(Button, Shift, X, Y);
 end;
 
 procedure TTyForm.DoOnChangeBounds;
 begin
   inherited DoOnChangeBounds;
-  if FEngine <> nil then FEngine.HandleChangeBounds;
+  if (FEngine <> nil) and not (csDesigning in ComponentState) then
+    FEngine.HandleChangeBounds;
 end;
 
 function TTyForm.GetTitleHeight: Integer;
-begin Result := FTitleBar.Height; end;
+begin
+  if FTitleBar <> nil then Result := FTitleBar.Height else Result := 0;
+end;
 
 procedure TTyForm.SetTitleHeight(AValue: Integer);
-begin if FTitleBar.Height <> AValue then FTitleBar.Height := AValue; end;
+begin
+  if (FTitleBar <> nil) and (FTitleBar.Height <> AValue) then FTitleBar.Height := AValue;
+end;
 
 procedure TTyForm.SetShowMinimize(AValue: Boolean);
-begin FShowMinimize := AValue; FTitleBar.MinButton.Visible := AValue; FTitleBar.LayoutButtons; end;
+begin
+  FShowMinimize := AValue;
+  if FTitleBar <> nil then
+  begin
+    FTitleBar.MinButton.Visible := AValue;
+    FTitleBar.LayoutButtons;
+  end;
+end;
 
 procedure TTyForm.SetShowMaximize(AValue: Boolean);
-begin FShowMaximize := AValue; FTitleBar.MaxButton.Visible := AValue; FTitleBar.LayoutButtons; end;
+begin
+  FShowMaximize := AValue;
+  if FTitleBar <> nil then
+  begin
+    FTitleBar.MaxButton.Visible := AValue;
+    FTitleBar.LayoutButtons;
+  end;
+end;
 
 procedure TTyForm.ApplyChromeTheme(AController: TTyStyleController);
 var bg: TTyStyleSet;
@@ -711,14 +805,24 @@ begin
   { Propagate the controller to every chrome sub-component FIRST, so the whole
     window chrome themes from the SAME controller the app loaded its theme into
     (each styleable control resolves its theme via its Controller). }
-  FTitleBar.Controller := AController;
-  FTitleBar.MinButton.Controller := AController;
-  FTitleBar.MaxButton.Controller := AController;
-  FTitleBar.CloseButton.Controller := AController;
+  if FTitleBar <> nil then
+  begin
+    FTitleBar.Controller := AController;
+    FTitleBar.MinButton.Controller := AController;
+    FTitleBar.MaxButton.Controller := AController;
+    FTitleBar.CloseButton.Controller := AController;
+  end;
   bg := AController.Model.ResolveStyle('TyForm', '', []);
   if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
     Color := TyColorToLCL(bg.Background.Color);
   Invalidate;
 end;
+
+initialization
+  { Register for streaming so a TTyTitleBar dropped on a form persists/loads from
+    the .lfm at RUNTIME. A form's own published fields resolve their class via RTTI,
+    but an associated title bar may be an unnamed/owner-only object — without this,
+    loading such an .lfm raises EClassNotFound: Class "TTyTitleBar" not found. }
+  RegisterClass(TTyTitleBar);
 
 end.

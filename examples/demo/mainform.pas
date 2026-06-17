@@ -2,7 +2,7 @@ unit mainform;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls, Graphics,
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs,
   tyControls.Controller, tyControls.Button, tyControls.TyLabel,
   tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
@@ -12,8 +12,8 @@ uses
 type
 
   { TDemoMainForm — all controls are placed in the designer (mainform.lfm),
-    including the TabControl's tabs (v1.7 design-time Tabs collection),
-    TTySpinEdit and TTyMemo. }
+    including the docked TTyTitleBar (associated via the form's TitleBar
+    property), the TabControl's tabs, TTySpinEdit and TTyMemo. }
 
   TDemoMainForm = class(TTyForm)
     Controller: TTyStyleController;
@@ -78,7 +78,7 @@ begin
 
   // Window chrome + backdrop follow the theme via the TyForm token.
   ApplyChromeTheme(Controller);
-  TitleBar.Caption := 'TyControls Demo';
+  if TitleBar <> nil then TitleBar.Caption := 'TyControls Demo';
 end;
 
 procedure TDemoMainForm.TrackBar1Change(Sender: TObject);
@@ -89,7 +89,7 @@ end;
 
 procedure TDemoMainForm.FormCreate(Sender: TObject);
 begin
-  // Controls (incl. tabs/spin/memo) come from the .lfm; just load the theme.
+  // Controls (incl. the title bar/tabs/spin/memo) come from the .lfm; load the theme.
   ApplyTheme('light.tycss');
 end;
 

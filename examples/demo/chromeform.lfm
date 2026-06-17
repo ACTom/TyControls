@@ -1,20 +1,30 @@
 object ChromeForm: TChromeForm
   Left = 280
+  Height = 360
   Top = 180
   Width = 520
-  Height = 360
   Caption = 'Custom Chrome Window'
-  TitleHeight = 34
+  TitleBar = TyTitleBar1
   OnCreate = FormCreate
+  object TyTitleBar1: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 520
+    Align = alTop
+    Caption = 'Custom Chrome Window'
+    Controller = Controller
+  end
   object Controller: TTyStyleController
     Left = 64
     Top = 48
   end
   object LblInfo: TTyLabel
     Left = 24
+    Height = 20
     Top = 80
     Width = 360
-    Height = 20
+    Controller = Controller
     Caption = 'Drag the title bar; resize from edges; double-click to maximize.'
   end
 end
