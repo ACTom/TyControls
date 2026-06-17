@@ -1548,14 +1548,14 @@ begin
                TextClipRight,
                ContentRect.Bottom),
           DisplayText, S.FontName, EffSize, S.FontWeight,
-          S.TextColor, taLeftJustify, tlCenter, True);
+          S.TextColor, taLeftJustify, tlCenter, False);  // clip+scroll, never ellipsize
       end
       else
         P.DrawText(
           Rect(ContentRect.Left + AOff, ContentRect.Top,
                ContentRect.Right, ContentRect.Bottom),
           DisplayText, S.FontName, EffSize, S.FontWeight,
-          S.TextColor, taLeftJustify, tlCenter, True);
+          S.TextColor, taLeftJustify, tlCenter, False);  // clip+scroll, never ellipsize
     end;
 
     // 3. Caret (only when focused, no selection, and blink-visible)
