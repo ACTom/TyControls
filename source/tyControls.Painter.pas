@@ -36,7 +36,7 @@ type
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
     procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
     procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
-    procedure FillGlass(const ARect: TRect; ABackdrop: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
+    procedure FillGlass(const ARect: TRect; ASharp, AGlass: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
     procedure EraseRect(const ARect: TRect);
     property Bitmap: TBGRABitmap read FBmp;
   end;
@@ -428,32 +428,49 @@ begin
   end;
 end;
 
-procedure TTyPainter.FillGlass(const ARect: TRect; ABackdrop: TBGRABitmap;
+procedure TTyPainter.FillGlass(const ARect: TRect; ASharp, AGlass: TBGRABitmap;
   const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
-{ Paint the "frosted glass" backdrop behind a control: blit the (already blurred)
-  backdrop slice at ASrcOffset into ARect, then composite the translucent tint with
-  the control's rounded corners. The slice is clamped to the backdrop so a control
-  partly off the backdrop keeps whatever solid fill was painted underneath. }
+{ Frosted glass behind a control. First lay the SHARP backdrop slice across the
+  whole rect so the corners (outside the rounded shape) read as the same photo the
+  form shows — seamless, no stray solid corner. Then overlay the BLURRED slice +
+  tint, round-clipped to the control's corners, as the glass pane itself. Slices
+  are clamped so a control partly off the backdrop keeps the underlying fill. }
 var
   w, h, ovL, ovT, ovR, ovB, r: Integer;
   opts: TRoundRectangleOptions;
   part, temp, mask: TBGRABitmap;
+  oldClip: TRect;
 begin
-  if (FBmp = nil) or (ABackdrop = nil) then Exit;
+  if (FBmp = nil) or (AGlass = nil) then Exit;
   w := ARect.Right - ARect.Left;
   h := ARect.Bottom - ARect.Top;
   if (w <= 0) or (h <= 0) then Exit;
   ovL := ASrcOffset.X; if ovL < 0 then ovL := 0;
   ovT := ASrcOffset.Y; if ovT < 0 then ovT := 0;
-  ovR := ASrcOffset.X + w; if ovR > ABackdrop.Width then ovR := ABackdrop.Width;
-  ovB := ASrcOffset.Y + h; if ovB > ABackdrop.Height then ovB := ABackdrop.Height;
+  ovR := ASrcOffset.X + w; if ovR > AGlass.Width then ovR := AGlass.Width;
+  ovB := ASrcOffset.Y + h; if ovB > AGlass.Height then ovB := AGlass.Height;
   if (ovR <= ovL) or (ovB <= ovT) then Exit;  // control entirely off the backdrop
-  // Build the glass content (blurred slice + tint) in a control-sized buffer, then
-  // round-clip it to the control's corners so it never overruns the rounded shape;
-  // the corners keep the solid parent fill painted underneath.
+  // 1. Sharp slice over the whole rect -> the corners blend into the form's photo.
+  if ASharp <> nil then
+  begin
+    oldClip := FBmp.ClipRect;
+    FBmp.ClipRect := ARect;
+    try
+      part := ASharp.GetPart(Rect(ovL, ovT, ovR, ovB)) as TBGRABitmap;
+      try
+        FBmp.PutImage(ARect.Left + (ovL - ASrcOffset.X),
+                      ARect.Top  + (ovT - ASrcOffset.Y), part, dmSet);
+      finally
+        part.Free;
+      end;
+    finally
+      FBmp.ClipRect := oldClip;
+    end;
+  end;
+  // 2. Blurred slice + tint, round-clipped, over the centre.
   temp := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
   try
-    part := ABackdrop.GetPart(Rect(ovL, ovT, ovR, ovB)) as TBGRABitmap;
+    part := AGlass.GetPart(Rect(ovL, ovT, ovR, ovB)) as TBGRABitmap;
     try
       temp.PutImage(ovL - ASrcOffset.X, ovT - ASrcOffset.Y, part, dmSet);
     finally

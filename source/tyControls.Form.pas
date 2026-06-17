@@ -130,11 +130,13 @@ type
     FShowMinimize: Boolean;
     FShowMaximize: Boolean;
     FController: TTyStyleController;   // set by ApplyChromeTheme; used by Paint
-    FGlassBackdrop: TBGRABitmap;      // form bg, snapshotted + blurred once for glass
+    FSharpBackdrop: TBGRABitmap;      // form bg snapshot, UNblurred (fills glass corners)
+    FGlassBackdrop: TBGRABitmap;      // same snapshot, blurred once for the glass pane
     FGlassKey: string;                // imagepath|WxH|blurDev — rebuild when it changes
     FGlassBlurLogical: Integer;       // theme-wide glass blur radius (0 = no glass)
     // ITyGlassHost
     function GlassBackdrop: TBGRABitmap;
+    function GlassSharpBackdrop: TBGRABitmap;
     function GlassClientOrigin: TPoint;
     function GlassUnderTitlebar: Boolean;
     procedure SetupChrome;
@@ -683,6 +685,7 @@ end;
 
 destructor TTyForm.Destroy;
 begin
+  FreeAndNil(FSharpBackdrop);
   FreeAndNil(FGlassBackdrop);
   if FTitleBar <> nil then FTitleBar.FEngine := nil;
   FEngine.Free;
@@ -835,6 +838,11 @@ begin
   Result := FGlassBackdrop;
 end;
 
+function TTyForm.GlassSharpBackdrop: TBGRABitmap;
+begin
+  Result := FSharpBackdrop;
+end;
+
 function TTyForm.GlassClientOrigin: TPoint;
 begin
   Result := ClientOrigin;
@@ -876,14 +884,13 @@ begin
             + IntToStr(ClientHeight) + '|' + IntToStr(blurDev);
           if (FGlassBackdrop = nil) or (newKey <> FGlassKey) then
           begin
+            FreeAndNil(FSharpBackdrop);
             FreeAndNil(FGlassBackdrop);
-            FGlassBackdrop := P.Bitmap.Duplicate as TBGRABitmap;
+            FSharpBackdrop := P.Bitmap.Duplicate as TBGRABitmap;  // corners (unblurred)
             if blurDev > 0 then
-            begin
-              tmp := FGlassBackdrop.FilterBlurRadial(blurDev, rbFast) as TBGRABitmap;
-              FreeAndNil(FGlassBackdrop);
-              FGlassBackdrop := tmp;
-            end;
+              FGlassBackdrop := FSharpBackdrop.FilterBlurRadial(blurDev, rbFast) as TBGRABitmap
+            else
+              FGlassBackdrop := FSharpBackdrop.Duplicate as TBGRABitmap;
             FGlassKey := newKey;
           end;
         end;
@@ -894,7 +901,8 @@ begin
       Exit;
     end;
   end;
-  FreeAndNil(FGlassBackdrop);   // non-image theme: drop any stale backdrop
+  FreeAndNil(FSharpBackdrop);   // non-image theme: drop any stale backdrop
+  FreeAndNil(FGlassBackdrop);
   inherited Paint;
 end;
 

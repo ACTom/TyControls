@@ -15,8 +15,9 @@ type
     background. Declared here (not in Form) so Base never `uses` the Form unit. }
   ITyGlassHost = interface
     ['{A1B2C3D4-0001-0002-0003-000000000002}']
-    function GlassBackdrop: TBGRABitmap;    // nil when no image backdrop / no glass
-    function GlassClientOrigin: TPoint;     // screen coords of the form client (0,0)
+    function GlassBackdrop: TBGRABitmap;       // blurred backdrop (nil if no glass)
+    function GlassSharpBackdrop: TBGRABitmap;  // unblurred — fills glass corners
+    function GlassClientOrigin: TPoint;        // screen coords of the form client (0,0)
     function GlassUnderTitlebar: Boolean;
   end;
 
@@ -357,7 +358,7 @@ begin
   if inTitle and not host.GlassUnderTitlebar then Exit;
   co := AControl.ClientOrigin;    // control client (0,0) in screen px
   fo := host.GlassClientOrigin;   // form client (0,0) in screen px
-  APainter.FillGlass(ARect, bmp, Point(co.X - fo.X, co.Y - fo.Y),
+  APainter.FillGlass(ARect, host.GlassSharpBackdrop, bmp, Point(co.X - fo.X, co.Y - fo.Y),
     AStyle.Background.GlassTint, TyEffectiveCorners(AStyle));
   Result := True;
 end;
