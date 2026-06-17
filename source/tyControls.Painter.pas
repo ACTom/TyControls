@@ -36,6 +36,7 @@ type
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
     procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
     procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
+    procedure FillGlass(const ARect: TRect; ABackdrop: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
     procedure EraseRect(const ARect: TRect);
     property Bitmap: TBGRABitmap read FBmp;
   end;
@@ -424,6 +425,51 @@ begin
     BlitRegion(src, Rect(sxR, syB, iw, ih), Rect(dr - sr, db - sb, dr, db));
   finally
     src.Free;
+  end;
+end;
+
+procedure TTyPainter.FillGlass(const ARect: TRect; ABackdrop: TBGRABitmap;
+  const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
+{ Paint the "frosted glass" backdrop behind a control: blit the (already blurred)
+  backdrop slice at ASrcOffset into ARect, then composite the translucent tint with
+  the control's rounded corners. The slice is clamped to the backdrop so a control
+  partly off the backdrop keeps whatever solid fill was painted underneath. }
+var
+  w, h, ovL, ovT, ovR, ovB: Integer;
+  part: TBGRABitmap;
+  oldClip: TRect;
+  tintFill: TTyFill;
+begin
+  if (FBmp = nil) or (ABackdrop = nil) then Exit;
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+  if (w <= 0) or (h <= 0) then Exit;
+  ovL := ASrcOffset.X; if ovL < 0 then ovL := 0;
+  ovT := ASrcOffset.Y; if ovT < 0 then ovT := 0;
+  ovR := ASrcOffset.X + w; if ovR > ABackdrop.Width then ovR := ABackdrop.Width;
+  ovB := ASrcOffset.Y + h; if ovB > ABackdrop.Height then ovB := ABackdrop.Height;
+  oldClip := FBmp.ClipRect;
+  FBmp.ClipRect := ARect;
+  try
+    if (ovR > ovL) and (ovB > ovT) then
+    begin
+      part := ABackdrop.GetPart(Rect(ovL, ovT, ovR, ovB)) as TBGRABitmap;
+      try
+        FBmp.PutImage(ARect.Left + (ovL - ASrcOffset.X),
+                      ARect.Top  + (ovT - ASrcOffset.Y), part, dmSet);
+      finally
+        part.Free;
+      end;
+    end;
+    if TyAlphaOf(ATint) > 0 then
+    begin
+      tintFill := Default(TTyFill);
+      tintFill.Kind := tfkSolid;
+      tintFill.Color := ATint;
+      FillBackground(ARect, tintFill, ACorners);
+    end;
+  finally
+    FBmp.ClipRect := oldClip;
   end;
 end;
 

@@ -2,13 +2,28 @@ unit tyControls.Base;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LMessages, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LMessages, LCLType, BGRABitmap,
   tyControls.Types, tyControls.Controller, tyControls.StyleModel,
   tyControls.Painter;
 type
   ITyStyleable = interface
     ['{A1B2C3D4-0001-0002-0003-000000000001}']
     function GetStyleTypeKey: string;
+  end;
+
+  { Implemented by TTyForm: lets a glass control sample the form's pre-blurred
+    background. Declared here (not in Form) so Base never `uses` the Form unit. }
+  ITyGlassHost = interface
+    ['{A1B2C3D4-0001-0002-0003-000000000002}']
+    function GlassBackdrop: TBGRABitmap;    // nil when no image backdrop / no glass
+    function GlassClientOrigin: TPoint;     // screen coords of the form client (0,0)
+    function GlassUnderTitlebar: Boolean;
+  end;
+
+  { Marker implemented by TTyTitleBar so the glass gate can detect a control that
+    is (or sits inside) the title bar without Base depending on the Form unit. }
+  ITyTitleBarTag = interface
+    ['{A1B2C3D4-0001-0002-0003-000000000003}']
   end;
 
   TTyGraphicControl = class(TGraphicControl, ITyStyleable)
@@ -304,15 +319,65 @@ begin
   end;
 end;
 
-procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: TRect);
+{ Frosted glass: when a control opted in (tpGlass) and an image-backed TTyForm is
+  above it, blit a slice of the form's pre-blurred backdrop behind the control and
+  tint it. Returns False (so the solid fill stands) whenever glass is not reachable
+  — headless/parentless/no-handle controls, plain forms, or the title-bar gate. }
+function TyFillGlassBg(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet): Boolean;
+var
+  host: ITyGlassHost;
+  tag: ITyTitleBarTag;
+  bmp: TBGRABitmap;
+  p: TControl;
+  co, fo: TPoint;
+  inTitle: Boolean;
+begin
+  Result := False;
+  if not (tpGlass in AStyle.Present) then Exit;
+  if (AControl = nil) or (AControl.Parent = nil) then Exit;
+  // ControlToScreen/ClientOrigin need a real window; non-windowed/headless controls
+  // fall back to the solid parent fill (no backdrop reachable anyway).
+  if not (AControl is TWinControl) or not TWinControl(AControl).HandleAllocated then Exit;
+  host := nil;
+  p := AControl;
+  while (p <> nil) and not Supports(p, ITyGlassHost, host) do p := p.Parent;
+  if host = nil then Exit;
+  bmp := host.GlassBackdrop;
+  if bmp = nil then Exit;
+  // Title-bar gate: a control that is (or sits inside) the title bar only glasses
+  // when the theme extended the image under the bar.
+  inTitle := False;
+  p := AControl;
+  while p <> nil do
+  begin
+    if Supports(p, ITyTitleBarTag, tag) then begin inTitle := True; Break; end;
+    p := p.Parent;
+  end;
+  if inTitle and not host.GlassUnderTitlebar then Exit;
+  co := AControl.ClientOrigin;    // control client (0,0) in screen px
+  fo := host.GlassClientOrigin;   // form client (0,0) in screen px
+  APainter.FillGlass(ARect, bmp, Point(co.X - fo.X, co.Y - fo.Y),
+    AStyle.Background.GlassTint, TyEffectiveCorners(AStyle));
+  Result := True;
+end;
+
+procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet);
 var
   c: TTyColor;
   f: TTyFill;
 begin
-  if not TyResolveParentBg(AControl, c) then Exit;
-  f.Kind := tfkSolid;
-  f.Color := c;
-  APainter.FillBackground(ARect, f, 0);
+  // Solid parent fill is the opaque base: off-form/no-backdrop safety, and it fills
+  // the corners outside a glass control's rounded tint.
+  if TyResolveParentBg(AControl, c) then
+  begin
+    f := Default(TTyFill);
+    f.Kind := tfkSolid;
+    f.Color := c;
+    APainter.FillBackground(ARect, f, 0);
+  end;
+  TyFillGlassBg(AControl, APainter, ARect, AStyle);
 end;
 
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
@@ -321,7 +386,7 @@ var
   off: Integer;
   ringRect: TRect;
 begin
-  TyFillParentBg(Self, APainter, ARect);
+  TyFillParentBg(Self, APainter, ARect, AStyle);
   if tpOpacity in AStyle.Present then
     APainter.Opacity := AStyle.Opacity;
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
@@ -498,7 +563,7 @@ var
   off: Integer;
   ringRect: TRect;
 begin
-  TyFillParentBg(Self, APainter, ARect);
+  TyFillParentBg(Self, APainter, ARect, AStyle);
   if tpOpacity in AStyle.Present then
     APainter.Opacity := AStyle.Opacity;
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then

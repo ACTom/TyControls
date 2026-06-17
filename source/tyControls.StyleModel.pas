@@ -29,6 +29,7 @@ type
     procedure LoadFromCss(const ASource: string);   // raises ETyCssError
     procedure LoadFromFile(const AFileName: string);
     function ResolveStyle(const ATypeKey, AStyleClass: string; AStates: TTyStateSet): TTyStyleSet;
+    function MaxGlassBlur: Integer;   // largest glass-blur any active rule requests (0 = none)
   end;
 
 procedure TyMergeStyleSet(var ABase: TTyStyleSet; const AOver: TTyStyleSet);
@@ -79,6 +80,15 @@ begin
     ABase.OutlineWidth  := AOver.OutlineWidth;
     ABase.OutlineOffset := AOver.OutlineOffset;
   end;
+  // Glass rides Background but merges NARROWLY: a ':hover { glass-tint: ... }' rule
+  // with no background: must not blank the base Background (only tpBackground does that).
+  if tpGlass in AOver.Present then
+  begin
+    ABase.Background.GlassBlur := AOver.Background.GlassBlur;
+    ABase.Background.GlassTint := AOver.Background.GlassTint;
+  end;
+  if tpBgUnderTitle in AOver.Present then
+    ABase.BackgroundUnderTitlebar := AOver.BackgroundUnderTitlebar;
   ABase.Present := ABase.Present + AOver.Present;
 end;
 
@@ -462,6 +472,21 @@ begin
   else if prop = 'background-blur' then
     AStyle.Background.Blur := StrToIntDef(
       Trim(StringReplace(LowerCase(raw), 'px', '', [rfReplaceAll])), 0)
+  else if prop = 'glass-blur' then
+  begin
+    AStyle.Background.GlassBlur := TyEvalLength(raw, Vars);
+    Include(AStyle.Present, tpGlass);
+  end
+  else if prop = 'glass-tint' then
+  begin
+    AStyle.Background.GlassTint := TyEvalColor(raw, Vars);
+    Include(AStyle.Present, tpGlass);
+  end
+  else if prop = 'background-under-titlebar' then
+  begin
+    AStyle.BackgroundUnderTitlebar := (LowerCase(raw) = 'true');
+    Include(AStyle.Present, tpBgUnderTitle);
+  end
   else if prop = 'shadow' then
   begin
     // shadow: <offsetX> <offsetY> <blur> <color>  (logical px)
@@ -686,6 +711,33 @@ end;
 procedure TTyStyleModel.LoadFromCss(const ASource: string);
 begin
   LoadInto(FRules, FVars, ASource);
+end;
+
+function TTyStyleModel.MaxGlassBlur: Integer;
+
+  function ScanLayer(ARules: TFPList; ASkipUserKeys: Boolean): Integer;
+  var
+    i: Integer;
+    e: TTyStyleRuleEntry;
+  begin
+    Result := 0;
+    for i := 0 to ARules.Count - 1 do
+    begin
+      e := TTyStyleRuleEntry(ARules[i]);
+      // Honour the user-suppresses-base rule: skip base entries for typeKeys the
+      // user theme defines (their base glass tokens are suppressed by ResolveStyle).
+      if ASkipUserKeys and UserHasTypeKey(e.TypeName) then Continue;
+      if (tpGlass in e.Style.Present) and (e.Style.Background.GlassBlur > Result) then
+        Result := e.Style.Background.GlassBlur;
+    end;
+  end;
+
+var
+  u, b: Integer;
+begin
+  u := ScanLayer(FRules, False);
+  b := ScanLayer(FBaseRules, True);
+  if u > b then Result := u else Result := b;
 end;
 
 procedure TTyStyleModel.LoadFromFile(const AFileName: string);

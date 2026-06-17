@@ -24,6 +24,7 @@ type
     procedure TestLoadGradientBackground;
     procedure TestLoadNineSliceBackgroundImage;
     procedure TestLoadPlainImageBackground;
+    procedure TestLoadGlassTokens;
     procedure TestLoadFromCssParseErrorPreservesPrevious;
     procedure TestDuplicateRuleLastWins;
     procedure TestBackgroundColorAlias;
@@ -223,6 +224,32 @@ begin
     m.LoadFromCss('TyForm { background-image: url(a.png); }');
     s := m.ResolveStyle('TyForm', '', []);
     AssertTrue('default mode cover', s.Background.ImageMode = timCover);
+  finally m.Free; end;
+end;
+
+procedure TTestStyleLoad.TestLoadGlassTokens;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(
+      'TyForm { background-image: url(a.jpg); background-under-titlebar: true; }'
+      + ' TyPanel { background: #FFFFFF; glass-blur: 14px; glass-tint: alpha(#FFFFFF, 0.5); }'
+      + ' TyPanel:hover { glass-tint: alpha(#000000, 0.2); }'
+      + ' TyButton { glass-blur: 20px; }');
+    s := m.ResolveStyle('TyForm', '', []);
+    AssertTrue('under-titlebar parsed true', s.BackgroundUnderTitlebar);
+    AssertTrue('bgUnderTitle present', tpBgUnderTitle in s.Present);
+    s := m.ResolveStyle('TyPanel', '', []);
+    AssertTrue('glass present', tpGlass in s.Present);
+    AssertEquals('glass-blur 14', 14, s.Background.GlassBlur);
+    AssertTrue('panel bg still solid white', s.Background.Kind = tfkSolid);
+    AssertEquals('panel bg red FF (not blanked)', $FF, TyRedOf(s.Background.Color));
+    // hover merges glass-tint NARROWLY — must not blank the base background
+    s := m.ResolveStyle('TyPanel', '', [tysHover]);
+    AssertEquals('hover keeps bg solid white', $FF, TyRedOf(s.Background.Color));
+    AssertTrue('hover bg still solid', s.Background.Kind = tfkSolid);
+    AssertEquals('MaxGlassBlur = largest (20)', 20, m.MaxGlassBlur);
   finally m.Free; end;
 end;
 

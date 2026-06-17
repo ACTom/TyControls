@@ -9,6 +9,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
+  BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller;
 
 type
@@ -40,7 +41,7 @@ type
     property OnClick;
   end;
 
-  TTyTitleBar = class(TTyCustomControl)
+  TTyTitleBar = class(TTyCustomControl, ITyTitleBarTag)
   private
     FCaption: string;
     FMinButton: TTyCaptionButton;
@@ -123,12 +124,19 @@ type
     Notification(opInsert) hook (the LCL Form.Menu -> TMainMenu pattern), and the
     engine + caption buttons wire to it at RUNTIME. Otherwise it behaves like an
     ordinary TForm: drop your controls straight onto it and design them in place. }
-  TTyForm = class(TForm)
+  TTyForm = class(TForm, ITyGlassHost)
   private
     FTitleBar: TTyTitleBar;
     FShowMinimize: Boolean;
     FShowMaximize: Boolean;
     FController: TTyStyleController;   // set by ApplyChromeTheme; used by Paint
+    FGlassBackdrop: TBGRABitmap;      // form bg, snapshotted + blurred once for glass
+    FGlassKey: string;                // imagepath|WxH|blurDev — rebuild when it changes
+    FGlassBlurLogical: Integer;       // theme-wide glass blur radius (0 = no glass)
+    // ITyGlassHost
+    function GlassBackdrop: TBGRABitmap;
+    function GlassClientOrigin: TPoint;
+    function GlassUnderTitlebar: Boolean;
     procedure SetupChrome;
     procedure SetTitleBar(AValue: TTyTitleBar);
     procedure WireTitleBarButtons;
@@ -675,6 +683,7 @@ end;
 
 destructor TTyForm.Destroy;
 begin
+  FreeAndNil(FGlassBackdrop);
   if FTitleBar <> nil then FTitleBar.FEngine := nil;
   FEngine.Free;
   inherited Destroy;
@@ -786,6 +795,7 @@ end;
 procedure TTyForm.DoOnChangeBounds;
 begin
   inherited DoOnChangeBounds;
+  FGlassKey := '';   // client size changed -> next Paint resnapshots the backdrop
   if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.HandleChangeBounds;
 end;
@@ -820,10 +830,29 @@ begin
   end;
 end;
 
+function TTyForm.GlassBackdrop: TBGRABitmap;
+begin
+  Result := FGlassBackdrop;
+end;
+
+function TTyForm.GlassClientOrigin: TPoint;
+begin
+  Result := ClientOrigin;
+end;
+
+function TTyForm.GlassUnderTitlebar: Boolean;
+begin
+  Result := (FController <> nil)
+    and FController.Model.ResolveStyle('TyForm', '', []).BackgroundUnderTitlebar;
+end;
+
 procedure TTyForm.Paint;
 var
   bg: TTyStyleSet;
   P: TTyPainter;
+  blurDev: Integer;
+  newKey: string;
+  tmp: TBGRABitmap;
 begin
   // When the TyForm token sets a background IMAGE, paint it across the whole client
   // (cover/stretch/center + optional blur). Otherwise fall back to the plain solid
@@ -837,6 +866,27 @@ begin
       try
         P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
         P.FillBackground(ClientRect, bg.Background, 0);
+        // Snapshot the form's own composited image and blur it ONCE for the glass
+        // controls to sample (keyed on image+client-size+blur so it rebuilds only
+        // when something changes). Must duplicate before EndPaint frees P.Bitmap.
+        if FGlassBlurLogical > 0 then
+        begin
+          blurDev := MulDiv(FGlassBlurLogical, Font.PixelsPerInch, 96);
+          newKey := bg.Background.ImagePath + '|' + IntToStr(ClientWidth) + 'x'
+            + IntToStr(ClientHeight) + '|' + IntToStr(blurDev);
+          if (FGlassBackdrop = nil) or (newKey <> FGlassKey) then
+          begin
+            FreeAndNil(FGlassBackdrop);
+            FGlassBackdrop := P.Bitmap.Duplicate as TBGRABitmap;
+            if blurDev > 0 then
+            begin
+              tmp := FGlassBackdrop.FilterBlurRadial(blurDev, rbFast) as TBGRABitmap;
+              FreeAndNil(FGlassBackdrop);
+              FGlassBackdrop := tmp;
+            end;
+            FGlassKey := newKey;
+          end;
+        end;
         P.EndPaint;
       finally
         P.Free;
@@ -844,6 +894,7 @@ begin
       Exit;
     end;
   end;
+  FreeAndNil(FGlassBackdrop);   // non-image theme: drop any stale backdrop
   inherited Paint;
 end;
 
@@ -852,6 +903,8 @@ var bg: TTyStyleSet;
 begin
   if AController = nil then Exit;
   FController := AController;   // remembered so Paint can resolve an image backdrop
+  FGlassBlurLogical := AController.Model.MaxGlassBlur;  // theme-wide glass radius
+  FGlassKey := '';             // force a backdrop rebuild for the new theme
   { Propagate the controller to every chrome sub-component FIRST, so the whole
     window chrome themes from the SAME controller the app loaded its theme into
     (each styleable control resolves its theme via its Controller). }

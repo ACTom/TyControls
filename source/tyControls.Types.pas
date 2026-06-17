@@ -33,16 +33,20 @@ type
     SliceInsets: TRect;
     ImageMode: TTyImageMode;   // tfkImage only
     Blur: Integer;             // tfkImage Gaussian blur radius, logical px (0 = none)
+    GlassBlur: Integer;        // frosted-glass: blur radius of the backdrop seen through
+                               // this control, logical px (0 = opaque, no glass)
+    GlassTint: TTyColor;       // translucent tint composited over the blurred slice
   end;
 
   TTyProp = (tpBackground, tpTextColor, tpBorderColor, tpBorderWidth, tpBorderRadius,
              tpPadding, tpFontName, tpFontSize, tpFontWeight, tpOpacity, tpShadow,
-             tpBorderStyle, tpOutline);
+             tpBorderStyle, tpOutline, tpGlass, tpBgUnderTitle);
   TTyPropSet = set of TTyProp;
 
   TTyStyleSet = record
     Present: TTyPropSet;
     Background: TTyFill;
+    BackgroundUnderTitlebar: Boolean;   // TyForm only: image extends under the title bar
     TextColor: TTyColor;
     BorderColor: TTyColor;
     BorderWidth: Integer;

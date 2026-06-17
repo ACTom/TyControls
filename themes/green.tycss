@@ -17,6 +17,7 @@ TyForm {
   background: darken(--surface, 4%);
   background-image: url(assets/background.jpg);
   background-size: cover;
+  background-under-titlebar: true;
 }
 
 TyButton {
@@ -88,12 +89,14 @@ TyRadioButton:focus { outline: 2px var(--focus-ring); }
 TyRadioButton:disabled { opacity: 0.5; }
 
 TyPanel {
-  background: var(--surface);
+  background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 8px;
+  glass-blur: 14px;
+  glass-tint: alpha(var(--surface), 0.45);
 }
 
 TyComboBox {
@@ -120,10 +123,12 @@ TyScrollBar:focus  { outline: 2px var(--focus-ring); }
 TyScrollBar:disabled { opacity: 0.5; }
 
 TyTitleBar {
-  background: darken(--surface, 6%);
+  background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
   font-size: 9px;
   font-weight: 700;
+  glass-blur: 14px;
+  glass-tint: alpha(var(--surface), 0.35);
 }
 
 TyCaptionButton {
@@ -139,12 +144,14 @@ TyCaptionButton.min:hover    { background: darken(--surface, 12%); }
 TyCaptionButton.max:hover    { background: darken(--surface, 12%); }
 
 TyListBox {
-  background: var(--surface);
+  background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 2px;
+  glass-blur: 14px;
+  glass-tint: alpha(var(--surface), 0.55);
 }
 TyListBox:hover   { border-color: darken(--border, 10%); }
 TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
@@ -200,9 +207,11 @@ TyTrackThumb:active { background: darken(--accent, 8%); }
 TyGroupBox {
   background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
+  glass-blur: 14px;
+  glass-tint: alpha(var(--surface), 0.40);
 }
 
 TyTabControl {
@@ -239,13 +248,15 @@ TySpinEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring
 TySpinEdit:disabled { opacity: 0.5; }
 
 TyMemo {
-  background: var(--surface);
+  background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 4px;
   font-size: 9px;
+  glass-blur: 14px;
+  glass-tint: alpha(var(--surface), 0.55);
 }
 TyMemo:hover    { border-color: darken(--border, 10%); }
 TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
