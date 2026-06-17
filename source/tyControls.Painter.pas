@@ -435,10 +435,9 @@ procedure TTyPainter.FillGlass(const ARect: TRect; ABackdrop: TBGRABitmap;
   the control's rounded corners. The slice is clamped to the backdrop so a control
   partly off the backdrop keeps whatever solid fill was painted underneath. }
 var
-  w, h, ovL, ovT, ovR, ovB: Integer;
-  part: TBGRABitmap;
-  oldClip: TRect;
-  tintFill: TTyFill;
+  w, h, ovL, ovT, ovR, ovB, r: Integer;
+  opts: TRoundRectangleOptions;
+  part, temp, mask: TBGRABitmap;
 begin
   if (FBmp = nil) or (ABackdrop = nil) then Exit;
   w := ARect.Right - ARect.Left;
@@ -448,28 +447,44 @@ begin
   ovT := ASrcOffset.Y; if ovT < 0 then ovT := 0;
   ovR := ASrcOffset.X + w; if ovR > ABackdrop.Width then ovR := ABackdrop.Width;
   ovB := ASrcOffset.Y + h; if ovB > ABackdrop.Height then ovB := ABackdrop.Height;
-  oldClip := FBmp.ClipRect;
-  FBmp.ClipRect := ARect;
+  if (ovR <= ovL) or (ovB <= ovT) then Exit;  // control entirely off the backdrop
+  // Build the glass content (blurred slice + tint) in a control-sized buffer, then
+  // round-clip it to the control's corners so it never overruns the rounded shape;
+  // the corners keep the solid parent fill painted underneath.
+  temp := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
   try
-    if (ovR > ovL) and (ovB > ovT) then
-    begin
-      part := ABackdrop.GetPart(Rect(ovL, ovT, ovR, ovB)) as TBGRABitmap;
-      try
-        FBmp.PutImage(ARect.Left + (ovL - ASrcOffset.X),
-                      ARect.Top  + (ovT - ASrcOffset.Y), part, dmSet);
-      finally
-        part.Free;
-      end;
+    part := ABackdrop.GetPart(Rect(ovL, ovT, ovR, ovB)) as TBGRABitmap;
+    try
+      temp.PutImage(ovL - ASrcOffset.X, ovT - ASrcOffset.Y, part, dmSet);
+    finally
+      part.Free;
     end;
     if TyAlphaOf(ATint) > 0 then
+      temp.FillRect(0, 0, w, h, TyColorToBGRA(ATint), dmDrawWithTransparency);
+    // Corner radius + per-corner squaring exactly as FillBackground computes them.
+    r := ACorners.TL;
+    if ACorners.TR > r then r := ACorners.TR;
+    if ACorners.BR > r then r := ACorners.BR;
+    if ACorners.BL > r then r := ACorners.BL;
+    r := Scale(r);
+    if r > 0 then
     begin
-      tintFill := Default(TTyFill);
-      tintFill.Kind := tfkSolid;
-      tintFill.Color := ATint;
-      FillBackground(ARect, tintFill, ACorners);
+      opts := [];
+      if ACorners.TL <= 0 then Include(opts, rrTopLeftSquare);
+      if ACorners.TR <= 0 then Include(opts, rrTopRightSquare);
+      if ACorners.BR <= 0 then Include(opts, rrBottomRightSquare);
+      if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
+      mask := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
+      try
+        mask.FillRoundRectAntialias(0, 0, w - 1, h - 1, r, r, BGRAWhite, opts);
+        temp.ApplyMask(mask);
+      finally
+        mask.Free;
+      end;
     end;
+    FBmp.PutImage(ARect.Left, ARect.Top, temp, dmDrawWithTransparency);
   finally
-    FBmp.ClipRect := oldClip;
+    temp.Free;
   end;
 end;
 

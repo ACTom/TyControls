@@ -50,13 +50,15 @@ TyLabel {
 TyLabel:disabled { opacity: 0.5; }
 
 TyEdit {
-  background: var(--surface);
+  background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 4px;
   font-size: 9px;
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.42);
 }
 TyEdit:hover    { border-color: darken(--border, 10%); }
 TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
@@ -95,18 +97,20 @@ TyPanel {
   border-width: 1px;
   border-radius: var(--radius);
   padding: 8px;
-  glass-blur: 14px;
-  glass-tint: alpha(var(--surface), 0.45);
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.30);
 }
 
 TyComboBox {
-  background: var(--surface);
+  background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 4px;
   font-size: 9px;
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.42);
 }
 TyComboBox:hover    { border-color: darken(--border, 10%); }
 TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
@@ -127,8 +131,8 @@ TyTitleBar {
   color: var(--on-surface);
   font-size: 9px;
   font-weight: 700;
-  glass-blur: 14px;
-  glass-tint: alpha(var(--surface), 0.35);
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.28);
 }
 
 TyCaptionButton {
@@ -150,8 +154,8 @@ TyListBox {
   border-width: 1px;
   border-radius: var(--radius);
   padding: 2px;
-  glass-blur: 14px;
-  glass-tint: alpha(var(--surface), 0.55);
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.42);
 }
 TyListBox:hover   { border-color: darken(--border, 10%); }
 TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
@@ -167,10 +171,12 @@ TyListItem:hover  { background: darken(--surface, 5%); }
 TyListItem:active { background: var(--accent); color: #FFFFFF; }
 
 TyProgressBar {
-  background: darken(--surface, 8%);
-  border-color: var(--border);
+  background: alpha(#FFFFFF, 0);
+  border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.25);
 }
 TyProgressBar:disabled { opacity: 0.5; }
 
@@ -190,9 +196,11 @@ TyToggleSwitch:focus { outline: 2px var(--focus-ring); }
 TyToggleSwitch:disabled { opacity: 0.5; }
 
 TyTrackBar {
-  background: darken(--surface, 10%);
+  background: alpha(#FFFFFF, 0);
   border-radius: 3px;
   padding: 0px;
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.25);
 }
 TyTrackBar:focus    { outline: 2px var(--focus-ring); }
 TyTrackBar:disabled { opacity: 0.5; }
@@ -210,16 +218,18 @@ TyGroupBox {
   border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
-  glass-blur: 14px;
-  glass-tint: alpha(var(--surface), 0.40);
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.30);
 }
 
 TyTabControl {
-  background: var(--surface);
+  background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.30);
 }
 TyTabControl:hover  { border-color: darken(--border, 10%); }
 TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
@@ -235,13 +245,15 @@ TyTab:hover  { background: darken(--surface, 2%); }
 TyTab:active { background: var(--surface); color: var(--accent); }
 
 TySpinEdit {
-  background: var(--surface);
+  background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: var(--border);
+  border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 4px;
   font-size: 9px;
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.42);
 }
 TySpinEdit:hover    { border-color: darken(--border, 10%); }
 TySpinEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
@@ -255,8 +267,8 @@ TyMemo {
   border-radius: var(--radius);
   padding: 4px;
   font-size: 9px;
-  glass-blur: 14px;
-  glass-tint: alpha(var(--surface), 0.55);
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.42);
 }
 TyMemo:hover    { border-color: darken(--border, 10%); }
 TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
