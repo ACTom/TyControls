@@ -1,10 +1,10 @@
 object DemoMainForm: TDemoMainForm
   Left = 200
-  Height = 660
+  Height = 692
   Top = 120
   Width = 640
   Caption = 'TyControls Demo'
-  ClientHeight = 660
+  ClientHeight = 692
   ClientWidth = 640
   LCLVersion = '4.99.0.0'
   OnCreate = FormCreate
