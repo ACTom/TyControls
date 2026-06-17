@@ -281,6 +281,10 @@ begin
     // the same style tokens captioned controls use (font/size/weight/text-color).
     if FCaption <> '' then
     begin
+      // The caption strip sits OUTSIDE the narrowed track rect, so DrawFrame never
+      // composited a backdrop there. On an image theme fill it with the form's photo
+      // (no-op off-image/headless) so it is not a solid gap beside the switch.
+      FillSharpBackdrop(P, Rect(R.Right, FullR.Top, FullR.Right, FullR.Bottom));
       Gap := P.Scale(TyCheckBoxGap);
       CaptionRect := Rect(R.Right + Gap, FullR.Top, FullR.Right, FullR.Bottom);
       P.DrawText(CaptionRect, FCaption, S.FontName, ResolveFontSize(S),

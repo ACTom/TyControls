@@ -380,9 +380,15 @@ begin
     // Image-backed form: the SHARP photo slice is the opaque base for EVERY control,
     // so the corners outside its rounded shape read as the form's photo, not a flat
     // fill. Glass controls then get the round-clipped blurred pane + tint on top.
-    APainter.FillImageSlice(ARect, host.GlassSharpBackdrop, off);
+    // ARect may be a sub-rect (group-box frame below its caption, tab content frame
+    // below the header), so fold its origin into the backdrop sample — the painter
+    // puts ASrcOffset at FBmp(ARect.Left,ARect.Top), and FBmp(cx,cy) must show
+    // backdrop(off.X+cx, off.Y+cy) for the photo to stay seamless across the frame.
+    APainter.FillImageSlice(ARect, host.GlassSharpBackdrop,
+      Point(off.X + ARect.Left, off.Y + ARect.Top));
     if tpGlass in AStyle.Present then
-      APainter.FillGlass(ARect, host.GlassBackdrop, off,
+      APainter.FillGlass(ARect, host.GlassBackdrop,
+        Point(off.X + ARect.Left, off.Y + ARect.Top),
         AStyle.Background.GlassTint, TyEffectiveCorners(AStyle));
   end
   else if TyResolveParentBg(AControl, c) then

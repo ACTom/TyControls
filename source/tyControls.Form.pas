@@ -860,7 +860,6 @@ var
   P: TTyPainter;
   blurDev: Integer;
   newKey: string;
-  tmp: TBGRABitmap;
 begin
   // When the TyForm token sets a background IMAGE, paint it across the whole client
   // (cover/stretch/center + optional blur). Otherwise fall back to the plain solid
@@ -874,25 +873,28 @@ begin
       try
         P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
         P.FillBackground(ClientRect, bg.Background, 0);
-        // Snapshot the form's own composited image and blur it ONCE for the glass
-        // controls to sample (keyed on image+client-size+blur so it rebuilds only
-        // when something changes). Must duplicate before EndPaint frees P.Bitmap.
-        if FGlassBlurLogical > 0 then
+        // Snapshot the form's own composited image. FSharpBackdrop is the photo base
+        // EVERY control samples for its corners, so build it for ANY image theme; the
+        // once-blurred FGlassBackdrop is built only when the theme uses glass. Keyed on
+        // image+client-size+blur so it rebuilds only when something changes (the blur
+        // dev-px is in the key, so an image->image switch that drops glass rebuilds and
+        // frees the old blurred backdrop). Must duplicate before EndPaint frees P.Bitmap.
+        blurDev := MulDiv(FGlassBlurLogical, Font.PixelsPerInch, 96);
+        newKey := bg.Background.ImagePath + '|' + IntToStr(ClientWidth) + 'x'
+          + IntToStr(ClientHeight) + '|' + IntToStr(blurDev);
+        if (FSharpBackdrop = nil) or (newKey <> FGlassKey) then
         begin
-          blurDev := MulDiv(FGlassBlurLogical, Font.PixelsPerInch, 96);
-          newKey := bg.Background.ImagePath + '|' + IntToStr(ClientWidth) + 'x'
-            + IntToStr(ClientHeight) + '|' + IntToStr(blurDev);
-          if (FGlassBackdrop = nil) or (newKey <> FGlassKey) then
+          FreeAndNil(FSharpBackdrop);
+          FreeAndNil(FGlassBackdrop);
+          FSharpBackdrop := P.Bitmap.Duplicate as TBGRABitmap;  // photo base (all controls)
+          if FGlassBlurLogical > 0 then
           begin
-            FreeAndNil(FSharpBackdrop);
-            FreeAndNil(FGlassBackdrop);
-            FSharpBackdrop := P.Bitmap.Duplicate as TBGRABitmap;  // corners (unblurred)
             if blurDev > 0 then
               FGlassBackdrop := FSharpBackdrop.FilterBlurRadial(blurDev, rbFast) as TBGRABitmap
             else
               FGlassBackdrop := FSharpBackdrop.Duplicate as TBGRABitmap;
-            FGlassKey := newKey;
           end;
+          FGlassKey := newKey;
         end;
         P.EndPaint;
       finally
