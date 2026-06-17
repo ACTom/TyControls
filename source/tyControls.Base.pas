@@ -227,12 +227,48 @@ begin
   Result := ActiveController.Model.ResolveStyle(GetStyleTypeKey, FStyleClass, CurrentStates);
 end;
 
+{ A windowed child does NOT inherit its parent's painted background, so a control
+  with a transparent background or rounded corners (e.g. the caption buttons or any
+  control dropped onto a TTyTitleBar) would show its own window colour outside the
+  drawn shape instead of the host band. When the parent is itself a styleable
+  tyControl, resolve its background colour so the child can fill it first and
+  composite against the band. Returns False when the parent is a plain form/panel,
+  leaving the normal form-background behaviour untouched. }
+function TyParentStyleBg(AChild: TControl; out AColor: TTyColor): Boolean;
+var
+  st: TTyStyleSet;
+begin
+  Result := False;
+  if (AChild = nil) or (AChild.Parent = nil) then Exit;
+  // Only a windowed control can be a parent; TTyCustomControl is the styleable
+  // container base (TTyGraphicControl is non-windowed and never a parent).
+  if not (AChild.Parent is TTyCustomControl) then Exit;
+  st := TTyCustomControl(AChild.Parent).CurrentStyle;
+  if not (tpBackground in st.Present) then Exit;
+  case st.Background.Kind of
+    tfkSolid:          begin AColor := st.Background.Color;  Result := True; end;
+    tfkLinearGradient: begin AColor := st.Background.GradTo; Result := True; end; // representative
+  end;
+end;
+
+procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: TRect);
+var
+  c: TTyColor;
+  f: TTyFill;
+begin
+  if not TyParentStyleBg(AControl, c) then Exit;
+  f.Kind := tfkSolid;
+  f.Color := c;
+  APainter.FillBackground(ARect, f, 0);
+end;
+
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
 var
   corners, ringCorners: TTyCorners;
   off: Integer;
   ringRect: TRect;
 begin
+  TyFillParentBg(Self, APainter, ARect);
   if tpOpacity in AStyle.Present then
     APainter.Opacity := AStyle.Opacity;
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
@@ -409,6 +445,7 @@ var
   off: Integer;
   ringRect: TRect;
 begin
+  TyFillParentBg(Self, APainter, ARect);
   if tpOpacity in AStyle.Present then
     APainter.Opacity := AStyle.Opacity;
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then

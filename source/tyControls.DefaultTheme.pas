@@ -138,9 +138,6 @@ begin
     'TyTitleBar {' + LineEnding +
     '  background: darken(--surface, 6%);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
-    '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
-    '  border-radius: var(--radius) var(--radius) 0 0;' + LineEnding +
     '  font-size: 9px;' + LineEnding +
     '  font-weight: 700;' + LineEnding +
     '}' + LineEnding +

@@ -118,9 +118,6 @@ TyScrollBar:disabled { opacity: 0.5; }
 TyTitleBar {
   background: darken(--surface, 6%);
   color: var(--on-surface);
-  border-color: var(--border);
-  border-width: 1px;
-  border-radius: var(--radius) var(--radius) 0 0;
   font-size: 9px;
   font-weight: 700;
 }

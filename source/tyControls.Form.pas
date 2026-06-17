@@ -47,9 +47,11 @@ type
     FMaxButton: TTyCaptionButton;
     FCloseButton: TTyCaptionButton;
     FButtonWidth: Integer;
+    FTitleAlignment: TAlignment;
     FEngine: TTyChromeEngine;
     procedure SetCaption(const AValue: string);
     procedure SetButtonWidth(AValue: Integer);
+    procedure SetTitleAlignment(AValue: TAlignment);
     function VisibleButtonCount: Integer;
     function LeftInsetPx: Integer;
   protected
@@ -75,6 +77,9 @@ type
     function RightInset: Integer;
   published
     property Caption: string read FCaption write SetCaption;
+    { Left (default) or centered title text. Centered lays out within the content
+      zone (left pad .. start of the caption buttons), so it never overlaps them. }
+    property TitleAlignment: TAlignment read FTitleAlignment write SetTitleAlignment default taLeftJustify;
     property Align;
     property Anchors;
     property ButtonWidth: Integer read FButtonWidth write SetButtonWidth;
@@ -303,7 +308,9 @@ begin
       DrawGlyph := True;
     if DrawGlyph then
     begin
-      GlyphSize := P.Scale(10);
+      // DrawGlyph insets ~4 logical px per side, so the glyph box must be that much
+      // larger than the desired stroke extent or the icon collapses to a few pixels.
+      GlyphSize := P.Scale(18);
       CX := R.Left + (R.Right - R.Left - GlyphSize) div 2;
       CY := R.Top + (R.Bottom - R.Top - GlyphSize) div 2;
       GlyphRect := Rect(CX, CY, CX + GlyphSize, CY + GlyphSize);
@@ -325,7 +332,12 @@ end;
 constructor TTyTitleBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  // Act as a real container: the designer drops controls INTO the bar (a menubar,
+  // a button, …) instead of as siblings, and they lay out in the content zone that
+  // AdjustClientRect carves out (left pad .. start of the caption buttons).
+  ControlStyle := ControlStyle + [csAcceptsControls];
   FButtonWidth := TyTitleButtonWidth;
+  FTitleAlignment := taLeftJustify;
   SetBounds(0, 0, 200, 32);
   FMinButton := TTyCaptionButton.Create(Self);
   FMinButton.Kind := cbkMin;
@@ -363,6 +375,14 @@ begin
     Exit;
   FButtonWidth := AValue;
   LayoutButtons;
+  Invalidate;
+end;
+
+procedure TTyTitleBar.SetTitleAlignment(AValue: TAlignment);
+begin
+  if FTitleAlignment = AValue then
+    Exit;
+  FTitleAlignment := AValue;
   Invalidate;
 end;
 
@@ -429,7 +449,7 @@ begin
     TextRect := Rect(R.Left + P.Scale(TyTitleBarPad), R.Top,
                      R.Left + W - RightInset, R.Top + H);
     P.DrawText(TextRect, FCaption, S.FontName, S.FontSize, S.FontWeight,
-      S.TextColor, taLeftJustify, tlCenter, True);
+      S.TextColor, FTitleAlignment, tlCenter, True);
     P.EndPaint;
   finally
     P.Free;

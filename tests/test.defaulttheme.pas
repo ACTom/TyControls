@@ -17,7 +17,7 @@ type
     procedure TestUserTypeKeySuppressesBuiltinNoBleed;
     procedure TestUnstyledTypeKeyStillGetsBuiltin;
     procedure TestControlVisibleWithoutTheme;
-    procedure TestBuiltinTitleBarTopRoundedTab;
+    procedure TestBuiltinTitleBarFlatTabRounded;
     procedure TestBuiltinFocusRingOnButton;
     procedure TestDisabledOpacityParity;
     procedure TestStateRuleParity;
@@ -221,15 +221,17 @@ begin
   end;
 end;
 
-procedure TBuiltinThemeTest.TestBuiltinTitleBarTopRoundedTab;
+procedure TBuiltinThemeTest.TestBuiltinTitleBarFlatTabRounded;
 var m: TTyStyleModel; sTitle, sTab: TTyStyleSet;
 begin
   m := TTyStyleModel.Create;
   try
     m.LoadFromCss(TyBuiltinThemeCss);
+    // The title bar is a flat chrome band: no border, no rounded corners.
     sTitle := m.ResolveStyle('TyTitleBar', '', []);
-    AssertTrue('titlebar tl rounded', sTitle.Radius.TL > 0);
+    AssertEquals('titlebar tl square (flat band)', 0, sTitle.Radius.TL);
     AssertEquals('titlebar bl square', 0, sTitle.Radius.BL);
+    // Tabs keep their top-rounded shape.
     sTab := m.ResolveStyle('TyTab', '', []);
     AssertTrue('tab tr rounded', sTab.Radius.TR > 0);
     AssertEquals('tab br square', 0, sTab.Radius.BR);
