@@ -2,7 +2,7 @@ unit tyControls.Design;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, PropEdits, ComponentEditors,
+  Classes, SysUtils, PropEdits, ComponentEditors, ProjectIntf,
   tyControls.Base, tyControls.Controller, tyControls.StyleModel,
   tyControls.Button, tyControls.TyLabel, tyControls.Edit,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
@@ -24,6 +24,18 @@ type
     function GetVerbCount: Integer; override;
     function GetVerb(Index: Integer): string; override;
     procedure ExecuteVerb(Index: Integer); override;
+  end;
+
+  { File > New entry that creates a unit whose form descends from TTyForm, so the
+    developer gets the custom window chrome (title bar + content panel) by design,
+    with WYSIWYG layout in the form designer. The chrome sub-components are
+    code-created by TTyForm, so the generated .lfm stays minimal. }
+  TTyFormFileDescriptor = class(TFileDescPascalUnitWithResource)
+  public
+    constructor Create; override;
+    function GetInterfaceUsesSection: string; override;
+    function GetLocalizedName: string; override;
+    function GetLocalizedDescription: string; override;
   end;
 
 procedure Register;
@@ -63,6 +75,35 @@ begin
     EditCollection(Component, TTyTabControl(Component).Tabs, 'Tabs');
 end;
 
+{ TTyFormFileDescriptor }
+
+constructor TTyFormFileDescriptor.Create;
+begin
+  inherited Create;
+  Name := 'TyControls form';        // internal id (File > New list)
+  ResourceClass := TTyForm;         // generated class descends from TTyForm
+  UseCreateFormStatements := True;  // add to the project's auto-create forms
+  // Auto-add the runtime package dependency so the generated `uses tyControls.Form`
+  // resolves in a fresh project (otherwise the IDE only adds LCL via its fallback).
+  RequiredPackages := 'tycontrols';
+end;
+
+function TTyFormFileDescriptor.GetInterfaceUsesSection: string;
+begin
+  Result := inherited GetInterfaceUsesSection + ', tyControls.Form';
+end;
+
+function TTyFormFileDescriptor.GetLocalizedName: string;
+begin
+  Result := 'TyControls Form';
+end;
+
+function TTyFormFileDescriptor.GetLocalizedDescription: string;
+begin
+  Result := 'A form descending from TTyForm — custom window chrome ' +
+    '(title bar + content panel), with WYSIWYG content layout in the designer.';
+end;
+
 procedure Register;
 begin
   RegisterComponents('TyControls',
@@ -82,6 +123,8 @@ begin
   RegisterPropertyEditor(TypeInfo(TTyTabCollection), TTyTabControl, 'Tabs',
     TCollectionPropertyEditor);
   RegisterComponentEditor(TTyTabControl, TTyTabControlEditor);
+  // File > New > "TyControls Form": a unit whose form descends from TTyForm.
+  RegisterProjectFileDescriptor(TTyFormFileDescriptor.Create);
 end;
 
 end.
