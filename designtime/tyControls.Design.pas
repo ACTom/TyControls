@@ -2,7 +2,7 @@ unit tyControls.Design;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, PropEdits, ComponentEditors, ProjectIntf,
+  Classes, SysUtils, PropEdits, ComponentEditors, ProjectIntf, FormEditingIntf,
   tyControls.Base, tyControls.Controller, tyControls.StyleModel,
   tyControls.Button, tyControls.TyLabel, tyControls.Edit,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
@@ -26,10 +26,9 @@ type
     procedure ExecuteVerb(Index: Integer); override;
   end;
 
-  { File > New entry that creates a unit whose form descends from TTyForm, so the
-    developer gets the custom window chrome (title bar + content panel) by design,
-    with WYSIWYG layout in the form designer. The chrome sub-components are
-    code-created by TTyForm, so the generated .lfm stays minimal. }
+  { File > New entry that creates a unit whose form descends from TTyForm — a
+    borderless form with a persistent chrome engine. The form is empty by default;
+    drop a TTyTitleBar onto it and it auto-associates to the TitleBar property. }
   TTyFormFileDescriptor = class(TFileDescPascalUnitWithResource)
   public
     constructor Create; override;
@@ -100,12 +99,20 @@ end;
 
 function TTyFormFileDescriptor.GetLocalizedDescription: string;
 begin
-  Result := 'A form descending from TTyForm — custom window chrome ' +
-    '(title bar + content panel), with WYSIWYG content layout in the designer.';
+  Result := 'A borderless form descending from TTyForm. Drop a TTyTitleBar onto ' +
+    'it to get a draggable custom title bar; lay out your controls below it.';
 end;
 
 procedure Register;
 begin
+  // Make TTyForm a recognized designer base class. Without this the form designer
+  // cannot resolve `class(TTyForm)` as an ancestor and silently falls back to TForm
+  // (sourcefilemanager FindBaseComponentClass -> StandardDesignerBaseClasses[TForm]),
+  // so the Object Inspector shows none of TTyForm's published chrome properties
+  // (TitleBar / TitleHeight / ShowMinimize / ShowMaximize). RegisterComponents only
+  // covers droppable controls, not base form classes — this is the form-level analog.
+  if FormEditingHook <> nil then
+    FormEditingHook.RegisterDesignerBaseClass(TTyForm);
   RegisterComponents('TyControls',
     [TTyButton, TTyLabel, TTyEdit, TTyCheckBox, TTyRadioButton,
      TTyPanel, TTyComboBox, TTyScrollBar, TTyStyleController,
