@@ -48,6 +48,7 @@ type
     procedure PopupListChange(Sender: TObject);
     procedure PopupDeactivate(Sender: TObject);
     procedure PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure DeferredCloseUp(Data: PtrInt);
   protected
     { Guard: tick at last CloseUp. Click reopens only if > 200ms have passed.
       This prevents the click-while-open reopen race where PopupDeactivate fires
@@ -142,6 +143,8 @@ end;
 
 destructor TTyComboBox.Destroy;
 begin
+  { Cancel any queued DeferredCloseUp so it can't fire into a freed combo. }
+  Application.RemoveAsyncCalls(Self);
   { Free popup (and its owned listbox) if it was ever created.
     We must detach the OnDeactivate handler first to avoid re-entering CloseUp
     from the TForm destruction path. }
@@ -464,8 +467,18 @@ end;
 
 procedure TTyComboBox.PopupListChange(Sender: TObject);
 begin
-  { User clicked / chose a row in the popup list -> a user-driven selection. }
+  { User clicked / chose a row in the popup list -> a user-driven selection.
+    Defer the close: hiding the popup synchronously here — still inside the list's
+    click handler — leaves LCL's click-completion focus path pointing at the
+    now-hidden popup form, raising EInvalidOperation
+    '[TCustomForm.SetFocus] ... Can not focus'. Closing on the next message cycle
+    lets the click finish first. }
   UserSelect(FPopupList.ItemIndex);
+  Application.QueueAsyncCall(@DeferredCloseUp, 0);
+end;
+
+procedure TTyComboBox.DeferredCloseUp(Data: PtrInt);
+begin
   CloseUp;
 end;
 
