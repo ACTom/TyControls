@@ -33,6 +33,7 @@ type
     procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean);
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
     procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
+    procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
     procedure EraseRect(const ARect: TRect);
     property Bitmap: TBGRABitmap read FBmp;
   end;
@@ -181,6 +182,7 @@ begin
         end;
       end;
     tfkNineSlice: NineSlice(ARect, AFill.ImagePath, AFill.SliceInsets);
+    tfkImage: DrawImageFill(ARect, AFill.ImagePath, AFill.ImageMode, AFill.Blur);
   end;
 end;
 
@@ -429,10 +431,88 @@ begin
   FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, BGRA(0,0,0,0), dmSet);
 end;
 
+var
+  GImgCache: TStringList = nil;  // key 'path|blurDev' -> TBGRABitmap (OwnsObjects)
+
+{ Load (and optionally blur) an image once, cached by path + device-px blur radius.
+  The returned bitmap is owned by the cache — callers must not free it. }
+function GetCachedImage(const APath: string; ABlurDev: Integer): TBGRABitmap;
+var
+  key: string;
+  idx: Integer;
+  raw, bl: TBGRABitmap;
+begin
+  Result := nil;
+  if not FileExists(APath) then Exit;
+  if GImgCache = nil then
+  begin
+    GImgCache := TStringList.Create;
+    GImgCache.OwnsObjects := True;
+  end;
+  key := APath + '|' + IntToStr(ABlurDev);
+  idx := GImgCache.IndexOf(key);
+  if idx >= 0 then
+    Exit(TBGRABitmap(GImgCache.Objects[idx]));
+  try
+    raw := TBGRABitmap.Create(APath);
+  except
+    Exit(nil);
+  end;
+  if ABlurDev > 0 then
+  begin
+    bl := raw.FilterBlurRadial(ABlurDev, rbFast) as TBGRABitmap;
+    raw.Free;
+    raw := bl;
+  end;
+  GImgCache.AddObject(key, raw);
+  Result := raw;
+end;
+
+procedure TTyPainter.DrawImageFill(const ARect: TRect; const AImagePath: string;
+  AMode: TTyImageMode; ABlurLogical: Integer);
+var
+  src: TBGRABitmap;
+  iw, ih, dw, dh, sw, sh, ox, oy: Integer;
+  sc, scW, scH: Double;
+  oldClip: TRect;
+begin
+  if FBmp = nil then Exit;
+  src := GetCachedImage(AImagePath, Scale(ABlurLogical));
+  if src = nil then Exit;
+  iw := src.Width; ih := src.Height;
+  dw := ARect.Right - ARect.Left; dh := ARect.Bottom - ARect.Top;
+  if (iw <= 0) or (ih <= 0) or (dw <= 0) or (dh <= 0) then Exit;
+  oldClip := FBmp.ClipRect;
+  FBmp.ClipRect := ARect;
+  try
+    case AMode of
+      timStretch:
+        FBmp.StretchPutImage(ARect, src, dmDrawWithTransparency);
+      timCenter:
+        FBmp.PutImage(ARect.Left + (dw - iw) div 2, ARect.Top + (dh - ih) div 2,
+          src, dmDrawWithTransparency);
+      timCover:
+        begin
+          scW := dw / iw; scH := dh / ih;
+          if scW > scH then sc := scW else sc := scH;
+          sw := Round(iw * sc); sh := Round(ih * sc);
+          ox := ARect.Left + (dw - sw) div 2;
+          oy := ARect.Top + (dh - sh) div 2;
+          FBmp.StretchPutImage(Rect(ox, oy, ox + sw, oy + sh), src, dmDrawWithTransparency);
+        end;
+    end;
+  finally
+    FBmp.ClipRect := oldClip;
+  end;
+end;
+
 initialization
   // Default: leave font name empty when no font-family is themed (unchanged
   // behavior). The controller opts into a concrete system-font fallback for
   // real GUI apps; headless contexts (tests) keep this empty for determinism.
   TyFallbackFontName := '';
+
+finalization
+  FreeAndNil(GImgCache);  // OwnsObjects frees the cached bitmaps
 
 end.

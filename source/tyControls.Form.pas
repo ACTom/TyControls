@@ -128,6 +128,7 @@ type
     FTitleBar: TTyTitleBar;
     FShowMinimize: Boolean;
     FShowMaximize: Boolean;
+    FController: TTyStyleController;   // set by ApplyChromeTheme; used by Paint
     procedure SetupChrome;
     procedure SetTitleBar(AValue: TTyTitleBar);
     procedure WireTitleBarButtons;
@@ -145,6 +146,7 @@ type
     FEngine: TTyChromeEngine;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
+    procedure Paint; override;   // draws an image backdrop when the TyForm token sets one
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -818,10 +820,38 @@ begin
   end;
 end;
 
+procedure TTyForm.Paint;
+var
+  bg: TTyStyleSet;
+  P: TTyPainter;
+begin
+  // When the TyForm token sets a background IMAGE, paint it across the whole client
+  // (cover/stretch/center + optional blur). Otherwise fall back to the plain solid
+  // Color fill the widgetset does. App controls paint on top in their own windows.
+  if FController <> nil then
+  begin
+    bg := FController.Model.ResolveStyle('TyForm', '', []);
+    if (tpBackground in bg.Present) and (bg.Background.Kind = tfkImage) then
+    begin
+      P := TTyPainter.Create;
+      try
+        P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+        P.FillBackground(ClientRect, bg.Background, 0);
+        P.EndPaint;
+      finally
+        P.Free;
+      end;
+      Exit;
+    end;
+  end;
+  inherited Paint;
+end;
+
 procedure TTyForm.ApplyChromeTheme(AController: TTyStyleController);
 var bg: TTyStyleSet;
 begin
   if AController = nil then Exit;
+  FController := AController;   // remembered so Paint can resolve an image backdrop
   { Propagate the controller to every chrome sub-component FIRST, so the whole
     window chrome themes from the SAME controller the app loaded its theme into
     (each styleable control resolves its theme via its Controller). }

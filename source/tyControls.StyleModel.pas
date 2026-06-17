@@ -219,6 +219,27 @@ begin
   end;
 end;
 
+// Parse 'url(path)' into a plain image fill (no slice). Mode defaults to cover and
+// is overridden by background-size; blur by background-blur.
+function ParsePlainImage(const ARaw: string): TTyFill;
+var
+  lo, urlInner: string;
+  pu, qu: Integer;
+begin
+  Result := Default(TTyFill);
+  Result.Kind := tfkImage;
+  Result.ImageMode := timCover;
+  lo := ARaw;
+  pu := Pos('url(', LowerCase(lo));
+  if pu = 0 then raise Exception.CreateFmt('background-image needs url(): %s', [ARaw]);
+  qu := pu + 4;
+  while (qu <= Length(lo)) and (lo[qu] <> ')') do Inc(qu);
+  urlInner := Trim(Copy(lo, pu + 4, qu - (pu + 4)));
+  if (Length(urlInner) >= 2) and ((urlInner[1] = '''') or (urlInner[1] = '"')) then
+    urlInner := Copy(urlInner, 2, Length(urlInner) - 2);
+  Result.ImagePath := StringReplace(urlInner, ' ', '', [rfReplaceAll]);
+end;
+
 // Parse 'shadow: <offX> <offY> <blur> <color>' (logical px + color expr).
 procedure ApplyShadow(var AStyle: TTyStyleSet; const ARaw: string; Vars: TStrings);
 var
@@ -410,9 +431,21 @@ begin
   end
   else if prop = 'background-image' then
   begin
-    AStyle.Background := ParseNineSlice(raw);
+    if Pos('slice(', LowerCase(raw)) > 0 then
+      AStyle.Background := ParseNineSlice(raw)    // url(...) slice(t r b l) -> 9-slice
+    else
+      AStyle.Background := ParsePlainImage(raw);  // url(...) -> plain image (cover)
     Include(AStyle.Present, tpBackground);
   end
+  else if prop = 'background-size' then
+  begin
+    if LowerCase(raw) = 'stretch' then AStyle.Background.ImageMode := timStretch
+    else if LowerCase(raw) = 'center' then AStyle.Background.ImageMode := timCenter
+    else AStyle.Background.ImageMode := timCover;
+  end
+  else if prop = 'background-blur' then
+    AStyle.Background.Blur := StrToIntDef(
+      Trim(StringReplace(LowerCase(raw), 'px', '', [rfReplaceAll])), 0)
   else if prop = 'shadow' then
   begin
     // shadow: <offsetX> <offsetY> <blur> <color>  (logical px)

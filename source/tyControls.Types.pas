@@ -13,7 +13,10 @@ type
   TTyState = (tysNormal, tysHover, tysActive, tysFocused, tysDisabled);
   TTyStateSet = set of TTyState;
 
-  TTyFillKind = (tfkNone, tfkSolid, tfkLinearGradient, tfkNineSlice);
+  TTyFillKind = (tfkNone, tfkSolid, tfkLinearGradient, tfkNineSlice, tfkImage);
+
+  // How a plain background image (tfkImage) maps into the target rect.
+  TTyImageMode = (timCover, timStretch, timCenter);
 
   TTyBorderStyle = (tbsSolid, tbsNone);
 
@@ -28,6 +31,8 @@ type
     GradAngleDeg: Single;
     ImagePath: string;
     SliceInsets: TRect;
+    ImageMode: TTyImageMode;   // tfkImage only
+    Blur: Integer;             // tfkImage Gaussian blur radius, logical px (0 = none)
   end;
 
   TTyProp = (tpBackground, tpTextColor, tpBorderColor, tpBorderWidth, tpBorderRadius,

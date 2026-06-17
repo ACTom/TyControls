@@ -23,6 +23,7 @@ type
     procedure TestLoadSolidBackgroundResolvesVar;
     procedure TestLoadGradientBackground;
     procedure TestLoadNineSliceBackgroundImage;
+    procedure TestLoadPlainImageBackground;
     procedure TestLoadFromCssParseErrorPreservesPrevious;
     procedure TestDuplicateRuleLastWins;
     procedure TestBackgroundColorAlias;
@@ -203,6 +204,26 @@ begin
   AssertEquals('slice right', 5, s.Background.SliceInsets.Right);
   AssertEquals('slice bottom', 6, s.Background.SliceInsets.Bottom);
   AssertEquals('slice left', 7, s.Background.SliceInsets.Left);
+end;
+
+procedure TTestStyleLoad.TestLoadPlainImageBackground;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    // url() WITHOUT slice() -> plain image fill; size/blur are separate props.
+    m.LoadFromCss('TyForm { background-image: url(assets/bg.jpg);'
+      + ' background-size: stretch; background-blur: 12px; }');
+    s := m.ResolveStyle('TyForm', '', []);
+    AssertTrue('plain image kind', s.Background.Kind = tfkImage);
+    AssertEquals('image path', 'assets/bg.jpg', s.Background.ImagePath);
+    AssertTrue('image mode stretch', s.Background.ImageMode = timStretch);
+    AssertEquals('blur 12', 12, s.Background.Blur);
+    // default size when background-size omitted is cover
+    m.LoadFromCss('TyForm { background-image: url(a.png); }');
+    s := m.ResolveStyle('TyForm', '', []);
+    AssertTrue('default mode cover', s.Background.ImageMode = timCover);
+  finally m.Free; end;
 end;
 
 procedure TTestStyleLoad.TestLoadFromCssParseErrorPreservesPrevious;
