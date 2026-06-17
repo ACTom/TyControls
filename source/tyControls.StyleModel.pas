@@ -172,6 +172,22 @@ begin
   end;
 end;
 
+var
+  GThemeBaseDir: string = '';  // set by LoadFromFile so url() resolves vs the theme dir
+
+{ Resolve a url() asset path. Strips spaces (the lexer can insert them around dots),
+  and when the model was loaded from a FILE, falls back to a path relative to the
+  theme file's directory if the raw path doesn't exist as-is. }
+function ResolveAssetPath(const APath: string): string;
+var p: string;
+begin
+  p := StringReplace(APath, ' ', '', [rfReplaceAll]);
+  Result := p;
+  if (p <> '') and (GThemeBaseDir <> '') and not FileExists(p)
+     and FileExists(GThemeBaseDir + p) then
+    Result := GThemeBaseDir + p;
+end;
+
 // Parse 'url(path) slice(t r b l)' into a nine-slice fill.
 function ParseNineSlice(const ARaw: string): TTyFill;
 var
@@ -196,7 +212,7 @@ begin
   // 'panel. png' for 'panel.png'); remove them so the path round-trips correctly.
   // v1 limitation: url() asset paths must not contain spaces, because spaces
   // are stripped unconditionally here to reconstruct dotted filenames (e.g. foo.png).
-  Result.ImagePath := StringReplace(urlInner, ' ', '', [rfReplaceAll]);
+  Result.ImagePath := ResolveAssetPath(urlInner);
   ps := Pos('slice(', LowerCase(lo));
   if ps = 0 then raise Exception.CreateFmt('background-image needs slice(): %s', [ARaw]);
   qs := ps + 6;
@@ -237,7 +253,7 @@ begin
   urlInner := Trim(Copy(lo, pu + 4, qu - (pu + 4)));
   if (Length(urlInner) >= 2) and ((urlInner[1] = '''') or (urlInner[1] = '"')) then
     urlInner := Copy(urlInner, 2, Length(urlInner) - 2);
-  Result.ImagePath := StringReplace(urlInner, ' ', '', [rfReplaceAll]);
+  Result.ImagePath := ResolveAssetPath(urlInner);
 end;
 
 // Parse 'shadow: <offX> <offY> <blur> <color>' (logical px + color expr).
@@ -678,7 +694,13 @@ begin
   sl := TStringList.Create;
   try
     sl.LoadFromFile(AFileName);
-    LoadFromCss(sl.Text);
+    // Resolve url() assets relative to the theme file's folder while parsing.
+    GThemeBaseDir := ExtractFilePath(ExpandFileName(AFileName));
+    try
+      LoadFromCss(sl.Text);
+    finally
+      GThemeBaseDir := '';
+    end;
   finally
     sl.Free;
   end;

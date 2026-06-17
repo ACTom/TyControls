@@ -11,15 +11,18 @@ uses
   tyControls.SpinEdit, tyControls.Memo;
 type
 
-  { TDemoMainForm — all controls are placed in the designer (mainform.lfm),
+  { TDemoMainForm ᾿all controls are placed in the designer (mainform.lfm),
     including the docked TTyTitleBar (associated via the form's TitleBar
     property), the TabControl's tabs, TTySpinEdit and TTyMemo. }
 
   TDemoMainForm = class(TTyForm)
     Controller: TTyStyleController;
+    TyButton1: TTyButton;
+    TyTitleBar1: TTyTitleBar;
     BtnLight: TTyButton;
     BtnDark: TTyButton;
     BtnShowcase: TTyButton;
+    BtnGreen: TTyButton;
     BtnPrimary: TTyButton;
     BtnDanger: TTyButton;
     LblHello: TTyLabel;
@@ -41,6 +44,7 @@ type
     procedure BtnLightClick(Sender: TObject);
     procedure BtnDarkClick(Sender: TObject);
     procedure BtnShowcaseClick(Sender: TObject);
+    procedure BtnGreenClick(Sender: TObject);
     procedure TrackBar1Change(Sender: TObject);
   private
     function ThemeDir: string;
@@ -56,10 +60,9 @@ var
   Dir: string;
   i: Integer;
 begin
-  // 从 exe 所在目录向上逐级查找 themes/，对以下位置均健壮：
+  // exe 扜目录向上逐级查找 themes/，对以下位置均健壮：
   //   <repo>/examples/demo/demo（工程目录）
-  //   <repo>/examples/demo/lib/<cpu>-<os>/demo（lazbuild 默认输出）
-  //   <repo>/examples/demo/demo.app/Contents/MacOS/demo（macOS 包）
+  //   <repo>/examples/demo/lib/<cpu>-<os>/demo（lazbuild 默认输出ﺿ  //   <repo>/examples/demo/demo.app/Contents/MacOS/demo（macOS 包）
   Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
   for i := 1 to 8 do
   begin
@@ -106,6 +109,11 @@ end;
 procedure TDemoMainForm.BtnShowcaseClick(Sender: TObject);
 begin
   ApplyTheme('showcase.tycss');
+end;
+
+procedure TDemoMainForm.BtnGreenClick(Sender: TObject);
+begin
+  ApplyTheme('green.tycss');
 end;
 
 end.

@@ -6,7 +6,9 @@ interface
 
 uses
   Classes, SysUtils, Types, Graphics, LCLType, BGRABitmap, BGRABitmapTypes,
-  BGRAGradientScanner, tyControls.Types;
+  BGRAGradientScanner,
+  FPReadJPEG, FPReadPNG, FPReadBMP,  // register FPImage readers so url() jpg/png/bmp load
+  tyControls.Types;
 
 type
   TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck,
