@@ -17,14 +17,6 @@ type
 
   TTyCaptionButtonKind = (cbkClose, cbkMin, cbkMax, cbkRestore);
 
-  TTyContentPanel = class(TTyCustomControl)
-  protected
-    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-    procedure Paint; override;
-  public
-    function GetStyleTypeKey: string; override;
-  end;
-
   TTyChromeEngine = class;
 
   TTyCaptionButton = class(TTyCustomControl)
@@ -120,11 +112,12 @@ type
     property Dragging: Boolean read FDragging;
   end;
 
+  { A borderless form that auto-adds a docked (alTop) title bar. Otherwise it
+    behaves like an ordinary TForm: drop your controls straight onto it (below the
+    title bar) and design them in place — no content panel, no reparenting. }
   TTyForm = class(TForm)
   private
     FTitleBar: TTyTitleBar;
-    FContent: TTyContentPanel;
-    FResizeBorder: Integer;
     FShowMinimize: Boolean;
     FShowMaximize: Boolean;
     procedure SetupChrome;
@@ -139,8 +132,6 @@ type
     { The window-behavior engine. Protected so a test access subclass can read its
       drag/maximize state through it. }
     FEngine: TTyChromeEngine;
-    procedure Loaded; override;
-    procedure ReparentContentChildren(Data: PtrInt);
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -151,7 +142,6 @@ type
     destructor Destroy; override;
     procedure ApplyChromeTheme(AController: TTyStyleController);
     property TitleBar: TTyTitleBar read FTitleBar;
-    property ContentPanel: TTyContentPanel read FContent;
   published
     property TitleHeight: Integer read GetTitleHeight write SetTitleHeight default 32;
     property ShowMinimize: Boolean read FShowMinimize write SetShowMinimize default True;
@@ -318,34 +308,6 @@ begin
 end;
 
 procedure TTyCaptionButton.Paint;
-begin
-  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
-end;
-
-{ TTyContentPanel }
-
-function TTyContentPanel.GetStyleTypeKey: string;
-begin
-  Result := 'TyContentPanel';
-end;
-
-procedure TTyContentPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-var
-  P: TTyPainter;
-  S: TTyStyleSet;
-begin
-  P := TTyPainter.Create;
-  try
-    P.BeginPaint(ACanvas, ARect, APPI);
-    S := CurrentStyle;
-    DrawFrame(P, Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top), S);
-    P.EndPaint;
-  finally
-    P.Free;
-  end;
-end;
-
-procedure TTyContentPanel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
@@ -658,7 +620,6 @@ end;
 procedure TTyForm.SetupChrome;
 begin
   BorderStyle := bsNone;
-  FResizeBorder := 6;
   FShowMinimize := True;
   FShowMaximize := True;
 
@@ -669,18 +630,8 @@ begin
   FTitleBar.Align := alTop;
   FTitleBar.Height := 32;
 
-  FContent := TTyContentPanel.Create(Self);
-  FContent.Name := 'TyContent';
-  FContent.SetSubComponent(True);
-  FContent.Parent := Self;
-  FContent.Align := alClient;
-  FContent.BorderSpacing.Left := FResizeBorder;
-  FContent.BorderSpacing.Right := FResizeBorder;
-  FContent.BorderSpacing.Bottom := FResizeBorder;
-
   FEngine := TTyChromeEngine.Create(FTitleBar);
   FEngine.Form := Self;
-  FEngine.BorderZone := FResizeBorder;
   FEngine.CaptureInstalledPPI;
   FTitleBar.FEngine := FEngine;
 
@@ -716,27 +667,6 @@ begin if FEngine <> nil then FEngine.ToggleMaximize; end;
 
 procedure TTyForm.DoCloseClick(Sender: TObject);
 begin Close; end;
-
-procedure TTyForm.Loaded;
-begin
-  inherited Loaded;
-  // Defer the stray-child reparent to after the form is fully loaded and shown.
-  // Reparenting during Loaded leaves the form's autosizing locked
-  // (AutoSizeDelayed=True), which makes TWinControl.UpdateShowing skip the show —
-  // the form ends up Visible=True but never actually displayed.
-  Application.QueueAsyncCall(@ReparentContentChildren, 0);
-end;
-
-procedure TTyForm.ReparentContentChildren(Data: PtrInt);
-var i: Integer; Ctl: TControl;
-begin
-  for i := ControlCount - 1 downto 0 do
-  begin
-    Ctl := Controls[i];
-    if (Ctl <> FTitleBar) and (Ctl <> FContent) then
-      Ctl.Parent := FContent;
-  end;
-end;
 
 procedure TTyForm.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
@@ -782,7 +712,6 @@ begin
     window chrome themes from the SAME controller the app loaded its theme into
     (each styleable control resolves its theme via its Controller). }
   FTitleBar.Controller := AController;
-  FContent.Controller := AController;
   FTitleBar.MinButton.Controller := AController;
   FTitleBar.MaxButton.Controller := AController;
   FTitleBar.CloseButton.Controller := AController;

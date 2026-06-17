@@ -115,10 +115,6 @@ TyScrollBar:active { color: var(--accent); }
 TyScrollBar:focus  { outline: 2px var(--focus-ring); }
 TyScrollBar:disabled { opacity: 0.5; }
 
-TyContentPanel {
-  background: var(--surface);
-}
-
 TyTitleBar {
   background: darken(--surface, 6%);
   color: var(--on-surface);

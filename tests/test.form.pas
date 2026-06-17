@@ -88,20 +88,11 @@ type
     procedure TestGlyphRenderedWhenHoverOnlyAndHovered;
   end;
 
-  TContentPanelTest = class(TTestCase)
-  published
-    procedure TestTypeKey;
-    procedure TestPaintSmoke;
-  end;
-
   TTyFormTest = class(TTestCase)
   published
     procedure TestBorderlessFromBirth;
     procedure TestTitleBarIsTopBand;
-    procedure TestContentIsClientBelowBand;
     procedure TestSubComponentsNamedAndFlagged;
-    procedure TestChildOnContentSitsBelowBand;
-    procedure TestDefensiveLoadedReparentsStrayChild;
     procedure TestApplyChromeThemeSetsColorFromToken;
     procedure TestApplyChromeThemePropagatesController;
     procedure TestSubComponentsSurviveStreamRoundTrip;
@@ -128,17 +119,9 @@ type
     procedure CallLayoutButtons;
   end;
 
-  TContentPanelAccess = class(TTyContentPanel)
-  public
-    procedure SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-  end;
-
   TTyFormAccess = class(TTyForm)
   public
     function TB: TTyTitleBar;
-    function Content: TTyContentPanel;
-    procedure CallLoaded;
-    procedure CallReparent;
     function EngineDragging: Boolean;
     function EngineMaximized: Boolean;
     procedure SetEngineMaximized(AValue: Boolean);
@@ -175,13 +158,7 @@ begin AdjustClientRect(ARect); end;
 procedure TTitleBarAccess.CallLayoutButtons;
 begin LayoutButtons; end;
 
-procedure TContentPanelAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-begin
-  RenderTo(ACanvas, ARect, APPI);
-end;
-
 function TTyFormAccess.TB: TTyTitleBar; begin Result := TitleBar; end;
-function TTyFormAccess.Content: TTyContentPanel; begin Result := ContentPanel; end;
 
 { Counts the components owned by AOwner (recursively) whose class is exactly
   AClass. Used to prove the sub-components are matched-by-name (not duplicated)
@@ -200,8 +177,6 @@ begin
   end;
 end;
 
-procedure TTyFormAccess.CallLoaded; begin Loaded; end;
-procedure TTyFormAccess.CallReparent; begin ReparentContentChildren(0); end;
 function TTyFormAccess.EngineDragging: Boolean; begin Result := FEngine.Dragging; end;
 function TTyFormAccess.EngineMaximized: Boolean; begin Result := FEngine.Maximized; end;
 procedure TTyFormAccess.SetEngineMaximized(AValue: Boolean); begin FEngine.Maximized := AValue; end;
@@ -728,40 +703,6 @@ begin
   end;
 end;
 
-{ TContentPanelTest }
-
-procedure TContentPanelTest.TestTypeKey;
-var P: TTyContentPanel;
-begin
-  P := TTyContentPanel.Create(nil);
-  try
-    AssertEquals('typekey', 'TyContentPanel', P.GetStyleTypeKey);
-  finally
-    P.Free;
-  end;
-end;
-
-procedure TContentPanelTest.TestPaintSmoke;
-var
-  P: TTyContentPanel;
-  Bmp: TBitmap;
-begin
-  P := TTyContentPanel.Create(nil);
-  try
-    Bmp := TBitmap.Create;
-    try
-      Bmp.PixelFormat := pf32bit;
-      Bmp.SetSize(100, 80);
-      TContentPanelAccess(P).SmokeRender(Bmp.Canvas, Rect(0, 0, 100, 80), 96);
-      AssertTrue('content panel RenderTo executed without exception', True);
-    finally
-      Bmp.Free;
-    end;
-  finally
-    P.Free;
-  end;
-end;
-
 { TTyFormTest }
 
 procedure TTyFormTest.TestBorderlessFromBirth;
@@ -789,83 +730,13 @@ begin
   end;
 end;
 
-procedure TTyFormTest.TestContentIsClientBelowBand;
-var F: TTyFormAccess;
-begin
-  { Structural proof of the content-below-band guarantee (headless-deterministic).
-    Realized alignment needs a window handle the headless runner can't create
-    (AutoSizeDelayed suppresses the align pass while the form is not visible), so
-    we assert the STRUCTURE that LCL guarantees yields the geometry: an alClient
-    content panel fills the area below an alTop title band. Realized pixel geometry
-    is verified manually in the Lazarus designer (plan's manual checklist); see the
-    design spec's verified LCL AlignControls analysis (2026-06-17 ... §4). }
-  F := TTyFormAccess.CreateNew(nil);
-  try
-    AssertTrue('content exists', F.Content <> nil);
-    AssertTrue('content alClient', F.Content.Align = alClient);
-    AssertTrue('titlebar alTop reserves the band', F.TB.Align = alTop);
-    AssertEquals('resize ring left', 6, F.Content.BorderSpacing.Left);
-    AssertEquals('resize ring right', 6, F.Content.BorderSpacing.Right);
-    AssertEquals('resize ring bottom', 6, F.Content.BorderSpacing.Bottom);
-    AssertEquals('no ring at top (title band sits there)', 0, F.Content.BorderSpacing.Top);
-  finally
-    F.Free;
-  end;
-end;
-
 procedure TTyFormTest.TestSubComponentsNamedAndFlagged;
 var F: TTyFormAccess;
 begin
   F := TTyFormAccess.CreateNew(nil);
   try
     AssertEquals('titlebar name', 'TyTitleBar', F.TB.Name);
-    AssertEquals('content name', 'TyContent', F.Content.Name);
     AssertTrue('titlebar subcomponent', csSubComponent in F.TB.ComponentStyle);
-    AssertTrue('content subcomponent', csSubComponent in F.Content.ComponentStyle);
-  finally
-    F.Free;
-  end;
-end;
-
-procedure TTyFormTest.TestChildOnContentSitsBelowBand;
-var
-  F: TTyFormAccess;
-  Btn: TButton;
-begin
-  { A control added to the content panel is parented to FContent (the alClient
-    region below the band), not the form root. Combined with the alClient/alTop
-    structure, that places it below the title band. Realized absolute geometry is
-    GUI-verified (manual checklist); the parenting + alignment contract proven here
-    is the headless-deterministic guarantee. }
-  F := TTyFormAccess.CreateNew(nil);
-  try
-    Btn := TButton.Create(F);
-    Btn.Parent := F.Content;
-    AssertTrue('child lives in the content panel', Btn.Parent = F.Content);
-    AssertTrue('content alClient below the alTop band',
-      (F.Content.Align = alClient) and (F.TB.Align = alTop));
-  finally
-    F.Free;
-  end;
-end;
-
-procedure TTyFormTest.TestDefensiveLoadedReparentsStrayChild;
-var
-  F: TTyFormAccess;
-  Stray: TButton;
-begin
-  { The reparent runs the same logic the Loaded override defers via
-    Application.QueueAsyncCall at runtime (deferring is required — reparenting during
-    Loaded leaves the form's autosizing locked, which suppresses the window show).
-    Drive that logic directly here so the unit test stays synchronous/headless. }
-  F := TTyFormAccess.CreateNew(nil);
-  try
-    Stray := TButton.Create(F);
-    Stray.Parent := F;
-    F.CallReparent;
-    AssertTrue('stray reparented into content', Stray.Parent = F.Content);
-    AssertTrue('titlebar still on form', F.TB.Parent = F);
-    AssertTrue('content still on form', F.Content.Parent = F);
   finally
     F.Free;
   end;
@@ -904,7 +775,6 @@ begin
     Ctl.LoadThemeCss('TyForm { background: #123456; }');
     F.ApplyChromeTheme(Ctl);
     AssertTrue('titlebar uses the passed controller', F.TB.Controller = Ctl);
-    AssertTrue('content uses the passed controller', F.Content.Controller = Ctl);
     AssertTrue('min button uses the passed controller', F.TB.MinButton.Controller = Ctl);
     AssertTrue('max button uses the passed controller', F.TB.MaxButton.Controller = Ctl);
     AssertTrue('close button uses the passed controller', F.TB.CloseButton.Controller = Ctl);
@@ -926,27 +796,26 @@ begin
 
     In the Lazarus designer, a form descending from TTyForm is streamed as a
     DESCENDENT of its ancestor (the TTyForm base, which already owns the
-    code-created TyTitleBar/TyContent sub-components). So the inherited .lfm
-    writes those sub-components with the ffInherited flag (matched by Name
-    against the ancestor), and reading it back INTO a fresh instance (whose
-    TyTitleBar/TyContent already exist from CreateNew) matches them by Name
-    instead of recreating them.
+    code-created TyTitleBar sub-component). So the inherited .lfm writes that
+    sub-component with the ffInherited flag (matched by Name against the
+    ancestor), and reading it back INTO a fresh instance (whose TyTitleBar
+    already exists from CreateNew) matches it by Name instead of recreating it.
 
     This test reproduces that exactly:
-      - Anc: the ancestor instance (its sub-components define the inherited set).
+      - Anc: the ancestor instance (its sub-component defines the inherited set).
       - Src: the descendant; UserBtn is the user-added child.
-      - WriteDescendent(Src, Anc): writes TyTitleBar/TyContent as ffInherited
-        (name-matched against Anc) and UserBtn as a normal new component.
+      - WriteDescendent(Src, Anc): writes TyTitleBar as ffInherited (name-matched
+        against Anc) and UserBtn as a normal new component.
       - ReadRootComponent(Dst) into a pre-existing instance: ffInherited
         children are resolved via FLookupRoot.FindComponent(Name) -> the
-        existing TyTitleBar/TyContent are reused (NOT duplicated), and UserBtn
-        is created fresh and re-parented under the content panel.
+        existing TyTitleBar is reused (NOT duplicated), and UserBtn is created
+        fresh on the form.
 
     What this proves: the SetSubComponent + fixed-Name mechanism makes a
-    descendant's inherited stream match the code-created sub-components by name
-    (no duplicates), and a content child round-trips under TyContent. What it
-    does NOT itself exercise: the IDE's on-disk .lfm text parse/codegen, which
-    is additionally covered by the design spec's LCL analysis and the manual
+    descendant's inherited stream match the code-created sub-component by name
+    (no duplicates), and a user child round-trips on the form. What it does NOT
+    itself exercise: the IDE's on-disk .lfm text parse/codegen, which is
+    additionally covered by the design spec's LCL analysis and the manual
     designer verification checklist. }
   Anc := TTyFormAccess.CreateNew(nil);
   Src := TTyFormAccess.CreateNew(nil);
@@ -954,7 +823,7 @@ begin
   try
     Child := TButton.Create(Src);
     Child.Name := 'UserBtn';
-    Child.Parent := Src.Content;
+    Child.Parent := Src;
 
     Writer := TWriter.Create(Stream, 4096);
     try
@@ -964,21 +833,20 @@ begin
     end;
     Stream.Position := 0;
 
-    Dst := TTyFormAccess.CreateNew(nil);  { already has its own TyTitleBar/TyContent }
+    Dst := TTyFormAccess.CreateNew(nil);  { already has its own TyTitleBar }
     try
       Reader := TReader.Create(Stream, 4096);
       try
-        Reader.ReadRootComponent(Dst);    { ffInherited children name-match -> no dup }
+        Reader.ReadRootComponent(Dst);    { ffInherited child name-matches -> no dup }
       finally
         Reader.Free;
       end;
-      { exactly one of each sub-component (matched by name, not duplicated) }
+      { exactly one title bar (matched by name, not duplicated) }
       AssertEquals('one title bar', 1, CountByClass(Dst, TTyTitleBar));
-      AssertEquals('one content panel', 1, CountByClass(Dst, TTyContentPanel));
-      { the user child round-tripped under the content panel }
+      { the user child round-tripped on the form }
       AssertTrue('user child present', Dst.FindComponent('UserBtn') <> nil);
-      AssertTrue('user child parented to content',
-        TControl(Dst.FindComponent('UserBtn')).Parent = Dst.Content);
+      AssertTrue('user child parented to form',
+        TControl(Dst.FindComponent('UserBtn')).Parent = Dst);
     finally
       Dst.Free;
     end;
@@ -1026,12 +894,10 @@ initialization
   RegisterTest(TTitleBarPaintTest);
   RegisterTest(TRescaleMetricTest);
   RegisterTest(TCaptionButtonHoverGlyphTest);
-  RegisterTest(TContentPanelTest);
   RegisterTest(TTyFormTest);
   { Streaming (TestSubComponentsSurviveStreamRoundTrip) resolves these child
     classes by name during ReadComponent, so they must be class-registered. }
   RegisterClass(TTyTitleBar);
-  RegisterClass(TTyContentPanel);
   RegisterClass(TTyCaptionButton);
   RegisterClass(TButton);  { the user-added content child created fresh on read }
 
