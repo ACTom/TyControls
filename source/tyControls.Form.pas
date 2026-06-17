@@ -140,6 +140,7 @@ type
       drag/maximize state through it. }
     FEngine: TTyChromeEngine;
     procedure Loaded; override;
+    procedure ReparentContentChildren(Data: PtrInt);
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -717,9 +718,18 @@ procedure TTyForm.DoCloseClick(Sender: TObject);
 begin Close; end;
 
 procedure TTyForm.Loaded;
-var i: Integer; Ctl: TControl;
 begin
   inherited Loaded;
+  // Defer the stray-child reparent to after the form is fully loaded and shown.
+  // Reparenting during Loaded leaves the form's autosizing locked
+  // (AutoSizeDelayed=True), which makes TWinControl.UpdateShowing skip the show —
+  // the form ends up Visible=True but never actually displayed.
+  Application.QueueAsyncCall(@ReparentContentChildren, 0);
+end;
+
+procedure TTyForm.ReparentContentChildren(Data: PtrInt);
+var i: Integer; Ctl: TControl;
+begin
   for i := ControlCount - 1 downto 0 do
   begin
     Ctl := Controls[i];

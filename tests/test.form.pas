@@ -138,6 +138,7 @@ type
     function TB: TTyTitleBar;
     function Content: TTyContentPanel;
     procedure CallLoaded;
+    procedure CallReparent;
     function EngineDragging: Boolean;
     function EngineMaximized: Boolean;
     procedure SetEngineMaximized(AValue: Boolean);
@@ -200,6 +201,7 @@ begin
 end;
 
 procedure TTyFormAccess.CallLoaded; begin Loaded; end;
+procedure TTyFormAccess.CallReparent; begin ReparentContentChildren(0); end;
 function TTyFormAccess.EngineDragging: Boolean; begin Result := FEngine.Dragging; end;
 function TTyFormAccess.EngineMaximized: Boolean; begin Result := FEngine.Maximized; end;
 procedure TTyFormAccess.SetEngineMaximized(AValue: Boolean); begin FEngine.Maximized := AValue; end;
@@ -852,11 +854,15 @@ var
   F: TTyFormAccess;
   Stray: TButton;
 begin
+  { The reparent runs the same logic the Loaded override defers via
+    Application.QueueAsyncCall at runtime (deferring is required — reparenting during
+    Loaded leaves the form's autosizing locked, which suppresses the window show).
+    Drive that logic directly here so the unit test stays synchronous/headless. }
   F := TTyFormAccess.CreateNew(nil);
   try
     Stray := TButton.Create(F);
     Stray.Parent := F;
-    F.CallLoaded;
+    F.CallReparent;
     AssertTrue('stray reparented into content', Stray.Parent = F.Content);
     AssertTrue('titlebar still on form', F.TB.Parent = F);
     AssertTrue('content still on form', F.Content.Parent = F);
