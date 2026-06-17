@@ -2587,6 +2587,9 @@ begin
           CaretX + P.Scale(1), y + LH - P.Scale(2));
         P.FillBackground(CaretRect, Default(TTyFill), 0);
         P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
+        // Pin the Windows IME composition window to the caret (client coords),
+        // so CJK candidates appear at the caret instead of the screen origin.
+        if Focused then TySetImeCaretPos(Self, CaretX, y);
       end;
     end;
 

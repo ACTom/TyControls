@@ -130,7 +130,53 @@ type
     property Controller: TTyStyleController read FController write SetController;
   end;
 
+{ Position the Windows IME composition window at a CLIENT-space caret point, so a
+  CJK composition/candidate popup appears at the caret instead of the screen origin
+  (custom-drawn text controls have no system caret for the IME to follow). No-op
+  off Windows or when the control has no allocated handle. }
+procedure TySetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
+
 implementation
+
+{$IFDEF WINDOWS}
+const
+  CFS_POINT = 2;
+type
+  TTyImeCompForm = record
+    dwStyle: LongWord;
+    ptCurrentPos: TPoint;
+    rcArea: TRect;
+  end;
+function ImmGetContext(AWnd: THandle): THandle; stdcall;
+  external 'imm32.dll' name 'ImmGetContext';
+function ImmReleaseContext(AWnd, AImc: THandle): LongBool; stdcall;
+  external 'imm32.dll' name 'ImmReleaseContext';
+function ImmSetCompositionWindow(AImc: THandle; ACompForm: Pointer): LongBool; stdcall;
+  external 'imm32.dll' name 'ImmSetCompositionWindow';
+{$ENDIF}
+
+procedure TySetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
+{$IFDEF WINDOWS}
+var
+  imc: THandle;
+  cf: TTyImeCompForm;
+{$ENDIF}
+begin
+{$IFDEF WINDOWS}
+  if (AControl = nil) or not AControl.HandleAllocated then Exit;
+  imc := ImmGetContext(AControl.Handle);
+  if imc = 0 then Exit;
+  try
+    FillChar(cf, SizeOf(cf), 0);
+    cf.dwStyle := CFS_POINT;
+    cf.ptCurrentPos.X := AClientX;
+    cf.ptCurrentPos.Y := AClientY;
+    ImmSetCompositionWindow(imc, @cf);
+  finally
+    ImmReleaseContext(AControl.Handle, imc);
+  end;
+{$ENDIF}
+end;
 
 { TTyGraphicControl }
 

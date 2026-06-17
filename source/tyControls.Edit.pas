@@ -68,6 +68,8 @@ type
     // Scroll helpers
     procedure EnsureCaretVisible(APPI: Integer);
     procedure ClampScrollX(APPI: Integer);
+    // Pin the Windows IME composition window to the on-screen caret
+    procedure UpdateImeCaret;
     // Word-classifier helper (pure codepoint logic; no widget dependency)
     function IsWordCodepoint(const CP: string): Boolean;
   protected
@@ -231,6 +233,7 @@ begin
     EnsureBlinkTimer;
     FBlinkTimer.Enabled := True;
   end;
+  UpdateImeCaret;   // anchor the IME to the caret as soon as we gain focus
 end;
 
 procedure TTyEdit.DoExit;
@@ -805,6 +808,23 @@ begin
   // Clamp
   if FScrollX > MaxScroll then FScrollX := MaxScroll;
   if FScrollX < 0 then FScrollX := 0;
+  UpdateImeCaret;
+end;
+
+procedure TTyEdit.UpdateImeCaret;
+{ Keep the Windows IME composition window pinned to the on-screen caret so CJK
+  candidates appear at the caret, not the screen origin (we draw our own caret, so
+  there is no system caret for the IME to track). Geometry mirrors RenderTo. }
+var
+  ppi: Integer;
+  S: TTyStyleSet;
+begin
+  if not Focused then Exit;
+  ppi := Font.PixelsPerInch;
+  S := CurrentStyle;
+  TySetImeCaretPos(Self,
+    CaretPixelXAt(FCaret, ppi) + AlignOffset(ppi) - FScrollX,
+    MulDiv(S.Padding.Top, ppi, 96));
 end;
 
 // ---- Word-boundary helpers ----
