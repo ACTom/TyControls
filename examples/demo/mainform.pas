@@ -3,7 +3,6 @@ unit mainform;
 interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics,
-  tyControls.Types, tyControls.StyleModel,
   tyControls.Controller, tyControls.Button, tyControls.TyLabel,
   tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
@@ -16,9 +15,8 @@ type
     including the TabControl's tabs (v1.7 design-time Tabs collection),
     TTySpinEdit and TTyMemo. }
 
-  TDemoMainForm = class(TForm)
+  TDemoMainForm = class(TTyForm)
     Controller: TTyStyleController;
-    Chrome: TTyFormChrome;
     BtnLight: TTyButton;
     BtnDark: TTyButton;
     BtnShowcase: TTyButton;
@@ -74,16 +72,13 @@ begin
 end;
 
 procedure TDemoMainForm.ApplyTheme(const AFile: string);
-var
-  bg: TTyStyleSet;
 begin
   Controller.LoadTheme(ThemeDir + AFile);
   Controller.Changed;
 
-  // Window follows theme: tint the plain TForm from the theme's TyForm token.
-  bg := Controller.Model.ResolveStyle('TyForm', '', []);
-  if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
-    Self.Color := TyColorToLCL(bg.Background.Color);
+  // Window chrome + backdrop follow the theme via the TyForm token.
+  ApplyChromeTheme(Controller);
+  TitleBar.Caption := 'TyControls Demo';
 end;
 
 procedure TDemoMainForm.TrackBar1Change(Sender: TObject);

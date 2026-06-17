@@ -199,8 +199,4 @@ object DemoMainForm: TDemoMainForm
     Left = 16
     Top = 16
   end
-  object Chrome: TTyFormChrome
-    Left = 64
-    Top = 16
-  end
 end
