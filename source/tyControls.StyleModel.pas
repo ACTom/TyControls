@@ -39,6 +39,7 @@ type
     FBaseRules: TFPList;      // built-in default layer — owns TTyStyleRuleEntry
     FBaseVars: TStringList;   // built-in :root vars
     FMergedVars: TStringList; // FBaseVars (+) FVars (+) active @mode vars; rebuilt on load/clear/SetMode
+    FThemeBaseDir: string;    // dir of the loaded theme file; restored into GThemeBaseDir at resolve so url() assets resolve (merge-then-resolve evaluates url() at resolve time, not load time)
     FVersion: Cardinal;       // bumped on every load/clear; the §3.8 switch/cache anchor
     FPropertyCascade: Boolean; // A7: False=all-or-nothing (default, golden); True=base->user per-prop merge
     FMode: string;            // P3 (D7): active @mode name ('' = no mode override)
@@ -719,6 +720,7 @@ begin
   ClearList(FRules);
   FVars.Clear;
   ClearModeVars;
+  FThemeBaseDir := '';   // no user theme -> no asset base dir
   RebuildMergedVars;
   Inc(FVersion);
 end;
@@ -1032,6 +1034,10 @@ begin
       ClearList(ARules);
       AVars.Clear;
       ClearModeVars;
+      // §3.8 REPLACE adopts the new theme's asset base dir (set by LoadFromFile/
+      // LoadFromSource via the GThemeBaseDir global; '' for a pure-string load).
+      // Additive loads keep the current theme's dir (compose onto the active theme).
+      FThemeBaseDir := GThemeBaseDir;
     end;
     for ri := 0 to tmpRules.Count - 1 do ARules.Add(tmpRules[ri]);
     tmpRules.Clear;   // ownership transferred to ARules; clear list only (do NOT free entries)
@@ -1196,17 +1202,27 @@ end;
 
 function TTyStyleModel.ResolveStyle(const ATypeKey, AStyleClass: string;
   AStates: TTyStateSet): TTyStyleSet;
+var savedBaseDir: string;
 begin
   Result := EmptyStyleSet;
-  { A7. With PropertyCascade OFF (default) the built-in default layer applies only
-    when the user theme defines NO rule for this typeKey — all-or-nothing: a fully-
-    themed control gets no base bleed; the golden baseline. With PropertyCascade ON
-    the base layer ALWAYS applies first, then the user layer overwrites per-property
-    (omitted user props inherit the base; 省略=继承, D4). Both layers' raw declarations
-    evaluate against the MERGED vars, so overriding a seed reaches base rules (D2). }
-  if FPropertyCascade or not UserHasTypeKey(ATypeKey) then
-    ResolveLayer(FBaseRules, ATypeKey, AStyleClass, AStates, Result);
-  ResolveLayer(FRules, ATypeKey, AStyleClass, AStates, Result);
+  { merge-then-resolve evaluates raw decls HERE, so a background-image url() is resolved
+    now — long after LoadFromFile cleared the GThemeBaseDir global. Restore the loaded
+    theme's dir for the duration of the resolve so ResolveAssetPath finds the asset. }
+  savedBaseDir := GThemeBaseDir;
+  GThemeBaseDir := FThemeBaseDir;
+  try
+    { A7. With PropertyCascade OFF (default) the built-in default layer applies only
+      when the user theme defines NO rule for this typeKey — all-or-nothing: a fully-
+      themed control gets no base bleed; the golden baseline. With PropertyCascade ON
+      the base layer ALWAYS applies first, then the user layer overwrites per-property
+      (omitted user props inherit the base; 省略=继承, D4). Both layers' raw declarations
+      evaluate against the MERGED vars, so overriding a seed reaches base rules (D2). }
+    if FPropertyCascade or not UserHasTypeKey(ATypeKey) then
+      ResolveLayer(FBaseRules, ATypeKey, AStyleClass, AStates, Result);
+    ResolveLayer(FRules, ATypeKey, AStyleClass, AStates, Result);
+  finally
+    GThemeBaseDir := savedBaseDir;
+  end;
 end;
 
 function TTyStyleModel.ResolveOverride(const ASource: string): TTyStyleSet;
@@ -1218,18 +1234,25 @@ function TTyStyleModel.ResolveOverride(const ASource: string): TTyStyleSet;
 var
   decls: TTyCssDeclarationArray;
   i: Integer;
+  savedBaseDir: string;
 begin
   Result := EmptyStyleSet;
   if not TyParseOverride(ASource, decls) then
     Exit;   // malformed fragment -> empty override (no Present flags -> overlays nothing)
-  for i := 0 to High(decls) do
-  begin
-    try
-      TyApplyDeclaration(Result, decls[i].Prop, decls[i].RawValue, FMergedVars);
-    except
-      on E: Exception do
-        ; // skip a bad declaration; keep the other (good) override props
+  savedBaseDir := GThemeBaseDir;   // an override may set a background-image; resolve its url() vs the theme dir too
+  GThemeBaseDir := FThemeBaseDir;
+  try
+    for i := 0 to High(decls) do
+    begin
+      try
+        TyApplyDeclaration(Result, decls[i].Prop, decls[i].RawValue, FMergedVars);
+      except
+        on E: Exception do
+          ; // skip a bad declaration; keep the other (good) override props
+      end;
     end;
+  finally
+    GThemeBaseDir := savedBaseDir;
   end;
 end;
 

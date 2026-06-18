@@ -30,6 +30,10 @@ type
     procedure TestShowcaseStylesFormTypeKey;
     { Phase 1 on-accent fix }
     procedure TestDarkOnAccentReadable;
+    { green = the image-background + frosted-glass theme; guard its resolution }
+    procedure TestGreenImageAndGlass;
+    { the demo's real path: switch FROM another theme INTO green (REPLACE) }
+    procedure TestGreenAfterLightSwitch;
   end;
 
   { Golden resolved-style dump. Loads each shipped theme, resolves a full grid of
@@ -260,6 +264,57 @@ begin
     AssertEquals('dark checkbox:active ink = 0B1120', TTyColor($FF0B1120), s.TextColor);
     s := model.ResolveStyle('TyRadioButton', '', [tysActive]);
     AssertEquals('dark radio:active ink = 0B1120', TTyColor($FF0B1120), s.TextColor);
+  finally
+    model.Free;
+  end;
+end;
+
+procedure TTestThemes.TestGreenImageAndGlass;
+var model: TTyStyleModel; s: TTyStyleSet;
+begin
+  // Regression guard: green is the image-background + frosted-glass demo theme.
+  // After the v2 engine refactor it must STILL resolve TyForm to an image fill and
+  // expose glass on its panels (the demo's whole point).
+  model := TTyStyleModel.Create;
+  try
+    model.LoadFromFile(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' +
+      PathDelim + 'green.tycss');
+    s := model.ResolveStyle('TyForm', '', []);
+    AssertEquals('green TyForm background kind', Ord(tfkImage), Ord(s.Background.Kind));
+    AssertTrue('green TyForm image path set', s.Background.ImagePath <> '');
+    // The resolved path must be LOADABLE — the painter loads this file at paint time,
+    // long after GThemeBaseDir was cleared, so resolve-time eval must still find it.
+    AssertTrue('green TyForm image is a real file: ' + s.Background.ImagePath,
+      FileExists(s.Background.ImagePath));
+    AssertEquals('green MaxGlassBlur', 16, model.MaxGlassBlur);
+    s := model.ResolveStyle('TyPanel', '', []);
+    AssertTrue('green TyPanel has glass', tpGlass in s.Present);
+    AssertEquals('green TyPanel glass-blur', 16, s.Background.GlassBlur);
+  finally
+    model.Free;
+  end;
+end;
+
+procedure TTestThemes.TestGreenAfterLightSwitch;
+var model: TTyStyleModel; s: TTyStyleSet; base: string;
+begin
+  // Reproduce the demo EXACTLY: load light first (FormCreate), then switch to green
+  // (Btn click). §3.8 switch = REPLACE; green's image+glass must survive the swap.
+  base := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim;
+  model := TTyStyleModel.Create;
+  try
+    model.LoadFromFile(base + 'light.tycss');   // FormCreate
+    model.LoadFromFile(base + 'green.tycss');   // BtnGreenClick (REPLACE)
+    s := model.ResolveStyle('TyForm', '', []);
+    AssertTrue('switched TyForm background present', tpBackground in s.Present);
+    AssertEquals('switched TyForm background kind', Ord(tfkImage), Ord(s.Background.Kind));
+    AssertTrue('switched TyForm image path set', s.Background.ImagePath <> '');
+    AssertTrue('switched TyForm image is a real file: ' + s.Background.ImagePath,
+      FileExists(s.Background.ImagePath));
+    AssertEquals('switched MaxGlassBlur', 16, model.MaxGlassBlur);
+    s := model.ResolveStyle('TyPanel', '', []);
+    AssertTrue('switched TyPanel has glass', tpGlass in s.Present);
+    AssertEquals('switched TyPanel glass-blur', 16, s.Background.GlassBlur);
   finally
     model.Free;
   end;
