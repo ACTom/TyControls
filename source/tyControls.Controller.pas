@@ -3,7 +3,8 @@ unit tyControls.Controller;
 interface
 uses
   Classes, SysUtils, Controls, Forms,
-  tyControls.Types, tyControls.StyleModel, tyControls.Painter;
+  tyControls.Types, tyControls.StyleModel, tyControls.Painter,
+  tyControls.ThemeRegistry;
 
 var
   // When True (default), the first TTyStyleController created in a GUI context
@@ -19,8 +20,10 @@ type
   private
     FModel: TTyStyleModel;
     FThemeFile: string;
+    FThemeName: string;
     FControls: TFPList;
     procedure SetThemeFile(const AValue: string);
+    procedure SetThemeName(const AValue: string);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -33,6 +36,13 @@ type
     procedure Changed;
   published
     property ThemeFile: string read FThemeFile write SetThemeFile;
+    { B (Phase 2): switch theme by registered NAME. Resolves via TyResolveTheme and
+      loads through the §3.8 REPLACE path (LoadFromFile -> LoadInto AReplace=True +
+      bump ThemeVersion + Changed); NEVER additive, so switching A->B fully replaces
+      layer-1 and leaves no residual previous theme. Mutually exclusive with ThemeFile:
+      setting ThemeName clears the stored ThemeFile (and vice versa) so layer-1 has a
+      single, unambiguous source. }
+    property ThemeName: string read FThemeName write SetThemeName;
   end;
 
 function TyDefaultController: TTyStyleController;
@@ -72,14 +82,33 @@ procedure TTyStyleController.SetThemeFile(const AValue: string);
 begin
   if FThemeFile = AValue then Exit;
   FThemeFile := AValue;
+  FThemeName := '';   // ThemeFile/ThemeName are mutually exclusive sources for layer-1
   if (AValue <> '') and FileExists(AValue) then
     LoadTheme(AValue);
+end;
+
+procedure TTyStyleController.SetThemeName(const AValue: string);
+var
+  src: string;
+begin
+  if FThemeName = AValue then Exit;
+  FThemeName := AValue;
+  FThemeFile := '';   // ThemeFile/ThemeName are mutually exclusive sources for layer-1
+  if (AValue <> '') and TyResolveTheme(AValue, src) and (src <> '')
+     and FileExists(src) then
+  begin
+    // §3.8 switch = REPLACE layer-1 (LoadFromFile uses AReplace=True and bumps
+    // ThemeVersion). Never additive: switching themes must not stack residual rules.
+    FModel.LoadFromFile(src);
+    Changed;
+  end;
 end;
 
 procedure TTyStyleController.LoadTheme(const AFileName: string);
 begin
   FModel.LoadFromFile(AFileName);
   FThemeFile := AFileName;
+  FThemeName := '';   // explicit file load supersedes any named-theme selection
   Changed;
 end;
 
