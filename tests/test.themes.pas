@@ -28,6 +28,8 @@ type
     procedure TestLightStylesFormTypeKey;
     procedure TestDarkStylesFormTypeKey;
     procedure TestShowcaseStylesFormTypeKey;
+    { Phase 1 on-accent fix }
+    procedure TestDarkOnAccentReadable;
   end;
 
   { Golden resolved-style dump. Loads each shipped theme, resolves a full grid of
@@ -236,6 +238,24 @@ end;
 procedure TTestThemes.TestShowcaseStylesFormTypeKey;
 begin
   CheckThemeFormTypeKey('showcase.tycss');
+end;
+
+procedure TTestThemes.TestDarkOnAccentReadable;
+var model: TTyStyleModel; s: TTyStyleSet;
+begin
+  // on-accent fix: dark TyCheckBox:active / TyRadioButton:active ink must be the dark
+  // #0B1120 (was #FFFFFF — low-contrast white on the light-blue dark accent). on() unifies.
+  model := TTyStyleModel.Create;
+  try
+    model.LoadFromFile(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' +
+      PathDelim + 'dark.tycss');
+    s := model.ResolveStyle('TyCheckBox', '', [tysActive]);
+    AssertEquals('dark checkbox:active ink = 0B1120', TTyColor($FF0B1120), s.TextColor);
+    s := model.ResolveStyle('TyRadioButton', '', [tysActive]);
+    AssertEquals('dark radio:active ink = 0B1120', TTyColor($FF0B1120), s.TextColor);
+  finally
+    model.Free;
+  end;
 end;
 
 { ── Golden resolved-style dump ─────────────────────────────────────────────── }

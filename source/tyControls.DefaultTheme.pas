@@ -81,10 +81,10 @@ begin
     'TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyButton:active   { background: var(--surface-active); }' + LineEnding +
     'TyButton:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
-    'TyButton.primary  { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }' + LineEnding +
+    'TyButton.primary  { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
     'TyButton.primary:hover    { background: var(--accent-hover); }' + LineEnding +
     'TyButton.primary:active   { background: var(--accent-active); }' + LineEnding +
-    'TyButton.danger   { background: var(--danger); color: #FFFFFF; border-color: var(--danger); }' + LineEnding +
+    'TyButton.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }' + LineEnding +
     'TyButton.danger:hover     { background: var(--danger-hover); }' + LineEnding +
     'TyButton.danger:active    { background: var(--danger-active); }' + LineEnding +
     '' + LineEnding +
@@ -118,7 +118,7 @@ begin
     '  padding: 4px;' + LineEnding +
     '}' + LineEnding +
     'TyCheckBox:hover    { border-color: var(--accent); }' + LineEnding +
-    'TyCheckBox:active   { background: var(--accent); color: #FFFFFF; }' + LineEnding +
+    'TyCheckBox:active   { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyCheckBox:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyCheckBox:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
@@ -131,7 +131,7 @@ begin
     '  padding: 4px;' + LineEnding +
     '}' + LineEnding +
     'TyRadioButton:hover    { border-color: var(--accent); }' + LineEnding +
-    'TyRadioButton:active   { background: var(--accent); color: #FFFFFF; }' + LineEnding +
+    'TyRadioButton:active   { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyRadioButton:focus { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyRadioButton:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
@@ -181,8 +181,8 @@ begin
     '}' + LineEnding +
     'TyCaptionButton:hover  { background: var(--surface-caption-hover); }' + LineEnding +
     'TyCaptionButton:active { background: var(--surface-caption-active); }' + LineEnding +
-    'TyCaptionButton.close:hover  { background: var(--danger); color: #FFFFFF; }' + LineEnding +
-    'TyCaptionButton.close:active { background: var(--danger-press-close); color: #FFFFFF; }' + LineEnding +
+    'TyCaptionButton.close:hover  { background: var(--danger); color: var(--on-danger); }' + LineEnding +
+    'TyCaptionButton.close:active { background: var(--danger-press-close); color: var(--on-danger); }' + LineEnding +
     'TyCaptionButton.min:hover    { background: var(--surface-caption-hover); }' + LineEnding +
     'TyCaptionButton.max:hover    { background: var(--surface-caption-hover); }' + LineEnding +
     '' + LineEnding +
@@ -207,7 +207,7 @@ begin
     '  padding: 4px;' + LineEnding +
     '}' + LineEnding +
     'TyListItem:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
-    'TyListItem:active { background: var(--accent); color: #FFFFFF; }' + LineEnding +
+    'TyListItem:active { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     '' + LineEnding +
     'TyProgressBar {' + LineEnding +
     '  background: var(--surface-sunk);' + LineEnding +

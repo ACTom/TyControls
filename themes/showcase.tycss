@@ -63,10 +63,10 @@ TyButton:hover    { background: linear-gradient(90deg, lighten(--surface, 3%), d
 TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyButton:active   { background: var(--surface-active); }
 TyButton:disabled { opacity: var(--disabled-opacity); }
-TyButton.primary  { background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent)); color: #FFFFFF; border-color: var(--accent); }
+TyButton.primary  { background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent)); color: var(--on-accent); border-color: var(--accent); }
 TyButton.primary:hover    { background: linear-gradient(90deg, lighten(--accent, 16%), lighten(--accent, 4%)); }
 TyButton.primary:active   { background: var(--accent-active); }
-TyButton.danger   { background: linear-gradient(90deg, lighten(--danger, 10%), var(--danger)); color: #FFFFFF; border-color: var(--danger); }
+TyButton.danger   { background: linear-gradient(90deg, lighten(--danger, 10%), var(--danger)); color: var(--on-danger); border-color: var(--danger); }
 TyButton.danger:hover     { background: linear-gradient(90deg, lighten(--danger, 16%), lighten(--danger, 4%)); }
 TyButton.danger:active    { background: var(--danger-active); }
 
@@ -100,7 +100,7 @@ TyCheckBox {
   padding: 4px;
 }
 TyCheckBox:hover    { border-color: var(--accent); }
-TyCheckBox:active   { background: var(--accent); color: #FFFFFF; }
+TyCheckBox:active   { background: var(--accent); color: var(--on-accent); }
 TyCheckBox:focus    { outline: 2px var(--focus-ring); }
 TyCheckBox:disabled { opacity: var(--disabled-opacity); }
 
@@ -113,7 +113,7 @@ TyRadioButton {
   padding: 4px;
 }
 TyRadioButton:hover    { border-color: var(--accent); }
-TyRadioButton:active   { background: var(--accent); color: #FFFFFF; }
+TyRadioButton:active   { background: var(--accent); color: var(--on-accent); }
 TyRadioButton:focus { outline: 2px var(--focus-ring); }
 TyRadioButton:disabled { opacity: var(--disabled-opacity); }
 
@@ -164,8 +164,8 @@ TyCaptionButton {
 }
 TyCaptionButton:hover  { background: var(--surface-caption-hover); }
 TyCaptionButton:active { background: var(--surface-caption-active); }
-TyCaptionButton.close:hover  { background: var(--danger); color: #FFFFFF; }
-TyCaptionButton.close:active { background: var(--danger-press-close); color: #FFFFFF; }
+TyCaptionButton.close:hover  { background: var(--danger); color: var(--on-danger); }
+TyCaptionButton.close:active { background: var(--danger-press-close); color: var(--on-danger); }
 TyCaptionButton.min:hover    { background: var(--surface-caption-hover); }
 TyCaptionButton.max:hover    { background: var(--surface-caption-hover); }
 
@@ -191,7 +191,7 @@ TyListItem {
   padding: 4px;
 }
 TyListItem:hover  { background: var(--surface-listitem-hover); }
-TyListItem:active { background: var(--accent); color: #FFFFFF; }
+TyListItem:active { background: var(--accent); color: var(--on-accent); }
 
 TyProgressBar {
   background: var(--surface-sunk);

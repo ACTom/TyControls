@@ -39,8 +39,11 @@
   --scroll-handle:    lighten(--border, 10%);      /* resting scroll thumb/handle */
   --input-border-hover: var(--border-hover);       /* neutral inputs hover border */
   /* on-* declared here but WIRED only in the §3 bug-fix commit */
-  --on-accent: on(var(--accent), #FFFFFF, #0B1120);   /* 3-ARG -> #0B1120 (== current correct) */
-  --on-danger: on(var(--danger), #FFFFFF, #0B1120);
+  /* dark accent/danger are LIGHT blues/reds (luma>0.5), so on() picks inkOnLight =
+     the dark ink #0B1120 (matches the correct sites, and fixes the white-on-accent
+     checkbox/radio bug); inkOnDark #FFFFFF is the fallback for a dark fill. */
+  --on-accent: on(var(--accent), #0B1120, #FFFFFF);
+  --on-danger: on(var(--danger), #0B1120, #FFFFFF);
 
   /* ── COMPONENT: scalars ── */
   --input-border-width: 1px;
@@ -66,10 +69,10 @@ TyButton:hover    { background: var(--surface-hover); border-color: var(--input-
 TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyButton:active   { background: var(--surface-active); }
 TyButton:disabled { opacity: var(--disabled-opacity); }
-TyButton.primary  { background: var(--accent); color: #0B1120; border-color: var(--accent); }
+TyButton.primary  { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyButton.primary:hover    { background: var(--accent-hover); }
 TyButton.primary:active   { background: var(--accent-active); }
-TyButton.danger   { background: var(--danger); color: #0B1120; border-color: var(--danger); }
+TyButton.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }
 TyButton.danger:hover     { background: var(--danger-hover); }
 TyButton.danger:active    { background: var(--danger-active); }
 
@@ -103,7 +106,7 @@ TyCheckBox {
   padding: 4px;
 }
 TyCheckBox:hover    { border-color: var(--accent); }
-TyCheckBox:active   { background: var(--accent); color: #FFFFFF; }
+TyCheckBox:active   { background: var(--accent); color: var(--on-accent); }
 TyCheckBox:focus    { outline: 2px var(--focus-ring); }
 TyCheckBox:disabled { opacity: var(--disabled-opacity); }
 
@@ -116,7 +119,7 @@ TyRadioButton {
   padding: 4px;
 }
 TyRadioButton:hover    { border-color: var(--accent); }
-TyRadioButton:active   { background: var(--accent); color: #FFFFFF; }
+TyRadioButton:active   { background: var(--accent); color: var(--on-accent); }
 TyRadioButton:focus { outline: 2px var(--focus-ring); }
 TyRadioButton:disabled { opacity: var(--disabled-opacity); }
 
@@ -166,8 +169,8 @@ TyCaptionButton {
 }
 TyCaptionButton:hover  { background: var(--surface-caption-hover); }
 TyCaptionButton:active { background: var(--surface-caption-active); }
-TyCaptionButton.close:hover  { background: var(--danger); color: #0B1120; }
-TyCaptionButton.close:active { background: var(--danger-press-close); color: #0B1120; }
+TyCaptionButton.close:hover  { background: var(--danger); color: var(--on-danger); }
+TyCaptionButton.close:active { background: var(--danger-press-close); color: var(--on-danger); }
 TyCaptionButton.min:hover    { background: var(--surface-caption-hover); }
 TyCaptionButton.max:hover    { background: var(--surface-caption-hover); }
 
@@ -192,7 +195,7 @@ TyListItem {
   padding: 4px;
 }
 TyListItem:hover  { background: var(--surface-listitem-hover); }
-TyListItem:active { background: var(--accent); color: #0B1120; }
+TyListItem:active { background: var(--accent); color: var(--on-accent); }
 
 TyProgressBar {
   background: var(--surface-sunk);

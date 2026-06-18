@@ -12,7 +12,8 @@
 - **求值模型**(`StyleModel.pas`):`:root` 变量存原始串,每个属性在 `ResolveStyle` 期对 `FMergedVars` 求值。**任何 `var(--x)`,只要 `--x` 的值正是当前内联的表达式,就逐字节解析相同** —— 这就是「分层=等价替换=零像素」的依据。
 - **`on()` 语义**(`Css.Values.pas`):Rec.601 luma,阈值 `> 0.5`。1 参 → 纯黑/白;3 参 `on(bg, inkOnLight, inkOnDark)` → 返回你传的字面。
 - **各填充 seed 的 luma**(已算):light accent #3B82F6=0.478→白;light danger #EF4444=0.467→白;showcase accent #7C3AED=0.385→白;showcase danger #DB2777=0.400→白;**dark accent #60A5FA=0.604→1参给#000000**;dark danger #F87171=0.601→#000000。
-- **后果(关键):** 1 参 `on()` 对 light+showcase 零像素;但 dark 会把**本就正确**的 `#0B1120` 站点挪成纯 `#000000`(非零变化)。**dark 必须用 3 参** `on(var(--accent), #FFFFFF, #0B1120)` —— 既修 bug 又保正确站点逐字节不变。light/showcase 用 1 参。
+- **后果(关键):** 1 参 `on()` 对 light+showcase 零像素;但 dark 会把**本就正确**的 `#0B1120` 站点挪成纯 `#000000`(非零变化)。**dark 必须用 3 参** `on(var(--accent), #0B1120, #FFFFFF)` —— 既修 bug 又保正确站点逐字节不变。light/showcase 用 1 参。
+  - **⚠ 参序(实现核验,纠正初稿):** `inkOnLight` 是 **bg 偏亮(luma>0.5)时** 取的墨,故应传**深墨** `#0B1120`;`inkOnDark` 传 `#FFFFFF`。dark accent `#60A5FA` luma 0.604>0.5 → 取 `inkOnLight=#0B1120`。**初稿把两参写反了**(`#FFFFFF, #0B1120`),会得白墨;已改为 `#0B1120, #FFFFFF`。
 - 无 `.gitattributes`;`tycontrols.lpk` 仅 `OtherUnitFiles=source`。`{$INCLUDESTR}` 在 FPC 3.2.2 **不支持**(已验证)→ DefaultTheme 用生成器 `gen-defaulttheme.ps1`(Commit 0,已落地)。
 
 ---
@@ -125,8 +126,8 @@
   --input-bg:    lighten(--surface, 4%);      /* dark raised input bg */
   --scroll-handle: lighten(--border, 10%);
   --input-border-hover: var(--border-hover);
-  --on-accent: on(var(--accent), #FFFFFF, #0B1120);   /* 3-ARG -> #0B1120 (== current correct) */
-  --on-danger: on(var(--danger), #FFFFFF, #0B1120);
+  --on-accent: on(var(--accent), #0B1120, #FFFFFF);   /* light-blue accent -> inkOnLight = #0B1120 */
+  --on-danger: on(var(--danger), #0B1120, #FFFFFF);
   /* COMPONENT identical to light: 1px / 3,8,12,4 / 9px / 400,700 */
 ```
 
