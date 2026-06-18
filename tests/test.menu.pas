@@ -50,6 +50,25 @@ type
     procedure TestComputeBoundsFlipsNearScreenEdges;
   end;
 
+  { Probe subclass: exposes TTyMenuBar's protected top-cell geometry seams so the
+    horizontal cell layout + hit-test (which top item an X falls in) is testable
+    headlessly, without a real bar window (the GUI window raises 1407 headless). }
+  TTyMenuBarAccess = class(TTyMenuBar)
+  public
+    function TopCount: Integer;
+    function TopCaption(AIndex: Integer): string;
+    function TopLeft(AIndex, APPI: Integer): Integer;
+    function TopAtX(AX, APPI: Integer): Integer;
+  end;
+
+  { Verifies TTyMenuBar (Task 5): an associated TMainMenu rendered as horizontal top
+    cells. The cell layout + hit-test are pure geometry (TopCount/TopCaption/TopLeft/
+    TopAtX), exercised here with no window. }
+  TMenuBarTest = class(TTestCase)
+  published
+    procedure TestTopCellsAndHitTest;
+  end;
+
 implementation
 
 procedure TMenuModelTest.TestBuildRowsMapsFields;
@@ -123,6 +142,28 @@ function TTyMenuPopupAccess.ComputeBounds(const AAnchor: TRect;
   AWidth, AHeight, APPI: Integer; AToRight: Boolean): TRect;
 begin
   Result := inherited ComputeBounds(AAnchor, AWidth, AHeight, APPI, AToRight);
+end;
+
+{ TTyMenuBarAccess }
+
+function TTyMenuBarAccess.TopCount: Integer;
+begin
+  Result := inherited TopCount;
+end;
+
+function TTyMenuBarAccess.TopCaption(AIndex: Integer): string;
+begin
+  Result := inherited TopCaption(AIndex);
+end;
+
+function TTyMenuBarAccess.TopLeft(AIndex, APPI: Integer): Integer;
+begin
+  Result := inherited TopLeft(AIndex, APPI);
+end;
+
+function TTyMenuBarAccess.TopAtX(AX, APPI: Integer): Integer;
+begin
+  Result := inherited TopAtX(AX, APPI);
 end;
 
 { TMenuViewTest }
@@ -234,8 +275,32 @@ begin
   finally mm.Free; end;
 end;
 
+{ TMenuBarTest }
+
+procedure TMenuBarTest.TestTopCellsAndHitTest;
+var bar: TTyMenuBarAccess; mm: TMainMenu;
+begin
+  mm := TMainMenu.Create(nil);
+  try
+    // NOTE: this LCL's NewSubMenu signature is
+    //   NewSubMenu(const ACaption; hCtx; const AName; const Items: array of TMenuItem; ...)
+    // so the children pass as an open array and the 3rd arg is the component Name
+    // (not a single child item as the plan sketch assumed).
+    mm.Items.Add(NewSubMenu('File', 0, '', [NewItem('New', 0, False, True, nil, 0, '')]));
+    mm.Items.Add(NewSubMenu('Edit', 0, '', [NewItem('Cut', 0, False, True, nil, 0, '')]));
+    bar := TTyMenuBarAccess.Create(nil);
+    try
+      bar.Menu := mm;
+      AssertEquals('2 top cells', 2, bar.TopCount);
+      AssertEquals('cell0 caption', 'File', bar.TopCaption(0));
+      AssertEquals('hit inside cell1 -> 1', 1, bar.TopAtX(bar.TopLeft(1, 96) + 1, 96));
+    finally bar.Free; end;
+  finally mm.Free; end;
+end;
+
 initialization
   RegisterTest(TMenuModelTest);
   RegisterTest(TMenuViewTest);
   RegisterTest(TMenuPopupTest);
+  RegisterTest(TMenuBarTest);
 end.

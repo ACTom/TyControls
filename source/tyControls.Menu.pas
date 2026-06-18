@@ -118,6 +118,7 @@ type
     FRoot: TMenuItem;         // the item whose children this level renders
     FController: TTyStyleController;
     FCloseTick: QWord;        // tick at last close; reopen guard (ComboBox idiom)
+    FOnNavigateAdjacent: TTyMenuAdjacentEvent;
     procedure EnsureForm;
     procedure HandleActivateRow(Sender: TObject; AIndex: Integer);
     procedure HandleOpenSubmenu(Sender: TObject; AIndex: Integer);
@@ -153,6 +154,64 @@ type
     procedure ActivateRowForTest(AIndex: Integer);
     property Controller: TTyStyleController read FController write FController;
     property Root: TMenuItem read FRoot;
+    { Left/Right at the bar-root dropdown: ADelta -1/+1. A bare popup has no adjacent
+      top to rotate to, so this is meaningful only when a host (TTyMenuBar, Task 5)
+      wires it and rotates the open dropdown to the adjacent top item. }
+    property OnNavigateAdjacent: TTyMenuAdjacentEvent
+      read FOnNavigateAdjacent write FOnNavigateAdjacent;
+  end;
+
+  { Themed application menu bar: renders an associated LCL TMainMenu's visible
+    top-level items as a row of horizontal cells (TyMenuBar background + TyMenuItem
+    cells with hover/active states), and opens a TTyMenuPopup dropdown rooted at the
+    clicked top item. The cell layout + hit-test are pure geometry seams
+    (TopCount/TopCaption/TopLeft/TopAtX, each taking an APPI), headless-testable like
+    TTyMenuView's row geometry; all visual values come from the TyMenuBar/TyMenuItem
+    .tycss tokens. Left/Right rotate the open dropdown to the adjacent top while one
+    is open (via the shared view's OnNavigateAdjacentBar). Follows the TToggleSwitch
+    anatomy: class(TTyCustomControl), GetStyleTypeKey, RenderTo seam + Paint. }
+  TTyMenuBar = class(TTyCustomControl)
+  private
+    FMenu: TMainMenu;
+    FOpenIndex: Integer;      // index of the open top dropdown, or -1 (none open)
+    FHotIndex: Integer;       // hovered top cell, or -1
+    FPopup: TTyMenuPopup;     // lazy dropdown host for the open top item
+    procedure SetMenu(AValue: TMainMenu);
+    { Index of the AIndex-th VISIBLE top item back into Menu.Items, or -1. }
+    function VisibleTopItem(AIndex: Integer): TMenuItem;
+    { Resolve the width of the AIndex-th top cell in device px (caption + the
+      TyMenuItem left/right padding), theme-driven. }
+    function TopCellWidth(AIndex, APPI: Integer): Integer;
+    procedure HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
+    procedure ClosePopup;
+    { Open (or re-open) the dropdown for top cell AIndex, anchored to its cell rect. }
+    procedure OpenTop(AIndex: Integer);
+  protected
+    function GetStyleTypeKey: string; override;
+    { Pure top-cell geometry seams (device px), driven by theme tokens. }
+    function TopCount: Integer;
+    function TopCaption(AIndex: Integer): string;
+    function TopLeft(AIndex, APPI: Integer): Integer;
+    { Device-x -> top cell index, or -1 when X is past the last cell. }
+    function TopAtX(AX, APPI: Integer): Integer;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure Paint; override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+  published
+    { The associated LCL data model. Setting it (re)builds the rendered top cells;
+      freeing it nils this reference (FreeNotification). TTyForm.MenuBar reads this
+      for the non-mac shortcut dispatch and the mac global-bar handoff (Task 6). }
+    property Menu: TMainMenu read FMenu write SetMenu;
+    property Align;
+    property Anchors;
+    property StyleClass;
+    property Controller;
   end;
 
 implementation
@@ -760,8 +819,11 @@ end;
 
 procedure TTyMenuPopup.HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
 begin
-  // Bar-level rotation is the host bar's concern (Task 5); a bare popup has no
-  // adjacent top to rotate to, so this is a no-op at this level.
+  // Bar-level rotation is the host bar's concern (Task 5): forward Left/Right at the
+  // bar root to whoever wired OnNavigateAdjacent (the TTyMenuBar). A bare popup with
+  // no host leaves it nil and the navigation is a no-op.
+  if Assigned(FOnNavigateAdjacent) then
+    FOnNavigateAdjacent(Self, ADelta);
 end;
 
 procedure TTyMenuPopup.FormDeactivate(Sender: TObject);
@@ -772,6 +834,280 @@ end;
 procedure TTyMenuPopup.ActivateRowForTest(AIndex: Integer);
 begin
   DoActivateRow(AIndex);
+end;
+
+{ TTyMenuBar }
+
+constructor TTyMenuBar.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  TabStop := True;
+  FMenu := nil;
+  FOpenIndex := -1;
+  FHotIndex := -1;
+  FPopup := nil;
+  Height := 28;
+end;
+
+destructor TTyMenuBar.Destroy;
+begin
+  FreeAndNil(FPopup);
+  inherited Destroy;
+end;
+
+function TTyMenuBar.GetStyleTypeKey: string;
+begin
+  Result := 'TyMenuBar';
+end;
+
+procedure TTyMenuBar.SetMenu(AValue: TMainMenu);
+begin
+  if FMenu = AValue then Exit;
+  ClosePopup;
+  FMenu := AValue;
+  if FMenu <> nil then
+    FMenu.FreeNotification(Self);
+  Invalidate;
+end;
+
+procedure TTyMenuBar.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FMenu) then
+  begin
+    ClosePopup;
+    FMenu := nil;
+    Invalidate;
+  end;
+end;
+
+function TTyMenuBar.TopCount: Integer;
+var i: Integer;
+begin
+  Result := 0;
+  if FMenu = nil then Exit;
+  for i := 0 to FMenu.Items.Count - 1 do
+    if FMenu.Items[i].Visible then Inc(Result);
+end;
+
+function TTyMenuBar.VisibleTopItem(AIndex: Integer): TMenuItem;
+var i, n: Integer;
+begin
+  Result := nil;
+  if (FMenu = nil) or (AIndex < 0) then Exit;
+  n := 0;
+  for i := 0 to FMenu.Items.Count - 1 do
+    if FMenu.Items[i].Visible then
+    begin
+      if n = AIndex then Exit(FMenu.Items[i]);
+      Inc(n);
+    end;
+end;
+
+function TTyMenuBar.TopCaption(AIndex: Integer): string;
+var mi: TMenuItem;
+begin
+  mi := VisibleTopItem(AIndex);
+  if mi <> nil then Result := mi.Caption else Result := '';
+end;
+
+{ A top cell is the item's caption width plus the TyMenuItem left+right padding, all
+  theme-driven (font + padding tokens), so the bar tracks the active theme metrics. }
+function TTyMenuBar.TopCellWidth(AIndex, APPI: Integer): Integer;
+var
+  RowStyle: TTyStyleSet;
+  Bmp: TBGRABitmap;
+  effSize, padLR, capW: Integer;
+  cap: string;
+begin
+  RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', []);
+  effSize := ResolveFontSize(RowStyle);
+  padLR := MulDiv(RowStyle.Padding.Left, APPI, 96) + MulDiv(RowStyle.Padding.Right, APPI, 96);
+  cap := TopCaption(AIndex);
+  capW := 0;
+  Bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(Bmp, RowStyle.FontName, effSize, RowStyle.FontWeight, APPI);
+    if cap <> '' then capW := Bmp.TextSize(cap).cx;
+  finally
+    Bmp.Free;
+  end;
+  Result := capW + padLR;
+  if Result < 1 then Result := 1;
+end;
+
+function TTyMenuBar.TopLeft(AIndex, APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+  i: Integer;
+begin
+  // The bar's own left padding offsets the first cell; cells then pack edge-to-edge.
+  S := CurrentStyle;
+  Result := MulDiv(S.Padding.Left, APPI, 96);
+  for i := 0 to AIndex - 1 do
+    Inc(Result, TopCellWidth(i, APPI));
+end;
+
+function TTyMenuBar.TopAtX(AX, APPI: Integer): Integer;
+var
+  i, cellL, cellR: Integer;
+begin
+  Result := -1;
+  for i := 0 to TopCount - 1 do
+  begin
+    cellL := TopLeft(i, APPI);
+    cellR := cellL + TopCellWidth(i, APPI);
+    if (AX >= cellL) and (AX < cellR) then Exit(i);
+  end;
+end;
+
+procedure TTyMenuBar.ClosePopup;
+begin
+  FOpenIndex := -1;
+  FreeAndNil(FPopup);
+  Invalidate;
+end;
+
+procedure TTyMenuBar.OpenTop(AIndex: Integer);
+var
+  mi: TMenuItem;
+  ppi, cellL, cellW: Integer;
+  origin: TPoint;
+  anchor: TRect;
+begin
+  mi := VisibleTopItem(AIndex);
+  if (mi = nil) or (mi.Count = 0) then begin ClosePopup; Exit; end;
+
+  // Reuse the live host across adjacent-cell rotation; rebuild it only when needed.
+  if FPopup = nil then
+  begin
+    FPopup := TTyMenuPopup.Create(Self);
+    FPopup.OnNavigateAdjacent := @HandleNavigateAdjacent;
+  end;
+  FPopup.Controller := ActiveController;
+  FPopup.SetRoot(mi);
+  FOpenIndex := AIndex;
+
+  // Anchor the dropdown to this cell's screen rect (just below the bar). Only
+  // meaningful with a live window handle; headless callers never reach here.
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  cellL := TopLeft(AIndex, ppi);
+  cellW := TopCellWidth(AIndex, ppi);
+  if HandleAllocated then
+  begin
+    origin := ClientToScreen(Point(0, 0));
+    anchor := Rect(origin.X + cellL, origin.Y,
+      origin.X + cellL + cellW, origin.Y + Height);
+    FPopup.Popup(anchor, False);
+  end;
+  Invalidate;
+end;
+
+procedure TTyMenuBar.HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
+var
+  n, idx: Integer;
+begin
+  // Left/Right at the bar root rotates the open dropdown to the adjacent top item,
+  // wrapping at both ends (mirrors the row-highlight wrap inside a dropdown).
+  n := TopCount;
+  if (n = 0) or (FOpenIndex < 0) then Exit;
+  idx := FOpenIndex + ADelta;
+  if idx < 0 then idx := idx + n
+  else if idx >= n then idx := idx - n;
+  OpenTop(idx);
+end;
+
+procedure TTyMenuBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+var idx: Integer;
+begin
+  inherited MouseMove(Shift, X, Y);
+  idx := TopAtX(X, Font.PixelsPerInch);
+  if idx <> FHotIndex then
+  begin
+    FHotIndex := idx;
+    Invalidate;
+  end;
+  // While a dropdown is open, hovering a different top cell switches to it (the
+  // standard menu-bar "track on hover" behaviour).
+  if (FOpenIndex >= 0) and (idx >= 0) and (idx <> FOpenIndex) then
+    OpenTop(idx);
+end;
+
+procedure TTyMenuBar.MouseLeave;
+begin
+  inherited MouseLeave;
+  if FHotIndex <> -1 then
+  begin
+    FHotIndex := -1;
+    Invalidate;
+  end;
+end;
+
+procedure TTyMenuBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var idx: Integer;
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  if Button <> mbLeft then Exit;
+  idx := TopAtX(X, Font.PixelsPerInch);
+  if idx < 0 then begin ClosePopup; Exit; end;
+  // Click the already-open cell to close it; otherwise open (or switch to) it.
+  if idx = FOpenIndex then
+    ClosePopup
+  else
+    OpenTop(idx);
+end;
+
+procedure TTyMenuBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+var
+  P: TTyPainter;
+  S, CellStyle: TTyStyleSet;
+  R, CellRect: TRect;
+  i, cellL, cellW, padL: Integer;
+  CellStates: TTyStateSet;
+begin
+  P := TTyPainter.Create;
+  try
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI);
+    // Surface: the TyMenuBar background/border from its own tokens.
+    S := CurrentStyle;
+    DrawFrame(P, R, S);
+
+    for i := 0 to TopCount - 1 do
+    begin
+      cellL := TopLeft(i, APPI);
+      cellW := TopCellWidth(i, APPI);
+
+      // A cell is active when its dropdown is open, hover when the mouse is over it.
+      CellStates := [];
+      if i = FOpenIndex then
+        Include(CellStates, tysActive)
+      else if i = FHotIndex then
+        Include(CellStates, tysHover)
+      else
+        Include(CellStates, tysNormal);
+      CellStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', CellStates);
+
+      CellRect := Rect(R.Left + cellL, R.Top, R.Left + cellL + cellW, R.Bottom);
+      if tpBackground in CellStyle.Present then
+        P.FillBackground(CellRect, CellStyle.Background, CellStyle.BorderRadius);
+
+      padL := P.Scale(CellStyle.Padding.Left);
+      P.DrawText(Rect(CellRect.Left + padL, CellRect.Top, CellRect.Right, CellRect.Bottom),
+        TopCaption(i), CellStyle.FontName, ResolveFontSize(CellStyle),
+        CellStyle.FontWeight, CellStyle.TextColor, taLeftJustify, tlCenter, True);
+    end;
+
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyMenuBar.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 end.
