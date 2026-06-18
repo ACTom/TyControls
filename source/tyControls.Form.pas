@@ -8,7 +8,7 @@ unit tyControls.Form;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller;
 
@@ -156,6 +156,16 @@ type
     FEngine: TTyChromeEngine;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
+    { P4 (D8 / §3.7) LIVE FOLLOW. The window message hook: on a Windows OS light/dark
+      toggle (WM_SETTINGCHANGE with lParam text "ImmersiveColorSet") or accent-colour
+      change (WM_DWMCOLORIZATIONCOLORCHANGED), if the active controller is following the
+      system, RE-DETECT scheme+accent and re-apply (RefreshFromSystem -> SetMode + accent
+      re-resolve + Changed) then Invalidate. Guarded so it is INERT when not following
+      (or no controller). NOTE: this path CANNOT be exercised headless — it needs a real
+      Windows light/dark toggle (Settings > Personalization > Colors) or an accent change
+      to fire. Verified by inspection + the headless RefreshFromSystem/SetMode tests; the
+      message-delivery leg itself is the documented manual-verification FLAG. }
+    procedure WndProc(var Message: TLMessage); override;
     procedure Paint; override;   // draws an image backdrop when the TyForm token sets one
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -183,6 +193,11 @@ implementation
 {$IFDEF LCLCOCOA}
 uses
   CocoaAll;
+{$ENDIF}
+
+{$IFDEF WINDOWS}
+uses
+  strings;   // StrComp(PAnsiChar, PAnsiChar) for the WM_SETTINGCHANGE area check
 {$ENDIF}
 
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
@@ -738,6 +753,46 @@ begin
   // A title bar associated from the .lfm had its engine-arming deferred (see
   // SetTitleBar); now that streaming has finished, wire it to the live engine.
   ArmEngine;
+end;
+
+procedure TTyForm.WndProc(var Message: TLMessage);
+{$IFDEF WINDOWS}
+const
+  WM_SETTINGCHANGE_              = 26;      // $001A (Windows.WM_SETTINGCHANGE)
+  WM_DWMCOLORIZATIONCOLORCHANGED_ = $0320; // accent colour changed
+var
+  doRefresh: Boolean;
+  param: PAnsiChar;
+{$ENDIF}
+begin
+  {$IFDEF WINDOWS}
+  // LIVE FOLLOW (§3.7 / D8). React to the two OS-appearance messages, but ONLY when a
+  // controller is actively following the system — otherwise this is fully inert (it
+  // just falls through to inherited, identical to having no override).
+  if (FController <> nil) and (FController.Follow = tfFollowSystem) then
+  begin
+    doRefresh := False;
+    case Message.msg of
+      WM_DWMCOLORIZATIONCOLORCHANGED_:
+        doRefresh := True;   // accent colour change — always refresh
+      WM_SETTINGCHANGE_:
+        begin
+          // The light/dark toggle broadcasts WM_SETTINGCHANGE with lParam = the
+          // ANSI area string "ImmersiveColorSet". Guard the pointer (it may be 0 for
+          // other setting-change broadcasts) before comparing.
+          param := PAnsiChar(Pointer(Message.lParam));
+          if (param <> nil) and (StrComp(param, 'ImmersiveColorSet') = 0) then
+            doRefresh := True;
+        end;
+    end;
+    if doRefresh then
+    begin
+      FController.RefreshFromSystem;   // re-detect scheme+accent, SetMode + Changed
+      Invalidate;
+    end;
+  end;
+  {$ENDIF}
+  inherited WndProc(Message);
 end;
 
 { Wire the caption-button click handlers. Split out so it can run both from

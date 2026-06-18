@@ -4,7 +4,14 @@ interface
 uses
   Classes, SysUtils, Controls, Forms,
   tyControls.Types, tyControls.StyleModel, tyControls.Painter,
-  tyControls.ThemeRegistry;
+  tyControls.ThemeRegistry, tyControls.SystemTheme;
+
+type
+  { P4 (D8 / §3.7). Theme follow policy. tfManual = the app drives Mode/ThemeName
+    explicitly (default; manual override always wins). tfFollowSystem = the controller
+    tracks the OS light/dark scheme + accent: it pulls the detected scheme into Mode and
+    re-resolves the accent on RefreshFromSystem / live OS-change notifications. }
+  TTyThemeFollow = (tfManual, tfFollowSystem);
 
 var
   // When True (default), the first TTyStyleController created in a GUI context
@@ -22,10 +29,12 @@ type
     FThemeFile: string;
     FThemeName: string;
     FControls: TFPList;
+    FFollow: TTyThemeFollow;
     procedure SetThemeFile(const AValue: string);
     procedure SetThemeName(const AValue: string);
     function GetMode: string;
     procedure SetMode(const AValue: string);
+    procedure SetFollow(const AValue: TTyThemeFollow);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -36,6 +45,13 @@ type
     procedure RegisterStyleable(AControl: TControl);
     procedure UnregisterStyleable(AControl: TControl);
     procedure Changed;
+    { P4 (D8). Re-detect the OS scheme + accent and re-apply when following: set Mode
+      from the detected scheme (tssUnknown -> keep current; never blanks the mode),
+      bump the model (RebuildMergedVars re-resolves any 'system-accent'/'system-mode'
+      sentinels to the freshly detected values), then Changed. Inert (no-op) under
+      tfManual, so an app that drives Mode/ThemeName explicitly is never overridden.
+      This is the method the live WndProc OS-change hook (TTyForm) calls. }
+    procedure RefreshFromSystem;
   published
     property ThemeFile: string read FThemeFile write SetThemeFile;
     { B (Phase 2): switch theme by registered NAME. Resolves via TyResolveTheme and
@@ -49,6 +65,12 @@ type
       the loaded theme is active (e.g. 'light'/'dark'). Delegates to Model.SetMode (re-merge
       + bump ThemeVersion) and repaints. An unknown/empty mode applies no mode overrides. }
     property Mode: string read GetMode write SetMode;
+    { P4 (D8 / §3.7) follow policy. tfManual (default) = app drives Mode/ThemeName.
+      Setting tfFollowSystem immediately pulls the OS scheme into Mode + re-resolves the
+      accent (RefreshFromSystem); the live OS-change hook in TTyForm calls RefreshFromSystem
+      while this is tfFollowSystem. A later explicit Mode/ThemeName set still wins (manual
+      override), and remains until the next RefreshFromSystem. }
+    property Follow: TTyThemeFollow read FFollow write SetFollow default tfManual;
   end;
 
 function TyDefaultController: TTyStyleController;
@@ -119,6 +141,36 @@ procedure TTyStyleController.SetMode(const AValue: string);
 begin
   if FModel.Mode = AValue then Exit;
   FModel.SetMode(AValue);
+  Changed;
+end;
+
+procedure TTyStyleController.SetFollow(const AValue: TTyThemeFollow);
+begin
+  if FFollow = AValue then Exit;
+  FFollow := AValue;
+  // Turning follow ON immediately syncs to the current OS state (mode + accent).
+  if FFollow = tfFollowSystem then
+    RefreshFromSystem;
+end;
+
+procedure TTyStyleController.RefreshFromSystem;
+{ P4 (D8). Re-detect scheme + accent and re-apply, but only while following. Detection
+  never raises (tyControls.SystemTheme); tssUnknown leaves the current mode untouched so
+  an unreadable OS never blanks the theme. SetMode re-merges (which re-resolves any
+  'system-accent'/'system-mode' sentinel to the now-current OS values) and repaints.
+  When the scheme is unchanged we still force a re-merge + Changed so a pure ACCENT change
+  (same light/dark, new accent colour) is picked up. }
+var
+  scheme: TTySystemScheme;
+  modeName: string;
+begin
+  if FFollow <> tfFollowSystem then Exit;   // inert under manual: app override wins
+  scheme := TyDetectSystemScheme;
+  modeName := TySchemeToMode(scheme);
+  if (modeName <> '') and (FModel.Mode <> modeName) then
+    FModel.SetMode(modeName)   // scheme flipped -> switch @mode block (re-merges)
+  else
+    FModel.RefreshSystemTokens; // same/unknown scheme -> still re-resolve the accent
   Changed;
 end;
 

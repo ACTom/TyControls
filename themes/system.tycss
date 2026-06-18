@@ -1,0 +1,358 @@
+/* TyControls — system.tycss: the built-in "follow the OS" theme (P4, D8, §3.7).
+   Dual-mode (@mode light/dark) like auto.tycss, but the SEED accent is the dynamic
+   token `system-accent`, which StyleModel resolves to the OS accent colour at merge
+   time, and `--ty-mode` is wired to `system-mode` so elevate()/on() follow the OS
+   light/dark scheme. on()/elevate() derive ink + steps from the (OS) accent + mode,
+   so the whole skin tracks the system: change the Windows accent or flip light/dark
+   and (with Controller.Follow = tfFollowSystem) the theme re-resolves and repaints.
+
+   Set the active mode via Controller.Mode / Controller.Follow := tfFollowSystem.
+   Body rule bodies are identical in shape to auto.tycss (var(--…) only); the @mode
+   :root blocks supply each mode's palette, with the accent coming from the OS. */
+
+TyForm { background: var(--form-bg); }
+
+TyButton {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 6px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+}
+TyButton:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }
+TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyButton:active   { background: var(--surface-active); }
+TyButton.primary  { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+TyButton.primary:hover    { background: var(--accent-hover); }
+TyButton.primary:active   { background: var(--accent-active); }
+TyButton.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }
+TyButton.danger:hover     { background: var(--danger-hover); }
+TyButton.danger:active    { background: var(--danger-active); }
+
+TyLabel {
+  background: var(--transparent-fill);
+  color: var(--on-surface);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+}
+TyLabel:disabled { opacity: var(--disabled-opacity); }
+
+TyEdit {
+  background: var(--input-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: var(--font-size-base);
+}
+TyEdit:hover    { border-color: var(--input-border-hover); }
+TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyEdit:disabled { opacity: var(--disabled-opacity); }
+
+TyCheckBox {
+  background: var(--input-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+}
+TyCheckBox:hover    { border-color: var(--accent); }
+TyCheckBox:active   { background: var(--accent); color: var(--on-accent); }
+TyCheckBox:focus    { outline: 2px var(--focus-ring); }
+TyCheckBox:disabled { opacity: var(--disabled-opacity); }
+
+TyRadioButton {
+  background: var(--input-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+}
+TyRadioButton:hover    { border-color: var(--accent); }
+TyRadioButton:active   { background: var(--accent); color: var(--on-accent); }
+TyRadioButton:focus { outline: 2px var(--focus-ring); }
+TyRadioButton:disabled { opacity: var(--disabled-opacity); }
+
+TyPanel {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 8px;
+}
+
+TyComboBox {
+  background: var(--input-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: var(--font-size-base);
+}
+TyComboBox:hover    { border-color: var(--input-border-hover); }
+TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyComboBox:disabled { opacity: var(--disabled-opacity); }
+
+TyScrollBar {
+  background: var(--surface-chrome);
+  color: var(--scroll-handle);
+  border-radius: var(--radius-scroll);
+}
+TyScrollBar:hover  { color: var(--scroll-handle-hover); }
+TyScrollBar:active { color: var(--accent); }
+TyScrollBar:focus  { outline: 2px var(--focus-ring); }
+TyScrollBar:disabled { opacity: var(--disabled-opacity); }
+
+TyTitleBar {
+  background: var(--titlebar-bg);
+  color: var(--on-surface);
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-bold);
+}
+
+TyCaptionButton {
+  background: var(--transparent-fill);
+  color: var(--on-surface);
+  border-radius: 0px;
+}
+TyCaptionButton:hover  { background: var(--surface-caption-hover); }
+TyCaptionButton:active { background: var(--surface-caption-active); }
+TyCaptionButton.close:hover  { background: var(--danger); color: var(--on-danger); }
+TyCaptionButton.close:active { background: var(--danger-press-close); color: var(--on-danger); }
+TyCaptionButton.min:hover    { background: var(--surface-caption-hover); }
+TyCaptionButton.max:hover    { background: var(--surface-caption-hover); }
+
+TyListBox {
+  background: var(--input-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 2px;
+}
+TyListBox:hover   { border-color: var(--input-border-hover); }
+TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyListBox:disabled { opacity: var(--disabled-opacity); }
+
+TyListItem {
+  background: var(--transparent-fill);
+  color: var(--on-surface);
+  border-radius: var(--radius);
+  padding: 4px;
+}
+TyListItem:hover  { background: var(--surface-listitem-hover); }
+TyListItem:active { background: var(--accent); color: var(--on-accent); }
+
+TyProgressBar {
+  background: var(--surface-sunk);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+}
+TyProgressBar:disabled { opacity: var(--disabled-opacity); }
+
+TyProgressFill {
+  background: var(--accent);
+  border-radius: var(--radius);
+}
+
+TyToggleSwitch {
+  background: var(--surface-toggle-off);
+  color: #FFFFFF;
+  border-radius: var(--radius-round);
+}
+TyToggleSwitch:hover    { background: var(--surface-toggle-off-hover); }
+TyToggleSwitch:active   { background: var(--accent); }
+TyToggleSwitch:focus { outline: 2px var(--focus-ring); }
+TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }
+
+TyTrackBar {
+  background: var(--surface-track);
+  border-radius: var(--radius-sm);
+  padding: 0px;
+}
+TyTrackBar:focus    { outline: 2px var(--focus-ring); }
+TyTrackBar:disabled { opacity: var(--disabled-opacity); }
+
+TyTrackThumb {
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+}
+TyTrackThumb:hover  { background: var(--accent-hover); }
+TyTrackThumb:active { background: var(--accent-active); }
+
+TyGroupBox {
+  background: var(--transparent-fill);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+}
+
+TyTabControl {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+}
+TyTabControl:hover  { border-color: var(--input-border-hover); }
+TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyTabControl:disabled { opacity: var(--disabled-opacity); }
+
+TyTab {
+  background: var(--surface-tab-rest);
+  color: var(--on-surface);
+  padding: 4px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+TyTab:hover  { background: var(--surface-tab-hover); }
+TyTab:active { background: var(--surface); color: var(--accent); }
+
+TySpinEdit {
+  background: var(--input-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: var(--font-size-base);
+}
+TySpinEdit:hover    { border-color: var(--input-border-hover); }
+TySpinEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TySpinEdit:disabled { opacity: var(--disabled-opacity); }
+
+TyMemo {
+  background: var(--input-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: var(--font-size-base);
+}
+TyMemo:hover    { border-color: var(--input-border-hover); }
+TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyMemo:disabled { opacity: var(--disabled-opacity); }
+
+TyTextSelection { background: var(--selection); }
+TyTextHint      { color: var(--muted); }
+TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }
+
+TyScrollThumb { background: var(--scroll-handle); border-radius: var(--radius-scroll); }
+TyScrollThumb:hover  { background: var(--scroll-handle-hover); }
+TyScrollThumb:active { background: var(--accent); }
+TyToggleKnob  { background: #FFFFFF; border-radius: var(--radius-round); }
+
+/* ── @mode conditional token blocks (D7) ──────────────────────────────────────
+   The accent SEED is `system-accent` (StyleModel swaps it for the OS accent at
+   merge time). --ty-mode = `system-mode` so elevate()/on() pick the OS scheme.
+   The surface / on-surface / border palettes differ per mode; ink colours are
+   derived with on() off the (OS) accent so they stay readable for ANY accent. */
+
+@mode light {
+  :root {
+  /* ── SEED ── accent from the OS; the rest is the light neutral palette */
+  --accent: system-accent; --surface: #FFFFFF; --on-surface: #1F2937;
+  --border: #D1D5DB; --danger: #EF4444; --radius: 6px;
+  --ty-mode: system-mode;   /* drives elevate()/on() direction = OS scheme */
+
+  /* ── MAP: directional elevate()/darken/lighten ── */
+  --surface-hover:            elevate(--surface, 4%);
+  --surface-active:           elevate(--surface, 10%);
+  --surface-chrome:           elevate(--surface, 6%);
+  --surface-sunk:             elevate(--surface, 8%);
+  --surface-track:            elevate(--surface, 10%);
+  --surface-listitem-hover:   elevate(--surface, 5%);
+  --surface-tab-rest:         elevate(--surface, 5%);
+  --surface-tab-hover:        elevate(--surface, 2%);
+  --surface-toggle-off:       elevate(--surface, 18%);
+  --surface-toggle-off-hover: elevate(--surface, 22%);
+  --surface-caption-hover:    elevate(--surface, 12%);
+  --surface-caption-active:   elevate(--surface, 20%);
+  --border-hover:             darken(--border, 10%);
+  --scroll-handle-hover:      darken(--border, 15%);
+  --accent-hover:  lighten(--accent, 8%);   --accent-active: darken(--accent, 8%);
+  --danger-hover:  lighten(--danger, 8%);   --danger-active: darken(--danger, 8%);
+  --danger-press-close: darken(--danger, 10%);
+
+  /* ── ALIAS: semantic ── */
+  --focus-ring:       var(--accent);
+  --selection:        alpha(var(--accent), 0.30);
+  --muted:            alpha(var(--on-surface), 0.5);
+  --overlay-hover:    alpha(var(--on-surface), 0.12);
+  --disabled-opacity: 0.5;
+  --form-bg:          var(--surface-hover);
+  --titlebar-bg:      var(--surface-chrome);
+  --input-bg:         var(--surface);
+  --scroll-handle:    var(--border);
+  --input-border-hover: var(--border-hover);
+  /* on() picks readable ink for ANY OS accent -> never a contrast bug */
+  --on-accent:        on(var(--accent));
+  --on-danger:        on(var(--danger));
+
+  /* ── COMPONENT: scalars ── */
+  --input-border-width: 1px;
+  --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;
+  --font-size-base: 9px; --font-size-title: 9px;
+  --font-weight-normal: 400; --font-weight-bold: 700;
+  --transparent-fill: alpha(#FFFFFF, 0);
+  }
+}
+
+@mode dark {
+  :root {
+  /* ── SEED ── accent from the OS; the rest is the dark neutral palette */
+  --accent: system-accent; --surface: #1E1E1E; --on-surface: #E5E7EB;
+  --border: #3F3F46; --danger: #F87171; --radius: 6px;
+  --ty-mode: system-mode;
+
+  /* ── MAP: directional elevate()/darken/lighten ── */
+  --surface-hover:            elevate(--surface, 8%);
+  --surface-active:           darken(--surface, 6%);
+  --surface-chrome:           darken(--surface, 4%);
+  --surface-sunk:             darken(--surface, 4%);
+  --surface-track:            darken(--surface, 4%);
+  --surface-listitem-hover:   elevate(--surface, 10%);
+  --surface-tab-rest:         elevate(--surface, 12%);
+  --surface-tab-hover:        elevate(--surface, 18%);
+  --surface-toggle-off:       elevate(--surface, 20%);
+  --surface-toggle-off-hover: elevate(--surface, 24%);
+  --surface-caption-hover:    elevate(--surface, 16%);
+  --surface-caption-active:   elevate(--surface, 24%);
+  --border-hover:             lighten(--border, 12%);
+  --scroll-handle-hover:      lighten(--border, 25%);
+  --accent-hover:  lighten(--accent, 8%);   --accent-active: darken(--accent, 8%);
+  --danger-hover:  lighten(--danger, 8%);   --danger-active: darken(--danger, 8%);
+  --danger-press-close: darken(--danger, 10%);
+
+  /* ── ALIAS: semantic ── */
+  --focus-ring: var(--accent);
+  --selection:     alpha(var(--accent), 0.30);
+  --muted:         alpha(var(--on-surface), 0.5);
+  --overlay-hover: alpha(#FFFFFF, 0.14);
+  --disabled-opacity: 0.5;
+  --form-bg:          var(--surface);
+  --titlebar-bg:      lighten(--surface, 4%);
+  --input-bg:         lighten(--surface, 4%);
+  --scroll-handle:    lighten(--border, 10%);
+  --input-border-hover: var(--border-hover);
+  --on-accent: on(var(--accent));
+  --on-danger: on(var(--danger));
+
+  /* ── COMPONENT: scalars ── */
+  --input-border-width: 1px;
+  --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;
+  --font-size-base: 9px; --font-size-title: 9px;
+  --font-weight-normal: 400; --font-weight-bold: 700;
+  --transparent-fill: alpha(#000000, 0);
+  }
+}

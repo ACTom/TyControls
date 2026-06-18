@@ -33,7 +33,8 @@ uses
   test.animation.button,
   test.undostack,
   test.themeregistry,
-  test.themebundle;
+  test.themebundle,
+  test.systemtheme;
 
 type
   TTyTestRunner = class(TTestRunner)

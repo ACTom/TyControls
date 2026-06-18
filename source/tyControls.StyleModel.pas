@@ -4,7 +4,22 @@ interface
 uses
   Classes, SysUtils, Types,
   tyControls.Types, tyControls.Css.Parser, tyControls.Css.Values,
-  tyControls.DefaultTheme, tyControls.ThemeBundle;
+  tyControls.DefaultTheme, tyControls.ThemeBundle, tyControls.SystemTheme;
+
+type
+  { P4 (A5 / D8). Resolver hooks for the dynamic OS tokens. RebuildMergedVars
+    post-processes the merged var set: any var whose VALUE is exactly 'system-accent'
+    is replaced by TySystemAccentHook (a '#RRGGBB' string) and any whose value is
+    exactly 'system-mode' by TySystemModeHook ('light'/'dark'/''). The hooks default
+    to the real OS probes (tyControls.SystemTheme) but are swappable so tests can
+    inject a deterministic accent/mode without touching the registry. }
+  TTySystemAccentHook = function: string;
+  TTySystemModeHook = function: string;
+
+var
+  { Default = live OS detection. A test may point these at a stub for determinism. }
+  TySystemAccentHook: TTySystemAccentHook;
+  TySystemModeHook: TTySystemModeHook;
 
 type
   { One parsed rule: selector match + its RAW declarations (Prop, RawValue), kept
@@ -77,6 +92,12 @@ type
       unknown/empty mode applies NO mode vars (graceful): the theme resolves as if it had
       only its shared body + plain :root. }
     procedure SetMode(const AMode: string);
+    { P4 (D8). Re-run RebuildMergedVars (re-resolving the 'system-accent'/'system-mode'
+      sentinels to the CURRENT OS state via the hooks) and bump ThemeVersion, WITHOUT a
+      mode switch — for a live OS ACCENT change where the light/dark scheme is unchanged.
+      Inert for themes that use no sentinel (the merge is identical), but always bumps the
+      version + lets the caller repaint. }
+    procedure RefreshSystemTokens;
     property Mode: string read FMode write SetMode;
     property ThemeVersion: Cardinal read FVersion;  // bumps on every load/clear
     { A7 property cascade. False (default) = today's all-or-nothing: a user rule for a
@@ -96,6 +117,24 @@ function TyApplyDeclaration(var AStyle: TTyStyleSet; const AProp, ARawValue: str
   Vars: TStrings): Boolean;
 
 implementation
+
+{ P4 (A5 / D8). Swap any var whose VALUE is exactly the sentinel 'system-accent' /
+  'system-mode' for the live OS state (a '#RRGGBB' hex / 'light'|'dark'|''). Used by
+  both RebuildMergedVars (the resolve-time var set) and LoadInto's validation set, so
+  a theme seeded with 'system-accent' validates AND resolves to a concrete colour. }
+procedure ApplySystemTokens(AVars: TStrings);
+var i: Integer; val: string;
+begin
+  if AVars = nil then Exit;
+  for i := 0 to AVars.Count - 1 do
+  begin
+    val := LowerCase(Trim(AVars.ValueFromIndex[i]));
+    if (val = 'system-accent') and Assigned(TySystemAccentHook) then
+      AVars.ValueFromIndex[i] := TySystemAccentHook()
+    else if (val = 'system-mode') and Assigned(TySystemModeHook) then
+      AVars.ValueFromIndex[i] := TySystemModeHook();
+  end;
+end;
 
 procedure TyMergeStyleSet(var ABase: TTyStyleSet; const AOver: TTyStyleSet);
 begin
@@ -703,6 +742,14 @@ begin
   Inc(FVersion);
 end;
 
+procedure TTyStyleModel.RefreshSystemTokens;
+{ P4 (D8). Re-merge (re-resolving system-* sentinels via the hooks) + bump version,
+  with no mode change — the live-accent-change path. See the interface comment. }
+begin
+  RebuildMergedVars;
+  Inc(FVersion);
+end;
+
 procedure TTyStyleModel.RebuildMergedVars;
 { Merge the token layers ONCE per load/mode-switch: base derives first, the user :root
   overrides same-named vars, then the ACTIVE @mode block's vars overlay on top (so a
@@ -719,6 +766,10 @@ begin
   if mv <> nil then
     for i := 0 to mv.Count - 1 do
       FMergedVars.Values[mv.Names[i]] := mv.ValueFromIndex[i];
+  { P4 (A5 / D8) dynamic OS tokens. AFTER the merge, swap any 'system-accent' /
+    'system-mode' sentinel VALUE for the live OS state, so '--accent: system-accent;'
+    resolves to the OS accent and ResolveStyle sees a concrete hex/mode. }
+  ApplySystemTokens(FMergedVars);
 end;
 
 procedure TTyStyleModel.ValidateRules(ARules: TFPList; AVars: TStrings);
@@ -970,6 +1021,9 @@ begin
       for vi := 0 to mv.Count - 1 do
         tmpMerged.Values[mv.Names[vi]] := mv.ValueFromIndex[vi];
     end;
+    // P4: resolve 'system-accent'/'system-mode' sentinels so a theme seeded with them
+    // validates against a concrete OS colour/mode (not the unparseable literal token).
+    ApplySystemTokens(tmpMerged);
     ValidateRules(tmpRules, tmpMerged);
     // Commit. Replace clears first; additive appends rules + merges vars (new wins) so
     // the appended entries sort LAST (importer/override wins via ApplyAllMatching order).
@@ -1178,5 +1232,27 @@ begin
     end;
   end;
 end;
+
+{ ── default dynamic-token hooks (live OS detection) ──────────────────────────── }
+
+function DefaultSystemAccentHook: string;
+{ The detected OS accent as a '#RRGGBB' literal (alpha implied FF, which TyParseColor
+  applies). Detection never raises; on failure TyDetectSystemAccent leaves a sensible
+  fallback in c, so this always returns a parseable hex. }
+var c: TTyColor;
+begin
+  TyDetectSystemAccent(c);   // True/False both leave a usable colour in c
+  Result := Format('#%.2x%.2x%.2x', [TyRedOf(c), TyGreenOf(c), TyBlueOf(c)]);
+end;
+
+function DefaultSystemModeHook: string;
+{ The detected OS scheme as 'light'/'dark', or '' when unknown (no override). }
+begin
+  Result := TySchemeToMode(TyDetectSystemScheme);
+end;
+
+initialization
+  TySystemAccentHook := @DefaultSystemAccentHook;
+  TySystemModeHook := @DefaultSystemModeHook;
 
 end.
