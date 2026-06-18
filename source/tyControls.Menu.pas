@@ -12,6 +12,7 @@ const
   TyMenuArrowSlot       = 16;  // width reserved at the right for a submenu ▸ arrow
   TyMenuCheckSlot       = 18;  // width reserved at the left for a check/radio glyph
   TyMenuShortcutGap     = 24;  // min gap between caption and the right-aligned shortcut text
+  TyMenuHoverOpenDelay  = 350; // ms the highlight must rest on a submenu row before it auto-opens
 
 type
   { Fired by TTyMenuView for the row at AIndex in its current row array: a leaf
@@ -55,7 +56,15 @@ type
     FOnActivateRow: TTyMenuRowEvent;
     FOnOpenSubmenu: TTyMenuRowEvent;
     FOnCloseRequested: TNotifyEvent;
+    FOnCloseChild: TNotifyEvent;
     FOnNavigateAdjacentBar: TTyMenuAdjacentEvent;
+    { Lazy hover-open timer (the ToggleSwitch/ComboBox lazy-TTimer idiom): while the
+      highlight rests on a submenu row, it (re)starts; on fire it requests opening that
+      row's submenu. FHoverPending is the row armed for opening, or -1 (disarmed). }
+    FHoverTimer: TTimer;
+    FHoverPending: Integer;
+    procedure EnsureHoverTimer;
+    procedure HandleHoverTimer(Sender: TObject);
     function ItemRowHeight(APPI: Integer): Integer;
     { True iff AIndex is an in-range, selectable (non-separator, enabled) item row. }
     function IsSelectable(AIndex: Integer): Boolean;
@@ -88,14 +97,30 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { Arm/disarm the lazy hover-open for the current highlight: if it is a submenu row,
+      (re)start the timer toward opening it; otherwise cancel any pending open and ask
+      the host to close any already-open child (a non-submenu row has none). Driven from
+      MouseMove when the highlight changes; exposed (protected) for the hover-open test. }
+    procedure UpdateHoverOpen;
+    { Steppable hover-open seam (no wall-clock): run exactly what the lazy hover
+      timer's OnTimer fire would — if the highlight is still the armed submenu row,
+      fire OnOpenSubmenu for it. Tests drive this directly via an access subclass;
+      the lazy TTimer drives it at runtime. }
+    procedure TickHoverForTest;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     procedure SetRows(const ARows: TTyMenuRowArray);
     procedure Click; override;
     { Activation/navigation events consumed by the host popup/bar (Tasks 4/5/7). }
     property OnActivateRow: TTyMenuRowEvent read FOnActivateRow write FOnActivateRow;
     property OnOpenSubmenu: TTyMenuRowEvent read FOnOpenSubmenu write FOnOpenSubmenu;
     property OnCloseRequested: TNotifyEvent read FOnCloseRequested write FOnCloseRequested;
+    { Close just this level's OPEN CHILD cascade (NOT this level itself): fired when the
+      hover highlight moves onto a non-submenu row, so a previously-opened sibling
+      submenu collapses while this dropdown stays up. Distinct from OnCloseRequested,
+      which collapses this whole level (ESC/Left). }
+    property OnCloseChild: TNotifyEvent read FOnCloseChild write FOnCloseChild;
     property OnNavigateAdjacentBar: TTyMenuAdjacentEvent
       read FOnNavigateAdjacentBar write FOnNavigateAdjacentBar;
   end;
@@ -123,6 +148,7 @@ type
     procedure HandleActivateRow(Sender: TObject; AIndex: Integer);
     procedure HandleOpenSubmenu(Sender: TObject; AIndex: Integer);
     procedure HandleCloseRequested(Sender: TObject);
+    procedure HandleCloseChild(Sender: TObject);
     procedure HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
     procedure FormDeactivate(Sender: TObject);
   protected
@@ -137,6 +163,10 @@ type
       child. Shared by the live OnActivateRow handler and ActivateRowForTest. }
     procedure DoActivateRow(AIndex: Integer);
     procedure DoOpenSubmenu(AIndex: Integer);
+    { Test seam: -1 when no open child exists, else the number of rows the open child
+      cascade's view was populated with. Lets a headless test assert that opening a
+      submenu row created AND populated the child (without a live window). }
+    function ChildRowCountForTest: Integer;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -305,6 +335,66 @@ begin
   TabStop := True;
   SetLength(FRows, 0);
   FHighlight := -1;
+  FHoverPending := -1;
+end;
+
+destructor TTyMenuView.Destroy;
+begin
+  // FHoverTimer is owned by Self (would be freed by DestroyComponents), but free it
+  // explicitly first so the OnTimer callback can never fire mid-teardown (ToggleSwitch).
+  FreeAndNil(FHoverTimer);
+  inherited Destroy;
+end;
+
+procedure TTyMenuView.EnsureHoverTimer;
+begin
+  if FHoverTimer = nil then
+  begin
+    FHoverTimer := TTimer.Create(Self);
+    FHoverTimer.Enabled := False;
+    FHoverTimer.Interval := TyMenuHoverOpenDelay;
+    FHoverTimer.OnTimer := @HandleHoverTimer;
+  end;
+end;
+
+procedure TTyMenuView.HandleHoverTimer(Sender: TObject);
+begin
+  // One-shot: disarm the wall-clock timer, then run the (re-checked) open.
+  if FHoverTimer <> nil then FHoverTimer.Enabled := False;
+  TickHoverForTest;
+end;
+
+procedure TTyMenuView.TickHoverForTest;
+begin
+  // Only open if the highlight is still resting on the armed submenu row (the user may
+  // have moved on since the timer was started). Re-validate against the live rows.
+  if (FHoverPending >= 0) and (FHoverPending = FHighlight)
+    and IsSelectable(FHoverPending) and FRows[FHoverPending].HasSubmenu then
+  begin
+    if Assigned(FOnOpenSubmenu) then FOnOpenSubmenu(Self, FHoverPending);
+  end;
+end;
+
+procedure TTyMenuView.UpdateHoverOpen;
+begin
+  if IsSelectable(FHighlight) and FRows[FHighlight].HasSubmenu then
+  begin
+    // Submenu row: (re)arm the lazy hover-open timer toward this row. Restarting it
+    // (disable+enable) resets the countdown so a quick pass-through doesn't open.
+    FHoverPending := FHighlight;
+    EnsureHoverTimer;
+    FHoverTimer.Enabled := False;
+    FHoverTimer.Enabled := True;
+  end
+  else
+  begin
+    // Non-submenu (or no) row: cancel any pending open and ask the host to close any
+    // already-open CHILD cascade (not this level) — the new highlight has no submenu of
+    // its own, so a sibling submenu opened earlier should collapse while this stays up.
+    FHoverPending := -1;
+    if FHoverTimer <> nil then FHoverTimer.Enabled := False;
+    if Assigned(FOnCloseChild) then FOnCloseChild(Self);
+  end;
 end;
 
 function TTyMenuView.GetStyleTypeKey: string;
@@ -508,16 +598,25 @@ begin
 end;
 
 procedure TTyMenuView.MouseMove(Shift: TShiftState; X, Y: Integer);
-var idx: Integer;
+var idx, prev: Integer;
 begin
   inherited MouseMove(Shift, X, Y);
+  prev := FHighlight;
   idx := RowAtY(Y, Font.PixelsPerInch);   // -1 over a separator / gutter
   SetHighlight(idx);                        // SetHighlight collapses -1 safely
+  // Only (re)arm/cancel the lazy hover-open when the highlight actually moved to a new
+  // row, so a jittery mouse inside one cell doesn't keep resetting the countdown.
+  if FHighlight <> prev then
+    UpdateHoverOpen;
 end;
 
 procedure TTyMenuView.MouseLeave;
 begin
   inherited MouseLeave;
+  // Cancel any pending hover-open; don't fire OnCloseRequested here, because the mouse
+  // may be travelling INTO an open child cascade (closing it would collapse the path).
+  FHoverPending := -1;
+  if FHoverTimer <> nil then FHoverTimer.Enabled := False;
   SetHighlight(-1);
 end;
 
@@ -719,6 +818,7 @@ begin
   FView.OnActivateRow := @HandleActivateRow;
   FView.OnOpenSubmenu := @HandleOpenSubmenu;
   FView.OnCloseRequested := @HandleCloseRequested;
+  FView.OnCloseChild := @HandleCloseChild;
   FView.OnNavigateAdjacentBar := @HandleNavigateAdjacent;
   if FRoot <> nil then
     FView.SetRows(TyBuildMenuRows(FRoot));
@@ -832,12 +932,18 @@ begin
   FreeAndNil(FChild);   // only one open submenu per level
   FChild := TTyMenuPopup.Create(Self);
   FChild.Controller := FController;
+  // Create the child's form+view and set its root BEFORE any FView access: SetRoot only
+  // populates rows when FView already exists (FView is built lazily by EnsureForm), so we
+  // build the view first, then root it — guaranteeing FChild.FView exists and is filled.
+  FChild.EnsureForm;
   FChild.SetRoot(rows[AIndex].Item);
 
-  // Anchor the child to the right of the parent row (screen coords). When the form
-  // is live we have a real row rect; headless callers use ActivateRowForTest, which
-  // never opens a window, so no anchor/window is built there.
-  if (FForm <> nil) and FForm.HandleAllocated then
+  // Anchor the child to the right of the parent row (screen coords). This needs a live
+  // parent window: our own FView/RowTop give the row's on-screen Y. Headless callers
+  // (ActivateRowForTest) have no parent window/handle, so we stop after building +
+  // populating the child (above) and never compute an anchor or pop a window — which is
+  // exactly what the previous FView nil-deref crashed on when FForm/FView weren't live.
+  if (FForm <> nil) and FForm.HandleAllocated and (FView <> nil) then
   begin
     // A zero-width anchor at the parent's right edge: the child opens flush to the
     // right of the parent column (ComputeBounds uses AAnchor.Right for AToRight),
@@ -848,6 +954,15 @@ begin
     anchor.Bottom := anchor.Top;
     FChild.Popup(anchor, True);
   end;
+end;
+
+function TTyMenuPopup.ChildRowCountForTest: Integer;
+begin
+  // Same-unit access to FChild/FView (non-strict private) + RowCount (protected).
+  if (FChild = nil) or (FChild.FView = nil) then
+    Result := -1
+  else
+    Result := FChild.FView.RowCount;
 end;
 
 procedure TTyMenuPopup.HandleActivateRow(Sender: TObject; AIndex: Integer);
@@ -863,6 +978,14 @@ end;
 procedure TTyMenuPopup.HandleCloseRequested(Sender: TObject);
 begin
   CloseAll;
+end;
+
+procedure TTyMenuPopup.HandleCloseChild(Sender: TObject);
+begin
+  // Hover moved onto a non-submenu row: collapse only the open child cascade (free it
+  // and any window/handle it allocated), leaving THIS dropdown up. CloseAll would close
+  // this level too — wrong while the user is still hovering inside it.
+  FreeAndNil(FChild);
 end;
 
 procedure TTyMenuPopup.HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);

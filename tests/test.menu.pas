@@ -19,12 +19,20 @@ type
     procedure SetHighlight(AIndex: Integer);
     procedure MoveHighlight(ADelta: Integer);
     function Highlight: Integer;
+    // Hover-open seams: SimulateHoverOnto highlights a row and arms the lazy hover-open
+    // exactly as a mouse-move onto a new row does; TickHover runs the timer fire.
+    procedure SimulateHoverOnto(AIndex: Integer);
+    procedure TickHover;
   end;
 
   TMenuViewTest = class(TTestCase)
+  private
+    FOpenedIndex: Integer;
+    procedure HandleOpenSubmenu(Sender: TObject; AIndex: Integer);
   published
     procedure TestMeasureAndHitTest;
     procedure TestKeyboardHighlightSkipsSeparatorsAndDisabled;
+    procedure TestHoverOnSubmenuRowFiresOpenAfterTick;
   end;
 
   { Probe subclass: exposes TTyMenuPopup's protected ComputeBounds seam so the
@@ -34,6 +42,7 @@ type
   public
     function ComputeBounds(const AAnchor: TRect; AWidth, AHeight, APPI: Integer;
       AToRight: Boolean): TRect;
+    function ChildRowCountForTest: Integer;
   end;
 
   { Verifies TTyMenuPopup (Task 4): the borderless TForm host + cascade. The window
@@ -48,6 +57,7 @@ type
   published
     procedure TestActivateLeafFiresItemOnClick;
     procedure TestComputeBoundsFlipsNearScreenEdges;
+    procedure TestOpenSubmenuParentDoesNotRaiseAndPopulatesChild;
   end;
 
   { Probe subclass: exposes TTyMenuBar's protected top-cell geometry seams so the
@@ -152,12 +162,30 @@ begin
   Result := inherited Highlight;
 end;
 
+procedure TTyMenuViewAccess.SimulateHoverOnto(AIndex: Integer);
+begin
+  // Mirror a mouse-move onto a NEW row: set the highlight, then arm the lazy
+  // hover-open exactly as TTyMenuView.MouseMove does when the highlight changes.
+  inherited SetHighlight(AIndex);
+  inherited UpdateHoverOpen;
+end;
+
+procedure TTyMenuViewAccess.TickHover;
+begin
+  inherited TickHoverForTest;
+end;
+
 { TTyMenuPopupAccess }
 
 function TTyMenuPopupAccess.ComputeBounds(const AAnchor: TRect;
   AWidth, AHeight, APPI: Integer; AToRight: Boolean): TRect;
 begin
   Result := inherited ComputeBounds(AAnchor, AWidth, AHeight, APPI, AToRight);
+end;
+
+function TTyMenuPopupAccess.ChildRowCountForTest: Integer;
+begin
+  Result := inherited ChildRowCountForTest;
 end;
 
 { TTyMenuBarAccess }
@@ -193,6 +221,50 @@ begin
 end;
 
 { TMenuViewTest }
+
+procedure TMenuViewTest.HandleOpenSubmenu(Sender: TObject; AIndex: Integer);
+begin
+  FOpenedIndex := AIndex;
+end;
+
+procedure TMenuViewTest.TestHoverOnSubmenuRowFiresOpenAfterTick;
+var v: TTyMenuViewAccess; mm: TMainMenu; top, sub: TMenuItem;
+begin
+  FOpenedIndex := -1;
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); top.Caption := 'File'; mm.Items.Add(top);
+    // row 0: a plain leaf; row 1: a submenu parent (has a child item).
+    top.Add(NewItem('Open', 0, False, True, nil, 0, ''));
+    sub := TMenuItem.Create(mm); sub.Caption := 'Recent';
+    sub.Add(NewItem('doc.txt', 0, False, True, nil, 0, ''));   // makes 'Recent' a submenu
+    top.Add(sub);
+
+    v := TTyMenuViewAccess.Create(nil);
+    try
+      v.SetRows(TyBuildMenuRows(top));
+      v.OnOpenSubmenu := @HandleOpenSubmenu;
+
+      // Hover the plain leaf (row 0): a tick must NOT fire OnOpenSubmenu (no submenu).
+      v.SimulateHoverOnto(0);
+      v.TickHover;
+      AssertEquals('leaf hover does not open a submenu', -1, FOpenedIndex);
+
+      // Hover the submenu row (row 1): arms the lazy hover-open; the tick fires it.
+      v.SimulateHoverOnto(1);
+      AssertEquals('not opened until the timer ticks', -1, FOpenedIndex);
+      v.TickHover;
+      AssertEquals('hover tick opens the submenu row', 1, FOpenedIndex);
+
+      // Moving the highlight off the submenu row before a tick cancels the pending open.
+      FOpenedIndex := -1;
+      v.SimulateHoverOnto(1);   // re-arm on the submenu row
+      v.SimulateHoverOnto(0);   // then move onto the leaf (disarms)
+      v.TickHover;
+      AssertEquals('moving off the submenu row cancels the pending open', -1, FOpenedIndex);
+    finally v.Free; end;
+  finally mm.Free; end;
+end;
 
 procedure TMenuViewTest.TestMeasureAndHitTest;
 var v: TTyMenuViewAccess; mm: TMainMenu; top: TMenuItem;
@@ -260,6 +332,32 @@ begin
       pop.SetRoot(top);
       pop.ActivateRowForTest(0);    // test seam: activate row 0 as if clicked
       AssertTrue('leaf OnClick fired', FFired);
+    finally pop.Free; end;
+  finally mm.Free; end;
+end;
+
+procedure TMenuPopupTest.TestOpenSubmenuParentDoesNotRaiseAndPopulatesChild;
+var
+  pop: TTyMenuPopupAccess; mm: TMainMenu; top, sub: TMenuItem;
+begin
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); mm.Items.Add(top);
+    // row 0 is a submenu parent with two visible children.
+    sub := TMenuItem.Create(mm); sub.Caption := 'Recent';
+    sub.Add(NewItem('a.txt', 0, False, True, nil, 0, ''));
+    sub.Add(NewItem('b.txt', 0, False, True, nil, 0, ''));
+    top.Add(sub);
+
+    pop := TTyMenuPopupAccess.Create(nil);
+    try
+      pop.SetRoot(top);
+      // Before opening there is no child cascade.
+      AssertEquals('no child before opening', -1, pop.ChildRowCountForTest);
+      // Activating the submenu-parent row must NOT raise (the old FView nil-deref bug)
+      // and must create + POPULATE the child with the submenu's two rows.
+      pop.ActivateRowForTest(0);
+      AssertEquals('child created and populated with 2 rows', 2, pop.ChildRowCountForTest);
     finally pop.Free; end;
   finally mm.Free; end;
 end;
