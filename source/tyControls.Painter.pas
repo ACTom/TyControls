@@ -38,6 +38,10 @@ type
     procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
     procedure FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
     procedure FillGlass(const ARect: TRect; AGlass: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
+    { Paint AColor into the area OUTSIDE the rounded rectangle (the 4 corner gaps).
+      Used to re-establish a clean parent background in a windowed control's corners
+      after a drop shadow bled into them. No-op when there are no rounded corners. }
+    procedure FillCornerGaps(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
     procedure EraseRect(const ARect: TRect);
     property Bitmap: TBGRABitmap read FBmp;
   end;
@@ -512,6 +516,39 @@ begin
         mask.Free;
       end;
     end;
+    FBmp.PutImage(ARect.Left, ARect.Top, temp, dmDrawWithTransparency);
+  finally
+    temp.Free;
+  end;
+end;
+
+procedure TTyPainter.FillCornerGaps(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
+var
+  temp: TBGRABitmap;
+  w, h, r: Integer;
+  opts: TRoundRectangleOptions;
+begin
+  if FBmp = nil then Exit;
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+  if (w <= 0) or (h <= 0) then Exit;
+  // Max corner radius + per-corner squaring, exactly as FillBackground/FillGlass compute.
+  r := ACorners.TL;
+  if ACorners.TR > r then r := ACorners.TR;
+  if ACorners.BR > r then r := ACorners.BR;
+  if ACorners.BL > r then r := ACorners.BL;
+  r := Scale(r);
+  if r <= 0 then Exit;   // square control -> no corner gaps to clean
+  opts := [];
+  if ACorners.TL <= 0 then Include(opts, rrTopLeftSquare);
+  if ACorners.TR <= 0 then Include(opts, rrTopRightSquare);
+  if ACorners.BR <= 0 then Include(opts, rrBottomRightSquare);
+  if ACorners.BL <= 0 then Include(opts, rrBottomLeftSquare);
+  // Build AColor everywhere, then erase the rounded interior (AA) so only the corner
+  // gaps remain; composite that over FBmp to overwrite whatever (shadow) was there.
+  temp := TBGRABitmap.Create(w, h, TyColorToBGRA(AColor));
+  try
+    temp.EraseRoundRectAntialias(0, 0, w - 1, h - 1, r, r, 255, opts);
     FBmp.PutImage(ARect.Left, ARect.Top, temp, dmDrawWithTransparency);
   finally
     temp.Free;

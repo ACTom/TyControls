@@ -657,6 +657,9 @@ var
   corners, ringCorners: TTyCorners;
   off: Integer;
   ringRect: TRect;
+  pc: TTyColor;
+  gHost: ITyGlassHost;
+  gOff: TPoint;
 begin
   TyFillParentBg(Self, APainter, ARect, AStyle);
   if tpOpacity in AStyle.Present then
@@ -669,6 +672,15 @@ begin
   if (tpBorderColor in AStyle.Present) and (AStyle.BorderWidth > 0)
      and not ((tpBorderStyle in AStyle.Present) and (AStyle.BorderStyle = tbsNone)) then
     APainter.StrokeBorder(ARect, corners, AStyle.BorderWidth, AStyle.BorderColor);
+  // A windowed control paints into its own opaque bitmap, so a drop shadow's blur bleeds
+  // into the corner gaps OUTSIDE the rounded background — it can't cast onto the parent, so
+  // it just leaves a dirty patch there. Re-paint those gaps with the flat parent background
+  // to keep the rounded silhouette clean. Only when there IS a shadow + a solid (non-glass)
+  // parent — the glass path already shows the form photo through the corners. (The shadow
+  // INSIDE the rounded shape, e.g. a checkbox box, is untouched.)
+  if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0)
+     and not TyResolveGlassHost(Self, gHost, gOff) and TyResolveParentBg(Self, pc) then
+    APainter.FillCornerGaps(ARect, corners, pc);
   // Focus ring: only present when a ':focus { outline: ... }' rule resolved.
   if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
   begin
