@@ -49,6 +49,12 @@ type
     procedure PopupDeactivate(Sender: TObject);
     procedure PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure DeferredCloseUp(Data: PtrInt);
+    { Shape the borderless popup window with a rounded region so the opaque
+      rectangular corners outside the themed rounded fill are clipped away. The
+      radius tracks the dropdown list's own resolved BorderRadius, scaled to the
+      popup's device PPI. No-op when the radius is 0 (leave rectangular) or off
+      Windows. Re-applied on every DropDown so it follows a new size/PPI/theme. }
+    procedure ApplyPopupRegion(AWidth, AHeight: Integer);
   protected
     { Guard: tick at last CloseUp. Click reopens only if > 200ms have passed.
       This prevents the click-while-open reopen race where PopupDeactivate fires
@@ -105,7 +111,10 @@ type
   end;
 implementation
 uses
-  Math;
+  // The Windows unit (for CreateRoundRectRgn/SetWindowRgn) declares POINT=TPOINT and
+  // RECT=TRect type aliases that shadow the Types.Point()/Rect() helper FUNCTIONS, so
+  // the few Rect()/Point() construction call sites in this unit are qualified Types.* .
+  Math{$IFDEF WINDOWS}, Windows{$ENDIF};
 
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
 var n, i, idx: Integer; pfx: string;
@@ -379,11 +388,47 @@ begin
   PopupW := Width;
 
   { Position below the combo }
-  P := ControlToScreen(Point(0, Height));
+  P := ControlToScreen(Types.Point(0, Height));
   FPopup.SetBounds(P.X, P.Y, PopupW, PopupH);
 
   FPopup.Show;
+  { Round the popup window's corners to match the dropdown's themed fill, now that
+    the handle is allocated by Show. Re-applied here every DropDown so it follows
+    the popup's current size, PPI and theme. }
+  ApplyPopupRegion(PopupW, PopupH);
   DoDropDown;   // popup actually opened
+end;
+
+{ Shape the popup window with a rounded region matching the dropdown list's themed
+  BorderRadius (scaled to device PPI). On non-Windows this is a graceful no-op. }
+procedure TTyComboBox.ApplyPopupRegion(AWidth, AHeight: Integer);
+{$IFDEF WINDOWS}
+var
+  S: TTyStyleSet;
+  d: Integer;
+  Rgn: Windows.HRGN;
+{$ENDIF}
+begin
+  {$IFDEF WINDOWS}
+  if (FPopup = nil) or (not FPopup.HandleAllocated) then Exit;
+  { Resolve the dropdown list's own style so the corner radius tracks the theme.
+    The popup hosts a TTyListBox (style key 'TyListBox'); resolve it through the
+    combo's active controller (the same theme the popup list paints with). }
+  S := ActiveController.Model.ResolveStyle('TyListBox', '', []);
+  { Scale the logical BorderRadius to the popup's device PPI; the rounded-rect
+    region uses the FULL corner diameter (2 * radius). }
+  d := MulDiv(S.BorderRadius, FPopup.Font.PixelsPerInch, 96) * 2;
+  if d <= 0 then
+  begin
+    { Radius 0: leave the window rectangular (clear any region from a prior open). }
+    Windows.SetWindowRgn(FPopup.Handle, 0, True);
+    Exit;
+  end;
+  { +1 on the extents: CreateRoundRectRgn's right/bottom are exclusive. }
+  Rgn := Windows.CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
+  { SetWindowRgn takes ownership of Rgn; do not delete it. }
+  Windows.SetWindowRgn(FPopup.Handle, Rgn, True);
+  {$ENDIF}
 end;
 
 procedure TTyComboBox.CloseUp;
@@ -511,15 +556,15 @@ var
 begin
   P := TTyPainter.Create;
   try
-    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    R := Types.Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
     BtnW := P.Scale(ButtonWidthLogical);
-    BtnR := Rect(R.Right - BtnW, R.Top, R.Right, R.Bottom);
+    BtnR := Types.Rect(R.Right - BtnW, R.Top, R.Right, R.Bottom);
     // Content honours the resolved Padding (consistent with Button/Edit/Panel);
     // the right edge stops at the chevron button zone.
-    TextR := Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
+    TextR := Types.Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
     if FText <> '' then
       P.DrawText(TextR, FText, S.FontName, S.FontSize, S.FontWeight,

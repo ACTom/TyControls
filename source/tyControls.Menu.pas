@@ -158,6 +158,12 @@ type
       Headless-testable; the live Popup calls it so on-screen sizing cannot drift. }
     function ComputeBounds(const AAnchor: TRect; AWidth, AHeight, APPI: Integer;
       AToRight: Boolean): TRect;
+    { Shape the borderless popup window with a rounded region matching the popup's
+      own themed BorderRadius (TyMenuPopup), scaled to device PPI, so the opaque
+      rectangular corners outside the rounded fill are clipped away. Guarded on
+      HandleAllocated and re-applied on every Popup so it tracks a new size/PPI/theme.
+      No-op when the radius is 0 (leave rectangular) or off Windows. }
+    procedure ApplyFormRegion(AWidth, AHeight: Integer);
     { Run the activation path for row AIndex exactly as a click/Enter would: a leaf
       fires its item's OnClick and closes the whole cascade; a submenu row opens its
       child. Shared by the live OnActivateRow handler and ActivateRowForTest. }
@@ -294,7 +300,11 @@ type
 
 implementation
 
-uses Math, BGRABitmap;
+// The Windows unit (for CreateRoundRectRgn/SetWindowRgn) declares POINT=TPOINT and
+// RECT=TRect type aliases that shadow the Types.Point()/Rect() helper FUNCTIONS, so
+// the Rect()/Point() construction call sites in this unit are qualified Types.* .
+uses Math, BGRABitmap
+  {$IFDEF WINDOWS}, Windows{$ENDIF};
 
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
 var i, n: Integer; mi: TMenuItem;
@@ -675,7 +685,7 @@ var
 begin
   P := TTyPainter.Create;
   try
-    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    R := Types.Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
     // Surface: the TyMenuView (popup) background/border/radius from its own tokens.
     S := CurrentStyle;
@@ -697,7 +707,7 @@ begin
         SepFill := Default(TTyFill);
         SepFill.Kind := tfkSolid;
         SepFill.Color := RowStyle.BorderColor;
-        P.FillBackground(Rect(R.Left + P.Scale(S.Padding.Left), SepY,
+        P.FillBackground(Types.Rect(R.Left + P.Scale(S.Padding.Left), SepY,
           R.Right - P.Scale(S.Padding.Right), SepY + Max(1, P.Scale(1))), SepFill, 0);
         Continue;
       end;
@@ -712,7 +722,7 @@ begin
         Include(RowStates, tysNormal);
       RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', RowStates);
 
-      RowRect := Rect(R.Left + P.Scale(S.Padding.Left), RowTop(i, APPI),
+      RowRect := Types.Rect(R.Left + P.Scale(S.Padding.Left), RowTop(i, APPI),
         R.Right - P.Scale(S.Padding.Right), RowTop(i, APPI) + itemH);
 
       if tpBackground in RowStyle.Present then
@@ -725,27 +735,27 @@ begin
       if FRows[i].Checked then
       begin
         if FRows[i].RadioItem then
-          P.DrawGlyph(Rect(RowRect.Left + padL, RowRect.Top, RowRect.Left + padL + leftSlot,
+          P.DrawGlyph(Types.Rect(RowRect.Left + padL, RowRect.Top, RowRect.Left + padL + leftSlot,
             RowRect.Bottom), tgRadioDot, RowStyle.TextColor, 2)
         else
-          P.DrawGlyph(Rect(RowRect.Left + padL, RowRect.Top, RowRect.Left + padL + leftSlot,
+          P.DrawGlyph(Types.Rect(RowRect.Left + padL, RowRect.Top, RowRect.Left + padL + leftSlot,
             RowRect.Bottom), tgCheck, RowStyle.TextColor, 2);
       end;
 
       // Caption: left-aligned after the check slot, ellipsized before the right slot.
       // A DefaultItem renders bold; otherwise honour the theme's font-weight.
       if FRows[i].DefaultItem then capWeight := 700 else capWeight := RowStyle.FontWeight;
-      TextRect := Rect(RowRect.Left + padL + leftSlot, RowRect.Top,
+      TextRect := Types.Rect(RowRect.Left + padL + leftSlot, RowRect.Top,
         RowRect.Right - padR - rightSlot, RowRect.Bottom);
       P.DrawText(TextRect, FRows[i].Caption, RowStyle.FontName, ResolveFontSize(RowStyle),
         capWeight, RowStyle.TextColor, taLeftJustify, tlCenter, True);
 
       // Submenu arrow OR the right-aligned shortcut text in the right slot.
       if FRows[i].HasSubmenu then
-        P.DrawGlyph(Rect(RowRect.Right - rightSlot, RowRect.Top, RowRect.Right, RowRect.Bottom),
+        P.DrawGlyph(Types.Rect(RowRect.Right - rightSlot, RowRect.Top, RowRect.Right, RowRect.Bottom),
           tgArrowRight, RowStyle.TextColor, 2)
       else if FRows[i].ShortcutText <> '' then
-        P.DrawText(Rect(RowRect.Left, RowRect.Top, RowRect.Right - padR, RowRect.Bottom),
+        P.DrawText(Types.Rect(RowRect.Left, RowRect.Top, RowRect.Right - padR, RowRect.Bottom),
           FRows[i].ShortcutText, RowStyle.FontName, ResolveFontSize(RowStyle),
           RowStyle.FontWeight, RowStyle.TextColor, taRightJustify, tlCenter, False);
     end;
@@ -854,7 +864,7 @@ begin
     T := AAnchor.Top - AHeight;
   if T < 0 then T := 0;
 
-  Result := Rect(L, T, L + AWidth, T + AHeight);
+  Result := Types.Rect(L, T, L + AWidth, T + AHeight);
 end;
 
 procedure TTyMenuPopup.Popup(const AAnchor: TRect; AToRight: Boolean);
@@ -881,6 +891,39 @@ begin
   R := ComputeBounds(AAnchor, w, h, ppi, AToRight);
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   FForm.Show;
+  { Round the popup window's corners to match the themed fill, now that Show has
+    allocated the handle. Re-applied every Popup so it follows the current size. }
+  ApplyFormRegion(R.Right - R.Left, R.Bottom - R.Top);
+end;
+
+{ Shape the popup window with a rounded region matching the popup's themed
+  BorderRadius (TyMenuPopup, scaled to device PPI). Non-Windows: graceful no-op. }
+procedure TTyMenuPopup.ApplyFormRegion(AWidth, AHeight: Integer);
+{$IFDEF WINDOWS}
+var
+  S: TTyStyleSet;
+  d: Integer;
+  Rgn: Windows.HRGN;
+{$ENDIF}
+begin
+  {$IFDEF WINDOWS}
+  if (FForm = nil) or (not FForm.HandleAllocated) or (FView = nil) then Exit;
+  { Resolve the popup's own style so the corner radius tracks the theme. The
+    rendered surface (TyMenuView) and the popup-host selector (TyMenuPopup) carry
+    the same radius token; use the host selector named in the spec. }
+  S := FView.ActiveController.Model.ResolveStyle('TyMenuPopup', '', []);
+  d := MulDiv(S.BorderRadius, FForm.Font.PixelsPerInch, 96) * 2;
+  if d <= 0 then
+  begin
+    { Radius 0: leave rectangular (clear any region carried over from a prior open). }
+    Windows.SetWindowRgn(FForm.Handle, 0, True);
+    Exit;
+  end;
+  { +1: CreateRoundRectRgn's right/bottom extents are exclusive. SetWindowRgn takes
+    ownership of the region handle, so it must not be deleted afterwards. }
+  Rgn := Windows.CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
+  Windows.SetWindowRgn(FForm.Handle, Rgn, True);
+  {$ENDIF}
 end;
 
 procedure TTyMenuPopup.CloseAll;
@@ -1217,8 +1260,8 @@ begin
   cellW := TopCellWidth(AIndex, ppi);
   if HandleAllocated then
   begin
-    origin := ClientToScreen(Point(0, 0));
-    anchor := Rect(origin.X + cellL, origin.Y,
+    origin := ClientToScreen(Types.Point(0, 0));
+    anchor := Types.Rect(origin.X + cellL, origin.Y,
       origin.X + cellL + cellW, origin.Y + Height);
     FPopup.Popup(anchor, False);
   end;
@@ -1289,7 +1332,7 @@ var
 begin
   P := TTyPainter.Create;
   try
-    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    R := Types.Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
     // Surface: the TyMenuBar background/border from its own tokens.
     S := CurrentStyle;
@@ -1310,12 +1353,12 @@ begin
         Include(CellStates, tysNormal);
       CellStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', CellStates);
 
-      CellRect := Rect(R.Left + cellL, R.Top, R.Left + cellL + cellW, R.Bottom);
+      CellRect := Types.Rect(R.Left + cellL, R.Top, R.Left + cellL + cellW, R.Bottom);
       if tpBackground in CellStyle.Present then
         P.FillBackground(CellRect, CellStyle.Background, CellStyle.BorderRadius);
 
       padL := P.Scale(CellStyle.Padding.Left);
-      P.DrawText(Rect(CellRect.Left + padL, CellRect.Top, CellRect.Right, CellRect.Bottom),
+      P.DrawText(Types.Rect(CellRect.Left + padL, CellRect.Top, CellRect.Right, CellRect.Bottom),
         TopCaption(i), CellStyle.FontName, ResolveFontSize(CellStyle),
         CellStyle.FontWeight, CellStyle.TextColor, taLeftJustify, tlCenter, True);
     end;
@@ -1371,7 +1414,7 @@ begin
   EnsureRenderer;
   // A zero-size anchor at the cursor: the renderer hangs its dropdown below/right of
   // (X, Y) and measures its own size (ComputeBounds flips near screen edges).
-  anchor := Rect(X, Y, X, Y);
+  anchor := Types.Rect(X, Y, X, Y);
   FRenderer.Popup(anchor, False);
 end;
 
