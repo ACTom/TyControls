@@ -191,7 +191,7 @@ TyListItem {
   padding: 4px;
 }
 TyListItem:hover  { background: var(--surface-listitem-hover); }
-TyListItem:active { background: var(--accent); color: var(--on-accent); }
+TyListItem:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }
 
 TyProgressBar {
   background: var(--surface-sunk);
@@ -306,7 +306,7 @@ TyToggleKnob  { background: #FFFFFF; border-radius: var(--radius-round); }
 
 /* The top application-menu bar (TTyMenuBar surface). */
 TyMenuBar {
-  background: var(--surface-chrome);
+  background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-bold);

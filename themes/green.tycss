@@ -168,7 +168,7 @@ TyListItem {
   padding: 4px;
 }
 TyListItem:hover  { background: darken(--surface, 5%); }
-TyListItem:active { background: var(--accent); color: #FFFFFF; }
+TyListItem:active { background: var(--accent); color: #FFFFFF; border-radius: 0; }
 
 TyProgressBar {
   background: alpha(#FFFFFF, 0);

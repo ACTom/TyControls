@@ -207,7 +207,7 @@ begin
     '  padding: 4px;' + LineEnding +
     '}' + LineEnding +
     'TyListItem:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
-    'TyListItem:active { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    'TyListItem:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }' + LineEnding +
     '' + LineEnding +
     'TyProgressBar {' + LineEnding +
     '  background: var(--surface-sunk);' + LineEnding +
@@ -318,7 +318,7 @@ begin
     '' + LineEnding +
     '/* The top application-menu bar (TTyMenuBar surface). */' + LineEnding +
     'TyMenuBar {' + LineEnding +
-    '  background: var(--titlebar-bg);' + LineEnding +
+    '  background: alpha(#FFFFFF, 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-normal);' + LineEnding +
