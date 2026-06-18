@@ -66,6 +66,10 @@ type
     { Pure geometry seams (device px), driven by theme tokens + the layout metrics. }
     function RowCount: Integer;
     function MeasureHeight(APPI: Integer): Integer;
+    { Content-driven popup width (device px): the widest item row's caption + the
+      check/arrow slots + the shortcut text + min gap, themed via TyMenuItem. Pure;
+      the popup host sizes to it (clamped to a host minimum). }
+    function MeasureWidth(APPI: Integer): Integer;
     function RowTop(AIndex, APPI: Integer): Integer;
     { Device-y -> row index, or -1 for a separator / out-of-range (not selectable). }
     function RowAtY(AY, APPI: Integer): Integer;
@@ -96,9 +100,64 @@ type
       read FOnNavigateAdjacentBar write FOnNavigateAdjacentBar;
   end;
 
+  { Borderless TForm host for a TTyMenuView, plus the submenu-cascade manager.
+    One TTyMenuPopup owns one popup level: its lazy FForm wraps an FView that
+    renders the rows of FRoot; opening a submenu row spawns a child TTyMenuPopup
+    (FChild) anchored to the right of that row, and so the cascade nests. Mirrors
+    the TTyComboBox popup idiom exactly: bsNone / stNever / fsStayOnTop, PopupParent
+    + pmExplicit, KeyPreview, OnDeactivate -> CloseAll with the handler DETACHED
+    around Hide, a FCloseTick 200 ms reopen guard, and Application.RemoveAsyncCalls
+    in the destructor. The window needs a GUI loop, so geometry lives in the pure,
+    headless-testable ComputeBounds seam (anchor -> screen rect, flipping above/left
+    near screen edges) and activation runs through ActivateRowForTest. }
+  TTyMenuPopup = class(TComponent)
+  private
+    FForm: TForm;             // lazy; created on first Popup; freed in Destroy
+    FView: TTyMenuView;       // owned by FForm once shown; else freed by us
+    FChild: TTyMenuPopup;     // open submenu cascade (this level's child), or nil
+    FRoot: TMenuItem;         // the item whose children this level renders
+    FController: TTyStyleController;
+    FCloseTick: QWord;        // tick at last close; reopen guard (ComboBox idiom)
+    procedure EnsureForm;
+    procedure HandleActivateRow(Sender: TObject; AIndex: Integer);
+    procedure HandleOpenSubmenu(Sender: TObject; AIndex: Integer);
+    procedure HandleCloseRequested(Sender: TObject);
+    procedure HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
+    procedure FormDeactivate(Sender: TObject);
+  protected
+    { Pure placement: turn an anchor rect (screen coords) + the popup's size into a
+      screen rect, flipping ABOVE the anchor when there is no room below and (for a
+      submenu, AToRight=True) LEFT of the anchor when there is no room to the right.
+      Headless-testable; the live Popup calls it so on-screen sizing cannot drift. }
+    function ComputeBounds(const AAnchor: TRect; AWidth, AHeight, APPI: Integer;
+      AToRight: Boolean): TRect;
+    { Run the activation path for row AIndex exactly as a click/Enter would: a leaf
+      fires its item's OnClick and closes the whole cascade; a submenu row opens its
+      child. Shared by the live OnActivateRow handler and ActivateRowForTest. }
+    procedure DoActivateRow(AIndex: Integer);
+    procedure DoOpenSubmenu(AIndex: Integer);
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    { Point this level at the item whose visible children it should render. }
+    procedure SetRoot(AItem: TMenuItem);
+    { Show the popup with its top-left anchored to AAnchor (a screen-coord rect, e.g.
+      a menu-bar cell or the parent row); AToRight places a submenu to the right of
+      its parent row. Lazily builds the borderless form on first call. }
+    procedure Popup(const AAnchor: TRect; AToRight: Boolean = False);
+    { Close this level: free the child cascade first, then hide the form (with the
+      OnDeactivate handler detached around Hide), and arm the reopen guard. }
+    procedure CloseAll;
+    function IsOpen: Boolean;
+    { Test seam: activate a row as if it were clicked (same path as a real click). }
+    procedure ActivateRowForTest(AIndex: Integer);
+    property Controller: TTyStyleController read FController write FController;
+    property Root: TMenuItem read FRoot;
+  end;
+
 implementation
 
-uses Math;
+uses Math, BGRABitmap;
 
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
 var i, n: Integer; mi: TMenuItem;
@@ -191,6 +250,43 @@ begin
       Inc(Result, MulDiv(TyMenuSeparatorHeight, APPI, 96))
     else
       Inc(Result, itemH);
+end;
+
+function TTyMenuView.MeasureWidth(APPI: Integer): Integer;
+var
+  S, RowStyle: TTyStyleSet;
+  Bmp: TBGRABitmap;
+  i, effSize, capW, scW, padLR, leftSlot, rightSlot, gap, rowW: Integer;
+begin
+  // Vertical chrome (popup) left+right padding bounds every row; each row's content
+  // = check slot + caption + (gap + shortcut) + arrow slot, themed via TyMenuItem.
+  S := CurrentStyle;
+  Result := MulDiv(S.Padding.Left, APPI, 96) + MulDiv(S.Padding.Right, APPI, 96);
+  RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', []);
+  effSize := ResolveFontSize(RowStyle);
+  padLR := MulDiv(RowStyle.Padding.Left, APPI, 96) + MulDiv(RowStyle.Padding.Right, APPI, 96);
+  leftSlot := MulDiv(TyMenuCheckSlot, APPI, 96);
+  rightSlot := MulDiv(TyMenuArrowSlot, APPI, 96);
+  gap := MulDiv(TyMenuShortcutGap, APPI, 96);
+
+  Bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(Bmp, RowStyle.FontName, effSize, RowStyle.FontWeight, APPI);
+    rowW := 0;
+    for i := 0 to High(FRows) do
+    begin
+      if FRows[i].Kind <> mrkItem then Continue;
+      capW := 0;
+      if FRows[i].Caption <> '' then capW := Bmp.TextSize(FRows[i].Caption).cx;
+      scW := 0;
+      if FRows[i].ShortcutText <> '' then scW := gap + Bmp.TextSize(FRows[i].ShortcutText).cx;
+      rowW := Max(rowW, padLR + leftSlot + capW + scW + rightSlot);
+    end;
+  finally
+    Bmp.Free;
+  end;
+  Inc(Result, rowW);
+  if Result < 1 then Result := 1;
 end;
 
 function TTyMenuView.RowTop(AIndex, APPI: Integer): Integer;
@@ -457,6 +553,225 @@ end;
 procedure TTyMenuView.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+{ TTyMenuPopup }
+
+constructor TTyMenuPopup.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FForm := nil;
+  FView := nil;
+  FChild := nil;
+  FRoot := nil;
+  FController := nil;
+  FCloseTick := 0;
+end;
+
+destructor TTyMenuPopup.Destroy;
+begin
+  { Cancel any queued async calls so they can't fire into a freed popup. }
+  Application.RemoveAsyncCalls(Self);
+  { Free the child cascade first (it parents under our form path). }
+  FreeAndNil(FChild);
+  { Detach OnDeactivate before tearing the form down to avoid re-entering CloseAll
+    from the TForm destruction path (the ComboBox lesson). FView is owned by FForm
+    once it has been parented; if the form was never created, free FView directly. }
+  if FForm <> nil then
+  begin
+    FForm.OnDeactivate := nil;
+    FreeAndNil(FForm);
+    FView := nil;  // was owned by FForm
+  end
+  else
+    FreeAndNil(FView);
+  inherited Destroy;
+end;
+
+procedure TTyMenuPopup.SetRoot(AItem: TMenuItem);
+begin
+  FRoot := AItem;
+  if FView <> nil then
+    FView.SetRows(TyBuildMenuRows(AItem));
+end;
+
+procedure TTyMenuPopup.EnsureForm;
+begin
+  if FForm <> nil then Exit;
+  FForm := TForm.CreateNew(nil);
+  FForm.BorderStyle := bsNone;
+  FForm.ShowInTaskBar := stNever;
+  FForm.FormStyle := fsStayOnTop;
+  FForm.PopupMode := pmExplicit;
+  FForm.KeyPreview := True;
+  FForm.OnDeactivate := @FormDeactivate;
+
+  FView := TTyMenuView.Create(FForm);
+  FView.Parent := FForm;
+  FView.Align := alClient;
+  FView.OnActivateRow := @HandleActivateRow;
+  FView.OnOpenSubmenu := @HandleOpenSubmenu;
+  FView.OnCloseRequested := @HandleCloseRequested;
+  FView.OnNavigateAdjacentBar := @HandleNavigateAdjacent;
+  if FRoot <> nil then
+    FView.SetRows(TyBuildMenuRows(FRoot));
+end;
+
+function TTyMenuPopup.ComputeBounds(const AAnchor: TRect;
+  AWidth, AHeight, APPI: Integer; AToRight: Boolean): TRect;
+var
+  L, T, sw, sh: Integer;
+begin
+  sw := Screen.Width;
+  sh := Screen.Height;
+
+  if AToRight then
+  begin
+    // A submenu sits to the RIGHT of its parent row; flip LEFT if it would overflow.
+    L := AAnchor.Right;
+    if L + AWidth > sw then
+      L := AAnchor.Left - AWidth;
+  end
+  else
+  begin
+    // A dropdown aligns its left edge with the anchor; nudge left if it overflows.
+    L := AAnchor.Left;
+    if L + AWidth > sw then
+      L := sw - AWidth;
+  end;
+  if L < 0 then L := 0;
+
+  // Hang BELOW the anchor; flip ABOVE when there isn't room below the bottom.
+  T := AAnchor.Bottom;
+  if T + AHeight > sh then
+    T := AAnchor.Top - AHeight;
+  if T < 0 then T := 0;
+
+  Result := Rect(L, T, L + AWidth, T + AHeight);
+end;
+
+procedure TTyMenuPopup.Popup(const AAnchor: TRect; AToRight: Boolean);
+var
+  ppi, w, h: Integer;
+  R: TRect;
+  ParentForm: TCustomForm;
+begin
+  EnsureForm;
+  FView.Controller := FController;
+
+  ParentForm := nil;
+  if (Owner <> nil) and (Owner is TControl) then
+    ParentForm := GetParentForm(TControl(Owner));
+  if ParentForm <> nil then
+    FForm.PopupParent := ParentForm;
+
+  ppi := FView.Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  h := FView.MeasureHeight(ppi);
+  // Content-driven width, but never narrower than the anchor (e.g. a bar cell), so
+  // a top dropdown is at least as wide as its trigger.
+  w := Max(FView.MeasureWidth(ppi), AAnchor.Right - AAnchor.Left);
+  R := ComputeBounds(AAnchor, w, h, ppi, AToRight);
+  FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
+  FForm.Show;
+end;
+
+procedure TTyMenuPopup.CloseAll;
+begin
+  { Collapse the cascade from the leaf up: free the child first. }
+  FreeAndNil(FChild);
+  if (FForm <> nil) and FForm.Visible then
+  begin
+    // Detach OnDeactivate around Hide so hiding can't re-enter CloseAll (ComboBox).
+    FForm.OnDeactivate := nil;
+    FForm.Hide;
+    FForm.OnDeactivate := @FormDeactivate;
+  end;
+  FCloseTick := GetTickCount64;
+end;
+
+function TTyMenuPopup.IsOpen: Boolean;
+begin
+  Result := (FForm <> nil) and FForm.Visible;
+end;
+
+procedure TTyMenuPopup.DoActivateRow(AIndex: Integer);
+var
+  rows: TTyMenuRowArray;
+begin
+  rows := TyBuildMenuRows(FRoot);
+  if (AIndex < 0) or (AIndex > High(rows)) then Exit;
+  if rows[AIndex].Kind <> mrkItem then Exit;
+  if not rows[AIndex].Enabled then Exit;
+  if rows[AIndex].HasSubmenu then
+  begin
+    DoOpenSubmenu(AIndex);
+    Exit;
+  end;
+  CloseAll;
+  if rows[AIndex].Item <> nil then
+    rows[AIndex].Item.Click;   // fire the source item's OnClick (the activation)
+end;
+
+procedure TTyMenuPopup.DoOpenSubmenu(AIndex: Integer);
+var
+  rows: TTyMenuRowArray;
+  anchor: TRect;
+begin
+  rows := TyBuildMenuRows(FRoot);
+  if (AIndex < 0) or (AIndex > High(rows)) then Exit;
+  if not rows[AIndex].HasSubmenu then Exit;
+
+  FreeAndNil(FChild);   // only one open submenu per level
+  FChild := TTyMenuPopup.Create(Self);
+  FChild.Controller := FController;
+  FChild.SetRoot(rows[AIndex].Item);
+
+  // Anchor the child to the right of the parent row (screen coords). When the form
+  // is live we have a real row rect; headless callers use ActivateRowForTest, which
+  // never opens a window, so no anchor/window is built there.
+  if (FForm <> nil) and FForm.HandleAllocated then
+  begin
+    // A zero-width anchor at the parent's right edge: the child opens flush to the
+    // right of the parent column (ComputeBounds uses AAnchor.Right for AToRight),
+    // and its own width is carried by Popup via the form width below.
+    anchor.Left := FForm.Left + FForm.Width;
+    anchor.Right := anchor.Left;
+    anchor.Top := FForm.Top + FView.RowTop(AIndex, FView.Font.PixelsPerInch);
+    anchor.Bottom := anchor.Top;
+    FChild.Popup(anchor, True);
+  end;
+end;
+
+procedure TTyMenuPopup.HandleActivateRow(Sender: TObject; AIndex: Integer);
+begin
+  DoActivateRow(AIndex);
+end;
+
+procedure TTyMenuPopup.HandleOpenSubmenu(Sender: TObject; AIndex: Integer);
+begin
+  DoOpenSubmenu(AIndex);
+end;
+
+procedure TTyMenuPopup.HandleCloseRequested(Sender: TObject);
+begin
+  CloseAll;
+end;
+
+procedure TTyMenuPopup.HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
+begin
+  // Bar-level rotation is the host bar's concern (Task 5); a bare popup has no
+  // adjacent top to rotate to, so this is a no-op at this level.
+end;
+
+procedure TTyMenuPopup.FormDeactivate(Sender: TObject);
+begin
+  CloseAll;
+end;
+
+procedure TTyMenuPopup.ActivateRowForTest(AIndex: Integer);
+begin
+  DoActivateRow(AIndex);
 end;
 
 end.

@@ -1,7 +1,7 @@
 unit test.menu;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Menus, fpcunit, testregistry, tyControls.Menu;
+uses Classes, SysUtils, Types, Forms, Menus, fpcunit, testregistry, tyControls.Menu;
 type
   TMenuModelTest = class(TTestCase)
   published
@@ -25,6 +25,29 @@ type
   published
     procedure TestMeasureAndHitTest;
     procedure TestKeyboardHighlightSkipsSeparatorsAndDisabled;
+  end;
+
+  { Probe subclass: exposes TTyMenuPopup's protected ComputeBounds seam so the
+    anchor->screen-rect placement (with edge flipping) is testable without a real
+    win32 popup form (the GUI window itself raises 1407 headless). }
+  TTyMenuPopupAccess = class(TTyMenuPopup)
+  public
+    function ComputeBounds(const AAnchor: TRect; AWidth, AHeight, APPI: Integer;
+      AToRight: Boolean): TRect;
+  end;
+
+  { Verifies TTyMenuPopup (Task 4): the borderless TForm host + cascade. The window
+    itself needs a GUI loop, so we exercise the headless seams: ComputeBounds (anchor
+    -> screen rect with screen-edge flipping) and that activating a leaf row fires the
+    source item's OnClick (the activation path a real click runs). FFired is set by
+    the leaf's OnClick handler. }
+  TMenuPopupTest = class(TTestCase)
+  private
+    FFired: Boolean;
+    procedure LeafClick(Sender: TObject);
+  published
+    procedure TestActivateLeafFiresItemOnClick;
+    procedure TestComputeBoundsFlipsNearScreenEdges;
   end;
 
 implementation
@@ -94,6 +117,14 @@ begin
   Result := inherited Highlight;
 end;
 
+{ TTyMenuPopupAccess }
+
+function TTyMenuPopupAccess.ComputeBounds(const AAnchor: TRect;
+  AWidth, AHeight, APPI: Integer; AToRight: Boolean): TRect;
+begin
+  Result := inherited ComputeBounds(AAnchor, AWidth, AHeight, APPI, AToRight);
+end;
+
 { TMenuViewTest }
 
 procedure TMenuViewTest.TestMeasureAndHitTest;
@@ -140,7 +171,71 @@ begin
   finally mm.Free; end;
 end;
 
+{ TMenuPopupTest }
+
+procedure TMenuPopupTest.LeafClick(Sender: TObject);
+begin
+  FFired := True;
+end;
+
+procedure TMenuPopupTest.TestActivateLeafFiresItemOnClick;
+var pop: TTyMenuPopup; mm: TMainMenu; top, leaf: TMenuItem;
+begin
+  FFired := False;
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); mm.Items.Add(top);
+    leaf := TMenuItem.Create(mm); leaf.Caption := 'Go';
+    leaf.OnClick := @LeafClick;     // sets FFired := True
+    top.Add(leaf);
+    pop := TTyMenuPopup.Create(nil);
+    try
+      pop.SetRoot(top);
+      pop.ActivateRowForTest(0);    // test seam: activate row 0 as if clicked
+      AssertTrue('leaf OnClick fired', FFired);
+    finally pop.Free; end;
+  finally mm.Free; end;
+end;
+
+procedure TMenuPopupTest.TestComputeBoundsFlipsNearScreenEdges;
+var
+  pop: TTyMenuPopupAccess; mm: TMainMenu; top: TMenuItem;
+  anchor: TRect; r: TRect; w, h, sw, sh: Integer;
+begin
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); mm.Items.Add(top);
+    top.Add(NewItem('One', 0, False, True, nil, 0, ''));
+    top.Add(NewItem('Two', 0, False, True, nil, 0, ''));
+    pop := TTyMenuPopupAccess.Create(nil);
+    try
+      pop.SetRoot(top);
+      w := 120; h := 80;
+      sw := Screen.Width; sh := Screen.Height;
+
+      // Anchor near top-left: popup hangs below the anchor, left edge aligned.
+      anchor := Rect(40, 40, 160, 64);
+      r := pop.ComputeBounds(anchor, w, h, 96, False);
+      AssertEquals('drops below anchor bottom', anchor.Bottom, r.Top);
+      AssertEquals('aligns to anchor left', anchor.Left, r.Left);
+      AssertEquals('width preserved', w, r.Right - r.Left);
+      AssertEquals('height preserved', h, r.Bottom - r.Top);
+
+      // Anchor near the BOTTOM edge: not enough room below, flips ABOVE the anchor.
+      anchor := Rect(40, sh - 10, 160, sh - 2);
+      r := pop.ComputeBounds(anchor, w, h, 96, False);
+      AssertTrue('flips above when no room below', r.Bottom <= anchor.Top + 1);
+
+      // Anchor near the RIGHT edge: popup would overflow, flips LEFT of the anchor.
+      anchor := Rect(sw - 6, 40, sw - 2, 64);
+      r := pop.ComputeBounds(anchor, w, h, 96, True);   // AToRight submenu placement
+      AssertTrue('flips left when no room right', r.Right <= anchor.Left + 1);
+    finally pop.Free; end;
+  finally mm.Free; end;
+end;
+
 initialization
   RegisterTest(TMenuModelTest);
   RegisterTest(TMenuViewTest);
+  RegisterTest(TMenuPopupTest);
 end.
