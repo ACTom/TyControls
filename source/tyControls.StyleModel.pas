@@ -24,14 +24,15 @@ type
     FBaseRules: TFPList;      // built-in default layer — owns TTyStyleRuleEntry
     FBaseVars: TStringList;   // built-in :root vars
     FMergedVars: TStringList; // FBaseVars (+) FVars, user wins; rebuilt on load/clear
+    FVersion: Cardinal;       // bumped on every load/clear; the §3.8 switch/cache anchor
     procedure ClearList(ARules: TFPList);
     procedure RebuildMergedVars;
     procedure ValidateRules(ARules: TFPList; AVars: TStrings);
     procedure LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string);
     procedure AddEntryTo(ARules: TFPList; const ATypeName, AVariant: string;
       AHasState: Boolean; AState: TTyState; const ADecls: array of TTyCssDeclaration);
-    function FindEntryIn(ARules: TFPList; const ATypeName, AVariant: string;
-      AHasState: Boolean; AState: TTyState): TTyStyleRuleEntry;
+    procedure ApplyAllMatching(ARules: TFPList; const ATypeName, AVariant: string;
+      AHasState: Boolean; AState: TTyState; var AResult: TTyStyleSet);
     procedure ApplyEntry(var AResult: TTyStyleSet; AEntry: TTyStyleRuleEntry);
     procedure ResolveLayer(ARules: TFPList; const ATypeKey, AStyleClass: string;
       AStates: TTyStateSet; var AResult: TTyStyleSet);
@@ -44,6 +45,7 @@ type
     procedure LoadFromFile(const AFileName: string);
     function ResolveStyle(const ATypeKey, AStyleClass: string; AStates: TTyStateSet): TTyStyleSet;
     function MaxGlassBlur: Integer;   // largest glass-blur any active rule requests (0 = none)
+    property ThemeVersion: Cardinal read FVersion;  // bumps on every load/clear
   end;
 
 procedure TyMergeStyleSet(var ABase: TTyStyleSet; const AOver: TTyStyleSet);
@@ -611,6 +613,7 @@ begin
   ClearList(FRules);
   FVars.Clear;
   RebuildMergedVars;
+  Inc(FVersion);
 end;
 
 procedure TTyStyleModel.ClearList(ARules: TFPList);
@@ -664,19 +667,23 @@ begin
   ARules.Add(e);
 end;
 
-function TTyStyleModel.FindEntryIn(ARules: TFPList; const ATypeName, AVariant: string;
-  AHasState: Boolean; AState: TTyState): TTyStyleRuleEntry;
+procedure TTyStyleModel.ApplyAllMatching(ARules: TFPList; const ATypeName, AVariant: string;
+  AHasState: Boolean; AState: TTyState; var AResult: TTyStyleSet);
+{ Apply EVERY matching entry's decls in list (FORWARD) order, so a later-appended
+  entry (additive load / @import / a duplicate rule) overwrites only the properties it
+  sets — per-property merge within a layer. Single-load themes have one entry per slot,
+  so this degenerates to apply-one (golden unchanged); TestDuplicateRuleLastWins still
+  passes (both entries apply forward, the later overwrites the field). }
 var
   i: Integer;
   e: TTyStyleRuleEntry;
 begin
-  Result := nil;
-  for i := ARules.Count - 1 downto 0 do   // backward = last-defined duplicate wins
+  for i := 0 to ARules.Count - 1 do
   begin
     e := TTyStyleRuleEntry(ARules[i]);
     if SameText(e.TypeName, ATypeName) and SameText(e.Variant, AVariant)
        and (e.HasState = AHasState) and ((not AHasState) or (e.State = AState)) then
-      Exit(e);
+      ApplyEntry(AResult, e);
   end;
 end;
 
@@ -761,6 +768,7 @@ begin
   end;
   tmpRules.Free; tmpVars.Free; tmpMerged.Free;
   RebuildMergedVars;   // base (+) user, for resolve-time evaluation
+  Inc(FVersion);       // §3.8: every load bumps the version (cache/switch anchor)
 end;
 
 procedure TTyStyleModel.LoadFromCss(const ASource: string);
@@ -825,7 +833,6 @@ const
   cStateOrder: array[0..3] of TTyState = (tysHover, tysFocused, tysActive, tysDisabled);
 var
   variants: TStringList;
-  e: TTyStyleRuleEntry;
   vi, si: Integer;
   v: string;
   st: TTyState;
@@ -836,15 +843,13 @@ begin
     variants.StrictDelimiter := False; // collapse multiple spaces
     variants.DelimitedText := Trim(AStyleClass);
     // 1) type base rule (no variant, no state)
-    e := FindEntryIn(ARules, ATypeKey, '', False, tysNormal);
-    if e <> nil then ApplyEntry(AResult, e);
+    ApplyAllMatching(ARules, ATypeKey, '', False, tysNormal, AResult);
     // 2) each variant token, in textual order, base-state rule (TypeName.variant)
     for vi := 0 to variants.Count - 1 do
     begin
       v := Trim(variants[vi]);
       if v = '' then Continue;
-      e := FindEntryIn(ARules, ATypeKey, v, False, tysNormal);
-      if e <> nil then ApplyEntry(AResult, e);
+      ApplyAllMatching(ARules, ATypeKey, v, False, tysNormal, AResult);
     end;
     // 3) state layers present in AStates, in fixed order;
     //    for each state apply TypeName:state then each TypeName.variant:state
@@ -852,14 +857,12 @@ begin
     begin
       st := cStateOrder[si];
       if not (st in AStates) then Continue;
-      e := FindEntryIn(ARules, ATypeKey, '', True, st);
-      if e <> nil then ApplyEntry(AResult, e);
+      ApplyAllMatching(ARules, ATypeKey, '', True, st, AResult);
       for vi := 0 to variants.Count - 1 do
       begin
         v := Trim(variants[vi]);
         if v = '' then Continue;
-        e := FindEntryIn(ARules, ATypeKey, v, True, st);
-        if e <> nil then ApplyEntry(AResult, e);
+        ApplyAllMatching(ARules, ATypeKey, v, True, st, AResult);
       end;
     end;
   finally
