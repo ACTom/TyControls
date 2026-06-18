@@ -294,3 +294,47 @@ TyScrollThumb { background: var(--scroll-handle); border-radius: var(--radius-sc
 TyScrollThumb:hover  { background: var(--scroll-handle-hover); }
 TyScrollThumb:active { background: var(--accent); }
 TyToggleKnob  { background: #FFFFFF; border-radius: var(--radius-round); }
+
+/* ── Menu system ───────────────────────────────────────────────────────── */
+
+/* The top application-menu bar (TTyMenuBar surface). */
+TyMenuBar {
+  background: var(--titlebar-bg);
+  color: var(--on-surface);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  padding: 2px;
+}
+
+/* The dropdown/context popup surface (TTyMenuView, the rendered popup body).
+   TyMenuPopup mirrors it for the popup-host selector named in the spec. */
+TyMenuView {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 4px;
+}
+TyMenuPopup {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 4px;
+}
+
+/* A single menu row / bar cell. The base border-color is the separator-line ink. */
+TyMenuItem {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+}
+TyMenuItem:hover    { background: var(--surface-hover); }
+TyMenuItem:active   { background: var(--accent); color: var(--on-accent); }
+TyMenuItem:disabled { color: var(--muted); }

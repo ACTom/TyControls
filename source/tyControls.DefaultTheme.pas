@@ -312,7 +312,51 @@ begin
     'TyScrollThumb { background: var(--scroll-handle); border-radius: var(--radius-scroll); }' + LineEnding +
     'TyScrollThumb:hover  { background: var(--scroll-handle-hover); }' + LineEnding +
     'TyScrollThumb:active { background: var(--accent); }' + LineEnding +
-    'TyToggleKnob  { background: #FFFFFF; border-radius: var(--radius-round); }' + LineEnding;
+    'TyToggleKnob  { background: #FFFFFF; border-radius: var(--radius-round); }' + LineEnding +
+    '' + LineEnding +
+    '/* ── Menu system ───────────────────────────────────────────────────────── */' + LineEnding +
+    '' + LineEnding +
+    '/* The top application-menu bar (TTyMenuBar surface). */' + LineEnding +
+    'TyMenuBar {' + LineEnding +
+    '  background: var(--titlebar-bg);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-normal);' + LineEnding +
+    '  padding: 2px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* The dropdown/context popup surface (TTyMenuView, the rendered popup body).' + LineEnding +
+    '   TyMenuPopup mirrors it for the popup-host selector named in the spec. */' + LineEnding +
+    'TyMenuView {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 4px;' + LineEnding +
+    '}' + LineEnding +
+    'TyMenuPopup {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 4px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* A single menu row / bar cell. The base border-color is the separator-line ink. */' + LineEnding +
+    'TyMenuItem {' + LineEnding +
+    '  background: alpha(#FFFFFF, 0);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-radius: var(--radius-sm);' + LineEnding +
+    '  padding: 4px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-normal);' + LineEnding +
+    '}' + LineEnding +
+    'TyMenuItem:hover    { background: var(--surface-hover); }' + LineEnding +
+    'TyMenuItem:active   { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    'TyMenuItem:disabled { color: var(--muted); }' + LineEnding;
 end;
 
 end.

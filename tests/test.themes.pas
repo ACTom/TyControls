@@ -369,7 +369,7 @@ begin
 end;
 
 const
-  GGRID: array[0..32] of string = (
+  GGRID: array[0..36] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
@@ -377,7 +377,8 @@ const
     'TyListBox|', 'TyListItem|', 'TyProgressBar|', 'TyProgressFill|',
     'TyToggleSwitch|', 'TyToggleKnob|', 'TyTrackBar|', 'TyTrackThumb|',
     'TyGroupBox|', 'TyTabControl|', 'TyTab|', 'TyTabClose|', 'TySpinEdit|',
-    'TyMemo|', 'TyTextSelection|', 'TyTextHint|');
+    'TyMemo|', 'TyTextSelection|', 'TyTextHint|',
+    'TyMenuBar|', 'TyMenuItem|', 'TyMenuPopup|', 'TyMenuView|');
 
 function TTestThemeGolden.ThemePath(const AName: string): string;
 begin
