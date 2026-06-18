@@ -7,6 +7,22 @@ type
   published
     procedure TestBuildRowsMapsFields;
   end;
+
+  { Probe subclass: exposes TTyMenuView's protected geometry seams so the pure
+    measure/hit-test logic is exercised headlessly (no window handle). }
+  TTyMenuViewAccess = class(TTyMenuView)
+  public
+    function RowCount: Integer;
+    function MeasureHeight(APPI: Integer): Integer;
+    function RowTop(AIndex, APPI: Integer): Integer;
+    function RowAtY(AY, APPI: Integer): Integer;
+  end;
+
+  TMenuViewTest = class(TTestCase)
+  published
+    procedure TestMeasureAndHitTest;
+  end;
+
 implementation
 
 procedure TMenuModelTest.TestBuildRowsMapsFields;
@@ -37,6 +53,53 @@ begin
   end;
 end;
 
+{ TTyMenuViewAccess }
+
+function TTyMenuViewAccess.RowCount: Integer;
+begin
+  Result := inherited RowCount;
+end;
+
+function TTyMenuViewAccess.MeasureHeight(APPI: Integer): Integer;
+begin
+  Result := inherited MeasureHeight(APPI);
+end;
+
+function TTyMenuViewAccess.RowTop(AIndex, APPI: Integer): Integer;
+begin
+  Result := inherited RowTop(AIndex, APPI);
+end;
+
+function TTyMenuViewAccess.RowAtY(AY, APPI: Integer): Integer;
+begin
+  Result := inherited RowAtY(AY, APPI);
+end;
+
+{ TMenuViewTest }
+
+procedure TMenuViewTest.TestMeasureAndHitTest;
+var v: TTyMenuViewAccess; mm: TMainMenu; top: TMenuItem;
+begin
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); top.Caption := 'Edit'; mm.Items.Add(top);
+    top.Add(NewItem('Cut',  0, False, True, nil, 0, ''));
+    top.Add(NewLine);
+    top.Add(NewItem('Copy', 0, False, True, nil, 0, ''));
+    v := TTyMenuViewAccess.Create(nil);
+    try
+      v.SetRows(TyBuildMenuRows(top));
+      AssertEquals('3 rows', 3, v.RowCount);
+      // height = item rows * itemH + separators * sepH (+ vertical padding); just assert > 0 + monotonic
+      AssertTrue('height positive', v.MeasureHeight(96) > 0);
+      // hit-test: y inside row 0 maps to 0; the separator row reports -1 (not selectable)
+      AssertEquals('row 0 hit', 0, v.RowAtY(v.RowTop(0, 96) + 1, 96));
+      AssertEquals('separator not selectable', -1, v.RowAtY(v.RowTop(1, 96) + 1, 96));
+    finally v.Free; end;
+  finally mm.Free; end;
+end;
+
 initialization
   RegisterTest(TMenuModelTest);
+  RegisterTest(TMenuViewTest);
 end.

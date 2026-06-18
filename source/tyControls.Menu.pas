@@ -4,6 +4,15 @@ interface
 uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, Menus,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 
+const
+  { Layout metrics (logical px, 96-PPI baseline). These are spacing/size tokens, not
+    visual colors — every call site scales them via TTyPainter.Scale / MulDiv(.,APPI,96).
+    Visual values (colors, fonts, padding) all come from .tycss tokens, never from here. }
+  TyMenuSeparatorHeight = 7;   // vertical slot a separator row occupies (the line is centered in it)
+  TyMenuArrowSlot       = 16;  // width reserved at the right for a submenu ▸ arrow
+  TyMenuCheckSlot       = 18;  // width reserved at the left for a check/radio glyph
+  TyMenuShortcutGap     = 24;  // min gap between caption and the right-aligned shortcut text
+
 type
   TTyMenuRowKind = (mrkItem, mrkSeparator);
   TTyMenuRow = record
@@ -22,7 +31,37 @@ type
 { Flatten a root TMenuItem's visible children into render rows. Caption '-' => separator. }
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
 
+type
+  { Themed renderer for a TTyMenuRowArray. Shared by the bar dropdown, submenu
+    cascade and context menu (each hosted in a TTyMenuPopup — Tasks 4/5/7). It owns
+    no window of its own logic: geometry is pure (MeasureHeight/RowTop/RowAtY take an
+    APPI and are headless-testable, mirroring TTyComboBox.ComputePopupHeight), and
+    pixels go through RenderTo following the TToggleSwitch painter idiom. All visual
+    values (bg/text/padding/highlight) are resolved from the TyMenuPopup/TyMenuItem
+    .tycss tokens — never hard-coded here. }
+  TTyMenuView = class(TTyCustomControl)
+  private
+    FRows: TTyMenuRowArray;
+    FHighlight: Integer;
+    function ItemRowHeight(APPI: Integer): Integer;
+  protected
+    function GetStyleTypeKey: string; override;
+    { Pure geometry seams (device px), driven by theme tokens + the layout metrics. }
+    function RowCount: Integer;
+    function MeasureHeight(APPI: Integer): Integer;
+    function RowTop(AIndex, APPI: Integer): Integer;
+    { Device-y -> row index, or -1 for a separator / out-of-range (not selectable). }
+    function RowAtY(AY, APPI: Integer): Integer;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure Paint; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    procedure SetRows(const ARows: TTyMenuRowArray);
+  end;
+
 implementation
+
+uses Math;
 
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
 var i, n: Integer; mi: TMenuItem;
@@ -54,4 +93,202 @@ begin
   end;
   SetLength(Result, n);
 end;
+
+{ TTyMenuView }
+
+constructor TTyMenuView.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  SetLength(FRows, 0);
+  FHighlight := -1;
+end;
+
+function TTyMenuView.GetStyleTypeKey: string;
+begin
+  Result := 'TyMenuView';
+end;
+
+procedure TTyMenuView.SetRows(const ARows: TTyMenuRowArray);
+begin
+  FRows := Copy(ARows, 0, Length(ARows));
+  FHighlight := -1;
+  Invalidate;
+end;
+
+function TTyMenuView.RowCount: Integer;
+begin
+  Result := Length(FRows);
+end;
+
+{ A normal item row is exactly tall enough for one line of text plus the TyMenuItem
+  top+bottom padding — both sourced from the resolved theme style, so the row height
+  tracks the theme's font-size and padding rather than any literal here. }
+function TTyMenuView.ItemRowHeight(APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+  fontLogical, textPx, padPx: Integer;
+begin
+  S := ActiveController.Model.ResolveStyle('TyMenuItem', '', []);
+  fontLogical := S.FontSize;
+  if fontLogical <= 0 then fontLogical := ResolveFontSize(S);
+  if fontLogical <= 0 then fontLogical := 9;
+  // Same logical->device text-height formula the painter uses for FontHeight.
+  textPx := MulDiv(Round(fontLogical * 96 / 72), APPI, 96);
+  padPx := MulDiv(S.Padding.Top, APPI, 96) + MulDiv(S.Padding.Bottom, APPI, 96);
+  Result := textPx + padPx;
+  if Result < 1 then Result := 1;
+end;
+
+function TTyMenuView.MeasureHeight(APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+  i, itemH: Integer;
+begin
+  // Vertical chrome = the TyMenuView (popup) top+bottom padding.
+  S := CurrentStyle;
+  Result := MulDiv(S.Padding.Top, APPI, 96) + MulDiv(S.Padding.Bottom, APPI, 96);
+  itemH := ItemRowHeight(APPI);
+  for i := 0 to High(FRows) do
+    if FRows[i].Kind = mrkSeparator then
+      Inc(Result, MulDiv(TyMenuSeparatorHeight, APPI, 96))
+    else
+      Inc(Result, itemH);
+end;
+
+function TTyMenuView.RowTop(AIndex, APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+  i, itemH: Integer;
+begin
+  S := CurrentStyle;
+  Result := MulDiv(S.Padding.Top, APPI, 96);
+  itemH := ItemRowHeight(APPI);
+  for i := 0 to AIndex - 1 do
+  begin
+    if (i < 0) or (i > High(FRows)) then Break;
+    if FRows[i].Kind = mrkSeparator then
+      Inc(Result, MulDiv(TyMenuSeparatorHeight, APPI, 96))
+    else
+      Inc(Result, itemH);
+  end;
+end;
+
+function TTyMenuView.RowAtY(AY, APPI: Integer): Integer;
+var
+  i, rowT, h, itemH, sepH: Integer;
+begin
+  Result := -1;
+  itemH := ItemRowHeight(APPI);
+  sepH := MulDiv(TyMenuSeparatorHeight, APPI, 96);
+  for i := 0 to High(FRows) do
+  begin
+    rowT := RowTop(i, APPI);
+    if FRows[i].Kind = mrkSeparator then h := sepH else h := itemH;
+    if (AY >= rowT) and (AY < rowT + h) then
+    begin
+      // Separators are not selectable.
+      if FRows[i].Kind = mrkSeparator then Exit(-1);
+      Exit(i);
+    end;
+  end;
+end;
+
+procedure TTyMenuView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+var
+  P: TTyPainter;
+  S, RowStyle: TTyStyleSet;
+  R, RowRect, TextRect: TRect;
+  i, itemH, sepH, padL, padR, leftSlot, rightSlot, capWeight: Integer;
+  RowStates: TTyStateSet;
+  SepFill: TTyFill;
+  SepY: Integer;
+begin
+  P := TTyPainter.Create;
+  try
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI);
+    // Surface: the TyMenuView (popup) background/border/radius from its own tokens.
+    S := CurrentStyle;
+    DrawFrame(P, R, S);
+
+    itemH := ItemRowHeight(APPI);
+    sepH := MulDiv(TyMenuSeparatorHeight, APPI, 96);
+    leftSlot := P.Scale(TyMenuCheckSlot);
+    rightSlot := P.Scale(TyMenuArrowSlot);
+
+    for i := 0 to High(FRows) do
+    begin
+      if FRows[i].Kind = mrkSeparator then
+      begin
+        // A 1px themed line centered in the separator slot, using the TyMenuItem
+        // border color (a structural divider color, not a hard-coded value).
+        RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', []);
+        SepY := RowTop(i, APPI) + sepH div 2;
+        SepFill := Default(TTyFill);
+        SepFill.Kind := tfkSolid;
+        SepFill.Color := RowStyle.BorderColor;
+        P.FillBackground(Rect(R.Left + P.Scale(S.Padding.Left), SepY,
+          R.Right - P.Scale(S.Padding.Right), SepY + Max(1, P.Scale(1))), SepFill, 0);
+        Continue;
+      end;
+
+      // Resolve TyMenuItem in the row's interaction state.
+      RowStates := [];
+      if not FRows[i].Enabled then
+        Include(RowStates, tysDisabled)
+      else if i = FHighlight then
+        Include(RowStates, tysActive)
+      else
+        Include(RowStates, tysNormal);
+      RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', RowStates);
+
+      RowRect := Rect(R.Left + P.Scale(S.Padding.Left), RowTop(i, APPI),
+        R.Right - P.Scale(S.Padding.Right), RowTop(i, APPI) + itemH);
+
+      if tpBackground in RowStyle.Present then
+        P.FillBackground(RowRect, RowStyle.Background, RowStyle.BorderRadius);
+
+      padL := P.Scale(RowStyle.Padding.Left);
+      padR := P.Scale(RowStyle.Padding.Right);
+
+      // Check / radio glyph in the left slot.
+      if FRows[i].Checked then
+      begin
+        if FRows[i].RadioItem then
+          P.DrawGlyph(Rect(RowRect.Left + padL, RowRect.Top, RowRect.Left + padL + leftSlot,
+            RowRect.Bottom), tgRadioDot, RowStyle.TextColor, 2)
+        else
+          P.DrawGlyph(Rect(RowRect.Left + padL, RowRect.Top, RowRect.Left + padL + leftSlot,
+            RowRect.Bottom), tgCheck, RowStyle.TextColor, 2);
+      end;
+
+      // Caption: left-aligned after the check slot, ellipsized before the right slot.
+      // A DefaultItem renders bold; otherwise honour the theme's font-weight.
+      if FRows[i].DefaultItem then capWeight := 700 else capWeight := RowStyle.FontWeight;
+      TextRect := Rect(RowRect.Left + padL + leftSlot, RowRect.Top,
+        RowRect.Right - padR - rightSlot, RowRect.Bottom);
+      P.DrawText(TextRect, FRows[i].Caption, RowStyle.FontName, ResolveFontSize(RowStyle),
+        capWeight, RowStyle.TextColor, taLeftJustify, tlCenter, True);
+
+      // Submenu arrow OR the right-aligned shortcut text in the right slot.
+      if FRows[i].HasSubmenu then
+        P.DrawGlyph(Rect(RowRect.Right - rightSlot, RowRect.Top, RowRect.Right, RowRect.Bottom),
+          tgArrowRight, RowStyle.TextColor, 2)
+      else if FRows[i].ShortcutText <> '' then
+        P.DrawText(Rect(RowRect.Left, RowRect.Top, RowRect.Right - padR, RowRect.Bottom),
+          FRows[i].ShortcutText, RowStyle.FontName, ResolveFontSize(RowStyle),
+          RowStyle.FontWeight, RowStyle.TextColor, taRightJustify, tlCenter, False);
+    end;
+
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyMenuView.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
 end.
