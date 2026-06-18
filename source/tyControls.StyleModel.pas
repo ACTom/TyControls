@@ -25,6 +25,7 @@ type
     FBaseVars: TStringList;   // built-in :root vars
     FMergedVars: TStringList; // FBaseVars (+) FVars, user wins; rebuilt on load/clear
     FVersion: Cardinal;       // bumped on every load/clear; the §3.8 switch/cache anchor
+    FPropertyCascade: Boolean; // A7: False=all-or-nothing (default, golden); True=base->user per-prop merge
     procedure ClearList(ARules: TFPList);
     procedure RebuildMergedVars;
     procedure ValidateRules(ARules: TFPList; AVars: TStrings);
@@ -51,6 +52,12 @@ type
     function ResolveStyle(const ATypeKey, AStyleClass: string; AStates: TTyStateSet): TTyStyleSet;
     function MaxGlassBlur: Integer;   // largest glass-blur any active rule requests (0 = none)
     property ThemeVersion: Cardinal read FVersion;  // bumps on every load/clear
+    { A7 property cascade. False (default) = today's all-or-nothing: a user rule for a
+      typeKey suppresses the ENTIRE built-in layer for that typeKey (golden baseline).
+      True = ResolveStyle ALWAYS applies the base layer then the user layer, so a thin
+      theme that sets only one property inherits the base's other properties (省略=继承,
+      D4). Default stays False so the golden is byte-identical until a theme opts in. }
+    property PropertyCascade: Boolean read FPropertyCascade write FPropertyCascade;
   end;
 
 procedure TyMergeStyleSet(var ABase: TTyStyleSet; const AOver: TTyStyleSet);
@@ -916,7 +923,9 @@ var
   u, b: Integer;
 begin
   u := ScanLayer(FRules, False);
-  b := ScanLayer(FBaseRules, True);
+  // A7: with property cascade ON, base entries are NOT suppressed by a user typeKey
+  // (ResolveStyle always applies the base layer), so base glass-blur must count too.
+  b := ScanLayer(FBaseRules, not FPropertyCascade);
   if u > b then Result := u else Result := b;
 end;
 
@@ -986,12 +995,13 @@ function TTyStyleModel.ResolveStyle(const ATypeKey, AStyleClass: string;
   AStates: TTyStateSet): TTyStyleSet;
 begin
   Result := EmptyStyleSet;
-  { Built-in default layer applies only when the user theme defines NO rule for
-    this typeKey — so a fully-themed control is untouched (no property bleed),
-    while an unstyled/partially-themed control still gets a sensible default. Both
-    layers' raw declarations evaluate against the MERGED vars, so overriding a seed
-    reaches base rules (the D2 unlock). }
-  if not UserHasTypeKey(ATypeKey) then
+  { A7. With PropertyCascade OFF (default) the built-in default layer applies only
+    when the user theme defines NO rule for this typeKey — all-or-nothing: a fully-
+    themed control gets no base bleed; the golden baseline. With PropertyCascade ON
+    the base layer ALWAYS applies first, then the user layer overwrites per-property
+    (omitted user props inherit the base; 省略=继承, D4). Both layers' raw declarations
+    evaluate against the MERGED vars, so overriding a seed reaches base rules (D2). }
+  if FPropertyCascade or not UserHasTypeKey(ATypeKey) then
     ResolveLayer(FBaseRules, ATypeKey, AStyleClass, AStates, Result);
   ResolveLayer(FRules, ATypeKey, AStyleClass, AStates, Result);
 end;

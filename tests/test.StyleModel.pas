@@ -45,6 +45,21 @@ type
     procedure TestAdditiveLoad;
   end;
 
+  { Phase 2 (theme v2): property cascade (A7) — base->user per-property merge behind a flag }
+  TTestStylePropertyCascade = class(TTestCase)
+  private
+    FModel: TTyStyleModel;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestDefaultFlagOff;
+    procedure TestFlagOffAllOrNothing;
+    procedure TestFlagOnThinThemeInheritsBase;
+    procedure TestFlagOnUserOverridesPerProperty;
+    procedure TestFlagOnUserLayerStillWinsLastDuplicate;
+  end;
+
   { Phase 2 (theme v2): @import (A8) — file-level compose, cycle guard, diamond dedup }
   TTestStyleImport = class(TTestCase)
   private
@@ -358,6 +373,85 @@ const
     '  opacity: 0.5;' + LineEnding +
     '  background: #111111;' + LineEnding +
     '}' + LineEnding;
+
+{ ── property cascade (A7) ───────────────────────────────────────────────────── }
+
+procedure TTestStylePropertyCascade.SetUp;
+begin
+  FModel := TTyStyleModel.Create;   // built-in base layer seeded (TyButton has bg+border+...)
+end;
+
+procedure TTestStylePropertyCascade.TearDown;
+begin
+  FModel.Free;
+end;
+
+procedure TTestStylePropertyCascade.TestDefaultFlagOff;
+begin
+  // The flag defaults OFF so the golden baseline (all-or-nothing) is preserved.
+  AssertFalse('PropertyCascade defaults False', FModel.PropertyCascade);
+end;
+
+procedure TTestStylePropertyCascade.TestFlagOffAllOrNothing;
+var s: TTyStyleSet;
+begin
+  // Flag OFF (default): a thin user TyButton rule touching only color SUPPRESSES the
+  // entire built-in base TyButton layer for that typeKey — base background/border do
+  // NOT bleed in. This is the unchanged pre-A7 behavior the golden depends on.
+  FModel.LoadFromCss('TyButton { color: #FF0000; }');
+  s := FModel.ResolveStyle('TyButton', '', []);
+  AssertEquals('user color applied', $FF, TyRedOf(s.TextColor));
+  AssertFalse('base background suppressed (all-or-nothing)', tpBackground in s.Present);
+  AssertFalse('base border-color suppressed (all-or-nothing)', tpBorderColor in s.Present);
+  AssertFalse('base border-width suppressed (all-or-nothing)', tpBorderWidth in s.Present);
+end;
+
+procedure TTestStylePropertyCascade.TestFlagOnThinThemeInheritsBase;
+var s: TTyStyleSet;
+begin
+  // Flag ON: a thin theme that sets ONLY color on TyButton inherits the base's other
+  // properties (background + border-color + border-width + border-radius), the
+  // headline A7 win (省略=继承, D4). Built-in base TyButton supplies all of these.
+  FModel.PropertyCascade := True;
+  FModel.LoadFromCss('TyButton { color: #FF0000; }');
+  s := FModel.ResolveStyle('TyButton', '', []);
+  AssertEquals('user color wins', $FF, TyRedOf(s.TextColor));
+  AssertTrue('base background inherited', tpBackground in s.Present);
+  AssertTrue('base border-color inherited', tpBorderColor in s.Present);
+  AssertTrue('base border-width inherited', tpBorderWidth in s.Present);
+  AssertTrue('base border-radius inherited', tpBorderRadius in s.Present);
+end;
+
+procedure TTestStylePropertyCascade.TestFlagOnUserOverridesPerProperty;
+var sBase, s: TTyStyleSet;
+begin
+  // Flag ON: the user layer still overwrites the properties it DOES set, per-property.
+  // background is set by both base and the thin theme -> user value (#123456) wins;
+  // border-width is set only by base -> inherited unchanged.
+  sBase := FModel.ResolveStyle('TyButton', '', []);   // base-only (no user theme yet)
+  FModel.PropertyCascade := True;
+  FModel.LoadFromCss('TyButton { background: #123456; }');
+  s := FModel.ResolveStyle('TyButton', '', []);
+  AssertTrue('background present', tpBackground in s.Present);
+  AssertTrue('user background solid', s.Background.Kind = tfkSolid);
+  AssertEquals('user background red', $12, TyRedOf(s.Background.Color));
+  AssertEquals('user background green', $34, TyGreenOf(s.Background.Color));
+  AssertEquals('user background blue', $56, TyBlueOf(s.Background.Color));
+  AssertTrue('base border-width still inherited', tpBorderWidth in s.Present);
+  AssertEquals('inherited border-width matches base', sBase.BorderWidth, s.BorderWidth);
+end;
+
+procedure TTestStylePropertyCascade.TestFlagOnUserLayerStillWinsLastDuplicate;
+var s: TTyStyleSet;
+begin
+  // Flag ON: the user layer is applied AFTER the base layer, so a user color overrides
+  // the base color; and within the user layer apply-all-forward keeps last-duplicate-wins.
+  FModel.PropertyCascade := True;
+  FModel.LoadFromCss('TyButton { color: #111111; } TyButton { color: #222222; }');
+  s := FModel.ResolveStyle('TyButton', '', []);
+  AssertEquals('user last-duplicate color wins over base', $22, TyRedOf(s.TextColor));
+  AssertTrue('base background still inherited under cascade', tpBackground in s.Present);
+end;
 
 { ── @import (A8) ──────────────────────────────────────────────────────────── }
 
@@ -856,6 +950,7 @@ initialization
   RegisterTest(TTestStyleMerge);
   RegisterTest(TTestStylePhase0);
   RegisterTest(TTestStyleLoad);
+  RegisterTest(TTestStylePropertyCascade);
   RegisterTest(TTestStyleImport);
   RegisterTest(TTestStyleResolve);
   RegisterTest(TTestStyleShadow);
