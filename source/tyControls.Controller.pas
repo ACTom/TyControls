@@ -2,7 +2,7 @@ unit tyControls.Controller;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Controls, Forms,
+  Classes, SysUtils, Controls, Forms, ExtCtrls,
   tyControls.Types, tyControls.StyleModel, tyControls.Painter,
   tyControls.ThemeRegistry, tyControls.SystemTheme;
 
@@ -30,11 +30,20 @@ type
     FThemeName: string;
     FControls: TFPList;
     FFollow: TTyThemeFollow;
+    FHotReload: Boolean;
+    FWatchTimer: TTimer;         // E23/DX: lazily created watch driver (nil until armed)
+    FWatchAge: LongInt;          // last-seen FileAge of FThemeFile (-1 = unknown/missing)
+    FWatchSize: Int64;           // last-seen size of FThemeFile (-1 = unknown/missing)
+    FInPoll: Boolean;            // reentrancy guard for PollThemeFile
     procedure SetThemeFile(const AValue: string);
     procedure SetThemeName(const AValue: string);
     function GetMode: string;
     procedure SetMode(const AValue: string);
     procedure SetFollow(const AValue: TTyThemeFollow);
+    procedure SetHotReload(const AValue: Boolean);
+    procedure UpdateWatch;                  // (re)arm or disarm the watch per state
+    procedure CaptureFileStamp;             // snapshot FWatchAge/FWatchSize of ThemeFile
+    procedure HandleWatchTimer(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -52,6 +61,17 @@ type
       tfManual, so an app that drives Mode/ThemeName explicitly is never overridden.
       This is the method the live WndProc OS-change hook (TTyForm) calls. }
     procedure RefreshFromSystem;
+    { E23 (DX) hot-reload core. Re-check the watched ThemeFile's last-modified stamp
+      (FileAge) + size against the snapshot taken at the last load/poll; if EITHER
+      differs the file content changed, so reload it (LoadTheme -> Changed) and return
+      True. Returns False when nothing changed, when HotReload is off, when no ThemeFile
+      is set, or when the file is currently missing (skip silently — a save-in-progress
+      may transiently unlink it; no raise). A reload that FAILS to parse is caught: the
+      previous theme stays active (LoadTheme/LoadInto's fail-fast-keeps-previous contract)
+      and the bad stamp is still recorded so the same broken content is not retried every
+      tick (the next GOOD save differs again and reloads). Reentrancy-guarded. This is the
+      fully headless-testable seam: tests call it directly instead of pumping a GUI loop. }
+    function PollThemeFile: Boolean;
   published
     property ThemeFile: string read FThemeFile write SetThemeFile;
     { B (Phase 2): switch theme by registered NAME. Resolves via TyResolveTheme and
@@ -71,7 +91,18 @@ type
       while this is tfFollowSystem. A later explicit Mode/ThemeName set still wins (manual
       override), and remains until the next RefreshFromSystem. }
     property Follow: TTyThemeFollow read FFollow write SetFollow default tfManual;
+    { E23 (DX) hot-reload. False (default). When True AND ThemeFile is set, the controller
+      watches that file's content (last-modified stamp + size) and, on change, reloads the
+      theme and repaints registered controls. The watch is driven at runtime by a lazily
+      created TTimer (default 750ms) that simply calls PollThemeFile on each tick; the timer
+      exists only while HotReload is True and a ThemeFile is set, and is freed otherwise.
+      The TIMER firing needs a running GUI message loop; the change-detect + reload logic is
+      fully exercised headless via the public PollThemeFile (drive it directly in tests). }
+    property HotReload: Boolean read FHotReload write SetHotReload default False;
   end;
+
+const
+  cTyHotReloadPollMs = 750;   // watch-timer interval while HotReload is armed
 
 function TyDefaultController: TTyStyleController;
 
@@ -101,6 +132,7 @@ end;
 
 destructor TTyStyleController.Destroy;
 begin
+  FWatchTimer.Free;   // nil-safe; disarms the hot-reload watch
   FControls.Free;
   FModel.Free;
   inherited Destroy;
@@ -112,7 +144,14 @@ begin
   FThemeFile := AValue;
   FThemeName := '';   // ThemeFile/ThemeName are mutually exclusive sources for layer-1
   if (AValue <> '') and FileExists(AValue) then
-    LoadTheme(AValue);
+    LoadTheme(AValue)
+  else
+  begin
+    // No load happened (cleared, or missing file): re-arm the watch against the new
+    // target so a later appearance of the file is picked up by PollThemeFile.
+    CaptureFileStamp;
+    UpdateWatch;
+  end;
 end;
 
 procedure TTyStyleController.SetThemeName(const AValue: string);
@@ -122,6 +161,9 @@ begin
   if FThemeName = AValue then Exit;
   FThemeName := AValue;
   FThemeFile := '';   // ThemeFile/ThemeName are mutually exclusive sources for layer-1
+  // Switching to a named theme drops the file source: disarm the hot-reload watch
+  // (nothing to watch — FThemeFile is now empty).
+  UpdateWatch;
   if (AValue <> '') and TyResolveTheme(AValue, src) and (src <> '')
      and FileExists(src) then
   begin
@@ -174,11 +216,113 @@ begin
   Changed;
 end;
 
+procedure TTyStyleController.SetHotReload(const AValue: Boolean);
+begin
+  if FHotReload = AValue then Exit;
+  FHotReload := AValue;
+  // Snapshot the current file state on arming so an immediate poll won't false-fire,
+  // then (re)arm or disarm the runtime watch timer.
+  CaptureFileStamp;
+  UpdateWatch;
+end;
+
+procedure TTyStyleController.CaptureFileStamp;
+{ Snapshot the watched file's last-modified stamp + size as the change baseline.
+  A missing/empty target yields (-1, -1); FileAge already returns -1 for a missing
+  file, so a file that later appears differs from the baseline and triggers a load. }
+var sr: TSearchRec;
+begin
+  FWatchAge := -1;
+  FWatchSize := -1;
+  if (FThemeFile = '') or not FileExists(FThemeFile) then Exit;
+  FWatchAge := FileAge(FThemeFile);
+  if FindFirst(FThemeFile, faAnyFile, sr) = 0 then
+  begin
+    FWatchSize := sr.Size;
+    FindClose(sr);
+  end;
+end;
+
+procedure TTyStyleController.UpdateWatch;
+{ Arm the watch timer exactly when HotReload is on AND a ThemeFile is set; free it
+  otherwise. The timer is the runtime-only driver — each tick calls PollThemeFile. It
+  is created lazily (never in a headless test that only drives PollThemeFile directly).
+  Creating it with no Owner keeps it off any form's component list; Destroy frees it. }
+begin
+  if FHotReload and (FThemeFile <> '') then
+  begin
+    if FWatchTimer = nil then
+    begin
+      FWatchTimer := TTimer.Create(nil);
+      FWatchTimer.Enabled := False;
+      FWatchTimer.Interval := cTyHotReloadPollMs;
+      FWatchTimer.OnTimer := @HandleWatchTimer;
+    end;
+    FWatchTimer.Enabled := True;
+  end
+  else
+    FreeAndNil(FWatchTimer);
+end;
+
+procedure TTyStyleController.HandleWatchTimer(Sender: TObject);
+{ Runtime watch tick: re-check the file and reload iff it changed. The whole effect is
+  in PollThemeFile so the logic stays headless-testable; this just wires it to the clock. }
+begin
+  PollThemeFile;
+end;
+
+function TTyStyleController.PollThemeFile: Boolean;
+var
+  age: LongInt;
+  size: Int64;
+  sr: TSearchRec;
+begin
+  Result := False;
+  // Off / no target / reentrant -> no-op. The reentrancy guard matters because the
+  // reload calls Changed (-> control Invalidate), which under a live loop could pump.
+  if (not FHotReload) or (FThemeFile = '') or FInPoll then Exit;
+  // Missing file: skip silently (a save may transiently unlink/rename) — no raise.
+  if not FileExists(FThemeFile) then Exit;
+  // Read the current stamp + size; unchanged on BOTH -> nothing to do.
+  age := FileAge(FThemeFile);
+  size := -1;
+  if FindFirst(FThemeFile, faAnyFile, sr) = 0 then
+  begin
+    size := sr.Size;
+    FindClose(sr);
+  end;
+  if (age = FWatchAge) and (size = FWatchSize) then Exit;
+  // Content changed -> reload. Record the new stamp FIRST (even if the reload fails)
+  // so a broken save isn't retried every tick; the next good save differs again.
+  FWatchAge := age;
+  FWatchSize := size;
+  FInPoll := True;
+  try
+    try
+      FModel.LoadFromFile(FThemeFile);
+      // FThemeFile unchanged; named-theme already cleared when ThemeFile was set.
+      Changed;
+      Result := True;
+    except
+      on E: Exception do
+        // Reload failed (bad theme): keep the previous theme (LoadFromFile fail-fast
+        // already left it intact) and do not crash. Result stays False.
+        ;
+    end;
+  finally
+    FInPoll := False;
+  end;
+end;
+
 procedure TTyStyleController.LoadTheme(const AFileName: string);
 begin
   FModel.LoadFromFile(AFileName);
   FThemeFile := AFileName;
   FThemeName := '';   // explicit file load supersedes any named-theme selection
+  // E23: snapshot the now-current file stamp so a later PollThemeFile only fires on a
+  // genuine post-load change, and (re)arm the watch against this freshly loaded file.
+  CaptureFileStamp;
+  UpdateWatch;
   Changed;
 end;
 
