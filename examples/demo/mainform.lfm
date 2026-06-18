@@ -1,11 +1,11 @@
 object DemoMainForm: TDemoMainForm
   Left = 200
-  Height = 1384
+  Height = 1440
   Top = 120
   Width = 1280
   BorderStyle = bsNone
   Caption = 'TyControls Demo'
-  ClientHeight = 1384
+  ClientHeight = 1440
   ClientWidth = 1280
   DesignTimePPI = 192
   LCLVersion = '4.4.0.0'
@@ -30,10 +30,20 @@ object DemoMainForm: TDemoMainForm
       Caption = 'TyButton1'
     end
   end
+  object TyMenuBar1: TTyMenuBar
+    Left = 0
+    Height = 48
+    Top = 64
+    Width = 1280
+    Align = alTop
+    TabOrder = 21
+    Controller = Controller
+    Menu = MainMenu1
+  end
   object BtnLight: TTyButton
     Left = 32
     Height = 60
-    Top = 100
+    Top = 156
     Width = 145
     TabOrder = 0
     OnClick = BtnLightClick
@@ -43,7 +53,7 @@ object DemoMainForm: TDemoMainForm
   object BtnDark: TTyButton
     Left = 185
     Height = 60
-    Top = 100
+    Top = 156
     Width = 145
     TabOrder = 1
     OnClick = BtnDarkClick
@@ -53,7 +63,7 @@ object DemoMainForm: TDemoMainForm
   object BtnShowcase: TTyButton
     Left = 338
     Height = 60
-    Top = 100
+    Top = 156
     Width = 145
     TabOrder = 2
     OnClick = BtnShowcaseClick
@@ -63,7 +73,7 @@ object DemoMainForm: TDemoMainForm
   object BtnGreen: TTyButton
     Left = 491
     Height = 60
-    Top = 100
+    Top = 156
     Width = 145
     TabOrder = 5
     OnClick = BtnGreenClick
@@ -73,7 +83,7 @@ object DemoMainForm: TDemoMainForm
   object BtnAuto: TTyButton
     Left = 644
     Height = 60
-    Top = 100
+    Top = 156
     Width = 145
     TabOrder = 19
     OnClick = BtnAutoClick
@@ -83,7 +93,7 @@ object DemoMainForm: TDemoMainForm
   object BtnSystem: TTyButton
     Left = 797
     Height = 60
-    Top = 100
+    Top = 156
     Width = 145
     TabOrder = 20
     OnClick = BtnSystemClick
@@ -93,7 +103,7 @@ object DemoMainForm: TDemoMainForm
   object BtnPrimary: TTyButton
     Left = 32
     Height = 60
-    Top = 188
+    Top = 244
     Width = 220
     TabOrder = 3
     StyleClass = 'primary'
@@ -103,7 +113,7 @@ object DemoMainForm: TDemoMainForm
   object BtnDanger: TTyButton
     Left = 268
     Height = 60
-    Top = 188
+    Top = 244
     Width = 220
     TabOrder = 4
     StyleClass = 'danger'
@@ -113,7 +123,7 @@ object DemoMainForm: TDemoMainForm
   object LblHello: TTyLabel
     Left = 32
     Height = 40
-    Top = 276
+    Top = 332
     Width = 240
     Controller = Controller
     Caption = 'Hello TyControls'
@@ -122,16 +132,17 @@ object DemoMainForm: TDemoMainForm
     Cursor = crIBeam
     Left = 32
     Height = 52
-    Top = 332
+    Top = 388
     Width = 400
     TabOrder = 5
     TabStop = True
     Controller = Controller
+    PopupMenu = PopupCtx
   end
   object ChkAgree: TTyCheckBox
     Left = 32
     Height = 44
-    Top = 404
+    Top = 460
     Width = 240
     TabOrder = 6
     TabStop = True
@@ -141,7 +152,7 @@ object DemoMainForm: TDemoMainForm
   object RadOne: TTyRadioButton
     Left = 32
     Height = 44
-    Top = 460
+    Top = 516
     Width = 240
     TabOrder = 7
     TabStop = True
@@ -151,7 +162,7 @@ object DemoMainForm: TDemoMainForm
   object PanelBox: TTyPanel
     Left = 512
     Height = 320
-    Top = 188
+    Top = 244
     Width = 400
     TabOrder = 8
     Controller = Controller
@@ -159,7 +170,7 @@ object DemoMainForm: TDemoMainForm
   object ComboKind: TTyComboBox
     Left = 32
     Height = 52
-    Top = 524
+    Top = 580
     Width = 400
     TabOrder = 9
     Controller = Controller
@@ -175,7 +186,7 @@ object DemoMainForm: TDemoMainForm
   object ScrollV: TTyScrollBar
     Left = 952
     Height = 320
-    Top = 188
+    Top = 244
     Width = 36
     TabOrder = 10
     Controller = Controller
@@ -183,7 +194,7 @@ object DemoMainForm: TDemoMainForm
   object GroupBox1: TTyGroupBox
     Left = 920
     Height = 220
-    Top = 548
+    Top = 604
     Width = 320
     TabOrder = 11
     Controller = Controller
@@ -192,7 +203,7 @@ object DemoMainForm: TDemoMainForm
   object ListBox1: TTyListBox
     Left = 32
     Height = 220
-    Top = 608
+    Top = 664
     Width = 400
     TabOrder = 12
     Controller = Controller
@@ -207,7 +218,7 @@ object DemoMainForm: TDemoMainForm
   object Progress1: TTyProgressBar
     Left = 480
     Height = 44
-    Top = 548
+    Top = 604
     Width = 400
     Controller = Controller
     Position = 60
@@ -215,7 +226,7 @@ object DemoMainForm: TDemoMainForm
   object TrackBar1: TTyTrackBar
     Left = 480
     Height = 60
-    Top = 624
+    Top = 680
     Width = 400
     TabOrder = 13
     Controller = Controller
@@ -225,7 +236,7 @@ object DemoMainForm: TDemoMainForm
   object Toggle1: TTyToggleSwitch
     Left = 480
     Height = 56
-    Top = 716
+    Top = 772
     Width = 112
     TabOrder = 14
     TabStop = True
@@ -236,7 +247,7 @@ object DemoMainForm: TDemoMainForm
     Cursor = crIBeam
     Left = 656
     Height = 56
-    Top = 716
+    Top = 772
     Width = 240
     TabOrder = 15
     Controller = Controller
@@ -246,17 +257,17 @@ object DemoMainForm: TDemoMainForm
   object TabCtrl1: TTyTabControl
     Left = 32
     Height = 260
-    Top = 868
+    Top = 924
     Width = 1208
     TabOrder = 16
     Controller = Controller
-    Tabs = <    
+    Tabs = <
       item
         Caption = 'Tab 1'
-      end    
+      end
       item
         Caption = 'Tab 2'
-      end    
+      end
       item
         Caption = 'Tab 3'
       end>
@@ -267,7 +278,7 @@ object DemoMainForm: TDemoMainForm
     Cursor = crIBeam
     Left = 32
     Height = 200
-    Top = 1148
+    Top = 1204
     Width = 1208
     TabOrder = 17
     TabStop = True
@@ -283,5 +294,74 @@ object DemoMainForm: TDemoMainForm
   object Controller: TTyStyleController
     Left = 32
     Top = 32
+  end
+  object MainMenu1: TMainMenu
+    Left = 144
+    Top = 32
+    object MnuFile: TMenuItem
+      Caption = 'File'
+      object MnuFileNew: TMenuItem
+        Caption = 'New'
+        ShortCut = 16462
+      end
+      object MnuFileOpen: TMenuItem
+        Caption = 'Open...'
+        ShortCut = 16463
+      end
+      object MnuFileSep: TMenuItem
+        Caption = '-'
+      end
+      object MnuFileExit: TMenuItem
+        Caption = 'Exit'
+        ShortCut = 16465
+        OnClick = MnuFileExitClick
+      end
+    end
+    object MnuEdit: TMenuItem
+      Caption = 'Edit'
+      object MnuEditCut: TMenuItem
+        Caption = 'Cut'
+        ShortCut = 16472
+      end
+      object MnuEditCopy: TMenuItem
+        Caption = 'Copy'
+        ShortCut = 16451
+      end
+      object MnuEditPaste: TMenuItem
+        Caption = 'Paste'
+        ShortCut = 16470
+      end
+    end
+    object MnuView: TMenuItem
+      Caption = 'View'
+      object MnuViewToggle: TMenuItem
+        Caption = 'Show Greeting'
+        Checked = True
+        ShortCut = 16467
+        OnClick = MnuViewToggleClick
+      end
+      object MnuViewMore: TMenuItem
+        Caption = 'More'
+        object MnuViewMoreA: TMenuItem
+          Caption = 'Submenu Item A'
+        end
+        object MnuViewMoreB: TMenuItem
+          Caption = 'Submenu Item B'
+        end
+      end
+    end
+  end
+  object PopupCtx: TTyPopupMenu
+    Controller = Controller
+    Left = 256
+    Top = 32
+    object PopupCtxHello: TMenuItem
+      Caption = 'Set Greeting'
+      OnClick = PopupCtxHelloClick
+    end
+    object PopupCtxAgree: TMenuItem
+      Caption = 'Toggle Agree'
+      OnClick = PopupCtxAgreeClick
+    end
   end
 end

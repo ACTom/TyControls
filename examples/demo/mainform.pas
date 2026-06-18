@@ -2,13 +2,13 @@ unit mainform;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs,
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus,
   tyControls.Controller, tyControls.Button, tyControls.TyLabel,
   tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
   tyControls.TrackBar, tyControls.GroupBox, tyControls.TabControl,
-  tyControls.SpinEdit, tyControls.Memo;
+  tyControls.SpinEdit, tyControls.Memo, tyControls.Menu;
 type
 
   { TDemoMainForm ᾿all controls are placed in the designer (mainform.lfm),
@@ -42,7 +42,30 @@ type
     TabCtrl1: TTyTabControl;
     SpinKind: TTySpinEdit;
     Memo1: TTyMemo;
+    MainMenu1: TMainMenu;
+    MnuFile: TMenuItem;
+    MnuFileNew: TMenuItem;
+    MnuFileOpen: TMenuItem;
+    MnuFileSep: TMenuItem;
+    MnuFileExit: TMenuItem;
+    MnuEdit: TMenuItem;
+    MnuEditCut: TMenuItem;
+    MnuEditCopy: TMenuItem;
+    MnuEditPaste: TMenuItem;
+    MnuView: TMenuItem;
+    MnuViewToggle: TMenuItem;
+    MnuViewMore: TMenuItem;
+    MnuViewMoreA: TMenuItem;
+    MnuViewMoreB: TMenuItem;
+    TyMenuBar1: TTyMenuBar;
+    PopupCtx: TTyPopupMenu;
+    PopupCtxHello: TMenuItem;
+    PopupCtxAgree: TMenuItem;
     procedure FormCreate(Sender: TObject);
+    procedure MnuViewToggleClick(Sender: TObject);
+    procedure MnuFileExitClick(Sender: TObject);
+    procedure PopupCtxHelloClick(Sender: TObject);
+    procedure PopupCtxAgreeClick(Sender: TObject);
     procedure BtnLightClick(Sender: TObject);
     procedure BtnDarkClick(Sender: TObject);
     procedure BtnShowcaseClick(Sender: TObject);
@@ -100,7 +123,35 @@ end;
 procedure TDemoMainForm.FormCreate(Sender: TObject);
 begin
   // Controls (incl. the title bar/tabs/spin/memo) come from the .lfm; load the theme.
+  // Associate the themed menu bar so the form drives shortcut dispatch (and, on macOS,
+  // hands MainMenu1 to the native global menu bar). See TTyForm.MenuBar (Task 6).
+  MenuBar := TyMenuBar1;
   ApplyTheme('light.tycss');
+end;
+
+procedure TDemoMainForm.MnuViewToggleClick(Sender: TObject);
+begin
+  // Demonstrates a checked item driving a control: flip the label text + the check mark.
+  MnuViewToggle.Checked := not MnuViewToggle.Checked;
+  if MnuViewToggle.Checked then
+    LblHello.Caption := 'Hello TyControls'
+  else
+    LblHello.Caption := 'Greeting hidden';
+end;
+
+procedure TDemoMainForm.MnuFileExitClick(Sender: TObject);
+begin
+  Close;
+end;
+
+procedure TDemoMainForm.PopupCtxHelloClick(Sender: TObject);
+begin
+  LblHello.Caption := 'Hello from the context menu';
+end;
+
+procedure TDemoMainForm.PopupCtxAgreeClick(Sender: TObject);
+begin
+  ChkAgree.Checked := not ChkAgree.Checked;
 end;
 
 procedure TDemoMainForm.BtnLightClick(Sender: TObject);
