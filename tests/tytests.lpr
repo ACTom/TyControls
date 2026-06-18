@@ -36,7 +36,8 @@ uses
   test.themeregistry,
   test.themebundle,
   test.systemtheme,
-  test.themelint;
+  test.themelint,
+  test.menu;
 
 type
   TTyTestRunner = class(TTestRunner)
