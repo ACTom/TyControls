@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types,
   tyControls.Types, tyControls.Css.Parser, tyControls.Css.Values,
-  tyControls.DefaultTheme;
+  tyControls.DefaultTheme, tyControls.ThemeBundle;
 
 type
   { One parsed rule: selector match + its RAW declarations (Prop, RawValue), kept
@@ -49,6 +49,13 @@ type
     procedure LoadFromCss(const ASource: string);          // raises ETyCssError (replaces user layer)
     procedure LoadFromCssAdditive(const ASource: string);  // appends rules + merges vars (A6)
     procedure LoadFromFile(const AFileName: string);
+    { C (Phase 2): load a theme from a bundle SOURCE (directory or zip), the §3.8 REPLACE
+      path. RootCss is the entry stylesheet; url()/@import resolve relative to the bundle
+      root. For a DIRECTORY source (AssetBaseDir<>'') resolution reuses the existing
+      file-based path (GThemeBaseDir), so a dir bundle is byte-identical to
+      LoadFromFile(<dir>/theme.tycss). For a ZIP source (AssetBaseDir='') the CSS text is
+      loaded directly; zipped IMAGE assets are a documented follow-up (not yet resolved). }
+    procedure LoadFromSource(ASource: ITyThemeSource);
     function ResolveStyle(const ATypeKey, AStyleClass: string; AStates: TTyStateSet): TTyStyleSet;
     { A9 per-instance StyleOverride (§3.1 layer 2). Parse a bare declaration block (no
       selector) and evaluate each declaration against the LIVE merged var set, so a
@@ -953,6 +960,26 @@ begin
     end;
   finally
     sl.Free;
+  end;
+end;
+
+procedure TTyStyleModel.LoadFromSource(ASource: ITyThemeSource);
+var
+  baseDir: string;
+begin
+  if ASource = nil then
+    raise ETyCssError.Create('LoadFromSource: nil theme source');
+  // A directory bundle carries an on-disk root; reuse the existing file-based url()/
+  // @import resolution (GThemeBaseDir) so it is byte-identical to LoadFromFile of the
+  // entry sheet (the golden guard). A zip bundle has no dir -> empty base (relative
+  // file url()/@import won't resolve; that is the documented zipped-image follow-up).
+  baseDir := ASource.AssetBaseDir;
+  if baseDir <> '' then
+    GThemeBaseDir := ExtractFilePath(ExpandFileName(IncludeTrailingPathDelimiter(baseDir)));
+  try
+    LoadFromCss(ASource.RootCss);
+  finally
+    GThemeBaseDir := '';
   end;
 end;
 

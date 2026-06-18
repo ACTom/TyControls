@@ -1,0 +1,37 @@
+/* tyControls — bundle parity fixture (CSS-only, no image assets).
+   Used by test.themebundle to prove a directory bundle and a .zip of the same
+   bundle resolve to byte-identical styles. Kept intentionally small. */
+:root {
+  --accent:     #2266CC;
+  --surface:    #F4F6FB;
+  --on-surface: #102040;
+  --border:     #9FB4D8;
+  --radius:     5px;
+}
+
+TyButton {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 6px;
+}
+TyButton:hover  { background: darken(--surface, 4%); }
+TyButton:focus  { border-color: var(--accent); outline: 2px var(--accent); }
+TyButton.primary { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+
+TyLabel {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+}
+
+TyEdit {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 4px;
+}
+TyEdit:focus { border-color: var(--accent); }

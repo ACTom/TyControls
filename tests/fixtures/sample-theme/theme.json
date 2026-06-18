@@ -1,0 +1,7 @@
+{
+  "name": "sample",
+  "author": "tyControls tests",
+  "version": "1.0.0",
+  "entry": "theme.tycss",
+  "dualMode": false
+}

@@ -32,7 +32,8 @@ uses
   test.animation.toggle,
   test.animation.button,
   test.undostack,
-  test.themeregistry;
+  test.themeregistry,
+  test.themebundle;
 
 type
   TTyTestRunner = class(TTestRunner)
