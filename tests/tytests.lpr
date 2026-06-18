@@ -35,7 +35,8 @@ uses
   test.undostack,
   test.themeregistry,
   test.themebundle,
-  test.systemtheme;
+  test.systemtheme,
+  test.themelint;
 
 type
   TTyTestRunner = class(TTestRunner)
