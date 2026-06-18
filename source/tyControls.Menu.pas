@@ -214,6 +214,35 @@ type
     property Controller;
   end;
 
+  { Themed context menu over the LCL TPopupMenu model. It IS a TPopupMenu (so it slots
+    into any control's PopupMenu property and the LCL right-click path keeps working),
+    but its virtual PopUp(X,Y) is overridden to route through our themed TTyMenuView /
+    TTyMenuPopup renderer instead of the native OS menu. The renderer is rooted at the
+    inherited Items, themed via the assigned Controller. Verified seam (menus.pp:485):
+    TPopupMenu.PopUp(X, Y: Integer) is VIRTUAL, so a direct override is correct (no
+    DoContextPopup fallback needed). Assigning a TTyPopupMenu to a control's PopupMenu
+    makes right-click show the themed menu, since LCL's DoContextPopup calls
+    PopupMenu.PopUp(X, Y). }
+  TTyPopupMenu = class(TPopupMenu)
+  private
+    FRenderer: TTyMenuPopup;     // lazy themed popup host; created on first PopUp
+    FController: TTyStyleController;
+    procedure EnsureRenderer;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    { Show the themed context menu at screen point (X, Y) instead of the native menu.
+      Roots the shared renderer at the inherited Items and pops it (a zero-size anchor
+      at the cursor; the renderer measures its own size). Overrides the virtual seam. }
+    procedure PopUp(X, Y: Integer); override;
+    { Test seam: activate the row at AIndex exactly as choosing it in the themed popup
+      would (fires the source item's OnClick). Mirrors TTyMenuPopup.ActivateRowForTest. }
+    procedure ActivateRowForTest(AIndex: Integer);
+  published
+    { The .tycss style controller the themed popup resolves its tokens through. }
+    property Controller: TTyStyleController read FController write FController;
+  end;
+
 implementation
 
 uses Math, BGRABitmap;
@@ -1108,6 +1137,47 @@ end;
 procedure TTyMenuBar.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+{ TTyPopupMenu }
+
+constructor TTyPopupMenu.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FRenderer := nil;
+  FController := nil;
+end;
+
+destructor TTyPopupMenu.Destroy;
+begin
+  FreeAndNil(FRenderer);
+  inherited Destroy;
+end;
+
+procedure TTyPopupMenu.EnsureRenderer;
+begin
+  if FRenderer = nil then
+    FRenderer := TTyMenuPopup.Create(Self);
+  FRenderer.Controller := FController;
+  // Root the shared renderer at this popup menu's items (the inherited LCL model).
+  FRenderer.SetRoot(Items);
+end;
+
+procedure TTyPopupMenu.PopUp(X, Y: Integer);
+var
+  anchor: TRect;
+begin
+  EnsureRenderer;
+  // A zero-size anchor at the cursor: the renderer hangs its dropdown below/right of
+  // (X, Y) and measures its own size (ComputeBounds flips near screen edges).
+  anchor := Rect(X, Y, X, Y);
+  FRenderer.Popup(anchor, False);
+end;
+
+procedure TTyPopupMenu.ActivateRowForTest(AIndex: Integer);
+begin
+  EnsureRenderer;
+  FRenderer.ActivateRowForTest(AIndex);
 end;
 
 end.

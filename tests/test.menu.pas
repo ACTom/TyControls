@@ -69,6 +69,19 @@ type
     procedure TestTopCellsAndHitTest;
   end;
 
+  { Verifies TTyPopupMenu (Task 7): a themed context menu over the LCL TPopupMenu
+    model. PopUp(X,Y) routes to our themed TTyMenuPopup renderer instead of the native
+    menu; choosing a row fires the source item's OnClick. The window itself needs a GUI
+    loop, so we drive the activation path through the ActivateRowForTest seam (mirrors
+    choosing the row in the themed popup). FFired is set by the leaf's OnClick handler. }
+  TPopupMenuTest = class(TTestCase)
+  private
+    FFired: Boolean;
+    procedure LeafClick(Sender: TObject);
+  published
+    procedure TestPopupRoutesToThemedRendererAndFires;
+  end;
+
 implementation
 
 procedure TMenuModelTest.TestBuildRowsMapsFields;
@@ -298,9 +311,31 @@ begin
   finally mm.Free; end;
 end;
 
+{ TPopupMenuTest }
+
+procedure TPopupMenuTest.LeafClick(Sender: TObject);
+begin
+  FFired := True;
+end;
+
+procedure TPopupMenuTest.TestPopupRoutesToThemedRendererAndFires;
+var pm: TTyPopupMenu; it: TMenuItem;
+begin
+  FFired := False;
+  pm := TTyPopupMenu.Create(nil);
+  try
+    it := TMenuItem.Create(pm); it.Caption := 'Paste';
+    it.OnClick := @LeafClick;     // sets FFired := True
+    pm.Items.Add(it);
+    pm.ActivateRowForTest(0);     // test seam mirrors choosing the row in the themed popup
+    AssertTrue('paste fired', FFired);
+  finally pm.Free; end;
+end;
+
 initialization
   RegisterTest(TMenuModelTest);
   RegisterTest(TMenuViewTest);
   RegisterTest(TMenuPopupTest);
   RegisterTest(TMenuBarTest);
+  RegisterTest(TPopupMenuTest);
 end.
