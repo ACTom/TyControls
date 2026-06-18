@@ -254,15 +254,24 @@ begin
 end;
 
 function GDumpStyle(const ts: TTyStyleSet): string;
+var bg: string;
 begin
+  // Kind-aware: only dump fields the fill Kind actually sets. Gradient/solid fills
+  // leave the image/glass fields uninitialized (ParseLinearGradient does not
+  // Default()-init), so dumping them unconditionally is non-deterministic.
+  bg := 'k' + IntToStr(Ord(ts.Background.Kind));
+  case ts.Background.Kind of
+    tfkSolid: bg := bg + '/' + GHex(ts.Background.Color);
+    tfkLinearGradient: bg := bg + '/' + GHex(ts.Background.GradFrom) + '>' +
+      GHex(ts.Background.GradTo) + '@' + IntToStr(Round(ts.Background.GradAngleDeg * 100));
+    tfkImage: bg := bg + '/' + ts.Background.ImagePath + '/m' +
+      IntToStr(Ord(ts.Background.ImageMode)) + '/bl' + IntToStr(ts.Background.Blur);
+    tfkNineSlice: bg := bg + '/' + ts.Background.ImagePath;
+  end;
+  if tpGlass in ts.Present then
+    bg := bg + '/glass' + IntToStr(ts.Background.GlassBlur) + ':' + GHex(ts.Background.GlassTint);
   Result :=
-    'pres[' + GPresent(ts.Present) + ']' +
-    ' bg=' + IntToStr(Ord(ts.Background.Kind)) + '/' + GHex(ts.Background.Color) +
-      '/' + GHex(ts.Background.GradFrom) + '/' + GHex(ts.Background.GradTo) +
-      '/a' + IntToStr(Round(ts.Background.GradAngleDeg * 100)) +
-      '/' + ts.Background.ImagePath + '/m' + IntToStr(Ord(ts.Background.ImageMode)) +
-      '/bl' + IntToStr(ts.Background.Blur) + '/gb' + IntToStr(ts.Background.GlassBlur) +
-      '/gt' + GHex(ts.Background.GlassTint) +
+    'pres[' + GPresent(ts.Present) + '] bg=' + bg +
     ' ut=' + IntToStr(Ord(ts.BackgroundUnderTitlebar)) +
     ' txt=' + GHex(ts.TextColor) +
     ' bd=' + GHex(ts.BorderColor) + '/' + IntToStr(ts.BorderWidth) + '/' + IntToStr(Ord(ts.BorderStyle)) +

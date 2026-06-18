@@ -19,126 +19,159 @@ begin
   Result :=
     '/* TyControls — Light theme */' + LineEnding +
     ':root {' + LineEnding +
-    '  --accent:     #3B82F6;' + LineEnding +
-    '  --surface:    #FFFFFF;' + LineEnding +
-    '  --on-surface: #1F2937;' + LineEnding +
-    '  --border:     #D1D5DB;' + LineEnding +
-    '  --danger:     #EF4444;' + LineEnding +
-    '  --radius:     6px;' + LineEnding +
-    '  --focus-ring: var(--accent);' + LineEnding +
-    '  --selection:     alpha(var(--accent), 0.30);' + LineEnding +
-    '  --muted:         alpha(var(--on-surface), 0.5);' + LineEnding +
-    '  --overlay-hover: alpha(var(--on-surface), 0.12);' + LineEnding +
+    '  /* ── SEED ── 5 colors + 1 metric */' + LineEnding +
+    '  --accent: #3B82F6; --surface: #FFFFFF; --on-surface: #1F2937;' + LineEnding +
+    '  --border: #D1D5DB; --danger: #EF4444; --radius: 6px;' + LineEnding +
+    '' + LineEnding +
+    '  /* ── MAP: directional darken/lighten the body inlines ── */' + LineEnding +
+    '  --surface-hover:            darken(--surface, 4%);' + LineEnding +
+    '  --surface-active:           darken(--surface, 10%);' + LineEnding +
+    '  --surface-chrome:           darken(--surface, 6%);' + LineEnding +
+    '  --surface-sunk:             darken(--surface, 8%);' + LineEnding +
+    '  --surface-track:            darken(--surface, 10%);' + LineEnding +
+    '  --surface-listitem-hover:   darken(--surface, 5%);' + LineEnding +
+    '  --surface-tab-rest:         darken(--surface, 5%);' + LineEnding +
+    '  --surface-tab-hover:        darken(--surface, 2%);' + LineEnding +
+    '  --surface-toggle-off:       darken(--surface, 18%);' + LineEnding +
+    '  --surface-toggle-off-hover: darken(--surface, 22%);' + LineEnding +
+    '  --surface-caption-hover:    darken(--surface, 12%);' + LineEnding +
+    '  --surface-caption-active:   darken(--surface, 20%);' + LineEnding +
+    '  --border-hover:             darken(--border, 10%);' + LineEnding +
+    '  --scroll-handle-hover:      darken(--border, 15%);' + LineEnding +
+    '  --accent-hover:  lighten(--accent, 8%);   --accent-active: darken(--accent, 8%);' + LineEnding +
+    '  --danger-hover:  lighten(--danger, 8%);   --danger-active: darken(--danger, 8%);' + LineEnding +
+    '  --danger-press-close: darken(--danger, 10%);' + LineEnding +
+    '' + LineEnding +
+    '  /* ── ALIAS: semantic ── */' + LineEnding +
+    '  --focus-ring:       var(--accent);' + LineEnding +
+    '  --selection:        alpha(var(--accent), 0.30);' + LineEnding +
+    '  --muted:            alpha(var(--on-surface), 0.5);' + LineEnding +
+    '  --overlay-hover:    alpha(var(--on-surface), 0.12);' + LineEnding +
+    '  --disabled-opacity: 0.5;' + LineEnding +
+    '  --form-bg:          var(--surface-hover);   /* TyForm bg */' + LineEnding +
+    '  --titlebar-bg:      var(--surface-chrome);  /* TyTitleBar bg */' + LineEnding +
+    '  --input-bg:         var(--surface);         /* Edit/Check/Radio/Combo/List/Spin/Memo bg */' + LineEnding +
+    '  --scroll-handle:    var(--border);          /* resting scroll thumb/handle */' + LineEnding +
+    '  --input-border-hover: var(--border-hover);  /* neutral inputs hover border */' + LineEnding +
+    '  /* on-* declared here but WIRED only in the §3 bug-fix commit */' + LineEnding +
+    '  --on-accent:        on(var(--accent));      /* light -> #FFFFFF (== current literal) */' + LineEnding +
+    '  --on-danger:        on(var(--danger));      /* light -> #FFFFFF */' + LineEnding +
+    '' + LineEnding +
+    '  /* ── COMPONENT: scalars ── */' + LineEnding +
+    '  --input-border-width: 1px;' + LineEnding +
+    '  --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;' + LineEnding +
+    '  --font-size-base: 9px; --font-size-title: 9px;' + LineEnding +
+    '  --font-weight-normal: 400; --font-weight-bold: 700;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Window/form backdrop — a soft off-white behind the white controls. */' + LineEnding +
-    'TyForm { background: darken(--surface, 4%); }' + LineEnding +
+    'TyForm { background: var(--form-bg); }' + LineEnding +
     '' + LineEnding +
     'TyButton {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 6px;' + LineEnding +
-    '  font-size: 9px;' + LineEnding +
-    '  font-weight: 400;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-normal);' + LineEnding +
     '}' + LineEnding +
-    'TyButton:hover    { background: darken(--surface, 4%); border-color: darken(--border, 10%); }' + LineEnding +
+    'TyButton:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }' + LineEnding +
     'TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyButton:active   { background: darken(--surface, 10%); }' + LineEnding +
-    'TyButton:disabled { opacity: 0.5; }' + LineEnding +
+    'TyButton:active   { background: var(--surface-active); }' + LineEnding +
+    'TyButton:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     'TyButton.primary  { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }' + LineEnding +
-    'TyButton.primary:hover    { background: lighten(--accent, 8%); }' + LineEnding +
-    'TyButton.primary:active   { background: darken(--accent, 8%); }' + LineEnding +
+    'TyButton.primary:hover    { background: var(--accent-hover); }' + LineEnding +
+    'TyButton.primary:active   { background: var(--accent-active); }' + LineEnding +
     'TyButton.danger   { background: var(--danger); color: #FFFFFF; border-color: var(--danger); }' + LineEnding +
-    'TyButton.danger:hover     { background: lighten(--danger, 8%); }' + LineEnding +
-    'TyButton.danger:active    { background: darken(--danger, 8%); }' + LineEnding +
+    'TyButton.danger:hover     { background: var(--danger-hover); }' + LineEnding +
+    'TyButton.danger:active    { background: var(--danger-active); }' + LineEnding +
     '' + LineEnding +
     'TyLabel {' + LineEnding +
     '  background: alpha(#FFFFFF, 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
-    '  font-size: 9px;' + LineEnding +
-    '  font-weight: 400;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-normal);' + LineEnding +
     '}' + LineEnding +
-    'TyLabel:disabled { opacity: 0.5; }' + LineEnding +
+    'TyLabel:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyEdit {' + LineEnding +
-    '  background: var(--surface);' + LineEnding +
+    '  background: var(--input-bg);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 4px;' + LineEnding +
-    '  font-size: 9px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
-    'TyEdit:hover    { border-color: darken(--border, 10%); }' + LineEnding +
+    'TyEdit:hover    { border-color: var(--input-border-hover); }' + LineEnding +
     'TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyEdit:disabled { opacity: 0.5; }' + LineEnding +
+    'TyEdit:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyCheckBox {' + LineEnding +
-    '  background: var(--surface);' + LineEnding +
+    '  background: var(--input-bg);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
-    '  border-radius: 3px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius-sm);' + LineEnding +
     '  padding: 4px;' + LineEnding +
     '}' + LineEnding +
     'TyCheckBox:hover    { border-color: var(--accent); }' + LineEnding +
     'TyCheckBox:active   { background: var(--accent); color: #FFFFFF; }' + LineEnding +
     'TyCheckBox:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyCheckBox:disabled { opacity: 0.5; }' + LineEnding +
+    'TyCheckBox:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyRadioButton {' + LineEnding +
-    '  background: var(--surface);' + LineEnding +
+    '  background: var(--input-bg);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
-    '  border-radius: 8px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius-pill);' + LineEnding +
     '  padding: 4px;' + LineEnding +
     '}' + LineEnding +
     'TyRadioButton:hover    { border-color: var(--accent); }' + LineEnding +
     'TyRadioButton:active   { background: var(--accent); color: #FFFFFF; }' + LineEnding +
     'TyRadioButton:focus { outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyRadioButton:disabled { opacity: 0.5; }' + LineEnding +
+    'TyRadioButton:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyPanel {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 8px;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
-    '  background: var(--surface);' + LineEnding +
+    '  background: var(--input-bg);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 4px;' + LineEnding +
-    '  font-size: 9px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
-    'TyComboBox:hover    { border-color: darken(--border, 10%); }' + LineEnding +
+    'TyComboBox:hover    { border-color: var(--input-border-hover); }' + LineEnding +
     'TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyComboBox:disabled { opacity: 0.5; }' + LineEnding +
+    'TyComboBox:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyScrollBar {' + LineEnding +
-    '  background: darken(--surface, 6%);' + LineEnding +
-    '  color: var(--border);' + LineEnding +
-    '  border-radius: 4px;' + LineEnding +
+    '  background: var(--surface-chrome);' + LineEnding +
+    '  color: var(--scroll-handle);' + LineEnding +
+    '  border-radius: var(--radius-scroll);' + LineEnding +
     '}' + LineEnding +
-    'TyScrollBar:hover  { color: darken(--border, 15%); }' + LineEnding +
+    'TyScrollBar:hover  { color: var(--scroll-handle-hover); }' + LineEnding +
     'TyScrollBar:active { color: var(--accent); }' + LineEnding +
     'TyScrollBar:focus  { outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyScrollBar:disabled { opacity: 0.5; }' + LineEnding +
+    'TyScrollBar:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyTitleBar {' + LineEnding +
-    '  background: darken(--surface, 6%);' + LineEnding +
+    '  background: var(--titlebar-bg);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
-    '  font-size: 9px;' + LineEnding +
-    '  font-weight: 700;' + LineEnding +
+    '  font-size: var(--font-size-title);' + LineEnding +
+    '  font-weight: var(--font-weight-bold);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     'TyCaptionButton {' + LineEnding +
@@ -146,26 +179,26 @@ begin
     '  color: var(--on-surface);' + LineEnding +
     '  border-radius: 0px;' + LineEnding +
     '}' + LineEnding +
-    'TyCaptionButton:hover  { background: darken(--surface, 12%); }' + LineEnding +
-    'TyCaptionButton:active { background: darken(--surface, 20%); }' + LineEnding +
+    'TyCaptionButton:hover  { background: var(--surface-caption-hover); }' + LineEnding +
+    'TyCaptionButton:active { background: var(--surface-caption-active); }' + LineEnding +
     'TyCaptionButton.close:hover  { background: var(--danger); color: #FFFFFF; }' + LineEnding +
-    'TyCaptionButton.close:active { background: darken(--danger, 10%); color: #FFFFFF; }' + LineEnding +
-    'TyCaptionButton.min:hover    { background: darken(--surface, 12%); }' + LineEnding +
-    'TyCaptionButton.max:hover    { background: darken(--surface, 12%); }' + LineEnding +
+    'TyCaptionButton.close:active { background: var(--danger-press-close); color: #FFFFFF; }' + LineEnding +
+    'TyCaptionButton.min:hover    { background: var(--surface-caption-hover); }' + LineEnding +
+    'TyCaptionButton.max:hover    { background: var(--surface-caption-hover); }' + LineEnding +
     '' + LineEnding +
     '/* ── v1.1 controls ─────────────────────────────────────────────────────── */' + LineEnding +
     '' + LineEnding +
     'TyListBox {' + LineEnding +
-    '  background: var(--surface);' + LineEnding +
+    '  background: var(--input-bg);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 2px;' + LineEnding +
     '}' + LineEnding +
-    'TyListBox:hover   { border-color: darken(--border, 10%); }' + LineEnding +
+    'TyListBox:hover   { border-color: var(--input-border-hover); }' + LineEnding +
     'TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyListBox:disabled { opacity: 0.5; }' + LineEnding +
+    'TyListBox:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyListItem {' + LineEnding +
     '  background: alpha(#000000, 0);' + LineEnding +
@@ -173,16 +206,16 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 4px;' + LineEnding +
     '}' + LineEnding +
-    'TyListItem:hover  { background: darken(--surface, 5%); }' + LineEnding +
+    'TyListItem:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
     'TyListItem:active { background: var(--accent); color: #FFFFFF; }' + LineEnding +
     '' + LineEnding +
     'TyProgressBar {' + LineEnding +
-    '  background: darken(--surface, 8%);' + LineEnding +
+    '  background: var(--surface-sunk);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
-    'TyProgressBar:disabled { opacity: 0.5; }' + LineEnding +
+    'TyProgressBar:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyProgressFill {' + LineEnding +
     '  background: var(--accent);' + LineEnding +
@@ -190,35 +223,35 @@ begin
     '}' + LineEnding +
     '' + LineEnding +
     'TyToggleSwitch {' + LineEnding +
-    '  background: darken(--surface, 18%);' + LineEnding +
+    '  background: var(--surface-toggle-off);' + LineEnding +
     '  color: #FFFFFF;' + LineEnding +
-    '  border-radius: 12px;' + LineEnding +
+    '  border-radius: var(--radius-round);' + LineEnding +
     '}' + LineEnding +
-    'TyToggleSwitch:hover    { background: darken(--surface, 22%); }' + LineEnding +
+    'TyToggleSwitch:hover    { background: var(--surface-toggle-off-hover); }' + LineEnding +
     'TyToggleSwitch:active   { background: var(--accent); }' + LineEnding +
     'TyToggleSwitch:focus { outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyToggleSwitch:disabled { opacity: 0.5; }' + LineEnding +
+    'TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyTrackBar {' + LineEnding +
-    '  background: darken(--surface, 10%);' + LineEnding +
-    '  border-radius: 3px;' + LineEnding +
+    '  background: var(--surface-track);' + LineEnding +
+    '  border-radius: var(--radius-sm);' + LineEnding +
     '  padding: 0px;' + LineEnding +
     '}' + LineEnding +
     'TyTrackBar:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyTrackBar:disabled { opacity: 0.5; }' + LineEnding +
+    'TyTrackBar:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyTrackThumb {' + LineEnding +
     '  background: var(--accent);' + LineEnding +
-    '  border-radius: 8px;' + LineEnding +
+    '  border-radius: var(--radius-pill);' + LineEnding +
     '}' + LineEnding +
-    'TyTrackThumb:hover  { background: lighten(--accent, 8%); }' + LineEnding +
-    'TyTrackThumb:active { background: darken(--accent, 8%); }' + LineEnding +
+    'TyTrackThumb:hover  { background: var(--accent-hover); }' + LineEnding +
+    'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
     '' + LineEnding +
     'TyGroupBox {' + LineEnding +
     '  background: alpha(#FFFFFF, 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -228,58 +261,58 @@ begin
     '  background: var(--surface);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
-    'TyTabControl:hover  { border-color: darken(--border, 10%); }' + LineEnding +
+    'TyTabControl:hover  { border-color: var(--input-border-hover); }' + LineEnding +
     'TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyTabControl:disabled { opacity: 0.5; }' + LineEnding +
+    'TyTabControl:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyTab {' + LineEnding +
-    '  background: darken(--surface, 5%);' + LineEnding +
+    '  background: var(--surface-tab-rest);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  padding: 4px;' + LineEnding +
     '  border-radius: var(--radius) var(--radius) 0 0;' + LineEnding +
     '}' + LineEnding +
-    'TyTab:hover  { background: darken(--surface, 2%); }' + LineEnding +
+    'TyTab:hover  { background: var(--surface-tab-hover); }' + LineEnding +
     'TyTab:active { background: var(--surface); color: var(--accent); }' + LineEnding +
     '' + LineEnding +
     '/* ── v1.9 controls ─────────────────────────────────────────────────────── */' + LineEnding +
     '' + LineEnding +
     'TySpinEdit {' + LineEnding +
-    '  background: var(--surface);' + LineEnding +
+    '  background: var(--input-bg);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 4px;' + LineEnding +
-    '  font-size: 9px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
-    'TySpinEdit:hover    { border-color: darken(--border, 10%); }' + LineEnding +
+    'TySpinEdit:hover    { border-color: var(--input-border-hover); }' + LineEnding +
     'TySpinEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TySpinEdit:disabled { opacity: 0.5; }' + LineEnding +
+    'TySpinEdit:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyMemo {' + LineEnding +
-    '  background: var(--surface);' + LineEnding +
+    '  background: var(--input-bg);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
-    '  border-width: 1px;' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: 4px;' + LineEnding +
-    '  font-size: 9px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
-    'TyMemo:hover    { border-color: darken(--border, 10%); }' + LineEnding +
+    'TyMemo:hover    { border-color: var(--input-border-hover); }' + LineEnding +
     'TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyMemo:disabled { opacity: 0.5; }' + LineEnding +
+    'TyMemo:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyTextSelection { background: var(--selection); }' + LineEnding +
     'TyTextHint      { color: var(--muted); }' + LineEnding +
     'TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }' + LineEnding +
     '' + LineEnding +
-    'TyScrollThumb { background: var(--border); border-radius: 4px; }' + LineEnding +
-    'TyScrollThumb:hover  { background: darken(--border, 15%); }' + LineEnding +
+    'TyScrollThumb { background: var(--scroll-handle); border-radius: var(--radius-scroll); }' + LineEnding +
+    'TyScrollThumb:hover  { background: var(--scroll-handle-hover); }' + LineEnding +
     'TyScrollThumb:active { background: var(--accent); }' + LineEnding +
-    'TyToggleKnob  { background: #FFFFFF; border-radius: 12px; }' + LineEnding;
+    'TyToggleKnob  { background: #FFFFFF; border-radius: var(--radius-round); }' + LineEnding;
 end;
 
 end.
