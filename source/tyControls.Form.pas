@@ -10,7 +10,8 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller;
+  tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller,
+  tyControls.Menu;
 
 type
   TTyBorderHit = (bhNone, bhLeft, bhTop, bhRight, bhBottom,
@@ -127,6 +128,7 @@ type
   TTyForm = class(TForm, ITyGlassHost)
   private
     FTitleBar: TTyTitleBar;
+    FMenuBar: TTyMenuBar;             // the primary menu bar (shortcut dispatch / mac global bar)
     FShowMinimize: Boolean;
     FShowMaximize: Boolean;
     FController: TTyStyleController;   // set by ApplyChromeTheme; used by Paint
@@ -144,6 +146,7 @@ type
     function GlassUnderTitlebar: Boolean;
     procedure SetupChrome;
     procedure SetTitleBar(AValue: TTyTitleBar);
+    procedure SetMenuBar(AValue: TTyMenuBar);
     procedure WireTitleBarButtons;
     procedure ArmEngine;
     function GetTitleHeight: Integer;
@@ -159,6 +162,10 @@ type
     FEngine: TTyChromeEngine;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
+    { Non-mac: the associated menu bar owns shortcut dispatch — forward the key to
+      its TMainMenu before the inherited (Form.Menu / action-list) handling. On mac
+      the global Form.Menu already does this, so the override just calls inherited. }
+    function IsShortcut(var Message: TLMKey): Boolean; override;
     procedure Paint; override;   // draws an image backdrop when the TyForm token sets one
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -171,6 +178,11 @@ type
     procedure ApplyChromeTheme(AController: TTyStyleController);
   published
     property TitleBar: TTyTitleBar read FTitleBar write SetTitleBar;
+    { Designate the primary application menu bar. Non-mac: the bar stays visible and
+      owns shortcut dispatch (IsShortcut forwards to its TMainMenu). Mac: the bar's
+      TMainMenu is handed to the inherited Form.Menu (the global top-of-screen bar)
+      and the in-window bar is hidden. Freeing the bar nils this (FreeNotification). }
+    property MenuBar: TTyMenuBar read FMenuBar write SetMenuBar;
     property TitleHeight: Integer read GetTitleHeight write SetTitleHeight default 32;
     property ShowMinimize: Boolean read FShowMinimize write SetShowMinimize default True;
     property ShowMaximize: Boolean read FShowMaximize write SetShowMaximize default True;
@@ -730,6 +742,44 @@ begin
   end;
 end;
 
+{ Designate (or clear) the primary application menu bar. The cross-platform split:
+  on macOS the bar's TMainMenu becomes the inherited Form.Menu (LCL renders it as
+  the global top-of-screen bar) and the in-window bar is hidden; everywhere else the
+  in-window bar stays visible and owns shortcut dispatch via IsShortcut. }
+procedure TTyForm.SetMenuBar(AValue: TTyMenuBar);
+begin
+  if AValue = FMenuBar then Exit;
+  {$IFDEF DARWIN}
+  // Detach the previous bar's menu from the global bar before switching.
+  if (FMenuBar <> nil) and (Menu = FMenuBar.Menu) then
+    Menu := nil;
+  {$ENDIF}
+  FMenuBar := AValue;
+  if AValue <> nil then
+  begin
+    AValue.FreeNotification(Self);
+    {$IFDEF DARWIN}
+    // Hand the bar's TMainMenu to the inherited Form.Menu (the global bar) and hide
+    // the in-window bar; the OS draws the menu at the top of the screen.
+    Menu := AValue.Menu;
+    AValue.Visible := False;
+    {$ENDIF}
+  end;
+end;
+
+function TTyForm.IsShortcut(var Message: TLMKey): Boolean;
+begin
+  {$IFNDEF DARWIN}
+  // Non-mac: the in-window menu bar owns dispatch. Let its TMainMenu try to match
+  // and fire the shortcut first; on mac the inherited path already consults the
+  // global Form.Menu (assigned in SetMenuBar), so we skip straight to inherited.
+  if (FMenuBar <> nil) and (FMenuBar.Menu <> nil)
+     and FMenuBar.Menu.IsShortCut(Message) then
+    Exit(True);
+  {$ENDIF}
+  Result := inherited IsShortcut(Message);
+end;
+
 { Connect the title bar to the live engine: back-reference so the bar's mouse
   events reach the engine, capture the install DPI, and wire the caption buttons.
   Safe to call repeatedly; never runs in the designer or before load completes. }
@@ -807,6 +857,13 @@ begin
   begin
     FTitleBar := nil;
     if FEngine <> nil then FEngine.TitleBar := nil;
+  end
+  else if (Operation = opRemove) and (AComponent = FMenuBar) then
+  begin
+    {$IFDEF DARWIN}
+    if Menu = FMenuBar.Menu then Menu := nil;
+    {$ENDIF}
+    FMenuBar := nil;
   end;
 end;
 
@@ -983,5 +1040,8 @@ initialization
     but an associated title bar may be an unnamed/owner-only object — without this,
     loading such an .lfm raises EClassNotFound: Class "TTyTitleBar" not found. }
   RegisterClass(TTyTitleBar);
+  { Same streaming lesson for the associated menu bar (TTyForm.MenuBar): register it
+    so an .lfm referencing it loads without EClassNotFound. }
+  RegisterClass(TTyMenuBar);
 
 end.

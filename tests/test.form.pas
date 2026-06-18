@@ -5,10 +5,11 @@ unit test.form;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, Menus, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
-  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form;
+  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form,
+  tyControls.Menu;
 
 type
   TFormHelpersTest = class(TTestCase)
@@ -100,6 +101,27 @@ type
     procedure TestDblClickMaximizeToggles;
   end;
 
+  { Verifies Task 6: TTyForm.MenuBar association + the non-mac shortcut dispatch
+    path. On a non-DARWIN target the menu bar OWNS shortcut dispatch — the form's
+    IsShortcut override forwards the key message to FMenuBar.Menu.IsShortCut, which
+    matches it against the menu's items and fires the matching item's OnClick.
+
+    NOTE (verified Win32 deviation): TMenu.IsShortcut derives the modifier set via
+    KeyDataToShiftState -> MsgKeyDataToShiftState, which on Win32 reads Ctrl/Shift/
+    Meta from the LIVE keyboard (GetKeyState) and ONLY reads ssAlt from KeyData
+    (MK_ALT). A headless test cannot force Ctrl through KeyData, so this test uses an
+    Alt-modified shortcut (deterministic via KeyData) to exercise the SAME dispatch
+    path the plan's Ctrl+S sketch intends. FFired is set by the item's OnClick. }
+  TTyMenuFormTest = class(TTestCase)
+  private
+    FFired: Boolean;
+    procedure ItemClick(Sender: TObject);
+  published
+    procedure TestPrimaryMenuBarDispatchesShortcut;
+    procedure TestMenuBarAssociationAndFreeNotification;
+    procedure TestNoMenuBarLeavesShortcutToInherited;
+  end;
+
 implementation
 
 type
@@ -126,6 +148,10 @@ type
     function EngineDragging: Boolean;
     function EngineMaximized: Boolean;
     procedure SetEngineMaximized(AValue: Boolean);
+    { Build a TLMKey for AKey + AShift and run it through the form's IsShortcut
+      override exactly as the widgetset would, returning whether it was consumed.
+      ssAlt is encoded into KeyData (MK_ALT) so the match is deterministic headless. }
+    function TestIsShortCut(AKey: Word; AShift: TShiftState): Boolean;
   end;
 
 procedure TCaptionButtonAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -168,6 +194,18 @@ begin Result := TTyTitleBar.Create(Self); end;
 function TTyFormAccess.EngineDragging: Boolean; begin Result := FEngine.Dragging; end;
 function TTyFormAccess.EngineMaximized: Boolean; begin Result := FEngine.Maximized; end;
 procedure TTyFormAccess.SetEngineMaximized(AValue: Boolean); begin FEngine.Maximized := AValue; end;
+
+function TTyFormAccess.TestIsShortCut(AKey: Word; AShift: TShiftState): Boolean;
+var msg: TLMKey;
+begin
+  FillChar(msg, SizeOf(msg), 0);
+  msg.CharCode := AKey;
+  // Encode the modifiers that the Win32 MsgKeyDataToShiftState reads from KeyData.
+  // Only ssAlt is KeyData-derived there; Ctrl/Shift/Meta come from GetKeyState and
+  // cannot be forced headlessly, so deterministic tests use ssAlt.
+  if ssAlt in AShift then msg.KeyData := msg.KeyData or PtrInt(MK_ALT);
+  Result := IsShortcut(msg);
+end;
 
 const
   CR: TRect = (Left: 0; Top: 0; Right: 200; Bottom: 100);
@@ -824,6 +862,73 @@ begin
   end;
 end;
 
+{ TTyMenuFormTest }
+
+procedure TTyMenuFormTest.ItemClick(Sender: TObject);
+begin
+  FFired := True;
+end;
+
+procedure TTyMenuFormTest.TestPrimaryMenuBarDispatchesShortcut;
+var
+  frm: TTyFormAccess;
+  bar: TTyMenuBar;
+  mm: TMainMenu;
+  it: TMenuItem;
+begin
+  FFired := False;
+  frm := TTyFormAccess.CreateNew(nil);
+  try
+    mm := TMainMenu.Create(frm);
+    it := TMenuItem.Create(mm);
+    it.Caption := 'Save';
+    it.ShortCut := ShortCut(Ord('S'), [ssAlt]);   // Alt -> deterministic via KeyData
+    it.OnClick := @ItemClick;
+    mm.Items.Add(it);
+    bar := TTyMenuBar.Create(frm);
+    bar.Parent := frm;
+    bar.Menu := mm;
+    frm.MenuBar := bar;                           // designate the primary menu bar
+    AssertTrue('form routes Alt+S to the menu', frm.TestIsShortCut(Ord('S'), [ssAlt]));
+    AssertTrue('item OnClick fired', FFired);
+  finally
+    frm.Free;
+  end;
+end;
+
+procedure TTyMenuFormTest.TestMenuBarAssociationAndFreeNotification;
+var
+  frm: TTyFormAccess;
+  bar: TTyMenuBar;
+begin
+  { Assigning MenuBar stores the reference; freeing the bar nils it (FreeNotification). }
+  frm := TTyFormAccess.CreateNew(nil);
+  try
+    bar := TTyMenuBar.Create(frm);
+    bar.Parent := frm;
+    frm.MenuBar := bar;
+    AssertTrue('MenuBar stored', frm.MenuBar = bar);
+    bar.Free;
+    AssertTrue('MenuBar nilled after the bar is freed', frm.MenuBar = nil);
+  finally
+    frm.Free;
+  end;
+end;
+
+procedure TTyMenuFormTest.TestNoMenuBarLeavesShortcutToInherited;
+var
+  frm: TTyFormAccess;
+begin
+  { With no MenuBar associated, the override must fall through to inherited and not
+    consume the key (no menu => nothing matches). }
+  frm := TTyFormAccess.CreateNew(nil);
+  try
+    AssertFalse('unconsumed with no menu bar', frm.TestIsShortCut(Ord('S'), [ssAlt]));
+  finally
+    frm.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeCursorTest);
@@ -834,5 +939,6 @@ initialization
   RegisterTest(TRescaleMetricTest);
   RegisterTest(TCaptionButtonHoverGlyphTest);
   RegisterTest(TTyFormTest);
+  RegisterTest(TTyMenuFormTest);
 
 end.
