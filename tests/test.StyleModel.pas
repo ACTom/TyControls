@@ -45,6 +45,23 @@ type
     procedure TestAdditiveLoad;
   end;
 
+  { Phase 2 (theme v2): @import (A8) — file-level compose, cycle guard, diamond dedup }
+  TTestStyleImport = class(TTestCase)
+  private
+    FDir: string;
+    procedure WriteCss(const AName, AContent: string);
+    function PathOf(const AName: string): string;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestImporterOverridesImported;
+    procedure TestNestedRelativeResolution;
+    procedure TestCycleRaisesNotHang;
+    procedure TestDiamondLoadsBaseOnce;
+    procedure TestMissingImportRaises;
+  end;
+
   TTestStyleResolve = class(TTestCase)
   private
     FModel: TTyStyleModel;
@@ -341,6 +358,142 @@ const
     '  opacity: 0.5;' + LineEnding +
     '  background: #111111;' + LineEnding +
     '}' + LineEnding;
+
+{ ── @import (A8) ──────────────────────────────────────────────────────────── }
+
+procedure TTestStyleImport.SetUp;
+begin
+  FDir := IncludeTrailingPathDelimiter(GetTempDir) +
+    'tyimport_' + IntToStr(PtrUInt(Self)) + '_' + IntToStr(Random(1 shl 30)) + PathDelim;
+  ForceDirectories(FDir);
+  ForceDirectories(FDir + 'sub' + PathDelim);
+end;
+
+procedure TTestStyleImport.TearDown;
+begin
+  // best-effort cleanup; leaving temp files behind is harmless if deletion fails
+  DeleteFile(PathOf('a.tycss'));
+  DeleteFile(PathOf('b.tycss'));
+  DeleteFile(PathOf('base.tycss'));
+  DeleteFile(PathOf('top.tycss'));
+  DeleteFile(FDir + 'sub' + PathDelim + 'b.tycss');
+  DeleteFile(FDir + 'sub' + PathDelim + 'c.tycss');
+  RemoveDir(FDir + 'sub' + PathDelim);
+  RemoveDir(FDir);
+end;
+
+function TTestStyleImport.PathOf(const AName: string): string;
+begin
+  Result := FDir + AName;
+end;
+
+procedure TTestStyleImport.WriteCss(const AName, AContent: string);
+var sl: TStringList;
+begin
+  sl := TStringList.Create;
+  try
+    sl.Text := AContent;
+    sl.SaveToFile(FDir + AName);
+  finally
+    sl.Free;
+  end;
+end;
+
+procedure TTestStyleImport.TestImporterOverridesImported;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  // a.tycss imports b.tycss then restates color. The importer's color wins, but b's
+  // background SURVIVES (per-property merge: imported spliced FIRST, importer last).
+  WriteCss('b.tycss', 'TyButton { color: #111111; background: #999999; }');
+  WriteCss('a.tycss', '@import "b.tycss"; TyButton { color: #222222; }');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromFile(PathOf('a.tycss'));
+    s := m.ResolveStyle('TyButton', '', []);
+    AssertEquals('importer color wins', $22, TyRedOf(s.TextColor));
+    AssertTrue('imported background survives', tpBackground in s.Present);
+    AssertEquals('imported background value', $99, TyRedOf(s.Background.Color));
+  finally m.Free; end;
+end;
+
+procedure TTestStyleImport.TestNestedRelativeResolution;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  // a imports sub/b; b imports c (relative to sub/, NOT a's dir). Proves the base-dir
+  // stack: c resolves relative to the importing file's own directory.
+  WriteCss('a.tycss', '@import "sub/b.tycss"; TyButton { color: #333333; }');
+  WriteCss('sub' + PathDelim + 'b.tycss', '@import "c.tycss"; TyButton { border-width: 5px; }');
+  WriteCss('sub' + PathDelim + 'c.tycss', 'TyButton { background: #777777; }');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromFile(PathOf('a.tycss'));
+    s := m.ResolveStyle('TyButton', '', []);
+    AssertEquals('top-level color', $33, TyRedOf(s.TextColor));
+    AssertEquals('nested b border', 5, s.BorderWidth);
+    AssertTrue('deepest c background present', tpBackground in s.Present);
+    AssertEquals('deepest c background value', $77, TyRedOf(s.Background.Color));
+  finally m.Free; end;
+end;
+
+procedure TTestStyleImport.TestCycleRaisesNotHang;
+var m: TTyStyleModel; raised: Boolean;
+begin
+  // a -> b -> a is a cycle: must RAISE (ETyCssError), never infinite-loop/hang.
+  WriteCss('a.tycss', '@import "b.tycss"; TyButton { color: #111111; }');
+  WriteCss('b.tycss', '@import "a.tycss"; TyButton { color: #222222; }');
+  m := TTyStyleModel.Create;
+  raised := False;
+  try
+    try
+      m.LoadFromFile(PathOf('a.tycss'));
+    except
+      on E: ETyCssError do
+        raised := True;
+    end;
+    AssertTrue('@import cycle raises ETyCssError (no hang)', raised);
+  finally m.Free; end;
+end;
+
+procedure TTestStyleImport.TestDiamondLoadsBaseOnce;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  // top -> a -> base and top -> b -> base. base loads ONCE: the splice order is
+  // base, a, b, top. base sets color #aaaaaa, a sets #bbbbbb. If base re-applied after
+  // a (double load) the final color would be #aa; with single load it stays a's #bb.
+  WriteCss('base.tycss', 'TyButton { color: #aaaaaa; background: #555555; }');
+  WriteCss('a.tycss', '@import "base.tycss"; TyButton { color: #bbbbbb; }');
+  WriteCss('b.tycss', '@import "base.tycss"; TyButton { border-width: 4px; }');
+  WriteCss('top.tycss', '@import "a.tycss"; @import "b.tycss"; TyButton { border-radius: 7px; }');
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromFile(PathOf('top.tycss'));
+    s := m.ResolveStyle('TyButton', '', []);
+    AssertEquals('base loaded once -> a color survives (not re-overwritten by base)',
+      $BB, TyRedOf(s.TextColor));
+    AssertTrue('base background present', tpBackground in s.Present);
+    AssertEquals('base background value', $55, TyRedOf(s.Background.Color));
+    AssertEquals('b border applied', 4, s.BorderWidth);
+    AssertEquals('top radius applied', 7, s.BorderRadius);
+  finally m.Free; end;
+end;
+
+procedure TTestStyleImport.TestMissingImportRaises;
+var m: TTyStyleModel; raised: Boolean;
+begin
+  // a relative @import target that does not exist is a load-time fail-fast (no silent skip).
+  WriteCss('a.tycss', '@import "nope.tycss"; TyButton { color: #111111; }');
+  m := TTyStyleModel.Create;
+  raised := False;
+  try
+    try
+      m.LoadFromFile(PathOf('a.tycss'));
+    except
+      on E: ETyCssError do
+        raised := True;
+    end;
+    AssertTrue('missing @import target raises ETyCssError', raised);
+  finally m.Free; end;
+end;
 
 procedure TTestStyleResolve.SetUp;
 begin
@@ -703,6 +856,7 @@ initialization
   RegisterTest(TTestStyleMerge);
   RegisterTest(TTestStylePhase0);
   RegisterTest(TTestStyleLoad);
+  RegisterTest(TTestStyleImport);
   RegisterTest(TTestStyleResolve);
   RegisterTest(TTestStyleShadow);
   RegisterTest(TTestStylePadding);

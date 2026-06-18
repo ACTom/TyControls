@@ -28,6 +28,7 @@ type
   TTyCssStylesheet = class
     Rules: TFPList;
     RootVars: TStringList;
+    Imports: array of string;   // raw @import paths, source order (parser does NO file I/O)
     constructor Create;
     destructor Destroy; override;
   end;
@@ -37,6 +38,7 @@ type
   TTyCssParser = class
   private
     FLexer: TTyCssLexer;
+    FSawRule: Boolean;   // set once a rule/:root has parsed; @import after it is an error
     function Expect(AKind: TTyCssTokenKind): TTyCssToken;
     procedure Error(const AMsg: string; const ATok: TTyCssToken);
     function PseudoToState(const AName: string; const ATok: TTyCssToken): TTyState;
@@ -44,6 +46,8 @@ type
     function ReadRawValue: string;
     procedure ParseRootBlock(ASheet: TTyCssStylesheet);
     procedure ParseRule(ASheet: TTyCssStylesheet);
+    procedure ParseAtRule(ASheet: TTyCssStylesheet; const ATok: TTyCssToken);
+    procedure ParseImport(ASheet: TTyCssStylesheet; const ATok: TTyCssToken);
   public
     constructor Create(const ASource: string);
     destructor Destroy; override;
@@ -235,6 +239,7 @@ var
   raw: string;
 begin
   // ':root' ident already consumed by caller; expect '{'
+  FSawRule := True;   // @import must precede :root/rules
   Expect(ctkLBrace);
   while True do
   begin
@@ -264,6 +269,7 @@ var
   tok, propTok: TTyCssToken;
   raw: string;
 begin
+  FSawRule := True;   // @import must precede all style rules
   rule := TTyCssRule.Create;
   try
     // selector list
@@ -305,10 +311,62 @@ begin
   end;
 end;
 
+procedure TTyCssParser.ParseImport(ASheet: TTyCssStylesheet; const ATok: TTyCssToken);
+{ Grammar: '@import <string|url(<string|ident>)> ;'. The parser only COLLECTS the raw
+  path into ASheet.Imports (in source order); StyleModel performs the recursive file
+  load + splice. '@import' must precede every :root/rule (FSawRule guard). }
+var
+  pathStr: string;
+  next, inner: TTyCssToken;
+begin
+  if FSawRule then
+    Error('An @import must precede all style rules', ATok);
+  next := FLexer.Peek;
+  if next.Kind = ctkString then
+  begin
+    FLexer.Next;
+    pathStr := next.Text;
+  end
+  else if (next.Kind = ctkFunction) and SameText(next.Text, 'url') then
+  begin
+    FLexer.Next; // consume 'url(' (the lexer already ate the '(')
+    inner := FLexer.Next;
+    if inner.Kind = ctkString then
+      pathStr := inner.Text
+    else if inner.Kind = ctkIdent then
+      pathStr := inner.Text
+    else
+      Error('Expected a path inside url() for @import', inner);
+    Expect(ctkRParen);
+  end
+  else
+    Error('Expected a quoted path or url() after @import', next);
+  Expect(ctkSemicolon);
+  SetLength(ASheet.Imports, Length(ASheet.Imports) + 1);
+  ASheet.Imports[High(ASheet.Imports)] := pathStr;
+end;
+
+procedure TTyCssParser.ParseAtRule(ASheet: TTyCssStylesheet; const ATok: TTyCssToken);
+{ ATok is the ctkAtKeyword already consumed by the caller. Dispatch on the (lower-cased)
+  at-keyword name. Today only '@import' (A8) is handled; unknown at-rules are a hard error
+  (the shared dispatcher is where P3's '@mode' will hook in). }
+var
+  name: string;
+begin
+  name := LowerCase(ATok.Text);
+  if name = 'import' then
+    ParseImport(ASheet, ATok)
+  else if name = '' then
+    Error('Expected an at-rule name after "@"', ATok)
+  else
+    Error('Unknown at-rule "@' + ATok.Text + '"', ATok);
+end;
+
 function TTyCssParser.Parse: TTyCssStylesheet;
 var
   tok: TTyCssToken;
 begin
+  FSawRule := False;
   Result := TTyCssStylesheet.Create;
   try
     while True do
@@ -316,7 +374,12 @@ begin
       tok := FLexer.Peek;
       if tok.Kind = ctkEOF then
         Break;
-      if (tok.Kind = ctkColon) then
+      if tok.Kind = ctkAtKeyword then
+      begin
+        FLexer.Next; // consume the at-keyword
+        ParseAtRule(Result, tok);
+      end
+      else if (tok.Kind = ctkColon) then
       begin
         // ':root'
         FLexer.Next; // consume ':'

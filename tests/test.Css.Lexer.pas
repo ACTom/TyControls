@@ -21,6 +21,7 @@ type
     procedure TestComment;
     procedure TestPeekDoesNotConsume;
     procedure TestLineColTracking;
+    procedure TestAtKeyword;
   end;
 
 implementation
@@ -195,6 +196,26 @@ begin
     t2 := lex.Next;
     AssertEquals('t2 line', 2, t2.Line);
     AssertEquals('t2 col', 3, t2.Col);
+  finally
+    lex.Free;
+  end;
+end;
+
+procedure TTestCssLexer.TestAtKeyword;
+var
+  lex: TTyCssLexer;
+  t, s: TTyCssToken;
+begin
+  // '@import' lexes as ONE ctkAtKeyword whose Text drops the leading '@', followed by
+  // the quoted path as a ctkString.
+  lex := TTyCssLexer.Create('@import "base"');
+  try
+    t := lex.Next;
+    AssertTrue('at-keyword kind', t.Kind = ctkAtKeyword);
+    AssertEquals('at-keyword text without @', 'import', t.Text);
+    s := lex.Next;
+    AssertTrue('then string', s.Kind = ctkString);
+    AssertEquals('string text', 'base', s.Text);
   finally
     lex.Free;
   end;

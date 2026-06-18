@@ -19,8 +19,9 @@ implementation
 procedure TTestCssTokens.TestKindOrdinals;
 begin
   AssertEquals('ident first', 0, Ord(ctkIdent));
-  AssertEquals('eof last', 15, Ord(ctkEOF));
+  AssertEquals('eof last', 16, Ord(ctkEOF));   // +1 since ctkAtKeyword was added for @import (A8)
   AssertTrue('function before delim', Ord(ctkFunction) < Ord(ctkDelim));
+  AssertTrue('at-keyword before delim', Ord(ctkAtKeyword) < Ord(ctkDelim));
 end;
 
 procedure TTestCssTokens.TestTokenRecord;

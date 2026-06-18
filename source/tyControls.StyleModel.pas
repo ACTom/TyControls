@@ -30,6 +30,9 @@ type
     procedure ValidateRules(ARules: TFPList; AVars: TStrings);
     procedure LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string;
       AReplace: Boolean = True);
+    procedure ExpandSheet(ASheet: TTyCssStylesheet; ATmpRules: TFPList;
+      ATmpVars: TStrings; const ABaseDir: string; AActive, ADone: TStrings; ADepth: Integer);
+    procedure AddSheetInto(ASheet: TTyCssStylesheet; ATmpRules: TFPList; ATmpVars: TStrings);
     procedure AddEntryTo(ARules: TFPList; const ATypeName, AVariant: string;
       AHasState: Boolean; AState: TTyState; const ADecls: array of TTyCssDeclaration);
     procedure ApplyAllMatching(ARules: TFPList; const ATypeName, AVariant: string;
@@ -190,6 +193,9 @@ begin
     parts.Free;
   end;
 end;
+
+const
+  cMaxImportDepth = 32;  // hard backstop against runaway @import recursion
 
 var
   GThemeBaseDir: string = '';  // set by LoadFromFile so url() resolves vs the theme dir
@@ -719,33 +725,120 @@ begin
   end;
 end;
 
+procedure TTyStyleModel.AddSheetInto(ASheet: TTyCssStylesheet; ATmpRules: TFPList;
+  ATmpVars: TStrings);
+{ Append ONE parsed sheet's own vars (over, new wins) + rules (after, so later wins via
+  apply-all-forward) into the accumulating tmp lists. Imports are NOT handled here — the
+  recursive ExpandSheet has already spliced them in BEFORE calling this. }
+var
+  ri, si, vi: Integer;
+  rule: TTyCssRule;
+  sel: TTyCssSelector;
+begin
+  for vi := 0 to ASheet.RootVars.Count - 1 do
+    ATmpVars.Values[ASheet.RootVars.Names[vi]] := ASheet.RootVars.ValueFromIndex[vi];
+  for ri := 0 to ASheet.Rules.Count - 1 do
+  begin
+    rule := TTyCssRule(ASheet.Rules[ri]);
+    for si := 0 to High(rule.Selectors) do
+    begin
+      sel := rule.Selectors[si];
+      // store the RAW declarations; evaluation is deferred to ResolveStyle (D2)
+      AddEntryTo(ATmpRules, sel.TypeName, sel.Variant, sel.HasState, sel.State,
+                 rule.Declarations);
+    end;
+  end;
+end;
+
+procedure TTyStyleModel.ExpandSheet(ASheet: TTyCssStylesheet; ATmpRules: TFPList;
+  ATmpVars: TStrings; const ABaseDir: string; AActive, ADone: TStrings; ADepth: Integer);
+{ Recursively flatten ASheet into (ATmpRules, ATmpVars): each @import target is loaded,
+  parsed and expanded FIRST (so its rules/vars are the LOWER layer), then THIS sheet's own
+  vars/rules are appended on top (so the importer overrides — same-name var override + a
+  later-appended rule wins via ApplyAllMatching forward order). base-dir is a STACK
+  (ABaseDir is this sheet's own dir; each child uses its OWN dir) for nested relative
+  resolution. Cycle guard: AActive = ancestor stack (re-entry on it = cycle -> raise);
+  ADone = permanently-seen set (idempotent diamond: a shared base loads ONCE). A hard
+  depth cap is the backstop. All file I/O lives here; the parser stays pure. }
+var
+  ii: Integer;
+  rawPath, resolved, canon, childDir: string;
+  childSheet: TTyCssStylesheet;
+  parser: TTyCssParser;
+  sl: TStringList;
+begin
+  if ADepth > cMaxImportDepth then
+    raise ETyCssError.CreateFmt('@import nesting too deep (> %d)', [cMaxImportDepth]);
+  for ii := 0 to High(ASheet.Imports) do
+  begin
+    rawPath := Trim(ASheet.Imports[ii]);
+    if rawPath = '' then
+      raise ETyCssError.Create('@import has an empty path');
+    // Resolve relative to THIS sheet's directory (the bundle/theme root). An absolute or
+    // already-existing path is used as-is; otherwise fall back to ABaseDir + path.
+    resolved := rawPath;
+    if (ABaseDir <> '') and not FileExists(resolved)
+       and FileExists(ABaseDir + rawPath) then
+      resolved := ABaseDir + rawPath;
+    if not FileExists(resolved) then
+      raise ETyCssError.CreateFmt('@import target not found: "%s"', [rawPath]);
+    canon := LowerCase(ExpandFileName(resolved));   // win32: case-insensitive canonical key
+    if AActive.IndexOf(canon) >= 0 then
+      raise ETyCssError.CreateFmt('@import cycle detected: "%s"', [rawPath]);
+    if ADone.IndexOf(canon) >= 0 then
+      Continue;   // diamond: this file was already spliced in once — skip (idempotent)
+
+    sl := TStringList.Create;
+    try
+      sl.LoadFromFile(resolved);
+      parser := TTyCssParser.Create(sl.Text);
+      try
+        childSheet := parser.Parse;
+        try
+          AActive.Add(canon);
+          ADone.Add(canon);
+          try
+            childDir := ExtractFilePath(ExpandFileName(resolved));
+            ExpandSheet(childSheet, ATmpRules, ATmpVars, childDir,
+                        AActive, ADone, ADepth + 1);
+          finally
+            AActive.Delete(AActive.IndexOf(canon));   // pop active stack (keep ADone)
+          end;
+        finally
+          childSheet.Free;
+        end;
+      finally
+        parser.Free;
+      end;
+    finally
+      sl.Free;
+    end;
+  end;
+  // THEN this sheet's own content, on top of everything it imported.
+  AddSheetInto(ASheet, ATmpRules, ATmpVars);
+end;
+
 procedure TTyStyleModel.LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string;
   AReplace: Boolean);
 var
   parser: TTyCssParser; sheet: TTyCssStylesheet;
-  tmpRules: TFPList; tmpVars, tmpMerged: TStringList;
-  ri, si: Integer; rule: TTyCssRule; sel: TTyCssSelector;
+  tmpRules: TFPList; tmpVars, tmpMerged, active, done: TStringList;
+  ri: Integer;
 begin
   tmpRules := TFPList.Create;
   tmpVars := TStringList.Create;
   tmpMerged := TStringList.Create;
+  active := TStringList.Create;
+  done := TStringList.Create;
   try
     parser := TTyCssParser.Create(ASource);
     try
       sheet := parser.Parse;
       try
-        tmpVars.Assign(sheet.RootVars);
-        for ri := 0 to sheet.Rules.Count - 1 do
-        begin
-          rule := TTyCssRule(sheet.Rules[ri]);
-          for si := 0 to High(rule.Selectors) do
-          begin
-            sel := rule.Selectors[si];
-            // store the RAW declarations; evaluation is deferred to ResolveStyle (D2)
-            AddEntryTo(tmpRules, sel.TypeName, sel.Variant, sel.HasState, sel.State,
-                       rule.Declarations);
-          end;
-        end;
+        // Recursively expand @import targets first (lower layer), then this sheet on top.
+        // The top-level base dir is the active theme-file dir (GThemeBaseDir, set by
+        // LoadFromFile; empty for LoadFromCss -> relative @import that doesn't exist errors).
+        ExpandSheet(sheet, tmpRules, tmpVars, GThemeBaseDir, active, done, 0);
       finally
         sheet.Free;
       end;
@@ -777,10 +870,10 @@ begin
         AVars.Values[tmpVars.Names[ri]] := tmpVars.ValueFromIndex[ri];
   except
     ClearList(tmpRules);  // free entries built before the failure
-    tmpRules.Free; tmpVars.Free; tmpMerged.Free;
+    tmpRules.Free; tmpVars.Free; tmpMerged.Free; active.Free; done.Free;
     raise;
   end;
-  tmpRules.Free; tmpVars.Free; tmpMerged.Free;
+  tmpRules.Free; tmpVars.Free; tmpMerged.Free; active.Free; done.Free;
   RebuildMergedVars;   // base (+) user, for resolve-time evaluation
   Inc(FVersion);       // §3.8: every load bumps the version (cache/switch anchor)
 end;

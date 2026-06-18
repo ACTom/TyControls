@@ -202,6 +202,21 @@ begin
     Exit(MakeToken(ctkString, s, startLine, startCol));
   end;
 
+  // At-keyword: '@' followed by an ident run (e.g. '@import', '@mode'). The leading
+  // '@' is consumed and the stored Text is the name WITHOUT it (parser LowerCases at
+  // compare). '@' alone (no ident run) yields an empty-Text ctkAtKeyword -> parser errors.
+  if CurChar = '@' then
+  begin
+    Advance; // consume '@'
+    s := '';
+    while CurChar in ['a'..'z', 'A'..'Z', '0'..'9', '_', '-'] do
+    begin
+      s := s + CurChar;
+      Advance;
+    end;
+    Exit(MakeToken(ctkAtKeyword, s, startLine, startCol));
+  end;
+
   // Single-char punctuation
   case CurChar of
     '%': begin Advance; Exit(MakeToken(ctkPercent, '%', startLine, startCol)); end;

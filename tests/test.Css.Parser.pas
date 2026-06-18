@@ -21,6 +21,10 @@ type
     procedure TestErrorMissingBrace;
     procedure TestErrorMissingSemicolon;
     procedure TestRawValueRoundTrips;
+    procedure TestImportCollectedInSourceOrder;
+    procedure TestImportUrlForm;
+    procedure TestImportAfterRuleRaises;
+    procedure TestUnknownAtRuleRaises;
   end;
 
 implementation
@@ -232,6 +236,89 @@ begin
   AssertEquals('multi-px then var(): space inserted',
                                                    '2px 4px 8px var(--c)',
                                                    ParseRaw('2px 4px 8px var(--c)'));
+end;
+
+procedure TTestCssParser.TestImportCollectedInSourceOrder;
+var
+  p: TTyCssParser;
+  sheet: TTyCssStylesheet;
+begin
+  // @import is collected as raw paths in source order; the parser does NO file I/O.
+  p := TTyCssParser.Create('@import "base"; @import "more"; TyButton { color: #111111; }');
+  try
+    sheet := p.Parse;
+    try
+      AssertEquals('two imports collected', 2, Length(sheet.Imports));
+      AssertEquals('import 0', 'base', sheet.Imports[0]);
+      AssertEquals('import 1', 'more', sheet.Imports[1]);
+      AssertEquals('rule still parsed', 1, sheet.Rules.Count);
+    finally
+      sheet.Free;
+    end;
+  finally
+    p.Free;
+  end;
+end;
+
+procedure TTestCssParser.TestImportUrlForm;
+var
+  p: TTyCssParser;
+  sheet: TTyCssStylesheet;
+begin
+  // url("...") form yields the same raw path as the bare-string form.
+  p := TTyCssParser.Create('@import url("theme/base.tycss");');
+  try
+    sheet := p.Parse;
+    try
+      AssertEquals('one import', 1, Length(sheet.Imports));
+      AssertEquals('url() path', 'theme/base.tycss', sheet.Imports[0]);
+    finally
+      sheet.Free;
+    end;
+  finally
+    p.Free;
+  end;
+end;
+
+procedure TTestCssParser.TestImportAfterRuleRaises;
+var
+  p: TTyCssParser;
+  raised: Boolean;
+begin
+  // CSS requires @import to precede all rules; an @import after a rule is an error.
+  p := TTyCssParser.Create('TyButton { color: #111111; } @import "late";');
+  raised := False;
+  try
+    try
+      p.Parse.Free;
+    except
+      on E: ETyCssError do
+        raised := True;
+    end;
+    AssertTrue('@import after a rule raises ETyCssError', raised);
+  finally
+    p.Free;
+  end;
+end;
+
+procedure TTestCssParser.TestUnknownAtRuleRaises;
+var
+  p: TTyCssParser;
+  raised: Boolean;
+begin
+  p := TTyCssParser.Create('@bogus "x";');
+  raised := False;
+  try
+    try
+      p.Parse.Free;
+    except
+      on E: ETyCssError do
+        raised := True;
+    end;
+    AssertTrue('unknown at-rule raises ETyCssError', raised);
+  finally
+    p.Free;
+  end;
 end;
 
 initialization
