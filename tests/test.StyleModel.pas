@@ -40,6 +40,8 @@ type
     procedure TearDown; override;
   published
     procedure TestBackgroundNoneKeyword;
+    procedure TestSeedOverrideReachesBaseRule;
+    procedure TestBaseResolveUnchanged;
   end;
 
   TTestStyleResolve = class(TTestCase)
@@ -657,6 +659,30 @@ begin
   st := FModel.ResolveStyle('TyPanel', '', []);
   AssertTrue('tpBackground present', tpBackground in st.Present);
   AssertTrue('Kind = tfkNone', st.Background.Kind = tfkNone);
+end;
+
+procedure TTestStylePhase0.TestSeedOverrideReachesBaseRule;
+var st: TTyStyleSet;
+begin
+  // thin user theme overriding ONLY --accent, with no TyButton rule. The built-in
+  // base TyButton.primary = var(--accent) must pick up the MERGED seed (red).
+  // Eager bake gives the built-in accent (#3B82F6); merge-then-resolve gives red.
+  FModel.LoadFromCss(':root { --accent: #FF0000; }');
+  st := FModel.ResolveStyle('TyButton', 'primary', []);
+  AssertTrue('background present', tpBackground in st.Present);
+  AssertEquals('base primary picks up merged seed = red',
+    TTyColor($FFFF0000), st.Background.Color);
+end;
+
+procedure TTestStylePhase0.TestBaseResolveUnchanged;
+var st, ed: TTyStyleSet;
+begin
+  // No user theme: the built-in base resolves to its own seeds (baseline guard,
+  // passes both before and after the refactor).
+  st := FModel.ResolveStyle('TyButton', 'primary', []);
+  AssertEquals('base primary = built-in accent', TTyColor($FF3B82F6), st.Background.Color);
+  ed := FModel.ResolveStyle('TyEdit', '', [tysFocused]);
+  AssertTrue('focus outline present', tpOutline in ed.Present);
 end;
 
 initialization

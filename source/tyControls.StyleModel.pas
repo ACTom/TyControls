@@ -7,20 +7,34 @@ uses
   tyControls.DefaultTheme;
 
 type
+  { One parsed rule: selector match + its RAW declarations (Prop, RawValue), kept
+    unevaluated so ResolveStyle evaluates them against the merged var set (D2). }
+  TTyStyleRuleEntry = class
+    TypeName: string;
+    Variant: string;
+    HasState: Boolean;
+    State: TTyState;
+    Decls: array of TTyCssDeclaration;
+  end;
+
   TTyStyleModel = class
   private
     FRules: TFPList;          // user layer — owns TTyStyleRuleEntry
     FVars: TStringList;       // user :root vars, name=value (no leading --)
     FBaseRules: TFPList;      // built-in default layer — owns TTyStyleRuleEntry
     FBaseVars: TStringList;   // built-in :root vars
+    FMergedVars: TStringList; // FBaseVars (+) FVars, user wins; rebuilt on load/clear
     procedure ClearList(ARules: TFPList);
+    procedure RebuildMergedVars;
+    procedure ValidateRules(ARules: TFPList; AVars: TStrings);
     procedure LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string);
     procedure AddEntryTo(ARules: TFPList; const ATypeName, AVariant: string;
-      AHasState: Boolean; AState: TTyState; const AStyle: TTyStyleSet);
-    function FindStyleIn(ARules: TFPList; const ATypeName, AVariant: string;
-      AHasState: Boolean; AState: TTyState; out AStyle: TTyStyleSet): Boolean;
-    function ResolveLayer(ARules: TFPList; const ATypeKey, AStyleClass: string;
-      AStates: TTyStateSet): TTyStyleSet;
+      AHasState: Boolean; AState: TTyState; const ADecls: array of TTyCssDeclaration);
+    function FindEntryIn(ARules: TFPList; const ATypeName, AVariant: string;
+      AHasState: Boolean; AState: TTyState): TTyStyleRuleEntry;
+    procedure ApplyEntry(var AResult: TTyStyleSet; AEntry: TTyStyleRuleEntry);
+    procedure ResolveLayer(ARules: TFPList; const ATypeKey, AStyleClass: string;
+      AStates: TTyStateSet; var AResult: TTyStyleSet);
     function UserHasTypeKey(const ATypeKey: string): Boolean;
   public
     constructor Create;
@@ -41,15 +55,6 @@ function TyApplyDeclaration(var AStyle: TTyStyleSet; const AProp, ARawValue: str
   Vars: TStrings): Boolean;
 
 implementation
-
-type
-  TTyStyleRuleEntry = class
-    TypeName: string;
-    Variant: string;
-    HasState: Boolean;
-    State: TTyState;
-    Style: TTyStyleSet;
-  end;
 
 procedure TyMergeStyleSet(var ABase: TTyStyleSet; const AOver: TTyStyleSet);
 begin
@@ -582,6 +587,7 @@ begin
   FVars := TStringList.Create;
   FBaseRules := TFPList.Create;
   FBaseVars := TStringList.Create;
+  FMergedVars := TStringList.Create;
   { Seed the built-in default skin once. It is never cleared by user theme
     loads — it only applies (per-typeKey) when the user layer is silent. }
   LoadInto(FBaseRules, FBaseVars, TyBuiltinThemeCss);
@@ -595,6 +601,7 @@ begin
   FBaseRules.Free;
   FVars.Free;
   FBaseVars.Free;
+  FMergedVars.Free;
   inherited Destroy;
 end;
 
@@ -603,6 +610,7 @@ procedure TTyStyleModel.Clear;
 begin
   ClearList(FRules);
   FVars.Clear;
+  RebuildMergedVars;
 end;
 
 procedure TTyStyleModel.ClearList(ARules: TFPList);
@@ -613,38 +621,73 @@ begin
   ARules.Clear;
 end;
 
+procedure TTyStyleModel.RebuildMergedVars;
+{ Merge the two token layers ONCE per load: base derives first, the user layer
+  overrides same-named vars. ResolveStyle evaluates every rule against this set,
+  so overriding a SEED re-derives the whole family (var-on-var resolves through
+  TyEvalColor at resolve time). }
+var i: Integer;
+begin
+  FMergedVars.Clear;
+  FMergedVars.Assign(FBaseVars);
+  for i := 0 to FVars.Count - 1 do
+    FMergedVars.Values[FVars.Names[i]] := FVars.ValueFromIndex[i];
+end;
+
+procedure TTyStyleModel.ValidateRules(ARules: TFPList; AVars: TStrings);
+{ Load-time fail-fast: try-evaluate every declaration against AVars once, BEFORE the
+  load commits, so a bad value (undefined var / malformed expression) raises with the
+  PREVIOUS theme intact — preserving the old eager-bake's "broken load throws + keeps
+  the old theme" contract now that real evaluation is deferred to resolve time. }
+var i, di: Integer; e: TTyStyleRuleEntry; dummy: TTyStyleSet;
+begin
+  for i := 0 to ARules.Count - 1 do
+  begin
+    e := TTyStyleRuleEntry(ARules[i]);
+    dummy := EmptyStyleSet;
+    for di := 0 to High(e.Decls) do
+      TyApplyDeclaration(dummy, e.Decls[di].Prop, e.Decls[di].RawValue, AVars);
+  end;
+end;
+
 procedure TTyStyleModel.AddEntryTo(ARules: TFPList; const ATypeName, AVariant: string;
-  AHasState: Boolean; AState: TTyState; const AStyle: TTyStyleSet);
-var e: TTyStyleRuleEntry;
+  AHasState: Boolean; AState: TTyState; const ADecls: array of TTyCssDeclaration);
+var e: TTyStyleRuleEntry; i: Integer;
 begin
   e := TTyStyleRuleEntry.Create;
   e.TypeName := ATypeName;
   e.Variant := AVariant;
   e.HasState := AHasState;
   e.State := AState;
-  e.Style := AStyle;
+  SetLength(e.Decls, Length(ADecls));
+  for i := 0 to High(ADecls) do e.Decls[i] := ADecls[i];
   ARules.Add(e);
 end;
 
-function TTyStyleModel.FindStyleIn(ARules: TFPList; const ATypeName, AVariant: string;
-  AHasState: Boolean; AState: TTyState; out AStyle: TTyStyleSet): Boolean;
+function TTyStyleModel.FindEntryIn(ARules: TFPList; const ATypeName, AVariant: string;
+  AHasState: Boolean; AState: TTyState): TTyStyleRuleEntry;
 var
   i: Integer;
   e: TTyStyleRuleEntry;
 begin
-  Result := False;
-  AStyle := EmptyStyleSet;
-  for i := ARules.Count - 1 downto 0 do
+  Result := nil;
+  for i := ARules.Count - 1 downto 0 do   // backward = last-defined duplicate wins
   begin
     e := TTyStyleRuleEntry(ARules[i]);
     if SameText(e.TypeName, ATypeName) and SameText(e.Variant, AVariant)
        and (e.HasState = AHasState) and ((not AHasState) or (e.State = AState)) then
-    begin
-      AStyle := e.Style;
-      Result := True;
-      Exit;
-    end;
+      Exit(e);
   end;
+end;
+
+procedure TTyStyleModel.ApplyEntry(var AResult: TTyStyleSet; AEntry: TTyStyleRuleEntry);
+{ Apply a matched rule's raw declarations IN ORDER onto AResult, evaluating each
+  against the merged vars. In-order application reproduces the eager bake exactly
+  (overwrite-by-field; shorthands expand the same), so the pixel baseline holds. }
+var di: Integer;
+begin
+  for di := 0 to High(AEntry.Decls) do
+    TyApplyDeclaration(AResult, AEntry.Decls[di].Prop, AEntry.Decls[di].RawValue, FMergedVars);
 end;
 
 function TTyStyleModel.UserHasTypeKey(const ATypeKey: string): Boolean;
@@ -670,11 +713,12 @@ end;
 procedure TTyStyleModel.LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string);
 var
   parser: TTyCssParser; sheet: TTyCssStylesheet;
-  tmpRules: TFPList; tmpVars: TStringList;
-  ri, si, di: Integer; rule: TTyCssRule; sel: TTyCssSelector; decl: TTyCssDeclaration; st: TTyStyleSet;
+  tmpRules: TFPList; tmpVars, tmpMerged: TStringList;
+  ri, si: Integer; rule: TTyCssRule; sel: TTyCssSelector;
 begin
   tmpRules := TFPList.Create;
   tmpVars := TStringList.Create;
+  tmpMerged := TStringList.Create;
   try
     parser := TTyCssParser.Create(ASource);
     try
@@ -684,16 +728,12 @@ begin
         for ri := 0 to sheet.Rules.Count - 1 do
         begin
           rule := TTyCssRule(sheet.Rules[ri]);
-          st := EmptyStyleSet;
-          for di := 0 to High(rule.Declarations) do
-          begin
-            decl := rule.Declarations[di];
-            TyApplyDeclaration(st, decl.Prop, decl.RawValue, tmpVars);
-          end;
           for si := 0 to High(rule.Selectors) do
           begin
             sel := rule.Selectors[si];
-            AddEntryTo(tmpRules, sel.TypeName, sel.Variant, sel.HasState, sel.State, st);
+            // store the RAW declarations; evaluation is deferred to ResolveStyle (D2)
+            AddEntryTo(tmpRules, sel.TypeName, sel.Variant, sel.HasState, sel.State,
+                       rule.Declarations);
           end;
         end;
       finally
@@ -702,17 +742,25 @@ begin
     finally
       parser.Free;
     end;
+    // Fail-fast on bad VALUES before committing (against base (+) this layer), so a
+    // broken theme raises with the previous theme still active.
+    tmpMerged.Assign(FBaseVars);
+    for ri := 0 to tmpVars.Count - 1 do
+      tmpMerged.Values[tmpVars.Names[ri]] := tmpVars.ValueFromIndex[ri];
+    ValidateRules(tmpRules, tmpMerged);
+    // Commit.
     ClearList(ARules);
     AVars.Clear;
     for ri := 0 to tmpRules.Count - 1 do ARules.Add(tmpRules[ri]);
-    tmpRules.Clear;   // ownership of entries transferred to ARules; clear list only (do NOT free entries)
+    tmpRules.Clear;   // ownership transferred to ARules; clear list only (do NOT free entries)
     AVars.Assign(tmpVars);
   except
     ClearList(tmpRules);  // free entries built before the failure
-    tmpRules.Free; tmpVars.Free;
+    tmpRules.Free; tmpVars.Free; tmpMerged.Free;
     raise;
   end;
-  tmpRules.Free; tmpVars.Free;
+  tmpRules.Free; tmpVars.Free; tmpMerged.Free;
+  RebuildMergedVars;   // base (+) user, for resolve-time evaluation
 end;
 
 procedure TTyStyleModel.LoadFromCss(const ASource: string);
@@ -724,7 +772,7 @@ function TTyStyleModel.MaxGlassBlur: Integer;
 
   function ScanLayer(ARules: TFPList; ASkipUserKeys: Boolean): Integer;
   var
-    i: Integer;
+    i, di, gb: Integer;
     e: TTyStyleRuleEntry;
   begin
     Result := 0;
@@ -734,8 +782,13 @@ function TTyStyleModel.MaxGlassBlur: Integer;
       // Honour the user-suppresses-base rule: skip base entries for typeKeys the
       // user theme defines (their base glass tokens are suppressed by ResolveStyle).
       if ASkipUserKeys and UserHasTypeKey(e.TypeName) then Continue;
-      if (tpGlass in e.Style.Present) and (e.Style.Background.GlassBlur > Result) then
-        Result := e.Style.Background.GlassBlur;
+      // Entries now hold raw decls; evaluate any glass-blur against the merged vars.
+      for di := 0 to High(e.Decls) do
+        if LowerCase(Trim(e.Decls[di].Prop)) = 'glass-blur' then
+        begin
+          gb := TyEvalLength(e.Decls[di].RawValue, FMergedVars);
+          if gb > Result then Result := gb;
+        end;
     end;
   end;
 
@@ -765,34 +818,33 @@ begin
   end;
 end;
 
-function TTyStyleModel.ResolveLayer(ARules: TFPList; const ATypeKey, AStyleClass: string;
-  AStates: TTyStateSet): TTyStyleSet;
+procedure TTyStyleModel.ResolveLayer(ARules: TFPList; const ATypeKey, AStyleClass: string;
+  AStates: TTyStateSet; var AResult: TTyStyleSet);
 const
   // fixed state application order: hover, focused, active, disabled
   cStateOrder: array[0..3] of TTyState = (tysHover, tysFocused, tysActive, tysDisabled);
 var
   variants: TStringList;
-  found: TTyStyleSet;
+  e: TTyStyleRuleEntry;
   vi, si: Integer;
   v: string;
   st: TTyState;
 begin
-  Result := EmptyStyleSet;
   variants := TStringList.Create;
   try
     variants.Delimiter := ' ';
     variants.StrictDelimiter := False; // collapse multiple spaces
     variants.DelimitedText := Trim(AStyleClass);
     // 1) type base rule (no variant, no state)
-    if FindStyleIn(ARules, ATypeKey, '', False, tysNormal, found) then
-      TyMergeStyleSet(Result, found);
+    e := FindEntryIn(ARules, ATypeKey, '', False, tysNormal);
+    if e <> nil then ApplyEntry(AResult, e);
     // 2) each variant token, in textual order, base-state rule (TypeName.variant)
     for vi := 0 to variants.Count - 1 do
     begin
       v := Trim(variants[vi]);
       if v = '' then Continue;
-      if FindStyleIn(ARules, ATypeKey, v, False, tysNormal, found) then
-        TyMergeStyleSet(Result, found);
+      e := FindEntryIn(ARules, ATypeKey, v, False, tysNormal);
+      if e <> nil then ApplyEntry(AResult, e);
     end;
     // 3) state layers present in AStates, in fixed order;
     //    for each state apply TypeName:state then each TypeName.variant:state
@@ -800,14 +852,14 @@ begin
     begin
       st := cStateOrder[si];
       if not (st in AStates) then Continue;
-      if FindStyleIn(ARules, ATypeKey, '', True, st, found) then
-        TyMergeStyleSet(Result, found);
+      e := FindEntryIn(ARules, ATypeKey, '', True, st);
+      if e <> nil then ApplyEntry(AResult, e);
       for vi := 0 to variants.Count - 1 do
       begin
         v := Trim(variants[vi]);
         if v = '' then Continue;
-        if FindStyleIn(ARules, ATypeKey, v, True, st, found) then
-          TyMergeStyleSet(Result, found);
+        e := FindEntryIn(ARules, ATypeKey, v, True, st);
+        if e <> nil then ApplyEntry(AResult, e);
       end;
     end;
   finally
@@ -817,17 +869,16 @@ end;
 
 function TTyStyleModel.ResolveStyle(const ATypeKey, AStyleClass: string;
   AStates: TTyStateSet): TTyStyleSet;
-var
-  userLayer: TTyStyleSet;
 begin
   Result := EmptyStyleSet;
   { Built-in default layer applies only when the user theme defines NO rule for
     this typeKey — so a fully-themed control is untouched (no property bleed),
-    while an unstyled/partially-themed control still gets a sensible default. }
+    while an unstyled/partially-themed control still gets a sensible default. Both
+    layers' raw declarations evaluate against the MERGED vars, so overriding a seed
+    reaches base rules (the D2 unlock). }
   if not UserHasTypeKey(ATypeKey) then
-    Result := ResolveLayer(FBaseRules, ATypeKey, AStyleClass, AStates);
-  userLayer := ResolveLayer(FRules, ATypeKey, AStyleClass, AStates);
-  TyMergeStyleSet(Result, userLayer);
+    ResolveLayer(FBaseRules, ATypeKey, AStyleClass, AStates, Result);
+  ResolveLayer(FRules, ATypeKey, AStyleClass, AStates, Result);
 end;
 
 end.
