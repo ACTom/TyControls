@@ -70,6 +70,26 @@ object DemoMainForm: TDemoMainForm
     Controller = Controller
     Caption = 'Green'
   end
+  object BtnAuto: TTyButton
+    Left = 644
+    Height = 60
+    Top = 100
+    Width = 145
+    TabOrder = 19
+    OnClick = BtnAutoClick
+    Controller = Controller
+    Caption = 'Auto'
+  end
+  object BtnSystem: TTyButton
+    Left = 797
+    Height = 60
+    Top = 100
+    Width = 145
+    TabOrder = 20
+    OnClick = BtnSystemClick
+    Controller = Controller
+    Caption = 'System'
+  end
   object BtnPrimary: TTyButton
     Left = 32
     Height = 60

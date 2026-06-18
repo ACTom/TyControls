@@ -23,6 +23,8 @@ type
     BtnDark: TTyButton;
     BtnShowcase: TTyButton;
     BtnGreen: TTyButton;
+    BtnAuto: TTyButton;
+    BtnSystem: TTyButton;
     BtnPrimary: TTyButton;
     BtnDanger: TTyButton;
     LblHello: TTyLabel;
@@ -45,6 +47,8 @@ type
     procedure BtnDarkClick(Sender: TObject);
     procedure BtnShowcaseClick(Sender: TObject);
     procedure BtnGreenClick(Sender: TObject);
+    procedure BtnAutoClick(Sender: TObject);
+    procedure BtnSystemClick(Sender: TObject);
     procedure TrackBar1Change(Sender: TObject);
   private
     function ThemeDir: string;
@@ -76,6 +80,9 @@ end;
 
 procedure TDemoMainForm.ApplyTheme(const AFile: string);
 begin
+  // An explicit theme pick is a MANUAL choice; the Auto/System buttons re-enable
+  // OS-follow after calling this (so picking Light/Dark/etc. stops tracking the OS).
+  Controller.Follow := tfManual;
   Controller.LoadTheme(ThemeDir + AFile);
   Controller.Changed;
 
@@ -114,6 +121,23 @@ end;
 procedure TDemoMainForm.BtnGreenClick(Sender: TObject);
 begin
   ApplyTheme('green.tycss');
+end;
+
+procedure TDemoMainForm.BtnAutoClick(Sender: TObject);
+begin
+  // auto.tycss is a single-file dual-mode theme (@mode light/dark). Following the
+  // system pulls the OS scheme into the active mode so it shows the right variant.
+  ApplyTheme('auto.tycss');
+  Controller.Follow := tfFollowSystem;
+  ApplyChromeTheme(Controller);   // re-resolve chrome for the OS-selected mode
+end;
+
+procedure TDemoMainForm.BtnSystemClick(Sender: TObject);
+begin
+  // system.tycss seeds its accent + mode from the live OS (system-accent/system-mode).
+  ApplyTheme('system.tycss');
+  Controller.Follow := tfFollowSystem;
+  ApplyChromeTheme(Controller);
 end;
 
 end.
