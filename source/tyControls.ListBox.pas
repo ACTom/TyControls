@@ -690,6 +690,8 @@ var
   R, ContentRect, RowRect, RowFillRect: TRect;
   SBWidth, SH, i, LastRow: Integer;
   ItemStates: TTyStateSet;
+  bw, ir, fillTop, fillBottom: Integer;
+  rowCorners: TTyCorners;
 begin
   // Keep scrollbar in sync (cheap; catches external Items.Add calls)
   UpdateScrollBar;
@@ -742,19 +744,32 @@ begin
         ContentRect.Top + (i - FTopIndex + 1) * SH
       );
 
-      // Fill row background if the style has one. Inset the fill rect
-      // horizontally by the listbox padding so TyListItem's rounded corners
-      // sit inside the listbox interior and stay visible (otherwise a rounded
-      // fill flush against the border looks like a hard square).
+      // Fill row background if the style has one. The highlight spans the listbox
+      // INTERIOR edge-to-edge (flush to the inner border, minus the scrollbar) — no
+      // side gap. The list is capped to the rounded container: the first item rounds
+      // its TOP corners and the last item its BOTTOM corners to the container's inner
+      // radius (so a square highlight never pokes past the rounded border), and those
+      // end rows extend to the inner border so the round nests; middle rows are square.
       if tpBackground in RowStyle.Present then
       begin
-        RowFillRect := Rect(
-          RowRect.Left  + P.Scale(BoxStyle.Padding.Left),
-          RowRect.Top,
-          RowRect.Right - P.Scale(BoxStyle.Padding.Right),
-          RowRect.Bottom
-        );
-        P.FillBackground(RowFillRect, RowStyle.Background, RowStyle.BorderRadius);
+        bw := P.Scale(BoxStyle.BorderWidth);
+        ir := BoxStyle.BorderRadius - BoxStyle.BorderWidth;
+        if ir < 0 then ir := 0;
+        fillTop := RowRect.Top;
+        fillBottom := RowRect.Bottom;
+        rowCorners := TyCorners(0, 0, 0, 0);
+        if i = 0 then
+        begin
+          fillTop := R.Top + bw;
+          rowCorners.TL := ir; rowCorners.TR := ir;
+        end;
+        if i = FItems.Count - 1 then
+        begin
+          fillBottom := R.Bottom - bw;
+          rowCorners.BR := ir; rowCorners.BL := ir;
+        end;
+        RowFillRect := Rect(R.Left + bw, fillTop, R.Right - bw - SBWidth, fillBottom);
+        P.FillBackground(RowFillRect, RowStyle.Background, rowCorners);
       end;
 
       // Draw item text, inset by item padding

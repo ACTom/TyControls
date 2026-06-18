@@ -395,14 +395,14 @@ begin
 end;
 
 { TestSelectedRowRoundedCorners
-  Batch4 Task 6: TyListItem now carries border-radius:var(--radius), and the
-  selected/hover row fill is inset by the ListBox padding so the rounded corners
-  fall inside the listbox interior and reveal the listbox background.
+  The selection bar spans the listbox INTERIOR edge-to-edge (no side gap) and is CAPPED
+  to the CONTAINER's rounded corner: the first row rounds its top corners by the TyListBox
+  radius so a square highlight never pokes past the rounded border.
 
-  (a) Theme wiring: ResolveStyle('TyListItem','',[]).BorderRadius > 0.
-  (b) Pixel proof: the selected row's top-left corner pixel is NOT the active
-      fill (accent) — the rounded corner + padding inset exposes the dark
-      listbox background there — while the row's centre IS the active fill. }
+  (a) Theme wiring: ResolveStyle('TyListBox','',[]).BorderRadius > 0.
+  (b) Pixel proof: row 0 centre IS the accent fill; its LEFT EDGE at mid-row IS the accent
+      fill (full width, no gap); its extreme top-left corner is NOT the accent fill (the
+      rounded cap shows the listbox background there, never poking past the border). }
 procedure TTyListBoxTest.TestSelectedRowRoundedCorners;
 var
   Ctl: TTyStyleController;
@@ -417,16 +417,16 @@ begin
   F := TForm.CreateNew(nil);
   Bmp := TBitmap.Create;
   try
-    // Big radius (12) + visible padding (2) so the rounded corner clearly
-    // exposes the dark listbox background at the row's extreme corner.
+    // Big CONTAINER radius (12) + no border so the rounded top-left clearly exposes the
+    // listbox background at the extreme corner; the selection caps to that radius.
     Ctl.LoadThemeCss(
-      'TyListBox { background: #101010; border-width: 0px; padding: 2px; } ' +
-      'TyListItem { color: #CCCCCC; border-radius: 12px; } ' +
+      'TyListBox { background: #101010; border-width: 0px; border-radius: 12px; padding: 2px; } ' +
+      'TyListItem { color: #CCCCCC; } ' +
       'TyListItem:active { background: #3B82F6; }');
 
-    // (a) theme wiring
-    AssertTrue('TyListItem border-radius wired (>0)',
-      Ctl.Model.ResolveStyle('TyListItem', '', []).BorderRadius > 0);
+    // (a) theme wiring — the CONTAINER radius drives the end-row cap now.
+    AssertTrue('TyListBox border-radius wired (>0)',
+      Ctl.Model.ResolveStyle('TyListBox', '', []).BorderRadius > 0);
 
     LB := TListBoxAccess.Create(F);
     LB.Parent := F;
@@ -437,7 +437,7 @@ begin
     LB.Items.Add('Alpha');
     LB.Items.Add('Beta');
     LB.Items.Add('Gamma');
-    LB.SelectItem(0);   // row 0 = active
+    LB.SelectItem(0);   // row 0 = active (first item -> top corners capped)
     LB.TopIndex := 0;
 
     Bmp.PixelFormat := pf32bit;
@@ -446,24 +446,31 @@ begin
     Bmp.Canvas.FillRect(0, 0, 120, 100);
     LB.RenderTo(Bmp.Canvas, Rect(0, 0, 120, 100), 96);
 
-    // Row 0 band: content area starts at padding-top (2px); row height = 24px.
-    RowTop := 2;
-    RowBottom := RowTop + 24;
-    CenterY := (RowTop + RowBottom) div 2;
+    // Row 0 fill now reaches the inner border at top (y=0); centre well inside.
+    RowTop := 0;
+    RowBottom := 2 + 24;            // content top (padding) + item height
+    CenterY := 13;
 
     Reread := TBGRABitmap.Create(Bmp);
     try
       // Centre of the row (well away from text at x=80) must be the accent fill.
       PxCenter := Reread.GetPixel(80, CenterY);
-      AssertTrue(Format('row0 centre is accent fill: B>180 (R=%d G=%d B=%d)',
-        [PxCenter.red, PxCenter.green, PxCenter.blue]), PxCenter.blue > 180);
-      AssertTrue(Format('row0 centre is accent fill: R<120 (R=%d G=%d B=%d)',
-        [PxCenter.red, PxCenter.green, PxCenter.blue]), PxCenter.red < 120);
+      AssertTrue(Format('row0 centre is accent fill (R=%d G=%d B=%d)',
+        [PxCenter.red, PxCenter.green, PxCenter.blue]),
+        (PxCenter.blue > 180) and (PxCenter.red < 120));
 
-      // Extreme top-left corner of the row band: rounding + inset means this is
-      // NOT the accent fill (it shows the dark listbox background instead).
-      PxCorner := Reread.GetPixel(RowTop, RowTop);
-      AssertFalse(Format('row0 top-left corner NOT accent fill (R=%d G=%d B=%d)',
+      // Full width / no side gap: x=2 at mid-row (inside what used to be the 4px inset
+      // gap, LEFT of the text glyphs, past the AA edge, below the corner curve) is the
+      // accent fill — proving the highlight now reaches the interior edge.
+      PxCenter := Reread.GetPixel(2, 18);
+      AssertTrue(Format('row0 left edge is accent (full width, no gap) (R=%d G=%d B=%d)',
+        [PxCenter.red, PxCenter.green, PxCenter.blue]),
+        (PxCenter.blue > 180) and (PxCenter.red < 120));
+
+      // Capped: the extreme top-left corner is rounded to the container, so it is NOT
+      // the accent fill (it shows the listbox/background, never poking past the border).
+      PxCorner := Reread.GetPixel(0, 0);
+      AssertFalse(Format('row0 top-left corner NOT accent (rounded cap) (R=%d G=%d B=%d)',
         [PxCorner.red, PxCorner.green, PxCorner.blue]),
         (PxCorner.blue > 180) and (PxCorner.red < 120));
     finally
