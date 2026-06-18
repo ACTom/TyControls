@@ -1,7 +1,7 @@
 unit test.menu;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Forms, Menus, fpcunit, testregistry, tyControls.Menu;
+uses Classes, SysUtils, Types, Controls, Forms, Menus, fpcunit, testregistry, tyControls.Menu;
 type
   TMenuModelTest = class(TTestCase)
   published
@@ -57,8 +57,10 @@ type
   public
     function TopCount: Integer;
     function TopCaption(AIndex: Integer): string;
+    function TopCellWidth(AIndex, APPI: Integer): Integer;
     function TopLeft(AIndex, APPI: Integer): Integer;
     function TopAtX(AX, APPI: Integer): Integer;
+    function FitWidth(APPI: Integer): Integer;
   end;
 
   { Verifies TTyMenuBar (Task 5): an associated TMainMenu rendered as horizontal top
@@ -67,6 +69,7 @@ type
   TMenuBarTest = class(TTestCase)
   published
     procedure TestTopCellsAndHitTest;
+    procedure TestAutoSizeWidthFitsContentExceptAlignTopBottom;
   end;
 
   { Verifies TTyPopupMenu (Task 7): a themed context menu over the LCL TPopupMenu
@@ -169,6 +172,11 @@ begin
   Result := inherited TopCaption(AIndex);
 end;
 
+function TTyMenuBarAccess.TopCellWidth(AIndex, APPI: Integer): Integer;
+begin
+  Result := inherited TopCellWidth(AIndex, APPI);
+end;
+
 function TTyMenuBarAccess.TopLeft(AIndex, APPI: Integer): Integer;
 begin
   Result := inherited TopLeft(AIndex, APPI);
@@ -177,6 +185,11 @@ end;
 function TTyMenuBarAccess.TopAtX(AX, APPI: Integer): Integer;
 begin
   Result := inherited TopAtX(AX, APPI);
+end;
+
+function TTyMenuBarAccess.FitWidth(APPI: Integer): Integer;
+begin
+  Result := inherited FitWidth(APPI);
 end;
 
 { TMenuViewTest }
@@ -307,6 +320,58 @@ begin
       AssertEquals('2 top cells', 2, bar.TopCount);
       AssertEquals('cell0 caption', 'File', bar.TopCaption(0));
       AssertEquals('hit inside cell1 -> 1', 1, bar.TopAtX(bar.TopLeft(1, 96) + 1, 96));
+    finally bar.Free; end;
+  finally mm.Free; end;
+end;
+
+procedure TMenuBarTest.TestAutoSizeWidthFitsContentExceptAlignTopBottom;
+var
+  bar: TTyMenuBarAccess; mm: TMainMenu; ppi, fit: Integer;
+begin
+  mm := TMainMenu.Create(nil);
+  try
+    // A 3-top-item menu so the fit-width is the sum of three cells + the bar padding.
+    mm.Items.Add(NewSubMenu('File', 0, '', [NewItem('New', 0, False, True, nil, 0, '')]));
+    mm.Items.Add(NewSubMenu('Edit', 0, '', [NewItem('Cut', 0, False, True, nil, 0, '')]));
+    mm.Items.Add(NewSubMenu('View', 0, '', [NewItem('Zoom', 0, False, True, nil, 0, '')]));
+
+    // Flag ON + Align=alNone: Width shrinks to exactly the content fit, which equals
+    // TopLeft(last) + TopCellWidth(last) + the bar's right padding (== FitWidth).
+    bar := TTyMenuBarAccess.Create(nil);
+    try
+      ppi := bar.Font.PixelsPerInch;
+      if ppi <= 0 then ppi := 96;
+      bar.Align := alNone;
+      bar.AutoSizeWidth := True;
+      bar.Menu := mm;
+      AssertEquals('3 top cells', 3, bar.TopCount);
+      // Content fit == last cell's right edge (TopLeft(last)+TopCellWidth(last)) plus
+      // the bar's own right padding, so it must be at least that right edge.
+      fit := bar.TopLeft(2, ppi) + bar.TopCellWidth(2, ppi);   // last cell right edge
+      AssertTrue('content width is positive', fit > 0);
+      AssertTrue('FitWidth covers the last cell right edge', bar.FitWidth(ppi) >= fit);
+      AssertEquals('alNone Width fits the content', bar.FitWidth(ppi), bar.Width);
+    finally bar.Free; end;
+
+    // Flag ON but Align=alLeft (still not alTop/alBottom): also fits the content.
+    bar := TTyMenuBarAccess.Create(nil);
+    try
+      ppi := bar.Font.PixelsPerInch;
+      if ppi <= 0 then ppi := 96;
+      bar.Align := alLeft;
+      bar.AutoSizeWidth := True;
+      bar.Menu := mm;
+      AssertEquals('alLeft Width fits the content', bar.FitWidth(ppi), bar.Width);
+    finally bar.Free; end;
+
+    // Flag ON but Align=alTop: width is NOT force-fit (the LCL stretches it instead).
+    bar := TTyMenuBarAccess.Create(nil);
+    try
+      bar.Align := alTop;
+      bar.Width := 500;          // a deliberately non-fit width
+      bar.AutoSizeWidth := True;
+      bar.Menu := mm;
+      AssertEquals('alTop width is left at its set value (not fit)', 500, bar.Width);
     finally bar.Free; end;
   finally mm.Free; end;
 end;

@@ -176,12 +176,16 @@ type
     FOpenIndex: Integer;      // index of the open top dropdown, or -1 (none open)
     FHotIndex: Integer;       // hovered top cell, or -1
     FPopup: TTyMenuPopup;     // lazy dropdown host for the open top item
+    FAutoSizeWidth: Boolean;  // shrink-to-fit the top cells (see FitWidth)
+    FInAutoSizeWidth: Boolean;// re-entrancy guard around the Width := FitWidth set
     procedure SetMenu(AValue: TMainMenu);
+    procedure SetAutoSizeWidth(AValue: Boolean);
+    { Apply content-fit sizing when enabled and Align permits it (not alTop/alBottom,
+      where the LCL force-stretches the bar to the parent width). Sets Width to
+      FitWidth; guarded against the Resize -> SetBounds -> Resize re-entry. }
+    procedure ApplyAutoSizeWidth;
     { Index of the AIndex-th VISIBLE top item back into Menu.Items, or -1. }
     function VisibleTopItem(AIndex: Integer): TMenuItem;
-    { Resolve the width of the AIndex-th top cell in device px (caption + the
-      TyMenuItem left/right padding), theme-driven. }
-    function TopCellWidth(AIndex, APPI: Integer): Integer;
     procedure HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
     procedure ClosePopup;
     { Open (or re-open) the dropdown for top cell AIndex, anchored to its cell rect. }
@@ -191,11 +195,19 @@ type
     { Pure top-cell geometry seams (device px), driven by theme tokens. }
     function TopCount: Integer;
     function TopCaption(AIndex: Integer): string;
+    { Resolve the width of the AIndex-th top cell in device px (caption + the
+      TyMenuItem left/right padding), theme-driven. }
+    function TopCellWidth(AIndex, APPI: Integer): Integer;
     function TopLeft(AIndex, APPI: Integer): Integer;
     { Device-x -> top cell index, or -1 when X is past the last cell. }
     function TopAtX(AX, APPI: Integer): Integer;
+    { Pure content-fit width (device px): the sum of the top-cell widths plus the bar's
+      own left+right padding — i.e. TopLeft(last) + TopCellWidth(last) + right padding.
+      The width an AutoSizeWidth bar shrinks to; headless-testable like TopLeft/TopAtX. }
+    function FitWidth(APPI: Integer): Integer;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    procedure Resize; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -208,6 +220,13 @@ type
       freeing it nils this reference (FreeNotification). TTyForm.MenuBar reads this
       for the non-mac shortcut dispatch and the mac global-bar handoff (Task 6). }
     property Menu: TMainMenu read FMenu write SetMenu;
+    { Shrink-to-fit the bar's Width to its top-level cells + horizontal padding. A
+      distinct flag (not the LCL AutoSize/CanAutoSize machinery, which fights the
+      auto-size layout system): when True it sets Width to FitWidth — but only while
+      Align is NOT alTop/alBottom, where the LCL force-stretches the bar to the parent
+      width and a content fit would be overridden anyway. Recomputed when Menu is
+      (re)assigned, when this flag is set True, and on resize/relayout. }
+    property AutoSizeWidth: Boolean read FAutoSizeWidth write SetAutoSizeWidth default False;
     property Align;
     property Anchors;
     property StyleClass;
@@ -896,7 +915,15 @@ begin
   FMenu := AValue;
   if FMenu <> nil then
     FMenu.FreeNotification(Self);
+  ApplyAutoSizeWidth;   // the cell set changed -> refit when enabled
   Invalidate;
+end;
+
+procedure TTyMenuBar.SetAutoSizeWidth(AValue: Boolean);
+begin
+  if FAutoSizeWidth = AValue then Exit;
+  FAutoSizeWidth := AValue;
+  ApplyAutoSizeWidth;   // fit immediately when turned on
 end;
 
 procedure TTyMenuBar.Notification(AComponent: TComponent; Operation: TOperation);
@@ -906,6 +933,7 @@ begin
   begin
     ClosePopup;
     FMenu := nil;
+    ApplyAutoSizeWidth;   // no cells left -> refit (to bare padding) when enabled
     Invalidate;
   end;
 end;
@@ -987,6 +1015,47 @@ begin
     cellL := TopLeft(i, APPI);
     cellR := cellL + TopCellWidth(i, APPI);
     if (AX >= cellL) and (AX < cellR) then Exit(i);
+  end;
+end;
+
+function TTyMenuBar.FitWidth(APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+  n: Integer;
+begin
+  // The cells pack from the bar's left padding (TopLeft(0)) edge-to-edge, so the last
+  // cell's right edge is TopLeft(last) + TopCellWidth(last); add the bar's own right
+  // padding to close the symmetric chrome. Reuses the pure cell-geometry seams so this
+  // stays headless-testable (no window). With no cells it collapses to just the
+  // left+right padding.
+  S := CurrentStyle;
+  n := TopCount;
+  if n <= 0 then
+    Result := MulDiv(S.Padding.Left, APPI, 96) + MulDiv(S.Padding.Right, APPI, 96)
+  else
+    Result := TopLeft(n - 1, APPI) + TopCellWidth(n - 1, APPI)
+      + MulDiv(S.Padding.Right, APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+procedure TTyMenuBar.ApplyAutoSizeWidth;
+var
+  ppi, w: Integer;
+begin
+  if not FAutoSizeWidth then Exit;
+  // alTop/alBottom hand width control to the LCL align layout (full parent width), so
+  // a content fit would just be overridden — leave those alone.
+  if Align in [alTop, alBottom] then Exit;
+  if FInAutoSizeWidth then Exit;   // guard the Width set's Resize re-entry
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  w := FitWidth(ppi);
+  if w = Width then Exit;
+  FInAutoSizeWidth := True;
+  try
+    Width := w;
+  finally
+    FInAutoSizeWidth := False;
   end;
 end;
 
@@ -1137,6 +1206,15 @@ end;
 procedure TTyMenuBar.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+procedure TTyMenuBar.Resize;
+begin
+  inherited Resize;
+  // Re-fit on a relayout (e.g. the parent resized us, or a DPI/font change moved the
+  // cell metrics). The re-entrancy guard inside ApplyAutoSizeWidth keeps the Width set
+  // from looping back through Resize.
+  ApplyAutoSizeWidth;
 end;
 
 { TTyPopupMenu }
