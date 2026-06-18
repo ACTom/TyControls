@@ -50,6 +50,15 @@ type
     procedure LoadFromCssAdditive(const ASource: string);  // appends rules + merges vars (A6)
     procedure LoadFromFile(const AFileName: string);
     function ResolveStyle(const ATypeKey, AStyleClass: string; AStates: TTyStateSet): TTyStyleSet;
+    { A9 per-instance StyleOverride (§3.1 layer 2). Parse a bare declaration block (no
+      selector) and evaluate each declaration against the LIVE merged var set, so a
+      'var(--accent)' in an override binds to the active theme (and re-binds after a
+      switch, since the override cache is keyed by ThemeVersion on the control side).
+      Returns a TTyStyleSet whose Present flags cover only the properties the override
+      mentions; TyMergeStyleSet then overlays those on top of the resolved theme style.
+      Bad-value tolerant: a parse failure yields EmptyStyleSet; a single bad declaration
+      (e.g. var(--undefined)) is skipped (try/except) so an override never crashes paint. }
+    function ResolveOverride(const ASource: string): TTyStyleSet;
     function MaxGlassBlur: Integer;   // largest glass-blur any active rule requests (0 = none)
     property ThemeVersion: Cardinal read FVersion;  // bumps on every load/clear
     { A7 property cascade. False (default) = today's all-or-nothing: a user rule for a
@@ -1004,6 +1013,30 @@ begin
   if FPropertyCascade or not UserHasTypeKey(ATypeKey) then
     ResolveLayer(FBaseRules, ATypeKey, AStyleClass, AStates, Result);
   ResolveLayer(FRules, ATypeKey, AStyleClass, AStates, Result);
+end;
+
+function TTyStyleModel.ResolveOverride(const ASource: string): TTyStyleSet;
+{ §3.1 layer 2. Parse the bare override block, then apply each declaration against the
+  MERGED var set (so var(--...) resolves through the active theme — the §3.8 token rule).
+  Each declaration is guarded individually so one bad value (undefined var, malformed
+  expression) is skipped, not fatal: an override must never crash painting (unlike a
+  theme LOAD, which fails fast). A parse failure leaves the result empty (no overlay). }
+var
+  decls: TTyCssDeclarationArray;
+  i: Integer;
+begin
+  Result := EmptyStyleSet;
+  if not TyParseOverride(ASource, decls) then
+    Exit;   // malformed fragment -> empty override (no Present flags -> overlays nothing)
+  for i := 0 to High(decls) do
+  begin
+    try
+      TyApplyDeclaration(Result, decls[i].Prop, decls[i].RawValue, FMergedVars);
+    except
+      on E: Exception do
+        ; // skip a bad declaration; keep the other (good) override props
+    end;
+  end;
 end;
 
 end.

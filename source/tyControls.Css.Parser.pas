@@ -54,6 +54,17 @@ type
     function Parse: TTyCssStylesheet;
   end;
 
+  TTyCssDeclarationArray = array of TTyCssDeclaration;
+
+{ Parse a BARE declaration block (no selector) — the per-instance StyleOverride (A9)
+  fragment, e.g. 'background:#f00; border-color: var(--accent);'. Wraps the fragment as
+  a synthetic _ovr rule (selector plus a brace-wrapped body), runs the existing parser,
+  and lifts Rules[0]'s raw declarations (the selector is discarded). Returns False on
+  ANY parse error (with an
+  empty ADecls) so a malformed override never crashes painting (the model treats it as
+  empty). An empty/blank fragment yields True with zero declarations. }
+function TyParseOverride(const ASource: string; out ADecls: TTyCssDeclarationArray): Boolean;
+
 implementation
 
 constructor TTyCssStylesheet.Create;
@@ -396,6 +407,57 @@ begin
   except
     Result.Free;
     raise;
+  end;
+end;
+
+function TyParseOverride(const ASource: string; out ADecls: TTyCssDeclarationArray): Boolean;
+var
+  parser: TTyCssParser;
+  sheet: TTyCssStylesheet;
+  rule: TTyCssRule;
+  i: Integer;
+  body: string;
+begin
+  Result := False;
+  SetLength(ADecls, 0);
+  body := Trim(ASource);
+  if body = '' then
+  begin
+    Result := True;   // empty override: valid, contributes nothing
+    Exit;
+  end;
+  // The grammar requires a ';' after EVERY declaration; a bare fragment commonly omits
+  // the trailing one (CSS makes the last semicolon optional). Normalize: drop a trailing
+  // ';' then append exactly one, so both 'a:1' and 'a:1;' parse and 'a:1;;' is avoided.
+  while (body <> '') and (body[Length(body)] = ';') do
+    body := TrimRight(Copy(body, 1, Length(body) - 1));
+  try
+    // Wrap as a synthetic rule so the existing selector{...} grammar parses the block;
+    // '_ovr' is a throwaway ident — only the declarations are kept.
+    parser := TTyCssParser.Create('_ovr{' + body + ';}');
+    try
+      sheet := parser.Parse;
+      try
+        if (sheet.Rules <> nil) and (sheet.Rules.Count > 0) then
+        begin
+          rule := TTyCssRule(sheet.Rules[0]);
+          SetLength(ADecls, Length(rule.Declarations));
+          for i := 0 to High(rule.Declarations) do
+            ADecls[i] := rule.Declarations[i];
+        end;
+        Result := True;
+      finally
+        sheet.Free;
+      end;
+    finally
+      parser.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      SetLength(ADecls, 0);
+      Result := False;   // malformed fragment -> empty override, never propagate
+    end;
   end;
 end;
 

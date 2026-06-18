@@ -77,6 +77,22 @@ type
     procedure TestMissingImportRaises;
   end;
 
+  { Phase 2 (theme v2): per-instance StyleOverride (A9) — ResolveOverride layer 2 }
+  TTestStyleOverride = class(TTestCase)
+  private
+    FModel: TTyStyleModel;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestOverrideAppliesOnlyMentionedProps;
+    procedure TestOverrideWinsOverTheme;
+    procedure TestOverrideVarResolvesAgainstTheme;
+    procedure TestOverrideVarRebindsOnThemeSwitch;
+    procedure TestOverrideBadValueDoesNotRaise;
+    procedure TestOverrideEmptyIsNoOp;
+  end;
+
   TTestStyleResolve = class(TTestCase)
   private
     FModel: TTyStyleModel;
@@ -589,6 +605,116 @@ begin
   finally m.Free; end;
 end;
 
+{ ── per-instance StyleOverride (A9) ─────────────────────────────────────────── }
+
+procedure TTestStyleOverride.SetUp;
+begin
+  FModel := TTyStyleModel.Create;   // built-in base layer seeded (--accent = #3B82F6)
+end;
+
+procedure TTestStyleOverride.TearDown;
+begin
+  FModel.Free;
+end;
+
+procedure TTestStyleOverride.TestOverrideAppliesOnlyMentionedProps;
+var ovr: TTyStyleSet;
+begin
+  // ResolveOverride sets Present flags ONLY for the properties the fragment mentions,
+  // so TyMergeStyleSet overlays just those on top of the resolved theme style.
+  ovr := FModel.ResolveOverride('background:#FF0000; border-width:5px');
+  AssertTrue('background present', tpBackground in ovr.Present);
+  AssertTrue('border-width present', tpBorderWidth in ovr.Present);
+  AssertEquals('override bg red', $FF, TyRedOf(ovr.Background.Color));
+  AssertEquals('override border-width', 5, ovr.BorderWidth);
+  AssertFalse('unmentioned text-color not present', tpTextColor in ovr.Present);
+  AssertFalse('unmentioned border-color not present', tpBorderColor in ovr.Present);
+end;
+
+procedure TTestStyleOverride.TestOverrideWinsOverTheme;
+var themed, ovr, merged: TTyStyleSet;
+begin
+  // An override property overlaid (per-Present) on top of a theme style wins for that
+  // property while leaving the theme's other properties intact — the layer-2 semantics
+  // CurrentStyle uses (here exercised directly via TyMergeStyleSet).
+  FModel.LoadFromCss('TyButton { color:#FFFFFF; background:#101010; border-width:2px; }');
+  themed := FModel.ResolveStyle('TyButton', '', []);
+  ovr := FModel.ResolveOverride('background:#00FF00');
+  merged := themed;
+  TyMergeStyleSet(merged, ovr);
+  AssertEquals('override background wins', $00, TyRedOf(merged.Background.Color));
+  AssertEquals('override background green', $FF, TyGreenOf(merged.Background.Color));
+  AssertEquals('theme text-color survives', $FF, TyRedOf(merged.TextColor));
+  AssertEquals('theme border-width survives', 2, merged.BorderWidth);
+end;
+
+procedure TTestStyleOverride.TestOverrideVarResolvesAgainstTheme;
+var ovr: TTyStyleSet;
+begin
+  // var(--accent) in an override resolves through the LIVE merged var set, NOT a literal.
+  // A user theme redefines --accent to pure green; the override must pick that up.
+  FModel.LoadFromCss(':root { --accent: #00FF00; }');
+  ovr := FModel.ResolveOverride('border-color: var(--accent)');
+  AssertTrue('border-color present', tpBorderColor in ovr.Present);
+  AssertEquals('var(--accent) resolves to themed green (r)', $00, TyRedOf(ovr.BorderColor));
+  AssertEquals('var(--accent) resolves to themed green (g)', $FF, TyGreenOf(ovr.BorderColor));
+  AssertEquals('var(--accent) resolves to themed green (b)', $00, TyBlueOf(ovr.BorderColor));
+end;
+
+procedure TTestStyleOverride.TestOverrideVarRebindsOnThemeSwitch;
+var ovr: TTyStyleSet;
+begin
+  // The same override text re-resolves against whatever theme is active. Switching the
+  // theme (a REPLACE load that bumps ThemeVersion) re-binds var(--accent) to the new
+  // value — the §3.8 promise that overrides persist but their var() re-bind on switch.
+  FModel.LoadFromCss(':root { --accent: #FF0000; }');   // theme A: red accent
+  ovr := FModel.ResolveOverride('border-color: var(--accent)');
+  AssertEquals('theme A accent red', $FF, TyRedOf(ovr.BorderColor));
+  AssertEquals('theme A accent not green', $00, TyGreenOf(ovr.BorderColor));
+
+  FModel.LoadFromCss(':root { --accent: #00FF00; }');   // switch to theme B: green accent
+  ovr := FModel.ResolveOverride('border-color: var(--accent)');
+  AssertEquals('theme B accent now green (r)', $00, TyRedOf(ovr.BorderColor));
+  AssertEquals('theme B accent now green (g)', $FF, TyGreenOf(ovr.BorderColor));
+end;
+
+procedure TTestStyleOverride.TestOverrideBadValueDoesNotRaise;
+var ovr: TTyStyleSet; raised: Boolean;
+begin
+  // A malformed/undefined-var override must NOT raise (unlike a theme load): one bad
+  // declaration is skipped while a good sibling declaration still applies.
+  raised := False;
+  try
+    ovr := FModel.ResolveOverride('border-color: var(--no-such-var); background:#123456');
+  except
+    on E: Exception do raised := True;
+  end;
+  AssertFalse('malformed override does not raise', raised);
+  // the good declaration still landed
+  AssertTrue('good background still applied', tpBackground in ovr.Present);
+  AssertEquals('good background value', $12, TyRedOf(ovr.Background.Color));
+
+  // A grossly malformed fragment (unparseable) also must not raise -> empty result.
+  raised := False;
+  try
+    ovr := FModel.ResolveOverride('@@@ not css ;;;');
+  except
+    on E: Exception do raised := True;
+  end;
+  AssertFalse('unparseable override does not raise', raised);
+  AssertTrue('unparseable override yields empty present set', ovr.Present = []);
+end;
+
+procedure TTestStyleOverride.TestOverrideEmptyIsNoOp;
+var ovr: TTyStyleSet;
+begin
+  // An empty/blank override is valid and contributes nothing (no Present flags).
+  ovr := FModel.ResolveOverride('');
+  AssertTrue('empty override has no present flags', ovr.Present = []);
+  ovr := FModel.ResolveOverride('   ');
+  AssertTrue('blank override has no present flags', ovr.Present = []);
+end;
+
 procedure TTestStyleResolve.SetUp;
 begin
   FModel := TTyStyleModel.Create;
@@ -952,6 +1078,7 @@ initialization
   RegisterTest(TTestStyleLoad);
   RegisterTest(TTestStylePropertyCascade);
   RegisterTest(TTestStyleImport);
+  RegisterTest(TTestStyleOverride);
   RegisterTest(TTestStyleResolve);
   RegisterTest(TTestStyleShadow);
   RegisterTest(TTestStylePadding);

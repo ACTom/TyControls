@@ -31,7 +31,16 @@ type
   private
     FStyleClass: string;
     FController: TTyStyleController;
+    { A9 per-instance StyleOverride: a bare CSS decl block layered on top of the resolved
+      theme style. FOvrCache holds the parsed+evaluated set; recomputed only when the text
+      or the model's ThemeVersion changes (so var(--...) re-binds on a theme switch). }
+    FStyleOverride: string;
+    FOvrCache: TTyStyleSet;
+    FOvrCacheText: string;
+    FOvrCacheVer: Cardinal;
+    FOvrCacheValid: Boolean;
     procedure SetStyleClass(const AValue: string);
+    procedure SetStyleOverride(const AValue: string);
     procedure SetController(AValue: TTyStyleController);
     procedure CMEnabledChanged(var Msg: TLMessage); message CM_ENABLEDCHANGED;
   protected
@@ -77,6 +86,10 @@ type
     property ParentShowHint;
     property Action;
     property StyleClass: string read FStyleClass write SetStyleClass;
+    { A9: a per-instance CSS declaration block (e.g. 'border-color: var(--accent);')
+      applied on top of the theme for THIS control only. May reference var(--...) tokens,
+      which resolve against the active theme. A malformed value is skipped, never fatal. }
+    property StyleOverride: string read FStyleOverride write SetStyleOverride;
     property Controller: TTyStyleController read FController write SetController;
   end;
 
@@ -84,7 +97,15 @@ type
   private
     FStyleClass: string;
     FController: TTyStyleController;
+    { A9 per-instance StyleOverride (mirrors the TTyGraphicControl twin — the two base
+      classes share no ancestor, so the field + setter + cache are duplicated). }
+    FStyleOverride: string;
+    FOvrCache: TTyStyleSet;
+    FOvrCacheText: string;
+    FOvrCacheVer: Cardinal;
+    FOvrCacheValid: Boolean;
     procedure SetStyleClass(const AValue: string);
+    procedure SetStyleOverride(const AValue: string);
     procedure CMEnabledChanged(var Msg: TLMessage); message CM_ENABLEDCHANGED;
   protected
     FHover, FPressed: Boolean;
@@ -149,6 +170,10 @@ type
     property OnExit;
     property OnEditingDone;
     property StyleClass: string read FStyleClass write SetStyleClass;
+    { A9: per-instance CSS declaration block applied on top of the theme for THIS control
+      only. May reference var(--...) tokens (resolved against the active theme); a
+      malformed value is skipped, never fatal. }
+    property StyleOverride: string read FStyleOverride write SetStyleOverride;
     property Controller: TTyStyleController read FController write SetController;
   end;
 
@@ -237,6 +262,14 @@ begin
   Invalidate;
 end;
 
+procedure TTyGraphicControl.SetStyleOverride(const AValue: string);
+begin
+  if FStyleOverride = AValue then Exit;
+  FStyleOverride := AValue;
+  FOvrCacheValid := False;   // force a re-parse on the next CurrentStyle
+  Invalidate;
+end;
+
 procedure TTyGraphicControl.SetController(AValue: TTyStyleController);
 begin
   if FController = AValue then Exit;
@@ -291,8 +324,25 @@ begin
 end;
 
 function TTyGraphicControl.CurrentStyle: TTyStyleSet;
+var
+  model: TTyStyleModel;
 begin
-  Result := ActiveController.Model.ResolveStyle(GetStyleTypeKey, FStyleClass, CurrentStates);
+  model := ActiveController.Model;
+  Result := model.ResolveStyle(GetStyleTypeKey, FStyleClass, CurrentStates);
+  // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
+  // the override text changed or the theme version bumped (so var(--...) re-binds).
+  if FStyleOverride <> '' then
+  begin
+    if (not FOvrCacheValid) or (FOvrCacheText <> FStyleOverride)
+       or (FOvrCacheVer <> model.ThemeVersion) then
+    begin
+      FOvrCache := model.ResolveOverride(FStyleOverride);
+      FOvrCacheText := FStyleOverride;
+      FOvrCacheVer := model.ThemeVersion;
+      FOvrCacheValid := True;
+    end;
+    TyMergeStyleSet(Result, FOvrCache);   // override wins per Present flag (§3.3)
+  end;
 end;
 
 { Resolve the background a child should composite onto. A windowed child does NOT
@@ -505,6 +555,14 @@ begin
   Invalidate;
 end;
 
+procedure TTyCustomControl.SetStyleOverride(const AValue: string);
+begin
+  if FStyleOverride = AValue then Exit;
+  FStyleOverride := AValue;
+  FOvrCacheValid := False;   // force a re-parse on the next CurrentStyle
+  Invalidate;
+end;
+
 procedure TTyCustomControl.SetController(AValue: TTyStyleController);
 begin
   if FController = AValue then Exit;
@@ -560,8 +618,25 @@ begin
 end;
 
 function TTyCustomControl.CurrentStyle: TTyStyleSet;
+var
+  model: TTyStyleModel;
 begin
-  Result := ActiveController.Model.ResolveStyle(GetStyleTypeKey, FStyleClass, CurrentStates);
+  model := ActiveController.Model;
+  Result := model.ResolveStyle(GetStyleTypeKey, FStyleClass, CurrentStates);
+  // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
+  // the override text changed or the theme version bumped (so var(--...) re-binds).
+  if FStyleOverride <> '' then
+  begin
+    if (not FOvrCacheValid) or (FOvrCacheText <> FStyleOverride)
+       or (FOvrCacheVer <> model.ThemeVersion) then
+    begin
+      FOvrCache := model.ResolveOverride(FStyleOverride);
+      FOvrCacheText := FStyleOverride;
+      FOvrCacheVer := model.ThemeVersion;
+      FOvrCacheValid := True;
+    end;
+    TyMergeStyleSet(Result, FOvrCache);   // override wins per Present flag (§3.3)
+  end;
 end;
 
 function TTyCustomControl.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
