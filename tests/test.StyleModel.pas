@@ -93,6 +93,27 @@ type
     procedure TestOverrideEmptyIsNoOp;
   end;
 
+  { Phase 3 (theme v2): single-file dual-mode (@mode, D7) — SetMode overlays the active
+    mode's :root vars and re-merges; unknown/empty mode applies nothing. }
+  TTestStyleMode = class(TTestCase)
+  private
+    FModel: TTyStyleModel;
+    const
+      DUAL_CSS =
+        'TyButton { background: var(--bg); color: var(--fg); }' +
+        '@mode light { :root { --bg: #FFFFFF; --fg: #000000; } }' +
+        '@mode dark  { :root { --bg: #000000; --fg: #FFFFFF; } }';
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestModeDefaultEmptyNoOverride;
+    procedure TestSetModeLightThenDark;
+    procedure TestUnknownModeGraceful;
+    procedure TestSetModeBumpsVersion;
+    procedure TestReloadReplacesModeBlocks;
+  end;
+
   TTestStyleResolve = class(TTestCase)
   private
     FModel: TTyStyleModel;
@@ -1072,8 +1093,96 @@ begin
   AssertEquals('additive base background value', TTyColor($FF111111), st.Background.Color);
 end;
 
+{ ── Phase 3: single-file dual-mode (@mode, D7) ─────────────────────────────── }
+
+procedure TTestStyleMode.SetUp;
+begin
+  FModel := TTyStyleModel.Create;
+  FModel.LoadFromCss(DUAL_CSS);
+end;
+
+procedure TTestStyleMode.TearDown;
+begin
+  FModel.Free;
+end;
+
+procedure TTestStyleMode.TestModeDefaultEmptyNoOverride;
+var raised: Boolean;
+begin
+  // Default mode is '' -> no @mode vars applied. The shared body's var(--bg)/var(--fg)
+  // are mode-only here, so they are undefined and resolving raises (until a mode is set).
+  AssertEquals('default mode is empty', '', FModel.Mode);
+  raised := False;
+  try
+    FModel.ResolveStyle('TyButton', '', []);
+  except
+    on E: Exception do raised := True;
+  end;
+  AssertTrue('mode-only vars are undefined until SetMode', raised);
+end;
+
+procedure TTestStyleMode.TestSetModeLightThenDark;
+var st: TTyStyleSet;
+begin
+  FModel.SetMode('light');
+  AssertEquals('mode is light', 'light', FModel.Mode);
+  st := FModel.ResolveStyle('TyButton', '', []);
+  AssertEquals('light bg', TTyColor($FFFFFFFF), st.Background.Color);
+  AssertEquals('light fg', TTyColor($FF000000), st.TextColor);
+  // switching to dark re-merges: the dark @mode :root now wins.
+  FModel.SetMode('dark');
+  st := FModel.ResolveStyle('TyButton', '', []);
+  AssertEquals('dark bg', TTyColor($FF000000), st.Background.Color);
+  AssertEquals('dark fg', TTyColor($FFFFFFFF), st.TextColor);
+end;
+
+procedure TTestStyleMode.TestUnknownModeGraceful;
+var raised: Boolean;
+begin
+  // An unknown mode applies NO mode vars (graceful) — same as the empty default: the
+  // mode-only vars stay undefined (no crash from SetMode itself).
+  FModel.SetMode('sepia');
+  AssertEquals('mode stored even if unknown', 'sepia', FModel.Mode);
+  raised := False;
+  try
+    FModel.ResolveStyle('TyButton', '', []);
+  except
+    on E: Exception do raised := True;
+  end;
+  AssertTrue('unknown mode contributes no vars', raised);
+end;
+
+procedure TTestStyleMode.TestSetModeBumpsVersion;
+var v0, v1: Cardinal;
+begin
+  v0 := FModel.ThemeVersion;
+  FModel.SetMode('light');
+  v1 := FModel.ThemeVersion;
+  AssertTrue('SetMode bumps ThemeVersion', v1 > v0);
+  // no-op SetMode (same mode) does NOT bump
+  FModel.SetMode('light');
+  AssertEquals('same-mode SetMode is a no-op', v1, FModel.ThemeVersion);
+end;
+
+procedure TTestStyleMode.TestReloadReplacesModeBlocks;
+var st: TTyStyleSet;
+begin
+  // A REPLACE load clears prior @mode blocks. Reload a theme whose 'light' mode differs;
+  // the active mode is kept, and re-resolving picks up the NEW light values (no residual).
+  FModel.SetMode('light');
+  st := FModel.ResolveStyle('TyButton', '', []);
+  AssertEquals('light bg before reload', TTyColor($FFFFFFFF), st.Background.Color);
+  FModel.LoadFromCss(
+    'TyButton { background: var(--bg); }' +
+    '@mode light { :root { --bg: #112233; } }');
+  // mode is still 'light'; RebuildMergedVars after load applied the new light block.
+  st := FModel.ResolveStyle('TyButton', '', []);
+  AssertEquals('light bg after reload = new value', TTyColor($FF112233), st.Background.Color);
+end;
+
 initialization
   RegisterTest(TTestStyleMerge);
+  RegisterTest(TTestStyleMode);
   RegisterTest(TTestStylePhase0);
   RegisterTest(TTestStyleLoad);
   RegisterTest(TTestStylePropertyCascade);

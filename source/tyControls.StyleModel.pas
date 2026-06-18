@@ -23,17 +23,21 @@ type
     FVars: TStringList;       // user :root vars, name=value (no leading --)
     FBaseRules: TFPList;      // built-in default layer — owns TTyStyleRuleEntry
     FBaseVars: TStringList;   // built-in :root vars
-    FMergedVars: TStringList; // FBaseVars (+) FVars, user wins; rebuilt on load/clear
+    FMergedVars: TStringList; // FBaseVars (+) FVars (+) active @mode vars; rebuilt on load/clear/SetMode
     FVersion: Cardinal;       // bumped on every load/clear; the §3.8 switch/cache anchor
     FPropertyCascade: Boolean; // A7: False=all-or-nothing (default, golden); True=base->user per-prop merge
+    FMode: string;            // P3 (D7): active @mode name ('' = no mode override)
+    FModeVars: TStringList;   // loaded @mode blocks: Names[i]=lower(mode), Objects[i]=owned TStringList of that mode's vars
     procedure ClearList(ARules: TFPList);
+    procedure ClearModeVars;
+    function ModeVarsFor(const AMode: string): TStringList;
     procedure RebuildMergedVars;
     procedure ValidateRules(ARules: TFPList; AVars: TStrings);
     procedure LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string;
       AReplace: Boolean = True);
     procedure ExpandSheet(ASheet: TTyCssStylesheet; ATmpRules: TFPList;
-      ATmpVars: TStrings; const ABaseDir: string; AActive, ADone: TStrings; ADepth: Integer);
-    procedure AddSheetInto(ASheet: TTyCssStylesheet; ATmpRules: TFPList; ATmpVars: TStrings);
+      ATmpVars, ATmpModes: TStrings; const ABaseDir: string; AActive, ADone: TStrings; ADepth: Integer);
+    procedure AddSheetInto(ASheet: TTyCssStylesheet; ATmpRules: TFPList; ATmpVars, ATmpModes: TStrings);
     procedure AddEntryTo(ARules: TFPList; const ATypeName, AVariant: string;
       AHasState: Boolean; AState: TTyState; const ADecls: array of TTyCssDeclaration);
     procedure ApplyAllMatching(ARules: TFPList; const ATypeName, AVariant: string;
@@ -67,6 +71,13 @@ type
       (e.g. var(--undefined)) is skipped (try/except) so an override never crashes paint. }
     function ResolveOverride(const ASource: string): TTyStyleSet;
     function MaxGlassBlur: Integer;   // largest glass-blur any active rule requests (0 = none)
+    { P3 (D7) single-file dual-mode. Select which loaded '@mode NAME' (its inner :root)
+      block's vars overlay the user :root in the merged var set. SetMode re-runs the merge
+      and bumps ThemeVersion so the §3.8 cache key changes and controls re-resolve. An
+      unknown/empty mode applies NO mode vars (graceful): the theme resolves as if it had
+      only its shared body + plain :root. }
+    procedure SetMode(const AMode: string);
+    property Mode: string read FMode write SetMode;
     property ThemeVersion: Cardinal read FVersion;  // bumps on every load/clear
     { A7 property cascade. False (default) = today's all-or-nothing: a user rule for a
       typeKey suppresses the ENTIRE built-in layer for that typeKey (golden baseline).
@@ -621,6 +632,7 @@ begin
   FBaseRules := TFPList.Create;
   FBaseVars := TStringList.Create;
   FMergedVars := TStringList.Create;
+  FModeVars := TStringList.Create;
   { Seed the built-in default skin once. It is never cleared by user theme
     loads — it only applies (per-typeKey) when the user layer is silent. }
   LoadInto(FBaseRules, FBaseVars, TyBuiltinThemeCss);
@@ -630,19 +642,44 @@ destructor TTyStyleModel.Destroy;
 begin
   ClearList(FRules);
   ClearList(FBaseRules);
+  ClearModeVars;
   FRules.Free;
   FBaseRules.Free;
   FVars.Free;
   FBaseVars.Free;
   FMergedVars.Free;
+  FModeVars.Free;
   inherited Destroy;
 end;
 
+procedure TTyStyleModel.ClearModeVars;
+{ Free every owned per-mode TStringList, then clear the index list. }
+var i: Integer;
+begin
+  for i := 0 to FModeVars.Count - 1 do
+    FModeVars.Objects[i].Free;
+  FModeVars.Clear;
+end;
+
+function TTyStyleModel.ModeVarsFor(const AMode: string): TStringList;
+{ The loaded vars for AMode (case-insensitive), or nil if there is no such @mode block. }
+var idx: Integer;
+begin
+  Result := nil;
+  if AMode = '' then Exit;
+  idx := FModeVars.IndexOf(LowerCase(Trim(AMode)));
+  if idx >= 0 then
+    Result := TStringList(FModeVars.Objects[idx]);
+end;
+
 procedure TTyStyleModel.Clear;
-{ Clears only the USER layer; the built-in base layer is permanent. }
+{ Clears only the USER layer (rules + :root vars + @mode blocks); the built-in base
+  layer is permanent. The active FMode name is kept (a re-load may bring it back), but
+  with no mode blocks it simply contributes nothing. }
 begin
   ClearList(FRules);
   FVars.Clear;
+  ClearModeVars;
   RebuildMergedVars;
   Inc(FVersion);
 end;
@@ -655,17 +692,33 @@ begin
   ARules.Clear;
 end;
 
+procedure TTyStyleModel.SetMode(const AMode: string);
+{ P3 (D7). Switch the active @mode and re-merge so the new mode's :root overrides win.
+  Bumps ThemeVersion (the §3.8 switch/cache anchor) so override caches and any
+  version-keyed consumers re-resolve. No-ops on an unchanged mode. }
+begin
+  if FMode = AMode then Exit;
+  FMode := AMode;
+  RebuildMergedVars;
+  Inc(FVersion);
+end;
+
 procedure TTyStyleModel.RebuildMergedVars;
-{ Merge the two token layers ONCE per load: base derives first, the user layer
-  overrides same-named vars. ResolveStyle evaluates every rule against this set,
-  so overriding a SEED re-derives the whole family (var-on-var resolves through
-  TyEvalColor at resolve time). }
-var i: Integer;
+{ Merge the token layers ONCE per load/mode-switch: base derives first, the user :root
+  overrides same-named vars, then the ACTIVE @mode block's vars overlay on top (so a
+  dual-mode theme's per-mode :root wins, P3/D7). ResolveStyle evaluates every rule
+  against this set, so overriding a SEED re-derives the whole family (var-on-var resolves
+  through TyEvalColor at resolve time). An unset/unknown FMode contributes nothing. }
+var i: Integer; mv: TStringList;
 begin
   FMergedVars.Clear;
   FMergedVars.Assign(FBaseVars);
   for i := 0 to FVars.Count - 1 do
     FMergedVars.Values[FVars.Names[i]] := FVars.ValueFromIndex[i];
+  mv := ModeVarsFor(FMode);
+  if mv <> nil then
+    for i := 0 to mv.Count - 1 do
+      FMergedVars.Values[mv.Names[i]] := mv.ValueFromIndex[i];
 end;
 
 procedure TTyStyleModel.ValidateRules(ARules: TFPList; AVars: TStrings);
@@ -749,14 +802,18 @@ begin
 end;
 
 procedure TTyStyleModel.AddSheetInto(ASheet: TTyCssStylesheet; ATmpRules: TFPList;
-  ATmpVars: TStrings);
+  ATmpVars, ATmpModes: TStrings);
 { Append ONE parsed sheet's own vars (over, new wins) + rules (after, so later wins via
-  apply-all-forward) into the accumulating tmp lists. Imports are NOT handled here — the
-  recursive ExpandSheet has already spliced them in BEFORE calling this. }
+  apply-all-forward) + @mode blocks into the accumulating tmp lists. Imports are NOT
+  handled here — the recursive ExpandSheet has already spliced them in BEFORE calling
+  this. @mode blocks accumulate into ATmpModes (Names[i]=lower(mode), Objects[i]=owned
+  TStringList); a later sheet's same-mode vars override earlier ones (importer wins). }
 var
-  ri, si, vi: Integer;
+  ri, si, vi, mi, idx: Integer;
   rule: TTyCssRule;
   sel: TTyCssSelector;
+  mb: TTyCssModeBlock;
+  dest: TStringList;
 begin
   for vi := 0 to ASheet.RootVars.Count - 1 do
     ATmpVars.Values[ASheet.RootVars.Names[vi]] := ASheet.RootVars.ValueFromIndex[vi];
@@ -771,10 +828,25 @@ begin
                  rule.Declarations);
     end;
   end;
+  // @mode blocks: merge into the per-mode accumulator (copy out before the sheet frees).
+  for mi := 0 to ASheet.ModeBlocks.Count - 1 do
+  begin
+    mb := TTyCssModeBlock(ASheet.ModeBlocks[mi]);
+    idx := ATmpModes.IndexOf(LowerCase(Trim(mb.Mode)));
+    if idx < 0 then
+    begin
+      dest := TStringList.Create;
+      ATmpModes.AddObject(LowerCase(Trim(mb.Mode)), dest);
+    end
+    else
+      dest := TStringList(ATmpModes.Objects[idx]);
+    for vi := 0 to mb.Vars.Count - 1 do
+      dest.Values[mb.Vars.Names[vi]] := mb.Vars.ValueFromIndex[vi];
+  end;
 end;
 
 procedure TTyStyleModel.ExpandSheet(ASheet: TTyCssStylesheet; ATmpRules: TFPList;
-  ATmpVars: TStrings; const ABaseDir: string; AActive, ADone: TStrings; ADepth: Integer);
+  ATmpVars, ATmpModes: TStrings; const ABaseDir: string; AActive, ADone: TStrings; ADepth: Integer);
 { Recursively flatten ASheet into (ATmpRules, ATmpVars): each @import target is loaded,
   parsed and expanded FIRST (so its rules/vars are the LOWER layer), then THIS sheet's own
   vars/rules are appended on top (so the importer overrides — same-name var override + a
@@ -822,7 +894,7 @@ begin
           ADone.Add(canon);
           try
             childDir := ExtractFilePath(ExpandFileName(resolved));
-            ExpandSheet(childSheet, ATmpRules, ATmpVars, childDir,
+            ExpandSheet(childSheet, ATmpRules, ATmpVars, ATmpModes, childDir,
                         AActive, ADone, ADepth + 1);
           finally
             AActive.Delete(AActive.IndexOf(canon));   // pop active stack (keep ADone)
@@ -838,21 +910,34 @@ begin
     end;
   end;
   // THEN this sheet's own content, on top of everything it imported.
-  AddSheetInto(ASheet, ATmpRules, ATmpVars);
+  AddSheetInto(ASheet, ATmpRules, ATmpVars, ATmpModes);
 end;
 
 procedure TTyStyleModel.LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string;
   AReplace: Boolean);
+
+  // Free every owned per-mode TStringList in a tmp mode accumulator, then the list.
+  procedure FreeModeAccum(AModes: TStringList);
+  var k: Integer;
+  begin
+    if AModes = nil then Exit;
+    for k := 0 to AModes.Count - 1 do
+      AModes.Objects[k].Free;
+    AModes.Free;
+  end;
+
 var
   parser: TTyCssParser; sheet: TTyCssStylesheet;
-  tmpRules: TFPList; tmpVars, tmpMerged, active, done: TStringList;
-  ri: Integer;
+  tmpRules: TFPList; tmpVars, tmpMerged, active, done, tmpModes: TStringList;
+  ri, mi, vi, idx: Integer;
+  mv, dest: TStringList;
 begin
   tmpRules := TFPList.Create;
   tmpVars := TStringList.Create;
   tmpMerged := TStringList.Create;
   active := TStringList.Create;
   done := TStringList.Create;
+  tmpModes := TStringList.Create;   // Names[i]=lower(mode), Objects[i]=owned TStringList
   try
     parser := TTyCssParser.Create(ASource);
     try
@@ -861,7 +946,7 @@ begin
         // Recursively expand @import targets first (lower layer), then this sheet on top.
         // The top-level base dir is the active theme-file dir (GThemeBaseDir, set by
         // LoadFromFile; empty for LoadFromCss -> relative @import that doesn't exist errors).
-        ExpandSheet(sheet, tmpRules, tmpVars, GThemeBaseDir, active, done, 0);
+        ExpandSheet(sheet, tmpRules, tmpVars, tmpModes, GThemeBaseDir, active, done, 0);
       finally
         sheet.Free;
       end;
@@ -869,13 +954,22 @@ begin
       parser.Free;
     end;
     // Fail-fast on bad VALUES before committing (against base (+) this layer), so a
-    // broken theme raises with the previous theme still active.
+    // broken theme raises with the previous theme still active. A dual-mode theme's
+    // SHARED body may reference vars defined ONLY inside @mode blocks (e.g. a per-mode
+    // transparent-fill); union EVERY loaded mode's vars into the validation set so such
+    // mode-conditional vars resolve here (a var defined in at least one mode is valid).
     tmpMerged.Assign(FBaseVars);
     if not AReplace then   // additive: the new rules also see the EXISTING user vars
       for ri := 0 to AVars.Count - 1 do
         tmpMerged.Values[AVars.Names[ri]] := AVars.ValueFromIndex[ri];
     for ri := 0 to tmpVars.Count - 1 do
       tmpMerged.Values[tmpVars.Names[ri]] := tmpVars.ValueFromIndex[ri];
+    for mi := 0 to tmpModes.Count - 1 do
+    begin
+      mv := TStringList(tmpModes.Objects[mi]);
+      for vi := 0 to mv.Count - 1 do
+        tmpMerged.Values[mv.Names[vi]] := mv.ValueFromIndex[vi];
+    end;
     ValidateRules(tmpRules, tmpMerged);
     // Commit. Replace clears first; additive appends rules + merges vars (new wins) so
     // the appended entries sort LAST (importer/override wins via ApplyAllMatching order).
@@ -883,6 +977,7 @@ begin
     begin
       ClearList(ARules);
       AVars.Clear;
+      ClearModeVars;
     end;
     for ri := 0 to tmpRules.Count - 1 do ARules.Add(tmpRules[ri]);
     tmpRules.Clear;   // ownership transferred to ARules; clear list only (do NOT free entries)
@@ -891,13 +986,31 @@ begin
     else
       for ri := 0 to tmpVars.Count - 1 do
         AVars.Values[tmpVars.Names[ri]] := tmpVars.ValueFromIndex[ri];
+    // Commit @mode blocks into model storage (replace cleared FModeVars above; additive
+    // merges per-mode, new wins). The tmp per-mode lists are COPIED, not transferred.
+    for mi := 0 to tmpModes.Count - 1 do
+    begin
+      mv := TStringList(tmpModes.Objects[mi]);
+      idx := FModeVars.IndexOf(tmpModes[mi]);
+      if idx < 0 then
+      begin
+        dest := TStringList.Create;
+        FModeVars.AddObject(tmpModes[mi], dest);
+      end
+      else
+        dest := TStringList(FModeVars.Objects[idx]);
+      for vi := 0 to mv.Count - 1 do
+        dest.Values[mv.Names[vi]] := mv.ValueFromIndex[vi];
+    end;
   except
     ClearList(tmpRules);  // free entries built before the failure
     tmpRules.Free; tmpVars.Free; tmpMerged.Free; active.Free; done.Free;
+    FreeModeAccum(tmpModes);
     raise;
   end;
   tmpRules.Free; tmpVars.Free; tmpMerged.Free; active.Free; done.Free;
-  RebuildMergedVars;   // base (+) user, for resolve-time evaluation
+  FreeModeAccum(tmpModes);
+  RebuildMergedVars;   // base (+) user (+) active @mode, for resolve-time evaluation
   Inc(FVersion);       // §3.8: every load bumps the version (cache/switch anchor)
 end;
 

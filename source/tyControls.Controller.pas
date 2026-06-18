@@ -24,6 +24,8 @@ type
     FControls: TFPList;
     procedure SetThemeFile(const AValue: string);
     procedure SetThemeName(const AValue: string);
+    function GetMode: string;
+    procedure SetMode(const AValue: string);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -43,6 +45,10 @@ type
       setting ThemeName clears the stored ThemeFile (and vice versa) so layer-1 has a
       single, unambiguous source. }
     property ThemeName: string read FThemeName write SetThemeName;
+    { P3 (D7) single-file dual-mode. Select which '@mode NAME' block of
+      the loaded theme is active (e.g. 'light'/'dark'). Delegates to Model.SetMode (re-merge
+      + bump ThemeVersion) and repaints. An unknown/empty mode applies no mode overrides. }
+    property Mode: string read GetMode write SetMode;
   end;
 
 function TyDefaultController: TTyStyleController;
@@ -102,6 +108,18 @@ begin
     FModel.LoadFromFile(src);
     Changed;
   end;
+end;
+
+function TTyStyleController.GetMode: string;
+begin
+  Result := FModel.Mode;
+end;
+
+procedure TTyStyleController.SetMode(const AValue: string);
+begin
+  if FModel.Mode = AValue then Exit;
+  FModel.SetMode(AValue);
+  Changed;
 end;
 
 procedure TTyStyleController.LoadTheme(const AFileName: string);

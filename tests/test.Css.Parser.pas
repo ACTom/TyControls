@@ -25,6 +25,9 @@ type
     procedure TestImportUrlForm;
     procedure TestImportAfterRuleRaises;
     procedure TestUnknownAtRuleRaises;
+    procedure TestModeBlockParses;
+    procedure TestModeBlockAfterRuleParses;
+    procedure TestModeBlockNonRootRaises;
   end;
 
 implementation
@@ -316,6 +319,83 @@ begin
         raised := True;
     end;
     AssertTrue('unknown at-rule raises ETyCssError', raised);
+  finally
+    p.Free;
+  end;
+end;
+
+procedure TTestCssParser.TestModeBlockParses;
+var
+  p: TTyCssParser;
+  sheet: TTyCssStylesheet;
+  mb: TTyCssModeBlock;
+begin
+  // '@mode <ident> { :root { … } }' collects a TTyCssModeBlock with the mode name and
+  // its inner :root vars; the parser does no resolution.
+  p := TTyCssParser.Create(
+    ':root { --accent: #111111; }' + LineEnding +
+    '@mode light { :root { --surface: #FFFFFF; --on-surface: #000000; } }' + LineEnding +
+    '@mode dark  { :root { --surface: #1E1E1E; } }');
+  try
+    sheet := p.Parse;
+    try
+      AssertEquals('top-level root var', '#111111', sheet.RootVars.Values['accent']);
+      AssertEquals('two mode blocks', 2, sheet.ModeBlocks.Count);
+      mb := TTyCssModeBlock(sheet.ModeBlocks[0]);
+      AssertEquals('mode 0 name', 'light', mb.Mode);
+      AssertEquals('mode 0 surface', '#FFFFFF', mb.Vars.Values['surface']);
+      AssertEquals('mode 0 on-surface', '#000000', mb.Vars.Values['on-surface']);
+      mb := TTyCssModeBlock(sheet.ModeBlocks[1]);
+      AssertEquals('mode 1 name', 'dark', mb.Mode);
+      AssertEquals('mode 1 surface', '#1E1E1E', mb.Vars.Values['surface']);
+    finally
+      sheet.Free;
+    end;
+  finally
+    p.Free;
+  end;
+end;
+
+procedure TTestCssParser.TestModeBlockAfterRuleParses;
+var
+  p: TTyCssParser;
+  sheet: TTyCssStylesheet;
+begin
+  // Unlike @import, a @mode block carries tokens (not a file ref) and may appear AFTER
+  // rules — it must not trip the @import-must-precede-rules guard.
+  p := TTyCssParser.Create(
+    'TyButton { color: #111111; }' + LineEnding +
+    '@mode dark { :root { --accent: #60A5FA; } }');
+  try
+    sheet := p.Parse;
+    try
+      AssertEquals('rule still parsed', 1, sheet.Rules.Count);
+      AssertEquals('one mode block', 1, sheet.ModeBlocks.Count);
+      AssertEquals('mode name', 'dark', TTyCssModeBlock(sheet.ModeBlocks[0]).Mode);
+    finally
+      sheet.Free;
+    end;
+  finally
+    p.Free;
+  end;
+end;
+
+procedure TTestCssParser.TestModeBlockNonRootRaises;
+var
+  p: TTyCssParser;
+  raised: Boolean;
+begin
+  // Only :root blocks are allowed inside @mode (v1); a plain selector inside raises.
+  p := TTyCssParser.Create('@mode light { TyButton { color: #fff; } }');
+  raised := False;
+  try
+    try
+      p.Parse.Free;
+    except
+      on E: ETyCssError do
+        raised := True;
+    end;
+    AssertTrue('non-:root inside @mode raises ETyCssError', raised);
   finally
     p.Free;
   end;

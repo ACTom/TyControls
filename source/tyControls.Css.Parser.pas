@@ -25,10 +25,23 @@ type
     Declarations: array of TTyCssDeclaration;
   end;
 
+  { One '@mode IDENT ( :root ( … ) )' conditional token block (P3, D7); braces shown as
+    parens in this comment. Carries the mode name and the --vars its inner :root declares
+    (name=value, no leading --). The parser only COLLECTS these; StyleModel copies the
+    active mode's vars into model-owned storage at load and overlays them on top of the
+    user :root in RebuildMergedVars. }
+  TTyCssModeBlock = class
+    Mode: string;
+    Vars: TStringList;
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
   TTyCssStylesheet = class
     Rules: TFPList;
     RootVars: TStringList;
     Imports: array of string;   // raw @import paths, source order (parser does NO file I/O)
+    ModeBlocks: TFPList;        // owns TTyCssModeBlock (P3 @mode blocks, source order)
     constructor Create;
     destructor Destroy; override;
   end;
@@ -44,10 +57,12 @@ type
     function PseudoToState(const AName: string; const ATok: TTyCssToken): TTyState;
     function ParseSelector: TTyCssSelector;
     function ReadRawValue: string;
+    procedure ParseRootInto(AVars: TStringList);
     procedure ParseRootBlock(ASheet: TTyCssStylesheet);
     procedure ParseRule(ASheet: TTyCssStylesheet);
     procedure ParseAtRule(ASheet: TTyCssStylesheet; const ATok: TTyCssToken);
     procedure ParseImport(ASheet: TTyCssStylesheet; const ATok: TTyCssToken);
+    procedure ParseModeBlock(ASheet: TTyCssStylesheet; const ATok: TTyCssToken);
   public
     constructor Create(const ASource: string);
     destructor Destroy; override;
@@ -67,11 +82,24 @@ function TyParseOverride(const ASource: string; out ADecls: TTyCssDeclarationArr
 
 implementation
 
+constructor TTyCssModeBlock.Create;
+begin
+  inherited Create;
+  Vars := TStringList.Create;
+end;
+
+destructor TTyCssModeBlock.Destroy;
+begin
+  Vars.Free;
+  inherited Destroy;
+end;
+
 constructor TTyCssStylesheet.Create;
 begin
   inherited Create;
   Rules := TFPList.Create;
   RootVars := TStringList.Create;
+  ModeBlocks := TFPList.Create;
 end;
 
 destructor TTyCssStylesheet.Destroy;
@@ -83,6 +111,12 @@ begin
     for i := 0 to Rules.Count - 1 do
       TTyCssRule(Rules[i]).Free;
     Rules.Free;
+  end;
+  if Assigned(ModeBlocks) then
+  begin
+    for i := 0 to ModeBlocks.Count - 1 do
+      TTyCssModeBlock(ModeBlocks[i]).Free;
+    ModeBlocks.Free;
   end;
   RootVars.Free;
   inherited Destroy;
@@ -244,13 +278,15 @@ begin
   Result := Trim(sb);
 end;
 
-procedure TTyCssParser.ParseRootBlock(ASheet: TTyCssStylesheet);
+procedure TTyCssParser.ParseRootInto(AVars: TStringList);
+{ Parse the body of a ':root' block (the brace-delimited declaration list), writing each
+  '--name: value;' into AVars (name without leading --). ':root' is already consumed by the
+  caller; the opening brace is expected here. Shared by the top-level :root and the
+  @mode-block inner :root. }
 var
   tok, nameTok: TTyCssToken;
   raw: string;
 begin
-  // ':root' ident already consumed by caller; expect '{'
-  FSawRule := True;   // @import must precede :root/rules
   Expect(ctkLBrace);
   while True do
   begin
@@ -269,8 +305,15 @@ begin
     Expect(ctkColon);
     raw := ReadRawValue;
     Expect(ctkSemicolon);
-    ASheet.RootVars.Values[Copy(nameTok.Text, 3, Length(nameTok.Text) - 2)] := raw;
+    AVars.Values[Copy(nameTok.Text, 3, Length(nameTok.Text) - 2)] := raw;
   end;
+end;
+
+procedure TTyCssParser.ParseRootBlock(ASheet: TTyCssStylesheet);
+begin
+  // ':root' ident already consumed by caller; expect '{'
+  FSawRule := True;   // @import must precede :root/rules
+  ParseRootInto(ASheet.RootVars);
 end;
 
 procedure TTyCssParser.ParseRule(ASheet: TTyCssStylesheet);
@@ -357,16 +400,66 @@ begin
   ASheet.Imports[High(ASheet.Imports)] := pathStr;
 end;
 
+procedure TTyCssParser.ParseModeBlock(ASheet: TTyCssStylesheet; const ATok: TTyCssToken);
+{ Grammar (braces shown as parens in this comment): '@mode IDENT ( :root ( --x: v; … ) )'
+  (P3, D7). Reads the mode identifier, the wrapping brace, then one (or more) inner ':root'
+  blocks whose vars are collected into a fresh TTyCssModeBlock on ASheet.ModeBlocks. Mode
+  blocks may appear after rules (they carry tokens, not @import file refs), so there is no
+  FSawRule guard here — but a mode block does NOT set FSawRule (only :root/rules close the
+  @import window). }
+var
+  nameTok, tok, innerTok: TTyCssToken;
+  block: TTyCssModeBlock;
+begin
+  nameTok := FLexer.Peek;
+  if nameTok.Kind <> ctkIdent then
+    Error('Expected a mode name after "@mode"', nameTok);
+  FLexer.Next;   // consume the mode ident
+  block := TTyCssModeBlock.Create;
+  try
+    block.Mode := nameTok.Text;
+    Expect(ctkLBrace);
+    while True do
+    begin
+      tok := FLexer.Peek;
+      if tok.Kind = ctkRBrace then
+      begin
+        FLexer.Next;
+        Break;
+      end;
+      if tok.Kind = ctkEOF then
+        Error('Unterminated @mode block', tok);
+      // inner ':root' block — the only construct allowed inside @mode (v1)
+      if tok.Kind = ctkColon then
+      begin
+        FLexer.Next; // consume ':'
+        innerTok := Expect(ctkIdent);
+        if LowerCase(innerTok.Text) <> 'root' then
+          Error('Expected "root" after ":" inside @mode', innerTok);
+        ParseRootInto(block.Vars);
+      end
+      else
+        Error('Only :root blocks are allowed inside @mode', tok);
+    end;
+    ASheet.ModeBlocks.Add(block);
+    block := nil;
+  finally
+    block.Free;
+  end;
+end;
+
 procedure TTyCssParser.ParseAtRule(ASheet: TTyCssStylesheet; const ATok: TTyCssToken);
 { ATok is the ctkAtKeyword already consumed by the caller. Dispatch on the (lower-cased)
-  at-keyword name. Today only '@import' (A8) is handled; unknown at-rules are a hard error
-  (the shared dispatcher is where P3's '@mode' will hook in). }
+  at-keyword name. '@import' (A8) collects a file ref; '@mode' (P3, D7) collects a
+  conditional :root token block. Unknown at-rules are a hard error. }
 var
   name: string;
 begin
   name := LowerCase(ATok.Text);
   if name = 'import' then
     ParseImport(ASheet, ATok)
+  else if name = 'mode' then
+    ParseModeBlock(ASheet, ATok)
   else if name = '' then
     Error('Expected an at-rule name after "@"', ATok)
   else

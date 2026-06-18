@@ -43,11 +43,18 @@ type
     function ThemePath(const AName: string): string;
     function GoldenPath(const AName: string): string;
     function DumpTheme(const APath: string): string;
+    function DumpThemeMode(const APath, AMode: string): string;
     procedure CheckGolden(const AThemeName: string);
   published
     procedure TestLightGolden;
     procedure TestDarkGolden;
     procedure TestShowcaseGolden;
+    { P3 (D7) single-file dual-mode fidelity (§7 risk-3 zero-pixel route): auto.tycss in
+      'light' mode resolves byte-identically to light.tycss, and in 'dark' mode to
+      dark.tycss, across the full (typeKey x variant x state) grid. This is the proof that
+      @mode carries both modes pixel-faithfully. }
+    procedure TestAutoLightEqualsLight;
+    procedure TestAutoDarkEqualsDark;
   end;
 implementation
 
@@ -354,6 +361,54 @@ begin
     sl.Free;
     model.Free;
   end;
+end;
+
+function TTestThemeGolden.DumpThemeMode(const APath, AMode: string): string;
+const
+  STATES: array[0..4] of TTyStateSet = ([], [tysHover], [tysActive], [tysFocused], [tysDisabled]);
+var
+  model: TTyStyleModel;
+  sl: TStringList;
+  i, si, bar: Integer;
+  key, variant: string;
+begin
+  model := TTyStyleModel.Create;
+  sl := TStringList.Create;
+  try
+    model.LoadFromFile(APath);
+    model.SetMode(AMode);   // P3: select the active @mode block before resolving
+    for i := 0 to High(GGRID) do
+    begin
+      bar := Pos('|', GGRID[i]);
+      key := Copy(GGRID[i], 1, bar - 1);
+      variant := Copy(GGRID[i], bar + 1, MaxInt);
+      for si := 0 to High(STATES) do
+        sl.Add(key + '|' + variant + '|' + IntToStr(si) + ' => ' +
+          GDumpStyle(model.ResolveStyle(key, variant, STATES[si])));
+    end;
+    Result := sl.Text;
+  finally
+    sl.Free;
+    model.Free;
+  end;
+end;
+
+procedure TTestThemeGolden.TestAutoLightEqualsLight;
+var autoDump, lightDump: string;
+begin
+  autoDump := DumpThemeMode(ThemePath('auto.tycss'), 'light');
+  lightDump := DumpTheme(ThemePath('light.tycss'));
+  AssertEquals('auto.tycss in light mode must resolve byte-identically to light.tycss',
+    lightDump, autoDump);
+end;
+
+procedure TTestThemeGolden.TestAutoDarkEqualsDark;
+var autoDump, darkDump: string;
+begin
+  autoDump := DumpThemeMode(ThemePath('auto.tycss'), 'dark');
+  darkDump := DumpTheme(ThemePath('dark.tycss'));
+  AssertEquals('auto.tycss in dark mode must resolve byte-identically to dark.tycss',
+    darkDump, autoDump);
 end;
 
 procedure TTestThemeGolden.CheckGolden(const AThemeName: string);
