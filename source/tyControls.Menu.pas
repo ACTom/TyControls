@@ -14,6 +14,15 @@ const
   TyMenuShortcutGap     = 24;  // min gap between caption and the right-aligned shortcut text
 
 type
+  { Fired by TTyMenuView for the row at AIndex in its current row array: a leaf
+    activation (Enter/click on a non-submenu enabled row), a submenu-open request
+    (Right/click on a HasSubmenu row), respectively. The host (TTyMenuPopup, Tasks
+    4/5/7) maps AIndex back to its TMenuItem and acts (Click / cascade). }
+  TTyMenuRowEvent = procedure(Sender: TObject; AIndex: Integer) of object;
+  { Left/Right at the bar level: ADelta is -1 (previous top) / +1 (next top). The
+    host (TTyMenuBar, Task 5) rotates the open dropdown to the adjacent top item. }
+  TTyMenuAdjacentEvent = procedure(Sender: TObject; ADelta: Integer) of object;
+
   TTyMenuRowKind = (mrkItem, mrkSeparator);
   TTyMenuRow = record
     Kind: TTyMenuRowKind;
@@ -43,7 +52,15 @@ type
   private
     FRows: TTyMenuRowArray;
     FHighlight: Integer;
+    FOnActivateRow: TTyMenuRowEvent;
+    FOnOpenSubmenu: TTyMenuRowEvent;
+    FOnCloseRequested: TNotifyEvent;
+    FOnNavigateAdjacentBar: TTyMenuAdjacentEvent;
     function ItemRowHeight(APPI: Integer): Integer;
+    { True iff AIndex is an in-range, selectable (non-separator, enabled) item row. }
+    function IsSelectable(AIndex: Integer): Boolean;
+    { Fire OnActivateRow (leaf) or OnOpenSubmenu (submenu) for AIndex, if enabled. }
+    procedure ActivateRow(AIndex: Integer);
   protected
     function GetStyleTypeKey: string; override;
     { Pure geometry seams (device px), driven by theme tokens + the layout metrics. }
@@ -52,11 +69,31 @@ type
     function RowTop(AIndex, APPI: Integer): Integer;
     { Device-y -> row index, or -1 for a separator / out-of-range (not selectable). }
     function RowAtY(AY, APPI: Integer): Integer;
+    { Highlight (keyboard/hover selection) navigation. SetHighlight clamps to a valid
+      row or -1 (none); MoveHighlight steps by ADelta over SELECTABLE rows only,
+      skipping separators + disabled items and wrapping at both ends. Pure — no
+      window handle needed, mirroring TTyComboBox's headless list logic. }
+    procedure SetHighlight(AIndex: Integer);
+    procedure MoveHighlight(ADelta: Integer);
+    function Highlight: Integer;
+    { First / last selectable row index, or -1 when none exists. }
+    function FirstSelectable: Integer;
+    function LastSelectable: Integer;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
     constructor Create(AOwner: TComponent); override;
     procedure SetRows(const ARows: TTyMenuRowArray);
+    procedure Click; override;
+    { Activation/navigation events consumed by the host popup/bar (Tasks 4/5/7). }
+    property OnActivateRow: TTyMenuRowEvent read FOnActivateRow write FOnActivateRow;
+    property OnOpenSubmenu: TTyMenuRowEvent read FOnOpenSubmenu write FOnOpenSubmenu;
+    property OnCloseRequested: TNotifyEvent read FOnCloseRequested write FOnCloseRequested;
+    property OnNavigateAdjacentBar: TTyMenuAdjacentEvent
+      read FOnNavigateAdjacentBar write FOnNavigateAdjacentBar;
   end;
 
 implementation
@@ -99,6 +136,7 @@ end;
 constructor TTyMenuView.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  TabStop := True;
   SetLength(FRows, 0);
   FHighlight := -1;
 end;
@@ -190,6 +228,136 @@ begin
       if FRows[i].Kind = mrkSeparator then Exit(-1);
       Exit(i);
     end;
+  end;
+end;
+
+function TTyMenuView.IsSelectable(AIndex: Integer): Boolean;
+begin
+  Result := (AIndex >= 0) and (AIndex <= High(FRows))
+    and (FRows[AIndex].Kind = mrkItem) and FRows[AIndex].Enabled;
+end;
+
+function TTyMenuView.FirstSelectable: Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to High(FRows) do
+    if IsSelectable(i) then Exit(i);
+end;
+
+function TTyMenuView.LastSelectable: Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := High(FRows) downto 0 do
+    if IsSelectable(i) then Exit(i);
+end;
+
+function TTyMenuView.Highlight: Integer;
+begin
+  Result := FHighlight;
+end;
+
+procedure TTyMenuView.SetHighlight(AIndex: Integer);
+begin
+  // Clamp to a valid selectable row, or -1 (no highlight). Non-selectable indices
+  // (separator / disabled / out of range) collapse to -1 so the highlight never
+  // lands on something the user can't activate.
+  if not IsSelectable(AIndex) then AIndex := -1;
+  if FHighlight = AIndex then Exit;
+  FHighlight := AIndex;
+  Invalidate;
+end;
+
+procedure TTyMenuView.MoveHighlight(ADelta: Integer);
+var
+  step, i, idx, n: Integer;
+begin
+  n := Length(FRows);
+  if (n = 0) or (FirstSelectable < 0) then Exit;   // nothing selectable
+  if ADelta = 0 then Exit;
+  if ADelta > 0 then step := 1 else step := -1;
+  // Walk SELECTABLE rows from the current highlight, wrapping; at most n hops to
+  // land on the next selectable index (separators + disabled rows are skipped).
+  idx := FHighlight;
+  for i := 1 to n do
+  begin
+    idx := idx + step;
+    if idx < 0 then idx := idx + n
+    else if idx >= n then idx := idx - n;
+    if IsSelectable(idx) then
+    begin
+      SetHighlight(idx);
+      Exit;
+    end;
+  end;
+end;
+
+procedure TTyMenuView.ActivateRow(AIndex: Integer);
+begin
+  if not IsSelectable(AIndex) then Exit;
+  if FRows[AIndex].HasSubmenu then
+  begin
+    if Assigned(FOnOpenSubmenu) then FOnOpenSubmenu(Self, AIndex);
+  end
+  else
+    if Assigned(FOnActivateRow) then FOnActivateRow(Self, AIndex);
+end;
+
+procedure TTyMenuView.MouseMove(Shift: TShiftState; X, Y: Integer);
+var idx: Integer;
+begin
+  inherited MouseMove(Shift, X, Y);
+  idx := RowAtY(Y, Font.PixelsPerInch);   // -1 over a separator / gutter
+  SetHighlight(idx);                        // SetHighlight collapses -1 safely
+end;
+
+procedure TTyMenuView.MouseLeave;
+begin
+  inherited MouseLeave;
+  SetHighlight(-1);
+end;
+
+procedure TTyMenuView.Click;
+begin
+  inherited Click;
+  ActivateRow(FHighlight);
+end;
+
+procedure TTyMenuView.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyDown(Key, Shift);
+  case Key of
+    VK_DOWN:  begin MoveHighlight(+1); Key := 0; end;
+    VK_UP:    begin MoveHighlight(-1); Key := 0; end;
+    VK_HOME:  begin SetHighlight(FirstSelectable); Key := 0; end;
+    VK_END:   begin SetHighlight(LastSelectable);  Key := 0; end;
+    VK_RETURN, VK_SPACE:
+      begin ActivateRow(FHighlight); Key := 0; end;
+    VK_RIGHT:
+      begin
+        // On a submenu row, open it; otherwise this is a bar-level "next top".
+        if IsSelectable(FHighlight) and FRows[FHighlight].HasSubmenu then
+        begin
+          if Assigned(FOnOpenSubmenu) then FOnOpenSubmenu(Self, FHighlight);
+        end
+        else if Assigned(FOnNavigateAdjacentBar) then
+          FOnNavigateAdjacentBar(Self, +1);
+        Key := 0;
+      end;
+    VK_LEFT:
+      begin
+        // Collapse this level (a submenu cascade closes back to its parent). The
+        // host decides whether "close this level" at the bar root rotates to the
+        // previous top — it does so from inside its OnCloseRequested handler.
+        if Assigned(FOnCloseRequested) then FOnCloseRequested(Self);
+        Key := 0;
+      end;
+    VK_ESCAPE:
+      begin
+        if Assigned(FOnCloseRequested) then FOnCloseRequested(Self);
+        Key := 0;
+      end;
   end;
 end;
 

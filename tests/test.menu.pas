@@ -8,19 +8,23 @@ type
     procedure TestBuildRowsMapsFields;
   end;
 
-  { Probe subclass: exposes TTyMenuView's protected geometry seams so the pure
-    measure/hit-test logic is exercised headlessly (no window handle). }
+  { Probe subclass: exposes TTyMenuView's protected geometry + navigation seams so
+    the pure measure/hit-test/highlight logic is exercised headlessly (no window). }
   TTyMenuViewAccess = class(TTyMenuView)
   public
     function RowCount: Integer;
     function MeasureHeight(APPI: Integer): Integer;
     function RowTop(AIndex, APPI: Integer): Integer;
     function RowAtY(AY, APPI: Integer): Integer;
+    procedure SetHighlight(AIndex: Integer);
+    procedure MoveHighlight(ADelta: Integer);
+    function Highlight: Integer;
   end;
 
   TMenuViewTest = class(TTestCase)
   published
     procedure TestMeasureAndHitTest;
+    procedure TestKeyboardHighlightSkipsSeparatorsAndDisabled;
   end;
 
 implementation
@@ -75,6 +79,21 @@ begin
   Result := inherited RowAtY(AY, APPI);
 end;
 
+procedure TTyMenuViewAccess.SetHighlight(AIndex: Integer);
+begin
+  inherited SetHighlight(AIndex);
+end;
+
+procedure TTyMenuViewAccess.MoveHighlight(ADelta: Integer);
+begin
+  inherited MoveHighlight(ADelta);
+end;
+
+function TTyMenuViewAccess.Highlight: Integer;
+begin
+  Result := inherited Highlight;
+end;
+
 { TMenuViewTest }
 
 procedure TMenuViewTest.TestMeasureAndHitTest;
@@ -95,6 +114,28 @@ begin
       // hit-test: y inside row 0 maps to 0; the separator row reports -1 (not selectable)
       AssertEquals('row 0 hit', 0, v.RowAtY(v.RowTop(0, 96) + 1, 96));
       AssertEquals('separator not selectable', -1, v.RowAtY(v.RowTop(1, 96) + 1, 96));
+    finally v.Free; end;
+  finally mm.Free; end;
+end;
+
+procedure TMenuViewTest.TestKeyboardHighlightSkipsSeparatorsAndDisabled;
+var v: TTyMenuViewAccess; mm: TMainMenu; top: TMenuItem;
+begin
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); mm.Items.Add(top);
+    top.Add(NewItem('A', 0, False, True,  nil, 0, ''));
+    top.Add(NewLine);
+    top.Add(NewItem('B', 0, False, False, nil, 0, ''));  // disabled (Enabled=False)
+    top.Add(NewItem('C', 0, False, True,  nil, 0, ''));
+    v := TTyMenuViewAccess.Create(nil);
+    try
+      v.SetRows(TyBuildMenuRows(top));
+      v.SetHighlight(-1);
+      v.MoveHighlight(+1); AssertEquals('first selectable A', 0, v.Highlight);
+      v.MoveHighlight(+1); AssertEquals('skip sep+disabled to C', 3, v.Highlight);
+      v.MoveHighlight(+1); AssertEquals('wraps to A', 0, v.Highlight);
+      v.MoveHighlight(-1); AssertEquals('prev wraps to C', 3, v.Highlight);
     finally v.Free; end;
   finally mm.Free; end;
 end;
