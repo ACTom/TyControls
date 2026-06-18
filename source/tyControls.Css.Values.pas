@@ -203,6 +203,9 @@ begin
   E := Trim(Expr);
   if E = '' then
     raise Exception.Create('Empty color expression');
+  // transparent keyword -> fully transparent (alpha 0); usable anywhere a color is
+  if LowerCase(E) = 'transparent' then
+    Exit(tyTransparent);
   // direct hex
   if E[1] = '#' then
     Exit(TyParseColor(E));

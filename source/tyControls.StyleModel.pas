@@ -444,7 +444,14 @@ begin
   raw := Trim(ARawValue);
   if (prop = 'background') or (prop = 'background-color') then
   begin
-    if LowerCase(Copy(raw, 1, 16)) = 'linear-gradient(' then
+    if LowerCase(raw) = 'none' then
+    begin
+      // explicit empty background (D4): no fill drawn
+      fill := Default(TTyFill);
+      fill.Kind := tfkNone;
+      AStyle.Background := fill;
+    end
+    else if LowerCase(Copy(raw, 1, 16)) = 'linear-gradient(' then
       AStyle.Background := ParseLinearGradient(raw, Vars)
     else
     begin

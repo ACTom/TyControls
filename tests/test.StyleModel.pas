@@ -31,6 +31,17 @@ type
     procedure TestBackgroundColorRgb;
   end;
 
+  { Phase 0 (theme v2): background:none keyword + merge-then-resolve unlock }
+  TTestStylePhase0 = class(TTestCase)
+  private
+    FModel: TTyStyleModel;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestBackgroundNoneKeyword;
+  end;
+
   TTestStyleResolve = class(TTestCase)
   private
     FModel: TTyStyleModel;
@@ -629,8 +640,28 @@ begin
   finally m.Free; end;
 end;
 
+procedure TTestStylePhase0.SetUp;
+begin
+  FModel := TTyStyleModel.Create;
+end;
+
+procedure TTestStylePhase0.TearDown;
+begin
+  FModel.Free;
+end;
+
+procedure TTestStylePhase0.TestBackgroundNoneKeyword;
+var st: TTyStyleSet;
+begin
+  FModel.LoadFromCss('TyPanel { background: none; }');
+  st := FModel.ResolveStyle('TyPanel', '', []);
+  AssertTrue('tpBackground present', tpBackground in st.Present);
+  AssertTrue('Kind = tfkNone', st.Background.Kind = tfkNone);
+end;
+
 initialization
   RegisterTest(TTestStyleMerge);
+  RegisterTest(TTestStylePhase0);
   RegisterTest(TTestStyleLoad);
   RegisterTest(TTestStyleResolve);
   RegisterTest(TTestStyleShadow);

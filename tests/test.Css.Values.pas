@@ -34,6 +34,12 @@ type
     procedure TestEvalBareVarColor;
     procedure TestEvalLightenBareVar;
   end;
+
+  { Phase 0 (theme v2): transparent keyword + mode-aware funcs luminance/elevate/on }
+  TTestCssValuesPhase0 = class(TTestCase)
+  published
+    procedure TestTransparentKeyword;
+  end;
 implementation
 
 procedure TTestCssValuesColors.TestParse3Digit;
@@ -221,7 +227,20 @@ begin
   AssertEquals('lighten 0 blue',  $F6, TyBlueOf(c));
 end;
 
+procedure TTestCssValuesPhase0.TestTransparentKeyword;
+var v: TStringList;
+begin
+  v := TStringList.Create;
+  try
+    AssertEquals('transparent -> $00000000', TTyColor($00000000), TyEvalColor('transparent', v));
+    AssertEquals('case-insensitive + trimmed', TTyColor($00000000), TyEvalColor('  TRANSPARENT ', v));
+  finally
+    v.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTestCssValuesColors);
   RegisterTest(TTestCssValuesEval);
+  RegisterTest(TTestCssValuesPhase0);
 end.
