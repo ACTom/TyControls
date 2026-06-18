@@ -34,7 +34,9 @@ type
     FWatchTimer: TTimer;         // E23/DX: lazily created watch driver (nil until armed)
     FWatchAge: LongInt;          // last-seen FileAge of FThemeFile (-1 = unknown/missing)
     FWatchSize: Int64;           // last-seen size of FThemeFile (-1 = unknown/missing)
-    FInPoll: Boolean;            // reentrancy guard for PollThemeFile
+    FInPoll: Boolean;            // reentrancy guard for PollThemeFile / PollSystemTheme
+    FLastMode: string;           // last system-followed mode ('light'/'dark'/''); poll change-anchor
+    FLastAccent: string;         // last system-followed accent literal; poll change-anchor
     procedure SetThemeFile(const AValue: string);
     procedure SetThemeName(const AValue: string);
     function GetMode: string;
@@ -59,8 +61,18 @@ type
       bump the model (RebuildMergedVars re-resolves any 'system-accent'/'system-mode'
       sentinels to the freshly detected values), then Changed. Inert (no-op) under
       tfManual, so an app that drives Mode/ThemeName explicitly is never overridden.
-      This is the method the live WndProc OS-change hook (TTyForm) calls. }
+      This is the method PollSystemTheme (and an app's manual re-sync) calls. }
     procedure RefreshFromSystem;
+    { P4 (D8 / §3.7) LIVE-FOLLOW POLL — the headless-testable seam (mirrors PollThemeFile).
+      Re-reads the OS mode + accent via TySystemModeHook/TySystemAccentHook; if EITHER
+      changed since the last apply, re-applies (RefreshFromSystem -> SetMode / token re-resolve
+      + Changed) and returns True so the caller (TTyForm's follow timer) can re-resolve its OWN
+      chrome. No-op (False) under tfManual or when nothing changed, so a watch timer can call it
+      every tick cheaply. WHY a poll and not a window message: LCL-Win32 consumes
+      WM_SETTINGCHANGE in its callback (Application.IntfSettingsChange) and never DeliverMessage's
+      it to a control's WndProc, and drops WM_DWMCOLORIZATIONCOLORCHANGED (< WM_USER) entirely —
+      so an overridden WndProc can NEVER see either; polling the registry is the reliable path. }
+    function PollSystemTheme: Boolean;
     { E23 (DX) hot-reload core. Re-check the watched ThemeFile's last-modified stamp
       (FileAge) + size against the snapshot taken at the last load/poll; if EITHER
       differs the file content changed, so reload it (LoadTheme -> Changed) and return
@@ -196,24 +208,53 @@ begin
 end;
 
 procedure TTyStyleController.RefreshFromSystem;
-{ P4 (D8). Re-detect scheme + accent and re-apply, but only while following. Detection
-  never raises (tyControls.SystemTheme); tssUnknown leaves the current mode untouched so
-  an unreadable OS never blanks the theme. SetMode re-merges (which re-resolves any
-  'system-accent'/'system-mode' sentinel to the now-current OS values) and repaints.
-  When the scheme is unchanged we still force a re-merge + Changed so a pure ACCENT change
-  (same light/dark, new accent colour) is picked up. }
+{ P4 (D8). Re-read the OS mode + accent and re-apply, but only while following. Detection
+  goes through TySystemModeHook/TySystemAccentHook (defaulting to the live registry probe,
+  overridable in tests) so this and the system-* token substitution read ONE seam. An empty
+  mode ('' = unknown OS) leaves the current mode untouched so an unreadable OS never blanks
+  the theme. SetMode re-merges (re-resolving any 'system-accent'/'system-mode' sentinel to
+  the now-current OS values) and repaints; when the mode is unchanged we still RefreshSystemTokens
+  so a pure ACCENT change (same light/dark, new accent colour) is picked up. The detected
+  values are snapshotted into FLastMode/FLastAccent so PollSystemTheme can no-op until they move. }
 var
-  scheme: TTySystemScheme;
-  modeName: string;
+  modeName, accent: string;
 begin
   if FFollow <> tfFollowSystem then Exit;   // inert under manual: app override wins
-  scheme := TyDetectSystemScheme;
-  modeName := TySchemeToMode(scheme);
+  modeName := '';
+  if Assigned(TySystemModeHook) then modeName := TySystemModeHook();
+  accent := '';
+  if Assigned(TySystemAccentHook) then accent := TySystemAccentHook();
   if (modeName <> '') and (FModel.Mode <> modeName) then
     FModel.SetMode(modeName)   // scheme flipped -> switch @mode block (re-merges)
   else
     FModel.RefreshSystemTokens; // same/unknown scheme -> still re-resolve the accent
+  FLastMode := modeName;
+  FLastAccent := accent;
   Changed;
+end;
+
+function TTyStyleController.PollSystemTheme: Boolean;
+{ See the interface comment. Change-aware: reads the OS mode+accent through the same hooks,
+  and only does work when one of them differs from the last applied snapshot. The FInPoll
+  guard is shared with PollThemeFile (both run from the same watch tick, and RefreshFromSystem's
+  Changed could pump a re-entrant tick under a live loop). }
+var
+  modeName, accent: string;
+begin
+  Result := False;
+  if (FFollow <> tfFollowSystem) or FInPoll then Exit;
+  modeName := '';
+  if Assigned(TySystemModeHook) then modeName := TySystemModeHook();
+  accent := '';
+  if Assigned(TySystemAccentHook) then accent := TySystemAccentHook();
+  if (modeName = FLastMode) and (accent = FLastAccent) then Exit;   // OS unchanged -> nothing to do
+  FInPoll := True;
+  try
+    RefreshFromSystem;   // applies + updates FLastMode/FLastAccent + Changed (child controls)
+    Result := True;      // caller (TTyForm) re-resolves its own chrome on True
+  finally
+    FInPoll := False;
+  end;
 end;
 
 procedure TTyStyleController.SetHotReload(const AValue: Boolean);

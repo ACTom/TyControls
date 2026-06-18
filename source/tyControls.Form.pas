@@ -8,7 +8,7 @@ unit tyControls.Form;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType, LMessages,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller;
 
@@ -134,6 +134,9 @@ type
     FGlassBackdrop: TBGRABitmap;      // same snapshot, blurred once for the glass pane
     FGlassKey: string;                // imagepath|WxH|blurDev — rebuild when it changes
     FGlassBlurLogical: Integer;       // theme-wide glass blur radius (0 = no glass)
+    FFollowTimer: TTimer;             // P4 live-follow: polls the OS scheme/accent while following (nil unless armed)
+    procedure DoFollowTick(Sender: TObject);
+    procedure UpdateFollowWatch;      // (re)arm/disarm FFollowTimer per the controller's Follow policy
     // ITyGlassHost
     function GlassBackdrop: TBGRABitmap;
     function GlassSharpBackdrop: TBGRABitmap;
@@ -156,16 +159,6 @@ type
     FEngine: TTyChromeEngine;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
-    { P4 (D8 / §3.7) LIVE FOLLOW. The window message hook: on a Windows OS light/dark
-      toggle (WM_SETTINGCHANGE with lParam text "ImmersiveColorSet") or accent-colour
-      change (WM_DWMCOLORIZATIONCOLORCHANGED), if the active controller is following the
-      system, RE-DETECT scheme+accent and re-apply (RefreshFromSystem -> SetMode + accent
-      re-resolve + Changed) then Invalidate. Guarded so it is INERT when not following
-      (or no controller). NOTE: this path CANNOT be exercised headless — it needs a real
-      Windows light/dark toggle (Settings > Personalization > Colors) or an accent change
-      to fire. Verified by inspection + the headless RefreshFromSystem/SetMode tests; the
-      message-delivery leg itself is the documented manual-verification FLAG. }
-    procedure WndProc(var Message: TLMessage); override;
     procedure Paint; override;   // draws an image backdrop when the TyForm token sets one
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -700,6 +693,7 @@ end;
 
 destructor TTyForm.Destroy;
 begin
+  FreeAndNil(FFollowTimer);   // disarm the OS-follow poll
   FreeAndNil(FSharpBackdrop);
   FreeAndNil(FGlassBackdrop);
   if FTitleBar <> nil then FTitleBar.FEngine := nil;
@@ -755,44 +749,40 @@ begin
   ArmEngine;
 end;
 
-procedure TTyForm.WndProc(var Message: TLMessage);
-{$IFDEF WINDOWS}
-const
-  WM_SETTINGCHANGE_              = 26;      // $001A (Windows.WM_SETTINGCHANGE)
-  WM_DWMCOLORIZATIONCOLORCHANGED_ = $0320; // accent colour changed
-var
-  doRefresh: Boolean;
-  param: PAnsiChar;
-{$ENDIF}
+procedure TTyForm.UpdateFollowWatch;
+{ P4 (D8 / §3.7) LIVE FOLLOW. Arm a low-frequency poll timer exactly while the bound
+  controller is following the OS; free it otherwise. We POLL rather than hook a window
+  message because LCL-Win32 swallows WM_SETTINGCHANGE in its own callback (it calls
+  Application.IntfSettingsChange and never DeliverMessage's it to a control's WndProc) and
+  drops WM_DWMCOLORIZATIONCOLORCHANGED (< WM_USER) outright — so an overridden WndProc can
+  never see either. The tick is cheap (PollSystemTheme no-ops until the OS scheme/accent
+  actually moves), and re-evaluated on every ApplyChromeTheme so a Light/Dark button (which
+  sets Follow:=tfManual) disarms it and an Auto/System button (tfFollowSystem) re-arms it. }
 begin
-  {$IFDEF WINDOWS}
-  // LIVE FOLLOW (§3.7 / D8). React to the two OS-appearance messages, but ONLY when a
-  // controller is actively following the system — otherwise this is fully inert (it
-  // just falls through to inherited, identical to having no override).
   if (FController <> nil) and (FController.Follow = tfFollowSystem) then
   begin
-    doRefresh := False;
-    case Message.msg of
-      WM_DWMCOLORIZATIONCOLORCHANGED_:
-        doRefresh := True;   // accent colour change — always refresh
-      WM_SETTINGCHANGE_:
-        begin
-          // The light/dark toggle broadcasts WM_SETTINGCHANGE with lParam = the
-          // ANSI area string "ImmersiveColorSet". Guard the pointer (it may be 0 for
-          // other setting-change broadcasts) before comparing.
-          param := PAnsiChar(Pointer(Message.lParam));
-          if (param <> nil) and (StrComp(param, 'ImmersiveColorSet') = 0) then
-            doRefresh := True;
-        end;
-    end;
-    if doRefresh then
+    if FFollowTimer = nil then
     begin
-      FController.RefreshFromSystem;   // re-detect scheme+accent, SetMode + Changed
-      Invalidate;
+      FFollowTimer := TTimer.Create(nil);   // no Owner: kept off the form's component list
+      FFollowTimer.Enabled := False;
+      FFollowTimer.Interval := 750;          // ≤0.75s latency on an OS toggle — imperceptible
+      FFollowTimer.OnTimer := @DoFollowTick;
     end;
-  end;
-  {$ENDIF}
-  inherited WndProc(Message);
+    FFollowTimer.Enabled := True;
+  end
+  else
+    FreeAndNil(FFollowTimer);
+end;
+
+procedure TTyForm.DoFollowTick(Sender: TObject);
+{ One poll tick. PollSystemTheme re-detects the OS scheme/accent and, only when it changed,
+  re-applies it to the model + repaints registered controls, returning True. On True we also
+  re-apply the form's OWN chrome (its solid Color / image backdrop / glass radius live in
+  ApplyChromeTheme, which Changed does not touch). The whole effect is in PollSystemTheme so
+  the logic stays headless-testable; this just drives it from the clock. }
+begin
+  if (FController <> nil) and FController.PollSystemTheme then
+    ApplyChromeTheme(FController);
 end;
 
 { Wire the caption-button click handlers. Split out so it can run both from
@@ -983,6 +973,7 @@ begin
   bg := AController.Model.ResolveStyle('TyForm', '', []);
   if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
     Color := TyColorToLCL(bg.Background.Color);
+  UpdateFollowWatch;   // arm/disarm the OS-follow poll to match the controller's Follow policy
   Invalidate;
 end;
 

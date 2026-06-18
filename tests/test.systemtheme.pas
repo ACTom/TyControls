@@ -3,8 +3,10 @@ unit test.systemtheme;
   is readable in-process): OS scheme/accent detection never raises and returns plausible
   values; system.tycss resolves TyButton.primary to the detected accent (system-accent
   substitution works); SetMode flips the surface palette; the Controller follow policy
-  pulls the detected scheme into Mode. The LIVE WM_SETTINGCHANGE follow path is NOT
-  tested here — it needs a real OS light/dark toggle (see the FLAG in tyControls.Form). }
+  pulls the detected scheme into Mode; and the live-follow POLL (Controller.PollSystemTheme,
+  the seam TTyForm's follow timer drives) re-applies a simulated OS light/dark + accent flip.
+  Only the TIMER tick and a real registry toggle need a live GUI/OS; the change-detect+apply
+  logic is fully headless (LCL never delivers WM_SETTINGCHANGE to a WndProc — hence the poll). }
 {$mode objfpc}{$H+}
 interface
 uses
@@ -22,6 +24,7 @@ type
     procedure TestSystemThemeResolvesAccent;
     procedure TestSystemThemeSetModeFlipsSurface;
     procedure TestControllerFollowSetsModeFromScheme;
+    procedure TestPollSystemThemeAppliesLiveFlip;
   end;
 
 implementation
@@ -42,6 +45,11 @@ end;
 function StubModeHookDark: string;
 begin
   Result := 'dark';
+end;
+
+function StubAccentHookB: string;
+begin
+  Result := '#654321';
 end;
 
 function TSystemThemeTest.ThemePath(const AName: string): string;
@@ -175,6 +183,56 @@ begin
   finally
     c.Free;
     TySystemModeHook := savedMode;
+  end;
+end;
+
+procedure TSystemThemeTest.TestPollSystemThemeAppliesLiveFlip;
+var
+  c: TTyStyleController;
+  savedMode: TTySystemModeHook;
+  savedAccent: TTySystemAccentHook;
+begin
+  // Exercise the REAL live-follow path (Controller.PollSystemTheme — what TTyForm's follow
+  // timer calls each tick) with stubbed OS hooks so a light/dark + accent flip is deterministic
+  // and headless. This is the leg the old WM_SETTINGCHANGE WndProc could NEVER reach, because
+  // LCL-Win32 swallows that message before it is delivered to any control's WndProc.
+  savedMode := TySystemModeHook;
+  savedAccent := TySystemAccentHook;
+  c := TTyStyleController.Create(nil);
+  try
+    TySystemModeHook := @StubModeHookLight;
+    TySystemAccentHook := @StubAccentHook;        // '#123456'
+    c.LoadThemeCss(
+      'TyButton { background: var(--accent); }' +
+      '@mode light { :root { --accent: #111111; } }' +
+      '@mode dark  { :root { --accent: #222222; } }');
+    c.Follow := tfFollowSystem;                    // snapshots light/#123456 and applies
+    AssertEquals('initial followed mode is light', 'light', c.Mode);
+    // No OS change yet -> the poll must be a no-op (cheap to call every tick).
+    AssertFalse('poll no-ops when the OS has not changed', c.PollSystemTheme);
+    // Simulate the user flipping Windows to Dark.
+    TySystemModeHook := @StubModeHookDark;
+    AssertTrue('poll detects + applies the dark flip', c.PollSystemTheme);
+    AssertEquals('mode followed to dark', 'dark', c.Mode);
+    // Idempotent: nothing new -> no-op again.
+    AssertFalse('poll no-ops after the flip is applied', c.PollSystemTheme);
+    // An accent-only change (same dark mode) is also caught by the change-detect.
+    TySystemAccentHook := @StubAccentHookB;         // '#654321'
+    AssertTrue('poll detects + applies an accent-only change', c.PollSystemTheme);
+    AssertEquals('still dark after the accent-only change', 'dark', c.Mode);
+    // Flip back to light.
+    TySystemModeHook := @StubModeHookLight;
+    AssertTrue('poll applies the flip back to light', c.PollSystemTheme);
+    AssertEquals('mode followed back to light', 'light', c.Mode);
+    // Inert under manual: an explicit app choice wins, the poll does nothing.
+    c.Follow := tfManual;
+    TySystemModeHook := @StubModeHookDark;
+    AssertFalse('poll is inert under tfManual', c.PollSystemTheme);
+    AssertEquals('manual keeps the last applied mode', 'light', c.Mode);
+  finally
+    c.Free;
+    TySystemModeHook := savedMode;
+    TySystemAccentHook := savedAccent;
   end;
 end;
 
