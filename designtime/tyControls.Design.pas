@@ -9,7 +9,7 @@ uses
   tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
   tyControls.TrackBar, tyControls.GroupBox, tyControls.TabControl,
-  tyControls.SpinEdit, tyControls.Memo;
+  tyControls.SpinEdit, tyControls.Memo, tyControls.Menu;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -117,7 +117,8 @@ begin
     [TTyButton, TTyLabel, TTyEdit, TTyCheckBox, TTyRadioButton,
      TTyPanel, TTyComboBox, TTyScrollBar, TTyStyleController,
      TTyListBox, TTyProgressBar, TTyToggleSwitch, TTyTrackBar, TTyGroupBox,
-     TTyTabControl, TTySpinEdit, TTyMemo, TTyTitleBar]);
+     TTyTabControl, TTySpinEdit, TTyMemo, TTyTitleBar,
+     TTyMenuBar, TTyPopupMenu]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',
