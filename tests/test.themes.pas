@@ -29,6 +29,24 @@ type
     procedure TestDarkStylesFormTypeKey;
     procedure TestShowcaseStylesFormTypeKey;
   end;
+
+  { Golden resolved-style dump. Loads each shipped theme, resolves a full grid of
+    (typeKey x variant x state) and serializes every TTyStyleSet field, comparing to
+    a committed golden. The shipped themes have no other pixel-value test, so this is
+    the guard that catches ANY value change (e.g. a Phase 1 tier substitution that is
+    not value-preserving). Bootstraps the golden file on first run; writes a .actual
+    alongside on mismatch for diffing. }
+  TTestThemeGolden = class(TTestCase)
+  private
+    function ThemePath(const AName: string): string;
+    function GoldenPath(const AName: string): string;
+    function DumpTheme(const APath: string): string;
+    procedure CheckGolden(const AThemeName: string);
+  published
+    procedure TestLightGolden;
+    procedure TestDarkGolden;
+    procedure TestShowcaseGolden;
+  end;
 implementation
 
 function TTestThemes.ThemePath(const AName: string): string;
@@ -220,6 +238,148 @@ begin
   CheckThemeFormTypeKey('showcase.tycss');
 end;
 
+{ ── Golden resolved-style dump ─────────────────────────────────────────────── }
+
+function GHex(c: TTyColor): string;
+begin
+  Result := IntToHex(Cardinal(c), 8);
+end;
+
+function GPresent(const p: TTyPropSet): string;
+var pr: TTyProp;
+begin
+  Result := '';
+  for pr := Low(TTyProp) to High(TTyProp) do
+    if pr in p then Result := Result + IntToStr(Ord(pr)) + ',';
+end;
+
+function GDumpStyle(const ts: TTyStyleSet): string;
+begin
+  Result :=
+    'pres[' + GPresent(ts.Present) + ']' +
+    ' bg=' + IntToStr(Ord(ts.Background.Kind)) + '/' + GHex(ts.Background.Color) +
+      '/' + GHex(ts.Background.GradFrom) + '/' + GHex(ts.Background.GradTo) +
+      '/a' + IntToStr(Round(ts.Background.GradAngleDeg * 100)) +
+      '/' + ts.Background.ImagePath + '/m' + IntToStr(Ord(ts.Background.ImageMode)) +
+      '/bl' + IntToStr(ts.Background.Blur) + '/gb' + IntToStr(ts.Background.GlassBlur) +
+      '/gt' + GHex(ts.Background.GlassTint) +
+    ' ut=' + IntToStr(Ord(ts.BackgroundUnderTitlebar)) +
+    ' txt=' + GHex(ts.TextColor) +
+    ' bd=' + GHex(ts.BorderColor) + '/' + IntToStr(ts.BorderWidth) + '/' + IntToStr(Ord(ts.BorderStyle)) +
+    ' rad=' + IntToStr(ts.BorderRadius) + '/' + IntToStr(ts.Radius.TL) + ',' + IntToStr(ts.Radius.TR) +
+      ',' + IntToStr(ts.Radius.BR) + ',' + IntToStr(ts.Radius.BL) +
+    ' pad=' + IntToStr(ts.Padding.Left) + ',' + IntToStr(ts.Padding.Top) + ',' +
+      IntToStr(ts.Padding.Right) + ',' + IntToStr(ts.Padding.Bottom) +
+    ' fnt=' + ts.FontName + '/' + IntToStr(ts.FontSize) + '/' + IntToStr(ts.FontWeight) +
+    ' op=' + IntToStr(Round(ts.Opacity * 1000)) +
+    ' sh=' + GHex(ts.ShadowColor) + '/' + IntToStr(ts.ShadowBlur) + '/' +
+      IntToStr(ts.ShadowOffset.X) + ',' + IntToStr(ts.ShadowOffset.Y) +
+    ' ol=' + GHex(ts.OutlineColor) + '/' + IntToStr(ts.OutlineWidth) + '/' + IntToStr(ts.OutlineOffset);
+end;
+
+const
+  GGRID: array[0..32] of string = (
+    'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
+    'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
+    'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
+    'TyCaptionButton|close', 'TyCaptionButton|min', 'TyCaptionButton|max',
+    'TyListBox|', 'TyListItem|', 'TyProgressBar|', 'TyProgressFill|',
+    'TyToggleSwitch|', 'TyToggleKnob|', 'TyTrackBar|', 'TyTrackThumb|',
+    'TyGroupBox|', 'TyTabControl|', 'TyTab|', 'TyTabClose|', 'TySpinEdit|',
+    'TyMemo|', 'TyTextSelection|', 'TyTextHint|');
+
+function TTestThemeGolden.ThemePath(const AName: string): string;
+begin
+  Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim + AName;
+end;
+
+function TTestThemeGolden.GoldenPath(const AName: string): string;
+begin
+  Result := ExtractFilePath(ParamStr(0)) + 'golden' + PathDelim + AName;
+end;
+
+function TTestThemeGolden.DumpTheme(const APath: string): string;
+const
+  STATES: array[0..4] of TTyStateSet = ([], [tysHover], [tysActive], [tysFocused], [tysDisabled]);
+var
+  model: TTyStyleModel;
+  sl: TStringList;
+  i, si, bar: Integer;
+  key, variant: string;
+begin
+  model := TTyStyleModel.Create;
+  sl := TStringList.Create;
+  try
+    model.LoadFromFile(APath);
+    for i := 0 to High(GGRID) do
+    begin
+      bar := Pos('|', GGRID[i]);
+      key := Copy(GGRID[i], 1, bar - 1);
+      variant := Copy(GGRID[i], bar + 1, MaxInt);
+      for si := 0 to High(STATES) do
+        sl.Add(key + '|' + variant + '|' + IntToStr(si) + ' => ' +
+          GDumpStyle(model.ResolveStyle(key, variant, STATES[si])));
+    end;
+    Result := sl.Text;
+  finally
+    sl.Free;
+    model.Free;
+  end;
+end;
+
+procedure TTestThemeGolden.CheckGolden(const AThemeName: string);
+var
+  dump, gpath: string;
+  sl: TStringList;
+begin
+  dump := DumpTheme(ThemePath(AThemeName + '.tycss'));
+  gpath := GoldenPath(AThemeName + '.golden.txt');
+  if FileExists(gpath) then
+  begin
+    sl := TStringList.Create;
+    try
+      sl.LoadFromFile(gpath);
+      if sl.Text <> dump then
+      begin
+        sl.Text := dump;
+        sl.SaveToFile(gpath + '.actual');
+        Fail('Theme ' + AThemeName + ' resolved styles changed vs golden. Diff ' +
+          gpath + ' against ' + gpath + '.actual; if intended, update the golden.');
+      end;
+    finally
+      sl.Free;
+    end;
+  end
+  else
+  begin
+    ForceDirectories(ExtractFilePath(gpath));
+    sl := TStringList.Create;
+    try
+      sl.Text := dump;
+      sl.SaveToFile(gpath);
+    finally
+      sl.Free;
+    end;
+    // bootstrap: golden created this run, nothing to assert
+  end;
+end;
+
+procedure TTestThemeGolden.TestLightGolden;
+begin
+  CheckGolden('light');
+end;
+
+procedure TTestThemeGolden.TestDarkGolden;
+begin
+  CheckGolden('dark');
+end;
+
+procedure TTestThemeGolden.TestShowcaseGolden;
+begin
+  CheckGolden('showcase');
+end;
+
 initialization
   RegisterTest(TTestThemes);
+  RegisterTest(TTestThemeGolden);
 end.
