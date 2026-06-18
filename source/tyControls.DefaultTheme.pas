@@ -1,11 +1,10 @@
 unit tyControls.DefaultTheme;
 
-{ Built-in default skin. Compiled into the binary (no disk dependency) so that
-  controls render with a sensible look even when no theme is loaded — e.g. a
-  control with no Controller bound, or any control dropped onto a form in the
-  Lazarus designer. This text MUST stay byte-identical to themes/light.tycss
-  (enforced by test.defaulttheme's sync test). When light.tycss changes, update
-  this string to match. }
+{ Built-in default skin compiled into the binary (no runtime file dependency) so
+  controls render sensibly with no theme loaded (no Controller, or the Lazarus
+  designer). GENERATED from themes/light.tycss by gen-defaulttheme.ps1 - do NOT edit
+  by hand; edit light.tycss and re-run the generator. Sync-tested byte-identical to
+  light.tycss (test.defaulttheme). }
 
 {$mode objfpc}{$H+}
 
