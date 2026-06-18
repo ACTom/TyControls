@@ -27,6 +27,7 @@ type
     property Model: TTyStyleModel read FModel;
     procedure LoadTheme(const AFileName: string);
     procedure LoadThemeCss(const ASource: string);
+    procedure LoadThemeCssAdditive(const ASource: string);   // compose onto current (A6)
     procedure RegisterStyleable(AControl: TControl);
     procedure UnregisterStyleable(AControl: TControl);
     procedure Changed;
@@ -85,6 +86,12 @@ end;
 procedure TTyStyleController.LoadThemeCss(const ASource: string);
 begin
   FModel.LoadFromCss(ASource);
+  Changed;
+end;
+
+procedure TTyStyleController.LoadThemeCssAdditive(const ASource: string);
+begin
+  FModel.LoadFromCssAdditive(ASource);
   Changed;
 end;
 

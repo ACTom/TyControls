@@ -42,6 +42,7 @@ type
     procedure TestBackgroundNoneKeyword;
     procedure TestSeedOverrideReachesBaseRule;
     procedure TestBaseResolveUnchanged;
+    procedure TestAdditiveLoad;
   end;
 
   TTestStyleResolve = class(TTestCase)
@@ -683,6 +684,19 @@ begin
   AssertEquals('base primary = built-in accent', TTyColor($FF3B82F6), st.Background.Color);
   ed := FModel.ResolveStyle('TyEdit', '', [tysFocused]);
   AssertTrue('focus outline present', tpOutline in ed.Present);
+end;
+
+procedure TTestStylePhase0.TestAdditiveLoad;
+var st: TTyStyleSet;
+begin
+  // additive load composes: the override's color wins, the base background SURVIVES
+  // (per-property merge across the two appended entries via apply-all-forward).
+  FModel.LoadFromCss('TyButton { background: #111111; color: #222222; }');
+  FModel.LoadFromCssAdditive('TyButton { color: #FF0000; }');
+  st := FModel.ResolveStyle('TyButton', '', []);
+  AssertEquals('additive override color wins', TTyColor($FFFF0000), st.TextColor);
+  AssertTrue('additive base background survives', tpBackground in st.Present);
+  AssertEquals('additive base background value', TTyColor($FF111111), st.Background.Color);
 end;
 
 initialization

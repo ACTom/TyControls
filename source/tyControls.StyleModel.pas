@@ -28,7 +28,8 @@ type
     procedure ClearList(ARules: TFPList);
     procedure RebuildMergedVars;
     procedure ValidateRules(ARules: TFPList; AVars: TStrings);
-    procedure LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string);
+    procedure LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string;
+      AReplace: Boolean = True);
     procedure AddEntryTo(ARules: TFPList; const ATypeName, AVariant: string;
       AHasState: Boolean; AState: TTyState; const ADecls: array of TTyCssDeclaration);
     procedure ApplyAllMatching(ARules: TFPList; const ATypeName, AVariant: string;
@@ -41,7 +42,8 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure Clear;
-    procedure LoadFromCss(const ASource: string);   // raises ETyCssError
+    procedure LoadFromCss(const ASource: string);          // raises ETyCssError (replaces user layer)
+    procedure LoadFromCssAdditive(const ASource: string);  // appends rules + merges vars (A6)
     procedure LoadFromFile(const AFileName: string);
     function ResolveStyle(const ATypeKey, AStyleClass: string; AStates: TTyStateSet): TTyStyleSet;
     function MaxGlassBlur: Integer;   // largest glass-blur any active rule requests (0 = none)
@@ -717,7 +719,8 @@ begin
   end;
 end;
 
-procedure TTyStyleModel.LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string);
+procedure TTyStyleModel.LoadInto(ARules: TFPList; AVars: TStrings; const ASource: string;
+  AReplace: Boolean);
 var
   parser: TTyCssParser; sheet: TTyCssStylesheet;
   tmpRules: TFPList; tmpVars, tmpMerged: TStringList;
@@ -752,15 +755,26 @@ begin
     // Fail-fast on bad VALUES before committing (against base (+) this layer), so a
     // broken theme raises with the previous theme still active.
     tmpMerged.Assign(FBaseVars);
+    if not AReplace then   // additive: the new rules also see the EXISTING user vars
+      for ri := 0 to AVars.Count - 1 do
+        tmpMerged.Values[AVars.Names[ri]] := AVars.ValueFromIndex[ri];
     for ri := 0 to tmpVars.Count - 1 do
       tmpMerged.Values[tmpVars.Names[ri]] := tmpVars.ValueFromIndex[ri];
     ValidateRules(tmpRules, tmpMerged);
-    // Commit.
-    ClearList(ARules);
-    AVars.Clear;
+    // Commit. Replace clears first; additive appends rules + merges vars (new wins) so
+    // the appended entries sort LAST (importer/override wins via ApplyAllMatching order).
+    if AReplace then
+    begin
+      ClearList(ARules);
+      AVars.Clear;
+    end;
     for ri := 0 to tmpRules.Count - 1 do ARules.Add(tmpRules[ri]);
     tmpRules.Clear;   // ownership transferred to ARules; clear list only (do NOT free entries)
-    AVars.Assign(tmpVars);
+    if AReplace then
+      AVars.Assign(tmpVars)
+    else
+      for ri := 0 to tmpVars.Count - 1 do
+        AVars.Values[tmpVars.Names[ri]] := tmpVars.ValueFromIndex[ri];
   except
     ClearList(tmpRules);  // free entries built before the failure
     tmpRules.Free; tmpVars.Free; tmpMerged.Free;
@@ -773,7 +787,12 @@ end;
 
 procedure TTyStyleModel.LoadFromCss(const ASource: string);
 begin
-  LoadInto(FRules, FVars, ASource);
+  LoadInto(FRules, FVars, ASource, True);
+end;
+
+procedure TTyStyleModel.LoadFromCssAdditive(const ASource: string);
+begin
+  LoadInto(FRules, FVars, ASource, False);
 end;
 
 function TTyStyleModel.MaxGlassBlur: Integer;
