@@ -9,6 +9,10 @@ function TyLighten(c: TTyColor; Pct: Single): TTyColor;  // Pct 0..100
 function TyDarken(c: TTyColor; Pct: Single): TTyColor;   // Pct 0..100
 function TyAlpha(c: TTyColor; A: Single): TTyColor;       // A 0..1
 function TyMix(c1, c2: TTyColor; Pct: Single): TTyColor;  // Pct 0..100 of c2
+function TyLuminance(c: TTyColor): Single;                // Rec.601 perceived brightness 0..1
+function TyElevate(c: TTyColor; Pct: Single; const Mode: string): TTyColor;  // mode-aware darken/lighten
+function TyOn(bg: TTyColor): TTyColor; overload;                              // readable black/white ink
+function TyOn(bg, inkOnLight, inkOnDark: TTyColor): TTyColor; overload;       // bg light->inkOnLight
 
 function TyEvalColor(const Expr: string; Vars: TStrings): TTyColor;  // resolves var()/funcs
 function TyEvalLength(const Expr: string; Vars: TStrings): Integer;  // '6px'->6, var() ok
@@ -133,6 +137,43 @@ begin
     ClampByte(TyAlphaOf(c1) * (1 - f) + TyAlphaOf(c2) * f));
 end;
 
+function TyLuminance(c: TTyColor): Single;
+begin
+  // Rec.601 perceived brightness (luma), 0..1. Perceptual (not WCAG-linear) on
+  // purpose: it puts saturated accents (#3B82F6 -> ~0.48) below 0.5 so on() gives
+  // them white ink — matching the common convention + the existing themes.
+  Result := (0.299 * TyRedOf(c) + 0.587 * TyGreenOf(c) + 0.114 * TyBlueOf(c)) / 255.0;
+end;
+
+function TyElevate(c: TTyColor; Pct: Single; const Mode: string): TTyColor;
+var m: string; goDark: Boolean;
+begin
+  m := LowerCase(Trim(Mode));
+  if m = 'light' then goDark := True          // light mode: raising elevation = darken
+  else if m = 'dark' then goDark := False      // dark mode: raising elevation = lighten
+  else goDark := TyLuminance(c) >= 0.5;         // no --ty-mode: coarse fallback by color
+  if goDark then Result := TyDarken(c, Pct) else Result := TyLighten(c, Pct);
+end;
+
+function TyOn(bg: TTyColor): TTyColor;
+begin
+  if TyLuminance(bg) > 0.5 then Result := TyRGB(0, 0, 0) else Result := TyRGB(255, 255, 255);
+end;
+
+function TyOn(bg, inkOnLight, inkOnDark: TTyColor): TTyColor;
+begin
+  if TyLuminance(bg) > 0.5 then Result := inkOnLight else Result := inkOnDark;
+end;
+
+// Read the active --ty-mode token ('light'/'dark'/'') from a var set; '' = unset.
+function ModeOf(Vars: TStrings): string;
+begin
+  if (Vars <> nil) and (Vars.IndexOfName('ty-mode') >= 0) then
+    Result := LowerCase(Trim(Vars.Values['ty-mode']))
+  else
+    Result := '';
+end;
+
 // --- expression evaluation -------------------------------------------------
 
 // Resolve var(--name) -> the raw string from Vars (name without leading --).
@@ -251,6 +292,12 @@ begin
                     ClampByte(ParsePctOrNum(args[2])),
                     ClampByte(aF * 255)));
       end;
+      if (fn = 'elevate') and (args.Count = 2) then
+        Exit(TyElevate(TyEvalColor(args[0], Vars), ParsePctOrNum(args[1]), ModeOf(Vars)));
+      if (fn = 'on') and (args.Count = 1) then
+        Exit(TyOn(TyEvalColor(args[0], Vars)));
+      if (fn = 'on') and (args.Count = 3) then
+        Exit(TyOn(TyEvalColor(args[0], Vars), TyEvalColor(args[1], Vars), TyEvalColor(args[2], Vars)));
       raise Exception.CreateFmt('Unknown color function: %s/%d', [fn, args.Count]);
     finally
       args.Free;

@@ -69,9 +69,9 @@
 
 ### 4.4 新函数（均落在 `Css.Values`，对 `TyEvalColor` 分发是叠加）
 
-- `function TyLuminance(c: TTyColor): Single`（0..1）。相对亮度：sRGB 通道线性化后 `0.2126·R + 0.7152·G + 0.0722·B`（WCAG）。内部 helper，可不进 CSS 词表。
+- `function TyLuminance(c: TTyColor): Single`（0..1）。**Rec.601 感知亮度** `0.299·R + 0.587·G + 0.114·B`（**非** WCAG 线性）。选感知亮度是为匹配「饱和色上用白字」的设计惯例：`on(#3B82F6)`/`on(accent)` 给白墨（WCAG 最大对比反而给黑墨、与现有主题/惯例相悖）。
 - `function TyElevate(c: TTyColor; Pct: Single; const Mode: string): TTyColor`：`Mode='light'`→`TyDarken`；`'dark'`→`TyLighten`；`''`（缺省）→ 按 `TyLuminance(c)`（亮色 darken / 暗色 lighten）。**方向匹配现有约定**（light 用 darken、dark 用 lighten 做抬升/下沉面）→ 落总纲风险3 的「保真路线」：方向由 mode 翻、幅度由显式步长给，零像素漂移；感知均匀（OkLab）留 P1/P3 可选打磨。
-- `function TyOn(bg: TTyColor): TTyColor` + 重载 `TyOn(bg, inkOnLight, inkOnDark: TTyColor)`：默认按「与 bg 对比更大者」挑 `#000`/`#FFF`；带参时 bg 偏亮取 `inkOnLight`、偏暗取 `inkOnDark`。**根治 on-accent bug**（`on(var(--accent))` 在任一 accent 上都可读），并使「换强调色」永远安全。
+- `function TyOn(bg: TTyColor): TTyColor` + 重载 `TyOn(bg, inkOnLight, inkOnDark: TTyColor)`：按 `TyLuminance(bg)` 阈 **0.5** 挑 `#000`（亮底）/`#FFF`（暗底）；带参时 bg 偏亮取 `inkOnLight`、偏暗取 `inkOnDark`。**根治 on-accent bug**（`on(var(--accent))` 一致可读），并使「换强调色」永远安全。
 - `TyEvalColor` 分发新增 `elevate`(2 参) / `on`(1 或 3 参)。**只有 `elevate` 读 `--ty-mode`**（经 `Vars.Values['ty-mode']`，空→按 `luminance(c)` 兜底定方向）；**`on` 不读 mode**，纯按 `luminance(bg)` 自挑墨。`transparent` 关键字（颜色处任意位置）→ `tyTransparent`。
 - `background: none` → `tfkNone`：在 `TyApplyDeclaration` 的 `background` 分支识别（`Default(TTyFill)` + `Kind:=tfkNone`，置 `tpBackground`）。
 

@@ -39,6 +39,10 @@ type
   TTestCssValuesPhase0 = class(TTestCase)
   published
     procedure TestTransparentKeyword;
+    procedure TestLuminance;
+    procedure TestElevateDirection;
+    procedure TestOnInk;
+    procedure TestElevateOnViaEvalColor;
   end;
 implementation
 
@@ -234,6 +238,53 @@ begin
   try
     AssertEquals('transparent -> $00000000', TTyColor($00000000), TyEvalColor('transparent', v));
     AssertEquals('case-insensitive + trimmed', TTyColor($00000000), TyEvalColor('  TRANSPARENT ', v));
+  finally
+    v.Free;
+  end;
+end;
+
+procedure TTestCssValuesPhase0.TestLuminance;
+begin
+  AssertEquals('white ~1', 1.0, TyLuminance(TyRGB(255, 255, 255)), 0.01);
+  AssertEquals('black 0', 0.0, TyLuminance(TyRGB(0, 0, 0)), 0.001);
+  AssertTrue('mid grey ~0.5', (TyLuminance(TyRGB(128, 128, 128)) > 0.45)
+                          and (TyLuminance(TyRGB(128, 128, 128)) < 0.55));
+end;
+
+procedure TTestCssValuesPhase0.TestElevateDirection;
+var lt, dk: TTyColor;
+begin
+  lt := TyRGB(240, 240, 240);  dk := TyRGB(20, 24, 32);
+  // explicit mode: light -> darken, dark -> lighten
+  AssertEquals('light=darken', TyDarken(lt, 8), TyElevate(lt, 8, 'light'));
+  AssertEquals('dark=lighten', TyLighten(dk, 8), TyElevate(dk, 8, 'dark'));
+  // no mode: fall back to the colour's own brightness (light->darken, dark->lighten)
+  AssertEquals('default light->darken', TyDarken(lt, 8), TyElevate(lt, 8, ''));
+  AssertEquals('default dark->lighten', TyLighten(dk, 8), TyElevate(dk, 8, ''));
+end;
+
+procedure TTestCssValuesPhase0.TestOnInk;
+begin
+  AssertEquals('on(white)=black', TyRGB(0, 0, 0), TyOn(TyRGB(255, 255, 255)));
+  AssertEquals('on(black)=white', TyRGB(255, 255, 255), TyOn(TyRGB(0, 0, 0)));
+  // on-accent bug regression: saturated accent gets white ink (convention)
+  AssertEquals('on(#3B82F6)=white', TyRGB(255, 255, 255), TyOn(TyParseColor('#3B82F6')));
+  // custom inks: dark bg -> inkOnDark
+  AssertEquals('custom ink on dark bg', TyParseColor('#EEEEEE'),
+    TyOn(TyRGB(20, 20, 20), TyParseColor('#111111'), TyParseColor('#EEEEEE')));
+end;
+
+procedure TTestCssValuesPhase0.TestElevateOnViaEvalColor;
+var v: TStringList;
+begin
+  v := TStringList.Create;
+  try
+    v.Values['surface'] := '#F0F0F0';
+    v.Values['ty-mode'] := 'light';
+    AssertEquals('elevate via eval (light->darken)', TyDarken(TyParseColor('#F0F0F0'), 6),
+      TyEvalColor('elevate(var(--surface), 6%)', v));
+    AssertEquals('on via eval (light surface->black)', TyRGB(0, 0, 0),
+      TyEvalColor('on(var(--surface))', v));
   finally
     v.Free;
   end;
