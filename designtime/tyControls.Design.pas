@@ -47,12 +47,34 @@ begin
 end;
 
 procedure TTyStyleClassPropertyEditor.GetValues(Proc: TGetStrProc);
+var
+  comp: TPersistent;
+  sty: ITyStyleable;
+  ctrl: TTyStyleController;
+  model: TTyStyleModel;
+  list: TStringList;
+  i: Integer;
 begin
-  Proc('primary');
-  Proc('danger');
-  Proc('close');
-  Proc('min');
-  Proc('max');
+  // Dynamic + per control type: list exactly the variants the active theme defines for
+  // THIS control's typeKey, read from its controller's model (else the global default,
+  // which always carries the built-in defaults). No more hard-coded cross-control list.
+  comp := GetComponent(0);
+  if not Supports(comp, ITyStyleable, sty) then Exit;
+  // Both base classes expose a published Controller but share no ancestor.
+  ctrl := nil;
+  if comp is TTyGraphicControl then ctrl := TTyGraphicControl(comp).Controller
+  else if comp is TTyCustomControl then ctrl := TTyCustomControl(comp).Controller;
+  if ctrl <> nil then model := ctrl.Model else model := TyDefaultController.Model;
+  list := TStringList.Create;
+  try
+    list.Sorted := True;            // stable display order
+    list.Duplicates := dupIgnore;
+    model.GetVariantsForType(sty.GetStyleTypeKey, list);
+    for i := 0 to list.Count - 1 do
+      Proc(list[i]);
+  finally
+    list.Free;
+  end;
 end;
 
 function TTyTabControlEditor.GetVerbCount: Integer;
