@@ -10,7 +10,11 @@ uses
 type
   TTyColor = type Cardinal;            // $AARRGGBB
 
-  TTyState = (tysNormal, tysHover, tysActive, tysFocused, tysDisabled);
+  // tysSelected is APPENDED last so existing ordinals (and the golden baseline)
+  // are unchanged; the cascade application order is set by cStateOrder in StyleModel,
+  // not by this enum order. Driven by TTyButton.Down; matched by the ':selected'
+  // (alias ':checked') pseudo-class.
+  TTyState = (tysNormal, tysHover, tysActive, tysFocused, tysDisabled, tysSelected);
   TTyStateSet = set of TTyState;
 
   TTyFillKind = (tfkNone, tfkSolid, tfkLinearGradient, tfkNineSlice, tfkImage);

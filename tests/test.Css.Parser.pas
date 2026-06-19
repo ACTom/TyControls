@@ -28,6 +28,7 @@ type
     procedure TestModeBlockParses;
     procedure TestModeBlockAfterRuleParses;
     procedure TestModeBlockNonRootRaises;
+    procedure TestSelectedPseudoState;
   end;
 
 implementation
@@ -399,6 +400,34 @@ begin
   finally
     p.Free;
   end;
+end;
+
+procedure TTestCssParser.TestSelectedPseudoState;
+var
+  parser: TTyCssParser;
+  sheet: TTyCssStylesheet;
+  rule: TTyCssRule;
+begin
+  // ':selected' 与别名 ':checked' 都应解析为 tysSelected
+  parser := TTyCssParser.Create('TyButton.ghost:selected { background:#FF0000; }');
+  try
+    sheet := parser.Parse;
+    try
+      AssertEquals('one rule', 1, sheet.Rules.Count);
+      rule := TTyCssRule(sheet.Rules[0]);
+      AssertTrue('has state', rule.Selectors[0].HasState);
+      AssertTrue('state is tysSelected', rule.Selectors[0].State = tysSelected);
+    finally sheet.Free; end;
+  finally parser.Free; end;
+
+  parser := TTyCssParser.Create('TyButton:checked { background:#00FF00; }');
+  try
+    sheet := parser.Parse;
+    try
+      rule := TTyCssRule(sheet.Rules[0]);
+      AssertTrue('checked alias -> tysSelected', rule.Selectors[0].State = tysSelected);
+    finally sheet.Free; end;
+  finally parser.Free; end;
 end;
 
 initialization
