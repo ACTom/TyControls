@@ -29,6 +29,7 @@ type
     procedure TestCaptionBandErasedBorderNotVisible;
     procedure TestClientRectInsetBelowCaption;
     procedure TestGroupBoxAlignmentMovesCaption;
+    procedure TestIsDesignerContainer;
   end;
 
 implementation
@@ -219,6 +220,13 @@ begin
   cr := InkCentroidX(taRightJustify);
   AssertTrue('left caption ink present', cl > 0);
   AssertTrue('right-aligned caption further right', cr > cl + 20);
+end;
+
+procedure TTyGroupBoxTest.TestIsDesignerContainer;
+begin
+  // csAcceptsControls makes the IDE designer drop child controls INTO the group box
+  // (they lay out below the caption band via AdjustClientRect).
+  AssertTrue('group box is a designer container', csAcceptsControls in FBox.ControlStyle);
 end;
 
 initialization

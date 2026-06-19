@@ -125,7 +125,7 @@ type
     Notification(opInsert) hook (the LCL Form.Menu -> TMainMenu pattern), and the
     engine + caption buttons wire to it at RUNTIME. Otherwise it behaves like an
     ordinary TForm: drop your controls straight onto it and design them in place. }
-  TTyForm = class(TForm, ITyGlassHost)
+  TTyForm = class(TForm, ITyGlassHost, ITyThemedBackground)
   private
     FTitleBar: TTyTitleBar;
     FMenuBar: TTyMenuBar;             // the primary menu bar (shortcut dispatch / mac global bar)
@@ -144,6 +144,8 @@ type
     function GlassSharpBackdrop: TBGRABitmap;
     function GlassClientOrigin: TPoint;
     function GlassUnderTitlebar: Boolean;
+    // ITyThemedBackground — the form's themed TyForm bg, for children's parent-bg fill.
+    function ThemedBgColor(out AColor: TTyColor): Boolean;
     procedure SetupChrome;
     procedure SetTitleBar(AValue: TTyTitleBar);
     procedure SetMenuBar(AValue: TTyMenuBar);
@@ -1008,6 +1010,25 @@ begin
   FreeAndNil(FSharpBackdrop);   // non-image theme: drop any stale backdrop
   FreeAndNil(FGlassBackdrop);
   inherited Paint;
+end;
+
+function TTyForm.ThemedBgColor(out AColor: TTyColor): Boolean;
+{ The form's themed TyForm background colour, for a child's parent-bg fill. Resolves from
+  the form's own controller when themed (= the LCL Color ApplyChromeTheme set), else from
+  TyDefaultController (the built-in theme) — so it is correct in the DESIGNER too, where
+  ApplyChromeTheme has not run and the raw LCL Color is the dark default. }
+var
+  ctrl: TTyStyleController;
+  bg: TTyStyleSet;
+begin
+  Result := False;
+  if FController <> nil then ctrl := FController else ctrl := TyDefaultController;
+  bg := ctrl.Model.ResolveStyle('TyForm', '', []);
+  if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
+  begin
+    AColor := bg.Background.Color;
+    Result := True;
+  end;
 end;
 
 procedure TTyForm.ApplyChromeTheme(AController: TTyStyleController);

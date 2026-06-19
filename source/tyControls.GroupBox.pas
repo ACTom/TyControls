@@ -49,6 +49,9 @@ end;
 constructor TTyGroupBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  // Designer container: the IDE drops child controls INTO the box; they lay out below
+  // the caption band carved by AdjustClientRect.
+  ControlStyle := ControlStyle + [csAcceptsControls];
   FCaption := '';
   FAlignment := taLeftJustify;
   Width := 185;
