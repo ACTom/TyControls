@@ -11,14 +11,20 @@ uses
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu, tyControls.BuiltinThemes;
 type
 
-  { TDemoMainForm ᾿all controls are placed in the designer (mainform.lfm),
-    including the docked TTyTitleBar (associated via the form's TitleBar
-    property), the TabControl's tabs, TTySpinEdit and TTyMemo. }
+  { TDemoMainForm — ALL controls live in the designer (mainform.lfm), including the docked
+    TTyTitleBar, the theme switcher (ThemeCombo + appearance buttons + random), the
+    TabControl's tabs, TTySpinEdit and TTyMemo. Code only does logic (data + handlers);
+    it NEVER creates UI controls (project rule: demo UI is edited in the .lfm only). }
 
   TDemoMainForm = class(TTyForm)
     Controller: TTyStyleController;
     TyButton1: TTyButton;
     TyTitleBar1: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
+    BtnApLight: TTyButton;
+    BtnApDark: TTyButton;
+    BtnApAuto: TTyButton;
+    BtnRandom: TTyButton;
     BtnPrimary: TTyButton;
     BtnDanger: TTyButton;
     LblHello: TTyLabel;
@@ -61,18 +67,16 @@ type
     procedure PopupCtxHelloClick(Sender: TObject);
     procedure PopupCtxAgreeClick(Sender: TObject);
     procedure TrackBar1Change(Sender: TObject);
-  private
-    ThemeCombo: TTyComboBox;
-    BtnApLight, BtnApDark, BtnApAuto, BtnRandom: TTyButton;
-    function ThemeDir: string;
-    procedure BuildSwitcher;
-    procedure ApplyBuiltin(const AName: string);
     procedure ThemeComboChange(Sender: TObject);
-    procedure SetAppearance(AFollow: TTyThemeFollow; const AMode: string; ASelected: TTyButton);
     procedure ApLightClick(Sender: TObject);
     procedure ApDarkClick(Sender: TObject);
     procedure ApAutoClick(Sender: TObject);
     procedure RandomClick(Sender: TObject);
+  private
+    function ThemeDir: string;
+    procedure InitThemes;
+    procedure ApplyBuiltin(const AName: string);
+    procedure SetAppearance(AFollow: TTyThemeFollow; const AMode: string; ASelected: TTyButton);
   end;
 var
   DemoMainForm: TDemoMainForm;
@@ -84,9 +88,7 @@ var
   Dir: string;
   i: Integer;
 begin
-  // exe 扜目录向上逐级查找 themes/，对以下位置均健壮：
-  //   <repo>/examples/demo/demo（工程目录）
-  //   <repo>/examples/demo/lib/<cpu>-<os>/demo（lazbuild 默认输出ﺿ  //   <repo>/examples/demo/demo.app/Contents/MacOS/demo（macOS 包）
+  // 从 exe 所在目录向上逐级查找 themes/(兼容工程目录 / lib/<cpu>-<os>/ / macOS .app 包)。
   Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
   for i := 1 to 8 do
   begin
@@ -95,7 +97,7 @@ begin
     Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
     if Dir = '' then Break;
   end;
-  Result := 'themes' + PathDelim; // 兜底：相对当前目录
+  Result := 'themes' + PathDelim; // 兜底:相对当前目录
 end;
 
 procedure TDemoMainForm.TrackBar1Change(Sender: TObject);
@@ -107,78 +109,27 @@ end;
 procedure TDemoMainForm.FormCreate(Sender: TObject);
 begin
   Randomize;                  // 给「随机换肤」一个种子
-  // Controls (incl. the title bar/tabs/spin/memo) come from the .lfm; load the theme.
-  // Associate the themed menu bar so the form drives shortcut dispatch (and, on macOS,
-  // hands MainMenu1 to the native global menu bar). See TTyForm.MenuBar (Task 6).
+  // Controls (incl. the title bar/tabs/spin/memo AND the theme switcher) come from the
+  // .lfm. Associate the themed menu bar (shortcut dispatch / macOS global menu), then
+  // fill the theme dropdown + set the initial theme/appearance — data only, no UI build.
   MenuBar := TyMenuBar1;
-  BuildSwitcher;             // 创建换肤 UI 并设初始主题/外观
+  InitThemes;
 end;
 
-procedure TDemoMainForm.MnuViewToggleClick(Sender: TObject);
-begin
-  // Demonstrates a checked item driving a control: flip the label text + the check mark.
-  MnuViewToggle.Checked := not MnuViewToggle.Checked;
-  if MnuViewToggle.Checked then
-    LblHello.Caption := 'Hello TyControls'
-  else
-    LblHello.Caption := 'Greeting hidden';
-end;
-
-procedure TDemoMainForm.MnuFileExitClick(Sender: TObject);
-begin
-  Close;
-end;
-
-procedure TDemoMainForm.PopupCtxHelloClick(Sender: TObject);
-begin
-  LblHello.Caption := 'Hello from the context menu';
-end;
-
-procedure TDemoMainForm.PopupCtxAgreeClick(Sender: TObject);
-begin
-  ChkAgree.Checked := not ChkAgree.Checked;
-end;
-
-procedure TDemoMainForm.BuildSwitcher;
+procedure TDemoMainForm.InitThemes;
 var
   names: TStringArray;
   i: Integer;
 begin
+  // 控件全部来自 .lfm;这里只填数据 + 设初始状态,绝不创建控件。
   TyRegisterBuiltinThemes;
-
-  ThemeCombo := TTyComboBox.Create(Self);
-  ThemeCombo.Parent := Self;
-  ThemeCombo.SetBounds(16, 8, 160, 28);
-  ThemeCombo.Controller := Controller;
   names := TyBuiltinThemeNames;
+  ThemeCombo.Items.Clear;
   for i := 0 to High(names) do ThemeCombo.Items.Add(names[i]);
   ThemeCombo.Items.Add('自定义…');
   ThemeCombo.ItemIndex := 0;                 // default
-  ThemeCombo.OnChange := @ThemeComboChange;
-
-  BtnApLight := TTyButton.Create(Self);
-  BtnApLight.Parent := Self; BtnApLight.SetBounds(188, 8, 56, 28);
-  BtnApLight.Caption := '浅色'; BtnApLight.StyleClass := 'ghost';
-  BtnApLight.Controller := Controller; BtnApLight.OnClick := @ApLightClick;
-
-  BtnApDark := TTyButton.Create(Self);
-  BtnApDark.Parent := Self; BtnApDark.SetBounds(248, 8, 56, 28);
-  BtnApDark.Caption := '深色'; BtnApDark.StyleClass := 'ghost';
-  BtnApDark.Controller := Controller; BtnApDark.OnClick := @ApDarkClick;
-
-  BtnApAuto := TTyButton.Create(Self);
-  BtnApAuto.Parent := Self; BtnApAuto.SetBounds(308, 8, 84, 28);
-  BtnApAuto.Caption := '跟随系统'; BtnApAuto.StyleClass := 'ghost';
-  BtnApAuto.Controller := Controller; BtnApAuto.OnClick := @ApAutoClick;
-
-  BtnRandom := TTyButton.Create(Self);
-  BtnRandom.Parent := Self; BtnRandom.SetBounds(400, 8, 84, 28);
-  BtnRandom.Caption := '随机换肤'; BtnRandom.StyleClass := 'primary';
-  BtnRandom.Controller := Controller; BtnRandom.OnClick := @RandomClick;
-
-  // 初始:default 主题 + 跟随系统外观
   ApplyBuiltin('default');
-  SetAppearance(tfFollowSystem, '', BtnApAuto);
+  SetAppearance(tfFollowSystem, '', BtnApAuto);   // 初始外观:跟随系统
 end;
 
 procedure TDemoMainForm.ApplyBuiltin(const AName: string);
@@ -245,6 +196,31 @@ begin
   end;
   ThemeCombo.ItemIndex := pick;     // 同步下拉(ApplyBuiltin 幂等,OnChange 若再触发也无副作用)
   ApplyBuiltin(names[pick]);
+end;
+
+procedure TDemoMainForm.MnuViewToggleClick(Sender: TObject);
+begin
+  // Demonstrates a checked item driving a control: flip the label text + the check mark.
+  MnuViewToggle.Checked := not MnuViewToggle.Checked;
+  if MnuViewToggle.Checked then
+    LblHello.Caption := 'Hello TyControls'
+  else
+    LblHello.Caption := 'Greeting hidden';
+end;
+
+procedure TDemoMainForm.MnuFileExitClick(Sender: TObject);
+begin
+  Close;
+end;
+
+procedure TDemoMainForm.PopupCtxHelloClick(Sender: TObject);
+begin
+  LblHello.Caption := 'Hello from the context menu';
+end;
+
+procedure TDemoMainForm.PopupCtxAgreeClick(Sender: TObject);
+begin
+  ChkAgree.Checked := not ChkAgree.Checked;
 end;
 
 end.

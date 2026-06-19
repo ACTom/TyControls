@@ -42,6 +42,59 @@ object DemoMainForm: TDemoMainForm
     Menu = MainMenu1
     Align = alTop
   end
+  object ThemeCombo: TTyComboBox
+    Left = 32
+    Height = 56
+    Top = 156
+    Width = 260
+    TabOrder = 23
+    Controller = Controller
+    OnChange = ThemeComboChange
+  end
+  object BtnApLight: TTyButton
+    Left = 308
+    Height = 56
+    Top = 156
+    Width = 110
+    TabOrder = 24
+    StyleClass = 'ghost'
+    OnClick = ApLightClick
+    Controller = Controller
+    Caption = '浅色'
+  end
+  object BtnApDark: TTyButton
+    Left = 432
+    Height = 56
+    Top = 156
+    Width = 110
+    TabOrder = 25
+    StyleClass = 'ghost'
+    OnClick = ApDarkClick
+    Controller = Controller
+    Caption = '深色'
+  end
+  object BtnApAuto: TTyButton
+    Left = 556
+    Height = 56
+    Top = 156
+    Width = 150
+    TabOrder = 26
+    StyleClass = 'ghost'
+    OnClick = ApAutoClick
+    Controller = Controller
+    Caption = '跟随系统'
+  end
+  object BtnRandom: TTyButton
+    Left = 720
+    Height = 56
+    Top = 156
+    Width = 170
+    TabOrder = 27
+    StyleClass = 'primary'
+    OnClick = RandomClick
+    Controller = Controller
+    Caption = '随机换肤'
+  end
   object BtnPrimary: TTyButton
     Left = 32
     Height = 60
