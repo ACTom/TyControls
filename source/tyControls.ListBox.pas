@@ -690,7 +690,7 @@ var
   R, ContentRect, RowRect: TRect;
   SBWidth, SH, i, LastRow: Integer;
   ItemStates: TTyStateSet;
-  capR, fillTop, fillBottom, bw: Integer;
+  capR, fillTop, fillBottom, inset, insetLogical: Integer;
   contentFills: Boolean;
   rowCorners: TTyCorners;
   savedClip: TRect;
@@ -724,14 +724,20 @@ begin
     if LastRow >= FItems.Count - 1 then
       LastRow := FItems.Count - 1;
 
-    // HARD-clip the rows to the listbox INTERIOR (inside the border). The border is drawn
-    // ONCE by DrawFrame over the listbox background, so its anti-aliased edge never blends
-    // with the variably-coloured row fills underneath (which made the border look a different
-    // shade at a hovered/selected row). The clip also stops a row fill's AA from spreading
-    // onto the border. Restored after the loop.
-    bw := P.Scale(BoxStyle.BorderWidth);
+    // Inset the rows just PAST the focus chrome (border + focus ring) and HARD-clip them
+    // there, so the chrome — drawn once by DrawFrame over the listbox background — keeps a
+    // UNIFORM colour: the row fills never touch its anti-aliased inner edge (which otherwise
+    // picked up the row colour at a hovered/selected row, tinting the border/ring there).
+    // insetLogical = the chrome's inner edge + 1px AA clearance; 0 when there is no chrome.
+    insetLogical := 0;
+    if BoxStyle.BorderWidth > 0 then
+      insetLogical := BoxStyle.BorderWidth + 1;
+    if (tpOutline in BoxStyle.Present) and (BoxStyle.OutlineWidth > 0) then
+      if BoxStyle.OutlineOffset + (BoxStyle.OutlineWidth + 1) div 2 + 1 > insetLogical then
+        insetLogical := BoxStyle.OutlineOffset + (BoxStyle.OutlineWidth + 1) div 2 + 1;
+    inset := P.Scale(insetLogical);
     savedClip := P.Bitmap.ClipRect;
-    P.Bitmap.ClipRect := Rect(R.Left + bw, R.Top + bw, R.Right - bw, R.Bottom - bw);
+    P.Bitmap.ClipRect := Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset);
 
     for i := FTopIndex to LastRow do
     begin
@@ -769,7 +775,7 @@ begin
         // CONCENTRIC with the rounded border (radius - border width) so they nest exactly;
         // only when the list FILLS the box does the last item cap+extend its bottom (else a
         // short list's last row would bleed into the empty space below). Middle rows square.
-        capR := BoxStyle.BorderRadius - BoxStyle.BorderWidth;
+        capR := BoxStyle.BorderRadius - insetLogical;
         if capR < 0 then capR := 0;
         contentFills := (FItems.Count * SH) >= (ContentRect.Bottom - ContentRect.Top);
         fillTop := RowRect.Top;
@@ -777,15 +783,15 @@ begin
         rowCorners := TyCorners(0, 0, 0, 0);
         if i = 0 then
         begin
-          fillTop := R.Top + bw;
+          fillTop := R.Top + inset;
           rowCorners.TL := capR; rowCorners.TR := capR;
         end;
         if (i = FItems.Count - 1) and contentFills then
         begin
-          fillBottom := R.Bottom - bw;
+          fillBottom := R.Bottom - inset;
           rowCorners.BR := capR; rowCorners.BL := capR;
         end;
-        P.FillBackground(Rect(R.Left + bw, fillTop, R.Right - bw - SBWidth, fillBottom),
+        P.FillBackground(Rect(R.Left + inset, fillTop, R.Right - inset - SBWidth, fillBottom),
           RowStyle.Background, rowCorners);
       end;
 
