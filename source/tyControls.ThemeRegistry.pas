@@ -33,7 +33,14 @@ procedure TyRegisterThemeFolder(const AName, ADir: string);
   Returns False (and ASource='') if the name is not registered. }
 function TyResolveTheme(const AName: string; out ASource: string): Boolean;
 
-{ All registered theme names, in registration order. }
+{ Register a theme NAME bound to an inline CSS string (a compiled-in built-in theme).
+  Case-insensitive; last registration wins. An empty name is ignored. }
+procedure TyRegisterThemeCss(const AName, ACss: string);
+
+{ Resolve a registered NAME to its inline CSS. Case-insensitive. False/'' if not a CSS theme. }
+function TyResolveThemeCss(const AName: string; out ACss: string): Boolean;
+
+{ All registered theme names (file sources first, then CSS sources). }
 function TyThemeNames: TStringArray;
 
 { Remove a registered name (case-insensitive). No-op if it was not registered. }
@@ -58,6 +65,57 @@ begin
     // is case-insensitive here (CaseSensitive=False), so name lookups stay correct.
   end;
   Result := GThemes;
+end;
+
+type
+  { Holds one compiled-in theme's CSS text (a TStringList Value can't carry newlines,
+    so CSS sources are stored as objects). }
+  TTyThemeCssHolder = class
+    Css: string;
+    constructor Create(const ACss: string);
+  end;
+
+var
+  GCssThemes: TStringList = nil;   // Name -> TTyThemeCssHolder; CaseSensitive=False, OwnsObjects
+
+constructor TTyThemeCssHolder.Create(const ACss: string);
+begin
+  inherited Create;
+  Css := ACss;
+end;
+
+function CssRegistry: TStringList;
+begin
+  if GCssThemes = nil then
+  begin
+    GCssThemes := TStringList.Create;
+    GCssThemes.CaseSensitive := False;
+    GCssThemes.OwnsObjects := True;
+  end;
+  Result := GCssThemes;
+end;
+
+procedure TyRegisterThemeCss(const AName, ACss: string);
+var idx: Integer; nm: string;
+begin
+  nm := Trim(AName);
+  if nm = '' then Exit;
+  idx := CssRegistry.IndexOf(nm);
+  if idx >= 0 then
+    TTyThemeCssHolder(CssRegistry.Objects[idx]).Css := ACss   // last wins
+  else
+    CssRegistry.AddObject(nm, TTyThemeCssHolder.Create(ACss));
+end;
+
+function TyResolveThemeCss(const AName: string; out ACss: string): Boolean;
+var idx: Integer;
+begin
+  ACss := '';
+  if (GCssThemes = nil) or (Trim(AName) = '') then Exit(False);
+  idx := GCssThemes.IndexOf(Trim(AName));
+  if idx < 0 then Exit(False);
+  ACss := TTyThemeCssHolder(GCssThemes.Objects[idx]).Css;
+  Result := True;
 end;
 
 procedure TyRegisterThemeFile(const AName, AFileName: string);
@@ -95,30 +153,42 @@ end;
 
 function TyThemeNames: TStringArray;
 var
-  i: Integer;
+  i, n: Integer;
 begin
-  if GThemes = nil then Exit(nil);
-  SetLength(Result, GThemes.Count);
-  for i := 0 to GThemes.Count - 1 do
-    Result[i] := GThemes.Names[i];
+  n := 0;
+  if GThemes <> nil then n := GThemes.Count;
+  if GCssThemes <> nil then Inc(n, GCssThemes.Count);
+  SetLength(Result, n);
+  n := 0;
+  if GThemes <> nil then
+    for i := 0 to GThemes.Count - 1 do begin Result[n] := GThemes.Names[i]; Inc(n); end;
+  if GCssThemes <> nil then
+    for i := 0 to GCssThemes.Count - 1 do begin Result[n] := GCssThemes[i]; Inc(n); end;
 end;
 
 procedure TyUnregisterTheme(const AName: string);
 var
   idx: Integer;
 begin
-  if (GThemes = nil) or (Trim(AName) = '') then Exit;
-  idx := GThemes.IndexOfName(Trim(AName));
-  if idx >= 0 then
-    GThemes.Delete(idx);
+  if (GThemes <> nil) and (Trim(AName) <> '') then
+  begin
+    idx := GThemes.IndexOfName(Trim(AName));
+    if idx >= 0 then GThemes.Delete(idx);
+  end;
+  if (GCssThemes <> nil) and (Trim(AName) <> '') then
+  begin
+    idx := GCssThemes.IndexOf(Trim(AName));
+    if idx >= 0 then GCssThemes.Delete(idx);
+  end;
 end;
 
 function TyThemeRegistered(const AName: string): Boolean;
 begin
-  Result := (GThemes <> nil) and (Trim(AName) <> '')
-    and (GThemes.IndexOfName(Trim(AName)) >= 0);
+  Result := ((GThemes <> nil) and (Trim(AName) <> '') and (GThemes.IndexOfName(Trim(AName)) >= 0))
+         or ((GCssThemes <> nil) and (Trim(AName) <> '') and (GCssThemes.IndexOf(Trim(AName)) >= 0));
 end;
 
 finalization
   FreeAndNil(GThemes);
+  FreeAndNil(GCssThemes);   // OwnsObjects frees the CSS holders
 end.
