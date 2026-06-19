@@ -8,6 +8,7 @@ object DemoMainForm: TDemoMainForm
   ClientHeight = 1440
   ClientWidth = 1280
   DesignTimePPI = 192
+  Font.Height = -24
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = TyTitleBar1
@@ -35,10 +36,11 @@ object DemoMainForm: TDemoMainForm
     Height = 48
     Top = 64
     Width = 1280
-    Align = alTop
     TabOrder = 21
+    TabStop = True
     Controller = Controller
     Menu = MainMenu1
+    Align = alTop
   end
   object BtnLight: TTyButton
     Left = 32
@@ -75,7 +77,7 @@ object DemoMainForm: TDemoMainForm
     Height = 60
     Top = 156
     Width = 145
-    TabOrder = 5
+    TabOrder = 22
     OnClick = BtnGreenClick
     Controller = Controller
     Caption = 'Green'
@@ -136,8 +138,8 @@ object DemoMainForm: TDemoMainForm
     Width = 400
     TabOrder = 5
     TabStop = True
-    Controller = Controller
     PopupMenu = PopupCtx
+    Controller = Controller
   end
   object ChkAgree: TTyCheckBox
     Left = 32
@@ -212,6 +214,7 @@ object DemoMainForm: TDemoMainForm
       'Beta'
       'Gamma'
       'Delta'
+      'Follow'
     )
     ItemIndex = 0
   end
@@ -261,13 +264,13 @@ object DemoMainForm: TDemoMainForm
     Width = 1208
     TabOrder = 16
     Controller = Controller
-    Tabs = <
+    Tabs = <    
       item
         Caption = 'Tab 1'
-      end
+      end    
       item
         Caption = 'Tab 2'
-      end
+      end    
       item
         Caption = 'Tab 3'
       end>
