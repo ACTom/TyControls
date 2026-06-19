@@ -13,11 +13,13 @@ type
     FDefault: Boolean;
     FCancel: Boolean;
     FModalResult: TModalResult;
+    FDown: Boolean;
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
     function GetBgAnimProgress: Single;
     procedure SetCancel(AValue: Boolean);
     procedure SetDefault(AValue: Boolean);
+    procedure SetDown(AValue: Boolean);
     // Register/unregister Self as the host form's Default/Cancel control. No-op
     // when there is no parent form yet (e.g. Default/Cancel streamed from the LFM
     // before Parent); Loaded re-applies it once the parent is known.
@@ -25,6 +27,8 @@ type
     procedure RegisterCancelWithForm;
   protected
     function GetStyleTypeKey: string; override;
+    // Inject tysSelected when Down (and enabled), so ':selected' theme rules apply.
+    function CurrentStates: TTyStateSet; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseEnter; override;
@@ -73,6 +77,10 @@ type
     // ModalResult (closing a modal dialog).
     property Default: Boolean read FDefault write SetDefault default False;
     property Cancel: Boolean read FCancel write SetCancel default False;
+    // VS Code 风格常驻选中态:为 True 时 CurrentStates 注入 tysSelected,触发主题里的
+    // ':selected' 规则(如 TyButton.ghost:selected)。互斥分组由应用在 OnClick 里自行
+    // 切换各按钮的 Down(本期不内建 GroupIndex)。
+    property Down: Boolean read FDown write SetDown default False;
     property ModalResult: TModalResult read FModalResult write FModalResult default mrNone;
     property Caption;
     property Enabled;
@@ -173,6 +181,25 @@ begin
   if FCancel = AValue then Exit;
   FCancel := AValue;
   RegisterCancelWithForm;
+end;
+
+procedure TTyButton.SetDown(AValue: Boolean);
+begin
+  if FDown = AValue then Exit;
+  FDown := AValue;
+  Invalidate;
+end;
+
+function TTyButton.CurrentStates: TTyStateSet;
+begin
+  Result := inherited CurrentStates;   // hover/active/focused/disabled, or normal
+  // Enabled=False makes inherited return [tysDisabled] only; disabled wins, so we
+  // never layer selected on top of it. Otherwise Down adds the resting selected state.
+  if FDown and Enabled then
+  begin
+    Include(Result, tysSelected);
+    Exclude(Result, tysNormal);
+  end;
 end;
 
 function TTyButton.WantsDialogKey(ACharCode: Word): Boolean;

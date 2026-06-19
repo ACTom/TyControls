@@ -3,7 +3,8 @@ unit test.button;
 interface
 uses
   Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
-  tyControls.Base, tyControls.Button;
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Base, tyControls.Button, tyControls.Types;
 type
   // Expose protected RenderTo for testing
   TTyButtonAccess = class(TTyButton)
@@ -16,6 +17,8 @@ type
     // Invoke the protected Loaded override to exercise the streamed-before-Parent
     // re-registration path without a full LFM load.
     procedure DoLoaded;
+    // Expose protected CurrentStates for the selected-state test.
+    function States: TTyStateSet;
   end;
 
   TButtonTest = class(TTestCase)
@@ -38,6 +41,7 @@ type
     procedure TestDefaultRespondsToEnter;
     procedure TestCancelRespondsToEscape;
     procedure TestDefaultReregisteredOnLoaded;
+    procedure TestDownDrivesSelectedState;
   end;
 implementation
 
@@ -64,6 +68,11 @@ end;
 procedure TTyButtonAccess.DoLoaded;
 begin
   Loaded;
+end;
+
+function TTyButtonAccess.States: TTyStateSet;
+begin
+  Result := CurrentStates;
 end;
 
 procedure TButtonTest.HandleClick(Sender: TObject);
@@ -278,6 +287,24 @@ begin
   finally
     F.Free;
   end;
+end;
+
+procedure TButtonTest.TestDownDrivesSelectedState;
+var B: TTyButtonAccess;
+begin
+  B := TTyButtonAccess.Create(nil);
+  try
+    AssertFalse('Down default False', B.Down);
+    AssertFalse('not selected initially', tysSelected in B.States);
+    B.Down := True;
+    AssertTrue('Down adds tysSelected', tysSelected in B.States);
+    AssertFalse('selected excludes normal', tysNormal in B.States);
+    // disabled 优先:Down 不叠加
+    B.Enabled := False;
+    AssertFalse('disabled drops selected', tysSelected in B.States);
+    AssertTrue('disabled present', tysDisabled in B.States);
+    AssertTrue('Down is published', IsPublishedProp(B, 'Down'));
+  finally B.Free; end;
 end;
 
 initialization
