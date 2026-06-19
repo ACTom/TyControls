@@ -21,6 +21,14 @@ type
     procedure TestDualBaseMatchesAuto;
     procedure TestSystemMatchesSystem;
   end;
+
+  TBuiltinThemesTest = class(TTestCase)
+  published
+    procedure TestNamesCountAndContents;
+    procedure TestAllBuiltinsLoad;
+    procedure TestDraculaPalette;
+    procedure TestNordPalette;
+  end;
 implementation
 
 procedure TThemeRegistryCssTest.TestRegisterResolveCss;
@@ -97,7 +105,78 @@ begin
   finally f.Free; end;
 end;
 
+procedure TBuiltinThemesTest.TestNamesCountAndContents;
+var n: TStringArray; i: Integer; sawDefault, sawSystem, sawDracula: Boolean;
+begin
+  n := TyBuiltinThemeNames;
+  AssertEquals('12 built-in themes', 12, Length(n));
+  sawDefault := False; sawSystem := False; sawDracula := False;
+  for i := 0 to High(n) do
+  begin
+    if n[i] = 'default' then sawDefault := True;
+    if n[i] = 'system'  then sawSystem := True;
+    if n[i] = 'dracula' then sawDracula := True;
+  end;
+  AssertTrue('has default', sawDefault);
+  AssertTrue('has system', sawSystem);
+  AssertTrue('has dracula', sawDracula);
+end;
+
+procedure TBuiltinThemesTest.TestAllBuiltinsLoad;
+var n: TStringArray; i: Integer; m: TTyStyleModel; s: TTyStyleSet;
+begin
+  n := TyBuiltinThemeNames;
+  for i := 0 to High(n) do
+  begin
+    m := TTyStyleModel.Create;
+    try
+      m.LoadFromCss(TyBuiltinThemeCss(n[i]));
+      m.SetMode('light');
+      s := m.ResolveStyle('TyButton', '', []);
+      AssertTrue(n[i] + ' light has bg', tpBackground in s.Present);
+      m.SetMode('dark');
+      s := m.ResolveStyle('TyButton', '', []);
+      AssertTrue(n[i] + ' dark has bg', tpBackground in s.Present);
+    finally m.Free; end;
+  end;
+end;
+
+procedure TBuiltinThemesTest.TestDraculaPalette;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(TyBuiltinThemeCss('dracula'));
+    m.SetMode('light');
+    s := m.ResolveStyle('TyButton', 'primary', []);   // primary bg = var(--accent)
+    AssertEquals('dracula light accent R', $64, TyRedOf(s.Background.Color));
+    AssertEquals('dracula light accent G', $4A, TyGreenOf(s.Background.Color));
+    AssertEquals('dracula light accent B', $C9, TyBlueOf(s.Background.Color));
+    m.SetMode('dark');
+    s := m.ResolveStyle('TyButton', 'primary', []);
+    AssertEquals('dracula dark accent R', $BD, TyRedOf(s.Background.Color));
+    AssertEquals('dracula dark surface R', $28,
+      TyRedOf(m.ResolveStyle('TyButton', '', []).Background.Color));
+  finally m.Free; end;
+end;
+
+procedure TBuiltinThemesTest.TestNordPalette;
+var m: TTyStyleModel; s: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(TyBuiltinThemeCss('nord'));
+    m.SetMode('dark');
+    s := m.ResolveStyle('TyButton', '', []);
+    AssertEquals('nord dark surface R', $2E, TyRedOf(s.Background.Color));
+    m.SetMode('light');
+    s := m.ResolveStyle('TyButton', '', []);
+    AssertEquals('nord light surface R', $EC, TyRedOf(s.Background.Color));
+  finally m.Free; end;
+end;
+
 initialization
   RegisterTest(TThemeRegistryCssTest);
   RegisterTest(TBuiltinSyncTest);
+  RegisterTest(TBuiltinThemesTest);
 end.
