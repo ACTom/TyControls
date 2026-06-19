@@ -9,7 +9,7 @@ uses
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
   tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
-  tyControls.TrackBar, tyControls.GroupBox, tyControls.TabControl,
+  tyControls.TrackBar, tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
@@ -18,9 +18,11 @@ type
     procedure GetValues(Proc: TGetStrProc); override;
   end;
 
-  { Adds an "Edit Tabs..." verb to the TTyTabControl context menu / Object
-    Inspector, opening the standard collection editor on the Tabs collection. }
-  TTyTabControlEditor = class(TDefaultComponentEditor)
+  { Manages TTyPageControl pages in the designer (no header click-switch on a
+    custom-drawn control). Verbs: Add / Delete / Show Next / Show Previous Page. }
+  TTyPageControlEditor = class(TDefaultComponentEditor)
+  private
+    function PC: TTyPageControl;
   public
     function GetVerbCount: Integer; override;
     function GetVerb(Index: Integer): string; override;
@@ -78,23 +80,60 @@ begin
   end;
 end;
 
-function TTyTabControlEditor.GetVerbCount: Integer;
+function TTyPageControlEditor.PC: TTyPageControl;
 begin
-  Result := 1;
+  Result := Component as TTyPageControl;
 end;
 
-function TTyTabControlEditor.GetVerb(Index: Integer): string;
+function TTyPageControlEditor.GetVerbCount: Integer;
 begin
-  if Index = 0 then
-    Result := 'Edit Tabs...'
+  Result := 4;
+end;
+
+function TTyPageControlEditor.GetVerb(Index: Integer): string;
+begin
+  case Index of
+    0: Result := 'Add Page';
+    1: Result := 'Delete Page';
+    2: Result := 'Show Next Page';
+    3: Result := 'Show Previous Page';
   else
     Result := '';
+  end;
 end;
 
-procedure TTyTabControlEditor.ExecuteVerb(Index: Integer);
+procedure TTyPageControlEditor.ExecuteVerb(Index: Integer);
+var
+  Hook: TPropertyEditorHook;
+  NewPage: TTyTabSheet;
+  NewName: string;
+  DelP: TPersistent;
 begin
-  if Index = 0 then
-    EditCollection(Component, TTyTabControl(Component).Tabs, 'Tabs');
+  case Index of
+    0: begin
+         Hook := nil;
+         if not GetHook(Hook) then Exit;
+         NewPage := TTyTabSheet.Create(PC.Owner);
+         NewPage.Parent := PC;                       // SetParent -> RegisterPage
+         NewName := GetDesigner.CreateUniqueComponentName(NewPage.ClassName);
+         NewPage.Caption := NewName;
+         NewPage.Name := NewName;
+         PC.ActivePage := NewPage;
+         Hook.PersistentAdded(NewPage, True);
+         Modified;
+       end;
+    1: begin
+         if (PC.ActivePageIndex < 0) or (PC.PageCount = 0) then Exit;
+         Hook := nil;
+         if not GetHook(Hook) then Exit;
+         DelP := TPersistent(PC.ActivePage);
+         Hook.DeletePersistent(DelP);
+       end;
+    2: if PC.PageCount > 0 then
+         PC.ActivePageIndex := (PC.ActivePageIndex + 1) mod PC.PageCount;
+    3: if PC.PageCount > 0 then
+         PC.ActivePageIndex := (PC.ActivePageIndex + PC.PageCount - 1) mod PC.PageCount;
+  end;
 end;
 
 { TTyFormFileDescriptor }
@@ -144,7 +183,7 @@ begin
     [TTyButton, TTyLabel, TTyEdit, TTyCheckBox, TTyRadioButton,
      TTyPanel, TTyComboBox, TTyScrollBar, TTyStyleController,
      TTyListBox, TTyProgressBar, TTyToggleSwitch, TTyTrackBar, TTyGroupBox,
-     TTyTabControl, TTySpinEdit, TTyMemo, TTyTitleBar,
+     TTyPageControl, TTyTabSheet, TTySpinEdit, TTyMemo, TTyTitleBar,
      TTyMenuBar, TTyPopupMenu]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
@@ -152,12 +191,8 @@ begin
     TTyStyleClassPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomControl, 'StyleClass',
     TTyStyleClassPropertyEditor);
-  // The IDE shows the standard collection dialog for any published TCollection
-  // property by default; register explicitly for discoverability, and add an
-  // "Edit Tabs..." component verb so the editor is reachable from the context menu.
-  RegisterPropertyEditor(TypeInfo(TTyTabCollection), TTyTabControl, 'Tabs',
-    TCollectionPropertyEditor);
-  RegisterComponentEditor(TTyTabControl, TTyTabControlEditor);
+  // Page management verbs (Add/Delete/Show Next/Prev) for the page control.
+  RegisterComponentEditor(TTyPageControl, TTyPageControlEditor);
   // File > New > "TyControls Form": a unit whose form descends from TTyForm.
   RegisterProjectFileDescriptor(TTyFormFileDescriptor.Create);
 end;
