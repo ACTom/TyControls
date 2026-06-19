@@ -3,7 +3,7 @@ unit test.pagecontrol;
 interface
 uses
   Classes, SysUtils, Controls, Forms, fpcunit, testregistry,
-  tyControls.TabSheet, tyControls.PageControl;
+  tyControls.Controller, tyControls.TabSheet, tyControls.PageControl;
 type
   TPageControlTest = class(TTestCase)
   private
@@ -19,6 +19,9 @@ type
     procedure TestActivePageTogglesDesignVisibleFlag;
     procedure TestRemovePageCompactsAndReselects;
     procedure TestCaptionFeedsTabLabel;
+    // Controller propagation (ported from test.tabcontrol.pas)
+    procedure TestControllerPropagatedOnSetAfterAddPage;
+    procedure TestControllerPropagatedOnAddPageAfterSet;
   end;
 
 implementation
@@ -95,6 +98,42 @@ begin
   AssertEquals('tab caption comes from the page', 'Hello', FPC.TabCaption(0));
   P.Caption := 'World';
   AssertEquals('tab caption tracks the page Caption', 'World', FPC.TabCaption(0));
+end;
+
+{ Add pages first, then set the page control's Controller -> every existing
+  page's Controller updates. (Ported from the old TestControllerPropagatedOnSetAfterAddTab.) }
+procedure TPageControlTest.TestControllerPropagatedOnSetAfterAddPage;
+var
+  Ctl: TTyStyleController;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    FPC.AddPage('One');
+    FPC.AddPage('Two');
+    FPC.Controller := Ctl;
+    AssertSame('Pages[0].Controller = Ctl after set', Ctl, FPC.Pages[0].Controller);
+    AssertSame('Pages[1].Controller = Ctl after set', Ctl, FPC.Pages[1].Controller);
+  finally
+    Ctl.Free;
+  end;
+end;
+
+{ Set the Controller first, then add a page -> the new page gets it.
+  (Ported from the old TestControllerPropagatedOnAddTabAfterSet.) }
+procedure TPageControlTest.TestControllerPropagatedOnAddPageAfterSet;
+var
+  Ctl: TTyStyleController;
+  Page: TTyTabSheet;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    FPC.Controller := Ctl;
+    Page := FPC.AddPage('New');
+    AssertSame('New page gets Controller when AddPage called after set',
+      Ctl, Page.Controller);
+  finally
+    Ctl.Free;
+  end;
 end;
 
 initialization
