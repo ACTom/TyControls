@@ -20,6 +20,7 @@ type
     procedure TestHostsChild;
     procedure TestPaintSmoke;
     procedure TestAlignmentMovesCaptionInk;
+    procedure TestIsDesignerContainer;
   end;
 implementation
 type
@@ -112,6 +113,12 @@ begin
   AssertTrue('left caption has ink', cl > 0);
   AssertTrue('right-aligned caption ink is further right than left-aligned', cr > cl + 20);
 end;
+procedure TTyPanelTest.TestIsDesignerContainer;
+begin
+  // csAcceptsControls makes the IDE designer drop child controls INTO the panel.
+  AssertTrue('panel is a designer container', csAcceptsControls in FPanel.ControlStyle);
+end;
+
 initialization
   RegisterTest(TTyPanelTest);
 end.

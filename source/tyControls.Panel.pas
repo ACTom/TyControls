@@ -29,6 +29,8 @@ implementation
 constructor TTyPanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  // Designer container: the IDE drops child controls INTO the panel.
+  ControlStyle := ControlStyle + [csAcceptsControls];
   FCaption := '';
   FAlignment := taCenter;
   Width := 185;
