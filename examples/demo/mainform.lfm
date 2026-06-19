@@ -1,11 +1,11 @@
 object DemoMainForm: TDemoMainForm
   Left = 200
-  Height = 1440
+  Height = 1298
   Top = 120
   Width = 1280
   BorderStyle = bsNone
   Caption = 'TyControls Demo'
-  ClientHeight = 1440
+  ClientHeight = 1298
   ClientWidth = 1280
   DesignTimePPI = 192
   Font.Height = -24
@@ -18,89 +18,62 @@ object DemoMainForm: TDemoMainForm
     Height = 64
     Top = 0
     Width = 1280
-    TabOrder = 18
+    TabOrder = 15
+    PopupMenu = PopupCtx
+    Caption = 'TyControls Demo'
+    TitleAlignment = taRightJustify
     Align = alTop
     ButtonWidth = 46
-    object TyButton1: TTyButton
-      Left = 296
-      Height = 50
+    object TyMenuBar1: TTyMenuBar
+      Left = 0
+      Height = 48
       Top = 8
-      Width = 154
+      Width = 196
       TabOrder = 3
+      TabStop = True
       Controller = Controller
-      Caption = 'TyButton1'
+      Menu = MainMenu1
+      AutoSizeWidth = True
     end
-  end
-  object TyMenuBar1: TTyMenuBar
-    Left = 0
-    Height = 48
-    Top = 64
-    Width = 1280
-    TabOrder = 21
-    TabStop = True
-    Controller = Controller
-    Menu = MainMenu1
-    Align = alTop
-  end
-  object ThemeCombo: TTyComboBox
-    Left = 32
-    Height = 56
-    Top = 156
-    Width = 260
-    TabOrder = 23
-    Controller = Controller
-    OnChange = ThemeComboChange
-  end
-  object BtnApLight: TTyButton
-    Left = 308
-    Height = 56
-    Top = 156
-    Width = 110
-    TabOrder = 24
-    StyleClass = 'ghost'
-    OnClick = ApLightClick
-    Controller = Controller
-    Caption = '浅色'
-  end
-  object BtnApDark: TTyButton
-    Left = 432
-    Height = 56
-    Top = 156
-    Width = 110
-    TabOrder = 25
-    StyleClass = 'ghost'
-    OnClick = ApDarkClick
-    Controller = Controller
-    Caption = '深色'
-  end
-  object BtnApAuto: TTyButton
-    Left = 556
-    Height = 56
-    Top = 156
-    Width = 150
-    TabOrder = 26
-    StyleClass = 'ghost'
-    OnClick = ApAutoClick
-    Controller = Controller
-    Caption = '跟随系统'
-  end
-  object BtnRandom: TTyButton
-    Left = 720
-    Height = 56
-    Top = 156
-    Width = 170
-    TabOrder = 27
-    StyleClass = 'primary'
-    OnClick = RandomClick
-    Controller = Controller
-    Caption = '随机换肤'
+    object ThemeCombo: TTyComboBox
+      Left = 232
+      Height = 56
+      Top = 8
+      Width = 260
+      TabOrder = 4
+      Controller = Controller
+      ItemIndex = -1
+      OnChange = ThemeComboChange
+    end
+    object BtnApLight: TTyButton
+      Left = 508
+      Height = 56
+      Top = 8
+      Width = 110
+      TabOrder = 5
+      OnClick = ApLightClick
+      StyleClass = 'ghost'
+      Controller = Controller
+      Caption = '浅色'
+    end
+    object BtnApDark: TTyButton
+      Left = 632
+      Height = 56
+      Top = 8
+      Width = 110
+      TabOrder = 6
+      OnClick = ApDarkClick
+      StyleClass = 'ghost'
+      Controller = Controller
+      Caption = '深色'
+    end
   end
   object BtnPrimary: TTyButton
     Left = 32
     Height = 60
-    Top = 244
+    Top = 88
     Width = 220
-    TabOrder = 3
+    TabOrder = 0
     StyleClass = 'primary'
     Controller = Controller
     Caption = 'Primary'
@@ -108,9 +81,9 @@ object DemoMainForm: TDemoMainForm
   object BtnDanger: TTyButton
     Left = 268
     Height = 60
-    Top = 244
+    Top = 88
     Width = 220
-    TabOrder = 4
+    TabOrder = 1
     StyleClass = 'danger'
     Controller = Controller
     Caption = 'Danger'
@@ -118,7 +91,7 @@ object DemoMainForm: TDemoMainForm
   object LblHello: TTyLabel
     Left = 32
     Height = 40
-    Top = 332
+    Top = 176
     Width = 240
     Controller = Controller
     Caption = 'Hello TyControls'
@@ -127,9 +100,9 @@ object DemoMainForm: TDemoMainForm
     Cursor = crIBeam
     Left = 32
     Height = 52
-    Top = 388
+    Top = 232
     Width = 400
-    TabOrder = 5
+    TabOrder = 2
     TabStop = True
     PopupMenu = PopupCtx
     Controller = Controller
@@ -137,9 +110,9 @@ object DemoMainForm: TDemoMainForm
   object ChkAgree: TTyCheckBox
     Left = 32
     Height = 44
-    Top = 460
+    Top = 304
     Width = 240
-    TabOrder = 6
+    TabOrder = 3
     TabStop = True
     Controller = Controller
     Caption = 'Agree'
@@ -147,9 +120,9 @@ object DemoMainForm: TDemoMainForm
   object RadOne: TTyRadioButton
     Left = 32
     Height = 44
-    Top = 516
+    Top = 360
     Width = 240
-    TabOrder = 7
+    TabOrder = 4
     TabStop = True
     Controller = Controller
     Caption = 'Option One'
@@ -157,17 +130,17 @@ object DemoMainForm: TDemoMainForm
   object PanelBox: TTyPanel
     Left = 512
     Height = 320
-    Top = 244
+    Top = 88
     Width = 400
-    TabOrder = 8
+    TabOrder = 5
     Controller = Controller
   end
   object ComboKind: TTyComboBox
     Left = 32
     Height = 52
-    Top = 580
+    Top = 424
     Width = 400
-    TabOrder = 9
+    TabOrder = 6
     Controller = Controller
     Items.Strings = (
       'Alpha'
@@ -181,26 +154,26 @@ object DemoMainForm: TDemoMainForm
   object ScrollV: TTyScrollBar
     Left = 952
     Height = 320
-    Top = 244
+    Top = 88
     Width = 36
-    TabOrder = 10
+    TabOrder = 7
     Controller = Controller
   end
   object GroupBox1: TTyGroupBox
     Left = 920
     Height = 220
-    Top = 604
+    Top = 448
     Width = 320
-    TabOrder = 11
+    TabOrder = 8
     Controller = Controller
     Caption = 'Options'
   end
   object ListBox1: TTyListBox
     Left = 32
     Height = 220
-    Top = 664
+    Top = 508
     Width = 400
-    TabOrder = 12
+    TabOrder = 9
     Controller = Controller
     Items.Strings = (
       'Alpha'
@@ -214,7 +187,7 @@ object DemoMainForm: TDemoMainForm
   object Progress1: TTyProgressBar
     Left = 480
     Height = 44
-    Top = 604
+    Top = 448
     Width = 400
     Controller = Controller
     Position = 60
@@ -222,9 +195,9 @@ object DemoMainForm: TDemoMainForm
   object TrackBar1: TTyTrackBar
     Left = 480
     Height = 60
-    Top = 680
+    Top = 524
     Width = 400
-    TabOrder = 13
+    TabOrder = 10
     Controller = Controller
     Position = 60
     OnChange = TrackBar1Change
@@ -232,9 +205,9 @@ object DemoMainForm: TDemoMainForm
   object Toggle1: TTyToggleSwitch
     Left = 480
     Height = 56
-    Top = 772
+    Top = 616
     Width = 112
-    TabOrder = 14
+    TabOrder = 11
     TabStop = True
     Controller = Controller
     Checked = True
@@ -243,9 +216,9 @@ object DemoMainForm: TDemoMainForm
     Cursor = crIBeam
     Left = 656
     Height = 56
-    Top = 772
+    Top = 616
     Width = 240
-    TabOrder = 15
+    TabOrder = 12
     Controller = Controller
     MaxValue = 10
     Value = 3
@@ -253,9 +226,9 @@ object DemoMainForm: TDemoMainForm
   object TabCtrl1: TTyTabControl
     Left = 32
     Height = 260
-    Top = 924
+    Top = 768
     Width = 1208
-    TabOrder = 16
+    TabOrder = 13
     Controller = Controller
     Tabs = <    
       item
@@ -274,9 +247,9 @@ object DemoMainForm: TDemoMainForm
     Cursor = crIBeam
     Left = 32
     Height = 200
-    Top = 1204
+    Top = 1048
     Width = 1208
-    TabOrder = 17
+    TabOrder = 14
     TabStop = True
     Controller = Controller
     Lines.Strings = (

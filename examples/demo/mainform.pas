@@ -18,13 +18,10 @@ type
 
   TDemoMainForm = class(TTyForm)
     Controller: TTyStyleController;
-    TyButton1: TTyButton;
     TyTitleBar1: TTyTitleBar;
     ThemeCombo: TTyComboBox;
     BtnApLight: TTyButton;
     BtnApDark: TTyButton;
-    BtnApAuto: TTyButton;
-    BtnRandom: TTyButton;
     BtnPrimary: TTyButton;
     BtnDanger: TTyButton;
     LblHello: TTyLabel;
@@ -129,7 +126,7 @@ begin
   ThemeCombo.Items.Add('自定义…');
   ThemeCombo.ItemIndex := 0;                 // default
   ApplyBuiltin('default');
-  SetAppearance(tfFollowSystem, '', BtnApAuto);   // 初始外观:跟随系统
+  SetAppearance(tfFollowSystem, '', nil);   // 初始外观:跟随系统
 end;
 
 procedure TDemoMainForm.ApplyBuiltin(const AName: string);
@@ -137,7 +134,6 @@ begin
   // 只换主题,不动 Follow/Mode(外观轴由三态独占)。
   Controller.ThemeName := AName;
   ApplyChromeTheme(Controller);
-  if TitleBar <> nil then TitleBar.Caption := 'TyControls Demo';
 end;
 
 procedure TDemoMainForm.ThemeComboChange(Sender: TObject);
@@ -170,7 +166,6 @@ begin
   // 三态互斥:用 ghost 的 Down 选中态高亮当前外观。
   BtnApLight.Down := (ASelected = BtnApLight);
   BtnApDark.Down  := (ASelected = BtnApDark);
-  BtnApAuto.Down  := (ASelected = BtnApAuto);
   ApplyChromeTheme(Controller);
 end;
 
@@ -181,21 +176,12 @@ procedure TDemoMainForm.ApDarkClick(Sender: TObject);
 begin SetAppearance(tfManual, 'dark', BtnApDark); end;
 
 procedure TDemoMainForm.ApAutoClick(Sender: TObject);
-begin SetAppearance(tfFollowSystem, '', BtnApAuto); end;
+begin
+end;
 
 procedure TDemoMainForm.RandomClick(Sender: TObject);
-var names: TStringArray; i, pick: Integer;
 begin
-  names := TyBuiltinThemeNames;
-  if Length(names) = 0 then Exit;
-  pick := ThemeCombo.ItemIndex;
-  for i := 0 to 7 do          // 随机取一个不同的内置主题
-  begin
-    pick := Random(Length(names));
-    if pick <> ThemeCombo.ItemIndex then Break;
-  end;
-  ThemeCombo.ItemIndex := pick;     // 同步下拉(ApplyBuiltin 幂等,OnChange 若再触发也无副作用)
-  ApplyBuiltin(names[pick]);
+
 end;
 
 procedure TDemoMainForm.MnuViewToggleClick(Sender: TObject);

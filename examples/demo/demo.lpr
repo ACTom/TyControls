@@ -4,9 +4,12 @@ uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms,
   mainform, chromeform;
+
+{$R *.res}
+
 begin
   RequireDerivedFormResource := True;
-  Application.Scaled := True;
+  Application.Scaled:=True;
   Application.Initialize;
   Application.CreateForm(TDemoMainForm, DemoMainForm);
   Application.CreateForm(TChromeForm, ChromeFormWnd);
