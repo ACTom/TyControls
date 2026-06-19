@@ -41,7 +41,8 @@ uses
   test.builtinthemes,
   test.paletteicons,
   test.tabsheet,
-  test.pagecontrol;
+  test.pagecontrol,
+  test.pagecontrol.streaming;
 
 type
   TTyTestRunner = class(TTestRunner)
