@@ -13,6 +13,25 @@ $classes = @(
   'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu'
 )
 
+# Drift guard: the icon set MUST match the components registered in Design.pas. Parse the
+# RegisterComponents('TyControls', [ ... ]) list and fail loudly if a registered control has
+# no icon (would show a blank palette icon) or an icon exists for an unregistered class.
+Write-Host '== checking icon set vs RegisterComponents =='
+$designPas = Join-Path $root 'designtime/tyControls.Design.pas'
+$design = Get-Content $designPas -Raw
+$m = [regex]::Match($design, "RegisterComponents\s*\(\s*'TyControls'\s*,\s*\[(?<list>[^\]]+)\]")
+if (-not $m.Success) { throw "could not find RegisterComponents('TyControls', [...]) in $designPas" }
+$registered = [regex]::Matches($m.Groups['list'].Value, 'TTy\w+') | ForEach-Object { $_.Value } | Sort-Object -Unique
+$missingIcon = @($registered | Where-Object { $_ -notin $classes })
+$extraIcon   = @($classes    | Where-Object { $_ -notin $registered })
+if ($missingIcon.Count -or $extraIcon.Count) {
+  throw ("icon set out of sync with RegisterComponents." +
+         " registered-but-no-icon: [$($missingIcon -join ', ')];" +
+         " icon-but-not-registered: [$($extraIcon -join ', ')]." +
+         " Update `$classes here, genicons.lpr Glyphs[], and test.paletteicons.pas CClasses.")
+}
+Write-Host "  OK: $($registered.Count) registered components all have icons"
+
 Write-Host '== building genicons =='
 & lazbuild $genLpi
 if ($LASTEXITCODE -ne 0) { throw 'genicons build failed' }
