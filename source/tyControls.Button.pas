@@ -130,6 +130,8 @@ begin
   FBgAnim.Target := 0;
   FBgAnim.DurationMs := 120;
   FBgAnim.Easing := teEaseOutCubic;
+  Width := 88;
+  Height := 30;
 end;
 
 destructor TTyButton.Destroy;

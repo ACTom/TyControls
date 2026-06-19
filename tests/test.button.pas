@@ -39,6 +39,7 @@ type
     procedure HideUnderThree(Sender: TObject; AValue: Integer; var AText: string; var AVisible: Boolean);
   published
     procedure TestTypeKey;
+    procedure TestDefaultSize;
     procedure TestOnClickFires;
     procedure TestPaintSmoke;
     procedure TestSpaceKeyFiresClick;
@@ -452,6 +453,18 @@ begin
       AssertFalse('no badge -> no accent blue in region', AccentBlueInCorner(Reread));
     finally Reread.Free; end;
   finally B.Free; Ctl.Free; Bmp.Free; end;
+end;
+
+procedure TButtonTest.TestDefaultSize;
+var B: TTyButton;
+begin
+  B := TTyButton.Create(nil);
+  try
+    AssertEquals('default width', 88, B.Width);
+    AssertEquals('default height', 30, B.Height);
+  finally
+    B.Free;
+  end;
 end;
 
 initialization

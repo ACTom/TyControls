@@ -175,6 +175,8 @@ begin
   inherited Create(AOwner);
   TabStop := True;
   Cursor := crIBeam;
+  Width := 140;
+  Height := 28;
   FText := '';
   FCaret := 0;
   FSelAnchor := 0;
