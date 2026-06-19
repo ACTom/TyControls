@@ -333,7 +333,10 @@ begin
     begin
       Result[n].Kind := mrkItem;
       Result[n].Caption := mi.Caption;
-      Result[n].ShortcutText := ShortCutToText(mi.ShortCut);
+      // Only render shortcut text for a REAL shortcut — ShortCutToText(0) returns 'Unknown'
+      // (not ''), which would otherwise show on every item that has no accelerator.
+      if mi.ShortCut <> 0 then
+        Result[n].ShortcutText := ShortCutToText(mi.ShortCut);
       Result[n].Enabled := mi.Enabled;
       Result[n].Checked := mi.Checked;
       Result[n].RadioItem := mi.RadioItem;

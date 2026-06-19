@@ -119,6 +119,7 @@ begin
     AssertTrue ('open has shortcut text', rows[0].ShortcutText <> '');
     AssertTrue ('row1 is separator', rows[1].Kind = mrkSeparator);
     AssertTrue ('word wrap checked', rows[2].Checked);
+    AssertEquals('no-shortcut item has EMPTY shortcut text (not "Unknown")', '', rows[2].ShortcutText);
     AssertTrue ('recent has submenu', rows[3].HasSubmenu);
   finally
     mm.Free;
