@@ -87,6 +87,23 @@ begin
     'TyButton.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }' + LineEnding +
     'TyButton.danger:hover     { background: var(--danger-hover); }' + LineEnding +
     'TyButton.danger:active    { background: var(--danger-active); }' + LineEnding +
+    '/* Ghost (VS Code 风格): 平时透明,仅 hover/active/选中显示底色与边框。透明用 alpha(...,0)' + LineEnding +
+    '   保持纯色,使现有 hover 背景 alpha 淡入有效;边框透明但保留宽度,避免 hover 尺寸跳动。 */' + LineEnding +
+    'TyButton.ghost {' + LineEnding +
+    '  background: alpha(var(--surface-hover), 0);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: alpha(var(--border), 0);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 6px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-normal);' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.ghost:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }' + LineEnding +
+    'TyButton.ghost:active   { background: var(--surface-active); }' + LineEnding +
+    'TyButton.ghost:selected { background: var(--surface-active); border-color: var(--accent); }' + LineEnding +
+    'TyButton.ghost:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyButton.ghost:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyLabel {' + LineEnding +
     '  background: alpha(#FFFFFF, 0);' + LineEnding +
@@ -313,6 +330,16 @@ begin
     'TyScrollThumb:hover  { background: var(--scroll-handle-hover); }' + LineEnding +
     'TyScrollThumb:active { background: var(--accent); }' + LineEnding +
     'TyToggleKnob  { background: #FFFFFF; border-radius: var(--radius-round); }' + LineEnding +
+    '' + LineEnding +
+    '/* 数字角标 (TTyButton badge): 默认 accent 蓝胶囊;padding 上下0、左右4 留横向呼吸。 */' + LineEnding +
+    'TyBadge {' + LineEnding +
+    '  background: var(--accent);' + LineEnding +
+    '  color: var(--on-accent);' + LineEnding +
+    '  border-radius: var(--radius-round);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-bold);' + LineEnding +
+    '  padding: 0px 4px;' + LineEnding +
+    '}' + LineEnding +
     '' + LineEnding +
     '/* ── Menu system ───────────────────────────────────────────────────────── */' + LineEnding +
     '' + LineEnding +

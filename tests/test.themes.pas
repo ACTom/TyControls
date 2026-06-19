@@ -34,6 +34,8 @@ type
     procedure TestGreenImageAndGlass;
     { the demo's real path: switch FROM another theme INTO green (REPLACE) }
     procedure TestGreenAfterLightSwitch;
+    { every bundled theme ships the ghost variant + TyBadge tokens }
+    procedure TestAllThemesHaveGhostAndBadge;
   end;
 
   { Golden resolved-style dump. Loads each shipped theme, resolves a full grid of
@@ -68,6 +70,32 @@ begin
   // depend on the current working directory.
   Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim
     + 'themes' + PathDelim + AName;
+end;
+
+procedure TTestThemes.TestAllThemesHaveGhostAndBadge;
+const
+  Names: array[0..5] of string = ('light', 'dark', 'green', 'showcase', 'system', 'auto');
+var
+  i: Integer;
+  m: TTyStyleModel;
+  g, b: TTyStyleSet;
+begin
+  for i := 0 to High(Names) do
+  begin
+    m := TTyStyleModel.Create;
+    try
+      m.LoadFromFile(ThemePath(Names[i] + '.tycss'));
+      m.Mode := 'light';   // dual-mode (system/auto) need an active mode; no-op for single-mode themes
+      g := m.ResolveStyle('TyButton', 'ghost', []);
+      AssertTrue(Names[i] + ': ghost has background', tpBackground in g.Present);
+      AssertTrue(Names[i] + ': ghost base transparent (alpha 0)',
+        TyAlphaOf(g.Background.Color) = 0);
+      b := m.ResolveStyle('TyBadge', '', []);
+      AssertTrue(Names[i] + ': TyBadge has background', tpBackground in b.Present);
+    finally
+      m.Free;
+    end;
+  end;
 end;
 
 procedure TTestThemes.CheckTheme(const AName: string);

@@ -160,6 +160,8 @@ begin
     Result := tysFocused
   else if n = 'disabled' then
     Result := tysDisabled
+  else if (n = 'selected') or (n = 'checked') then
+    Result := tysSelected
   else
   begin
     Error('Unknown pseudo-class "' + AName + '"', ATok);

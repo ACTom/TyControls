@@ -20,6 +20,7 @@ type
     FCount: Integer;
     FStatus: TTyLabel;
     procedure ButtonClicked(Sender: TObject);
+    procedure GhostToggle(Sender: TObject);   // 点击切换 ghost 按钮的选中态
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -64,7 +65,7 @@ begin
   inherited CreateNew(AOwner, 0);
   Caption := 'TTyButton 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 320, 240);
+  SetBounds(0, 0, 400, 240);
 
   // 加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
@@ -76,9 +77,27 @@ begin
   B := AddButton('禁用按钮', 'primary', 144);
   B.Enabled := False;                     // :disabled（主题里通常用 opacity 变暗）
 
+  // 右列：Ghost(透明)+ 选中态 —— 平时透明，hover/点击/选中才显边框底色。
+  B := TTyButton.Create(Self);
+  B.Parent := Self;
+  B.SetBounds(208, 24, 160, 32);
+  B.Caption := 'Ghost / 选中';
+  B.StyleClass := 'ghost';                 // TyButton.ghost
+  B.Down := True;                          // 常驻选中（:selected）
+  B.OnClick := @GhostToggle;               // 点击切换选中
+
+  // 右列：数字角标 —— >99 显示 99+，样式由 TyBadge 主题键控制。
+  B := TTyButton.Create(Self);
+  B.Parent := Self;
+  B.SetBounds(208, 64, 160, 32);
+  B.Caption := '消息';
+  B.ShowBadge := True;
+  B.BadgeValue := 128;                     // 显示 "99+"
+  B.BadgePosition := bpBottomRight;
+
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
-  FStatus.SetBounds(24, 196, 272, 20);
+  FStatus.SetBounds(24, 196, 352, 20);
   FStatus.Caption := '点击次数：0';
 end;
 
@@ -87,6 +106,12 @@ begin
   Inc(FCount);
   FStatus.Caption := Format('点击次数：%d（%s）',
     [FCount, (Sender as TTyButton).Caption]);
+end;
+
+procedure TMainForm.GhostToggle(Sender: TObject);
+begin
+  with Sender as TTyButton do
+    Down := not Down;   // 切换常驻选中态
 end;
 
 end.

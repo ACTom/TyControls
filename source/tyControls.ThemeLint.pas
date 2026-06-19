@@ -179,7 +179,7 @@ end;
 function SelectorText(const ASel: TTyCssSelector): string;
 const
   cStateName: array[TTyState] of string =
-    ('', 'hover', 'active', 'focus', 'disabled');
+    ('', 'hover', 'active', 'focus', 'disabled', 'selected');
 begin
   Result := ASel.TypeName;
   if ASel.Variant <> '' then

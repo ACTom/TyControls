@@ -40,6 +40,22 @@ TyButton.primary:active   { background: darken(--accent, 8%); }
 TyButton.danger   { background: var(--danger); color: #FFFFFF; border-color: var(--danger); }
 TyButton.danger:hover     { background: lighten(--danger, 8%); }
 TyButton.danger:active    { background: darken(--danger, 8%); }
+/* Ghost (VS Code 风格): 平时透明,仅 hover/active/选中显示。 */
+TyButton.ghost {
+  background: alpha(var(--surface), 0);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 6px;
+  font-size: 9px;
+  font-weight: 400;
+}
+TyButton.ghost:hover    { background: darken(--surface, 4%); border-color: darken(--border, 10%); }
+TyButton.ghost:active   { background: darken(--surface, 10%); }
+TyButton.ghost:selected { background: darken(--surface, 10%); border-color: var(--accent); }
+TyButton.ghost:focus    { outline: 2px var(--focus-ring); }
+TyButton.ghost:disabled { opacity: 0.5; }
 
 TyLabel {
   background: alpha(#FFFFFF, 0);
@@ -282,3 +298,13 @@ TyScrollThumb { background: var(--border); border-radius: 4px; }
 TyScrollThumb:hover  { background: darken(--border, 15%); }
 TyScrollThumb:active { background: var(--accent); }
 TyToggleKnob  { background: #FFFFFF; border-radius: 12px; }
+
+/* 数字角标 (TTyButton badge): accent 绿胶囊。 */
+TyBadge {
+  background: var(--accent);
+  color: #FFFFFF;
+  border-radius: 12px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0px 4px;
+}

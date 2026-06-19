@@ -5,6 +5,13 @@ uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, ExtCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 type
+  // Which corner the numeric badge sits in (inset within the button's client rect).
+  TTyBadgePosition = (bpTopLeft, bpTopRight, bpBottomLeft, bpBottomRight);
+  // Display hook: default text/visibility are computed first, then this may rewrite
+  // AText or set AVisible:=False for a custom policy (e.g. hide when AValue < 3).
+  TTyBadgeDisplayEvent = procedure(Sender: TObject; AValue: Integer;
+    var AText: string; var AVisible: Boolean) of object;
+
   TTyButton = class(TTyCustomControl)
   private
     FBgAnim: TTyAnimator;
@@ -13,11 +20,20 @@ type
     FDefault: Boolean;
     FCancel: Boolean;
     FModalResult: TModalResult;
+    FDown: Boolean;
+    FShowBadge: Boolean;
+    FBadgeValue: Integer;
+    FBadgePosition: TTyBadgePosition;
+    FOnBadgeDisplay: TTyBadgeDisplayEvent;
+    procedure SetShowBadge(AValue: Boolean);
+    procedure SetBadgeValue(AValue: Integer);
+    procedure SetBadgePosition(AValue: TTyBadgePosition);
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
     function GetBgAnimProgress: Single;
     procedure SetCancel(AValue: Boolean);
     procedure SetDefault(AValue: Boolean);
+    procedure SetDown(AValue: Boolean);
     // Register/unregister Self as the host form's Default/Cancel control. No-op
     // when there is no parent form yet (e.g. Default/Cancel streamed from the LFM
     // before Parent); Loaded re-applies it once the parent is known.
@@ -25,6 +41,14 @@ type
     procedure RegisterCancelWithForm;
   protected
     function GetStyleTypeKey: string; override;
+    // Inject tysSelected when Down (and enabled), so ':selected' theme rules apply.
+    function CurrentStates: TTyStateSet; override;
+    // Decide whether/what to draw for the badge. ShowBadge off -> False; else default
+    // text ('99+' cap, includes '0') + AVisible:=True, then OnBadgeDisplay may rewrite;
+    // True only when visible and the text is non-empty.
+    function ResolveBadgeDisplay(out AText: string): Boolean;
+    // Paint the badge (if visible) at the chosen corner, inset within AFullRect.
+    procedure DrawBadge(P: TTyPainter; const AFullRect: TRect);
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseEnter; override;
@@ -73,7 +97,17 @@ type
     // ModalResult (closing a modal dialog).
     property Default: Boolean read FDefault write SetDefault default False;
     property Cancel: Boolean read FCancel write SetCancel default False;
+    // VS Code 风格常驻选中态:为 True 时 CurrentStates 注入 tysSelected,触发主题里的
+    // ':selected' 规则(如 TyButton.ghost:selected)。互斥分组由应用在 OnClick 里自行
+    // 切换各按钮的 Down(本期不内建 GroupIndex)。
+    property Down: Boolean read FDown write SetDown default False;
     property ModalResult: TModalResult read FModalResult write FModalResult default mrNone;
+    // 角标(badge):仅数字,>99 显示 '99+'。ShowBadge 为总开关;默认显示含 0,可经
+    // OnBadgeDisplay 改写文本或置 AVisible:=False 自定义隐藏。样式由 TyBadge typeKey 主题化。
+    property ShowBadge: Boolean read FShowBadge write SetShowBadge default False;
+    property BadgeValue: Integer read FBadgeValue write SetBadgeValue default 0;
+    property BadgePosition: TTyBadgePosition read FBadgePosition write SetBadgePosition default bpBottomRight;
+    property OnBadgeDisplay: TTyBadgeDisplayEvent read FOnBadgeDisplay write FOnBadgeDisplay;
     property Caption;
     property Enabled;
     property Font;
@@ -89,6 +123,7 @@ constructor TTyButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FAnimationsEnabled := True;
+  FBadgePosition := bpBottomRight;
   // Hover bg-fade animator: rest at 0 (normal), ~120ms full traversal,
   // decelerating. Mirrors the ToggleSwitch knob-slide timing.
   FBgAnim.Progress := 0;
@@ -173,6 +208,101 @@ begin
   if FCancel = AValue then Exit;
   FCancel := AValue;
   RegisterCancelWithForm;
+end;
+
+procedure TTyButton.SetDown(AValue: Boolean);
+begin
+  if FDown = AValue then Exit;
+  FDown := AValue;
+  Invalidate;
+end;
+
+function TTyButton.CurrentStates: TTyStateSet;
+begin
+  Result := inherited CurrentStates;   // hover/active/focused/disabled, or normal
+  // Enabled=False makes inherited return [tysDisabled] only; disabled wins, so we
+  // never layer selected on top of it. Otherwise Down adds the resting selected state.
+  if FDown and Enabled then
+  begin
+    Include(Result, tysSelected);
+    Exclude(Result, tysNormal);
+  end;
+end;
+
+procedure TTyButton.SetShowBadge(AValue: Boolean);
+begin
+  if FShowBadge = AValue then Exit;
+  FShowBadge := AValue;
+  Invalidate;
+end;
+
+procedure TTyButton.SetBadgeValue(AValue: Integer);
+begin
+  if FBadgeValue = AValue then Exit;
+  FBadgeValue := AValue;
+  if FShowBadge then Invalidate;
+end;
+
+procedure TTyButton.SetBadgePosition(AValue: TTyBadgePosition);
+begin
+  if FBadgePosition = AValue then Exit;
+  FBadgePosition := AValue;
+  if FShowBadge then Invalidate;
+end;
+
+function TTyButton.ResolveBadgeDisplay(out AText: string): Boolean;
+var vis: Boolean;
+begin
+  Result := False;
+  AText := '';
+  if not FShowBadge then Exit;
+  if FBadgeValue > 99 then AText := '99+' else AText := IntToStr(FBadgeValue);
+  vis := True;   // default: show (including '0'); the event may override
+  if Assigned(FOnBadgeDisplay) then FOnBadgeDisplay(Self, FBadgeValue, AText, vis);
+  Result := vis and (AText <> '');
+end;
+
+procedure TTyButton.DrawBadge(P: TTyPainter; const AFullRect: TRect);
+var
+  S: TTyStyleSet;
+  txt: string;
+  fs, fw, padX, padY, tw, bh, bw, inset, x, y, half, themedR, rLogical: Integer;
+  szH, szW: TSize;
+  badgeRect: TRect;
+begin
+  if not ResolveBadgeDisplay(txt) then Exit;
+  S := ActiveController.Model.ResolveStyle('TyBadge', '', []);
+  if not (tpBackground in S.Present) then Exit;   // no theme key -> nothing to draw
+  fs := ResolveFontSize(S);
+  fw := S.FontWeight;
+  // Height from a stable reference glyph ('0'); width from the actual text.
+  szH := P.MeasureText('0', S.FontName, fs, fw);
+  szW := P.MeasureText(txt, S.FontName, fs, fw);
+  padX := P.Scale(S.Padding.Left);
+  padY := P.Scale(S.Padding.Top);
+  bh := szH.cy + 2 * padY;
+  if bh < P.Scale(8) then bh := P.Scale(8);    // degenerate-measure floor: stay visible
+  tw := szW.cx;
+  bw := tw + 2 * padX;
+  if bw < bh then bw := bh;                     // single glyph -> near-circle
+  inset := P.Scale(2);
+  case FBadgePosition of
+    bpTopLeft:     begin x := AFullRect.Left  + inset;       y := AFullRect.Top    + inset;       end;
+    bpTopRight:    begin x := AFullRect.Right - inset - bw;  y := AFullRect.Top    + inset;       end;
+    bpBottomLeft:  begin x := AFullRect.Left  + inset;       y := AFullRect.Bottom - inset - bh;  end;
+    bpBottomRight: begin x := AFullRect.Right - inset - bw;  y := AFullRect.Bottom - inset - bh;  end;
+  else
+    begin x := AFullRect.Right - inset - bw; y := AFullRect.Bottom - inset - bh; end;
+  end;
+  badgeRect := Rect(x, y, x + bw, y + bh);
+  // Pill by default (half-height radius); honour a smaller themed radius if set.
+  // FillBackground takes a LOGICAL radius and Scales it, so unscale the device half.
+  half := P.Unscale(bh div 2);
+  themedR := TyEffectiveCorners(S).TL;
+  if themedR <= 0 then rLogical := half
+  else rLogical := TyClampRadius(themedR, half);
+  P.FillBackground(badgeRect, S.Background, TyUniformCorners(rLogical));
+  P.DrawText(badgeRect, txt, S.FontName, fs, fw, S.TextColor, taCenter, tlCenter, False);
 end;
 
 function TTyButton.WantsDialogKey(ACharCode: Word): Boolean;
@@ -293,7 +423,7 @@ procedure TTyButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer
 var
   P: TTyPainter;
   S, NormalS, HoverS: TTyStyleSet;
-  ContentRect: TRect;
+  ContentRect, BadgeArea: TRect;
   Eased: Single;
 begin
   P := TTyPainter.Create;
@@ -307,13 +437,17 @@ begin
     // the normal background; at Eased=1 exactly the hover background.
     if (Eased > 0) and (Eased < 1) and (S.Background.Kind = tfkSolid) then
     begin
-      NormalS := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysNormal]);
-      HoverS  := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysHover]);
+      // Resting end = the current state set MINUS hover (a selected button rests on
+      // its :selected bg, a plain one on :normal); hover end = current state PLUS hover.
+      // Alpha participates in the lerp (ghost's transparent rest -> opaque hover fade).
+      NormalS := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, CurrentStates - [tysHover]);
+      HoverS  := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, CurrentStates + [tysHover]);
       if (NormalS.Background.Kind = tfkSolid) and (HoverS.Background.Kind = tfkSolid) then
         S.Background.Color := TyLerpColor(NormalS.Background.Color, HoverS.Background.Color, Eased);
     end;
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     DrawFrame(P, ContentRect, S);
+    BadgeArea := ContentRect;   // full client rect for badge positioning (pre-padding)
     // Inset content by all four padding sides
     ContentRect := Rect(
       ContentRect.Left   + P.Scale(S.Padding.Left),
@@ -323,6 +457,7 @@ begin
     );
     P.DrawText(ContentRect, Caption, S.FontName, S.FontSize, S.FontWeight,
       S.TextColor, taCenter, tlCenter, True);
+    DrawBadge(P, BadgeArea);
     P.EndPaint;
   finally
     P.Free;

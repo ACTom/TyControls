@@ -127,6 +127,8 @@ type
     procedure TestButtonDisabled;
     procedure TestPrimaryHoverCombo;
     procedure TestStateOrderDisabledWinsOverHover;
+    procedure TestSelectedStateCascade;
+    procedure TestGetVariantsForType;
   end;
 
   TTestStyleShadow = class(TTestCase)
@@ -812,6 +814,54 @@ begin
   s := FModel.ResolveStyle('TyButton', '', [tysHover, tysDisabled]);
   AssertEquals('disabled bg wins', $11, TyRedOf(s.Background.Color));
   AssertTrue('opacity from disabled', Abs(s.Opacity - 0.5) < 0.0001);
+end;
+
+procedure TTestStyleResolve.TestSelectedStateCascade;
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  // selected 作为常驻底层,hover 应能逐属性覆盖其 background,但保留 selected 独有的 border-color
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(
+      'TyButton.ghost { background:#000000; }' + LineEnding +
+      'TyButton.ghost:selected { background:#111111; border-color:#FF0000; }' + LineEnding +
+      'TyButton.ghost:hover { background:#222222; }');
+    // 仅 selected
+    s := m.ResolveStyle('TyButton', 'ghost', [tysSelected]);
+    AssertEquals('selected bg', $11, TyRedOf(s.Background.Color));
+    AssertEquals('selected border R', $FF, TyRedOf(s.BorderColor));
+    // selected + hover:hover 覆盖 background,selected 的 border-color 保留
+    s := m.ResolveStyle('TyButton', 'ghost', [tysSelected, tysHover]);
+    AssertEquals('hover overrides bg', $22, TyRedOf(s.Background.Color));
+    AssertEquals('selected border survives', $FF, TyRedOf(s.BorderColor));
+  finally m.Free; end;
+end;
+
+procedure TTestStyleResolve.TestGetVariantsForType;
+var m: TTyStyleModel; list: TStringList; k, n: Integer;
+begin
+  m := TTyStyleModel.Create;   // built-in (light) layer only
+  list := TStringList.Create;
+  try
+    m.GetVariantsForType('TyButton', list);
+    AssertTrue('builtin has primary', list.IndexOf('primary') >= 0);
+    AssertTrue('builtin has danger',  list.IndexOf('danger')  >= 0);
+    AssertTrue('builtin has ghost',   list.IndexOf('ghost')   >= 0);
+    // variant 不串到别的控件
+    list.Clear;
+    m.GetVariantsForType('TyEdit', list);
+    AssertEquals('TyEdit has no variants', 0, list.Count);
+    // 加载自定义主题后,新 class 出现且去重(.cta 与 .cta:hover 只计一次)
+    list.Clear;
+    m.LoadFromCss('TyButton.cta { background:#FF0000; } TyButton.cta:hover { background:#EE0000; }');
+    m.GetVariantsForType('TyButton', list);
+    AssertTrue('custom class appears', list.IndexOf('cta') >= 0);
+    n := 0;
+    for k := 0 to list.Count - 1 do if list[k] = 'cta' then Inc(n);
+    AssertEquals('cta deduped', 1, n);
+  finally list.Free; m.Free; end;
 end;
 
 procedure TTestStyleShadow.TestShadowLiteralColor;

@@ -27,6 +27,8 @@ type
     procedure BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure EndPaint;
     function Scale(ALogical: Integer): Integer;
+    function Unscale(ADevice: Integer): Integer;
+    function MeasureText(const AText, AFontName: string; AFontSizeLogical, AWeight: Integer): TSize;
     procedure FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer); overload;
     procedure FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners); overload;
     procedure StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor); overload;
@@ -122,6 +124,22 @@ end;
 function TTyPainter.Scale(ALogical: Integer): Integer;
 begin
   Result := MulDiv(ALogical, FPPI, 96);
+end;
+
+function TTyPainter.Unscale(ADevice: Integer): Integer;
+begin
+  // Inverse of Scale: device px -> logical px. Used when a caller has device-space
+  // geometry but must hand a LOGICAL radius to FillBackground (which Scales it again).
+  Result := MulDiv(ADevice, 96, FPPI);
+end;
+
+function TTyPainter.MeasureText(const AText, AFontName: string; AFontSizeLogical, AWeight: Integer): TSize;
+begin
+  Result := Size(0, 0);
+  if FBmp = nil then Exit;
+  // Same font configuration as DrawText, so measured size matches drawn glyphs.
+  TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
+  Result := FBmp.TextSize(AText);
 end;
 
 procedure TTyPainter.GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);

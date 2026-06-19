@@ -23,6 +23,7 @@ type
     procedure TestStateRuleParity;
     procedure TestBatch4Tokens;
     procedure TestBatch4ThumbKnobTypeKeys;
+    procedure TestGhostAndBadge;
   end;
 
   TTyButtonRenderAccess = class(TTyButton)
@@ -341,6 +342,31 @@ begin
     AssertEquals('toggle knob R = white', $FF, TyRedOf(kn.Background.Color));
     AssertEquals('toggle knob G = white', $FF, TyGreenOf(kn.Background.Color));
     AssertEquals('toggle knob B = white', $FF, TyBlueOf(kn.Background.Color));
+  finally m.Free; end;
+end;
+
+procedure TBuiltinThemeTest.TestGhostAndBadge;
+var m: TTyStyleModel; g, gh, b: TTyStyleSet;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(TyBuiltinThemeCss);
+    // ghost 基态:透明纯色底(alpha=0),但仍是 solid
+    g := m.ResolveStyle('TyButton', 'ghost', []);
+    AssertTrue('ghost has background', tpBackground in g.Present);
+    AssertTrue('ghost base is solid', g.Background.Kind = tfkSolid);
+    AssertTrue('ghost base transparent (alpha 0)', TyAlphaOf(g.Background.Color) = 0);
+    // ghost hover:不透明底 + 边框
+    gh := m.ResolveStyle('TyButton', 'ghost', [tysHover]);
+    AssertTrue('ghost hover background present', tpBackground in gh.Present);
+    AssertTrue('ghost hover bg opaque-ish', TyAlphaOf(gh.Background.Color) > 200);
+    // ghost selected:有边框色
+    gh := m.ResolveStyle('TyButton', 'ghost', [tysSelected]);
+    AssertTrue('ghost selected sets border-color', tpBorderColor in gh.Present);
+    // TyBadge:有背景与文字色
+    b := m.ResolveStyle('TyBadge', '', []);
+    AssertTrue('badge has background', tpBackground in b.Present);
+    AssertTrue('badge has text color', tpTextColor in b.Present);
   finally m.Free; end;
 end;
 

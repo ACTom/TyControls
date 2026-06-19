@@ -32,6 +32,10 @@ uses tyControls.Button;
 | `Cancel` | `Boolean` | `False` | **（API parity 新增）** 为 `True` 时在宿主窗体上按 Esc 触发本按钮的 `Click`（注册到窗体 `CancelControl`）；同样在 `Loaded` 中重新注册。 |
 | `ModalResult` | `TModalResult` | `mrNone` | **（API parity 新增）** 非 `mrNone` 时，`Click` 在调用 `inherited Click`（即触发 `OnClick`）**之前**先把宿主窗体的 `ModalResult` 设为本值——遵循原生 `TButton` 语义，使 `OnClick` 处理器可通过 `Form.ModalResult := mrNone` 否决关闭。 |
 | `AnimationsEnabled` | `Boolean` | `True` | **（API parity 新增 published）** 控制悬停背景淡入动画（约 120 ms，EaseOutCubic）；详见第 7 节。 |
+| `Down` | `Boolean` | `False` | **（v1.11 新增）** 常驻**选中态**：为 `True` 时 `CurrentStates` 注入 `tysSelected`，触发主题 `:selected` 规则（如 `TyButton.ghost:selected`）。`Enabled = False` 时不生效（disabled 优先）。互斥分组由应用在 `OnClick` 里自行切换各按钮的 `Down`（不内建 `GroupIndex`）。详见第 9 节。 |
+| `ShowBadge` | `Boolean` | `False` | **（v1.11 新增）** 角标总开关。详见第 9 节。 |
+| `BadgeValue` | `Integer` | `0` | **（v1.11 新增）** 角标数值；仅数字，`>99` 显示 `99+`。 |
+| `BadgePosition` | `TTyBadgePosition` | `bpBottomRight` | **（v1.11 新增）** 角标所在角：`bpTopLeft / bpTopRight / bpBottomLeft / bpBottomRight`。窗口控件不能越界,角标内嵌于按钮内并稍作内缩。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled` 主题状态，控件不响应交互 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器；字体族与大小优先由主题控制 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式 |
@@ -62,6 +66,7 @@ uses tyControls.Button;
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
 | `OnClick` | `TNotifyEvent` | 鼠标点击或通过 `Click` 方法触发时 |
+| `OnBadgeDisplay` | `TTyBadgeDisplayEvent` | **（v1.11 新增）** 角标绘制前回调：`procedure(Sender; AValue: Integer; var AText: string; var AVisible: Boolean)`。默认显示含 `0`，可在此改写 `AText` 或置 `AVisible := False` 自定义隐藏策略（如 `<3` 不显示）。详见第 9 节。 |
 
 > **`ModalResult` 与 `OnClick` 的次序：** 当 `ModalResult <> mrNone` 时，`Click` 先把宿主窗体 `ModalResult` 设为本值，**再**调用 `inherited Click`（触发 `OnClick`）。因此 `OnClick` 处理器可在事件中读取/改写 `Form.ModalResult`（如置 `mrNone` 否决关闭）。
 >
@@ -79,6 +84,7 @@ uses tyControls.Button;
 | `:focus` | 获得键盘焦点 |
 | `:active` | 鼠标左键按下 |
 | `:disabled` | `Enabled = False` |
+| `:selected`（别名 `:checked`） | `Down = True`（且 `Enabled`）；常驻选中态，详见第 9 节 |
 
 ### light.tycss 内置规则摘要
 
@@ -199,3 +205,66 @@ Btn.Caption := '悬停我';
 - `Font` 属性中的 `PixelsPerInch` 用于 HiDPI 缩放；字体族（`FontName`）和大小（`FontSize`）优先从主题读取，`Font.Name`、`Font.Size` 作为备用。
 - 控件不需要背景擦除（继承自 `TCustomControl`），由 `Paint` 完整重绘整个区域，不会出现闪烁。
 - 同一窗体上所有未显式指定 `Controller` 的控件共享 `TyDefaultController`；若需要在同一窗体上使用多套主题，为不同控件分别设置不同的 `TTyStyleController` 实例即可。
+
+---
+
+## 9. Ghost 变体 + 选中态 + 角标 (v1.11)
+
+### 9.1 Ghost（透明）变体与选中态
+
+`StyleClass := 'ghost'` 让按钮平时**透明无边框**（类似 VS Code 活动栏/工具栏按钮），仅在 `:hover` / `:active` / **选中** 时显示底色与边框。
+
+- **选中是常驻状态**：`Button.Down := True;` 触发主题 `:selected` 规则（`TyButton.ghost:selected`），区别于瞬时的 hover/active。`Down` 为 `False` 时清除。`Enabled = False` 时 `Down` 不生效（disabled 优先）。
+- **互斥分组**（同组仅一个选中，如活动栏）由应用在 `OnClick` 里自行切换各按钮的 `Down`；本控件不内建 `GroupIndex`。
+- ghost 的 base 用 `alpha(<令牌>, 0)`（透明但仍是纯色），使既有的悬停背景淡入动画（alpha `0→255`）继续生效；透明边框保留 `border-width`，避免 hover 时尺寸跳动。所有内置主题均提供 `TyButton.ghost`。
+
+### 9.2 角标（badge）
+
+按钮某个角叠加一个**数字角标**（如未读数）。仅数字，`>99` 显示 `99+`。
+
+| 成员 | 说明 |
+|------|------|
+| `ShowBadge: Boolean` | 总开关；`False` 时完全不绘制、不调用事件 |
+| `BadgeValue: Integer` | 数值 |
+| `BadgePosition: TTyBadgePosition` | 所在角（默认 `bpBottomRight`）；窗口控件不能越界,角标内嵌于按钮内并稍作内缩 |
+| `OnBadgeDisplay` | 显示前回调，见下 |
+
+**显示规则**：`ShowBadge = False` → 不画。`ShowBadge = True` → 先算默认文本（`>99` 截断为 `99+`，否则 `IntToStr(BadgeValue)`，**默认显示含 `0`**）与 `AVisible := True`，再调用 `OnBadgeDisplay`（若挂接）让用户改写 `AText` / 置 `AVisible := False`；最终 `AVisible and (AText <> '')` 才绘制。
+
+样式由独立 typeKey **`TyBadge`** 主题化（默认 `var(--accent)` 蓝底胶囊，单字符近正圆）：
+
+```css
+TyBadge {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: var(--radius-round);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  padding: 0px 4px;
+}
+```
+
+### 9.3 代码示例
+
+```pascal
+// Ghost + 选中(工具栏按钮)
+GhostBtn := TTyButton.Create(Self);
+GhostBtn.Parent := Self;
+GhostBtn.StyleClass := 'ghost';
+GhostBtn.Down := True;            // 常驻选中
+// 点击切换选中:
+//   procedure TForm1.GhostClick(Sender: TObject);
+//   begin (Sender as TTyButton).Down := not (Sender as TTyButton).Down; end;
+
+// 角标
+BadgeBtn := TTyButton.Create(Self);
+BadgeBtn.Parent := Self;
+BadgeBtn.Caption := '消息';
+BadgeBtn.ShowBadge := True;
+BadgeBtn.BadgeValue := 128;       // 显示 "99+"
+BadgeBtn.BadgePosition := bpBottomRight;
+// 仅在 >=3 时显示:
+//   procedure TForm1.OnBadge(Sender: TObject; AValue: Integer; var AText: string; var AVisible: Boolean);
+//   begin AVisible := AValue >= 3; end;
+//   BadgeBtn.OnBadgeDisplay := @OnBadge;
+```
