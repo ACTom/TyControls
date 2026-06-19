@@ -2,22 +2,25 @@ unit mainform;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus,
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus, ComCtrls,
   tyControls.Controller, tyControls.Button, tyControls.TyLabel,
   tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
-  tyControls.TrackBar, tyControls.GroupBox, tyControls.TabControl,
+  tyControls.TrackBar, tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu, tyControls.BuiltinThemes;
 type
 
   { TDemoMainForm — ALL controls live in the designer (mainform.lfm), including the docked
     TTyTitleBar, the theme switcher (ThemeCombo + appearance buttons + random), the
-    TabControl's tabs, TTySpinEdit and TTyMemo. Code only does logic (data + handlers);
+    PageControl's pages, TTySpinEdit and TTyMemo. Code only does logic (data + handlers);
     it NEVER creates UI controls (project rule: demo UI is edited in the .lfm only). }
 
   TDemoMainForm = class(TTyForm)
     Controller: TTyStyleController;
+    TyButton1: TTyButton;
+    TyButton2: TTyButton;
+    TyEdit1: TTyEdit;
     TyTitleBar1: TTyTitleBar;
     ThemeCombo: TTyComboBox;
     BtnApLight: TTyButton;
@@ -36,7 +39,10 @@ type
     Progress1: TTyProgressBar;
     TrackBar1: TTyTrackBar;
     Toggle1: TTyToggleSwitch;
-    TabCtrl1: TTyTabControl;
+    TabCtrl1: TTyPageControl;
+    TyTabSheet1: TTyTabSheet;
+    TyTabSheet2: TTyTabSheet;
+    TyTabSheet3: TTyTabSheet;
     SpinKind: TTySpinEdit;
     Memo1: TTyMemo;
     MainMenu1: TMainMenu;
@@ -59,6 +65,7 @@ type
     PopupCtxHello: TMenuItem;
     PopupCtxAgree: TMenuItem;
     procedure FormCreate(Sender: TObject);
+    procedure GroupBox1Click(Sender: TObject);
     procedure MnuViewToggleClick(Sender: TObject);
     procedure MnuFileExitClick(Sender: TObject);
     procedure PopupCtxHelloClick(Sender: TObject);
@@ -111,6 +118,11 @@ begin
   // fill the theme dropdown + set the initial theme/appearance — data only, no UI build.
   MenuBar := TyMenuBar1;
   InitThemes;
+end;
+
+procedure TDemoMainForm.GroupBox1Click(Sender: TObject);
+begin
+
 end;
 
 procedure TDemoMainForm.InitThemes;

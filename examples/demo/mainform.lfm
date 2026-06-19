@@ -134,6 +134,14 @@ object DemoMainForm: TDemoMainForm
     Width = 400
     TabOrder = 5
     Controller = Controller
+    object TyButton1: TTyButton
+      Left = 44
+      Height = 56
+      Top = 72
+      Width = 164
+      TabOrder = 0
+      Caption = 'TyButton1'
+    end
   end
   object ComboKind: TTyComboBox
     Left = 32
@@ -165,8 +173,18 @@ object DemoMainForm: TDemoMainForm
     Top = 448
     Width = 320
     TabOrder = 8
+    OnClick = GroupBox1Click
     Controller = Controller
     Caption = 'Options'
+    object TyEdit1: TTyEdit
+      Cursor = crIBeam
+      Left = 44
+      Height = 64
+      Top = 48
+      Width = 196
+      TabOrder = 0
+      TabStop = True
+    end
   end
   object ListBox1: TTyListBox
     Left = 32
@@ -223,25 +241,23 @@ object DemoMainForm: TDemoMainForm
     MaxValue = 10
     Value = 3
   end
-  object TabCtrl1: TTyTabControl
+  object TabCtrl1: TTyPageControl
     Left = 32
     Height = 260
-    Top = 768
+    Top = 752
     Width = 1208
     TabOrder = 13
     Controller = Controller
-    Tabs = <    
-      item
-        Caption = 'Tab 1'
-      end    
-      item
-        Caption = 'Tab 2'
-      end    
-      item
-        Caption = 'Tab 3'
-      end>
-    TabIndex = 0
-    TabsClosable = True
+    ActivePageIndex = 1
+    object TyTabSheet1: TTyTabSheet
+      Caption = 'Tab 1'
+    end
+    object TyTabSheet2: TTyTabSheet
+      Caption = 'Tab 2'
+    end
+    object TyTabSheet3: TTyTabSheet
+      Caption = 'Tab 3'
+    end
   end
   object Memo1: TTyMemo
     Cursor = crIBeam
@@ -259,6 +275,14 @@ object DemoMainForm: TDemoMainForm
       'when the text overflows the visible rows.'
     )
     Text = 'TTyMemo multi-line editor'#13#10'Enter splits a line; Backspace/Delete merge across lines.'#13#10'Arrows / Home / End move the caret; the wheel scrolls'#13#10'when the text overflows the visible rows.'#13#10
+  end
+  object TyButton2: TTyButton
+    Left = 140
+    Height = 74
+    Top = 846
+    Width = 162
+    TabOrder = 16
+    Caption = 'TyButton2'
   end
   object Controller: TTyStyleController
     Left = 32

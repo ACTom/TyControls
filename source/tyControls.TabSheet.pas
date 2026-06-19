@@ -87,4 +87,8 @@ begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
+initialization
+  { Runtime LFM streaming resolves nested (non-field) page objects via the class
+    registry; register so a saved form's pages load (mirrors TTyTitleBar in Form.pas). }
+  RegisterClass(TTyTabSheet);
 end.

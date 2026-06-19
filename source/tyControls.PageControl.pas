@@ -242,4 +242,6 @@ begin
   inherited Destroy;   // pages are owned by the form (or Self) and freed normally
 end;
 
+initialization
+  RegisterClass(TTyPageControl);
 end.
