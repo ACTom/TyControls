@@ -77,6 +77,10 @@ type
       loaded directly; zipped IMAGE assets are a documented follow-up (not yet resolved). }
     procedure LoadFromSource(ASource: ITyThemeSource);
     function ResolveStyle(const ATypeKey, AStyleClass: string; AStates: TTyStateSet): TTyStyleSet;
+    { Distinct non-empty variant names defined for ATypeKey across the base + user layers
+      (ignores :state). Powers the design-time StyleClass dropdown so it lists exactly the
+      classes the active theme defines for THIS control type. Exact-case dedupe. }
+    procedure GetVariantsForType(const ATypeKey: string; AList: TStrings);
     { A9 per-instance StyleOverride (§3.1 layer 2). Parse a bare declaration block (no
       selector) and evaluate each declaration against the LIVE merged var set, so a
       'var(--accent)' in an override binds to the active theme (and re-binds after a
@@ -1226,6 +1230,26 @@ begin
   finally
     GThemeBaseDir := savedBaseDir;
   end;
+end;
+
+procedure TTyStyleModel.GetVariantsForType(const ATypeKey: string; AList: TStrings);
+
+  procedure ScanLayer(ARules: TFPList);
+  var i: Integer; e: TTyStyleRuleEntry;
+  begin
+    for i := 0 to ARules.Count - 1 do
+    begin
+      e := TTyStyleRuleEntry(ARules[i]);
+      if SameText(e.TypeName, ATypeKey) and (e.Variant <> '')
+         and (AList.IndexOf(e.Variant) < 0) then
+        AList.Add(e.Variant);
+    end;
+  end;
+
+begin
+  if AList = nil then Exit;
+  ScanLayer(FBaseRules);   // built-in defaults (always present)
+  ScanLayer(FRules);       // user theme layer
 end;
 
 function TTyStyleModel.ResolveOverride(const ASource: string): TTyStyleSet;
