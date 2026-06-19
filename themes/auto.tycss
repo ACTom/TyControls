@@ -27,6 +27,22 @@ TyButton.primary:active   { background: var(--accent-active); }
 TyButton.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }
 TyButton.danger:hover     { background: var(--danger-hover); }
 TyButton.danger:active    { background: var(--danger-active); }
+/* Ghost (VS Code 风格): 平时透明,仅 hover/active/选中显示。 */
+TyButton.ghost {
+  background: var(--transparent-fill);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 6px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+}
+TyButton.ghost:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }
+TyButton.ghost:active   { background: var(--surface-active); }
+TyButton.ghost:selected { background: var(--surface-active); border-color: var(--accent); }
+TyButton.ghost:focus    { outline: 2px var(--focus-ring); }
+TyButton.ghost:disabled { opacity: var(--disabled-opacity); }
 
 TyLabel {
   background: var(--transparent-fill);
@@ -253,6 +269,16 @@ TyScrollThumb { background: var(--scroll-handle); border-radius: var(--radius-sc
 TyScrollThumb:hover  { background: var(--scroll-handle-hover); }
 TyScrollThumb:active { background: var(--accent); }
 TyToggleKnob  { background: #FFFFFF; border-radius: var(--radius-round); }
+
+/* 数字角标 (TTyButton badge): accent 胶囊。 */
+TyBadge {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: var(--radius-round);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  padding: 0px 4px;
+}
 
 /* ── Menu system ───────────────────────────────────────────────────────── */
 
