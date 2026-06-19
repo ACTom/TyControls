@@ -1159,8 +1159,11 @@ end;
 procedure TTyStyleModel.ResolveLayer(ARules: TFPList; const ATypeKey, AStyleClass: string;
   AStates: TTyStateSet; var AResult: TTyStyleSet);
 const
-  // fixed state application order: hover, focused, active, disabled
-  cStateOrder: array[0..3] of TTyState = (tysHover, tysFocused, tysActive, tysDisabled);
+  // fixed state application order: selected (resting layer) first, then the
+  // transient feedback states, then disabled last (highest precedence). selected
+  // goes first so hover/active can override its conflicting props per-property
+  // while selected-only props (e.g. a border-color) survive.
+  cStateOrder: array[0..4] of TTyState = (tysSelected, tysHover, tysFocused, tysActive, tysDisabled);
 var
   variants: TStringList;
   vi, si: Integer;

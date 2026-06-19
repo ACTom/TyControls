@@ -127,6 +127,7 @@ type
     procedure TestButtonDisabled;
     procedure TestPrimaryHoverCombo;
     procedure TestStateOrderDisabledWinsOverHover;
+    procedure TestSelectedStateCascade;
   end;
 
   TTestStyleShadow = class(TTestCase)
@@ -812,6 +813,29 @@ begin
   s := FModel.ResolveStyle('TyButton', '', [tysHover, tysDisabled]);
   AssertEquals('disabled bg wins', $11, TyRedOf(s.Background.Color));
   AssertTrue('opacity from disabled', Abs(s.Opacity - 0.5) < 0.0001);
+end;
+
+procedure TTestStyleResolve.TestSelectedStateCascade;
+var
+  m: TTyStyleModel;
+  s: TTyStyleSet;
+begin
+  // selected 作为常驻底层,hover 应能逐属性覆盖其 background,但保留 selected 独有的 border-color
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss(
+      'TyButton.ghost { background:#000000; }' + LineEnding +
+      'TyButton.ghost:selected { background:#111111; border-color:#FF0000; }' + LineEnding +
+      'TyButton.ghost:hover { background:#222222; }');
+    // 仅 selected
+    s := m.ResolveStyle('TyButton', 'ghost', [tysSelected]);
+    AssertEquals('selected bg', $11, TyRedOf(s.Background.Color));
+    AssertEquals('selected border R', $FF, TyRedOf(s.BorderColor));
+    // selected + hover:hover 覆盖 background,selected 的 border-color 保留
+    s := m.ResolveStyle('TyButton', 'ghost', [tysSelected, tysHover]);
+    AssertEquals('hover overrides bg', $22, TyRedOf(s.Background.Color));
+    AssertEquals('selected border survives', $FF, TyRedOf(s.BorderColor));
+  finally m.Free; end;
 end;
 
 procedure TTestStyleShadow.TestShadowLiteralColor;
