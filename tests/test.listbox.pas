@@ -446,10 +446,7 @@ begin
     Bmp.Canvas.FillRect(0, 0, 120, 100);
     LB.RenderTo(Bmp.Canvas, Rect(0, 0, 120, 100), 96);
 
-    // Row 0 fill now reaches the inner border at top (y=0); centre well inside.
-    RowTop := 0;
-    RowBottom := 2 + 24;            // content top (padding) + item height
-    CenterY := 13;
+    CenterY := 13;                  // mid row 0 (content top padding 2 + half of 24)
 
     Reread := TBGRABitmap.Create(Bmp);
     try
@@ -459,20 +456,38 @@ begin
         [PxCenter.red, PxCenter.green, PxCenter.blue]),
         (PxCenter.blue > 180) and (PxCenter.red < 120));
 
-      // Full width / no side gap: x=2 at mid-row (inside what used to be the 4px inset
-      // gap, LEFT of the text glyphs, past the AA edge, below the corner curve) is the
-      // accent fill — proving the highlight now reaches the interior edge.
-      PxCenter := Reread.GetPixel(2, 18);
-      AssertTrue(Format('row0 left edge is accent (full width, no gap) (R=%d G=%d B=%d)',
+      // Single padding inset (no big side gap): x=4 at mid-row — solid accent now, whereas
+      // the OLD double inset started the fill at x=4 (only an AA edge there). LEFT of the
+      // text glyphs, below the corner curve.
+      PxCenter := Reread.GetPixel(4, CenterY);
+      AssertTrue(Format('row0 left reaches single-inset edge (R=%d G=%d B=%d)',
         [PxCenter.red, PxCenter.green, PxCenter.blue]),
         (PxCenter.blue > 180) and (PxCenter.red < 120));
 
-      // Capped: the extreme top-left corner is rounded to the container, so it is NOT
-      // the accent fill (it shows the listbox/background, never poking past the border).
+      // Capped: the extreme top-left corner is rounded to the container (and the fill is
+      // inset by the padding), so it is NOT the accent fill — never poking past the border.
       PxCorner := Reread.GetPixel(0, 0);
-      AssertFalse(Format('row0 top-left corner NOT accent (rounded cap) (R=%d G=%d B=%d)',
+      AssertFalse(Format('row0 top-left corner NOT accent (capped) (R=%d G=%d B=%d)',
         [PxCorner.red, PxCorner.green, PxCorner.blue]),
         (PxCorner.blue > 180) and (PxCorner.red < 120));
+    finally
+      Reread.Free;
+    end;
+
+    // Issue 2: a SHORT list (3 rows in a 100px box) must NOT let the last item's highlight
+    // bleed into the empty space below it. Select the last item, re-render, and check the
+    // empty area below the rows is the listbox background, not the accent fill.
+    LB.SelectItem(2);
+    Bmp.Canvas.Brush.Color := clBlack;
+    Bmp.Canvas.FillRect(0, 0, 120, 100);
+    LB.RenderTo(Bmp.Canvas, Rect(0, 0, 120, 100), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      // Rows end at y = 2 + 3*24 = 74; sample well below that (y=85) in the empty band.
+      PxCenter := Reread.GetPixel(80, 85);
+      AssertFalse(Format('empty space below last item NOT accent (R=%d G=%d B=%d)',
+        [PxCenter.red, PxCenter.green, PxCenter.blue]),
+        (PxCenter.blue > 180) and (PxCenter.red < 120));
     finally
       Reread.Free;
     end;
