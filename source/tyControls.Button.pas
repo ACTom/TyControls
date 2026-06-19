@@ -334,8 +334,11 @@ begin
     // the normal background; at Eased=1 exactly the hover background.
     if (Eased > 0) and (Eased < 1) and (S.Background.Kind = tfkSolid) then
     begin
-      NormalS := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysNormal]);
-      HoverS  := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysHover]);
+      // Resting end = the current state set MINUS hover (a selected button rests on
+      // its :selected bg, a plain one on :normal); hover end = current state PLUS hover.
+      // Alpha participates in the lerp (ghost's transparent rest -> opaque hover fade).
+      NormalS := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, CurrentStates - [tysHover]);
+      HoverS  := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, CurrentStates + [tysHover]);
       if (NormalS.Background.Kind = tfkSolid) and (HoverS.Background.Kind = tfkSolid) then
         S.Background.Color := TyLerpColor(NormalS.Background.Color, HoverS.Background.Color, Eased);
     end;

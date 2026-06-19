@@ -19,6 +19,10 @@ type
     procedure DoLoaded;
     // Expose protected CurrentStates for the selected-state test.
     function States: TTyStateSet;
+    // Drive the hover bg-fade animator deterministically (no wall clock) so a
+    // mid-frame (0 < Eased < 1) can be rendered.
+    procedure ArmBg(ATarget: Single);
+    function AdvanceAnim(AMs: Integer): Boolean;
   end;
 
   TButtonTest = class(TTestCase)
@@ -42,6 +46,7 @@ type
     procedure TestCancelRespondsToEscape;
     procedure TestDefaultReregisteredOnLoaded;
     procedure TestDownDrivesSelectedState;
+    procedure TestHoverBlendUsesRestingState;
   end;
 implementation
 
@@ -73,6 +78,16 @@ end;
 function TTyButtonAccess.States: TTyStateSet;
 begin
   Result := CurrentStates;
+end;
+
+procedure TTyButtonAccess.ArmBg(ATarget: Single);
+begin
+  ArmBgAnim(ATarget);
+end;
+
+function TTyButtonAccess.AdvanceAnim(AMs: Integer): Boolean;
+begin
+  Result := AdvanceAnimation(AMs);
 end;
 
 procedure TButtonTest.HandleClick(Sender: TObject);
@@ -305,6 +320,38 @@ begin
     AssertTrue('disabled present', tysDisabled in B.States);
     AssertTrue('Down is published', IsPublishedProp(B, 'Down'));
   finally B.Free; end;
+end;
+
+procedure TButtonTest.TestHoverBlendUsesRestingState;
+var
+  B: TTyButtonAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  Px: TBGRAPixel;
+begin
+  // 选中的 ghost 按钮、hover 淡入中间帧:静止端应是 ghost:selected(不透明 surface-active)。
+  // 修复前混色取 normal(透明)<->hover,中间帧是半透明 over 黑底 -> 绿通道塌到 ~66;
+  // 修复后取 selected<->selected+hover,两端皆不透明浅灰 -> 绿通道 ~234。以绿通道判别。
+  Bmp := TBitmap.Create;
+  B := TTyButtonAccess.Create(nil);
+  try
+    B.StyleClass := 'ghost';
+    B.Down := True;
+    B.Caption := '';
+    B.Font.PixelsPerInch := 96;
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(80, 28);
+    Bmp.Canvas.Brush.Color := clBlack;          // 黑底:半透明会明显塌绿
+    Bmp.Canvas.FillRect(0, 0, 80, 28);
+    B.ArmBg(1);                                  // 朝 hover 端推进
+    B.AdvanceAnim(12);                           // 12/120=0.1 -> Eased=0.271,落在混色区间
+    B.RenderTo(Bmp.Canvas, Rect(0, 0, 80, 28), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      Px := Reread.GetPixel(40, 14);
+      AssertTrue('selected ghost mid-frame stays opaque light (green high)', Px.green > 150);
+    finally Reread.Free; end;
+  finally B.Free; Bmp.Free; end;
 end;
 
 initialization
