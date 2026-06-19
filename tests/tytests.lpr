@@ -38,7 +38,8 @@ uses
   test.systemtheme,
   test.themelint,
   test.menu,
-  test.builtinthemes;
+  test.builtinthemes,
+  test.paletteicons;
 
 type
   TTyTestRunner = class(TTestRunner)
