@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Base, tyControls.Button, tyControls.Types;
+  tyControls.Base, tyControls.Button, tyControls.Types, tyControls.Controller;
 type
   // Expose protected RenderTo for testing
   TTyButtonAccess = class(TTyButton)
@@ -342,6 +342,7 @@ end;
 procedure TButtonTest.TestHoverBlendUsesRestingState;
 var
   B: TTyButtonAccess;
+  Ctl: TTyStyleController;
   Bmp: TBitmap;
   Reread: TBGRABitmap;
   Px: TBGRAPixel;
@@ -349,9 +350,12 @@ begin
   // 选中的 ghost 按钮、hover 淡入中间帧:静止端应是 ghost:selected(不透明 surface-active)。
   // 修复前混色取 normal(透明)<->hover,中间帧是半透明 over 黑底 -> 绿通道塌到 ~66;
   // 修复后取 selected<->selected+hover,两端皆不透明浅灰 -> 绿通道 ~234。以绿通道判别。
+  // 用专属 controller(全新 = 内置 light 主题),隔离全局 TyDefaultController 可能被其它测试污染。
   Bmp := TBitmap.Create;
+  Ctl := TTyStyleController.Create(nil);
   B := TTyButtonAccess.Create(nil);
   try
+    B.Controller := Ctl;
     B.StyleClass := 'ghost';
     B.Down := True;
     B.Caption := '';
@@ -368,7 +372,7 @@ begin
       Px := Reread.GetPixel(40, 14);
       AssertTrue('selected ghost mid-frame stays opaque light (green high)', Px.green > 150);
     finally Reread.Free; end;
-  finally B.Free; Bmp.Free; end;
+  finally B.Free; Ctl.Free; Bmp.Free; end;
 end;
 
 procedure TButtonTest.TestBadgeDisplayRules;
@@ -416,12 +420,15 @@ procedure TButtonTest.TestBadgeRendersAtCorner;
       end;
   end;
 var
-  B: TTyButtonAccess; Bmp: TBitmap; Reread: TBGRABitmap;
+  B: TTyButtonAccess; Ctl: TTyStyleController; Bmp: TBitmap; Reread: TBGRABitmap;
 begin
   // 内置 TyBadge 背景 = var(--accent) = #3B82F6。右下角应出现 accent 蓝;关掉后没有。
+  // 专属 controller(内置 light),隔离全局 TyDefaultController 被其它测试改主题的可能。
   Bmp := TBitmap.Create;
+  Ctl := TTyStyleController.Create(nil);
   B := TTyButtonAccess.Create(nil);
   try
+    B.Controller := Ctl;
     B.Caption := '';
     B.Font.PixelsPerInch := 96;
     B.ShowBadge := True;
@@ -444,7 +451,7 @@ begin
     try
       AssertFalse('no badge -> no accent blue in region', AccentBlueInCorner(Reread));
     finally Reread.Free; end;
-  finally B.Free; Bmp.Free; end;
+  finally B.Free; Ctl.Free; Bmp.Free; end;
 end;
 
 initialization
