@@ -5,6 +5,13 @@ uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, ExtCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 type
+  // Which corner the numeric badge sits in (inset within the button's client rect).
+  TTyBadgePosition = (bpTopLeft, bpTopRight, bpBottomLeft, bpBottomRight);
+  // Display hook: default text/visibility are computed first, then this may rewrite
+  // AText or set AVisible:=False for a custom policy (e.g. hide when AValue < 3).
+  TTyBadgeDisplayEvent = procedure(Sender: TObject; AValue: Integer;
+    var AText: string; var AVisible: Boolean) of object;
+
   TTyButton = class(TTyCustomControl)
   private
     FBgAnim: TTyAnimator;
@@ -14,6 +21,13 @@ type
     FCancel: Boolean;
     FModalResult: TModalResult;
     FDown: Boolean;
+    FShowBadge: Boolean;
+    FBadgeValue: Integer;
+    FBadgePosition: TTyBadgePosition;
+    FOnBadgeDisplay: TTyBadgeDisplayEvent;
+    procedure SetShowBadge(AValue: Boolean);
+    procedure SetBadgeValue(AValue: Integer);
+    procedure SetBadgePosition(AValue: TTyBadgePosition);
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
     function GetBgAnimProgress: Single;
@@ -29,6 +43,12 @@ type
     function GetStyleTypeKey: string; override;
     // Inject tysSelected when Down (and enabled), so ':selected' theme rules apply.
     function CurrentStates: TTyStateSet; override;
+    // Decide whether/what to draw for the badge. ShowBadge off -> False; else default
+    // text ('99+' cap, includes '0') + AVisible:=True, then OnBadgeDisplay may rewrite;
+    // True only when visible and the text is non-empty.
+    function ResolveBadgeDisplay(out AText: string): Boolean;
+    // Paint the badge (if visible) at the chosen corner, inset within AFullRect.
+    procedure DrawBadge(P: TTyPainter; const AFullRect: TRect);
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseEnter; override;
@@ -82,6 +102,12 @@ type
     // 切换各按钮的 Down(本期不内建 GroupIndex)。
     property Down: Boolean read FDown write SetDown default False;
     property ModalResult: TModalResult read FModalResult write FModalResult default mrNone;
+    // 角标(badge):仅数字,>99 显示 '99+'。ShowBadge 为总开关;默认显示含 0,可经
+    // OnBadgeDisplay 改写文本或置 AVisible:=False 自定义隐藏。样式由 TyBadge typeKey 主题化。
+    property ShowBadge: Boolean read FShowBadge write SetShowBadge default False;
+    property BadgeValue: Integer read FBadgeValue write SetBadgeValue default 0;
+    property BadgePosition: TTyBadgePosition read FBadgePosition write SetBadgePosition default bpBottomRight;
+    property OnBadgeDisplay: TTyBadgeDisplayEvent read FOnBadgeDisplay write FOnBadgeDisplay;
     property Caption;
     property Enabled;
     property Font;
@@ -97,6 +123,7 @@ constructor TTyButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FAnimationsEnabled := True;
+  FBadgePosition := bpBottomRight;
   // Hover bg-fade animator: rest at 0 (normal), ~120ms full traversal,
   // decelerating. Mirrors the ToggleSwitch knob-slide timing.
   FBgAnim.Progress := 0;
@@ -200,6 +227,44 @@ begin
     Include(Result, tysSelected);
     Exclude(Result, tysNormal);
   end;
+end;
+
+procedure TTyButton.SetShowBadge(AValue: Boolean);
+begin
+  if FShowBadge = AValue then Exit;
+  FShowBadge := AValue;
+  Invalidate;
+end;
+
+procedure TTyButton.SetBadgeValue(AValue: Integer);
+begin
+  if FBadgeValue = AValue then Exit;
+  FBadgeValue := AValue;
+  if FShowBadge then Invalidate;
+end;
+
+procedure TTyButton.SetBadgePosition(AValue: TTyBadgePosition);
+begin
+  if FBadgePosition = AValue then Exit;
+  FBadgePosition := AValue;
+  if FShowBadge then Invalidate;
+end;
+
+function TTyButton.ResolveBadgeDisplay(out AText: string): Boolean;
+var vis: Boolean;
+begin
+  Result := False;
+  AText := '';
+  if not FShowBadge then Exit;
+  if FBadgeValue > 99 then AText := '99+' else AText := IntToStr(FBadgeValue);
+  vis := True;   // default: show (including '0'); the event may override
+  if Assigned(FOnBadgeDisplay) then FOnBadgeDisplay(Self, FBadgeValue, AText, vis);
+  Result := vis and (AText <> '');
+end;
+
+procedure TTyButton.DrawBadge(P: TTyPainter; const AFullRect: TRect);
+begin
+  // Real rendering lands in the next task; the decision logic is exercised now.
 end;
 
 function TTyButton.WantsDialogKey(ACharCode: Word): Boolean;

@@ -23,6 +23,8 @@ type
     // mid-frame (0 < Eased < 1) can be rendered.
     procedure ArmBg(ATarget: Single);
     function AdvanceAnim(AMs: Integer): Boolean;
+    // Expose the protected badge display decision.
+    function CallResolveBadge(out AText: string): Boolean;
   end;
 
   TButtonTest = class(TTestCase)
@@ -33,6 +35,8 @@ type
     // OnClick handler that vetoes the modal close by clearing the form's
     // ModalResult — used to prove ModalResult is set BEFORE OnClick.
     procedure HandleClickVeto(Sender: TObject);
+    // OnBadgeDisplay handler that hides the badge when value < 3.
+    procedure HideUnderThree(Sender: TObject; AValue: Integer; var AText: string; var AVisible: Boolean);
   published
     procedure TestTypeKey;
     procedure TestOnClickFires;
@@ -47,6 +51,7 @@ type
     procedure TestDefaultReregisteredOnLoaded;
     procedure TestDownDrivesSelectedState;
     procedure TestHoverBlendUsesRestingState;
+    procedure TestBadgeDisplayRules;
   end;
 implementation
 
@@ -90,6 +95,11 @@ begin
   Result := AdvanceAnimation(AMs);
 end;
 
+function TTyButtonAccess.CallResolveBadge(out AText: string): Boolean;
+begin
+  Result := ResolveBadgeDisplay(AText);
+end;
+
 procedure TButtonTest.HandleClick(Sender: TObject);
 begin
   Inc(FClicked);
@@ -99,6 +109,12 @@ procedure TButtonTest.HandleClickVeto(Sender: TObject);
 begin
   if FVetoForm <> nil then
     FVetoForm.ModalResult := mrNone;
+end;
+
+procedure TButtonTest.HideUnderThree(Sender: TObject; AValue: Integer;
+  var AText: string; var AVisible: Boolean);
+begin
+  if AValue < 3 then AVisible := False;   // 用户策略:<3 不显示
 end;
 
 procedure TButtonTest.TestTypeKey;
@@ -352,6 +368,36 @@ begin
       AssertTrue('selected ghost mid-frame stays opaque light (green high)', Px.green > 150);
     finally Reread.Free; end;
   finally B.Free; Bmp.Free; end;
+end;
+
+procedure TButtonTest.TestBadgeDisplayRules;
+var B: TTyButtonAccess; txt: string;
+begin
+  B := TTyButtonAccess.Create(nil);
+  try
+    AssertFalse('ShowBadge default False', B.ShowBadge);
+    AssertTrue('BadgePosition default bottom-right', B.BadgePosition = bpBottomRight);
+    AssertTrue('badge props published', IsPublishedProp(B, 'ShowBadge')
+      and IsPublishedProp(B, 'BadgeValue') and IsPublishedProp(B, 'BadgePosition'));
+    // 关:不显示
+    B.ShowBadge := False; B.BadgeValue := 5;
+    AssertFalse('off -> not visible', B.CallResolveBadge(txt));
+    // 开 + 值0:默认显示 "0"
+    B.ShowBadge := True; B.BadgeValue := 0;
+    AssertTrue('on, value 0 -> visible by default', B.CallResolveBadge(txt));
+    AssertEquals('value 0 text', '0', txt);
+    // >99 -> 99+
+    B.BadgeValue := 150;
+    AssertTrue(B.CallResolveBadge(txt));
+    AssertEquals('cap at 99+', '99+', txt);
+    // 事件隐藏 <3
+    B.OnBadgeDisplay := @HideUnderThree;
+    B.BadgeValue := 2;
+    AssertFalse('event hides <3', B.CallResolveBadge(txt));
+    B.BadgeValue := 7;
+    AssertTrue('event shows >=3', B.CallResolveBadge(txt));
+    AssertEquals('7 text', '7', txt);
+  finally B.Free; end;
 end;
 
 initialization
