@@ -8,7 +8,7 @@ uses
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
   tyControls.TrackBar, tyControls.GroupBox, tyControls.TabControl,
-  tyControls.SpinEdit, tyControls.Memo, tyControls.Menu;
+  tyControls.SpinEdit, tyControls.Memo, tyControls.Menu, tyControls.BuiltinThemes;
 type
 
   { TDemoMainForm ᾿all controls are placed in the designer (mainform.lfm),
@@ -19,12 +19,6 @@ type
     Controller: TTyStyleController;
     TyButton1: TTyButton;
     TyTitleBar1: TTyTitleBar;
-    BtnLight: TTyButton;
-    BtnDark: TTyButton;
-    BtnShowcase: TTyButton;
-    BtnGreen: TTyButton;
-    BtnAuto: TTyButton;
-    BtnSystem: TTyButton;
     BtnPrimary: TTyButton;
     BtnDanger: TTyButton;
     LblHello: TTyLabel;
@@ -66,16 +60,19 @@ type
     procedure MnuFileExitClick(Sender: TObject);
     procedure PopupCtxHelloClick(Sender: TObject);
     procedure PopupCtxAgreeClick(Sender: TObject);
-    procedure BtnLightClick(Sender: TObject);
-    procedure BtnDarkClick(Sender: TObject);
-    procedure BtnShowcaseClick(Sender: TObject);
-    procedure BtnGreenClick(Sender: TObject);
-    procedure BtnAutoClick(Sender: TObject);
-    procedure BtnSystemClick(Sender: TObject);
     procedure TrackBar1Change(Sender: TObject);
   private
+    ThemeCombo: TTyComboBox;
+    BtnApLight, BtnApDark, BtnApAuto, BtnRandom: TTyButton;
     function ThemeDir: string;
-    procedure ApplyTheme(const AFile: string);
+    procedure BuildSwitcher;
+    procedure ApplyBuiltin(const AName: string);
+    procedure ThemeComboChange(Sender: TObject);
+    procedure SetAppearance(AFollow: TTyThemeFollow; const AMode: string; ASelected: TTyButton);
+    procedure ApLightClick(Sender: TObject);
+    procedure ApDarkClick(Sender: TObject);
+    procedure ApAutoClick(Sender: TObject);
+    procedure RandomClick(Sender: TObject);
   end;
 var
   DemoMainForm: TDemoMainForm;
@@ -101,19 +98,6 @@ begin
   Result := 'themes' + PathDelim; // 兜底：相对当前目录
 end;
 
-procedure TDemoMainForm.ApplyTheme(const AFile: string);
-begin
-  // An explicit theme pick is a MANUAL choice; the Auto/System buttons re-enable
-  // OS-follow after calling this (so picking Light/Dark/etc. stops tracking the OS).
-  Controller.Follow := tfManual;
-  Controller.LoadTheme(ThemeDir + AFile);
-  Controller.Changed;
-
-  // Window chrome + backdrop follow the theme via the TyForm token.
-  ApplyChromeTheme(Controller);
-  if TitleBar <> nil then TitleBar.Caption := 'TyControls Demo';
-end;
-
 procedure TDemoMainForm.TrackBar1Change(Sender: TObject);
 begin
   if Assigned(Progress1) then
@@ -122,11 +106,12 @@ end;
 
 procedure TDemoMainForm.FormCreate(Sender: TObject);
 begin
+  Randomize;                  // 给「随机换肤」一个种子
   // Controls (incl. the title bar/tabs/spin/memo) come from the .lfm; load the theme.
   // Associate the themed menu bar so the form drives shortcut dispatch (and, on macOS,
   // hands MainMenu1 to the native global menu bar). See TTyForm.MenuBar (Task 6).
   MenuBar := TyMenuBar1;
-  ApplyTheme('light.tycss');
+  BuildSwitcher;             // 创建换肤 UI 并设初始主题/外观
 end;
 
 procedure TDemoMainForm.MnuViewToggleClick(Sender: TObject);
@@ -154,41 +139,112 @@ begin
   ChkAgree.Checked := not ChkAgree.Checked;
 end;
 
-procedure TDemoMainForm.BtnLightClick(Sender: TObject);
+procedure TDemoMainForm.BuildSwitcher;
+var
+  names: TStringArray;
+  i: Integer;
 begin
-  ApplyTheme('light.tycss');
+  TyRegisterBuiltinThemes;
+
+  ThemeCombo := TTyComboBox.Create(Self);
+  ThemeCombo.Parent := Self;
+  ThemeCombo.SetBounds(16, 8, 160, 28);
+  ThemeCombo.Controller := Controller;
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.Items.Add('自定义…');
+  ThemeCombo.ItemIndex := 0;                 // default
+  ThemeCombo.OnChange := @ThemeComboChange;
+
+  BtnApLight := TTyButton.Create(Self);
+  BtnApLight.Parent := Self; BtnApLight.SetBounds(188, 8, 56, 28);
+  BtnApLight.Caption := '浅色'; BtnApLight.StyleClass := 'ghost';
+  BtnApLight.Controller := Controller; BtnApLight.OnClick := @ApLightClick;
+
+  BtnApDark := TTyButton.Create(Self);
+  BtnApDark.Parent := Self; BtnApDark.SetBounds(248, 8, 56, 28);
+  BtnApDark.Caption := '深色'; BtnApDark.StyleClass := 'ghost';
+  BtnApDark.Controller := Controller; BtnApDark.OnClick := @ApDarkClick;
+
+  BtnApAuto := TTyButton.Create(Self);
+  BtnApAuto.Parent := Self; BtnApAuto.SetBounds(308, 8, 84, 28);
+  BtnApAuto.Caption := '跟随系统'; BtnApAuto.StyleClass := 'ghost';
+  BtnApAuto.Controller := Controller; BtnApAuto.OnClick := @ApAutoClick;
+
+  BtnRandom := TTyButton.Create(Self);
+  BtnRandom.Parent := Self; BtnRandom.SetBounds(400, 8, 84, 28);
+  BtnRandom.Caption := '随机换肤'; BtnRandom.StyleClass := 'primary';
+  BtnRandom.Controller := Controller; BtnRandom.OnClick := @RandomClick;
+
+  // 初始:default 主题 + 跟随系统外观
+  ApplyBuiltin('default');
+  SetAppearance(tfFollowSystem, '', BtnApAuto);
 end;
 
-procedure TDemoMainForm.BtnDarkClick(Sender: TObject);
+procedure TDemoMainForm.ApplyBuiltin(const AName: string);
 begin
-  ApplyTheme('dark.tycss');
-end;
-
-procedure TDemoMainForm.BtnShowcaseClick(Sender: TObject);
-begin
-  ApplyTheme('showcase.tycss');
-end;
-
-procedure TDemoMainForm.BtnGreenClick(Sender: TObject);
-begin
-  ApplyTheme('green.tycss');
-end;
-
-procedure TDemoMainForm.BtnAutoClick(Sender: TObject);
-begin
-  // auto.tycss is a single-file dual-mode theme (@mode light/dark). Following the
-  // system pulls the OS scheme into the active mode so it shows the right variant.
-  ApplyTheme('auto.tycss');
-  Controller.Follow := tfFollowSystem;
-  ApplyChromeTheme(Controller);   // re-resolve chrome for the OS-selected mode
-end;
-
-procedure TDemoMainForm.BtnSystemClick(Sender: TObject);
-begin
-  // system.tycss seeds its accent + mode from the live OS (system-accent/system-mode).
-  ApplyTheme('system.tycss');
-  Controller.Follow := tfFollowSystem;
+  // 只换主题,不动 Follow/Mode(外观轴由三态独占)。
+  Controller.ThemeName := AName;
   ApplyChromeTheme(Controller);
+  if TitleBar <> nil then TitleBar.Caption := 'TyControls Demo';
+end;
+
+procedure TDemoMainForm.ThemeComboChange(Sender: TObject);
+var idx: Integer; dlg: TOpenDialog;
+begin
+  idx := ThemeCombo.ItemIndex;
+  if idx < 0 then Exit;
+  if ThemeCombo.Items[idx] = '自定义…' then
+  begin
+    dlg := TOpenDialog.Create(Self);
+    try
+      dlg.Filter := 'TyControls 主题 (*.tycss)|*.tycss';
+      dlg.InitialDir := ThemeDir;
+      if dlg.Execute then
+      begin
+        Controller.ThemeFile := dlg.FileName;   // 自定义文件(REPLACE)
+        ApplyChromeTheme(Controller);
+      end;
+    finally dlg.Free; end;
+  end
+  else
+    ApplyBuiltin(ThemeCombo.Items[idx]);
+end;
+
+procedure TDemoMainForm.SetAppearance(AFollow: TTyThemeFollow; const AMode: string;
+  ASelected: TTyButton);
+begin
+  Controller.Follow := AFollow;
+  if AFollow = tfManual then Controller.Mode := AMode;   // 跟随系统时 Mode 由 OS 决定
+  // 三态互斥:用 ghost 的 Down 选中态高亮当前外观。
+  BtnApLight.Down := (ASelected = BtnApLight);
+  BtnApDark.Down  := (ASelected = BtnApDark);
+  BtnApAuto.Down  := (ASelected = BtnApAuto);
+  ApplyChromeTheme(Controller);
+end;
+
+procedure TDemoMainForm.ApLightClick(Sender: TObject);
+begin SetAppearance(tfManual, 'light', BtnApLight); end;
+
+procedure TDemoMainForm.ApDarkClick(Sender: TObject);
+begin SetAppearance(tfManual, 'dark', BtnApDark); end;
+
+procedure TDemoMainForm.ApAutoClick(Sender: TObject);
+begin SetAppearance(tfFollowSystem, '', BtnApAuto); end;
+
+procedure TDemoMainForm.RandomClick(Sender: TObject);
+var names: TStringArray; i, pick: Integer;
+begin
+  names := TyBuiltinThemeNames;
+  if Length(names) = 0 then Exit;
+  pick := ThemeCombo.ItemIndex;
+  for i := 0 to 7 do          // 随机取一个不同的内置主题
+  begin
+    pick := Random(Length(names));
+    if pick <> ThemeCombo.ItemIndex then Break;
+  end;
+  ThemeCombo.ItemIndex := pick;     // 同步下拉(ApplyBuiltin 幂等,OnChange 若再触发也无副作用)
+  ApplyBuiltin(names[pick]);
 end;
 
 end.

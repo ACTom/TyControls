@@ -42,66 +42,6 @@ object DemoMainForm: TDemoMainForm
     Menu = MainMenu1
     Align = alTop
   end
-  object BtnLight: TTyButton
-    Left = 32
-    Height = 60
-    Top = 156
-    Width = 145
-    TabOrder = 0
-    OnClick = BtnLightClick
-    Controller = Controller
-    Caption = 'Light'
-  end
-  object BtnDark: TTyButton
-    Left = 185
-    Height = 60
-    Top = 156
-    Width = 145
-    TabOrder = 1
-    OnClick = BtnDarkClick
-    Controller = Controller
-    Caption = 'Dark'
-  end
-  object BtnShowcase: TTyButton
-    Left = 338
-    Height = 60
-    Top = 156
-    Width = 145
-    TabOrder = 2
-    OnClick = BtnShowcaseClick
-    Controller = Controller
-    Caption = 'Showcase'
-  end
-  object BtnGreen: TTyButton
-    Left = 491
-    Height = 60
-    Top = 156
-    Width = 145
-    TabOrder = 22
-    OnClick = BtnGreenClick
-    Controller = Controller
-    Caption = 'Green'
-  end
-  object BtnAuto: TTyButton
-    Left = 644
-    Height = 60
-    Top = 156
-    Width = 145
-    TabOrder = 19
-    OnClick = BtnAutoClick
-    Controller = Controller
-    Caption = 'Auto'
-  end
-  object BtnSystem: TTyButton
-    Left = 797
-    Height = 60
-    Top = 156
-    Width = 145
-    TabOrder = 20
-    OnClick = BtnSystemClick
-    Controller = Controller
-    Caption = 'System'
-  end
   object BtnPrimary: TTyButton
     Left = 32
     Height = 60
