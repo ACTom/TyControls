@@ -12,6 +12,15 @@ type
     procedure TestNamesMergeFileAndCss;
     procedure TestUnregisterCss;
   end;
+
+  TBuiltinSyncTest = class(TTestCase)
+  private
+    function ThemePath(const AName: string): string;
+    function NormalizeCss(const S: string): string;
+  published
+    procedure TestDualBaseMatchesAuto;
+    procedure TestSystemMatchesSystem;
+  end;
 implementation
 
 procedure TThemeRegistryCssTest.TestRegisterResolveCss;
@@ -52,6 +61,43 @@ begin
   AssertFalse('not registered', TyThemeRegistered('__t_css3'));
 end;
 
+function TBuiltinSyncTest.ThemePath(const AName: string): string;
+begin
+  Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim + AName;
+end;
+
+function TBuiltinSyncTest.NormalizeCss(const S: string): string;
+var sl: TStringList; i: Integer;
+begin
+  sl := TStringList.Create;
+  try
+    sl.Text := S;
+    for i := 0 to sl.Count - 1 do sl[i] := TrimRight(sl[i]);
+    Result := Trim(sl.Text);
+  finally sl.Free; end;
+end;
+
+procedure TBuiltinSyncTest.TestDualBaseMatchesAuto;
+var f: TStringList;
+begin
+  f := TStringList.Create;
+  try
+    f.LoadFromFile(ThemePath('auto.tycss'));
+    AssertEquals('dual base == auto.tycss', NormalizeCss(f.Text), NormalizeCss(TyBuiltinDualBaseCss));
+  finally f.Free; end;
+end;
+
+procedure TBuiltinSyncTest.TestSystemMatchesSystem;
+var f: TStringList;
+begin
+  f := TStringList.Create;
+  try
+    f.LoadFromFile(ThemePath('system.tycss'));
+    AssertEquals('system css == system.tycss', NormalizeCss(f.Text), NormalizeCss(TyBuiltinSystemCss));
+  finally f.Free; end;
+end;
+
 initialization
   RegisterTest(TThemeRegistryCssTest);
+  RegisterTest(TBuiltinSyncTest);
 end.
