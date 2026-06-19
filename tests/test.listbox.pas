@@ -456,11 +456,11 @@ begin
         [PxCenter.red, PxCenter.green, PxCenter.blue]),
         (PxCenter.blue > 180) and (PxCenter.red < 120));
 
-      // Single padding inset (no big side gap): x=4 at mid-row — solid accent now, whereas
-      // the OLD double inset started the fill at x=4 (only an AA edge there). LEFT of the
-      // text glyphs, below the corner curve.
-      PxCenter := Reread.GetPixel(4, CenterY);
-      AssertTrue(Format('row0 left reaches single-inset edge (R=%d G=%d B=%d)',
+      // Full interior width (no side gap): x=2 at mid-row is solid accent — flush to the
+      // interior edge, where the OLD inset left the listbox background. LEFT of the text
+      // glyphs, below the corner curve. (The border is re-stroked on top in real themes.)
+      PxCenter := Reread.GetPixel(2, CenterY);
+      AssertTrue(Format('row0 left reaches the interior edge (R=%d G=%d B=%d)',
         [PxCenter.red, PxCenter.green, PxCenter.blue]),
         (PxCenter.blue > 180) and (PxCenter.red < 120));
 

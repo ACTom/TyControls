@@ -690,7 +690,7 @@ var
   R, ContentRect, RowRect: TRect;
   SBWidth, SH, i, LastRow: Integer;
   ItemStates: TTyStateSet;
-  capR: Integer;
+  capR, fillTop, fillBottom: Integer;
   contentFills: Boolean;
   rowCorners: TTyCorners;
 begin
@@ -745,28 +745,32 @@ begin
         ContentRect.Top + (i - FTopIndex + 1) * SH
       );
 
-      // Fill row background if the style has one. The highlight spans the CONTENT width
-      // (RowRect = the listbox interior inset by the padding ONCE — enough to keep the
-      // border visible, dropping the old double inset that left a big side gap). It caps
-      // to the rounded container CONCENTRIC with the listbox corner (radius - padding):
-      // the first item rounds its TOP corners, and ONLY when the list actually fills the
-      // box does the last item round its BOTTOM corners — otherwise a short list's last
-      // row would bleed into the empty space below. Middle rows are square.
+      // Fill row background if the style has one. The highlight spans the full interior
+      // width (to the edges, minus the scrollbar). The first/last rows extend to the listbox
+      // edge and round their OUTER corners by the listbox radius so the fill reaches the
+      // rounded corner exactly (no gap); only when the list actually FILLS the box does the
+      // last item cap+extend its bottom (else a short list's last row would bleed into the
+      // empty space below). The border is re-stroked ON TOP after the loop, so a highlight
+      // reaching the edge never covers it (no overlap). Middle rows are square.
       if tpBackground in RowStyle.Present then
       begin
-        capR := BoxStyle.BorderRadius - BoxStyle.Padding.Left;
-        if capR < 0 then capR := 0;
+        capR := BoxStyle.BorderRadius;
         contentFills := (FItems.Count * SH) >= (ContentRect.Bottom - ContentRect.Top);
+        fillTop := RowRect.Top;
+        fillBottom := RowRect.Bottom;
         rowCorners := TyCorners(0, 0, 0, 0);
         if i = 0 then
         begin
+          fillTop := R.Top;
           rowCorners.TL := capR; rowCorners.TR := capR;
         end;
         if (i = FItems.Count - 1) and contentFills then
         begin
+          fillBottom := R.Bottom;
           rowCorners.BR := capR; rowCorners.BL := capR;
         end;
-        P.FillBackground(RowRect, RowStyle.Background, rowCorners);
+        P.FillBackground(Rect(R.Left, fillTop, R.Right - SBWidth, fillBottom),
+          RowStyle.Background, rowCorners);
       end;
 
       // Draw item text, inset by item padding
@@ -781,6 +785,13 @@ begin
         taLeftJustify, tlCenter, True
       );
     end;
+
+    // Re-stroke the listbox border ON TOP of the rows so a full-width highlight reaching the
+    // interior edge never covers the border (drawn last). Uniform radius (the list uses one).
+    if (tpBorderColor in BoxStyle.Present) and (BoxStyle.BorderWidth > 0)
+       and not ((tpBorderStyle in BoxStyle.Present) and (BoxStyle.BorderStyle = tbsNone)) then
+      P.StrokeBorder(R, TyUniformCorners(BoxStyle.BorderRadius),
+        BoxStyle.BorderWidth, BoxStyle.BorderColor);
 
     P.EndPaint;
   finally
