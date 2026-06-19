@@ -41,13 +41,21 @@ New-Item -ItemType Directory -Force $icons | Out-Null
 & $genExe $icons
 if ($LASTEXITCODE -ne 0) { throw 'genicons run failed' }
 
-Write-Host '== packing .lrs =='
+Write-Host '== packing .lrs (3 sizes per class for HiDPI) =='
+# base = 100% (24px), _150 = 150% (36px), _200 = 200% (48px). The IDE picks the variant
+# matching the display scaling, so palette icons stay crisp instead of upscaling 24px.
+$suffixes = @('', '_150', '_200')
 $lazArgs = @($lrs)
+$count = 0
 foreach ($c in $classes) {
-  $png = Join-Path $icons "$c.png"
-  if (-not (Test-Path $png)) { throw "missing PNG: $png" }
-  $lazArgs += ('{0}={1}' -f $png, $c)
+  foreach ($sfx in $suffixes) {
+    $name = "$c$sfx"
+    $png = Join-Path $icons "$name.png"
+    if (-not (Test-Path $png)) { throw "missing PNG: $png" }
+    $lazArgs += ('{0}={1}' -f $png, $name)
+    $count++
+  }
 }
 & $lazres @lazArgs
 if ($LASTEXITCODE -ne 0) { throw 'lazres failed' }
-Write-Host "Packed $($classes.Count) icons into $lrs"
+Write-Host "Packed $count icon resources ($($classes.Count) classes x $($suffixes.Count) sizes) into $lrs"

@@ -1,8 +1,14 @@
 # Palette icon generator
 
-Draws the 20 TyControls component-palette icons (24x24 RGBA, line-glyph + `#3B82F6` accent)
-and packs them into `designtime/tycontrols_icons.lrs`, which `tyControls.Design.pas`
-includes via `{$I}` before `RegisterComponents`. The IDE shows each by class name.
+Draws the 20 TyControls component-palette icons (line-glyph + `#3B82F6` accent) and packs
+them into `designtime/tycontrols_icons.lrs`, which `tyControls.Design.pas` includes via
+`{$I}` before `RegisterComponents`. The IDE shows each by class name.
+
+Each icon is rendered at **three native sizes** for HiDPI: `<Class>` = 24px (100%),
+`<Class>_150` = 36px (150%), `<Class>_200` = 48px (200%). The IDE picks the variant
+matching the display scaling, so palette icons stay crisp instead of upscaling 24px.
+Geometry is authored in a 24-unit space and scaled per size — every variant is drawn at
+native resolution, never resampled.
 
 ## Regenerate
 

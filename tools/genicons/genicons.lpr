@@ -4,44 +4,56 @@ uses
   Interfaces, SysUtils, BGRABitmap, BGRABitmapTypes;
 
 const
-  ST = 1.7;
+  ST = 1.7;   // stroke width at the 24px base; scales with GScale
 
 var
   Ink, Acc, Faint: TBGRAPixel;
+  { Coordinates in the glyph routines are authored in a 24-unit space. GScale maps
+    that to the actual output size (1.0 -> 24px, 1.5 -> 36px, 2.0 -> 48px) so each
+    HiDPI variant is RENDERED crisply at native size, not upscaled from 24px. }
+  GScale: single = 1.0;
+
+function ScalePts(const pts: array of TPointF): ArrayOfTPointF;
+var i: Integer;
+begin
+  SetLength(Result, Length(pts));
+  for i := 0 to High(pts) do
+    Result[i] := PointF(pts[i].x * GScale, pts[i].y * GScale);
+end;
 
 procedure Line(b: TBGRABitmap; x1, y1, x2, y2: single; c: TBGRAPixel; w: single = ST);
 begin
-  b.DrawLineAntialias(x1, y1, x2, y2, c, w);
+  b.DrawLineAntialias(x1*GScale, y1*GScale, x2*GScale, y2*GScale, c, w*GScale);
 end;
 
 procedure RRect(b: TBGRABitmap; l, t, r, bot, rad: single; c: TBGRAPixel; w: single = ST);
 begin
-  b.RoundRectAntialias(l, t, r, bot, rad, rad, c, w);
+  b.RoundRectAntialias(l*GScale, t*GScale, r*GScale, bot*GScale, rad*GScale, rad*GScale, c, w*GScale);
 end;
 
 procedure FillRRect(b: TBGRABitmap; l, t, r, bot, rad: single; c: TBGRAPixel);
 begin
-  b.FillRoundRectAntialias(l, t, r, bot, rad, rad, c);
+  b.FillRoundRectAntialias(l*GScale, t*GScale, r*GScale, bot*GScale, rad*GScale, rad*GScale, c);
 end;
 
 procedure Circ(b: TBGRABitmap; cx, cy, rad: single; c: TBGRAPixel; w: single = ST);
 begin
-  b.EllipseAntialias(cx, cy, rad, rad, c, w);
+  b.EllipseAntialias(cx*GScale, cy*GScale, rad*GScale, rad*GScale, c, w*GScale);
 end;
 
 procedure FillCirc(b: TBGRABitmap; cx, cy, rad: single; c: TBGRAPixel);
 begin
-  b.FillEllipseAntialias(cx, cy, rad, rad, c);
+  b.FillEllipseAntialias(cx*GScale, cy*GScale, rad*GScale, rad*GScale, c);
 end;
 
 procedure PolyL(b: TBGRABitmap; const pts: array of TPointF; c: TBGRAPixel; w: single = ST);
 begin
-  b.DrawPolyLineAntialias(pts, c, w);
+  b.DrawPolyLineAntialias(ScalePts(pts), c, w*GScale);
 end;
 
 procedure FillPolyG(b: TBGRABitmap; const pts: array of TPointF; c: TBGRAPixel);
 begin
-  b.FillPolyAntialias(pts, c);
+  b.FillPolyAntialias(ScalePts(pts), c);
 end;
 
 procedure GButton(b: TBGRABitmap); begin RRect(b,3,7,21,17,3,Ink); Line(b,8,12,16,12,Acc,2.4); end;
@@ -93,9 +105,16 @@ const
     (Name:'TTyPopupMenu';       Draw:@GPopupMenu)
   );
 
+const
+  { Lazarus HiDPI palette convention: base name = 100% (24px); '_150' = 150% (36px);
+    '_200' = 200% (48px). The IDE picks the variant matching the display scaling, so
+    no upscaling/blur. (Verified against stock components/PascalScript/pascalscript.lrs.) }
+  SizePx:     array[0..2] of Integer = (24, 36, 48);
+  SizeSuffix: array[0..2] of string  = ('', '_150', '_200');
+
 var
   OutDir: string;
-  i: Integer;
+  i, s, total: Integer;
   bmp: TBGRABitmap;
 begin
   Ink   := BGRA($3C, $3C, $3C, 255);
@@ -106,20 +125,26 @@ begin
   OutDir := IncludeTrailingPathDelimiter(OutDir);
   ForceDirectories(OutDir);
 
-  for i := 0 to High(Glyphs) do
+  total := 0;
+  for s := 0 to High(SizePx) do
   begin
-    bmp := TBGRABitmap.Create(24, 24);   // fully transparent
-    try
-      Glyphs[i].Draw(bmp);
-      if (bmp.Width <> 24) or (bmp.Height <> 24) then
-      begin
-        writeln('ERROR: ', Glyphs[i].Name, ' is not 24x24');
-        Halt(2);
+    GScale := SizePx[s] / 24.0;
+    for i := 0 to High(Glyphs) do
+    begin
+      bmp := TBGRABitmap.Create(SizePx[s], SizePx[s]);   // fully transparent
+      try
+        Glyphs[i].Draw(bmp);
+        if (bmp.Width <> SizePx[s]) or (bmp.Height <> SizePx[s]) then
+        begin
+          writeln('ERROR: ', Glyphs[i].Name, ' wrong size');
+          Halt(2);
+        end;
+        bmp.SaveToFile(OutDir + Glyphs[i].Name + SizeSuffix[s] + '.png');
+        Inc(total);
+      finally
+        bmp.Free;
       end;
-      bmp.SaveToFile(OutDir + Glyphs[i].Name + '.png');
-    finally
-      bmp.Free;
     end;
   end;
-  writeln('Wrote ', Length(Glyphs), ' icons to ', OutDir);
+  writeln('Wrote ', total, ' icons (', Length(Glyphs), ' x ', Length(SizePx), ' sizes) to ', OutDir);
 end.
