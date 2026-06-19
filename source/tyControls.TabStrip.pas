@@ -64,7 +64,6 @@ type
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
 
-    procedure SetTabIndex(AValue: Integer);
     procedure SetTabHeight(AValue: Integer);
     procedure SetTabsClosable(AValue: Boolean);
     procedure RebuildLayout(APPI: Integer);
@@ -93,6 +92,10 @@ type
     function GetTabCount: Integer; virtual; abstract;
     function GetTabCaption(AIndex: Integer): string; virtual; abstract;
     function GetTabClosableAt(AIndex: Integer): Boolean; virtual;
+    { Protected so a subclass can publish the selection under its own name
+      (TTyPageControl: ActivePageIndex). Clamps against GetTabCount, fires
+      OnChanging/OnChange, calls DoSelectTab. }
+    procedure SetTabIndex(AValue: Integer);
     procedure DoSelectTab(AIndex: Integer); virtual;
     procedure DoReorderTabs(AFromIndex, AToIndex: Integer); virtual;
     procedure RemoveTabData(AIndex: Integer); virtual;

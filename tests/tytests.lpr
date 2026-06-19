@@ -39,7 +39,9 @@ uses
   test.themelint,
   test.menu,
   test.builtinthemes,
-  test.paletteicons;
+  test.paletteicons,
+  test.tabsheet,
+  test.pagecontrol;
 
 type
   TTyTestRunner = class(TTestRunner)
