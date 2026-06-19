@@ -34,6 +34,7 @@ type
     procedure TestEraseRectMakesTransparent;
     procedure TestPerCornerTopRoundBottomSquare;
     procedure TestFallbackFontNameApplied;
+    procedure TestMeasureTextAndUnscale;
   end;
 
 implementation
@@ -309,6 +310,16 @@ begin
     bmp.Free;
     TyFallbackFontName := saved;
   end;
+end;
+
+procedure TPainterTest.TestMeasureTextAndUnscale;
+var sz: TSize;
+begin
+  MakePainter(60, 30, 96);   // FreePainter runs in TearDown
+  sz := FPainter.MeasureText('99+', '', 9, 400);
+  AssertTrue('measured width > 0', sz.cx > 0);
+  AssertTrue('measured height > 0', sz.cy > 0);
+  AssertEquals('unscale identity at 96ppi', 12, FPainter.Unscale(FPainter.Scale(12)));
 end;
 
 initialization
