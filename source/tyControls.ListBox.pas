@@ -690,9 +690,10 @@ var
   R, ContentRect, RowRect: TRect;
   SBWidth, SH, i, LastRow: Integer;
   ItemStates: TTyStateSet;
-  capR, fillTop, fillBottom: Integer;
+  capR, fillTop, fillBottom, bw: Integer;
   contentFills: Boolean;
   rowCorners: TTyCorners;
+  savedClip: TRect;
 begin
   // Keep scrollbar in sync (cheap; catches external Items.Add calls)
   UpdateScrollBar;
@@ -722,6 +723,15 @@ begin
     LastRow := FTopIndex + VisibleRows - 1;
     if LastRow >= FItems.Count - 1 then
       LastRow := FItems.Count - 1;
+
+    // HARD-clip the rows to the listbox INTERIOR (inside the border). The border is drawn
+    // ONCE by DrawFrame over the listbox background, so its anti-aliased edge never blends
+    // with the variably-coloured row fills underneath (which made the border look a different
+    // shade at a hovered/selected row). The clip also stops a row fill's AA from spreading
+    // onto the border. Restored after the loop.
+    bw := P.Scale(BoxStyle.BorderWidth);
+    savedClip := P.Bitmap.ClipRect;
+    P.Bitmap.ClipRect := Rect(R.Left + bw, R.Top + bw, R.Right - bw, R.Bottom - bw);
 
     for i := FTopIndex to LastRow do
     begin
@@ -754,22 +764,28 @@ begin
       // reaching the edge never covers it (no overlap). Middle rows are square.
       if tpBackground in RowStyle.Present then
       begin
-        capR := BoxStyle.BorderRadius;
+        // Fill the INTERIOR width (flush to the inner border, minus the scrollbar). The
+        // first/last rows extend to the inner border edge and cap their outer corners
+        // CONCENTRIC with the rounded border (radius - border width) so they nest exactly;
+        // only when the list FILLS the box does the last item cap+extend its bottom (else a
+        // short list's last row would bleed into the empty space below). Middle rows square.
+        capR := BoxStyle.BorderRadius - BoxStyle.BorderWidth;
+        if capR < 0 then capR := 0;
         contentFills := (FItems.Count * SH) >= (ContentRect.Bottom - ContentRect.Top);
         fillTop := RowRect.Top;
         fillBottom := RowRect.Bottom;
         rowCorners := TyCorners(0, 0, 0, 0);
         if i = 0 then
         begin
-          fillTop := R.Top;
+          fillTop := R.Top + bw;
           rowCorners.TL := capR; rowCorners.TR := capR;
         end;
         if (i = FItems.Count - 1) and contentFills then
         begin
-          fillBottom := R.Bottom;
+          fillBottom := R.Bottom - bw;
           rowCorners.BR := capR; rowCorners.BL := capR;
         end;
-        P.FillBackground(Rect(R.Left, fillTop, R.Right - SBWidth, fillBottom),
+        P.FillBackground(Rect(R.Left + bw, fillTop, R.Right - bw - SBWidth, fillBottom),
           RowStyle.Background, rowCorners);
       end;
 
@@ -786,12 +802,7 @@ begin
       );
     end;
 
-    // Re-stroke the listbox border ON TOP of the rows so a full-width highlight reaching the
-    // interior edge never covers the border (drawn last). Uniform radius (the list uses one).
-    if (tpBorderColor in BoxStyle.Present) and (BoxStyle.BorderWidth > 0)
-       and not ((tpBorderStyle in BoxStyle.Present) and (BoxStyle.BorderStyle = tbsNone)) then
-      P.StrokeBorder(R, TyUniformCorners(BoxStyle.BorderRadius),
-        BoxStyle.BorderWidth, BoxStyle.BorderColor);
+    P.Bitmap.ClipRect := savedClip;   // restore (rows were clipped to the interior)
 
     P.EndPaint;
   finally
