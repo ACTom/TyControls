@@ -15,10 +15,10 @@ implementation
 const
   // Must stay in sync with RegisterComponents in designtime/tyControls.Design.pas and the
   // $classes list in scripts/gen-icons.ps1 (which enforces RegisterComponents <-> $classes).
-  CClasses: array[0..19] of string = (
+  CClasses: array[0..20] of string = (
     'TTyButton','TTyLabel','TTyEdit','TTyCheckBox','TTyRadioButton',
     'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyListBox',
-    'TTyTabControl','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
+    'TTyPageControl','TTyTabSheet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
     'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu');
 
 procedure TPaletteIconTest.TestAllTwentyResourcesPresentAndPng;

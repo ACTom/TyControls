@@ -67,6 +67,7 @@ procedure GTrack(b: TBGRABitmap); begin Line(b,3,12,21,12,Ink); Line(b,6,10.4,6,
 procedure GProgress(b: TBGRABitmap); begin RRect(b,3,9,21,15,3,Ink); FillRRect(b,3,9,13,15,3,Acc); end;
 procedure GListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,6,9,18,9,Acc,2); Line(b,6,13,18,13,Ink); Line(b,6,17,15,17,Ink); end;
 procedure GTabControl(b: TBGRABitmap); begin FillRRect(b,3.5,5,11.5,10.5,1.5,Acc); RRect(b,12.5,6.2,20,10.5,1.5,Ink); RRect(b,3,10,21,20,2,Ink); end;
+procedure GTabSheet(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Acc,2); end;
 procedure GGroupBox(b: TBGRABitmap); begin RRect(b,4,7,20,20,2,Ink); Line(b,6.5,7,11.5,7,Acc,2.6); end;
 procedure GPanel(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); end;
 procedure GScrollBar(b: TBGRABitmap); begin RRect(b,9,3,15,21,3,Ink); PolyL(b,[PointF(10.5,7),PointF(12,5.5),PointF(13.5,7)],Ink); PolyL(b,[PointF(10.5,17),PointF(12,18.5),PointF(13.5,17)],Ink); FillRRect(b,9.5,10,14.5,15,1.5,Acc); end;
@@ -82,7 +83,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..19] of TGlyph = (
+  Glyphs: array[0..20] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -93,7 +94,8 @@ const
     (Name:'TTyTrackBar';        Draw:@GTrack),
     (Name:'TTyProgressBar';     Draw:@GProgress),
     (Name:'TTyListBox';         Draw:@GListBox),
-    (Name:'TTyTabControl';      Draw:@GTabControl),
+    (Name:'TTyPageControl';     Draw:@GTabControl),
+    (Name:'TTyTabSheet';        Draw:@GTabSheet),
     (Name:'TTyGroupBox';        Draw:@GGroupBox),
     (Name:'TTyPanel';           Draw:@GPanel),
     (Name:'TTyScrollBar';       Draw:@GScrollBar),

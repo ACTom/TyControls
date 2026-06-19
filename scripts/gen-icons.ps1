@@ -9,7 +9,7 @@ $lazres = 'C:\lazarus\tools\lazres.exe'
 $classes = @(
   'TTyButton','TTyLabel','TTyEdit','TTyCheckBox','TTyRadioButton',
   'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyListBox',
-  'TTyTabControl','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
+  'TTyPageControl','TTyTabSheet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
   'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu'
 )
 
