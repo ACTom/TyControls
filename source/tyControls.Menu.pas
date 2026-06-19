@@ -144,6 +144,7 @@ type
     FController: TTyStyleController;
     FCloseTick: QWord;        // tick at last close; reopen guard (ComboBox idiom)
     FOnNavigateAdjacent: TTyMenuAdjacentEvent;
+    FOnClose: TNotifyEvent;   // fired by CloseAll so a host (bar) can reset its open state
     procedure EnsureForm;
     procedure HandleActivateRow(Sender: TObject; AIndex: Integer);
     procedure HandleOpenSubmenu(Sender: TObject; AIndex: Integer);
@@ -152,6 +153,7 @@ type
     procedure HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
     procedure FormDeactivate(Sender: TObject);
     procedure DeferredDismiss(Data: PtrInt);
+    procedure DeferredForceClose(Data: PtrInt);
   protected
     { Pure placement: turn an anchor rect (screen coords) + the popup's size into a
       screen rect, flipping ABOVE the anchor when there is no room below and (for a
@@ -196,6 +198,10 @@ type
       wires it and rotates the open dropdown to the adjacent top item. }
     property OnNavigateAdjacent: TTyMenuAdjacentEvent
       read FOnNavigateAdjacent write FOnNavigateAdjacent;
+    { Fired whenever this level closes (CloseAll). A host (TTyMenuBar) wires it on the
+      root dropdown to clear its open-index when the cascade collapses — whether from an
+      activation, a focus-loss dismiss, or Esc. }
+    property OnClose: TNotifyEvent read FOnClose write FOnClose;
   end;
 
   { Themed application menu bar: renders an associated LCL TMainMenu's visible
@@ -224,6 +230,7 @@ type
     { Index of the AIndex-th VISIBLE top item back into Menu.Items, or -1. }
     function VisibleTopItem(AIndex: Integer): TMenuItem;
     procedure HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
+    procedure HandlePopupClosed(Sender: TObject);
     procedure ClosePopup;
     { Open (or re-open) the dropdown for top cell AIndex, anchored to its cell rect. }
     procedure OpenTop(AIndex: Integer);
@@ -939,6 +946,12 @@ begin
     FForm.OnDeactivate := @FormDeactivate;
   end;
   FCloseTick := GetTickCount64;
+  if Assigned(FOnClose) then FOnClose(Self);   // let a host (bar) reset its open state
+end;
+
+procedure TTyMenuPopup.DeferredForceClose(Data: PtrInt);
+begin
+  CloseAll;   // unconditional cascade collapse after a leaf activation
 end;
 
 function TTyMenuPopup.IsOpen: Boolean;
@@ -949,6 +962,7 @@ end;
 procedure TTyMenuPopup.DoActivateRow(AIndex: Integer);
 var
   rows: TTyMenuRowArray;
+  rootPopup: TTyMenuPopup;
 begin
   rows := TyBuildMenuRows(FRoot);
   if (AIndex < 0) or (AIndex > High(rows)) then Exit;
@@ -959,9 +973,18 @@ begin
     DoOpenSubmenu(AIndex);
     Exit;
   end;
-  CloseAll;
+  CloseAll;   // close THIS level immediately (instant feedback for the clicked level)
   if rows[AIndex].Item <> nil then
     rows[AIndex].Item.Click;   // fire the source item's OnClick (the activation)
+  // Collapse the REST of the cascade (the parent dropdown(s) + reset the bar). Activating a
+  // leaf in a submenu must dismiss every level above it — not just this one. Defer it and run
+  // on the ROOT so we never free a popup from inside its own activation handler; the root's
+  // CloseAll fires OnClose so the bar clears its open-index.
+  rootPopup := Self;
+  while (rootPopup.Owner <> nil) and (rootPopup.Owner is TTyMenuPopup) do
+    rootPopup := TTyMenuPopup(rootPopup.Owner);
+  if rootPopup <> Self then
+    Application.QueueAsyncCall(@rootPopup.DeferredForceClose, 0);
 end;
 
 procedure TTyMenuPopup.DoOpenSubmenu(AIndex: Integer);
@@ -1262,6 +1285,15 @@ begin
   Invalidate;
 end;
 
+procedure TTyMenuBar.HandlePopupClosed(Sender: TObject);
+begin
+  // The dropdown cascade collapsed (leaf activation / focus-loss dismiss / Esc). Clear the
+  // open-index and repaint the active cell. Do NOT free FPopup — this fires from inside the
+  // popup's own CloseAll, and the bar keeps the (now hidden) host for reuse.
+  FOpenIndex := -1;
+  Invalidate;
+end;
+
 procedure TTyMenuBar.OpenTop(AIndex: Integer);
 var
   mi: TMenuItem;
@@ -1277,6 +1309,7 @@ begin
   begin
     FPopup := TTyMenuPopup.Create(Self);
     FPopup.OnNavigateAdjacent := @HandleNavigateAdjacent;
+    FPopup.OnClose := @HandlePopupClosed;
   end;
   FPopup.Controller := ActiveController;
   FPopup.SetRoot(mi);
