@@ -52,6 +52,7 @@ type
     procedure TestDownDrivesSelectedState;
     procedure TestHoverBlendUsesRestingState;
     procedure TestBadgeDisplayRules;
+    procedure TestBadgeRendersAtCorner;
   end;
 implementation
 
@@ -398,6 +399,52 @@ begin
     AssertTrue('event shows >=3', B.CallResolveBadge(txt));
     AssertEquals('7 text', '7', txt);
   finally B.Free; end;
+end;
+
+procedure TButtonTest.TestBadgeRendersAtCorner;
+  // True if any pixel in the bottom-right region is accent blue (#3B82F6-ish:
+  // strong blue, weak red) — robust to exact glyph metrics / badge size.
+  function AccentBlueInCorner(R: TBGRABitmap): Boolean;
+  var ix, iy: Integer; px: TBGRAPixel;
+  begin
+    Result := False;
+    for iy := 22 to 39 do
+      for ix := 78 to 99 do
+      begin
+        px := R.GetPixel(ix, iy);
+        if (px.blue > 200) and (px.red < 128) then Exit(True);
+      end;
+  end;
+var
+  B: TTyButtonAccess; Bmp: TBitmap; Reread: TBGRABitmap;
+begin
+  // 内置 TyBadge 背景 = var(--accent) = #3B82F6。右下角应出现 accent 蓝;关掉后没有。
+  Bmp := TBitmap.Create;
+  B := TTyButtonAccess.Create(nil);
+  try
+    B.Caption := '';
+    B.Font.PixelsPerInch := 96;
+    B.ShowBadge := True;
+    B.BadgeValue := 2;
+    B.BadgePosition := bpBottomRight;
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(100, 40);
+    Bmp.Canvas.Brush.Color := clBlack; Bmp.Canvas.FillRect(0, 0, 100, 40);
+    B.RenderTo(Bmp.Canvas, Rect(0, 0, 100, 40), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      AssertTrue('badge (accent blue) drawn in bottom-right', AccentBlueInCorner(Reread));
+    finally Reread.Free; end;
+
+    // 关掉角标:右下角不应再有 accent 蓝(默认按钮底为白,红通道高,被排除)。
+    B.ShowBadge := False;
+    Bmp.Canvas.Brush.Color := clBlack; Bmp.Canvas.FillRect(0, 0, 100, 40);
+    B.RenderTo(Bmp.Canvas, Rect(0, 0, 100, 40), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      AssertFalse('no badge -> no accent blue in region', AccentBlueInCorner(Reread));
+    finally Reread.Free; end;
+  finally B.Free; Bmp.Free; end;
 end;
 
 initialization

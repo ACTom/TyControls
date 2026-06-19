@@ -263,8 +263,46 @@ begin
 end;
 
 procedure TTyButton.DrawBadge(P: TTyPainter; const AFullRect: TRect);
+var
+  S: TTyStyleSet;
+  txt: string;
+  fs, fw, padX, padY, tw, bh, bw, inset, x, y, half, themedR, rLogical: Integer;
+  szH, szW: TSize;
+  badgeRect: TRect;
 begin
-  // Real rendering lands in the next task; the decision logic is exercised now.
+  if not ResolveBadgeDisplay(txt) then Exit;
+  S := ActiveController.Model.ResolveStyle('TyBadge', '', []);
+  if not (tpBackground in S.Present) then Exit;   // no theme key -> nothing to draw
+  fs := ResolveFontSize(S);
+  fw := S.FontWeight;
+  // Height from a stable reference glyph ('0'); width from the actual text.
+  szH := P.MeasureText('0', S.FontName, fs, fw);
+  szW := P.MeasureText(txt, S.FontName, fs, fw);
+  padX := P.Scale(S.Padding.Left);
+  padY := P.Scale(S.Padding.Top);
+  bh := szH.cy + 2 * padY;
+  if bh < P.Scale(8) then bh := P.Scale(8);    // degenerate-measure floor: stay visible
+  tw := szW.cx;
+  bw := tw + 2 * padX;
+  if bw < bh then bw := bh;                     // single glyph -> near-circle
+  inset := P.Scale(2);
+  case FBadgePosition of
+    bpTopLeft:     begin x := AFullRect.Left  + inset;       y := AFullRect.Top    + inset;       end;
+    bpTopRight:    begin x := AFullRect.Right - inset - bw;  y := AFullRect.Top    + inset;       end;
+    bpBottomLeft:  begin x := AFullRect.Left  + inset;       y := AFullRect.Bottom - inset - bh;  end;
+    bpBottomRight: begin x := AFullRect.Right - inset - bw;  y := AFullRect.Bottom - inset - bh;  end;
+  else
+    begin x := AFullRect.Right - inset - bw; y := AFullRect.Bottom - inset - bh; end;
+  end;
+  badgeRect := Rect(x, y, x + bw, y + bh);
+  // Pill by default (half-height radius); honour a smaller themed radius if set.
+  // FillBackground takes a LOGICAL radius and Scales it, so unscale the device half.
+  half := P.Unscale(bh div 2);
+  themedR := TyEffectiveCorners(S).TL;
+  if themedR <= 0 then rLogical := half
+  else rLogical := TyClampRadius(themedR, half);
+  P.FillBackground(badgeRect, S.Background, TyUniformCorners(rLogical));
+  P.DrawText(badgeRect, txt, S.FontName, fs, fw, S.TextColor, taCenter, tlCenter, False);
 end;
 
 function TTyButton.WantsDialogKey(ACharCode: Word): Boolean;
@@ -385,7 +423,7 @@ procedure TTyButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer
 var
   P: TTyPainter;
   S, NormalS, HoverS: TTyStyleSet;
-  ContentRect: TRect;
+  ContentRect, BadgeArea: TRect;
   Eased: Single;
 begin
   P := TTyPainter.Create;
@@ -409,6 +447,7 @@ begin
     end;
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     DrawFrame(P, ContentRect, S);
+    BadgeArea := ContentRect;   // full client rect for badge positioning (pre-padding)
     // Inset content by all four padding sides
     ContentRect := Rect(
       ContentRect.Left   + P.Scale(S.Padding.Left),
@@ -418,6 +457,7 @@ begin
     );
     P.DrawText(ContentRect, Caption, S.FontName, S.FontSize, S.FontWeight,
       S.TextColor, taCenter, tlCenter, True);
+    DrawBadge(P, BadgeArea);
     P.EndPaint;
   finally
     P.Free;
