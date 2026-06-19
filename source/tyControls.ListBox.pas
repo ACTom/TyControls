@@ -729,12 +729,16 @@ begin
     // UNIFORM colour: the row fills never touch its anti-aliased inner edge (which otherwise
     // picked up the row colour at a hovered/selected row, tinting the border/ring there).
     // insetLogical = the chrome's inner edge + 1px AA clearance; 0 when there is no chrome.
-    insetLogical := 0;
-    if BoxStyle.BorderWidth > 0 then
-      insetLogical := BoxStyle.BorderWidth + 1;
+    // The border and the focus ring (StrokeBorder) are both drawn INSIDE the edge: the border
+    // occupies [Left, Left+BorderWidth] and the ring [Left+OutlineOffset, +OutlineWidth]. The
+    // chrome's inner edge is therefore the LARGER of those (full widths, not half). Inset the
+    // rows one logical px PAST it so a thin background gap sits between the chrome and the fill
+    // and the chrome keeps a single uniform colour. No chrome => inset 0 (rows fill fully).
+    insetLogical := BoxStyle.BorderWidth;
     if (tpOutline in BoxStyle.Present) and (BoxStyle.OutlineWidth > 0) then
-      if BoxStyle.OutlineOffset + (BoxStyle.OutlineWidth + 1) div 2 + 1 > insetLogical then
-        insetLogical := BoxStyle.OutlineOffset + (BoxStyle.OutlineWidth + 1) div 2 + 1;
+      if BoxStyle.OutlineOffset + BoxStyle.OutlineWidth > insetLogical then
+        insetLogical := BoxStyle.OutlineOffset + BoxStyle.OutlineWidth;
+    if insetLogical > 0 then Inc(insetLogical);
     inset := P.Scale(insetLogical);
     savedClip := P.Bitmap.ClipRect;
     P.Bitmap.ClipRect := Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset);
