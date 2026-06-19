@@ -151,6 +151,7 @@ type
     procedure HandleCloseChild(Sender: TObject);
     procedure HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
     procedure FormDeactivate(Sender: TObject);
+    procedure DeferredDismiss(Data: PtrInt);
   protected
     { Pure placement: turn an anchor rect (screen coords) + the popup's size into a
       screen rect, flipping ABOVE the anchor when there is no room below and (for a
@@ -1041,7 +1042,36 @@ begin
 end;
 
 procedure TTyMenuPopup.FormDeactivate(Sender: TObject);
+var
+  rootPopup: TTyMenuPopup;
 begin
+  // When we open a submenu, focus moves to the CHILD popup within our own cascade, which
+  // deactivates us — that is NOT a dismiss, and collapsing here would free the child while
+  // it is still being shown (AV at FForm.Show). So don't decide synchronously: DEFER the
+  // dismiss to the next message cycle (by then the active window has settled and we can tell
+  // a cascade hand-off from a real focus loss), and run it on the ROOT popup so CloseAll
+  // tears down the children without freeing a form from inside its own deactivate handler.
+  rootPopup := Self;
+  while (rootPopup.Owner <> nil) and (rootPopup.Owner is TTyMenuPopup) do
+    rootPopup := TTyMenuPopup(rootPopup.Owner);
+  Application.QueueAsyncCall(@rootPopup.DeferredDismiss, 0);
+end;
+
+procedure TTyMenuPopup.DeferredDismiss(Data: PtrInt);
+var
+  p: TTyMenuPopup;
+  af: TCustomForm;
+begin
+  // Runs on the ROOT after a deactivate has settled. If the active window is still any popup
+  // in our cascade (we just moved between levels / opened a submenu), it is not a dismiss —
+  // stay open. Otherwise focus genuinely left the menu, so collapse the whole cascade.
+  af := Screen.ActiveForm;
+  p := Self;
+  while p <> nil do
+  begin
+    if (p.FForm <> nil) and (p.FForm = af) then Exit;
+    p := p.FChild;
+  end;
   CloseAll;
 end;
 
