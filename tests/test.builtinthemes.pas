@@ -29,6 +29,12 @@ type
     procedure TestDraculaPalette;
     procedure TestNordPalette;
   end;
+
+  TControllerThemeNameTest = class(TTestCase)
+  published
+    procedure TestThemeNameLoadsBuiltinCss;
+    procedure TestModePersistsAcrossThemeSwitch;
+  end;
 implementation
 
 procedure TThemeRegistryCssTest.TestRegisterResolveCss;
@@ -175,8 +181,37 @@ begin
   finally m.Free; end;
 end;
 
+procedure TControllerThemeNameTest.TestThemeNameLoadsBuiltinCss;
+var c: TTyStyleController; s: TTyStyleSet;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := 'gruvbox';
+    c.Mode := 'dark';
+    s := c.Model.ResolveStyle('TyButton', 'primary', []);   // gruvbox dark accent #FE8019
+    AssertEquals('gruvbox dark accent R', $FE, TyRedOf(s.Background.Color));
+    AssertEquals('gruvbox dark accent G', $80, TyGreenOf(s.Background.Color));
+  finally c.Free; end;
+end;
+
+procedure TControllerThemeNameTest.TestModePersistsAcrossThemeSwitch;
+var c: TTyStyleController;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    c.Mode := 'dark';
+    c.ThemeName := 'nord';
+    AssertEquals('mode persists after theme switch', 'dark', c.Mode);
+    AssertEquals('nord dark surface R', $2E,
+      TyRedOf(c.Model.ResolveStyle('TyButton', '', []).Background.Color));
+  finally c.Free; end;
+end;
+
 initialization
   RegisterTest(TThemeRegistryCssTest);
   RegisterTest(TBuiltinSyncTest);
   RegisterTest(TBuiltinThemesTest);
+  RegisterTest(TControllerThemeNameTest);
 end.

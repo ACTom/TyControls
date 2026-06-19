@@ -168,7 +168,7 @@ end;
 
 procedure TTyStyleController.SetThemeName(const AValue: string);
 var
-  src: string;
+  src, css: string;
 begin
   if FThemeName = AValue then Exit;
   FThemeName := AValue;
@@ -176,8 +176,15 @@ begin
   // Switching to a named theme drops the file source: disarm the hot-reload watch
   // (nothing to watch — FThemeFile is now empty).
   UpdateWatch;
-  if (AValue <> '') and TyResolveTheme(AValue, src) and (src <> '')
-     and FileExists(src) then
+  if AValue = '' then Exit;
+  if TyResolveThemeCss(AValue, css) then
+  begin
+    // Compile-in built-in theme (registered as an inline CSS source): REPLACE layer-1
+    // from the string + bump ThemeVersion. No file -> no hot-reload watch.
+    FModel.LoadFromCss(css);
+    Changed;
+  end
+  else if TyResolveTheme(AValue, src) and (src <> '') and FileExists(src) then
   begin
     // §3.8 switch = REPLACE layer-1 (LoadFromFile uses AReplace=True and bumps
     // ThemeVersion). Never additive: switching themes must not stack residual rules.
