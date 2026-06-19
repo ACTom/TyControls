@@ -27,6 +27,16 @@ type
     ['{A1B2C3D4-0001-0002-0003-000000000003}']
   end;
 
+  { Implemented by TTyForm: lets a child resolve the form's THEMED background colour
+    (the TyForm token) instead of the un-themed LCL Color. ApplyChromeTheme only sets
+    the LCL Color at RUNTIME, so without this a child's corner-gaps / transparent body
+    paint the dark default Color in the DESIGNER. Declared here so Base needn't `uses`
+    the Form unit (same decoupling as ITyGlassHost). True + a solid colour, or False. }
+  ITyThemedBackground = interface
+    ['{A1B2C3D4-0001-0002-0003-000000000004}']
+    function ThemedBgColor(out AColor: TTyColor): Boolean;
+  end;
+
   TTyGraphicControl = class(TGraphicControl, ITyStyleable)
   private
     FStyleClass: string;
@@ -182,6 +192,14 @@ type
   (custom-drawn text controls have no system caret for the IME to follow). No-op
   off Windows or when the control has no allocated handle. }
 procedure TySetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
+
+{ Resolve the SOLID background a windowed child should composite onto (it does not
+  inherit its parent's painted bg, so corner-gaps / transparent fills would otherwise
+  show the child's own window colour). Styleable parent -> its themed CurrentStyle;
+  a TTyForm parent -> its themed TyForm bg (via ITyThemedBackground, correct at design
+  time too); otherwise the parent's raw LCL Color. False only when there is no parent.
+  Exposed for tests. }
+function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
 
 implementation
 
@@ -356,6 +374,7 @@ function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
 var
   st: TTyStyleSet;
   r, g, b: Byte;
+  tb: ITyThemedBackground;
 begin
   Result := False;
   if (AChild = nil) or (AChild.Parent = nil) then Exit;
@@ -368,6 +387,10 @@ begin
       tfkLinearGradient: begin AColor := st.Background.GradTo; Result := True; end; // representative
     end;
   end
+  // A TTyForm parent: use its THEMED TyForm bg (correct at design time too — the LCL
+  // Color is only themed by ApplyChromeTheme at runtime). Same value as Color at runtime.
+  else if Supports(AChild.Parent, ITyThemedBackground, tb) and tb.ThemedBgColor(AColor) then
+    Result := True
   else
   begin
     RedGreenBlue(ColorToRGB(AChild.Parent.Color), r, g, b);

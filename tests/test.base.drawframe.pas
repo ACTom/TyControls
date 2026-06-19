@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
-  tyControls.Types, tyControls.Base, tyControls.Painter;
+  tyControls.Types, tyControls.Base, tyControls.Painter,
+  tyControls.Form, tyControls.Button;
 type
   TDrawFrameProbe = class(TTyCustomControl)
   protected
@@ -20,6 +21,7 @@ type
     procedure TestBorderStyleNoneSuppressesBorder;
     procedure TestPerCornerBackgroundViaDrawFrame;
     procedure TestFocusRingDrawnWhenOutlinePresent;
+    procedure TestFormChildResolvesThemedParentBg;
   end;
 implementation
 
@@ -305,6 +307,34 @@ begin
       AssertTrue('no ring: green>128 (white)', px.green > 128);
     finally reread.Free; end;
   finally painter.Free; probe.Free; bmp.Free; end;
+end;
+
+procedure TDrawFrameTest.TestFormChildResolvesThemedParentBg;
+{ A control parented to a TTyForm must resolve its parent background from the form's
+  THEMED TyForm bg (works at design time too, via the built-in default theme), NOT from
+  the raw LCL form.Color (which is only themed by ApplyChromeTheme at runtime). Without
+  this, designer/un-themed forms paint dark corner-gaps behind every child. }
+var
+  form: TTyForm;
+  btn: TTyButton;
+  c: TTyColor;
+  ok: Boolean;
+begin
+  form := TTyForm.CreateNew(nil);
+  try
+    form.Color := clRed;          // a distinct raw Color, different from any themed bg
+    btn := TTyButton.Create(form);
+    btn.Parent := form;
+    c := 0;
+    ok := TyResolveParentBg(btn, c);
+    AssertTrue('resolved a parent bg', ok);
+    // Built-in default TyForm bg is a light grey (form-bg=surface-hover); its green is high.
+    // The raw clRed would give green=0, so this discriminates themed vs raw form.Color.
+    AssertTrue('themed light parent bg (green high), not raw clRed', TyGreenOf(c) > 200);
+    AssertTrue('not the raw red form.Color', TyRedOf(c) < 250);
+  finally
+    form.Free;
+  end;
 end;
 
 initialization
