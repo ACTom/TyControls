@@ -136,7 +136,7 @@ end;
 2. **条带就是停靠在内容面板之上的 `alTop` 普通控件**，按从上到下的顺序创建，使每个条带先占据自己的条带区、再由 `ContentPanel` 填充剩余区域。**标题栏是条带 0**；ribbon 只是其下方"又一条条带"。条带的创建/对齐顺序是**承重（load-bearing）**的——必须自上而下，每个条带先占据其条带区，再由内容面板填充。
 3. **预留主题 typeKey** `TyRibbon`、`TyRibbonTab`、`TyRibbonGroup`——**这是命名决策，请勿把这三个名字用于其它任何用途**。
 
-未来的 `TTyRibbon` 将是一个与窗框无关（chrome-agnostic）的、基于 `TTyTabControl` 的 `alTop` 控件，通过 `AdjustClientRect` 预留自身的主体区，docked 在内容面板之上、标题栏之下——**不**焊死在标题栏里。它在原生有边框的 `TForm` 上也能工作。
+未来的 `TTyRibbon` 将是一个与窗框无关（chrome-agnostic）的、基于 `TTyCustomTabStrip` 的 `alTop` 控件，通过 `AdjustClientRect` 预留自身的主体区，docked 在内容面板之上、标题栏之下——**不**焊死在标题栏里。它在原生有边框的 `TForm` 上也能工作。
 
 > **增量保证：** 添加条带是未来的纯增量步骤——届时会扩展 `TTyForm` 以**注册条带**，使其堆叠在内容面板之上，并被排除在内容区 reparent 之外。本节记录这一意图，使后续 ribbon 工作保持纯增量、不需返工。
 

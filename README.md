@@ -14,15 +14,15 @@ TyButton:disabled { opacity: 0.5; }
 
 - **三层解耦架构** —— 控件层 / 样式引擎 / 绘图原语(`TTyPainter`),控件不写死任何颜色
 - **CSS-lite 主题语言** —— `:root` 变量、类型/变体/状态选择器、`rgb/rgba/lighten/darken/alpha/mix` 颜色函数、`border` 简写、线性渐变、9-slice 贴图
-- **18 个自绘控件** —— Button、Label、Edit、CheckBox、RadioButton、Panel、ComboBox、ScrollBar、ListBox、ProgressBar、ToggleSwitch、TrackBar、GroupBox、TitleBar、CaptionButton、TabControl、SpinEdit、Memo
+- **自绘控件** —— Button、Label、Edit、CheckBox、RadioButton、Panel、ComboBox、ScrollBar、ListBox、ProgressBar、ToggleSwitch、TrackBar、GroupBox、TitleBar、CaptionButton、PageControl(+TabSheet)、SpinEdit、Memo
 - **文本编辑能力** —— `TTyEdit` 单行(选区 / 剪贴板 / 水平滚动 / 词级导航:Ctrl 或 Alt/Option + 左右键按词跳转、+Shift 扩选、词级删除);`TTyMemo` 多行(回车换行、跨行退格/删除、2D 导航、垂直滚动);`TTySpinEdit` 数值微调
 - **状态切换动画** —— `TTyToggleSwitch` 旋钮在 ON/OFF 间约 120ms 滑动、`TTyButton` 悬停/常态背景色淡入淡出(缓出三次曲线);可逐控件 `AnimationsEnabled` 开启,纯算法内核可步进、可测试
-- **设计期可视标签页** —— `TTyTabControl` 的 `Tabs` 集合(`TTyTabItem.Caption`)随 `.lfm` 序列化,IDE 内置 "Edit Tabs…" 组件编辑器;页签溢出时表头横向滚动(箭头按钮 + 滚轮 + 当前页自动滚入视野),支持拖拽重排序、可关闭 `×`(独立 hover 高亮)
+- **设计期分页容器** —— `TTyPageControl`(对标 `TPageControl`):页是窗体拥有、命名、走标准 `GetChildren` 流式化的 `TTyTabSheet`,可在设计器里直接往每页拖控件并随 `.lfm` 持久化;IDE 组件编辑器提供 Add / Delete / Show Next/Previous Page 动词;页签溢出时表头横向滚动(箭头按钮 + 滚轮 + 当前页自动滚入视野),支持拖拽重排序、可关闭 `×`(独立 hover 高亮)、活动页签头交叉淡入
 - **自绘窗框** —— `TTyFormChrome` 一个组件接管无边框窗口:标题栏、拖动、8 向缩放、最小/最大化/关闭、双击最大化(避让任务栏)
 - **零配置默认皮肤** —— 未加载主题或在设计器中拖放即有合理外观;主题在其之上按 typeKey 覆盖
 - **运行时热切换主题** —— `LoadTheme` 一行代码,全部控件即时重绘
 - **HiDPI** —— 所有长度按 PPI 缩放,矢量绘制天然清晰
-- **设计期集成** —— 组件面板 "TyControls" 分页,StyleClass 属性下拉,TabControl 标签页集合属性编辑器
+- **设计期集成** —— 组件面板 "TyControls" 分页,StyleClass 属性下拉,PageControl 页管理组件编辑器(Add/Delete/Show Page)
 - **260+ 个单元测试**,全套件内存零泄漏(heaptrc 验证)
 
 ## 快速开始
@@ -70,7 +70,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 [CaptionButton](docs/controls/captionbutton.md) ·
 [FormChrome](docs/controls/formchrome.md) ·
 [StyleController](docs/controls/stylecontroller.md) ·
-[TabControl](docs/controls/tabcontrol.md) ·
+[PageControl](docs/controls/pagecontrol.md) ·
 [SpinEdit](docs/controls/spinedit.md) ·
 [Memo](docs/controls/memo.md)
 
