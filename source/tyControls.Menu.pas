@@ -301,7 +301,10 @@ type
     { Test seam: activate the row at AIndex exactly as choosing it in the themed popup
       would (fires the source item's OnClick). Mirrors TTyMenuPopup.ActivateRowForTest. }
     procedure ActivateRowForTest(AIndex: Integer);
+    function GetAbout: string;
   published
+    { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
+    property About: string read GetAbout;
     { The .tycss style controller the themed popup resolves its tokens through. }
     property Controller: TTyStyleController read FController write FController;
   end;
@@ -1450,6 +1453,11 @@ begin
 end;
 
 { TTyPopupMenu }
+
+function TTyPopupMenu.GetAbout: string;
+begin
+  Result := TyVersion;
+end;
 
 constructor TTyPopupMenu.Create(AOwner: TComponent);
 begin

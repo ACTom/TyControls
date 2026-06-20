@@ -2,8 +2,9 @@ unit tyControls.Design;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, PropEdits, ComponentEditors, ProjectIntf, FormEditingIntf,
-  LResources,
+  Classes, SysUtils, Forms, Controls, StdCtrls, Graphics, LCLIntf,
+  PropEdits, ComponentEditors, ProjectIntf, FormEditingIntf,
+  LResources, tyControls.Types,
   tyControls.Base, tyControls.Controller, tyControls.StyleModel,
   tyControls.Button, tyControls.TyLabel, tyControls.Edit,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
@@ -29,6 +30,14 @@ type
     procedure ExecuteVerb(Index: Integer); override;
   end;
 
+  { Read-only `About` property: shows TyVersion in the Object Inspector and opens the
+    About dialog (version + clickable homepage link) when the '...' button is clicked. }
+  TTyAboutEditor = class(TStringPropertyEditor)
+  public
+    function GetAttributes: TPropertyAttributes; override;
+    procedure Edit; override;
+  end;
+
   { File > New entry that creates a unit whose form descends from TTyForm — a
     borderless form with a persistent chrome engine. The form is empty by default;
     drop a TTyTitleBar onto it and it auto-associates to the TitleBar property. }
@@ -43,6 +52,77 @@ type
 procedure Register;
 
 implementation
+
+type
+  { Small code-built About form (no .lfm), so the design-time package stays resource-free. }
+  TTyAboutForm = class(TForm)
+    procedure LinkClick(Sender: TObject);
+  end;
+
+procedure TTyAboutForm.LinkClick(Sender: TObject);
+begin
+  OpenURL(TyHomepageUrl);
+end;
+
+procedure ShowTyAboutDialog;
+var
+  F: TTyAboutForm;
+  LTitle, LDesc, LLink: TLabel;
+  Btn: TButton;
+begin
+  F := TTyAboutForm.CreateNew(nil);
+  try
+    F.Caption := 'About TyControls';
+    F.BorderStyle := bsDialog;
+    F.Position := poScreenCenter;
+    F.ClientWidth := 400;
+    F.ClientHeight := 172;
+
+    LTitle := TLabel.Create(F);
+    LTitle.Parent := F;
+    LTitle.Left := 24; LTitle.Top := 24;
+    LTitle.Font.Style := [fsBold];
+    LTitle.Font.Size := 13;
+    LTitle.Caption := 'TyControls';
+
+    LDesc := TLabel.Create(F);
+    LDesc.Parent := F;
+    LDesc.Left := 24; LDesc.Top := 58;
+    LDesc.Caption := 'Themed LCL control library    ·    v' + TyVersion;
+
+    LLink := TLabel.Create(F);
+    LLink.Parent := F;
+    LLink.Left := 24; LLink.Top := 92;
+    LLink.Caption := TyHomepageUrl;
+    LLink.Font.Color := clBlue;
+    LLink.Font.Underline := True;
+    LLink.Cursor := crHandPoint;
+    LLink.OnClick := @F.LinkClick;
+
+    Btn := TButton.Create(F);
+    Btn.Parent := F;
+    Btn.Caption := 'OK';
+    Btn.ModalResult := mrOk;
+    Btn.Default := True;
+    Btn.Width := 84; Btn.Height := 30;
+    Btn.Left := F.ClientWidth - Btn.Width - 24;
+    Btn.Top := F.ClientHeight - Btn.Height - 22;
+
+    F.ShowModal;
+  finally
+    F.Free;
+  end;
+end;
+
+function TTyAboutEditor.GetAttributes: TPropertyAttributes;
+begin
+  Result := [paReadOnly, paDialog];   // greyed value + '...' button that opens the dialog
+end;
+
+procedure TTyAboutEditor.Edit;
+begin
+  ShowTyAboutDialog;
+end;
 
 function TTyStyleClassPropertyEditor.GetAttributes: TPropertyAttributes;
 begin
@@ -191,6 +271,13 @@ begin
     TTyStyleClassPropertyEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyCustomControl, 'StyleClass',
     TTyStyleClassPropertyEditor);
+  // About: read-only version display + design-time About dialog, on every registered class
+  // (the two control bases cover all visual controls; the rest are non-visual / the form).
+  RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'About', TTyAboutEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomControl, 'About', TTyAboutEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'About', TTyAboutEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyPopupMenu, 'About', TTyAboutEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyForm, 'About', TTyAboutEditor);
   // Page management verbs (Add/Delete/Show Next/Prev) for the page control.
   RegisterComponentEditor(TTyPageControl, TTyPageControlEditor);
   // File > New > "TyControls Form": a unit whose form descends from TTyForm.
