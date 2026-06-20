@@ -3,6 +3,7 @@
   <Package Version="5">
     <Name Value="tycontrols"/>
     <Type Value="RunTime"/>
+    <Author Value="ACTom"/>
     <CompilerOptions>
       <Version Value="11"/>
       <SearchPaths>
@@ -13,6 +14,9 @@
         <SyntaxMode Value="ObjFPC"/>
       </SyntaxOptions>
     </CompilerOptions>
+    <Description Value="主题化 LCL 控件库 — 运行时控件 + 三层解耦的 CSS-lite 主题引擎。https://github.com/ACTom/TyControls"/>
+    <License Value="Modified LGPL (see COPYING.modifiedLGPL.txt) — same as the Lazarus LCL"/>
+    <Version Major="2" Minor="0" Release="0" Build="0"/>
     <Files Count="37">
       <Item1><Filename Value="source/tyControls.Types.pas"/><UnitName Value="tyControls.Types"/></Item1>
       <Item2><Filename Value="source/tyControls.Css.Tokens.pas"/><UnitName Value="tyControls.Css.Tokens"/></Item2>
