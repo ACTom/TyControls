@@ -2,7 +2,7 @@ unit tyControls.Design;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls, StdCtrls, Graphics, LCLIntf,
+  Classes, SysUtils, Forms, Controls, StdCtrls, ExtCtrls, Graphics, LCLIntf,
   PropEdits, ComponentEditors, ProjectIntf, FormEditingIntf,
   LResources, tyControls.Types,
   tyControls.Base, tyControls.Controller, tyControls.StyleModel,
@@ -67,35 +67,56 @@ end;
 procedure ShowTyAboutDialog;
 var
   F: TTyAboutForm;
-  LTitle, LDesc, LLink: TLabel;
+  Hdr: TPanel;
+  LLink: TLabel;
   Btn: TButton;
+  Accent: TColor;
+
+  // A full-width, horizontally-centered text row (taCenter avoids any text measurement,
+  // so it lays out correctly before the form has a handle).
+  function AddRow(const ACaption: string; ATop, ASize: Integer;
+    AStyle: TFontStyles; AColor: TColor): TLabel;
+  begin
+    Result := TLabel.Create(F);
+    Result.Parent := F;
+    Result.AutoSize := False;
+    Result.Left := 20;
+    Result.Width := F.ClientWidth - 40;
+    Result.Height := ASize + 16;
+    Result.Alignment := taCenter;
+    Result.Layout := tlCenter;
+    Result.Caption := ACaption;
+    Result.Font.Size := ASize;
+    Result.Font.Style := AStyle;
+    Result.Font.Color := AColor;
+    Result.Top := ATop;
+  end;
+
 begin
+  Accent := RGBToColor($3B, $82, $F6);   // TyControls default-theme accent
   F := TTyAboutForm.CreateNew(nil);
   try
     F.Caption := 'About TyControls';
     F.BorderStyle := bsDialog;
     F.Position := poScreenCenter;
-    F.ClientWidth := 400;
-    F.ClientHeight := 172;
+    F.ClientWidth := 460;
+    F.ClientHeight := 234;
 
-    LTitle := TLabel.Create(F);
-    LTitle.Parent := F;
-    LTitle.Left := 24; LTitle.Top := 24;
-    LTitle.Font.Style := [fsBold];
-    LTitle.Font.Size := 13;
-    LTitle.Caption := 'TyControls';
+    // Branded header band: accent fill, white product name centered.
+    Hdr := TPanel.Create(F);
+    Hdr.Parent := F;
+    Hdr.SetBounds(0, 0, F.ClientWidth, 72);
+    Hdr.BevelOuter := bvNone;
+    Hdr.Color := Accent;
+    Hdr.Font.Color := clWhite;
+    Hdr.Font.Style := [fsBold];
+    Hdr.Font.Size := 18;
+    Hdr.Caption := 'TyControls';
 
-    LDesc := TLabel.Create(F);
-    LDesc.Parent := F;
-    LDesc.Left := 24; LDesc.Top := 58;
-    LDesc.Caption := 'Themed LCL control library    ·    v' + TyVersion;
+    AddRow('主题化 LCL 控件库', 90, 11, [], clWindowText);
+    AddRow('版本 / Version  ' + TyVersion, 118, 10, [], clGrayText);
 
-    LLink := TLabel.Create(F);
-    LLink.Parent := F;
-    LLink.Left := 24; LLink.Top := 92;
-    LLink.Caption := TyHomepageUrl;
-    LLink.Font.Color := clBlue;
-    LLink.Font.Underline := True;
+    LLink := AddRow(TyHomepageUrl, 150, 10, [fsUnderline], clBlue);
     LLink.Cursor := crHandPoint;
     LLink.OnClick := @F.LinkClick;
 
@@ -104,9 +125,8 @@ begin
     Btn.Caption := 'OK';
     Btn.ModalResult := mrOk;
     Btn.Default := True;
-    Btn.Width := 84; Btn.Height := 30;
-    Btn.Left := F.ClientWidth - Btn.Width - 24;
-    Btn.Top := F.ClientHeight - Btn.Height - 22;
+    Btn.Cancel := True;
+    Btn.SetBounds((F.ClientWidth - 92) div 2, 186, 92, 30);
 
     F.ShowModal;
   finally
