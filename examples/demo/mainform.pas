@@ -20,7 +20,9 @@ type
     Controller: TTyStyleController;
     TyButton1: TTyButton;
     TyButton2: TTyButton;
+    TyButton3: TTyButton;
     TyEdit1: TTyEdit;
+    TyEdit2: TTyEdit;
     TyTitleBar1: TTyTitleBar;
     ThemeCombo: TTyComboBox;
     BtnApLight: TTyButton;

@@ -248,15 +248,61 @@ object DemoMainForm: TDemoMainForm
     Width = 1208
     TabOrder = 13
     Controller = Controller
-    ActivePageIndex = 1
+    ActivePageIndex = 0
     object TyTabSheet1: TTyTabSheet
+      Left = 0
+      Height = 204
+      Top = 56
+      Width = 1208
+      TabOrder = 0
+      Controller = Controller
       Caption = 'Tab 1'
+      object TyButton2: TTyButton
+        Left = 456
+        Height = 74
+        Top = 48
+        Width = 162
+        TabOrder = 0
+        StyleClass = 'ghost'
+        Controller = Controller
+        Caption = 'TyButton2'
+      end
+      object TyButton3: TTyButton
+        Left = 182
+        Height = 60
+        Top = 64
+        Width = 176
+        TabOrder = 1
+        Controller = Controller
+        Caption = 'TyButton3'
+      end
     end
     object TyTabSheet2: TTyTabSheet
+      Left = 0
+      Height = 102
+      Top = 28
+      Width = 604
+      TabOrder = 1
+      Controller = Controller
       Caption = 'Tab 2'
     end
     object TyTabSheet3: TTyTabSheet
+      Left = 0
+      Height = 204
+      Top = 56
+      Width = 1208
+      TabOrder = 2
+      Controller = Controller
       Caption = 'Tab 3'
+      object TyEdit2: TTyEdit
+        Cursor = crIBeam
+        Left = 192
+        Height = 56
+        Top = 58
+        Width = 280
+        TabOrder = 0
+        TabStop = True
+      end
     end
   end
   object Memo1: TTyMemo
@@ -275,14 +321,6 @@ object DemoMainForm: TDemoMainForm
       'when the text overflows the visible rows.'
     )
     Text = 'TTyMemo multi-line editor'#13#10'Enter splits a line; Backspace/Delete merge across lines.'#13#10'Arrows / Home / End move the caret; the wheel scrolls'#13#10'when the text overflows the visible rows.'#13#10
-  end
-  object TyButton2: TTyButton
-    Left = 140
-    Height = 74
-    Top = 846
-    Width = 162
-    TabOrder = 16
-    Caption = 'TyButton2'
   end
   object Controller: TTyStyleController
     Left = 32
