@@ -3,30 +3,38 @@
   <Package Version="5">
     <Name Value="tycontrols_dt"/>
     <Type Value="DesignTime"/>
-    <AddToProjectUsesSection Value="False"/>
+    <Author Value="ACTom"/>
     <CompilerOptions>
       <Version Value="11"/>
       <SearchPaths>
         <OtherUnitFiles Value="designtime"/>
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)/designtime"/>
       </SearchPaths>
-      <SyntaxOptions>
-        <SyntaxMode Value="ObjFPC"/>
-      </SyntaxOptions>
     </CompilerOptions>
-    <Files Count="1">
-      <Item1>
+    <Description Value="TyControls Design-Time Support Package. Requires the TyControls Run-Time Package to function.
+"/>
+    <License Value="Modified LGPL (see COPYING.modifiedLGPL.txt) — same as the Lazarus LCL"/>
+    <Version Major="2"/>
+    <Files>
+      <Item>
         <Filename Value="designtime/tyControls.Design.pas"/>
         <HasRegisterProc Value="True"/>
         <UnitName Value="tyControls.Design"/>
-      </Item1>
+      </Item>
     </Files>
-    <RequiredPkgs Count="2">
-      <Item1><PackageName Value="tycontrols"/></Item1>
-      <Item2><PackageName Value="IDEIntf"/></Item2>
+    <RequiredPkgs>
+      <Item>
+        <PackageName Value="tycontrols"/>
+      </Item>
+      <Item>
+        <PackageName Value="IDEIntf"/>
+      </Item>
     </RequiredPkgs>
     <UsageOptions>
       <UnitPath Value="$(PkgOutDir)"/>
     </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+    </PublishOptions>
   </Package>
 </CONFIG>

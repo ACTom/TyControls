@@ -70,7 +70,10 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    function GetAbout: string;
   published
+    { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
+    property About: string read GetAbout;
     property Enabled;
     property Font;
     property Hint;
@@ -144,7 +147,10 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    function GetAbout: string;
   published
+    { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
+    property About: string read GetAbout;
     property Enabled;
     property Font;
     property Hint;
@@ -249,6 +255,11 @@ constructor TTyGraphicControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ActiveController.RegisterStyleable(Self);
+end;
+
+function TTyGraphicControl.GetAbout: string;
+begin
+  Result := TyVersion;
 end;
 
 function TTyGraphicControl._AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
@@ -547,6 +558,11 @@ begin
   // is unchanged; only the on-screen WMPaint path is affected (RenderTo bypasses it).
   DoubleBuffered := True;
   ActiveController.RegisterStyleable(Self);
+end;
+
+function TTyCustomControl.GetAbout: string;
+begin
+  Result := TyVersion;
 end;
 
 function TTyCustomControl._AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};

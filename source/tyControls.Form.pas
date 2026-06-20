@@ -178,7 +178,10 @@ type
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     destructor Destroy; override;
     procedure ApplyChromeTheme(AController: TTyStyleController);
+    function GetAbout: string;
   published
+    { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
+    property About: string read GetAbout;
     property TitleBar: TTyTitleBar read FTitleBar write SetTitleBar;
     { Designate the primary application menu bar. Non-mac: the bar stays visible and
       owns shortcut dispatch (IsShortcut forwards to its TMainMenu). Mac: the bar's
@@ -691,6 +694,11 @@ begin
   FShowMaximize := True;
   FEngine := TTyChromeEngine.Create;
   FEngine.Form := Self;
+end;
+
+function TTyForm.GetAbout: string;
+begin
+  Result := TyVersion;
 end;
 
 constructor TTyForm.Create(AOwner: TComponent);

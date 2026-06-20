@@ -84,7 +84,10 @@ type
       tick (the next GOOD save differs again and reloads). Reentrancy-guarded. This is the
       fully headless-testable seam: tests call it directly instead of pumping a GUI loop. }
     function PollThemeFile: Boolean;
+    function GetAbout: string;
   published
+    { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
+    property About: string read GetAbout;
     property ThemeFile: string read FThemeFile write SetThemeFile;
     { B (Phase 2): switch theme by registered NAME. Resolves via TyResolveTheme and
       loads through the §3.8 REPLACE path (LoadFromFile -> LoadInto AReplace=True +
@@ -122,6 +125,11 @@ implementation
 
 var
   GDefaultController: TTyStyleController = nil;
+
+function TTyStyleController.GetAbout: string;
+begin
+  Result := TyVersion;
+end;
 
 constructor TTyStyleController.Create(AOwner: TComponent);
 begin

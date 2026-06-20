@@ -37,7 +37,8 @@ uses
   test.paletteicons,
   test.tabsheet,
   test.pagecontrol,
-  test.pagecontrol.streaming;
+  test.pagecontrol.streaming,
+  test.about;
 
 type
   TTyTestRunner = class(TTestRunner)
