@@ -29,6 +29,7 @@ type
     procedure HRadioB(Sender: TObject);
   published
     procedure TestTypeKey;
+    procedure TestDefaultSize;
     procedure TestClickTogglesChecked;
     procedure TestPaintSmoke;
     procedure TestDrawFrameOpacityApplied;
@@ -577,6 +578,18 @@ begin
     AssertEquals('A unchecked (sibling) fires A.OnChange once', 1, FRadioACount);
   finally
     F.Free;
+  end;
+end;
+
+procedure TCheckBoxTest.TestDefaultSize;
+var C: TTyCheckBox;
+begin
+  C := TTyCheckBox.Create(nil);
+  try
+    AssertEquals('default width', 130, C.Width);
+    AssertEquals('default height', 22, C.Height);
+  finally
+    C.Free;
   end;
 end;
 

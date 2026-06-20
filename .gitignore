@@ -42,3 +42,8 @@ Thumbs.db
 
 # Superpowers brainstorming 可视化助手临时产物
 .superpowers/
+
+# 图标生成器构建产物（committed: designtime/icons/*.png + tycontrols_icons.lrs）
+/tools/genicons/genicons.exe
+/tools/genicons/lib/
+/tools/genicons/_smoke/

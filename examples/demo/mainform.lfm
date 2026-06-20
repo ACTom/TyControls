@@ -134,6 +134,14 @@ object DemoMainForm: TDemoMainForm
     Width = 400
     TabOrder = 5
     Controller = Controller
+    object TyButton1: TTyButton
+      Left = 44
+      Height = 56
+      Top = 72
+      Width = 164
+      TabOrder = 0
+      Caption = 'TyButton1'
+    end
   end
   object ComboKind: TTyComboBox
     Left = 32
@@ -165,8 +173,18 @@ object DemoMainForm: TDemoMainForm
     Top = 448
     Width = 320
     TabOrder = 8
+    OnClick = GroupBox1Click
     Controller = Controller
     Caption = 'Options'
+    object TyEdit1: TTyEdit
+      Cursor = crIBeam
+      Left = 44
+      Height = 64
+      Top = 48
+      Width = 196
+      TabOrder = 0
+      TabStop = True
+    end
   end
   object ListBox1: TTyListBox
     Left = 32
@@ -223,25 +241,69 @@ object DemoMainForm: TDemoMainForm
     MaxValue = 10
     Value = 3
   end
-  object TabCtrl1: TTyTabControl
+  object TabCtrl1: TTyPageControl
     Left = 32
     Height = 260
-    Top = 768
+    Top = 752
     Width = 1208
     TabOrder = 13
     Controller = Controller
-    Tabs = <    
-      item
-        Caption = 'Tab 1'
-      end    
-      item
-        Caption = 'Tab 2'
-      end    
-      item
-        Caption = 'Tab 3'
-      end>
-    TabIndex = 0
-    TabsClosable = True
+    ActivePageIndex = 0
+    object TyTabSheet1: TTyTabSheet
+      Left = 0
+      Height = 204
+      Top = 56
+      Width = 1208
+      TabOrder = 0
+      Controller = Controller
+      Caption = 'Tab 1'
+      object TyButton2: TTyButton
+        Left = 456
+        Height = 74
+        Top = 48
+        Width = 162
+        TabOrder = 0
+        StyleClass = 'ghost'
+        Controller = Controller
+        Caption = 'TyButton2'
+      end
+      object TyButton3: TTyButton
+        Left = 182
+        Height = 60
+        Top = 64
+        Width = 176
+        TabOrder = 1
+        Controller = Controller
+        Caption = 'TyButton3'
+      end
+    end
+    object TyTabSheet2: TTyTabSheet
+      Left = 0
+      Height = 102
+      Top = 28
+      Width = 604
+      TabOrder = 1
+      Controller = Controller
+      Caption = 'Tab 2'
+    end
+    object TyTabSheet3: TTyTabSheet
+      Left = 0
+      Height = 204
+      Top = 56
+      Width = 1208
+      TabOrder = 2
+      Controller = Controller
+      Caption = 'Tab 3'
+      object TyEdit2: TTyEdit
+        Cursor = crIBeam
+        Left = 192
+        Height = 56
+        Top = 58
+        Width = 280
+        TabOrder = 0
+        TabStop = True
+      end
+    end
   end
   object Memo1: TTyMemo
     Cursor = crIBeam

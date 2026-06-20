@@ -49,6 +49,7 @@ type
   TEditTest = class(TTestCase)
   published
     procedure TestTypeKey;
+    procedure TestDefaultSize;
     procedure TestKeyInputAppendsText;
     procedure TestBackspaceRemovesChar;
     procedure TestBackspaceUTF8;
@@ -2405,6 +2406,18 @@ begin
   E := TTyEdit.Create(nil);
   try
     AssertEquals(crIBeam, E.Cursor);
+  finally
+    E.Free;
+  end;
+end;
+
+procedure TEditTest.TestDefaultSize;
+var E: TTyEdit;
+begin
+  E := TTyEdit.Create(nil);
+  try
+    AssertEquals('default width', 140, E.Width);
+    AssertEquals('default height', 28, E.Height);
   finally
     E.Free;
   end;

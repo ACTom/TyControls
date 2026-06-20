@@ -69,6 +69,8 @@ constructor TTyCheckBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
+  Width := 130;
+  Height := 22;
 end;
 
 function TTyCheckBox.GetStyleTypeKey: string;
@@ -179,6 +181,8 @@ constructor TTyRadioButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   TabStop := True;
+  Width := 130;
+  Height := 22;
 end;
 
 function TTyRadioButton.GetStyleTypeKey: string;

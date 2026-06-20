@@ -15,6 +15,7 @@ type
   TRadioButtonTest = class(TTestCase)
   published
     procedure TestTypeKey;
+    procedure TestDefaultSize;
     procedure TestClickClearsGroup;
     procedure TestSeparateParentsAreIndependent;
     procedure TestPaintSmoke;
@@ -202,6 +203,18 @@ begin
     AssertFalse('C cleared by D (same group)', C.Checked);
     AssertTrue('B still checked (different group)', B.Checked);
   finally F.Free; end;
+end;
+
+procedure TRadioButtonTest.TestDefaultSize;
+var R: TTyRadioButton;
+begin
+  R := TTyRadioButton.Create(nil);
+  try
+    AssertEquals('default width', 130, R.Width);
+    AssertEquals('default height', 22, R.Height);
+  finally
+    R.Free;
+  end;
 end;
 
 initialization
