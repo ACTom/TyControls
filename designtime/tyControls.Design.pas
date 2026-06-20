@@ -126,7 +126,7 @@ begin
 
     maxW := FW('TyControls', 22, True);
     if FW('主题化 LCL 控件库', 13, False) > maxW then maxW := FW('主题化 LCL 控件库', 13, False);
-    if FW('版本 / Version  ' + TyVersion, 11, False) > maxW then maxW := FW('版本 / Version  ' + TyVersion, 11, False);
+    if FW('Version ' + TyVersion, 11, False) > maxW then maxW := FW('Version ' + TyVersion, 11, False);
     if FW(TyHomepageUrl, 11, False) > maxW then maxW := FW(TyHomepageUrl, 11, False);
     if maxW < Round(420 * sc) then maxW := Round(420 * sc);   // floor for narrow content
     F.ClientWidth := maxW + 2 * margin;
@@ -144,7 +144,7 @@ begin
 
     y := hdrH + gap;
     AddRow('主题化 LCL 控件库', 13, [], clWindowText);
-    AddRow('版本 / Version  ' + TyVersion, 11, [], clGrayText);
+    AddRow('Version ' + TyVersion, 11, [], clGrayText);
     LLink := AddRow(TyHomepageUrl, 11, [fsUnderline], clBlue);
     LLink.Cursor := crHandPoint;
     LLink.OnClick := @F.LinkClick;
