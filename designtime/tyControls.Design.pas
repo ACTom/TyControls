@@ -71,62 +71,96 @@ var
   LLink: TLabel;
   Btn: TButton;
   Accent: TColor;
+  sc: Double;
+  y, maxW, gap, margin, hdrH, btnH, bw: Integer;
 
-  // A full-width, horizontally-centered text row (taCenter avoids any text measurement,
-  // so it lays out correctly before the form has a handle).
-  function AddRow(const ACaption: string; ATop, ASize: Integer;
-    AStyle: TFontStyles; AColor: TColor): TLabel;
+  // Measure at the form's REAL device context (after HandleNeeded) so the window is
+  // sized to the actually-rendered text — robust on any HiDPI/scaled display.
+  function FW(const S: string; ASize: Integer; ABold: Boolean): Integer;
   begin
+    F.Canvas.Font.Assign(F.Font);
+    F.Canvas.Font.Size := ASize;
+    if ABold then F.Canvas.Font.Style := [fsBold];
+    Result := F.Canvas.TextWidth(S);
+  end;
+
+  function FH(ASize: Integer): Integer;
+  begin
+    F.Canvas.Font.Assign(F.Font);
+    F.Canvas.Font.Size := ASize;
+    Result := F.Canvas.TextHeight('Ag');
+  end;
+
+  // One centered row; height = line height + padding, then advance y by a full gap.
+  function AddRow(const Cap: string; ASize: Integer; AStyle: TFontStyles; AColor: TColor): TLabel;
+  var h: Integer;
+  begin
+    h := FH(ASize) + gap div 3;
     Result := TLabel.Create(F);
     Result.Parent := F;
     Result.AutoSize := False;
-    Result.Left := 20;
-    Result.Width := F.ClientWidth - 40;
-    Result.Height := ASize + 16;
+    Result.SetBounds(margin, y, F.ClientWidth - 2 * margin, h);
     Result.Alignment := taCenter;
     Result.Layout := tlCenter;
-    Result.Caption := ACaption;
+    Result.Caption := Cap;
     Result.Font.Size := ASize;
     Result.Font.Style := AStyle;
     Result.Font.Color := AColor;
-    Result.Top := ATop;
+    Inc(y, h + gap);
   end;
 
 begin
   Accent := RGBToColor($3B, $82, $F6);   // TyControls default-theme accent
+  sc := Screen.PixelsPerInch / 96;
+  if sc < 1 then sc := 1;
   F := TTyAboutForm.CreateNew(nil);
   try
     F.Caption := 'About TyControls';
     F.BorderStyle := bsDialog;
     F.Position := poScreenCenter;
-    F.ClientWidth := 460;
-    F.ClientHeight := 234;
+    F.HandleNeeded;                       // so F.Canvas measures at the real DPI
 
-    // Branded header band: accent fill, white product name centered.
+    gap := FH(13);                        // generous line spacing ~ one line height
+    if gap < Round(20 * sc) then gap := Round(20 * sc);
+    margin := gap + gap div 2;
+
+    maxW := FW('TyControls', 22, True);
+    if FW('主题化 LCL 控件库', 13, False) > maxW then maxW := FW('主题化 LCL 控件库', 13, False);
+    if FW('版本 / Version  ' + TyVersion, 11, False) > maxW then maxW := FW('版本 / Version  ' + TyVersion, 11, False);
+    if FW(TyHomepageUrl, 11, False) > maxW then maxW := FW(TyHomepageUrl, 11, False);
+    if maxW < Round(420 * sc) then maxW := Round(420 * sc);   // floor for narrow content
+    F.ClientWidth := maxW + 2 * margin;
+
+    hdrH := FH(22) + 2 * gap;
     Hdr := TPanel.Create(F);
     Hdr.Parent := F;
-    Hdr.SetBounds(0, 0, F.ClientWidth, 72);
+    Hdr.SetBounds(0, 0, F.ClientWidth, hdrH);
     Hdr.BevelOuter := bvNone;
     Hdr.Color := Accent;
     Hdr.Font.Color := clWhite;
     Hdr.Font.Style := [fsBold];
-    Hdr.Font.Size := 18;
+    Hdr.Font.Size := 22;
     Hdr.Caption := 'TyControls';
 
-    AddRow('主题化 LCL 控件库', 90, 11, [], clWindowText);
-    AddRow('版本 / Version  ' + TyVersion, 118, 10, [], clGrayText);
-
-    LLink := AddRow(TyHomepageUrl, 150, 10, [fsUnderline], clBlue);
+    y := hdrH + gap;
+    AddRow('主题化 LCL 控件库', 13, [], clWindowText);
+    AddRow('版本 / Version  ' + TyVersion, 11, [], clGrayText);
+    LLink := AddRow(TyHomepageUrl, 11, [fsUnderline], clBlue);
     LLink.Cursor := crHandPoint;
     LLink.OnClick := @F.LinkClick;
 
+    Inc(y, gap div 2);
+    btnH := FH(11) + gap;
+    bw := FW('OK', 11, False) + 3 * gap;
     Btn := TButton.Create(F);
     Btn.Parent := F;
     Btn.Caption := 'OK';
     Btn.ModalResult := mrOk;
     Btn.Default := True;
     Btn.Cancel := True;
-    Btn.SetBounds((F.ClientWidth - 92) div 2, 186, 92, 30);
+    Btn.SetBounds((F.ClientWidth - bw) div 2, y, bw, btnH);
+    Inc(y, btnH + gap);
+    F.ClientHeight := y;
 
     F.ShowModal;
   finally
