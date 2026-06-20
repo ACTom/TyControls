@@ -54,7 +54,7 @@ uses
   tyControls.TyLabel, tyControls.ProgressBar,
   tyControls.Button, tyControls.Edit, tyControls.Memo, tyControls.SpinEdit,
   tyControls.ComboBox, tyControls.CheckBox, tyControls.ListBox,
-  tyControls.TabControl, tyControls.GroupBox, tyControls.Panel,
+  tyControls.PageControl, tyControls.GroupBox, tyControls.Panel,
   tyControls.ScrollBar, tyControls.TrackBar, tyControls.ToggleSwitch;
 
 type
@@ -211,7 +211,7 @@ type
     procedure FDoExit;
   end;
 
-  TTabAcc = class(TTyTabControl)
+  TTabAcc = class(TTyPageControl)
   public
     procedure FMouseDown(B: TMouseButton; S: TShiftState; X, Y: Integer);
     procedure FMouseUp(B: TMouseButton; S: TShiftState; X, Y: Integer);
