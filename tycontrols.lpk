@@ -2,7 +2,6 @@
 <CONFIG>
   <Package Version="5">
     <Name Value="tycontrols"/>
-    <Type Value="RunTime"/>
     <Author Value="ACTom"/>
     <CompilerOptions>
       <Version Value="11"/>
@@ -10,58 +9,175 @@
         <OtherUnitFiles Value="source"/>
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
-      <SyntaxOptions>
-        <SyntaxMode Value="ObjFPC"/>
-      </SyntaxOptions>
     </CompilerOptions>
-    <Description Value="主题化 LCL 控件库 — 运行时控件 + 三层解耦的 CSS-lite 主题引擎。https://github.com/ACTom/TyControls"/>
+    <Description Value="A Lazarus component library with skin/style support: all controls are fully custom-drawn via BGRABitmap, their appearances are uniformly styled by lightweight CSS text themes (.tycss), delivering pixel-perfect identical UI rendering across Windows, Linux and macOS.
+
+Homepage: https://github.com/ACTom/TyControls"/>
     <License Value="Modified LGPL (see COPYING.modifiedLGPL.txt) — same as the Lazarus LCL"/>
-    <Version Major="2" Minor="0" Release="0" Build="0"/>
-    <Files Count="37">
-      <Item1><Filename Value="source/tyControls.Types.pas"/><UnitName Value="tyControls.Types"/></Item1>
-      <Item2><Filename Value="source/tyControls.Css.Tokens.pas"/><UnitName Value="tyControls.Css.Tokens"/></Item2>
-      <Item3><Filename Value="source/tyControls.Css.Lexer.pas"/><UnitName Value="tyControls.Css.Lexer"/></Item3>
-      <Item4><Filename Value="source/tyControls.Css.Parser.pas"/><UnitName Value="tyControls.Css.Parser"/></Item4>
-      <Item5><Filename Value="source/tyControls.Css.Values.pas"/><UnitName Value="tyControls.Css.Values"/></Item5>
-      <Item6><Filename Value="source/tyControls.StyleModel.pas"/><UnitName Value="tyControls.StyleModel"/></Item6>
-      <Item7><Filename Value="source/tyControls.Painter.pas"/><UnitName Value="tyControls.Painter"/></Item7>
-      <Item8><Filename Value="source/tyControls.Controller.pas"/><UnitName Value="tyControls.Controller"/></Item8>
-      <Item9><Filename Value="source/tyControls.Base.pas"/><UnitName Value="tyControls.Base"/></Item9>
-      <Item10><Filename Value="source/tyControls.Button.pas"/><UnitName Value="tyControls.Button"/></Item10>
-      <Item11><Filename Value="source/tyControls.TyLabel.pas"/><UnitName Value="tyControls.TyLabel"/></Item11>
-      <Item12><Filename Value="source/tyControls.Edit.pas"/><UnitName Value="tyControls.Edit"/></Item12>
-      <Item13><Filename Value="source/tyControls.CheckBox.pas"/><UnitName Value="tyControls.CheckBox"/></Item13>
-      <Item14><Filename Value="source/tyControls.Panel.pas"/><UnitName Value="tyControls.Panel"/></Item14>
-      <Item15><Filename Value="source/tyControls.ComboBox.pas"/><UnitName Value="tyControls.ComboBox"/></Item15>
-      <Item16><Filename Value="source/tyControls.ScrollBar.pas"/><UnitName Value="tyControls.ScrollBar"/></Item16>
-      <Item17><Filename Value="source/tyControls.Form.pas"/><UnitName Value="tyControls.Form"/></Item17>
-      <Item18><Filename Value="source/tyControls.ListBox.pas"/><UnitName Value="tyControls.ListBox"/></Item18>
-      <Item19><Filename Value="source/tyControls.ProgressBar.pas"/><UnitName Value="tyControls.ProgressBar"/></Item19>
-      <Item20><Filename Value="source/tyControls.ToggleSwitch.pas"/><UnitName Value="tyControls.ToggleSwitch"/></Item20>
-      <Item21><Filename Value="source/tyControls.TrackBar.pas"/><UnitName Value="tyControls.TrackBar"/></Item21>
-      <Item22><Filename Value="source/tyControls.GroupBox.pas"/><UnitName Value="tyControls.GroupBox"/></Item22>
-      <Item23><Filename Value="source/tyControls.DefaultTheme.pas"/><UnitName Value="tyControls.DefaultTheme"/></Item23>
-      <Item24><Filename Value="source/tyControls.SpinEdit.pas"/><UnitName Value="tyControls.SpinEdit"/></Item24>
-      <Item25><Filename Value="source/tyControls.Memo.pas"/><UnitName Value="tyControls.Memo"/></Item25>
-      <Item26><Filename Value="source/tyControls.Animation.pas"/><UnitName Value="tyControls.Animation"/></Item26>
-      <Item27><Filename Value="source/tyControls.UndoStack.pas"/><UnitName Value="tyControls.UndoStack"/></Item27>
-      <Item28><Filename Value="source/tyControls.ThemeRegistry.pas"/><UnitName Value="tyControls.ThemeRegistry"/></Item28>
-      <Item29><Filename Value="source/tyControls.ThemeBundle.pas"/><UnitName Value="tyControls.ThemeBundle"/></Item29>
-      <Item30><Filename Value="source/tyControls.SystemTheme.pas"/><UnitName Value="tyControls.SystemTheme"/></Item30>
-      <Item31><Filename Value="source/tyControls.ThemeLint.pas"/><UnitName Value="tyControls.ThemeLint"/></Item31>
-      <Item32><Filename Value="source/tyControls.Menu.pas"/><UnitName Value="tyControls.Menu"/></Item32>
-      <Item33><Filename Value="source/tyControls.BuiltinThemeData.pas"/><UnitName Value="tyControls.BuiltinThemeData"/></Item33>
-      <Item34><Filename Value="source/tyControls.BuiltinThemes.pas"/><UnitName Value="tyControls.BuiltinThemes"/></Item34>
-      <Item35><Filename Value="source/tyControls.TabStrip.pas"/><UnitName Value="tyControls.TabStrip"/></Item35>
-      <Item36><Filename Value="source/tyControls.TabSheet.pas"/><UnitName Value="tyControls.TabSheet"/></Item36>
-      <Item37><Filename Value="source/tyControls.PageControl.pas"/><UnitName Value="tyControls.PageControl"/></Item37>
+    <Version Major="2"/>
+    <Files>
+      <Item>
+        <Filename Value="source/tyControls.Types.pas"/>
+        <UnitName Value="tyControls.Types"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Css.Tokens.pas"/>
+        <UnitName Value="tyControls.Css.Tokens"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Css.Lexer.pas"/>
+        <UnitName Value="tyControls.Css.Lexer"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Css.Parser.pas"/>
+        <UnitName Value="tyControls.Css.Parser"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Css.Values.pas"/>
+        <UnitName Value="tyControls.Css.Values"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.StyleModel.pas"/>
+        <UnitName Value="tyControls.StyleModel"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Painter.pas"/>
+        <UnitName Value="tyControls.Painter"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Controller.pas"/>
+        <UnitName Value="tyControls.Controller"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Base.pas"/>
+        <UnitName Value="tyControls.Base"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Button.pas"/>
+        <UnitName Value="tyControls.Button"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.TyLabel.pas"/>
+        <UnitName Value="tyControls.TyLabel"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Edit.pas"/>
+        <UnitName Value="tyControls.Edit"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.CheckBox.pas"/>
+        <UnitName Value="tyControls.CheckBox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Panel.pas"/>
+        <UnitName Value="tyControls.Panel"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ComboBox.pas"/>
+        <UnitName Value="tyControls.ComboBox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ScrollBar.pas"/>
+        <UnitName Value="tyControls.ScrollBar"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Form.pas"/>
+        <UnitName Value="tyControls.Form"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ListBox.pas"/>
+        <UnitName Value="tyControls.ListBox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ProgressBar.pas"/>
+        <UnitName Value="tyControls.ProgressBar"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ToggleSwitch.pas"/>
+        <UnitName Value="tyControls.ToggleSwitch"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.TrackBar.pas"/>
+        <UnitName Value="tyControls.TrackBar"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.GroupBox.pas"/>
+        <UnitName Value="tyControls.GroupBox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.DefaultTheme.pas"/>
+        <UnitName Value="tyControls.DefaultTheme"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.SpinEdit.pas"/>
+        <UnitName Value="tyControls.SpinEdit"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Memo.pas"/>
+        <UnitName Value="tyControls.Memo"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Animation.pas"/>
+        <UnitName Value="tyControls.Animation"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.UndoStack.pas"/>
+        <UnitName Value="tyControls.UndoStack"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ThemeRegistry.pas"/>
+        <UnitName Value="tyControls.ThemeRegistry"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ThemeBundle.pas"/>
+        <UnitName Value="tyControls.ThemeBundle"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.SystemTheme.pas"/>
+        <UnitName Value="tyControls.SystemTheme"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ThemeLint.pas"/>
+        <UnitName Value="tyControls.ThemeLint"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Menu.pas"/>
+        <UnitName Value="tyControls.Menu"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.BuiltinThemeData.pas"/>
+        <UnitName Value="tyControls.BuiltinThemeData"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.BuiltinThemes.pas"/>
+        <UnitName Value="tyControls.BuiltinThemes"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.TabStrip.pas"/>
+        <UnitName Value="tyControls.TabStrip"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.TabSheet.pas"/>
+        <UnitName Value="tyControls.TabSheet"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.PageControl.pas"/>
+        <UnitName Value="tyControls.PageControl"/>
+      </Item>
     </Files>
-    <RequiredPkgs Count="2">
-      <Item1><PackageName Value="BGRABitmapPack"/></Item1>
-      <Item2><PackageName Value="LCL"/></Item2>
+    <RequiredPkgs>
+      <Item>
+        <PackageName Value="BGRABitmapPack"/>
+      </Item>
+      <Item>
+        <PackageName Value="LCL"/>
+      </Item>
     </RequiredPkgs>
     <UsageOptions>
       <UnitPath Value="$(PkgOutDir)"/>
     </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+    </PublishOptions>
   </Package>
 </CONFIG>
