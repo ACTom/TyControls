@@ -11,7 +11,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller,
-  tyControls.Menu;
+  tyControls.Menu, tyControls.WindowEffects;
 
 type
   TTyBorderHit = (bhNone, bhLeft, bhTop, bhRight, bhBottom,
@@ -173,11 +173,13 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure DoOnChangeBounds; override;
+    procedure DoShow; override;   // first show: apply window corners + shadow once the handle exists
   public
     constructor Create(AOwner: TComponent); override;
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     destructor Destroy; override;
     procedure ApplyChromeTheme(AController: TTyStyleController);
+    procedure ApplyWindowEffects;   // (re)apply OS rounded corners + native shadow from the TyForm style
     function GetAbout: string;
   published
     { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
@@ -683,6 +685,8 @@ begin
     FMaximized := True;
     if FTitleBar <> nil then FTitleBar.MaxButton.Kind := cbkRestore;
   end;
+  // corners must go square when maximized and round again when restored
+  if FForm is TTyForm then TTyForm(FForm).ApplyWindowEffects;
 end;
 
 { TTyForm }
@@ -807,6 +811,7 @@ begin
   // A title bar associated from the .lfm had its engine-arming deferred (see
   // SetTitleBar); now that streaming has finished, wire it to the live engine.
   ArmEngine;
+  ApplyWindowEffects;   // handle exists post-load -> apply corners + shadow
 end;
 
 procedure TTyForm.UpdateFollowWatch;
@@ -1060,7 +1065,24 @@ begin
   if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
     Color := TyColorToLCL(bg.Background.Color);
   UpdateFollowWatch;   // arm/disarm the OS-follow poll to match the controller's Follow policy
+  ApplyWindowEffects;  // re-apply corners + shadow (theme may have changed border-radius/window-shadow)
   Invalidate;
+end;
+
+procedure TTyForm.ApplyWindowEffects;
+var maximized: Boolean;
+begin
+  if (FController = nil) or (not HandleAllocated) then Exit;
+  // The chrome engine fakes maximize via BoundsRect, so read ITS flag (not WindowState).
+  maximized := (FEngine <> nil) and FEngine.Maximized;
+  TyApplyWindowEffects(Self,
+    TyResolveWindowEffect(FController.Model.ResolveStyle('TyForm', '', []), maximized));
+end;
+
+procedure TTyForm.DoShow;
+begin
+  inherited DoShow;
+  ApplyWindowEffects;
 end;
 
 initialization
