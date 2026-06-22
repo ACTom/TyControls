@@ -552,9 +552,15 @@ begin
   if (Button = mbLeft) and (FForm <> nil) and not FMaximized then
   begin
     // Qt6: hand the drag to the window manager — programmatic move() is ignored mid-grab on X11.
-    // When this starts a system move, we do NO per-move repositioning (TitleBarMouseMove no-ops
-    // because FDragging stays False). Win32/GTK2/Qt5 -> False -> the global-cursor fallback below.
-    if TyQtStartSystemMove(FForm) then Exit;
+    // When this starts a system move, release LCL's just-set mouse capture so it doesn't conflict
+    // with the WM's move grab (else after one drag the capture leaks -> the whole window stays in
+    // move-mode). We do NO per-move repositioning (FDragging stays False -> TitleBarMouseMove no-ops).
+    // Win32/GTK2/Qt5 -> False -> the global-cursor fallback below.
+    if TyQtStartSystemMove(FForm) then
+    begin
+      SetCaptureControl(nil);
+      Exit;
+    end;
     FDragging := True;
     // Use the GLOBAL cursor + the form's start origin, not client-relative deltas: on Qt/X11 a
     // programmatic move during a mouse grab is flaky, so we set the ABSOLUTE target each move

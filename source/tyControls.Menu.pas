@@ -968,10 +968,10 @@ begin
   w := Max(FView.MeasureWidth(ppi), AAnchor.Right - AAnchor.Left);
   R := ComputeBounds(AAnchor, w, h, ppi, AToRight);
   FPopupRect := R;
+  TyQtMakePopup(FForm);   // Qt: re-type as Qt::Popup BEFORE Show so it maps app-positioned (no top-left flash)
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   FForm.Show;
-  TyQtMakePopup(FForm);   // Qt: re-type as Qt::Popup so the WM positions it (app-driven) + allows the mouse grab
-  // Qt/X11 RE-PLACES + un-masks a frameless window at MAP time; re-assert now AND again next
+  // Qt/X11 may still RE-PLACE + un-mask a frameless window at MAP time; re-assert now AND again next
   // event-loop turn (DeferredReapplyGeometry), once the native window settles. No-op on Win32/GTK2.
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   // Route keyboard navigation to the dropdown: without focus, arrow/Esc keys never reach
