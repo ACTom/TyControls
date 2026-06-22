@@ -905,34 +905,41 @@ end;
 function TTyMenuPopup.ComputeBounds(const AAnchor: TRect;
   AWidth, AHeight, APPI: Integer; AToRight: Boolean): TRect;
 var
-  L, T, sw, sh: Integer;
+  L, T: Integer;
+  wa: TRect;
+  mon: TMonitor;
 begin
-  sw := Screen.Width;
-  sh := Screen.Height;
+  // Clamp/flip against the WORK AREA of the monitor the anchor sits on, NOT the global virtual
+  // desktop. With multiple monitors (GTK2 reports positions in the global coordinate space), comparing
+  // a global anchor.Y against a single Screen.Height mis-flipped a low menu upward and could place the
+  // popup on the wrong monitor. The anchor's-monitor work area fixes both.
+  wa := Types.Rect(0, 0, Screen.Width, Screen.Height);   // fallback (headless / no monitor info)
+  mon := Screen.MonitorFromPoint(Types.Point((AAnchor.Left + AAnchor.Right) div 2, AAnchor.Top));
+  if mon <> nil then wa := mon.WorkareaRect;
 
   if AToRight then
   begin
     // A submenu sits to the RIGHT of its parent row; flip LEFT if it would overflow.
     L := AAnchor.Right;
-    if L + AWidth > sw then
+    if L + AWidth > wa.Right then
       L := AAnchor.Left - AWidth;
   end
   else
   begin
     // A dropdown aligns its left edge with the anchor; nudge left if it overflows.
     L := AAnchor.Left;
-    if L + AWidth > sw then
-      L := sw - AWidth;
+    if L + AWidth > wa.Right then
+      L := wa.Right - AWidth;
   end;
-  if L < 0 then L := 0;
+  if L < wa.Left then L := wa.Left;
 
   // Hang BELOW the anchor; flip ABOVE only when there's no room below AND genuinely room above.
   // (Never flip a top-anchored menu up off the bar — the GTK2 'menu opens upward' symptom, where a
   // too-small reported Screen.Height or an inflated anchor.Y falsely tripped the old unconditional flip.)
   T := AAnchor.Bottom;
-  if (T + AHeight > sh) and (AAnchor.Top - AHeight >= 0) then
+  if (T + AHeight > wa.Bottom) and (AAnchor.Top - AHeight >= wa.Top) then
     T := AAnchor.Top - AHeight;
-  if T < 0 then T := 0;
+  if T < wa.Top then T := wa.Top;
 
   Result := Types.Rect(L, T, L + AWidth, T + AHeight);
 end;
