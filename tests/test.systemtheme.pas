@@ -24,6 +24,7 @@ type
     procedure TestSystemThemeResolvesAccent;
     procedure TestSystemThemeSetModeFlipsSurface;
     procedure TestControllerFollowSetsModeFromScheme;
+    procedure TestFollowAdoptsDefaultModeWhenOSUnreadable;
     procedure TestPollSystemThemeAppliesLiveFlip;
   end;
 
@@ -45,6 +46,11 @@ end;
 function StubModeHookDark: string;
 begin
   Result := 'dark';
+end;
+
+function StubModeHookUnreadable: string;   // OS scheme not probeable (e.g. Linux: no registry)
+begin
+  Result := '';
 end;
 
 function StubAccentHookB: string;
@@ -175,11 +181,41 @@ begin
       AssertEquals('controller Mode follows the detected OS scheme',
         expectedMode, c.Mode)
     else
-      // tssUnknown -> follow must NOT blank the mode (leaves it as-is, here '').
-      AssertEquals('unknown scheme leaves mode unchanged', '', c.Mode);
+      // tssUnknown (OS scheme unreadable): follow adopts the theme's DEFAULT mode so a dual-mode
+      // theme isn't left mode-less (its @mode-only vars would be undefined). Default here = 'light'.
+      AssertEquals('unknown scheme adopts the theme default mode', 'light', c.Mode);
     // And follow re-detection is idempotent / inert when set back to manual.
     c.Follow := tfManual;
-    AssertEquals('manual keeps the last-followed mode', expectedMode, c.Mode);
+    if expectedMode <> '' then
+      AssertEquals('manual keeps the last-followed mode', expectedMode, c.Mode)
+    else
+      AssertEquals('manual keeps the default-adopted mode', 'light', c.Mode);
+  finally
+    c.Free;
+    TySystemModeHook := savedMode;
+  end;
+end;
+
+procedure TSystemThemeTest.TestFollowAdoptsDefaultModeWhenOSUnreadable;
+var c: TTyStyleController; savedMode: TTySystemModeHook; raised: Boolean;
+begin
+  // Linux repro: the OS-scheme hook returns '' (no registry to probe). A dual-mode theme whose
+  // body uses a @mode-only var must NOT be left mode-less — follow adopts the theme's default mode
+  // ('light') so the var resolves instead of raising "Undefined variable: --transparent-fill".
+  savedMode := TySystemModeHook;
+  c := TTyStyleController.Create(nil);
+  try
+    TySystemModeHook := @StubModeHookUnreadable;
+    c.LoadThemeCss(
+      'TyButton { background: var(--transparent-fill); }' +
+      '@mode light { :root { --transparent-fill: alpha(#FFFFFF, 0); } }' +
+      '@mode dark  { :root { --transparent-fill: alpha(#000000, 0); } }');
+    AssertEquals('no mode before follow', '', c.Mode);
+    c.Follow := tfFollowSystem;
+    AssertEquals('unreadable OS -> adopt the theme default (light)', 'light', c.Mode);
+    raised := False;
+    try c.Model.ResolveStyle('TyButton', '', []); except raised := True; end;
+    AssertFalse('@mode-only var resolves after default-mode adoption (no Undefined variable)', raised);
   finally
     c.Free;
     TySystemModeHook := savedMode;

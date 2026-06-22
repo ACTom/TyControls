@@ -239,12 +239,18 @@ begin
   if Assigned(TySystemModeHook) then modeName := TySystemModeHook();
   accent := '';
   if Assigned(TySystemAccentHook) then accent := TySystemAccentHook();
+  FLastMode := modeName;   // snapshot the RAW OS reading (so PollSystemTheme no-ops while it holds)
+  FLastAccent := accent;
+  // OS scheme unreadable (e.g. Linux has no registry hook -> '') AND no mode chosen yet: adopt the
+  // theme's default mode so a dual-mode theme isn't left mode-less — its @mode-only vars (e.g.
+  // --transparent-fill) would otherwise be UNDEFINED and blow up at resolve. A mode already in
+  // effect is left untouched: an unreadable OS must never blank a deliberately-set mode.
+  if (modeName = '') and (FModel.Mode = '') then
+    modeName := FModel.DefaultModeName;
   if (modeName <> '') and (FModel.Mode <> modeName) then
     FModel.SetMode(modeName)   // scheme flipped -> switch @mode block (re-merges)
   else
     FModel.RefreshSystemTokens; // same/unknown scheme -> still re-resolve the accent
-  FLastMode := modeName;
-  FLastAccent := accent;
   Changed;
 end;
 

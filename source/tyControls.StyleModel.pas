@@ -104,6 +104,11 @@ type
       version + lets the caller repaint. }
     procedure RefreshSystemTokens;
     property Mode: string read FMode write SetMode;
+    { The mode a follower should adopt when the OS scheme is unreadable (e.g. Linux has no registry
+      hook): 'light' if a light @mode exists, else the first declared @mode, else '' (single-mode).
+      Lets a host keep a dual-mode theme from being left mode-less — its @mode-only vars would
+      otherwise be undefined at resolve. Pure query; does NOT change the active mode. }
+    function DefaultModeName: string;
     property ThemeVersion: Cardinal read FVersion;  // bumps on every load/clear
     { A7 property cascade. False (default) = today's all-or-nothing: a user rule for a
       typeKey suppresses the ENTIRE built-in layer for that typeKey (golden baseline).
@@ -722,6 +727,14 @@ begin
   idx := FModeVars.IndexOf(LowerCase(Trim(AMode)));
   if idx >= 0 then
     Result := TStringList(FModeVars.Objects[idx]);
+end;
+
+function TTyStyleModel.DefaultModeName: string;
+{ Prefer a 'light' @mode (the convention); else the first declared @mode; else '' (single-mode). }
+begin
+  if FModeVars.Count = 0 then Result := ''
+  else if FModeVars.IndexOf('light') >= 0 then Result := 'light'
+  else Result := FModeVars[0];
 end;
 
 procedure TTyStyleModel.Clear;
