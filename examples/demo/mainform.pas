@@ -78,6 +78,8 @@ type
     procedure ApDarkClick(Sender: TObject);
     procedure ApAutoClick(Sender: TObject);
     procedure RandomClick(Sender: TObject);
+    procedure TyButton1Click(Sender: TObject);
+    procedure TyButton3Click(Sender: TObject);
   private
     function ThemeDir: string;
     procedure InitThemes;
@@ -196,6 +198,16 @@ end;
 procedure TDemoMainForm.RandomClick(Sender: TObject);
 begin
 
+end;
+
+procedure TDemoMainForm.TyButton1Click(Sender: TObject);
+begin
+  TyButton1.Caption := TyButton1.Caption + '1';
+end;
+
+procedure TDemoMainForm.TyButton3Click(Sender: TObject);
+begin
+  TyButton3.Caption := TyButton3.Caption + '1';
 end;
 
 procedure TDemoMainForm.MnuViewToggleClick(Sender: TObject);
