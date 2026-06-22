@@ -67,6 +67,7 @@ type
     FOnCloseRequested: TNotifyEvent;
     FOnCloseChild: TNotifyEvent;
     FOnNavigateAdjacentBar: TTyMenuAdjacentEvent;
+    FOnNavigateLeft: TNotifyEvent;
     { Lazy hover-open timer (the ToggleSwitch/ComboBox lazy-TTimer idiom): while the
       highlight rests on a submenu row, it (re)starts; on fire it requests opening that
       row's submenu. FHoverPending is the row armed for opening, or -1 (disarmed). }
@@ -132,6 +133,9 @@ type
     property OnCloseChild: TNotifyEvent read FOnCloseChild write FOnCloseChild;
     property OnNavigateAdjacentBar: TTyMenuAdjacentEvent
       read FOnNavigateAdjacentBar write FOnNavigateAdjacentBar;
+    { Left key: the host popup decides by level — a submenu collapses to its parent, the
+      ROOT dropdown rotates to the previous top. Distinct from OnCloseRequested (Esc). }
+    property OnNavigateLeft: TNotifyEvent read FOnNavigateLeft write FOnNavigateLeft;
   end;
 
   { Borderless TForm host for a TTyMenuView, plus the submenu-cascade manager.
@@ -160,9 +164,12 @@ type
     procedure HandleCloseRequested(Sender: TObject);
     procedure HandleCloseChild(Sender: TObject);
     procedure HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
+    procedure HandleNavigateLeft(Sender: TObject);
+    function IsSubmenuLevel: Boolean;
     procedure FormDeactivate(Sender: TObject);
     procedure DeferredDismiss(Data: PtrInt);
     procedure DeferredForceClose(Data: PtrInt);
+    procedure DeferredCollapseChild(Data: PtrInt);
   protected
     { Pure placement: turn an anchor rect (screen coords) + the popup's size into a
       screen rect, flipping ABOVE the anchor when there is no room below and (for a
@@ -720,10 +727,9 @@ begin
       end;
     VK_LEFT:
       begin
-        // Collapse this level (a submenu cascade closes back to its parent). The
-        // host decides whether "close this level" at the bar root rotates to the
-        // previous top — it does so from inside its OnCloseRequested handler.
-        if Assigned(FOnCloseRequested) then FOnCloseRequested(Self);
+        // Left: a submenu collapses back to its parent; the ROOT dropdown rotates to the
+        // PREVIOUS top. The host popup decides by level (it knows if it is a child cascade).
+        if Assigned(FOnNavigateLeft) then FOnNavigateLeft(Self);
         Key := 0;
       end;
     VK_ESCAPE:
@@ -891,6 +897,7 @@ begin
   FView.OnCloseRequested := @HandleCloseRequested;
   FView.OnCloseChild := @HandleCloseChild;
   FView.OnNavigateAdjacentBar := @HandleNavigateAdjacent;
+  FView.OnNavigateLeft := @HandleNavigateLeft;
   if FRoot <> nil then
     FView.SetRows(TyBuildMenuRows(FRoot));
 end;
@@ -952,6 +959,9 @@ begin
   R := ComputeBounds(AAnchor, w, h, ppi, AToRight);
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   FForm.Show;
+  // Route keyboard navigation to the dropdown: without focus, arrow/Esc keys never reach
+  // TTyMenuView.KeyDown and a keypress can instead deactivate (and dismiss) the popup.
+  if FView.CanFocus then FView.SetFocus;
   { Round the popup window's corners to match the themed fill, now that Show has
     allocated the handle. Re-applied every Popup so it follows the current size. }
   ApplyFormRegion(R.Right - R.Left, R.Bottom - R.Top);
@@ -1095,9 +1105,39 @@ begin
   DoOpenSubmenu(AIndex);
 end;
 
+function TTyMenuPopup.IsSubmenuLevel: Boolean;
+begin
+  // A submenu cascade is Create(parentPopup); the bar's root dropdown is Create(bar).
+  Result := (Owner <> nil) and (Owner is TTyMenuPopup);
+end;
+
+procedure TTyMenuPopup.DeferredCollapseChild(Data: PtrInt);
+begin
+  // Free our open child cascade and return keyboard focus to THIS level. Deferred so we
+  // never free a popup whose own view's KeyDown is still on the stack (cf. DeferredForceClose).
+  if FChild <> nil then FreeAndNil(FChild);
+  if (FForm <> nil) and FForm.Visible and (FView <> nil) and FView.CanFocus then
+    FView.SetFocus;
+end;
+
 procedure TTyMenuPopup.HandleCloseRequested(Sender: TObject);
 begin
-  CloseAll;
+  // Esc: a submenu collapses back to its parent; the root dropdown closes the whole menu.
+  if IsSubmenuLevel then
+    Application.QueueAsyncCall(@TTyMenuPopup(Owner).DeferredCollapseChild, 0)
+  else
+    CloseAll;
+end;
+
+procedure TTyMenuPopup.HandleNavigateLeft(Sender: TObject);
+begin
+  // Left: a submenu collapses back to its parent; the root dropdown rotates to the PREVIOUS top.
+  if IsSubmenuLevel then
+    Application.QueueAsyncCall(@TTyMenuPopup(Owner).DeferredCollapseChild, 0)
+  else if Assigned(FOnNavigateAdjacent) then
+    FOnNavigateAdjacent(Self, -1)
+  else
+    CloseAll;
 end;
 
 procedure TTyMenuPopup.HandleCloseChild(Sender: TObject);
