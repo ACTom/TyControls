@@ -333,11 +333,10 @@ type
 
 implementation
 
-// The Windows unit (for CreateRoundRectRgn/SetWindowRgn) declares POINT=TPOINT and
-// RECT=TRect type aliases that shadow the Types.Point()/Rect() helper FUNCTIONS, so
-// the Rect()/Point() construction call sites in this unit are qualified Types.* .
-uses Math, BGRABitmap
-  {$IFDEF WINDOWS}, Windows{$ENDIF};
+// Rounded popup corners use the CROSS-PLATFORM LCLIntf SetWindowRgn/CreateRoundRectRgn (the
+// win32/gtk2/qt widgetsets all implement them) — no Windows unit needed. (Rect()/Point() call
+// sites remain qualified Types.* — harmless now that the Windows POINT=TPOINT shadow is gone.)
+uses Math, BGRABitmap;
 
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
 var i, n: Integer; mi: TMenuItem;
@@ -913,9 +912,11 @@ begin
   end;
   if L < 0 then L := 0;
 
-  // Hang BELOW the anchor; flip ABOVE when there isn't room below the bottom.
+  // Hang BELOW the anchor; flip ABOVE only when there's no room below AND genuinely room above.
+  // (Never flip a top-anchored menu up off the bar — the GTK2 'menu opens upward' symptom, where a
+  // too-small reported Screen.Height or an inflated anchor.Y falsely tripped the old unconditional flip.)
   T := AAnchor.Bottom;
-  if T + AHeight > sh then
+  if (T + AHeight > sh) and (AAnchor.Top - AHeight >= 0) then
     T := AAnchor.Top - AHeight;
   if T < 0 then T := 0;
 
@@ -946,6 +947,9 @@ begin
   R := ComputeBounds(AAnchor, w, h, ppi, AToRight);
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   FForm.Show;
+  // Qt/X11 may RE-PLACE a frameless stay-on-top window at MAP time (centering it over the parent);
+  // re-assert the computed rect AFTER Show so the popup lands at its anchor. No-op on Win32/GTK2.
+  FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   // Route keyboard navigation to the dropdown: without focus, arrow/Esc keys never reach
   // TTyMenuView.KeyDown and a keypress can instead deactivate (and dismiss) the popup.
   if FView.CanFocus then FView.SetFocus;
@@ -957,31 +961,33 @@ end;
 { Shape the popup window with a rounded region matching the popup's themed
   BorderRadius (TyMenuPopup, scaled to device PPI). Non-Windows: graceful no-op. }
 procedure TTyMenuPopup.ApplyFormRegion(AWidth, AHeight: Integer);
-{$IFDEF WINDOWS}
 var
   S: TTyStyleSet;
   d: Integer;
-  Rgn: Windows.HRGN;
-{$ENDIF}
+  Rgn: HRGN;
 begin
-  {$IFDEF WINDOWS}
   if (FForm = nil) or (not FForm.HandleAllocated) or (FView = nil) then Exit;
   { Resolve the popup's own style so the corner radius tracks the theme. The
     rendered surface (TyMenuView) and the popup-host selector (TyMenuPopup) carry
     the same radius token; use the host selector named in the spec. }
   S := FView.ActiveController.Model.ResolveStyle('TyMenuPopup', '', []);
+  // Paint the window background with the popup's own surface so the corner gaps OUTSIDE the rounded
+  // region are not the dark default form Color (the Linux 'black corners') if a widgetset's region
+  // is a no-op; on widgetsets where the region clips (win32/gtk2/qt), the gaps are hidden anyway.
+  if S.Background.Kind = tfkSolid then
+    FForm.Color := TyColorToLCL(S.Background.Color);
   d := MulDiv(S.BorderRadius, FForm.Font.PixelsPerInch, 96) * 2;
   if d <= 0 then
   begin
     { Radius 0: leave rectangular (clear any region carried over from a prior open). }
-    Windows.SetWindowRgn(FForm.Handle, 0, True);
+    SetWindowRgn(FForm.Handle, 0, True);
     Exit;
   end;
-  { +1: CreateRoundRectRgn's right/bottom extents are exclusive. SetWindowRgn takes
-    ownership of the region handle, so it must not be deleted afterwards. }
-  Rgn := Windows.CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
-  Windows.SetWindowRgn(FForm.Handle, Rgn, True);
-  {$ENDIF}
+  { +1: CreateRoundRectRgn's right/bottom extents are exclusive. SetWindowRgn takes ownership of the
+    region handle, so it must not be deleted afterwards. LCLIntf routes to the widgetset: win32 =
+    native region, gtk2 = gdk_window_shape_combine_region, qt = QWidget.setMask. }
+  Rgn := CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
+  SetWindowRgn(FForm.Handle, Rgn, True);
 end;
 
 procedure TTyMenuPopup.CloseAll;

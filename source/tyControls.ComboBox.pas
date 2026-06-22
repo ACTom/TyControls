@@ -111,10 +111,9 @@ type
   end;
 implementation
 uses
-  // The Windows unit (for CreateRoundRectRgn/SetWindowRgn) declares POINT=TPOINT and
-  // RECT=TRect type aliases that shadow the Types.Point()/Rect() helper FUNCTIONS, so
-  // the few Rect()/Point() construction call sites in this unit are qualified Types.* .
-  Math{$IFDEF WINDOWS}, Windows{$ENDIF};
+  // Rounded popup corners use the CROSS-PLATFORM LCLIntf SetWindowRgn/CreateRoundRectRgn (win32/
+  // gtk2/qt all implement them) — no Windows unit. (Rect()/Point() call sites stay qualified Types.*.)
+  Math;
 
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
 var n, i, idx: Integer; pfx: string;
@@ -392,6 +391,9 @@ begin
   FPopup.SetBounds(P.X, P.Y, PopupW, PopupH);
 
   FPopup.Show;
+  // Qt/X11 may RE-PLACE a frameless stay-on-top window at map time (centering it); re-assert the
+  // rect AFTER Show so the dropdown lands under the combo. No-op on Win32/GTK2 (already there).
+  FPopup.SetBounds(P.X, P.Y, PopupW, PopupH);
   { Round the popup window's corners to match the dropdown's themed fill, now that
     the handle is allocated by Show. Re-applied here every DropDown so it follows
     the popup's current size, PPI and theme. }
@@ -402,33 +404,33 @@ end;
 { Shape the popup window with a rounded region matching the dropdown list's themed
   BorderRadius (scaled to device PPI). On non-Windows this is a graceful no-op. }
 procedure TTyComboBox.ApplyPopupRegion(AWidth, AHeight: Integer);
-{$IFDEF WINDOWS}
 var
   S: TTyStyleSet;
   d: Integer;
-  Rgn: Windows.HRGN;
-{$ENDIF}
+  Rgn: HRGN;
 begin
-  {$IFDEF WINDOWS}
   if (FPopup = nil) or (not FPopup.HandleAllocated) then Exit;
   { Resolve the dropdown list's own style so the corner radius tracks the theme.
     The popup hosts a TTyListBox (style key 'TyListBox'); resolve it through the
     combo's active controller (the same theme the popup list paints with). }
   S := ActiveController.Model.ResolveStyle('TyListBox', '', []);
+  // Fill the window background with the list surface so the corner gaps OUTSIDE the rounded region
+  // are not the dark default form Color (the Linux 'black corners') where a widgetset region no-ops.
+  if S.Background.Kind = tfkSolid then
+    FPopup.Color := TyColorToLCL(S.Background.Color);
   { Scale the logical BorderRadius to the popup's device PPI; the rounded-rect
     region uses the FULL corner diameter (2 * radius). }
   d := MulDiv(S.BorderRadius, FPopup.Font.PixelsPerInch, 96) * 2;
   if d <= 0 then
   begin
     { Radius 0: leave the window rectangular (clear any region from a prior open). }
-    Windows.SetWindowRgn(FPopup.Handle, 0, True);
+    SetWindowRgn(FPopup.Handle, 0, True);
     Exit;
   end;
-  { +1 on the extents: CreateRoundRectRgn's right/bottom are exclusive. }
-  Rgn := Windows.CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
-  { SetWindowRgn takes ownership of Rgn; do not delete it. }
-  Windows.SetWindowRgn(FPopup.Handle, Rgn, True);
-  {$ENDIF}
+  { +1 on the extents: CreateRoundRectRgn's right/bottom are exclusive. SetWindowRgn takes ownership
+    of Rgn; do not delete it. LCLIntf routes it: win32 native / gtk2 shape-combine / qt setMask. }
+  Rgn := CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
+  SetWindowRgn(FPopup.Handle, Rgn, True);
 end;
 
 procedure TTyComboBox.CloseUp;

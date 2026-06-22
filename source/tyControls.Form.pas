@@ -94,7 +94,8 @@ type
     FBorderZone: Integer;
     FInstalledPPI: Integer;
     FDragging: Boolean;
-    FDragStart: TPoint;
+    FDragStart: TPoint;        // GLOBAL cursor pos at drag start (screen coords)
+    FDragFormStart: TPoint;    // form Left/Top at drag start
     FResizing: Boolean;
     FResizeHit: TTyBorderHit;
     FResizeStartBounds: TRect;
@@ -551,7 +552,11 @@ begin
   if (Button = mbLeft) and (FForm <> nil) and not FMaximized then
   begin
     FDragging := True;
-    FDragStart := Point(X, Y);
+    // Use the GLOBAL cursor + the form's start origin, not client-relative deltas: on Qt/X11 a
+    // programmatic move during a mouse grab is flaky, so we set the ABSOLUTE target each move
+    // (mathematically identical to the old delta on Win32/GTK2, so those are unaffected).
+    FDragStart := Mouse.CursorPos;
+    FDragFormStart := Point(FForm.Left, FForm.Top);
   end;
 end;
 
@@ -559,8 +564,8 @@ procedure TTyChromeEngine.TitleBarMouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   if FDragging and (FForm <> nil) then
   begin
-    FForm.Left := FForm.Left + (X - FDragStart.X);
-    FForm.Top := FForm.Top + (Y - FDragStart.Y);
+    FForm.Left := FDragFormStart.X + (Mouse.CursorPos.X - FDragStart.X);
+    FForm.Top  := FDragFormStart.Y + (Mouse.CursorPos.Y - FDragStart.Y);
   end;
 end;
 

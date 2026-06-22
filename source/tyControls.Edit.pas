@@ -1144,7 +1144,7 @@ begin
   Before := UTF8Copy(FText, 1, FCaret);
   After  := UTF8Copy(FText, FCaret + 1, UTF8Length(FText) - FCaret);
   FText  := Before + Ch + After;
-  Inc(FCaret);
+  Inc(FCaret, UTF8Length(Ch));   // advance by CODEPOINTS, not 1: Qt/GTK IME can deliver a multi-codepoint commit
   FSelAnchor := FCaret;
   InvalidateWidthCache;
   APPI := Font.PixelsPerInch;
