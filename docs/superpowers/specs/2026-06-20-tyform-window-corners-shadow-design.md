@@ -62,11 +62,19 @@ TyForm {
   border-radius: 8px;     /* ALREADY parsed (StyleModel ApplyBorderRadius -> TTyStyleSet.BorderRadius).
                              Window uses the UNIFORM BorderRadius. Win11 -> enum, macOS -> exact px,
                              older Win/Linux -> ignored (square). */
-  window-shadow: true;    /* NEW boolean token: opt into the OS-native window shadow.
+  window-shadow: true;    /* NEW boolean token: toggle the OS-native window shadow.
                              On/off only — the OS owns the look (blur/color/spread not customizable,
                              because a custom-styled shadow would need the layered approach we can't use). */
 }
 ```
+
+**Defaults — ON by default.** Corners + shadow apply with **no theme tokens required**. A pure helper
+`TyResolveWindowEffect(Style, Maximized)` encodes the policy: if `TyForm` has no `border-radius`, use
+`TyDefaultWindowRadiusPx = 8`; if it has no `window-shadow`, treat it as `true`. A theme opts out
+explicitly with `border-radius: 0` (square) and/or `window-shadow: false`. The shipped default theme's
+`TyForm` rule sets neither, so it inherits the defaults. The default-radius constant is the single visual
+value living in code — and it is fully css-overridable, which keeps the theme-customizability principle
+satisfied. The helper is pure, so the default-on / opt-out behavior is unit-tested headlessly.
 
 `window-shadow` parsing (engine change): add a `window-shadow` property handler in
 `tyControls.StyleModel` (parse `true`/`false`), a `WindowShadow: Boolean` field + a present-flag
@@ -118,8 +126,9 @@ confirm it's present in HEAD and fold it in.)
 
 ## Integration into TTyForm
 
-1. Build a `TTyWindowEffect` from the resolved `TyForm` style: `RadiusPx := P.Scale(Style.BorderRadius)`
-   (device px), `Shadow := Style.WindowShadow`, `Maximized := WindowState = wsMaximized`.
+1. Build a `TTyWindowEffect` from the resolved `TyForm` style via `TyResolveWindowEffect(Style, Maximized)`
+   — `RadiusPx` is the LOGICAL css px (default 8 when the token is absent), `Shadow` defaults to true when
+   absent, `Maximized := WindowState = wsMaximized`.
 2. Call `TyApplyWindowEffects` from:
    - **after the handle exists + first shown** (a `DoShow`/`Loaded` hook — the HWND/NSWindow must exist),
    - **`ApplyChromeTheme`** (theme switch may change radius/shadow — re-apply, `Form.pas:~1059`),
