@@ -40,9 +40,16 @@ begin
 end;
 
 procedure TyQtMakePopup(AForm: TCustomForm);
+var w: TQtMainWindow;
 begin
   if (AForm = nil) or (not AForm.HandleAllocated) then Exit;
-  TQtMainWindow(AForm.Handle).setWindowFlags(QtPopup or QtFramelessWindowHint);
+  w := TQtMainWindow(AForm.Handle);
+  if (w.windowFlags and QtWindowType_Mask) = QtPopup then Exit;   // already a popup: don't re-flag (avoids re-hide churn)
+  w.setWindowFlags(QtPopup or QtFramelessWindowHint);
+  // setWindowFlags HIDES the window in Qt — must re-show. As a Qt::Popup it is now app-positioned
+  // and grabs/releases the mouse properly (the prior 'grab only for popup windows' warning + the
+  // leaked grab came from it NOT being a popup). The caller re-asserts SetBounds right after.
+  w.setVisible(True);
 end;
 
 function TyQtStartSystemMove(AForm: TCustomForm): Boolean;
