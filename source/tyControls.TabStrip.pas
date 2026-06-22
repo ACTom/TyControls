@@ -2,9 +2,9 @@ unit tyControls.TabStrip;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, ExtCtrls,
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
-  tyControls.Animation;
+  tyControls.Animation, tyControls.Accel;
 
 type
   TTyTabCloseEvent = procedure(Sender: TObject; AIndex: Integer;
@@ -103,6 +103,7 @@ type
     procedure SetController(AValue: TTyStyleController); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    function DialogChar(var Message: TLMKey): Boolean; override;
     procedure AdjustClientRect(var ARect: TRect); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
                         X, Y: Integer); override;
@@ -194,6 +195,7 @@ implementation
 constructor TTyCustomTabStrip.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  TyAccelRegister(Self);
   FTabIndex  := -1;
   FPendingTabIndex := -1;
   FTabHeight := 28;
@@ -221,7 +223,20 @@ begin
   { FTimer is owned by Self (would be freed by DestroyComponents), but free it
     explicitly first so the OnTimer callback can never fire mid-teardown. }
   FreeAndNil(FTimer);
+  TyAccelUnregister(Self);
   inherited Destroy;
+end;
+
+function TTyCustomTabStrip.DialogChar(var Message: TLMKey): Boolean;
+var I: Integer;
+begin
+  for I := 0 to GetTabCount - 1 do
+    if TyIsAccelKey(Message, GetTabCaption(I)) then
+    begin
+      SetTabIndex(I);
+      Exit(True);
+    end;
+  Result := inherited DialogChar(Message);
 end;
 
 { Default virtual hooks. Subclasses override these to wire real tab data:
@@ -348,6 +363,8 @@ var
   TabStyle: TTyStyleSet;
   I, X, TW, HW, Cy: Integer;
   VisibleWidth, AffordanceW, ArrowW, MaxScroll: Integer;
+  dispCap: string;
+  mpm: Integer;
 begin
   SetLength(FHeaderRects, GetTabCount);
   SetLength(FCloseRects, GetTabCount);
@@ -365,7 +382,8 @@ begin
   X := 0;
   for I := 0 to GetTabCount - 1 do
   begin
-    TW := TabCaptionWidth(GetTabCaption(I), TabStyle, APPI) + 2 * Pad;
+    TyParseMnemonic(GetTabCaption(I), dispCap, mpm);
+    TW := TabCaptionWidth(dispCap, TabStyle, APPI) + 2 * Pad;
     if GetTabClosableAt(I) then
     begin
       Inc(TW, CloseSlot);
@@ -670,6 +688,8 @@ var
   TabStates: TTyStateSet;
   CloseHi: TTyFill;
   FadeEased: Single;
+  disp: string;
+  mp: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -750,11 +770,12 @@ begin
       TextRect := HdrRect;
       if GetTabClosableAt(I) then
         TextRect.Right := CloseRect.Left;
+      TyParseMnemonic(GetTabCaption(I), disp, mp);
       P.DrawText(TextRect,
-        GetTabCaption(I),
+        disp,
         TabStyle.FontName, ResolveFontSize(TabStyle), TabStyle.FontWeight,
         TabStyle.TextColor,
-        taCenter, tlCenter, True);
+        taCenter, tlCenter, True, TyAccelGatePos(mp));
 
       if GetTabClosableAt(I) then
       begin
