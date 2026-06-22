@@ -29,6 +29,9 @@ type
     Kind: TTyMenuRowKind;
     Item: TMenuItem;        // source item (for activation / submenu)
     Caption: string;
+    Display: string;        // Caption with the mnemonic '&' removed (what is drawn + measured)
+    Mnemonic: Char;         // upper-cased mnemonic char (for Alt+key), or #0
+    MnemonicPos: Integer;   // 1-based index of the mnemonic char within Display, or 0
     ShortcutText: string;   // ShortCutToText(Item.ShortCut)
     Enabled: Boolean;
     Checked: Boolean;
@@ -37,6 +40,12 @@ type
     DefaultItem: Boolean;   // render bold
   end;
   TTyMenuRowArray = array of TTyMenuRow;
+
+{ Parse a caption's mnemonic. A single '&' marks the NEXT char as the mnemonic and is removed
+  from the display; '&&' collapses to a literal '&' (not a mnemonic). Returns the display text in
+  ADisplay, the 1-based index of the mnemonic char within ADisplay in AMnemonicPos (0 = none), and
+  the upper-cased mnemonic char as the result (#0 = none). The first single '&' wins. }
+function TyParseMnemonic(const ACaption: string; out ADisplay: string; out AMnemonicPos: Integer): Char;
 
 { Flatten a root TMenuItem's visible children into render rows. Caption '-' => separator. }
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
@@ -238,7 +247,8 @@ type
     function GetStyleTypeKey: string; override;
     { Pure top-cell geometry seams (device px), driven by theme tokens. }
     function TopCount: Integer;
-    function TopCaption(AIndex: Integer): string;
+    function TopCaption(AIndex: Integer): string;   // mnemonic '&' stripped (display text)
+    function TopMnemonic(AIndex: Integer): Char;    // upper-cased Alt+key mnemonic, or #0
     { Resolve the width of the AIndex-th top cell in device px (caption + the
       TyMenuItem left/right padding), theme-driven. }
     function TopCellWidth(AIndex, APPI: Integer): Integer;
@@ -317,6 +327,42 @@ implementation
 uses Math, BGRABitmap
   {$IFDEF WINDOWS}, Windows{$ENDIF};
 
+function TyParseMnemonic(const ACaption: string; out ADisplay: string; out AMnemonicPos: Integer): Char;
+var i, n: Integer;
+begin
+  Result := #0;
+  AMnemonicPos := 0;
+  ADisplay := '';
+  n := Length(ACaption);
+  i := 1;
+  while i <= n do
+  begin
+    if ACaption[i] = '&' then
+    begin
+      if (i < n) and (ACaption[i + 1] = '&') then
+      begin
+        ADisplay := ADisplay + '&';   // '&&' -> literal '&'
+        Inc(i, 2);
+        Continue;
+      end
+      else if i < n then
+      begin
+        if Result = #0 then            // first single '&' marks the mnemonic
+        begin
+          Result := UpCase(ACaption[i + 1]);
+          AMnemonicPos := Length(ADisplay) + 1;
+        end;
+        Inc(i);                        // drop the '&'; the next char is appended normally
+        Continue;
+      end
+      else
+        Break;                         // trailing '&' -> drop it
+    end;
+    ADisplay := ADisplay + ACaption[i];
+    Inc(i);
+  end;
+end;
+
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
 var i, n: Integer; mi: TMenuItem;
 begin
@@ -336,6 +382,7 @@ begin
     begin
       Result[n].Kind := mrkItem;
       Result[n].Caption := mi.Caption;
+      Result[n].Mnemonic := TyParseMnemonic(mi.Caption, Result[n].Display, Result[n].MnemonicPos);
       // Only render shortcut text for a REAL shortcut — ShortCutToText(0) returns 'Unknown'
       // (not ''), which would otherwise show on every item that has no accelerator.
       if mi.ShortCut <> 0 then
@@ -498,7 +545,7 @@ begin
     begin
       if FRows[i].Kind <> mrkItem then Continue;
       capW := 0;
-      if FRows[i].Caption <> '' then capW := Bmp.TextSize(FRows[i].Caption).cx;
+      if FRows[i].Display <> '' then capW := Bmp.TextSize(FRows[i].Display).cx;
       scW := 0;
       if FRows[i].ShortcutText <> '' then scW := gap + Bmp.TextSize(FRows[i].ShortcutText).cx;
       rowW := Max(rowW, padLR + leftSlot + capW + scW + rightSlot);
@@ -761,7 +808,7 @@ begin
       if FRows[i].DefaultItem then capWeight := 700 else capWeight := RowStyle.FontWeight;
       TextRect := Types.Rect(RowRect.Left + padL + leftSlot, RowRect.Top,
         RowRect.Right - padR - rightSlot, RowRect.Bottom);
-      P.DrawText(TextRect, FRows[i].Caption, RowStyle.FontName, ResolveFontSize(RowStyle),
+      P.DrawText(TextRect, FRows[i].Display, RowStyle.FontName, ResolveFontSize(RowStyle),
         capWeight, RowStyle.TextColor, taLeftJustify, tlCenter, True);
 
       // Submenu arrow OR the right-aligned shortcut text in the right slot.
@@ -1187,10 +1234,18 @@ begin
 end;
 
 function TTyMenuBar.TopCaption(AIndex: Integer): string;
-var mi: TMenuItem;
+var mi: TMenuItem; pos: Integer;
 begin
   mi := VisibleTopItem(AIndex);
-  if mi <> nil then Result := mi.Caption else Result := '';
+  if mi <> nil then TyParseMnemonic(mi.Caption, Result, pos) else Result := '';
+end;
+
+function TTyMenuBar.TopMnemonic(AIndex: Integer): Char;
+var mi: TMenuItem; disp: string; pos: Integer;
+begin
+  Result := #0;
+  mi := VisibleTopItem(AIndex);
+  if mi <> nil then Result := TyParseMnemonic(mi.Caption, disp, pos);
 end;
 
 { A top cell is the item's caption width plus the TyMenuItem left+right padding, all
