@@ -31,20 +31,25 @@ procedure TyAccelUnregister(AControl: TControl);
 function TyIsAccelKey(const Message: TLMKey; const ACaption: string): Boolean;
 
 implementation
-uses SysUtils, Forms, LCLType, LCLIntf, LCLProc;
+uses SysUtils, Forms, ExtCtrls, LCLType, LCLIntf, LCLProc;   // Forms: IsAccel + KeyDataToShiftState
 
 type
-  { A method-of-object host for Application.AddOnUserInputHandler (which needs an of-object event). }
+  { Host for the poll timer's OnTimer. We POLL Alt (not Application.AddOnUserInputHandler) because
+    TOnUserInputEvent's signature varies by Lazarus version (Msg: Cardinal vs var Msg: TLMessage),
+    which breaks cross-version builds; a TTimer's OnTimer is a plain TNotifyEvent, stable everywhere. }
   TTyAccelWatcher = class
-    procedure Input(Sender: TObject; Msg: Cardinal);
+    procedure Tick(Sender: TObject);
   end;
+
+const
+  TyAccelPollMs = 75;   // Alt-state poll interval (ms): responsive cue without busy-waiting
 
 var
   GShowing: Boolean = False;
   GFinalized: Boolean = False;
   GRegistry: TFPList = nil;
   GWatcher: TTyAccelWatcher = nil;
-  GHooked: Boolean = False;
+  GTimer: TTimer = nil;
 
 function TyParseMnemonic(const ACaption: string; out ADisplay: string; out AMnemonicPos: Integer): Char;
 var i, n: Integer;
@@ -75,10 +80,10 @@ begin Result := GShowing; end;
 function TyAccelGatePos(AMnemonicPos: Integer): Integer;
 begin if GShowing then Result := AMnemonicPos else Result := 0; end;
 
-procedure TTyAccelWatcher.Input(Sender: TObject; Msg: Cardinal);
+procedure TTyAccelWatcher.Tick(Sender: TObject);
 var alt: Boolean; i: Integer;
 begin
-  // GetKeyState high bit (negative) = key down. Fires on Alt press/release + mouse input.
+  // Poll the Alt key (GetKeyState high bit = down). Repaint registered controls only when it flips.
   alt := GetKeyState(VK_MENU) < 0;
   if alt = GShowing then Exit;
   GShowing := alt;
@@ -93,23 +98,22 @@ begin
   if csDesigning in AControl.ComponentState then Exit;   // never hook the IDE design surface
   if GRegistry = nil then GRegistry := TFPList.Create;
   if GRegistry.IndexOf(AControl) < 0 then GRegistry.Add(AControl);
-  if not GHooked then
+  if GTimer = nil then
   begin
-    if GWatcher = nil then GWatcher := TTyAccelWatcher.Create;
-    Application.AddOnUserInputHandler(@GWatcher.Input);
-    GHooked := True;
+    GWatcher := TTyAccelWatcher.Create;
+    GTimer := TTimer.Create(nil);
+    GTimer.Interval := TyAccelPollMs;
+    GTimer.OnTimer := @GWatcher.Tick;
   end;
+  GTimer.Enabled := True;   // (re)start polling while at least one control is registered
 end;
 
 procedure TyAccelUnregister(AControl: TControl);
 begin
   if GFinalized or (GRegistry = nil) then Exit;
   GRegistry.Remove(AControl);
-  if GHooked and (GWatcher <> nil) and (GRegistry.Count = 0) then
-  begin
-    Application.RemoveOnUserInputHandler(@GWatcher.Input);
-    GHooked := False;
-  end;
+  if (GTimer <> nil) and (GRegistry.Count = 0) then
+    GTimer.Enabled := False;   // pause polling when no controls remain
 end;
 
 function TyIsAccelKey(const Message: TLMKey; const ACaption: string): Boolean;
@@ -119,12 +123,11 @@ begin
 end;
 
 finalization
-  // Mark finalized FIRST: control destructors run AFTER this unit (Accel uses Forms, so Forms
-  // finalizes later) and call TyAccelUnregister — GFinalized makes that a safe no-op rather than
+  // Mark finalized FIRST: control destructors run AFTER this unit (we use Forms, so the widgetset
+  // finalizes LATER) and call TyAccelUnregister — GFinalized makes that a safe no-op rather than
   // a use-after-free on the freed GRegistry.
   GFinalized := True;
-  if GHooked and (GWatcher <> nil) then Application.RemoveOnUserInputHandler(@GWatcher.Input);
-  GHooked := False;
+  FreeAndNil(GTimer);     // safe: this unit finalizes while the widgetset is still up
   FreeAndNil(GWatcher);
   FreeAndNil(GRegistry);
 end.
