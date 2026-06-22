@@ -2,7 +2,7 @@ unit tyControls.Menu;
 {$mode objfpc}{$H+}
 interface
 uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LCLIntf, LMessages, Menus,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel;
 
 const
   { Layout metrics (logical px, 96-PPI baseline). These are spacing/size tokens, not
@@ -41,13 +41,8 @@ type
   end;
   TTyMenuRowArray = array of TTyMenuRow;
 
-{ Parse a caption's mnemonic. A single '&' marks the NEXT char as the mnemonic and is removed
-  from the display; '&&' collapses to a literal '&' (not a mnemonic). Returns the display text in
-  ADisplay, the 1-based index of the mnemonic char within ADisplay in AMnemonicPos (0 = none), and
-  the upper-cased mnemonic char as the result (#0 = none). The first single '&' wins. }
-function TyParseMnemonic(const ACaption: string; out ADisplay: string; out AMnemonicPos: Integer): Char;
-
-{ Flatten a root TMenuItem's visible children into render rows. Caption '-' => separator. }
+{ Flatten a root TMenuItem's visible children into render rows. Caption '-' => separator.
+  (TyParseMnemonic lives in tyControls.Accel — the shared mnemonic facility.) }
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
 
 type
@@ -238,7 +233,6 @@ type
     FHotIndex: Integer;       // hovered top cell, or -1
     FPopup: TTyMenuPopup;     // lazy dropdown host for the open top item
     FPendingTop: Integer;     // deferred keyboard-rotation target, or -1
-    FShowAccel: Boolean;      // underline the bar mnemonics only while Alt is held
     FAutoSizeWidth: Boolean;  // shrink-to-fit the top cells (see FitWidth)
     FInAutoSizeWidth: Boolean;// re-entrancy guard around the Width := FitWidth set
     procedure SetMenu(AValue: TMainMenu);
@@ -257,9 +251,7 @@ type
     { Deferred OpenTop(FPendingTop): keyboard rotation must not free FPopup synchronously
       while the dropdown view's KeyDown is on the stack (rotating onto a childless top frees it). }
     procedure DeferredOpenTop(Data: PtrInt);
-    { Track Alt via the app-wide input hook: show the mnemonic underline only while Alt is held. }
-    procedure AccelInput(Sender: TObject; Msg: Cardinal);
-    function AccelPos(AIndex: Integer): Integer;   // TopMnemonicPos when FShowAccel, else 0
+    function AccelPos(AIndex: Integer): Integer;   // gated mnemonic pos via the shared facility
   protected
     function GetStyleTypeKey: string; override;
     { Pure top-cell geometry seams (device px), driven by theme tokens. }
@@ -346,42 +338,6 @@ implementation
 // the Rect()/Point() construction call sites in this unit are qualified Types.* .
 uses Math, BGRABitmap
   {$IFDEF WINDOWS}, Windows{$ENDIF};
-
-function TyParseMnemonic(const ACaption: string; out ADisplay: string; out AMnemonicPos: Integer): Char;
-var i, n: Integer;
-begin
-  Result := #0;
-  AMnemonicPos := 0;
-  ADisplay := '';
-  n := Length(ACaption);
-  i := 1;
-  while i <= n do
-  begin
-    if ACaption[i] = '&' then
-    begin
-      if (i < n) and (ACaption[i + 1] = '&') then
-      begin
-        ADisplay := ADisplay + '&';   // '&&' -> literal '&'
-        Inc(i, 2);
-        Continue;
-      end
-      else if i < n then
-      begin
-        if Result = #0 then            // first single '&' marks the mnemonic
-        begin
-          Result := UpCase(ACaption[i + 1]);
-          AMnemonicPos := Length(ADisplay) + 1;
-        end;
-        Inc(i);                        // drop the '&'; the next char is appended normally
-        Continue;
-      end
-      else
-        Break;                         // trailing '&' -> drop it
-    end;
-    ADisplay := ADisplay + ACaption[i];
-    Inc(i);
-  end;
-end;
 
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
 var i, n: Integer; mi: TMenuItem;
@@ -1238,35 +1194,21 @@ begin
   FHotIndex := -1;
   FPopup := nil;
   FPendingTop := -1;
-  FShowAccel := False;
-  Application.AddOnUserInputHandler(@AccelInput);   // watch Alt down/up app-wide
+  TyAccelRegister(Self);   // shared Alt-state: repaint the bar when Alt is pressed/released
   Height := 28;
 end;
 
 destructor TTyMenuBar.Destroy;
 begin
-  Application.RemoveOnUserInputHandler(@AccelInput);
+  TyAccelUnregister(Self);
   Application.RemoveAsyncCalls(Self);   // cancel any pending DeferredOpenTop
   FreeAndNil(FPopup);
   inherited Destroy;
 end;
 
-procedure TTyMenuBar.AccelInput(Sender: TObject; Msg: Cardinal);
-var alt: Boolean;
-begin
-  // GetKeyState high bit (negative) = key down. Fires on Alt press/release (key messages)
-  // and on mouse input (which hides the cue when Alt isn't held) — repaint only on change.
-  alt := GetKeyState(VK_MENU) < 0;
-  if alt <> FShowAccel then
-  begin
-    FShowAccel := alt;
-    Invalidate;
-  end;
-end;
-
 function TTyMenuBar.AccelPos(AIndex: Integer): Integer;
 begin
-  if FShowAccel then Result := TopMnemonicPos(AIndex) else Result := 0;
+  Result := TyAccelGatePos(TopMnemonicPos(AIndex));
 end;
 
 function TTyMenuBar.GetStyleTypeKey: string;
