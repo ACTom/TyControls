@@ -2,8 +2,8 @@ unit tyControls.CheckBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel;
 type
   TTyCheckBox = class(TTyCustomControl)
   private
@@ -16,8 +16,10 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    function DialogChar(var Message: TLMKey): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     procedure Click; override;
   published
     property Checked: Boolean read FChecked write SetChecked default False;
@@ -45,8 +47,10 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    function DialogChar(var Message: TLMKey): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     procedure Click; override;
   published
     property Checked: Boolean read FChecked write SetChecked default False;
@@ -68,9 +72,27 @@ implementation
 constructor TTyCheckBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  TyAccelRegister(Self);
   TabStop := True;
   Width := 130;
   Height := 22;
+end;
+
+destructor TTyCheckBox.Destroy;
+begin
+  TyAccelUnregister(Self);
+  inherited Destroy;
+end;
+
+function TTyCheckBox.DialogChar(var Message: TLMKey): Boolean;
+begin
+  if Enabled and TyIsAccelKey(Message, Caption) then
+  begin
+    if CanFocus then SetFocus;
+    Click;
+    Exit(True);
+  end;
+  Result := inherited DialogChar(Message);
 end;
 
 function TTyCheckBox.GetStyleTypeKey: string;
@@ -121,6 +143,8 @@ var
   S, FrameS, CaptionS: TTyStyleSet;
   ContentRect, BoxRect, TextRect, FullRect: TRect;
   BoxSize, Gap: Integer;
+  disp: string;
+  mp: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -162,8 +186,9 @@ begin
       P.DrawGlyph(BoxRect, tgCheck, S.TextColor, 2);
     TextRect := Rect(BoxRect.Right + Gap, ContentRect.Top,
       ContentRect.Right, ContentRect.Bottom);
-    P.DrawText(TextRect, Caption, S.FontName, ResolveFontSize(S), S.FontWeight,
-      CaptionS.TextColor, taLeftJustify, tlCenter, True);
+    TyParseMnemonic(Caption, disp, mp);
+    P.DrawText(TextRect, disp, S.FontName, ResolveFontSize(S), S.FontWeight,
+      CaptionS.TextColor, taLeftJustify, tlCenter, True, TyAccelGatePos(mp));
     P.EndPaint;
   finally
     P.Free;
@@ -180,9 +205,27 @@ end;
 constructor TTyRadioButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  TyAccelRegister(Self);
   TabStop := True;
   Width := 130;
   Height := 22;
+end;
+
+destructor TTyRadioButton.Destroy;
+begin
+  TyAccelUnregister(Self);
+  inherited Destroy;
+end;
+
+function TTyRadioButton.DialogChar(var Message: TLMKey): Boolean;
+begin
+  if Enabled and TyIsAccelKey(Message, Caption) then
+  begin
+    if CanFocus then SetFocus;
+    Click;
+    Exit(True);
+  end;
+  Result := inherited DialogChar(Message);
 end;
 
 function TTyRadioButton.GetStyleTypeKey: string;
@@ -250,6 +293,8 @@ var
   S, FrameS, CaptionS: TTyStyleSet;
   ContentRect, DotRect, TextRect, FullRect: TRect;
   BoxSize, Gap, DotRadiusLogical: Integer;
+  disp: string;
+  mp: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -295,8 +340,9 @@ begin
       P.DrawGlyph(DotRect, tgRadioDot, S.TextColor, 2);
     TextRect := Rect(DotRect.Right + Gap, ContentRect.Top,
       ContentRect.Right, ContentRect.Bottom);
-    P.DrawText(TextRect, Caption, S.FontName, ResolveFontSize(S), S.FontWeight,
-      CaptionS.TextColor, taLeftJustify, tlCenter, True);
+    TyParseMnemonic(Caption, disp, mp);
+    P.DrawText(TextRect, disp, S.FontName, ResolveFontSize(S), S.FontWeight,
+      CaptionS.TextColor, taLeftJustify, tlCenter, True, TyAccelGatePos(mp));
     P.EndPaint;
   finally
     P.Free;
