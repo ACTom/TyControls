@@ -1,7 +1,7 @@
 unit tyControls.Menu;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, Menus,
+uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LCLIntf, LMessages, Menus,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 
 const
@@ -29,6 +29,9 @@ type
     Kind: TTyMenuRowKind;
     Item: TMenuItem;        // source item (for activation / submenu)
     Caption: string;
+    Display: string;        // Caption with the mnemonic '&' removed (what is drawn + measured)
+    Mnemonic: Char;         // upper-cased mnemonic char (for Alt+key), or #0
+    MnemonicPos: Integer;   // 1-based index of the mnemonic char within Display, or 0
     ShortcutText: string;   // ShortCutToText(Item.ShortCut)
     Enabled: Boolean;
     Checked: Boolean;
@@ -37,6 +40,12 @@ type
     DefaultItem: Boolean;   // render bold
   end;
   TTyMenuRowArray = array of TTyMenuRow;
+
+{ Parse a caption's mnemonic. A single '&' marks the NEXT char as the mnemonic and is removed
+  from the display; '&&' collapses to a literal '&' (not a mnemonic). Returns the display text in
+  ADisplay, the 1-based index of the mnemonic char within ADisplay in AMnemonicPos (0 = none), and
+  the upper-cased mnemonic char as the result (#0 = none). The first single '&' wins. }
+function TyParseMnemonic(const ACaption: string; out ADisplay: string; out AMnemonicPos: Integer): Char;
 
 { Flatten a root TMenuItem's visible children into render rows. Caption '-' => separator. }
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
@@ -58,6 +67,7 @@ type
     FOnCloseRequested: TNotifyEvent;
     FOnCloseChild: TNotifyEvent;
     FOnNavigateAdjacentBar: TTyMenuAdjacentEvent;
+    FOnNavigateLeft: TNotifyEvent;
     { Lazy hover-open timer (the ToggleSwitch/ComboBox lazy-TTimer idiom): while the
       highlight rests on a submenu row, it (re)starts; on fire it requests opening that
       row's submenu. FHoverPending is the row armed for opening, or -1 (disarmed). }
@@ -68,6 +78,8 @@ type
     function ItemRowHeight(APPI: Integer): Integer;
     { True iff AIndex is an in-range, selectable (non-separator, enabled) item row. }
     function IsSelectable(AIndex: Integer): Boolean;
+    { First selectable row whose mnemonic equals AChar (upper-cased), or -1. }
+    function FindMnemonicRow(AChar: Char): Integer;
     { Fire OnActivateRow (leaf) or OnOpenSubmenu (submenu) for AIndex, if enabled. }
     procedure ActivateRow(AIndex: Integer);
   protected
@@ -123,6 +135,9 @@ type
     property OnCloseChild: TNotifyEvent read FOnCloseChild write FOnCloseChild;
     property OnNavigateAdjacentBar: TTyMenuAdjacentEvent
       read FOnNavigateAdjacentBar write FOnNavigateAdjacentBar;
+    { Left key: the host popup decides by level — a submenu collapses to its parent, the
+      ROOT dropdown rotates to the previous top. Distinct from OnCloseRequested (Esc). }
+    property OnNavigateLeft: TNotifyEvent read FOnNavigateLeft write FOnNavigateLeft;
   end;
 
   { Borderless TForm host for a TTyMenuView, plus the submenu-cascade manager.
@@ -151,9 +166,12 @@ type
     procedure HandleCloseRequested(Sender: TObject);
     procedure HandleCloseChild(Sender: TObject);
     procedure HandleNavigateAdjacent(Sender: TObject; ADelta: Integer);
+    procedure HandleNavigateLeft(Sender: TObject);
+    function IsSubmenuLevel: Boolean;
     procedure FormDeactivate(Sender: TObject);
     procedure DeferredDismiss(Data: PtrInt);
     procedure DeferredForceClose(Data: PtrInt);
+    procedure DeferredCollapseChild(Data: PtrInt);
   protected
     { Pure placement: turn an anchor rect (screen coords) + the popup's size into a
       screen rect, flipping ABOVE the anchor when there is no room below and (for a
@@ -219,6 +237,8 @@ type
     FOpenIndex: Integer;      // index of the open top dropdown, or -1 (none open)
     FHotIndex: Integer;       // hovered top cell, or -1
     FPopup: TTyMenuPopup;     // lazy dropdown host for the open top item
+    FPendingTop: Integer;     // deferred keyboard-rotation target, or -1
+    FShowAccel: Boolean;      // underline the bar mnemonics only while Alt is held
     FAutoSizeWidth: Boolean;  // shrink-to-fit the top cells (see FitWidth)
     FInAutoSizeWidth: Boolean;// re-entrancy guard around the Width := FitWidth set
     procedure SetMenu(AValue: TMainMenu);
@@ -234,11 +254,19 @@ type
     procedure ClosePopup;
     { Open (or re-open) the dropdown for top cell AIndex, anchored to its cell rect. }
     procedure OpenTop(AIndex: Integer);
+    { Deferred OpenTop(FPendingTop): keyboard rotation must not free FPopup synchronously
+      while the dropdown view's KeyDown is on the stack (rotating onto a childless top frees it). }
+    procedure DeferredOpenTop(Data: PtrInt);
+    { Track Alt via the app-wide input hook: show the mnemonic underline only while Alt is held. }
+    procedure AccelInput(Sender: TObject; Msg: Cardinal);
+    function AccelPos(AIndex: Integer): Integer;   // TopMnemonicPos when FShowAccel, else 0
   protected
     function GetStyleTypeKey: string; override;
     { Pure top-cell geometry seams (device px), driven by theme tokens. }
     function TopCount: Integer;
-    function TopCaption(AIndex: Integer): string;
+    function TopCaption(AIndex: Integer): string;   // mnemonic '&' stripped (display text)
+    function TopMnemonic(AIndex: Integer): Char;    // upper-cased Alt+key mnemonic, or #0
+    function TopMnemonicPos(AIndex: Integer): Integer;  // 1-based mnemonic index in TopCaption, or 0
     { Resolve the width of the AIndex-th top cell in device px (caption + the
       TyMenuItem left/right padding), theme-driven. }
     function TopCellWidth(AIndex, APPI: Integer): Integer;
@@ -256,6 +284,8 @@ type
     procedure MouseLeave; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { Alt+<mnemonic>: open the matching top menu (LCL broadcasts DialogChar to children). }
+    function DialogChar(var Message: TLMKey): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -317,6 +347,42 @@ implementation
 uses Math, BGRABitmap
   {$IFDEF WINDOWS}, Windows{$ENDIF};
 
+function TyParseMnemonic(const ACaption: string; out ADisplay: string; out AMnemonicPos: Integer): Char;
+var i, n: Integer;
+begin
+  Result := #0;
+  AMnemonicPos := 0;
+  ADisplay := '';
+  n := Length(ACaption);
+  i := 1;
+  while i <= n do
+  begin
+    if ACaption[i] = '&' then
+    begin
+      if (i < n) and (ACaption[i + 1] = '&') then
+      begin
+        ADisplay := ADisplay + '&';   // '&&' -> literal '&'
+        Inc(i, 2);
+        Continue;
+      end
+      else if i < n then
+      begin
+        if Result = #0 then            // first single '&' marks the mnemonic
+        begin
+          Result := UpCase(ACaption[i + 1]);
+          AMnemonicPos := Length(ADisplay) + 1;
+        end;
+        Inc(i);                        // drop the '&'; the next char is appended normally
+        Continue;
+      end
+      else
+        Break;                         // trailing '&' -> drop it
+    end;
+    ADisplay := ADisplay + ACaption[i];
+    Inc(i);
+  end;
+end;
+
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
 var i, n: Integer; mi: TMenuItem;
 begin
@@ -336,6 +402,7 @@ begin
     begin
       Result[n].Kind := mrkItem;
       Result[n].Caption := mi.Caption;
+      Result[n].Mnemonic := TyParseMnemonic(mi.Caption, Result[n].Display, Result[n].MnemonicPos);
       // Only render shortcut text for a REAL shortcut — ShortCutToText(0) returns 'Unknown'
       // (not ''), which would otherwise show on every item that has no accelerator.
       if mi.ShortCut <> 0 then
@@ -498,7 +565,7 @@ begin
     begin
       if FRows[i].Kind <> mrkItem then Continue;
       capW := 0;
-      if FRows[i].Caption <> '' then capW := Bmp.TextSize(FRows[i].Caption).cx;
+      if FRows[i].Display <> '' then capW := Bmp.TextSize(FRows[i].Display).cx;
       scW := 0;
       if FRows[i].ShortcutText <> '' then scW := gap + Bmp.TextSize(FRows[i].ShortcutText).cx;
       rowW := Max(rowW, padLR + leftSlot + capW + scW + rightSlot);
@@ -552,6 +619,15 @@ function TTyMenuView.IsSelectable(AIndex: Integer): Boolean;
 begin
   Result := (AIndex >= 0) and (AIndex <= High(FRows))
     and (FRows[AIndex].Kind = mrkItem) and FRows[AIndex].Enabled;
+end;
+
+function TTyMenuView.FindMnemonicRow(AChar: Char): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  if AChar = #0 then Exit;
+  for i := 0 to High(FRows) do
+    if IsSelectable(i) and (FRows[i].Mnemonic = AChar) then Exit(i);
 end;
 
 function TTyMenuView.FirstSelectable: Integer;
@@ -651,6 +727,7 @@ begin
 end;
 
 procedure TTyMenuView.KeyDown(var Key: Word; Shift: TShiftState);
+var idx: Integer;
 begin
   inherited KeyDown(Key, Shift);
   case Key of
@@ -673,10 +750,9 @@ begin
       end;
     VK_LEFT:
       begin
-        // Collapse this level (a submenu cascade closes back to its parent). The
-        // host decides whether "close this level" at the bar root rotates to the
-        // previous top — it does so from inside its OnCloseRequested handler.
-        if Assigned(FOnCloseRequested) then FOnCloseRequested(Self);
+        // Left: a submenu collapses back to its parent; the ROOT dropdown rotates to the
+        // PREVIOUS top. The host popup decides by level (it knows if it is a child cascade).
+        if Assigned(FOnNavigateLeft) then FOnNavigateLeft(Self);
         Key := 0;
       end;
     VK_ESCAPE:
@@ -684,6 +760,14 @@ begin
         if Assigned(FOnCloseRequested) then FOnCloseRequested(Self);
         Key := 0;
       end;
+  else
+    // Bare letter/digit (no Ctrl/Alt): jump to / activate the row whose mnemonic matches.
+    if (Shift * [ssCtrl, ssAlt] = []) and
+       (((Key >= VK_A) and (Key <= VK_Z)) or ((Key >= VK_0) and (Key <= VK_9))) then
+    begin
+      idx := FindMnemonicRow(UpCase(Chr(Key)));
+      if idx >= 0 then begin SetHighlight(idx); ActivateRow(idx); Key := 0; end;
+    end;
   end;
 end;
 
@@ -761,8 +845,8 @@ begin
       if FRows[i].DefaultItem then capWeight := 700 else capWeight := RowStyle.FontWeight;
       TextRect := Types.Rect(RowRect.Left + padL + leftSlot, RowRect.Top,
         RowRect.Right - padR - rightSlot, RowRect.Bottom);
-      P.DrawText(TextRect, FRows[i].Caption, RowStyle.FontName, ResolveFontSize(RowStyle),
-        capWeight, RowStyle.TextColor, taLeftJustify, tlCenter, True);
+      P.DrawText(TextRect, FRows[i].Display, RowStyle.FontName, ResolveFontSize(RowStyle),
+        capWeight, RowStyle.TextColor, taLeftJustify, tlCenter, True, FRows[i].MnemonicPos);
 
       // Submenu arrow OR the right-aligned shortcut text in the right slot.
       if FRows[i].HasSubmenu then
@@ -844,6 +928,7 @@ begin
   FView.OnCloseRequested := @HandleCloseRequested;
   FView.OnCloseChild := @HandleCloseChild;
   FView.OnNavigateAdjacentBar := @HandleNavigateAdjacent;
+  FView.OnNavigateLeft := @HandleNavigateLeft;
   if FRoot <> nil then
     FView.SetRows(TyBuildMenuRows(FRoot));
 end;
@@ -905,6 +990,9 @@ begin
   R := ComputeBounds(AAnchor, w, h, ppi, AToRight);
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   FForm.Show;
+  // Route keyboard navigation to the dropdown: without focus, arrow/Esc keys never reach
+  // TTyMenuView.KeyDown and a keypress can instead deactivate (and dismiss) the popup.
+  if FView.CanFocus then FView.SetFocus;
   { Round the popup window's corners to match the themed fill, now that Show has
     allocated the handle. Re-applied every Popup so it follows the current size. }
   ApplyFormRegion(R.Right - R.Left, R.Bottom - R.Top);
@@ -1048,9 +1136,39 @@ begin
   DoOpenSubmenu(AIndex);
 end;
 
+function TTyMenuPopup.IsSubmenuLevel: Boolean;
+begin
+  // A submenu cascade is Create(parentPopup); the bar's root dropdown is Create(bar).
+  Result := (Owner <> nil) and (Owner is TTyMenuPopup);
+end;
+
+procedure TTyMenuPopup.DeferredCollapseChild(Data: PtrInt);
+begin
+  // Free our open child cascade and return keyboard focus to THIS level. Deferred so we
+  // never free a popup whose own view's KeyDown is still on the stack (cf. DeferredForceClose).
+  if FChild <> nil then FreeAndNil(FChild);
+  if (FForm <> nil) and FForm.Visible and (FView <> nil) and FView.CanFocus then
+    FView.SetFocus;
+end;
+
 procedure TTyMenuPopup.HandleCloseRequested(Sender: TObject);
 begin
-  CloseAll;
+  // Esc: a submenu collapses back to its parent; the root dropdown closes the whole menu.
+  if IsSubmenuLevel then
+    Application.QueueAsyncCall(@TTyMenuPopup(Owner).DeferredCollapseChild, 0)
+  else
+    CloseAll;
+end;
+
+procedure TTyMenuPopup.HandleNavigateLeft(Sender: TObject);
+begin
+  // Left: a submenu collapses back to its parent; the root dropdown rotates to the PREVIOUS top.
+  if IsSubmenuLevel then
+    Application.QueueAsyncCall(@TTyMenuPopup(Owner).DeferredCollapseChild, 0)
+  else if Assigned(FOnNavigateAdjacent) then
+    FOnNavigateAdjacent(Self, -1)
+  else
+    CloseAll;
 end;
 
 procedure TTyMenuPopup.HandleCloseChild(Sender: TObject);
@@ -1119,13 +1237,36 @@ begin
   FOpenIndex := -1;
   FHotIndex := -1;
   FPopup := nil;
+  FPendingTop := -1;
+  FShowAccel := False;
+  Application.AddOnUserInputHandler(@AccelInput);   // watch Alt down/up app-wide
   Height := 28;
 end;
 
 destructor TTyMenuBar.Destroy;
 begin
+  Application.RemoveOnUserInputHandler(@AccelInput);
+  Application.RemoveAsyncCalls(Self);   // cancel any pending DeferredOpenTop
   FreeAndNil(FPopup);
   inherited Destroy;
+end;
+
+procedure TTyMenuBar.AccelInput(Sender: TObject; Msg: Cardinal);
+var alt: Boolean;
+begin
+  // GetKeyState high bit (negative) = key down. Fires on Alt press/release (key messages)
+  // and on mouse input (which hides the cue when Alt isn't held) — repaint only on change.
+  alt := GetKeyState(VK_MENU) < 0;
+  if alt <> FShowAccel then
+  begin
+    FShowAccel := alt;
+    Invalidate;
+  end;
+end;
+
+function TTyMenuBar.AccelPos(AIndex: Integer): Integer;
+begin
+  if FShowAccel then Result := TopMnemonicPos(AIndex) else Result := 0;
 end;
 
 function TTyMenuBar.GetStyleTypeKey: string;
@@ -1187,10 +1328,26 @@ begin
 end;
 
 function TTyMenuBar.TopCaption(AIndex: Integer): string;
-var mi: TMenuItem;
+var mi: TMenuItem; pos: Integer;
 begin
   mi := VisibleTopItem(AIndex);
-  if mi <> nil then Result := mi.Caption else Result := '';
+  if mi <> nil then TyParseMnemonic(mi.Caption, Result, pos) else Result := '';
+end;
+
+function TTyMenuBar.TopMnemonic(AIndex: Integer): Char;
+var mi: TMenuItem; disp: string; pos: Integer;
+begin
+  Result := #0;
+  mi := VisibleTopItem(AIndex);
+  if mi <> nil then Result := TyParseMnemonic(mi.Caption, disp, pos);
+end;
+
+function TTyMenuBar.TopMnemonicPos(AIndex: Integer): Integer;
+var mi: TMenuItem; disp: string;
+begin
+  Result := 0;
+  mi := VisibleTopItem(AIndex);
+  if mi <> nil then TyParseMnemonic(mi.Caption, disp, Result);
 end;
 
 { A top cell is the item's caption width plus the TyMenuItem left+right padding, all
@@ -1348,7 +1505,44 @@ begin
   idx := FOpenIndex + ADelta;
   if idx < 0 then idx := idx + n
   else if idx >= n then idx := idx - n;
-  OpenTop(idx);
+  // Defer: we are inside the open dropdown view's KeyDown, and OpenTop may FreeAndNil(FPopup)
+  // (rotating onto a childless top), which would free the very view whose KeyDown is on the stack.
+  FPendingTop := idx;
+  Application.QueueAsyncCall(@DeferredOpenTop, 0);
+end;
+
+procedure TTyMenuBar.DeferredOpenTop(Data: PtrInt);
+begin
+  if FPendingTop >= 0 then OpenTop(FPendingTop);
+  FPendingTop := -1;
+end;
+
+function TTyMenuBar.DialogChar(var Message: TLMKey): Boolean;
+var i: Integer; ch: Char; mi: TMenuItem;
+begin
+  // Only Alt+<mnemonic> opens a top menu (mirrors TCustomLabel.DialogChar); a plain keystroke
+  // that reaches the form-level DialogChar broadcast must not spuriously open one.
+  if KeyDataToShiftState(Message.KeyData) * [ssCtrl, ssAlt, ssShift] = [ssAlt] then
+  begin
+    // Message.CharCode here is the TRANSLATED character (lowercase 'f' for Alt+F), NOT a VK code:
+    // map only ASCII letters/digits to an upper-cased char; anything else stays #0 (no match).
+    ch := #0;
+    case Message.CharCode of
+      Ord('0')..Ord('9'), Ord('A')..Ord('Z'), Ord('a')..Ord('z'):
+        ch := UpCase(Chr(Message.CharCode));
+    end;
+    if ch <> #0 then
+      for i := 0 to TopCount - 1 do
+      begin
+        mi := VisibleTopItem(i);
+        if (mi <> nil) and mi.Enabled and (TopMnemonic(i) = ch) then
+        begin
+          OpenTop(i);
+          Exit(True);
+        end;
+      end;
+  end;
+  Result := inherited DialogChar(Message);
 end;
 
 procedure TTyMenuBar.MouseMove(Shift: TShiftState; X, Y: Integer);
@@ -1429,7 +1623,7 @@ begin
       padL := P.Scale(CellStyle.Padding.Left);
       P.DrawText(Types.Rect(CellRect.Left + padL, CellRect.Top, CellRect.Right, CellRect.Bottom),
         TopCaption(i), CellStyle.FontName, ResolveFontSize(CellStyle),
-        CellStyle.FontWeight, CellStyle.TextColor, taLeftJustify, tlCenter, True);
+        CellStyle.FontWeight, CellStyle.TextColor, taLeftJustify, tlCenter, True, AccelPos(i));
     end;
 
     P.EndPaint;

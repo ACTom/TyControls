@@ -6,6 +6,8 @@ type
   TMenuModelTest = class(TTestCase)
   published
     procedure TestBuildRowsMapsFields;
+    procedure TestParseMnemonic;
+    procedure TestBuildRowsParsesMnemonic;
   end;
 
   { Probe subclass: exposes TTyMenuView's protected geometry + navigation seams so
@@ -124,6 +126,59 @@ begin
   finally
     mm.Free;
   end;
+end;
+
+procedure TMenuModelTest.TestParseMnemonic;
+var disp: string; pos: Integer; m: Char;
+begin
+  // single '&' -> mnemonic on the NEXT char, '&' removed from display
+  m := TyParseMnemonic('&File', disp, pos);
+  AssertEquals('display strips &', 'File', disp);
+  AssertEquals('mnemonic char', 'F', m);
+  AssertEquals('mnemonic pos (1-based)', 1, pos);
+
+  // mid-word mnemonic
+  m := TyParseMnemonic('Save &As', disp, pos);
+  AssertEquals('display', 'Save As', disp);
+  AssertEquals('mnemonic char', 'A', m);
+  AssertEquals('mnemonic pos', 6, pos);
+
+  // '&&' -> literal '&', no mnemonic
+  m := TyParseMnemonic('Fish && Chips', disp, pos);
+  AssertEquals('display keeps one &', 'Fish & Chips', disp);
+  AssertEquals('no mnemonic', #0, m);
+  AssertEquals('no mnemonic pos', 0, pos);
+
+  // no '&' at all
+  m := TyParseMnemonic('Edit', disp, pos);
+  AssertEquals('display unchanged', 'Edit', disp);
+  AssertEquals('no mnemonic', #0, m);
+
+  // mnemonic is upper-cased
+  m := TyParseMnemonic('e&xit', disp, pos);
+  AssertEquals('display', 'exit', disp);
+  AssertEquals('mnemonic upper-cased', 'X', m);
+  AssertEquals('pos', 2, pos);
+end;
+
+procedure TMenuModelTest.TestBuildRowsParsesMnemonic;
+var mm: TMainMenu; top, it: TMenuItem; rows: TTyMenuRowArray;
+begin
+  // TyBuildMenuRows must populate Display + Mnemonic from each item's '&' caption
+  // (the letter-jump + underline rely on these per-row fields).
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); top.Caption := 'File'; mm.Items.Add(top);
+    it := TMenuItem.Create(mm); it.Caption := '&Open'; top.Add(it);
+    it := TMenuItem.Create(mm); it.Caption := 'E&xit'; top.Add(it);
+    rows := TyBuildMenuRows(top);
+    AssertEquals('open display', 'Open', rows[0].Display);
+    AssertEquals('open mnemonic', 'O', rows[0].Mnemonic);
+    AssertEquals('open mnemonic pos', 1, rows[0].MnemonicPos);
+    AssertEquals('exit display', 'Exit', rows[1].Display);
+    AssertEquals('exit mnemonic', 'X', rows[1].Mnemonic);
+    AssertEquals('exit mnemonic pos', 2, rows[1].MnemonicPos);
+  finally mm.Free; end;
 end;
 
 { TTyMenuViewAccess }

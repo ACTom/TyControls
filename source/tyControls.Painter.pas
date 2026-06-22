@@ -34,7 +34,7 @@ type
     procedure StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor); overload;
     procedure StrokeBorder(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor); overload;
     procedure DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
-    procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean);
+    procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0);
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
     procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
     procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
@@ -285,12 +285,13 @@ begin
   end;
 end;
 
-procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean);
+procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0);
 var
   style: TTextStyle;
   s: string;
-  sz: TSize;
+  sz, full: TSize;
   px: TBGRAPixel;
+  beforeW, charW, ux, uy, uth: Integer;
 begin
   if FBmp = nil then
     Exit;
@@ -314,6 +315,32 @@ begin
   style.SingleLine := True;
   style.Clipping := True;
   FBmp.TextRect(ARect, ARect.Left, ARect.Top, s, style, px);
+  // Mnemonic underline: a thin line under the AMnemonicPos-th char (1-based), placed by
+  // reusing the same alignment the text was drawn with. Skipped when the text was ellipsis-
+  // truncated (s <> AText), so the underline never lands on a '.' or a shifted glyph.
+  if (AMnemonicPos >= 1) and (AMnemonicPos <= Length(s)) and (s = AText) then
+  begin
+    full := FBmp.TextSize(s);
+    beforeW := FBmp.TextSize(Copy(s, 1, AMnemonicPos - 1)).cx;
+    charW := FBmp.TextSize(Copy(s, AMnemonicPos, 1)).cx;
+    case AHAlign of
+      taCenter:       ux := ARect.Left + ((ARect.Right - ARect.Left) - full.cx) div 2;
+      taRightJustify: ux := ARect.Right - full.cx;
+    else
+      ux := ARect.Left;
+    end;
+    Inc(ux, beforeW);
+    case AVAlign of
+      tlTop:    uy := ARect.Top + full.cy;
+      tlBottom: uy := ARect.Bottom;
+    else
+      uy := ARect.Top + ((ARect.Bottom - ARect.Top) + full.cy) div 2;
+    end;
+    uth := Scale(1);
+    if uth < 1 then uth := 1;
+    Dec(uy, uth);
+    FBmp.FillRect(ux, uy, ux + charW, uy + uth, px, dmDrawWithTransparency);
+  end;
 end;
 
 procedure TTyPainter.DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
