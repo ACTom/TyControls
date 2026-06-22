@@ -15,14 +15,20 @@ for a future Tier-2 native enhancement layer.
 
 - Windows Aero Snap (edge tiling) is not supported; dragging to a screen edge
   moves the form but does not trigger snap-to-half or snap-to-quadrant tiling.
-- Borderless-window native drop shadow: **resolved on macOS** (v1.1). After
-  `BorderStyle := bsNone`, the form restores the system shadow via
-  `NSView(Form.Handle).window.setHasShadow(True)` using the LCL-Cocoa handle
-  convention (`Form.Handle` is a `TCocoaWindowContent` NSView; `.window` gives
-  the backing `NSWindow`). The call is wrapped in `{$IFDEF LCLCOCOA}` so
-  non-Cocoa builds are unaffected.
-  Windows DWM drop shadow remains pending — no cross-compile verification
-  environment is available to test or debug the DWM API path.
+- Borderless-window rounded corners + native drop shadow: **implemented** in
+  `tyControls.WindowEffects` (`TyApplyWindowEffects`), applied by `TTyForm` on
+  show/theme/maximize. ON by default; opt out via `TyForm { border-radius: 0;
+  window-shadow: false; }`. Per-platform: Win11 = anti-aliased DWM corners + free
+  shadow; Win Vista–10 = square + `DwmExtendFrameIntoClientArea` shadow; XP =
+  square, no shadow; macOS = `CALayer.cornerRadius` + `NSWindow.setHasShadow`.
+  `dwmapi.dll` is loaded dynamically (`GetProcAddress`) so the binary still
+  launches on Win7/XP. The pure logic (token parse, radius→enum, default-on) is
+  unit-tested headlessly. **Pending real-machine visual verification** — the
+  actual rendered corners/shadow on Win11, Win10 and macOS still need a human to
+  eyeball (no headless GPU/compositor). Risk: the Win Vista–10 native shadow on a
+  pure `WS_POPUP` (bsNone) window may need a `WM_NCCALCSIZE`/style tweak to appear;
+  if it does not, fall back to no native shadow on pre-Win11. Linux is a documented
+  widgetset-aware extension point (not implemented).
 - macOS traffic-light (red/yellow/green) caption buttons are not emulated;
   TyControls draws its own close/min/max glyphs (`TTyCaptionButton`) instead.
   macOS users do not get platform-standard window controls. A visual approximation

@@ -128,7 +128,40 @@ end;
 
 `TyForm` 令牌在内置主题中为 `background: darken(--surface, 4%)`（窗体背景）。
 
-## 8. 未来条带（bands）与 ribbon —— 仅锁定命名/设计
+## 8. 窗口圆角与原生投影阴影
+
+无边框的 `TTyForm` 在支持的平台上**默认**拥有抗锯齿圆角与原生投影阴影——**无需任何主题令牌**。视觉由两个 `TyForm` 令牌驱动，可在 `.tycss` 中覆盖或关闭：
+
+```css
+TyForm {
+  border-radius: 12px;     /* 圆角半径（默认 8）；逻辑像素 */
+  border-radius: 0;        /* 关闭圆角（方角窗口）       */
+  window-shadow: false;    /* 关闭原生窗口阴影           */
+}
+```
+
+> **默认开启：** 内置主题的 `TyForm` 规则未设置这两个令牌，因此走代码默认值（半径 8 + 阴影开）。要关闭就显式写 `border-radius: 0` / `window-shadow: false`。默认半径常量 `TyDefaultWindowRadiusPx` 是代码里唯一的视觉默认值，且完全可被 css 覆盖——仍符合"视觉由主题令牌驱动"的原则。
+
+### 平台支持矩阵
+
+| 平台 | 圆角 | 阴影 |
+|------|------|------|
+| Windows 11 | 抗锯齿（DWM 圆角偏好） | 随圆角自带的原生阴影 |
+| Windows Vista–10 | 方角（不上锯齿 region） | 原生矩形阴影（`DwmExtendFrameIntoClientArea`） |
+| Windows XP | 方角 | 无（无 DWM 合成器） |
+| macOS | 抗锯齿（`CALayer.cornerRadius`） | 原生（`NSWindow.hasShadow`） |
+| Linux（GTK / Qt） | 由桌面环境决定 | 由桌面环境决定 |
+
+### 实现要点
+
+- **抗锯齿优先：** 只在能做出**平滑**圆角的平台圆角（Win11、macOS）；老版 Windows 保持方角，但仍可加原生阴影。这是经过权衡的取舍——锯齿圆角比方角更难看。
+- **不限定 Win10+：** Windows 路径通过运行期 `GetProcAddress` 动态加载 `dwmapi.dll`（绝不静态 `external`），因此可执行文件在 Win7/XP 上**照常启动**，查不到 DWM 函数时优雅降级。
+- **半径映射：** Win11 的 DWM 只接受枚举（round≈8px / small≈4px / none），无法精确到任意像素，`border-radius` 据此映射到 round/small；macOS 使用精确逻辑像素。
+- **最大化变方角：** 最大化时圆角自动关闭（否则四角会露出桌面），还原时恢复——由 chrome 引擎的 `ToggleMaximize` 触发重新应用。
+- **应用时机：** 首次显示（`DoShow`）、`Loaded`、主题切换（`ApplyChromeTheme`）、最大化/还原时各应用一次。半径为逻辑像素，故 DPI 变化无需重新应用。
+- **架构隔离：** 所有平台/widgetset 代码集中在 `tyControls.WindowEffects` 单元，对外只暴露 `TyApplyWindowEffects` 一个入口；Linux 各 widgetset 留有 widgetset-aware 扩展口（Qt 透明窗 + 自绘抗锯齿圆角 + 自定义阴影是未来最有希望的路径）。
+
+## 9. 未来条带（bands）与 ribbon —— 仅锁定命名/设计
 
 `TTyForm` 的条带模型为**纯增量式（additive）**地添加菜单栏 / ribbon / 工具栏预留了清晰的接缝：
 
@@ -140,7 +173,7 @@ end;
 
 > **增量保证：** 添加条带是未来的纯增量步骤——届时会扩展 `TTyForm` 以**注册条带**，使其堆叠在内容面板之上，并被排除在内容区 reparent 之外。本节记录这一意图，使后续 ribbon 工作保持纯增量、不需返工。
 
-## 9. 注意事项
+## 10. 注意事项
 
 1. **唯一自绘窗框路径：** 自绘窗框只通过继承 `TTyForm` 获得；普通 `TForm` 是原生（无窗框）路径。不存在"把窗框挂到既有 `TForm` 上"的控制器（旧 `TTyFormChrome` 已移除）。
 2. **控件放内容区：** 应用控件应放在 `ContentPanel` 上（设计期直接拖到内容面板）。防御式 `Loaded` 会把误放在窗体根上的控件归位到内容面板，但仍建议直接拖入内容面板以获得正确的设计期 WYSIWYG。
@@ -149,9 +182,9 @@ end;
 5. **缩放最小尺寸：** 边缘缩放硬编码最小宽度 80px、高度 60px（在引擎中），不可经属性配置。
 6. **设计期标题栏皮肤未换肤：** 见第 6 节——这是 tyControls 全库一致的设计期行为，不是缺陷。
 7. **最大化避让任务栏：** 引擎 `ToggleMaximize` 使用当前显示器工作区（`Screen.MonitorFromWindow(...).WorkareaRect`），最大化窗口自然避让任务栏。
-8. **原生窗口行为缺口：** Windows Aero Snap、Windows DWM 原生投影阴影等仍未实现；详见 [KNOWN_GAPS.md](../KNOWN_GAPS.md)。
+8. **原生窗口行为缺口：** Windows Aero Snap 仍未实现；Windows DWM 原生投影阴影与圆角**已实现**（见第 8 节「窗口圆角与原生投影阴影」）。详见 [KNOWN_GAPS.md](../KNOWN_GAPS.md)。
 
-## 10. 相关文档
+## 11. 相关文档
 
 - [titlebar.md](titlebar.md) —— `TTyTitleBar` 标题栏子组件（可定制内容区、`AdjustClientRect`、`ButtonWidth`）。
 - [captionbutton.md](captionbutton.md) —— `TTyCaptionButton` 标题栏系统按钮。
