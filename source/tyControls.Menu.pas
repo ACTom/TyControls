@@ -2,7 +2,8 @@ unit tyControls.Menu;
 {$mode objfpc}{$H+}
 interface
 uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LCLIntf, LMessages, Menus,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel,
+  tyControls.QtWS;
 
 const
   { Layout metrics (logical px, 96-PPI baseline). These are spacing/size tokens, not
@@ -969,8 +970,9 @@ begin
   FPopupRect := R;
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   FForm.Show;
-  // Qt/X11 RE-PLACES + un-masks a frameless stay-on-top window at MAP time; re-assert now AND again
-  // next event-loop turn (DeferredReapplyGeometry), once the native window settles. No-op on Win32/GTK2.
+  TyQtMakePopup(FForm);   // Qt: re-type as Qt::Popup so the WM positions it (app-driven) + allows the mouse grab
+  // Qt/X11 RE-PLACES + un-masks a frameless window at MAP time; re-assert now AND again next
+  // event-loop turn (DeferredReapplyGeometry), once the native window settles. No-op on Win32/GTK2.
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   // Route keyboard navigation to the dropdown: without focus, arrow/Esc keys never reach
   // TTyMenuView.KeyDown and a keypress can instead deactivate (and dismiss) the popup.

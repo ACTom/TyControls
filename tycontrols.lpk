@@ -172,6 +172,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.WindowEffects.pas"/>
         <UnitName Value="tyControls.WindowEffects"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.QtWS.pas"/>
+        <UnitName Value="tyControls.QtWS"/>
+      </Item>
     </Files>
     <RequiredPkgs>
       <Item>

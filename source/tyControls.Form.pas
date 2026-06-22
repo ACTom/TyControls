@@ -11,7 +11,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller,
-  tyControls.Menu, tyControls.WindowEffects;
+  tyControls.Menu, tyControls.WindowEffects, tyControls.QtWS;
 
 type
   TTyBorderHit = (bhNone, bhLeft, bhTop, bhRight, bhBottom,
@@ -551,6 +551,10 @@ procedure TTyChromeEngine.TitleBarMouseDown(Button: TMouseButton;
 begin
   if (Button = mbLeft) and (FForm <> nil) and not FMaximized then
   begin
+    // Qt6: hand the drag to the window manager — programmatic move() is ignored mid-grab on X11.
+    // When this starts a system move, we do NO per-move repositioning (TitleBarMouseMove no-ops
+    // because FDragging stays False). Win32/GTK2/Qt5 -> False -> the global-cursor fallback below.
+    if TyQtStartSystemMove(FForm) then Exit;
     FDragging := True;
     // Use the GLOBAL cursor + the form's start origin, not client-relative deltas: on Qt/X11 a
     // programmatic move during a mouse grab is flaky, so we set the ABSOLUTE target each move

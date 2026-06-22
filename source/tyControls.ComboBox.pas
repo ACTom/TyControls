@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, StdCtrls, LCLType, LCLIntf,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
-  tyControls.ListBox;
+  tyControls.ListBox, tyControls.QtWS;
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
 
 type
@@ -396,6 +396,7 @@ begin
   FPopup.SetBounds(P.X, P.Y, PopupW, PopupH);
 
   FPopup.Show;
+  TyQtMakePopup(FPopup);   // Qt: re-type as Qt::Popup so the WM positions it (app-driven) + allows the mouse grab
   // Qt/X11 RE-PLACES + un-masks a frameless window at MAP time; re-assert now AND again next
   // event-loop turn (DeferredReapplyGeometry), once the native window settles. No-op on Win32/GTK2.
   FPopup.SetBounds(P.X, P.Y, PopupW, PopupH);
