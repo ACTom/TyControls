@@ -230,12 +230,13 @@ end;
 function TTyCustomTabStrip.DialogChar(var Message: TLMKey): Boolean;
 var I: Integer;
 begin
-  for I := 0 to GetTabCount - 1 do
-    if TyIsAccelKey(Message, GetTabCaption(I)) then
-    begin
-      SetTabIndex(I);
-      Exit(True);
-    end;
+  if Enabled then   // match the Enabled gate on MouseDown/KeyDown + the sibling controls
+    for I := 0 to GetTabCount - 1 do
+      if TyIsAccelKey(Message, GetTabCaption(I)) then
+      begin
+        SetTabIndex(I);
+        Exit(True);
+      end;
   Result := inherited DialogChar(Message);
 end;
 

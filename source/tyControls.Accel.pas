@@ -31,7 +31,7 @@ procedure TyAccelUnregister(AControl: TControl);
 function TyIsAccelKey(const Message: TLMKey; const ACaption: string): Boolean;
 
 implementation
-uses Forms, LCLType, LCLIntf, LCLProc;
+uses SysUtils, Forms, LCLType, LCLIntf, LCLProc;
 
 type
   { A method-of-object host for Application.AddOnUserInputHandler (which needs an of-object event). }
@@ -41,6 +41,7 @@ type
 
 var
   GShowing: Boolean = False;
+  GFinalized: Boolean = False;
   GRegistry: TFPList = nil;
   GWatcher: TTyAccelWatcher = nil;
   GHooked: Boolean = False;
@@ -88,7 +89,8 @@ end;
 
 procedure TyAccelRegister(AControl: TControl);
 begin
-  if AControl = nil then Exit;
+  if (AControl = nil) or GFinalized then Exit;
+  if csDesigning in AControl.ComponentState then Exit;   // never hook the IDE design surface
   if GRegistry = nil then GRegistry := TFPList.Create;
   if GRegistry.IndexOf(AControl) < 0 then GRegistry.Add(AControl);
   if not GHooked then
@@ -101,8 +103,9 @@ end;
 
 procedure TyAccelUnregister(AControl: TControl);
 begin
-  if GRegistry <> nil then GRegistry.Remove(AControl);
-  if GHooked and ((GRegistry = nil) or (GRegistry.Count = 0)) then
+  if GFinalized or (GRegistry = nil) then Exit;
+  GRegistry.Remove(AControl);
+  if GHooked and (GWatcher <> nil) and (GRegistry.Count = 0) then
   begin
     Application.RemoveOnUserInputHandler(@GWatcher.Input);
     GHooked := False;
@@ -116,7 +119,12 @@ begin
 end;
 
 finalization
+  // Mark finalized FIRST: control destructors run AFTER this unit (Accel uses Forms, so Forms
+  // finalizes later) and call TyAccelUnregister — GFinalized makes that a safe no-op rather than
+  // a use-after-free on the freed GRegistry.
+  GFinalized := True;
   if GHooked and (GWatcher <> nil) then Application.RemoveOnUserInputHandler(@GWatcher.Input);
-  GWatcher.Free;
-  GRegistry.Free;
+  GHooked := False;
+  FreeAndNil(GWatcher);
+  FreeAndNil(GRegistry);
 end.
