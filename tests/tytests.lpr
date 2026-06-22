@@ -38,7 +38,8 @@ uses
   test.tabsheet,
   test.pagecontrol,
   test.pagecontrol.streaming,
-  test.about;
+  test.about,
+  test.windoweffects;
 
 type
   TTyTestRunner = class(TTestRunner)

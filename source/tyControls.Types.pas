@@ -44,13 +44,14 @@ type
 
   TTyProp = (tpBackground, tpTextColor, tpBorderColor, tpBorderWidth, tpBorderRadius,
              tpPadding, tpFontName, tpFontSize, tpFontWeight, tpOpacity, tpShadow,
-             tpBorderStyle, tpOutline, tpGlass, tpBgUnderTitle);
+             tpBorderStyle, tpOutline, tpGlass, tpBgUnderTitle, tpWindowShadow);
   TTyPropSet = set of TTyProp;
 
   TTyStyleSet = record
     Present: TTyPropSet;
     Background: TTyFill;
     BackgroundUnderTitlebar: Boolean;   // TyForm only: image extends under the title bar
+    WindowShadow: Boolean;              // TyForm only: toggle the OS-native window drop shadow
     TextColor: TTyColor;
     BorderColor: TTyColor;
     BorderWidth: Integer;

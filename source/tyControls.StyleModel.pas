@@ -587,6 +587,12 @@ begin
     AStyle.BackgroundUnderTitlebar := (LowerCase(raw) = 'true');
     Include(AStyle.Present, tpBgUnderTitle);
   end
+  else if prop = 'window-shadow' then
+  begin
+    // TyForm only: toggle the OS-native window drop shadow (on/off; the OS owns the look)
+    AStyle.WindowShadow := (LowerCase(raw) = 'true');
+    Include(AStyle.Present, tpWindowShadow);
+  end
   else if prop = 'shadow' then
   begin
     // shadow: <offsetX> <offsetY> <blur> <color>  (logical px)
