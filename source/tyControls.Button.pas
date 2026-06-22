@@ -2,8 +2,8 @@ unit tyControls.Button;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, ExtCtrls,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
+  Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LMessages, ExtCtrls,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation, tyControls.Accel;
 type
   // Which corner the numeric badge sits in (inset within the button's client rect).
   TTyBadgePosition = (bpTopLeft, bpTopRight, bpBottomLeft, bpBottomRight);
@@ -51,6 +51,7 @@ type
     procedure DrawBadge(P: TTyPainter; const AFullRect: TRect);
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    function DialogChar(var Message: TLMKey): Boolean; override;
     procedure MouseEnter; override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -122,6 +123,7 @@ implementation
 constructor TTyButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  TyAccelRegister(Self);
   FAnimationsEnabled := True;
   FBadgePosition := bpBottomRight;
   // Hover bg-fade animator: rest at 0 (normal), ~120ms full traversal,
@@ -139,7 +141,18 @@ begin
   // FTimer is owned by Self (would be freed by DestroyComponents), but free it
   // explicitly first so the OnTimer callback can never fire mid-teardown.
   FreeAndNil(FTimer);
+  TyAccelUnregister(Self);
   inherited Destroy;
+end;
+
+function TTyButton.DialogChar(var Message: TLMKey): Boolean;
+begin
+  if Enabled and TyIsAccelKey(Message, Caption) then
+  begin
+    Click;
+    Exit(True);
+  end;
+  Result := inherited DialogChar(Message);
 end;
 
 procedure TTyButton.Click;
@@ -427,6 +440,8 @@ var
   S, NormalS, HoverS: TTyStyleSet;
   ContentRect, BadgeArea: TRect;
   Eased: Single;
+  disp: string;
+  mp: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -457,8 +472,9 @@ begin
       ContentRect.Right  - P.Scale(S.Padding.Right),
       ContentRect.Bottom - P.Scale(S.Padding.Bottom)
     );
-    P.DrawText(ContentRect, Caption, S.FontName, S.FontSize, S.FontWeight,
-      S.TextColor, taCenter, tlCenter, True);
+    TyParseMnemonic(Caption, disp, mp);
+    P.DrawText(ContentRect, disp, S.FontName, S.FontSize, S.FontWeight,
+      S.TextColor, taCenter, tlCenter, True, TyAccelGatePos(mp));
     DrawBadge(P, BadgeArea);
     P.EndPaint;
   finally
