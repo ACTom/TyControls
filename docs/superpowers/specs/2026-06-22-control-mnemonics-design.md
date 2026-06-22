@@ -12,9 +12,11 @@ Caption-bearing TyControls support mnemonics, matching what the menu now does:
 3. **Alt+`<letter>` activation** — `Alt+O` on an `&OK` button clicks it; on a checkbox toggles it;
    on a label focuses its `FocusControl`; on a group box focuses its first child.
 
-In scope: `TTyButton`, `TTyCheckBox`, `TTyRadioButton`, `TTyGroupBox`, `TTyLabel`, and `TTyPageControl`
-tab captions. (Edit/Memo/ScrollBar/ListBox/ProgressBar/TrackBar/ToggleSwitch have no activatable caption
-— a ToggleSwitch caption, if any, can be added later.)
+In scope: `TTyButton`, `TTyCheckBox`, `TTyRadioButton`, `TTyGroupBox`, `TTyLabel`, and **tab captions at the
+`TTyCustomTabStrip` base** — which covers `TTyPageControl` now and the planned `TTyTabSet` automatically when
+it's built (both descend from `TTyCustomTabStrip`; `TTyTabSet` is still unbuilt per the PageControl-redesign
+program, so it inherits this for free). (Edit/Memo/ScrollBar/ListBox/ProgressBar/TrackBar/ToggleSwitch have no
+activatable caption — a ToggleSwitch caption, if any, can be added later.)
 
 ## Current state (verified)
 
@@ -97,7 +99,7 @@ Each caption control gets the same three edits:
    | `TTyCheckBox` / `TTyRadioButton` | `SetFocus; Click` (focus then toggle, like LCL) |
    | `TTyLabel` | `if FFocusControl <> nil then Click` (Click already focuses FocusControl) |
    | `TTyGroupBox` | focus the first focusable child (`SelectFirst`-style) |
-   | `TTyPageControl` | per tab caption: match the mnemonic against each tab → switch `TabIndex` |
+   | `TTyCustomTabStrip` (→ `TTyPageControl`, future `TTyTabSet`) | per tab caption: match the mnemonic against each tab → `DoSelectTab(i)`. Strip `&` in the tab-caption draw/measure + gated underline at the base, so both descendants inherit it. |
 
    `TTyGroupBox`/`TTyLabel` are `TTyGraphicControl` (non-windowed) but still receive `DialogChar` via the
    parent's broadcast, so the override works.
