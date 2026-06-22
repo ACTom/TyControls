@@ -39,7 +39,8 @@ uses
   test.pagecontrol,
   test.pagecontrol.streaming,
   test.about,
-  test.windoweffects;
+  test.windoweffects,
+  test.accel;
 
 type
   TTyTestRunner = class(TTestRunner)
