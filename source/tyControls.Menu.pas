@@ -258,6 +258,7 @@ type
     function TopCount: Integer;
     function TopCaption(AIndex: Integer): string;   // mnemonic '&' stripped (display text)
     function TopMnemonic(AIndex: Integer): Char;    // upper-cased Alt+key mnemonic, or #0
+    function TopMnemonicPos(AIndex: Integer): Integer;  // 1-based mnemonic index in TopCaption, or 0
     { Resolve the width of the AIndex-th top cell in device px (caption + the
       TyMenuItem left/right padding), theme-driven. }
     function TopCellWidth(AIndex, APPI: Integer): Integer;
@@ -836,7 +837,7 @@ begin
       TextRect := Types.Rect(RowRect.Left + padL + leftSlot, RowRect.Top,
         RowRect.Right - padR - rightSlot, RowRect.Bottom);
       P.DrawText(TextRect, FRows[i].Display, RowStyle.FontName, ResolveFontSize(RowStyle),
-        capWeight, RowStyle.TextColor, taLeftJustify, tlCenter, True);
+        capWeight, RowStyle.TextColor, taLeftJustify, tlCenter, True, FRows[i].MnemonicPos);
 
       // Submenu arrow OR the right-aligned shortcut text in the right slot.
       if FRows[i].HasSubmenu then
@@ -1309,6 +1310,14 @@ begin
   if mi <> nil then Result := TyParseMnemonic(mi.Caption, disp, pos);
 end;
 
+function TTyMenuBar.TopMnemonicPos(AIndex: Integer): Integer;
+var mi: TMenuItem; disp: string;
+begin
+  Result := 0;
+  mi := VisibleTopItem(AIndex);
+  if mi <> nil then TyParseMnemonic(mi.Caption, disp, Result);
+end;
+
 { A top cell is the item's caption width plus the TyMenuItem left+right padding, all
   theme-driven (font + padding tokens), so the bar tracks the active theme metrics. }
 function TTyMenuBar.TopCellWidth(AIndex, APPI: Integer): Integer;
@@ -1566,7 +1575,7 @@ begin
       padL := P.Scale(CellStyle.Padding.Left);
       P.DrawText(Types.Rect(CellRect.Left + padL, CellRect.Top, CellRect.Right, CellRect.Bottom),
         TopCaption(i), CellStyle.FontName, ResolveFontSize(CellStyle),
-        CellStyle.FontWeight, CellStyle.TextColor, taLeftJustify, tlCenter, True);
+        CellStyle.FontWeight, CellStyle.TextColor, taLeftJustify, tlCenter, True, TopMnemonicPos(i));
     end;
 
     P.EndPaint;
