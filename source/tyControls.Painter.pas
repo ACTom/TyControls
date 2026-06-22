@@ -316,8 +316,9 @@ begin
   style.Clipping := True;
   FBmp.TextRect(ARect, ARect.Left, ARect.Top, s, style, px);
   // Mnemonic underline: a thin line under the AMnemonicPos-th char (1-based), placed by
-  // reusing the same alignment the text was drawn with. Skipped if the char was ellipsized away.
-  if (AMnemonicPos >= 1) and (AMnemonicPos <= Length(s)) then
+  // reusing the same alignment the text was drawn with. Skipped when the text was ellipsis-
+  // truncated (s <> AText), so the underline never lands on a '.' or a shifted glyph.
+  if (AMnemonicPos >= 1) and (AMnemonicPos <= Length(s)) and (s = AText) then
   begin
     full := FBmp.TextSize(s);
     beforeW := FBmp.TextSize(Copy(s, 1, AMnemonicPos - 1)).cx;

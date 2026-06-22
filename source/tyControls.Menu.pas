@@ -237,6 +237,7 @@ type
     FOpenIndex: Integer;      // index of the open top dropdown, or -1 (none open)
     FHotIndex: Integer;       // hovered top cell, or -1
     FPopup: TTyMenuPopup;     // lazy dropdown host for the open top item
+    FPendingTop: Integer;     // deferred keyboard-rotation target, or -1
     FAutoSizeWidth: Boolean;  // shrink-to-fit the top cells (see FitWidth)
     FInAutoSizeWidth: Boolean;// re-entrancy guard around the Width := FitWidth set
     procedure SetMenu(AValue: TMainMenu);
@@ -252,6 +253,9 @@ type
     procedure ClosePopup;
     { Open (or re-open) the dropdown for top cell AIndex, anchored to its cell rect. }
     procedure OpenTop(AIndex: Integer);
+    { Deferred OpenTop(FPendingTop): keyboard rotation must not free FPopup synchronously
+      while the dropdown view's KeyDown is on the stack (rotating onto a childless top frees it). }
+    procedure DeferredOpenTop(Data: PtrInt);
   protected
     function GetStyleTypeKey: string; override;
     { Pure top-cell geometry seams (device px), driven by theme tokens. }
@@ -753,8 +757,9 @@ begin
         Key := 0;
       end;
   else
-    // Letter: jump to / activate the row whose mnemonic matches (Windows menu behavior).
-    if (Key >= VK_A) and (Key <= VK_Z) then
+    // Bare letter/digit (no Ctrl/Alt): jump to / activate the row whose mnemonic matches.
+    if (Shift * [ssCtrl, ssAlt] = []) and
+       (((Key >= VK_A) and (Key <= VK_Z)) or ((Key >= VK_0) and (Key <= VK_9))) then
     begin
       idx := FindMnemonicRow(UpCase(Chr(Key)));
       if idx >= 0 then begin SetHighlight(idx); ActivateRow(idx); Key := 0; end;
@@ -1228,11 +1233,13 @@ begin
   FOpenIndex := -1;
   FHotIndex := -1;
   FPopup := nil;
+  FPendingTop := -1;
   Height := 28;
 end;
 
 destructor TTyMenuBar.Destroy;
 begin
+  Application.RemoveAsyncCalls(Self);   // cancel any pending DeferredOpenTop
   FreeAndNil(FPopup);
   inherited Destroy;
 end;
@@ -1473,26 +1480,42 @@ begin
   idx := FOpenIndex + ADelta;
   if idx < 0 then idx := idx + n
   else if idx >= n then idx := idx - n;
-  OpenTop(idx);
+  // Defer: we are inside the open dropdown view's KeyDown, and OpenTop may FreeAndNil(FPopup)
+  // (rotating onto a childless top), which would free the very view whose KeyDown is on the stack.
+  FPendingTop := idx;
+  Application.QueueAsyncCall(@DeferredOpenTop, 0);
+end;
+
+procedure TTyMenuBar.DeferredOpenTop(Data: PtrInt);
+begin
+  if FPendingTop >= 0 then OpenTop(FPendingTop);
+  FPendingTop := -1;
 end;
 
 function TTyMenuBar.DialogChar(var Message: TLMKey): Boolean;
 var i: Integer; ch: Char; mi: TMenuItem;
 begin
-  // Alt+<letter/digit>: open the top menu whose mnemonic matches. DialogChar is LCL's
-  // Alt-accelerator broadcast, so this reaches the bar form-wide (focused or not).
-  if (Message.CharCode >= VK_0) and (Message.CharCode <= VK_Z) then
+  // Only Alt+<mnemonic> opens a top menu (mirrors TCustomLabel.DialogChar); a plain keystroke
+  // that reaches the form-level DialogChar broadcast must not spuriously open one.
+  if KeyDataToShiftState(Message.KeyData) * [ssCtrl, ssAlt, ssShift] = [ssAlt] then
   begin
-    ch := UpCase(Chr(Message.CharCode));
-    for i := 0 to TopCount - 1 do
-    begin
-      mi := VisibleTopItem(i);
-      if (mi <> nil) and mi.Enabled and (TopMnemonic(i) = ch) then
-      begin
-        OpenTop(i);
-        Exit(True);
-      end;
+    // Message.CharCode here is the TRANSLATED character (lowercase 'f' for Alt+F), NOT a VK code:
+    // map only ASCII letters/digits to an upper-cased char; anything else stays #0 (no match).
+    ch := #0;
+    case Message.CharCode of
+      Ord('0')..Ord('9'), Ord('A')..Ord('Z'), Ord('a')..Ord('z'):
+        ch := UpCase(Chr(Message.CharCode));
     end;
+    if ch <> #0 then
+      for i := 0 to TopCount - 1 do
+      begin
+        mi := VisibleTopItem(i);
+        if (mi <> nil) and mi.Enabled and (TopMnemonic(i) = ch) then
+        begin
+          OpenTop(i);
+          Exit(True);
+        end;
+      end;
   end;
   Result := inherited DialogChar(Message);
 end;
