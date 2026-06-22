@@ -2,8 +2,8 @@ unit tyControls.GroupBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LMessages,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Accel;
 type
   TTyGroupBox = class(TTyCustomControl)
   private
@@ -19,8 +19,10 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure AdjustClientRect(var ARect: TRect); override;
+    function DialogChar(var Message: TLMKey): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
   published
     property Caption: string read FCaption write SetCaption;
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
@@ -49,6 +51,7 @@ end;
 constructor TTyGroupBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  TyAccelRegister(Self);
   // Designer container: the IDE drops child controls INTO the box; they lay out below
   // the caption band carved by AdjustClientRect.
   ControlStyle := ControlStyle + [csAcceptsControls];
@@ -56,6 +59,24 @@ begin
   FAlignment := taLeftJustify;
   Width := 185;
   Height := 105;
+end;
+
+destructor TTyGroupBox.Destroy;
+begin
+  TyAccelUnregister(Self);
+  inherited Destroy;
+end;
+
+function TTyGroupBox.DialogChar(var Message: TLMKey): Boolean;
+var pf: TCustomForm;
+begin
+  if Enabled and TyIsAccelKey(Message, FCaption) then
+  begin
+    pf := GetParentForm(Self);
+    if pf <> nil then pf.SelectNext(Self, True, True);   // focus the first child after the group box
+    Exit(True);
+  end;
+  Result := inherited DialogChar(Message);
 end;
 
 function TTyGroupBox.GetStyleTypeKey: string;
@@ -85,6 +106,8 @@ var
   FrameRect, BandRect, TextRect: TRect;
   TextW, BandLeft: Integer;
   MeasBmp: TBitmap;
+  disp: string;
+  mp: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -110,6 +133,7 @@ begin
     // Draw caption text with a background band behind it
     if FCaption <> '' then
     begin
+      TyParseMnemonic(FCaption, disp, mp);
       // Measure actual text width using a scratch bitmap canvas so CJK and
       // variable-width fonts are handled correctly (avoids byte-Length * 8).
       MeasBmp := TBitmap.Create;
@@ -119,7 +143,7 @@ begin
         // Measure with the same effective size the caption is drawn at, so the
         // erased band matches the now-readable text (ResolveFontSize fallback).
         MeasBmp.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
-        TextW := MeasBmp.Canvas.TextWidth(FCaption);
+        TextW := MeasBmp.Canvas.TextWidth(disp);
       finally
         MeasBmp.Free;
       end;
@@ -143,8 +167,8 @@ begin
 
       // Draw caption text within the band, aligned per FAlignment.
       TextRect := Rect(BandLeft + P.Scale(4), 0, BandLeft + P.Scale(4) + TextW + P.Scale(8), CapH);
-      P.DrawText(TextRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
-        S.TextColor, FAlignment, tlCenter, True);
+      P.DrawText(TextRect, disp, S.FontName, ResolveFontSize(S), S.FontWeight,
+        S.TextColor, FAlignment, tlCenter, True, TyAccelGatePos(mp));
     end;
 
     P.EndPaint;
