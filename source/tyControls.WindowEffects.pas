@@ -148,5 +148,6 @@ end;
 {$IFDEF WINDOWS}
 finalization
   if GLib <> 0 then FreeLibrary(GLib);
+  GLib := 0; FnSetAttr := nil; FnExtend := nil; FnCompEnabled := nil;  // no dangling procs post-unload
 {$ENDIF}
 end.

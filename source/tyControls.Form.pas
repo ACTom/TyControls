@@ -1070,13 +1070,18 @@ begin
 end;
 
 procedure TTyForm.ApplyWindowEffects;
-var maximized: Boolean;
+var maximized: Boolean; ctrl: TTyStyleController;
 begin
-  if (FController = nil) or (not HandleAllocated) then Exit;
+  if csDesigning in ComponentState then Exit;   // never poke DWM/Cocoa on the IDE design surface
+  if not HandleAllocated then Exit;
+  // Default-on must work even when ApplyChromeTheme was never called: fall back to the
+  // always-available built-in controller (mirrors ThemedBgColor). TyResolveWindowEffect
+  // supplies the radius/shadow defaults regardless of which controller resolves the style.
+  if FController <> nil then ctrl := FController else ctrl := TyDefaultController;
   // The chrome engine fakes maximize via BoundsRect, so read ITS flag (not WindowState).
   maximized := (FEngine <> nil) and FEngine.Maximized;
   TyApplyWindowEffects(Self,
-    TyResolveWindowEffect(FController.Model.ResolveStyle('TyForm', '', []), maximized));
+    TyResolveWindowEffect(ctrl.Model.ResolveStyle('TyForm', '', []), maximized));
 end;
 
 procedure TTyForm.DoShow;

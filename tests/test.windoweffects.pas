@@ -13,6 +13,7 @@ type
     procedure TestDefaultsOnWhenTokensAbsent;
     procedure TestBorderRadiusZeroTurnsCornersOff;
     procedure TestWindowShadowFalseTurnsShadowOff;
+    procedure TestMergeCopiesWindowShadowValue;
   end;
 implementation
 procedure TWindowEffectsTest.TestWindowShadowParsesTrue;
@@ -83,6 +84,21 @@ begin
     M.LoadFromCss('TyForm { window-shadow: false; }');
     E := TyResolveWindowEffect(M.ResolveStyle('TyForm', '', []), False);
     AssertFalse('shadow off via window-shadow:false', E.Shadow);
+  finally M.Free; end;
+end;
+procedure TWindowEffectsTest.TestMergeCopiesWindowShadowValue;
+var M: TTyStyleModel; base, over: TTyStyleSet;
+begin
+  // Regression: TyMergeStyleSet must copy the WindowShadow VALUE under tpWindowShadow,
+  // not just union the present-flag (else a per-instance window-shadow:false is lost).
+  M := TTyStyleModel.Create;
+  try
+    M.LoadFromCss('A { window-shadow: true; } B { window-shadow: false; }');
+    base := M.ResolveStyle('A', '', []);
+    over := M.ResolveStyle('B', '', []);
+    TyMergeStyleSet(base, over);
+    AssertTrue('tpWindowShadow present after merge', tpWindowShadow in base.Present);
+    AssertFalse('override window-shadow:false copied into base', base.WindowShadow);
   finally M.Free; end;
 end;
 initialization

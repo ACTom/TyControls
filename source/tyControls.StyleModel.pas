@@ -179,6 +179,8 @@ begin
   end;
   if tpBgUnderTitle in AOver.Present then
     ABase.BackgroundUnderTitlebar := AOver.BackgroundUnderTitlebar;
+  if tpWindowShadow in AOver.Present then
+    ABase.WindowShadow := AOver.WindowShadow;
   ABase.Present := ABase.Present + AOver.Present;
 end;
 
