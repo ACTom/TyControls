@@ -2,8 +2,8 @@ unit tyControls.TyLabel;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LMessages,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Accel;
 type
   TTyLabel = class(TTyGraphicControl)
   private
@@ -32,6 +32,7 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure Click; override;
+    function DialogChar(var Message: TLMKey): Boolean; override;
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
     { Caption changes at runtime route here (CM_TEXTCHANGED). When AutoSize is on,
@@ -45,6 +46,7 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
   published
     property Caption;
     property Enabled;
@@ -67,10 +69,27 @@ implementation
 constructor TTyLabel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  TyAccelRegister(Self);
   FAlignment := taLeftJustify;
   FLayout := tlCenter;
   FWordWrap := False;
   FTransparent := True;
+end;
+
+destructor TTyLabel.Destroy;
+begin
+  TyAccelUnregister(Self);
+  inherited Destroy;
+end;
+
+function TTyLabel.DialogChar(var Message: TLMKey): Boolean;
+begin
+  if (FFocusControl <> nil) and TyIsAccelKey(Message, Caption) then
+  begin
+    Click;   // TTyLabel.Click focuses FFocusControl
+    Exit(True);
+  end;
+  Result := inherited DialogChar(Message);
 end;
 
 function TTyLabel.GetStyleTypeKey: string;
@@ -219,9 +238,11 @@ var
   S: TTyStyleSet;
   Meas: TBitmap;
   Lines: TStringList;
-  i, w, lineH: Integer;
+  i, w, lineH, mpos: Integer;
+  disp: string;
 begin
   S := CurrentStyle;
+  TyParseMnemonic(Caption, disp, mpos);
   AWidthPx := 0;
   AHeightPx := 0;
   Meas := TBitmap.Create;
@@ -238,12 +259,12 @@ begin
     if lineH < 1 then lineH := 1;
 
     if FWordWrap and (AAvailWidthPx > 0) then
-      WrapText(Caption, AAvailWidthPx, Meas.Canvas, Lines)
+      WrapText(disp, AAvailWidthPx, Meas.Canvas, Lines)
     else
-      Lines.Text := Caption; // splits on existing line breaks; usually one line
+      Lines.Text := disp; // splits on existing line breaks; usually one line
 
     if Lines.Count = 0 then
-      Lines.Add(Caption);
+      Lines.Add(disp);
 
     for i := 0 to Lines.Count - 1 do
     begin
@@ -292,13 +313,15 @@ var
   ContentRect, LineRect: TRect;
   Meas: TBitmap;
   Lines: TStringList;
-  lineH, i, availW, fontSize, contentH, blockH, yOff: Integer;
+  lineH, i, availW, fontSize, contentH, blockH, yOff, mp: Integer;
+  dispCap: string;
 begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     fontSize := ResolveFontSize(S);
+    TyParseMnemonic(Caption, dispCap, mp);
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     // When opaque, paint the style background (DrawFrame fill). When transparent
     // (default), skip the fill so no background paints regardless of theme — but
@@ -331,7 +354,7 @@ begin
         lineH := Meas.Canvas.TextHeight('Ag');
         if lineH < 1 then lineH := 1;
         availW := ContentRect.Right - ContentRect.Left;
-        WrapText(Caption, availW, Meas.Canvas, Lines);
+        WrapText(dispCap, availW, Meas.Canvas, Lines);
         // Position the whole wrapped block per Layout (native vertically anchors
         // the block, not each line): compute a one-off vertical offset, then draw
         // each wrapped line top-anchored within its single-line rect.
@@ -357,8 +380,8 @@ begin
       end;
     end
     else
-      P.DrawText(ContentRect, Caption, S.FontName, fontSize, S.FontWeight,
-        S.TextColor, FAlignment, FLayout, False);
+      P.DrawText(ContentRect, dispCap, S.FontName, fontSize, S.FontWeight,
+        S.TextColor, FAlignment, FLayout, False, TyAccelGatePos(mp));
     P.EndPaint;
   finally
     P.Free;
