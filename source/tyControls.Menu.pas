@@ -1,7 +1,7 @@
 unit tyControls.Menu;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, Menus,
+uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LMessages, Menus,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 
 const
@@ -78,6 +78,8 @@ type
     function ItemRowHeight(APPI: Integer): Integer;
     { True iff AIndex is an in-range, selectable (non-separator, enabled) item row. }
     function IsSelectable(AIndex: Integer): Boolean;
+    { First selectable row whose mnemonic equals AChar (upper-cased), or -1. }
+    function FindMnemonicRow(AChar: Char): Integer;
     { Fire OnActivateRow (leaf) or OnOpenSubmenu (submenu) for AIndex, if enabled. }
     procedure ActivateRow(AIndex: Integer);
   protected
@@ -273,6 +275,8 @@ type
     procedure MouseLeave; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { Alt+<mnemonic>: open the matching top menu (LCL broadcasts DialogChar to children). }
+    function DialogChar(var Message: TLMKey): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -608,6 +612,15 @@ begin
     and (FRows[AIndex].Kind = mrkItem) and FRows[AIndex].Enabled;
 end;
 
+function TTyMenuView.FindMnemonicRow(AChar: Char): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  if AChar = #0 then Exit;
+  for i := 0 to High(FRows) do
+    if IsSelectable(i) and (FRows[i].Mnemonic = AChar) then Exit(i);
+end;
+
 function TTyMenuView.FirstSelectable: Integer;
 var i: Integer;
 begin
@@ -705,6 +718,7 @@ begin
 end;
 
 procedure TTyMenuView.KeyDown(var Key: Word; Shift: TShiftState);
+var idx: Integer;
 begin
   inherited KeyDown(Key, Shift);
   case Key of
@@ -737,6 +751,13 @@ begin
         if Assigned(FOnCloseRequested) then FOnCloseRequested(Self);
         Key := 0;
       end;
+  else
+    // Letter: jump to / activate the row whose mnemonic matches (Windows menu behavior).
+    if (Key >= VK_A) and (Key <= VK_Z) then
+    begin
+      idx := FindMnemonicRow(UpCase(Chr(Key)));
+      if idx >= 0 then begin SetHighlight(idx); ActivateRow(idx); Key := 0; end;
+    end;
   end;
 end;
 
@@ -1444,6 +1465,27 @@ begin
   if idx < 0 then idx := idx + n
   else if idx >= n then idx := idx - n;
   OpenTop(idx);
+end;
+
+function TTyMenuBar.DialogChar(var Message: TLMKey): Boolean;
+var i: Integer; ch: Char; mi: TMenuItem;
+begin
+  // Alt+<letter/digit>: open the top menu whose mnemonic matches. DialogChar is LCL's
+  // Alt-accelerator broadcast, so this reaches the bar form-wide (focused or not).
+  if (Message.CharCode >= VK_0) and (Message.CharCode <= VK_Z) then
+  begin
+    ch := UpCase(Chr(Message.CharCode));
+    for i := 0 to TopCount - 1 do
+    begin
+      mi := VisibleTopItem(i);
+      if (mi <> nil) and mi.Enabled and (TopMnemonic(i) = ch) then
+      begin
+        OpenTop(i);
+        Exit(True);
+      end;
+    end;
+  end;
+  Result := inherited DialogChar(Message);
 end;
 
 procedure TTyMenuBar.MouseMove(Shift: TShiftState; X, Y: Integer);
