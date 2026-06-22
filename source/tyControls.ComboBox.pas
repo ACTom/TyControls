@@ -24,6 +24,7 @@ type
     { Dropdown popup state }
     FPopup: TForm;           // lazy; created on first DropDown; freed in Destroy
     FPopupList: TTyListBox;  // owned by FPopup
+    FPopupRect: TRect;       // computed screen rect of the last DropDown (for the deferred Qt re-apply)
     { Type-ahead state }
     FTypeAhead: string;
     FTypeAheadTick: QWord;
@@ -49,6 +50,9 @@ type
     procedure PopupDeactivate(Sender: TObject);
     procedure PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure DeferredCloseUp(Data: PtrInt);
+    { Qt/X11 re-places + un-masks a frameless window at MAP time (after Show); re-assert the
+      dropdown's bounds + region next event-loop turn, once the native window has settled. }
+    procedure DeferredReapplyGeometry(Data: PtrInt);
     { Shape the borderless popup window with a rounded region so the opaque
       rectangular corners outside the themed rounded fill are clipped away. The
       radius tracks the dropdown list's own resolved BorderRadius, scaled to the
@@ -388,16 +392,18 @@ begin
 
   { Position below the combo }
   P := ControlToScreen(Types.Point(0, Height));
+  FPopupRect := Types.Rect(P.X, P.Y, P.X + PopupW, P.Y + PopupH);
   FPopup.SetBounds(P.X, P.Y, PopupW, PopupH);
 
   FPopup.Show;
-  // Qt/X11 may RE-PLACE a frameless stay-on-top window at map time (centering it); re-assert the
-  // rect AFTER Show so the dropdown lands under the combo. No-op on Win32/GTK2 (already there).
+  // Qt/X11 RE-PLACES + un-masks a frameless window at MAP time; re-assert now AND again next
+  // event-loop turn (DeferredReapplyGeometry), once the native window settles. No-op on Win32/GTK2.
   FPopup.SetBounds(P.X, P.Y, PopupW, PopupH);
   { Round the popup window's corners to match the dropdown's themed fill, now that
     the handle is allocated by Show. Re-applied here every DropDown so it follows
     the popup's current size, PPI and theme. }
   ApplyPopupRegion(PopupW, PopupH);
+  Application.QueueAsyncCall(@DeferredReapplyGeometry, 0);
   DoDropDown;   // popup actually opened
 end;
 
@@ -522,6 +528,16 @@ begin
     lets the click finish first. }
   UserSelect(FPopupList.ItemIndex);
   Application.QueueAsyncCall(@DeferredCloseUp, 0);
+end;
+
+procedure TTyComboBox.DeferredReapplyGeometry(Data: PtrInt);
+begin
+  // One event-loop turn after Show, by when Qt's map-time reparent/flag churn has settled — so this
+  // SetBounds + region finally stick (harmless re-assert on Win32/GTK2).
+  if (FPopup = nil) or (not FPopup.Visible) then Exit;
+  FPopup.SetBounds(FPopupRect.Left, FPopupRect.Top,
+    FPopupRect.Right - FPopupRect.Left, FPopupRect.Bottom - FPopupRect.Top);
+  ApplyPopupRegion(FPopupRect.Right - FPopupRect.Left, FPopupRect.Bottom - FPopupRect.Top);
 end;
 
 procedure TTyComboBox.DeferredCloseUp(Data: PtrInt);

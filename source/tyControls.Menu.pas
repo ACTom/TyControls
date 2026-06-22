@@ -153,6 +153,7 @@ type
     FRoot: TMenuItem;         // the item whose children this level renders
     FController: TTyStyleController;
     FCloseTick: QWord;        // tick at last close; reopen guard (ComboBox idiom)
+    FPopupRect: TRect;        // computed screen rect of the last Popup (for the deferred Qt re-apply)
     FOnNavigateAdjacent: TTyMenuAdjacentEvent;
     FOnClose: TNotifyEvent;   // fired by CloseAll so a host (bar) can reset its open state
     procedure EnsureForm;
@@ -167,6 +168,9 @@ type
     procedure DeferredDismiss(Data: PtrInt);
     procedure DeferredForceClose(Data: PtrInt);
     procedure DeferredCollapseChild(Data: PtrInt);
+    { Qt/X11 re-places + un-masks a frameless window at MAP time, AFTER Show returns; re-assert the
+      popup's bounds + rounded region on the next event-loop turn, once the native window has settled. }
+    procedure DeferredReapplyGeometry(Data: PtrInt);
   protected
     { Pure placement: turn an anchor rect (screen coords) + the popup's size into a
       screen rect, flipping ABOVE the anchor when there is no room below and (for a
@@ -337,6 +341,16 @@ implementation
 // win32/gtk2/qt widgetsets all implement them) — no Windows unit needed. (Rect()/Point() call
 // sites remain qualified Types.* — harmless now that the Windows POINT=TPOINT shadow is gone.)
 uses Math, BGRABitmap;
+
+{ Opt-in geometry diagnostics for the Linux popup/menu-position investigation: set the env var
+  TY_MENU_DEBUG (any value) and run from a terminal to see the computed-vs-actual screen rects.
+  No-op (one getenv) otherwise. }
+procedure TyGeomLog(const AMsg: string);
+begin
+  if GetEnvironmentVariable('TY_MENU_DEBUG') = '' then Exit;
+  WriteLn(StdErr, '[ty-menu] ' + AMsg);
+  Flush(StdErr);
+end;
 
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
 var i, n: Integer; mi: TMenuItem;
@@ -945,17 +959,20 @@ begin
   // a top dropdown is at least as wide as its trigger.
   w := Max(FView.MeasureWidth(ppi), AAnchor.Right - AAnchor.Left);
   R := ComputeBounds(AAnchor, w, h, ppi, AToRight);
+  FPopupRect := R;
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   FForm.Show;
-  // Qt/X11 may RE-PLACE a frameless stay-on-top window at MAP time (centering it over the parent);
-  // re-assert the computed rect AFTER Show so the popup lands at its anchor. No-op on Win32/GTK2.
+  // Qt/X11 RE-PLACES + un-masks a frameless stay-on-top window at MAP time; re-assert now AND again
+  // next event-loop turn (DeferredReapplyGeometry), once the native window settles. No-op on Win32/GTK2.
   FForm.SetBounds(R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top);
   // Route keyboard navigation to the dropdown: without focus, arrow/Esc keys never reach
   // TTyMenuView.KeyDown and a keypress can instead deactivate (and dismiss) the popup.
   if FView.CanFocus then FView.SetFocus;
-  { Round the popup window's corners to match the themed fill, now that Show has
-    allocated the handle. Re-applied every Popup so it follows the current size. }
   ApplyFormRegion(R.Right - R.Left, R.Bottom - R.Top);
+  TyGeomLog(Format('Popup computed=(%d,%d %dx%d) actual=(%d,%d %dx%d) screen=%dx%d',
+    [R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top,
+     FForm.Left, FForm.Top, FForm.Width, FForm.Height, Screen.Width, Screen.Height]));
+  Application.QueueAsyncCall(@DeferredReapplyGeometry, 0);
 end;
 
 { Shape the popup window with a rounded region matching the popup's themed
@@ -988,6 +1005,18 @@ begin
     native region, gtk2 = gdk_window_shape_combine_region, qt = QWidget.setMask. }
   Rgn := CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
   SetWindowRgn(FForm.Handle, Rgn, True);
+end;
+
+procedure TTyMenuPopup.DeferredReapplyGeometry(Data: PtrInt);
+begin
+  // Runs one event-loop turn after Popup's Show, by when Qt's map-time reparent/flag-recreation has
+  // settled — so this SetBounds + region finally stick (on Win32/GTK2 it's a harmless re-assert).
+  if (FForm = nil) or (not FForm.Visible) then Exit;
+  FForm.SetBounds(FPopupRect.Left, FPopupRect.Top,
+    FPopupRect.Right - FPopupRect.Left, FPopupRect.Bottom - FPopupRect.Top);
+  ApplyFormRegion(FPopupRect.Right - FPopupRect.Left, FPopupRect.Bottom - FPopupRect.Top);
+  TyGeomLog(Format('DeferredReapply actual=(%d,%d %dx%d)',
+    [FForm.Left, FForm.Top, FForm.Width, FForm.Height]));
 end;
 
 procedure TTyMenuPopup.CloseAll;
@@ -1437,6 +1466,9 @@ begin
     origin := ClientToScreen(Types.Point(0, 0));
     anchor := Types.Rect(origin.X + cellL, origin.Y,
       origin.X + cellL + cellW, origin.Y + Height);
+    TyGeomLog(Format('OpenTop[%d] origin=(%d,%d) barH=%d anchor=(%d,%d-%d,%d) screen=%dx%d',
+      [AIndex, origin.X, origin.Y, Height, anchor.Left, anchor.Top, anchor.Right, anchor.Bottom,
+       Screen.Width, Screen.Height]));
     FPopup.Popup(anchor, False);
   end;
   Invalidate;
