@@ -1,7 +1,7 @@
 unit test.menu;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Controls, Forms, Menus, fpcunit, testregistry, tyControls.Menu;
+uses Classes, SysUtils, Types, Controls, Forms, Menus, fpcunit, testregistry, tyControls.Menu, tyControls.Accel;
 type
   TMenuModelTest = class(TTestCase)
   published
