@@ -30,8 +30,9 @@ const
   unless the theme opts out (border-radius: 0 / window-shadow: false). Pure -> headless-testable. }
 function TyResolveWindowEffect(const AStyle: TTyStyleSet; AMaximized: Boolean): TTyWindowEffect;
 
-{ Pure mapping for the Win11 DWM corner-preference enum:
-  0 = DONOTROUND, 2 = ROUND, 3 = ROUNDSMALL. Exposed for headless testing. }
+{ Pure mapping for the Win11 DWM_WINDOW_CORNER_PREFERENCE enum:
+  1 = DONOTROUND, 2 = ROUND, 3 = ROUNDSMALL. (0 = DEFAULT lets DWM decide -> it ROUNDS
+  top-level windows, which is NOT what we want for opt-out/maximize.) Exposed for testing. }
 function TyRadiusToCornerPref(ARadiusPx: Integer; AMaximized: Boolean): Integer;
 
 { Apply rounded corners + native shadow to AForm's window per platform/widgetset.
@@ -54,7 +55,7 @@ end;
 
 function TyRadiusToCornerPref(ARadiusPx: Integer; AMaximized: Boolean): Integer;
 begin
-  if AMaximized or (ARadiusPx <= 0) then Result := 0          // DWMWCP_DONOTROUND
+  if AMaximized or (ARadiusPx <= 0) then Result := 1          // DWMWCP_DONOTROUND (1, NOT 0=DEFAULT)
   else if ARadiusPx <= 5 then Result := 3                     // DWMWCP_ROUNDSMALL
   else Result := 2;                                           // DWMWCP_ROUND
 end;

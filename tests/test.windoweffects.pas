@@ -38,11 +38,11 @@ begin
 end;
 procedure TWindowEffectsTest.TestRadiusToCornerPref;
 begin
-  // 0 -> 0 (DONOTROUND), 1..5 -> 3 (ROUNDSMALL), >5 -> 2 (ROUND)
-  AssertEquals('0 -> donotround', 0, TyRadiusToCornerPref(0, False));
+  // 0 -> 1 (DONOTROUND), 1..5 -> 3 (ROUNDSMALL), >5 -> 2 (ROUND)
+  AssertEquals('0 -> donotround', 1, TyRadiusToCornerPref(0, False));
   AssertEquals('4 -> roundsmall', 3, TyRadiusToCornerPref(4, False));
   AssertEquals('8 -> round', 2, TyRadiusToCornerPref(8, False));
-  AssertEquals('maximized -> donotround', 0, TyRadiusToCornerPref(8, True));
+  AssertEquals('maximized -> donotround', 1, TyRadiusToCornerPref(8, True));
 end;
 procedure TWindowEffectsTest.TestApplyIsNoOpWhenNoHandle;
 var F: TForm; E: TTyWindowEffect;
