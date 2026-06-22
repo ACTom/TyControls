@@ -1,7 +1,7 @@
 unit tyControls.Menu;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LMessages, Menus,
+uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LCLIntf, LMessages, Menus,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 
 const
@@ -238,6 +238,7 @@ type
     FHotIndex: Integer;       // hovered top cell, or -1
     FPopup: TTyMenuPopup;     // lazy dropdown host for the open top item
     FPendingTop: Integer;     // deferred keyboard-rotation target, or -1
+    FShowAccel: Boolean;      // underline the bar mnemonics only while Alt is held
     FAutoSizeWidth: Boolean;  // shrink-to-fit the top cells (see FitWidth)
     FInAutoSizeWidth: Boolean;// re-entrancy guard around the Width := FitWidth set
     procedure SetMenu(AValue: TMainMenu);
@@ -256,6 +257,9 @@ type
     { Deferred OpenTop(FPendingTop): keyboard rotation must not free FPopup synchronously
       while the dropdown view's KeyDown is on the stack (rotating onto a childless top frees it). }
     procedure DeferredOpenTop(Data: PtrInt);
+    { Track Alt via the app-wide input hook: show the mnemonic underline only while Alt is held. }
+    procedure AccelInput(Sender: TObject; Msg: Cardinal);
+    function AccelPos(AIndex: Integer): Integer;   // TopMnemonicPos when FShowAccel, else 0
   protected
     function GetStyleTypeKey: string; override;
     { Pure top-cell geometry seams (device px), driven by theme tokens. }
@@ -1234,14 +1238,35 @@ begin
   FHotIndex := -1;
   FPopup := nil;
   FPendingTop := -1;
+  FShowAccel := False;
+  Application.AddOnUserInputHandler(@AccelInput);   // watch Alt down/up app-wide
   Height := 28;
 end;
 
 destructor TTyMenuBar.Destroy;
 begin
+  Application.RemoveOnUserInputHandler(@AccelInput);
   Application.RemoveAsyncCalls(Self);   // cancel any pending DeferredOpenTop
   FreeAndNil(FPopup);
   inherited Destroy;
+end;
+
+procedure TTyMenuBar.AccelInput(Sender: TObject; Msg: Cardinal);
+var alt: Boolean;
+begin
+  // GetKeyState high bit (negative) = key down. Fires on Alt press/release (key messages)
+  // and on mouse input (which hides the cue when Alt isn't held) — repaint only on change.
+  alt := GetKeyState(VK_MENU) < 0;
+  if alt <> FShowAccel then
+  begin
+    FShowAccel := alt;
+    Invalidate;
+  end;
+end;
+
+function TTyMenuBar.AccelPos(AIndex: Integer): Integer;
+begin
+  if FShowAccel then Result := TopMnemonicPos(AIndex) else Result := 0;
 end;
 
 function TTyMenuBar.GetStyleTypeKey: string;
@@ -1598,7 +1623,7 @@ begin
       padL := P.Scale(CellStyle.Padding.Left);
       P.DrawText(Types.Rect(CellRect.Left + padL, CellRect.Top, CellRect.Right, CellRect.Bottom),
         TopCaption(i), CellStyle.FontName, ResolveFontSize(CellStyle),
-        CellStyle.FontWeight, CellStyle.TextColor, taLeftJustify, tlCenter, True, TopMnemonicPos(i));
+        CellStyle.FontWeight, CellStyle.TextColor, taLeftJustify, tlCenter, True, AccelPos(i));
     end;
 
     P.EndPaint;
