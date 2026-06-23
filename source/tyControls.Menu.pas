@@ -172,6 +172,11 @@ type
     { Qt/X11 re-places + un-masks a frameless window at MAP time, AFTER Show returns; re-assert the
       popup's bounds + rounded region on the next event-loop turn, once the native window has settled. }
     procedure DeferredReapplyGeometry(Data: PtrInt);
+    { Qt clears a window's mask on every resize; with scrollable-forms (Qt6 default) the popup is
+      resized by its layout AFTER Show, wiping the rounded region set in Popup/DeferredReapply and
+      leaving opaque corners. Re-assert the region on every resize so it survives. Harmless re-apply
+      on Win32/GTK2. }
+    procedure FormResize(Sender: TObject);
   protected
     { Pure placement: turn an anchor rect (screen coords) + the popup's size into a
       screen rect, flipping ABOVE the anchor when there is no room below and (for a
@@ -889,6 +894,7 @@ begin
   FForm.PopupMode := pmExplicit;
   FForm.KeyPreview := True;
   FForm.OnDeactivate := @FormDeactivate;
+  FForm.OnResize := @FormResize;   // re-mask rounded corners after Qt's layout-driven resize
 
   FView := TTyMenuView.Create(FForm);
   FView.Parent := FForm;
@@ -991,6 +997,7 @@ var
   S: TTyStyleSet;
   d: Integer;
   Rgn: HRGN;
+  res: LongInt;
 begin
   if (FForm = nil) or (not FForm.HandleAllocated) or (FView = nil) then Exit;
   { Resolve the popup's own style so the corner radius tracks the theme. The
@@ -1013,7 +1020,17 @@ begin
     region handle, so it must not be deleted afterwards. LCLIntf routes to the widgetset: win32 =
     native region, gtk2 = gdk_window_shape_combine_region, qt = QWidget.setMask. }
   Rgn := CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
-  SetWindowRgn(FForm.Handle, Rgn, True);
+  res := SetWindowRgn(FForm.Handle, Rgn, True);
+  TyGeomLog(Format('ApplyRegion d=%d req=%dx%d actual=%dx%d res=%d',
+    [d, AWidth, AHeight, FForm.Width, FForm.Height, res]));
+end;
+
+procedure TTyMenuPopup.FormResize(Sender: TObject);
+begin
+  // Re-assert the rounded region at the form's ACTUAL realized size — Qt drops the mask on resize,
+  // and the post-Show layout resize is exactly when that happens (Win32/GTK2: idempotent re-apply).
+  if (FForm <> nil) and FForm.Visible and FForm.HandleAllocated then
+    ApplyFormRegion(FForm.Width, FForm.Height);
 end;
 
 procedure TTyMenuPopup.DeferredReapplyGeometry(Data: PtrInt);

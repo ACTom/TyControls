@@ -59,6 +59,10 @@ type
       popup's device PPI. No-op when the radius is 0 (leave rectangular) or off
       Windows. Re-applied on every DropDown so it follows a new size/PPI/theme. }
     procedure ApplyPopupRegion(AWidth, AHeight: Integer);
+    { Qt drops a window's mask on every resize; with scrollable-forms (Qt6 default) the dropdown is
+      resized by its layout AFTER Show, wiping the region and leaving opaque corners. Re-assert it on
+      every resize so it survives (harmless re-apply on Win32/GTK2). }
+    procedure PopupResize(Sender: TObject);
   protected
     { Guard: tick at last CloseUp. Click reopens only if > 200ms have passed.
       This prevents the click-while-open reopen race where PopupDeactivate fires
@@ -367,6 +371,7 @@ begin
     FPopup.KeyPreview := True;
     FPopup.OnDeactivate := @PopupDeactivate;
     FPopup.OnKeyDown := @PopupKeyDown;
+    FPopup.OnResize := @PopupResize;   // re-mask rounded corners after Qt's layout-driven resize
 
     FPopupList := TTyListBox.Create(FPopup);
     FPopupList.Parent := FPopup;
@@ -438,6 +443,14 @@ begin
     of Rgn; do not delete it. LCLIntf routes it: win32 native / gtk2 shape-combine / qt setMask. }
   Rgn := CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
   SetWindowRgn(FPopup.Handle, Rgn, True);
+end;
+
+procedure TTyComboBox.PopupResize(Sender: TObject);
+begin
+  // Re-assert the rounded region at the popup's ACTUAL realized size — Qt drops the mask on resize,
+  // and the post-Show layout resize is exactly when that happens (Win32/GTK2: idempotent re-apply).
+  if (FPopup <> nil) and FPopup.Visible and FPopup.HandleAllocated then
+    ApplyPopupRegion(FPopup.Width, FPopup.Height);
 end;
 
 procedure TTyComboBox.CloseUp;

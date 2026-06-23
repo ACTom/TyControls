@@ -11,7 +11,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller,
-  tyControls.Menu, tyControls.WindowEffects, tyControls.QtWS;
+  tyControls.Menu, tyControls.WindowEffects, tyControls.QtWS, tyControls.GtkWS;
 
 type
   TTyBorderHit = (bhNone, bhLeft, bhTop, bhRight, bhBottom,
@@ -551,12 +551,14 @@ procedure TTyChromeEngine.TitleBarMouseDown(Button: TMouseButton;
 begin
   if (Button = mbLeft) and (FForm <> nil) and not FMaximized then
   begin
-    // Qt6: hand the drag to the window manager — programmatic move() is ignored mid-grab on X11.
-    // When this starts a system move, release LCL's just-set mouse capture so it doesn't conflict
-    // with the WM's move grab (else after one drag the capture leaks -> the whole window stays in
-    // move-mode). We do NO per-move repositioning (FDragging stays False -> TitleBarMouseMove no-ops).
-    // Win32/GTK2/Qt5 -> False -> the global-cursor fallback below.
-    if TyQtStartSystemMove(FForm) then
+    // Linux: hand the drag to the window manager — a programmatic move() is ignored mid-grab on
+    // Qt/X11, and gtk_window_move() gets clamped to the whole-screen bounds on GTK2 (so a window on
+    // a non-bottom-aligned second monitor can't be dragged past mid-screen). Qt6 -> startSystemMove,
+    // GTK2 -> begin_move_drag; both let the WM cross monitors freely. When a system move starts we
+    // release LCL's just-set mouse capture so it doesn't fight the WM's move grab (else after one
+    // drag the capture leaks -> the whole window stays in move-mode). No per-move repositioning then
+    // (FDragging stays False -> TitleBarMouseMove no-ops). Win32/Qt5 -> False -> fallback below.
+    if TyQtStartSystemMove(FForm) or TyGtkStartSystemMove(FForm) then
     begin
       SetCaptureControl(nil);
       Exit;

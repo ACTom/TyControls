@@ -176,6 +176,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.QtWS.pas"/>
         <UnitName Value="tyControls.QtWS"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.GtkWS.pas"/>
+        <UnitName Value="tyControls.GtkWS"/>
+      </Item>
     </Files>
     <RequiredPkgs>
       <Item>

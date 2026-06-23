@@ -18,8 +18,9 @@ uses Forms;
 { True iff this is a Qt build (so a caller can branch on it without its own IFDEFs). }
 function TyIsQt: Boolean;
 
-{ Re-type AForm's native window as a Qt POPUP (Qt::Popup | FramelessWindowHint). Call once the
-  handle exists (after Show). No-op off Qt / when no handle. }
+{ Re-type AForm's native window as a Qt POPUP (Qt::Popup | FramelessWindowHint). Call BEFORE the
+  caller's Show (it HandleNeeds an invisible window, so Show then maps it app-positioned with no
+  top-left flash). No-op off Qt / when no handle. }
 procedure TyQtMakePopup(AForm: TCustomForm);
 
 { Begin a WM-driven interactive move of AForm's window (call from a mouse-DOWN handler while the
