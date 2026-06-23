@@ -1012,14 +1012,22 @@ begin
   d := MulDiv(S.BorderRadius, FForm.Font.PixelsPerInch, 96) * 2;
   if d <= 0 then
   begin
-    { Radius 0: leave rectangular (clear any region carried over from a prior open). }
+    { Radius 0: leave rectangular (clear any region carried over from a prior open). On Qt, deep-clear
+      first — SetWindowRgn(.,0) is a no-op there, so a reused popup would keep stale viewport/child
+      masks (no-op off Qt). }
+    TyQtClearWindowMaskDeep(FForm, FView);
     SetWindowRgn(FForm.Handle, 0, True);
     Exit;
   end;
   { +1: CreateRoundRectRgn's right/bottom extents are exclusive. SetWindowRgn takes ownership of the
     region handle, so it must not be deleted afterwards. LCLIntf routes to the widgetset: win32 =
-    native region, gtk2 = gdk_window_shape_combine_region, qt = QWidget.setMask. }
+    native region, gtk2 = gdk_window_shape_combine_region, qt = QWidget.setMask (top-level ONLY). }
   Rgn := CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
+  { Qt6/X11 (QTSCROLLABLEFORMS): the painted surface is the scroll-area viewport + the alClient
+    TTyMenuView's own native widget, which the top-level mask never reaches. Deep-mask them with the
+    SAME region BEFORE SetWindowRgn (which only masks the top-level and doesn't consume Rgn). No-op
+    off Qt. }
+  TyQtMaskWindowDeep(FForm, FView, Rgn);
   res := SetWindowRgn(FForm.Handle, Rgn, True);
   TyGeomLog(Format('ApplyRegion d=%d req=%dx%d actual=%dx%d res=%d',
     [d, AWidth, AHeight, FForm.Width, FForm.Height, res]));

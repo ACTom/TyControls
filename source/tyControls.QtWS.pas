@@ -10,10 +10,16 @@ unit tyControls.QtWS;
      popup windows"). Re-typing the window as Qt::Popup makes it app-positioned + grab-capable.
    - A borderless window can't be dragged by setting Left/Top — the WM ignores programmatic move()
      during a button grab. QWindow.startSystemMove() hands the drag to the WM (Qt6 only; the Qt5
-     pas binding doesn't export it). }
+     pas binding doesn't export it).
+   - Rounding a popup's corners: the cross-platform SetWindowRgn masks ONLY the top-level QWidget,
+     but with QTSCROLLABLEFORMS (the Qt6 default) the painted surface is the form's scroll-area
+     VIEWPORT plus the alClient windowed content control's own native widget — a Qt mask does not
+     reach child QWidgets, so those keep square opaque corners. TyQtMaskWindowDeep re-applies the
+     SAME region to every native surface; TyQtClearWindowMaskDeep removes them (SetWindowRgn(.,0) is
+     a no-op on Qt, so a radius-0 theme must clear explicitly). }
 
 interface
-uses Forms;
+uses Forms, Controls, LCLType;
 
 { True iff this is a Qt build (so a caller can branch on it without its own IFDEFs). }
 function TyIsQt: Boolean;
@@ -28,12 +34,25 @@ procedure TyQtMakePopup(AForm: TCustomForm);
   per-move repositioning. Qt6 only; returns False elsewhere so the caller keeps its fallback. }
 function TyQtStartSystemMove(AForm: TCustomForm): Boolean;
 
+{ Apply the rounded region ARgn (an LCL HRGN whose Qt backing is a live QRegion) to ALL the native
+  QWidget surfaces of AForm's popup so the square corners are actually clipped on Qt6/X11 with
+  QTSCROLLABLEFORMS: the form top-level + its container/viewport, AND the alClient content control's
+  own widget + container/viewport. Call this WHILE ARgn is still a live HRGN (just before handing it
+  to SetWindowRgn, which on Qt only masks the top-level and does not consume the HRGN). ContentCtl
+  may be nil. No-op off Qt / when no handle. }
+procedure TyQtMaskWindowDeep(AForm: TCustomForm; AContentCtl: TWinControl; ARgn: HRGN);
+
+{ Clear the masks TyQtMaskWindowDeep set on all of AForm's native surfaces. Needed on Qt because
+  SetWindowRgn(handle, 0, True) is a no-op there (it early-exits on a 0 region), so a reused popup
+  switching to a 0-radius theme would otherwise keep a stale rounded mask. No-op off Qt. }
+procedure TyQtClearWindowMaskDeep(AForm: TCustomForm; AContentCtl: TWinControl);
+
 implementation
 
 {$IF defined(LCLQT6) or defined(LCLQT5)}
 uses
   {$IFDEF LCLQT6} qt6, {$ELSE} qt5, {$ENDIF}
-  qtwidgets;
+  qtwidgets, qtobjects;
 
 function TyIsQt: Boolean;
 begin
@@ -70,6 +89,52 @@ begin
   // Qt5: QWindow_startSystemMove is not in the qt5 pas binding -> no-op (caller keeps its fallback).
 end;
 
+{ Mask AW's outer widget and (when different) its container/viewport. GetContainerWidget is public on
+  TQtWidget and resolves correctly in BOTH build configs: under QTSCROLLABLEFORMS it returns the
+  scroll-area viewport (where LCL reparents children / where a TQtCustomControl paints); otherwise it
+  returns FCentralWidget or the widget itself. So we avoid the {$IFDEF QTSCROLLABLEFORMS}-only
+  ScrollArea field entirely. }
+procedure MaskWidgetDeep(AW: TQtWidget; R: QRegionH);
+var cont: QWidgetH;
+begin
+  if AW = nil then Exit;
+  if AW.Widget <> nil then
+    QWidget_setMask(AW.Widget, R);
+  cont := AW.GetContainerWidget;
+  if (cont <> nil) and (cont <> AW.Widget) then
+    QWidget_setMask(cont, R);
+end;
+
+procedure ClearWidgetDeep(AW: TQtWidget);
+var cont: QWidgetH;
+begin
+  if AW = nil then Exit;
+  if AW.Widget <> nil then
+    QWidget_clearMask(AW.Widget);
+  cont := AW.GetContainerWidget;
+  if (cont <> nil) and (cont <> AW.Widget) then
+    QWidget_clearMask(cont);
+end;
+
+procedure TyQtMaskWindowDeep(AForm: TCustomForm; AContentCtl: TWinControl; ARgn: HRGN);
+var R: QRegionH;
+begin
+  if (AForm = nil) or (not AForm.HandleAllocated) or (ARgn = 0) then Exit;
+  R := TQtRegion(ARgn).FHandle;   // live QRegionH backing the LCL HRGN (Qt copies it on setMask)
+  if R = nil then Exit;
+  MaskWidgetDeep(TQtWidget(AForm.Handle), R);   // form top-level + its scroll-area viewport
+  if (AContentCtl <> nil) and AContentCtl.HandleAllocated then
+    MaskWidgetDeep(TQtWidget(AContentCtl.Handle), R);   // alClient control's own widget + viewport
+end;
+
+procedure TyQtClearWindowMaskDeep(AForm: TCustomForm; AContentCtl: TWinControl);
+begin
+  if (AForm = nil) or (not AForm.HandleAllocated) then Exit;
+  ClearWidgetDeep(TQtWidget(AForm.Handle));
+  if (AContentCtl <> nil) and AContentCtl.HandleAllocated then
+    ClearWidgetDeep(TQtWidget(AContentCtl.Handle));
+end;
+
 {$ELSE}
 
 function TyIsQt: Boolean;
@@ -85,6 +150,16 @@ end;
 function TyQtStartSystemMove(AForm: TCustomForm): Boolean;
 begin
   Result := False;
+end;
+
+procedure TyQtMaskWindowDeep(AForm: TCustomForm; AContentCtl: TWinControl; ARgn: HRGN);
+begin
+  // non-Qt widgetset: the cross-platform SetWindowRgn already clips the whole window; nothing to do.
+end;
+
+procedure TyQtClearWindowMaskDeep(AForm: TCustomForm; AContentCtl: TWinControl);
+begin
+  // non-Qt widgetset: nothing to do.
 end;
 
 {$ENDIF}

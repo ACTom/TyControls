@@ -435,13 +435,19 @@ begin
   d := MulDiv(S.BorderRadius, FPopup.Font.PixelsPerInch, 96) * 2;
   if d <= 0 then
   begin
-    { Radius 0: leave the window rectangular (clear any region from a prior open). }
+    { Radius 0: leave the window rectangular (clear any region from a prior open). On Qt, deep-clear
+      first — SetWindowRgn(.,0) is a no-op there (no-op off Qt). }
+    TyQtClearWindowMaskDeep(FPopup, FPopupList);
     SetWindowRgn(FPopup.Handle, 0, True);
     Exit;
   end;
   { +1 on the extents: CreateRoundRectRgn's right/bottom are exclusive. SetWindowRgn takes ownership
-    of Rgn; do not delete it. LCLIntf routes it: win32 native / gtk2 shape-combine / qt setMask. }
+    of Rgn; do not delete it. LCLIntf routes it: win32 native / gtk2 shape-combine / qt setMask
+    (top-level ONLY). }
   Rgn := CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
+  { Qt6/X11 (QTSCROLLABLEFORMS): also mask the scroll-area viewport + the alClient TTyListBox's own
+    native widget, which the top-level mask never reaches. Before SetWindowRgn; no-op off Qt. }
+  TyQtMaskWindowDeep(FPopup, FPopupList, Rgn);
   SetWindowRgn(FPopup.Handle, Rgn, True);
 end;
 
