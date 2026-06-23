@@ -768,8 +768,12 @@ begin
     // Surface: the TyMenuView (popup) background/border/radius from its own tokens.
     S := CurrentStyle;
     // Wayland: the window can't be shape-masked, so paint the surface SQUARE to match it (no edge).
+    // Per-corner Radius wins in TyEffectiveCorners, so zero BOTH it and BorderRadius.
     if ForceSquareSurface then
+    begin
       S.BorderRadius := 0;
+      S.Radius := Default(TTyCorners);
+    end;
     DrawFrame(P, R, S);
 
     itemH := ItemRowHeight(APPI);

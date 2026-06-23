@@ -708,10 +708,13 @@ begin
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
     BoxStyle := CurrentStyle;
-    // Wayland popup: the window can't be shape-masked, so paint square corners to match it (the
-    // first/last row caps key off BorderRadius too, so this squares the whole surface).
+    // Wayland popup: the window can't be shape-masked, so paint square corners to match it. Per-corner
+    // Radius wins in TyEffectiveCorners, so zero it AND BorderRadius (row caps key off BorderRadius).
     if ForceSquareSurface then
+    begin
       BoxStyle.BorderRadius := 0;
+      BoxStyle.Radius := Default(TTyCorners);
+    end;
     DrawFrame(P, R, BoxStyle);
 
     // Content area = full rect inset by the LISTBOX style's Padding
