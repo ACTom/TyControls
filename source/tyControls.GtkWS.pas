@@ -23,7 +23,7 @@ function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 implementation
 
 {$IFDEF LCLGTK2}
-uses Controls, gtk2;
+uses Types, Controls, gtk2;
 
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 var
