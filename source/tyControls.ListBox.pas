@@ -70,6 +70,11 @@ type
     procedure ClearSelection;
     procedure SelectAll;
     property Selected[AIndex: Integer]: Boolean read GetSelected write SetSelected;
+  public
+    { When True, the box surface is painted with SQUARE corners (frame radius forced to 0). The
+      ComboBox dropdown sets this on Wayland, where the popup window can't be shape-masked, so a
+      square paint matches the square window. Default False — embedded listboxes keep their radius. }
+    ForceSquareSurface: Boolean;
   published
     property Items: TStringList read FItems write SetItems;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
@@ -703,6 +708,10 @@ begin
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     P.BeginPaint(ACanvas, ARect, APPI);
     BoxStyle := CurrentStyle;
+    // Wayland popup: the window can't be shape-masked, so paint square corners to match it (the
+    // first/last row caps key off BorderRadius too, so this squares the whole surface).
+    if ForceSquareSurface then
+      BoxStyle.BorderRadius := 0;
     DrawFrame(P, R, BoxStyle);
 
     // Content area = full rect inset by the LISTBOX style's Padding

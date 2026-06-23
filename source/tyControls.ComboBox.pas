@@ -376,6 +376,7 @@ begin
     FPopupList := TTyListBox.Create(FPopup);
     FPopupList.Parent := FPopup;
     FPopupList.Align := alClient;
+    FPopupList.ForceSquareSurface := TyQtIsWayland;   // Wayland can't shape-mask the window -> square
     FPopupList.OnChange := @PopupListChange;
   end;
 
@@ -430,6 +431,9 @@ begin
   // are not the dark default form Color (the Linux 'black corners') where a widgetset region no-ops.
   if S.Background.Kind = tfkSolid then
     FPopup.Color := TyColorToLCL(S.Background.Color);
+  // Wayland ignores window masks (no XShape): skip shaping — the list paints square corners
+  // (ForceSquareSurface) so the dropdown is a clean rectangle, not rounded-paint-on-square-window.
+  if TyQtIsWayland then Exit;
   { Scale the logical BorderRadius to the popup's device PPI; the rounded-rect
     region uses the FULL corner diameter (2 * radius). }
   d := MulDiv(S.BorderRadius, FPopup.Font.PixelsPerInch, 96) * 2;

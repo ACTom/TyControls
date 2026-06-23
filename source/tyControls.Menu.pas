@@ -120,6 +120,11 @@ type
     destructor Destroy; override;
     procedure SetRows(const ARows: TTyMenuRowArray);
     procedure Click; override;
+  public
+    { When True, the popup surface is painted with SQUARE corners (frame radius forced to 0). The
+      host popup sets this on Wayland, where the window can't be shape-masked, so a square paint
+      matches the square window and avoids the rounded-paint-vs-square-window edge artifact. }
+    ForceSquareSurface: Boolean;
     { Activation/navigation events consumed by the host popup/bar (Tasks 4/5/7). }
     property OnActivateRow: TTyMenuRowEvent read FOnActivateRow write FOnActivateRow;
     property OnOpenSubmenu: TTyMenuRowEvent read FOnOpenSubmenu write FOnOpenSubmenu;
@@ -762,6 +767,9 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     // Surface: the TyMenuView (popup) background/border/radius from its own tokens.
     S := CurrentStyle;
+    // Wayland: the window can't be shape-masked, so paint the surface SQUARE to match it (no edge).
+    if ForceSquareSurface then
+      S.BorderRadius := 0;
     DrawFrame(P, R, S);
 
     itemH := ItemRowHeight(APPI);
@@ -899,6 +907,8 @@ begin
   FView := TTyMenuView.Create(FForm);
   FView.Parent := FForm;
   FView.Align := alClient;
+  FView.ForceSquareSurface := TyQtIsWayland;   // Wayland can't shape-mask the window -> square paint
+
   FView.OnActivateRow := @HandleActivateRow;
   FView.OnOpenSubmenu := @HandleOpenSubmenu;
   FView.OnCloseRequested := @HandleCloseRequested;
@@ -1009,6 +1019,9 @@ begin
   // is a no-op; on widgetsets where the region clips (win32/gtk2/qt), the gaps are hidden anyway.
   if S.Background.Kind = tfkSolid then
     FForm.Color := TyColorToLCL(S.Background.Color);
+  // Wayland ignores window masks (no XShape): skip shaping entirely — the view paints square corners
+  // (ForceSquareSurface) so the popup is a clean rectangle instead of rounded-paint-on-square-window.
+  if TyQtIsWayland then Exit;
   d := MulDiv(S.BorderRadius, FForm.Font.PixelsPerInch, 96) * 2;
   if d <= 0 then
   begin

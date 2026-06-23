@@ -24,6 +24,12 @@ uses Forms, Controls, LCLType;
 { True iff this is a Qt build (so a caller can branch on it without its own IFDEFs). }
 function TyIsQt: Boolean;
 
+{ True iff running under the Qt WAYLAND platform plugin. Wayland has NO client-side window shaping
+  (no XShape), so SetWindowRgn/setMask is silently ignored there — a popup must instead be drawn with
+  SQUARE corners to match its un-shaped window (rounded corners on Wayland need a translucent surface,
+  which LCL-Qt does not plumb). Always False off Qt / on X11 (xcb). Cached after the first query. }
+function TyQtIsWayland: Boolean;
+
 { Re-type AForm's native window as a Qt POPUP (Qt::Popup | FramelessWindowHint). Call BEFORE the
   caller's Show (it HandleNeeds an invisible window, so Show then maps it app-positioned with no
   top-left flash). No-op off Qt / when no handle. }
@@ -57,6 +63,19 @@ uses
 function TyIsQt: Boolean;
 begin
   Result := True;
+end;
+
+var
+  GIsWayland: Integer = -1;   // -1 unknown, 0 no, 1 yes (platform is fixed for the process)
+
+function TyQtIsWayland: Boolean;
+var s: WideString;
+begin
+  if GIsWayland >= 0 then Exit(GIsWayland = 1);
+  QGuiApplication_platformName(@s);   // 'wayland' / 'xcb' / '' (before the app is up)
+  if s = 'wayland' then begin GIsWayland := 1; Exit(True); end;
+  if s <> '' then GIsWayland := 0;    // cache only a DEFINITIVE answer; '' -> re-query next time
+  Result := False;
 end;
 
 procedure TyQtMakePopup(AForm: TCustomForm);
@@ -140,6 +159,11 @@ end;
 function TyIsQt: Boolean;
 begin
   Result := False;
+end;
+
+function TyQtIsWayland: Boolean;
+begin
+  Result := False;   // non-Qt widgetset: never Wayland (Win32/GTK2/Cocoa).
 end;
 
 procedure TyQtMakePopup(AForm: TCustomForm);
