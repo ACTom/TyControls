@@ -21,6 +21,10 @@ unit tyControls.QtWS;
 interface
 uses Forms, Controls, LCLType;
 
+type
+  { Called with the FULL UTF-8 commit string from a Qt input-method commit (no 7-byte truncation). }
+  TTyImeCommitEvent = procedure(const ACommitUtf8: string) of object;
+
 { True iff this is a Qt build (so a caller can branch on it without its own IFDEFs). }
 function TyIsQt: Boolean;
 
@@ -53,12 +57,69 @@ procedure TyQtMaskWindowDeep(AForm: TCustomForm; AContentCtl: TWinControl; ARgn:
   switching to a 0-radius theme would otherwise keep a stale rounded mask. No-op off Qt. }
 procedure TyQtClearWindowMaskDeep(AForm: TCustomForm; AContentCtl: TWinControl);
 
+{ Install a Qt input-method commit interceptor on AControl's native widget. A custom-drawn TWinControl
+  on Qt6 only receives an IME commit through LCL's UTF8KeyPress, whose TUTF8Char (String[7]) truncates
+  any commit over ~2 CJK chars. This installs our own Qt event filter that reads the FULL
+  QInputMethodEvent.commitString and hands it to AOnCommit, then EATS the event so LCL's truncated
+  insert never runs. Returns an opaque handle to pass to TyQtUninstallIme (nil off Qt / on failure). }
+function TyQtInstallImeCommit(AControl: TWinControl; AOnCommit: TTyImeCommitEvent): TObject;
+
+{ Tear down a TyQtInstallImeCommit interceptor (frees the Qt event hook). Safe on nil / off Qt. }
+procedure TyQtUninstallIme(var AHandle: TObject);
+
 implementation
 
 {$IF defined(LCLQT6) or defined(LCLQT5)}
 uses
+  SysUtils, LazUTF8,
   {$IFDEF LCLQT6} qt6, {$ELSE} qt5, {$ENDIF}
   qtwidgets, qtobjects;
+
+type
+  { Owns a Qt event filter on a widget that turns a full QInputMethodEvent commit into AOnCommit. }
+  TTyQtImeHook = class
+  private
+    FHook: QObject_hookH;
+    FOnCommit: TTyImeCommitEvent;
+    function EventFilter(Sender: QObjectH; Event: QEventH): Boolean; cdecl;
+  public
+    constructor Create(AWidget: QWidgetH; AOnCommit: TTyImeCommitEvent);
+    destructor Destroy; override;
+  end;
+
+constructor TTyQtImeHook.Create(AWidget: QWidgetH; AOnCommit: TTyImeCommitEvent);
+begin
+  inherited Create;
+  FOnCommit := AOnCommit;
+  // Installed AFTER LCL's own event filter (the handle already exists) -> Qt calls ours FIRST, so we
+  // can consume the IME commit before LCL's SlotInputMethod squeezes it through TUTF8Char (String[7]).
+  FHook := QObject_hook_create(AWidget);
+  QObject_hook_hook_events(FHook, @EventFilter);
+end;
+
+destructor TTyQtImeHook.Destroy;
+begin
+  if FHook <> nil then
+    QObject_hook_destroy(FHook);
+  inherited Destroy;
+end;
+
+function TTyQtImeHook.EventFilter(Sender: QObjectH; Event: QEventH): Boolean; cdecl;
+var
+  ws: WideString;
+  s: string;
+begin
+  Result := False;
+  if QEvent_type(Event) <> QEventInputMethod then Exit;
+  QInputMethodEvent_commitString(QInputMethodEventH(Event), @ws);
+  if ws = '' then Exit;   // preedit-only (still composing): let Qt/LCL handle it, don't eat
+  s := UTF16ToUTF8(ws);
+  if (s <> '') and Assigned(FOnCommit) then
+  begin
+    FOnCommit(s);
+    Result := True;       // EAT: stop LCL's SlotInputMethod from inserting the 7-byte-truncated copy
+  end;
+end;
 
 function TyIsQt: Boolean;
 begin
@@ -154,6 +215,21 @@ begin
     ClearWidgetDeep(TQtWidget(AContentCtl.Handle));
 end;
 
+function TyQtInstallImeCommit(AControl: TWinControl; AOnCommit: TTyImeCommitEvent): TObject;
+var w: QWidgetH;
+begin
+  Result := nil;
+  if (AControl = nil) or (not AControl.HandleAllocated) or (not Assigned(AOnCommit)) then Exit;
+  w := TQtWidget(AControl.Handle).Widget;   // the widget that carries WA_InputMethodEnabled + the IME event
+  if w = nil then Exit;
+  Result := TTyQtImeHook.Create(w, AOnCommit);
+end;
+
+procedure TyQtUninstallIme(var AHandle: TObject);
+begin
+  FreeAndNil(AHandle);
+end;
+
 {$ELSE}
 
 function TyIsQt: Boolean;
@@ -184,6 +260,16 @@ end;
 procedure TyQtClearWindowMaskDeep(AForm: TCustomForm; AContentCtl: TWinControl);
 begin
   // non-Qt widgetset: nothing to do.
+end;
+
+function TyQtInstallImeCommit(AControl: TWinControl; AOnCommit: TTyImeCommitEvent): TObject;
+begin
+  Result := nil;   // non-Qt: IME flows through the normal LCL path (Win32 IME already works).
+end;
+
+procedure TyQtUninstallIme(var AHandle: TObject);
+begin
+  AHandle := nil;   // nothing was installed.
 end;
 
 {$ENDIF}

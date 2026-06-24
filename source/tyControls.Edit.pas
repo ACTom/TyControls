@@ -6,7 +6,7 @@ uses
   ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.UndoStack,
-  tyControls.Animation;
+  tyControls.Animation, tyControls.QtWS;
 type
   TTyIntArray = array of Integer;
 
@@ -37,6 +37,9 @@ type
     FCharCase: TEditCharCase;
     FNumbersOnly: Boolean;
     FOnChange: TNotifyEvent;
+    FImeHook: TObject;    // Qt-only IME commit interceptor (nil off Qt); see tyControls.QtWS
+    // Insert a full IME commit string (Qt: the un-truncated QInputMethodEvent.commitString).
+    procedure HandleImeCommit(const ACommitUtf8: string);
     procedure SetText(const AValue: string);
     procedure SetTextHint(const AValue: string);
     procedure SetCaretPos(AValue: Integer);
@@ -109,6 +112,10 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    // Qt6: install/tear down our own input-method commit interceptor on the native widget
+    // (custom controls otherwise only get the TUTF8Char/String[7]-truncated commit). No-op off Qt.
+    procedure InitializeWnd; override;
+    procedure DestroyWnd; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -195,6 +202,7 @@ begin
   // Free the timer first so its OnTimer callback can never fire mid-teardown
   // (mirrors TTyButton.Destroy). It is owned by Self but we free it explicitly.
   FreeAndNil(FBlinkTimer);
+  TyQtUninstallIme(FImeHook);   // in case DestroyWnd never ran (Qt-only; no-op elsewhere)
   FUndoStack.Free;
   FMeasureBmp.Free;
   inherited Destroy;
@@ -1217,6 +1225,50 @@ begin
   if not Enabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
   InjectKey(UTF8Key);
+end;
+
+{ Insert a FULL input-method commit (Qt6 path). LCL's UTF8KeyPress caps a commit at TUTF8Char
+  (String[7], ~2 CJK chars); our Qt event filter (tyControls.QtWS) bypasses that and calls this with
+  the whole commitString. Mirrors Paste: one undo step, replace any selection, strip CR/LF, fire
+  OnChange once. }
+procedure TTyEdit.HandleImeCommit(const ACommitUtf8: string);
+var
+  TextBefore, Filtered: string;
+  i: Integer;
+begin
+  if FReadOnly or not Enabled then Exit;
+  if ACommitUtf8 = '' then Exit;
+  TextBefore := FText;
+  BeginUndoStep(uskTyping);
+  FSuspendUndo := True;
+  try
+    Filtered := '';
+    for i := 1 to Length(ACommitUtf8) do
+      if (ACommitUtf8[i] <> #13) and (ACommitUtf8[i] <> #10) then
+        // NumbersOnly: keep only ASCII digits (CJK/other bytes are >= #128 -> dropped), matching the
+        // InjectKey path so an IME commit can't bypass the digit restriction.
+        if (not FNumbersOnly) or ((ACommitUtf8[i] >= '0') and (ACommitUtf8[i] <= '9')) then
+          Filtered := Filtered + ACommitUtf8[i];
+    if HasSelection then DeleteSelection;
+    if Filtered <> '' then InjectStringAt(Filtered);
+  finally
+    FSuspendUndo := False;
+  end;
+  if FText <> TextBefore then DoChange;
+end;
+
+procedure TTyEdit.InitializeWnd;
+begin
+  inherited InitializeWnd;
+  // Qt6: intercept the native input-method commit so a multi-char CJK commit isn't truncated to
+  // ~2 chars by LCL's TUTF8Char path. No-op (returns nil) on Win32/GTK2/Cocoa.
+  FImeHook := TyQtInstallImeCommit(Self, @HandleImeCommit);
+end;
+
+procedure TTyEdit.DestroyWnd;
+begin
+  TyQtUninstallIme(FImeHook);
+  inherited DestroyWnd;
 end;
 
 procedure TTyEdit.KeyDown(var Key: Word; Shift: TShiftState);
