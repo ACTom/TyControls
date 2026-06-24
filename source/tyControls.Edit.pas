@@ -38,8 +38,11 @@ type
     FNumbersOnly: Boolean;
     FOnChange: TNotifyEvent;
     FImeHook: TObject;    // Qt-only IME commit interceptor (nil off Qt); see tyControls.QtWS
+    FImeCaretRect: TRect; // caret rect (client device px) cached each paint; fed to the Qt IME query
     // Insert a full IME commit string (Qt: the un-truncated QInputMethodEvent.commitString).
     procedure HandleImeCommit(const ACommitUtf8: string);
+    // Caret rect (client device px) for the Qt IME candidate window; empty when not focused.
+    function GetImeCaretRect: TRect;
     procedure SetText(const AValue: string);
     procedure SetTextHint(const AValue: string);
     procedure SetCaretPos(AValue: Integer);
@@ -1257,12 +1260,20 @@ begin
   if FText <> TextBefore then DoChange;
 end;
 
+function TTyEdit.GetImeCaretRect: TRect;
+begin
+  // Empty rect when not focused/painted -> the IME hook declines and Qt's default position stands.
+  if (not HandleAllocated) or (not Focused) then
+    Exit(Rect(0, 0, 0, 0));
+  Result := FImeCaretRect;
+end;
+
 procedure TTyEdit.InitializeWnd;
 begin
   inherited InitializeWnd;
-  // Qt6: intercept the native input-method commit so a multi-char CJK commit isn't truncated to
-  // ~2 chars by LCL's TUTF8Char path. No-op (returns nil) on Win32/GTK2/Cocoa.
-  FImeHook := TyQtInstallImeCommit(Self, @HandleImeCommit);
+  // Qt6: intercept the native input method so (1) a multi-char CJK commit isn't truncated to ~2 chars
+  // by LCL's TUTF8Char path and (2) the candidate window follows the caret. No-op on Win32/GTK2/Cocoa.
+  FImeHook := TyQtInstallIme(Self, @HandleImeCommit, @GetImeCaretRect);
 end;
 
 procedure TTyEdit.DestroyWnd;
@@ -1623,6 +1634,7 @@ begin
         CaretX + P.Scale(1), ContentRect.Bottom - P.Scale(2));
       P.FillBackground(CaretRect, Default(TTyFill), 0);
       P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
+      FImeCaretRect := CaretRect;   // cache for the Qt IME candidate-window query
     end;
 
     P.EndPaint;

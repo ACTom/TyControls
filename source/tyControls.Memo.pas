@@ -121,6 +121,7 @@ type
     // Enter/Backspace/Delete/merge are never limited. Default 0.
     FMaxLength: Integer;
     FImeHook: TObject;   // Qt-only IME commit interceptor (nil off Qt); see tyControls.QtWS
+    FImeCaretRect: TRect; // caret rect (client device px) cached each paint; fed to the Qt IME query
     // WantTabs: when True a Tab key inserts a literal tab char into the text;
     // when False (default) Tab is left to propagate so it navigates between
     // controls (the native TMemo default). Gated in KeyDown.
@@ -183,6 +184,8 @@ type
     procedure ScrollBarChange(Sender: TObject);
     // Insert a FULL input-method commit (Qt6 path), bypassing LCL's TUTF8Char (String[7]) truncation.
     procedure HandleImeCommit(const ACommitUtf8: string);
+    // Caret rect (client device px) for the Qt IME candidate window; empty when not focused.
+    function GetImeCaretRect: TRect;
     // --- Model mutators (pure UTF8 splice; no key/paint dependency) ---
     procedure DoInsertText(const AStr: string);
     // Insert AStr at the caret, splitting it into logical lines on CR/LF (CRLF and
@@ -2595,6 +2598,7 @@ begin
           CaretX + P.Scale(1), y + LH - P.Scale(2));
         P.FillBackground(CaretRect, Default(TTyFill), 0);
         P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
+        FImeCaretRect := CaretRect;   // cache for the Qt IME candidate-window query
         // Pin the Windows IME composition window to the caret (client coords),
         // so CJK candidates appear at the caret instead of the screen origin.
         if Focused then TySetImeCaretPos(Self, CaretX, y);
@@ -2678,10 +2682,17 @@ begin
   end;
 end;
 
+function TTyMemo.GetImeCaretRect: TRect;
+begin
+  if (not HandleAllocated) or (not Focused) then
+    Exit(Rect(0, 0, 0, 0));   // decline -> Qt's default candidate position stands
+  Result := FImeCaretRect;
+end;
+
 procedure TTyMemo.InitializeWnd;
 begin
   inherited InitializeWnd;
-  FImeHook := TyQtInstallImeCommit(Self, @HandleImeCommit);   // Qt6 only; nil elsewhere
+  FImeHook := TyQtInstallIme(Self, @HandleImeCommit, @GetImeCaretRect);   // Qt6 only; nil elsewhere
 end;
 
 procedure TTyMemo.DestroyWnd;
