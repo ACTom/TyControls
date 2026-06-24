@@ -6,7 +6,7 @@ uses
   ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
-  tyControls.ScrollBar, tyControls.UndoStack, tyControls.Animation;
+  tyControls.ScrollBar, tyControls.UndoStack, tyControls.Animation, tyControls.QtWS;
 type
   // Cumulative-prefix pixel widths, length = codepoints+1 (shared name with Edit).
   TTyIntArray = array of Integer;
@@ -120,6 +120,7 @@ type
     // new printable char at the cap and truncates paste to the remaining room;
     // Enter/Backspace/Delete/merge are never limited. Default 0.
     FMaxLength: Integer;
+    FImeHook: TObject;   // Qt-only IME commit interceptor (nil off Qt); see tyControls.QtWS
     // WantTabs: when True a Tab key inserts a literal tab char into the text;
     // when False (default) Tab is left to propagate so it navigates between
     // controls (the native TMemo default). Gated in KeyDown.
@@ -180,6 +181,8 @@ type
     procedure AfterCaretMove(APPI: Integer);
     // Scrollbar OnChange handler -> SetTopLine (guarded against ping-pong).
     procedure ScrollBarChange(Sender: TObject);
+    // Insert a FULL input-method commit (Qt6 path), bypassing LCL's TUTF8Char (String[7]) truncation.
+    procedure HandleImeCommit(const ACommitUtf8: string);
     // --- Model mutators (pure UTF8 splice; no key/paint dependency) ---
     procedure DoInsertText(const AStr: string);
     // Insert AStr at the caret, splitting it into logical lines on CR/LF (CRLF and
@@ -392,6 +395,10 @@ type
     // Input handlers. Both early-Exit when not Enabled (v1.5 policy); when
     // disabled, KeyDown does NOT consume Key so navigation falls through.
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    // Qt6: own input-method commit interceptor (custom controls otherwise get the String[7]-truncated
+    // commit). No-op off Qt.
+    procedure InitializeWnd; override;
+    procedure DestroyWnd; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     // Left-click caret hit-test: Y -> logical line, X -> codepoint column. Early
     // Exit when not Enabled (v1.5 policy). try/except SetFocus like Edit/ListBox.
@@ -541,6 +548,7 @@ destructor TTyMemo.Destroy;
 begin
   // Free the timer first so its OnTimer callback can never fire mid-teardown.
   FreeAndNil(FBlinkTimer);
+  TyQtUninstallIme(FImeHook);   // in case DestroyWnd never ran (Qt-only; no-op elsewhere)
   FUndoStack.Free;
   FMeasureBmp.Free;
   FLines.Free;
@@ -2637,6 +2645,49 @@ begin
   FSelAnchorCol := FCaretCol;
   FDesiredCol := FCaretCol;          // horizontal edit refreshes desired column
   AfterEdit(Font.PixelsPerInch);
+end;
+
+{ Insert a FULL input-method commit (Qt6). LCL's UTF8KeyPress caps a commit at TUTF8Char (String[7],
+  ~2 CJK chars); our Qt event filter (tyControls.QtWS) calls this with the whole commitString. Mirrors
+  PasteFromClipboard: MaxLength trim, one undo step, replace selection, splice via InsertTextMultiline. }
+procedure TTyMemo.HandleImeCommit(const ACommitUtf8: string);
+var
+  S: string;
+  Room: Integer;
+begin
+  if FReadOnly or not Enabled then Exit;
+  if ACommitUtf8 = '' then Exit;
+  S := ACommitUtf8;
+  if FMaxLength > 0 then
+  begin
+    Room := FMaxLength - ContentCodepointCount;
+    if Room <= 0 then Exit;
+    if UTF8Length(S) > Room then S := UTF8Copy(S, 1, Room);
+  end;
+  BeginUndoStep(uskTyping);
+  FSuspendUndo := True;
+  try
+    if HasSelection then DeleteSelection;
+    InsertTextMultiline(S);
+    FSelAnchorLine := FCaretLine;     // collapse anchor so the next input doesn't replace this run
+    FSelAnchorCol := FCaretCol;
+    FDesiredCol := FCaretCol;
+    AfterEdit(Font.PixelsPerInch);
+  finally
+    FSuspendUndo := False;
+  end;
+end;
+
+procedure TTyMemo.InitializeWnd;
+begin
+  inherited InitializeWnd;
+  FImeHook := TyQtInstallImeCommit(Self, @HandleImeCommit);   // Qt6 only; nil elsewhere
+end;
+
+procedure TTyMemo.DestroyWnd;
+begin
+  TyQtUninstallIme(FImeHook);
+  inherited DestroyWnd;
 end;
 
 procedure TTyMemo.KeyDown(var Key: Word; Shift: TShiftState);
