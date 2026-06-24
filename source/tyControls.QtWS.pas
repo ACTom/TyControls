@@ -125,7 +125,7 @@ function TTyQtImeHook.AnswerCaretQuery(Ev: QInputMethodQueryEventH): Boolean;
 var
   queries: QtInputMethodQueries;
   r: TRect;
-  qr: array[0..3] of LongInt;   // QRect memory layout: x1, y1, x2, y2 (x2/y2 inclusive)
+  rf: QRectFH;
   v: QVariantH;
 begin
   Result := False;
@@ -134,10 +134,17 @@ begin
   if (queries and QtImCursorRectangle) = 0 then Exit;   // not a positioning query -> leave to LCL
   r := FCaretQuery();
   if r.Right <= r.Left then Exit;                        // fail-safe: no caret rect -> don't consume
-  qr[0] := r.Left; qr[1] := r.Top; qr[2] := r.Right - 1; qr[3] := r.Bottom - 1;
-  v := QVariant_Create(QVariantRect, @qr[0]);
-  QInputMethodQueryEvent_setValue(Ev, QtImCursorRectangle, v);
-  QVariant_Destroy(v);
+  // Build the cursor rect as a QRectF QVariant. (NOT QVariant_Create(typeId,ptr): that binding's first
+  // arg is a Qt6 QMetaType, not an int, so passing QVariantRect segfaults. The QRectF overload is the
+  // safe path; Qt reads ImCursorRectangle as a QRectF anyway.)
+  rf := QRectF_Create(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+  try
+    v := QVariant_Create(rf);
+    QInputMethodQueryEvent_setValue(Ev, QtImCursorRectangle, v);
+    QVariant_Destroy(v);
+  finally
+    QRectF_Destroy(rf);
+  end;
   if (queries and QtImEnabled) <> 0 then
   begin
     v := QVariant_Create(True);
