@@ -1273,6 +1273,7 @@ begin
   inherited InitializeWnd;
   // Qt6: intercept the native input method so (1) a multi-char CJK commit isn't truncated to ~2 chars
   // by LCL's TUTF8Char path and (2) the candidate window follows the caret. No-op on Win32/GTK2/Cocoa.
+  TyQtUninstallIme(FImeHook);   // defensive: drop any prior hook if the handle is recreated
   FImeHook := TyQtInstallIme(Self, @HandleImeCommit, @GetImeCaretRect);
 end;
 

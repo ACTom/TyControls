@@ -2692,6 +2692,7 @@ end;
 procedure TTyMemo.InitializeWnd;
 begin
   inherited InitializeWnd;
+  TyQtUninstallIme(FImeHook);   // defensive: drop any prior hook if the handle is recreated
   FImeHook := TyQtInstallIme(Self, @HandleImeCommit, @GetImeCaretRect);   // Qt6 only; nil elsewhere
 end;
 
