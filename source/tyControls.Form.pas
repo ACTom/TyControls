@@ -138,6 +138,7 @@ type
     FGlassKey: string;                // imagepath|WxH|blurDev — rebuild when it changes
     FGlassBlurLogical: Integer;       // theme-wide glass blur radius (0 = no glass)
     FFollowTimer: TTimer;             // P4 live-follow: polls the OS scheme/accent while following (nil unless armed)
+    FDidInitialClamp: Boolean;        // macOS: clamp the window onto a visible monitor on first show only
     procedure DoFollowTick(Sender: TObject);
     procedure UpdateFollowWatch;      // (re)arm/disarm FFollowTimer per the controller's Follow policy
     // ITyGlassHost
@@ -1144,6 +1145,21 @@ end;
 procedure TTyForm.DoShow;
 begin
   inherited DoShow;
+  {$IFDEF LCLCOCOA}
+  // macOS multi-monitor fix. LCL's (0,0) is the top-left of the virtual-desktop UNION (the top of
+  // the TALLEST screen, via NSGlobalScreenBottom), NOT the primary screen's corner. A poDesigned
+  // form (the default) is placed at its raw streamed Left/Top with NO visibility clamp — so on a
+  // bottom-aligned mixed-height layout (e.g. a portrait screen beside a shorter landscape one) the
+  // designed Top can land in the dead zone above the shorter monitor, off-screen. MakeFullyVisible
+  // clamps the window back onto its nearest visible monitor's work area; it no-ops if already
+  // visible, so single-monitor / normal setups are unaffected. First show only (DoShow can re-fire,
+  // and we must not yank a window the user has since dragged). Cocoa-gated -> Windows/Linux untouched.
+  if (not (csDesigning in ComponentState)) and HandleAllocated and (not FDidInitialClamp) then
+  begin
+    FDidInitialClamp := True;
+    MakeFullyVisible(nil);
+  end;
+  {$ENDIF}
   ApplyWindowEffects;
 end;
 
