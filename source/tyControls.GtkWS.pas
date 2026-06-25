@@ -68,7 +68,8 @@ type
     FCaretQuery: TTyImeCaretQuery;
     FSnooperID: guint;
     FFocused: Boolean;
-    function ClientWin: PGdkWindow;
+    function ControlWin: PGdkWindow;    // the control's client draw window (caret-coord origin)
+    function ToplevelWin: PGdkWindow;   // the form's window (what the IM actually anchors to)
     procedure UpdateCursorLocation;
   public
     constructor Create(AWidget: PGtkWidget; AOnCommit: TTyImeCommitEvent; ACaretQuery: TTyImeCaretQuery);
@@ -101,8 +102,8 @@ begin
   FOnCommit := AOnCommit;
   FCaretQuery := ACaretQuery;
   FIM := gtk_im_multicontext_new;
-  if ClientWin <> nil then
-    gtk_im_context_set_client_window(FIM, ClientWin);
+  if ToplevelWin <> nil then
+    gtk_im_context_set_client_window(FIM, ToplevelWin);
   g_signal_connect(FIM, 'commit', TGCallback(@TyGtkImeCommitCB), Self);
   FSnooperID := gtk_key_snooper_install(@TyGtkImeSnoop, Self);
 end;
@@ -120,7 +121,7 @@ begin
   inherited Destroy;
 end;
 
-function TTyGtkImeHook.ClientWin: PGdkWindow;
+function TTyGtkImeHook.ControlWin: PGdkWindow;
 begin
   // The control's client draw window (NOT FWidget^.window, which for an LCL custom control is not
   // the window the caret is painted in) — same window LCL itself uses for set_client_window.
@@ -128,6 +129,18 @@ begin
     Result := GetControlWindow(FWidget)
   else
     Result := nil;
+end;
+
+function TTyGtkImeHook.ToplevelWin: PGdkWindow;
+var top: PGtkWidget;
+begin
+  // fcitx/ibus anchor the cursor location to the TOPLEVEL (form) window, not the control's window,
+  // so that is what we set as the IM client window and translate the caret into.
+  Result := nil;
+  if FWidget = nil then Exit;
+  top := gtk_widget_get_toplevel(FWidget);
+  if top <> nil then
+    Result := GetControlWindow(top);
 end;
 
 function TTyGtkImeHook.FilterKey(event: PGdkEventKey): Boolean;
@@ -152,23 +165,29 @@ procedure TTyGtkImeHook.UpdateCursorLocation;
 var
   r: TRect;
   area: TGdkRectangle;
-  win: PGdkWindow;
-  ox, oy: gint;
+  cwin, twin: PGdkWindow;
+  cox, coy, tox, toy: gint;
 begin
   if (FIM = nil) or (not Assigned(FCaretQuery)) then Exit;
-  r := FCaretQuery();   // caret rect in the control's client device px == widget-window coords
-  area.x := r.Left;
-  area.y := r.Top;
+  r := FCaretQuery();   // caret rect in the control's CLIENT device px
+  cwin := ControlWin;
+  twin := ToplevelWin;
+  if (cwin = nil) or (twin = nil) then Exit;
+  // Translate the caret from control-client coords into TOPLEVEL-window coords (where the IM anchors)
+  // via the two windows' screen origins. The translation cancels regardless of which window the IM
+  // honors, so the final screen position is correct: toplevel_origin + area == control_origin + r.
+  cox := 0; coy := 0; tox := 0; toy := 0;
+  gdk_window_get_origin(cwin, @cox, @coy);
+  gdk_window_get_origin(twin, @tox, @toy);
+  area.x := r.Left + (cox - tox);
+  area.y := r.Top + (coy - toy);
   area.width := r.Right - r.Left;
   area.height := r.Bottom - r.Top;
   gtk_im_context_set_cursor_location(FIM, @area);
   if GetEnvironmentVariable('TY_IME_DEBUG') <> '' then
   begin
-    ox := -1; oy := -1;
-    win := ClientWin;
-    if win <> nil then gdk_window_get_origin(win, @ox, @oy);
-    WriteLn(StdErr, Format('[ty-ime] caret=(%d,%d %dx%d) clientWinOrigin=(%d,%d) winNil=%d',
-      [area.x, area.y, area.width, area.height, ox, oy, Ord(win = nil)]));
+    WriteLn(StdErr, Format('[ty-ime] r=(%d,%d) ctrlOrigin=(%d,%d) topOrigin=(%d,%d) -> area=(%d,%d %dx%d)',
+      [r.Left, r.Top, cox, coy, tox, toy, area.x, area.y, area.width, area.height]));
     Flush(StdErr);
   end;
 end;
@@ -180,8 +199,8 @@ begin
   if AFocused then
   begin
     // (re)bind the client window now that the widget is realized, then focus + place the candidate.
-    if ClientWin <> nil then
-      gtk_im_context_set_client_window(FIM, ClientWin);
+    if ToplevelWin <> nil then
+      gtk_im_context_set_client_window(FIM, ToplevelWin);
     gtk_im_context_focus_in(FIM);
     UpdateCursorLocation;
   end
