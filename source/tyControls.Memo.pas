@@ -100,6 +100,12 @@ type
     // capped to bound edit-history growth.
     FLineWidthCache: specialize TDictionary<string, TTyIntArray>;
     FWidthCacheSig: string;   // font signature the cache was built for
+    // Incremental hint for the line being edited: typing/erasing happens at the line END, so the new
+    // content is usually a prefix-extension (append) or prefix-truncation (delete) of the last one.
+    // Then we reuse the unchanged prefix widths and only measure the new tail — O(1) per keystroke,
+    // and EXACT (kerning preserved, unlike summing per-char advances). Middle edits fall back to full.
+    FLastMeasuredLine: string;
+    FLastMeasuredWidths: TTyIntArray;
     // Headless-only override of the LCL focused state. Real focus is unavailable
     // when rendering offscreen, so tests can force the caret to draw. Production
     // paint uses (Focused or FForceFocused) so this is a no-op unless set.
@@ -2383,16 +2389,18 @@ function TTyMemo.MeasureLineWidths(const ALine: string; APPI: Integer): TTyIntAr
 var
   S: TTyStyleSet;
   EffSize: Integer;
-  i, Len: Integer;
+  i, Len, lastLen, lastBLen, aBLen: Integer;
   sig: string;
 begin
   S := CurrentStyle;
   EffSize := EffectiveFontSize(S);
-  // Drop the whole cache if the font (name/size/weight/PPI) changed — all widths would be stale.
+  // Drop the caches if the font (name/size/weight/PPI) changed — all widths would be stale.
   sig := S.FontName + '|' + IntToStr(EffSize) + '|' + IntToStr(S.FontWeight) + '|' + IntToStr(APPI);
   if sig <> FWidthCacheSig then
   begin
     FLineWidthCache.Clear;
+    FLastMeasuredLine := '';
+    FLastMeasuredWidths := nil;
     FWidthCacheSig := sig;
   end;
   if FLineWidthCache.TryGetValue(ALine, Result) then
@@ -2407,11 +2415,36 @@ begin
     if FMeasureBmp = nil then
       FMeasureBmp := TBGRABitmap.Create(1, 1);
     TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
-    // PREFIX measurement captures inter-glyph kerning/hinting as drawn.
-    for i := 1 to Len do
-      Result[i] := FMeasureBmp.TextSize(UTF8Copy(ALine, 1, i)).cx;
+    lastLen := UTF8Length(FLastMeasuredLine);
+    lastBLen := Length(FLastMeasuredLine);   // BYTE lengths for safe prefix compares (no overread)
+    aBLen := Length(ALine);
+    // PREFIX measurement (TextSize of growing prefixes) captures inter-glyph kerning as drawn.
+    // Incremental: if the edited line just EXTENDED the last one (append at end), reuse its prefix
+    // widths and measure only the new tail; if it TRUNCATED it (delete at end), just copy the prefix.
+    if (lastLen > 0) and (Length(FLastMeasuredWidths) = lastLen + 1)
+       and (aBLen > lastBLen)
+       and (CompareByte(PChar(ALine)^, PChar(FLastMeasuredLine)^, lastBLen) = 0) then
+    begin
+      for i := 0 to lastLen do Result[i] := FLastMeasuredWidths[i];
+      for i := lastLen + 1 to Len do
+        Result[i] := FMeasureBmp.TextSize(UTF8Copy(ALine, 1, i)).cx;
+    end
+    else if (lastLen > 0) and (Length(FLastMeasuredWidths) = lastLen + 1)
+       and (aBLen < lastBLen) and (aBLen > 0)
+       and (CompareByte(PChar(FLastMeasuredLine)^, PChar(ALine)^, aBLen) = 0) then
+    begin
+      for i := 0 to Len do Result[i] := FLastMeasuredWidths[i];
+    end
+    else
+    begin
+      for i := 1 to Len do
+        Result[i] := FMeasureBmp.TextSize(UTF8Copy(ALine, 1, i)).cx;
+    end;
   end;
-  // Bound edit-history growth: an unbroken editing session keeps producing new line contents.
+  // Remember this as the incremental hint (the line just edited), and cache by content for the
+  // unchanged-line fast path (RenderTo / WidestLineWidth). Bound edit-history growth.
+  FLastMeasuredLine := ALine;
+  FLastMeasuredWidths := Result;
   if FLineWidthCache.Count > 1024 then
     FLineWidthCache.Clear;
   FLineWidthCache.AddOrSetValue(ALine, Result);
