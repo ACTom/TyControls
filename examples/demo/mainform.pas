@@ -3,7 +3,7 @@ unit mainform;
 interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus, ComCtrls,
-  LCLTranslator, Translations,
+  LCLTranslator,
   tyControls.Controller, tyControls.Button, tyControls.TyLabel,
   tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
@@ -26,7 +26,6 @@ type
     TyEdit2: TTyEdit;
     TyTitleBar1: TTyTitleBar;
     ThemeCombo: TTyComboBox;
-    LangCombo: TTyComboBox;
     BtnApLight: TTyButton;
     BtnApDark: TTyButton;
     BtnPrimary: TTyButton;
@@ -76,7 +75,6 @@ type
     procedure PopupCtxAgreeClick(Sender: TObject);
     procedure TrackBar1Change(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
-    procedure LangComboChange(Sender: TObject);
     procedure ApLightClick(Sender: TObject);
     procedure ApDarkClick(Sender: TObject);
     procedure ApAutoClick(Sender: TObject);
@@ -212,31 +210,11 @@ begin
 end;
 
 procedure TDemoMainForm.InitLanguages;
-var
-  langId: TLanguageID;
 begin
-  // Combo items are self-labels (each language named in its own tongue) -> NOT translated.
-  // Index 0 -> 'en', index 1 -> 'zh_CN', kept in lockstep with LangComboChange.
-  LangCombo.Items.Clear;
-  LangCombo.Items.Add('English');
-  LangCombo.Items.Add('中文(简体)');
-  langId := GetLanguageID;                       // the OS UI language
-  if SameText(langId.LanguageCode, 'zh') then
-    LangCombo.ItemIndex := 1
-  else
-    LangCombo.ItemIndex := 0;
-  LangComboChange(nil);                          // apply the detected language now
-end;
-
-procedure TDemoMainForm.LangComboChange(Sender: TObject);
-begin
-  // SetDefaultLang loads languages/demo.<lang>.po, patches resourcestrings, and (via the
-  // installed TPOTranslator) retranslates every open form's captions/hints live.
-  case LangCombo.ItemIndex of
-    1: SetDefaultLang('zh_CN', LangDir);
-  else
-    SetDefaultLang('en', LangDir);
-  end;
+  // Apply the OS UI language at startup (no live switcher — runtime re-translation of an already-
+  // shown custom-drawn form proved unreliable). SetDefaultLang('') autodetects the locale (or a
+  // --lang= command-line param) and loads languages/demo.<lang>.po from LangDir.
+  SetDefaultLang('', LangDir);
 end;
 
 procedure TDemoMainForm.SetAppearance(AFollow: TTyThemeFollow; const AMode: string;

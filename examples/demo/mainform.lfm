@@ -34,20 +34,20 @@ object DemoMainForm: TDemoMainForm
       AutoSizeWidth = True
     end
     object ThemeCombo: TTyComboBox
-      Left = 116
+      Left = 160
       Height = 28
       Top = 4
-      Width = 130
+      Width = 72
       TabOrder = 4
       Controller = TyController
       ItemIndex = -1
       OnChange = ThemeComboChange
     end
     object BtnApLight: TTyButton
-      Left = 254
+      Left = 240
       Height = 28
       Top = 4
-      Width = 55
+      Width = 42
       TabOrder = 5
       OnClick = ApLightClick
       StyleClass = 'ghost'
@@ -55,25 +55,15 @@ object DemoMainForm: TDemoMainForm
       Caption = 'Light'
     end
     object BtnApDark: TTyButton
-      Left = 316
+      Left = 280
       Height = 28
       Top = 4
-      Width = 55
+      Width = 47
       TabOrder = 6
       OnClick = ApDarkClick
       StyleClass = 'ghost'
       Controller = TyController
       Caption = 'Dark'
-    end
-    object LangCombo: TTyComboBox
-      Left = 380
-      Height = 28
-      Top = 4
-      Width = 110
-      TabOrder = 7
-      Controller = TyController
-      ItemIndex = -1
-      OnChange = LangComboChange
     end
   end
   object BtnPrimary: TTyButton
