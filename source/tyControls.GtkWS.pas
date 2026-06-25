@@ -41,7 +41,7 @@ procedure TyGtkImeSetFocus(AHandle: TObject; AFocused: Boolean);
 implementation
 
 {$IFDEF LCLGTK2}
-uses Types, gtk2, gdk2, glib2, Gtk2Proc;   // Gtk2Proc: GetControlWindow (the control's client GdkWindow)
+uses SysUtils, Types, gtk2, gdk2, glib2, Gtk2Proc;   // Gtk2Proc: GetControlWindow (the control's client GdkWindow)
 
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 var
@@ -152,6 +152,8 @@ procedure TTyGtkImeHook.UpdateCursorLocation;
 var
   r: TRect;
   area: TGdkRectangle;
+  win: PGdkWindow;
+  ox, oy: gint;
 begin
   if (FIM = nil) or (not Assigned(FCaretQuery)) then Exit;
   r := FCaretQuery();   // caret rect in the control's client device px == widget-window coords
@@ -160,6 +162,15 @@ begin
   area.width := r.Right - r.Left;
   area.height := r.Bottom - r.Top;
   gtk_im_context_set_cursor_location(FIM, @area);
+  if GetEnvironmentVariable('TY_IME_DEBUG') <> '' then
+  begin
+    ox := -1; oy := -1;
+    win := ClientWin;
+    if win <> nil then gdk_window_get_origin(win, @ox, @oy);
+    WriteLn(StdErr, Format('[ty-ime] caret=(%d,%d %dx%d) clientWinOrigin=(%d,%d) winNil=%d',
+      [area.x, area.y, area.width, area.height, ox, oy, Ord(win = nil)]));
+    Flush(StdErr);
+  end;
 end;
 
 procedure TTyGtkImeHook.SetFocused(AFocused: Boolean);
