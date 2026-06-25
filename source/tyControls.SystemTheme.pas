@@ -51,6 +51,10 @@ implementation
 uses
   Registry, Windows;
 {$ENDIF}
+{$IFDEF DARWIN}
+uses
+  process;   // RunCommand (FCL) — shells out to `defaults` for the macOS appearance
+{$ENDIF}
 
 function TySchemeToMode(AScheme: TTySystemScheme): string;
 begin
