@@ -138,7 +138,12 @@ type
     FGlassKey: string;                // imagepath|WxH|blurDev — rebuild when it changes
     FGlassBlurLogical: Integer;       // theme-wide glass blur radius (0 = no glass)
     FFollowTimer: TTimer;             // P4 live-follow: polls the OS scheme/accent while following (nil unless armed)
+    FReassertL, FReassertT: Integer;  // poDesigned target captured at DoShow (re-asserted after the WM centers a frameless window)
     procedure DoFollowTick(Sender: TObject);
+    // Qt/GTK X11 centers a frameless top-level at map time, ignoring poDesigned. Re-assert the
+    // designed Left/Top one event-loop turn after Show, once the WM has placed (and we've recorded
+    // the intended position). Impossible on Wayland (clients can't set absolute window positions).
+    procedure DeferredReassertPos(Data: PtrInt);
     procedure UpdateFollowWatch;      // (re)arm/disarm FFollowTimer per the controller's Follow policy
     // ITyGlassHost
     function GlassBackdrop: TBGRABitmap;
@@ -736,6 +741,7 @@ end;
 
 destructor TTyForm.Destroy;
 begin
+  Application.RemoveAsyncCalls(Self);   // cancel a pending DeferredReassertPos
   FreeAndNil(FFollowTimer);   // disarm the OS-follow poll
   FreeAndNil(FSharpBackdrop);
   FreeAndNil(FGlassBackdrop);
@@ -1105,6 +1111,23 @@ procedure TTyForm.DoShow;
 begin
   inherited DoShow;
   ApplyWindowEffects;
+  // poDesigned on a frameless window: the X11 WM centers it at map time (same reason popups needed
+  // help). At DoShow our Left/Top are still the intended values (the WM's configure event is
+  // processed later), so capture them and re-assert — now and once more after the event-loop turn
+  // when the WM has finished placing. No-op on Wayland (can't position) / Win32 / Cocoa (already correct).
+  if (Position = poDesigned) and not TyQtIsWayland then
+  begin
+    FReassertL := Left;
+    FReassertT := Top;
+    SetBounds(FReassertL, FReassertT, Width, Height);
+    Application.QueueAsyncCall(@DeferredReassertPos, 0);
+  end;
+end;
+
+procedure TTyForm.DeferredReassertPos(Data: PtrInt);
+begin
+  if not Visible then Exit;
+  SetBounds(FReassertL, FReassertT, Width, Height);
 end;
 
 initialization
