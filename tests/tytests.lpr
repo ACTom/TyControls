@@ -40,7 +40,8 @@ uses
   test.pagecontrol.streaming,
   test.about,
   test.windoweffects,
-  test.accel;
+  test.accel,
+  test.i18n;
 
 type
   TTyTestRunner = class(TTestRunner)
