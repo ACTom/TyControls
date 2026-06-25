@@ -41,7 +41,7 @@ procedure TyGtkImeSetFocus(AHandle: TObject; AFocused: Boolean);
 implementation
 
 {$IFDEF LCLGTK2}
-uses Types, gtk2, gdk2, glib2;
+uses Types, gtk2, gdk2, glib2, Gtk2Proc;   // Gtk2Proc: GetControlWindow (the control's client GdkWindow)
 
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 var
@@ -68,6 +68,7 @@ type
     FCaretQuery: TTyImeCaretQuery;
     FSnooperID: guint;
     FFocused: Boolean;
+    function ClientWin: PGdkWindow;
     procedure UpdateCursorLocation;
   public
     constructor Create(AWidget: PGtkWidget; AOnCommit: TTyImeCommitEvent; ACaretQuery: TTyImeCaretQuery);
@@ -100,8 +101,8 @@ begin
   FOnCommit := AOnCommit;
   FCaretQuery := ACaretQuery;
   FIM := gtk_im_multicontext_new;
-  if (FWidget <> nil) and (FWidget^.window <> nil) then
-    gtk_im_context_set_client_window(FIM, FWidget^.window);
+  if ClientWin <> nil then
+    gtk_im_context_set_client_window(FIM, ClientWin);
   g_signal_connect(FIM, 'commit', TGCallback(@TyGtkImeCommitCB), Self);
   FSnooperID := gtk_key_snooper_install(@TyGtkImeSnoop, Self);
 end;
@@ -117,6 +118,16 @@ begin
     g_object_unref(FIM);
   end;
   inherited Destroy;
+end;
+
+function TTyGtkImeHook.ClientWin: PGdkWindow;
+begin
+  // The control's client draw window (NOT FWidget^.window, which for an LCL custom control is not
+  // the window the caret is painted in) — same window LCL itself uses for set_client_window.
+  if FWidget <> nil then
+    Result := GetControlWindow(FWidget)
+  else
+    Result := nil;
 end;
 
 function TTyGtkImeHook.FilterKey(event: PGdkEventKey): Boolean;
@@ -158,8 +169,8 @@ begin
   if AFocused then
   begin
     // (re)bind the client window now that the widget is realized, then focus + place the candidate.
-    if (FWidget <> nil) and (FWidget^.window <> nil) then
-      gtk_im_context_set_client_window(FIM, FWidget^.window);
+    if ClientWin <> nil then
+      gtk_im_context_set_client_window(FIM, ClientWin);
     gtk_im_context_focus_in(FIM);
     UpdateCursorLocation;
   end
