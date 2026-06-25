@@ -1111,11 +1111,12 @@ procedure TTyForm.DoShow;
 begin
   inherited DoShow;
   ApplyWindowEffects;
-  // poDesigned on a frameless window: the X11 WM centers it at map time (same reason popups needed
-  // help). At DoShow our Left/Top are still the intended values (the WM's configure event is
-  // processed later), so capture them and re-assert — now and once more after the event-loop turn
-  // when the WM has finished placing. No-op on Wayland (can't position) / Win32 / Cocoa (already correct).
-  if (Position = poDesigned) and not TyQtIsWayland then
+  // poDesigned on a FRAMELESS window: LCL-Qt's setWindowFlags(Frameless) recreates the native window
+  // and re-applies only size, not position, so the WM/compositor re-places (centers) it. At DoShow our
+  // Left/Top are still the intended values, so capture them and re-assert — now and once more after the
+  // event-loop turn when the placement has settled. No-op on Win32/Cocoa/GTK2 (already at the designed
+  // position). (A bordered form has no such flag-recreation, so it keeps its position natively.)
+  if Position = poDesigned then
   begin
     FReassertL := Left;
     FReassertT := Top;
