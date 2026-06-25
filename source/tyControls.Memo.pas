@@ -3,7 +3,7 @@ unit tyControls.Memo;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
-  ExtCtrls, StdCtrls,
+  Generics.Collections, ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.ScrollBar, tyControls.UndoStack, tyControls.Animation,
@@ -92,6 +92,14 @@ type
     FSyncingScroll: Boolean;
     // Lazy measuring bitmap (freed in Destroy). Shared by all per-line measures.
     FMeasureBmp: TBGRABitmap;
+    // Per-line width cache (line content -> cumulative prefix widths). The hot path: a keystroke makes
+    // RenderTo / caret / scrollbar code measure the caret line + every visible line repeatedly, and
+    // MeasureLineWidths is O(n^2) per line; without this, an edit re-measures all of them every repaint
+    // (the ~0.5s lag). Keyed by CONTENT so unchanged lines hit the cache with no index-sync across
+    // insert/delete; dropped wholesale when the font signature (name/size/weight/PPI) changes, and
+    // capped to bound edit-history growth.
+    FLineWidthCache: specialize TDictionary<string, TTyIntArray>;
+    FWidthCacheSig: string;   // font signature the cache was built for
     // Headless-only override of the LCL focused state. Real focus is unavailable
     // when rendering offscreen, so tests can force the caret to draw. Production
     // paint uses (Focused or FForceFocused) so this is a no-op unless set.
@@ -533,6 +541,8 @@ begin
   FScrollBar := nil;
   FSyncingScroll := False;
   FMeasureBmp := nil;
+  FLineWidthCache := specialize TDictionary<string, TTyIntArray>.Create;
+  FWidthCacheSig := '';
   FForceFocused := False;
   FUndoStack := TTyUndoStack.Create;
   FSuspendUndo := False;
@@ -555,6 +565,7 @@ begin
   TyQtUninstallIme(FImeHook);   // in case DestroyWnd never ran (Qt-only; no-op elsewhere)
   FUndoStack.Free;
   FMeasureBmp.Free;
+  FLineWidthCache.Free;
   FLines.Free;
   inherited Destroy;
 end;
@@ -2345,16 +2356,28 @@ end;
 
 function TTyMemo.MeasureLineWidths(const ALine: string; APPI: Integer): TTyIntArray;
 // Cumulative prefix x positions (px), length = UTF8Length(ALine)+1, measured on
-// the shared lazy bitmap. Lifted from TTyEdit.MeasureCodepointWidths; takes the
-// line as a parameter and does NOT cache (per-line caching is a later concern).
+// the shared lazy bitmap. Lifted from TTyEdit.MeasureCodepointWidths. CACHED by line
+// content + font signature: a keystroke then re-measures only the edited line, not every
+// visible line on every repaint. The returned array is treated read-only by callers.
 var
   S: TTyStyleSet;
   EffSize: Integer;
   i, Len: Integer;
+  sig: string;
 begin
-  Result := nil;
   S := CurrentStyle;
   EffSize := EffectiveFontSize(S);
+  // Drop the whole cache if the font (name/size/weight/PPI) changed — all widths would be stale.
+  sig := S.FontName + '|' + IntToStr(EffSize) + '|' + IntToStr(S.FontWeight) + '|' + IntToStr(APPI);
+  if sig <> FWidthCacheSig then
+  begin
+    FLineWidthCache.Clear;
+    FWidthCacheSig := sig;
+  end;
+  if FLineWidthCache.TryGetValue(ALine, Result) then
+    Exit;   // cache hit — unchanged line, no re-measure
+
+  Result := nil;
   Len := UTF8Length(ALine);
   SetLength(Result, Len + 1);
   Result[0] := 0;
@@ -2367,6 +2390,10 @@ begin
     for i := 1 to Len do
       Result[i] := FMeasureBmp.TextSize(UTF8Copy(ALine, 1, i)).cx;
   end;
+  // Bound edit-history growth: an unbroken editing session keeps producing new line contents.
+  if FLineWidthCache.Count > 1024 then
+    FLineWidthCache.Clear;
+  FLineWidthCache.AddOrSetValue(ALine, Result);
 end;
 
 function TTyMemo.ColPixelXAt(const ALine: string; ACol, APPI: Integer): Integer;
