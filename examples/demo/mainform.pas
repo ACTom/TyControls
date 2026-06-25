@@ -3,7 +3,6 @@ unit mainform;
 interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus, ComCtrls,
-  LCLTranslator,
   tyControls.Controller, tyControls.Button, tyControls.TyLabel,
   tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
@@ -83,9 +82,7 @@ type
     procedure TyButton3Click(Sender: TObject);
   private
     function ThemeDir: string;
-    function LangDir: string;
     procedure InitThemes;
-    procedure InitLanguages;
     procedure ApplyBuiltin(const AName: string);
     procedure SetAppearance(AFollow: TTyThemeFollow; const AMode: string; ASelected: TTyButton);
   end;
@@ -119,23 +116,6 @@ begin
   Result := 'themes' + PathDelim; // 兜底:相对当前目录
 end;
 
-function TDemoMainForm.LangDir: string;
-var
-  Dir: string;
-  i: Integer;
-begin
-  // Mirror ThemeDir: search upward from the exe for a 'languages' folder holding the .po files.
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 8 do
-  begin
-    if DirectoryExists(Dir + 'languages') then
-      Exit(Dir + 'languages' + PathDelim);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := 'languages' + PathDelim; // fallback: relative to the current dir
-end;
-
 procedure TDemoMainForm.TrackBar1Change(Sender: TObject);
 begin
   if Assigned(Progress1) then
@@ -156,7 +136,6 @@ begin
   TyTitleBar1.TitleAlignment := taLeftJustify;
   {$ENDIF}
   InitThemes;
-  InitLanguages;
 end;
 
 procedure TDemoMainForm.GroupBox1Click(Sender: TObject);
@@ -207,14 +186,6 @@ begin
   end
   else
     ApplyBuiltin(ThemeCombo.Items[idx]);
-end;
-
-procedure TDemoMainForm.InitLanguages;
-begin
-  // Apply the OS UI language at startup (no live switcher — runtime re-translation of an already-
-  // shown custom-drawn form proved unreliable). SetDefaultLang('') autodetects the locale (or a
-  // --lang= command-line param) and loads languages/demo.<lang>.po from LangDir.
-  SetDefaultLang('', LangDir);
 end;
 
 procedure TDemoMainForm.SetAppearance(AFollow: TTyThemeFollow; const AMode: string;
