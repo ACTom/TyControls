@@ -123,7 +123,9 @@ function TTyGtkImeHook.FilterKey(event: PGdkEventKey): Boolean;
 begin
   Result := False;
   if (not FFocused) or (FIM = nil) then Exit;
-  Result := gtk_im_context_filter_keypress(FIM, event) <> 0;
+  // gtk_im_context_filter_keypress returns gboolean (Boolean32 in this binding) — assign directly,
+  // do NOT compare to 0 (Boolean32 vs integer won't compile).
+  Result := gtk_im_context_filter_keypress(FIM, event);
 end;
 
 procedure TTyGtkImeHook.DoCommit(const S: string);
