@@ -6,7 +6,8 @@ uses
   ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
-  tyControls.ScrollBar, tyControls.UndoStack, tyControls.Animation, tyControls.QtWS;
+  tyControls.ScrollBar, tyControls.UndoStack, tyControls.Animation,
+  tyControls.QtWS, tyControls.GtkWS;
 type
   // Cumulative-prefix pixel widths, length = codepoints+1 (shared name with Edit).
   TTyIntArray = array of Integer;
@@ -593,11 +594,13 @@ begin
     EnsureBlinkTimer;
     FBlinkTimer.Enabled := True;
   end;
+  TyGtkImeSetFocus(FImeHook, True);   // GTK2: start our IM context composing (no-op elsewhere)
 end;
 
 procedure TTyMemo.DoExit;
 begin
   inherited DoExit;
+  TyGtkImeSetFocus(FImeHook, False);   // GTK2: stop our IM context composing (no-op elsewhere)
   if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
   FCaretVisible := True;
   Invalidate;
@@ -2694,6 +2697,8 @@ begin
   inherited InitializeWnd;
   TyQtUninstallIme(FImeHook);   // defensive: drop any prior hook if the handle is recreated
   FImeHook := TyQtInstallIme(Self, @HandleImeCommit, @GetImeCaretRect);   // Qt6 only; nil elsewhere
+  if FImeHook = nil then        // GTK2: stock LCL delivers no IME — attach our own GtkIMContext
+    FImeHook := TyGtkInstallIme(Self, @HandleImeCommit, @GetImeCaretRect);
 end;
 
 procedure TTyMemo.DestroyWnd;

@@ -6,7 +6,7 @@ uses
   ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.UndoStack,
-  tyControls.Animation, tyControls.QtWS;
+  tyControls.Animation, tyControls.QtWS, tyControls.GtkWS;
 type
   TTyIntArray = array of Integer;
 
@@ -247,11 +247,13 @@ begin
     FBlinkTimer.Enabled := True;
   end;
   UpdateImeCaret;   // anchor the IME to the caret as soon as we gain focus
+  TyGtkImeSetFocus(FImeHook, True);   // GTK2: start our IM context composing (no-op elsewhere)
 end;
 
 procedure TTyEdit.DoExit;
 begin
   inherited DoExit;
+  TyGtkImeSetFocus(FImeHook, False);   // GTK2: stop our IM context composing (no-op elsewhere)
   if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
   FCaretVisible := True;
   Invalidate;
@@ -1275,6 +1277,8 @@ begin
   // by LCL's TUTF8Char path and (2) the candidate window follows the caret. No-op on Win32/GTK2/Cocoa.
   TyQtUninstallIme(FImeHook);   // defensive: drop any prior hook if the handle is recreated
   FImeHook := TyQtInstallIme(Self, @HandleImeCommit, @GetImeCaretRect);
+  if FImeHook = nil then        // GTK2: stock LCL delivers no IME — attach our own GtkIMContext
+    FImeHook := TyGtkInstallIme(Self, @HandleImeCommit, @GetImeCaretRect);
 end;
 
 procedure TTyEdit.DestroyWnd;

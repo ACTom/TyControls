@@ -333,7 +333,10 @@ end;
 
 procedure TyQtUninstallIme(var AHandle: TObject);
 begin
-  AHandle := nil;   // nothing was installed.
+  // Generic IME-hook teardown: on GTK2 this frees the GtkWS IME hook stored in the same field
+  // (its destructor removes the key snooper + unrefs the context); nil-safe on Win32/Cocoa.
+  AHandle.Free;
+  AHandle := nil;
 end;
 
 {$ENDIF}
