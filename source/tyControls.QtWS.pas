@@ -76,6 +76,11 @@ function TyQtInstallIme(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;
 { Tear down a TyQtInstallImeCommit interceptor (frees the Qt event hook). Safe on nil / off Qt. }
 procedure TyQtUninstallIme(var AHandle: TObject);
 
+{ Poke Qt to RE-QUERY the input cursor rectangle (Qt asks ImCursorRectangle only once at composition
+  start otherwise, so the candidate window freezes at the first caret position). Call when the caret
+  moves. Qt6 only (the binding is declared locally against the Qt6Pas C export); no-op on Qt5/non-Qt. }
+procedure TyQtImeUpdateCaret;
+
 implementation
 
 {$IF defined(LCLQT6) or defined(LCLQT5)}
@@ -83,6 +88,21 @@ uses
   SysUtils, LazUTF8,
   {$IFDEF LCLQT6} qt6, {$ELSE} qt5, {$ENDIF}
   qtwidgets, qtobjects;
+
+{$IFDEF LCLQT6}
+// Exported by the Qt6Pas C bindings (cbindings/src/qinputmethod_c.cpp) but NOT declared in qt62.pas;
+// declare it here so we can poke Qt to re-query the cursor rectangle when the caret moves.
+procedure QInputMethod_update(handle: QInputMethodH; queries: QtInputMethodQueries); cdecl;
+  external Qt6PasLib name 'QInputMethod_update';
+{$ENDIF}
+
+procedure TyQtImeUpdateCaret;
+begin
+  {$IFDEF LCLQT6}
+  QInputMethod_update(QGuiApplication_inputMethod, QtImCursorRectangle);
+  {$ENDIF}
+  // Qt5: the C export isn't wired here, so the candidate is positioned at composition start only.
+end;
 
 type
   { Owns a Qt event filter on a widget that turns a full QInputMethodEvent commit into AOnCommit. }
@@ -343,6 +363,11 @@ begin
   // (its destructor removes the key snooper + unrefs the context); nil-safe on Win32/Cocoa.
   AHandle.Free;
   AHandle := nil;
+end;
+
+procedure TyQtImeUpdateCaret;
+begin
+  // non-Qt: nothing to poke.
 end;
 
 {$ENDIF}

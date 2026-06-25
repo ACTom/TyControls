@@ -1639,7 +1639,11 @@ begin
         CaretX + P.Scale(1), ContentRect.Bottom - P.Scale(2));
       P.FillBackground(CaretRect, Default(TTyFill), 0);
       P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
-      FImeCaretRect := CaretRect;   // cache for the Qt IME candidate-window query
+      if not EqualRect(FImeCaretRect, CaretRect) then
+      begin
+        FImeCaretRect := CaretRect;   // cache for the IME candidate-window query
+        TyQtImeUpdateCaret;           // Qt6: re-query so the candidate follows the caret (no-op elsewhere)
+      end;
     end;
 
     P.EndPaint;
