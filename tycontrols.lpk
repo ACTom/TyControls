@@ -185,6 +185,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.GtkWS"/>
       </Item>
     </Files>
+    <i18n>
+      <EnableI18N Value="True"/>
+      <OutDir Value="languages"/>
+    </i18n>
     <RequiredPkgs>
       <Item>
         <PackageName Value="BGRABitmapPack"/>

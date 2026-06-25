@@ -1,0 +1,216 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+#: tycontrols.strconsts.rscsscannotevaluatecolor
+#, object-pascal-format
+msgid "Cannot evaluate color: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rscssemptycolorexpression
+msgid "Empty color expression"
+msgstr ""
+
+#: tycontrols.strconsts.rscsserrorframe
+#, object-pascal-format
+msgid "%s at line %d, col %d (got \"%s\")"
+msgstr ""
+
+#: tycontrols.strconsts.rscssexpectedatrulename
+msgid "Expected an at-rule name after \"@\""
+msgstr ""
+
+#: tycontrols.strconsts.rscssexpectedmodename
+msgid "Expected a mode name after \"@mode\""
+msgstr ""
+
+#: tycontrols.strconsts.rscssexpectedpathafterimport
+msgid "Expected a quoted path or url() after @import"
+msgstr ""
+
+#: tycontrols.strconsts.rscssexpectedpathinurl
+msgid "Expected a path inside url() for @import"
+msgstr ""
+
+#: tycontrols.strconsts.rscssexpectedrootaftercolon
+msgid "Expected \"root\" after \":\""
+msgstr ""
+
+#: tycontrols.strconsts.rscssexpectedrootinmode
+msgid "Expected \"root\" after \":\" inside @mode"
+msgstr ""
+
+#: tycontrols.strconsts.rscssexpectedselectororroot
+msgid "Expected selector or :root"
+msgstr ""
+
+#: tycontrols.strconsts.rscssexpectedvariablename
+msgid "Expected --variable name"
+msgstr ""
+
+#: tycontrols.strconsts.rscssimportmustprecederules
+msgid "An @import must precede all style rules"
+msgstr ""
+
+#: tycontrols.strconsts.rscssinvalidcolorlength
+#, object-pascal-format
+msgid "Invalid color length: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rscssinvalidcolorliteral
+#, object-pascal-format
+msgid "Invalid color literal: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rscssinvalidhexincolor
+#, object-pascal-format
+msgid "Invalid hex in color: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rscssonlyrootinmode
+msgid "Only :root blocks are allowed inside @mode"
+msgstr ""
+
+#: tycontrols.strconsts.rscssundefinedvariable
+#, object-pascal-format
+msgid "Undefined variable: --%s"
+msgstr ""
+
+#: tycontrols.strconsts.rscssunexpectedtoken
+msgid "Unexpected token"
+msgstr ""
+
+#: tycontrols.strconsts.rscssunknownatrule
+#, object-pascal-format
+msgid "Unknown at-rule \"@%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rscssunknowncolorfunction
+#, object-pascal-format
+msgid "Unknown color function: %s/%d"
+msgstr ""
+
+#: tycontrols.strconsts.rscssunknownpseudoclass
+#, object-pascal-format
+msgid "Unknown pseudo-class \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rscssunterminatedmodeblock
+msgid "Unterminated @mode block"
+msgstr ""
+
+#: tycontrols.strconsts.rscssunterminatedrootblock
+msgid "Unterminated :root block"
+msgstr ""
+
+#: tycontrols.strconsts.rscssunterminatedruleblock
+msgid "Unterminated rule block"
+msgstr ""
+
+#: tycontrols.strconsts.rslintemptyimportpath
+msgid "empty @import path"
+msgstr ""
+
+#: tycontrols.strconsts.rslintimportcycle
+#, object-pascal-format
+msgid "@import cycle '%s'"
+msgstr ""
+
+#: tycontrols.strconsts.rslintimportparseerror
+#, object-pascal-format
+msgid "parse error in @import '%s': %s"
+msgstr ""
+
+#: tycontrols.strconsts.rslintimporttoodeep
+#, object-pascal-format
+msgid "import nesting too deep (> %d)"
+msgstr ""
+
+#: tycontrols.strconsts.rslintlowcontrast
+#, object-pascal-format
+msgid "low contrast on '%s'"
+msgstr ""
+
+#: tycontrols.strconsts.rslintmissingasset
+#, object-pascal-format
+msgid "missing asset '%s'"
+msgstr ""
+
+#: tycontrols.strconsts.rslintmissingimport
+#, object-pascal-format
+msgid "missing @import '%s'"
+msgstr ""
+
+#: tycontrols.strconsts.rslintparseerror
+#, object-pascal-format
+msgid "parse error: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rslintundefinedvar
+#, object-pascal-format
+msgid "undefined variable --%s"
+msgstr ""
+
+#: tycontrols.strconsts.rslintunknownproperty
+#, object-pascal-format
+msgid "unknown property '%s'"
+msgstr ""
+
+#: tycontrols.strconsts.rslintunreadableimport
+#, object-pascal-format
+msgid "unreadable @import '%s'"
+msgstr ""
+
+#: tycontrols.strconsts.rssmbackgroundimageneedsslice
+#, object-pascal-format
+msgid "background-image needs slice(): %s"
+msgstr ""
+
+#: tycontrols.strconsts.rssmbackgroundimageneedsurl
+#, object-pascal-format
+msgid "background-image needs url(): %s"
+msgstr ""
+
+#: tycontrols.strconsts.rssmborderradiusneeds1or4
+#, object-pascal-format
+msgid "border-radius needs 1 or 4 values: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rssmimportcycledetected
+#, object-pascal-format
+msgid "@import cycle detected: \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rssmimportemptypath
+msgid "@import has an empty path"
+msgstr ""
+
+#: tycontrols.strconsts.rssmimportnestingtoodeep
+#, object-pascal-format
+msgid "@import nesting too deep (> %d)"
+msgstr ""
+
+#: tycontrols.strconsts.rssmimporttargetnotfound
+#, object-pascal-format
+msgid "@import target not found: \"%s\""
+msgstr ""
+
+#: tycontrols.strconsts.rssminvalidlineargradient
+#, object-pascal-format
+msgid "Invalid linear-gradient: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rssminvalidpadding
+#, object-pascal-format
+msgid "Invalid padding: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rssminvalidshadow
+#, object-pascal-format
+msgid "Invalid shadow: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rssmsliceneeds4values
+#, object-pascal-format
+msgid "slice() needs 4 values: %s"
+msgstr ""
+
