@@ -2,7 +2,7 @@ unit tyControls.Css.Values;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, tyControls.Types;
+  Classes, SysUtils, tyControls.Types, tyControls.StrConsts;
 
 function TyParseColor(const S: string): TTyColor;        // #rgb #rrggbb #rrggbbaa
 function TyLighten(c: TTyColor; Pct: Single): TTyColor;  // Pct 0..100
@@ -61,7 +61,7 @@ var
 begin
   T := Trim(S);
   if (T = '') or (T[1] <> '#') then
-    raise Exception.CreateFmt('Invalid color literal: %s', [S]);
+    raise Exception.CreateFmt(rsCssInvalidColorLiteral, [S]);
   T := Copy(T, 2, Length(T) - 1);
   n := Length(T);
   ok4 := True;
@@ -88,10 +88,10 @@ begin
         A := HexByte(T[7], T[8], ok4);
       end;
   else
-    raise Exception.CreateFmt('Invalid color length: %s', [S]);
+    raise Exception.CreateFmt(rsCssInvalidColorLength, [S]);
   end;
   if not (ok1 and ok2 and ok3 and ok4) then
-    raise Exception.CreateFmt('Invalid hex in color: %s', [S]);
+    raise Exception.CreateFmt(rsCssInvalidHexInColor, [S]);
   Result := TyRGBA(Byte(R), Byte(G), Byte(B), Byte(A));
 end;
 
@@ -190,7 +190,7 @@ begin
   if Vars = nil then
     raise Exception.CreateFmt('var(%s) but no vars provided', [inner]);
   if Vars.IndexOfName(key) < 0 then
-    raise Exception.CreateFmt('Undefined variable: --%s', [key]);
+    raise Exception.CreateFmt(rsCssUndefinedVariable, [key]);
   Result := Vars.Values[key];
 end;
 
@@ -243,7 +243,7 @@ var
 begin
   E := Trim(Expr);
   if E = '' then
-    raise Exception.Create('Empty color expression');
+    raise Exception.Create(rsCssEmptyColorExpression);
   // transparent keyword -> fully transparent (alpha 0); usable anywhere a color is
   if LowerCase(E) = 'transparent' then
     Exit(tyTransparent);
@@ -298,7 +298,7 @@ begin
         Exit(TyOn(TyEvalColor(args[0], Vars)));
       if (fn = 'on') and (args.Count = 3) then
         Exit(TyOn(TyEvalColor(args[0], Vars), TyEvalColor(args[1], Vars), TyEvalColor(args[2], Vars)));
-      raise Exception.CreateFmt('Unknown color function: %s/%d', [fn, args.Count]);
+      raise Exception.CreateFmt(rsCssUnknownColorFunction, [fn, args.Count]);
     finally
       args.Free;
     end;
@@ -306,7 +306,7 @@ begin
   // bare '--name' leaf: look up in Vars and recurse
   if (Length(E) >= 2) and (E[1] = '-') and (E[2] = '-') then
     Exit(TyEvalColor(Vars.Values[Copy(E, 3, MaxInt)], Vars));
-  raise Exception.CreateFmt('Cannot evaluate color: %s', [Expr]);
+  raise Exception.CreateFmt(rsCssCannotEvaluateColor, [Expr]);
 end;
 
 function TyEvalLength(const Expr: string; Vars: TStrings): Integer;

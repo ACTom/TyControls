@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types,
   tyControls.Types, tyControls.Css.Parser, tyControls.Css.Values,
-  tyControls.DefaultTheme, tyControls.ThemeBundle, tyControls.SystemTheme;
+  tyControls.DefaultTheme, tyControls.ThemeBundle, tyControls.SystemTheme,
+  tyControls.StrConsts;
 
 type
   { P4 (A5 / D8). Resolver hooks for the dynamic OS tokens. RebuildMergedVars
@@ -234,7 +235,7 @@ begin
           v[0] := TyEvalLength(parts[3], Vars); // left
         end;
     else
-      raise Exception.CreateFmt('Invalid padding: %s', [ARaw]);
+      raise Exception.CreateFmt(rsSmInvalidPadding, [ARaw]);
     end;
     Result := Rect(v[0], v[1], v[2], v[3]);
   finally
@@ -265,7 +266,7 @@ begin
     // inner commas (e.g. 'lighten(--accent, 16%)') are not mis-split.
     SplitArgs(inner, parts);
     if parts.Count <> 3 then
-      raise Exception.CreateFmt('Invalid linear-gradient: %s', [ARaw]);
+      raise Exception.CreateFmt(rsSmInvalidLinearGradient, [ARaw]);
     angleTok := LowerCase(Trim(parts[0]));
     if (Length(angleTok) >= 3) and (Copy(angleTok, Length(angleTok) - 2, 3) = 'deg') then
       angleTok := Trim(Copy(angleTok, 1, Length(angleTok) - 3));
@@ -311,7 +312,7 @@ begin
   Result.GradAngleDeg := 0;
   lo := ARaw;
   pu := Pos('url(', LowerCase(lo));
-  if pu = 0 then raise Exception.CreateFmt('background-image needs url(): %s', [ARaw]);
+  if pu = 0 then raise Exception.CreateFmt(rsSmBackgroundImageNeedsUrl, [ARaw]);
   qu := pu + 4;
   while (qu <= Length(lo)) and (lo[qu] <> ')') do Inc(qu);
   urlInner := Trim(Copy(lo, pu + 4, qu - (pu + 4)));
@@ -324,7 +325,7 @@ begin
   // are stripped unconditionally here to reconstruct dotted filenames (e.g. foo.png).
   Result.ImagePath := ResolveAssetPath(urlInner);
   ps := Pos('slice(', LowerCase(lo));
-  if ps = 0 then raise Exception.CreateFmt('background-image needs slice(): %s', [ARaw]);
+  if ps = 0 then raise Exception.CreateFmt(rsSmBackgroundImageNeedsSlice, [ARaw]);
   qs := ps + 6;
   while (qs <= Length(lo)) and (lo[qs] <> ')') do Inc(qs);
   sliceInner := Trim(Copy(lo, ps + 6, qs - (ps + 6)));
@@ -334,7 +335,7 @@ begin
     nums.StrictDelimiter := False; // collapse runs of spaces
     nums.DelimitedText := sliceInner;
     if nums.Count <> 4 then
-      raise Exception.CreateFmt('slice() needs 4 values: %s', [ARaw]);
+      raise Exception.CreateFmt(rsSmSliceNeeds4Values, [ARaw]);
     t := StrToInt(Trim(nums[0]));
     r := StrToInt(Trim(nums[1]));
     b := StrToInt(Trim(nums[2]));
@@ -357,7 +358,7 @@ begin
   Result.ImageMode := timCover;
   lo := ARaw;
   pu := Pos('url(', LowerCase(lo));
-  if pu = 0 then raise Exception.CreateFmt('background-image needs url(): %s', [ARaw]);
+  if pu = 0 then raise Exception.CreateFmt(rsSmBackgroundImageNeedsUrl, [ARaw]);
   qu := pu + 4;
   while (qu <= Length(lo)) and (lo[qu] <> ')') do Inc(qu);
   urlInner := Trim(Copy(lo, pu + 4, qu - (pu + 4)));
@@ -380,7 +381,7 @@ begin
     for i := parts.Count - 1 downto 0 do
       if Trim(parts[i]) = '' then parts.Delete(i);
     if parts.Count <> 4 then
-      raise Exception.CreateFmt('Invalid shadow: %s', [ARaw]);
+      raise Exception.CreateFmt(rsSmInvalidShadow, [ARaw]);
     AStyle.ShadowOffset.X := TyEvalLength(parts[0], Vars);
     AStyle.ShadowOffset.Y := TyEvalLength(parts[1], Vars);
     AStyle.ShadowBlur := TyEvalLength(parts[2], Vars);
@@ -485,7 +486,7 @@ begin
           AStyle.BorderRadius := mx;
         end;
     else
-      raise Exception.CreateFmt('border-radius needs 1 or 4 values: %s', [ARaw]);
+      raise Exception.CreateFmt(rsSmBorderRadiusNeeds1Or4, [ARaw]);
     end;
     Include(AStyle.Present, tpBorderRadius);
   finally
@@ -941,12 +942,12 @@ var
   sl: TStringList;
 begin
   if ADepth > cMaxImportDepth then
-    raise ETyCssError.CreateFmt('@import nesting too deep (> %d)', [cMaxImportDepth]);
+    raise ETyCssError.CreateFmt(rsSmImportNestingTooDeep, [cMaxImportDepth]);
   for ii := 0 to High(ASheet.Imports) do
   begin
     rawPath := Trim(ASheet.Imports[ii]);
     if rawPath = '' then
-      raise ETyCssError.Create('@import has an empty path');
+      raise ETyCssError.Create(rsSmImportEmptyPath);
     // Resolve relative to THIS sheet's directory (the bundle/theme root). An absolute or
     // already-existing path is used as-is; otherwise fall back to ABaseDir + path.
     resolved := rawPath;
@@ -954,10 +955,10 @@ begin
        and FileExists(ABaseDir + rawPath) then
       resolved := ABaseDir + rawPath;
     if not FileExists(resolved) then
-      raise ETyCssError.CreateFmt('@import target not found: "%s"', [rawPath]);
+      raise ETyCssError.CreateFmt(rsSmImportTargetNotFound, [rawPath]);
     canon := LowerCase(ExpandFileName(resolved));   // win32: case-insensitive canonical key
     if AActive.IndexOf(canon) >= 0 then
-      raise ETyCssError.CreateFmt('@import cycle detected: "%s"', [rawPath]);
+      raise ETyCssError.CreateFmt(rsSmImportCycleDetected, [rawPath]);
     if ADone.IndexOf(canon) >= 0 then
       Continue;   // diamond: this file was already spliced in once — skip (idempotent)
 
