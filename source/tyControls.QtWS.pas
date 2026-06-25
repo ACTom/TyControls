@@ -134,6 +134,12 @@ begin
   if (queries and QtImCursorRectangle) = 0 then Exit;   // not a positioning query -> leave to LCL
   r := FCaretQuery();
   if r.Right <= r.Left then Exit;                        // fail-safe: no caret rect -> don't consume
+  if GetEnvironmentVariable('TY_IME_DEBUG') <> '' then
+  begin
+    WriteLn(StdErr, Format('[ty-ime-qt] answer ImCursorRectangle = caret client rect (%d,%d %dx%d)',
+      [r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top]));
+    Flush(StdErr);
+  end;
   // Build the cursor rect as a QRectF QVariant. (NOT QVariant_Create(typeId,ptr): that binding's first
   // arg is a Qt6 QMetaType, not an int, so passing QVariantRect segfaults. The QRectF overload is the
   // safe path; Qt reads ImCursorRectangle as a QRectF anyway.)
