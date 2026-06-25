@@ -5,7 +5,8 @@ unit tyControls.Css.Parser;
 interface
 
 uses
-  Classes, SysUtils, tyControls.Types, tyControls.Css.Tokens, tyControls.Css.Lexer;
+  Classes, SysUtils, tyControls.Types, tyControls.Css.Tokens, tyControls.Css.Lexer,
+  tyControls.StrConsts;
 
 type
   TTyCssSelector = record
@@ -136,7 +137,7 @@ end;
 
 procedure TTyCssParser.Error(const AMsg: string; const ATok: TTyCssToken);
 begin
-  raise ETyCssError.CreateFmt('%s at line %d, col %d (got "%s")',
+  raise ETyCssError.CreateFmt(rsCssErrorFrame,
     [AMsg, ATok.Line, ATok.Col, ATok.Text]);
 end;
 
@@ -144,7 +145,7 @@ function TTyCssParser.Expect(AKind: TTyCssTokenKind): TTyCssToken;
 begin
   Result := FLexer.Next;
   if Result.Kind <> AKind then
-    Error('Unexpected token', Result);
+    Error(rsCssUnexpectedToken, Result);
 end;
 
 function TTyCssParser.PseudoToState(const AName: string; const ATok: TTyCssToken): TTyState;
@@ -164,7 +165,7 @@ begin
     Result := tysSelected
   else
   begin
-    Error('Unknown pseudo-class "' + AName + '"', ATok);
+    Error(Format(rsCssUnknownPseudoClass, [AName]), ATok);
     Result := tysNormal; // unreachable; silences warning
   end;
 end;
@@ -299,11 +300,11 @@ begin
       Break;
     end;
     if tok.Kind = ctkEOF then
-      Error('Unterminated :root block', tok);
+      Error(rsCssUnterminatedRootBlock, tok);
     // expect identifier of form --name (lexer yields ctkIdent '--name')
     nameTok := Expect(ctkIdent);
     if Copy(nameTok.Text, 1, 2) <> '--' then
-      Error('Expected --variable name', nameTok);
+      Error(rsCssExpectedVariableName, nameTok);
     Expect(ctkColon);
     raw := ReadRawValue;
     Expect(ctkSemicolon);
@@ -350,7 +351,7 @@ begin
         Break;
       end;
       if tok.Kind = ctkEOF then
-        Error('Unterminated rule block', tok);
+        Error(rsCssUnterminatedRuleBlock, tok);
       propTok := Expect(ctkIdent);
       Expect(ctkColon);
       raw := ReadRawValue;
@@ -376,7 +377,7 @@ var
   next, inner: TTyCssToken;
 begin
   if FSawRule then
-    Error('An @import must precede all style rules', ATok);
+    Error(rsCssImportMustPrecedeRules, ATok);
   next := FLexer.Peek;
   if next.Kind = ctkString then
   begin
@@ -392,11 +393,11 @@ begin
     else if inner.Kind = ctkIdent then
       pathStr := inner.Text
     else
-      Error('Expected a path inside url() for @import', inner);
+      Error(rsCssExpectedPathInUrl, inner);
     Expect(ctkRParen);
   end
   else
-    Error('Expected a quoted path or url() after @import', next);
+    Error(rsCssExpectedPathAfterImport, next);
   Expect(ctkSemicolon);
   SetLength(ASheet.Imports, Length(ASheet.Imports) + 1);
   ASheet.Imports[High(ASheet.Imports)] := pathStr;
@@ -415,7 +416,7 @@ var
 begin
   nameTok := FLexer.Peek;
   if nameTok.Kind <> ctkIdent then
-    Error('Expected a mode name after "@mode"', nameTok);
+    Error(rsCssExpectedModeName, nameTok);
   FLexer.Next;   // consume the mode ident
   block := TTyCssModeBlock.Create;
   try
@@ -430,18 +431,18 @@ begin
         Break;
       end;
       if tok.Kind = ctkEOF then
-        Error('Unterminated @mode block', tok);
+        Error(rsCssUnterminatedModeBlock, tok);
       // inner ':root' block — the only construct allowed inside @mode (v1)
       if tok.Kind = ctkColon then
       begin
         FLexer.Next; // consume ':'
         innerTok := Expect(ctkIdent);
         if LowerCase(innerTok.Text) <> 'root' then
-          Error('Expected "root" after ":" inside @mode', innerTok);
+          Error(rsCssExpectedRootInMode, innerTok);
         ParseRootInto(block.Vars);
       end
       else
-        Error('Only :root blocks are allowed inside @mode', tok);
+        Error(rsCssOnlyRootInMode, tok);
     end;
     ASheet.ModeBlocks.Add(block);
     block := nil;
@@ -463,9 +464,9 @@ begin
   else if name = 'mode' then
     ParseModeBlock(ASheet, ATok)
   else if name = '' then
-    Error('Expected an at-rule name after "@"', ATok)
+    Error(rsCssExpectedAtRuleName, ATok)
   else
-    Error('Unknown at-rule "@' + ATok.Text + '"', ATok);
+    Error(Format(rsCssUnknownAtRule, [ATok.Text]), ATok);
 end;
 
 function TTyCssParser.Parse: TTyCssStylesheet;
@@ -491,13 +492,13 @@ begin
         FLexer.Next; // consume ':'
         tok := Expect(ctkIdent);
         if LowerCase(tok.Text) <> 'root' then
-          Error('Expected "root" after ":"', tok);
+          Error(rsCssExpectedRootAfterColon, tok);
         ParseRootBlock(Result);
       end
       else if tok.Kind = ctkIdent then
         ParseRule(Result)
       else
-        Error('Expected selector or :root', tok);
+        Error(rsCssExpectedSelectorOrRoot, tok);
     end;
   except
     Result.Free;
