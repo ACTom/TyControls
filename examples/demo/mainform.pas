@@ -151,6 +151,12 @@ begin
   // .lfm. Associate the themed menu bar (shortcut dispatch / macOS global menu), then
   // fill the theme dropdown + set the initial theme/appearance — data only, no UI build.
   MenuBar := TyMenuBar1;
+  {$IFDEF DARWIN}
+  // macOS: MenuBar moves to the global top-of-screen bar, so the in-window TyMenuBar1 is hidden,
+  // freeing the left of the title bar. Left-align the caption to fill that space instead of leaving
+  // it floating at the right (where it looks unbalanced once the menu is gone).
+  TyTitleBar1.TitleAlignment := taLeftJustify;
+  {$ENDIF}
   InitThemes;
   InitLanguages;
 end;
