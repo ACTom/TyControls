@@ -20,7 +20,7 @@ unit tyControls.GtkWS;
      truncation that bites Qt6). Focus is driven from the control's DoEnter/DoExit. }
 
 interface
-uses Forms, Controls, tyControls.QtWS;   // QtWS: shared TTyImeCommitEvent / TTyImeCaretQuery types
+uses Forms, Controls, tyControls.Types;   // tyControls.Types: shared TTyImeCommitEvent / TTyImeCaretQuery
 
 { Begin a WM-driven interactive move of AForm's window (call from a mouse-DOWN handler while the
   button is held). Returns True if the system move started — then the caller must NOT do its own
@@ -41,7 +41,7 @@ procedure TyGtkImeSetFocus(AHandle: TObject; AFocused: Boolean);
 implementation
 
 {$IFDEF LCLGTK2}
-uses SysUtils, Types, gtk2, gdk2, glib2, Gtk2Proc;   // Gtk2Proc: GetControlWindow (the control's client GdkWindow)
+uses Types, gtk2, gdk2, glib2, Gtk2Proc;   // Gtk2Proc: GetControlWindow (the control's client GdkWindow)
 
 function TyGtkStartSystemMove(AForm: TCustomForm): Boolean;
 var
@@ -82,7 +82,7 @@ type
 procedure TyGtkImeCommitCB(context: PGtkIMContext; str: PgChar; data: gpointer); cdecl;
 begin
   if (data <> nil) and (str <> nil) then
-    TTyGtkImeHook(data).DoCommit(StrPas(PChar(str)));
+    TTyGtkImeHook(data).DoCommit(PChar(str));   // PChar -> string (auto-converts the UTF-8 bytes)
 end;
 
 { Process-wide key snooper: see every key BEFORE widget dispatch. Only the FOCUSED control's hook
@@ -173,12 +173,6 @@ begin
   area.width := r.Right - r.Left;
   area.height := r.Bottom - r.Top;
   gtk_im_context_set_cursor_location(FIM, @area);
-  if GetEnvironmentVariable('TY_IME_DEBUG') <> '' then
-  begin
-    WriteLn(StdErr, Format('[ty-ime] r=(%d,%d) -> topCoords area=(%d,%d %dx%d)',
-      [r.Left, r.Top, area.x, area.y, area.width, area.height]));
-    Flush(StdErr);
-  end;
 end;
 
 procedure TTyGtkImeHook.SetFocused(AFocused: Boolean);

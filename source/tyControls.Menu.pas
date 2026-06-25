@@ -353,16 +353,6 @@ implementation
 // sites remain qualified Types.* — harmless now that the Windows POINT=TPOINT shadow is gone.)
 uses Math, BGRABitmap;
 
-{ Opt-in geometry diagnostics for the Linux popup/menu-position investigation: set the env var
-  TY_MENU_DEBUG (any value) and run from a terminal to see the computed-vs-actual screen rects.
-  No-op (one getenv) otherwise. }
-procedure TyGeomLog(const AMsg: string);
-begin
-  if GetEnvironmentVariable('TY_MENU_DEBUG') = '' then Exit;
-  WriteLn(StdErr, '[ty-menu] ' + AMsg);
-  Flush(StdErr);
-end;
-
 function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
 var i, n: Integer; mi: TMenuItem;
 begin
@@ -998,9 +988,6 @@ begin
   // TTyMenuView.KeyDown and a keypress can instead deactivate (and dismiss) the popup.
   if FView.CanFocus then FView.SetFocus;
   ApplyFormRegion(R.Right - R.Left, R.Bottom - R.Top);
-  TyGeomLog(Format('Popup computed=(%d,%d %dx%d) actual=(%d,%d %dx%d) screen=%dx%d',
-    [R.Left, R.Top, R.Right - R.Left, R.Bottom - R.Top,
-     FForm.Left, FForm.Top, FForm.Width, FForm.Height, Screen.Width, Screen.Height]));
   Application.QueueAsyncCall(@DeferredReapplyGeometry, 0);
 end;
 
@@ -1011,7 +998,6 @@ var
   S: TTyStyleSet;
   d: Integer;
   Rgn: HRGN;
-  res: LongInt;
 begin
   if (FForm = nil) or (not FForm.HandleAllocated) or (FView = nil) then Exit;
   { Resolve the popup's own style so the corner radius tracks the theme. The
@@ -1045,9 +1031,7 @@ begin
     SAME region BEFORE SetWindowRgn (which only masks the top-level and doesn't consume Rgn). No-op
     off Qt. }
   TyQtMaskWindowDeep(FForm, FView, Rgn);
-  res := SetWindowRgn(FForm.Handle, Rgn, True);
-  TyGeomLog(Format('ApplyRegion d=%d req=%dx%d actual=%dx%d res=%d',
-    [d, AWidth, AHeight, FForm.Width, FForm.Height, res]));
+  SetWindowRgn(FForm.Handle, Rgn, True);
 end;
 
 procedure TTyMenuPopup.FormResize(Sender: TObject);
@@ -1066,8 +1050,6 @@ begin
   FForm.SetBounds(FPopupRect.Left, FPopupRect.Top,
     FPopupRect.Right - FPopupRect.Left, FPopupRect.Bottom - FPopupRect.Top);
   ApplyFormRegion(FPopupRect.Right - FPopupRect.Left, FPopupRect.Bottom - FPopupRect.Top);
-  TyGeomLog(Format('DeferredReapply actual=(%d,%d %dx%d)',
-    [FForm.Left, FForm.Top, FForm.Width, FForm.Height]));
 end;
 
 procedure TTyMenuPopup.CloseAll;
@@ -1517,9 +1499,6 @@ begin
     origin := ClientToScreen(Types.Point(0, 0));
     anchor := Types.Rect(origin.X + cellL, origin.Y,
       origin.X + cellL + cellW, origin.Y + Height);
-    TyGeomLog(Format('OpenTop[%d] origin=(%d,%d) barH=%d anchor=(%d,%d-%d,%d) screen=%dx%d',
-      [AIndex, origin.X, origin.Y, Height, anchor.Left, anchor.Top, anchor.Right, anchor.Bottom,
-       Screen.Width, Screen.Height]));
     FPopup.Popup(anchor, False);
   end;
   Invalidate;

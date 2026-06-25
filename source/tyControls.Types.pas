@@ -10,6 +10,12 @@ uses
 type
   TTyColor = type Cardinal;            // $AARRGGBB
 
+  // Input-method (IME) callbacks shared by the Qt/GTK widgetset helpers (tyControls.QtWS/.GtkWS)
+  // and the controls that opt in (Edit/Memo). Kept here in the common types unit so neither
+  // widgetset helper has to depend on the other.
+  TTyImeCommitEvent = procedure(const ACommitUtf8: string) of object;   // full committed UTF-8 text
+  TTyImeCaretQuery = function: TRect of object;                         // caret rect, client device px
+
   // tysSelected is APPENDED last so existing ordinals (and the golden baseline)
   // are unchanged; the cascade application order is set by cStateOrder in StyleModel,
   // not by this enum order. Driven by TTyButton.Down; matched by the ':selected'
