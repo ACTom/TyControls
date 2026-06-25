@@ -518,10 +518,13 @@ type
 
 implementation
 
-{$IFDEF WINDOWS}uses Windows;{$ENDIF}
-
 { High-resolution microsecond clock for the perf probe (GetTickCount64's ~15ms tick is too coarse to
-  tell a 2ms op from a 20ms one). }
+  tell a 2ms op from a 20ms one). The QPC functions are declared locally rather than via the Windows
+  unit, whose GetEnvironmentVariable/BeginPaint/Rect would shadow the RTL/LCL names used here. }
+{$IFDEF WINDOWS}
+function QueryPerformanceCounter(var lpc: Int64): LongBool; stdcall; external 'kernel32' name 'QueryPerformanceCounter';
+function QueryPerformanceFrequency(var lpf: Int64): LongBool; stdcall; external 'kernel32' name 'QueryPerformanceFrequency';
+{$ENDIF}
 var GPerfFreq: Int64 = 0;
 function PerfNowUs: Int64;
 {$IFDEF WINDOWS}
