@@ -41,7 +41,8 @@ uses
   test.about,
   test.windoweffects,
   test.accel,
-  test.i18n;
+  test.i18n,
+  test.controller.changelistener;
 
 type
   TTyTestRunner = class(TTestRunner)

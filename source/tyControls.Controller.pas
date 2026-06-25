@@ -3,6 +3,7 @@ unit tyControls.Controller;
 interface
 uses
   Classes, SysUtils, Controls, Forms, ExtCtrls,
+  LazMethodList,
   tyControls.Types, tyControls.StyleModel, tyControls.Painter,
   tyControls.ThemeRegistry, tyControls.SystemTheme;
 
@@ -37,6 +38,7 @@ type
     FInPoll: Boolean;            // reentrancy guard for PollThemeFile / PollSystemTheme
     FLastMode: string;           // last system-followed mode ('light'/'dark'/''); poll change-anchor
     FLastAccent: string;         // last system-followed accent literal; poll change-anchor
+    FChangeListeners: TMethodList;
     procedure SetThemeFile(const AValue: string);
     procedure SetThemeName(const AValue: string);
     function GetMode: string;
@@ -56,6 +58,8 @@ type
     procedure RegisterStyleable(AControl: TControl);
     procedure UnregisterStyleable(AControl: TControl);
     procedure Changed;
+    procedure AddChangeListener(AListener: TNotifyEvent);
+    procedure RemoveChangeListener(AListener: TNotifyEvent);
     { P4 (D8). Re-detect the OS scheme + accent and re-apply when following: set Mode
       from the detected scheme (tssUnknown -> keep current; never blanks the mode),
       bump the model (RebuildMergedVars re-resolves any 'system-accent'/'system-mode'
@@ -136,6 +140,7 @@ begin
   inherited Create(AOwner);
   FModel := TTyStyleModel.Create;
   FControls := TFPList.Create;
+  FChangeListeners := TMethodList.Create;
   // One-time: derive a concrete fallback font from the real system font when a
   // GUI app first creates a controller and the theme provides no font-family.
   // Only a FALLBACK (still token-driven: a themed font-family always wins). The
@@ -153,6 +158,7 @@ end;
 destructor TTyStyleController.Destroy;
 begin
   FWatchTimer.Free;   // nil-safe; disarms the hot-reload watch
+  FChangeListeners.Free;
   FControls.Free;
   FModel.Free;
   inherited Destroy;
@@ -421,6 +427,17 @@ var
 begin
   for i := FControls.Count - 1 downto 0 do
     TControl(FControls[i]).Invalidate;
+  FChangeListeners.CallNotifyEvents(Self);
+end;
+
+procedure TTyStyleController.AddChangeListener(AListener: TNotifyEvent);
+begin
+  FChangeListeners.Add(TMethod(AListener));
+end;
+
+procedure TTyStyleController.RemoveChangeListener(AListener: TNotifyEvent);
+begin
+  FChangeListeners.Remove(TMethod(AListener));
 end;
 
 function TyDefaultController: TTyStyleController;
