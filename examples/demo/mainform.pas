@@ -3,6 +3,7 @@ unit mainform;
 interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus, ComCtrls,
+  LCLTranslator, Translations,
   tyControls.Controller, tyControls.Button, tyControls.TyLabel,
   tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
   tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
@@ -25,6 +26,7 @@ type
     TyEdit2: TTyEdit;
     TyTitleBar1: TTyTitleBar;
     ThemeCombo: TTyComboBox;
+    LangCombo: TTyComboBox;
     BtnApLight: TTyButton;
     BtnApDark: TTyButton;
     BtnPrimary: TTyButton;
@@ -74,6 +76,7 @@ type
     procedure PopupCtxAgreeClick(Sender: TObject);
     procedure TrackBar1Change(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure LangComboChange(Sender: TObject);
     procedure ApLightClick(Sender: TObject);
     procedure ApDarkClick(Sender: TObject);
     procedure ApAutoClick(Sender: TObject);
@@ -82,7 +85,9 @@ type
     procedure TyButton3Click(Sender: TObject);
   private
     function ThemeDir: string;
+    function LangDir: string;
     procedure InitThemes;
+    procedure InitLanguages;
     procedure ApplyBuiltin(const AName: string);
     procedure SetAppearance(AFollow: TTyThemeFollow; const AMode: string; ASelected: TTyButton);
   end;
@@ -90,6 +95,14 @@ var
   DemoMainForm: TDemoMainForm;
 implementation
 {$R *.lfm}
+
+resourcestring
+  // English msgids; Simplified-Chinese in examples/demo/languages/demo.zh_CN.po.
+  rsDemoThemeCustom     = 'Custom…';
+  rsDemoThemeFilter     = 'TyControls Theme (*.tycss)|*.tycss';
+  rsDemoGreetingShown   = 'Hello TyControls';
+  rsDemoGreetingHidden  = 'Greeting hidden';
+  rsDemoGreetingFromCtx = 'Hello from the context menu';
 
 function TDemoMainForm.ThemeDir: string;
 var
@@ -108,6 +121,23 @@ begin
   Result := 'themes' + PathDelim; // 兜底:相对当前目录
 end;
 
+function TDemoMainForm.LangDir: string;
+var
+  Dir: string;
+  i: Integer;
+begin
+  // Mirror ThemeDir: search upward from the exe for a 'languages' folder holding the .po files.
+  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
+  for i := 1 to 8 do
+  begin
+    if DirectoryExists(Dir + 'languages') then
+      Exit(Dir + 'languages' + PathDelim);
+    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
+    if Dir = '' then Break;
+  end;
+  Result := 'languages' + PathDelim; // fallback: relative to the current dir
+end;
+
 procedure TDemoMainForm.TrackBar1Change(Sender: TObject);
 begin
   if Assigned(Progress1) then
@@ -122,6 +152,7 @@ begin
   // fill the theme dropdown + set the initial theme/appearance — data only, no UI build.
   MenuBar := TyMenuBar1;
   InitThemes;
+  InitLanguages;
 end;
 
 procedure TDemoMainForm.GroupBox1Click(Sender: TObject);
@@ -139,7 +170,7 @@ begin
   names := TyBuiltinThemeNames;
   ThemeCombo.Items.Clear;
   for i := 0 to High(names) do ThemeCombo.Items.Add(names[i]);
-  ThemeCombo.Items.Add('自定义…');
+  ThemeCombo.Items.Add(rsDemoThemeCustom);
   ThemeCombo.ItemIndex := 0;                 // default
   ApplyBuiltin('default');
   SetAppearance(tfFollowSystem, '', nil);   // 初始外观:跟随系统
@@ -157,11 +188,11 @@ var idx: Integer; dlg: TOpenDialog;
 begin
   idx := ThemeCombo.ItemIndex;
   if idx < 0 then Exit;
-  if ThemeCombo.Items[idx] = '自定义…' then
+  if ThemeCombo.Items[idx] = rsDemoThemeCustom then
   begin
     dlg := TOpenDialog.Create(Self);
     try
-      dlg.Filter := 'TyControls 主题 (*.tycss)|*.tycss';
+      dlg.Filter := rsDemoThemeFilter;
       dlg.InitialDir := ThemeDir;
       if dlg.Execute then
       begin
@@ -172,6 +203,34 @@ begin
   end
   else
     ApplyBuiltin(ThemeCombo.Items[idx]);
+end;
+
+procedure TDemoMainForm.InitLanguages;
+var
+  langId: TLanguageID;
+begin
+  // Combo items are self-labels (each language named in its own tongue) -> NOT translated.
+  // Index 0 -> 'en', index 1 -> 'zh_CN', kept in lockstep with LangComboChange.
+  LangCombo.Items.Clear;
+  LangCombo.Items.Add('English');
+  LangCombo.Items.Add('中文(简体)');
+  langId := GetLanguageID;                       // the OS UI language
+  if SameText(langId.LanguageCode, 'zh') then
+    LangCombo.ItemIndex := 1
+  else
+    LangCombo.ItemIndex := 0;
+  LangComboChange(nil);                          // apply the detected language now
+end;
+
+procedure TDemoMainForm.LangComboChange(Sender: TObject);
+begin
+  // SetDefaultLang loads languages/demo.<lang>.po, patches resourcestrings, and (via the
+  // installed TPOTranslator) retranslates every open form's captions/hints live.
+  case LangCombo.ItemIndex of
+    1: SetDefaultLang('zh_CN', LangDir);
+  else
+    SetDefaultLang('en', LangDir);
+  end;
 end;
 
 procedure TDemoMainForm.SetAppearance(AFollow: TTyThemeFollow; const AMode: string;
@@ -215,9 +274,9 @@ begin
   // Demonstrates a checked item driving a control: flip the label text + the check mark.
   MnuViewToggle.Checked := not MnuViewToggle.Checked;
   if MnuViewToggle.Checked then
-    LblHello.Caption := 'Hello TyControls'
+    LblHello.Caption := rsDemoGreetingShown
   else
-    LblHello.Caption := 'Greeting hidden';
+    LblHello.Caption := rsDemoGreetingHidden;
 end;
 
 procedure TDemoMainForm.MnuFileExitClick(Sender: TObject);
@@ -227,7 +286,7 @@ end;
 
 procedure TDemoMainForm.PopupCtxHelloClick(Sender: TObject);
 begin
-  LblHello.Caption := 'Hello from the context menu';
+  LblHello.Caption := rsDemoGreetingFromCtx;
 end;
 
 procedure TDemoMainForm.PopupCtxAgreeClick(Sender: TObject);

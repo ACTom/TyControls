@@ -17,6 +17,9 @@ var
 implementation
 {$R *.lfm}
 
+resourcestring
+  rsDemoCustomChromeWindow = 'Custom Chrome Window';   // zh in languages/demo.zh_CN.po
+
 function TChromeForm.ThemeDir: string;
 var
   Dir: string;
@@ -50,7 +53,7 @@ begin
     // Window chrome + backdrop follow the theme via the TyForm token.
     ApplyChromeTheme(TyController);
   end;
-  if TitleBar <> nil then TitleBar.Caption := 'Custom Chrome Window';
+  if TitleBar <> nil then TitleBar.Caption := rsDemoCustomChromeWindow;
   TyController.Changed;
 end;
 

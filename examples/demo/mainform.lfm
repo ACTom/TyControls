@@ -52,7 +52,7 @@ object DemoMainForm: TDemoMainForm
       OnClick = ApLightClick
       StyleClass = 'ghost'
       Controller = TyController
-      Caption = '浅色'
+      Caption = 'Light'
     end
     object BtnApDark: TTyButton
       Left = 316
@@ -63,7 +63,17 @@ object DemoMainForm: TDemoMainForm
       OnClick = ApDarkClick
       StyleClass = 'ghost'
       Controller = TyController
-      Caption = '深色'
+      Caption = 'Dark'
+    end
+    object LangCombo: TTyComboBox
+      Left = 380
+      Height = 28
+      Top = 4
+      Width = 110
+      TabOrder = 7
+      Controller = TyController
+      ItemIndex = -1
+      OnChange = LangComboChange
     end
   end
   object BtnPrimary: TTyButton

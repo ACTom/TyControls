@@ -1,0 +1,162 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-demo 2.0\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- code-set resourcestrings (mainform.pas / chromeform.pas) ---
+
+#: mainform.rsdemothemecustom
+msgid "Custom…"
+msgstr "自定义…"
+
+#: mainform.rsdemothemefilter
+msgid "TyControls Theme (*.tycss)|*.tycss"
+msgstr "TyControls 主题 (*.tycss)|*.tycss"
+
+#: mainform.rsdemogreetingshown
+msgid "Hello TyControls"
+msgstr "你好，TyControls"
+
+#: mainform.rsdemogreetinghidden
+msgid "Greeting hidden"
+msgstr "问候语已隐藏"
+
+#: mainform.rsdemogreetingfromctx
+msgid "Hello from the context menu"
+msgstr "来自右键菜单的问候"
+
+#: chromeform.rsdemocustomchromewindow
+msgid "Custom Chrome Window"
+msgstr "自定义标题栏窗口"
+
+# --- form captions (harvested via EnableI18NForLFM; key = <formclass>.<comp>.caption) ---
+
+#: tdemomainform.caption
+msgid "TyControls Demo"
+msgstr "TyControls 演示"
+
+#: tdemomainform.tytitlebar1.caption
+msgid "TyControls Demo"
+msgstr "TyControls 演示"
+
+#: tdemomainform.btnaplight.caption
+msgid "Light"
+msgstr "浅色"
+
+#: tdemomainform.btnapdark.caption
+msgid "Dark"
+msgstr "深色"
+
+#: tdemomainform.btnprimary.caption
+msgid "Primary"
+msgstr "主要"
+
+#: tdemomainform.btndanger.caption
+msgid "Danger"
+msgstr "危险"
+
+#: tdemomainform.lblhello.caption
+msgid "Hello TyControls"
+msgstr "你好，TyControls"
+
+#: tdemomainform.chkagree.caption
+msgid "&Agree"
+msgstr "同意(&A)"
+
+#: tdemomainform.radone.caption
+msgid "Option &One"
+msgstr "选项一(&O)"
+
+#: tdemomainform.groupbox1.caption
+msgid "Options"
+msgstr "选项"
+
+#: tdemomainform.tytabsheet1.caption
+msgid "Tab 1"
+msgstr "标签 1"
+
+#: tdemomainform.tytabsheet2.caption
+msgid "Tab 2"
+msgstr "标签 2"
+
+#: tdemomainform.tytabsheet3.caption
+msgid "Tab 3"
+msgstr "标签 3"
+
+#: tdemomainform.mnufile.caption
+msgid "&File"
+msgstr "文件(&F)"
+
+#: tdemomainform.mnufilenew.caption
+msgid "New"
+msgstr "新建"
+
+#: tdemomainform.mnufileopen.caption
+msgid "Open..."
+msgstr "打开..."
+
+#: tdemomainform.mnufileexit.caption
+msgid "Exit"
+msgstr "退出"
+
+#: tdemomainform.mnuedit.caption
+msgid "&Edit"
+msgstr "编辑(&E)"
+
+#: tdemomainform.mnueditcut.caption
+msgid "Cut"
+msgstr "剪切"
+
+#: tdemomainform.mnueditcopy.caption
+msgid "Copy"
+msgstr "复制"
+
+#: tdemomainform.mnueditpaste.caption
+msgid "Paste"
+msgstr "粘贴"
+
+#: tdemomainform.mnuview.caption
+msgid "&View"
+msgstr "视图(&V)"
+
+#: tdemomainform.mnuviewtoggle.caption
+msgid "Show Greeting"
+msgstr "显示问候"
+
+#: tdemomainform.mnuviewmore.caption
+msgid "More"
+msgstr "更多"
+
+#: tdemomainform.mnuviewmorea.caption
+msgid "Submenu Item A"
+msgstr "子菜单项 A"
+
+#: tdemomainform.mnuviewmoreb.caption
+msgid "Submenu Item B"
+msgstr "子菜单项 B"
+
+#: tdemomainform.popupctxhello.caption
+msgid "Set Greeting"
+msgstr "设置问候"
+
+#: tdemomainform.popupctxagree.caption
+msgid "Toggle Agree"
+msgstr "切换同意"
+
+#: tchromeform.caption
+msgid "Custom Chrome Window"
+msgstr "自定义标题栏窗口"
+
+#: tchromeform.tytitlebar1.caption
+msgid "Custom Chrome Window"
+msgstr "自定义标题栏窗口"
+
+#: tchromeform.lblinfo.caption
+msgid "Drag the title bar; resize from edges; double-click to maximize."
+msgstr "拖动标题栏移动;从边缘缩放;双击最大化。"
