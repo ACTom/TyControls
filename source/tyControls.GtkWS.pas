@@ -123,6 +123,9 @@ function TTyGtkImeHook.FilterKey(event: PGdkEventKey): Boolean;
 begin
   Result := False;
   if (not FFocused) or (FIM = nil) then Exit;
+  // GTK is a PUSH model (unlike Qt's pull/inputMethodQuery): re-push the caret location on every key
+  // so the candidate window tracks the caret across commits, not just at focus-in.
+  UpdateCursorLocation;
   // gtk_im_context_filter_keypress returns gboolean (Boolean32 in this binding) — assign directly,
   // do NOT compare to 0 (Boolean32 vs integer won't compile).
   Result := gtk_im_context_filter_keypress(FIM, event);
