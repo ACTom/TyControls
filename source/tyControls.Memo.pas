@@ -2437,6 +2437,10 @@ begin
     if FMeasureBmp = nil then
       FMeasureBmp := TBGRABitmap.Create(1, 1);
     TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
+    // MEASURE with fqSystem (fast widgetset metrics), not fqFineAntialiasing (which renders the text
+    // to measure -> ~0.16ms/char). The glyph ADVANCE widths are identical, so the caret/selection
+    // still align with the fqFine-drawn text; only the slow render-to-measure is skipped.
+    FMeasureBmp.FontQuality := fqSystem;
     lastLen := UTF8Length(FLastMeasuredLine);
     lastBLen := Length(FLastMeasuredLine);   // BYTE lengths for safe prefix compares (no overread)
     aBLen := Length(ALine);
