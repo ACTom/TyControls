@@ -6,7 +6,7 @@ uses
   tyControls.Controller, tyControls.TyLabel, tyControls.Form;
 type
   TChromeForm = class(TTyForm)
-    Controller: TTyStyleController;
+    TyController: TTyStyleController;
     LblInfo: TTyLabel;
     procedure FormCreate(Sender: TObject);
   private
@@ -46,12 +46,12 @@ begin
   ThemeFile := ThemeDir + 'showcase.tycss';
   if FileExists(ThemeFile) then
   begin
-    Controller.LoadTheme(ThemeFile);
+    TyController.LoadTheme(ThemeFile);
     // Window chrome + backdrop follow the theme via the TyForm token.
-    ApplyChromeTheme(Controller);
+    ApplyChromeTheme(TyController);
   end;
   if TitleBar <> nil then TitleBar.Caption := 'Custom Chrome Window';
-  Controller.Changed;
+  TyController.Changed;
 end;
 
 end.

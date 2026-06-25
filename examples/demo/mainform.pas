@@ -17,7 +17,7 @@ type
     it NEVER creates UI controls (project rule: demo UI is edited in the .lfm only). }
 
   TDemoMainForm = class(TTyForm)
-    Controller: TTyStyleController;
+    TyController: TTyStyleController;
     TyButton1: TTyButton;
     TyButton2: TTyButton;
     TyButton3: TTyButton;
@@ -148,8 +148,8 @@ end;
 procedure TDemoMainForm.ApplyBuiltin(const AName: string);
 begin
   // 只换主题,不动 Follow/Mode(外观轴由三态独占)。
-  Controller.ThemeName := AName;
-  ApplyChromeTheme(Controller);
+  TyController.ThemeName := AName;
+  ApplyChromeTheme(TyController);
 end;
 
 procedure TDemoMainForm.ThemeComboChange(Sender: TObject);
@@ -165,8 +165,8 @@ begin
       dlg.InitialDir := ThemeDir;
       if dlg.Execute then
       begin
-        Controller.ThemeFile := dlg.FileName;   // 自定义文件(REPLACE)
-        ApplyChromeTheme(Controller);
+        TyController.ThemeFile := dlg.FileName;   // 自定义文件(REPLACE)
+        ApplyChromeTheme(TyController);
       end;
     finally dlg.Free; end;
   end
@@ -177,12 +177,12 @@ end;
 procedure TDemoMainForm.SetAppearance(AFollow: TTyThemeFollow; const AMode: string;
   ASelected: TTyButton);
 begin
-  Controller.Follow := AFollow;
-  if AFollow = tfManual then Controller.Mode := AMode;   // 跟随系统时 Mode 由 OS 决定
+  TyController.Follow := AFollow;
+  if AFollow = tfManual then TyController.Mode := AMode;   // 跟随系统时 Mode 由 OS 决定
   // 三态互斥:用 ghost 的 Down 选中态高亮当前外观。
   BtnApLight.Down := (ASelected = BtnApLight);
   BtnApDark.Down  := (ASelected = BtnApDark);
-  ApplyChromeTheme(Controller);
+  ApplyChromeTheme(TyController);
 end;
 
 procedure TDemoMainForm.ApLightClick(Sender: TObject);
