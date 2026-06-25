@@ -154,6 +154,7 @@ type
     procedure ArmEngine;
     function GetTitleHeight: Integer;
     procedure SetTitleHeight(AValue: Integer);
+    procedure SetController(AValue: TTyStyleController);
     procedure SetShowMinimize(AValue: Boolean);
     procedure SetShowMaximize(AValue: Boolean);
     procedure DoMinimizeClick(Sender: TObject);
@@ -185,6 +186,12 @@ type
   published
     { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
     property About: string read GetAbout;
+    { The style controller that themes this whole window. Assigning it applies the theme
+      (the same effect as calling ApplyChromeTheme) and propagates the controller to the
+      title bar + caption buttons; a streamed value is applied in Loaded once the title bar
+      exists. Leave it unset to use the built-in default theme (TyDefaultController), or wire
+      it to the main window's controller so the whole app shares one theme. }
+    property Controller: TTyStyleController read FController write SetController;
     property TitleBar: TTyTitleBar read FTitleBar write SetTitleBar;
     { Designate the primary application menu bar. Non-mac: the bar stays visible and
       owns shortcut dispatch (IsShortcut forwards to its TMainMenu). Mac: the bar's
@@ -378,6 +385,10 @@ begin
   ControlStyle := ControlStyle + [csAcceptsControls];
   FButtonWidth := TyTitleButtonWidth;
   FTitleAlignment := taLeftJustify;
+  // A title bar belongs at the top of the window by default. (The streaming default stays
+  // alNone, so existing .lfm files keep writing `Align = alTop` explicitly — no change for
+  // them — but a freshly dropped/created bar now snaps to the top strip on its own.)
+  Align := alTop;
   SetBounds(0, 0, 200, 32);
   FMinButton := TTyCaptionButton.Create(Self);
   FMinButton.Kind := cbkMin;
@@ -828,6 +839,11 @@ begin
   // A title bar associated from the .lfm had its engine-arming deferred (see
   // SetTitleBar); now that streaming has finished, wire it to the live engine.
   ArmEngine;
+  // A Controller streamed from the .lfm: SetController deferred during csLoading; apply now
+  // that the title bar + every sub-component is assigned. (ApplyChromeTheme calls
+  // ApplyWindowEffects itself, so the no-controller case still gets effects just below.)
+  if FController <> nil then
+    ApplyChromeTheme(FController);
   ApplyWindowEffects;   // handle exists post-load -> apply corners + shadow
 end;
 
@@ -896,7 +912,9 @@ begin
     if Menu = FMenuBar.Menu then Menu := nil;
     {$ENDIF}
     FMenuBar := nil;
-  end;
+  end
+  else if (Operation = opRemove) and (AComponent = FController) then
+    FController := nil;   // the bound controller was freed: drop the dangling ref
 end;
 
 procedure TTyForm.DoMinimizeClick(Sender: TObject);
@@ -1081,9 +1099,31 @@ begin
   bg := AController.Model.ResolveStyle('TyForm', '', []);
   if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
     Color := TyColorToLCL(bg.Background.Color);
-  UpdateFollowWatch;   // arm/disarm the OS-follow poll to match the controller's Follow policy
+  // arm/disarm the OS-follow poll to match the controller's Follow policy. Never at design
+  // time (this can now run in the IDE designer, via the Controller property / Loaded) — a
+  // polling timer has no place on the design surface; ApplyWindowEffects self-guards already.
+  if not (csDesigning in ComponentState) then
+    UpdateFollowWatch;
   ApplyWindowEffects;  // re-apply corners + shadow (theme may have changed border-radius/window-shadow)
   Invalidate;
+end;
+
+procedure TTyForm.SetController(AValue: TTyStyleController);
+begin
+  if FController = AValue then Exit;
+  if FController <> nil then RemoveFreeNotification(FController);
+  FController := AValue;
+  if AValue <> nil then FreeNotification(AValue);   // opRemove nils the ref if it's freed
+  // During streaming the title bar / sub-components may not be assigned yet; Loaded re-applies
+  // once the whole .lfm is in. ApplyChromeTheme re-sets FController (harmless) + themes everything.
+  if csLoading in ComponentState then Exit;
+  if AValue <> nil then
+    ApplyChromeTheme(AValue)
+  else
+  begin
+    if not (csDesigning in ComponentState) then UpdateFollowWatch;   // disarm any follow timer
+    Invalidate;
+  end;
 end;
 
 procedure TTyForm.ApplyWindowEffects;

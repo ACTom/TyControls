@@ -3,7 +3,7 @@ unit tyControls.Design;
 interface
 uses
   Classes, SysUtils, Forms, Controls, StdCtrls, ExtCtrls, Graphics, LCLIntf,
-  PropEdits, ComponentEditors, ProjectIntf, FormEditingIntf,
+  PropEdits, ComponentEditors, ProjectIntf, FormEditingIntf, LazIDEIntf,
   LResources, tyControls.Types,
   tyControls.Base, tyControls.Controller, tyControls.StyleModel,
   tyControls.Button, tyControls.TyLabel, tyControls.Edit,
@@ -38,20 +38,53 @@ type
     procedure Edit; override;
   end;
 
-  { File > New entry that creates a unit whose form descends from TTyForm — a
-    borderless form with a persistent chrome engine. The form is empty by default;
-    drop a TTyTitleBar onto it and it auto-associates to the TitleBar property. }
+  { File > New entry that creates a unit whose form descends from TTyForm — a borderless
+    form with a persistent chrome engine. The generated form comes WITH a top-aligned
+    TTyTitleBar already associated (TitleBar = TyTitleBar1). FWithController=True (the
+    TyControls Application main form) additionally drops a TTyStyleController and wires the
+    form + title bar to it; the plain form leaves the controller unset so it can be pointed
+    at the main window's controller later. }
   TTyFormFileDescriptor = class(TFileDescPascalUnitWithResource)
+  protected
+    FWithController: Boolean;
   public
     constructor Create; override;
     function GetInterfaceUsesSection: string; override;
+    function GetInterfaceSource(const Filename, SourceName, ResourceName: string): string; override;
+    function GetResourceSource(const ResourceName: string): string; override;
     function GetLocalizedName: string; override;
     function GetLocalizedDescription: string; override;
+  end;
+
+  { The main form for a "TyControls Application" project: a themed TTyForm carrying its own
+    TTyStyleController, with both the form and the title bar associated to it. }
+  TTyMainFormFileDescriptor = class(TTyFormFileDescriptor)
+  public
+    constructor Create; override;
+    function GetLocalizedName: string; override;
+    function GetLocalizedDescription: string; override;
+  end;
+
+  { File > New > Project > "TyControls Application": a normal LCL GUI app whose main form is
+    a themed TTyForm (title bar + style controller), with the tycontrols package dependency
+    pre-added. Mirrors the IDE's built-in Application descriptor. }
+  TTyApplicationDescriptor = class(TProjectDescriptor)
+  public
+    constructor Create; override;
+    function GetLocalizedName: string; override;
+    function GetLocalizedDescription: string; override;
+    function InitProject(AProject: TLazProject): TModalResult; override;
+    function CreateStartFiles(AProject: TLazProject): TModalResult; override;
   end;
 
 procedure Register;
 
 implementation
+
+var
+  // The themed main-form descriptor, reused by the TyControls Application project's
+  // CreateStartFiles. Held here so registration owns its (refcounted) lifetime.
+  TyMainFormDescriptor: TTyMainFormFileDescriptor;
 
 type
   { Small code-built About form (no .lfm), so the design-time package stays resource-free. }
@@ -275,6 +308,7 @@ end;
 constructor TTyFormFileDescriptor.Create;
 begin
   inherited Create;
+  FWithController := False;
   Name := 'TyControls form';        // internal id (File > New list)
   ResourceClass := TTyForm;         // generated class descends from TTyForm
   UseCreateFormStatements := True;  // add to the project's auto-create forms
@@ -286,6 +320,75 @@ end;
 function TTyFormFileDescriptor.GetInterfaceUsesSection: string;
 begin
   Result := inherited GetInterfaceUsesSection + ', tyControls.Form';
+  if FWithController then
+    Result := Result + ', tyControls.Controller';
+end;
+
+function TTyFormFileDescriptor.GetInterfaceSource(const Filename, SourceName,
+  ResourceName: string): string;
+const
+  LE = LineEnding;
+var
+  fields: string;
+begin
+  // Declare the pre-placed components as published fields so the generated class matches the
+  // .lfm GetResourceSource emits (the IDE binds streamed components to these fields by name).
+  fields := '    TyTitleBar1: TTyTitleBar;' + LE;
+  if FWithController then
+    fields := fields + '    TyStyleController1: TTyStyleController;' + LE;
+  Result :=
+     'type' + LE
+    + '  T' + ResourceName + ' = class(TTyForm)' + LE
+    + fields
+    + '  private' + LE
+    + LE
+    + '  public' + LE
+    + LE
+    + '  end;' + LE
+    + LE
+    + 'var' + LE
+    + '  ' + ResourceName + ': T' + ResourceName + ';' + LE
+    + LE;
+end;
+
+function TTyFormFileDescriptor.GetResourceSource(const ResourceName: string): string;
+const
+  LE = LineEnding;
+var
+  s: string;
+begin
+  // A non-empty result OVERRIDES the IDE's automatic .lfm generation. The form class is
+  // T<ResourceName> (the convention GetInterfaceSource + the IDE both use). Modelled on a
+  // real IDE-generated TTyForm + title-bar .lfm (examples/demo/chromeform.lfm); the form-level
+  // `TitleBar =` / `Controller =` are forward refs the LFM reader resolves via fixups.
+  s :=
+     'object ' + ResourceName + ': T' + ResourceName + LE
+    + '  Left = 300' + LE
+    + '  Height = 320' + LE
+    + '  Top = 200' + LE
+    + '  Width = 480' + LE
+    + '  Caption = ''' + ResourceName + '''' + LE;
+  if FWithController then
+    s := s + '  Controller = TyStyleController1' + LE;
+  s := s
+    + '  TitleBar = TyTitleBar1' + LE
+    + '  object TyTitleBar1: TTyTitleBar' + LE
+    + '    Left = 0' + LE
+    + '    Height = 32' + LE
+    + '    Top = 0' + LE
+    + '    Width = 480' + LE
+    + '    Align = alTop' + LE
+    + '    Caption = ''' + ResourceName + '''' + LE;
+  if FWithController then
+    s := s + '    Controller = TyStyleController1' + LE;
+  s := s + '  end' + LE;
+  if FWithController then
+    s := s
+      + '  object TyStyleController1: TTyStyleController' + LE
+      + '    Left = 64' + LE
+      + '    Top = 48' + LE
+      + '  end' + LE;
+  Result := s + 'end' + LE;
 end;
 
 function TTyFormFileDescriptor.GetLocalizedName: string;
@@ -295,8 +398,109 @@ end;
 
 function TTyFormFileDescriptor.GetLocalizedDescription: string;
 begin
-  Result := 'A borderless form descending from TTyForm. Drop a TTyTitleBar onto ' +
-    'it to get a draggable custom title bar; lay out your controls below it.';
+  Result := 'A borderless form descending from TTyForm, with a top-aligned TTyTitleBar ' +
+    'already attached (drag to move, double-click to maximize). Point its Controller at your ' +
+    'main window''s style controller to theme it, or lay out your controls below the bar.';
+end;
+
+{ TTyMainFormFileDescriptor }
+
+constructor TTyMainFormFileDescriptor.Create;
+begin
+  inherited Create;
+  FWithController := True;
+  Name := 'TyControls main form';   // internal id (distinct from the plain form)
+end;
+
+function TTyMainFormFileDescriptor.GetLocalizedName: string;
+begin
+  Result := 'TyControls Main Form';
+end;
+
+function TTyMainFormFileDescriptor.GetLocalizedDescription: string;
+begin
+  Result := 'A themed TTyForm carrying its own TTyStyleController, with the form and the ' +
+    'title bar already associated to it — the root window for a TyControls application.';
+end;
+
+{ TTyApplicationDescriptor }
+
+constructor TTyApplicationDescriptor.Create;
+begin
+  inherited Create;
+  Name := 'TyControls Application';
+  // Inherit the user's IDE-wide default project compiler options, like a normal Application.
+  Flags := Flags + [pfUseDefaultCompilerOptions];
+end;
+
+function TTyApplicationDescriptor.GetLocalizedName: string;
+begin
+  Result := 'TyControls Application';
+end;
+
+function TTyApplicationDescriptor.GetLocalizedDescription: string;
+begin
+  Result := 'A graphical TyControls application. The main form is a themed TTyForm ' +
+    '(custom title bar + style controller); the tycontrols package is added automatically.';
+end;
+
+function TTyApplicationDescriptor.InitProject(AProject: TLazProject): TModalResult;
+const
+  LE = LineEnding;
+var
+  MainFile: TLazProjectFile;
+  NewSource: string;
+begin
+  Result := inherited InitProject(AProject);
+
+  MainFile := AProject.CreateProjectFile('project1.lpr');
+  MainFile.IsPartOfProject := True;
+  AProject.AddFile(MainFile, False);
+  AProject.MainFileID := 0;          // the .lpr is the main file
+  AProject.UseAppBundle := True;
+  AProject.UseManifest := True;
+  AProject.Scaled := True;
+  AProject.LoadDefaultIcon;
+
+  NewSource :=
+     'program Project1;' + LE + LE
+    + '{$mode objfpc}{$H+}' + LE + LE
+    + 'uses' + LE
+    + '  {$IFDEF UNIX}' + LE
+    + '  cthreads,' + LE
+    + '  {$ENDIF}' + LE
+    + '  {$IFDEF HASAMIGA}' + LE
+    + '  athreads,' + LE
+    + '  {$ENDIF}' + LE
+    + '  Interfaces, // this includes the LCL widgetset' + LE
+    + '  Forms' + LE
+    + '  { you can add units after this };' + LE + LE
+    + 'begin' + LE
+    + '  RequireDerivedFormResource := True;' + LE
+    + '  Application.Scaled := True;' + LE
+    + '  {$PUSH}{$WARN 5044 OFF}' + LE
+    + '  Application.MainFormOnTaskbar := True;' + LE
+    + '  {$POP}' + LE
+    + '  Application.Initialize;' + LE
+    + '  Application.Run;' + LE
+    + 'end.' + LE + LE;
+  AProject.MainFile.SetSourceText(NewSource, True);
+
+  AProject.AddPackageDependency('LCL');
+  AProject.AddPackageDependency('tycontrols');   // the main form descends from TTyForm
+  AProject.LazCompilerOptions.Win32GraphicApp := True;
+  AProject.LazCompilerOptions.UnitOutputDirectory := 'lib' + PathDelim + '$(TargetCPU)-$(TargetOS)';
+  AProject.LazCompilerOptions.TargetFilename := 'project1';
+
+  Result := mrOK;
+end;
+
+function TTyApplicationDescriptor.CreateStartFiles(AProject: TLazProject): TModalResult;
+begin
+  // Create + open the themed main form. UseCreateFormStatements makes the IDE add
+  // `Application.CreateForm(...)` + the unit to the .lpr automatically.
+  Result := LazarusIDE.DoNewEditorFile(TyMainFormDescriptor, '', '',
+    [nfIsPartOfProject, nfOpenInEditor, nfCreateDefaultSrc]);
 end;
 
 procedure Register;
@@ -334,8 +538,16 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyForm, 'About', TTyAboutEditor);
   // Page management verbs (Add/Delete/Show Next/Prev) for the page control.
   RegisterComponentEditor(TTyPageControl, TTyPageControlEditor);
-  // File > New > "TyControls Form": a unit whose form descends from TTyForm.
+  // File > New > "TyControls Form": a unit whose form descends from TTyForm, pre-fitted
+  // with a top-aligned title bar.
   RegisterProjectFileDescriptor(TTyFormFileDescriptor.Create);
+  // The themed main form (title bar + style controller). Registered so its lifetime is
+  // refcount-managed; reused by the TyControls Application project below.
+  TyMainFormDescriptor := TTyMainFormFileDescriptor.Create;
+  RegisterProjectFileDescriptor(TyMainFormDescriptor);
+  // File > New > Project > "TyControls Application": a GUI app whose main form is that
+  // themed TTyForm, with the tycontrols dependency pre-added.
+  RegisterProjectDescriptor(TTyApplicationDescriptor.Create);
 end;
 
 end.

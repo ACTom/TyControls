@@ -56,6 +56,7 @@ type
   published
     procedure TestTypeKey;
     procedure TestCaptionProperty;
+    procedure TestDefaultAlignIsTop;
     procedure TestHasThreeButtons;
     procedure TestButtonKinds;
     procedure TestButtonsRightAlignedAfterResize;
@@ -97,6 +98,8 @@ type
     procedure TestFreeingTitleBarNilsProperty;
     procedure TestApplyChromeThemeSetsColorFromToken;
     procedure TestApplyChromeThemePropagatesController;
+    procedure TestControllerPropertyThemesAndPropagates;
+    procedure TestFreeingControllerNilsProperty;
     procedure TestTitleBarDragArmsViaEngine;
     procedure TestDblClickMaximizeToggles;
   end;
@@ -408,6 +411,20 @@ begin
   try
     T.Caption := 'Hello';
     AssertEquals('caption', 'Hello', T.Caption);
+  finally
+    T.Free;
+  end;
+end;
+
+procedure TTitleBarTest.TestDefaultAlignIsTop;
+var
+  T: TTyTitleBar;
+begin
+  { A title bar belongs at the top: the constructor defaults Align to alTop so a freshly
+    dropped/created bar snaps to the top strip without manual alignment. }
+  T := TTyTitleBar.Create(nil);
+  try
+    AssertTrue('default Align is alTop', T.Align = alTop);
   finally
     T.Free;
   end;
@@ -825,6 +842,51 @@ begin
     AssertTrue('min button uses the passed controller', F.TB.MinButton.Controller = Ctl);
     AssertTrue('max button uses the passed controller', F.TB.MaxButton.Controller = Ctl);
     AssertTrue('close button uses the passed controller', F.TB.CloseButton.Controller = Ctl);
+  finally
+    Ctl.Free;
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestControllerPropertyThemesAndPropagates;
+var
+  F: TTyFormAccess;
+  Ctl: TTyStyleController;
+begin
+  { Assigning the new published Controller property applies the theme (drives the form
+    Color) AND propagates the controller to the chrome — i.e. it routes through
+    ApplyChromeTheme, so the association is declarative (.lfm / Object Inspector). }
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    F.MakeTitleBar;
+    Ctl.LoadThemeCss('TyForm { background: #123456; }');
+    F.Controller := Ctl;
+    AssertTrue('Controller property reads back', F.Controller = Ctl);
+    AssertEquals('form Color themed from the controller',
+      Integer(RGBToColor($12, $34, $56)), Integer(F.Color));
+    AssertTrue('titlebar got the controller', F.TB.Controller = Ctl);
+  finally
+    Ctl.Free;
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestFreeingControllerNilsProperty;
+var
+  F: TTyFormAccess;
+  Ctl: TTyStyleController;
+begin
+  { Freeing the bound controller fires Notification(opRemove), nilling the property so the
+    form never paints through a dangling controller. }
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    F.Controller := Ctl;
+    AssertTrue('bound', F.Controller = Ctl);
+    Ctl.Free;
+    Ctl := nil;
+    AssertTrue('nil after free', F.Controller = nil);
   finally
     Ctl.Free;
     F.Free;
