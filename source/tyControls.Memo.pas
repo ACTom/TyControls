@@ -512,6 +512,23 @@ type
 
 implementation
 
+{ Opt-in perf probe (TY_MEMO_PERF=1): append a line to memo_perf.log next to the exe. Used to split
+  per-keystroke cost between the edit/measure pass (AfterEdit) and the paint (RenderTo). Removed once
+  the hot spot is found. }
+procedure MemoPerfLog(const AMsg: string);
+var f: TextFile; p: string;
+begin
+  if GetEnvironmentVariable('TY_MEMO_PERF') = '' then Exit;
+  p := ExtractFilePath(ParamStr(0)) + 'memo_perf.log';
+  {$I-}
+  AssignFile(f, p);
+  if FileExists(p) then Append(f) else Rewrite(f);
+  WriteLn(f, AMsg);
+  CloseFile(f);
+  {$I+}
+  if IOResult <> 0 then ;
+end;
+
 constructor TTyMemo.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -1699,7 +1716,9 @@ begin
 end;
 
 procedure TTyMemo.AfterEdit(APPI: Integer);
+var t0: QWord; cl: Integer;
 begin
+  t0 := GetTickCount64;
   ClampCaret;
   // The text model changed: any cached wrap layout is stale.
   InvalidateVisualRows;
@@ -1716,6 +1735,8 @@ begin
   DoChange;
   // An edit that moves the caret is also a selection/caret change (self-guarded).
   DoSelectionChange;
+  if (FCaretLine >= 0) and (FCaretLine < FLines.Count) then cl := UTF8Length(FLines[FCaretLine]) else cl := 0;
+  MemoPerfLog(Format('AfterEdit=%dms lines=%d caretLineLen=%d', [GetTickCount64 - t0, FLines.Count, cl]));
 end;
 
 procedure TTyMemo.AfterCaretMove(APPI: Integer);
@@ -2464,7 +2485,9 @@ var
   BandFill: TTyFill;
   BandColor: TTyColor;
   DrawBand: Boolean;
+  t0: QWord;
 begin
+  t0 := GetTickCount64;
   // Keep the scrollbar in sync (cheap; catches external Lines mutations).
   UpdateScrollBar;
   // Build/refresh the visual-row cache for the current content width + wrap mode.
@@ -2643,6 +2666,7 @@ begin
   finally
     P.Free;
   end;
+  MemoPerfLog(Format('RenderTo=%dms rows=%d..%d top=%d', [GetTickCount64 - t0, FTopRow, LastVisible, FTopRow]));
 end;
 
 procedure TTyMemo.Paint;
