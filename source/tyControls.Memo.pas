@@ -518,6 +518,25 @@ type
 
 implementation
 
+{$IFDEF WINDOWS}uses Windows;{$ENDIF}
+
+{ High-resolution microsecond clock for the perf probe (GetTickCount64's ~15ms tick is too coarse to
+  tell a 2ms op from a 20ms one). }
+var GPerfFreq: Int64 = 0;
+function PerfNowUs: Int64;
+{$IFDEF WINDOWS}
+var c: Int64;
+begin
+  if GPerfFreq = 0 then QueryPerformanceFrequency(GPerfFreq);
+  QueryPerformanceCounter(c);
+  if GPerfFreq > 0 then Result := (c * 1000000) div GPerfFreq else Result := 0;
+end;
+{$ELSE}
+begin
+  Result := Int64(GetTickCount64) * 1000;
+end;
+{$ENDIF}
+
 { Opt-in perf probe (TY_MEMO_PERF=1): append a line to memo_perf.log next to the exe. Used to split
   per-keystroke cost between the edit/measure pass (AfterEdit) and the paint (RenderTo). Removed once
   the hot spot is found. }
@@ -1722,9 +1741,9 @@ begin
 end;
 
 procedure TTyMemo.AfterEdit(APPI: Integer);
-var t0: QWord; cl: Integer;
+var t0: Int64; cl: Integer;
 begin
-  t0 := GetTickCount64;
+  t0 := PerfNowUs;
   ClampCaret;
   // The text model changed: any cached wrap layout is stale.
   InvalidateVisualRows;
@@ -1742,7 +1761,7 @@ begin
   // An edit that moves the caret is also a selection/caret change (self-guarded).
   DoSelectionChange;
   if (FCaretLine >= 0) and (FCaretLine < FLines.Count) then cl := UTF8Length(FLines[FCaretLine]) else cl := 0;
-  MemoPerfLog(Format('AfterEdit=%dms lines=%d caretLineLen=%d', [GetTickCount64 - t0, FLines.Count, cl]));
+  MemoPerfLog(Format('AfterEdit=%dus lines=%d caretLineLen=%d', [PerfNowUs - t0, FLines.Count, cl]));
 end;
 
 procedure TTyMemo.AfterCaretMove(APPI: Integer);
@@ -2518,9 +2537,9 @@ var
   BandFill: TTyFill;
   BandColor: TTyColor;
   DrawBand: Boolean;
-  t0: QWord;
+  t0, t1: Int64;
 begin
-  t0 := GetTickCount64;
+  t0 := PerfNowUs;
   // Keep the scrollbar in sync (cheap; catches external Lines mutations).
   UpdateScrollBar;
   // Build/refresh the visual-row cache for the current content width + wrap mode.
@@ -2566,6 +2585,7 @@ begin
     if LastVisible > High(FVisualRows) then
       LastVisible := High(FVisualRows);
 
+    t1 := PerfNowUs;   // setup (scrollbar + visual rows + BeginPaint + DrawFrame) done; row drawing next
     for vr := FTopRow to LastVisible do
     begin
       if (vr < 0) or (vr > High(FVisualRows)) then Continue;
@@ -2699,7 +2719,7 @@ begin
   finally
     P.Free;
   end;
-  MemoPerfLog(Format('RenderTo=%dms rows=%d..%d top=%d', [GetTickCount64 - t0, FTopRow, LastVisible, FTopRow]));
+  MemoPerfLog(Format('RenderTo=%dus setup=%dus draw=%dus rows=%d..%d', [PerfNowUs - t0, t1 - t0, PerfNowUs - t1, FTopRow, LastVisible]));
 end;
 
 procedure TTyMemo.Paint;
