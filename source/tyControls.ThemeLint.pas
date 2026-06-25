@@ -37,7 +37,7 @@ unit tyControls.ThemeLint;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils;
+  Classes, SysUtils, tyControls.StrConsts;
 
 type
   TTyLintResult = array of string;
@@ -125,7 +125,7 @@ begin
           begin
             seen.Add(key);
             if (ADefined.IndexOf(key) < 0) and not IsKnownDynamicVar(name) then
-              Emit(AResult, 'undefined variable --' + name);
+              Emit(AResult, Format(rsLintUndefinedVar, [name]));
           end;
         end;
         i := j;
@@ -166,7 +166,7 @@ begin
       if not FileExists(resolved) and FileExists(ABaseDir + path) then
         resolved := ABaseDir + path;
       if not FileExists(resolved) then
-        Emit(AResult, 'missing asset ''' + path + '''');
+        Emit(AResult, Format(rsLintMissingAsset, [path]));
     end;
     // advance past this url( and look for the next
     p := Pos('url(', Copy(lo, q + 1, Length(lo)));
@@ -238,7 +238,7 @@ begin
       sel := SelectorText(ARule.Selectors[0])
     else
       sel := '?';
-    Emit(AResult, 'low contrast on ''' + sel + '''');
+    Emit(AResult, Format(rsLintLowContrast, [sel]));
   end;
 end;
 
@@ -277,7 +277,7 @@ var
 begin
   if ADepth > cMaxDepth then
   begin
-    Emit(AResult, 'import nesting too deep (> ' + IntToStr(cMaxDepth) + ')');
+    Emit(AResult, Format(rsLintImportTooDeep, [cMaxDepth]));
     Exit;
   end;
   for ii := 0 to High(ASheet.Imports) do
@@ -285,7 +285,7 @@ begin
     rawPath := Trim(ASheet.Imports[ii]);
     if rawPath = '' then
     begin
-      Emit(AResult, 'empty @import path');
+      Emit(AResult, rsLintEmptyImportPath);
       Continue;
     end;
     resolved := rawPath;
@@ -293,13 +293,13 @@ begin
       resolved := ABaseDir + rawPath;
     if not FileExists(resolved) then
     begin
-      Emit(AResult, 'missing @import ''' + rawPath + '''');
+      Emit(AResult, Format(rsLintMissingImport, [rawPath]));
       Continue;
     end;
     canon := LowerCase(ExpandFileName(resolved));
     if AActive.IndexOf(canon) >= 0 then
     begin
-      Emit(AResult, '@import cycle ''' + rawPath + '''');
+      Emit(AResult, Format(rsLintImportCycle, [rawPath]));
       Continue;
     end;
     if ADone.IndexOf(canon) >= 0 then
@@ -310,7 +310,7 @@ begin
       try
         sl.LoadFromFile(resolved);
       except
-        Emit(AResult, 'unreadable @import ''' + rawPath + '''');
+        Emit(AResult, Format(rsLintUnreadableImport, [rawPath]));
         Continue;
       end;
       child := nil;
@@ -322,7 +322,7 @@ begin
           except
             on E: Exception do
             begin
-              Emit(AResult, 'parse error in @import ''' + rawPath + ''': ' + E.Message);
+              Emit(AResult, Format(rsLintImportParseError, [rawPath, E.Message]));
               child := nil;
             end;
           end;
@@ -435,7 +435,7 @@ begin
         known := True;
       end;
       if not known then
-        Emit(AResult, 'unknown property ''' + prop + '''');
+        Emit(AResult, Format(rsLintUnknownProperty, [prop]));
     end;
     // undefined vars + missing assets across this rule's values (after the prop pass so all
     // 'unknown property' lines precede 'undefined variable' lines in the output)
@@ -479,7 +479,7 @@ begin
     except
       on E: Exception do
       begin
-        Emit(Result, 'parse error: ' + E.Message);
+        Emit(Result, Format(rsLintParseError, [E.Message]));
         sheet := nil;
       end;
     end;
