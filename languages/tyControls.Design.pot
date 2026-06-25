@@ -1,0 +1,60 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+#: tycontrols.design.rsdtaboutok
+msgid "OK"
+msgstr ""
+
+#: tycontrols.design.rsdtabouttagline
+msgid "Themed LCL control library"
+msgstr ""
+
+#: tycontrols.design.rsdtabouttitle
+msgid "About TyControls"
+msgstr ""
+
+#: tycontrols.design.rsdtaboutversion
+#, object-pascal-format
+msgid "Version %s"
+msgstr ""
+
+#: tycontrols.design.rsdtappdescription
+msgid "A graphical TyControls application. The main form is a themed TTyForm (custom title bar + style controller); the tycontrols package is added automatically."
+msgstr ""
+
+#: tycontrols.design.rsdtappname
+msgid "TyControls Application"
+msgstr ""
+
+#: tycontrols.design.rsdtformdescription
+msgid "A borderless form descending from TTyForm, with a top-aligned TTyTitleBar already attached (drag to move, double-click to maximize). Point its Controller at your main window's style controller to theme it, or lay out your controls below the bar."
+msgstr ""
+
+#: tycontrols.design.rsdtformname
+msgid "TyControls Form"
+msgstr ""
+
+#: tycontrols.design.rsdtmainformdescription
+msgid "A themed TTyForm carrying its own TTyStyleController, with the form and the title bar already associated to it — the root window for a TyControls application."
+msgstr ""
+
+#: tycontrols.design.rsdtmainformname
+msgid "TyControls Main Form"
+msgstr ""
+
+#: tycontrols.design.rsdtpageadd
+msgid "Add Page"
+msgstr ""
+
+#: tycontrols.design.rsdtpagedelete
+msgid "Delete Page"
+msgstr ""
+
+#: tycontrols.design.rsdtpageshownext
+msgid "Show Next Page"
+msgstr ""
+
+#: tycontrols.design.rsdtpageshowprev
+msgid "Show Previous Page"
+msgstr ""
+

@@ -22,6 +22,10 @@
         <UnitName Value="tyControls.Design"/>
       </Item>
     </Files>
+    <i18n>
+      <EnableI18N Value="True"/>
+      <OutDir Value="languages"/>
+    </i18n>
     <RequiredPkgs>
       <Item>
         <PackageName Value="tycontrols"/>

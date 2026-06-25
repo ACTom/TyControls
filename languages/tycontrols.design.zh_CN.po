@@ -1,0 +1,67 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols 2.0\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: tycontrols.design.rsdtformname
+msgid "TyControls Form"
+msgstr "TyControls 窗体"
+
+#: tycontrols.design.rsdtformdescription
+msgid "A borderless form descending from TTyForm, with a top-aligned TTyTitleBar already attached (drag to move, double-click to maximize). Point its Controller at your main window's style controller to theme it, or lay out your controls below the bar."
+msgstr "一个继承自 TTyForm 的无边框窗体，已附带一个顶端对齐的 TTyTitleBar（拖动可移动，双击可最大化）。将其 Controller 指向主窗口的样式控制器即可应用主题，或在标题栏下方布置你的控件。"
+
+#: tycontrols.design.rsdtmainformname
+msgid "TyControls Main Form"
+msgstr "TyControls 主窗体"
+
+#: tycontrols.design.rsdtmainformdescription
+msgid "A themed TTyForm carrying its own TTyStyleController, with the form and the title bar already associated to it — the root window for a TyControls application."
+msgstr "一个带有自身 TTyStyleController 的主题化 TTyForm，窗体与标题栏均已关联到它——TyControls 应用程序的根窗口。"
+
+#: tycontrols.design.rsdtappname
+msgid "TyControls Application"
+msgstr "TyControls 应用程序"
+
+#: tycontrols.design.rsdtappdescription
+msgid "A graphical TyControls application. The main form is a themed TTyForm (custom title bar + style controller); the tycontrols package is added automatically."
+msgstr "一个图形化的 TyControls 应用程序。主窗体是主题化的 TTyForm（自定义标题栏 + 样式控制器）；tycontrols 包将被自动添加。"
+
+#: tycontrols.design.rsdtabouttitle
+msgid "About TyControls"
+msgstr "关于 TyControls"
+
+#: tycontrols.design.rsdtabouttagline
+msgid "Themed LCL control library"
+msgstr "主题化 LCL 控件库"
+
+#: tycontrols.design.rsdtaboutversion
+#, object-pascal-format
+msgid "Version %s"
+msgstr "版本 %s"
+
+#: tycontrols.design.rsdtaboutok
+msgid "OK"
+msgstr "确定"
+
+#: tycontrols.design.rsdtpageadd
+msgid "Add Page"
+msgstr "添加页"
+
+#: tycontrols.design.rsdtpagedelete
+msgid "Delete Page"
+msgstr "删除页"
+
+#: tycontrols.design.rsdtpageshownext
+msgid "Show Next Page"
+msgstr "显示下一页"
+
+#: tycontrols.design.rsdtpageshowprev
+msgid "Show Previous Page"
+msgstr "显示上一页"
