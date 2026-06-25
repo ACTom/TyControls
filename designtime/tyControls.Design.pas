@@ -81,6 +81,27 @@ procedure Register;
 
 implementation
 
+resourcestring
+  rsDtFormName        = 'TyControls Form';
+  rsDtFormDescription = 'A borderless form descending from TTyForm, with a top-aligned ' +
+    'TTyTitleBar already attached (drag to move, double-click to maximize). Point its ' +
+    'Controller at your main window''s style controller to theme it, or lay out your controls ' +
+    'below the bar.';
+  rsDtMainFormName        = 'TyControls Main Form';
+  rsDtMainFormDescription = 'A themed TTyForm carrying its own TTyStyleController, with the ' +
+    'form and the title bar already associated to it — the root window for a TyControls application.';
+  rsDtAppName        = 'TyControls Application';
+  rsDtAppDescription = 'A graphical TyControls application. The main form is a themed TTyForm ' +
+    '(custom title bar + style controller); the tycontrols package is added automatically.';
+  rsDtAboutTitle   = 'About TyControls';
+  rsDtAboutTagline = 'Themed LCL control library';
+  rsDtAboutVersion = 'Version %s';
+  rsDtAboutOK      = 'OK';
+  rsDtPageAdd      = 'Add Page';
+  rsDtPageDelete   = 'Delete Page';
+  rsDtPageShowNext = 'Show Next Page';
+  rsDtPageShowPrev = 'Show Previous Page';
+
 var
   // The themed main-form descriptor, reused by the TyControls Application project's
   // CreateStartFiles. Held here so registration owns its (refcounted) lifetime.
@@ -148,7 +169,7 @@ begin
   if sc < 1 then sc := 1;
   F := TTyAboutForm.CreateNew(nil);
   try
-    F.Caption := 'About TyControls';
+    F.Caption := rsDtAboutTitle;
     F.BorderStyle := bsDialog;
     F.Position := poScreenCenter;
     F.HandleNeeded;                       // so F.Canvas measures at the real DPI
@@ -158,8 +179,8 @@ begin
     margin := gap + gap div 2;
 
     maxW := FW('TyControls', 22, True);
-    if FW('主题化 LCL 控件库', 13, False) > maxW then maxW := FW('主题化 LCL 控件库', 13, False);
-    if FW('Version ' + TyVersion, 11, False) > maxW then maxW := FW('Version ' + TyVersion, 11, False);
+    if FW(rsDtAboutTagline, 13, False) > maxW then maxW := FW(rsDtAboutTagline, 13, False);
+    if FW(Format(rsDtAboutVersion, [TyVersion]), 11, False) > maxW then maxW := FW(Format(rsDtAboutVersion, [TyVersion]), 11, False);
     if FW(TyHomepageUrl, 11, False) > maxW then maxW := FW(TyHomepageUrl, 11, False);
     if maxW < Round(420 * sc) then maxW := Round(420 * sc);   // floor for narrow content
     F.ClientWidth := maxW + 2 * margin;
@@ -176,18 +197,18 @@ begin
     Hdr.Caption := 'TyControls';
 
     y := hdrH + gap;
-    AddRow('主题化 LCL 控件库', 13, [], clWindowText);
-    AddRow('Version ' + TyVersion, 11, [], clGrayText);
+    AddRow(rsDtAboutTagline, 13, [], clWindowText);
+    AddRow(Format(rsDtAboutVersion, [TyVersion]), 11, [], clGrayText);
     LLink := AddRow(TyHomepageUrl, 11, [fsUnderline], clBlue);
     LLink.Cursor := crHandPoint;
     LLink.OnClick := @F.LinkClick;
 
     Inc(y, gap div 2);
     btnH := FH(11) + gap;
-    bw := FW('OK', 11, False) + 3 * gap;
+    bw := FW(rsDtAboutOK, 11, False) + 3 * gap;
     Btn := TButton.Create(F);
     Btn.Parent := F;
-    Btn.Caption := 'OK';
+    Btn.Caption := rsDtAboutOK;
     Btn.ModalResult := mrOk;
     Btn.Default := True;
     Btn.Cancel := True;
@@ -260,10 +281,10 @@ end;
 function TTyPageControlEditor.GetVerb(Index: Integer): string;
 begin
   case Index of
-    0: Result := 'Add Page';
-    1: Result := 'Delete Page';
-    2: Result := 'Show Next Page';
-    3: Result := 'Show Previous Page';
+    0: Result := rsDtPageAdd;
+    1: Result := rsDtPageDelete;
+    2: Result := rsDtPageShowNext;
+    3: Result := rsDtPageShowPrev;
   else
     Result := '';
   end;
@@ -393,14 +414,12 @@ end;
 
 function TTyFormFileDescriptor.GetLocalizedName: string;
 begin
-  Result := 'TyControls Form';
+  Result := rsDtFormName;
 end;
 
 function TTyFormFileDescriptor.GetLocalizedDescription: string;
 begin
-  Result := 'A borderless form descending from TTyForm, with a top-aligned TTyTitleBar ' +
-    'already attached (drag to move, double-click to maximize). Point its Controller at your ' +
-    'main window''s style controller to theme it, or lay out your controls below the bar.';
+  Result := rsDtFormDescription;
 end;
 
 { TTyMainFormFileDescriptor }
@@ -414,13 +433,12 @@ end;
 
 function TTyMainFormFileDescriptor.GetLocalizedName: string;
 begin
-  Result := 'TyControls Main Form';
+  Result := rsDtMainFormName;
 end;
 
 function TTyMainFormFileDescriptor.GetLocalizedDescription: string;
 begin
-  Result := 'A themed TTyForm carrying its own TTyStyleController, with the form and the ' +
-    'title bar already associated to it — the root window for a TyControls application.';
+  Result := rsDtMainFormDescription;
 end;
 
 { TTyApplicationDescriptor }
@@ -435,13 +453,12 @@ end;
 
 function TTyApplicationDescriptor.GetLocalizedName: string;
 begin
-  Result := 'TyControls Application';
+  Result := rsDtAppName;
 end;
 
 function TTyApplicationDescriptor.GetLocalizedDescription: string;
 begin
-  Result := 'A graphical TyControls application. The main form is a themed TTyForm ' +
-    '(custom title bar + style controller); the tycontrols package is added automatically.';
+  Result := rsDtAppDescription;
 end;
 
 function TTyApplicationDescriptor.InitProject(AProject: TLazProject): TModalResult;
