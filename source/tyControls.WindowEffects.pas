@@ -110,7 +110,9 @@ end;
 
 {$IFDEF LCLCOCOA}
 procedure ApplyCocoa(AForm: TCustomForm; const E: TTyWindowEffect);
-var v, content: NSView; win: NSWindow; r: CGFloat;
+// r is Double (not CGFloat): CocoaAll doesn't surface CGFloat in all FPC versions, and the
+// CALayer binding's setCornerRadius takes Double — which CGFloat already is on 64-bit macOS.
+var v, content: NSView; win: NSWindow; r: Double;
 begin
   v := NSView(AForm.Handle);          // LCL-Cocoa: Form.Handle is a TCocoaWindowContent (NSView)
   if v = nil then Exit;
