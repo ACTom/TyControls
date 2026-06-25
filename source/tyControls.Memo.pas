@@ -87,8 +87,11 @@ type
     // Embedded vertical scrollbar, lazily created on first overflow (owned by
     // Self via Create(Self), so freed by TComponent). nil until first needed.
     FScrollBar: TTyScrollBar;
+    // Embedded HORIZONTAL scrollbar (WordWrap=False only); drives FScrollX. Same
+    // lazy/owned lifecycle as FScrollBar. nil until first needed.
+    FHScrollBar: TTyScrollBar;
     // Reentrancy guard: TopLine->scrollbar.Position and scrollbar OnChange->
-    // SetTopLine would otherwise ping-pong.
+    // SetTopLine would otherwise ping-pong. Shared by both bars.
     FSyncingScroll: Boolean;
     // Lazy measuring bitmap (freed in Destroy). Shared by all per-line measures.
     FMeasureBmp: TBGRABitmap;
@@ -130,6 +133,9 @@ type
     // delete/Paste) are blocked and Cut degrades to Copy; navigation, selection,
     // Copy, SelectAll and programmatic Lines := still work. Default False.
     FReadOnly: Boolean;
+    // HideSelection (default True, matches TMemo): when the control is unfocused, paint no selection
+    // highlight. The selection itself is preserved; only its band is hidden.
+    FHideSelection: Boolean;
     // MaxLength: caps the TOTAL content codepoint count (sum of UTF8Length over
     // all logical lines; line breaks are NOT counted). 0 = unlimited. Blocks a
     // new printable char at the cap and truncates paste to the remaining room;
@@ -152,6 +158,7 @@ type
     // policy (this memo has no horizontal scrollbar — flagged, not implemented).
     FScrollBars: TScrollStyle;
     procedure SetReadOnly(AValue: Boolean);
+    procedure SetHideSelection(AValue: Boolean);
     procedure SetMaxLength(AValue: Integer);
     procedure SetWantTabs(AValue: Boolean);
     procedure SetWantReturns(AValue: Boolean);
@@ -195,8 +202,11 @@ type
     // Shared post-move routine for pure caret motion: clamp, keep visible, repaint.
     // Never fires OnChange.
     procedure AfterCaretMove(APPI: Integer);
-    // Scrollbar OnChange handler -> SetTopLine (guarded against ping-pong).
+    // Scrollbar OnChange handlers -> SetTopLine / FScrollX (guarded against ping-pong).
     procedure ScrollBarChange(Sender: TObject);
+    procedure HScrollBarChange(Sender: TObject);
+    // Height (device px) the horizontal bar steals from the content when visible, else 0.
+    function HScrollBarHeight: Integer;
     // Insert a FULL input-method commit (Qt6 path), bypassing LCL's TUTF8Char (String[7]) truncation.
     procedure HandleImeCommit(const ACommitUtf8: string);
     // Caret rect (client device px) for the Qt IME candidate window; empty when not focused.
@@ -483,22 +493,21 @@ type
     // When True (default), Enter inserts a line break; when False, Enter is not
     // consumed so the form's default button can handle it.
     property WantReturns: Boolean read FWantReturns write SetWantReturns default True;
-    // Which scrollbars show. Default ssAutoVertical = the historical behaviour (the
-    // embedded vertical bar appears on overflow). ssNone hides it entirely;
-    // ssVertical/ssBoth force it always-visible. This memo has no HORIZONTAL
-    // scrollbar, so the horizontal variants (ssHorizontal/ssBoth/ssAutoHorizontal/
-    // ssAutoBoth) honour only their vertical half (horizontal scrolling is a
-    // flagged, unimplemented feature).
+    // Which scrollbars show (like TMemo). Default ssAutoVertical (vertical bar on overflow).
+    //   ssNone           -> neither bar;
+    //   ssVertical/ssBoth   -> force the vertical bar;  ssAutoVertical/ssAutoBoth -> vertical on overflow;
+    //   ssHorizontal/ssBoth -> force the horizontal bar; ssAutoHorizontal/ssAutoBoth -> horizontal on overflow.
+    // The horizontal bar only applies when WordWrap=False (wrap mode never scrolls horizontally).
     property ScrollBars: TScrollStyle read FScrollBars write SetScrollBars
       default ssAutoVertical;
-    // Soft word-wrap toggle. Default False (no wrap; long lines later gain
-    // horizontal scrolling). True wraps long logical lines into multiple visual
-    // rows at word boundaries.
+    // Soft word-wrap toggle. Default False (no wrap; long lines scroll horizontally instead).
+    // True wraps long logical lines into multiple visual rows at word boundaries.
     property WordWrap: Boolean read FWordWrap write SetWordWrap default False;
     // When True, the memo ignores all user edits but still allows caret/selection
     // navigation, Copy and SelectAll; programmatic Lines := still mutates. Cut
     // acts as Copy. Default False.
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+    property HideSelection: Boolean read FHideSelection write SetHideSelection default True;
     // Caps total content codepoints (typing blocked at the cap; paste truncated
     // to the remaining room). 0 = unlimited. Default 0.
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
@@ -514,6 +523,38 @@ type
     // mutation (arrow keys, click, shift-select, programmatic SetCaret) and after
     // edits that move the caret. Self-guarded: a no-op move never fires.
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
+    // Standard control properties/events re-published to match TMemo (all inherited; the key/mouse
+    // overrides call inherited so the events fire). Color/BorderStyle are intentionally NOT published:
+    // this control is theme-/self-drawn. Alignment/CharCase/BidiMode are out of scope.
+    property TabStop default True;
+    property TabOrder;
+    property Visible;
+    property PopupMenu;
+    property ShowHint;
+    property ParentShowHint;
+    property Constraints;
+    property BorderSpacing;
+    property DragCursor;
+    property DragKind;
+    property DragMode;
+    property OnContextPopup;
+    property OnDblClick;
+    property OnDragDrop;
+    property OnDragOver;
+    property OnEndDrag;
+    property OnStartDrag;
+    property OnEditingDone;
+    property OnEnter;
+    property OnExit;
+    property OnKeyDown;
+    property OnKeyPress;
+    property OnKeyUp;
+    property OnMouseDown;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseMove;
+    property OnMouseUp;
+    property OnMouseWheel;
   end;
 
 implementation
@@ -545,6 +586,7 @@ begin
   FVisualRowsValid := False;
   FVisualRowsWidth := -1;
   FScrollBar := nil;
+  FHScrollBar := nil;
   FSyncingScroll := False;
   FMeasureBmp := nil;
   FLineWidthCache := specialize TDictionary<string, TTyIntArray>.Create;
@@ -553,6 +595,7 @@ begin
   FUndoStack := TTyUndoStack.Create;
   FSuspendUndo := False;
   FReadOnly := False;
+  FHideSelection := True;      // TMemo default: hide the selection highlight when unfocused
   FMaxLength := 0;
   FWantTabs := False;          // Tab navigates by default (native TMemo default)
   FWantReturns := True;        // Enter inserts a line break by default
@@ -612,6 +655,7 @@ begin
     FBlinkTimer.Enabled := True;
   end;
   TyGtkImeSetFocus(FImeHook, True);   // GTK2: start our IM context composing (no-op elsewhere)
+  Invalidate;   // show caret + (HideSelection) the selection band immediately on focus-gain
 end;
 
 procedure TTyMemo.DoExit;
@@ -759,6 +803,13 @@ begin
   if FReadOnly = AValue then Exit;
   FReadOnly := AValue;
   Invalidate;
+end;
+
+procedure TTyMemo.SetHideSelection(AValue: Boolean);
+begin
+  if FHideSelection = AValue then Exit;
+  FHideSelection := AValue;
+  if not Focused then Invalidate;   // only changes the unfocused appearance
 end;
 
 procedure TTyMemo.SetMaxLength(AValue: Integer);
@@ -1421,7 +1472,8 @@ begin
   // Use Height rather than ClientHeight so the result is testable headlessly
   // (in headless LCL without a native handle, ClientHeight can lag behind
   // SetBounds). For this borderless control Height = ClientHeight at runtime.
-  Result := Height div LH;
+  // Subtract the horizontal scrollbar's strip when it's showing.
+  Result := (Height - HScrollBarHeight) div LH;
   if Result < 1 then Result := 1;
 end;
 
@@ -1499,42 +1551,52 @@ begin
   end;
 end;
 
+procedure TTyMemo.HScrollBarChange(Sender: TObject);
+begin
+  if FSyncingScroll then Exit;
+  FSyncingScroll := True;
+  try
+    FScrollX := FHScrollBar.Position;
+    Invalidate;
+  finally
+    FSyncingScroll := False;
+  end;
+end;
+
+function TTyMemo.HScrollBarHeight: Integer;
+begin
+  if (FHScrollBar <> nil) and FHScrollBar.Visible then
+    Result := MulDiv(TyScrollbarSize, Font.PixelsPerInch, 96)
+  else
+    Result := 0;
+end;
+
 procedure TTyMemo.UpdateScrollBar;
 var
-  VR, MaxPos, MaxTop, Total: Integer;
-  WasVisible, WantBar: Boolean;
+  PPI, LH, VR, MaxPos, MaxTop, Total, SBW, viewW, hMax: Integer;
+  WasVisible, WantV, WantH: Boolean;
 begin
-  VR := VisibleRows;
-  Total := TotalVisualRows(Font.PixelsPerInch);
-  // Clamp FTopRow in case Lines were mutated directly (without SetLines).
-  MaxTop := Total - VR;
-  if MaxTop < 0 then MaxTop := 0;
-  if FTopRow > MaxTop then FTopRow := MaxTop;
-  // ScrollBars policy decides whether the embedded vertical bar shows:
-  //   ssNone                      -> never (hidden even under overflow);
-  //   ssVertical / ssBoth / ...   -> always (force visible even when it fits);
-  //   ssAutoVertical (default) and the horizontal variants we cannot honour
-  //                               -> on overflow only (the historical behaviour).
-  // This memo has NO horizontal scrollbar, so ssHorizontal/ssBoth/ssAutoHorizontal/
-  // ssAutoBoth degrade to the vertical policy (their horizontal half is a flagged,
-  // unimplemented feature). ssVertical/ssBoth force-show; the rest are auto.
+  PPI := Font.PixelsPerInch;
+  LH := LineHeight(PPI); if LH < 1 then LH := 1;
+  SBW := MulDiv(TyScrollbarSize, PPI, 96);   // both bars' thickness
+  Total := TotalVisualRows(PPI);
+
+  // ---- 1) Decide + apply the VERTICAL bar FIRST, from the full height (its overflow is row-count
+  //         driven and effectively independent of the hbar). Applying it now makes ContentWidthFor
+  //         reflect the real vbar, so the hbar's show-test and its scroll range below use ONE
+  //         consistent width (no stale-vbar transient). ----
+  VR := Height div LH; if VR < 1 then VR := 1;
   case FScrollBars of
-    ssNone:
-      WantBar := False;
-    ssVertical, ssBoth:
-      WantBar := True;
+    ssVertical, ssBoth: WantV := True;
+    ssAutoVertical, ssAutoBoth: WantV := Total > VR;
   else
-    WantBar := Total > VR;   // ssAutoVertical / ssAutoBoth / horizontal-only -> auto
+    WantV := False;   // ssNone / ssHorizontal / ssAutoHorizontal -> no vertical bar
   end;
-  if WantBar then
+  if WantV then
   begin
-    // Capture the bar's prior visibility BEFORE creating/flipping it. A bar that
-    // does not yet exist counts as previously-hidden: TControl.Visible defaults
-    // to True, so reading FScrollBar.Visible AFTER creation would falsely report
-    // the first-ever creation as "already visible" and skip the narrow rebuild
-    // below — undersizing Max by the rows the stolen SBWidth pushes off-screen.
+    // Prior visibility captured BEFORE creating/flipping: a not-yet-created bar counts as hidden
+    // (TControl.Visible defaults True), else the first-ever creation skips the WordWrap rebuild below.
     WasVisible := (FScrollBar <> nil) and FScrollBar.Visible;
-    // Ensure scrollbar created.
     if FScrollBar = nil then
     begin
       FScrollBar := TTyScrollBar.Create(Self);
@@ -1542,35 +1604,40 @@ begin
       FScrollBar.Kind := sbVertical;
       FScrollBar.Align := alRight;
       FScrollBar.OnChange := @ScrollBarChange;
-      // Embedded scrollbar drives content scrolling: keep it instant (no thumb
-      // glide) so scrolling never lags behind the wheel/keyboard.
-      FScrollBar.AnimationsEnabled := False;
+      FScrollBar.AnimationsEnabled := False;   // instant: scrolling never lags the wheel/keyboard
     end;
-    // Update DPI-dependent width and controller every call so DPI changes take effect.
-    FScrollBar.Width := MulDiv(TyScrollbarSize, Font.PixelsPerInch, 96);
+    FScrollBar.Width := SBW;
     FScrollBar.Controller := Self.Controller;
-    // SBWidth feedback (matters when WordWrap=True): making the bar visible steals
-    // SBWidth from the content width, which narrows the wrap and can yield MORE
-    // visual rows than the (wider) pre-scrollbar Total we just computed. If the
-    // visibility is flipping hidden->visible now, flip it FIRST, invalidate the
-    // row cache (so it rebuilds at the narrowed content width) and recompute Total
-    // so the range below covers EVERY settled row — otherwise the last wrapped
-    // rows could never scroll into view. No-op for WordWrap=False (content width
-    // is independent of the bar there, so the recomputed Total is unchanged).
-    if not WasVisible then
+    FScrollBar.Visible := True;
+    // WordWrap: a newly-visible vbar steals SBW from the content width -> narrower wrap -> MORE rows.
+    // Rebuild at the narrowed width and recompute Total so the range covers every settled row. No-op
+    // for WordWrap=False (width independent of the bar).
+    if (not WasVisible) and FWordWrap then
     begin
-      FScrollBar.Visible := True;
-      if FWordWrap then
-      begin
-        InvalidateVisualRows;
-        Total := TotalVisualRows(Font.PixelsPerInch);
-        MaxTop := Total - VR;
-        if MaxTop < 0 then MaxTop := 0;
-        if FTopRow > MaxTop then FTopRow := MaxTop;
-      end;
+      InvalidateVisualRows;
+      Total := TotalVisualRows(PPI);
     end;
-    MaxPos := Total - VR;
-    if MaxPos < 0 then MaxPos := 0;
+  end
+  else if FScrollBar <> nil then
+    FScrollBar.Visible := False;
+
+  // ---- 2) Decide the HORIZONTAL bar from the NOW-CURRENT content width (reflects the vbar just
+  //         applied). WordWrap=False only, and only with room for the bar plus a content row. ----
+  WantH := False;
+  if (not FWordWrap) and (Height >= 2 * SBW) then
+    case FScrollBars of
+      ssHorizontal, ssBoth: WantH := True;
+      ssAutoHorizontal, ssAutoBoth: WantH := WidestLineWidth(PPI) > ContentWidthFor(PPI);
+    end;
+
+  // ---- 3) Final visible-row count (the hbar steals a row), clamp FTopRow, set the vbar range. ----
+  VR := (Height - (Ord(WantH) * SBW)) div LH; if VR < 1 then VR := 1;
+  MaxTop := Total - VR; if MaxTop < 0 then MaxTop := 0;
+  if FTopRow > MaxTop then FTopRow := MaxTop;
+  if FTopRow < 0 then FTopRow := 0;
+  if WantV then
+  begin
+    MaxPos := Total - VR; if MaxPos < 0 then MaxPos := 0;
     FSyncingScroll := True;
     try
       FScrollBar.Min := 0;
@@ -1580,12 +1647,44 @@ begin
     finally
       FSyncingScroll := False;
     end;
-    FScrollBar.Visible := True;
+  end;
+
+  // ---- 4) Apply the HORIZONTAL bar (manual bottom strip, stopping before the vbar) ----
+  if WantH then
+  begin
+    if FHScrollBar = nil then
+    begin
+      FHScrollBar := TTyScrollBar.Create(Self);
+      FHScrollBar.Parent := Self;
+      FHScrollBar.Kind := sbHorizontal;
+      FHScrollBar.Align := alNone;   // manual: stops before the vbar so they don't fight for the corner
+      FHScrollBar.OnChange := @HScrollBarChange;
+      FHScrollBar.AnimationsEnabled := False;
+    end;
+    FHScrollBar.Height := SBW;
+    FHScrollBar.Controller := Self.Controller;
+    FHScrollBar.Visible := True;
+    FHScrollBar.SetBounds(0, Height - SBW, Width - (Ord(WantV) * SBW), SBW);
+    viewW := ContentWidthFor(PPI);
+    hMax := WidestLineWidth(PPI) - viewW; if hMax < 0 then hMax := 0;
+    if FScrollX > hMax then FScrollX := hMax;
+    if FScrollX < 0 then FScrollX := 0;
+    FSyncingScroll := True;
+    try
+      FHScrollBar.Min := 0;
+      FHScrollBar.Max := hMax;
+      FHScrollBar.PageSize := viewW;
+      FHScrollBar.Position := FScrollX;
+    finally
+      FSyncingScroll := False;
+    end;
   end
   else
   begin
-    if FScrollBar <> nil then
-      FScrollBar.Visible := False;
+    if FHScrollBar <> nil then FHScrollBar.Visible := False;
+    // No hbar: re-clamp a stale horizontal offset (line shrank, ScrollBars->ssNone, wrap toggled on),
+    // so a previously scrolled-off line isn't left stranded with no bar to bring it back.
+    ClampScrollX(PPI);
   end;
 end;
 
@@ -1707,6 +1806,10 @@ end;
 procedure TTyMemo.AfterEdit(APPI: Integer);
 begin
   ClampCaret;
+  // NOTE: AfterEdit is anchor-NEUTRAL on purpose. RestoreState (undo/redo) restores a selection and
+  // then calls AfterEdit, so collapsing the anchor here would defeat undo re-selection. Edit paths
+  // that should drop the selection collapse the anchor themselves before calling AfterEdit (typing,
+  // IME, Tab, paste, Enter-split).
   // The text model changed: any cached wrap layout is stale.
   InvalidateVisualRows;
   EnsureCaretLineVisible(APPI);
@@ -2306,6 +2409,9 @@ begin
     if HasSelection then DeleteSelection;
     // Normalise + split + splice the payload into one-or-more logical lines.
     InsertTextMultiline(S);
+    // Caret sits AFTER the pasted text with no selection (collapse the anchor).
+    FSelAnchorLine := FCaretLine;
+    FSelAnchorCol := FCaretCol;
     FDesiredCol := FCaretCol;
     AfterEdit(Font.PixelsPerInch);
   finally
@@ -2496,7 +2602,7 @@ var
   Widths: TTyIntArray;
   BandFill: TTyFill;
   BandColor: TTyColor;
-  DrawBand: Boolean;
+  DrawBand, ShowSel: Boolean;
 begin
   // Keep the scrollbar in sync (cheap; catches external Lines mutations).
   UpdateScrollBar;
@@ -2523,6 +2629,9 @@ begin
     SBWidth := 0;
     if (FScrollBar <> nil) and FScrollBar.Visible then
       SBWidth := MulDiv(TyScrollbarSize, APPI, 96);
+    // Keep text/caret above the horizontal scrollbar strip when it's showing.
+    if (FHScrollBar <> nil) and FHScrollBar.Visible then
+      ContentRect.Bottom := ContentRect.Bottom - MulDiv(TyScrollbarSize, APPI, 96);
 
     LH := LineHeight(APPI);
     ContentTop := ContentRect.Top;
@@ -2532,7 +2641,9 @@ begin
     // --selection = alpha(accent,0.30)). Only needed when a selection exists; the
     // band is filled per visible row below.
     SL := 0; SC := 0; EL := 0; EC := 0;
-    if HasSelection then
+    // HideSelection (TMemo): when unfocused, paint no selection band (the selection is preserved).
+    ShowSel := HasSelection and ((Focused or FForceFocused) or not FHideSelection);
+    if ShowSel then
     begin
       SelStyle := ActiveController.Model.ResolveStyle('TyTextSelection', '', []);
       GetOrderedSel(SL, SC, EL, EC);
@@ -2571,7 +2682,7 @@ begin
       // Generalised per visual row: with RS=0 it reduces to the legacy per-line
       // band exactly. RowBaseW shifts the row's columns so the segment's first
       // codepoint sits at ContentRect.Left.
-      if HasSelection and (RL >= SL) and (RL <= EL) then
+      if ShowSel and (RL >= SL) and (RL <= EL) then
       begin
         Widths := MeasureLineWidths(Line, APPI);
         RowBaseW := Widths[RS];
@@ -2855,6 +2966,9 @@ begin
         finally
           FSuspendUndo := False;
         end;
+        // Caret is at the start of the new line with no selection (collapse the anchor).
+        FSelAnchorLine := FCaretLine;
+        FSelAnchorCol := FCaretCol;
         FDesiredCol := FCaretCol;
         AfterEdit(APPI);
       end;

@@ -38,6 +38,9 @@ type
     procedure TestTypingRunCoalescesSingleUndo;
     procedure TestBackspaceMergeThenUndoRestoresTwoLines;
     procedure TestDeleteSelectionMultiLineThenUndoRestores;
+    procedure TestUndoRestoresSelection;
+    procedure TestPasteCollapsesSelection;
+    procedure TestEnterCollapsesSelection;
     procedure TestPasteMultiLineThenUndoIsOneStep;
     procedure TestCutMultiLineThenUndoIsOneStep;
     procedure TestTrailingEmptyLineRoundTrips;
@@ -224,6 +227,73 @@ begin
     AssertEquals('line 0', 'hello', M.Lines[0]);
     AssertEquals('line 1', 'world', M.Lines[1]);
     AssertEquals('line 2', 'foo', M.Lines[2]);
+  finally
+    M.Free;
+  end;
+end;
+
+procedure TTyMemoUndoTest.TestUndoRestoresSelection;
+// Undo must RE-SELECT what a delete removed. Regression guard: AfterEdit was briefly made to collapse
+// the anchor unconditionally, which silently defeated RestoreState's selection restore (the existing
+// delete-undo tests only check text, so nothing caught it).
+var
+  M: TTyMemoUndoAccess;
+begin
+  M := TTyMemoUndoAccess.Create(nil);
+  try
+    M.Font.PixelsPerInch := 96;
+    M.Lines.Text := 'hello';
+    M.SetCaretEx(0, 1);
+    M.SetSelAnchorEx(0, 4);          // select cols 1..4 ('ell')
+    AssertEquals('selection before delete', 3, M.SelLength);
+    M.ProbeKeyDown(VK_DELETE, []);
+    AssertEquals('no selection after delete', 0, M.SelLength);
+    AssertEquals('text after delete', 'ho', M.Lines[0]);
+    M.Undo;
+    AssertEquals('undo restores text', 'hello', M.Lines[0]);
+    AssertEquals('undo restores the selection', 3, M.SelLength);
+  finally
+    M.Free;
+  end;
+end;
+
+procedure TTyMemoUndoTest.TestPasteCollapsesSelection;
+// Paste leaves the caret AFTER the inserted text with NO selection (not the pasted text selected).
+var
+  M: TTyMemoUndoAccess;
+begin
+  M := TTyMemoUndoAccess.Create(nil);
+  try
+    M.Font.PixelsPerInch := 96;
+    M.Lines.Text := 'hello';
+    M.ClipText := 'XY';
+    M.SetCaretEx(0, 5);              // caret at end of line
+    M.PasteFromClipboard;
+    AssertEquals('text after paste', 'helloXY', M.Lines[0]);
+    AssertEquals('paste leaves no selection', 0, M.SelLength);
+    AssertEquals('caret sits after the pasted text', 7, M.SelStart);
+  finally
+    M.Free;
+  end;
+end;
+
+procedure TTyMemoUndoTest.TestEnterCollapsesSelection;
+// Enter over a selection replaces it with a line break and leaves NO selection (not the new break
+// selected). WantReturns defaults True.
+var
+  M: TTyMemoUndoAccess;
+begin
+  M := TTyMemoUndoAccess.Create(nil);
+  try
+    M.Font.PixelsPerInch := 96;
+    M.Lines.Text := 'hello';
+    M.SetCaretEx(0, 1);
+    M.SetSelAnchorEx(0, 4);          // select 'ell'
+    M.ProbeKeyDown(VK_RETURN, []);
+    AssertEquals('enter leaves no selection', 0, M.SelLength);
+    AssertEquals('split into two lines', 2, M.Lines.Count);
+    AssertEquals('line 0', 'h', M.Lines[0]);
+    AssertEquals('line 1', 'o', M.Lines[1]);
   finally
     M.Free;
   end;
