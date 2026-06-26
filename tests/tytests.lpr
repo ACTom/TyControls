@@ -48,6 +48,7 @@ uses
   test.statusbar,
   test.toolbar,
   test.litetrio.events,
+  test.datetime.events,
   test.popup,
   test.calendar,
   test.datetimepicker;
