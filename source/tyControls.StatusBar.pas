@@ -149,7 +149,7 @@ begin
   if FSimplePanel or (FPanels.Count = 0) then Exit;
   SetLength(ws, FPanels.Count);
   for i := 0 to FPanels.Count - 1 do ws[i] := FPanels[i].Width;
-  rects := TyStatusPanelRects(ws, ClientWidth, 6);   // 6 = logical padding; see RenderTo
+  rects := TyStatusPanelRects(ws, ClientWidth, MulDiv(6, Font.PixelsPerInch, 96));   // scale padding to match RenderTo's P.Scale(6)
   for i := 0 to High(rects) do
     if (X >= rects[i].Left) and (X < rects[i].Right) then Exit(i);
 end;
@@ -191,7 +191,7 @@ begin
       rects := TyStatusPanelRects(ws, W, padX);
       for i := 0 to High(rects) do
       begin
-        if i > 0 then   // separator before each panel after the first
+        if (i > 0) and (tpBorderColor in S.Present) then   // separator before each panel after the first (only when border color is present)
         begin
           bg.Color := S.BorderColor;
           P.FillBackground(Rect(rects[i].Left, P.Scale(3), rects[i].Left + 1, H - P.Scale(3)), bg, 0);
