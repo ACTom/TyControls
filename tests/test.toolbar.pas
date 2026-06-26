@@ -1,14 +1,36 @@
 unit test.toolbar;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, fpcunit, testregistry, tyControls.Types, tyControls.ToolBar;
+uses Classes, SysUtils, Types, Controls, Forms, fpcunit, testregistry,
+  tyControls.Types, tyControls.ToolBar, tyControls.Button;
 type
   TToolBarGeomTest = class(TTestCase)
   published
     procedure TestLayoutSingleRow;
     procedure TestLayoutWraps;
   end;
+
+  TTyToolBarAccess = class(TTyToolBar)
+  public
+    procedure ForceLayout;
+  end;
+
+  TToolBarControlTest = class(TTestCase)
+  published
+    procedure TestArrangesButtons;
+  end;
+
 implementation
+
+{ TTyToolBarAccess }
+procedure TTyToolBarAccess.ForceLayout;
+var dummy: TRect;
+begin
+  // Directly invoke AlignControls with a zero-rect (we only care about Left placement,
+  // not about Height auto-resize which is guarded by FInLayout anyway).
+  dummy := Rect(0, 0, Width, Height);
+  AlignControls(nil, dummy);
+end;
 procedure TToolBarGeomTest.TestLayoutSingleRow;
 var r: TTyRectArray; rows: Integer;
 begin
@@ -28,6 +50,58 @@ begin
   AssertEquals('i2 wrapped to indent', 4, r[2].Left);
   AssertTrue('i2 on row 2 (top > i0 top)', r[2].Top > r[0].Top);
 end;
+
+{ TToolBarControlTest }
+
+procedure TToolBarControlTest.TestArrangesButtons;
+var
+  Form: TForm;
+  TB: TTyToolBarAccess;
+  B1, B2: TTyButton;
+  ExpectedLeft: Integer;
+begin
+  // In headless LCL, Realign posts a deferred message that is never processed
+  // without a message pump.  We use a thin probe subclass (TTyToolBarAccess)
+  // that calls AlignControls directly, bypassing the deferred path.
+  // Width is set explicitly so the layout function works with a known bar width
+  // and ClientWidth is irrelevant (AlignControls reads ClientWidth, but we call
+  // it directly with Width via the probe -- the layout uses the 'Width' from
+  // the dummy rect we pass, so items land at deterministic positions).
+  Form := TForm.CreateNew(nil);
+  try
+    Form.SetBounds(0, 0, 400, 200);
+
+    TB := TTyToolBarAccess.Create(Form);
+    TB.Parent := Form;
+    // alNone: prevent LCL alignment engine from fighting our explicit bounds
+    TB.Align := alNone;
+    TB.Width := 300;
+    TB.Indent := 4;
+    TB.ButtonSpacing := 2;
+    TB.ButtonHeight := 24;
+    TB.Wrapable := True;
+
+    B1 := TTyButton.Create(Form);
+    B1.Parent := TB;
+    B1.Width := 60;
+
+    B2 := TTyButton.Create(Form);
+    B2.Parent := TB;
+    B2.Width := 60;
+
+    // Direct synchronous layout call (probe exposes the protected AlignControls).
+    // The dummy rect uses TB.Width so the bar-width is 300 and no wrapping occurs.
+    TB.ForceLayout;
+
+    // Button 2 should sit right after Button 1: Indent + B1.Width + ButtonSpacing
+    ExpectedLeft := TB.Indent + B1.Width + TB.ButtonSpacing;
+    AssertEquals('b2.Left = indent + b1.width + spacing', ExpectedLeft, B2.Left);
+  finally
+    Form.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TToolBarGeomTest);
+  RegisterTest(TToolBarControlTest);
 end.
