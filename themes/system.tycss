@@ -278,6 +278,31 @@ TyBadge {
   padding: 0px 4px;
 }
 
+/* ── Lightweight trio ──────────────────────────────────────────────────── */
+
+TySplitter {
+  background: none;
+  color: var(--muted);
+}
+TySplitter:hover {
+  color: var(--accent);
+}
+
+TyStatusBar {
+  background: var(--surface-chrome);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+}
+
+TyToolBar {
+  background: var(--surface-chrome);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+}
+
 /* ── @mode conditional token blocks (D7) ──────────────────────────────────────
    The accent SEED is `system-accent` (StyleModel swaps it for the OS accent at
    merge time). --ty-mode = `system-mode` so elevate()/on() pick the OS scheme.

@@ -106,6 +106,8 @@ begin
       tpBorderColor in m.ResolveStyle('TyGroupBox', '', []).Present);
     AssertTrue('TyLabel must set TextColor',
       tpTextColor in m.ResolveStyle('TyLabel', '', []).Present);
+    AssertBg('TyStatusBar', []);
+    AssertBg('TyToolBar', []);
   finally
     m.Free;
   end;

@@ -343,6 +343,31 @@ begin
     'TyMenuItem:active   { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyMenuItem:disabled { color: var(--muted); }' + LineEnding +
     '' + LineEnding +
+    '/* ── Lightweight trio ──────────────────────────────────────────────────── */' + LineEnding +
+    '' + LineEnding +
+    'TySplitter {' + LineEnding +
+    '  background: none;' + LineEnding +
+    '  color: var(--muted);' + LineEnding +
+    '}' + LineEnding +
+    'TySplitter:hover {' + LineEnding +
+    '  color: var(--accent);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    'TyStatusBar {' + LineEnding +
+    '  background: var(--surface-chrome);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-normal);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    'TyToolBar {' + LineEnding +
+    '  background: var(--surface-chrome);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '/* ── @mode conditional token blocks (D7) ──────────────────────────────── */' + LineEnding +
     '' + LineEnding +
     '@mode light {' + LineEnding +
@@ -738,6 +763,31 @@ begin
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-bold);' + LineEnding +
     '  padding: 0px 4px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* ── Lightweight trio ──────────────────────────────────────────────────── */' + LineEnding +
+    '' + LineEnding +
+    'TySplitter {' + LineEnding +
+    '  background: none;' + LineEnding +
+    '  color: var(--muted);' + LineEnding +
+    '}' + LineEnding +
+    'TySplitter:hover {' + LineEnding +
+    '  color: var(--accent);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    'TyStatusBar {' + LineEnding +
+    '  background: var(--surface-chrome);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-normal);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    'TyToolBar {' + LineEnding +
+    '  background: var(--surface-chrome);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ── @mode conditional token blocks (D7) ──────────────────────────────────────' + LineEnding +

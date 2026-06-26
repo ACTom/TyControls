@@ -308,3 +308,28 @@ TyBadge {
   font-weight: 700;
   padding: 0px 4px;
 }
+
+/* ── Lightweight trio ──────────────────────────────────────────────────── */
+
+TySplitter {
+  background: none;
+  color: var(--muted);
+}
+TySplitter:hover {
+  color: var(--accent);
+}
+
+TyStatusBar {
+  background: darken(--surface, 4%);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  font-size: 9px;
+  font-weight: 400;
+}
+
+TyToolBar {
+  background: darken(--surface, 4%);
+  border-color: var(--border);
+  border-width: 1px;
+}

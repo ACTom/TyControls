@@ -325,6 +325,31 @@ TyMenuItem:hover    { background: var(--surface-hover); }
 TyMenuItem:active   { background: var(--accent); color: var(--on-accent); }
 TyMenuItem:disabled { color: var(--muted); }
 
+/* ── Lightweight trio ──────────────────────────────────────────────────── */
+
+TySplitter {
+  background: none;
+  color: var(--muted);
+}
+TySplitter:hover {
+  color: var(--accent);
+}
+
+TyStatusBar {
+  background: var(--surface-chrome);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+}
+
+TyToolBar {
+  background: var(--surface-chrome);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+}
+
 /* ── @mode conditional token blocks (D7) ──────────────────────────────── */
 
 @mode light {
