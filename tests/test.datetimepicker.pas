@@ -3,6 +3,7 @@ unit test.datetimepicker;
 {
   Task C1 — pure-function tests for tyControls.DateTimePicker.
   Task C2 — control tests: probe + synthetic keys, segment editing, pixel test.
+  Task C3 — dropdown/spin/ShowCheckBox wiring tests.
 
   All tests use a PINNED TFormatSettings built locally so the host locale
   never leaks.  No GUI, no file I/O for the pure tests.
@@ -14,7 +15,7 @@ uses
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.DefaultTheme, tyControls.DateTimePicker;
+  tyControls.DefaultTheme, tyControls.DateTimePicker, tyControls.Calendar;
 
 type
   { Tests for TyFormatDateTime, TyDateTimeSegments, TySegmentStep,
@@ -145,6 +146,60 @@ type
     procedure TestActiveSegmentHighlightPresent;
     procedure TestButtonGlyphPresent_dtkDate;
     procedure TestButtonGlyphPresent_dtkTime;
+  end;
+
+  { Task C3: extended probe that exposes additional test seams.
+    Extends TTyDateTimePickerProbe so SimKeyDown/SimKeyPress are inherited. }
+  TTyDateTimePickerProbeC3 = class(TTyDateTimePickerProbe)
+  public
+    { Ensure the lazy popup+calendar are created (calls protected EnsurePopup). }
+    procedure EnsurePopupForTest;
+    { Simulate a CalendarAccepted call for headless testing.
+      Seeds the internal FCalendar with ADate then calls the accept handler. }
+    procedure SimCalendarAccept(ADate: TDateTime);
+    { Simulate a mouse-down on the up spin button for dtkTime testing.
+      Calls StepActiveSeg(+1) directly. }
+    procedure SimSpinUp;
+    { Simulate a mouse-down on the down spin button for dtkTime testing. }
+    procedure SimSpinDown;
+    { Simulate toggling the ShowCheckBox (as if the user clicked it). }
+    procedure SimToggleCheckBox;
+  end;
+
+  { Task C3: dropdown wiring + ShowCheckBox tests }
+  TDateTimePickerC3Test = class(TTestCase)
+  private
+    FPicker:    TTyDateTimePickerProbeC3;
+    FChangeCount: Integer;
+    FCloseUpCount: Integer;
+    FCheckedCount: Integer;
+    procedure OnChange(Sender: TObject);
+    procedure OnCloseUp(Sender: TObject);
+    procedure OnChecked(Sender: TObject);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { dtkDate CalendarAccepted: DateTime date-part updates + OnChange fires +
+      OnCloseUp fires + DroppedDown becomes False. }
+    procedure TestCalendarAccept_UpdatesDateAndFiresEvents;
+    { dtkDate CalendarAccepted: time-part of DateTime is preserved. }
+    procedure TestCalendarAccept_PreservesTimePart;
+    { dtkTime spin-up steps the active segment (assert DateTime changed). }
+    procedure TestSpinUp_StepsActiveSeg;
+    { dtkTime spin-down steps the active segment in the other direction. }
+    procedure TestSpinDown_StepsActiveSeg;
+    { ShowCheckBox=True, Checked=False: digit key does NOT change DateTime. }
+    procedure TestInert_DigitDoesNotChangeDateTime;
+    { ShowCheckBox=True, Checked=False: step does NOT change DateTime. }
+    procedure TestInert_StepDoesNotChangeDateTime;
+    { ShowCheckBox=True, Checked=False: no OnChange fired. }
+    procedure TestInert_NoOnChangeFired;
+    { ShowCheckBox=True, Checked=False → toggle → Checked becomes True
+      and OnChecked fires. }
+    procedure TestCheckBoxToggle_FiresOnChecked_FlipsChecked;
+    { After toggling Checked, editing is re-enabled (digit key works). }
+    procedure TestCheckBoxToggle_ReEnablesEditing;
   end;
 
 implementation
@@ -1107,10 +1162,240 @@ begin
   end;
 end;
 
+{ ── TTyDateTimePickerProbeC3 ─────────────────────────────────────────────── }
+
+procedure TTyDateTimePickerProbeC3.EnsurePopupForTest;
+begin
+  { EnsurePopup is protected — accessible from the subclass. }
+  EnsurePopup;
+end;
+
+procedure TTyDateTimePickerProbeC3.SimCalendarAccept(ADate: TDateTime);
+begin
+  { Force-create the popup+calendar if not yet done (lazy init). }
+  EnsurePopupForTest;
+  { Seed the calendar's Date directly. }
+  Calendar.Date := ADate;
+  { Invoke the accept handler through the calendar's OnAccept event.
+    This simulates what happens when the user clicks a day cell or presses Enter. }
+  if Assigned(Calendar.OnAccept) then
+    Calendar.OnAccept(Calendar);
+end;
+
+procedure TTyDateTimePickerProbeC3.SimSpinUp;
+begin
+  { StepActiveSeg is protected — accessible from the subclass. }
+  StepActiveSeg(+1);
+end;
+
+procedure TTyDateTimePickerProbeC3.SimSpinDown;
+begin
+  StepActiveSeg(-1);
+end;
+
+procedure TTyDateTimePickerProbeC3.SimToggleCheckBox;
+begin
+  { Simulate a checkbox toggle: flip Checked and fire OnChecked. }
+  Checked := not Checked;
+  if Assigned(OnChecked) then OnChecked(Self);
+end;
+
+{ ── TDateTimePickerC3Test ────────────────────────────────────────────────── }
+
+procedure TDateTimePickerC3Test.OnChange(Sender: TObject);
+begin
+  Inc(FChangeCount);
+end;
+
+procedure TDateTimePickerC3Test.OnCloseUp(Sender: TObject);
+begin
+  Inc(FCloseUpCount);
+end;
+
+procedure TDateTimePickerC3Test.OnChecked(Sender: TObject);
+begin
+  Inc(FCheckedCount);
+end;
+
+procedure TDateTimePickerC3Test.SetUp;
+begin
+  FPicker := TTyDateTimePickerProbeC3.Create(nil);
+  FPicker.Font.PixelsPerInch := 96;
+  FPicker.Kind       := dtkDate;
+  FPicker.DateFormat := 'yyyy-mm-dd';
+  FPicker.DateTime   := EncodeDate(2026, 6, 15) + EncodeTime(10, 30, 0, 0);
+  FPicker.OnChange   := @OnChange;
+  FPicker.OnCloseUp  := @OnCloseUp;
+  FPicker.OnChecked  := @OnChecked;
+  FChangeCount  := 0;
+  FCloseUpCount := 0;
+  FCheckedCount := 0;
+end;
+
+procedure TDateTimePickerC3Test.TearDown;
+begin
+  FPicker.Free;
+end;
+
+procedure TDateTimePickerC3Test.TestCalendarAccept_UpdatesDateAndFiresEvents;
+{ Simulate accepting a different date via the calendar: assert:
+  - DateTime date-part = accepted date
+  - OnChange fired (at least once)
+  - OnCloseUp fired (at least once)
+  - DroppedDown = False (popup not open) }
+var
+  Y, M, D, H, Mi, S, MS: Word;
+begin
+  { Initial: 2026-06-15 }
+  FChangeCount  := 0;
+  FCloseUpCount := 0;
+
+  { Simulate accepting 2026-07-20 from the calendar }
+  FPicker.SimCalendarAccept(EncodeDate(2026, 7, 20));
+
+  DecodeDateTime(FPicker.DateTimeForTest, Y, M, D, H, Mi, S, MS);
+  AssertEquals('date-part year', 2026, Integer(Y));
+  AssertEquals('date-part month', 7,    Integer(M));
+  AssertEquals('date-part day', 20,     Integer(D));
+  AssertTrue('OnChange fired at least once', FChangeCount >= 1);
+  AssertTrue('OnCloseUp fired at least once', FCloseUpCount >= 1);
+  AssertFalse('DroppedDown is False after accept', FPicker.DroppedDown);
+end;
+
+procedure TDateTimePickerC3Test.TestCalendarAccept_PreservesTimePart;
+{ After accepting a new date the time part of the original DateTime should
+  be preserved (not zeroed out). }
+var
+  Y, M, D, H, Mi, S, MS: Word;
+begin
+  { Initial DateTime has time 10:30:00 }
+  FPicker.SimCalendarAccept(EncodeDate(2026, 8, 1));
+  DecodeDateTime(FPicker.DateTimeForTest, Y, M, D, H, Mi, S, MS);
+  AssertEquals('time hour preserved', 10, Integer(H));
+  AssertEquals('time minute preserved', 30, Integer(Mi));
+end;
+
+procedure TDateTimePickerC3Test.TestSpinUp_StepsActiveSeg;
+{ dtkTime spin-up: active segment steps +1 → DateTime changes. }
+var
+  Before, After: TDateTime;
+  Key: Word;
+begin
+  FPicker.Kind       := dtkTime;
+  FPicker.TimeFormat := 'hh:nn:ss';
+  FPicker.DateTime   := EncodeTime(10, 30, 0, 0);
+  FChangeCount := 0;
+  { Move to hour segment (seg 0) }
+  Key := VK_HOME;
+  FPicker.SimKeyDown(Key);
+  Before := FPicker.DateTimeForTest;
+  FPicker.SimSpinUp;
+  After := FPicker.DateTimeForTest;
+  AssertTrue('DateTime changed after spin-up', Before <> After);
+  AssertTrue('OnChange fired', FChangeCount >= 1);
+end;
+
+procedure TDateTimePickerC3Test.TestSpinDown_StepsActiveSeg;
+{ dtkTime spin-down: active segment steps -1 → DateTime changes. }
+var
+  Before, After: TDateTime;
+  Key: Word;
+begin
+  FPicker.Kind       := dtkTime;
+  FPicker.TimeFormat := 'hh:nn:ss';
+  FPicker.DateTime   := EncodeTime(10, 30, 0, 0);
+  FChangeCount := 0;
+  Key := VK_HOME;
+  FPicker.SimKeyDown(Key);
+  Before := FPicker.DateTimeForTest;
+  FPicker.SimSpinDown;
+  After := FPicker.DateTimeForTest;
+  AssertTrue('DateTime changed after spin-down', Before <> After);
+end;
+
+procedure TDateTimePickerC3Test.TestInert_DigitDoesNotChangeDateTime;
+{ ShowCheckBox=True, Checked=False → field is inert → digit key must not
+  change DateTime and must not fire OnChange. }
+var
+  Before: TDateTime;
+begin
+  FPicker.ShowCheckBox := True;
+  FPicker.Checked      := False;
+  FChangeCount         := 0;
+  Before := FPicker.DateTimeForTest;
+  FPicker.SimKeyPress('5');
+  AssertEquals('DateTime unchanged when inert', Before, FPicker.DateTimeForTest);
+  AssertEquals('DigitBuffer empty when inert', '', FPicker.DigitBuffer);
+end;
+
+procedure TDateTimePickerC3Test.TestInert_StepDoesNotChangeDateTime;
+{ ShowCheckBox=True, Checked=False → VK_UP must not change DateTime. }
+var
+  Before: TDateTime;
+  Key: Word;
+begin
+  FPicker.ShowCheckBox := True;
+  FPicker.Checked      := False;
+  FChangeCount         := 0;
+  Before := FPicker.DateTimeForTest;
+  Key := VK_UP;
+  FPicker.SimKeyDown(Key);
+  AssertEquals('DateTime unchanged on VK_UP when inert', Before, FPicker.DateTimeForTest);
+end;
+
+procedure TDateTimePickerC3Test.TestInert_NoOnChangeFired;
+{ ShowCheckBox=True, Checked=False → no OnChange from digit or step. }
+var
+  Key: Word;
+begin
+  FPicker.ShowCheckBox := True;
+  FPicker.Checked      := False;
+  FChangeCount         := 0;
+  FPicker.SimKeyPress('3');
+  Key := VK_UP;
+  FPicker.SimKeyDown(Key);
+  AssertEquals('OnChange never fires when inert', 0, FChangeCount);
+end;
+
+procedure TDateTimePickerC3Test.TestCheckBoxToggle_FiresOnChecked_FlipsChecked;
+{ When ShowCheckBox=True and Checked=False, toggling the checkbox flips
+  Checked to True and fires OnChecked. }
+begin
+  FPicker.ShowCheckBox := True;
+  FPicker.Checked      := False;
+  FCheckedCount        := 0;
+  FPicker.SimToggleCheckBox;
+  AssertTrue('Checked is now True after toggle', FPicker.Checked);
+  AssertEquals('OnChecked fired once', 1, FCheckedCount);
+end;
+
+procedure TDateTimePickerC3Test.TestCheckBoxToggle_ReEnablesEditing;
+{ After toggling Checked=True, a digit key MUST update DateTime (field is
+  no longer inert). }
+var
+  Before: TDateTime;
+begin
+  FPicker.ShowCheckBox := True;
+  FPicker.Checked      := False;
+  { Toggle on → now Checked=True }
+  FPicker.SimToggleCheckBox;
+  AssertTrue('Checked is True', FPicker.Checked);
+  FChangeCount := 0;
+  { Move to seg 0 (year) and type '2026' }
+  FPicker.DateTime := EncodeDate(2026, 6, 15);
+  Before := FPicker.DateTimeForTest;
+  FPicker.SimKeyPress('1');    // digit: should now work
+  { Even if it doesn't finalize yet (need more digits for year), the buffer
+    should be non-empty — showing editing is unblocked. }
+  AssertTrue('DigitBuffer non-empty after re-enabled edit',
+    FPicker.DigitBuffer <> '');
+end;
+
 initialization
   RegisterTest(TDateTimePickerPureTest);
   RegisterTest(TDateTimeActiveSegAtTest);
   RegisterTest(TDateTimePickerControlTest);
   RegisterTest(TDateTimePickerPixelTest);
+  RegisterTest(TDateTimePickerC3Test);
 
 end.

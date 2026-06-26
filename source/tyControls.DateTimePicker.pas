@@ -2,7 +2,7 @@ unit tyControls.DateTimePicker;
 {$mode objfpc}{$H+}
 {
   tyControls.DateTimePicker — pure-function section (Task C1)
-                            + TTyDateTimePicker control (Task C2).
+                            + TTyDateTimePicker control (Task C2 + C3).
 
   No-carry / roll-within-field decision
   ======================================
@@ -38,15 +38,41 @@ unit tyControls.DateTimePicker;
   ←/→/Home/End/Enter/Escape on navigation, ↑/↓ (step), focus-out.
   On finalize with a non-empty buffer: parse → clamp to [segMin,segMax] →
   write FDateTime → clamp to [MinDate,MaxDate] → CommitAndFire → clear buffer.
+
+  dtkDate dropdown (Task C3)
+  ==========================
+  FPopup: TTyDropdownPopup is lazy (created on first open) and lives for the
+  lifetime of the picker.  FCalendar: TTyCalendar is owned by the PICKER
+  (Create(Self)) — not by the popup form — so FreeAndNil(FPopup) never
+  double-frees the calendar, and the destructor frees both independently:
+    FreeAndNil(FPopup);    // frees the popup helper + its form (not calendar)
+    FreeAndNil(FCalendar); // frees the calendar (owned by Self)
+  SetContent(FCalendar) only parents the calendar into the popup form; it does
+  not transfer ownership (the popup's destructor sets FContent := nil without
+  freeing it, per TTyDropdownPopup.Destroy).
+
+  Calendar OnAccept vs OnChange:
+    OnAccept fires when the user clicks a day cell or presses Enter/Space; this
+    is the CLOSE trigger so that arrow-key navigation does NOT dismiss the popup.
+    OnChange fires on every navigation step (arrow keys) and updates FDateTime
+    immediately (so the picker's field text tracks while the popup is open) but
+    does NOT close the popup.
+
+  ShowCheckBox / Checked inert state:
+    When ShowCheckBox=True and Checked=False the control is "null": all editing
+    (digit entry, step, wheel, dropdown open) is blocked.  Clicking the checkbox
+    area toggles Checked and fires OnChecked.  When ShowCheckBox=False the
+    Checked property is irrelevant and IsInert always returns False.
 }
 
 interface
 
 uses
   Classes, SysUtils, Types, DateUtils,
-  Controls, Graphics, LCLType,
+  Controls, Graphics, LCLType, LCLIntf,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation,
+  tyControls.Popup, tyControls.Calendar;
 
 type
   TTyDateTimeKind = (dtkDate, dtkTime);
@@ -128,7 +154,9 @@ type
     FTimeFormat:  string;
     FReadOnly:    Boolean;
     FOnChange:    TNotifyEvent;
-    { ShowCheckBox / Checked — storage stubs; wired to rendering in Task C3 }
+    FOnDropDown:  TNotifyEvent;
+    FOnCloseUp:   TNotifyEvent;
+    FOnChecked:   TNotifyEvent;
     FShowCheckBox: Boolean;
     FChecked:      Boolean;
 
@@ -137,6 +165,14 @@ type
     FActiveSeg:   Integer;          // index into FSegments; -1 = none
     FDigitBuffer: string;           // accumulated digit chars for current seg
                                     // (not yet written to FDateTime)
+
+    { Dropdown state (dtkDate) }
+    FPopup:       TTyDropdownPopup; // lazy; created on first open; freed in Destroy
+    FCalendar:    TTyCalendar;      // owned by Self (NOT the popup form); created
+                                    // on first open alongside FPopup; freed in Destroy.
+                                    // SetContent(FCalendar) only parents the calendar
+                                    // into the popup form — ownership stays with Self.
+    FCloseUpTick: QWord;            // tick at last CloseUp for the reopen-race guard
 
     function  ActiveFormat: string;
     function  EffectiveFormat: string;
@@ -161,8 +197,35 @@ type
     { Commit: clamp FDateTime to [MinDate,MaxDate] and fire OnChange if changed.
       AOldVal is the value before any digit/step that triggered the commit. }
     procedure CommitAndFire(AOldVal: TDateTime);
-    { Step the active segment by ADelta and commit. }
-    procedure StepActiveSeg(ADelta: Integer);
+    { Step the active segment by ADelta and commit.
+      Moved to protected so test probes (in other units) can call it directly. }
+    // procedure StepActiveSeg(ADelta: Integer);   [moved to protected]
+
+    { Returns True when the field is inert: ShowCheckBox=True AND Checked=False.
+      All editing and dropdown must be blocked when this is True. }
+    function  IsInert: Boolean;
+    { Resolve the checkbox box rect within ATextR (left of text content) @APPI. }
+    function  CheckBoxRect(const ATextR: TRect; APPI: Integer): TRect;
+
+    { Dropdown helpers (dtkDate) }
+    { Ensure FPopup + FCalendar are created (lazy init).
+      Moved to protected so test probes can call it. }
+    // procedure EnsurePopup;   [moved to protected]
+    { Open the calendar dropdown. }
+    procedure OpenDropDown;
+    { Close the dropdown (if open). }
+    procedure CloseDropDown;
+    { TTyDropdownPopup.OnClose handler: marks DroppedDown=False + fires OnCloseUp. }
+    procedure PopupClosed(Sender: TObject);
+    { Popup form KeyDown: closes on Escape. }
+    procedure PopupFormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    { TTyCalendar.OnChange handler: writes the date part back to FDateTime +
+      fires OnChange (via SetDateTime).  Does NOT close the popup so that
+      arrow-key navigation inside the calendar does not dismiss it. }
+    procedure CalendarChange(Sender: TObject);
+    { TTyCalendar.OnAccept handler: writes the date part back + closes the popup.
+      Fires OnChange (via SetDateTime) then FPopup.Close. }
+    procedure CalendarAccepted(Sender: TObject);
 
     procedure SetKind(AValue: TTyDateTimeKind);
     procedure SetDateTime(AValue: TDateTime);
@@ -177,8 +240,15 @@ type
     procedure SetReadOnly(AValue: Boolean);
     procedure SetShowCheckBox(AValue: Boolean);
     procedure SetChecked(AValue: Boolean);
+    function  GetDroppedDown: Boolean;
+    procedure SetDroppedDown(AValue: Boolean);
 
   protected
+    { Step the active segment by ADelta and commit (protected for test probes). }
+    procedure StepActiveSeg(ADelta: Integer);
+    { Ensure FPopup + FCalendar are created (lazy init; protected for probes). }
+    procedure EnsurePopup;
+
     function  GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -201,6 +271,9 @@ type
     property ActiveSeg:   Integer   read FActiveSeg;
     property Segments:    TTySegmentArray read FSegments;
     property DigitBuffer: string    read FDigitBuffer;
+    { Expose popup and calendar for test probes }
+    property Popup:       TTyDropdownPopup read FPopup;
+    property Calendar:    TTyCalendar      read FCalendar;
 
   published
     { Published so DateTime appears in the Object Inspector and is streamed. }
@@ -213,7 +286,11 @@ type
     property ReadOnly:     Boolean         read FReadOnly    write SetReadOnly    default False;
     property ShowCheckBox: Boolean         read FShowCheckBox write SetShowCheckBox default False;
     property Checked:      Boolean         read FChecked     write SetChecked     default True;
+    property DroppedDown:  Boolean         read GetDroppedDown write SetDroppedDown;
     property OnChange:     TNotifyEvent    read FOnChange    write FOnChange;
+    property OnDropDown:   TNotifyEvent    read FOnDropDown  write FOnDropDown;
+    property OnCloseUp:    TNotifyEvent    read FOnCloseUp   write FOnCloseUp;
+    property OnChecked:    TNotifyEvent    read FOnChecked   write FOnChecked;
     property Align;
     property Anchors;
     property Font;
@@ -617,6 +694,9 @@ begin
   FChecked       := True;
   FActiveSeg     := 0;
   FDigitBuffer   := '';
+  FPopup         := nil;
+  FCalendar      := nil;
+  FCloseUpTick   := 0;
   Width  := 130;
   Height := 24;
   RebuildSegments;
@@ -624,6 +704,15 @@ end;
 
 destructor TTyDateTimePicker.Destroy;
 begin
+  { Free the popup helper first: it hides the form and fires OnClose
+    (PopupClosed), which accesses FPopup.CloseUpTick.  Detach the handler
+    before freeing so we don't re-enter during destruction. }
+  if FPopup <> nil then
+    FPopup.OnClose := nil;
+  FreeAndNil(FPopup);
+  { FCalendar is owned by Self (not by the popup form), so free it after the
+    popup to avoid any use-after-free if the popup form tried to access it. }
+  FreeAndNil(FCalendar);
   inherited Destroy;
 end;
 
@@ -862,6 +951,150 @@ begin
   CommitAndFire(OldVal);
 end;
 
+{ ── IsInert / CheckBoxRect ───────────────────────────────────────────────── }
+
+function TTyDateTimePicker.IsInert: Boolean;
+begin
+  Result := FShowCheckBox and not FChecked;
+end;
+
+function TTyDateTimePicker.CheckBoxRect(const ATextR: TRect; APPI: Integer): TRect;
+{ Returns the small checkbox box rect aligned vertically within ATextR. }
+var
+  BoxSize, MidY: Integer;
+begin
+  BoxSize := MulDiv(TyCheckBoxBox, APPI, 96);
+  MidY    := ATextR.Top + (ATextR.Bottom - ATextR.Top - BoxSize) div 2;
+  Result  := Rect(ATextR.Left, MidY, ATextR.Left + BoxSize, MidY + BoxSize);
+end;
+
+{ ── Dropdown helpers (dtkDate) ───────────────────────────────────────────── }
+
+procedure TTyDateTimePicker.EnsurePopup;
+begin
+  if FPopup <> nil then Exit;
+
+  { Create the calendar first (owned by Self, so FreeAndNil(FCalendar) frees it). }
+  FCalendar             := TTyCalendar.Create(Self);
+  FCalendar.Controller  := Self.Controller;
+  FCalendar.OnChange    := @CalendarChange;
+  FCalendar.OnAccept    := @CalendarAccepted;
+
+  { Create the popup helper (owns its form; does NOT own FCalendar). }
+  FPopup            := TTyDropdownPopup.Create;
+  FPopup.Controller := Self.Controller;
+  FPopup.OnClose    := @PopupClosed;
+
+  { Parent the calendar into the popup form (SetContent does NOT transfer ownership). }
+  FPopup.SetContent(FCalendar);
+
+  { Allow Escape to close the popup from anywhere in the popup form. }
+  FPopup.Form.KeyPreview := True;
+  FPopup.Form.OnKeyDown  := @PopupFormKeyDown;
+end;
+
+procedure TTyDateTimePicker.OpenDropDown;
+var
+  CalStyle: TTyStyleSet;
+  Radius: Integer;
+begin
+  if IsInert then Exit;
+  if FKind <> dtkDate then Exit;
+  if (FPopup <> nil) and FPopup.IsOpen then Exit;
+
+  { Guard the click-while-open reopen race: the popup deactivates (fires
+    PopupClosed → Close) BEFORE the picker's MouseDown/Click handler runs.
+    Suppress reopen if CloseUp happened within the last 200 ms. }
+  if GetTickCount64 - FCloseUpTick <= 200 then Exit;
+
+  EnsurePopup;
+
+  { Seed the calendar from the picker's current state. }
+  FCalendar.Date          := DateOf(FDateTime);
+  FCalendar.MinDate       := FMinDate;
+  FCalendar.MaxDate       := FMaxDate;
+  FCalendar.FirstDayOfWeek := wdSunday;
+  FCalendar.Controller    := Self.Controller;
+
+  { Match the popup corner radius to the calendar's resolved border-radius. }
+  CalStyle := FCalendar.Controller.Model.ResolveStyle('TyCalendar', '', []);
+  Radius   := CalStyle.BorderRadius;
+  FPopup.CornerRadiusLogical := Radius;
+  FPopup.Controller := Self.Controller;
+
+  if Assigned(FOnDropDown) then FOnDropDown(Self);
+
+  { Show the popup below (or above) the picker control. }
+  FPopup.Popup(Self, 240, 220);
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.CloseDropDown;
+begin
+  if (FPopup <> nil) and FPopup.IsOpen then
+    FPopup.Close
+  else
+  begin
+    { Headless path: no real window, but still update tick and fire events. }
+    FCloseUpTick := GetTickCount64;
+    Invalidate;
+    if Assigned(FOnCloseUp) then FOnCloseUp(Self);
+  end;
+end;
+
+procedure TTyDateTimePicker.PopupClosed(Sender: TObject);
+begin
+  if FPopup <> nil then
+    FCloseUpTick := FPopup.CloseUpTick;
+  Invalidate;
+  if Assigned(FOnCloseUp) then FOnCloseUp(Self);
+end;
+
+procedure TTyDateTimePicker.PopupFormKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  if Key = VK_ESCAPE then
+  begin
+    CloseDropDown;
+    Key := 0;
+  end;
+end;
+
+procedure TTyDateTimePicker.CalendarChange(Sender: TObject);
+{ OnChange: arrow-key navigation inside the popup.  Update the date part of
+  FDateTime so the picker text follows live, but do NOT close the popup. }
+var
+  OldVal: TDateTime;
+begin
+  if FCalendar = nil then Exit;
+  OldVal    := FDateTime;
+  { Keep the time part; replace only the date part. }
+  FDateTime := DateOf(FCalendar.Date) + Frac(FDateTime);
+  { Clamp to [MinDate, MaxDate] }
+  if (FMinDate <> 0) and (FDateTime < FMinDate) then FDateTime := FMinDate;
+  if (FMaxDate <> 0) and (FDateTime > FMaxDate) then FDateTime := FMaxDate;
+  if (FDateTime <> OldVal) and Assigned(FOnChange) then
+    FOnChange(Self);
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.CalendarAccepted(Sender: TObject);
+{ OnAccept: user clicked a day cell or pressed Enter.  Commit the date and
+  close the popup.  SetDateTime handles clamping + OnChange.
+  Uses CloseDropDown so both the real-window path (fires PopupClosed→OnCloseUp)
+  and the headless test path (CloseDropDown's else-branch fires OnCloseUp) work. }
+var
+  NewDate: TDateTime;
+begin
+  if FCalendar = nil then Exit;
+  NewDate := DateOf(FCalendar.Date) + Frac(FDateTime);
+  SetDateTime(NewDate);
+  { Close after committing — CloseDropDown handles both the real-window path
+    (FPopup.Close → PopupClosed → FOnCloseUp) and the headless path
+    (directly fires FOnCloseUp). }
+  CloseDropDown;
+end;
+
 { ── Focus ────────────────────────────────────────────────────────────────── }
 
 procedure TTyDateTimePicker.DoEnter;
@@ -889,9 +1122,11 @@ procedure TTyDateTimePicker.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI:
 var
   P:         TTyPainter;
   S:         TTyStyleSet;
-  R, TextR, BtnR: TRect;
-  BtnW, EffSize: Integer;
+  CbS:       TTyStyleSet;
+  R, TextR, BtnR, CbR: TRect;
+  BtnW, CbW, EffSize: Integer;
   Txt:       string;
+  TextColor: TTyColor;
   { Selection highlight }
   SelStyle:  TTyStyleSet;
   SelFill:   TTyFill;
@@ -910,19 +1145,49 @@ begin
     BtnW  := P.Scale(TyFieldButtonWidth);
     EffSize := ResolveFontSize(S);
 
-    { Text content rect: left padding to right minus button column }
+    { Base text content rect: left padding to right minus button column }
     TextR := Rect(
       R.Left  + P.Scale(S.Padding.Left),
       R.Top   + P.Scale(S.Padding.Top),
       R.Right - BtnW,
       R.Bottom - P.Scale(S.Padding.Bottom));
 
+    { ShowCheckBox: reserve space at the left and draw the checkbox glyph }
+    CbW := 0;
+    if FShowCheckBox then
+    begin
+      CbW := P.Scale(TyCheckBoxBox) + P.Scale(TyCheckBoxGap);
+      CbR := CheckBoxRect(TextR, APPI);
+      { Resolve checkbox style from TyCheckBox typeKey }
+      if FChecked then
+        CbS := ActiveController.Model.ResolveStyle('TyCheckBox', '', [tysActive])
+      else
+        CbS := ActiveController.Model.ResolveStyle('TyCheckBox', '', []);
+      P.FillBackground(CbR, CbS.Background, CbS.BorderRadius);
+      P.StrokeBorder(CbR, CbS.BorderRadius, CbS.BorderWidth, CbS.BorderColor);
+      if FChecked then
+        P.DrawGlyph(CbR, tgCheck, CbS.TextColor, 2);
+      { Shift text rect right past the checkbox }
+      TextR.Left := TextR.Left + CbW;
+    end;
+
+    { Determine text color: muted when inert (ShowCheckBox + not Checked) }
+    TextColor := S.TextColor;
+    if IsInert then
+    begin
+      { Resolve muted color from TyCheckBox :disabled or fall back to half-opacity }
+      CbS := ActiveController.Model.ResolveStyle('TyCheckBox', '', [tysDisabled]);
+      TextColor := CbS.TextColor;
+    end;
+
     { Use buffer-display text: shows digit buffer content for active segment
       while the user is mid-entry, so no premature-clamp flicker. }
     Txt := ActiveSegDisplayText;
 
-    { 1. Active-segment highlight (drawn BEFORE text so glyphs appear on top) }
-    if Focused and (FActiveSeg >= 0) and (FActiveSeg <= High(FSegments)) then
+    { 1. Active-segment highlight (drawn BEFORE text so glyphs appear on top)
+         Only when focused AND field is not inert. }
+    if Focused and not IsInert and
+       (FActiveSeg >= 0) and (FActiveSeg <= High(FSegments)) then
     begin
       SelStyle := ActiveController.Model.ResolveStyle('TyTextSelection', '', []);
       SelFill  := Default(TTyFill);
@@ -946,7 +1211,7 @@ begin
 
     { 2. Draw the formatted text }
     P.DrawText(TextR, Txt, S.FontName, EffSize, S.FontWeight,
-      S.TextColor, taLeftJustify, tlCenter, False);
+      TextColor, taLeftJustify, tlCenter, False);
 
     { 3. Right-side button area }
     BtnR := TyDateTimeButtonRect(R, APPI);
@@ -980,6 +1245,40 @@ var OldVal: TDateTime;
 begin
   if not Enabled then Exit;
   inherited KeyDown(Key, Shift);
+
+  { Escape: close dropdown if open, otherwise clear digit buffer }
+  if Key = VK_ESCAPE then
+  begin
+    if (FPopup <> nil) and FPopup.IsOpen then
+    begin
+      CloseDropDown;
+      Key := 0;
+    end
+    else
+    begin
+      FDigitBuffer := '';
+      Invalidate; Key := 0;
+    end;
+    Exit;
+  end;
+
+  { Alt+Down or F4: toggle dropdown for dtkDate }
+  if FKind = dtkDate then
+  begin
+    if ((Key = VK_DOWN) and (ssAlt in Shift)) or (Key = VK_F4) then
+    begin
+      if (FPopup <> nil) and FPopup.IsOpen then
+        CloseDropDown
+      else
+        OpenDropDown;
+      Key := 0;
+      Exit;
+    end;
+  end;
+
+  { If field is inert (ShowCheckBox + not Checked), block all further editing }
+  if IsInert then Exit;
+
   case Key of
     VK_LEFT:
       begin
@@ -1029,11 +1328,6 @@ begin
           CommitAndFire(OldVal);
         Key := 0;
       end;
-    VK_ESCAPE:
-      begin
-        FDigitBuffer := '';
-        Invalidate; Key := 0;
-      end;
   end;
 end;
 
@@ -1045,6 +1339,7 @@ begin
   if not Enabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
   if FReadOnly then Exit;
+  if IsInert then Exit;
   if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9']) then
   begin
     OldVal  := FDateTime;
@@ -1066,6 +1361,7 @@ begin
   if not Enabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   if FReadOnly then Exit(False);
+  if IsInert then Exit(False);
   if WheelDelta > 0 then
     StepActiveSeg(+1)
   else
@@ -1087,29 +1383,69 @@ var
   CharIdx:  Integer;
   HitSeg:   Integer;
   TxtLen:   Integer;
+  PaddingL: Integer;
+  CbBoxR:   TRect;
+  TextR:    TRect;
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
-    { Check button area click }
+    { ── Checkbox area click ─────────────────────────────────────────────── }
+    if FShowCheckBox then
+    begin
+      S        := CurrentStyle;
+      PaddingL := MulDiv(S.Padding.Left, Font.PixelsPerInch, 96);
+      { Recompute text rect exactly as in RenderTo (without scale rounding diff) }
+      TextR := Rect(
+        PaddingL,
+        MulDiv(S.Padding.Top, Font.PixelsPerInch, 96),
+        ClientRect.Right - MulDiv(TyFieldButtonWidth, Font.PixelsPerInch, 96),
+        ClientRect.Bottom - MulDiv(S.Padding.Bottom, Font.PixelsPerInch, 96));
+      CbBoxR := CheckBoxRect(TextR, Font.PixelsPerInch);
+      { Expand hit area slightly (easy to miss tiny box) }
+      CbBoxR := Rect(CbBoxR.Left - 2, CbBoxR.Top - 2,
+                     CbBoxR.Right + 2, CbBoxR.Bottom + 2);
+      if PtInRect(CbBoxR, Point(X, Y)) then
+      begin
+        { Toggle Checked }
+        FChecked := not FChecked;
+        Invalidate;
+        if Assigned(FOnChecked) then FOnChecked(Self);
+        try
+          if CanFocus then SetFocus;
+        except
+        end;
+        Exit;
+      end;
+    end;
+
+    { ── Button area click ───────────────────────────────────────────────── }
     if PtInRect(TyDateTimeButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
     begin
-      if (FKind = dtkTime) and not FReadOnly then
+      if FKind = dtkDate then
+      begin
+        { Chevron click → toggle dropdown (guard reopen race in OpenDropDown) }
+        if not IsInert then
+          OpenDropDown;
+      end
+      else if (FKind = dtkTime) and not FReadOnly and not IsInert then
       begin
         if PtInRect(TyDateTimeUpButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
           StepActiveSeg(+1)
         else
           StepActiveSeg(-1);
       end;
-      { dtkDate chevron → dropdown (Task C3): no-op here }
     end
-    else
+    else if not IsInert then
     begin
-      { Hit-test which segment the click landed in }
+      { ── Segment hit-test ─────────────────────────────────────────────── }
       S        := CurrentStyle;
       EffSize  := ResolveFontSize(S);
       TextLeft := MulDiv(S.Padding.Left, Font.PixelsPerInch, 96);
+      { If ShowCheckBox, add the checkbox+gap to the text left offset }
+      if FShowCheckBox then
+        Inc(TextLeft, MulDiv(TyCheckBoxBox + TyCheckBoxGap, Font.PixelsPerInch, 96));
       Txt      := FormattedText;
       TxtLen   := Length(Txt);
 
@@ -1243,6 +1579,19 @@ begin
   if FChecked = AValue then Exit;
   FChecked := AValue;
   Invalidate;
+end;
+
+function TTyDateTimePicker.GetDroppedDown: Boolean;
+begin
+  Result := (FPopup <> nil) and FPopup.IsOpen;
+end;
+
+procedure TTyDateTimePicker.SetDroppedDown(AValue: Boolean);
+begin
+  if AValue then
+    OpenDropDown
+  else
+    CloseDropDown;
 end;
 
 end.
