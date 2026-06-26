@@ -46,7 +46,8 @@ uses
   test.nativestyler,
   test.splitter,
   test.statusbar,
-  test.toolbar;
+  test.toolbar,
+  test.litetrio.events;
 
 type
   TTyTestRunner = class(TTestRunner)
