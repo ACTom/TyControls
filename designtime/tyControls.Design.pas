@@ -12,7 +12,8 @@ uses
   tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
   tyControls.TrackBar, tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu, tyControls.NativeStyler,
-  tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar;
+  tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
+  tyControls.Calendar, tyControls.DateTimePicker;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -541,7 +542,8 @@ begin
      TTyListBox, TTyProgressBar, TTyToggleSwitch, TTyTrackBar, TTyGroupBox,
      TTyPageControl, TTyTabSheet, TTySpinEdit, TTyMemo, TTyTitleBar,
      TTyMenuBar, TTyPopupMenu, TTyNativeStyler,
-     TTySplitter, TTyStatusBar, TTyToolBar, TTyToolSeparator]);
+     TTySplitter, TTyStatusBar, TTyToolBar, TTyToolSeparator,
+     TTyCalendar, TTyDateTimePicker]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',

@@ -122,12 +122,38 @@ begin
   Line(b,12,7,12,17,Ink,1.8);
 end;
 
+{ TTyCalendar: rounded rect with a top header bar + two rows of day dots }
+procedure GCalendar(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,21,2,Ink);
+  FillRRect(b,3.5,4.5,20.5,9.5,1,Acc);
+  // two small page-turn dots in the header
+  FillCirc(b,7,7,1.2,BGRAWhite);
+  FillCirc(b,17,7,1.2,BGRAWhite);
+  // grid dots: two rows of three
+  FillCirc(b,8,13,1.2,Ink);
+  FillCirc(b,12,13,1.2,Ink);
+  FillCirc(b,16,13,1.2,Acc);
+  FillCirc(b,8,17.5,1.2,Ink);
+  FillCirc(b,12,17.5,1.2,Ink);
+  FillCirc(b,16,17.5,1.2,Ink);
+end;
+
+{ TTyDateTimePicker: edit-field rounded rect with a chevron-down button on the right }
+procedure GDateTimePicker(b: TBGRABitmap);
+begin
+  RRect(b,3,7,21,17,2,Ink);
+  Line(b,16,7,16,17,Ink,1);
+  // chevron-down glyph inside the button area (x: 16..21 range)
+  PolyL(b,[PointF(17.5,11.3),PointF(19,13),PointF(20.5,11.3)],Acc,1.8);
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..25] of TGlyph = (
+  Glyphs: array[0..27] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -153,7 +179,9 @@ const
     (Name:'TTySplitter';        Draw:@GSplitter),
     (Name:'TTyStatusBar';       Draw:@GStatusBar),
     (Name:'TTyToolBar';         Draw:@GToolBar),
-    (Name:'TTyToolSeparator';   Draw:@GToolSeparator)
+    (Name:'TTyToolSeparator';   Draw:@GToolSeparator),
+    (Name:'TTyCalendar';        Draw:@GCalendar),
+    (Name:'TTyDateTimePicker';  Draw:@GDateTimePicker)
   );
 
 const
