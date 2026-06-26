@@ -66,6 +66,9 @@ function TyStatusPanelRects(const AWidths: array of Integer; ATotalWidth, APaddi
 
 implementation
 
+const
+  CStatusBarPadX = 6;   // logical-px horizontal padding (panels + simple text)
+
 function TyStatusPanelRects(const AWidths: array of Integer; ATotalWidth, APadding: Integer): TTyRectArray;
 var
   i, x, fixed, fillIdx, fillW: Integer;
@@ -113,7 +116,7 @@ begin Result := TTyStatusPanel(inherited Add); end;
 procedure TTyStatusPanels.Update(Item: TCollectionItem);
 begin
   inherited Update(Item);
-  if (GetOwner <> nil) and (GetOwner is TControl) then TControl(GetOwner).Invalidate;
+  if GetOwner is TTyStatusBar then TTyStatusBar(GetOwner).Invalidate;
 end;
 
 { TTyStatusBar }
@@ -147,9 +150,10 @@ var
 begin
   Result := -1;
   if FSimplePanel or (FPanels.Count = 0) then Exit;
+  if (Y < 0) or (Y >= ClientHeight) then Exit;
   SetLength(ws, FPanels.Count);
   for i := 0 to FPanels.Count - 1 do ws[i] := FPanels[i].Width;
-  rects := TyStatusPanelRects(ws, ClientWidth, MulDiv(6, Font.PixelsPerInch, 96));   // scale padding to match RenderTo's P.Scale(6)
+  rects := TyStatusPanelRects(ws, ClientWidth, MulDiv(CStatusBarPadX, Font.PixelsPerInch, 96));
   for i := 0 to High(rects) do
     if (X >= rects[i].Left) and (X < rects[i].Right) then Exit(i);
 end;
@@ -161,7 +165,7 @@ procedure TTyStatusBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Inte
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  W, H, i, padX, fs, bw, gx, gy, k: Integer;
+  W, H, i, padX, sepW, fs, bw, gx, gy, k: Integer;
   bg, grip: TTyFill;
   rects: TTyRectArray;
   ws: array of Integer;
@@ -171,7 +175,7 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     W := ARect.Right - ARect.Left; H := ARect.Bottom - ARect.Top;
-    padX := P.Scale(6);
+    padX := P.Scale(CStatusBarPadX);
     fs := ResolveFontSize(S);
     // background fill (whole) + a 1px top border line (status-bar look — not a full frame)
     bg := Default(TTyFill); bg.Kind := tfkSolid; bg.Color := S.Background.Color;
@@ -189,12 +193,13 @@ begin
       SetLength(ws, FPanels.Count);
       for i := 0 to FPanels.Count - 1 do ws[i] := FPanels[i].Width;
       rects := TyStatusPanelRects(ws, W, padX);
+      sepW := P.Scale(1); if sepW < 1 then sepW := 1;
       for i := 0 to High(rects) do
       begin
         if (i > 0) and (tpBorderColor in S.Present) then   // separator before each panel after the first (only when border color is present)
         begin
           bg.Color := S.BorderColor;
-          P.FillBackground(Rect(rects[i].Left, P.Scale(3), rects[i].Left + 1, H - P.Scale(3)), bg, 0);
+          P.FillBackground(Rect(rects[i].Left, P.Scale(3), rects[i].Left + sepW, H - P.Scale(3)), bg, 0);
         end;
         P.DrawText(Rect(rects[i].Left + P.Scale(2), 0, rects[i].Right - P.Scale(2), H),
           FPanels[i].Text, S.FontName, fs, S.FontWeight, S.TextColor, FPanels[i].Alignment, tlCenter, True);
