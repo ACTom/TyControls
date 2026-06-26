@@ -10,6 +10,8 @@ uses
 type
   TTyColor = type Cardinal;            // $AARRGGBB
 
+  TTyRectArray = array of TRect;
+
   // Input-method (IME) callbacks shared by the Qt/GTK widgetset helpers (tyControls.QtWS/.GtkWS)
   // and the controls that opt in (Edit/Memo). Kept here in the common types unit so neither
   // widgetset helper has to depend on the other.
