@@ -192,6 +192,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Splitter.pas"/>
         <UnitName Value="tyControls.Splitter"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.StatusBar.pas"/>
+        <UnitName Value="tyControls.StatusBar"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
