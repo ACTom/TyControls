@@ -17,11 +17,10 @@ type
     FDragging: Boolean;
     FMouseStart: Integer;     // mouse coord (screen-axis) at drag start
     FStartSize: Integer;      // target size at drag start
-    FLineOfs: Integer;        // rsLine ghost position (logical, along axis)
     function Vertical: Boolean;     // a left/right splitter resizes horizontally
     function FindResizeTarget: TControl;
     function AxisSize(AControl: TControl): Integer;
-    procedure ApplySize(ANewSize: Integer);
+    procedure ApplySize(ADelta: Integer);
     procedure SetMinSize(AValue: Integer);
     procedure UpdateCursor;
   protected
@@ -78,7 +77,9 @@ end;
 
 function TTySplitter.Vertical: Boolean;
 begin
-  Result := Align in [alLeft, alRight];   // vertical bar -> resizes width (horizontal drag)
+  // Returns True when the splitter BAR is vertical (Align in [alLeft, alRight]),
+  // i.e. it resizes the neighbour's WIDTH via a horizontal drag.
+  Result := Align in [alLeft, alRight];
 end;
 
 procedure TTySplitter.UpdateCursor;
@@ -120,23 +121,27 @@ begin
     c := Parent.Controls[i];
     if (c = Self) or (not c.Visible) then Continue;
     case Align of
-      alLeft:   if (c.Left + c.Width <= Left) and (c.Left + c.Width > bestEdge) then begin best := c; bestEdge := c.Left + c.Width; end;
-      alRight:  if (c.Left >= Left + Width) and (-c.Left > bestEdge) then begin best := c; bestEdge := -c.Left; end;
-      alTop:    if (c.Top + c.Height <= Top) and (c.Top + c.Height > bestEdge) then begin best := c; bestEdge := c.Top + c.Height; end;
-      alBottom: if (c.Top >= Top + Height) and (-c.Top > bestEdge) then begin best := c; bestEdge := -c.Top; end;
+      alLeft:   if (c.Left + c.Width <= Left) and (c.Left + c.Width > bestEdge)
+                   and (c.Top < Top + Height) and (c.Top + c.Height > Top) then begin best := c; bestEdge := c.Left + c.Width; end;
+      alRight:  if (c.Left >= Left + Width) and (-c.Left > bestEdge)
+                   and (c.Top < Top + Height) and (c.Top + c.Height > Top) then begin best := c; bestEdge := -c.Left; end;
+      alTop:    if (c.Top + c.Height <= Top) and (c.Top + c.Height > bestEdge)
+                   and (c.Left < Left + Width) and (c.Left + c.Width > Left) then begin best := c; bestEdge := c.Top + c.Height; end;
+      alBottom: if (c.Top >= Top + Height) and (-c.Top > bestEdge)
+                   and (c.Left < Left + Width) and (c.Left + c.Width > Left) then begin best := c; bestEdge := -c.Top; end;
     end;
   end;
   Result := best;
 end;
 
-procedure TTySplitter.ApplySize(ANewSize: Integer);
+procedure TTySplitter.ApplySize(ADelta: Integer);
 var
   maxSize, n: Integer;
   accept: Boolean;
 begin
   if FTarget = nil then Exit;
   if Vertical then maxSize := Parent.ClientWidth - Width else maxSize := Parent.ClientHeight - Height;
-  n := TySplitterNewSize(Align, FStartSize, ANewSize, FMinSize, maxSize);
+  n := TySplitterNewSize(Align, FStartSize, ADelta, FMinSize, maxSize);
   accept := True;
   if Assigned(FOnCanResize) then FOnCanResize(Self, n, accept);
   if not accept then Exit;
@@ -152,7 +157,6 @@ begin
   FDragging := True;
   FStartSize := AxisSize(FTarget);
   if Vertical then FMouseStart := X else FMouseStart := Y;   // X/Y are control-local; constant origin is fine for a delta
-  FLineOfs := 0;
 end;
 
 procedure TTySplitter.MouseMove(Shift: TShiftState; X, Y: Integer);
@@ -166,8 +170,8 @@ begin
     ApplySize(delta)
   else
   begin
-    FLineOfs := delta;       // rsLine: remember, draw ghost, apply on MouseUp
-    Invalidate;
+    // rsLine defers the resize to MouseUp and does NOT draw a live ghost line.
+    // Drawing a ghost overlay (XOR line / canvas paint) is a deferred Tier-2 enhancement.
   end;
 end;
 
@@ -181,12 +185,13 @@ begin
     begin
       if Vertical then delta := X - FMouseStart else delta := Y - FMouseStart;
       ApplySize(delta);
-      FLineOfs := 0;
-      Invalidate;
     end;
     FDragging := False;
+    // Fire OnMoved only when the resize actually changed the target's size
+    // (mirrors TCustomSplitter behaviour).
+    if Assigned(FOnMoved) and (FTarget <> nil) and (AxisSize(FTarget) <> FStartSize) then
+      FOnMoved(Self);
     FTarget := nil;
-    if Assigned(FOnMoved) then FOnMoved(Self);
   end;
   inherited MouseUp(Button, Shift, X, Y);
 end;
@@ -200,7 +205,7 @@ procedure TTySplitter.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integ
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  W, H, cx, cy, i, gap, dot: Integer;
+  W, H, cx, cy, i, gap, dot, half: Integer;
   grip: TTyFill;
 begin
   P := TTyPainter.Create;
@@ -217,11 +222,12 @@ begin
     dot := P.Scale(2);
     gap := P.Scale(3);
     cx := W div 2; cy := H div 2;
+    half := dot div 2;
     for i := -1 to 1 do
       if Vertical then
-        P.FillBackground(Rect(cx - dot div 2, cy + i*gap - dot div 2, cx - dot div 2 + dot, cy + i*gap - dot div 2 + dot), grip, dot div 2)
+        P.FillBackground(Rect(cx - half, cy + i*gap - half, cx - half + dot, cy + i*gap - half + dot), grip, half)
       else
-        P.FillBackground(Rect(cx + i*gap - dot div 2, cy - dot div 2, cx + i*gap - dot div 2 + dot, cy - dot div 2 + dot), grip, dot div 2);
+        P.FillBackground(Rect(cx + i*gap - half, cy - half, cx + i*gap - half + dot, cy - half + dot), grip, half);
     P.EndPaint;
   finally
     P.Free;
