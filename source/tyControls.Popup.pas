@@ -82,6 +82,13 @@ type
 
     { The hosted TForm.  Callers may set KeyPreview / OnKeyDown on it. }
     property Form: TForm read FForm;
+
+    { Tick value (GetTickCount64) recorded at the moment the popup last closed.
+      The owner can use this to guard against the click-while-open reopen race:
+      PopupDeactivate fires Close BEFORE the owner control's Click handler runs,
+      so Click sees IsOpen=False and would reopen.  Guard: reopen only when
+      (GetTickCount64 - CloseUpTick > 200). }
+    property CloseUpTick: QWord read FCloseUpTick;
   end;
 
 implementation
