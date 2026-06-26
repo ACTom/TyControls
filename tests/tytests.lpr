@@ -48,7 +48,8 @@ uses
   test.statusbar,
   test.toolbar,
   test.litetrio.events,
-  test.popup;
+  test.popup,
+  test.calendar;
 
 type
   TTyTestRunner = class(TTestRunner)
