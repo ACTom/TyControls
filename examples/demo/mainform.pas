@@ -3,12 +3,13 @@ unit mainform;
 interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus, ComCtrls,
-  tyControls.Controller, tyControls.Button, tyControls.TyLabel,
-  tyControls.Edit, tyControls.CheckBox, tyControls.Panel,
-  tyControls.ComboBox, tyControls.ScrollBar, tyControls.Form,
-  tyControls.ListBox, tyControls.ProgressBar, tyControls.ToggleSwitch,
-  tyControls.TrackBar, tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
-  tyControls.SpinEdit, tyControls.Memo, tyControls.Menu, tyControls.BuiltinThemes;
+  tyControls.Controller, tyControls.Button, tyControls.TyLabel, tyControls.Edit,
+  tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
+  tyControls.ScrollBar, tyControls.Form, tyControls.ListBox,
+  tyControls.ProgressBar, tyControls.ToggleSwitch, tyControls.TrackBar,
+  tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
+  tyControls.SpinEdit, tyControls.Memo, tyControls.Menu,
+  tyControls.BuiltinThemes, tyControls.NativeStyler;
 type
 
   { TDemoMainForm — ALL controls live in the designer (mainform.lfm), including the docked
@@ -17,12 +18,14 @@ type
     it NEVER creates UI controls (project rule: demo UI is edited in the .lfm only). }
 
   TDemoMainForm = class(TTyForm)
+    TreeView1: TTreeView;
     TyController: TTyStyleController;
     TyButton1: TTyButton;
     TyButton2: TTyButton;
     TyButton3: TTyButton;
     TyEdit1: TTyEdit;
     TyEdit2: TTyEdit;
+    TyNativeStyler1: TTyNativeStyler;
     TyTitleBar1: TTyTitleBar;
     ThemeCombo: TTyComboBox;
     BtnApLight: TTyButton;
