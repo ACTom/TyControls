@@ -78,12 +78,56 @@ procedure GMenuBar(b: TBGRABitmap); begin RRect(b,3,6,21,12,2,Ink); Line(b,6,9,8
 procedure GStyleController(b: TBGRABitmap); begin RRect(b,4,4,20,20,3,Ink); FillPolyG(b,[PointF(5,19),PointF(19,19),PointF(5,5)],Acc); end;
 procedure GPopupMenu(b: TBGRABitmap); begin RRect(b,4,3,19,21,2,Ink); Line(b,7,7,16,7,Ink); Line(b,7,11,16,11,Acc); Line(b,7,15,16,15,Ink); end;
 
+{ TTyNativeStyler: a plain rect (native control) with an accent paint-drop swatch in the corner }
+procedure GNativeStyler(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  FillRRect(b,14,13,20,19,2,Acc);
+  RRect(b,14,13,20,19,2,Acc);
+end;
+
+{ TTySplitter: vertical centre line with left+right arrowheads (resize handle) }
+procedure GSplitter(b: TBGRABitmap);
+begin
+  Line(b,12,3,12,21,Ink,2);
+  PolyL(b,[PointF(8,10),PointF(5,12),PointF(8,14)],Acc,1.8);
+  PolyL(b,[PointF(16,10),PointF(19,12),PointF(16,14)],Acc,1.8);
+end;
+
+{ TTyStatusBar: rounded rect with thin bottom band divided into 3 cells }
+procedure GStatusBar(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  Line(b,3,15,21,15,Ink);
+  FillRRect(b,3.5,15.5,20.5,19.5,1,Faint);
+  Line(b,9,15,9,20,Ink,1);
+  Line(b,15,15,15,20,Ink,1);
+end;
+
+{ TTyToolBar: rounded rect with a top band holding 3 small dot-buttons }
+procedure GToolBar(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  Line(b,3,10,21,10,Ink);
+  FillRRect(b,3.5,4.5,20.5,9.5,1,Faint);
+  FillCirc(b,7.5,7,1.8,Acc);
+  FillCirc(b,12,7,1.8,Ink);
+  FillCirc(b,16.5,7,1.8,Ink);
+end;
+
+{ TTyToolSeparator: a single short vertical line centred in the icon }
+procedure GToolSeparator(b: TBGRABitmap);
+begin
+  Line(b,12,6,12,18,Faint,1.4);
+  Line(b,12,7,12,17,Ink,1.8);
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..20] of TGlyph = (
+  Glyphs: array[0..25] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -104,7 +148,12 @@ const
     (Name:'TTyTitleBar';        Draw:@GTitleBar),
     (Name:'TTyMenuBar';         Draw:@GMenuBar),
     (Name:'TTyStyleController';  Draw:@GStyleController),
-    (Name:'TTyPopupMenu';       Draw:@GPopupMenu)
+    (Name:'TTyPopupMenu';       Draw:@GPopupMenu),
+    (Name:'TTyNativeStyler';   Draw:@GNativeStyler),
+    (Name:'TTySplitter';        Draw:@GSplitter),
+    (Name:'TTyStatusBar';       Draw:@GStatusBar),
+    (Name:'TTyToolBar';         Draw:@GToolBar),
+    (Name:'TTyToolSeparator';   Draw:@GToolSeparator)
   );
 
 const

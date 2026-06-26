@@ -7,7 +7,7 @@ uses
 type
   TPaletteIconTest = class(TTestCase)
   published
-    procedure TestAllTwentyResourcesPresentAndPng;
+    procedure TestAllResourcesPresentAndPng;
   end;
 
 implementation
@@ -15,13 +15,14 @@ implementation
 const
   // Must stay in sync with RegisterComponents in designtime/tyControls.Design.pas and the
   // $classes list in scripts/gen-icons.ps1 (which enforces RegisterComponents <-> $classes).
-  CClasses: array[0..20] of string = (
+  CClasses: array[0..25] of string = (
     'TTyButton','TTyLabel','TTyEdit','TTyCheckBox','TTyRadioButton',
     'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyListBox',
     'TTyPageControl','TTyTabSheet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
-    'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu');
+    'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu',
+    'TTyNativeStyler','TTySplitter','TTyStatusBar','TTyToolBar','TTyToolSeparator');
 
-procedure TPaletteIconTest.TestAllTwentyResourcesPresentAndPng;
+procedure TPaletteIconTest.TestAllResourcesPresentAndPng;
 const
   // HiDPI variants: '' = 100% (24px), '_150' = 150% (36px), '_200' = 200% (48px).
   Suffixes: array[0..2] of string = ('', '_150', '_200');
