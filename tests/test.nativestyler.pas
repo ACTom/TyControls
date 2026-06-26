@@ -2,7 +2,7 @@ unit test.nativestyler;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Graphics, Controls, StdCtrls, ExtCtrls, Forms, fpcunit, testregistry,
+  Classes, SysUtils, Graphics, Controls, StdCtrls, ExtCtrls, Forms, ComCtrls, fpcunit, testregistry,
   tyControls.Controller, tyControls.NativeStyler;
 type
   TNativeStylerTest = class(TTestCase)
@@ -20,6 +20,7 @@ type
     procedure TestOnStyleControlCanSkip;
     procedure TestRegisterDenyBlocksBackground;
     procedure TestUnmappedFallsBackToPanel;
+    procedure TestTreeViewGetsThemed;
   end;
 
 implementation
@@ -120,6 +121,19 @@ begin
     AssertEquals('unmapped control borrows TyPanel bg', Integer(RGBToColor($77, $88, $99)), Integer(sb.Color));
   finally
     sb.Free;
+  end;
+end;
+
+procedure TNativeStylerTest.TestTreeViewGetsThemed;
+var tv: TTreeView;
+begin
+  tv := TTreeView.Create(nil);
+  try
+    FStyler.StyleControl(tv);
+    AssertEquals('treeview bg = TyPanel bg (unmapped)', Integer(RGBToColor($77, $88, $99)), Integer(tv.Color));
+    AssertEquals('treeview font = TyPanel color', Integer(RGBToColor($AA, $BB, $CC)), Integer(tv.Font.Color));
+  finally
+    tv.Free;
   end;
 end;
 
