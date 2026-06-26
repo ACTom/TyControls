@@ -56,6 +56,7 @@ type
     FViewYear: Word;
     FViewMonth: Word;
     FOnChange: TNotifyEvent;
+    FOnAccept: TNotifyEvent;
     procedure SetDate(AValue: TDateTime);
     procedure SetMinDate(AValue: TDateTime);
     procedure SetMaxDate(AValue: TDateTime);
@@ -95,6 +96,10 @@ type
     property ShowToday: Boolean read FShowToday write SetShowToday default True;
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+    { Fires when the user definitively accepts the current date (Enter/Space key
+      or a day-cell mouse click). A hosting popup should close on this event, not
+      on OnChange, so arrow-navigation inside the dropdown does not close it. }
+    property OnAccept: TNotifyEvent read FOnAccept write FOnAccept;
     property Align;
     property Anchors;
     property Font;
@@ -236,14 +241,16 @@ procedure TTyCalendar.SetMinDate(AValue: TDateTime);
 begin
   if FMinDate = AValue then Exit;
   FMinDate := AValue;
-  Invalidate;
+  SetDate(FDate);   // re-clamp to new bounds (SetDate clamps + invalidates if date changed)
+  Invalidate;       // always repaint: enabled/disabled cell appearance changed
 end;
 
 procedure TTyCalendar.SetMaxDate(AValue: TDateTime);
 begin
   if FMaxDate = AValue then Exit;
   FMaxDate := AValue;
-  Invalidate;
+  SetDate(FDate);   // re-clamp to new bounds (SetDate clamps + invalidates if date changed)
+  Invalidate;       // always repaint: enabled/disabled cell appearance changed
 end;
 
 procedure TTyCalendar.SetFirstDayOfWeek(AValue: TTyWeekDay);
@@ -307,8 +314,11 @@ end;
 procedure TTyCalendar.CalcLayout(const ARect: TRect; APPI: Integer;
   out HeaderH, WeekdayH, WkNumW, ColW, RowH: Integer; out GridRect: TRect);
 var
-  W, H, gridLeft: Integer;
+  W, H: Integer;
 begin
+  { All rects are 0-origin (relative to ARect's top-left = (0,0)).
+    Paint calls P.BeginPaint with ARect so it draws 0-based.
+    MouseDown receives ClientRect which is also 0-origin. }
   W := ARect.Right  - ARect.Left;
   H := ARect.Bottom - ARect.Top;
   HeaderH  := MulDiv(28, APPI, 96);
@@ -317,16 +327,15 @@ begin
     WkNumW := MulDiv(24, APPI, 96)
   else
     WkNumW := 0;
-  gridLeft := ARect.Left + WkNumW;
   ColW := (W - WkNumW) div 7;
   if ColW < 1 then ColW := 1;
   RowH := (H - HeaderH - WeekdayH) div 6;
   if RowH < 1 then RowH := 1;
   GridRect := Rect(
-    gridLeft,
-    ARect.Top + HeaderH + WeekdayH,
-    gridLeft + 7 * ColW,
-    ARect.Top + HeaderH + WeekdayH + 6 * RowH);
+    WkNumW,
+    HeaderH + WeekdayH,
+    WkNumW + 7 * ColW,
+    HeaderH + WeekdayH + 6 * RowH);
 end;
 
 procedure TTyCalendar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -350,6 +359,9 @@ var
   DayName, TitleText: string;
   FontSz, FontWt: Integer;
   MutedColor: TTyColor;
+  TodayRingStyle: TTyStyleSet;
+  TodayRingW: Integer;
+  TodayRingColor: TTyColor;
 begin
   P := TTyPainter.Create;
   try
@@ -407,9 +419,9 @@ begin
       DayName  := DefaultFormatSettings.ShortDayNames[WeekOrderArr[col] + 1];
       CellRect := Rect(
         GridRect.Left + col * ColW,
-        ARect.Top + HeaderH,
+        HeaderH,
         GridRect.Left + (col + 1) * ColW,
-        ARect.Top + HeaderH + WeekdayH);
+        HeaderH + WeekdayH);
       P.DrawText(CellRect, DayName, CellStyle.FontName, CellStyle.FontSize,
         FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
     end;
@@ -462,9 +474,20 @@ begin
       if tpBackground in CellStyle.Present then
         P.FillBackground(CellRect, CellStyle.Background, 0);
 
-      // Today highlight (outline ring)
+      // Today highlight (outline ring).
+      // Color reuses the selected-state accent (var(--accent) via :selected background).
+      // Width is a scaled hairline (P.Scale(1), floored to 1) for consistency with other hairlines.
       if FShowToday and (DateOf(CellDate) = TodayDate) and not IsSelected then
-        P.StrokeBorder(CellRect, 0, 1, S.TextColor);
+      begin
+        TodayRingStyle := ActiveController.Model.ResolveStyle('TyCalendarCell', '', [tysSelected]);
+        if tpBackground in TodayRingStyle.Present then
+          TodayRingColor := TodayRingStyle.Background.Color
+        else
+          TodayRingColor := S.TextColor;
+        TodayRingW := P.Scale(1);
+        if TodayRingW < 1 then TodayRingW := 1;
+        P.StrokeBorder(CellRect, 0, TodayRingW, TodayRingColor);
+      end;
 
       // Day number
       P.DrawText(CellRect, IntToStr(CellD), CellStyle.FontName, CellStyle.FontSize,
@@ -475,9 +498,9 @@ begin
       begin
         wkNum := TyISOWeekNumber(CellDate);
         WkNumRect := Rect(
-          ARect.Left,
+          0,
           GridRect.Top + row * RowH,
-          ARect.Left + WkNumW,
+          WkNumW,
           GridRect.Top + (row + 1) * RowH);
         CellStyle := ActiveController.Model.ResolveStyle('TyCalendarWeekday', '', [tysNormal]);
         if not (tpTextColor in CellStyle.Present) then
@@ -554,14 +577,20 @@ begin
 
   newDate := DateOf(CellDate);
   oldDate := DateOf(FDate);
-  if newDate = oldDate then Exit;
 
-  FDate := newDate;
-  DecodeDate(FDate, dy, dm, dd);
-  FViewYear  := dy;
-  FViewMonth := dm;
-  Invalidate;
-  if Assigned(FOnChange) then FOnChange(Self);
+  if newDate <> oldDate then
+  begin
+    FDate := newDate;
+    DecodeDate(FDate, dy, dm, dd);
+    FViewYear  := dy;
+    FViewMonth := dm;
+    Invalidate;
+    if Assigned(FOnChange) then FOnChange(Self);
+  end;
+
+  // A day-cell click is a definitive-select gesture: always fire OnAccept
+  // (even when the date didn't change, the user confirmed this date).
+  if Assigned(FOnAccept) then FOnAccept(Self);
 end;
 
 procedure TTyCalendar.KeyDown(var Key: Word; Shift: TShiftState);
@@ -617,8 +646,7 @@ begin
 
     VK_PRIOR:  // PageUp = previous month
       begin
-        SetViewMonth(FViewYear, Integer(FViewMonth) - 1);
-        // Move selected date back by 1 month
+        // Compute target date directly; let SelectDate set the view (no flicker).
         DecodeDate(curDate, dy, dm, dd);
         nm := Integer(dm) - 1;
         ny := Integer(dy);
@@ -626,14 +654,13 @@ begin
         maxd := MonthDays[IsLeapYear(ny), nm];
         if dd > maxd then dd := maxd;
         newDate := TyCalendarClampDate(EncodeDate(ny, nm, dd), FMinDate, FMaxDate);
-        if DateOf(FDate) <> DateOf(newDate) then
-          SelectDate(newDate);
+        SelectDate(newDate);
         Key := 0;
       end;
 
     VK_NEXT:  // PageDown = next month
       begin
-        SetViewMonth(FViewYear, Integer(FViewMonth) + 1);
+        // Compute target date directly; let SelectDate set the view (no flicker).
         DecodeDate(curDate, dy, dm, dd);
         nm := Integer(dm) + 1;
         ny := Integer(dy);
@@ -641,8 +668,7 @@ begin
         maxd := MonthDays[IsLeapYear(ny), nm];
         if dd > maxd then dd := maxd;
         newDate := TyCalendarClampDate(EncodeDate(ny, nm, dd), FMinDate, FMaxDate);
-        if DateOf(FDate) <> DateOf(newDate) then
-          SelectDate(newDate);
+        SelectDate(newDate);
         Key := 0;
       end;
 
@@ -686,8 +712,11 @@ begin
 
     VK_RETURN, VK_SPACE:
       begin
-        // Commit: fire OnChange for the currently selected date
-        if Assigned(FOnChange) then FOnChange(Self);
+        // Accept: fire OnAccept (for a popup to commit+close).
+        // Do NOT re-fire OnChange here — the date was already changed (and
+        // OnChange already fired) by the arrow-navigation that got here.
+        // (ReadOnly is already guarded at the top of KeyDown.)
+        if Assigned(FOnAccept) then FOnAccept(Self);
         Key := 0;
       end;
 

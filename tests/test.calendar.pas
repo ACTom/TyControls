@@ -24,6 +24,12 @@ type
     procedure Handle(Sender: TObject);
   end;
 
+  TCalendarAcceptCounter = class
+  public
+    Count: Integer;
+    procedure Handle(Sender: TObject);
+  end;
+
   { B1: pure math tests (unchanged from the previous task) }
 
   TCalendarGeomTest = class(TTestCase)
@@ -81,6 +87,7 @@ type
     FForm: TForm;
     FCal: TTyCalendarProbe;
     FCounter: TCalendarChangeCounter;
+    FAccept: TCalendarAcceptCounter;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -98,6 +105,10 @@ type
     procedure TestMouseClickSelectsDay;
     procedure TestMouseClickPrevArrow;
     procedure TestMouseClickNextArrow;
+    procedure TestMaxDateTightenReClampsDate;
+    procedure TestMinDateTightenReClampsDate;
+    procedure TestMouseClickFiresOnAccept;
+    procedure TestEnterFiresOnAcceptNotOnChange;
   end;
 
   { B2: pixel rendering test }
@@ -112,6 +123,11 @@ implementation
 { TCalendarChangeCounter }
 
 procedure TCalendarChangeCounter.Handle(Sender: TObject);
+begin
+  Inc(Count);
+end;
+
+procedure TCalendarAcceptCounter.Handle(Sender: TObject);
 begin
   Inc(Count);
 end;
@@ -427,6 +443,7 @@ end;
 procedure TCalendarControlTest.SetUp;
 begin
   FCounter := TCalendarChangeCounter.Create;
+  FAccept  := TCalendarAcceptCounter.Create;
   FForm    := TForm.CreateNew(nil);
   FForm.SetBounds(0, 0, 400, 400);
   FCal := TTyCalendarProbe.Create(FForm);
@@ -434,33 +451,40 @@ begin
   FCal.SetBounds(0, 0, 240, 220);
   FCal.Font.PixelsPerInch := 96;
   FCal.OnChange := @FCounter.Handle;
+  FCal.OnAccept := @FAccept.Handle;
   FCal.Date := EncodeDate(2026, 6, 15);
   FCounter.Count := 0;
+  FAccept.Count  := 0;
 end;
 
 procedure TCalendarControlTest.TearDown;
 begin
   FForm.Free;
   FCounter.Free;
+  FAccept.Free;
 end;
 
 procedure TCalendarControlTest.TestArrowRightThenEnterSelectsAndFires;
-{ VK_RIGHT advances by 1 day and fires OnChange; VK_RETURN fires it again. }
+{ VK_RIGHT advances by 1 day and fires OnChange exactly once.
+  VK_RETURN then fires OnAccept (accept/commit) but must NOT re-fire OnChange. }
 var
   key: Word;
   startDate: TDateTime;
 begin
   startDate := DateOf(FCal.Date);
   FCounter.Count := 0;
+  FAccept.Count  := 0;
 
   key := VK_RIGHT;
   FCal.SimulateKeyDown(key);
   AssertEquals('date advanced by 1 day', DateOf(startDate + 1), DateOf(FCal.Date));
   AssertEquals('OnChange fired once after Right', 1, FCounter.Count);
+  AssertEquals('OnAccept NOT fired on arrow', 0, FAccept.Count);
 
   key := VK_RETURN;
   FCal.SimulateKeyDown(key);
-  AssertEquals('OnChange fired again on Enter', 2, FCounter.Count);
+  AssertEquals('OnChange must NOT re-fire on Enter', 1, FCounter.Count);
+  AssertEquals('OnAccept fired once on Enter', 1, FAccept.Count);
 end;
 
 procedure TCalendarControlTest.TestArrowLeftAcrossMonthBoundary;
@@ -543,7 +567,7 @@ begin
 
   AssertEquals('Home: day = 1', 1, DayOf(FCal.Date));
   AssertEquals('Home: month = 6', 6, MonthOf(FCal.Date));
-  AssertTrue('OnChange fired', FCounter.Count >= 1);
+  AssertEquals('OnChange fired exactly once', 1, FCounter.Count);
 end;
 
 procedure TCalendarControlTest.TestEndSelectsLastDay;
@@ -558,7 +582,7 @@ begin
 
   AssertEquals('End: day = 30 (June has 30 days)', 30, DayOf(FCal.Date));
   AssertEquals('End: month = 6', 6, MonthOf(FCal.Date));
-  AssertTrue('OnChange fired', FCounter.Count >= 1);
+  AssertEquals('OnChange fired exactly once', 1, FCounter.Count);
 end;
 
 procedure TCalendarControlTest.TestReadOnlyBlocksKeyboard;
@@ -611,6 +635,7 @@ begin
 
   AssertEquals('click selected June 20', DateOf(EncodeDate(2026, 6, 20)), DateOf(FCal.Date));
   AssertEquals('OnChange fired once', 1, FCounter.Count);
+  AssertEquals('OnAccept fired once on click', 1, FAccept.Count);
 end;
 
 procedure TCalendarControlTest.TestMouseClickPrevArrow;
@@ -636,6 +661,57 @@ begin
 
   AssertEquals('date unchanged', DateOf(EncodeDate(2026, 6, 15)), DateOf(FCal.Date));
   AssertEquals('OnChange NOT fired', 0, FCounter.Count);
+end;
+
+procedure TCalendarControlTest.TestMaxDateTightenReClampsDate;
+{ Setting MaxDate below the current Date must re-clamp Date to MaxDate. }
+begin
+  FCal.Date    := EncodeDate(2026, 6, 25);
+  FCounter.Count := 0;
+  FCal.MaxDate := EncodeDate(2026, 6, 10);
+  AssertEquals('Date clamped to new MaxDate',
+    DateOf(EncodeDate(2026, 6, 10)), DateOf(FCal.Date));
+end;
+
+procedure TCalendarControlTest.TestMinDateTightenReClampsDate;
+{ Setting MinDate above the current Date must re-clamp Date to MinDate. }
+begin
+  FCal.Date    := EncodeDate(2026, 6, 5);
+  FCounter.Count := 0;
+  FCal.MinDate := EncodeDate(2026, 6, 15);
+  AssertEquals('Date clamped to new MinDate',
+    DateOf(EncodeDate(2026, 6, 15)), DateOf(FCal.Date));
+end;
+
+procedure TCalendarControlTest.TestMouseClickFiresOnAccept;
+{ Clicking a day-cell fires OnAccept (as well as OnChange if date changed). }
+begin
+  FCal.Date := EncodeDate(2026, 6, 15);
+  FCounter.Count := 0;
+  FAccept.Count  := 0;
+
+  { Click June 20 (x=221, y=118 — same geometry as TestMouseClickSelectsDay). }
+  FCal.SimulateMouseDown(221, 118);
+
+  AssertEquals('click selected June 20', DateOf(EncodeDate(2026, 6, 20)), DateOf(FCal.Date));
+  AssertEquals('OnChange fired once on click', 1, FCounter.Count);
+  AssertEquals('OnAccept fired once on click', 1, FAccept.Count);
+end;
+
+procedure TCalendarControlTest.TestEnterFiresOnAcceptNotOnChange;
+{ Enter on an already-selected date fires OnAccept but NOT OnChange. }
+var
+  key: Word;
+begin
+  FCal.Date := EncodeDate(2026, 6, 15);
+  FCounter.Count := 0;
+  FAccept.Count  := 0;
+
+  key := VK_RETURN;
+  FCal.SimulateKeyDown(key);
+
+  AssertEquals('OnChange NOT fired on Enter (no date change)', 0, FCounter.Count);
+  AssertEquals('OnAccept fired once on Enter', 1, FAccept.Count);
 end;
 
 { TCalendarPixelTest }
