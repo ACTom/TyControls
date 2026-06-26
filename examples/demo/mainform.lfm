@@ -1,11 +1,11 @@
 object DemoMainForm: TDemoMainForm
   Left = 200
-  Height = 649
+  Height = 820
   Top = 120
   Width = 640
   BorderStyle = bsNone
   Caption = 'TyControls Demo'
-  ClientHeight = 649
+  ClientHeight = 820
   ClientWidth = 640
   Font.Height = -12
   LCLVersion = '4.4.0.0'
@@ -278,7 +278,7 @@ object DemoMainForm: TDemoMainForm
   end
   object TabCtrl1: TTyPageControl
     Left = 16
-    Height = 130
+    Height = 280
     Top = 376
     Width = 604
     TabOrder = 13
@@ -286,7 +286,7 @@ object DemoMainForm: TDemoMainForm
     ActivePageIndex = 0
     object TyTabSheet1: TTyTabSheet
       Left = 0
-      Height = 102
+      Height = 252
       Top = 28
       Width = 604
       TabOrder = 0
@@ -317,16 +317,46 @@ object DemoMainForm: TDemoMainForm
     end
     object TyTabSheet2: TTyTabSheet
       Left = 0
-      Height = 102
+      Height = 252
       Top = 28
       Width = 604
       TabOrder = 1
       Controller = TyController
       Caption = 'Tab 2'
+      object Calendar1: TTyCalendar
+        Left = 16
+        Height = 230
+        Top = 8
+        Width = 240
+        TabOrder = 0
+        TabStop = True
+        Controller = TyController
+      end
+      object DateField1: TTyDateTimePicker
+        Left = 272
+        Height = 30
+        Top = 8
+        Width = 200
+        TabOrder = 1
+        TabStop = True
+        Controller = TyController
+        Kind = dtkDate
+        ShowCheckBox = True
+      end
+      object TimeField1: TTyDateTimePicker
+        Left = 272
+        Height = 30
+        Top = 46
+        Width = 200
+        TabOrder = 2
+        TabStop = True
+        Controller = TyController
+        Kind = dtkTime
+      end
     end
     object TyTabSheet3: TTyTabSheet
       Left = 0
-      Height = 102
+      Height = 252
       Top = 28
       Width = 604
       TabOrder = 2
@@ -348,7 +378,7 @@ object DemoMainForm: TDemoMainForm
     Cursor = crIBeam
     Left = 16
     Height = 100
-    Top = 524
+    Top = 674
     Width = 604
     TabOrder = 14
     Controller = TyController
@@ -418,7 +448,7 @@ object DemoMainForm: TDemoMainForm
   object StatusBar1: TTyStatusBar
     Left = 0
     Height = 22
-    Top = 627
+    Top = 798
     Width = 640
     TabOrder = 21
     Controller = TyController

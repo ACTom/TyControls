@@ -10,7 +10,8 @@ uses
   tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu,
   tyControls.BuiltinThemes, tyControls.NativeStyler,
-  tyControls.ToolBar, tyControls.StatusBar, tyControls.Splitter;
+  tyControls.ToolBar, tyControls.StatusBar, tyControls.Splitter,
+  tyControls.Calendar, tyControls.DateTimePicker;
 type
 
   { TDemoMainForm — ALL controls live in the designer (mainform.lfm), including the docked
@@ -77,6 +78,9 @@ type
     PopupCtx: TTyPopupMenu;
     PopupCtxHello: TMenuItem;
     PopupCtxAgree: TMenuItem;
+    Calendar1: TTyCalendar;
+    DateField1: TTyDateTimePicker;
+    TimeField1: TTyDateTimePicker;
     procedure FormCreate(Sender: TObject);
     procedure GroupBox1Click(Sender: TObject);
     procedure MnuViewToggleClick(Sender: TObject);
