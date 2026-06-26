@@ -26,8 +26,8 @@ implementation
 procedure TTyToolBarAccess.ForceLayout;
 var dummy: TRect;
 begin
-  // Directly invoke AlignControls with a zero-rect (we only care about Left placement,
-  // not about Height auto-resize which is guarded by FInLayout anyway).
+  // AlignControls uses ClientWidth internally (it ignores the ARect arg); in the headless
+  // runner ClientWidth matches TB.Width, so positions are deterministic.
   dummy := Rect(0, 0, Width, Height);
   AlignControls(nil, dummy);
 end;
@@ -48,7 +48,7 @@ begin
   r := TyToolbarLayout([Size(40,20), Size(40,20), Size(40,20)], 90, 4, 2, 24, True, rows);
   AssertEquals('rows', 2, rows);
   AssertEquals('i2 wrapped to indent', 4, r[2].Left);
-  AssertTrue('i2 on row 2 (top > i0 top)', r[2].Top > r[0].Top);
+  AssertEquals('i2.Top = indent + buttonHeight + spacing', 30, r[2].Top);
 end;
 
 { TToolBarControlTest }
@@ -63,10 +63,8 @@ begin
   // In headless LCL, Realign posts a deferred message that is never processed
   // without a message pump.  We use a thin probe subclass (TTyToolBarAccess)
   // that calls AlignControls directly, bypassing the deferred path.
-  // Width is set explicitly so the layout function works with a known bar width
-  // and ClientWidth is irrelevant (AlignControls reads ClientWidth, but we call
-  // it directly with Width via the probe -- the layout uses the 'Width' from
-  // the dummy rect we pass, so items land at deterministic positions).
+  // Width is set explicitly so ClientWidth is a known bar width; AlignControls
+  // uses ClientWidth internally (it ignores the ARect arg), so positions are deterministic.
   Form := TForm.CreateNew(nil);
   try
     Form.SetBounds(0, 0, 400, 200);
@@ -93,7 +91,8 @@ begin
     // The dummy rect uses TB.Width so the bar-width is 300 and no wrapping occurs.
     TB.ForceLayout;
 
-    // Button 2 should sit right after Button 1: Indent + B1.Width + ButtonSpacing
+    // Button 1 should start at Indent; Button 2 right after: Indent + B1.Width + ButtonSpacing
+    AssertEquals('b1.Left = indent', TB.Indent, B1.Left);
     ExpectedLeft := TB.Indent + B1.Width + TB.ButtonSpacing;
     AssertEquals('b2.Left = indent + b1.width + spacing', ExpectedLeft, B2.Left);
   finally

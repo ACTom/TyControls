@@ -50,6 +50,8 @@ type
     property ButtonSpacing: Integer read FButtonSpacing write SetButtonSpacing default 2;
     property Indent: Integer read FIndent write SetIndent default 4;
     property Wrapable: Boolean read FWrapable write SetWrapable default True;
+    { Reserved (not yet wired): in the reuse-TTyButton model each child button owns its own
+      caption + image, so these have no effect today; kept for forward LCL-parity. }
     property ShowCaptions: Boolean read FShowCaptions write SetShowCaptions default False;
     property Flat: Boolean read FFlat write SetFlat default True;
     property Images: TImageList read FImages write SetImages;
@@ -65,16 +67,16 @@ implementation
 
 function TyToolbarLayout(const AItemSizes: array of TSize; ABarWidth, AIndent, ASpacing, AButtonHeight: Integer; AWrapable: Boolean; out ARows: Integer): TTyRectArray;
 var
-  i, x, y, rowH: Integer;
+  i, x, y: Integer;
 begin
   SetLength(Result, Length(AItemSizes));
   ARows := 1;
-  x := AIndent; y := AIndent; rowH := AButtonHeight;
+  x := AIndent; y := AIndent;
   for i := 0 to High(AItemSizes) do
   begin
     if AWrapable and (i > 0) and (x + AItemSizes[i].cx > ABarWidth - AIndent) then
     begin
-      x := AIndent; Inc(y, rowH + ASpacing); Inc(ARows);
+      x := AIndent; Inc(y, AButtonHeight + ASpacing); Inc(ARows);
     end;
     Result[i].Left := x;
     Result[i].Top := y;
@@ -109,7 +111,6 @@ begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls];   // hosts the tool buttons
   FButtonHeight := 24; FButtonSpacing := 2; FIndent := 4; FWrapable := True; FFlat := True;
-  FInLayout := False;
   Align := alTop;
   Width := 300; Height := 30;
 end;
@@ -126,8 +127,11 @@ procedure TTyToolBar.SetFlat(AValue: Boolean); begin if FFlat = AValue then Exit
 
 procedure TTyToolBar.ApplyToButton(B: TTyButton);
 begin
-  // reuse the ghost/flat TTyButton; propagate the bar's button metrics
-  if FFlat then B.StyleClass := 'ghost';
+  // reuse the ghost/flat TTyButton; propagate the bar's button metrics.
+  // NOTE: the toolbar owns the ghost/non-ghost StyleClass entirely — it does NOT
+  // preserve whatever StyleClass a child button had before being added.
+  if FFlat then B.StyleClass := 'ghost'
+  else B.StyleClass := '';
   // (Images/ShowCaptions propagation hooks here if/when TTyButton exposes them.)
 end;
 
@@ -151,7 +155,7 @@ begin
   if FInLayout then Exit;
   FInLayout := True;
   try
-    // collect visible non-splitter children in child order
+    // collect visible children in child order
     SetLength(list, ControlCount); n := 0;
     for i := 0 to ControlCount - 1 do
     begin
@@ -163,7 +167,7 @@ begin
     begin
       if list[i] is TTyButton then ApplyToButton(TTyButton(list[i]));
       sizes[i].cx := list[i].Width;
-      sizes[i].cy := list[i].Height;
+      sizes[i].cy := list[i].Height;  // cy is not used by TyToolbarLayout (AButtonHeight governs row height)
     end;
     rects := TyToolbarLayout(sizes, ClientWidth, FIndent, FButtonSpacing, FButtonHeight, FWrapable, rows);
     for i := 0 to n - 1 do
