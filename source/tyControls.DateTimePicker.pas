@@ -18,23 +18,33 @@ unit tyControls.DateTimePicker;
   additionally clamped to the length of the *current* month after rolling, so
   e.g. rolling from day 31 in a 30-day month still yields a valid date.
 
-  Digit buffer / auto-advance rule (Task C2)
-  ==========================================
-  FDigitBuffer accumulates typed digit characters for the active segment.
-  Auto-advance fires when the segment becomes "full":
-    - For 2-digit segments (day, month, hour, minute, second): after 2 digits,
-      OR when the partial value × 10 would already exceed the segment max (e.g.
-      typing '3' into a month segment [max=12] auto-advances because 30 > 12).
-    - For the year segment (4 digits): after 4 digits.
-  On auto-advance FActiveSeg increments (clamped at High(FSegments)); the buffer
-  resets. The user can also force an advance by pressing →.
+  Fixed-width field normalization
+  ================================
+  TyEffectiveFormat normalizes single field specifiers to double (m→mm, d→dd,
+  h→hh, n→nn, s→ss) so every rendered field is zero-padded to a fixed width.
+  This means format character positions == rendered text positions, making the
+  segment highlight and click hit-test accurate regardless of the actual value.
+  yyyy/yy are left unchanged; literals are preserved verbatim.
+
+  Digit buffer / commit-on-leave model (Task C2)
+  ================================================
+  FDigitBuffer accumulates typed digit characters for the active segment but
+  does NOT write to FDateTime until the segment is "complete" or a finalize
+  trigger fires.  While a buffer is active the rendered text shows the buffered
+  digits (zero-padded / as-typed) instead of the FDateTime value, so the user
+  sees exactly what they typed with no premature clamping flicker.
+
+  Finalize triggers: segment auto-complete (length-full OR value×10 > segMax),
+  ←/→/Home/End/Enter/Escape on navigation, ↑/↓ (step), focus-out.
+  On finalize with a non-empty buffer: parse → clamp to [segMin,segMax] →
+  write FDateTime → clamp to [MinDate,MaxDate] → CommitAndFire → clear buffer.
 }
 
 interface
 
 uses
   Classes, SysUtils, Types, DateUtils,
-  Controls, Graphics, LCLType, ExtCtrls,
+  Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 
@@ -44,15 +54,24 @@ type
   TTySegKind = (skNone, skDay, skMonth, skYear, skHour, skMinute, skSecond, skAMPM);
 
   { Describes one editable segment inside a formatted date/time string.
-    StartCh and LenCh are 0-based character indices into the FORMAT template
-    (not the rendered value), so the picker can highlight the right span. }
+    StartCh and LenCh are 0-based character indices into the EFFECTIVE FORMAT
+    string (see TyEffectiveFormat), which has the same positions as the rendered
+    text because every field is rendered fixed-width (zero-padded). }
   TTySegment = record
     Kind:    TTySegKind;
-    StartCh: Integer;   // 0-based start in the format string
+    StartCh: Integer;   // 0-based start in the effective format string
     LenCh:   Integer;   // number of format characters in this segment
   end;
 
   TTySegmentArray = array of TTySegment;
+
+{ Normalize AFormat so every single-letter field specifier becomes double:
+    m → mm,  d → dd,  h → hh,  n → nn,  s → ss
+  yyyy and yy are left unchanged.  Literal characters and quoted text are
+  copied verbatim.  The result is used for BOTH rendering (TyFormatDateTime)
+  and segment scanning (TyDateTimeSegments), ensuring that format character
+  positions equal rendered-text positions (every field is leading-zero padded). }
+function TyEffectiveFormat(const AFormat: string): string;
 
 { Thin deterministic wrapper around the RTL FormatDateTime.
   Always uses AFmt so locale never leaks. }
@@ -114,36 +133,36 @@ type
     FChecked:      Boolean;
 
     { Segment editing state }
-    FSegments:    TTySegmentArray;  // computed from active format
+    FSegments:    TTySegmentArray;  // computed from effective format
     FActiveSeg:   Integer;          // index into FSegments; -1 = none
     FDigitBuffer: string;           // accumulated digit chars for current seg
-
-    { Blinking caret (same pattern as TTySpinEdit — optional here; we use the
-      segment highlight as the primary focus cue, so FCaretVisible only gates
-      the thin I-beam caret drawn inside the active segment for accessibility). }
-    FCaretVisible:   Boolean;
-    FBlinkTimer:     TTimer;
-    FBlinkElapsedMs: Integer;
+                                    // (not yet written to FDateTime)
 
     function  ActiveFormat: string;
+    function  EffectiveFormat: string;
     procedure RebuildSegments;
     function  FormattedText: string;
+    { Return the text to render for the active segment: uses FDigitBuffer content
+      when a buffer is active, otherwise the value from FDateTime. }
+    function  ActiveSegDisplayText: string;
     { Pixel x of the start of character ACharIdx in the rendered text,
       relative to the text-content rect's left edge. }
     function  MeasureCharX(const AText, AFontName: string;
                 ACharIdx, AFontSizePx, AFontWeight, APPI: Integer): Integer;
-    { Apply a typed digit to the active segment; auto-advance if full.
-      Returns True if FDateTime changed. }
-    function  ApplyDigit(ADigit: Char): Boolean;
+    { Accumulate ADigit into FDigitBuffer only (no FDateTime write).
+      Returns True when the segment is now "full" (auto-advance condition)
+      so the caller knows to call FinalizeBuffer + advance. }
+    function  AccumulateDigit(ADigit: Char): Boolean;
+    { Parse FDigitBuffer → clamp to segment range → write FDateTime → clamp
+      to [MinDate,MaxDate] → CommitAndFire(AOldVal) → clear buffer.
+      No-op when FDigitBuffer is empty.  AAdvance: if True, also increment
+      FActiveSeg (auto-advance to next segment). }
+    procedure FinalizeBuffer(AOldVal: TDateTime; AAdvance: Boolean);
     { Commit: clamp FDateTime to [MinDate,MaxDate] and fire OnChange if changed.
       AOldVal is the value before any digit/step that triggered the commit. }
     procedure CommitAndFire(AOldVal: TDateTime);
     { Step the active segment by ADelta and commit. }
     procedure StepActiveSeg(ADelta: Integer);
-
-    procedure EnsureBlinkTimer;
-    procedure HandleBlink(Sender: TObject);
-    procedure ResetCaretBlink;
 
     procedure SetKind(AValue: TTyDateTimeKind);
     procedure SetDateTime(AValue: TDateTime);
@@ -176,14 +195,16 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
 
-    property DateTime:    TDateTime read FDateTime  write SetDateTime;
     property Date:        TDateTime read GetDate    write SetDate;
     property Time:        TDateTime read GetTime    write SetTime;
     { Expose for tests }
     property ActiveSeg:   Integer   read FActiveSeg;
     property Segments:    TTySegmentArray read FSegments;
+    property DigitBuffer: string    read FDigitBuffer;
 
   published
+    { Published so DateTime appears in the Object Inspector and is streamed. }
+    property DateTime:    TDateTime       read FDateTime    write SetDateTime;
     property Kind:         TTyDateTimeKind read FKind        write SetKind        default dtkDate;
     property DateFormat:   string          read FDateFormat  write SetDateFormat;
     property TimeFormat:   string          read FTimeFormat  write SetTimeFormat;
@@ -210,6 +231,99 @@ function TyDateTimeUpButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 function TyDateTimeDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 
 implementation
+
+{ ── TyEffectiveFormat ────────────────────────────────────────────────────── }
+
+function TyEffectiveFormat(const AFormat: string): string;
+{ Walk the format string and double any single-letter field specifier:
+    m → mm,  d → dd,  h → hh,  n → nn,  s → ss
+  yyyy / yyy / yy are left as-is (year already has explicit width).
+  Quoted text ('...' or "...") is copied verbatim.
+  All other characters (separators, literals) are copied as-is. }
+var
+  Fmt: string;
+  i, N: Integer;
+  Ch: Char;
+  RunStart, RunLen: Integer;
+  RunCh: Char;
+begin
+  Fmt := LowerCase(AFormat);
+  N   := Length(Fmt);
+  Result := '';
+  i := 1;
+  while i <= N do
+  begin
+    Ch := Fmt[i];
+
+    { Quoted literal — copy verbatim until the matching quote }
+    if Ch in ['''', '"'] then
+    begin
+      Result := Result + AFormat[i];
+      Inc(i);
+      while (i <= N) and (Fmt[i] <> Ch) do
+      begin
+        Result := Result + AFormat[i];
+        Inc(i);
+      end;
+      if i <= N then
+      begin
+        Result := Result + AFormat[i];  // closing quote
+        Inc(i);
+      end;
+      Continue;
+    end;
+
+    { Year runs: copy as-is regardless of length }
+    if Ch = 'y' then
+    begin
+      RunStart := i;
+      RunLen   := 0;
+      while (i <= N) and (Fmt[i] = 'y') do begin Inc(RunLen); Inc(i); end;
+      Result := Result + Copy(AFormat, RunStart, RunLen);
+      Continue;
+    end;
+
+    { Single-letter field specifiers that must be doubled }
+    if Ch in ['m', 'd', 'h', 'n', 's'] then
+    begin
+      RunStart := i;
+      RunCh    := Ch;
+      RunLen   := 0;
+      while (i <= N) and (Fmt[i] = RunCh) do begin Inc(RunLen); Inc(i); end;
+      if RunLen = 1 then
+        { Single → double for fixed-width rendering }
+        Result := Result + Ch + Ch
+      else
+        Result := Result + Copy(AFormat, RunStart, RunLen);
+      Continue;
+    end;
+
+    { am/pm and a/p tokens — copy verbatim (already fixed-width) }
+    if Ch = 'a' then
+    begin
+      if (i + 4 <= N) and (LowerCase(Copy(AFormat, i, 5)) = 'am/pm') then
+      begin
+        Result := Result + Copy(AFormat, i, 5);
+        Inc(i, 5);
+      end
+      else if (i + 2 <= N) and (LowerCase(Copy(AFormat, i, 3)) = 'a/p') then
+      begin
+        Result := Result + Copy(AFormat, i, 3);
+        Inc(i, 3);
+      end
+      else
+      begin
+        Result := Result + AFormat[i];
+        Inc(i);
+      end;
+      Continue;
+    end;
+
+    { Everything else: separator / literal — copy as-is }
+    Result := Result + AFormat[i];
+    Inc(i);
+  end;
+end;
 
 { ── TyFormatDateTime ─────────────────────────────────────────────────────── }
 
@@ -503,9 +617,6 @@ begin
   FChecked       := True;
   FActiveSeg     := 0;
   FDigitBuffer   := '';
-  FCaretVisible  := True;
-  FBlinkTimer    := nil;
-  FBlinkElapsedMs := 0;
   Width  := 130;
   Height := 24;
   RebuildSegments;
@@ -513,7 +624,6 @@ end;
 
 destructor TTyDateTimePicker.Destroy;
 begin
-  FreeAndNil(FBlinkTimer);
   inherited Destroy;
 end;
 
@@ -542,9 +652,19 @@ begin
   end;
 end;
 
+function TTyDateTimePicker.EffectiveFormat: string;
+{ Returns a normalized version of ActiveFormat where every single-letter
+  field specifier is doubled (m→mm, d→dd, etc.) to guarantee fixed-width
+  rendering so that format positions == rendered text positions. }
+begin
+  Result := TyEffectiveFormat(ActiveFormat);
+end;
+
 procedure TTyDateTimePicker.RebuildSegments;
 begin
-  FSegments := TyDateTimeSegments(ActiveFormat);
+  { Scan the EFFECTIVE (normalized) format so segment positions match the
+    rendered text positions. }
+  FSegments := TyDateTimeSegments(EffectiveFormat);
   if FActiveSeg > High(FSegments) then
     FActiveSeg := 0;
   if Length(FSegments) = 0 then
@@ -554,7 +674,41 @@ end;
 
 function TTyDateTimePicker.FormattedText: string;
 begin
-  Result := TyFormatDateTime(FDateTime, ActiveFormat, DefaultFormatSettings);
+  { Render using the EFFECTIVE format (fixed-width fields). }
+  Result := TyFormatDateTime(FDateTime, EffectiveFormat, DefaultFormatSettings);
+end;
+
+function TTyDateTimePicker.ActiveSegDisplayText: string;
+{ Return the per-segment display text, substituting the buffer content for the
+  active segment when a digit buffer is active (buffer-display model). }
+var
+  Full: string;
+  Seg:  TTySegment;
+  BufVal, RMin, RMax: Integer;
+  SegText: string;
+begin
+  Full := FormattedText;
+  if (FDigitBuffer = '') or (FActiveSeg < 0) or (FActiveSeg > High(FSegments)) then
+  begin
+    Result := Full;
+    Exit;
+  end;
+  Seg := FSegments[FActiveSeg];
+  if not TySegmentRange(Seg, RMin, RMax) then
+  begin
+    Result := Full;
+    Exit;
+  end;
+  { Build the segment display string from the buffer:
+    zero-pad on the left to match the segment width. }
+  BufVal  := StrToIntDef(FDigitBuffer, 0);
+  SegText := IntToStr(BufVal);
+  while Length(SegText) < Seg.LenCh do
+    SegText := '0' + SegText;
+  { Splice into the full formatted string }
+  Result := Copy(Full, 1, Seg.StartCh) +
+            SegText +
+            Copy(Full, Seg.StartCh + Seg.LenCh + 1, MaxInt);
 end;
 
 { ── Pixel measurement helper ─────────────────────────────────────────────── }
@@ -581,20 +735,19 @@ begin
   end;
 end;
 
-{ ── Digit buffer / auto-advance ──────────────────────────────────────────── }
+{ ── Digit buffer accumulation ────────────────────────────────────────────── }
 
-function TTyDateTimePicker.ApplyDigit(ADigit: Char): Boolean;
-{ Returns True if FDateTime changed. }
+function TTyDateTimePicker.AccumulateDigit(ADigit: Char): Boolean;
+{ Append ADigit to FDigitBuffer without writing FDateTime.
+  Returns True when the segment is "full" (auto-advance condition):
+    - MaxDigits reached, OR
+    - for non-year: NewVal * 10 > RMax (can't add another digit and stay valid). }
 var
-  Seg:          TTySegment;
-  RMin, RMax:   Integer;
-  NewBuf:       string;
-  NewVal:       Integer;
-  MaxDigits:    Integer;
-  Tentative:    Integer;
-  Y, M, D, H, Mi, S, MS: Word;
-  NewDT:        TDateTime;
-  Advance:      Boolean;
+  Seg:       TTySegment;
+  RMin, RMax: Integer;
+  NewBuf:    string;
+  NewVal:    Integer;
+  MaxDigits: Integer;
 begin
   Result := False;
   if FActiveSeg < 0 then Exit;
@@ -606,26 +759,48 @@ begin
   NewVal := StrToIntDef(NewBuf, -1);
   if NewVal < 0 then Exit;  // non-digit sneaked in
 
-  { Determine max digit count for this segment }
   if Seg.Kind = skYear then
     MaxDigits := 4
   else
     MaxDigits := 2;
 
-  { Determine whether to auto-advance after this digit:
-    - reached MaxDigits, OR
-    - for non-year: NewVal * 10 > RMax (can't add another digit and stay valid) }
-  Advance := False;
-  if Length(NewBuf) >= MaxDigits then
-    Advance := True
-  else if (Seg.Kind <> skYear) and (NewVal * 10 > RMax) then
-    Advance := True;
+  FDigitBuffer := NewBuf;  // store buffer (no FDateTime write yet)
 
-  { Clamp the value to [RMin, RMax] }
+  if Length(NewBuf) >= MaxDigits then
+    Result := True
+  else if (Seg.Kind <> skYear) and (NewVal * 10 > RMax) then
+    Result := True;
+  { Result = True → caller should call FinalizeBuffer(OldVal, True) }
+end;
+
+{ ── Buffer finalization ──────────────────────────────────────────────────── }
+
+procedure TTyDateTimePicker.FinalizeBuffer(AOldVal: TDateTime; AAdvance: Boolean);
+{ Parse FDigitBuffer, clamp to segment range, write FDateTime, commit.
+  AAdvance = True means also increment FActiveSeg (auto-advance path). }
+var
+  Seg:       TTySegment;
+  RMin, RMax: Integer;
+  NewVal:    Integer;
+  Y, M, D, H, Mi, S, MS: Word;
+  NewDT:     TDateTime;
+begin
+  if (FDigitBuffer = '') or (FActiveSeg < 0) or (FActiveSeg > High(FSegments)) then
+  begin
+    FDigitBuffer := '';
+    Exit;
+  end;
+  Seg := FSegments[FActiveSeg];
+  if not TySegmentRange(Seg, RMin, RMax) then
+  begin
+    FDigitBuffer := '';
+    Exit;
+  end;
+
+  NewVal := StrToIntDef(FDigitBuffer, RMin);
   if NewVal < RMin then NewVal := RMin;
   if NewVal > RMax then NewVal := RMax;
 
-  { Write the new value into FDateTime }
   DecodeDateTime(FDateTime, Y, M, D, H, Mi, S, MS);
   case Seg.Kind of
     skYear:   Y  := Word(NewVal);
@@ -635,46 +810,30 @@ begin
     skMinute: Mi := Word(NewVal);
     skSecond: S  := Word(NewVal);
   else
-    Exit;  // skAMPM / skNone — not handled by digit entry
+    FDigitBuffer := '';
+    Exit;
   end;
-  { Clamp day when month/year changed }
   if D > DaysInAMonth(Y, M) then D := DaysInAMonth(Y, M);
   try
     NewDT := EncodeDateTime(Y, M, D, H, Mi, S, MS);
   except
+    FDigitBuffer := '';
     Exit;
   end;
-  Result := NewDT <> FDateTime;
   FDateTime := NewDT;
+  FDigitBuffer := '';
 
-  { Update buffer or advance }
-  if Advance then
-  begin
-    FDigitBuffer := '';
-    if FActiveSeg < High(FSegments) then
-      Inc(FActiveSeg);
-  end
-  else
-    FDigitBuffer := NewBuf;
+  if AAdvance and (FActiveSeg < High(FSegments)) then
+    Inc(FActiveSeg);
 
-  { For partial entry: if the partial value < RMin, keep going (don't clamp
-    mid-entry). The value is already written as-is (possibly below RMin for a
-    moment, e.g. typing '0' as first digit of month is fine since '01'..'09'
-    are valid). The commit on focus-out will clamp. }
-  Tentative := StrToIntDef(FDigitBuffer, 0);
-  if (FDigitBuffer <> '') and (Tentative < RMin) then
-  begin
-    { keep partial buffer — do NOT clamp yet, user may still type }
-  end;
+  CommitAndFire(AOldVal);
 end;
 
 { ── Commit / step ────────────────────────────────────────────────────────── }
 
 procedure TTyDateTimePicker.CommitAndFire(AOldVal: TDateTime);
 { Clamp FDateTime to [MinDate,MaxDate] and fire OnChange if the value
-  actually changed relative to AOldVal.  Does NOT reset the digit buffer —
-  callers that finish digit entry (auto-advance / Enter / focus-out) clear
-  FDigitBuffer themselves; intermediate per-digit calls must leave it intact. }
+  actually changed relative to AOldVal. }
 var
   Clamped: TDateTime;
 begin
@@ -694,36 +853,13 @@ begin
   if FReadOnly then Exit;
   if FActiveSeg < 0 then Exit;
   if FActiveSeg > High(FSegments) then Exit;
+  OldVal := FDateTime;
+  { Commit any pending digit buffer before stepping }
+  if FDigitBuffer <> '' then
+    FinalizeBuffer(OldVal, False);
   OldVal    := FDateTime;
   FDateTime := TySegmentStep(FDateTime, FSegments[FActiveSeg], ADelta);
-  FDigitBuffer := '';
   CommitAndFire(OldVal);
-end;
-
-{ ── Blink timer ──────────────────────────────────────────────────────────── }
-
-procedure TTyDateTimePicker.EnsureBlinkTimer;
-begin
-  if FBlinkTimer = nil then
-  begin
-    FBlinkTimer          := TTimer.Create(Self);
-    FBlinkTimer.Enabled  := False;
-    FBlinkTimer.Interval := 530;
-    FBlinkTimer.OnTimer  := @HandleBlink;
-  end;
-end;
-
-procedure TTyDateTimePicker.HandleBlink(Sender: TObject);
-begin
-  Inc(FBlinkElapsedMs, FBlinkTimer.Interval);
-  FCaretVisible := TyCaretVisible(FBlinkElapsedMs, FBlinkTimer.Interval);
-  Invalidate;
-end;
-
-procedure TTyDateTimePicker.ResetCaretBlink;
-begin
-  FCaretVisible    := True;
-  FBlinkElapsedMs  := 0;
 end;
 
 { ── Focus ────────────────────────────────────────────────────────────────── }
@@ -731,12 +867,6 @@ end;
 procedure TTyDateTimePicker.DoEnter;
 begin
   inherited DoEnter;
-  ResetCaretBlink;
-  if HandleAllocated then
-  begin
-    EnsureBlinkTimer;
-    FBlinkTimer.Enabled := True;
-  end;
   Invalidate;
 end;
 
@@ -744,11 +874,12 @@ procedure TTyDateTimePicker.DoExit;
 var SavedDT: TDateTime;
 begin
   inherited DoExit;
-  SavedDT    := FDateTime;
-  FDigitBuffer := '';   // discard any partial digit entry
-  CommitAndFire(SavedDT);
-  if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
-  FCaretVisible := True;
+  SavedDT := FDateTime;
+  { Commit any pending digit buffer on focus-out }
+  if FDigitBuffer <> '' then
+    FinalizeBuffer(SavedDT, False)
+  else
+    CommitAndFire(SavedDT);
   Invalidate;
 end;
 
@@ -786,7 +917,9 @@ begin
       R.Right - BtnW,
       R.Bottom - P.Scale(S.Padding.Bottom));
 
-    Txt := FormattedText;
+    { Use buffer-display text: shows digit buffer content for active segment
+      while the user is mid-entry, so no premature-clamp flicker. }
+    Txt := ActiveSegDisplayText;
 
     { 1. Active-segment highlight (drawn BEFORE text so glyphs appear on top) }
     if Focused and (FActiveSeg >= 0) and (FActiveSeg <= High(FSegments)) then
@@ -796,11 +929,10 @@ begin
       SelFill.Kind  := tfkSolid;
       SelFill.Color := SelStyle.Background.Color;
 
-      { Measure pixel x of segment start in the formatted text.
-        The segment's StartCh/LenCh are character indices in the FORMAT string,
-        but the formatted text has the same character positions (each format
-        character maps to exactly one rendered character for fixed-width tokens
-        like 'yyyy-mm-dd'). We measure directly from the rendered string. }
+      { Measure pixel x of segment start/end in the displayed text.
+        Because we use the effective (normalized) format, every field is
+        fixed-width: format character positions == rendered text positions,
+        so StartCh/LenCh index directly into the rendered string. }
       SegX1 := TextR.Left + MeasureCharX(Txt, S.FontName,
                   FSegments[FActiveSeg].StartCh,
                   EffSize, S.FontWeight, APPI);
@@ -851,26 +983,32 @@ begin
   case Key of
     VK_LEFT:
       begin
-        FDigitBuffer := '';
+        { Finalize any pending buffer before moving the cursor }
+        OldVal := FDateTime;
+        if FDigitBuffer <> '' then FinalizeBuffer(OldVal, False);
         if FActiveSeg > 0 then Dec(FActiveSeg);
-        ResetCaretBlink; Invalidate; Key := 0;
+        Invalidate; Key := 0;
       end;
     VK_RIGHT:
       begin
-        FDigitBuffer := '';
+        OldVal := FDateTime;
+        if FDigitBuffer <> '' then FinalizeBuffer(OldVal, False);
         if FActiveSeg < High(FSegments) then Inc(FActiveSeg);
-        ResetCaretBlink; Invalidate; Key := 0;
+        Invalidate; Key := 0;
       end;
     VK_HOME:
       begin
-        FDigitBuffer := ''; FActiveSeg := 0;
-        ResetCaretBlink; Invalidate; Key := 0;
+        OldVal := FDateTime;
+        if FDigitBuffer <> '' then FinalizeBuffer(OldVal, False);
+        FActiveSeg := 0;
+        Invalidate; Key := 0;
       end;
     VK_END:
       begin
-        FDigitBuffer := '';
+        OldVal := FDateTime;
+        if FDigitBuffer <> '' then FinalizeBuffer(OldVal, False);
         if Length(FSegments) > 0 then FActiveSeg := High(FSegments);
-        ResetCaretBlink; Invalidate; Key := 0;
+        Invalidate; Key := 0;
       end;
     VK_UP:
       begin
@@ -885,8 +1023,10 @@ begin
     VK_RETURN:
       begin
         OldVal := FDateTime;
-        FDigitBuffer := '';   // discard any partial digit entry
-        CommitAndFire(OldVal);
+        if FDigitBuffer <> '' then
+          FinalizeBuffer(OldVal, False)
+        else
+          CommitAndFire(OldVal);
         Key := 0;
       end;
     VK_ESCAPE:
@@ -899,17 +1039,21 @@ end;
 
 procedure TTyDateTimePicker.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
-  OldVal: TDateTime;
+  OldVal:   TDateTime;
+  AutoAdv:  Boolean;
 begin
   if not Enabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
   if FReadOnly then Exit;
   if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9']) then
   begin
-    OldVal := FDateTime;
-    if ApplyDigit(UTF8Key[1]) then
-      CommitAndFire(OldVal)
+    OldVal  := FDateTime;
+    AutoAdv := AccumulateDigit(UTF8Key[1]);
+    if AutoAdv then
+      { Buffer full: finalize + auto-advance to next segment }
+      FinalizeBuffer(OldVal, True)
     else
+      { Still accumulating: just redraw to show buffer content }
       Invalidate;
   end;
 end;
@@ -942,8 +1086,7 @@ var
   TextX:    Integer;
   CharIdx:  Integer;
   HitSeg:   Integer;
-  FmtLen:   Integer;
-  FmtStr:   string;
+  TxtLen:   Integer;
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
@@ -968,12 +1111,11 @@ begin
       EffSize  := ResolveFontSize(S);
       TextLeft := MulDiv(S.Padding.Left, Font.PixelsPerInch, 96);
       Txt      := FormattedText;
-      FmtStr   := ActiveFormat;
-      FmtLen   := Length(FmtStr);
+      TxtLen   := Length(Txt);
 
       { Convert click X to a character offset by finding the character
         whose right edge passes the click coordinate. }
-      if (Txt <> '') and (FmtLen > 0) then
+      if (Txt <> '') and (TxtLen > 0) then
       begin
         Bmp := TBGRABitmap.Create(1, 1);
         try
@@ -981,7 +1123,7 @@ begin
             Font.PixelsPerInch);
           TextX   := X - TextLeft;
           CharIdx := 0;
-          while CharIdx < FmtLen do
+          while CharIdx < TxtLen do
           begin
             if Bmp.TextSize(Copy(Txt, 1, CharIdx + 1)).cx >= TextX then
               Break;
@@ -992,7 +1134,6 @@ begin
           begin
             FActiveSeg   := HitSeg;
             FDigitBuffer := '';
-            ResetCaretBlink;
             Invalidate;
           end;
         finally

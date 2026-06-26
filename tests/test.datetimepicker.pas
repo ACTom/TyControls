@@ -70,6 +70,14 @@ type
 
     { TySegmentStep — day clamped after month roll }
     procedure TestStep_Month_Roll_Day31_ClampsToMonthLength;
+
+    { TyEffectiveFormat — single letter normalization }
+    procedure TestEffectiveFormat_SingleM_Doubled;
+    procedure TestEffectiveFormat_SingleD_Doubled;
+    procedure TestEffectiveFormat_SingleH_Doubled;
+    procedure TestEffectiveFormat_yyyy_Unchanged;
+    procedure TestEffectiveFormat_DoubleAlreadyDouble;
+    procedure TestEffectiveFormat_MixedSingleAndDouble;
   end;
 
   { Task C2 — TyDateTimeActiveSegAt pure helper }
@@ -89,8 +97,10 @@ type
     procedure RenderToForTest(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure SimKeyDown(var Key: Word);
     procedure SimKeyPress(const C: TUTF8Char);
+    procedure SimDoExit;
     function  ActiveSegForTest: Integer;
     function  DateTimeForTest: TDateTime;
+    function  DigitBufferForTest: string;
   end;
 
   TChangeCounter = class
@@ -115,6 +125,16 @@ type
     procedure TestOnChangeFiredOnlyOnRealChange;
     procedure TestHomeGoesToFirstSeg;
     procedure TestEndGoesToLastSeg;
+
+    { New tests for review fixes }
+    procedure TestReadOnly_BlocksDigitEntry;
+    procedure TestReadOnly_BlocksStepUp;
+    procedure TestReadOnly_BlocksWheel;
+    procedure TestReadOnly_NoOnChange;
+    procedure TestAutoAdvance_ValueBranch_Typing3InMonth;
+    procedure TestStepPastMaxDate_Clamps;
+    procedure TestLeadingZero_BufferDisplayed_NoImmediateWrite;
+    procedure TestLeadingZero_ThenDigit_CommitsCorrectMonth;
   end;
 
   { Pixel / render test }
@@ -459,6 +479,43 @@ begin
   AssertEquals('day clamped to 28', 28, Integer(D));
 end;
 
+{ ── TyEffectiveFormat ────────────────────────────────────────────────────── }
+
+procedure TDateTimePickerPureTest.TestEffectiveFormat_SingleM_Doubled;
+{ A lone 'm' in a format string should become 'mm'. }
+begin
+  AssertEquals('m→mm', 'mm/dd/yyyy', TyEffectiveFormat('m/d/yyyy'));
+end;
+
+procedure TDateTimePickerPureTest.TestEffectiveFormat_SingleD_Doubled;
+begin
+  AssertEquals('d→dd in m/d/yyyy', 'mm/dd/yyyy', TyEffectiveFormat('m/d/yyyy'));
+end;
+
+procedure TDateTimePickerPureTest.TestEffectiveFormat_SingleH_Doubled;
+{ 'h:n:s' → 'hh:nn:ss' }
+begin
+  AssertEquals('h:n:s→hh:nn:ss', 'hh:nn:ss', TyEffectiveFormat('h:n:s'));
+end;
+
+procedure TDateTimePickerPureTest.TestEffectiveFormat_yyyy_Unchanged;
+{ yyyy must not become yyyyyyyy }
+begin
+  AssertEquals('yyyy unchanged', 'yyyy-mm-dd', TyEffectiveFormat('yyyy-mm-dd'));
+end;
+
+procedure TDateTimePickerPureTest.TestEffectiveFormat_DoubleAlreadyDouble;
+{ mm/dd/yyyy: already doubled — must not triple }
+begin
+  AssertEquals('mm/dd/yyyy unchanged', 'mm/dd/yyyy', TyEffectiveFormat('mm/dd/yyyy'));
+end;
+
+procedure TDateTimePickerPureTest.TestEffectiveFormat_MixedSingleAndDouble;
+{ 'hh:n:ss' — only 'n' is single → becomes 'hh:nn:ss' }
+begin
+  AssertEquals('hh:n:ss → hh:nn:ss', 'hh:nn:ss', TyEffectiveFormat('hh:n:ss'));
+end;
+
 { ── TyDateTimeActiveSegAt ────────────────────────────────────────────────── }
 
 procedure TDateTimeActiveSegAtTest.TestHitsFirstSegment;
@@ -539,6 +596,11 @@ begin
   UTF8KeyPress(K);
 end;
 
+procedure TTyDateTimePickerProbe.SimDoExit;
+begin
+  DoExit;
+end;
+
 function TTyDateTimePickerProbe.ActiveSegForTest: Integer;
 begin
   Result := ActiveSeg;
@@ -547,6 +609,11 @@ end;
 function TTyDateTimePickerProbe.DateTimeForTest: TDateTime;
 begin
   Result := DateTime;
+end;
+
+function TTyDateTimePickerProbe.DigitBufferForTest: string;
+begin
+  Result := DigitBuffer;
 end;
 
 { ── TChangeCounter ───────────────────────────────────────────────────────── }
@@ -692,6 +759,161 @@ begin
   Key := VK_END;
   FPicker.SimKeyDown(Key);
   AssertEquals('End → last seg (2)', 2, FPicker.ActiveSegForTest);
+end;
+
+{ ── New tests ────────────────────────────────────────────────────────────── }
+
+procedure TDateTimePickerControlTest.TestReadOnly_BlocksDigitEntry;
+{ ReadOnly=True: typing a digit must not alter DateTime and must not
+  populate the digit buffer. }
+var
+  Before: TDateTime;
+begin
+  FPicker.ReadOnly := True;
+  Before := FPicker.DateTimeForTest;
+  FPicker.SimKeyPress('5');
+  AssertEquals('DateTime unchanged when ReadOnly', Before, FPicker.DateTimeForTest);
+  AssertEquals('DigitBuffer empty when ReadOnly', '', FPicker.DigitBufferForTest);
+end;
+
+procedure TDateTimePickerControlTest.TestReadOnly_BlocksStepUp;
+{ ReadOnly=True: VK_UP must not change DateTime. }
+var
+  Key: Word;
+  Before: TDateTime;
+begin
+  FPicker.ReadOnly := True;
+  Before := FPicker.DateTimeForTest;
+  Key := VK_UP;
+  FPicker.SimKeyDown(Key);
+  AssertEquals('DateTime unchanged on VK_UP when ReadOnly', Before,
+    FPicker.DateTimeForTest);
+end;
+
+procedure TDateTimePickerControlTest.TestReadOnly_BlocksWheel;
+{ ReadOnly=True: DoMouseWheel must not change DateTime. }
+var
+  Before: TDateTime;
+  Res: Boolean;
+begin
+  FPicker.ReadOnly := True;
+  Before := FPicker.DateTimeForTest;
+  Res := FPicker.DoMouseWheel([], 120, Point(0, 0));
+  AssertFalse('DoMouseWheel returns False when ReadOnly', Res);
+  AssertEquals('DateTime unchanged on wheel when ReadOnly', Before,
+    FPicker.DateTimeForTest);
+end;
+
+procedure TDateTimePickerControlTest.TestReadOnly_NoOnChange;
+{ ReadOnly=True: none of the above must fire OnChange. }
+var
+  Key: Word;
+begin
+  FPicker.ReadOnly := True;
+  FCounter.Count   := 0;
+  FPicker.SimKeyPress('5');
+  Key := VK_UP;
+  FPicker.SimKeyDown(Key);
+  FPicker.DoMouseWheel([], 120, Point(0, 0));
+  AssertEquals('OnChange never fires when ReadOnly', 0, FCounter.Count);
+end;
+
+procedure TDateTimePickerControlTest.TestAutoAdvance_ValueBranch_Typing3InMonth;
+{ Active segment = month (seg 1 in yyyy-mm-dd).
+  Typing '3' into a month segment triggers auto-advance because 30 > 12.
+  After the finalize the active segment must have moved to seg 2 (day),
+  and the month must be 3. }
+var
+  Key: Word;
+  Y, M, D, H, Mi, S, MS: Word;
+begin
+  FPicker.DateTime := EncodeDate(2026, 6, 15);
+  FCounter.Count   := 0;
+  { Move to month segment (seg 1) }
+  Key := VK_HOME;
+  FPicker.SimKeyDown(Key);
+  Key := VK_RIGHT;
+  FPicker.SimKeyDown(Key);
+  AssertEquals('active seg is month (1)', 1, FPicker.ActiveSegForTest);
+  FPicker.SimKeyPress('3');
+  { '3' auto-advances because 30 > 12: month = 3, seg advances to 2 }
+  AssertEquals('auto-advanced to seg 2 after typing 3', 2, FPicker.ActiveSegForTest);
+  DecodeDateTime(FPicker.DateTimeForTest, Y, M, D, H, Mi, S, MS);
+  AssertEquals('month is 3 after typing 3', 3, Integer(M));
+  AssertTrue('OnChange fired', FCounter.Count >= 1);
+end;
+
+procedure TDateTimePickerControlTest.TestStepPastMaxDate_Clamps;
+{ Set MaxDate = 2026-06-30.  Start at 2026-06-30.  Step month up.
+  TySegmentStep would give 2026-07-30 > MaxDate → CommitAndFire must clamp
+  back to MaxDate (2026-06-30). }
+var
+  Key: Word;
+  Y, M, D, H, Mi, S, MS: Word;
+begin
+  FPicker.DateTime := EncodeDate(2026, 6, 30);
+  FPicker.MaxDate  := EncodeDate(2026, 6, 30);
+  FCounter.Count   := 0;
+  { Move to month segment }
+  Key := VK_HOME;
+  FPicker.SimKeyDown(Key);
+  Key := VK_RIGHT;
+  FPicker.SimKeyDown(Key);
+  AssertEquals('at month seg', 1, FPicker.ActiveSegForTest);
+  Key := VK_UP;
+  FPicker.SimKeyDown(Key);
+  DecodeDateTime(FPicker.DateTimeForTest, Y, M, D, H, Mi, S, MS);
+  AssertEquals('year still 2026', 2026, Integer(Y));
+  AssertEquals('month clamped to 6 by MaxDate', 6, Integer(M));
+  AssertEquals('day still 30', 30, Integer(D));
+end;
+
+procedure TDateTimePickerControlTest.TestLeadingZero_BufferDisplayed_NoImmediateWrite;
+{ Buffer-display model: typing '0' into the month segment must NOT immediately
+  write month=1 to FDateTime (premature clamp-write).  The FDateTime month
+  must remain as the ORIGINAL value until a second digit or a finalize trigger.
+  The digit buffer must contain '0'. }
+var
+  Key: Word;
+  Y, M, D, H, Mi, S, MS: Word;
+begin
+  FPicker.DateTime := EncodeDate(2026, 6, 15);  // month = 6
+  FCounter.Count   := 0;
+  { Move to month segment (seg 1) }
+  Key := VK_HOME;
+  FPicker.SimKeyDown(Key);
+  Key := VK_RIGHT;
+  FPicker.SimKeyDown(Key);
+  AssertEquals('active seg is month', 1, FPicker.ActiveSegForTest);
+  FPicker.SimKeyPress('0');
+  { Buffer holds '0'; FDateTime.month must still be 6 (not clamped to 1) }
+  AssertEquals('digit buffer is 0', '0', FPicker.DigitBufferForTest);
+  DecodeDateTime(FPicker.DateTimeForTest, Y, M, D, H, Mi, S, MS);
+  AssertEquals('month unchanged (still 6) after typing 0', 6, Integer(M));
+  AssertEquals('OnChange NOT fired while buffer incomplete', 0, FCounter.Count);
+end;
+
+procedure TDateTimePickerControlTest.TestLeadingZero_ThenDigit_CommitsCorrectMonth;
+{ After typing '0' then '3' into the month segment, the month must be 3.
+  Typing '3' completes the 2-digit entry: buffer '03' → month = 3. }
+var
+  Key: Word;
+  Y, M, D, H, Mi, S, MS: Word;
+begin
+  FPicker.DateTime := EncodeDate(2026, 6, 15);
+  FCounter.Count   := 0;
+  { Move to month segment }
+  Key := VK_HOME;
+  FPicker.SimKeyDown(Key);
+  Key := VK_RIGHT;
+  FPicker.SimKeyDown(Key);
+  FPicker.SimKeyPress('0');
+  FPicker.SimKeyPress('3');
+  { '03' is exactly 2 digits → auto-finalize; month = 3 }
+  DecodeDateTime(FPicker.DateTimeForTest, Y, M, D, H, Mi, S, MS);
+  AssertEquals('month is 3 after typing 0 then 3', 3, Integer(M));
+  AssertEquals('digit buffer cleared after auto-advance', '', FPicker.DigitBufferForTest);
+  AssertTrue('OnChange fired', FCounter.Count >= 1);
 end;
 
 { ── Pixel tests ──────────────────────────────────────────────────────────── }
