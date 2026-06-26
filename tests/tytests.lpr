@@ -49,7 +49,8 @@ uses
   test.toolbar,
   test.litetrio.events,
   test.popup,
-  test.calendar;
+  test.calendar,
+  test.datetimepicker;
 
 type
   TTyTestRunner = class(TTestRunner)

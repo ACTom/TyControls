@@ -208,6 +208,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Calendar.pas"/>
         <UnitName Value="tyControls.Calendar"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.DateTimePicker.pas"/>
+        <UnitName Value="tyControls.DateTimePicker"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
