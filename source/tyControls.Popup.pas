@@ -51,8 +51,9 @@ type
     destructor Destroy; override;
 
     { Parent AControl into the form with Align=alClient.  Call before Popup.
-      Can be called only once; subsequent calls are ignored (the form owns its
-      content for its lifetime). }
+      Can be called only once; subsequent calls are ignored. The helper only
+      PARENTS the content; the caller retains ownership (unless AControl.Owner =
+      the form), so the caller is responsible for freeing it. }
     procedure SetContent(AControl: TControl);
 
     { Compute the screen rect via TyPopupRect, size/show the form non-activating,
@@ -150,7 +151,7 @@ begin
     FForm.OnResize     := nil;
     Application.RemoveAsyncCalls(Self);
     FreeAndNil(FForm);
-    FContent := nil;  // owned by FForm; already freed
+    FContent := nil;  // only parented here; freed by its own owner, not us
   end;
   inherited Destroy;
 end;
