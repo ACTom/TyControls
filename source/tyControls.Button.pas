@@ -317,6 +317,15 @@ begin
   if themedR <= 0 then rLogical := half
   else rLogical := TyClampRadius(themedR, half);
   P.FillBackground(badgeRect, S.Background, TyUniformCorners(rLogical));
+  // Anti-clip breathing room. The pill is sized to MeasureText, but some widgetsets (notably
+  // LCL-Qt6) render small bold glyphs a hair larger than they measure; DrawText clips to its rect,
+  // so the digit edges get shaved -> the number looks cut off and the clipped AA edges read as
+  // blurry (TyBadge padding is 0px vertically, so the height is especially tight). Inflate ONLY the
+  // text's clip rect by 1px each side: the centred text stays on the same point and the pill
+  // geometry is unchanged, so Windows / headless render byte-identically (their measure == render,
+  // so nothing was at the clip boundary).
+  Dec(badgeRect.Left, P.Scale(1));  Dec(badgeRect.Top, P.Scale(1));
+  Inc(badgeRect.Right, P.Scale(1)); Inc(badgeRect.Bottom, P.Scale(1));
   P.DrawText(badgeRect, txt, S.FontName, fs, fw, S.TextColor, taCenter, tlCenter, False);
 end;
 
