@@ -43,6 +43,12 @@ function TyISOWeekNumber(ADate: TDateTime): Integer;
   or -1 outside. ACols=7, ARows=6 for a standard month grid. }
 function TyCalendarHitCell(const AGridRect: TRect; ACols, ARows, X, Y: Integer): Integer;
 
+{ Zoom-out: Days→Months→Years→Decades (capped at Decades). }
+function TyCalendarZoomOut(AView: TTyCalView): TTyCalView;
+
+{ Zoom-in: Decades→Years→Months→Days (capped at Days). }
+function TyCalendarZoomIn(AView: TTyCalView): TTyCalView;
+
 type
   TTyCalendar = class(TTyCustomControl)
   private
@@ -55,8 +61,10 @@ type
     FReadOnly: Boolean;
     FViewYear: Word;
     FViewMonth: Word;
+    FViewMode: TTyCalView;           // transient UI state, not published
     FOnChange: TNotifyEvent;
     FOnAccept: TNotifyEvent;
+    FOnViewChange: TNotifyEvent;
     procedure SetDate(AValue: TDateTime);
     procedure SetMinDate(AValue: TDateTime);
     procedure SetMaxDate(AValue: TDateTime);
@@ -68,6 +76,8 @@ type
     procedure SetViewMonth(AYear: Integer; AMonth: Integer);
     { Selects a cell date (used by keyboard), fires OnChange if changed. }
     procedure SelectDate(ANewDate: TDateTime);
+    { Changes ViewMode and fires OnViewChange. }
+    procedure ChangeViewMode(ANewMode: TTyCalView);
     { Computes layout metrics given current size + APPI.
       HeaderH   = arrow+title band height (device px)
       WeekdayH  = weekday-names row height (device px)
@@ -77,6 +87,19 @@ type
       GridRect  = full 6x7 grid area in ARect-local coords }
     procedure CalcLayout(const ARect: TRect; APPI: Integer;
       out HeaderH, WeekdayH, WkNumW, ColW, RowH: Integer; out GridRect: TRect);
+    { Computes a 4x3 grid rect for drill-down views (Months/Years/Decades).
+      Returns the grid rect that occupies the area below the header. }
+    procedure CalcLayout4x3(const ARect: TRect; APPI: Integer;
+      out HeaderH, ColW, RowH: Integer; out GridRect: TRect);
+    { Render the Months view. }
+    procedure RenderMonthsView(P: TTyPainter; const ARect: TRect; APPI: Integer;
+      const S: TTyStyleSet; HeaderH, ColW, RowH: Integer; const GridRect: TRect);
+    { Render the Years view. }
+    procedure RenderYearsView(P: TTyPainter; const ARect: TRect; APPI: Integer;
+      const S: TTyStyleSet; HeaderH, ColW, RowH: Integer; const GridRect: TRect);
+    { Render the Decades view. }
+    procedure RenderDecadesView(P: TTyPainter; const ARect: TRect; APPI: Integer;
+      const S: TTyStyleSet; HeaderH, ColW, RowH: Integer; const GridRect: TRect);
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -87,6 +110,12 @@ type
     constructor Create(AOwner: TComponent); override;
     { Expose RenderTo publicly for tests and embedding. }
     procedure RenderToPublic(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { Current drill-down view (transient UI state, not published). }
+    property ViewMode: TTyCalView read FViewMode;
+    { Current view anchor month (1-12, transient UI state). }
+    property ViewMonth: Word read FViewMonth;
+    { Current view anchor year (transient UI state). }
+    property ViewYear: Word read FViewYear;
   published
     property Date: TDateTime read FDate write SetDate;
     property MinDate: TDateTime read FMinDate write SetMinDate;
@@ -100,6 +129,8 @@ type
       or a day-cell mouse click). A hosting popup should close on this event, not
       on OnChange, so arrow-navigation inside the dropdown does not close it. }
     property OnAccept: TNotifyEvent read FOnAccept write FOnAccept;
+    { Fires when ViewMode changes (zoom in/out). }
+    property OnViewChange: TNotifyEvent read FOnViewChange write FOnViewChange;
     property Align;
     property Anchors;
     property Font;
@@ -177,6 +208,34 @@ begin
   Result := WeekOfTheYear(ADate);
 end;
 
+{ TyCalendarZoomOut }
+
+function TyCalendarZoomOut(AView: TTyCalView): TTyCalView;
+begin
+  case AView of
+    cvmDays:    Result := cvmMonths;
+    cvmMonths:  Result := cvmYears;
+    cvmYears:   Result := cvmDecades;
+    cvmDecades: Result := cvmDecades;   // already at the top — cap
+  else
+    Result := cvmDecades;
+  end;
+end;
+
+{ TyCalendarZoomIn }
+
+function TyCalendarZoomIn(AView: TTyCalView): TTyCalView;
+begin
+  case AView of
+    cvmDecades: Result := cvmYears;
+    cvmYears:   Result := cvmMonths;
+    cvmMonths:  Result := cvmDays;
+    cvmDays:    Result := cvmDays;      // already at the bottom — cap
+  else
+    Result := cvmDays;
+  end;
+end;
+
 { TyCalendarHitCell }
 
 function TyCalendarHitCell(const AGridRect: TRect; ACols, ARows, X, Y: Integer): Integer;
@@ -210,6 +269,7 @@ begin
   FWeekNumbers  := False;
   FShowToday    := True;
   FReadOnly     := False;
+  FViewMode     := cvmDays;
   TabStop       := True;
   Width         := 240;
   Height        := 220;
@@ -311,6 +371,267 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
+procedure TTyCalendar.ChangeViewMode(ANewMode: TTyCalView);
+begin
+  if FViewMode = ANewMode then Exit;
+  FViewMode := ANewMode;
+  Invalidate;
+  if Assigned(FOnViewChange) then FOnViewChange(Self);
+end;
+
+procedure TTyCalendar.CalcLayout4x3(const ARect: TRect; APPI: Integer;
+  out HeaderH, ColW, RowH: Integer; out GridRect: TRect);
+var
+  W, H: Integer;
+begin
+  W := ARect.Right  - ARect.Left;
+  H := ARect.Bottom - ARect.Top;
+  HeaderH := MulDiv(28, APPI, 96);
+  ColW    := (W) div 4;
+  if ColW < 1 then ColW := 1;
+  RowH    := (H - HeaderH) div 3;
+  if RowH < 1 then RowH := 1;
+  GridRect := Rect(0, HeaderH, 4 * ColW, HeaderH + 3 * RowH);
+end;
+
+procedure TTyCalendar.RenderMonthsView(P: TTyPainter; const ARect: TRect; APPI: Integer;
+  const S: TTyStyleSet; HeaderH, ColW, RowH: Integer; const GridRect: TRect);
+var
+  W: Integer;
+  ArrowW: Integer;
+  TitleRect, ArrowLeftRect, ArrowRightRect: TRect;
+  TitleText: string;
+  CellStyle: TTyStyleSet;
+  FontSz, FontWt: Integer;
+  i, col, row: Integer;
+  CellRect: TRect;
+  CellStates: TTyStateSet;
+  DateY, DateM, DateD: Word;
+begin
+  W      := ARect.Right - ARect.Left;
+  ArrowW := HeaderH;
+  FontSz := ResolveFontSize(S);
+  FontWt := S.FontWeight;
+
+  // Header: [←] [YYYY] [→]
+  ArrowLeftRect  := Rect(0, 0, ArrowW, HeaderH);
+  ArrowRightRect := Rect(W - ArrowW, 0, W, HeaderH);
+  TitleRect      := Rect(ArrowW, 0, W - ArrowW, HeaderH);
+
+  P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
+  P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+
+  TitleText := IntToStr(FViewYear);
+  CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
+  if not (tpTextColor in CellStyle.Present) then CellStyle.TextColor := S.TextColor;
+  if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
+  P.DrawText(TitleRect, TitleText, CellStyle.FontName, CellStyle.FontSize,
+    FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
+
+  // 4x3 month grid
+  DecodeDate(FDate, DateY, DateM, DateD);
+  for i := 0 to 11 do
+  begin
+    col := i mod 4;
+    row := i div 4;
+    CellRect := Rect(
+      GridRect.Left + col * ColW,
+      GridRect.Top  + row * RowH,
+      GridRect.Left + (col + 1) * ColW,
+      GridRect.Top  + (row + 1) * RowH);
+
+    // Selected = the month of FDate when view year matches
+    if (FViewYear = DateY) and (Word(i + 1) = DateM) then
+      CellStates := [tysSelected]
+    else
+      CellStates := [tysNormal];
+
+    CellStyle := ActiveController.Model.ResolveStyle('TyCalendarCell', '', CellStates);
+    if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
+    if not (tpTextColor in CellStyle.Present) then CellStyle.TextColor := S.TextColor;
+
+    if tpBackground in CellStyle.Present then
+      P.FillBackground(CellRect, CellStyle.Background, 0);
+
+    P.DrawText(CellRect, DefaultFormatSettings.ShortMonthNames[i + 1],
+      CellStyle.FontName, CellStyle.FontSize,
+      FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
+  end;
+end;
+
+procedure TTyCalendar.RenderYearsView(P: TTyPainter; const ARect: TRect; APPI: Integer;
+  const S: TTyStyleSet; HeaderH, ColW, RowH: Integer; const GridRect: TRect);
+{ Layout: 4x3 = 12 cells showing decadeStart-1 .. decadeStart+10 (spill layout).
+  The leading and trailing cells display years outside the decade in a muted style. }
+var
+  W: Integer;
+  ArrowW: Integer;
+  TitleRect, ArrowLeftRect, ArrowRightRect: TRect;
+  TitleText: string;
+  CellStyle: TTyStyleSet;
+  FontSz, FontWt: Integer;
+  i, col, row, cellYear: Integer;
+  CellRect: TRect;
+  CellStates: TTyStateSet;
+  DS: Integer;           // decadeStart
+  DateY, DateM, DateD: Word;
+  IsSpill: Boolean;
+  MutedColor: TTyColor;
+begin
+  W      := ARect.Right - ARect.Left;
+  ArrowW := HeaderH;
+  FontSz := ResolveFontSize(S);
+  FontWt := S.FontWeight;
+  DS     := TyDecadeStart(FViewYear);
+
+  // Muted color for spill years
+  MutedColor := TyRGBA(TyRedOf(S.TextColor), TyGreenOf(S.TextColor),
+                       TyBlueOf(S.TextColor), 100);
+
+  // Header: [←] [DS–DS+9] [→]
+  ArrowLeftRect  := Rect(0, 0, ArrowW, HeaderH);
+  ArrowRightRect := Rect(W - ArrowW, 0, W, HeaderH);
+  TitleRect      := Rect(ArrowW, 0, W - ArrowW, HeaderH);
+
+  P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
+  P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+
+  TitleText := IntToStr(DS) + '–' + IntToStr(DS + 9);
+  CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
+  if not (tpTextColor in CellStyle.Present) then CellStyle.TextColor := S.TextColor;
+  if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
+  P.DrawText(TitleRect, TitleText, CellStyle.FontName, CellStyle.FontSize,
+    FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
+
+  // 4x3 grid: cells 0..11 = years (DS-1) .. (DS+10)
+  DecodeDate(FDate, DateY, DateM, DateD);
+  for i := 0 to 11 do
+  begin
+    col      := i mod 4;
+    row      := i div 4;
+    cellYear := DS - 1 + i;   // spill: leading (DS-1) and trailing (DS+10)
+    IsSpill  := (cellYear < DS) or (cellYear > DS + 9);
+
+    CellRect := Rect(
+      GridRect.Left + col * ColW,
+      GridRect.Top  + row * RowH,
+      GridRect.Left + (col + 1) * ColW,
+      GridRect.Top  + (row + 1) * RowH);
+
+    if cellYear = Integer(DateY) then
+      CellStates := [tysSelected]
+    else if IsSpill then
+      CellStates := [tysDisabled]
+    else
+      CellStates := [tysNormal];
+
+    CellStyle := ActiveController.Model.ResolveStyle('TyCalendarCell', '', CellStates);
+    if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
+    if not (tpTextColor in CellStyle.Present) then
+    begin
+      if IsSpill then
+        CellStyle.TextColor := MutedColor
+      else
+        CellStyle.TextColor := S.TextColor;
+    end;
+
+    if tpBackground in CellStyle.Present then
+      P.FillBackground(CellRect, CellStyle.Background, 0);
+
+    P.DrawText(CellRect, IntToStr(cellYear),
+      CellStyle.FontName, CellStyle.FontSize,
+      FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
+  end;
+end;
+
+procedure TTyCalendar.RenderDecadesView(P: TTyPainter; const ARect: TRect; APPI: Integer;
+  const S: TTyStyleSet; HeaderH, ColW, RowH: Integer; const GridRect: TRect);
+{ 4x3 grid of 12 decades for the century containing FViewYear.
+  centStart = (FViewYear div 100) * 100.
+  Cells: decades centStart-10 .. centStart+100 (spill layout, same as years view). }
+var
+  W: Integer;
+  ArrowW: Integer;
+  TitleRect, ArrowLeftRect, ArrowRightRect: TRect;
+  TitleText: string;
+  CellStyle: TTyStyleSet;
+  FontSz, FontWt: Integer;
+  i, col, row, cellDecade: Integer;
+  CellRect: TRect;
+  CellStates: TTyStateSet;
+  CentStart: Integer;
+  DateY, DateM, DateD: Word;
+  IsSpill: Boolean;
+  MutedColor: TTyColor;
+  DateDecade: Integer;
+begin
+  W      := ARect.Right - ARect.Left;
+  ArrowW := HeaderH;
+  FontSz := ResolveFontSize(S);
+  FontWt := S.FontWeight;
+  CentStart := (Integer(FViewYear) div 100) * 100;
+
+  // Muted color for spill decades
+  MutedColor := TyRGBA(TyRedOf(S.TextColor), TyGreenOf(S.TextColor),
+                       TyBlueOf(S.TextColor), 100);
+
+  // Header: [←] [centStart–centStart+99] [→]
+  ArrowLeftRect  := Rect(0, 0, ArrowW, HeaderH);
+  ArrowRightRect := Rect(W - ArrowW, 0, W, HeaderH);
+  TitleRect      := Rect(ArrowW, 0, W - ArrowW, HeaderH);
+
+  P.DrawGlyph(ArrowLeftRect,  tgArrowLeft,  S.TextColor, 1);
+  P.DrawGlyph(ArrowRightRect, tgArrowRight, S.TextColor, 1);
+
+  TitleText := IntToStr(CentStart) + '–' + IntToStr(CentStart + 99);
+  CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
+  if not (tpTextColor in CellStyle.Present) then CellStyle.TextColor := S.TextColor;
+  if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
+  P.DrawText(TitleRect, TitleText, CellStyle.FontName, CellStyle.FontSize,
+    FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
+
+  // 4x3 grid: cells 0..11 = decades (CentStart-10) .. (CentStart+100) — spill layout
+  DecodeDate(FDate, DateY, DateM, DateD);
+  DateDecade := TyDecadeStart(DateY);
+  for i := 0 to 11 do
+  begin
+    col         := i mod 4;
+    row         := i div 4;
+    cellDecade  := CentStart - 10 + i * 10;
+    IsSpill     := (cellDecade < CentStart) or (cellDecade > CentStart + 90);
+
+    CellRect := Rect(
+      GridRect.Left + col * ColW,
+      GridRect.Top  + row * RowH,
+      GridRect.Left + (col + 1) * ColW,
+      GridRect.Top  + (row + 1) * RowH);
+
+    if cellDecade = DateDecade then
+      CellStates := [tysSelected]
+    else if IsSpill then
+      CellStates := [tysDisabled]
+    else
+      CellStates := [tysNormal];
+
+    CellStyle := ActiveController.Model.ResolveStyle('TyCalendarCell', '', CellStates);
+    if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
+    if not (tpTextColor in CellStyle.Present) then
+    begin
+      if IsSpill then
+        CellStyle.TextColor := MutedColor
+      else
+        CellStyle.TextColor := S.TextColor;
+    end;
+
+    if tpBackground in CellStyle.Present then
+      P.FillBackground(CellRect, CellStyle.Background, 0);
+
+    P.DrawText(CellRect, IntToStr(cellDecade),
+      CellStyle.FontName, CellStyle.FontSize,
+      FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
+  end;
+end;
+
 procedure TTyCalendar.CalcLayout(const ARect: TRect; APPI: Integer;
   out HeaderH, WeekdayH, WkNumW, ColW, RowH: Integer; out GridRect: TRect);
 var
@@ -362,6 +683,9 @@ var
   TodayRingStyle: TTyStyleSet;
   TodayRingW: Integer;
   TodayRingColor: TTyColor;
+  // drill-down views
+  HdrH4, ColW4, RowH4: Integer;
+  GridRect4: TRect;
 begin
   P := TTyPainter.Create;
   try
@@ -372,6 +696,22 @@ begin
 
     // Frame (outer border + background)
     DrawFrame(P, Rect(0, 0, W, H), S);
+
+    // Branch on ViewMode
+    if FViewMode <> cvmDays then
+    begin
+      CalcLayout4x3(ARect, APPI, HdrH4, ColW4, RowH4, GridRect4);
+      case FViewMode of
+        cvmMonths:
+          RenderMonthsView(P, ARect, APPI, S, HdrH4, ColW4, RowH4, GridRect4);
+        cvmYears:
+          RenderYearsView(P, ARect, APPI, S, HdrH4, ColW4, RowH4, GridRect4);
+        cvmDecades:
+          RenderDecadesView(P, ARect, APPI, S, HdrH4, ColW4, RowH4, GridRect4);
+      end;
+      P.EndPaint;
+      Exit;
+    end;
 
     FontSz := ResolveFontSize(S);
     FontWt := S.FontWeight;
@@ -539,14 +879,102 @@ var
   CellY, CellM, dummy: Word;
   oldDate, newDate: TDateTime;
   dy, dm, dd: Word;
+  // drill-down
+  HdrH4, ColW4, RowH4: Integer;
+  GridRect4: TRect;
+  DS, CentStart, cellYear, cellMonth, cellDecade: Integer;
 begin
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
 
   W := ClientWidth;
+
+  // Handle non-Days views
+  if FViewMode <> cvmDays then
+  begin
+    CalcLayout4x3(ClientRect, Font.PixelsPerInch, HdrH4, ColW4, RowH4, GridRect4);
+    ArrowW := HdrH4;
+
+    // Left arrow
+    if (X >= 0) and (X < ArrowW) and (Y >= 0) and (Y < HdrH4) then
+    begin
+      case FViewMode of
+        cvmMonths:  FViewYear := FViewYear - 1;          // ∓1 year
+        cvmYears:   FViewYear := FViewYear - 10;         // ∓10 years (decade)
+        cvmDecades: FViewYear := FViewYear - 100;        // ∓100 years (century)
+      end;
+      if FViewYear < 1    then FViewYear := 1;
+      if FViewYear > 9999 then FViewYear := 9999;
+      Invalidate;
+      Exit;
+    end;
+
+    // Right arrow
+    if (X >= W - ArrowW) and (X < W) and (Y >= 0) and (Y < HdrH4) then
+    begin
+      case FViewMode of
+        cvmMonths:  FViewYear := FViewYear + 1;
+        cvmYears:   FViewYear := FViewYear + 10;
+        cvmDecades: FViewYear := FViewYear + 100;
+      end;
+      if FViewYear < 1    then FViewYear := 1;
+      if FViewYear > 9999 then FViewYear := 9999;
+      Invalidate;
+      Exit;
+    end;
+
+    // Title click: zoom out another level
+    if (X >= ArrowW) and (X < W - ArrowW) and (Y >= 0) and (Y < HdrH4) then
+    begin
+      ChangeViewMode(TyCalendarZoomOut(FViewMode));
+      Exit;
+    end;
+
+    // Grid cell click: pick and zoom in
+    cellIdx := TyCalendarHitCell(GridRect4, 4, 3, X, Y);
+    if cellIdx < 0 then Exit;
+
+    case FViewMode of
+      cvmMonths:
+        begin
+          // Pick the month; zoom to Days of that month
+          cellMonth  := cellIdx + 1;   // 1..12
+          FViewMonth := Word(cellMonth);
+          // FViewYear already set (the displayed year)
+          ChangeViewMode(TyCalendarZoomIn(FViewMode));
+        end;
+      cvmYears:
+        begin
+          // Pick the year (spill layout: cell 0 = DS-1)
+          DS       := TyDecadeStart(FViewYear);
+          cellYear := DS - 1 + cellIdx;
+          FViewYear := cellYear;
+          ChangeViewMode(TyCalendarZoomIn(FViewMode));
+        end;
+      cvmDecades:
+        begin
+          // Pick a decade (spill layout: cell 0 = CentStart-10)
+          CentStart   := (Integer(FViewYear) div 100) * 100;
+          cellDecade  := CentStart - 10 + cellIdx * 10;
+          FViewYear   := cellDecade;   // navigate to that decade's start year
+          ChangeViewMode(TyCalendarZoomIn(FViewMode));
+        end;
+    end;
+    Exit;
+  end;
+
+  // === Days view (existing logic) ===
+
   CalcLayout(ClientRect, Font.PixelsPerInch,
     HeaderH, WeekdayH, WkNumW, ColW, RowH, GridRect);
   ArrowW := HeaderH;
+
+  // Title click in Days view: zoom out to Months
+  if (X >= ArrowW) and (X < W - ArrowW) and (Y >= 0) and (Y < HeaderH) then
+  begin
+    ChangeViewMode(TyCalendarZoomOut(FViewMode));
+    Exit;
+  end;
 
   // Left arrow (prev month)
   if (X >= 0) and (X < ArrowW) and (Y >= 0) and (Y < HeaderH) then

@@ -118,6 +118,56 @@ type
     procedure TestSelectedCellIsBlue;
   end;
 
+  { B3: zoom pure-function tests }
+
+  TCalendarZoomTest = class(TTestCase)
+  published
+    { TyCalendarZoomOut chain: Days→Months→Years→Decades→Decades (cap) }
+    procedure TestZoomOutDaysToMonths;
+    procedure TestZoomOutMonthsToYears;
+    procedure TestZoomOutYearsToDecades;
+    procedure TestZoomOutDecadesCapped;
+    { TyCalendarZoomIn chain: Decades→Years→Months→Days→Days (cap) }
+    procedure TestZoomInDecadesToYears;
+    procedure TestZoomInYearsToMonths;
+    procedure TestZoomInMonthsToDays;
+    procedure TestZoomInDaysCapped;
+    { Full round-trips }
+    procedure TestZoomOutFullChain;
+    procedure TestZoomInFullChain;
+  end;
+
+  { B3: behaviour tests (probe-based) }
+
+  TCalendarDrillDownTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FCal: TTyCalendarProbe;
+    FViewChangeCount: Integer;
+    procedure HandleViewChange(Sender: TObject);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { Title click in Days view zooms to Months }
+    procedure TestTitleClickDaysToMonths;
+    { Title click in Months zooms to Years }
+    procedure TestTitleClickMonthsToYears;
+    { Title click in Years zooms to Decades }
+    procedure TestTitleClickYearsToDecades;
+    { Title click in Decades stays at Decades (cap) }
+    procedure TestTitleClickDecadesCapped;
+    { OnViewChange fires on each zoom }
+    procedure TestOnViewChangeFires;
+    { Clicking a month cell in Months view zooms to Days of that month;
+      Date does NOT change }
+    procedure TestMonthCellClickZoomsToDays;
+    { Render smoke tests: no exception for non-Days views }
+    procedure TestRenderMonthsNoException;
+    procedure TestRenderYearsNoException;
+    procedure TestRenderDecadesNoException;
+  end;
+
 implementation
 
 { TCalendarChangeCounter }
@@ -790,8 +840,228 @@ begin
   end;
 end;
 
+{ TCalendarZoomTest — B3 pure-function tests }
+
+procedure TCalendarZoomTest.TestZoomOutDaysToMonths;
+begin
+  AssertEquals('Days -> Months', Ord(cvmMonths), Ord(TyCalendarZoomOut(cvmDays)));
+end;
+
+procedure TCalendarZoomTest.TestZoomOutMonthsToYears;
+begin
+  AssertEquals('Months -> Years', Ord(cvmYears), Ord(TyCalendarZoomOut(cvmMonths)));
+end;
+
+procedure TCalendarZoomTest.TestZoomOutYearsToDecades;
+begin
+  AssertEquals('Years -> Decades', Ord(cvmDecades), Ord(TyCalendarZoomOut(cvmYears)));
+end;
+
+procedure TCalendarZoomTest.TestZoomOutDecadesCapped;
+begin
+  AssertEquals('Decades capped at Decades', Ord(cvmDecades), Ord(TyCalendarZoomOut(cvmDecades)));
+end;
+
+procedure TCalendarZoomTest.TestZoomInDecadesToYears;
+begin
+  AssertEquals('Decades -> Years', Ord(cvmYears), Ord(TyCalendarZoomIn(cvmDecades)));
+end;
+
+procedure TCalendarZoomTest.TestZoomInYearsToMonths;
+begin
+  AssertEquals('Years -> Months', Ord(cvmMonths), Ord(TyCalendarZoomIn(cvmYears)));
+end;
+
+procedure TCalendarZoomTest.TestZoomInMonthsToDays;
+begin
+  AssertEquals('Months -> Days', Ord(cvmDays), Ord(TyCalendarZoomIn(cvmMonths)));
+end;
+
+procedure TCalendarZoomTest.TestZoomInDaysCapped;
+begin
+  AssertEquals('Days capped at Days', Ord(cvmDays), Ord(TyCalendarZoomIn(cvmDays)));
+end;
+
+procedure TCalendarZoomTest.TestZoomOutFullChain;
+{ Days → 3 zooms out → Decades, 4th stays at Decades }
+var v: TTyCalView;
+begin
+  v := cvmDays;
+  v := TyCalendarZoomOut(v); AssertEquals('step1=Months',  Ord(cvmMonths),  Ord(v));
+  v := TyCalendarZoomOut(v); AssertEquals('step2=Years',   Ord(cvmYears),   Ord(v));
+  v := TyCalendarZoomOut(v); AssertEquals('step3=Decades', Ord(cvmDecades), Ord(v));
+  v := TyCalendarZoomOut(v); AssertEquals('step4=Decades', Ord(cvmDecades), Ord(v));
+end;
+
+procedure TCalendarZoomTest.TestZoomInFullChain;
+{ Decades → 3 zooms in → Days, 4th stays at Days }
+var v: TTyCalView;
+begin
+  v := cvmDecades;
+  v := TyCalendarZoomIn(v); AssertEquals('step1=Years',  Ord(cvmYears),  Ord(v));
+  v := TyCalendarZoomIn(v); AssertEquals('step2=Months', Ord(cvmMonths), Ord(v));
+  v := TyCalendarZoomIn(v); AssertEquals('step3=Days',   Ord(cvmDays),   Ord(v));
+  v := TyCalendarZoomIn(v); AssertEquals('step4=Days',   Ord(cvmDays),   Ord(v));
+end;
+
+{ TCalendarDrillDownTest — B3 behaviour tests }
+
+procedure TCalendarDrillDownTest.HandleViewChange(Sender: TObject);
+begin
+  Inc(FViewChangeCount);
+end;
+
+procedure TCalendarDrillDownTest.SetUp;
+begin
+  FViewChangeCount := 0;
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 400, 400);
+  FCal := TTyCalendarProbe.Create(FForm);
+  FCal.Parent := FForm;
+  FCal.SetBounds(0, 0, 240, 220);
+  FCal.Font.PixelsPerInch := 96;
+  FCal.OnViewChange := @HandleViewChange;
+  FCal.Date := EncodeDate(2026, 6, 15);
+end;
+
+procedure TCalendarDrillDownTest.TearDown;
+begin
+  FForm.Free;
+end;
+
+procedure TCalendarDrillDownTest.TestTitleClickDaysToMonths;
+{ In Days view, clicking the title area (centre of header) should zoom to Months.
+  Layout at 96ppi, 240x220: HeaderH=28, ArrowW=28, TitleRect=[28, 0, 212, 28].
+  Click at (120, 14) = centre of title. }
+begin
+  AssertEquals('start at Days', Ord(cvmDays), Ord(FCal.ViewMode));
+  FCal.SimulateMouseDown(120, 14);
+  AssertEquals('after title click: Months', Ord(cvmMonths), Ord(FCal.ViewMode));
+end;
+
+procedure TCalendarDrillDownTest.TestTitleClickMonthsToYears;
+begin
+  FCal.SimulateMouseDown(120, 14);  // Days -> Months
+  FViewChangeCount := 0;
+  FCal.SimulateMouseDown(120, 14);  // Months -> Years
+  AssertEquals('after 2nd title click: Years', Ord(cvmYears), Ord(FCal.ViewMode));
+end;
+
+procedure TCalendarDrillDownTest.TestTitleClickYearsToDecades;
+begin
+  FCal.SimulateMouseDown(120, 14);  // Days -> Months
+  FCal.SimulateMouseDown(120, 14);  // Months -> Years
+  FViewChangeCount := 0;
+  FCal.SimulateMouseDown(120, 14);  // Years -> Decades
+  AssertEquals('after 3rd title click: Decades', Ord(cvmDecades), Ord(FCal.ViewMode));
+end;
+
+procedure TCalendarDrillDownTest.TestTitleClickDecadesCapped;
+{ 4th title click stays at Decades (no further zoom). }
+begin
+  FCal.SimulateMouseDown(120, 14);
+  FCal.SimulateMouseDown(120, 14);
+  FCal.SimulateMouseDown(120, 14);
+  FViewChangeCount := 0;
+  FCal.SimulateMouseDown(120, 14);  // Decades -> Decades (capped)
+  AssertEquals('stays at Decades', Ord(cvmDecades), Ord(FCal.ViewMode));
+  AssertEquals('OnViewChange NOT fired when capped', 0, FViewChangeCount);
+end;
+
+procedure TCalendarDrillDownTest.TestOnViewChangeFires;
+{ Each actual zoom step fires OnViewChange exactly once. }
+begin
+  FViewChangeCount := 0;
+  FCal.SimulateMouseDown(120, 14);  // Days -> Months (+1)
+  FCal.SimulateMouseDown(120, 14);  // Months -> Years (+1)
+  FCal.SimulateMouseDown(120, 14);  // Years -> Decades (+1)
+  AssertEquals('OnViewChange fired 3 times', 3, FViewChangeCount);
+end;
+
+procedure TCalendarDrillDownTest.TestMonthCellClickZoomsToDays;
+{ In Months view, clicking on a month cell should:
+  - zoom ViewMode back to Days
+  - set FViewMonth to the picked month
+  - NOT change FDate
+  Layout at 240x220, 96ppi in 4x3 mode:
+    HeaderH=28, ColW=240 div 4=60, RowH=(220-28) div 3=64.
+    GridRect=[0,28,240,220].
+  Cell (col=0, row=0) = month 1 (January):
+    centre x=30, y=28+32=60. }
+var
+  savedDate: TDateTime;
+begin
+  savedDate := FCal.Date;
+  FCal.SimulateMouseDown(120, 14);  // Days -> Months
+  AssertEquals('in Months', Ord(cvmMonths), Ord(FCal.ViewMode));
+
+  // Click first cell (col=0, row=0) -> month 1 = January
+  FCal.SimulateMouseDown(30, 60);
+
+  AssertEquals('zoomed back to Days', Ord(cvmDays), Ord(FCal.ViewMode));
+  AssertEquals('ViewMonth set to January', 1, Integer(FCal.ViewMonth));
+  AssertEquals('Date NOT changed', DateOf(savedDate), DateOf(FCal.Date));
+end;
+
+procedure TCalendarDrillDownTest.TestRenderMonthsNoException;
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(240, 220);
+    FCal.SimulateMouseDown(120, 14);  // Days -> Months
+    AssertEquals('in Months view', Ord(cvmMonths), Ord(FCal.ViewMode));
+    // Must not raise
+    FCal.RenderTo(Bmp.Canvas, Rect(0, 0, 240, 220), 96);
+    AssertTrue('render Months did not raise', True);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TCalendarDrillDownTest.TestRenderYearsNoException;
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(240, 220);
+    FCal.SimulateMouseDown(120, 14);
+    FCal.SimulateMouseDown(120, 14);  // -> Years
+    AssertEquals('in Years view', Ord(cvmYears), Ord(FCal.ViewMode));
+    FCal.RenderTo(Bmp.Canvas, Rect(0, 0, 240, 220), 96);
+    AssertTrue('render Years did not raise', True);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TCalendarDrillDownTest.TestRenderDecadesNoException;
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(240, 220);
+    FCal.SimulateMouseDown(120, 14);
+    FCal.SimulateMouseDown(120, 14);
+    FCal.SimulateMouseDown(120, 14);  // -> Decades
+    AssertEquals('in Decades view', Ord(cvmDecades), Ord(FCal.ViewMode));
+    FCal.RenderTo(Bmp.Canvas, Rect(0, 0, 240, 220), 96);
+    AssertTrue('render Decades did not raise', True);
+  finally
+    Bmp.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TCalendarGeomTest);
   RegisterTest(TCalendarControlTest);
   RegisterTest(TCalendarPixelTest);
+  RegisterTest(TCalendarZoomTest);
+  RegisterTest(TCalendarDrillDownTest);
 end.
