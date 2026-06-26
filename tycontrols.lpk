@@ -196,6 +196,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.StatusBar.pas"/>
         <UnitName Value="tyControls.StatusBar"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.ToolBar.pas"/>
+        <UnitName Value="tyControls.ToolBar"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

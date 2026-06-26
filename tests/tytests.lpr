@@ -45,7 +45,8 @@ uses
   test.controller.changelistener,
   test.nativestyler,
   test.splitter,
-  test.statusbar;
+  test.statusbar,
+  test.toolbar;
 
 type
   TTyTestRunner = class(TTestRunner)
