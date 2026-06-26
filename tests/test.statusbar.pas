@@ -1,7 +1,11 @@
 unit test.statusbar;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, fpcunit, testregistry, tyControls.Types, tyControls.StatusBar;
+uses Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
+  fpcunit, testregistry,
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Controller, tyControls.Base,
+  tyControls.StatusBar;
 type
   TStatusBarGeomTest = class(TTestCase)
   published
@@ -10,6 +14,17 @@ type
     procedure TestPanelRectsPadding;
     procedure TestPanelRectsFillFirstOnly;
     procedure TestPanelRectsOverflowAndEmpty;
+  end;
+
+  { Access subclass that re-exposes protected RenderTo as public }
+  TTyStatusBarPixAccess = class(TTyStatusBar)
+  public
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+  TStatusBarPixelTest = class(TTestCase)
+  published
+    procedure TestBodyPixelIsDark;
   end;
 implementation
 procedure TStatusBarGeomTest.TestPanelRectsFixed;
@@ -55,6 +70,81 @@ begin
   r := TyStatusPanelRects([], 200, 0);
   AssertEquals('empty', 0, Length(r));
 end;
+{ TTyStatusBarPixAccess }
+
+procedure TTyStatusBarPixAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+{ TStatusBarPixelTest }
+
+procedure TStatusBarPixelTest.TestBodyPixelIsDark;
+{ Theme: background: #202020 (32,32,32), color: #FFFFFF, border-color: #404040.
+  Control: 200x22 statusbar with one panel Text='Hi'.
+  The body background #202020 should appear throughout most of the bar.
+  Assert a body pixel (x=10, y=11 — well inside, away from hairlines and text)
+  has all channels < 60. The top hairline (y=0) should be slightly lighter
+  (#404040 = 64 each); assert its red channel >= 40.
+}
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  Bar: TTyStatusBarPixAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  PxBody, PxHairline: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyStatusBar { background: #202020; color: #FFFFFF; border-color: #404040; }');
+
+    Bar := TTyStatusBarPixAccess.Create(Form);
+    Bar.Parent := Form;
+    Bar.Controller := Ctl;
+    Bar.SetBounds(0, 0, 200, 22);
+    Bar.Font.PixelsPerInch := 96;
+    Bar.SizeGrip := False;
+    Bar.Panels.Add.Text := 'Hi';
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 22);
+    // Pre-fill white so background rendering is unambiguous (canvas default is undefined)
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 200, 22);
+    Bar.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 22), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      // Mid-body pixel at x=150, y=11 — far from text (panel width=50, text in x=8..50),
+      // far from top hairline (y=0), and size grip is disabled.
+      PxBody := Reread.GetPixel(150, 11);
+      // Top hairline (y=0): #404040 = 64 per channel
+      PxHairline := Reread.GetPixel(150, 0);
+      AssertTrue(
+        Format('body pixel should be dark (r=%d g=%d b=%d alpha=%d at x=150,y=11, expected < 60; hairline r=%d)',
+          [PxBody.red, PxBody.green, PxBody.blue, PxBody.alpha, PxHairline.red]),
+        (PxBody.red < 60) and (PxBody.green < 60) and (PxBody.blue < 60));
+
+      // Top hairline (y=0): #404040 = 64 per channel — lighter than body (#202020 = 32)
+      AssertTrue(
+        Format('top hairline should be lighter than body (hairline.red=%d > body.red=%d)',
+          [PxHairline.red, PxBody.red]),
+        PxHairline.red > PxBody.red);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TStatusBarGeomTest);
+  RegisterTest(TStatusBarPixelTest);
 end.

@@ -1,8 +1,11 @@
 unit test.toolbar;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, Types, Controls, Forms, fpcunit, testregistry,
-  tyControls.Types, tyControls.ToolBar, tyControls.Button;
+uses Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
+  fpcunit, testregistry,
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Controller, tyControls.Base,
+  tyControls.ToolBar, tyControls.Button;
 type
   TToolBarGeomTest = class(TTestCase)
   published
@@ -13,11 +16,17 @@ type
   TTyToolBarAccess = class(TTyToolBar)
   public
     procedure ForceLayout;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
   TToolBarControlTest = class(TTestCase)
   published
     procedure TestArrangesButtons;
+  end;
+
+  TToolBarPixelTest = class(TTestCase)
+  published
+    procedure TestBottomHairlineIsLighterThanBody;
   end;
 
 implementation
@@ -30,6 +39,11 @@ begin
   // runner ClientWidth matches TB.Width, so positions are deterministic.
   dummy := Rect(0, 0, Width, Height);
   AlignControls(nil, dummy);
+end;
+
+procedure TTyToolBarAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
 end;
 procedure TToolBarGeomTest.TestLayoutSingleRow;
 var r: TTyRectArray; rows: Integer;
@@ -100,7 +114,69 @@ begin
   end;
 end;
 
+{ TToolBarPixelTest }
+
+procedure TToolBarPixelTest.TestBottomHairlineIsLighterThanBody;
+{ Theme: background: #202020 (32,32,32), border-color: #404040 (64,64,64).
+  Control: 200x30 toolbar. RenderTo draws the full body in #202020 and
+  a 1px bottom hairline in #404040 (border-color).
+  At PPI 96, Scale(BorderWidth=1) = 1px, so y=29 is the hairline row.
+  Assert the bottom row (y=29) red channel > mid-body (y=15) red channel.
+}
+var
+  Ctl: TTyStyleController;
+  Form: TForm;
+  TB: TTyToolBarAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  PxBody, PxHairline: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Form := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyToolBar { background: #202020; border-color: #404040; border-width: 1px; }');
+
+    TB := TTyToolBarAccess.Create(Form);
+    TB.Parent := Form;
+    TB.Controller := Ctl;
+    TB.Align := alNone;
+    TB.SetBounds(0, 0, 200, 30);
+    TB.Font.PixelsPerInch := 96;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 30);
+    TB.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 30), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      // Mid-body pixel (x=10, y=15): should be dark #202020
+      PxBody := Reread.GetPixel(10, 15);
+      // Bottom hairline pixel (x=10, y=29): should be #404040 — lighter
+      PxHairline := Reread.GetPixel(10, 29);
+
+      AssertTrue(
+        Format('body pixel should be dark (r=%d g=%d b=%d, expected < 60)',
+          [PxBody.red, PxBody.green, PxBody.blue]),
+        (PxBody.red < 60) and (PxBody.green < 60) and (PxBody.blue < 60));
+
+      AssertTrue(
+        Format('bottom hairline should be lighter than body (hairline.red=%d > body.red=%d)',
+          [PxHairline.red, PxBody.red]),
+        PxHairline.red > PxBody.red);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Form.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TToolBarGeomTest);
   RegisterTest(TToolBarControlTest);
+  RegisterTest(TToolBarPixelTest);
 end.
