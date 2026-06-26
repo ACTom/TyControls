@@ -326,7 +326,9 @@ begin
   // so nothing was at the clip boundary).
   Dec(badgeRect.Left, P.Scale(1));  Dec(badgeRect.Top, P.Scale(1));
   Inc(badgeRect.Right, P.Scale(1)); Inc(badgeRect.Bottom, P.Scale(1));
-  P.DrawText(badgeRect, txt, S.FontName, fs, fw, S.TextColor, taCenter, tlCenter, False);
+  // ASmallCrisp: on Linux/macOS the digits are supersampled (BGRA otherwise renders small bold
+  // text soft there); Windows ignores the flag and renders identically to before.
+  P.DrawText(badgeRect, txt, S.FontName, fs, fw, S.TextColor, taCenter, tlCenter, False, 0, True);
 end;
 
 function TTyButton.WantsDialogKey(ACharCode: Word): Boolean;

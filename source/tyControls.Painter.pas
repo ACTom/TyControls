@@ -22,6 +22,10 @@ type
     FPPI: Integer;
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect);
+    {$IF defined(LINUX) or defined(DARWIN)}
+    procedure DrawTextSupersampled(const ARect: TRect; const AText, AFontName: string;
+      AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout);
+    {$ENDIF}
   public
     Opacity: Single;
     procedure BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -34,7 +38,7 @@ type
     procedure StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor); overload;
     procedure StrokeBorder(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor); overload;
     procedure DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
-    procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0);
+    procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False);
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
     procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
     procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
@@ -285,7 +289,7 @@ begin
   end;
 end;
 
-procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0);
+procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False);
 var
   style: TTextStyle;
   s: string;
@@ -295,6 +299,19 @@ var
 begin
   if FBmp = nil then
     Exit;
+  {$IF defined(LINUX) or defined(DARWIN)}
+  // On Linux/macOS, BGRABitmap's LCL renderer drops fqFineAntialiasing to single-pass
+  // fqSystem for text taller than ~13px (bgratext.pas SYSTEM_RENDERER_IS_FINE), so small
+  // bold glyphs come out soft/blurry -- unlike Windows, where it always supersamples. For
+  // callers that ask for crisp small text (the button badge) we supersample ourselves. Skips
+  // the ellipsis/mnemonic features (the badge uses neither); only compiled where it's needed,
+  // so Windows/headless keep the exact original path (and the pixel goldens stay byte-identical).
+  if ASmallCrisp and not AEllipsis and (AMnemonicPos = 0) then
+  begin
+    DrawTextSupersampled(ARect, AText, AFontName, AFontSizeLogical, AWeight, AColor, AHAlign, AVAlign);
+    Exit;
+  end;
+  {$ENDIF}
   px := TyColorToBGRA(AColor);
   TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
   s := AText;
@@ -342,6 +359,49 @@ begin
     FBmp.FillRect(ux, uy, ux + charW, uy + uth, px, dmDrawWithTransparency);
   end;
 end;
+
+{$IF defined(LINUX) or defined(DARWIN)}
+procedure TTyPainter.DrawTextSupersampled(const ARect: TRect; const AText, AFontName: string;
+  AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout);
+const
+  FACTOR = 3;  // matches BGRA's own Windows supersample factor
+var
+  w, h: Integer;
+  hi: TBGRABitmap;
+  lo: TBGRACustomBitmap;
+  style: TTextStyle;
+  px: TBGRAPixel;
+begin
+  if (FBmp = nil) or (AText = '') then Exit;
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+  if (w <= 0) or (h <= 0) then Exit;
+  px := TyColorToBGRA(AColor);
+  // Rasterize the glyphs at FACTOR x the device size: even after BGRA downgrades to fqSystem,
+  // big glyphs come out crisp; downscaling them yields smooth grayscale AA (no ClearType colour
+  // fringe on the accent pill) -- exactly the supersample BGRA itself applies on Windows.
+  hi := TBGRABitmap.Create(w * FACTOR, h * FACTOR);
+  try
+    hi.Fill(BGRAPixelTransparent);
+    TyConfigureTextFont(hi, AFontName, AFontSizeLogical, AWeight, FPPI * FACTOR);
+    style := Default(TTextStyle);
+    style.Alignment := AHAlign;
+    style.Layout := AVAlign;
+    style.SingleLine := True;
+    style.Clipping := False;
+    hi.TextRect(Rect(0, 0, hi.Width, hi.Height), 0, 0, AText, style, px);
+    hi.ResampleFilter := rfBestQuality;
+    lo := hi.Resample(w, h, rmFineResample);
+    try
+      FBmp.PutImage(ARect.Left, ARect.Top, lo, dmDrawWithTransparency);
+    finally
+      lo.Free;
+    end;
+  finally
+    hi.Free;
+  end;
+end;
+{$ENDIF}
 
 procedure TTyPainter.DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
 var
