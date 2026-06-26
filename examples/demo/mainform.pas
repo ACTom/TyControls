@@ -9,7 +9,8 @@ uses
   tyControls.ProgressBar, tyControls.ToggleSwitch, tyControls.TrackBar,
   tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu,
-  tyControls.BuiltinThemes, tyControls.NativeStyler;
+  tyControls.BuiltinThemes, tyControls.NativeStyler,
+  tyControls.ToolBar, tyControls.StatusBar, tyControls.Splitter;
 type
 
   { TDemoMainForm — ALL controls live in the designer (mainform.lfm), including the docked
@@ -27,6 +28,13 @@ type
     TyEdit2: TTyEdit;
     TyNativeStyler1: TTyNativeStyler;
     TyTitleBar1: TTyTitleBar;
+    ToolBar1: TTyToolBar;
+    TbBtnNew: TTyButton;
+    TbSep1: TTyToolSeparator;
+    TbBtnOpen: TTyButton;
+    StatusBar1: TTyStatusBar;
+    SidePanel: TTyPanel;
+    Splitter1: TTySplitter;
     ThemeCombo: TTyComboBox;
     BtnApLight: TTyButton;
     BtnApDark: TTyButton;

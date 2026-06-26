@@ -66,6 +66,40 @@ object DemoMainForm: TDemoMainForm
       Caption = 'Dark'
     end
   end
+  object ToolBar1: TTyToolBar
+    Left = 0
+    Height = 32
+    Top = 32
+    Width = 640
+    TabOrder = 20
+    Controller = TyController
+    Align = alTop
+    object TbBtnNew: TTyButton
+      Left = 4
+      Height = 24
+      Top = 4
+      Width = 54
+      TabOrder = 0
+      Controller = TyController
+      Caption = '&New'
+    end
+    object TbSep1: TTyToolSeparator
+      Left = 60
+      Height = 24
+      Top = 4
+      Width = 8
+      Controller = TyController
+    end
+    object TbBtnOpen: TTyButton
+      Left = 70
+      Height = 24
+      Top = 4
+      Width = 60
+      TabOrder = 1
+      Controller = TyController
+      Caption = '&Open'
+    end
+  end
   object BtnPrimary: TTyButton
     Left = 16
     Height = 30
@@ -380,6 +414,43 @@ object DemoMainForm: TDemoMainForm
       FFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000008000000E9A1B9E79B
       AE3130
     }
+  end
+  object StatusBar1: TTyStatusBar
+    Left = 0
+    Height = 22
+    Top = 627
+    Width = 640
+    TabOrder = 21
+    Controller = TyController
+    Align = alBottom
+    Panels = <
+      item
+        Text = 'Ready'
+        Width = 140
+      end
+      item
+        Text = 'TyControls demo'
+        Width = 0
+      end>
+  end
+  object SidePanel: TTyPanel
+    Left = 0
+    Height = 400
+    Top = 64
+    Width = 120
+    TabOrder = 22
+    Controller = TyController
+    Align = alLeft
+    Caption = 'Side'
+  end
+  object Splitter1: TTySplitter
+    Left = 120
+    Height = 400
+    Top = 64
+    Width = 5
+    TabOrder = 23
+    Controller = TyController
+    Align = alLeft
   end
   object TyController: TTyStyleController
     Left = 16
