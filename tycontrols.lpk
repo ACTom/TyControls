@@ -188,6 +188,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.GtkWS.pas"/>
         <UnitName Value="tyControls.GtkWS"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Splitter.pas"/>
+        <UnitName Value="tyControls.Splitter"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

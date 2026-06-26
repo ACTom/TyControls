@@ -43,7 +43,8 @@ uses
   test.accel,
   test.i18n,
   test.controller.changelistener,
-  test.nativestyler;
+  test.nativestyler,
+  test.splitter;
 
 type
   TTyTestRunner = class(TTestRunner)
