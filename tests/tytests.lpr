@@ -47,7 +47,8 @@ uses
   test.splitter,
   test.statusbar,
   test.toolbar,
-  test.litetrio.events;
+  test.litetrio.events,
+  test.popup;
 
 type
   TTyTestRunner = class(TTestRunner)

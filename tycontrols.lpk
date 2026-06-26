@@ -200,6 +200,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.ToolBar.pas"/>
         <UnitName Value="tyControls.ToolBar"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Popup.pas"/>
+        <UnitName Value="tyControls.Popup"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
