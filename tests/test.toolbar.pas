@@ -147,6 +147,9 @@ begin
 
     Bmp.PixelFormat := pf32bit;
     Bmp.SetSize(200, 30);
+    // Pre-fill white so background rendering is unambiguous (canvas default is undefined)
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(0, 0, 200, 30);
     TB.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 30), 96);
 
     Reread := TBGRABitmap.Create(Bmp);
@@ -160,6 +163,11 @@ begin
         Format('body pixel should be dark (r=%d g=%d b=%d, expected < 60)',
           [PxBody.red, PxBody.green, PxBody.blue]),
         (PxBody.red < 60) and (PxBody.green < 60) and (PxBody.blue < 60));
+
+      AssertTrue(
+        Format('hairline rendered (hairline.red=%d, expected >=55)',
+          [PxHairline.red]),
+        PxHairline.red >= 55);
 
       AssertTrue(
         Format('bottom hairline should be lighter than body (hairline.red=%d > body.red=%d)',

@@ -131,6 +131,11 @@ begin
 
       // Top hairline (y=0): #404040 = 64 per channel — lighter than body (#202020 = 32)
       AssertTrue(
+        Format('hairline rendered (hairline.red=%d, expected >=55)',
+          [PxHairline.red]),
+        PxHairline.red >= 55);
+
+      AssertTrue(
         Format('top hairline should be lighter than body (hairline.red=%d > body.red=%d)',
           [PxHairline.red, PxBody.red]),
         PxHairline.red > PxBody.red);
