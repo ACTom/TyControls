@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, StdCtrls, LCLType, LCLIntf,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
-  tyControls.ListBox, tyControls.QtWS;
+  tyControls.ListBox, tyControls.Popup;
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
 
 type
@@ -22,9 +22,8 @@ type
     FOnDropDown: TNotifyEvent;
     FOnCloseUp: TNotifyEvent;
     { Dropdown popup state }
-    FPopup: TForm;           // lazy; created on first DropDown; freed in Destroy
-    FPopupList: TTyListBox;  // owned by FPopup
-    FPopupRect: TRect;       // computed screen rect of the last DropDown (for the deferred Qt re-apply)
+    FPopup: TTyDropdownPopup; // lazy; created on first DropDown; freed in Destroy
+    FPopupList: TTyListBox;   // owned by Self; parented into FPopup.Form via SetContent
     { Type-ahead state }
     FTypeAhead: string;
     FTypeAheadTick: QWord;
@@ -47,27 +46,13 @@ type
     procedure UserSelect(AIndex: Integer);
     { Popup event handlers }
     procedure PopupListChange(Sender: TObject);
-    procedure PopupDeactivate(Sender: TObject);
     procedure PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure PopupClosed(Sender: TObject);
     procedure DeferredCloseUp(Data: PtrInt);
-    { Qt/X11 re-places + un-masks a frameless window at MAP time (after Show); re-assert the
-      dropdown's bounds + region next event-loop turn, once the native window has settled. }
-    procedure DeferredReapplyGeometry(Data: PtrInt);
-    { Shape the borderless popup window with a rounded region so the opaque
-      rectangular corners outside the themed rounded fill are clipped away. The
-      radius tracks the dropdown list's own resolved BorderRadius, scaled to the
-      popup's device PPI. No-op when the radius is 0 (leave rectangular) or off
-      Windows. Re-applied on every DropDown so it follows a new size/PPI/theme. }
-    procedure ApplyPopupRegion(AWidth, AHeight: Integer);
-    { Qt drops a window's mask on every resize; with scrollable-forms (Qt6 default) the dropdown is
-      resized by its layout AFTER Show, wiping the region and leaving opaque corners. Re-assert it on
-      every resize so it survives (harmless re-apply on Win32/GTK2). }
-    procedure PopupResize(Sender: TObject);
   protected
     { Guard: tick at last CloseUp. Click reopens only if > 200ms have passed.
-      This prevents the click-while-open reopen race where PopupDeactivate fires
-      CloseUp BEFORE Click runs, so Click would see DroppedDown=False and reopen.
-      Protected so test subclasses can manipulate it for headless logic tests. }
+      Mirrored from FPopup.CloseUpTick (via PopupClosed) so test subclasses can
+      still manipulate it (e.g. AgeCloseUpTick) without accessing FPopup directly. }
     FCloseUpTick: QWord;
     procedure SetController(AValue: TTyStyleController); override;
     { Headless-testable popup-height calculation: DropDownCount governs how many
@@ -119,9 +104,7 @@ type
   end;
 implementation
 uses
-  // Rounded popup corners use the CROSS-PLATFORM LCLIntf SetWindowRgn/CreateRoundRectRgn (win32/
-  // gtk2/qt all implement them) — no Windows unit. (Rect()/Point() call sites stay qualified Types.*.)
-  Math;
+  Math, tyControls.QtWS;
 
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
 var n, i, idx: Integer; pfx: string;
@@ -150,7 +133,7 @@ begin
   FSorted := False;
   FMaxLength := 0;
   FCharCase := ecNormal;
-  FPopup := nil;
+  FPopup     := nil;
   FPopupList := nil;
   TabStop := True;
   Width := 145;
@@ -159,17 +142,14 @@ end;
 
 destructor TTyComboBox.Destroy;
 begin
-  { Cancel any queued DeferredCloseUp so it can't fire into a freed combo. }
+  { Cancel any queued async calls so they can't fire into a freed combo. }
   Application.RemoveAsyncCalls(Self);
-  { Free popup (and its owned listbox) if it was ever created.
-    We must detach the OnDeactivate handler first to avoid re-entering CloseUp
-    from the TForm destruction path. }
-  if FPopup <> nil then
-  begin
-    FPopup.OnDeactivate := nil;
-    FreeAndNil(FPopup);
-    FPopupList := nil;  // freed by FPopup (was owned by it)
-  end;
+  { Free the popup helper first (it owns its form; FPopupList is owned by Self
+    and will be freed below — the helper only parented it, not owned it). }
+  FreeAndNil(FPopup);
+  { Free the list box (owned by Self; no longer parented to anything after the
+    helper's form was freed above). }
+  FreeAndNil(FPopupList);
   FItems.Free;
   inherited Destroy;
 end;
@@ -186,6 +166,10 @@ begin
     otherwise FPopupList keeps the old controller until the next DropDown. }
   if FPopupList <> nil then
     FPopupList.Controller := AValue;
+  { Propagate to the popup helper so ApplyRegion resolves the background color
+    from the updated theme. }
+  if FPopup <> nil then
+    FPopup.Controller := AValue;
 end;
 
 procedure TTyComboBox.DoSelect;
@@ -340,141 +324,73 @@ end;
 
 function TTyComboBox.DroppedDown: Boolean;
 begin
-  Result := (FPopup <> nil) and FPopup.Visible;
+  Result := (FPopup <> nil) and FPopup.IsOpen;
 end;
 
-{ Ensure the popup form and its TTyListBox child exist.
-  Called lazily on first DropDown. }
+{ Ensure the popup helper and its TTyListBox child exist, then show the popup. }
 procedure TTyComboBox.DropDown;
 var
-  PopupH, PopupW: Integer;
-  P: TPoint;
-  ParentForm: TCustomForm;
+  PopupH: Integer;
+  S: TTyStyleSet;
 begin
   if FItems.Count = 0 then Exit;
 
-  { Lazily create the popup form + listbox }
+  { Lazily create the popup helper and the list box (both live for the combo's
+    lifetime — the helper reuses its form across multiple show/hide cycles). }
   if FPopup = nil then
   begin
-    FPopup := TForm.CreateNew(nil);
-    FPopup.BorderStyle := bsNone;
-    FPopup.ShowInTaskBar := stNever;
-    FPopup.FormStyle := fsStayOnTop;
+    FPopup := TTyDropdownPopup.Create;
+    FPopup.Controller := Self.Controller;
+    FPopup.OnClose    := @PopupClosed;
 
-    ParentForm := GetParentForm(Self);
-    if ParentForm <> nil then
-    begin
-      FPopup.PopupParent := ParentForm;
-      FPopup.PopupMode := pmExplicit;
-    end;
-
-    FPopup.KeyPreview := True;
-    FPopup.OnDeactivate := @PopupDeactivate;
-    FPopup.OnKeyDown := @PopupKeyDown;
-    FPopup.OnResize := @PopupResize;   // re-mask rounded corners after Qt's layout-driven resize
-
-    FPopupList := TTyListBox.Create(FPopup);
-    FPopupList.Parent := FPopup;
-    FPopupList.Align := alClient;
-    FPopupList.ForceSquareSurface := TyQtIsWayland;   // Wayland can't shape-mask the window -> square
+    FPopupList := TTyListBox.Create(Self);  // owned by the combo, not the form
+    FPopupList.ForceSquareSurface := TyQtIsWayland;
     FPopupList.OnChange := @PopupListChange;
+
+    { Wire the list into the helper's form (alClient; SetContent is one-shot). }
+    FPopup.SetContent(FPopupList);
+
+    { Key handling on the popup form. }
+    FPopup.Form.KeyPreview := True;
+    FPopup.Form.OnKeyDown  := @PopupKeyDown;
   end;
 
-  { Sync controller every DropDown so DPI/theme changes take effect }
+  { Sync controller every DropDown so DPI/theme changes take effect. }
   FPopupList.Controller := Self.Controller;
+  FPopup.Controller     := Self.Controller;
 
-  { Sync items and selection — detach OnChange to prevent recursion }
+  { Sync items and selection — detach OnChange to prevent recursion. }
   FPopupList.OnChange := nil;
   FPopupList.Items.Assign(FItems);
-  { Use the private field path via SelectItem with temp guard:
-    SelectItem won't fire our nil'd OnChange anyway }
   FPopupList.SelectItem(FItemIndex);
   FPopupList.OnChange := @PopupListChange;
 
-  { Size: height = min(DropDownCount, Items.Count) rows (+ frame chrome).
-    Shared with the headless ComputePopupHeight so sizing cannot drift. }
-  PopupH := ComputePopupHeight(Font.PixelsPerInch);
-  PopupW := Width;
-
-  { Position below the combo }
-  P := ControlToScreen(Types.Point(0, Height));
-  FPopupRect := Types.Rect(P.X, P.Y, P.X + PopupW, P.Y + PopupH);
-  TyQtMakePopup(FPopup);   // Qt: re-type as Qt::Popup BEFORE Show so it maps app-positioned (no top-left flash)
-  FPopup.SetBounds(P.X, P.Y, PopupW, PopupH);
-
-  FPopup.Show;
-  // Qt/X11 may still RE-PLACE + un-mask a frameless window at MAP time; re-assert now AND again next
-  // event-loop turn (DeferredReapplyGeometry), once the native window settles. No-op on Win32/GTK2.
-  FPopup.SetBounds(P.X, P.Y, PopupW, PopupH);
-  { Round the popup window's corners to match the dropdown's themed fill, now that
-    the handle is allocated by Show. Re-applied here every DropDown so it follows
-    the popup's current size, PPI and theme. }
-  ApplyPopupRegion(PopupW, PopupH);
-  Application.QueueAsyncCall(@DeferredReapplyGeometry, 0);
-  DoDropDown;   // popup actually opened
-end;
-
-{ Shape the popup window with a rounded region matching the dropdown list's themed
-  BorderRadius (scaled to device PPI). On non-Windows this is a graceful no-op. }
-procedure TTyComboBox.ApplyPopupRegion(AWidth, AHeight: Integer);
-var
-  S: TTyStyleSet;
-  d: Integer;
-  Rgn: HRGN;
-begin
-  if (FPopup = nil) or (not FPopup.HandleAllocated) then Exit;
-  { Resolve the dropdown list's own style so the corner radius tracks the theme.
-    The popup hosts a TTyListBox (style key 'TyListBox'); resolve it through the
-    combo's active controller (the same theme the popup list paints with). }
+  { Resolve the list's corner radius so the popup window region matches the
+    themed fill (same value the old ApplyPopupRegion computed). }
   S := ActiveController.Model.ResolveStyle('TyListBox', '', []);
-  // Fill the window background with the list surface so the corner gaps OUTSIDE the rounded region
-  // are not the dark default form Color (the Linux 'black corners') where a widgetset region no-ops.
-  if S.Background.Kind = tfkSolid then
-    FPopup.Color := TyColorToLCL(S.Background.Color);
-  // Wayland ignores window masks (no XShape): skip shaping — the list paints square corners
-  // (ForceSquareSurface) so the dropdown is a clean rectangle, not rounded-paint-on-square-window.
-  if TyQtIsWayland then Exit;
-  { Scale the logical BorderRadius to the popup's device PPI; the rounded-rect
-    region uses the FULL corner diameter (2 * radius). }
-  d := MulDiv(S.BorderRadius, FPopup.Font.PixelsPerInch, 96) * 2;
-  if d <= 0 then
-  begin
-    { Radius 0: leave the window rectangular (clear any region from a prior open). On Qt, deep-clear
-      first — SetWindowRgn(.,0) is a no-op there (no-op off Qt). }
-    TyQtClearWindowMaskDeep(FPopup, FPopupList);
-    SetWindowRgn(FPopup.Handle, 0, True);
-    Exit;
-  end;
-  { +1 on the extents: CreateRoundRectRgn's right/bottom are exclusive. SetWindowRgn takes ownership
-    of Rgn; do not delete it. LCLIntf routes it: win32 native / gtk2 shape-combine / qt setMask
-    (top-level ONLY). }
-  Rgn := CreateRoundRectRgn(0, 0, AWidth + 1, AHeight + 1, d, d);
-  { Qt6/X11 (QTSCROLLABLEFORMS): also mask the scroll-area viewport + the alClient TTyListBox's own
-    native widget, which the top-level mask never reaches. Before SetWindowRgn; no-op off Qt. }
-  TyQtMaskWindowDeep(FPopup, FPopupList, Rgn);
-  SetWindowRgn(FPopup.Handle, Rgn, True);
-end;
+  FPopup.CornerRadiusLogical := S.BorderRadius;
 
-procedure TTyComboBox.PopupResize(Sender: TObject);
-begin
-  // Re-assert the rounded region at the popup's ACTUAL realized size — Qt drops the mask on resize,
-  // and the post-Show layout resize is exactly when that happens (Win32/GTK2: idempotent re-apply).
-  if (FPopup <> nil) and FPopup.Visible and FPopup.HandleAllocated then
-    ApplyPopupRegion(FPopup.Width, FPopup.Height);
+  { Size: height = min(DropDownCount, Items.Count) rows (+ frame chrome). }
+  PopupH := ComputePopupHeight(Font.PixelsPerInch);
+
+  FPopup.Popup(Self, Width, PopupH);
+  DoDropDown;   // popup actually opened
 end;
 
 procedure TTyComboBox.CloseUp;
 begin
-  if (FPopup <> nil) and FPopup.Visible then
+  { If the popup is open, close it — FPopup.Close fires PopupClosed (OnClose)
+    which mirrors FCloseUpTick, Invalidates, and calls DoCloseUp. }
+  if (FPopup <> nil) and FPopup.IsOpen then
   begin
-    { Detach deactivate to prevent re-entering CloseUp from Hide }
-    FPopup.OnDeactivate := nil;
-    FPopup.Hide;
-    FPopup.OnDeactivate := @PopupDeactivate;
+    FPopup.Close;   // → PopupClosed fires here
+    Exit;
   end;
+  { Popup was not open (headless test path or already closed): record the tick
+    and fire bookkeeping so the race guard still works in tests. }
   FCloseUpTick := GetTickCount64;
   Invalidate;
-  DoCloseUp;   // dropdown closed
+  DoCloseUp;
 end;
 
 procedure TTyComboBox.Click;
@@ -482,9 +398,10 @@ begin
   if not Enabled then Exit;
   inherited Click;
   { If dropped down, close. Otherwise open — but guard the reopen race:
-    clicking the combo while it is open fires PopupDeactivate→CloseUp BEFORE
-    this Click handler runs, so DroppedDown is already False here. We suppress
-    reopen if CloseUp happened within the last 200 ms. }
+    clicking the combo while it is open fires FormDeactivate→FPopup.Close→
+    PopupClosed BEFORE this Click handler runs, so DroppedDown is already False
+    here. We suppress reopen if CloseUp happened within the last 200 ms.
+    FCloseUpTick is mirrored from FPopup.CloseUpTick in PopupClosed. }
   if DroppedDown then
     CloseUp
   else if GetTickCount64 - FCloseUpTick > 200 then
@@ -554,24 +471,21 @@ begin
   Application.QueueAsyncCall(@DeferredCloseUp, 0);
 end;
 
-procedure TTyComboBox.DeferredReapplyGeometry(Data: PtrInt);
-begin
-  // One event-loop turn after Show, by when Qt's map-time reparent/flag churn has settled — so this
-  // SetBounds + region finally stick (harmless re-assert on Win32/GTK2).
-  if (FPopup = nil) or (not FPopup.Visible) then Exit;
-  FPopup.SetBounds(FPopupRect.Left, FPopupRect.Top,
-    FPopupRect.Right - FPopupRect.Left, FPopupRect.Bottom - FPopupRect.Top);
-  ApplyPopupRegion(FPopupRect.Right - FPopupRect.Left, FPopupRect.Bottom - FPopupRect.Top);
-end;
-
 procedure TTyComboBox.DeferredCloseUp(Data: PtrInt);
 begin
   CloseUp;
 end;
 
-procedure TTyComboBox.PopupDeactivate(Sender: TObject);
+{ Called by TTyDropdownPopup.OnClose when the popup hides (click-away, Escape,
+  or programmatic FPopup.Close).  This is the single bookkeeping point. }
+procedure TTyComboBox.PopupClosed(Sender: TObject);
 begin
-  CloseUp;
+  { Mirror the helper's close-up tick into the protected field so test subclasses
+    (e.g. AgeCloseUpTick) and the Click guard can use it without touching FPopup. }
+  if FPopup <> nil then
+    FCloseUpTick := FPopup.CloseUpTick;
+  Invalidate;
+  DoCloseUp;
 end;
 
 procedure TTyComboBox.PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
