@@ -1,7 +1,8 @@
 unit tyControls.DateTimePicker;
 {$mode objfpc}{$H+}
 {
-  tyControls.DateTimePicker — pure-function section (Task C1).
+  tyControls.DateTimePicker — pure-function section (Task C1)
+                            + TTyDateTimePicker control (Task C2).
 
   No-carry / roll-within-field decision
   ======================================
@@ -16,12 +17,26 @@ unit tyControls.DateTimePicker;
   DATETIMEPICK_CLASS), where each segment spins independently. The day is
   additionally clamped to the length of the *current* month after rolling, so
   e.g. rolling from day 31 in a 30-day month still yields a valid date.
+
+  Digit buffer / auto-advance rule (Task C2)
+  ==========================================
+  FDigitBuffer accumulates typed digit characters for the active segment.
+  Auto-advance fires when the segment becomes "full":
+    - For 2-digit segments (day, month, hour, minute, second): after 2 digits,
+      OR when the partial value × 10 would already exceed the segment max (e.g.
+      typing '3' into a month segment [max=12] auto-advances because 30 > 12).
+    - For the year segment (4 digits): after 4 digits.
+  On auto-advance FActiveSeg increments (clamped at High(FSegments)); the buffer
+  resets. The user can also force an advance by pressing →.
 }
 
 interface
 
 uses
-  Classes, SysUtils, Types, DateUtils;
+  Classes, SysUtils, Types, DateUtils,
+  Controls, Graphics, LCLType, ExtCtrls,
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 
 type
   TTyDateTimeKind = (dtkDate, dtkTime);
@@ -73,6 +88,126 @@ function TySegmentStep(AValue: TDateTime; const ASeg: TTySegment;
   Returns False (and leaves AMin/AMax 0) when ASeg.Kind = skNone. }
 function TySegmentRange(const ASeg: TTySegment;
   out AMin, AMax: Integer): Boolean;
+
+{ Return the segment index (0-based into ASegs) whose character span contains
+  ACharIndex (0-based). Returns -1 when ACharIndex is outside all segments.
+  Used for click hit-testing: measure the substring up to the click → pass the
+  resulting character offset here. }
+function TyDateTimeActiveSegAt(const ASegs: TTySegmentArray;
+  ACharIndex: Integer): Integer;
+
+{ TTyDateTimePicker — field render + segment editing (Task C2).
+  Dropdown/time-spin/ShowCheckBox behavior is wired in Task C3. }
+type
+  TTyDateTimePicker = class(TTyCustomControl)
+  private
+    FKind:        TTyDateTimeKind;
+    FDateTime:    TDateTime;
+    FMinDate:     TDateTime;
+    FMaxDate:     TDateTime;
+    FDateFormat:  string;
+    FTimeFormat:  string;
+    FReadOnly:    Boolean;
+    FOnChange:    TNotifyEvent;
+    { ShowCheckBox / Checked — storage stubs; wired to rendering in Task C3 }
+    FShowCheckBox: Boolean;
+    FChecked:      Boolean;
+
+    { Segment editing state }
+    FSegments:    TTySegmentArray;  // computed from active format
+    FActiveSeg:   Integer;          // index into FSegments; -1 = none
+    FDigitBuffer: string;           // accumulated digit chars for current seg
+
+    { Blinking caret (same pattern as TTySpinEdit — optional here; we use the
+      segment highlight as the primary focus cue, so FCaretVisible only gates
+      the thin I-beam caret drawn inside the active segment for accessibility). }
+    FCaretVisible:   Boolean;
+    FBlinkTimer:     TTimer;
+    FBlinkElapsedMs: Integer;
+
+    function  ActiveFormat: string;
+    procedure RebuildSegments;
+    function  FormattedText: string;
+    { Pixel x of the start of character ACharIdx in the rendered text,
+      relative to the text-content rect's left edge. }
+    function  MeasureCharX(const AText, AFontName: string;
+                ACharIdx, AFontSizePx, AFontWeight, APPI: Integer): Integer;
+    { Apply a typed digit to the active segment; auto-advance if full.
+      Returns True if FDateTime changed. }
+    function  ApplyDigit(ADigit: Char): Boolean;
+    { Commit: clamp FDateTime to [MinDate,MaxDate] and fire OnChange if changed.
+      AOldVal is the value before any digit/step that triggered the commit. }
+    procedure CommitAndFire(AOldVal: TDateTime);
+    { Step the active segment by ADelta and commit. }
+    procedure StepActiveSeg(ADelta: Integer);
+
+    procedure EnsureBlinkTimer;
+    procedure HandleBlink(Sender: TObject);
+    procedure ResetCaretBlink;
+
+    procedure SetKind(AValue: TTyDateTimeKind);
+    procedure SetDateTime(AValue: TDateTime);
+    procedure SetDate(AValue: TDateTime);
+    function  GetDate: TDateTime;
+    procedure SetTime(AValue: TDateTime);
+    function  GetTime: TDateTime;
+    procedure SetDateFormat(const AValue: string);
+    procedure SetTimeFormat(const AValue: string);
+    procedure SetMinDate(AValue: TDateTime);
+    procedure SetMaxDate(AValue: TDateTime);
+    procedure SetReadOnly(AValue: Boolean);
+    procedure SetShowCheckBox(AValue: Boolean);
+    procedure SetChecked(AValue: Boolean);
+
+  protected
+    function  GetStyleTypeKey: string; override;
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure Paint; override;
+    procedure DoEnter; override;
+    procedure DoExit; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    function  DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+                MousePos: TPoint): Boolean; override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
+                X, Y: Integer); override;
+
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor  Destroy; override;
+
+    property DateTime:    TDateTime read FDateTime  write SetDateTime;
+    property Date:        TDateTime read GetDate    write SetDate;
+    property Time:        TDateTime read GetTime    write SetTime;
+    { Expose for tests }
+    property ActiveSeg:   Integer   read FActiveSeg;
+    property Segments:    TTySegmentArray read FSegments;
+
+  published
+    property Kind:         TTyDateTimeKind read FKind        write SetKind        default dtkDate;
+    property DateFormat:   string          read FDateFormat  write SetDateFormat;
+    property TimeFormat:   string          read FTimeFormat  write SetTimeFormat;
+    property MinDate:      TDateTime       read FMinDate     write SetMinDate;
+    property MaxDate:      TDateTime       read FMaxDate     write SetMaxDate;
+    property ReadOnly:     Boolean         read FReadOnly    write SetReadOnly    default False;
+    property ShowCheckBox: Boolean         read FShowCheckBox write SetShowCheckBox default False;
+    property Checked:      Boolean         read FChecked     write SetChecked     default True;
+    property OnChange:     TNotifyEvent    read FOnChange    write FOnChange;
+    property Align;
+    property Anchors;
+    property Font;
+    property StyleClass;
+    property Controller;
+    property TabStop default True;
+    property OnClick;
+  end;
+
+{ Button rect for the right-side button area (dtkDate = chevron, dtkTime = up/down) }
+function TyDateTimeButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+{ For dtkTime: top half of the button = up arrow }
+function TyDateTimeUpButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+{ For dtkTime: bottom half = down arrow }
+function TyDateTimeDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 
 implementation
 
@@ -298,6 +433,675 @@ begin
   end;
 
   Result := EncodeDateTime(Y, M, D, H, Min, S, MS);
+end;
+
+{ ── TyDateTimeActiveSegAt ─────────────────────────────────────────────────── }
+
+function TyDateTimeActiveSegAt(const ASegs: TTySegmentArray;
+  ACharIndex: Integer): Integer;
+{ Return the index of the segment that contains ACharIndex (0-based char
+  position in the format string). Returns -1 when no segment covers it. }
+var
+  i: Integer;
+begin
+  Result := -1;
+  for i := 0 to High(ASegs) do
+    if (ACharIndex >= ASegs[i].StartCh) and
+       (ACharIndex < ASegs[i].StartCh + ASegs[i].LenCh) then
+    begin
+      Result := i;
+      Exit;
+    end;
+end;
+
+{ ── Button geometry helpers ──────────────────────────────────────────────── }
+
+function TyDateTimeButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+var BtnW, X0: Integer;
+begin
+  BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
+  if BtnW < 1 then BtnW := 1;
+  X0 := ALocal.Right - BtnW;
+  Result := Rect(X0, ALocal.Top, ALocal.Right, ALocal.Bottom);
+end;
+
+function TyDateTimeUpButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+var BtnW, X0, HalfY: Integer;
+begin
+  BtnW  := MulDiv(TyFieldButtonWidth, APPI, 96);
+  if BtnW < 1 then BtnW := 1;
+  X0    := ALocal.Right - BtnW;
+  HalfY := ALocal.Top + (ALocal.Bottom - ALocal.Top) div 2;
+  Result := Rect(X0, ALocal.Top, ALocal.Right, HalfY);
+end;
+
+function TyDateTimeDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+var BtnW, X0, HalfY: Integer;
+begin
+  BtnW  := MulDiv(TyFieldButtonWidth, APPI, 96);
+  if BtnW < 1 then BtnW := 1;
+  X0    := ALocal.Right - BtnW;
+  HalfY := ALocal.Top + (ALocal.Bottom - ALocal.Top) div 2;
+  Result := Rect(X0, HalfY, ALocal.Right, ALocal.Bottom);
+end;
+
+{ ── TTyDateTimePicker ────────────────────────────────────────────────────── }
+
+constructor TTyDateTimePicker.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  TabStop        := True;
+  Cursor         := crArrow;
+  FKind          := dtkDate;
+  FDateTime      := Now;
+  FMinDate       := 0;
+  FMaxDate       := 0;
+  FDateFormat    := '';
+  FTimeFormat    := '';
+  FReadOnly      := False;
+  FShowCheckBox  := False;
+  FChecked       := True;
+  FActiveSeg     := 0;
+  FDigitBuffer   := '';
+  FCaretVisible  := True;
+  FBlinkTimer    := nil;
+  FBlinkElapsedMs := 0;
+  Width  := 130;
+  Height := 24;
+  RebuildSegments;
+end;
+
+destructor TTyDateTimePicker.Destroy;
+begin
+  FreeAndNil(FBlinkTimer);
+  inherited Destroy;
+end;
+
+function TTyDateTimePicker.GetStyleTypeKey: string;
+begin
+  Result := 'TyDateTimePicker';
+end;
+
+{ ── Active format resolution ─────────────────────────────────────────────── }
+
+function TTyDateTimePicker.ActiveFormat: string;
+begin
+  if FKind = dtkDate then
+  begin
+    if FDateFormat <> '' then
+      Result := FDateFormat
+    else
+      Result := DefaultFormatSettings.ShortDateFormat;
+  end
+  else
+  begin
+    if FTimeFormat <> '' then
+      Result := FTimeFormat
+    else
+      Result := DefaultFormatSettings.ShortTimeFormat;
+  end;
+end;
+
+procedure TTyDateTimePicker.RebuildSegments;
+begin
+  FSegments := TyDateTimeSegments(ActiveFormat);
+  if FActiveSeg > High(FSegments) then
+    FActiveSeg := 0;
+  if Length(FSegments) = 0 then
+    FActiveSeg := -1;
+  FDigitBuffer := '';
+end;
+
+function TTyDateTimePicker.FormattedText: string;
+begin
+  Result := TyFormatDateTime(FDateTime, ActiveFormat, DefaultFormatSettings);
+end;
+
+{ ── Pixel measurement helper ─────────────────────────────────────────────── }
+
+function TTyDateTimePicker.MeasureCharX(const AText, AFontName: string;
+  ACharIdx, AFontSizePx, AFontWeight, APPI: Integer): Integer;
+var
+  Bmp: TBGRABitmap;
+  Sub: string;
+begin
+  if (ACharIdx <= 0) or (AText = '') then
+  begin
+    Result := 0;
+    Exit;
+  end;
+  if ACharIdx > Length(AText) then ACharIdx := Length(AText);
+  Sub := Copy(AText, 1, ACharIdx);
+  Bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(Bmp, AFontName, AFontSizePx, AFontWeight, APPI);
+    Result := Bmp.TextSize(Sub).cx;
+  finally
+    Bmp.Free;
+  end;
+end;
+
+{ ── Digit buffer / auto-advance ──────────────────────────────────────────── }
+
+function TTyDateTimePicker.ApplyDigit(ADigit: Char): Boolean;
+{ Returns True if FDateTime changed. }
+var
+  Seg:          TTySegment;
+  RMin, RMax:   Integer;
+  NewBuf:       string;
+  NewVal:       Integer;
+  MaxDigits:    Integer;
+  Tentative:    Integer;
+  Y, M, D, H, Mi, S, MS: Word;
+  NewDT:        TDateTime;
+  Advance:      Boolean;
+begin
+  Result := False;
+  if FActiveSeg < 0 then Exit;
+  if FActiveSeg > High(FSegments) then Exit;
+  Seg := FSegments[FActiveSeg];
+  if not TySegmentRange(Seg, RMin, RMax) then Exit;
+
+  NewBuf := FDigitBuffer + ADigit;
+  NewVal := StrToIntDef(NewBuf, -1);
+  if NewVal < 0 then Exit;  // non-digit sneaked in
+
+  { Determine max digit count for this segment }
+  if Seg.Kind = skYear then
+    MaxDigits := 4
+  else
+    MaxDigits := 2;
+
+  { Determine whether to auto-advance after this digit:
+    - reached MaxDigits, OR
+    - for non-year: NewVal * 10 > RMax (can't add another digit and stay valid) }
+  Advance := False;
+  if Length(NewBuf) >= MaxDigits then
+    Advance := True
+  else if (Seg.Kind <> skYear) and (NewVal * 10 > RMax) then
+    Advance := True;
+
+  { Clamp the value to [RMin, RMax] }
+  if NewVal < RMin then NewVal := RMin;
+  if NewVal > RMax then NewVal := RMax;
+
+  { Write the new value into FDateTime }
+  DecodeDateTime(FDateTime, Y, M, D, H, Mi, S, MS);
+  case Seg.Kind of
+    skYear:   Y  := Word(NewVal);
+    skMonth:  M  := Word(NewVal);
+    skDay:    D  := Word(NewVal);
+    skHour:   H  := Word(NewVal);
+    skMinute: Mi := Word(NewVal);
+    skSecond: S  := Word(NewVal);
+  else
+    Exit;  // skAMPM / skNone — not handled by digit entry
+  end;
+  { Clamp day when month/year changed }
+  if D > DaysInAMonth(Y, M) then D := DaysInAMonth(Y, M);
+  try
+    NewDT := EncodeDateTime(Y, M, D, H, Mi, S, MS);
+  except
+    Exit;
+  end;
+  Result := NewDT <> FDateTime;
+  FDateTime := NewDT;
+
+  { Update buffer or advance }
+  if Advance then
+  begin
+    FDigitBuffer := '';
+    if FActiveSeg < High(FSegments) then
+      Inc(FActiveSeg);
+  end
+  else
+    FDigitBuffer := NewBuf;
+
+  { For partial entry: if the partial value < RMin, keep going (don't clamp
+    mid-entry). The value is already written as-is (possibly below RMin for a
+    moment, e.g. typing '0' as first digit of month is fine since '01'..'09'
+    are valid). The commit on focus-out will clamp. }
+  Tentative := StrToIntDef(FDigitBuffer, 0);
+  if (FDigitBuffer <> '') and (Tentative < RMin) then
+  begin
+    { keep partial buffer — do NOT clamp yet, user may still type }
+  end;
+end;
+
+{ ── Commit / step ────────────────────────────────────────────────────────── }
+
+procedure TTyDateTimePicker.CommitAndFire(AOldVal: TDateTime);
+{ Clamp FDateTime to [MinDate,MaxDate] and fire OnChange if the value
+  actually changed relative to AOldVal.  Does NOT reset the digit buffer —
+  callers that finish digit entry (auto-advance / Enter / focus-out) clear
+  FDigitBuffer themselves; intermediate per-digit calls must leave it intact. }
+var
+  Clamped: TDateTime;
+begin
+  Clamped := FDateTime;
+  if (FMinDate <> 0) and (Clamped < FMinDate) then Clamped := FMinDate;
+  if (FMaxDate <> 0) and (Clamped > FMaxDate) then Clamped := FMaxDate;
+  FDateTime := Clamped;
+  if (FDateTime <> AOldVal) and Assigned(FOnChange) then
+    FOnChange(Self);
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.StepActiveSeg(ADelta: Integer);
+var
+  OldVal: TDateTime;
+begin
+  if FReadOnly then Exit;
+  if FActiveSeg < 0 then Exit;
+  if FActiveSeg > High(FSegments) then Exit;
+  OldVal    := FDateTime;
+  FDateTime := TySegmentStep(FDateTime, FSegments[FActiveSeg], ADelta);
+  FDigitBuffer := '';
+  CommitAndFire(OldVal);
+end;
+
+{ ── Blink timer ──────────────────────────────────────────────────────────── }
+
+procedure TTyDateTimePicker.EnsureBlinkTimer;
+begin
+  if FBlinkTimer = nil then
+  begin
+    FBlinkTimer          := TTimer.Create(Self);
+    FBlinkTimer.Enabled  := False;
+    FBlinkTimer.Interval := 530;
+    FBlinkTimer.OnTimer  := @HandleBlink;
+  end;
+end;
+
+procedure TTyDateTimePicker.HandleBlink(Sender: TObject);
+begin
+  Inc(FBlinkElapsedMs, FBlinkTimer.Interval);
+  FCaretVisible := TyCaretVisible(FBlinkElapsedMs, FBlinkTimer.Interval);
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.ResetCaretBlink;
+begin
+  FCaretVisible    := True;
+  FBlinkElapsedMs  := 0;
+end;
+
+{ ── Focus ────────────────────────────────────────────────────────────────── }
+
+procedure TTyDateTimePicker.DoEnter;
+begin
+  inherited DoEnter;
+  ResetCaretBlink;
+  if HandleAllocated then
+  begin
+    EnsureBlinkTimer;
+    FBlinkTimer.Enabled := True;
+  end;
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.DoExit;
+var SavedDT: TDateTime;
+begin
+  inherited DoExit;
+  SavedDT    := FDateTime;
+  FDigitBuffer := '';   // discard any partial digit entry
+  CommitAndFire(SavedDT);
+  if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
+  FCaretVisible := True;
+  Invalidate;
+end;
+
+{ ── Rendering ────────────────────────────────────────────────────────────── }
+
+procedure TTyDateTimePicker.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+var
+  P:         TTyPainter;
+  S:         TTyStyleSet;
+  R, TextR, BtnR: TRect;
+  BtnW, EffSize: Integer;
+  Txt:       string;
+  { Selection highlight }
+  SelStyle:  TTyStyleSet;
+  SelFill:   TTyFill;
+  SegX1, SegX2: Integer;
+  SegRect:   TRect;
+  { Button area }
+  UpR, DnR:  TRect;
+begin
+  P := TTyPainter.Create;
+  try
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI);
+    S := CurrentStyle;
+    DrawFrame(P, R, S);
+
+    BtnW  := P.Scale(TyFieldButtonWidth);
+    EffSize := ResolveFontSize(S);
+
+    { Text content rect: left padding to right minus button column }
+    TextR := Rect(
+      R.Left  + P.Scale(S.Padding.Left),
+      R.Top   + P.Scale(S.Padding.Top),
+      R.Right - BtnW,
+      R.Bottom - P.Scale(S.Padding.Bottom));
+
+    Txt := FormattedText;
+
+    { 1. Active-segment highlight (drawn BEFORE text so glyphs appear on top) }
+    if Focused and (FActiveSeg >= 0) and (FActiveSeg <= High(FSegments)) then
+    begin
+      SelStyle := ActiveController.Model.ResolveStyle('TyTextSelection', '', []);
+      SelFill  := Default(TTyFill);
+      SelFill.Kind  := tfkSolid;
+      SelFill.Color := SelStyle.Background.Color;
+
+      { Measure pixel x of segment start in the formatted text.
+        The segment's StartCh/LenCh are character indices in the FORMAT string,
+        but the formatted text has the same character positions (each format
+        character maps to exactly one rendered character for fixed-width tokens
+        like 'yyyy-mm-dd'). We measure directly from the rendered string. }
+      SegX1 := TextR.Left + MeasureCharX(Txt, S.FontName,
+                  FSegments[FActiveSeg].StartCh,
+                  EffSize, S.FontWeight, APPI);
+      SegX2 := TextR.Left + MeasureCharX(Txt, S.FontName,
+                  FSegments[FActiveSeg].StartCh + FSegments[FActiveSeg].LenCh,
+                  EffSize, S.FontWeight, APPI);
+      if SegX2 <= SegX1 then SegX2 := SegX1 + P.Scale(8);  // degenerate guard
+      SegRect := Rect(SegX1, TextR.Top, SegX2, TextR.Bottom);
+      P.FillBackground(SegRect, SelFill, 0);
+    end;
+
+    { 2. Draw the formatted text }
+    P.DrawText(TextR, Txt, S.FontName, EffSize, S.FontWeight,
+      S.TextColor, taLeftJustify, tlCenter, False);
+
+    { 3. Right-side button area }
+    BtnR := TyDateTimeButtonRect(R, APPI);
+    if FKind = dtkDate then
+    begin
+      P.DrawGlyph(BtnR, tgChevronDown, S.TextColor, 2);
+    end
+    else
+    begin
+      UpR := TyDateTimeUpButtonRect(R, APPI);
+      DnR := TyDateTimeDownButtonRect(R, APPI);
+      P.DrawGlyph(UpR,  tgArrowUp,   S.TextColor, 2);
+      P.DrawGlyph(DnR,  tgArrowDown, S.TextColor, 2);
+    end;
+
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyDateTimePicker.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+{ ── Keyboard ─────────────────────────────────────────────────────────────── }
+
+procedure TTyDateTimePicker.KeyDown(var Key: Word; Shift: TShiftState);
+var OldVal: TDateTime;
+begin
+  if not Enabled then Exit;
+  inherited KeyDown(Key, Shift);
+  case Key of
+    VK_LEFT:
+      begin
+        FDigitBuffer := '';
+        if FActiveSeg > 0 then Dec(FActiveSeg);
+        ResetCaretBlink; Invalidate; Key := 0;
+      end;
+    VK_RIGHT:
+      begin
+        FDigitBuffer := '';
+        if FActiveSeg < High(FSegments) then Inc(FActiveSeg);
+        ResetCaretBlink; Invalidate; Key := 0;
+      end;
+    VK_HOME:
+      begin
+        FDigitBuffer := ''; FActiveSeg := 0;
+        ResetCaretBlink; Invalidate; Key := 0;
+      end;
+    VK_END:
+      begin
+        FDigitBuffer := '';
+        if Length(FSegments) > 0 then FActiveSeg := High(FSegments);
+        ResetCaretBlink; Invalidate; Key := 0;
+      end;
+    VK_UP:
+      begin
+        if not FReadOnly then StepActiveSeg(+1);
+        Key := 0;
+      end;
+    VK_DOWN:
+      begin
+        if not FReadOnly then StepActiveSeg(-1);
+        Key := 0;
+      end;
+    VK_RETURN:
+      begin
+        OldVal := FDateTime;
+        FDigitBuffer := '';   // discard any partial digit entry
+        CommitAndFire(OldVal);
+        Key := 0;
+      end;
+    VK_ESCAPE:
+      begin
+        FDigitBuffer := '';
+        Invalidate; Key := 0;
+      end;
+  end;
+end;
+
+procedure TTyDateTimePicker.UTF8KeyPress(var UTF8Key: TUTF8Char);
+var
+  OldVal: TDateTime;
+begin
+  if not Enabled then Exit;
+  inherited UTF8KeyPress(UTF8Key);
+  if FReadOnly then Exit;
+  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9']) then
+  begin
+    OldVal := FDateTime;
+    if ApplyDigit(UTF8Key[1]) then
+      CommitAndFire(OldVal)
+    else
+      Invalidate;
+  end;
+end;
+
+{ ── Mouse wheel ──────────────────────────────────────────────────────────── }
+
+function TTyDateTimePicker.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+begin
+  if not Enabled then Exit(False);
+  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
+  if FReadOnly then Exit(False);
+  if WheelDelta > 0 then
+    StepActiveSeg(+1)
+  else
+    StepActiveSeg(-1);
+  Result := True;
+end;
+
+{ ── Mouse down — segment hit-test + button clicks ────────────────────────── }
+
+procedure TTyDateTimePicker.MouseDown(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+var
+  S:        TTyStyleSet;
+  EffSize:  Integer;
+  TextLeft: Integer;
+  Txt:      string;
+  Bmp:      TBGRABitmap;
+  TextX:    Integer;
+  CharIdx:  Integer;
+  HitSeg:   Integer;
+  FmtLen:   Integer;
+  FmtStr:   string;
+begin
+  if not Enabled then Exit;
+  inherited MouseDown(Button, Shift, X, Y);
+  if Button = mbLeft then
+  begin
+    { Check button area click }
+    if PtInRect(TyDateTimeButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
+    begin
+      if (FKind = dtkTime) and not FReadOnly then
+      begin
+        if PtInRect(TyDateTimeUpButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
+          StepActiveSeg(+1)
+        else
+          StepActiveSeg(-1);
+      end;
+      { dtkDate chevron → dropdown (Task C3): no-op here }
+    end
+    else
+    begin
+      { Hit-test which segment the click landed in }
+      S        := CurrentStyle;
+      EffSize  := ResolveFontSize(S);
+      TextLeft := MulDiv(S.Padding.Left, Font.PixelsPerInch, 96);
+      Txt      := FormattedText;
+      FmtStr   := ActiveFormat;
+      FmtLen   := Length(FmtStr);
+
+      { Convert click X to a character offset by finding the character
+        whose right edge passes the click coordinate. }
+      if (Txt <> '') and (FmtLen > 0) then
+      begin
+        Bmp := TBGRABitmap.Create(1, 1);
+        try
+          TyConfigureTextFont(Bmp, S.FontName, EffSize, S.FontWeight,
+            Font.PixelsPerInch);
+          TextX   := X - TextLeft;
+          CharIdx := 0;
+          while CharIdx < FmtLen do
+          begin
+            if Bmp.TextSize(Copy(Txt, 1, CharIdx + 1)).cx >= TextX then
+              Break;
+            Inc(CharIdx);
+          end;
+          HitSeg := TyDateTimeActiveSegAt(FSegments, CharIdx);
+          if HitSeg >= 0 then
+          begin
+            FActiveSeg   := HitSeg;
+            FDigitBuffer := '';
+            ResetCaretBlink;
+            Invalidate;
+          end;
+        finally
+          Bmp.Free;
+        end;
+      end;
+    end;
+
+    try
+      if CanFocus then SetFocus;
+    except
+    end;
+  end;
+end;
+
+{ ── Property setters ─────────────────────────────────────────────────────── }
+
+procedure TTyDateTimePicker.SetKind(AValue: TTyDateTimeKind);
+begin
+  if FKind = AValue then Exit;
+  FKind := AValue;
+  RebuildSegments;
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.SetDateTime(AValue: TDateTime);
+begin
+  if (FMinDate <> 0) and (AValue < FMinDate) then AValue := FMinDate;
+  if (FMaxDate <> 0) and (AValue > FMaxDate) then AValue := FMaxDate;
+  if FDateTime = AValue then Exit;
+  FDateTime := AValue;
+  FDigitBuffer := '';
+  if Assigned(FOnChange) then FOnChange(Self);
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.SetDate(AValue: TDateTime);
+begin
+  { Keep the time part, replace only the date part }
+  SetDateTime(Trunc(AValue) + Frac(FDateTime));
+end;
+
+function TTyDateTimePicker.GetDate: TDateTime;
+begin
+  Result := Trunc(FDateTime);
+end;
+
+procedure TTyDateTimePicker.SetTime(AValue: TDateTime);
+begin
+  { Keep the date part, replace only the time part }
+  SetDateTime(Trunc(FDateTime) + Frac(AValue));
+end;
+
+function TTyDateTimePicker.GetTime: TDateTime;
+begin
+  Result := Frac(FDateTime);
+end;
+
+procedure TTyDateTimePicker.SetDateFormat(const AValue: string);
+begin
+  if FDateFormat = AValue then Exit;
+  FDateFormat := AValue;
+  if FKind = dtkDate then RebuildSegments;
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.SetTimeFormat(const AValue: string);
+begin
+  if FTimeFormat = AValue then Exit;
+  FTimeFormat := AValue;
+  if FKind = dtkTime then RebuildSegments;
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.SetMinDate(AValue: TDateTime);
+begin
+  if FMinDate = AValue then Exit;
+  FMinDate := AValue;
+  if (FMinDate <> 0) and (FDateTime < FMinDate) then SetDateTime(FMinDate);
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.SetMaxDate(AValue: TDateTime);
+begin
+  if FMaxDate = AValue then Exit;
+  FMaxDate := AValue;
+  if (FMaxDate <> 0) and (FDateTime > FMaxDate) then SetDateTime(FMaxDate);
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.SetReadOnly(AValue: Boolean);
+begin
+  if FReadOnly = AValue then Exit;
+  FReadOnly := AValue;
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.SetShowCheckBox(AValue: Boolean);
+begin
+  if FShowCheckBox = AValue then Exit;
+  FShowCheckBox := AValue;
+  Invalidate;
+end;
+
+procedure TTyDateTimePicker.SetChecked(AValue: Boolean);
+begin
+  if FChecked = AValue then Exit;
+  FChecked := AValue;
+  Invalidate;
 end;
 
 end.
