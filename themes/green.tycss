@@ -333,3 +333,31 @@ TyToolBar {
   border-color: var(--border);
   border-width: 1px;
 }
+
+/* ── Calendar + DateTimePicker ─────────────────────────────────────────── */
+/* green lacks several token aliases; concrete equivalents used below:
+   --input-bg          = alpha(#FFFFFF, 0) (glass, matching TyEdit/TyComboBox)
+   --surface-hover     = darken(--surface, 4%)
+   --surface-chrome    = darken(--surface, 6%)
+   --input-border-width= 1px
+   --font-size-base    = 9px
+   --font-weight-bold  = 700
+   --input-border-hover= darken(--border, 10%)
+   --disabled-opacity  = 0.5
+   --radius-sm         = 3px
+   --on-accent         = #FFFFFF                                         */
+
+TyCalendar { background: alpha(#FFFFFF, 0); color: var(--on-surface); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 6px; font-size: 9px; glass-blur: 16px; glass-tint: alpha(var(--surface), 0.42); }
+TyCalendarTitle { color: var(--on-surface); font-weight: 700; }
+TyCalendarTitle:hover { color: var(--accent); }
+TyCalendarWeekday { color: var(--muted); font-size: 9px; }
+TyCalendarCell { background: none; color: var(--on-surface); border-radius: 3px; }
+TyCalendarCell:hover { background: darken(--surface, 4%); }
+TyCalendarCell:selected { background: var(--accent); color: #FFFFFF; }
+TyCalendarCell:disabled { color: var(--muted); }
+TyDateTimePicker { background: alpha(#FFFFFF, 0); color: var(--on-surface); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 4px 6px; font-size: 9px; glass-blur: 16px; glass-tint: alpha(var(--surface), 0.42); }
+TyDateTimePicker:hover { border-color: darken(--border, 10%); }
+TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyDateTimePicker:disabled { opacity: 0.5; }
+TyDateTimeButton { background: darken(--surface, 6%); color: var(--on-surface); }
+TyDateTimeButton:hover { background: darken(--surface, 4%); color: var(--accent); }

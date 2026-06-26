@@ -368,6 +368,23 @@ begin
     '  border-width: var(--input-border-width);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
+    '/* ── Calendar + DateTimePicker ─────────────────────────────────────────── */' + LineEnding +
+    '' + LineEnding +
+    'TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 6px; font-size: var(--font-size-base); }' + LineEnding +
+    'TyCalendarTitle { color: var(--on-surface); font-weight: var(--font-weight-bold); }' + LineEnding +
+    'TyCalendarTitle:hover { color: var(--accent); }' + LineEnding +
+    'TyCalendarWeekday { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    'TyCalendarCell { background: none; color: var(--on-surface); border-radius: var(--radius-sm); }' + LineEnding +
+    'TyCalendarCell:hover { background: var(--surface-hover); }' + LineEnding +
+    'TyCalendarCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    'TyCalendarCell:disabled { color: var(--muted); }' + LineEnding +
+    'TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 4px 6px; font-size: var(--font-size-base); }' + LineEnding +
+    'TyDateTimePicker:hover { border-color: var(--input-border-hover); }' + LineEnding +
+    'TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyDateTimeButton { background: var(--surface-chrome); color: var(--on-surface); }' + LineEnding +
+    'TyDateTimeButton:hover { background: var(--surface-hover); color: var(--accent); }' + LineEnding +
+    '' + LineEnding +
     '/* ── @mode conditional token blocks (D7) ──────────────────────────────── */' + LineEnding +
     '' + LineEnding +
     '@mode light {' + LineEnding +
@@ -789,6 +806,23 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '}' + LineEnding +
+    '' + LineEnding +
+    '/* ── Calendar + DateTimePicker ─────────────────────────────────────────── */' + LineEnding +
+    '' + LineEnding +
+    'TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 6px; font-size: var(--font-size-base); }' + LineEnding +
+    'TyCalendarTitle { color: var(--on-surface); font-weight: var(--font-weight-bold); }' + LineEnding +
+    'TyCalendarTitle:hover { color: var(--accent); }' + LineEnding +
+    'TyCalendarWeekday { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    'TyCalendarCell { background: none; color: var(--on-surface); border-radius: var(--radius-sm); }' + LineEnding +
+    'TyCalendarCell:hover { background: var(--surface-hover); }' + LineEnding +
+    'TyCalendarCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    'TyCalendarCell:disabled { color: var(--muted); }' + LineEnding +
+    'TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 4px 6px; font-size: var(--font-size-base); }' + LineEnding +
+    'TyDateTimePicker:hover { border-color: var(--input-border-hover); }' + LineEnding +
+    'TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyDateTimeButton { background: var(--surface-chrome); color: var(--on-surface); }' + LineEnding +
+    'TyDateTimeButton:hover { background: var(--surface-hover); color: var(--accent); }' + LineEnding +
     '' + LineEnding +
     '/* ── @mode conditional token blocks (D7) ──────────────────────────────────────' + LineEnding +
     '   The accent SEED is `system-accent` (StyleModel swaps it for the OS accent at' + LineEnding +

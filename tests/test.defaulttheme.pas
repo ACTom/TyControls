@@ -108,6 +108,9 @@ begin
       tpTextColor in m.ResolveStyle('TyLabel', '', []).Present);
     AssertBg('TyStatusBar', []);
     AssertBg('TyToolBar', []);
+    AssertBg('TyCalendar', []);
+    AssertBg('TyDateTimePicker', []);
+    AssertBg('TyDateTimeButton', []);
   finally
     m.Free;
   end;

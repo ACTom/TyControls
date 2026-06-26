@@ -390,3 +390,20 @@ TyToolBar {
   border-color: var(--border);
   border-width: var(--input-border-width);
 }
+
+/* ── Calendar + DateTimePicker ─────────────────────────────────────────── */
+
+TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 6px; font-size: var(--font-size-base); }
+TyCalendarTitle { color: var(--on-surface); font-weight: var(--font-weight-bold); }
+TyCalendarTitle:hover { color: var(--accent); }
+TyCalendarWeekday { color: var(--muted); font-size: var(--font-size-base); }
+TyCalendarCell { background: none; color: var(--on-surface); border-radius: var(--radius-sm); }
+TyCalendarCell:hover { background: var(--surface-hover); }
+TyCalendarCell:selected { background: var(--accent); color: var(--on-accent); }
+TyCalendarCell:disabled { color: var(--muted); }
+TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 4px 6px; font-size: var(--font-size-base); }
+TyDateTimePicker:hover { border-color: var(--input-border-hover); }
+TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }
+TyDateTimeButton { background: var(--surface-chrome); color: var(--on-surface); }
+TyDateTimeButton:hover { background: var(--surface-hover); color: var(--accent); }
