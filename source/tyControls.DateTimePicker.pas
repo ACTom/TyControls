@@ -173,6 +173,7 @@ type
                                     // SetContent(FCalendar) only parents the calendar
                                     // into the popup form — ownership stays with Self.
     FCloseUpTick: QWord;            // tick at last CloseUp for the reopen-race guard
+    FMouseDownOnButton: Boolean;    // chevron pressed in MouseDown -> open the dropdown in Click
 
     function  ActiveFormat: string;
     function  EffectiveFormat: string;
@@ -260,6 +261,9 @@ type
                 MousePos: TPoint): Boolean; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
                 X, Y: Integer); override;
+    { Open/toggle the dropdown on Click (not MouseDown) — mirrors TTyComboBox so the
+      popup isn't immediately deactivated by the mouse-up that follows MouseDown. }
+    procedure Click; override;
 
   public
     constructor Create(AOwner: TComponent); override;
@@ -1371,6 +1375,21 @@ end;
 
 { ── Mouse down — segment hit-test + button clicks ────────────────────────── }
 
+procedure TTyDateTimePicker.Click;
+begin
+  inherited Click;
+  if FMouseDownOnButton then
+  begin
+    FMouseDownOnButton := False;
+    { Toggle: when the popup is open, the click's deactivate already closed it (and
+      OpenDropDown's 200ms guard suppresses an immediate reopen); otherwise open it.
+      Mirrors TTyComboBox.Click — opening here (not in MouseDown) avoids the mouse-up
+      activation change closing the just-shown popup. }
+    if DroppedDown then CloseDropDown
+    else OpenDropDown;
+  end;
+end;
+
 procedure TTyDateTimePicker.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
@@ -1389,6 +1408,7 @@ var
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
+  FMouseDownOnButton := False;
   if Button = mbLeft then
   begin
     { ── Checkbox area click ─────────────────────────────────────────────── }
@@ -1425,9 +1445,10 @@ begin
     begin
       if FKind = dtkDate then
       begin
-        { Chevron click → toggle dropdown (guard reopen race in OpenDropDown) }
+        { Chevron pressed → remember it; the actual open happens in Click (so the
+          mouse-up that follows MouseDown can't immediately deactivate-close the popup). }
         if not IsInert then
-          OpenDropDown;
+          FMouseDownOnButton := True;
       end
       else if (FKind = dtkTime) and not FReadOnly and not IsInert then
       begin
