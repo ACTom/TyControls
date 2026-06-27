@@ -156,7 +156,11 @@ begin
   if FTarget = nil then Exit;
   FDragging := True;
   FStartSize := AxisSize(FTarget);
-  if Vertical then FMouseStart := X else FMouseStart := Y;   // X/Y are control-local; constant origin is fine for a delta
+  // Measure the mouse in SCREEN coords. An alLeft/alTop splitter slides as it resizes the
+  // neighbour, so a control-LOCAL delta tracks the mouse at half speed (W = (start + mouseDelta)/2).
+  // Screen coords are a stable reference, so the resize follows the mouse 1:1.
+  if Vertical then FMouseStart := ClientToScreen(Point(X, Y)).X
+  else FMouseStart := ClientToScreen(Point(X, Y)).Y;
 end;
 
 procedure TTySplitter.MouseMove(Shift: TShiftState; X, Y: Integer);
@@ -165,7 +169,8 @@ var
 begin
   inherited MouseMove(Shift, X, Y);
   if not FDragging then Exit;
-  if Vertical then delta := X - FMouseStart else delta := Y - FMouseStart;
+  if Vertical then delta := ClientToScreen(Point(X, Y)).X - FMouseStart
+  else delta := ClientToScreen(Point(X, Y)).Y - FMouseStart;
   if FResizeStyle = rsUpdate then
     ApplySize(delta)
   else
@@ -183,7 +188,8 @@ begin
   begin
     if FResizeStyle = rsLine then
     begin
-      if Vertical then delta := X - FMouseStart else delta := Y - FMouseStart;
+      if Vertical then delta := ClientToScreen(Point(X, Y)).X - FMouseStart
+      else delta := ClientToScreen(Point(X, Y)).Y - FMouseStart;
       ApplySize(delta);
     end;
     FDragging := False;
