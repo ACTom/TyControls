@@ -1,4 +1,4 @@
-﻿unit test.treeview;
+unit test.treeview;
 {$mode objfpc}{$H+}
 interface
 uses
@@ -4857,6 +4857,171 @@ begin
   end;
 end;
 
+{ ── D4 ── auto-size on resize + spring ─────────────────────────────────────── }
+
+type
+  TTreeD4AutoSizeTest = class(TTestCase)
+  private
+    { Build a 3-column tree with hoAutoResize + AutoSizeIndex=1.
+      col0=100, col1=?, col2=80; client width=300 so col1 should start=120.
+      Caller owns F and Ctl. }
+    function BuildD4Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
+  published
+    { With hoAutoResize+AutoSizeIndex=1 and client=300:
+      col1 fills 300-100-80=120. }
+    procedure TestD4_AutoSizeInitial;
+    { After Resize (wider client), col1 grows to absorb the extra width. }
+    procedure TestD4_AutoSizeAfterResize;
+    { Spring columns: two coAutoSpring columns share a delta evenly. }
+    procedure TestD4_SpringDistribution;
+    { After a non-auto column is resized, col1 (auto) absorbs the change. }
+    procedure TestD4_AutoSizeAfterColumnResize;
+  end;
+
+function TTreeD4AutoSizeTest.BuildD4Tree(out Ctl: TTyStyleController;
+  out F: TForm): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 22;
+  { Width=300, header=22px → content width=300 (no scrollbars, no padding in theme) }
+  t.SetBounds(0, 0, 300, 200);
+
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 100;
+  col0.Text  := 'A';
+
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 50;   { will be reset by ApplyAutoSize to fill remainder }
+  col1.Text  := 'B';
+
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := 80;
+  col2.Text  := 'C';
+
+  t.Header.MainColumn    := 0;
+  t.Header.Height        := 22;
+  t.Header.AutoSizeIndex := 1;   { col1 = auto-size column }
+  t.Header.Options       := [hoVisible, hoColumnResize, hoAutoResize];
+
+  t.AddChild(nil);
+  Result := t;
+end;
+
+{ D4: col1 width = client_width - col0 - col2 = 300 - 100 - 80 = 120 after initial Resize }
+procedure TTreeD4AutoSizeTest.TestD4_AutoSizeInitial;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col1: TTyTreeColumn;
+  expected: Integer;
+begin
+  t := BuildD4Tree(Ctl, F);
+  try
+    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
+    { Apply auto-size manually to simulate the Resize trigger }
+    t.Header.Columns.ApplyAutoSize(
+      MulDiv(t.ContentRect.Width, 96, t.Font.PixelsPerInch), 1);
+    expected := 300 - 100 - 80;  { = 120 }
+    AssertEquals('D4: col1 auto-sized to 120', expected, col1.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D4: after Resize to width=350, col1 should grow to 170 (350-100-80) }
+procedure TTreeD4AutoSizeTest.TestD4_AutoSizeAfterResize;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col1: TTyTreeColumn;
+  expected: Integer;
+begin
+  t := BuildD4Tree(Ctl, F);
+  try
+    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
+    { Resize the control to 350 wide — Resize override should run ApplyAutoSize }
+    t.SetBounds(0, 0, 350, 200);
+    { SetBounds calls Resize; verify col1 absorbed the extra 50px }
+    expected := 350 - 100 - 80;  { = 170 }
+    AssertEquals('D4: col1 grows to 170 after Resize to 350', expected, col1.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D4: spring distribution — two coAutoSpring columns share delta evenly }
+procedure TTreeD4AutoSizeTest.TestD4_SpringDistribution;
+var
+  col0: TTyTreeColumn;
+  cols: TTyTreeColumns;
+  col1, col2: TTyTreeColumn;
+begin
+  cols := TTyTreeColumns.Create;
+  try
+    col0 := cols.Add as TTyTreeColumn;
+    col0.Width   := 100;
+    col0.Options := [coVisible, coAutoSpring];
+
+    col1 := cols.Add as TTyTreeColumn;
+    col1.Width   := 100;
+    col1.Options := [coVisible, coAutoSpring];
+
+    col2 := cols.Add as TTyTreeColumn;
+    col2.Width   := 50;
+    col2.Options := [coVisible];   { not a spring column }
+
+    { Distribute +40 across spring columns (col0 and col1 each get +20) }
+    cols.DistributeSpring(40);
+    AssertEquals('D4: col0 gets half of delta', 120, col0.Width);
+    AssertEquals('D4: col1 gets half of delta', 120, col1.Width);
+    AssertEquals('D4: col2 unchanged (no spring)', 50, col2.Width);
+  finally
+    cols.Free;
+  end;
+  { Suppress unused hint for col1 - it's used in Asserts above }
+end;
+
+{ D4: after a non-auto-column resize, col1 (auto) absorbs the difference }
+procedure TTreeD4AutoSizeTest.TestD4_AutoSizeAfterColumnResize;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0, col1: TTyTreeColumn;
+begin
+  t := BuildD4Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
+
+    { Simulate resizing col0 from 100 to 130 via header drag }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 100, 11);  { col0 right edge }
+    TTyTreeViewAccess(t).MouseMove([], 130, 11);           { drag right 30px }
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 130, 11);
+
+    { col0 width should be 130 }
+    AssertEquals('D4: col0 width after resize', 130, col0.Width);
+    { col1 (auto) should absorb: new width = 300 - 130 - 80 = 90 }
+    AssertEquals('D4: col1 auto-absorbs col0 resize', 90, col1.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
 
 initialization
   RegisterTest(TTreeStoreTest);
@@ -4875,4 +5040,5 @@ initialization
   RegisterTest(TTreeColumnPaintTest);
   RegisterTest(TTreeD1D2Test);
   RegisterTest(TTreeD3DragTest);
+  RegisterTest(TTreeD4AutoSizeTest);
 end.
