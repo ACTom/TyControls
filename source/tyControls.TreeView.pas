@@ -2155,3 +2155,6 @@ begin
 end;
 
 end.
+
+initialization
+  RegisterClass(TTyTreeView);
