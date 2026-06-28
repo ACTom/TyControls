@@ -66,6 +66,8 @@ type
     procedure BeginThumbDrag(AGrabPosAlongTrack: Integer);
     procedure DragThumbTo(APosAlongTrack: Integer);
     procedure EndThumbDrag;
+    { True while the user is dragging the thumb with the mouse. }
+    property Dragging: Boolean read FDragging;
   published
     // On by default. When enabled and the control has a window handle, a
     // PROGRAMMATIC Position change (keyboard/wheel/track-click) eases the painted
@@ -99,6 +101,7 @@ function TyScrollThumbRect(const ATrack: TRect; AKind: TTyScrollBarKind;
   AMin, AMax, APosition, APageSize: Integer): TRect;
 var
   TrackLen, Span, ThumbLen, FreeSpace, Travel, Pos0, Offset: Integer;
+  Cross, MinThumb: Integer;
 begin
   if AKind = sbVertical then
     TrackLen := ATrack.Bottom - ATrack.Top
@@ -112,7 +115,9 @@ begin
     Exit;
   end;
   ThumbLen := (APageSize * TrackLen) div Span;
-  if ThumbLen < 1 then ThumbLen := 1;
+  if AKind = sbVertical then Cross := ATrack.Right - ATrack.Left else Cross := ATrack.Bottom - ATrack.Top;
+  MinThumb := Cross; if MinThumb < 6 then MinThumb := 6;
+  if ThumbLen < MinThumb then ThumbLen := MinThumb;
   if ThumbLen > TrackLen then ThumbLen := TrackLen;
   FreeSpace := TrackLen - ThumbLen;
   Travel := AMax - AMin;
@@ -122,7 +127,7 @@ begin
   if Travel <= 0 then
     Offset := 0
   else
-    Offset := (Pos0 * FreeSpace) div Travel;
+    Offset := Integer((Int64(Pos0) * FreeSpace) div Travel);
   if AKind = sbVertical then
     Result := Rect(ATrack.Left, ATrack.Top + Offset,
       ATrack.Right, ATrack.Top + Offset + ThumbLen)
@@ -505,7 +510,7 @@ begin
   if NewTop < TrackStart then NewTop := TrackStart;
   if NewTop > TrackStart + FreeSpace then NewTop := TrackStart + FreeSpace;
   Travel := FMax - FMin;
-  NewPos := FMin + ((NewTop - TrackStart) * Travel) div FreeSpace;
+  NewPos := FMin + Integer((Int64(NewTop - TrackStart) * Travel) div FreeSpace);
   // Live drag tracking fires scTrack with the proposed value (handler may
   // adjust it); commit through the Position setter (clamps + OnChange).
   if NewPos < FMin then NewPos := FMin;

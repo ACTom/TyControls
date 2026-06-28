@@ -12,7 +12,7 @@ uses
 
 type
   TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck,
-    tgRadioDot, tgChevronDown, tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight);
+    tgRadioDot, tgChevronDown, tgChevronRight, tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight);
 
   TTyPainter = class
   private
@@ -39,7 +39,7 @@ type
     procedure StrokeBorder(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor); overload;
     procedure DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
     procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False);
-    procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
+    procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer = 4);
     procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
     procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
     procedure FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
@@ -403,7 +403,7 @@ begin
 end;
 {$ENDIF}
 
-procedure TTyPainter.DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer);
+procedure TTyPainter.DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer = 4);
 var
   px: TBGRAPixel;
   th: Single;
@@ -416,7 +416,7 @@ begin
   th := Scale(AThicknessLogical);
   if th < 1 then
     th := 1;
-  pad := Scale(4);
+  pad := Scale(APadLogical);
   l := ARect.Left + pad;
   t := ARect.Top + pad;
   r := ARect.Right - 1 - pad;
@@ -453,6 +453,11 @@ begin
     tgChevronDown:
       FBmp.DrawPolyLineAntialias([PointF(l, t + h * 0.3),
         PointF(cx, b - h * 0.2), PointF(r, t + h * 0.3)], px, th);
+    tgChevronRight:
+      { Right-pointing chevron (>) — apex on the right, arms going up-left and
+        down-left from the vertical centre. Mirrors tgChevronDown rotated 90°. }
+      FBmp.DrawPolyLineAntialias([PointF(l + w * 0.3, t),
+        PointF(r - w * 0.2, cy), PointF(l + w * 0.3, b)], px, th);
     tgArrowUp:
       begin
         FBmp.DrawLineAntialias(cx, b, cx, t, px, th, True);

@@ -320,6 +320,14 @@ TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }
 TyDateTimeButton { background: var(--surface-chrome); color: var(--on-surface); }
 TyDateTimeButton:hover { background: var(--surface-hover); color: var(--accent); }
 
+/* ── TreeView ──────────────────────────────────────────────────────────── */
+
+TyTreeView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 2px; font-size: var(--font-size-base); }
+TyTreeNode { background: none; color: var(--on-surface); }
+TyTreeNode:hover { background: var(--surface-hover); }
+TyTreeNode:selected { background: var(--accent); color: var(--on-accent); }
+TyTreeNode:disabled { color: var(--muted); }
+
 /* ── @mode conditional token blocks (D7) ──────────────────────────────────────
    The accent SEED is `system-accent` (StyleModel swaps it for the OS accent at
    merge time). --ty-mode = `system-mode` so elevate()/on() pick the OS scheme.

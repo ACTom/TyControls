@@ -13,7 +13,8 @@ uses
   tyControls.TrackBar, tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu, tyControls.NativeStyler,
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
-  tyControls.Calendar, tyControls.DateTimePicker;
+  tyControls.Calendar, tyControls.DateTimePicker,
+  tyControls.TreeView;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -543,7 +544,8 @@ begin
      TTyPageControl, TTyTabSheet, TTySpinEdit, TTyMemo, TTyTitleBar,
      TTyMenuBar, TTyPopupMenu, TTyNativeStyler,
      TTySplitter, TTyStatusBar, TTyToolBar, TTyToolSeparator,
-     TTyCalendar, TTyDateTimePicker]);
+     TTyCalendar, TTyDateTimePicker,
+     TTyTreeView]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',

@@ -51,7 +51,9 @@ uses
   test.datetime.events,
   test.popup,
   test.calendar,
-  test.datetimepicker;
+  test.datetimepicker,
+  test.treeview.events,
+  test.treeview;
 
 type
   TTyTestRunner = class(TTestRunner)

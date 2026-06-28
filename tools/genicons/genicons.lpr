@@ -148,12 +148,28 @@ begin
   PolyL(b,[PointF(17.5,11.3),PointF(19,13),PointF(20.5,11.3)],Acc,1.8);
 end;
 
+{ TTyTreeView: a root row with a triangle expand button + two indented child rows }
+procedure GTreeView(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  // root row: triangle (expand button) + row line
+  FillPolyG(b,[PointF(6,7.5),PointF(9,9),PointF(6,10.5)],Acc);
+  Line(b,10.5,9,19,9,Ink);
+  // child row 1 (indented)
+  Line(b,8,13,8,16,Faint,1.2);   // tree connector
+  Line(b,8,13,10,13,Faint,1.2);
+  Line(b,10.5,13,19,13,Ink);
+  // child row 2 (indented)
+  Line(b,8,16,10,16,Faint,1.2);
+  Line(b,10.5,17,19,17,Ink);
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..27] of TGlyph = (
+  Glyphs: array[0..28] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -181,7 +197,8 @@ const
     (Name:'TTyToolBar';         Draw:@GToolBar),
     (Name:'TTyToolSeparator';   Draw:@GToolSeparator),
     (Name:'TTyCalendar';        Draw:@GCalendar),
-    (Name:'TTyDateTimePicker';  Draw:@GDateTimePicker)
+    (Name:'TTyDateTimePicker';  Draw:@GDateTimePicker),
+    (Name:'TTyTreeView';        Draw:@GTreeView)
   );
 
 const

@@ -361,3 +361,17 @@ TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-r
 TyDateTimePicker:disabled { opacity: 0.5; }
 TyDateTimeButton { background: darken(--surface, 6%); color: var(--on-surface); }
 TyDateTimeButton:hover { background: darken(--surface, 4%); color: var(--accent); }
+
+/* ── TreeView ──────────────────────────────────────────────────────────── */
+/* green lacks several token aliases; concrete equivalents used below:
+   --input-bg          = alpha(#FFFFFF, 0) (glass, matching TyEdit/TyCalendar)
+   --surface-hover     = darken(--surface, 4%)
+   --input-border-width= 1px
+   --font-size-base    = 9px
+   --on-accent         = #FFFFFF                                            */
+
+TyTreeView { background: alpha(#FFFFFF, 0); color: var(--on-surface); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 2px; font-size: 9px; glass-blur: 16px; glass-tint: alpha(var(--surface), 0.42); }
+TyTreeNode { background: none; color: var(--on-surface); }
+TyTreeNode:hover { background: darken(--surface, 4%); }
+TyTreeNode:selected { background: var(--accent); color: #FFFFFF; }
+TyTreeNode:disabled { color: var(--muted); }

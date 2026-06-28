@@ -212,6 +212,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.DateTimePicker.pas"/>
         <UnitName Value="tyControls.DateTimePicker"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.TreeView.pas"/>
+        <UnitName Value="tyControls.TreeView"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

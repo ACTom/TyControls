@@ -117,6 +117,7 @@ object DemoMainForm: TDemoMainForm
       item
         Text = 'TyControls demo'
         Width = 0
+        Alignment = taRightJustify
       end>
   end
   object SidePanel: TTyPanel
@@ -191,6 +192,20 @@ object DemoMainForm: TDemoMainForm
           AE3130
         }
       end
+    end
+    object TyTree1: TTyTreeView
+      Left = 0
+      Height = 397
+      Top = 337
+      Width = 165
+      Align = alClient
+      TabStop = True
+      Controller = TyController
+      NodeDataSize = 0
+      RootNodeCount = 100000
+      OnInitNode = TyTree1InitNode
+      OnInitChildren = TyTree1InitChildren
+      OnGetText = TyTree1GetText
     end
   end
   object Splitter1: TTySplitter
@@ -463,6 +478,7 @@ object DemoMainForm: TDemoMainForm
           Controller = TyController
           DateTime = 46200.4859845833
           Kind = dtkTime
+          TimeFormat = 'HH:mm:ss'
           DroppedDown = False
         end
       end

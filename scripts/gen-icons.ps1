@@ -12,7 +12,8 @@ $classes = @(
   'TTyPageControl','TTyTabSheet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
   'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu',
   'TTyNativeStyler','TTySplitter','TTyStatusBar','TTyToolBar','TTyToolSeparator',
-  'TTyCalendar','TTyDateTimePicker'
+  'TTyCalendar','TTyDateTimePicker',
+  'TTyTreeView'
 )
 
 # Drift guard: the icon set MUST match the components registered in Design.pas. Parse the

@@ -42,10 +42,9 @@
         <ComponentName Value="DemoMainForm"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
-        <IsVisibleTab Value="True"/>
         <TopLine Value="189"/>
         <CursorPos X="33" Y="214"/>
-        <UsageCount Value="92"/>
+        <UsageCount Value="93"/>
         <Loaded Value="True"/>
         <LoadedDesigner Value="True"/>
       </Unit>
@@ -62,12 +61,17 @@
         <CursorPos X="3" Y="1046"/>
         <UsageCount Value="9"/>
       </Unit>
+      <Unit>
+        <Filename Value="../../source/tyControls.TreeView.pas"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="1"/>
+        <TopLine Value="56"/>
+        <CursorPos X="15" Y="88"/>
+        <UsageCount Value="11"/>
+        <Loaded Value="True"/>
+      </Unit>
     </Units>
     <JumpHistory HistoryIndex="29">
-      <Position>
-        <Filename Value="mainform.pas"/>
-        <Caret Line="205" Column="33" TopLine="180"/>
-      </Position>
       <Position>
         <Filename Value="mainform.pas"/>
         <Caret Line="204" Column="33" TopLine="179"/>
@@ -183,6 +187,10 @@
       <Position>
         <Filename Value="mainform.pas"/>
         <Caret Line="213" Column="33" TopLine="188"/>
+      </Position>
+      <Position>
+        <Filename Value="mainform.pas"/>
+        <Caret Line="214" Column="33" TopLine="189"/>
       </Position>
     </JumpHistory>
   </ProjectOptions>
