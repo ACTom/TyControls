@@ -1,4 +1,4 @@
-unit test.treeview;
+﻿unit test.treeview;
 {$mode objfpc}{$H+}
 interface
 uses
@@ -4659,6 +4659,205 @@ begin
   end;
 end;
 
+{ ── D3 ── column drag-reorder ──────────────────────────────────────────────── }
+
+type
+  TTreeD3DragTest = class(TTestCase)
+  private
+    FReorderFired:   Boolean;
+    FReorderOldPos:  Integer;
+    FReorderNewPos:  Integer;
+    procedure OnColumnReorder(Sender: TTyTreeView; OldPosition, NewPosition: Integer);
+    { Build a 3-column tree ready for drag-reorder tests.
+      widths 100/80/60, hoDrag, all coDraggable, PPI=96, header height=22.
+      Layout: col0=[0..100), col1=[100..180), col2=[180..240).
+      Caller owns F and Ctl. }
+    function BuildD3Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
+  published
+    { Drag col0 header past the threshold into col2 area → positions reordered,
+      FLeft recomputed, OnColumnReorder fired with oldPos=0 newPos=2. }
+    procedure TestD3_DragReorderColumns;
+    { Press-and-release with no movement → no reorder (click-sort path preserved). }
+    procedure TestD3_ClickNoReorder;
+    { Drag below threshold → no reorder (pending state cleared cleanly). }
+    procedure TestD3_BelowThresholdNoReorder;
+    { OnColumnReorder fires with correct old/new positions. }
+    procedure TestD3_OnColumnReorderFired;
+  end;
+
+procedure TTreeD3DragTest.OnColumnReorder(Sender: TTyTreeView;
+  OldPosition, NewPosition: Integer);
+begin
+  FReorderFired  := True;
+  FReorderOldPos := OldPosition;
+  FReorderNewPos := NewPosition;
+end;
+
+function TTreeD3DragTest.BuildD3Tree(out Ctl: TTyStyleController;
+  out F: TForm): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 22;
+  t.SetBounds(0, 0, 300, 200);
+
+  { 3 columns — widths 100/80/60 }
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 100;
+  col0.Text  := 'Col0';
+  col0.Options := [coVisible, coResizable, coAllowClick, coDraggable];
+
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 80;
+  col1.Text  := 'Col1';
+  col1.Options := [coVisible, coResizable, coAllowClick, coDraggable];
+
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := 60;
+  col2.Text  := 'Col2';
+  col2.Options := [coVisible, coResizable, coAllowClick, coDraggable];
+
+  t.Header.MainColumn := 0;
+  t.Header.Height     := 22;
+  t.Header.Options    := [hoVisible, hoColumnResize, hoDrag];
+
+  t.AddChild(nil);
+  Result := t;
+end;
+
+{ D3: drag col0 centre to col2 centre → positions reordered }
+procedure TTreeD3DragTest.TestD3_DragReorderColumns;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+  oldCol0Pos, oldCol1Pos, oldCol2Pos: Integer;
+begin
+  t := BuildD3Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
+    col2 := t.Header.Columns.Items[2] as TTyTreeColumn;
+
+    { Remember initial positions }
+    oldCol0Pos := col0.Position;  { = 0 }
+    oldCol1Pos := col1.Position;  { = 1 }
+    oldCol2Pos := col2.Position;  { = 2 }
+
+    AssertEquals('D3: col0 initial position=0', 0, Integer(oldCol0Pos));
+    AssertEquals('D3: col1 initial position=1', 1, Integer(oldCol1Pos));
+    AssertEquals('D3: col2 initial position=2', 2, Integer(oldCol2Pos));
+
+    { Press in col0 centre (X=50, Y=11), drag right by 150px to X=200 (col2 area),
+      then release.  Threshold = 4px at PPI=96, so 150px >> threshold. }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseMove([], 200, 11);  { past threshold into col2 }
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 200, 11);
+
+    { col0 (collection index 0) should now be at position 2 }
+    AssertEquals('D3: col0.Position after drag to pos2', 2, Integer(col0.Position));
+    { FLeft of col0 should be UpdatePositions-recomputed }
+    { col1 and col2 should have shifted left by one position each }
+    AssertEquals('D3: col1.Position after drag', 0, Integer(col1.Position));
+    AssertEquals('D3: col2.Position after drag', 1, Integer(col2.Position));
+    { FLeft values reflect the new order: col1=0, col2=80, col0=140 }
+    AssertEquals('D3: col1 FLeft=0 (now first)', 0, col1.Left);
+    AssertEquals('D3: col2 FLeft=80 (now second)', 80, col2.Left);
+    AssertEquals('D3: col0 FLeft=140 (now third)', 140, col0.Left);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D3: press-and-release without movement → no reorder }
+procedure TTreeD3DragTest.TestD3_ClickNoReorder;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0: TTyTreeColumn;
+begin
+  t := BuildD3Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+
+    { Press and release at the same spot (no movement) }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+
+    { col0 must still be at position 0 — no reorder }
+    AssertEquals('D3: click-no-move leaves col0.Position=0', 0, Integer(col0.Position));
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D3: drag below threshold → no reorder }
+procedure TTreeD3DragTest.TestD3_BelowThresholdNoReorder;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0: TTyTreeColumn;
+begin
+  t := BuildD3Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+
+    { Press then move only 2px (below 4px threshold) then release }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseMove([], 52, 11);   { 2px — below threshold }
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 52, 11);
+
+    AssertEquals('D3: below-threshold no reorder, col0.Position=0', 0, Integer(col0.Position));
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D3: OnColumnReorder fires with correct OldPosition and NewPosition }
+procedure TTreeD3DragTest.TestD3_OnColumnReorderFired;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  FReorderFired  := False;
+  FReorderOldPos := -99;
+  FReorderNewPos := -99;
+
+  t := BuildD3Tree(Ctl, F);
+  try
+    t.OnColumnReorder := @OnColumnReorder;
+
+    { Drag col0 (position 0) to col2's area (position 2) }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseMove([], 200, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 200, 11);
+
+    AssertTrue ('D3: OnColumnReorder fired', FReorderFired);
+    AssertEquals('D3: OldPosition=0', 0, FReorderOldPos);
+    AssertEquals('D3: NewPosition=2', 2, FReorderNewPos);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -4675,4 +4874,5 @@ initialization
   RegisterTest(TTreeHiDPITest);
   RegisterTest(TTreeColumnPaintTest);
   RegisterTest(TTreeD1D2Test);
+  RegisterTest(TTreeD3DragTest);
 end.
