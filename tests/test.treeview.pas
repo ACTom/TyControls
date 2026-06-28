@@ -2687,7 +2687,11 @@ end;
 
 { TestSelectedRowHasAccentBlue
   Node 0 at level 0 is selected; at DefaultNodeHeight=20 its band occupies y=0..19.
-  Probe (10, 10) inside row 0 must have a blue pixel (B > 150, R < 100). }
+  The selection fill spans the whole row, but the left of the row now carries the
+  (larger) expand chevron glyph and the short caption text, both dark ink. Probe a
+  point that is clearly inside the selected band yet to the RIGHT of the caption
+  text (the short 'N0 L0' label) so we sample the pure accent fill: (120, 10).
+  It must be the accent blue (B > 150, R < 120). }
 procedure TTreeC3PaintTest.TestSelectedRowHasAccentBlue;
 var
   Ctl: TTyStyleController;
@@ -2704,8 +2708,8 @@ begin
 
     Bgra := RenderTreeToBitmap(Tree, Bmp);
     try
-      { Row 0 centre: y=10 (inside the 0..19 band) }
-      Px := Bgra.GetPixel(10, 10);
+      { Row 0, well past the chevron + short caption: pure accent fill. }
+      Px := Bgra.GetPixel(120, 10);
       AssertTrue('selected row blue channel > 150', Px.blue > 150);
       AssertTrue('selected row red channel < 120',  Px.red  < 120);
     finally
