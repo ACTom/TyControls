@@ -3537,6 +3537,150 @@ begin
   end;
 end;
 
+{ ── HiDPI (PPI≠96) vertical-axis correctness ──────────────────────────────── }
+
+type
+  { Two tests that are IMPOSSIBLE to pass before the fix but trivially pass after:
+      (a) hit-test matches paint at PPI=144 (150 %)
+      (b) ScrollIntoView / UpdateScrollBars reaches the true logical bottom
+
+    Tree geometry (PPI=144, border-width=0, padding=0):
+      DefaultNodeHeight = 20 logical → 30 device pixels per row
+      Viewport          = 200×300 device = 200×200 logical (MulDiv(300,96,144))
+      20 root nodes     → ContentHeight (logical) = 400
+      FOffsetY = 0, no scrolling yet
+      CR.Top = 0 (no padding / border)
+
+    Row mapping at FOffsetY=0:
+      node[i]  logical [i*20 .. i*20+19]
+               device  [i*30 .. i*30+29]
+
+    The 3rd visible row (i=2):
+      logical [40..59]   device [60..89]   center device-Y = 75
+
+    Pre-fix GetNodeAtPoint computes absY = (75-0)+0 = 75 and hits node[3] (logical 60-79).
+    Post-fix it computes absY = MulDiv(75,96,144)+0 = 50 and hits node[2]. }
+  TTreeHiDPITest = class(TTestCase)
+  published
+    { (a) GetNodeAtPoint centre of 3rd visible row must return the 3rd node. }
+    procedure TestHitTestMatchesPaintAt144DPI;
+    { (b) ScrollIntoView on last node must reach logical bottom. }
+    procedure TestScrollIntoViewReachesBottomAt144DPI;
+  end;
+
+{ BuildHiDPITree144: 20 root nodes, PPI=144, 200×300 device viewport, no border/padding.
+  Caller must free F then Ctl when done. }
+function BuildHiDPITree144(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(
+    'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+    'TyTreeNode  { background: none; color: #000000; }');
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent              := F;
+  t.Controller          := Ctl;
+  t.Font.PixelsPerInch  := 144;
+  t.DefaultNodeHeight   := 20;   { logical; 30 device pixels at PPI=144 }
+  t.Indent              := 16;
+  t.ShowRoot            := True;
+  t.ShowButtons         := False;
+  { Width=200 device, Height=300 device (= 200 logical at 144 DPI). }
+  t.SetBounds(0, 0, 200, 300);
+  t.RootNodeCount := 20;
+  { Mark all nodes initialised so GetNodeAtPoint skips lazy callbacks. }
+  n := t.RootNode^.FirstChild;
+  while n <> nil do
+  begin
+    Include(n^.States, nsInitialized);
+    n := n^.NextSibling;
+  end;
+  Result := t;
+end;
+
+procedure TTreeHiDPITest.TestHitTestMatchesPaintAt144DPI;
+{ The 3rd visible row (index 2, FOffsetY=0) occupies device Y [60..89].
+  Its visual centre is device Y = 75.  GetNodeAtPoint must return the 3rd root
+  child (the node RenderTo paints at that device Y).
+
+  Pre-fix:  absY = (75 - 0) + 0 = 75 → GetNodeAt returns node[3] (wrong).
+  Post-fix: absY = MulDiv(75, 96, 144) + 0 = 50 → GetNodeAt returns node[2] (correct). }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  thirdNode: PTyTreeNode;
+  part: TTyTreeHitPart;
+  hitNode: PTyTreeNode;
+  devRowH, centerY: Integer;
+begin
+  t := BuildHiDPITree144(Ctl, F);
+  try
+    { Identify the 3rd root child (0-based index 2). }
+    thirdNode := t.RootNode^.FirstChild;
+    AssertTrue('tree has >=3 nodes', thirdNode <> nil);
+    thirdNode := thirdNode^.NextSibling;
+    AssertTrue('tree has >=3 nodes (2)', thirdNode <> nil);
+    thirdNode := thirdNode^.NextSibling;
+    AssertTrue('tree has >=3 nodes (3)', thirdNode <> nil);
+
+    { Device row height = MulDiv(20, 144, 96) = 30. }
+    devRowH := MulDiv(t.DefaultNodeHeight, t.Font.PixelsPerInch, 96);
+    { Centre of 3rd row (0-based i=2): i * devRowH + devRowH / 2 = 75. }
+    centerY := 2 * devRowH + devRowH div 2;
+
+    hitNode := t.GetNodeAtPoint(50, centerY, part);
+
+    AssertTrue(
+      Format('GetNodeAtPoint at device-Y=%d must return 3rd node (hitNode=nil: %s)',
+             [centerY, BoolToStr(hitNode = nil, True)]),
+      hitNode = thirdNode);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeHiDPITest.TestScrollIntoViewReachesBottomAt144DPI;
+{ After ScrollIntoView(lastNode), FOffsetY must equal the true logical bottom:
+    -(ContentHeight - viewH_logical)
+  where viewH_logical = MulDiv(300, 96, 144) = 200.
+  ContentHeight (logical) = 20 nodes * 20 = 400.
+  Expected FOffsetY = -(400 - 200) = -200.
+
+  Pre-fix: ScrollIntoView used device ClientHeight=300 instead of logical 200,
+  so it would clamp at -(400 - 300) = -100, failing to reach the last node. }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  lastNode: PTyTreeNode;
+  contH, viewHLogical, expectedOff: Integer;
+begin
+  t := BuildHiDPITree144(Ctl, F);
+  try
+    lastNode := t.RootNode^.LastChild;
+    AssertTrue('lastNode non-nil', lastNode <> nil);
+
+    t.ScrollIntoView(lastNode);
+
+    contH        := t.ContentHeight;                                    { 400 logical }
+    viewHLogical := MulDiv(t.ClientHeight, 96, t.Font.PixelsPerInch);  { 200 logical }
+    expectedOff  := -(contH - viewHLogical);                            { -200 }
+
+    AssertTrue('FOffsetY <= 0 after ScrollIntoView', t.OffsetY <= 0);
+    AssertEquals(
+      Format('FOffsetY must reach -(ContentHeight - viewH_logical) = %d', [expectedOff]),
+      expectedOff, t.OffsetY);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -3550,4 +3694,5 @@ initialization
   RegisterTest(TTreeC3PaintTest);
   RegisterTest(TTreeC4Test);
   RegisterTest(TTreeContentRectPaddingTest);
+  RegisterTest(TTreeHiDPITest);
 end.

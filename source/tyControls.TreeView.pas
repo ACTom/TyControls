@@ -492,23 +492,26 @@ end;
   sequence (no window handle needed), then clamp FOffsetY so the node is
   within the viewport.  Full scrollbar sync is Task C2.
 
-  Clamp rules (FOffsetY ≤ 0):
+  Clamp rules (FOffsetY ≤ 0, all in LOGICAL units):
     • If node is above the current viewport: FOffsetY := -nodeTop (scroll up).
-    • If node is below: FOffsetY := -(nodeTop + NodeHeight - ClientHeight) (scroll down).
-    • FOffsetY is clamped to [-(FRangeY - ClientHeight), 0].
-      When ClientHeight ≥ FRangeY the clamp collapses to 0 (no scroll needed). }
+    • If node is below: FOffsetY := -(nodeTop + NodeHeight - viewH) (scroll down).
+    • FOffsetY is clamped to [-(FRangeY - viewH), 0].
+      viewH = MulDiv(ClientHeight, 96, PPI) — the logical viewport height.
+      When viewH ≥ FRangeY the clamp collapses to 0 (no scroll needed). }
 procedure TTyTreeView.ScrollIntoView(Node: PTyTreeNode);
 var
   n:       PTyTreeNode;
   accTop:  Integer;
-  viewTop: Integer;      // viewport top in absolute coords = -FOffsetY
-  viewBot: Integer;      // viewport bottom in absolute coords
+  viewTop: Integer;      // viewport top in absolute coords = -FOffsetY (logical)
+  viewBot: Integer;      // viewport bottom in absolute coords (logical)
+  viewH:   Integer;      // logical viewport height
   nodeTop: Integer;
   minOff:  Integer;
 begin
   if (Node = nil) or (Node = FRoot) then Exit;
 
   // Compute the node's absolute top via a visible-order walk.
+  // All units here are LOGICAL (node heights are unscaled logical values).
   accTop := 0;
   n := GetFirstVisibleNoInit;
   nodeTop := -1;
@@ -524,8 +527,11 @@ begin
   end;
   if nodeTop < 0 then Exit;   // node is not visible in the current tree
 
+  // ClientHeight is device pixels; convert to logical so all comparisons are
+  // consistent with the logical FOffsetY / FRangeY / NodeHeight units.
+  viewH   := MulDiv(ClientHeight, 96, Font.PixelsPerInch);
   viewTop := -FOffsetY;
-  viewBot := viewTop + ClientHeight;
+  viewBot := viewTop + viewH;
 
   if nodeTop < viewTop then
   begin
@@ -535,13 +541,13 @@ begin
   else if nodeTop + Integer(Node^.NodeHeight) > viewBot then
   begin
     // Node is below the viewport — scroll down so the bottom of the node is at the bottom.
-    FOffsetY := -(nodeTop + Integer(Node^.NodeHeight) - ClientHeight);
+    FOffsetY := -(nodeTop + Integer(Node^.NodeHeight) - viewH);
   end
   else
     Exit;   // already in view — nothing to do
 
-  // Clamp FOffsetY to [-(FRangeY - ClientHeight), 0]
-  minOff := ClientHeight - FRangeY;
+  // Clamp FOffsetY to [-(FRangeY - viewH), 0]
+  minOff := viewH - FRangeY;
   if minOff > 0 then minOff := 0;   // when content shorter than viewport: no negative offset needed
   if FOffsetY < minOff then FOffsetY := minOff;
   if FOffsetY > 0 then FOffsetY := 0;
@@ -607,33 +613,35 @@ end;
   FOffsetY is clamped to [-(ContentHeight - viewportH), 0] each call. }
 procedure TTyTreeView.UpdateScrollBars;
 var
-  SBThick, viewW, viewH, contH: Integer;
+  SBThick, viewW, viewH, contH, PPI: Integer;
   wantVScroll, wantHScroll: Boolean;
 begin
-  SBThick := MulDiv(TyScrollbarSize, Font.PixelsPerInch, 96);
+  PPI     := Font.PixelsPerInch;
+  SBThick := MulDiv(TyScrollbarSize, PPI, 96);
 
-  { Compute viewport dimensions.  Use Height/Width (same as ListBox) so the
-    calculation is reliable even without a window handle (headless tests). }
-  viewH := Height;
-  viewW := Width;
+  { Vertical model: logical units, so they agree with the logical node heights
+    stored in ContentHeight / FOffsetY / FRangeY.
+    ClientHeight is device pixels; convert to logical via MulDiv(…,96,PPI).
+    At 96 DPI MulDiv(n,96,96)=n, so headless tests (PPI=96) are unaffected.
+    Horizontal model: device pixels (FRangeX/FOffsetX are device-pixel
+    quantities accumulated by RenderTo via P.Scale — the X axis is already
+    correct and must remain device throughout). }
+  viewH := MulDiv(ClientHeight, 96, PPI);   // logical viewport height
+  viewW := ClientWidth;                      // device viewport width (X axis)
   contH := ContentHeight;
 
   { Decide which bars are needed.  The presence of a vertical bar steals width
-    from the horizontal viewport (and vice-versa), so we must account for that.
-    For simplicity we use the same two-pass logic as Memo / ListBox:
-      1. Check vertical ignoring the horizontal bar's height.
-      2. Adjust viewH for the horizontal bar when it turns out to be visible,
-         then re-evaluate whether we still need the vertical bar.
-    FRangeX is 0 between structural changes and the next paint (reset by
-    InvalidateTreeLayout), so the second pass is a no-op in that window. }
+    from the horizontal viewport (device), and the presence of a horizontal bar
+    steals height from the vertical viewport (logical).  SBThick is device;
+    convert it to logical when adjusting viewH. }
   wantVScroll := contH > viewH;
   if wantVScroll then viewW := viewW - SBThick;
   wantHScroll := FRangeX > viewW;
-  if wantHScroll then viewH := viewH - SBThick;
+  if wantHScroll then viewH := viewH - MulDiv(SBThick, 96, PPI);
   if (not wantVScroll) and (contH > viewH) then
   begin
     wantVScroll := True;
-    viewW := Width - SBThick;
+    viewW := ClientWidth - SBThick;
   end;
 
   { ── Vertical bar ────────────────────────────────────────────────────────── }
@@ -1664,8 +1672,11 @@ begin
       Exit;
     end;
     { The first row may be partially scrolled above the viewport.
-      rowTop = device-Y where the first row's TOP pixel should be drawn. }
-    rowTop := CR.Top - (firstNodeY - firstTop);
+      rowTop = device-Y where the first row's TOP pixel should be drawn.
+      firstNodeY and firstTop are LOGICAL (node heights), so the sub-row
+      remainder (firstNodeY - firstTop) must be scaled to device pixels before
+      subtracting from the device-pixel CR.Top. }
+    rowTop := CR.Top - P.Scale(firstNodeY - firstTop);
 
     rangeXNew := FRangeX;
 
@@ -1861,8 +1872,11 @@ begin
   PPI := Font.PixelsPerInch;
   CR  := ContentRect;
 
-  { Convert to content-space coordinates }
-  absY := (Y - CR.Top)  + (-FOffsetY);
+  { Convert to content-space coordinates.
+    absY: (Y - CR.Top) is in device pixels; FOffsetY is logical.  Convert the
+    device delta to logical before adding so both operands are in the same unit.
+    absX: FOffsetX is device pixels (X axis is already device-consistent). }
+  absY := MulDiv(Y - CR.Top, 96, PPI) + (-FOffsetY);
   absX := (X - CR.Left) + (-FOffsetX);
 
   if absY < 0 then Exit;
