@@ -216,6 +216,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.TreeView.pas"/>
         <UnitName Value="tyControls.TreeView"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.TreeView.Columns.pas"/>
+        <UnitName Value="tyControls.TreeView.Columns"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
