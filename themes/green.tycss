@@ -375,3 +375,10 @@ TyTreeNode { background: none; color: var(--on-surface); }
 TyTreeNode:hover { background: darken(--surface, 4%); }
 TyTreeNode:selected { background: var(--accent); color: #FFFFFF; }
 TyTreeNode:disabled { color: var(--muted); }
+/* green lacks --surface-chrome/hover/active/font-weight-bold/font-size-base tokens;
+   concrete equivalents: chrome=darken(--surface,6%), hover=darken(--surface,4%),
+   active=darken(--surface,10%), bold=700, base=9px                               */
+TyTreeHeader { background: darken(--surface, 6%); border-color: var(--border); border-width: 1px; color: var(--on-surface); font-size: 9px; font-weight: 700; }
+TyTreeHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }
+TyTreeHeaderSection:hover { background: darken(--surface, 4%); }
+TyTreeHeaderSection:selected { background: darken(--surface, 10%); }

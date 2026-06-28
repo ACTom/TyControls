@@ -392,6 +392,10 @@ begin
     'TyTreeNode:hover { background: var(--surface-hover); }' + LineEnding +
     'TyTreeNode:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyTreeNode:disabled { color: var(--muted); }' + LineEnding +
+    'TyTreeHeader { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }' + LineEnding +
+    'TyTreeHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
+    'TyTreeHeaderSection:hover { background: var(--surface-hover); }' + LineEnding +
+    'TyTreeHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
     '' + LineEnding +
     '/* ── @mode conditional token blocks (D7) ──────────────────────────────── */' + LineEnding +
     '' + LineEnding +
@@ -839,6 +843,10 @@ begin
     'TyTreeNode:hover { background: var(--surface-hover); }' + LineEnding +
     'TyTreeNode:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyTreeNode:disabled { color: var(--muted); }' + LineEnding +
+    'TyTreeHeader { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }' + LineEnding +
+    'TyTreeHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
+    'TyTreeHeaderSection:hover { background: var(--surface-hover); }' + LineEnding +
+    'TyTreeHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
     '' + LineEnding +
     '/* ── @mode conditional token blocks (D7) ──────────────────────────────────────' + LineEnding +
     '   The accent SEED is `system-accent` (StyleModel swaps it for the OS accent at' + LineEnding +
