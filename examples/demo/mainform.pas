@@ -11,7 +11,8 @@ uses
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu,
   tyControls.BuiltinThemes, tyControls.NativeStyler,
   tyControls.ToolBar, tyControls.StatusBar, tyControls.Splitter,
-  tyControls.Calendar, tyControls.DateTimePicker;
+  tyControls.Calendar, tyControls.DateTimePicker,
+  tyControls.TreeView;
 type
 
   { TDemoMainForm — ALL controls live in the designer (mainform.lfm), including the docked
@@ -82,7 +83,14 @@ type
     PopupCtx: TTyPopupMenu;
     PopupCtxHello: TMenuItem;
     PopupCtxAgree: TMenuItem;
+    TyTree1: TTyTreeView;
     procedure FormCreate(Sender: TObject);
+    procedure TyTree1InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+      var InitStates: TTyNodeInitStates);
+    procedure TyTree1InitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
+    procedure TyTree1GetText(Sender: TTyTreeView; Node: PTyTreeNode;
+      var AText: string);
     procedure GroupBox1Click(Sender: TObject);
     procedure MnuViewToggleClick(Sender: TObject);
     procedure MnuFileExitClick(Sender: TObject);
@@ -263,6 +271,25 @@ end;
 procedure TDemoMainForm.PopupCtxAgreeClick(Sender: TObject);
 begin
   ChkAgree.Checked := not ChkAgree.Checked;
+end;
+
+procedure TDemoMainForm.TyTree1InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+  var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) < 4 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TDemoMainForm.TyTree1InitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+  var ChildCount: Cardinal);
+begin
+  ChildCount := 10;
+end;
+
+procedure TDemoMainForm.TyTree1GetText(Sender: TTyTreeView; Node: PTyTreeNode;
+  var AText: string);
+begin
+  AText := Format('Node %d  (L%d)', [Node^.Index, Sender.GetNodeLevel(Node)]);
 end;
 
 end.

@@ -193,6 +193,20 @@ object DemoMainForm: TDemoMainForm
         }
       end
     end
+    object TyTree1: TTyTreeView
+      Left = 0
+      Height = 397
+      Top = 337
+      Width = 165
+      Align = alClient
+      TabStop = True
+      Controller = TyController
+      NodeDataSize = 0
+      RootNodeCount = 100000
+      OnInitNode = TyTree1InitNode
+      OnInitChildren = TyTree1InitChildren
+      OnGetText = TyTree1GetText
+    end
   end
   object Splitter1: TTySplitter
     Cursor = crHSplit
