@@ -44,6 +44,11 @@ begin
   AssertPub('OnGetText');
   AssertPub('OnGetImageIndex');
   AssertPub('OnPaintText');
+  { column/sort events (D2, D3, E1, E3) }
+  AssertPub('OnColumnResized');
+  AssertPub('OnColumnReorder');
+  AssertPub('OnCompareNodes');
+  AssertPub('OnHeaderClick');
 end;
 initialization
   RegisterTest(TTreeViewEventsTest);

@@ -154,7 +154,10 @@ type
     FOnColumnReorder:  TTyTreeColumnReorderEvent;
     { E1/E2/E3: sort engine }
     FOnCompareNodes:   TTyTreeCompareEvent;
+    FOnHeaderClick:    TTyTreeColumnEvent;
     FSorting:          Boolean;   // reentrancy guard: SortTree -> HeaderChanged -> SortTree
+    { E3: internal — process a header section click (toggle sort direction / set sort column) }
+    procedure _HandleHeaderClick(ColIndex: Integer);
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
     procedure UpdateScrollBars;
@@ -310,6 +313,8 @@ type
     property OnColumnReorder: TTyTreeColumnReorderEvent read FOnColumnReorder write FOnColumnReorder;
     { E1: sort compare event }
     property OnCompareNodes: TTyTreeCompareEvent read FOnCompareNodes write FOnCompareNodes;
+    { E3: header click event (fired after sort, if sort was triggered) }
+    property OnHeaderClick: TTyTreeColumnEvent read FOnHeaderClick write FOnHeaderClick;
   end;
 
 implementation
@@ -2735,6 +2740,11 @@ begin
         if Assigned(FOnColumnReorder) then
           FOnColumnReorder(Self, oldPos, newPos);
       end;
+    end
+    else if FDragPending and not FDragging and (FDragColumn <> NoColumn) then
+    begin
+      { E3: plain press+release (no drag) on a header section = header click }
+      _HandleHeaderClick(FDragColumn);
     end;
     { Clear drag state }
     FDragColumn    := NoColumn;
@@ -3084,6 +3094,57 @@ begin
     Node^.LastChild   := prev;
   end;
   { ChildCount/TotalCount/TotalHeight are unchanged (same set of children) }
+end;
+
+{ ── E3 ── header-click sort wiring ──────────────────────────────────────── }
+
+{ _HandleHeaderClick: called from MouseUp when a header section receives a
+  plain click (press+release with no drag movement).
+  Toggles SortDirection when clicking the already-sorted column; otherwise sets
+  the new SortColumn and resets direction to Ascending.  Then runs SortTree.
+  FSorting prevents re-entry from the programmatic SortColumn/SortDirection setters. }
+procedure TTyTreeView._HandleHeaderClick(ColIndex: Integer);
+var
+  col: TTyTreeColumn;
+begin
+  if FHeader = nil then Exit;
+  if (ColIndex < 0) or (ColIndex >= FHeader.Columns.Count) then Exit;
+
+  col := FHeader.Columns.Items[ColIndex] as TTyTreeColumn;
+
+  { Guard: column must allow click and header must have auto-sort on }
+  if not (coAllowClick in col.Options) then Exit;
+  if not (hoHeaderClickAutoSort in FHeader.Options) then Exit;
+
+  { Update SortColumn / SortDirection (suppress HeaderChanged reentrancy) }
+  FSorting := True;
+  try
+    if FHeader.SortColumn = ColIndex then
+    begin
+      { Same column — toggle direction }
+      if FHeader.SortDirection = sdAscending then
+        FHeader.SortDirection := sdDescending
+      else
+        FHeader.SortDirection := sdAscending;
+    end
+    else
+    begin
+      { New column — set it, reset to ascending }
+      FHeader.SortColumn    := ColIndex;
+      FHeader.SortDirection := sdAscending;
+    end;
+  finally
+    FSorting := False;
+  end;
+
+  { Run the sort }
+  SortTree(FHeader.SortColumn, FHeader.SortDirection);
+
+  { Fire the event }
+  if Assigned(FOnHeaderClick) then
+    FOnHeaderClick(Self, ColIndex);
+
+  Invalidate;
 end;
 
 { ── E2 ── SortTree (recursive, lazy-aware) ───────────────────────────────── }

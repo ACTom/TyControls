@@ -5500,6 +5500,216 @@ begin
   end;
 end;
 
+{ ── E3 ── header-click sort wiring ─────────────────────────────────────────── }
+
+type
+  TTreeE3HeaderClickTest = class(TTestCase)
+  private
+    FCompareCol:      Integer;
+    FHeaderClickCol:  Integer;
+    FHeaderClickCount: Integer;
+    procedure OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+                        Column: Integer; var Result: Integer);
+    procedure OnHeaderClick(Sender: TTyTreeView; Column: Integer);
+    { Build a sortable multi-column tree with 4 root nodes keyed [4,2,3,1]. }
+    function BuildE3Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
+  published
+    procedure TestE3_ClickSetsColumnAsc;
+    procedure TestE3_ClickSameColumnTogglesToDesc;
+    procedure TestE3_ClickNewColumnResetsAsc;
+    procedure TestE3_OnHeaderClickFired;
+    procedure TestE3_SortRunsOnClick;
+  end;
+
+procedure TTreeE3HeaderClickTest.OnCompare(Sender: TTyTreeView;
+  Node1, Node2: PTyTreeNode; Column: Integer; var Result: Integer);
+begin
+  FCompareCol := Column;
+  Result := PInteger(Sender.GetNodeData(Node1))^ -
+            PInteger(Sender.GetNodeData(Node2))^;
+end;
+
+procedure TTreeE3HeaderClickTest.OnHeaderClick(Sender: TTyTreeView; Column: Integer);
+begin
+  Inc(FHeaderClickCount);
+  FHeaderClickCol := Column;
+end;
+
+function TTreeE3HeaderClickTest.BuildE3Tree(out Ctl: TTyStyleController;
+  out F: TForm): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1: TTyTreeColumn;
+  n: PTyTreeNode;
+  i: Integer;
+const
+  Keys: array[0..3] of Integer = (4, 2, 3, 1);
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 20;
+  t.NodeDataSize       := SizeOf(Integer);
+  t.SetBounds(0, 0, 300, 200);
+
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 100; col0.Text := 'Col0';
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 100; col1.Text := 'Col1';
+
+  t.Header.MainColumn    := 0;
+  t.Header.Height        := 22;
+  t.Header.SortColumn    := -1;
+  t.Header.Options       := [hoVisible, hoHeaderClickAutoSort, hoDrag];
+
+  t.OnCompareNodes := @OnCompare;
+  t.OnHeaderClick  := @OnHeaderClick;
+
+  { 4 root nodes with keys [4,2,3,1] }
+  t.RootNodeCount := 4;
+  n := t.RootNode^.FirstChild;
+  i := 0;
+  while n <> nil do
+  begin
+    Include(n^.States, nsInitialized);
+    PInteger(t.GetNodeData(n))^ := Keys[i];
+    Inc(i);
+    n := n^.NextSibling;
+  end;
+
+  Result := t;
+end;
+
+{ Simulate a press+release on the header section of a column (no drag).
+  col0 header: Y=11 (inside the 22px header band), X=50 (within col0 width=100).
+  col1 header: X=150 (within col1 which starts at 100). }
+
+procedure TTreeE3HeaderClickTest.TestE3_ClickSetsColumnAsc;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  t := BuildE3Tree(Ctl, F);
+  try
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    AssertEquals('E3 SortColumn set to col0 (0)', 0, t.Header.SortColumn);
+    AssertEquals('E3 SortDirection = ascending', Ord(sdAscending), Ord(t.Header.SortDirection));
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeE3HeaderClickTest.TestE3_ClickSameColumnTogglesToDesc;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  t := BuildE3Tree(Ctl, F);
+  try
+    { First click: sets col0, asc }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    AssertEquals('E3 1st click: asc', Ord(sdAscending), Ord(t.Header.SortDirection));
+    { Second click on same col: toggles to desc }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    AssertEquals('E3 2nd click: desc', Ord(sdDescending), Ord(t.Header.SortDirection));
+    AssertEquals('E3 SortColumn still 0', 0, t.Header.SortColumn);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeE3HeaderClickTest.TestE3_ClickNewColumnResetsAsc;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  t := BuildE3Tree(Ctl, F);
+  try
+    { Click col0 twice → desc }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    AssertEquals('E3 col0 is desc', Ord(sdDescending), Ord(t.Header.SortDirection));
+    { Click col1 (X=150) → SortColumn=1, reset to asc }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 150, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 150, 11);
+    AssertEquals('E3 SortColumn=1 after col1 click', 1, t.Header.SortColumn);
+    AssertEquals('E3 SortDirection reset to asc', Ord(sdAscending), Ord(t.Header.SortDirection));
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeE3HeaderClickTest.TestE3_OnHeaderClickFired;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  FHeaderClickCount := 0;
+  FHeaderClickCol   := -1;
+  t := BuildE3Tree(Ctl, F);
+  try
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    AssertEquals('E3 OnHeaderClick fired once', 1, FHeaderClickCount);
+    AssertEquals('E3 OnHeaderClick col=0', 0, FHeaderClickCol);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeE3HeaderClickTest.TestE3_SortRunsOnClick;
+{ After clicking col0, the 4 root nodes [4,2,3,1] should be sorted [1,2,3,4]. }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  n: PTyTreeNode;
+  keys: array[0..3] of Integer;
+  i: Integer;
+begin
+  FCompareCol := -99;
+  t := BuildE3Tree(Ctl, F);
+  try
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    { Collect the sorted root order }
+    n := t.RootNode^.FirstChild;
+    i := 0;
+    while (n <> nil) and (i < 4) do
+    begin
+      keys[i] := PInteger(t.GetNodeData(n))^;
+      Inc(i);
+      n := n^.NextSibling;
+    end;
+    AssertEquals('E3 sort[0]=1', 1, keys[0]);
+    AssertEquals('E3 sort[1]=2', 2, keys[1]);
+    AssertEquals('E3 sort[2]=3', 3, keys[2]);
+    AssertEquals('E3 sort[3]=4', 4, keys[3]);
+    AssertEquals('E3 OnCompareNodes column=0', 0, FCompareCol);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -5520,4 +5730,5 @@ initialization
   RegisterTest(TTreeD4AutoSizeTest);
   RegisterTest(TTreeE1SortTest);
   RegisterTest(TTreeE2SortTreeTest);
+  RegisterTest(TTreeE3HeaderClickTest);
 end.
