@@ -1,12 +1,14 @@
 unit test.treeview.columns;
 { Phase A — pure column model tests (A1–A4).
-  All tests are headless: no TTyTreeView, no windowing, no paint.
-  A bare TTyTreeColumns.Create is sufficient. }
+  Phase B — TTyTreeHeader + Header/Columns wired into TTyTreeView.
+  A-tests: headless, no TTyTreeView.
+  B-tests: use TTyTreeView headlessly (Create(nil), no windowing). }
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry,
-  tyControls.TreeView.Columns;
+  Classes, SysUtils, Types, LCLType, fpcunit, testregistry,
+  tyControls.TreeView.Columns,
+  tyControls.TreeView;
 
 type
   { -----------------------------------------------------------------------
@@ -139,6 +141,61 @@ type
     procedure TestDistributeSpringZeroDelta;
     { Integral: repeated spring calls don't accumulate fractional drift }
     procedure TestDistributeSpringIntegralNoFractionalDrift;
+  end;
+
+  { -----------------------------------------------------------------------
+    B1: TTyTreeHeader + published Header/Columns wired to TTyTreeView
+    ----------------------------------------------------------------------- }
+  TColumnB1Test = class(TTestCase)
+  private
+    FTree: TTyTreeView;
+    FHeaderChangedCount: Integer;
+  protected
+    procedure Setup; override;
+    procedure TearDown; override;
+  published
+    { Tree has a Header property with empty Columns by default }
+    procedure TestHeaderExists;
+    { Adding 3 columns via Header.Columns.Add gives Count=3 }
+    procedure TestAddThreeColumns;
+    { Header.MainColumn clamped to Columns.Count-1 when set too high }
+    procedure TestMainColumnClamped;
+    { Header.MainColumn = NoColumn(-1) when columns are empty }
+    procedure TestMainColumnNoColumnWhenEmpty;
+    { Mutating a column Width triggers FRangeX to equal TotalWidth }
+    procedure TestColumnWidthChangeFiresHeaderChanged;
+    { Mutating Header.Height triggers FRangeX to equal TotalWidth }
+    procedure TestHeaderHeightChangeFiresHeaderChanged;
+    { Header.Options default contains hoVisible, hoColumnResize, etc. }
+    procedure TestHeaderOptionsDefault;
+    { Header.Height default is 22 }
+    procedure TestHeaderHeightDefault;
+    { Header.SortColumn default is NoColumn(-1) }
+    procedure TestHeaderSortColumnDefault;
+  end;
+
+  { -----------------------------------------------------------------------
+    B2: ContentRect header inset + FRangeX from column total (0-col == ③a)
+    ----------------------------------------------------------------------- }
+  TColumnB2Test = class(TTestCase)
+  private
+    FTree: TTyTreeView;
+  protected
+    procedure Setup; override;
+    procedure TearDown; override;
+  published
+    { With 0 columns, ContentRect.Top = padding only (③a, no header inset) }
+    procedure TestContentRectTopNoPadZeroColumns;
+    { Adding columns + hoVisible insets ContentRect.Top by Header.Height }
+    procedure TestContentRectTopInsetWithColumns;
+    { Removing hoVisible removes the top inset even with columns }
+    procedure TestContentRectTopNoInsetWhenNotVisible;
+    { FRangeX = TotalWidth when columns exist (driven by column model) }
+    procedure TestRangeXEqualsTotalWidthWithColumns;
+    { FRangeX = 0 after InvalidateTreeLayout with 0 columns (③a path) }
+    procedure TestRangeXZeroWithNoColumns;
+    { FRangeX updates when a column Width changes }
+    procedure TestRangeXUpdatesOnColumnWidthChange;
   end;
 
 implementation
@@ -577,9 +634,210 @@ begin
   end;
 end;
 
+{ ===========================================================================
+  B1 setup helpers
+  =========================================================================== }
+
+procedure TColumnB1Test.Setup;
+begin
+  FTree := TTyTreeView.Create(nil);
+  FHeaderChangedCount := 0;
+end;
+
+procedure TColumnB1Test.TearDown;
+begin
+  FTree.Free;
+end;
+
+{ --- B1 tests --- }
+
+procedure TColumnB1Test.TestHeaderExists;
+begin
+  AssertNotNull('Header is not nil', FTree.Header);
+  AssertNotNull('Header.Columns is not nil', FTree.Header.Columns);
+end;
+
+procedure TColumnB1Test.TestAddThreeColumns;
+begin
+  FTree.Header.Columns.Add;
+  FTree.Header.Columns.Add;
+  FTree.Header.Columns.Add;
+  AssertEquals('Header.Columns.Count = 3', 3, FTree.Header.Columns.Count);
+end;
+
+procedure TColumnB1Test.TestMainColumnClamped;
+begin
+  FTree.Header.Columns.Add;
+  FTree.Header.Columns.Add;
+  FTree.Header.Columns.Add;
+  { 3 columns: valid range = [0, 2]; 5 must be clamped to 2 }
+  FTree.Header.MainColumn := 5;
+  AssertEquals('MainColumn clamped to 2', 2, FTree.Header.MainColumn);
+end;
+
+procedure TColumnB1Test.TestMainColumnNoColumnWhenEmpty;
+begin
+  { No columns: MainColumn must be NoColumn(-1) }
+  FTree.Header.MainColumn := 0;   { try to set it — must clamp to NoColumn }
+  AssertEquals('MainColumn = NoColumn when no columns', NoColumn, FTree.Header.MainColumn);
+end;
+
+procedure TColumnB1Test.TestColumnWidthChangeFiresHeaderChanged;
+var
+  colA, colB: TTyTreeColumn;
+begin
+  colA := FTree.Header.Columns.Add as TTyTreeColumn;  colA.Width := 100;
+  colB := FTree.Header.Columns.Add as TTyTreeColumn;  colB.Width := 50;
+  { After adding columns, FRangeX = TotalWidth (150) }
+  AssertEquals('FRangeX = TotalWidth after add', 150, FTree.RangeX);
+  { Change colA.Width -> TotalWidth becomes 200 }
+  colA.Width := 150;
+  AssertEquals('FRangeX updated after column width change', 200, FTree.RangeX);
+end;
+
+procedure TColumnB1Test.TestHeaderHeightChangeFiresHeaderChanged;
+var
+  colA: TTyTreeColumn;
+begin
+  colA := FTree.Header.Columns.Add as TTyTreeColumn;  colA.Width := 80;
+  { Changing Header.Height fires HeaderChanged -> FRangeX still = TotalWidth }
+  FTree.Header.Height := 30;
+  AssertEquals('FRangeX = TotalWidth after Height change', 80, FTree.RangeX);
+end;
+
+procedure TColumnB1Test.TestHeaderOptionsDefault;
+var
+  defaultOpts: TTyTreeHeaderOptions;
+begin
+  defaultOpts := [hoVisible, hoColumnResize, hoShowSortGlyphs,
+                  hoHeaderClickAutoSort, hoDrag];
+  AssertTrue('Header.Options default',
+    FTree.Header.Options = defaultOpts);
+end;
+
+procedure TColumnB1Test.TestHeaderHeightDefault;
+begin
+  AssertEquals('Header.Height default = 22', 22, FTree.Header.Height);
+end;
+
+procedure TColumnB1Test.TestHeaderSortColumnDefault;
+begin
+  AssertEquals('Header.SortColumn default = NoColumn', NoColumn, FTree.Header.SortColumn);
+end;
+
+{ ===========================================================================
+  B2 setup helpers
+  =========================================================================== }
+
+procedure TColumnB2Test.Setup;
+begin
+  FTree := TTyTreeView.Create(nil);
+end;
+
+procedure TColumnB2Test.TearDown;
+begin
+  FTree.Free;
+end;
+
+{ --- B2 tests --- }
+
+procedure TColumnB2Test.TestContentRectTopNoPadZeroColumns;
+var
+  CR0, CR1: TRect;
+  colA: TTyTreeColumn;
+begin
+  { 0 columns: record the ③a baseline top.
+    Then add columns + hoVisible to check the inset is ON TOP of that baseline.
+    The key invariant: 0-column ContentRect.Top equals the value with columns
+    MINUS the header inset. }
+  CR0 := FTree.ContentRect;   { ③a baseline (includes any theme padding) }
+
+  colA := FTree.Header.Columns.Add as TTyTreeColumn;
+  colA.Width := 100;
+  AssertTrue('hoVisible active', hoVisible in FTree.Header.Options);
+  CR1 := FTree.ContentRect;   { with columns + hoVisible }
+
+  { With columns, the top must be larger than the 0-column top. }
+  AssertTrue('ContentRect.Top inset is greater with columns',
+    CR1.Top > CR0.Top);
+
+  { Remove columns and verify we return to the ③a baseline. }
+  FTree.Header.Columns.Delete(colA.Index);
+  AssertEquals('ContentRect.Top restored to ③a baseline after removing columns',
+    CR0.Top, FTree.ContentRect.Top);
+end;
+
+procedure TColumnB2Test.TestContentRectTopInsetWithColumns;
+var
+  CRBase, CRWithCols: TRect;
+  PPI, headerInset: Integer;
+begin
+  { Record ③a baseline first (0 columns). }
+  CRBase := FTree.ContentRect;
+
+  FTree.Header.Columns.Add;
+  FTree.Header.Columns.Add;
+  AssertTrue('hoVisible in Options', hoVisible in FTree.Header.Options);
+
+  CRWithCols := FTree.ContentRect;
+  PPI        := FTree.Font.PixelsPerInch;
+  headerInset := MulDiv(FTree.Header.Height, PPI, 96);
+
+  AssertEquals('ContentRect.Top = baseline + Header.Height device-px',
+    CRBase.Top + headerInset, CRWithCols.Top);
+end;
+
+procedure TColumnB2Test.TestContentRectTopNoInsetWhenNotVisible;
+var
+  CRBase, CRNoVis: TRect;
+begin
+  { Capture ③a baseline (0 columns). }
+  CRBase := FTree.ContentRect;
+
+  FTree.Header.Columns.Add;
+  FTree.Header.Columns.Add;
+  { Remove hoVisible — should produce no top inset }
+  FTree.Header.Options := FTree.Header.Options - [hoVisible];
+  CRNoVis := FTree.ContentRect;
+
+  AssertEquals('ContentRect.Top = ③a baseline when hoVisible removed',
+    CRBase.Top, CRNoVis.Top);
+end;
+
+procedure TColumnB2Test.TestRangeXEqualsTotalWidthWithColumns;
+var
+  colA, colB: TTyTreeColumn;
+begin
+  colA := FTree.Header.Columns.Add as TTyTreeColumn;  colA.Width := 100;
+  colB := FTree.Header.Columns.Add as TTyTreeColumn;  colB.Width := 80;
+  AssertEquals('FRangeX = TotalWidth = 180',
+    FTree.Header.Columns.TotalWidth, FTree.RangeX);
+end;
+
+procedure TColumnB2Test.TestRangeXZeroWithNoColumns;
+begin
+  { 0 columns: InvalidateTreeLayout resets FRangeX to 0 (③a path) }
+  FTree.RootNodeCount := 3;
+  { RootNodeCount setter calls InvalidateTreeLayout implicitly }
+  AssertEquals('FRangeX = 0 with no columns', 0, FTree.RangeX);
+end;
+
+procedure TColumnB2Test.TestRangeXUpdatesOnColumnWidthChange;
+var
+  colA: TTyTreeColumn;
+begin
+  colA := FTree.Header.Columns.Add as TTyTreeColumn;
+  colA.Width := 100;
+  AssertEquals('RangeX = 100 initially', 100, FTree.RangeX);
+  colA.Width := 200;
+  AssertEquals('RangeX = 200 after Width change', 200, FTree.RangeX);
+end;
+
 initialization
   RegisterTest(TColumnA1Test);
   RegisterTest(TColumnA2Test);
   RegisterTest(TColumnA3Test);
   RegisterTest(TColumnA4Test);
+  RegisterTest(TColumnB1Test);
+  RegisterTest(TColumnB2Test);
 end.
