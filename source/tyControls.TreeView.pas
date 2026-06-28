@@ -563,17 +563,27 @@ begin
 end;
 
 { ContentRect: the sub-rectangle of ClientRect available for tree content.
-  Shrinks the right edge by the vertical scrollbar width when it is visible,
-  and the bottom edge by the horizontal scrollbar height when it is visible.
-  Mirrors the ListBox/Memo pattern: subtract bar thickness only when Visible. }
+  Insets for the themed padding (matching RenderTo's CR exactly) and shrinks
+  the right/bottom edges when the respective scrollbar is visible.
+  With no controller the padding is 0, so the result equals the old ClientRect
+  minus scrollbar thickness — headless tests that use Create(nil) are unaffected. }
 function TTyTreeView.ContentRect: TRect;
 var
-  SBThick: Integer;
+  SBThick, PPI: Integer;
+  S: TTyStyleSet;
+  CR: TRect;
 begin
-  Result  := ClientRect;
-  SBThick := MulDiv(TyScrollbarSize, Font.PixelsPerInch, 96);
+  S   := CurrentStyle;
+  PPI := Font.PixelsPerInch;
+  CR  := ClientRect;
+  Result := Rect(
+    CR.Left   + MulDiv(S.Padding.Left,   PPI, 96),
+    CR.Top    + MulDiv(S.Padding.Top,    PPI, 96),
+    CR.Right  - MulDiv(S.Padding.Right,  PPI, 96),
+    CR.Bottom - MulDiv(S.Padding.Bottom, PPI, 96));
+  SBThick := MulDiv(TyScrollbarSize, PPI, 96);
   if (FVScroll <> nil) and FVScroll.Visible then
-    Dec(Result.Right, SBThick);
+    Dec(Result.Right,  SBThick);
   if (FHScroll <> nil) and FHScroll.Visible then
     Dec(Result.Bottom, SBThick);
 end;

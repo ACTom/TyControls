@@ -3264,6 +3264,65 @@ begin
   end;
 end;
 
+{ ── ContentRect padding regression ─────────────────────────────────────── }
+
+type
+  { Regression: ContentRect must inset the themed padding so hit-testing and
+    the paint origin agree.  Before the fix, ContentRect returned ClientRect
+    (minus scrollbar only), so with any padding > 0 the hit-test origin was
+    Padding.Left/Top pixels off the paint origin.
+    We load an inline theme with padding:6px (chosen to be clearly non-zero at
+    96 DPI: MulDiv(6,96,96)=6) and verify ContentRect.Left=6 and Top=6.
+    With no controller the padding is 0, so existing headless tests are unaffected. }
+  TTreeContentRectPaddingTest = class(TTestCase)
+  published
+    procedure TestContentRectInsetsThemedPadding;
+  end;
+
+procedure TTreeContentRectPaddingTest.TestContentRectInsetsThemedPadding;
+// Load a theme with TyTreeView padding:6px (and minimal TyTreeNode rules
+// so the CSS parse succeeds).  At 96 DPI, MulDiv(6,96,96)=6 so the inset is
+// an exact integer -- no rounding ambiguity.
+// Assert ContentRect.Left = 6 and ContentRect.Top = 6.
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  CR: TRect;
+  PPI, Expected: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  F   := TForm.CreateNew(nil);
+  try
+    Ctl.LoadThemeCss(
+      'TyTreeView { background: #FFF; border-width: 0px; padding: 6px; } ' +
+      'TyTreeNode  { color: #000; }');
+    t := TTyTreeView.Create(F);
+    t.Parent     := F;
+    t.Controller := Ctl;
+    t.Font.PixelsPerInch := 96;
+    t.SetBounds(0, 0, 400, 300);
+    t.RootNodeCount := 3;   { give it some nodes so UpdateScrollBars sees real content }
+
+    PPI      := t.Font.PixelsPerInch;   { = 96 }
+    Expected := MulDiv(6, PPI, 96);     { = 6 at 96 DPI }
+
+    CR := t.ContentRect;
+
+    AssertEquals(
+      Format('ContentRect.Left must equal MulDiv(6,%d,96) = %d (themed padding)',
+             [PPI, Expected]),
+      Expected, CR.Left);
+    AssertEquals(
+      Format('ContentRect.Top must equal MulDiv(6,%d,96) = %d (themed padding)',
+             [PPI, Expected]),
+      Expected, CR.Top);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -3276,4 +3335,5 @@ initialization
   RegisterTest(TTreeC2Test);
   RegisterTest(TTreeC3PaintTest);
   RegisterTest(TTreeC4Test);
+  RegisterTest(TTreeContentRectPaddingTest);
 end.
