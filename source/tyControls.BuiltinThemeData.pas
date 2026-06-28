@@ -385,6 +385,14 @@ begin
     'TyDateTimeButton { background: var(--surface-chrome); color: var(--on-surface); }' + LineEnding +
     'TyDateTimeButton:hover { background: var(--surface-hover); color: var(--accent); }' + LineEnding +
     '' + LineEnding +
+    '/* ── TreeView ──────────────────────────────────────────────────────────── */' + LineEnding +
+    '' + LineEnding +
+    'TyTreeView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 2px; font-size: var(--font-size-base); }' + LineEnding +
+    'TyTreeNode { background: none; color: var(--on-surface); }' + LineEnding +
+    'TyTreeNode:hover { background: var(--surface-hover); }' + LineEnding +
+    'TyTreeNode:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    'TyTreeNode:disabled { color: var(--muted); }' + LineEnding +
+    '' + LineEnding +
     '/* ── @mode conditional token blocks (D7) ──────────────────────────────── */' + LineEnding +
     '' + LineEnding +
     '@mode light {' + LineEnding +
@@ -823,6 +831,14 @@ begin
     'TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     'TyDateTimeButton { background: var(--surface-chrome); color: var(--on-surface); }' + LineEnding +
     'TyDateTimeButton:hover { background: var(--surface-hover); color: var(--accent); }' + LineEnding +
+    '' + LineEnding +
+    '/* ── TreeView ──────────────────────────────────────────────────────────── */' + LineEnding +
+    '' + LineEnding +
+    'TyTreeView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 2px; font-size: var(--font-size-base); }' + LineEnding +
+    'TyTreeNode { background: none; color: var(--on-surface); }' + LineEnding +
+    'TyTreeNode:hover { background: var(--surface-hover); }' + LineEnding +
+    'TyTreeNode:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    'TyTreeNode:disabled { color: var(--muted); }' + LineEnding +
     '' + LineEnding +
     '/* ── @mode conditional token blocks (D7) ──────────────────────────────────────' + LineEnding +
     '   The accent SEED is `system-accent` (StyleModel swaps it for the OS accent at' + LineEnding +

@@ -1542,8 +1542,6 @@ end;
      • Accumulate FRangeX for the horizontal scrollbar.
   6. EndPaint; after the loop call UpdateScrollBars if FRangeX changed. }
 procedure TTyTreeView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-const
-  TREE_LINE_COLOR = $FF808080;   // muted grey; replaced by token in D1
 var
   P: TTyPainter;
   S, NodeStyle: TTyStyleSet;
@@ -1679,7 +1677,7 @@ begin
                       - (btnSlotW shr 1);
           if anc^.NextSibling <> nil then
             P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
-              TyColorToBGRA(TREE_LINE_COLOR), False);
+              TyColorToBGRA(S.BorderColor), False);
           anc := anc^.Parent;
         end;
 
@@ -1689,12 +1687,12 @@ begin
                    - (btnSlotW shr 1);
         ancMidY := rowTop + rowH div 2;
         P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
-          TyColorToBGRA(TREE_LINE_COLOR), False);
+          TyColorToBGRA(S.BorderColor), False);
         P.Bitmap.DrawLine(ancMidX, ancMidY,   CR.Left + indentPx, ancMidY,
-          TyColorToBGRA(TREE_LINE_COLOR), False);
+          TyColorToBGRA(S.BorderColor), False);
         if node^.NextSibling <> nil then
           P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
-            TyColorToBGRA(TREE_LINE_COLOR), False);
+            TyColorToBGRA(S.BorderColor), False);
       end;
 
       { ── Expand button ────────────────────────────────────────────────── }

@@ -111,6 +111,7 @@ begin
     AssertBg('TyCalendar', []);
     AssertBg('TyDateTimePicker', []);
     AssertBg('TyDateTimeButton', []);
+    AssertBg('TyTreeView', []);
   finally
     m.Free;
   end;
