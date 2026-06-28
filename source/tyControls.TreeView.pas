@@ -46,6 +46,11 @@ type
   TTyTreeColumnReorderEvent = procedure(Sender: TTyTreeView;
     OldPosition, NewPosition: Integer) of object;
 
+  { E1: compare event for the sort engine — app returns <0 / 0 / >0 (natural order;
+    direction is handled internally by the sort). }
+  TTyTreeCompareEvent = procedure(Sender: TTyTreeView;
+    Node1, Node2: PTyTreeNode; Column: Integer; var CompareResult: Integer) of object;
+
   { C3: text type (mirrors VTV's TVSTTextType) }
   TTyVSTTextType = (ttNormal, ttStatic);
 
@@ -147,6 +152,9 @@ type
     FDragging:         Boolean;   // threshold exceeded: ghost + drop-mark active
     FDragTargetPos:    Integer;   // visual position to drop into (0-based)
     FOnColumnReorder:  TTyTreeColumnReorderEvent;
+    { E1/E2/E3: sort engine }
+    FOnCompareNodes:   TTyTreeCompareEvent;
+    FSorting:          Boolean;   // reentrancy guard: SortTree -> HeaderChanged -> SortTree
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
     procedure UpdateScrollBars;
@@ -251,6 +259,10 @@ type
     function GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): PTyTreeNode; overload;
     { D1: header hit-test — True when (X,Y) is in the header band }
     function GetHeaderHitAt(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): Boolean;
+    { E1: compare helper wrapping OnCompareNodes — returns 0 when unassigned }
+    function DoCompare(Node1, Node2: PTyTreeNode; Column: Integer): Integer;
+    { E1: sort the direct children of Node (one level only) }
+    procedure Sort(Node: PTyTreeNode; Column: Integer; ADirection: TTySortDirection; DoInit: Boolean);
   published
     { B (columns): header sub-object }
     property Header: TTyTreeHeader read FHeader write SetHeader;
@@ -294,6 +306,8 @@ type
     property OnColumnResized: TTyTreeColumnEvent read FOnColumnResized write FOnColumnResized;
     { D3: column reorder event }
     property OnColumnReorder: TTyTreeColumnReorderEvent read FOnColumnReorder write FOnColumnReorder;
+    { E1: sort compare event }
+    property OnCompareNodes: TTyTreeCompareEvent read FOnCompareNodes write FOnCompareNodes;
   end;
 
 implementation
@@ -900,6 +914,8 @@ begin
   FDragStartX       := 0;
   FDragging         := False;
   FDragTargetPos    := 0;
+  { E1/E2/E3: sort engine — idle state }
+  FSorting          := False;
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
@@ -2916,6 +2932,149 @@ begin
     end;
 
   end;
+end;
+
+{ ── E1 ── sort engine ────────────────────────────────────────────────────── }
+
+{ DoCompare: wraps OnCompareNodes.  Returns 0 when no handler assigned.
+  The caller uses natural ordering; the sort direction is handled by the merge. }
+function TTyTreeView.DoCompare(Node1, Node2: PTyTreeNode; Column: Integer): Integer;
+begin
+  Result := 0;
+  if Assigned(FOnCompareNodes) then
+    FOnCompareNodes(Self, Node1, Node2, Column, Result);
+end;
+
+{ MergeSortedLists: merge two sorted singly-linked (NextSibling) lists into one.
+  AscDir = True  → pick the SMALLER node first (ascending)
+  AscDir = False → pick the LARGER  node first (descending)
+  Only NextSibling is used during the merge; PrevSibling/Index/Parent are
+  repaired by the sweep in Sort after this returns. }
+function MergeSortedLists(Tree: TTyTreeView; A, B: PTyTreeNode;
+  Column: Integer; AscDir: Boolean): PTyTreeNode;
+var
+  head, tail, chosen: PTyTreeNode;
+  cmp: Integer;
+begin
+  head := nil;
+  tail := nil;
+  while (A <> nil) and (B <> nil) do
+  begin
+    cmp := Tree.DoCompare(A, B, Column);
+    { Ascending: pick A when cmp <= 0 (stable: equal stays in original order).
+      Descending: pick A when cmp >= 0. }
+    if AscDir then
+    begin
+      if cmp <= 0 then chosen := A else chosen := B;
+    end
+    else
+    begin
+      if cmp >= 0 then chosen := A else chosen := B;
+    end;
+    if chosen = A then A := A^.NextSibling
+    else              B := B^.NextSibling;
+    chosen^.NextSibling := nil;  { isolate the node }
+    if tail = nil then begin head := chosen; tail := chosen; end
+    else begin tail^.NextSibling := chosen; tail := chosen; end;
+  end;
+  { Append whichever list still has nodes }
+  if tail <> nil then
+  begin
+    if A <> nil then tail^.NextSibling := A
+    else             tail^.NextSibling := B;
+  end;
+  if head = nil then
+  begin
+    if A <> nil then Result := A
+    else              Result := B;
+  end
+  else Result := head;
+end;
+
+{ MergeSortList: top-down recursive merge sort on a singly-linked list
+  (linked via NextSibling only).  Returns the new head of the sorted list.
+  ACount = number of nodes in the list (for efficient split). }
+function MergeSortList(Tree: TTyTreeView; Head: PTyTreeNode;
+  ACount: Integer; Column: Integer; AscDir: Boolean): PTyTreeNode;
+var
+  half, i: Integer;
+  slow, fast, left, right: PTyTreeNode;
+begin
+  if (Head = nil) or (ACount <= 1) then begin Result := Head; Exit; end;
+
+  { Split: advance by ACount div 2 nodes to find the midpoint }
+  half := ACount div 2;
+  slow := Head;
+  for i := 1 to half - 1 do
+    slow := slow^.NextSibling;
+  fast  := slow^.NextSibling;   { second half starts here }
+  slow^.NextSibling := nil;      { cut the list }
+  left  := Head;
+  right := fast;
+
+  left  := MergeSortList(Tree, left,  half,         Column, AscDir);
+  right := MergeSortList(Tree, right, ACount - half, Column, AscDir);
+
+  Result := MergeSortedLists(Tree, left, right, Column, AscDir);
+end;
+
+{ Sort: sort the direct children of Node one level.
+  DoInit=True → lazily materialise children first (matches the ③a lazy model). }
+procedure TTyTreeView.Sort(Node: PTyTreeNode; Column: Integer;
+  ADirection: TTySortDirection; DoInit: Boolean);
+var
+  child, prev: PTyTreeNode;
+  newHead: PTyTreeNode;
+  idx: Cardinal;
+  cnt: Integer;
+begin
+  if Node = nil then Exit;
+
+  { Step 1: if DoInit, ensure children are materialised and each child is inited }
+  if DoInit then
+  begin
+    if (nsHasChildren in Node^.States) and (Node^.ChildCount = 0) then
+      InitChildren(Node);
+    { Init each direct child so nsHasChildren etc. are populated for compare }
+    child := Node^.FirstChild;
+    while child <> nil do
+    begin
+      InitNode(child);
+      child := child^.NextSibling;
+    end;
+  end;
+
+  cnt := Node^.ChildCount;
+  if cnt <= 1 then Exit;   { 0 or 1 child: nothing to sort }
+
+  { Step 2: merge sort the FirstChild→NextSibling singly-linked list }
+  newHead := MergeSortList(Self, Node^.FirstChild, cnt, Column,
+                           ADirection = sdAscending);
+
+  { Step 3: sweep the sorted list to rebuild full doubly-linked structure
+    and re-stamp Index. }
+  Node^.FirstChild := newHead;
+  prev := nil;
+  idx  := 0;
+  child := newHead;
+  while child <> nil do
+  begin
+    child^.Parent      := Node;
+    child^.Index       := idx;
+    child^.PrevSibling := prev;
+    if prev <> nil then
+      prev^.NextSibling := child;
+    prev := child;
+    child := child^.NextSibling;
+    Inc(idx);
+  end;
+  { prev is now the last node }
+  if prev <> nil then
+  begin
+    prev^.NextSibling := nil;
+    Node^.LastChild   := prev;
+  end;
+  { ChildCount/TotalCount/TotalHeight are unchanged (same set of children) }
 end;
 
 initialization

@@ -5023,6 +5023,263 @@ begin
   end;
 end;
 
+{ ── E1 ── OnCompareNodes + sibling-list merge Sort(node,col,dir) ─────────────── }
+{ Strategy: store an integer key in the node-data blob (NodeDataSize=SizeOf(Integer))
+  via the tree's NodeDataSize.  OnCompareNodes reads the key and compares.
+  The tree will use a parent node whose children carry keys [3,1,4,1,5,9,2,6].
+  After ascending sort the order must be [1,1,2,3,4,5,6,9] (stable within equal keys).
+  After descending the order must be [9,6,5,4,3,2,1,1].
+  The key is written into the node-data blob via PInteger(t.GetNodeData(child))^. }
+
+type
+  TTreeE1SortTest = class(TTestCase)
+  private
+    FCompareCount: Integer;
+    FLastColumn:   Integer;
+    procedure OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+                        Column: Integer; var Result: Integer);
+    { Build a parent+children tree with the keys [3,1,4,1,5,9,2,6].
+      Returns the tree (caller frees); AParent = the parent node. }
+    function BuildSortTree(out AParent: PTyTreeNode): TTyTreeView;
+    { Walk children of AParent forward and return their keys in order }
+    procedure CollectKeys(Tree: TTyTreeView; Parent: PTyTreeNode; out AKeys: array of Integer);
+  published
+    procedure TestE1_AscendingSortOrder;
+    procedure TestE1_DescendingSortOrder;
+    procedure TestE1_IndexReStamped;
+    procedure TestE1_BackwardLinkCorrect;
+    procedure TestE1_ZeroChildNoOp;
+    procedure TestE1_OneChildNoOp;
+    procedure TestE1_HeightInvariantHolds;
+    procedure TestE1_OnCompareNodesFiredWithCorrectColumn;
+  end;
+
+procedure TTreeE1SortTest.OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+  Column: Integer; var Result: Integer);
+begin
+  Inc(FCompareCount);
+  FLastColumn := Column;
+  { Compare the integer key stored in the node-data blob }
+  Result := PInteger(Sender.GetNodeData(Node1))^ -
+            PInteger(Sender.GetNodeData(Node2))^;
+end;
+
+function TTreeE1SortTest.BuildSortTree(out AParent: PTyTreeNode): TTyTreeView;
+const
+  Keys: array[0..7] of Integer = (3, 1, 4, 1, 5, 9, 2, 6);
+var
+  t: TTyTreeView;
+  parent, child: PTyTreeNode;
+  i: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  t.NodeDataSize := SizeOf(Integer);
+  t.OnCompareNodes := @OnCompare;
+
+  { Create a parent node with 8 children (NOT expanded — sort is a pure relink test) }
+  t.RootNodeCount := 1;
+  parent := t.RootNode^.FirstChild;
+  Include(parent^.States, nsHasChildren);  { mark as having children }
+  t.SetChildCount(parent, 8);
+  { Parent stays COLLAPSED so TotalHeight is not affected by children heights. }
+
+  { Stamp keys into the data blobs and init states }
+  child := parent^.FirstChild;
+  i := 0;
+  while child <> nil do
+  begin
+    Include(child^.States, nsInitialized); { already inited for compare purposes }
+    PInteger(t.GetNodeData(child))^ := Keys[i];
+    Inc(i);
+    child := child^.NextSibling;
+  end;
+
+  AParent := parent;
+  Result := t;
+end;
+
+{ CollectKeys: walk children of Parent forward and fill AKeys }
+procedure TTreeE1SortTest.CollectKeys(Tree: TTyTreeView; Parent: PTyTreeNode;
+  out AKeys: array of Integer);
+var
+  child: PTyTreeNode;
+  i: Integer;
+begin
+  i := 0;
+  child := Parent^.FirstChild;
+  while child <> nil do
+  begin
+    if i <= High(AKeys) then
+      AKeys[i] := PInteger(Tree.GetNodeData(child))^;
+    Inc(i);
+    child := child^.NextSibling;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_AscendingSortOrder;
+var
+  t: TTyTreeView;
+  parent: PTyTreeNode;
+  keys: array[0..7] of Integer;
+  expected: array[0..7] of Integer = (1, 1, 2, 3, 4, 5, 6, 9);
+  i: Integer;
+begin
+  t := BuildSortTree(parent);
+  try
+    t.Sort(parent, 0, sdAscending, False);
+    CollectKeys(t, parent, keys);
+    for i := 0 to 7 do
+      AssertEquals('E1 asc key['+IntToStr(i)+']', expected[i], keys[i]);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_DescendingSortOrder;
+var
+  t: TTyTreeView;
+  parent: PTyTreeNode;
+  keys: array[0..7] of Integer;
+  expected: array[0..7] of Integer = (9, 6, 5, 4, 3, 2, 1, 1);
+  i: Integer;
+begin
+  t := BuildSortTree(parent);
+  try
+    t.Sort(parent, 0, sdDescending, False);
+    CollectKeys(t, parent, keys);
+    for i := 0 to 7 do
+      AssertEquals('E1 desc key['+IntToStr(i)+']', expected[i], keys[i]);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_IndexReStamped;
+var
+  t: TTyTreeView;
+  parent, child: PTyTreeNode;
+  i: Integer;
+begin
+  t := BuildSortTree(parent);
+  try
+    t.Sort(parent, 0, sdAscending, False);
+    child := parent^.FirstChild;
+    i := 0;
+    while child <> nil do
+    begin
+      AssertEquals('E1 Index['+IntToStr(i)+'] re-stamped', i, Integer(child^.Index));
+      Inc(i);
+      child := child^.NextSibling;
+    end;
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_BackwardLinkCorrect;
+var
+  t: TTyTreeView;
+  parent, child, prev: PTyTreeNode;
+begin
+  t := BuildSortTree(parent);
+  try
+    t.Sort(parent, 0, sdAscending, False);
+    { Walk forward and verify PrevSibling of each node points back to the previous }
+    prev  := nil;
+    child := parent^.FirstChild;
+    AssertTrue('E1 FirstChild.PrevSibling = nil', child^.PrevSibling = nil);
+    AssertTrue('E1 Parent.FirstChild = sorted head', parent^.FirstChild = child);
+    while child <> nil do
+    begin
+      AssertTrue('E1 PrevSibling correct', child^.PrevSibling = prev);
+      if child^.NextSibling = nil then
+        AssertTrue('E1 LastChild correct', parent^.LastChild = child);
+      prev  := child;
+      child := child^.NextSibling;
+    end;
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_ZeroChildNoOp;
+var
+  t: TTyTreeView;
+  parent: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.RootNodeCount := 1;
+    parent := t.RootNode^.FirstChild;
+    { Parent has no children — Sort must be a no-op (no crash) }
+    t.Sort(parent, 0, sdAscending, False);
+    AssertEquals('E1 0-child ChildCount unchanged', 0, Integer(parent^.ChildCount));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_OneChildNoOp;
+var
+  t: TTyTreeView;
+  parent, child: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  t.NodeDataSize := SizeOf(Integer);
+  t.OnCompareNodes := @OnCompare;
+  try
+    t.RootNodeCount := 1;
+    parent := t.RootNode^.FirstChild;
+    t.SetChildCount(parent, 1);
+    child := parent^.FirstChild;
+    Include(child^.States, nsInitialized);
+    PInteger(t.GetNodeData(child))^ := 42;
+    { 1 child — Sort must be a no-op (no crash, child unchanged) }
+    t.Sort(parent, 0, sdAscending, False);
+    AssertEquals('E1 1-child key unchanged', 42, PInteger(t.GetNodeData(parent^.FirstChild))^);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_HeightInvariantHolds;
+{ After sorting, TotalHeight must be unchanged (sort is a pure relink). }
+var
+  t: TTyTreeView;
+  parent: PTyTreeNode;
+  totalBefore, totalAfter: Integer;
+begin
+  t := BuildSortTree(parent);
+  try
+    totalBefore := Integer(t.RootNode^.TotalHeight);
+    t.Sort(parent, 0, sdAscending, False);
+    totalAfter := Integer(t.RootNode^.TotalHeight);
+    AssertEquals('E1 height invariant: TotalHeight unchanged by sort',
+      totalBefore, totalAfter);
+    AssertEquals('E1 height invariant: TotalHeight = SumVisible',
+      t.SumVisibleHeights, totalAfter);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_OnCompareNodesFiredWithCorrectColumn;
+var
+  t: TTyTreeView;
+  parent: PTyTreeNode;
+begin
+  t := BuildSortTree(parent);
+  try
+    FCompareCount := 0;
+    FLastColumn   := -99;
+    t.Sort(parent, 3, sdAscending, False);   { column 3 }
+    AssertTrue('E1 OnCompareNodes fired at least once', FCompareCount > 0);
+    AssertEquals('E1 OnCompareNodes column = 3', 3, FLastColumn);
+  finally
+    t.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -5041,4 +5298,5 @@ initialization
   RegisterTest(TTreeD1D2Test);
   RegisterTest(TTreeD3DragTest);
   RegisterTest(TTreeD4AutoSizeTest);
+  RegisterTest(TTreeE1SortTest);
 end.
