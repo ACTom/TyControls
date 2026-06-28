@@ -8,7 +8,8 @@ uses
 
 type
   { C4: hit-test result — which part of a node row the mouse landed in }
-  TTyTreeHitPart = (hpNowhere, hpButton, hpImage, hpLabel, hpIndent);
+  TTyTreeHitPart = (hpNowhere, hpButton, hpImage, hpLabel, hpIndent,
+                    hpHeaderSection, hpHeaderDivider);
 
 type
   PTyTreeNode = ^TTyTreeNode;
@@ -225,7 +226,11 @@ type
     { B3: read-only; how many nodes were visited in the last GetNodeAt walk (for perf tests) }
     property LastGetNodeAtVisits: Integer read FLastGetNodeAtVisits;
     { C4: hit-testing }
-    function GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode;
+    function GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode; overload;
+    { D1: 3-out overload — also returns the column index under the cursor }
+    function GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): PTyTreeNode; overload;
+    { D1: header hit-test — True when (X,Y) is in the header band }
+    function GetHeaderHitAt(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): Boolean;
   published
     { B (columns): header sub-object }
     property Header: TTyTreeHeader read FHeader write SetHeader;
@@ -2206,12 +2211,13 @@ end;
 
 { ── C4 ── hit-testing + mouse + keyboard + hot-track ─────────────────────── }
 
-{ GetNodeAtPoint
+{ GetNodeAtPoint (3-out overload)
   Convert client (X, Y) to the absolute content coordinate space, find the
   node under the cursor via GetNodeAt, then classify which column slot was hit.
+  AColumn returns the collection Index of the column under X (-1 = NoColumn).
 
   X-accumulation mirrors RenderTo EXACTLY (same scale, same formula):
-    CR      = ContentRect (padding-inset + scrollbar-shrunk)
+    CR      = ContentRect (padding-inset + scrollbar-shrunk, header inset already applied)
     indentPx = Scale((level + Ord(FShowRoot)) * FIndent)
     btnSlotW = Scale(FIndent)   — one Indent-wide slot before indentPx
     imgSlotW = Scale(FIndent)   — one Indent-wide slot after indentPx
@@ -2219,7 +2225,7 @@ end;
   The absolute content X/Y:
     absY = (Y - CR.Top) + (-FOffsetY)
     absX = (X - CR.Left) + (-FOffsetX)  }
-function TTyTreeView.GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode;
+function TTyTreeView.GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): PTyTreeNode;
 var
   PPI: Integer;
   CR: TRect;
@@ -2228,9 +2234,11 @@ var
   node: PTyTreeNode;
   level, indentPx, btnSlotW, imgSlotW: Integer;
   captionX: Integer;
+  logX, logScroll: Integer;
 begin
   Result   := nil;
   APart    := hpNowhere;
+  AColumn  := NoColumn;
 
   PPI := Font.PixelsPerInch;
   CR  := ContentRect;
@@ -2268,17 +2276,13 @@ begin
   begin
     APart := hpIndent;
     Result := node;
-    Exit;
-  end;
-
-  if absX < indentPx - btnSlotW then
+  end
+  else if absX < indentPx - btnSlotW then
   begin
     APart  := hpIndent;
     Result := node;
-    Exit;
-  end;
-
-  if (absX < indentPx) then
+  end
+  else if (absX < indentPx) then
   begin
     { In the button slot — classify as hpButton only if the node has children
       AND buttons are shown.  Otherwise treat as hpIndent. }
@@ -2287,25 +2291,101 @@ begin
     else
       APart := hpIndent;
     Result := node;
-    Exit;
-  end;
-
-  { Past the indent zone }
-  captionX := indentPx;
-  if (FImages <> nil) and (FImages.Count > 0) then
+  end
+  else
   begin
-    if absX < captionX + imgSlotW then
+    { Past the indent zone }
+    captionX := indentPx;
+    if (FImages <> nil) and (FImages.Count > 0) then
     begin
-      APart  := hpImage;
+      if absX < captionX + imgSlotW then
+      begin
+        APart  := hpImage;
+        Result := node;
+      end
+      else
+      begin
+        Inc(captionX, imgSlotW);
+        APart  := hpLabel;
+        Result := node;
+      end;
+    end
+    else
+    begin
+      { Everything to the right of the image slot is the label area }
+      APart  := hpLabel;
       Result := node;
-      Exit;
     end;
-    Inc(captionX, imgSlotW);
   end;
 
-  { Everything to the right of the image slot is the label area }
-  APart  := hpLabel;
-  Result := node;
+  { D1: determine which column the X coordinate lands in (when columns exist) }
+  if (Result <> nil) and (FHeader <> nil) and (FHeader.Columns.Count > 0) then
+  begin
+    { Convert device X offset from CR.Left into logical px (matches paint formula).
+      ColumnFromPosition(logX, logScroll) checks col.FLeft-logScroll <= logX < col.FLeft-logScroll+col.Width
+      which matches CR.Left + Scale(col.Left) + FOffsetX <= X < ... }
+    logX      := MulDiv(X - CR.Left, 96, PPI);
+    logScroll := MulDiv(-FOffsetX, 96, PPI);
+    AColumn := FHeader.Columns.ColumnFromPosition(logX, logScroll);
+  end;
+end;
+
+{ GetNodeAtPoint (2-out overload — backward-compatible delegator) }
+function TTyTreeView.GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode;
+var
+  col: Integer;
+begin
+  Result := GetNodeAtPoint(X, Y, APart, col);
+end;
+
+{ GetHeaderHitAt
+  Returns True and sets APart + AColumn when (X,Y) is inside the header band.
+  The header band occupies device Y in [CR.Top-headerH .. CR.Top) where
+  CR = ContentRect (which already has headerH added to its Top). }
+function TTyTreeView.GetHeaderHitAt(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): Boolean;
+var
+  PPI, logX, logScroll, colIdx: Integer;
+  CR: TRect;
+begin
+  Result  := False;
+  APart   := hpNowhere;
+  AColumn := NoColumn;
+
+  { Guard: header must be present, visible, and have at least one column }
+  if (FHeader = nil) or not (hoVisible in FHeader.Options) or
+     (FHeader.Columns.Count = 0) then Exit;
+
+  CR := ContentRect;
+  { ContentRect.Top already includes the header band height.
+    Any Y below ContentRect.Top is in the header/padding band.
+    Check both the upper boundary (Y >= padding top = CR.Top - headerH) and lower
+    boundary (Y < CR.Top).  We use Y < CR.Top as the sufficient test — clicking
+    in the narrow padding above the header is treated as a header hit. }
+  if Y >= CR.Top then Exit;
+
+  { We're in the header band }
+  PPI := Font.PixelsPerInch;
+
+  { Compute logical X relative to CR.Left (shared horizontal geometry with cells).
+    ColumnFromPosition and DetermineSplitterIndex both use the same paint formula. }
+  logX      := MulDiv(X - CR.Left, 96, PPI);
+  logScroll := MulDiv(-FOffsetX, 96, PPI);
+
+  { Check for divider (resizable column right-edge within tolerance) }
+  colIdx := FHeader.Columns.DetermineSplitterIndex(logX, logScroll);
+  if colIdx <> NoColumn then
+  begin
+    APart   := hpHeaderDivider;
+    AColumn := colIdx;
+    Result  := True;
+  end
+  else
+  begin
+    { Plain header section hit }
+    AColumn := FHeader.Columns.ColumnFromPosition(logX, logScroll);
+    APart   := hpHeaderSection;
+    Result  := True;
+  end;
 end;
 
 procedure TTyTreeView.MouseDown(Button: TMouseButton; Shift: TShiftState;
