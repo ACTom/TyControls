@@ -2,7 +2,7 @@ unit tyControls.TreeView;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, ImgList,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar;
 
 type
@@ -31,6 +31,7 @@ type
   TTyTreeChangingEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean) of object;
   TTyTreeInitNodeEvent     = procedure(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates) of object;
   TTyTreeInitChildrenEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var ChildCount: Cardinal) of object;
+  TTyTreeGetTextEvent  = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string) of object;
 
 const
   TreeNodeSize = (SizeOf(TTyTreeNode) + 7) and not 7;  // pointer-aligned struct stride
@@ -68,6 +69,35 @@ type
     FOnExpanded:     TTyTreeNodeEvent;
     FOnCollapsing:   TTyTreeChangingEvent;
     FOnCollapsed:    TTyTreeNodeEvent;
+    { C1: selection + focus }
+    FFocusedNode:    PTyTreeNode;
+    FSelectedNode:   PTyTreeNode;
+    FOnChange:       TTyTreeNodeEvent;
+    FOnFocusChanged: TTyTreeNodeEvent;
+    { C1: layout / display properties }
+    FIndent:            Integer;
+    FImages:            TImageList;
+    FEmptyListMessage:  string;
+    FShowButtons:       Boolean;
+    FShowTreeLines:     Boolean;
+    FShowRoot:          Boolean;
+    FToggleOnDblClick:  Boolean;
+    FHotTrack:          Boolean;
+    { C1: scroll offset (set by ScrollIntoView; C2 will add full scrollbar wiring) }
+    FOffsetY: Integer;
+    procedure SetIndent(AValue: Integer);
+    procedure SetImages(AValue: TImageList);
+    procedure SetShowButtons(AValue: Boolean);
+    procedure SetShowTreeLines(AValue: Boolean);
+    procedure SetShowRoot(AValue: Boolean);
+    procedure SetToggleOnDblClick(AValue: Boolean);
+    procedure SetHotTrack(AValue: Boolean);
+    { C1: selection internals }
+    procedure ClearSelectedNode;
+    function  GetSelected(Node: PTyTreeNode): Boolean;
+    procedure SetSelected(Node: PTyTreeNode; AValue: Boolean);
+    function  GetFocusedNode: PTyTreeNode;
+    procedure SetFocusedNode(AValue: PTyTreeNode);
     function  MakeNewNode: PTyTreeNode;
     procedure FreeNodeMem(Node: PTyTreeNode);
     procedure SetNodeDataSize(AValue: Integer);
@@ -85,6 +115,7 @@ type
     procedure SetExpanded(Node: PTyTreeNode; AValue: Boolean);
   protected
     function GetStyleTypeKey: string; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
@@ -113,15 +144,40 @@ type
     function  GetNodeAt(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
     { B1 helpers — used by tests + scroll engine }
     function  SumVisibleHeights: Integer;
+    { C1: selection + focus }
+    procedure ClearSelection;
+    procedure FullExpand(Node: PTyTreeNode = nil);
+    procedure FullCollapse(Node: PTyTreeNode = nil);
+    procedure ScrollIntoView(Node: PTyTreeNode);
     property Expanded[Node: PTyTreeNode]: Boolean read GetExpanded write SetExpanded;
+    property Selected[Node: PTyTreeNode]: Boolean read GetSelected write SetSelected;
+    property FocusedNode: PTyTreeNode read GetFocusedNode write SetFocusedNode;
     property RootNode: PTyTreeNode read FRoot;
     property RangeY: Integer read FRangeY;
+    property OffsetY: Integer read FOffsetY;
     { B3: read-only; how many nodes were visited in the last GetNodeAt walk (for perf tests) }
     property LastGetNodeAtVisits: Integer read FLastGetNodeAtVisits;
   published
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
     property DefaultNodeHeight: Integer read FDefaultNodeHeight write FDefaultNodeHeight default 18;
     property RootNodeCount: Cardinal read GetRootNodeCount write SetRootNodeCount default 0;
+    { C1: display properties }
+    property Indent: Integer read FIndent write SetIndent default 16;
+    property Images: TImageList read FImages write SetImages;
+    property EmptyListMessage: string read FEmptyListMessage write FEmptyListMessage;
+    property ShowButtons: Boolean read FShowButtons write SetShowButtons default True;
+    property ShowTreeLines: Boolean read FShowTreeLines write SetShowTreeLines default True;
+    property ShowRoot: Boolean read FShowRoot write SetShowRoot default True;
+    property ToggleOnDblClick: Boolean read FToggleOnDblClick write SetToggleOnDblClick default True;
+    property HotTrack: Boolean read FHotTrack write SetHotTrack default False;
+    { C1: re-published standard LCL properties }
+    property Align;
+    property Anchors;
+    property Font;
+    property StyleClass;
+    property Controller;
+    property TabStop default True;
+    { events }
     property OnFreeNode:      TTyTreeNodeEvent         read FOnFreeNode      write FOnFreeNode;
     property OnInitNode:      TTyTreeInitNodeEvent     read FOnInitNode      write FOnInitNode;
     property OnInitChildren:  TTyTreeInitChildrenEvent read FOnInitChildren  write FOnInitChildren;
@@ -129,6 +185,8 @@ type
     property OnExpanded:      TTyTreeNodeEvent         read FOnExpanded      write FOnExpanded;
     property OnCollapsing:    TTyTreeChangingEvent     read FOnCollapsing    write FOnCollapsing;
     property OnCollapsed:     TTyTreeNodeEvent         read FOnCollapsed     write FOnCollapsed;
+    property OnChange:        TTyTreeNodeEvent         read FOnChange        write FOnChange;
+    property OnFocusChanged:  TTyTreeNodeEvent         read FOnFocusChanged  write FOnFocusChanged;
   end;
 
 implementation
@@ -138,6 +196,285 @@ implementation
 function TTyTreeView.GetStyleTypeKey: string;
 begin
   Result := 'TyTreeView';
+end;
+
+procedure TTyTreeView.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FImages) then FImages := nil;
+end;
+
+{ ── C1 ── selection / focus ────────────────────────────────────────────────── }
+
+{ ClearSelectedNode: internal — removes nsSelected from the currently-selected
+  node without firing any event.  Used by SetSelected before setting a new node. }
+procedure TTyTreeView.ClearSelectedNode;
+begin
+  if FSelectedNode = nil then Exit;
+  Exclude(FSelectedNode^.States, nsSelected);
+  FSelectedNode := nil;
+end;
+
+function TTyTreeView.GetSelected(Node: PTyTreeNode): Boolean;
+begin
+  Result := (Node <> nil) and (Node <> FRoot) and (nsSelected in Node^.States);
+end;
+
+{ SetSelected — single-select semantics:
+  * Deselect the previously-selected node.
+  * Set nsSelected on the new node (if AValue=True) or just clear (AValue=False).
+  * Fire OnChange once IFF the selection set actually changed. }
+procedure TTyTreeView.SetSelected(Node: PTyTreeNode; AValue: Boolean);
+var
+  didChange: Boolean;
+begin
+  if (Node = nil) or (Node = FRoot) then Exit;
+
+  if AValue then
+  begin
+    // Selecting a node: changed if the node is not already the selected one.
+    didChange := (FSelectedNode <> Node);
+    if not didChange then Exit;   // same node, same state — fire nothing
+    ClearSelectedNode;
+    Include(Node^.States, nsSelected);
+    FSelectedNode := Node;
+  end
+  else
+  begin
+    // Deselecting: changed only if this node was the selected one.
+    if not (nsSelected in Node^.States) then Exit;
+    didChange := True;
+    Exclude(Node^.States, nsSelected);
+    if FSelectedNode = Node then FSelectedNode := nil;
+  end;
+
+  if didChange and Assigned(FOnChange) then
+    FOnChange(Self, Node);
+  Invalidate;
+end;
+
+{ ClearSelection: public — deselects the current node, fires OnChange. }
+procedure TTyTreeView.ClearSelection;
+var
+  prev: PTyTreeNode;
+begin
+  if FSelectedNode = nil then Exit;
+  prev := FSelectedNode;
+  Exclude(prev^.States, nsSelected);
+  FSelectedNode := nil;
+  if Assigned(FOnChange) then FOnChange(Self, prev);
+  Invalidate;
+end;
+
+function TTyTreeView.GetFocusedNode: PTyTreeNode;
+begin
+  Result := FFocusedNode;
+end;
+
+{ SetFocusedNode — moving focus also selects (single-select ③a rule):
+  set focused node, select it, fire OnFocusChanged.
+  Selecting also fires OnChange via SetSelected. }
+procedure TTyTreeView.SetFocusedNode(AValue: PTyTreeNode);
+var
+  prevFocus: PTyTreeNode;
+begin
+  if AValue = FFocusedNode then Exit;
+  prevFocus   := FFocusedNode;
+  FFocusedNode := AValue;
+  // Focusing selects in single-select mode.
+  if AValue <> nil then
+    SetSelected(AValue, True);
+  if Assigned(FOnFocusChanged) then
+    FOnFocusChanged(Self, AValue);
+  Invalidate;
+  { suppress unused-variable warning }
+  if prevFocus = nil then ;
+end;
+
+{ ── C1 ── display property setters ─────────────────────────────────────────── }
+
+procedure TTyTreeView.SetIndent(AValue: Integer);
+begin
+  if FIndent = AValue then Exit;
+  FIndent := AValue;
+  Invalidate;
+end;
+
+procedure TTyTreeView.SetImages(AValue: TImageList);
+begin
+  if FImages = AValue then Exit;
+  FImages := AValue;
+  Invalidate;
+end;
+
+procedure TTyTreeView.SetShowButtons(AValue: Boolean);
+begin
+  if FShowButtons = AValue then Exit;
+  FShowButtons := AValue;
+  Invalidate;
+end;
+
+procedure TTyTreeView.SetShowTreeLines(AValue: Boolean);
+begin
+  if FShowTreeLines = AValue then Exit;
+  FShowTreeLines := AValue;
+  Invalidate;
+end;
+
+procedure TTyTreeView.SetShowRoot(AValue: Boolean);
+begin
+  if FShowRoot = AValue then Exit;
+  FShowRoot := AValue;
+  Invalidate;
+end;
+
+procedure TTyTreeView.SetToggleOnDblClick(AValue: Boolean);
+begin
+  if FToggleOnDblClick = AValue then Exit;
+  FToggleOnDblClick := AValue;
+  Invalidate;
+end;
+
+procedure TTyTreeView.SetHotTrack(AValue: Boolean);
+begin
+  if FHotTrack = AValue then Exit;
+  FHotTrack := AValue;
+  Invalidate;
+end;
+
+{ ── C1 ── bulk operations ───────────────────────────────────────────────────── }
+
+{ FullExpandSubtree — recursive helper: expand Node (if it has children) then
+  recurse into every materialised child.
+  IMPORTANT: expanding fires OnInitChildren which may materialise children,
+  so we collect them via FirstChild/NextSibling AFTER the expand call. }
+procedure FullExpandSubtree(Tree: TTyTreeView; Node: PTyTreeNode);
+var
+  child: PTyTreeNode;
+begin
+  if Node = nil then Exit;
+  if nsHasChildren in Node^.States then
+    Tree.SetExpanded(Node, True);   // materialises children via InitChildren
+  // Recurse into (now-materialised) children
+  child := Node^.FirstChild;
+  while child <> nil do
+  begin
+    FullExpandSubtree(Tree, child);
+    child := child^.NextSibling;
+  end;
+end;
+
+procedure TTyTreeView.FullExpand(Node: PTyTreeNode);
+var
+  child: PTyTreeNode;
+begin
+  if Node <> nil then
+    FullExpandSubtree(Self, Node)
+  else
+  begin
+    // Expand all top-level nodes and their descendants
+    child := FRoot^.FirstChild;
+    while child <> nil do
+    begin
+      FullExpandSubtree(Self, child);
+      child := child^.NextSibling;
+    end;
+  end;
+end;
+
+{ FullCollapseSubtree — recursive helper: collapse Node then recurse into children. }
+procedure FullCollapseSubtree(Tree: TTyTreeView; Node: PTyTreeNode);
+var
+  child: PTyTreeNode;
+begin
+  if Node = nil then Exit;
+  // Recurse into children first (collapse leaves before parents)
+  child := Node^.FirstChild;
+  while child <> nil do
+  begin
+    FullCollapseSubtree(Tree, child);
+    child := child^.NextSibling;
+  end;
+  if nsExpanded in Node^.States then
+    Tree.SetExpanded(Node, False);
+end;
+
+procedure TTyTreeView.FullCollapse(Node: PTyTreeNode);
+var
+  child: PTyTreeNode;
+begin
+  if Node <> nil then
+    FullCollapseSubtree(Self, Node)
+  else
+  begin
+    child := FRoot^.FirstChild;
+    while child <> nil do
+    begin
+      FullCollapseSubtree(Self, child);
+      child := child^.NextSibling;
+    end;
+  end;
+end;
+
+{ ScrollIntoView — compute the node's absolute top by walking the visible
+  sequence (no window handle needed), then clamp FOffsetY so the node is
+  within the viewport.  Full scrollbar sync is Task C2.
+
+  Clamp rules (FOffsetY ≤ 0):
+    • If node is above the current viewport: FOffsetY := -nodeTop (scroll up).
+    • If node is below: FOffsetY := -(nodeTop + NodeHeight - ClientHeight) (scroll down).
+    • FOffsetY is clamped to [-(FRangeY - ClientHeight), 0].
+      When ClientHeight ≥ FRangeY the clamp collapses to 0 (no scroll needed). }
+procedure TTyTreeView.ScrollIntoView(Node: PTyTreeNode);
+var
+  n:       PTyTreeNode;
+  accTop:  Integer;
+  viewTop: Integer;      // viewport top in absolute coords = -FOffsetY
+  viewBot: Integer;      // viewport bottom in absolute coords
+  nodeTop: Integer;
+  minOff:  Integer;
+begin
+  if (Node = nil) or (Node = FRoot) then Exit;
+
+  // Compute the node's absolute top via a visible-order walk.
+  accTop := 0;
+  n := GetFirstVisibleNoInit;
+  nodeTop := -1;
+  while n <> nil do
+  begin
+    if n = Node then
+    begin
+      nodeTop := accTop;
+      Break;
+    end;
+    Inc(accTop, n^.NodeHeight);
+    n := GetNextVisibleNoInit(n);
+  end;
+  if nodeTop < 0 then Exit;   // node is not visible in the current tree
+
+  viewTop := -FOffsetY;
+  viewBot := viewTop + ClientHeight;
+
+  if nodeTop < viewTop then
+  begin
+    // Node is above the viewport — scroll up so node is at the top.
+    FOffsetY := -nodeTop;
+  end
+  else if nodeTop + Integer(Node^.NodeHeight) > viewBot then
+  begin
+    // Node is below the viewport — scroll down so the bottom of the node is at the bottom.
+    FOffsetY := -(nodeTop + Integer(Node^.NodeHeight) - ClientHeight);
+  end
+  else
+    Exit;   // already in view — nothing to do
+
+  // Clamp FOffsetY to [-(FRangeY - ClientHeight), 0]
+  minOff := ClientHeight - FRangeY;
+  if minOff > 0 then minOff := 0;   // when content shorter than viewport: no negative offset needed
+  if FOffsetY < minOff then FOffsetY := minOff;
+  if FOffsetY > 0 then FOffsetY := 0;
+
+  Invalidate;
 end;
 
 constructor TTyTreeView.Create(AOwner: TComponent);
@@ -152,11 +489,23 @@ begin
   FRoot^.NextSibling := FRoot;
   // Root is always "expanded" so its children contribute height
   Include(FRoot^.States, nsExpanded);
+  { C1 defaults }
+  FIndent           := 16;
+  FShowButtons      := True;
+  FShowTreeLines    := True;
+  FShowRoot         := True;
+  FToggleOnDblClick := True;
+  FHotTrack         := False;
+  FOffsetY          := 0;
+  TabStop           := True;
   Width := 200; Height := 160;
 end;
 
 destructor TTyTreeView.Destroy;
 begin
+  // Null out selection/focus pointers before Clear so no dangling refs remain.
+  FFocusedNode  := nil;
+  FSelectedNode := nil;
   // Free all child nodes first (without firing OnFreeNode in Destroy —
   // event handler may already be gone; clear it first)
   FOnFreeNode := nil;
@@ -336,6 +685,14 @@ var
 begin
   if (Node = nil) or (Node = FRoot) then Exit;
 
+  // Null out selection/focus if this node (or an ancestor) is being deleted
+  if FFocusedNode = Node then FFocusedNode := nil;
+  if FSelectedNode = Node then
+  begin
+    Exclude(Node^.States, nsSelected);
+    FSelectedNode := nil;
+  end;
+
   // Recursively free all children first (depth-first)
   while Node^.FirstChild <> nil do DeleteNode(Node^.FirstChild);
 
@@ -425,7 +782,7 @@ begin
   if ivsHasChildren in initStates then
     Include(Node^.States, nsHasChildren);
   if ivsSelected in initStates then
-    Include(Node^.States, nsSelected);   // SetSelected is Task C1; just set the bit here
+    SetSelected(Node, True);   // C1: full single-select semantics (fires OnChange)
   if ivsExpanded in initStates then
     SetExpanded(Node, True);             // materialise children if the app requests auto-expand
 end;
