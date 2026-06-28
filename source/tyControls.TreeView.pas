@@ -1001,8 +1001,10 @@ var
 begin
   if (Node = nil) or (Node = FRoot) then Exit;
 
-  // Null out selection/focus if this node (or an ancestor) is being deleted
-  if FFocusedNode = Node then FFocusedNode := nil;
+  // Null out selection/focus/hover if this node (or an ancestor) is being deleted
+  if FFocusedNode   = Node then FFocusedNode   := nil;
+  if FLastMouseNode = Node then FLastMouseNode := nil;
+  if FHotNode       = Node then FHotNode       := nil;
   if FSelectedNode = Node then
   begin
     Exclude(Node^.States, nsSelected);
@@ -1956,8 +1958,11 @@ begin
   end
   else if Button = mbRight then
   begin
-    { Right-click: select the node if not already selected }
-    if (node <> nil) and not (nsSelected in node^.States) then
+    { Right-click: always move focus to the clicked node (mirrors VTV right-down
+      behaviour).  Doing this unconditionally avoids a desync where FocusedNode
+      and the visually-highlighted row differ when the node was programmatically
+      selected without focus, and keeps keyboard nav anchored to the right row. }
+    if node <> nil then
       FocusedNode := node;
   end;
 end;

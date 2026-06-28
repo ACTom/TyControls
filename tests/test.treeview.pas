@@ -134,6 +134,10 @@ type
     procedure TestKeyRightExpandsCollapsed;
     { Keyboard: VK_LEFT on expanded node collapses it }
     procedure TestKeyLeftCollapsesExpanded;
+    { FIX 2: DeleteNode must clear FLastMouseNode to prevent UAF on DblClick }
+    procedure TestDeleteNodeClearsFLastMouseNode;
+    { FIX 3: right-click always moves FocusedNode even when node already selected }
+    procedure TestRightClickAlwaysSetsFocus;
   end;
 
 implementation
@@ -144,6 +148,7 @@ type
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure DblClick;
     procedure KeyDown(var Key: Word; Shift: TShiftState);
   end;
 
@@ -155,6 +160,11 @@ end;
 procedure TTyTreeViewAccess.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseDown(Button, Shift, X, Y);
+end;
+
+procedure TTyTreeViewAccess.DblClick;
+begin
+  inherited DblClick;
 end;
 
 procedure TTyTreeViewAccess.KeyDown(var Key: Word; Shift: TShiftState);
@@ -3299,6 +3309,78 @@ begin
 
     AssertEquals('VK_LEFT key consumed', 0, Integer(key));
     AssertFalse('n0 collapsed after VK_LEFT', nsExpanded in n0^.States);
+  finally
+    t.Free;
+  end;
+end;
+
+{ FIX 2: TestDeleteNodeClearsFLastMouseNode
+  When a node is deleted that was previously recorded in FLastMouseNode
+  (by a MouseDown), DblClick must not crash (use-after-free) and must be a no-op.
+  We verify the behaviour by observing that no DblClick event fires.
+
+  Geometry: use BuildHitTestTree (DefaultNodeHeight=20, ShowRoot=True).
+    n1 is at absY=80..99 (row 4).  Click at (30, 90) to set FLastMouseNode=n1.
+    Then DeleteNode(n1) — FLastMouseNode must become nil.
+    Then call DblClick — must not crash AND must NOT fire OnNodeDblClick. }
+procedure TTreeC4Test.TestDeleteNodeClearsFLastMouseNode;
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    { Left-click on n1's label to set FLastMouseNode = n1 }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 90);
+    {$POP}
+    AssertTrue('after MouseDown FocusedNode = n1', t.FocusedNode = n1);
+    // Now delete n1; FLastMouseNode must be cleared
+    t.DeleteNode(n1);
+    // Call DblClick — if FLastMouseNode is not nil this would be a UAF.
+    // The call must succeed without an exception.
+    ResetCounters;
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).DblClick;
+    {$POP}
+    // DblClick on a nil FLastMouseNode must fire 0 DblClick events
+    AssertEquals('OnNodeDblClick NOT fired after DeleteNode cleared FLastMouseNode',
+                 0, FOnDblClickCount);
+  finally
+    t.Free;
+  end;
+end;
+
+{ FIX 3: TestRightClickAlwaysSetsFocus
+  Right-click must unconditionally move FocusedNode to the clicked node,
+  even when the node is already selected.  This prevents a desync where
+  FocusedNode and the visually-highlighted row differ after a programmatic
+  Selected[] assignment without focus.
+
+  Setup: select n2 programmatically (no focus change), then right-click n2.
+  Expected: FocusedNode = n2 after right-click.
+
+  Geometry: n2 at absY=100..119 (row 5).  Right-click at (30, 110). }
+procedure TTreeC4Test.TestRightClickAlwaysSetsFocus;
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    // Programmatically select n2 without moving focus
+    t.Selected[n2] := True;
+    AssertTrue('n2 is selected', nsSelected in n2^.States);
+    AssertTrue('FocusedNode is NOT n2 yet (selection only)', t.FocusedNode <> n2);
+
+    // Right-click on n2 — even though nsSelected is set, focus must follow
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbRight, [], 30, 110);
+    {$POP}
+    AssertTrue('FocusedNode = n2 after right-click on already-selected node',
+               t.FocusedNode = n2);
   finally
     t.Free;
   end;
