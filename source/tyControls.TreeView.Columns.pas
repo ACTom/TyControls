@@ -1,11 +1,11 @@
 unit tyControls.TreeView.Columns;
 {$mode objfpc}{$H+}
 { Phase A — pure column model: types, position<->index map, layout/hit, auto-size/spring.
-  No dependency on TTyTreeView; fully headless-testable.
-  Phase B will wire TTyTreeHeader into TTyTreeView. }
+  Phase B — TTyTreeHeader owning TTyTreeColumns; published Header/Columns on TTyTreeView.
+  No dependency on TTyTreeView; fully headless-testable. }
 interface
 uses
-  Classes, SysUtils, Math;
+  Classes, SysUtils, Math, ImgList;
 
 const
   NoColumn = -1;   { sentinel: "no column" / not found }
@@ -21,10 +21,24 @@ type
   );
   TTyTreeColumnOptions = set of TTyTreeColumnOption;
 
-  { Sort direction (used by TTyTreeHeader.SortDirection + SortTree) }
-  TTySortDirection = (sdAscending, sdDescending);
-
   TTyTreeColumns = class;   { forward }
+  TTyTreeHeader  = class;   { forward }
+
+  { Header option flags (mirrors VTV's TVTHeaderOption subset) }
+  TTyTreeHeaderOption = (
+    hoVisible,              { paint the header band above the node area }
+    hoColumnResize,         { allow dragging column dividers to resize }
+    hoShowSortGlyphs,       { show a sort triangle in the sort column }
+    hoHeaderClickAutoSort,  { clicking a section triggers SortTree }
+    hoDrag,                 { allow dragging columns to reorder }
+    hoAutoResize,           { one column (AutoSizeIndex) fills remaining width }
+    hoHotTrack              { highlight the hovered header section }
+  );
+  TTyTreeHeaderOptions = set of TTyTreeHeaderOption;
+
+  { Sort direction (used by TTyTreeHeader.SortDirection + SortTree).
+    Declared here so both the header and the tree can reference it. }
+  TTySortDirection = (sdAscending, sdDescending);
 
   { ===================================================================
     TTyTreeColumn — one column (TCollectionItem)
@@ -132,6 +146,51 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
+  { ===================================================================
+    TTyTreeHeader — header band descriptor (Phase B)
+    Owned by TTyTreeView; painted by the tree (not a windowed control).
+    =================================================================== }
+  TTyTreeHeader = class(TPersistent)
+  private
+    FHeight:        Integer;
+    FColumns:       TTyTreeColumns;
+    FMainColumn:    Integer;
+    FSortColumn:    Integer;
+    FSortDirection: TTySortDirection;
+    FAutoSizeIndex: Integer;
+    FImages:        TCustomImageList;
+    FOptions:       TTyTreeHeaderOptions;
+    FOnChange:      TNotifyEvent;
+
+    procedure SetHeight(AValue: Integer);
+    procedure SetMainColumn(AValue: Integer);
+    procedure SetSortColumn(AValue: Integer);
+    procedure SetSortDirection(AValue: TTySortDirection);
+    procedure SetAutoSizeIndex(AValue: Integer);
+    procedure SetOptions(AValue: TTyTreeHeaderOptions);
+    { Forwarded from FColumns.OnChange }
+    procedure ColumnsChanged(Sender: TObject);
+  public
+    constructor Create;
+    destructor  Destroy; override;
+    procedure Assign(ASource: TPersistent); override;
+
+    { Fire FOnChange — called by all mutating setters and by ColumnsChanged. }
+    procedure Changed;
+
+    { Hook wired by the tree so it is notified of every header/column change. }
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  published
+    property Height:        Integer              read FHeight        write SetHeight        default 22;
+    property Columns:       TTyTreeColumns       read FColumns;
+    property MainColumn:    Integer              read FMainColumn    write SetMainColumn    default 0;
+    property SortColumn:    Integer              read FSortColumn    write SetSortColumn    default -1;
+    property SortDirection: TTySortDirection     read FSortDirection write SetSortDirection default sdAscending;
+    property AutoSizeIndex: Integer              read FAutoSizeIndex write SetAutoSizeIndex default -1;
+    property Images:        TCustomImageList     read FImages        write FImages;
+    property Options:       TTyTreeHeaderOptions read FOptions       write SetOptions;
+  end;
+
 implementation
 
 { ---------------------------------------------------------------------------
@@ -140,6 +199,10 @@ implementation
 
 constructor TTyTreeColumn.Create(ACollection: TCollection);
 begin
+  { NOTE: inherited Create calls SetCollection → InsertItem → Notify(cnAdded)
+    BEFORE any of our field assignments below run (FWidth is still 0 at that
+    point).  We re-run UpdatePositions+DoChange at the end so the owner's
+    position cache and any wired OnChange handler see the correct defaults. }
   inherited Create(ACollection);
   FWidth            := 100;
   FMinWidth         := 10;
@@ -150,7 +213,12 @@ begin
   FOptions          := [coVisible, coResizable, coAllowClick, coDraggable];
   FLeft             := 0;
   FTag              := 0;
-  { Position is assigned by TTyTreeColumns.Notify after the item is added. }
+  { Re-notify with the correct defaults now set. }
+  if Collection <> nil then
+  begin
+    GetOwnerColumns.UpdatePositions;
+    GetOwnerColumns.DoChange;
+  end;
 end;
 
 function TTyTreeColumn.GetDisplayName: string;
@@ -582,6 +650,125 @@ begin
 
   UpdatePositions;
   DoChange;
+end;
+
+{ ---------------------------------------------------------------------------
+  TTyTreeHeader
+  --------------------------------------------------------------------------- }
+
+constructor TTyTreeHeader.Create;
+begin
+  inherited Create;
+  FHeight        := 22;
+  FMainColumn    := 0;
+  FSortColumn    := NoColumn;
+  FSortDirection := sdAscending;
+  FAutoSizeIndex := NoColumn;
+  FImages        := nil;
+  FOptions       := [hoVisible, hoColumnResize, hoShowSortGlyphs,
+                     hoHeaderClickAutoSort, hoDrag];
+  FColumns       := TTyTreeColumns.Create;
+  FColumns.OnChange := @ColumnsChanged;
+end;
+
+destructor TTyTreeHeader.Destroy;
+begin
+  FColumns.Free;
+  inherited Destroy;
+end;
+
+procedure TTyTreeHeader.ColumnsChanged(Sender: TObject);
+begin
+  Changed;
+end;
+
+procedure TTyTreeHeader.Changed;
+begin
+  if Assigned(FOnChange) then
+    FOnChange(Self);
+end;
+
+procedure TTyTreeHeader.SetHeight(AValue: Integer);
+begin
+  if FHeight = AValue then Exit;
+  FHeight := AValue;
+  Changed;
+end;
+
+procedure TTyTreeHeader.SetMainColumn(AValue: Integer);
+var
+  maxCol: Integer;
+begin
+  { Clamp to [NoColumn, Columns.Count-1] }
+  if FColumns.Count = 0 then
+    AValue := NoColumn
+  else
+  begin
+    maxCol := FColumns.Count - 1;
+    if AValue < NoColumn then AValue := NoColumn;
+    if AValue > maxCol   then AValue := maxCol;
+  end;
+  if FMainColumn = AValue then Exit;
+  FMainColumn := AValue;
+  Changed;
+end;
+
+procedure TTyTreeHeader.SetSortColumn(AValue: Integer);
+begin
+  if FSortColumn = AValue then Exit;
+  FSortColumn := AValue;
+  Changed;
+end;
+
+procedure TTyTreeHeader.SetSortDirection(AValue: TTySortDirection);
+begin
+  if FSortDirection = AValue then Exit;
+  FSortDirection := AValue;
+  Changed;
+end;
+
+procedure TTyTreeHeader.SetAutoSizeIndex(AValue: Integer);
+begin
+  if FAutoSizeIndex = AValue then Exit;
+  FAutoSizeIndex := AValue;
+  Changed;
+end;
+
+procedure TTyTreeHeader.SetOptions(AValue: TTyTreeHeaderOptions);
+begin
+  if FOptions = AValue then Exit;
+  FOptions := AValue;
+  Changed;
+end;
+
+procedure TTyTreeHeader.Assign(ASource: TPersistent);
+var
+  Src: TTyTreeHeader;
+  i: Integer;
+  srcCol, dstCol: TTyTreeColumn;
+begin
+  if ASource is TTyTreeHeader then
+  begin
+    Src := TTyTreeHeader(ASource);
+    FHeight        := Src.FHeight;
+    FMainColumn    := Src.FMainColumn;
+    FSortColumn    := Src.FSortColumn;
+    FSortDirection := Src.FSortDirection;
+    FAutoSizeIndex := Src.FAutoSizeIndex;
+    FImages        := Src.FImages;
+    FOptions       := Src.FOptions;
+    { Rebuild columns }
+    FColumns.Clear;
+    for i := 0 to Src.FColumns.Count - 1 do
+    begin
+      srcCol := Src.FColumns.Items[i] as TTyTreeColumn;
+      dstCol := FColumns.Add as TTyTreeColumn;
+      dstCol.Assign(srcCol);
+    end;
+    Changed;
+  end
+  else
+    inherited Assign(ASource);
 end;
 
 end.

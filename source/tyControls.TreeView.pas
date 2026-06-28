@@ -3,7 +3,8 @@ unit tyControls.TreeView;
 interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, ImgList,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar,
+  tyControls.TreeView.Columns;
 
 type
   { C4: hit-test result — which part of a node row the mouse landed in }
@@ -124,9 +125,14 @@ type
     FOffsetX:   Integer;        // ≤ 0; how many pixels the viewport is scrolled right
     FRangeX:    Integer;        // max content width; accumulated by paint pass (C3); reset to 0 by InvalidateTreeLayout on every structural change
     FSyncingScroll: Boolean;    // reentrancy guard (mirrors ListBox pattern)
+    { B (columns): header sub-object }
+    FHeader:    TTyTreeHeader;
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
     procedure UpdateScrollBars;
+    { B (columns): header/column change handler }
+    procedure HeaderChanged(Sender: TObject);
+    procedure SetHeader(AValue: TTyTreeHeader);
     procedure SetIndent(AValue: Integer);
     procedure SetImages(AValue: TImageList);
     procedure SetShowButtons(AValue: Boolean);
@@ -221,6 +227,8 @@ type
     { C4: hit-testing }
     function GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode;
   published
+    { B (columns): header sub-object }
+    property Header: TTyTreeHeader read FHeader write SetHeader;
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
     property DefaultNodeHeight: Integer read FDefaultNodeHeight write FDefaultNodeHeight default 18;
     property RootNodeCount: Cardinal read GetRootNodeCount write SetRootNodeCount default 0;
@@ -253,9 +261,10 @@ type
     property OnNodeClick:     TTyTreeNodeEvent         read FOnNodeClick     write FOnNodeClick;
     property OnNodeDblClick:  TTyTreeNodeEvent         read FOnNodeDblClick  write FOnNodeDblClick;
     { C3: paint events }
-    property OnGetText:       TTyTreeGetTextEvent           read FOnGetText           write FOnGetText;
-    property OnGetImageIndex: TTyTreeGetImageIndexEvent     read FOnGetImageIndex     write FOnGetImageIndex;
-    property OnPaintText:     TTyTreePaintTextEvent         read FOnPaintText         write FOnPaintText;
+    property OnGetText:            TTyTreeGetTextEvent           read FOnGetText            write FOnGetText;
+    property OnGetTextWithType:    TTyTreeGetTextWithTypeEvent   read FOnGetTextWithType    write FOnGetTextWithType;
+    property OnGetImageIndex:      TTyTreeGetImageIndexEvent     read FOnGetImageIndex      write FOnGetImageIndex;
+    property OnPaintText:          TTyTreePaintTextEvent         read FOnPaintText          write FOnPaintText;
   end;
 
 implementation
@@ -592,6 +601,11 @@ begin
     Dec(Result.Right,  SBThick);
   if (FHScroll <> nil) and FHScroll.Visible then
     Dec(Result.Bottom, SBThick);
+  { B (columns): when hoVisible AND there are columns, inset Top by the header height.
+    Guard: Columns.Count = 0 → ③a path unchanged (no inset). }
+  if (FHeader <> nil) and (FHeader.Columns.Count > 0) and
+     (hoVisible in FHeader.Options) then
+    Inc(Result.Top, MulDiv(FHeader.Height, PPI, 96));
 end;
 
 { UpdateScrollBars: show/hide and configure each scrollbar based on the
@@ -781,6 +795,27 @@ begin
   UpdateScrollBars;
 end;
 
+{ B (columns): header/column change handler }
+procedure TTyTreeView.HeaderChanged(Sender: TObject);
+begin
+  { Guard: skip during destruction (FRoot is nil after Clear+FreeNodeMem). }
+  if FRoot = nil then Exit;
+  { Recompute the horizontal range from column total width (when columns exist),
+    invalidate the layout cache, and request a repaint.
+    When Columns.Count = 0 FRangeX stays 0 — the ③a paint pass accumulates it. }
+  if (FHeader <> nil) and (FHeader.Columns.Count > 0) then
+    FRangeX := FHeader.Columns.TotalWidth
+  else
+    FRangeX := 0;
+  InvalidateTreeLayout;
+  Invalidate;
+end;
+
+procedure TTyTreeView.SetHeader(AValue: TTyTreeHeader);
+begin
+  FHeader.Assign(AValue);
+end;
+
 constructor TTyTreeView.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -821,6 +856,9 @@ begin
   FHScroll.AnimationsEnabled := False;
   FHScroll.OnChange          := @HScrollChange;
   FHScroll.Visible           := False;
+  { B (columns): create the header sub-object and wire its change notification }
+  FHeader := TTyTreeHeader.Create;
+  FHeader.OnChange := @HeaderChanged;
   TabStop           := True;
   Width := 200; Height := 160;
 end;
@@ -840,6 +878,9 @@ begin
     FreeNodeMem(FRoot);
     FRoot := nil;
   end;
+  { B (columns): free the header sub-object }
+  FHeader.Free;
+  FHeader := nil;
   inherited Destroy;
 end;
 
@@ -919,11 +960,14 @@ begin
   // FRangeY = ContentHeight (the scrollable content height, root phantom row excluded).
   FCacheValid := False;
   FRangeY     := ContentHeight;
-  // Reset FRangeX so the next paint pass recomputes the true maximum row width
-  // from scratch.  Without this reset, FRangeX only ever grows: after Clear /
-  // collapse / delete the horizontal scrollbar would stay over-ranged/visible
-  // even though the widest row is gone.
-  FRangeX     := 0;
+  // Reset FRangeX.  When columns exist, the horizontal range is TotalWidth
+  // (driven by the column model, not by measured text).  When there are no
+  // columns (③a path), reset to 0 so the next paint pass re-accumulates
+  // the true maximum row width from scratch.
+  if (FHeader <> nil) and (FHeader.Columns.Count > 0) then
+    FRangeX := FHeader.Columns.TotalWidth
+  else
+    FRangeX := 0;
   UpdateScrollBars;
   Invalidate;
 end;
