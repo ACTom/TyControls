@@ -57,6 +57,8 @@ type
     procedure TestDeleteNilNoOp;
     procedure TestRootNodeCountShrinkDeletesTail;
     procedure TestRootChildCountAfterShrink;
+    { FIX 1: OnFreeNode must fire on destructor teardown (without explicit Clear) }
+    procedure TestOnFreeNodeFiredOnTreeviewDestruction;
   end;
 
   { C3: pixel-level paint tests }
@@ -781,6 +783,44 @@ begin
   finally
     t.Free;
   end;
+end;
+
+{ FIX 1: TestOnFreeNodeFiredOnTreeviewDestruction
+  Verifies that OnFreeNode fires during destructor teardown even when the app
+  never calls Clear explicitly.  This is the regression test for the bug where
+  FOnFreeNode was nilled before Clear in Destroy, silently skipping every
+  managed-field release.
+
+  Pattern:
+    - NodeDataSize = SizeOf(TManagedRec) so each node has an AnsiString blob.
+    - OnFreeNode increments FFireCount; also clears the AnsiString (canonical
+      managed-release pattern) so the heap is left clean.
+    - Build a 4-node tree, assign handler, then FREE the tree WITHOUT calling
+      Clear → destructor must still walk and fire OnFreeNode for all 4 nodes.
+
+  This test MUST FAIL before FIX 1 (when FOnFreeNode was nilled before Clear)
+  and PASS after. }
+procedure TTreeDeleteTest.TestOnFreeNodeFiredOnTreeviewDestruction;
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+  i: Integer;
+begin
+  FFireCount := 0;
+  t := TTyTreeView.Create(nil);
+  t.NodeDataSize := SizeOf(TManagedRec);
+  // Add 4 nodes and write a heap-allocated string into each blob.
+  // AllocMem zero-fills so the AnsiString field starts as a valid nil ref.
+  for i := 0 to 3 do
+  begin
+    n := t.AddChild(nil);
+    PManagedRec(t.GetNodeData(n))^.S := 'node-' + IntToStr(i);
+    PManagedRec(t.GetNodeData(n))^.I := i;
+  end;
+  t.OnFreeNode := @OnFreeManagedRec;  // clears S then increments FFireCount
+  // Free without an explicit Clear — destructor must still fire OnFreeNode
+  t.Free;
+  AssertEquals('OnFreeNode fired for all 4 nodes on Free (no explicit Clear)', 4, FFireCount);
 end;
 
 { ── A5 ── lazy init + expand/collapse + iterators ─────────────────────── }

@@ -820,9 +820,10 @@ begin
   // Null out selection/focus pointers before Clear so no dangling refs remain.
   FFocusedNode  := nil;
   FSelectedNode := nil;
-  // Free all child nodes first (without firing OnFreeNode in Destroy —
-  // event handler may already be gone; clear it first)
-  FOnFreeNode := nil;
+  // Clear fires OnFreeNode for every node so managed fields in user data blobs
+  // are properly released.  Do NOT nil FOnFreeNode before Clear — that would
+  // silently skip the release path and leak any AnsiString/interface stored in
+  // node data.  (The fire site already guards with Assigned(FOnFreeNode).)
   Clear;
   if FRoot <> nil then
   begin
