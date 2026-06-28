@@ -39,6 +39,7 @@ type
     FFireCount: Integer;
     FLastNode: PTyTreeNode;
     procedure OnFree(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnFreeManagedRec(Sender: TTyTreeView; Node: PTyTreeNode);
   published
     procedure TestClearFiresOnFreeNodeForAll;
     procedure TestClearResetsCountsToZero;
@@ -403,6 +404,13 @@ begin
   FLastNode := Node;
 end;
 
+procedure TTreeDeleteTest.OnFreeManagedRec(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  // Finalize the heap-allocated AnsiString before FreeMem destroys the raw blob.
+  PManagedRec(Sender.GetNodeData(Node))^.S := '';
+  Inc(FFireCount);
+end;
+
 procedure TTreeDeleteTest.TestClearFiresOnFreeNodeForAll;
 var
   t: TTyTreeView;
@@ -571,28 +579,39 @@ begin
 end;
 
 procedure TTreeDeleteTest.TestManagedFieldReleaseViaOnFreeNode;
-// Verifies that OnFreeNode can safely clear a managed AnsiString field
-// in the node data blob without crashing.
+// Proves the canonical "OnFreeNode releases managed fields" pattern:
+// - node blob is zero-filled by AllocMem, so AnsiString starts as a valid nil ref
+// - a real heap-allocated string is written into the blob after AddChild
+// - OnFreeNode (OnFreeManagedRec) finalizes the string field before the raw FreeMem
+// - no crash and no memory leak; handler fires exactly once per node
 var
   t: TTyTreeView;
   n: PTyTreeNode;
-  p: PManagedRec;
 begin
+  FFireCount := 0;
   t := TTyTreeView.Create(nil);
   try
     t.NodeDataSize := SizeOf(TManagedRec);
+    // Add three nodes and write a real heap-allocated string into each blob.
+    // AllocMem zero-fills the blob so the AnsiString starts as a valid nil ref;
+    // assigning into it is safe and causes a real heap allocation.
     n := t.AddChild(nil);
-    p := PManagedRec(t.GetNodeData(n));
-    // Manually initialize managed field (note: AllocMem zeroes the bytes,
-    // but AnsiString in a raw record needs careful handling — we just write a short one)
-    p^.I := 99;
-    // A test that OnFreeNode fires without crash (managed string not initialized here
-    // because we'd need Finalize; just verify the callback fires and doesn't crash)
-    FFireCount := 0;
-    t.OnFreeNode := @OnFree;
+    PManagedRec(t.GetNodeData(n))^.S := 'hello world ' + IntToStr(n^.Index);
+    PManagedRec(t.GetNodeData(n))^.I := 1;
+    n := t.AddChild(nil);
+    PManagedRec(t.GetNodeData(n))^.S := 'hello world ' + IntToStr(n^.Index);
+    PManagedRec(t.GetNodeData(n))^.I := 2;
+    n := t.AddChild(nil);
+    PManagedRec(t.GetNodeData(n))^.S := 'hello world ' + IntToStr(n^.Index);
+    PManagedRec(t.GetNodeData(n))^.I := 3;
+    // OnFreeManagedRec clears S (releasing the heap block) then increments FFireCount
+    t.OnFreeNode := @OnFreeManagedRec;
+    // Clear must fire OnFreeNode for every node (finalizing the heap string each time)
     t.Clear;
-    AssertEquals('OnFreeNode fired for managed node', 1, FFireCount);
+    AssertEquals('OnFreeNode fired for all 3 managed nodes', 3, FFireCount);
+    AssertEquals('tree is empty after Clear', 0, Integer(t.RootNode^.ChildCount));
   finally
+    // Free without OnFreeNode (strings already cleared above); must not crash
     t.Free;
   end;
 end;

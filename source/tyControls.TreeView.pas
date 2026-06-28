@@ -217,9 +217,11 @@ begin
   end
   else
   begin
-    // Shrink: delete tail children one by one (DeleteNode handles recursion + OnFreeNode)
+    // Shrink: delete tail children one by one (DeleteNode handles recursion + OnFreeNode).
+    // Each DeleteNode call already fires InvalidateTreeLayout; no extra call needed here.
     while Node^.ChildCount > NewCount do
       DeleteNode(Node^.LastChild);
+    Exit;  // skip the grow-path InvalidateTreeLayout below
   end;
   InvalidateTreeLayout;
 end;
@@ -247,9 +249,9 @@ begin
   while Node^.FirstChild <> nil do DeleteNode(Node^.FirstChild);
 
   nodeParent := Node^.Parent;
-  // dc = how many nodes we're removing from ancestor counts
-  // After the recursive child deletions above, this node is a leaf, so TotalCount=1
-  dc := 1;  // Node^.TotalCount is now 1 (all children already gone)
+  // dc = how many nodes we're removing from ancestor counts.
+  // All children have already been freed above, so TotalCount is authoritatively 1 here.
+  dc := Node^.TotalCount;  // = 1 after recursive child frees; avoids magic literal
 
   // Height delta: only subtract from ancestors when nodeParent contributes visible heights
   if (nsExpanded in nodeParent^.States) or (nodeParent = FRoot) then
