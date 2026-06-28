@@ -681,8 +681,370 @@ begin
   end;
 end;
 
+{ ── A5 ── lazy init + expand/collapse + iterators ─────────────────────── }
+
+type
+  TTreeLazyTest = class(TTestCase)
+  private
+    FInitNodeCount:     Integer;
+    FInitChildrenCount: Integer;
+    FExpandingCount:    Integer;
+    FExpandedCount:     Integer;
+    FCollapsingCount:   Integer;
+    FCollapsedCount:    Integer;
+    FVetoExpanding:     Boolean;
+
+    procedure OnInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+                         var InitStates: TTyNodeInitStates);
+    procedure OnInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+                             var ChildCount: Cardinal);
+    procedure OnExpanding(Sender: TTyTreeView; Node: PTyTreeNode;
+                          var Allowed: Boolean);
+    procedure OnExpanded(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnCollapsing(Sender: TTyTreeView; Node: PTyTreeNode;
+                           var Allowed: Boolean);
+    procedure OnCollapsed(Sender: TTyTreeView; Node: PTyTreeNode);
+
+    // Build a standard test tree: attach the handlers and set RootNodeCount.
+    function MakeTree: TTyTreeView;
+    procedure ResetCounters;
+  published
+    // Setting RootNodeCount allocates skeletons but fires NO OnInitNode.
+    procedure TestSetRootNodeCountFiresNoInit;
+    // GetNext touches each node exactly once via OnInitNode.
+    procedure TestGetNextFiresInitNodeOnce;
+    // A node that got ivsHasChildren has nsHasChildren set but ChildCount=0.
+    procedure TestHasChildrenSetWithoutMaterialising;
+    // Expanding fires OnInitChildren once and allocates 4 children.
+    procedure TestExpandingFiresInitChildrenOnce;
+    // GetNextVisibleNoInit yields screen order over an expanded tree.
+    procedure TestGetNextVisibleNoInitScreenOrder;
+    // GetNextVisibleNoInit skips a collapsed node's children.
+    procedure TestGetNextVisibleNoInitSkipsCollapsed;
+    // GetNodeLevel returns 0 for top-level nodes, 1 for their children, etc.
+    procedure TestGetNodeLevel;
+    // OnExpanding with Allowed:=False vetoes the expand (node stays collapsed).
+    procedure TestExpandingVetoPreventsExpand;
+    // After expand then collapse, RootNode^.TotalHeight returns to the pre-expand value.
+    procedure TestHeightRoundTrip;
+    // Expanded property getter / setter roundtrip.
+    procedure TestExpandedProperty;
+  end;
+
+{ ── TTreeLazyTest helpers ─────────────────────────────────────────────── }
+
+{ OnInitNode fires for any depth.
+  ivsHasChildren is set for levels 0, 1, and 2 (so level 3 nodes are leaves).
+  We always signal HasChildren for simplicity; InitChildren/OnInitChildren
+  will be called to actually materialise child nodes. }
+procedure TTreeLazyTest.OnInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+                                   var InitStates: TTyNodeInitStates);
+begin
+  Inc(FInitNodeCount);
+  if Sender.GetNodeLevel(Node) < 3 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeLazyTest.OnInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+                                       var ChildCount: Cardinal);
+begin
+  Inc(FInitChildrenCount);
+  ChildCount := 4;
+end;
+
+procedure TTreeLazyTest.OnExpanding(Sender: TTyTreeView; Node: PTyTreeNode;
+                                    var Allowed: Boolean);
+begin
+  Inc(FExpandingCount);
+  Allowed := not FVetoExpanding;
+end;
+
+procedure TTreeLazyTest.OnExpanded(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  Inc(FExpandedCount);
+end;
+
+procedure TTreeLazyTest.OnCollapsing(Sender: TTyTreeView; Node: PTyTreeNode;
+                                     var Allowed: Boolean);
+begin
+  Inc(FCollapsingCount);
+  Allowed := True;
+end;
+
+procedure TTreeLazyTest.OnCollapsed(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  Inc(FCollapsedCount);
+end;
+
+procedure TTreeLazyTest.ResetCounters;
+begin
+  FInitNodeCount     := 0;
+  FInitChildrenCount := 0;
+  FExpandingCount    := 0;
+  FExpandedCount     := 0;
+  FCollapsingCount   := 0;
+  FCollapsedCount    := 0;
+  FVetoExpanding     := False;
+end;
+
+function TTreeLazyTest.MakeTree: TTyTreeView;
+var
+  t: TTyTreeView;
+begin
+  t := TTyTreeView.Create(nil);
+  t.OnInitNode     := @OnInitNode;
+  t.OnInitChildren := @OnInitChildren;
+  t.OnExpanding    := @OnExpanding;
+  t.OnExpanded     := @OnExpanded;
+  t.OnCollapsing   := @OnCollapsing;
+  t.OnCollapsed    := @OnCollapsed;
+  t.RootNodeCount  := 3;   // 3 top-level skeleton nodes, no init fired yet
+  Result := t;
+end;
+
+{ ── TTreeLazyTest published tests ────────────────────────────────────── }
+
+procedure TTreeLazyTest.TestSetRootNodeCountFiresNoInit;
+var
+  t: TTyTreeView;
+begin
+  ResetCounters;
+  t := MakeTree;
+  try
+    AssertEquals('no OnInitNode on RootNodeCount', 0, FInitNodeCount);
+    AssertEquals('no OnInitChildren on RootNodeCount', 0, FInitChildrenCount);
+    AssertEquals('ChildCount = 3', 3, Integer(t.RootNode^.ChildCount));
+  finally t.Free; end;
+end;
+
+procedure TTreeLazyTest.TestGetNextFiresInitNodeOnce;
+{ Walk the entire top-level (3 nodes, no deeper because we don't expand).
+  GetNext inits each node as it is first touched. }
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+  visited: Integer;
+begin
+  ResetCounters;
+  t := MakeTree;
+  try
+    visited := 0;
+    n := t.GetFirst;
+    while n <> nil do
+    begin
+      Inc(visited);
+      n := t.GetNext(n);
+    end;
+    AssertEquals('visited 3 top-level nodes', 3, visited);
+    // Each node inited exactly once.
+    AssertEquals('OnInitNode fired once per node', 3, FInitNodeCount);
+    // Second walk fires no additional init (nsInitialized guard).
+    ResetCounters;
+    n := t.GetFirst;
+    while n <> nil do n := t.GetNext(n);
+    AssertEquals('no re-init on second walk', 0, FInitNodeCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeLazyTest.TestHasChildrenSetWithoutMaterialising;
+{ After InitNode, a level-0 node should have nsHasChildren but still ChildCount=0
+  (children are not materialised until expansion). }
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  ResetCounters;
+  t := MakeTree;
+  try
+    n := t.GetFirst;   // triggers InitNode
+    AssertTrue ('nsHasChildren set', nsHasChildren in n^.States);
+    AssertEquals('ChildCount still 0 (not yet expanded)', 0, Integer(n^.ChildCount));
+    AssertFalse ('not expanded', nsExpanded in n^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeLazyTest.TestExpandingFiresInitChildrenOnce;
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  ResetCounters;
+  t := MakeTree;
+  try
+    n := t.GetFirst;  // InitNode → sets nsHasChildren
+    t.Expanded[n] := True;
+    AssertEquals('OnInitChildren fired once', 1, FInitChildrenCount);
+    AssertEquals('4 children materialised', 4, Integer(n^.ChildCount));
+    AssertTrue  ('nsExpanded set', nsExpanded in n^.States);
+    // Second expand call must NOT fire OnInitChildren again.
+    FInitChildrenCount := 0;
+    t.Expanded[n] := True;   // already expanded — no-op
+    AssertEquals('no re-init on second expand', 0, FInitChildrenCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeLazyTest.TestGetNextVisibleNoInitScreenOrder;
+{ Build:  root
+            n[0] (expanded, 4 children)
+            n[1]
+            n[2]
+  Screen order: n[0], child[0], child[1], child[2], child[3], n[1], n[2] }
+var
+  t: TTyTreeView;
+  n0: PTyTreeNode;
+  vis: PTyTreeNode;
+  order: array[0..6] of PTyTreeNode;
+  i, count: Integer;
+begin
+  ResetCounters;
+  t := MakeTree;
+  try
+    n0 := t.GetFirst;   // InitNode n0 → ivsHasChildren
+    t.Expanded[n0] := True;  // materialises 4 children
+
+    // Collect screen order via NoInit iterator
+    count := 0;
+    vis := t.GetFirstVisibleNoInit;
+    while vis <> nil do
+    begin
+      AssertTrue('count < 7', count < 7);
+      order[count] := vis;
+      Inc(count);
+      vis := t.GetNextVisibleNoInit(vis);
+    end;
+
+    AssertEquals('7 visible nodes', 7, count);
+    // First = n0
+    AssertEquals('order[0] = n0', PtrUInt(n0), PtrUInt(order[0]));
+    // order[1..4] = children of n0
+    for i := 1 to 4 do
+      AssertEquals('order[' + IntToStr(i) + '] parent = n0',
+                   PtrUInt(n0), PtrUInt(order[i]^.Parent));
+    // order[5] and order[6] = n[1] and n[2]
+    AssertEquals('order[5].PrevSibling = n0', PtrUInt(n0), PtrUInt(order[5]^.PrevSibling));
+  finally t.Free; end;
+end;
+
+procedure TTreeLazyTest.TestGetNextVisibleNoInitSkipsCollapsed;
+{ Expand n[0], then collapse it again — the 4 children must not appear in the walk. }
+var
+  t: TTyTreeView;
+  n0: PTyTreeNode;
+  vis: PTyTreeNode;
+  count: Integer;
+begin
+  ResetCounters;
+  t := MakeTree;
+  try
+    n0 := t.GetFirst;
+    t.Expanded[n0] := True;
+    t.Expanded[n0] := False;   // collapse
+
+    count := 0;
+    vis := t.GetFirstVisibleNoInit;
+    while vis <> nil do
+    begin
+      Inc(count);
+      vis := t.GetNextVisibleNoInit(vis);
+    end;
+    AssertEquals('only 3 visible (collapsed subtree skipped)', 3, count);
+  finally t.Free; end;
+end;
+
+procedure TTreeLazyTest.TestGetNodeLevel;
+var
+  t: TTyTreeView;
+  n0, child, grandchild: PTyTreeNode;
+begin
+  ResetCounters;
+  t := MakeTree;
+  try
+    n0 := t.GetFirst;   // level 0
+    AssertEquals('level 0', 0, t.GetNodeLevel(n0));
+
+    t.Expanded[n0] := True;
+    child := n0^.FirstChild;   // level 1
+    AssertEquals('level 1', 1, t.GetNodeLevel(child));
+
+    // Initialise and expand the child so we can get a grandchild
+    t.InitNode(child);
+    t.Expanded[child] := True;
+    grandchild := child^.FirstChild;  // level 2
+    AssertEquals('level 2', 2, t.GetNodeLevel(grandchild));
+  finally t.Free; end;
+end;
+
+procedure TTreeLazyTest.TestExpandingVetoPreventsExpand;
+var
+  t: TTyTreeView;
+  n0: PTyTreeNode;
+  prevTotal: Cardinal;
+begin
+  ResetCounters;
+  FVetoExpanding := True;
+  t := MakeTree;
+  try
+    n0 := t.GetFirst;  // InitNode → nsHasChildren
+    prevTotal := t.RootNode^.TotalHeight;
+    t.Expanded[n0] := True;   // vetoed
+    AssertFalse ('still not expanded', nsExpanded in n0^.States);
+    AssertEquals('ChildCount still 0', 0, Integer(n0^.ChildCount));
+    AssertEquals('TotalHeight unchanged', Integer(prevTotal), Integer(t.RootNode^.TotalHeight));
+    AssertEquals('OnExpanding fired', 1, FExpandingCount);
+    AssertEquals('OnExpanded NOT fired', 0, FExpandedCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeLazyTest.TestHeightRoundTrip;
+{ Expand n[0], then collapse it.  RootNode^.TotalHeight must return to its
+  pre-expand value.  (The full multi-step invariant test lives in B1.) }
+var
+  t: TTyTreeView;
+  n0: PTyTreeNode;
+  heightBefore, heightAfterExpand, heightAfterCollapse: Integer;
+begin
+  ResetCounters;
+  t := MakeTree;
+  try
+    // Baseline: 3 top-level nodes, each NodeHeight=18; root itself 18 → total=4*18=72
+    heightBefore := Integer(t.RootNode^.TotalHeight);
+    AssertEquals('baseline height 72', 72, heightBefore);
+
+    n0 := t.GetFirst;   // InitNode n0
+    t.Expanded[n0] := True;
+    heightAfterExpand := Integer(t.RootNode^.TotalHeight);
+    // n0 expanded with 4 children (each 18px) → root total = 72 + 4*18 = 144
+    AssertEquals('height after expand = 144', 144, heightAfterExpand);
+
+    t.Expanded[n0] := False;  // collapse
+    heightAfterCollapse := Integer(t.RootNode^.TotalHeight);
+    AssertEquals('height after collapse = baseline', heightBefore, heightAfterCollapse);
+
+    AssertEquals('OnCollapsing fired', 1, FCollapsingCount);
+    AssertEquals('OnCollapsed fired',  1, FCollapsedCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeLazyTest.TestExpandedProperty;
+var
+  t: TTyTreeView;
+  n0: PTyTreeNode;
+begin
+  ResetCounters;
+  t := MakeTree;
+  try
+    n0 := t.GetFirst;
+    AssertFalse('not expanded initially', t.Expanded[n0]);
+    t.Expanded[n0] := True;
+    AssertTrue ('expanded after set', t.Expanded[n0]);
+    t.Expanded[n0] := False;
+    AssertFalse('collapsed after clear', t.Expanded[n0]);
+  finally t.Free; end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
   RegisterTest(TTreeDeleteTest);
+  RegisterTest(TTreeLazyTest);
 end.

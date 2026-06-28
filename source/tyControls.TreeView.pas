@@ -27,7 +27,10 @@ type
 
   TTyTreeView = class;
 
-  TTyTreeNodeEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode) of object;
+  TTyTreeNodeEvent    = procedure(Sender: TTyTreeView; Node: PTyTreeNode) of object;
+  TTyTreeChangingEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean) of object;
+  TTyTreeInitNodeEvent     = procedure(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates) of object;
+  TTyTreeInitChildrenEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var ChildCount: Cardinal) of object;
 
 const
   TreeNodeSize = (SizeOf(TTyTreeNode) + 7) and not 7;  // pointer-aligned struct stride
@@ -40,6 +43,13 @@ type
     FNodeAllocSize: Integer;    // TreeNodeSize + Max(0, FNodeDataSize)
     FDefaultNodeHeight: Integer;
     FOnFreeNode: TTyTreeNodeEvent;
+    { A5 events }
+    FOnInitNode:     TTyTreeInitNodeEvent;
+    FOnInitChildren: TTyTreeInitChildrenEvent;
+    FOnExpanding:    TTyTreeChangingEvent;
+    FOnExpanded:     TTyTreeNodeEvent;
+    FOnCollapsing:   TTyTreeChangingEvent;
+    FOnCollapsed:    TTyTreeNodeEvent;
     function  MakeNewNode: PTyTreeNode;
     procedure FreeNodeMem(Node: PTyTreeNode);
     procedure SetNodeDataSize(AValue: Integer);
@@ -48,6 +58,10 @@ type
     procedure AdjustTotalCount(Node: PTyTreeNode; Delta: Integer);
     procedure AdjustTotalHeight(Node: PTyTreeNode; Delta: Integer);
     procedure InvalidateTreeLayout;
+    { A5 helpers }
+    function  ComputeExpandedSubtreeHeight(Node: PTyTreeNode): Integer;
+    function  GetExpanded(Node: PTyTreeNode): Boolean;
+    procedure SetExpanded(Node: PTyTreeNode; AValue: Boolean);
   protected
     function GetStyleTypeKey: string; override;
   public
@@ -58,12 +72,35 @@ type
     function  AddChild(AParent: PTyTreeNode): PTyTreeNode;
     procedure DeleteNode(Node: PTyTreeNode);
     procedure Clear;
+    { A5 lifecycle }
+    procedure InitNode(Node: PTyTreeNode);
+    procedure InitChildren(Node: PTyTreeNode);
+    procedure ToggleNode(Node: PTyTreeNode; AExpand: Boolean);
+    { A5 iterators }
+    function GetFirstChild(Node: PTyTreeNode): PTyTreeNode;
+    function GetLastChild(Node: PTyTreeNode): PTyTreeNode;
+    function GetNextSibling(Node: PTyTreeNode): PTyTreeNode;
+    function GetPrevSibling(Node: PTyTreeNode): PTyTreeNode;
+    function GetParent(Node: PTyTreeNode): PTyTreeNode;
+    function GetNodeLevel(Node: PTyTreeNode): Integer;
+    function GetFirst: PTyTreeNode;
+    function GetNext(Node: PTyTreeNode): PTyTreeNode;
+    function GetFirstVisibleNoInit: PTyTreeNode;
+    function GetNextVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
+    function GetPreviousVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
+    property Expanded[Node: PTyTreeNode]: Boolean read GetExpanded write SetExpanded;
     property RootNode: PTyTreeNode read FRoot;
   published
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
     property DefaultNodeHeight: Integer read FDefaultNodeHeight write FDefaultNodeHeight default 18;
     property RootNodeCount: Cardinal read GetRootNodeCount write SetRootNodeCount default 0;
-    property OnFreeNode: TTyTreeNodeEvent read FOnFreeNode write FOnFreeNode;
+    property OnFreeNode:      TTyTreeNodeEvent         read FOnFreeNode      write FOnFreeNode;
+    property OnInitNode:      TTyTreeInitNodeEvent     read FOnInitNode      write FOnInitNode;
+    property OnInitChildren:  TTyTreeInitChildrenEvent read FOnInitChildren  write FOnInitChildren;
+    property OnExpanding:     TTyTreeChangingEvent     read FOnExpanding     write FOnExpanding;
+    property OnExpanded:      TTyTreeNodeEvent         read FOnExpanded      write FOnExpanded;
+    property OnCollapsing:    TTyTreeChangingEvent     read FOnCollapsing    write FOnCollapsing;
+    property OnCollapsed:     TTyTreeNodeEvent         read FOnCollapsed     write FOnCollapsed;
   end;
 
 implementation
@@ -291,6 +328,291 @@ end;
 procedure TTyTreeView.Clear;
 begin
   while FRoot^.FirstChild <> nil do DeleteNode(FRoot^.FirstChild);
+end;
+
+{ ── A5 ── lazy lifecycle ─────────────────────────────────────────────────── }
+
+{ ComputeExpandedSubtreeHeight
+  Returns the total pixel height that Node and ALL its currently-expanded
+  descendants would occupy if Node itself were visible.
+  This is a pure recursive walk — called only when we NEED the exact value
+  (on expand/collapse) and not in the hot paint path. }
+function TTyTreeView.ComputeExpandedSubtreeHeight(Node: PTyTreeNode): Integer;
+var
+  child: PTyTreeNode;
+begin
+  if Node = nil then begin Result := 0; Exit; end;
+  Result := Node^.NodeHeight;
+  if (nsExpanded in Node^.States) and (Node^.FirstChild <> nil) then
+  begin
+    child := Node^.FirstChild;
+    while child <> nil do
+    begin
+      Inc(Result, ComputeExpandedSubtreeHeight(child));
+      child := child^.NextSibling;
+    end;
+  end;
+end;
+
+function TTyTreeView.GetExpanded(Node: PTyTreeNode): Boolean;
+begin
+  Result := (Node <> nil) and (nsExpanded in Node^.States);
+end;
+
+procedure TTyTreeView.InitNode(Node: PTyTreeNode);
+var
+  initStates: TTyNodeInitStates;
+begin
+  if (Node = nil) or (Node = FRoot) or (nsInitialized in Node^.States) then Exit;
+  Include(Node^.States, nsInitialized);
+  initStates := [];
+  if Assigned(FOnInitNode) then
+    FOnInitNode(Self, Node^.Parent, Node, initStates);
+  if ivsHasChildren in initStates then
+    Include(Node^.States, nsHasChildren);
+  if ivsSelected in initStates then
+    Include(Node^.States, nsSelected);   // SetSelected is Task C1; just set the bit here
+  if ivsExpanded in initStates then
+    SetExpanded(Node, True);             // materialise children if the app requests auto-expand
+end;
+
+procedure TTyTreeView.InitChildren(Node: PTyTreeNode);
+var
+  c: Cardinal;
+begin
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if Node^.ChildCount > 0 then Exit;           // already materialised
+  if not (nsHasChildren in Node^.States) then Exit;
+  c := 0;
+  if Assigned(FOnInitChildren) then
+    FOnInitChildren(Self, Node, c);
+  if c > 0 then
+    SetChildCount(Node, c)
+  else
+    Exclude(Node^.States, nsHasChildren);       // app says "actually no children"
+end;
+
+procedure TTyTreeView.SetExpanded(Node: PTyTreeNode; AValue: Boolean);
+{ Height-bookkeeping invariant (asserted by B1):
+    RootNode^.TotalHeight = sum of NodeHeight for every visible (nsVisible + reachable via
+    nsExpanded ancestors) node.
+  When a node is EXPANDED:
+    • Its children are just-materialised collapsed skeletons; each child's TotalHeight = NodeHeight.
+    • We add the delta = ComputeExpandedSubtreeHeight(Node) − current TotalHeight.
+      (current TotalHeight equals NodeHeight while collapsed.)
+  When a node is COLLAPSED:
+    • All descendant heights are subtracted.
+    • The delta = NodeHeight − current TotalHeight  (a negative number). }
+var
+  allowed: Boolean;
+  childrenH: Integer;
+begin
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if not (nsHasChildren in Node^.States) then Exit;
+  if AValue = (nsExpanded in Node^.States) then Exit;
+
+  if AValue then
+  begin
+    // ── Expanding ──
+    allowed := True;
+    if Assigned(FOnExpanding) then FOnExpanding(Self, Node, allowed);
+    if not allowed then Exit;
+
+    InitChildren(Node);
+    Include(Node^.States, nsExpanded);
+
+    // Add the newly-visible descendant heights.
+    // While collapsed, TotalHeight == NodeHeight.
+    // ComputeExpandedSubtreeHeight(Node) = NodeHeight + sum(child heights).
+    childrenH := ComputeExpandedSubtreeHeight(Node) - Integer(Node^.TotalHeight);
+    if childrenH <> 0 then AdjustTotalHeight(Node, childrenH);
+
+    if Assigned(FOnExpanded) then FOnExpanded(Self, Node);
+  end
+  else
+  begin
+    // ── Collapsing ──
+    allowed := True;
+    if Assigned(FOnCollapsing) then FOnCollapsing(Self, Node, allowed);
+    if not allowed then Exit;
+
+    // childrenH is negative: NodeHeight − TotalHeight (TotalHeight ≥ NodeHeight while expanded).
+    // IMPORTANT: call AdjustTotalHeight BEFORE Exclude(nsExpanded), so that
+    // AdjustTotalHeight can still climb past this node to its ancestors.
+    // (AdjustTotalHeight stops climbing at the first non-expanded node; if we
+    // cleared nsExpanded first, it would stop right here and leave root stale.)
+    childrenH := Integer(Node^.NodeHeight) - Integer(Node^.TotalHeight);
+    if childrenH <> 0 then AdjustTotalHeight(Node, childrenH);
+    Exclude(Node^.States, nsExpanded);
+
+    if Assigned(FOnCollapsed) then FOnCollapsed(Self, Node);
+  end;
+  InvalidateTreeLayout;
+end;
+
+procedure TTyTreeView.ToggleNode(Node: PTyTreeNode; AExpand: Boolean);
+begin
+  SetExpanded(Node, AExpand);
+end;
+
+{ ── A5 ── iterators ──────────────────────────────────────────────────────── }
+
+function TTyTreeView.GetFirstChild(Node: PTyTreeNode): PTyTreeNode;
+begin
+  if Node = nil then Result := FRoot^.FirstChild
+  else Result := Node^.FirstChild;
+end;
+
+function TTyTreeView.GetLastChild(Node: PTyTreeNode): PTyTreeNode;
+begin
+  if Node = nil then Result := FRoot^.LastChild
+  else Result := Node^.LastChild;
+end;
+
+function TTyTreeView.GetNextSibling(Node: PTyTreeNode): PTyTreeNode;
+begin
+  if Node = nil then Result := nil
+  else Result := Node^.NextSibling;
+end;
+
+function TTyTreeView.GetPrevSibling(Node: PTyTreeNode): PTyTreeNode;
+begin
+  if Node = nil then Result := nil
+  else Result := Node^.PrevSibling;
+end;
+
+{ GetParent: returns nil when Node is a top-level node (its Parent is the hidden root).
+  Mirrors VTV semantics: GetNodeParent returns nil for root-level nodes. }
+function TTyTreeView.GetParent(Node: PTyTreeNode): PTyTreeNode;
+begin
+  if (Node = nil) or (Node = FRoot) then
+    Result := nil
+  else if Node^.Parent = FRoot then
+    Result := nil     // top-level node — parent is the hidden root sentinel
+  else if Node^.Parent = PTyTreeNode(Self) then
+    Result := nil     // Node IS the root (shouldn't happen but be safe)
+  else
+    Result := Node^.Parent;
+end;
+
+{ GetNodeLevel: returns 0 for top-level nodes (direct children of the hidden root).
+  Counts parent hops until we hit the hidden root or the sentinel. }
+function TTyTreeView.GetNodeLevel(Node: PTyTreeNode): Integer;
+var
+  run: PTyTreeNode;
+begin
+  Result := 0;
+  if (Node = nil) or (Node = FRoot) then Exit;
+  run := Node^.Parent;
+  while (run <> nil) and (run <> FRoot) and (run <> PTyTreeNode(Self)) do
+  begin
+    Inc(Result);
+    run := run^.Parent;
+  end;
+end;
+
+{ GetFirst: depth-first pre-order first node, inits it. }
+function TTyTreeView.GetFirst: PTyTreeNode;
+begin
+  Result := FRoot^.FirstChild;
+  if Result <> nil then InitNode(Result);
+end;
+
+{ GetNext: depth-first pre-order successor, inits any node we land on. }
+function TTyTreeView.GetNext(Node: PTyTreeNode): PTyTreeNode;
+begin
+  if Node = nil then begin Result := nil; Exit; end;
+
+  // Descend into children first
+  if Node^.FirstChild <> nil then
+  begin
+    Result := Node^.FirstChild;
+    InitNode(Result);
+    Exit;
+  end;
+
+  // No children — try next sibling, then climb
+  Result := Node;
+  repeat
+    if Result^.NextSibling <> nil then
+    begin
+      Result := Result^.NextSibling;
+      InitNode(Result);
+      Exit;
+    end;
+    Result := Result^.Parent;
+    if (Result = FRoot) or (Result = PTyTreeNode(Self)) then
+    begin
+      Result := nil;
+      Exit;
+    end;
+  until False;
+end;
+
+{ GetFirstVisibleNoInit: first screen-order visible node (no init side-effects). }
+function TTyTreeView.GetFirstVisibleNoInit: PTyTreeNode;
+begin
+  Result := FRoot^.FirstChild;
+  // Advance past any non-visible top-level nodes
+  while (Result <> nil) and not (nsVisible in Result^.States) do
+    Result := Result^.NextSibling;
+end;
+
+{ GetNextVisibleNoInit: screen-order successor, skipping collapsed subtrees.
+  Never inits nodes — safe to call from paint / scroll. }
+function TTyTreeView.GetNextVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
+begin
+  Result := Node;
+  repeat
+    if (nsExpanded in Result^.States) and (Result^.FirstChild <> nil) then
+      Result := Result^.FirstChild
+    else
+      while Result <> nil do
+      begin
+        if Result^.NextSibling <> nil then
+        begin
+          Result := Result^.NextSibling;
+          Break;
+        end;
+        Result := Result^.Parent;
+        if Result = FRoot then
+        begin
+          Result := nil;
+          Break;
+        end;
+      end;
+  until (Result = nil) or (nsVisible in Result^.States);
+end;
+
+{ GetPreviousVisibleNoInit: reverse screen-order predecessor (no init).
+  Walk to the previous sibling's last expanded descendant, or to the parent. }
+function TTyTreeView.GetPreviousVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
+var
+  prev: PTyTreeNode;
+begin
+  if Node = nil then begin Result := nil; Exit; end;
+
+  // Try the previous sibling (then go down into its last expanded descendant)
+  if Node^.PrevSibling <> nil then
+  begin
+    Result := Node^.PrevSibling;
+    // Descend into the last expanded child chain
+    while (nsExpanded in Result^.States) and (Result^.LastChild <> nil) do
+      Result := Result^.LastChild;
+    // skip invisible (shouldn't happen in normal trees, but be safe)
+    while (Result <> nil) and not (nsVisible in Result^.States) do
+    begin
+      prev := Result^.PrevSibling;
+      if prev <> nil then Result := prev
+      else begin Result := nil; Break; end;
+    end;
+    Exit;
+  end;
+
+  // No previous sibling — go to parent (unless parent is root)
+  Result := Node^.Parent;
+  if (Result = nil) or (Result = FRoot) or (Result = PTyTreeNode(Self)) then
+    Result := nil;
 end;
 
 end.
