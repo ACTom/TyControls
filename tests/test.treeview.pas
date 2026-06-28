@@ -3748,6 +3748,39 @@ type
     procedure TestC0_ZeroColumnsIdenticToIIIa;
   end;
 
+  { TTreeD1D2Test — D1 header/column hit-test + D2 column resize by drag }
+  TTreeD1D2Test = class(TTestCase)
+  private
+    FColumnResizedCount: Integer;
+    FColumnResizedLast:  Integer;
+    procedure OnColumnResized(Sender: TTyTreeView; Column: Integer);
+    { Build a 3-column tree (widths 120/80/100, PPI=96, header height=22,
+      hoVisible+hoColumnResize, all columns coResizable).
+      Caller owns F and Ctl. }
+    function BuildD1D2Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
+  published
+    { D1: GetNodeAtPoint 3-out overload returns the correct column index }
+    procedure TestD1_NodeColumnIndex;
+    { D1: GetHeaderHitAt returns hpHeaderSection for a plain header hit }
+    procedure TestD1_HeaderSectionHit;
+    { D1: GetHeaderHitAt returns hpHeaderDivider at a column right edge }
+    procedure TestD1_HeaderDividerHit;
+    { D1: Y below the header band → GetHeaderHitAt returns False }
+    procedure TestD1_BelowHeaderNotHeader;
+    { D1: zero columns → GetHeaderHitAt always returns False }
+    procedure TestD1_ZeroColumnsNoHeader;
+    { D1: 2-out overload still compiles and works (backward compat) }
+    procedure TestD1_TwoOutOverloadCompat;
+    { D2: dragging col0 divider right by 30px widens col0 by 30 }
+    procedure TestD2_ResizeColumn0;
+    { D2: drag is clamped to MaxWidth }
+    procedure TestD2_ClampAtMaxWidth;
+    { D2: column without coResizable → drag does not start }
+    procedure TestD2_NonResizableNoResize;
+    { D2: OnColumnResized fires during resize }
+    procedure TestD2_OnColumnResizedFired;
+  end;
+
 { Inline theme used for column tests.
   TyTreeHeader / TyTreeHeaderSection typeKeys (Phase F1 adds them to the real
   themes; here we use an inline CSS block so the test is self-contained). }
@@ -4338,6 +4371,294 @@ begin
   end;
 end;
 
+{ ── D1/D2 ── header/column hit-test + column resize ─────────────────────── }
+
+procedure TTreeD1D2Test.OnColumnResized(Sender: TTyTreeView; Column: Integer);
+begin
+  Inc(FColumnResizedCount);
+  FColumnResizedLast := Column;
+end;
+
+function TTreeD1D2Test.BuildD1D2Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+  n0: PTyTreeNode;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent              := F;
+  t.Controller          := Ctl;
+  t.Font.PixelsPerInch  := 96;
+  t.DefaultNodeHeight   := 22;
+  t.Indent              := 16;
+  t.ShowButtons         := True;
+  t.ShowTreeLines       := False;
+  t.ShowRoot            := True;
+  t.SetBounds(0, 0, 300, 200);
+
+  { Set up 3 columns: widths 120 / 80 / 100 }
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 120;
+  col0.Text  := 'Name';
+
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 80;
+  col1.Text  := 'Info';
+
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := 100;
+  col2.Text  := 'Size';
+
+  t.Header.MainColumn    := 0;
+  t.Header.SortColumn    := -1;
+  t.Header.Height        := 22;
+  t.Header.Options       := [hoVisible, hoColumnResize, hoShowSortGlyphs];
+
+  { All columns get default Options including coResizable (set in TTyTreeColumn.Create) }
+
+  { Materialise 1 root node }
+  n0 := t.AddChild(nil);
+  Include(n0^.States, nsInitialized);
+
+  Result := t;
+end;
+
+{ D1: GetNodeAtPoint 3-out returns correct column index.
+  At PPI=96, ContentRect.Top = 22 (header height).
+  Col spans: col0=[0..120), col1=[120..200), col2=[200..300).
+  Row 0 centre: Y = 22 + 11 = 33. }
+procedure TTreeD1D2Test.TestD1_NodeColumnIndex;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  col: Integer;
+  node: PTyTreeNode;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    { X=60 → col0 (span [0..120)) }
+    node := t.GetNodeAtPoint(60, 33, part, col);
+    AssertTrue('D1: node at (60,33) not nil', node <> nil);
+    AssertEquals('D1: column at X=60 is col0', 0, col);
+
+    { X=250 → col2 (span [200..300)) }
+    node := t.GetNodeAtPoint(250, 33, part, col);
+    AssertTrue('D1: node at (250,33) not nil', node <> nil);
+    AssertEquals('D1: column at X=250 is col2', 2, col);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D1: GetHeaderHitAt returns True + hpHeaderSection for a centre-of-header click }
+procedure TTreeD1D2Test.TestD1_HeaderSectionHit;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  col: Integer;
+  ok: Boolean;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    { Y=11 (mid of 22px header), X=160 (centre of col1 [120..200)) }
+    ok := t.GetHeaderHitAt(160, 11, part, col);
+    AssertTrue('D1: GetHeaderHitAt in header band returns True', ok);
+    AssertEquals('D1: part = hpHeaderSection', Ord(hpHeaderSection), Ord(part));
+    AssertEquals('D1: col = 1 (col1)', 1, col);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D1: GetHeaderHitAt returns hpHeaderDivider at col0 right edge (X=120) }
+procedure TTreeD1D2Test.TestD1_HeaderDividerHit;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  col: Integer;
+  ok: Boolean;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    { X=120 is the right edge of col0 (logical 120 = device 120 at PPI=96).
+      DetermineSplitterIndex tolerance: [120-3=117 .. 120+5=125]. X=120 hits. }
+    ok := t.GetHeaderHitAt(120, 11, part, col);
+    AssertTrue('D1: GetHeaderHitAt at divider returns True', ok);
+    AssertEquals('D1: part = hpHeaderDivider', Ord(hpHeaderDivider), Ord(part));
+    AssertEquals('D1: divider col = 0 (col0 right edge)', 0, col);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D1: Y in node area (below header) → GetHeaderHitAt returns False }
+procedure TTreeD1D2Test.TestD1_BelowHeaderNotHeader;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  col: Integer;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    AssertFalse('D1: Y=33 (node area) is not in header',
+      t.GetHeaderHitAt(100, 33, part, col));
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D1: zero columns → header is not shown → GetHeaderHitAt returns False }
+procedure TTreeD1D2Test.TestD1_ZeroColumnsNoHeader;
+var
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  col: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Font.PixelsPerInch := 96;
+    t.SetBounds(0, 0, 300, 200);
+    AssertFalse('D1: no columns → GetHeaderHitAt = False',
+      t.GetHeaderHitAt(100, 10, part, col));
+  finally
+    t.Free;
+  end;
+end;
+
+{ D1: 2-out overload compiles and returns node (backward compat) }
+procedure TTreeD1D2Test.TestD1_TwoOutOverloadCompat;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  node: PTyTreeNode;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    node := t.GetNodeAtPoint(60, 33, part);
+    AssertTrue('D1: 2-out overload returns non-nil node', node <> nil);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D2: dragging col0 divider from X=120 to X=150 → col0.Width = 150 }
+procedure TTreeD1D2Test.TestD2_ResizeColumn0;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0: TTyTreeColumn;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    AssertEquals('D2: col0 initial width', 120, col0.Width);
+
+    { Simulate: MouseDown on divider at (120,11), drag to (150,11), release }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 120, 11);
+    TTyTreeViewAccess(t).MouseMove([], 150, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 150, 11);
+
+    { newWidth = 120 + MulDiv(150-120, 96, 96) = 120 + 30 = 150 }
+    AssertEquals('D2: col0.Width after drag right 30px', 150, col0.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D2: drag beyond MaxWidth is clamped }
+procedure TTreeD1D2Test.TestD2_ClampAtMaxWidth;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0: TTyTreeColumn;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col0.MaxWidth := 130;   // clamp at 130
+
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 120, 11);
+    TTyTreeViewAccess(t).MouseMove([], 200, 11);  // delta=80 → unclamped=200, clamped=130
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 200, 11);
+
+    AssertEquals('D2: col0.Width clamped to MaxWidth=130', 130, col0.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D2: column without coResizable → drag does not start → width unchanged }
+procedure TTreeD1D2Test.TestD2_NonResizableNoResize;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0: TTyTreeColumn;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col0.Options := col0.Options - [coResizable];   // remove coResizable
+
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 120, 11);
+    TTyTreeViewAccess(t).MouseMove([], 150, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 150, 11);
+
+    AssertEquals('D2: non-resizable col0 width unchanged', 120, col0.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D2: OnColumnResized fires at least once during a resize drag }
+procedure TTreeD1D2Test.TestD2_OnColumnResizedFired;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  FColumnResizedCount := 0;
+  FColumnResizedLast  := -99;
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    t.OnColumnResized := @OnColumnResized;
+
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 120, 11);
+    TTyTreeViewAccess(t).MouseMove([], 150, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 150, 11);
+
+    AssertTrue('D2: OnColumnResized fired at least once', FColumnResizedCount > 0);
+    AssertEquals('D2: OnColumnResized last column = 0', 0, FColumnResizedLast);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -4353,4 +4674,5 @@ initialization
   RegisterTest(TTreeContentRectPaddingTest);
   RegisterTest(TTreeHiDPITest);
   RegisterTest(TTreeColumnPaintTest);
+  RegisterTest(TTreeD1D2Test);
 end.

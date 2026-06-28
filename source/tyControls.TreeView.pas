@@ -38,6 +38,8 @@ type
   TTyTreeInitNodeEvent     = procedure(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates) of object;
   TTyTreeInitChildrenEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var ChildCount: Cardinal) of object;
   TTyTreeGetTextEvent  = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string) of object;
+  { D2: column event — fired when a column is resized }
+  TTyTreeColumnEvent = procedure(Sender: TTyTreeView; Column: Integer) of object;
 
   { C3: text type (mirrors VTV's TVSTTextType) }
   TTyVSTTextType = (ttNormal, ttStatic);
@@ -128,6 +130,11 @@ type
     FSyncingScroll: Boolean;    // reentrancy guard (mirrors ListBox pattern)
     { B (columns): header sub-object }
     FHeader:    TTyTreeHeader;
+    { D2: column resize state }
+    FResizeColumn:     Integer;   // NoColumn when not resizing
+    FResizeStartWidth: Integer;   // col.Width at drag start (logical px)
+    FResizeStartX:     Integer;   // X at drag start (device px)
+    FOnColumnResized:  TTyTreeColumnEvent;
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
     procedure UpdateScrollBars;
@@ -172,6 +179,7 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure DblClick; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
@@ -270,6 +278,8 @@ type
     property OnGetTextWithType:    TTyTreeGetTextWithTypeEvent   read FOnGetTextWithType    write FOnGetTextWithType;
     property OnGetImageIndex:      TTyTreeGetImageIndexEvent     read FOnGetImageIndex      write FOnGetImageIndex;
     property OnPaintText:          TTyTreePaintTextEvent         read FOnPaintText          write FOnPaintText;
+    { D2: column resize event }
+    property OnColumnResized: TTyTreeColumnEvent read FOnColumnResized write FOnColumnResized;
   end;
 
 implementation
@@ -849,6 +859,10 @@ begin
   FOffsetX       := 0;
   FRangeX        := 0;
   FSyncingScroll := False;
+  { D2: column resize — idle state }
+  FResizeColumn     := NoColumn;
+  FResizeStartWidth := 0;
+  FResizeStartX     := 0;
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
@@ -2393,6 +2407,9 @@ procedure TTyTreeView.MouseDown(Button: TMouseButton; Shift: TShiftState;
 var
   part: TTyTreeHitPart;
   node: PTyTreeNode;
+  headerPart: TTyTreeHitPart;
+  headerCol: Integer;
+  col: TTyTreeColumn;
 begin
   inherited MouseDown(Button, Shift, X, Y);
 
@@ -2400,6 +2417,22 @@ begin
 
   { Request keyboard focus so arrow-key navigation works after click }
   if CanSetFocus then SetFocus;
+
+  { D2: header hit test — intercept before node hit-test }
+  if GetHeaderHitAt(X, Y, headerPart, headerCol) then
+  begin
+    if (Button = mbLeft) and (headerPart = hpHeaderDivider) and
+       (headerCol <> NoColumn) and
+       (hoColumnResize in FHeader.Options) then
+    begin
+      col := FHeader.Columns.Items[headerCol] as TTyTreeColumn;
+      FResizeColumn     := headerCol;
+      FResizeStartWidth := col.Width;
+      FResizeStartX     := X;
+      MouseCapture      := True;
+    end;
+    Exit;  { don't fall through to node hit-test when in header }
+  end;
 
   node := GetNodeAtPoint(X, Y, part);
   FLastMouseNode := node;
@@ -2453,8 +2486,35 @@ procedure TTyTreeView.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   part: TTyTreeHitPart;
   node: PTyTreeNode;
+  hPart: TTyTreeHitPart;
+  hCol, PPI, newWidth: Integer;
+  col: TTyTreeColumn;
 begin
   inherited MouseMove(Shift, X, Y);
+
+  { D2: active column resize drag }
+  if FResizeColumn <> NoColumn then
+  begin
+    PPI := Font.PixelsPerInch;
+    newWidth := FResizeStartWidth + MulDiv(X - FResizeStartX, 96, PPI);
+    col := FHeader.Columns.Items[FResizeColumn] as TTyTreeColumn;
+    col.Width := newWidth;  // setter clamps + UpdatePositions + fires HeaderChanged → repaint
+    if Assigned(FOnColumnResized) then
+      FOnColumnResized(Self, FResizeColumn);
+    Exit;
+  end;
+
+  { D2: cursor feedback for header divider hover }
+  if (FHeader <> nil) and (FHeader.Columns.Count > 0) and
+     (hoColumnResize in FHeader.Options) then
+  begin
+    hPart := hpNowhere;
+    hCol  := NoColumn;
+    if GetHeaderHitAt(X, Y, hPart, hCol) and (hPart = hpHeaderDivider) then
+      Cursor := crHSplit
+    else
+      Cursor := crDefault;
+  end;
 
   if not FHotTrack then Exit;
 
@@ -2463,6 +2523,18 @@ begin
   begin
     FHotNode := node;
     Invalidate;
+  end;
+end;
+
+procedure TTyTreeView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  if (Button = mbLeft) and (FResizeColumn <> NoColumn) then
+  begin
+    if Assigned(FOnColumnResized) then
+      FOnColumnResized(Self, FResizeColumn);
+    FResizeColumn := NoColumn;
+    MouseCapture  := False;
   end;
 end;
 
