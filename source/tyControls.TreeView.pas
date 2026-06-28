@@ -1649,6 +1649,23 @@ var
   contentLeft: Integer;
   gSz, slotBaseX: Integer;
   usedImgSlotW: Integer;
+  { ── C (columns) variables ───────────────────────────────────────────────── }
+  useColumns: Boolean;          // True when Columns.Count > 0
+  hasHeader: Boolean;           // True when hoVisible and useColumns
+  headerH: Integer;             // device-px header band height
+  headerBandRect: TRect;        // device rect for the header band
+  headerBgStyle, headerSecStyle: TTyStyleSet;
+  colCount, posIdx, colIdx: Integer;
+  col: TTyTreeColumn;
+  cellLeft, cellRight: Integer;
+  cellRect, clipR: TRect;
+  colCellLeft, colCellRight: Integer;
+  colCaptionX, colMargin: Integer;
+  colTxt: string;
+  sortGlyphSize: Integer;
+  colAlign: TAlignment;
+  sortBandR: TRect;
+  mainColBase: Integer;
 begin
   UpdateScrollBars;   // keep scrollbar range current (cheap; no-op when clean)
 
@@ -1680,6 +1697,23 @@ begin
       VISIBLE frame (CR); only content x-positions use contentLeft. }
     contentLeft := CR.Left + FOffsetX;
 
+    { ── Column guard: are we in multi-column mode? ─────────────────────────── }
+    useColumns := (FHeader <> nil) and (FHeader.Columns.Count > 0);
+    hasHeader  := useColumns and (hoVisible in FHeader.Options);
+    headerH    := 0;
+    if hasHeader then
+    begin
+      headerH := P.Scale(FHeader.Height);
+      { Inset CR.Top so node rows start BELOW the header band.
+        The header band occupies [CR.Top_original .. CR.Top_original + headerH].
+        After this Inc, CR.Top is the top of the node area. }
+      Inc(CR.Top, headerH);
+      { Ensure positions are current before paint }
+      FHeader.Columns.UpdatePositions;
+    end
+    else if useColumns then
+      FHeader.Columns.UpdatePositions;
+
     { ── Empty tree ───────────────────────────────────────────────────────── }
     if FRoot^.FirstChild = nil then
     begin
@@ -1704,6 +1738,137 @@ begin
 
     savedClip := P.Bitmap.ClipRect;
     P.Bitmap.ClipRect := Rect(inset, inset, W - inset, H - inset);
+
+    { ── C2: Header band paint (BEFORE node area) ─────────────────────────── }
+    if hasHeader then
+    begin
+      { Band rect spans the full content width, at the top of CR (before headerH offset) }
+      headerBandRect := Rect(CR.Left, CR.Top - headerH, CR.Right, CR.Top);
+      { Resolve styles — tolerate absent typeKeys (fallback to tree tokens) }
+      headerBgStyle  := ActiveController.Model.ResolveStyle('TyTreeHeader', '', []);
+      headerSecStyle := ActiveController.Model.ResolveStyle('TyTreeHeaderSection', '', []);
+
+      { Fill header band background }
+      if tpBackground in headerBgStyle.Present then
+        P.FillBackground(headerBandRect, headerBgStyle.Background, 0)
+      else
+      begin
+        { Fallback: use a lightened border color or the tree background }
+        P.FillBackground(headerBandRect, S.Background, 0);
+      end;
+
+      { Per-column header cells }
+      colCount := FHeader.Columns.Count;
+      for posIdx := 0 to colCount - 1 do
+      begin
+        col := FHeader.Columns.ColumnByPosition(posIdx);
+        if col = nil then Continue;
+        if not (coVisible in col.Options) then Continue;
+
+        colIdx := col.Index;
+
+        { Column cell x range (scroll-adjusted, device pixels).
+          col.Left is the absolute left in logical px; scale to device. }
+        cellLeft  := CR.Left + P.Scale(col.Left) + FOffsetX;
+        cellRight := cellLeft + P.Scale(col.Width);
+
+        { Skip cells entirely off-screen }
+        if cellRight <= CR.Left then Continue;
+        if cellLeft  >= CR.Right then Continue;
+
+        { Header cell rect }
+        cellRect := Rect(cellLeft, headerBandRect.Top, cellRight, headerBandRect.Bottom);
+
+        { Clip to visible area }
+        clipR := cellRect;
+        if clipR.Left  < CR.Left  then clipR.Left  := CR.Left;
+        if clipR.Right > CR.Right then clipR.Right := CR.Right;
+
+        { Fill cell background — hover if this is the hovered column,
+          else transparent (inherits band bg) }
+        if (hoHotTrack in FHeader.Options) and (colIdx = NoColumn) then
+        begin
+          { NoColumn = -1, so this branch never fires — FHotHeaderColumn would go here in Phase D }
+        end;
+        if tpBackground in headerSecStyle.Present then
+          P.FillBackground(clipR, headerSecStyle.Background, 0);
+
+        { Reserve space for sort glyph when this is the sort column }
+        sortGlyphSize := 0;
+        if (hoShowSortGlyphs in FHeader.Options) and
+           (colIdx = FHeader.SortColumn) then
+          sortGlyphSize := P.Scale(10);
+
+        { Column caption rect }
+        colMargin := P.Scale(4);
+        colCaptionX := clipR.Left + colMargin;
+
+        textRect := Rect(colCaptionX,
+                         headerBandRect.Top,
+                         clipR.Right - colMargin - sortGlyphSize,
+                         headerBandRect.Bottom);
+
+        if textRect.Left < textRect.Right then
+        begin
+          { Determine caption alignment }
+          colAlign := col.CaptionAlignment;
+          { Resolve text color }
+          if tpTextColor in headerSecStyle.Present then
+            P.DrawText(textRect, col.Text,
+              headerSecStyle.FontName, ResolveFontSize(headerSecStyle),
+              headerSecStyle.FontWeight,
+              headerSecStyle.TextColor, colAlign, tlCenter, True)
+          else
+            P.DrawText(textRect, col.Text,
+              S.FontName, ResolveFontSize(S), S.FontWeight,
+              S.TextColor, colAlign, tlCenter, True);
+        end;
+
+        { Sort glyph in sort column }
+        if sortGlyphSize > 0 then
+        begin
+          { Draw an arrow glyph at the right of the header cell using DrawGlyph }
+          sortBandR := Rect(clipR.Right - sortGlyphSize - colMargin,
+                            headerBandRect.Top + P.Scale(2),
+                            clipR.Right - colMargin,
+                            headerBandRect.Bottom - P.Scale(2));
+          if sortBandR.Right > sortBandR.Left then
+          begin
+            if tpTextColor in headerSecStyle.Present then
+              colTxt := ''  { reuse colTxt as a scratch — not used here }
+            else
+              colTxt := '';
+            if FHeader.SortDirection = sdAscending then
+            begin
+              if tpTextColor in headerSecStyle.Present then
+                P.DrawGlyph(sortBandR, tgArrowUp, headerSecStyle.TextColor, P.Scale(1), 1)
+              else
+                P.DrawGlyph(sortBandR, tgArrowUp, S.TextColor, P.Scale(1), 1);
+            end
+            else
+            begin
+              if tpTextColor in headerSecStyle.Present then
+                P.DrawGlyph(sortBandR, tgArrowDown, headerSecStyle.TextColor, P.Scale(1), 1)
+              else
+                P.DrawGlyph(sortBandR, tgArrowDown, S.TextColor, P.Scale(1), 1);
+            end;
+          end;
+        end;
+
+        { Right-edge divider line (not on the last visible column) }
+        if posIdx < colCount - 1 then
+        begin
+          { Check if next column is visible }
+          P.Bitmap.DrawLine(cellRight - 1, headerBandRect.Top,
+                            cellRight - 1, headerBandRect.Bottom,
+                            TyColorToBGRA(S.BorderColor), False);
+        end;
+      end;
+
+      { Bottom border of header band }
+      P.Bitmap.DrawLine(CR.Left, CR.Top, CR.Right, CR.Top,
+                        TyColorToBGRA(S.BorderColor), False);
+    end;
 
     { ── First on-screen node ─────────────────────────────────────────────── }
     firstNodeY := -FOffsetY;
@@ -1754,113 +1919,267 @@ begin
       level    := GetNodeLevel(node);
       indentPx := P.Scale((level + Ord(FShowRoot)) * FIndent);
 
-      { ── Tree lines (simplified: guide + elbow) ──────────────────────────── }
-      if FShowTreeLines and (level > 0) then
+      if useColumns then
       begin
-        { Draw a vertical guide in each ancestor's column if that ancestor has
-          a NextSibling (i.e. the guide continues past this row). }
-        anc := node^.Parent;
-        while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
-        begin
-          ancLevel := GetNodeLevel(anc);
-          ancSlotX := contentLeft
-                      + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
-                      - (btnSlotW shr 1);
-          if anc^.NextSibling <> nil then
-            P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
-              TyColorToBGRA(S.BorderColor), False);
-          anc := anc^.Parent;
-        end;
+        { ── C1: Multi-column paint branch ──────────────────────────────────
+          Guard: only runs when Columns.Count > 0.
+          The ③a single-column path is below (in the else branch). }
 
-        { Elbow at this node's level: vertical half + horizontal stub. }
-        ancMidX := contentLeft
-                   + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
-                   - (btnSlotW shr 1);
-        ancMidY := rowTop + rowH div 2;
-        P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
-          TyColorToBGRA(S.BorderColor), False);
-        P.Bitmap.DrawLine(ancMidX, ancMidY,   contentLeft + indentPx, ancMidY,
-          TyColorToBGRA(S.BorderColor), False);
-        if node^.NextSibling <> nil then
-          P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
+        colCount := FHeader.Columns.Count;
+        for posIdx := 0 to colCount - 1 do
+        begin
+          col := FHeader.Columns.ColumnByPosition(posIdx);
+          if col = nil then Continue;
+          if not (coVisible in col.Options) then Continue;
+
+          colIdx := col.Index;
+
+          { Column cell x range (scroll-adjusted, device pixels).
+            col.Left is the absolute left from column 0 in logical px; scale to device.
+            The origin is CR.Left + FOffsetX = contentLeft. }
+          colCellLeft  := CR.Left + P.Scale(col.Left) + FOffsetX;
+          colCellRight := colCellLeft + P.Scale(col.Width);
+
+          { Skip cells entirely outside the visible content rect }
+          if colCellRight <= CR.Left then Continue;
+          if colCellLeft  >= CR.Right then Continue;
+
+          { Clip painter to this cell's visible x range }
+          clipR := Rect(colCellLeft, rowTop, colCellRight, rowTop + rowH);
+          if clipR.Left  < CR.Left  then clipR.Left  := CR.Left;
+          if clipR.Right > CR.Right then clipR.Right := CR.Right;
+          P.Bitmap.ClipRect := clipR;
+
+          if colIdx = FHeader.MainColumn then
+          begin
+            { ── Main column: draw ③a chrome (tree-lines + button + image) ── }
+            { mainColBase is the left of the main column cell (like contentLeft in ③a) }
+            mainColBase := colCellLeft;
+
+            { Tree lines (anchored at mainColBase) }
+            if FShowTreeLines and (level > 0) then
+            begin
+              anc := node^.Parent;
+              while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
+              begin
+                ancLevel := GetNodeLevel(anc);
+                ancSlotX := mainColBase
+                            + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
+                            - (btnSlotW shr 1);
+                if anc^.NextSibling <> nil then
+                  P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
+                    TyColorToBGRA(S.BorderColor), False);
+                anc := anc^.Parent;
+              end;
+              ancMidX := mainColBase
+                         + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
+                         - (btnSlotW shr 1);
+              ancMidY := rowTop + rowH div 2;
+              P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
+                TyColorToBGRA(S.BorderColor), False);
+              P.Bitmap.DrawLine(ancMidX, ancMidY,   mainColBase + indentPx, ancMidY,
+                TyColorToBGRA(S.BorderColor), False);
+              if node^.NextSibling <> nil then
+                P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
+                  TyColorToBGRA(S.BorderColor), False);
+            end;
+
+            { Expand button (anchored at mainColBase) }
+            if FShowButtons and (nsHasChildren in node^.States) then
+            begin
+              gSz := btnSlotW;
+              if rowH < gSz then gSz := rowH;
+              slotBaseX := mainColBase + indentPx - btnSlotW + (btnSlotW - gSz) div 2;
+              btnRect := Rect(
+                slotBaseX,
+                rowTop + (rowH - gSz) div 2,
+                slotBaseX + gSz,
+                rowTop + (rowH - gSz) div 2 + gSz
+              );
+              if btnRect.Right  <= btnRect.Left  then btnRect.Right  := btnRect.Left  + 4;
+              if btnRect.Bottom <= btnRect.Top   then btnRect.Bottom := btnRect.Top   + 4;
+              if nsExpanded in node^.States then
+                P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
+              else
+                P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
+            end;
+
+            { Image (main column only) }
+            captionX := mainColBase + indentPx;
+            usedImgSlotW := 0;
+            if (FImages <> nil) and (FImages.Count > 0) then
+            begin
+              usedImgSlotW := imgSlotW;
+              imgIdx  := -1;
+              ghosted := False;
+              if Assigned(FOnGetImageIndex) then
+                FOnGetImageIndex(Self, node, ikNormal, colIdx, ghosted, imgIdx);
+              if (imgIdx >= 0) and (imgIdx < FImages.Count) then
+                FImages.Draw(ACanvas,
+                  ARect.Left + captionX,
+                  ARect.Top  + rowTop + (rowH - FImages.Height) div 2,
+                  imgIdx);
+              Inc(captionX, imgSlotW);
+            end;
+
+            { Caption in main column }
+            colTxt := '';
+            if Assigned(FOnGetTextWithType) then
+              FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
+            else if Assigned(FOnGetText) then
+              FOnGetText(Self, node, colTxt);
+
+            textRect := Rect(captionX + P.Scale(2), rowTop,
+                             colCellRight - P.Scale(2), rowTop + rowH);
+            if (textRect.Left < textRect.Right) and (colTxt <> '') then
+              P.DrawText(textRect, colTxt,
+                NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+                NodeStyle.TextColor, taLeftJustify, tlCenter, True);
+
+            if Assigned(FOnPaintText) then
+              FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+          end
+          else
+          begin
+            { ── Non-main column: flat text cell ──────────────────────────── }
+            colMargin := P.Scale(4);
+            colCaptionX := colCellLeft + colMargin;
+
+            colTxt := '';
+            if Assigned(FOnGetTextWithType) then
+              FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
+            else if Assigned(FOnGetText) then
+              FOnGetText(Self, node, colTxt);   // fallback for compat
+
+            colAlign := col.Alignment;
+            textRect := Rect(colCaptionX, rowTop,
+                             colCellRight - colMargin, rowTop + rowH);
+            if (textRect.Left < textRect.Right) and (colTxt <> '') then
+              P.DrawText(textRect, colTxt,
+                NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+                NodeStyle.TextColor, colAlign, tlCenter, True);
+
+            if Assigned(FOnPaintText) then
+              FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+          end;
+
+          { Restore clip to full inset rect after each cell }
+          P.Bitmap.ClipRect := Rect(inset, inset, W - inset, H - inset);
+        end;
+        { FRangeX is already set from TotalWidth — do NOT re-accumulate }
+      end
+      else
+      begin
+        { ── ③a single-column path (0-column guard: verbatim ③a code) ───────── }
+
+        { ── Tree lines (simplified: guide + elbow) ──────────────────────────── }
+        if FShowTreeLines and (level > 0) then
+        begin
+          { Draw a vertical guide in each ancestor's column if that ancestor has
+            a NextSibling (i.e. the guide continues past this row). }
+          anc := node^.Parent;
+          while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
+          begin
+            ancLevel := GetNodeLevel(anc);
+            ancSlotX := contentLeft
+                        + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
+                        - (btnSlotW shr 1);
+            if anc^.NextSibling <> nil then
+              P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
+                TyColorToBGRA(S.BorderColor), False);
+            anc := anc^.Parent;
+          end;
+
+          { Elbow at this node's level: vertical half + horizontal stub. }
+          ancMidX := contentLeft
+                     + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
+                     - (btnSlotW shr 1);
+          ancMidY := rowTop + rowH div 2;
+          P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
             TyColorToBGRA(S.BorderColor), False);
-      end;
-
-      { ── Expand button ────────────────────────────────────────────────── }
-      if FShowButtons and (nsHasChildren in node^.States) then
-      begin
-        { The button occupies the slot just before indentPx. Use a CENTRED
-          SQUARE filling the slot (side = min(slot, rowH)) so the chevron is
-          large and crisp; DrawGlyph's pad is reduced to 2. }
-        gSz := btnSlotW;
-        if rowH < gSz then gSz := rowH;
-        slotBaseX := contentLeft + indentPx - btnSlotW + (btnSlotW - gSz) div 2;
-        btnRect := Rect(
-          slotBaseX,
-          rowTop + (rowH - gSz) div 2,
-          slotBaseX + gSz,
-          rowTop + (rowH - gSz) div 2 + gSz
-        );
-        if btnRect.Right  <= btnRect.Left  then btnRect.Right  := btnRect.Left  + 4;
-        if btnRect.Bottom <= btnRect.Top   then btnRect.Bottom := btnRect.Top   + 4;
-        if nsExpanded in node^.States then
-          P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
-        else
-          P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
-      end;
-
-      { ── Image ────────────────────────────────────────────────────────── }
-      captionX := contentLeft + indentPx;
-      { The image slot is RESERVED whenever an image list is assigned (matching
-        GetNodeAtPoint's hpImage zone), so usedImgSlotW mirrors that reservation
-        for the FRangeX width below. }
-      usedImgSlotW := 0;
-      if (FImages <> nil) and (FImages.Count > 0) then
-      begin
-        usedImgSlotW := imgSlotW;
-        imgIdx  := -1;
-        ghosted := False;
-        if Assigned(FOnGetImageIndex) then
-          FOnGetImageIndex(Self, node, ikNormal, -1, ghosted, imgIdx);
-        if (imgIdx >= 0) and (imgIdx < FImages.Count) then
-        begin
-          { Draw images directly to the underlying Canvas.  The BGRA bitmap and
-            the ACanvas share the same device context, so this is safe as long as
-            we blit into the device-space rect (offset by ARect.Left/Top). }
-          FImages.Draw(ACanvas,
-            ARect.Left + captionX,
-            ARect.Top  + rowTop + (rowH - FImages.Height) div 2,
-            imgIdx);
+          P.Bitmap.DrawLine(ancMidX, ancMidY,   contentLeft + indentPx, ancMidY,
+            TyColorToBGRA(S.BorderColor), False);
+          if node^.NextSibling <> nil then
+            P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
+              TyColorToBGRA(S.BorderColor), False);
         end;
-        Inc(captionX, imgSlotW);
-      end;
 
-      { ── Caption ─────────────────────────────────────────────────────── }
-      txt := '';
-      if Assigned(FOnGetText) then
-        FOnGetText(Self, node, txt);
+        { ── Expand button ────────────────────────────────────────────────── }
+        if FShowButtons and (nsHasChildren in node^.States) then
+        begin
+          { The button occupies the slot just before indentPx. Use a CENTRED
+            SQUARE filling the slot (side = min(slot, rowH)) so the chevron is
+            large and crisp; DrawGlyph's pad is reduced to 2. }
+          gSz := btnSlotW;
+          if rowH < gSz then gSz := rowH;
+          slotBaseX := contentLeft + indentPx - btnSlotW + (btnSlotW - gSz) div 2;
+          btnRect := Rect(
+            slotBaseX,
+            rowTop + (rowH - gSz) div 2,
+            slotBaseX + gSz,
+            rowTop + (rowH - gSz) div 2 + gSz
+          );
+          if btnRect.Right  <= btnRect.Left  then btnRect.Right  := btnRect.Left  + 4;
+          if btnRect.Bottom <= btnRect.Top   then btnRect.Bottom := btnRect.Top   + 4;
+          if nsExpanded in node^.States then
+            P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
+          else
+            P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
+        end;
 
-      textRect := Rect(captionX + P.Scale(2), rowTop, CR.Right, rowTop + rowH);
-      if (textRect.Left < textRect.Right) and (txt <> '') then
-        P.DrawText(textRect, txt,
-          NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
-          NodeStyle.TextColor, taLeftJustify, tlCenter, True);
+        { ── Image ────────────────────────────────────────────────────────── }
+        captionX := contentLeft + indentPx;
+        { The image slot is RESERVED whenever an image list is assigned (matching
+          GetNodeAtPoint's hpImage zone), so usedImgSlotW mirrors that reservation
+          for the FRangeX width below. }
+        usedImgSlotW := 0;
+        if (FImages <> nil) and (FImages.Count > 0) then
+        begin
+          usedImgSlotW := imgSlotW;
+          imgIdx  := -1;
+          ghosted := False;
+          if Assigned(FOnGetImageIndex) then
+            FOnGetImageIndex(Self, node, ikNormal, -1, ghosted, imgIdx);
+          if (imgIdx >= 0) and (imgIdx < FImages.Count) then
+          begin
+            { Draw images directly to the underlying Canvas.  The BGRA bitmap and
+              the ACanvas share the same device context, so this is safe as long as
+              we blit into the device-space rect (offset by ARect.Left/Top). }
+            FImages.Draw(ACanvas,
+              ARect.Left + captionX,
+              ARect.Top  + rowTop + (rowH - FImages.Height) div 2,
+              imgIdx);
+          end;
+          Inc(captionX, imgSlotW);
+        end;
 
-      if Assigned(FOnPaintText) then
-        FOnPaintText(Self, ACanvas, node, -1, ttNormal);
+        { ── Caption ─────────────────────────────────────────────────────── }
+        txt := '';
+        if Assigned(FOnGetText) then
+          FOnGetText(Self, node, txt);
 
-      { ── FRangeX accumulation ─────────────────────────────────────────── }
-      { Pure content WIDTH for this row — independent of CR.Left and FOffsetX so
-        the H-scroll range never drifts with the scroll position.  Equals the
-        rendered layout: indent + (image slot if used) + gap + text + tail. }
-      if txt <> '' then
-      begin
-        measW := indentPx + usedImgSlotW + P.Scale(2) +
-          P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
-                        NodeStyle.FontWeight).cx + P.Scale(4);
-        if measW > rangeXNew then
-          rangeXNew := measW;
-      end;
+        textRect := Rect(captionX + P.Scale(2), rowTop, CR.Right, rowTop + rowH);
+        if (textRect.Left < textRect.Right) and (txt <> '') then
+          P.DrawText(textRect, txt,
+            NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+            NodeStyle.TextColor, taLeftJustify, tlCenter, True);
+
+        if Assigned(FOnPaintText) then
+          FOnPaintText(Self, ACanvas, node, -1, ttNormal);
+
+        { ── FRangeX accumulation ─────────────────────────────────────────── }
+        { Pure content WIDTH for this row — independent of CR.Left and FOffsetX so
+          the H-scroll range never drifts with the scroll position.  Equals the
+          rendered layout: indent + (image slot if used) + gap + text + tail. }
+        if txt <> '' then
+        begin
+          measW := indentPx + usedImgSlotW + P.Scale(2) +
+            P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
+                          NodeStyle.FontWeight).cx + P.Scale(4);
+          if measW > rangeXNew then
+            rangeXNew := measW;
+        end;
+      end; { end ③a single-column path }
 
       node   := GetNextVisibleNoInit(node);
       Inc(rowTop, rowH);
