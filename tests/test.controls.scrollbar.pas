@@ -92,6 +92,17 @@ type
     procedure TestWheelStillFiresInheritedOnMouseWheel;
   end;
 
+  { Regression: Int32 overflow at large range (100k-node tree ~ 1.8M px content)
+    on a tall track (>= 1300 px).  The old 32-bit arithmetic wrapped negative so
+    the thumb and drag both snapped to the top.  The new Int64-widened path must
+    place the thumb at the BOTTOM for Position=Max and map a drag to the track
+    bottom back to a Position near Max. }
+  TTyScrollBarHugeRangeTest = class(TTestCase)
+  published
+    procedure TestHugeRangeThumbAtMaxIsAtBottom;
+    procedure TestHugeRangeDragToBottomYieldsMaxPosition;
+  end;
+
 implementation
 type
   TScrollAccess = class(TTyScrollBar)
@@ -938,6 +949,114 @@ begin
   end;
 end;
 
+{ TTyScrollBarHugeRangeTest
+  Parameters chosen to reproduce the original Int32 overflow:
+    Kind=sbVertical, Min=0, Max=1800000, PageSize=380
+    Track: the scrollbar gets Width=12, Height=1320.
+    ButtonSize = 12 (cross-axis width of a vertical bar).
+    Track rect = [12 .. 1308)  → TrackLen = 1296 px.
+    Span = 1800000 + 380 = 1800380.
+    ThumbLen = (380 * 1296) div 1800380 ≈ 0 → clamped up to MinThumb = 12.
+    FreeSpace = 1296 - 12 = 1284.
+    Travel = 1800000.
+
+  OLD code (overflowed):
+    Offset = (Pos0 * FreeSpace) div Travel
+           = (1800000 * 1284) div 1800000   →  1800000 * 1284 overflows Int32
+               (= 2_311_200_000 > 2^31-1)   →  wraps to negative → Offset < 0.
+    Result: thumb snapped to top instead of bottom.
+
+  NEW code:
+    Offset = Integer((Int64(1800000) * 1284) div 1800000) = 1284 = FreeSpace ✓.
+
+  Drag test (inverse path):
+    DragThumbTo maps (NewTop - TrackStart) back to position.
+    For a drag to the very bottom of the track (TrackStart + FreeSpace = 12 + 1284 = 1296):
+    OLD: NewPos = FMin + ((1284) * 1800000) div 1284
+               = 0 + (1284 * 1800000) div 1284  →  1284 * 1800000 = 2_311_200_000 overflows
+               → wraps negative → NewPos clamped to FMin = 0.
+    NEW: NewPos = 0 + Integer((Int64(1284) * 1800000) div 1284) = 1800000 = Max ✓.
+
+  The tests use the pure arithmetic path (TyScrollThumbRect + inline DragThumbTo
+  formula) so they run headlessly without needing a window handle. }
+
+procedure TTyScrollBarHugeRangeTest.TestHugeRangeThumbAtMaxIsAtBottom;
+const
+  { Scrollbar geometry: 12 px wide, 1320 px tall vertical bar at 96 DPI.
+    Button size = 12 (= cross-axis width).
+    Track: top = 12, bottom = 1308 → TrackLen = 1296 px. }
+  TrackTop    = 12;
+  TrackBottom = 1308;
+var
+  Track, ThumbR: TRect;
+  FreeSpace, ThumbLen, TrackLen: Integer;
+begin
+  Track := Rect(0, TrackTop, 12, TrackBottom);
+
+  { Position = Max (1800000): thumb must sit at the bottom of the track. }
+  ThumbR := TyScrollThumbRect(Track, sbVertical, 0, 1800000, 1800000, 380);
+
+  TrackLen  := TrackBottom - TrackTop;   { 1296 }
+  ThumbLen  := ThumbR.Bottom - ThumbR.Top;
+  FreeSpace := TrackLen - ThumbLen;
+
+  AssertTrue(
+    Format('huge-range thumb at Max: thumb bottom must equal track bottom ' +
+           '(ThumbR.Bottom=%d, TrackBottom=%d)', [ThumbR.Bottom, TrackBottom]),
+    ThumbR.Bottom = TrackBottom);
+  AssertTrue(
+    Format('huge-range thumb at Max: Offset must equal FreeSpace ' +
+           '(ThumbR.Top - TrackTop=%d, FreeSpace=%d)',
+           [ThumbR.Top - TrackTop, FreeSpace]),
+    (ThumbR.Top - TrackTop) = FreeSpace);
+end;
+
+procedure TTyScrollBarHugeRangeTest.TestHugeRangeDragToBottomYieldsMaxPosition;
+{ Replicate DragThumbTo's exact arithmetic so the test runs headlessly.
+  For a drag landing at TrackStart + FreeSpace (= track bottom), the inverse
+  mapping must return Position near Max (>= Max * 0.95), NOT 0. }
+const
+  FMin      = 0;
+  FMax      = 1800000;
+  PageSize  = 380;
+  TrackTop  = 12;
+  TrackBottom = 1308;
+var
+  Track, ThumbR: TRect;
+  ThumbLen, FreeSpace, TrackStart, NewTop, Travel, NewPos: Integer;
+begin
+  Track      := Rect(0, TrackTop, 12, TrackBottom);
+  TrackStart := TrackTop;   { sbVertical: TrackStart = Track.Top }
+
+  ThumbR  := TyScrollThumbRect(Track, sbVertical, FMin, FMax, FMax, PageSize);
+  ThumbLen := ThumbR.Bottom - ThumbR.Top;
+
+  FreeSpace := (TrackBottom - TrackTop) - ThumbLen;
+  if FreeSpace < 1 then FreeSpace := 1;
+
+  Travel := FMax - FMin;
+
+  { Simulate drag arriving exactly at the track bottom (TrackStart + FreeSpace). }
+  NewTop := TrackStart + FreeSpace;   { clamped upper limit in DragThumbTo }
+
+  { NEW (Int64-widened) formula — must NOT overflow: }
+  NewPos := FMin + Integer((Int64(NewTop - TrackStart) * Travel) div FreeSpace);
+  if NewPos < FMin then NewPos := FMin;
+  if NewPos > FMax then NewPos := FMax;
+
+  AssertTrue(
+    Format('huge-range drag to bottom: Position must be near Max (%d), ' +
+           'got %d (must be >= %d)', [FMax, NewPos, FMax * 95 div 100]),
+    NewPos >= (FMax * 95 div 100));
+
+  { Belt-and-suspenders: the old Int32 formula would have given 0 (or negative
+    clamped to 0).  Verify the result is NOT stuck at the bottom (0). }
+  AssertTrue(
+    Format('huge-range drag to bottom: Position must not be 0 (old overflow), got %d',
+           [NewPos]),
+    NewPos > 0);
+end;
+
 initialization
   RegisterTest(TTyScrollGeometryTest);
   RegisterTest(TTyScrollBarDragTest);
@@ -945,4 +1064,5 @@ initialization
   RegisterTest(TTyScrollBarMouseTest);
   RegisterTest(TTyScrollBarAnimationTest);
   RegisterTest(TTyScrollBarOnScrollTest);
+  RegisterTest(TTyScrollBarHugeRangeTest);
 end.

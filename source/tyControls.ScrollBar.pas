@@ -127,7 +127,7 @@ begin
   if Travel <= 0 then
     Offset := 0
   else
-    Offset := (Pos0 * FreeSpace) div Travel;
+    Offset := Integer((Int64(Pos0) * FreeSpace) div Travel);
   if AKind = sbVertical then
     Result := Rect(ATrack.Left, ATrack.Top + Offset,
       ATrack.Right, ATrack.Top + Offset + ThumbLen)
@@ -510,7 +510,7 @@ begin
   if NewTop < TrackStart then NewTop := TrackStart;
   if NewTop > TrackStart + FreeSpace then NewTop := TrackStart + FreeSpace;
   Travel := FMax - FMin;
-  NewPos := FMin + ((NewTop - TrackStart) * Travel) div FreeSpace;
+  NewPos := FMin + Integer((Int64(NewTop - TrackStart) * Travel) div FreeSpace);
   // Live drag tracking fires scTrack with the proposed value (handler may
   // adjust it); commit through the Position setter (clamps + OnChange).
   if NewPos < FMin then NewPos := FMin;
