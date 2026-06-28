@@ -1573,8 +1573,10 @@ var
   savedClip: TRect;
   anc: PTyTreeNode;
   ancLevel, ancMidX, ancMidY, ancSlotX: Integer;
-  btnPad: Integer;
   measW: Integer;
+  contentLeft: Integer;
+  gSz, slotBaseX: Integer;
+  usedImgSlotW: Integer;
 begin
   UpdateScrollBars;   // keep scrollbar range current (cheap; no-op when clean)
 
@@ -1600,6 +1602,11 @@ begin
       Dec(CR.Right, SBThick);
     if (FHScroll <> nil) and FHScroll.Visible then
       Dec(CR.Bottom, SBThick);
+
+    { Content origin: shifted left by the horizontal scroll offset (FOffsetX <= 0).
+      Row backgrounds, the right-clip and the clip rect stay anchored to the
+      VISIBLE frame (CR); only content x-positions use contentLeft. }
+    contentLeft := CR.Left + FOffsetX;
 
     { ── Empty tree ───────────────────────────────────────────────────────── }
     if FRoot^.FirstChild = nil then
@@ -1644,7 +1651,6 @@ begin
 
     btnSlotW := P.Scale(FIndent);   // one Indent-wide slot for the expand button
     imgSlotW := P.Scale(FIndent);   // one Indent-wide slot for the image
-    btnPad   := P.Scale(3);         // inner padding around the button glyph
 
     { ── Per-row paint loop ───────────────────────────────────────────────── }
     while (node <> nil) and (rowTop < CR.Bottom) do
@@ -1682,7 +1688,7 @@ begin
         while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
         begin
           ancLevel := GetNodeLevel(anc);
-          ancSlotX := CR.Left
+          ancSlotX := contentLeft
                       + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
                       - (btnSlotW shr 1);
           if anc^.NextSibling <> nil then
@@ -1692,13 +1698,13 @@ begin
         end;
 
         { Elbow at this node's level: vertical half + horizontal stub. }
-        ancMidX := CR.Left
+        ancMidX := contentLeft
                    + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
                    - (btnSlotW shr 1);
         ancMidY := rowTop + rowH div 2;
         P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
           TyColorToBGRA(S.BorderColor), False);
-        P.Bitmap.DrawLine(ancMidX, ancMidY,   CR.Left + indentPx, ancMidY,
+        P.Bitmap.DrawLine(ancMidX, ancMidY,   contentLeft + indentPx, ancMidY,
           TyColorToBGRA(S.BorderColor), False);
         if node^.NextSibling <> nil then
           P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
@@ -1708,25 +1714,35 @@ begin
       { ── Expand button ────────────────────────────────────────────────── }
       if FShowButtons and (nsHasChildren in node^.States) then
       begin
-        { The button occupies the slot just before indentPx, centred vertically. }
+        { The button occupies the slot just before indentPx. Use a CENTRED
+          SQUARE filling the slot (side = min(slot, rowH)) so the chevron is
+          large and crisp; DrawGlyph's pad is reduced to 2. }
+        gSz := btnSlotW;
+        if rowH < gSz then gSz := rowH;
+        slotBaseX := contentLeft + indentPx - btnSlotW + (btnSlotW - gSz) div 2;
         btnRect := Rect(
-          CR.Left + indentPx - btnSlotW + btnPad,
-          rowTop  + btnPad,
-          CR.Left + indentPx - btnPad,
-          rowTop  + rowH - btnPad
+          slotBaseX,
+          rowTop + (rowH - gSz) div 2,
+          slotBaseX + gSz,
+          rowTop + (rowH - gSz) div 2 + gSz
         );
         if btnRect.Right  <= btnRect.Left  then btnRect.Right  := btnRect.Left  + 4;
         if btnRect.Bottom <= btnRect.Top   then btnRect.Bottom := btnRect.Top   + 4;
         if nsExpanded in node^.States then
-          P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1))
+          P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
         else
-          P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1));
+          P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
       end;
 
       { ── Image ────────────────────────────────────────────────────────── }
-      captionX := CR.Left + indentPx;
+      captionX := contentLeft + indentPx;
+      { The image slot is RESERVED whenever an image list is assigned (matching
+        GetNodeAtPoint's hpImage zone), so usedImgSlotW mirrors that reservation
+        for the FRangeX width below. }
+      usedImgSlotW := 0;
       if (FImages <> nil) and (FImages.Count > 0) then
       begin
+        usedImgSlotW := imgSlotW;
         imgIdx  := -1;
         ghosted := False;
         if Assigned(FOnGetImageIndex) then
@@ -1759,9 +1775,12 @@ begin
         FOnPaintText(Self, ACanvas, node, -1, ttNormal);
 
       { ── FRangeX accumulation ─────────────────────────────────────────── }
+      { Pure content WIDTH for this row — independent of CR.Left and FOffsetX so
+        the H-scroll range never drifts with the scroll position.  Equals the
+        rendered layout: indent + (image slot if used) + gap + text + tail. }
       if txt <> '' then
       begin
-        measW := captionX + P.Scale(2) +
+        measW := indentPx + usedImgSlotW + P.Scale(2) +
           P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
                         NodeStyle.FontWeight).cx + P.Scale(4);
         if measW > rangeXNew then
