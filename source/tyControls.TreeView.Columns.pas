@@ -74,6 +74,7 @@ type
     function  GetDisplayName: string; override;
   public
     constructor Create(ACollection: TCollection); override;
+    procedure Assign(ASource: TPersistent); override;
     { Read-only public: current absolute left edge (set by UpdatePositions).
       Note: this is NOT scroll-adjusted — paint code subtracts FOffsetX itself. }
     property Left: Integer read FLeft;
@@ -219,6 +220,31 @@ begin
     GetOwnerColumns.UpdatePositions;
     GetOwnerColumns.DoChange;
   end;
+end;
+
+procedure TTyTreeColumn.Assign(ASource: TPersistent);
+var
+  Src: TTyTreeColumn;
+begin
+  if ASource is TTyTreeColumn then
+  begin
+    Src := TTyTreeColumn(ASource);
+    FWidth            := Src.FWidth;
+    FMinWidth         := Src.FMinWidth;
+    FMaxWidth         := Src.FMaxWidth;
+    FAlignment        := Src.FAlignment;
+    FCaptionAlignment := Src.FCaptionAlignment;
+    FText             := Src.FText;
+    FImageIndex       := Src.FImageIndex;
+    FOptions          := Src.FOptions;
+    FTag              := Src.FTag;
+    { FLeft and FPosition are computed — not copied; let the owning
+      collection recompute them via UpdatePositions after assignment. }
+    if Collection <> nil then
+      GetOwnerColumns.UpdatePositions;
+  end
+  else
+    inherited Assign(ASource);
 end;
 
 function TTyTreeColumn.GetDisplayName: string;
@@ -770,5 +796,13 @@ begin
   else
     inherited Assign(ASource);
 end;
+
+initialization
+  { Register sub-object classes so the LFM streaming system can instantiate
+    them when loading a .lfm that contains a TTyTreeView with Header/Columns.
+    Must be in initialization (before end.) — code after end. is dead. }
+  RegisterClass(TTyTreeColumn);
+  RegisterClass(TTyTreeColumns);
+  RegisterClass(TTyTreeHeader);
 
 end.

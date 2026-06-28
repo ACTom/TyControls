@@ -198,6 +198,19 @@ type
     procedure TestRangeXUpdatesOnColumnWidthChange;
   end;
 
+  { -----------------------------------------------------------------------
+    F3: design-time streaming — TTyTreeHeader.Assign deep-copies columns
+    ----------------------------------------------------------------------- }
+  TColumnF3Test = class(TTestCase)
+  published
+    { Assign deep-copies 3 columns with their Width/Text into a fresh header }
+    procedure TestHeaderAssignDeepCopiesColumns;
+    { Assigned columns are independent (changing src does not affect dst) }
+    procedure TestHeaderAssignIsDeepNotShallow;
+    { RegisterClass registered TTyTreeColumn, TTyTreeColumns, TTyTreeHeader }
+    procedure TestRegisterClassForStreaming;
+  end;
+
 implementation
 
 { ===========================================================================
@@ -833,6 +846,71 @@ begin
   AssertEquals('RangeX = 200 after Width change', 200, FTree.RangeX);
 end;
 
+{ ===========================================================================
+  F3: TTyTreeHeader.Assign deep-copy tests
+  =========================================================================== }
+
+procedure TColumnF3Test.TestHeaderAssignDeepCopiesColumns;
+var
+  src, dst: TTyTreeHeader;
+  colA, colB, colC: TTyTreeColumn;
+begin
+  src := TTyTreeHeader.Create;
+  dst := TTyTreeHeader.Create;
+  try
+    colA := src.Columns.Add as TTyTreeColumn;  colA.Width := 120;  colA.Text := 'Name';
+    colB := src.Columns.Add as TTyTreeColumn;  colB.Width := 80;   colB.Text := 'Size';
+    colC := src.Columns.Add as TTyTreeColumn;  colC.Width := 100;  colC.Text := 'Modified';
+
+    dst.Assign(src);
+
+    AssertEquals('Assign: Columns.Count = 3', 3, dst.Columns.Count);
+    AssertEquals('Assign: col0.Width = 120', 120, (dst.Columns.Items[0] as TTyTreeColumn).Width);
+    AssertEquals('Assign: col0.Text = Name', 'Name', (dst.Columns.Items[0] as TTyTreeColumn).Text);
+    AssertEquals('Assign: col1.Width = 80', 80, (dst.Columns.Items[1] as TTyTreeColumn).Width);
+    AssertEquals('Assign: col1.Text = Size', 'Size', (dst.Columns.Items[1] as TTyTreeColumn).Text);
+    AssertEquals('Assign: col2.Width = 100', 100, (dst.Columns.Items[2] as TTyTreeColumn).Width);
+    AssertEquals('Assign: col2.Text = Modified', 'Modified', (dst.Columns.Items[2] as TTyTreeColumn).Text);
+  finally
+    src.Free;
+    dst.Free;
+  end;
+end;
+
+procedure TColumnF3Test.TestHeaderAssignIsDeepNotShallow;
+var
+  src, dst: TTyTreeHeader;
+  colA: TTyTreeColumn;
+begin
+  src := TTyTreeHeader.Create;
+  dst := TTyTreeHeader.Create;
+  try
+    colA := src.Columns.Add as TTyTreeColumn;  colA.Width := 200;  colA.Text := 'Alpha';
+
+    dst.Assign(src);
+
+    { Mutate src column after assign — dst must not be affected }
+    (src.Columns.Items[0] as TTyTreeColumn).Width := 999;
+    (src.Columns.Items[0] as TTyTreeColumn).Text  := 'Changed';
+
+    AssertEquals('Deep copy: dst Width unchanged', 200, (dst.Columns.Items[0] as TTyTreeColumn).Width);
+    AssertEquals('Deep copy: dst Text unchanged', 'Alpha', (dst.Columns.Items[0] as TTyTreeColumn).Text);
+  finally
+    src.Free;
+    dst.Free;
+  end;
+end;
+
+procedure TColumnF3Test.TestRegisterClassForStreaming;
+begin
+  { RegisterClass was called in initialization of tyControls.TreeView.Columns.
+    FindClass raises EClassNotFound if the class was not registered.
+    These are the three classes needed for LFM round-trip of Header/Columns. }
+  AssertNotNull('TTyTreeColumn registered', FindClass('TTyTreeColumn'));
+  AssertNotNull('TTyTreeColumns registered', FindClass('TTyTreeColumns'));
+  AssertNotNull('TTyTreeHeader registered', FindClass('TTyTreeHeader'));
+end;
+
 initialization
   RegisterTest(TColumnA1Test);
   RegisterTest(TColumnA2Test);
@@ -840,4 +918,5 @@ initialization
   RegisterTest(TColumnA4Test);
   RegisterTest(TColumnB1Test);
   RegisterTest(TColumnB2Test);
+  RegisterTest(TColumnF3Test);
 end.
