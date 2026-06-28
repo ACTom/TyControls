@@ -43,6 +43,9 @@ type
     FNodeAllocSize: Integer;    // TreeNodeSize + Max(0, FNodeDataSize)
     FDefaultNodeHeight: Integer;
     FOnFreeNode: TTyTreeNodeEvent;
+    { B1 scroll engine cache fields }
+    FCacheValid: Boolean;
+    FRangeY:    Integer;
     { A5 events }
     FOnInitNode:     TTyTreeInitNodeEvent;
     FOnInitChildren: TTyTreeInitChildrenEvent;
@@ -88,8 +91,11 @@ type
     function GetFirstVisibleNoInit: PTyTreeNode;
     function GetNextVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
     function GetPreviousVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
+    { B1 helpers — used by tests + scroll engine }
+    function  SumVisibleHeights: Integer;
     property Expanded[Node: PTyTreeNode]: Boolean read GetExpanded write SetExpanded;
     property RootNode: PTyTreeNode read FRoot;
+    property RangeY: Integer read FRangeY;
   published
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
     property DefaultNodeHeight: Integer read FDefaultNodeHeight write FDefaultNodeHeight default 18;
@@ -187,28 +193,54 @@ begin
 end;
 
 procedure TTyTreeView.AdjustTotalHeight(Node: PTyTreeNode; Delta: Integer);
-// Propagates a pixel delta up the chain, but STOPS climbing past a collapsed ancestor
-// (a collapsed node's TotalHeight does not include hidden descendants).
+{ Propagates a pixel delta up the ancestor chain.
+  INVARIANT: a parent's TotalHeight includes a child's contribution ONLY when the
+  PARENT is expanded.  Therefore, before adding Delta to a parent, we check whether
+  the PARENT is expanded — not whether the child (run) is expanded.
+  This is ordering-independent: the caller may set/clear nsExpanded on Node before
+  or after calling AdjustTotalHeight and the result is still correct.
+  (The old code checked run^.States BEFORE climbing, which wrongly inflated a
+  collapsed ancestor when a deeply-nested node was expanded programmatically.) }
 var
-  run: PTyTreeNode;
+  run, up: PTyTreeNode;
 begin
+  if Delta = 0 then Exit;
+  Inc(Node^.TotalHeight, Delta);          // the changed node's own total always reflects the delta
   run := Node;
-  while run <> nil do
+  while True do
   begin
-    Inc(run^.TotalHeight, Delta);
-    // Stop climbing if this node is not expanded: its ancestors don't see the delta
-    // (its collapsed TotalHeight is just its own row, not the subtree)
-    if not (nsExpanded in run^.States) then Break;
-    run := run^.Parent;
-    if run = PTyTreeNode(Self) then Break;  // sentinel
+    up := run^.Parent;
+    if (up = nil) or (up = PTyTreeNode(Self)) then Break;  // reached the root sentinel
+    if not (nsExpanded in up^.States) then Break;  // parent collapsed: its total excludes run's subtree
+    Inc(up^.TotalHeight, Delta);
+    run := up;
   end;
 end;
 
 procedure TTyTreeView.InvalidateTreeLayout;
 begin
-  // Phase B will implement the position cache + range update.
-  // For A1-A4, just repaint.
+  // B1: mark the position cache dirty and recompute FRangeY.
+  // The cache itself is built lazily in Task B3; here we just invalidate the flag.
+  FCacheValid := False;
+  FRangeY     := Integer(FRoot^.TotalHeight);
   Invalidate;
+end;
+
+function TTyTreeView.SumVisibleHeights: Integer;
+{ Walk all screen-order visible nodes and sum their NodeHeight values.
+  Used ONLY by the B1 invariant test and debug assertions — not in the hot path. }
+var
+  n: PTyTreeNode;
+begin
+  Result := 0;
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    Inc(Result, n^.NodeHeight);
+    n := GetNextVisibleNoInit(n);
+  end;
+  // Add the root's own NodeHeight (the root sentinel always counts itself)
+  Inc(Result, FRoot^.NodeHeight);
 end;
 
 function TTyTreeView.GetRootNodeCount: Cardinal;

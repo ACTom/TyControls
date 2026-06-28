@@ -1042,9 +1042,380 @@ begin
   finally t.Free; end;
 end;
 
+{ ── B1 ── TotalHeight invariant + FRangeY ──────────────────────────────── }
+
+type
+  TTreeHeightInvariantTest = class(TTestCase)
+  private
+    { Shared event state for scenario 3 (auto-expand via ivsExpanded). }
+    FAutoExpandLevel: Integer;  // OnInitNode sets ivsExpanded for nodes at this level
+
+    procedure OnInitNodeAutoExpand(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+                                   var InitStates: TTyNodeInitStates);
+    procedure OnInitChildren4(Sender: TTyTreeView; Node: PTyTreeNode;
+                              var ChildCount: Cardinal);
+    { Count all nodes via depth-first GetFirst/GetNext (no init side-effects, but we
+      call GetFirst which does call InitNode for the first node; for counting purposes
+      we accept this and note: we only need TotalCount = RootNode^.TotalCount). }
+    function CountAllNodes(T: TTyTreeView): Integer;
+    procedure AssertInvariant(T: TTyTreeView; const Step: string);
+  published
+    { Scenario 1: root nodes → expand → collapse (basic roundtrip). }
+    procedure TestScenario1_ExpandCollapse;
+    { Scenario 2: nested expand A, then expand A.child B, then collapse A (B still expanded),
+      then re-expand A (B must still be expanded, invariant must hold throughout). }
+    procedure TestScenario2_NestedCollapseAndReexpand;
+    { Scenario 3: OnInitNode returns ivsExpanded → auto-expand on first touch;
+      assert invariant after the node is initialised. }
+    procedure TestScenario3_AutoExpandViaInitStates;
+    { Scenario 4: AddChild to an expanded parent grows root height;
+      AddChild to a collapsed parent does NOT. }
+    procedure TestScenario4_AddChildExpandedVsCollapsed;
+    { Scenario 5: DeleteNode of an expanded child (parent expanded) drops the full
+      visible subtree; DeleteNode from a collapsed parent leaves root height unchanged. }
+    procedure TestScenario5_DeleteExpandedVsCollapsed;
+    { Scenario 6 (the bug this fix addresses): with A collapsed, set Expanded[B]=True
+      where B is A's child → A.TotalHeight must stay = A.NodeHeight, root unchanged;
+      then expand A → root grows by B's already-expanded subtree. }
+    procedure TestScenario6_ExpandInCollapsedAncestor;
+    { RangeY tracks RootNode^.TotalHeight after mutations. }
+    procedure TestRangeYTracksRoot;
+  end;
+
+procedure TTreeHeightInvariantTest.OnInitNodeAutoExpand(
+  Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+  var InitStates: TTyNodeInitStates);
+begin
+  { Auto-expand nodes at level FAutoExpandLevel (or all levels if -1).
+    Set ivsHasChildren always so we can test auto-expansion. }
+  Include(InitStates, ivsHasChildren);
+  if (FAutoExpandLevel < 0) or (Sender.GetNodeLevel(Node) = FAutoExpandLevel) then
+    Include(InitStates, ivsExpanded);
+end;
+
+procedure TTreeHeightInvariantTest.OnInitChildren4(
+  Sender: TTyTreeView; Node: PTyTreeNode; var ChildCount: Cardinal);
+begin
+  ChildCount := 4;
+end;
+
+function TTreeHeightInvariantTest.CountAllNodes(T: TTyTreeView): Integer;
+{ Return the count of all nodes (not counting the root sentinel itself).
+  We simply use RootNode^.TotalCount - 1 (root counts itself).
+  Cross-checked in scenario tests. }
+begin
+  Result := Integer(T.RootNode^.TotalCount) - 1;
+end;
+
+procedure TTreeHeightInvariantTest.AssertInvariant(T: TTyTreeView; const Step: string);
+var
+  sumH, rootH: Integer;
+begin
+  sumH  := T.SumVisibleHeights;
+  rootH := Integer(T.RootNode^.TotalHeight);
+  AssertEquals(Step + ': TotalHeight = SumVisibleHeights', sumH, rootH);
+end;
+
+{ Scenario 1 }
+procedure TTreeHeightInvariantTest.TestScenario1_ExpandCollapse;
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+  heightBase: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.OnInitChildren := @OnInitChildren4;
+    t.RootNodeCount  := 5;
+    AssertInvariant(t, 'after RootNodeCount=5');
+
+    { Manually give node HasChildren so Expanded can work (no OnInitNode) }
+    n := t.RootNode^.FirstChild;
+    Include(n^.States, nsHasChildren);
+    Include(n^.States, nsInitialized);
+    heightBase := Integer(t.RootNode^.TotalHeight);
+
+    t.Expanded[n] := True;
+    AssertInvariant(t, 'after expand first node');
+
+    t.Expanded[n] := False;
+    AssertInvariant(t, 'after collapse first node');
+    AssertEquals('height returns to base after collapse', heightBase,
+                 Integer(t.RootNode^.TotalHeight));
+  finally
+    t.Free;
+  end;
+end;
+
+{ Scenario 2 }
+procedure TTreeHeightInvariantTest.TestScenario2_NestedCollapseAndReexpand;
+{ Tree (5 root nodes; A = first root node, B = A's first child)
+  Step 1: expand A → A's 4 children materialised
+  Step 2: expand B (A's first child) → B's 4 grandchildren materialised
+  Step 3: collapse A (B is still expanded internally)
+  Step 4: re-expand A → B must still be expanded, invariant holds }
+var
+  t: TTyTreeView;
+  A, B: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.OnInitChildren := @OnInitChildren4;
+    t.RootNodeCount  := 3;
+    AssertInvariant(t, 'S2 initial');
+
+    A := t.RootNode^.FirstChild;
+    Include(A^.States, nsHasChildren);
+    Include(A^.States, nsInitialized);
+
+    { Step 1: expand A }
+    t.Expanded[A] := True;
+    AssertInvariant(t, 'S2 after expand A');
+
+    { Step 2: expand B (first child of A) }
+    B := A^.FirstChild;
+    Include(B^.States, nsHasChildren);
+    Include(B^.States, nsInitialized);
+    t.Expanded[B] := True;
+    AssertInvariant(t, 'S2 after expand B');
+    { root height = root_h + 3*18 (root children) + 4*18 (A's children) + 4*18 (B's children) }
+    AssertEquals('S2 A expanded, B expanded: height',
+                 Integer(t.RootNode^.NodeHeight) + 3*18 + 4*18 + 4*18,
+                 Integer(t.RootNode^.TotalHeight));
+
+    { Step 3: collapse A (B is still internally expanded but its children are now hidden) }
+    t.Expanded[A] := False;
+    AssertInvariant(t, 'S2 after collapse A (B still internally expanded)');
+    { Now only 3 root children are visible; A is collapsed }
+    AssertEquals('S2 A collapsed: height = root_h + 3*18',
+                 Integer(t.RootNode^.NodeHeight) + 3*18,
+                 Integer(t.RootNode^.TotalHeight));
+    { B must still be internally expanded (nsExpanded still set) }
+    AssertTrue('B still internally expanded', nsExpanded in B^.States);
+
+    { Step 4: re-expand A — B's 4 grandchildren must reappear }
+    t.Expanded[A] := True;
+    AssertInvariant(t, 'S2 after re-expand A (B still expanded)');
+    AssertEquals('S2 re-expand A: height = root_h + 3*18 + 4*18 + 4*18',
+                 Integer(t.RootNode^.NodeHeight) + 3*18 + 4*18 + 4*18,
+                 Integer(t.RootNode^.TotalHeight));
+  finally
+    t.Free;
+  end;
+end;
+
+{ Scenario 3 }
+procedure TTreeHeightInvariantTest.TestScenario3_AutoExpandViaInitStates;
+{ OnInitNode returns ivsExpanded for level-0 nodes → auto-expand on first GetNext touch.
+  The invariant must hold after InitNode + auto-expand fires. }
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  FAutoExpandLevel := 0;
+  t := TTyTreeView.Create(nil);
+  try
+    t.OnInitNode     := @OnInitNodeAutoExpand;
+    t.OnInitChildren := @OnInitChildren4;
+    t.RootNodeCount  := 2;
+    AssertInvariant(t, 'S3 before init');
+
+    { Touch first node: triggers InitNode → ivsExpanded → auto-expand → InitChildren → 4 children }
+    n := t.GetFirst;   // fires InitNode(first child) → sets ivsExpanded → calls SetExpanded
+    AssertTrue('S3 node is expanded after auto-expand', nsExpanded in n^.States);
+    AssertEquals('S3 node has 4 children after auto-expand', 4, Integer(n^.ChildCount));
+    AssertInvariant(t, 'S3 after auto-expand via ivsExpanded');
+    { root_h + 2*18 (root children) + 4*18 (first child's expanded children) }
+    AssertEquals('S3 height = root_h + 2*18 + 4*18',
+                 Integer(t.RootNode^.NodeHeight) + 2*18 + 4*18,
+                 Integer(t.RootNode^.TotalHeight));
+  finally
+    t.Free;
+  end;
+end;
+
+{ Scenario 4 }
+procedure TTreeHeightInvariantTest.TestScenario4_AddChildExpandedVsCollapsed;
+var
+  t: TTyTreeView;
+  expandedParent, collapsedParent: PTyTreeNode;
+  heightBefore: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.OnInitChildren := @OnInitChildren4;
+    t.RootNodeCount  := 2;
+    expandedParent  := t.RootNode^.FirstChild;
+    collapsedParent := expandedParent^.NextSibling;
+
+    { Expand first node (manually mark has-children first) }
+    Include(expandedParent^.States, nsHasChildren);
+    Include(expandedParent^.States, nsInitialized);
+    t.Expanded[expandedParent] := True;
+    AssertInvariant(t, 'S4 after expand first node');
+
+    { AddChild to an EXPANDED node → root height grows by NodeHeight }
+    heightBefore := Integer(t.RootNode^.TotalHeight);
+    t.AddChild(expandedParent);
+    AssertInvariant(t, 'S4 after AddChild to expanded parent');
+    AssertEquals('S4 root height grew by NodeHeight after AddChild to expanded',
+                 heightBefore + 18,
+                 Integer(t.RootNode^.TotalHeight));
+
+    { AddChild to a COLLAPSED node → root height unchanged }
+    heightBefore := Integer(t.RootNode^.TotalHeight);
+    t.AddChild(collapsedParent);
+    AssertInvariant(t, 'S4 after AddChild to collapsed parent');
+    AssertEquals('S4 root height unchanged after AddChild to collapsed',
+                 heightBefore,
+                 Integer(t.RootNode^.TotalHeight));
+  finally
+    t.Free;
+  end;
+end;
+
+{ Scenario 5 }
+procedure TTreeHeightInvariantTest.TestScenario5_DeleteExpandedVsCollapsed;
+var
+  t: TTyTreeView;
+  expandedParent, collapsedParent, expandedChild, collapsedChild: PTyTreeNode;
+  heightBefore: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.OnInitChildren := @OnInitChildren4;
+    t.RootNodeCount  := 2;
+    expandedParent  := t.RootNode^.FirstChild;
+    collapsedParent := expandedParent^.NextSibling;
+
+    { Expand first parent and add a child to it }
+    Include(expandedParent^.States, nsHasChildren);
+    Include(expandedParent^.States, nsInitialized);
+    t.Expanded[expandedParent] := True;   { materialises 4 children }
+    expandedChild := expandedParent^.FirstChild;
+    AssertInvariant(t, 'S5 after expand parent');
+
+    { Also expand one of its children (grandchild scenario) }
+    Include(expandedChild^.States, nsHasChildren);
+    Include(expandedChild^.States, nsInitialized);
+    t.Expanded[expandedChild] := True;    { materialises 4 grandchildren }
+    AssertInvariant(t, 'S5 after expand child');
+
+    { Delete the expanded child (parent expanded) → root drops by child's full TotalHeight }
+    heightBefore := Integer(t.RootNode^.TotalHeight);
+    { expandedChild^.TotalHeight = 18 + 4*18 = 90 (itself + 4 grandchildren) }
+    AssertEquals('S5 expanded child TotalHeight = 90', 90,
+                 Integer(expandedChild^.TotalHeight));
+    t.DeleteNode(expandedChild);
+    AssertInvariant(t, 'S5 after delete expanded child');
+    AssertEquals('S5 root dropped by child TotalHeight (90)',
+                 heightBefore - 90,
+                 Integer(t.RootNode^.TotalHeight));
+
+    { Now test deletion from a COLLAPSED parent }
+    collapsedChild := t.AddChild(collapsedParent);
+    AssertInvariant(t, 'S5 after add to collapsed parent');
+    heightBefore := Integer(t.RootNode^.TotalHeight);
+    t.DeleteNode(collapsedChild);
+    AssertInvariant(t, 'S5 after delete from collapsed parent');
+    AssertEquals('S5 root height unchanged after delete from collapsed',
+                 heightBefore,
+                 Integer(t.RootNode^.TotalHeight));
+  finally
+    t.Free;
+  end;
+end;
+
+{ Scenario 6 — the bug this fix addresses }
+procedure TTreeHeightInvariantTest.TestScenario6_ExpandInCollapsedAncestor;
+{ With A collapsed, programmatically set Expanded[B] := True where B is A's child.
+  Expected:
+    • A.TotalHeight stays = A.NodeHeight (collapsed; B's subtree excluded)
+    • RootNode^.TotalHeight unchanged
+  Then expand A:
+    • Root grows by A's full (now B-expanded) subtree height
+    • B must still be expanded, invariant holds. }
+var
+  t: TTyTreeView;
+  A, B: PTyTreeNode;
+  rootHeightBase: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.OnInitChildren := @OnInitChildren4;
+    t.RootNodeCount  := 2;   { 2 root nodes, A = first }
+    A := t.RootNode^.FirstChild;
+
+    { Materialise A's children (without expanding A) }
+    Include(A^.States, nsHasChildren);
+    Include(A^.States, nsInitialized);
+    t.SetChildCount(A, 4);   { 4 children allocated but A still collapsed }
+    AssertInvariant(t, 'S6 after SetChildCount A (still collapsed)');
+
+    rootHeightBase := Integer(t.RootNode^.TotalHeight);
+
+    { B = first child of A }
+    B := A^.FirstChild;
+    Include(B^.States, nsHasChildren);
+    Include(B^.States, nsInitialized);
+
+    { Expand B while A is COLLAPSED — the key scenario }
+    t.Expanded[B] := True;   { InitChildren fires via SetExpanded → 4 grandchildren }
+    AssertInvariant(t, 'S6 after Expanded[B]=True with A collapsed');
+    { A is collapsed: its TotalHeight must still be just its own NodeHeight (18) }
+    AssertEquals('S6 A.TotalHeight = 18 while A collapsed (B expanded inside)',
+                 18, Integer(A^.TotalHeight));
+    { Root height must NOT have changed }
+    AssertEquals('S6 root height unchanged while A collapsed',
+                 rootHeightBase, Integer(t.RootNode^.TotalHeight));
+    AssertTrue('S6 B is marked expanded', nsExpanded in B^.States);
+
+    { Now expand A — root must grow by A's full visible subtree (A's 4 children + B's 4 grandchildren) }
+    t.Expanded[A] := True;
+    AssertInvariant(t, 'S6 after Expanded[A]=True (B already expanded)');
+    AssertTrue('S6 B still expanded after A expands', nsExpanded in B^.States);
+    { A's visible subtree: 4 children rows + 4 grandchildren (under B) }
+    { root height = root_h + 2*18 (root's 2 children) + 4*18 (A's children) + 4*18 (B's grandchildren) }
+    AssertEquals('S6 root height = root_h + 2*18 + 4*18 + 4*18',
+                 Integer(t.RootNode^.NodeHeight) + 2*18 + 4*18 + 4*18,
+                 Integer(t.RootNode^.TotalHeight));
+  finally
+    t.Free;
+  end;
+end;
+
+{ RangeY }
+procedure TTreeHeightInvariantTest.TestRangeYTracksRoot;
+var
+  t: TTyTreeView;
+  A: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.OnInitChildren := @OnInitChildren4;
+    t.RootNodeCount  := 3;
+    AssertEquals('RangeY = RootNode^.TotalHeight after RootNodeCount',
+                 Integer(t.RootNode^.TotalHeight), t.RangeY);
+
+    A := t.RootNode^.FirstChild;
+    Include(A^.States, nsHasChildren);
+    Include(A^.States, nsInitialized);
+    t.Expanded[A] := True;
+    AssertEquals('RangeY = RootNode^.TotalHeight after expand',
+                 Integer(t.RootNode^.TotalHeight), t.RangeY);
+
+    t.Expanded[A] := False;
+    AssertEquals('RangeY = RootNode^.TotalHeight after collapse',
+                 Integer(t.RootNode^.TotalHeight), t.RangeY);
+  finally
+    t.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
   RegisterTest(TTreeDeleteTest);
   RegisterTest(TTreeLazyTest);
+  RegisterTest(TTreeHeightInvariantTest);
 end.
