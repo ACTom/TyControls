@@ -5280,6 +5280,226 @@ begin
   end;
 end;
 
+{ ── E2 ── SortTree recursive lazy-aware + cache rebuild ─────────────────────── }
+
+type
+  TTreeE2SortTreeTest = class(TTestCase)
+  private
+    procedure OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+                        Column: Integer; var Result: Integer);
+    { Build a 3-level tree:
+        root
+          A (key=3, expanded, 2 children: A1=key2, A2=key1)
+          B (key=1, expanded, 2 children: B1=key9, B2=key5)
+          C (key=2, collapsed, 1 child C1=key7, lazy/uninitialized) }
+    function BuildE2Tree(out A, B, C: PTyTreeNode): TTyTreeView;
+  published
+    procedure TestE2_RootLevelSorted;
+    procedure TestE2_ExpandedChildLevelSorted;
+    procedure TestE2_CollapsedBranchNotSorted;
+    procedure TestE2_HeightInvariantAfterSortTree;
+    procedure TestE2_GetNodeAtConsistentAfterSort;
+  end;
+
+procedure TTreeE2SortTreeTest.OnCompare(Sender: TTyTreeView;
+  Node1, Node2: PTyTreeNode; Column: Integer; var Result: Integer);
+begin
+  Result := PInteger(Sender.GetNodeData(Node1))^ -
+            PInteger(Sender.GetNodeData(Node2))^;
+end;
+
+function TTreeE2SortTreeTest.BuildE2Tree(out A, B, C: PTyTreeNode): TTyTreeView;
+var
+  t: TTyTreeView;
+  A1, A2, B1, B2: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  t.NodeDataSize   := SizeOf(Integer);
+  t.OnCompareNodes := @OnCompare;
+  t.DefaultNodeHeight := 20;
+
+  { Root level: 3 nodes A,B,C }
+  t.RootNodeCount := 3;
+  A := t.RootNode^.FirstChild;
+  B := A^.NextSibling;
+  C := B^.NextSibling;
+
+  { Stamp keys and mark initialized }
+  Include(A^.States, nsInitialized); PInteger(t.GetNodeData(A))^ := 3;
+  Include(B^.States, nsInitialized); PInteger(t.GetNodeData(B))^ := 1;
+  Include(C^.States, nsInitialized); PInteger(t.GetNodeData(C))^ := 2;
+
+  { A: expanded with 2 children using Expanded property (proper height tracking) }
+  Include(A^.States, nsHasChildren);
+  t.SetChildCount(A, 2);
+  t.Expanded[A] := True;
+  A1 := A^.FirstChild; A2 := A1^.NextSibling;
+  Include(A1^.States, nsInitialized); PInteger(t.GetNodeData(A1))^ := 2;
+  Include(A2^.States, nsInitialized); PInteger(t.GetNodeData(A2))^ := 1;
+
+  { B: expanded with 2 children }
+  Include(B^.States, nsHasChildren);
+  t.SetChildCount(B, 2);
+  t.Expanded[B] := True;
+  B1 := B^.FirstChild; B2 := B1^.NextSibling;
+  Include(B1^.States, nsInitialized); PInteger(t.GetNodeData(B1))^ := 9;
+  Include(B2^.States, nsInitialized); PInteger(t.GetNodeData(B2))^ := 5;
+
+  { C: collapsed, 1 lazy child (NOT initialized - simulates lazy model) }
+  Include(C^.States, nsHasChildren);
+  t.SetChildCount(C, 1);
+  { C stays collapsed }
+  PInteger(t.GetNodeData(C^.FirstChild))^ := 7;
+  { Leave C^.FirstChild NOT initialized }
+
+  Result := t;
+end;
+
+procedure TTreeE2SortTreeTest.TestE2_RootLevelSorted;
+var
+  t: TTyTreeView;
+  A, B, C: PTyTreeNode;
+  n: PTyTreeNode;
+  keys: array[0..2] of Integer;
+  i: Integer;
+begin
+  t := BuildE2Tree(A, B, C);
+  try
+    t.SortTree(0, sdAscending);
+    { Root-level should now be B(1), C(2), A(3) }
+    n := t.RootNode^.FirstChild;
+    i := 0;
+    while (n <> nil) and (i < 3) do
+    begin
+      keys[i] := PInteger(t.GetNodeData(n))^;
+      Inc(i);
+      n := n^.NextSibling;
+    end;
+    AssertEquals('E2 root[0]=1 (B)', 1, keys[0]);
+    AssertEquals('E2 root[1]=2 (C)', 2, keys[1]);
+    AssertEquals('E2 root[2]=3 (A)', 3, keys[2]);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE2SortTreeTest.TestE2_ExpandedChildLevelSorted;
+var
+  t: TTyTreeView;
+  A, B, C: PTyTreeNode;
+  n: PTyTreeNode;
+  childKeys: array[0..1] of Integer;
+  i: Integer;
+begin
+  t := BuildE2Tree(A, B, C);
+  try
+    t.SortTree(0, sdAscending);
+    { A's children: sorted ascending → A2(1), A1(2) }
+    n := A^.FirstChild;
+    i := 0;
+    while (n <> nil) and (i < 2) do
+    begin
+      childKeys[i] := PInteger(t.GetNodeData(n))^;
+      Inc(i);
+      n := n^.NextSibling;
+    end;
+    AssertEquals('E2 A.child[0]=1', 1, childKeys[0]);
+    AssertEquals('E2 A.child[1]=2', 2, childKeys[1]);
+    { B's children: sorted ascending → B2(5), B1(9) }
+    n := B^.FirstChild;
+    i := 0;
+    while (n <> nil) and (i < 2) do
+    begin
+      childKeys[i] := PInteger(t.GetNodeData(n))^;
+      Inc(i);
+      n := n^.NextSibling;
+    end;
+    AssertEquals('E2 B.child[0]=5', 5, childKeys[0]);
+    AssertEquals('E2 B.child[1]=9', 9, childKeys[1]);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE2SortTreeTest.TestE2_CollapsedBranchNotSorted;
+var
+  t: TTyTreeView;
+  A, B, C, C1: PTyTreeNode;
+begin
+  t := BuildE2Tree(A, B, C);
+  try
+    t.SortTree(0, sdAscending);
+    { C1 key=7, C is not expanded; SortTree should NOT touch C1 }
+    C1 := C^.FirstChild;
+    AssertTrue('E2 C1 still exists', C1 <> nil);
+    AssertEquals('E2 collapsed C1 key unchanged (7)', 7, PInteger(t.GetNodeData(C1))^);
+    AssertFalse('E2 collapsed C1 not initialized by SortTree',
+      nsInitialized in C1^.States);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE2SortTreeTest.TestE2_HeightInvariantAfterSortTree;
+var
+  t: TTyTreeView;
+  A, B, C: PTyTreeNode;
+begin
+  t := BuildE2Tree(A, B, C);
+  try
+    t.SortTree(0, sdAscending);
+    AssertEquals('E2 height invariant after SortTree',
+      t.SumVisibleHeights, Integer(t.RootNode^.TotalHeight));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE2SortTreeTest.TestE2_GetNodeAtConsistentAfterSort;
+{ After SortTree, GetNodeAt(y) must return the same node as a manual visible-walk. }
+var
+  t: TTyTreeView;
+  A, B, C: PTyTreeNode;
+  yList: array[0..2] of Integer;
+  i: Integer;
+  sampleY, nodeTop: Integer;
+  nodeFromCache, nodeFromWalk: PTyTreeNode;
+  accTop: Integer;
+  walk: PTyTreeNode;
+begin
+  t := BuildE2Tree(A, B, C);
+  try
+    t.SortTree(0, sdAscending);
+    { Sample visible y values: 5 (1st row), 25 (2nd row), 45 (3rd row) }
+    yList[0] := 5;
+    yList[1] := 25;
+    yList[2] := 45;
+    for i := 0 to 2 do
+    begin
+      sampleY       := yList[i];
+      nodeFromCache := t.GetNodeAt(sampleY, nodeTop);
+      { Manual visible-order walk to find who owns sampleY }
+      accTop        := 0;
+      nodeFromWalk  := nil;
+      walk := t.GetFirstVisibleNoInit;
+      while walk <> nil do
+      begin
+        if (sampleY >= accTop) and (sampleY < accTop + Integer(walk^.NodeHeight)) then
+        begin
+          nodeFromWalk := walk;
+          Break;
+        end;
+        Inc(accTop, walk^.NodeHeight);
+        walk := t.GetNextVisibleNoInit(walk);
+      end;
+      AssertTrue('E2 GetNodeAt['+IntToStr(sampleY)+'] matches walk',
+        nodeFromCache = nodeFromWalk);
+    end;
+  finally
+    t.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -5299,4 +5519,5 @@ initialization
   RegisterTest(TTreeD3DragTest);
   RegisterTest(TTreeD4AutoSizeTest);
   RegisterTest(TTreeE1SortTest);
+  RegisterTest(TTreeE2SortTreeTest);
 end.

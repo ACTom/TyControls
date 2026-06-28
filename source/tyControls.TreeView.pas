@@ -263,6 +263,8 @@ type
     function DoCompare(Node1, Node2: PTyTreeNode; Column: Integer): Integer;
     { E1: sort the direct children of Node (one level only) }
     procedure Sort(Node: PTyTreeNode; Column: Integer; ADirection: TTySortDirection; DoInit: Boolean);
+    { E2: recursive sort of the whole tree (initialized+expanded levels only) }
+    procedure SortTree(Column: Integer; ADirection: TTySortDirection);
   published
     { B (columns): header sub-object }
     property Header: TTyTreeHeader read FHeader write SetHeader;
@@ -868,6 +870,13 @@ begin
   else
     FRangeX := 0;
   InvalidateTreeLayout;
+  { E2/E3: when the sort key changes programmatically (not via _HandleHeaderClick),
+    and auto-sort is active, re-sort the tree.  The FSorting guard prevents
+    _HandleHeaderClick → SortColumn setter → HeaderChanged → SortTree infinite loop. }
+  if (not FSorting) and (FHeader <> nil) and
+     (hoHeaderClickAutoSort in FHeader.Options) and
+     (FHeader.SortColumn >= 0) then
+    SortTree(FHeader.SortColumn, FHeader.SortDirection);
   Invalidate;
 end;
 
@@ -3075,6 +3084,50 @@ begin
     Node^.LastChild   := prev;
   end;
   { ChildCount/TotalCount/TotalHeight are unchanged (same set of children) }
+end;
+
+{ ── E2 ── SortTree (recursive, lazy-aware) ───────────────────────────────── }
+
+{ SortTreeNode: recursive helper for SortTree.
+  Sorts Node's children, then descends into initialized+expanded children.
+  Collapsed subtrees are skipped (lazy: they will sort when expanded). }
+procedure SortTreeNode(Tree: TTyTreeView; Node: PTyTreeNode;
+  Column: Integer; ADirection: TTySortDirection);
+var
+  child: PTyTreeNode;
+begin
+  if Node = nil then Exit;
+  { Sort this level }
+  Tree.Sort(Node, Column, ADirection, False);
+  { Recurse into initialized+expanded children (skip collapsed) }
+  child := Node^.FirstChild;
+  while child <> nil do
+  begin
+    if (nsInitialized in child^.States) and (nsExpanded in child^.States) then
+      SortTreeNode(Tree, child, Column, ADirection);
+    child := child^.NextSibling;
+  end;
+end;
+
+{ SortTree: sort the whole (initialized+expanded) tree, rebuild the position
+  cache, and request a repaint. }
+procedure TTyTreeView.SortTree(Column: Integer; ADirection: TTySortDirection);
+begin
+  if FSorting then Exit;   { reentrancy guard }
+  FSorting := True;
+  try
+    { Sort(FRoot, …, DoInit=True) materialises root-level children first,
+      then inits each before comparing. }
+    Sort(FRoot, Column, ADirection, True);
+    { Recurse into initialized+expanded non-root nodes }
+    SortTreeNode(Self, FRoot, Column, ADirection);
+    { The visible order changed — invalidate the position cache }
+    FCacheValid := False;
+    FRangeY     := ContentHeight;
+    Invalidate;
+  finally
+    FSorting := False;
+  end;
 end;
 
 initialization
