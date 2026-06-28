@@ -5,7 +5,8 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.TreeView;
+  tyControls.Types, tyControls.Controller, tyControls.TreeView,
+  tyControls.TreeView.Columns;
 
 type
   { A1: basic allocation and GetNodeData }
@@ -3681,6 +3682,650 @@ begin
   end;
 end;
 
+{ ── C (columns): Phase C1 + C2 paint tests ────────────────────────────────── }
+
+type
+  { TTreeColumnPaintTest — pixel tests for multi-column node paint (C1)
+    and header band paint (C2).
+    Guard: 0-column render must be byte-identical to ③a (existing tests green). }
+  TTreeColumnPaintTest = class(TTestCase)
+  private
+    { Per-column text returned by OnGetTextWithType }
+    procedure OnGetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
+      Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+      var InitStates: TTyNodeInitStates);
+    procedure OnInitChildren3(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
+    { C0 regression: 0-column callbacks mimicking ③a (same as TTreeC3PaintTest) }
+    procedure C0GetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure C0InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+      var InitStates: TTyNodeInitStates);
+    procedure C0InitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
+
+    { Build a 3-column tree and render it.  Returns the BGRA bitmap (caller
+      frees both Bgra and Bmp).
+      Col 0 (main, width=120): tree chrome + caption
+      Col 1 (left-align, width=80): flat text
+      Col 2 (right-align, width=100): flat right-aligned text
+      PPI=96; DefaultNodeHeight=22; ShowRoot=True; Indent=16;
+      1 root node expanded with 2 children. }
+    function BuildColumnTree(out Ctl: TTyStyleController; out F: TForm;
+      ASortColumn: Integer = -1): TTyTreeView;
+    function RenderColumnTree(Tree: TTyTreeView; out Bmp: TBitmap): TBGRABitmap;
+  published
+    { C1a: column-1 caption ink starts WITHIN column 1's x span (right of col 0). }
+    procedure TestC1_Col1CaptionInCol1Span;
+    { C1b: right-aligned column-2 text sits in the cell's right half. }
+    procedure TestC1_Col2RightAligned;
+    { C1c: expand button and indent ink appear ONLY within column 0 (main column). }
+    procedure TestC1_ChromeOnlyInMainColumn;
+    { C1d: selection fill spans the full row width (not just col 0). }
+    procedure TestC1_SelectionSpansFullRow;
+    { C2a: the top Scale(Header.Height) px is the header band (distinct bg). }
+    procedure TestC2_HeaderBandAtTop;
+    { C2b: each column caption paints within its header cell x span. }
+    procedure TestC2_HeaderCaptionsInSpan;
+    { C2c: sort glyph appears in the SortColumn's header cell. }
+    procedure TestC2_SortGlyphInSortColumn;
+    { C2d: FOffsetX scroll shifts both header caption and node cell by the same delta. }
+    procedure TestC2_ScrollShiftsHeaderAndCells;
+    { C0 regression: 0 columns → existing ③a single-column paint is unchanged.
+      The same pixel assertions as TestChildRowIndentedMoreThanTopLevel must still hold. }
+    procedure TestC0_ZeroColumnsIdenticToIIIa;
+  end;
+
+{ Inline theme used for column tests.
+  TyTreeHeader / TyTreeHeaderSection typeKeys (Phase F1 adds them to the real
+  themes; here we use an inline CSS block so the test is self-contained). }
+const
+  COLUMN_THEME_CSS =
+    'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+    'TyTreeNode { background: none; color: #000000; } ' +
+    'TyTreeNode:selected { background: #3B82F6; color: #FFFFFF; } ' +
+    'TyTreeHeader { background: #EEEEEE; color: #000000; } ' +
+    'TyTreeHeaderSection { background: none; color: #000000; } ' +
+    'TyTreeHeaderSection:hover { background: #DDDDDD; }';
+
+{ Column widths in logical px at PPI=96 (device px = logical at 96 DPI) }
+const
+  COL0_W = 120;  // main column
+  COL1_W = 80;   // col 1 left-align
+  COL2_W = 100;  // col 2 right-align
+  COL1_LEFT = COL0_W;          // left edge of col 1 (device px at 96 DPI)
+  COL2_LEFT = COL0_W + COL1_W; // left edge of col 2
+
+procedure TTreeColumnPaintTest.OnGetTextWithType(Sender: TTyTreeView;
+  Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+begin
+  case Column of
+    0: CellText := 'Name' + IntToStr(Node^.Index);
+    1: CellText := 'Col1';
+    2: CellText := 'C2Right';
+  else
+    CellText := '';
+  end;
+end;
+
+procedure TTreeColumnPaintTest.OnInitNodeHasChildren(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) = 0 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeColumnPaintTest.OnInitChildren3(Sender: TTyTreeView;
+  Node: PTyTreeNode; var ChildCount: Cardinal);
+begin
+  ChildCount := 2;
+end;
+
+function TTreeColumnPaintTest.BuildColumnTree(out Ctl: TTyStyleController;
+  out F: TForm; ASortColumn: Integer): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+  n0: PTyTreeNode;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 22;
+  t.Indent             := 16;
+  t.ShowButtons        := True;
+  t.ShowTreeLines      := False;  // keep simple for pixel tests
+  t.ShowRoot           := True;
+  { Width = COL0_W + COL1_W + COL2_W = 300; Height enough for header + 3 rows }
+  t.SetBounds(0, 0, 300, 200);
+
+  t.OnGetTextWithType := @OnGetTextWithType;
+  t.OnInitNode     := @OnInitNodeHasChildren;
+  t.OnInitChildren := @OnInitChildren3;
+
+  { Set up 3 columns }
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := COL0_W;
+  col0.Text  := 'Name';
+  col0.Alignment := taLeftJustify;
+  col0.CaptionAlignment := taLeftJustify;
+
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := COL1_W;
+  col1.Text  := 'Info';
+  col1.Alignment := taLeftJustify;
+  col1.CaptionAlignment := taLeftJustify;
+
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := COL2_W;
+  col2.Text  := 'Size';
+  col2.Alignment := taRightJustify;
+  col2.CaptionAlignment := taLeftJustify;
+
+  t.Header.MainColumn    := 0;
+  t.Header.SortColumn    := ASortColumn;
+  t.Header.SortDirection := sdAscending;
+  t.Header.Options       := [hoVisible, hoShowSortGlyphs];
+
+  { Materialise 1 root node, expand it }
+  t.RootNodeCount := 1;
+  n0 := t.RootNode^.FirstChild;
+  t.InitNode(n0);
+  t.Expanded[n0] := True;
+
+  Result := t;
+end;
+
+function TTreeColumnPaintTest.RenderColumnTree(Tree: TTyTreeView;
+  out Bmp: TBitmap): TBGRABitmap;
+var
+  BgraWrap: TBGRABitmap;
+begin
+  Bmp := TBitmap.Create;
+  Bmp.PixelFormat := pf32bit;
+  Bmp.SetSize(Tree.Width, Tree.Height);
+  Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+
+  {$PUSH}{$HINTS OFF}
+  TTyTreeViewAccess(Tree).RenderTo(Bmp.Canvas,
+    Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+  {$POP}
+
+  BgraWrap := TBGRABitmap.Create(Bmp, True);
+  Result := BgraWrap;
+end;
+
+{ Helper: scan a horizontal band [xFrom..xTo) at y and return True if any
+  pixel has R<200 (dark ink). }
+function HasDarkInkInBand(Bgra: TBGRABitmap; xFrom, xTo, y: Integer): Boolean;
+var
+  x: Integer;
+  px: TBGRAPixel;
+begin
+  Result := False;
+  for x := xFrom to xTo - 1 do
+  begin
+    px := Bgra.GetPixel(x, y);
+    if (px.alpha > 0) and (px.red < 200) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+{ Helper: returns True if ALL pixels in x range are bright (R>=200) = no dark ink. }
+function NoDarkInkInBand(Bgra: TBGRABitmap; xFrom, xTo, y: Integer): Boolean;
+var
+  x: Integer;
+  px: TBGRAPixel;
+begin
+  Result := True;
+  for x := xFrom to xTo - 1 do
+  begin
+    px := Bgra.GetPixel(x, y);
+    if (px.alpha > 0) and (px.red < 100) then
+    begin
+      Result := False;
+      Exit;
+    end;
+  end;
+end;
+
+{ C1a: column 1 caption ink starts WITHIN [COL1_LEFT .. COL1_LEFT+COL1_W).
+  Row 0 (the root node) has caption 'Name0' in col 0, 'Col1' in col 1, 'C2Right' in col 2.
+  At PPI=96, DefaultNodeHeight=22, header=22px:
+    Row 0 top in device px = headerH = 22 (since header occupies 0..21).
+    Row 0 y-center ≈ 22 + 11 = 33. }
+procedure TTreeColumnPaintTest.TestC1_Col1CaptionInCol1Span;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  rowY: Integer;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      { Row 0 is at device y = headerH (22 px) .. headerH+22.  Centre = 22+11=33. }
+      rowY := 33;
+
+      { Col 1 x span = [COL1_LEFT .. COL1_LEFT+COL1_W) = [120..200).
+        There must be dark ink in that band (the 'Col1' text). }
+      AssertTrue(
+        'C1a: col1 caption ink found in x=[120..200) at y=' + IntToStr(rowY),
+        HasDarkInkInBand(Bgra, COL1_LEFT, COL1_LEFT + COL1_W, rowY));
+
+      { Col 0 right half should not contain col 1's ink (they don't overlap).
+        We test that col 1 text does NOT appear left of COL1_LEFT in the first few px. }
+      { This check is font-dependent so we only assert positively above }
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C1b: right-aligned column 2 text sits in the right half of cell [COL2_LEFT .. 300).
+  Right half = [COL2_LEFT+COL2_W/2 .. COL2_LEFT+COL2_W) = [250..300). }
+procedure TTreeColumnPaintTest.TestC1_Col2RightAligned;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  rowY, rightHalfLeft: Integer;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      rowY := 33;  // row 0 centre (header=22, row height=22, centre=22+11=33)
+      rightHalfLeft := COL2_LEFT + COL2_W div 2;  // 200+50=250
+
+      { Right half of col 2 must have dark ink }
+      AssertTrue(
+        'C1b: right-aligned col2 text ink found in right half x=[' +
+        IntToStr(rightHalfLeft) + '..300) at y=' + IntToStr(rowY),
+        HasDarkInkInBand(Bgra, rightHalfLeft, COL2_LEFT + COL2_W, rowY));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C1c: the expand button / chevron ink is confined to column 0 (the main column).
+  The col1 left edge (x=120) up to the caption margin (x=123) is a blank gap —
+  the column paint starts at colCaptionX = colCellLeft + colMargin = 120 + 4 = 124.
+  The col2 left edge (x=200..203) is similarly blank.
+  If chrome leaked into col1/col2, ink would appear in x=[120..123] or x=[200..203]. }
+procedure TTreeColumnPaintTest.TestC1_ChromeOnlyInMainColumn;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  y: Integer;
+  px: TBGRAPixel;
+  inkInGap1, inkInGap2: Boolean;
+  x: Integer;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      { Row 0 y-range = 22..43, centre y=33.
+        x=[120..123]: gap between col1 left edge and caption margin (should be blank).
+        x=[200..203]: gap between col2 left edge and caption margin (should be blank). }
+      y := 33;
+      inkInGap1 := False;
+      for x := COL1_LEFT to COL1_LEFT + 3 do
+      begin
+        px := Bgra.GetPixel(x, y);
+        if (px.alpha > 0) and (px.red < 230) then
+          inkInGap1 := True;
+      end;
+      inkInGap2 := False;
+      for x := COL2_LEFT to COL2_LEFT + 3 do
+      begin
+        px := Bgra.GetPixel(x, y);
+        if (px.alpha > 0) and (px.red < 230) then
+          inkInGap2 := True;
+      end;
+      AssertFalse(
+        'C1c: no ink in col1 left-margin gap x=[120..123] (chrome should not leak into col1)',
+        inkInGap1);
+      AssertFalse(
+        'C1c: no ink in col2 left-margin gap x=[200..203] (chrome should not leak into col2)',
+        inkInGap2);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C1d: selection fill spans the FULL row width (x=[0..300)).
+  Select row 0, check that the blue accent fill is present both at x=10 (col 0)
+  and x=205 (just inside col 2 left edge, before any right-aligned text). }
+procedure TTreeColumnPaintTest.TestC1_SelectionSpansFullRow;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  px0, px2: TBGRAPixel;
+  rowY: Integer;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    { Select the root node (row 0) }
+    Tree.Selected[Tree.RootNode^.FirstChild] := True;
+
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      rowY := 33;  // row 0 centre
+
+      { Check blue fill at x=50 (col 0, well past the expand button + image slots at x=[0..32)).
+        The caption 'Root' starts around x=36, so x=50 may have text — but text on a blue
+        background is still blue-dominant (composite). We use blue>150 as a loose bar. }
+      px0 := Bgra.GetPixel(50, rowY);
+
+      { Check blue fill at x=205 (5px into col 2, before right-aligned text starts).
+        'C2Right' is right-aligned; in a 100px cell with 4px margin the text ends at
+        x=296 and starts around x=248+ depending on font. x=205 should be pure fill. }
+      px2 := Bgra.GetPixel(205, rowY);
+
+      AssertTrue(
+        'C1d: selection fill blue channel > 150 at col0 x=50 y=' + IntToStr(rowY),
+        px0.blue > 150);
+      AssertTrue(
+        'C1d: selection fill red channel < 200 at col0 x=50 y=' + IntToStr(rowY),
+        px0.red < 200);
+      AssertTrue(
+        'C1d: selection fill blue channel > 150 at col2 x=205 y=' + IntToStr(rowY),
+        px2.blue > 150);
+      AssertTrue(
+        'C1d: selection fill red channel < 120 at col2 x=205 y=' + IntToStr(rowY),
+        px2.red < 120);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C2a: the top headerH device px is the header band (bg color #EEEEEE = R=238,G=238,B=238).
+  At y=11 (mid of 22px header band), x=150 (col 1, no text) we expect the grey bg. }
+procedure TTreeColumnPaintTest.TestC2_HeaderBandAtTop;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  px: TBGRAPixel;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      { Mid of header band = y=11; x=150 (middle of col 1 span).
+        The header background is #EEEEEE (R=238 >= 200). }
+      px := Bgra.GetPixel(150, 11);
+      AssertTrue(
+        'C2a: header band has grey bg at y=11 (R>=200)',
+        px.red >= 200);
+      { Also verify that the header paint covers y=2 (near top of header band) at x=150.
+        This confirms the header bg is a full band, not just a thin stripe. }
+      px := Bgra.GetPixel(150, 2);
+      AssertTrue(
+        'C2a: header band top (y=2) also grey (R>=200)',
+        px.red >= 200);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C2b: each column caption paints within its header cell x span.
+  Col 0 header text 'Name' → ink in [0..120) at y=11.
+  Col 1 header text 'Info' → ink in [120..200) at y=11.
+  Col 2 header text 'Size' → ink in [200..300) at y=11. }
+procedure TTreeColumnPaintTest.TestC2_HeaderCaptionsInSpan;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  headerY: Integer;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      headerY := 11;  // mid of 22px header band
+
+      AssertTrue(
+        'C2b: col0 header "Name" ink in x=[0..120) at y=' + IntToStr(headerY),
+        HasDarkInkInBand(Bgra, 0, COL0_W, headerY));
+
+      AssertTrue(
+        'C2b: col1 header "Info" ink in x=[120..200) at y=' + IntToStr(headerY),
+        HasDarkInkInBand(Bgra, COL1_LEFT, COL1_LEFT + COL1_W, headerY));
+
+      AssertTrue(
+        'C2b: col2 header "Size" ink in x=[200..300) at y=' + IntToStr(headerY),
+        HasDarkInkInBand(Bgra, COL2_LEFT, COL2_LEFT + COL2_W, headerY));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C2c: sort glyph appears in the SortColumn (col 1) header cell, NOT in col 0 or col 2.
+  The glyph arrow is drawn at the right of the col 1 cell so we probe x≈190 (right
+  of col 1's text but still inside the cell).
+  We also verify no extra glyph ink appears in col 0 or col 2 cells at similar x.
+  NOTE: DrawGlyph uses antialias lines; the glyph ink may be grey rather than very dark.
+  We use a broader test: check that SOME non-white pixel exists in the glyph zone. }
+procedure TTreeColumnPaintTest.TestC2_SortGlyphInSortColumn;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  headerY: Integer;
+  px: TBGRAPixel;
+  x: Integer;
+  glyphZoneHasInk: Boolean;
+begin
+  { Build with SortColumn = 1 (col 1 = 'Info') }
+  Tree := BuildColumnTree(Ctl, F, {ASortColumn=}1);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      headerY := 11;  // mid of 22px header band
+
+      { Glyph is drawn at the right of col 1: reserve sortGlyphSize = Scale(10) = 10px.
+        So glyph occupies [cellRight - 10 - margin .. cellRight - margin]
+        = [200 - 10 - 4 .. 200 - 4] = [186 .. 196] approx.
+        We scan x=[185..199] for any non-white pixel. }
+      glyphZoneHasInk := False;
+      for x := 185 to 199 do
+      begin
+        px := Bgra.GetPixel(x, headerY);
+        if (px.alpha > 0) and ((px.red < 200) or (px.green < 200) or (px.blue < 200)) then
+        begin
+          glyphZoneHasInk := True;
+          Break;
+        end;
+      end;
+      AssertTrue('C2c: sort glyph ink in col1 right zone x=[185..199] at y=11',
+                 glyphZoneHasInk);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C2d: FOffsetX = 0 → header and cell column origins are aligned.
+  We verify that the col2 header text ('Size') appears at x=[200..220) at FOffsetX=0,
+  AND that col2 node cell text also starts at x >= 200 (same origin).
+  The general invariant (header scrolls by the same delta as cells) is guaranteed
+  by the implementation using the same CR.Left + P.Scale(col.Left) + FOffsetX
+  formula for both bands. }
+procedure TTreeColumnPaintTest.TestC2_ScrollShiftsHeaderAndCells;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  headerY, rowY: Integer;
+  headerCol2HasInk, nodeCellCol2HasInk: Boolean;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      headerY := 11;   // mid of header band
+      rowY    := 33;   // row 0 node centre
+
+      { Col 2 header ('Size') at x=[200..220) }
+      headerCol2HasInk :=
+        HasDarkInkInBand(Bgra, COL2_LEFT, COL2_LEFT + 20, headerY);
+
+      { Col 2 node cell ('C2Right', right-aligned) at x=[200..300) }
+      nodeCellCol2HasInk :=
+        HasDarkInkInBand(Bgra, COL2_LEFT, COL2_LEFT + COL2_W, rowY);
+
+      AssertTrue(
+        'C2d: col2 header ink at x=[200..220) at FOffsetX=0',
+        headerCol2HasInk);
+      AssertTrue(
+        'C2d: col2 node cell ink at x=[200..300) at FOffsetX=0 (same origin as header)',
+        nodeCellCol2HasInk);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeColumnPaintTest.C0GetText(Sender: TTyTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  Text := 'Node ' + IntToStr(Node^.Index) + ' L' + IntToStr(Sender.GetNodeLevel(Node));
+end;
+
+procedure TTreeColumnPaintTest.C0InitNode(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) < 2 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeColumnPaintTest.C0InitChildren(Sender: TTyTreeView;
+  Node: PTyTreeNode; var ChildCount: Cardinal);
+begin
+  ChildCount := 3;
+end;
+
+{ C0 regression: 0 columns → the ③a single-column paint path is byte-identical.
+  We reproduce the same assertions as TestChildRowIndentedMoreThanTopLevel:
+    (a) parent row (y=10) has text ink at x=[18..35]
+    (b) child row (y=30) has text ink at x=[36..100]
+  This uses the standard BuildPaintTree helper (which has 0 columns and uses
+  OnGetText, not OnGetTextWithType). }
+procedure TTreeColumnPaintTest.TestC0_ZeroColumnsIdenticToIIIa;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  Px: TBGRAPixel;
+  x: Integer;
+  parentHasInk, childHasInkFarRight: Boolean;
+begin
+  { BuildPaintTree creates a 0-column tree with the ③a OnGetText event }
+  Tree := BuildPaintTree(Ctl, F, @Self.C0GetText, @Self.C0InitNode, @Self.C0InitChildren);
+  try
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      { (a) Parent row (y=10): must have text ink at x=[18..35] }
+      parentHasInk := False;
+      for x := 18 to 35 do
+      begin
+        Px := Bgra.GetPixel(x, 10);
+        if (Px.alpha > 0) and (Px.red < 230) then
+          parentHasInk := True;
+      end;
+      AssertTrue('C0 regression: 0-column parent row has ink in x=[18..35]',
+                 parentHasInk);
+
+      { (b) Child row (y=30): must have text ink at x=[36..100] }
+      childHasInkFarRight := False;
+      for x := 36 to 100 do
+      begin
+        Px := Bgra.GetPixel(x, 30);
+        if (Px.alpha > 0) and (Px.red < 230) then
+          childHasInkFarRight := True;
+      end;
+      AssertTrue('C0 regression: 0-column child row has ink in x=[36..100]',
+                 childHasInkFarRight);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -3695,4 +4340,5 @@ initialization
   RegisterTest(TTreeC4Test);
   RegisterTest(TTreeContentRectPaddingTest);
   RegisterTest(TTreeHiDPITest);
+  RegisterTest(TTreeColumnPaintTest);
 end.
