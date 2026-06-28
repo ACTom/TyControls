@@ -15,6 +15,8 @@ type
     procedure TestHorizontalThumbAtTop;
     procedure TestZeroRangeFillsTrack;
     procedure TestScrollTrackInsetGeometry;
+    procedure TestHugeRangeThumbStaysGrabbable;
+    procedure TestModestRangeThumbStaysProportional;
   end;
 
   TTyScrollBarDragTest = class(TTestCase)
@@ -220,6 +222,43 @@ begin
   AssertEquals('degenerate keeps full', 0, TyScrollTrackRect(Rect(0,0,16,20), sbVertical, 16).Top);
   AssertEquals('degenerate keeps full2', 20, TyScrollTrackRect(Rect(0,0,16,20), sbVertical, 16).Bottom);
 end;
+procedure TTyScrollGeometryTest.TestHugeRangeThumbStaysGrabbable;
+var
+  R: TRect;
+  Len: Integer;
+begin
+  // Regression: a huge content range (e.g. a 100k-node tree, ~1.8M px tall)
+  // used to floor the thumb at 1px, making it impossible to grab. The minimum
+  // thumb length must now be tied to the bar's cross-axis thickness so the
+  // thumb is always at least a few px tall and never exceeds the track.
+  // Track ~ a 12px-wide vertical bar, 380px tall; Min=0 Max=1.8M Page=380.
+  R := TyScrollThumbRect(Rect(0, 0, 12, 380), sbVertical, 0, 1800000, 0, 380);
+  Len := R.Bottom - R.Top;
+  AssertTrue(Format('huge-range thumb is grabbable (>=6, actual %d)', [Len]),
+    Len >= 6);
+  AssertTrue(Format('huge-range thumb never exceeds track (<=380, actual %d)', [Len]),
+    Len <= 380);
+end;
+
+procedure TTyScrollGeometryTest.TestModestRangeThumbStaysProportional;
+var
+  R: TRect;
+  Len, Cross, Proportional: Integer;
+begin
+  // Regression guard: the new minimum must not distort modest ranges. With a
+  // 12x200 vertical track, Max=100, Page=10 -> Span=110, proportional thumb is
+  // 10*200 div 110 = 18px. That is well above the MinThumb (=Cross=12), so the
+  // result must stay the proportional value, not be clamped up.
+  R := TyScrollThumbRect(Rect(0, 0, 12, 200), sbVertical, 0, 100, 0, 10);
+  Len := R.Bottom - R.Top;
+  Cross := 12;
+  Proportional := (10 * 200) div ((100 - 0) + 10);   // = 18
+  AssertTrue(Format('modest-range thumb stays proportional (~%d, actual %d)',
+    [Proportional, Len]), Len = Proportional);
+  AssertTrue(Format('modest-range thumb exceeds MinThumb cross=%d (actual %d)',
+    [Cross, Len]), Len > Cross);
+end;
+
 procedure TTyScrollBarDragTest.OnBarChange(Sender: TObject);
 begin
   Inc(FChanges);

@@ -101,6 +101,7 @@ function TyScrollThumbRect(const ATrack: TRect; AKind: TTyScrollBarKind;
   AMin, AMax, APosition, APageSize: Integer): TRect;
 var
   TrackLen, Span, ThumbLen, FreeSpace, Travel, Pos0, Offset: Integer;
+  Cross, MinThumb: Integer;
 begin
   if AKind = sbVertical then
     TrackLen := ATrack.Bottom - ATrack.Top
@@ -114,7 +115,9 @@ begin
     Exit;
   end;
   ThumbLen := (APageSize * TrackLen) div Span;
-  if ThumbLen < 1 then ThumbLen := 1;
+  if AKind = sbVertical then Cross := ATrack.Right - ATrack.Left else Cross := ATrack.Bottom - ATrack.Top;
+  MinThumb := Cross; if MinThumb < 6 then MinThumb := 6;
+  if ThumbLen < MinThumb then ThumbLen := MinThumb;
   if ThumbLen > TrackLen then ThumbLen := TrackLen;
   FreeSpace := TrackLen - ThumbLen;
   Travel := AMax - AMin;
