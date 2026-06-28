@@ -66,6 +66,8 @@ type
     procedure BeginThumbDrag(AGrabPosAlongTrack: Integer);
     procedure DragThumbTo(APosAlongTrack: Integer);
     procedure EndThumbDrag;
+    { True while the user is dragging the thumb with the mouse. }
+    property Dragging: Boolean read FDragging;
   published
     // On by default. When enabled and the control has a window handle, a
     // PROGRAMMATIC Position change (keyboard/wheel/track-click) eases the painted

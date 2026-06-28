@@ -2401,6 +2401,8 @@ type
     procedure OnInitChildrenX(Sender: TTyTreeView; Node: PTyTreeNode;
                                var ChildCount: Cardinal);
   published
+    { Scrollbars exist immediately after Create — never lazily created during paint. }
+    procedure TestScrollBarsExistAfterConstruction;
     { ContentHeight = TotalHeight - NodeHeight (phantom root excluded). }
     procedure TestContentHeightExcludesRoot;
     { RangeY == ContentHeight after structural mutations. }
@@ -2421,6 +2423,25 @@ procedure TTreeC2Test.OnInitChildrenX(Sender: TTyTreeView; Node: PTyTreeNode;
                                        var ChildCount: Cardinal);
 begin
   ChildCount := 5;
+end;
+
+procedure TTreeC2Test.TestScrollBarsExistAfterConstruction;
+{ Both scrollbars must be allocated right after Create — before any paint,
+  before any RootNodeCount assignment.  This proves they are created eagerly
+  in the constructor and will receive mouse events via a valid HWND chain,
+  not lazily during a WM_PAINT where a windowed child has no real parent. }
+var
+  t: TTyTreeView;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    AssertTrue('VScroll non-nil after Create (no nodes set)', t.VScroll <> nil);
+    AssertTrue('HScroll non-nil after Create (no nodes set)', t.HScroll <> nil);
+    AssertFalse('VScroll initially hidden', t.VScroll.Visible);
+    AssertFalse('HScroll initially hidden', t.HScroll.Visible);
+  finally
+    t.Free;
+  end;
 end;
 
 procedure TTreeC2Test.TestContentHeightExcludesRoot;
@@ -2483,8 +2504,7 @@ begin
   try
     { Height = 160 (default); 20 nodes × 18 = 360px > 160px → bar needed. }
     t.RootNodeCount := 20;
-    { UpdateScrollBars is called inside InvalidateTreeLayout via SetChildCount.
-      FVScroll is created lazily inside UpdateScrollBars. }
+    { Both scrollbars are created in the constructor, so VScroll is never nil. }
     AssertTrue('VScroll created', t.VScroll <> nil);
     AssertTrue('VScroll visible for tall tree', t.VScroll.Visible);
     AssertEquals('VScroll.Max = ContentHeight',
