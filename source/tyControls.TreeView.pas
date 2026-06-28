@@ -33,6 +33,25 @@ type
   TTyTreeInitChildrenEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var ChildCount: Cardinal) of object;
   TTyTreeGetTextEvent  = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string) of object;
 
+  { C3: text type (mirrors VTV's TVSTTextType) }
+  TTyVSTTextType = (ttNormal, ttStatic);
+
+  { C3: image kind (mirrors VTV's TVTImageKind) }
+  TTyVTImageKind = (ikNormal, ikSelected, ikState, ikOverlay);
+
+  { C3: OnGetImageIndex event }
+  TTyTreeGetImageIndexEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+    Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean;
+    var ImageIndex: Integer) of object;
+
+  { C3: OnGetText event with Column + TextType (full VTV signature) }
+  TTyTreeGetTextWithTypeEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+    Column: Integer; TextType: TTyVSTTextType; var CellText: string) of object;
+
+  { C3: OnPaintText — post-draw hook (no-op in ③a) }
+  TTyTreePaintTextEvent = procedure(Sender: TTyTreeView; const TargetCanvas: TCanvas;
+    Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType) of object;
+
 const
   TreeNodeSize = (SizeOf(TTyTreeNode) + 7) and not 7;  // pointer-aligned struct stride
   { B3: one cache mark per TREE_CACHE_STEP visible nodes.
@@ -74,6 +93,12 @@ type
     FSelectedNode:   PTyTreeNode;
     FOnChange:       TTyTreeNodeEvent;
     FOnFocusChanged: TTyTreeNodeEvent;
+    { C3: paint-related fields }
+    FHotNode:              PTyTreeNode;   // node under cursor (HotTrack); nil = none
+    FOnGetText:            TTyTreeGetTextEvent;
+    FOnGetImageIndex:      TTyTreeGetImageIndexEvent;
+    FOnGetTextWithType:    TTyTreeGetTextWithTypeEvent;
+    FOnPaintText:          TTyTreePaintTextEvent;
     { C1: layout / display properties }
     FIndent:            Integer;
     FImages:            TImageList;
@@ -124,6 +149,7 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure Paint; override;
     function  DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
                 MousePos: TPoint): Boolean; override;
     procedure Resize; override;
@@ -174,6 +200,8 @@ type
     { C2: content geometry helpers used by C3 paint pass. }
     function ContentHeight: Integer;
     function ContentRect: TRect;
+    { C3: paint }
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { B3: read-only; how many nodes were visited in the last GetNodeAt walk (for perf tests) }
     property LastGetNodeAtVisits: Integer read FLastGetNodeAtVisits;
   published
@@ -206,6 +234,10 @@ type
     property OnCollapsed:     TTyTreeNodeEvent         read FOnCollapsed     write FOnCollapsed;
     property OnChange:        TTyTreeNodeEvent         read FOnChange        write FOnChange;
     property OnFocusChanged:  TTyTreeNodeEvent         read FOnFocusChanged  write FOnFocusChanged;
+    { C3: paint events }
+    property OnGetText:       TTyTreeGetTextEvent           read FOnGetText           write FOnGetText;
+    property OnGetImageIndex: TTyTreeGetImageIndexEvent     read FOnGetImageIndex     write FOnGetImageIndex;
+    property OnPaintText:     TTyTreePaintTextEvent         read FOnPaintText         write FOnPaintText;
   end;
 
 implementation
@@ -1471,6 +1503,266 @@ begin
     end;
     // If node is still nil here, all siblings+ancestors exhausted → loop exits.
   end;
+end;
+
+{ ── C3 ── RenderTo / Paint ──────────────────────────────────────────────── }
+
+{ RenderTo — paint the VISIBLE window only (performance is the point).
+
+  Algorithm:
+  1. DrawFrame for the TyTreeView container.
+  2. Compute ContentRect (frame interior minus padding and visible scrollbar(s)).
+  3. Empty tree → draw EmptyListMessage centred, done.
+  4. Find first on-screen node via GetNodeAt(-FOffsetY). The node may start
+     ABOVE ContentRect.Top (sub-row remainder); the initial rowTop accounts for
+     the partial row already scrolled out of view.
+  5. Loop over visible nodes until rowTop >= ContentRect.Bottom:
+     • InitNode so OnGetText / nsHasChildren / OnGetImageIndex are ready.
+     • Row background: resolve TyTreeNode style with the right state set.
+     • Indent + expand button + image + caption, all in scaled pixels.
+     • Tree lines (simplified: vertical guide + elbow per indent slot).
+     • Accumulate FRangeX for the horizontal scrollbar.
+  6. EndPaint; after the loop call UpdateScrollBars if FRangeX changed. }
+procedure TTyTreeView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+const
+  TREE_LINE_COLOR = $FF808080;   // muted grey; replaced by token in D1
+var
+  P: TTyPainter;
+  S, NodeStyle: TTyStyleSet;
+  W, H: Integer;
+  CR: TRect;   // content rect (frame interior minus scrollbars)
+  SBThick: Integer;
+  node: PTyTreeNode;
+  rowTop, firstTop, firstNodeY: Integer;
+  rowH: Integer;
+  rowRect, bgRect, textRect, btnRect: TRect;
+  level, indentPx, btnSlotW, imgSlotW: Integer;
+  nodeStates: TTyStateSet;
+  txt: string;
+  ghosted: Boolean;
+  imgIdx: Integer;
+  captionX: Integer;
+  rangeXNew: Integer;
+  inset, insetLogical: Integer;
+  savedClip: TRect;
+  anc: PTyTreeNode;
+  ancLevel, ancMidX, ancMidY, ancSlotX: Integer;
+  btnPad: Integer;
+  measW: Integer;
+begin
+  UpdateScrollBars;   // keep scrollbar range current (cheap; no-op when clean)
+
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(ACanvas, ARect, APPI);
+    S := CurrentStyle;
+
+    W := ARect.Right  - ARect.Left;
+    H := ARect.Bottom - ARect.Top;
+
+    DrawFrame(P, Rect(0, 0, W, H), S);
+
+    { Content rect: frame interior minus padding and visible scrollbar(s). }
+    SBThick := MulDiv(TyScrollbarSize, APPI, 96);
+    CR := Rect(
+      P.Scale(S.Padding.Left),
+      P.Scale(S.Padding.Top),
+      W - P.Scale(S.Padding.Right),
+      H - P.Scale(S.Padding.Bottom)
+    );
+    if (FVScroll <> nil) and FVScroll.Visible then
+      Dec(CR.Right, SBThick);
+    if (FHScroll <> nil) and FHScroll.Visible then
+      Dec(CR.Bottom, SBThick);
+
+    { ── Empty tree ───────────────────────────────────────────────────────── }
+    if FRoot^.FirstChild = nil then
+    begin
+      if FEmptyListMessage <> '' then
+      begin
+        NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', []);
+        P.DrawText(CR, FEmptyListMessage, S.FontName, ResolveFontSize(S), S.FontWeight,
+          NodeStyle.TextColor, taCenter, tlCenter, True);
+      end;
+      P.EndPaint;
+      Exit;
+    end;
+
+    { Row chrome inset: row fills must not touch the border's anti-aliased edge.
+      Mirror the ListBox pattern exactly. }
+    insetLogical := S.BorderWidth;
+    if (tpOutline in S.Present) and (S.OutlineWidth > 0) then
+      if S.OutlineOffset + S.OutlineWidth > insetLogical then
+        insetLogical := S.OutlineOffset + S.OutlineWidth;
+    if insetLogical > 0 then Inc(insetLogical);
+    inset := P.Scale(insetLogical);
+
+    savedClip := P.Bitmap.ClipRect;
+    P.Bitmap.ClipRect := Rect(inset, inset, W - inset, H - inset);
+
+    { ── First on-screen node ─────────────────────────────────────────────── }
+    firstNodeY := -FOffsetY;
+    if firstNodeY < 0 then firstNodeY := 0;
+    node := GetNodeAt(firstNodeY, firstTop);
+    if node = nil then
+    begin
+      P.Bitmap.ClipRect := savedClip;
+      P.EndPaint;
+      Exit;
+    end;
+    { The first row may be partially scrolled above the viewport.
+      rowTop = device-Y where the first row's TOP pixel should be drawn. }
+    rowTop := CR.Top - (firstNodeY - firstTop);
+
+    rangeXNew := FRangeX;
+
+    btnSlotW := P.Scale(FIndent);   // one Indent-wide slot for the expand button
+    imgSlotW := P.Scale(FIndent);   // one Indent-wide slot for the image
+    btnPad   := P.Scale(3);         // inner padding around the button glyph
+
+    { ── Per-row paint loop ───────────────────────────────────────────────── }
+    while (node <> nil) and (rowTop < CR.Bottom) do
+    begin
+      InitNode(node);   // idempotent; fires OnGetText/nsHasChildren/etc. once
+
+      rowH    := P.Scale(node^.NodeHeight);
+      rowRect := Rect(CR.Left, rowTop, CR.Right, rowTop + rowH);
+
+      { ── Row background ─────────────────────────────────────────────────── }
+      nodeStates := [];
+      if nsSelected in node^.States then
+        nodeStates := [tysSelected]
+      else if FHotTrack and (node = FHotNode) then
+        nodeStates := [tysHover];
+
+      NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', nodeStates);
+
+      if tpBackground in NodeStyle.Present then
+      begin
+        bgRect := rowRect;
+        P.FillBackground(bgRect, NodeStyle.Background, 0);
+      end;
+
+      { ── X accumulation: level → indent ─────────────────────────────────── }
+      level    := GetNodeLevel(node);
+      indentPx := P.Scale((level + Ord(FShowRoot)) * FIndent);
+
+      { ── Tree lines (simplified: guide + elbow) ──────────────────────────── }
+      if FShowTreeLines and (level > 0) then
+      begin
+        { Draw a vertical guide in each ancestor's column if that ancestor has
+          a NextSibling (i.e. the guide continues past this row). }
+        anc := node^.Parent;
+        while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
+        begin
+          ancLevel := GetNodeLevel(anc);
+          ancSlotX := CR.Left
+                      + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
+                      - (btnSlotW shr 1);
+          if anc^.NextSibling <> nil then
+            P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
+              TyColorToBGRA(TREE_LINE_COLOR), False);
+          anc := anc^.Parent;
+        end;
+
+        { Elbow at this node's level: vertical half + horizontal stub. }
+        ancMidX := CR.Left
+                   + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
+                   - (btnSlotW shr 1);
+        ancMidY := rowTop + rowH div 2;
+        P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
+          TyColorToBGRA(TREE_LINE_COLOR), False);
+        P.Bitmap.DrawLine(ancMidX, ancMidY,   CR.Left + indentPx, ancMidY,
+          TyColorToBGRA(TREE_LINE_COLOR), False);
+        if node^.NextSibling <> nil then
+          P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
+            TyColorToBGRA(TREE_LINE_COLOR), False);
+      end;
+
+      { ── Expand button ────────────────────────────────────────────────── }
+      if FShowButtons and (nsHasChildren in node^.States) then
+      begin
+        { The button occupies the slot just before indentPx, centred vertically. }
+        btnRect := Rect(
+          CR.Left + indentPx - btnSlotW + btnPad,
+          rowTop  + btnPad,
+          CR.Left + indentPx - btnPad,
+          rowTop  + rowH - btnPad
+        );
+        if btnRect.Right  <= btnRect.Left  then btnRect.Right  := btnRect.Left  + 4;
+        if btnRect.Bottom <= btnRect.Top   then btnRect.Bottom := btnRect.Top   + 4;
+        if nsExpanded in node^.States then
+          P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1))
+        else
+          P.DrawGlyph(btnRect, tgArrowRight, NodeStyle.TextColor, P.Scale(1));
+      end;
+
+      { ── Image ────────────────────────────────────────────────────────── }
+      captionX := CR.Left + indentPx;
+      if (FImages <> nil) and (FImages.Count > 0) then
+      begin
+        imgIdx  := -1;
+        ghosted := False;
+        if Assigned(FOnGetImageIndex) then
+          FOnGetImageIndex(Self, node, ikNormal, -1, ghosted, imgIdx);
+        if (imgIdx >= 0) and (imgIdx < FImages.Count) then
+        begin
+          { Draw images directly to the underlying Canvas.  The BGRA bitmap and
+            the ACanvas share the same device context, so this is safe as long as
+            we blit into the device-space rect (offset by ARect.Left/Top). }
+          FImages.Draw(ACanvas,
+            ARect.Left + captionX,
+            ARect.Top  + rowTop + (rowH - FImages.Height) div 2,
+            imgIdx);
+        end;
+        Inc(captionX, imgSlotW);
+      end;
+
+      { ── Caption ─────────────────────────────────────────────────────── }
+      txt := '';
+      if Assigned(FOnGetText) then
+        FOnGetText(Self, node, txt);
+
+      textRect := Rect(captionX + P.Scale(2), rowTop, CR.Right, rowTop + rowH);
+      if (textRect.Left < textRect.Right) and (txt <> '') then
+        P.DrawText(textRect, txt,
+          NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+          NodeStyle.TextColor, taLeftJustify, tlCenter, True);
+
+      if Assigned(FOnPaintText) then
+        FOnPaintText(Self, ACanvas, node, -1, ttNormal);
+
+      { ── FRangeX accumulation ─────────────────────────────────────────── }
+      if txt <> '' then
+      begin
+        measW := captionX + P.Scale(2) +
+          P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
+                        NodeStyle.FontWeight).cx + P.Scale(4);
+        if measW > rangeXNew then
+          rangeXNew := measW;
+      end;
+
+      node   := GetNextVisibleNoInit(node);
+      Inc(rowTop, rowH);
+    end;
+
+    P.Bitmap.ClipRect := savedClip;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+
+  { After the loop: update the horizontal scrollbar if the widest row changed. }
+  if rangeXNew <> FRangeX then
+  begin
+    FRangeX := rangeXNew;
+    UpdateScrollBars;
+  end;
+end;
+
+procedure TTyTreeView.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
 end.

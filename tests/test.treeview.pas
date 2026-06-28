@@ -2,7 +2,9 @@ unit test.treeview;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, tyControls.TreeView;
+  Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Controller, tyControls.TreeView;
 
 type
   { A1: basic allocation and GetNodeData }
@@ -56,7 +58,35 @@ type
     procedure TestRootChildCountAfterShrink;
   end;
 
+  { C3: pixel-level paint tests }
+  TTreeC3PaintTest = class(TTestCase)
+  private
+    FGetTextCalled: Integer;
+    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+                        var InitStates: TTyNodeInitStates);
+    procedure OnInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+                             var ChildCount: Cardinal);
+  published
+    procedure TestSelectedRowHasAccentBlue;
+    procedure TestChildRowIndentedMoreThanTopLevel;
+    procedure TestExpandButtonInkForExpandable;
+    procedure TestEmptyTreeNoException;
+  end;
+
 implementation
+
+type
+  { C3: hard-cast helper to call the protected RenderTo from tests. }
+  TTyTreeViewAccess = class(TTyTreeView)
+  public
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+procedure TTyTreeViewAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
+end;
 
 type
   PMyRec = ^TMyRec;
@@ -2474,6 +2504,300 @@ begin
   end;
 end;
 
+{ ── C3 ── pixel paint tests ──────────────────────────────────────────────── }
+
+{ Shared event handlers for the C3 test suite.
+
+  MakeTestTree builds a 3-node root-level tree (RootNodeCount=3) with node 0
+  expanded via SetExpanded so it has 3 children; OnInitNode signals ivsHasChildren
+  for level<2 and OnInitChildren returns ChildCount=3. }
+
+procedure TTreeC3PaintTest.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  Inc(FGetTextCalled);
+  Text := 'Node ' + IntToStr(Node^.Index) + ' L' + IntToStr(Sender.GetNodeLevel(Node));
+end;
+
+procedure TTreeC3PaintTest.OnInitNode(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) < 2 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeC3PaintTest.OnInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+  var ChildCount: Cardinal);
+begin
+  ChildCount := 3;
+end;
+
+{ BuildPaintTree: create a tree + controller + form.
+  The tree has 3 root nodes; node 0 is expanded (so it shows 3 children).
+  Returns the tree and sets Ctl/F out-params (caller must free F then Ctl). }
+function BuildPaintTree(out Ctl: TTyStyleController; out F: TForm;
+  GetText: TTyTreeGetTextEvent;
+  InitNode: TTyTreeInitNodeEvent;
+  InitChildren: TTyTreeInitChildrenEvent): TTyTreeView;
+var
+  t: TTyTreeView;
+  n0: PTyTreeNode;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(
+    'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+    'TyTreeNode { background: none; color: #000000; } ' +
+    'TyTreeNode:selected { background: #3B82F6; color: #FFFFFF; } ' +
+    'TyTreeNode:hover { background: #E5E7EB; color: #111827; }');
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 20;
+  t.Indent             := 16;
+  t.ShowButtons        := True;
+  t.ShowTreeLines      := True;
+  t.ShowRoot           := True;
+  t.SetBounds(0, 0, 200, 160);
+  t.OnGetText      := GetText;
+  t.OnInitNode     := InitNode;
+  t.OnInitChildren := InitChildren;
+
+  { Materialise 3 root skeletons and expand node 0 (fires InitNode/InitChildren) }
+  t.RootNodeCount := 3;
+  n0 := t.RootNode^.FirstChild;
+  t.InitNode(n0);            // sets nsHasChildren
+  t.Expanded[n0] := True;   // materialises 3 children
+  Result := t;
+end;
+
+{ RenderTreeToBitmap: render the tree to a pf32bit bitmap (pre-filled white).
+  Returns a TBGRABitmap wrapping the bitmap; caller must free both. }
+function RenderTreeToBitmap(Tree: TTyTreeView; out Bmp: TBitmap): TBGRABitmap;
+var
+  BgraWrap: TBGRABitmap;
+begin
+  Bmp := TBitmap.Create;
+  Bmp.PixelFormat := pf32bit;
+  Bmp.SetSize(Tree.Width, Tree.Height);
+  Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);   // white fill
+
+  { Drive the protected RenderTo via a TTreeViewAccess hard-cast helper. }
+  {$PUSH}{$HINTS OFF}
+  TTyTreeViewAccess(Tree).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+  {$POP}
+
+  BgraWrap := TBGRABitmap.Create(Bmp, True);   // read-only wrap; does not own the bitmap
+  Result := BgraWrap;
+end;
+
+{ TestSelectedRowHasAccentBlue
+  Node 0 at level 0 is selected; at DefaultNodeHeight=20 its band occupies y=0..19.
+  Probe (10, 10) inside row 0 must have a blue pixel (B > 150, R < 100). }
+procedure TTreeC3PaintTest.TestSelectedRowHasAccentBlue;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  Px: TBGRAPixel;
+begin
+  Tree := BuildPaintTree(Ctl, F, @OnGetText, @OnInitNode, @OnInitChildren);
+  try
+    { Select node 0 }
+    Tree.Selected[Tree.RootNode^.FirstChild] := True;
+
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      { Row 0 centre: y=10 (inside the 0..19 band) }
+      Px := Bgra.GetPixel(10, 10);
+      AssertTrue('selected row blue channel > 150', Px.blue > 150);
+      AssertTrue('selected row red channel < 120',  Px.red  < 120);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ TestChildRowIndentedMoreThanTopLevel
+  With DefaultNodeHeight=20, ShowRoot=True, Indent=16:
+    row 0 = top-level node 0 (level 0, expanded). Caption starts at x≈18.
+    row 1 = first child of node 0 (level 1). Caption starts at x≈34.
+  Assert: the child row has text ink at x≥40 (comfortably in its caption zone)
+  AND the parent row has text ink at x in [18..35) (its caption zone).
+  Crucially, the parent row at x≥36 should NOT have text ink (caption 'N0 L0'
+  is short) — but that's font-dependent.  The robust assertion is:
+    (a) parent row has text ink at y=10, x=[18..35]
+    (b) child row has text ink at y=30, x=[36..80]
+  This proves the child's caption starts further right than the parent's. }
+procedure TTreeC3PaintTest.TestChildRowIndentedMoreThanTopLevel;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  Px: TBGRAPixel;
+  x: Integer;
+  parentHasInk, childHasInkFarRight: Boolean;
+begin
+  Tree := BuildPaintTree(Ctl, F, @OnGetText, @OnInitNode, @OnInitChildren);
+  try
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      { (a) Parent row (y=10): must have text ink at x=[18..35] }
+      parentHasInk := False;
+      for x := 18 to 35 do
+      begin
+        Px := Bgra.GetPixel(x, 10);
+        if (Px.alpha > 0) and (Px.red < 230) then
+          parentHasInk := True;
+      end;
+      AssertTrue('top-level row has ink in caption zone x=[18..35]', parentHasInk);
+
+      { (b) Child row (y=30): must have text ink at x=[36..100] (child caption zone) }
+      childHasInkFarRight := False;
+      for x := 36 to 100 do
+      begin
+        Px := Bgra.GetPixel(x, 30);
+        if (Px.alpha > 0) and (Px.red < 230) then
+          childHasInkFarRight := True;
+      end;
+      AssertTrue('child row has ink in its caption zone x=[36..100] (indented right)', childHasInkFarRight);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ TestExpandButtonInkForExpandable
+  Node 0 (level 0, expanded=True) has nsHasChildren and ShowButtons=True.
+  The button slot for a level-0 node with ShowRoot=True and Indent=16:
+    indentPx = (0+1)*16 = 16; button rect x = [0+16-16+3..0+16-3] = [3..13]
+  We check that the button slot x=[3..13], y=[4..15] (row 0 interior) has ink.
+
+  For "no button on a leaf", we need a node that OnInitNode does NOT give
+  ivsHasChildren. OnInitNode sets ivsHasChildren for level < 2, so a level-2
+  node (grandchild) is a leaf. After expanding node 0's first child (level 1),
+  its children (level 2) will appear and should have NO button.
+  Row layout with ShowRoot/Indent=16, DefaultNodeHeight=20:
+    y=0..19  : node 0 (expanded)
+    y=20..39 : child 0 of node 0 (level 1, inited, expanded)
+    y=40..59 : grandchild 0 of child 0 (level 2 = leaf → no button)
+  Check grandchild at y=47 (centre of row y=40..59), x=[3..13]: should be blank. }
+procedure TTreeC3PaintTest.TestExpandButtonInkForExpandable;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  Px: TBGRAPixel;
+  x, y: Integer;
+  node0HasInk, leafIsBlank: Boolean;
+  ch0: PTyTreeNode;
+begin
+  Tree := BuildPaintTree(Ctl, F, @OnGetText, @OnInitNode, @OnInitChildren);
+  try
+    { Also expand the first child (level 1) so grandchildren (level 2, leaves) are visible }
+    ch0 := Tree.RootNode^.FirstChild^.FirstChild;   // first child of node 0
+    Tree.InitNode(ch0);      // sets nsHasChildren for level-1 node
+    Tree.Expanded[ch0] := True;  // materialises grandchildren (level 2)
+
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      { (a) Node 0 button slot x=[3..13], y=[4..15]: must have glyph ink }
+      node0HasInk := False;
+      for x := 3 to 13 do
+        for y := 4 to 15 do
+        begin
+          Px := Bgra.GetPixel(x, y);
+          if (Px.alpha > 0) and (Px.red < 200) then
+            node0HasInk := True;
+        end;
+      AssertTrue('expanded node 0 has button glyph ink in slot x=[3..13], y=[4..15]', node0HasInk);
+
+      { (b) Grandchild (level 2 = leaf, no nsHasChildren) at row y=40..59.
+        Button slot x=[3..13] should have no glyph ink (tree-line may exist but
+        it is grey ~128; we test red<150 to exclude both glyph and dark text).
+        Use centre y=49 to avoid partial overlap with row 1's button. }
+      leafIsBlank := True;
+      for x := 3 to 13 do
+      begin
+        Px := Bgra.GetPixel(x, 49);
+        { Grey tree lines have R=G=B≈128; glyph has R<64. We only flag as "ink"
+          when red < 100 to avoid false positives from tree lines. }
+        if (Px.alpha > 0) and (Px.red < 100) then
+          leafIsBlank := False;
+      end;
+      AssertTrue('level-2 leaf has no dark button glyph at x=[3..13]', leafIsBlank);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ TestEmptyTreeNoException
+  An empty tree (no nodes) must render without exception. }
+procedure TTreeC3PaintTest.TestEmptyTreeNoException;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(
+    'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+    'TyTreeNode { background: none; color: #000000; }');
+  F := TForm.CreateNew(nil);
+  Bmp := TBitmap.Create;
+  try
+    Tree := TTyTreeView.Create(F);
+    Tree.Parent := F;
+    Tree.Controller := Ctl;
+    Tree.Font.PixelsPerInch := 96;
+    Tree.SetBounds(0, 0, 200, 160);
+    Tree.EmptyListMessage := 'Empty';
+    { No RootNodeCount set — tree is empty }
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 160);
+    Bmp.Canvas.FillRect(0, 0, 200, 160);
+    { Must not raise }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(Tree).RenderTo(Bmp.Canvas, Rect(0, 0, 200, 160), 96);
+    {$POP}
+    AssertTrue('empty tree rendered without exception', True);
+    Bgra := TBGRABitmap.Create(Bmp, True);
+    try
+      { Just check we got a non-crash pixel }
+      AssertTrue('bitmap created OK', Bgra.Width = 200);
+    finally
+      Bgra.Free;
+    end;
+  finally
+    Bmp.Free;
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -2484,4 +2808,5 @@ initialization
   RegisterTest(TTreePerfTest);
   RegisterTest(TTreeC1Test);
   RegisterTest(TTreeC2Test);
+  RegisterTest(TTreeC3PaintTest);
 end.
