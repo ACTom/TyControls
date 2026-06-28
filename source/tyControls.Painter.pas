@@ -12,7 +12,7 @@ uses
 
 type
   TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck,
-    tgRadioDot, tgChevronDown, tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight);
+    tgRadioDot, tgChevronDown, tgChevronRight, tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight);
 
   TTyPainter = class
   private
@@ -453,6 +453,11 @@ begin
     tgChevronDown:
       FBmp.DrawPolyLineAntialias([PointF(l, t + h * 0.3),
         PointF(cx, b - h * 0.2), PointF(r, t + h * 0.3)], px, th);
+    tgChevronRight:
+      { Right-pointing chevron (>) — apex on the right, arms going up-left and
+        down-left from the vertical centre. Mirrors tgChevronDown rotated 90°. }
+      FBmp.DrawPolyLineAntialias([PointF(l + w * 0.3, t),
+        PointF(r - w * 0.2, cy), PointF(l + w * 0.3, b)], px, th);
     tgArrowUp:
       begin
         FBmp.DrawLineAntialias(cx, b, cx, t, px, th, True);

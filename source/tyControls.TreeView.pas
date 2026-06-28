@@ -118,8 +118,8 @@ type
     FToggleOnDblClick:  Boolean;
     FHotTrack:          Boolean;
     { C2: embedded scrollbars + offsets }
-    FVScroll:   TTyScrollBar;   // vertical; nil until first UpdateScrollBars
-    FHScroll:   TTyScrollBar;   // horizontal; nil until first UpdateScrollBars
+    FVScroll:   TTyScrollBar;   // vertical; created in constructor (never nil after Create)
+    FHScroll:   TTyScrollBar;   // horizontal; created in constructor (never nil after Create)
     FOffsetY:   Integer;        // ≤ 0; how many pixels the viewport is scrolled down
     FOffsetX:   Integer;        // ≤ 0; how many pixels the viewport is scrolled right
     FRangeX:    Integer;        // max content width; set by paint pass (C3); 0 for now
@@ -627,21 +627,17 @@ begin
   { ── Vertical bar ────────────────────────────────────────────────────────── }
   if wantVScroll then
   begin
-    if FVScroll = nil then
-    begin
-      FVScroll := TTyScrollBar.Create(Self);
-      FVScroll.Parent            := Self;
-      FVScroll.Kind              := sbVertical;
-      FVScroll.AnimationsEnabled := False;
-      FVScroll.OnChange          := @VScrollChange;
-    end;
+    { Bars always exist (created in constructor); just configure and show. }
     FVScroll.Width      := SBThick;
     FVScroll.Controller := Self.Controller;
     { Position the bar along the right edge (above any horizontal bar). }
-    if wantHScroll then
-      FVScroll.SetBounds(Width - SBThick, 0, SBThick, Height - SBThick)
-    else
-      FVScroll.SetBounds(Width - SBThick, 0, SBThick, Height);
+    if not FVScroll.Dragging then
+    begin
+      if wantHScroll then
+        FVScroll.SetBounds(Width - SBThick, 0, SBThick, Height - SBThick)
+      else
+        FVScroll.SetBounds(Width - SBThick, 0, SBThick, Height);
+    end;
 
     { Clamp FOffsetY to [-(contentH - viewH), 0] before syncing the thumb. }
     if contH > viewH then
@@ -652,59 +648,60 @@ begin
       FOffsetY := 0;   // content fits in the viewport
     if FOffsetY > 0 then FOffsetY := 0;
 
-    FSyncingScroll := True;
-    try
-      FVScroll.Min      := 0;
-      FVScroll.Max      := contH;
-      FVScroll.PageSize := viewH;
-      FVScroll.Position := -FOffsetY;
-    finally
-      FSyncingScroll := False;
+    if not FVScroll.Dragging then
+    begin
+      FSyncingScroll := True;
+      try
+        FVScroll.Min      := 0;
+        FVScroll.Max      := contH;
+        FVScroll.PageSize := viewH;
+        FVScroll.Position := -FOffsetY;
+      finally
+        FSyncingScroll := False;
+      end;
     end;
     FVScroll.Visible := True;
   end
   else
   begin
-    if FVScroll <> nil then FVScroll.Visible := False;
+    FVScroll.Visible := False;
     FOffsetY := 0;
   end;
 
   { ── Horizontal bar ─────────────────────────────────────────────────────── }
   if wantHScroll then
   begin
-    if FHScroll = nil then
-    begin
-      FHScroll := TTyScrollBar.Create(Self);
-      FHScroll.Parent            := Self;
-      FHScroll.Kind              := sbHorizontal;
-      FHScroll.AnimationsEnabled := False;
-      FHScroll.OnChange          := @HScrollChange;
-    end;
     FHScroll.Height     := SBThick;
     FHScroll.Controller := Self.Controller;
     { Position the bar along the bottom edge (left of the vertical bar). }
-    if wantVScroll then
-      FHScroll.SetBounds(0, Height - SBThick, Width - SBThick, SBThick)
-    else
-      FHScroll.SetBounds(0, Height - SBThick, Width, SBThick);
+    if not FHScroll.Dragging then
+    begin
+      if wantVScroll then
+        FHScroll.SetBounds(0, Height - SBThick, Width - SBThick, SBThick)
+      else
+        FHScroll.SetBounds(0, Height - SBThick, Width, SBThick);
+    end;
 
     if FOffsetX < -(FRangeX - viewW) then FOffsetX := -(FRangeX - viewW);
     if FOffsetX > 0 then FOffsetX := 0;
 
-    FSyncingScroll := True;
-    try
-      FHScroll.Min      := 0;
-      FHScroll.Max      := FRangeX;
-      FHScroll.PageSize := viewW;
-      FHScroll.Position := -FOffsetX;
-    finally
-      FSyncingScroll := False;
+    if not FHScroll.Dragging then
+    begin
+      FSyncingScroll := True;
+      try
+        FHScroll.Min      := 0;
+        FHScroll.Max      := FRangeX;
+        FHScroll.PageSize := viewW;
+        FHScroll.Position := -FOffsetX;
+      finally
+        FSyncingScroll := False;
+      end;
     end;
     FHScroll.Visible := True;
   end
   else
   begin
-    if FHScroll <> nil then FHScroll.Visible := False;
+    FHScroll.Visible := False;
     FOffsetX := 0;
   end;
 end;
@@ -783,14 +780,27 @@ begin
   FShowRoot         := True;
   FToggleOnDblClick := True;
   FHotTrack         := False;
-  { C2 scroll state — scrollbars are created lazily in UpdateScrollBars
-    (the same pattern as ListBox.FScrollBar: nil until first needed). }
+  { C2 scroll state — both scrollbars are created here in the constructor so
+    they always have proper window handles and receive mouse events.  Creating
+    them lazily inside UpdateScrollBars (which is called from RenderTo) meant
+    they were first created during a WM_PAINT, which left them without a valid
+    HWND parent-chain → they painted but never received MouseDown → undraggable. }
   FOffsetY       := 0;
   FOffsetX       := 0;
   FRangeX        := 0;
   FSyncingScroll := False;
-  FVScroll       := nil;
-  FHScroll       := nil;
+  FVScroll := TTyScrollBar.Create(Self);
+  FVScroll.Parent            := Self;
+  FVScroll.Kind              := sbVertical;
+  FVScroll.AnimationsEnabled := False;
+  FVScroll.OnChange          := @VScrollChange;
+  FVScroll.Visible           := False;
+  FHScroll := TTyScrollBar.Create(Self);
+  FHScroll.Parent            := Self;
+  FHScroll.Kind              := sbHorizontal;
+  FHScroll.AnimationsEnabled := False;
+  FHScroll.OnChange          := @HScrollChange;
+  FHScroll.Visible           := False;
   TabStop           := True;
   Width := 200; Height := 160;
 end;
@@ -1710,7 +1720,7 @@ begin
         if nsExpanded in node^.States then
           P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1))
         else
-          P.DrawGlyph(btnRect, tgArrowRight, NodeStyle.TextColor, P.Scale(1));
+          P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1));
       end;
 
       { ── Image ────────────────────────────────────────────────────────── }
