@@ -344,15 +344,18 @@ end;
 
 { ── C1 ── bulk operations ───────────────────────────────────────────────────── }
 
-{ FullExpandSubtree — recursive helper: expand Node (if it has children) then
+{ FullExpandSubtree — recursive helper: init Node (so nsHasChildren is known),
+  expand it if it has children (materialising them via InitChildren), then
   recurse into every materialised child.
-  IMPORTANT: expanding fires OnInitChildren which may materialise children,
-  so we collect them via FirstChild/NextSibling AFTER the expand call. }
+  IMPORTANT: InitNode is called first so a fresh lazy tree (where nodes have
+  not yet been visited) materialises correctly — without this, nsHasChildren
+  would never be set and SetExpanded would silently do nothing. }
 procedure FullExpandSubtree(Tree: TTyTreeView; Node: PTyTreeNode);
 var
   child: PTyTreeNode;
 begin
   if Node = nil then Exit;
+  Tree.InitNode(Node);              // ensure nsHasChildren is determined
   if nsHasChildren in Node^.States then
     Tree.SetExpanded(Node, True);   // materialises children via InitChildren
   // Recurse into (now-materialised) children

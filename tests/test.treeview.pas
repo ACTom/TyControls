@@ -2166,18 +2166,25 @@ begin
 end;
 
 procedure TTreeC1Test.TestFullExpandMaterialisesAllLazy;
-{ 3-level lazy tree (OnInitNode gives ivsHasChildren for level < 3;
-  OnInitChildren returns 3 children).
-  After FullExpand on 3 top-level nodes:
-    level 0: 3 nodes  → 3 InitChildren calls
-    level 1: 9 nodes  → 9 InitChildren calls
-    level 2: 27 nodes → 27 InitChildren calls (they get children but level-3 children are leaves)
-  Total expandable nodes = 3 + 9 + 27 = 39 → OnInitChildren fires 39 times.
-  Total node count (excluding root) = 3 + 9 + 27 + 81 = 120. }
+{ FullExpand on a FRESH lazy tree (no pre-initialisation) must materialise the
+  entire tree by calling InitNode on each node as it descends.
+
+  Setup: 3 root nodes, OnInitNode gives ivsHasChildren for level < 3,
+  OnInitChildren returns 3 children.
+
+  Expected after FullExpand(nil):
+    level 0: 3 nodes  → 3  OnInitChildren calls  (3 root nodes expanded)
+    level 1: 9 nodes  → 9  OnInitChildren calls  (9 level-1 nodes expanded)
+    level 2: 27 nodes → 27 OnInitChildren calls  (27 level-2 nodes expanded)
+    level 3: 81 nodes → leaves (level >= 3 → no ivsHasChildren → not expanded)
+  Total OnInitChildren calls = 39 (= 3 + 9 + 27, all expandable nodes).
+  Total node count (excl. root) = 3 + 9 + 27 + 81 = 120.
+  RootNode^.TotalCount = 121 (root itself + 120 descendants). }
 var
   t: TTyTreeView;
-  expectedExpandable: Integer;
-  expectedTotal: Integer;
+  n: PTyTreeNode;
+  expectedInitChildren: Integer;
+  expectedTotalCount:   Integer;
 begin
   ResetCounters;
   t := TTyTreeView.Create(nil);
@@ -2185,49 +2192,25 @@ begin
     t.OnInitNode     := @OnInitNodeHasChildren;
     t.OnInitChildren := @OnInitChildren3;
     t.RootNodeCount  := 3;
-    // Touch nodes so InitNode fires (needed so ivsHasChildren is set before FullExpand)
-    // FullExpand itself will call InitNode on each node via SetExpanded → InitChildren.
-    // We need nodes to be inited so nsHasChildren is known. FullExpand calls SetExpanded
-    // which calls InitChildren; but InitChildren requires nsHasChildren to be set first.
-    // SetExpanded checks nsHasChildren, so we need InitNode to run first.
-    // Solution: walk the top-level nodes to init them, then FullExpand.
-    // (FullExpand does not auto-init nodes; the app must ensure nsHasChildren is set.)
-    // Simplest approach: call GetFirst (inits first node); but we need ALL root nodes inited.
-    // Use the public InitNode method for each root-level node.
-    t.InitNode(t.RootNode^.FirstChild);
-    t.InitNode(t.RootNode^.FirstChild^.NextSibling);
-    t.InitNode(t.RootNode^.LastChild);
+    // FRESH tree — no manual InitNode calls; FullExpand must do its own InitNode.
 
-    FInitChildrenCount := 0;
     t.FullExpand(nil);
 
-    { With 3 top-level nodes (each expanded → 3 children, each of those expanded → 3,
-      and those get nsHasChildren at level 2 but InitNode not called for them yet;
-      FullExpand recurses into materialised children, calling InitNode internally...
-      Actually: SetExpanded calls InitChildren, not InitNode. So the level-1/2 children
-      won't have nsHasChildren set until InitNode is called. FullExpand only calls
-      SetExpanded, which calls InitChildren — but InitChildren checks nsHasChildren.
-      For the lazily-inited children, nsHasChildren is NOT set (InitNode hasn't run).
-      So FullExpand will only expand the 3 root nodes (which were pre-inited above).
-      The 9 level-1 children need InitNode called too.
+    expectedInitChildren := 3 + 9 + 27;   // expandable nodes at levels 0, 1, 2
+    expectedTotalCount   := 3 + 9 + 27 + 81 + 1;  // all nodes + root itself
 
-      The correct model: FullExpand SHOULD call InitNode for each node it encounters.
-      The spec says "this MATERIALIZES all lazy children via the existing expand path —
-      OnInitChildren fires for each". For a fully lazy tree this means we need InitNode
-      to run first for a node before we can expand it.
+    AssertEquals('OnInitChildren fires for every expandable node',
+                 expectedInitChildren, FInitChildrenCount);
+    AssertEquals('TotalCount equals full tree size (root + 120 descendants)',
+                 expectedTotalCount, Integer(t.RootNode^.TotalCount));
 
-      In this test we pre-init the 3 root nodes; FullExpand expands them (3 InitChildren
-      calls), materialises 9 level-1 children. The level-1 children need InitNode too.
-
-      For a realistic scenario this test will check a simpler case:
-      pre-init ALL three levels manually, then FullExpand. }
-
-    // For this test: verify that the 3 root-level nodes were expanded
-    // (OnInitChildren was called at least 3 times) and their children exist.
-    AssertTrue('FullExpand expanded at least 3 nodes (root level)',
-               FInitChildrenCount >= 3);
-    AssertTrue('root TotalCount > 3 after FullExpand',
-               Integer(t.RootNode^.TotalCount) > 3 + 1);  // +1 for root itself
+    // Spot-check: every level-0..2 node is expanded; level-3 nodes are leaves.
+    n := t.RootNode^.FirstChild;
+    while n <> nil do
+    begin
+      AssertTrue('level-0 node is expanded', nsExpanded in n^.States);
+      n := n^.NextSibling;
+    end;
   finally
     t.Free;
   end;
