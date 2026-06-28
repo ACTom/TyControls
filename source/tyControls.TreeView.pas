@@ -6,6 +6,10 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar;
 
 type
+  { C4: hit-test result — which part of a node row the mouse landed in }
+  TTyTreeHitPart = (hpNowhere, hpButton, hpImage, hpLabel, hpIndent);
+
+type
   PTyTreeNode = ^TTyTreeNode;
 
   TTyNodeState = (nsInitialized, nsHasChildren, nsExpanded, nsVisible, nsSelected,
@@ -99,6 +103,11 @@ type
     FOnGetImageIndex:      TTyTreeGetImageIndexEvent;
     FOnGetTextWithType:    TTyTreeGetTextWithTypeEvent;
     FOnPaintText:          TTyTreePaintTextEvent;
+    { C4: interaction events }
+    FOnNodeClick:          TTyTreeNodeEvent;
+    FOnNodeDblClick:       TTyTreeNodeEvent;
+    { C4: DblClick tracking — remember which node the MouseDown landed on }
+    FLastMouseNode:        PTyTreeNode;
     { C1: layout / display properties }
     FIndent:            Integer;
     FImages:            TImageList;
@@ -153,6 +162,11 @@ type
     function  DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
                 MousePos: TPoint): Boolean; override;
     procedure Resize; override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure DblClick; override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
@@ -204,6 +218,8 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { B3: read-only; how many nodes were visited in the last GetNodeAt walk (for perf tests) }
     property LastGetNodeAtVisits: Integer read FLastGetNodeAtVisits;
+    { C4: hit-testing }
+    function GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode;
   published
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
     property DefaultNodeHeight: Integer read FDefaultNodeHeight write FDefaultNodeHeight default 18;
@@ -234,6 +250,8 @@ type
     property OnCollapsed:     TTyTreeNodeEvent         read FOnCollapsed     write FOnCollapsed;
     property OnChange:        TTyTreeNodeEvent         read FOnChange        write FOnChange;
     property OnFocusChanged:  TTyTreeNodeEvent         read FOnFocusChanged  write FOnFocusChanged;
+    property OnNodeClick:     TTyTreeNodeEvent         read FOnNodeClick     write FOnNodeClick;
+    property OnNodeDblClick:  TTyTreeNodeEvent         read FOnNodeDblClick  write FOnNodeDblClick;
     { C3: paint events }
     property OnGetText:       TTyTreeGetTextEvent           read FOnGetText           write FOnGetText;
     property OnGetImageIndex: TTyTreeGetImageIndexEvent     read FOnGetImageIndex     write FOnGetImageIndex;
@@ -1763,6 +1781,379 @@ end;
 procedure TTyTreeView.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+{ ── C4 ── hit-testing + mouse + keyboard + hot-track ─────────────────────── }
+
+{ GetNodeAtPoint
+  Convert client (X, Y) to the absolute content coordinate space, find the
+  node under the cursor via GetNodeAt, then classify which column slot was hit.
+
+  X-accumulation mirrors RenderTo EXACTLY (same scale, same formula):
+    CR      = ContentRect (padding-inset + scrollbar-shrunk)
+    indentPx = Scale((level + Ord(FShowRoot)) * FIndent)
+    btnSlotW = Scale(FIndent)   — one Indent-wide slot before indentPx
+    imgSlotW = Scale(FIndent)   — one Indent-wide slot after indentPx
+
+  The absolute content X/Y:
+    absY = (Y - CR.Top) + (-FOffsetY)
+    absX = (X - CR.Left) + (-FOffsetX)  }
+function TTyTreeView.GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode;
+var
+  PPI: Integer;
+  CR: TRect;
+  absY, absX: Integer;
+  nodeTop: Integer;
+  node: PTyTreeNode;
+  level, indentPx, btnSlotW, imgSlotW: Integer;
+  captionX: Integer;
+begin
+  Result   := nil;
+  APart    := hpNowhere;
+
+  PPI := Font.PixelsPerInch;
+  CR  := ContentRect;
+
+  { Convert to content-space coordinates }
+  absY := (Y - CR.Top)  + (-FOffsetY);
+  absX := (X - CR.Left) + (-FOffsetX);
+
+  if absY < 0 then Exit;
+
+  node := GetNodeAt(absY, nodeTop);
+  if node = nil then Exit;
+
+  { Make sure the node is initialised so nsHasChildren is reliable }
+  InitNode(node);
+
+  { Compute the same x-zone layout as RenderTo }
+  level    := GetNodeLevel(node);
+
+  { Use a simple 1:1 scale helper: Scale(n) = MulDiv(n, PPI, 96) }
+  indentPx := MulDiv((level + Ord(FShowRoot)) * FIndent, PPI, 96);
+  btnSlotW := MulDiv(FIndent, PPI, 96);
+  imgSlotW := MulDiv(FIndent, PPI, 96);
+
+  { Zones (all in content-space X, i.e. relative to CR.Left after FOffsetX):
+      [0 .. indentPx - btnSlotW)   = hpIndent (the left-padding area)
+      [indentPx - btnSlotW .. indentPx) = hpButton slot (only when nsHasChildren)
+      [indentPx .. indentPx + imgSlotW) = hpImage (only when FImages assigned)
+      [indentPx or beyond caption)       = hpLabel                            }
+
+  if absX < 0 then
+  begin
+    APart := hpIndent;
+    Result := node;
+    Exit;
+  end;
+
+  if absX < indentPx - btnSlotW then
+  begin
+    APart  := hpIndent;
+    Result := node;
+    Exit;
+  end;
+
+  if (absX < indentPx) then
+  begin
+    { In the button slot — classify as hpButton only if the node has children
+      AND buttons are shown.  Otherwise treat as hpIndent. }
+    if FShowButtons and (nsHasChildren in node^.States) then
+      APart := hpButton
+    else
+      APart := hpIndent;
+    Result := node;
+    Exit;
+  end;
+
+  { Past the indent zone }
+  captionX := indentPx;
+  if (FImages <> nil) and (FImages.Count > 0) then
+  begin
+    if absX < captionX + imgSlotW then
+    begin
+      APart  := hpImage;
+      Result := node;
+      Exit;
+    end;
+    Inc(captionX, imgSlotW);
+  end;
+
+  { Everything to the right of the image slot is the label area }
+  APart  := hpLabel;
+  Result := node;
+end;
+
+procedure TTyTreeView.MouseDown(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+var
+  part: TTyTreeHitPart;
+  node: PTyTreeNode;
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+
+  if not Enabled then Exit;
+
+  { Request keyboard focus so arrow-key navigation works after click }
+  if CanSetFocus then SetFocus;
+
+  node := GetNodeAtPoint(X, Y, part);
+  FLastMouseNode := node;
+
+  if Button = mbLeft then
+  begin
+    if node = nil then Exit;
+
+    if part = hpButton then
+    begin
+      { Click on the expand/collapse button — toggle, do NOT change selection }
+      Expanded[node] := not Expanded[node];
+    end
+    else
+    begin
+      { Click on any other part (label, image, indent) — focus the node }
+      FocusedNode := node;
+      if Assigned(FOnNodeClick) then FOnNodeClick(Self, node);
+    end;
+  end
+  else if Button = mbRight then
+  begin
+    { Right-click: select the node if not already selected }
+    if (node <> nil) and not (nsSelected in node^.States) then
+      FocusedNode := node;
+  end;
+end;
+
+procedure TTyTreeView.DblClick;
+var
+  node: PTyTreeNode;
+begin
+  inherited DblClick;
+  { FLastMouseNode was set by the preceding MouseDown; use it here so we don't
+    need to re-probe the mouse position (which may have drifted). }
+  node := FLastMouseNode;
+  if node = nil then Exit;
+
+  { ToggleOnDblClick: toggle expand/collapse on the node (only if expandable
+    and the click was NOT on the explicit button — that already toggled on Down). }
+  if FToggleOnDblClick and (nsHasChildren in node^.States) then
+    Expanded[node] := not Expanded[node];
+
+  if Assigned(FOnNodeDblClick) then FOnNodeDblClick(Self, node);
+end;
+
+procedure TTyTreeView.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  part: TTyTreeHitPart;
+  node: PTyTreeNode;
+begin
+  inherited MouseMove(Shift, X, Y);
+
+  if not FHotTrack then Exit;
+
+  node := GetNodeAtPoint(X, Y, part);
+  if node <> FHotNode then
+  begin
+    FHotNode := node;
+    Invalidate;
+  end;
+end;
+
+procedure TTyTreeView.MouseLeave;
+begin
+  inherited MouseLeave;
+  if FHotNode <> nil then
+  begin
+    FHotNode := nil;
+    Invalidate;
+  end;
+end;
+
+procedure TTyTreeView.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  cur, nxt: PTyTreeNode;
+  viewH, rowH, pgRows, i: Integer;
+begin
+  inherited KeyDown(Key, Shift);
+
+  cur := FFocusedNode;
+
+  case Key of
+
+    VK_DOWN:
+    begin
+      if cur = nil then
+        nxt := GetFirstVisibleNoInit
+      else
+        nxt := GetNextVisibleNoInit(cur);
+      if nxt <> nil then
+      begin
+        FocusedNode := nxt;
+        ScrollIntoView(nxt);
+      end;
+      Key := 0;
+    end;
+
+    VK_UP:
+    begin
+      if cur <> nil then
+      begin
+        nxt := GetPreviousVisibleNoInit(cur);
+        if nxt <> nil then
+        begin
+          FocusedNode := nxt;
+          ScrollIntoView(nxt);
+        end;
+      end;
+      Key := 0;
+    end;
+
+    VK_RIGHT:
+    begin
+      if cur <> nil then
+      begin
+        InitNode(cur);
+        if (nsHasChildren in cur^.States) and not (nsExpanded in cur^.States) then
+          Expanded[cur] := True          // expand collapsed node
+        else
+        begin
+          { Already expanded or no children: move to first child }
+          nxt := GetNextVisibleNoInit(cur);
+          if (nxt <> nil) and (nxt^.Parent = cur) then
+          begin
+            FocusedNode := nxt;
+            ScrollIntoView(nxt);
+          end;
+        end;
+      end;
+      Key := 0;
+    end;
+
+    VK_LEFT:
+    begin
+      if cur <> nil then
+      begin
+        if nsExpanded in cur^.States then
+          Expanded[cur] := False         // collapse expanded node
+        else
+        begin
+          { Move to parent (if not root-level) }
+          nxt := GetParent(cur);
+          if nxt <> nil then
+          begin
+            FocusedNode := nxt;
+            ScrollIntoView(nxt);
+          end;
+        end;
+      end;
+      Key := 0;
+    end;
+
+    VK_HOME:
+    begin
+      nxt := GetFirstVisibleNoInit;
+      if nxt <> nil then
+      begin
+        FocusedNode := nxt;
+        ScrollIntoView(nxt);
+      end;
+      Key := 0;
+    end;
+
+    VK_END:
+    begin
+      { Walk to the last visible node }
+      nxt := GetFirstVisibleNoInit;
+      if nxt <> nil then
+      begin
+        while GetNextVisibleNoInit(nxt) <> nil do
+          nxt := GetNextVisibleNoInit(nxt);
+        FocusedNode := nxt;
+        ScrollIntoView(nxt);
+      end;
+      Key := 0;
+    end;
+
+    VK_PRIOR:  { Page Up }
+    begin
+      if cur <> nil then
+      begin
+        rowH  := MulDiv(FDefaultNodeHeight, Font.PixelsPerInch, 96);
+        viewH := ContentRect.Bottom - ContentRect.Top;
+        if rowH > 0 then pgRows := viewH div rowH else pgRows := 1;
+        if pgRows < 1 then pgRows := 1;
+        nxt := cur;
+        for i := 1 to pgRows do
+        begin
+          if GetPreviousVisibleNoInit(nxt) <> nil then
+            nxt := GetPreviousVisibleNoInit(nxt)
+          else
+            Break;
+        end;
+        FocusedNode := nxt;
+        ScrollIntoView(nxt);
+      end;
+      Key := 0;
+    end;
+
+    VK_NEXT:   { Page Down }
+    begin
+      if cur = nil then cur := GetFirstVisibleNoInit;
+      if cur <> nil then
+      begin
+        rowH  := MulDiv(FDefaultNodeHeight, Font.PixelsPerInch, 96);
+        viewH := ContentRect.Bottom - ContentRect.Top;
+        if rowH > 0 then pgRows := viewH div rowH else pgRows := 1;
+        if pgRows < 1 then pgRows := 1;
+        nxt := cur;
+        for i := 1 to pgRows do
+        begin
+          if GetNextVisibleNoInit(nxt) <> nil then
+            nxt := GetNextVisibleNoInit(nxt)
+          else
+            Break;
+        end;
+        FocusedNode := nxt;
+        ScrollIntoView(nxt);
+      end;
+      Key := 0;
+    end;
+
+    VK_ADD, Ord('+'):   { Expand }
+    begin
+      if cur <> nil then
+      begin
+        InitNode(cur);
+        if nsHasChildren in cur^.States then
+          Expanded[cur] := True;
+      end;
+      Key := 0;
+    end;
+
+    VK_SUBTRACT, Ord('-'):  { Collapse }
+    begin
+      if cur <> nil then
+        Expanded[cur] := False;
+      Key := 0;
+    end;
+
+    VK_MULTIPLY, Ord('*'):   { FullExpand from focused node }
+    begin
+      if cur <> nil then
+        FullExpand(cur)
+      else
+        FullExpand(nil);
+      Key := 0;
+    end;
+
+    VK_RETURN:
+    begin
+      if (cur <> nil) and Assigned(FOnNodeDblClick) then
+        FOnNodeDblClick(Self, cur);
+      Key := 0;
+    end;
+
+  end;
 end;
 
 end.

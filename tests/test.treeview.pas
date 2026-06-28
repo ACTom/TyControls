@@ -2,7 +2,8 @@ unit test.treeview;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType,
+  fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.TreeView;
 
@@ -74,18 +75,89 @@ type
     procedure TestEmptyTreeNoException;
   end;
 
+  { C4: hit-test + mouse + keyboard }
+  TTreeC4Test = class(TTestCase)
+  private
+    FOnChangeCount:     Integer;
+    FOnChangeLastNode:  PTyTreeNode;
+    FOnFocusCount:      Integer;
+    FOnFocusLastNode:   PTyTreeNode;
+    FOnClickCount:      Integer;
+    FOnClickLastNode:   PTyTreeNode;
+    FOnDblClickCount:   Integer;
+    FOnDblClickLastNode: PTyTreeNode;
+    FOnExpandedCount:   Integer;
+    FOnExpandedNode:    PTyTreeNode;
+
+    procedure OnChange(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnNodeClick(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnExpanded(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+                                    var InitStates: TTyNodeInitStates);
+    procedure OnInitChildren3(Sender: TTyTreeView; Node: PTyTreeNode;
+                              var ChildCount: Cardinal);
+    procedure ResetCounters;
+
+    { Build a known-geometry tree (PPI=96, DefaultNodeHeight=20, Indent=16, ShowRoot=True)
+        root
+          n0  (expandable: nsHasChildren manually set, 3 children materialised)
+            n0c0  (leaf)
+            n0c1  (leaf)
+            n0c2  (leaf)
+          n1  (leaf)
+          n2  (leaf)
+      n0 is already EXPANDED on return.
+      Out params let the caller reference individual nodes. }
+    function BuildHitTestTree(out n0, n0c0, n1, n2: PTyTreeNode): TTyTreeView;
+  published
+    { GetNodeAtPoint: button slot returns hpButton for an expandable node }
+    procedure TestHitTestButtonSlot;
+    { GetNodeAtPoint: label area returns hpLabel }
+    procedure TestHitTestLabelArea;
+    { GetNodeAtPoint: below all rows returns nil + hpNowhere }
+    procedure TestHitTestBelowAllRows;
+    { GetNodeAtPoint: indent area (left of button slot) returns hpIndent }
+    procedure TestHitTestIndentArea;
+    { Mouse: clicking label selects+focuses node, fires OnChange + OnNodeClick }
+    procedure TestMouseClickLabelSelectsNode;
+    { Mouse: clicking expand button toggles expansion, does NOT change focus }
+    procedure TestMouseClickButtonExpandsNode;
+    { Keyboard: VK_DOWN moves FocusedNode to next visible, fires OnFocusChanged }
+    procedure TestKeyDownMovesToNextVisible;
+    { Keyboard: VK_UP moves FocusedNode to previous visible, fires OnFocusChanged }
+    procedure TestKeyUpMovesToPrevious;
+    { Keyboard: VK_RIGHT on collapsed+expandable node expands it }
+    procedure TestKeyRightExpandsCollapsed;
+    { Keyboard: VK_LEFT on expanded node collapses it }
+    procedure TestKeyLeftCollapsesExpanded;
+  end;
+
 implementation
 
 type
-  { C3: hard-cast helper to call the protected RenderTo from tests. }
+  { C3/C4: hard-cast helper to call protected methods from tests. }
   TTyTreeViewAccess = class(TTyTreeView)
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure KeyDown(var Key: Word; Shift: TShiftState);
   end;
 
 procedure TTyTreeViewAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TTyTreeViewAccess.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+end;
+
+procedure TTyTreeViewAccess.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyDown(Key, Shift);
 end;
 
 type
@@ -2798,6 +2870,376 @@ begin
   end;
 end;
 
+{ ── C4 ── hit-test + mouse + keyboard ─────────────────────────────────────── }
+
+{ TTreeC4Test event handlers }
+
+procedure TTreeC4Test.OnChange(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  Inc(FOnChangeCount);
+  FOnChangeLastNode := Node;
+end;
+
+procedure TTreeC4Test.OnFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  Inc(FOnFocusCount);
+  FOnFocusLastNode := Node;
+end;
+
+procedure TTreeC4Test.OnNodeClick(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  Inc(FOnClickCount);
+  FOnClickLastNode := Node;
+end;
+
+procedure TTreeC4Test.OnNodeDblClick(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  Inc(FOnDblClickCount);
+  FOnDblClickLastNode := Node;
+end;
+
+procedure TTreeC4Test.OnExpanded(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  Inc(FOnExpandedCount);
+  FOnExpandedNode := Node;
+end;
+
+procedure TTreeC4Test.OnInitNodeHasChildren(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) < 1 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeC4Test.OnInitChildren3(Sender: TTyTreeView; Node: PTyTreeNode;
+  var ChildCount: Cardinal);
+begin
+  ChildCount := 3;
+end;
+
+procedure TTreeC4Test.ResetCounters;
+begin
+  FOnChangeCount    := 0;  FOnChangeLastNode  := nil;
+  FOnFocusCount     := 0;  FOnFocusLastNode   := nil;
+  FOnClickCount     := 0;  FOnClickLastNode   := nil;
+  FOnDblClickCount  := 0;  FOnDblClickLastNode := nil;
+  FOnExpandedCount  := 0;  FOnExpandedNode    := nil;
+end;
+
+{ BuildHitTestTree
+  Geometry (PPI=96, DefaultNodeHeight=20, Indent=16, ShowRoot=True, ShowButtons=True):
+    Row 0: n0    absY=[0..19]   level=0  indentPx=(0+1)*16=16
+    Row 1: n0c0  absY=[20..39]  level=1  indentPx=(1+1)*16=32
+    Row 2: n0c1  absY=[40..59]
+    Row 3: n0c2  absY=[60..79]
+    Row 4: n1    absY=[80..99]  level=0  indentPx=16
+    Row 5: n2    absY=[100..119]
+
+  n0 is expanded (so children are visible).  n1, n2 are leaves.
+
+  Button slot for level-0 node (indentPx=16, btnSlotW=16):
+    x in [0 .. 16) = button zone = [indentPx-btnSlotW .. indentPx) = [0 .. 16)
+  Label zone: x >= 16 (+ 2 text pad)
+
+  ContentRect with no scrollbar, no padding:
+    CR = Rect(0, 0, 200, 160)  (padding=0 since no controller loaded)
+  FOffsetX = FOffsetY = 0 initially.
+
+  Note: the tree is created with Create(nil) so there is no controller → no CSS
+  padding/border.  ContentRect falls back to ClientRect = Rect(0,0,200,160). }
+function TTreeC4Test.BuildHitTestTree(out n0, n0c0, n1, n2: PTyTreeNode): TTyTreeView;
+var
+  t: TTyTreeView;
+  n0c1, n0c2: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 20;
+  t.Indent             := 16;
+  t.ShowRoot           := True;
+  t.ShowButtons        := True;
+  t.SetBounds(0, 0, 200, 160);
+
+  { Hook events }
+  t.OnChange       := @OnChange;
+  t.OnFocusChanged := @OnFocusChanged;
+  t.OnNodeClick    := @OnNodeClick;
+  t.OnNodeDblClick := @OnNodeDblClick;
+  t.OnExpanded     := @OnExpanded;
+
+  { Build structure }
+  n0  := t.AddChild(nil);
+  n1  := t.AddChild(nil);
+  n2  := t.AddChild(nil);
+
+  n0c0 := t.AddChild(n0);
+  n0c1 := t.AddChild(n0);
+  n0c2 := t.AddChild(n0);
+  { Suppress unused warnings }
+  if n0c1 = nil then;
+  if n0c2 = nil then;
+
+  { Mark n0 as having children and expand it }
+  Include(n0^.States, nsHasChildren);
+  Include(n0^.States, nsInitialized);
+  t.Expanded[n0] := True;
+
+  Result := t;
+end;
+
+{ ── C4 published tests ─────────────────────────────────────────────────────── }
+
+procedure TTreeC4Test.TestHitTestButtonSlot;
+{ n0 is at absY=0..19, level=0, indentPx=16, btnSlotW=16.
+  Button slot x in [0 .. 15] (i.e. indentPx-btnSlotW=0 .. indentPx-1=15).
+  Click at (8, 10) should hit n0 with hpButton.
+  ContentRect with no controller = Rect(0,0,200,160); FOffsetX/Y = 0.
+  So client (8,10) maps to content (8,10) which is in n0's button slot. }
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+  node: PTyTreeNode;
+  part: TTyTreeHitPart;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    node := t.GetNodeAtPoint(8, 10, part);
+    AssertTrue('button-slot hit returns n0', node = n0);
+    AssertEquals('button-slot hit returns hpButton', Ord(hpButton), Ord(part));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC4Test.TestHitTestLabelArea;
+{ Click at x=30 (past button slot=16 for level-0), y=10 (row 0 = n0).
+  x=30 >= indentPx=16 → label zone. }
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+  node: PTyTreeNode;
+  part: TTyTreeHitPart;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    node := t.GetNodeAtPoint(30, 10, part);
+    AssertTrue('label-area hit returns n0', node = n0);
+    AssertEquals('label-area hit returns hpLabel', Ord(hpLabel), Ord(part));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC4Test.TestHitTestBelowAllRows;
+{ 6 rows × 20px = 120px total.  Y=130 is below all rows.
+  GetNodeAtPoint must return nil + hpNowhere. }
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+  node: PTyTreeNode;
+  part: TTyTreeHitPart;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    node := t.GetNodeAtPoint(50, 130, part);
+    AssertNull('below-all-rows returns nil', node);
+    AssertEquals('below-all-rows returns hpNowhere', Ord(hpNowhere), Ord(part));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC4Test.TestHitTestIndentArea;
+{ n0c0 is a child of n0 (level 1).  indentPx = (1+1)*16 = 32.
+  btnSlotW = 16.  Button slot = [16..31], indent area = x < 16.
+  n0c0 is NOT expandable (no nsHasChildren), so clicking x=8 is hpIndent.
+  n0c0 row absY=[20..39].  Client Y=30 → absY=30 → n0c0. }
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+  node: PTyTreeNode;
+  part: TTyTreeHitPart;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    { x=8 is below indentPx-btnSlotW = 32-16 = 16 for level-1 node,
+      so it falls in the indent area. }
+    node := t.GetNodeAtPoint(8, 30, part);
+    AssertTrue('indent-area hit returns n0c0', node = n0c0);
+    AssertEquals('indent-area hit returns hpIndent', Ord(hpIndent), Ord(part));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC4Test.TestMouseClickLabelSelectsNode;
+{ Simulate a left-click at the label area of n1 (row 4, absY=80..99).
+  Client Y=90, X=30 → n1's label zone.
+  Expected: FocusedNode = n1, OnChange fired, OnFocusChanged fired, OnNodeClick fired. }
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    { Call MouseDown via access helper (bypasses window handle; works headlessly) }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 90);
+    {$POP}
+
+    AssertTrue('FocusedNode = n1 after click', t.FocusedNode = n1);
+    AssertTrue('nsSelected set on n1', nsSelected in n1^.States);
+    AssertTrue('OnChange fired', FOnChangeCount >= 1);
+    AssertTrue('OnChange node = n1', FOnChangeLastNode = n1);
+    AssertTrue('OnFocusChanged fired', FOnFocusCount >= 1);
+    AssertTrue('OnFocusChanged node = n1', FOnFocusLastNode = n1);
+    AssertTrue('OnNodeClick fired', FOnClickCount >= 1);
+    AssertTrue('OnNodeClick node = n1', FOnClickLastNode = n1);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC4Test.TestMouseClickButtonExpandsNode;
+{ n0 is currently EXPANDED.  Click on its button slot → should collapse it.
+  Button slot for n0 (level 0, indentPx=16, btnSlotW=16): x in [0..15], y=10.
+  Expected: Expanded[n0] becomes False (toggled), FocusedNode is NOT changed
+            (button click does not select), OnExpanded NOT fired (OnCollapsed would fire). }
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+  prevFocus: PTyTreeNode;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    AssertTrue('n0 is expanded initially', nsExpanded in n0^.States);
+    prevFocus := t.FocusedNode;   // nil initially
+
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 8, 10);  { click button slot at (8,10) in n0's row }
+    {$POP}
+
+    AssertFalse('n0 collapsed after button click', nsExpanded in n0^.States);
+    AssertTrue('FocusedNode unchanged after button click', t.FocusedNode = prevFocus);
+    AssertEquals('OnChange NOT fired from button click', 0, FOnChangeCount);
+    AssertEquals('OnNodeClick NOT fired from button click', 0, FOnClickCount);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC4Test.TestKeyDownMovesToNextVisible;
+{ With n0 expanded, visible order: n0, n0c0, n0c1, n0c2, n1, n2.
+  Set FocusedNode = n0, press VK_DOWN → should land on n0c0 and fire OnFocusChanged. }
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+  key: Word;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    t.FocusedNode := n0;
+    ResetCounters;  { clear the focus event from setting FocusedNode above }
+
+    key := VK_DOWN;
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, []);{$POP}
+
+    AssertEquals('VK_DOWN key consumed (Key=0)', 0, Integer(key));
+    AssertTrue('FocusedNode = n0c0 after VK_DOWN', t.FocusedNode = n0c0);
+    AssertTrue('OnFocusChanged fired', FOnFocusCount >= 1);
+    AssertTrue('OnFocusChanged node = n0c0', FOnFocusLastNode = n0c0);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC4Test.TestKeyUpMovesToPrevious;
+{ With FocusedNode = n0c0 (row 1), VK_UP should land on n0 (row 0). }
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+  key: Word;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    t.FocusedNode := n0c0;
+    ResetCounters;
+
+    key := VK_UP;
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, []);{$POP}
+
+    AssertEquals('VK_UP key consumed', 0, Integer(key));
+    AssertTrue('FocusedNode = n0 after VK_UP', t.FocusedNode = n0);
+    AssertTrue('OnFocusChanged fired', FOnFocusCount >= 1);
+    AssertTrue('OnFocusChanged node = n0', FOnFocusLastNode = n0);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC4Test.TestKeyRightExpandsCollapsed;
+{ n1 is a leaf (no nsHasChildren).  Give it children manually and collapse it,
+  then press VK_RIGHT → should expand it. }
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+  key: Word;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    { Give n1 a child and mark expandable but collapsed }
+    t.AddChild(n1);
+    Include(n1^.States, nsHasChildren);
+    Include(n1^.States, nsInitialized);
+    { n1 should now be collapsed with nsHasChildren }
+    AssertFalse('n1 is collapsed', nsExpanded in n1^.States);
+
+    t.FocusedNode := n1;
+    ResetCounters;
+
+    key := VK_RIGHT;
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, []);{$POP}
+
+    AssertEquals('VK_RIGHT key consumed', 0, Integer(key));
+    AssertTrue('n1 expanded after VK_RIGHT', nsExpanded in n1^.States);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC4Test.TestKeyLeftCollapsesExpanded;
+{ n0 is expanded; press VK_LEFT with FocusedNode=n0 → should collapse n0. }
+var
+  t: TTyTreeView;
+  n0, n0c0, n1, n2: PTyTreeNode;
+  key: Word;
+begin
+  ResetCounters;
+  t := BuildHitTestTree(n0, n0c0, n1, n2);
+  try
+    AssertTrue('n0 is expanded', nsExpanded in n0^.States);
+    t.FocusedNode := n0;
+    ResetCounters;
+
+    key := VK_LEFT;
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, []);{$POP}
+
+    AssertEquals('VK_LEFT key consumed', 0, Integer(key));
+    AssertFalse('n0 collapsed after VK_LEFT', nsExpanded in n0^.States);
+  finally
+    t.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -2809,4 +3251,5 @@ initialization
   RegisterTest(TTreeC1Test);
   RegisterTest(TTreeC2Test);
   RegisterTest(TTreeC3PaintTest);
+  RegisterTest(TTreeC4Test);
 end.
