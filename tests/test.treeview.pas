@@ -2450,6 +2450,8 @@ type
   private
     procedure OnInitChildrenX(Sender: TTyTreeView; Node: PTyTreeNode;
                                var ChildCount: Cardinal);
+    { FIX 4 helper: returns a text string wide enough to overflow a 50px viewport }
+    procedure OnGetTextWide(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
   published
     { Scrollbars exist immediately after Create — never lazily created during paint. }
     procedure TestScrollBarsExistAfterConstruction;
@@ -2467,12 +2469,20 @@ type
     procedure TestOffsetYClamped;
     { Horizontal bar hidden when FRangeX = 0. }
     procedure TestHScrollHiddenWhenRangeXZero;
+    { FIX 4: RangeX retracts to 0 after Clear; HScroll hidden again. }
+    procedure TestFRangeXRetractsAfterClear;
   end;
 
 procedure TTreeC2Test.OnInitChildrenX(Sender: TTyTreeView; Node: PTyTreeNode;
                                        var ChildCount: Cardinal);
 begin
   ChildCount := 5;
+end;
+
+procedure TTreeC2Test.OnGetTextWide(Sender: TTyTreeView; Node: PTyTreeNode;
+                                     var Text: string);
+begin
+  Text := 'Wide label text that overflows the narrow 50px viewport easily';
 end;
 
 procedure TTreeC2Test.TestScrollBarsExistAfterConstruction;
@@ -2643,6 +2653,88 @@ begin
                (t.HScroll = nil) or (not t.HScroll.Visible));
   finally
     t.Free;
+  end;
+end;
+
+{ FIX 4: TestFRangeXRetractsAfterClear
+  After a paint pass that sets FRangeX > 0 (making HScroll visible), a Clear
+  followed by another paint must collapse FRangeX back to 0 and hide HScroll.
+
+  We build a narrow tree (50px wide) with OnGetText wired to return a wide
+  string, so the first RenderTo sets FRangeX > 50 and shows HScroll.
+  Then Clear → RangeX must drop to 0 immediately (InvalidateTreeLayout).
+  A second RenderTo on the empty tree must leave RangeX = 0 / HScroll hidden.
+
+  This validates the FIX 4 invariant: InvalidateTreeLayout resets FRangeX = 0
+  so a new paint pass accumulates from scratch. }
+procedure TTreeC2Test.TestFRangeXRetractsAfterClear;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  Bmp: TBitmap;
+  n: PTyTreeNode;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  F   := TForm.CreateNew(nil);
+  try
+    Ctl.LoadThemeCss(
+      'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+      'TyTreeNode  { background: none; color: #000000; }');
+    t := TTyTreeView.Create(F);
+    t.Parent     := F;
+    t.Controller := Ctl;
+    t.Font.PixelsPerInch := 96;
+    t.DefaultNodeHeight  := 20;
+    t.Indent             := 16;
+    t.ShowRoot           := True;
+    { Width = 50px (narrow): any node with a non-trivial label overflows. }
+    t.SetBounds(0, 0, 50, 200);
+    { OnGetText returns a wide string so FRangeX accumulation has text to measure. }
+    t.OnGetText := @OnGetTextWide;
+
+    { Three root nodes, all marked initialised so RenderTo skips lazy init. }
+    t.RootNodeCount := 3;
+    n := t.RootNode^.FirstChild;
+    while n <> nil do
+    begin
+      Include(n^.States, nsInitialized);
+      n := n^.NextSibling;
+    end;
+
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(t.Width, t.Height);
+
+      { First paint: expect FRangeX > 0 because labels overflow 50px. }
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+      {$POP}
+      AssertTrue('RangeX > 0 after first paint (wide labels overflow narrow viewport)',
+                 t.RangeX > 0);
+      AssertTrue('HScroll visible after first paint',
+                 (t.HScroll <> nil) and t.HScroll.Visible);
+
+      { Clear: InvalidateTreeLayout must reset FRangeX = 0 immediately. }
+      t.Clear;
+      AssertEquals('RangeX = 0 immediately after Clear', 0, t.RangeX);
+
+      { Second paint on empty tree: FRangeX stays 0; HScroll hidden. }
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+      {$POP}
+      AssertEquals('RangeX = 0 after Clear + repaint (empty tree)', 0, t.RangeX);
+      AssertTrue('HScroll hidden after Clear + repaint',
+                 (t.HScroll = nil) or (not t.HScroll.Visible));
+    finally
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
   end;
 end;
 

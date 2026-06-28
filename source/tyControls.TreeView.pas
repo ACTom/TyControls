@@ -122,7 +122,7 @@ type
     FHScroll:   TTyScrollBar;   // horizontal; created in constructor (never nil after Create)
     FOffsetY:   Integer;        // ≤ 0; how many pixels the viewport is scrolled down
     FOffsetX:   Integer;        // ≤ 0; how many pixels the viewport is scrolled right
-    FRangeX:    Integer;        // max content width; set by paint pass (C3); 0 for now
+    FRangeX:    Integer;        // max content width; accumulated by paint pass (C3); reset to 0 by InvalidateTreeLayout on every structural change
     FSyncingScroll: Boolean;    // reentrancy guard (mirrors ListBox pattern)
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
@@ -599,8 +599,10 @@ end;
 
   Horizontal bar:
     Visible iff FRangeX > viewport width.
-    (FRangeX is 0 until the paint pass (C3) sets it; so the bar stays hidden
-    in C2.  The plumbing is wired so C3 can just set FRangeX and it will work.)
+    FRangeX is reset to 0 by InvalidateTreeLayout on every structural change
+    and then re-accumulated during the paint pass (C3).  So between a structural
+    change and the next repaint the bar is correctly hidden, and after the repaint
+    it reflects the true widest visible row.
 
   FOffsetY is clamped to [-(ContentHeight - viewportH), 0] each call. }
 procedure TTyTreeView.UpdateScrollBars;
@@ -622,8 +624,8 @@ begin
       1. Check vertical ignoring the horizontal bar's height.
       2. Adjust viewH for the horizontal bar when it turns out to be visible,
          then re-evaluate whether we still need the vertical bar.
-    In ③a the horizontal bar is always hidden (FRangeX = 0), so the second
-    pass is a no-op; the pattern is here for C3 to activate. }
+    FRangeX is 0 between structural changes and the next paint (reset by
+    InvalidateTreeLayout), so the second pass is a no-op in that window. }
   wantVScroll := contH > viewH;
   if wantVScroll then viewW := viewW - SBThick;
   wantHScroll := FRangeX > viewW;
@@ -909,6 +911,11 @@ begin
   // FRangeY = ContentHeight (the scrollable content height, root phantom row excluded).
   FCacheValid := False;
   FRangeY     := ContentHeight;
+  // Reset FRangeX so the next paint pass recomputes the true maximum row width
+  // from scratch.  Without this reset, FRangeX only ever grows: after Clear /
+  // collapse / delete the horizontal scrollbar would stay over-ranged/visible
+  // even though the widest row is gone.
+  FRangeX     := 0;
   UpdateScrollBars;
   Invalidate;
 end;
@@ -2199,7 +2206,7 @@ begin
   end;
 end;
 
-end.
-
 initialization
   RegisterClass(TTyTreeView);
+
+end.
