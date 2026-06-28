@@ -3,6 +3,7 @@ unit tyControls.TreeView;
 interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, ImgList,
+  BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar,
   tyControls.TreeView.Columns;
 
@@ -40,6 +41,10 @@ type
   TTyTreeGetTextEvent  = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string) of object;
   { D2: column event — fired when a column is resized }
   TTyTreeColumnEvent = procedure(Sender: TTyTreeView; Column: Integer) of object;
+
+  { D3: column reorder event — fired when a column is dragged to a new position }
+  TTyTreeColumnReorderEvent = procedure(Sender: TTyTreeView;
+    OldPosition, NewPosition: Integer) of object;
 
   { C3: text type (mirrors VTV's TVSTTextType) }
   TTyVSTTextType = (ttNormal, ttStatic);
@@ -135,6 +140,13 @@ type
     FResizeStartWidth: Integer;   // col.Width at drag start (logical px)
     FResizeStartX:     Integer;   // X at drag start (device px)
     FOnColumnResized:  TTyTreeColumnEvent;
+    { D3: column drag-reorder state }
+    FDragColumn:       Integer;   // collection Index of the dragged column; NoColumn when idle
+    FDragPending:      Boolean;   // MouseDown on a draggable section; drag not yet started
+    FDragStartX:       Integer;   // device X at the drag press
+    FDragging:         Boolean;   // threshold exceeded: ghost + drop-mark active
+    FDragTargetPos:    Integer;   // visual position to drop into (0-based)
+    FOnColumnReorder:  TTyTreeColumnReorderEvent;
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
     procedure UpdateScrollBars;
@@ -280,6 +292,8 @@ type
     property OnPaintText:          TTyTreePaintTextEvent         read FOnPaintText          write FOnPaintText;
     { D2: column resize event }
     property OnColumnResized: TTyTreeColumnEvent read FOnColumnResized write FOnColumnResized;
+    { D3: column reorder event }
+    property OnColumnReorder: TTyTreeColumnReorderEvent read FOnColumnReorder write FOnColumnReorder;
   end;
 
 implementation
@@ -803,11 +817,28 @@ begin
   Result := True;
 end;
 
-{ Resize — recalculate scrollbar visibility/geometry on layout change. }
+{ Resize — recalculate scrollbar visibility/geometry on layout change.
+  D4: when hoAutoResize is on, re-apply auto-size so the designated column fills
+  the remaining width whenever the control is resized. }
 procedure TTyTreeView.Resize;
+var
+  PPI, contentW: Integer;
 begin
   inherited Resize;
   UpdateScrollBars;
+  { D4: auto-size hook — runs after UpdateScrollBars so ContentRect is current }
+  if (FHeader <> nil) and (hoAutoResize in FHeader.Options) and
+     (FHeader.AutoSizeIndex >= 0) and
+     (FHeader.AutoSizeIndex < FHeader.Columns.Count) and
+     (FHeader.Columns.Count > 0) then
+  begin
+    PPI      := Font.PixelsPerInch;
+    contentW := MulDiv(ContentRect.Width, 96, PPI);
+    FHeader.Columns.ApplyAutoSize(contentW, FHeader.AutoSizeIndex);
+    if FHeader.Columns.Count > 0 then
+      FRangeX := FHeader.Columns.TotalWidth;
+    UpdateScrollBars;
+  end;
 end;
 
 { B (columns): header/column change handler }
@@ -863,6 +894,12 @@ begin
   FResizeColumn     := NoColumn;
   FResizeStartWidth := 0;
   FResizeStartX     := 0;
+  { D3: column drag-reorder — idle state }
+  FDragColumn       := NoColumn;
+  FDragPending      := False;
+  FDragStartX       := 0;
+  FDragging         := False;
+  FDragTargetPos    := 0;
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
@@ -1887,6 +1924,47 @@ begin
       { Bottom border of header band }
       P.Bitmap.DrawLine(CR.Left, CR.Top, CR.Right, CR.Top,
                         TyColorToBGRA(S.BorderColor), False);
+
+      { D3: drag-reorder overlay — ghost of dragged column + drop-mark caret }
+      if FDragging and (FDragColumn >= 0) and (FDragColumn < FHeader.Columns.Count) then
+      begin
+        { Ghost: draw a semi-transparent filled rect over the dragged column's
+          header cell at its current position (not yet moved) }
+        col := FHeader.Columns.Items[FDragColumn] as TTyTreeColumn;
+        cellLeft  := CR.Left + P.Scale(col.Left) + FOffsetX;
+        cellRight := cellLeft + P.Scale(col.Width);
+        { Clamp to visible area }
+        if cellLeft  < CR.Left  then cellLeft  := CR.Left;
+        if cellRight > CR.Right then cellRight := CR.Right;
+        if cellLeft < cellRight then
+        begin
+          cellRect := Rect(cellLeft, headerBandRect.Top, cellRight, headerBandRect.Bottom);
+          { Ghost fill: accent color at ~40% opacity over the header }
+          P.Bitmap.FillRect(cellRect.Left, cellRect.Top,
+                            cellRect.Right, cellRect.Bottom,
+                            BGRA(59, 130, 246, 100));  { blue ghost, ~40% alpha }
+        end;
+
+        { Drop-mark: a 2px vertical caret at the target position boundary }
+        if (FDragTargetPos >= 0) and (FDragTargetPos < FHeader.Columns.Count) then
+        begin
+          col := FHeader.Columns.ColumnByPosition(FDragTargetPos);
+          if col <> nil then
+          begin
+            { Insert caret at the LEFT edge of the target column's position }
+            cellLeft := CR.Left + P.Scale(col.Left) + FOffsetX;
+            if cellLeft < CR.Left  then cellLeft := CR.Left;
+            if cellLeft > CR.Right then cellLeft := CR.Right;
+            { Draw a 2px wide vertical accent bar }
+            P.Bitmap.DrawLine(cellLeft,     headerBandRect.Top,
+                              cellLeft,     headerBandRect.Bottom,
+                              BGRA(59, 130, 246, 255), False);
+            P.Bitmap.DrawLine(cellLeft + 1, headerBandRect.Top,
+                              cellLeft + 1, headerBandRect.Bottom,
+                              BGRA(59, 130, 246, 255), False);
+          end;
+        end;
+      end;
     end;
 
     { ── First on-screen node ─────────────────────────────────────────────── }
@@ -2429,7 +2507,23 @@ begin
       FResizeColumn     := headerCol;
       FResizeStartWidth := col.Width;
       FResizeStartX     := X;
-      MouseCapture      := True;
+      { D2 fix: guard against handle allocation in headless tests }
+      if HandleAllocated then MouseCapture := True;
+    end
+    else if (Button = mbLeft) and (headerPart = hpHeaderSection) and
+            (headerCol <> NoColumn) and (hoDrag in FHeader.Options) then
+    begin
+      { D3: initiate a potential drag-reorder — record start, wait for threshold }
+      col := FHeader.Columns.Items[headerCol] as TTyTreeColumn;
+      if coDraggable in col.Options then
+      begin
+        FDragColumn    := headerCol;
+        FDragPending   := True;
+        FDragStartX    := X;
+        FDragging      := False;
+        FDragTargetPos := col.Position;
+        if HandleAllocated then MouseCapture := True;
+      end;
     end;
     Exit;  { don't fall through to node hit-test when in header }
   end;
@@ -2489,7 +2583,10 @@ var
   hPart: TTyTreeHitPart;
   hCol, PPI, newWidth: Integer;
   col: TTyTreeColumn;
+  threshold, logX, logScroll, hitColIdx, targetPos: Integer;
 begin
+  hitColIdx := NoColumn;
+  targetPos := 0;
   inherited MouseMove(Shift, X, Y);
 
   { D2: active column resize drag }
@@ -2501,6 +2598,62 @@ begin
     col.Width := newWidth;  // setter clamps + UpdatePositions + fires HeaderChanged → repaint
     if Assigned(FOnColumnResized) then
       FOnColumnResized(Self, FResizeColumn);
+    { D4: if hoAutoResize is on, re-apply auto-size after a manual resize }
+    if (hoAutoResize in FHeader.Options) and (FHeader.AutoSizeIndex >= 0) and
+       (FHeader.AutoSizeIndex < FHeader.Columns.Count) then
+    begin
+      PPI := Font.PixelsPerInch;
+      FHeader.Columns.ApplyAutoSize(
+        MulDiv(ContentRect.Width, 96, PPI),
+        FHeader.AutoSizeIndex);
+      if FHeader.Columns.Count > 0 then
+        FRangeX := FHeader.Columns.TotalWidth;
+      UpdateScrollBars;
+    end;
+    Exit;
+  end;
+
+  { D3: active or pending column drag-reorder }
+  if FDragPending or FDragging then
+  begin
+    threshold := MulDiv(4, Font.PixelsPerInch, 96);
+    if not FDragging and (Abs(X - FDragStartX) > threshold) then
+    begin
+      FDragging := True;
+      Invalidate;
+    end;
+
+    if FDragging then
+    begin
+      { Compute the target visual position from the current X }
+      PPI       := Font.PixelsPerInch;
+      logX      := MulDiv(X - ContentRect.Left, 96, PPI);
+      logScroll := MulDiv(-FOffsetX, 96, PPI);
+      hitColIdx := FHeader.Columns.ColumnFromPosition(logX, logScroll);
+
+      if hitColIdx <> NoColumn then
+      begin
+        col := FHeader.Columns.Items[hitColIdx] as TTyTreeColumn;
+        targetPos := col.Position;
+      end
+      else
+      begin
+        { X is past the last column — clamp to the last visible position }
+        targetPos := FHeader.Columns.Count - 1;
+      end;
+
+      if targetPos < 0 then targetPos := 0;
+      if targetPos > FHeader.Columns.Count - 1 then
+        targetPos := FHeader.Columns.Count - 1;
+
+      if targetPos <> FDragTargetPos then
+      begin
+        FDragTargetPos := targetPos;
+        Invalidate;
+      end
+      else
+        Invalidate;  { always repaint to update ghost position }
+    end;
     Exit;
   end;
 
@@ -2524,17 +2677,47 @@ begin
     FHotNode := node;
     Invalidate;
   end;
+
 end;
 
 procedure TTyTreeView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  draggedCol: TTyTreeColumn;
+  oldPos, newPos: Integer;
 begin
   inherited MouseUp(Button, Shift, X, Y);
+
   if (Button = mbLeft) and (FResizeColumn <> NoColumn) then
   begin
     if Assigned(FOnColumnResized) then
       FOnColumnResized(Self, FResizeColumn);
     FResizeColumn := NoColumn;
-    MouseCapture  := False;
+    if HandleAllocated then MouseCapture := False;
+  end;
+
+  { D3: end of drag-reorder }
+  if (Button = mbLeft) and (FDragPending or FDragging) then
+  begin
+    if FDragging and (FDragColumn <> NoColumn) then
+    begin
+      draggedCol := FHeader.Columns.Items[FDragColumn] as TTyTreeColumn;
+      oldPos := draggedCol.Position;
+      newPos := FDragTargetPos;
+      if newPos <> Integer(oldPos) then
+      begin
+        FHeader.Columns.AdjustPosition(draggedCol, newPos);
+        { AdjustPosition already calls UpdatePositions + DoChange → HeaderChanged }
+        if Assigned(FOnColumnReorder) then
+          FOnColumnReorder(Self, oldPos, newPos);
+      end;
+    end;
+    { Clear drag state }
+    FDragColumn    := NoColumn;
+    FDragPending   := False;
+    FDragging      := False;
+    FDragTargetPos := 0;
+    if HandleAllocated then MouseCapture := False;
+    Invalidate;
   end;
 end;
 
