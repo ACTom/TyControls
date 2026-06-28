@@ -52,6 +52,7 @@ uses
   test.popup,
   test.calendar,
   test.datetimepicker,
+  test.treeview.events,
   test.treeview;
 
 type
