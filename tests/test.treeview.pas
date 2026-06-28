@@ -1386,27 +1386,33 @@ end;
 
 { RangeY }
 procedure TTreeHeightInvariantTest.TestRangeYTracksRoot;
+{ C2 fix: RangeY now equals ContentHeight = RootNode^.TotalHeight - RootNode^.NodeHeight.
+  The root's phantom row is NOT part of the scrollable content. }
 var
   t: TTyTreeView;
   A: PTyTreeNode;
+  expectedRangeY: Integer;
 begin
   t := TTyTreeView.Create(nil);
   try
     t.OnInitChildren := @OnInitChildren4;
     t.RootNodeCount  := 3;
-    AssertEquals('RangeY = RootNode^.TotalHeight after RootNodeCount',
-                 Integer(t.RootNode^.TotalHeight), t.RangeY);
+    expectedRangeY := Integer(t.RootNode^.TotalHeight) - Integer(t.RootNode^.NodeHeight);
+    AssertEquals('RangeY = ContentHeight (TotalHeight - NodeHeight) after RootNodeCount',
+                 expectedRangeY, t.RangeY);
 
     A := t.RootNode^.FirstChild;
     Include(A^.States, nsHasChildren);
     Include(A^.States, nsInitialized);
     t.Expanded[A] := True;
-    AssertEquals('RangeY = RootNode^.TotalHeight after expand',
-                 Integer(t.RootNode^.TotalHeight), t.RangeY);
+    expectedRangeY := Integer(t.RootNode^.TotalHeight) - Integer(t.RootNode^.NodeHeight);
+    AssertEquals('RangeY = ContentHeight after expand',
+                 expectedRangeY, t.RangeY);
 
     t.Expanded[A] := False;
-    AssertEquals('RangeY = RootNode^.TotalHeight after collapse',
-                 Integer(t.RootNode^.TotalHeight), t.RangeY);
+    expectedRangeY := Integer(t.RootNode^.TotalHeight) - Integer(t.RootNode^.NodeHeight);
+    AssertEquals('RangeY = ContentHeight after collapse',
+                 expectedRangeY, t.RangeY);
   finally
     t.Free;
   end;
@@ -1904,11 +1910,12 @@ begin
     node := t.GetNodeAt(0, nodeTop);
     AssertTrue('first query: node found', node <> nil);
 
-    { Clear invalidates the cache; RangeY drops to root's own TotalHeight (18 — the
-      hidden root always counts itself, so it is never 0 even when the tree is empty). }
+    { Clear invalidates the cache; RangeY = ContentHeight = TotalHeight - NodeHeight.
+      After Clear, no children remain, so TotalHeight = NodeHeight → RangeY = 0. }
     t.Clear;
-    AssertEquals('after Clear: RangeY = root.TotalHeight',
-                 Integer(t.RootNode^.TotalHeight), t.RangeY);
+    AssertEquals('after Clear: RangeY = ContentHeight (= 0 when tree empty)',
+                 Integer(t.RootNode^.TotalHeight) - Integer(t.RootNode^.NodeHeight),
+                 t.RangeY);
     node := t.GetNodeAt(0, nodeTop);
     AssertNull('after Clear: GetNodeAt(0) = nil (empty)', node);
 
@@ -2284,6 +2291,189 @@ begin
   end;
 end;
 
+{ ── C2 ── embedded scrollbars + offsets ─────────────────────────────────────── }
+
+type
+  TTreeC2Test = class(TTestCase)
+  private
+    procedure OnInitChildrenX(Sender: TTyTreeView; Node: PTyTreeNode;
+                               var ChildCount: Cardinal);
+  published
+    { ContentHeight = TotalHeight - NodeHeight (phantom root excluded). }
+    procedure TestContentHeightExcludesRoot;
+    { RangeY == ContentHeight after structural mutations. }
+    procedure TestRangeYEqualsContentHeight;
+    { Tall tree: vertical bar visible; FOffsetY set to -Position (negative). }
+    procedure TestVScrollBarAppearsForTallTree;
+    { Short tree (content < viewport): vertical bar hidden, FOffsetY = 0. }
+    procedure TestVScrollBarHiddenForShortTree;
+    { Setting Position on VScroll sets FOffsetY negative. }
+    procedure TestVScrollPositionSetsOffsetY;
+    { FOffsetY clamped to [-(ContentHeight - viewportH), 0]. }
+    procedure TestOffsetYClamped;
+    { Horizontal bar hidden when FRangeX = 0. }
+    procedure TestHScrollHiddenWhenRangeXZero;
+  end;
+
+procedure TTreeC2Test.OnInitChildrenX(Sender: TTyTreeView; Node: PTyTreeNode;
+                                       var ChildCount: Cardinal);
+begin
+  ChildCount := 5;
+end;
+
+procedure TTreeC2Test.TestContentHeightExcludesRoot;
+{ ContentHeight must be TotalHeight - NodeHeight (phantom root row excluded). }
+var
+  t: TTyTreeView;
+  expectedCH: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.RootNodeCount := 10;
+    { Each child has NodeHeight=18; root total = 18 + 10*18 = 198. ContentHeight = 10*18 = 180. }
+    expectedCH := Integer(t.RootNode^.TotalHeight) - Integer(t.RootNode^.NodeHeight);
+    AssertEquals('ContentHeight = 10*18', 10 * t.DefaultNodeHeight, expectedCH);
+    AssertEquals('RangeY == ContentHeight', expectedCH, t.RangeY);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC2Test.TestRangeYEqualsContentHeight;
+{ After expand/collapse, RangeY stays = ContentHeight. }
+var
+  t: TTyTreeView;
+  A: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.OnInitChildren := @OnInitChildrenX;
+    t.RootNodeCount  := 3;
+    AssertEquals('initial RangeY = ContentHeight',
+                 Integer(t.RootNode^.TotalHeight) - Integer(t.RootNode^.NodeHeight),
+                 t.RangeY);
+
+    A := t.RootNode^.FirstChild;
+    Include(A^.States, nsHasChildren);
+    Include(A^.States, nsInitialized);
+    t.Expanded[A] := True;
+    AssertEquals('RangeY = ContentHeight after expand',
+                 Integer(t.RootNode^.TotalHeight) - Integer(t.RootNode^.NodeHeight),
+                 t.RangeY);
+
+    t.Expanded[A] := False;
+    AssertEquals('RangeY = ContentHeight after collapse',
+                 Integer(t.RootNode^.TotalHeight) - Integer(t.RootNode^.NodeHeight),
+                 t.RangeY);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC2Test.TestVScrollBarAppearsForTallTree;
+{ Build a tree whose ContentHeight (= N * 18) > the control Height.
+  After UpdateScrollBars (called by InvalidateTreeLayout → SetChildCount),
+  the vertical scrollbar must be Visible. }
+var
+  t: TTyTreeView;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    { Height = 160 (default); 20 nodes × 18 = 360px > 160px → bar needed. }
+    t.RootNodeCount := 20;
+    { UpdateScrollBars is called inside InvalidateTreeLayout via SetChildCount.
+      FVScroll is created lazily inside UpdateScrollBars. }
+    AssertTrue('VScroll created', t.VScroll <> nil);
+    AssertTrue('VScroll visible for tall tree', t.VScroll.Visible);
+    AssertEquals('VScroll.Max = ContentHeight',
+                 t.RangeY, t.VScroll.Max);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC2Test.TestVScrollBarHiddenForShortTree;
+{ 3 nodes × 18 = 54px < 160px (default Height) → bar hidden, FOffsetY = 0. }
+var
+  t: TTyTreeView;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.RootNodeCount := 3;
+    { Either VScroll is nil (never created) or it is Visible=False. }
+    AssertTrue('VScroll hidden for short tree',
+               (t.VScroll = nil) or (not t.VScroll.Visible));
+    AssertEquals('FOffsetY = 0 when content fits', 0, t.OffsetY);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC2Test.TestVScrollPositionSetsOffsetY;
+{ Simulate scrollbar interaction: set Position on the VScroll and verify
+  that FOffsetY = -(Position).  We drive UpdateScrollBars to ensure the bar
+  is created and wired, then set Position directly. }
+var
+  t: TTyTreeView;
+  pos: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    { Tall tree so VScroll is visible. }
+    t.RootNodeCount := 50;
+    AssertTrue('VScroll visible', (t.VScroll <> nil) and t.VScroll.Visible);
+
+    { Set scrollbar to half-way. }
+    pos := t.VScroll.Max div 2;
+    t.VScroll.Position := pos;
+    { OnChange fires VScrollChange which sets FOffsetY := -Position. }
+    AssertEquals('FOffsetY = -Position after scrollbar move', -pos, t.OffsetY);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC2Test.TestOffsetYClamped;
+{ FOffsetY must stay in [-(ContentHeight - viewportH), 0].
+  We call ScrollIntoView on a node far past the end to drive FOffsetY, then
+  verify the clamp is respected. }
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+  contH, viewH: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.RootNodeCount := 30;
+    n := t.RootNode^.LastChild;
+    t.ScrollIntoView(n);
+    AssertTrue('FOffsetY <= 0', t.OffsetY <= 0);
+    contH := t.RangeY;
+    viewH := t.Height;
+    if contH > viewH then
+      AssertTrue('FOffsetY >= -(ContentHeight - viewH)',
+                 t.OffsetY >= -(contH - viewH));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeC2Test.TestHScrollHiddenWhenRangeXZero;
+{ In C2, FRangeX = 0 always, so the horizontal bar must always be hidden. }
+var
+  t: TTyTreeView;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.RootNodeCount := 20;
+    AssertEquals('FRangeX = 0 in C2', 0, t.RangeX);
+    AssertTrue('HScroll hidden when RangeX=0',
+               (t.HScroll = nil) or (not t.HScroll.Visible));
+  finally
+    t.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -2293,4 +2483,5 @@ initialization
   RegisterTest(TTreeGetNodeAtTest);
   RegisterTest(TTreePerfTest);
   RegisterTest(TTreeC1Test);
+  RegisterTest(TTreeC2Test);
 end.

@@ -83,8 +83,16 @@ type
     FShowRoot:          Boolean;
     FToggleOnDblClick:  Boolean;
     FHotTrack:          Boolean;
-    { C1: scroll offset (set by ScrollIntoView; C2 will add full scrollbar wiring) }
-    FOffsetY: Integer;
+    { C2: embedded scrollbars + offsets }
+    FVScroll:   TTyScrollBar;   // vertical; nil until first UpdateScrollBars
+    FHScroll:   TTyScrollBar;   // horizontal; nil until first UpdateScrollBars
+    FOffsetY:   Integer;        // ≤ 0; how many pixels the viewport is scrolled down
+    FOffsetX:   Integer;        // ≤ 0; how many pixels the viewport is scrolled right
+    FRangeX:    Integer;        // max content width; set by paint pass (C3); 0 for now
+    FSyncingScroll: Boolean;    // reentrancy guard (mirrors ListBox pattern)
+    procedure VScrollChange(Sender: TObject);
+    procedure HScrollChange(Sender: TObject);
+    procedure UpdateScrollBars;
     procedure SetIndent(AValue: Integer);
     procedure SetImages(AValue: TImageList);
     procedure SetShowButtons(AValue: Boolean);
@@ -116,6 +124,9 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    function  DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+                MousePos: TPoint): Boolean; override;
+    procedure Resize; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
@@ -155,6 +166,14 @@ type
     property RootNode: PTyTreeNode read FRoot;
     property RangeY: Integer read FRangeY;
     property OffsetY: Integer read FOffsetY;
+    property OffsetX: Integer read FOffsetX;
+    property RangeX: Integer read FRangeX;
+    { C2: read-only access to the embedded scrollbars (for tests + C3 paint). }
+    property VScroll: TTyScrollBar read FVScroll;
+    property HScroll: TTyScrollBar read FHScroll;
+    { C2: content geometry helpers used by C3 paint pass. }
+    function ContentHeight: Integer;
+    function ContentRect: TRect;
     { B3: read-only; how many nodes were visited in the last GetNodeAt walk (for perf tests) }
     property LastGetNodeAtVisits: Integer read FLastGetNodeAtVisits;
   published
@@ -477,7 +496,222 @@ begin
   if FOffsetY < minOff then FOffsetY := minOff;
   if FOffsetY > 0 then FOffsetY := 0;
 
+  UpdateScrollBars;   // sync the scrollbar thumb to the new offset
   Invalidate;
+end;
+
+{ ── C2 ── embedded scrollbars + offsets ─────────────────────────────────── }
+
+{ ContentHeight: the scrollable pixel height of the visible node sequence.
+  The hidden root's own NodeHeight is NOT part of the scroll space — it is a
+  phantom sentinel row that never appears on screen.  So:
+    ContentHeight = RootNode^.TotalHeight - RootNode^.NodeHeight
+  This is the value used for FRangeY and for scrollbar Max. }
+function TTyTreeView.ContentHeight: Integer;
+begin
+  Result := Integer(FRoot^.TotalHeight) - Integer(FRoot^.NodeHeight);
+end;
+
+{ ContentRect: the sub-rectangle of ClientRect available for tree content.
+  Shrinks the right edge by the vertical scrollbar width when it is visible,
+  and the bottom edge by the horizontal scrollbar height when it is visible.
+  Mirrors the ListBox/Memo pattern: subtract bar thickness only when Visible. }
+function TTyTreeView.ContentRect: TRect;
+var
+  SBThick: Integer;
+begin
+  Result  := ClientRect;
+  SBThick := MulDiv(TyScrollbarSize, Font.PixelsPerInch, 96);
+  if (FVScroll <> nil) and FVScroll.Visible then
+    Dec(Result.Right, SBThick);
+  if (FHScroll <> nil) and FHScroll.Visible then
+    Dec(Result.Bottom, SBThick);
+end;
+
+{ UpdateScrollBars: show/hide and configure each scrollbar based on the
+  current content size vs viewport size.  Mirrors ListBox.UpdateScrollBar.
+
+  Vertical bar:
+    Visible iff ContentHeight > viewport height.
+    Max      = ContentHeight
+    PageSize = viewport height
+    Position = -FOffsetY (FOffsetY ≤ 0)
+
+  Horizontal bar:
+    Visible iff FRangeX > viewport width.
+    (FRangeX is 0 until the paint pass (C3) sets it; so the bar stays hidden
+    in C2.  The plumbing is wired so C3 can just set FRangeX and it will work.)
+
+  FOffsetY is clamped to [-(ContentHeight - viewportH), 0] each call. }
+procedure TTyTreeView.UpdateScrollBars;
+var
+  SBThick, viewW, viewH, contH: Integer;
+  wantVScroll, wantHScroll: Boolean;
+begin
+  SBThick := MulDiv(TyScrollbarSize, Font.PixelsPerInch, 96);
+
+  { Compute viewport dimensions.  Use Height/Width (same as ListBox) so the
+    calculation is reliable even without a window handle (headless tests). }
+  viewH := Height;
+  viewW := Width;
+  contH := ContentHeight;
+
+  { Decide which bars are needed.  The presence of a vertical bar steals width
+    from the horizontal viewport (and vice-versa), so we must account for that.
+    For simplicity we use the same two-pass logic as Memo / ListBox:
+      1. Check vertical ignoring the horizontal bar's height.
+      2. Adjust viewH for the horizontal bar when it turns out to be visible,
+         then re-evaluate whether we still need the vertical bar.
+    In ③a the horizontal bar is always hidden (FRangeX = 0), so the second
+    pass is a no-op; the pattern is here for C3 to activate. }
+  wantVScroll := contH > viewH;
+  if wantVScroll then viewW := viewW - SBThick;
+  wantHScroll := FRangeX > viewW;
+  if wantHScroll then viewH := viewH - SBThick;
+  if (not wantVScroll) and (contH > viewH) then
+  begin
+    wantVScroll := True;
+    viewW := Width - SBThick;
+  end;
+
+  { ── Vertical bar ────────────────────────────────────────────────────────── }
+  if wantVScroll then
+  begin
+    if FVScroll = nil then
+    begin
+      FVScroll := TTyScrollBar.Create(Self);
+      FVScroll.Parent            := Self;
+      FVScroll.Kind              := sbVertical;
+      FVScroll.AnimationsEnabled := False;
+      FVScroll.OnChange          := @VScrollChange;
+    end;
+    FVScroll.Width      := SBThick;
+    FVScroll.Controller := Self.Controller;
+    { Position the bar along the right edge (above any horizontal bar). }
+    if wantHScroll then
+      FVScroll.SetBounds(Width - SBThick, 0, SBThick, Height - SBThick)
+    else
+      FVScroll.SetBounds(Width - SBThick, 0, SBThick, Height);
+
+    { Clamp FOffsetY to [-(contentH - viewH), 0] before syncing the thumb. }
+    if contH > viewH then
+    begin
+      if FOffsetY < -(contH - viewH) then FOffsetY := -(contH - viewH);
+    end
+    else
+      FOffsetY := 0;   // content fits in the viewport
+    if FOffsetY > 0 then FOffsetY := 0;
+
+    FSyncingScroll := True;
+    try
+      FVScroll.Min      := 0;
+      FVScroll.Max      := contH;
+      FVScroll.PageSize := viewH;
+      FVScroll.Position := -FOffsetY;
+    finally
+      FSyncingScroll := False;
+    end;
+    FVScroll.Visible := True;
+  end
+  else
+  begin
+    if FVScroll <> nil then FVScroll.Visible := False;
+    FOffsetY := 0;
+  end;
+
+  { ── Horizontal bar ─────────────────────────────────────────────────────── }
+  if wantHScroll then
+  begin
+    if FHScroll = nil then
+    begin
+      FHScroll := TTyScrollBar.Create(Self);
+      FHScroll.Parent            := Self;
+      FHScroll.Kind              := sbHorizontal;
+      FHScroll.AnimationsEnabled := False;
+      FHScroll.OnChange          := @HScrollChange;
+    end;
+    FHScroll.Height     := SBThick;
+    FHScroll.Controller := Self.Controller;
+    { Position the bar along the bottom edge (left of the vertical bar). }
+    if wantVScroll then
+      FHScroll.SetBounds(0, Height - SBThick, Width - SBThick, SBThick)
+    else
+      FHScroll.SetBounds(0, Height - SBThick, Width, SBThick);
+
+    if FOffsetX < -(FRangeX - viewW) then FOffsetX := -(FRangeX - viewW);
+    if FOffsetX > 0 then FOffsetX := 0;
+
+    FSyncingScroll := True;
+    try
+      FHScroll.Min      := 0;
+      FHScroll.Max      := FRangeX;
+      FHScroll.PageSize := viewW;
+      FHScroll.Position := -FOffsetX;
+    finally
+      FSyncingScroll := False;
+    end;
+    FHScroll.Visible := True;
+  end
+  else
+  begin
+    if FHScroll <> nil then FHScroll.Visible := False;
+    FOffsetX := 0;
+  end;
+end;
+
+{ VScrollChange — fired by the vertical scrollbar when the user drags/clicks it.
+  Convert Position (0..Max) back to FOffsetY (≤ 0). }
+procedure TTyTreeView.VScrollChange(Sender: TObject);
+begin
+  if FSyncingScroll then Exit;
+  FSyncingScroll := True;
+  try
+    FOffsetY := -FVScroll.Position;
+    Invalidate;
+  finally
+    FSyncingScroll := False;
+  end;
+end;
+
+{ HScrollChange — horizontal bar counterpart. }
+procedure TTyTreeView.HScrollChange(Sender: TObject);
+begin
+  if FSyncingScroll then Exit;
+  FSyncingScroll := True;
+  try
+    FOffsetX := -FHScroll.Position;
+    Invalidate;
+  finally
+    FSyncingScroll := False;
+  end;
+end;
+
+{ DoMouseWheel — scroll 3 rows per detent (mirrors ListBox wheel).
+  WheelDelta > 0 = scroll up (content moves down, FOffsetY increases toward 0);
+  WheelDelta < 0 = scroll down (FOffsetY decreases). }
+function TTyTreeView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var
+  Delta, step: Integer;
+begin
+  if not Enabled then Exit(False);
+  if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
+
+  step := 3 * FDefaultNodeHeight;
+  if WheelDelta > 0 then Delta :=  step   // scroll up
+  else                    Delta := -step;  // scroll down
+
+  FOffsetY := FOffsetY + Delta;
+  UpdateScrollBars;   // clamps FOffsetY and syncs thumb
+  Invalidate;
+  Result := True;
+end;
+
+{ Resize — recalculate scrollbar visibility/geometry on layout change. }
+procedure TTyTreeView.Resize;
+begin
+  inherited Resize;
+  UpdateScrollBars;
 end;
 
 constructor TTyTreeView.Create(AOwner: TComponent);
@@ -499,7 +733,14 @@ begin
   FShowRoot         := True;
   FToggleOnDblClick := True;
   FHotTrack         := False;
-  FOffsetY          := 0;
+  { C2 scroll state — scrollbars are created lazily in UpdateScrollBars
+    (the same pattern as ListBox.FScrollBar: nil until first needed). }
+  FOffsetY       := 0;
+  FOffsetX       := 0;
+  FRangeX        := 0;
+  FSyncingScroll := False;
+  FVScroll       := nil;
+  FHScroll       := nil;
   TabStop           := True;
   Width := 200; Height := 160;
 end;
@@ -594,9 +835,10 @@ end;
 procedure TTyTreeView.InvalidateTreeLayout;
 begin
   // B1: mark the position cache dirty and recompute FRangeY.
-  // The cache itself is built lazily in Task B3; here we just invalidate the flag.
+  // FRangeY = ContentHeight (the scrollable content height, root phantom row excluded).
   FCacheValid := False;
-  FRangeY     := Integer(FRoot^.TotalHeight);
+  FRangeY     := ContentHeight;
+  UpdateScrollBars;
   Invalidate;
 end;
 
