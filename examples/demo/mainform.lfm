@@ -508,6 +508,31 @@ object DemoMainForm: TDemoMainForm
           Align = alClient
         end
       end
+      object TyTabSheet4: TTyTabSheet
+        Left = 0
+        Height = 334
+        Top = 28
+        Width = 604
+        TabOrder = 3
+        Controller = TyController
+        Caption = 'Tree'
+        object TyColTree: TTyTreeView
+          Left = 0
+          Height = 334
+          Top = 0
+          Width = 604
+          Align = alClient
+          TabStop = True
+          Controller = TyController
+          NodeDataSize = 0
+          RootNodeCount = 0
+          ShowRoot = False
+          OnInitNode = TyColTreeInitNode
+          OnInitChildren = TyColTreeInitChildren
+          OnGetTextWithType = TyColTreeGetText
+          OnCompareNodes = TyColTreeCompareNodes
+        end
+      end
     end
   end
   object TyController: TTyStyleController
