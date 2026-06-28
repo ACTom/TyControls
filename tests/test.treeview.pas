@@ -1412,10 +1412,340 @@ begin
   end;
 end;
 
+{ ── B2 ── GetNodeAt(Y) cross-check vs linear walk ────────────────────────── }
+
+type
+  TTreeGetNodeAtTest = class(TTestCase)
+  private
+    { Multi-level test tree layout (all nodes have DefaultNodeHeight=18):
+        Root (hidden)
+          A0   top=0   (expanded, 3 children)
+            A0C0  top=18  (leaf)
+            A0C1  top=36  (expanded, 2 children)
+              A0C1G0  top=54  (leaf)
+              A0C1G1  top=72  (leaf)
+            A0C2  top=90  (leaf)
+          A1   top=108  (collapsed, has children but not expanded)
+          A2   top=126  (expanded, 2 children)
+            A2C0  top=144  (leaf)
+            A2C1  top=162  (leaf)
+          A3   top=180  (leaf)
+
+      Total visible height = 10 nodes × 18 = 180 px
+      (A1's children are NOT visible because A1 is collapsed.)
+
+      We build this tree explicitly (no lazy init needed). }
+
+    { Nodes we keep for assertions }
+    FA0, FA0C0, FA0C1, FA0C1G0, FA0C1G1, FA0C2: PTyTreeNode;
+    FA1, FA2, FA2C0, FA2C1, FA3: PTyTreeNode;
+
+    function  BuildTree: TTyTreeView;
+    { Linear-walk helper: find (node, top) for a given Y by summing NodeHeight. }
+    function  LinearGetNodeAt(T: TTyTreeView; Y: Integer; out ANodeTop: Integer): PTyTreeNode;
+  published
+    { Exact-node tests: known (node, top) pairs. }
+    procedure TestGetNodeAtKnownNodes;
+    { Boundary: GetNodeAt(top + NodeHeight - 1) still returns the same node;
+                GetNodeAt(top + NodeHeight)     returns the NEXT visible node. }
+    procedure TestGetNodeAtBoundaries;
+    { Cross-check against linear walk for EVERY Y from 0 to (visibleHeight + margin). }
+    procedure TestGetNodeAtCrossCheckVsLinearWalk;
+    { Edge cases: Y<0 and Y past end return nil. }
+    procedure TestGetNodeAtNegativeAndPastEnd;
+    { Collapsed subtree is correctly skipped. }
+    procedure TestGetNodeAtSkipsCollapsedSubtree;
+    { Empty tree: GetNodeAt(0) returns nil. }
+    procedure TestGetNodeAtEmptyTree;
+  end;
+
+{ ── TTreeGetNodeAtTest helpers ────────────────────────────────────────────── }
+
+function TTreeGetNodeAtTest.BuildTree: TTyTreeView;
+var
+  t: TTyTreeView;
+begin
+  t := TTyTreeView.Create(nil);
+
+  { Top-level nodes }
+  FA0 := t.AddChild(nil);   { will be expanded }
+  FA1 := t.AddChild(nil);   { will be collapsed, but marked HasChildren }
+  FA2 := t.AddChild(nil);   { will be expanded }
+  FA3 := t.AddChild(nil);   { leaf }
+
+  { A0's children }
+  FA0C0 := t.AddChild(FA0);
+  FA0C1 := t.AddChild(FA0);   { will be expanded }
+  FA0C2 := t.AddChild(FA0);
+
+  { A0C1's children (grandchildren) }
+  FA0C1G0 := t.AddChild(FA0C1);
+  FA0C1G1 := t.AddChild(FA0C1);
+
+  { A1's children — allocate them but keep A1 collapsed }
+  t.AddChild(FA1);
+  t.AddChild(FA1);
+  t.AddChild(FA1);
+
+  { A2's children }
+  FA2C0 := t.AddChild(FA2);
+  FA2C1 := t.AddChild(FA2);
+
+  { Now expand the nodes that should be expanded }
+
+  { Expand A0C1 first (a child; must be done before expanding A0) }
+  Include(FA0C1^.States, nsHasChildren);
+  Include(FA0C1^.States, nsInitialized);
+  t.Expanded[FA0C1] := True;
+
+  { Expand A0 }
+  Include(FA0^.States, nsHasChildren);
+  Include(FA0^.States, nsInitialized);
+  t.Expanded[FA0] := True;
+
+  { A1: mark as having children but leave collapsed }
+  Include(FA1^.States, nsHasChildren);
+  Include(FA1^.States, nsInitialized);
+  { Deliberately NOT expanding FA1 }
+
+  { Expand A2 }
+  Include(FA2^.States, nsHasChildren);
+  Include(FA2^.States, nsInitialized);
+  t.Expanded[FA2] := True;
+
+  Result := t;
+end;
+
+function TTreeGetNodeAtTest.LinearGetNodeAt(T: TTyTreeView; Y: Integer;
+  out ANodeTop: Integer): PTyTreeNode;
+{ Walk all screen-order visible nodes, accumulating NodeHeight, and return
+  the one whose [accTop, accTop+NodeHeight) contains Y. }
+var
+  n: PTyTreeNode;
+  accTop: Integer;
+begin
+  Result   := nil;
+  ANodeTop := 0;
+  if Y < 0 then Exit;
+
+  accTop := 0;
+  n := T.GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    if (Y >= accTop) and (Y < accTop + n^.NodeHeight) then
+    begin
+      Result   := n;
+      ANodeTop := accTop;
+      Exit;
+    end;
+    Inc(accTop, n^.NodeHeight);
+    n := T.GetNextVisibleNoInit(n);
+  end;
+  { Y is past the end — return nil }
+end;
+
+{ ── TTreeGetNodeAtTest published tests ───────────────────────────────────── }
+
+procedure TTreeGetNodeAtTest.TestGetNodeAtKnownNodes;
+{ Verify exact (node, top) pairs for the constructed tree.
+  Tree layout (NodeHeight = 18 each):
+    A0       top=0
+    A0C0     top=18
+    A0C1     top=36
+    A0C1G0   top=54
+    A0C1G1   top=72
+    A0C2     top=90
+    A1       top=108   (collapsed)
+    A2       top=126
+    A2C0     top=144
+    A2C1     top=162
+    A3       top=180
+  Total visible = 11 nodes × 18 = 198 px }
+var
+  t: TTyTreeView;
+  node: PTyTreeNode;
+  nodeTop: Integer;
+begin
+  t := BuildTree;
+  try
+    node := t.GetNodeAt(0, nodeTop);
+    AssertEquals('A0 top=0: nodeTop', 0, nodeTop);
+    AssertEquals('A0 top=0: node', PtrUInt(FA0), PtrUInt(node));
+
+    node := t.GetNodeAt(18, nodeTop);
+    AssertEquals('A0C0 top=18: nodeTop', 18, nodeTop);
+    AssertEquals('A0C0 top=18: node', PtrUInt(FA0C0), PtrUInt(node));
+
+    node := t.GetNodeAt(36, nodeTop);
+    AssertEquals('A0C1 top=36: nodeTop', 36, nodeTop);
+    AssertEquals('A0C1 top=36: node', PtrUInt(FA0C1), PtrUInt(node));
+
+    node := t.GetNodeAt(54, nodeTop);
+    AssertEquals('A0C1G0 top=54: nodeTop', 54, nodeTop);
+    AssertEquals('A0C1G0 top=54: node', PtrUInt(FA0C1G0), PtrUInt(node));
+
+    node := t.GetNodeAt(72, nodeTop);
+    AssertEquals('A0C1G1 top=72: nodeTop', 72, nodeTop);
+    AssertEquals('A0C1G1 top=72: node', PtrUInt(FA0C1G1), PtrUInt(node));
+
+    node := t.GetNodeAt(90, nodeTop);
+    AssertEquals('A0C2 top=90: nodeTop', 90, nodeTop);
+    AssertEquals('A0C2 top=90: node', PtrUInt(FA0C2), PtrUInt(node));
+
+    node := t.GetNodeAt(108, nodeTop);
+    AssertEquals('A1 top=108: nodeTop', 108, nodeTop);
+    AssertEquals('A1 top=108: node', PtrUInt(FA1), PtrUInt(node));
+
+    node := t.GetNodeAt(126, nodeTop);
+    AssertEquals('A2 top=126: nodeTop', 126, nodeTop);
+    AssertEquals('A2 top=126: node', PtrUInt(FA2), PtrUInt(node));
+
+    node := t.GetNodeAt(144, nodeTop);
+    AssertEquals('A2C0 top=144: nodeTop', 144, nodeTop);
+    AssertEquals('A2C0 top=144: node', PtrUInt(FA2C0), PtrUInt(node));
+
+    node := t.GetNodeAt(162, nodeTop);
+    AssertEquals('A2C1 top=162: nodeTop', 162, nodeTop);
+    AssertEquals('A2C1 top=162: node', PtrUInt(FA2C1), PtrUInt(node));
+
+    node := t.GetNodeAt(180, nodeTop);
+    AssertEquals('A3 top=180: nodeTop', 180, nodeTop);
+    AssertEquals('A3 top=180: node', PtrUInt(FA3), PtrUInt(node));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeGetNodeAtTest.TestGetNodeAtBoundaries;
+{ GetNodeAt(top)                returns node with ANodeTop=top
+  GetNodeAt(top + NodeHeight-1) returns the same node
+  GetNodeAt(top + NodeHeight)   returns the NEXT visible node }
+var
+  t: TTyTreeView;
+  node: PTyTreeNode;
+  nodeTop: Integer;
+begin
+  t := BuildTree;
+  try
+    { A0C1 is at top=36, NodeHeight=18 → spans [36, 54) }
+    node := t.GetNodeAt(36, nodeTop);
+    AssertEquals('A0C1: GetNodeAt(36) nodeTop', 36, nodeTop);
+    AssertEquals('A0C1: GetNodeAt(36) node', PtrUInt(FA0C1), PtrUInt(node));
+
+    node := t.GetNodeAt(53, nodeTop);  { 36 + 18 - 1 }
+    AssertEquals('A0C1: GetNodeAt(53) nodeTop', 36, nodeTop);
+    AssertEquals('A0C1: GetNodeAt(53) node', PtrUInt(FA0C1), PtrUInt(node));
+
+    node := t.GetNodeAt(54, nodeTop);  { 36 + 18 = next node top }
+    AssertEquals('A0C1G0: GetNodeAt(54) nodeTop', 54, nodeTop);
+    AssertEquals('A0C1G0: GetNodeAt(54) node', PtrUInt(FA0C1G0), PtrUInt(node));
+
+    { A1 is at top=108 (collapsed), spans [108, 126); next visible is A2 at 126 }
+    node := t.GetNodeAt(125, nodeTop);
+    AssertEquals('A1: GetNodeAt(125) nodeTop', 108, nodeTop);
+    AssertEquals('A1: GetNodeAt(125) node', PtrUInt(FA1), PtrUInt(node));
+
+    node := t.GetNodeAt(126, nodeTop);
+    AssertEquals('A2: GetNodeAt(126) nodeTop', 126, nodeTop);
+    AssertEquals('A2: GetNodeAt(126) node', PtrUInt(FA2), PtrUInt(node));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeGetNodeAtTest.TestGetNodeAtCrossCheckVsLinearWalk;
+{ THE KEY TEST: for every Y from 0 to (visibleHeight + 18 margin), assert that
+  GetNodeAt(Y) returns exactly the same (node, nodeTop) as a linear walk. }
+var
+  t: TTyTreeView;
+  y, fastTop, linearTop: Integer;
+  fastNode, linearNode: PTyTreeNode;
+  visH: Integer;
+begin
+  t := BuildTree;
+  try
+    { Compute total visible height as NodeHeight sum via linear walk }
+    visH := t.SumVisibleHeights - Integer(t.RootNode^.NodeHeight);
+    { visH = sum of NodeHeight for all visible (non-root) nodes }
+
+    for y := 0 to visH + 18 do
+    begin
+      fastNode   := t.GetNodeAt(y, fastTop);
+      linearNode := LinearGetNodeAt(t, y, linearTop);
+
+      if fastNode <> linearNode then
+        Fail(Format('Y=%d: GetNodeAt returns $%x but linear walk returns $%x',
+                    [y, PtrUInt(fastNode), PtrUInt(linearNode)]));
+      if fastTop <> linearTop then
+        Fail(Format('Y=%d: GetNodeAt nodeTop=%d but linear walk nodeTop=%d',
+                    [y, fastTop, linearTop]));
+    end;
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeGetNodeAtTest.TestGetNodeAtNegativeAndPastEnd;
+var
+  t: TTyTreeView;
+  node: PTyTreeNode;
+  nodeTop: Integer;
+begin
+  t := BuildTree;
+  try
+    node := t.GetNodeAt(-1, nodeTop);
+    AssertNull('GetNodeAt(-1) = nil', node);
+
+    node := t.GetNodeAt(100000, nodeTop);
+    AssertNull('GetNodeAt(hugeY) = nil', node);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeGetNodeAtTest.TestGetNodeAtSkipsCollapsedSubtree;
+{ A Y just past A1 (collapsed at top=108) must land on A2 (top=126), NOT on one
+  of A1's hidden children. }
+var
+  t: TTyTreeView;
+  node: PTyTreeNode;
+  nodeTop: Integer;
+begin
+  t := BuildTree;
+  try
+    { A1 spans [108, 126); Y=126 is A2, not A1's hidden child }
+    node := t.GetNodeAt(126, nodeTop);
+    AssertEquals('Y=126 lands on A2, not a hidden child of A1',
+                 PtrUInt(FA2), PtrUInt(node));
+    AssertEquals('A2 nodeTop=126', 126, nodeTop);
+
+    { Also confirm A1 is indeed still collapsed }
+    AssertFalse('A1 is collapsed', nsExpanded in FA1^.States);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeGetNodeAtTest.TestGetNodeAtEmptyTree;
+var
+  t: TTyTreeView;
+  node: PTyTreeNode;
+  nodeTop: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    node := t.GetNodeAt(0, nodeTop);
+    AssertNull('empty tree: GetNodeAt(0) = nil', node);
+  finally
+    t.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
   RegisterTest(TTreeDeleteTest);
   RegisterTest(TTreeLazyTest);
   RegisterTest(TTreeHeightInvariantTest);
+  RegisterTest(TTreeGetNodeAtTest);
 end.

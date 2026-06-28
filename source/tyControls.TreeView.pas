@@ -91,6 +91,8 @@ type
     function GetFirstVisibleNoInit: PTyTreeNode;
     function GetNextVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
     function GetPreviousVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
+    { B2 scroll engine }
+    function  GetNodeAt(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
     { B1 helpers — used by tests + scroll engine }
     function  SumVisibleHeights: Integer;
     property Expanded[Node: PTyTreeNode]: Boolean read GetExpanded write SetExpanded;
@@ -645,6 +647,113 @@ begin
   Result := Node^.Parent;
   if (Result = nil) or (Result = FRoot) or (Result = PTyTreeNode(Self)) then
     Result := nil;
+end;
+
+{ ── B2 ── GetNodeAt(Y) — TotalHeight subtree-skip ──────────────────────── }
+
+{ Maps an absolute vertical pixel offset Y (0 = top of the first visible node,
+  i.e. the hidden root's own row is NOT counted) to the visible node covering it
+  plus that node's absolute top in ANodeTop.  Returns nil if Y < 0 or past end.
+
+  Algorithm (O(depth + local sibling scan), NOT O(total nodes)):
+  • Start at FRoot^.FirstChild, running top = 0.
+  • For each node:
+      – if not nsVisible → skip to NextSibling (non-visible nodes have no screen extent).
+      – if Y < top + NodeHeight → hit this node's own row; return it.
+      – if expanded with children AND Y < top + TotalHeight → target is inside the
+        expanded subtree: advance top past the node's own row, descend to FirstChild.
+      – else → skip the whole node (NodeHeight if leaf/collapsed; TotalHeight if
+        expanded-but-not-containing-Y) and advance to NextSibling.
+  • Climb-back: when a sibling-list is exhausted mid-descent (NextSibling = nil),
+    walk parent^.NextSibling up the chain until a sibling is found or FRoot is
+    reached.  This exactly mirrors GetNextVisibleNoInit's climb logic. }
+function TTyTreeView.GetNodeAt(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
+var
+  node, climb: PTyTreeNode;
+  runTop, h: Integer;
+begin
+  Result   := nil;
+  ANodeTop := 0;
+  if Y < 0 then Exit;
+
+  node   := FRoot^.FirstChild;
+  runTop := 0;
+
+  while node <> nil do
+  begin
+    // Skip non-visible nodes (they have no screen extent); treat like a missing node.
+    if not (nsVisible in node^.States) then
+    begin
+      // Advance to NextSibling (or climb if at end of list)
+      if node^.NextSibling <> nil then
+      begin
+        node := node^.NextSibling;
+        Continue;
+      end;
+      // Climb-back: walk up to find a parent with a NextSibling
+      climb := node^.Parent;
+      node  := nil;
+      while (climb <> nil) and (climb <> FRoot) do
+      begin
+        if climb^.NextSibling <> nil then
+        begin
+          node := climb^.NextSibling;
+          Break;
+        end;
+        climb := climb^.Parent;
+      end;
+      Continue;
+    end;
+
+    h := node^.NodeHeight;
+
+    // Does Y land in this node's own row?
+    if Y < runTop + h then
+    begin
+      Result   := node;
+      ANodeTop := runTop;
+      Exit;
+    end;
+
+    // Does Y land inside this node's expanded subtree?
+    if (nsExpanded in node^.States) and (node^.FirstChild <> nil)
+       and (Y < runTop + Integer(node^.TotalHeight)) then
+    begin
+      // Descend: advance past the node's own row and go into children.
+      Inc(runTop, h);
+      node := node^.FirstChild;
+      Continue;
+    end;
+
+    // Skip this node's span — TotalHeight for an expanded node (skipping the subtree in O(1)),
+    // or just NodeHeight for a leaf or collapsed node.
+    if (nsExpanded in node^.States) and (node^.FirstChild <> nil) then
+      Inc(runTop, Integer(node^.TotalHeight))
+    else
+      Inc(runTop, h);
+
+    // Advance to next sibling.  If the sibling list is exhausted, climb back to the
+    // nearest ancestor that still has a NextSibling — mirroring GetNextVisibleNoInit.
+    if node^.NextSibling <> nil then
+    begin
+      node := node^.NextSibling;
+      Continue;
+    end;
+
+    // Climb-back: walk up until we find an ancestor with a NextSibling, or reach FRoot.
+    climb := node^.Parent;
+    node  := nil;
+    while (climb <> nil) and (climb <> FRoot) do
+    begin
+      if climb^.NextSibling <> nil then
+      begin
+        node := climb^.NextSibling;
+        Break;
+      end;
+      climb := climb^.Parent;
+    end;
+    // If node is still nil here, all siblings+ancestors exhausted → loop exits.
+  end;
 end;
 
 end.
