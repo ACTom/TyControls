@@ -42,6 +42,7 @@ begin
   AssertPub('OnNodeDblClick');
   { paint callbacks }
   AssertPub('OnGetText');
+  AssertPub('OnGetTextWithType');
   AssertPub('OnGetImageIndex');
   AssertPub('OnPaintText');
   { column/sort events (D2, D3, E1, E3) }
