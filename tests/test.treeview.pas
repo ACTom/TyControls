@@ -1741,6 +1741,188 @@ begin
   end;
 end;
 
+{ ── B3 ── position cache + performance invariant ────────────────────────── }
+
+type
+  TTreePerfTest = class(TTestCase)
+  private
+    { Linear-walk helper (reused from TTreeGetNodeAtTest). }
+    function LinearGetNodeAt(T: TTyTreeView; Y: Integer; out ANodeTop: Integer): PTyTreeNode;
+  published
+    { PERFORMANCE INVARIANT: a flat 200k-node tree, GetNodeAt near the END of the
+      list must visit ≤ TREE_CACHE_STEP + small constant nodes, NOT ~200k.
+      This proves the binary-search cache bounds the per-call scan.
+
+      200k flat skeleton nodes are allocated in one SetChildCount call
+      (no OnInitNode, NodeDataSize=0 → minimum allocation stride).
+      Each node: NodeHeight=18, nsVisible set, not expandable → total visible height = 200k×18.
+
+      We query a Y near the END (node 199_000's top = 199_000 × 18 = 3_582_000 px).
+      Without the cache, GetNodeAt would scan ~199_000 nodes linearly.
+      With TREE_CACHE_STEP=2000, it starts from mark floor(199_000/2000)=99 and
+      then scans at most 2000 nodes → visits ≤ 2000+small.
+
+      Building 200k nodes takes ~100ms headlessly; well within test budget. }
+    procedure TestFlatTree200kCacheBoundsVisits;
+
+    { CORRECTNESS SPOT-CHECK: a few GetNodeAt queries on the 200k tree must return
+      the correct node (verified against a short local linear walk — we do NOT
+      linearly scan 200k for every query). }
+    procedure TestFlatTree200kCorrectness;
+
+    { INVALIDATION: after Clear, the cache is dirty; after re-adding nodes,
+      ValidateCache rebuilds and GetNodeAt still works correctly. }
+    procedure TestCacheInvalidatesOnClear;
+  end;
+
+function TTreePerfTest.LinearGetNodeAt(T: TTyTreeView; Y: Integer;
+  out ANodeTop: Integer): PTyTreeNode;
+{ Short linear walk — only used for spot-checks of a few nodes. }
+var
+  n: PTyTreeNode;
+  accTop: Integer;
+begin
+  Result   := nil;
+  ANodeTop := 0;
+  if Y < 0 then Exit;
+  accTop := 0;
+  n := T.GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    if (Y >= accTop) and (Y < accTop + n^.NodeHeight) then
+    begin
+      Result   := n;
+      ANodeTop := accTop;
+      Exit;
+    end;
+    Inc(accTop, n^.NodeHeight);
+    n := T.GetNextVisibleNoInit(n);
+  end;
+end;
+
+procedure TTreePerfTest.TestFlatTree200kCacheBoundsVisits;
+{ The KEY performance-invariant test.
+  Flat tree: 200_000 root-level nodes, NodeHeight=18, NodeDataSize=0, no events.
+  Query Y near the END of the list (node 199_000 → top = 199_000 × 18).
+  Expect: visits ≤ TREE_CACHE_STEP + a small constant (well under 3000).
+  Without the cache, this would be ~199_000 visits. }
+const
+  NODE_COUNT  = 200000;
+  QUERY_INDEX = 199000;   // the node we target (0-based)
+  MAX_VISITS  = TREE_CACHE_STEP + 100;  // allow TREE_CACHE_STEP walk + climb overhead
+var
+  t: TTyTreeView;
+  queryY, nodeTop, visits: Integer;
+  node: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.NodeDataSize   := 0;    // smallest allocation; no data blob
+    t.RootNodeCount  := NODE_COUNT;
+
+    { Y for node at QUERY_INDEX (0-based): QUERY_INDEX × DefaultNodeHeight }
+    queryY := QUERY_INDEX * t.DefaultNodeHeight;
+
+    node   := t.GetNodeAt(queryY, nodeTop);
+    visits := t.LastGetNodeAtVisits;
+
+    AssertTrue('node found (not nil)', node <> nil);
+
+    { nodeTop must be exactly QUERY_INDEX × 18 }
+    AssertEquals('nodeTop correct', QUERY_INDEX * t.DefaultNodeHeight, nodeTop);
+
+    { The cache must limit the scan to ≤ MAX_VISITS nodes.
+      Without the cache, this would be ~199_000.  With TREE_CACHE_STEP=2000 the
+      walk starts from mark 99 (top=199_000×18 closest from below) and advances
+      at most 2000 nodes, so visits will typically be ≤ 2001. }
+    if visits > MAX_VISITS then
+      Fail(Format('Cache did NOT bound the scan: visited %d nodes (limit=%d). '
+                + 'Expected ≤ %d for TREE_CACHE_STEP=%d.',
+                  [visits, MAX_VISITS, MAX_VISITS, TREE_CACHE_STEP]));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreePerfTest.TestFlatTree200kCorrectness;
+{ Spot-check: a few GetNodeAt queries at known Y values return the right node
+  (confirmed by cross-checking against a short local linear walk).
+  We test a node near the START, MIDDLE, and END of the 200k list. }
+const
+  NODE_COUNT = 200000;
+var
+  t: TTyTreeView;
+  queryY, fastTop, linearTop: Integer;
+  fastNode, linearNode: PTyTreeNode;
+
+  procedure Check(idx: Integer; const tag: string);
+  begin
+    queryY     := idx * t.DefaultNodeHeight;
+    fastNode   := t.GetNodeAt(queryY, fastTop);
+    linearNode := LinearGetNodeAt(t, queryY, linearTop);
+    AssertTrue(tag + ': GetNodeAt non-nil', fastNode <> nil);
+    if fastNode <> linearNode then
+      Fail(Format('%s: node mismatch at idx=%d Y=%d', [tag, idx, queryY]));
+    if fastTop <> linearTop then
+      Fail(Format('%s: nodeTop mismatch at idx=%d (fast=%d, linear=%d)',
+                  [tag, idx, fastTop, linearTop]));
+  end;
+
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.NodeDataSize  := 0;
+    t.RootNodeCount := NODE_COUNT;
+
+    Check(0,        'node at start');
+    Check(1000,     'node at 1000');
+    Check(50000,    'node at 50000');
+    Check(100000,   'node at midpoint');
+    Check(199999,   'node at end');
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreePerfTest.TestCacheInvalidatesOnClear;
+{ After structural changes (Clear + re-add), FCacheValid must be False,
+  so ValidateCache rebuilds on the next GetNodeAt.
+  We verify GetNodeAt still returns correct results after rebuild. }
+const
+  NODE_COUNT = 5000;
+var
+  t: TTyTreeView;
+  nodeTop: Integer;
+  node: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.NodeDataSize  := 0;
+    t.RootNodeCount := NODE_COUNT;
+
+    { First query — builds cache }
+    node := t.GetNodeAt(0, nodeTop);
+    AssertTrue('first query: node found', node <> nil);
+
+    { Clear invalidates the cache; RangeY drops to root's own TotalHeight (18 — the
+      hidden root always counts itself, so it is never 0 even when the tree is empty). }
+    t.Clear;
+    AssertEquals('after Clear: RangeY = root.TotalHeight',
+                 Integer(t.RootNode^.TotalHeight), t.RangeY);
+    node := t.GetNodeAt(0, nodeTop);
+    AssertNull('after Clear: GetNodeAt(0) = nil (empty)', node);
+
+    { Add nodes back → cache rebuilds }
+    t.RootNodeCount := NODE_COUNT;
+    node := t.GetNodeAt((NODE_COUNT - 1) * t.DefaultNodeHeight, nodeTop);
+    AssertTrue('after re-add: last node found', node <> nil);
+    AssertEquals('after re-add: nodeTop correct',
+                 (NODE_COUNT - 1) * t.DefaultNodeHeight, nodeTop);
+  finally
+    t.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -1748,4 +1930,5 @@ initialization
   RegisterTest(TTreeLazyTest);
   RegisterTest(TTreeHeightInvariantTest);
   RegisterTest(TTreeGetNodeAtTest);
+  RegisterTest(TTreePerfTest);
 end.

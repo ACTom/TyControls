@@ -34,8 +34,18 @@ type
 
 const
   TreeNodeSize = (SizeOf(TTyTreeNode) + 7) and not 7;  // pointer-aligned struct stride
+  { B3: one cache mark per TREE_CACHE_STEP visible nodes.
+    A flat 200k-node list will have ~100 marks; a GetNodeAt near the end
+    walks at most TREE_CACHE_STEP nodes after finding the nearest mark. }
+  TREE_CACHE_STEP = 2000;
 
 type
+  { B3: one position-cache mark }
+  TTyTreeCacheMark = record
+    Node:    PTyTreeNode;
+    NodeTop: Integer;   // absolute Y of Node.NodeHeight's top pixel
+  end;
+
   TTyTreeView = class(TTyCustomControl)
   private
     FRoot: PTyTreeNode;
@@ -43,9 +53,14 @@ type
     FNodeAllocSize: Integer;    // TreeNodeSize + Max(0, FNodeDataSize)
     FDefaultNodeHeight: Integer;
     FOnFreeNode: TTyTreeNodeEvent;
-    { B1 scroll engine cache fields }
+    { B1 scroll engine }
     FCacheValid: Boolean;
     FRangeY:    Integer;
+    { B3 position cache }
+    FPositionCache: array of TTyTreeCacheMark;
+    { B3 debug/test counter: number of nodes visited in the most-recent GetNodeAt walk.
+      Reset to 0 at the start of each GetNodeAt call; exposed read-only for tests. }
+    FLastGetNodeAtVisits: Integer;
     { A5 events }
     FOnInitNode:     TTyTreeInitNodeEvent;
     FOnInitChildren: TTyTreeInitChildrenEvent;
@@ -61,6 +76,9 @@ type
     procedure AdjustTotalCount(Node: PTyTreeNode; Delta: Integer);
     procedure AdjustTotalHeight(Node: PTyTreeNode; Delta: Integer);
     procedure InvalidateTreeLayout;
+    { B3 position-cache helpers }
+    procedure ValidateCache;
+    function  FindInCache(Y: Integer): Integer;
     { A5 helpers }
     function  ComputeExpandedSubtreeHeight(Node: PTyTreeNode): Integer;
     function  GetExpanded(Node: PTyTreeNode): Boolean;
@@ -91,13 +109,15 @@ type
     function GetFirstVisibleNoInit: PTyTreeNode;
     function GetNextVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
     function GetPreviousVisibleNoInit(Node: PTyTreeNode): PTyTreeNode;
-    { B2 scroll engine }
+    { B2/B3 scroll engine }
     function  GetNodeAt(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
     { B1 helpers — used by tests + scroll engine }
     function  SumVisibleHeights: Integer;
     property Expanded[Node: PTyTreeNode]: Boolean read GetExpanded write SetExpanded;
     property RootNode: PTyTreeNode read FRoot;
     property RangeY: Integer read FRangeY;
+    { B3: read-only; how many nodes were visited in the last GetNodeAt walk (for perf tests) }
+    property LastGetNodeAtVisits: Integer read FLastGetNodeAtVisits;
   published
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
     property DefaultNodeHeight: Integer read FDefaultNodeHeight write FDefaultNodeHeight default 18;
@@ -649,38 +669,133 @@ begin
     Result := nil;
 end;
 
+{ ── B3 ── position cache ────────────────────────────────────────────────── }
+
+{ ValidateCache
+  One O(visibleCount) pass building the FPositionCache array.
+  A mark is pushed every TREE_CACHE_STEP visible nodes (including node #0).
+  Called at the start of every GetNodeAt; only does work when FCacheValid=False.
+
+  Safety: FCacheValid is cleared by InvalidateTreeLayout, which is called on
+  every structural change (SetChildCount, DeleteNode, Clear, expand/collapse).
+  So when ValidateCache runs, the tree is in its current canonical state.
+  There is NO path that uses a stale cache: every GetNodeAt calls ValidateCache
+  first, and ValidateCache rebuilds when FCacheValid=False. }
+procedure TTyTreeView.ValidateCache;
+var
+  n:         PTyTreeNode;
+  accTop:    Integer;  // accumulates absolute Y (named accTop to avoid conflict with TControl.Top)
+  visIdx:    Integer;
+  markCount: Integer;
+begin
+  if FCacheValid then Exit;
+
+  { Rebuild from scratch. }
+  SetLength(FPositionCache, 0);
+  markCount := 0;
+
+  accTop := 0;
+  visIdx := 0;
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    { Push a mark every TREE_CACHE_STEP nodes (index 0, 2000, 4000, …). }
+    if (visIdx mod TREE_CACHE_STEP) = 0 then
+    begin
+      SetLength(FPositionCache, markCount + 1);
+      FPositionCache[markCount].Node    := n;
+      FPositionCache[markCount].NodeTop := accTop;
+      Inc(markCount);
+    end;
+    Inc(accTop, n^.NodeHeight);
+    Inc(visIdx);
+    n := GetNextVisibleNoInit(n);
+  end;
+
+  FCacheValid := True;
+end;
+
+{ FindInCache(Y)
+  Binary-search FPositionCache for the index of the last mark whose Top <= Y.
+  Returns -1 if Y is before the first mark or the cache is empty.
+  The caller should treat -1 as "start from the root" (i.e. cache miss). }
+function TTyTreeView.FindInCache(Y: Integer): Integer;
+var
+  lo, hi, mid: Integer;
+begin
+  Result := -1;
+  if Length(FPositionCache) = 0 then Exit;
+  if Y < FPositionCache[0].NodeTop then Exit;  // before the very first mark
+
+  lo := 0;
+  hi := High(FPositionCache);
+  while lo <= hi do
+  begin
+    mid := (lo + hi) shr 1;
+    if FPositionCache[mid].NodeTop <= Y then
+    begin
+      Result := mid;   // candidate — keep searching right for a closer mark
+      lo := mid + 1;
+    end
+    else
+      hi := mid - 1;
+  end;
+end;
+
 { ── B2 ── GetNodeAt(Y) — TotalHeight subtree-skip ──────────────────────── }
 
 { Maps an absolute vertical pixel offset Y (0 = top of the first visible node,
   i.e. the hidden root's own row is NOT counted) to the visible node covering it
   plus that node's absolute top in ANodeTop.  Returns nil if Y < 0 or past end.
 
-  Algorithm (O(depth + local sibling scan), NOT O(total nodes)):
-  • Start at FRoot^.FirstChild, running top = 0.
-  • For each node:
-      – if not nsVisible → skip to NextSibling (non-visible nodes have no screen extent).
-      – if Y < top + NodeHeight → hit this node's own row; return it.
-      – if expanded with children AND Y < top + TotalHeight → target is inside the
-        expanded subtree: advance top past the node's own row, descend to FirstChild.
-      – else → skip the whole node (NodeHeight if leaf/collapsed; TotalHeight if
-        expanded-but-not-containing-Y) and advance to NextSibling.
-  • Climb-back: when a sibling-list is exhausted mid-descent (NextSibling = nil),
-    walk parent^.NextSibling up the chain until a sibling is found or FRoot is
-    reached.  This exactly mirrors GetNextVisibleNoInit's climb logic. }
+  B3 cache: ValidateCache is called first to ensure FPositionCache is current.
+  FindInCache returns the mark index whose Top is the nearest at-or-below Y.
+  The walk then STARTS from that mark rather than from root, bounding the
+  per-call sibling scan to at most TREE_CACHE_STEP nodes.
+
+  The correctness of the cache is guaranteed by the invariant:
+    • FCacheValid is cleared by every structural mutation (InvalidateTreeLayout).
+    • ValidateCache rebuilds before any cache read.
+  Therefore the marks always correspond to the current visible-node sequence.
+
+  Algorithm (bounded by TREE_CACHE_STEP after the cache-start, plus depth):
+  • Call ValidateCache; binary-search FPositionCache with FindInCache(Y).
+  • If a mark is found, seed (node, runTop) from the mark; otherwise use root.
+  • From the seeded node, perform the same subtree-skip walk as in B2.
+  • Climb-back logic mirrors GetNextVisibleNoInit exactly.
+
+  FLastGetNodeAtVisits counts how many node-iterations the walk makes;
+  it is exposed read-only for the performance-invariant test (TTreePerfTest). }
 function TTyTreeView.GetNodeAt(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
 var
   node, climb: PTyTreeNode;
-  runTop, h: Integer;
+  runTop, h:   Integer;
+  cacheIdx:    Integer;
 begin
   Result   := nil;
   ANodeTop := 0;
+  FLastGetNodeAtVisits := 0;
   if Y < 0 then Exit;
 
-  node   := FRoot^.FirstChild;
-  runTop := 0;
+  { B3: rebuild cache if dirty, then find the nearest mark at or below Y. }
+  ValidateCache;
+  cacheIdx := FindInCache(Y);
+  if cacheIdx >= 0 then
+  begin
+    node   := FPositionCache[cacheIdx].Node;
+    runTop := FPositionCache[cacheIdx].NodeTop;
+  end
+  else
+  begin
+    { No suitable mark (cache empty or Y before first mark) — start from root. }
+    node   := FRoot^.FirstChild;
+    runTop := 0;
+  end;
 
   while node <> nil do
   begin
+    Inc(FLastGetNodeAtVisits);
+
     // Skip non-visible nodes (they have no screen extent); treat like a missing node.
     if not (nsVisible in node^.States) then
     begin
