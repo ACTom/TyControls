@@ -54,6 +54,32 @@ type
     procedure TestTinyClientClampsNonNegativeExtent;
   end;
 
+  { Pure Windows NC hit-test mapper (TyNcHitTest): window-relative point -> HT* code.
+    Edge zones (within AZone of an edge) -> HTLEFT..HTBOTTOMRIGHT; the caption band
+    (y < ACaptionH, not on an edge) -> HTCAPTION; interior -> HTCLIENT; and when not
+    resizable, NO edge codes ever (HTCAPTION/HTCLIENT only). Coords are device px
+    (PPI-independent). Compiled + tested on every platform (the mapper is pure). }
+  TNcHitTestTest = class(TTestCase)
+  published
+    procedure TestLeftEdgeIsHtLeft;
+    procedure TestRightEdgeIsHtRight;
+    procedure TestTopEdgeIsHtTop;
+    procedure TestBottomEdgeIsHtBottom;
+    procedure TestTopLeftCornerIsHtTopLeft;
+    procedure TestTopRightCornerIsHtTopRight;
+    procedure TestBottomLeftCornerIsHtBottomLeft;
+    procedure TestBottomRightCornerIsHtBottomRight;
+    procedure TestCaptionBandIsHtCaption;
+    procedure TestInteriorIsHtClient;
+    procedure TestBelowCaptionIsHtClient;
+    procedure TestTopEdgeWinsOverCaption;
+    procedure TestNotResizableEdgeIsHtClient;
+    procedure TestNotResizableCornerIsHtClient;
+    procedure TestNotResizableCaptionStillHtCaption;
+    procedure TestNotResizableInteriorIsHtClient;
+    procedure TestZeroCaptionNeverCaption;
+  end;
+
   { Pure mapping from a border-resize hit zone to the native resize cursor.
     bhNone -> crDefault; left/right -> crSizeWE; top/bottom -> crSizeNS;
     topLeft/bottomRight -> crSizeNWSE; topRight/bottomLeft -> crSizeNESW. }
@@ -427,6 +453,109 @@ begin
   R := TyResizeGutterRect(Tiny, ZONE, True, False, True);
   AssertTrue('right not < left', R.Right >= R.Left);
   AssertTrue('bottom not < top', R.Bottom >= R.Top);
+end;
+
+{ TNcHitTestTest — pure Windows NC hit-test mapper.
+  WR is a window rect at the origin (NC hit-test works in window-relative coords);
+  CAPH is a caption-band height so y<CAPH (away from an edge) maps to HTCAPTION. }
+const
+  WR: TRect = (Left: 0; Top: 0; Right: 300; Bottom: 200);
+  CAPH = 32;
+
+procedure TNcHitTestTest.TestLeftEdgeIsHtLeft;
+begin
+  { A point in the left strip, vertically clear of the top/bottom zones, is HTLEFT. }
+  AssertEquals(TyHTLEFT, TyNcHitTest(WR, Point(2, 100), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestRightEdgeIsHtRight;
+begin
+  AssertEquals(TyHTRIGHT, TyNcHitTest(WR, Point(298, 100), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestTopEdgeIsHtTop;
+begin
+  AssertEquals(TyHTTOP, TyNcHitTest(WR, Point(150, 2), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestBottomEdgeIsHtBottom;
+begin
+  AssertEquals(TyHTBOTTOM, TyNcHitTest(WR, Point(150, 198), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestTopLeftCornerIsHtTopLeft;
+begin
+  AssertEquals(TyHTTOPLEFT, TyNcHitTest(WR, Point(2, 2), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestTopRightCornerIsHtTopRight;
+begin
+  AssertEquals(TyHTTOPRIGHT, TyNcHitTest(WR, Point(298, 2), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestBottomLeftCornerIsHtBottomLeft;
+begin
+  AssertEquals(TyHTBOTTOMLEFT, TyNcHitTest(WR, Point(2, 198), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestBottomRightCornerIsHtBottomRight;
+begin
+  AssertEquals(TyHTBOTTOMRIGHT, TyNcHitTest(WR, Point(298, 198), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestCaptionBandIsHtCaption;
+begin
+  { y < CAPH, x well clear of the left/right edge zones -> the title-bar drag band. }
+  AssertEquals(TyHTCAPTION, TyNcHitTest(WR, Point(150, 16), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestInteriorIsHtClient;
+begin
+  AssertEquals(TyHTCLIENT, TyNcHitTest(WR, Point(150, 100), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestBelowCaptionIsHtClient;
+begin
+  { Just below the caption band but clear of every edge -> client. }
+  AssertEquals(TyHTCLIENT, TyNcHitTest(WR, Point(150, CAPH + 1), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestTopEdgeWinsOverCaption;
+begin
+  { A point inside BOTH the caption band and the top resize zone must be the resize
+    edge (top wins), so the top border stays grabbable on a captioned window. }
+  AssertEquals(TyHTTOP, TyNcHitTest(WR, Point(150, 1), ZONE, CAPH, True));
+end;
+
+procedure TNcHitTestTest.TestNotResizableEdgeIsHtClient;
+begin
+  { Not resizable: an edge point must NOT return an edge code. Below the caption band
+    (so not HTCAPTION) it is plain HTCLIENT. }
+  AssertEquals(TyHTCLIENT, TyNcHitTest(WR, Point(2, 100), ZONE, CAPH, False));
+end;
+
+procedure TNcHitTestTest.TestNotResizableCornerIsHtClient;
+begin
+  { A bottom corner (below the caption band) when not resizable -> HTCLIENT, never a corner code. }
+  AssertEquals(TyHTCLIENT, TyNcHitTest(WR, Point(298, 198), ZONE, CAPH, False));
+end;
+
+procedure TNcHitTestTest.TestNotResizableCaptionStillHtCaption;
+begin
+  { Not resizable still allows the caption drag band (a fixed window can be moved). }
+  AssertEquals(TyHTCAPTION, TyNcHitTest(WR, Point(150, 16), ZONE, CAPH, False));
+end;
+
+procedure TNcHitTestTest.TestNotResizableInteriorIsHtClient;
+begin
+  AssertEquals(TyHTCLIENT, TyNcHitTest(WR, Point(150, 100), ZONE, CAPH, False));
+end;
+
+procedure TNcHitTestTest.TestZeroCaptionNeverCaption;
+begin
+  { ACaptionH = 0 (no associated title bar): a near-top interior point is HTCLIENT,
+    never HTCAPTION — there is no drag band. (The top edge zone still resizes.) }
+  AssertEquals(TyHTCLIENT, TyNcHitTest(WR, Point(150, 10), ZONE, 0, True));
 end;
 
 { TResizeCursorTest }
@@ -1106,13 +1235,21 @@ end;
 procedure TTyFormTest.TestResizableEdgePressStartsResize;
 var F: TTyFormAccess;
 begin
-  { Resizable (default): a left-button press in the edge zone arms the engine resize.
-    SetBounds gives the form a known size so (2,50) lands in the left border zone. }
+  { Resizable (default): a left-button press in the edge zone. SetBounds gives the form a
+    known size so (2,50) lands in the left border zone.
+      - Non-Windows: the engine's MANUAL BoundsRect-drag resize arms (FResizing=True).
+      - Windows: the manual path is DISABLED (Phase B — native WS_THICKFRAME + WM_NCHITTEST
+        own resize), so the engine must NOT arm; the OS drives resize via the NC subclass
+        (not observable headlessly). ManualResizeEnabled returns False there. }
   F := TTyFormAccess.CreateNew(nil);
   try
     F.SetBounds(0, 0, 200, 100);
     F.InjectFormMouseDown(mbLeft, [], 2, 50);
+    {$IFDEF WINDOWS}
+    AssertFalse('Windows: manual engine resize disabled (native NC owns it)', F.EngineResizing);
+    {$ELSE}
     AssertTrue('edge press started a resize', F.EngineResizing);
+    {$ENDIF}
     F.InjectFormMouseUp(mbLeft, [], 2, 50);   // release so nothing lingers
   finally
     F.Free;
@@ -1239,6 +1376,7 @@ initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeHitForTest);
   RegisterTest(TResizeGutterTest);
+  RegisterTest(TNcHitTestTest);
   RegisterTest(TResizeCursorTest);
   RegisterTest(TCaptionButtonTest);
   RegisterTest(TTitleBarTest);

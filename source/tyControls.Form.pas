@@ -106,6 +106,11 @@ type
       TCustomForm for the generic engine; default True for a non-TTyForm host). The
       edge hit-test routes through this so a fixed window never starts a resize. }
     function FormResizable: Boolean;
+    { Whether the engine's MANUAL (BoundsRect-drag) edge resize is active. False on Windows —
+      there the native WS_THICKFRAME + WM_NCHITTEST own resize, so the manual path is disabled
+      to avoid double-handling (see tyControls.Win32Resize); elsewhere it follows FormResizable.
+      Distinct from FormResizable so the maximize gate (which uses FormResizable) is unaffected. }
+    function ManualResizeEnabled: Boolean;
   public
     constructor Create;
     procedure CaptureInstalledPPI;
@@ -238,20 +243,45 @@ function TyResizeHitFor(AResizable: Boolean; const AClient: TRect; const APt: TP
   (ANeedsGutter and AResizable and not AMaximized) — so alClient children stop short of the
   form edge and the edge strip receives the mouse — else returns AClient unchanged. }
 function TyResizeGutterRect(const AClient: TRect; AZone: Integer; AResizable, AMaximized, ANeedsGutter: Boolean): TRect;
+
+const
+  { Win32 WM_NCHITTEST result codes, declared platform-neutrally so TyNcHitTest (a pure
+    function compiled on EVERY widgetset for headless testing) needn't pull in the Windows
+    unit. Values are the canonical winuser.h codes — identical to Windows.HTLEFT.., so on
+    Win32 returning these is byte-for-byte the native protocol. See B1 spike note below. }
+  TyHTCLIENT      = 1;
+  TyHTCAPTION     = 2;
+  TyHTLEFT        = 10;
+  TyHTRIGHT       = 11;
+  TyHTTOP         = 12;
+  TyHTTOPLEFT     = 13;
+  TyHTTOPRIGHT    = 14;
+  TyHTBOTTOM      = 15;
+  TyHTBOTTOMLEFT  = 16;
+  TyHTBOTTOMRIGHT = 17;
+
+{ Pure Windows NC hit-test mapper (no window handle -> headless-testable on any platform).
+  APt is in WINDOW-relative coords. Within AZone of an edge -> the matching HT* edge/corner
+  code; y < ACaptionH and NOT on a resize edge -> TyHTCAPTION (the title-bar drag band); else
+  TyHTCLIENT. When not AResizable, no edge code is ever returned (TyHTCAPTION/TyHTCLIENT only),
+  so a fixed window keeps its drag band but cannot be resized. A resize edge WINS over the
+  caption band (the top border stays grabbable on a captioned window). The Win32 WM_NCHITTEST
+  bridge feeds its window-relative cursor point straight through this. }
+function TyNcHitTest(const AWinRect: TRect; const APt: TPoint;
+  AZone, ACaptionH: Integer; AResizable: Boolean): Integer;
 function TyResizeCursor(AHit: TTyBorderHit): TCursor;
 function TyMaximizedBounds(const AWorkArea: TRect): TRect;
 function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
 
 implementation
 
-{$IFDEF LCLCOCOA}
 uses
-  CocoaAll;
-{$ENDIF}
+  tyControls.Win32Resize   // native Win32 NC edge-resize glue (no-op off Windows)
+  {$IFDEF LCLCOCOA}, CocoaAll{$ENDIF}
+  {$IFDEF WINDOWS}, strings{$ENDIF}   // StrComp(PAnsiChar) for the WM_SETTINGCHANGE area check
+  ;
 
 {$IFDEF WINDOWS}
-uses
-  strings;   // StrComp(PAnsiChar, PAnsiChar) for the WM_SETTINGCHANGE area check
 { ============================================================================
   B1 SPIKE — how TTyForm intercepts WM_NCCALCSIZE / WM_NCHITTEST on LCL-Win32
   ----------------------------------------------------------------------------
@@ -344,6 +374,32 @@ begin
     if Result.Right < Result.Left then Result.Right := Result.Left;
     if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
   end;
+end;
+
+function TyNcHitTest(const AWinRect: TRect; const APt: TPoint;
+  AZone, ACaptionH: Integer; AResizable: Boolean): Integer;
+var
+  Hit: TTyBorderHit;
+begin
+  // Edge zones first (the top edge must win over the caption band). TyResizeHitFor folds in
+  // the Resizable gate, so a fixed window never yields an edge/corner code.
+  Hit := TyResizeHitFor(AResizable, AWinRect, APt, AZone);
+  case Hit of
+    bhLeft:        Exit(TyHTLEFT);
+    bhRight:       Exit(TyHTRIGHT);
+    bhTop:         Exit(TyHTTOP);
+    bhBottom:      Exit(TyHTBOTTOM);
+    bhTopLeft:     Exit(TyHTTOPLEFT);
+    bhTopRight:    Exit(TyHTTOPRIGHT);
+    bhBottomLeft:  Exit(TyHTBOTTOMLEFT);
+    bhBottomRight: Exit(TyHTBOTTOMRIGHT);
+  end;
+  // Not on a resize edge: the title-bar drag band (when a bar is associated -> ACaptionH>0),
+  // else plain client. APt is window-relative, so the band is [AWinRect.Top .. +ACaptionH).
+  if (ACaptionH > 0) and (APt.Y >= AWinRect.Top) and (APt.Y < AWinRect.Top + ACaptionH) then
+    Result := TyHTCAPTION
+  else
+    Result := TyHTCLIENT;
 end;
 
 function TyResizeCursor(AHit: TTyBorderHit): TCursor;
@@ -649,6 +705,15 @@ begin
     Result := True;
 end;
 
+function TTyChromeEngine.ManualResizeEnabled: Boolean;
+begin
+  {$IFDEF WINDOWS}
+  Result := False;   // native NC resize (WS_THICKFRAME + WM_NCHITTEST) owns it on Windows
+  {$ELSE}
+  Result := FormResizable;
+  {$ENDIF}
+end;
+
 procedure TTyChromeEngine.CaptureInstalledPPI;
 begin
   if (FForm <> nil) and (FForm.Monitor <> nil) then
@@ -708,7 +773,7 @@ procedure TTyChromeEngine.FormMouseDown(Button: TMouseButton;
 begin
   if (Button <> mbLeft) or (FForm = nil) or FMaximized then
     Exit;
-  FResizeHit := TyResizeHitFor(FormResizable, Rect(0, 0, FForm.Width, FForm.Height),
+  FResizeHit := TyResizeHitFor(ManualResizeEnabled, Rect(0, 0, FForm.Width, FForm.Height),
     Point(X, Y), FBorderZone);
   if FResizeHit <> bhNone then
   begin
@@ -732,7 +797,7 @@ begin
     so we leave it alone and fall through to the resize-drag logic below. }
   if not FResizing then
   begin
-    FForm.Cursor := TyResizeCursor(TyResizeHitFor(FormResizable,
+    FForm.Cursor := TyResizeCursor(TyResizeHitFor(ManualResizeEnabled,
       Rect(0, 0, FForm.Width, FForm.Height), Point(X, Y), FBorderZone));
     Exit;
   end;
@@ -790,6 +855,9 @@ begin
     FTitleBar.LayoutButtons;
     FInstalledPPI := CurPPI;
     FForm.Invalidate;
+    // The rescaled caption height (and possibly the border zone) feed the native NC hit-test
+    // on Windows, so refresh the strategy with the new metrics (no-op off Windows / no handle).
+    if FForm is TTyForm then TTyForm(FForm).ApplyResizeStrategy;
   end;
 end;
 
@@ -938,6 +1006,9 @@ begin
   FTitleBar.FEngine := FEngine;
   if FEngine <> nil then FEngine.CaptureInstalledPPI;
   WireTitleBarButtons;
+  // A bar that associated AFTER the window was shown changes the caption-drag band height,
+  // so refresh the native NC strategy (no-op without a handle / off Windows).
+  ApplyResizeStrategy;
 end;
 
 procedure TTyForm.Loaded;
@@ -1126,14 +1197,29 @@ begin
   // (the double-click-maximize path is gated on FResizable in DoMaxRestoreClick).
   if (FTitleBar <> nil) and (FTitleBar.MaxButton <> nil) then
     FTitleBar.MaxButton.Enabled := AValue;
-  ApplyResizeStrategy;   // per-platform style toggle (filled in later phases)
+  ApplyResizeStrategy;   // per-platform style toggle (Windows: WS_THICKFRAME + NC subclass)
 end;
 
 procedure TTyForm.ApplyResizeStrategy;
+{$IFDEF WINDOWS}
+var capH, zone: Integer;
+{$ENDIF}
 begin
-  // Phase A stub: per-platform resize-strategy bodies (WS_THICKFRAME / styleMask /
-  // gutter re-align) land in Phases B/C. The call sites are wired now so those phases
-  // only fill the body.
+  if csDesigning in ComponentState then Exit;   // never poke the window on the design surface
+  {$IFDEF WINDOWS}
+  // Windows native NC resize: assert/clear WS_THICKFRAME per FResizable + (re)install the HWND
+  // subclass that handles WM_NCCALCSIZE/WM_NCHITTEST (see tyControls.Win32Resize / the B1 note).
+  // Caption-drag band height = the title bar's height when one is associated, else 0 (no caption
+  // zone). Guarded by HandleAllocated (the helper also no-ops without a handle).
+  if HandleAllocated then
+  begin
+    if FTitleBar <> nil then capH := FTitleBar.Height else capH := 0;
+    if FEngine <> nil then zone := FEngine.BorderZone else zone := 6;
+    TyWin32ApplyNcResize(Self, FResizable, zone, capH);
+  end;
+  {$ENDIF}
+  // GTK/Qt: the AdjustClientRect gutter + WM handoff (Phase C). Cocoa: resizable styleMask
+  // (Phase C). Those bodies land later; the call sites (SetResizable + DoShow) are wired.
 end;
 
 function TTyForm.GlassBackdrop: TBGRABitmap;
@@ -1310,8 +1396,9 @@ begin
     MakeFullyVisible(nil);
   end;
   {$ENDIF}
-  // After the handle exists, apply the per-platform resize strategy (e.g. WS_THICKFRAME
-  // / styleMask) so the window honours Resizable from first show. Phase A: a no-op stub.
+  // After the handle exists, apply the per-platform resize strategy so the window honours
+  // Resizable from first show. Windows (Phase B): WS_THICKFRAME + the WM_NCCALCSIZE/NCHITTEST
+  // subclass. GTK/Qt + Cocoa bodies land in Phase C; the call site is wired now.
   if (not (csDesigning in ComponentState)) and HandleAllocated then
     ApplyResizeStrategy;
   ApplyWindowEffects;
