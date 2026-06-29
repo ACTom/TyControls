@@ -1,4 +1,4 @@
-unit test.treeview;
+﻿unit test.treeview;
 {$mode objfpc}{$H+}
 interface
 uses
@@ -234,7 +234,7 @@ var
 begin
   t := TTyTreeView.Create(nil);
   try
-    // NodeDataSize = -1 (default) → GetNodeData returns nil even for a real node
+    // NodeDataSize = -1 (default) 鈫?GetNodeData returns nil even for a real node
     n := t.AddChild(nil);
     AssertNull('GetNodeData nil when NodeDataSize=-1', t.GetNodeData(n));
   finally
@@ -310,7 +310,7 @@ begin
   try
     t.RootNodeCount := 5;
     // Root TotalCount = 1 (self) + 5 children = 6
-    // Wait — root is a special sentinel. Root's TotalCount accumulates all descendants + itself.
+    // Wait 鈥?root is a special sentinel. Root's TotalCount accumulates all descendants + itself.
     // Each child has TotalCount=1, so root TotalCount = 1 + 5 = 6
     AssertEquals('root TotalCount = 6', 6, Integer(t.RootNode^.TotalCount));
   finally
@@ -326,7 +326,7 @@ begin
   try
     t.RootNodeCount := 5;
     // Root is expanded; 5 children each with NodeHeight=18; root TotalHeight = 18 + 5*18 = 108
-    // Root's own NodeHeight = 18; plus 5*18 = 90 → 108
+    // Root's own NodeHeight = 18; plus 5*18 = 90 鈫?108
     AssertEquals('root TotalHeight = 108', 108, Integer(t.RootNode^.TotalHeight));
   finally
     t.Free;
@@ -480,7 +480,7 @@ begin
   t := TTyTreeView.Create(nil);
   try
     parent := t.AddChild(nil);
-    // parent is not expanded yet — children contribute 0 height to root
+    // parent is not expanded yet 鈥?children contribute 0 height to root
     child1 := t.AddChild(parent);
     child2 := t.AddChild(parent);
     // root TotalCount = root(1) + parent(1) + child1(1) + child2(1) = 4
@@ -599,7 +599,7 @@ procedure TTreeDeleteTest.TestDeleteMiddleChildUpdatesIndices;
 // A1 fix: DeleteNode re-sequences sibling Index values after an unlink so that
 // remaining siblings always have consecutive 0-based indices.
 // The Clear fast-path skips the re-sequence (guarded by nsClearing on FRoot)
-// so bulk teardown stays O(n), not O(n²).
+// so bulk teardown stays O(n), not O(n虏).
 var
   t: TTyTreeView;
   n1, n2, n3: PTyTreeNode;
@@ -822,7 +822,7 @@ end;
     - OnFreeNode increments FFireCount; also clears the AnsiString (canonical
       managed-release pattern) so the heap is left clean.
     - Build a 4-node tree, assign handler, then FREE the tree WITHOUT calling
-      Clear → destructor must still walk and fire OnFreeNode for all 4 nodes.
+      Clear 鈫?destructor must still walk and fire OnFreeNode for all 4 nodes.
 
   This test MUST FAIL before FIX 1 (when FOnFreeNode was nilled before Clear)
   and PASS after. }
@@ -844,12 +844,12 @@ begin
     PManagedRec(t.GetNodeData(n))^.I := i;
   end;
   t.OnFreeNode := @OnFreeManagedRec;  // clears S then increments FFireCount
-  // Free without an explicit Clear — destructor must still fire OnFreeNode
+  // Free without an explicit Clear 鈥?destructor must still fire OnFreeNode
   t.Free;
   AssertEquals('OnFreeNode fired for all 4 nodes on Free (no explicit Clear)', 4, FFireCount);
 end;
 
-{ ── A5 ── lazy init + expand/collapse + iterators ─────────────────────── }
+{ 鈹€鈹€ A5 鈹€鈹€ lazy init + expand/collapse + iterators 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   TTreeLazyTest = class(TTestCase)
@@ -899,7 +899,7 @@ type
     procedure TestExpandedProperty;
   end;
 
-{ ── TTreeLazyTest helpers ─────────────────────────────────────────────── }
+{ 鈹€鈹€ TTreeLazyTest helpers 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 { OnInitNode fires for any depth.
   ivsHasChildren is set for levels 0, 1, and 2 (so level 3 nodes are leaves).
@@ -970,7 +970,7 @@ begin
   Result := t;
 end;
 
-{ ── TTreeLazyTest published tests ────────────────────────────────────── }
+{ 鈹€鈹€ TTreeLazyTest published tests 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 procedure TTreeLazyTest.TestSetRootNodeCountFiresNoInit;
 var
@@ -1039,14 +1039,14 @@ begin
   ResetCounters;
   t := MakeTree;
   try
-    n := t.GetFirst;  // InitNode → sets nsHasChildren
+    n := t.GetFirst;  // InitNode 鈫?sets nsHasChildren
     t.Expanded[n] := True;
     AssertEquals('OnInitChildren fired once', 1, FInitChildrenCount);
     AssertEquals('4 children materialised', 4, Integer(n^.ChildCount));
     AssertTrue  ('nsExpanded set', nsExpanded in n^.States);
     // Second expand call must NOT fire OnInitChildren again.
     FInitChildrenCount := 0;
-    t.Expanded[n] := True;   // already expanded — no-op
+    t.Expanded[n] := True;   // already expanded 鈥?no-op
     AssertEquals('no re-init on second expand', 0, FInitChildrenCount);
   finally t.Free; end;
 end;
@@ -1067,7 +1067,7 @@ begin
   ResetCounters;
   t := MakeTree;
   try
-    n0 := t.GetFirst;   // InitNode n0 → ivsHasChildren
+    n0 := t.GetFirst;   // InitNode n0 鈫?ivsHasChildren
     t.Expanded[n0] := True;  // materialises 4 children
 
     // Collect screen order via NoInit iterator
@@ -1094,7 +1094,7 @@ begin
 end;
 
 procedure TTreeLazyTest.TestGetNextVisibleNoInitSkipsCollapsed;
-{ Expand n[0], then collapse it again — the 4 children must not appear in the walk. }
+{ Expand n[0], then collapse it again 鈥?the 4 children must not appear in the walk. }
 var
   t: TTyTreeView;
   n0: PTyTreeNode;
@@ -1152,7 +1152,7 @@ begin
   FVetoExpanding := True;
   t := MakeTree;
   try
-    n0 := t.GetFirst;  // InitNode → nsHasChildren
+    n0 := t.GetFirst;  // InitNode 鈫?nsHasChildren
     prevTotal := t.RootNode^.TotalHeight;
     t.Expanded[n0] := True;   // vetoed
     AssertFalse ('still not expanded', nsExpanded in n0^.States);
@@ -1174,14 +1174,14 @@ begin
   ResetCounters;
   t := MakeTree;
   try
-    // Baseline: 3 top-level nodes, each NodeHeight=18; root itself 18 → total=4*18=72
+    // Baseline: 3 top-level nodes, each NodeHeight=18; root itself 18 鈫?total=4*18=72
     heightBefore := Integer(t.RootNode^.TotalHeight);
     AssertEquals('baseline height 72', 72, heightBefore);
 
     n0 := t.GetFirst;   // InitNode n0
     t.Expanded[n0] := True;
     heightAfterExpand := Integer(t.RootNode^.TotalHeight);
-    // n0 expanded with 4 children (each 18px) → root total = 72 + 4*18 = 144
+    // n0 expanded with 4 children (each 18px) 鈫?root total = 72 + 4*18 = 144
     AssertEquals('height after expand = 144', 144, heightAfterExpand);
 
     t.Expanded[n0] := False;  // collapse
@@ -1210,7 +1210,7 @@ begin
   finally t.Free; end;
 end;
 
-{ ── B1 ── TotalHeight invariant + FRangeY ──────────────────────────────── }
+{ 鈹€鈹€ B1 鈹€鈹€ TotalHeight invariant + FRangeY 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   TTreeHeightInvariantTest = class(TTestCase)
@@ -1228,12 +1228,12 @@ type
     function CountAllNodes(T: TTyTreeView): Integer;
     procedure AssertInvariant(T: TTyTreeView; const Step: string);
   published
-    { Scenario 1: root nodes → expand → collapse (basic roundtrip). }
+    { Scenario 1: root nodes 鈫?expand 鈫?collapse (basic roundtrip). }
     procedure TestScenario1_ExpandCollapse;
     { Scenario 2: nested expand A, then expand A.child B, then collapse A (B still expanded),
       then re-expand A (B must still be expanded, invariant must hold throughout). }
     procedure TestScenario2_NestedCollapseAndReexpand;
-    { Scenario 3: OnInitNode returns ivsExpanded → auto-expand on first touch;
+    { Scenario 3: OnInitNode returns ivsExpanded 鈫?auto-expand on first touch;
       assert invariant after the node is initialised. }
     procedure TestScenario3_AutoExpandViaInitStates;
     { Scenario 4: AddChild to an expanded parent grows root height;
@@ -1243,8 +1243,8 @@ type
       visible subtree; DeleteNode from a collapsed parent leaves root height unchanged. }
     procedure TestScenario5_DeleteExpandedVsCollapsed;
     { Scenario 6 (the bug this fix addresses): with A collapsed, set Expanded[B]=True
-      where B is A's child → A.TotalHeight must stay = A.NodeHeight, root unchanged;
-      then expand A → root grows by B's already-expanded subtree. }
+      where B is A's child 鈫?A.TotalHeight must stay = A.NodeHeight, root unchanged;
+      then expand A 鈫?root grows by B's already-expanded subtree. }
     procedure TestScenario6_ExpandInCollapsedAncestor;
     { RangeY tracks RootNode^.TotalHeight after mutations. }
     procedure TestRangeYTracksRoot;
@@ -1318,10 +1318,10 @@ end;
 { Scenario 2 }
 procedure TTreeHeightInvariantTest.TestScenario2_NestedCollapseAndReexpand;
 { Tree (5 root nodes; A = first root node, B = A's first child)
-  Step 1: expand A → A's 4 children materialised
-  Step 2: expand B (A's first child) → B's 4 grandchildren materialised
+  Step 1: expand A 鈫?A's 4 children materialised
+  Step 2: expand B (A's first child) 鈫?B's 4 grandchildren materialised
   Step 3: collapse A (B is still expanded internally)
-  Step 4: re-expand A → B must still be expanded, invariant holds }
+  Step 4: re-expand A 鈫?B must still be expanded, invariant holds }
 var
   t: TTyTreeView;
   A, B: PTyTreeNode;
@@ -1361,7 +1361,7 @@ begin
     { B must still be internally expanded (nsExpanded still set) }
     AssertTrue('B still internally expanded', nsExpanded in B^.States);
 
-    { Step 4: re-expand A — B's 4 grandchildren must reappear }
+    { Step 4: re-expand A 鈥?B's 4 grandchildren must reappear }
     t.Expanded[A] := True;
     AssertInvariant(t, 'S2 after re-expand A (B still expanded)');
     AssertEquals('S2 re-expand A: height = root_h + 3*18 + 4*18 + 4*18',
@@ -1374,7 +1374,7 @@ end;
 
 { Scenario 3 }
 procedure TTreeHeightInvariantTest.TestScenario3_AutoExpandViaInitStates;
-{ OnInitNode returns ivsExpanded for level-0 nodes → auto-expand on first GetNext touch.
+{ OnInitNode returns ivsExpanded for level-0 nodes 鈫?auto-expand on first GetNext touch.
   The invariant must hold after InitNode + auto-expand fires. }
 var
   t: TTyTreeView;
@@ -1388,8 +1388,8 @@ begin
     t.RootNodeCount  := 2;
     AssertInvariant(t, 'S3 before init');
 
-    { Touch first node: triggers InitNode → ivsExpanded → auto-expand → InitChildren → 4 children }
-    n := t.GetFirst;   // fires InitNode(first child) → sets ivsExpanded → calls SetExpanded
+    { Touch first node: triggers InitNode 鈫?ivsExpanded 鈫?auto-expand 鈫?InitChildren 鈫?4 children }
+    n := t.GetFirst;   // fires InitNode(first child) 鈫?sets ivsExpanded 鈫?calls SetExpanded
     AssertTrue('S3 node is expanded after auto-expand', nsExpanded in n^.States);
     AssertEquals('S3 node has 4 children after auto-expand', 4, Integer(n^.ChildCount));
     AssertInvariant(t, 'S3 after auto-expand via ivsExpanded');
@@ -1422,7 +1422,7 @@ begin
     t.Expanded[expandedParent] := True;
     AssertInvariant(t, 'S4 after expand first node');
 
-    { AddChild to an EXPANDED node → root height grows by NodeHeight }
+    { AddChild to an EXPANDED node 鈫?root height grows by NodeHeight }
     heightBefore := Integer(t.RootNode^.TotalHeight);
     t.AddChild(expandedParent);
     AssertInvariant(t, 'S4 after AddChild to expanded parent');
@@ -1430,7 +1430,7 @@ begin
                  heightBefore + 18,
                  Integer(t.RootNode^.TotalHeight));
 
-    { AddChild to a COLLAPSED node → root height unchanged }
+    { AddChild to a COLLAPSED node 鈫?root height unchanged }
     heightBefore := Integer(t.RootNode^.TotalHeight);
     t.AddChild(collapsedParent);
     AssertInvariant(t, 'S4 after AddChild to collapsed parent');
@@ -1469,7 +1469,7 @@ begin
     t.Expanded[expandedChild] := True;    { materialises 4 grandchildren }
     AssertInvariant(t, 'S5 after expand child');
 
-    { Delete the expanded child (parent expanded) → root drops by child's full TotalHeight }
+    { Delete the expanded child (parent expanded) 鈫?root drops by child's full TotalHeight }
     heightBefore := Integer(t.RootNode^.TotalHeight);
     { expandedChild^.TotalHeight = 18 + 4*18 = 90 (itself + 4 grandchildren) }
     AssertEquals('S5 expanded child TotalHeight = 90', 90,
@@ -1494,15 +1494,15 @@ begin
   end;
 end;
 
-{ Scenario 6 — the bug this fix addresses }
+{ Scenario 6 鈥?the bug this fix addresses }
 procedure TTreeHeightInvariantTest.TestScenario6_ExpandInCollapsedAncestor;
 { With A collapsed, programmatically set Expanded[B] := True where B is A's child.
   Expected:
-    • A.TotalHeight stays = A.NodeHeight (collapsed; B's subtree excluded)
-    • RootNode^.TotalHeight unchanged
+    鈥?A.TotalHeight stays = A.NodeHeight (collapsed; B's subtree excluded)
+    鈥?RootNode^.TotalHeight unchanged
   Then expand A:
-    • Root grows by A's full (now B-expanded) subtree height
-    • B must still be expanded, invariant holds. }
+    鈥?Root grows by A's full (now B-expanded) subtree height
+    鈥?B must still be expanded, invariant holds. }
 var
   t: TTyTreeView;
   A, B: PTyTreeNode;
@@ -1527,8 +1527,8 @@ begin
     Include(B^.States, nsHasChildren);
     Include(B^.States, nsInitialized);
 
-    { Expand B while A is COLLAPSED — the key scenario }
-    t.Expanded[B] := True;   { InitChildren fires via SetExpanded → 4 grandchildren }
+    { Expand B while A is COLLAPSED 鈥?the key scenario }
+    t.Expanded[B] := True;   { InitChildren fires via SetExpanded 鈫?4 grandchildren }
     AssertInvariant(t, 'S6 after Expanded[B]=True with A collapsed');
     { A is collapsed: its TotalHeight must still be just its own NodeHeight (18) }
     AssertEquals('S6 A.TotalHeight = 18 while A collapsed (B expanded inside)',
@@ -1538,7 +1538,7 @@ begin
                  rootHeightBase, Integer(t.RootNode^.TotalHeight));
     AssertTrue('S6 B is marked expanded', nsExpanded in B^.States);
 
-    { Now expand A — root must grow by A's full visible subtree (A's 4 children + B's 4 grandchildren) }
+    { Now expand A 鈥?root must grow by A's full visible subtree (A's 4 children + B's 4 grandchildren) }
     t.Expanded[A] := True;
     AssertInvariant(t, 'S6 after Expanded[A]=True (B already expanded)');
     AssertTrue('S6 B still expanded after A expands', nsExpanded in B^.States);
@@ -1586,7 +1586,7 @@ begin
   end;
 end;
 
-{ ── B2 ── GetNodeAt(Y) cross-check vs linear walk ────────────────────────── }
+{ 鈹€鈹€ B2 鈹€鈹€ GetNodeAt(Y) cross-check vs linear walk 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   TTreeGetNodeAtTest = class(TTestCase)
@@ -1605,7 +1605,7 @@ type
             A2C1  top=162  (leaf)
           A3   top=180  (leaf)
 
-      Total visible height = 10 nodes × 18 = 180 px
+      Total visible height = 10 nodes 脳 18 = 180 px
       (A1's children are NOT visible because A1 is collapsed.)
 
       We build this tree explicitly (no lazy init needed). }
@@ -1633,7 +1633,7 @@ type
     procedure TestGetNodeAtEmptyTree;
   end;
 
-{ ── TTreeGetNodeAtTest helpers ────────────────────────────────────────────── }
+{ 鈹€鈹€ TTreeGetNodeAtTest helpers 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 function TTreeGetNodeAtTest.BuildTree: TTyTreeView;
 var
@@ -1656,7 +1656,7 @@ begin
   FA0C1G0 := t.AddChild(FA0C1);
   FA0C1G1 := t.AddChild(FA0C1);
 
-  { A1's children — allocate them but keep A1 collapsed }
+  { A1's children 鈥?allocate them but keep A1 collapsed }
   t.AddChild(FA1);
   t.AddChild(FA1);
   t.AddChild(FA1);
@@ -1715,10 +1715,10 @@ begin
     Inc(accTop, n^.NodeHeight);
     n := T.GetNextVisibleNoInit(n);
   end;
-  { Y is past the end — return nil }
+  { Y is past the end 鈥?return nil }
 end;
 
-{ ── TTreeGetNodeAtTest published tests ───────────────────────────────────── }
+{ 鈹€鈹€ TTreeGetNodeAtTest published tests 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 procedure TTreeGetNodeAtTest.TestGetNodeAtKnownNodes;
 { Verify exact (node, top) pairs for the constructed tree.
@@ -1734,7 +1734,7 @@ procedure TTreeGetNodeAtTest.TestGetNodeAtKnownNodes;
     A2C0     top=144
     A2C1     top=162
     A3       top=180
-  Total visible = 11 nodes × 18 = 198 px }
+  Total visible = 11 nodes 脳 18 = 198 px }
 var
   t: TTyTreeView;
   node: PTyTreeNode;
@@ -1801,7 +1801,7 @@ var
 begin
   t := BuildTree;
   try
-    { A0C1 is at top=36, NodeHeight=18 → spans [36, 54) }
+    { A0C1 is at top=36, NodeHeight=18 鈫?spans [36, 54) }
     node := t.GetNodeAt(36, nodeTop);
     AssertEquals('A0C1: GetNodeAt(36) nodeTop', 36, nodeTop);
     AssertEquals('A0C1: GetNodeAt(36) node', PtrUInt(FA0C1), PtrUInt(node));
@@ -1915,7 +1915,7 @@ begin
   end;
 end;
 
-{ ── B3 ── position cache + performance invariant ────────────────────────── }
+{ 鈹€鈹€ B3 鈹€鈹€ position cache + performance invariant 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   TTreePerfTest = class(TTestCase)
@@ -1924,23 +1924,23 @@ type
     function LinearGetNodeAt(T: TTyTreeView; Y: Integer; out ANodeTop: Integer): PTyTreeNode;
   published
     { PERFORMANCE INVARIANT: a flat 200k-node tree, GetNodeAt near the END of the
-      list must visit ≤ TREE_CACHE_STEP + small constant nodes, NOT ~200k.
+      list must visit 鈮?TREE_CACHE_STEP + small constant nodes, NOT ~200k.
       This proves the binary-search cache bounds the per-call scan.
 
       200k flat skeleton nodes are allocated in one SetChildCount call
-      (no OnInitNode, NodeDataSize=0 → minimum allocation stride).
-      Each node: NodeHeight=18, nsVisible set, not expandable → total visible height = 200k×18.
+      (no OnInitNode, NodeDataSize=0 鈫?minimum allocation stride).
+      Each node: NodeHeight=18, nsVisible set, not expandable 鈫?total visible height = 200k脳18.
 
-      We query a Y near the END (node 199_000's top = 199_000 × 18 = 3_582_000 px).
+      We query a Y near the END (node 199_000's top = 199_000 脳 18 = 3_582_000 px).
       Without the cache, GetNodeAt would scan ~199_000 nodes linearly.
       With TREE_CACHE_STEP=2000, it starts from mark floor(199_000/2000)=99 and
-      then scans at most 2000 nodes → visits ≤ 2000+small.
+      then scans at most 2000 nodes 鈫?visits 鈮?2000+small.
 
       Building 200k nodes takes ~100ms headlessly; well within test budget. }
     procedure TestFlatTree200kCacheBoundsVisits;
 
     { CORRECTNESS SPOT-CHECK: a few GetNodeAt queries on the 200k tree must return
-      the correct node (verified against a short local linear walk — we do NOT
+      the correct node (verified against a short local linear walk 鈥?we do NOT
       linearly scan 200k for every query). }
     procedure TestFlatTree200kCorrectness;
 
@@ -1951,7 +1951,7 @@ type
 
 function TTreePerfTest.LinearGetNodeAt(T: TTyTreeView; Y: Integer;
   out ANodeTop: Integer): PTyTreeNode;
-{ Short linear walk — only used for spot-checks of a few nodes. }
+{ Short linear walk 鈥?only used for spot-checks of a few nodes. }
 var
   n: PTyTreeNode;
   accTop: Integer;
@@ -1977,8 +1977,8 @@ end;
 procedure TTreePerfTest.TestFlatTree200kCacheBoundsVisits;
 { The KEY performance-invariant test.
   Flat tree: 200_000 root-level nodes, NodeHeight=18, NodeDataSize=0, no events.
-  Query Y near the END of the list (node 199_000 → top = 199_000 × 18).
-  Expect: visits ≤ TREE_CACHE_STEP + a small constant (well under 3000).
+  Query Y near the END of the list (node 199_000 鈫?top = 199_000 脳 18).
+  Expect: visits 鈮?TREE_CACHE_STEP + a small constant (well under 3000).
   Without the cache, this would be ~199_000 visits. }
 const
   NODE_COUNT  = 200000;
@@ -1994,7 +1994,7 @@ begin
     t.NodeDataSize   := 0;    // smallest allocation; no data blob
     t.RootNodeCount  := NODE_COUNT;
 
-    { Y for node at QUERY_INDEX (0-based): QUERY_INDEX × DefaultNodeHeight }
+    { Y for node at QUERY_INDEX (0-based): QUERY_INDEX 脳 DefaultNodeHeight }
     queryY := QUERY_INDEX * t.DefaultNodeHeight;
 
     node   := t.GetNodeAt(queryY, nodeTop);
@@ -2002,16 +2002,16 @@ begin
 
     AssertTrue('node found (not nil)', node <> nil);
 
-    { nodeTop must be exactly QUERY_INDEX × 18 }
+    { nodeTop must be exactly QUERY_INDEX 脳 18 }
     AssertEquals('nodeTop correct', QUERY_INDEX * t.DefaultNodeHeight, nodeTop);
 
-    { The cache must limit the scan to ≤ MAX_VISITS nodes.
+    { The cache must limit the scan to 鈮?MAX_VISITS nodes.
       Without the cache, this would be ~199_000.  With TREE_CACHE_STEP=2000 the
-      walk starts from mark 99 (top=199_000×18 closest from below) and advances
-      at most 2000 nodes, so visits will typically be ≤ 2001. }
+      walk starts from mark 99 (top=199_000脳18 closest from below) and advances
+      at most 2000 nodes, so visits will typically be 鈮?2001. }
     if visits > MAX_VISITS then
       Fail(Format('Cache did NOT bound the scan: visited %d nodes (limit=%d). '
-                + 'Expected ≤ %d for TREE_CACHE_STEP=%d.',
+                + 'Expected 鈮?%d for TREE_CACHE_STEP=%d.',
                   [visits, MAX_VISITS, MAX_VISITS, TREE_CACHE_STEP]));
   finally
     t.Free;
@@ -2074,12 +2074,12 @@ begin
     t.NodeDataSize  := 0;
     t.RootNodeCount := NODE_COUNT;
 
-    { First query — builds cache }
+    { First query 鈥?builds cache }
     node := t.GetNodeAt(0, nodeTop);
     AssertTrue('first query: node found', node <> nil);
 
     { Clear invalidates the cache; RangeY = ContentHeight = TotalHeight - NodeHeight.
-      After Clear, no children remain, so TotalHeight = NodeHeight → RangeY = 0. }
+      After Clear, no children remain, so TotalHeight = NodeHeight 鈫?RangeY = 0. }
     t.Clear;
     AssertEquals('after Clear: RangeY = ContentHeight (= 0 when tree empty)',
                  Integer(t.RootNode^.TotalHeight) - Integer(t.RootNode^.NodeHeight),
@@ -2087,7 +2087,7 @@ begin
     node := t.GetNodeAt(0, nodeTop);
     AssertNull('after Clear: GetNodeAt(0) = nil (empty)', node);
 
-    { Add nodes back → cache rebuilds }
+    { Add nodes back 鈫?cache rebuilds }
     t.RootNodeCount := NODE_COUNT;
     node := t.GetNodeAt((NODE_COUNT - 1) * t.DefaultNodeHeight, nodeTop);
     AssertTrue('after re-add: last node found', node <> nil);
@@ -2098,7 +2098,7 @@ begin
   end;
 end;
 
-{ ── C1 ── selection / focus + tree options + FullExpand/Collapse/ScrollIntoView ── }
+{ 鈹€鈹€ C1 鈹€鈹€ selection / focus + tree options + FullExpand/Collapse/ScrollIntoView 鈹€鈹€ }
 
 type
   TTreeC1Test = class(TTestCase)
@@ -2181,7 +2181,7 @@ begin
   FInitChildrenCount := 0;
 end;
 
-{ ── Published tests ──────────────────────────────────────────────────────────── }
+{ 鈹€鈹€ Published tests 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 procedure TTreeC1Test.TestSelectNodeSetsStateAndFiresOnChange;
 var
@@ -2216,7 +2216,7 @@ begin
     n := t.RootNode^.FirstChild;
     t.Selected[n] := True;   // first selection
     FOnChangeCount := 0;     // reset
-    t.Selected[n] := True;   // re-select same node → should fire nothing
+    t.Selected[n] := True;   // re-select same node 鈫?should fire nothing
     AssertEquals('no OnChange on re-select of same node', 0, FOnChangeCount);
     AssertTrue ('nsSelected still set', nsSelected in n^.States);
   finally
@@ -2315,7 +2315,7 @@ begin
 end;
 
 procedure TTreeC1Test.TestTreeOptionSettersNocrash;
-{ Just flip every Boolean and set Indent — must not crash (Invalidate is safe
+{ Just flip every Boolean and set Indent 鈥?must not crash (Invalidate is safe
   without a window handle on a headless control). }
 var
   t: TTyTreeView;
@@ -2348,10 +2348,10 @@ procedure TTreeC1Test.TestFullExpandMaterialisesAllLazy;
   OnInitChildren returns 3 children.
 
   Expected after FullExpand(nil):
-    level 0: 3 nodes  → 3  OnInitChildren calls  (3 root nodes expanded)
-    level 1: 9 nodes  → 9  OnInitChildren calls  (9 level-1 nodes expanded)
-    level 2: 27 nodes → 27 OnInitChildren calls  (27 level-2 nodes expanded)
-    level 3: 81 nodes → leaves (level >= 3 → no ivsHasChildren → not expanded)
+    level 0: 3 nodes  鈫?3  OnInitChildren calls  (3 root nodes expanded)
+    level 1: 9 nodes  鈫?9  OnInitChildren calls  (9 level-1 nodes expanded)
+    level 2: 27 nodes 鈫?27 OnInitChildren calls  (27 level-2 nodes expanded)
+    level 3: 81 nodes 鈫?leaves (level >= 3 鈫?no ivsHasChildren 鈫?not expanded)
   Total OnInitChildren calls = 39 (= 3 + 9 + 27, all expandable nodes).
   Total node count (excl. root) = 3 + 9 + 27 + 81 = 120.
   RootNode^.TotalCount = 121 (root itself + 120 descendants). }
@@ -2367,7 +2367,7 @@ begin
     t.OnInitNode     := @OnInitNodeHasChildren;
     t.OnInitChildren := @OnInitChildren3;
     t.RootNodeCount  := 3;
-    // FRESH tree — no manual InitNode calls; FullExpand must do its own InitNode.
+    // FRESH tree 鈥?no manual InitNode calls; FullExpand must do its own InitNode.
 
     t.FullExpand(nil);
 
@@ -2392,7 +2392,7 @@ begin
 end;
 
 procedure TTreeC1Test.TestFullCollapse;
-{ Expand some nodes then FullCollapse — all nsExpanded bits must be cleared. }
+{ Expand some nodes then FullCollapse 鈥?all nsExpanded bits must be cleared. }
 var
   t: TTyTreeView;
   n: PTyTreeNode;
@@ -2425,7 +2425,7 @@ var
 begin
   t := TTyTreeView.Create(nil);
   try
-    t.RootNodeCount := 20;   // 20 nodes × 18px = 360px total; ClientHeight=0 headless
+    t.RootNodeCount := 20;   // 20 nodes 脳 18px = 360px total; ClientHeight=0 headless
     lastNode := t.RootNode^.LastChild;
     t.ScrollIntoView(lastNode);
     { FOffsetY should be negative (scrolled toward the node). }
@@ -2459,7 +2459,7 @@ begin
   end;
 end;
 
-{ ── C2 ── embedded scrollbars + offsets ─────────────────────────────────────── }
+{ 鈹€鈹€ C2 鈹€鈹€ embedded scrollbars + offsets 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   TTreeC2Test = class(TTestCase)
@@ -2469,7 +2469,7 @@ type
     { FIX 4 helper: returns a text string wide enough to overflow a 50px viewport }
     procedure OnGetTextWide(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
   published
-    { Scrollbars exist immediately after Create — never lazily created during paint. }
+    { Scrollbars exist immediately after Create 鈥?never lazily created during paint. }
     procedure TestScrollBarsExistAfterConstruction;
     { ContentHeight = TotalHeight - NodeHeight (phantom root excluded). }
     procedure TestContentHeightExcludesRoot;
@@ -2502,7 +2502,7 @@ begin
 end;
 
 procedure TTreeC2Test.TestScrollBarsExistAfterConstruction;
-{ Both scrollbars must be allocated right after Create — before any paint,
+{ Both scrollbars must be allocated right after Create 鈥?before any paint,
   before any RootNodeCount assignment.  This proves they are created eagerly
   in the constructor and will receive mouse events via a valid HWND chain,
   not lazily during a WM_PAINT where a windowed child has no real parent. }
@@ -2571,14 +2571,14 @@ end;
 
 procedure TTreeC2Test.TestVScrollBarAppearsForTallTree;
 { Build a tree whose ContentHeight (= N * 18) > the control Height.
-  After UpdateScrollBars (called by InvalidateTreeLayout → SetChildCount),
+  After UpdateScrollBars (called by InvalidateTreeLayout 鈫?SetChildCount),
   the vertical scrollbar must be Visible. }
 var
   t: TTyTreeView;
 begin
   t := TTyTreeView.Create(nil);
   try
-    { Height = 160 (default); 20 nodes × 18 = 360px > 160px → bar needed. }
+    { Height = 160 (default); 20 nodes 脳 18 = 360px > 160px 鈫?bar needed. }
     t.RootNodeCount := 20;
     { Both scrollbars are created in the constructor, so VScroll is never nil. }
     AssertTrue('VScroll created', t.VScroll <> nil);
@@ -2591,7 +2591,7 @@ begin
 end;
 
 procedure TTreeC2Test.TestVScrollBarHiddenForShortTree;
-{ 3 nodes × 18 = 54px < 160px (default Height) → bar hidden, FOffsetY = 0. }
+{ 3 nodes 脳 18 = 54px < 160px (default Height) 鈫?bar hidden, FOffsetY = 0. }
 var
   t: TTyTreeView;
 begin
@@ -2678,7 +2678,7 @@ end;
 
   We build a narrow tree (50px wide) with OnGetText wired to return a wide
   string, so the first RenderTo sets FRangeX > 50 and shows HScroll.
-  Then Clear → RangeX must drop to 0 immediately (InvalidateTreeLayout).
+  Then Clear 鈫?RangeX must drop to 0 immediately (InvalidateTreeLayout).
   A second RenderTo on the empty tree must leave RangeX = 0 / HScroll hidden.
 
   This validates the FIX 4 invariant: InvalidateTreeLayout resets FRangeX = 0
@@ -2754,7 +2754,7 @@ begin
   end;
 end;
 
-{ ── C3 ── pixel paint tests ──────────────────────────────────────────────── }
+{ 鈹€鈹€ C3 鈹€鈹€ pixel paint tests 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 { Shared event handlers for the C3 test suite.
 
@@ -2882,12 +2882,12 @@ end;
 
 { TestChildRowIndentedMoreThanTopLevel
   With DefaultNodeHeight=20, ShowRoot=True, Indent=16:
-    row 0 = top-level node 0 (level 0, expanded). Caption starts at x≈18.
-    row 1 = first child of node 0 (level 1). Caption starts at x≈34.
-  Assert: the child row has text ink at x≥40 (comfortably in its caption zone)
+    row 0 = top-level node 0 (level 0, expanded). Caption starts at x鈮?8.
+    row 1 = first child of node 0 (level 1). Caption starts at x鈮?4.
+  Assert: the child row has text ink at x鈮?0 (comfortably in its caption zone)
   AND the parent row has text ink at x in [18..35) (its caption zone).
-  Crucially, the parent row at x≥36 should NOT have text ink (caption 'N0 L0'
-  is short) — but that's font-dependent.  The robust assertion is:
+  Crucially, the parent row at x鈮?6 should NOT have text ink (caption 'N0 L0'
+  is short) 鈥?but that's font-dependent.  The robust assertion is:
     (a) parent row has text ink at y=10, x=[18..35]
     (b) child row has text ink at y=30, x=[36..80]
   This proves the child's caption starts further right than the parent's. }
@@ -2948,7 +2948,7 @@ end;
   Row layout with ShowRoot/Indent=16, DefaultNodeHeight=20:
     y=0..19  : node 0 (expanded)
     y=20..39 : child 0 of node 0 (level 1, inited, expanded)
-    y=40..59 : grandchild 0 of child 0 (level 2 = leaf → no button)
+    y=40..59 : grandchild 0 of child 0 (level 2 = leaf 鈫?no button)
   Check grandchild at y=47 (centre of row y=40..59), x=[3..13]: should be blank. }
 procedure TTreeC3PaintTest.TestExpandButtonInkForExpandable;
 var
@@ -2990,7 +2990,7 @@ begin
       for x := 3 to 13 do
       begin
         Px := Bgra.GetPixel(x, 49);
-        { Grey tree lines have R=G=B≈128; glyph has R<64. We only flag as "ink"
+        { Grey tree lines have R=G=B鈮?28; glyph has R<64. We only flag as "ink"
           when red < 100 to avoid false positives from tree lines. }
         if (Px.alpha > 0) and (Px.red < 100) then
           leafIsBlank := False;
@@ -3029,7 +3029,7 @@ begin
     Tree.Font.PixelsPerInch := 96;
     Tree.SetBounds(0, 0, 200, 160);
     Tree.EmptyListMessage := 'Empty';
-    { No RootNodeCount set — tree is empty }
+    { No RootNodeCount set 鈥?tree is empty }
     Bmp.PixelFormat := pf32bit;
     Bmp.SetSize(200, 160);
     Bmp.Canvas.FillRect(0, 0, 200, 160);
@@ -3052,7 +3052,7 @@ begin
   end;
 end;
 
-{ ── C4 ── hit-test + mouse + keyboard ─────────────────────────────────────── }
+{ 鈹€鈹€ C4 鈹€鈹€ hit-test + mouse + keyboard 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 { TTreeC4Test event handlers }
 
@@ -3127,7 +3127,7 @@ end;
     CR = Rect(0, 0, 200, 160)  (padding=0 since no controller loaded)
   FOffsetX = FOffsetY = 0 initially.
 
-  Note: the tree is created with Create(nil) so there is no controller → no CSS
+  Note: the tree is created with Create(nil) so there is no controller 鈫?no CSS
   padding/border.  ContentRect falls back to ClientRect = Rect(0,0,200,160). }
 function TTreeC4Test.BuildHitTestTree(out n0, n0c0, n1, n2: PTyTreeNode): TTyTreeView;
 var
@@ -3169,7 +3169,7 @@ begin
   Result := t;
 end;
 
-{ ── C4 published tests ─────────────────────────────────────────────────────── }
+{ 鈹€鈹€ C4 published tests 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 procedure TTreeC4Test.TestHitTestButtonSlot;
 { n0 is at absY=0..19, level=0, indentPx=16, btnSlotW=16.
@@ -3196,7 +3196,7 @@ end;
 
 procedure TTreeC4Test.TestHitTestLabelArea;
 { Click at x=30 (past button slot=16 for level-0), y=10 (row 0 = n0).
-  x=30 >= indentPx=16 → label zone. }
+  x=30 >= indentPx=16 鈫?label zone. }
 var
   t: TTyTreeView;
   n0, n0c0, n1, n2: PTyTreeNode;
@@ -3215,7 +3215,7 @@ begin
 end;
 
 procedure TTreeC4Test.TestHitTestBelowAllRows;
-{ 6 rows × 20px = 120px total.  Y=130 is below all rows.
+{ 6 rows 脳 20px = 120px total.  Y=130 is below all rows.
   GetNodeAtPoint must return nil + hpNowhere. }
 var
   t: TTyTreeView;
@@ -3238,7 +3238,7 @@ procedure TTreeC4Test.TestHitTestIndentArea;
 { n0c0 is a child of n0 (level 1).  indentPx = (1+1)*16 = 32.
   btnSlotW = 16.  Button slot = [16..31], indent area = x < 16.
   n0c0 is NOT expandable (no nsHasChildren), so clicking x=8 is hpIndent.
-  n0c0 row absY=[20..39].  Client Y=30 → absY=30 → n0c0. }
+  n0c0 row absY=[20..39].  Client Y=30 鈫?absY=30 鈫?n0c0. }
 var
   t: TTyTreeView;
   n0, n0c0, n1, n2: PTyTreeNode;
@@ -3260,7 +3260,7 @@ end;
 
 procedure TTreeC4Test.TestMouseClickLabelSelectsNode;
 { Simulate a left-click at the label area of n1 (row 4, absY=80..99).
-  Client Y=90, X=30 → n1's label zone.
+  Client Y=90, X=30 鈫?n1's label zone.
   Expected: FocusedNode = n1, OnChange fired, OnFocusChanged fired, OnNodeClick fired. }
 var
   t: TTyTreeView;
@@ -3288,7 +3288,7 @@ begin
 end;
 
 procedure TTreeC4Test.TestMouseClickButtonExpandsNode;
-{ n0 is currently EXPANDED.  Click on its button slot → should collapse it.
+{ n0 is currently EXPANDED.  Click on its button slot 鈫?should collapse it.
   Button slot for n0 (level 0, indentPx=16, btnSlotW=16): x in [0..15], y=10.
   Expected: Expanded[n0] becomes False (toggled), FocusedNode is NOT changed
             (button click does not select), OnExpanded NOT fired (OnCollapsed would fire). }
@@ -3318,7 +3318,7 @@ end;
 
 procedure TTreeC4Test.TestKeyDownMovesToNextVisible;
 { With n0 expanded, visible order: n0, n0c0, n0c1, n0c2, n1, n2.
-  Set FocusedNode = n0, press VK_DOWN → should land on n0c0 and fire OnFocusChanged. }
+  Set FocusedNode = n0, press VK_DOWN 鈫?should land on n0c0 and fire OnFocusChanged. }
 var
   t: TTyTreeView;
   n0, n0c0, n1, n2: PTyTreeNode;
@@ -3369,7 +3369,7 @@ end;
 
 procedure TTreeC4Test.TestKeyRightExpandsCollapsed;
 { n1 is a leaf (no nsHasChildren).  Give it children manually and collapse it,
-  then press VK_RIGHT → should expand it. }
+  then press VK_RIGHT 鈫?should expand it. }
 var
   t: TTyTreeView;
   n0, n0c0, n1, n2: PTyTreeNode;
@@ -3399,7 +3399,7 @@ begin
 end;
 
 procedure TTreeC4Test.TestKeyLeftCollapsesExpanded;
-{ n0 is expanded; press VK_LEFT with FocusedNode=n0 → should collapse n0. }
+{ n0 is expanded; press VK_LEFT with FocusedNode=n0 鈫?should collapse n0. }
 var
   t: TTyTreeView;
   n0, n0c0, n1, n2: PTyTreeNode;
@@ -3429,8 +3429,8 @@ end;
 
   Geometry: use BuildHitTestTree (DefaultNodeHeight=20, ShowRoot=True).
     n1 is at absY=80..99 (row 4).  Click at (30, 90) to set FLastMouseNode=n1.
-    Then DeleteNode(n1) — FLastMouseNode must become nil.
-    Then call DblClick — must not crash AND must NOT fire OnNodeDblClick. }
+    Then DeleteNode(n1) 鈥?FLastMouseNode must become nil.
+    Then call DblClick 鈥?must not crash AND must NOT fire OnNodeDblClick. }
 procedure TTreeC4Test.TestDeleteNodeClearsFLastMouseNode;
 var
   t: TTyTreeView;
@@ -3446,7 +3446,7 @@ begin
     AssertTrue('after MouseDown FocusedNode = n1', t.FocusedNode = n1);
     // Now delete n1; FLastMouseNode must be cleared
     t.DeleteNode(n1);
-    // Call DblClick — if FLastMouseNode is not nil this would be a UAF.
+    // Call DblClick 鈥?if FLastMouseNode is not nil this would be a UAF.
     // The call must succeed without an exception.
     ResetCounters;
     {$PUSH}{$HINTS OFF}
@@ -3483,7 +3483,7 @@ begin
     AssertTrue('n2 is selected', nsSelected in n2^.States);
     AssertTrue('FocusedNode is NOT n2 yet (selection only)', t.FocusedNode <> n2);
 
-    // Right-click on n2 — even though nsSelected is set, focus must follow
+    // Right-click on n2 鈥?even though nsSelected is set, focus must follow
     {$PUSH}{$HINTS OFF}
     TTyTreeViewAccess(t).MouseDown(mbRight, [], 30, 110);
     {$POP}
@@ -3494,7 +3494,7 @@ begin
   end;
 end;
 
-{ ── ContentRect padding regression ─────────────────────────────────────── }
+{ 鈹€鈹€ ContentRect padding regression 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   { Regression: ContentRect must inset the themed padding so hit-testing and
@@ -3553,7 +3553,7 @@ begin
   end;
 end;
 
-{ ── HiDPI (PPI≠96) vertical-axis correctness ──────────────────────────────── }
+{ 鈹€鈹€ HiDPI (PPI鈮?6) vertical-axis correctness 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   { Two tests that are IMPOSSIBLE to pass before the fix but trivially pass after:
@@ -3561,9 +3561,9 @@ type
       (b) ScrollIntoView / UpdateScrollBars reaches the true logical bottom
 
     Tree geometry (PPI=144, border-width=0, padding=0):
-      DefaultNodeHeight = 20 logical → 30 device pixels per row
-      Viewport          = 200×300 device = 200×200 logical (MulDiv(300,96,144))
-      20 root nodes     → ContentHeight (logical) = 400
+      DefaultNodeHeight = 20 logical 鈫?30 device pixels per row
+      Viewport          = 200脳300 device = 200脳200 logical (MulDiv(300,96,144))
+      20 root nodes     鈫?ContentHeight (logical) = 400
       FOffsetY = 0, no scrolling yet
       CR.Top = 0 (no padding / border)
 
@@ -3584,7 +3584,7 @@ type
     procedure TestScrollIntoViewReachesBottomAt144DPI;
   end;
 
-{ BuildHiDPITree144: 20 root nodes, PPI=144, 200×300 device viewport, no border/padding.
+{ BuildHiDPITree144: 20 root nodes, PPI=144, 200脳300 device viewport, no border/padding.
   Caller must free F then Ctl when done. }
 function BuildHiDPITree144(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
 var
@@ -3622,8 +3622,8 @@ procedure TTreeHiDPITest.TestHitTestMatchesPaintAt144DPI;
   Its visual centre is device Y = 75.  GetNodeAtPoint must return the 3rd root
   child (the node RenderTo paints at that device Y).
 
-  Pre-fix:  absY = (75 - 0) + 0 = 75 → GetNodeAt returns node[3] (wrong).
-  Post-fix: absY = MulDiv(75, 96, 144) + 0 = 50 → GetNodeAt returns node[2] (correct). }
+  Pre-fix:  absY = (75 - 0) + 0 = 75 鈫?GetNodeAt returns node[3] (wrong).
+  Post-fix: absY = MulDiv(75, 96, 144) + 0 = 50 鈫?GetNodeAt returns node[2] (correct). }
 var
   Ctl: TTyStyleController;
   F: TForm;
@@ -3697,12 +3697,12 @@ begin
   end;
 end;
 
-{ ── C (columns): Phase C1 + C2 paint tests ────────────────────────────────── }
+{ 鈹€鈹€ C (columns): Phase C1 + C2 paint tests 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
-  { TTreeColumnPaintTest — pixel tests for multi-column node paint (C1)
+  { TTreeColumnPaintTest 鈥?pixel tests for multi-column node paint (C1)
     and header band paint (C2).
-    Guard: 0-column render must be byte-identical to ③a (existing tests green). }
+    Guard: 0-column render must be byte-identical to 鈶 (existing tests green). }
   TTreeColumnPaintTest = class(TTestCase)
   private
     { Per-column text returned by OnGetTextWithType }
@@ -3712,7 +3712,7 @@ type
       var InitStates: TTyNodeInitStates);
     procedure OnInitChildren3(Sender: TTyTreeView; Node: PTyTreeNode;
       var ChildCount: Cardinal);
-    { C0 regression: 0-column callbacks mimicking ③a (same as TTreeC3PaintTest) }
+    { C0 regression: 0-column callbacks mimicking 鈶 (same as TTreeC3PaintTest) }
     procedure C0GetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
     procedure C0InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
@@ -3746,12 +3746,12 @@ type
     procedure TestC2_SortGlyphInSortColumn;
     { C2d: FOffsetX scroll shifts both header caption and node cell by the same delta. }
     procedure TestC2_ScrollShiftsHeaderAndCells;
-    { C0 regression: 0 columns → existing ③a single-column paint is unchanged.
+    { C0 regression: 0 columns 鈫?existing 鈶 single-column paint is unchanged.
       The same pixel assertions as TestChildRowIndentedMoreThanTopLevel must still hold. }
     procedure TestC0_ZeroColumnsIdenticToIIIa;
   end;
 
-  { TTreeD1D2Test — D1 header/column hit-test + D2 column resize by drag }
+  { TTreeD1D2Test 鈥?D1 header/column hit-test + D2 column resize by drag }
   TTreeD1D2Test = class(TTestCase)
   private
     FColumnResizedCount: Integer;
@@ -3768,9 +3768,9 @@ type
     procedure TestD1_HeaderSectionHit;
     { D1: GetHeaderHitAt returns hpHeaderDivider at a column right edge }
     procedure TestD1_HeaderDividerHit;
-    { D1: Y below the header band → GetHeaderHitAt returns False }
+    { D1: Y below the header band 鈫?GetHeaderHitAt returns False }
     procedure TestD1_BelowHeaderNotHeader;
-    { D1: zero columns → GetHeaderHitAt always returns False }
+    { D1: zero columns 鈫?GetHeaderHitAt always returns False }
     procedure TestD1_ZeroColumnsNoHeader;
     { D1: 2-out overload still compiles and works (backward compat) }
     procedure TestD1_TwoOutOverloadCompat;
@@ -3778,7 +3778,7 @@ type
     procedure TestD2_ResizeColumn0;
     { D2: drag is clamped to MaxWidth }
     procedure TestD2_ClampAtMaxWidth;
-    { D2: column without coResizable → drag does not start }
+    { D2: column without coResizable 鈫?drag does not start }
     procedure TestD2_NonResizableNoResize;
     { D2: OnColumnResized fires during resize }
     procedure TestD2_OnColumnResizedFired;
@@ -3949,7 +3949,7 @@ end;
   Row 0 (the root node) has caption 'Name0' in col 0, 'Col1' in col 1, 'C2Right' in col 2.
   At PPI=96, DefaultNodeHeight=22, header=22px:
     Row 0 top in device px = headerH = 22 (since header occupies 0..21).
-    Row 0 y-center ≈ 22 + 11 = 33. }
+    Row 0 y-center 鈮?22 + 11 = 33. }
 procedure TTreeColumnPaintTest.TestC1_Col1CaptionInCol1Span;
 var
   Ctl: TTyStyleController;
@@ -4019,7 +4019,7 @@ begin
 end;
 
 { C1c: the expand button / chevron ink is confined to column 0 (the main column).
-  The col1 left edge (x=120) up to the caption margin (x=123) is a blank gap —
+  The col1 left edge (x=120) up to the caption margin (x=123) is a blank gap 鈥?
   the column paint starts at colCaptionX = colCellLeft + colMargin = 120 + 4 = 124.
   The col2 left edge (x=200..203) is similarly blank.
   If chrome leaked into col1/col2, ink would appear in x=[120..123] or x=[200..203]. }
@@ -4096,7 +4096,7 @@ begin
       rowY := 33;  // row 0 centre
 
       { Check blue fill at x=50 (col 0, well past the expand button + image slots at x=[0..32)).
-        The caption 'Root' starts around x=36, so x=50 may have text — but text on a blue
+        The caption 'Root' starts around x=36, so x=50 may have text 鈥?but text on a blue
         background is still blue-dominant (composite). We use blue>150 as a loose bar. }
       px0 := Bgra.GetPixel(50, rowY);
 
@@ -4165,9 +4165,9 @@ begin
 end;
 
 { C2b: each column caption paints within its header cell x span.
-  Col 0 header text 'Name' → ink in [0..120) at y=11.
-  Col 1 header text 'Info' → ink in [120..200) at y=11.
-  Col 2 header text 'Size' → ink in [200..300) at y=11. }
+  Col 0 header text 'Name' 鈫?ink in [0..120) at y=11.
+  Col 1 header text 'Info' 鈫?ink in [120..200) at y=11.
+  Col 2 header text 'Size' 鈫?ink in [200..300) at y=11. }
 procedure TTreeColumnPaintTest.TestC2_HeaderCaptionsInSpan;
 var
   Ctl: TTyStyleController;
@@ -4205,7 +4205,7 @@ begin
 end;
 
 { C2c: sort glyph appears in the SortColumn (col 1) header cell, NOT in col 0 or col 2.
-  The glyph arrow is drawn at the right of the col 1 cell so we probe x≈190 (right
+  The glyph arrow is drawn at the right of the col 1 cell so we probe x鈮?90 (right
   of col 1's text but still inside the cell).
   We also verify no extra glyph ink appears in col 0 or col 2 cells at similar x.
   NOTE: DrawGlyph uses antialias lines; the glyph ink may be grey rather than very dark.
@@ -4255,7 +4255,7 @@ begin
   end;
 end;
 
-{ C2d: FOffsetX = 0 → header and cell column origins are aligned.
+{ C2d: FOffsetX = 0 鈫?header and cell column origins are aligned.
   We verify that the col2 header text ('Size') appears at x=[200..220) at FOffsetX=0,
   AND that col2 node cell text also starts at x >= 200 (same origin).
   The general invariant (header scrolls by the same delta as cells) is guaranteed
@@ -4321,7 +4321,7 @@ begin
   ChildCount := 3;
 end;
 
-{ C0 regression: 0 columns → the ③a single-column paint path is byte-identical.
+{ C0 regression: 0 columns 鈫?the 鈶 single-column paint path is byte-identical.
   We reproduce the same assertions as TestChildRowIndentedMoreThanTopLevel:
     (a) parent row (y=10) has text ink at x=[18..35]
     (b) child row (y=30) has text ink at x=[36..100]
@@ -4338,7 +4338,7 @@ var
   x: Integer;
   parentHasInk, childHasInkFarRight: Boolean;
 begin
-  { BuildPaintTree creates a 0-column tree with the ③a OnGetText event }
+  { BuildPaintTree creates a 0-column tree with the 鈶 OnGetText event }
   Tree := BuildPaintTree(Ctl, F, @Self.C0GetText, @Self.C0InitNode, @Self.C0InitChildren);
   try
     Bgra := RenderTreeToBitmap(Tree, Bmp);
@@ -4374,7 +4374,7 @@ begin
   end;
 end;
 
-{ ── D1/D2 ── header/column hit-test + column resize ─────────────────────── }
+{ 鈹€鈹€ D1/D2 鈹€鈹€ header/column hit-test + column resize 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 procedure TTreeD1D2Test.OnColumnResized(Sender: TTyTreeView; Column: Integer);
 begin
@@ -4445,12 +4445,12 @@ var
 begin
   t := BuildD1D2Tree(Ctl, F);
   try
-    { X=60 → col0 (span [0..120)) }
+    { X=60 鈫?col0 (span [0..120)) }
     node := t.GetNodeAtPoint(60, 33, part, col);
     AssertTrue('D1: node at (60,33) not nil', node <> nil);
     AssertEquals('D1: column at X=60 is col0', 0, col);
 
-    { X=250 → col2 (span [200..300)) }
+    { X=250 鈫?col2 (span [200..300)) }
     node := t.GetNodeAtPoint(250, 33, part, col);
     AssertTrue('D1: node at (250,33) not nil', node <> nil);
     AssertEquals('D1: column at X=250 is col2', 2, col);
@@ -4507,7 +4507,7 @@ begin
   end;
 end;
 
-{ D1: Y in node area (below header) → GetHeaderHitAt returns False }
+{ D1: Y in node area (below header) 鈫?GetHeaderHitAt returns False }
 procedure TTreeD1D2Test.TestD1_BelowHeaderNotHeader;
 var
   Ctl: TTyStyleController;
@@ -4526,7 +4526,7 @@ begin
   end;
 end;
 
-{ D1: zero columns → header is not shown → GetHeaderHitAt returns False }
+{ D1: zero columns 鈫?header is not shown 鈫?GetHeaderHitAt returns False }
 procedure TTreeD1D2Test.TestD1_ZeroColumnsNoHeader;
 var
   t: TTyTreeView;
@@ -4537,7 +4537,7 @@ begin
   try
     t.Font.PixelsPerInch := 96;
     t.SetBounds(0, 0, 300, 200);
-    AssertFalse('D1: no columns → GetHeaderHitAt = False',
+    AssertFalse('D1: no columns 鈫?GetHeaderHitAt = False',
       t.GetHeaderHitAt(100, 10, part, col));
   finally
     t.Free;
@@ -4563,7 +4563,7 @@ begin
   end;
 end;
 
-{ D2: dragging col0 divider from X=120 to X=150 → col0.Width = 150 }
+{ D2: dragging col0 divider from X=120 to X=150 鈫?col0.Width = 150 }
 procedure TTreeD1D2Test.TestD2_ResizeColumn0;
 var
   Ctl: TTyStyleController;
@@ -4603,7 +4603,7 @@ begin
     col0.MaxWidth := 130;   // clamp at 130
 
     TTyTreeViewAccess(t).MouseDown(mbLeft, [], 120, 11);
-    TTyTreeViewAccess(t).MouseMove([], 200, 11);  // delta=80 → unclamped=200, clamped=130
+    TTyTreeViewAccess(t).MouseMove([], 200, 11);  // delta=80 鈫?unclamped=200, clamped=130
     TTyTreeViewAccess(t).MouseUp(mbLeft, [], 200, 11);
 
     AssertEquals('D2: col0.Width clamped to MaxWidth=130', 130, col0.Width);
@@ -4613,7 +4613,7 @@ begin
   end;
 end;
 
-{ D2: column without coResizable → drag does not start → width unchanged }
+{ D2: column without coResizable 鈫?drag does not start 鈫?width unchanged }
 procedure TTreeD1D2Test.TestD2_NonResizableNoResize;
 var
   Ctl: TTyStyleController;
@@ -4662,7 +4662,7 @@ begin
   end;
 end;
 
-{ ── D3 ── column drag-reorder ──────────────────────────────────────────────── }
+{ 鈹€鈹€ D3 鈹€鈹€ column drag-reorder 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   TTreeD3DragTest = class(TTestCase)
@@ -4677,12 +4677,12 @@ type
       Caller owns F and Ctl. }
     function BuildD3Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
   published
-    { Drag col0 header past the threshold into col2 area → positions reordered,
+    { Drag col0 header past the threshold into col2 area 鈫?positions reordered,
       FLeft recomputed, OnColumnReorder fired with oldPos=0 newPos=2. }
     procedure TestD3_DragReorderColumns;
-    { Press-and-release with no movement → no reorder (click-sort path preserved). }
+    { Press-and-release with no movement 鈫?no reorder (click-sort path preserved). }
     procedure TestD3_ClickNoReorder;
-    { Drag below threshold → no reorder (pending state cleared cleanly). }
+    { Drag below threshold 鈫?no reorder (pending state cleared cleanly). }
     procedure TestD3_BelowThresholdNoReorder;
     { OnColumnReorder fires with correct old/new positions. }
     procedure TestD3_OnColumnReorderFired;
@@ -4713,7 +4713,7 @@ begin
   t.DefaultNodeHeight  := 22;
   t.SetBounds(0, 0, 300, 200);
 
-  { 3 columns — widths 100/80/60 }
+  { 3 columns 鈥?widths 100/80/60 }
   col0 := t.Header.Columns.Add as TTyTreeColumn;
   col0.Width := 100;
   col0.Text  := 'Col0';
@@ -4737,7 +4737,7 @@ begin
   Result := t;
 end;
 
-{ D3: drag col0 centre to col2 centre → positions reordered }
+{ D3: drag col0 centre to col2 centre 鈫?positions reordered }
 procedure TTreeD3DragTest.TestD3_DragReorderColumns;
 var
   Ctl: TTyStyleController;
@@ -4783,7 +4783,7 @@ begin
   end;
 end;
 
-{ D3: press-and-release without movement → no reorder }
+{ D3: press-and-release without movement 鈫?no reorder }
 procedure TTreeD3DragTest.TestD3_ClickNoReorder;
 var
   Ctl: TTyStyleController;
@@ -4799,7 +4799,7 @@ begin
     TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
     TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
 
-    { col0 must still be at position 0 — no reorder }
+    { col0 must still be at position 0 鈥?no reorder }
     AssertEquals('D3: click-no-move leaves col0.Position=0', 0, Integer(col0.Position));
   finally
     F.Free;
@@ -4807,7 +4807,7 @@ begin
   end;
 end;
 
-{ D3: drag below threshold → no reorder }
+{ D3: drag below threshold 鈫?no reorder }
 procedure TTreeD3DragTest.TestD3_BelowThresholdNoReorder;
 var
   Ctl: TTyStyleController;
@@ -4821,7 +4821,7 @@ begin
 
     { Press then move only 2px (below 4px threshold) then release }
     TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
-    TTyTreeViewAccess(t).MouseMove([], 52, 11);   { 2px — below threshold }
+    TTyTreeViewAccess(t).MouseMove([], 52, 11);   { 2px 鈥?below threshold }
     TTyTreeViewAccess(t).MouseUp(mbLeft, [], 52, 11);
 
     AssertEquals('D3: below-threshold no reorder, col0.Position=0', 0, Integer(col0.Position));
@@ -4860,7 +4860,7 @@ begin
   end;
 end;
 
-{ ── D4 ── auto-size on resize + spring ─────────────────────────────────────── }
+{ 鈹€鈹€ D4 鈹€鈹€ auto-size on resize + spring 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   TTreeD4AutoSizeTest = class(TTestCase)
@@ -4896,7 +4896,7 @@ begin
   t.Controller := Ctl;
   t.Font.PixelsPerInch := 96;
   t.DefaultNodeHeight  := 22;
-  { Width=300, header=22px → content width=300 (no scrollbars, no padding in theme) }
+  { Width=300, header=22px 鈫?content width=300 (no scrollbars, no padding in theme) }
   t.SetBounds(0, 0, 300, 200);
 
   col0 := t.Header.Columns.Add as TTyTreeColumn;
@@ -4955,7 +4955,7 @@ begin
   t := BuildD4Tree(Ctl, F);
   try
     col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
-    { Resize the control to 350 wide — Resize override should run ApplyAutoSize }
+    { Resize the control to 350 wide 鈥?Resize override should run ApplyAutoSize }
     t.SetBounds(0, 0, 350, 200);
     { SetBounds calls Resize; verify col1 absorbed the extra 50px }
     expected := 350 - 100 - 80;  { = 170 }
@@ -4966,7 +4966,7 @@ begin
   end;
 end;
 
-{ D4: spring distribution — two coAutoSpring columns share delta evenly }
+{ D4: spring distribution 鈥?two coAutoSpring columns share delta evenly }
 procedure TTreeD4AutoSizeTest.TestD4_SpringDistribution;
 var
   col0: TTyTreeColumn;
@@ -5026,7 +5026,7 @@ begin
   end;
 end;
 
-{ ── E1 ── OnCompareNodes + sibling-list merge Sort(node,col,dir) ─────────────── }
+{ 鈹€鈹€ E1 鈹€鈹€ OnCompareNodes + sibling-list merge Sort(node,col,dir) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 { Strategy: store an integer key in the node-data blob (NodeDataSize=SizeOf(Integer))
   via the tree's NodeDataSize.  OnCompareNodes reads the key and compares.
   The tree will use a parent node whose children carry keys [3,1,4,1,5,9,2,6].
@@ -5079,7 +5079,7 @@ begin
   t.NodeDataSize := SizeOf(Integer);
   t.OnCompareNodes := @OnCompare;
 
-  { Create a parent node with 8 children (NOT expanded — sort is a pure relink test) }
+  { Create a parent node with 8 children (NOT expanded 鈥?sort is a pure relink test) }
   t.RootNodeCount := 1;
   parent := t.RootNode^.FirstChild;
   Include(parent^.States, nsHasChildren);  { mark as having children }
@@ -5214,7 +5214,7 @@ begin
   try
     t.RootNodeCount := 1;
     parent := t.RootNode^.FirstChild;
-    { Parent has no children — Sort must be a no-op (no crash) }
+    { Parent has no children 鈥?Sort must be a no-op (no crash) }
     t.Sort(parent, 0, sdAscending, False);
     AssertEquals('E1 0-child ChildCount unchanged', 0, Integer(parent^.ChildCount));
   finally
@@ -5237,7 +5237,7 @@ begin
     child := parent^.FirstChild;
     Include(child^.States, nsInitialized);
     PInteger(t.GetNodeData(child))^ := 42;
-    { 1 child — Sort must be a no-op (no crash, child unchanged) }
+    { 1 child 鈥?Sort must be a no-op (no crash, child unchanged) }
     t.Sort(parent, 0, sdAscending, False);
     AssertEquals('E1 1-child key unchanged', 42, PInteger(t.GetNodeData(parent^.FirstChild))^);
   finally
@@ -5283,7 +5283,7 @@ begin
   end;
 end;
 
-{ ── E2 ── SortTree recursive lazy-aware + cache rebuild ─────────────────────── }
+{ 鈹€鈹€ E2 鈹€鈹€ SortTree recursive lazy-aware + cache rebuild 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   TTreeE2SortTreeTest = class(TTestCase)
@@ -5397,7 +5397,7 @@ begin
   t := BuildE2Tree(A, B, C);
   try
     t.SortTree(0, sdAscending);
-    { A's children: sorted ascending → A2(1), A1(2) }
+    { A's children: sorted ascending 鈫?A2(1), A1(2) }
     n := A^.FirstChild;
     i := 0;
     while (n <> nil) and (i < 2) do
@@ -5408,7 +5408,7 @@ begin
     end;
     AssertEquals('E2 A.child[0]=1', 1, childKeys[0]);
     AssertEquals('E2 A.child[1]=2', 2, childKeys[1]);
-    { B's children: sorted ascending → B2(5), B1(9) }
+    { B's children: sorted ascending 鈫?B2(5), B1(9) }
     n := B^.FirstChild;
     i := 0;
     while (n <> nil) and (i < 2) do
@@ -5503,7 +5503,7 @@ begin
   end;
 end;
 
-{ ── E3 ── header-click sort wiring ─────────────────────────────────────────── }
+{ 鈹€鈹€ E3 鈹€鈹€ header-click sort wiring 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   TTreeE3HeaderClickTest = class(TTestCase)
@@ -5641,13 +5641,13 @@ var
 begin
   t := BuildE3Tree(Ctl, F);
   try
-    { Click col0 twice → desc }
+    { Click col0 twice 鈫?desc }
     TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
     TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
     TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
     TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
     AssertEquals('E3 col0 is desc', Ord(sdDescending), Ord(t.Header.SortDirection));
-    { Click col1 (X=150) → SortColumn=1, reset to asc }
+    { Click col1 (X=150) 鈫?SortColumn=1, reset to asc }
     TTyTreeViewAccess(t).MouseDown(mbLeft, [], 150, 11);
     TTyTreeViewAccess(t).MouseUp(mbLeft, [], 150, 11);
     AssertEquals('E3 SortColumn=1 after col1 click', 1, t.Header.SortColumn);
@@ -5713,7 +5713,7 @@ begin
   end;
 end;
 
-{ ── A2 ── check types + tri-state propagation pure helpers ──────────────── }
+{ 鈹€鈹€ A2 鈹€鈹€ check types + tri-state propagation pure helpers 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   TTreeA2CheckPropTest = class(TTestCase)
@@ -5722,15 +5722,15 @@ type
     procedure TestPropagateCheckDownSetsAllCheckBoxChildren;
     { PropagateCheckDown does not touch ctRadioButton children. }
     procedure TestPropagateCheckDownSkipsRadioButton;
-    { RecomputeParentCheckState: all checked → csChecked. }
+    { RecomputeParentCheckState: all checked 鈫?csChecked. }
     procedure TestRecomputeAllChecked;
-    { RecomputeParentCheckState: all unchecked → csUnchecked. }
+    { RecomputeParentCheckState: all unchecked 鈫?csUnchecked. }
     procedure TestRecomputeAllUnchecked;
-    { RecomputeParentCheckState: mixed (checked+unchecked) → csMixed. }
+    { RecomputeParentCheckState: mixed (checked+unchecked) 鈫?csMixed. }
     procedure TestRecomputeMixedReturnsCsMixed;
     { RecomputeParentCheckState: ctRadioButton children are ignored. }
     procedure TestRecomputeIgnoresRadioButton;
-    { RecomputeParentCheckState: no check-children → returns current state unchanged. }
+    { RecomputeParentCheckState: no check-children 鈫?returns current state unchanged. }
     procedure TestRecomputeNoCheckChildrenReturnsCurrentState;
   end;
 
@@ -5794,7 +5794,7 @@ begin
     c2 := t.AddChild(parent);
     c1^.CheckType  := ctCheckBox; c1^.CheckState := csChecked;
     c2^.CheckType  := ctCheckBox; c2^.CheckState := csChecked;
-    AssertEquals('all checked → csChecked',
+    AssertEquals('all checked 鈫?csChecked',
       Ord(csChecked), Ord(t.RecomputeParentCheckState(parent)));
   finally
     t.Free;
@@ -5813,7 +5813,7 @@ begin
     c2 := t.AddChild(parent);
     c1^.CheckType  := ctCheckBox; c1^.CheckState := csUnchecked;
     c2^.CheckType  := ctCheckBox; c2^.CheckState := csUnchecked;
-    AssertEquals('all unchecked → csUnchecked',
+    AssertEquals('all unchecked 鈫?csUnchecked',
       Ord(csUnchecked), Ord(t.RecomputeParentCheckState(parent)));
   finally
     t.Free;
@@ -5834,7 +5834,7 @@ begin
     c1^.CheckType := ctCheckBox; c1^.CheckState := csChecked;
     c2^.CheckType := ctCheckBox; c2^.CheckState := csChecked;
     c3^.CheckType := ctCheckBox; c3^.CheckState := csUnchecked;
-    AssertEquals('checked+unchecked → csMixed',
+    AssertEquals('checked+unchecked 鈫?csMixed',
       Ord(csMixed), Ord(t.RecomputeParentCheckState(parent)));
   finally
     t.Free;
@@ -5853,8 +5853,8 @@ begin
     radio := t.AddChild(parent);
     cb^.CheckType    := ctCheckBox;    cb^.CheckState    := csChecked;
     radio^.CheckType  := ctRadioButton; radio^.CheckState := csUnchecked;
-    // Only cb counts → all check-children are csChecked → csChecked
-    AssertEquals('radio ignored; cb checked → csChecked',
+    // Only cb counts 鈫?all check-children are csChecked 鈫?csChecked
+    AssertEquals('radio ignored; cb checked 鈫?csChecked',
       Ord(csChecked), Ord(t.RecomputeParentCheckState(parent)));
   finally
     t.Free;
@@ -5872,14 +5872,14 @@ begin
     child  := t.AddChild(parent);
     child^.CheckType   := ctNone;  // not a check child
     parent^.CheckState := csMixed;
-    AssertEquals('no check-children → current state unchanged',
+    AssertEquals('no check-children 鈫?current state unchanged',
       Ord(csMixed), Ord(t.RecomputeParentCheckState(parent)));
   finally
     t.Free;
   end;
 end;
 
-{ ── A3 ── SelectRange visible-order helper + selection-count bookkeeping ── }
+{ 鈹€鈹€ A3 鈹€鈹€ SelectRange visible-order helper + selection-count bookkeeping 鈹€鈹€ }
 
 type
   TTreeA3SelectRangeTest = class(TTestCase)
@@ -5892,7 +5892,7 @@ type
     procedure TestSelectRangeReverse;
     { SelectRange(n,n): just n selected; count=1. }
     procedure TestSelectRangeSingleNode;
-    { After SelectRange, ClearSelection → SelectedCount=0. }
+    { After SelectRange, ClearSelection 鈫?SelectedCount=0. }
     procedure TestClearSelectionResetsCount;
     { SelectedCount returns 0 after construction. }
     procedure TestSelectedCountInitiallyZero;
@@ -5920,7 +5920,7 @@ begin
       nodes[i] := n;
       n := n^.NextSibling;
     end;
-    // SelectRange(node[2], node[4]) → nodes 2,3,4 selected
+    // SelectRange(node[2], node[4]) 鈫?nodes 2,3,4 selected
     t.SelectRange(nodes[2], nodes[4]);
     AssertEquals('SelectedCount = 3', 3, t.SelectedCount);
     AssertFalse('node[0] not selected', nsSelected in nodes[0]^.States);
@@ -5949,7 +5949,7 @@ begin
       nodes[i] := n;
       n := n^.NextSibling;
     end;
-    // SelectRange(node[4], node[2]) — order-independent; same set
+    // SelectRange(node[4], node[2]) 鈥?order-independent; same set
     t.SelectRange(nodes[4], nodes[2]);
     AssertEquals('SelectedCount = 3 (reversed)', 3, t.SelectedCount);
     AssertTrue ('node[2] selected',     nsSelected in nodes[2]^.States);
@@ -6023,7 +6023,7 @@ begin
   end;
 end;
 
-{ ── B1 ── Options set + check array properties ─────────────────────────────── }
+{ 鈹€鈹€ B1 鈹€鈹€ Options set + check array properties 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
 
 type
   TTreeB1OptionsTest = class(TTestCase)
@@ -6084,7 +6084,7 @@ begin
     n := t.AddChild(nil);
     t.CheckType[n] := ctCheckBox;
     t.Checked[n]   := True;
-    AssertEquals('Checked:=True → csChecked',
+    AssertEquals('Checked:=True 鈫?csChecked',
       Ord(csChecked), Ord(t.CheckState[n]));
     AssertTrue('Checked getter True', t.Checked[n]);
   finally
@@ -6103,7 +6103,7 @@ begin
     t.CheckType[n]  := ctCheckBox;
     t.CheckState[n] := csChecked;   // start checked
     t.Checked[n]    := False;
-    AssertEquals('Checked:=False → csUnchecked',
+    AssertEquals('Checked:=False 鈫?csUnchecked',
       Ord(csUnchecked), Ord(t.CheckState[n]));
     AssertFalse('Checked getter False', t.Checked[n]);
   finally
@@ -6154,12 +6154,245 @@ begin
     t.CheckType[nil]  := ctCheckBox;
     t.CheckState[nil] := csChecked;
     t.Checked[nil]    := True;
-    AssertEquals('CheckType nil→ctNone',     Ord(ctNone),     Ord(t.CheckType[nil]));
-    AssertEquals('CheckState nil→csUnchecked', Ord(csUnchecked), Ord(t.CheckState[nil]));
-    AssertFalse('Checked nil→False', t.Checked[nil]);
+    AssertEquals('CheckType nil鈫抍tNone',     Ord(ctNone),     Ord(t.CheckType[nil]));
+    AssertEquals('CheckState nil鈫抍sUnchecked', Ord(csUnchecked), Ord(t.CheckState[nil]));
+    AssertFalse('Checked nil鈫扚alse', t.Checked[nil]);
   finally
     t.Free;
   end;
+end;
+
+{ 鈹€鈹€ B2 鈹€鈹€ Checkbox/radio paint in the main column 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ }
+
+{ Helper: build a simple paint tree with an inline CSS theme that includes
+  TyTreeCheckBox rules.  Returns the tree (owned by F).
+  The tree has 2 root nodes:
+    n0  ctCheckBox  csChecked
+    n1  ctCheckBox  csUnchecked
+  Width=200, Height=100, PPI=96, NodeHeight=20, Indent=16, ShowRoot=True.
+  toCheckSupport is set in Options.  An outer Ctl+F must be freed by the caller. }
+function BuildCheckboxPaintTree(out Ctl: TTyStyleController; out F: TForm;
+  CheckOff: Boolean = False): TTyTreeViewAccess;
+var
+  t: TTyTreeViewAccess;
+  n0, n1: PTyTreeNode;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(
+    'TyTreeView { background:#FFFFFF; border-width:0px; padding:0px; } ' +
+    'TyTreeNode { background:none; color:#000000; } ' +
+    'TyTreeNode:selected { background:#3B82F6; color:#FFFFFF; } ' +
+    'TyTreeCheckBox { background:#FFFFFF; color:#000000; border-color:#888888; border-width:1px; } ' +
+    'TyTreeCheckBox:active { background:#3B82F6; color:#FFFFFF; border-color:#3B82F6; border-width:1px; }');
+  F := TForm.CreateNew(nil);
+  t := TTyTreeViewAccess(TTyTreeView.Create(F));
+  t.Parent              := F;
+  t.Controller          := Ctl;
+  t.Font.PixelsPerInch  := 96;
+  t.DefaultNodeHeight   := 20;
+  t.Indent              := 16;
+  t.ShowButtons         := False;
+  t.ShowTreeLines       := False;
+  t.ShowRoot            := True;
+  t.SetBounds(0, 0, 200, 100);
+  if not CheckOff then
+    t.Options := [toCheckSupport];
+  t.RootNodeCount := 2;
+  n0 := t.RootNode^.FirstChild;
+  n1 := n0^.NextSibling;
+  t.CheckType[n0]  := ctCheckBox;
+  t.CheckState[n0] := csChecked;
+  t.CheckType[n1]  := ctCheckBox;
+  t.CheckState[n1] := csUnchecked;
+  Result := t;
+end;
+
+{ Helper: scan x=[xLeft..xRight) at y; True if any pixel is dark (R<150, A>0). }
+function HasDarkInkAt(Bmp: TBGRABitmap; xLeft, xRight, y: Integer): Boolean;
+var
+  x: Integer;
+  px: TBGRAPixel;
+begin
+  Result := False;
+  for x := xLeft to xRight - 1 do
+  begin
+    px := Bmp.GetPixel(x, y);
+    if (px.alpha > 0) and (px.red < 150) then begin Result := True; Exit; end;
+  end;
+end;
+
+{ Helper: True if any pixel in x=[xLeft..xRight) at y is NOT pure white. }
+function HasNonWhiteAt(Bmp: TBGRABitmap; xLeft, xRight, y: Integer): Boolean;
+var
+  x: Integer;
+  px: TBGRAPixel;
+begin
+  Result := False;
+  for x := xLeft to xRight - 1 do
+  begin
+    px := Bmp.GetPixel(x, y);
+    if (px.alpha > 0) and ((px.red < 240) or (px.green < 240) or (px.blue < 240)) then
+    begin Result := True; Exit; end;
+  end;
+end;
+
+type
+  TTreeB2CheckPaintTest = class(TTestCase)
+  published
+    procedure TestCheckedNodeDrawsCheckGlyph;
+    procedure TestUncheckedNodeDrawsEmptyBox;
+    procedure TestCaptionStartsRightOfCheckSlot;
+    procedure TestNoCheckSlotWhenOptionOff;
+    procedure TestRadioButtonCheckedDrawsDot;
+  end;
+
+procedure TTreeB2CheckPaintTest.TestCheckedNodeDrawsCheckGlyph;
+{ Row 0 (csChecked) at y=10. Slot x=[16..32). With :active 鈫?blue fill 鈫?non-white. }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeViewAccess;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Tree := BuildCheckboxPaintTree(Ctl, F);
+  try
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(Tree.Width, Tree.Height);
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      Tree.RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+      Bgra := TBGRABitmap.Create(Bmp, True);
+      try
+        AssertTrue('B2: checked row 0 has non-white ink in slot x=[16..32) at y=10',
+          HasNonWhiteAt(Bgra, 16, 32, 10));
+      finally Bgra.Free; end;
+    finally Bmp.Free; end;
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeB2CheckPaintTest.TestUncheckedNodeDrawsEmptyBox;
+{ Row 1 (csUnchecked) at y=30. Border in slot (non-white); no dark glyph in centre. }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeViewAccess;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Tree := BuildCheckboxPaintTree(Ctl, F);
+  try
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(Tree.Width, Tree.Height);
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      Tree.RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+      Bgra := TBGRABitmap.Create(Bmp, True);
+      try
+        AssertTrue('B2: unchecked row 1 border ink in x=[16..32) at y=30',
+          HasNonWhiteAt(Bgra, 16, 32, 30));
+        AssertFalse('B2: unchecked row 1 no dark glyph in x=[21..27) at y=30',
+          HasDarkInkAt(Bgra, 21, 27, 30));
+      finally Bgra.Free; end;
+    finally Bmp.Free; end;
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeB2CheckPaintTest.TestCaptionStartsRightOfCheckSlot;
+{ Slot x=[16..32) has non-white ink; x=[0..16) is white (no indent at level 0). }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeViewAccess;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Tree := BuildCheckboxPaintTree(Ctl, F);
+  try
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(Tree.Width, Tree.Height);
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      Tree.RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+      Bgra := TBGRABitmap.Create(Bmp, True);
+      try
+        AssertTrue('B2: slot x=[16..32) has non-white ink at y=10',
+          HasNonWhiteAt(Bgra, 16, 32, 10));
+        AssertFalse('B2: x=[0..16) is white at y=10',
+          HasNonWhiteAt(Bgra, 0, 16, 10));
+      finally Bgra.Free; end;
+    finally Bmp.Free; end;
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeB2CheckPaintTest.TestNoCheckSlotWhenOptionOff;
+{ toCheckSupport OFF 鈫?x=[16..32) is pure white (no box drawn). }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeViewAccess;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Tree := BuildCheckboxPaintTree(Ctl, F, True);  { CheckOff=True }
+  try
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(Tree.Width, Tree.Height);
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      Tree.RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+      Bgra := TBGRABitmap.Create(Bmp, True);
+      try
+        AssertFalse('B2 (option off): no box border in x=[16..32) at y=10',
+          HasNonWhiteAt(Bgra, 16, 32, 10));
+      finally Bgra.Free; end;
+    finally Bmp.Free; end;
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeB2CheckPaintTest.TestRadioButtonCheckedDrawsDot;
+{ ctRadioButton + csChecked 鈫?:active 鈫?blue circle 鈫?non-white ink in slot. }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeViewAccess;
+  n: PTyTreeNode;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(
+    'TyTreeView { background:#FFFFFF; border-width:0px; padding:0px; } ' +
+    'TyTreeNode { background:none; color:#000000; } ' +
+    'TyTreeNode:selected { background:#3B82F6; color:#FFFFFF; } ' +
+    'TyTreeCheckBox { background:#FFFFFF; color:#000000; border-color:#888888; border-width:1px; } ' +
+    'TyTreeCheckBox:active { background:#3B82F6; color:#FFFFFF; border-color:#3B82F6; border-width:1px; }');
+  F := TForm.CreateNew(nil);
+  t := TTyTreeViewAccess(TTyTreeView.Create(F));
+  t.Parent := F; t.Controller := Ctl; t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight := 20; t.Indent := 16;
+  t.ShowButtons := False; t.ShowTreeLines := False; t.ShowRoot := True;
+  t.Options := [toCheckSupport]; t.SetBounds(0, 0, 200, 100);
+  t.RootNodeCount := 1;
+  n := t.RootNode^.FirstChild;
+  t.CheckType[n] := ctRadioButton; t.CheckState[n] := csChecked;
+  try
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit; Bmp.SetSize(t.Width, t.Height);
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      t.RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+      Bgra := TBGRABitmap.Create(Bmp, True);
+      try
+        AssertTrue('B2: ctRadioButton+csChecked draws ink in x=[16..32) at y=10',
+          HasNonWhiteAt(Bgra, 16, 32, 10));
+      finally Bgra.Free; end;
+    finally Bmp.Free; end;
+  finally F.Free; Ctl.Free; end;
 end;
 
 initialization
@@ -6186,4 +6419,5 @@ initialization
   RegisterTest(TTreeA2CheckPropTest);
   RegisterTest(TTreeA3SelectRangeTest);
   RegisterTest(TTreeB1OptionsTest);
+  RegisterTest(TTreeB2CheckPaintTest);
 end.

@@ -2052,6 +2052,12 @@ var
   sortBandR: TRect;
   accentPx: TBGRAPixel;         // theme accent for the drag ghost/drop-mark
   mainColBase: Integer;
+  { B2: checkbox slot variables }
+  cbSlotW: Integer;            // device-px width of the checkbox slot (P.Scale(16))
+  cbStyle: TTyStyleSet;        // resolved TyTreeCheckBox style
+  cbBoxRect: TRect;            // device rect of the box/circle within the slot
+  cbBoxSize: Integer;          // device-px side of the drawn box/circle
+  usedCbSlotW: Integer;        // 0 when checkbox off/ctNone; cbSlotW otherwise
 begin
   UpdateScrollBars;   // keep scrollbar range current (cheap; no-op when clean)
 
@@ -2438,7 +2444,87 @@ begin
             end;
 
             { Image (main column only) }
+            { B2: Checkbox slot (main column, after expand button, before image) }
             captionX := mainColBase + indentPx;
+            usedCbSlotW := 0;
+            if (toCheckSupport in FOptions) and (node^.CheckType <> ctNone) then
+            begin
+              cbSlotW     := P.Scale(16);
+              usedCbSlotW := cbSlotW;
+              { Resolve checkbox style — fall back gracefully if typeKey absent }
+              if node^.CheckState = csChecked then
+                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
+              else if nsSelected in node^.States then
+                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysSelected])
+              else
+                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', []);
+              cbBoxSize := P.Scale(12);
+              if cbBoxSize > rowH - P.Scale(2) then cbBoxSize := rowH - P.Scale(2);
+              if cbBoxSize < 4 then cbBoxSize := 4;
+              cbBoxRect := Rect(
+                captionX + (cbSlotW - cbBoxSize) div 2,
+                rowTop + (rowH - cbBoxSize) div 2,
+                captionX + (cbSlotW - cbBoxSize) div 2 + cbBoxSize,
+                rowTop + (rowH - cbBoxSize) div 2 + cbBoxSize);
+              { Draw box background + border }
+              if tpBackground in cbStyle.Present then
+                P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
+              else
+                P.FillBackground(cbBoxRect, S.Background, 2);
+              if tpBorderColor in cbStyle.Present then
+                P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
+              else
+                P.StrokeBorder(cbBoxRect, 2, 1, S.BorderColor);
+              { Draw glyph by CheckType + CheckState }
+              case node^.CheckType of
+                ctCheckBox, ctTriStateCheckBox:
+                begin
+                  if node^.CheckState = csChecked then
+                  begin
+                    if tpTextColor in cbStyle.Present then
+                      P.DrawGlyph(cbBoxRect, tgCheck, cbStyle.TextColor, 2)
+                    else
+                      P.DrawGlyph(cbBoxRect, tgCheck, NodeStyle.TextColor, 2);
+                  end
+                  else if node^.CheckState = csMixed then
+                  begin
+                    if tpTextColor in cbStyle.Present then
+                      P.Bitmap.FillRect(
+                        cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
+                        cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                        TyColorToBGRA(cbStyle.TextColor))
+                    else
+                      P.Bitmap.FillRect(
+                        cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
+                        cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                        TyColorToBGRA(S.TextColor));
+                  end;
+                  { csUnchecked: nothing extra }
+                end;
+                ctRadioButton:
+                begin
+                  { Re-draw as circle (large radius = half-side) }
+                  if tpBackground in cbStyle.Present then
+                    P.FillBackground(cbBoxRect, cbStyle.Background, cbBoxSize div 2)
+                  else
+                    P.FillBackground(cbBoxRect, S.Background, cbBoxSize div 2);
+                  if tpBorderColor in cbStyle.Present then
+                    P.StrokeBorder(cbBoxRect, cbBoxSize div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
+                  else
+                    P.StrokeBorder(cbBoxRect, cbBoxSize div 2, 1, S.BorderColor);
+                  if node^.CheckState = csChecked then
+                  begin
+                    if tpTextColor in cbStyle.Present then
+                      P.DrawGlyph(cbBoxRect, tgRadioDot, cbStyle.TextColor, 2)
+                    else
+                      P.DrawGlyph(cbBoxRect, tgRadioDot, NodeStyle.TextColor, 2);
+                  end;
+                end;
+              end; { case }
+              Inc(captionX, cbSlotW);
+            end;
+
+            { Image (main column only) }
             usedImgSlotW := 0;
             if (FImages <> nil) and (FImages.Count > 0) then
             begin
@@ -2560,8 +2646,86 @@ begin
             P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
         end;
 
-        { ── Image ────────────────────────────────────────────────────────── }
+        { ── B2: Checkbox slot (after expand button, before image) ──────── }
         captionX := contentLeft + indentPx;
+        usedCbSlotW := 0;
+        if (toCheckSupport in FOptions) and (node^.CheckType <> ctNone) then
+        begin
+          cbSlotW     := P.Scale(16);
+          usedCbSlotW := cbSlotW;
+          { Resolve checkbox style }
+          if node^.CheckState = csChecked then
+            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
+          else if nsSelected in node^.States then
+            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysSelected])
+          else
+            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', []);
+          cbBoxSize := P.Scale(12);
+          if cbBoxSize > rowH - P.Scale(2) then cbBoxSize := rowH - P.Scale(2);
+          if cbBoxSize < 4 then cbBoxSize := 4;
+          cbBoxRect := Rect(
+            captionX + (cbSlotW - cbBoxSize) div 2,
+            rowTop + (rowH - cbBoxSize) div 2,
+            captionX + (cbSlotW - cbBoxSize) div 2 + cbBoxSize,
+            rowTop + (rowH - cbBoxSize) div 2 + cbBoxSize);
+          { Box background + border }
+          if tpBackground in cbStyle.Present then
+            P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
+          else
+            P.FillBackground(cbBoxRect, S.Background, 2);
+          if tpBorderColor in cbStyle.Present then
+            P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
+          else
+            P.StrokeBorder(cbBoxRect, 2, 1, S.BorderColor);
+          { Glyph by CheckType + CheckState }
+          case node^.CheckType of
+            ctCheckBox, ctTriStateCheckBox:
+            begin
+              if node^.CheckState = csChecked then
+              begin
+                if tpTextColor in cbStyle.Present then
+                  P.DrawGlyph(cbBoxRect, tgCheck, cbStyle.TextColor, 2)
+                else
+                  P.DrawGlyph(cbBoxRect, tgCheck, NodeStyle.TextColor, 2);
+              end
+              else if node^.CheckState = csMixed then
+              begin
+                if tpTextColor in cbStyle.Present then
+                  P.Bitmap.FillRect(
+                    cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
+                    cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                    TyColorToBGRA(cbStyle.TextColor))
+                else
+                  P.Bitmap.FillRect(
+                    cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
+                    cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                    TyColorToBGRA(S.TextColor));
+              end;
+            end;
+            ctRadioButton:
+            begin
+              { Re-draw as circle }
+              if tpBackground in cbStyle.Present then
+                P.FillBackground(cbBoxRect, cbStyle.Background, cbBoxSize div 2)
+              else
+                P.FillBackground(cbBoxRect, S.Background, cbBoxSize div 2);
+              if tpBorderColor in cbStyle.Present then
+                P.StrokeBorder(cbBoxRect, cbBoxSize div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
+              else
+                P.StrokeBorder(cbBoxRect, cbBoxSize div 2, 1, S.BorderColor);
+              if node^.CheckState = csChecked then
+              begin
+                if tpTextColor in cbStyle.Present then
+                  P.DrawGlyph(cbBoxRect, tgRadioDot, cbStyle.TextColor, 2)
+                else
+                  P.DrawGlyph(cbBoxRect, tgRadioDot, NodeStyle.TextColor, 2);
+              end;
+            end;
+          end; { case }
+          Inc(captionX, cbSlotW);
+        end;
+
+        { ── Image ────────────────────────────────────────────────────────── }
         { The image slot is RESERVED whenever an image list is assigned (matching
           GetNodeAtPoint's hpImage zone), so usedImgSlotW mirrors that reservation
           for the FRangeX width below. }
@@ -2603,10 +2767,10 @@ begin
         { ── FRangeX accumulation ─────────────────────────────────────────── }
         { Pure content WIDTH for this row — independent of CR.Left and FOffsetX so
           the H-scroll range never drifts with the scroll position.  Equals the
-          rendered layout: indent + (image slot if used) + gap + text + tail. }
+          rendered layout: indent + cbSlot + (image slot if used) + gap + text + tail. }
         if txt <> '' then
         begin
-          measW := indentPx + usedImgSlotW + P.Scale(2) +
+          measW := indentPx + usedCbSlotW + usedImgSlotW + P.Scale(2) +
             P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
                           NodeStyle.FontWeight).cx + P.Scale(4);
           if measW > rangeXNew then
