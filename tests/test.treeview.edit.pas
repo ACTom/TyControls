@@ -77,10 +77,44 @@ type
     procedure TearDown; override;
   published
     procedure TestEditNodeOpensAndSeedsText;
+    procedure TestEditNodeOpensAndSeedsTextAt144DPI;
     procedure TestEditNodeVetoedByOnEditing;
     procedure TestEndEditNodeFiresOnNewTextOnChange;
     procedure TestEndEditNodeNoEventWhenUnchanged;
     procedure TestCancelEditFiresCancelledNoNewText;
+  end;
+
+  { E4: robustness — the editor stays glued to its cell across scroll/layout
+    changes, commits when its cell scrolls out of view, and tears down cleanly
+    when its node / the toEditable option / the tree content goes away. Plus the
+    editor's own focus-loss commit + Enter/Esc handlers. A tall (40-row) tree so
+    the viewport scrolls; the V-scrollbar Position drives the real scroll path. }
+  TTreeEditE4Test = class(TTestCase)
+  private
+    FCtl:   TTyStyleController;
+    FForm:  TForm;
+    FTree:  TTyTreeView;
+    FNewTextFired:   Integer;
+    FNewTextValue:   string;
+    FCancelledFired: Integer;
+    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnNewText(Sender: TTyTreeView; Node: PTyTreeNode; Column: Integer;
+      const NewText: string);
+    procedure OnEditCancelled(Sender: TTyTreeView; Node: PTyTreeNode; Column: Integer);
+    function  NodeAt(AIndex: Integer): PTyTreeNode;
+    procedure Layout;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestScrollRepositionsEditor;
+    procedure TestScrollOutCommits;
+    procedure TestDeleteEditedNodeCancels;
+    procedure TestClearDuringEditCancels;
+    procedure TestRemovingEditableOptionCloses;
+    procedure TestFocusLossCommits;
+    procedure TestEditorEnterCommits;
+    procedure TestEditorEscapeCancels;
   end;
 
 implementation
@@ -106,6 +140,9 @@ type
     procedure DblClickPub;
     procedure KeyDownPub(var Key: Word; Shift: TShiftState);
     function  LastMouseColumnPub: Integer;
+    { E4: drive the editor's own input handlers (focus-loss commit + Enter/Esc). }
+    procedure EditorExitPub;
+    procedure EditorKeyDownPub(var Key: Word; Shift: TShiftState);
   end;
 
 procedure TEditTreeAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -147,6 +184,16 @@ end;
 function TEditTreeAccess.LastMouseColumnPub: Integer;
 begin
   Result := LastMouseColumn;
+end;
+
+procedure TEditTreeAccess.EditorExitPub;
+begin
+  EditorExit(InlineEditor);
+end;
+
+procedure TEditTreeAccess.EditorKeyDownPub(var Key: Word; Shift: TShiftState);
+begin
+  EditorKeyDown(InlineEditor, Key, Shift);
 end;
 
 { ----------------------------------------------------------------------------
@@ -437,6 +484,38 @@ begin
   AssertTrue('editor bounds == EditorBoundsFromCell(GetCellRect) (B)', edR.Bottom = wantR.Bottom);
 end;
 
+{ HiDPI: at PPI=144 the editor bounds still equal EditorBoundsFromCell of the
+  device-px GetCellRect rect (GetCellRect is already device-px, EditorBoundsFromCell
+  scales its pad by Font.PixelsPerInch/96 → the glue holds at any DPI). The fixture
+  builds at PPI=96; rebuild it at 144 here, re-lay-out, then open + compare. }
+procedure TTreeEditE2Test.TestEditNodeOpensAndSeedsTextAt144DPI;
+var
+  Bmp: TBitmap;
+  cellR, edR, wantR: TRect;
+begin
+  { Re-skin the existing fixture for 144 DPI and re-run a layout pass. }
+  FTree.Font.PixelsPerInch := 144;
+  Bmp := TBitmap.Create;
+  try
+    Bmp.SetSize(200, 160);
+    TEditTreeAccess(FTree).RenderTo(Bmp.Canvas, Rect(0, 0, 200, 160), 144);
+  finally
+    Bmp.Free;
+  end;
+
+  AssertTrue('EditNode(first,0) returns True at 144 DPI', FTree.EditNode(FNode0, 0));
+  AssertTrue('IsEditing True at 144 DPI', FTree.IsEditing);
+
+  edR := TEditTreeAccess(FTree).Editor.BoundsRect;
+  AssertFalse('editor bounds non-empty at 144 DPI', IsRectEmpty(edR));
+  AssertTrue('GetCellRect resolves at 144 DPI', FTree.GetCellRect(FNode0, 0, cellR));
+  wantR := TEditTreeAccess(FTree).EditorBoundsFromCellPub(cellR);
+  AssertTrue('editor bounds == EditorBoundsFromCell(GetCellRect) @144 (L)', edR.Left = wantR.Left);
+  AssertTrue('editor bounds == EditorBoundsFromCell(GetCellRect) @144 (T)', edR.Top = wantR.Top);
+  AssertTrue('editor bounds == EditorBoundsFromCell(GetCellRect) @144 (R)', edR.Right = wantR.Right);
+  AssertTrue('editor bounds == EditorBoundsFromCell(GetCellRect) @144 (B)', edR.Bottom = wantR.Bottom);
+end;
+
 { OnEditing sets Allowed:=False ⇒ EditNode refuses, no editor shown. }
 procedure TTreeEditE2Test.TestEditNodeVetoedByOnEditing;
 begin
@@ -483,8 +562,253 @@ begin
   AssertFalse('not editing after cancel', FTree.IsEditing);
 end;
 
+{ ----------------------------------------------------------------------------
+  E4 — robustness (reposition on scroll/layout, teardown on delete/clear/
+  option-off, focus-loss / Enter / Esc)
+  ---------------------------------------------------------------------------- }
+
+procedure TTreeEditE4Test.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  Text := 'row' + IntToStr(Node^.Index);
+end;
+
+procedure TTreeEditE4Test.OnNewText(Sender: TTyTreeView; Node: PTyTreeNode;
+  Column: Integer; const NewText: string);
+begin
+  Inc(FNewTextFired);
+  FNewTextValue := NewText;
+end;
+
+procedure TTreeEditE4Test.OnEditCancelled(Sender: TTyTreeView; Node: PTyTreeNode;
+  Column: Integer);
+begin
+  Inc(FCancelledFired);
+end;
+
+{ Nth root child (0-based), nil if out of range. }
+function TTreeEditE4Test.NodeAt(AIndex: Integer): PTyTreeNode;
+var
+  i: Integer;
+begin
+  Result := FTree.RootNode^.FirstChild;
+  i := 0;
+  while (Result <> nil) and (i < AIndex) do
+  begin
+    Result := Result^.NextSibling;
+    Inc(i);
+  end;
+end;
+
+procedure TTreeEditE4Test.Layout;
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.SetSize(160, 160);
+    TEditTreeAccess(FTree).RenderTo(Bmp.Canvas, Rect(0, 0, 160, 160), 96);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TTreeEditE4Test.SetUp;
+var
+  n: PTyTreeNode;
+begin
+  FNewTextFired   := 0;
+  FNewTextValue   := '';
+  FCancelledFired := 0;
+
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(EDIT_THEME_CSS);
+
+  FForm := TForm.CreateNew(nil);
+  FTree := TTyTreeView.Create(FForm);
+  FTree.Parent     := FForm;
+  FTree.Controller := FCtl;
+  FTree.Font.PixelsPerInch := 96;
+  FTree.DefaultNodeHeight  := 22;
+  FTree.Indent             := 16;
+  FTree.ShowRoot           := True;
+  FTree.SetBounds(0, 0, 160, 160);   { viewport 160px ≈ 7 rows of 22px }
+  FTree.OnGetText        := @OnGetText;
+  FTree.OnNewText        := @OnNewText;
+  FTree.OnEditCancelled  := @OnEditCancelled;
+  FTree.Options          := [toEditable];
+
+  { 40 root nodes (40*22 = 880px content >> 160px viewport) so the view scrolls.
+    Mark every node initialised so the *NoInit walks see them. }
+  FTree.RootNodeCount := 40;
+  n := FTree.RootNode^.FirstChild;
+  while n <> nil do begin Include(n^.States, nsInitialized); n := n^.NextSibling; end;
+
+  Layout;
+end;
+
+procedure TTreeEditE4Test.TearDown;
+begin
+  FForm.Free;   // frees FTree (owned)
+  FCtl.Free;
+end;
+
+{ Scrolling a small amount while the edited node stays visible re-glues the editor
+  to its (now shifted-up) cell: the editor top moves up by the scroll delta. }
+procedure TTreeEditE4Test.TestScrollRepositionsEditor;
+var
+  node3: PTyTreeNode;
+  topBefore, topAfter, cellTop: TRect;
+begin
+  node3 := NodeAt(3);   { row 3 → device y≈[66..88), comfortably in view }
+  AssertTrue('open edit on row 3', FTree.EditNode(node3, 0));
+  topBefore := TEditTreeAccess(FTree).Editor.BoundsRect;
+
+  { Scroll down 44px (2 rows) via the real V-scroll path. node3 → device y≈[22..44),
+    still visible. Setting Position fires VScrollChange → RepositionEditor. }
+  FTree.VScroll.Position := 44;
+  AssertTrue('scrolled (OffsetY < 0)', FTree.OffsetY < 0);
+  AssertTrue('still editing after a small scroll (node visible)', FTree.IsEditing);
+
+  topAfter := TEditTreeAccess(FTree).Editor.BoundsRect;
+  AssertTrue('editor followed its cell up after scroll', topAfter.Top < topBefore.Top);
+
+  { And it sits exactly on the repositioned cell. }
+  AssertTrue('cell still resolves', FTree.GetCellRect(node3, 0, cellTop));
+  AssertTrue('editor glued to repositioned cell',
+    topAfter.Top = TEditTreeAccess(FTree).EditorBoundsFromCellPub(cellTop).Top);
+end;
+
+{ Scrolling the edited node entirely out of the viewport commits + closes it. }
+procedure TTreeEditE4Test.TestScrollOutCommits;
+var
+  node0: PTyTreeNode;
+begin
+  node0 := NodeAt(0);   { top row }
+  AssertTrue('open edit on row 0', FTree.EditNode(node0, 0));
+  TEditTreeAccess(FTree).SetEditorText('changed-then-scrolled');
+
+  { Scroll far down so row 0 leaves the viewport → RepositionEditor commits+closes. }
+  FTree.VScroll.Position := 400;
+
+  AssertFalse('editing closed after the cell scrolled out of view', FTree.IsEditing);
+  AssertEquals('scroll-out committed (OnNewText fired once)', 1, FNewTextFired);
+  AssertEquals('committed the edited text', 'changed-then-scrolled', FNewTextValue);
+  AssertTrue('EditedNode cleared after teardown', FTree.EditedNode = nil);
+end;
+
+{ Deleting the edited node cancels (no commit on a vanishing node) and clears the
+  cached pointer so the next layout pass can't touch a freed node. }
+procedure TTreeEditE4Test.TestDeleteEditedNodeCancels;
+var
+  node2: PTyTreeNode;
+begin
+  node2 := NodeAt(2);
+  AssertTrue('open edit on row 2', FTree.EditNode(node2, 0));
+  TEditTreeAccess(FTree).SetEditorText('will-be-deleted');
+
+  FTree.DeleteNode(node2);
+
+  AssertFalse('not editing after the edited node was deleted', FTree.IsEditing);
+  AssertEquals('delete cancels — OnNewText NOT fired', 0, FNewTextFired);
+  AssertTrue('delete fired OnEditCancelled', FCancelledFired >= 1);
+  AssertTrue('EditedNode nulled (no dangling pointer)', FTree.EditedNode = nil);
+
+  { A subsequent layout pass must not crash on a freed pointer. }
+  Layout;
+  AssertFalse('still not editing after a repaint', FTree.IsEditing);
+end;
+
+{ Deleting an ANCESTOR of the edited node also cancels (descendant check). }
+procedure TTreeEditE4Test.TestClearDuringEditCancels;
+var
+  node1: PTyTreeNode;
+begin
+  node1 := NodeAt(1);
+  AssertTrue('open edit on row 1', FTree.EditNode(node1, 0));
+
+  FTree.Clear;
+
+  AssertFalse('not editing after Clear', FTree.IsEditing);
+  AssertEquals('Clear cancels — OnNewText NOT fired', 0, FNewTextFired);
+  AssertTrue('EditedNode nulled after Clear', FTree.EditedNode = nil);
+
+  Layout;   { must not touch a freed pointer }
+end;
+
+{ Removing toEditable mid-edit closes the editor (commit semantics). }
+procedure TTreeEditE4Test.TestRemovingEditableOptionCloses;
+var
+  node0: PTyTreeNode;
+begin
+  node0 := NodeAt(0);
+  AssertTrue('open edit on row 0', FTree.EditNode(node0, 0));
+  TEditTreeAccess(FTree).SetEditorText('kept-on-option-off');
+
+  FTree.Options := FTree.Options - [toEditable];
+
+  AssertFalse('editing closed when toEditable removed', FTree.IsEditing);
+  AssertEquals('option-off committed (OnNewText fired once)', 1, FNewTextFired);
+  AssertEquals('committed the edited text', 'kept-on-option-off', FNewTextValue);
+end;
+
+{ The editor's OnExit handler (focus lost) commits Explorer-style. }
+procedure TTreeEditE4Test.TestFocusLossCommits;
+var
+  node0: PTyTreeNode;
+begin
+  node0 := NodeAt(0);
+  AssertTrue('open edit on row 0', FTree.EditNode(node0, 0));
+  TEditTreeAccess(FTree).SetEditorText('lost-focus');
+
+  TEditTreeAccess(FTree).EditorExitPub;   { invoke FEditor.OnExit }
+
+  AssertEquals('focus-loss committed (OnNewText fired once)', 1, FNewTextFired);
+  AssertEquals('committed the edited text', 'lost-focus', FNewTextValue);
+  AssertFalse('not editing after focus-loss commit', FTree.IsEditing);
+end;
+
+{ Enter in the editor commits and consumes the key. }
+procedure TTreeEditE4Test.TestEditorEnterCommits;
+var
+  node0: PTyTreeNode;
+  Key: Word;
+begin
+  node0 := NodeAt(0);
+  AssertTrue('open edit on row 0', FTree.EditNode(node0, 0));
+  TEditTreeAccess(FTree).SetEditorText('entered');
+
+  Key := VK_RETURN;
+  TEditTreeAccess(FTree).EditorKeyDownPub(Key, []);
+
+  AssertEquals('Enter consumed the key', 0, Key);
+  AssertEquals('Enter committed (OnNewText fired once)', 1, FNewTextFired);
+  AssertEquals('committed the edited text', 'entered', FNewTextValue);
+  AssertFalse('not editing after Enter', FTree.IsEditing);
+end;
+
+{ Escape in the editor cancels (no commit) and consumes the key. }
+procedure TTreeEditE4Test.TestEditorEscapeCancels;
+var
+  node0: PTyTreeNode;
+  Key: Word;
+begin
+  node0 := NodeAt(0);
+  AssertTrue('open edit on row 0', FTree.EditNode(node0, 0));
+  TEditTreeAccess(FTree).SetEditorText('discard-on-esc');
+
+  Key := VK_ESCAPE;
+  TEditTreeAccess(FTree).EditorKeyDownPub(Key, []);
+
+  AssertEquals('Escape consumed the key', 0, Key);
+  AssertEquals('Escape did NOT commit', 0, FNewTextFired);
+  AssertTrue('Escape fired OnEditCancelled', FCancelledFired >= 1);
+  AssertFalse('not editing after Escape', FTree.IsEditing);
+end;
+
 initialization
   RegisterTest(TTreeEditE1Test);
   RegisterTest(TTreeEditE2Test);
   RegisterTest(TTreeEditE3Test);
+  RegisterTest(TTreeEditE4Test);
 end.

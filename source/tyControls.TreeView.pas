@@ -363,6 +363,13 @@ type
     function  EditorBoundsFromCell(const r: TRect): TRect;
     function  CurrentCellText(Node: PTyTreeNode; Column: Integer): string;
     procedure FinishEdit;
+    { ③e E4: keep the editor glued to its cell as the view changes (called from
+      every layout/scroll path) and the editor's own input handlers (Enter/Esc on
+      FEditor.OnKeyDown, focus-loss commit on FEditor.OnExit). Protected so a
+      descendant / test can drive them without a real window handle. }
+    procedure RepositionEditor;
+    procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure EditorExit(Sender: TObject);
     property  InlineEditor: TTyEdit read FEditor;   // child editor (tests/descendants)
     { E3: the column recorded by the last MouseDown (NoColumn = none). Protected so
       a descendant / test can inspect the trigger state without growing the public
@@ -1175,6 +1182,10 @@ var
   n:                    PTyTreeNode;
 begin
   if FOptions = AValue then Exit;
+  { ③e E4: toEditable being turned off mid-edit ⇒ COMMIT the open editor (matches
+    the focus-loss semantics) before the option goes away. EndEditNode is a no-op
+    when not editing, so non-editing trees are unaffected. }
+  if FEditing and not (toEditable in AValue) then EndEditNode;
   CheckSupportChanged := (toCheckSupport in AValue) <> (toCheckSupport in FOptions);
   { FIX 5: detect toMultiSelect being removed while multiple nodes are selected }
   MultiSelectRemoved  := (toMultiSelect in FOptions) and
@@ -1400,6 +1411,7 @@ begin
 
   UpdateScrollBars;   // sync the scrollbar thumb to the new offset
   Invalidate;
+  RepositionEditor;   // ③e E4: keep an open editor glued to its cell after scroll
 end;
 
 { ── C2 ── embedded scrollbars + offsets ─────────────────────────────────── }
@@ -1589,6 +1601,7 @@ begin
   finally
     FSyncingScroll := False;
   end;
+  RepositionEditor;   // ③e E4: keep an open editor glued to its cell after scroll
 end;
 
 { HScrollChange — horizontal bar counterpart. }
@@ -1602,6 +1615,7 @@ begin
   finally
     FSyncingScroll := False;
   end;
+  RepositionEditor;   // ③e E4: keep an open editor glued to its cell after scroll
 end;
 
 { DoMouseWheel — scroll 3 rows per detent (mirrors ListBox wheel).
@@ -1624,6 +1638,7 @@ begin
   FOffsetY := FOffsetY + Delta;
   UpdateScrollBars;   // clamps FOffsetY and syncs thumb
   Invalidate;
+  RepositionEditor;   // ③e E4: keep an open editor glued to its cell after wheel scroll
   Result := True;
 end;
 
@@ -1649,6 +1664,7 @@ begin
       FRangeX := MulDiv(FHeader.Columns.TotalWidth, Font.PixelsPerInch, 96);
     UpdateScrollBars;
   end;
+  RepositionEditor;   // ③e E4: keep an open editor glued to its cell after a resize
 end;
 
 { B (columns): header/column change handler }
@@ -1758,6 +1774,10 @@ begin
   FEditor.Parent  := Self;
   FEditor.Visible := False;
   FEditor.TabStop := False;
+  { ③e E4: editor input — Enter commits, Esc cancels (EditorKeyDown), and losing
+    focus commits Explorer-style (EditorExit). }
+  FEditor.OnKeyDown := @EditorKeyDown;
+  FEditor.OnExit    := @EditorExit;
   TabStop           := True;
   Width := 200; Height := 160;
 end;
@@ -1869,6 +1889,11 @@ begin
     FRangeX := 0;
   UpdateScrollBars;
   Invalidate;
+  { ③e E4: central layout hub — covers expand/collapse, per-node height change,
+    column resize/reorder (via HeaderChanged) and structural growth. DeleteNode /
+    Clear CancelEdit *before* they reach here, so FEditNode is already nulled and
+    RepositionEditor safely no-ops (it never touches the freed node). }
+  RepositionEditor;
 end;
 
 function TTyTreeView.SumVisibleHeights: Integer;
@@ -1958,8 +1983,25 @@ var
   dh, dc:     Integer;
   reseqChild: PTyTreeNode;   { A1: for sibling re-sequence walk }
   reseqIdx:   Cardinal;
+  anc:        PTyTreeNode;   { ③e E4: ancestor walk to detect the edited subtree }
 begin
   if (Node = nil) or (Node = FRoot) then Exit;
+
+  { ③e E4: if the active edit lives in the subtree about to be freed (the node
+    itself or any descendant), CANCEL it (no commit on a vanishing node) BEFORE
+    anything is freed. CancelEdit → FinishEdit nulls FEditNode, so the recursive
+    child-frees + the trailing InvalidateTreeLayout → RepositionEditor see
+    FEditing=False and never dereference the freed pointer. }
+  if FEditing and (FEditNode <> nil) then
+  begin
+    anc := FEditNode;
+    while anc <> nil do
+    begin
+      if anc = Node then begin CancelEdit; Break; end;
+      anc := anc^.Parent;
+      if anc = FRoot then Break;   { reached the sentinel root — not in this subtree }
+    end;
+  end;
 
   // Null out selection/focus/hover if this node (or an ancestor) is being deleted
   if FFocusedNode   = Node then FFocusedNode   := nil;
@@ -2039,6 +2081,11 @@ end;
 
 procedure TTyTreeView.Clear;
 begin
+  { ③e E4: any active edit is on a node about to be freed — CANCEL it (no commit)
+    BEFORE the teardown so FEditNode can't dangle. (DeleteNode's own subtree check
+    would also catch it per-node, but cancelling once up-front is cheaper + clearer
+    for a bulk clear.) }
+  if FEditing then CancelEdit;
   { A1: mark FRoot with nsClearing so DeleteNode skips the O(siblings) index
     re-sequence during bulk teardown, keeping Clear O(n). }
   Include(FRoot^.States, nsClearing);
@@ -2052,6 +2099,7 @@ begin
   FSelectionCount := 0;
   FSelectedNode   := nil;
   FRangeAnchor    := nil;
+  FEditNode       := nil;   { ③e E4: dangling-pointer hygiene (CancelEdit already nulled it) }
 end;
 
 { ── A5 ── lazy lifecycle ─────────────────────────────────────────────────── }
@@ -4978,6 +5026,44 @@ begin
   FEditColumn     := NoColumn;
   FEditOriginalText := '';
   Invalidate;
+end;
+
+{ RepositionEditor — re-glue the open editor to its cell after a layout/scroll
+  change. Called from every layout path (scroll setters, expand/collapse,
+  InvalidateTreeLayout, column resize/reorder, node-height, Resize) — the
+  `not FEditing` guard makes it a no-op when no edit is active, so Options=[] /
+  non-editing trees are byte-identical. FEndingEdit additionally short-circuits a
+  reposition reached during a commit/cancel teardown (defensive: FinishEdit only
+  calls Invalidate, never a layout setter, so this cannot recurse). When the cell
+  scrolled out of view (GetCellRect returns False / empty) we commit + close
+  (EndEditNode) — Explorer-style; a still-visible cell just re-bounds. }
+procedure TTyTreeView.RepositionEditor;
+var
+  r: TRect;
+begin
+  if not FEditing or FEndingEdit then Exit;
+  if GetCellRect(FEditNode, FEditColumn, r) and not IsRectEmpty(r) then
+    FEditor.BoundsRect := EditorBoundsFromCell(r)
+  else
+    EndEditNode;   // scrolled out of view → commit + close
+end;
+
+{ EditorKeyDown — Enter commits, Esc cancels; both consume the key. Attached to
+  FEditor.OnKeyDown in the ctor. }
+procedure TTyTreeView.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  case Key of
+    VK_RETURN: begin EndEditNode; Key := 0; end;
+    VK_ESCAPE: begin CancelEdit;  Key := 0; end;
+  end;
+end;
+
+{ EditorExit — focus left the editor ⇒ commit (Explorer-style). Guarded against
+  re-entry during an in-flight teardown (EndEditNode hides the editor, which can
+  itself trigger a focus change → OnExit). Attached to FEditor.OnExit in the ctor. }
+procedure TTyTreeView.EditorExit(Sender: TObject);
+begin
+  if FEditing and not FEndingEdit then EndEditNode;
 end;
 
 { Start editing Node's cell in Column. Returns False when not allowed: not
