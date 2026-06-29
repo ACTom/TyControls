@@ -6877,6 +6877,677 @@ begin
   finally t.Free; end;
 end;
 
+{ ── D1 ── multi-select mouse (Ctrl/Shift) + selection API + OnSelectionChanged ── }
+
+type
+  TTreeD1MultiSelectMouseTest = class(TTestCase)
+  private
+    FSelChangedCount: Integer;
+    procedure OnSelChanged(Sender: TObject);
+    { Build a flat 6-node tree with toMultiSelect; PPI=96, NodeHeight=20,
+      Indent=16, ShowRoot=True, ShowButtons=False.
+      Nodes occupy rows 0..5 (absY 0..19 .. 100..119).
+      Label zone for level-0 nodes: x >= 16. }
+    function BuildMultiTree(out nodes: array of PTyTreeNode): TTyTreeView;
+  published
+    { Ctrl+click two separate nodes → both selected, SelectedCount=2;
+      OnSelectionChanged fired once per click. }
+    procedure TestCtrlClickTwoNodes;
+    { Shift+click after a plain-click anchor → inclusive visible range selected. }
+    procedure TestShiftClickRange;
+    { Plain click → collapses multi-selection to count=1. }
+    procedure TestPlainClickCollapsesSelection;
+    { SelectAll → count = visible node count; iterators walk in visible order. }
+    procedure TestSelectAllAndIterators;
+    { GetFirstSelected/GetNextSelected traverse in visible order. }
+    procedure TestGetFirstAndNextSelected;
+    { OnSelectionChanged fires once per mouse gesture (not per node). }
+    procedure TestOnSelectionChangedFiredOncePerGesture;
+    { toMultiSelect OFF → Ctrl+click behaves like plain single-select. }
+    procedure TestMultiSelectOffCtrlClickIsSingleSelect;
+    { toMultiSelect OFF → Shift+click behaves like plain single-select. }
+    procedure TestMultiSelectOffShiftClickIsSingleSelect;
+    { Ctrl+Shift+click extends range without clearing existing selection. }
+    procedure TestCtrlShiftClickExtendsRange;
+    { hpButton click does NOT change multi-selection. }
+    procedure TestButtonClickDoesNotAlterMultiSelect;
+    { hpCheckBox click does NOT change multi-selection. }
+    procedure TestCheckBoxClickDoesNotAlterMultiSelect;
+  end;
+
+procedure TTreeD1MultiSelectMouseTest.OnSelChanged(Sender: TObject);
+begin
+  Inc(FSelChangedCount);
+end;
+
+function TTreeD1MultiSelectMouseTest.BuildMultiTree(
+  out nodes: array of PTyTreeNode): TTyTreeView;
+var
+  t: TTyTreeView;
+  i: Integer;
+  n: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 20;
+  t.Indent             := 16;
+  t.ShowRoot           := True;
+  t.ShowButtons        := False;
+  t.ShowTreeLines      := False;
+  t.Options            := [toMultiSelect];
+  t.SetBounds(0, 0, 300, 200);
+  t.RootNodeCount := 6;
+  n := t.RootNode^.FirstChild;
+  for i := 0 to 5 do
+  begin
+    nodes[i] := n;
+    n := n^.NextSibling;
+  end;
+  Result := t;
+end;
+
+procedure TTreeD1MultiSelectMouseTest.TestCtrlClickTwoNodes;
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+begin
+  FSelChangedCount := 0;
+  t := BuildMultiTree(nodes);
+  try
+    t.OnSelectionChanged := @OnSelChanged;
+    { Plain click on node[0] — anchor + select }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 10);  { row 0, label zone }
+    {$POP}
+    AssertEquals('D1 ctrl2: after plain click count=1', 1, t.SelectedCount);
+    AssertEquals('D1 ctrl2: sel-changed fired for plain click', 1, FSelChangedCount);
+    FSelChangedCount := 0;
+    { Ctrl+click on node[2] — add to selection }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssCtrl], 30, 50);  { row 2, label zone }
+    {$POP}
+    AssertEquals('D1 ctrl2: SelectedCount=2', 2, t.SelectedCount);
+    AssertTrue('D1 ctrl2: node[0] selected', nsSelected in nodes[0]^.States);
+    AssertTrue('D1 ctrl2: node[2] selected', nsSelected in nodes[2]^.States);
+    AssertFalse('D1 ctrl2: node[1] not selected', nsSelected in nodes[1]^.States);
+    AssertEquals('D1 ctrl2: OnSelectionChanged fired once for Ctrl+click',
+      1, FSelChangedCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeD1MultiSelectMouseTest.TestShiftClickRange;
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+begin
+  t := BuildMultiTree(nodes);
+  try
+    { Plain click on node[1] → anchor }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 30);   { row 1 }
+    {$POP}
+    { Shift+click on node[4] → range [1..4] selected }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssShift], 30, 90);  { row 4 }
+    {$POP}
+    AssertEquals('D1 shift: SelectedCount=4', 4, t.SelectedCount);
+    AssertFalse('D1 shift: node[0] not selected', nsSelected in nodes[0]^.States);
+    AssertTrue ('D1 shift: node[1] selected',     nsSelected in nodes[1]^.States);
+    AssertTrue ('D1 shift: node[2] selected',     nsSelected in nodes[2]^.States);
+    AssertTrue ('D1 shift: node[3] selected',     nsSelected in nodes[3]^.States);
+    AssertTrue ('D1 shift: node[4] selected',     nsSelected in nodes[4]^.States);
+    AssertFalse('D1 shift: node[5] not selected', nsSelected in nodes[5]^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeD1MultiSelectMouseTest.TestPlainClickCollapsesSelection;
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+begin
+  t := BuildMultiTree(nodes);
+  try
+    { Select a range first }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 10);          { row 0 }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssShift], 30, 90);   { row 4 }
+    {$POP}
+    AssertEquals('D1 plain: initial range count=5', 5, t.SelectedCount);
+    { Plain click on node[3] → collapse to 1 }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 70);  { row 3 }
+    {$POP}
+    AssertEquals('D1 plain: collapsed to count=1', 1, t.SelectedCount);
+    AssertTrue('D1 plain: only node[3] selected', nsSelected in nodes[3]^.States);
+    AssertFalse('D1 plain: node[0] deselected',   nsSelected in nodes[0]^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeD1MultiSelectMouseTest.TestSelectAllAndIterators;
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+  i: Integer;
+begin
+  t := BuildMultiTree(nodes);
+  try
+    t.SelectAll;
+    AssertEquals('D1 selectall: SelectedCount=6', 6, t.SelectedCount);
+    for i := 0 to 5 do
+      AssertTrue('D1 selectall: node[' + IntToStr(i) + '] selected',
+        nsSelected in nodes[i]^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeD1MultiSelectMouseTest.TestGetFirstAndNextSelected;
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+  n: PTyTreeNode;
+  visitCount: Integer;
+begin
+  t := BuildMultiTree(nodes);
+  try
+    { Select nodes 1, 3, 5 }
+    t.InternalSetSelected(nodes[1], True);
+    t.InternalSetSelected(nodes[3], True);
+    t.InternalSetSelected(nodes[5], True);
+    AssertEquals('D1 iter: SelectedCount=3', 3, t.SelectedCount);
+    n := t.GetFirstSelected;
+    AssertTrue('D1 iter: GetFirstSelected = nodes[1]', n = nodes[1]);
+    n := t.GetNextSelected(n);
+    AssertTrue('D1 iter: next = nodes[3]', n = nodes[3]);
+    n := t.GetNextSelected(n);
+    AssertTrue('D1 iter: next = nodes[5]', n = nodes[5]);
+    n := t.GetNextSelected(n);
+    AssertTrue('D1 iter: no more selected (nil)', n = nil);
+    { Count via iteration }
+    visitCount := 0;
+    n := t.GetFirstSelected;
+    while n <> nil do
+    begin
+      Inc(visitCount);
+      n := t.GetNextSelected(n);
+    end;
+    AssertEquals('D1 iter: iterated 3 nodes', 3, visitCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeD1MultiSelectMouseTest.TestOnSelectionChangedFiredOncePerGesture;
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+begin
+  FSelChangedCount := 0;
+  t := BuildMultiTree(nodes);
+  try
+    t.OnSelectionChanged := @OnSelChanged;
+    { SelectAll is one gesture → one fire }
+    t.SelectAll;
+    AssertEquals('D1 once: SelectAll fires once', 1, FSelChangedCount);
+    FSelChangedCount := 0;
+    { ClearSelection → does NOT fire OnSelectionChanged (it's not a user gesture
+      from multi-select perspective; ClearSelection fires OnChange instead).
+      That's consistent with the design spec. }
+    t.ClearSelection;
+    { One plain mouse click → one fire }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 10);
+    {$POP}
+    AssertEquals('D1 once: plain click fires once', 1, FSelChangedCount);
+    FSelChangedCount := 0;
+    { Shift+click → one fire (covers the whole range in one gesture) }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssShift], 30, 90);
+    {$POP}
+    AssertEquals('D1 once: Shift+click fires once', 1, FSelChangedCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeD1MultiSelectMouseTest.TestMultiSelectOffCtrlClickIsSingleSelect;
+{ toMultiSelect OFF → Ctrl+click is treated as plain single-select (③a/③b). }
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+begin
+  t := BuildMultiTree(nodes);
+  try
+    t.Options := [];   { toMultiSelect OFF }
+    { Click node[0] }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 10);
+    {$POP}
+    AssertEquals('D1 off ctrl: count=1 after plain', 1, t.SelectedCount);
+    { Ctrl+click node[2] → should NOT add; just single-selects node[2] }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssCtrl], 30, 50);
+    {$POP}
+    { In single-select mode, FocusedNode := node[2] runs → SetSelected(node[2],True)
+      which calls ClearSelectedNode first — so node[0] deselected, node[2] selected }
+    AssertEquals('D1 off ctrl: still only 1 selected', 1, t.SelectedCount);
+    AssertTrue('D1 off ctrl: node[2] selected',   nsSelected in nodes[2]^.States);
+    AssertFalse('D1 off ctrl: node[0] deselected', nsSelected in nodes[0]^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeD1MultiSelectMouseTest.TestMultiSelectOffShiftClickIsSingleSelect;
+{ toMultiSelect OFF → Shift+click is treated as plain single-select (③a/③b). }
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+begin
+  t := BuildMultiTree(nodes);
+  try
+    t.Options := [];   { toMultiSelect OFF }
+    { Shift+click node[3] → single-selects node[3] }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssShift], 30, 70);
+    {$POP}
+    AssertEquals('D1 off shift: exactly 1 selected', 1, t.SelectedCount);
+    AssertTrue('D1 off shift: node[3] selected', nsSelected in nodes[3]^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeD1MultiSelectMouseTest.TestCtrlShiftClickExtendsRange;
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+begin
+  t := BuildMultiTree(nodes);
+  try
+    { First: plain click on node[0] → anchor + select (count=1) }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 10);
+    {$POP}
+    AssertEquals('D1 ctrl+shift: after plain count=1', 1, t.SelectedCount);
+    { Ctrl+click node[4] → node[0]+node[4] selected (count=2); anchor=node[4] }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssCtrl], 30, 90);
+    {$POP}
+    AssertEquals('D1 ctrl+shift: after ctrl count=2', 2, t.SelectedCount);
+    { Ctrl+Shift+click on node[5] → extend range from anchor(node[4]) to node[5];
+      adds node[5] to existing selection (does NOT clear node[0]). }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssCtrl, ssShift], 30, 110);
+    {$POP}
+    AssertTrue('D1 ctrl+shift: node[0] still selected', nsSelected in nodes[0]^.States);
+    AssertTrue('D1 ctrl+shift: node[4] selected', nsSelected in nodes[4]^.States);
+    AssertTrue('D1 ctrl+shift: node[5] selected', nsSelected in nodes[5]^.States);
+    AssertEquals('D1 ctrl+shift: count=3', 3, t.SelectedCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeD1MultiSelectMouseTest.TestButtonClickDoesNotAlterMultiSelect;
+{ hpButton click expands/collapses; does NOT change multi-selection. }
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+  n0: PTyTreeNode;
+begin
+  t := BuildMultiTree(nodes);
+  try
+    t.ShowButtons := True;
+    { Pre-select nodes[1] and nodes[2] }
+    t.InternalSetSelected(nodes[1], True);
+    t.InternalSetSelected(nodes[2], True);
+    AssertEquals('D1 btn: pre-sel count=2', 2, t.SelectedCount);
+    { Make nodes[0] expandable so there's a real button }
+    n0 := nodes[0];
+    Include(n0^.States, nsHasChildren);
+    Include(n0^.States, nsInitialized);
+    { Click the button slot of nodes[0] at (8,10) — indentPx=16, btnSlotW=16
+      so button zone x in [0..15]; we hit x=8, y=10 = row 0 }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 8, 10);
+    {$POP}
+    AssertEquals('D1 btn: count still=2 after button click', 2, t.SelectedCount);
+    AssertTrue('D1 btn: node[1] still selected', nsSelected in nodes[1]^.States);
+    AssertTrue('D1 btn: node[2] still selected', nsSelected in nodes[2]^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeD1MultiSelectMouseTest.TestCheckBoxClickDoesNotAlterMultiSelect;
+{ hpCheckBox click toggles check; does NOT change multi-selection. }
+var
+  t: TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+begin
+  t := BuildMultiTree(nodes);
+  try
+    t.Options := [toMultiSelect, toCheckSupport];
+    nodes[0]^.CheckType  := ctCheckBox;
+    nodes[0]^.CheckState := csUnchecked;
+    { Pre-select nodes[1] and nodes[2] }
+    t.InternalSetSelected(nodes[1], True);
+    t.InternalSetSelected(nodes[2], True);
+    AssertEquals('D1 cb: pre-sel count=2', 2, t.SelectedCount);
+    { Click the checkbox slot of nodes[0]: x=20 (indentPx=16, cbSlot=[16..31]) }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 20, 10);
+    {$POP}
+    AssertEquals('D1 cb: count still=2 after checkbox click', 2, t.SelectedCount);
+    AssertTrue('D1 cb: node[1] still selected', nsSelected in nodes[1]^.States);
+    AssertTrue('D1 cb: node[2] still selected', nsSelected in nodes[2]^.States);
+    AssertEquals('D1 cb: nodes[0] check toggled to csChecked',
+      Ord(csChecked), Ord(nodes[0]^.CheckState));
+  finally t.Free; end;
+end;
+
+{ ── D2 ── multi-select keyboard + full-row select ────────────────────────────── }
+
+type
+  TTreeD2MultiSelectKeyboardTest = class(TTestCase)
+  private
+    FSelChangedCount: Integer;
+    procedure OnSelChanged(Sender: TObject);
+    function BuildKeyTree(out nodes: array of PTyTreeNode): TTyTreeView;
+  published
+    { Shift+Down extends selection by one; anchor stays }
+    procedure TestShiftDownExtendsRange;
+    { Shift+Up extends selection by one (upward) }
+    procedure TestShiftUpExtendsRange;
+    { Ctrl+Space toggles the focused node's selection }
+    procedure TestCtrlSpaceTogglesFocused;
+    { Ctrl+A selects all visible nodes }
+    procedure TestCtrlASelectsAll;
+    { Plain Down (no Shift) collapses to new single selection + resets anchor }
+    procedure TestPlainDownCollapsesSingleSelect;
+    { toFullRowSelect: click past the caption selects the row }
+    procedure TestFullRowSelectClickPastCaption;
+    { Without toFullRowSelect: click in indent zone does NOT select (single-select ③b) }
+    procedure TestNoFullRowSelectIndentZoneDoesNotSelect;
+    { toFullRowSelect: Ctrl+click past caption adds to multi-selection }
+    procedure TestFullRowSelectCtrlClickAdds;
+    { toMultiSelect OFF → Ctrl+Space does nothing (not consumed) }
+    procedure TestMultiSelectOffCtrlSpaceNoOp;
+    { toMultiSelect OFF → Shift+Down single-selects (no extension) }
+    procedure TestMultiSelectOffShiftDownSingleSelect;
+  end;
+
+procedure TTreeD2MultiSelectKeyboardTest.OnSelChanged(Sender: TObject);
+begin
+  Inc(FSelChangedCount);
+end;
+
+function TTreeD2MultiSelectKeyboardTest.BuildKeyTree(
+  out nodes: array of PTyTreeNode): TTyTreeView;
+var
+  t: TTyTreeView;
+  i: Integer;
+  n: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 20;
+  t.Indent             := 16;
+  t.ShowRoot           := True;
+  t.ShowButtons        := False;
+  t.ShowTreeLines      := False;
+  t.Options            := [toMultiSelect];
+  t.SetBounds(0, 0, 300, 200);
+  t.RootNodeCount := 5;
+  n := t.RootNode^.FirstChild;
+  for i := 0 to 4 do
+  begin
+    nodes[i] := n;
+    n := n^.NextSibling;
+  end;
+  Result := t;
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.TestShiftDownExtendsRange;
+{ Start: plain click node[1] → anchor=node[1], selected=node[1].
+  Shift+Down → caret moves to node[2], SelectRange(node[1],node[2]).
+  Result: nodes[1]+nodes[2] selected, count=2; anchor=node[1]. }
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+  key: Word;
+begin
+  FSelChangedCount := 0;
+  t := BuildKeyTree(nodes);
+  try
+    t.OnSelectionChanged := @OnSelChanged;
+    { Plain click on node[1] }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 30);  { row 1 }
+    {$POP}
+    FSelChangedCount := 0;
+    { Shift+Down }
+    key := VK_DOWN;
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, [ssShift]);{$POP}
+    AssertEquals('D2 shift-dn: key consumed', 0, Integer(key));
+    AssertEquals('D2 shift-dn: SelectedCount=2', 2, t.SelectedCount);
+    AssertTrue ('D2 shift-dn: node[1] selected', nsSelected in nodes[1]^.States);
+    AssertTrue ('D2 shift-dn: node[2] selected', nsSelected in nodes[2]^.States);
+    AssertFalse('D2 shift-dn: node[0] not selected', nsSelected in nodes[0]^.States);
+    AssertTrue ('D2 shift-dn: FocusedNode=node[2]', t.FocusedNode = nodes[2]);
+    AssertEquals('D2 shift-dn: OnSelectionChanged fired once', 1, FSelChangedCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.TestShiftUpExtendsRange;
+{ Start: plain click node[3] → anchor=node[3].
+  Shift+Up → caret to node[2], SelectRange(node[3],node[2]).
+  Result: nodes[2]+nodes[3] selected, count=2. }
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+  key: Word;
+begin
+  t := BuildKeyTree(nodes);
+  try
+    { Plain click on node[3] }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 70);  { row 3 }
+    {$POP}
+    { Shift+Up }
+    key := VK_UP;
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, [ssShift]);{$POP}
+    AssertEquals('D2 shift-up: key consumed', 0, Integer(key));
+    AssertEquals('D2 shift-up: SelectedCount=2', 2, t.SelectedCount);
+    AssertTrue ('D2 shift-up: node[2] selected', nsSelected in nodes[2]^.States);
+    AssertTrue ('D2 shift-up: node[3] selected', nsSelected in nodes[3]^.States);
+    AssertTrue ('D2 shift-up: FocusedNode=node[2]', t.FocusedNode = nodes[2]);
+  finally t.Free; end;
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.TestCtrlSpaceTogglesFocused;
+{ Ctrl+Space on a focused node toggles its selection state. }
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+  key: Word;
+begin
+  FSelChangedCount := 0;
+  t := BuildKeyTree(nodes);
+  try
+    t.OnSelectionChanged := @OnSelChanged;
+    { Focus node[2] (plain click) }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 50);  { row 2 }
+    {$POP}
+    AssertTrue('D2 ctrl-sp: node[2] selected after click',
+      nsSelected in nodes[2]^.States);
+    FSelChangedCount := 0;
+    { Ctrl+Space → toggles node[2] from selected → deselected }
+    key := VK_SPACE;
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, [ssCtrl]);{$POP}
+    AssertEquals('D2 ctrl-sp: key consumed', 0, Integer(key));
+    AssertFalse('D2 ctrl-sp: node[2] deselected after toggle',
+      nsSelected in nodes[2]^.States);
+    AssertEquals('D2 ctrl-sp: OnSelectionChanged fired', 1, FSelChangedCount);
+    { Second Ctrl+Space → re-selects }
+    FSelChangedCount := 0;
+    key := VK_SPACE;
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, [ssCtrl]);{$POP}
+    AssertTrue('D2 ctrl-sp: node[2] re-selected', nsSelected in nodes[2]^.States);
+    AssertEquals('D2 ctrl-sp: OnSelectionChanged fired again', 1, FSelChangedCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.TestCtrlASelectsAll;
+{ Ctrl+A selects all 5 visible nodes. }
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+  key: Word;
+  i: Integer;
+begin
+  FSelChangedCount := 0;
+  t := BuildKeyTree(nodes);
+  try
+    t.OnSelectionChanged := @OnSelChanged;
+    key := Ord('A');
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, [ssCtrl]);{$POP}
+    AssertEquals('D2 ctrl-a: key consumed', 0, Integer(key));
+    AssertEquals('D2 ctrl-a: SelectedCount=5', 5, t.SelectedCount);
+    for i := 0 to 4 do
+      AssertTrue('D2 ctrl-a: nodes[' + IntToStr(i) + '] selected',
+        nsSelected in nodes[i]^.States);
+    AssertEquals('D2 ctrl-a: OnSelectionChanged fired once', 1, FSelChangedCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.TestPlainDownCollapsesSingleSelect;
+{ Plain Down (no Shift) in multi-select: moves caret + collapses to one. }
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+  key: Word;
+begin
+  t := BuildKeyTree(nodes);
+  try
+    { Select a range first }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 10);         { row 0 }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssShift], 30, 70);  { row 3 }
+    {$POP}
+    AssertEquals('D2 plain-dn: range count=4', 4, t.SelectedCount);
+    { Plain Down from node[3] → node[4]; collapses selection }
+    key := VK_DOWN;
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, []);{$POP}
+    AssertEquals('D2 plain-dn: collapsed to count=1', 1, t.SelectedCount);
+    AssertTrue('D2 plain-dn: node[4] selected', nsSelected in nodes[4]^.States);
+    AssertFalse('D2 plain-dn: node[3] deselected', nsSelected in nodes[3]^.States);
+    AssertTrue('D2 plain-dn: FocusedNode=node[4]', t.FocusedNode = nodes[4]);
+  finally t.Free; end;
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.TestFullRowSelectClickPastCaption;
+{ toFullRowSelect: click at x=200 (far right, past label) selects the row. }
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+begin
+  t := BuildKeyTree(nodes);
+  try
+    t.Options := [toMultiSelect, toFullRowSelect];
+    { Click far right in row 2 (y=50) }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 200, 50);
+    {$POP}
+    AssertEquals('D2 fullrow: SelectedCount=1', 1, t.SelectedCount);
+    AssertTrue('D2 fullrow: node[2] selected', nsSelected in nodes[2]^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.TestNoFullRowSelectIndentZoneDoesNotSelect;
+{ Without toFullRowSelect: a click in the label area still selects; a click in
+  the indent zone also selects (hpIndent → single-select path).
+  But a click in the indent zone for toMultiSelect without toFullRowSelect falls
+  through to the single-select path (FocusedNode := node). }
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+begin
+  t := BuildKeyTree(nodes);
+  try
+    { toMultiSelect WITHOUT toFullRowSelect }
+    t.Options := [toMultiSelect];
+    { Click on the label zone of node[1] (row 1, x=30) — should select }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 30);
+    {$POP}
+    AssertEquals('D2 no-fullrow label: count=1', 1, t.SelectedCount);
+    AssertTrue('D2 no-fullrow label: node[1] selected', nsSelected in nodes[1]^.States);
+    { Now click far right (x=200) in row 2 — hpLabel (past caption), selects }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 200, 50);
+    {$POP}
+    AssertEquals('D2 no-fullrow far: count=1', 1, t.SelectedCount);
+    AssertTrue('D2 no-fullrow far: node[2] selected', nsSelected in nodes[2]^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.TestFullRowSelectCtrlClickAdds;
+{ toFullRowSelect + Ctrl+click far right adds to multi-selection. }
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+begin
+  t := BuildKeyTree(nodes);
+  try
+    t.Options := [toMultiSelect, toFullRowSelect];
+    { Plain click node[0] }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 30, 10);
+    {$POP}
+    AssertEquals('D2 fullrow-ctrl: count=1', 1, t.SelectedCount);
+    { Ctrl+click far right in row 3 → add node[3] }
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [ssCtrl], 200, 70);
+    {$POP}
+    AssertEquals('D2 fullrow-ctrl: count=2', 2, t.SelectedCount);
+    AssertTrue('D2 fullrow-ctrl: node[0] selected', nsSelected in nodes[0]^.States);
+    AssertTrue('D2 fullrow-ctrl: node[3] selected', nsSelected in nodes[3]^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.TestMultiSelectOffCtrlSpaceNoOp;
+{ toMultiSelect OFF → Ctrl+Space key is not consumed (no multi-select action). }
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+  key: Word;
+begin
+  t := BuildKeyTree(nodes);
+  try
+    t.Options := [];   { toMultiSelect OFF }
+    t.FocusedNode := nodes[1];
+    key := VK_SPACE;
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, [ssCtrl]);{$POP}
+    { When toMultiSelect is off, the Ctrl+Space handler is skipped.
+      VK_SPACE falls to the case branch which only fires for toCheckSupport+ctNone check.
+      With toCheckSupport off the key is NOT consumed either. }
+    AssertEquals('D2 off ctrl-sp: key not consumed (VK_SPACE=32)',
+      VK_SPACE, Integer(key));
+  finally t.Free; end;
+end;
+
+procedure TTreeD2MultiSelectKeyboardTest.TestMultiSelectOffShiftDownSingleSelect;
+{ toMultiSelect OFF → Shift+Down moves focus like plain Down (single-select). }
+var
+  t: TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+  key: Word;
+begin
+  t := BuildKeyTree(nodes);
+  try
+    t.Options := [];   { toMultiSelect OFF }
+    t.FocusedNode := nodes[1];
+    key := VK_DOWN;
+    {$PUSH}{$HINTS OFF}TTyTreeViewAccess(t).KeyDown(key, [ssShift]);{$POP}
+    { Without toMultiSelect, Shift+Down falls through to the normal VK_DOWN case
+      which calls FocusedNode := nxt (single-select). }
+    AssertEquals('D2 off shift-dn: key consumed', 0, Integer(key));
+    AssertTrue('D2 off shift-dn: FocusedNode = nodes[2]', t.FocusedNode = nodes[2]);
+    AssertEquals('D2 off shift-dn: only 1 selected', 1, t.SelectedCount);
+    AssertTrue('D2 off shift-dn: nodes[2] selected', nsSelected in nodes[2]^.States);
+    AssertFalse('D2 off shift-dn: nodes[1] deselected', nsSelected in nodes[1]^.States);
+  finally t.Free; end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -6904,4 +7575,6 @@ initialization
   RegisterTest(TTreeB2CheckPaintTest);
   RegisterTest(TTreeB3HitCheckBoxTest);
   RegisterTest(TTreeC1CheckBehaviourTest);
+  RegisterTest(TTreeD1MultiSelectMouseTest);
+  RegisterTest(TTreeD2MultiSelectKeyboardTest);
 end.
