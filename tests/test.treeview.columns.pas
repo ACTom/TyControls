@@ -199,6 +199,31 @@ type
   end;
 
   { -----------------------------------------------------------------------
+    B3: MainColumn auto-defaults to the first added column (NoColumn footgun)
+    Regression guard: assigning MainColumn before any column exists used to
+    silently clamp to NoColumn(-1), leaving the tree with no main column so
+    RenderTo never drew tree chrome/images. The first-column add hook now
+    restores MainColumn := 0 when it is still NoColumn.
+    ----------------------------------------------------------------------- }
+  TColumnB3Test = class(TTestCase)
+  private
+    FHeader: TTyTreeHeader;
+  protected
+    procedure Setup; override;
+    procedure TearDown; override;
+  published
+    { #1 Auto-default: add 3 columns, never touch MainColumn -> MainColumn=0 }
+    procedure TestMainColumnAutoDefaultsToZero;
+    { #2 Footgun order now safe: set MainColumn:=0 (clamps to -1) BEFORE any
+      column, then add a column -> MainColumn restored to 0 }
+    procedure TestMainColumnRestoredAfterPreSetThenAdd;
+    { #3 Explicit non-zero respected: auto->0, set :=2, add 4th -> stays 2 }
+    procedure TestExplicitNonZeroMainColumnRespectedOnLaterAdd;
+    { #4 Opt-out respected: 3 columns (auto->0), set :=NoColumn -> stays -1 }
+    procedure TestMainColumnOptOutToNoColumnRespected;
+  end;
+
+  { -----------------------------------------------------------------------
     F3: design-time streaming — TTyTreeHeader.Assign deep-copies columns
     ----------------------------------------------------------------------- }
   TColumnF3Test = class(TTestCase)
@@ -849,6 +874,68 @@ begin
 end;
 
 { ===========================================================================
+  B3: MainColumn auto-default / footgun-guard tests
+  =========================================================================== }
+
+procedure TColumnB3Test.Setup;
+begin
+  FHeader := TTyTreeHeader.Create;
+end;
+
+procedure TColumnB3Test.TearDown;
+begin
+  FHeader.Free;
+end;
+
+procedure TColumnB3Test.TestMainColumnAutoDefaultsToZero;
+{ #1: add 3 columns, never touch MainColumn -> MainColumn = 0 }
+begin
+  FHeader.Columns.Add;
+  FHeader.Columns.Add;
+  FHeader.Columns.Add;
+  AssertEquals('MainColumn auto-defaults to first column', 0, FHeader.MainColumn);
+end;
+
+procedure TColumnB3Test.TestMainColumnRestoredAfterPreSetThenAdd;
+{ #2: the footgun order — set MainColumn:=0 with no columns (clamps to
+  NoColumn), THEN add a column. The first-column hook must restore it to 0. }
+begin
+  FHeader.MainColumn := 0;   { no columns yet -> setter clamps to NoColumn }
+  AssertEquals('precondition: MainColumn clamped to NoColumn pre-add',
+    NoColumn, FHeader.MainColumn);
+  FHeader.Columns.Add;       { first add -> hook restores MainColumn := 0 }
+  AssertEquals('MainColumn restored to 0 by first-column add', 0, FHeader.MainColumn);
+end;
+
+procedure TColumnB3Test.TestExplicitNonZeroMainColumnRespectedOnLaterAdd;
+{ #3: add 3 columns (auto -> 0), set MainColumn := 2, then add a 4th column.
+  The hook only fires for the FIRST column (Count=1), so a later add must NOT
+  reset the app's explicit choice. }
+begin
+  FHeader.Columns.Add;
+  FHeader.Columns.Add;
+  FHeader.Columns.Add;
+  AssertEquals('precondition: auto-default 0', 0, FHeader.MainColumn);
+  FHeader.MainColumn := 2;
+  AssertEquals('explicit MainColumn = 2', 2, FHeader.MainColumn);
+  FHeader.Columns.Add;       { Count now 4 -> hook does not fire }
+  AssertEquals('MainColumn stays 2 after a later add', 2, FHeader.MainColumn);
+end;
+
+procedure TColumnB3Test.TestMainColumnOptOutToNoColumnRespected;
+{ #4: add 3 columns (auto -> 0), then opt out with MainColumn := NoColumn.
+  With no further adds the hook never re-fires, so the -1 must stick. }
+begin
+  FHeader.Columns.Add;
+  FHeader.Columns.Add;
+  FHeader.Columns.Add;
+  AssertEquals('precondition: auto-default 0', 0, FHeader.MainColumn);
+  FHeader.MainColumn := NoColumn;
+  AssertEquals('opt-out MainColumn = NoColumn is respected',
+    NoColumn, FHeader.MainColumn);
+end;
+
+{ ===========================================================================
   F3: TTyTreeHeader.Assign deep-copy tests
   =========================================================================== }
 
@@ -920,5 +1007,6 @@ initialization
   RegisterTest(TColumnA4Test);
   RegisterTest(TColumnB1Test);
   RegisterTest(TColumnB2Test);
+  RegisterTest(TColumnB3Test);
   RegisterTest(TColumnF3Test);
 end.
