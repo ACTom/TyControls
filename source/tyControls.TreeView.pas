@@ -119,6 +119,9 @@ type
     FSelectedNode:   PTyTreeNode;
     FOnChange:       TTyTreeNodeEvent;
     FOnFocusChanged: TTyTreeNodeEvent;
+    { A3: multi-select count + range anchor }
+    FSelectionCount: Integer;
+    FRangeAnchor:    PTyTreeNode;
     { C3: paint-related fields }
     FHotNode:              PTyTreeNode;   // node under cursor (HotTrack); nil = none
     FOnGetText:            TTyTreeGetTextEvent;
@@ -246,6 +249,10 @@ type
     { A2: check-propagation pure helpers }
     procedure PropagateCheckDown(Node: PTyTreeNode; AState: TTyCheckState);
     function  RecomputeParentCheckState(Node: PTyTreeNode): TTyCheckState;
+    { A3: range-selection helper + selection-count }
+    procedure InternalSetSelected(Node: PTyTreeNode; AValue: Boolean);
+    procedure SelectRange(AAnchor, ATarget: PTyTreeNode);
+    function  SelectedCount: Integer;
     { C1: selection + focus }
     procedure ClearSelection;
     procedure FullExpand(Node: PTyTreeNode = nil);
@@ -353,6 +360,7 @@ procedure TTyTreeView.ClearSelectedNode;
 begin
   if FSelectedNode = nil then Exit;
   Exclude(FSelectedNode^.States, nsSelected);
+  if FSelectionCount > 0 then Dec(FSelectionCount);  { A3: keep count consistent }
   FSelectedNode := nil;
 end;
 
@@ -376,9 +384,10 @@ begin
     // Selecting a node: changed if the node is not already the selected one.
     didChange := (FSelectedNode <> Node);
     if not didChange then Exit;   // same node, same state — fire nothing
-    ClearSelectedNode;
+    ClearSelectedNode;             // deselects previous (adjusts FSelectionCount)
     Include(Node^.States, nsSelected);
     FSelectedNode := Node;
+    Inc(FSelectionCount);          { A3: count the new selection }
   end
   else
   begin
@@ -387,6 +396,7 @@ begin
     didChange := True;
     Exclude(Node^.States, nsSelected);
     if FSelectedNode = Node then FSelectedNode := nil;
+    if FSelectionCount > 0 then Dec(FSelectionCount);  { A3: keep count consistent }
   end;
 
   if didChange and Assigned(FOnChange) then
@@ -394,16 +404,39 @@ begin
   Invalidate;
 end;
 
-{ ClearSelection: public — deselects the current node, fires OnChange. }
+{ ClearSelection: public — deselects all selected nodes, fires OnChange once.
+  A3: when a SelectRange has selected multiple nodes (FSelectionCount > 1),
+  walk all visible nodes to clear nsSelected (single-select path just clears
+  FSelectedNode; multi-select path is a full visible walk). }
 procedure TTyTreeView.ClearSelection;
 var
   prev: PTyTreeNode;
+  n:    PTyTreeNode;
 begin
-  if FSelectedNode = nil then Exit;
+  if (FSelectedNode = nil) and (FSelectionCount = 0) then Exit;
   prev := FSelectedNode;
-  Exclude(prev^.States, nsSelected);
-  FSelectedNode := nil;
-  if Assigned(FOnChange) then FOnChange(Self, prev);
+  if FSelectionCount > 1 then
+  begin
+    // Multi-select: walk all visible nodes to remove nsSelected
+    n := GetFirstVisibleNoInit;
+    while n <> nil do
+    begin
+      Exclude(n^.States, nsSelected);
+      n := GetNextVisibleNoInit(n);
+    end;
+    FSelectedNode   := nil;
+    FSelectionCount := 0;
+    if Assigned(FOnChange) then FOnChange(Self, prev);
+  end
+  else
+  begin
+    // Single-select path (unchanged behaviour)
+    if prev = nil then begin FSelectionCount := 0; Exit; end;
+    Exclude(prev^.States, nsSelected);
+    FSelectedNode   := nil;
+    FSelectionCount := 0;
+    if Assigned(FOnChange) then FOnChange(Self, prev);
+  end;
   Invalidate;
 end;
 
@@ -467,6 +500,86 @@ begin
   else if hasUnchecked and not hasChecked then
     Result := csUnchecked;
   // else: no check-children → leave Result as Node^.CheckState
+end;
+
+{ ── A3 ── range-selection pure helpers ───────────────────────────────────── }
+
+{ InternalSetSelected — add/remove nsSelected AND keep FSelectionCount correct.
+  Never touches FRoot.  Only counts real transitions (no double-counts). }
+procedure TTyTreeView.InternalSetSelected(Node: PTyTreeNode; AValue: Boolean);
+begin
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if AValue then
+  begin
+    if not (nsSelected in Node^.States) then
+    begin
+      Include(Node^.States, nsSelected);
+      Inc(FSelectionCount);
+      if FSelectedNode = nil then FSelectedNode := Node;  // maintain single-select field
+    end;
+  end
+  else
+  begin
+    if nsSelected in Node^.States then
+    begin
+      Exclude(Node^.States, nsSelected);
+      if FSelectionCount > 0 then Dec(FSelectionCount);
+      if FSelectedNode = Node then FSelectedNode := nil;
+    end;
+  end;
+end;
+
+{ SelectRange — clear all selected nodes, then select every visible node from
+  AAnchor to ATarget inclusive (order-independent: works in both directions).
+  Maintains FSelectionCount. }
+procedure TTyTreeView.SelectRange(AAnchor, ATarget: PTyTreeNode);
+var
+  n:       PTyTreeNode;
+  inRange: Boolean;
+begin
+  if (AAnchor = nil) or (ATarget = nil) then Exit;
+
+  // Clear all current selection first (fast clear without firing events)
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    Exclude(n^.States, nsSelected);
+    n := GetNextVisibleNoInit(n);
+  end;
+  FSelectionCount := 0;
+  FSelectedNode   := nil;
+
+  // Walk visible order: enter range when we hit either endpoint;
+  // exit (and include the second endpoint) when we hit the other one.
+  inRange := False;
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    if (n = AAnchor) or (n = ATarget) then
+    begin
+      if not inRange then
+      begin
+        // First endpoint found: start the inclusive range
+        inRange := True;
+        InternalSetSelected(n, True);
+        if AAnchor = ATarget then Break;  // degenerate: single-node range
+      end
+      else
+      begin
+        // Second endpoint: include it and we're done
+        InternalSetSelected(n, True);
+        Break;
+      end;
+    end
+    else if inRange then
+      InternalSetSelected(n, True);
+    n := GetNextVisibleNoInit(n);
+  end;
+end;
+
+function TTyTreeView.SelectedCount: Integer;
+begin
+  Result := FSelectionCount;
 end;
 
 function TTyTreeView.GetFocusedNode: PTyTreeNode;

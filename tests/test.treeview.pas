@@ -5879,6 +5879,150 @@ begin
   end;
 end;
 
+{ ── A3 ── SelectRange visible-order helper + selection-count bookkeeping ── }
+
+type
+  TTreeA3SelectRangeTest = class(TTestCase)
+  private
+    function  BuildFlatTree6: TTyTreeView;
+  published
+    { SelectRange(n2,n4): nodes at positions 2,3,4 selected; SelectedCount=3. }
+    procedure TestSelectRangeForward;
+    { SelectRange(n4,n2): same set regardless of argument order. }
+    procedure TestSelectRangeReverse;
+    { SelectRange(n,n): just n selected; count=1. }
+    procedure TestSelectRangeSingleNode;
+    { After SelectRange, ClearSelection → SelectedCount=0. }
+    procedure TestClearSelectionResetsCount;
+    { SelectedCount returns 0 after construction. }
+    procedure TestSelectedCountInitiallyZero;
+  end;
+
+function TTreeA3SelectRangeTest.BuildFlatTree6: TTyTreeView;
+begin
+  Result := TTyTreeView.Create(nil);
+  Result.RootNodeCount := 6;
+end;
+
+procedure TTreeA3SelectRangeTest.TestSelectRangeForward;
+var
+  t:     TTyTreeView;
+  n:     PTyTreeNode;
+  nodes: array[0..5] of PTyTreeNode;
+  i:     Integer;
+begin
+  t := BuildFlatTree6;
+  try
+    // Collect nodes in visible order
+    n := t.RootNode^.FirstChild;
+    for i := 0 to 5 do
+    begin
+      nodes[i] := n;
+      n := n^.NextSibling;
+    end;
+    // SelectRange(node[2], node[4]) → nodes 2,3,4 selected
+    t.SelectRange(nodes[2], nodes[4]);
+    AssertEquals('SelectedCount = 3', 3, t.SelectedCount);
+    AssertFalse('node[0] not selected', nsSelected in nodes[0]^.States);
+    AssertFalse('node[1] not selected', nsSelected in nodes[1]^.States);
+    AssertTrue ('node[2] selected',     nsSelected in nodes[2]^.States);
+    AssertTrue ('node[3] selected',     nsSelected in nodes[3]^.States);
+    AssertTrue ('node[4] selected',     nsSelected in nodes[4]^.States);
+    AssertFalse('node[5] not selected', nsSelected in nodes[5]^.States);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeA3SelectRangeTest.TestSelectRangeReverse;
+var
+  t:     TTyTreeView;
+  n:     PTyTreeNode;
+  nodes: array[0..5] of PTyTreeNode;
+  i:     Integer;
+begin
+  t := BuildFlatTree6;
+  try
+    n := t.RootNode^.FirstChild;
+    for i := 0 to 5 do
+    begin
+      nodes[i] := n;
+      n := n^.NextSibling;
+    end;
+    // SelectRange(node[4], node[2]) — order-independent; same set
+    t.SelectRange(nodes[4], nodes[2]);
+    AssertEquals('SelectedCount = 3 (reversed)', 3, t.SelectedCount);
+    AssertTrue ('node[2] selected',     nsSelected in nodes[2]^.States);
+    AssertTrue ('node[3] selected',     nsSelected in nodes[3]^.States);
+    AssertTrue ('node[4] selected',     nsSelected in nodes[4]^.States);
+    AssertFalse('node[0] not selected', nsSelected in nodes[0]^.States);
+    AssertFalse('node[5] not selected', nsSelected in nodes[5]^.States);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeA3SelectRangeTest.TestSelectRangeSingleNode;
+var
+  t:     TTyTreeView;
+  n:     PTyTreeNode;
+  nodes: array[0..5] of PTyTreeNode;
+  i:     Integer;
+begin
+  t := BuildFlatTree6;
+  try
+    n := t.RootNode^.FirstChild;
+    for i := 0 to 5 do
+    begin
+      nodes[i] := n;
+      n := n^.NextSibling;
+    end;
+    t.SelectRange(nodes[3], nodes[3]);
+    AssertEquals('SelectedCount = 1 (single)', 1, t.SelectedCount);
+    AssertTrue ('node[3] selected',     nsSelected in nodes[3]^.States);
+    AssertFalse('node[2] not selected', nsSelected in nodes[2]^.States);
+    AssertFalse('node[4] not selected', nsSelected in nodes[4]^.States);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeA3SelectRangeTest.TestClearSelectionResetsCount;
+var
+  t:     TTyTreeView;
+  n:     PTyTreeNode;
+  nodes: array[0..5] of PTyTreeNode;
+  i:     Integer;
+begin
+  t := BuildFlatTree6;
+  try
+    n := t.RootNode^.FirstChild;
+    for i := 0 to 5 do
+    begin
+      nodes[i] := n;
+      n := n^.NextSibling;
+    end;
+    t.SelectRange(nodes[1], nodes[4]);
+    AssertTrue('SelectedCount > 0 before clear', t.SelectedCount > 0);
+    t.ClearSelection;
+    AssertEquals('SelectedCount = 0 after ClearSelection', 0, t.SelectedCount);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeA3SelectRangeTest.TestSelectedCountInitiallyZero;
+var
+  t: TTyTreeView;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    AssertEquals('SelectedCount = 0 initially', 0, t.SelectedCount);
+  finally
+    t.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -5901,4 +6045,5 @@ initialization
   RegisterTest(TTreeE2SortTreeTest);
   RegisterTest(TTreeE3HeaderClickTest);
   RegisterTest(TTreeA2CheckPropTest);
+  RegisterTest(TTreeA3SelectRangeTest);
 end.
