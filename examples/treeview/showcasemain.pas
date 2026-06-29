@@ -12,7 +12,7 @@ unit showcasemain;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls, Graphics,
+  Classes, SysUtils, Forms, Controls, Graphics, ImgList,
   tyControls.Controller, tyControls.Form, tyControls.Button,
   tyControls.TyLabel, tyControls.PageControl, tyControls.TabSheet,
   tyControls.StatusBar, tyControls.BuiltinThemes,
@@ -32,6 +32,7 @@ type
     { Infrastructure }
     TyController: TTyStyleController;
     StatusBar:    TTyStatusBar;
+    ChromeBar:    TTyTitleBar;
     Pages:        TTyPageControl;
 
     { Per-tab trees }
@@ -40,9 +41,13 @@ type
     CheckTree:    TTyTreeView;   // Tab 3: Checkboxes
     MultiTree:    TTyTreeView;   // Tab 4: Multi-select
 
+    { Explorer-style row icons for the Columns tab (owned by the form) }
+    FFileIcons:   TImageList;
+
     { Helpers }
     function  ThemeDir: string;
     procedure InitTheme;
+    procedure BuildTitleBar;
     procedure BuildToolbar(AParent: TWinControl);
     procedure BuildStatusBar;
     procedure BuildPages;
@@ -57,6 +62,7 @@ type
                                   var AText: string);
 
     { Tab 2 — Columns + sort }
+    procedure BuildFileIcons;
     procedure InitColTab(APage: TTyTabSheet);
     procedure ColInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
                               var InitStates: TTyNodeInitStates);
@@ -65,6 +71,9 @@ type
     procedure ColGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
                               Column: Integer; TextType: TTyVSTTextType;
                               var CellText: string);
+    procedure ColGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+                              Kind: TTyVTImageKind; Column: Integer;
+                              var Ghosted: Boolean; var ImageIndex: Integer);
     procedure ColCompareNodes(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
                               Column: Integer; var CompareResult: Integer);
 
@@ -195,33 +204,43 @@ end;
 { -----------------------------------------------------------------------
   Top toolbar: Light + Dark buttons
   ----------------------------------------------------------------------- }
+procedure TShowcaseForm.BuildTitleBar;
+begin
+  { TTyForm is born borderless (SetupChrome sets BorderStyle=bsNone) with NO title
+    bar. Associating a TTyTitleBar arms the chrome engine — drag, edge-resize, and
+    the min/max/close buttons. Without it the window can't be moved, sized, or closed. }
+  ChromeBar := TTyTitleBar.Create(Self);
+  ChromeBar.Parent         := Self;
+  ChromeBar.Align          := alTop;
+  ChromeBar.Caption        := 'TTyTreeView Feature Showcase';
+  ChromeBar.TitleAlignment := taCenter;
+  ChromeBar.Controller     := TyController;
+  TitleBar := ChromeBar;             // associate -> arms engine + wires caption buttons
+  ApplyChromeTheme(TyController);     // re-theme chrome now that the bar exists
+end;
+
+{ -----------------------------------------------------------------------
+  Light / Dark theme buttons — hosted inside the title bar (left side).
+  ----------------------------------------------------------------------- }
 procedure TShowcaseForm.BuildToolbar(AParent: TWinControl);
 var
   BtnLight, BtnDark: TTyButton;
-  Lbl: TTyLabel;
 begin
-  Lbl := TTyLabel.Create(Self);
-  Lbl.Parent := AParent;
-  Lbl.SetBounds(8, 8, 260, 20);
-  Lbl.Caption := 'TTyTreeView Feature Showcase';
-  Lbl.Font.Style := [fsBold];
-  Lbl.Controller := TyController;
-
   BtnLight := TTyButton.Create(Self);
   BtnLight.Parent := AParent;
-  BtnLight.SetBounds(Width - 188, 4, 86, 28);
+  BtnLight.SetBounds(8, 4, 76, 24);
   BtnLight.Caption := 'Light';
   BtnLight.StyleClass := 'ghost';
-  BtnLight.Anchors := [akTop, akRight];
+  BtnLight.Anchors := [akLeft, akTop];
   BtnLight.OnClick := @LightClick;
   BtnLight.Controller := TyController;
 
   BtnDark := TTyButton.Create(Self);
   BtnDark.Parent := AParent;
-  BtnDark.SetBounds(Width - 98, 4, 86, 28);
+  BtnDark.SetBounds(88, 4, 76, 24);
   BtnDark.Caption := 'Dark';
   BtnDark.StyleClass := 'ghost';
-  BtnDark.Anchors := [akTop, akRight];
+  BtnDark.Anchors := [akLeft, akTop];
   BtnDark.OnClick := @DarkClick;
   BtnDark.Controller := TyController;
 end;
@@ -276,7 +295,9 @@ var
 begin
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := APage;
-  Lbl.SetBounds(8, 6, 700, 18);
+  Lbl.Align := alTop;
+  Lbl.Height := 26;
+  Lbl.BorderSpacing.Left := 8;
   Lbl.Caption :=
     'Virtual engine: 1 000 000 root nodes; up to level 4 each has 10 children. ' +
     'All nodes initialised lazily (OnInitNode / OnInitChildren).';
@@ -284,8 +305,7 @@ begin
 
   VirtualTree := TTyTreeView.Create(Self);
   VirtualTree.Parent := APage;
-  VirtualTree.SetBounds(0, 30, APage.ClientWidth, APage.ClientHeight - 30);
-  VirtualTree.Anchors := [akLeft, akTop, akRight, akBottom];
+  VirtualTree.Align := alClient;
   VirtualTree.Controller := TyController;
 
   VirtualTree.OnInitNode     := @VirtualInitNode;
@@ -321,7 +341,132 @@ end;
   4 columns: Name / Type / Size / Modified.
   NodeDataSize = SizeOf(TRowRec); stable keys stored at OnInitNode.
   Sort via OnCompareNodes reads PRowRec(GetNodeData(Node)), NEVER Node^.Index.
+
+  Explorer-style row icons are supplied through ColTree.Images (a TImageList)
+  + the ColGetImageIndex handler — the same Images / OnGetImageIndex pair a
+  real app would use.  The four 16×16 glyphs are drawn here in code (demo art):
+    0 = folder   1 = generic file   2 = image file   3 = archive
   ======================================================================= }
+
+{ Icon indices into FFileIcons — keep in sync with BuildFileIcons. }
+const
+  ICON_FOLDER  = 0;
+  ICON_FILE    = 1;
+  ICON_IMAGE   = 2;
+  ICON_ARCHIVE = 3;
+
+{ Build the 16×16 image list with four simple, theme-neutral glyphs.
+  Drawing uses plain LCL TBitmap + Canvas (GDI); a clFuchsia color-key is
+  punched out via AddMasked so every glyph sits on a transparent background
+  and reads cleanly on both light and dark themes. }
+procedure TShowcaseForm.BuildFileIcons;
+
+  function NewGlyph: TBitmap;
+  begin
+    Result := TBitmap.Create;
+    Result.SetSize(16, 16);
+    Result.Canvas.Brush.Color := clFuchsia;   { transparency key }
+    Result.Canvas.FillRect(0, 0, 16, 16);
+    Result.Canvas.Pen.Style := psSolid;
+    Result.Canvas.Pen.Width := 1;
+  end;
+
+  { White page with a folded top-right corner; caller draws the body lines. }
+  procedure DrawPageBody(C: TCanvas);
+  begin
+    C.Brush.Color := clWhite;
+    C.Pen.Color   := $00808080;              { mid grey outline (BGR) }
+    { Page outline: x 3..12, y 1..14, with the corner folded in. }
+    C.Polygon([Point(3, 1), Point(10, 1), Point(12, 3),
+               Point(12, 14), Point(3, 14)]);
+    { Folded corner triangle (lighter). }
+    C.Brush.Color := $00D8D8D8;
+    C.Polygon([Point(10, 1), Point(12, 3), Point(10, 3)]);
+  end;
+
+var
+  bmp: TBitmap;
+  C:   TCanvas;
+begin
+  FFileIcons := TImageList.Create(Self);   { Owner = form → auto-freed }
+  FFileIcons.Width  := 16;
+  FFileIcons.Height := 16;
+
+  { 0 — Folder (warm amber, a darker tab lip on top). }
+  bmp := NewGlyph;
+  try
+    C := bmp.Canvas;
+    C.Brush.Color := $0033B0E8;   { warm amber body (BGR of #E8B033) }
+    C.Pen.Color   := $001E84B8;   { darker amber edge }
+    C.RoundRect(1, 5, 15, 14, 3, 3);
+    { Back tab lip peeking over the top-left. }
+    C.Brush.Color := $0055C8F0;
+    C.Pen.Color   := $001E84B8;
+    C.Polygon([Point(2, 5), Point(2, 3), Point(6, 3), Point(8, 5)]);
+    FFileIcons.AddMasked(bmp, clFuchsia);
+  finally
+    bmp.Free;
+  end;
+
+  { 1 — Generic file (page + two grey text lines). }
+  bmp := NewGlyph;
+  try
+    C := bmp.Canvas;
+    DrawPageBody(C);
+    C.Pen.Color := $00A0A0A0;
+    C.Line(5, 6, 10, 6);
+    C.Line(5, 8, 11, 8);
+    C.Line(5, 10, 10, 10);
+    FFileIcons.AddMasked(bmp, clFuchsia);
+  finally
+    bmp.Free;
+  end;
+
+  { 2 — Image file (page with a tiny sky / hill / sun thumbnail). }
+  bmp := NewGlyph;
+  try
+    C := bmp.Canvas;
+    DrawPageBody(C);
+    { Sky inset. }
+    C.Brush.Color := $00E8C878;   { soft blue (BGR) }
+    C.Pen.Color   := $00808080;
+    C.Rectangle(5, 6, 11, 12);
+    { Sun. }
+    C.Brush.Color := $0033CCFF;   { yellow }
+    C.Pen.Color   := $0033CCFF;
+    C.Ellipse(6, 6, 9, 9);
+    { Green hill. }
+    C.Brush.Color := $004CA04C;
+    C.Pen.Color   := $004CA04C;
+    C.Polygon([Point(5, 11), Point(8, 8), Point(10, 11)]);
+    FFileIcons.AddMasked(bmp, clFuchsia);
+  finally
+    bmp.Free;
+  end;
+
+  { 3 — Archive (folder-ish box with a vertical zip + slider). }
+  bmp := NewGlyph;
+  try
+    C := bmp.Canvas;
+    C.Brush.Color := $004FA8D8;   { muted gold box }
+    C.Pen.Color   := $002878A8;
+    C.RoundRect(2, 3, 14, 14, 2, 2);
+    { Zip teeth down the centre. }
+    C.Pen.Color := $002878A8;
+    C.Line(8, 3, 8, 13);
+    C.Line(7, 5, 9, 5);
+    C.Line(7, 7, 9, 7);
+    C.Line(7, 9, 9, 9);
+    { Slider tab. }
+    C.Brush.Color := $00FFFFFF;
+    C.Pen.Color   := $002878A8;
+    C.Rectangle(7, 9, 10, 12);
+    FFileIcons.AddMasked(bmp, clFuchsia);
+  finally
+    bmp.Free;
+  end;
+end;
+
 procedure TShowcaseForm.InitColTab(APage: TTyTabSheet);
 var
   Lbl: TTyLabel;
@@ -329,17 +474,23 @@ var
 begin
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := APage;
-  Lbl.SetBounds(8, 6, 760, 18);
+  Lbl.Align := alTop;
+  Lbl.Height := 26;
+  Lbl.BorderSpacing.Left := 8;
   Lbl.Caption :=
     'Data lives in the node (NodeDataSize = SizeOf(TRowRec)). ' +
     'Sort reads PRowRec(GetNodeData(Node)) — never Node^.Index — so column ' +
-    'sorts are always stable.  Click a column header to sort.';
+    'sorts are always stable.  Click a column header to sort.  ' +
+    'Each Name shows an Explorer-style icon (folder / file / image / archive) ' +
+    'via Images + OnGetImageIndex.';
   Lbl.Controller := TyController;
+
+  { Explorer-style row icons (drawn in code, owned by the form) }
+  BuildFileIcons;
 
   ColTree := TTyTreeView.Create(Self);
   ColTree.Parent := APage;
-  ColTree.SetBounds(0, 30, APage.ClientWidth, APage.ClientHeight - 30);
-  ColTree.Anchors := [akLeft, akTop, akRight, akBottom];
+  ColTree.Align := alClient;
   ColTree.Controller := TyController;
 
   { Allocate the per-node TRowRec blob }
@@ -351,12 +502,15 @@ begin
   ColTree.OnGetTextWithType := @ColGetText;
   ColTree.OnCompareNodes  := @ColCompareNodes;
 
+  { Per-row icons in the main (Name) column }
+  ColTree.Images          := FFileIcons;
+  ColTree.OnGetImageIndex := @ColGetImageIndex;
+
   { Build header }
   with ColTree.Header do
   begin
     Options := [hoVisible, hoColumnResize, hoShowSortGlyphs,
                 hoHeaderClickAutoSort, hoDrag];
-    MainColumn := 0;
 
     col := Columns.Add as TTyTreeColumn;
     col.Text := 'Name';
@@ -377,6 +531,10 @@ begin
     col.Text := 'Modified';
     col.Width := 120;
     col.Alignment := taLeftJustify;
+
+    { Set the main (tree) column AFTER the columns exist — SetMainColumn clamps to
+      NoColumn(-1) when assigned while Columns.Count = 0. }
+    MainColumn := 0;
   end;
 
   ColTree.RootNodeCount := 3;
@@ -486,6 +644,48 @@ begin
   end;
 end;
 
+{ Explorer-style icon for the Name column.  Reads the stored TRowRec (never
+  Node^.Index — Sort re-stamps Index) to pick folder / file / image / archive. }
+procedure TShowcaseForm.ColGetImageIndex(Sender: TTyTreeView;
+  Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
+  var Ghosted: Boolean; var ImageIndex: Integer);
+var
+  data:    PRowRec;
+  fi, ci:  Integer;
+  kindStr: string;
+begin
+  { Icons live only in the main (Name) column.  The renderer passes the main
+    column index for multi-column trees (0 here) and -1 for the single-column
+    case — accept both, suppress every other column. }
+  if (Column > 0) then Exit;
+
+  data := PRowRec(Sender.GetNodeData(Node));
+
+  { Folder rows: level 0, or any child whose stored Kind text is 'Folder'. }
+  if Sender.GetNodeLevel(Node) = 0 then
+  begin
+    ImageIndex := ICON_FOLDER;
+    Exit;
+  end;
+
+  { File row — map the stored child Kind to a glyph. }
+  if data <> nil then begin fi := data^.NameIdx; ci := data^.Kind; end
+  else begin fi := Integer(Node^.Parent^.Index); ci := Integer(Node^.Index); end;
+
+  kindStr := '';
+  if (fi >= 0) and (fi <= 2) and (ci >= 0) and (ci <= 4) then
+    kindStr := ColChildKinds[fi][ci];
+
+  if kindStr = 'Folder' then
+    ImageIndex := ICON_FOLDER
+  else if (kindStr = 'JPEG') or (kindStr = 'PNG') then
+    ImageIndex := ICON_IMAGE
+  else if kindStr = 'Archive' then
+    ImageIndex := ICON_ARCHIVE
+  else
+    ImageIndex := ICON_FILE;
+end;
+
 procedure TShowcaseForm.ColCompareNodes(Sender: TTyTreeView;
   Node1, Node2: PTyTreeNode; Column: Integer; var CompareResult: Integer);
 var
@@ -544,7 +744,9 @@ var
 begin
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := APage;
-  Lbl.SetBounds(8, 6, 760, 18);
+  Lbl.Align := alTop;
+  Lbl.Height := 26;
+  Lbl.BorderSpacing.Left := 8;
   Lbl.Caption :=
     'Folders: tri-state checkboxes (auto-propagate). ' +
     'Music/Videos files: plain checkboxes. ' +
@@ -553,8 +755,7 @@ begin
 
   CheckTree := TTyTreeView.Create(Self);
   CheckTree.Parent := APage;
-  CheckTree.SetBounds(0, 30, APage.ClientWidth, APage.ClientHeight - 30);
-  CheckTree.Anchors := [akLeft, akTop, akRight, akBottom];
+  CheckTree.Align := alClient;
   CheckTree.Controller := TyController;
   CheckTree.Options := [toCheckSupport, toAutoTristateTracking];
 
@@ -625,7 +826,9 @@ var
 begin
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := APage;
-  Lbl.SetBounds(8, 6, 760, 18);
+  Lbl.Align := alTop;
+  Lbl.Height := 26;
+  Lbl.BorderSpacing.Left := 8;
   Lbl.Caption :=
     'Multi-select + full-row highlight. Ctrl+click / Shift+click / Ctrl+A. ' +
     'OnSelectionChanged shows live count in the status bar.';
@@ -633,8 +836,7 @@ begin
 
   MultiTree := TTyTreeView.Create(Self);
   MultiTree.Parent := APage;
-  MultiTree.SetBounds(0, 30, APage.ClientWidth, APage.ClientHeight - 30);
-  MultiTree.Anchors := [akLeft, akTop, akRight, akBottom];
+  MultiTree.Align := alClient;
   MultiTree.Controller := TyController;
   MultiTree.Options := [toMultiSelect, toFullRowSelect];
 
@@ -688,8 +890,10 @@ begin
   { 1. Bootstrap theme controller FIRST (all controls below set Controller) }
   InitTheme;
 
-  { 2. Top toolbar strip — plain label strip with Light/Dark buttons }
-  BuildToolbar(Self);
+  { 2. Title bar — TTyForm is borderless by design; the bar provides drag /
+       min-max-close and arms the edge-resize engine. Theme buttons live in it. }
+  BuildTitleBar;
+  BuildToolbar(ChromeBar);
 
   { 3. Status bar }
   BuildStatusBar;

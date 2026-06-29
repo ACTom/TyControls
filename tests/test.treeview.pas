@@ -2,7 +2,7 @@
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, ImgList, LCLType,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.TreeView,
@@ -141,6 +141,182 @@ type
     procedure TestRightClickAlwaysSetsFocus;
   end;
 
+  { ③d A1: GetCellRect — single source of cell geometry.
+    Builds a 3-column tree (PPI 96, header 22, DefaultNodeHeight 22, ShowRoot,
+    Indent 16, 1 root expanded with 2 children) and asserts GetCellRect's device
+    rect matches the painted geometry, scales at HiDPI, shifts with scroll, and
+    returns False for non-visible nodes. }
+  TTreeGetCellRectTest = class(TTestCase)
+  private
+    procedure OnGetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
+      Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+      var InitStates: TTyNodeInitStates);
+    procedure OnInitChildren2(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
+    { Build the 3-column tree at the given PPI; out-params expose the form/ctl
+      (caller frees F then Ctl) and the root + its first child. }
+    function BuildTree(out Ctl: TTyStyleController; out F: TForm;
+      out ARoot, AChild0: PTyTreeNode; APPI: Integer = 96): TTyTreeView;
+  published
+    { device rect of column 0 / column 2 matches the manual P.Scale computation }
+    procedure TestCellRectColumn0Geometry;
+    procedure TestCellRectColumn2Geometry;
+    { Column = -1 maps to the main column's cell }
+    procedure TestCellRectMainColumnAlias;
+    { a child row sits one Scale(NodeHeight) below the root row }
+    procedure TestCellRectChildRowTop;
+    { a node hidden under a collapsed ancestor → Result = False }
+    procedure TestCellRectCollapsedNodeFalse;
+    { root / nil → Result = False }
+    procedure TestCellRectRootAndNilFalse;
+    { a node scrolled entirely above the content rect → Result = False }
+    procedure TestCellRectScrolledOffscreenFalse;
+    { cross-check vs paint: the caption ink of (root, col 1) lies inside its rect }
+    procedure TestCellRectContainsPaintedInk;
+    { HiDPI: at PPI=144 the rect (top, height, column span) scales }
+    procedure TestCellRectHiDPIScales;
+    { scroll: setting FOffsetX/FOffsetY shifts the rect by the same delta as paint }
+    procedure TestCellRectShiftsWithScroll;
+  end;
+
+  { ③d B1: variable per-node row height (toVariableNodeHeight + OnMeasureItem +
+    NodeHeight[]). A flat 12-child tree whose OnMeasureItem returns
+    18 + 6*(Index mod 3) → heights cycle 18/24/30. Verifies the ③a height
+    invariant holds with variable heights, GetNodeAt lands on the right node,
+    NodeHeight[] override bumps TotalHeight by the delta, default-off == ③c, and
+    the invariant survives HiDPI (logical units). }
+  TTreeB1VariableHeightTest = class(TTestCase)
+  private
+    FMeasureCalls: Integer;
+    procedure OnMeasureItem(Sender: TTyTreeView; ACanvas: TCanvas;
+      Node: PTyTreeNode; var ANodeHeight: Integer);
+    { Build a flat tree of AChildCount root children at APPI; optionally wire
+      OnMeasureItem + toVariableNodeHeight. Caller frees F then Ctl. }
+    function BuildFlatTree(out Ctl: TTyStyleController; out F: TForm;
+      AChildCount: Integer; AVariable: Boolean; APPI: Integer = 96): TTyTreeView;
+    { Force a measure of every visible node (paint to an offscreen bitmap, which
+      calls InitNode → OnMeasureItem for each rendered row). Bitmap is tall
+      enough to render all rows. }
+    procedure ForceMeasureAll(t: TTyTreeView; APPI: Integer = 96);
+    { Expected logical height of the child at Index under the 18+6*(idx mod 3) rule. }
+    function ExpectedH(Index: Integer): Integer;
+  published
+    { invariant: RootNode.TotalHeight == Σ measured heights + root's own row }
+    procedure TestTotalHeightSumsVariableHeights;
+    { SumVisibleHeights (the ③a invariant helper) agrees with RootNode.TotalHeight }
+    procedure TestInvariantHelperAgrees;
+    { GetNodeAt(y) lands on the correct node across the varied heights }
+    procedure TestGetNodeAtAcrossVariedHeights;
+    { NodeHeight[node] := 40 bumps TotalHeight by (40 - oldHeight); reads back 40 }
+    procedure TestSetNodeHeightUpdatesTotal;
+    { default off (no toVariableNodeHeight) → every node = DefaultNodeHeight (== ③c) }
+    procedure TestDefaultOffEqualsC3;
+    { OnMeasureItem unassigned but option on → still all DefaultNodeHeight }
+    procedure TestOptionOnButNoHandlerEqualsC3;
+    { HiDPI: at PPI=144 the LOGICAL TotalHeight still sums the logical heights }
+    procedure TestHiDPILogicalInvariant;
+    { OnMeasureItem returning 0 is ignored (height stays at default) }
+    procedure TestZeroHeightIgnored;
+  end;
+
+  { ③d C1: incremental type-to-find search.
+    Flat tree of named leaves ('apple','banana','band','cherry','date') via
+    OnGetText keyed on Node^.Index. Verifies: prefix match jumps focus, re-press
+    advances, custom OnIncrementalSearch (CONTAINS) is honored, Backspace pops a
+    char, the option default-off changes nothing, and the ③a/b/c arrow/Home/End
+    keys still work (search does not hijack them). }
+  TTreeC1IncSearchTest = class(TTestCase)
+  private
+    FCustomSearchHits: Integer;
+    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var CellText: string);
+    { custom predicate: CONTAINS (case-insensitive substring) instead of prefix }
+    procedure OnContainsSearch(Sender: TTyTreeView; Node: PTyTreeNode;
+      const ASearchText: string; var AMatch: Boolean);
+    { Build a flat tree of the named leaves; optionally turn on toIncrementalSearch.
+      Caller frees F then Ctl. }
+    function BuildNamedTree(out Ctl: TTyStyleController; out F: TForm;
+      ASearch: Boolean): TTyTreeView;
+    { Nth visible (= Nth root child) node, 0-based. }
+    function NthChild(t: TTyTreeView; AIndex: Integer): PTyTreeNode;
+  published
+    { Typing 'b','a' → focus lands on the first node whose text starts with 'ba' (banana) }
+    procedure TestPrefixMatchMovesFocus;
+    { Re-pressing 'b' (fresh buffer) from banana → advances to the next 'b' match (band) }
+    procedure TestRepeatCharAdvances;
+    { OnIncrementalSearch override (CONTAINS) is honored over the default prefix }
+    procedure TestCustomPredicateHonored;
+    { Backspace pops the last UTF-8 char and re-resolves focus }
+    procedure TestBackspacePopsChar;
+    { toIncrementalSearch OFF → typing changes nothing (focus + buffer untouched) }
+    procedure TestOptionOffDoesNothing;
+    { Idle past SearchTimeout resets the buffer (simulate via FSearchLastTick) }
+    procedure TestTimeoutResetsBuffer;
+    { ③a/b/c regression: VK_DOWN/VK_UP/VK_HOME/VK_END still move focus with search on }
+    procedure TestArrowKeysStillWorkWithSearchOn;
+  end;
+
+  { End-to-end node-image render gate.
+    Renders a REAL TTyTreeView (with a TImageList) through the full RenderTo
+    path — interleaved BGRA ops + EndPaint blit + any post-draw — into an output
+    TBitmap, then scans the OUTPUT for the icon. This replicates the exact GUI
+    render path (an isolated painter test does NOT, because it reads FBmp before
+    the EndPaint blit). The gate: an opaque RED node icon must survive to the
+    output bitmap, AND the node caption must still render (icon didn't clobber it). }
+  TTreeNodeImageRenderTest = class(TTestCase)
+  private
+    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+      Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
+  published
+    { Opaque RED icon present in the main-column icon slot of row 0 in the output. }
+    procedure TestNodeImageSurvivesToOutput;
+  end;
+
+  { ③d D1: per-cell owner-draw — OnDrawNode (full cell replacement, gated by
+    toOwnerDraw) + OnAfterCellPaint (overlay). Both draw onto the control canvas
+    AFTER the BGRA composite, so the probe colors are read back via
+    outBmp.Canvas.Pixels (the GDI surface), exactly like the node-icon gate.
+    3-column tree (main = 0 set AFTER adding columns), 1 root + 2 children. }
+  TTreeD1OwnerDrawTest = class(TTestCase)
+  private
+    FProbeCol:        Integer;   // which column OnDrawNode/OnAfterCellPaint probes
+    FDrawNodeCalls:   Integer;
+    FAfterCalls:      Integer;
+    FLastDrawRect:    TRect;     // the ACellRect handed to the last OnDrawNode
+    FLastDrawCol:     Integer;
+    FLastDrawNode:    PTyTreeNode;
+    FCapturedNode:    PTyTreeNode;  // node to capture ACellRect for (compare vs GetCellRect)
+    procedure OnGetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
+      Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+      var InitStates: TTyNodeInitStates);
+    procedure OnInitChildren2(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
+    { OnDrawNode: fill the WHOLE cell rect with opaque GREEN (probe). }
+    procedure OnDrawNodeFillGreen(Sender: TTyTreeView; ACanvas: TCanvas;
+      Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+    { OnAfterCellPaint: paint a small BLUE probe rect near the cell's top-left. }
+    procedure OnAfterPaintBlueDot(Sender: TTyTreeView; ACanvas: TCanvas;
+      Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+    function BuildTree(out Ctl: TTyStyleController; out F: TForm;
+      out ARoot, AChild0: PTyTreeNode): TTyTreeView;
+  published
+    { toOwnerDraw + OnDrawNode → probe color present in the cell AND default
+      caption ink ABSENT (app fully owns the cell). }
+    procedure TestOwnerDrawFillsCellAndSkipsDefault;
+    { OnAfterCellPaint (no toOwnerDraw) → probe present AND default caption ink
+      STILL present underneath. }
+    procedure TestAfterCellPaintOverlaysDefault;
+    { the ACellRect handed to OnDrawNode equals GetCellRect(node, col). }
+    procedure TestOwnerDrawCellRectMatchesGetCellRect;
+    { default-off (toOwnerDraw off, both events unassigned) → byte-identical to
+      a plain render (the ③c paint): no owner-draw side effects. }
+    procedure TestDefaultOffIdenticalToC3;
+    { OnDrawNode assigned but toOwnerDraw OFF → NOT called, default text drawn. }
+    procedure TestDrawNodeIgnoredWithoutOption;
+  end;
+
 implementation
 
 type
@@ -153,6 +329,12 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure DblClick;
     procedure KeyDown(var Key: Word; Shift: TShiftState);
+    { ③d C1: drive/inspect incremental search from tests. }
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char);
+    procedure TypeChar(const AChar: string);            // convenience: feed one printable char
+    function  SearchBuffer: string;                     // current type-ahead buffer
+    procedure SetSearchLastTick(ATick: QWord);          // simulate a timeout by aging the tick
+    function  SearchLastTick: QWord;
   end;
 
 procedure TTyTreeViewAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -183,6 +365,34 @@ end;
 procedure TTyTreeViewAccess.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   inherited KeyDown(Key, Shift);
+end;
+
+procedure TTyTreeViewAccess.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  inherited UTF8KeyPress(UTF8Key);
+end;
+
+procedure TTyTreeViewAccess.TypeChar(const AChar: string);
+var
+  k: TUTF8Char;
+begin
+  k := AChar;
+  UTF8KeyPress(k);
+end;
+
+function TTyTreeViewAccess.SearchBuffer: string;
+begin
+  Result := FSearchBuffer;   // protected field, reachable from this descendant
+end;
+
+procedure TTyTreeViewAccess.SetSearchLastTick(ATick: QWord);
+begin
+  FSearchLastTick := ATick;
+end;
+
+function TTyTreeViewAccess.SearchLastTick: QWord;
+begin
+  Result := FSearchLastTick;
 end;
 
 type
@@ -7779,6 +7989,1492 @@ begin
   finally t.Free; end;
 end;
 
+{ ── ③d A1 ── GetCellRect tests ──────────────────────────────────────────── }
+
+procedure TTreeGetCellRectTest.OnGetTextWithType(Sender: TTyTreeView;
+  Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+begin
+  case Column of
+    0: CellText := 'Name' + IntToStr(Node^.Index);
+    1: CellText := 'Col1';
+    2: CellText := 'C2Right';
+  else
+    CellText := '';
+  end;
+end;
+
+procedure TTreeGetCellRectTest.OnInitNodeHasChildren(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) = 0 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeGetCellRectTest.OnInitChildren2(Sender: TTyTreeView;
+  Node: PTyTreeNode; var ChildCount: Cardinal);
+begin
+  ChildCount := 2;
+end;
+
+{ 3-column tree, mirroring the column-paint harness:
+    col 0 (main, width 120) | col 1 (width 80) | col 2 (width 100)
+  header height 22, DefaultNodeHeight 22, ShowRoot, Indent 16, 1 root + 2 kids.
+  At PPI=96 device px == logical px; col0=[0..120), col1=[120..200), col2=[200..300). }
+function TTreeGetCellRectTest.BuildTree(out Ctl: TTyStyleController; out F: TForm;
+  out ARoot, AChild0: PTyTreeNode; APPI: Integer): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := APPI;
+  t.DefaultNodeHeight  := 22;
+  t.Indent             := 16;
+  t.ShowButtons        := True;
+  t.ShowTreeLines      := False;
+  t.ShowRoot           := True;
+  { Device size scales with PPI so the same logical layout fits at any DPI. }
+  t.SetBounds(0, 0, MulDiv(300, APPI, 96), MulDiv(200, APPI, 96));
+
+  t.OnGetTextWithType := @OnGetTextWithType;
+  t.OnInitNode        := @OnInitNodeHasChildren;
+  t.OnInitChildren    := @OnInitChildren2;
+
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 120; col0.Text := 'Name';
+  col0.Alignment := taLeftJustify; col0.CaptionAlignment := taLeftJustify;
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 80; col1.Text := 'Info';
+  col1.Alignment := taLeftJustify; col1.CaptionAlignment := taLeftJustify;
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := 100; col2.Text := 'Size';
+  col2.Alignment := taRightJustify; col2.CaptionAlignment := taLeftJustify;
+
+  t.Header.MainColumn := 0;
+  t.Header.Options    := [hoVisible];
+
+  t.RootNodeCount := 1;
+  ARoot := t.RootNode^.FirstChild;
+  t.InitNode(ARoot);
+  t.Expanded[ARoot] := True;
+  AChild0 := ARoot^.FirstChild;
+  Result := t;
+end;
+
+{ Col 0 (main) at PPI=96: header band = device [0..22), so row 0 (root) top = 22,
+  height = 22; main column span x = [0..120). }
+procedure TTreeGetCellRectTest.TestCellRectColumn0Geometry;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  r: TRect; ok: Boolean;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    ok := t.GetCellRect(root, 0, r);
+    AssertTrue('col0: GetCellRect succeeds for visible root', ok);
+    AssertEquals('col0: top = headerH(22) + index0*22', 22, r.Top);
+    AssertEquals('col0: height = Scale(NodeHeight)=22', 22, r.Bottom - r.Top);
+    AssertEquals('col0: left = main column left (0)', 0, r.Left);
+    AssertEquals('col0: right = col0 width (120)', 120, r.Right);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Col 2 span = [200..300); same row geometry. }
+procedure TTreeGetCellRectTest.TestCellRectColumn2Geometry;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  r: TRect; ok: Boolean;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    ok := t.GetCellRect(root, 2, r);
+    AssertTrue('col2: GetCellRect succeeds', ok);
+    AssertEquals('col2: left = 120+80 = 200', 200, r.Left);
+    AssertEquals('col2: right = 200+100 = 300', 300, r.Right);
+    AssertEquals('col2: top = 22', 22, r.Top);
+    AssertEquals('col2: height = 22', 22, r.Bottom - r.Top);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Column = -1 returns the same rect as the explicit MainColumn (0). }
+procedure TTreeGetCellRectTest.TestCellRectMainColumnAlias;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  rMain, rNeg1: TRect;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    AssertTrue('main: col 0 ok',  t.GetCellRect(root, 0,  rMain));
+    AssertTrue('main: col -1 ok', t.GetCellRect(root, -1, rNeg1));
+    AssertTrue('main: -1 aliases MainColumn (left)',  rMain.Left  = rNeg1.Left);
+    AssertTrue('main: -1 aliases MainColumn (right)', rMain.Right = rNeg1.Right);
+    AssertTrue('main: -1 aliases MainColumn (top)',   rMain.Top   = rNeg1.Top);
+    AssertTrue('main: -1 aliases MainColumn (bottom)',rMain.Bottom= rNeg1.Bottom);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Child row (visible index 1) sits exactly Scale(NodeHeight)=22 below the root row. }
+procedure TTreeGetCellRectTest.TestCellRectChildRowTop;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  rRoot, rChild: TRect;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    AssertTrue('child: root ok',  t.GetCellRect(root,   0, rRoot));
+    AssertTrue('child: child ok', t.GetCellRect(child0, 0, rChild));
+    AssertEquals('child: row top = root top + 22', rRoot.Top + 22, rChild.Top);
+    AssertEquals('child: height = 22', 22, rChild.Bottom - rChild.Top);
+    AssertEquals('child: same main-column left as root', rRoot.Left,  rChild.Left);
+    AssertEquals('child: same main-column right as root', rRoot.Right, rChild.Right);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Collapsing the root hides its children → GetCellRect(child) = False. }
+procedure TTreeGetCellRectTest.TestCellRectCollapsedNodeFalse;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  r: TRect;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    { child0 is visible while root is expanded }
+    AssertTrue('collapsed: child visible while expanded', t.GetCellRect(child0, 0, r));
+    t.Expanded[root] := False;   // collapse → child0 no longer visible
+    AssertFalse('collapsed: child under collapsed ancestor → False',
+      t.GetCellRect(child0, 0, r));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ nil and the hidden root sentinel → False. }
+procedure TTreeGetCellRectTest.TestCellRectRootAndNilFalse;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  r: TRect;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    AssertFalse('nil node → False',  t.GetCellRect(nil, 0, r));
+    AssertFalse('root sentinel → False', t.GetCellRect(t.RootNode, 0, r));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ A node scrolled entirely above the content rect → False.
+  Build a tall tree (many rows), scroll down via the vertical scrollbar so the
+  first rows are above the viewport, then assert the very first node's rect is
+  rejected (row bottom <= CR.Top). }
+procedure TTreeGetCellRectTest.TestCellRectScrolledOffscreenFalse;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView;
+  first, n: PTyTreeNode;
+  r: TRect;
+  i: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss('TyTreeView { background:#FFFFFF; border-width:0px; padding:0px; } ' +
+                   'TyTreeNode { background:none; color:#000000; }');
+  F := TForm.CreateNew(nil);
+  try
+    t := TTyTreeView.Create(F);
+    t.Parent := F; t.Controller := Ctl;
+    t.Font.PixelsPerInch := 96;
+    t.DefaultNodeHeight := 20;
+    t.Indent := 16; t.ShowRoot := True;
+    t.SetBounds(0, 0, 120, 100);   // viewport 100px tall: holds 5 rows
+    t.RootNodeCount := 40;          // 40*20 = 800px content >> 100px viewport
+    n := t.RootNode^.FirstChild;
+    while n <> nil do begin Include(n^.States, nsInitialized); n := n^.NextSibling; end;
+
+    { RootNodeCount → InvalidateTreeLayout → UpdateScrollBars already realized the
+      bars; GetCellRect also calls UpdateScrollBars. Confirm the V-bar is up. }
+    AssertTrue('offscreen: vertical bar visible',
+               (t.VScroll <> nil) and t.VScroll.Visible);
+
+    { Scroll down 10 rows (200px) so the first ~10 rows are above the viewport. }
+    t.VScroll.Position := 200;
+    AssertTrue('offscreen: scrolled down (OffsetY < 0)', t.OffsetY < 0);
+
+    first := t.RootNode^.FirstChild;   // node 0 — now well above the top
+    AssertFalse('offscreen: first node scrolled above content rect → False',
+                t.GetCellRect(first, 0, r));
+
+    { A node currently in the viewport must still succeed. }
+    n := first;
+    for i := 1 to 12 do n := t.GetNextVisibleNoInit(n);  // ~row 12, on screen
+    AssertTrue('offscreen: an on-screen node still succeeds',
+               t.GetCellRect(n, 0, r));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Cross-check vs paint: render the tree and confirm the column-1 caption ink of
+  the root row lies INSIDE GetCellRect(root, 1). }
+procedure TTreeGetCellRectTest.TestCellRectContainsPaintedInk;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  Bmp: TBitmap; Bgra: TBGRABitmap; px: TBGRAPixel;
+  r: TRect; x, y: Integer; inkX, inkY: Integer; foundInk: Boolean;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    AssertTrue('ink: col1 rect ok', t.GetCellRect(root, 1, r));
+
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(t.Width, t.Height);
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+      {$POP}
+      Bgra := TBGRABitmap.Create(Bmp, True);
+      try
+        { Search the WHOLE bitmap for the 'Col1' dark ink, then assert it lies
+          inside GetCellRect(root,1). Restricting the search to the rect would be
+          circular; scanning everything proves the ink the paint produced for that
+          cell actually falls within the reported rect. We scan only the root row's
+          vertical band to isolate col-1 ink from the col-1 text of the child row. }
+        foundInk := False; inkX := -1; inkY := -1;
+        for y := r.Top to r.Bottom - 1 do
+        begin
+          for x := 0 to Bmp.Width - 1 do
+          begin
+            px := Bgra.GetPixel(x, y);
+            { 'Col1' is the only dark ink in [120..200) on the root row; col0 has
+              'Name0' + chevron, col2 has 'C2Right'. Find the leftmost dark ink at
+              or past col1's left so we land on the 'Col1' glyphs. }
+            if (px.alpha > 0) and (px.red < 120) and (x >= 120) and (x < 200) then
+            begin
+              foundInk := True; inkX := x; inkY := y;
+              Break;
+            end;
+          end;
+          if foundInk then Break;
+        end;
+        AssertTrue('ink: found col1 caption ink on the root row', foundInk);
+        AssertTrue('ink: ink X inside GetCellRect(root,1)',
+                   (inkX >= r.Left) and (inkX < r.Right));
+        AssertTrue('ink: ink Y inside GetCellRect(root,1)',
+                   (inkY >= r.Top) and (inkY < r.Bottom));
+      finally
+        Bgra.Free;
+      end;
+    finally
+      Bmp.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ HiDPI: at PPI=144 the rect top/height and column span all scale by 144/96. }
+procedure TTreeGetCellRectTest.TestCellRectHiDPIScales;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  r: TRect;
+begin
+  t := BuildTree(Ctl, F, root, child0, 144);
+  try
+    AssertTrue('hidpi: col0 rect ok', t.GetCellRect(root, 0, r));
+    { header 22 → MulDiv(22,144,96)=33; NodeHeight 22 → 33; col0 width 120 → 180 }
+    AssertEquals('hidpi: top = Scale(22) = 33', 33, r.Top);
+    AssertEquals('hidpi: height = Scale(22) = 33', 33, r.Bottom - r.Top);
+    AssertEquals('hidpi: left = 0', 0, r.Left);
+    AssertEquals('hidpi: right = Scale(120) = 180', 180, r.Right);
+    { col 2: left = Scale(200)=300, right = Scale(300)=450 }
+    AssertTrue('hidpi: col2 rect ok', t.GetCellRect(root, 2, r));
+    AssertEquals('hidpi: col2 left = Scale(200) = 300', 300, r.Left);
+    AssertEquals('hidpi: col2 right = Scale(300) = 450', 450, r.Right);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Scroll: with the H and V bars driven to a known position, GetCellRect shifts by
+  exactly the read-back FOffsetX (horizontally) and tracks the paint vertically.
+  A tall+narrow tree guarantees both bars are present. }
+procedure TTreeGetCellRectTest.TestCellRectShiftsWithScroll;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView;
+  col0, col1: TTyTreeColumn;
+  n0: PTyTreeNode;
+  rBefore, rAfter: TRect;
+  offX: Integer;
+  Bmp: TBitmap; Bgra: TBGRABitmap; px: TBGRAPixel;
+  x, y: Integer; foundInk: Boolean;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+  F := TForm.CreateNew(nil);
+  try
+    t := TTyTreeView.Create(F);
+    t.Parent := F; t.Controller := Ctl;
+    t.Font.PixelsPerInch := 96;
+    t.DefaultNodeHeight := 22; t.Indent := 16;
+    t.ShowButtons := True; t.ShowTreeLines := False; t.ShowRoot := True;
+    { Narrow viewport (200 < 300 total col width) so the H-bar shows. }
+    t.SetBounds(0, 0, 200, 200);
+    t.OnGetTextWithType := @OnGetTextWithType;
+
+    col0 := t.Header.Columns.Add as TTyTreeColumn;
+    col0.Width := 120; col0.Text := 'Name';
+    col1 := t.Header.Columns.Add as TTyTreeColumn;
+    col1.Width := 80;  col1.Text := 'Info';
+    with t.Header.Columns.Add as TTyTreeColumn do begin Width := 100; Text := 'Size'; end;
+    t.Header.MainColumn := 0;
+    t.Header.Options := [hoVisible];
+
+    t.RootNodeCount := 1;
+    n0 := t.RootNode^.FirstChild;
+    Include(n0^.States, nsInitialized);
+
+    { Adding columns + RootNodeCount already ran InvalidateTreeLayout →
+      UpdateScrollBars, configuring the H-bar (FRangeX=300 > viewport 200). }
+    AssertTrue('scroll: H-bar visible (cols 300 > viewport 200)',
+               (t.HScroll <> nil) and t.HScroll.Visible);
+
+    { Unscrolled rect of column 0 for node 0. }
+    AssertTrue('scroll: rect before ok', t.GetCellRect(n0, 0, rBefore));
+
+    { Scroll right by 40 device px. Read back the actual (clamped) offset. }
+    t.HScroll.Position := 40;
+    offX := -t.OffsetX;   // device px the content shifted left (>0)
+    AssertTrue('scroll: scrolled right (OffsetX < 0)', t.OffsetX < 0);
+
+    AssertTrue('scroll: rect after ok', t.GetCellRect(n0, 0, rAfter));
+    AssertEquals('scroll: cell left shifts by -OffsetX',  rBefore.Left  - offX, rAfter.Left);
+    AssertEquals('scroll: cell right shifts by -OffsetX', rBefore.Right - offX, rAfter.Right);
+    AssertEquals('scroll: top unchanged by horizontal scroll', rBefore.Top, rAfter.Top);
+
+    { Cross-check vs paint at the scrolled offset: the col-0 caption ink must fall
+      inside the shifted rect. Render and scan the root row band. }
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(t.Width, t.Height);
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+      {$POP}
+      Bgra := TBGRABitmap.Create(Bmp, True);
+      try
+        { The main column is the LEFTMOST column, so the leftmost dark-ink pixel
+          on the root row belongs to the main column's caption ('Name0'). Assert
+          that leftmost ink falls inside the SHIFTED GetCellRect(n0,0) — a
+          non-circular cross-check that paint and GetCellRect agree under scroll.
+          (col-1 'Col1' / col-2 'C2Right' ink sits further right, in their own
+          cells, so we must not require ALL row ink to be in the main rect.) }
+        foundInk := False;
+        for x := 0 to Bmp.Width - 1 do
+        begin
+          for y := rAfter.Top to rAfter.Bottom - 1 do
+          begin
+            px := Bgra.GetPixel(x, y);
+            if (px.alpha > 0) and (px.red < 120) then
+            begin
+              foundInk := True;
+              Break;
+            end;
+          end;
+          if foundInk then Break;
+        end;
+        AssertTrue('scroll: found painted caption ink on the scrolled root row', foundInk);
+        AssertTrue('scroll: leftmost root-row ink X within shifted main-column rect',
+                   (x >= rAfter.Left) and (x < rAfter.Right));
+      finally
+        Bgra.Free;
+      end;
+    finally
+      Bmp.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ ── ③d D1 ── per-cell owner-draw (OnDrawNode + OnAfterCellPaint) ───────────── }
+
+procedure TTreeD1OwnerDrawTest.OnGetTextWithType(Sender: TTyTreeView;
+  Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+begin
+  case Column of
+    0: CellText := 'Name' + IntToStr(Node^.Index);
+    1: CellText := 'Col1';
+    2: CellText := 'C2Right';
+  else
+    CellText := '';
+  end;
+end;
+
+procedure TTreeD1OwnerDrawTest.OnInitNodeHasChildren(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) = 0 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeD1OwnerDrawTest.OnInitChildren2(Sender: TTyTreeView;
+  Node: PTyTreeNode; var ChildCount: Cardinal);
+begin
+  ChildCount := 2;
+end;
+
+{ OnDrawNode — full cell replacement: fill the whole reported ACellRect with
+  opaque GREEN. Only fires for the probed column (so the other cells keep their
+  default ink for the "ink absent only where replaced" check). Captures the rect
+  for the GetCellRect cross-check. }
+procedure TTreeD1OwnerDrawTest.OnDrawNodeFillGreen(Sender: TTyTreeView;
+  ACanvas: TCanvas; Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+begin
+  Inc(FDrawNodeCalls);
+  if (FCapturedNode <> nil) and (Node = FCapturedNode) and (Column = FProbeCol) then
+  begin
+    FLastDrawRect := ACellRect;
+    FLastDrawCol  := Column;
+    FLastDrawNode := Node;
+  end;
+  if Column <> FProbeCol then Exit;
+  ACanvas.Brush.Style := bsSolid;
+  ACanvas.Brush.Color := RGBToColor(0, 200, 0);   // GREEN probe
+  ACanvas.FillRect(ACellRect);
+end;
+
+{ OnAfterCellPaint — overlay: a small BLUE probe rect near the cell's top-left,
+  for the probed column only. }
+procedure TTreeD1OwnerDrawTest.OnAfterPaintBlueDot(Sender: TTyTreeView;
+  ACanvas: TCanvas; Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+var
+  r: TRect;
+begin
+  Inc(FAfterCalls);
+  if Column <> FProbeCol then Exit;
+  r := Rect(ACellRect.Left + 2, ACellRect.Top + 2,
+            ACellRect.Left + 8, ACellRect.Top + 8);
+  ACanvas.Brush.Style := bsSolid;
+  ACanvas.Brush.Color := RGBToColor(0, 0, 220);   // BLUE probe
+  ACanvas.FillRect(r);
+end;
+
+{ 3-column tree mirroring the column-paint harness: col0 (main, 120) | col1 (80)
+  | col2 (100); header 22, DefaultNodeHeight 22, ShowRoot, Indent 16, 1 root + 2
+  kids. MainColumn set AFTER adding columns. PPI 96 → device px == logical px. }
+function TTreeD1OwnerDrawTest.BuildTree(out Ctl: TTyStyleController; out F: TForm;
+  out ARoot, AChild0: PTyTreeNode): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 22;
+  t.Indent             := 16;
+  t.ShowButtons        := True;
+  t.ShowTreeLines      := False;
+  t.ShowRoot           := True;
+  t.SetBounds(0, 0, 300, 200);
+
+  t.OnGetTextWithType := @OnGetTextWithType;
+  t.OnInitNode        := @OnInitNodeHasChildren;
+  t.OnInitChildren    := @OnInitChildren2;
+
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 120; col0.Text := 'Name';
+  col0.Alignment := taLeftJustify; col0.CaptionAlignment := taLeftJustify;
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 80; col1.Text := 'Info';
+  col1.Alignment := taLeftJustify; col1.CaptionAlignment := taLeftJustify;
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := 100; col2.Text := 'Size';
+  col2.Alignment := taLeftJustify; col2.CaptionAlignment := taLeftJustify;
+
+  { MainColumn set AFTER adding columns (avoids the NoColumn footgun). }
+  t.Header.MainColumn := 0;
+  t.Header.Options    := [hoVisible];
+
+  t.RootNodeCount := 1;
+  ARoot := t.RootNode^.FirstChild;
+  t.InitNode(ARoot);
+  t.Expanded[ARoot] := True;
+  AChild0 := ARoot^.FirstChild;
+  Result := t;
+end;
+
+{ toOwnerDraw + OnDrawNode probing col 1 → the GREEN fill is present inside
+  GetCellRect(root,1) AND the default 'Col1' dark ink is ABSENT there (the app
+  fully replaced the cell). Non-vacuous: we scan the whole col-1 root-row band. }
+procedure TTreeD1OwnerDrawTest.TestOwnerDrawFillsCellAndSkipsDefault;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  outBmp: TBitmap; r: TRect;
+  x, y, col: Integer;
+  greenFound, inkFound: Boolean;
+begin
+  FProbeCol := 1; FDrawNodeCalls := 0; FAfterCalls := 0; FCapturedNode := nil;
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    t.Options    := t.Options + [toOwnerDraw];
+    t.OnDrawNode := @OnDrawNodeFillGreen;
+
+    AssertTrue('ownerdraw: col1 rect ok', t.GetCellRect(root, 1, r));
+
+    outBmp := TBitmap.Create;
+    try
+      outBmp.PixelFormat := pf32bit;
+      outBmp.SetSize(t.Width, t.Height);
+      outBmp.Canvas.Brush.Color := clWhite;
+      outBmp.Canvas.FillRect(0, 0, outBmp.Width, outBmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(outBmp.Canvas, Rect(0, 0, outBmp.Width, outBmp.Height), 96);
+      {$POP}
+
+      AssertTrue('ownerdraw: OnDrawNode fired', FDrawNodeCalls > 0);
+
+      { GREEN probe present somewhere inside GetCellRect(root,1). }
+      greenFound := False;
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+          if (Green(col) > 160) and (Red(col) < 96) and (Blue(col) < 96) then
+            greenFound := True;
+        end;
+      AssertTrue('ownerdraw: GREEN fill present inside GetCellRect(root,1)', greenFound);
+
+      { Default 'Col1' dark ink must be ABSENT in the col-1 root-row band (the
+        owner-draw replaced the cell — no caption drawn under the green). }
+      inkFound := False;
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+          if (Red(col) < 64) and (Green(col) < 64) and (Blue(col) < 64) then
+            inkFound := True;
+        end;
+      AssertFalse('ownerdraw: default caption ink ABSENT in replaced col-1 cell', inkFound);
+    finally
+      outBmp.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ OnAfterCellPaint (no toOwnerDraw) probing col 1 → the BLUE probe is present
+  near the cell's top-left AND the default 'Col1' caption ink is STILL present
+  in the cell (overlay drawn on top, not replacing). }
+procedure TTreeD1OwnerDrawTest.TestAfterCellPaintOverlaysDefault;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  outBmp: TBitmap; r: TRect;
+  x, y, col: Integer;
+  blueFound, inkFound: Boolean;
+begin
+  FProbeCol := 1; FDrawNodeCalls := 0; FAfterCalls := 0; FCapturedNode := nil;
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    { No toOwnerDraw, no OnDrawNode — only the overlay. }
+    t.OnAfterCellPaint := @OnAfterPaintBlueDot;
+
+    AssertTrue('after: col1 rect ok', t.GetCellRect(root, 1, r));
+
+    outBmp := TBitmap.Create;
+    try
+      outBmp.PixelFormat := pf32bit;
+      outBmp.SetSize(t.Width, t.Height);
+      outBmp.Canvas.Brush.Color := clWhite;
+      outBmp.Canvas.FillRect(0, 0, outBmp.Width, outBmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(outBmp.Canvas, Rect(0, 0, outBmp.Width, outBmp.Height), 96);
+      {$POP}
+
+      AssertTrue('after: OnAfterCellPaint fired', FAfterCalls > 0);
+
+      { BLUE probe present near col-1 cell top-left. }
+      blueFound := False;
+      for y := r.Top to r.Top + 10 do
+        for x := r.Left to r.Left + 10 do
+        begin
+          if (y < 0) or (x < 0) or (y >= outBmp.Height) or (x >= outBmp.Width) then Continue;
+          col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+          if (Blue(col) > 160) and (Red(col) < 96) and (Green(col) < 96) then
+            blueFound := True;
+        end;
+      AssertTrue('after: BLUE overlay probe present in col-1 cell', blueFound);
+
+      { Default 'Col1' dark ink STILL present in the col-1 root-row band. }
+      inkFound := False;
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+          if (Red(col) < 64) and (Green(col) < 64) and (Blue(col) < 64) then
+            inkFound := True;
+        end;
+      AssertTrue('after: default caption ink STILL present under overlay', inkFound);
+    finally
+      outBmp.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ The ACellRect handed to OnDrawNode must equal GetCellRect(node, col) exactly. }
+procedure TTreeD1OwnerDrawTest.TestOwnerDrawCellRectMatchesGetCellRect;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  outBmp: TBitmap; rExpect: TRect;
+begin
+  FProbeCol := 2; FDrawNodeCalls := 0; FAfterCalls := 0;
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    FCapturedNode := root;
+    t.Options    := t.Options + [toOwnerDraw];
+    t.OnDrawNode := @OnDrawNodeFillGreen;
+
+    AssertTrue('rect: GetCellRect(root,2) ok', t.GetCellRect(root, 2, rExpect));
+
+    FLastDrawNode := nil; FLastDrawCol := -99;
+    FLastDrawRect := Rect(0, 0, 0, 0);
+
+    outBmp := TBitmap.Create;
+    try
+      outBmp.PixelFormat := pf32bit;
+      outBmp.SetSize(t.Width, t.Height);
+      outBmp.Canvas.Brush.Color := clWhite;
+      outBmp.Canvas.FillRect(0, 0, outBmp.Width, outBmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(outBmp.Canvas, Rect(0, 0, outBmp.Width, outBmp.Height), 96);
+      {$POP}
+    finally
+      outBmp.Free;
+    end;
+
+    AssertTrue('rect: OnDrawNode captured the root col-2 cell', FLastDrawNode = root);
+    AssertEquals('rect: captured column = 2', 2, FLastDrawCol);
+    AssertEquals('rect: ACellRect.Left = GetCellRect.Left',   rExpect.Left,   FLastDrawRect.Left);
+    AssertEquals('rect: ACellRect.Top = GetCellRect.Top',     rExpect.Top,    FLastDrawRect.Top);
+    AssertEquals('rect: ACellRect.Right = GetCellRect.Right', rExpect.Right,  FLastDrawRect.Right);
+    AssertEquals('rect: ACellRect.Bottom = GetCellRect.Bottom',rExpect.Bottom,FLastDrawRect.Bottom);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Default-off (toOwnerDraw off, both events unassigned) → byte-identical to a
+  plain render: render twice (once "plain", once after wiring NOTHING) and assert
+  the two output bitmaps are pixel-identical. This pins that the owner-draw code
+  path is a true no-op when off (== ③c). }
+procedure TTreeD1OwnerDrawTest.TestDefaultOffIdenticalToC3;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  bmpA, bmpB: TBitmap;
+  x, y: Integer;
+  diff: Boolean;
+begin
+  FProbeCol := 1; FDrawNodeCalls := 0; FAfterCalls := 0; FCapturedNode := nil;
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    { No toOwnerDraw, no OnDrawNode, no OnAfterCellPaint — pure ③c. }
+    bmpA := TBitmap.Create;
+    bmpB := TBitmap.Create;
+    try
+      bmpA.PixelFormat := pf32bit; bmpA.SetSize(t.Width, t.Height);
+      bmpB.PixelFormat := pf32bit; bmpB.SetSize(t.Width, t.Height);
+      bmpA.Canvas.Brush.Color := clWhite; bmpA.Canvas.FillRect(0, 0, bmpA.Width, bmpA.Height);
+      bmpB.Canvas.Brush.Color := clWhite; bmpB.Canvas.FillRect(0, 0, bmpB.Width, bmpB.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(bmpA.Canvas, Rect(0, 0, bmpA.Width, bmpA.Height), 96);
+      TTyTreeViewAccess(t).RenderTo(bmpB.Canvas, Rect(0, 0, bmpB.Width, bmpB.Height), 96);
+      {$POP}
+
+      AssertEquals('offc3: OnDrawNode never fired', 0, FDrawNodeCalls);
+      AssertEquals('offc3: OnAfterCellPaint never fired', 0, FAfterCalls);
+
+      diff := False;
+      for y := 0 to bmpA.Height - 1 do
+      begin
+        for x := 0 to bmpA.Width - 1 do
+          if ColorToRGB(bmpA.Canvas.Pixels[x, y]) <> ColorToRGB(bmpB.Canvas.Pixels[x, y]) then
+          begin
+            diff := True; Break;
+          end;
+        if diff then Break;
+      end;
+      AssertFalse('offc3: two default-off renders are pixel-identical (== ③c)', diff);
+    finally
+      bmpA.Free; bmpB.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ OnDrawNode assigned but toOwnerDraw OFF → the handler must NOT fire and the
+  default caption ink must still render (the option gates the replacement). }
+procedure TTreeD1OwnerDrawTest.TestDrawNodeIgnoredWithoutOption;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  outBmp: TBitmap; r: TRect;
+  x, y, col: Integer;
+  inkFound: Boolean;
+begin
+  FProbeCol := 1; FDrawNodeCalls := 0; FAfterCalls := 0; FCapturedNode := nil;
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    { OnDrawNode wired, but toOwnerDraw NOT set. }
+    t.OnDrawNode := @OnDrawNodeFillGreen;
+
+    AssertTrue('noopt: col1 rect ok', t.GetCellRect(root, 1, r));
+
+    outBmp := TBitmap.Create;
+    try
+      outBmp.PixelFormat := pf32bit;
+      outBmp.SetSize(t.Width, t.Height);
+      outBmp.Canvas.Brush.Color := clWhite;
+      outBmp.Canvas.FillRect(0, 0, outBmp.Width, outBmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(outBmp.Canvas, Rect(0, 0, outBmp.Width, outBmp.Height), 96);
+      {$POP}
+
+      AssertEquals('noopt: OnDrawNode did NOT fire (option off)', 0, FDrawNodeCalls);
+
+      { Default 'Col1' caption ink present (cell was NOT replaced). }
+      inkFound := False;
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+          if (Red(col) < 64) and (Green(col) < 64) and (Blue(col) < 64) then
+            inkFound := True;
+        end;
+      AssertTrue('noopt: default caption ink present (no owner-draw without option)', inkFound);
+    finally
+      outBmp.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ ── ③d B1 ── variable per-node row height ──────────────────────────────────── }
+
+function TTreeB1VariableHeightTest.ExpectedH(Index: Integer): Integer;
+begin
+  Result := 18 + 6 * (Index mod 3);   // 0→18, 1→24, 2→30
+end;
+
+procedure TTreeB1VariableHeightTest.OnMeasureItem(Sender: TTyTreeView;
+  ACanvas: TCanvas; Node: PTyTreeNode; var ANodeHeight: Integer);
+begin
+  Inc(FMeasureCalls);
+  AssertTrue('measure: ACanvas non-nil', ACanvas <> nil);
+  ANodeHeight := ExpectedH(Integer(Node^.Index));
+end;
+
+{ Flat tree: a single level of AChildCount root children, all leaves.
+  DefaultNodeHeight = 18 (the C3 default). At PPI=96 logical px == device px. }
+function TTreeB1VariableHeightTest.BuildFlatTree(out Ctl: TTyStyleController;
+  out F: TForm; AChildCount: Integer; AVariable: Boolean; APPI: Integer): TTyTreeView;
+var
+  t: TTyTreeView;
+begin
+  FMeasureCalls := 0;
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := APPI;
+  t.DefaultNodeHeight  := 18;
+  t.Indent             := 16;
+  t.ShowRoot           := True;
+  t.SetBounds(0, 0, MulDiv(200, APPI, 96), MulDiv(120, APPI, 96));
+
+  if AVariable then
+  begin
+    t.Options       := t.Options + [toVariableNodeHeight];
+    t.OnMeasureItem := @OnMeasureItem;
+  end;
+
+  t.RootNodeCount := AChildCount;   // flat list of leaves
+  Result := t;
+end;
+
+{ Render to an offscreen bitmap tall enough to fit all rows so every visible row
+  is InitNode'd (→ OnMeasureItem fired). Render twice: the first pass measures +
+  invalidates the cache; a settle pass ensures TotalHeight + cache reflect the
+  measured heights. }
+procedure TTreeB1VariableHeightTest.ForceMeasureAll(t: TTyTreeView; APPI: Integer);
+var
+  Bmp: TBitmap;
+  pass: Integer;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(MulDiv(200, APPI, 96), MulDiv(2000, APPI, 96));  // tall: all rows fit
+    for pass := 1 to 2 do
+    begin
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), APPI);
+      {$POP}
+    end;
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestTotalHeightSumsVariableHeights;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  i, expectedSum: Integer;
+  n: PTyTreeNode;
+begin
+  t := BuildFlatTree(Ctl, F, 12, True);
+  try
+    ForceMeasureAll(t);
+    AssertTrue('measure fired for the visible rows', FMeasureCalls >= 12);
+
+    { Σ of per-node heights (children only) }
+    expectedSum := 0;
+    for i := 0 to 11 do Inc(expectedSum, ExpectedH(i));
+    AssertEquals('Σ child heights = 4*(18+24+30) = 288', 288, expectedSum);
+
+    { Each node carries its measured height }
+    n := t.RootNode^.FirstChild; i := 0;
+    while n <> nil do
+    begin
+      AssertEquals('node ' + IntToStr(i) + ' NodeHeight = expected',
+        ExpectedH(i), Integer(n^.NodeHeight));
+      n := n^.NextSibling; Inc(i);
+    end;
+
+    { ③a invariant with variable heights: root TotalHeight = Σ children + root row(18) }
+    AssertEquals('RootNode.TotalHeight = 288 + root row 18 = 306',
+      306, Integer(t.RootNode^.TotalHeight));
+    AssertEquals('ContentHeight = 288', 288, t.ContentHeight);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestInvariantHelperAgrees;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+begin
+  t := BuildFlatTree(Ctl, F, 12, True);
+  try
+    ForceMeasureAll(t);
+    { SumVisibleHeights (the ③a invariant helper) must equal RootNode.TotalHeight. }
+    AssertEquals('SumVisibleHeights = RootNode.TotalHeight (invariant holds)',
+      t.SumVisibleHeights, Integer(t.RootNode^.TotalHeight));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestGetNodeAtAcrossVariedHeights;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  node: PTyTreeNode;
+  top, accTop, i: Integer;
+begin
+  t := BuildFlatTree(Ctl, F, 12, True);
+  try
+    ForceMeasureAll(t);
+
+    { Walk the expected boundaries: child i occupies [accTop, accTop+ExpectedH(i)).
+      GetNodeAt at the top pixel and the last pixel of each band must land on
+      child i with ANodeTop = accTop. }
+    accTop := 0;
+    for i := 0 to 11 do
+    begin
+      node := t.GetNodeAt(accTop, top);
+      AssertTrue('GetNodeAt(top of band ' + IntToStr(i) + ') non-nil', node <> nil);
+      AssertEquals('GetNodeAt(top) → child ' + IntToStr(i) + ' (by Index)',
+        i, Integer(node^.Index));
+      AssertEquals('GetNodeAt(top) ANodeTop = band top', accTop, top);
+
+      node := t.GetNodeAt(accTop + ExpectedH(i) - 1, top);
+      AssertEquals('GetNodeAt(bottom-1 of band ' + IntToStr(i) + ') → same child',
+        i, Integer(node^.Index));
+
+      Inc(accTop, ExpectedH(i));
+    end;
+
+    { One pixel past the last band → nil (past end). accTop now = 288. }
+    node := t.GetNodeAt(accTop, top);
+    AssertTrue('GetNodeAt past last band → nil', node = nil);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestSetNodeHeightUpdatesTotal;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  node: PTyTreeNode;
+  oldH, beforeTotal: Integer;
+begin
+  t := BuildFlatTree(Ctl, F, 12, True);
+  try
+    ForceMeasureAll(t);
+
+    { Pick child index 1 (measured height 24). }
+    node := t.RootNode^.FirstChild^.NextSibling;
+    AssertEquals('precondition: child1 height = 24', 24, Integer(node^.NodeHeight));
+    AssertEquals('NodeHeight[] getter returns 24', 24, t.NodeHeight[node]);
+
+    oldH        := Integer(node^.NodeHeight);
+    beforeTotal := Integer(t.RootNode^.TotalHeight);
+
+    t.NodeHeight[node] := 40;
+
+    AssertEquals('NodeHeight[] reads back 40', 40, t.NodeHeight[node]);
+    AssertEquals('node field = 40', 40, Integer(node^.NodeHeight));
+    AssertEquals('RootNode.TotalHeight bumped by (40 - oldH)',
+      beforeTotal + (40 - oldH), Integer(t.RootNode^.TotalHeight));
+
+    { Invariant still holds after the programmatic override. }
+    AssertEquals('SumVisibleHeights = RootNode.TotalHeight after SetNodeHeight',
+      t.SumVisibleHeights, Integer(t.RootNode^.TotalHeight));
+
+    { No-op when set to the same value. }
+    beforeTotal := Integer(t.RootNode^.TotalHeight);
+    t.NodeHeight[node] := 40;
+    AssertEquals('SetNodeHeight same value → no change',
+      beforeTotal, Integer(t.RootNode^.TotalHeight));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestDefaultOffEqualsC3;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  { toVariableNodeHeight OFF (and OnMeasureItem still wired would not matter, but
+    here it's unassigned too): every node = DefaultNodeHeight, identical to ③c. }
+  t := BuildFlatTree(Ctl, F, 12, False);
+  try
+    ForceMeasureAll(t);
+    AssertEquals('default-off: no measure calls', 0, FMeasureCalls);
+
+    n := t.RootNode^.FirstChild;
+    while n <> nil do
+    begin
+      AssertEquals('default-off: every node = DefaultNodeHeight(18)',
+        18, Integer(n^.NodeHeight));
+      n := n^.NextSibling;
+    end;
+    { TotalHeight == count*default + root row: 12*18 + 18 = 234 }
+    AssertEquals('default-off: TotalHeight = 13*18 = 234',
+      234, Integer(t.RootNode^.TotalHeight));
+    AssertEquals('default-off: ContentHeight = 12*18 = 216', 216, t.ContentHeight);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestOptionOnButNoHandlerEqualsC3;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  { Option ON but OnMeasureItem UNASSIGNED → the measure block is skipped (guard
+    on Assigned(FOnMeasureItem)), so behaviour == ③c. }
+  t := BuildFlatTree(Ctl, F, 12, False);   // build without handler...
+  try
+    t.Options := t.Options + [toVariableNodeHeight];  // ...then turn the option on, leave OnMeasureItem nil
+    ForceMeasureAll(t);
+
+    n := t.RootNode^.FirstChild;
+    while n <> nil do
+    begin
+      AssertEquals('option-on/no-handler: every node = DefaultNodeHeight(18)',
+        18, Integer(n^.NodeHeight));
+      n := n^.NextSibling;
+    end;
+    AssertEquals('option-on/no-handler: TotalHeight = 234',
+      234, Integer(t.RootNode^.TotalHeight));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestHiDPILogicalInvariant;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  i, expectedSum: Integer;
+begin
+  { At PPI=144 the measured heights are LOGICAL (device scaling happens at paint
+    via P.Scale). TotalHeight is logical, so it must still sum the logical
+    heights — exactly as at PPI=96 (matching the ③a logical-unit discipline). }
+  t := BuildFlatTree(Ctl, F, 12, True, 144);
+  try
+    ForceMeasureAll(t, 144);
+
+    expectedSum := 0;
+    for i := 0 to 11 do Inc(expectedSum, ExpectedH(i));   // 288 logical
+
+    { Each node stores the LOGICAL measured height (not scaled to 144). }
+    AssertEquals('hidpi: child0 logical height = 18', 18,
+      Integer(t.RootNode^.FirstChild^.NodeHeight));
+    AssertEquals('hidpi: RootNode.TotalHeight logical = 288 + 18 = 306',
+      306, Integer(t.RootNode^.TotalHeight));
+    AssertEquals('hidpi: invariant holds (SumVisibleHeights logical)',
+      t.SumVisibleHeights, Integer(t.RootNode^.TotalHeight));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestZeroHeightIgnored;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  node: PTyTreeNode;
+  beforeTotal: Integer;
+begin
+  { Programmatic guard: SetNodeHeight(0) is a no-op (heights must be positive). }
+  t := BuildFlatTree(Ctl, F, 4, True);
+  try
+    ForceMeasureAll(t);
+    node := t.RootNode^.FirstChild;   // index 0, height 18
+    beforeTotal := Integer(t.RootNode^.TotalHeight);
+    t.NodeHeight[node] := 0;          // ignored
+    AssertEquals('SetNodeHeight(0) ignored: height unchanged',
+      18, Integer(node^.NodeHeight));
+    AssertEquals('SetNodeHeight(0) ignored: TotalHeight unchanged',
+      beforeTotal, Integer(t.RootNode^.TotalHeight));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ ── ③d C1 ── incremental type-to-find search ──────────────────────────────── }
+
+const
+  C1_NAMES: array[0..4] of string =
+    ('apple', 'banana', 'band', 'cherry', 'date');
+
+procedure TTreeC1IncSearchTest.OnGetText(Sender: TTyTreeView;
+  Node: PTyTreeNode; var CellText: string);
+begin
+  if Integer(Node^.Index) in [0..4] then
+    CellText := C1_NAMES[Integer(Node^.Index)]
+  else
+    CellText := '';
+end;
+
+procedure TTreeC1IncSearchTest.OnContainsSearch(Sender: TTyTreeView;
+  Node: PTyTreeNode; const ASearchText: string; var AMatch: Boolean);
+var
+  txt: string;
+begin
+  Inc(FCustomSearchHits);
+  { CONTAINS (substring), case-insensitive — different from the default prefix. }
+  txt := '';
+  if Integer(Node^.Index) in [0..4] then txt := C1_NAMES[Integer(Node^.Index)];
+  AMatch := (ASearchText <> '') and
+            (Pos(UpperCase(ASearchText), UpperCase(txt)) > 0);
+end;
+
+function TTreeC1IncSearchTest.BuildNamedTree(out Ctl: TTyStyleController;
+  out F: TForm; ASearch: Boolean): TTyTreeView;
+var
+  t: TTyTreeView;
+begin
+  FCustomSearchHits := 0;
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.DefaultNodeHeight := 18;
+  t.ShowRoot   := False;          // 5 flat leaves; no synthetic root row
+  t.SetBounds(0, 0, 200, 120);
+  t.OnGetText  := @OnGetText;
+  if ASearch then
+    t.Options := t.Options + [toIncrementalSearch];
+  t.RootNodeCount := 5;           // apple/banana/band/cherry/date (Index 0..4)
+  Result := t;
+end;
+
+function TTreeC1IncSearchTest.NthChild(t: TTyTreeView; AIndex: Integer): PTyTreeNode;
+var
+  n: PTyTreeNode;
+  i: Integer;
+begin
+  Result := nil;
+  n := t.RootNode^.FirstChild;
+  i := 0;
+  while n <> nil do
+  begin
+    if i = AIndex then begin Result := n; Exit; end;
+    n := n^.NextSibling; Inc(i);
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestPrefixMatchMovesFocus;
+{ Typing 'b' then 'a' (toIncrementalSearch on) → focus lands on the FIRST visible
+  node whose text starts with 'ba' = 'banana' (index 1). }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    AssertTrue('focus starts nil', t.FocusedNode = nil);
+    t.TypeChar('b');
+    t.TypeChar('a');
+    AssertEquals('search buffer = ba', 'ba', t.SearchBuffer);
+    AssertTrue('FocusedNode = banana (first ba-prefix)', t.FocusedNode = NthChild(t, 1));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestRepeatCharAdvances;
+{ From banana (a 'b' match), a FRESH single 'b' (buffer reset via timeout) walks
+  from AFTER banana and lands on the next 'b'-prefix node = 'band' (index 2). }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    t.TypeChar('b');
+    AssertTrue('first b → banana', t.FocusedNode = NthChild(t, 1));
+    { Simulate the timeout so the next 'b' starts a fresh buffer. }
+    t.SetSearchLastTick(0);
+    t.TypeChar('b');
+    AssertEquals('buffer reset to single b', 'b', t.SearchBuffer);
+    AssertTrue('second b advances to band', t.FocusedNode = NthChild(t, 2));
+    { A third fresh 'b' from band wraps back to banana (only two b-prefix nodes). }
+    t.SetSearchLastTick(0);
+    t.TypeChar('b');
+    AssertTrue('third b wraps to banana', t.FocusedNode = NthChild(t, 1));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestCustomPredicateHonored;
+{ OnIncrementalSearch = CONTAINS. Typing 'an' (no node STARTS with 'an', but
+  'banana'/'band' CONTAIN it) → the custom predicate fires and focus moves to the
+  first containing node = 'banana'. The default prefix match would find nothing. }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    t.OnIncrementalSearch := @OnContainsSearch;
+    t.TypeChar('a');
+    t.TypeChar('n');
+    AssertTrue('custom predicate was consulted', FCustomSearchHits > 0);
+    AssertTrue('CONTAINS an → banana', t.FocusedNode = NthChild(t, 1));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestBackspacePopsChar;
+{ Buffer 'ba' (focus banana). Backspace → buffer 'b', focus re-resolves to the
+  first 'b'-prefix node (banana). Multibyte-safe pop. }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  key: Word;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    t.TypeChar('b');
+    t.TypeChar('a');
+    AssertEquals('buffer ba', 'ba', t.SearchBuffer);
+    t.FocusedNode := NthChild(t, 2);  // move focus to band so the re-search is observable
+
+    key := VK_BACK;
+    {$PUSH}{$HINTS OFF}t.KeyDown(key, []);{$POP}
+
+    AssertEquals('Backspace consumed (Key=0)', 0, Integer(key));
+    AssertEquals('buffer popped to b', 'b', t.SearchBuffer);
+    { Re-search from after band wraps to banana (the first b-prefix). }
+    AssertTrue('focus re-resolved to a b-prefix node', t.FocusedNode = NthChild(t, 1));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestOptionOffDoesNothing;
+{ toIncrementalSearch OFF → typing accumulates nothing and never moves focus. }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, False));   // option OFF
+  try
+    t.FocusedNode := NthChild(t, 0);   // apple
+    t.TypeChar('b');
+    t.TypeChar('a');
+    AssertEquals('buffer stays empty with option off', '', t.SearchBuffer);
+    AssertTrue('focus unchanged with option off', t.FocusedNode = NthChild(t, 0));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestTimeoutResetsBuffer;
+{ Type 'b' (buffer 'b'); age the tick past SearchTimeout; type 'c' → the buffer
+  resets to 'c' (not 'bc') and focus jumps to 'cherry'. }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    AssertEquals('default SearchTimeout = 1000', 1000, t.SearchTimeout);
+    t.TypeChar('b');
+    AssertEquals('buffer b', 'b', t.SearchBuffer);
+    t.SetSearchLastTick(0);            // far in the past → next char resets
+    t.TypeChar('c');
+    AssertEquals('timeout reset buffer to c (not bc)', 'c', t.SearchBuffer);
+    AssertTrue('focus = cherry', t.FocusedNode = NthChild(t, 3));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestArrowKeysStillWorkWithSearchOn;
+{ ③a/b/c regression: with toIncrementalSearch ON, the arrow / Home / End keys
+  still move focus — incremental search (UTF8KeyPress) does not hijack KeyDown. }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  key: Word;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    t.FocusedNode := NthChild(t, 0);   // apple
+
+    key := VK_DOWN;
+    {$PUSH}{$HINTS OFF}t.KeyDown(key, []);{$POP}
+    AssertEquals('VK_DOWN consumed', 0, Integer(key));
+    AssertTrue('VK_DOWN → banana', t.FocusedNode = NthChild(t, 1));
+
+    key := VK_UP;
+    {$PUSH}{$HINTS OFF}t.KeyDown(key, []);{$POP}
+    AssertEquals('VK_UP consumed', 0, Integer(key));
+    AssertTrue('VK_UP → apple', t.FocusedNode = NthChild(t, 0));
+
+    key := VK_END;
+    {$PUSH}{$HINTS OFF}t.KeyDown(key, []);{$POP}
+    AssertEquals('VK_END consumed', 0, Integer(key));
+    AssertTrue('VK_END → date (last)', t.FocusedNode = NthChild(t, 4));
+
+    key := VK_HOME;
+    {$PUSH}{$HINTS OFF}t.KeyDown(key, []);{$POP}
+    AssertEquals('VK_HOME consumed', 0, Integer(key));
+    AssertTrue('VK_HOME → apple (first)', t.FocusedNode = NthChild(t, 0));
+
+    { And the buffer was never touched by these navigation keys. }
+    AssertEquals('search buffer untouched by arrows', '', t.SearchBuffer);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ ── End-to-end node-image render gate ───────────────────────────────────── }
+
+procedure TTreeNodeImageRenderTest.OnGetText(Sender: TTyTreeView;
+  Node: PTyTreeNode; var Text: string);
+begin
+  Text := 'NodeText' + IntToStr(Node^.Index);
+end;
+
+procedure TTreeNodeImageRenderTest.OnGetImageIndex(Sender: TTyTreeView;
+  Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
+  var Ghosted: Boolean; var ImageIndex: Integer);
+begin
+  { One opaque red icon at index 0 for every node in the main column. }
+  ImageIndex := 0;
+end;
+
+procedure TTreeNodeImageRenderTest.TestNodeImageSurvivesToOutput;
+{ Build a real TTyTreeView with a TImageList holding ONE fully-opaque solid-RED
+  16x16 icon, MainColumn=0, OnGetImageIndex→0 for all nodes, two root nodes with
+  captions. Render through the full RenderTo path into an output TBitmap and scan
+  the OUTPUT:
+    • a RED pixel must exist in the main column's icon slot on row 0, AND
+    • a dark (caption ink) pixel must exist in the caption band on row 0.
+  Geometry @96dpi: ShowRoot=True, Indent=16, Header.Height=22.
+    Row 0 spans y=[22..44). No children → no expand button, but slots are anchored.
+    captionX = mainColBase(0) + indentPx((0+1)*16=16) = 16.
+    Image slot = x=[16..32), icon 16x16 centred at y = 22 + (22-16) div 2 = 25 → y=[25..41).
+    Caption textRect.Left = 32 + 2 = 34, col0 right = 120. }
+const
+  W = 300;
+  H = 200;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  il: TImageList;
+  redBmp: TBitmap;
+  col0, col1, col2: TTyTreeColumn;
+  outBmp: TBitmap;
+  x, y: Integer;
+  col: TColor;
+  redFound, inkFound: Boolean;
+  redX, redY: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  il   := nil;
+  redBmp := nil;
+  outBmp := nil;
+  F := nil;
+  try
+    Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+    F := TForm.CreateNew(nil, 0);
+    t := TTyTreeView.Create(F);
+    t.Parent     := F;
+    t.Controller := Ctl;
+    t.Font.PixelsPerInch := 96;
+    t.DefaultNodeHeight  := 22;
+    t.Indent             := 16;
+    t.ShowButtons        := True;
+    t.ShowTreeLines      := False;
+    t.ShowRoot           := True;
+    t.SetBounds(0, 0, W, H);
+
+    { One fully-opaque solid-RED 16x16 icon. }
+    redBmp := TBitmap.Create;
+    redBmp.SetSize(16, 16);
+    redBmp.Canvas.Brush.Color := clRed;
+    redBmp.Canvas.FillRect(0, 0, 16, 16);
+    il := TImageList.Create(F);
+    il.Width  := 16;
+    il.Height := 16;
+    il.Add(redBmp, nil);               { nil mask => fully opaque }
+    AssertEquals('imagelist has 1 entry', 1, il.Count);
+
+    t.Images          := il;
+    t.OnGetText       := @OnGetText;
+    t.OnGetImageIndex := @OnGetImageIndex;
+
+    { Three columns, main = 0. }
+    col0 := t.Header.Columns.Add as TTyTreeColumn;
+    col0.Width := 120; col0.Text := 'Name'; col0.Alignment := taLeftJustify;
+    col1 := t.Header.Columns.Add as TTyTreeColumn;
+    col1.Width := 80;  col1.Text := 'Info'; col1.Alignment := taLeftJustify;
+    col2 := t.Header.Columns.Add as TTyTreeColumn;
+    col2.Width := 100; col2.Text := 'Size'; col2.Alignment := taLeftJustify;
+    t.Header.MainColumn := 0;
+    t.Header.Options    := [hoVisible];
+
+    { Two root nodes; init both so RenderTo fires OnGetText/OnGetImageIndex. }
+    t.RootNodeCount := 2;
+    t.InitNode(t.RootNode^.FirstChild);
+    t.InitNode(t.RootNode^.FirstChild^.NextSibling);
+
+    { Render through the full path into an output bitmap (white background). }
+    outBmp := TBitmap.Create;
+    outBmp.PixelFormat := pf32bit;
+    outBmp.SetSize(W, H);
+    outBmp.Canvas.Brush.Color := clWhite;
+    outBmp.Canvas.FillRect(0, 0, W, H);
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).RenderTo(outBmp.Canvas, Rect(0, 0, W, H), 96);
+    {$POP}
+
+    { Read the OUTPUT bitmap via the GDI CANVAS surface — this is what EndPaint's
+      ACanvas.Draw(...,Bitmap) actually paints and what the real GUI shows. (Reading
+      the raw DIB bits via TLazIntfImage is NOT representative: on Windows the BGRA
+      layer's bitmap shares its buffer with the canvas, so a canvas-drawn icon shows
+      in the raw bits even when the GUI-visible canvas surface has lost it.) }
+
+    { Scan the icon slot band x=[16..31], y=[26..40) for a RED pixel.
+      TColor is $00BBGGRR — Red()/Green()/Blue() from the Graphics unit. }
+    redFound := False; redX := -1; redY := -1;
+    for y := 26 to 39 do
+      for x := 16 to 31 do
+      begin
+        col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+        if (Red(col) > 192) and (Green(col) < 64) and (Blue(col) < 64) then
+        begin
+          redFound := True; redX := x; redY := y;
+        end;
+      end;
+
+    { Scan the caption band x=[34..118], y=[26..40) for a dark ink pixel
+      (caption color #000000 on white). Non-vacuous: the band is wide. }
+    inkFound := False;
+    for y := 26 to 39 do
+      for x := 34 to 118 do
+      begin
+        col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+        if (Red(col) < 64) and (Green(col) < 64) and (Blue(col) < 64) then
+          inkFound := True;
+      end;
+
+    AssertTrue(
+      'node icon RED pixel must survive to the output bitmap in the row-0 ' +
+      'main-column icon slot x=[16..31] y=[26..40) (found=' +
+      BoolToStr(redFound, True) + ' at ' + IntToStr(redX) + ',' + IntToStr(redY) + ')',
+      redFound);
+    AssertTrue(
+      'node caption ink must still render on row 0 in x=[34..118] (icon did not clobber text)',
+      inkFound);
+  finally
+    outBmp.Free;
+    redBmp.Free;
+    { il is owned by F; do not free separately }
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -7809,4 +9505,9 @@ initialization
   RegisterTest(TTreeD1MultiSelectMouseTest);
   RegisterTest(TTreeD2MultiSelectKeyboardTest);
   RegisterTest(TTreeAdversarialFixTest);
+  RegisterTest(TTreeGetCellRectTest);
+  RegisterTest(TTreeB1VariableHeightTest);
+  RegisterTest(TTreeC1IncSearchTest);
+  RegisterTest(TTreeNodeImageRenderTest);
+  RegisterTest(TTreeD1OwnerDrawTest);
 end.

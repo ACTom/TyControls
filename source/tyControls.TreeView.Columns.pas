@@ -101,13 +101,19 @@ type
     FPositionToIndex: array of Integer;
     { Notify hook: wired by Phase-B header.  May be nil in Phase-A tests. }
     FOnChange: TNotifyEvent;
+    { Owning header (Phase B). nil in Phase-A headless tests and during raw
+      LFM streaming via the parameterless Create — GetOwner returns it so the
+      first-column add hook can reach the header's MainColumn. }
+    FOwnerHeader: TTyTreeHeader;
 
     procedure RebuildPositionMap;
     procedure DoChange;
   protected
     procedure Notify(Item: TCollectionItem; Action: TCollectionNotification); override;
+    function  GetOwner: TPersistent; override;
   public
-    constructor Create;
+    constructor Create; overload;
+    constructor Create(AOwnerHeader: TTyTreeHeader); overload;
 
     { Look up the column at visual position APos (0-based). }
     function  ColumnByPosition(APos: Integer): TTyTreeColumn;
@@ -352,7 +358,19 @@ constructor TTyTreeColumns.Create;
 begin
   inherited Create(TTyTreeColumn);
   SetLength(FPositionToIndex, 0);
-  FOnChange := nil;
+  FOnChange    := nil;
+  FOwnerHeader := nil;
+end;
+
+constructor TTyTreeColumns.Create(AOwnerHeader: TTyTreeHeader);
+begin
+  Create;
+  FOwnerHeader := AOwnerHeader;
+end;
+
+function TTyTreeColumns.GetOwner: TPersistent;
+begin
+  Result := FOwnerHeader;
 end;
 
 procedure TTyTreeColumns.DoChange;
@@ -390,6 +408,16 @@ begin
       SetLength(FPositionToIndex, Count);
       FPositionToIndex[Count - 1] := col.Index;
       col.FPosition := Cardinal(Count - 1);
+      { Footgun guard: when the FIRST column is added and the owning header's
+        MainColumn is still NoColumn (e.g. the app assigned MainColumn before
+        any column existed, so the setter clamped it to -1), default it to the
+        first column — VirtualTreeView does the same. Only fires on the first
+        add (Count = 1), so any explicit later choice (incl. an opt-out
+        MainColumn := NoColumn, or := 2) is fully respected. The assignment
+        goes through SetMainColumn, which now succeeds because Count >= 1. }
+      if (Count = 1) and (GetOwner is TTyTreeHeader) and
+         (TTyTreeHeader(GetOwner).MainColumn = NoColumn) then
+        TTyTreeHeader(GetOwner).MainColumn := 0;
       UpdatePositions;
       DoChange;
     end;
@@ -421,6 +449,25 @@ begin
           if FPositionToIndex[i] > col.Index then
             Dec(FPositionToIndex[i]);
       end;
+      { Deletion never goes through SetMainColumn (the only other clamp site), so keep
+        MainColumn valid + following the index renumber here. Otherwise a stale,
+        now-out-of-range MainColumn makes RenderTo's `colIdx = MainColumn` never match
+        and ALL tree chrome (expand buttons / images / main caption) silently vanishes.
+        Count still includes the column being deleted, so post-delete count = Count - 1. }
+      if GetOwner is TTyTreeHeader then
+        with TTyTreeHeader(GetOwner) do
+        begin
+          if FMainColumn = col.Index then
+          begin
+            if Count - 1 > 0 then FMainColumn := 0 else FMainColumn := NoColumn;
+          end
+          else if FMainColumn > col.Index then
+            Dec(FMainColumn);
+          if (FMainColumn <> NoColumn) and (FMainColumn >= Count - 1) then
+          begin
+            if Count - 1 > 0 then FMainColumn := Count - 2 else FMainColumn := NoColumn;
+          end;
+        end;
       DoChange;
     end;
     cnExtracting:
@@ -687,7 +734,7 @@ begin
   FImages        := nil;
   FOptions       := [hoVisible, hoColumnResize, hoShowSortGlyphs,
                      hoHeaderClickAutoSort, hoDrag];
-  FColumns       := TTyTreeColumns.Create;
+  FColumns       := TTyTreeColumns.Create(Self);
   FColumns.OnChange := @ColumnsChanged;
 end;
 
@@ -771,7 +818,6 @@ begin
   begin
     Src := TTyTreeHeader(ASource);
     FHeight        := Src.FHeight;
-    FMainColumn    := Src.FMainColumn;
     FSortColumn    := Src.FSortColumn;
     FSortDirection := Src.FSortDirection;
     FAutoSizeIndex := Src.FAutoSizeIndex;
@@ -785,6 +831,11 @@ begin
       dstCol := FColumns.Add as TTyTreeColumn;
       dstCol.Assign(srcCol);
     end;
+    { MainColumn AFTER the rebuild: each FColumns.Add fires Notify(cnAdded), and the
+      first one auto-defaults MainColumn to 0 when it is NoColumn — which would clobber
+      a copied opt-out (NoColumn). Assigning here (post-rebuild, Count = Src.Count) lets
+      the opt-out and any explicit value survive. }
+    FMainColumn := Src.FMainColumn;
     Changed;
   end
   else

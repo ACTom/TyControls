@@ -50,6 +50,9 @@ begin
   AssertPub('OnGetTextWithType');
   AssertPub('OnGetImageIndex');
   AssertPub('OnPaintText');
+  { ③d D1: per-cell owner-draw (OnBeforeCellPaint deferred — NOT published) }
+  AssertPub('OnDrawNode');
+  AssertPub('OnAfterCellPaint');
   { column/sort events (D2, D3, E1, E3) }
   AssertPub('OnColumnResized');
   AssertPub('OnColumnReorder');

@@ -2,7 +2,7 @@ unit tyControls.TreeView;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, ImgList,
+  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LCLIntf, LazUTF8, ImgList,
   BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar,
   tyControls.TreeView.Columns;
@@ -14,8 +14,17 @@ type
                     hpCheckBox);   { B3: the checkbox slot in the main column }
 
   { B1: per-tree option flags (VTV-style set; default [] = ③a/③b behaviour) }
+  { ③d B1: toVariableNodeHeight opts a tree into per-node row heights via
+    OnMeasureItem (default off ⇒ every node uses DefaultNodeHeight, == ③c).
+    ③d C1: toIncrementalSearch opts a tree into type-to-find: printable chars
+    typed with focus on the tree jump focus to the next matching visible node
+    (default off ⇒ typing does nothing special, == ③c).
+    ③d D1: toOwnerDraw opts a tree into per-cell owner-draw via OnDrawNode (full
+    cell-content replacement) + OnAfterCellPaint (overlay). Default off ⇒ the
+    default cell content paints, == ③c. }
   TTyTreeOption = (toMultiSelect, toCheckSupport, toFullRowSelect,
-                   toAutoTristateTracking);
+                   toAutoTristateTracking, toVariableNodeHeight,
+                   toIncrementalSearch, toOwnerDraw);
   TTyTreeOptions = set of TTyTreeOption;
 
   { A2: check column type for a node }
@@ -86,6 +95,46 @@ type
   TTyTreePaintTextEvent = procedure(Sender: TTyTreeView; const TargetCanvas: TCanvas;
     Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType) of object;
 
+  { ③d B1: OnMeasureItem — fired once per node from InitNode (when
+    toVariableNodeHeight is set) so the app can return a per-node row height.
+    ANodeHeight is seeded with the node's current height (DefaultNodeHeight for a
+    fresh node); the app overwrites it. ACanvas is the control canvas (for text
+    measurement). Heights are LOGICAL pixels — device scaling happens at paint. }
+  TTyTreeMeasureItemEvent = procedure(Sender: TTyTreeView; ACanvas: TCanvas;
+    Node: PTyTreeNode; var ANodeHeight: Integer) of object;
+
+  { ③d C1: OnIncrementalSearch — custom match predicate for type-to-find. Fired
+    once per candidate visible node during the search walk; the app sets AMatch
+    (seeded False) to True to accept the node. ASearchText is the accumulated
+    type-ahead buffer. When unassigned, the default is a case-insensitive PREFIX
+    test of ASearchText against the node's main-column text. }
+  TTyTreeIncrementalSearchEvent = procedure(Sender: TTyTreeView;
+    Node: PTyTreeNode; const ASearchText: string; var AMatch: Boolean) of object;
+
+  { ③d D1: per-cell owner-draw events (cross-platform post-EndPaint subset).
+    Both fire AFTER the BGRA layer has been composited onto ACanvas, with
+    ACanvas (the control canvas) clipped to the cell's device rect (ACellRect,
+    the exact rect GetCellRect(Node, Column) returns).
+
+    OnDrawNode — FULL cell-content replacement. Fires only when toOwnerDraw is in
+    Options. When assigned, RenderTo SKIPS the default cell content (caption text,
+    and for the main column the node image) for that cell; the row background and
+    tree chrome (expand button / tree-lines / checkbox) still paint underneath.
+    The app draws the entire cell content here.
+
+    OnAfterCellPaint — overlay. Fires for EVERY painted cell (independent of
+    toOwnerDraw), on top of the default content AND any OnDrawNode result. Use it
+    to decorate cells (badges, focus rings, etc.); no-op the cells you don't care
+    about.
+
+    DEFERRED (NOT implemented in ③d D1): OnBeforeCellPaint (a backdrop UNDER the
+    default text) — it cannot be done post-EndPaint and needs a temp-bitmap→BGRA
+    path. }
+  TTyTreeDrawNodeEvent  = procedure(Sender: TTyTreeView; ACanvas: TCanvas;
+    Node: PTyTreeNode; Column: Integer; const ACellRect: TRect) of object;
+  TTyTreeCellPaintEvent = procedure(Sender: TTyTreeView; ACanvas: TCanvas;
+    Node: PTyTreeNode; Column: Integer; const ACellRect: TRect) of object;
+
 const
   TreeNodeSize = (SizeOf(TTyTreeNode) + 7) and not 7;  // pointer-aligned struct stride
   { B3: one cache mark per TREE_CACHE_STEP visible nodes.
@@ -141,6 +190,13 @@ type
     FOnGetImageIndex:      TTyTreeGetImageIndexEvent;
     FOnGetTextWithType:    TTyTreeGetTextWithTypeEvent;
     FOnPaintText:          TTyTreePaintTextEvent;
+    { ③d B1: variable per-node row height }
+    FOnMeasureItem:        TTyTreeMeasureItemEvent;
+    { ③d C1: incremental type-to-find search }
+    FOnIncrementalSearch:  TTyTreeIncrementalSearchEvent;
+    { ③d D1: per-cell owner-draw (post-EndPaint; cross-platform) }
+    FOnDrawNode:           TTyTreeDrawNodeEvent;
+    FOnAfterCellPaint:     TTyTreeCellPaintEvent;
     { C4: interaction events }
     FOnNodeClick:          TTyTreeNodeEvent;
     FOnNodeDblClick:       TTyTreeNodeEvent;
@@ -185,6 +241,13 @@ type
     { B1: tree option flags }
     FOptions:          TTyTreeOptions;
     procedure SetOptions(AValue: TTyTreeOptions);
+    { ③d B1: per-node row-height accessors (variable height) }
+    function  GetNodeHeight(Node: PTyTreeNode): Integer;
+    procedure SetNodeHeight(Node: PTyTreeNode; AValue: Integer);
+    { ③d C1: incremental-search internals }
+    function  GetNodeSearchText(Node: PTyTreeNode): string;        // main-column text (mirrors the caption)
+    function  NodeMatchesSearch(Node: PTyTreeNode; const ASearchText: string): Boolean;
+    procedure DoIncrementalSearch;                                 // walk visible nodes from focus (wrapping)
     { B1: check property raw accessors }
     function  GetCheckType(Node: PTyTreeNode): TTyCheckType;
     procedure SetCheckType(Node: PTyTreeNode; AValue: TTyCheckType);
@@ -230,11 +293,27 @@ type
     { B3 position-cache helpers }
     procedure ValidateCache;
     function  FindInCache(Y: Integer): Integer;
+    { ③d A1: shared cell-geometry — given the device content rect CR, the device
+      row top/height of a node's row and a column index, produce the cell's device
+      rect. Single source of the per-column x-math used by BOTH RenderTo (paint)
+      and GetCellRect (measure) so they can never drift. Column = -1 or the
+      MainColumn maps to the main cell; in 0-column mode Column is ignored and the
+      cell spans CR.Left..CR.Right. Returns False only when a real column index is
+      out of range / not visible. }
+    function  InternalCellRect(const CR: TRect; ARowTop, ARowH, AColumn, APPI: Integer;
+                out ACellRect: TRect): Boolean;
     { A5 helpers }
     function  ComputeExpandedSubtreeHeight(Node: PTyTreeNode): Integer;
     function  GetExpanded(Node: PTyTreeNode): Boolean;
     procedure SetExpanded(Node: PTyTreeNode; AValue: Boolean);
   protected
+    { ③d C1: incremental type-to-find state. Protected (not private) so tests can
+      drive/inspect it via a descendant; FEditing is also the ③e edit-suppression
+      hook (always False until ③e wires inline editing). }
+    FSearchBuffer:         string;     // accumulated type-ahead chars
+    FSearchLastTick:       QWord;      // GetTickCount64 of the last accepted char
+    FSearchTimeout:        Integer;    // ms of idle before the buffer auto-resets
+    FEditing:              Boolean;    // True while an inline editor is active (③e)
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Paint; override;
@@ -247,6 +326,10 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { ③d C1: LCL delivers printable chars here (after KeyDown). When
+      toIncrementalSearch is set we accumulate them into FSearchBuffer and jump
+      focus to the next matching visible node. }
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
@@ -300,6 +383,10 @@ type
     property CheckType[Node: PTyTreeNode]: TTyCheckType   read GetCheckType  write SetCheckType;
     property CheckState[Node: PTyTreeNode]: TTyCheckState  read GetCheckState write SetCheckState;
     property Checked[Node: PTyTreeNode]: Boolean           read GetChecked    write SetChecked;
+    { ③d B1: per-node row height (logical px). Reading returns Node^.NodeHeight;
+      writing applies the delta via AdjustTotalHeight + marks the node measured +
+      invalidates the layout. Programmatic override (mirrors VTV SetNodeHeight). }
+    property NodeHeight[Node: PTyTreeNode]: Integer        read GetNodeHeight write SetNodeHeight;
     property RootNode: PTyTreeNode read FRoot;
     property RangeY: Integer read FRangeY;
     property OffsetY: Integer read FOffsetY;
@@ -311,6 +398,17 @@ type
     { C2: content geometry helpers used by C3 paint pass. }
     function ContentHeight: Integer;
     function ContentRect: TRect;
+    { ③d A1: cell geometry — the device-pixel rect of Node's cell in Column,
+      in the SAME coordinate space RenderTo paints into (ContentRect space).
+      Accounts for FOffsetX/FOffsetY, the header-band top inset, the per-column
+      left/width (multi-column) and HiDPI. Column = -1 (or = Header.MainColumn)
+      returns the main/whole cell; in 0-column mode Column is ignored and the
+      cell is the content row rect (CR.Left..CR.Right). Returns False when Node
+      is not currently visible (nil, root, under a collapsed ancestor, or its
+      row is scrolled entirely outside the content rect). Has no side effects on
+      node state (never calls InitNode). RenderTo derives its per-cell rect from
+      the same shared helper so paint and GetCellRect cannot drift. }
+    function GetCellRect(Node: PTyTreeNode; Column: Integer; out ACellRect: TRect): Boolean;
     { C3: paint }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { B3: read-only; how many nodes were visited in the last GetNodeAt walk (for perf tests) }
@@ -344,6 +442,9 @@ type
     property ShowRoot: Boolean read FShowRoot write SetShowRoot default True;
     property ToggleOnDblClick: Boolean read FToggleOnDblClick write SetToggleOnDblClick default True;
     property HotTrack: Boolean read FHotTrack write SetHotTrack default False;
+    { ③d C1: ms of keyboard idle before the incremental-search buffer auto-resets
+      (next printable char starts a fresh search). Default 1000. }
+    property SearchTimeout: Integer read FSearchTimeout write FSearchTimeout default 1000;
     { C1: re-published standard LCL properties }
     property Align;
     property Anchors;
@@ -373,6 +474,13 @@ type
     property OnGetTextWithType:    TTyTreeGetTextWithTypeEvent   read FOnGetTextWithType    write FOnGetTextWithType;
     property OnGetImageIndex:      TTyTreeGetImageIndexEvent     read FOnGetImageIndex      write FOnGetImageIndex;
     property OnPaintText:          TTyTreePaintTextEvent         read FOnPaintText          write FOnPaintText;
+    { ③d D1: per-cell owner-draw — full replacement (gated by toOwnerDraw) + overlay }
+    property OnDrawNode:           TTyTreeDrawNodeEvent          read FOnDrawNode           write FOnDrawNode;
+    property OnAfterCellPaint:     TTyTreeCellPaintEvent         read FOnAfterCellPaint     write FOnAfterCellPaint;
+    { ③d B1: per-node measure event — fired from InitNode when toVariableNodeHeight set }
+    property OnMeasureItem:        TTyTreeMeasureItemEvent       read FOnMeasureItem        write FOnMeasureItem;
+    { ③d C1: custom incremental-search match predicate (default = prefix match) }
+    property OnIncrementalSearch:  TTyTreeIncrementalSearchEvent read FOnIncrementalSearch  write FOnIncrementalSearch;
     { D2: column resize event }
     property OnColumnResized: TTyTreeColumnEvent read FOnColumnResized write FOnColumnResized;
     { D3: column reorder event }
@@ -753,6 +861,94 @@ begin
     else if inRange then
       InternalSetSelected(n, True);
     n := GetNextVisibleNoInit(n);
+  end;
+end;
+
+{ ── ③d C1 ── incremental type-to-find search ──────────────────────────────── }
+
+{ GetNodeSearchText — the node's MAIN-column text, obtained exactly the way the
+  caption is (OnGetTextWithType for the main column / ttNormal, falling back to
+  OnGetText) so the search matches what the user actually sees. No side effects
+  (never inits the node). }
+function TTyTreeView.GetNodeSearchText(Node: PTyTreeNode): string;
+begin
+  Result := '';
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if Assigned(FOnGetTextWithType) then
+    FOnGetTextWithType(Self, Node, FHeader.MainColumn, ttNormal, Result)
+  else if Assigned(FOnGetText) then
+    FOnGetText(Self, Node, Result);
+end;
+
+{ NodeMatchesSearch — the match predicate for one candidate node.
+  Default (OnIncrementalSearch unassigned) = case-insensitive PREFIX test of
+  ASearchText against the node's main-column text (both upper-cased via
+  UTF8UpperCase so multibyte casing is correct). When OnIncrementalSearch is
+  assigned the app fully decides (AMatch seeded False). }
+function TTyTreeView.NodeMatchesSearch(Node: PTyTreeNode; const ASearchText: string): Boolean;
+var
+  nodeText, upSearch: string;
+begin
+  Result := False;
+  if (Node = nil) or (Node = FRoot) or (ASearchText = '') then Exit;
+  if Assigned(FOnIncrementalSearch) then
+  begin
+    FOnIncrementalSearch(Self, Node, ASearchText, Result);
+    Exit;
+  end;
+  { Default: case-insensitive prefix match on the main-column caption. }
+  nodeText := UTF8UpperCase(GetNodeSearchText(Node));
+  upSearch := UTF8UpperCase(ASearchText);
+  Result := (upSearch <> '')
+            and (UTF8Length(nodeText) >= UTF8Length(upSearch))
+            and (UTF8Copy(nodeText, 1, UTF8Length(upSearch)) = upSearch);
+end;
+
+{ DoIncrementalSearch — walk the VISIBLE nodes (wrapping through the whole visible
+  set) and move focus to the first node whose match predicate is True.
+
+  Start position (mirrors Windows Explorer / VTV type-ahead):
+   • A SINGLE-char buffer (a fresh search, or re-pressing the same letter) starts
+     the walk AFTER the current focus, so repeats advance to the next match.
+   • A MULTI-char buffer (the user is refining, e.g. 'b' then 'a') starts the walk
+     AT the current focus (inclusive), so the focus stays put if it still matches
+     the longer prefix instead of jumping to a later sibling.
+
+  Lazy limitation: only visible (expanded-reachable) nodes are walked via
+  GetNextVisibleNoInit — collapsed subtrees are never force-initialised, so a
+  match hidden under a collapsed parent is not found (unlike VTV's isAll). }
+procedure TTyTreeView.DoIncrementalSearch;
+var
+  start, n: PTyTreeNode;
+  inclusive: Boolean;
+begin
+  if FSearchBuffer = '' then Exit;
+
+  inclusive := UTF8Length(FSearchBuffer) > 1;   // refining → keep focus if it still matches
+
+  if FFocusedNode <> nil then
+  begin
+    if inclusive then start := FFocusedNode
+    else              start := GetNextVisibleNoInit(FFocusedNode);
+  end
+  else
+    start := GetFirstVisibleNoInit;
+  if start = nil then
+    start := GetFirstVisibleNoInit;   // wrap to the top when focus was at the end
+
+  n := start;
+  while n <> nil do
+  begin
+    if NodeMatchesSearch(n, FSearchBuffer) then
+    begin
+      FocusedNode := n;     // selects (single-select rule) + fires OnFocusChanged
+      ScrollIntoView(n);    // SetFocusedNode does not scroll on its own
+      Exit;
+    end;
+    n := GetNextVisibleNoInit(n);
+    if n = nil then
+      n := GetFirstVisibleNoInit;   // wrap once through the whole visible set
+    if n = start then Break;        // came full circle — no match
   end;
 end;
 
@@ -1349,6 +1545,8 @@ begin
   if not Enabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
 
+  // ③d B1: page/wheel estimates use FDefaultNodeHeight even under
+  // toVariableNodeHeight — an acceptable approximation (no per-node walk here).
   step := 3 * FDefaultNodeHeight;
   if WheelDelta > 0 then Delta :=  step   // scroll up
   else                    Delta := -step;  // scroll down
@@ -1455,6 +1653,11 @@ begin
   FSorting          := False;
   FSortedColumn     := NoColumn;   // no key sorted yet (so the first real sort runs)
   FSortedDirection  := sdAscending;
+  { ③d C1: incremental search — idle state }
+  FSearchBuffer     := '';
+  FSearchLastTick   := 0;
+  FSearchTimeout    := 1000;
+  FEditing          := False;
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
@@ -1795,9 +1998,32 @@ begin
   Result := (Node <> nil) and (nsExpanded in Node^.States);
 end;
 
+{ ③d B1: per-node row-height accessors. }
+function TTyTreeView.GetNodeHeight(Node: PTyTreeNode): Integer;
+begin
+  if Node = nil then Result := FDefaultNodeHeight
+  else Result := Node^.NodeHeight;
+end;
+
+procedure TTyTreeView.SetNodeHeight(Node: PTyTreeNode; AValue: Integer);
+{ Programmatic per-node height override (mirrors VTV SetNodeHeight). Applies the
+  delta up the ancestor chain via AdjustTotalHeight so the ③a invariant holds,
+  marks the node measured (so a later InitNode measure won't clobber it), and
+  invalidates the layout (cache rebuild + repaint). No-op when unchanged. }
+begin
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if AValue <= 0 then Exit;                              // guard: heights are positive
+  Include(Node^.States, nsHeightMeasured);               // explicit set counts as measured
+  if AValue = Integer(Node^.NodeHeight) then Exit;       // no-op if unchanged
+  AdjustTotalHeight(Node, AValue - Integer(Node^.NodeHeight));
+  Node^.NodeHeight := Word(AValue);
+  InvalidateTreeLayout;
+end;
+
 procedure TTyTreeView.InitNode(Node: PTyTreeNode);
 var
   initStates: TTyNodeInitStates;
+  h: Integer;
 begin
   if (Node = nil) or (Node = FRoot) or (nsInitialized in Node^.States) then Exit;
   Include(Node^.States, nsInitialized);
@@ -1810,6 +2036,28 @@ begin
     SetSelected(Node, True);   // C1: full single-select semantics (fires OnChange)
   if ivsExpanded in initStates then
     SetExpanded(Node, True);             // materialise children if the app requests auto-expand
+
+  { ③d B1: variable per-node row height. Measure ONCE, at the END of InitNode
+    (never in GetNodeAt — re-entrant layout risk). The paint loop calls InitNode
+    before reading NodeHeight, so the measure lands at the right time. The height
+    is kept in the node field (persists), and AdjustTotalHeight keeps the ③a
+    invariant (RootNode^.TotalHeight == Σ visible NodeHeight). When a height
+    actually changes we mark the layout dirty so the position cache — built by
+    GetNextVisibleNoInit (no init) and thus possibly cold/unmeasured — rebuilds
+    with the measured values on the next access. }
+  if (toVariableNodeHeight in FOptions) and Assigned(FOnMeasureItem)
+     and not (nsHeightMeasured in Node^.States) then
+  begin
+    h := Node^.NodeHeight;                              // seed with current/default
+    FOnMeasureItem(Self, Canvas, Node, h);
+    if (h > 0) and (h <> Integer(Node^.NodeHeight)) then
+    begin
+      AdjustTotalHeight(Node, h - Integer(Node^.NodeHeight));  // keep the invariant
+      Node^.NodeHeight := Word(h);
+      InvalidateTreeLayout;   // force the position cache to rebuild with the measured height
+    end;
+    Include(Node^.States, nsHeightMeasured);
+  end;
 end;
 
 procedure TTyTreeView.InitChildren(Node: PTyTreeNode);
@@ -2253,6 +2501,142 @@ begin
   end;
 end;
 
+{ ── ③d A1 ── shared cell geometry ───────────────────────────────────────── }
+
+{ InternalCellRect — the single source of per-cell x-geometry, shared by
+  RenderTo (paint) and GetCellRect (measure).
+
+  Inputs are all DEVICE-pixel: CR is the content rect (RenderTo's CR /
+  ContentRect — top already past the header band), ARowTop/ARowH are the device
+  top/height of the node's row, AColumn is the requested column (or -1 / the
+  main column for the whole main cell), APPI is the paint PPI.
+
+  Output ACellRect spans the full device column cell:
+    • 0-column mode → CR.Left .. CR.Right (AColumn ignored).
+    • multi-column  → CR.Left + Scale(col.Left) + FOffsetX
+                      .. + Scale(col.Width)
+      (verbatim the colCellLeft/colCellRight formula RenderTo paints with).
+  The vertical extent is always [ARowTop .. ARowTop + ARowH].
+
+  Returns False only when a REAL column index does not resolve to a visible
+  column (out of range / coVisible off); the main/0-column cases always succeed. }
+function TTyTreeView.InternalCellRect(const CR: TRect;
+  ARowTop, ARowH, AColumn, APPI: Integer; out ACellRect: TRect): Boolean;
+var
+  col: TTyTreeColumn;
+  colObj: TObject;
+  effCol: Integer;
+  cLeft, cRight: Integer;
+begin
+  Result   := False;
+  ACellRect := Rect(0, 0, 0, 0);
+
+  { 0-column (③a) mode: the cell IS the content row rect; AColumn is ignored. }
+  if (FHeader = nil) or (FHeader.Columns.Count = 0) then
+  begin
+    ACellRect := Rect(CR.Left, ARowTop, CR.Right, ARowTop + ARowH);
+    Result := True;
+    Exit;
+  end;
+
+  { Multi-column: -1 → the main column's own cell. }
+  effCol := AColumn;
+  if effCol = NoColumn then
+    effCol := FHeader.MainColumn;
+
+  if (effCol < 0) or (effCol >= FHeader.Columns.Count) then Exit;
+  colObj := FHeader.Columns.Items[effCol];
+  if not (colObj is TTyTreeColumn) then Exit;
+  col := TTyTreeColumn(colObj);
+  if not (coVisible in col.Options) then Exit;
+
+  { Verbatim the RenderTo cell-left/right math (device px, scroll-adjusted). }
+  cLeft  := CR.Left + MulDiv(col.Left,  APPI, 96) + FOffsetX;
+  cRight := cLeft   + MulDiv(col.Width, APPI, 96);
+  ACellRect := Rect(cLeft, ARowTop, cRight, ARowTop + ARowH);
+  Result := True;
+end;
+
+{ GetCellRect — device-pixel rect of Node's cell in Column (see the interface
+  comment). Computes the node's device row-top by REPRODUCING RenderTo's own
+  walk exactly: seed from GetNodeAt(max(0,-FOffsetY)) (the first on-screen node,
+  with rowTop = CR.Top - Scale(firstNodeY - firstTop)), then advance / retreat
+  by Scale(NodeHeight) per visible row to the target — byte-identical arithmetic
+  to the paint loop's per-row accumulation, so no rounding drift at any PPI.
+  Never calls InitNode (uses the *NoInit visible iterators only). }
+function TTyTreeView.GetCellRect(Node: PTyTreeNode; Column: Integer;
+  out ACellRect: TRect): Boolean;
+var
+  PPI: Integer;
+  CR: TRect;
+  firstNodeY, firstTop: Integer;
+  seed, n: PTyTreeNode;
+  rowTop, rowH: Integer;
+  found: Boolean;
+begin
+  Result    := False;
+  ACellRect := Rect(0, 0, 0, 0);
+
+  { Not a real, visible node. }
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if not (nsVisible in Node^.States) then Exit;
+
+  { Keep scrollbar visibility / offset clamping current — exactly what RenderTo
+    does at the top of every paint, so CR (and thus the rect) matches the paint. }
+  UpdateScrollBars;
+
+  PPI := Font.PixelsPerInch;
+  CR  := ContentRect;   // identical to RenderTo's CR (padding + scrollbars + header inset)
+
+  { Seed the row-top walk the SAME way RenderTo does. }
+  firstNodeY := -FOffsetY;
+  if firstNodeY < 0 then firstNodeY := 0;
+  seed := GetNodeAt(firstNodeY, firstTop);
+  if seed = nil then Exit;   // empty / fully scrolled past
+  rowTop := CR.Top - MulDiv(firstNodeY - firstTop, PPI, 96);
+
+  found := False;
+  if seed = Node then
+    found := True
+  else
+  begin
+    { Target is after the seed: walk forward, advancing rowTop per row
+      (mirrors `Inc(rowTop, rowH)` in the paint loop). }
+    n := seed;
+    while n <> nil do
+    begin
+      Inc(rowTop, MulDiv(n^.NodeHeight, PPI, 96));
+      n := GetNextVisibleNoInit(n);
+      if n = Node then begin found := True; Break; end;
+    end;
+
+    { Not forward — target is above the first on-screen node: retreat from the
+      seed, subtracting each predecessor's scaled height. }
+    if not found then
+    begin
+      rowTop := CR.Top - MulDiv(firstNodeY - firstTop, PPI, 96);
+      n := seed;
+      while n <> nil do
+      begin
+        n := GetPreviousVisibleNoInit(n);
+        if n = nil then Break;
+        Dec(rowTop, MulDiv(n^.NodeHeight, PPI, 96));
+        if n = Node then begin found := True; Break; end;
+      end;
+    end;
+  end;
+
+  if not found then Exit;   // node not in the visible sequence
+
+  rowH := MulDiv(Node^.NodeHeight, PPI, 96);
+
+  { Off-screen vertically (row entirely above / below the node area) → not visible. }
+  if rowTop + rowH <= CR.Top then Exit;
+  if rowTop >= CR.Bottom then Exit;
+
+  Result := InternalCellRect(CR, rowTop, rowH, Column, PPI, ACellRect);
+end;
+
 { ── C3 ── RenderTo / Paint ──────────────────────────────────────────────── }
 
 { RenderTo — paint the VISIBLE window only (performance is the point).
@@ -2321,6 +2705,28 @@ var
   cbBoxRect: TRect;            // device rect of the box/circle within the slot
   cbBoxSize: Integer;          // device-px side of the drawn box/circle
   usedCbSlotW: Integer;        // 0 when checkbox off/ctNone; cbSlotW otherwise
+  { Node images are drawn via GDI onto ACanvas AFTER EndPaint (see below), so
+    collect their device-coord positions during the row loop instead of drawing
+    them into the BGRA layer. Drawing an ImageList into TTyPainter.Bitmap.Canvas
+    worked on Windows (the LCL RawImage→bitmap conversion aliases the BGRA data
+    buffer there) but was silently dropped on Qt/GTK, where the bitmap is a
+    separate buffer the EndPaint rebuild-from-data discards. }
+  pendingIcons: array of record X, Y, Idx: Integer; end;
+  pendingCount: Integer;
+  iIcon, savedDC: Integer;
+  { ③d D1: per-cell owner-draw — collected during the row loop, drawn onto
+    ACanvas AFTER P.EndPaint (the same post-composite path as pendingIcons,
+    because any GDI draw to ACanvas DURING RenderTo is erased by the EndPaint
+    blit of the BGRA layer). Rect is painter-local (CR-space, 0-based); the
+    post-EndPaint draw offsets it by ARect just like the icons. ownerDrawCell
+    is True only when this exact cell is being fully replaced by OnDrawNode. }
+  ownerDrawActive: Boolean;   // toOwnerDraw in FOptions and OnDrawNode assigned
+  ownerDrawCell:   Boolean;   // per-cell: this cell is replaced by OnDrawNode
+  pendingDrawNode: array of record Node: PTyTreeNode; Col: Integer; R: TRect; end;
+  pendingDrawCount: Integer;
+  pendingAfter: array of record Node: PTyTreeNode; Col: Integer; R: TRect; end;
+  pendingAfterCount: Integer;
+  iCb: Integer;
 begin
   UpdateScrollBars;   // keep scrollbar range current (cheap; no-op when clean)
 
@@ -2328,6 +2734,16 @@ begin
   try
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
+
+    pendingCount := 0;
+    SetLength(pendingIcons, 0);
+
+    { ③d D1: owner-draw collection state }
+    ownerDrawActive   := (toOwnerDraw in FOptions) and Assigned(FOnDrawNode);
+    pendingDrawCount  := 0;
+    SetLength(pendingDrawNode, 0);
+    pendingAfterCount := 0;
+    SetLength(pendingAfter, 0);
 
     W := ARect.Right  - ARect.Left;
     H := ARect.Bottom - ARect.Top;
@@ -2637,10 +3053,14 @@ begin
           colIdx := col.Index;
 
           { Column cell x range (scroll-adjusted, device pixels).
-            col.Left is the absolute left from column 0 in logical px; scale to device.
-            The origin is CR.Left + FOffsetX = contentLeft. }
-          colCellLeft  := CR.Left + P.Scale(col.Left) + FOffsetX;
-          colCellRight := colCellLeft + P.Scale(col.Width);
+            ③d A1: derived from the SHARED InternalCellRect so the painted cell
+            and GetCellRect(node, colIdx) are byte-identical (single source of
+            geometry). The result equals the old inline
+              CR.Left + P.Scale(col.Left) + FOffsetX .. + P.Scale(col.Width). }
+          if not InternalCellRect(CR, rowTop, rowH, colIdx, APPI, cellRect) then
+            Continue;
+          colCellLeft  := cellRect.Left;
+          colCellRight := cellRect.Right;
 
           { Skip cells entirely outside the visible content rect }
           if colCellRight <= CR.Left then Continue;
@@ -2651,6 +3071,30 @@ begin
           if clipR.Left  < CR.Left  then clipR.Left  := CR.Left;
           if clipR.Right > CR.Right then clipR.Right := CR.Right;
           P.Bitmap.ClipRect := clipR;
+
+          { ③d D1: this cell is owner-drawn (default text/image skipped) when
+            toOwnerDraw + OnDrawNode are active. cellRect is the SHARED device
+            rect (== GetCellRect(node, colIdx)) collected for the post-EndPaint
+            callback; the row bg + tree chrome still paint underneath. }
+          ownerDrawCell := ownerDrawActive;
+          if ownerDrawCell then
+          begin
+            if pendingDrawCount = Length(pendingDrawNode) then
+              SetLength(pendingDrawNode, pendingDrawCount + 32);
+            pendingDrawNode[pendingDrawCount].Node := node;
+            pendingDrawNode[pendingDrawCount].Col  := colIdx;
+            pendingDrawNode[pendingDrawCount].R    := cellRect;
+            Inc(pendingDrawCount);
+          end;
+          if Assigned(FOnAfterCellPaint) then
+          begin
+            if pendingAfterCount = Length(pendingAfter) then
+              SetLength(pendingAfter, pendingAfterCount + 32);
+            pendingAfter[pendingAfterCount].Node := node;
+            pendingAfter[pendingAfterCount].Col  := colIdx;
+            pendingAfter[pendingAfterCount].R    := cellRect;
+            Inc(pendingAfterCount);
+          end;
 
           if colIdx = FHeader.MainColumn then
           begin
@@ -2800,53 +3244,69 @@ begin
               ghosted := False;
               if Assigned(FOnGetImageIndex) then
                 FOnGetImageIndex(Self, node, ikNormal, colIdx, ghosted, imgIdx);
-              if (imgIdx >= 0) and (imgIdx < FImages.Count) then
-                FImages.Draw(ACanvas,
-                  ARect.Left + captionX,
-                  ARect.Top  + rowTop + (rowH - FImages.Height) div 2,
-                  imgIdx);
+              { ③d D1: when this cell is owner-drawn the app owns the image too —
+                do NOT collect it into pendingIcons (slot still reserved so the
+                row width / chrome layout is unchanged). }
+              if (not ownerDrawCell) and (imgIdx >= 0) and (imgIdx < FImages.Count) then
+              begin
+                { Collect; drawn via GDI onto ACanvas after EndPaint (see below). }
+                if pendingCount = Length(pendingIcons) then
+                  SetLength(pendingIcons, pendingCount + 32);
+                pendingIcons[pendingCount].X   := ARect.Left + captionX;
+                pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - FImages.Height) div 2;
+                pendingIcons[pendingCount].Idx := imgIdx;
+                Inc(pendingCount);
+              end;
               Inc(captionX, imgSlotW);
             end;
 
-            { Caption in main column }
-            colTxt := '';
-            if Assigned(FOnGetTextWithType) then
-              FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
-            else if Assigned(FOnGetText) then
-              FOnGetText(Self, node, colTxt);
+            { Caption in main column — skipped for an owner-drawn cell (the app
+              fully replaces the cell content via OnDrawNode post-EndPaint). }
+            if not ownerDrawCell then
+            begin
+              colTxt := '';
+              if Assigned(FOnGetTextWithType) then
+                FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
+              else if Assigned(FOnGetText) then
+                FOnGetText(Self, node, colTxt);
 
-            textRect := Rect(captionX + P.Scale(2), rowTop,
-                             colCellRight - P.Scale(2), rowTop + rowH);
-            if (textRect.Left < textRect.Right) and (colTxt <> '') then
-              P.DrawText(textRect, colTxt,
-                NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
-                NodeStyle.TextColor, taLeftJustify, tlCenter, True);
+              textRect := Rect(captionX + P.Scale(2), rowTop,
+                               colCellRight - P.Scale(2), rowTop + rowH);
+              if (textRect.Left < textRect.Right) and (colTxt <> '') then
+                P.DrawText(textRect, colTxt,
+                  NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+                  NodeStyle.TextColor, taLeftJustify, tlCenter, True);
 
-            if Assigned(FOnPaintText) then
-              FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+              if Assigned(FOnPaintText) then
+                FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+            end;
           end
           else
           begin
             { ── Non-main column: flat text cell ──────────────────────────── }
-            colMargin := P.Scale(4);
-            colCaptionX := colCellLeft + colMargin;
+            { ③d D1: skipped for an owner-drawn cell (app fully replaces it). }
+            if not ownerDrawCell then
+            begin
+              colMargin := P.Scale(4);
+              colCaptionX := colCellLeft + colMargin;
 
-            colTxt := '';
-            if Assigned(FOnGetTextWithType) then
-              FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
-            else if Assigned(FOnGetText) then
-              FOnGetText(Self, node, colTxt);   // fallback for compat
+              colTxt := '';
+              if Assigned(FOnGetTextWithType) then
+                FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
+              else if Assigned(FOnGetText) then
+                FOnGetText(Self, node, colTxt);   // fallback for compat
 
-            colAlign := col.Alignment;
-            textRect := Rect(colCaptionX, rowTop,
-                             colCellRight - colMargin, rowTop + rowH);
-            if (textRect.Left < textRect.Right) and (colTxt <> '') then
-              P.DrawText(textRect, colTxt,
-                NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
-                NodeStyle.TextColor, colAlign, tlCenter, True);
+              colAlign := col.Alignment;
+              textRect := Rect(colCaptionX, rowTop,
+                               colCellRight - colMargin, rowTop + rowH);
+              if (textRect.Left < textRect.Right) and (colTxt <> '') then
+                P.DrawText(textRect, colTxt,
+                  NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+                  NodeStyle.TextColor, colAlign, tlCenter, True);
 
-            if Assigned(FOnPaintText) then
-              FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+              if Assigned(FOnPaintText) then
+                FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+            end;
           end;
 
           { Restore clip to full inset rect after each cell }
@@ -2857,6 +3317,36 @@ begin
       else
       begin
         { ── ③a single-column path (0-column guard: verbatim ③a code) ───────── }
+
+        { ③d A1: the ③a cell rect IS the content row rect; derive it from the
+          SHARED helper so paint and GetCellRect(node, -1) agree exactly. This is
+          purely additive (cellRect is not consumed by the verbatim chrome below
+          in ③a; it backs ③d owner-draw). Equals Rect(CR.Left, rowTop, CR.Right,
+          rowTop+rowH). }
+        InternalCellRect(CR, rowTop, rowH, -1, APPI, cellRect);
+
+        { ③d D1: 0-column owner-draw — Column = -1 (the whole row cell). Same
+          collection as the multi-column paths; default caption/image skipped
+          for the owner-drawn cell, row bg + chrome still paint underneath. }
+        ownerDrawCell := ownerDrawActive;
+        if ownerDrawCell then
+        begin
+          if pendingDrawCount = Length(pendingDrawNode) then
+            SetLength(pendingDrawNode, pendingDrawCount + 32);
+          pendingDrawNode[pendingDrawCount].Node := node;
+          pendingDrawNode[pendingDrawCount].Col  := -1;
+          pendingDrawNode[pendingDrawCount].R    := cellRect;
+          Inc(pendingDrawCount);
+        end;
+        if Assigned(FOnAfterCellPaint) then
+        begin
+          if pendingAfterCount = Length(pendingAfter) then
+            SetLength(pendingAfter, pendingAfterCount + 32);
+          pendingAfter[pendingAfterCount].Node := node;
+          pendingAfter[pendingAfterCount].Col  := -1;
+          pendingAfter[pendingAfterCount].R    := cellRect;
+          Inc(pendingAfterCount);
+        end;
 
         { ── Tree lines (simplified: guide + elbow) ──────────────────────────── }
         if FShowTreeLines and (level > 0) then
@@ -3008,32 +3498,37 @@ begin
           ghosted := False;
           if Assigned(FOnGetImageIndex) then
             FOnGetImageIndex(Self, node, ikNormal, -1, ghosted, imgIdx);
-          if (imgIdx >= 0) and (imgIdx < FImages.Count) then
+          { ③d D1: owner-drawn cell owns its image — do not collect it. }
+          if (not ownerDrawCell) and (imgIdx >= 0) and (imgIdx < FImages.Count) then
           begin
-            { Draw images directly to the underlying Canvas.  The BGRA bitmap and
-              the ACanvas share the same device context, so this is safe as long as
-              we blit into the device-space rect (offset by ARect.Left/Top). }
-            FImages.Draw(ACanvas,
-              ARect.Left + captionX,
-              ARect.Top  + rowTop + (rowH - FImages.Height) div 2,
-              imgIdx);
+            { Collect; drawn via GDI onto ACanvas after EndPaint (see below). }
+            if pendingCount = Length(pendingIcons) then
+              SetLength(pendingIcons, pendingCount + 32);
+            pendingIcons[pendingCount].X   := ARect.Left + captionX;
+            pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - FImages.Height) div 2;
+            pendingIcons[pendingCount].Idx := imgIdx;
+            Inc(pendingCount);
           end;
           Inc(captionX, imgSlotW);
         end;
 
         { ── Caption ─────────────────────────────────────────────────────── }
+        { ③d D1: skipped for an owner-drawn cell (app fully replaces it). }
         txt := '';
-        if Assigned(FOnGetText) then
+        if (not ownerDrawCell) and Assigned(FOnGetText) then
           FOnGetText(Self, node, txt);
 
-        textRect := Rect(captionX + P.Scale(2), rowTop, CR.Right, rowTop + rowH);
-        if (textRect.Left < textRect.Right) and (txt <> '') then
-          P.DrawText(textRect, txt,
-            NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
-            NodeStyle.TextColor, taLeftJustify, tlCenter, True);
+        if not ownerDrawCell then
+        begin
+          textRect := Rect(captionX + P.Scale(2), rowTop, CR.Right, rowTop + rowH);
+          if (textRect.Left < textRect.Right) and (txt <> '') then
+            P.DrawText(textRect, txt,
+              NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+              NodeStyle.TextColor, taLeftJustify, tlCenter, True);
 
-        if Assigned(FOnPaintText) then
-          FOnPaintText(Self, ACanvas, node, -1, ttNormal);
+          if Assigned(FOnPaintText) then
+            FOnPaintText(Self, ACanvas, node, -1, ttNormal);
+        end;
 
         { ── FRangeX accumulation ─────────────────────────────────────────── }
         { Pure content WIDTH for this row — independent of CR.Left and FOffsetX so
@@ -3055,6 +3550,78 @@ begin
 
     P.Bitmap.ClipRect := savedClip;
     P.EndPaint;
+
+    { ── ③d D1 ── post-EndPaint owner-draw / icons / overlays ──────────────────
+      EndPaint has alpha-blitted the BGRA layer onto ACanvas; ACanvas now holds
+      the default-painted tree. ALL three of the following draw straight onto
+      ACanvas via GDI — the ONLY path that survives every widgetset, because a
+      GDI draw to ACanvas DURING RenderTo is erased by the EndPaint blit (the
+      node-icon bug, commit d427095). The collected rects (.R) are painter-local
+      (CR-space, 0-based); each clip is offset by ARect — and intersected with
+      the content rect CR — exactly like the icon clip, so cells can't bleed over
+      the header band or the border.
+
+      Draw ORDER (matters): 1) OnDrawNode (replaced cell content, on the row bg)
+      → 2) node images (existing; already skipped for owner-drawn cells) →
+      3) OnAfterCellPaint (overlays, on top of everything). }
+
+    { 1) OnDrawNode — full cell-content replacement (toOwnerDraw + handler). }
+    if pendingDrawCount > 0 then
+      for iCb := 0 to pendingDrawCount - 1 do
+      begin
+        savedDC := SaveDC(ACanvas.Handle);
+        try
+          IntersectClipRect(ACanvas.Handle,
+            ARect.Left + CR.Left,  ARect.Top + CR.Top,
+            ARect.Left + CR.Right, ARect.Top + CR.Bottom);
+          IntersectClipRect(ACanvas.Handle,
+            ARect.Left + pendingDrawNode[iCb].R.Left,  ARect.Top + pendingDrawNode[iCb].R.Top,
+            ARect.Left + pendingDrawNode[iCb].R.Right, ARect.Top + pendingDrawNode[iCb].R.Bottom);
+          FOnDrawNode(Self, ACanvas, pendingDrawNode[iCb].Node,
+            pendingDrawNode[iCb].Col, pendingDrawNode[iCb].R);
+        finally
+          RestoreDC(ACanvas.Handle, savedDC);
+        end;
+      end;
+
+    { 2) Node images: draw via GDI onto the (now composited) control canvas.
+      Drawing into the BGRA layer's Canvas was erased by the EndPaint rebuild on
+      Qt/GTK. The X/Y were captured in ARect-relative device coords (== ACanvas
+      device coords here); CR is painter-local (0-based), so the clip is offset
+      by ARect. Owner-drawn cells were already skipped at collection time. }
+    if (pendingCount > 0) and (FImages <> nil) then
+    begin
+      savedDC := SaveDC(ACanvas.Handle);
+      try
+        IntersectClipRect(ACanvas.Handle,
+          ARect.Left + CR.Left,  ARect.Top + CR.Top,
+          ARect.Left + CR.Right, ARect.Top + CR.Bottom);
+        for iIcon := 0 to pendingCount - 1 do
+          FImages.Draw(ACanvas, pendingIcons[iIcon].X, pendingIcons[iIcon].Y,
+            pendingIcons[iIcon].Idx);
+      finally
+        RestoreDC(ACanvas.Handle, savedDC);
+      end;
+    end;
+
+    { 3) OnAfterCellPaint — overlay on top of default content + OnDrawNode. }
+    if pendingAfterCount > 0 then
+      for iCb := 0 to pendingAfterCount - 1 do
+      begin
+        savedDC := SaveDC(ACanvas.Handle);
+        try
+          IntersectClipRect(ACanvas.Handle,
+            ARect.Left + CR.Left,  ARect.Top + CR.Top,
+            ARect.Left + CR.Right, ARect.Top + CR.Bottom);
+          IntersectClipRect(ACanvas.Handle,
+            ARect.Left + pendingAfter[iCb].R.Left,  ARect.Top + pendingAfter[iCb].R.Top,
+            ARect.Left + pendingAfter[iCb].R.Right, ARect.Top + pendingAfter[iCb].R.Bottom);
+          FOnAfterCellPaint(Self, ACanvas, pendingAfter[iCb].Node,
+            pendingAfter[iCb].Col, pendingAfter[iCb].R);
+        finally
+          RestoreDC(ACanvas.Handle, savedDC);
+        end;
+      end;
   finally
     P.Free;
   end;
@@ -3630,6 +4197,20 @@ begin
 
   cur := FFocusedNode;
 
+  { ③d C1: Backspace pops the last char of an active incremental-search buffer
+    and re-runs the search. Multibyte-safe (UTF8Copy/UTF8Length, not Delete(.,Length,1)).
+    Only intercepts while actually searching (buffer non-empty) so plain trees keep
+    Backspace untouched; suppressed while an editor is active (FEditing, ③e). }
+  if (toIncrementalSearch in FOptions) and not FEditing
+     and (FSearchBuffer <> '') and (Key = VK_BACK) then
+  begin
+    FSearchBuffer   := UTF8Copy(FSearchBuffer, 1, UTF8Length(FSearchBuffer) - 1);
+    FSearchLastTick := GetTickCount64;
+    DoIncrementalSearch;   // re-resolve focus against the shortened buffer (no-op when empty)
+    Key := 0;
+    Exit;
+  end;
+
   { D2: multi-select keyboard overrides for Shift+arrows, Ctrl+Space, Ctrl+A.
     These are checked BEFORE the main case so they can intercept VK_DOWN/VK_UP. }
   if toMultiSelect in FOptions then
@@ -3848,6 +4429,8 @@ begin
     begin
       if cur <> nil then
       begin
+        { ③d B1: page estimate uses FDefaultNodeHeight even with variable
+          heights — acceptable approximation (ScrollIntoView corrects the view). }
         rowH  := MulDiv(FDefaultNodeHeight, Font.PixelsPerInch, 96);
         viewH := ContentRect.Bottom - ContentRect.Top;
         if rowH > 0 then pgRows := viewH div rowH else pgRows := 1;
@@ -3940,6 +4523,33 @@ begin
     end;
 
   end;
+end;
+
+{ ── ③d C1 ── UTF8KeyPress: type-to-find ───────────────────────────────────── }
+
+{ LCL delivers printable characters here (its WM_CHAR equivalent), AFTER KeyDown.
+  We call inherited first (so OnUTF8KeyPress / normal handling runs), then — when
+  toIncrementalSearch is on and no editor is active and the char is printable —
+  accumulate it into FSearchBuffer (resetting first if the idle timeout elapsed)
+  and jump focus to the matching visible node (see DoIncrementalSearch for the
+  start-position rule: re-pressing one char advances, refining keeps focus). }
+procedure TTyTreeView.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  inherited UTF8KeyPress(UTF8Key);
+
+  if not (toIncrementalSearch in FOptions) then Exit;
+  if FEditing then Exit;
+  { Printable only: non-empty and the first byte is >= space (filters control
+    chars — Backspace/Tab/Enter arrive as #8/#9/#13 and are handled in KeyDown). }
+  if (UTF8Key = '') or (UTF8Key[1] < #32) then Exit;
+
+  { Idle longer than SearchTimeout ⇒ start a fresh search. }
+  if GetTickCount64 - FSearchLastTick > QWord(FSearchTimeout) then
+    FSearchBuffer := '';
+  FSearchBuffer   := FSearchBuffer + UTF8Key;
+  FSearchLastTick := GetTickCount64;
+
+  DoIncrementalSearch;
 end;
 
 { ── E1 ── sort engine ────────────────────────────────────────────────────── }
