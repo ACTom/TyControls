@@ -156,6 +156,8 @@ type
     FOnCompareNodes:   TTyTreeCompareEvent;
     FOnHeaderClick:    TTyTreeColumnEvent;
     FSorting:          Boolean;   // reentrancy guard: SortTree -> HeaderChanged -> SortTree
+    FSortedColumn:     Integer;   // last key SortTree ran with — so a width/reorder
+    FSortedDirection:  TTySortDirection;  //   change (same key) does NOT re-sort the tree
     { E3: internal — process a header section click (toggle sort direction / set sort column) }
     procedure _HandleHeaderClick(ColIndex: Integer);
     procedure VScrollChange(Sender: TObject);
@@ -857,7 +859,7 @@ begin
     contentW := MulDiv(ContentRect.Width, 96, PPI);
     FHeader.Columns.ApplyAutoSize(contentW, FHeader.AutoSizeIndex);
     if FHeader.Columns.Count > 0 then
-      FRangeX := FHeader.Columns.TotalWidth;
+      FRangeX := MulDiv(FHeader.Columns.TotalWidth, Font.PixelsPerInch, 96);
     UpdateScrollBars;
   end;
 end;
@@ -871,7 +873,7 @@ begin
     invalidate the layout cache, and request a repaint.
     When Columns.Count = 0 FRangeX stays 0 — the ③a paint pass accumulates it. }
   if (FHeader <> nil) and (FHeader.Columns.Count > 0) then
-    FRangeX := FHeader.Columns.TotalWidth
+    FRangeX := MulDiv(FHeader.Columns.TotalWidth, Font.PixelsPerInch, 96)
   else
     FRangeX := 0;
   InvalidateTreeLayout;
@@ -880,7 +882,9 @@ begin
     _HandleHeaderClick → SortColumn setter → HeaderChanged → SortTree infinite loop. }
   if (not FSorting) and (FHeader <> nil) and
      (hoHeaderClickAutoSort in FHeader.Options) and
-     (FHeader.SortColumn >= 0) then
+     (FHeader.SortColumn >= 0) and
+     ((FHeader.SortColumn <> FSortedColumn) or
+      (FHeader.SortDirection <> FSortedDirection)) then
     SortTree(FHeader.SortColumn, FHeader.SortDirection);
   Invalidate;
 end;
@@ -930,6 +934,8 @@ begin
   FDragTargetPos    := 0;
   { E1/E2/E3: sort engine — idle state }
   FSorting          := False;
+  FSortedColumn     := NoColumn;   // no key sorted yet (so the first real sort runs)
+  FSortedDirection  := sdAscending;
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
@@ -1051,7 +1057,7 @@ begin
   // columns (③a path), reset to 0 so the next paint pass re-accumulates
   // the true maximum row width from scratch.
   if (FHeader <> nil) and (FHeader.Columns.Count > 0) then
-    FRangeX := FHeader.Columns.TotalWidth
+    FRangeX := MulDiv(FHeader.Columns.TotalWidth, Font.PixelsPerInch, 96)
   else
     FRangeX := 0;
   UpdateScrollBars;
@@ -2645,7 +2651,7 @@ begin
         MulDiv(ContentRect.Width, 96, PPI),
         FHeader.AutoSizeIndex);
       if FHeader.Columns.Count > 0 then
-        FRangeX := FHeader.Columns.TotalWidth;
+        FRangeX := MulDiv(FHeader.Columns.TotalWidth, Font.PixelsPerInch, 96);
       UpdateScrollBars;
     end;
     Exit;
@@ -3190,11 +3196,14 @@ begin
   if FSorting then Exit;   { reentrancy guard }
   FSorting := True;
   try
-    { Sort(FRoot, …, DoInit=True) materialises root-level children first,
-      then inits each before comparing. }
-    Sort(FRoot, Column, ADirection, True);
-    { Recurse into initialized+expanded non-root nodes }
+    { SortTreeNode sorts FRoot's children (DoInit=True) and recurses into every
+      initialized+expanded subtree, materialising + InitNode-ing each level
+      before comparing.  (Sorting the root here, NOT a separate Sort(FRoot) call
+      first — that double-sorted the root level.) }
     SortTreeNode(Self, FRoot, Column, ADirection);
+    { Record the key so HeaderChanged does NOT re-sort on a width/reorder change. }
+    FSortedColumn    := Column;
+    FSortedDirection := ADirection;
     { The visible order changed — invalidate the position cache }
     FCacheValid := False;
     FRangeY     := ContentHeight;

@@ -654,6 +654,7 @@ end;
 procedure TColumnB1Test.Setup;
 begin
   FTree := TTyTreeView.Create(nil);
+  FTree.Font.PixelsPerInch := 96;  { FRangeX is device-px now; pin 96 so it equals logical TotalWidth }
   FHeaderChangedCount := 0;
 end;
 
@@ -745,6 +746,7 @@ end;
 procedure TColumnB2Test.Setup;
 begin
   FTree := TTyTreeView.Create(nil);
+  FTree.Font.PixelsPerInch := 96;  { FRangeX is device-px now; pin 96 so it equals logical TotalWidth }
 end;
 
 procedure TColumnB2Test.TearDown;
