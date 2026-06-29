@@ -165,6 +165,10 @@ begin
   TyRegisterBuiltinThemes;
   TyController := TTyStyleController.Create(Self);
   TyController.ThemeName := 'default';
+  { 'default' is a dual-mode theme; pick a mode so its @mode-only vars resolve.
+    (The Light/Dark buttons flip this at runtime.) }
+  TyController.Follow := tfManual;
+  TyController.Mode   := 'light';
   { Wire the controller to the form so ApplyChromeTheme propagates to all
     child controls that have Controller set to the same instance. }
   Controller := TyController;

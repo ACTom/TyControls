@@ -210,12 +210,15 @@ begin
       'TyButton { background: var(--transparent-fill); }' +
       '@mode light { :root { --transparent-fill: alpha(#FFFFFF, 0); } }' +
       '@mode dark  { :root { --transparent-fill: alpha(#000000, 0); } }');
-    AssertEquals('no mode before follow', '', c.Mode);
-    c.Follow := tfFollowSystem;
-    AssertEquals('unreadable OS -> adopt the theme default (light)', 'light', c.Mode);
+    // A dual-mode theme now auto-seeds its default mode at LOAD (SeedModeIfDual in
+    // Changed) so it is NEVER mode-less and resolve never raises — the fix is no longer
+    // deferred to follow. This is the showcase crash scenario: load + paint before any follow.
+    AssertEquals('dual-mode load auto-seeds the default mode', 'light', c.Mode);
     raised := False;
     try c.Model.ResolveStyle('TyButton', '', []); except raised := True; end;
-    AssertFalse('@mode-only var resolves after default-mode adoption (no Undefined variable)', raised);
+    AssertFalse('@mode-only var resolves right after load, before any follow (showcase scenario)', raised);
+    c.Follow := tfFollowSystem;
+    AssertEquals('unreadable OS -> still the theme default (light)', 'light', c.Mode);
   finally
     c.Free;
     TySystemModeHook := savedMode;
