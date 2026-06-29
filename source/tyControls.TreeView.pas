@@ -10,7 +10,13 @@ uses
 type
   { C4: hit-test result — which part of a node row the mouse landed in }
   TTyTreeHitPart = (hpNowhere, hpButton, hpImage, hpLabel, hpIndent,
-                    hpHeaderSection, hpHeaderDivider);
+                    hpHeaderSection, hpHeaderDivider,
+                    hpCheckBox);   { B3: the checkbox slot in the main column }
+
+  { B1: per-tree option flags (VTV-style set; default [] = ③a/③b behaviour) }
+  TTyTreeOption = (toMultiSelect, toCheckSupport, toFullRowSelect,
+                   toAutoTristateTracking);
+  TTyTreeOptions = set of TTyTreeOption;
 
   { A2: check column type for a node }
   TTyCheckType  = (ctNone, ctCheckBox, ctTriStateCheckBox, ctRadioButton);
@@ -169,6 +175,16 @@ type
     FSorting:          Boolean;   // reentrancy guard: SortTree -> HeaderChanged -> SortTree
     FSortedColumn:     Integer;   // last key SortTree ran with — so a width/reorder
     FSortedDirection:  TTySortDirection;  //   change (same key) does NOT re-sort the tree
+    { B1: tree option flags }
+    FOptions:          TTyTreeOptions;
+    procedure SetOptions(AValue: TTyTreeOptions);
+    { B1: check property raw accessors }
+    function  GetCheckType(Node: PTyTreeNode): TTyCheckType;
+    procedure SetCheckType(Node: PTyTreeNode; AValue: TTyCheckType);
+    function  GetCheckState(Node: PTyTreeNode): TTyCheckState;
+    procedure SetCheckState(Node: PTyTreeNode; AValue: TTyCheckState);
+    function  GetChecked(Node: PTyTreeNode): Boolean;
+    procedure SetChecked(Node: PTyTreeNode; AValue: Boolean);
     { E3: internal — process a header section click (toggle sort direction / set sort column) }
     procedure _HandleHeaderClick(ColIndex: Integer);
     procedure VScrollChange(Sender: TObject);
@@ -261,6 +277,10 @@ type
     property Expanded[Node: PTyTreeNode]: Boolean read GetExpanded write SetExpanded;
     property Selected[Node: PTyTreeNode]: Boolean read GetSelected write SetSelected;
     property FocusedNode: PTyTreeNode read GetFocusedNode write SetFocusedNode;
+    { B1: raw per-node check accessors (no propagation — that is Phase C) }
+    property CheckType[Node: PTyTreeNode]: TTyCheckType   read GetCheckType  write SetCheckType;
+    property CheckState[Node: PTyTreeNode]: TTyCheckState  read GetCheckState write SetCheckState;
+    property Checked[Node: PTyTreeNode]: Boolean           read GetChecked    write SetChecked;
     property RootNode: PTyTreeNode read FRoot;
     property RangeY: Integer read FRangeY;
     property OffsetY: Integer read FOffsetY;
@@ -289,6 +309,8 @@ type
     { E2: recursive sort of the whole tree (initialized+expanded levels only) }
     procedure SortTree(Column: Integer; ADirection: TTySortDirection);
   published
+    { B1: option flags set (default [] = ③a/③b behaviour) }
+    property Options: TTyTreeOptions read FOptions write SetOptions default [];
     { B (columns): header sub-object }
     property Header: TTyTreeHeader read FHeader write SetHeader;
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
@@ -656,6 +678,68 @@ begin
   if FHotTrack = AValue then Exit;
   FHotTrack := AValue;
   Invalidate;
+end;
+
+{ ── B1 ── Options set + check array properties ──────────────────────────────── }
+
+procedure TTyTreeView.SetOptions(AValue: TTyTreeOptions);
+var
+  CheckSupportChanged: Boolean;
+begin
+  if FOptions = AValue then Exit;
+  CheckSupportChanged := (toCheckSupport in AValue) <> (toCheckSupport in FOptions);
+  FOptions := AValue;
+  if CheckSupportChanged then
+  begin
+    { Re-measure FRangeX when toCheckSupport toggles in multi-column mode,
+      because the checkbox slot shifts the caption/image start in the main column. }
+    if (FHeader <> nil) and (FHeader.Columns.Count > 0) then
+      InvalidateTreeLayout;
+  end;
+  Invalidate;
+end;
+
+function TTyTreeView.GetCheckType(Node: PTyTreeNode): TTyCheckType;
+begin
+  if Node = nil then Exit(ctNone);
+  Result := Node^.CheckType;
+end;
+
+procedure TTyTreeView.SetCheckType(Node: PTyTreeNode; AValue: TTyCheckType);
+begin
+  if Node = nil then Exit;
+  if Node^.CheckType = AValue then Exit;
+  Node^.CheckType := AValue;
+  Invalidate;
+end;
+
+function TTyTreeView.GetCheckState(Node: PTyTreeNode): TTyCheckState;
+begin
+  if Node = nil then Exit(csUnchecked);
+  Result := Node^.CheckState;
+end;
+
+procedure TTyTreeView.SetCheckState(Node: PTyTreeNode; AValue: TTyCheckState);
+begin
+  if Node = nil then Exit;
+  if Node^.CheckState = AValue then Exit;
+  Node^.CheckState := AValue;
+  Invalidate;
+end;
+
+function TTyTreeView.GetChecked(Node: PTyTreeNode): Boolean;
+begin
+  if Node = nil then Exit(False);
+  Result := Node^.CheckState = csChecked;
+end;
+
+procedure TTyTreeView.SetChecked(Node: PTyTreeNode; AValue: Boolean);
+begin
+  if Node = nil then Exit;
+  if AValue then
+    SetCheckState(Node, csChecked)
+  else
+    SetCheckState(Node, csUnchecked);
 end;
 
 { ── C1 ── bulk operations ───────────────────────────────────────────────────── }

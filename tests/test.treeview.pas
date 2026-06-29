@@ -6023,6 +6023,145 @@ begin
   end;
 end;
 
+{ ── B1 ── Options set + check array properties ─────────────────────────────── }
+
+type
+  TTreeB1OptionsTest = class(TTestCase)
+  published
+    { Options defaults to []. }
+    procedure TestOptionsDefaultEmpty;
+    { Setting CheckType via array property stores the value in the node. }
+    procedure TestSetCheckTypePersists;
+    { Checked[n] := True sets CheckState to csChecked. }
+    procedure TestCheckedTrueSetsCsChecked;
+    { Checked[n] := False sets CheckState to csUnchecked. }
+    procedure TestCheckedFalseSetsCsUnchecked;
+    { Checked getter returns True only when csChecked. }
+    procedure TestCheckedGetterReflectsCheckState;
+    { CheckState[n] := csMixed stores csMixed. }
+    procedure TestSetCheckStateMixed;
+    { CheckType/CheckState setters are nil-safe (no crash). }
+    procedure TestNilNodeSafe;
+  end;
+
+procedure TTreeB1OptionsTest.TestOptionsDefaultEmpty;
+var
+  t: TTyTreeView;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    AssertTrue('Options default []', t.Options = []);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeB1OptionsTest.TestSetCheckTypePersists;
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    n := t.AddChild(nil);
+    t.CheckType[n] := ctCheckBox;
+    AssertEquals('CheckType ctCheckBox persisted',
+      Ord(ctCheckBox), Ord(t.CheckType[n]));
+    AssertEquals('CheckState still csUnchecked',
+      Ord(csUnchecked), Ord(t.CheckState[n]));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeB1OptionsTest.TestCheckedTrueSetsCsChecked;
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    n := t.AddChild(nil);
+    t.CheckType[n] := ctCheckBox;
+    t.Checked[n]   := True;
+    AssertEquals('Checked:=True → csChecked',
+      Ord(csChecked), Ord(t.CheckState[n]));
+    AssertTrue('Checked getter True', t.Checked[n]);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeB1OptionsTest.TestCheckedFalseSetsCsUnchecked;
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    n := t.AddChild(nil);
+    t.CheckType[n]  := ctCheckBox;
+    t.CheckState[n] := csChecked;   // start checked
+    t.Checked[n]    := False;
+    AssertEquals('Checked:=False → csUnchecked',
+      Ord(csUnchecked), Ord(t.CheckState[n]));
+    AssertFalse('Checked getter False', t.Checked[n]);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeB1OptionsTest.TestCheckedGetterReflectsCheckState;
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    n := t.AddChild(nil);
+    t.CheckType[n]  := ctCheckBox;
+    t.CheckState[n] := csMixed;
+    AssertFalse('Checked getter False for csMixed', t.Checked[n]);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeB1OptionsTest.TestSetCheckStateMixed;
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    n := t.AddChild(nil);
+    t.CheckType[n]  := ctTriStateCheckBox;
+    t.CheckState[n] := csMixed;
+    AssertEquals('CheckState csMixed persisted',
+      Ord(csMixed), Ord(t.CheckState[n]));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeB1OptionsTest.TestNilNodeSafe;
+var
+  t: TTyTreeView;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    { These must not crash }
+    t.CheckType[nil]  := ctCheckBox;
+    t.CheckState[nil] := csChecked;
+    t.Checked[nil]    := True;
+    AssertEquals('CheckType nil→ctNone',     Ord(ctNone),     Ord(t.CheckType[nil]));
+    AssertEquals('CheckState nil→csUnchecked', Ord(csUnchecked), Ord(t.CheckState[nil]));
+    AssertFalse('Checked nil→False', t.Checked[nil]);
+  finally
+    t.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -6046,4 +6185,5 @@ initialization
   RegisterTest(TTreeE3HeaderClickTest);
   RegisterTest(TTreeA2CheckPropTest);
   RegisterTest(TTreeA3SelectRangeTest);
+  RegisterTest(TTreeB1OptionsTest);
 end.
