@@ -273,6 +273,50 @@ type
     procedure TestNodeImageSurvivesToOutput;
   end;
 
+  { ③d D1: per-cell owner-draw — OnDrawNode (full cell replacement, gated by
+    toOwnerDraw) + OnAfterCellPaint (overlay). Both draw onto the control canvas
+    AFTER the BGRA composite, so the probe colors are read back via
+    outBmp.Canvas.Pixels (the GDI surface), exactly like the node-icon gate.
+    3-column tree (main = 0 set AFTER adding columns), 1 root + 2 children. }
+  TTreeD1OwnerDrawTest = class(TTestCase)
+  private
+    FProbeCol:        Integer;   // which column OnDrawNode/OnAfterCellPaint probes
+    FDrawNodeCalls:   Integer;
+    FAfterCalls:      Integer;
+    FLastDrawRect:    TRect;     // the ACellRect handed to the last OnDrawNode
+    FLastDrawCol:     Integer;
+    FLastDrawNode:    PTyTreeNode;
+    FCapturedNode:    PTyTreeNode;  // node to capture ACellRect for (compare vs GetCellRect)
+    procedure OnGetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
+      Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+      var InitStates: TTyNodeInitStates);
+    procedure OnInitChildren2(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
+    { OnDrawNode: fill the WHOLE cell rect with opaque GREEN (probe). }
+    procedure OnDrawNodeFillGreen(Sender: TTyTreeView; ACanvas: TCanvas;
+      Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+    { OnAfterCellPaint: paint a small BLUE probe rect near the cell's top-left. }
+    procedure OnAfterPaintBlueDot(Sender: TTyTreeView; ACanvas: TCanvas;
+      Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+    function BuildTree(out Ctl: TTyStyleController; out F: TForm;
+      out ARoot, AChild0: PTyTreeNode): TTyTreeView;
+  published
+    { toOwnerDraw + OnDrawNode → probe color present in the cell AND default
+      caption ink ABSENT (app fully owns the cell). }
+    procedure TestOwnerDrawFillsCellAndSkipsDefault;
+    { OnAfterCellPaint (no toOwnerDraw) → probe present AND default caption ink
+      STILL present underneath. }
+    procedure TestAfterCellPaintOverlaysDefault;
+    { the ACellRect handed to OnDrawNode equals GetCellRect(node, col). }
+    procedure TestOwnerDrawCellRectMatchesGetCellRect;
+    { default-off (toOwnerDraw off, both events unassigned) → byte-identical to
+      a plain render (the ③c paint): no owner-draw side effects. }
+    procedure TestDefaultOffIdenticalToC3;
+    { OnDrawNode assigned but toOwnerDraw OFF → NOT called, default text drawn. }
+    procedure TestDrawNodeIgnoredWithoutOption;
+  end;
+
 implementation
 
 type
@@ -8377,6 +8421,382 @@ begin
   end;
 end;
 
+{ ── ③d D1 ── per-cell owner-draw (OnDrawNode + OnAfterCellPaint) ───────────── }
+
+procedure TTreeD1OwnerDrawTest.OnGetTextWithType(Sender: TTyTreeView;
+  Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+begin
+  case Column of
+    0: CellText := 'Name' + IntToStr(Node^.Index);
+    1: CellText := 'Col1';
+    2: CellText := 'C2Right';
+  else
+    CellText := '';
+  end;
+end;
+
+procedure TTreeD1OwnerDrawTest.OnInitNodeHasChildren(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) = 0 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeD1OwnerDrawTest.OnInitChildren2(Sender: TTyTreeView;
+  Node: PTyTreeNode; var ChildCount: Cardinal);
+begin
+  ChildCount := 2;
+end;
+
+{ OnDrawNode — full cell replacement: fill the whole reported ACellRect with
+  opaque GREEN. Only fires for the probed column (so the other cells keep their
+  default ink for the "ink absent only where replaced" check). Captures the rect
+  for the GetCellRect cross-check. }
+procedure TTreeD1OwnerDrawTest.OnDrawNodeFillGreen(Sender: TTyTreeView;
+  ACanvas: TCanvas; Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+begin
+  Inc(FDrawNodeCalls);
+  if (FCapturedNode <> nil) and (Node = FCapturedNode) and (Column = FProbeCol) then
+  begin
+    FLastDrawRect := ACellRect;
+    FLastDrawCol  := Column;
+    FLastDrawNode := Node;
+  end;
+  if Column <> FProbeCol then Exit;
+  ACanvas.Brush.Style := bsSolid;
+  ACanvas.Brush.Color := RGBToColor(0, 200, 0);   // GREEN probe
+  ACanvas.FillRect(ACellRect);
+end;
+
+{ OnAfterCellPaint — overlay: a small BLUE probe rect near the cell's top-left,
+  for the probed column only. }
+procedure TTreeD1OwnerDrawTest.OnAfterPaintBlueDot(Sender: TTyTreeView;
+  ACanvas: TCanvas; Node: PTyTreeNode; Column: Integer; const ACellRect: TRect);
+var
+  r: TRect;
+begin
+  Inc(FAfterCalls);
+  if Column <> FProbeCol then Exit;
+  r := Rect(ACellRect.Left + 2, ACellRect.Top + 2,
+            ACellRect.Left + 8, ACellRect.Top + 8);
+  ACanvas.Brush.Style := bsSolid;
+  ACanvas.Brush.Color := RGBToColor(0, 0, 220);   // BLUE probe
+  ACanvas.FillRect(r);
+end;
+
+{ 3-column tree mirroring the column-paint harness: col0 (main, 120) | col1 (80)
+  | col2 (100); header 22, DefaultNodeHeight 22, ShowRoot, Indent 16, 1 root + 2
+  kids. MainColumn set AFTER adding columns. PPI 96 → device px == logical px. }
+function TTreeD1OwnerDrawTest.BuildTree(out Ctl: TTyStyleController; out F: TForm;
+  out ARoot, AChild0: PTyTreeNode): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 22;
+  t.Indent             := 16;
+  t.ShowButtons        := True;
+  t.ShowTreeLines      := False;
+  t.ShowRoot           := True;
+  t.SetBounds(0, 0, 300, 200);
+
+  t.OnGetTextWithType := @OnGetTextWithType;
+  t.OnInitNode        := @OnInitNodeHasChildren;
+  t.OnInitChildren    := @OnInitChildren2;
+
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 120; col0.Text := 'Name';
+  col0.Alignment := taLeftJustify; col0.CaptionAlignment := taLeftJustify;
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 80; col1.Text := 'Info';
+  col1.Alignment := taLeftJustify; col1.CaptionAlignment := taLeftJustify;
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := 100; col2.Text := 'Size';
+  col2.Alignment := taLeftJustify; col2.CaptionAlignment := taLeftJustify;
+
+  { MainColumn set AFTER adding columns (avoids the NoColumn footgun). }
+  t.Header.MainColumn := 0;
+  t.Header.Options    := [hoVisible];
+
+  t.RootNodeCount := 1;
+  ARoot := t.RootNode^.FirstChild;
+  t.InitNode(ARoot);
+  t.Expanded[ARoot] := True;
+  AChild0 := ARoot^.FirstChild;
+  Result := t;
+end;
+
+{ toOwnerDraw + OnDrawNode probing col 1 → the GREEN fill is present inside
+  GetCellRect(root,1) AND the default 'Col1' dark ink is ABSENT there (the app
+  fully replaced the cell). Non-vacuous: we scan the whole col-1 root-row band. }
+procedure TTreeD1OwnerDrawTest.TestOwnerDrawFillsCellAndSkipsDefault;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  outBmp: TBitmap; r: TRect;
+  x, y, col: Integer;
+  greenFound, inkFound: Boolean;
+begin
+  FProbeCol := 1; FDrawNodeCalls := 0; FAfterCalls := 0; FCapturedNode := nil;
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    t.Options    := t.Options + [toOwnerDraw];
+    t.OnDrawNode := @OnDrawNodeFillGreen;
+
+    AssertTrue('ownerdraw: col1 rect ok', t.GetCellRect(root, 1, r));
+
+    outBmp := TBitmap.Create;
+    try
+      outBmp.PixelFormat := pf32bit;
+      outBmp.SetSize(t.Width, t.Height);
+      outBmp.Canvas.Brush.Color := clWhite;
+      outBmp.Canvas.FillRect(0, 0, outBmp.Width, outBmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(outBmp.Canvas, Rect(0, 0, outBmp.Width, outBmp.Height), 96);
+      {$POP}
+
+      AssertTrue('ownerdraw: OnDrawNode fired', FDrawNodeCalls > 0);
+
+      { GREEN probe present somewhere inside GetCellRect(root,1). }
+      greenFound := False;
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+          if (Green(col) > 160) and (Red(col) < 96) and (Blue(col) < 96) then
+            greenFound := True;
+        end;
+      AssertTrue('ownerdraw: GREEN fill present inside GetCellRect(root,1)', greenFound);
+
+      { Default 'Col1' dark ink must be ABSENT in the col-1 root-row band (the
+        owner-draw replaced the cell — no caption drawn under the green). }
+      inkFound := False;
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+          if (Red(col) < 64) and (Green(col) < 64) and (Blue(col) < 64) then
+            inkFound := True;
+        end;
+      AssertFalse('ownerdraw: default caption ink ABSENT in replaced col-1 cell', inkFound);
+    finally
+      outBmp.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ OnAfterCellPaint (no toOwnerDraw) probing col 1 → the BLUE probe is present
+  near the cell's top-left AND the default 'Col1' caption ink is STILL present
+  in the cell (overlay drawn on top, not replacing). }
+procedure TTreeD1OwnerDrawTest.TestAfterCellPaintOverlaysDefault;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  outBmp: TBitmap; r: TRect;
+  x, y, col: Integer;
+  blueFound, inkFound: Boolean;
+begin
+  FProbeCol := 1; FDrawNodeCalls := 0; FAfterCalls := 0; FCapturedNode := nil;
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    { No toOwnerDraw, no OnDrawNode — only the overlay. }
+    t.OnAfterCellPaint := @OnAfterPaintBlueDot;
+
+    AssertTrue('after: col1 rect ok', t.GetCellRect(root, 1, r));
+
+    outBmp := TBitmap.Create;
+    try
+      outBmp.PixelFormat := pf32bit;
+      outBmp.SetSize(t.Width, t.Height);
+      outBmp.Canvas.Brush.Color := clWhite;
+      outBmp.Canvas.FillRect(0, 0, outBmp.Width, outBmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(outBmp.Canvas, Rect(0, 0, outBmp.Width, outBmp.Height), 96);
+      {$POP}
+
+      AssertTrue('after: OnAfterCellPaint fired', FAfterCalls > 0);
+
+      { BLUE probe present near col-1 cell top-left. }
+      blueFound := False;
+      for y := r.Top to r.Top + 10 do
+        for x := r.Left to r.Left + 10 do
+        begin
+          if (y < 0) or (x < 0) or (y >= outBmp.Height) or (x >= outBmp.Width) then Continue;
+          col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+          if (Blue(col) > 160) and (Red(col) < 96) and (Green(col) < 96) then
+            blueFound := True;
+        end;
+      AssertTrue('after: BLUE overlay probe present in col-1 cell', blueFound);
+
+      { Default 'Col1' dark ink STILL present in the col-1 root-row band. }
+      inkFound := False;
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+          if (Red(col) < 64) and (Green(col) < 64) and (Blue(col) < 64) then
+            inkFound := True;
+        end;
+      AssertTrue('after: default caption ink STILL present under overlay', inkFound);
+    finally
+      outBmp.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ The ACellRect handed to OnDrawNode must equal GetCellRect(node, col) exactly. }
+procedure TTreeD1OwnerDrawTest.TestOwnerDrawCellRectMatchesGetCellRect;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  outBmp: TBitmap; rExpect: TRect;
+begin
+  FProbeCol := 2; FDrawNodeCalls := 0; FAfterCalls := 0;
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    FCapturedNode := root;
+    t.Options    := t.Options + [toOwnerDraw];
+    t.OnDrawNode := @OnDrawNodeFillGreen;
+
+    AssertTrue('rect: GetCellRect(root,2) ok', t.GetCellRect(root, 2, rExpect));
+
+    FLastDrawNode := nil; FLastDrawCol := -99;
+    FLastDrawRect := Rect(0, 0, 0, 0);
+
+    outBmp := TBitmap.Create;
+    try
+      outBmp.PixelFormat := pf32bit;
+      outBmp.SetSize(t.Width, t.Height);
+      outBmp.Canvas.Brush.Color := clWhite;
+      outBmp.Canvas.FillRect(0, 0, outBmp.Width, outBmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(outBmp.Canvas, Rect(0, 0, outBmp.Width, outBmp.Height), 96);
+      {$POP}
+    finally
+      outBmp.Free;
+    end;
+
+    AssertTrue('rect: OnDrawNode captured the root col-2 cell', FLastDrawNode = root);
+    AssertEquals('rect: captured column = 2', 2, FLastDrawCol);
+    AssertEquals('rect: ACellRect.Left = GetCellRect.Left',   rExpect.Left,   FLastDrawRect.Left);
+    AssertEquals('rect: ACellRect.Top = GetCellRect.Top',     rExpect.Top,    FLastDrawRect.Top);
+    AssertEquals('rect: ACellRect.Right = GetCellRect.Right', rExpect.Right,  FLastDrawRect.Right);
+    AssertEquals('rect: ACellRect.Bottom = GetCellRect.Bottom',rExpect.Bottom,FLastDrawRect.Bottom);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Default-off (toOwnerDraw off, both events unassigned) → byte-identical to a
+  plain render: render twice (once "plain", once after wiring NOTHING) and assert
+  the two output bitmaps are pixel-identical. This pins that the owner-draw code
+  path is a true no-op when off (== ③c). }
+procedure TTreeD1OwnerDrawTest.TestDefaultOffIdenticalToC3;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  bmpA, bmpB: TBitmap;
+  x, y: Integer;
+  diff: Boolean;
+begin
+  FProbeCol := 1; FDrawNodeCalls := 0; FAfterCalls := 0; FCapturedNode := nil;
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    { No toOwnerDraw, no OnDrawNode, no OnAfterCellPaint — pure ③c. }
+    bmpA := TBitmap.Create;
+    bmpB := TBitmap.Create;
+    try
+      bmpA.PixelFormat := pf32bit; bmpA.SetSize(t.Width, t.Height);
+      bmpB.PixelFormat := pf32bit; bmpB.SetSize(t.Width, t.Height);
+      bmpA.Canvas.Brush.Color := clWhite; bmpA.Canvas.FillRect(0, 0, bmpA.Width, bmpA.Height);
+      bmpB.Canvas.Brush.Color := clWhite; bmpB.Canvas.FillRect(0, 0, bmpB.Width, bmpB.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(bmpA.Canvas, Rect(0, 0, bmpA.Width, bmpA.Height), 96);
+      TTyTreeViewAccess(t).RenderTo(bmpB.Canvas, Rect(0, 0, bmpB.Width, bmpB.Height), 96);
+      {$POP}
+
+      AssertEquals('offc3: OnDrawNode never fired', 0, FDrawNodeCalls);
+      AssertEquals('offc3: OnAfterCellPaint never fired', 0, FAfterCalls);
+
+      diff := False;
+      for y := 0 to bmpA.Height - 1 do
+      begin
+        for x := 0 to bmpA.Width - 1 do
+          if ColorToRGB(bmpA.Canvas.Pixels[x, y]) <> ColorToRGB(bmpB.Canvas.Pixels[x, y]) then
+          begin
+            diff := True; Break;
+          end;
+        if diff then Break;
+      end;
+      AssertFalse('offc3: two default-off renders are pixel-identical (== ③c)', diff);
+    finally
+      bmpA.Free; bmpB.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ OnDrawNode assigned but toOwnerDraw OFF → the handler must NOT fire and the
+  default caption ink must still render (the option gates the replacement). }
+procedure TTreeD1OwnerDrawTest.TestDrawNodeIgnoredWithoutOption;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  outBmp: TBitmap; r: TRect;
+  x, y, col: Integer;
+  inkFound: Boolean;
+begin
+  FProbeCol := 1; FDrawNodeCalls := 0; FAfterCalls := 0; FCapturedNode := nil;
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    { OnDrawNode wired, but toOwnerDraw NOT set. }
+    t.OnDrawNode := @OnDrawNodeFillGreen;
+
+    AssertTrue('noopt: col1 rect ok', t.GetCellRect(root, 1, r));
+
+    outBmp := TBitmap.Create;
+    try
+      outBmp.PixelFormat := pf32bit;
+      outBmp.SetSize(t.Width, t.Height);
+      outBmp.Canvas.Brush.Color := clWhite;
+      outBmp.Canvas.FillRect(0, 0, outBmp.Width, outBmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(outBmp.Canvas, Rect(0, 0, outBmp.Width, outBmp.Height), 96);
+      {$POP}
+
+      AssertEquals('noopt: OnDrawNode did NOT fire (option off)', 0, FDrawNodeCalls);
+
+      { Default 'Col1' caption ink present (cell was NOT replaced). }
+      inkFound := False;
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+          if (Red(col) < 64) and (Green(col) < 64) and (Blue(col) < 64) then
+            inkFound := True;
+        end;
+      AssertTrue('noopt: default caption ink present (no owner-draw without option)', inkFound);
+    finally
+      outBmp.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
 { ── ③d B1 ── variable per-node row height ──────────────────────────────────── }
 
 function TTreeB1VariableHeightTest.ExpectedH(Index: Integer): Integer;
@@ -9089,4 +9509,5 @@ initialization
   RegisterTest(TTreeB1VariableHeightTest);
   RegisterTest(TTreeC1IncSearchTest);
   RegisterTest(TTreeNodeImageRenderTest);
+  RegisterTest(TTreeD1OwnerDrawTest);
 end.

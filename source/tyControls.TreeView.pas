@@ -18,10 +18,13 @@ type
     OnMeasureItem (default off ⇒ every node uses DefaultNodeHeight, == ③c).
     ③d C1: toIncrementalSearch opts a tree into type-to-find: printable chars
     typed with focus on the tree jump focus to the next matching visible node
-    (default off ⇒ typing does nothing special, == ③c). }
+    (default off ⇒ typing does nothing special, == ③c).
+    ③d D1: toOwnerDraw opts a tree into per-cell owner-draw via OnDrawNode (full
+    cell-content replacement) + OnAfterCellPaint (overlay). Default off ⇒ the
+    default cell content paints, == ③c. }
   TTyTreeOption = (toMultiSelect, toCheckSupport, toFullRowSelect,
                    toAutoTristateTracking, toVariableNodeHeight,
-                   toIncrementalSearch);
+                   toIncrementalSearch, toOwnerDraw);
   TTyTreeOptions = set of TTyTreeOption;
 
   { A2: check column type for a node }
@@ -108,6 +111,30 @@ type
   TTyTreeIncrementalSearchEvent = procedure(Sender: TTyTreeView;
     Node: PTyTreeNode; const ASearchText: string; var AMatch: Boolean) of object;
 
+  { ③d D1: per-cell owner-draw events (cross-platform post-EndPaint subset).
+    Both fire AFTER the BGRA layer has been composited onto ACanvas, with
+    ACanvas (the control canvas) clipped to the cell's device rect (ACellRect,
+    the exact rect GetCellRect(Node, Column) returns).
+
+    OnDrawNode — FULL cell-content replacement. Fires only when toOwnerDraw is in
+    Options. When assigned, RenderTo SKIPS the default cell content (caption text,
+    and for the main column the node image) for that cell; the row background and
+    tree chrome (expand button / tree-lines / checkbox) still paint underneath.
+    The app draws the entire cell content here.
+
+    OnAfterCellPaint — overlay. Fires for EVERY painted cell (independent of
+    toOwnerDraw), on top of the default content AND any OnDrawNode result. Use it
+    to decorate cells (badges, focus rings, etc.); no-op the cells you don't care
+    about.
+
+    DEFERRED (NOT implemented in ③d D1): OnBeforeCellPaint (a backdrop UNDER the
+    default text) — it cannot be done post-EndPaint and needs a temp-bitmap→BGRA
+    path. }
+  TTyTreeDrawNodeEvent  = procedure(Sender: TTyTreeView; ACanvas: TCanvas;
+    Node: PTyTreeNode; Column: Integer; const ACellRect: TRect) of object;
+  TTyTreeCellPaintEvent = procedure(Sender: TTyTreeView; ACanvas: TCanvas;
+    Node: PTyTreeNode; Column: Integer; const ACellRect: TRect) of object;
+
 const
   TreeNodeSize = (SizeOf(TTyTreeNode) + 7) and not 7;  // pointer-aligned struct stride
   { B3: one cache mark per TREE_CACHE_STEP visible nodes.
@@ -167,6 +194,9 @@ type
     FOnMeasureItem:        TTyTreeMeasureItemEvent;
     { ③d C1: incremental type-to-find search }
     FOnIncrementalSearch:  TTyTreeIncrementalSearchEvent;
+    { ③d D1: per-cell owner-draw (post-EndPaint; cross-platform) }
+    FOnDrawNode:           TTyTreeDrawNodeEvent;
+    FOnAfterCellPaint:     TTyTreeCellPaintEvent;
     { C4: interaction events }
     FOnNodeClick:          TTyTreeNodeEvent;
     FOnNodeDblClick:       TTyTreeNodeEvent;
@@ -444,6 +474,9 @@ type
     property OnGetTextWithType:    TTyTreeGetTextWithTypeEvent   read FOnGetTextWithType    write FOnGetTextWithType;
     property OnGetImageIndex:      TTyTreeGetImageIndexEvent     read FOnGetImageIndex      write FOnGetImageIndex;
     property OnPaintText:          TTyTreePaintTextEvent         read FOnPaintText          write FOnPaintText;
+    { ③d D1: per-cell owner-draw — full replacement (gated by toOwnerDraw) + overlay }
+    property OnDrawNode:           TTyTreeDrawNodeEvent          read FOnDrawNode           write FOnDrawNode;
+    property OnAfterCellPaint:     TTyTreeCellPaintEvent         read FOnAfterCellPaint     write FOnAfterCellPaint;
     { ③d B1: per-node measure event — fired from InitNode when toVariableNodeHeight set }
     property OnMeasureItem:        TTyTreeMeasureItemEvent       read FOnMeasureItem        write FOnMeasureItem;
     { ③d C1: custom incremental-search match predicate (default = prefix match) }
@@ -2681,6 +2714,19 @@ var
   pendingIcons: array of record X, Y, Idx: Integer; end;
   pendingCount: Integer;
   iIcon, savedDC: Integer;
+  { ③d D1: per-cell owner-draw — collected during the row loop, drawn onto
+    ACanvas AFTER P.EndPaint (the same post-composite path as pendingIcons,
+    because any GDI draw to ACanvas DURING RenderTo is erased by the EndPaint
+    blit of the BGRA layer). Rect is painter-local (CR-space, 0-based); the
+    post-EndPaint draw offsets it by ARect just like the icons. ownerDrawCell
+    is True only when this exact cell is being fully replaced by OnDrawNode. }
+  ownerDrawActive: Boolean;   // toOwnerDraw in FOptions and OnDrawNode assigned
+  ownerDrawCell:   Boolean;   // per-cell: this cell is replaced by OnDrawNode
+  pendingDrawNode: array of record Node: PTyTreeNode; Col: Integer; R: TRect; end;
+  pendingDrawCount: Integer;
+  pendingAfter: array of record Node: PTyTreeNode; Col: Integer; R: TRect; end;
+  pendingAfterCount: Integer;
+  iCb: Integer;
 begin
   UpdateScrollBars;   // keep scrollbar range current (cheap; no-op when clean)
 
@@ -2691,6 +2737,13 @@ begin
 
     pendingCount := 0;
     SetLength(pendingIcons, 0);
+
+    { ③d D1: owner-draw collection state }
+    ownerDrawActive   := (toOwnerDraw in FOptions) and Assigned(FOnDrawNode);
+    pendingDrawCount  := 0;
+    SetLength(pendingDrawNode, 0);
+    pendingAfterCount := 0;
+    SetLength(pendingAfter, 0);
 
     W := ARect.Right  - ARect.Left;
     H := ARect.Bottom - ARect.Top;
@@ -3019,6 +3072,30 @@ begin
           if clipR.Right > CR.Right then clipR.Right := CR.Right;
           P.Bitmap.ClipRect := clipR;
 
+          { ③d D1: this cell is owner-drawn (default text/image skipped) when
+            toOwnerDraw + OnDrawNode are active. cellRect is the SHARED device
+            rect (== GetCellRect(node, colIdx)) collected for the post-EndPaint
+            callback; the row bg + tree chrome still paint underneath. }
+          ownerDrawCell := ownerDrawActive;
+          if ownerDrawCell then
+          begin
+            if pendingDrawCount = Length(pendingDrawNode) then
+              SetLength(pendingDrawNode, pendingDrawCount + 32);
+            pendingDrawNode[pendingDrawCount].Node := node;
+            pendingDrawNode[pendingDrawCount].Col  := colIdx;
+            pendingDrawNode[pendingDrawCount].R    := cellRect;
+            Inc(pendingDrawCount);
+          end;
+          if Assigned(FOnAfterCellPaint) then
+          begin
+            if pendingAfterCount = Length(pendingAfter) then
+              SetLength(pendingAfter, pendingAfterCount + 32);
+            pendingAfter[pendingAfterCount].Node := node;
+            pendingAfter[pendingAfterCount].Col  := colIdx;
+            pendingAfter[pendingAfterCount].R    := cellRect;
+            Inc(pendingAfterCount);
+          end;
+
           if colIdx = FHeader.MainColumn then
           begin
             { ── Main column: draw ③a chrome (tree-lines + button + image) ── }
@@ -3167,7 +3244,10 @@ begin
               ghosted := False;
               if Assigned(FOnGetImageIndex) then
                 FOnGetImageIndex(Self, node, ikNormal, colIdx, ghosted, imgIdx);
-              if (imgIdx >= 0) and (imgIdx < FImages.Count) then
+              { ③d D1: when this cell is owner-drawn the app owns the image too —
+                do NOT collect it into pendingIcons (slot still reserved so the
+                row width / chrome layout is unchanged). }
+              if (not ownerDrawCell) and (imgIdx >= 0) and (imgIdx < FImages.Count) then
               begin
                 { Collect; drawn via GDI onto ACanvas after EndPaint (see below). }
                 if pendingCount = Length(pendingIcons) then
@@ -3180,45 +3260,53 @@ begin
               Inc(captionX, imgSlotW);
             end;
 
-            { Caption in main column }
-            colTxt := '';
-            if Assigned(FOnGetTextWithType) then
-              FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
-            else if Assigned(FOnGetText) then
-              FOnGetText(Self, node, colTxt);
+            { Caption in main column — skipped for an owner-drawn cell (the app
+              fully replaces the cell content via OnDrawNode post-EndPaint). }
+            if not ownerDrawCell then
+            begin
+              colTxt := '';
+              if Assigned(FOnGetTextWithType) then
+                FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
+              else if Assigned(FOnGetText) then
+                FOnGetText(Self, node, colTxt);
 
-            textRect := Rect(captionX + P.Scale(2), rowTop,
-                             colCellRight - P.Scale(2), rowTop + rowH);
-            if (textRect.Left < textRect.Right) and (colTxt <> '') then
-              P.DrawText(textRect, colTxt,
-                NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
-                NodeStyle.TextColor, taLeftJustify, tlCenter, True);
+              textRect := Rect(captionX + P.Scale(2), rowTop,
+                               colCellRight - P.Scale(2), rowTop + rowH);
+              if (textRect.Left < textRect.Right) and (colTxt <> '') then
+                P.DrawText(textRect, colTxt,
+                  NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+                  NodeStyle.TextColor, taLeftJustify, tlCenter, True);
 
-            if Assigned(FOnPaintText) then
-              FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+              if Assigned(FOnPaintText) then
+                FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+            end;
           end
           else
           begin
             { ── Non-main column: flat text cell ──────────────────────────── }
-            colMargin := P.Scale(4);
-            colCaptionX := colCellLeft + colMargin;
+            { ③d D1: skipped for an owner-drawn cell (app fully replaces it). }
+            if not ownerDrawCell then
+            begin
+              colMargin := P.Scale(4);
+              colCaptionX := colCellLeft + colMargin;
 
-            colTxt := '';
-            if Assigned(FOnGetTextWithType) then
-              FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
-            else if Assigned(FOnGetText) then
-              FOnGetText(Self, node, colTxt);   // fallback for compat
+              colTxt := '';
+              if Assigned(FOnGetTextWithType) then
+                FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
+              else if Assigned(FOnGetText) then
+                FOnGetText(Self, node, colTxt);   // fallback for compat
 
-            colAlign := col.Alignment;
-            textRect := Rect(colCaptionX, rowTop,
-                             colCellRight - colMargin, rowTop + rowH);
-            if (textRect.Left < textRect.Right) and (colTxt <> '') then
-              P.DrawText(textRect, colTxt,
-                NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
-                NodeStyle.TextColor, colAlign, tlCenter, True);
+              colAlign := col.Alignment;
+              textRect := Rect(colCaptionX, rowTop,
+                               colCellRight - colMargin, rowTop + rowH);
+              if (textRect.Left < textRect.Right) and (colTxt <> '') then
+                P.DrawText(textRect, colTxt,
+                  NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+                  NodeStyle.TextColor, colAlign, tlCenter, True);
 
-            if Assigned(FOnPaintText) then
-              FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+              if Assigned(FOnPaintText) then
+                FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+            end;
           end;
 
           { Restore clip to full inset rect after each cell }
@@ -3236,6 +3324,29 @@ begin
           in ③a; it backs ③d owner-draw). Equals Rect(CR.Left, rowTop, CR.Right,
           rowTop+rowH). }
         InternalCellRect(CR, rowTop, rowH, -1, APPI, cellRect);
+
+        { ③d D1: 0-column owner-draw — Column = -1 (the whole row cell). Same
+          collection as the multi-column paths; default caption/image skipped
+          for the owner-drawn cell, row bg + chrome still paint underneath. }
+        ownerDrawCell := ownerDrawActive;
+        if ownerDrawCell then
+        begin
+          if pendingDrawCount = Length(pendingDrawNode) then
+            SetLength(pendingDrawNode, pendingDrawCount + 32);
+          pendingDrawNode[pendingDrawCount].Node := node;
+          pendingDrawNode[pendingDrawCount].Col  := -1;
+          pendingDrawNode[pendingDrawCount].R    := cellRect;
+          Inc(pendingDrawCount);
+        end;
+        if Assigned(FOnAfterCellPaint) then
+        begin
+          if pendingAfterCount = Length(pendingAfter) then
+            SetLength(pendingAfter, pendingAfterCount + 32);
+          pendingAfter[pendingAfterCount].Node := node;
+          pendingAfter[pendingAfterCount].Col  := -1;
+          pendingAfter[pendingAfterCount].R    := cellRect;
+          Inc(pendingAfterCount);
+        end;
 
         { ── Tree lines (simplified: guide + elbow) ──────────────────────────── }
         if FShowTreeLines and (level > 0) then
@@ -3387,7 +3498,8 @@ begin
           ghosted := False;
           if Assigned(FOnGetImageIndex) then
             FOnGetImageIndex(Self, node, ikNormal, -1, ghosted, imgIdx);
-          if (imgIdx >= 0) and (imgIdx < FImages.Count) then
+          { ③d D1: owner-drawn cell owns its image — do not collect it. }
+          if (not ownerDrawCell) and (imgIdx >= 0) and (imgIdx < FImages.Count) then
           begin
             { Collect; drawn via GDI onto ACanvas after EndPaint (see below). }
             if pendingCount = Length(pendingIcons) then
@@ -3401,18 +3513,22 @@ begin
         end;
 
         { ── Caption ─────────────────────────────────────────────────────── }
+        { ③d D1: skipped for an owner-drawn cell (app fully replaces it). }
         txt := '';
-        if Assigned(FOnGetText) then
+        if (not ownerDrawCell) and Assigned(FOnGetText) then
           FOnGetText(Self, node, txt);
 
-        textRect := Rect(captionX + P.Scale(2), rowTop, CR.Right, rowTop + rowH);
-        if (textRect.Left < textRect.Right) and (txt <> '') then
-          P.DrawText(textRect, txt,
-            NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
-            NodeStyle.TextColor, taLeftJustify, tlCenter, True);
+        if not ownerDrawCell then
+        begin
+          textRect := Rect(captionX + P.Scale(2), rowTop, CR.Right, rowTop + rowH);
+          if (textRect.Left < textRect.Right) and (txt <> '') then
+            P.DrawText(textRect, txt,
+              NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+              NodeStyle.TextColor, taLeftJustify, tlCenter, True);
 
-        if Assigned(FOnPaintText) then
-          FOnPaintText(Self, ACanvas, node, -1, ttNormal);
+          if Assigned(FOnPaintText) then
+            FOnPaintText(Self, ACanvas, node, -1, ttNormal);
+        end;
 
         { ── FRangeX accumulation ─────────────────────────────────────────── }
         { Pure content WIDTH for this row — independent of CR.Left and FOffsetX so
@@ -3435,14 +3551,44 @@ begin
     P.Bitmap.ClipRect := savedClip;
     P.EndPaint;
 
-    { ── Node images: draw via GDI onto the (now composited) control canvas ──
+    { ── ③d D1 ── post-EndPaint owner-draw / icons / overlays ──────────────────
       EndPaint has alpha-blitted the BGRA layer onto ACanvas; ACanvas now holds
-      the finished tree. Draw the collected icons straight onto it with the LCL
-      ImageList, clipped to the content-rows area (below the header band). This
-      is the only path that survives on every widgetset: drawing into the BGRA
-      layer's Canvas was erased by the EndPaint rebuild on Qt/GTK. The X/Y were
-      captured in ARect-relative device coords (== ACanvas device coords here),
-      and CR is painter-local (0-based), so the clip is offset by ARect. }
+      the default-painted tree. ALL three of the following draw straight onto
+      ACanvas via GDI — the ONLY path that survives every widgetset, because a
+      GDI draw to ACanvas DURING RenderTo is erased by the EndPaint blit (the
+      node-icon bug, commit d427095). The collected rects (.R) are painter-local
+      (CR-space, 0-based); each clip is offset by ARect — and intersected with
+      the content rect CR — exactly like the icon clip, so cells can't bleed over
+      the header band or the border.
+
+      Draw ORDER (matters): 1) OnDrawNode (replaced cell content, on the row bg)
+      → 2) node images (existing; already skipped for owner-drawn cells) →
+      3) OnAfterCellPaint (overlays, on top of everything). }
+
+    { 1) OnDrawNode — full cell-content replacement (toOwnerDraw + handler). }
+    if pendingDrawCount > 0 then
+      for iCb := 0 to pendingDrawCount - 1 do
+      begin
+        savedDC := SaveDC(ACanvas.Handle);
+        try
+          IntersectClipRect(ACanvas.Handle,
+            ARect.Left + CR.Left,  ARect.Top + CR.Top,
+            ARect.Left + CR.Right, ARect.Top + CR.Bottom);
+          IntersectClipRect(ACanvas.Handle,
+            ARect.Left + pendingDrawNode[iCb].R.Left,  ARect.Top + pendingDrawNode[iCb].R.Top,
+            ARect.Left + pendingDrawNode[iCb].R.Right, ARect.Top + pendingDrawNode[iCb].R.Bottom);
+          FOnDrawNode(Self, ACanvas, pendingDrawNode[iCb].Node,
+            pendingDrawNode[iCb].Col, pendingDrawNode[iCb].R);
+        finally
+          RestoreDC(ACanvas.Handle, savedDC);
+        end;
+      end;
+
+    { 2) Node images: draw via GDI onto the (now composited) control canvas.
+      Drawing into the BGRA layer's Canvas was erased by the EndPaint rebuild on
+      Qt/GTK. The X/Y were captured in ARect-relative device coords (== ACanvas
+      device coords here); CR is painter-local (0-based), so the clip is offset
+      by ARect. Owner-drawn cells were already skipped at collection time. }
     if (pendingCount > 0) and (FImages <> nil) then
     begin
       savedDC := SaveDC(ACanvas.Handle);
@@ -3457,6 +3603,25 @@ begin
         RestoreDC(ACanvas.Handle, savedDC);
       end;
     end;
+
+    { 3) OnAfterCellPaint — overlay on top of default content + OnDrawNode. }
+    if pendingAfterCount > 0 then
+      for iCb := 0 to pendingAfterCount - 1 do
+      begin
+        savedDC := SaveDC(ACanvas.Handle);
+        try
+          IntersectClipRect(ACanvas.Handle,
+            ARect.Left + CR.Left,  ARect.Top + CR.Top,
+            ARect.Left + CR.Right, ARect.Top + CR.Bottom);
+          IntersectClipRect(ACanvas.Handle,
+            ARect.Left + pendingAfter[iCb].R.Left,  ARect.Top + pendingAfter[iCb].R.Top,
+            ARect.Left + pendingAfter[iCb].R.Right, ARect.Top + pendingAfter[iCb].R.Bottom);
+          FOnAfterCellPaint(Self, ACanvas, pendingAfter[iCb].Node,
+            pendingAfter[iCb].Col, pendingAfter[iCb].R);
+        finally
+          RestoreDC(ACanvas.Handle, savedDC);
+        end;
+      end;
   finally
     P.Free;
   end;
