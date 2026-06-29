@@ -769,7 +769,10 @@ end;
 
 procedure TTyChromeEngine.TitleBarMouseMove(Shift: TShiftState; X, Y: Integer);
 begin
-  if FDragging and (FForm <> nil) then
+  { Don't drag-move a maximized window (a maximized window has no movable position; a
+    post-maximize MouseMove with a still-armed drag would otherwise yank it back toward the
+    press origin — the double-click-to-maximize "grew in place" bug). }
+  if FDragging and (FForm <> nil) and not FMaximized then
   begin
     FForm.Left := FDragFormStart.X + (Mouse.CursorPos.X - FDragStart.X);
     FForm.Top  := FDragFormStart.Y + (Mouse.CursorPos.Y - FDragStart.Y);
@@ -886,6 +889,9 @@ var
 begin
   if FForm = nil then
     Exit;
+  // A double-click that maximizes presses the title bar first (arming a drag); cancel it so a
+  // trailing MouseMove can't move the just-maximized window.
+  FDragging := False;
   // A fixed (non-resizable) window can't maximize. This gates BOTH entry points
   // (the title-bar double-click via TitleBarDblClick and the max button); the button
   // is also disabled when not resizable (SetResizable). When already maximized,

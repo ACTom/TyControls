@@ -61,10 +61,8 @@ type
     BorderZone: Integer;
     CaptionH: Integer;
     Maximized: Boolean;   // engine (work-area) maximize -> suppress the NC resize inset
+    WorkArea: TRect;      // monitor work area (LCL-sourced) -> pin the client when maximized
   end;
-
-const
-  TY_SM_CXPADDEDBORDER = 92;   { SM_CXPADDEDBORDER — FPC's Windows unit may not define it }
 
 var
   GStates: array of PNcState;
@@ -98,7 +96,8 @@ var
   pt: TPoint;
   wr: Windows.RECT;
   ncp: PNCCalcSizeParams;
-  z, ovx, ovy: Integer;
+  z: Integer;
+  maxed: Boolean;
 begin
   st := FindState(Wnd);
   if st = nil then
@@ -114,29 +113,34 @@ begin
         // rect, so it can't cover the grabbable edge, and the WS_THICKFRAME border the OS sizes
         // natively stays uncovered. Returning 0 makes the (modified) rgrc[0] the new client rect.
         // Width = the engine's border zone (matches TyNcHitTest's zone) when resizable; 0 = fixed.
-        // Engine (work-area) maximize OR not resizable -> NO inset, client fills the whole
-        // window. Native maximize (IsZoomed) -> the OS places the window at the work area PLUS a
-        // frame overhang on every side, so inset by that overhang to keep the client exactly on
-        // the work area (no off-screen bleed/clipping). Normal -> a thin NC resize border on
-        // L/R/B, top flush.
-        if st^.Resizable and not st^.Maximized then
+        if st^.Resizable then
         begin
           ncp := PNCCalcSizeParams(LP);
-          if IsZoomed(Wnd) then
+          maxed := st^.Maximized;          // engine (work-area) maximize
+          if not maxed then maxed := IsZoomed(Wnd);   // native maximize / Aero-Snap
+          if maxed then
           begin
-            ovx := GetSystemMetrics(SM_CXFRAME) + GetSystemMetrics(TY_SM_CXPADDEDBORDER);
-            ovy := GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(TY_SM_CXPADDEDBORDER);
-            Inc(ncp^.rgrc[0].Left, ovx);  Dec(ncp^.rgrc[0].Right,  ovx);
-            Inc(ncp^.rgrc[0].Top,  ovy);  Dec(ncp^.rgrc[0].Bottom, ovy);
+            // Pin the client to the monitor WORK AREA (LCL-sourced, stored in the state) so it can
+            // never overhang under the taskbar. Robust for BOTH maximize paths — no frame-overhang
+            // guessing. (Empty/unset work area -> leave client = window: a safe fallback, since the
+            // engine maximize already sizes the window to the work area.)
+            if (st^.WorkArea.Right > st^.WorkArea.Left)
+               and (st^.WorkArea.Bottom > st^.WorkArea.Top) then
+            begin
+              ncp^.rgrc[0].Left   := st^.WorkArea.Left;
+              ncp^.rgrc[0].Top    := st^.WorkArea.Top;
+              ncp^.rgrc[0].Right  := st^.WorkArea.Right;
+              ncp^.rgrc[0].Bottom := st^.WorkArea.Bottom;
+            end;
           end
           else
           begin
+            // Normal: thin NC resize border on L/R/B; top flush to the window edge (no inset) so
+            // the themed title bar sits at the very top with no thick system-frame strip (the
+            // VS Code / Windows Terminal custom-frame fix). Top-edge resize via the title bar hot-zone.
             z := st^.BorderZone;
             if z < 1 then z := 1;
             Inc(ncp^.rgrc[0].Left, z);  Dec(ncp^.rgrc[0].Right, z);  Dec(ncp^.rgrc[0].Bottom, z);
-            // Top flush to the window edge (no inset): themed title bar at the very top, no thick
-            // system-frame strip (the VS Code / Windows Terminal custom-frame fix). Top-edge
-            // resize is recovered by the title bar's top hot-zone (TyWin32BeginTopResize).
           end;
         end;
         Result := 0;
@@ -211,6 +215,8 @@ begin
   st^.BorderZone := ABorderZone;
   st^.CaptionH := ACaptionHeight;
   st^.Maximized := AMaximized;
+  if AForm.Monitor <> nil then
+    st^.WorkArea := AForm.Monitor.WorkareaRect;   // LCL-sourced; pins the client when maximized
   ApplyThickFrame(Wnd, AResizable, AAllowMaximize);
 end;
 
