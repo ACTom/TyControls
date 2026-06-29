@@ -1751,6 +1751,7 @@ var
   sortGlyphSize: Integer;
   colAlign: TAlignment;
   sortBandR: TRect;
+  accentPx: TBGRAPixel;         // theme accent for the drag ghost/drop-mark
   mainColBase: Integer;
 begin
   UpdateScrollBars;   // keep scrollbar range current (cheap; no-op when clean)
@@ -1958,6 +1959,13 @@ begin
       { D3: drag-reorder overlay — ghost of dragged column + drop-mark caret }
       if FDragging and (FDragColumn >= 0) and (FDragColumn < FHeader.Columns.Count) then
       begin
+        { Drag overlay accent from the THEME (TyTreeNode:selected bg = --accent),
+          never a hard-coded color. NodeStyle is free here — the node loop runs later. }
+        NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', [tysSelected]);
+        if tpBackground in NodeStyle.Present then
+          accentPx := TyColorToBGRA(NodeStyle.Background.Color)
+        else
+          accentPx := TyColorToBGRA(S.BorderColor);
         { Ghost: draw a semi-transparent filled rect over the dragged column's
           header cell at its current position (not yet moved) }
         col := FHeader.Columns.Items[FDragColumn] as TTyTreeColumn;
@@ -1972,7 +1980,7 @@ begin
           { Ghost fill: accent color at ~40% opacity over the header }
           P.Bitmap.FillRect(cellRect.Left, cellRect.Top,
                             cellRect.Right, cellRect.Bottom,
-                            BGRA(59, 130, 246, 100));  { blue ghost, ~40% alpha }
+                            BGRA(accentPx.red, accentPx.green, accentPx.blue, 100));  { accent ghost, ~40% alpha }
         end;
 
         { Drop-mark: a 2px vertical caret at the target position boundary }
@@ -1988,10 +1996,10 @@ begin
             { Draw a 2px wide vertical accent bar }
             P.Bitmap.DrawLine(cellLeft,     headerBandRect.Top,
                               cellLeft,     headerBandRect.Bottom,
-                              BGRA(59, 130, 246, 255), False);
+                              accentPx, False);
             P.Bitmap.DrawLine(cellLeft + 1, headerBandRect.Top,
                               cellLeft + 1, headerBandRect.Bottom,
-                              BGRA(59, 130, 246, 255), False);
+                              accentPx, False);
           end;
         end;
       end;
@@ -2541,19 +2549,19 @@ begin
       if HandleAllocated then MouseCapture := True;
     end
     else if (Button = mbLeft) and (headerPart = hpHeaderSection) and
-            (headerCol <> NoColumn) and (hoDrag in FHeader.Options) then
+            (headerCol <> NoColumn) then
     begin
-      { D3: initiate a potential drag-reorder — record start, wait for threshold }
+      { Record a header-section press. A plain press+release sorts on MouseUp
+        (E3 header-click); a drag-reorder only ENGAGES in MouseMove when
+        hoDrag + coDraggable allow it — so header-click sort works even when
+        drag-reorder is disabled (decoupled from hoDrag/coDraggable). }
       col := FHeader.Columns.Items[headerCol] as TTyTreeColumn;
-      if coDraggable in col.Options then
-      begin
-        FDragColumn    := headerCol;
-        FDragPending   := True;
-        FDragStartX    := X;
-        FDragging      := False;
-        FDragTargetPos := col.Position;
-        if HandleAllocated then MouseCapture := True;
-      end;
+      FDragColumn    := headerCol;
+      FDragPending   := True;
+      FDragStartX    := X;
+      FDragging      := False;
+      FDragTargetPos := col.Position;
+      if HandleAllocated then MouseCapture := True;
     end;
     Exit;  { don't fall through to node hit-test when in header }
   end;
@@ -2647,7 +2655,10 @@ begin
   if FDragPending or FDragging then
   begin
     threshold := MulDiv(4, Font.PixelsPerInch, 96);
-    if not FDragging and (Abs(X - FDragStartX) > threshold) then
+    if not FDragging and (Abs(X - FDragStartX) > threshold) and
+       (hoDrag in FHeader.Options) and
+       (FDragColumn >= 0) and (FDragColumn < FHeader.Columns.Count) and
+       (coDraggable in (FHeader.Columns.Items[FDragColumn] as TTyTreeColumn).Options) then
     begin
       FDragging := True;
       Invalidate;
@@ -3158,8 +3169,10 @@ var
   child: PTyTreeNode;
 begin
   if Node = nil then Exit;
-  { Sort this level }
-  Tree.Sort(Node, Column, ADirection, False);
+  { Sort this level — DoInit=True so each level materialises + InitNodes its
+    children BEFORE comparing (deeper expanded levels have lazy, possibly
+    uninitialised children; comparing them zero-filled gives wrong order). }
+  Tree.Sort(Node, Column, ADirection, True);
   { Recurse into initialized+expanded children (skip collapsed) }
   child := Node^.FirstChild;
   while child <> nil do
