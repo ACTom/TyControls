@@ -54,7 +54,8 @@ uses
   test.datetimepicker,
   test.treeview.events,
   test.treeview,
-  test.treeview.columns;
+  test.treeview.columns,
+  test.treeview.streaming;
 
 type
   TTyTestRunner = class(TTestRunner)

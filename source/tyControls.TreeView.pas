@@ -10,7 +10,18 @@ uses
 type
   { C4: hit-test result — which part of a node row the mouse landed in }
   TTyTreeHitPart = (hpNowhere, hpButton, hpImage, hpLabel, hpIndent,
-                    hpHeaderSection, hpHeaderDivider);
+                    hpHeaderSection, hpHeaderDivider,
+                    hpCheckBox);   { B3: the checkbox slot in the main column }
+
+  { B1: per-tree option flags (VTV-style set; default [] = ③a/③b behaviour) }
+  TTyTreeOption = (toMultiSelect, toCheckSupport, toFullRowSelect,
+                   toAutoTristateTracking);
+  TTyTreeOptions = set of TTyTreeOption;
+
+  { A2: check column type for a node }
+  TTyCheckType  = (ctNone, ctCheckBox, ctTriStateCheckBox, ctRadioButton);
+  { A2: check state of a node }
+  TTyCheckState = (csUnchecked, csChecked, csMixed);
 
 type
   PTyTreeNode = ^TTyTreeNode;
@@ -29,6 +40,9 @@ type
     TotalCount: Cardinal;       // self + all descendants
     TotalHeight: Cardinal;      // pixels of self + expanded/visible descendants
     Parent, PrevSibling, NextSibling, FirstChild, LastChild: PTyTreeNode;
+    { A2/B1: per-node check column type and state (byte fields; zero-init by MakeNewNode) }
+    CheckType:  TTyCheckType;   // ctNone by default
+    CheckState: TTyCheckState;  // csUnchecked by default
     // user data blob (NodeDataSize bytes) follows at offset TreeNodeSize
   end;
 
@@ -36,6 +50,8 @@ type
 
   TTyTreeNodeEvent    = procedure(Sender: TTyTreeView; Node: PTyTreeNode) of object;
   TTyTreeChangingEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean) of object;
+  { C1: fired before a check-state change; set Allowed:=False to veto }
+  TTyTreeCheckingEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean) of object;
   TTyTreeInitNodeEvent     = procedure(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates) of object;
   TTyTreeInitChildrenEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var ChildCount: Cardinal) of object;
   TTyTreeGetTextEvent  = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string) of object;
@@ -111,6 +127,14 @@ type
     FSelectedNode:   PTyTreeNode;
     FOnChange:       TTyTreeNodeEvent;
     FOnFocusChanged: TTyTreeNodeEvent;
+    { C1: check events }
+    FOnChecking:     TTyTreeCheckingEvent;
+    FOnChecked:      TTyTreeNodeEvent;
+    { D1: selection-changed event (fired once per gesture when multi-select set changes) }
+    FOnSelectionChanged: TNotifyEvent;
+    { A3: multi-select count + range anchor }
+    FSelectionCount: Integer;
+    FRangeAnchor:    PTyTreeNode;
     { C3: paint-related fields }
     FHotNode:              PTyTreeNode;   // node under cursor (HotTrack); nil = none
     FOnGetText:            TTyTreeGetTextEvent;
@@ -158,6 +182,16 @@ type
     FSorting:          Boolean;   // reentrancy guard: SortTree -> HeaderChanged -> SortTree
     FSortedColumn:     Integer;   // last key SortTree ran with — so a width/reorder
     FSortedDirection:  TTySortDirection;  //   change (same key) does NOT re-sort the tree
+    { B1: tree option flags }
+    FOptions:          TTyTreeOptions;
+    procedure SetOptions(AValue: TTyTreeOptions);
+    { B1: check property raw accessors }
+    function  GetCheckType(Node: PTyTreeNode): TTyCheckType;
+    procedure SetCheckType(Node: PTyTreeNode; AValue: TTyCheckType);
+    function  GetCheckState(Node: PTyTreeNode): TTyCheckState;
+    procedure SetCheckState(Node: PTyTreeNode; AValue: TTyCheckState);
+    function  GetChecked(Node: PTyTreeNode): Boolean;
+    procedure SetChecked(Node: PTyTreeNode; AValue: Boolean);
     { E3: internal — process a header section click (toggle sort direction / set sort column) }
     procedure _HandleHeaderClick(ColIndex: Integer);
     procedure VScrollChange(Sender: TObject);
@@ -175,10 +209,16 @@ type
     procedure SetHotTrack(AValue: Boolean);
     { C1: selection internals }
     procedure ClearSelectedNode;
+    { FIX 3: recursive full-tree clear of nsSelected (walks collapsed subtrees) }
+    procedure ClearAllSelectedFull(ANode: PTyTreeNode);
     function  GetSelected(Node: PTyTreeNode): Boolean;
     procedure SetSelected(Node: PTyTreeNode; AValue: Boolean);
     function  GetFocusedNode: PTyTreeNode;
     procedure SetFocusedNode(AValue: PTyTreeNode);
+    { D1: move focus without touching selection (multi-select helper) }
+    procedure MoveFocusOnly(AValue: PTyTreeNode);
+    { D1: Ctrl+Shift additive range extension — add anchor..target to current selection }
+    procedure AddRangeToSelection(AAnchor, ATarget: PTyTreeNode);
     function  MakeNewNode: PTyTreeNode;
     procedure FreeNodeMem(Node: PTyTreeNode);
     procedure SetNodeDataSize(AValue: Integer);
@@ -219,6 +259,8 @@ type
     procedure InitNode(Node: PTyTreeNode);
     procedure InitChildren(Node: PTyTreeNode);
     procedure ToggleNode(Node: PTyTreeNode; AExpand: Boolean);
+    { C1: toggle a node's check state, fire OnChecking/OnChecked, propagate if needed }
+    procedure ToggleCheck(Node: PTyTreeNode);
     { A5 iterators }
     function GetFirstChild(Node: PTyTreeNode): PTyTreeNode;
     function GetLastChild(Node: PTyTreeNode): PTyTreeNode;
@@ -235,6 +277,17 @@ type
     function  GetNodeAt(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
     { B1 helpers — used by tests + scroll engine }
     function  SumVisibleHeights: Integer;
+    { A2: check-propagation pure helpers }
+    procedure PropagateCheckDown(Node: PTyTreeNode; AState: TTyCheckState);
+    function  RecomputeParentCheckState(Node: PTyTreeNode): TTyCheckState;
+    { A3: range-selection helper + selection-count }
+    procedure InternalSetSelected(Node: PTyTreeNode; AValue: Boolean);
+    procedure SelectRange(AAnchor, ATarget: PTyTreeNode);
+    function  SelectedCount: Integer;
+    { D1: multi-select public API }
+    procedure SelectAll;
+    function  GetFirstSelected: PTyTreeNode;
+    function  GetNextSelected(Node: PTyTreeNode): PTyTreeNode;
     { C1: selection + focus }
     procedure ClearSelection;
     procedure FullExpand(Node: PTyTreeNode = nil);
@@ -243,6 +296,10 @@ type
     property Expanded[Node: PTyTreeNode]: Boolean read GetExpanded write SetExpanded;
     property Selected[Node: PTyTreeNode]: Boolean read GetSelected write SetSelected;
     property FocusedNode: PTyTreeNode read GetFocusedNode write SetFocusedNode;
+    { B1: raw per-node check accessors (no propagation — that is Phase C) }
+    property CheckType[Node: PTyTreeNode]: TTyCheckType   read GetCheckType  write SetCheckType;
+    property CheckState[Node: PTyTreeNode]: TTyCheckState  read GetCheckState write SetCheckState;
+    property Checked[Node: PTyTreeNode]: Boolean           read GetChecked    write SetChecked;
     property RootNode: PTyTreeNode read FRoot;
     property RangeY: Integer read FRangeY;
     property OffsetY: Integer read FOffsetY;
@@ -271,6 +328,8 @@ type
     { E2: recursive sort of the whole tree (initialized+expanded levels only) }
     procedure SortTree(Column: Integer; ADirection: TTySortDirection);
   published
+    { B1: option flags set (default [] = ③a/③b behaviour) }
+    property Options: TTyTreeOptions read FOptions write SetOptions default [];
     { B (columns): header sub-object }
     property Header: TTyTreeHeader read FHeader write SetHeader;
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
@@ -302,6 +361,11 @@ type
     property OnCollapsed:     TTyTreeNodeEvent         read FOnCollapsed     write FOnCollapsed;
     property OnChange:        TTyTreeNodeEvent         read FOnChange        write FOnChange;
     property OnFocusChanged:  TTyTreeNodeEvent         read FOnFocusChanged  write FOnFocusChanged;
+    { C1: check events }
+    property OnChecking: TTyTreeCheckingEvent          read FOnChecking      write FOnChecking;
+    property OnChecked:  TTyTreeNodeEvent              read FOnChecked       write FOnChecked;
+    { D1: selection-changed event — fired once per gesture when multi-select set changes }
+    property OnSelectionChanged: TNotifyEvent          read FOnSelectionChanged write FOnSelectionChanged;
     property OnNodeClick:     TTyTreeNodeEvent         read FOnNodeClick     write FOnNodeClick;
     property OnNodeDblClick:  TTyTreeNodeEvent         read FOnNodeDblClick  write FOnNodeDblClick;
     { C3: paint events }
@@ -342,6 +406,7 @@ procedure TTyTreeView.ClearSelectedNode;
 begin
   if FSelectedNode = nil then Exit;
   Exclude(FSelectedNode^.States, nsSelected);
+  if FSelectionCount > 0 then Dec(FSelectionCount);  { A3: keep count consistent }
   FSelectedNode := nil;
 end;
 
@@ -365,9 +430,10 @@ begin
     // Selecting a node: changed if the node is not already the selected one.
     didChange := (FSelectedNode <> Node);
     if not didChange then Exit;   // same node, same state — fire nothing
-    ClearSelectedNode;
+    ClearSelectedNode;             // deselects previous (adjusts FSelectionCount)
     Include(Node^.States, nsSelected);
     FSelectedNode := Node;
+    Inc(FSelectionCount);          { A3: count the new selection }
   end
   else
   begin
@@ -376,6 +442,7 @@ begin
     didChange := True;
     Exclude(Node^.States, nsSelected);
     if FSelectedNode = Node then FSelectedNode := nil;
+    if FSelectionCount > 0 then Dec(FSelectionCount);  { A3: keep count consistent }
   end;
 
   if didChange and Assigned(FOnChange) then
@@ -383,17 +450,241 @@ begin
   Invalidate;
 end;
 
-{ ClearSelection: public — deselects the current node, fires OnChange. }
+{ ClearAllSelectedFull — FIX 3 helper: walk the ENTIRE structural tree
+  (not just visible nodes) clearing nsSelected on every node.  This ensures
+  that selected descendants hidden under a collapsed parent are also cleared,
+  preventing stale highlights on re-expand and FSelectionCount desync. }
+procedure TTyTreeView.ClearAllSelectedFull(ANode: PTyTreeNode);
+var
+  child: PTyTreeNode;
+begin
+  if ANode = nil then Exit;
+  child := ANode^.FirstChild;
+  while child <> nil do
+  begin
+    if nsSelected in child^.States then
+      Exclude(child^.States, nsSelected);
+    if child^.FirstChild <> nil then
+      ClearAllSelectedFull(child);
+    child := child^.NextSibling;
+  end;
+end;
+
+{ ClearSelection: public — deselects all selected nodes, fires OnChange once.
+  FIX 3: uses ClearAllSelectedFull (full structural walk, not just visible
+  nodes) so selected nodes hidden under a collapsed parent are also cleared.
+  This prevents stale highlights on re-expand and FSelectionCount desync. }
 procedure TTyTreeView.ClearSelection;
 var
   prev: PTyTreeNode;
 begin
-  if FSelectedNode = nil then Exit;
+  if (FSelectedNode = nil) and (FSelectionCount = 0) then Exit;
   prev := FSelectedNode;
-  Exclude(prev^.States, nsSelected);
-  FSelectedNode := nil;
-  if Assigned(FOnChange) then FOnChange(Self, prev);
+  // Walk the entire structural tree, not just visible nodes (FIX 3).
+  ClearAllSelectedFull(FRoot);
+  FSelectedNode   := nil;
+  FSelectionCount := 0;
+  if prev <> nil then
+    if Assigned(FOnChange) then FOnChange(Self, prev)
+  else
+    if Assigned(FOnChange) then FOnChange(Self, nil);
   Invalidate;
+end;
+
+{ ── A2 ── check propagation pure helpers ─────────────────────────────────── }
+
+{ PropagateCheckDown — sets every ALREADY-INITIALISED descendant whose
+  CheckType is ctCheckBox or ctTriStateCheckBox to AState.  ctNone and
+  ctRadioButton nodes are skipped.  Lazy (not-yet-initialised) subtrees are
+  intentionally untouched — they will inherit the right state when they are
+  eventually initialised in Phase B/C. }
+procedure TTyTreeView.PropagateCheckDown(Node: PTyTreeNode; AState: TTyCheckState);
+var
+  child: PTyTreeNode;
+begin
+  if Node = nil then Exit;
+  child := Node^.FirstChild;
+  while child <> nil do
+  begin
+    if child^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+      child^.CheckState := AState;
+    // Recurse into already-initialised children (lazy-safe: only if FirstChild ≠ nil)
+    if child^.FirstChild <> nil then
+      PropagateCheckDown(child, AState);
+    child := child^.NextSibling;
+  end;
+end;
+
+{ RecomputeParentCheckState — inspect Node's direct check-children
+  (ctCheckBox/ctTriStateCheckBox only; ctRadioButton/ctNone ignored).
+  Returns: csChecked if all check-children are csChecked;
+           csUnchecked if all are csUnchecked;
+           csMixed if mixed or any is already csMixed;
+           Node^.CheckState unchanged when there are no check-children. }
+function TTyTreeView.RecomputeParentCheckState(Node: PTyTreeNode): TTyCheckState;
+var
+  child:        PTyTreeNode;
+  hasChecked:   Boolean;
+  hasUnchecked: Boolean;
+begin
+  Result       := Node^.CheckState;  // default: no change when no check-children
+  hasChecked   := False;
+  hasUnchecked := False;
+
+  child := Node^.FirstChild;
+  while child <> nil do
+  begin
+    if child^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+    begin
+      case child^.CheckState of
+        csChecked:   hasChecked   := True;
+        csUnchecked: hasUnchecked := True;
+        csMixed:     begin Result := csMixed; Exit; end;  // short-circuit
+      end;
+      if hasChecked and hasUnchecked then begin Result := csMixed; Exit; end;
+    end;
+    child := child^.NextSibling;
+  end;
+
+  if hasChecked and not hasUnchecked then
+    Result := csChecked
+  else if hasUnchecked and not hasChecked then
+    Result := csUnchecked;
+  // else: no check-children → leave Result as Node^.CheckState
+end;
+
+{ ── A3 ── range-selection pure helpers ───────────────────────────────────── }
+
+{ InternalSetSelected — add/remove nsSelected AND keep FSelectionCount correct.
+  Never touches FRoot.  Only counts real transitions (no double-counts). }
+procedure TTyTreeView.InternalSetSelected(Node: PTyTreeNode; AValue: Boolean);
+begin
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if AValue then
+  begin
+    if not (nsSelected in Node^.States) then
+    begin
+      Include(Node^.States, nsSelected);
+      Inc(FSelectionCount);
+      if FSelectedNode = nil then FSelectedNode := Node;  // maintain single-select field
+    end;
+  end
+  else
+  begin
+    if nsSelected in Node^.States then
+    begin
+      Exclude(Node^.States, nsSelected);
+      if FSelectionCount > 0 then Dec(FSelectionCount);
+      if FSelectedNode = Node then FSelectedNode := nil;
+    end;
+  end;
+end;
+
+{ SelectRange — clear all selected nodes, then select every visible node from
+  AAnchor to ATarget inclusive (order-independent: works in both directions).
+  Maintains FSelectionCount. }
+procedure TTyTreeView.SelectRange(AAnchor, ATarget: PTyTreeNode);
+var
+  n:       PTyTreeNode;
+  inRange: Boolean;
+begin
+  if (AAnchor = nil) or (ATarget = nil) then Exit;
+
+  // FIX 3: clear the FULL structural tree (not just visible) so selected nodes
+  // hidden under collapsed parents don't persist as stale highlights.
+  ClearAllSelectedFull(FRoot);
+  FSelectionCount := 0;
+  FSelectedNode   := nil;
+
+  // Walk visible order: enter range when we hit either endpoint;
+  // exit (and include the second endpoint) when we hit the other one.
+  inRange := False;
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    if (n = AAnchor) or (n = ATarget) then
+    begin
+      if not inRange then
+      begin
+        // First endpoint found: start the inclusive range
+        inRange := True;
+        InternalSetSelected(n, True);
+        if AAnchor = ATarget then Break;  // degenerate: single-node range
+      end
+      else
+      begin
+        // Second endpoint: include it and we're done
+        InternalSetSelected(n, True);
+        Break;
+      end;
+    end
+    else if inRange then
+      InternalSetSelected(n, True);
+    n := GetNextVisibleNoInit(n);
+  end;
+end;
+
+function TTyTreeView.SelectedCount: Integer;
+begin
+  Result := FSelectionCount;
+end;
+
+{ ── D1 ── multi-select public API ────────────────────────────────────────── }
+
+{ SelectAll — select all visible initialised nodes; update FSelectionCount;
+  fire OnSelectionChanged if anything changed. }
+procedure TTyTreeView.SelectAll;
+var
+  n:      PTyTreeNode;
+  didAny: Boolean;
+begin
+  didAny := False;
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    if not (nsSelected in n^.States) then
+    begin
+      Include(n^.States, nsSelected);
+      Inc(FSelectionCount);
+      if FSelectedNode = nil then FSelectedNode := n;
+      didAny := True;
+    end;
+    n := GetNextVisibleNoInit(n);
+  end;
+  if didAny then
+  begin
+    Invalidate;
+    if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+  end;
+end;
+
+{ GetFirstSelected — return the first visible node with nsSelected, or nil. }
+function TTyTreeView.GetFirstSelected: PTyTreeNode;
+var
+  n: PTyTreeNode;
+begin
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    if nsSelected in n^.States then Exit(n);
+    n := GetNextVisibleNoInit(n);
+  end;
+  Result := nil;
+end;
+
+{ GetNextSelected — return the next visible node after Node with nsSelected, or nil. }
+function TTyTreeView.GetNextSelected(Node: PTyTreeNode): PTyTreeNode;
+var
+  n: PTyTreeNode;
+begin
+  if Node = nil then Exit(nil);
+  n := GetNextVisibleNoInit(Node);
+  while n <> nil do
+  begin
+    if nsSelected in n^.States then Exit(n);
+    n := GetNextVisibleNoInit(n);
+  end;
+  Result := nil;
 end;
 
 function TTyTreeView.GetFocusedNode: PTyTreeNode;
@@ -419,6 +710,143 @@ begin
   Invalidate;
   { suppress unused-variable warning }
   if prevFocus = nil then ;
+end;
+
+{ MoveFocusOnly — move keyboard focus without touching the selection set.
+  Used by the multi-select mouse/keyboard paths to position the caret
+  independently of selection. }
+procedure TTyTreeView.MoveFocusOnly(AValue: PTyTreeNode);
+begin
+  if AValue = FFocusedNode then Exit;
+  FFocusedNode := AValue;
+  if Assigned(FOnFocusChanged) then FOnFocusChanged(Self, AValue);
+  Invalidate;
+end;
+
+{ AddRangeToSelection — Ctrl+Shift additive extend: add every visible node
+  from AAnchor to ATarget (inclusive, order-independent) to the EXISTING
+  selection without clearing.  InternalSetSelected ignores already-selected nodes. }
+procedure TTyTreeView.AddRangeToSelection(AAnchor, ATarget: PTyTreeNode);
+var
+  n:       PTyTreeNode;
+  inRange: Boolean;
+begin
+  if (AAnchor = nil) or (ATarget = nil) then Exit;
+  inRange := False;
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    if (n = AAnchor) or (n = ATarget) then
+    begin
+      if not inRange then
+      begin
+        inRange := True;
+        InternalSetSelected(n, True);
+        if AAnchor = ATarget then Break;  // single-node degenerate
+      end
+      else
+      begin
+        InternalSetSelected(n, True);
+        Break;
+      end;
+    end
+    else if inRange then
+      InternalSetSelected(n, True);
+    n := GetNextVisibleNoInit(n);
+  end;
+end;
+
+{ ── C1 ── ToggleCheck — check-state toggle + events + radio + tri-state ─────── }
+
+{ ToggleCheck — apply a user-driven check toggle to Node.
+  Guards: Node<>nil, Node<>FRoot, toCheckSupport in FOptions, CheckType<>ctNone.
+  Fires OnChecking (veto possible), toggles the state, propagates down/up when
+  toAutoTristateTracking is in FOptions, fires OnChecked, repaints. }
+procedure TTyTreeView.ToggleCheck(Node: PTyTreeNode);
+var
+  Allowed:  Boolean;
+  sib:      PTyTreeNode;
+  anc:      PTyTreeNode;
+  newState: TTyCheckState;
+begin
+  { ── guards ── }
+  if Node = nil then Exit;
+  if Node = FRoot then Exit;
+  if not (toCheckSupport in FOptions) then Exit;
+  if Node^.CheckType = ctNone then Exit;
+
+  { ── OnChecking veto ── }
+  Allowed := True;
+  if Assigned(FOnChecking) then FOnChecking(Self, Node, Allowed);
+  if not Allowed then Exit;
+
+  { ── apply by CheckType ── }
+  case Node^.CheckType of
+
+    ctCheckBox:
+    begin
+      { simple toggle: unchecked↔checked }
+      if Node^.CheckState = csChecked then
+        Node^.CheckState := csUnchecked
+      else
+        Node^.CheckState := csChecked;
+    end;
+
+    ctTriStateCheckBox:
+    begin
+      { user-click cycle: unchecked→checked→unchecked
+        csMixed (set only by propagation) → user click goes to csChecked }
+      case Node^.CheckState of
+        csUnchecked: Node^.CheckState := csChecked;
+        csChecked:   Node^.CheckState := csUnchecked;
+        csMixed:     Node^.CheckState := csChecked;
+      end;
+    end;
+
+    ctRadioButton:
+    begin
+      { radio: set this node csChecked; uncheck every ctRadioButton sibling }
+      Node^.CheckState := csChecked;
+      { walk the siblings (same Parent) }
+      sib := Node^.Parent^.FirstChild;
+      while sib <> nil do
+      begin
+        if (sib <> Node) and (sib^.CheckType = ctRadioButton) then
+          sib^.CheckState := csUnchecked;
+        sib := sib^.NextSibling;
+      end;
+      { radio nodes have no tri-state tracking; skip propagation below }
+    end;
+
+  end; { case }
+
+  { ── toAutoTristateTracking ── }
+  if toAutoTristateTracking in FOptions then
+  begin
+    if Node^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+    begin
+      { DOWN: push the new state to all already-initialised descendants }
+      PropagateCheckDown(Node, Node^.CheckState);
+
+      { UP: walk ancestors toward FRoot; recompute each and stop early when
+        the state did not actually change (avoids pointless upward sweeps). }
+      anc := Node^.Parent;
+      while (anc <> nil) and (anc <> FRoot) do
+      begin
+        if anc^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+        begin
+          newState := RecomputeParentCheckState(anc);
+          if anc^.CheckState = newState then Break;  { no change — stop }
+          anc^.CheckState := newState;
+        end;
+        anc := anc^.Parent;
+      end;
+    end;
+  end;
+
+  { ── OnChecked + repaint ── }
+  if Assigned(FOnChecked) then FOnChecked(Self, Node);
+  Invalidate;
 end;
 
 { ── C1 ── display property setters ─────────────────────────────────────────── }
@@ -470,6 +898,97 @@ begin
   if FHotTrack = AValue then Exit;
   FHotTrack := AValue;
   Invalidate;
+end;
+
+{ ── B1 ── Options set + check array properties ──────────────────────────────── }
+
+procedure TTyTreeView.SetOptions(AValue: TTyTreeOptions);
+var
+  CheckSupportChanged:  Boolean;
+  MultiSelectRemoved:   Boolean;
+  n:                    PTyTreeNode;
+begin
+  if FOptions = AValue then Exit;
+  CheckSupportChanged := (toCheckSupport in AValue) <> (toCheckSupport in FOptions);
+  { FIX 5: detect toMultiSelect being removed while multiple nodes are selected }
+  MultiSelectRemoved  := (toMultiSelect in FOptions) and
+                         not (toMultiSelect in AValue) and
+                         (FSelectionCount > 1);
+  FOptions := AValue;
+  if CheckSupportChanged then
+  begin
+    { Re-measure FRangeX when toCheckSupport toggles in multi-column mode,
+      because the checkbox slot shifts the caption/image start in the main column. }
+    if (FHeader <> nil) and (FHeader.Columns.Count > 0) then
+      InvalidateTreeLayout;
+  end;
+  if MultiSelectRemoved then
+  begin
+    { Collapse to a single selection: keep FSelectedNode (or FocusedNode as
+      fallback), clear nsSelected on all other nodes via the full structural walk,
+      then restore the single selection. }
+    if FSelectedNode = nil then FSelectedNode := FFocusedNode;
+    ClearAllSelectedFull(FRoot);
+    FSelectionCount := 0;
+    FRangeAnchor    := nil;
+    if FSelectedNode <> nil then
+    begin
+      Include(FSelectedNode^.States, nsSelected);
+      FSelectionCount := 1;
+    end;
+    { Deselect any node that is still in FFocusedNode but not FSelectedNode }
+    if (FFocusedNode <> nil) and (FFocusedNode <> FSelectedNode) then
+    begin
+      n := FFocusedNode;
+      { keep FFocusedNode pointing to the surviving selection }
+      FFocusedNode := FSelectedNode;
+      if Assigned(FOnFocusChanged) then FOnFocusChanged(Self, n);
+    end;
+  end;
+  Invalidate;
+end;
+
+function TTyTreeView.GetCheckType(Node: PTyTreeNode): TTyCheckType;
+begin
+  if Node = nil then Exit(ctNone);
+  Result := Node^.CheckType;
+end;
+
+procedure TTyTreeView.SetCheckType(Node: PTyTreeNode; AValue: TTyCheckType);
+begin
+  if Node = nil then Exit;
+  if Node^.CheckType = AValue then Exit;
+  Node^.CheckType := AValue;
+  Invalidate;
+end;
+
+function TTyTreeView.GetCheckState(Node: PTyTreeNode): TTyCheckState;
+begin
+  if Node = nil then Exit(csUnchecked);
+  Result := Node^.CheckState;
+end;
+
+procedure TTyTreeView.SetCheckState(Node: PTyTreeNode; AValue: TTyCheckState);
+begin
+  if Node = nil then Exit;
+  if Node^.CheckState = AValue then Exit;
+  Node^.CheckState := AValue;
+  Invalidate;
+end;
+
+function TTyTreeView.GetChecked(Node: PTyTreeNode): Boolean;
+begin
+  if Node = nil then Exit(False);
+  Result := Node^.CheckState = csChecked;
+end;
+
+procedure TTyTreeView.SetChecked(Node: PTyTreeNode; AValue: Boolean);
+begin
+  if Node = nil then Exit;
+  if AValue then
+    SetCheckState(Node, csChecked)
+  else
+    SetCheckState(Node, csUnchecked);
 end;
 
 { ── C1 ── bulk operations ───────────────────────────────────────────────────── }
@@ -1148,7 +1667,9 @@ end;
 procedure TTyTreeView.DeleteNode(Node: PTyTreeNode);
 var
   nodeParent: PTyTreeNode;
-  dh, dc: Integer;
+  dh, dc:     Integer;
+  reseqChild: PTyTreeNode;   { A1: for sibling re-sequence walk }
+  reseqIdx:   Cardinal;
 begin
   if (Node = nil) or (Node = FRoot) then Exit;
 
@@ -1156,11 +1677,17 @@ begin
   if FFocusedNode   = Node then FFocusedNode   := nil;
   if FLastMouseNode = Node then FLastMouseNode := nil;
   if FHotNode       = Node then FHotNode       := nil;
-  if FSelectedNode = Node then
+  { FIX 1: selection bookkeeping — clear nsSelected + decrement count for THIS
+    node BEFORE the recursive child-free loop below, so that every descendant
+    also runs through DeleteNode and gets the same treatment.  We handle this
+    node's own state here; children are handled recursively. }
+  if nsSelected in Node^.States then
   begin
     Exclude(Node^.States, nsSelected);
-    FSelectedNode := nil;
+    if FSelectionCount > 0 then Dec(FSelectionCount);
   end;
+  if FSelectedNode = Node then FSelectedNode := nil;
+  if FRangeAnchor  = Node then FRangeAnchor  := nil;
 
   // Recursively free all children first (depth-first)
   while Node^.FirstChild <> nil do DeleteNode(Node^.FirstChild);
@@ -1201,13 +1728,42 @@ begin
   if nodeParent^.ChildCount = 0 then
     Exclude(nodeParent^.States, nsHasChildren);
 
+  { A1: re-sequence the remaining siblings' Index values (0-based, consecutive).
+    Skipped during Clear (nsClearing on FRoot), so bulk teardown stays O(n).
+    FIX 2: guard on FRoot^.States, not nodeParent^.States — nsClearing is set only
+    on FRoot, so checking nodeParent caused O(k^2) re-sequences on intermediate
+    nodes during Clear even though FRoot was already marked. }
+  if not (nsClearing in FRoot^.States) then
+  begin
+    reseqChild := nodeParent^.FirstChild;
+    reseqIdx   := 0;
+    while reseqChild <> nil do
+    begin
+      reseqChild^.Index := reseqIdx;
+      Inc(reseqIdx);
+      reseqChild := reseqChild^.NextSibling;
+    end;
+  end;
+
   FreeNodeMem(Node);
   InvalidateTreeLayout;
 end;
 
 procedure TTyTreeView.Clear;
 begin
-  while FRoot^.FirstChild <> nil do DeleteNode(FRoot^.FirstChild);
+  { A1: mark FRoot with nsClearing so DeleteNode skips the O(siblings) index
+    re-sequence during bulk teardown, keeping Clear O(n). }
+  Include(FRoot^.States, nsClearing);
+  try
+    while FRoot^.FirstChild <> nil do DeleteNode(FRoot^.FirstChild);
+  finally
+    Exclude(FRoot^.States, nsClearing);
+  end;
+  { FIX 1: make bookkeeping authoritative after teardown — DeleteNode decrements
+    per-node, but Clear guarantees all nodes are gone so these must be 0/nil. }
+  FSelectionCount := 0;
+  FSelectedNode   := nil;
+  FRangeAnchor    := nil;
 end;
 
 { ── A5 ── lazy lifecycle ─────────────────────────────────────────────────── }
@@ -1759,6 +2315,12 @@ var
   sortBandR: TRect;
   accentPx: TBGRAPixel;         // theme accent for the drag ghost/drop-mark
   mainColBase: Integer;
+  { B2: checkbox slot variables }
+  cbSlotW: Integer;            // device-px width of the checkbox slot (P.Scale(16))
+  cbStyle: TTyStyleSet;        // resolved TyTreeCheckBox style
+  cbBoxRect: TRect;            // device rect of the box/circle within the slot
+  cbBoxSize: Integer;          // device-px side of the drawn box/circle
+  usedCbSlotW: Integer;        // 0 when checkbox off/ctNone; cbSlotW otherwise
 begin
   UpdateScrollBars;   // keep scrollbar range current (cheap; no-op when clean)
 
@@ -2145,7 +2707,91 @@ begin
             end;
 
             { Image (main column only) }
+            { B2: Checkbox slot (main column, after expand button, before image) }
             captionX := mainColBase + indentPx;
+            usedCbSlotW := 0;
+            if (toCheckSupport in FOptions) and (node^.CheckType <> ctNone) then
+            begin
+              cbSlotW     := P.Scale(16);
+              usedCbSlotW := cbSlotW;
+              { Resolve checkbox style — fall back gracefully if typeKey absent }
+              if node^.CheckState = csChecked then
+                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
+              else if nsSelected in node^.States then
+                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysSelected])
+              else
+                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', []);
+              cbBoxSize := P.Scale(12);
+              if cbBoxSize > rowH - P.Scale(2) then cbBoxSize := rowH - P.Scale(2);
+              if cbBoxSize < 4 then cbBoxSize := 4;
+              cbBoxRect := Rect(
+                captionX + (cbSlotW - cbBoxSize) div 2,
+                rowTop + (rowH - cbBoxSize) div 2,
+                captionX + (cbSlotW - cbBoxSize) div 2 + cbBoxSize,
+                rowTop + (rowH - cbBoxSize) div 2 + cbBoxSize);
+              { FIX 4: draw rectangular box background + border ONLY for checkbox
+                types; ctRadioButton draws its own circle below (no square corners). }
+              if node^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+              begin
+                if tpBackground in cbStyle.Present then
+                  P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
+                else
+                  P.FillBackground(cbBoxRect, S.Background, 2);
+                if tpBorderColor in cbStyle.Present then
+                  P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
+                else
+                  P.StrokeBorder(cbBoxRect, 2, 1, S.BorderColor);
+              end;
+              { Draw glyph by CheckType + CheckState }
+              case node^.CheckType of
+                ctCheckBox, ctTriStateCheckBox:
+                begin
+                  if node^.CheckState = csChecked then
+                  begin
+                    if tpTextColor in cbStyle.Present then
+                      P.DrawGlyph(cbBoxRect, tgCheck, cbStyle.TextColor, 2)
+                    else
+                      P.DrawGlyph(cbBoxRect, tgCheck, NodeStyle.TextColor, 2);
+                  end
+                  else if node^.CheckState = csMixed then
+                  begin
+                    if tpTextColor in cbStyle.Present then
+                      P.Bitmap.FillRect(
+                        cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
+                        cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                        TyColorToBGRA(cbStyle.TextColor))
+                    else
+                      P.Bitmap.FillRect(
+                        cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
+                        cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                        TyColorToBGRA(S.TextColor));
+                  end;
+                  { csUnchecked: nothing extra }
+                end;
+                ctRadioButton:
+                begin
+                  { Draw circle only — no square box (FIX 4: prevents corner artifact) }
+                  if tpBackground in cbStyle.Present then
+                    P.FillBackground(cbBoxRect, cbStyle.Background, cbBoxSize div 2)
+                  else
+                    P.FillBackground(cbBoxRect, S.Background, cbBoxSize div 2);
+                  if tpBorderColor in cbStyle.Present then
+                    P.StrokeBorder(cbBoxRect, cbBoxSize div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
+                  else
+                    P.StrokeBorder(cbBoxRect, cbBoxSize div 2, 1, S.BorderColor);
+                  if node^.CheckState = csChecked then
+                  begin
+                    if tpTextColor in cbStyle.Present then
+                      P.DrawGlyph(cbBoxRect, tgRadioDot, cbStyle.TextColor, 2)
+                    else
+                      P.DrawGlyph(cbBoxRect, tgRadioDot, NodeStyle.TextColor, 2);
+                  end;
+                end;
+              end; { case }
+              Inc(captionX, cbSlotW);
+            end;
+
+            { Image (main column only) }
             usedImgSlotW := 0;
             if (FImages <> nil) and (FImages.Count > 0) then
             begin
@@ -2267,8 +2913,90 @@ begin
             P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
         end;
 
-        { ── Image ────────────────────────────────────────────────────────── }
+        { ── B2: Checkbox slot (after expand button, before image) ──────── }
         captionX := contentLeft + indentPx;
+        usedCbSlotW := 0;
+        if (toCheckSupport in FOptions) and (node^.CheckType <> ctNone) then
+        begin
+          cbSlotW     := P.Scale(16);
+          usedCbSlotW := cbSlotW;
+          { Resolve checkbox style }
+          if node^.CheckState = csChecked then
+            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
+          else if nsSelected in node^.States then
+            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysSelected])
+          else
+            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', []);
+          cbBoxSize := P.Scale(12);
+          if cbBoxSize > rowH - P.Scale(2) then cbBoxSize := rowH - P.Scale(2);
+          if cbBoxSize < 4 then cbBoxSize := 4;
+          cbBoxRect := Rect(
+            captionX + (cbSlotW - cbBoxSize) div 2,
+            rowTop + (rowH - cbBoxSize) div 2,
+            captionX + (cbSlotW - cbBoxSize) div 2 + cbBoxSize,
+            rowTop + (rowH - cbBoxSize) div 2 + cbBoxSize);
+          { FIX 4: draw rectangular box background + border ONLY for checkbox
+            types; ctRadioButton draws its own circle below (no square corners). }
+          if node^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+          begin
+            if tpBackground in cbStyle.Present then
+              P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
+            else
+              P.FillBackground(cbBoxRect, S.Background, 2);
+            if tpBorderColor in cbStyle.Present then
+              P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
+            else
+              P.StrokeBorder(cbBoxRect, 2, 1, S.BorderColor);
+          end;
+          { Glyph by CheckType + CheckState }
+          case node^.CheckType of
+            ctCheckBox, ctTriStateCheckBox:
+            begin
+              if node^.CheckState = csChecked then
+              begin
+                if tpTextColor in cbStyle.Present then
+                  P.DrawGlyph(cbBoxRect, tgCheck, cbStyle.TextColor, 2)
+                else
+                  P.DrawGlyph(cbBoxRect, tgCheck, NodeStyle.TextColor, 2);
+              end
+              else if node^.CheckState = csMixed then
+              begin
+                if tpTextColor in cbStyle.Present then
+                  P.Bitmap.FillRect(
+                    cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
+                    cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                    TyColorToBGRA(cbStyle.TextColor))
+                else
+                  P.Bitmap.FillRect(
+                    cbBoxRect.Left + P.Scale(3), cbBoxRect.Top + P.Scale(3),
+                    cbBoxRect.Right - P.Scale(3), cbBoxRect.Bottom - P.Scale(3),
+                    TyColorToBGRA(S.TextColor));
+              end;
+            end;
+            ctRadioButton:
+            begin
+              { Draw circle only — no square box (FIX 4: prevents corner artifact) }
+              if tpBackground in cbStyle.Present then
+                P.FillBackground(cbBoxRect, cbStyle.Background, cbBoxSize div 2)
+              else
+                P.FillBackground(cbBoxRect, S.Background, cbBoxSize div 2);
+              if tpBorderColor in cbStyle.Present then
+                P.StrokeBorder(cbBoxRect, cbBoxSize div 2, cbStyle.BorderWidth, cbStyle.BorderColor)
+              else
+                P.StrokeBorder(cbBoxRect, cbBoxSize div 2, 1, S.BorderColor);
+              if node^.CheckState = csChecked then
+              begin
+                if tpTextColor in cbStyle.Present then
+                  P.DrawGlyph(cbBoxRect, tgRadioDot, cbStyle.TextColor, 2)
+                else
+                  P.DrawGlyph(cbBoxRect, tgRadioDot, NodeStyle.TextColor, 2);
+              end;
+            end;
+          end; { case }
+          Inc(captionX, cbSlotW);
+        end;
+
+        { ── Image ────────────────────────────────────────────────────────── }
         { The image slot is RESERVED whenever an image list is assigned (matching
           GetNodeAtPoint's hpImage zone), so usedImgSlotW mirrors that reservation
           for the FRangeX width below. }
@@ -2310,10 +3038,10 @@ begin
         { ── FRangeX accumulation ─────────────────────────────────────────── }
         { Pure content WIDTH for this row — independent of CR.Left and FOffsetX so
           the H-scroll range never drifts with the scroll position.  Equals the
-          rendered layout: indent + (image slot if used) + gap + text + tail. }
+          rendered layout: indent + cbSlot + (image slot if used) + gap + text + tail. }
         if txt <> '' then
         begin
-          measW := indentPx + usedImgSlotW + P.Scale(2) +
+          measW := indentPx + usedCbSlotW + usedImgSlotW + P.Scale(2) +
             P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
                           NodeStyle.FontWeight).cx + P.Scale(4);
           if measW > rangeXNew then
@@ -2402,10 +3130,12 @@ begin
   imgSlotW := MulDiv(FIndent, PPI, 96);
 
   { Zones (all in content-space X, i.e. relative to CR.Left after FOffsetX):
-      [0 .. indentPx - btnSlotW)   = hpIndent (the left-padding area)
+      [0 .. indentPx - btnSlotW)        = hpIndent (the left-padding area)
       [indentPx - btnSlotW .. indentPx) = hpButton slot (only when nsHasChildren)
-      [indentPx .. indentPx + imgSlotW) = hpImage (only when FImages assigned)
-      [indentPx or beyond caption)       = hpLabel                            }
+      [indentPx .. indentPx + cbSlotW)  = hpCheckBox (B3: only when toCheckSupport + CheckType<>ctNone)
+      [captionX .. captionX+imgSlotW)   = hpImage (only when FImages assigned)
+      [captionX or beyond)              = hpLabel
+    cbSlotW = MulDiv(16, PPI, 96) — identical to B2 paint formula.              }
 
   if absX < 0 then
   begin
@@ -2431,25 +3161,63 @@ begin
   begin
     { Past the indent zone }
     captionX := indentPx;
-    if (FImages <> nil) and (FImages.Count > 0) then
+
+    { B3: Checkbox slot — same width as B2 paint: MulDiv(16, PPI, 96) }
+    if (toCheckSupport in FOptions) and (node^.CheckType <> ctNone) then
     begin
-      if absX < captionX + imgSlotW then
+      if absX < captionX + MulDiv(16, PPI, 96) then
       begin
-        APart  := hpImage;
+        APart  := hpCheckBox;
         Result := node;
+        { Column detection happens below — don't Exit here }
       end
       else
       begin
-        Inc(captionX, imgSlotW);
-        APart  := hpLabel;
-        Result := node;
+        Inc(captionX, MulDiv(16, PPI, 96));
+        if (FImages <> nil) and (FImages.Count > 0) then
+        begin
+          if absX < captionX + imgSlotW then
+          begin
+            APart  := hpImage;
+            Result := node;
+          end
+          else
+          begin
+            Inc(captionX, imgSlotW);
+            APart  := hpLabel;
+            Result := node;
+          end;
+        end
+        else
+        begin
+          APart  := hpLabel;
+          Result := node;
+        end;
       end;
     end
     else
     begin
-      { Everything to the right of the image slot is the label area }
-      APart  := hpLabel;
-      Result := node;
+      { No checkbox slot }
+      if (FImages <> nil) and (FImages.Count > 0) then
+      begin
+        if absX < captionX + imgSlotW then
+        begin
+          APart  := hpImage;
+          Result := node;
+        end
+        else
+        begin
+          Inc(captionX, imgSlotW);
+          APart  := hpLabel;
+          Result := node;
+        end;
+      end
+      else
+      begin
+        { Everything to the right of the indent zone is the label area }
+        APart  := hpLabel;
+        Result := node;
+      end;
     end;
   end;
 
@@ -2587,11 +3355,78 @@ begin
       { Click on the expand/collapse button — toggle, do NOT change selection }
       Expanded[node] := not Expanded[node];
     end
+    else if part = hpCheckBox then
+    begin
+      { C1: click on the checkbox slot — toggle the check state, do NOT change
+        selection or focus (a checkbox click is purely a check operation). }
+      ToggleCheck(node);
+    end
     else
     begin
-      { Click on any other part (label, image, indent) — focus the node }
-      FocusedNode := node;
-      if Assigned(FOnNodeClick) then FOnNodeClick(Self, node);
+      { Click on any other part (label, image, indent) — select/focus the node.
+        D1: when toMultiSelect, apply Ctrl/Shift modifier semantics.
+        D2: when toFullRowSelect, any in-row part (already in this branch) is
+            treated as a selection hit.  Without toFullRowSelect, only the
+            main-column content zones (label/image) are taken as selection hits;
+            hpIndent still reaches here, but without toFullRowSelect we only
+            count it as a selection gesture if it's hpLabel or hpImage.
+            Note: hpButton and hpCheckBox are already handled above; this branch
+            covers hpLabel, hpImage, hpIndent (and any future column parts). }
+      if toMultiSelect in FOptions then
+      begin
+        { Determine whether this part counts as a selectable hit }
+        if (toFullRowSelect in FOptions) or (part in [hpLabel, hpImage]) then
+        begin
+          { Multi-select modifier matrix }
+          if (ssShift in Shift) and (ssCtrl in Shift) then
+          begin
+            { Ctrl+Shift: extend range on top of existing selection (no clear) }
+            if FRangeAnchor = nil then FRangeAnchor := node;
+            AddRangeToSelection(FRangeAnchor, node);
+            MoveFocusOnly(node);
+            if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          end
+          else if ssShift in Shift then
+          begin
+            { Shift: select range from anchor to node; anchor unchanged }
+            if FRangeAnchor = nil then FRangeAnchor := node;
+            SelectRange(FRangeAnchor, node);
+            MoveFocusOnly(node);
+            if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          end
+          else if ssCtrl in Shift then
+          begin
+            { Ctrl: toggle membership; update anchor; no clear }
+            InternalSetSelected(node, not (nsSelected in node^.States));
+            FRangeAnchor := node;
+            MoveFocusOnly(node);
+            if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          end
+          else
+          begin
+            { Plain click: clear selection, select one, reset anchor }
+            ClearSelection;
+            InternalSetSelected(node, True);
+            FRangeAnchor := node;
+            MoveFocusOnly(node);
+            if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          end;
+          Invalidate;
+          if Assigned(FOnNodeClick) then FOnNodeClick(Self, node);
+        end
+        else
+        begin
+          { Indent-only click without toFullRowSelect — treat as focus/select (③b) }
+          FocusedNode := node;
+          if Assigned(FOnNodeClick) then FOnNodeClick(Self, node);
+        end;
+      end
+      else
+      begin
+        { Single-select path (③a/③b): unchanged behaviour }
+        FocusedNode := node;
+        if Assigned(FOnNodeClick) then FOnNodeClick(Self, node);
+      end;
     end;
   end
   else if Button = mbRight then
@@ -2795,6 +3630,70 @@ begin
 
   cur := FFocusedNode;
 
+  { D2: multi-select keyboard overrides for Shift+arrows, Ctrl+Space, Ctrl+A.
+    These are checked BEFORE the main case so they can intercept VK_DOWN/VK_UP. }
+  if toMultiSelect in FOptions then
+  begin
+    { Ctrl+A — select all visible nodes }
+    if (ssCtrl in Shift) and (Key = Ord('A')) then
+    begin
+      SelectAll;
+      Key := 0;
+      Exit;
+    end;
+
+    { Ctrl+Space — toggle selection on the focused node }
+    if (ssCtrl in Shift) and (Key = VK_SPACE) then
+    begin
+      if cur <> nil then
+      begin
+        InternalSetSelected(cur, not (nsSelected in cur^.States));
+        Invalidate;
+        if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+      end;
+      Key := 0;
+      Exit;
+    end;
+
+    { Shift+Down — move caret down and extend range from anchor to caret }
+    if (ssShift in Shift) and (Key = VK_DOWN) then
+    begin
+      if cur = nil then
+        nxt := GetFirstVisibleNoInit
+      else
+        nxt := GetNextVisibleNoInit(cur);
+      if nxt <> nil then
+      begin
+        if FRangeAnchor = nil then FRangeAnchor := cur;
+        MoveFocusOnly(nxt);
+        SelectRange(FRangeAnchor, nxt);
+        ScrollIntoView(nxt);
+        if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+      end;
+      Key := 0;
+      Exit;
+    end;
+
+    { Shift+Up — move caret up and extend range from anchor to caret }
+    if (ssShift in Shift) and (Key = VK_UP) then
+    begin
+      if cur <> nil then
+      begin
+        nxt := GetPreviousVisibleNoInit(cur);
+        if nxt <> nil then
+        begin
+          if FRangeAnchor = nil then FRangeAnchor := cur;
+          MoveFocusOnly(nxt);
+          SelectRange(FRangeAnchor, nxt);
+          ScrollIntoView(nxt);
+          if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+        end;
+      end;
+      Key := 0;
+      Exit;
+    end;
+  end;
+
   case Key of
 
     VK_DOWN:
@@ -2805,8 +3704,22 @@ begin
         nxt := GetNextVisibleNoInit(cur);
       if nxt <> nil then
       begin
-        FocusedNode := nxt;
-        ScrollIntoView(nxt);
+        if toMultiSelect in FOptions then
+        begin
+          { Plain Down in multi-select: collapse to single selection + reset anchor }
+          ClearSelection;
+          InternalSetSelected(nxt, True);
+          FRangeAnchor := nxt;
+          MoveFocusOnly(nxt);
+          Invalidate;
+          if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          ScrollIntoView(nxt);
+        end
+        else
+        begin
+          FocusedNode := nxt;
+          ScrollIntoView(nxt);
+        end;
       end;
       Key := 0;
     end;
@@ -2818,8 +3731,22 @@ begin
         nxt := GetPreviousVisibleNoInit(cur);
         if nxt <> nil then
         begin
-          FocusedNode := nxt;
-          ScrollIntoView(nxt);
+          if toMultiSelect in FOptions then
+          begin
+            { Plain Up in multi-select: collapse to single selection + reset anchor }
+            ClearSelection;
+            InternalSetSelected(nxt, True);
+            FRangeAnchor := nxt;
+            MoveFocusOnly(nxt);
+            Invalidate;
+            if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+            ScrollIntoView(nxt);
+          end
+          else
+          begin
+            FocusedNode := nxt;
+            ScrollIntoView(nxt);
+          end;
         end;
       end;
       Key := 0;
@@ -2871,8 +3798,21 @@ begin
       nxt := GetFirstVisibleNoInit;
       if nxt <> nil then
       begin
-        FocusedNode := nxt;
-        ScrollIntoView(nxt);
+        if toMultiSelect in FOptions then
+        begin
+          ClearSelection;
+          InternalSetSelected(nxt, True);
+          FRangeAnchor := nxt;
+          MoveFocusOnly(nxt);
+          Invalidate;
+          if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          ScrollIntoView(nxt);
+        end
+        else
+        begin
+          FocusedNode := nxt;
+          ScrollIntoView(nxt);
+        end;
       end;
       Key := 0;
     end;
@@ -2885,8 +3825,21 @@ begin
       begin
         while GetNextVisibleNoInit(nxt) <> nil do
           nxt := GetNextVisibleNoInit(nxt);
-        FocusedNode := nxt;
-        ScrollIntoView(nxt);
+        if toMultiSelect in FOptions then
+        begin
+          ClearSelection;
+          InternalSetSelected(nxt, True);
+          FRangeAnchor := nxt;
+          MoveFocusOnly(nxt);
+          Invalidate;
+          if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          ScrollIntoView(nxt);
+        end
+        else
+        begin
+          FocusedNode := nxt;
+          ScrollIntoView(nxt);
+        end;
       end;
       Key := 0;
     end;
@@ -2968,6 +3921,22 @@ begin
       if (cur <> nil) and Assigned(FOnNodeDblClick) then
         FOnNodeDblClick(Self, cur);
       Key := 0;
+    end;
+
+    VK_SPACE:
+    begin
+      { C1: Space toggles the check state of the focused node when toCheckSupport
+        is active and the node has a non-None CheckType.  Falls through (key NOT
+        consumed) when the tree has no check support so that non-check trees are
+        unaffected.
+        D2: Ctrl+Space (for multi-select toggle) is handled above; plain Space
+        here only triggers check-toggle, NOT selection-toggle. }
+      if (toCheckSupport in FOptions) and
+         (cur <> nil) and (cur^.CheckType <> ctNone) then
+      begin
+        ToggleCheck(cur);
+        Key := 0;
+      end;
     end;
 
   end;

@@ -248,3 +248,8 @@ TyTreeHeaderSection||1 => pres[0,1,2,] bg=k1/FFEBE9F5 ut=0 txt=FF2E1065 bd=FFC4B
 TyTreeHeaderSection||2 => pres[0,1,2,] bg=k0 ut=0 txt=FF2E1065 bd=FFC4B5FD/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTreeHeaderSection||3 => pres[0,1,2,] bg=k0 ut=0 txt=FF2E1065 bd=FFC4B5FD/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTreeHeaderSection||4 => pres[0,1,2,] bg=k0 ut=0 txt=FF2E1065 bd=FFC4B5FD/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTreeCheckBox||0 => pres[0,1,2,3,4,] bg=k1/FFFFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=4/4,4,4,4 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTreeCheckBox||1 => pres[0,1,2,3,4,] bg=k1/FFFFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=4/4,4,4,4 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTreeCheckBox||2 => pres[0,1,2,3,4,] bg=k1/FF7C3AED ut=0 txt=FFFFFFFF bd=FF7C3AED/2/0 rad=4/4,4,4,4 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTreeCheckBox||3 => pres[0,1,2,3,4,] bg=k1/FFFFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=4/4,4,4,4 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTreeCheckBox||4 => pres[0,1,2,3,4,] bg=k1/FFFFFFFF ut=0 txt=802E1065 bd=FFC4B5FD/2/0 rad=4/4,4,4,4 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0

@@ -37,6 +37,11 @@ begin
   { selection / focus }
   AssertPub('OnChange');
   AssertPub('OnFocusChanged');
+  { D1: multi-select selection changed }
+  AssertPub('OnSelectionChanged');
+  { C1: check events }
+  AssertPub('OnChecking');
+  AssertPub('OnChecked');
   { interaction }
   AssertPub('OnNodeClick');
   AssertPub('OnNodeDblClick');

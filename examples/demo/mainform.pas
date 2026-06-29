@@ -102,6 +102,8 @@ type
       Column: Integer; TextType: TTyVSTTextType; var CellText: string);
     procedure TyColTreeCompareNodes(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
       Column: Integer; var CompareResult: Integer);
+    procedure TyColTreeChecked(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure TyColTreeSelectionChanged(Sender: TObject);
     procedure GroupBox1Click(Sender: TObject);
     procedure MnuViewToggleClick(Sender: TObject);
     procedure MnuFileExitClick(Sender: TObject);
@@ -307,11 +309,21 @@ end;
 
 { ---------------------------------------------------------------------------
   Multi-column sortable tree — small curated file-tree dataset
-  3 folders x ~4-5 children.  Data is fully static (no NodeDataSize storage).
+  3 folders x ~4-5 children.
   Column 0 = Name (folder/file name)
   Column 1 = Size (bytes as string; '' for folders)
   Column 2 = Modified (date as string)
+
+  FIX 6: Each node stores a STABLE key in its data blob (TColNode) so that
+  after a column sort (which re-stamps Node^.Index with the new position) the
+  data handlers still read the original source-array indices and the rows show
+  the correct content.  Without this, GetText/Compare/InitChildren all keyed on
+  the mutable Node^.Index, making every sort appear to do nothing.
   --------------------------------------------------------------------------- }
+
+type
+  TColNode  = record FolderIdx, ChildIdx: Integer; end;
+  PColNode  = ^TColNode;
 
 const
   { Top-level folder names }
@@ -356,6 +368,15 @@ procedure TDemoMainForm.InitColTree;
 var
   col: TTyTreeColumn;
 begin
+  { FIX 6: each node stores a stable TColNode key so sort does not scramble data }
+  TyColTree.NodeDataSize := SizeOf(TColNode);
+  { E4: enable checkboxes + multi-select + full-row hit + tri-state tracking }
+  TyColTree.Options := [toCheckSupport, toMultiSelect, toAutoTristateTracking,
+                        toFullRowSelect];
+  { E4: wire status display handlers }
+  TyColTree.OnChecked          := @TyColTreeChecked;
+  TyColTree.OnSelectionChanged := @TyColTreeSelectionChanged;
+
   with TyColTree.Header do
   begin
     Options := [hoVisible, hoColumnResize, hoShowSortGlyphs,
@@ -382,18 +403,61 @@ end;
 
 procedure TDemoMainForm.TyColTreeInitNode(Sender: TTyTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+var
+  level: Integer;
+  data:  PColNode;
+  parentData: PColNode;
 begin
-  { Top-level nodes (folders) always have children. }
-  if Sender.GetNodeLevel(Node) = 0 then
+  level := Sender.GetNodeLevel(Node);
+  data  := PColNode(Sender.GetNodeData(Node));
+  if level = 0 then
+  begin
+    { Top-level nodes (folders) always have children. }
     Include(InitStates, ivsHasChildren);
+    { E4: folder → tri-state checkbox so it reflects children state }
+    Node^.CheckType := ctTriStateCheckBox;
+    { FIX 6: store stable key — Node^.Index is still the original position here }
+    if data <> nil then
+    begin
+      data^.FolderIdx := Integer(Node^.Index);
+      data^.ChildIdx  := -1;
+    end;
+  end
+  else
+  begin
+    { E4: level-1 children —
+        "Projects" folder (index 2) uses radio buttons (one active project);
+        Documents + Pictures use plain checkboxes. }
+    { FIX 6: read parent's STORED FolderIdx so it survives parent reorder too }
+    parentData := PColNode(Sender.GetNodeData(ParentNode));
+    if (parentData <> nil) and (parentData^.FolderIdx = 2) then
+      Node^.CheckType := ctRadioButton
+    else
+      Node^.CheckType := ctCheckBox;
+    { FIX 6: store stable child key — use parent's stored FolderIdx when available }
+    if data <> nil then
+    begin
+      if parentData <> nil then
+        data^.FolderIdx := parentData^.FolderIdx
+      else
+        data^.FolderIdx := Integer(ParentNode^.Index);
+      data^.ChildIdx  := Integer(Node^.Index);
+    end;
+  end;
 end;
 
 procedure TDemoMainForm.TyColTreeInitChildren(Sender: TTyTreeView;
   Node: PTyTreeNode; var ChildCount: Cardinal);
 var
+  data:      PColNode;
   folderIdx: Integer;
 begin
-  folderIdx := Integer(Node^.Index);
+  { FIX 6: use stored FolderIdx so expand still works after folder row is sorted }
+  data := PColNode(Sender.GetNodeData(Node));
+  if data <> nil then
+    folderIdx := data^.FolderIdx
+  else
+    folderIdx := Integer(Node^.Index);  { fallback (shouldn't happen) }
   if (folderIdx >= 0) and (folderIdx <= 2) then
     ChildCount := Cardinal(ColTreeChildCounts[folderIdx])
   else
@@ -405,15 +469,20 @@ procedure TDemoMainForm.TyColTreeGetText(Sender: TTyTreeView;
   var CellText: string);
 var
   level, folderIdx, childIdx: Integer;
+  data: PColNode;
   sz: Integer;
 begin
   if TextType <> ttNormal then begin CellText := ''; Exit; end;
 
+  { FIX 6: read stable keys from the node data blob, not from Node^.Index
+    (which is re-stamped by the sort engine to reflect the new position). }
+  data := PColNode(Sender.GetNodeData(Node));
   level := Sender.GetNodeLevel(Node);
   if level = 0 then
   begin
     { Folder row }
-    folderIdx := Integer(Node^.Index);
+    if data <> nil then folderIdx := data^.FolderIdx
+    else folderIdx := Integer(Node^.Index);
     case Column of
       0: CellText := ColTreeFolders[folderIdx];
       1: CellText := '';                          { folders have no size }
@@ -425,8 +494,16 @@ begin
   else
   begin
     { File row }
-    folderIdx := Integer(Node^.Parent^.Index);
-    childIdx  := Integer(Node^.Index);
+    if data <> nil then
+    begin
+      folderIdx := data^.FolderIdx;
+      childIdx  := data^.ChildIdx;
+    end
+    else
+    begin
+      folderIdx := Integer(Node^.Parent^.Index);
+      childIdx  := Integer(Node^.Index);
+    end;
     case Column of
       0: CellText := ColTreeChildNames[folderIdx][childIdx];
       1: begin
@@ -446,23 +523,27 @@ end;
 procedure TDemoMainForm.TyColTreeCompareNodes(Sender: TTyTreeView;
   Node1, Node2: PTyTreeNode; Column: Integer; var CompareResult: Integer);
 var
-  t1, t2: string;
-  s1, s2: Integer;
-  lv: Integer;
+  t1, t2:    string;
+  s1, s2:    Integer;
+  lv:        Integer;
+  d1, d2:    PColNode;
+  fi1, fi2:  Integer;
+  ci1, ci2:  Integer;
 begin
   { Both nodes must be at the same level for sort to compare them.
-    Within the same parent the column determines the key. }
+    Within the same parent the column determines the key.
+    FIX 6: read stable keys from the node data blob. }
   lv := Sender.GetNodeLevel(Node1);
+  d1 := PColNode(Sender.GetNodeData(Node1));
+  d2 := PColNode(Sender.GetNodeData(Node2));
   if lv = 0 then
   begin
+    if d1 <> nil then fi1 := d1^.FolderIdx else fi1 := Integer(Node1^.Index);
+    if d2 <> nil then fi2 := d2^.FolderIdx else fi2 := Integer(Node2^.Index);
     { Folder level: only Name and Modified are meaningful }
     case Column of
-      0: CompareResult := CompareStr(
-           ColTreeFolders[Integer(Node1^.Index)],
-           ColTreeFolders[Integer(Node2^.Index)]);
-      2: CompareResult := CompareStr(
-           ColTreeFolderDates[Integer(Node1^.Index)],
-           ColTreeFolderDates[Integer(Node2^.Index)]);
+      0: CompareResult := CompareStr(ColTreeFolders[fi1], ColTreeFolders[fi2]);
+      2: CompareResult := CompareStr(ColTreeFolderDates[fi1], ColTreeFolderDates[fi2]);
     else
       CompareResult := 0;
     end;
@@ -475,8 +556,12 @@ begin
     case Column of
       1: begin
            { Sort by raw byte size for correct numeric ordering }
-           s1 := ColTreeChildSizes[Integer(Node1^.Parent^.Index)][Integer(Node1^.Index)];
-           s2 := ColTreeChildSizes[Integer(Node2^.Parent^.Index)][Integer(Node2^.Index)];
+           if d1 <> nil then begin fi1 := d1^.FolderIdx; ci1 := d1^.ChildIdx; end
+           else begin fi1 := Integer(Node1^.Parent^.Index); ci1 := Integer(Node1^.Index); end;
+           if d2 <> nil then begin fi2 := d2^.FolderIdx; ci2 := d2^.ChildIdx; end
+           else begin fi2 := Integer(Node2^.Parent^.Index); ci2 := Integer(Node2^.Index); end;
+           s1 := ColTreeChildSizes[fi1][ci1];
+           s2 := ColTreeChildSizes[fi2][ci2];
            if s1 < s2 then CompareResult := -1
            else if s1 > s2 then CompareResult := 1
            else CompareResult := 0;
@@ -485,6 +570,29 @@ begin
       CompareResult := CompareStr(t1, t2);
     end;
   end;
+end;
+
+{ E4: update StatusBar panel 0 after a checkbox toggle.
+  Shows the name of the toggled node (column 0 text). }
+procedure TDemoMainForm.TyColTreeChecked(Sender: TTyTreeView; Node: PTyTreeNode);
+var
+  nodeName: string;
+begin
+  nodeName := '';
+  TyColTreeGetText(Sender, Node, 0, ttNormal, nodeName);
+  StatusBar1.Panels[0].Text := 'Checked: ' + nodeName;
+end;
+
+{ E4: update StatusBar panel 0 after the multi-select set changes. }
+procedure TDemoMainForm.TyColTreeSelectionChanged(Sender: TObject);
+var
+  n: Integer;
+begin
+  n := TyColTree.SelectedCount;
+  if n = 0 then
+    StatusBar1.Panels[0].Text := 'Ready'
+  else
+    StatusBar1.Panels[0].Text := Format('Selected: %d item(s)', [n]);
 end;
 
 end.

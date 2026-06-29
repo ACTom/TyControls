@@ -378,6 +378,10 @@ TyTreeHeader { background: var(--surface-chrome); border-color: var(--border); b
 TyTreeHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }
 TyTreeHeaderSection:hover { background: var(--surface-hover); }
 TyTreeHeaderSection:selected { background: var(--surface-active); }
+TyTreeCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }
+TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+TyTreeCheckBox:disabled { color: var(--muted); }
 
 /* ── @mode conditional token blocks (D7) ──────────────────────────────── */
 

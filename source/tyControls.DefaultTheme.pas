@@ -437,7 +437,11 @@ begin
     'TyTreeHeader { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }' + LineEnding +
     'TyTreeHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     'TyTreeHeaderSection:hover { background: var(--surface-hover); }' + LineEnding +
-    'TyTreeHeaderSection:selected { background: var(--surface-active); }' + LineEnding;
+    'TyTreeHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
+    'TyTreeCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }' + LineEnding +
+    'TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
+    'TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
+    'TyTreeCheckBox:disabled { color: var(--muted); }' + LineEnding;
 end;
 
 end.
