@@ -227,13 +227,17 @@ type
         FEndingEdit       — reentrancy guard shared by commit/cancel/focus-loss so
                             they can't recurse or double-fire.
         FLastMouseColumn  — column under the last MouseDown (NoColumn = none); F2
-                            uses it (fallback: MainColumn, else 0). Reused by ③f. }
+                            uses it (fallback: MainColumn, else 0). Reused by ③f.
+        FLastMouseHitPart — the hit part under the last MouseDown; DblClick uses it
+                            to decide edit-vs-toggle (E3: edit only on an editable
+                            cell region — hpLabel/hpImage, not button/checkbox). }
     FEditor:               TTyEdit;
     FEditNode:             PTyTreeNode;
     FEditColumn:           Integer;
     FEditOriginalText:     string;
     FEndingEdit:           Boolean;
     FLastMouseColumn:      Integer;
+    FLastMouseHitPart:     TTyTreeHitPart;
     { ③e E2: inline-edit events }
     FOnEditing:            TTyTreeEditingEvent;
     FOnNewText:            TTyTreeNewTextEvent;
@@ -360,6 +364,10 @@ type
     function  CurrentCellText(Node: PTyTreeNode; Column: Integer): string;
     procedure FinishEdit;
     property  InlineEditor: TTyEdit read FEditor;   // child editor (tests/descendants)
+    { E3: the column recorded by the last MouseDown (NoColumn = none). Protected so
+      a descendant / test can inspect the trigger state without growing the public
+      surface; F2 uses it as the effective edit column. }
+    property  LastMouseColumn: Integer read FLastMouseColumn;
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Paint; override;
@@ -1726,6 +1734,7 @@ begin
   FEditOriginalText := '';
   FEndingEdit       := False;
   FLastMouseColumn  := NoColumn;
+  FLastMouseHitPart := hpNowhere;
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
@@ -3946,6 +3955,7 @@ var
   headerPart: TTyTreeHitPart;
   headerCol: Integer;
   col: TTyTreeColumn;
+  col2: Integer;   { E3: column under the cursor (out param of the hit-test) }
 begin
   inherited MouseDown(Button, Shift, X, Y);
 
@@ -3986,8 +3996,14 @@ begin
     Exit;  { don't fall through to node hit-test when in header }
   end;
 
-  node := GetNodeAtPoint(X, Y, part);
-  FLastMouseNode := node;
+  node := GetNodeAtPoint(X, Y, part, col2);
+  FLastMouseNode    := node;
+  { E3: record the column + hit part for the edit triggers. FLastMouseColumn is
+    the column under the cursor (NoColumn when 0 columns / outside any cell); F2
+    uses it. FLastMouseHitPart lets DblClick distinguish an editable cell region
+    (hpLabel/hpImage) from the expand button / checkbox. }
+  FLastMouseColumn  := col2;
+  FLastMouseHitPart := part;
 
   if Button = mbLeft then
   begin
@@ -4086,12 +4102,29 @@ end;
 procedure TTyTreeView.DblClick;
 var
   node: PTyTreeNode;
+  editCol: Integer;
 begin
   inherited DblClick;
   { FLastMouseNode was set by the preceding MouseDown; use it here so we don't
     need to re-probe the mouse position (which may have drifted). }
   node := FLastMouseNode;
   if node = nil then Exit;
+
+  { ③e E3: double-click-to-edit takes precedence over expand-toggle, but ONLY on
+    an editable cell region (the label / image zone — never the expand button or
+    the checkbox, which have their own gestures). When the press landed there and
+    EditNode succeeds, consume the double-click (skip the toggle + OnNodeDblClick)
+    so editable cells edit instead of toggling. Otherwise fall through to the
+    existing behaviour UNCHANGED (so Options=[] / non-editable cells are
+    byte-identical). The effective column is FLastMouseColumn when it names a real
+    column, else MainColumn (EditNode resolves NoColumn → MainColumn internally). }
+  if (toEditable in FOptions) and not FEditing and
+     (FLastMouseHitPart in [hpLabel, hpImage]) then
+  begin
+    if FLastMouseColumn <> NoColumn then editCol := FLastMouseColumn
+    else                                 editCol := FHeader.MainColumn;
+    if EditNode(node, editCol) then Exit;
+  end;
 
   { ToggleOnDblClick: toggle expand/collapse on the node (only if expandable
     and the click was NOT on the explicit button — that already toggled on Down). }
@@ -4268,6 +4301,7 @@ procedure TTyTreeView.KeyDown(var Key: Word; Shift: TShiftState);
 var
   cur, nxt: PTyTreeNode;
   viewH, rowH, pgRows, i: Integer;
+  colIdx: Integer;   { E3: effective edit column for F2 }
 begin
   inherited KeyDown(Key, Shift);
 
@@ -4580,6 +4614,28 @@ begin
       if (cur <> nil) and Assigned(FOnNodeDblClick) then
         FOnNodeDblClick(Self, cur);
       Key := 0;
+    end;
+
+    VK_F2:
+    begin
+      { ③e E3: F2 starts editing the focused node. Gated on toEditable + a focused
+        node + not already editing, so non-editable trees leave F2 untouched (the
+        key is only consumed when an edit actually starts). Effective column:
+        FLastMouseColumn when it names a real column, else MainColumn if valid,
+        else 0 (single-column / 0-column trees). }
+      if (toEditable in FOptions) and (cur <> nil) and not FEditing then
+      begin
+        if (FLastMouseColumn >= 0) and
+           (FHeader <> nil) and (FLastMouseColumn < FHeader.Columns.Count) then
+          colIdx := FLastMouseColumn
+        else if (FHeader <> nil) and (FHeader.MainColumn >= 0) and
+                (FHeader.MainColumn < FHeader.Columns.Count) then
+          colIdx := FHeader.MainColumn
+        else
+          colIdx := 0;
+        EditNode(cur, colIdx);
+        Key := 0;
+      end;
     end;
 
     VK_SPACE:
