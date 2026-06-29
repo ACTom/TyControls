@@ -50,6 +50,8 @@ type
 
   TTyTreeNodeEvent    = procedure(Sender: TTyTreeView; Node: PTyTreeNode) of object;
   TTyTreeChangingEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean) of object;
+  { C1: fired before a check-state change; set Allowed:=False to veto }
+  TTyTreeCheckingEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean) of object;
   TTyTreeInitNodeEvent     = procedure(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates) of object;
   TTyTreeInitChildrenEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var ChildCount: Cardinal) of object;
   TTyTreeGetTextEvent  = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string) of object;
@@ -125,6 +127,9 @@ type
     FSelectedNode:   PTyTreeNode;
     FOnChange:       TTyTreeNodeEvent;
     FOnFocusChanged: TTyTreeNodeEvent;
+    { C1: check events }
+    FOnChecking:     TTyTreeCheckingEvent;
+    FOnChecked:      TTyTreeNodeEvent;
     { A3: multi-select count + range anchor }
     FSelectionCount: Integer;
     FRangeAnchor:    PTyTreeNode;
@@ -246,6 +251,8 @@ type
     procedure InitNode(Node: PTyTreeNode);
     procedure InitChildren(Node: PTyTreeNode);
     procedure ToggleNode(Node: PTyTreeNode; AExpand: Boolean);
+    { C1: toggle a node's check state, fire OnChecking/OnChecked, propagate if needed }
+    procedure ToggleCheck(Node: PTyTreeNode);
     { A5 iterators }
     function GetFirstChild(Node: PTyTreeNode): PTyTreeNode;
     function GetLastChild(Node: PTyTreeNode): PTyTreeNode;
@@ -342,6 +349,9 @@ type
     property OnCollapsed:     TTyTreeNodeEvent         read FOnCollapsed     write FOnCollapsed;
     property OnChange:        TTyTreeNodeEvent         read FOnChange        write FOnChange;
     property OnFocusChanged:  TTyTreeNodeEvent         read FOnFocusChanged  write FOnFocusChanged;
+    { C1: check events }
+    property OnChecking: TTyTreeCheckingEvent          read FOnChecking      write FOnChecking;
+    property OnChecked:  TTyTreeNodeEvent              read FOnChecked       write FOnChecked;
     property OnNodeClick:     TTyTreeNodeEvent         read FOnNodeClick     write FOnNodeClick;
     property OnNodeDblClick:  TTyTreeNodeEvent         read FOnNodeDblClick  write FOnNodeDblClick;
     { C3: paint events }
@@ -627,6 +637,99 @@ begin
   Invalidate;
   { suppress unused-variable warning }
   if prevFocus = nil then ;
+end;
+
+{ ── C1 ── ToggleCheck — check-state toggle + events + radio + tri-state ─────── }
+
+{ ToggleCheck — apply a user-driven check toggle to Node.
+  Guards: Node<>nil, Node<>FRoot, toCheckSupport in FOptions, CheckType<>ctNone.
+  Fires OnChecking (veto possible), toggles the state, propagates down/up when
+  toAutoTristateTracking is in FOptions, fires OnChecked, repaints. }
+procedure TTyTreeView.ToggleCheck(Node: PTyTreeNode);
+var
+  Allowed:  Boolean;
+  sib:      PTyTreeNode;
+  anc:      PTyTreeNode;
+  newState: TTyCheckState;
+begin
+  { ── guards ── }
+  if Node = nil then Exit;
+  if Node = FRoot then Exit;
+  if not (toCheckSupport in FOptions) then Exit;
+  if Node^.CheckType = ctNone then Exit;
+
+  { ── OnChecking veto ── }
+  Allowed := True;
+  if Assigned(FOnChecking) then FOnChecking(Self, Node, Allowed);
+  if not Allowed then Exit;
+
+  { ── apply by CheckType ── }
+  case Node^.CheckType of
+
+    ctCheckBox:
+    begin
+      { simple toggle: unchecked↔checked }
+      if Node^.CheckState = csChecked then
+        Node^.CheckState := csUnchecked
+      else
+        Node^.CheckState := csChecked;
+    end;
+
+    ctTriStateCheckBox:
+    begin
+      { user-click cycle: unchecked→checked→unchecked
+        csMixed (set only by propagation) → user click goes to csChecked }
+      case Node^.CheckState of
+        csUnchecked: Node^.CheckState := csChecked;
+        csChecked:   Node^.CheckState := csUnchecked;
+        csMixed:     Node^.CheckState := csChecked;
+      end;
+    end;
+
+    ctRadioButton:
+    begin
+      { radio: set this node csChecked; uncheck every ctRadioButton sibling }
+      Node^.CheckState := csChecked;
+      { walk the siblings (same Parent) }
+      sib := Node^.Parent^.FirstChild;
+      while sib <> nil do
+      begin
+        if (sib <> Node) and (sib^.CheckType = ctRadioButton) then
+          sib^.CheckState := csUnchecked;
+        sib := sib^.NextSibling;
+      end;
+      { radio nodes have no tri-state tracking; skip propagation below }
+    end;
+
+  end; { case }
+
+  { ── toAutoTristateTracking ── }
+  if toAutoTristateTracking in FOptions then
+  begin
+    if Node^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+    begin
+      { DOWN: push the new state to all already-initialised descendants }
+      PropagateCheckDown(Node, Node^.CheckState);
+
+      { UP: walk ancestors toward FRoot; recompute each and stop early when
+        the state did not actually change (avoids pointless upward sweeps). }
+      anc := Node^.Parent;
+      while (anc <> nil) and (anc <> FRoot) do
+      begin
+        if anc^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+        begin
+          newState := RecomputeParentCheckState(anc);
+          if anc^.CheckState = newState then Break;  { no change — stop }
+          anc^.CheckState := newState;
+        end;
+        anc := anc^.Parent;
+      end;
+    end;
+  end;
+
+  { ── OnChecked + repaint ── }
+  if Assigned(FOnChecked) then FOnChecked(Self, Node);
+  Invalidate;
 end;
 
 { ── C1 ── display property setters ─────────────────────────────────────────── }
@@ -3084,6 +3187,12 @@ begin
       { Click on the expand/collapse button — toggle, do NOT change selection }
       Expanded[node] := not Expanded[node];
     end
+    else if part = hpCheckBox then
+    begin
+      { C1: click on the checkbox slot — toggle the check state, do NOT change
+        selection or focus (a checkbox click is purely a check operation). }
+      ToggleCheck(node);
+    end
     else
     begin
       { Click on any other part (label, image, indent) — focus the node }
@@ -3465,6 +3574,20 @@ begin
       if (cur <> nil) and Assigned(FOnNodeDblClick) then
         FOnNodeDblClick(Self, cur);
       Key := 0;
+    end;
+
+    VK_SPACE:
+    begin
+      { C1: Space toggles the check state of the focused node when toCheckSupport
+        is active and the node has a non-None CheckType.  Falls through (key NOT
+        consumed) when the tree has no check support so that non-check trees are
+        unaffected. }
+      if (toCheckSupport in FOptions) and
+         (cur <> nil) and (cur^.CheckType <> ctNone) then
+      begin
+        ToggleCheck(cur);
+        Key := 0;
+      end;
     end;
 
   end;

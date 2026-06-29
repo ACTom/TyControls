@@ -6480,6 +6480,403 @@ begin
   finally F.Free; Ctl.Free; end;
 end;
 
+{ ── C1 ── ToggleCheck + events + radio exclusivity + auto-tri-state ─────────── }
+
+type
+  TTreeC1CheckBehaviourTest = class(TTestCase)
+  private
+    FCheckingCount: Integer;
+    FCheckingAllowed: Boolean;
+    FCheckedCount: Integer;
+    FCheckedLastNode: PTyTreeNode;
+    procedure OnChecking(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean);
+    procedure OnChecked(Sender: TTyTreeView; Node: PTyTreeNode);
+
+    { Build a tree with toCheckSupport (PPI=96, NodeHeight=20, Indent=16, ShowRoot=True)
+      ready for checkbox-slot hit tests.  Returns TTyTreeViewAccess.
+      F is the owning form; Ctl is the style controller.
+      n0 = first root child (ctCheckBox, csUnchecked). }
+    function BuildCheckTree(out Ctl: TTyStyleController; out F: TForm;
+      out n0: PTyTreeNode): TTyTreeViewAccess;
+  published
+    { ToggleCheck: ctCheckBox unchecked→checked }
+    procedure TestToggleCheckBoxUncheckedToChecked;
+    { ToggleCheck: ctCheckBox checked→unchecked }
+    procedure TestToggleCheckBoxCheckedToUnchecked;
+    { OnChecked fires after a successful toggle }
+    procedure TestOnCheckedFiresAfterToggle;
+    { OnChecking with Allowed:=False blocks the change and OnChecked NOT fired }
+    procedure TestOnCheckingVetoBlocksChange;
+    { ctTriStateCheckBox: unchecked→checked }
+    procedure TestTriStateUncheckedToChecked;
+    { ctTriStateCheckBox: checked→unchecked }
+    procedure TestTriStateCheckedToUnchecked;
+    { ctTriStateCheckBox: csMixed→csChecked (user click never sets csMixed) }
+    procedure TestTriStateMixedToChecked;
+    { Radio: checking the 2nd of 3 radio siblings → 2nd checked, others unchecked }
+    procedure TestRadioExclusivity;
+    { Radio: checking the 3rd after the 2nd → 3rd checked, 2nd unchecked }
+    procedure TestRadioSwitchToThird;
+    { MouseDown on hpCheckBox toggles check, does NOT change FocusedNode/selection }
+    procedure TestMouseDownCheckBoxDoesNotSelect;
+    { VK_SPACE on focused checkable node toggles it }
+    procedure TestSpaceKeyTogglesCheck;
+    { toCheckSupport off → ToggleCheck is a no-op (no state change) }
+    procedure TestToggleCheckNoOpWhenOptionOff;
+    { toCheckSupport off → click where box would be just selects (③b behaviour) }
+    procedure TestClickWithCheckOffSelectsNode;
+    { toAutoTristateTracking: ToggleCheck(parent) csChecked → all children csChecked }
+    procedure TestAutoTriStateDownPropagatesToChildren;
+    { toAutoTristateTracking: uncheck one child → parent becomes csMixed }
+    procedure TestAutoTriStateUpMixedOnOneUnchecked;
+    { toAutoTristateTracking: uncheck all children → parent csUnchecked }
+    procedure TestAutoTriStateUpAllUnchecked;
+  end;
+
+procedure TTreeC1CheckBehaviourTest.OnChecking(Sender: TTyTreeView;
+  Node: PTyTreeNode; var Allowed: Boolean);
+begin
+  Inc(FCheckingCount);
+  Allowed := FCheckingAllowed;
+end;
+
+procedure TTreeC1CheckBehaviourTest.OnChecked(Sender: TTyTreeView;
+  Node: PTyTreeNode);
+begin
+  Inc(FCheckedCount);
+  FCheckedLastNode := Node;
+end;
+
+function TTreeC1CheckBehaviourTest.BuildCheckTree(out Ctl: TTyStyleController;
+  out F: TForm; out n0: PTyTreeNode): TTyTreeViewAccess;
+var
+  t: TTyTreeViewAccess;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(
+    'TyTreeView { background:#FFFFFF; border-width:0px; padding:0px; } ' +
+    'TyTreeNode { background:none; color:#000000; } ' +
+    'TyTreeNode:selected { background:#3B82F6; color:#FFFFFF; } ' +
+    'TyTreeCheckBox { background:#FFFFFF; color:#000000; border-color:#888888; border-width:1px; } ' +
+    'TyTreeCheckBox:active { background:#3B82F6; color:#FFFFFF; border-color:#3B82F6; border-width:1px; }');
+  F := TForm.CreateNew(nil);
+  t := TTyTreeViewAccess(TTyTreeView.Create(F));
+  t.Parent             := F;
+  t.Controller         := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 20;
+  t.Indent             := 16;
+  t.ShowButtons        := False;
+  t.ShowTreeLines      := False;
+  t.ShowRoot           := True;
+  t.Options            := [toCheckSupport];
+  t.SetBounds(0, 0, 200, 100);
+  t.RootNodeCount := 1;
+  n0 := t.RootNode^.FirstChild;
+  t.CheckType[n0]  := ctCheckBox;
+  t.CheckState[n0] := csUnchecked;
+  Result := t;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestToggleCheckBoxUncheckedToChecked;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    t.ToggleCheck(n0);
+    AssertEquals('C1: unchecked→checked', Ord(csChecked), Ord(t.CheckState[n0]));
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestToggleCheckBoxCheckedToUnchecked;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    t.CheckState[n0] := csChecked;
+    t.ToggleCheck(n0);
+    AssertEquals('C1: checked→unchecked', Ord(csUnchecked), Ord(t.CheckState[n0]));
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestOnCheckedFiresAfterToggle;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    FCheckedCount    := 0;
+    FCheckedLastNode := nil;
+    t.OnChecked      := @OnChecked;
+    t.ToggleCheck(n0);
+    AssertEquals('C1: OnChecked fires once', 1, FCheckedCount);
+    AssertTrue('C1: OnChecked node = n0', FCheckedLastNode = n0);
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestOnCheckingVetoBlocksChange;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    FCheckingCount   := 0;
+    FCheckingAllowed := False;   // veto
+    FCheckedCount    := 0;
+    t.OnChecking     := @OnChecking;
+    t.OnChecked      := @OnChecked;
+    t.ToggleCheck(n0);
+    AssertEquals('C1: OnChecking fired',        1,               FCheckingCount);
+    AssertEquals('C1: state unchanged (vetoed)',Ord(csUnchecked), Ord(t.CheckState[n0]));
+    AssertEquals('C1: OnChecked NOT fired',     0,               FCheckedCount);
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestTriStateUncheckedToChecked;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    t.CheckType[n0]  := ctTriStateCheckBox;
+    t.CheckState[n0] := csUnchecked;
+    t.ToggleCheck(n0);
+    AssertEquals('C1 tri: unchecked→checked', Ord(csChecked), Ord(t.CheckState[n0]));
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestTriStateCheckedToUnchecked;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    t.CheckType[n0]  := ctTriStateCheckBox;
+    t.CheckState[n0] := csChecked;
+    t.ToggleCheck(n0);
+    AssertEquals('C1 tri: checked→unchecked', Ord(csUnchecked), Ord(t.CheckState[n0]));
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestTriStateMixedToChecked;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    t.CheckType[n0]  := ctTriStateCheckBox;
+    t.CheckState[n0] := csMixed;
+    t.ToggleCheck(n0);
+    AssertEquals('C1 tri: mixed→checked (user click)', Ord(csChecked), Ord(t.CheckState[n0]));
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestRadioExclusivity;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0, r0, r1, r2: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    { Turn n0 into a radio and add 2 more siblings }
+    t.CheckType[n0]  := ctRadioButton;
+    t.CheckState[n0] := csChecked;  // r0 starts checked
+    r0 := n0;
+    t.RootNodeCount := 3;
+    r1 := r0^.NextSibling;
+    r2 := r1^.NextSibling;
+    t.CheckType[r1]  := ctRadioButton; t.CheckState[r1] := csUnchecked;
+    t.CheckType[r2]  := ctRadioButton; t.CheckState[r2] := csUnchecked;
+
+    { Toggle r1 — should make r1 checked, r0+r2 unchecked }
+    t.ToggleCheck(r1);
+    AssertEquals('C1 radio: r0 unchecked', Ord(csUnchecked), Ord(r0^.CheckState));
+    AssertEquals('C1 radio: r1 checked',   Ord(csChecked),   Ord(r1^.CheckState));
+    AssertEquals('C1 radio: r2 unchecked', Ord(csUnchecked), Ord(r2^.CheckState));
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestRadioSwitchToThird;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0, r0, r1, r2: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    t.CheckType[n0]  := ctRadioButton;
+    t.CheckState[n0] := csUnchecked;
+    r0 := n0;
+    t.RootNodeCount := 3;
+    r1 := r0^.NextSibling;
+    r2 := r1^.NextSibling;
+    t.CheckType[r1]  := ctRadioButton; t.CheckState[r1] := csChecked;   // r1 starts checked
+    t.CheckType[r2]  := ctRadioButton; t.CheckState[r2] := csUnchecked;
+
+    { Toggle r2 — should make r2 the only checked one }
+    t.ToggleCheck(r2);
+    AssertEquals('C1 radio3: r0 unchecked', Ord(csUnchecked), Ord(r0^.CheckState));
+    AssertEquals('C1 radio3: r1 unchecked', Ord(csUnchecked), Ord(r1^.CheckState));
+    AssertEquals('C1 radio3: r2 checked',   Ord(csChecked),   Ord(r2^.CheckState));
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestMouseDownCheckBoxDoesNotSelect;
+{ MouseDown at the hpCheckBox slot (x=20, row 0 y=10) toggles check
+  but does NOT change FocusedNode or selection. }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    AssertTrue('C1 mouse: no focused node before click', t.FocusedNode = nil);
+    t.MouseDown(mbLeft, [], 20, 10);  { x=20 → slot x=[16..32) → hpCheckBox }
+    AssertEquals('C1 mouse: state toggled to csChecked',
+      Ord(csChecked), Ord(t.CheckState[n0]));
+    AssertTrue('C1 mouse: FocusedNode unchanged (still nil)',
+      t.FocusedNode = nil);
+    AssertFalse('C1 mouse: node not selected',
+      t.Selected[n0]);
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestSpaceKeyTogglesCheck;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0: PTyTreeNode;
+  Key: Word;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    t.FocusedNode := n0;   { focus the node (sets selection — expected) }
+    t.CheckState[n0] := csUnchecked;
+    Key := VK_SPACE;
+    t.KeyDown(Key, []);
+    AssertEquals('C1 space: state toggled to csChecked',
+      Ord(csChecked), Ord(t.CheckState[n0]));
+    AssertEquals('C1 space: Key consumed (=0)', 0, Integer(Key));
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestToggleCheckNoOpWhenOptionOff;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    t.Options := [];   { toCheckSupport off }
+    t.ToggleCheck(n0);
+    AssertEquals('C1 opt-off: state unchanged',
+      Ord(csUnchecked), Ord(t.CheckState[n0]));
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestClickWithCheckOffSelectsNode;
+{ toCheckSupport off → click at x=20 (where box would be) → selects node (③b) }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  n0: PTyTreeNode;
+begin
+  t := BuildCheckTree(Ctl, F, n0);
+  try
+    t.Options := [];   { toCheckSupport off }
+    t.MouseDown(mbLeft, [], 20, 10);
+    AssertTrue('C1 click-no-check: node is focused/selected',
+      t.Selected[n0]);
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestAutoTriStateDownPropagatesToChildren;
+{ parent (ctTriStateCheckBox) + 3 ctCheckBox children.
+  ToggleCheck(parent) → parent csChecked → all 3 children csChecked (down). }
+var
+  t: TTyTreeView;
+  parent, c1, c2, c3: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toCheckSupport, toAutoTristateTracking];
+    parent := t.AddChild(nil);
+    parent^.CheckType  := ctTriStateCheckBox;
+    parent^.CheckState := csUnchecked;
+    c1 := t.AddChild(parent); c1^.CheckType := ctCheckBox; c1^.CheckState := csUnchecked;
+    c2 := t.AddChild(parent); c2^.CheckType := ctCheckBox; c2^.CheckState := csUnchecked;
+    c3 := t.AddChild(parent); c3^.CheckType := ctCheckBox; c3^.CheckState := csUnchecked;
+    { toggle parent: unchecked→checked }
+    t.ToggleCheck(parent);
+    AssertEquals('C1 tri-down: parent csChecked',
+      Ord(csChecked), Ord(parent^.CheckState));
+    AssertEquals('C1 tri-down: c1 csChecked',
+      Ord(csChecked), Ord(c1^.CheckState));
+    AssertEquals('C1 tri-down: c2 csChecked',
+      Ord(csChecked), Ord(c2^.CheckState));
+    AssertEquals('C1 tri-down: c3 csChecked',
+      Ord(csChecked), Ord(c3^.CheckState));
+  finally t.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestAutoTriStateUpMixedOnOneUnchecked;
+{ parent + 3 children all checked.  ToggleCheck(c1) → c1 unchecked → parent csMixed. }
+var
+  t: TTyTreeView;
+  parent, c1, c2, c3: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toCheckSupport, toAutoTristateTracking];
+    parent := t.AddChild(nil);
+    parent^.CheckType  := ctTriStateCheckBox;
+    parent^.CheckState := csChecked;
+    c1 := t.AddChild(parent); c1^.CheckType := ctCheckBox; c1^.CheckState := csChecked;
+    c2 := t.AddChild(parent); c2^.CheckType := ctCheckBox; c2^.CheckState := csChecked;
+    c3 := t.AddChild(parent); c3^.CheckType := ctCheckBox; c3^.CheckState := csChecked;
+    { uncheck c1 }
+    t.ToggleCheck(c1);
+    AssertEquals('C1 tri-up: c1 unchecked',
+      Ord(csUnchecked), Ord(c1^.CheckState));
+    AssertEquals('C1 tri-up: parent csMixed',
+      Ord(csMixed), Ord(parent^.CheckState));
+  finally t.Free; end;
+end;
+
+procedure TTreeC1CheckBehaviourTest.TestAutoTriStateUpAllUnchecked;
+{ parent + 3 children all checked.  Uncheck all 3 → parent becomes csUnchecked. }
+var
+  t: TTyTreeView;
+  parent, c1, c2, c3: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toCheckSupport, toAutoTristateTracking];
+    parent := t.AddChild(nil);
+    parent^.CheckType  := ctTriStateCheckBox;
+    parent^.CheckState := csChecked;
+    c1 := t.AddChild(parent); c1^.CheckType := ctCheckBox; c1^.CheckState := csChecked;
+    c2 := t.AddChild(parent); c2^.CheckType := ctCheckBox; c2^.CheckState := csChecked;
+    c3 := t.AddChild(parent); c3^.CheckType := ctCheckBox; c3^.CheckState := csChecked;
+    { propagation test: start by checking parent to set all checked first,
+      then uncheck each child individually }
+    t.ToggleCheck(c1);   { c1→unchecked; parent→csMixed }
+    t.ToggleCheck(c2);   { c2→unchecked; parent stays csMixed }
+    t.ToggleCheck(c3);   { c3→unchecked; parent→csUnchecked }
+    AssertEquals('C1 tri-up-all: c1 unchecked', Ord(csUnchecked), Ord(c1^.CheckState));
+    AssertEquals('C1 tri-up-all: c2 unchecked', Ord(csUnchecked), Ord(c2^.CheckState));
+    AssertEquals('C1 tri-up-all: c3 unchecked', Ord(csUnchecked), Ord(c3^.CheckState));
+    AssertEquals('C1 tri-up-all: parent csUnchecked',
+      Ord(csUnchecked), Ord(parent^.CheckState));
+  finally t.Free; end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -6506,4 +6903,5 @@ initialization
   RegisterTest(TTreeB1OptionsTest);
   RegisterTest(TTreeB2CheckPaintTest);
   RegisterTest(TTreeB3HitCheckBoxTest);
+  RegisterTest(TTreeC1CheckBehaviourTest);
 end.
