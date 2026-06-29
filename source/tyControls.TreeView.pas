@@ -79,6 +79,18 @@ type
   TTyTreeCompareEvent = procedure(Sender: TTyTreeView;
     Node1, Node2: PTyTreeNode; Column: Integer; var CompareResult: Integer) of object;
 
+  { ③e E2: inline-edit lifecycle events (mirror VTV's surface).
+    OnEditing — fired before the editor opens; set Allowed:=False to veto (it
+                defaults True). OnNewText — fired on commit ONLY when the text
+                actually changed; the app writes NewText into its node blob.
+                OnEditCancelled — fired on Esc / programmatic CancelEdit. }
+  TTyTreeEditingEvent    = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+    Column: Integer; var Allowed: Boolean) of object;
+  TTyTreeNewTextEvent    = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+    Column: Integer; const NewText: string) of object;
+  TTyTreeColumnNodeEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
+    Column: Integer) of object;
+
   { C3: text type (mirrors VTV's TVSTTextType) }
   TTyVSTTextType = (ttNormal, ttStatic);
 
@@ -222,6 +234,10 @@ type
     FEditOriginalText:     string;
     FEndingEdit:           Boolean;
     FLastMouseColumn:      Integer;
+    { ③e E2: inline-edit events }
+    FOnEditing:            TTyTreeEditingEvent;
+    FOnNewText:            TTyTreeNewTextEvent;
+    FOnEditCancelled:      TTyTreeColumnNodeEvent;
     { C1: layout / display properties }
     FIndent:            Integer;
     FImages:            TImageList;
@@ -334,6 +350,16 @@ type
     FSearchLastTick:       QWord;      // GetTickCount64 of the last accepted char
     FSearchTimeout:        Integer;    // ms of idle before the buffer auto-resets
     FEditing:              Boolean;    // True while an inline editor is active (③e)
+    { ③e E2: inline-edit internals. Protected so a descendant / test can reach the
+      editor + geometry helper without growing the public surface.
+      EditorBoundsFromCell insets the device cell rect to where the caption was
+      drawn; CurrentCellText reads the cell text via the SAME path the painter
+      uses (OnGetTextWithType / OnGetText, Column-aware) so the editor seeds with
+      exactly what's on screen; FinishEdit hides + clears the edit state. }
+    function  EditorBoundsFromCell(const r: TRect): TRect;
+    function  CurrentCellText(Node: PTyTreeNode; Column: Integer): string;
+    procedure FinishEdit;
+    property  InlineEditor: TTyEdit read FEditor;   // child editor (tests/descendants)
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Paint; override;
@@ -521,6 +547,10 @@ type
     property OnCompareNodes: TTyTreeCompareEvent read FOnCompareNodes write FOnCompareNodes;
     { E3: header click event (fired after sort, if sort was triggered) }
     property OnHeaderClick: TTyTreeColumnEvent read FOnHeaderClick write FOnHeaderClick;
+    { ③e E2: inline-edit lifecycle events }
+    property OnEditing:       TTyTreeEditingEvent    read FOnEditing       write FOnEditing;
+    property OnNewText:       TTyTreeNewTextEvent    read FOnNewText       write FOnNewText;
+    property OnEditCancelled: TTyTreeColumnNodeEvent read FOnEditCancelled write FOnEditCancelled;
   end;
 
 implementation
@@ -4841,26 +4871,131 @@ begin
   end;
 end;
 
-{ ── ③e E1 ── inline cell editing (stubs; lifecycle lands in E2) ────────────── }
+{ ── ③e E2 ── inline cell editing (open / commit / cancel + events) ─────────── }
 
-{ Start editing Node's cell in Column. E1: dormant scaffolding — always refuses.
-  E2 adds the guards (toEditable / OnEditing veto / nil node / no visible rect),
-  seeds + positions FEditor, and sets the edit state. }
+{ EditorBoundsFromCell — inset the device cell rect (from GetCellRect, already
+  client device-px incl. scroll) to where the caption was drawn. The painter
+  pads the cell text by P.Scale(2) on each side (both the main-column and the
+  0-column text rects use captionX+P.Scale(2) .. right-P.Scale(2)); mirror that
+  horizontal pad so the edit text sits over the drawn text. Vertically the
+  editor fills the row (no inset) so it lines up with the row band. The pad uses
+  the SAME MulDiv(.,PPI,96) the painter's Scale does, so it tracks at any DPI. }
+function TTyTreeView.EditorBoundsFromCell(const r: TRect): TRect;
+var
+  pad: Integer;
+begin
+  pad := MulDiv(2, Font.PixelsPerInch, 96);
+  Result := r;
+  Inc(Result.Left, pad);
+  Dec(Result.Right, pad);
+  if Result.Right < Result.Left then Result.Right := Result.Left;   // never inverted
+end;
+
+{ CurrentCellText — the cell's display text, read via the EXACT painter path
+  (OnGetTextWithType for the resolved column / ttNormal, falling back to
+  OnGetText) so the editor seeds with what's on screen. NoColumn maps to the
+  main column (multi-column); the 0-column path simply falls to OnGetText.
+  No side effects (never inits the node). }
+function TTyTreeView.CurrentCellText(Node: PTyTreeNode; Column: Integer): string;
+var
+  effCol: Integer;
+begin
+  Result := '';
+  if (Node = nil) or (Node = FRoot) then Exit;
+  effCol := Column;
+  if (effCol = NoColumn) and (FHeader <> nil) then
+    effCol := FHeader.MainColumn;
+  if Assigned(FOnGetTextWithType) then
+    FOnGetTextWithType(Self, Node, effCol, ttNormal, Result)
+  else if Assigned(FOnGetText) then
+    FOnGetText(Self, Node, Result);
+end;
+
+{ FinishEdit — tear down the active edit: hide the editor, clear the edit state,
+  and invalidate so the row repaints with its real caption. Shared by commit and
+  cancel; assumes the caller already fired any event. }
+procedure TTyTreeView.FinishEdit;
+begin
+  FEditor.Visible := False;
+  FEditing        := False;
+  FEditNode       := nil;
+  FEditColumn     := NoColumn;
+  FEditOriginalText := '';
+  Invalidate;
+end;
+
+{ Start editing Node's cell in Column. Returns False when not allowed: not
+  toEditable, OnEditing veto, nil node, already editing that same cell, or the
+  cell has no visible rect. On success: seeds FEditor with the cell text,
+  positions it over the cell, shows + focuses it, and sets the edit state. }
 function TTyTreeView.EditNode(Node: PTyTreeNode; Column: Integer): Boolean;
+var
+  allowed: Boolean;
+  r: TRect;
 begin
   Result := False;
+  if not (toEditable in FOptions) then Exit;
+  if (Node = nil) or (Node = FRoot) then Exit;
+  { idempotent-safe: refuse a re-open of the cell already being edited. }
+  if FEditing and (Node = FEditNode) and (Column = FEditColumn) then Exit;
+
+  { permit / veto (Allowed defaults True). }
+  allowed := True;
+  if Assigned(FOnEditing) then FOnEditing(Self, Node, Column, allowed);
+  if not allowed then Exit;
+
+  { device-px cell rect (incl. scroll). Empty / off-view ⇒ refuse. }
+  if not GetCellRect(Node, Column, r) then Exit;
+  if IsRectEmpty(r) then Exit;
+
+  FEditOriginalText  := CurrentCellText(Node, Column);
+  FEditor.Text       := FEditOriginalText;
+  FEditor.BoundsRect := EditorBoundsFromCell(r);
+  FEditor.Visible    := True;
+  FEditNode          := Node;
+  FEditColumn        := Column;
+  FEditing           := True;
+
+  { Focus + select-all need a window handle; headless tests never allocate one.
+    Guard so they no-op cleanly off-screen (mirrors ③b's MouseCapture lesson). }
+  if FEditor.HandleAllocated then
+  begin
+    if FEditor.CanFocus then FEditor.SetFocus;
+    FEditor.SelectAll;
+  end;
+
+  Result := True;
 end;
 
-{ Commit the active edit (fire OnNewText iff the text changed, then hide). E1:
-  no-op; E2 fills it. }
+{ Commit the active edit: fire OnNewText iff the text changed, then tear down.
+  FEndingEdit guards re-entry (a focus-loss commit can fire mid-teardown). }
 procedure TTyTreeView.EndEditNode;
 begin
+  if FEndingEdit then Exit;
+  if not FEditing then Exit;
+  FEndingEdit := True;
+  try
+    if (FEditor.Text <> FEditOriginalText) and Assigned(FOnNewText) then
+      FOnNewText(Self, FEditNode, FEditColumn, FEditor.Text);
+    FinishEdit;
+  finally
+    FEndingEdit := False;
+  end;
 end;
 
-{ Discard the active edit (fire OnEditCancelled, then hide). E1: no-op; E2 fills
-  it. }
+{ Discard the active edit: fire OnEditCancelled, then tear down (no commit). }
 procedure TTyTreeView.CancelEdit;
 begin
+  if FEndingEdit then Exit;
+  if not FEditing then Exit;
+  FEndingEdit := True;
+  try
+    if Assigned(FOnEditCancelled) then
+      FOnEditCancelled(Self, FEditNode, FEditColumn);
+    FinishEdit;
+  finally
+    FEndingEdit := False;
+  end;
 end;
 
 initialization
