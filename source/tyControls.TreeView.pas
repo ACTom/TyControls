@@ -1148,7 +1148,9 @@ end;
 procedure TTyTreeView.DeleteNode(Node: PTyTreeNode);
 var
   nodeParent: PTyTreeNode;
-  dh, dc: Integer;
+  dh, dc:     Integer;
+  reseqChild: PTyTreeNode;   { A1: for sibling re-sequence walk }
+  reseqIdx:   Cardinal;
 begin
   if (Node = nil) or (Node = FRoot) then Exit;
 
@@ -1201,13 +1203,34 @@ begin
   if nodeParent^.ChildCount = 0 then
     Exclude(nodeParent^.States, nsHasChildren);
 
+  { A1: re-sequence the remaining siblings' Index values (0-based, consecutive).
+    Skipped during Clear (nsClearing on FRoot), so bulk teardown stays O(n). }
+  if not (nsClearing in nodeParent^.States) then
+  begin
+    reseqChild := nodeParent^.FirstChild;
+    reseqIdx   := 0;
+    while reseqChild <> nil do
+    begin
+      reseqChild^.Index := reseqIdx;
+      Inc(reseqIdx);
+      reseqChild := reseqChild^.NextSibling;
+    end;
+  end;
+
   FreeNodeMem(Node);
   InvalidateTreeLayout;
 end;
 
 procedure TTyTreeView.Clear;
 begin
-  while FRoot^.FirstChild <> nil do DeleteNode(FRoot^.FirstChild);
+  { A1: mark FRoot with nsClearing so DeleteNode skips the O(siblings) index
+    re-sequence during bulk teardown, keeping Clear O(n). }
+  Include(FRoot^.States, nsClearing);
+  try
+    while FRoot^.FirstChild <> nil do DeleteNode(FRoot^.FirstChild);
+  finally
+    Exclude(FRoot^.States, nsClearing);
+  end;
 end;
 
 { ── A5 ── lazy lifecycle ─────────────────────────────────────────────────── }

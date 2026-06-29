@@ -596,10 +596,10 @@ begin
 end;
 
 procedure TTreeDeleteTest.TestDeleteMiddleChildUpdatesIndices;
-// Note: DeleteNode does NOT re-sequence sibling indices (that would be O(n) per delete).
-// The Index field reflects the original insertion order; callers should use
-// sibling traversal (NextSibling/PrevSibling) rather than relying on Index post-delete.
-// This test verifies the initial Index values are correct at insertion time.
+// A1 fix: DeleteNode re-sequences sibling Index values after an unlink so that
+// remaining siblings always have consecutive 0-based indices.
+// The Clear fast-path skips the re-sequence (guarded by nsClearing on FRoot)
+// so bulk teardown stays O(n), not O(n²).
 var
   t: TTyTreeView;
   n1, n2, n3: PTyTreeNode;
@@ -613,11 +613,14 @@ begin
     AssertEquals('n1 index = 0', 0, Integer(n1^.Index));
     AssertEquals('n2 index = 1', 1, Integer(n2^.Index));
     AssertEquals('n3 index = 2', 2, Integer(n3^.Index));
-    // After deleting n2, ChildCount drops, but sibling indices are NOT re-sequenced
+    // After deleting n2, DeleteNode re-sequences: n1->0, n3->1
     t.DeleteNode(n2);
     AssertEquals('root ChildCount = 2 after delete', 2, Integer(t.RootNode^.ChildCount));
     // n3 is still linked and accessible via n1^.NextSibling
     AssertEquals('n1.NextSibling = n3', PtrUInt(n3), PtrUInt(n1^.NextSibling));
+    // A1: re-sequenced indices
+    AssertEquals('n1 index = 0 after resequence', 0, Integer(n1^.Index));
+    AssertEquals('n3 index = 1 after resequence', 1, Integer(n3^.Index));
   finally
     t.Free;
   end;
