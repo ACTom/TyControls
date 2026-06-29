@@ -6395,6 +6395,91 @@ begin
   finally F.Free; Ctl.Free; end;
 end;
 
+{ ── B3 ── Checkbox hit-test (hpCheckBox) ───────────────────────────────────── }
+
+type
+  TTreeB3HitCheckBoxTest = class(TTestCase)
+  published
+    procedure TestClickInSlotReturnsHpCheckBox;
+    procedure TestClickOnLabelReturnsHpLabel;
+    procedure TestOptionOffNoHpCheckBox;
+    procedure TestCtNoneNodeNoHpCheckBox;
+  end;
+
+procedure TTreeB3HitCheckBoxTest.TestClickInSlotReturnsHpCheckBox;
+{ toCheckSupport on; node 0 is ctCheckBox; click at x=20 (slot=[16..32)) → hpCheckBox }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeViewAccess;
+  HitNode: PTyTreeNode;
+  HitPart: TTyTreeHitPart;
+begin
+  Tree := BuildCheckboxPaintTree(Ctl, F);
+  try
+    HitNode := Tree.GetNodeAtPoint(20, 10, HitPart);
+    AssertNotNull('B3: hit node at (20,10)', HitNode);
+    AssertTrue('B3: hpCheckBox when clicking slot x=20', HitPart = hpCheckBox);
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeB3HitCheckBoxTest.TestClickOnLabelReturnsHpLabel;
+{ Click at x=50 (well past slot [16..32)) → hpLabel }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeViewAccess;
+  HitNode: PTyTreeNode;
+  HitPart: TTyTreeHitPart;
+begin
+  Tree := BuildCheckboxPaintTree(Ctl, F);
+  try
+    HitNode := Tree.GetNodeAtPoint(50, 10, HitPart);
+    AssertNotNull('B3: hit node at (50,10)', HitNode);
+    AssertTrue('B3: hpLabel when clicking past slot x=50', HitPart = hpLabel);
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeB3HitCheckBoxTest.TestOptionOffNoHpCheckBox;
+{ toCheckSupport OFF; click at x=20 → hpLabel (no slot reserved) }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeViewAccess;
+  HitNode: PTyTreeNode;
+  HitPart: TTyTreeHitPart;
+begin
+  Tree := BuildCheckboxPaintTree(Ctl, F, True);  { CheckOff=True }
+  try
+    HitNode := Tree.GetNodeAtPoint(20, 10, HitPart);
+    AssertNotNull('B3 (opt off): hit node at (20,10)', HitNode);
+    AssertFalse('B3 (opt off): no hpCheckBox when toCheckSupport off',
+      HitPart = hpCheckBox);
+  finally F.Free; Ctl.Free; end;
+end;
+
+procedure TTreeB3HitCheckBoxTest.TestCtNoneNodeNoHpCheckBox;
+{ toCheckSupport ON but CheckType=ctNone → click in slot → not hpCheckBox }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeViewAccess;
+  n: PTyTreeNode;
+  HitNode: PTyTreeNode;
+  HitPart: TTyTreeHitPart;
+begin
+  Tree := BuildCheckboxPaintTree(Ctl, F);
+  try
+    { Override first node to ctNone }
+    n := Tree.RootNode^.FirstChild;
+    Tree.CheckType[n] := ctNone;
+    HitNode := Tree.GetNodeAtPoint(20, 10, HitPart);
+    AssertNotNull('B3 (ctNone): hit node at (20,10)', HitNode);
+    AssertFalse('B3 (ctNone): no hpCheckBox when CheckType=ctNone',
+      HitPart = hpCheckBox);
+  finally F.Free; Ctl.Free; end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -6420,4 +6505,5 @@ initialization
   RegisterTest(TTreeA3SelectRangeTest);
   RegisterTest(TTreeB1OptionsTest);
   RegisterTest(TTreeB2CheckPaintTest);
+  RegisterTest(TTreeB3HitCheckBoxTest);
 end.

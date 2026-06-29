@@ -2859,10 +2859,12 @@ begin
   imgSlotW := MulDiv(FIndent, PPI, 96);
 
   { Zones (all in content-space X, i.e. relative to CR.Left after FOffsetX):
-      [0 .. indentPx - btnSlotW)   = hpIndent (the left-padding area)
+      [0 .. indentPx - btnSlotW)        = hpIndent (the left-padding area)
       [indentPx - btnSlotW .. indentPx) = hpButton slot (only when nsHasChildren)
-      [indentPx .. indentPx + imgSlotW) = hpImage (only when FImages assigned)
-      [indentPx or beyond caption)       = hpLabel                            }
+      [indentPx .. indentPx + cbSlotW)  = hpCheckBox (B3: only when toCheckSupport + CheckType<>ctNone)
+      [captionX .. captionX+imgSlotW)   = hpImage (only when FImages assigned)
+      [captionX or beyond)              = hpLabel
+    cbSlotW = MulDiv(16, PPI, 96) — identical to B2 paint formula.              }
 
   if absX < 0 then
   begin
@@ -2888,25 +2890,63 @@ begin
   begin
     { Past the indent zone }
     captionX := indentPx;
-    if (FImages <> nil) and (FImages.Count > 0) then
+
+    { B3: Checkbox slot — same width as B2 paint: MulDiv(16, PPI, 96) }
+    if (toCheckSupport in FOptions) and (node^.CheckType <> ctNone) then
     begin
-      if absX < captionX + imgSlotW then
+      if absX < captionX + MulDiv(16, PPI, 96) then
       begin
-        APart  := hpImage;
+        APart  := hpCheckBox;
         Result := node;
+        { Column detection happens below — don't Exit here }
       end
       else
       begin
-        Inc(captionX, imgSlotW);
-        APart  := hpLabel;
-        Result := node;
+        Inc(captionX, MulDiv(16, PPI, 96));
+        if (FImages <> nil) and (FImages.Count > 0) then
+        begin
+          if absX < captionX + imgSlotW then
+          begin
+            APart  := hpImage;
+            Result := node;
+          end
+          else
+          begin
+            Inc(captionX, imgSlotW);
+            APart  := hpLabel;
+            Result := node;
+          end;
+        end
+        else
+        begin
+          APart  := hpLabel;
+          Result := node;
+        end;
       end;
     end
     else
     begin
-      { Everything to the right of the image slot is the label area }
-      APart  := hpLabel;
-      Result := node;
+      { No checkbox slot }
+      if (FImages <> nil) and (FImages.Count > 0) then
+      begin
+        if absX < captionX + imgSlotW then
+        begin
+          APart  := hpImage;
+          Result := node;
+        end
+        else
+        begin
+          Inc(captionX, imgSlotW);
+          APart  := hpLabel;
+          Result := node;
+        end;
+      end
+      else
+      begin
+        { Everything to the right of the indent zone is the label area }
+        APart  := hpLabel;
+        Result := node;
+      end;
     end;
   end;
 
