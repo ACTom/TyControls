@@ -48,6 +48,7 @@ type
     procedure UpdateWatch;                  // (re)arm or disarm the watch per state
     procedure CaptureFileStamp;             // snapshot FWatchAge/FWatchSize of ThemeFile
     procedure HandleWatchTimer(Sender: TObject);
+    procedure SeedModeIfDual;   // dual-mode theme + no Mode -> adopt DefaultModeName (avoid undefined @mode vars)
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -421,10 +422,24 @@ begin
     FControls.Delete(i);
 end;
 
+procedure TTyStyleController.SeedModeIfDual;
+begin
+  { A dual-mode theme defines some vars ONLY inside its @mode blocks (e.g.
+    --transparent-fill). If such a theme is active with NO mode selected, those vars
+    are undefined and ResolveStyle raises "Undefined variable". So when mode-less and
+    the theme is dual-mode (DefaultModeName <> ''), adopt the theme's default mode.
+    Single-mode themes have DefaultModeName='' -> no-op; an already-set mode is left
+    untouched. (The system-follow path already seeds in ApplySystemTheme; this covers
+    the MANUAL ThemeName/ThemeFile/LoadThemeCss paths in one choke point.) }
+  if (FModel.Mode = '') and (FModel.DefaultModeName <> '') then
+    FModel.SetMode(FModel.DefaultModeName);
+end;
+
 procedure TTyStyleController.Changed;
 var
   i: Integer;
 begin
+  SeedModeIfDual;
   for i := FControls.Count - 1 downto 0 do
     TControl(FControls[i]).Invalidate;
   FChangeListeners.CallNotifyEvents(Self);
