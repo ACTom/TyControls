@@ -45,6 +45,17 @@ Determine the clean interception point: does LCL-Win32 deliver `WM_NCCALCSIZE`/`
 
 - [ ] **Step 1:** read LCL win32 widgetset message dispatch + `TCustomForm` style handling. **Step 2:** write the findings (mechanism, hook point, any LCL message the form already gets) into a short note in this plan file under B1. **Step 3:** commit `docs(form): B1 spike — LCL-Win32 NC message interception findings`.
 
+#### B1 findings (2026-06-29 — read `C:\lazarus\lcl\interfaces\win32\win32callback.inc`)
+
+**Mechanism chosen: subclass the HWND via `SetWindowLongPtr(Handle, GWLP_WNDPROC, …)` after handle creation, chaining the saved LCL window proc with `CallWindowProc`.** Overriding `TTyForm.WndProc` does NOT work for either message — proven from the source:
+
+- **Dispatch path:** every window message enters `WindowProc → TWindowProcHelper.DoWindowProc` (`win32callback.inc`), which inits `LMessage := Default; PLMsg := @LMessage; WinProcess := True`, optionally `DeliverMessage`s to the LCL control, then — unless the message is in a small "respect the LCL result" allow-list (keys / erasebkgnd / setcursor / IME / syscommand …) — **overwrites the result with `CallDefaultWindowProc` whenever `WinProcess` is still True** (line ~2679-2689).
+- **`WM_NCHITTEST`** (line 2358): `SetLMessageAndParams(LM_NCHITTEST)` — sets the LCL msg but leaves `WinProcess = True`, and `LM_NCHITTEST` is NOT in the result-respecting allow-list. So even if a `WndProc` override set `Message.Result`, the LCL callback discards it and returns `DefWindowProc`'s value. An override is futile.
+- **`WM_NCCALCSIZE`:** NOT present anywhere in `DoWindowProc`'s `case Msg of`. It falls through with `PLMsg^.Msg = LM_NULL` (so it is never `DeliverMessage`d — guard at line ~2620), `WinProcess` stays True, and `CallDefaultWindowProc` returns. So `WM_NCCALCSIZE` is **never delivered to an LCL `WndProc` at all** — an override can't see it.
+- **`WS_THICKFRAME` / `bsNone`:** a `bsNone` form is created with no resize border. The robust place to (re)assert the style is **after the handle exists** (`DoShow` / on `Resizable` change), via `GetWindowLong/SetWindowLong(Handle, GWL_STYLE, …)` + `SetWindowPos(…, SWP_FRAMECHANGED or SWP_NOMOVE or SWP_NOSIZE or SWP_NOZORDER or SWP_NOACTIVATE)`.
+
+This matches the existing memory note that LCL-Win32 swallows messages in its own callback (the `WM_SETTINGCHANGE` precedent) and the modern custom-frame technique (Chrome / VS Code / WinUI). The subclass intercepts `WM_NCCALCSIZE` (collapse NC so the client fills the window) + `WM_NCHITTEST` (return `TyNcHitTest`) before the LCL proc, and chains `CallWindowProc(savedProc, …)` for everything else. **Hook point:** install the subclass once per handle in `DoShow` (handle guaranteed allocated, `csDesigning` excluded); store the prior proc to restore on handle destroy / re-install idempotently.
+
 ### Task B2: WS_THICKFRAME + WM_NCCALCSIZE + WM_NCHITTEST
 **Files:** `source/tyControls.Form.pas` (Windows `{$IFDEF}` block); Test `tests/...`.
 

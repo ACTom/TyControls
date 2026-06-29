@@ -252,6 +252,39 @@ uses
 {$IFDEF WINDOWS}
 uses
   strings;   // StrComp(PAnsiChar, PAnsiChar) for the WM_SETTINGCHANGE area check
+{ ============================================================================
+  B1 SPIKE — how TTyForm intercepts WM_NCCALCSIZE / WM_NCHITTEST on LCL-Win32
+  ----------------------------------------------------------------------------
+  MECHANISM CHOSEN: subclass the HWND via SetWindowLongPtr(Handle, GWLP_WNDPROC, ..)
+  after the handle exists, chaining the saved LCL window proc through CallWindowProc.
+  Overriding TTyForm.WndProc does NOT work for either message — confirmed by reading
+  C:\lazarus\lcl\interfaces\win32\win32callback.inc:
+
+   - Every message enters WindowProc -> TWindowProcHelper.DoWindowProc, which inits
+     WinProcess:=True, may DeliverMessage to the LCL control, then — unless the message
+     is in a small "respect the LCL result" allow-list (keys / erasebkgnd / setcursor /
+     IME / syscommand) — OVERWRITES the result with CallDefaultWindowProc while WinProcess
+     stays True (line ~2679-2689).
+   - WM_NCHITTEST (line ~2358) does SetLMessageAndParams(LM_NCHITTEST) but leaves
+     WinProcess=True and is NOT in the allow-list -> a WndProc override's Result is
+     discarded and DefWindowProc's value is returned. Override is futile.
+   - WM_NCCALCSIZE is absent from DoWindowProc's case entirely -> PLMsg^.Msg stays
+     LM_NULL, it is never delivered to the control (guard at line ~2620), and
+     CallDefaultWindowProc returns. The LCL WndProc never even sees it.
+
+  So we must sit IN FRONT of the LCL proc. Because pulling the Windows unit into THIS unit's
+  global namespace shadows Types.Rect/Point + Classes.RegisterClass (which the rest of
+  Form.pas relies on), the subclass machinery lives in a dedicated {$IFDEF WINDOWS} helper
+  unit (tyControls.Win32Resize) — the same isolation pattern as tyControls.WindowEffects /
+  QtWS / GtkWS. That helper handles WM_NCCALCSIZE (collapse the non-client area so the client
+  fills the whole window while the WS_THICKFRAME sizing border stays hit-testable) +
+  WM_NCHITTEST (return TyNcHitTest, the pure mapper that stays HERE next to TyHitTestBorder),
+  and chains CallWindowProc(savedProc, ..) for everything else. WS_THICKFRAME — stripped from
+  a bsNone form — is re-asserted after the handle exists (DoShow / on Resizable change). The
+  install is idempotent + per-handle; the original proc is restored on WM_NCDESTROY. This is
+  the standard Chrome/VS Code/WinUI custom-frame route, and mirrors the existing "LCL-Win32
+  swallows WM_SETTINGCHANGE in its callback" lesson. ApplyResizeStrategy (below) drives it.
+  ============================================================================ }
 {$ENDIF}
 
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
