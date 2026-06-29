@@ -187,6 +187,13 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure DoOnChangeBounds; override;
+    {$IF DEFINED(LCLGtk2) or DEFINED(LCLQt5) or DEFINED(LCLQt6)}
+    { GTK/Qt resize-reception gutter: inset the client rect by FBorderZone so alClient
+      children stop short of the edge and the form's edge strip receives the mouse.
+      Windows (native NC border) and Cocoa (resizable styleMask) need no gutter — the
+      IFDEF leaves their build with inherited only. }
+    procedure AdjustClientRect(var ARect: TRect); override;
+    {$ENDIF}
     procedure DoShow; override;   // first show: apply window corners + shadow once the handle exists
   public
     constructor Create(AOwner: TComponent); override;
@@ -227,6 +234,10 @@ function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer
   function (no window handle) so the gating is unit-testable; the chrome engine routes its
   edge hits through this so a non-resizable form never starts a resize / shows a resize cursor. }
 function TyResizeHitFor(AResizable: Boolean; const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
+{ Linux resize-gutter math (pure): insets AClient by AZone on each side when
+  (ANeedsGutter and AResizable and not AMaximized) — so alClient children stop short of the
+  form edge and the edge strip receives the mouse — else returns AClient unchanged. }
+function TyResizeGutterRect(const AClient: TRect; AZone: Integer; AResizable, AMaximized, ANeedsGutter: Boolean): TRect;
 function TyResizeCursor(AHit: TTyBorderHit): TCursor;
 function TyMaximizedBounds(const AWorkArea: TRect): TRect;
 function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
@@ -284,6 +295,22 @@ begin
     Result := bhNone
   else
     Result := TyHitTestBorder(AClient, APt, AZone);
+end;
+
+function TyResizeGutterRect(const AClient: TRect; AZone: Integer;
+  AResizable, AMaximized, ANeedsGutter: Boolean): TRect;
+begin
+  Result := AClient;
+  if ANeedsGutter and AResizable and not AMaximized then
+  begin
+    Inc(Result.Left, AZone);
+    Inc(Result.Top, AZone);
+    Dec(Result.Right, AZone);
+    Dec(Result.Bottom, AZone);
+    // A tiny client must not invert: clamp the far edges to the near ones.
+    if Result.Right < Result.Left then Result.Right := Result.Left;
+    if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
+  end;
 end;
 
 function TyResizeCursor(AHit: TTyBorderHit): TCursor;
@@ -1004,6 +1031,29 @@ begin
   if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.HandleChangeBounds;
 end;
+
+{$IF DEFINED(LCLGtk2) or DEFINED(LCLQt5) or DEFINED(LCLQt6)}
+procedure TTyForm.AdjustClientRect(var ARect: TRect);
+var
+  zone: Integer;
+  maxed: Boolean;
+begin
+  inherited AdjustClientRect(ARect);
+  // The resize gutter (zone + maximized state live on the chrome engine). NeedsGutter=True
+  // here because this override only compiles on the GTK/Qt widgetsets that require it.
+  if FEngine <> nil then
+  begin
+    zone := FEngine.BorderZone;
+    maxed := FEngine.Maximized;
+  end
+  else
+  begin
+    zone := 6;
+    maxed := False;
+  end;
+  ARect := TyResizeGutterRect(ARect, zone, FResizable, maxed, True);
+end;
+{$ENDIF}
 
 function TTyForm.GetTitleHeight: Integer;
 begin

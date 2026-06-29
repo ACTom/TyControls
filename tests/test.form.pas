@@ -43,6 +43,17 @@ type
     procedure TestResizableMatchesHitTestInterior;
   end;
 
+  { Pure Linux resize-gutter math: TyResizeGutterRect insets AClient by AZone on each
+    side only when (ANeedsGutter and AResizable and not AMaximized); else unchanged. }
+  TResizeGutterTest = class(TTestCase)
+  published
+    procedure TestInsetsWhenAllConditionsMet;
+    procedure TestUnchangedWhenNotResizable;
+    procedure TestUnchangedWhenMaximized;
+    procedure TestUnchangedWhenNoGutter;
+    procedure TestTinyClientClampsNonNegativeExtent;
+  end;
+
   { Pure mapping from a border-resize hit zone to the native resize cursor.
     bhNone -> crDefault; left/right -> crSizeWE; top/bottom -> crSizeNS;
     topLeft/bottomRight -> crSizeNWSE; topRight/bottomLeft -> crSizeNESW. }
@@ -369,6 +380,53 @@ begin
   { Interior must agree too (both bhNone) — gating only changes the not-resizable case. }
   AssertTrue('interior matches', TyResizeHitFor(True, CR, Point(100, 50), ZONE)
     = TyHitTestBorder(CR, Point(100, 50), ZONE));
+end;
+
+{ TResizeGutterTest — pure Linux gutter math }
+
+procedure TResizeGutterTest.TestInsetsWhenAllConditionsMet;
+var R: TRect;
+begin
+  R := TyResizeGutterRect(CR, ZONE, True, False, True);
+  AssertEquals('left inset', CR.Left + ZONE, R.Left);
+  AssertEquals('top inset', CR.Top + ZONE, R.Top);
+  AssertEquals('right inset', CR.Right - ZONE, R.Right);
+  AssertEquals('bottom inset', CR.Bottom - ZONE, R.Bottom);
+end;
+
+procedure TResizeGutterTest.TestUnchangedWhenNotResizable;
+var R: TRect;
+begin
+  R := TyResizeGutterRect(CR, ZONE, False, False, True);
+  AssertTrue('unchanged when not resizable',
+    (R.Left = CR.Left) and (R.Top = CR.Top) and (R.Right = CR.Right) and (R.Bottom = CR.Bottom));
+end;
+
+procedure TResizeGutterTest.TestUnchangedWhenMaximized;
+var R: TRect;
+begin
+  R := TyResizeGutterRect(CR, ZONE, True, True, True);
+  AssertTrue('unchanged when maximized',
+    (R.Left = CR.Left) and (R.Top = CR.Top) and (R.Right = CR.Right) and (R.Bottom = CR.Bottom));
+end;
+
+procedure TResizeGutterTest.TestUnchangedWhenNoGutter;
+var R: TRect;
+begin
+  { Windows/Cocoa path: NeedsGutter=False -> never inset even when resizable + not maximized. }
+  R := TyResizeGutterRect(CR, ZONE, True, False, False);
+  AssertTrue('unchanged on no-gutter platform',
+    (R.Left = CR.Left) and (R.Top = CR.Top) and (R.Right = CR.Right) and (R.Bottom = CR.Bottom));
+end;
+
+procedure TResizeGutterTest.TestTinyClientClampsNonNegativeExtent;
+var R, Tiny: TRect;
+begin
+  { A client smaller than 2*AZone must not invert: far edges clamp to the near ones. }
+  Tiny := Rect(0, 0, 4, 4);   // 4 < 2*6 -> would go negative without the clamp
+  R := TyResizeGutterRect(Tiny, ZONE, True, False, True);
+  AssertTrue('right not < left', R.Right >= R.Left);
+  AssertTrue('bottom not < top', R.Bottom >= R.Top);
 end;
 
 { TResizeCursorTest }
@@ -1180,6 +1238,7 @@ end;
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeHitForTest);
+  RegisterTest(TResizeGutterTest);
   RegisterTest(TResizeCursorTest);
   RegisterTest(TCaptionButtonTest);
   RegisterTest(TTitleBarTest);
