@@ -662,6 +662,17 @@ end;
 
 procedure TTyTitleBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
+  {$IFDEF WINDOWS}
+  // Top-edge resize hot-zone: the bar sits flush at the window top (no NC strip there — that
+  // would be an ugly thick frame), so the OS can't resize from the top edge. Grab the top
+  // FBorderZone px ourselves and hand a NATIVE top-resize to the OS instead of starting a drag.
+  if (Button = mbLeft) and (FEngine <> nil) and not (csDesigning in ComponentState)
+     and FEngine.FormResizable and (Y < FEngine.BorderZone) then
+  begin
+    TyWin32BeginTopResize(GetParentForm(Self));
+    Exit;
+  end;
+  {$ENDIF}
   inherited MouseDown(Button, Shift, X, Y);
   if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarMouseDown(Button, Shift, X, Y);
@@ -670,6 +681,14 @@ end;
 procedure TTyTitleBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
+  {$IFDEF WINDOWS}
+  // Show the N-S resize cursor over the top hot-zone (matches the MouseDown top-resize above).
+  if (FEngine <> nil) and not (csDesigning in ComponentState)
+     and FEngine.FormResizable and (Y < FEngine.BorderZone) then
+    Cursor := crSizeNS
+  else
+    Cursor := crDefault;
+  {$ENDIF}
   if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarMouseMove(Shift, X, Y);
 end;

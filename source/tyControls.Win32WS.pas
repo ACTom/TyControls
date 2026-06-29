@@ -36,6 +36,11 @@ uses
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
   ABorderZone, ACaptionHeight: Integer);
 
+{ Begin a native top-edge resize of AForm. The flush title bar covers the top (there is no NC
+  strip there), so the OS can't start a top resize itself; the title bar calls this from its top
+  hot-zone via WM_NCLBUTTONDOWN/HTTOP. No-op off Windows / when AForm has no handle. }
+procedure TyWin32BeginTopResize(AForm: TCustomForm);
+
 implementation
 
 {$IFDEF WINDOWS}
@@ -88,6 +93,8 @@ var
   orig: WNDPROC;
   pt: TPoint;
   wr: Windows.RECT;
+  ncp: PNCCalcSizeParams;
+  z: Integer;
 begin
   st := FindState(Wnd);
   if st = nil then
@@ -98,9 +105,24 @@ begin
     WM_NCCALCSIZE:
       if WP <> 0 then
       begin
-        // Collapse the non-client area: returning 0 leaves the proposed client rect equal to
-        // the whole window rect, so no native caption/border is carved out — our themed chrome
-        // fills the window — while the WS_THICKFRAME sizing border stays a hit-testable NC strip.
+        // Remove the native caption/border (don't inset by the caption height) BUT keep a thin
+        // NON-CLIENT resize border on all sides: the alClient content fills only the inset client
+        // rect, so it can't cover the grabbable edge, and the WS_THICKFRAME border the OS sizes
+        // natively stays uncovered. Returning 0 makes the (modified) rgrc[0] the new client rect.
+        // Width = the engine's border zone (matches TyNcHitTest's zone) when resizable; 0 = fixed.
+        if st^.Resizable then
+        begin
+          z := st^.BorderZone;
+          if z < 1 then z := 1;
+          ncp := PNCCalcSizeParams(LP);
+          Inc(ncp^.rgrc[0].Left,   z);
+          Dec(ncp^.rgrc[0].Right,  z);
+          Dec(ncp^.rgrc[0].Bottom, z);
+          // Top extends to the window edge (NO inset): the themed title bar sits flush with no
+          // thick system-frame strip above it (the standard custom-frame top fix, à la VS Code /
+          // Windows Terminal). Trade-off: the top edge isn't an OS resize border — the title bar
+          // + maximize cover that; left/right/bottom + the bottom corners still resize natively.
+        end;
         Result := 0;
         Exit;
       end;
@@ -169,6 +191,13 @@ begin
   ApplyThickFrame(Wnd, AResizable);
 end;
 
+procedure TyWin32BeginTopResize(AForm: TCustomForm);
+begin
+  if (AForm = nil) or (not AForm.HandleAllocated) then Exit;
+  ReleaseCapture;
+  SendMessage(AForm.Handle, WM_NCLBUTTONDOWN, HTTOP, 0);
+end;
+
 {$ELSE}
 
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
@@ -176,6 +205,11 @@ procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
 begin
   // Non-Windows widgetset: native NC resize is a Win32-only strategy. GTK/Qt use the
   // AdjustClientRect gutter + WM handoff; Cocoa uses the resizable styleMask (later phases).
+end;
+
+procedure TyWin32BeginTopResize(AForm: TCustomForm);
+begin
+  // Native top-edge resize is a Win32-only strategy for now; GTK/Qt top-resize lands in Phase C.
 end;
 
 {$ENDIF}
