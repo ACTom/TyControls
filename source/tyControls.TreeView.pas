@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LCLIntf, LazUTF8, ImgList,
   BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar,
-  tyControls.TreeView.Columns;
+  tyControls.TreeView.Columns, tyControls.Edit;
 
 type
   { C4: hit-test result — which part of a node row the mouse landed in }
@@ -21,10 +21,13 @@ type
     (default off ⇒ typing does nothing special, == ③c).
     ③d D1: toOwnerDraw opts a tree into per-cell owner-draw via OnDrawNode (full
     cell-content replacement) + OnAfterCellPaint (overlay). Default off ⇒ the
-    default cell content paints, == ③c. }
+    default cell content paints, == ③c.
+    ③e E1: toEditable opts a tree into in-place cell editing via a themed TTyEdit
+    overlay (F2 / double-click on an editable cell). Default off ⇒ no editing,
+    == ③d. Appended last so the existing ordinals are undisturbed. }
   TTyTreeOption = (toMultiSelect, toCheckSupport, toFullRowSelect,
                    toAutoTristateTracking, toVariableNodeHeight,
-                   toIncrementalSearch, toOwnerDraw);
+                   toIncrementalSearch, toOwnerDraw, toEditable);
   TTyTreeOptions = set of TTyTreeOption;
 
   { A2: check column type for a node }
@@ -202,6 +205,23 @@ type
     FOnNodeDblClick:       TTyTreeNodeEvent;
     { C4: DblClick tracking — remember which node the MouseDown landed on }
     FLastMouseNode:        PTyTreeNode;
+    { ③e E1: inline cell editing. One persistent hidden TTyEdit overlay, created
+      in the ctor, repositioned + shown on demand (reused for every edit). Edit
+      state lives on the control (no node-record growth). FEditing is declared in
+      the protected section (it doubles as the incremental-search suppression
+      hook) — only the remaining state fields live here.
+        FEditOriginalText — the cell text at edit start (OnNewText fires iff
+                            FEditor.Text differs at commit).
+        FEndingEdit       — reentrancy guard shared by commit/cancel/focus-loss so
+                            they can't recurse or double-fire.
+        FLastMouseColumn  — column under the last MouseDown (NoColumn = none); F2
+                            uses it (fallback: MainColumn, else 0). Reused by ③f. }
+    FEditor:               TTyEdit;
+    FEditNode:             PTyTreeNode;
+    FEditColumn:           Integer;
+    FEditOriginalText:     string;
+    FEndingEdit:           Boolean;
+    FLastMouseColumn:      Integer;
     { C1: layout / display properties }
     FIndent:            Integer;
     FImages:            TImageList;
@@ -425,6 +445,18 @@ type
     procedure Sort(Node: PTyTreeNode; Column: Integer; ADirection: TTySortDirection; DoInit: Boolean);
     { E2: recursive sort of the whole tree (initialized+expanded levels only) }
     procedure SortTree(Column: Integer; ADirection: TTySortDirection);
+    { ③e E1: inline-edit public API (mirrors VirtualTreeView). E1 ships stubs;
+      E2 fills the lifecycle. EditNode returns False when editing is not allowed
+      (not toEditable, OnEditing veto, nil node, or the cell has no visible rect);
+      EndEditNode commits (fires OnNewText iff the text changed), CancelEdit
+      discards (fires OnEditCancelled). }
+    function  EditNode(Node: PTyTreeNode; Column: Integer): Boolean;
+    procedure EndEditNode;
+    procedure CancelEdit;
+    { ③e E1: read-only edit state. }
+    property IsEditing:    Boolean     read FEditing;
+    property EditedNode:   PTyTreeNode read FEditNode;
+    property EditedColumn: Integer     read FEditColumn;
   published
     { B1: option flags set (default [] = ③a/③b behaviour) }
     property Options: TTyTreeOptions read FOptions write SetOptions default [];
@@ -1658,6 +1690,12 @@ begin
   FSearchLastTick   := 0;
   FSearchTimeout    := 1000;
   FEditing          := False;
+  { ③e E1: inline-edit — idle state }
+  FEditNode         := nil;
+  FEditColumn       := NoColumn;
+  FEditOriginalText := '';
+  FEndingEdit       := False;
+  FLastMouseColumn  := NoColumn;
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
@@ -1673,6 +1711,14 @@ begin
   { B (columns): create the header sub-object and wire its change notification }
   FHeader := TTyTreeHeader.Create;
   FHeader.OnChange := @HeaderChanged;
+  { ③e E1: the persistent inline editor — hidden, non-tab-stop, parented to the
+    tree so it shares the tree's Controller (themed automatically) and lives in
+    the same client coordinate space the cell rects use. Shown + positioned on
+    demand by EditNode (E2); dormant while toEditable is off. }
+  FEditor := TTyEdit.Create(Self);
+  FEditor.Parent  := Self;
+  FEditor.Visible := False;
+  FEditor.TabStop := False;
   TabStop           := True;
   Width := 200; Height := 160;
 end;
@@ -4793,6 +4839,28 @@ begin
   finally
     FSorting := False;
   end;
+end;
+
+{ ── ③e E1 ── inline cell editing (stubs; lifecycle lands in E2) ────────────── }
+
+{ Start editing Node's cell in Column. E1: dormant scaffolding — always refuses.
+  E2 adds the guards (toEditable / OnEditing veto / nil node / no visible rect),
+  seeds + positions FEditor, and sets the edit state. }
+function TTyTreeView.EditNode(Node: PTyTreeNode; Column: Integer): Boolean;
+begin
+  Result := False;
+end;
+
+{ Commit the active edit (fire OnNewText iff the text changed, then hide). E1:
+  no-op; E2 fills it. }
+procedure TTyTreeView.EndEditNode;
+begin
+end;
+
+{ Discard the active edit (fire OnEditCancelled, then hide). E1: no-op; E2 fills
+  it. }
+procedure TTyTreeView.CancelEdit;
+begin
 end;
 
 initialization
