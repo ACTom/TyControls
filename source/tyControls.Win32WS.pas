@@ -1,4 +1,4 @@
-unit tyControls.Win32Resize;
+unit tyControls.Win32WS;
 {$mode objfpc}{$H+}
 
 { Windows-only native non-client edge-resize glue for the borderless TTyForm. EVERY routine

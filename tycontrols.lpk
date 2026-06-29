@@ -181,8 +181,8 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.WindowEffects"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.Win32Resize.pas"/>
-        <UnitName Value="tyControls.Win32Resize"/>
+        <Filename Value="source/tyControls.Win32WS.pas"/>
+        <UnitName Value="tyControls.Win32WS"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.QtWS.pas"/>

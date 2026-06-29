@@ -108,7 +108,7 @@ type
     function FormResizable: Boolean;
     { Whether the engine's MANUAL (BoundsRect-drag) edge resize is active. False on Windows —
       there the native WS_THICKFRAME + WM_NCHITTEST own resize, so the manual path is disabled
-      to avoid double-handling (see tyControls.Win32Resize); elsewhere it follows FormResizable.
+      to avoid double-handling (see tyControls.Win32WS); elsewhere it follows FormResizable.
       Distinct from FormResizable so the maximize gate (which uses FormResizable) is unaffected. }
     function ManualResizeEnabled: Boolean;
   public
@@ -276,7 +276,7 @@ function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
 implementation
 
 uses
-  tyControls.Win32Resize   // native Win32 NC edge-resize glue (no-op off Windows)
+  tyControls.Win32WS   // native Win32 NC edge-resize glue (no-op off Windows)
   {$IFDEF LCLCOCOA}, CocoaAll{$ENDIF}
   {$IFDEF WINDOWS}, strings{$ENDIF}   // StrComp(PAnsiChar) for the WM_SETTINGCHANGE area check
   ;
@@ -305,7 +305,7 @@ uses
   So we must sit IN FRONT of the LCL proc. Because pulling the Windows unit into THIS unit's
   global namespace shadows Types.Rect/Point + Classes.RegisterClass (which the rest of
   Form.pas relies on), the subclass machinery lives in a dedicated {$IFDEF WINDOWS} helper
-  unit (tyControls.Win32Resize) — the same isolation pattern as tyControls.WindowEffects /
+  unit (tyControls.Win32WS) — the same isolation pattern as tyControls.WindowEffects /
   QtWS / GtkWS. That helper handles WM_NCCALCSIZE (collapse the non-client area so the client
   fills the whole window while the WS_THICKFRAME sizing border stays hit-testable) +
   WM_NCHITTEST (return TyNcHitTest, the pure mapper that stays HERE next to TyHitTestBorder),
@@ -1208,7 +1208,7 @@ begin
   if csDesigning in ComponentState then Exit;   // never poke the window on the design surface
   {$IFDEF WINDOWS}
   // Windows native NC resize: assert/clear WS_THICKFRAME per FResizable + (re)install the HWND
-  // subclass that handles WM_NCCALCSIZE/WM_NCHITTEST (see tyControls.Win32Resize / the B1 note).
+  // subclass that handles WM_NCCALCSIZE/WM_NCHITTEST (see tyControls.Win32WS / the B1 note).
   // Caption-drag band height = the title bar's height when one is associated, else 0 (no caption
   // zone). Guarded by HandleAllocated (the helper also no-ops without a handle).
   if HandleAllocated then
