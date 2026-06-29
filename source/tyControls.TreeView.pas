@@ -2,7 +2,7 @@ unit tyControls.TreeView;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LazUTF8, ImgList,
+  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LCLIntf, LazUTF8, ImgList,
   BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar,
   tyControls.TreeView.Columns;
@@ -2672,6 +2672,15 @@ var
   cbBoxRect: TRect;            // device rect of the box/circle within the slot
   cbBoxSize: Integer;          // device-px side of the drawn box/circle
   usedCbSlotW: Integer;        // 0 when checkbox off/ctNone; cbSlotW otherwise
+  { Node images are drawn via GDI onto ACanvas AFTER EndPaint (see below), so
+    collect their device-coord positions during the row loop instead of drawing
+    them into the BGRA layer. Drawing an ImageList into TTyPainter.Bitmap.Canvas
+    worked on Windows (the LCL RawImage→bitmap conversion aliases the BGRA data
+    buffer there) but was silently dropped on Qt/GTK, where the bitmap is a
+    separate buffer the EndPaint rebuild-from-data discards. }
+  pendingIcons: array of record X, Y, Idx: Integer; end;
+  pendingCount: Integer;
+  iIcon, savedDC: Integer;
 begin
   UpdateScrollBars;   // keep scrollbar range current (cheap; no-op when clean)
 
@@ -2679,6 +2688,9 @@ begin
   try
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
+
+    pendingCount := 0;
+    SetLength(pendingIcons, 0);
 
     W := ARect.Right  - ARect.Left;
     H := ARect.Bottom - ARect.Top;
@@ -3156,9 +3168,15 @@ begin
               if Assigned(FOnGetImageIndex) then
                 FOnGetImageIndex(Self, node, ikNormal, colIdx, ghosted, imgIdx);
               if (imgIdx >= 0) and (imgIdx < FImages.Count) then
-                P.DrawImageList(FImages, imgIdx,
-                  ARect.Left + captionX,
-                  ARect.Top  + rowTop + (rowH - FImages.Height) div 2);
+              begin
+                { Collect; drawn via GDI onto ACanvas after EndPaint (see below). }
+                if pendingCount = Length(pendingIcons) then
+                  SetLength(pendingIcons, pendingCount + 32);
+                pendingIcons[pendingCount].X   := ARect.Left + captionX;
+                pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - FImages.Height) div 2;
+                pendingIcons[pendingCount].Idx := imgIdx;
+                Inc(pendingCount);
+              end;
               Inc(captionX, imgSlotW);
             end;
 
@@ -3370,9 +3388,15 @@ begin
           if Assigned(FOnGetImageIndex) then
             FOnGetImageIndex(Self, node, ikNormal, -1, ghosted, imgIdx);
           if (imgIdx >= 0) and (imgIdx < FImages.Count) then
-            P.DrawImageList(FImages, imgIdx,
-              ARect.Left + captionX,
-              ARect.Top  + rowTop + (rowH - FImages.Height) div 2);
+          begin
+            { Collect; drawn via GDI onto ACanvas after EndPaint (see below). }
+            if pendingCount = Length(pendingIcons) then
+              SetLength(pendingIcons, pendingCount + 32);
+            pendingIcons[pendingCount].X   := ARect.Left + captionX;
+            pendingIcons[pendingCount].Y   := ARect.Top  + rowTop + (rowH - FImages.Height) div 2;
+            pendingIcons[pendingCount].Idx := imgIdx;
+            Inc(pendingCount);
+          end;
           Inc(captionX, imgSlotW);
         end;
 
@@ -3410,6 +3434,29 @@ begin
 
     P.Bitmap.ClipRect := savedClip;
     P.EndPaint;
+
+    { ── Node images: draw via GDI onto the (now composited) control canvas ──
+      EndPaint has alpha-blitted the BGRA layer onto ACanvas; ACanvas now holds
+      the finished tree. Draw the collected icons straight onto it with the LCL
+      ImageList, clipped to the content-rows area (below the header band). This
+      is the only path that survives on every widgetset: drawing into the BGRA
+      layer's Canvas was erased by the EndPaint rebuild on Qt/GTK. The X/Y were
+      captured in ARect-relative device coords (== ACanvas device coords here),
+      and CR is painter-local (0-based), so the clip is offset by ARect. }
+    if (pendingCount > 0) and (FImages <> nil) then
+    begin
+      savedDC := SaveDC(ACanvas.Handle);
+      try
+        IntersectClipRect(ACanvas.Handle,
+          ARect.Left + CR.Left,  ARect.Top + CR.Top,
+          ARect.Left + CR.Right, ARect.Top + CR.Bottom);
+        for iIcon := 0 to pendingCount - 1 do
+          FImages.Draw(ACanvas, pendingIcons[iIcon].X, pendingIcons[iIcon].Y,
+            pendingIcons[iIcon].Idx);
+      finally
+        RestoreDC(ACanvas.Handle, savedDC);
+      end;
+    end;
   finally
     P.Free;
   end;

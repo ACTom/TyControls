@@ -5,7 +5,7 @@ unit test.painter;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, Controls, ImgList, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter;
 
@@ -35,8 +35,6 @@ type
     procedure TestPerCornerTopRoundBottomSquare;
     procedure TestFallbackFontNameApplied;
     procedure TestMeasureTextAndUnscale;
-    procedure TestDrawImageListOpaqueLandsInBitmap;
-    procedure TestDrawImageListMaskedTransparency;
   end;
 
 implementation
@@ -322,94 +320,6 @@ begin
   AssertTrue('measured width > 0', sz.cx > 0);
   AssertTrue('measured height > 0', sz.cy > 0);
   AssertEquals('unscale identity at 96ppi', 12, FPainter.Unscale(FPainter.Scale(12)));
-end;
-
-procedure TPainterTest.TestDrawImageListOpaqueLandsInBitmap;
-{ THE GATE (opaque case): an unmasked, fully-opaque solid-RED 16x16 icon drawn
-  into the BGRA layer must land there with alpha=255. This proves DrawImageList
-  composites the LCL ImageList.Draw onto FBmp.Canvas and InvalidateBitmap syncs
-  the pixels back. Read FPainter.Bitmap BEFORE EndPaint (TearDown frees FBmp). }
-var
-  il: TImageList;
-  bmp: TBitmap;
-  pxIcon, pxOutside: TBGRAPixel;
-begin
-  il := TImageList.Create(nil);
-  bmp := TBitmap.Create;
-  try
-    il.Width := 16;
-    il.Height := 16;
-    bmp.SetSize(16, 16);
-    bmp.Canvas.Brush.Color := clRed;
-    bmp.Canvas.FillRect(0, 0, 16, 16);
-    il.Add(bmp, nil);                 // nil mask => fully opaque
-    AssertEquals('imagelist has 1 entry', 1, il.Count);
-
-    MakePainter(64, 64, 96);          // FreePainter in TearDown calls EndPaint
-    FPainter.Bitmap.Fill(BGRA(0, 0, 255, 255));  // opaque blue background
-    FPainter.DrawImageList(il, 0, 8, 8);
-
-    pxIcon := PixelAt(16, 16);        // icon center (8..24)
-    pxOutside := PixelAt(2, 2);       // outside the icon
-
-    AssertEquals('icon center red', 255, pxIcon.red);
-    AssertEquals('icon center green', 0, pxIcon.green);
-    AssertEquals('icon center blue', 0, pxIcon.blue);
-    AssertEquals('icon center opaque', 255, pxIcon.alpha);
-
-    AssertEquals('outside still blue (blue)', 255, pxOutside.blue);
-    AssertEquals('outside still blue (red 0)', 0, pxOutside.red);
-    AssertEquals('outside opaque', 255, pxOutside.alpha);
-  finally
-    bmp.Free;
-    il.Free;
-  end;
-end;
-
-procedure TPainterTest.TestDrawImageListMaskedTransparency;
-{ THE GATE (masked case): an AddMasked 16x16 icon, clFuchsia (mask) on the left
-  half + solid GREEN on the right half, drawn at (8,8) onto a blue FBmp. The green
-  (right) half must composite opaque green; the masked (left) half must let the
-  blue background show through. Proves masked transparency composites correctly. }
-var
-  il: TImageList;
-  bmp: TBitmap;
-  pxGreen, pxMasked: TBGRAPixel;
-begin
-  il := TImageList.Create(nil);
-  bmp := TBitmap.Create;
-  try
-    il.Width := 16;
-    il.Height := 16;
-    bmp.SetSize(16, 16);
-    // left half = fuchsia (becomes the transparent mask), right half = green
-    bmp.Canvas.Brush.Color := clFuchsia;
-    bmp.Canvas.FillRect(0, 0, 8, 16);
-    bmp.Canvas.Brush.Color := clGreen;
-    bmp.Canvas.FillRect(8, 0, 16, 16);
-    il.AddMasked(bmp, clFuchsia);
-    AssertEquals('masked imagelist has 1 entry', 1, il.Count);
-
-    MakePainter(64, 64, 96);          // FreePainter in TearDown calls EndPaint
-    FPainter.Bitmap.Fill(BGRA(0, 0, 255, 255));  // opaque blue background
-    FPainter.DrawImageList(il, 0, 8, 8);
-
-    // icon spans x 8..24; left (masked) half ~8..16, right (green) half ~16..24
-    pxGreen := PixelAt(20, 16);       // right half -> green, opaque
-    pxMasked := PixelAt(10, 16);      // left half -> masked, blue shows through
-
-    AssertTrue('green half: green dominant', pxGreen.green > 100);
-    AssertTrue('green half: red low', pxGreen.red < 80);
-    AssertTrue('green half: blue low', pxGreen.blue < 80);
-    AssertEquals('green half opaque', 255, pxGreen.alpha);
-
-    AssertTrue('masked half: blue shows through', pxMasked.blue > 200);
-    AssertTrue('masked half: green low (bg, not icon)', pxMasked.green < 80);
-    AssertEquals('masked half opaque (bg)', 255, pxMasked.alpha);
-  finally
-    bmp.Free;
-    il.Free;
-  end;
 end;
 
 initialization

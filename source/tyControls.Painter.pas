@@ -5,7 +5,7 @@ unit tyControls.Painter;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, LCLType, ImgList, BGRABitmap, BGRABitmapTypes,
+  Classes, SysUtils, Types, Graphics, LCLType, BGRABitmap, BGRABitmapTypes,
   BGRAGradientScanner,
   FPReadJPEG, FPReadPNG, FPReadBMP,  // register FPImage readers so url() jpg/png/bmp load
   tyControls.Types;
@@ -42,10 +42,6 @@ type
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer = 4);
     procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
     procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
-    { Composite an image-list entry INTO the BGRA layer (FBmp), so it survives the
-      EndPaint blit. Drawing straight to the control canvas instead would be erased
-      when EndPaint alpha-blits the whole BGRA layer over it. }
-    procedure DrawImageList(AImages: TCustomImageList; AIndex, X, Y: Integer);
     procedure FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
     procedure FillGlass(const ARect: TRect; AGlass: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
     { Paint AColor into the area OUTSIDE the rounded rectangle (the 4 corner gaps).
@@ -748,13 +744,6 @@ begin
   finally
     FBmp.ClipRect := oldClip;
   end;
-end;
-
-procedure TTyPainter.DrawImageList(AImages: TCustomImageList; AIndex, X, Y: Integer);
-begin
-  if (FBmp = nil) or (AImages = nil) or (AIndex < 0) or (AIndex >= AImages.Count) then Exit;
-  AImages.Draw(FBmp.Canvas, X, Y, AIndex);   // draw into the BGRA layer's LCL canvas
-  FBmp.InvalidateBitmap;                       // tell BGRABitmap the pixels changed via Canvas
 end;
 
 initialization

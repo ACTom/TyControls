@@ -2,7 +2,7 @@
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, ImgList, LCLType,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.TreeView,
@@ -254,6 +254,23 @@ type
     procedure TestTimeoutResetsBuffer;
     { ③a/b/c regression: VK_DOWN/VK_UP/VK_HOME/VK_END still move focus with search on }
     procedure TestArrowKeysStillWorkWithSearchOn;
+  end;
+
+  { End-to-end node-image render gate.
+    Renders a REAL TTyTreeView (with a TImageList) through the full RenderTo
+    path — interleaved BGRA ops + EndPaint blit + any post-draw — into an output
+    TBitmap, then scans the OUTPUT for the icon. This replicates the exact GUI
+    render path (an isolated painter test does NOT, because it reads FBmp before
+    the EndPaint blit). The gate: an opaque RED node icon must survive to the
+    output bitmap, AND the node caption must still render (icon didn't clobber it). }
+  TTreeNodeImageRenderTest = class(TTestCase)
+  private
+    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+      Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
+  published
+    { Opaque RED icon present in the main-column icon slot of row 0 in the output. }
+    procedure TestNodeImageSurvivesToOutput;
   end;
 
 implementation
@@ -8887,6 +8904,157 @@ begin
   end;
 end;
 
+{ ── End-to-end node-image render gate ───────────────────────────────────── }
+
+procedure TTreeNodeImageRenderTest.OnGetText(Sender: TTyTreeView;
+  Node: PTyTreeNode; var Text: string);
+begin
+  Text := 'NodeText' + IntToStr(Node^.Index);
+end;
+
+procedure TTreeNodeImageRenderTest.OnGetImageIndex(Sender: TTyTreeView;
+  Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
+  var Ghosted: Boolean; var ImageIndex: Integer);
+begin
+  { One opaque red icon at index 0 for every node in the main column. }
+  ImageIndex := 0;
+end;
+
+procedure TTreeNodeImageRenderTest.TestNodeImageSurvivesToOutput;
+{ Build a real TTyTreeView with a TImageList holding ONE fully-opaque solid-RED
+  16x16 icon, MainColumn=0, OnGetImageIndex→0 for all nodes, two root nodes with
+  captions. Render through the full RenderTo path into an output TBitmap and scan
+  the OUTPUT:
+    • a RED pixel must exist in the main column's icon slot on row 0, AND
+    • a dark (caption ink) pixel must exist in the caption band on row 0.
+  Geometry @96dpi: ShowRoot=True, Indent=16, Header.Height=22.
+    Row 0 spans y=[22..44). No children → no expand button, but slots are anchored.
+    captionX = mainColBase(0) + indentPx((0+1)*16=16) = 16.
+    Image slot = x=[16..32), icon 16x16 centred at y = 22 + (22-16) div 2 = 25 → y=[25..41).
+    Caption textRect.Left = 32 + 2 = 34, col0 right = 120. }
+const
+  W = 300;
+  H = 200;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  il: TImageList;
+  redBmp: TBitmap;
+  col0, col1, col2: TTyTreeColumn;
+  outBmp: TBitmap;
+  x, y: Integer;
+  col: TColor;
+  redFound, inkFound: Boolean;
+  redX, redY: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  il   := nil;
+  redBmp := nil;
+  outBmp := nil;
+  F := nil;
+  try
+    Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+    F := TForm.CreateNew(nil, 0);
+    t := TTyTreeView.Create(F);
+    t.Parent     := F;
+    t.Controller := Ctl;
+    t.Font.PixelsPerInch := 96;
+    t.DefaultNodeHeight  := 22;
+    t.Indent             := 16;
+    t.ShowButtons        := True;
+    t.ShowTreeLines      := False;
+    t.ShowRoot           := True;
+    t.SetBounds(0, 0, W, H);
+
+    { One fully-opaque solid-RED 16x16 icon. }
+    redBmp := TBitmap.Create;
+    redBmp.SetSize(16, 16);
+    redBmp.Canvas.Brush.Color := clRed;
+    redBmp.Canvas.FillRect(0, 0, 16, 16);
+    il := TImageList.Create(F);
+    il.Width  := 16;
+    il.Height := 16;
+    il.Add(redBmp, nil);               { nil mask => fully opaque }
+    AssertEquals('imagelist has 1 entry', 1, il.Count);
+
+    t.Images          := il;
+    t.OnGetText       := @OnGetText;
+    t.OnGetImageIndex := @OnGetImageIndex;
+
+    { Three columns, main = 0. }
+    col0 := t.Header.Columns.Add as TTyTreeColumn;
+    col0.Width := 120; col0.Text := 'Name'; col0.Alignment := taLeftJustify;
+    col1 := t.Header.Columns.Add as TTyTreeColumn;
+    col1.Width := 80;  col1.Text := 'Info'; col1.Alignment := taLeftJustify;
+    col2 := t.Header.Columns.Add as TTyTreeColumn;
+    col2.Width := 100; col2.Text := 'Size'; col2.Alignment := taLeftJustify;
+    t.Header.MainColumn := 0;
+    t.Header.Options    := [hoVisible];
+
+    { Two root nodes; init both so RenderTo fires OnGetText/OnGetImageIndex. }
+    t.RootNodeCount := 2;
+    t.InitNode(t.RootNode^.FirstChild);
+    t.InitNode(t.RootNode^.FirstChild^.NextSibling);
+
+    { Render through the full path into an output bitmap (white background). }
+    outBmp := TBitmap.Create;
+    outBmp.PixelFormat := pf32bit;
+    outBmp.SetSize(W, H);
+    outBmp.Canvas.Brush.Color := clWhite;
+    outBmp.Canvas.FillRect(0, 0, W, H);
+    {$PUSH}{$HINTS OFF}
+    TTyTreeViewAccess(t).RenderTo(outBmp.Canvas, Rect(0, 0, W, H), 96);
+    {$POP}
+
+    { Read the OUTPUT bitmap via the GDI CANVAS surface — this is what EndPaint's
+      ACanvas.Draw(...,Bitmap) actually paints and what the real GUI shows. (Reading
+      the raw DIB bits via TLazIntfImage is NOT representative: on Windows the BGRA
+      layer's bitmap shares its buffer with the canvas, so a canvas-drawn icon shows
+      in the raw bits even when the GUI-visible canvas surface has lost it.) }
+
+    { Scan the icon slot band x=[16..31], y=[26..40) for a RED pixel.
+      TColor is $00BBGGRR — Red()/Green()/Blue() from the Graphics unit. }
+    redFound := False; redX := -1; redY := -1;
+    for y := 26 to 39 do
+      for x := 16 to 31 do
+      begin
+        col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+        if (Red(col) > 192) and (Green(col) < 64) and (Blue(col) < 64) then
+        begin
+          redFound := True; redX := x; redY := y;
+        end;
+      end;
+
+    { Scan the caption band x=[34..118], y=[26..40) for a dark ink pixel
+      (caption color #000000 on white). Non-vacuous: the band is wide. }
+    inkFound := False;
+    for y := 26 to 39 do
+      for x := 34 to 118 do
+      begin
+        col := ColorToRGB(outBmp.Canvas.Pixels[x, y]);
+        if (Red(col) < 64) and (Green(col) < 64) and (Blue(col) < 64) then
+          inkFound := True;
+      end;
+
+    AssertTrue(
+      'node icon RED pixel must survive to the output bitmap in the row-0 ' +
+      'main-column icon slot x=[16..31] y=[26..40) (found=' +
+      BoolToStr(redFound, True) + ' at ' + IntToStr(redX) + ',' + IntToStr(redY) + ')',
+      redFound);
+    AssertTrue(
+      'node caption ink must still render on row 0 in x=[34..118] (icon did not clobber text)',
+      inkFound);
+  finally
+    outBmp.Free;
+    redBmp.Free;
+    { il is owned by F; do not free separately }
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -8920,4 +9088,5 @@ initialization
   RegisterTest(TTreeGetCellRectTest);
   RegisterTest(TTreeB1VariableHeightTest);
   RegisterTest(TTreeC1IncSearchTest);
+  RegisterTest(TTreeNodeImageRenderTest);
 end.
