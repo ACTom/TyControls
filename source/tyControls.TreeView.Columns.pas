@@ -449,6 +449,25 @@ begin
           if FPositionToIndex[i] > col.Index then
             Dec(FPositionToIndex[i]);
       end;
+      { Deletion never goes through SetMainColumn (the only other clamp site), so keep
+        MainColumn valid + following the index renumber here. Otherwise a stale,
+        now-out-of-range MainColumn makes RenderTo's `colIdx = MainColumn` never match
+        and ALL tree chrome (expand buttons / images / main caption) silently vanishes.
+        Count still includes the column being deleted, so post-delete count = Count - 1. }
+      if GetOwner is TTyTreeHeader then
+        with TTyTreeHeader(GetOwner) do
+        begin
+          if FMainColumn = col.Index then
+          begin
+            if Count - 1 > 0 then FMainColumn := 0 else FMainColumn := NoColumn;
+          end
+          else if FMainColumn > col.Index then
+            Dec(FMainColumn);
+          if (FMainColumn <> NoColumn) and (FMainColumn >= Count - 1) then
+          begin
+            if Count - 1 > 0 then FMainColumn := Count - 2 else FMainColumn := NoColumn;
+          end;
+        end;
       DoChange;
     end;
     cnExtracting:
@@ -799,7 +818,6 @@ begin
   begin
     Src := TTyTreeHeader(ASource);
     FHeight        := Src.FHeight;
-    FMainColumn    := Src.FMainColumn;
     FSortColumn    := Src.FSortColumn;
     FSortDirection := Src.FSortDirection;
     FAutoSizeIndex := Src.FAutoSizeIndex;
@@ -813,6 +831,11 @@ begin
       dstCol := FColumns.Add as TTyTreeColumn;
       dstCol.Assign(srcCol);
     end;
+    { MainColumn AFTER the rebuild: each FColumns.Add fires Notify(cnAdded), and the
+      first one auto-defaults MainColumn to 0 when it is NoColumn — which would clobber
+      a copied opt-out (NoColumn). Assigning here (post-rebuild, Count = Src.Count) lets
+      the opt-out and any explicit value survive. }
+    FMainColumn := Src.FMainColumn;
     Changed;
   end
   else

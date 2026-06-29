@@ -667,7 +667,7 @@ begin
   // would be an ugly thick frame), so the OS can't resize from the top edge. Grab the top
   // FBorderZone px ourselves and hand a NATIVE top-resize to the OS instead of starting a drag.
   if (Button = mbLeft) and (FEngine <> nil) and not (csDesigning in ComponentState)
-     and FEngine.FormResizable and (Y < FEngine.BorderZone) then
+     and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZone) then
   begin
     TyWin32BeginTopResize(GetParentForm(Self));
     Exit;
@@ -684,7 +684,7 @@ begin
   {$IFDEF WINDOWS}
   // Show the N-S resize cursor over the top hot-zone (matches the MouseDown top-resize above).
   if (FEngine <> nil) and not (csDesigning in ComponentState)
-     and FEngine.FormResizable and (Y < FEngine.BorderZone) then
+     and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZone) then
     Cursor := crSizeNS
   else
     Cursor := crDefault;
@@ -908,6 +908,9 @@ begin
   end;
   // corners must go square when maximized and round again when restored
   if FForm is TTyForm then TTyForm(FForm).ApplyWindowEffects;
+  // refresh the NC strategy: when (un)maximized the WM_NCCALCSIZE inset must turn off/on
+  // (a maximized window must NOT keep the resize border, else content overhangs the work area).
+  if FForm is TTyForm then TTyForm(FForm).ApplyResizeStrategy;
 end;
 
 { TTyForm }
@@ -1234,7 +1237,9 @@ begin
   begin
     if FTitleBar <> nil then capH := FTitleBar.Height else capH := 0;
     if FEngine <> nil then zone := FEngine.BorderZone else zone := 6;
-    TyWin32ApplyNcResize(Self, FResizable, zone, capH);
+    TyWin32ApplyNcResize(Self, FResizable, zone, capH,
+      (FEngine <> nil) and FEngine.Maximized,   // engine (work-area) maximize -> no NC inset
+      FResizable and FShowMaximize);             // allow native maximize (WS_MAXIMIZEBOX)
   end;
   {$ENDIF}
   // GTK/Qt: the AdjustClientRect gutter + WM handoff (Phase C). Cocoa: resizable styleMask

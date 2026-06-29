@@ -34,7 +34,7 @@ uses
   WM_NCCALCSIZE/WM_NCHITTEST are handled with the current Resizable / border-zone / caption
   height. Safe to call repeatedly and when AForm has no handle (no-op). No-op off Windows. }
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
-  ABorderZone, ACaptionHeight: Integer);
+  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean);
 
 { Begin a native top-edge resize of AForm. The flush title bar covers the top (there is no NC
   strip there), so the OS can't start a top resize itself; the title bar calls this from its top
@@ -60,7 +60,11 @@ type
     Resizable: Boolean;
     BorderZone: Integer;
     CaptionH: Integer;
+    Maximized: Boolean;   // engine (work-area) maximize -> suppress the NC resize inset
   end;
+
+const
+  TY_SM_CXPADDEDBORDER = 92;   { SM_CXPADDEDBORDER — FPC's Windows unit may not define it }
 
 var
   GStates: array of PNcState;
@@ -94,7 +98,7 @@ var
   pt: TPoint;
   wr: Windows.RECT;
   ncp: PNCCalcSizeParams;
-  z: Integer;
+  z, ovx, ovy: Integer;
 begin
   st := FindState(Wnd);
   if st = nil then
@@ -110,18 +114,30 @@ begin
         // rect, so it can't cover the grabbable edge, and the WS_THICKFRAME border the OS sizes
         // natively stays uncovered. Returning 0 makes the (modified) rgrc[0] the new client rect.
         // Width = the engine's border zone (matches TyNcHitTest's zone) when resizable; 0 = fixed.
-        if st^.Resizable then
+        // Engine (work-area) maximize OR not resizable -> NO inset, client fills the whole
+        // window. Native maximize (IsZoomed) -> the OS places the window at the work area PLUS a
+        // frame overhang on every side, so inset by that overhang to keep the client exactly on
+        // the work area (no off-screen bleed/clipping). Normal -> a thin NC resize border on
+        // L/R/B, top flush.
+        if st^.Resizable and not st^.Maximized then
         begin
-          z := st^.BorderZone;
-          if z < 1 then z := 1;
           ncp := PNCCalcSizeParams(LP);
-          Inc(ncp^.rgrc[0].Left,   z);
-          Dec(ncp^.rgrc[0].Right,  z);
-          Dec(ncp^.rgrc[0].Bottom, z);
-          // Top extends to the window edge (NO inset): the themed title bar sits flush with no
-          // thick system-frame strip above it (the standard custom-frame top fix, à la VS Code /
-          // Windows Terminal). Trade-off: the top edge isn't an OS resize border — the title bar
-          // + maximize cover that; left/right/bottom + the bottom corners still resize natively.
+          if IsZoomed(Wnd) then
+          begin
+            ovx := GetSystemMetrics(SM_CXFRAME) + GetSystemMetrics(TY_SM_CXPADDEDBORDER);
+            ovy := GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(TY_SM_CXPADDEDBORDER);
+            Inc(ncp^.rgrc[0].Left, ovx);  Dec(ncp^.rgrc[0].Right,  ovx);
+            Inc(ncp^.rgrc[0].Top,  ovy);  Dec(ncp^.rgrc[0].Bottom, ovy);
+          end
+          else
+          begin
+            z := st^.BorderZone;
+            if z < 1 then z := 1;
+            Inc(ncp^.rgrc[0].Left, z);  Dec(ncp^.rgrc[0].Right, z);  Dec(ncp^.rgrc[0].Bottom, z);
+            // Top flush to the window edge (no inset): themed title bar at the very top, no thick
+            // system-frame strip (the VS Code / Windows Terminal custom-frame fix). Top-edge
+            // resize is recovered by the title bar's top hot-zone (TyWin32BeginTopResize).
+          end;
         end;
         Result := 0;
         Exit;
@@ -152,7 +168,7 @@ begin
   Result := CallWindowProc(orig, Wnd, Msg, WP, LP);
 end;
 
-procedure ApplyThickFrame(Wnd: HWND; AResizable: Boolean);
+procedure ApplyThickFrame(Wnd: HWND; AResizable, AAllowMaximize: Boolean);
 var style: PtrInt;
 begin
   style := GetWindowLongPtr(Wnd, GWL_STYLE);
@@ -160,13 +176,19 @@ begin
     style := style or WS_THICKFRAME
   else
     style := style and (not WS_THICKFRAME);
+  // Gate native maximize (Aero Snap / Win+Up / system menu) on the maximize box: a fixed or
+  // no-maximize window must not be maximizable into the inset-cleared state.
+  if AAllowMaximize then
+    style := style or WS_MAXIMIZEBOX
+  else
+    style := style and (not WS_MAXIMIZEBOX);
   SetWindowLongPtr(Wnd, GWL_STYLE, style);
   SetWindowPos(Wnd, 0, 0, 0, 0, 0,
     SWP_FRAMECHANGED or SWP_NOMOVE or SWP_NOSIZE or SWP_NOZORDER or SWP_NOACTIVATE);
 end;
 
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
-  ABorderZone, ACaptionHeight: Integer);
+  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean);
 var
   Wnd: HWND;
   st: PNcState;
@@ -188,7 +210,8 @@ begin
   st^.Resizable := AResizable;
   st^.BorderZone := ABorderZone;
   st^.CaptionH := ACaptionHeight;
-  ApplyThickFrame(Wnd, AResizable);
+  st^.Maximized := AMaximized;
+  ApplyThickFrame(Wnd, AResizable, AAllowMaximize);
 end;
 
 procedure TyWin32BeginTopResize(AForm: TCustomForm);
@@ -201,7 +224,7 @@ end;
 {$ELSE}
 
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
-  ABorderZone, ACaptionHeight: Integer);
+  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean);
 begin
   // Non-Windows widgetset: native NC resize is a Win32-only strategy. GTK/Qt use the
   // AdjustClientRect gutter + WM handoff; Cocoa uses the resizable styleMask (later phases).

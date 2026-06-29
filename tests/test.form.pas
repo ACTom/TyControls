@@ -154,6 +154,7 @@ type
     procedure TestControllerPropertyThemesAndPropagates;
     procedure TestFreeingControllerNilsProperty;
     procedure TestTitleBarDragArmsViaEngine;
+    procedure TestTitleBarTopZoneDoesNotArmDrag;
     procedure TestDblClickMaximizeToggles;
     procedure TestResizableDefaultsTrue;
     procedure TestResizableRoundTrips;
@@ -1183,8 +1184,26 @@ begin
   F := TTyFormAccess.CreateNew(nil);
   try
     F.MakeTitleBar;
-    TTitleBarAccess(F.TitleBar).InjectMouseDown(mbLeft, [], 10, 5);
+    { Press BELOW the top resize hot-zone (the top FBorderZone=6 px is now a top-edge
+      resize zone, not drag) so this exercises the window-drag path. }
+    TTitleBarAccess(F.TitleBar).InjectMouseDown(mbLeft, [], 10, 16);
     AssertTrue('engine drag armed via title bar', F.EngineDragging);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestTitleBarTopZoneDoesNotArmDrag;
+var F: TTyFormAccess;
+begin
+  { A press in the top resize hot-zone (Y < FBorderZone) is a top-edge resize gesture, NOT a
+    window drag (the native OS handoff is a no-op headless; the point is the drag path is
+    bypassed). Default Resizable=True + not maximized, so the hot-zone is active. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    TTitleBarAccess(F.TitleBar).InjectMouseDown(mbLeft, [], 10, 2);
+    AssertFalse('top hot-zone press must not arm a window drag', F.EngineDragging);
   finally
     F.Free;
   end;
