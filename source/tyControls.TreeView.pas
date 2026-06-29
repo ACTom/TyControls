@@ -1808,17 +1808,8 @@ begin
       FHeader.Columns.UpdatePositions;
 
     { ── Empty tree ───────────────────────────────────────────────────────── }
-    if FRoot^.FirstChild = nil then
-    begin
-      if FEmptyListMessage <> '' then
-      begin
-        NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', []);
-        P.DrawText(CR, FEmptyListMessage, S.FontName, ResolveFontSize(S), S.FontWeight,
-          NodeStyle.TextColor, taCenter, tlCenter, True);
-      end;
-      P.EndPaint;
-      Exit;
-    end;
+    { Handled AFTER the header band paints (at the first-row-nil branch below) so
+      an empty multi-column tree still shows its column headers. }
 
     { Row chrome inset: row fills must not touch the border's anti-aliased edge.
       Mirror the ListBox pattern exactly. }
@@ -2017,6 +2008,14 @@ begin
     node := GetNodeAt(firstNodeY, firstTop);
     if node = nil then
     begin
+      { Empty tree (or fully scrolled past): draw the empty-list message in the
+        node area, BELOW the header band which has already painted above. }
+      if (FRoot^.FirstChild = nil) and (FEmptyListMessage <> '') then
+      begin
+        NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', []);
+        P.DrawText(CR, FEmptyListMessage, S.FontName, ResolveFontSize(S), S.FontWeight,
+          NodeStyle.TextColor, taCenter, tlCenter, True);
+      end;
       P.Bitmap.ClipRect := savedClip;
       P.EndPaint;
       Exit;
@@ -2507,8 +2506,12 @@ begin
   logX      := MulDiv(X - CR.Left, 96, PPI);
   logScroll := MulDiv(-FOffsetX, 96, PPI);
 
-  { Check for divider (resizable column right-edge within tolerance) }
-  colIdx := FHeader.Columns.DetermineSplitterIndex(logX, logScroll);
+  { Check for divider (resizable column right-edge within tolerance) — only when
+    column resize is enabled; otherwise the divider zone belongs to the clickable
+    (sortable) header section so a click near a border still sorts. }
+  colIdx := NoColumn;
+  if hoColumnResize in FHeader.Options then
+    colIdx := FHeader.Columns.DetermineSplitterIndex(logX, logScroll);
   if colIdx <> NoColumn then
   begin
     APart   := hpHeaderDivider;

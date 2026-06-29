@@ -626,7 +626,7 @@ procedure TTyTreeColumns.DistributeSpring(ADeltaWidth: Integer);
 var
   i, colIndex: Integer;
   col: TTyTreeColumn;
-  springTotal, share, remainder, bonus: Integer;
+  springTotal, share, remainder: Integer;
   springCols: array of Integer;   { collection indices of spring columns }
   springCount: Integer;
 begin
@@ -663,15 +663,9 @@ begin
     { Exact proportional share (scaled by springTotal to keep integer math) }
     share := (ADeltaWidth * col.FWidth + remainder) div springTotal;
     remainder := (ADeltaWidth * col.FWidth + remainder) mod springTotal;
-    { Bonus pixel for the first column if remainder > 0 (Bresenham-style) }
-    bonus := 0;
-    if i = springCount - 1 then
-    begin
-      { Last column absorbs any remaining fractional pixel }
-      bonus := 0;  { absorbed via remainder accumulation above }
-    end;
-    { Clamp }
-    col.FWidth := Max(col.FMinWidth, Min(col.FMaxWidth, col.FWidth + share + bonus));
+    { Clamp (the running `remainder` accumulation already carries the fractional
+      pixel forward, so the integer shares sum to ADeltaWidth). }
+    col.FWidth := Max(col.FMinWidth, Min(col.FMaxWidth, col.FWidth + share));
   end;
 
   UpdatePositions;
