@@ -5090,6 +5090,13 @@ begin
   if not GetCellRect(Node, Column, r) then Exit;
   if IsRectEmpty(r) then Exit;
 
+  { ③e E5: theme the overlay with the tree's controller. ActiveController does
+    NOT walk Parent (it is FController-or-TyDefaultController), so a child does
+    not inherit the tree's per-instance controller implicitly — assign it here
+    (mirrors how the scrollbars get Self.Controller in UpdateScrollbars) so the
+    editor resolves the SAME theme as the tree, every time an edit opens. }
+  FEditor.Controller := Controller;
+
   FEditOriginalText  := CurrentCellText(Node, Column);
   FEditor.Text       := FEditOriginalText;
   FEditor.BoundsRect := EditorBoundsFromCell(r);

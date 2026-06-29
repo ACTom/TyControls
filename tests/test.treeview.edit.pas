@@ -13,6 +13,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType,
   fpcunit, testregistry,
+  tyControls.Types,
   tyControls.Edit,
   tyControls.TreeView.Columns,
   tyControls.TreeView,
@@ -117,6 +118,27 @@ type
     procedure TestEditorEscapeCancels;
   end;
 
+  { E5: theme-on-child. The overlay editor must resolve the SAME theme as the
+    tree. ActiveController is FController-or-TyDefaultController (it does NOT walk
+    Parent), so a child does not inherit the tree's per-instance controller
+    implicitly — EditNode assigns it. This verifies: (a) the editor shares the
+    tree's Controller reference once an edit opens, and (b) the editor then
+    resolves the tree theme's (deliberately distinctive) text color, which a
+    bare default-controller editor does NOT — proving the theme actually flows
+    from the tree's controller into the overlay. }
+  TTreeEditE5ThemeTest = class(TTestCase)
+  private
+    FCtl:  TTyStyleController;
+    FForm: TForm;
+    FTree: TTyTreeView;
+    FNode0: PTyTreeNode;
+    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+  protected
+    procedure TearDown; override;
+  published
+    procedure TestEditorThemedByTreeController;
+  end;
+
 implementation
 
 const
@@ -143,6 +165,13 @@ type
     { E4: drive the editor's own input handlers (focus-loss commit + Enter/Esc). }
     procedure EditorExitPub;
     procedure EditorKeyDownPub(var Key: Word; Shift: TShiftState);
+  end;
+
+  { E5: reach the protected CurrentStyle of a TTyEdit so a test can read the
+    color the editor actually resolves from its (active) controller. }
+  TEditAccess = class(TTyEdit)
+  public
+    function ResolvedTextColor: TTyColor;
   end;
 
 procedure TEditTreeAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -194,6 +223,11 @@ end;
 procedure TEditTreeAccess.EditorKeyDownPub(var Key: Word; Shift: TShiftState);
 begin
   EditorKeyDown(InlineEditor, Key, Shift);
+end;
+
+function TEditAccess.ResolvedTextColor: TTyColor;
+begin
+  Result := CurrentStyle.TextColor;
 end;
 
 { ----------------------------------------------------------------------------
@@ -806,9 +840,94 @@ begin
   AssertFalse('not editing after Escape', FTree.IsEditing);
 end;
 
+{ ----------------------------------------------------------------------------
+  E5 — theme-on-child (the overlay editor is themed by the tree's controller)
+  ---------------------------------------------------------------------------- }
+
+procedure TTreeEditE5ThemeTest.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  Text := 'row' + IntToStr(Node^.Index);
+end;
+
+procedure TTreeEditE5ThemeTest.TearDown;
+begin
+  FForm.Free;   // frees FTree (owned)
+  FCtl.Free;
+end;
+
+{ Open an edit under a controller whose TyEdit text color is a deliberately
+  distinctive non-default value (#FF00FF). The overlay editor must then (a) share
+  the tree's Controller reference and (b) resolve THAT color — whereas a bare
+  TTyEdit with no controller (the global TyDefaultController) resolves a different
+  color. Together that proves the tree's theme actually flows into the editor. }
+procedure TTreeEditE5ThemeTest.TestEditorThemedByTreeController;
+const
+  THEME_CSS =
+    'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+    'TyTreeNode { background: none; color: #000000; } ' +
+    'TyEdit { background: #FFFFFF; color: #FF00FF; border-width: 1px; } ';
+var
+  Bmp: TBitmap;
+  bare: TEditAccess;
+  themed, dflt: TTyColor;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(THEME_CSS);
+
+  FForm := TForm.CreateNew(nil);
+  FTree := TTyTreeView.Create(FForm);
+  FTree.Parent     := FForm;
+  FTree.Controller := FCtl;
+  FTree.Font.PixelsPerInch := 96;
+  FTree.DefaultNodeHeight  := 22;
+  FTree.ShowRoot           := True;
+  FTree.SetBounds(0, 0, 200, 160);
+  FTree.OnGetText          := @OnGetText;
+  FTree.Options            := [toEditable];
+
+  FTree.RootNodeCount := 3;
+  FNode0 := FTree.RootNode^.FirstChild;
+  FTree.InitNode(FNode0);
+
+  { layout pass so GetCellRect resolves a real device rect }
+  Bmp := TBitmap.Create;
+  try
+    Bmp.SetSize(200, 160);
+    TEditTreeAccess(FTree).RenderTo(Bmp.Canvas, Rect(0, 0, 200, 160), 96);
+  finally
+    Bmp.Free;
+  end;
+
+  AssertTrue('EditNode opens', FTree.EditNode(FNode0, 0));
+
+  { (a) structural invariant: the overlay now shares the tree's controller. }
+  AssertTrue('editor shares the tree''s Controller reference',
+    TEditTreeAccess(FTree).InlineEditor.Controller = FTree.Controller);
+
+  { (b) value invariant: the editor resolves the tree theme's text color, which
+    differs from a bare (default-controller) editor's. }
+  themed := TEditAccess(TEditTreeAccess(FTree).InlineEditor).ResolvedTextColor;
+  bare := TEditAccess.Create(nil);
+  try
+    dflt := bare.ResolvedTextColor;   // no controller ⇒ TyDefaultController
+  finally
+    bare.Free;
+  end;
+  AssertTrue('themed editor text color differs from the default-controller editor',
+    themed <> dflt);
+  AssertEquals('themed editor resolves the theme''s color (#FF00FF, R)',
+    255, TyRedOf(themed));
+  AssertEquals('themed editor resolves the theme''s color (#FF00FF, G)',
+    0, TyGreenOf(themed));
+  AssertEquals('themed editor resolves the theme''s color (#FF00FF, B)',
+    255, TyBlueOf(themed));
+end;
+
 initialization
   RegisterTest(TTreeEditE1Test);
   RegisterTest(TTreeEditE2Test);
   RegisterTest(TTreeEditE3Test);
   RegisterTest(TTreeEditE4Test);
+  RegisterTest(TTreeEditE5ThemeTest);
 end.
