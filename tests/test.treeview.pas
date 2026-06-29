@@ -220,6 +220,42 @@ type
     procedure TestZeroHeightIgnored;
   end;
 
+  { ③d C1: incremental type-to-find search.
+    Flat tree of named leaves ('apple','banana','band','cherry','date') via
+    OnGetText keyed on Node^.Index. Verifies: prefix match jumps focus, re-press
+    advances, custom OnIncrementalSearch (CONTAINS) is honored, Backspace pops a
+    char, the option default-off changes nothing, and the ③a/b/c arrow/Home/End
+    keys still work (search does not hijack them). }
+  TTreeC1IncSearchTest = class(TTestCase)
+  private
+    FCustomSearchHits: Integer;
+    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var CellText: string);
+    { custom predicate: CONTAINS (case-insensitive substring) instead of prefix }
+    procedure OnContainsSearch(Sender: TTyTreeView; Node: PTyTreeNode;
+      const ASearchText: string; var AMatch: Boolean);
+    { Build a flat tree of the named leaves; optionally turn on toIncrementalSearch.
+      Caller frees F then Ctl. }
+    function BuildNamedTree(out Ctl: TTyStyleController; out F: TForm;
+      ASearch: Boolean): TTyTreeView;
+    { Nth visible (= Nth root child) node, 0-based. }
+    function NthChild(t: TTyTreeView; AIndex: Integer): PTyTreeNode;
+  published
+    { Typing 'b','a' → focus lands on the first node whose text starts with 'ba' (banana) }
+    procedure TestPrefixMatchMovesFocus;
+    { Re-pressing 'b' (fresh buffer) from banana → advances to the next 'b' match (band) }
+    procedure TestRepeatCharAdvances;
+    { OnIncrementalSearch override (CONTAINS) is honored over the default prefix }
+    procedure TestCustomPredicateHonored;
+    { Backspace pops the last UTF-8 char and re-resolves focus }
+    procedure TestBackspacePopsChar;
+    { toIncrementalSearch OFF → typing changes nothing (focus + buffer untouched) }
+    procedure TestOptionOffDoesNothing;
+    { Idle past SearchTimeout resets the buffer (simulate via FSearchLastTick) }
+    procedure TestTimeoutResetsBuffer;
+    { ③a/b/c regression: VK_DOWN/VK_UP/VK_HOME/VK_END still move focus with search on }
+    procedure TestArrowKeysStillWorkWithSearchOn;
+  end;
+
 implementation
 
 type
@@ -232,6 +268,12 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure DblClick;
     procedure KeyDown(var Key: Word; Shift: TShiftState);
+    { ③d C1: drive/inspect incremental search from tests. }
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char);
+    procedure TypeChar(const AChar: string);            // convenience: feed one printable char
+    function  SearchBuffer: string;                     // current type-ahead buffer
+    procedure SetSearchLastTick(ATick: QWord);          // simulate a timeout by aging the tick
+    function  SearchLastTick: QWord;
   end;
 
 procedure TTyTreeViewAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -262,6 +304,34 @@ end;
 procedure TTyTreeViewAccess.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   inherited KeyDown(Key, Shift);
+end;
+
+procedure TTyTreeViewAccess.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  inherited UTF8KeyPress(UTF8Key);
+end;
+
+procedure TTyTreeViewAccess.TypeChar(const AChar: string);
+var
+  k: TUTF8Char;
+begin
+  k := AChar;
+  UTF8KeyPress(k);
+end;
+
+function TTyTreeViewAccess.SearchBuffer: string;
+begin
+  Result := FSearchBuffer;   // protected field, reachable from this descendant
+end;
+
+procedure TTyTreeViewAccess.SetSearchLastTick(ATick: QWord);
+begin
+  FSearchLastTick := ATick;
+end;
+
+function TTyTreeViewAccess.SearchLastTick: QWord;
+begin
+  Result := FSearchLastTick;
 end;
 
 type
@@ -8589,6 +8659,234 @@ begin
   end;
 end;
 
+{ ── ③d C1 ── incremental type-to-find search ──────────────────────────────── }
+
+const
+  C1_NAMES: array[0..4] of string =
+    ('apple', 'banana', 'band', 'cherry', 'date');
+
+procedure TTreeC1IncSearchTest.OnGetText(Sender: TTyTreeView;
+  Node: PTyTreeNode; var CellText: string);
+begin
+  if Integer(Node^.Index) in [0..4] then
+    CellText := C1_NAMES[Integer(Node^.Index)]
+  else
+    CellText := '';
+end;
+
+procedure TTreeC1IncSearchTest.OnContainsSearch(Sender: TTyTreeView;
+  Node: PTyTreeNode; const ASearchText: string; var AMatch: Boolean);
+var
+  txt: string;
+begin
+  Inc(FCustomSearchHits);
+  { CONTAINS (substring), case-insensitive — different from the default prefix. }
+  txt := '';
+  if Integer(Node^.Index) in [0..4] then txt := C1_NAMES[Integer(Node^.Index)];
+  AMatch := (ASearchText <> '') and
+            (Pos(UpperCase(ASearchText), UpperCase(txt)) > 0);
+end;
+
+function TTreeC1IncSearchTest.BuildNamedTree(out Ctl: TTyStyleController;
+  out F: TForm; ASearch: Boolean): TTyTreeView;
+var
+  t: TTyTreeView;
+begin
+  FCustomSearchHits := 0;
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.DefaultNodeHeight := 18;
+  t.ShowRoot   := False;          // 5 flat leaves; no synthetic root row
+  t.SetBounds(0, 0, 200, 120);
+  t.OnGetText  := @OnGetText;
+  if ASearch then
+    t.Options := t.Options + [toIncrementalSearch];
+  t.RootNodeCount := 5;           // apple/banana/band/cherry/date (Index 0..4)
+  Result := t;
+end;
+
+function TTreeC1IncSearchTest.NthChild(t: TTyTreeView; AIndex: Integer): PTyTreeNode;
+var
+  n: PTyTreeNode;
+  i: Integer;
+begin
+  Result := nil;
+  n := t.RootNode^.FirstChild;
+  i := 0;
+  while n <> nil do
+  begin
+    if i = AIndex then begin Result := n; Exit; end;
+    n := n^.NextSibling; Inc(i);
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestPrefixMatchMovesFocus;
+{ Typing 'b' then 'a' (toIncrementalSearch on) → focus lands on the FIRST visible
+  node whose text starts with 'ba' = 'banana' (index 1). }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    AssertTrue('focus starts nil', t.FocusedNode = nil);
+    t.TypeChar('b');
+    t.TypeChar('a');
+    AssertEquals('search buffer = ba', 'ba', t.SearchBuffer);
+    AssertTrue('FocusedNode = banana (first ba-prefix)', t.FocusedNode = NthChild(t, 1));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestRepeatCharAdvances;
+{ From banana (a 'b' match), a FRESH single 'b' (buffer reset via timeout) walks
+  from AFTER banana and lands on the next 'b'-prefix node = 'band' (index 2). }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    t.TypeChar('b');
+    AssertTrue('first b → banana', t.FocusedNode = NthChild(t, 1));
+    { Simulate the timeout so the next 'b' starts a fresh buffer. }
+    t.SetSearchLastTick(0);
+    t.TypeChar('b');
+    AssertEquals('buffer reset to single b', 'b', t.SearchBuffer);
+    AssertTrue('second b advances to band', t.FocusedNode = NthChild(t, 2));
+    { A third fresh 'b' from band wraps back to banana (only two b-prefix nodes). }
+    t.SetSearchLastTick(0);
+    t.TypeChar('b');
+    AssertTrue('third b wraps to banana', t.FocusedNode = NthChild(t, 1));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestCustomPredicateHonored;
+{ OnIncrementalSearch = CONTAINS. Typing 'an' (no node STARTS with 'an', but
+  'banana'/'band' CONTAIN it) → the custom predicate fires and focus moves to the
+  first containing node = 'banana'. The default prefix match would find nothing. }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    t.OnIncrementalSearch := @OnContainsSearch;
+    t.TypeChar('a');
+    t.TypeChar('n');
+    AssertTrue('custom predicate was consulted', FCustomSearchHits > 0);
+    AssertTrue('CONTAINS an → banana', t.FocusedNode = NthChild(t, 1));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestBackspacePopsChar;
+{ Buffer 'ba' (focus banana). Backspace → buffer 'b', focus re-resolves to the
+  first 'b'-prefix node (banana). Multibyte-safe pop. }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  key: Word;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    t.TypeChar('b');
+    t.TypeChar('a');
+    AssertEquals('buffer ba', 'ba', t.SearchBuffer);
+    t.FocusedNode := NthChild(t, 2);  // move focus to band so the re-search is observable
+
+    key := VK_BACK;
+    {$PUSH}{$HINTS OFF}t.KeyDown(key, []);{$POP}
+
+    AssertEquals('Backspace consumed (Key=0)', 0, Integer(key));
+    AssertEquals('buffer popped to b', 'b', t.SearchBuffer);
+    { Re-search from after band wraps to banana (the first b-prefix). }
+    AssertTrue('focus re-resolved to a b-prefix node', t.FocusedNode = NthChild(t, 1));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestOptionOffDoesNothing;
+{ toIncrementalSearch OFF → typing accumulates nothing and never moves focus. }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, False));   // option OFF
+  try
+    t.FocusedNode := NthChild(t, 0);   // apple
+    t.TypeChar('b');
+    t.TypeChar('a');
+    AssertEquals('buffer stays empty with option off', '', t.SearchBuffer);
+    AssertTrue('focus unchanged with option off', t.FocusedNode = NthChild(t, 0));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestTimeoutResetsBuffer;
+{ Type 'b' (buffer 'b'); age the tick past SearchTimeout; type 'c' → the buffer
+  resets to 'c' (not 'bc') and focus jumps to 'cherry'. }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    AssertEquals('default SearchTimeout = 1000', 1000, t.SearchTimeout);
+    t.TypeChar('b');
+    AssertEquals('buffer b', 'b', t.SearchBuffer);
+    t.SetSearchLastTick(0);            // far in the past → next char resets
+    t.TypeChar('c');
+    AssertEquals('timeout reset buffer to c (not bc)', 'c', t.SearchBuffer);
+    AssertTrue('focus = cherry', t.FocusedNode = NthChild(t, 3));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeC1IncSearchTest.TestArrowKeysStillWorkWithSearchOn;
+{ ③a/b/c regression: with toIncrementalSearch ON, the arrow / Home / End keys
+  still move focus — incremental search (UTF8KeyPress) does not hijack KeyDown. }
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeViewAccess;
+  key: Word;
+begin
+  t := TTyTreeViewAccess(BuildNamedTree(Ctl, F, True));
+  try
+    t.FocusedNode := NthChild(t, 0);   // apple
+
+    key := VK_DOWN;
+    {$PUSH}{$HINTS OFF}t.KeyDown(key, []);{$POP}
+    AssertEquals('VK_DOWN consumed', 0, Integer(key));
+    AssertTrue('VK_DOWN → banana', t.FocusedNode = NthChild(t, 1));
+
+    key := VK_UP;
+    {$PUSH}{$HINTS OFF}t.KeyDown(key, []);{$POP}
+    AssertEquals('VK_UP consumed', 0, Integer(key));
+    AssertTrue('VK_UP → apple', t.FocusedNode = NthChild(t, 0));
+
+    key := VK_END;
+    {$PUSH}{$HINTS OFF}t.KeyDown(key, []);{$POP}
+    AssertEquals('VK_END consumed', 0, Integer(key));
+    AssertTrue('VK_END → date (last)', t.FocusedNode = NthChild(t, 4));
+
+    key := VK_HOME;
+    {$PUSH}{$HINTS OFF}t.KeyDown(key, []);{$POP}
+    AssertEquals('VK_HOME consumed', 0, Integer(key));
+    AssertTrue('VK_HOME → apple (first)', t.FocusedNode = NthChild(t, 0));
+
+    { And the buffer was never touched by these navigation keys. }
+    AssertEquals('search buffer untouched by arrows', '', t.SearchBuffer);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -8621,4 +8919,5 @@ initialization
   RegisterTest(TTreeAdversarialFixTest);
   RegisterTest(TTreeGetCellRectTest);
   RegisterTest(TTreeB1VariableHeightTest);
+  RegisterTest(TTreeC1IncSearchTest);
 end.

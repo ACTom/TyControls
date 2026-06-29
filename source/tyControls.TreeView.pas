@@ -2,7 +2,7 @@ unit tyControls.TreeView;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, ImgList,
+  Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LazUTF8, ImgList,
   BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar,
   tyControls.TreeView.Columns;
@@ -15,9 +15,13 @@ type
 
   { B1: per-tree option flags (VTV-style set; default [] = ③a/③b behaviour) }
   { ③d B1: toVariableNodeHeight opts a tree into per-node row heights via
-    OnMeasureItem (default off ⇒ every node uses DefaultNodeHeight, == ③c). }
+    OnMeasureItem (default off ⇒ every node uses DefaultNodeHeight, == ③c).
+    ③d C1: toIncrementalSearch opts a tree into type-to-find: printable chars
+    typed with focus on the tree jump focus to the next matching visible node
+    (default off ⇒ typing does nothing special, == ③c). }
   TTyTreeOption = (toMultiSelect, toCheckSupport, toFullRowSelect,
-                   toAutoTristateTracking, toVariableNodeHeight);
+                   toAutoTristateTracking, toVariableNodeHeight,
+                   toIncrementalSearch);
   TTyTreeOptions = set of TTyTreeOption;
 
   { A2: check column type for a node }
@@ -96,6 +100,14 @@ type
   TTyTreeMeasureItemEvent = procedure(Sender: TTyTreeView; ACanvas: TCanvas;
     Node: PTyTreeNode; var ANodeHeight: Integer) of object;
 
+  { ③d C1: OnIncrementalSearch — custom match predicate for type-to-find. Fired
+    once per candidate visible node during the search walk; the app sets AMatch
+    (seeded False) to True to accept the node. ASearchText is the accumulated
+    type-ahead buffer. When unassigned, the default is a case-insensitive PREFIX
+    test of ASearchText against the node's main-column text. }
+  TTyTreeIncrementalSearchEvent = procedure(Sender: TTyTreeView;
+    Node: PTyTreeNode; const ASearchText: string; var AMatch: Boolean) of object;
+
 const
   TreeNodeSize = (SizeOf(TTyTreeNode) + 7) and not 7;  // pointer-aligned struct stride
   { B3: one cache mark per TREE_CACHE_STEP visible nodes.
@@ -153,6 +165,8 @@ type
     FOnPaintText:          TTyTreePaintTextEvent;
     { ③d B1: variable per-node row height }
     FOnMeasureItem:        TTyTreeMeasureItemEvent;
+    { ③d C1: incremental type-to-find search }
+    FOnIncrementalSearch:  TTyTreeIncrementalSearchEvent;
     { C4: interaction events }
     FOnNodeClick:          TTyTreeNodeEvent;
     FOnNodeDblClick:       TTyTreeNodeEvent;
@@ -200,6 +214,10 @@ type
     { ③d B1: per-node row-height accessors (variable height) }
     function  GetNodeHeight(Node: PTyTreeNode): Integer;
     procedure SetNodeHeight(Node: PTyTreeNode; AValue: Integer);
+    { ③d C1: incremental-search internals }
+    function  GetNodeSearchText(Node: PTyTreeNode): string;        // main-column text (mirrors the caption)
+    function  NodeMatchesSearch(Node: PTyTreeNode; const ASearchText: string): Boolean;
+    procedure DoIncrementalSearch;                                 // walk visible nodes from focus (wrapping)
     { B1: check property raw accessors }
     function  GetCheckType(Node: PTyTreeNode): TTyCheckType;
     procedure SetCheckType(Node: PTyTreeNode; AValue: TTyCheckType);
@@ -259,6 +277,13 @@ type
     function  GetExpanded(Node: PTyTreeNode): Boolean;
     procedure SetExpanded(Node: PTyTreeNode; AValue: Boolean);
   protected
+    { ③d C1: incremental type-to-find state. Protected (not private) so tests can
+      drive/inspect it via a descendant; FEditing is also the ③e edit-suppression
+      hook (always False until ③e wires inline editing). }
+    FSearchBuffer:         string;     // accumulated type-ahead chars
+    FSearchLastTick:       QWord;      // GetTickCount64 of the last accepted char
+    FSearchTimeout:        Integer;    // ms of idle before the buffer auto-resets
+    FEditing:              Boolean;    // True while an inline editor is active (③e)
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Paint; override;
@@ -271,6 +296,10 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { ③d C1: LCL delivers printable chars here (after KeyDown). When
+      toIncrementalSearch is set we accumulate them into FSearchBuffer and jump
+      focus to the next matching visible node. }
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
@@ -383,6 +412,9 @@ type
     property ShowRoot: Boolean read FShowRoot write SetShowRoot default True;
     property ToggleOnDblClick: Boolean read FToggleOnDblClick write SetToggleOnDblClick default True;
     property HotTrack: Boolean read FHotTrack write SetHotTrack default False;
+    { ③d C1: ms of keyboard idle before the incremental-search buffer auto-resets
+      (next printable char starts a fresh search). Default 1000. }
+    property SearchTimeout: Integer read FSearchTimeout write FSearchTimeout default 1000;
     { C1: re-published standard LCL properties }
     property Align;
     property Anchors;
@@ -414,6 +446,8 @@ type
     property OnPaintText:          TTyTreePaintTextEvent         read FOnPaintText          write FOnPaintText;
     { ③d B1: per-node measure event — fired from InitNode when toVariableNodeHeight set }
     property OnMeasureItem:        TTyTreeMeasureItemEvent       read FOnMeasureItem        write FOnMeasureItem;
+    { ③d C1: custom incremental-search match predicate (default = prefix match) }
+    property OnIncrementalSearch:  TTyTreeIncrementalSearchEvent read FOnIncrementalSearch  write FOnIncrementalSearch;
     { D2: column resize event }
     property OnColumnResized: TTyTreeColumnEvent read FOnColumnResized write FOnColumnResized;
     { D3: column reorder event }
@@ -794,6 +828,94 @@ begin
     else if inRange then
       InternalSetSelected(n, True);
     n := GetNextVisibleNoInit(n);
+  end;
+end;
+
+{ ── ③d C1 ── incremental type-to-find search ──────────────────────────────── }
+
+{ GetNodeSearchText — the node's MAIN-column text, obtained exactly the way the
+  caption is (OnGetTextWithType for the main column / ttNormal, falling back to
+  OnGetText) so the search matches what the user actually sees. No side effects
+  (never inits the node). }
+function TTyTreeView.GetNodeSearchText(Node: PTyTreeNode): string;
+begin
+  Result := '';
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if Assigned(FOnGetTextWithType) then
+    FOnGetTextWithType(Self, Node, FHeader.MainColumn, ttNormal, Result)
+  else if Assigned(FOnGetText) then
+    FOnGetText(Self, Node, Result);
+end;
+
+{ NodeMatchesSearch — the match predicate for one candidate node.
+  Default (OnIncrementalSearch unassigned) = case-insensitive PREFIX test of
+  ASearchText against the node's main-column text (both upper-cased via
+  UTF8UpperCase so multibyte casing is correct). When OnIncrementalSearch is
+  assigned the app fully decides (AMatch seeded False). }
+function TTyTreeView.NodeMatchesSearch(Node: PTyTreeNode; const ASearchText: string): Boolean;
+var
+  nodeText, upSearch: string;
+begin
+  Result := False;
+  if (Node = nil) or (Node = FRoot) or (ASearchText = '') then Exit;
+  if Assigned(FOnIncrementalSearch) then
+  begin
+    FOnIncrementalSearch(Self, Node, ASearchText, Result);
+    Exit;
+  end;
+  { Default: case-insensitive prefix match on the main-column caption. }
+  nodeText := UTF8UpperCase(GetNodeSearchText(Node));
+  upSearch := UTF8UpperCase(ASearchText);
+  Result := (upSearch <> '')
+            and (UTF8Length(nodeText) >= UTF8Length(upSearch))
+            and (UTF8Copy(nodeText, 1, UTF8Length(upSearch)) = upSearch);
+end;
+
+{ DoIncrementalSearch — walk the VISIBLE nodes (wrapping through the whole visible
+  set) and move focus to the first node whose match predicate is True.
+
+  Start position (mirrors Windows Explorer / VTV type-ahead):
+   • A SINGLE-char buffer (a fresh search, or re-pressing the same letter) starts
+     the walk AFTER the current focus, so repeats advance to the next match.
+   • A MULTI-char buffer (the user is refining, e.g. 'b' then 'a') starts the walk
+     AT the current focus (inclusive), so the focus stays put if it still matches
+     the longer prefix instead of jumping to a later sibling.
+
+  Lazy limitation: only visible (expanded-reachable) nodes are walked via
+  GetNextVisibleNoInit — collapsed subtrees are never force-initialised, so a
+  match hidden under a collapsed parent is not found (unlike VTV's isAll). }
+procedure TTyTreeView.DoIncrementalSearch;
+var
+  start, n: PTyTreeNode;
+  inclusive: Boolean;
+begin
+  if FSearchBuffer = '' then Exit;
+
+  inclusive := UTF8Length(FSearchBuffer) > 1;   // refining → keep focus if it still matches
+
+  if FFocusedNode <> nil then
+  begin
+    if inclusive then start := FFocusedNode
+    else              start := GetNextVisibleNoInit(FFocusedNode);
+  end
+  else
+    start := GetFirstVisibleNoInit;
+  if start = nil then
+    start := GetFirstVisibleNoInit;   // wrap to the top when focus was at the end
+
+  n := start;
+  while n <> nil do
+  begin
+    if NodeMatchesSearch(n, FSearchBuffer) then
+    begin
+      FocusedNode := n;     // selects (single-select rule) + fires OnFocusChanged
+      ScrollIntoView(n);    // SetFocusedNode does not scroll on its own
+      Exit;
+    end;
+    n := GetNextVisibleNoInit(n);
+    if n = nil then
+      n := GetFirstVisibleNoInit;   // wrap once through the whole visible set
+    if n = start then Break;        // came full circle — no match
   end;
 end;
 
@@ -1498,6 +1620,11 @@ begin
   FSorting          := False;
   FSortedColumn     := NoColumn;   // no key sorted yet (so the first real sort runs)
   FSortedDirection  := sdAscending;
+  { ③d C1: incremental search — idle state }
+  FSearchBuffer     := '';
+  FSearchLastTick   := 0;
+  FSearchTimeout    := 1000;
+  FEditing          := False;
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
@@ -3858,6 +3985,20 @@ begin
 
   cur := FFocusedNode;
 
+  { ③d C1: Backspace pops the last char of an active incremental-search buffer
+    and re-runs the search. Multibyte-safe (UTF8Copy/UTF8Length, not Delete(.,Length,1)).
+    Only intercepts while actually searching (buffer non-empty) so plain trees keep
+    Backspace untouched; suppressed while an editor is active (FEditing, ③e). }
+  if (toIncrementalSearch in FOptions) and not FEditing
+     and (FSearchBuffer <> '') and (Key = VK_BACK) then
+  begin
+    FSearchBuffer   := UTF8Copy(FSearchBuffer, 1, UTF8Length(FSearchBuffer) - 1);
+    FSearchLastTick := GetTickCount64;
+    DoIncrementalSearch;   // re-resolve focus against the shortened buffer (no-op when empty)
+    Key := 0;
+    Exit;
+  end;
+
   { D2: multi-select keyboard overrides for Shift+arrows, Ctrl+Space, Ctrl+A.
     These are checked BEFORE the main case so they can intercept VK_DOWN/VK_UP. }
   if toMultiSelect in FOptions then
@@ -4170,6 +4311,33 @@ begin
     end;
 
   end;
+end;
+
+{ ── ③d C1 ── UTF8KeyPress: type-to-find ───────────────────────────────────── }
+
+{ LCL delivers printable characters here (its WM_CHAR equivalent), AFTER KeyDown.
+  We call inherited first (so OnUTF8KeyPress / normal handling runs), then — when
+  toIncrementalSearch is on and no editor is active and the char is printable —
+  accumulate it into FSearchBuffer (resetting first if the idle timeout elapsed)
+  and jump focus to the matching visible node (see DoIncrementalSearch for the
+  start-position rule: re-pressing one char advances, refining keeps focus). }
+procedure TTyTreeView.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  inherited UTF8KeyPress(UTF8Key);
+
+  if not (toIncrementalSearch in FOptions) then Exit;
+  if FEditing then Exit;
+  { Printable only: non-empty and the first byte is >= space (filters control
+    chars — Backspace/Tab/Enter arrive as #8/#9/#13 and are handled in KeyDown). }
+  if (UTF8Key = '') or (UTF8Key[1] < #32) then Exit;
+
+  { Idle longer than SearchTimeout ⇒ start a fresh search. }
+  if GetTickCount64 - FSearchLastTick > QWord(FSearchTimeout) then
+    FSearchBuffer := '';
+  FSearchBuffer   := FSearchBuffer + UTF8Key;
+  FSearchLastTick := GetTickCount64;
+
+  DoIncrementalSearch;
 end;
 
 { ── E1 ── sort engine ────────────────────────────────────────────────────── }
