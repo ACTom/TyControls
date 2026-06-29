@@ -180,6 +180,46 @@ type
     procedure TestCellRectShiftsWithScroll;
   end;
 
+  { ③d B1: variable per-node row height (toVariableNodeHeight + OnMeasureItem +
+    NodeHeight[]). A flat 12-child tree whose OnMeasureItem returns
+    18 + 6*(Index mod 3) → heights cycle 18/24/30. Verifies the ③a height
+    invariant holds with variable heights, GetNodeAt lands on the right node,
+    NodeHeight[] override bumps TotalHeight by the delta, default-off == ③c, and
+    the invariant survives HiDPI (logical units). }
+  TTreeB1VariableHeightTest = class(TTestCase)
+  private
+    FMeasureCalls: Integer;
+    procedure OnMeasureItem(Sender: TTyTreeView; ACanvas: TCanvas;
+      Node: PTyTreeNode; var ANodeHeight: Integer);
+    { Build a flat tree of AChildCount root children at APPI; optionally wire
+      OnMeasureItem + toVariableNodeHeight. Caller frees F then Ctl. }
+    function BuildFlatTree(out Ctl: TTyStyleController; out F: TForm;
+      AChildCount: Integer; AVariable: Boolean; APPI: Integer = 96): TTyTreeView;
+    { Force a measure of every visible node (paint to an offscreen bitmap, which
+      calls InitNode → OnMeasureItem for each rendered row). Bitmap is tall
+      enough to render all rows. }
+    procedure ForceMeasureAll(t: TTyTreeView; APPI: Integer = 96);
+    { Expected logical height of the child at Index under the 18+6*(idx mod 3) rule. }
+    function ExpectedH(Index: Integer): Integer;
+  published
+    { invariant: RootNode.TotalHeight == Σ measured heights + root's own row }
+    procedure TestTotalHeightSumsVariableHeights;
+    { SumVisibleHeights (the ③a invariant helper) agrees with RootNode.TotalHeight }
+    procedure TestInvariantHelperAgrees;
+    { GetNodeAt(y) lands on the correct node across the varied heights }
+    procedure TestGetNodeAtAcrossVariedHeights;
+    { NodeHeight[node] := 40 bumps TotalHeight by (40 - oldHeight); reads back 40 }
+    procedure TestSetNodeHeightUpdatesTotal;
+    { default off (no toVariableNodeHeight) → every node = DefaultNodeHeight (== ③c) }
+    procedure TestDefaultOffEqualsC3;
+    { OnMeasureItem unassigned but option on → still all DefaultNodeHeight }
+    procedure TestOptionOnButNoHandlerEqualsC3;
+    { HiDPI: at PPI=144 the LOGICAL TotalHeight still sums the logical heights }
+    procedure TestHiDPILogicalInvariant;
+    { OnMeasureItem returning 0 is ignored (height stays at default) }
+    procedure TestZeroHeightIgnored;
+  end;
+
 implementation
 
 type
@@ -8250,6 +8290,305 @@ begin
   end;
 end;
 
+{ ── ③d B1 ── variable per-node row height ──────────────────────────────────── }
+
+function TTreeB1VariableHeightTest.ExpectedH(Index: Integer): Integer;
+begin
+  Result := 18 + 6 * (Index mod 3);   // 0→18, 1→24, 2→30
+end;
+
+procedure TTreeB1VariableHeightTest.OnMeasureItem(Sender: TTyTreeView;
+  ACanvas: TCanvas; Node: PTyTreeNode; var ANodeHeight: Integer);
+begin
+  Inc(FMeasureCalls);
+  AssertTrue('measure: ACanvas non-nil', ACanvas <> nil);
+  ANodeHeight := ExpectedH(Integer(Node^.Index));
+end;
+
+{ Flat tree: a single level of AChildCount root children, all leaves.
+  DefaultNodeHeight = 18 (the C3 default). At PPI=96 logical px == device px. }
+function TTreeB1VariableHeightTest.BuildFlatTree(out Ctl: TTyStyleController;
+  out F: TForm; AChildCount: Integer; AVariable: Boolean; APPI: Integer): TTyTreeView;
+var
+  t: TTyTreeView;
+begin
+  FMeasureCalls := 0;
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := APPI;
+  t.DefaultNodeHeight  := 18;
+  t.Indent             := 16;
+  t.ShowRoot           := True;
+  t.SetBounds(0, 0, MulDiv(200, APPI, 96), MulDiv(120, APPI, 96));
+
+  if AVariable then
+  begin
+    t.Options       := t.Options + [toVariableNodeHeight];
+    t.OnMeasureItem := @OnMeasureItem;
+  end;
+
+  t.RootNodeCount := AChildCount;   // flat list of leaves
+  Result := t;
+end;
+
+{ Render to an offscreen bitmap tall enough to fit all rows so every visible row
+  is InitNode'd (→ OnMeasureItem fired). Render twice: the first pass measures +
+  invalidates the cache; a settle pass ensures TotalHeight + cache reflect the
+  measured heights. }
+procedure TTreeB1VariableHeightTest.ForceMeasureAll(t: TTyTreeView; APPI: Integer);
+var
+  Bmp: TBitmap;
+  pass: Integer;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(MulDiv(200, APPI, 96), MulDiv(2000, APPI, 96));  // tall: all rows fit
+    for pass := 1 to 2 do
+    begin
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), APPI);
+      {$POP}
+    end;
+  finally
+    Bmp.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestTotalHeightSumsVariableHeights;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  i, expectedSum: Integer;
+  n: PTyTreeNode;
+begin
+  t := BuildFlatTree(Ctl, F, 12, True);
+  try
+    ForceMeasureAll(t);
+    AssertTrue('measure fired for the visible rows', FMeasureCalls >= 12);
+
+    { Σ of per-node heights (children only) }
+    expectedSum := 0;
+    for i := 0 to 11 do Inc(expectedSum, ExpectedH(i));
+    AssertEquals('Σ child heights = 4*(18+24+30) = 288', 288, expectedSum);
+
+    { Each node carries its measured height }
+    n := t.RootNode^.FirstChild; i := 0;
+    while n <> nil do
+    begin
+      AssertEquals('node ' + IntToStr(i) + ' NodeHeight = expected',
+        ExpectedH(i), Integer(n^.NodeHeight));
+      n := n^.NextSibling; Inc(i);
+    end;
+
+    { ③a invariant with variable heights: root TotalHeight = Σ children + root row(18) }
+    AssertEquals('RootNode.TotalHeight = 288 + root row 18 = 306',
+      306, Integer(t.RootNode^.TotalHeight));
+    AssertEquals('ContentHeight = 288', 288, t.ContentHeight);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestInvariantHelperAgrees;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+begin
+  t := BuildFlatTree(Ctl, F, 12, True);
+  try
+    ForceMeasureAll(t);
+    { SumVisibleHeights (the ③a invariant helper) must equal RootNode.TotalHeight. }
+    AssertEquals('SumVisibleHeights = RootNode.TotalHeight (invariant holds)',
+      t.SumVisibleHeights, Integer(t.RootNode^.TotalHeight));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestGetNodeAtAcrossVariedHeights;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  node: PTyTreeNode;
+  top, accTop, i: Integer;
+begin
+  t := BuildFlatTree(Ctl, F, 12, True);
+  try
+    ForceMeasureAll(t);
+
+    { Walk the expected boundaries: child i occupies [accTop, accTop+ExpectedH(i)).
+      GetNodeAt at the top pixel and the last pixel of each band must land on
+      child i with ANodeTop = accTop. }
+    accTop := 0;
+    for i := 0 to 11 do
+    begin
+      node := t.GetNodeAt(accTop, top);
+      AssertTrue('GetNodeAt(top of band ' + IntToStr(i) + ') non-nil', node <> nil);
+      AssertEquals('GetNodeAt(top) → child ' + IntToStr(i) + ' (by Index)',
+        i, Integer(node^.Index));
+      AssertEquals('GetNodeAt(top) ANodeTop = band top', accTop, top);
+
+      node := t.GetNodeAt(accTop + ExpectedH(i) - 1, top);
+      AssertEquals('GetNodeAt(bottom-1 of band ' + IntToStr(i) + ') → same child',
+        i, Integer(node^.Index));
+
+      Inc(accTop, ExpectedH(i));
+    end;
+
+    { One pixel past the last band → nil (past end). accTop now = 288. }
+    node := t.GetNodeAt(accTop, top);
+    AssertTrue('GetNodeAt past last band → nil', node = nil);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestSetNodeHeightUpdatesTotal;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  node: PTyTreeNode;
+  oldH, beforeTotal: Integer;
+begin
+  t := BuildFlatTree(Ctl, F, 12, True);
+  try
+    ForceMeasureAll(t);
+
+    { Pick child index 1 (measured height 24). }
+    node := t.RootNode^.FirstChild^.NextSibling;
+    AssertEquals('precondition: child1 height = 24', 24, Integer(node^.NodeHeight));
+    AssertEquals('NodeHeight[] getter returns 24', 24, t.NodeHeight[node]);
+
+    oldH        := Integer(node^.NodeHeight);
+    beforeTotal := Integer(t.RootNode^.TotalHeight);
+
+    t.NodeHeight[node] := 40;
+
+    AssertEquals('NodeHeight[] reads back 40', 40, t.NodeHeight[node]);
+    AssertEquals('node field = 40', 40, Integer(node^.NodeHeight));
+    AssertEquals('RootNode.TotalHeight bumped by (40 - oldH)',
+      beforeTotal + (40 - oldH), Integer(t.RootNode^.TotalHeight));
+
+    { Invariant still holds after the programmatic override. }
+    AssertEquals('SumVisibleHeights = RootNode.TotalHeight after SetNodeHeight',
+      t.SumVisibleHeights, Integer(t.RootNode^.TotalHeight));
+
+    { No-op when set to the same value. }
+    beforeTotal := Integer(t.RootNode^.TotalHeight);
+    t.NodeHeight[node] := 40;
+    AssertEquals('SetNodeHeight same value → no change',
+      beforeTotal, Integer(t.RootNode^.TotalHeight));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestDefaultOffEqualsC3;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  { toVariableNodeHeight OFF (and OnMeasureItem still wired would not matter, but
+    here it's unassigned too): every node = DefaultNodeHeight, identical to ③c. }
+  t := BuildFlatTree(Ctl, F, 12, False);
+  try
+    ForceMeasureAll(t);
+    AssertEquals('default-off: no measure calls', 0, FMeasureCalls);
+
+    n := t.RootNode^.FirstChild;
+    while n <> nil do
+    begin
+      AssertEquals('default-off: every node = DefaultNodeHeight(18)',
+        18, Integer(n^.NodeHeight));
+      n := n^.NextSibling;
+    end;
+    { TotalHeight == count*default + root row: 12*18 + 18 = 234 }
+    AssertEquals('default-off: TotalHeight = 13*18 = 234',
+      234, Integer(t.RootNode^.TotalHeight));
+    AssertEquals('default-off: ContentHeight = 12*18 = 216', 216, t.ContentHeight);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestOptionOnButNoHandlerEqualsC3;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  { Option ON but OnMeasureItem UNASSIGNED → the measure block is skipped (guard
+    on Assigned(FOnMeasureItem)), so behaviour == ③c. }
+  t := BuildFlatTree(Ctl, F, 12, False);   // build without handler...
+  try
+    t.Options := t.Options + [toVariableNodeHeight];  // ...then turn the option on, leave OnMeasureItem nil
+    ForceMeasureAll(t);
+
+    n := t.RootNode^.FirstChild;
+    while n <> nil do
+    begin
+      AssertEquals('option-on/no-handler: every node = DefaultNodeHeight(18)',
+        18, Integer(n^.NodeHeight));
+      n := n^.NextSibling;
+    end;
+    AssertEquals('option-on/no-handler: TotalHeight = 234',
+      234, Integer(t.RootNode^.TotalHeight));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestHiDPILogicalInvariant;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  i, expectedSum: Integer;
+begin
+  { At PPI=144 the measured heights are LOGICAL (device scaling happens at paint
+    via P.Scale). TotalHeight is logical, so it must still sum the logical
+    heights — exactly as at PPI=96 (matching the ③a logical-unit discipline). }
+  t := BuildFlatTree(Ctl, F, 12, True, 144);
+  try
+    ForceMeasureAll(t, 144);
+
+    expectedSum := 0;
+    for i := 0 to 11 do Inc(expectedSum, ExpectedH(i));   // 288 logical
+
+    { Each node stores the LOGICAL measured height (not scaled to 144). }
+    AssertEquals('hidpi: child0 logical height = 18', 18,
+      Integer(t.RootNode^.FirstChild^.NodeHeight));
+    AssertEquals('hidpi: RootNode.TotalHeight logical = 288 + 18 = 306',
+      306, Integer(t.RootNode^.TotalHeight));
+    AssertEquals('hidpi: invariant holds (SumVisibleHeights logical)',
+      t.SumVisibleHeights, Integer(t.RootNode^.TotalHeight));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+procedure TTreeB1VariableHeightTest.TestZeroHeightIgnored;
+var
+  Ctl: TTyStyleController; F: TForm; t: TTyTreeView;
+  node: PTyTreeNode;
+  beforeTotal: Integer;
+begin
+  { Programmatic guard: SetNodeHeight(0) is a no-op (heights must be positive). }
+  t := BuildFlatTree(Ctl, F, 4, True);
+  try
+    ForceMeasureAll(t);
+    node := t.RootNode^.FirstChild;   // index 0, height 18
+    beforeTotal := Integer(t.RootNode^.TotalHeight);
+    t.NodeHeight[node] := 0;          // ignored
+    AssertEquals('SetNodeHeight(0) ignored: height unchanged',
+      18, Integer(node^.NodeHeight));
+    AssertEquals('SetNodeHeight(0) ignored: TotalHeight unchanged',
+      beforeTotal, Integer(t.RootNode^.TotalHeight));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -8281,4 +8620,5 @@ initialization
   RegisterTest(TTreeD2MultiSelectKeyboardTest);
   RegisterTest(TTreeAdversarialFixTest);
   RegisterTest(TTreeGetCellRectTest);
+  RegisterTest(TTreeB1VariableHeightTest);
 end.

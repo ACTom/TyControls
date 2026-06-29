@@ -14,8 +14,10 @@ type
                     hpCheckBox);   { B3: the checkbox slot in the main column }
 
   { B1: per-tree option flags (VTV-style set; default [] = ③a/③b behaviour) }
+  { ③d B1: toVariableNodeHeight opts a tree into per-node row heights via
+    OnMeasureItem (default off ⇒ every node uses DefaultNodeHeight, == ③c). }
   TTyTreeOption = (toMultiSelect, toCheckSupport, toFullRowSelect,
-                   toAutoTristateTracking);
+                   toAutoTristateTracking, toVariableNodeHeight);
   TTyTreeOptions = set of TTyTreeOption;
 
   { A2: check column type for a node }
@@ -86,6 +88,14 @@ type
   TTyTreePaintTextEvent = procedure(Sender: TTyTreeView; const TargetCanvas: TCanvas;
     Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType) of object;
 
+  { ③d B1: OnMeasureItem — fired once per node from InitNode (when
+    toVariableNodeHeight is set) so the app can return a per-node row height.
+    ANodeHeight is seeded with the node's current height (DefaultNodeHeight for a
+    fresh node); the app overwrites it. ACanvas is the control canvas (for text
+    measurement). Heights are LOGICAL pixels — device scaling happens at paint. }
+  TTyTreeMeasureItemEvent = procedure(Sender: TTyTreeView; ACanvas: TCanvas;
+    Node: PTyTreeNode; var ANodeHeight: Integer) of object;
+
 const
   TreeNodeSize = (SizeOf(TTyTreeNode) + 7) and not 7;  // pointer-aligned struct stride
   { B3: one cache mark per TREE_CACHE_STEP visible nodes.
@@ -141,6 +151,8 @@ type
     FOnGetImageIndex:      TTyTreeGetImageIndexEvent;
     FOnGetTextWithType:    TTyTreeGetTextWithTypeEvent;
     FOnPaintText:          TTyTreePaintTextEvent;
+    { ③d B1: variable per-node row height }
+    FOnMeasureItem:        TTyTreeMeasureItemEvent;
     { C4: interaction events }
     FOnNodeClick:          TTyTreeNodeEvent;
     FOnNodeDblClick:       TTyTreeNodeEvent;
@@ -185,6 +197,9 @@ type
     { B1: tree option flags }
     FOptions:          TTyTreeOptions;
     procedure SetOptions(AValue: TTyTreeOptions);
+    { ③d B1: per-node row-height accessors (variable height) }
+    function  GetNodeHeight(Node: PTyTreeNode): Integer;
+    procedure SetNodeHeight(Node: PTyTreeNode; AValue: Integer);
     { B1: check property raw accessors }
     function  GetCheckType(Node: PTyTreeNode): TTyCheckType;
     procedure SetCheckType(Node: PTyTreeNode; AValue: TTyCheckType);
@@ -309,6 +324,10 @@ type
     property CheckType[Node: PTyTreeNode]: TTyCheckType   read GetCheckType  write SetCheckType;
     property CheckState[Node: PTyTreeNode]: TTyCheckState  read GetCheckState write SetCheckState;
     property Checked[Node: PTyTreeNode]: Boolean           read GetChecked    write SetChecked;
+    { ③d B1: per-node row height (logical px). Reading returns Node^.NodeHeight;
+      writing applies the delta via AdjustTotalHeight + marks the node measured +
+      invalidates the layout. Programmatic override (mirrors VTV SetNodeHeight). }
+    property NodeHeight[Node: PTyTreeNode]: Integer        read GetNodeHeight write SetNodeHeight;
     property RootNode: PTyTreeNode read FRoot;
     property RangeY: Integer read FRangeY;
     property OffsetY: Integer read FOffsetY;
@@ -393,6 +412,8 @@ type
     property OnGetTextWithType:    TTyTreeGetTextWithTypeEvent   read FOnGetTextWithType    write FOnGetTextWithType;
     property OnGetImageIndex:      TTyTreeGetImageIndexEvent     read FOnGetImageIndex      write FOnGetImageIndex;
     property OnPaintText:          TTyTreePaintTextEvent         read FOnPaintText          write FOnPaintText;
+    { ③d B1: per-node measure event — fired from InitNode when toVariableNodeHeight set }
+    property OnMeasureItem:        TTyTreeMeasureItemEvent       read FOnMeasureItem        write FOnMeasureItem;
     { D2: column resize event }
     property OnColumnResized: TTyTreeColumnEvent read FOnColumnResized write FOnColumnResized;
     { D3: column reorder event }
@@ -1369,6 +1390,8 @@ begin
   if not Enabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
 
+  // ③d B1: page/wheel estimates use FDefaultNodeHeight even under
+  // toVariableNodeHeight — an acceptable approximation (no per-node walk here).
   step := 3 * FDefaultNodeHeight;
   if WheelDelta > 0 then Delta :=  step   // scroll up
   else                    Delta := -step;  // scroll down
@@ -1815,9 +1838,32 @@ begin
   Result := (Node <> nil) and (nsExpanded in Node^.States);
 end;
 
+{ ③d B1: per-node row-height accessors. }
+function TTyTreeView.GetNodeHeight(Node: PTyTreeNode): Integer;
+begin
+  if Node = nil then Result := FDefaultNodeHeight
+  else Result := Node^.NodeHeight;
+end;
+
+procedure TTyTreeView.SetNodeHeight(Node: PTyTreeNode; AValue: Integer);
+{ Programmatic per-node height override (mirrors VTV SetNodeHeight). Applies the
+  delta up the ancestor chain via AdjustTotalHeight so the ③a invariant holds,
+  marks the node measured (so a later InitNode measure won't clobber it), and
+  invalidates the layout (cache rebuild + repaint). No-op when unchanged. }
+begin
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if AValue <= 0 then Exit;                              // guard: heights are positive
+  Include(Node^.States, nsHeightMeasured);               // explicit set counts as measured
+  if AValue = Integer(Node^.NodeHeight) then Exit;       // no-op if unchanged
+  AdjustTotalHeight(Node, AValue - Integer(Node^.NodeHeight));
+  Node^.NodeHeight := Word(AValue);
+  InvalidateTreeLayout;
+end;
+
 procedure TTyTreeView.InitNode(Node: PTyTreeNode);
 var
   initStates: TTyNodeInitStates;
+  h: Integer;
 begin
   if (Node = nil) or (Node = FRoot) or (nsInitialized in Node^.States) then Exit;
   Include(Node^.States, nsInitialized);
@@ -1830,6 +1876,28 @@ begin
     SetSelected(Node, True);   // C1: full single-select semantics (fires OnChange)
   if ivsExpanded in initStates then
     SetExpanded(Node, True);             // materialise children if the app requests auto-expand
+
+  { ③d B1: variable per-node row height. Measure ONCE, at the END of InitNode
+    (never in GetNodeAt — re-entrant layout risk). The paint loop calls InitNode
+    before reading NodeHeight, so the measure lands at the right time. The height
+    is kept in the node field (persists), and AdjustTotalHeight keeps the ③a
+    invariant (RootNode^.TotalHeight == Σ visible NodeHeight). When a height
+    actually changes we mark the layout dirty so the position cache — built by
+    GetNextVisibleNoInit (no init) and thus possibly cold/unmeasured — rebuilds
+    with the measured values on the next access. }
+  if (toVariableNodeHeight in FOptions) and Assigned(FOnMeasureItem)
+     and not (nsHeightMeasured in Node^.States) then
+  begin
+    h := Node^.NodeHeight;                              // seed with current/default
+    FOnMeasureItem(Self, Canvas, Node, h);
+    if (h > 0) and (h <> Integer(Node^.NodeHeight)) then
+    begin
+      AdjustTotalHeight(Node, h - Integer(Node^.NodeHeight));  // keep the invariant
+      Node^.NodeHeight := Word(h);
+      InvalidateTreeLayout;   // force the position cache to rebuild with the measured height
+    end;
+    Include(Node^.States, nsHeightMeasured);
+  end;
 end;
 
 procedure TTyTreeView.InitChildren(Node: PTyTreeNode);
@@ -4015,6 +4083,8 @@ begin
     begin
       if cur <> nil then
       begin
+        { ③d B1: page estimate uses FDefaultNodeHeight even with variable
+          heights — acceptable approximation (ScrollIntoView corrects the view). }
         rowH  := MulDiv(FDefaultNodeHeight, Font.PixelsPerInch, 96);
         viewH := ContentRect.Bottom - ContentRect.Top;
         if rowH > 0 then pgRows := viewH div rowH else pgRows := 1;
