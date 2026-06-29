@@ -130,6 +130,8 @@ type
     { C1: check events }
     FOnChecking:     TTyTreeCheckingEvent;
     FOnChecked:      TTyTreeNodeEvent;
+    { D1: selection-changed event (fired once per gesture when multi-select set changes) }
+    FOnSelectionChanged: TNotifyEvent;
     { A3: multi-select count + range anchor }
     FSelectionCount: Integer;
     FRangeAnchor:    PTyTreeNode;
@@ -211,6 +213,10 @@ type
     procedure SetSelected(Node: PTyTreeNode; AValue: Boolean);
     function  GetFocusedNode: PTyTreeNode;
     procedure SetFocusedNode(AValue: PTyTreeNode);
+    { D1: move focus without touching selection (multi-select helper) }
+    procedure MoveFocusOnly(AValue: PTyTreeNode);
+    { D1: Ctrl+Shift additive range extension — add anchor..target to current selection }
+    procedure AddRangeToSelection(AAnchor, ATarget: PTyTreeNode);
     function  MakeNewNode: PTyTreeNode;
     procedure FreeNodeMem(Node: PTyTreeNode);
     procedure SetNodeDataSize(AValue: Integer);
@@ -276,6 +282,10 @@ type
     procedure InternalSetSelected(Node: PTyTreeNode; AValue: Boolean);
     procedure SelectRange(AAnchor, ATarget: PTyTreeNode);
     function  SelectedCount: Integer;
+    { D1: multi-select public API }
+    procedure SelectAll;
+    function  GetFirstSelected: PTyTreeNode;
+    function  GetNextSelected(Node: PTyTreeNode): PTyTreeNode;
     { C1: selection + focus }
     procedure ClearSelection;
     procedure FullExpand(Node: PTyTreeNode = nil);
@@ -352,6 +362,8 @@ type
     { C1: check events }
     property OnChecking: TTyTreeCheckingEvent          read FOnChecking      write FOnChecking;
     property OnChecked:  TTyTreeNodeEvent              read FOnChecked       write FOnChecked;
+    { D1: selection-changed event — fired once per gesture when multi-select set changes }
+    property OnSelectionChanged: TNotifyEvent          read FOnSelectionChanged write FOnSelectionChanged;
     property OnNodeClick:     TTyTreeNodeEvent         read FOnNodeClick     write FOnNodeClick;
     property OnNodeDblClick:  TTyTreeNodeEvent         read FOnNodeDblClick  write FOnNodeDblClick;
     { C3: paint events }
@@ -614,6 +626,64 @@ begin
   Result := FSelectionCount;
 end;
 
+{ ── D1 ── multi-select public API ────────────────────────────────────────── }
+
+{ SelectAll — select all visible initialised nodes; update FSelectionCount;
+  fire OnSelectionChanged if anything changed. }
+procedure TTyTreeView.SelectAll;
+var
+  n:      PTyTreeNode;
+  didAny: Boolean;
+begin
+  didAny := False;
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    if not (nsSelected in n^.States) then
+    begin
+      Include(n^.States, nsSelected);
+      Inc(FSelectionCount);
+      if FSelectedNode = nil then FSelectedNode := n;
+      didAny := True;
+    end;
+    n := GetNextVisibleNoInit(n);
+  end;
+  if didAny then
+  begin
+    Invalidate;
+    if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+  end;
+end;
+
+{ GetFirstSelected — return the first visible node with nsSelected, or nil. }
+function TTyTreeView.GetFirstSelected: PTyTreeNode;
+var
+  n: PTyTreeNode;
+begin
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    if nsSelected in n^.States then Exit(n);
+    n := GetNextVisibleNoInit(n);
+  end;
+  Result := nil;
+end;
+
+{ GetNextSelected — return the next visible node after Node with nsSelected, or nil. }
+function TTyTreeView.GetNextSelected(Node: PTyTreeNode): PTyTreeNode;
+var
+  n: PTyTreeNode;
+begin
+  if Node = nil then Exit(nil);
+  n := GetNextVisibleNoInit(Node);
+  while n <> nil do
+  begin
+    if nsSelected in n^.States then Exit(n);
+    n := GetNextVisibleNoInit(n);
+  end;
+  Result := nil;
+end;
+
 function TTyTreeView.GetFocusedNode: PTyTreeNode;
 begin
   Result := FFocusedNode;
@@ -637,6 +707,50 @@ begin
   Invalidate;
   { suppress unused-variable warning }
   if prevFocus = nil then ;
+end;
+
+{ MoveFocusOnly — move keyboard focus without touching the selection set.
+  Used by the multi-select mouse/keyboard paths to position the caret
+  independently of selection. }
+procedure TTyTreeView.MoveFocusOnly(AValue: PTyTreeNode);
+begin
+  if AValue = FFocusedNode then Exit;
+  FFocusedNode := AValue;
+  if Assigned(FOnFocusChanged) then FOnFocusChanged(Self, AValue);
+  Invalidate;
+end;
+
+{ AddRangeToSelection — Ctrl+Shift additive extend: add every visible node
+  from AAnchor to ATarget (inclusive, order-independent) to the EXISTING
+  selection without clearing.  InternalSetSelected ignores already-selected nodes. }
+procedure TTyTreeView.AddRangeToSelection(AAnchor, ATarget: PTyTreeNode);
+var
+  n:       PTyTreeNode;
+  inRange: Boolean;
+begin
+  if (AAnchor = nil) or (ATarget = nil) then Exit;
+  inRange := False;
+  n := GetFirstVisibleNoInit;
+  while n <> nil do
+  begin
+    if (n = AAnchor) or (n = ATarget) then
+    begin
+      if not inRange then
+      begin
+        inRange := True;
+        InternalSetSelected(n, True);
+        if AAnchor = ATarget then Break;  // single-node degenerate
+      end
+      else
+      begin
+        InternalSetSelected(n, True);
+        Break;
+      end;
+    end
+    else if inRange then
+      InternalSetSelected(n, True);
+    n := GetNextVisibleNoInit(n);
+  end;
 end;
 
 { ── C1 ── ToggleCheck — check-state toggle + events + radio + tri-state ─────── }
@@ -3195,9 +3309,70 @@ begin
     end
     else
     begin
-      { Click on any other part (label, image, indent) — focus the node }
-      FocusedNode := node;
-      if Assigned(FOnNodeClick) then FOnNodeClick(Self, node);
+      { Click on any other part (label, image, indent) — select/focus the node.
+        D1: when toMultiSelect, apply Ctrl/Shift modifier semantics.
+        D2: when toFullRowSelect, any in-row part (already in this branch) is
+            treated as a selection hit.  Without toFullRowSelect, only the
+            main-column content zones (label/image) are taken as selection hits;
+            hpIndent still reaches here, but without toFullRowSelect we only
+            count it as a selection gesture if it's hpLabel or hpImage.
+            Note: hpButton and hpCheckBox are already handled above; this branch
+            covers hpLabel, hpImage, hpIndent (and any future column parts). }
+      if toMultiSelect in FOptions then
+      begin
+        { Determine whether this part counts as a selectable hit }
+        if (toFullRowSelect in FOptions) or (part in [hpLabel, hpImage]) then
+        begin
+          { Multi-select modifier matrix }
+          if (ssShift in Shift) and (ssCtrl in Shift) then
+          begin
+            { Ctrl+Shift: extend range on top of existing selection (no clear) }
+            if FRangeAnchor = nil then FRangeAnchor := node;
+            AddRangeToSelection(FRangeAnchor, node);
+            MoveFocusOnly(node);
+            if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          end
+          else if ssShift in Shift then
+          begin
+            { Shift: select range from anchor to node; anchor unchanged }
+            if FRangeAnchor = nil then FRangeAnchor := node;
+            SelectRange(FRangeAnchor, node);
+            MoveFocusOnly(node);
+            if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          end
+          else if ssCtrl in Shift then
+          begin
+            { Ctrl: toggle membership; update anchor; no clear }
+            InternalSetSelected(node, not (nsSelected in node^.States));
+            FRangeAnchor := node;
+            MoveFocusOnly(node);
+            if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          end
+          else
+          begin
+            { Plain click: clear selection, select one, reset anchor }
+            ClearSelection;
+            InternalSetSelected(node, True);
+            FRangeAnchor := node;
+            MoveFocusOnly(node);
+            if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          end;
+          Invalidate;
+          if Assigned(FOnNodeClick) then FOnNodeClick(Self, node);
+        end
+        else
+        begin
+          { Indent-only click without toFullRowSelect — treat as focus/select (③b) }
+          FocusedNode := node;
+          if Assigned(FOnNodeClick) then FOnNodeClick(Self, node);
+        end;
+      end
+      else
+      begin
+        { Single-select path (③a/③b): unchanged behaviour }
+        FocusedNode := node;
+        if Assigned(FOnNodeClick) then FOnNodeClick(Self, node);
+      end;
     end;
   end
   else if Button = mbRight then
@@ -3401,6 +3576,70 @@ begin
 
   cur := FFocusedNode;
 
+  { D2: multi-select keyboard overrides for Shift+arrows, Ctrl+Space, Ctrl+A.
+    These are checked BEFORE the main case so they can intercept VK_DOWN/VK_UP. }
+  if toMultiSelect in FOptions then
+  begin
+    { Ctrl+A — select all visible nodes }
+    if (ssCtrl in Shift) and (Key = Ord('A')) then
+    begin
+      SelectAll;
+      Key := 0;
+      Exit;
+    end;
+
+    { Ctrl+Space — toggle selection on the focused node }
+    if (ssCtrl in Shift) and (Key = VK_SPACE) then
+    begin
+      if cur <> nil then
+      begin
+        InternalSetSelected(cur, not (nsSelected in cur^.States));
+        Invalidate;
+        if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+      end;
+      Key := 0;
+      Exit;
+    end;
+
+    { Shift+Down — move caret down and extend range from anchor to caret }
+    if (ssShift in Shift) and (Key = VK_DOWN) then
+    begin
+      if cur = nil then
+        nxt := GetFirstVisibleNoInit
+      else
+        nxt := GetNextVisibleNoInit(cur);
+      if nxt <> nil then
+      begin
+        if FRangeAnchor = nil then FRangeAnchor := cur;
+        MoveFocusOnly(nxt);
+        SelectRange(FRangeAnchor, nxt);
+        ScrollIntoView(nxt);
+        if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+      end;
+      Key := 0;
+      Exit;
+    end;
+
+    { Shift+Up — move caret up and extend range from anchor to caret }
+    if (ssShift in Shift) and (Key = VK_UP) then
+    begin
+      if cur <> nil then
+      begin
+        nxt := GetPreviousVisibleNoInit(cur);
+        if nxt <> nil then
+        begin
+          if FRangeAnchor = nil then FRangeAnchor := cur;
+          MoveFocusOnly(nxt);
+          SelectRange(FRangeAnchor, nxt);
+          ScrollIntoView(nxt);
+          if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+        end;
+      end;
+      Key := 0;
+      Exit;
+    end;
+  end;
+
   case Key of
 
     VK_DOWN:
@@ -3411,8 +3650,22 @@ begin
         nxt := GetNextVisibleNoInit(cur);
       if nxt <> nil then
       begin
-        FocusedNode := nxt;
-        ScrollIntoView(nxt);
+        if toMultiSelect in FOptions then
+        begin
+          { Plain Down in multi-select: collapse to single selection + reset anchor }
+          ClearSelection;
+          InternalSetSelected(nxt, True);
+          FRangeAnchor := nxt;
+          MoveFocusOnly(nxt);
+          Invalidate;
+          if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          ScrollIntoView(nxt);
+        end
+        else
+        begin
+          FocusedNode := nxt;
+          ScrollIntoView(nxt);
+        end;
       end;
       Key := 0;
     end;
@@ -3424,8 +3677,22 @@ begin
         nxt := GetPreviousVisibleNoInit(cur);
         if nxt <> nil then
         begin
-          FocusedNode := nxt;
-          ScrollIntoView(nxt);
+          if toMultiSelect in FOptions then
+          begin
+            { Plain Up in multi-select: collapse to single selection + reset anchor }
+            ClearSelection;
+            InternalSetSelected(nxt, True);
+            FRangeAnchor := nxt;
+            MoveFocusOnly(nxt);
+            Invalidate;
+            if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+            ScrollIntoView(nxt);
+          end
+          else
+          begin
+            FocusedNode := nxt;
+            ScrollIntoView(nxt);
+          end;
         end;
       end;
       Key := 0;
@@ -3477,8 +3744,21 @@ begin
       nxt := GetFirstVisibleNoInit;
       if nxt <> nil then
       begin
-        FocusedNode := nxt;
-        ScrollIntoView(nxt);
+        if toMultiSelect in FOptions then
+        begin
+          ClearSelection;
+          InternalSetSelected(nxt, True);
+          FRangeAnchor := nxt;
+          MoveFocusOnly(nxt);
+          Invalidate;
+          if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          ScrollIntoView(nxt);
+        end
+        else
+        begin
+          FocusedNode := nxt;
+          ScrollIntoView(nxt);
+        end;
       end;
       Key := 0;
     end;
@@ -3491,8 +3771,21 @@ begin
       begin
         while GetNextVisibleNoInit(nxt) <> nil do
           nxt := GetNextVisibleNoInit(nxt);
-        FocusedNode := nxt;
-        ScrollIntoView(nxt);
+        if toMultiSelect in FOptions then
+        begin
+          ClearSelection;
+          InternalSetSelected(nxt, True);
+          FRangeAnchor := nxt;
+          MoveFocusOnly(nxt);
+          Invalidate;
+          if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+          ScrollIntoView(nxt);
+        end
+        else
+        begin
+          FocusedNode := nxt;
+          ScrollIntoView(nxt);
+        end;
       end;
       Key := 0;
     end;
@@ -3581,7 +3874,9 @@ begin
       { C1: Space toggles the check state of the focused node when toCheckSupport
         is active and the node has a non-None CheckType.  Falls through (key NOT
         consumed) when the tree has no check support so that non-check trees are
-        unaffected. }
+        unaffected.
+        D2: Ctrl+Space (for multi-select toggle) is handled above; plain Space
+        here only triggers check-toggle, NOT selection-toggle. }
       if (toCheckSupport in FOptions) and
          (cur <> nil) and (cur^.CheckType <> ctNone) then
       begin
