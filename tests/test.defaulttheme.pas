@@ -113,6 +113,7 @@ begin
     AssertBg('TyDateTimeButton', []);
     AssertBg('TyTreeView', []);
     AssertBg('TyTreeHeader', []);
+    AssertBg('TyTreeCheckBox', []);
   finally
     m.Free;
   end;

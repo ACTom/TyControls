@@ -382,3 +382,10 @@ TyTreeHeader { background: darken(--surface, 6%); border-color: var(--border); b
 TyTreeHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }
 TyTreeHeaderSection:hover { background: darken(--surface, 4%); }
 TyTreeHeaderSection:selected { background: darken(--surface, 10%); }
+/* TyTreeCheckBox: green lacks --input-bg/--input-border-width/--radius-sm/--on-accent;
+   concrete equivalents: input-bg=alpha(#FFFFFF,0) (glass), border-width=1px,
+   radius-sm=3px, on-accent=#FFFFFF (green accent is deep green, luma<0.5)    */
+TyTreeCheckBox { background: alpha(#FFFFFF, 0); color: var(--on-surface); border-color: var(--border); border-width: 1px; border-radius: 3px; }
+TyTreeCheckBox:active   { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+TyTreeCheckBox:selected { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+TyTreeCheckBox:disabled { color: var(--muted); }
