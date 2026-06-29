@@ -511,7 +511,6 @@ begin
   begin
     Options := [hoVisible, hoColumnResize, hoShowSortGlyphs,
                 hoHeaderClickAutoSort, hoDrag];
-    MainColumn := 0;
 
     col := Columns.Add as TTyTreeColumn;
     col.Text := 'Name';
@@ -532,6 +531,10 @@ begin
     col.Text := 'Modified';
     col.Width := 120;
     col.Alignment := taLeftJustify;
+
+    { Set the main (tree) column AFTER the columns exist — SetMainColumn clamps to
+      NoColumn(-1) when assigned while Columns.Count = 0. }
+    MainColumn := 0;
   end;
 
   ColTree.RootNodeCount := 3;
