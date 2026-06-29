@@ -32,6 +32,7 @@ type
     { Infrastructure }
     TyController: TTyStyleController;
     StatusBar:    TTyStatusBar;
+    ChromeBar:    TTyTitleBar;
     Pages:        TTyPageControl;
 
     { Per-tab trees }
@@ -43,6 +44,7 @@ type
     { Helpers }
     function  ThemeDir: string;
     procedure InitTheme;
+    procedure BuildTitleBar;
     procedure BuildToolbar(AParent: TWinControl);
     procedure BuildStatusBar;
     procedure BuildPages;
@@ -195,33 +197,43 @@ end;
 { -----------------------------------------------------------------------
   Top toolbar: Light + Dark buttons
   ----------------------------------------------------------------------- }
+procedure TShowcaseForm.BuildTitleBar;
+begin
+  { TTyForm is born borderless (SetupChrome sets BorderStyle=bsNone) with NO title
+    bar. Associating a TTyTitleBar arms the chrome engine — drag, edge-resize, and
+    the min/max/close buttons. Without it the window can't be moved, sized, or closed. }
+  ChromeBar := TTyTitleBar.Create(Self);
+  ChromeBar.Parent         := Self;
+  ChromeBar.Align          := alTop;
+  ChromeBar.Caption        := 'TTyTreeView Feature Showcase';
+  ChromeBar.TitleAlignment := taCenter;
+  ChromeBar.Controller     := TyController;
+  TitleBar := ChromeBar;             // associate -> arms engine + wires caption buttons
+  ApplyChromeTheme(TyController);     // re-theme chrome now that the bar exists
+end;
+
+{ -----------------------------------------------------------------------
+  Light / Dark theme buttons — hosted inside the title bar (left side).
+  ----------------------------------------------------------------------- }
 procedure TShowcaseForm.BuildToolbar(AParent: TWinControl);
 var
   BtnLight, BtnDark: TTyButton;
-  Lbl: TTyLabel;
 begin
-  Lbl := TTyLabel.Create(Self);
-  Lbl.Parent := AParent;
-  Lbl.SetBounds(8, 8, 260, 20);
-  Lbl.Caption := 'TTyTreeView Feature Showcase';
-  Lbl.Font.Style := [fsBold];
-  Lbl.Controller := TyController;
-
   BtnLight := TTyButton.Create(Self);
   BtnLight.Parent := AParent;
-  BtnLight.SetBounds(Width - 188, 4, 86, 28);
+  BtnLight.SetBounds(8, 4, 76, 24);
   BtnLight.Caption := 'Light';
   BtnLight.StyleClass := 'ghost';
-  BtnLight.Anchors := [akTop, akRight];
+  BtnLight.Anchors := [akLeft, akTop];
   BtnLight.OnClick := @LightClick;
   BtnLight.Controller := TyController;
 
   BtnDark := TTyButton.Create(Self);
   BtnDark.Parent := AParent;
-  BtnDark.SetBounds(Width - 98, 4, 86, 28);
+  BtnDark.SetBounds(88, 4, 76, 24);
   BtnDark.Caption := 'Dark';
   BtnDark.StyleClass := 'ghost';
-  BtnDark.Anchors := [akTop, akRight];
+  BtnDark.Anchors := [akLeft, akTop];
   BtnDark.OnClick := @DarkClick;
   BtnDark.Controller := TyController;
 end;
@@ -276,7 +288,9 @@ var
 begin
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := APage;
-  Lbl.SetBounds(8, 6, 700, 18);
+  Lbl.Align := alTop;
+  Lbl.Height := 26;
+  Lbl.BorderSpacing.Left := 8;
   Lbl.Caption :=
     'Virtual engine: 1 000 000 root nodes; up to level 4 each has 10 children. ' +
     'All nodes initialised lazily (OnInitNode / OnInitChildren).';
@@ -284,8 +298,7 @@ begin
 
   VirtualTree := TTyTreeView.Create(Self);
   VirtualTree.Parent := APage;
-  VirtualTree.SetBounds(0, 30, APage.ClientWidth, APage.ClientHeight - 30);
-  VirtualTree.Anchors := [akLeft, akTop, akRight, akBottom];
+  VirtualTree.Align := alClient;
   VirtualTree.Controller := TyController;
 
   VirtualTree.OnInitNode     := @VirtualInitNode;
@@ -329,7 +342,9 @@ var
 begin
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := APage;
-  Lbl.SetBounds(8, 6, 760, 18);
+  Lbl.Align := alTop;
+  Lbl.Height := 26;
+  Lbl.BorderSpacing.Left := 8;
   Lbl.Caption :=
     'Data lives in the node (NodeDataSize = SizeOf(TRowRec)). ' +
     'Sort reads PRowRec(GetNodeData(Node)) — never Node^.Index — so column ' +
@@ -338,8 +353,7 @@ begin
 
   ColTree := TTyTreeView.Create(Self);
   ColTree.Parent := APage;
-  ColTree.SetBounds(0, 30, APage.ClientWidth, APage.ClientHeight - 30);
-  ColTree.Anchors := [akLeft, akTop, akRight, akBottom];
+  ColTree.Align := alClient;
   ColTree.Controller := TyController;
 
   { Allocate the per-node TRowRec blob }
@@ -544,7 +558,9 @@ var
 begin
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := APage;
-  Lbl.SetBounds(8, 6, 760, 18);
+  Lbl.Align := alTop;
+  Lbl.Height := 26;
+  Lbl.BorderSpacing.Left := 8;
   Lbl.Caption :=
     'Folders: tri-state checkboxes (auto-propagate). ' +
     'Music/Videos files: plain checkboxes. ' +
@@ -553,8 +569,7 @@ begin
 
   CheckTree := TTyTreeView.Create(Self);
   CheckTree.Parent := APage;
-  CheckTree.SetBounds(0, 30, APage.ClientWidth, APage.ClientHeight - 30);
-  CheckTree.Anchors := [akLeft, akTop, akRight, akBottom];
+  CheckTree.Align := alClient;
   CheckTree.Controller := TyController;
   CheckTree.Options := [toCheckSupport, toAutoTristateTracking];
 
@@ -625,7 +640,9 @@ var
 begin
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := APage;
-  Lbl.SetBounds(8, 6, 760, 18);
+  Lbl.Align := alTop;
+  Lbl.Height := 26;
+  Lbl.BorderSpacing.Left := 8;
   Lbl.Caption :=
     'Multi-select + full-row highlight. Ctrl+click / Shift+click / Ctrl+A. ' +
     'OnSelectionChanged shows live count in the status bar.';
@@ -633,8 +650,7 @@ begin
 
   MultiTree := TTyTreeView.Create(Self);
   MultiTree.Parent := APage;
-  MultiTree.SetBounds(0, 30, APage.ClientWidth, APage.ClientHeight - 30);
-  MultiTree.Anchors := [akLeft, akTop, akRight, akBottom];
+  MultiTree.Align := alClient;
   MultiTree.Controller := TyController;
   MultiTree.Options := [toMultiSelect, toFullRowSelect];
 
@@ -688,8 +704,10 @@ begin
   { 1. Bootstrap theme controller FIRST (all controls below set Controller) }
   InitTheme;
 
-  { 2. Top toolbar strip — plain label strip with Light/Dark buttons }
-  BuildToolbar(Self);
+  { 2. Title bar — TTyForm is borderless by design; the bar provides drag /
+       min-max-close and arms the edge-resize engine. Theme buttons live in it. }
+  BuildTitleBar;
+  BuildToolbar(ChromeBar);
 
   { 3. Status bar }
   BuildStatusBar;
