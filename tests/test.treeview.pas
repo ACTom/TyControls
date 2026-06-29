@@ -5713,6 +5713,172 @@ begin
   end;
 end;
 
+{ ── A2 ── check types + tri-state propagation pure helpers ──────────────── }
+
+type
+  TTreeA2CheckPropTest = class(TTestCase)
+  published
+    { PropagateCheckDown sets all ctCheckBox children to the given state. }
+    procedure TestPropagateCheckDownSetsAllCheckBoxChildren;
+    { PropagateCheckDown does not touch ctRadioButton children. }
+    procedure TestPropagateCheckDownSkipsRadioButton;
+    { RecomputeParentCheckState: all checked → csChecked. }
+    procedure TestRecomputeAllChecked;
+    { RecomputeParentCheckState: all unchecked → csUnchecked. }
+    procedure TestRecomputeAllUnchecked;
+    { RecomputeParentCheckState: mixed (checked+unchecked) → csMixed. }
+    procedure TestRecomputeMixedReturnsCsMixed;
+    { RecomputeParentCheckState: ctRadioButton children are ignored. }
+    procedure TestRecomputeIgnoresRadioButton;
+    { RecomputeParentCheckState: no check-children → returns current state unchanged. }
+    procedure TestRecomputeNoCheckChildrenReturnsCurrentState;
+  end;
+
+procedure TTreeA2CheckPropTest.TestPropagateCheckDownSetsAllCheckBoxChildren;
+var
+  t: TTyTreeView;
+  parent, c1, c2, c3: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    parent := t.AddChild(nil);
+    c1 := t.AddChild(parent);
+    c2 := t.AddChild(parent);
+    c3 := t.AddChild(parent);
+    c1^.CheckType := ctCheckBox;
+    c2^.CheckType := ctCheckBox;
+    c3^.CheckType := ctCheckBox;
+    c1^.CheckState := csUnchecked;
+    c2^.CheckState := csUnchecked;
+    c3^.CheckState := csUnchecked;
+    t.PropagateCheckDown(parent, csChecked);
+    AssertEquals('c1 csChecked', Ord(csChecked), Ord(c1^.CheckState));
+    AssertEquals('c2 csChecked', Ord(csChecked), Ord(c2^.CheckState));
+    AssertEquals('c3 csChecked', Ord(csChecked), Ord(c3^.CheckState));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeA2CheckPropTest.TestPropagateCheckDownSkipsRadioButton;
+var
+  t: TTyTreeView;
+  parent, c1, radio: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    parent := t.AddChild(nil);
+    c1     := t.AddChild(parent);
+    radio  := t.AddChild(parent);
+    c1^.CheckType    := ctCheckBox;
+    c1^.CheckState   := csUnchecked;
+    radio^.CheckType  := ctRadioButton;
+    radio^.CheckState := csChecked;
+    t.PropagateCheckDown(parent, csUnchecked);
+    AssertEquals('c1 set to csUnchecked',    Ord(csUnchecked), Ord(c1^.CheckState));
+    AssertEquals('radio stays csChecked',    Ord(csChecked),   Ord(radio^.CheckState));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeA2CheckPropTest.TestRecomputeAllChecked;
+var
+  t: TTyTreeView;
+  parent, c1, c2: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    parent := t.AddChild(nil);
+    c1 := t.AddChild(parent);
+    c2 := t.AddChild(parent);
+    c1^.CheckType  := ctCheckBox; c1^.CheckState := csChecked;
+    c2^.CheckType  := ctCheckBox; c2^.CheckState := csChecked;
+    AssertEquals('all checked → csChecked',
+      Ord(csChecked), Ord(t.RecomputeParentCheckState(parent)));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeA2CheckPropTest.TestRecomputeAllUnchecked;
+var
+  t: TTyTreeView;
+  parent, c1, c2: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    parent := t.AddChild(nil);
+    c1 := t.AddChild(parent);
+    c2 := t.AddChild(parent);
+    c1^.CheckType  := ctCheckBox; c1^.CheckState := csUnchecked;
+    c2^.CheckType  := ctCheckBox; c2^.CheckState := csUnchecked;
+    AssertEquals('all unchecked → csUnchecked',
+      Ord(csUnchecked), Ord(t.RecomputeParentCheckState(parent)));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeA2CheckPropTest.TestRecomputeMixedReturnsCsMixed;
+var
+  t: TTyTreeView;
+  parent, c1, c2, c3: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    parent := t.AddChild(nil);
+    c1 := t.AddChild(parent);
+    c2 := t.AddChild(parent);
+    c3 := t.AddChild(parent);
+    c1^.CheckType := ctCheckBox; c1^.CheckState := csChecked;
+    c2^.CheckType := ctCheckBox; c2^.CheckState := csChecked;
+    c3^.CheckType := ctCheckBox; c3^.CheckState := csUnchecked;
+    AssertEquals('checked+unchecked → csMixed',
+      Ord(csMixed), Ord(t.RecomputeParentCheckState(parent)));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeA2CheckPropTest.TestRecomputeIgnoresRadioButton;
+var
+  t: TTyTreeView;
+  parent, cb, radio: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    parent := t.AddChild(nil);
+    cb    := t.AddChild(parent);
+    radio := t.AddChild(parent);
+    cb^.CheckType    := ctCheckBox;    cb^.CheckState    := csChecked;
+    radio^.CheckType  := ctRadioButton; radio^.CheckState := csUnchecked;
+    // Only cb counts → all check-children are csChecked → csChecked
+    AssertEquals('radio ignored; cb checked → csChecked',
+      Ord(csChecked), Ord(t.RecomputeParentCheckState(parent)));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeA2CheckPropTest.TestRecomputeNoCheckChildrenReturnsCurrentState;
+var
+  t: TTyTreeView;
+  parent, child: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    parent := t.AddChild(nil);
+    child  := t.AddChild(parent);
+    child^.CheckType   := ctNone;  // not a check child
+    parent^.CheckState := csMixed;
+    AssertEquals('no check-children → current state unchanged',
+      Ord(csMixed), Ord(t.RecomputeParentCheckState(parent)));
+  finally
+    t.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -5734,4 +5900,5 @@ initialization
   RegisterTest(TTreeE1SortTest);
   RegisterTest(TTreeE2SortTreeTest);
   RegisterTest(TTreeE3HeaderClickTest);
+  RegisterTest(TTreeA2CheckPropTest);
 end.

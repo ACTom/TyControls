@@ -12,6 +12,11 @@ type
   TTyTreeHitPart = (hpNowhere, hpButton, hpImage, hpLabel, hpIndent,
                     hpHeaderSection, hpHeaderDivider);
 
+  { A2: check column type for a node }
+  TTyCheckType  = (ctNone, ctCheckBox, ctTriStateCheckBox, ctRadioButton);
+  { A2: check state of a node }
+  TTyCheckState = (csUnchecked, csChecked, csMixed);
+
 type
   PTyTreeNode = ^TTyTreeNode;
 
@@ -29,6 +34,9 @@ type
     TotalCount: Cardinal;       // self + all descendants
     TotalHeight: Cardinal;      // pixels of self + expanded/visible descendants
     Parent, PrevSibling, NextSibling, FirstChild, LastChild: PTyTreeNode;
+    { A2/B1: per-node check column type and state (byte fields; zero-init by MakeNewNode) }
+    CheckType:  TTyCheckType;   // ctNone by default
+    CheckState: TTyCheckState;  // csUnchecked by default
     // user data blob (NodeDataSize bytes) follows at offset TreeNodeSize
   end;
 
@@ -235,6 +243,9 @@ type
     function  GetNodeAt(Y: Integer; out ANodeTop: Integer): PTyTreeNode;
     { B1 helpers — used by tests + scroll engine }
     function  SumVisibleHeights: Integer;
+    { A2: check-propagation pure helpers }
+    procedure PropagateCheckDown(Node: PTyTreeNode; AState: TTyCheckState);
+    function  RecomputeParentCheckState(Node: PTyTreeNode): TTyCheckState;
     { C1: selection + focus }
     procedure ClearSelection;
     procedure FullExpand(Node: PTyTreeNode = nil);
@@ -394,6 +405,68 @@ begin
   FSelectedNode := nil;
   if Assigned(FOnChange) then FOnChange(Self, prev);
   Invalidate;
+end;
+
+{ ── A2 ── check propagation pure helpers ─────────────────────────────────── }
+
+{ PropagateCheckDown — sets every ALREADY-INITIALISED descendant whose
+  CheckType is ctCheckBox or ctTriStateCheckBox to AState.  ctNone and
+  ctRadioButton nodes are skipped.  Lazy (not-yet-initialised) subtrees are
+  intentionally untouched — they will inherit the right state when they are
+  eventually initialised in Phase B/C. }
+procedure TTyTreeView.PropagateCheckDown(Node: PTyTreeNode; AState: TTyCheckState);
+var
+  child: PTyTreeNode;
+begin
+  if Node = nil then Exit;
+  child := Node^.FirstChild;
+  while child <> nil do
+  begin
+    if child^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+      child^.CheckState := AState;
+    // Recurse into already-initialised children (lazy-safe: only if FirstChild ≠ nil)
+    if child^.FirstChild <> nil then
+      PropagateCheckDown(child, AState);
+    child := child^.NextSibling;
+  end;
+end;
+
+{ RecomputeParentCheckState — inspect Node's direct check-children
+  (ctCheckBox/ctTriStateCheckBox only; ctRadioButton/ctNone ignored).
+  Returns: csChecked if all check-children are csChecked;
+           csUnchecked if all are csUnchecked;
+           csMixed if mixed or any is already csMixed;
+           Node^.CheckState unchanged when there are no check-children. }
+function TTyTreeView.RecomputeParentCheckState(Node: PTyTreeNode): TTyCheckState;
+var
+  child:        PTyTreeNode;
+  hasChecked:   Boolean;
+  hasUnchecked: Boolean;
+begin
+  Result       := Node^.CheckState;  // default: no change when no check-children
+  hasChecked   := False;
+  hasUnchecked := False;
+
+  child := Node^.FirstChild;
+  while child <> nil do
+  begin
+    if child^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+    begin
+      case child^.CheckState of
+        csChecked:   hasChecked   := True;
+        csUnchecked: hasUnchecked := True;
+        csMixed:     begin Result := csMixed; Exit; end;  // short-circuit
+      end;
+      if hasChecked and hasUnchecked then begin Result := csMixed; Exit; end;
+    end;
+    child := child^.NextSibling;
+  end;
+
+  if hasChecked and not hasUnchecked then
+    Result := csChecked
+  else if hasUnchecked and not hasChecked then
+    Result := csUnchecked;
+  // else: no check-children → leave Result as Node^.CheckState
 end;
 
 function TTyTreeView.GetFocusedNode: PTyTreeNode;
