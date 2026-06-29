@@ -173,7 +173,7 @@ end;
 
 procedure TTyNativeStyler.StyleControl(AControl: TControl);
 var
-  style: TTyStyleSet;
+  style, fb: TTyStyleSet;
   fnt: TFont;
   handled: Boolean;
 begin
@@ -192,7 +192,17 @@ begin
     fnt := TFont(GetObjectProp(AControl, 'Font'));
     if fnt <> nil then
     begin
-      if tpTextColor in style.Present then fnt.Color := TyColorToLCL(style.TextColor);
+      if tpTextColor in style.Present then
+        fnt.Color := TyColorToLCL(style.TextColor)
+      else
+      begin
+        { Mapped style has no explicit text colour (e.g. anything → TyPanel, which
+          only sets a background). Fall back to the theme foreground (TyLabel's
+          on-surface) so native text stays readable on dark themes instead of
+          keeping its design-time black. }
+        fb := FController.Model.ResolveStyle('TyLabel', '', []);
+        if tpTextColor in fb.Present then fnt.Color := TyColorToLCL(fb.TextColor);
+      end;
       if FApplyFontName and (tpFontName in style.Present) and (style.FontName <> '') then
         fnt.Name := style.FontName;
       if FApplyFontSize and (tpFontSize in style.Present) and (style.FontSize > 0) then
