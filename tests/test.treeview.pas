@@ -7548,6 +7548,237 @@ begin
   finally t.Free; end;
 end;
 
+{ ── FIX 1/2/3/5 adversarial-review regression tests ─────────────────────── }
+
+type
+  TTreeAdversarialFixTest = class(TTestCase)
+  published
+    { FIX 1: DeleteNode of a selected node decrements FSelectionCount }
+    procedure TestDeleteSelectedNodeDecrementsCount;
+    { FIX 1: DeleteNode of a multi-selected range member decrements count correctly }
+    procedure TestDeleteRangeMemberDecrementsCount;
+    { FIX 1: Clear after SelectAll resets SelectedCount=0 and FRangeAnchor=nil }
+    procedure TestClearAfterSelectAllResetsCount;
+    { FIX 1: DeleteNode clears FRangeAnchor when anchor is deleted }
+    procedure TestDeleteAnchorClearsRangeAnchor;
+    { FIX 2: re-sequence still happens on normal (non-Clear) DeleteNode }
+    procedure TestDeleteNonClearResequences;
+    { FIX 3: ClearSelection after collapse clears hidden selected nodes }
+    procedure TestClearSelectionClearsHiddenNodes;
+    { FIX 3: SelectRange clears hidden selected nodes before selecting new range }
+    procedure TestSelectRangeClearsHiddenSelectedFirst;
+    { FIX 5: removing toMultiSelect collapses multi-selection to single }
+    procedure TestRemoveMultiSelectCollapsesToSingle;
+    { FIX 5: removing toMultiSelect with 0 or 1 nodes selected is a no-op }
+    procedure TestRemoveMultiSelectSingleSelectedNoOp;
+  end;
+
+procedure TTreeAdversarialFixTest.TestDeleteSelectedNodeDecrementsCount;
+{ FIX 1: deleting the single selected node must set SelectedCount=0. }
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    n := t.AddChild(nil);
+    t.Selected[n] := True;
+    AssertEquals('count=1 before delete', 1, t.SelectedCount);
+    t.DeleteNode(n);
+    AssertEquals('FIX1: count=0 after delete', 0, t.SelectedCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeAdversarialFixTest.TestDeleteRangeMemberDecrementsCount;
+{ FIX 1: SelectRange(n2..n4) = 3 nodes; DeleteNode(n3) → count=2. }
+var
+  t:     TTyTreeView;
+  nodes: array[0..5] of PTyTreeNode;
+  n:     PTyTreeNode;
+  i:     Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.RootNodeCount := 6;
+    n := t.RootNode^.FirstChild;
+    for i := 0 to 5 do begin nodes[i] := n; n := n^.NextSibling; end;
+    t.SelectRange(nodes[2], nodes[4]);
+    AssertEquals('FIX1 pre: SelectedCount=3', 3, t.SelectedCount);
+    t.DeleteNode(nodes[3]);
+    AssertEquals('FIX1: SelectedCount=2 after delete of mid member', 2, t.SelectedCount);
+    AssertFalse('FIX1: deleted node no longer selected', nsSelected in nodes[3]^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeAdversarialFixTest.TestClearAfterSelectAllResetsCount;
+{ FIX 1: SelectAll then Clear → SelectedCount=0, no crash. }
+var
+  t: TTyTreeView;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toMultiSelect];
+    t.RootNodeCount := 5;
+    t.SelectAll;
+    AssertEquals('FIX1 pre: SelectedCount=5', 5, t.SelectedCount);
+    t.Clear;
+    AssertEquals('FIX1: SelectedCount=0 after Clear', 0, t.SelectedCount);
+    AssertNull ('FIX1: FSelectedNode nil after Clear', t.FocusedNode);
+  finally t.Free; end;
+end;
+
+procedure TTreeAdversarialFixTest.TestDeleteAnchorClearsRangeAnchor;
+{ FIX 1: after DeleteNode of the range anchor, FRangeAnchor must be nil.
+  We verify indirectly: ClearSelection must run without crash (no UAF). }
+var
+  t:     TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+  n:     PTyTreeNode;
+  i:     Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toMultiSelect];
+    t.RootNodeCount := 5;
+    n := t.RootNode^.FirstChild;
+    for i := 0 to 4 do begin nodes[i] := n; n := n^.NextSibling; end;
+    { SelectRange sets FRangeAnchor to nodes[1] internally via keyboard path;
+      we simulate by direct SelectRange + selection of anchor }
+    t.SelectRange(nodes[1], nodes[3]);
+    AssertEquals('FIX1 anchor pre: count=3', 3, t.SelectedCount);
+    { Delete nodes[1] — the range anchor }
+    t.DeleteNode(nodes[1]);
+    { Now ClearSelection must not crash (FRangeAnchor should be nil) }
+    t.ClearSelection;
+    AssertEquals('FIX1 anchor: count=0 after clear', 0, t.SelectedCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeAdversarialFixTest.TestDeleteNonClearResequences;
+{ FIX 2: normal (non-Clear) DeleteNode still re-sequences sibling indices. }
+var
+  t:      TTyTreeView;
+  n1, n2, n3: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    n1 := t.AddChild(nil);
+    n2 := t.AddChild(nil);
+    n3 := t.AddChild(nil);
+    t.DeleteNode(n2);
+    AssertEquals('FIX2: n1 index still 0', 0, Integer(n1^.Index));
+    AssertEquals('FIX2: n3 re-sequenced to 1', 1, Integer(n3^.Index));
+  finally t.Free; end;
+end;
+
+procedure TTreeAdversarialFixTest.TestClearSelectionClearsHiddenNodes;
+{ FIX 3: select parent + child, then hide child by removing nsExpanded from
+  parent (simulating a collapse without triggering height bookkeeping).
+  ClearSelection must clear the child even though it is no longer visible. }
+var
+  t:      TTyTreeView;
+  parent, child: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toMultiSelect];
+    parent := t.AddChild(nil);
+    child  := t.AddChild(parent);
+    { Mark parent as having initialized, expanded children }
+    Include(parent^.States, nsHasChildren);
+    Include(parent^.States, nsInitialized);
+    Include(parent^.States, nsExpanded);
+    { Select both (while parent is expanded) }
+    t.InternalSetSelected(parent, True);
+    t.InternalSetSelected(child, True);
+    AssertEquals('FIX3 pre: count=2', 2, t.SelectedCount);
+    { Simulate collapse by clearing nsExpanded — child is no longer in visible walk }
+    Exclude(parent^.States, nsExpanded);
+    { ClearSelection must clear child too, not just visible nodes }
+    t.ClearSelection;
+    AssertEquals('FIX3: count=0 after clear', 0, t.SelectedCount);
+    AssertFalse('FIX3: parent not selected', nsSelected in parent^.States);
+    AssertFalse('FIX3: hidden child not selected', nsSelected in child^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeAdversarialFixTest.TestSelectRangeClearsHiddenSelectedFirst;
+{ FIX 3: a pre-existing selection that includes a hidden (collapsed) node
+  must be fully cleared when SelectRange is called next. }
+var
+  t:      TTyTreeView;
+  parent, child, sib: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toMultiSelect];
+    parent := t.AddChild(nil);
+    child  := t.AddChild(parent);
+    sib    := t.AddChild(nil);
+    Include(parent^.States, nsHasChildren);
+    Include(parent^.States, nsInitialized);
+    Include(parent^.States, nsExpanded);
+    { Select child while parent is expanded }
+    t.InternalSetSelected(child, True);
+    AssertEquals('FIX3 sr pre: count=1', 1, t.SelectedCount);
+    { Simulate collapse by clearing nsExpanded — child hidden }
+    Exclude(parent^.States, nsExpanded);
+    { SelectRange(parent, sib) — must clear child's nsSelected first }
+    t.SelectRange(parent, sib);
+    AssertFalse('FIX3 sr: child not selected after new range', nsSelected in child^.States);
+    AssertTrue ('FIX3 sr: parent selected', nsSelected in parent^.States);
+    AssertTrue ('FIX3 sr: sib selected', nsSelected in sib^.States);
+    { Count must be 2 (parent+sib); child is cleared by ClearAllSelectedFull }
+    AssertEquals('FIX3 sr: count=2 (parent+sib)', 2, t.SelectedCount);
+  finally t.Free; end;
+end;
+
+procedure TTreeAdversarialFixTest.TestRemoveMultiSelectCollapsesToSingle;
+{ FIX 5: 3 nodes selected, toMultiSelect removed → SelectedCount ≤ 1. }
+var
+  t:     TTyTreeView;
+  nodes: array[0..4] of PTyTreeNode;
+  n:     PTyTreeNode;
+  i:     Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toMultiSelect];
+    t.RootNodeCount := 5;
+    n := t.RootNode^.FirstChild;
+    for i := 0 to 4 do begin nodes[i] := n; n := n^.NextSibling; end;
+    t.SelectRange(nodes[0], nodes[2]);
+    AssertEquals('FIX5 pre: count=3', 3, t.SelectedCount);
+    t.Options := [];   { remove toMultiSelect }
+    AssertTrue('FIX5: SelectedCount ≤ 1 after remove', t.SelectedCount <= 1);
+    { Verify no stale nsSelected flags on the cleared nodes }
+    if not (nsSelected in nodes[0]^.States) then
+      AssertFalse('FIX5: node[1] cleared', nsSelected in nodes[1]^.States);
+  finally t.Free; end;
+end;
+
+procedure TTreeAdversarialFixTest.TestRemoveMultiSelectSingleSelectedNoOp;
+{ FIX 5: removing toMultiSelect when only 1 node selected — count stays 1. }
+var
+  t:     TTyTreeView;
+  nodes: array[0..2] of PTyTreeNode;
+  n:     PTyTreeNode;
+  i:     Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Options := [toMultiSelect];
+    t.RootNodeCount := 3;
+    n := t.RootNode^.FirstChild;
+    for i := 0 to 2 do begin nodes[i] := n; n := n^.NextSibling; end;
+    t.InternalSetSelected(nodes[1], True);
+    AssertEquals('FIX5 single pre: count=1', 1, t.SelectedCount);
+    t.Options := [];
+    AssertEquals('FIX5 single: count still=1', 1, t.SelectedCount);
+    AssertTrue('FIX5 single: node[1] still selected', nsSelected in nodes[1]^.States);
+  finally t.Free; end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -7577,4 +7808,5 @@ initialization
   RegisterTest(TTreeC1CheckBehaviourTest);
   RegisterTest(TTreeD1MultiSelectMouseTest);
   RegisterTest(TTreeD2MultiSelectKeyboardTest);
+  RegisterTest(TTreeAdversarialFixTest);
 end.

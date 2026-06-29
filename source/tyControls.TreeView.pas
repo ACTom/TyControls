@@ -209,6 +209,8 @@ type
     procedure SetHotTrack(AValue: Boolean);
     { C1: selection internals }
     procedure ClearSelectedNode;
+    { FIX 3: recursive full-tree clear of nsSelected (walks collapsed subtrees) }
+    procedure ClearAllSelectedFull(ANode: PTyTreeNode);
     function  GetSelected(Node: PTyTreeNode): Boolean;
     procedure SetSelected(Node: PTyTreeNode; AValue: Boolean);
     function  GetFocusedNode: PTyTreeNode;
@@ -448,39 +450,44 @@ begin
   Invalidate;
 end;
 
+{ ClearAllSelectedFull — FIX 3 helper: walk the ENTIRE structural tree
+  (not just visible nodes) clearing nsSelected on every node.  This ensures
+  that selected descendants hidden under a collapsed parent are also cleared,
+  preventing stale highlights on re-expand and FSelectionCount desync. }
+procedure TTyTreeView.ClearAllSelectedFull(ANode: PTyTreeNode);
+var
+  child: PTyTreeNode;
+begin
+  if ANode = nil then Exit;
+  child := ANode^.FirstChild;
+  while child <> nil do
+  begin
+    if nsSelected in child^.States then
+      Exclude(child^.States, nsSelected);
+    if child^.FirstChild <> nil then
+      ClearAllSelectedFull(child);
+    child := child^.NextSibling;
+  end;
+end;
+
 { ClearSelection: public — deselects all selected nodes, fires OnChange once.
-  A3: when a SelectRange has selected multiple nodes (FSelectionCount > 1),
-  walk all visible nodes to clear nsSelected (single-select path just clears
-  FSelectedNode; multi-select path is a full visible walk). }
+  FIX 3: uses ClearAllSelectedFull (full structural walk, not just visible
+  nodes) so selected nodes hidden under a collapsed parent are also cleared.
+  This prevents stale highlights on re-expand and FSelectionCount desync. }
 procedure TTyTreeView.ClearSelection;
 var
   prev: PTyTreeNode;
-  n:    PTyTreeNode;
 begin
   if (FSelectedNode = nil) and (FSelectionCount = 0) then Exit;
   prev := FSelectedNode;
-  if FSelectionCount > 1 then
-  begin
-    // Multi-select: walk all visible nodes to remove nsSelected
-    n := GetFirstVisibleNoInit;
-    while n <> nil do
-    begin
-      Exclude(n^.States, nsSelected);
-      n := GetNextVisibleNoInit(n);
-    end;
-    FSelectedNode   := nil;
-    FSelectionCount := 0;
-    if Assigned(FOnChange) then FOnChange(Self, prev);
-  end
+  // Walk the entire structural tree, not just visible nodes (FIX 3).
+  ClearAllSelectedFull(FRoot);
+  FSelectedNode   := nil;
+  FSelectionCount := 0;
+  if prev <> nil then
+    if Assigned(FOnChange) then FOnChange(Self, prev)
   else
-  begin
-    // Single-select path (unchanged behaviour)
-    if prev = nil then begin FSelectionCount := 0; Exit; end;
-    Exclude(prev^.States, nsSelected);
-    FSelectedNode   := nil;
-    FSelectionCount := 0;
-    if Assigned(FOnChange) then FOnChange(Self, prev);
-  end;
+    if Assigned(FOnChange) then FOnChange(Self, nil);
   Invalidate;
 end;
 
@@ -583,13 +590,9 @@ var
 begin
   if (AAnchor = nil) or (ATarget = nil) then Exit;
 
-  // Clear all current selection first (fast clear without firing events)
-  n := GetFirstVisibleNoInit;
-  while n <> nil do
-  begin
-    Exclude(n^.States, nsSelected);
-    n := GetNextVisibleNoInit(n);
-  end;
+  // FIX 3: clear the FULL structural tree (not just visible) so selected nodes
+  // hidden under collapsed parents don't persist as stale highlights.
+  ClearAllSelectedFull(FRoot);
   FSelectionCount := 0;
   FSelectedNode   := nil;
 
@@ -901,10 +904,16 @@ end;
 
 procedure TTyTreeView.SetOptions(AValue: TTyTreeOptions);
 var
-  CheckSupportChanged: Boolean;
+  CheckSupportChanged:  Boolean;
+  MultiSelectRemoved:   Boolean;
+  n:                    PTyTreeNode;
 begin
   if FOptions = AValue then Exit;
   CheckSupportChanged := (toCheckSupport in AValue) <> (toCheckSupport in FOptions);
+  { FIX 5: detect toMultiSelect being removed while multiple nodes are selected }
+  MultiSelectRemoved  := (toMultiSelect in FOptions) and
+                         not (toMultiSelect in AValue) and
+                         (FSelectionCount > 1);
   FOptions := AValue;
   if CheckSupportChanged then
   begin
@@ -912,6 +921,29 @@ begin
       because the checkbox slot shifts the caption/image start in the main column. }
     if (FHeader <> nil) and (FHeader.Columns.Count > 0) then
       InvalidateTreeLayout;
+  end;
+  if MultiSelectRemoved then
+  begin
+    { Collapse to a single selection: keep FSelectedNode (or FocusedNode as
+      fallback), clear nsSelected on all other nodes via the full structural walk,
+      then restore the single selection. }
+    if FSelectedNode = nil then FSelectedNode := FFocusedNode;
+    ClearAllSelectedFull(FRoot);
+    FSelectionCount := 0;
+    FRangeAnchor    := nil;
+    if FSelectedNode <> nil then
+    begin
+      Include(FSelectedNode^.States, nsSelected);
+      FSelectionCount := 1;
+    end;
+    { Deselect any node that is still in FFocusedNode but not FSelectedNode }
+    if (FFocusedNode <> nil) and (FFocusedNode <> FSelectedNode) then
+    begin
+      n := FFocusedNode;
+      { keep FFocusedNode pointing to the surviving selection }
+      FFocusedNode := FSelectedNode;
+      if Assigned(FOnFocusChanged) then FOnFocusChanged(Self, n);
+    end;
   end;
   Invalidate;
 end;
@@ -1645,11 +1677,17 @@ begin
   if FFocusedNode   = Node then FFocusedNode   := nil;
   if FLastMouseNode = Node then FLastMouseNode := nil;
   if FHotNode       = Node then FHotNode       := nil;
-  if FSelectedNode = Node then
+  { FIX 1: selection bookkeeping — clear nsSelected + decrement count for THIS
+    node BEFORE the recursive child-free loop below, so that every descendant
+    also runs through DeleteNode and gets the same treatment.  We handle this
+    node's own state here; children are handled recursively. }
+  if nsSelected in Node^.States then
   begin
     Exclude(Node^.States, nsSelected);
-    FSelectedNode := nil;
+    if FSelectionCount > 0 then Dec(FSelectionCount);
   end;
+  if FSelectedNode = Node then FSelectedNode := nil;
+  if FRangeAnchor  = Node then FRangeAnchor  := nil;
 
   // Recursively free all children first (depth-first)
   while Node^.FirstChild <> nil do DeleteNode(Node^.FirstChild);
@@ -1691,8 +1729,11 @@ begin
     Exclude(nodeParent^.States, nsHasChildren);
 
   { A1: re-sequence the remaining siblings' Index values (0-based, consecutive).
-    Skipped during Clear (nsClearing on FRoot), so bulk teardown stays O(n). }
-  if not (nsClearing in nodeParent^.States) then
+    Skipped during Clear (nsClearing on FRoot), so bulk teardown stays O(n).
+    FIX 2: guard on FRoot^.States, not nodeParent^.States — nsClearing is set only
+    on FRoot, so checking nodeParent caused O(k^2) re-sequences on intermediate
+    nodes during Clear even though FRoot was already marked. }
+  if not (nsClearing in FRoot^.States) then
   begin
     reseqChild := nodeParent^.FirstChild;
     reseqIdx   := 0;
@@ -1718,6 +1759,11 @@ begin
   finally
     Exclude(FRoot^.States, nsClearing);
   end;
+  { FIX 1: make bookkeeping authoritative after teardown — DeleteNode decrements
+    per-node, but Clear guarantees all nodes are gone so these must be 0/nil. }
+  FSelectionCount := 0;
+  FSelectedNode   := nil;
+  FRangeAnchor    := nil;
 end;
 
 { ── A5 ── lazy lifecycle ─────────────────────────────────────────────────── }
@@ -2683,15 +2729,19 @@ begin
                 rowTop + (rowH - cbBoxSize) div 2,
                 captionX + (cbSlotW - cbBoxSize) div 2 + cbBoxSize,
                 rowTop + (rowH - cbBoxSize) div 2 + cbBoxSize);
-              { Draw box background + border }
-              if tpBackground in cbStyle.Present then
-                P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
-              else
-                P.FillBackground(cbBoxRect, S.Background, 2);
-              if tpBorderColor in cbStyle.Present then
-                P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
-              else
-                P.StrokeBorder(cbBoxRect, 2, 1, S.BorderColor);
+              { FIX 4: draw rectangular box background + border ONLY for checkbox
+                types; ctRadioButton draws its own circle below (no square corners). }
+              if node^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+              begin
+                if tpBackground in cbStyle.Present then
+                  P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
+                else
+                  P.FillBackground(cbBoxRect, S.Background, 2);
+                if tpBorderColor in cbStyle.Present then
+                  P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
+                else
+                  P.StrokeBorder(cbBoxRect, 2, 1, S.BorderColor);
+              end;
               { Draw glyph by CheckType + CheckState }
               case node^.CheckType of
                 ctCheckBox, ctTriStateCheckBox:
@@ -2720,7 +2770,7 @@ begin
                 end;
                 ctRadioButton:
                 begin
-                  { Re-draw as circle (large radius = half-side) }
+                  { Draw circle only — no square box (FIX 4: prevents corner artifact) }
                   if tpBackground in cbStyle.Present then
                     P.FillBackground(cbBoxRect, cbStyle.Background, cbBoxSize div 2)
                   else
@@ -2885,15 +2935,19 @@ begin
             rowTop + (rowH - cbBoxSize) div 2,
             captionX + (cbSlotW - cbBoxSize) div 2 + cbBoxSize,
             rowTop + (rowH - cbBoxSize) div 2 + cbBoxSize);
-          { Box background + border }
-          if tpBackground in cbStyle.Present then
-            P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
-          else
-            P.FillBackground(cbBoxRect, S.Background, 2);
-          if tpBorderColor in cbStyle.Present then
-            P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
-          else
-            P.StrokeBorder(cbBoxRect, 2, 1, S.BorderColor);
+          { FIX 4: draw rectangular box background + border ONLY for checkbox
+            types; ctRadioButton draws its own circle below (no square corners). }
+          if node^.CheckType in [ctCheckBox, ctTriStateCheckBox] then
+          begin
+            if tpBackground in cbStyle.Present then
+              P.FillBackground(cbBoxRect, cbStyle.Background, cbStyle.BorderRadius)
+            else
+              P.FillBackground(cbBoxRect, S.Background, 2);
+            if tpBorderColor in cbStyle.Present then
+              P.StrokeBorder(cbBoxRect, cbStyle.BorderRadius, cbStyle.BorderWidth, cbStyle.BorderColor)
+            else
+              P.StrokeBorder(cbBoxRect, 2, 1, S.BorderColor);
+          end;
           { Glyph by CheckType + CheckState }
           case node^.CheckType of
             ctCheckBox, ctTriStateCheckBox:
@@ -2921,7 +2975,7 @@ begin
             end;
             ctRadioButton:
             begin
-              { Re-draw as circle }
+              { Draw circle only — no square box (FIX 4: prevents corner artifact) }
               if tpBackground in cbStyle.Present then
                 P.FillBackground(cbBoxRect, cbStyle.Background, cbBoxSize div 2)
               else
