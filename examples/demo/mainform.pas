@@ -102,6 +102,8 @@ type
       Column: Integer; TextType: TTyVSTTextType; var CellText: string);
     procedure TyColTreeCompareNodes(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
       Column: Integer; var CompareResult: Integer);
+    procedure TyColTreeChecked(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure TyColTreeSelectionChanged(Sender: TObject);
     procedure GroupBox1Click(Sender: TObject);
     procedure MnuViewToggleClick(Sender: TObject);
     procedure MnuFileExitClick(Sender: TObject);
@@ -356,6 +358,13 @@ procedure TDemoMainForm.InitColTree;
 var
   col: TTyTreeColumn;
 begin
+  { E4: enable checkboxes + multi-select + full-row hit + tri-state tracking }
+  TyColTree.Options := [toCheckSupport, toMultiSelect, toAutoTristateTracking,
+                        toFullRowSelect];
+  { E4: wire status display handlers }
+  TyColTree.OnChecked          := @TyColTreeChecked;
+  TyColTree.OnSelectionChanged := @TyColTreeSelectionChanged;
+
   with TyColTree.Header do
   begin
     Options := [hoVisible, hoColumnResize, hoShowSortGlyphs,
@@ -382,10 +391,27 @@ end;
 
 procedure TDemoMainForm.TyColTreeInitNode(Sender: TTyTreeView;
   ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+var
+  level: Integer;
 begin
-  { Top-level nodes (folders) always have children. }
-  if Sender.GetNodeLevel(Node) = 0 then
+  level := Sender.GetNodeLevel(Node);
+  if level = 0 then
+  begin
+    { Top-level nodes (folders) always have children. }
     Include(InitStates, ivsHasChildren);
+    { E4: folder → tri-state checkbox so it reflects children state }
+    Node^.CheckType := ctTriStateCheckBox;
+  end
+  else
+  begin
+    { E4: level-1 children —
+        "Projects" folder (index 2) uses radio buttons (one active project);
+        Documents + Pictures use plain checkboxes. }
+    if ParentNode^.Index = 2 then
+      Node^.CheckType := ctRadioButton
+    else
+      Node^.CheckType := ctCheckBox;
+  end;
 end;
 
 procedure TDemoMainForm.TyColTreeInitChildren(Sender: TTyTreeView;
@@ -485,6 +511,29 @@ begin
       CompareResult := CompareStr(t1, t2);
     end;
   end;
+end;
+
+{ E4: update StatusBar panel 0 after a checkbox toggle.
+  Shows the name of the toggled node (column 0 text). }
+procedure TDemoMainForm.TyColTreeChecked(Sender: TTyTreeView; Node: PTyTreeNode);
+var
+  nodeName: string;
+begin
+  nodeName := '';
+  TyColTreeGetText(Sender, Node, 0, ttNormal, nodeName);
+  StatusBar1.Panels[0].Text := 'Checked: ' + nodeName;
+end;
+
+{ E4: update StatusBar panel 0 after the multi-select set changes. }
+procedure TDemoMainForm.TyColTreeSelectionChanged(Sender: TObject);
+var
+  n: Integer;
+begin
+  n := TyColTree.SelectedCount;
+  if n = 0 then
+    StatusBar1.Panels[0].Text := 'Ready'
+  else
+    StatusBar1.Panels[0].Text := Format('Selected: %d item(s)', [n]);
 end;
 
 end.
