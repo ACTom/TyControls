@@ -3029,10 +3029,9 @@ begin
               if Assigned(FOnGetImageIndex) then
                 FOnGetImageIndex(Self, node, ikNormal, colIdx, ghosted, imgIdx);
               if (imgIdx >= 0) and (imgIdx < FImages.Count) then
-                FImages.Draw(ACanvas,
+                P.DrawImageList(FImages, imgIdx,
                   ARect.Left + captionX,
-                  ARect.Top  + rowTop + (rowH - FImages.Height) div 2,
-                  imgIdx);
+                  ARect.Top  + rowTop + (rowH - FImages.Height) div 2);
               Inc(captionX, imgSlotW);
             end;
 
@@ -3244,15 +3243,9 @@ begin
           if Assigned(FOnGetImageIndex) then
             FOnGetImageIndex(Self, node, ikNormal, -1, ghosted, imgIdx);
           if (imgIdx >= 0) and (imgIdx < FImages.Count) then
-          begin
-            { Draw images directly to the underlying Canvas.  The BGRA bitmap and
-              the ACanvas share the same device context, so this is safe as long as
-              we blit into the device-space rect (offset by ARect.Left/Top). }
-            FImages.Draw(ACanvas,
+            P.DrawImageList(FImages, imgIdx,
               ARect.Left + captionX,
-              ARect.Top  + rowTop + (rowH - FImages.Height) div 2,
-              imgIdx);
-          end;
+              ARect.Top  + rowTop + (rowH - FImages.Height) div 2);
           Inc(captionX, imgSlotW);
         end;
 
