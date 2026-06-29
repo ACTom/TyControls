@@ -141,6 +141,45 @@ type
     procedure TestRightClickAlwaysSetsFocus;
   end;
 
+  { ③d A1: GetCellRect — single source of cell geometry.
+    Builds a 3-column tree (PPI 96, header 22, DefaultNodeHeight 22, ShowRoot,
+    Indent 16, 1 root expanded with 2 children) and asserts GetCellRect's device
+    rect matches the painted geometry, scales at HiDPI, shifts with scroll, and
+    returns False for non-visible nodes. }
+  TTreeGetCellRectTest = class(TTestCase)
+  private
+    procedure OnGetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
+      Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+      var InitStates: TTyNodeInitStates);
+    procedure OnInitChildren2(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
+    { Build the 3-column tree at the given PPI; out-params expose the form/ctl
+      (caller frees F then Ctl) and the root + its first child. }
+    function BuildTree(out Ctl: TTyStyleController; out F: TForm;
+      out ARoot, AChild0: PTyTreeNode; APPI: Integer = 96): TTyTreeView;
+  published
+    { device rect of column 0 / column 2 matches the manual P.Scale computation }
+    procedure TestCellRectColumn0Geometry;
+    procedure TestCellRectColumn2Geometry;
+    { Column = -1 maps to the main column's cell }
+    procedure TestCellRectMainColumnAlias;
+    { a child row sits one Scale(NodeHeight) below the root row }
+    procedure TestCellRectChildRowTop;
+    { a node hidden under a collapsed ancestor → Result = False }
+    procedure TestCellRectCollapsedNodeFalse;
+    { root / nil → Result = False }
+    procedure TestCellRectRootAndNilFalse;
+    { a node scrolled entirely above the content rect → Result = False }
+    procedure TestCellRectScrolledOffscreenFalse;
+    { cross-check vs paint: the caption ink of (root, col 1) lies inside its rect }
+    procedure TestCellRectContainsPaintedInk;
+    { HiDPI: at PPI=144 the rect (top, height, column span) scales }
+    procedure TestCellRectHiDPIScales;
+    { scroll: setting FOffsetX/FOffsetY shifts the rect by the same delta as paint }
+    procedure TestCellRectShiftsWithScroll;
+  end;
+
 implementation
 
 type
@@ -7779,6 +7818,438 @@ begin
   finally t.Free; end;
 end;
 
+{ ── ③d A1 ── GetCellRect tests ──────────────────────────────────────────── }
+
+procedure TTreeGetCellRectTest.OnGetTextWithType(Sender: TTyTreeView;
+  Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+begin
+  case Column of
+    0: CellText := 'Name' + IntToStr(Node^.Index);
+    1: CellText := 'Col1';
+    2: CellText := 'C2Right';
+  else
+    CellText := '';
+  end;
+end;
+
+procedure TTreeGetCellRectTest.OnInitNodeHasChildren(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) = 0 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeGetCellRectTest.OnInitChildren2(Sender: TTyTreeView;
+  Node: PTyTreeNode; var ChildCount: Cardinal);
+begin
+  ChildCount := 2;
+end;
+
+{ 3-column tree, mirroring the column-paint harness:
+    col 0 (main, width 120) | col 1 (width 80) | col 2 (width 100)
+  header height 22, DefaultNodeHeight 22, ShowRoot, Indent 16, 1 root + 2 kids.
+  At PPI=96 device px == logical px; col0=[0..120), col1=[120..200), col2=[200..300). }
+function TTreeGetCellRectTest.BuildTree(out Ctl: TTyStyleController; out F: TForm;
+  out ARoot, AChild0: PTyTreeNode; APPI: Integer): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := APPI;
+  t.DefaultNodeHeight  := 22;
+  t.Indent             := 16;
+  t.ShowButtons        := True;
+  t.ShowTreeLines      := False;
+  t.ShowRoot           := True;
+  { Device size scales with PPI so the same logical layout fits at any DPI. }
+  t.SetBounds(0, 0, MulDiv(300, APPI, 96), MulDiv(200, APPI, 96));
+
+  t.OnGetTextWithType := @OnGetTextWithType;
+  t.OnInitNode        := @OnInitNodeHasChildren;
+  t.OnInitChildren    := @OnInitChildren2;
+
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 120; col0.Text := 'Name';
+  col0.Alignment := taLeftJustify; col0.CaptionAlignment := taLeftJustify;
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 80; col1.Text := 'Info';
+  col1.Alignment := taLeftJustify; col1.CaptionAlignment := taLeftJustify;
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := 100; col2.Text := 'Size';
+  col2.Alignment := taRightJustify; col2.CaptionAlignment := taLeftJustify;
+
+  t.Header.MainColumn := 0;
+  t.Header.Options    := [hoVisible];
+
+  t.RootNodeCount := 1;
+  ARoot := t.RootNode^.FirstChild;
+  t.InitNode(ARoot);
+  t.Expanded[ARoot] := True;
+  AChild0 := ARoot^.FirstChild;
+  Result := t;
+end;
+
+{ Col 0 (main) at PPI=96: header band = device [0..22), so row 0 (root) top = 22,
+  height = 22; main column span x = [0..120). }
+procedure TTreeGetCellRectTest.TestCellRectColumn0Geometry;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  r: TRect; ok: Boolean;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    ok := t.GetCellRect(root, 0, r);
+    AssertTrue('col0: GetCellRect succeeds for visible root', ok);
+    AssertEquals('col0: top = headerH(22) + index0*22', 22, r.Top);
+    AssertEquals('col0: height = Scale(NodeHeight)=22', 22, r.Bottom - r.Top);
+    AssertEquals('col0: left = main column left (0)', 0, r.Left);
+    AssertEquals('col0: right = col0 width (120)', 120, r.Right);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Col 2 span = [200..300); same row geometry. }
+procedure TTreeGetCellRectTest.TestCellRectColumn2Geometry;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  r: TRect; ok: Boolean;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    ok := t.GetCellRect(root, 2, r);
+    AssertTrue('col2: GetCellRect succeeds', ok);
+    AssertEquals('col2: left = 120+80 = 200', 200, r.Left);
+    AssertEquals('col2: right = 200+100 = 300', 300, r.Right);
+    AssertEquals('col2: top = 22', 22, r.Top);
+    AssertEquals('col2: height = 22', 22, r.Bottom - r.Top);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Column = -1 returns the same rect as the explicit MainColumn (0). }
+procedure TTreeGetCellRectTest.TestCellRectMainColumnAlias;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  rMain, rNeg1: TRect;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    AssertTrue('main: col 0 ok',  t.GetCellRect(root, 0,  rMain));
+    AssertTrue('main: col -1 ok', t.GetCellRect(root, -1, rNeg1));
+    AssertTrue('main: -1 aliases MainColumn (left)',  rMain.Left  = rNeg1.Left);
+    AssertTrue('main: -1 aliases MainColumn (right)', rMain.Right = rNeg1.Right);
+    AssertTrue('main: -1 aliases MainColumn (top)',   rMain.Top   = rNeg1.Top);
+    AssertTrue('main: -1 aliases MainColumn (bottom)',rMain.Bottom= rNeg1.Bottom);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Child row (visible index 1) sits exactly Scale(NodeHeight)=22 below the root row. }
+procedure TTreeGetCellRectTest.TestCellRectChildRowTop;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  rRoot, rChild: TRect;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    AssertTrue('child: root ok',  t.GetCellRect(root,   0, rRoot));
+    AssertTrue('child: child ok', t.GetCellRect(child0, 0, rChild));
+    AssertEquals('child: row top = root top + 22', rRoot.Top + 22, rChild.Top);
+    AssertEquals('child: height = 22', 22, rChild.Bottom - rChild.Top);
+    AssertEquals('child: same main-column left as root', rRoot.Left,  rChild.Left);
+    AssertEquals('child: same main-column right as root', rRoot.Right, rChild.Right);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Collapsing the root hides its children → GetCellRect(child) = False. }
+procedure TTreeGetCellRectTest.TestCellRectCollapsedNodeFalse;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  r: TRect;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    { child0 is visible while root is expanded }
+    AssertTrue('collapsed: child visible while expanded', t.GetCellRect(child0, 0, r));
+    t.Expanded[root] := False;   // collapse → child0 no longer visible
+    AssertFalse('collapsed: child under collapsed ancestor → False',
+      t.GetCellRect(child0, 0, r));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ nil and the hidden root sentinel → False. }
+procedure TTreeGetCellRectTest.TestCellRectRootAndNilFalse;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  r: TRect;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    AssertFalse('nil node → False',  t.GetCellRect(nil, 0, r));
+    AssertFalse('root sentinel → False', t.GetCellRect(t.RootNode, 0, r));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ A node scrolled entirely above the content rect → False.
+  Build a tall tree (many rows), scroll down via the vertical scrollbar so the
+  first rows are above the viewport, then assert the very first node's rect is
+  rejected (row bottom <= CR.Top). }
+procedure TTreeGetCellRectTest.TestCellRectScrolledOffscreenFalse;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView;
+  first, n: PTyTreeNode;
+  r: TRect;
+  i: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss('TyTreeView { background:#FFFFFF; border-width:0px; padding:0px; } ' +
+                   'TyTreeNode { background:none; color:#000000; }');
+  F := TForm.CreateNew(nil);
+  try
+    t := TTyTreeView.Create(F);
+    t.Parent := F; t.Controller := Ctl;
+    t.Font.PixelsPerInch := 96;
+    t.DefaultNodeHeight := 20;
+    t.Indent := 16; t.ShowRoot := True;
+    t.SetBounds(0, 0, 120, 100);   // viewport 100px tall: holds 5 rows
+    t.RootNodeCount := 40;          // 40*20 = 800px content >> 100px viewport
+    n := t.RootNode^.FirstChild;
+    while n <> nil do begin Include(n^.States, nsInitialized); n := n^.NextSibling; end;
+
+    { RootNodeCount → InvalidateTreeLayout → UpdateScrollBars already realized the
+      bars; GetCellRect also calls UpdateScrollBars. Confirm the V-bar is up. }
+    AssertTrue('offscreen: vertical bar visible',
+               (t.VScroll <> nil) and t.VScroll.Visible);
+
+    { Scroll down 10 rows (200px) so the first ~10 rows are above the viewport. }
+    t.VScroll.Position := 200;
+    AssertTrue('offscreen: scrolled down (OffsetY < 0)', t.OffsetY < 0);
+
+    first := t.RootNode^.FirstChild;   // node 0 — now well above the top
+    AssertFalse('offscreen: first node scrolled above content rect → False',
+                t.GetCellRect(first, 0, r));
+
+    { A node currently in the viewport must still succeed. }
+    n := first;
+    for i := 1 to 12 do n := t.GetNextVisibleNoInit(n);  // ~row 12, on screen
+    AssertTrue('offscreen: an on-screen node still succeeds',
+               t.GetCellRect(n, 0, r));
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Cross-check vs paint: render the tree and confirm the column-1 caption ink of
+  the root row lies INSIDE GetCellRect(root, 1). }
+procedure TTreeGetCellRectTest.TestCellRectContainsPaintedInk;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  Bmp: TBitmap; Bgra: TBGRABitmap; px: TBGRAPixel;
+  r: TRect; x, y: Integer; inkX, inkY: Integer; foundInk: Boolean;
+begin
+  t := BuildTree(Ctl, F, root, child0);
+  try
+    AssertTrue('ink: col1 rect ok', t.GetCellRect(root, 1, r));
+
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(t.Width, t.Height);
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+      {$POP}
+      Bgra := TBGRABitmap.Create(Bmp, True);
+      try
+        { Search the WHOLE bitmap for the 'Col1' dark ink, then assert it lies
+          inside GetCellRect(root,1). Restricting the search to the rect would be
+          circular; scanning everything proves the ink the paint produced for that
+          cell actually falls within the reported rect. We scan only the root row's
+          vertical band to isolate col-1 ink from the col-1 text of the child row. }
+        foundInk := False; inkX := -1; inkY := -1;
+        for y := r.Top to r.Bottom - 1 do
+        begin
+          for x := 0 to Bmp.Width - 1 do
+          begin
+            px := Bgra.GetPixel(x, y);
+            { 'Col1' is the only dark ink in [120..200) on the root row; col0 has
+              'Name0' + chevron, col2 has 'C2Right'. Find the leftmost dark ink at
+              or past col1's left so we land on the 'Col1' glyphs. }
+            if (px.alpha > 0) and (px.red < 120) and (x >= 120) and (x < 200) then
+            begin
+              foundInk := True; inkX := x; inkY := y;
+              Break;
+            end;
+          end;
+          if foundInk then Break;
+        end;
+        AssertTrue('ink: found col1 caption ink on the root row', foundInk);
+        AssertTrue('ink: ink X inside GetCellRect(root,1)',
+                   (inkX >= r.Left) and (inkX < r.Right));
+        AssertTrue('ink: ink Y inside GetCellRect(root,1)',
+                   (inkY >= r.Top) and (inkY < r.Bottom));
+      finally
+        Bgra.Free;
+      end;
+    finally
+      Bmp.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ HiDPI: at PPI=144 the rect top/height and column span all scale by 144/96. }
+procedure TTreeGetCellRectTest.TestCellRectHiDPIScales;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView; root, child0: PTyTreeNode;
+  r: TRect;
+begin
+  t := BuildTree(Ctl, F, root, child0, 144);
+  try
+    AssertTrue('hidpi: col0 rect ok', t.GetCellRect(root, 0, r));
+    { header 22 → MulDiv(22,144,96)=33; NodeHeight 22 → 33; col0 width 120 → 180 }
+    AssertEquals('hidpi: top = Scale(22) = 33', 33, r.Top);
+    AssertEquals('hidpi: height = Scale(22) = 33', 33, r.Bottom - r.Top);
+    AssertEquals('hidpi: left = 0', 0, r.Left);
+    AssertEquals('hidpi: right = Scale(120) = 180', 180, r.Right);
+    { col 2: left = Scale(200)=300, right = Scale(300)=450 }
+    AssertTrue('hidpi: col2 rect ok', t.GetCellRect(root, 2, r));
+    AssertEquals('hidpi: col2 left = Scale(200) = 300', 300, r.Left);
+    AssertEquals('hidpi: col2 right = Scale(300) = 450', 450, r.Right);
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
+{ Scroll: with the H and V bars driven to a known position, GetCellRect shifts by
+  exactly the read-back FOffsetX (horizontally) and tracks the paint vertically.
+  A tall+narrow tree guarantees both bars are present. }
+procedure TTreeGetCellRectTest.TestCellRectShiftsWithScroll;
+var
+  Ctl: TTyStyleController; F: TForm;
+  t: TTyTreeView;
+  col0, col1: TTyTreeColumn;
+  n0: PTyTreeNode;
+  rBefore, rAfter: TRect;
+  offX: Integer;
+  Bmp: TBitmap; Bgra: TBGRABitmap; px: TBGRAPixel;
+  x, y: Integer; foundInk: Boolean;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+  F := TForm.CreateNew(nil);
+  try
+    t := TTyTreeView.Create(F);
+    t.Parent := F; t.Controller := Ctl;
+    t.Font.PixelsPerInch := 96;
+    t.DefaultNodeHeight := 22; t.Indent := 16;
+    t.ShowButtons := True; t.ShowTreeLines := False; t.ShowRoot := True;
+    { Narrow viewport (200 < 300 total col width) so the H-bar shows. }
+    t.SetBounds(0, 0, 200, 200);
+    t.OnGetTextWithType := @OnGetTextWithType;
+
+    col0 := t.Header.Columns.Add as TTyTreeColumn;
+    col0.Width := 120; col0.Text := 'Name';
+    col1 := t.Header.Columns.Add as TTyTreeColumn;
+    col1.Width := 80;  col1.Text := 'Info';
+    with t.Header.Columns.Add as TTyTreeColumn do begin Width := 100; Text := 'Size'; end;
+    t.Header.MainColumn := 0;
+    t.Header.Options := [hoVisible];
+
+    t.RootNodeCount := 1;
+    n0 := t.RootNode^.FirstChild;
+    Include(n0^.States, nsInitialized);
+
+    { Adding columns + RootNodeCount already ran InvalidateTreeLayout →
+      UpdateScrollBars, configuring the H-bar (FRangeX=300 > viewport 200). }
+    AssertTrue('scroll: H-bar visible (cols 300 > viewport 200)',
+               (t.HScroll <> nil) and t.HScroll.Visible);
+
+    { Unscrolled rect of column 0 for node 0. }
+    AssertTrue('scroll: rect before ok', t.GetCellRect(n0, 0, rBefore));
+
+    { Scroll right by 40 device px. Read back the actual (clamped) offset. }
+    t.HScroll.Position := 40;
+    offX := -t.OffsetX;   // device px the content shifted left (>0)
+    AssertTrue('scroll: scrolled right (OffsetX < 0)', t.OffsetX < 0);
+
+    AssertTrue('scroll: rect after ok', t.GetCellRect(n0, 0, rAfter));
+    AssertEquals('scroll: cell left shifts by -OffsetX',  rBefore.Left  - offX, rAfter.Left);
+    AssertEquals('scroll: cell right shifts by -OffsetX', rBefore.Right - offX, rAfter.Right);
+    AssertEquals('scroll: top unchanged by horizontal scroll', rBefore.Top, rAfter.Top);
+
+    { Cross-check vs paint at the scrolled offset: the col-0 caption ink must fall
+      inside the shifted rect. Render and scan the root row band. }
+    Bmp := TBitmap.Create;
+    try
+      Bmp.PixelFormat := pf32bit;
+      Bmp.SetSize(t.Width, t.Height);
+      Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+      {$PUSH}{$HINTS OFF}
+      TTyTreeViewAccess(t).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+      {$POP}
+      Bgra := TBGRABitmap.Create(Bmp, True);
+      try
+        { The main column is the LEFTMOST column, so the leftmost dark-ink pixel
+          on the root row belongs to the main column's caption ('Name0'). Assert
+          that leftmost ink falls inside the SHIFTED GetCellRect(n0,0) — a
+          non-circular cross-check that paint and GetCellRect agree under scroll.
+          (col-1 'Col1' / col-2 'C2Right' ink sits further right, in their own
+          cells, so we must not require ALL row ink to be in the main rect.) }
+        foundInk := False;
+        for x := 0 to Bmp.Width - 1 do
+        begin
+          for y := rAfter.Top to rAfter.Bottom - 1 do
+          begin
+            px := Bgra.GetPixel(x, y);
+            if (px.alpha > 0) and (px.red < 120) then
+            begin
+              foundInk := True;
+              Break;
+            end;
+          end;
+          if foundInk then Break;
+        end;
+        AssertTrue('scroll: found painted caption ink on the scrolled root row', foundInk);
+        AssertTrue('scroll: leftmost root-row ink X within shifted main-column rect',
+                   (x >= rAfter.Left) and (x < rAfter.Right));
+      finally
+        Bgra.Free;
+      end;
+    finally
+      Bmp.Free;
+    end;
+  finally
+    F.Free; Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -7809,4 +8280,5 @@ initialization
   RegisterTest(TTreeD1MultiSelectMouseTest);
   RegisterTest(TTreeD2MultiSelectKeyboardTest);
   RegisterTest(TTreeAdversarialFixTest);
+  RegisterTest(TTreeGetCellRectTest);
 end.

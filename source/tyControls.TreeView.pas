@@ -230,6 +230,15 @@ type
     { B3 position-cache helpers }
     procedure ValidateCache;
     function  FindInCache(Y: Integer): Integer;
+    { ③d A1: shared cell-geometry — given the device content rect CR, the device
+      row top/height of a node's row and a column index, produce the cell's device
+      rect. Single source of the per-column x-math used by BOTH RenderTo (paint)
+      and GetCellRect (measure) so they can never drift. Column = -1 or the
+      MainColumn maps to the main cell; in 0-column mode Column is ignored and the
+      cell spans CR.Left..CR.Right. Returns False only when a real column index is
+      out of range / not visible. }
+    function  InternalCellRect(const CR: TRect; ARowTop, ARowH, AColumn, APPI: Integer;
+                out ACellRect: TRect): Boolean;
     { A5 helpers }
     function  ComputeExpandedSubtreeHeight(Node: PTyTreeNode): Integer;
     function  GetExpanded(Node: PTyTreeNode): Boolean;
@@ -311,6 +320,17 @@ type
     { C2: content geometry helpers used by C3 paint pass. }
     function ContentHeight: Integer;
     function ContentRect: TRect;
+    { ③d A1: cell geometry — the device-pixel rect of Node's cell in Column,
+      in the SAME coordinate space RenderTo paints into (ContentRect space).
+      Accounts for FOffsetX/FOffsetY, the header-band top inset, the per-column
+      left/width (multi-column) and HiDPI. Column = -1 (or = Header.MainColumn)
+      returns the main/whole cell; in 0-column mode Column is ignored and the
+      cell is the content row rect (CR.Left..CR.Right). Returns False when Node
+      is not currently visible (nil, root, under a collapsed ancestor, or its
+      row is scrolled entirely outside the content rect). Has no side effects on
+      node state (never calls InitNode). RenderTo derives its per-cell rect from
+      the same shared helper so paint and GetCellRect cannot drift. }
+    function GetCellRect(Node: PTyTreeNode; Column: Integer; out ACellRect: TRect): Boolean;
     { C3: paint }
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { B3: read-only; how many nodes were visited in the last GetNodeAt walk (for perf tests) }
@@ -2253,6 +2273,142 @@ begin
   end;
 end;
 
+{ ── ③d A1 ── shared cell geometry ───────────────────────────────────────── }
+
+{ InternalCellRect — the single source of per-cell x-geometry, shared by
+  RenderTo (paint) and GetCellRect (measure).
+
+  Inputs are all DEVICE-pixel: CR is the content rect (RenderTo's CR /
+  ContentRect — top already past the header band), ARowTop/ARowH are the device
+  top/height of the node's row, AColumn is the requested column (or -1 / the
+  main column for the whole main cell), APPI is the paint PPI.
+
+  Output ACellRect spans the full device column cell:
+    • 0-column mode → CR.Left .. CR.Right (AColumn ignored).
+    • multi-column  → CR.Left + Scale(col.Left) + FOffsetX
+                      .. + Scale(col.Width)
+      (verbatim the colCellLeft/colCellRight formula RenderTo paints with).
+  The vertical extent is always [ARowTop .. ARowTop + ARowH].
+
+  Returns False only when a REAL column index does not resolve to a visible
+  column (out of range / coVisible off); the main/0-column cases always succeed. }
+function TTyTreeView.InternalCellRect(const CR: TRect;
+  ARowTop, ARowH, AColumn, APPI: Integer; out ACellRect: TRect): Boolean;
+var
+  col: TTyTreeColumn;
+  colObj: TObject;
+  effCol: Integer;
+  cLeft, cRight: Integer;
+begin
+  Result   := False;
+  ACellRect := Rect(0, 0, 0, 0);
+
+  { 0-column (③a) mode: the cell IS the content row rect; AColumn is ignored. }
+  if (FHeader = nil) or (FHeader.Columns.Count = 0) then
+  begin
+    ACellRect := Rect(CR.Left, ARowTop, CR.Right, ARowTop + ARowH);
+    Result := True;
+    Exit;
+  end;
+
+  { Multi-column: -1 → the main column's own cell. }
+  effCol := AColumn;
+  if effCol = NoColumn then
+    effCol := FHeader.MainColumn;
+
+  if (effCol < 0) or (effCol >= FHeader.Columns.Count) then Exit;
+  colObj := FHeader.Columns.Items[effCol];
+  if not (colObj is TTyTreeColumn) then Exit;
+  col := TTyTreeColumn(colObj);
+  if not (coVisible in col.Options) then Exit;
+
+  { Verbatim the RenderTo cell-left/right math (device px, scroll-adjusted). }
+  cLeft  := CR.Left + MulDiv(col.Left,  APPI, 96) + FOffsetX;
+  cRight := cLeft   + MulDiv(col.Width, APPI, 96);
+  ACellRect := Rect(cLeft, ARowTop, cRight, ARowTop + ARowH);
+  Result := True;
+end;
+
+{ GetCellRect — device-pixel rect of Node's cell in Column (see the interface
+  comment). Computes the node's device row-top by REPRODUCING RenderTo's own
+  walk exactly: seed from GetNodeAt(max(0,-FOffsetY)) (the first on-screen node,
+  with rowTop = CR.Top - Scale(firstNodeY - firstTop)), then advance / retreat
+  by Scale(NodeHeight) per visible row to the target — byte-identical arithmetic
+  to the paint loop's per-row accumulation, so no rounding drift at any PPI.
+  Never calls InitNode (uses the *NoInit visible iterators only). }
+function TTyTreeView.GetCellRect(Node: PTyTreeNode; Column: Integer;
+  out ACellRect: TRect): Boolean;
+var
+  PPI: Integer;
+  CR: TRect;
+  firstNodeY, firstTop: Integer;
+  seed, n: PTyTreeNode;
+  rowTop, rowH: Integer;
+  found: Boolean;
+begin
+  Result    := False;
+  ACellRect := Rect(0, 0, 0, 0);
+
+  { Not a real, visible node. }
+  if (Node = nil) or (Node = FRoot) then Exit;
+  if not (nsVisible in Node^.States) then Exit;
+
+  { Keep scrollbar visibility / offset clamping current — exactly what RenderTo
+    does at the top of every paint, so CR (and thus the rect) matches the paint. }
+  UpdateScrollBars;
+
+  PPI := Font.PixelsPerInch;
+  CR  := ContentRect;   // identical to RenderTo's CR (padding + scrollbars + header inset)
+
+  { Seed the row-top walk the SAME way RenderTo does. }
+  firstNodeY := -FOffsetY;
+  if firstNodeY < 0 then firstNodeY := 0;
+  seed := GetNodeAt(firstNodeY, firstTop);
+  if seed = nil then Exit;   // empty / fully scrolled past
+  rowTop := CR.Top - MulDiv(firstNodeY - firstTop, PPI, 96);
+
+  found := False;
+  if seed = Node then
+    found := True
+  else
+  begin
+    { Target is after the seed: walk forward, advancing rowTop per row
+      (mirrors `Inc(rowTop, rowH)` in the paint loop). }
+    n := seed;
+    while n <> nil do
+    begin
+      Inc(rowTop, MulDiv(n^.NodeHeight, PPI, 96));
+      n := GetNextVisibleNoInit(n);
+      if n = Node then begin found := True; Break; end;
+    end;
+
+    { Not forward — target is above the first on-screen node: retreat from the
+      seed, subtracting each predecessor's scaled height. }
+    if not found then
+    begin
+      rowTop := CR.Top - MulDiv(firstNodeY - firstTop, PPI, 96);
+      n := seed;
+      while n <> nil do
+      begin
+        n := GetPreviousVisibleNoInit(n);
+        if n = nil then Break;
+        Dec(rowTop, MulDiv(n^.NodeHeight, PPI, 96));
+        if n = Node then begin found := True; Break; end;
+      end;
+    end;
+  end;
+
+  if not found then Exit;   // node not in the visible sequence
+
+  rowH := MulDiv(Node^.NodeHeight, PPI, 96);
+
+  { Off-screen vertically (row entirely above / below the node area) → not visible. }
+  if rowTop + rowH <= CR.Top then Exit;
+  if rowTop >= CR.Bottom then Exit;
+
+  Result := InternalCellRect(CR, rowTop, rowH, Column, PPI, ACellRect);
+end;
+
 { ── C3 ── RenderTo / Paint ──────────────────────────────────────────────── }
 
 { RenderTo — paint the VISIBLE window only (performance is the point).
@@ -2637,10 +2793,14 @@ begin
           colIdx := col.Index;
 
           { Column cell x range (scroll-adjusted, device pixels).
-            col.Left is the absolute left from column 0 in logical px; scale to device.
-            The origin is CR.Left + FOffsetX = contentLeft. }
-          colCellLeft  := CR.Left + P.Scale(col.Left) + FOffsetX;
-          colCellRight := colCellLeft + P.Scale(col.Width);
+            ③d A1: derived from the SHARED InternalCellRect so the painted cell
+            and GetCellRect(node, colIdx) are byte-identical (single source of
+            geometry). The result equals the old inline
+              CR.Left + P.Scale(col.Left) + FOffsetX .. + P.Scale(col.Width). }
+          if not InternalCellRect(CR, rowTop, rowH, colIdx, APPI, cellRect) then
+            Continue;
+          colCellLeft  := cellRect.Left;
+          colCellRight := cellRect.Right;
 
           { Skip cells entirely outside the visible content rect }
           if colCellRight <= CR.Left then Continue;
@@ -2857,6 +3017,13 @@ begin
       else
       begin
         { ── ③a single-column path (0-column guard: verbatim ③a code) ───────── }
+
+        { ③d A1: the ③a cell rect IS the content row rect; derive it from the
+          SHARED helper so paint and GetCellRect(node, -1) agree exactly. This is
+          purely additive (cellRect is not consumed by the verbatim chrome below
+          in ③a; it backs ③d owner-draw). Equals Rect(CR.Left, rowTop, CR.Right,
+          rowTop+rowH). }
+        InternalCellRect(CR, rowTop, rowH, -1, APPI, cellRect);
 
         { ── Tree lines (simplified: guide + elbow) ──────────────────────────── }
         if FShowTreeLines and (level > 0) then
