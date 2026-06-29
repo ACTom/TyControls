@@ -102,6 +102,10 @@ type
     FResizeStartMouse: TPoint;
     FMaximized: Boolean;
     FSavedBounds: TRect;
+    { The form's Resizable opt-out, read off the associated TTyForm (FForm is typed
+      TCustomForm for the generic engine; default True for a non-TTyForm host). The
+      edge hit-test routes through this so a fixed window never starts a resize. }
+    function FormResizable: Boolean;
   public
     constructor Create;
     procedure CaptureInstalledPPI;
@@ -119,6 +123,7 @@ type
     property BorderZone: Integer read FBorderZone write FBorderZone;
     property Maximized: Boolean read FMaximized write FMaximized;
     property Dragging: Boolean read FDragging;
+    property Resizing: Boolean read FResizing;
   end;
 
   { A borderless form that owns a persistent chrome engine but is born EMPTY (no
@@ -132,6 +137,7 @@ type
     FMenuBar: TTyMenuBar;             // the primary menu bar (shortcut dispatch / mac global bar)
     FShowMinimize: Boolean;
     FShowMaximize: Boolean;
+    FResizable: Boolean;              // window edge-resize opt-out (default True); see SetResizable
     FController: TTyStyleController;   // set by ApplyChromeTheme; used by Paint
     FSharpBackdrop: TBGRABitmap;      // form bg snapshot, UNblurred (fills glass corners)
     FGlassBackdrop: TBGRABitmap;      // same snapshot, blurred once for the glass pane
@@ -158,6 +164,11 @@ type
     procedure SetController(AValue: TTyStyleController);
     procedure SetShowMinimize(AValue: Boolean);
     procedure SetShowMaximize(AValue: Boolean);
+    procedure SetResizable(AValue: Boolean);
+    { Per-platform resize-strategy application (WS_THICKFRAME on Win32, styleMask on
+      Cocoa, gutter re-align on GTK/Qt). Stub for Phase A — the bodies land in later
+      phases; the call sites (SetResizable + post-handle-creation) are wired now. }
+    procedure ApplyResizeStrategy;
     procedure DoMinimizeClick(Sender: TObject);
     procedure DoMaxRestoreClick(Sender: TObject);
     procedure DoCloseClick(Sender: TObject);
@@ -202,9 +213,20 @@ type
     property TitleHeight: Integer read GetTitleHeight write SetTitleHeight default 32;
     property ShowMinimize: Boolean read FShowMinimize write SetShowMinimize default True;
     property ShowMaximize: Boolean read FShowMaximize write SetShowMaximize default True;
+    { Whether the window can be edge-resized. Default True (the borderless window is
+      resizable — the fix for the long-standing "no TTyForm could resize" bug). Setting
+      False makes a fixed-size window AND disables maximize (a fixed window can't
+      maximize): the title-bar max button is disabled and double-click-maximize is gated.
+      Published so it persists in the .lfm; applied at runtime (chrome paths guard
+      csDesigning). }
+    property Resizable: Boolean read FResizable write SetResizable default True;
   end;
 
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
+{ Resize-gated edge hit-test: bhNone when not AResizable, else TyHitTestBorder. A pure
+  function (no window handle) so the gating is unit-testable; the chrome engine routes its
+  edge hits through this so a non-resizable form never starts a resize / shows a resize cursor. }
+function TyResizeHitFor(AResizable: Boolean; const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
 function TyResizeCursor(AHit: TTyBorderHit): TCursor;
 function TyMaximizedBounds(const AWorkArea: TRect): TRect;
 function TyRescaleChromeMetric(AValue, AFromPPI, AToPPI: Integer): Integer;
@@ -253,6 +275,15 @@ begin
     Result := bhBottom
   else
     Result := bhNone;
+end;
+
+function TyResizeHitFor(AResizable: Boolean; const AClient: TRect;
+  const APt: TPoint; AZone: Integer): TTyBorderHit;
+begin
+  if not AResizable then
+    Result := bhNone
+  else
+    Result := TyHitTestBorder(AClient, APt, AZone);
 end;
 
 function TyResizeCursor(AHit: TTyBorderHit): TCursor;
@@ -550,6 +581,14 @@ begin
   FMaximized := False;
 end;
 
+function TTyChromeEngine.FormResizable: Boolean;
+begin
+  if FForm is TTyForm then
+    Result := TTyForm(FForm).Resizable
+  else
+    Result := True;
+end;
+
 procedure TTyChromeEngine.CaptureInstalledPPI;
 begin
   if (FForm <> nil) and (FForm.Monitor <> nil) then
@@ -609,7 +648,7 @@ procedure TTyChromeEngine.FormMouseDown(Button: TMouseButton;
 begin
   if (Button <> mbLeft) or (FForm = nil) or FMaximized then
     Exit;
-  FResizeHit := TyHitTestBorder(Rect(0, 0, FForm.Width, FForm.Height),
+  FResizeHit := TyResizeHitFor(FormResizable, Rect(0, 0, FForm.Width, FForm.Height),
     Point(X, Y), FBorderZone);
   if FResizeHit <> bhNone then
   begin
@@ -633,7 +672,7 @@ begin
     so we leave it alone and fall through to the resize-drag logic below. }
   if not FResizing then
   begin
-    FForm.Cursor := TyResizeCursor(TyHitTestBorder(
+    FForm.Cursor := TyResizeCursor(TyResizeHitFor(FormResizable,
       Rect(0, 0, FForm.Width, FForm.Height), Point(X, Y), FBorderZone));
     Exit;
   end;
@@ -700,6 +739,12 @@ var
 begin
   if FForm = nil then
     Exit;
+  // A fixed (non-resizable) window can't maximize. This gates BOTH entry points
+  // (the title-bar double-click via TitleBarDblClick and the max button); the button
+  // is also disabled when not resizable (SetResizable). When already maximized,
+  // still allow the restore branch so a window can't get stuck maximized.
+  if (not FormResizable) and (not FMaximized) then
+    Exit;
   if FMaximized then
   begin
     FForm.BoundsRect := FSavedBounds;
@@ -725,6 +770,7 @@ begin
   BorderStyle := bsNone;
   FShowMinimize := True;
   FShowMaximize := True;
+  FResizable := True;
   FEngine := TTyChromeEngine.Create;
   FEngine.Form := Self;
 end;
@@ -922,7 +968,10 @@ procedure TTyForm.DoMinimizeClick(Sender: TObject);
 begin WindowState := wsMinimized; end;
 
 procedure TTyForm.DoMaxRestoreClick(Sender: TObject);
-begin if FEngine <> nil then FEngine.ToggleMaximize; end;
+begin
+  if not FResizable then Exit;   // a fixed window can't maximize
+  if FEngine <> nil then FEngine.ToggleMaximize;
+end;
 
 procedure TTyForm.DoCloseClick(Sender: TObject);
 begin Close; end;
@@ -984,6 +1033,24 @@ begin
     FTitleBar.MaxButton.Visible := AValue;
     FTitleBar.LayoutButtons;
   end;
+end;
+
+procedure TTyForm.SetResizable(AValue: Boolean);
+begin
+  if FResizable = AValue then Exit;
+  FResizable := AValue;
+  // A fixed (non-resizable) window can't maximize: disable the title-bar max button
+  // (the double-click-maximize path is gated on FResizable in DoMaxRestoreClick).
+  if (FTitleBar <> nil) and (FTitleBar.MaxButton <> nil) then
+    FTitleBar.MaxButton.Enabled := AValue;
+  ApplyResizeStrategy;   // per-platform style toggle (filled in later phases)
+end;
+
+procedure TTyForm.ApplyResizeStrategy;
+begin
+  // Phase A stub: per-platform resize-strategy bodies (WS_THICKFRAME / styleMask /
+  // gutter re-align) land in Phases B/C. The call sites are wired now so those phases
+  // only fill the body.
 end;
 
 function TTyForm.GlassBackdrop: TBGRABitmap;
@@ -1160,6 +1227,10 @@ begin
     MakeFullyVisible(nil);
   end;
   {$ENDIF}
+  // After the handle exists, apply the per-platform resize strategy (e.g. WS_THICKFRAME
+  // / styleMask) so the window honours Resizable from first show. Phase A: a no-op stub.
+  if (not (csDesigning in ComponentState)) and HandleAllocated then
+    ApplyResizeStrategy;
   ApplyWindowEffects;
 end;
 

@@ -27,6 +27,22 @@ type
     procedure TestMaximizedBoundsEqualsWorkArea;
   end;
 
+  { Pure resize gating: TyResizeHitFor returns bhNone for every point when not
+    AResizable, and is identical to TyHitTestBorder when AResizable. }
+  TResizeHitForTest = class(TTestCase)
+  published
+    procedure TestNotResizableEdgeIsNone;
+    procedure TestNotResizableCornerIsNone;
+    procedure TestNotResizableInteriorIsNone;
+    procedure TestResizableMatchesHitTestLeftEdge;
+    procedure TestResizableMatchesHitTestRightEdge;
+    procedure TestResizableMatchesHitTestTopEdge;
+    procedure TestResizableMatchesHitTestBottomEdge;
+    procedure TestResizableMatchesHitTestTopLeftCorner;
+    procedure TestResizableMatchesHitTestBottomRightCorner;
+    procedure TestResizableMatchesHitTestInterior;
+  end;
+
   { Pure mapping from a border-resize hit zone to the native resize cursor.
     bhNone -> crDefault; left/right -> crSizeWE; top/bottom -> crSizeNS;
     topLeft/bottomRight -> crSizeNWSE; topRight/bottomLeft -> crSizeNESW. }
@@ -102,6 +118,12 @@ type
     procedure TestFreeingControllerNilsProperty;
     procedure TestTitleBarDragArmsViaEngine;
     procedure TestDblClickMaximizeToggles;
+    procedure TestResizableDefaultsTrue;
+    procedure TestResizableRoundTrips;
+    procedure TestResizableEdgePressStartsResize;
+    procedure TestNonResizableEdgePressDoesNotStartResize;
+    procedure TestNonResizableDisablesMaxButton;
+    procedure TestNonResizableGatesMaximize;
   end;
 
   { Verifies Task 6: TTyForm.MenuBar association + the non-mac shortcut dispatch
@@ -150,7 +172,12 @@ type
     function MakeTitleBar: TTyTitleBar;
     function EngineDragging: Boolean;
     function EngineMaximized: Boolean;
+    function EngineResizing: Boolean;
     procedure SetEngineMaximized(AValue: Boolean);
+    { Drive the form's own (protected) mouse entry points headlessly — exactly the path
+      the widgetset uses — so the engine's resize gating can be exercised without a handle. }
+    procedure InjectFormMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure InjectFormMouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     { Build a TLMKey for AKey + AShift and run it through the form's IsShortcut
       override exactly as the widgetset would, returning whether it was consumed.
       ssAlt is encoded into KeyData (MK_ALT) so the match is deterministic headless. }
@@ -196,7 +223,14 @@ begin Result := TTyTitleBar.Create(Self); end;
 
 function TTyFormAccess.EngineDragging: Boolean; begin Result := FEngine.Dragging; end;
 function TTyFormAccess.EngineMaximized: Boolean; begin Result := FEngine.Maximized; end;
+function TTyFormAccess.EngineResizing: Boolean; begin Result := FEngine.Resizing; end;
 procedure TTyFormAccess.SetEngineMaximized(AValue: Boolean); begin FEngine.Maximized := AValue; end;
+
+procedure TTyFormAccess.InjectFormMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin MouseDown(Button, Shift, X, Y); end;
+
+procedure TTyFormAccess.InjectFormMouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin MouseUp(Button, Shift, X, Y); end;
 
 function TTyFormAccess.TestIsShortCut(AKey: Word; AShift: TShiftState): Boolean;
 var msg: TLMKey;
@@ -274,6 +308,67 @@ begin
   AssertEquals('top', 0, R.Top);
   AssertEquals('right', 1920, R.Right);
   AssertEquals('bottom', 1040, R.Bottom);
+end;
+
+{ TResizeHitForTest — pure resize gating }
+
+procedure TResizeHitForTest.TestNotResizableEdgeIsNone;
+begin
+  { A genuine edge point that TyHitTestBorder would flag must be bhNone when not resizable. }
+  AssertTrue('left edge gated', TyResizeHitFor(False, CR, Point(2, 50), ZONE) = bhNone);
+end;
+
+procedure TResizeHitForTest.TestNotResizableCornerIsNone;
+begin
+  AssertTrue('corner gated', TyResizeHitFor(False, CR, Point(2, 2), ZONE) = bhNone);
+end;
+
+procedure TResizeHitForTest.TestNotResizableInteriorIsNone;
+begin
+  AssertTrue('interior gated', TyResizeHitFor(False, CR, Point(100, 50), ZONE) = bhNone);
+end;
+
+procedure TResizeHitForTest.TestResizableMatchesHitTestLeftEdge;
+begin
+  AssertTrue('left matches', TyResizeHitFor(True, CR, Point(2, 50), ZONE)
+    = TyHitTestBorder(CR, Point(2, 50), ZONE));
+end;
+
+procedure TResizeHitForTest.TestResizableMatchesHitTestRightEdge;
+begin
+  AssertTrue('right matches', TyResizeHitFor(True, CR, Point(198, 50), ZONE)
+    = TyHitTestBorder(CR, Point(198, 50), ZONE));
+end;
+
+procedure TResizeHitForTest.TestResizableMatchesHitTestTopEdge;
+begin
+  AssertTrue('top matches', TyResizeHitFor(True, CR, Point(100, 2), ZONE)
+    = TyHitTestBorder(CR, Point(100, 2), ZONE));
+end;
+
+procedure TResizeHitForTest.TestResizableMatchesHitTestBottomEdge;
+begin
+  AssertTrue('bottom matches', TyResizeHitFor(True, CR, Point(100, 98), ZONE)
+    = TyHitTestBorder(CR, Point(100, 98), ZONE));
+end;
+
+procedure TResizeHitForTest.TestResizableMatchesHitTestTopLeftCorner;
+begin
+  AssertTrue('topleft matches', TyResizeHitFor(True, CR, Point(2, 2), ZONE)
+    = TyHitTestBorder(CR, Point(2, 2), ZONE));
+end;
+
+procedure TResizeHitForTest.TestResizableMatchesHitTestBottomRightCorner;
+begin
+  AssertTrue('bottomright matches', TyResizeHitFor(True, CR, Point(198, 98), ZONE)
+    = TyHitTestBorder(CR, Point(198, 98), ZONE));
+end;
+
+procedure TResizeHitForTest.TestResizableMatchesHitTestInterior;
+begin
+  { Interior must agree too (both bhNone) — gating only changes the not-resizable case. }
+  AssertTrue('interior matches', TyResizeHitFor(True, CR, Point(100, 50), ZONE)
+    = TyHitTestBorder(CR, Point(100, 50), ZONE));
 end;
 
 { TResizeCursorTest }
@@ -924,6 +1019,97 @@ begin
   end;
 end;
 
+procedure TTyFormTest.TestResizableDefaultsTrue;
+var F: TTyForm;
+begin
+  { The published Resizable defaults True — the borderless window is resizable (the fix). }
+  F := TTyForm.CreateNew(nil);
+  try
+    AssertTrue('Resizable defaults True', F.Resizable);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestResizableRoundTrips;
+var F: TTyForm;
+begin
+  F := TTyForm.CreateNew(nil);
+  try
+    F.Resizable := False;
+    AssertFalse('reads back False', F.Resizable);
+    F.Resizable := True;
+    AssertTrue('reads back True', F.Resizable);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestResizableEdgePressStartsResize;
+var F: TTyFormAccess;
+begin
+  { Resizable (default): a left-button press in the edge zone arms the engine resize.
+    SetBounds gives the form a known size so (2,50) lands in the left border zone. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.SetBounds(0, 0, 200, 100);
+    F.InjectFormMouseDown(mbLeft, [], 2, 50);
+    AssertTrue('edge press started a resize', F.EngineResizing);
+    F.InjectFormMouseUp(mbLeft, [], 2, 50);   // release so nothing lingers
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestNonResizableEdgePressDoesNotStartResize;
+var F: TTyFormAccess;
+begin
+  { Resizable=False: the SAME edge press must NOT start a resize (gating via TyResizeHitFor). }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.SetBounds(0, 0, 200, 100);
+    F.Resizable := False;
+    F.InjectFormMouseDown(mbLeft, [], 2, 50);
+    AssertFalse('edge press gated when not resizable', F.EngineResizing);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestNonResizableDisablesMaxButton;
+var F: TTyFormAccess;
+begin
+  { Setting Resizable=False disables the title-bar max button (a fixed window can't maximize). }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    AssertTrue('max button enabled while resizable', F.TB.MaxButton.Enabled);
+    F.Resizable := False;
+    AssertFalse('max button disabled when not resizable', F.TB.MaxButton.Enabled);
+    F.Resizable := True;
+    AssertTrue('max button re-enabled when resizable again', F.TB.MaxButton.Enabled);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TTyFormTest.TestNonResizableGatesMaximize;
+var F: TTyFormAccess;
+begin
+  { Resizable=False gates the double-click-maximize path (engine ToggleMaximize early-exits
+    from the not-maximized state). Start NOT maximized; a dbl-click must leave it not maximized. }
+  F := TTyFormAccess.CreateNew(nil);
+  try
+    F.MakeTitleBar;
+    F.Resizable := False;
+    AssertFalse('precondition: not maximized', F.EngineMaximized);
+    TTitleBarAccess(F.TitleBar).InjectDblClick;
+    AssertFalse('maximize gated when not resizable', F.EngineMaximized);
+  finally
+    F.Free;
+  end;
+end;
+
 { TTyMenuFormTest }
 
 procedure TTyMenuFormTest.ItemClick(Sender: TObject);
@@ -993,6 +1179,7 @@ end;
 
 initialization
   RegisterTest(TFormHelpersTest);
+  RegisterTest(TResizeHitForTest);
   RegisterTest(TResizeCursorTest);
   RegisterTest(TCaptionButtonTest);
   RegisterTest(TTitleBarTest);
