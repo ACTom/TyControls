@@ -132,6 +132,8 @@ begin
     FStyler.StyleControl(tv);
     AssertEquals('treeview bg = TyPanel bg (unmapped)', Integer(RGBToColor($77, $88, $99)), Integer(tv.Color));
     AssertEquals('treeview font = TyPanel color', Integer(RGBToColor($AA, $BB, $CC)), Integer(tv.Font.Color));
+    AssertFalse('tvoThemedDraw cleared so Font.Color drives node text (not OS-themed black)',
+      tvoThemedDraw in tv.Options);
   finally
     tv.Free;
   end;

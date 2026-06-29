@@ -55,7 +55,7 @@ type
 implementation
 
 uses
-  Graphics, TypInfo, StdCtrls, ExtCtrls, Buttons,
+  Graphics, TypInfo, StdCtrls, ExtCtrls, Buttons, ComCtrls,
   tyControls.Types, tyControls.Base, tyControls.StyleModel;
 
 var
@@ -218,6 +218,14 @@ begin
     SetOrdProp(AControl, 'Color', TyColorToLCL(style.Background.Color));
     if IsPublishedProp(AControl, 'ParentColor') then SetOrdProp(AControl, 'ParentColor', Ord(False));
   end;
+
+  { LCL's native TTreeView draws node TEXT with the OS theme colour when tvoThemedDraw
+    is in Options (the LCL default, see treeview.inc DrawNodeText), IGNORING Font.Color.
+    Clear it so the Font.Color set above actually drives the text — otherwise dark-theme
+    text stays OS-black. (It also themes the +/- buttons; dropping it gives classic
+    buttons but theme-correct, Font.Color-driven text — the right trade when theming.) }
+  if AControl is TCustomTreeView then
+    TCustomTreeView(AControl).Options := TCustomTreeView(AControl).Options - [tvoThemedDraw];
 end;
 
 initialization
