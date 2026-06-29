@@ -357,10 +357,13 @@ type
     { ③e E2: inline-edit internals. Protected so a descendant / test can reach the
       editor + geometry helper without growing the public surface.
       EditorBoundsFromCell insets the device cell rect to where the caption was
-      drawn; CurrentCellText reads the cell text via the SAME path the painter
-      uses (OnGetTextWithType / OnGetText, Column-aware) so the editor seeds with
-      exactly what's on screen; FinishEdit hides + clears the edit state. }
-    function  EditorBoundsFromCell(const r: TRect): TRect;
+      drawn (via CellTextRect — the indent + checkbox + image slots in the main
+      column, the flat text pad elsewhere); CurrentCellText reads the cell text
+      via the SAME path the painter uses (OnGetTextWithType / OnGetText,
+      Column-aware) so the editor seeds with exactly what's on screen; FinishEdit
+      hides + clears the edit state. }
+    function  CellTextRect(Node: PTyTreeNode; Column: Integer; const ACellRect: TRect): TRect;
+    function  EditorBoundsFromCell(Node: PTyTreeNode; Column: Integer; const r: TRect): TRect;
     function  CurrentCellText(Node: PTyTreeNode; Column: Integer): string;
     procedure FinishEdit;
     { ③e E4: keep the editor glued to its cell as the view changes (called from
@@ -2005,7 +2008,15 @@ begin
 
   // Null out selection/focus/hover if this node (or an ancestor) is being deleted
   if FFocusedNode   = Node then FFocusedNode   := nil;
-  if FLastMouseNode = Node then FLastMouseNode := nil;
+  if FLastMouseNode = Node then
+  begin
+    FLastMouseNode := nil;
+    { FIX 6 (adversarial): the recorded mouse column/part referred to the now-gone
+      node; reset them so a later edit trigger (DblClick/F2) can't act on a stale
+      column from a freed node. }
+    FLastMouseColumn  := NoColumn;
+    FLastMouseHitPart := hpNowhere;
+  end;
   if FHotNode       = Node then FHotNode       := nil;
   { FIX 1: selection bookkeeping — clear nsSelected + decrement count for THIS
     node BEFORE the recursive child-free loop below, so that every descendant
@@ -4159,15 +4170,17 @@ begin
   if node = nil then Exit;
 
   { ③e E3: double-click-to-edit takes precedence over expand-toggle, but ONLY on
-    an editable cell region (the label / image zone — never the expand button or
-    the checkbox, which have their own gestures). When the press landed there and
-    EditNode succeeds, consume the double-click (skip the toggle + OnNodeDblClick)
-    so editable cells edit instead of toggling. Otherwise fall through to the
+    the LABEL region — never the expand button, the checkbox, OR the icon (each
+    has its own gesture). When the press landed on the label and EditNode
+    succeeds, consume the double-click (skip the toggle + OnNodeDblClick) so
+    editable cells edit instead of toggling. Otherwise fall through to the
     existing behaviour UNCHANGED (so Options=[] / non-editable cells are
-    byte-identical). The effective column is FLastMouseColumn when it names a real
-    column, else MainColumn (EditNode resolves NoColumn → MainColumn internally). }
+    byte-identical). FIX 7 (adversarial): hpImage dropped — double-clicking the
+    icon now falls through to the toggle, matching VirtualTreeView. The effective
+    column is FLastMouseColumn when it names a real column, else MainColumn
+    (EditNode resolves NoColumn → MainColumn internally). }
   if (toEditable in FOptions) and not FEditing and
-     (FLastMouseHitPart in [hpLabel, hpImage]) then
+     (FLastMouseHitPart in [hpLabel]) then
   begin
     if FLastMouseColumn <> NoColumn then editCol := FLastMouseColumn
     else                                 editCol := FHeader.MainColumn;
@@ -4977,22 +4990,77 @@ end;
 
 { ── ③e E2 ── inline cell editing (open / commit / cancel + events) ─────────── }
 
-{ EditorBoundsFromCell — inset the device cell rect (from GetCellRect, already
-  client device-px incl. scroll) to where the caption was drawn. The painter
-  pads the cell text by P.Scale(2) on each side (both the main-column and the
-  0-column text rects use captionX+P.Scale(2) .. right-P.Scale(2)); mirror that
-  horizontal pad so the edit text sits over the drawn text. Vertically the
-  editor fills the row (no inset) so it lines up with the row band. The pad uses
-  the SAME MulDiv(.,PPI,96) the painter's Scale does, so it tracks at any DPI. }
-function TTyTreeView.EditorBoundsFromCell(const r: TRect): TRect;
+{ CellTextRect — the device-px rect where the painter draws the CAPTION TEXT of
+  Node's cell in Column, given the cell band ACellRect (from GetCellRect, already
+  client device-px incl. scroll). This is what the inline editor must sit over —
+  the bare cell band is NOT it: in the main column the painter first consumes the
+  indent + (optional) checkbox slot + (optional) image slot, then draws text at
+  captionX + Scale(2); a non-main column just pads the text in by Scale(4).
+
+  KEEP IN SYNC WITH RenderTo's main-column caption layout (lines ~3286–3411 and
+  the 0-column twin ~3540–3660) and GetNodeAtPoint's x-zones (~3824–3895): the
+  slot conditions + widths below are byte-identical to those paths —
+    indentPx     = Scale((level + Ord(FShowRoot)) * FIndent)
+    checkbox slot= Scale(16),  reserved iff toCheckSupport + node CheckType<>ctNone
+    image slot   = Scale(FIndent), reserved iff FImages assigned + non-empty
+    text pad     = Scale(2) (main column) / Scale(4) (other columns)
+  Scale(n) here = MulDiv(n, Font.PixelsPerInch, 96), identical to the painter's
+  P.Scale and GetNodeAtPoint, so the glue holds at any DPI. }
+function TTyTreeView.CellTextRect(Node: PTyTreeNode; Column: Integer;
+  const ACellRect: TRect): TRect;
 var
-  pad: Integer;
+  PPI, effCol, level, indentPx, slots: Integer;
+  isMain: Boolean;
 begin
-  pad := MulDiv(2, Font.PixelsPerInch, 96);
-  Result := r;
-  Inc(Result.Left, pad);
-  Dec(Result.Right, pad);
+  Result := ACellRect;
+  PPI := Font.PixelsPerInch;
+
+  { Resolve whether Column is the main (chrome-bearing) column. The 0-column (③a)
+    tree's single cell IS the main column; in multi-column mode only the cell
+    whose index = MainColumn carries indent + slots (NoColumn → MainColumn). }
+  if (FHeader = nil) or (FHeader.Columns.Count = 0) then
+    isMain := True
+  else
+  begin
+    effCol := Column;
+    if effCol = NoColumn then effCol := FHeader.MainColumn;
+    isMain := (effCol = FHeader.MainColumn);
+  end;
+
+  if isMain then
+  begin
+    if Node <> nil then
+      level := GetNodeLevel(Node)
+    else
+      level := 0;
+    indentPx := MulDiv((level + Ord(FShowRoot)) * FIndent, PPI, 96);
+    slots := indentPx;
+    if (toCheckSupport in FOptions) and (Node <> nil) and (Node^.CheckType <> ctNone) then
+      Inc(slots, MulDiv(16, PPI, 96));
+    if (FImages <> nil) and (FImages.Count > 0) then
+      Inc(slots, MulDiv(FIndent, PPI, 96));
+    Inc(Result.Left, slots + MulDiv(2, PPI, 96));   { captionX + Scale(2) }
+    Dec(Result.Right, MulDiv(2, PPI, 96));           { painter's right pad }
+  end
+  else
+  begin
+    Inc(Result.Left, MulDiv(4, PPI, 96));            { colMargin = Scale(4) }
+    Dec(Result.Right, MulDiv(4, PPI, 96));
+  end;
+
   if Result.Right < Result.Left then Result.Right := Result.Left;   // never inverted
+end;
+
+{ EditorBoundsFromCell — position the overlay editor over the painted caption
+  text of Node's cell in Column. Delegates the horizontal extent to CellTextRect
+  (indent + checkbox + image slots in the main column, the flat text pad
+  elsewhere) so the edit text lands ON the caption, not over the chevron/icon.
+  Vertically the editor fills the cell band (CellTextRect leaves top/bottom
+  untouched) so it lines up with the row. }
+function TTyTreeView.EditorBoundsFromCell(Node: PTyTreeNode; Column: Integer;
+  const r: TRect): TRect;
+begin
+  Result := CellTextRect(Node, Column, r);
 end;
 
 { CurrentCellText — the cell's display text, read via the EXACT painter path
@@ -5025,6 +5093,11 @@ begin
   FEditNode       := nil;
   FEditColumn     := NoColumn;
   FEditOriginalText := '';
+  { FIX 2 (adversarial): hiding the editor leaves the tree unfocused, so keyboard
+    nav dies after every edit. Return focus to the tree on BOTH commit and cancel
+    (FinishEdit is the shared teardown). CanSetFocus (the same guard MouseDown
+    uses) no-ops cleanly headless / without a handle, so Options=[] is unaffected. }
+  if CanSetFocus then SetFocus;
   Invalidate;
 end;
 
@@ -5039,11 +5112,22 @@ end;
   (EndEditNode) — Explorer-style; a still-visible cell just re-bounds. }
 procedure TTyTreeView.RepositionEditor;
 var
-  r: TRect;
+  r, cr: TRect;
 begin
   if not FEditing or FEndingEdit then Exit;
   if GetCellRect(FEditNode, FEditColumn, r) and not IsRectEmpty(r) then
-    FEditor.BoundsRect := EditorBoundsFromCell(r)
+  begin
+    { FIX 4 (adversarial): GetCellRect returns True for a cell scrolled only
+      PARTLY out (top above / bottom below the content area — it refuses only when
+      the row is ENTIRELY off-screen), and re-bounding it would overlap the header
+      band. Treat a row not FULLY inside the vertical content area as scrolled-out:
+      commit + close instead of repositioning. }
+    cr := ContentRect;
+    if (r.Top < cr.Top) or (r.Bottom > cr.Bottom) then
+      EndEditNode
+    else
+      FEditor.BoundsRect := EditorBoundsFromCell(FEditNode, FEditColumn, r);
+  end
   else
     EndEditNode;   // scrolled out of view → commit + close
 end;
@@ -5063,6 +5147,11 @@ end;
   itself trigger a focus change → OnExit). Attached to FEditor.OnExit in the ctor. }
 procedure TTyTreeView.EditorExit(Sender: TObject);
 begin
+  { FIX 5 (adversarial): a host form tearing down can drop the editor's focus
+    while the tree is being destroyed; don't fire a commit (with its event +
+    SetFocus) during destruction. The tree's OWN destructor is already safe via
+    FEndingEdit, but a closing parent form is not. }
+  if csDestroying in ComponentState then Exit;
   if FEditing and not FEndingEdit then EndEditNode;
 end;
 
@@ -5078,8 +5167,15 @@ begin
   Result := False;
   if not (toEditable in FOptions) then Exit;
   if (Node = nil) or (Node = FRoot) then Exit;
-  { idempotent-safe: refuse a re-open of the cell already being edited. }
-  if FEditing and (Node = FEditNode) and (Column = FEditColumn) then Exit;
+  { idempotent-safe: re-open of the cell already being edited is a no-op; a
+    re-open of a DIFFERENT cell while editing must COMMIT the in-progress edit
+    first (FIX 3 adversarial — otherwise the public EditNode silently overwrites
+    the edit state and OnNewText never fires for the old cell). }
+  if FEditing then
+  begin
+    if (Node = FEditNode) and (Column = FEditColumn) then Exit(False);
+    EndEditNode;
+  end;
 
   { permit / veto (Allowed defaults True). }
   allowed := True;
@@ -5094,12 +5190,17 @@ begin
     NOT walk Parent (it is FController-or-TyDefaultController), so a child does
     not inherit the tree's per-instance controller implicitly — assign it here
     (mirrors how the scrollbars get Self.Controller in UpdateScrollbars) so the
-    editor resolves the SAME theme as the tree, every time an edit opens. }
+    editor resolves the SAME theme as the tree, every time an edit opens.
+    DEFERRED N1: the overlay is themed as a TyEdit (font/colors come from the
+    TyEdit token, NOT TyTreeNode) — a known deviation if a theme gives the two
+    different fonts. DEFERRED N2: a Controller change WHILE an edit is open is not
+    propagated to the live overlay until the NEXT EditNode (it is re-assigned only
+    here, at open time). }
   FEditor.Controller := Controller;
 
   FEditOriginalText  := CurrentCellText(Node, Column);
   FEditor.Text       := FEditOriginalText;
-  FEditor.BoundsRect := EditorBoundsFromCell(r);
+  FEditor.BoundsRect := EditorBoundsFromCell(Node, Column, r);
   FEditor.Visible    := True;
   FEditNode          := Node;
   FEditColumn        := Column;

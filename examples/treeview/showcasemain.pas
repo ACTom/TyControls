@@ -27,7 +27,11 @@ type
     ShortString (value-type, copied/freed with the blob — no managed-field
     lifecycle), so the edit lives in the node data, NOT in Node^.Index: sort
     re-stamps Index, but the edited text follows its row. Empty ⇒ show the
-    static array name. }
+    static array name.
+    DEFERRED N5: this is a demo-only 63-byte cap — a rename of 64+ characters is
+    truncated by the string[63] assignment (a real app would use a plain string
+    field + OnFreeNode, but a managed field in a node blob needs the data lifecycle
+    handled, which is out of scope for the showcase). }
   TRowRec  = record NameIdx, Kind: Integer; Size: Int64; EditedName: string[63]; end;
   PRowRec  = ^TRowRec;
 
@@ -83,6 +87,8 @@ type
                               Column: Integer; var CompareResult: Integer);
     procedure ColNewText     (Sender: TTyTreeView; Node: PTyTreeNode;
                               Column: Integer; const NewText: string);
+    procedure ColEditing     (Sender: TTyTreeView; Node: PTyTreeNode;
+                              Column: Integer; var Allowed: Boolean);
 
     { Tab 3 — Checkboxes }
     procedure InitCheckTab(APage: TTyTabSheet);
@@ -515,6 +521,7 @@ begin
   ColTree.OnGetTextWithType := @ColGetText;
   ColTree.OnCompareNodes  := @ColCompareNodes;
   ColTree.OnNewText       := @ColNewText;
+  ColTree.OnEditing       := @ColEditing;   { FIX 8: only the Name column edits }
 
   { Per-row icons in the main (Name) column }
   ColTree.Images          := FFileIcons;
@@ -767,6 +774,15 @@ begin
   Sender.Invalidate;   { re-read via ColGetText (EndEditNode also repaints) }
   if (StatusBar <> nil) and (StatusBar.Panels.Count > 0) then
     StatusBar.Panels[0].Text := 'Renamed to "' + NewText + '"';
+end;
+
+{ FIX 8: gate which cells open an editor. Only the Name column (0) is writable
+  (ColNewText no-ops elsewhere), so veto an edit on Kind/Size/Modified — otherwise
+  the editor would open on those columns and silently discard the user's typing. }
+procedure TShowcaseForm.ColEditing(Sender: TTyTreeView; Node: PTyTreeNode;
+  Column: Integer; var Allowed: Boolean);
+begin
+  Allowed := (Column = 0);
 end;
 
 { =======================================================================

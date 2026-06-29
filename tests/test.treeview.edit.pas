@@ -83,6 +83,7 @@ type
     procedure TestEndEditNodeFiresOnNewTextOnChange;
     procedure TestEndEditNodeNoEventWhenUnchanged;
     procedure TestCancelEditFiresCancelledNoNewText;
+    procedure TestEditNodeOnOtherCellCommitsFirst;
   end;
 
   { E4: robustness — the editor stays glued to its cell across scroll/layout
@@ -110,6 +111,7 @@ type
   published
     procedure TestScrollRepositionsEditor;
     procedure TestScrollOutCommits;
+    procedure TestPartialScrollUnderHeaderCommits;
     procedure TestDeleteEditedNodeCancels;
     procedure TestClearDuringEditCancels;
     procedure TestRemovingEditableOptionCloses;
@@ -139,6 +141,36 @@ type
     procedure TestEditorThemedByTreeController;
   end;
 
+  { FIX 1 (adversarial) drift-guard: the editor must sit over the painted CAPTION
+    TEXT, not the bare cell band. In the MAIN column that means past the indent +
+    (here) the image slot; in a NON-main column it's the flat Scale(4) text pad.
+    A multi-column tree WITH an ImageList + ShowRoot/ShowButtons so the main column
+    has both indent and an icon. The test locks FEditor.BoundsRect.Left to the
+    helper's computed caption text-left (single source of truth shared with the
+    painter via CellTextRect) AND independently asserts it clears the chrome by at
+    least indent+image — so a regression that drops the slot math fails loudly.
+    Includes a PPI=144 variant (the bug worsens at HiDPI). }
+  TTreeEditFix1Test = class(TTestCase)
+  private
+    FCtl:  TTyStyleController;
+    FForm: TForm;
+    FTree: TTyTreeView;
+    FImages: TImageList;
+    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+      Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean;
+      var ImageIndex: Integer);
+    procedure Build(APPI: Integer);
+    procedure Layout(APPI: Integer);
+    function  Node0: PTyTreeNode;
+  protected
+    procedure TearDown; override;
+  published
+    procedure TestEditorBoundsOverMainColumnText;
+    procedure TestEditorBoundsOverMainColumnTextAt144DPI;
+    procedure TestEditorBoundsNonMainColumnPad;
+  end;
+
 implementation
 
 const
@@ -156,7 +188,8 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function  Editor: TTyEdit;
     procedure SetEditorText(const S: string);
-    function  EditorBoundsFromCellPub(const R: TRect): TRect;
+    function  EditorBoundsFromCellPub(Node: PTyTreeNode; Column: Integer; const R: TRect): TRect;
+    function  CellTextRectPub(Node: PTyTreeNode; Column: Integer; const R: TRect): TRect;
     { E3: drive the protected input handlers + read the recorded column. }
     procedure MouseDownPub(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure DblClickPub;
@@ -189,9 +222,14 @@ begin
   InlineEditor.Text := S;
 end;
 
-function TEditTreeAccess.EditorBoundsFromCellPub(const R: TRect): TRect;
+function TEditTreeAccess.EditorBoundsFromCellPub(Node: PTyTreeNode; Column: Integer; const R: TRect): TRect;
 begin
-  Result := EditorBoundsFromCell(R);
+  Result := EditorBoundsFromCell(Node, Column, R);
+end;
+
+function TEditTreeAccess.CellTextRectPub(Node: PTyTreeNode; Column: Integer; const R: TRect): TRect;
+begin
+  Result := CellTextRect(Node, Column, R);
 end;
 
 procedure TEditTreeAccess.MouseDownPub(Button: TMouseButton; Shift: TShiftState;
@@ -511,7 +549,7 @@ begin
   AssertTrue('editor top within client',  (edR.Top  >= 0) and (edR.Top  < FTree.Height));
 
   AssertTrue('GetCellRect resolves', FTree.GetCellRect(FNode0, 0, cellR));
-  wantR := TEditTreeAccess(FTree).EditorBoundsFromCellPub(cellR);
+  wantR := TEditTreeAccess(FTree).EditorBoundsFromCellPub(FNode0, 0, cellR);
   AssertTrue('editor bounds == EditorBoundsFromCell(GetCellRect) (L)', edR.Left = wantR.Left);
   AssertTrue('editor bounds == EditorBoundsFromCell(GetCellRect) (T)', edR.Top = wantR.Top);
   AssertTrue('editor bounds == EditorBoundsFromCell(GetCellRect) (R)', edR.Right = wantR.Right);
@@ -543,7 +581,7 @@ begin
   edR := TEditTreeAccess(FTree).Editor.BoundsRect;
   AssertFalse('editor bounds non-empty at 144 DPI', IsRectEmpty(edR));
   AssertTrue('GetCellRect resolves at 144 DPI', FTree.GetCellRect(FNode0, 0, cellR));
-  wantR := TEditTreeAccess(FTree).EditorBoundsFromCellPub(cellR);
+  wantR := TEditTreeAccess(FTree).EditorBoundsFromCellPub(FNode0, 0, cellR);
   AssertTrue('editor bounds == EditorBoundsFromCell(GetCellRect) @144 (L)', edR.Left = wantR.Left);
   AssertTrue('editor bounds == EditorBoundsFromCell(GetCellRect) @144 (T)', edR.Top = wantR.Top);
   AssertTrue('editor bounds == EditorBoundsFromCell(GetCellRect) @144 (R)', edR.Right = wantR.Right);
@@ -594,6 +632,36 @@ begin
   AssertEquals('OnEditCancelled carries the column', 0, FCancelledColumn);
   AssertEquals('OnNewText NOT fired on cancel', 0, FNewTextFired);
   AssertFalse('not editing after cancel', FTree.IsEditing);
+end;
+
+{ FIX 3 (adversarial): opening an edit on a DIFFERENT cell while one is in flight
+  must COMMIT the in-progress edit first (fire OnNewText for the old cell), then
+  open the new one — not silently drop it. }
+procedure TTreeEditE2Test.TestEditNodeOnOtherCellCommitsFirst;
+var
+  node1: PTyTreeNode;
+begin
+  node1 := FNode0^.NextSibling;
+  AssertTrue('precondition: a second node exists', node1 <> nil);
+
+  AssertTrue('open edit on node0', FTree.EditNode(FNode0, 0));
+  TEditTreeAccess(FTree).SetEditorText('committed-on-reedit');
+
+  { Re-open on a different cell — must commit node0 first. }
+  AssertTrue('EditNode on the other cell returns True', FTree.EditNode(node1, 0));
+
+  AssertEquals('the in-progress edit was committed (OnNewText once)', 1, FNewTextFired);
+  AssertEquals('OnNewText carried the OLD cell text', 'committed-on-reedit', FNewTextValue);
+  AssertTrue('OnNewText carried the OLD node', FNewTextNode = FNode0);
+
+  { …and we are now editing the new cell. }
+  AssertTrue('now editing the new cell', FTree.IsEditing);
+  AssertTrue('EditedNode is the new node', FTree.EditedNode = node1);
+  AssertEquals('EditedColumn is the new column', 0, FTree.EditedColumn);
+
+  { A re-open of the SAME cell, by contrast, is a no-op (no extra commit). }
+  AssertFalse('re-open of the same cell returns False', FTree.EditNode(node1, 0));
+  AssertEquals('same-cell re-open did NOT fire another commit', 1, FNewTextFired);
 end;
 
 { ----------------------------------------------------------------------------
@@ -710,7 +778,7 @@ begin
   { And it sits exactly on the repositioned cell. }
   AssertTrue('cell still resolves', FTree.GetCellRect(node3, 0, cellTop));
   AssertTrue('editor glued to repositioned cell',
-    topAfter.Top = TEditTreeAccess(FTree).EditorBoundsFromCellPub(cellTop).Top);
+    topAfter.Top = TEditTreeAccess(FTree).EditorBoundsFromCellPub(node3, 0, cellTop).Top);
 end;
 
 { Scrolling the edited node entirely out of the viewport commits + closes it. }
@@ -729,6 +797,48 @@ begin
   AssertEquals('scroll-out committed (OnNewText fired once)', 1, FNewTextFired);
   AssertEquals('committed the edited text', 'changed-then-scrolled', FNewTextValue);
   AssertTrue('EditedNode cleared after teardown', FTree.EditedNode = nil);
+end;
+
+{ FIX 4 (adversarial): a row scrolled only PARTLY out — its top tucked under the
+  header band but its bottom still visible — must commit + close, NOT re-bound the
+  editor overlapping the header. Add a visible header to the fixture so the content
+  area starts below a real header inset, edit the top data row, then scroll a few
+  px so that row's top crosses above ContentRect.Top while its bottom stays in
+  view. (GetCellRect still returns True there — the bug was that RepositionEditor
+  then re-bounded into the header band.) }
+procedure TTreeEditE4Test.TestPartialScrollUnderHeaderCommits;
+var
+  node0: PTyTreeNode;
+  col0: TTyTreeColumn;
+  cr, cell: TRect;
+begin
+  { Give the fixture a visible single-column header, then re-lay-out. }
+  col0 := FTree.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 140; col0.Text := 'Name';
+  FTree.Header.MainColumn := 0;
+  FTree.Header.Options    := [hoVisible];
+  Layout;
+
+  node0 := NodeAt(0);
+  AssertTrue('open edit on the top data row', FTree.EditNode(node0, 0));
+  TEditTreeAccess(FTree).SetEditorText('partial-scroll');
+
+  { Scroll just 10px: row 0's bottom (22) stays below the header inset, but its
+    top (0) slides above ContentRect.Top → partly under the header. }
+  cr := FTree.ContentRect;
+  AssertTrue('header produced a content inset (>0)', cr.Top > 0);
+  FTree.VScroll.Position := 10;
+
+  { The cell must now straddle the content top (top above it, bottom below it). }
+  AssertTrue('cell still resolves while partly under header',
+    FTree.GetCellRect(node0, 0, cell));
+  AssertTrue('cell top is above the content area (partial scroll-out)',
+    cell.Top < FTree.ContentRect.Top);
+
+  AssertFalse('editing closed when the row went partly under the header',
+    FTree.IsEditing);
+  AssertEquals('partial scroll-out committed (OnNewText once)', 1, FNewTextFired);
+  AssertEquals('committed the edited text', 'partial-scroll', FNewTextValue);
 end;
 
 { Deleting the edited node cancels (no commit on a vanishing node) and clears the
@@ -924,10 +1034,189 @@ begin
     255, TyBlueOf(themed));
 end;
 
+{ ----------------------------------------------------------------------------
+  FIX 1 — editor sits over the painted caption text (indent + slots), not the
+  bare cell band.
+  ---------------------------------------------------------------------------- }
+
+procedure TTreeEditFix1Test.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  Text := 'row' + IntToStr(Node^.Index);
+end;
+
+procedure TTreeEditFix1Test.OnGetImageIndex(Sender: TTyTreeView;
+  Node: PTyTreeNode; Kind: TTyVTImageKind; Column: Integer;
+  var Ghosted: Boolean; var ImageIndex: Integer);
+begin
+  ImageIndex := 0;   { the one icon, for every node in the main column }
+end;
+
+{ A 3-column tree (main = 0) with a 16x16 ImageList + ShowRoot/ShowButtons, one
+  root that has a child (so we can edit a LEVEL-1 node — indent is non-trivial). }
+procedure TTreeEditFix1Test.Build(APPI: Integer);
+var
+  redBmp: TBitmap;
+  col0, col1, col2: TTyTreeColumn;
+  root: PTyTreeNode;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(EDIT_THEME_CSS);
+
+  FForm := TForm.CreateNew(nil);
+  FTree := TTyTreeView.Create(FForm);
+  FTree.Parent     := FForm;
+  FTree.Controller := FCtl;
+  FTree.Font.PixelsPerInch := APPI;
+  FTree.DefaultNodeHeight  := 22;
+  FTree.Indent             := 16;
+  FTree.ShowButtons        := True;
+  FTree.ShowTreeLines      := False;
+  FTree.ShowRoot           := True;
+  FTree.SetBounds(0, 0, 300, 200);
+  FTree.OnGetText          := @OnGetText;
+  FTree.OnGetImageIndex    := @OnGetImageIndex;
+  FTree.Options            := [toEditable];
+
+  { One fully-opaque 16x16 icon so the main column reserves an image slot. }
+  redBmp := TBitmap.Create;
+  try
+    redBmp.SetSize(16, 16);
+    redBmp.Canvas.Brush.Color := clRed;
+    redBmp.Canvas.FillRect(0, 0, 16, 16);
+    FImages := TImageList.Create(FForm);
+    FImages.Width  := 16;
+    FImages.Height := 16;
+    FImages.Add(redBmp, nil);
+  finally
+    redBmp.Free;
+  end;
+  FTree.Images := FImages;
+
+  col0 := FTree.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 140; col0.Text := 'Name';
+  col1 := FTree.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 80;  col1.Text := 'Info';
+  col2 := FTree.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := 80;  col2.Text := 'Size';
+  FTree.Header.MainColumn := 0;
+  FTree.Header.Options    := [hoVisible];
+
+  { 1 root with a child; expand the root so the child (level 1) is visible. }
+  FTree.RootNodeCount := 1;
+  root := FTree.RootNode^.FirstChild;
+  FTree.InitNode(root);
+  FTree.AddChild(root);
+  FTree.Expanded[root] := True;
+end;
+
+procedure TTreeEditFix1Test.Layout(APPI: Integer);
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.SetSize(300, 200);
+    TEditTreeAccess(FTree).RenderTo(Bmp.Canvas, Rect(0, 0, 300, 200), APPI);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+{ The visible level-1 node (the root's first child). }
+function TTreeEditFix1Test.Node0: PTyTreeNode;
+begin
+  Result := FTree.RootNode^.FirstChild^.FirstChild;
+end;
+
+procedure TTreeEditFix1Test.TearDown;
+begin
+  FForm.Free;   // frees FTree + FImages (owned)
+  FCtl.Free;
+end;
+
+{ MAIN column: the editor's left must equal the caption text-left the painter
+  draws — cell.Left + indent((level+ShowRoot)*Indent) + imageSlot(Indent) +
+  Scale(2) — i.e. CellTextRect. Also assert it clears the chrome (indent+image)
+  so a regression that forgets the slots fails even if the helper were wrong. }
+procedure TTreeEditFix1Test.TestEditorBoundsOverMainColumnText;
+var
+  child: PTyTreeNode;
+  cell, edR, want: TRect;
+  indentPx, imgSlot, minClear: Integer;
+begin
+  Build(96);
+  Layout(96);
+  child := Node0;
+  AssertTrue('precondition: level-1 child exists', child <> nil);
+  AssertEquals('precondition: child is level 1', 1, FTree.GetNodeLevel(child));
+
+  AssertTrue('open edit on the level-1 child (main col)', FTree.EditNode(child, 0));
+  edR := TEditTreeAccess(FTree).Editor.BoundsRect;
+
+  AssertTrue('GetCellRect resolves', FTree.GetCellRect(child, 0, cell));
+  want := TEditTreeAccess(FTree).CellTextRectPub(child, 0, cell);
+  AssertEquals('editor left == painted caption text-left (CellTextRect)',
+    want.Left, edR.Left);
+
+  { Independent lower bound: indent(level1: (1+1)*16=32) + image(16) = 48 px @96. }
+  indentPx := (1 + 1) * 16;   { (level + Ord(ShowRoot)) * Indent, PPI=96 → 1:1 }
+  imgSlot  := 16;             { Indent-wide image slot }
+  minClear := cell.Left + indentPx + imgSlot;
+  AssertTrue('editor left clears indent + icon chrome',
+    edR.Left >= minClear);
+  AssertEquals('caption text-left is exactly indent+image+Scale(2) @96',
+    cell.Left + indentPx + imgSlot + 2, edR.Left);
+end;
+
+{ HiDPI variant: the same equality holds at PPI=144 (the misalignment the bug
+  produced grew with DPI; the helper scales every slot by PPI/96). }
+procedure TTreeEditFix1Test.TestEditorBoundsOverMainColumnTextAt144DPI;
+var
+  child: PTyTreeNode;
+  cell, edR, want: TRect;
+  expectLeft: Integer;
+begin
+  Build(144);
+  Layout(144);
+  child := Node0;
+
+  AssertTrue('open edit on the level-1 child @144', FTree.EditNode(child, 0));
+  edR := TEditTreeAccess(FTree).Editor.BoundsRect;
+
+  AssertTrue('GetCellRect resolves @144', FTree.GetCellRect(child, 0, cell));
+  want := TEditTreeAccess(FTree).CellTextRectPub(child, 0, cell);
+  AssertEquals('editor left == CellTextRect @144', want.Left, edR.Left);
+
+  { indent (32 logical) + image (16 logical) + 2 logical, each scaled by 144/96. }
+  expectLeft := cell.Left + MulDiv(32, 144, 96) + MulDiv(16, 144, 96) + MulDiv(2, 144, 96);
+  AssertEquals('caption text-left scaled correctly @144', expectLeft, edR.Left);
+end;
+
+{ NON-main column: no indent / slots — the editor sits at colCellLeft + Scale(4)
+  (the painter's flat-cell colMargin). }
+procedure TTreeEditFix1Test.TestEditorBoundsNonMainColumnPad;
+var
+  child: PTyTreeNode;
+  cell, edR: TRect;
+begin
+  Build(96);
+  Layout(96);
+  child := Node0;
+
+  AssertTrue('open edit on column 1 (non-main)', FTree.EditNode(child, 1));
+  edR := TEditTreeAccess(FTree).Editor.BoundsRect;
+
+  AssertTrue('GetCellRect(col1) resolves', FTree.GetCellRect(child, 1, cell));
+  AssertEquals('non-main editor left == cell.Left + Scale(4)',
+    cell.Left + 4, edR.Left);   { PPI=96 → Scale(4)=4 }
+end;
+
 initialization
   RegisterTest(TTreeEditE1Test);
   RegisterTest(TTreeEditE2Test);
   RegisterTest(TTreeEditE3Test);
   RegisterTest(TTreeEditE4Test);
   RegisterTest(TTreeEditE5ThemeTest);
+  RegisterTest(TTreeEditFix1Test);
 end.
