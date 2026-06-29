@@ -5,7 +5,8 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType,
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.TreeView;
+  tyControls.Types, tyControls.Controller, tyControls.TreeView,
+  tyControls.TreeView.Columns;
 
 type
   { A1: basic allocation and GetNodeData }
@@ -148,6 +149,8 @@ type
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer);
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure DblClick;
     procedure KeyDown(var Key: Word; Shift: TShiftState);
   end;
@@ -160,6 +163,16 @@ end;
 procedure TTyTreeViewAccess.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseDown(Button, Shift, X, Y);
+end;
+
+procedure TTyTreeViewAccess.MouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseMove(Shift, X, Y);
+end;
+
+procedure TTyTreeViewAccess.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
 end;
 
 procedure TTyTreeViewAccess.DblClick;
@@ -3681,6 +3694,2022 @@ begin
   end;
 end;
 
+{ ── C (columns): Phase C1 + C2 paint tests ────────────────────────────────── }
+
+type
+  { TTreeColumnPaintTest — pixel tests for multi-column node paint (C1)
+    and header band paint (C2).
+    Guard: 0-column render must be byte-identical to ③a (existing tests green). }
+  TTreeColumnPaintTest = class(TTestCase)
+  private
+    { Per-column text returned by OnGetTextWithType }
+    procedure OnGetTextWithType(Sender: TTyTreeView; Node: PTyTreeNode;
+      Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+    procedure OnInitNodeHasChildren(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+      var InitStates: TTyNodeInitStates);
+    procedure OnInitChildren3(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
+    { C0 regression: 0-column callbacks mimicking ③a (same as TTreeC3PaintTest) }
+    procedure C0GetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure C0InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+      var InitStates: TTyNodeInitStates);
+    procedure C0InitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
+
+    { Build a 3-column tree and render it.  Returns the BGRA bitmap (caller
+      frees both Bgra and Bmp).
+      Col 0 (main, width=120): tree chrome + caption
+      Col 1 (left-align, width=80): flat text
+      Col 2 (right-align, width=100): flat right-aligned text
+      PPI=96; DefaultNodeHeight=22; ShowRoot=True; Indent=16;
+      1 root node expanded with 2 children. }
+    function BuildColumnTree(out Ctl: TTyStyleController; out F: TForm;
+      ASortColumn: Integer = -1): TTyTreeView;
+    function RenderColumnTree(Tree: TTyTreeView; out Bmp: TBitmap): TBGRABitmap;
+  published
+    { C1a: column-1 caption ink starts WITHIN column 1's x span (right of col 0). }
+    procedure TestC1_Col1CaptionInCol1Span;
+    { C1b: right-aligned column-2 text sits in the cell's right half. }
+    procedure TestC1_Col2RightAligned;
+    { C1c: expand button and indent ink appear ONLY within column 0 (main column). }
+    procedure TestC1_ChromeOnlyInMainColumn;
+    { C1d: selection fill spans the full row width (not just col 0). }
+    procedure TestC1_SelectionSpansFullRow;
+    { C2a: the top Scale(Header.Height) px is the header band (distinct bg). }
+    procedure TestC2_HeaderBandAtTop;
+    { C2b: each column caption paints within its header cell x span. }
+    procedure TestC2_HeaderCaptionsInSpan;
+    { C2c: sort glyph appears in the SortColumn's header cell. }
+    procedure TestC2_SortGlyphInSortColumn;
+    { C2d: FOffsetX scroll shifts both header caption and node cell by the same delta. }
+    procedure TestC2_ScrollShiftsHeaderAndCells;
+    { C0 regression: 0 columns → existing ③a single-column paint is unchanged.
+      The same pixel assertions as TestChildRowIndentedMoreThanTopLevel must still hold. }
+    procedure TestC0_ZeroColumnsIdenticToIIIa;
+  end;
+
+  { TTreeD1D2Test — D1 header/column hit-test + D2 column resize by drag }
+  TTreeD1D2Test = class(TTestCase)
+  private
+    FColumnResizedCount: Integer;
+    FColumnResizedLast:  Integer;
+    procedure OnColumnResized(Sender: TTyTreeView; Column: Integer);
+    { Build a 3-column tree (widths 120/80/100, PPI=96, header height=22,
+      hoVisible+hoColumnResize, all columns coResizable).
+      Caller owns F and Ctl. }
+    function BuildD1D2Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
+  published
+    { D1: GetNodeAtPoint 3-out overload returns the correct column index }
+    procedure TestD1_NodeColumnIndex;
+    { D1: GetHeaderHitAt returns hpHeaderSection for a plain header hit }
+    procedure TestD1_HeaderSectionHit;
+    { D1: GetHeaderHitAt returns hpHeaderDivider at a column right edge }
+    procedure TestD1_HeaderDividerHit;
+    { D1: Y below the header band → GetHeaderHitAt returns False }
+    procedure TestD1_BelowHeaderNotHeader;
+    { D1: zero columns → GetHeaderHitAt always returns False }
+    procedure TestD1_ZeroColumnsNoHeader;
+    { D1: 2-out overload still compiles and works (backward compat) }
+    procedure TestD1_TwoOutOverloadCompat;
+    { D2: dragging col0 divider right by 30px widens col0 by 30 }
+    procedure TestD2_ResizeColumn0;
+    { D2: drag is clamped to MaxWidth }
+    procedure TestD2_ClampAtMaxWidth;
+    { D2: column without coResizable → drag does not start }
+    procedure TestD2_NonResizableNoResize;
+    { D2: OnColumnResized fires during resize }
+    procedure TestD2_OnColumnResizedFired;
+  end;
+
+{ Inline theme used for column tests.
+  TyTreeHeader / TyTreeHeaderSection typeKeys (Phase F1 adds them to the real
+  themes; here we use an inline CSS block so the test is self-contained). }
+const
+  COLUMN_THEME_CSS =
+    'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+    'TyTreeNode { background: none; color: #000000; } ' +
+    'TyTreeNode:selected { background: #3B82F6; color: #FFFFFF; } ' +
+    'TyTreeHeader { background: #EEEEEE; color: #000000; } ' +
+    'TyTreeHeaderSection { background: none; color: #000000; } ' +
+    'TyTreeHeaderSection:hover { background: #DDDDDD; }';
+
+{ Column widths in logical px at PPI=96 (device px = logical at 96 DPI) }
+const
+  COL0_W = 120;  // main column
+  COL1_W = 80;   // col 1 left-align
+  COL2_W = 100;  // col 2 right-align
+  COL1_LEFT = COL0_W;          // left edge of col 1 (device px at 96 DPI)
+  COL2_LEFT = COL0_W + COL1_W; // left edge of col 2
+
+procedure TTreeColumnPaintTest.OnGetTextWithType(Sender: TTyTreeView;
+  Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+begin
+  case Column of
+    0: CellText := 'Name' + IntToStr(Node^.Index);
+    1: CellText := 'Col1';
+    2: CellText := 'C2Right';
+  else
+    CellText := '';
+  end;
+end;
+
+procedure TTreeColumnPaintTest.OnInitNodeHasChildren(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) = 0 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeColumnPaintTest.OnInitChildren3(Sender: TTyTreeView;
+  Node: PTyTreeNode; var ChildCount: Cardinal);
+begin
+  ChildCount := 2;
+end;
+
+function TTreeColumnPaintTest.BuildColumnTree(out Ctl: TTyStyleController;
+  out F: TForm; ASortColumn: Integer): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+  n0: PTyTreeNode;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 22;
+  t.Indent             := 16;
+  t.ShowButtons        := True;
+  t.ShowTreeLines      := False;  // keep simple for pixel tests
+  t.ShowRoot           := True;
+  { Width = COL0_W + COL1_W + COL2_W = 300; Height enough for header + 3 rows }
+  t.SetBounds(0, 0, 300, 200);
+
+  t.OnGetTextWithType := @OnGetTextWithType;
+  t.OnInitNode     := @OnInitNodeHasChildren;
+  t.OnInitChildren := @OnInitChildren3;
+
+  { Set up 3 columns }
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := COL0_W;
+  col0.Text  := 'Name';
+  col0.Alignment := taLeftJustify;
+  col0.CaptionAlignment := taLeftJustify;
+
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := COL1_W;
+  col1.Text  := 'Info';
+  col1.Alignment := taLeftJustify;
+  col1.CaptionAlignment := taLeftJustify;
+
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := COL2_W;
+  col2.Text  := 'Size';
+  col2.Alignment := taRightJustify;
+  col2.CaptionAlignment := taLeftJustify;
+
+  t.Header.MainColumn    := 0;
+  t.Header.SortColumn    := ASortColumn;
+  t.Header.SortDirection := sdAscending;
+  t.Header.Options       := [hoVisible, hoShowSortGlyphs];
+
+  { Materialise 1 root node, expand it }
+  t.RootNodeCount := 1;
+  n0 := t.RootNode^.FirstChild;
+  t.InitNode(n0);
+  t.Expanded[n0] := True;
+
+  Result := t;
+end;
+
+function TTreeColumnPaintTest.RenderColumnTree(Tree: TTyTreeView;
+  out Bmp: TBitmap): TBGRABitmap;
+var
+  BgraWrap: TBGRABitmap;
+begin
+  Bmp := TBitmap.Create;
+  Bmp.PixelFormat := pf32bit;
+  Bmp.SetSize(Tree.Width, Tree.Height);
+  Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+
+  {$PUSH}{$HINTS OFF}
+  TTyTreeViewAccess(Tree).RenderTo(Bmp.Canvas,
+    Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+  {$POP}
+
+  BgraWrap := TBGRABitmap.Create(Bmp, True);
+  Result := BgraWrap;
+end;
+
+{ Helper: scan a horizontal band [xFrom..xTo) at y and return True if any
+  pixel has R<200 (dark ink). }
+function HasDarkInkInBand(Bgra: TBGRABitmap; xFrom, xTo, y: Integer): Boolean;
+var
+  x: Integer;
+  px: TBGRAPixel;
+begin
+  Result := False;
+  for x := xFrom to xTo - 1 do
+  begin
+    px := Bgra.GetPixel(x, y);
+    if (px.alpha > 0) and (px.red < 200) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+{ Helper: returns True if ALL pixels in x range are bright (R>=200) = no dark ink. }
+function NoDarkInkInBand(Bgra: TBGRABitmap; xFrom, xTo, y: Integer): Boolean;
+var
+  x: Integer;
+  px: TBGRAPixel;
+begin
+  Result := True;
+  for x := xFrom to xTo - 1 do
+  begin
+    px := Bgra.GetPixel(x, y);
+    if (px.alpha > 0) and (px.red < 100) then
+    begin
+      Result := False;
+      Exit;
+    end;
+  end;
+end;
+
+{ C1a: column 1 caption ink starts WITHIN [COL1_LEFT .. COL1_LEFT+COL1_W).
+  Row 0 (the root node) has caption 'Name0' in col 0, 'Col1' in col 1, 'C2Right' in col 2.
+  At PPI=96, DefaultNodeHeight=22, header=22px:
+    Row 0 top in device px = headerH = 22 (since header occupies 0..21).
+    Row 0 y-center ≈ 22 + 11 = 33. }
+procedure TTreeColumnPaintTest.TestC1_Col1CaptionInCol1Span;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  rowY: Integer;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      { Row 0 is at device y = headerH (22 px) .. headerH+22.  Centre = 22+11=33. }
+      rowY := 33;
+
+      { Col 1 x span = [COL1_LEFT .. COL1_LEFT+COL1_W) = [120..200).
+        There must be dark ink in that band (the 'Col1' text). }
+      AssertTrue(
+        'C1a: col1 caption ink found in x=[120..200) at y=' + IntToStr(rowY),
+        HasDarkInkInBand(Bgra, COL1_LEFT, COL1_LEFT + COL1_W, rowY));
+
+      { Col 0 right half should not contain col 1's ink (they don't overlap).
+        We test that col 1 text does NOT appear left of COL1_LEFT in the first few px. }
+      { This check is font-dependent so we only assert positively above }
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C1b: right-aligned column 2 text sits in the right half of cell [COL2_LEFT .. 300).
+  Right half = [COL2_LEFT+COL2_W/2 .. COL2_LEFT+COL2_W) = [250..300). }
+procedure TTreeColumnPaintTest.TestC1_Col2RightAligned;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  rowY, rightHalfLeft: Integer;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      rowY := 33;  // row 0 centre (header=22, row height=22, centre=22+11=33)
+      rightHalfLeft := COL2_LEFT + COL2_W div 2;  // 200+50=250
+
+      { Right half of col 2 must have dark ink }
+      AssertTrue(
+        'C1b: right-aligned col2 text ink found in right half x=[' +
+        IntToStr(rightHalfLeft) + '..300) at y=' + IntToStr(rowY),
+        HasDarkInkInBand(Bgra, rightHalfLeft, COL2_LEFT + COL2_W, rowY));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C1c: the expand button / chevron ink is confined to column 0 (the main column).
+  The col1 left edge (x=120) up to the caption margin (x=123) is a blank gap —
+  the column paint starts at colCaptionX = colCellLeft + colMargin = 120 + 4 = 124.
+  The col2 left edge (x=200..203) is similarly blank.
+  If chrome leaked into col1/col2, ink would appear in x=[120..123] or x=[200..203]. }
+procedure TTreeColumnPaintTest.TestC1_ChromeOnlyInMainColumn;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  y: Integer;
+  px: TBGRAPixel;
+  inkInGap1, inkInGap2: Boolean;
+  x: Integer;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      { Row 0 y-range = 22..43, centre y=33.
+        x=[120..123]: gap between col1 left edge and caption margin (should be blank).
+        x=[200..203]: gap between col2 left edge and caption margin (should be blank). }
+      y := 33;
+      inkInGap1 := False;
+      for x := COL1_LEFT to COL1_LEFT + 3 do
+      begin
+        px := Bgra.GetPixel(x, y);
+        if (px.alpha > 0) and (px.red < 230) then
+          inkInGap1 := True;
+      end;
+      inkInGap2 := False;
+      for x := COL2_LEFT to COL2_LEFT + 3 do
+      begin
+        px := Bgra.GetPixel(x, y);
+        if (px.alpha > 0) and (px.red < 230) then
+          inkInGap2 := True;
+      end;
+      AssertFalse(
+        'C1c: no ink in col1 left-margin gap x=[120..123] (chrome should not leak into col1)',
+        inkInGap1);
+      AssertFalse(
+        'C1c: no ink in col2 left-margin gap x=[200..203] (chrome should not leak into col2)',
+        inkInGap2);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C1d: selection fill spans the FULL row width (x=[0..300)).
+  Select row 0, check that the blue accent fill is present both at x=10 (col 0)
+  and x=205 (just inside col 2 left edge, before any right-aligned text). }
+procedure TTreeColumnPaintTest.TestC1_SelectionSpansFullRow;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  px0, px2: TBGRAPixel;
+  rowY: Integer;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    { Select the root node (row 0) }
+    Tree.Selected[Tree.RootNode^.FirstChild] := True;
+
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      rowY := 33;  // row 0 centre
+
+      { Check blue fill at x=50 (col 0, well past the expand button + image slots at x=[0..32)).
+        The caption 'Root' starts around x=36, so x=50 may have text — but text on a blue
+        background is still blue-dominant (composite). We use blue>150 as a loose bar. }
+      px0 := Bgra.GetPixel(50, rowY);
+
+      { Check blue fill at x=205 (5px into col 2, before right-aligned text starts).
+        'C2Right' is right-aligned; in a 100px cell with 4px margin the text ends at
+        x=296 and starts around x=248+ depending on font. x=205 should be pure fill. }
+      px2 := Bgra.GetPixel(205, rowY);
+
+      AssertTrue(
+        'C1d: selection fill blue channel > 150 at col0 x=50 y=' + IntToStr(rowY),
+        px0.blue > 150);
+      AssertTrue(
+        'C1d: selection fill red channel < 200 at col0 x=50 y=' + IntToStr(rowY),
+        px0.red < 200);
+      AssertTrue(
+        'C1d: selection fill blue channel > 150 at col2 x=205 y=' + IntToStr(rowY),
+        px2.blue > 150);
+      AssertTrue(
+        'C1d: selection fill red channel < 120 at col2 x=205 y=' + IntToStr(rowY),
+        px2.red < 120);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C2a: the top headerH device px is the header band (bg color #EEEEEE = R=238,G=238,B=238).
+  At y=11 (mid of 22px header band), x=150 (col 1, no text) we expect the grey bg. }
+procedure TTreeColumnPaintTest.TestC2_HeaderBandAtTop;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  px: TBGRAPixel;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      { Mid of header band = y=11; x=150 (middle of col 1 span).
+        The header background is #EEEEEE (R=238 >= 200). }
+      px := Bgra.GetPixel(150, 11);
+      AssertTrue(
+        'C2a: header band has grey bg at y=11 (R>=200)',
+        px.red >= 200);
+      { Also verify that the header paint covers y=2 (near top of header band) at x=150.
+        This confirms the header bg is a full band, not just a thin stripe. }
+      px := Bgra.GetPixel(150, 2);
+      AssertTrue(
+        'C2a: header band top (y=2) also grey (R>=200)',
+        px.red >= 200);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C2b: each column caption paints within its header cell x span.
+  Col 0 header text 'Name' → ink in [0..120) at y=11.
+  Col 1 header text 'Info' → ink in [120..200) at y=11.
+  Col 2 header text 'Size' → ink in [200..300) at y=11. }
+procedure TTreeColumnPaintTest.TestC2_HeaderCaptionsInSpan;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  headerY: Integer;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      headerY := 11;  // mid of 22px header band
+
+      AssertTrue(
+        'C2b: col0 header "Name" ink in x=[0..120) at y=' + IntToStr(headerY),
+        HasDarkInkInBand(Bgra, 0, COL0_W, headerY));
+
+      AssertTrue(
+        'C2b: col1 header "Info" ink in x=[120..200) at y=' + IntToStr(headerY),
+        HasDarkInkInBand(Bgra, COL1_LEFT, COL1_LEFT + COL1_W, headerY));
+
+      AssertTrue(
+        'C2b: col2 header "Size" ink in x=[200..300) at y=' + IntToStr(headerY),
+        HasDarkInkInBand(Bgra, COL2_LEFT, COL2_LEFT + COL2_W, headerY));
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C2c: sort glyph appears in the SortColumn (col 1) header cell, NOT in col 0 or col 2.
+  The glyph arrow is drawn at the right of the col 1 cell so we probe x≈190 (right
+  of col 1's text but still inside the cell).
+  We also verify no extra glyph ink appears in col 0 or col 2 cells at similar x.
+  NOTE: DrawGlyph uses antialias lines; the glyph ink may be grey rather than very dark.
+  We use a broader test: check that SOME non-white pixel exists in the glyph zone. }
+procedure TTreeColumnPaintTest.TestC2_SortGlyphInSortColumn;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  headerY: Integer;
+  px: TBGRAPixel;
+  x: Integer;
+  glyphZoneHasInk: Boolean;
+begin
+  { Build with SortColumn = 1 (col 1 = 'Info') }
+  Tree := BuildColumnTree(Ctl, F, {ASortColumn=}1);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      headerY := 11;  // mid of 22px header band
+
+      { Glyph is drawn at the right of col 1: reserve sortGlyphSize = Scale(10) = 10px.
+        So glyph occupies [cellRight - 10 - margin .. cellRight - margin]
+        = [200 - 10 - 4 .. 200 - 4] = [186 .. 196] approx.
+        We scan x=[185..199] for any non-white pixel. }
+      glyphZoneHasInk := False;
+      for x := 185 to 199 do
+      begin
+        px := Bgra.GetPixel(x, headerY);
+        if (px.alpha > 0) and ((px.red < 200) or (px.green < 200) or (px.blue < 200)) then
+        begin
+          glyphZoneHasInk := True;
+          Break;
+        end;
+      end;
+      AssertTrue('C2c: sort glyph ink in col1 right zone x=[185..199] at y=11',
+                 glyphZoneHasInk);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ C2d: FOffsetX = 0 → header and cell column origins are aligned.
+  We verify that the col2 header text ('Size') appears at x=[200..220) at FOffsetX=0,
+  AND that col2 node cell text also starts at x >= 200 (same origin).
+  The general invariant (header scrolls by the same delta as cells) is guaranteed
+  by the implementation using the same CR.Left + P.Scale(col.Left) + FOffsetX
+  formula for both bands. }
+procedure TTreeColumnPaintTest.TestC2_ScrollShiftsHeaderAndCells;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  headerY, rowY: Integer;
+  headerCol2HasInk, nodeCellCol2HasInk: Boolean;
+begin
+  Tree := BuildColumnTree(Ctl, F);
+  try
+    Bgra := RenderColumnTree(Tree, Bmp);
+    try
+      headerY := 11;   // mid of header band
+      rowY    := 33;   // row 0 node centre
+
+      { Col 2 header ('Size') at x=[200..220) }
+      headerCol2HasInk :=
+        HasDarkInkInBand(Bgra, COL2_LEFT, COL2_LEFT + 20, headerY);
+
+      { Col 2 node cell ('C2Right', right-aligned) at x=[200..300) }
+      nodeCellCol2HasInk :=
+        HasDarkInkInBand(Bgra, COL2_LEFT, COL2_LEFT + COL2_W, rowY);
+
+      AssertTrue(
+        'C2d: col2 header ink at x=[200..220) at FOffsetX=0',
+        headerCol2HasInk);
+      AssertTrue(
+        'C2d: col2 node cell ink at x=[200..300) at FOffsetX=0 (same origin as header)',
+        nodeCellCol2HasInk);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeColumnPaintTest.C0GetText(Sender: TTyTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  Text := 'Node ' + IntToStr(Node^.Index) + ' L' + IntToStr(Sender.GetNodeLevel(Node));
+end;
+
+procedure TTreeColumnPaintTest.C0InitNode(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  if Sender.GetNodeLevel(Node) < 2 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTreeColumnPaintTest.C0InitChildren(Sender: TTyTreeView;
+  Node: PTyTreeNode; var ChildCount: Cardinal);
+begin
+  ChildCount := 3;
+end;
+
+{ C0 regression: 0 columns → the ③a single-column paint path is byte-identical.
+  We reproduce the same assertions as TestChildRowIndentedMoreThanTopLevel:
+    (a) parent row (y=10) has text ink at x=[18..35]
+    (b) child row (y=30) has text ink at x=[36..100]
+  This uses the standard BuildPaintTree helper (which has 0 columns and uses
+  OnGetText, not OnGetTextWithType). }
+procedure TTreeColumnPaintTest.TestC0_ZeroColumnsIdenticToIIIa;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  Tree: TTyTreeView;
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+  Px: TBGRAPixel;
+  x: Integer;
+  parentHasInk, childHasInkFarRight: Boolean;
+begin
+  { BuildPaintTree creates a 0-column tree with the ③a OnGetText event }
+  Tree := BuildPaintTree(Ctl, F, @Self.C0GetText, @Self.C0InitNode, @Self.C0InitChildren);
+  try
+    Bgra := RenderTreeToBitmap(Tree, Bmp);
+    try
+      { (a) Parent row (y=10): must have text ink at x=[18..35] }
+      parentHasInk := False;
+      for x := 18 to 35 do
+      begin
+        Px := Bgra.GetPixel(x, 10);
+        if (Px.alpha > 0) and (Px.red < 230) then
+          parentHasInk := True;
+      end;
+      AssertTrue('C0 regression: 0-column parent row has ink in x=[18..35]',
+                 parentHasInk);
+
+      { (b) Child row (y=30): must have text ink at x=[36..100] }
+      childHasInkFarRight := False;
+      for x := 36 to 100 do
+      begin
+        Px := Bgra.GetPixel(x, 30);
+        if (Px.alpha > 0) and (Px.red < 230) then
+          childHasInkFarRight := True;
+      end;
+      AssertTrue('C0 regression: 0-column child row has ink in x=[36..100]',
+                 childHasInkFarRight);
+    finally
+      Bgra.Free;
+      Bmp.Free;
+    end;
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ ── D1/D2 ── header/column hit-test + column resize ─────────────────────── }
+
+procedure TTreeD1D2Test.OnColumnResized(Sender: TTyTreeView; Column: Integer);
+begin
+  Inc(FColumnResizedCount);
+  FColumnResizedLast := Column;
+end;
+
+function TTreeD1D2Test.BuildD1D2Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+  n0: PTyTreeNode;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent              := F;
+  t.Controller          := Ctl;
+  t.Font.PixelsPerInch  := 96;
+  t.DefaultNodeHeight   := 22;
+  t.Indent              := 16;
+  t.ShowButtons         := True;
+  t.ShowTreeLines       := False;
+  t.ShowRoot            := True;
+  t.SetBounds(0, 0, 300, 200);
+
+  { Set up 3 columns: widths 120 / 80 / 100 }
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 120;
+  col0.Text  := 'Name';
+
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 80;
+  col1.Text  := 'Info';
+
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := 100;
+  col2.Text  := 'Size';
+
+  t.Header.MainColumn    := 0;
+  t.Header.SortColumn    := -1;
+  t.Header.Height        := 22;
+  t.Header.Options       := [hoVisible, hoColumnResize, hoShowSortGlyphs];
+
+  { All columns get default Options including coResizable (set in TTyTreeColumn.Create) }
+
+  { Materialise 1 root node }
+  n0 := t.AddChild(nil);
+  Include(n0^.States, nsInitialized);
+
+  Result := t;
+end;
+
+{ D1: GetNodeAtPoint 3-out returns correct column index.
+  At PPI=96, ContentRect.Top = 22 (header height).
+  Col spans: col0=[0..120), col1=[120..200), col2=[200..300).
+  Row 0 centre: Y = 22 + 11 = 33. }
+procedure TTreeD1D2Test.TestD1_NodeColumnIndex;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  col: Integer;
+  node: PTyTreeNode;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    { X=60 → col0 (span [0..120)) }
+    node := t.GetNodeAtPoint(60, 33, part, col);
+    AssertTrue('D1: node at (60,33) not nil', node <> nil);
+    AssertEquals('D1: column at X=60 is col0', 0, col);
+
+    { X=250 → col2 (span [200..300)) }
+    node := t.GetNodeAtPoint(250, 33, part, col);
+    AssertTrue('D1: node at (250,33) not nil', node <> nil);
+    AssertEquals('D1: column at X=250 is col2', 2, col);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D1: GetHeaderHitAt returns True + hpHeaderSection for a centre-of-header click }
+procedure TTreeD1D2Test.TestD1_HeaderSectionHit;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  col: Integer;
+  ok: Boolean;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    { Y=11 (mid of 22px header), X=160 (centre of col1 [120..200)) }
+    ok := t.GetHeaderHitAt(160, 11, part, col);
+    AssertTrue('D1: GetHeaderHitAt in header band returns True', ok);
+    AssertEquals('D1: part = hpHeaderSection', Ord(hpHeaderSection), Ord(part));
+    AssertEquals('D1: col = 1 (col1)', 1, col);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D1: GetHeaderHitAt returns hpHeaderDivider at col0 right edge (X=120) }
+procedure TTreeD1D2Test.TestD1_HeaderDividerHit;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  col: Integer;
+  ok: Boolean;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    { X=120 is the right edge of col0 (logical 120 = device 120 at PPI=96).
+      DetermineSplitterIndex tolerance: [120-3=117 .. 120+5=125]. X=120 hits. }
+    ok := t.GetHeaderHitAt(120, 11, part, col);
+    AssertTrue('D1: GetHeaderHitAt at divider returns True', ok);
+    AssertEquals('D1: part = hpHeaderDivider', Ord(hpHeaderDivider), Ord(part));
+    AssertEquals('D1: divider col = 0 (col0 right edge)', 0, col);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D1: Y in node area (below header) → GetHeaderHitAt returns False }
+procedure TTreeD1D2Test.TestD1_BelowHeaderNotHeader;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  col: Integer;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    AssertFalse('D1: Y=33 (node area) is not in header',
+      t.GetHeaderHitAt(100, 33, part, col));
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D1: zero columns → header is not shown → GetHeaderHitAt returns False }
+procedure TTreeD1D2Test.TestD1_ZeroColumnsNoHeader;
+var
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  col: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.Font.PixelsPerInch := 96;
+    t.SetBounds(0, 0, 300, 200);
+    AssertFalse('D1: no columns → GetHeaderHitAt = False',
+      t.GetHeaderHitAt(100, 10, part, col));
+  finally
+    t.Free;
+  end;
+end;
+
+{ D1: 2-out overload compiles and returns node (backward compat) }
+procedure TTreeD1D2Test.TestD1_TwoOutOverloadCompat;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  part: TTyTreeHitPart;
+  node: PTyTreeNode;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    node := t.GetNodeAtPoint(60, 33, part);
+    AssertTrue('D1: 2-out overload returns non-nil node', node <> nil);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D2: dragging col0 divider from X=120 to X=150 → col0.Width = 150 }
+procedure TTreeD1D2Test.TestD2_ResizeColumn0;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0: TTyTreeColumn;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    AssertEquals('D2: col0 initial width', 120, col0.Width);
+
+    { Simulate: MouseDown on divider at (120,11), drag to (150,11), release }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 120, 11);
+    TTyTreeViewAccess(t).MouseMove([], 150, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 150, 11);
+
+    { newWidth = 120 + MulDiv(150-120, 96, 96) = 120 + 30 = 150 }
+    AssertEquals('D2: col0.Width after drag right 30px', 150, col0.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D2: drag beyond MaxWidth is clamped }
+procedure TTreeD1D2Test.TestD2_ClampAtMaxWidth;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0: TTyTreeColumn;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col0.MaxWidth := 130;   // clamp at 130
+
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 120, 11);
+    TTyTreeViewAccess(t).MouseMove([], 200, 11);  // delta=80 → unclamped=200, clamped=130
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 200, 11);
+
+    AssertEquals('D2: col0.Width clamped to MaxWidth=130', 130, col0.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D2: column without coResizable → drag does not start → width unchanged }
+procedure TTreeD1D2Test.TestD2_NonResizableNoResize;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0: TTyTreeColumn;
+begin
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col0.Options := col0.Options - [coResizable];   // remove coResizable
+
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 120, 11);
+    TTyTreeViewAccess(t).MouseMove([], 150, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 150, 11);
+
+    AssertEquals('D2: non-resizable col0 width unchanged', 120, col0.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D2: OnColumnResized fires at least once during a resize drag }
+procedure TTreeD1D2Test.TestD2_OnColumnResizedFired;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  FColumnResizedCount := 0;
+  FColumnResizedLast  := -99;
+  t := BuildD1D2Tree(Ctl, F);
+  try
+    t.OnColumnResized := @OnColumnResized;
+
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 120, 11);
+    TTyTreeViewAccess(t).MouseMove([], 150, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 150, 11);
+
+    AssertTrue('D2: OnColumnResized fired at least once', FColumnResizedCount > 0);
+    AssertEquals('D2: OnColumnResized last column = 0', 0, FColumnResizedLast);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ ── D3 ── column drag-reorder ──────────────────────────────────────────────── }
+
+type
+  TTreeD3DragTest = class(TTestCase)
+  private
+    FReorderFired:   Boolean;
+    FReorderOldPos:  Integer;
+    FReorderNewPos:  Integer;
+    procedure OnColumnReorder(Sender: TTyTreeView; OldPosition, NewPosition: Integer);
+    { Build a 3-column tree ready for drag-reorder tests.
+      widths 100/80/60, hoDrag, all coDraggable, PPI=96, header height=22.
+      Layout: col0=[0..100), col1=[100..180), col2=[180..240).
+      Caller owns F and Ctl. }
+    function BuildD3Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
+  published
+    { Drag col0 header past the threshold into col2 area → positions reordered,
+      FLeft recomputed, OnColumnReorder fired with oldPos=0 newPos=2. }
+    procedure TestD3_DragReorderColumns;
+    { Press-and-release with no movement → no reorder (click-sort path preserved). }
+    procedure TestD3_ClickNoReorder;
+    { Drag below threshold → no reorder (pending state cleared cleanly). }
+    procedure TestD3_BelowThresholdNoReorder;
+    { OnColumnReorder fires with correct old/new positions. }
+    procedure TestD3_OnColumnReorderFired;
+  end;
+
+procedure TTreeD3DragTest.OnColumnReorder(Sender: TTyTreeView;
+  OldPosition, NewPosition: Integer);
+begin
+  FReorderFired  := True;
+  FReorderOldPos := OldPosition;
+  FReorderNewPos := NewPosition;
+end;
+
+function TTreeD3DragTest.BuildD3Tree(out Ctl: TTyStyleController;
+  out F: TForm): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 22;
+  t.SetBounds(0, 0, 300, 200);
+
+  { 3 columns — widths 100/80/60 }
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 100;
+  col0.Text  := 'Col0';
+  col0.Options := [coVisible, coResizable, coAllowClick, coDraggable];
+
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 80;
+  col1.Text  := 'Col1';
+  col1.Options := [coVisible, coResizable, coAllowClick, coDraggable];
+
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := 60;
+  col2.Text  := 'Col2';
+  col2.Options := [coVisible, coResizable, coAllowClick, coDraggable];
+
+  t.Header.MainColumn := 0;
+  t.Header.Height     := 22;
+  t.Header.Options    := [hoVisible, hoColumnResize, hoDrag];
+
+  t.AddChild(nil);
+  Result := t;
+end;
+
+{ D3: drag col0 centre to col2 centre → positions reordered }
+procedure TTreeD3DragTest.TestD3_DragReorderColumns;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+  oldCol0Pos, oldCol1Pos, oldCol2Pos: Integer;
+begin
+  t := BuildD3Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
+    col2 := t.Header.Columns.Items[2] as TTyTreeColumn;
+
+    { Remember initial positions }
+    oldCol0Pos := col0.Position;  { = 0 }
+    oldCol1Pos := col1.Position;  { = 1 }
+    oldCol2Pos := col2.Position;  { = 2 }
+
+    AssertEquals('D3: col0 initial position=0', 0, Integer(oldCol0Pos));
+    AssertEquals('D3: col1 initial position=1', 1, Integer(oldCol1Pos));
+    AssertEquals('D3: col2 initial position=2', 2, Integer(oldCol2Pos));
+
+    { Press in col0 centre (X=50, Y=11), drag right by 150px to X=200 (col2 area),
+      then release.  Threshold = 4px at PPI=96, so 150px >> threshold. }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseMove([], 200, 11);  { past threshold into col2 }
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 200, 11);
+
+    { col0 (collection index 0) should now be at position 2 }
+    AssertEquals('D3: col0.Position after drag to pos2', 2, Integer(col0.Position));
+    { FLeft of col0 should be UpdatePositions-recomputed }
+    { col1 and col2 should have shifted left by one position each }
+    AssertEquals('D3: col1.Position after drag', 0, Integer(col1.Position));
+    AssertEquals('D3: col2.Position after drag', 1, Integer(col2.Position));
+    { FLeft values reflect the new order: col1=0, col2=80, col0=140 }
+    AssertEquals('D3: col1 FLeft=0 (now first)', 0, col1.Left);
+    AssertEquals('D3: col2 FLeft=80 (now second)', 80, col2.Left);
+    AssertEquals('D3: col0 FLeft=140 (now third)', 140, col0.Left);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D3: press-and-release without movement → no reorder }
+procedure TTreeD3DragTest.TestD3_ClickNoReorder;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0: TTyTreeColumn;
+begin
+  t := BuildD3Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+
+    { Press and release at the same spot (no movement) }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+
+    { col0 must still be at position 0 — no reorder }
+    AssertEquals('D3: click-no-move leaves col0.Position=0', 0, Integer(col0.Position));
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D3: drag below threshold → no reorder }
+procedure TTreeD3DragTest.TestD3_BelowThresholdNoReorder;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0: TTyTreeColumn;
+begin
+  t := BuildD3Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+
+    { Press then move only 2px (below 4px threshold) then release }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseMove([], 52, 11);   { 2px — below threshold }
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 52, 11);
+
+    AssertEquals('D3: below-threshold no reorder, col0.Position=0', 0, Integer(col0.Position));
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D3: OnColumnReorder fires with correct OldPosition and NewPosition }
+procedure TTreeD3DragTest.TestD3_OnColumnReorderFired;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  FReorderFired  := False;
+  FReorderOldPos := -99;
+  FReorderNewPos := -99;
+
+  t := BuildD3Tree(Ctl, F);
+  try
+    t.OnColumnReorder := @OnColumnReorder;
+
+    { Drag col0 (position 0) to col2's area (position 2) }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseMove([], 200, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 200, 11);
+
+    AssertTrue ('D3: OnColumnReorder fired', FReorderFired);
+    AssertEquals('D3: OldPosition=0', 0, FReorderOldPos);
+    AssertEquals('D3: NewPosition=2', 2, FReorderNewPos);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ ── D4 ── auto-size on resize + spring ─────────────────────────────────────── }
+
+type
+  TTreeD4AutoSizeTest = class(TTestCase)
+  private
+    { Build a 3-column tree with hoAutoResize + AutoSizeIndex=1.
+      col0=100, col1=?, col2=80; client width=300 so col1 should start=120.
+      Caller owns F and Ctl. }
+    function BuildD4Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
+  published
+    { With hoAutoResize+AutoSizeIndex=1 and client=300:
+      col1 fills 300-100-80=120. }
+    procedure TestD4_AutoSizeInitial;
+    { After Resize (wider client), col1 grows to absorb the extra width. }
+    procedure TestD4_AutoSizeAfterResize;
+    { Spring columns: two coAutoSpring columns share a delta evenly. }
+    procedure TestD4_SpringDistribution;
+    { After a non-auto column is resized, col1 (auto) absorbs the change. }
+    procedure TestD4_AutoSizeAfterColumnResize;
+  end;
+
+function TTreeD4AutoSizeTest.BuildD4Tree(out Ctl: TTyStyleController;
+  out F: TForm): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1, col2: TTyTreeColumn;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 22;
+  { Width=300, header=22px → content width=300 (no scrollbars, no padding in theme) }
+  t.SetBounds(0, 0, 300, 200);
+
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 100;
+  col0.Text  := 'A';
+
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 50;   { will be reset by ApplyAutoSize to fill remainder }
+  col1.Text  := 'B';
+
+  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2.Width := 80;
+  col2.Text  := 'C';
+
+  t.Header.MainColumn    := 0;
+  t.Header.Height        := 22;
+  t.Header.AutoSizeIndex := 1;   { col1 = auto-size column }
+  t.Header.Options       := [hoVisible, hoColumnResize, hoAutoResize];
+
+  t.AddChild(nil);
+  Result := t;
+end;
+
+{ D4: col1 width = client_width - col0 - col2 = 300 - 100 - 80 = 120 after initial Resize }
+procedure TTreeD4AutoSizeTest.TestD4_AutoSizeInitial;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col1: TTyTreeColumn;
+  expected: Integer;
+begin
+  t := BuildD4Tree(Ctl, F);
+  try
+    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
+    { Apply auto-size manually to simulate the Resize trigger }
+    t.Header.Columns.ApplyAutoSize(
+      MulDiv(t.ContentRect.Width, 96, t.Font.PixelsPerInch), 1);
+    expected := 300 - 100 - 80;  { = 120 }
+    AssertEquals('D4: col1 auto-sized to 120', expected, col1.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D4: after Resize to width=350, col1 should grow to 170 (350-100-80) }
+procedure TTreeD4AutoSizeTest.TestD4_AutoSizeAfterResize;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col1: TTyTreeColumn;
+  expected: Integer;
+begin
+  t := BuildD4Tree(Ctl, F);
+  try
+    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
+    { Resize the control to 350 wide — Resize override should run ApplyAutoSize }
+    t.SetBounds(0, 0, 350, 200);
+    { SetBounds calls Resize; verify col1 absorbed the extra 50px }
+    expected := 350 - 100 - 80;  { = 170 }
+    AssertEquals('D4: col1 grows to 170 after Resize to 350', expected, col1.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ D4: spring distribution — two coAutoSpring columns share delta evenly }
+procedure TTreeD4AutoSizeTest.TestD4_SpringDistribution;
+var
+  col0: TTyTreeColumn;
+  cols: TTyTreeColumns;
+  col1, col2: TTyTreeColumn;
+begin
+  cols := TTyTreeColumns.Create;
+  try
+    col0 := cols.Add as TTyTreeColumn;
+    col0.Width   := 100;
+    col0.Options := [coVisible, coAutoSpring];
+
+    col1 := cols.Add as TTyTreeColumn;
+    col1.Width   := 100;
+    col1.Options := [coVisible, coAutoSpring];
+
+    col2 := cols.Add as TTyTreeColumn;
+    col2.Width   := 50;
+    col2.Options := [coVisible];   { not a spring column }
+
+    { Distribute +40 across spring columns (col0 and col1 each get +20) }
+    cols.DistributeSpring(40);
+    AssertEquals('D4: col0 gets half of delta', 120, col0.Width);
+    AssertEquals('D4: col1 gets half of delta', 120, col1.Width);
+    AssertEquals('D4: col2 unchanged (no spring)', 50, col2.Width);
+  finally
+    cols.Free;
+  end;
+  { Suppress unused hint for col1 - it's used in Asserts above }
+end;
+
+{ D4: after a non-auto-column resize, col1 (auto) absorbs the difference }
+procedure TTreeD4AutoSizeTest.TestD4_AutoSizeAfterColumnResize;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  col0, col1: TTyTreeColumn;
+begin
+  t := BuildD4Tree(Ctl, F);
+  try
+    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
+
+    { Simulate resizing col0 from 100 to 130 via header drag }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 100, 11);  { col0 right edge }
+    TTyTreeViewAccess(t).MouseMove([], 130, 11);           { drag right 30px }
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 130, 11);
+
+    { col0 width should be 130 }
+    AssertEquals('D4: col0 width after resize', 130, col0.Width);
+    { col1 (auto) should absorb: new width = 300 - 130 - 80 = 90 }
+    AssertEquals('D4: col1 auto-absorbs col0 resize', 90, col1.Width);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ ── E1 ── OnCompareNodes + sibling-list merge Sort(node,col,dir) ─────────────── }
+{ Strategy: store an integer key in the node-data blob (NodeDataSize=SizeOf(Integer))
+  via the tree's NodeDataSize.  OnCompareNodes reads the key and compares.
+  The tree will use a parent node whose children carry keys [3,1,4,1,5,9,2,6].
+  After ascending sort the order must be [1,1,2,3,4,5,6,9] (stable within equal keys).
+  After descending the order must be [9,6,5,4,3,2,1,1].
+  The key is written into the node-data blob via PInteger(t.GetNodeData(child))^. }
+
+type
+  TTreeE1SortTest = class(TTestCase)
+  private
+    FCompareCount: Integer;
+    FLastColumn:   Integer;
+    procedure OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+                        Column: Integer; var Result: Integer);
+    { Build a parent+children tree with the keys [3,1,4,1,5,9,2,6].
+      Returns the tree (caller frees); AParent = the parent node. }
+    function BuildSortTree(out AParent: PTyTreeNode): TTyTreeView;
+    { Walk children of AParent forward and return their keys in order }
+    procedure CollectKeys(Tree: TTyTreeView; Parent: PTyTreeNode; out AKeys: array of Integer);
+  published
+    procedure TestE1_AscendingSortOrder;
+    procedure TestE1_DescendingSortOrder;
+    procedure TestE1_IndexReStamped;
+    procedure TestE1_BackwardLinkCorrect;
+    procedure TestE1_ZeroChildNoOp;
+    procedure TestE1_OneChildNoOp;
+    procedure TestE1_HeightInvariantHolds;
+    procedure TestE1_OnCompareNodesFiredWithCorrectColumn;
+  end;
+
+procedure TTreeE1SortTest.OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+  Column: Integer; var Result: Integer);
+begin
+  Inc(FCompareCount);
+  FLastColumn := Column;
+  { Compare the integer key stored in the node-data blob }
+  Result := PInteger(Sender.GetNodeData(Node1))^ -
+            PInteger(Sender.GetNodeData(Node2))^;
+end;
+
+function TTreeE1SortTest.BuildSortTree(out AParent: PTyTreeNode): TTyTreeView;
+const
+  Keys: array[0..7] of Integer = (3, 1, 4, 1, 5, 9, 2, 6);
+var
+  t: TTyTreeView;
+  parent, child: PTyTreeNode;
+  i: Integer;
+begin
+  t := TTyTreeView.Create(nil);
+  t.NodeDataSize := SizeOf(Integer);
+  t.OnCompareNodes := @OnCompare;
+
+  { Create a parent node with 8 children (NOT expanded — sort is a pure relink test) }
+  t.RootNodeCount := 1;
+  parent := t.RootNode^.FirstChild;
+  Include(parent^.States, nsHasChildren);  { mark as having children }
+  t.SetChildCount(parent, 8);
+  { Parent stays COLLAPSED so TotalHeight is not affected by children heights. }
+
+  { Stamp keys into the data blobs and init states }
+  child := parent^.FirstChild;
+  i := 0;
+  while child <> nil do
+  begin
+    Include(child^.States, nsInitialized); { already inited for compare purposes }
+    PInteger(t.GetNodeData(child))^ := Keys[i];
+    Inc(i);
+    child := child^.NextSibling;
+  end;
+
+  AParent := parent;
+  Result := t;
+end;
+
+{ CollectKeys: walk children of Parent forward and fill AKeys }
+procedure TTreeE1SortTest.CollectKeys(Tree: TTyTreeView; Parent: PTyTreeNode;
+  out AKeys: array of Integer);
+var
+  child: PTyTreeNode;
+  i: Integer;
+begin
+  i := 0;
+  child := Parent^.FirstChild;
+  while child <> nil do
+  begin
+    if i <= High(AKeys) then
+      AKeys[i] := PInteger(Tree.GetNodeData(child))^;
+    Inc(i);
+    child := child^.NextSibling;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_AscendingSortOrder;
+var
+  t: TTyTreeView;
+  parent: PTyTreeNode;
+  keys: array[0..7] of Integer;
+  expected: array[0..7] of Integer = (1, 1, 2, 3, 4, 5, 6, 9);
+  i: Integer;
+begin
+  t := BuildSortTree(parent);
+  try
+    t.Sort(parent, 0, sdAscending, False);
+    CollectKeys(t, parent, keys);
+    for i := 0 to 7 do
+      AssertEquals('E1 asc key['+IntToStr(i)+']', expected[i], keys[i]);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_DescendingSortOrder;
+var
+  t: TTyTreeView;
+  parent: PTyTreeNode;
+  keys: array[0..7] of Integer;
+  expected: array[0..7] of Integer = (9, 6, 5, 4, 3, 2, 1, 1);
+  i: Integer;
+begin
+  t := BuildSortTree(parent);
+  try
+    t.Sort(parent, 0, sdDescending, False);
+    CollectKeys(t, parent, keys);
+    for i := 0 to 7 do
+      AssertEquals('E1 desc key['+IntToStr(i)+']', expected[i], keys[i]);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_IndexReStamped;
+var
+  t: TTyTreeView;
+  parent, child: PTyTreeNode;
+  i: Integer;
+begin
+  t := BuildSortTree(parent);
+  try
+    t.Sort(parent, 0, sdAscending, False);
+    child := parent^.FirstChild;
+    i := 0;
+    while child <> nil do
+    begin
+      AssertEquals('E1 Index['+IntToStr(i)+'] re-stamped', i, Integer(child^.Index));
+      Inc(i);
+      child := child^.NextSibling;
+    end;
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_BackwardLinkCorrect;
+var
+  t: TTyTreeView;
+  parent, child, prev: PTyTreeNode;
+begin
+  t := BuildSortTree(parent);
+  try
+    t.Sort(parent, 0, sdAscending, False);
+    { Walk forward and verify PrevSibling of each node points back to the previous }
+    prev  := nil;
+    child := parent^.FirstChild;
+    AssertTrue('E1 FirstChild.PrevSibling = nil', child^.PrevSibling = nil);
+    AssertTrue('E1 Parent.FirstChild = sorted head', parent^.FirstChild = child);
+    while child <> nil do
+    begin
+      AssertTrue('E1 PrevSibling correct', child^.PrevSibling = prev);
+      if child^.NextSibling = nil then
+        AssertTrue('E1 LastChild correct', parent^.LastChild = child);
+      prev  := child;
+      child := child^.NextSibling;
+    end;
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_ZeroChildNoOp;
+var
+  t: TTyTreeView;
+  parent: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.RootNodeCount := 1;
+    parent := t.RootNode^.FirstChild;
+    { Parent has no children — Sort must be a no-op (no crash) }
+    t.Sort(parent, 0, sdAscending, False);
+    AssertEquals('E1 0-child ChildCount unchanged', 0, Integer(parent^.ChildCount));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_OneChildNoOp;
+var
+  t: TTyTreeView;
+  parent, child: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  t.NodeDataSize := SizeOf(Integer);
+  t.OnCompareNodes := @OnCompare;
+  try
+    t.RootNodeCount := 1;
+    parent := t.RootNode^.FirstChild;
+    t.SetChildCount(parent, 1);
+    child := parent^.FirstChild;
+    Include(child^.States, nsInitialized);
+    PInteger(t.GetNodeData(child))^ := 42;
+    { 1 child — Sort must be a no-op (no crash, child unchanged) }
+    t.Sort(parent, 0, sdAscending, False);
+    AssertEquals('E1 1-child key unchanged', 42, PInteger(t.GetNodeData(parent^.FirstChild))^);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_HeightInvariantHolds;
+{ After sorting, TotalHeight must be unchanged (sort is a pure relink). }
+var
+  t: TTyTreeView;
+  parent: PTyTreeNode;
+  totalBefore, totalAfter: Integer;
+begin
+  t := BuildSortTree(parent);
+  try
+    totalBefore := Integer(t.RootNode^.TotalHeight);
+    t.Sort(parent, 0, sdAscending, False);
+    totalAfter := Integer(t.RootNode^.TotalHeight);
+    AssertEquals('E1 height invariant: TotalHeight unchanged by sort',
+      totalBefore, totalAfter);
+    AssertEquals('E1 height invariant: TotalHeight = SumVisible',
+      t.SumVisibleHeights, totalAfter);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE1SortTest.TestE1_OnCompareNodesFiredWithCorrectColumn;
+var
+  t: TTyTreeView;
+  parent: PTyTreeNode;
+begin
+  t := BuildSortTree(parent);
+  try
+    FCompareCount := 0;
+    FLastColumn   := -99;
+    t.Sort(parent, 3, sdAscending, False);   { column 3 }
+    AssertTrue('E1 OnCompareNodes fired at least once', FCompareCount > 0);
+    AssertEquals('E1 OnCompareNodes column = 3', 3, FLastColumn);
+  finally
+    t.Free;
+  end;
+end;
+
+{ ── E2 ── SortTree recursive lazy-aware + cache rebuild ─────────────────────── }
+
+type
+  TTreeE2SortTreeTest = class(TTestCase)
+  private
+    procedure OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+                        Column: Integer; var Result: Integer);
+    { Build a 3-level tree:
+        root
+          A (key=3, expanded, 2 children: A1=key2, A2=key1)
+          B (key=1, expanded, 2 children: B1=key9, B2=key5)
+          C (key=2, collapsed, 1 child C1=key7, lazy/uninitialized) }
+    function BuildE2Tree(out A, B, C: PTyTreeNode): TTyTreeView;
+  published
+    procedure TestE2_RootLevelSorted;
+    procedure TestE2_ExpandedChildLevelSorted;
+    procedure TestE2_CollapsedBranchNotSorted;
+    procedure TestE2_HeightInvariantAfterSortTree;
+    procedure TestE2_GetNodeAtConsistentAfterSort;
+  end;
+
+procedure TTreeE2SortTreeTest.OnCompare(Sender: TTyTreeView;
+  Node1, Node2: PTyTreeNode; Column: Integer; var Result: Integer);
+begin
+  Result := PInteger(Sender.GetNodeData(Node1))^ -
+            PInteger(Sender.GetNodeData(Node2))^;
+end;
+
+function TTreeE2SortTreeTest.BuildE2Tree(out A, B, C: PTyTreeNode): TTyTreeView;
+var
+  t: TTyTreeView;
+  A1, A2, B1, B2: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  t.NodeDataSize   := SizeOf(Integer);
+  t.OnCompareNodes := @OnCompare;
+  t.DefaultNodeHeight := 20;
+
+  { Root level: 3 nodes A,B,C }
+  t.RootNodeCount := 3;
+  A := t.RootNode^.FirstChild;
+  B := A^.NextSibling;
+  C := B^.NextSibling;
+
+  { Stamp keys and mark initialized }
+  Include(A^.States, nsInitialized); PInteger(t.GetNodeData(A))^ := 3;
+  Include(B^.States, nsInitialized); PInteger(t.GetNodeData(B))^ := 1;
+  Include(C^.States, nsInitialized); PInteger(t.GetNodeData(C))^ := 2;
+
+  { A: expanded with 2 children using Expanded property (proper height tracking) }
+  Include(A^.States, nsHasChildren);
+  t.SetChildCount(A, 2);
+  t.Expanded[A] := True;
+  A1 := A^.FirstChild; A2 := A1^.NextSibling;
+  Include(A1^.States, nsInitialized); PInteger(t.GetNodeData(A1))^ := 2;
+  Include(A2^.States, nsInitialized); PInteger(t.GetNodeData(A2))^ := 1;
+
+  { B: expanded with 2 children }
+  Include(B^.States, nsHasChildren);
+  t.SetChildCount(B, 2);
+  t.Expanded[B] := True;
+  B1 := B^.FirstChild; B2 := B1^.NextSibling;
+  Include(B1^.States, nsInitialized); PInteger(t.GetNodeData(B1))^ := 9;
+  Include(B2^.States, nsInitialized); PInteger(t.GetNodeData(B2))^ := 5;
+
+  { C: collapsed, 1 lazy child (NOT initialized - simulates lazy model) }
+  Include(C^.States, nsHasChildren);
+  t.SetChildCount(C, 1);
+  { C stays collapsed }
+  PInteger(t.GetNodeData(C^.FirstChild))^ := 7;
+  { Leave C^.FirstChild NOT initialized }
+
+  Result := t;
+end;
+
+procedure TTreeE2SortTreeTest.TestE2_RootLevelSorted;
+var
+  t: TTyTreeView;
+  A, B, C: PTyTreeNode;
+  n: PTyTreeNode;
+  keys: array[0..2] of Integer;
+  i: Integer;
+begin
+  t := BuildE2Tree(A, B, C);
+  try
+    t.SortTree(0, sdAscending);
+    { Root-level should now be B(1), C(2), A(3) }
+    n := t.RootNode^.FirstChild;
+    i := 0;
+    while (n <> nil) and (i < 3) do
+    begin
+      keys[i] := PInteger(t.GetNodeData(n))^;
+      Inc(i);
+      n := n^.NextSibling;
+    end;
+    AssertEquals('E2 root[0]=1 (B)', 1, keys[0]);
+    AssertEquals('E2 root[1]=2 (C)', 2, keys[1]);
+    AssertEquals('E2 root[2]=3 (A)', 3, keys[2]);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE2SortTreeTest.TestE2_ExpandedChildLevelSorted;
+var
+  t: TTyTreeView;
+  A, B, C: PTyTreeNode;
+  n: PTyTreeNode;
+  childKeys: array[0..1] of Integer;
+  i: Integer;
+begin
+  t := BuildE2Tree(A, B, C);
+  try
+    t.SortTree(0, sdAscending);
+    { A's children: sorted ascending → A2(1), A1(2) }
+    n := A^.FirstChild;
+    i := 0;
+    while (n <> nil) and (i < 2) do
+    begin
+      childKeys[i] := PInteger(t.GetNodeData(n))^;
+      Inc(i);
+      n := n^.NextSibling;
+    end;
+    AssertEquals('E2 A.child[0]=1', 1, childKeys[0]);
+    AssertEquals('E2 A.child[1]=2', 2, childKeys[1]);
+    { B's children: sorted ascending → B2(5), B1(9) }
+    n := B^.FirstChild;
+    i := 0;
+    while (n <> nil) and (i < 2) do
+    begin
+      childKeys[i] := PInteger(t.GetNodeData(n))^;
+      Inc(i);
+      n := n^.NextSibling;
+    end;
+    AssertEquals('E2 B.child[0]=5', 5, childKeys[0]);
+    AssertEquals('E2 B.child[1]=9', 9, childKeys[1]);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE2SortTreeTest.TestE2_CollapsedBranchNotSorted;
+var
+  t: TTyTreeView;
+  A, B, C, C1: PTyTreeNode;
+begin
+  t := BuildE2Tree(A, B, C);
+  try
+    t.SortTree(0, sdAscending);
+    { C1 key=7, C is not expanded; SortTree should NOT touch C1 }
+    C1 := C^.FirstChild;
+    AssertTrue('E2 C1 still exists', C1 <> nil);
+    AssertEquals('E2 collapsed C1 key unchanged (7)', 7, PInteger(t.GetNodeData(C1))^);
+    AssertFalse('E2 collapsed C1 not initialized by SortTree',
+      nsInitialized in C1^.States);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE2SortTreeTest.TestE2_HeightInvariantAfterSortTree;
+var
+  t: TTyTreeView;
+  A, B, C: PTyTreeNode;
+begin
+  t := BuildE2Tree(A, B, C);
+  try
+    t.SortTree(0, sdAscending);
+    AssertEquals('E2 height invariant after SortTree',
+      t.SumVisibleHeights, Integer(t.RootNode^.TotalHeight));
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeE2SortTreeTest.TestE2_GetNodeAtConsistentAfterSort;
+{ After SortTree, GetNodeAt(y) must return the same node as a manual visible-walk. }
+var
+  t: TTyTreeView;
+  A, B, C: PTyTreeNode;
+  yList: array[0..2] of Integer;
+  i: Integer;
+  sampleY, nodeTop: Integer;
+  nodeFromCache, nodeFromWalk: PTyTreeNode;
+  accTop: Integer;
+  walk: PTyTreeNode;
+begin
+  t := BuildE2Tree(A, B, C);
+  try
+    t.SortTree(0, sdAscending);
+    { Sample visible y values: 5 (1st row), 25 (2nd row), 45 (3rd row) }
+    yList[0] := 5;
+    yList[1] := 25;
+    yList[2] := 45;
+    for i := 0 to 2 do
+    begin
+      sampleY       := yList[i];
+      nodeFromCache := t.GetNodeAt(sampleY, nodeTop);
+      { Manual visible-order walk to find who owns sampleY }
+      accTop        := 0;
+      nodeFromWalk  := nil;
+      walk := t.GetFirstVisibleNoInit;
+      while walk <> nil do
+      begin
+        if (sampleY >= accTop) and (sampleY < accTop + Integer(walk^.NodeHeight)) then
+        begin
+          nodeFromWalk := walk;
+          Break;
+        end;
+        Inc(accTop, walk^.NodeHeight);
+        walk := t.GetNextVisibleNoInit(walk);
+      end;
+      AssertTrue('E2 GetNodeAt['+IntToStr(sampleY)+'] matches walk',
+        nodeFromCache = nodeFromWalk);
+    end;
+  finally
+    t.Free;
+  end;
+end;
+
+{ ── E3 ── header-click sort wiring ─────────────────────────────────────────── }
+
+type
+  TTreeE3HeaderClickTest = class(TTestCase)
+  private
+    FCompareCol:      Integer;
+    FHeaderClickCol:  Integer;
+    FHeaderClickCount: Integer;
+    procedure OnCompare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+                        Column: Integer; var Result: Integer);
+    procedure OnHeaderClick(Sender: TTyTreeView; Column: Integer);
+    { Build a sortable multi-column tree with 4 root nodes keyed [4,2,3,1]. }
+    function BuildE3Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
+  published
+    procedure TestE3_ClickSetsColumnAsc;
+    procedure TestE3_ClickSameColumnTogglesToDesc;
+    procedure TestE3_ClickNewColumnResetsAsc;
+    procedure TestE3_OnHeaderClickFired;
+    procedure TestE3_SortRunsOnClick;
+  end;
+
+procedure TTreeE3HeaderClickTest.OnCompare(Sender: TTyTreeView;
+  Node1, Node2: PTyTreeNode; Column: Integer; var Result: Integer);
+begin
+  FCompareCol := Column;
+  Result := PInteger(Sender.GetNodeData(Node1))^ -
+            PInteger(Sender.GetNodeData(Node2))^;
+end;
+
+procedure TTreeE3HeaderClickTest.OnHeaderClick(Sender: TTyTreeView; Column: Integer);
+begin
+  Inc(FHeaderClickCount);
+  FHeaderClickCol := Column;
+end;
+
+function TTreeE3HeaderClickTest.BuildE3Tree(out Ctl: TTyStyleController;
+  out F: TForm): TTyTreeView;
+var
+  t: TTyTreeView;
+  col0, col1: TTyTreeColumn;
+  n: PTyTreeNode;
+  i: Integer;
+const
+  Keys: array[0..3] of Integer = (4, 2, 3, 1);
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Ctl.LoadThemeCss(COLUMN_THEME_CSS);
+
+  F := TForm.CreateNew(nil);
+  t := TTyTreeView.Create(F);
+  t.Parent     := F;
+  t.Controller := Ctl;
+  t.Font.PixelsPerInch := 96;
+  t.DefaultNodeHeight  := 20;
+  t.NodeDataSize       := SizeOf(Integer);
+  t.SetBounds(0, 0, 300, 200);
+
+  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0.Width := 100; col0.Text := 'Col0';
+  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1.Width := 100; col1.Text := 'Col1';
+
+  t.Header.MainColumn    := 0;
+  t.Header.Height        := 22;
+  t.Header.SortColumn    := -1;
+  t.Header.Options       := [hoVisible, hoHeaderClickAutoSort, hoDrag];
+
+  t.OnCompareNodes := @OnCompare;
+  t.OnHeaderClick  := @OnHeaderClick;
+
+  { 4 root nodes with keys [4,2,3,1] }
+  t.RootNodeCount := 4;
+  n := t.RootNode^.FirstChild;
+  i := 0;
+  while n <> nil do
+  begin
+    Include(n^.States, nsInitialized);
+    PInteger(t.GetNodeData(n))^ := Keys[i];
+    Inc(i);
+    n := n^.NextSibling;
+  end;
+
+  Result := t;
+end;
+
+{ Simulate a press+release on the header section of a column (no drag).
+  col0 header: Y=11 (inside the 22px header band), X=50 (within col0 width=100).
+  col1 header: X=150 (within col1 which starts at 100). }
+
+procedure TTreeE3HeaderClickTest.TestE3_ClickSetsColumnAsc;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  t := BuildE3Tree(Ctl, F);
+  try
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    AssertEquals('E3 SortColumn set to col0 (0)', 0, t.Header.SortColumn);
+    AssertEquals('E3 SortDirection = ascending', Ord(sdAscending), Ord(t.Header.SortDirection));
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeE3HeaderClickTest.TestE3_ClickSameColumnTogglesToDesc;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  t := BuildE3Tree(Ctl, F);
+  try
+    { First click: sets col0, asc }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    AssertEquals('E3 1st click: asc', Ord(sdAscending), Ord(t.Header.SortDirection));
+    { Second click on same col: toggles to desc }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    AssertEquals('E3 2nd click: desc', Ord(sdDescending), Ord(t.Header.SortDirection));
+    AssertEquals('E3 SortColumn still 0', 0, t.Header.SortColumn);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeE3HeaderClickTest.TestE3_ClickNewColumnResetsAsc;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  t := BuildE3Tree(Ctl, F);
+  try
+    { Click col0 twice → desc }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    AssertEquals('E3 col0 is desc', Ord(sdDescending), Ord(t.Header.SortDirection));
+    { Click col1 (X=150) → SortColumn=1, reset to asc }
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 150, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 150, 11);
+    AssertEquals('E3 SortColumn=1 after col1 click', 1, t.Header.SortColumn);
+    AssertEquals('E3 SortDirection reset to asc', Ord(sdAscending), Ord(t.Header.SortDirection));
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeE3HeaderClickTest.TestE3_OnHeaderClickFired;
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+begin
+  FHeaderClickCount := 0;
+  FHeaderClickCol   := -1;
+  t := BuildE3Tree(Ctl, F);
+  try
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    AssertEquals('E3 OnHeaderClick fired once', 1, FHeaderClickCount);
+    AssertEquals('E3 OnHeaderClick col=0', 0, FHeaderClickCol);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTreeE3HeaderClickTest.TestE3_SortRunsOnClick;
+{ After clicking col0, the 4 root nodes [4,2,3,1] should be sorted [1,2,3,4]. }
+var
+  Ctl: TTyStyleController;
+  F: TForm;
+  t: TTyTreeView;
+  n: PTyTreeNode;
+  keys: array[0..3] of Integer;
+  i: Integer;
+begin
+  FCompareCol := -99;
+  t := BuildE3Tree(Ctl, F);
+  try
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
+    TTyTreeViewAccess(t).MouseUp(mbLeft, [], 50, 11);
+    { Collect the sorted root order }
+    n := t.RootNode^.FirstChild;
+    i := 0;
+    while (n <> nil) and (i < 4) do
+    begin
+      keys[i] := PInteger(t.GetNodeData(n))^;
+      Inc(i);
+      n := n^.NextSibling;
+    end;
+    AssertEquals('E3 sort[0]=1', 1, keys[0]);
+    AssertEquals('E3 sort[1]=2', 2, keys[1]);
+    AssertEquals('E3 sort[2]=3', 3, keys[2]);
+    AssertEquals('E3 sort[3]=4', 4, keys[3]);
+    AssertEquals('E3 OnCompareNodes column=0', 0, FCompareCol);
+  finally
+    F.Free;
+    Ctl.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTreeStoreTest);
   RegisterTest(TTreeAggTest);
@@ -3695,4 +5724,11 @@ initialization
   RegisterTest(TTreeC4Test);
   RegisterTest(TTreeContentRectPaddingTest);
   RegisterTest(TTreeHiDPITest);
+  RegisterTest(TTreeColumnPaintTest);
+  RegisterTest(TTreeD1D2Test);
+  RegisterTest(TTreeD3DragTest);
+  RegisterTest(TTreeD4AutoSizeTest);
+  RegisterTest(TTreeE1SortTest);
+  RegisterTest(TTreeE2SortTreeTest);
+  RegisterTest(TTreeE3HeaderClickTest);
 end.

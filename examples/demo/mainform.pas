@@ -12,7 +12,7 @@ uses
   tyControls.BuiltinThemes, tyControls.NativeStyler,
   tyControls.ToolBar, tyControls.StatusBar, tyControls.Splitter,
   tyControls.Calendar, tyControls.DateTimePicker,
-  tyControls.TreeView;
+  tyControls.TreeView, tyControls.TreeView.Columns;
 type
 
   { TDemoMainForm — ALL controls live in the designer (mainform.lfm), including the docked
@@ -84,6 +84,8 @@ type
     PopupCtxHello: TMenuItem;
     PopupCtxAgree: TMenuItem;
     TyTree1: TTyTreeView;
+    TyColTree: TTyTreeView;
+    TyTabSheet4: TTyTabSheet;
     procedure FormCreate(Sender: TObject);
     procedure TyTree1InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
@@ -91,6 +93,15 @@ type
       var ChildCount: Cardinal);
     procedure TyTree1GetText(Sender: TTyTreeView; Node: PTyTreeNode;
       var AText: string);
+    { Multi-column sortable tree handlers }
+    procedure TyColTreeInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
+      var InitStates: TTyNodeInitStates);
+    procedure TyColTreeInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
+    procedure TyColTreeGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+      Column: Integer; TextType: TTyVSTTextType; var CellText: string);
+    procedure TyColTreeCompareNodes(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+      Column: Integer; var CompareResult: Integer);
     procedure GroupBox1Click(Sender: TObject);
     procedure MnuViewToggleClick(Sender: TObject);
     procedure MnuFileExitClick(Sender: TObject);
@@ -107,6 +118,7 @@ type
   private
     function ThemeDir: string;
     procedure InitThemes;
+    procedure InitColTree;
     procedure ApplyBuiltin(const AName: string);
     procedure SetAppearance(AFollow: TTyThemeFollow; const AMode: string; ASelected: TTyButton);
   end;
@@ -160,6 +172,7 @@ begin
   TyTitleBar1.TitleAlignment := taLeftJustify;
   {$ENDIF}
   InitThemes;
+  InitColTree;
 end;
 
 procedure TDemoMainForm.GroupBox1Click(Sender: TObject);
@@ -290,6 +303,188 @@ procedure TDemoMainForm.TyTree1GetText(Sender: TTyTreeView; Node: PTyTreeNode;
   var AText: string);
 begin
   AText := Format('Node %d  (L%d)', [Node^.Index, Sender.GetNodeLevel(Node)]);
+end;
+
+{ ---------------------------------------------------------------------------
+  Multi-column sortable tree — small curated file-tree dataset
+  3 folders x ~4-5 children.  Data is fully static (no NodeDataSize storage).
+  Column 0 = Name (folder/file name)
+  Column 1 = Size (bytes as string; '' for folders)
+  Column 2 = Modified (date as string)
+  --------------------------------------------------------------------------- }
+
+const
+  { Top-level folder names }
+  ColTreeFolders: array[0..2] of string = ('Documents', 'Pictures', 'Projects');
+
+  { Child names per folder [folder, child] }
+  ColTreeChildNames: array[0..2] of array[0..4] of string = (
+    ('Report_Q1.docx',  'Budget_2026.xlsx', 'Proposal.pdf',   'Notes.txt',    'Archive.zip'),
+    ('Vacation.jpg',    'Logo.png',         'Screenshot.png', 'Portrait.jpg', ''),
+    ('ty-controls',     'web-app',          'scripts',        'README.md',    '')
+  );
+
+  { Child sizes in bytes [folder, child]; 0 = sub-folder }
+  ColTreeChildSizes: array[0..2] of array[0..4] of Integer = (
+    (45312, 102400, 233472, 2048, 5242880),
+    (3145728, 49152, 204800, 2097152, 0),
+    (0, 0, 8192, 4096, 0)
+  );
+
+  { Child count per folder (how many are actually used; rest are padding) }
+  ColTreeChildCounts: array[0..2] of Integer = (5, 4, 4);
+
+  { Modified dates (stored as Pascal string; TDate = days since 30-Dec-1899) }
+  ColTreeFolderDates: array[0..2] of string = ('2026-05-10', '2026-04-22', '2026-06-01');
+  ColTreeChildDates: array[0..2] of array[0..4] of string = (
+    ('2026-05-08', '2026-04-30', '2026-05-01', '2026-06-10', '2026-03-15'),
+    ('2026-01-20', '2026-05-05', '2026-06-12', '2025-12-25', ''),
+    ('2026-06-28', '2026-06-15', '2026-05-20', '2026-06-27', '')
+  );
+
+{ ---------------------------------------------------------------------------
+  Build the 3-column header in code (documented exception: writing a
+  TPersistent + TCollection hierarchy by hand in a .lfm is error-prone;
+  code path is simpler and equally correct once nodes are initialised before
+  the first paint).
+  --------------------------------------------------------------------------- }
+
+procedure TDemoMainForm.InitColTree;
+{ Build the 3-column header in code (documented exception: writing a
+  TPersistent + TCollection hierarchy by hand in a .lfm is error-prone;
+  code path is simpler and equally correct). }
+var
+  col: TTyTreeColumn;
+begin
+  with TyColTree.Header do
+  begin
+    Options := [hoVisible, hoColumnResize, hoShowSortGlyphs,
+                hoHeaderClickAutoSort, hoDrag];
+    MainColumn := 0;
+    { Column 0: Name }
+    col := Columns.Add as TTyTreeColumn;
+    col.Text := 'Name';
+    col.Width := 180;
+    col.Alignment := taLeftJustify;
+    { Column 1: Size }
+    col := Columns.Add as TTyTreeColumn;
+    col.Text := 'Size';
+    col.Width := 80;
+    col.Alignment := taRightJustify;
+    { Column 2: Modified }
+    col := Columns.Add as TTyTreeColumn;
+    col.Text := 'Modified';
+    col.Width := 120;
+    col.Alignment := taLeftJustify;
+  end;
+  TyColTree.RootNodeCount := 3;
+end;
+
+procedure TDemoMainForm.TyColTreeInitNode(Sender: TTyTreeView;
+  ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates);
+begin
+  { Top-level nodes (folders) always have children. }
+  if Sender.GetNodeLevel(Node) = 0 then
+    Include(InitStates, ivsHasChildren);
+end;
+
+procedure TDemoMainForm.TyColTreeInitChildren(Sender: TTyTreeView;
+  Node: PTyTreeNode; var ChildCount: Cardinal);
+var
+  folderIdx: Integer;
+begin
+  folderIdx := Integer(Node^.Index);
+  if (folderIdx >= 0) and (folderIdx <= 2) then
+    ChildCount := Cardinal(ColTreeChildCounts[folderIdx])
+  else
+    ChildCount := 0;
+end;
+
+procedure TDemoMainForm.TyColTreeGetText(Sender: TTyTreeView;
+  Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType;
+  var CellText: string);
+var
+  level, folderIdx, childIdx: Integer;
+  sz: Integer;
+begin
+  if TextType <> ttNormal then begin CellText := ''; Exit; end;
+
+  level := Sender.GetNodeLevel(Node);
+  if level = 0 then
+  begin
+    { Folder row }
+    folderIdx := Integer(Node^.Index);
+    case Column of
+      0: CellText := ColTreeFolders[folderIdx];
+      1: CellText := '';                          { folders have no size }
+      2: CellText := ColTreeFolderDates[folderIdx];
+    else
+      CellText := '';
+    end;
+  end
+  else
+  begin
+    { File row }
+    folderIdx := Integer(Node^.Parent^.Index);
+    childIdx  := Integer(Node^.Index);
+    case Column of
+      0: CellText := ColTreeChildNames[folderIdx][childIdx];
+      1: begin
+           sz := ColTreeChildSizes[folderIdx][childIdx];
+           if sz = 0 then CellText := ''
+           else if sz < 1024 then CellText := Format('%d B', [sz])
+           else if sz < 1048576 then CellText := Format('%d KB', [sz div 1024])
+           else CellText := Format('%d MB', [sz div 1048576]);
+         end;
+      2: CellText := ColTreeChildDates[folderIdx][childIdx];
+    else
+      CellText := '';
+    end;
+  end;
+end;
+
+procedure TDemoMainForm.TyColTreeCompareNodes(Sender: TTyTreeView;
+  Node1, Node2: PTyTreeNode; Column: Integer; var CompareResult: Integer);
+var
+  t1, t2: string;
+  s1, s2: Integer;
+  lv: Integer;
+begin
+  { Both nodes must be at the same level for sort to compare them.
+    Within the same parent the column determines the key. }
+  lv := Sender.GetNodeLevel(Node1);
+  if lv = 0 then
+  begin
+    { Folder level: only Name and Modified are meaningful }
+    case Column of
+      0: CompareResult := CompareStr(
+           ColTreeFolders[Integer(Node1^.Index)],
+           ColTreeFolders[Integer(Node2^.Index)]);
+      2: CompareResult := CompareStr(
+           ColTreeFolderDates[Integer(Node1^.Index)],
+           ColTreeFolderDates[Integer(Node2^.Index)]);
+    else
+      CompareResult := 0;
+    end;
+  end
+  else
+  begin
+    { File level }
+    TyColTreeGetText(Sender, Node1, Column, ttNormal, t1);
+    TyColTreeGetText(Sender, Node2, Column, ttNormal, t2);
+    case Column of
+      1: begin
+           { Sort by raw byte size for correct numeric ordering }
+           s1 := ColTreeChildSizes[Integer(Node1^.Parent^.Index)][Integer(Node1^.Index)];
+           s2 := ColTreeChildSizes[Integer(Node2^.Parent^.Index)][Integer(Node2^.Index)];
+           if s1 < s2 then CompareResult := -1
+           else if s1 > s2 then CompareResult := 1
+           else CompareResult := 0;
+         end;
+    else
+      CompareResult := CompareStr(t1, t2);
+    end;
+  end;
 end;
 
 end.

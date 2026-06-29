@@ -3,11 +3,14 @@ unit tyControls.TreeView;
 interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, ImgList,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar;
+  BGRABitmapTypes,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar,
+  tyControls.TreeView.Columns;
 
 type
   { C4: hit-test result — which part of a node row the mouse landed in }
-  TTyTreeHitPart = (hpNowhere, hpButton, hpImage, hpLabel, hpIndent);
+  TTyTreeHitPart = (hpNowhere, hpButton, hpImage, hpLabel, hpIndent,
+                    hpHeaderSection, hpHeaderDivider);
 
 type
   PTyTreeNode = ^TTyTreeNode;
@@ -36,6 +39,17 @@ type
   TTyTreeInitNodeEvent     = procedure(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode; var InitStates: TTyNodeInitStates) of object;
   TTyTreeInitChildrenEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var ChildCount: Cardinal) of object;
   TTyTreeGetTextEvent  = procedure(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string) of object;
+  { D2: column event — fired when a column is resized }
+  TTyTreeColumnEvent = procedure(Sender: TTyTreeView; Column: Integer) of object;
+
+  { D3: column reorder event — fired when a column is dragged to a new position }
+  TTyTreeColumnReorderEvent = procedure(Sender: TTyTreeView;
+    OldPosition, NewPosition: Integer) of object;
+
+  { E1: compare event for the sort engine — app returns <0 / 0 / >0 (natural order;
+    direction is handled internally by the sort). }
+  TTyTreeCompareEvent = procedure(Sender: TTyTreeView;
+    Node1, Node2: PTyTreeNode; Column: Integer; var CompareResult: Integer) of object;
 
   { C3: text type (mirrors VTV's TVSTTextType) }
   TTyVSTTextType = (ttNormal, ttStatic);
@@ -124,9 +138,34 @@ type
     FOffsetX:   Integer;        // ≤ 0; how many pixels the viewport is scrolled right
     FRangeX:    Integer;        // max content width; accumulated by paint pass (C3); reset to 0 by InvalidateTreeLayout on every structural change
     FSyncingScroll: Boolean;    // reentrancy guard (mirrors ListBox pattern)
+    { B (columns): header sub-object }
+    FHeader:    TTyTreeHeader;
+    { D2: column resize state }
+    FResizeColumn:     Integer;   // NoColumn when not resizing
+    FResizeStartWidth: Integer;   // col.Width at drag start (logical px)
+    FResizeStartX:     Integer;   // X at drag start (device px)
+    FOnColumnResized:  TTyTreeColumnEvent;
+    { D3: column drag-reorder state }
+    FDragColumn:       Integer;   // collection Index of the dragged column; NoColumn when idle
+    FDragPending:      Boolean;   // MouseDown on a draggable section; drag not yet started
+    FDragStartX:       Integer;   // device X at the drag press
+    FDragging:         Boolean;   // threshold exceeded: ghost + drop-mark active
+    FDragTargetPos:    Integer;   // visual position to drop into (0-based)
+    FOnColumnReorder:  TTyTreeColumnReorderEvent;
+    { E1/E2/E3: sort engine }
+    FOnCompareNodes:   TTyTreeCompareEvent;
+    FOnHeaderClick:    TTyTreeColumnEvent;
+    FSorting:          Boolean;   // reentrancy guard: SortTree -> HeaderChanged -> SortTree
+    FSortedColumn:     Integer;   // last key SortTree ran with — so a width/reorder
+    FSortedDirection:  TTySortDirection;  //   change (same key) does NOT re-sort the tree
+    { E3: internal — process a header section click (toggle sort direction / set sort column) }
+    procedure _HandleHeaderClick(ColIndex: Integer);
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
     procedure UpdateScrollBars;
+    { B (columns): header/column change handler }
+    procedure HeaderChanged(Sender: TObject);
+    procedure SetHeader(AValue: TTyTreeHeader);
     procedure SetIndent(AValue: Integer);
     procedure SetImages(AValue: TImageList);
     procedure SetShowButtons(AValue: Boolean);
@@ -165,6 +204,7 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure DblClick; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
@@ -219,8 +259,20 @@ type
     { B3: read-only; how many nodes were visited in the last GetNodeAt walk (for perf tests) }
     property LastGetNodeAtVisits: Integer read FLastGetNodeAtVisits;
     { C4: hit-testing }
-    function GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode;
+    function GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode; overload;
+    { D1: 3-out overload — also returns the column index under the cursor }
+    function GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): PTyTreeNode; overload;
+    { D1: header hit-test — True when (X,Y) is in the header band }
+    function GetHeaderHitAt(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): Boolean;
+    { E1: compare helper wrapping OnCompareNodes — returns 0 when unassigned }
+    function DoCompare(Node1, Node2: PTyTreeNode; Column: Integer): Integer;
+    { E1: sort the direct children of Node (one level only) }
+    procedure Sort(Node: PTyTreeNode; Column: Integer; ADirection: TTySortDirection; DoInit: Boolean);
+    { E2: recursive sort of the whole tree (initialized+expanded levels only) }
+    procedure SortTree(Column: Integer; ADirection: TTySortDirection);
   published
+    { B (columns): header sub-object }
+    property Header: TTyTreeHeader read FHeader write SetHeader;
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
     property DefaultNodeHeight: Integer read FDefaultNodeHeight write FDefaultNodeHeight default 18;
     property RootNodeCount: Cardinal read GetRootNodeCount write SetRootNodeCount default 0;
@@ -253,9 +305,18 @@ type
     property OnNodeClick:     TTyTreeNodeEvent         read FOnNodeClick     write FOnNodeClick;
     property OnNodeDblClick:  TTyTreeNodeEvent         read FOnNodeDblClick  write FOnNodeDblClick;
     { C3: paint events }
-    property OnGetText:       TTyTreeGetTextEvent           read FOnGetText           write FOnGetText;
-    property OnGetImageIndex: TTyTreeGetImageIndexEvent     read FOnGetImageIndex     write FOnGetImageIndex;
-    property OnPaintText:     TTyTreePaintTextEvent         read FOnPaintText         write FOnPaintText;
+    property OnGetText:            TTyTreeGetTextEvent           read FOnGetText            write FOnGetText;
+    property OnGetTextWithType:    TTyTreeGetTextWithTypeEvent   read FOnGetTextWithType    write FOnGetTextWithType;
+    property OnGetImageIndex:      TTyTreeGetImageIndexEvent     read FOnGetImageIndex      write FOnGetImageIndex;
+    property OnPaintText:          TTyTreePaintTextEvent         read FOnPaintText          write FOnPaintText;
+    { D2: column resize event }
+    property OnColumnResized: TTyTreeColumnEvent read FOnColumnResized write FOnColumnResized;
+    { D3: column reorder event }
+    property OnColumnReorder: TTyTreeColumnReorderEvent read FOnColumnReorder write FOnColumnReorder;
+    { E1: sort compare event }
+    property OnCompareNodes: TTyTreeCompareEvent read FOnCompareNodes write FOnCompareNodes;
+    { E3: header click event (fired after sort, if sort was triggered) }
+    property OnHeaderClick: TTyTreeColumnEvent read FOnHeaderClick write FOnHeaderClick;
   end;
 
 implementation
@@ -592,6 +653,11 @@ begin
     Dec(Result.Right,  SBThick);
   if (FHScroll <> nil) and FHScroll.Visible then
     Dec(Result.Bottom, SBThick);
+  { B (columns): when hoVisible AND there are columns, inset Top by the header height.
+    Guard: Columns.Count = 0 → ③a path unchanged (no inset). }
+  if (FHeader <> nil) and (FHeader.Columns.Count > 0) and
+     (hoVisible in FHeader.Options) then
+    Inc(Result.Top, MulDiv(FHeader.Height, PPI, 96));
 end;
 
 { UpdateScrollBars: show/hide and configure each scrollbar based on the
@@ -774,11 +840,58 @@ begin
   Result := True;
 end;
 
-{ Resize — recalculate scrollbar visibility/geometry on layout change. }
+{ Resize — recalculate scrollbar visibility/geometry on layout change.
+  D4: when hoAutoResize is on, re-apply auto-size so the designated column fills
+  the remaining width whenever the control is resized. }
 procedure TTyTreeView.Resize;
+var
+  PPI, contentW: Integer;
 begin
   inherited Resize;
   UpdateScrollBars;
+  { D4: auto-size hook — runs after UpdateScrollBars so ContentRect is current }
+  if (FHeader <> nil) and (hoAutoResize in FHeader.Options) and
+     (FHeader.AutoSizeIndex >= 0) and
+     (FHeader.AutoSizeIndex < FHeader.Columns.Count) and
+     (FHeader.Columns.Count > 0) then
+  begin
+    PPI      := Font.PixelsPerInch;
+    contentW := MulDiv(ContentRect.Width, 96, PPI);
+    FHeader.Columns.ApplyAutoSize(contentW, FHeader.AutoSizeIndex);
+    if FHeader.Columns.Count > 0 then
+      FRangeX := MulDiv(FHeader.Columns.TotalWidth, Font.PixelsPerInch, 96);
+    UpdateScrollBars;
+  end;
+end;
+
+{ B (columns): header/column change handler }
+procedure TTyTreeView.HeaderChanged(Sender: TObject);
+begin
+  { Guard: skip during destruction (FRoot is nil after Clear+FreeNodeMem). }
+  if FRoot = nil then Exit;
+  { Recompute the horizontal range from column total width (when columns exist),
+    invalidate the layout cache, and request a repaint.
+    When Columns.Count = 0 FRangeX stays 0 — the ③a paint pass accumulates it. }
+  if (FHeader <> nil) and (FHeader.Columns.Count > 0) then
+    FRangeX := MulDiv(FHeader.Columns.TotalWidth, Font.PixelsPerInch, 96)
+  else
+    FRangeX := 0;
+  InvalidateTreeLayout;
+  { E2/E3: when the sort key changes programmatically (not via _HandleHeaderClick),
+    and auto-sort is active, re-sort the tree.  The FSorting guard prevents
+    _HandleHeaderClick → SortColumn setter → HeaderChanged → SortTree infinite loop. }
+  if (not FSorting) and (FHeader <> nil) and
+     (hoHeaderClickAutoSort in FHeader.Options) and
+     (FHeader.SortColumn >= 0) and
+     ((FHeader.SortColumn <> FSortedColumn) or
+      (FHeader.SortDirection <> FSortedDirection)) then
+    SortTree(FHeader.SortColumn, FHeader.SortDirection);
+  Invalidate;
+end;
+
+procedure TTyTreeView.SetHeader(AValue: TTyTreeHeader);
+begin
+  FHeader.Assign(AValue);
 end;
 
 constructor TTyTreeView.Create(AOwner: TComponent);
@@ -809,6 +922,20 @@ begin
   FOffsetX       := 0;
   FRangeX        := 0;
   FSyncingScroll := False;
+  { D2: column resize — idle state }
+  FResizeColumn     := NoColumn;
+  FResizeStartWidth := 0;
+  FResizeStartX     := 0;
+  { D3: column drag-reorder — idle state }
+  FDragColumn       := NoColumn;
+  FDragPending      := False;
+  FDragStartX       := 0;
+  FDragging         := False;
+  FDragTargetPos    := 0;
+  { E1/E2/E3: sort engine — idle state }
+  FSorting          := False;
+  FSortedColumn     := NoColumn;   // no key sorted yet (so the first real sort runs)
+  FSortedDirection  := sdAscending;
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
@@ -821,6 +948,9 @@ begin
   FHScroll.AnimationsEnabled := False;
   FHScroll.OnChange          := @HScrollChange;
   FHScroll.Visible           := False;
+  { B (columns): create the header sub-object and wire its change notification }
+  FHeader := TTyTreeHeader.Create;
+  FHeader.OnChange := @HeaderChanged;
   TabStop           := True;
   Width := 200; Height := 160;
 end;
@@ -840,6 +970,9 @@ begin
     FreeNodeMem(FRoot);
     FRoot := nil;
   end;
+  { B (columns): free the header sub-object }
+  FHeader.Free;
+  FHeader := nil;
   inherited Destroy;
 end;
 
@@ -919,11 +1052,14 @@ begin
   // FRangeY = ContentHeight (the scrollable content height, root phantom row excluded).
   FCacheValid := False;
   FRangeY     := ContentHeight;
-  // Reset FRangeX so the next paint pass recomputes the true maximum row width
-  // from scratch.  Without this reset, FRangeX only ever grows: after Clear /
-  // collapse / delete the horizontal scrollbar would stay over-ranged/visible
-  // even though the widest row is gone.
-  FRangeX     := 0;
+  // Reset FRangeX.  When columns exist, the horizontal range is TotalWidth
+  // (driven by the column model, not by measured text).  When there are no
+  // columns (③a path), reset to 0 so the next paint pass re-accumulates
+  // the true maximum row width from scratch.
+  if (FHeader <> nil) and (FHeader.Columns.Count > 0) then
+    FRangeX := MulDiv(FHeader.Columns.TotalWidth, Font.PixelsPerInch, 96)
+  else
+    FRangeX := 0;
   UpdateScrollBars;
   Invalidate;
 end;
@@ -1605,6 +1741,24 @@ var
   contentLeft: Integer;
   gSz, slotBaseX: Integer;
   usedImgSlotW: Integer;
+  { ── C (columns) variables ───────────────────────────────────────────────── }
+  useColumns: Boolean;          // True when Columns.Count > 0
+  hasHeader: Boolean;           // True when hoVisible and useColumns
+  headerH: Integer;             // device-px header band height
+  headerBandRect: TRect;        // device rect for the header band
+  headerBgStyle, headerSecStyle: TTyStyleSet;
+  colCount, posIdx, colIdx: Integer;
+  col: TTyTreeColumn;
+  cellLeft, cellRight: Integer;
+  cellRect, clipR: TRect;
+  colCellLeft, colCellRight: Integer;
+  colCaptionX, colMargin: Integer;
+  colTxt: string;
+  sortGlyphSize: Integer;
+  colAlign: TAlignment;
+  sortBandR: TRect;
+  accentPx: TBGRAPixel;         // theme accent for the drag ghost/drop-mark
+  mainColBase: Integer;
 begin
   UpdateScrollBars;   // keep scrollbar range current (cheap; no-op when clean)
 
@@ -1636,18 +1790,26 @@ begin
       VISIBLE frame (CR); only content x-positions use contentLeft. }
     contentLeft := CR.Left + FOffsetX;
 
-    { ── Empty tree ───────────────────────────────────────────────────────── }
-    if FRoot^.FirstChild = nil then
+    { ── Column guard: are we in multi-column mode? ─────────────────────────── }
+    useColumns := (FHeader <> nil) and (FHeader.Columns.Count > 0);
+    hasHeader  := useColumns and (hoVisible in FHeader.Options);
+    headerH    := 0;
+    if hasHeader then
     begin
-      if FEmptyListMessage <> '' then
-      begin
-        NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', []);
-        P.DrawText(CR, FEmptyListMessage, S.FontName, ResolveFontSize(S), S.FontWeight,
-          NodeStyle.TextColor, taCenter, tlCenter, True);
-      end;
-      P.EndPaint;
-      Exit;
-    end;
+      headerH := P.Scale(FHeader.Height);
+      { Inset CR.Top so node rows start BELOW the header band.
+        The header band occupies [CR.Top_original .. CR.Top_original + headerH].
+        After this Inc, CR.Top is the top of the node area. }
+      Inc(CR.Top, headerH);
+      { Ensure positions are current before paint }
+      FHeader.Columns.UpdatePositions;
+    end
+    else if useColumns then
+      FHeader.Columns.UpdatePositions;
+
+    { ── Empty tree ───────────────────────────────────────────────────────── }
+    { Handled AFTER the header band paints (at the first-row-nil branch below) so
+      an empty multi-column tree still shows its column headers. }
 
     { Row chrome inset: row fills must not touch the border's anti-aliased edge.
       Mirror the ListBox pattern exactly. }
@@ -1661,12 +1823,199 @@ begin
     savedClip := P.Bitmap.ClipRect;
     P.Bitmap.ClipRect := Rect(inset, inset, W - inset, H - inset);
 
+    { ── C2: Header band paint (BEFORE node area) ─────────────────────────── }
+    if hasHeader then
+    begin
+      { Band rect spans the full content width, at the top of CR (before headerH offset) }
+      headerBandRect := Rect(CR.Left, CR.Top - headerH, CR.Right, CR.Top);
+      { Resolve styles — tolerate absent typeKeys (fallback to tree tokens) }
+      headerBgStyle  := ActiveController.Model.ResolveStyle('TyTreeHeader', '', []);
+      headerSecStyle := ActiveController.Model.ResolveStyle('TyTreeHeaderSection', '', []);
+
+      { Fill header band background }
+      if tpBackground in headerBgStyle.Present then
+        P.FillBackground(headerBandRect, headerBgStyle.Background, 0)
+      else
+      begin
+        { Fallback: use a lightened border color or the tree background }
+        P.FillBackground(headerBandRect, S.Background, 0);
+      end;
+
+      { Per-column header cells }
+      colCount := FHeader.Columns.Count;
+      for posIdx := 0 to colCount - 1 do
+      begin
+        col := FHeader.Columns.ColumnByPosition(posIdx);
+        if col = nil then Continue;
+        if not (coVisible in col.Options) then Continue;
+
+        colIdx := col.Index;
+
+        { Column cell x range (scroll-adjusted, device pixels).
+          col.Left is the absolute left in logical px; scale to device. }
+        cellLeft  := CR.Left + P.Scale(col.Left) + FOffsetX;
+        cellRight := cellLeft + P.Scale(col.Width);
+
+        { Skip cells entirely off-screen }
+        if cellRight <= CR.Left then Continue;
+        if cellLeft  >= CR.Right then Continue;
+
+        { Header cell rect }
+        cellRect := Rect(cellLeft, headerBandRect.Top, cellRight, headerBandRect.Bottom);
+
+        { Clip to visible area }
+        clipR := cellRect;
+        if clipR.Left  < CR.Left  then clipR.Left  := CR.Left;
+        if clipR.Right > CR.Right then clipR.Right := CR.Right;
+
+        { Fill cell background — hover if this is the hovered column,
+          else transparent (inherits band bg) }
+        if (hoHotTrack in FHeader.Options) and (colIdx = NoColumn) then
+        begin
+          { NoColumn = -1, so this branch never fires — FHotHeaderColumn would go here in Phase D }
+        end;
+        if tpBackground in headerSecStyle.Present then
+          P.FillBackground(clipR, headerSecStyle.Background, 0);
+
+        { Reserve space for sort glyph when this is the sort column }
+        sortGlyphSize := 0;
+        if (hoShowSortGlyphs in FHeader.Options) and
+           (colIdx = FHeader.SortColumn) then
+          sortGlyphSize := P.Scale(10);
+
+        { Column caption rect }
+        colMargin := P.Scale(4);
+        colCaptionX := clipR.Left + colMargin;
+
+        textRect := Rect(colCaptionX,
+                         headerBandRect.Top,
+                         clipR.Right - colMargin - sortGlyphSize,
+                         headerBandRect.Bottom);
+
+        if textRect.Left < textRect.Right then
+        begin
+          { Determine caption alignment }
+          colAlign := col.CaptionAlignment;
+          { Resolve text color }
+          if tpTextColor in headerSecStyle.Present then
+            P.DrawText(textRect, col.Text,
+              headerSecStyle.FontName, ResolveFontSize(headerSecStyle),
+              headerSecStyle.FontWeight,
+              headerSecStyle.TextColor, colAlign, tlCenter, True)
+          else
+            P.DrawText(textRect, col.Text,
+              S.FontName, ResolveFontSize(S), S.FontWeight,
+              S.TextColor, colAlign, tlCenter, True);
+        end;
+
+        { Sort glyph in sort column }
+        if sortGlyphSize > 0 then
+        begin
+          { Draw an arrow glyph at the right of the header cell using DrawGlyph }
+          sortBandR := Rect(clipR.Right - sortGlyphSize - colMargin,
+                            headerBandRect.Top + P.Scale(2),
+                            clipR.Right - colMargin,
+                            headerBandRect.Bottom - P.Scale(2));
+          if sortBandR.Right > sortBandR.Left then
+          begin
+            if tpTextColor in headerSecStyle.Present then
+              colTxt := ''  { reuse colTxt as a scratch — not used here }
+            else
+              colTxt := '';
+            if FHeader.SortDirection = sdAscending then
+            begin
+              if tpTextColor in headerSecStyle.Present then
+                P.DrawGlyph(sortBandR, tgArrowUp, headerSecStyle.TextColor, P.Scale(1), 1)
+              else
+                P.DrawGlyph(sortBandR, tgArrowUp, S.TextColor, P.Scale(1), 1);
+            end
+            else
+            begin
+              if tpTextColor in headerSecStyle.Present then
+                P.DrawGlyph(sortBandR, tgArrowDown, headerSecStyle.TextColor, P.Scale(1), 1)
+              else
+                P.DrawGlyph(sortBandR, tgArrowDown, S.TextColor, P.Scale(1), 1);
+            end;
+          end;
+        end;
+
+        { Right-edge divider line (not on the last visible column) }
+        if posIdx < colCount - 1 then
+        begin
+          { Check if next column is visible }
+          P.Bitmap.DrawLine(cellRight - 1, headerBandRect.Top,
+                            cellRight - 1, headerBandRect.Bottom,
+                            TyColorToBGRA(S.BorderColor), False);
+        end;
+      end;
+
+      { Bottom border of header band }
+      P.Bitmap.DrawLine(CR.Left, CR.Top, CR.Right, CR.Top,
+                        TyColorToBGRA(S.BorderColor), False);
+
+      { D3: drag-reorder overlay — ghost of dragged column + drop-mark caret }
+      if FDragging and (FDragColumn >= 0) and (FDragColumn < FHeader.Columns.Count) then
+      begin
+        { Drag overlay accent from the THEME (TyTreeNode:selected bg = --accent),
+          never a hard-coded color. NodeStyle is free here — the node loop runs later. }
+        NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', [tysSelected]);
+        if tpBackground in NodeStyle.Present then
+          accentPx := TyColorToBGRA(NodeStyle.Background.Color)
+        else
+          accentPx := TyColorToBGRA(S.BorderColor);
+        { Ghost: draw a semi-transparent filled rect over the dragged column's
+          header cell at its current position (not yet moved) }
+        col := FHeader.Columns.Items[FDragColumn] as TTyTreeColumn;
+        cellLeft  := CR.Left + P.Scale(col.Left) + FOffsetX;
+        cellRight := cellLeft + P.Scale(col.Width);
+        { Clamp to visible area }
+        if cellLeft  < CR.Left  then cellLeft  := CR.Left;
+        if cellRight > CR.Right then cellRight := CR.Right;
+        if cellLeft < cellRight then
+        begin
+          cellRect := Rect(cellLeft, headerBandRect.Top, cellRight, headerBandRect.Bottom);
+          { Ghost fill: accent color at ~40% opacity over the header }
+          P.Bitmap.FillRect(cellRect.Left, cellRect.Top,
+                            cellRect.Right, cellRect.Bottom,
+                            BGRA(accentPx.red, accentPx.green, accentPx.blue, 100));  { accent ghost, ~40% alpha }
+        end;
+
+        { Drop-mark: a 2px vertical caret at the target position boundary }
+        if (FDragTargetPos >= 0) and (FDragTargetPos < FHeader.Columns.Count) then
+        begin
+          col := FHeader.Columns.ColumnByPosition(FDragTargetPos);
+          if col <> nil then
+          begin
+            { Insert caret at the LEFT edge of the target column's position }
+            cellLeft := CR.Left + P.Scale(col.Left) + FOffsetX;
+            if cellLeft < CR.Left  then cellLeft := CR.Left;
+            if cellLeft > CR.Right then cellLeft := CR.Right;
+            { Draw a 2px wide vertical accent bar }
+            P.Bitmap.DrawLine(cellLeft,     headerBandRect.Top,
+                              cellLeft,     headerBandRect.Bottom,
+                              accentPx, False);
+            P.Bitmap.DrawLine(cellLeft + 1, headerBandRect.Top,
+                              cellLeft + 1, headerBandRect.Bottom,
+                              accentPx, False);
+          end;
+        end;
+      end;
+    end;
+
     { ── First on-screen node ─────────────────────────────────────────────── }
     firstNodeY := -FOffsetY;
     if firstNodeY < 0 then firstNodeY := 0;
     node := GetNodeAt(firstNodeY, firstTop);
     if node = nil then
     begin
+      { Empty tree (or fully scrolled past): draw the empty-list message in the
+        node area, BELOW the header band which has already painted above. }
+      if (FRoot^.FirstChild = nil) and (FEmptyListMessage <> '') then
+      begin
+        NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', []);
+        P.DrawText(CR, FEmptyListMessage, S.FontName, ResolveFontSize(S), S.FontWeight,
+          NodeStyle.TextColor, taCenter, tlCenter, True);
+      end;
       P.Bitmap.ClipRect := savedClip;
       P.EndPaint;
       Exit;
@@ -1710,113 +2059,267 @@ begin
       level    := GetNodeLevel(node);
       indentPx := P.Scale((level + Ord(FShowRoot)) * FIndent);
 
-      { ── Tree lines (simplified: guide + elbow) ──────────────────────────── }
-      if FShowTreeLines and (level > 0) then
+      if useColumns then
       begin
-        { Draw a vertical guide in each ancestor's column if that ancestor has
-          a NextSibling (i.e. the guide continues past this row). }
-        anc := node^.Parent;
-        while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
-        begin
-          ancLevel := GetNodeLevel(anc);
-          ancSlotX := contentLeft
-                      + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
-                      - (btnSlotW shr 1);
-          if anc^.NextSibling <> nil then
-            P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
-              TyColorToBGRA(S.BorderColor), False);
-          anc := anc^.Parent;
-        end;
+        { ── C1: Multi-column paint branch ──────────────────────────────────
+          Guard: only runs when Columns.Count > 0.
+          The ③a single-column path is below (in the else branch). }
 
-        { Elbow at this node's level: vertical half + horizontal stub. }
-        ancMidX := contentLeft
-                   + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
-                   - (btnSlotW shr 1);
-        ancMidY := rowTop + rowH div 2;
-        P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
-          TyColorToBGRA(S.BorderColor), False);
-        P.Bitmap.DrawLine(ancMidX, ancMidY,   contentLeft + indentPx, ancMidY,
-          TyColorToBGRA(S.BorderColor), False);
-        if node^.NextSibling <> nil then
-          P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
+        colCount := FHeader.Columns.Count;
+        for posIdx := 0 to colCount - 1 do
+        begin
+          col := FHeader.Columns.ColumnByPosition(posIdx);
+          if col = nil then Continue;
+          if not (coVisible in col.Options) then Continue;
+
+          colIdx := col.Index;
+
+          { Column cell x range (scroll-adjusted, device pixels).
+            col.Left is the absolute left from column 0 in logical px; scale to device.
+            The origin is CR.Left + FOffsetX = contentLeft. }
+          colCellLeft  := CR.Left + P.Scale(col.Left) + FOffsetX;
+          colCellRight := colCellLeft + P.Scale(col.Width);
+
+          { Skip cells entirely outside the visible content rect }
+          if colCellRight <= CR.Left then Continue;
+          if colCellLeft  >= CR.Right then Continue;
+
+          { Clip painter to this cell's visible x range }
+          clipR := Rect(colCellLeft, rowTop, colCellRight, rowTop + rowH);
+          if clipR.Left  < CR.Left  then clipR.Left  := CR.Left;
+          if clipR.Right > CR.Right then clipR.Right := CR.Right;
+          P.Bitmap.ClipRect := clipR;
+
+          if colIdx = FHeader.MainColumn then
+          begin
+            { ── Main column: draw ③a chrome (tree-lines + button + image) ── }
+            { mainColBase is the left of the main column cell (like contentLeft in ③a) }
+            mainColBase := colCellLeft;
+
+            { Tree lines (anchored at mainColBase) }
+            if FShowTreeLines and (level > 0) then
+            begin
+              anc := node^.Parent;
+              while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
+              begin
+                ancLevel := GetNodeLevel(anc);
+                ancSlotX := mainColBase
+                            + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
+                            - (btnSlotW shr 1);
+                if anc^.NextSibling <> nil then
+                  P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
+                    TyColorToBGRA(S.BorderColor), False);
+                anc := anc^.Parent;
+              end;
+              ancMidX := mainColBase
+                         + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
+                         - (btnSlotW shr 1);
+              ancMidY := rowTop + rowH div 2;
+              P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
+                TyColorToBGRA(S.BorderColor), False);
+              P.Bitmap.DrawLine(ancMidX, ancMidY,   mainColBase + indentPx, ancMidY,
+                TyColorToBGRA(S.BorderColor), False);
+              if node^.NextSibling <> nil then
+                P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
+                  TyColorToBGRA(S.BorderColor), False);
+            end;
+
+            { Expand button (anchored at mainColBase) }
+            if FShowButtons and (nsHasChildren in node^.States) then
+            begin
+              gSz := btnSlotW;
+              if rowH < gSz then gSz := rowH;
+              slotBaseX := mainColBase + indentPx - btnSlotW + (btnSlotW - gSz) div 2;
+              btnRect := Rect(
+                slotBaseX,
+                rowTop + (rowH - gSz) div 2,
+                slotBaseX + gSz,
+                rowTop + (rowH - gSz) div 2 + gSz
+              );
+              if btnRect.Right  <= btnRect.Left  then btnRect.Right  := btnRect.Left  + 4;
+              if btnRect.Bottom <= btnRect.Top   then btnRect.Bottom := btnRect.Top   + 4;
+              if nsExpanded in node^.States then
+                P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
+              else
+                P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
+            end;
+
+            { Image (main column only) }
+            captionX := mainColBase + indentPx;
+            usedImgSlotW := 0;
+            if (FImages <> nil) and (FImages.Count > 0) then
+            begin
+              usedImgSlotW := imgSlotW;
+              imgIdx  := -1;
+              ghosted := False;
+              if Assigned(FOnGetImageIndex) then
+                FOnGetImageIndex(Self, node, ikNormal, colIdx, ghosted, imgIdx);
+              if (imgIdx >= 0) and (imgIdx < FImages.Count) then
+                FImages.Draw(ACanvas,
+                  ARect.Left + captionX,
+                  ARect.Top  + rowTop + (rowH - FImages.Height) div 2,
+                  imgIdx);
+              Inc(captionX, imgSlotW);
+            end;
+
+            { Caption in main column }
+            colTxt := '';
+            if Assigned(FOnGetTextWithType) then
+              FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
+            else if Assigned(FOnGetText) then
+              FOnGetText(Self, node, colTxt);
+
+            textRect := Rect(captionX + P.Scale(2), rowTop,
+                             colCellRight - P.Scale(2), rowTop + rowH);
+            if (textRect.Left < textRect.Right) and (colTxt <> '') then
+              P.DrawText(textRect, colTxt,
+                NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+                NodeStyle.TextColor, taLeftJustify, tlCenter, True);
+
+            if Assigned(FOnPaintText) then
+              FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+          end
+          else
+          begin
+            { ── Non-main column: flat text cell ──────────────────────────── }
+            colMargin := P.Scale(4);
+            colCaptionX := colCellLeft + colMargin;
+
+            colTxt := '';
+            if Assigned(FOnGetTextWithType) then
+              FOnGetTextWithType(Self, node, colIdx, ttNormal, colTxt)
+            else if Assigned(FOnGetText) then
+              FOnGetText(Self, node, colTxt);   // fallback for compat
+
+            colAlign := col.Alignment;
+            textRect := Rect(colCaptionX, rowTop,
+                             colCellRight - colMargin, rowTop + rowH);
+            if (textRect.Left < textRect.Right) and (colTxt <> '') then
+              P.DrawText(textRect, colTxt,
+                NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+                NodeStyle.TextColor, colAlign, tlCenter, True);
+
+            if Assigned(FOnPaintText) then
+              FOnPaintText(Self, ACanvas, node, colIdx, ttNormal);
+          end;
+
+          { Restore clip to full inset rect after each cell }
+          P.Bitmap.ClipRect := Rect(inset, inset, W - inset, H - inset);
+        end;
+        { FRangeX is already set from TotalWidth — do NOT re-accumulate }
+      end
+      else
+      begin
+        { ── ③a single-column path (0-column guard: verbatim ③a code) ───────── }
+
+        { ── Tree lines (simplified: guide + elbow) ──────────────────────────── }
+        if FShowTreeLines and (level > 0) then
+        begin
+          { Draw a vertical guide in each ancestor's column if that ancestor has
+            a NextSibling (i.e. the guide continues past this row). }
+          anc := node^.Parent;
+          while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
+          begin
+            ancLevel := GetNodeLevel(anc);
+            ancSlotX := contentLeft
+                        + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
+                        - (btnSlotW shr 1);
+            if anc^.NextSibling <> nil then
+              P.Bitmap.DrawLine(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
+                TyColorToBGRA(S.BorderColor), False);
+            anc := anc^.Parent;
+          end;
+
+          { Elbow at this node's level: vertical half + horizontal stub. }
+          ancMidX := contentLeft
+                     + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
+                     - (btnSlotW shr 1);
+          ancMidY := rowTop + rowH div 2;
+          P.Bitmap.DrawLine(ancMidX, rowTop,    ancMidX, ancMidY,
             TyColorToBGRA(S.BorderColor), False);
-      end;
-
-      { ── Expand button ────────────────────────────────────────────────── }
-      if FShowButtons and (nsHasChildren in node^.States) then
-      begin
-        { The button occupies the slot just before indentPx. Use a CENTRED
-          SQUARE filling the slot (side = min(slot, rowH)) so the chevron is
-          large and crisp; DrawGlyph's pad is reduced to 2. }
-        gSz := btnSlotW;
-        if rowH < gSz then gSz := rowH;
-        slotBaseX := contentLeft + indentPx - btnSlotW + (btnSlotW - gSz) div 2;
-        btnRect := Rect(
-          slotBaseX,
-          rowTop + (rowH - gSz) div 2,
-          slotBaseX + gSz,
-          rowTop + (rowH - gSz) div 2 + gSz
-        );
-        if btnRect.Right  <= btnRect.Left  then btnRect.Right  := btnRect.Left  + 4;
-        if btnRect.Bottom <= btnRect.Top   then btnRect.Bottom := btnRect.Top   + 4;
-        if nsExpanded in node^.States then
-          P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
-        else
-          P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
-      end;
-
-      { ── Image ────────────────────────────────────────────────────────── }
-      captionX := contentLeft + indentPx;
-      { The image slot is RESERVED whenever an image list is assigned (matching
-        GetNodeAtPoint's hpImage zone), so usedImgSlotW mirrors that reservation
-        for the FRangeX width below. }
-      usedImgSlotW := 0;
-      if (FImages <> nil) and (FImages.Count > 0) then
-      begin
-        usedImgSlotW := imgSlotW;
-        imgIdx  := -1;
-        ghosted := False;
-        if Assigned(FOnGetImageIndex) then
-          FOnGetImageIndex(Self, node, ikNormal, -1, ghosted, imgIdx);
-        if (imgIdx >= 0) and (imgIdx < FImages.Count) then
-        begin
-          { Draw images directly to the underlying Canvas.  The BGRA bitmap and
-            the ACanvas share the same device context, so this is safe as long as
-            we blit into the device-space rect (offset by ARect.Left/Top). }
-          FImages.Draw(ACanvas,
-            ARect.Left + captionX,
-            ARect.Top  + rowTop + (rowH - FImages.Height) div 2,
-            imgIdx);
+          P.Bitmap.DrawLine(ancMidX, ancMidY,   contentLeft + indentPx, ancMidY,
+            TyColorToBGRA(S.BorderColor), False);
+          if node^.NextSibling <> nil then
+            P.Bitmap.DrawLine(ancMidX, ancMidY, ancMidX, rowTop + rowH,
+              TyColorToBGRA(S.BorderColor), False);
         end;
-        Inc(captionX, imgSlotW);
-      end;
 
-      { ── Caption ─────────────────────────────────────────────────────── }
-      txt := '';
-      if Assigned(FOnGetText) then
-        FOnGetText(Self, node, txt);
+        { ── Expand button ────────────────────────────────────────────────── }
+        if FShowButtons and (nsHasChildren in node^.States) then
+        begin
+          { The button occupies the slot just before indentPx. Use a CENTRED
+            SQUARE filling the slot (side = min(slot, rowH)) so the chevron is
+            large and crisp; DrawGlyph's pad is reduced to 2. }
+          gSz := btnSlotW;
+          if rowH < gSz then gSz := rowH;
+          slotBaseX := contentLeft + indentPx - btnSlotW + (btnSlotW - gSz) div 2;
+          btnRect := Rect(
+            slotBaseX,
+            rowTop + (rowH - gSz) div 2,
+            slotBaseX + gSz,
+            rowTop + (rowH - gSz) div 2 + gSz
+          );
+          if btnRect.Right  <= btnRect.Left  then btnRect.Right  := btnRect.Left  + 4;
+          if btnRect.Bottom <= btnRect.Top   then btnRect.Bottom := btnRect.Top   + 4;
+          if nsExpanded in node^.States then
+            P.DrawGlyph(btnRect, tgChevronDown, NodeStyle.TextColor, P.Scale(1), 2)
+          else
+            P.DrawGlyph(btnRect, tgChevronRight, NodeStyle.TextColor, P.Scale(1), 2);
+        end;
 
-      textRect := Rect(captionX + P.Scale(2), rowTop, CR.Right, rowTop + rowH);
-      if (textRect.Left < textRect.Right) and (txt <> '') then
-        P.DrawText(textRect, txt,
-          NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
-          NodeStyle.TextColor, taLeftJustify, tlCenter, True);
+        { ── Image ────────────────────────────────────────────────────────── }
+        captionX := contentLeft + indentPx;
+        { The image slot is RESERVED whenever an image list is assigned (matching
+          GetNodeAtPoint's hpImage zone), so usedImgSlotW mirrors that reservation
+          for the FRangeX width below. }
+        usedImgSlotW := 0;
+        if (FImages <> nil) and (FImages.Count > 0) then
+        begin
+          usedImgSlotW := imgSlotW;
+          imgIdx  := -1;
+          ghosted := False;
+          if Assigned(FOnGetImageIndex) then
+            FOnGetImageIndex(Self, node, ikNormal, -1, ghosted, imgIdx);
+          if (imgIdx >= 0) and (imgIdx < FImages.Count) then
+          begin
+            { Draw images directly to the underlying Canvas.  The BGRA bitmap and
+              the ACanvas share the same device context, so this is safe as long as
+              we blit into the device-space rect (offset by ARect.Left/Top). }
+            FImages.Draw(ACanvas,
+              ARect.Left + captionX,
+              ARect.Top  + rowTop + (rowH - FImages.Height) div 2,
+              imgIdx);
+          end;
+          Inc(captionX, imgSlotW);
+        end;
 
-      if Assigned(FOnPaintText) then
-        FOnPaintText(Self, ACanvas, node, -1, ttNormal);
+        { ── Caption ─────────────────────────────────────────────────────── }
+        txt := '';
+        if Assigned(FOnGetText) then
+          FOnGetText(Self, node, txt);
 
-      { ── FRangeX accumulation ─────────────────────────────────────────── }
-      { Pure content WIDTH for this row — independent of CR.Left and FOffsetX so
-        the H-scroll range never drifts with the scroll position.  Equals the
-        rendered layout: indent + (image slot if used) + gap + text + tail. }
-      if txt <> '' then
-      begin
-        measW := indentPx + usedImgSlotW + P.Scale(2) +
-          P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
-                        NodeStyle.FontWeight).cx + P.Scale(4);
-        if measW > rangeXNew then
-          rangeXNew := measW;
-      end;
+        textRect := Rect(captionX + P.Scale(2), rowTop, CR.Right, rowTop + rowH);
+        if (textRect.Left < textRect.Right) and (txt <> '') then
+          P.DrawText(textRect, txt,
+            NodeStyle.FontName, ResolveFontSize(NodeStyle), NodeStyle.FontWeight,
+            NodeStyle.TextColor, taLeftJustify, tlCenter, True);
+
+        if Assigned(FOnPaintText) then
+          FOnPaintText(Self, ACanvas, node, -1, ttNormal);
+
+        { ── FRangeX accumulation ─────────────────────────────────────────── }
+        { Pure content WIDTH for this row — independent of CR.Left and FOffsetX so
+          the H-scroll range never drifts with the scroll position.  Equals the
+          rendered layout: indent + (image slot if used) + gap + text + tail. }
+        if txt <> '' then
+        begin
+          measW := indentPx + usedImgSlotW + P.Scale(2) +
+            P.MeasureText(txt, NodeStyle.FontName, ResolveFontSize(NodeStyle),
+                          NodeStyle.FontWeight).cx + P.Scale(4);
+          if measW > rangeXNew then
+            rangeXNew := measW;
+        end;
+      end; { end ③a single-column path }
 
       node   := GetNextVisibleNoInit(node);
       Inc(rowTop, rowH);
@@ -1843,12 +2346,13 @@ end;
 
 { ── C4 ── hit-testing + mouse + keyboard + hot-track ─────────────────────── }
 
-{ GetNodeAtPoint
+{ GetNodeAtPoint (3-out overload)
   Convert client (X, Y) to the absolute content coordinate space, find the
   node under the cursor via GetNodeAt, then classify which column slot was hit.
+  AColumn returns the collection Index of the column under X (-1 = NoColumn).
 
   X-accumulation mirrors RenderTo EXACTLY (same scale, same formula):
-    CR      = ContentRect (padding-inset + scrollbar-shrunk)
+    CR      = ContentRect (padding-inset + scrollbar-shrunk, header inset already applied)
     indentPx = Scale((level + Ord(FShowRoot)) * FIndent)
     btnSlotW = Scale(FIndent)   — one Indent-wide slot before indentPx
     imgSlotW = Scale(FIndent)   — one Indent-wide slot after indentPx
@@ -1856,7 +2360,7 @@ end;
   The absolute content X/Y:
     absY = (Y - CR.Top) + (-FOffsetY)
     absX = (X - CR.Left) + (-FOffsetX)  }
-function TTyTreeView.GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode;
+function TTyTreeView.GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): PTyTreeNode;
 var
   PPI: Integer;
   CR: TRect;
@@ -1865,9 +2369,11 @@ var
   node: PTyTreeNode;
   level, indentPx, btnSlotW, imgSlotW: Integer;
   captionX: Integer;
+  logX, logScroll: Integer;
 begin
   Result   := nil;
   APart    := hpNowhere;
+  AColumn  := NoColumn;
 
   PPI := Font.PixelsPerInch;
   CR  := ContentRect;
@@ -1905,17 +2411,13 @@ begin
   begin
     APart := hpIndent;
     Result := node;
-    Exit;
-  end;
-
-  if absX < indentPx - btnSlotW then
+  end
+  else if absX < indentPx - btnSlotW then
   begin
     APart  := hpIndent;
     Result := node;
-    Exit;
-  end;
-
-  if (absX < indentPx) then
+  end
+  else if (absX < indentPx) then
   begin
     { In the button slot — classify as hpButton only if the node has children
       AND buttons are shown.  Otherwise treat as hpIndent. }
@@ -1924,25 +2426,105 @@ begin
     else
       APart := hpIndent;
     Result := node;
-    Exit;
-  end;
-
-  { Past the indent zone }
-  captionX := indentPx;
-  if (FImages <> nil) and (FImages.Count > 0) then
+  end
+  else
   begin
-    if absX < captionX + imgSlotW then
+    { Past the indent zone }
+    captionX := indentPx;
+    if (FImages <> nil) and (FImages.Count > 0) then
     begin
-      APart  := hpImage;
+      if absX < captionX + imgSlotW then
+      begin
+        APart  := hpImage;
+        Result := node;
+      end
+      else
+      begin
+        Inc(captionX, imgSlotW);
+        APart  := hpLabel;
+        Result := node;
+      end;
+    end
+    else
+    begin
+      { Everything to the right of the image slot is the label area }
+      APart  := hpLabel;
       Result := node;
-      Exit;
     end;
-    Inc(captionX, imgSlotW);
   end;
 
-  { Everything to the right of the image slot is the label area }
-  APart  := hpLabel;
-  Result := node;
+  { D1: determine which column the X coordinate lands in (when columns exist) }
+  if (Result <> nil) and (FHeader <> nil) and (FHeader.Columns.Count > 0) then
+  begin
+    { Convert device X offset from CR.Left into logical px (matches paint formula).
+      ColumnFromPosition(logX, logScroll) checks col.FLeft-logScroll <= logX < col.FLeft-logScroll+col.Width
+      which matches CR.Left + Scale(col.Left) + FOffsetX <= X < ... }
+    logX      := MulDiv(X - CR.Left, 96, PPI);
+    logScroll := MulDiv(-FOffsetX, 96, PPI);
+    AColumn := FHeader.Columns.ColumnFromPosition(logX, logScroll);
+  end;
+end;
+
+{ GetNodeAtPoint (2-out overload — backward-compatible delegator) }
+function TTyTreeView.GetNodeAtPoint(X, Y: Integer; out APart: TTyTreeHitPart): PTyTreeNode;
+var
+  col: Integer;
+begin
+  Result := GetNodeAtPoint(X, Y, APart, col);
+end;
+
+{ GetHeaderHitAt
+  Returns True and sets APart + AColumn when (X,Y) is inside the header band.
+  The header band occupies device Y in [CR.Top-headerH .. CR.Top) where
+  CR = ContentRect (which already has headerH added to its Top). }
+function TTyTreeView.GetHeaderHitAt(X, Y: Integer; out APart: TTyTreeHitPart; out AColumn: Integer): Boolean;
+var
+  PPI, logX, logScroll, colIdx: Integer;
+  CR: TRect;
+begin
+  Result  := False;
+  APart   := hpNowhere;
+  AColumn := NoColumn;
+
+  { Guard: header must be present, visible, and have at least one column }
+  if (FHeader = nil) or not (hoVisible in FHeader.Options) or
+     (FHeader.Columns.Count = 0) then Exit;
+
+  CR := ContentRect;
+  { ContentRect.Top already includes the header band height.
+    Any Y below ContentRect.Top is in the header/padding band.
+    Check both the upper boundary (Y >= padding top = CR.Top - headerH) and lower
+    boundary (Y < CR.Top).  We use Y < CR.Top as the sufficient test — clicking
+    in the narrow padding above the header is treated as a header hit. }
+  if Y >= CR.Top then Exit;
+
+  { We're in the header band }
+  PPI := Font.PixelsPerInch;
+
+  { Compute logical X relative to CR.Left (shared horizontal geometry with cells).
+    ColumnFromPosition and DetermineSplitterIndex both use the same paint formula. }
+  logX      := MulDiv(X - CR.Left, 96, PPI);
+  logScroll := MulDiv(-FOffsetX, 96, PPI);
+
+  { Check for divider (resizable column right-edge within tolerance) — only when
+    column resize is enabled; otherwise the divider zone belongs to the clickable
+    (sortable) header section so a click near a border still sorts. }
+  colIdx := NoColumn;
+  if hoColumnResize in FHeader.Options then
+    colIdx := FHeader.Columns.DetermineSplitterIndex(logX, logScroll);
+  if colIdx <> NoColumn then
+  begin
+    APart   := hpHeaderDivider;
+    AColumn := colIdx;
+    Result  := True;
+  end
+  else
+  begin
+    { Plain header section hit }
+    AColumn := FHeader.Columns.ColumnFromPosition(logX, logScroll);
+    APart   := hpHeaderSection;
+    Result  := True;
+  end;
 end;
 
 procedure TTyTreeView.MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -1950,6 +2532,9 @@ procedure TTyTreeView.MouseDown(Button: TMouseButton; Shift: TShiftState;
 var
   part: TTyTreeHitPart;
   node: PTyTreeNode;
+  headerPart: TTyTreeHitPart;
+  headerCol: Integer;
+  col: TTyTreeColumn;
 begin
   inherited MouseDown(Button, Shift, X, Y);
 
@@ -1957,6 +2542,38 @@ begin
 
   { Request keyboard focus so arrow-key navigation works after click }
   if CanSetFocus then SetFocus;
+
+  { D2: header hit test — intercept before node hit-test }
+  if GetHeaderHitAt(X, Y, headerPart, headerCol) then
+  begin
+    if (Button = mbLeft) and (headerPart = hpHeaderDivider) and
+       (headerCol <> NoColumn) and
+       (hoColumnResize in FHeader.Options) then
+    begin
+      col := FHeader.Columns.Items[headerCol] as TTyTreeColumn;
+      FResizeColumn     := headerCol;
+      FResizeStartWidth := col.Width;
+      FResizeStartX     := X;
+      { D2 fix: guard against handle allocation in headless tests }
+      if HandleAllocated then MouseCapture := True;
+    end
+    else if (Button = mbLeft) and (headerPart = hpHeaderSection) and
+            (headerCol <> NoColumn) then
+    begin
+      { Record a header-section press. A plain press+release sorts on MouseUp
+        (E3 header-click); a drag-reorder only ENGAGES in MouseMove when
+        hoDrag + coDraggable allow it — so header-click sort works even when
+        drag-reorder is disabled (decoupled from hoDrag/coDraggable). }
+      col := FHeader.Columns.Items[headerCol] as TTyTreeColumn;
+      FDragColumn    := headerCol;
+      FDragPending   := True;
+      FDragStartX    := X;
+      FDragging      := False;
+      FDragTargetPos := col.Position;
+      if HandleAllocated then MouseCapture := True;
+    end;
+    Exit;  { don't fall through to node hit-test when in header }
+  end;
 
   node := GetNodeAtPoint(X, Y, part);
   FLastMouseNode := node;
@@ -2010,8 +2627,97 @@ procedure TTyTreeView.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   part: TTyTreeHitPart;
   node: PTyTreeNode;
+  hPart: TTyTreeHitPart;
+  hCol, PPI, newWidth: Integer;
+  col: TTyTreeColumn;
+  threshold, logX, logScroll, hitColIdx, targetPos: Integer;
 begin
+  hitColIdx := NoColumn;
+  targetPos := 0;
   inherited MouseMove(Shift, X, Y);
+
+  { D2: active column resize drag }
+  if FResizeColumn <> NoColumn then
+  begin
+    PPI := Font.PixelsPerInch;
+    newWidth := FResizeStartWidth + MulDiv(X - FResizeStartX, 96, PPI);
+    col := FHeader.Columns.Items[FResizeColumn] as TTyTreeColumn;
+    col.Width := newWidth;  // setter clamps + UpdatePositions + fires HeaderChanged → repaint
+    if Assigned(FOnColumnResized) then
+      FOnColumnResized(Self, FResizeColumn);
+    { D4: if hoAutoResize is on, re-apply auto-size after a manual resize }
+    if (hoAutoResize in FHeader.Options) and (FHeader.AutoSizeIndex >= 0) and
+       (FHeader.AutoSizeIndex < FHeader.Columns.Count) then
+    begin
+      PPI := Font.PixelsPerInch;
+      FHeader.Columns.ApplyAutoSize(
+        MulDiv(ContentRect.Width, 96, PPI),
+        FHeader.AutoSizeIndex);
+      if FHeader.Columns.Count > 0 then
+        FRangeX := MulDiv(FHeader.Columns.TotalWidth, Font.PixelsPerInch, 96);
+      UpdateScrollBars;
+    end;
+    Exit;
+  end;
+
+  { D3: active or pending column drag-reorder }
+  if FDragPending or FDragging then
+  begin
+    threshold := MulDiv(4, Font.PixelsPerInch, 96);
+    if not FDragging and (Abs(X - FDragStartX) > threshold) and
+       (hoDrag in FHeader.Options) and
+       (FDragColumn >= 0) and (FDragColumn < FHeader.Columns.Count) and
+       (coDraggable in (FHeader.Columns.Items[FDragColumn] as TTyTreeColumn).Options) then
+    begin
+      FDragging := True;
+      Invalidate;
+    end;
+
+    if FDragging then
+    begin
+      { Compute the target visual position from the current X }
+      PPI       := Font.PixelsPerInch;
+      logX      := MulDiv(X - ContentRect.Left, 96, PPI);
+      logScroll := MulDiv(-FOffsetX, 96, PPI);
+      hitColIdx := FHeader.Columns.ColumnFromPosition(logX, logScroll);
+
+      if hitColIdx <> NoColumn then
+      begin
+        col := FHeader.Columns.Items[hitColIdx] as TTyTreeColumn;
+        targetPos := col.Position;
+      end
+      else
+      begin
+        { X is past the last column — clamp to the last visible position }
+        targetPos := FHeader.Columns.Count - 1;
+      end;
+
+      if targetPos < 0 then targetPos := 0;
+      if targetPos > FHeader.Columns.Count - 1 then
+        targetPos := FHeader.Columns.Count - 1;
+
+      if targetPos <> FDragTargetPos then
+      begin
+        FDragTargetPos := targetPos;
+        Invalidate;
+      end
+      else
+        Invalidate;  { always repaint to update ghost position }
+    end;
+    Exit;
+  end;
+
+  { D2: cursor feedback for header divider hover }
+  if (FHeader <> nil) and (FHeader.Columns.Count > 0) and
+     (hoColumnResize in FHeader.Options) then
+  begin
+    hPart := hpNowhere;
+    hCol  := NoColumn;
+    if GetHeaderHitAt(X, Y, hPart, hCol) and (hPart = hpHeaderDivider) then
+      Cursor := crHSplit
+    else
+      Cursor := crDefault;
+  end;
 
   if not FHotTrack then Exit;
 
@@ -2019,6 +2725,53 @@ begin
   if node <> FHotNode then
   begin
     FHotNode := node;
+    Invalidate;
+  end;
+
+end;
+
+procedure TTyTreeView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  draggedCol: TTyTreeColumn;
+  oldPos, newPos: Integer;
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+
+  if (Button = mbLeft) and (FResizeColumn <> NoColumn) then
+  begin
+    if Assigned(FOnColumnResized) then
+      FOnColumnResized(Self, FResizeColumn);
+    FResizeColumn := NoColumn;
+    if HandleAllocated then MouseCapture := False;
+  end;
+
+  { D3: end of drag-reorder }
+  if (Button = mbLeft) and (FDragPending or FDragging) then
+  begin
+    if FDragging and (FDragColumn <> NoColumn) then
+    begin
+      draggedCol := FHeader.Columns.Items[FDragColumn] as TTyTreeColumn;
+      oldPos := draggedCol.Position;
+      newPos := FDragTargetPos;
+      if newPos <> Integer(oldPos) then
+      begin
+        FHeader.Columns.AdjustPosition(draggedCol, newPos);
+        { AdjustPosition already calls UpdatePositions + DoChange → HeaderChanged }
+        if Assigned(FOnColumnReorder) then
+          FOnColumnReorder(Self, oldPos, newPos);
+      end;
+    end
+    else if FDragPending and not FDragging and (FDragColumn <> NoColumn) then
+    begin
+      { E3: plain press+release (no drag) on a header section = header click }
+      _HandleHeaderClick(FDragColumn);
+    end;
+    { Clear drag state }
+    FDragColumn    := NoColumn;
+    FDragPending   := False;
+    FDragging      := False;
+    FDragTargetPos := 0;
+    if HandleAllocated then MouseCapture := False;
     Invalidate;
   end;
 end;
@@ -2217,6 +2970,249 @@ begin
       Key := 0;
     end;
 
+  end;
+end;
+
+{ ── E1 ── sort engine ────────────────────────────────────────────────────── }
+
+{ DoCompare: wraps OnCompareNodes.  Returns 0 when no handler assigned.
+  The caller uses natural ordering; the sort direction is handled by the merge. }
+function TTyTreeView.DoCompare(Node1, Node2: PTyTreeNode; Column: Integer): Integer;
+begin
+  Result := 0;
+  if Assigned(FOnCompareNodes) then
+    FOnCompareNodes(Self, Node1, Node2, Column, Result);
+end;
+
+{ MergeSortedLists: merge two sorted singly-linked (NextSibling) lists into one.
+  AscDir = True  → pick the SMALLER node first (ascending)
+  AscDir = False → pick the LARGER  node first (descending)
+  Only NextSibling is used during the merge; PrevSibling/Index/Parent are
+  repaired by the sweep in Sort after this returns. }
+function MergeSortedLists(Tree: TTyTreeView; A, B: PTyTreeNode;
+  Column: Integer; AscDir: Boolean): PTyTreeNode;
+var
+  head, tail, chosen: PTyTreeNode;
+  cmp: Integer;
+begin
+  head := nil;
+  tail := nil;
+  while (A <> nil) and (B <> nil) do
+  begin
+    cmp := Tree.DoCompare(A, B, Column);
+    { Ascending: pick A when cmp <= 0 (stable: equal stays in original order).
+      Descending: pick A when cmp >= 0. }
+    if AscDir then
+    begin
+      if cmp <= 0 then chosen := A else chosen := B;
+    end
+    else
+    begin
+      if cmp >= 0 then chosen := A else chosen := B;
+    end;
+    if chosen = A then A := A^.NextSibling
+    else              B := B^.NextSibling;
+    chosen^.NextSibling := nil;  { isolate the node }
+    if tail = nil then begin head := chosen; tail := chosen; end
+    else begin tail^.NextSibling := chosen; tail := chosen; end;
+  end;
+  { Append whichever list still has nodes }
+  if tail <> nil then
+  begin
+    if A <> nil then tail^.NextSibling := A
+    else             tail^.NextSibling := B;
+  end;
+  if head = nil then
+  begin
+    if A <> nil then Result := A
+    else              Result := B;
+  end
+  else Result := head;
+end;
+
+{ MergeSortList: top-down recursive merge sort on a singly-linked list
+  (linked via NextSibling only).  Returns the new head of the sorted list.
+  ACount = number of nodes in the list (for efficient split). }
+function MergeSortList(Tree: TTyTreeView; Head: PTyTreeNode;
+  ACount: Integer; Column: Integer; AscDir: Boolean): PTyTreeNode;
+var
+  half, i: Integer;
+  slow, fast, left, right: PTyTreeNode;
+begin
+  if (Head = nil) or (ACount <= 1) then begin Result := Head; Exit; end;
+
+  { Split: advance by ACount div 2 nodes to find the midpoint }
+  half := ACount div 2;
+  slow := Head;
+  for i := 1 to half - 1 do
+    slow := slow^.NextSibling;
+  fast  := slow^.NextSibling;   { second half starts here }
+  slow^.NextSibling := nil;      { cut the list }
+  left  := Head;
+  right := fast;
+
+  left  := MergeSortList(Tree, left,  half,         Column, AscDir);
+  right := MergeSortList(Tree, right, ACount - half, Column, AscDir);
+
+  Result := MergeSortedLists(Tree, left, right, Column, AscDir);
+end;
+
+{ Sort: sort the direct children of Node one level.
+  DoInit=True → lazily materialise children first (matches the ③a lazy model). }
+procedure TTyTreeView.Sort(Node: PTyTreeNode; Column: Integer;
+  ADirection: TTySortDirection; DoInit: Boolean);
+var
+  child, prev: PTyTreeNode;
+  newHead: PTyTreeNode;
+  idx: Cardinal;
+  cnt: Integer;
+begin
+  if Node = nil then Exit;
+
+  { Step 1: if DoInit, ensure children are materialised and each child is inited }
+  if DoInit then
+  begin
+    if (nsHasChildren in Node^.States) and (Node^.ChildCount = 0) then
+      InitChildren(Node);
+    { Init each direct child so nsHasChildren etc. are populated for compare }
+    child := Node^.FirstChild;
+    while child <> nil do
+    begin
+      InitNode(child);
+      child := child^.NextSibling;
+    end;
+  end;
+
+  cnt := Node^.ChildCount;
+  if cnt <= 1 then Exit;   { 0 or 1 child: nothing to sort }
+
+  { Step 2: merge sort the FirstChild→NextSibling singly-linked list }
+  newHead := MergeSortList(Self, Node^.FirstChild, cnt, Column,
+                           ADirection = sdAscending);
+
+  { Step 3: sweep the sorted list to rebuild full doubly-linked structure
+    and re-stamp Index. }
+  Node^.FirstChild := newHead;
+  prev := nil;
+  idx  := 0;
+  child := newHead;
+  while child <> nil do
+  begin
+    child^.Parent      := Node;
+    child^.Index       := idx;
+    child^.PrevSibling := prev;
+    if prev <> nil then
+      prev^.NextSibling := child;
+    prev := child;
+    child := child^.NextSibling;
+    Inc(idx);
+  end;
+  { prev is now the last node }
+  if prev <> nil then
+  begin
+    prev^.NextSibling := nil;
+    Node^.LastChild   := prev;
+  end;
+  { ChildCount/TotalCount/TotalHeight are unchanged (same set of children) }
+end;
+
+{ ── E3 ── header-click sort wiring ──────────────────────────────────────── }
+
+{ _HandleHeaderClick: called from MouseUp when a header section receives a
+  plain click (press+release with no drag movement).
+  Toggles SortDirection when clicking the already-sorted column; otherwise sets
+  the new SortColumn and resets direction to Ascending.  Then runs SortTree.
+  FSorting prevents re-entry from the programmatic SortColumn/SortDirection setters. }
+procedure TTyTreeView._HandleHeaderClick(ColIndex: Integer);
+var
+  col: TTyTreeColumn;
+begin
+  if FHeader = nil then Exit;
+  if (ColIndex < 0) or (ColIndex >= FHeader.Columns.Count) then Exit;
+
+  col := FHeader.Columns.Items[ColIndex] as TTyTreeColumn;
+
+  { Guard: column must allow click and header must have auto-sort on }
+  if not (coAllowClick in col.Options) then Exit;
+  if not (hoHeaderClickAutoSort in FHeader.Options) then Exit;
+
+  { Update SortColumn / SortDirection (suppress HeaderChanged reentrancy) }
+  FSorting := True;
+  try
+    if FHeader.SortColumn = ColIndex then
+    begin
+      { Same column — toggle direction }
+      if FHeader.SortDirection = sdAscending then
+        FHeader.SortDirection := sdDescending
+      else
+        FHeader.SortDirection := sdAscending;
+    end
+    else
+    begin
+      { New column — set it, reset to ascending }
+      FHeader.SortColumn    := ColIndex;
+      FHeader.SortDirection := sdAscending;
+    end;
+  finally
+    FSorting := False;
+  end;
+
+  { Run the sort }
+  SortTree(FHeader.SortColumn, FHeader.SortDirection);
+
+  { Fire the event }
+  if Assigned(FOnHeaderClick) then
+    FOnHeaderClick(Self, ColIndex);
+
+  Invalidate;
+end;
+
+{ ── E2 ── SortTree (recursive, lazy-aware) ───────────────────────────────── }
+
+{ SortTreeNode: recursive helper for SortTree.
+  Sorts Node's children, then descends into initialized+expanded children.
+  Collapsed subtrees are skipped (lazy: they will sort when expanded). }
+procedure SortTreeNode(Tree: TTyTreeView; Node: PTyTreeNode;
+  Column: Integer; ADirection: TTySortDirection);
+var
+  child: PTyTreeNode;
+begin
+  if Node = nil then Exit;
+  { Sort this level — DoInit=True so each level materialises + InitNodes its
+    children BEFORE comparing (deeper expanded levels have lazy, possibly
+    uninitialised children; comparing them zero-filled gives wrong order). }
+  Tree.Sort(Node, Column, ADirection, True);
+  { Recurse into initialized+expanded children (skip collapsed) }
+  child := Node^.FirstChild;
+  while child <> nil do
+  begin
+    if (nsInitialized in child^.States) and (nsExpanded in child^.States) then
+      SortTreeNode(Tree, child, Column, ADirection);
+    child := child^.NextSibling;
+  end;
+end;
+
+{ SortTree: sort the whole (initialized+expanded) tree, rebuild the position
+  cache, and request a repaint. }
+procedure TTyTreeView.SortTree(Column: Integer; ADirection: TTySortDirection);
+begin
+  if FSorting then Exit;   { reentrancy guard }
+  FSorting := True;
+  try
+    { SortTreeNode sorts FRoot's children (DoInit=True) and recurses into every
+      initialized+expanded subtree, materialising + InitNode-ing each level
+      before comparing.  (Sorting the root here, NOT a separate Sort(FRoot) call
+      first — that double-sorted the root level.) }
+    SortTreeNode(Self, FRoot, Column, ADirection);
+    { Record the key so HeaderChanged does NOT re-sort on a width/reorder change. }
+    FSortedColumn    := Column;
+    FSortedDirection := ADirection;
+    { The visible order changed — invalidate the position cache }
+    FCacheValid := False;
+    FRangeY     := ContentHeight;
+    Invalidate;
+  finally
+    FSorting := False;
   end;
 end;
 

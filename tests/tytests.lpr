@@ -53,7 +53,8 @@ uses
   test.calendar,
   test.datetimepicker,
   test.treeview.events,
-  test.treeview;
+  test.treeview,
+  test.treeview.columns;
 
 type
   TTyTestRunner = class(TTestRunner)

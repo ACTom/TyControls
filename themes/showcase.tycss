@@ -423,3 +423,7 @@ TyTreeNode { background: none; color: var(--on-surface); }
 TyTreeNode:hover { background: var(--surface-hover); }
 TyTreeNode:selected { background: var(--accent); color: var(--on-accent); }
 TyTreeNode:disabled { color: var(--muted); }
+TyTreeHeader { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
+TyTreeHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }
+TyTreeHeaderSection:hover { background: var(--surface-hover); }
+TyTreeHeaderSection:selected { background: var(--surface-active); }

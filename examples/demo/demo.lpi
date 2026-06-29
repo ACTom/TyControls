@@ -42,6 +42,7 @@
         <ComponentName Value="DemoMainForm"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
+        <IsVisibleTab Value="True"/>
         <TopLine Value="189"/>
         <CursorPos X="33" Y="214"/>
         <UsageCount Value="93"/>
@@ -63,12 +64,10 @@
       </Unit>
       <Unit>
         <Filename Value="../../source/tyControls.TreeView.pas"/>
-        <IsVisibleTab Value="True"/>
-        <EditorIndex Value="1"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="56"/>
         <CursorPos X="15" Y="88"/>
         <UsageCount Value="11"/>
-        <Loaded Value="True"/>
       </Unit>
     </Units>
     <JumpHistory HistoryIndex="29">
