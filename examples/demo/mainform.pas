@@ -49,10 +49,10 @@ type
     TyEdit1: TTyEdit;
     TyNativeStyler1: TTyNativeStyler;
     TyPanel1: TTyPanel;
-    TyPanel2: TTyPanel;
     TyTabSheet1: TTyTabSheet;
     TyTabSheet2: TTyTabSheet;
     TyTabSheet3: TTyTabSheet;
+    TyTabSheet5: TTyTabSheet;
     TyTitleBar1: TTyTitleBar;
     ToolBar1: TTyToolBar;
     TbBtnNew: TTyButton;

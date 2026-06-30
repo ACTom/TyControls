@@ -35,7 +35,7 @@
     <Units>
       <Unit>
         <Filename Value="demo.lpr"/>
-        <UsageCount Value="5"/>
+        <UsageCount Value="4"/>
       </Unit>
       <Unit>
         <Filename Value="mainform.pas"/>
@@ -43,9 +43,9 @@
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="189"/>
+        <TopLine Value="196"/>
         <CursorPos X="130" Y="229"/>
-        <UsageCount Value="98"/>
+        <UsageCount Value="103"/>
         <Loaded Value="True"/>
         <LoadedDesigner Value="True"/>
       </Unit>
@@ -53,40 +53,32 @@
         <Filename Value="chromeform.pas"/>
         <ComponentName Value="ChromeForm"/>
         <ResourceBaseClass Value="Form"/>
-        <UsageCount Value="5"/>
+        <UsageCount Value="4"/>
       </Unit>
       <Unit>
         <Filename Value="../../source/tyControls.Menu.pas"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="1024"/>
         <CursorPos X="3" Y="1046"/>
-        <UsageCount Value="8"/>
+        <UsageCount Value="7"/>
       </Unit>
       <Unit>
         <Filename Value="../../source/tyControls.TreeView.pas"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="517"/>
         <CursorPos X="25" Y="544"/>
-        <UsageCount Value="10"/>
+        <UsageCount Value="9"/>
       </Unit>
       <Unit>
         <Filename Value="mainform.lfm"/>
         <HasResources Value="True"/>
         <EditorIndex Value="-1"/>
         <CursorPos X="135" Y="24"/>
-        <UsageCount Value="9"/>
+        <UsageCount Value="8"/>
         <DefaultSyntaxHighlighter Value="LFM"/>
       </Unit>
     </Units>
-    <JumpHistory HistoryIndex="26">
-      <Position>
-        <Filename Value="mainform.pas"/>
-        <Caret Line="201" Column="33" TopLine="176"/>
-      </Position>
-      <Position>
-        <Filename Value="mainform.pas"/>
-        <Caret Line="200" Column="33" TopLine="175"/>
-      </Position>
+    <JumpHistory HistoryIndex="29">
       <Position>
         <Filename Value="mainform.pas"/>
         <Caret Line="199" Column="33" TopLine="174"/>
@@ -186,6 +178,26 @@
       <Position>
         <Filename Value="mainform.pas"/>
         <Caret Line="214" Column="33" TopLine="189"/>
+      </Position>
+      <Position>
+        <Filename Value="mainform.pas"/>
+        <Caret Line="229" Column="130" TopLine="189"/>
+      </Position>
+      <Position>
+        <Filename Value="mainform.pas"/>
+        <Caret Line="230" Column="130" TopLine="197"/>
+      </Position>
+      <Position>
+        <Filename Value="mainform.pas"/>
+        <Caret Line="229" Column="130" TopLine="196"/>
+      </Position>
+      <Position>
+        <Filename Value="mainform.pas"/>
+        <Caret Line="230" Column="130" TopLine="197"/>
+      </Position>
+      <Position>
+        <Filename Value="mainform.pas"/>
+        <Caret Line="229" Column="130" TopLine="196"/>
       </Position>
     </JumpHistory>
   </ProjectOptions>
