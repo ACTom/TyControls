@@ -49,6 +49,7 @@ type
     ColTree:      TTyTreeView;   // Tab 2: Columns + sort
     CheckTree:    TTyTreeView;   // Tab 3: Checkboxes
     MultiTree:    TTyTreeView;   // Tab 4: Multi-select
+    DragTree:     TTyTreeView;   // Tab 5: Drag to move
 
     { Explorer-style row icons for the Columns tab (owned by the form) }
     FFileIcons:   TImageList;
@@ -69,7 +70,6 @@ type
                                   var ChildCount: Cardinal);
     procedure VirtualGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
                                   var AText: string);
-    procedure VirtualNodeMoved   (Sender: TTyTreeView; Node: PTyTreeNode);
 
     { Tab 2 — Columns + sort }
     procedure BuildFileIcons;
@@ -110,6 +110,12 @@ type
     procedure MultiGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
                                 var AText: string);
     procedure MultiSelectionChanged(Sender: TObject);
+
+    { Tab 5 — Drag to move (small, reparent-safe) }
+    procedure InitDragTab(APage: TTyTabSheet);
+    procedure DragGetText   (Sender: TTyTreeView; Node: PTyTreeNode;
+                             var AText: string);
+    procedure DragNodeMoved (Sender: TTyTreeView; Node: PTyTreeNode);
 
     { Toolbar button handlers }
     procedure LightClick(Sender: TObject);
@@ -280,7 +286,7 @@ end;
   ----------------------------------------------------------------------- }
 procedure TShowcaseForm.BuildPages;
 var
-  Tab1, Tab2, Tab3, Tab4: TTyTabSheet;
+  Tab1, Tab2, Tab3, Tab4, Tab5: TTyTabSheet;
 begin
   Pages := TTyPageControl.Create(Self);
   Pages.Parent := Self;
@@ -291,11 +297,13 @@ begin
   Tab2 := Pages.AddPage('Columns + Sort');
   Tab3 := Pages.AddPage('Checkboxes');
   Tab4 := Pages.AddPage('Multi-Select');
+  Tab5 := Pages.AddPage('Drag to Move');
 
   InitVirtualTab(Tab1);
   InitColTab(Tab2);
   InitCheckTab(Tab3);
   InitMultiTab(Tab4);
+  InitDragTab(Tab5);
 
   Pages.ActivePageIndex := 0;
 end;
@@ -314,23 +322,23 @@ begin
   Lbl.BorderSpacing.Left := 8;
   Lbl.Caption :=
     'Virtual engine: 1 000 000 root nodes; up to level 4 each has 10 children. ' +
-    'All nodes initialised lazily (OnInitNode / OnInitChildren). ' +
-    'Drag a node above / onto / below another to move it (toNodeDrag).';
+    'All nodes initialised lazily (OnInitNode / OnInitChildren).';
   Lbl.Controller := TyController;
 
   VirtualTree := TTyTreeView.Create(Self);
   VirtualTree.Parent := APage;
   VirtualTree.Align := alClient;
   VirtualTree.Controller := TyController;
-  { Intra-tree node drag-drop: drag a node above/onto/below another to reorder or
-    reparent. The label is purely positional (Node N (LM)), so a moved node simply
-    re-renders with its new index/level — no node-data write-back needed. }
-  VirtualTree.Options := [toNodeDrag];
+  { NOTE: intra-tree node drag (toNodeDrag) is deliberately NOT enabled here. The
+    1M root nodes form one flat sibling list; a drop calls ReindexSiblings over the
+    whole list (O(siblings), same class as DeleteNode) which would freeze the UI on
+    a list this size. The drag-to-move demo lives on its own small tab instead (see
+    InitDragTab). This tab stays a pure virtual-engine / lazy-init showcase. }
+  VirtualTree.Options := [];
 
   VirtualTree.OnInitNode     := @VirtualInitNode;
   VirtualTree.OnInitChildren := @VirtualInitChildren;
   VirtualTree.OnGetText      := @VirtualGetText;
-  VirtualTree.OnNodeMoved    := @VirtualNodeMoved;
 
   { 1 million root nodes — the virtual engine creates no child structure until
     a node is expanded; memory stays constant until the user expands nodes. }
@@ -354,19 +362,6 @@ procedure TShowcaseForm.VirtualGetText(Sender: TTyTreeView;
   Node: PTyTreeNode; var AText: string);
 begin
   AText := Format('Node %d  (L%d)', [Node^.Index, Sender.GetNodeLevel(Node)]);
-end;
-
-{ Report a completed intra-tree move in the status bar. The node-data blob (none
-  here — text is positional) travels with the node, so there is nothing to write
-  back; we just re-read the node's current label and announce it. }
-procedure TShowcaseForm.VirtualNodeMoved(Sender: TTyTreeView; Node: PTyTreeNode);
-var
-  s: string;
-begin
-  s := '';
-  VirtualGetText(Sender, Node, s);
-  if (StatusBar <> nil) and (StatusBar.Panels.Count > 0) then
-    StatusBar.Panels[0].Text := 'Moved ' + s;
 end;
 
 { =======================================================================
@@ -950,6 +945,98 @@ begin
     StatusBar.Panels[0].Text := 'Ready'
   else
     StatusBar.Panels[0].Text := Format('Selected: %d', [n]);
+end;
+
+{ =======================================================================
+  TAB 5 — Drag to move (small, reparent-safe)
+  A deliberately SMALL static tree (3 groups × ~3 items = ~12 nodes, 2 levels)
+  with toNodeDrag enabled — the safe home for the drag demo. Each node carries a
+  STABLE label id in its node-data blob (assigned once at build time); DragGetText
+  reads that id, so a node keeps its caption when reparented or reordered (NOT a
+  [parent][childIndex] lookup, which would go out of bounds after a reparent).
+  ======================================================================= }
+const
+  { 12 stable captions, indexed by the id stored in each node's data blob. }
+  DragLabels: array[0..11] of string = (
+    'Fruits', 'Apple', 'Banana', 'Cherry',
+    'Animals', 'Cat', 'Dog', 'Otter',
+    'Colors', 'Red', 'Green', 'Blue');
+type
+  { one Integer per node: the stable index into DragLabels. }
+  PDragRec = ^TDragRec;
+  TDragRec = record
+    LabelId: Integer;
+  end;
+
+procedure TShowcaseForm.InitDragTab(APage: TTyTabSheet);
+var
+  Lbl:     TTyLabel;
+  group:   PTyTreeNode;
+  child:   PTyTreeNode;
+  data:    PDragRec;
+  g, c, id: Integer;
+begin
+  Lbl := TTyLabel.Create(Self);
+  Lbl.Parent := APage;
+  Lbl.Align := alTop;
+  Lbl.Height := 26;
+  Lbl.BorderSpacing.Left := 8;
+  Lbl.Caption :=
+    'Drag to move: drag a node ABOVE / ONTO / BELOW another to reorder or ' +
+    'reparent it (toNodeDrag). Each node keeps its name when moved.';
+  Lbl.Controller := TyController;
+
+  DragTree := TTyTreeView.Create(Self);
+  DragTree.Parent := APage;
+  DragTree.Align := alClient;
+  DragTree.Controller := TyController;
+  DragTree.Options := [toNodeDrag];
+  DragTree.NodeDataSize := SizeOf(TDragRec);
+  DragTree.OnGetText   := @DragGetText;
+  DragTree.OnNodeMoved := @DragNodeMoved;
+
+  { Build the small tree eagerly (no lazy init needed at this size). Three groups,
+    each with three children; the label id is just the node's position in
+    DragLabels at build time and never changes thereafter. }
+  for g := 0 to 2 do
+  begin
+    group := DragTree.AddChild(nil);
+    id := g * 4;
+    data := PDragRec(DragTree.GetNodeData(group));
+    if data <> nil then data^.LabelId := id;
+    for c := 1 to 3 do
+    begin
+      child := DragTree.AddChild(group);
+      data := PDragRec(DragTree.GetNodeData(child));
+      if data <> nil then data^.LabelId := id + c;
+    end;
+    DragTree.Expanded[group] := True;
+  end;
+end;
+
+procedure TShowcaseForm.DragGetText(Sender: TTyTreeView;
+  Node: PTyTreeNode; var AText: string);
+var
+  data: PDragRec;
+begin
+  data := PDragRec(Sender.GetNodeData(Node));
+  if (data <> nil) and (data^.LabelId >= Low(DragLabels)) and
+     (data^.LabelId <= High(DragLabels)) then
+    AText := DragLabels[data^.LabelId]
+  else
+    AText := '?';
+end;
+
+{ Announce a completed move in the status bar (the stable label travels with the
+  node, so we just re-read its caption). }
+procedure TShowcaseForm.DragNodeMoved(Sender: TTyTreeView; Node: PTyTreeNode);
+var
+  s: string;
+begin
+  s := '';
+  DragGetText(Sender, Node, s);
+  if (StatusBar <> nil) and (StatusBar.Panels.Count > 0) then
+    StatusBar.Panels[0].Text := 'Moved ' + s;
 end;
 
 { =======================================================================

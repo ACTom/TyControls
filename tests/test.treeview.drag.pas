@@ -29,7 +29,10 @@ type
     FRootA, FRootB:     PTyTreeNode;
     FA0, FA1, FA2:      PTyTreeNode;
     FB0, FB1:           PTyTreeNode;
+    FLazyChildCount:    Cardinal;     // how many children OnInitChildren materialises
     procedure BuildTree;
+    procedure OnInitLazyChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+      var ChildCount: Cardinal);
     function  SiblingIndexList(AParent: PTyTreeNode): string;  // "child0Index,child1Index,..."
     function  ChildAt(AParent: PTyTreeNode; AIdx: Integer): PTyTreeNode;
   protected
@@ -56,6 +59,9 @@ type
     procedure TestNoOpReparentRejected;
     { auto-expand }
     procedure TestMoveOnCollapsedTargetAutoExpands;
+    { lazy (VirtualTree) dmOn target: its pending children must be materialised,
+      not destroyed, by the drop (review FIX 1 — data loss). }
+    procedure TestMoveOnLazyTargetMaterializesChildren;
     { IsDescendant + CanMoveNode predicate matrix }
     procedure TestIsDescendant;
     procedure TestCanMoveNodePredicateMatrix;
@@ -239,6 +245,15 @@ begin
   { expand both subtrees so heights are "visible" and conservation is meaningful }
   FTree.Expanded[FRootA] := True;
   FTree.Expanded[FRootB] := True;
+end;
+
+{ Lazy-children provider (mirrors the VirtualTree pattern): a node marked
+  nsHasChildren with ChildCount=0 materialises FLazyChildCount real children the
+  first time the tree needs them (here: triggered by MoveNode's dmOn path). }
+procedure TTreeDragF1Test.OnInitLazyChildren(Sender: TTyTreeView; Node: PTyTreeNode;
+  var ChildCount: Cardinal);
+begin
+  ChildCount := FLazyChildCount;
 end;
 
 function TTreeDragF1Test.SiblingIndexList(AParent: PTyTreeNode): string;
@@ -452,6 +467,57 @@ begin
     Integer(before) + 2 * NH, Integer(FTree.RootNode^.TotalHeight));
   { rootB now expanded with 3 children: rootB row + 3 child rows }
   AssertEquals('rootB TotalHeight = 4*NH', 4 * NH, Integer(FRootB^.TotalHeight));
+end;
+
+procedure TTreeDragF1Test.TestMoveOnLazyTargetMaterializesChildren;
+var
+  src, target, c0, c1, c2: PTyTreeNode;
+  beforeCount: Cardinal;
+begin
+  { Build a lazy (VirtualTree-style) target: nsHasChildren set, ChildCount=0, with
+    an OnInitChildren that will create 3 real children on first materialisation.
+    Plus a top-level source node to drop ONTO it. (Both live alongside the SetUp
+    fixture's rootA/rootB; that is harmless.) }
+  FLazyChildCount    := 3;
+  FTree.OnInitChildren := @OnInitLazyChildren;
+
+  src    := FTree.AddChild(nil);                 // a fresh top-level leaf
+  target := FTree.AddChild(nil);                 // a fresh top-level node...
+  Include(target^.States, nsHasChildren);        // ...marked as having (unbuilt) children
+  AssertEquals('precondition: lazy target has ChildCount=0 (not materialised)',
+    0, Integer(target^.ChildCount));
+  AssertTrue('precondition: target carries nsHasChildren', nsHasChildren in target^.States);
+
+  beforeCount := FTree.RootNode^.TotalCount;
+
+  { THE FIX: dropping ONTO a lazy target must FIRST materialise its 3 pending
+    children, THEN append src after them — never discard them. }
+  AssertTrue('MoveNode(src, target, dmOn)', FTree.MoveNode(src, target, dmOn));
+
+  { 3 originals materialised + src appended = 4; none lost. }
+  AssertEquals('target.ChildCount = 4 (3 materialised originals + src)',
+    4, Integer(target^.ChildCount));
+  c0 := ChildAt(target, 0);
+  c1 := ChildAt(target, 1);
+  c2 := ChildAt(target, 2);
+  AssertTrue('original child 0 present (not lost)',  (c0 <> nil) and (c0 <> src));
+  AssertTrue('original child 1 present (not lost)',  (c1 <> nil) and (c1 <> src));
+  AssertTrue('original child 2 present (not lost)',  (c2 <> nil) and (c2 <> src));
+  AssertSame('src appended AFTER the materialised originals (last child)',
+    src, target^.LastChild);
+  AssertSame('src.Parent = target', target, src^.Parent);
+
+  { dmOn auto-expands the (previously collapsed) target so the drop is visible. }
+  AssertTrue('target auto-expanded by the dmOn drop', FTree.Expanded[target]);
+
+  { Count bookkeeping: materialising 3 children grows the root TotalCount by 3
+    (exactly as a user expand would); src was already counted (it only relocated),
+    so the net root delta is +3. }
+  AssertEquals('root TotalCount grew by the 3 materialised children (src merely moved)',
+    Integer(beforeCount) + 3, Integer(FTree.RootNode^.TotalCount));
+  { target subtree count = self + 3 originals + src = 5 }
+  AssertEquals('target TotalCount = 5 (self + 3 originals + src)',
+    5, Integer(target^.TotalCount));
 end;
 
 { ---- IsDescendant + predicate matrix ---- }

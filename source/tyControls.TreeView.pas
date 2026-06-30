@@ -2326,6 +2326,20 @@ begin
   if oldParent^.ChildCount = 0 then
     Exclude(oldParent^.States, nsHasChildren);
 
+  { ── 1b. MATERIALISE a lazy dmOn target's children BEFORE linking ANode ──────
+    A VirtualTree target may carry nsHasChildren with ChildCount=0 (its real
+    children not yet built). Linking ANode first would bump ChildCount to 1, and
+    InitChildren's `ChildCount>0` guard would then early-exit and DISCARD those
+    pending children. So build them now (while ChildCount is still 0): ANode then
+    appends AFTER the real children. InitChildren legitimately grows TotalCount by
+    the materialised children (exactly as a user expanding the node would) — that
+    is correct, not a conservation violation; the dmOn auto-expand height delta
+    below recomputes over the now-existing children. (newParent <> oldParent here:
+    a lazy ChildCount=0 target can't already be ANode's parent.) }
+  if (AMode = dmOn) and (newParent <> FRoot) and
+     (nsHasChildren in newParent^.States) and (newParent^.ChildCount = 0) then
+    InitChildren(newParent);
+
   { ── 2. LINK ANode into newParent before beforeNode (nil = append last) ─────── }
   ANode^.Parent := newParent;
   if beforeNode = nil then
@@ -2379,7 +2393,10 @@ begin
     parent — adds nothing: ANode stays hidden, consistent with AddChild.) }
 
   { ── 3. re-stamp Index on BOTH sibling lists (③c re-sequence). When oldParent =
-    newParent the second call simply re-confirms the first; cheap + correct. ───── }
+    newParent the second call simply re-confirms the first; cheap + correct.
+    Cost: O(siblings) per affected parent (Index is the node's positional rank —
+    same class as DeleteNode's reindex). Fine for typical trees; pathological only
+    for a huge flat sibling list (thousands+ direct children). ──────────────────── }
   ReindexSiblings(oldParent);
   if newParent <> oldParent then
     ReindexSiblings(newParent);
@@ -2396,6 +2413,12 @@ begin
   FDragNode   := nil;
   FDropTarget := nil;
   FDropMode   := dmNone;
+  { ③f F2 review: reset the drag cursor here. The only Cursor:=crDefault in
+    MouseMove is gated behind (Columns.Count>0) and hoColumnResize, so a 0-column
+    tree (the VirtualTree case) would otherwise keep crDrag/crNoDrop forever after
+    a drag. Also drop the node-drag mouse capture (FIX 5) if we took it. }
+  Cursor := crDefault;
+  if HandleAllocated and MouseCapture then MouseCapture := False;
   Invalidate;
 end;
 
@@ -4079,18 +4102,22 @@ begin
             P.Bitmap.FillRect(textRect.Left, rowRect.Bottom - P.Scale(2),
                               CR.Right,      rowRect.Bottom,           accentPx);
           { dmOn: an accent outline around the whole target row (distinct shape
-            from the line, so "make child" reads differently from "reorder"). }
+            from the line, so "make child" reads differently from "reorder"). The
+            HORIZONTAL extent spans the full content width (CR.Left..CR.Right, like
+            the row fill) — not just the main column's cell — so in multi-column
+            mode the outline frames the whole row, not one column. Vertical bounds
+            come from the target's row band (rowRect.Top/Bottom). }
           dmOn:
             begin
               inset := P.Scale(2);   // outline thickness (reuse inset scratch)
-              P.Bitmap.FillRect(rowRect.Left, rowRect.Top,
-                                rowRect.Right, rowRect.Top + inset, accentPx);          // top
-              P.Bitmap.FillRect(rowRect.Left, rowRect.Bottom - inset,
-                                rowRect.Right, rowRect.Bottom, accentPx);               // bottom
-              P.Bitmap.FillRect(rowRect.Left, rowRect.Top,
-                                rowRect.Left + inset, rowRect.Bottom, accentPx);        // left
-              P.Bitmap.FillRect(rowRect.Right - inset, rowRect.Top,
-                                rowRect.Right, rowRect.Bottom, accentPx);               // right
+              P.Bitmap.FillRect(CR.Left, rowRect.Top,
+                                CR.Right, rowRect.Top + inset, accentPx);               // top
+              P.Bitmap.FillRect(CR.Left, rowRect.Bottom - inset,
+                                CR.Right, rowRect.Bottom, accentPx);                    // bottom
+              P.Bitmap.FillRect(CR.Left, rowRect.Top,
+                                CR.Left + inset, rowRect.Bottom, accentPx);             // left
+              P.Bitmap.FillRect(CR.Right - inset, rowRect.Top,
+                                CR.Right, rowRect.Bottom, accentPx);                    // right
             end;
         end;
       end;
@@ -4636,7 +4663,15 @@ begin
     if (ssLeft in Shift) and not FDragActive and
        ((Abs(X - FDragStartPos.X) > MulDiv(4, Font.PixelsPerInch, 96)) or
         (Abs(Y - FDragStartPos.Y) > MulDiv(4, Font.PixelsPerInch, 96))) then
+    begin
       FDragActive := True;
+      { ③f FIX 5: capture the mouse for the duration of the node drag (mirrors the
+        header/resize gestures) so a release OUTSIDE the control still reaches
+        MouseUp → EndNodeDrag and clears FDragActive. The column drag is mutually
+        exclusive (its block Exits before reaching here), so the captures never
+        overlap. EndNodeDrag releases it. }
+      if HandleAllocated then MouseCapture := True;
+    end;
 
     if FDragActive then
     begin
@@ -4649,6 +4684,13 @@ begin
       allowed := CanMoveNode(FDragNode, FDropTarget, FDropMode);
       if Assigned(FOnDragOver) then
         FOnDragOver(Self, FDragNode, FDropTarget, FDropMode, allowed);
+      { Note (by design): if an OnDragOver handler forces Allowed:=True on a move
+        that CanMoveNode rejects, the drop-mark below will paint a "valid" mark,
+        but MouseUp's MoveNode re-runs CanMoveNode and HARD-rejects it — CanMoveNode
+        is the single hard gate; OnDragOver can only further RESTRICT a valid move,
+        not authorise an invalid one. Also: a re-entrant Clear/MoveNode from inside
+        OnDragOver is tolerated — the code after this handler does not re-deref the
+        drag pointers (it only reads FDropMode and repaints). }
       if not allowed then FDropMode := dmNone;
 
       if FDropMode <> dmNone then Cursor := crDrag
