@@ -419,6 +419,11 @@ type
       without growing the public surface. }
     function  DropModeFromY(Target: PTyTreeNode; AY: Integer): TTyTreeDropMode;
     property  DragNode: PTyTreeNode read FDragNode;
+    { ③f F3: force the active-drag state (source/target/mode) without driving the
+      mouse gesture. Protected so a descendant / test can set up a drop-mark render
+      in isolation — same rationale as DragNode/DropModeFromY above. No Invalidate
+      (the caller paints explicitly). }
+    procedure SetActiveDragState(ASource, ATarget: PTyTreeNode; AMode: TTyTreeDropMode);
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Paint; override;
@@ -2394,6 +2399,18 @@ begin
   Invalidate;
 end;
 
+{ ③f F3: seed the active-drag state directly (test/descendant seam — see the
+  protected declaration). Flips FDragActive True so the drop-mark in RenderTo
+  paints; no Invalidate (the caller renders explicitly). }
+procedure TTyTreeView.SetActiveDragState(ASource, ATarget: PTyTreeNode;
+  AMode: TTyTreeDropMode);
+begin
+  FDragActive := True;
+  FDragNode   := ASource;
+  FDropTarget := ATarget;
+  FDropMode   := AMode;
+end;
+
 { ③f F2: split the cursor's device-px Y across ATarget's visible row band into a
   drop mode. Uses GetCellRect (the SAME row-rect math RenderTo paints into) so the
   thirds line up with the painted row; dmNone when ATarget is nil or off-screen. }
@@ -4025,6 +4042,58 @@ begin
 
       node   := GetNextVisibleNoInit(node);
       Inc(rowTop, rowH);
+    end;
+
+    { ── ③f F3 ── drop-mark overlay (drawn INTO the BGRA layer, before EndPaint) ─
+      A node drag in progress paints a mark on the prospective drop target so the
+      user sees where the node will land. Drawn here (after the rows, while the
+      content ClipRect is still active) into P.Bitmap — the SAME layer the rows
+      use, so the alpha-blit in EndPaint preserves it (a GDI draw to ACanvas would
+      be erased; cf. d427095). Accent comes from the THEME — the TyTreeNode:selected
+      background is --accent — exactly the source the ③b header drag-mark uses; no
+      hard-coded color, no new typeKey. Fully gated: a tree that is not dragging
+      (FDragActive False), has no mode (dmNone) or no/off-screen target never enters
+      here, so Options=[] / non-drag renders are byte-identical. }
+    if FDragActive and (FDropMode <> dmNone) and (FDropTarget <> nil) then
+    begin
+      mainColBase := NoColumn;
+      if useColumns then mainColBase := FHeader.MainColumn;
+      if GetCellRect(FDropTarget, mainColBase, rowRect) then
+      begin
+        { Theme accent (same resolution as the header drag overlay above). }
+        NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', [tysSelected]);
+        if tpBackground in NodeStyle.Present then
+          accentPx := TyColorToBGRA(NodeStyle.Background.Color)
+        else
+          accentPx := TyColorToBGRA(S.BorderColor);
+        { Text-left of the target's main cell → the line starts at the caption
+          indent so it reads as "between these siblings at this level". }
+        textRect := CellTextRect(FDropTarget, mainColBase, rowRect);
+        case FDropMode of
+          { dmAbove / dmBelow: a Scale(2)-thick accent line at the target row's
+            top / bottom, from the caption indent to the content right edge. }
+          dmAbove:
+            P.Bitmap.FillRect(textRect.Left, rowRect.Top,
+                              CR.Right,      rowRect.Top + P.Scale(2), accentPx);
+          dmBelow:
+            P.Bitmap.FillRect(textRect.Left, rowRect.Bottom - P.Scale(2),
+                              CR.Right,      rowRect.Bottom,           accentPx);
+          { dmOn: an accent outline around the whole target row (distinct shape
+            from the line, so "make child" reads differently from "reorder"). }
+          dmOn:
+            begin
+              inset := P.Scale(2);   // outline thickness (reuse inset scratch)
+              P.Bitmap.FillRect(rowRect.Left, rowRect.Top,
+                                rowRect.Right, rowRect.Top + inset, accentPx);          // top
+              P.Bitmap.FillRect(rowRect.Left, rowRect.Bottom - inset,
+                                rowRect.Right, rowRect.Bottom, accentPx);               // bottom
+              P.Bitmap.FillRect(rowRect.Left, rowRect.Top,
+                                rowRect.Left + inset, rowRect.Bottom, accentPx);        // left
+              P.Bitmap.FillRect(rowRect.Right - inset, rowRect.Top,
+                                rowRect.Right, rowRect.Bottom, accentPx);               // right
+            end;
+        end;
+      end;
     end;
 
     P.Bitmap.ClipRect := savedClip;

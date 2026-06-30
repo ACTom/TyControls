@@ -9,6 +9,7 @@ unit test.treeview.drag;
 interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType,
+  BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.TreeView.Columns,
   tyControls.TreeView,
@@ -108,6 +109,39 @@ type
     procedure TestOptionsEmptyNoDrag;
   end;
 
+  { F3: the drop-mark paint. Headless render: a real TForm + Controller + a
+    RenderTo pass into an offscreen TBitmap wrapped read-only by a TBGRABitmap,
+    then probe pixels for the theme accent (DRAG_THEME_CSS's TyTreeNode:selected
+    background = #3B82F6 = the accent the impl resolves). The drag state is poked
+    directly via TDragTreeAccess.SetDragStatePub so each mode (dmAbove / dmBelow /
+    dmOn / dmNone) is exercised deterministically. Same 0-column / 22px-row / three
+    top-level node fixture as F2: row r occupies device-y [22*r .. 22*r+22). }
+  TTreeDragF3Test = class(TTestCase)
+  private
+    FCtl:  TTyStyleController;
+    FForm: TForm;
+    FTree: TTyTreeView;
+    FN0, FN1, FN2: PTyTreeNode;
+    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure BuildTree;
+    { Render the current tree state to an offscreen bitmap; out a BGRA read-only
+      wrap for pixel probing. Caller frees both via FreeRender. }
+    function  Render(out Bmp: TBitmap): TBGRABitmap;
+    procedure FreeRender(Bmp: TBitmap; Bgra: TBGRABitmap);
+    { True if any pixel in the horizontal band [xFrom..xTo] at row y is the accent
+      (blue-dominant: B>150, R<120 — same test the C3 accent paint test uses). }
+    function  HasAccentInBand(Bgra: TBGRABitmap; xFrom, xTo, y: Integer): Boolean;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestDmAboveDrawsAccentLineAtRowTop;
+    procedure TestDmBelowDrawsAccentLineAtRowBottom;
+    procedure TestDmOnDrawsAccentOutlineOnRow;
+    procedure TestDmNoneDrawsNoMark;
+    procedure TestNotDraggingDrawsNoMark;
+  end;
+
 implementation
 
 const
@@ -131,6 +165,10 @@ type
     procedure KeyDownPub(var Key: Word; Shift: TShiftState);
     function  DropModeFromYPub(Target: PTyTreeNode; AY: Integer): TTyTreeDropMode;
     function  DragNodePub: PTyTreeNode;
+    { F3: poke the active-drag state directly so a drop-mark render can be set up
+      without driving the whole mouse gesture (the protected fields are reachable
+      from a descendant). }
+    procedure SetDragStatePub(ATarget: PTyTreeNode; AMode: TTyTreeDropMode);
   end;
 
 procedure TDragTreeAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -166,6 +204,12 @@ end;
 function TDragTreeAccess.DragNodePub: PTyTreeNode;
 begin
   Result := DragNode;
+end;
+
+procedure TDragTreeAccess.SetDragStatePub(ATarget: PTyTreeNode; AMode: TTyTreeDropMode);
+begin
+  { source = target is fine here; the drop-mark paint only reads target + mode. }
+  SetActiveDragState(ATarget, ATarget, AMode);
 end;
 
 procedure TTreeDragF1Test.SetUp;
@@ -735,8 +779,191 @@ begin
     TDragTreeAccess(FTree).DragNodePub = nil);
 end;
 
+{ ============================================================================
+  F3 — drop-mark paint (above/below line, on-outline) via the theme accent
+  ============================================================================ }
+
+procedure TTreeDragF3Test.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  Text := 'row' + IntToStr(Node^.Index);
+end;
+
+procedure TTreeDragF3Test.BuildTree;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(DRAG_THEME_CSS);
+
+  FForm := TForm.CreateNew(nil);
+  FTree := TTyTreeView.Create(FForm);
+  FTree.Parent     := FForm;
+  FTree.Controller := FCtl;
+  FTree.Font.PixelsPerInch := 96;
+  FTree.DefaultNodeHeight  := 22;
+  FTree.Indent             := 16;
+  FTree.ShowButtons        := True;
+  FTree.ShowTreeLines      := False;
+  FTree.ShowRoot           := True;
+  FTree.SetBounds(0, 0, 300, 200);
+  FTree.OnGetText          := @OnGetText;
+
+  FTree.RootNodeCount := 3;
+  FN0 := FTree.RootNode^.FirstChild;
+  FN1 := FN0^.NextSibling;
+  FN2 := FN1^.NextSibling;
+end;
+
+function TTreeDragF3Test.Render(out Bmp: TBitmap): TBGRABitmap;
+begin
+  Bmp := TBitmap.Create;
+  Bmp.PixelFormat := pf32bit;
+  Bmp.SetSize(FTree.Width, FTree.Height);
+  Bmp.Canvas.Brush.Color := clWhite;
+  Bmp.Canvas.FillRect(0, 0, Bmp.Width, Bmp.Height);
+  TDragTreeAccess(FTree).RenderTo(Bmp.Canvas, Rect(0, 0, Bmp.Width, Bmp.Height), 96);
+  Result := TBGRABitmap.Create(Bmp, True);   // read-only wrap; does not own Bmp
+end;
+
+procedure TTreeDragF3Test.FreeRender(Bmp: TBitmap; Bgra: TBGRABitmap);
+begin
+  Bgra.Free;
+  Bmp.Free;
+end;
+
+function TTreeDragF3Test.HasAccentInBand(Bgra: TBGRABitmap; xFrom, xTo, y: Integer): Boolean;
+var
+  x: Integer;
+  px: TBGRAPixel;
+begin
+  Result := False;
+  for x := xFrom to xTo do
+  begin
+    px := Bgra.GetPixel(x, y);
+    if (px.blue > 150) and (px.red < 120) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+procedure TTreeDragF3Test.SetUp;
+begin
+  BuildTree;
+end;
+
+procedure TTreeDragF3Test.TearDown;
+begin
+  FForm.Free;   // frees FTree (owned)
+  FForm := nil;
+  FCtl.Free;
+  FCtl := nil;
+end;
+
+{ row 1 spans device-y [22..44): a dmAbove mark is a Scale(2) accent line at its
+  TOP (y=22..23), starting at the caption indent (top-level ShowRoot ⇒ text-left
+  ≈ x=18) and running to the content right edge. Probe inside the line band. }
+procedure TTreeDragF3Test.TestDmAboveDrawsAccentLineAtRowTop;
+var
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  TDragTreeAccess(FTree).SetDragStatePub(FN1, dmAbove);
+  Bgra := Render(Bmp);
+  try
+    AssertTrue('dmAbove: accent line present at row-1 top (y=22), in the caption span',
+      HasAccentInBand(Bgra, 40, 120, 22));
+    { it must NOT bleed to the row bottom (that is the dmBelow position) }
+    AssertFalse('dmAbove: no accent at the row bottom (y=43)',
+      HasAccentInBand(Bgra, 40, 120, 43));
+  finally
+    FreeRender(Bmp, Bgra);
+  end;
+end;
+
+{ dmBelow → the line sits at row 1's BOTTOM (y=42..43). }
+procedure TTreeDragF3Test.TestDmBelowDrawsAccentLineAtRowBottom;
+var
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  TDragTreeAccess(FTree).SetDragStatePub(FN1, dmBelow);
+  Bgra := Render(Bmp);
+  try
+    AssertTrue('dmBelow: accent line present at row-1 bottom (y=43), in the caption span',
+      HasAccentInBand(Bgra, 40, 120, 43));
+    AssertFalse('dmBelow: no accent at the row top (y=22)',
+      HasAccentInBand(Bgra, 40, 120, 22));
+  finally
+    FreeRender(Bmp, Bgra);
+  end;
+end;
+
+{ dmOn → an accent OUTLINE around the whole row. The line modes start at the
+  caption indent (x≈18) and never paint the left border column (x=0..1); the
+  dmOn outline does. Probe the left edge at the row's mid-Y (y=33) — accent there
+  is the outline's signature, distinct from a between-siblings line. }
+procedure TTreeDragF3Test.TestDmOnDrawsAccentOutlineOnRow;
+var
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  TDragTreeAccess(FTree).SetDragStatePub(FN1, dmOn);
+  Bgra := Render(Bmp);
+  try
+    { left edge of row 1, mid-row: the outline's left bar (x=0..1). }
+    AssertTrue('dmOn: accent outline on the row left edge at mid-Y (x=0..2,y=33)',
+      HasAccentInBand(Bgra, 0, 2, 33));
+    { top edge present too }
+    AssertTrue('dmOn: accent outline on the row top edge (y=22)',
+      HasAccentInBand(Bgra, 0, 120, 22));
+  finally
+    FreeRender(Bmp, Bgra);
+  end;
+end;
+
+{ dmNone (with an active drag) ⇒ nothing painted. }
+procedure TTreeDragF3Test.TestDmNoneDrawsNoMark;
+var
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  TDragTreeAccess(FTree).SetDragStatePub(FN1, dmNone);
+  Bgra := Render(Bmp);
+  try
+    AssertFalse('dmNone: no accent mark at the row top',
+      HasAccentInBand(Bgra, 0, 120, 22));
+    AssertFalse('dmNone: no accent mark at the row bottom',
+      HasAccentInBand(Bgra, 0, 120, 43));
+    AssertFalse('dmNone: no accent mark on the left edge',
+      HasAccentInBand(Bgra, 0, 2, 33));
+  finally
+    FreeRender(Bmp, Bgra);
+  end;
+end;
+
+{ Not dragging at all (FDragActive False) ⇒ nothing painted, even if a target /
+  mode were somehow set. This is the Options=[]/non-drag byte-identical guarantee. }
+procedure TTreeDragF3Test.TestNotDraggingDrawsNoMark;
+var
+  Bmp: TBitmap;
+  Bgra: TBGRABitmap;
+begin
+  { no SetDragStatePub call ⇒ FDragActive stays False }
+  AssertFalse('precondition: not dragging', FTree.IsDraggingNode);
+  Bgra := Render(Bmp);
+  try
+    AssertFalse('no drag: no accent at row-1 top',    HasAccentInBand(Bgra, 0, 120, 22));
+    AssertFalse('no drag: no accent at row-1 bottom', HasAccentInBand(Bgra, 0, 120, 43));
+    AssertFalse('no drag: no accent on left edge',    HasAccentInBand(Bgra, 0, 2, 33));
+  finally
+    FreeRender(Bmp, Bgra);
+  end;
+end;
+
 initialization
   RegisterTest(TTreeDragF1Test);
   RegisterTest(TTreeDragF2Test);
+  RegisterTest(TTreeDragF3Test);
 
 end.
