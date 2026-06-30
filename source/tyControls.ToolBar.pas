@@ -199,8 +199,13 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     W := ARect.Right - ARect.Left; H := ARect.Bottom - ARect.Top;
-    bg := Default(TTyFill); bg.Kind := tfkSolid; bg.Color := S.Background.Color;
-    if tpBackground in S.Present then P.FillBackground(Rect(0, 0, W, H), bg, 0);
+    // Lay the form's photo down FIRST so an alpha CSS background tints the photo (glass),
+    // like TTyPanel. No-op (False) on solid/non-image themes -> their look is unchanged.
+    FillSharpBackdrop(P, Rect(0, 0, W, H));
+    // Paint S.Background directly (not a solid bg.Color rebuild) so an alpha() background is
+    // honored OVER the backdrop instead of replacing it with an opaque tint.
+    if tpBackground in S.Present then P.FillBackground(Rect(0, 0, W, H), S.Background, 0);
+    bg := Default(TTyFill); bg.Kind := tfkSolid;
     bw := P.Scale(S.BorderWidth); if bw < 1 then bw := 1;
     if tpBorderColor in S.Present then
     begin

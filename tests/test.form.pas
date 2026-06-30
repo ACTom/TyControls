@@ -9,7 +9,7 @@ uses
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form,
-  tyControls.Menu;
+  tyControls.Base, tyControls.Menu;
 
 type
   TFormHelpersTest = class(TTestCase)
@@ -164,6 +164,21 @@ type
     procedure TestNonResizableGatesMaximize;
   end;
 
+  { FIX #1: the photo backdrop must (re)build on theme-apply WITHOUT a paint cycle.
+    Loads the green image-bg theme, gives the form a client size, calls RebuildBackdrop
+    directly (no WM_PAINT), and asserts FSharpBackdrop exists at the client size. Also
+    checks that a non-image theme leaves no stale backdrop. This is the core of FIX #1:
+    a WS_CLIPCHILDREN form tiled by children never gets a WM_PAINT, so the old in-Paint-
+    only snapshot left the photo missing until a min/restore. }
+  TTyFormBackdropTest = class(TTestCase)
+  private
+    function GreenThemePath: string;
+  published
+    procedure TestRebuildBackdropBuildsWithoutPaint;
+    procedure TestRebuildBackdropMatchesClientSize;
+    procedure TestNonImageThemeHasNoBackdrop;
+  end;
+
   { Verifies Task 6: TTyForm.MenuBar association + the non-mac shortcut dispatch
     path. On a non-DARWIN target the menu bar OWNS shortcut dispatch — the form's
     IsShortcut override forwards the key message to FMenuBar.Menu.IsShortCut, which
@@ -220,6 +235,10 @@ type
       override exactly as the widgetset would, returning whether it was consumed.
       ssAlt is encoded into KeyData (MK_ALT) so the match is deterministic headless. }
     function TestIsShortCut(AKey: Word; AShift: TShiftState): Boolean;
+    { Drive the (protected) offscreen backdrop build directly, and read the resulting
+      snapshot — to prove FIX #1: an image theme builds FSharpBackdrop with NO paint cycle. }
+    procedure CallRebuildBackdrop;
+    function SharpBackdrop: TBGRABitmap;
   end;
 
 procedure TCaptionButtonAccess.SmokeRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -280,6 +299,14 @@ begin
   // cannot be forced headlessly, so deterministic tests use ssAlt.
   if ssAlt in AShift then msg.KeyData := msg.KeyData or PtrInt(MK_ALT);
   Result := IsShortcut(msg);
+end;
+
+procedure TTyFormAccess.CallRebuildBackdrop; begin RebuildBackdrop; end;
+function TTyFormAccess.SharpBackdrop: TBGRABitmap;
+begin
+  // FSharpBackdrop is private; read it through the public ITyGlassHost accessor the form
+  // implements (GlassSharpBackdrop returns FSharpBackdrop). Same value child controls sample.
+  Result := (Self as ITyGlassHost).GlassSharpBackdrop;
 end;
 
 const
@@ -1324,6 +1351,81 @@ begin
   end;
 end;
 
+{ TTyFormBackdropTest }
+
+function TTyFormBackdropTest.GreenThemePath: string;
+begin
+  // Same repo-relative resolution the golden tests use (test.themes.pas): the exe runs
+  // from tests/, so the themes dir is one level up. Loading via the file sets the theme
+  // base dir so url(assets/background.jpg) resolves to a real, loadable image.
+  Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim + 'green.tycss';
+end;
+
+procedure TTyFormBackdropTest.TestRebuildBackdropBuildsWithoutPaint;
+var F: TTyFormAccess; Ctl: TTyStyleController;
+begin
+  if not FileExists(GreenThemePath) then
+  begin
+    AssertTrue('green.tycss not found — skipping backdrop build test', True);
+    Exit;
+  end;
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    F.SetBounds(0, 0, 320, 240);   // a client size to snapshot (no handle / no paint)
+    Ctl.ThemeFile := GreenThemePath;
+    F.ApplyChromeTheme(Ctl);       // arms FController + FGlassBlurLogical; also calls RebuildBackdrop
+    F.CallRebuildBackdrop;         // explicit: prove the snapshot builds with NO WM_PAINT
+    AssertTrue('image theme builds FSharpBackdrop without a paint cycle',
+      F.SharpBackdrop <> nil);
+  finally
+    Ctl.Free;
+    F.Free;
+  end;
+end;
+
+procedure TTyFormBackdropTest.TestRebuildBackdropMatchesClientSize;
+var F: TTyFormAccess; Ctl: TTyStyleController;
+begin
+  if not FileExists(GreenThemePath) then
+  begin
+    AssertTrue('green.tycss not found — skipping backdrop size test', True);
+    Exit;
+  end;
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    F.SetBounds(0, 0, 320, 240);
+    Ctl.ThemeFile := GreenThemePath;
+    F.ApplyChromeTheme(Ctl);
+    F.CallRebuildBackdrop;
+    AssertTrue('backdrop exists', F.SharpBackdrop <> nil);
+    AssertEquals('backdrop width = client width', F.ClientWidth, F.SharpBackdrop.Width);
+    AssertEquals('backdrop height = client height', F.ClientHeight, F.SharpBackdrop.Height);
+  finally
+    Ctl.Free;
+    F.Free;
+  end;
+end;
+
+procedure TTyFormBackdropTest.TestNonImageThemeHasNoBackdrop;
+var F: TTyFormAccess; Ctl: TTyStyleController;
+begin
+  // A solid (non-image) theme must leave NO backdrop — RebuildBackdrop frees + clears it.
+  F := TTyFormAccess.CreateNew(nil);
+  Ctl := TTyStyleController.Create(nil);
+  try
+    F.SetBounds(0, 0, 320, 240);
+    Ctl.LoadThemeCss('TyForm { background: #123456; }');
+    F.ApplyChromeTheme(Ctl);
+    F.CallRebuildBackdrop;
+    AssertTrue('solid theme leaves no photo backdrop', F.SharpBackdrop = nil);
+  finally
+    Ctl.Free;
+    F.Free;
+  end;
+end;
+
 { TTyMenuFormTest }
 
 procedure TTyMenuFormTest.ItemClick(Sender: TObject);
@@ -1404,6 +1506,7 @@ initialization
   RegisterTest(TRescaleMetricTest);
   RegisterTest(TCaptionButtonHoverGlyphTest);
   RegisterTest(TTyFormTest);
+  RegisterTest(TTyFormBackdropTest);
   RegisterTest(TTyMenuFormTest);
 
 end.

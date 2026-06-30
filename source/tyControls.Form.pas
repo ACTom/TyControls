@@ -187,6 +187,13 @@ type
       its TMainMenu before the inherited (Form.Menu / action-list) handling. On mac
       the global Form.Menu already does this, so the override just calls inherited. }
     function IsShortcut(var Message: TLMKey): Boolean; override;
+    { Build (or refresh) FSharpBackdrop/FGlassBackdrop — the photo snapshot every glass
+      child SAMPLES — OFFSCREEN, without a paint cycle. Keyed on imagepath|WxH|blurDev so
+      it rebuilds only when something changes; frees + clears the backdrop on a non-image
+      theme. Called from Paint (so the in-paint path stays in sync) AND from ApplyChromeTheme
+      (so a theme-apply readies the backdrop even when WS_CLIPCHILDREN starves the form of a
+      WM_PAINT — the original "photo only after min/restore" bug). Never blits to the canvas. }
+    procedure RebuildBackdrop;
     procedure Paint; override;   // draws an image backdrop when the TyForm token sets one
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -1124,7 +1131,15 @@ begin
 end;
 
 procedure TTyForm.DoMinimizeClick(Sender: TObject);
-begin WindowState := wsMinimized; end;
+begin
+  // A borderless (bsNone) window minimized via WindowState shrinks to the legacy bottom-left
+  // desktop box, NOT the taskbar. For the main form, minimize the whole app (LCL routes it to the
+  // taskbar button); a secondary form falls back to the plain window state.
+  if Application.MainForm = Self then
+    Application.Minimize
+  else
+    WindowState := wsMinimized;
+end;
 
 procedure TTyForm.DoMaxRestoreClick(Sender: TObject);
 begin
@@ -1273,57 +1288,94 @@ begin
     and FController.Model.ResolveStyle('TyForm', '', []).BackgroundUnderTitlebar;
 end;
 
-procedure TTyForm.Paint;
+procedure TTyForm.RebuildBackdrop;
 var
   bg: TTyStyleSet;
   P: TTyPainter;
   blurDev: Integer;
   newKey: string;
 begin
+  // Non-image (or no controller): no photo backdrop -> drop any stale snapshot and bail.
+  if FController = nil then
+  begin
+    FreeAndNil(FSharpBackdrop);
+    FreeAndNil(FGlassBackdrop);
+    FGlassKey := '';
+    Exit;
+  end;
+  bg := FController.Model.ResolveStyle('TyForm', '', []);
+  if not ((tpBackground in bg.Present) and (bg.Background.Kind = tfkImage)) then
+  begin
+    FreeAndNil(FSharpBackdrop);   // non-image theme: drop any stale backdrop
+    FreeAndNil(FGlassBackdrop);
+    FGlassKey := '';
+    Exit;
+  end;
+  if (ClientWidth <= 0) or (ClientHeight <= 0) then Exit;   // not laid out yet — nothing to snapshot
+  // FSharpBackdrop is the photo base EVERY control samples for its corners, so build it for
+  // ANY image theme; the once-blurred FGlassBackdrop is built only when the theme uses glass.
+  // Keyed on image+client-size+blur so it rebuilds only when something changes (the blur
+  // dev-px is in the key, so an image->image switch that drops glass rebuilds + frees the old
+  // blurred backdrop). When the key is unchanged the snapshot is already current — skip.
+  blurDev := MulDiv(FGlassBlurLogical, Font.PixelsPerInch, 96);
+  newKey := bg.Background.ImagePath + '|' + IntToStr(ClientWidth) + 'x'
+    + IntToStr(ClientHeight) + '|' + IntToStr(blurDev);
+  if (FSharpBackdrop <> nil) and (newKey = FGlassKey) then Exit;
+  // Build the snapshot OFFSCREEN. CRITICAL: pass a NIL canvas so EndPaint does NOT blit to
+  // any DC (the form is WS_CLIPCHILDREN — drawing the photo here, outside a WM_PAINT, would
+  // be erased or clobber the children); it still frees the painter's internal bitmap, which
+  // TTyPainter only releases in EndPaint (no destructor), so this also avoids a leak. We
+  // Duplicate the composited image BEFORE EndPaint frees P.Bitmap.
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(nil, Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+    P.FillBackground(Rect(0, 0, ClientWidth, ClientHeight), bg.Background, 0);
+    FreeAndNil(FSharpBackdrop);
+    FreeAndNil(FGlassBackdrop);
+    FSharpBackdrop := P.Bitmap.Duplicate as TBGRABitmap;  // photo base (all controls)
+    if FGlassBlurLogical > 0 then
+    begin
+      if blurDev > 0 then
+        FGlassBackdrop := FSharpBackdrop.FilterBlurRadial(blurDev, rbFast) as TBGRABitmap
+      else
+        FGlassBackdrop := FSharpBackdrop.Duplicate as TBGRABitmap;
+    end;
+    FGlassKey := newKey;
+    P.EndPaint;   // nil canvas -> no blit, just frees P.Bitmap (avoids the leak)
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyForm.Paint;
+var
+  bg: TTyStyleSet;
+  P: TTyPainter;
+begin
   // When the TyForm token sets a background IMAGE, paint it across the whole client
   // (cover/stretch/center + optional blur). Otherwise fall back to the plain solid
   // Color fill the widgetset does. App controls paint on top in their own windows.
+  // The SNAPSHOT every glass child samples is (re)built by RebuildBackdrop (shared with
+  // the theme-apply path); here we additionally blit the visible photo onto the real
+  // canvas for any exposed client gaps (non-tiled children / borders).
   if FController <> nil then
   begin
     bg := FController.Model.ResolveStyle('TyForm', '', []);
     if (tpBackground in bg.Present) and (bg.Background.Kind = tfkImage) then
     begin
+      RebuildBackdrop;   // keep the offscreen snapshot current (no-op if already so)
       P := TTyPainter.Create;
       try
         P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
         P.FillBackground(ClientRect, bg.Background, 0);
-        // Snapshot the form's own composited image. FSharpBackdrop is the photo base
-        // EVERY control samples for its corners, so build it for ANY image theme; the
-        // once-blurred FGlassBackdrop is built only when the theme uses glass. Keyed on
-        // image+client-size+blur so it rebuilds only when something changes (the blur
-        // dev-px is in the key, so an image->image switch that drops glass rebuilds and
-        // frees the old blurred backdrop). Must duplicate before EndPaint frees P.Bitmap.
-        blurDev := MulDiv(FGlassBlurLogical, Font.PixelsPerInch, 96);
-        newKey := bg.Background.ImagePath + '|' + IntToStr(ClientWidth) + 'x'
-          + IntToStr(ClientHeight) + '|' + IntToStr(blurDev);
-        if (FSharpBackdrop = nil) or (newKey <> FGlassKey) then
-        begin
-          FreeAndNil(FSharpBackdrop);
-          FreeAndNil(FGlassBackdrop);
-          FSharpBackdrop := P.Bitmap.Duplicate as TBGRABitmap;  // photo base (all controls)
-          if FGlassBlurLogical > 0 then
-          begin
-            if blurDev > 0 then
-              FGlassBackdrop := FSharpBackdrop.FilterBlurRadial(blurDev, rbFast) as TBGRABitmap
-            else
-              FGlassBackdrop := FSharpBackdrop.Duplicate as TBGRABitmap;
-          end;
-          FGlassKey := newKey;
-        end;
-        P.EndPaint;
+        P.EndPaint;   // blits the visible photo to the form DC (this IS a WM_PAINT)
       finally
         P.Free;
       end;
       Exit;
     end;
   end;
-  FreeAndNil(FSharpBackdrop);   // non-image theme: drop any stale backdrop
-  FreeAndNil(FGlassBackdrop);
+  RebuildBackdrop;   // non-image theme: drop any stale backdrop
   inherited Paint;
 end;
 
@@ -1348,6 +1400,23 @@ end;
 
 procedure TTyForm.ApplyChromeTheme(AController: TTyStyleController);
 var bg: TTyStyleSet;
+
+  { Theme-switch glass-backdrop ordering: the form (parent) paints first and rebuilds the photo/
+    glass backdrop that windowed children SAMPLE for their own glass corners; force the children
+    to repaint too so they re-sample the FRESH backdrop. Without this, on a switch INTO an image
+    theme the children repaint against the old/empty backdrop and the image only appears after a
+    later full repaint (e.g. minimize/restore). }
+  procedure InvalidateKids(AParent: TWinControl);
+  var i: Integer;
+  begin
+    for i := 0 to AParent.ControlCount - 1 do
+    begin
+      AParent.Controls[i].Invalidate;
+      if AParent.Controls[i] is TWinControl then
+        InvalidateKids(TWinControl(AParent.Controls[i]));
+    end;
+  end;
+
 begin
   if AController = nil then Exit;
   FController := AController;   // remembered so Paint can resolve an image backdrop
@@ -1372,7 +1441,13 @@ begin
   if not (csDesigning in ComponentState) then
     UpdateFollowWatch;
   ApplyWindowEffects;  // re-apply corners + shadow (theme may have changed border-radius/window-shadow)
+  // Build the photo/glass snapshot NOW (offscreen, no paint needed) so it is ready BEFORE the
+  // children repaint + re-sample it. A WS_CLIPCHILDREN form whose client is fully tiled by
+  // windowed children gets an EMPTY update region from Invalidate -> no WM_PAINT -> Paint never
+  // runs -> without this the backdrop would only build on a later full repaint (min/restore).
+  RebuildBackdrop;
   Invalidate;
+  InvalidateKids(Self);   // children re-sample the freshly-rebuilt glass/photo backdrop
 end;
 
 procedure TTyForm.SetController(AValue: TTyStyleController);
