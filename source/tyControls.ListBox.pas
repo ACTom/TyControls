@@ -500,6 +500,7 @@ begin
       // Embedded scrollbar drives content scrolling: keep it instant (no thumb
       // glide) so scrolling never lags behind the wheel/keyboard.
       FScrollBar.AnimationsEnabled := False;
+      FScrollBar.ControlStyle := FScrollBar.ControlStyle + [csNoDesignVisible];   // internal: never a designable child
     end;
     // Update DPI-dependent width and controller every call so DPI changes take effect
     FScrollBar.Width := MulDiv(TyScrollbarSize, Font.PixelsPerInch, 96);

@@ -1838,12 +1838,14 @@ begin
   FVScroll.AnimationsEnabled := False;
   FVScroll.OnChange          := @VScrollChange;
   FVScroll.Visible           := False;
+  FVScroll.ControlStyle      := FVScroll.ControlStyle + [csNoDesignVisible];   // internal: never shown as a designable child (runtime shows it via UpdateScrollBars)
   FHScroll := TTyScrollBar.Create(Self);
   FHScroll.Parent            := Self;
   FHScroll.Kind              := sbHorizontal;
   FHScroll.AnimationsEnabled := False;
   FHScroll.OnChange          := @HScrollChange;
   FHScroll.Visible           := False;
+  FHScroll.ControlStyle      := FHScroll.ControlStyle + [csNoDesignVisible];   // internal: hide in the designer
   { B (columns): create the header sub-object and wire its change notification }
   FHeader := TTyTreeHeader.Create;
   FHeader.OnChange := @HeaderChanged;
@@ -1855,6 +1857,7 @@ begin
   FEditor.Parent  := Self;
   FEditor.Visible := False;
   FEditor.TabStop := False;
+  FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];   // internal inline editor: hide in the designer (EditNode shows it at runtime)
   { ③e E4: editor input — Enter commits, Esc cancels (EditorKeyDown), and losing
     focus commits Explorer-style (EditorExit). }
   FEditor.OnKeyDown := @EditorKeyDown;

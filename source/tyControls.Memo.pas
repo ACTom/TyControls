@@ -1605,6 +1605,7 @@ begin
       FScrollBar.Align := alRight;
       FScrollBar.OnChange := @ScrollBarChange;
       FScrollBar.AnimationsEnabled := False;   // instant: scrolling never lags the wheel/keyboard
+      FScrollBar.ControlStyle := FScrollBar.ControlStyle + [csNoDesignVisible];   // internal: never a designable child
     end;
     FScrollBar.Width := SBW;
     FScrollBar.Controller := Self.Controller;
@@ -1660,6 +1661,7 @@ begin
       FHScrollBar.Align := alNone;   // manual: stops before the vbar so they don't fight for the corner
       FHScrollBar.OnChange := @HScrollBarChange;
       FHScrollBar.AnimationsEnabled := False;
+      FHScrollBar.ControlStyle := FHScrollBar.ControlStyle + [csNoDesignVisible];   // internal: hide in the designer
     end;
     FHScrollBar.Height := SBW;
     FHScrollBar.Controller := Self.Controller;

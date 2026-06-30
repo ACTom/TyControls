@@ -99,12 +99,18 @@ var
 begin
   for I := 0 to High(FPages) do
   begin
-    FPages[I].Visible := (I = AIndex);
+    { Set csNoDesignVisible BEFORE Visible. The control's design-time shown-state is
+      `Visible or (csDesigning and not csNoDesignVisible)`, and it is the VISIBLE change that
+      triggers the re-evaluation (UpdateControlState). If csNoDesignVisible were set AFTER, the
+      re-eval would have run against its stale value, leaving a switched-away page's HWND shown
+      until a full designer re-render (the "flip to the code tab and back" workaround). }
     if I = AIndex then
       FPages[I].ControlStyle := FPages[I].ControlStyle - [csNoDesignVisible]
     else
       FPages[I].ControlStyle := FPages[I].ControlStyle + [csNoDesignVisible];
+    FPages[I].Visible := (I = AIndex);
   end;
+  Invalidate;
 end;
 
 procedure TTyPageControl.DoSelectTab(AIndex: Integer);
