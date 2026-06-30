@@ -1540,6 +1540,7 @@ var
   ContentRect, BandRect, CaretRect: TRect;
   Widths: TTyIntArray;
   X1, X2, CaretX, AOff: Integer;
+  CaretH, CaretMidY: Integer;
   BandFill: TTyFill;
   BandColor: TTyColor;
   EffSize: Integer;
@@ -1635,8 +1636,16 @@ begin
         Widths := MeasureCodepointWidths(APPI);
       // Apply scroll + alignment offset to caret position
       CaretX := ContentRect.Left + AOff + Widths[FCaret] - FScrollX;
-      CaretRect := Rect(CaretX, ContentRect.Top + P.Scale(2),
-        CaretX + P.Scale(1), ContentRect.Bottom - P.Scale(2));
+      // Caret height tracks the TEXT (font line height), vertically centered on the content
+      // rect — NOT the box height. The text is drawn tlCenter in ContentRect, so its centre is
+      // ContentRect's centre; sizing the caret to the measured line height keeps it the same
+      // height as the glyphs whether the box is taller OR shorter than the text (e.g. the tree's
+      // inline-edit overlay, whose box is the row height, leaves ContentRect shorter than the font
+      // and previously yielded a stunted half-height caret).
+      CaretH := P.MeasureText('Ag', S.FontName, EffSize, S.FontWeight).cy;
+      CaretMidY := (ContentRect.Top + ContentRect.Bottom) div 2;
+      CaretRect := Rect(CaretX, CaretMidY - CaretH div 2,
+        CaretX + P.Scale(1), CaretMidY - CaretH div 2 + CaretH);
       P.FillBackground(CaretRect, Default(TTyFill), 0);
       P.StrokeBorder(CaretRect, 0, 1, S.TextColor);
       if not EqualRect(FImeCaretRect, CaretRect) then
