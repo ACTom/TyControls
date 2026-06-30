@@ -58,6 +58,10 @@ begin
   AssertPub('OnColumnReorder');
   AssertPub('OnCompareNodes');
   AssertPub('OnHeaderClick');
+  { ③e E5: inline-edit events }
+  AssertPub('OnEditing');
+  AssertPub('OnNewText');
+  AssertPub('OnEditCancelled');
 end;
 initialization
   RegisterTest(TTreeViewEventsTest);

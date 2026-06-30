@@ -23,7 +23,16 @@ uses
   Lives BEYOND FormCreate so event handlers can declare PRowRec locally.
   ----------------------------------------------------------------------- }
 type
-  TRowRec  = record NameIdx, Kind: Integer; Size: Int64; end;
+  { EditedName holds an in-place edit of the Name column (toEditable). It is a
+    ShortString (value-type, copied/freed with the blob — no managed-field
+    lifecycle), so the edit lives in the node data, NOT in Node^.Index: sort
+    re-stamps Index, but the edited text follows its row. Empty ⇒ show the
+    static array name.
+    DEFERRED N5: this is a demo-only 63-byte cap — a rename of 64+ characters is
+    truncated by the string[63] assignment (a real app would use a plain string
+    field + OnFreeNode, but a managed field in a node blob needs the data lifecycle
+    handled, which is out of scope for the showcase). }
+  TRowRec  = record NameIdx, Kind: Integer; Size: Int64; EditedName: string[63]; end;
   PRowRec  = ^TRowRec;
 
 type
@@ -76,6 +85,10 @@ type
                               var Ghosted: Boolean; var ImageIndex: Integer);
     procedure ColCompareNodes(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
                               Column: Integer; var CompareResult: Integer);
+    procedure ColNewText     (Sender: TTyTreeView; Node: PTyTreeNode;
+                              Column: Integer; const NewText: string);
+    procedure ColEditing     (Sender: TTyTreeView; Node: PTyTreeNode;
+                              Column: Integer; var Allowed: Boolean);
 
     { Tab 3 — Checkboxes }
     procedure InitCheckTab(APage: TTyTabSheet);
@@ -482,7 +495,8 @@ begin
     'Sort reads PRowRec(GetNodeData(Node)) — never Node^.Index — so column ' +
     'sorts are always stable.  Click a column header to sort.  ' +
     'Each Name shows an Explorer-style icon (folder / file / image / archive) ' +
-    'via Images + OnGetImageIndex.';
+    'via Images + OnGetImageIndex.  Double-click / F2 a Name to edit it ' +
+    '(OnNewText writes the text into the node blob, so it survives re-sorts).';
   Lbl.Controller := TyController;
 
   { Explorer-style row icons (drawn in code, owned by the form) }
@@ -496,11 +510,18 @@ begin
   { Allocate the per-node TRowRec blob }
   ColTree.NodeDataSize := SizeOf(TRowRec);
 
+  { Inline-edit the Name column: double-click / F2 opens a themed editor over the
+    cell; OnNewText writes the committed string into the node blob (data-in-node,
+    NOT Node^.Index). }
+  ColTree.Options := [toEditable];
+
   { Wire handlers }
   ColTree.OnInitNode      := @ColInitNode;
   ColTree.OnInitChildren  := @ColInitChildren;
   ColTree.OnGetTextWithType := @ColGetText;
   ColTree.OnCompareNodes  := @ColCompareNodes;
+  ColTree.OnNewText       := @ColNewText;
+  ColTree.OnEditing       := @ColEditing;   { FIX 8: only the Name column edits }
 
   { Per-row icons in the main (Name) column }
   ColTree.Images          := FFileIcons;
@@ -614,7 +635,10 @@ begin
     if data <> nil then fi := data^.NameIdx
     else fi := Integer(Node^.Index);
     case Column of
-      0: CellText := ColFolders[fi];
+      0: if (data <> nil) and (data^.EditedName <> '') then
+           CellText := string(data^.EditedName)   { in-place edit wins }
+         else
+           CellText := ColFolders[fi];
       1: CellText := 'Folder';
       2: CellText := '';
       3: CellText := ColFolderDates[fi];
@@ -628,7 +652,10 @@ begin
     if data <> nil then begin fi := data^.NameIdx; ci := data^.Kind; end
     else begin fi := Integer(Node^.Parent^.Index); ci := Integer(Node^.Index); end;
     case Column of
-      0: CellText := ColChildNames[fi][ci];
+      0: if (data <> nil) and (data^.EditedName <> '') then
+           CellText := string(data^.EditedName)   { in-place edit wins }
+         else
+           CellText := ColChildNames[fi][ci];
       1: CellText := ColChildKinds[fi][ci];
       2: begin
            sz := ColChildSizes[fi][ci];
@@ -728,6 +755,34 @@ begin
       CompareResult := CompareStr(t1, t2);
     end;
   end;
+end;
+
+{ Inline-edit commit for the Name column. The tree owns no text (it is virtual):
+  write the committed string straight into the node's own blob, then invalidate
+  so ColGetText re-reads it. The edit lives in TRowRec.EditedName (data-in-node),
+  so it follows the row across sorts — it is NOT keyed on Node^.Index. }
+procedure TShowcaseForm.ColNewText(Sender: TTyTreeView; Node: PTyTreeNode;
+  Column: Integer; const NewText: string);
+var
+  data: PRowRec;
+begin
+  if Column <> 0 then Exit;   { only the Name column is editable }
+  data := PRowRec(Sender.GetNodeData(Node));
+  if data = nil then Exit;
+  { ShortString[63] — truncates a very long entry; ample for a file/folder name. }
+  data^.EditedName := ShortString(NewText);
+  Sender.Invalidate;   { re-read via ColGetText (EndEditNode also repaints) }
+  if (StatusBar <> nil) and (StatusBar.Panels.Count > 0) then
+    StatusBar.Panels[0].Text := 'Renamed to "' + NewText + '"';
+end;
+
+{ FIX 8: gate which cells open an editor. Only the Name column (0) is writable
+  (ColNewText no-ops elsewhere), so veto an edit on Kind/Size/Modified — otherwise
+  the editor would open on those columns and silently discard the user's typing. }
+procedure TShowcaseForm.ColEditing(Sender: TTyTreeView; Node: PTyTreeNode;
+  Column: Integer; var Allowed: Boolean);
+begin
+  Allowed := (Column = 0);
 end;
 
 { =======================================================================
