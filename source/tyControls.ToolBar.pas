@@ -99,6 +99,9 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     W := ARect.Right - ARect.Left; H := ARect.Bottom - ARect.Top;
+    FillSharpBackdrop(P, Rect(0, 0, W, H));   // photo through the separator on an image theme (no-op on solid)
+    if tpBackground in S.Present then
+      P.FillBackground(Rect(0, 0, W, H), S.Background, 0);   // match the toolbar bg (seamless on solid; transparent->photo on green)
     line := Default(TTyFill); line.Kind := tfkSolid; line.Color := S.BorderColor;
     P.FillBackground(Rect(W div 2, P.Scale(3), W div 2 + 1, H - P.Scale(3)), line, 0);
     P.EndPaint;

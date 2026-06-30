@@ -107,14 +107,12 @@ TyRadioButton:focus { outline: 2px var(--focus-ring); }
 TyRadioButton:disabled { opacity: 0.5; }
 
 TyPanel {
-  background: alpha(#FFFFFF, 0);
+  background: alpha(#FFFFFF, 0);   /* fully transparent: the sharp photo shows clean (no frosted glass) */
   color: var(--on-surface);
   border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 8px;
-  glass-blur: 16px;
-  glass-tint: alpha(var(--surface), 0.30);
 }
 
 TyComboBox {
@@ -133,7 +131,7 @@ TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring
 TyComboBox:disabled { opacity: 0.5; }
 
 TyScrollBar {
-  background: darken(--surface, 6%);
+  background: alpha(#FFFFFF, 0);   /* transparent track: photo shows through (overlay-scrollbar look) */
   color: var(--border);
   border-radius: 4px;
 }
@@ -143,12 +141,10 @@ TyScrollBar:focus  { outline: 2px var(--focus-ring); }
 TyScrollBar:disabled { opacity: 0.5; }
 
 TyTitleBar {
-  background: alpha(#FFFFFF, 0);
+  background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo under the titlebar (no frost) */
   color: var(--on-surface);
   font-size: 9px;
   font-weight: 700;
-  glass-blur: 16px;
-  glass-tint: alpha(var(--surface), 0.28);
 }
 
 TyCaptionButton {
@@ -156,12 +152,12 @@ TyCaptionButton {
   color: var(--on-surface);
   border-radius: 0px;
 }
-TyCaptionButton:hover  { background: darken(--surface, 12%); }
-TyCaptionButton:active { background: darken(--surface, 20%); }
+TyCaptionButton:hover  { background: alpha(var(--surface), 0.55); }   /* translucent: photo shows under the titlebar */
+TyCaptionButton:active { background: alpha(var(--surface), 0.75); }
 TyCaptionButton.close:hover  { background: var(--danger); color: #FFFFFF; }
 TyCaptionButton.close:active { background: darken(--danger, 10%); color: #FFFFFF; }
-TyCaptionButton.min:hover    { background: darken(--surface, 12%); }
-TyCaptionButton.max:hover    { background: darken(--surface, 12%); }
+TyCaptionButton.min:hover    { background: alpha(var(--surface), 0.55); }
+TyCaptionButton.max:hover    { background: alpha(var(--surface), 0.55); }
 
 TyListBox {
   background: alpha(#FFFFFF, 0);
@@ -229,36 +225,32 @@ TyTrackThumb:hover  { background: lighten(--accent, 8%); }
 TyTrackThumb:active { background: darken(--accent, 8%); }
 
 TyGroupBox {
-  background: alpha(#FFFFFF, 0);
+  background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo shows clean (no frost) */
   color: var(--on-surface);
   border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
-  glass-blur: 16px;
-  glass-tint: alpha(var(--surface), 0.30);
 }
 
 TyTabControl {
-  background: alpha(#FFFFFF, 0);
+  background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo shows clean (no frost) */
   color: var(--on-surface);
   border-color: alpha(var(--surface), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
-  glass-blur: 16px;
-  glass-tint: alpha(var(--surface), 0.30);
 }
 TyTabControl:hover  { border-color: darken(--border, 10%); }
 TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyTabControl:disabled { opacity: 0.5; }
 
 TyTab {
-  background: darken(--surface, 5%);
+  background: alpha(#FFFFFF, 0);   /* transparent: photo shows through the tabs (no frost) */
   color: var(--on-surface);
   padding: 4px;
   border-radius: var(--radius) var(--radius) 0 0;
 }
-TyTab:hover  { background: darken(--surface, 2%); }
-TyTab:active { background: var(--surface); color: var(--accent); }
+TyTab:hover  { color: var(--accent); }
+TyTab:active { color: var(--accent); font-weight: 700; }   /* active = accent + bold, no bg (photo shows) */
 
 TySpinEdit {
   background: alpha(#FFFFFF, 0);
@@ -294,8 +286,8 @@ TyTextSelection { background: var(--selection); }
 TyTextHint      { color: var(--muted); }
 TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }
 
-TyScrollThumb { background: var(--border); border-radius: 4px; }
-TyScrollThumb:hover  { background: darken(--border, 15%); }
+TyScrollThumb { background: alpha(var(--on-surface), 0.50); border-radius: 4px; }   /* translucent thumb over the photo */
+TyScrollThumb:hover  { background: alpha(var(--on-surface), 0.65); }
 TyScrollThumb:active { background: var(--accent); }
 TyToggleKnob  { background: #FFFFFF; border-radius: 12px; }
 
@@ -320,7 +312,7 @@ TySplitter:hover {
 }
 
 TyStatusBar {
-  background: darken(--surface, 4%);
+  background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo shows clean (no frost) */
   color: var(--on-surface);
   border-color: var(--border);
   border-width: 1px;
@@ -329,7 +321,7 @@ TyStatusBar {
 }
 
 TyToolBar {
-  background: darken(--surface, 4%);
+  background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo shows clean (no frost) */
   border-color: var(--border);
   border-width: 1px;
 }

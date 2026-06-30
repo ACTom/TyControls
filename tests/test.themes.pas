@@ -300,9 +300,9 @@ end;
 procedure TTestThemes.TestGreenImageAndGlass;
 var model: TTyStyleModel; s: TTyStyleSet;
 begin
-  // Regression guard: green is the image-background + frosted-glass demo theme.
-  // After the v2 engine refactor it must STILL resolve TyForm to an image fill and
-  // expose glass on its panels (the demo's whole point).
+  // Regression guard: green is the image-background demo theme. It must resolve TyForm to an
+  // image fill; its CONTAINERS are intentionally clean (no glass) so the sharp photo shows
+  // through, while glass remains on the input controls (TyEdit etc.).
   model := TTyStyleModel.Create;
   try
     model.LoadFromFile(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' +
@@ -314,10 +314,12 @@ begin
     // long after GThemeBaseDir was cleared, so resolve-time eval must still find it.
     AssertTrue('green TyForm image is a real file: ' + s.Background.ImagePath,
       FileExists(s.Background.ImagePath));
-    AssertEquals('green MaxGlassBlur', 16, model.MaxGlassBlur);
+    AssertEquals('green MaxGlassBlur (glass still used by input controls)', 16, model.MaxGlassBlur);
+    { Containers are CLEAN (no glass) so the sharp photo shows through; glass stays on inputs. }
     s := model.ResolveStyle('TyPanel', '', []);
-    AssertTrue('green TyPanel has glass', tpGlass in s.Present);
-    AssertEquals('green TyPanel glass-blur', 16, s.Background.GlassBlur);
+    AssertFalse('green TyPanel is clean (no glass)', tpGlass in s.Present);
+    s := model.ResolveStyle('TyEdit', '', []);
+    AssertTrue('green TyEdit still has glass', tpGlass in s.Present);
   finally
     model.Free;
   end;
@@ -341,8 +343,9 @@ begin
       FileExists(s.Background.ImagePath));
     AssertEquals('switched MaxGlassBlur', 16, model.MaxGlassBlur);
     s := model.ResolveStyle('TyPanel', '', []);
-    AssertTrue('switched TyPanel has glass', tpGlass in s.Present);
-    AssertEquals('switched TyPanel glass-blur', 16, s.Background.GlassBlur);
+    AssertFalse('switched TyPanel is clean (no glass)', tpGlass in s.Present);
+    s := model.ResolveStyle('TyEdit', '', []);
+    AssertTrue('switched TyEdit still has glass', tpGlass in s.Present);
   finally
     model.Free;
   end;
