@@ -58,6 +58,9 @@ add_tree() {
 
 echo "-- root + packages"
 add_file README.md
+add_file README.en.md
+add_file CHANGELOG.md
+add_file CHANGELOG.zh-CN.md
 add_file COPYING.LGPL.txt
 add_file COPYING.modifiedLGPL.txt
 add_file tycontrols.lpk

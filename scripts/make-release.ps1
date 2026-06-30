@@ -59,7 +59,8 @@ function Add-File {
 }
 
 Write-Host '-- root + packages'
-'README.md', 'COPYING.LGPL.txt', 'COPYING.modifiedLGPL.txt',
+'README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.zh-CN.md',
+'COPYING.LGPL.txt', 'COPYING.modifiedLGPL.txt',
 'tycontrols.lpk', 'tycontrols_dt.lpk' | ForEach-Object { Add-File $_ }
 
 Write-Host '-- runtime source'
