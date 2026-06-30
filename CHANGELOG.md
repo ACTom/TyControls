@@ -72,8 +72,6 @@ and keyboard mnemonics across the whole library.
 
 ### Notes
 
-- The version string is now **3-part** (`2.1.0`) and is shown by every component's read-only
-  `About` property.
 - Native window resize is **Windows-only** in this release; GTK / Qt / Cocoa fall back to a manual
   resize gutter (a native handoff is planned).
 
