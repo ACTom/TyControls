@@ -56,7 +56,8 @@ uses
   test.treeview,
   test.treeview.columns,
   test.treeview.streaming,
-  test.treeview.edit;
+  test.treeview.edit,
+  test.treeview.drag;
 
 type
   TTyTestRunner = class(TTestRunner)

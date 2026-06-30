@@ -62,6 +62,9 @@ begin
   AssertPub('OnEditing');
   AssertPub('OnNewText');
   AssertPub('OnEditCancelled');
+  { ③f F2: intra-tree node-drag events }
+  AssertPub('OnDragOver');
+  AssertPub('OnNodeMoved');
 end;
 initialization
   RegisterTest(TTreeViewEventsTest);
