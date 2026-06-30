@@ -84,8 +84,8 @@ const
   tyTransparent = TTyColor($00000000);
 
   // Library identity — surfaced by every component's read-only `About` property and
-  // the design-time About dialog. Bump TyVersion on each release.
-  TyVersion     = '2.0.0.0';
+  // the design-time About dialog. Bump TyVersion on each release (3-part: major.minor.patch).
+  TyVersion     = '2.1.0';
   TyHomepageUrl = 'https://github.com/ACTom/TyControls';
 
   // Shared logical-px spacing/size constants (96-PPI baseline). Promoted from
