@@ -69,6 +69,7 @@ type
                                   var ChildCount: Cardinal);
     procedure VirtualGetText     (Sender: TTyTreeView; Node: PTyTreeNode;
                                   var AText: string);
+    procedure VirtualNodeMoved   (Sender: TTyTreeView; Node: PTyTreeNode);
 
     { Tab 2 — Columns + sort }
     procedure BuildFileIcons;
@@ -313,17 +314,23 @@ begin
   Lbl.BorderSpacing.Left := 8;
   Lbl.Caption :=
     'Virtual engine: 1 000 000 root nodes; up to level 4 each has 10 children. ' +
-    'All nodes initialised lazily (OnInitNode / OnInitChildren).';
+    'All nodes initialised lazily (OnInitNode / OnInitChildren). ' +
+    'Drag a node above / onto / below another to move it (toNodeDrag).';
   Lbl.Controller := TyController;
 
   VirtualTree := TTyTreeView.Create(Self);
   VirtualTree.Parent := APage;
   VirtualTree.Align := alClient;
   VirtualTree.Controller := TyController;
+  { Intra-tree node drag-drop: drag a node above/onto/below another to reorder or
+    reparent. The label is purely positional (Node N (LM)), so a moved node simply
+    re-renders with its new index/level — no node-data write-back needed. }
+  VirtualTree.Options := [toNodeDrag];
 
   VirtualTree.OnInitNode     := @VirtualInitNode;
   VirtualTree.OnInitChildren := @VirtualInitChildren;
   VirtualTree.OnGetText      := @VirtualGetText;
+  VirtualTree.OnNodeMoved    := @VirtualNodeMoved;
 
   { 1 million root nodes — the virtual engine creates no child structure until
     a node is expanded; memory stays constant until the user expands nodes. }
@@ -347,6 +354,19 @@ procedure TShowcaseForm.VirtualGetText(Sender: TTyTreeView;
   Node: PTyTreeNode; var AText: string);
 begin
   AText := Format('Node %d  (L%d)', [Node^.Index, Sender.GetNodeLevel(Node)]);
+end;
+
+{ Report a completed intra-tree move in the status bar. The node-data blob (none
+  here — text is positional) travels with the node, so there is nothing to write
+  back; we just re-read the node's current label and announce it. }
+procedure TShowcaseForm.VirtualNodeMoved(Sender: TTyTreeView; Node: PTyTreeNode);
+var
+  s: string;
+begin
+  s := '';
+  VirtualGetText(Sender, Node, s);
+  if (StatusBar <> nil) and (StatusBar.Panels.Count > 0) then
+    StatusBar.Panels[0].Text := 'Moved ' + s;
 end;
 
 { =======================================================================
