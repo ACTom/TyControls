@@ -4,7 +4,7 @@ A skinnable / styleable **Lazarus component library**: every control is fully cu
 (BGRABitmap) and its appearance is driven uniformly by lightweight CSS-lite text themes
 (`.tycss`), rendering pixel-identical on Windows / Linux / macOS.
 
-> **中文:** [README.md](README.md) ·  **Changelog:** [CHANGELOG.md](CHANGELOG.md)
+> **中文:** [README.md](README.md) ·  **Changelog:** [CHANGELOG.en.md](CHANGELOG.en.md)
 
 ```css
 :root { --accent: #3B82F6; --radius: 6px; }
@@ -79,7 +79,7 @@ Full steps (install the package, first form, theme switching) are in
 | [getting-started.md](docs/getting-started.md) | Install, first form, theme load/switch, HiDPI |
 | [tycss-reference.md](docs/tycss-reference.md) | The authoritative `.tycss` reference: every property, function, selector, merge order |
 | [controls/](docs/controls/) | Per-control API (properties / events / states / theme variants / examples) |
-| [CHANGELOG.md](CHANGELOG.md) | Release changelog |
+| [CHANGELOG.en.md](CHANGELOG.en.md) | Release changelog |
 | [KNOWN_GAPS.md](docs/KNOWN_GAPS.md) | Known limitations and planned work |
 
 > The newer controls (`TTyTreeView`, `TTySplitter`, `TTyStatusBar`, `TTyToolBar`,

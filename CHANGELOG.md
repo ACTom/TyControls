@@ -1,82 +1,71 @@
-# Changelog
+# 更新日志
 
-All notable changes to **ty-controls** are documented in this file. The project uses
-3-part semantic versions (`MAJOR.MINOR.PATCH`). Every control is fully custom-drawn via
-BGRABitmap and themed by lightweight `.tycss` text themes — pixel-identical on Windows,
-Linux and macOS.
+本文件记录 **ty-controls** 的所有重要变更。项目采用 3 段式语义化版本号(`主版本.次版本.修订号`)。
+所有控件均由 BGRABitmap 全自绘、由轻量 `.tycss` 文本主题统一着色 —— 在 Windows、Linux、macOS 上
+像素级一致。
 
-> 中文版见 [CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)。
+> English: [CHANGELOG.en.md](CHANGELOG.en.md).
 
 ## [2.1.0] — 2026-06-30
 
-A large feature release. The headline is **TTyTreeView**, a full VirtualTreeView-class virtual
-tree, joined by five more new controls, native window resize and window effects for **TTyForm**,
-and keyboard mnemonics across the whole library.
+一个大型功能版本。主角是 **TTyTreeView**(一个 VirtualTreeView 级别的虚拟树),同时新增另外五个控件、
+为 **TTyForm** 加入原生窗口缩放与窗口特效,并为整个库加上键盘助记符。
 
-### Added — New controls
+### 新增 — 新控件
 
-- **TTyTreeView** — a virtual, data-on-demand tree that scales to millions of nodes:
-  - Lazy 3-stage node initialization; an incremental height/position cache with fast hit-testing.
-  - Multi-column with a draggable header — column **resize**, **reorder**, **auto-size / spring**.
-  - **Sorting** — `OnCompareNodes`, click-to-sort header with a direction glyph, lazy-aware merge sort.
-  - **Checkboxes** with tri-state + automatic tri-state propagation, and **radio-button** nodes.
-  - **Multi-selection** (Ctrl / Shift / Ctrl+A) and **full-row** select.
-  - **Variable per-node row height** (`OnMeasureItem`).
-  - **Incremental type-to-find** search.
-  - **Per-cell owner-draw** (`OnDrawNode` / `OnAfterCellPaint`).
-  - **Inline cell editing** (F2 / double-click; Enter commits, Esc cancels; `OnEditing` / `OnNewText`).
-  - **Intra-tree node drag-drop** — reorder or reparent, accent drop-mark, circular-reparent guard.
-- **TTySplitter** — drag to resize a neighbouring control.
-- **TTyStatusBar** — paneled status bar.
-- **TTyToolBar** — toolbar with separators.
-- **TTyDateTimePicker** — segmented date/time editing with a drop-down calendar and a time spinner.
-- **TTyCalendar** — calendar with day → month → year drill-down.
+- **TTyTreeView** —— 虚拟、数据按需加载的树,可承载百万级节点:
+  - 三阶段惰性初始化;增量高度/位置缓存 + 快速命中测试。
+  - 多列 + 可拖拽表头 —— 列**调宽**、**重排**、**自动列宽 / 弹性列**。
+  - **排序** —— `OnCompareNodes`、点击表头切换升降序(带方向箭头)、惰性感知的归并排序。
+  - **复选框** + 三态 + 自动三态传播,以及**单选(radio)**节点。
+  - **多选**(Ctrl / Shift / Ctrl+A)与**整行选择**。
+  - **逐节点可变行高**(`OnMeasureItem`)。
+  - **增量输入查找**(type-to-find)。
+  - **逐单元格自绘**(`OnDrawNode` / `OnAfterCellPaint`)。
+  - **内联单元格编辑**(F2 / 双击;Enter 提交、Esc 取消;`OnEditing` / `OnNewText`)。
+  - **树内节点拖放** —— 重排或改变父子关系,带 accent 落点标记与循环重父化守卫。
+- **TTySplitter** —— 拖动以调整相邻控件大小。
+- **TTyStatusBar** —— 分栏状态栏。
+- **TTyToolBar** —— 带分隔符的工具栏。
+- **TTyDateTimePicker** —— 分段式日期/时间编辑 + 下拉日历 + 时间微调。
+- **TTyCalendar** —— 支持 日 → 月 → 年 逐级钻取的日历。
 
-### Added — TTyForm
+### 新增 — TTyForm
 
-- Native window **resize** (Windows custom frame: `WS_THICKFRAME` + `WM_NCCALCSIZE` /
-  `WM_NCHITTEST`) with a published **`Resizable`** property; maximize fills the monitor work area;
-  title-bar drag and top-edge resize.
-- OS **rounded corners + native drop shadow** (Windows 11 DWM / macOS), on by default, opt-out via CSS.
+- 原生窗口**缩放**(Windows 自绘边框:`WS_THICKFRAME` + `WM_NCCALCSIZE` / `WM_NCHITTEST`),
+  新增 **`Resizable`** 属性;最大化铺满显示器工作区;标题栏拖动 + 顶边缩放。
+- 系统**圆角 + 原生投影**(Windows 11 DWM / macOS),默认开启,可通过 CSS 关闭。
 
-### Added — Interaction, theming, i18n
+### 新增 — 交互、主题、国际化
 
-- **Mnemonics** — `&`-accelerators with Alt-underline display and Alt+letter activation across
-  menus, buttons, check boxes, radio buttons, group boxes, labels and tabs.
-- **TTyNativeStyler** — harmonizes native / third-party LCL controls with the active theme.
-- **TTyComboBox** — shared themed drop-down popup.
-- **Internationalization** — `resourcestring`s plus English and Simplified-Chinese `.po` catalogs
-  for theme diagnostics, design-time strings and the demo (with a runtime language switcher).
+- **助记符(Mnemonics)** —— `&` 加速键,Alt 下划线显示 + Alt+字母激活,覆盖菜单、按钮、复选框、
+  单选钮、分组框、标签、标签页。
+- **TTyNativeStyler** —— 让原生 / 第三方 LCL 控件与当前主题协调一致。
+- **TTyComboBox** —— 共享的主题化下拉浮层。
+- **国际化** —— `resourcestring` + 英文与简体中文 `.po` 词条(主题诊断、设计期字符串、演示程序),
+  演示程序支持运行时切换语言。
 
-### Fixed
+### 修复
 
-- **TreeView** — node icons not painting (the ImageList draw was erased by the BGRA composite and
-  is now drawn after it; the real root cause was `MainColumn` being assigned before columns
-  existed); HiDPI vertical axis (scroll / hit-test / scroll-into-view); embedded scrollbars for
-  huge ranges (minimum thumb size, 64-bit position mapping, constructor-time creation); expand
-  chevron size; horizontal scrolling; a managed node-data leak on teardown; multi-select count
-  integrity on delete / clear.
-- **TTyForm** — maximize edge slipping under the taskbar; double-click-maximize "growing in place";
-  top-edge resize; a too-thick top frame.
-- **Theming** — crash when a dual-mode theme is loaded without a mode; `TTyNativeStyler` text colour
-  on dark themes.
-- **TTyEdit** — the caret height now tracks the font line-height (it was tied to the box height,
-  which gave a stunted caret in tight hosts such as the tree's inline editor).
-- **TTyMemo** — text-measurement performance (a per-line width cache).
+- **TreeView** —— 节点图标不显示(ImageList 绘制被 BGRA 合成覆盖,改为合成之后再画;真正的根因是
+  在加列之前就设了 `MainColumn`);HiDPI 垂直轴(滚动 / 命中测试 / 滚动到可见);超大范围的内嵌
+  滚动条(最小滑块尺寸、64 位位置映射、构造期创建);展开箭头尺寸;水平滚动;销毁时托管节点数据
+  泄漏;删除 / 清空时多选计数完整性。
+- **TTyForm** —— 最大化底边钻到任务栏下方;双击最大化"原地变大";顶边缩放;顶部边框过宽。
+- **主题** —— 双模式主题以无模式方式加载时崩溃;`TTyNativeStyler` 在深色主题下的文字颜色。
+- **TTyEdit** —— 光标高度改为跟随字体行高(原先绑定盒子高度,在树的内联编辑器等紧凑宿主里只有半高)。
+- **TTyMemo** —— 文本测量性能(逐行宽度缓存)。
 
-### Platform
+### 平台
 
-- **macOS** — compile + run fixes (a process unit for OS theme detection, `CGFloat`, multi-monitor
-  startup positioning).
-- **IME** support on custom-drawn edits (Qt6 / GTK2).
+- **macOS** —— 编译 + 运行修复(系统主题检测用 process 单元、`CGFloat`、多显示器启动定位)。
+- 自绘编辑控件的**输入法(IME)**支持(Qt6 / GTK2)。
 
-### Notes
+### 说明
 
-- Native window resize is **Windows-only** in this release; GTK / Qt / Cocoa fall back to a manual
-  resize gutter (a native handoff is planned).
+- 原生窗口缩放本版本**仅 Windows**;GTK / Qt / Cocoa 回退到手动缩放边距(原生交接计划中)。
 
 ## [2.0.0] — 2026-06-20
 
-Initial 2.x baseline: the custom-drawn control set on the `.tycss` v2 theme engine (merge-then-
-resolve, tiered tokens, dual `@mode`, OS light/dark + accent follow, hot-reload + lint), a 12-theme
-built-in pack, per-component `About` metadata, and the release tooling.
+2.x 初始基线:基于 `.tycss` v2 主题引擎(先合并后解析、分层 token、双 `@mode`、跟随系统亮/暗 + 强调色、
+热重载 + lint)的全自绘控件集,12 套内置主题,逐控件 `About` 元数据,以及发布工具链。
