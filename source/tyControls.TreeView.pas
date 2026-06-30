@@ -30,6 +30,12 @@ type
                    toIncrementalSearch, toOwnerDraw, toEditable);
   TTyTreeOptions = set of TTyTreeOption;
 
+  { ③f F1: drop position relative to a target node, for the intra-tree node
+    drag-drop move engine. dmNone = no valid drop (empty area / vetoed);
+    dmAbove/dmBelow = reorder as ATarget's preceding/following sibling;
+    dmOn = reparent as ATarget's last child. }
+  TTyTreeDropMode = (dmNone, dmAbove, dmOn, dmBelow);
+
   { A2: check column type for a node }
   TTyCheckType  = (ctNone, ctCheckBox, ctTriStateCheckBox, ctRadioButton);
   { A2: check state of a node }
@@ -329,6 +335,9 @@ type
     procedure SetRootNodeCount(AValue: Cardinal);
     procedure AdjustTotalCount(Node: PTyTreeNode; Delta: Integer);
     procedure AdjustTotalHeight(Node: PTyTreeNode; Delta: Integer);
+    { ③c A1 / ③f F1: re-stamp a parent's child list with consecutive 0-based Index
+      values. Shared by DeleteNode (sibling renumber after a removal) and MoveNode. }
+    procedure ReindexSiblings(AParent: PTyTreeNode);
     procedure InvalidateTreeLayout;
     { B3 position-cache helpers }
     procedure ValidateCache;
@@ -402,6 +411,18 @@ type
     function  AddChild(AParent: PTyTreeNode): PTyTreeNode;
     procedure DeleteNode(Node: PTyTreeNode);
     procedure Clear;
+    { ③f F1: pure intra-tree node-move engine. IsDescendant walks ANode.Parent up
+      to the hidden root, returning True iff it passes through APossibleAncestor.
+      CanMoveNode is the single validity gate (non-nil, AMode<>dmNone, ANode is not
+      the hidden root, ANode<>ATarget, ATarget is NOT in ANode's subtree, and the
+      move is not a no-op). MoveNode relinks the sibling lists, adjusts both parent
+      chains' TotalCount/TotalHeight via the existing Adjust* spine, re-stamps the
+      sibling Index on both lists, sets ANode.Parent, marks/auto-expands the new
+      parent on dmOn, and InvalidateTreeLayout. No node is freed → cached pointers
+      stay valid. Public — also usable programmatically. }
+    function  IsDescendant(ANode, APossibleAncestor: PTyTreeNode): Boolean;
+    function  CanMoveNode(ANode, ATarget: PTyTreeNode; AMode: TTyTreeDropMode): Boolean;
+    function  MoveNode(ANode, ATarget: PTyTreeNode; AMode: TTyTreeDropMode): Boolean;
     { A5 lifecycle }
     procedure InitNode(Node: PTyTreeNode);
     procedure InitChildren(Node: PTyTreeNode);
@@ -1984,8 +2005,6 @@ procedure TTyTreeView.DeleteNode(Node: PTyTreeNode);
 var
   nodeParent: PTyTreeNode;
   dh, dc:     Integer;
-  reseqChild: PTyTreeNode;   { A1: for sibling re-sequence walk }
-  reseqIdx:   Cardinal;
   anc:        PTyTreeNode;   { ③e E4: ancestor walk to detect the edited subtree }
 begin
   if (Node = nil) or (Node = FRoot) then Exit;
@@ -2075,19 +2094,218 @@ begin
     on FRoot, so checking nodeParent caused O(k^2) re-sequences on intermediate
     nodes during Clear even though FRoot was already marked. }
   if not (nsClearing in FRoot^.States) then
-  begin
-    reseqChild := nodeParent^.FirstChild;
-    reseqIdx   := 0;
-    while reseqChild <> nil do
-    begin
-      reseqChild^.Index := reseqIdx;
-      Inc(reseqIdx);
-      reseqChild := reseqChild^.NextSibling;
-    end;
-  end;
+    ReindexSiblings(nodeParent);
 
   FreeNodeMem(Node);
   InvalidateTreeLayout;
+end;
+
+{ ③c A1 / ③f F1: re-stamp a parent's child list with consecutive 0-based Index
+  values (sibling position). Extracted from DeleteNode so MoveNode reuses the SAME
+  re-sequence (no parallel renumber math). AParent may be FRoot. }
+procedure TTyTreeView.ReindexSiblings(AParent: PTyTreeNode);
+var
+  child: PTyTreeNode;
+  idx:   Cardinal;
+begin
+  if AParent = nil then Exit;
+  child := AParent^.FirstChild;
+  idx   := 0;
+  while child <> nil do
+  begin
+    child^.Index := idx;
+    Inc(idx);
+    child := child^.NextSibling;
+  end;
+end;
+
+{ ③f F1: True iff APossibleAncestor lies on ANode's Parent chain (ANode itself is
+  NOT its own descendant). Walk up to the hidden root / the sentinel above it. }
+function TTyTreeView.IsDescendant(ANode, APossibleAncestor: PTyTreeNode): Boolean;
+var
+  run: PTyTreeNode;
+begin
+  Result := False;
+  if (ANode = nil) or (APossibleAncestor = nil) then Exit;
+  run := ANode^.Parent;
+  while (run <> nil) and (run <> PTyTreeNode(Self)) do
+  begin
+    if run = APossibleAncestor then Exit(True);
+    if run = FRoot then Break;     // reached the hidden root sentinel; stop
+    run := run^.Parent;
+  end;
+end;
+
+{ ③f F1: the single validity gate for a node move. Shared by MoveNode (which
+  re-checks — so a malicious OnDragOver setting Allowed:=True can't bypass it),
+  the default OnDragOver, and the drop-mark gating. }
+function TTyTreeView.CanMoveNode(ANode, ATarget: PTyTreeNode;
+  AMode: TTyTreeDropMode): Boolean;
+var
+  newParent, afterNode: PTyTreeNode;
+begin
+  Result := False;
+  if (ANode = nil) or (ATarget = nil) then Exit;
+  if AMode = dmNone then Exit;
+  if ANode = FRoot then Exit;          // the hidden root never moves
+  if ANode = ATarget then Exit;
+  { circular-reparent guard: can't drop a node into its own subtree. ATarget being
+    a descendant of ANode covers ATarget=ANode too, but we checked that already. }
+  if IsDescendant(ATarget, ANode) then Exit;
+
+  { no-op guard: compute the would-be (newParent, preceding-sibling) and reject if
+    it equals ANode's CURRENT (Parent, PrevSibling) — i.e. the move would leave
+    ANode exactly where it is. For dmAbove/dmBelow the new parent is ATarget.Parent;
+    for dmOn it is ATarget and the node is appended last (preceding = LastChild). }
+  case AMode of
+    dmAbove:
+      begin
+        newParent := ATarget^.Parent;
+        afterNode := ATarget^.PrevSibling;       // ANode would sit before ATarget
+      end;
+    dmBelow:
+      begin
+        newParent := ATarget^.Parent;
+        afterNode := ATarget;                    // ANode would sit after ATarget
+      end;
+    else { dmOn }
+      begin
+        newParent := ATarget;
+        afterNode := ATarget^.LastChild;         // appended as the last child
+      end;
+  end;
+  { if afterNode = ANode, the slot is the one ANode already occupies relative to
+    itself (dmBelow ANode's current prev / dmAbove ANode's current next collapses to
+    this); normalise so the comparison below catches it. }
+  if afterNode = ANode then afterNode := ANode^.PrevSibling;
+  if (newParent = ANode^.Parent) and (afterNode = ANode^.PrevSibling) then Exit;
+
+  Result := True;
+end;
+
+{ ③f F1: the pure structural move (see the declaration comment). Reuses
+  AdjustTotalCount/AdjustTotalHeight (the ③a spine), ComputeExpandedSubtreeHeight +
+  the SetExpanded auto-expand delta, and ReindexSiblings (the ③c re-sequence). }
+function TTyTreeView.MoveNode(ANode, ATarget: PTyTreeNode;
+  AMode: TTyTreeDropMode): Boolean;
+var
+  oldParent, newParent, beforeNode: PTyTreeNode;
+  subtreeCount: Integer;
+  subtreeHeight: Integer;
+  childrenH: Integer;
+begin
+  Result := False;
+  if not CanMoveNode(ANode, ATarget, AMode) then Exit;
+
+  oldParent := ANode^.Parent;
+  { the height ANode's subtree contributes to a parent that DISPLAYS it is exactly
+    ANode^.TotalHeight (== ComputeExpandedSubtreeHeight(ANode)); its node count is
+    ANode^.TotalCount. Snapshot both BEFORE relinking. }
+  subtreeCount  := Integer(ANode^.TotalCount);
+  subtreeHeight := Integer(ANode^.TotalHeight);
+
+  { resolve the destination parent + the existing node ANode will be inserted
+    BEFORE (nil = append as last child). }
+  case AMode of
+    dmAbove:
+      begin
+        newParent  := ATarget^.Parent;
+        beforeNode := ATarget;
+      end;
+    dmBelow:
+      begin
+        newParent  := ATarget^.Parent;
+        beforeNode := ATarget^.NextSibling;
+      end;
+    else { dmOn }
+      begin
+        newParent  := ATarget;
+        beforeNode := nil;                 // append last
+      end;
+  end;
+
+  { ── 1. UNLINK ANode from oldParent's child list ───────────────────────────── }
+  if ANode^.PrevSibling <> nil then
+    ANode^.PrevSibling^.NextSibling := ANode^.NextSibling
+  else
+    oldParent^.FirstChild := ANode^.NextSibling;
+  if ANode^.NextSibling <> nil then
+    ANode^.NextSibling^.PrevSibling := ANode^.PrevSibling
+  else
+    oldParent^.LastChild := ANode^.PrevSibling;
+  Dec(oldParent^.ChildCount);
+  ANode^.PrevSibling := nil;
+  ANode^.NextSibling := nil;
+
+  { subtract ANode's subtree from the OLD parent chain — only when oldParent
+    actually displays its children (expanded, or it is the always-expanded root),
+    mirroring DeleteNode. Count is always subtracted (not gated by expansion). }
+  AdjustTotalCount(oldParent, -subtreeCount);
+  if (nsExpanded in oldParent^.States) or (oldParent = FRoot) then
+    AdjustTotalHeight(oldParent, -subtreeHeight);
+  if oldParent^.ChildCount = 0 then
+    Exclude(oldParent^.States, nsHasChildren);
+
+  { ── 2. LINK ANode into newParent before beforeNode (nil = append last) ─────── }
+  ANode^.Parent := newParent;
+  if beforeNode = nil then
+  begin
+    // append as last child
+    ANode^.PrevSibling := newParent^.LastChild;
+    if newParent^.LastChild <> nil then
+      newParent^.LastChild^.NextSibling := ANode
+    else
+      newParent^.FirstChild := ANode;
+    newParent^.LastChild := ANode;
+  end
+  else
+  begin
+    // insert before beforeNode
+    ANode^.NextSibling := beforeNode;
+    ANode^.PrevSibling := beforeNode^.PrevSibling;
+    if beforeNode^.PrevSibling <> nil then
+      beforeNode^.PrevSibling^.NextSibling := ANode
+    else
+      newParent^.FirstChild := ANode;
+    beforeNode^.PrevSibling := ANode;
+  end;
+  Inc(newParent^.ChildCount);
+
+  { count always propagates up the NEW chain (conserves the root total). }
+  AdjustTotalCount(newParent, subtreeCount);
+
+  { newParent now has a child. Mark it (unless it is the hidden root, which never
+    carries nsHasChildren — same rule as AddChild). }
+  if (newParent <> FRoot) and not (nsHasChildren in newParent^.States) then
+    Include(newParent^.States, nsHasChildren);
+
+  { height onto the NEW chain: }
+  if (AMode = dmOn) and (newParent <> FRoot)
+     and not (nsExpanded in newParent^.States) then
+  begin
+    { auto-expand the (previously collapsed / leaf) target so the drop is visible.
+      Mirror SetExpanded's expand path EXACTLY: ANode is already linked, so
+      ComputeExpandedSubtreeHeight(newParent) now includes it; the delta over
+      newParent's current (collapsed) TotalHeight is the whole now-visible child
+      block (ANode's subtree + any pre-existing children). }
+    Include(newParent^.States, nsExpanded);
+    childrenH := ComputeExpandedSubtreeHeight(newParent) - Integer(newParent^.TotalHeight);
+    if childrenH <> 0 then AdjustTotalHeight(newParent, childrenH);
+  end
+  else if (nsExpanded in newParent^.States) or (newParent = FRoot) then
+    { newParent already displays its children → add just ANode's subtree height. }
+    AdjustTotalHeight(newParent, subtreeHeight);
+  { (newParent collapsed and NOT dmOn — i.e. dmAbove/dmBelow under a collapsed
+    parent — adds nothing: ANode stays hidden, consistent with AddChild.) }
+
+  { ── 3. re-stamp Index on BOTH sibling lists (③c re-sequence). When oldParent =
+    newParent the second call simply re-confirms the first; cheap + correct. ───── }
+  ReindexSiblings(oldParent);
+  if newParent <> oldParent then
+    ReindexSiblings(newParent);
+
+  InvalidateTreeLayout;
+  Result := True;
 end;
 
 procedure TTyTreeView.Clear;
