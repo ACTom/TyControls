@@ -24,10 +24,13 @@ type
     default cell content paints, == ③c.
     ③e E1: toEditable opts a tree into in-place cell editing via a themed TTyEdit
     overlay (F2 / double-click on an editable cell). Default off ⇒ no editing,
-    == ③d. Appended last so the existing ordinals are undisturbed. }
+    == ③d. Appended last so the existing ordinals are undisturbed.
+    ③f F2: toNodeDrag opts a tree into intra-tree node drag-drop (drag a node to
+    reorder among siblings / reparent), via the MoveNode engine + a thin mouse
+    state machine. Default off ⇒ no drag, == ③e. Appended last (ordinals stable). }
   TTyTreeOption = (toMultiSelect, toCheckSupport, toFullRowSelect,
                    toAutoTristateTracking, toVariableNodeHeight,
-                   toIncrementalSearch, toOwnerDraw, toEditable);
+                   toIncrementalSearch, toOwnerDraw, toEditable, toNodeDrag);
   TTyTreeOptions = set of TTyTreeOption;
 
   { ③f F1: drop position relative to a target node, for the intra-tree node
@@ -96,6 +99,16 @@ type
     Column: Integer; const NewText: string) of object;
   TTyTreeColumnNodeEvent = procedure(Sender: TTyTreeView; Node: PTyTreeNode;
     Column: Integer) of object;
+
+  { ③f F2: intra-tree drag events.
+    OnDragOver — per-target/-mode veto fired while dragging. Allowed enters as
+                 CanMoveNode(Src, Target, Mode); the handler may only FURTHER
+                 restrict (setting Allowed:=True on an invalid move is still
+                 blocked by MoveNode's own guard — CanMoveNode is the hard gate).
+    OnNodeMoved reuses TTyTreeNodeEvent (Sender; Node) — fired after a successful
+                drop (Node.Parent is the new parent; Index re-stamped). }
+  TTyTreeDragOverEvent = procedure(Sender: TTyTreeView; Src, Target: PTyTreeNode;
+    Mode: TTyTreeDropMode; var Allowed: Boolean) of object;
 
   { C3: text type (mirrors VTV's TVSTTextType) }
   TTyVSTTextType = (ttNormal, ttStatic);
@@ -248,6 +261,19 @@ type
     FOnEditing:            TTyTreeEditingEvent;
     FOnNewText:            TTyTreeNewTextEvent;
     FOnEditCancelled:      TTyTreeColumnNodeEvent;
+    { ③f F2: intra-tree node-drag state machine (gated by toNodeDrag). The drag
+      lives entirely on the control (no node-record growth). FDragNode is the
+      pressed node (ARMED on MouseDown over a label/image); FDragActive flips True
+      once MouseMove passes the Scale(4) manhattan threshold; FDropTarget/FDropMode
+      are the tracked drop position (updated each MouseMove while active, consumed
+      by MouseUp + the F3 drop-mark). }
+    FDragNode:             PTyTreeNode;
+    FDragActive:           Boolean;
+    FDragStartPos:         TPoint;
+    FDropTarget:           PTyTreeNode;
+    FDropMode:             TTyTreeDropMode;
+    FOnDragOver:           TTyTreeDragOverEvent;
+    FOnNodeMoved:          TTyTreeNodeEvent;
     { C1: layout / display properties }
     FIndent:            Integer;
     FImages:            TImageList;
@@ -387,6 +413,12 @@ type
       a descendant / test can inspect the trigger state without growing the public
       surface; F2 uses it as the effective edit column. }
     property  LastMouseColumn: Integer read FLastMouseColumn;
+    { ③f F2: the node-drag row-mode helper + the armed-but-not-yet-active source
+      pointer. Protected so a descendant / test can drive/inspect the gesture
+      internals (the ARM state, distinct from the public IsDraggingNode = active)
+      without growing the public surface. }
+    function  DropModeFromY(Target: PTyTreeNode; AY: Integer): TTyTreeDropMode;
+    property  DragNode: PTyTreeNode read FDragNode;
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Paint; override;
@@ -522,6 +554,14 @@ type
     property IsEditing:    Boolean     read FEditing;
     property EditedNode:   PTyTreeNode read FEditNode;
     property EditedColumn: Integer     read FEditColumn;
+    { ③f F2: end any in-progress node drag — clear all drag state + Invalidate.
+      Safe to call when not dragging (no-op-ish: just re-clears + repaints). Called
+      on MouseUp commit, Esc, teardown (DeleteNode/Clear), and option-off. }
+    procedure EndNodeDrag;
+    { ③f F2: read-only node-drag state. }
+    property IsDraggingNode: Boolean         read FDragActive;
+    property DropTargetNode: PTyTreeNode     read FDropTarget;
+    property DropMode:       TTyTreeDropMode read FDropMode;
   published
     { B1: option flags set (default [] = ③a/③b behaviour) }
     property Options: TTyTreeOptions read FOptions write SetOptions default [];
@@ -590,6 +630,9 @@ type
     property OnEditing:       TTyTreeEditingEvent    read FOnEditing       write FOnEditing;
     property OnNewText:       TTyTreeNewTextEvent    read FOnNewText       write FOnNewText;
     property OnEditCancelled: TTyTreeColumnNodeEvent read FOnEditCancelled write FOnEditCancelled;
+    { ③f F2: intra-tree node-drag events }
+    property OnDragOver:      TTyTreeDragOverEvent   read FOnDragOver      write FOnDragOver;
+    property OnNodeMoved:     TTyTreeNodeEvent       read FOnNodeMoved     write FOnNodeMoved;
   end;
 
 implementation
@@ -1210,6 +1253,9 @@ begin
     the focus-loss semantics) before the option goes away. EndEditNode is a no-op
     when not editing, so non-editing trees are unaffected. }
   if FEditing and not (toEditable in AValue) then EndEditNode;
+  { ③f F2: toNodeDrag turned off mid-drag ⇒ abandon the drag (no move). Idempotent
+    when not dragging. }
+  if FDragActive and not (toNodeDrag in AValue) then EndNodeDrag;
   CheckSupportChanged := (toCheckSupport in AValue) <> (toCheckSupport in FOptions);
   { FIX 5: detect toMultiSelect being removed while multiple nodes are selected }
   MultiSelectRemoved  := (toMultiSelect in FOptions) and
@@ -1775,6 +1821,12 @@ begin
   FEndingEdit       := False;
   FLastMouseColumn  := NoColumn;
   FLastMouseHitPart := hpNowhere;
+  { ③f F2: node-drag — idle state }
+  FDragNode         := nil;
+  FDragActive       := False;
+  FDragStartPos     := Point(0, 0);
+  FDropTarget       := nil;
+  FDropMode         := dmNone;
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent            := Self;
   FVScroll.Kind              := sbVertical;
@@ -2037,6 +2089,29 @@ begin
     FLastMouseHitPart := hpNowhere;
   end;
   if FHotNode       = Node then FHotNode       := nil;
+  { ③f F2: dangling-pointer hygiene for the node drag. If the subtree about to be
+    freed contains the drag source or the current drop target (the node itself or
+    any descendant), END the drag and null whichever pointer is vanishing — so the
+    recursive child-frees + the trailing InvalidateTreeLayout never dereference a
+    freed node. (A mid-gesture Clear from an event can hit this; a normal drag
+    can't free its own source.) }
+  if (FDragNode <> nil) or FDragActive then
+  begin
+    anc := FDragNode;
+    while anc <> nil do
+    begin
+      if anc = Node then begin EndNodeDrag; Break; end;
+      if anc = FRoot then Break;
+      anc := anc^.Parent;
+    end;
+    anc := FDropTarget;
+    while anc <> nil do
+    begin
+      if anc = Node then begin EndNodeDrag; Break; end;
+      if anc = FRoot then Break;
+      anc := anc^.Parent;
+    end;
+  end;
   { FIX 1: selection bookkeeping — clear nsSelected + decrement count for THIS
     node BEFORE the recursive child-free loop below, so that every descendant
     also runs through DeleteNode and gets the same treatment.  We handle this
@@ -2308,6 +2383,43 @@ begin
   Result := True;
 end;
 
+{ ③f F2: end any in-progress node drag — clear all drag state + repaint (drops the
+  drop-mark). Idempotent; safe from MouseUp / Esc / teardown / option-off. }
+procedure TTyTreeView.EndNodeDrag;
+begin
+  FDragActive := False;
+  FDragNode   := nil;
+  FDropTarget := nil;
+  FDropMode   := dmNone;
+  Invalidate;
+end;
+
+{ ③f F2: split the cursor's device-px Y across ATarget's visible row band into a
+  drop mode. Uses GetCellRect (the SAME row-rect math RenderTo paints into) so the
+  thirds line up with the painted row; dmNone when ATarget is nil or off-screen. }
+function TTyTreeView.DropModeFromY(Target: PTyTreeNode; AY: Integer): TTyTreeDropMode;
+var
+  r: TRect;
+  rTop, h, third: Integer;
+begin
+  Result := dmNone;
+  if Target = nil then Exit;
+  { the main column gives the whole row band; Column = Header.MainColumn (or the
+    0-column whole-row rect). }
+  if not GetCellRect(Target, FHeader.MainColumn, r) then Exit;
+  rTop := r.Top;
+  h    := r.Bottom - r.Top;
+  if h <= 0 then Exit;
+  third := h div 3;
+  if third <= 0 then third := 1;
+  if AY < rTop + third then
+    Result := dmAbove
+  else if AY >= rTop + h - third then
+    Result := dmBelow
+  else
+    Result := dmOn;
+end;
+
 procedure TTyTreeView.Clear;
 begin
   { ③e E4: any active edit is on a node about to be freed — CANCEL it (no commit)
@@ -2315,6 +2427,11 @@ begin
     would also catch it per-node, but cancelling once up-front is cheaper + clearer
     for a bulk clear.) }
   if FEditing then CancelEdit;
+  { ③f F2: a bulk clear frees every node, so any in-progress node drag is on
+    vanishing pointers — end it up-front (DeleteNode's per-node check would also
+    catch it, but ending once here is cheaper + guarantees FDragNode/FDropTarget
+    are nil before the teardown loop). }
+  if (FDragNode <> nil) or FDragActive then EndNodeDrag;
   { A1: mark FRoot with nsClearing so DeleteNode skips the O(siblings) index
     re-sequence during bulk teardown, keeping Clear O(n). }
   Include(FRoot^.States, nsClearing);
@@ -4374,6 +4491,19 @@ begin
     if node <> nil then
       FocusedNode := node;
   end;
+
+  { ③f F2: ARM a node drag (selection above already happened). Gate on toNodeDrag
+    + a press on the node's label/image region (NOT the expand button / checkbox —
+    each owns its gesture). FDragActive stays False here; MouseMove promotes it
+    once the press travels past the threshold. (Left button only — node drag is a
+    left-button gesture, like VTV.) }
+  if (Button = mbLeft) and (toNodeDrag in FOptions) and
+     (FLastMouseHitPart in [hpLabel, hpImage]) and (FLastMouseNode <> nil) then
+  begin
+    FDragNode     := FLastMouseNode;
+    FDragStartPos := Point(X, Y);
+    FDragActive   := False;
+  end;
 end;
 
 procedure TTyTreeView.DblClick;
@@ -4421,10 +4551,43 @@ var
   hCol, PPI, newWidth: Integer;
   col: TTyTreeColumn;
   threshold, logX, logScroll, hitColIdx, targetPos: Integer;
+  allowed: Boolean;   { ③f F2: per-move CanMoveNode + OnDragOver verdict }
 begin
   hitColIdx := NoColumn;
   targetPos := 0;
   inherited MouseMove(Shift, X, Y);
+
+  { ③f F2: intra-tree node drag. Engaged only when a node was armed on MouseDown
+    (FDragNode<>nil) under toNodeDrag — a header column drag arms FDragPending /
+    FDragColumn instead, so the two gestures never overlap. }
+  if (toNodeDrag in FOptions) and (FDragNode <> nil) then
+  begin
+    { arm → active once the press travels past Scale(4) manhattan (same threshold
+      formula as the column drag-reorder: MulDiv(4, PPI, 96)). }
+    if (ssLeft in Shift) and not FDragActive and
+       ((Abs(X - FDragStartPos.X) > MulDiv(4, Font.PixelsPerInch, 96)) or
+        (Abs(Y - FDragStartPos.Y) > MulDiv(4, Font.PixelsPerInch, 96))) then
+      FDragActive := True;
+
+    if FDragActive then
+    begin
+      { track the drop target + mode under the cursor; let OnDragOver further
+        restrict (CanMoveNode is the default + the hard gate). }
+      FDropTarget := GetNodeAtPoint(X, Y, part);
+      if FDropTarget <> nil then FDropMode := DropModeFromY(FDropTarget, Y)
+      else                       FDropMode := dmNone;
+
+      allowed := CanMoveNode(FDragNode, FDropTarget, FDropMode);
+      if Assigned(FOnDragOver) then
+        FOnDragOver(Self, FDragNode, FDropTarget, FDropMode, allowed);
+      if not allowed then FDropMode := dmNone;
+
+      if FDropMode <> dmNone then Cursor := crDrag
+      else                        Cursor := crNoDrop;
+      Invalidate;
+      Exit;   { skip the normal hover/hot-node update while a drag is active }
+    end;
+  end;
 
   { D2: active column resize drag }
   if FResizeColumn <> NoColumn then
@@ -4527,6 +4690,24 @@ var
 begin
   inherited MouseUp(Button, Shift, X, Y);
 
+  { ③f F2: commit an active node drag. MoveNode re-checks CanMoveNode, so an
+    OnDragOver that wrongly set Allowed:=True still can't push through an invalid
+    move. Fires OnNodeMoved only on a real move. EndNodeDrag clears + repaints.
+    Exit so the gesture doesn't fall through to the header paths below. }
+  if FDragActive then
+  begin
+    if (FDropTarget <> nil) and (FDropMode <> dmNone) and
+       MoveNode(FDragNode, FDropTarget, FDropMode) then
+      if Assigned(FOnNodeMoved) then FOnNodeMoved(Self, FDragNode);
+    EndNodeDrag;
+    Exit;
+  end;
+  { a press that armed but never crossed the threshold (FDragNode set, not active)
+    leaves no residue here — the next MouseDown re-arms or the option-off teardown
+    clears it; nulling it on a plain click keeps state tidy. }
+  if (Button = mbLeft) and (FDragNode <> nil) then
+    FDragNode := nil;
+
   if (Button = mbLeft) and (FResizeColumn <> NoColumn) then
   begin
     if Assigned(FOnColumnResized) then
@@ -4585,6 +4766,16 @@ begin
   inherited KeyDown(Key, Shift);
 
   cur := FFocusedNode;
+
+  { ③f F2: Esc cancels an in-progress node drag (no move). Placed first so it can't
+    disturb other Esc handling — when NOT dragging this is skipped and Esc falls
+    through unchanged. }
+  if (Key = VK_ESCAPE) and FDragActive then
+  begin
+    EndNodeDrag;
+    Key := 0;
+    Exit;
+  end;
 
   { ③d C1: Backspace pops the last char of an active incremental-search buffer
     and re-runs the search. Multibyte-safe (UTF8Copy/UTF8Length, not Delete(.,Length,1)).

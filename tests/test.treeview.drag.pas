@@ -8,9 +8,11 @@ unit test.treeview.drag;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils,
+  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType,
   fpcunit, testregistry,
-  tyControls.TreeView;
+  tyControls.TreeView.Columns,
+  tyControls.TreeView,
+  tyControls.Controller;
 
 type
   { F1: the pure move engine. The fixture is a small known tree built with
@@ -58,10 +60,113 @@ type
     procedure TestCanMoveNodePredicateMatrix;
   end;
 
+  { F2: the mouse/keyboard drag state machine over the F1 engine. Headless: a real
+    TForm + Controller + a RenderTo layout pass (so the hit-test resolves real
+    device coordinates), driving the protected MouseDown/MouseMove/MouseUp/KeyDown
+    through a hard-cast descendant. A 0-column tree (no header band) with three
+    expandable/flat top-level nodes, ShowRoot + DefaultNodeHeight=22, so row r sits
+    at y=[22*r .. 22*r+22). }
+  TTreeDragF2Test = class(TTestCase)
+  private
+    FCtl:  TTyStyleController;
+    FForm: TForm;
+    FTree: TTyTreeView;
+    FN0, FN1, FN2: PTyTreeNode;   // three top-level nodes (rows 0,1,2)
+    { OnDragOver bookkeeping }
+    FDragOverFired:   Integer;
+    FDragOverAllow:   Boolean;    // what the handler forces Allowed to
+    FDragOverVeto:    Boolean;    // when True the handler sets Allowed := False
+    FDragOverSrc:     PTyTreeNode;
+    FDragOverTarget:  PTyTreeNode;
+    FDragOverMode:    TTyTreeDropMode;
+    { OnNodeMoved bookkeeping }
+    FMovedFired:      Integer;
+    FMovedNode:       PTyTreeNode;
+    procedure OnGetText(Sender: TTyTreeView; Node: PTyTreeNode; var Text: string);
+    procedure OnDragOver(Sender: TTyTreeView; Src, Target: PTyTreeNode;
+      Mode: TTyTreeDropMode; var Allowed: Boolean);
+    procedure OnNodeMoved(Sender: TTyTreeView; Node: PTyTreeNode);
+    procedure BuildTree;
+    procedure Layout;
+    function  RowMidY(ARow: Integer): Integer;      // device-px Y at the middle of row ARow
+    function  LabelX: Integer;                      // device-px X inside the label zone
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestMouseDownArmsOnLabel;
+    procedure TestMouseDownDoesNotArmOnButton;
+    procedure TestMouseDownDoesNotArmWhenOptionOff;
+    procedure TestMouseMoveBelowThresholdDoesNotStart;
+    procedure TestMouseMovePastThresholdStarts;
+    procedure TestDropModeFromYThirds;
+    procedure TestDragOverVetoPerformsNoMove;
+    procedure TestValidDropMovesAndFiresOnce;
+    procedure TestEscapeCancelsMidDrag;
+    procedure TestDeleteNodeMidDragClears;
+    procedure TestClearMidDragClears;
+    procedure TestOptionsEmptyNoDrag;
+  end;
+
 implementation
 
 const
   NH = 18;  // == TTyTreeView.DefaultNodeHeight for a fresh control
+
+  { minimal theme so RenderTo/GetCellRect lay out (mirrors the ③e edit fixture). }
+  DRAG_THEME_CSS =
+    'TyTreeView { background: #FFFFFF; border-width: 0px; padding: 0px; } ' +
+    'TyTreeNode { background: none; color: #000000; } ' +
+    'TyTreeNode:selected { background: #3B82F6; color: #FFFFFF; } ';
+
+type
+  { hard-cast helper: reach the protected RenderTo (to lay out) + the protected
+    mouse/key handlers + the private DropModeFromY from the F2 tests. }
+  TDragTreeAccess = class(TTyTreeView)
+  public
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure MouseDownPub(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure MouseMovePub(Shift: TShiftState; X, Y: Integer);
+    procedure MouseUpPub(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure KeyDownPub(var Key: Word; Shift: TShiftState);
+    function  DropModeFromYPub(Target: PTyTreeNode; AY: Integer): TTyTreeDropMode;
+    function  DragNodePub: PTyTreeNode;
+  end;
+
+procedure TDragTreeAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TDragTreeAccess.MouseDownPub(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  MouseDown(Button, Shift, X, Y);
+end;
+
+procedure TDragTreeAccess.MouseMovePub(Shift: TShiftState; X, Y: Integer);
+begin
+  MouseMove(Shift, X, Y);
+end;
+
+procedure TDragTreeAccess.MouseUpPub(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  MouseUp(Button, Shift, X, Y);
+end;
+
+procedure TDragTreeAccess.KeyDownPub(var Key: Word; Shift: TShiftState);
+begin
+  KeyDown(Key, Shift);
+end;
+
+function TDragTreeAccess.DropModeFromYPub(Target: PTyTreeNode; AY: Integer): TTyTreeDropMode;
+begin
+  Result := DropModeFromY(Target, AY);
+end;
+
+function TDragTreeAccess.DragNodePub: PTyTreeNode;
+begin
+  Result := DragNode;
+end;
 
 procedure TTreeDragF1Test.SetUp;
 begin
@@ -337,7 +442,301 @@ begin
   AssertFalse('circular (target is src descendant) invalid', FTree.CanMoveNode(FRootA, FA1, dmOn));
 end;
 
+{ ============================================================================
+  F2 — drag state machine (mouse + Esc) + option + events
+  ============================================================================ }
+
+procedure TTreeDragF2Test.OnGetText(Sender: TTyTreeView; Node: PTyTreeNode;
+  var Text: string);
+begin
+  Text := 'row' + IntToStr(Node^.Index);
+end;
+
+procedure TTreeDragF2Test.OnDragOver(Sender: TTyTreeView; Src, Target: PTyTreeNode;
+  Mode: TTyTreeDropMode; var Allowed: Boolean);
+begin
+  Inc(FDragOverFired);
+  FDragOverSrc    := Src;
+  FDragOverTarget := Target;
+  FDragOverMode   := Mode;
+  if FDragOverVeto then Allowed := False
+  else                  Allowed := FDragOverAllow;
+end;
+
+procedure TTreeDragF2Test.OnNodeMoved(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  Inc(FMovedFired);
+  FMovedNode := Node;
+end;
+
+{ A 0-column tree (no header band) with three top-level nodes; the FIRST is given
+  a child (so it shows an expand button at the left — exercises the hpButton gate),
+  the other two are flat leaves. ShowRoot + DefaultNodeHeight=22 ⇒ row r at
+  device-y [22*r .. 22*r+22); top-level indent = 16px so the button slot is [0..16)
+  and the label zone is [16..). }
+procedure TTreeDragF2Test.BuildTree;
+begin
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.LoadThemeCss(DRAG_THEME_CSS);
+
+  FForm := TForm.CreateNew(nil);
+  FTree := TTyTreeView.Create(FForm);
+  FTree.Parent     := FForm;
+  FTree.Controller := FCtl;
+  FTree.Font.PixelsPerInch := 96;
+  FTree.DefaultNodeHeight  := 22;
+  FTree.Indent             := 16;
+  FTree.ShowButtons        := True;
+  FTree.ShowTreeLines      := False;
+  FTree.ShowRoot           := True;
+  FTree.SetBounds(0, 0, 300, 200);
+  FTree.OnGetText          := @OnGetText;
+
+  FTree.RootNodeCount := 3;
+  FN0 := FTree.RootNode^.FirstChild;
+  FN1 := FN0^.NextSibling;
+  FN2 := FN1^.NextSibling;
+  { give n0 a child so it shows an expand button; keep it collapsed }
+  FTree.InitNode(FN0);
+  FTree.AddChild(FN0);
+end;
+
+procedure TTreeDragF2Test.Layout;
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.SetSize(300, 200);
+    TDragTreeAccess(FTree).RenderTo(Bmp.Canvas, Rect(0, 0, 300, 200), 96);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+function TTreeDragF2Test.RowMidY(ARow: Integer): Integer;
+begin
+  { DefaultNodeHeight=22 @96dpi, no header band ⇒ row ARow is [22*ARow .. +22). }
+  Result := ARow * 22 + 11;
+end;
+
+function TTreeDragF2Test.LabelX: Integer;
+begin
+  { top-level indent = 16px ⇒ label zone starts at x=16; 50 is comfortably inside. }
+  Result := 50;
+end;
+
+procedure TTreeDragF2Test.SetUp;
+begin
+  FDragOverFired  := 0;
+  FDragOverAllow  := True;
+  FDragOverVeto   := False;
+  FDragOverSrc    := nil;
+  FDragOverTarget := nil;
+  FDragOverMode   := dmNone;
+  FMovedFired     := 0;
+  FMovedNode      := nil;
+  BuildTree;
+end;
+
+procedure TTreeDragF2Test.TearDown;
+begin
+  FForm.Free;   // frees FTree (owned)
+  FForm := nil;
+  FCtl.Free;
+  FCtl := nil;
+end;
+
+{ ---- MouseDown arms only on label/image + toNodeDrag ---- }
+
+procedure TTreeDragF2Test.TestMouseDownArmsOnLabel;
+begin
+  FTree.Options := [toNodeDrag];
+  Layout;
+  { press on n1's label (row 1, x in label zone) → arms FDragNode but not active. }
+  TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], LabelX, RowMidY(1));
+  AssertSame('MouseDown on a label arms FDragNode',
+    FN1, TDragTreeAccess(FTree).DragNodePub);
+  AssertFalse('arming does not start the drag yet', FTree.IsDraggingNode);
+end;
+
+procedure TTreeDragF2Test.TestMouseDownDoesNotArmOnButton;
+begin
+  FTree.Options := [toNodeDrag];
+  Layout;
+  { n0 has a child ⇒ the expand button occupies x=[0..16) on row 0. A press there
+    is hpButton → must NOT arm a drag (the button toggles instead). }
+  TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], 8, RowMidY(0));
+  AssertTrue('press on the expand button arms nothing',
+    TDragTreeAccess(FTree).DragNodePub = nil);
+end;
+
+procedure TTreeDragF2Test.TestMouseDownDoesNotArmWhenOptionOff;
+begin
+  FTree.Options := [];   // toNodeDrag OFF
+  Layout;
+  TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], LabelX, RowMidY(1));
+  AssertTrue('no toNodeDrag ⇒ MouseDown does not arm',
+    TDragTreeAccess(FTree).DragNodePub = nil);
+  AssertFalse('and no drag is active', FTree.IsDraggingNode);
+end;
+
+{ ---- MouseMove threshold ---- }
+
+procedure TTreeDragF2Test.TestMouseMoveBelowThresholdDoesNotStart;
+begin
+  FTree.Options := [toNodeDrag];
+  Layout;
+  TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], LabelX, RowMidY(1));
+  { move 3px (< Scale(4)=4 @96dpi) with the button held ⇒ still armed, not active. }
+  TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX + 3, RowMidY(1));
+  AssertFalse('a move below the threshold does not start the drag',
+    FTree.IsDraggingNode);
+end;
+
+procedure TTreeDragF2Test.TestMouseMovePastThresholdStarts;
+begin
+  FTree.Options := [toNodeDrag];
+  Layout;
+  TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], LabelX, RowMidY(1));
+  { move 6px (> 4) with the button held ⇒ the drag goes active. }
+  TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX + 6, RowMidY(1));
+  AssertTrue('a move past Scale(4) starts the drag', FTree.IsDraggingNode);
+end;
+
+{ ---- DropModeFromY thirds ---- }
+
+procedure TTreeDragF2Test.TestDropModeFromYThirds;
+begin
+  FTree.Options := [toNodeDrag];
+  Layout;
+  { row 1 spans device-y [22..44): top third [22..29.33) → dmAbove, middle → dmOn,
+    bottom third [36.67..44) → dmBelow. Probe 24 / 33 / 42. }
+  AssertEquals('top third → dmAbove', Ord(dmAbove),
+    Ord(TDragTreeAccess(FTree).DropModeFromYPub(FN1, 24)));
+  AssertEquals('middle third → dmOn', Ord(dmOn),
+    Ord(TDragTreeAccess(FTree).DropModeFromYPub(FN1, 33)));
+  AssertEquals('bottom third → dmBelow', Ord(dmBelow),
+    Ord(TDragTreeAccess(FTree).DropModeFromYPub(FN1, 42)));
+  AssertEquals('nil target → dmNone', Ord(dmNone),
+    Ord(TDragTreeAccess(FTree).DropModeFromYPub(nil, 33)));
+end;
+
+{ ---- OnDragOver veto → no move ---- }
+
+procedure TTreeDragF2Test.TestDragOverVetoPerformsNoMove;
+begin
+  FTree.Options    := [toNodeDrag];
+  FTree.OnDragOver := @OnDragOver;
+  FDragOverVeto    := True;        // handler forces Allowed := False
+  Layout;
+  { press n2's label, drag onto n0 (dmOn), release. The veto must block the move. }
+  TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], LabelX, RowMidY(2));   // n2
+  TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX + 6, RowMidY(2)); // start
+  TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX, RowMidY(0));     // over n0
+  AssertTrue('OnDragOver fired during the drag', FDragOverFired > 0);
+  AssertEquals('veto collapses the drop mode to dmNone', Ord(dmNone), Ord(FTree.DropMode));
+  TDragTreeAccess(FTree).MouseUpPub(mbLeft, [], LabelX, RowMidY(0));
+  { n2 must be untouched: still a top-level leaf, n0 still has just its 1 child. }
+  AssertSame('vetoed: n2.Parent unchanged', FTree.RootNode, FN2^.Parent);
+  AssertEquals('vetoed: n0.ChildCount unchanged (1)', 1, Integer(FN0^.ChildCount));
+  AssertEquals('vetoed: OnNodeMoved never fired', 0, FMovedFired);
+  AssertFalse('drag ended', FTree.IsDraggingNode);
+end;
+
+{ ---- valid drop → MoveNode ran + OnNodeMoved once ---- }
+
+procedure TTreeDragF2Test.TestValidDropMovesAndFiresOnce;
+begin
+  FTree.Options     := [toNodeDrag];
+  FTree.OnDragOver  := @OnDragOver;
+  FTree.OnNodeMoved := @OnNodeMoved;
+  Layout;
+  AssertEquals('precondition: 3 top-level nodes', 3, Integer(FTree.RootNode^.ChildCount));
+  { press n2's label, drag, drop ONTO n0 (middle third) → n2 reparents under n0. }
+  TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], LabelX, RowMidY(2));   // n2
+  TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX + 6, RowMidY(2)); // start
+  TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX, RowMidY(0) + 0); // over n0 middle
+  AssertEquals('tracking resolved dmOn over n0', Ord(dmOn), Ord(FTree.DropMode));
+  AssertSame('drop target is n0', FN0, FTree.DropTargetNode);
+  TDragTreeAccess(FTree).MouseUpPub(mbLeft, [], LabelX, RowMidY(0));
+  { structure changed: n2 now a child of n0; top-level count dropped to 2. }
+  AssertSame('n2.Parent = n0 after the drop', FN0, FN2^.Parent);
+  AssertEquals('top-level count now 2', 2, Integer(FTree.RootNode^.ChildCount));
+  AssertEquals('OnNodeMoved fired exactly once', 1, FMovedFired);
+  AssertSame('OnNodeMoved carried the moved node', FN2, FMovedNode);
+  AssertFalse('drag ended after the commit', FTree.IsDraggingNode);
+end;
+
+{ ---- Esc cancels mid-drag ---- }
+
+procedure TTreeDragF2Test.TestEscapeCancelsMidDrag;
+var
+  Key: Word;
+begin
+  FTree.Options     := [toNodeDrag];
+  FTree.OnNodeMoved := @OnNodeMoved;
+  Layout;
+  TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], LabelX, RowMidY(2));   // n2
+  TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX + 6, RowMidY(2)); // start
+  TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX, RowMidY(0));     // over n0
+  AssertTrue('precondition: dragging', FTree.IsDraggingNode);
+  Key := VK_ESCAPE;
+  TDragTreeAccess(FTree).KeyDownPub(Key, []);
+  AssertFalse('Esc cancels the drag', FTree.IsDraggingNode);
+  AssertEquals('Esc consumed the key', 0, Integer(Key));
+  { a follow-up MouseUp must NOT commit a move. }
+  TDragTreeAccess(FTree).MouseUpPub(mbLeft, [], LabelX, RowMidY(0));
+  AssertSame('Esc: n2.Parent unchanged', FTree.RootNode, FN2^.Parent);
+  AssertEquals('Esc: no move fired', 0, FMovedFired);
+end;
+
+{ ---- DeleteNode / Clear during a drag clears state (no UAF on next layout) ---- }
+
+procedure TTreeDragF2Test.TestDeleteNodeMidDragClears;
+begin
+  FTree.Options := [toNodeDrag];
+  Layout;
+  TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], LabelX, RowMidY(2));   // arm n2
+  TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX + 6, RowMidY(2)); // active
+  AssertTrue('precondition: dragging n2', FTree.IsDraggingNode);
+  { delete the very node being dragged ⇒ drag must end + FDragNode null. }
+  FTree.DeleteNode(FN2);
+  AssertFalse('DeleteNode of the drag source clears the drag', FTree.IsDraggingNode);
+  AssertTrue('FDragNode nulled', TDragTreeAccess(FTree).DragNodePub = nil);
+  AssertTrue('DropTargetNode nulled', FTree.DropTargetNode = nil);
+  Layout;   // must not dereference a freed pointer
+end;
+
+procedure TTreeDragF2Test.TestClearMidDragClears;
+begin
+  FTree.Options := [toNodeDrag];
+  Layout;
+  TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], LabelX, RowMidY(1));   // arm n1
+  TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX + 6, RowMidY(1)); // active
+  AssertTrue('precondition: dragging', FTree.IsDraggingNode);
+  FTree.Clear;
+  AssertFalse('Clear during a drag clears the drag', FTree.IsDraggingNode);
+  AssertTrue('FDragNode nulled by Clear', TDragTreeAccess(FTree).DragNodePub = nil);
+  AssertTrue('DropTargetNode nulled by Clear', FTree.DropTargetNode = nil);
+  Layout;   // must not dereference a freed pointer
+end;
+
+{ ---- Options=[] ⇒ no drag at all ---- }
+
+procedure TTreeDragF2Test.TestOptionsEmptyNoDrag;
+begin
+  FTree.Options := [];
+  Layout;
+  TDragTreeAccess(FTree).MouseDownPub(mbLeft, [], LabelX, RowMidY(1));
+  TDragTreeAccess(FTree).MouseMovePub([ssLeft], LabelX + 20, RowMidY(1));  // way past threshold
+  AssertFalse('Options=[] never starts a drag', FTree.IsDraggingNode);
+  AssertTrue('Options=[] never arms a drag node',
+    TDragTreeAccess(FTree).DragNodePub = nil);
+end;
+
 initialization
   RegisterTest(TTreeDragF1Test);
+  RegisterTest(TTreeDragF2Test);
 
 end.
