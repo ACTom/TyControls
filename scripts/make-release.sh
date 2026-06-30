@@ -4,7 +4,7 @@
 # Bash twin of scripts/make-release.ps1 — same manifest, same output.
 #
 # Ships ONLY what a consumer needs (runtime + design-time source, the Lazarus
-# packages, themes, user docs, examples) laid out as in the repo so the .lpk files
+# packages, themes, i18n catalogs, user docs, examples) laid out as in the repo so the .lpk files
 # install unchanged. Excludes tests, tools/ (icon generator), scripts/,
 # docs/superpowers (specs/plans), designtime/icons (the packed .lrs ships instead),
 # the auto-generated package units, and every build artifact.
@@ -73,14 +73,17 @@ echo "-- design-time (Design unit + packed icons .lrs; NOT the png source)"
 add_file designtime/tyControls.Design.pas
 add_file designtime/tycontrols_icons.lrs
 
-echo "-- themes"
-add_tree themes "" tycss
+echo "-- themes (+ image assets referenced via url(), e.g. green's photo)"
+add_tree themes "" tycss jpg jpeg png webp bmp gif svg
+
+echo "-- languages (i18n .po/.pot catalogs; .lpk EnableI18N points here)"
+add_tree languages "" po pot
 
 echo "-- docs (excluding docs/superpowers)"
 add_tree docs "/superpowers/" md png svg gif
 
 echo "-- examples (source only)"
-add_tree examples "" pas lpr lpi lfm ico tycss inc
+add_tree examples "" pas lpr lpi lfm ico tycss inc po pot
 
 # --- archive ---------------------------------------------------------------
 echo "-- archiving"

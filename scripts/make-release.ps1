@@ -2,7 +2,7 @@
   Build a TyControls release bundle for a GitHub release.
 
   Ships ONLY what a consumer needs to use the library — the runtime + design-time
-  source, the Lazarus packages, themes, user docs and examples — laid out exactly
+  source, the Lazarus packages, themes, i18n catalogs, user docs and examples — laid out exactly
   as in the repo so `tycontrols.lpk` / `tycontrols_dt.lpk` install unchanged.
 
   EXCLUDED: tests, tools/ (icon generator), scripts/, docs/superpowers (specs/plans),
@@ -70,14 +70,17 @@ Write-Host '-- design-time (Design unit + packed icons .lrs; NOT the png source)
 Add-File 'designtime/tyControls.Design.pas'
 Add-File 'designtime/tycontrols_icons.lrs'
 
-Write-Host '-- themes'
-Add-Tree 'themes' @('.tycss')
+Write-Host '-- themes (+ image assets referenced via url(), e.g. green''s photo)'
+Add-Tree 'themes' @('.tycss', '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.svg')
+
+Write-Host '-- languages (i18n .po/.pot catalogs; .lpk EnableI18N points here)'
+Add-Tree 'languages' @('.po', '.pot')
 
 Write-Host '-- docs (excluding docs/superpowers)'
 Add-Tree 'docs' @('.md', '.png', '.svg', '.gif') '(^|[\\/])superpowers([\\/]|$)'
 
 Write-Host '-- examples (source only)'
-Add-Tree 'examples' @('.pas', '.lpr', '.lpi', '.lfm', '.ico', '.tycss', '.inc')
+Add-Tree 'examples' @('.pas', '.lpr', '.lpi', '.lfm', '.ico', '.tycss', '.inc', '.po', '.pot')
 
 # --- zip -------------------------------------------------------------------
 Write-Host '-- zipping'
