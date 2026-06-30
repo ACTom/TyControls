@@ -6,6 +6,22 @@
 
 > English: [CHANGELOG.en.md](CHANGELOG.en.md).
 
+## [2.1.1] — 2026-06-30
+
+一个修复版本,集中处理 green 图片主题的真机观感,以及 IDE 设计期的若干小问题。
+
+### 修复
+
+- **green 主题** —— 所有容器(toolbar、titlebar、statusbar、panel、groupbox、tab、分隔符、滚动条)
+  改为 **100% 透明**,照片背景干净透出,不再有磨砂或纯色填充。
+- **TTyForm 玻璃/照片背景** —— 应用主题时即时重建:用 Custom… 选图片主题后背景图**立刻出现**
+  (不再需要先最小化/最大化触发);工具栏、状态栏也会采样照片透出。
+- **最小化** —— 主窗口最小化到任务栏(而不是缩到屏幕角落的小方块);最小化弹出子窗口不再连累整个应用。
+- **TTyToolBar 分隔符** —— 实心主题下与工具栏背景无缝(去掉怪异的填充色块),图片主题下透出照片。
+- **IDE 设计器**
+  - 切换 **TTyPageControl** 页面后旧页控件不再残留(先置 `csNoDesignVisible` 再改 `Visible`,使可见性即时重算)。
+  - **TTyTreeView / TTyListBox / TTyMemo** 的内部子控件(滚动条、TTyTreeView 的内联编辑器)不再在设计器中露出。
+
 ## [2.1.0] — 2026-06-30
 
 一个大型功能版本。主角是 **TTyTreeView**(一个 VirtualTreeView 级别的虚拟树),同时新增另外五个控件、

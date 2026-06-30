@@ -16,7 +16,7 @@ implementation
 
 procedure TAboutTest.TestVersionConstantPinned;
 begin
-  AssertEquals('TyVersion pinned for this release', '2.1.0', TyVersion);
+  AssertEquals('TyVersion pinned for this release', '2.1.1', TyVersion);
 end;
 
 procedure TAboutTest.TestEveryComponentAboutReturnsVersion;

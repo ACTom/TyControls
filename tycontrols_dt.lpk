@@ -14,7 +14,7 @@
     <Description Value="TyControls Design-Time Support Package. Requires the TyControls Run-Time Package to function.
 "/>
     <License Value="Modified LGPL (see COPYING.modifiedLGPL.txt) — same as the Lazarus LCL"/>
-    <Version Major="2" Minor="1"/>
+    <Version Major="2" Minor="1" Release="1"/>
     <Files>
       <Item>
         <Filename Value="designtime/tyControls.Design.pas"/>

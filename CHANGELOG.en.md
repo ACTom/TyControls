@@ -7,6 +7,28 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
+## [2.1.1] — 2026-06-30
+
+A bug-fix release focused on the green image theme's on-device look and a few IDE design-time glitches.
+
+### Fixed
+
+- **green theme** — every container (toolbar, title bar, status bar, panel, group box, tab,
+  separator, scrollbar) is now **100% transparent**, so the photo background shows through cleanly,
+  with no frosting or solid fill.
+- **TTyForm glass/photo backdrop** — rebuilt the instant a theme is applied: picking an image theme
+  via Custom… now shows the photo **immediately** (no more minimize/restore to trigger it); the
+  toolbar and status bar sample the photo too.
+- **Minimize** — the main form minimizes to the taskbar (not a small box in a screen corner);
+  minimizing a popup child window no longer minimizes the whole app.
+- **TTyToolBar separator** — seamless with the toolbar background on solid themes (no odd fill
+  patch), and shows the photo through on image themes.
+- **IDE designer**
+  - Switching **TTyPageControl** pages no longer leaves the old page's controls behind (set
+    `csNoDesignVisible` before `Visible` so the shown-state re-evaluates immediately).
+  - Internal sub-controls of **TTyTreeView / TTyListBox / TTyMemo** (scrollbars, and the
+    TTyTreeView inline editor) no longer leak into the designer.
+
 ## [2.1.0] — 2026-06-30
 
 A large feature release. The headline is **TTyTreeView**, a full VirtualTreeView-class virtual
