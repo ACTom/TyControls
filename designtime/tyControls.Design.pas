@@ -559,6 +559,9 @@ begin
   RegisterPropertyEditor(TypeInfo(string), TTyStyleController, 'About', TTyAboutEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyPopupMenu, 'About', TTyAboutEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyForm, 'About', TTyAboutEditor);
+  // BorderStyle is locked to bsNone (TTyForm is a borderless custom-chrome window) —
+  // hide it from the Object Inspector so it is neither shown nor editable.
+  RegisterPropertyEditor(TypeInfo(TFormBorderStyle), TTyForm, 'BorderStyle', THiddenPropertyEditor);
   // Page management verbs (Add/Delete/Show Next/Prev) for the page control.
   RegisterComponentEditor(TTyPageControl, TTyPageControlEditor);
   // File > New > "TyControls Form": a unit whose form descends from TTyForm, pre-fitted
