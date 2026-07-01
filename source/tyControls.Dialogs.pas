@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Controls, Dialogs, Forms,
   tyControls.Types, tyControls.Form, tyControls.Button, tyControls.Panel,
-  tyControls.TyLabel, tyControls.Edit, tyControls.Painter, tyControls.StrConsts;
+  tyControls.TyLabel, tyControls.Edit, tyControls.Memo, tyControls.Painter,
+  tyControls.StrConsts;
 
 { Right-aligns caption buttons in a bar: index 0 is the RIGHTMOST (primary), each successive
   button sits to its left, ASpacing apart, AMargin from the right edge. Pure. }
@@ -117,6 +118,34 @@ type
     property Prompt: string read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
     property PasswordChar: string read FPasswordChar write FPasswordChar;
+  end;
+
+{ Text dialog — resizable multi-line memo input }
+
+type
+  TTyTextDialogForm = class(TTyDialog)
+  private
+    FMemo: TTyMemo;
+    FPromptBottom: Integer;   // y where the memo starts (below the prompt)
+  protected
+    procedure LayoutContent; override;
+  public
+    property Memo: TTyMemo read FMemo;
+  end;
+
+function TyBuildTextDialog(const ACaption, APrompt, ADefault: string; out AMemo: TTyMemo): TTyTextDialogForm;
+function TyTextQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
+
+type
+  TTyTextDialog = class(TComponent)
+  private
+    FCaption, FPrompt, FValue: string;
+  public
+    function Execute: Boolean;
+  published
+    property Caption: string read FCaption write FCaption;
+    property Prompt: string read FPrompt write FPrompt;
+    property Value: string read FValue write FValue;
   end;
 
 implementation
@@ -563,5 +592,53 @@ begin
     if Result then FValue := e.Text;
   finally d.Free; end;
 end;
+
+{ TTyTextDialogForm }
+
+procedure TTyTextDialogForm.LayoutContent;
+var r: TRect;
+begin
+  if FMemo = nil then Exit;
+  r := ContentRect;
+  FMemo.SetBounds(r.Left + TyDlgPad, FPromptBottom,
+    (r.Right - r.Left) - 2*TyDlgPad, r.Bottom - FPromptBottom - TyDlgPad);
+end;
+
+{ Text dialog free functions }
+
+function TyBuildTextDialog(const ACaption, APrompt, ADefault: string; out AMemo: TTyMemo): TTyTextDialogForm;
+var y: Integer;
+begin
+  Result := TTyTextDialogForm.CreateNew(Application);
+  Result.Resizable := True;
+  Result.Caption := ACaption;
+  Result.Constraints.MinWidth := 320;
+  Result.Constraints.MinHeight := 220;
+  y := TyPlacePrompt(Result, APrompt, 380);
+  Result.FPromptBottom := y;
+  AMemo := TTyMemo.Create(Result);
+  AMemo.Parent := Result;
+  AMemo.Text := ADefault;
+  Result.FMemo := AMemo;
+  Result.AddButton(rsMsgBtnOK, mrOK, True, False);
+  Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
+  Result.AutoSizeToContent(420, 260 - Result.ContentRect.Top);  // roomy default
+  Result.LayoutContent;   // place the memo into the content area
+end;
+
+function TyTextQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
+var d: TTyTextDialogForm; m: TTyMemo;
+begin
+  d := TyBuildTextDialog(ACaption, APrompt, AValue, m);
+  try
+    Result := (d.ShowModal = mrOK);
+    if Result then AValue := m.Text;
+  finally d.Free; end;
+end;
+
+{ TTyTextDialog }
+
+function TTyTextDialog.Execute: Boolean;
+begin Result := TyTextQuery(FCaption, FPrompt, FValue); end;
 
 end.

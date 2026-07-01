@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, fpcunit, testregistry,
   tyControls.Types, tyControls.Dialogs, tyControls.Button, tyControls.Panel,
-  tyControls.Edit;
+  tyControls.Edit, tyControls.Memo;
 type
   TDialogButtonBarTest = class(TTestCase)
   published
@@ -59,6 +59,16 @@ type
   TPasswordDialogTest = class(TTestCase)
   published
     procedure TestBuildMasksEdit;
+  end;
+
+  // access subclass exposes the protected LayoutContent/Resize for the resize tests
+  TTyTextFormAccess = class(TTyTextDialogForm);
+
+  TTextDialogTest = class(TTestCase)
+  published
+    procedure TestBuildSeedsMemoResizable;
+    procedure TestMemoReflowsOnResize;
+    procedure TestResizeInvokesLayoutContent;
   end;
 
 implementation
@@ -307,6 +317,46 @@ begin
   finally d.Free; end;
 end;
 
+{ TTextDialogTest }
+
+procedure TTextDialogTest.TestBuildSeedsMemoResizable;
+var d: TTyTextDialogForm; m: TTyMemo;
+begin
+  d := TyBuildTextDialog('Notes', 'Enter notes:', 'line1' + LineEnding + 'line2', m);
+  try
+    AssertTrue('memo created', m <> nil);
+    // TTyMemo.Text uses TStrings.Text semantics: always appends a trailing LineEnding.
+    AssertEquals('memo seeded', 'line1' + LineEnding + 'line2' + LineEnding, m.Text);
+    AssertTrue('resizable', d.Resizable);
+    AssertEquals('two buttons', 2, TyDialogButtonCount(d));
+  finally d.Free; end;
+end;
+
+procedure TTextDialogTest.TestMemoReflowsOnResize;
+var d: TTyTextDialogForm; m: TTyMemo; w0: Integer;
+begin
+  d := TyBuildTextDialog('T', 'p', '', m);
+  try
+    TTyTextFormAccess(d).LayoutContent; w0 := m.Width;
+    d.ClientWidth := d.ClientWidth + 100;
+    TTyTextFormAccess(d).LayoutContent;
+    AssertTrue('memo widened', m.Width > w0);
+  finally d.Free; end;
+end;
+
+procedure TTextDialogTest.TestResizeInvokesLayoutContent;
+var d: TTyTextDialogForm; m: TTyMemo; w0: Integer;
+begin
+  // exercises the LIVE Resize override (base Task 1): Resize -> LayoutButtonBar + LayoutContent
+  d := TyBuildTextDialog('T', 'p', '', m);
+  try
+    w0 := m.Width;
+    d.ClientWidth := d.ClientWidth + 100;
+    TTyTextFormAccess(d).Resize;   // must reflow the memo via LayoutContent
+    AssertTrue('memo widened via Resize', m.Width > w0);
+  finally d.Free; end;
+end;
+
 initialization
   RegisterTest(TDialogButtonBarTest);
   RegisterTest(TMsgMappingTest);
@@ -315,4 +365,5 @@ initialization
   RegisterTest(TDialogResizeTest);
   RegisterTest(TInputDialogTest);
   RegisterTest(TPasswordDialogTest);
+  RegisterTest(TTextDialogTest);
 end.
