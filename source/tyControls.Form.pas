@@ -1306,12 +1306,6 @@ begin Result := inherited BorderIcons; end;
 
 procedure TTyForm.SetBorderIconsTy(AValue: TBorderIcons);
 begin
-  // Resist the LCL auto-reset: SetFormBorderStyle(bsNone) would push [] because
-  // DefaultBorderIcons[bsNone]=[], but TTyForm is always bsNone and uses our own
-  // default ([biSystemMenu,biMinimize,biMaximize]). Ignore the [] auto-push so the
-  // user's explicit BorderIcons assignment is not silently cleared.
-  if (AValue = []) and (inherited BorderIcons <> []) then
-    Exit;
   inherited BorderIcons := AValue;
   SyncCaptionButtons;
 end;

@@ -237,6 +237,7 @@ type
     procedure TestBorderIconsHideMinimize;
     procedure TestCloseOnly;
     procedure TestResizableFalseHidesMaximize;
+    procedure TestEmptyBorderIconsHidesAllRuntime;
   end;
 
   { A title bar belonging to another form cannot be associated. }
@@ -1642,11 +1643,11 @@ end;
 { TFormDrivesBarTest }
 
 function TFormDrivesBarTest.MakeFormWithBar: TTyForm;
-var f: TTyFormAccess; bar: TTyTitleBar;
+var f: TTyFormAccess;
 begin
   f := TTyFormAccess.CreateNew(nil);
   f.SetDesigning(True, False);            // avoid arming the runtime engine (no Monitor/handle)
-  bar := TTyTitleBar.Create(f);           // Owner = the form; auto-assigns via Notification
+  TTyTitleBar.Create(f);                  // Owner = the form; auto-assigns via Notification
   Result := f;
 end;
 
@@ -1683,6 +1684,21 @@ begin
     f.Resizable := False;
     AssertFalse('max hidden when not resizable', f.TitleBar.MaxButton.Visible);
     AssertTrue('min still', f.TitleBar.MinButton.Visible);
+  finally f.Free; end;
+end;
+
+procedure TFormDrivesBarTest.TestEmptyBorderIconsHidesAllRuntime;
+var f: TTyFormAccess;
+begin
+  f := TTyFormAccess.CreateNew(nil);   // runtime (NOT designing): exercises the live sync path
+  f.MakeTitleBar;
+  try
+    f.BorderIcons := [];               // must reach the form: a dialog can drop all caption buttons
+    AssertFalse('no close', f.TB.CloseButton.Visible);
+    AssertFalse('no min', f.TB.MinButton.Visible);
+    AssertFalse('no max', f.TB.MaxButton.Visible);
+    f.BorderIcons := [biSystemMenu];
+    AssertTrue('close restored', f.TB.CloseButton.Visible);
   finally f.Free; end;
 end;
 
