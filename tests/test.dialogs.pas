@@ -3,7 +3,8 @@ unit test.dialogs;
 interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, fpcunit, testregistry,
-  tyControls.Types, tyControls.Dialogs, tyControls.Button, tyControls.Panel;
+  tyControls.Types, tyControls.Dialogs, tyControls.Button, tyControls.Panel,
+  tyControls.Edit;
 type
   TDialogButtonBarTest = class(TTestCase)
   published
@@ -47,6 +48,12 @@ type
   published
     procedure TestLayoutContentFillsContentRect;
     procedure TestReflowOnClientResize;
+  end;
+
+  TInputDialogTest = class(TTestCase)
+  published
+    procedure TestBuildSeedsEditAndButtons;
+    procedure TestBoxReturnsDefaultOnCancelLogic;
   end;
 
 implementation
@@ -257,10 +264,36 @@ begin
   finally d.Free; end;
 end;
 
+{ TInputDialogTest }
+
+procedure TInputDialogTest.TestBuildSeedsEditAndButtons;
+var d: TTyDialog; e: TTyEdit;
+begin
+  d := TyBuildInputDialog('Rename', 'New name:', 'old.txt', e);
+  try
+    AssertTrue('edit created', e <> nil);
+    AssertEquals('edit seeded', 'old.txt', e.Text);
+    AssertEquals('two buttons', 2, TyDialogButtonCount(d));
+    AssertEquals('ok caption', 'OK', TyDialogButton(d, 0).Caption);
+  finally d.Free; end;
+end;
+
+procedure TInputDialogTest.TestBoxReturnsDefaultOnCancelLogic;
+var d: TTyDialog; e: TTyEdit;
+begin
+  d := TyBuildInputDialog('X', 'p', 'def', e);
+  try
+    e.Text := 'typed';
+    AssertEquals('cancel -> default kept', 'def', TyInputResult(e, 'def', mrCancel));
+    AssertEquals('ok -> typed', 'typed', TyInputResult(e, 'def', mrOk));
+  finally d.Free; end;
+end;
+
 initialization
   RegisterTest(TDialogButtonBarTest);
   RegisterTest(TMsgMappingTest);
   RegisterTest(TDialogBaseTest);
   RegisterTest(TMessageBuildTest);
   RegisterTest(TDialogResizeTest);
+  RegisterTest(TInputDialogTest);
 end.

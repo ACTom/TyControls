@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Controls, Dialogs, Forms,
   tyControls.Types, tyControls.Form, tyControls.Button, tyControls.Panel,
-  tyControls.TyLabel, tyControls.Painter, tyControls.StrConsts;
+  tyControls.TyLabel, tyControls.Edit, tyControls.Painter, tyControls.StrConsts;
 
 { Right-aligns caption buttons in a bar: index 0 is the RIGHTMOST (primary), each successive
   button sits to its left, ASpacing apart, AMargin from the right edge. Pure. }
@@ -79,6 +79,24 @@ type
     property Msg: string read FMsg write FMsg;
     property DlgType: TMsgDlgType read FDlgType write FDlgType default mtInformation;
     property Buttons: TMsgDlgButtons read FButtons write FButtons default [mbOK];
+  end;
+
+{ Input dialog — construct-only builder returns the dialog + its edit (out param). }
+function TyBuildInputDialog(const ACaption, APrompt, ADefault: string; out AEdit: TTyEdit): TTyDialog;
+function TyInputResult(AEdit: TTyEdit; const ADefault: string; AResult: TModalResult): string;
+function TyInputQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
+function TyInputBox(const ACaption, APrompt, ADefault: string): string;
+
+type
+  TTyInputDialog = class(TComponent)
+  private
+    FCaption, FPrompt, FValue: string;
+  public
+    function Execute: Boolean;
+  published
+    property Caption: string read FCaption write FCaption;
+    property Prompt: string read FPrompt write FPrompt;
+    property Value: string read FValue write FValue;
   end;
 
 implementation
@@ -407,5 +425,70 @@ begin
   d := TyBuildMessageDialog(FMsg, FDlgType, FButtons, FTitle);
   Result := RunDialogModal(d);
 end;
+
+{ Input dialog }
+
+const
+  TyDlgPad   = 16;   // content padding
+  TyDlgEditW = 320;  // default single-line input width
+  TyDlgEditH = 30;
+
+// Places a wrapped prompt label at the top of the content area (parented to ADlg).
+// Returns the y (in dialog client coords) just below the prompt.
+function TyPlacePrompt(ADlg: TTyDialog; const APrompt: string; AWidth: Integer): Integer;
+var lbl: TTyLabel; r: TRect;
+begin
+  r := ADlg.ContentRect;
+  lbl := TTyLabel.Create(ADlg);
+  lbl.Parent := ADlg;
+  lbl.WordWrap := True;
+  lbl.Caption := APrompt;
+  lbl.SetBounds(r.Left + TyDlgPad, r.Top + TyDlgPad, AWidth, 20);
+  Result := r.Top + TyDlgPad + 26;
+end;
+
+function TyBuildInputDialog(const ACaption, APrompt, ADefault: string; out AEdit: TTyEdit): TTyDialog;
+var y: Integer;
+begin
+  Result := TTyDialog.CreateNew(Application);
+  Result.Caption := ACaption;
+  y := TyPlacePrompt(Result, APrompt, TyDlgEditW);
+  AEdit := TTyEdit.Create(Result);
+  AEdit.Parent := Result;
+  AEdit.Text := ADefault;
+  AEdit.SetBounds(TyDlgPad, y, TyDlgEditW, TyDlgEditH);
+  Result.AddButton(rsMsgBtnOK, mrOk, True, False);
+  Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
+  Result.AutoSizeToContent(TyDlgEditW + TyDlgPad, y + TyDlgEditH + TyDlgPad - Result.ContentRect.Top);
+end;
+
+function TyInputResult(AEdit: TTyEdit; const ADefault: string; AResult: TModalResult): string;
+begin
+  if AResult = mrOk then Result := AEdit.Text else Result := ADefault;
+end;
+
+function TyInputBox(const ACaption, APrompt, ADefault: string): string;
+var d: TTyDialog; e: TTyEdit; mr: TModalResult;
+begin
+  d := TyBuildInputDialog(ACaption, APrompt, ADefault, e);
+  mr := d.ShowModal;
+  Result := TyInputResult(e, ADefault, mr);
+  d.Free;
+end;
+
+function TyInputQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
+var d: TTyDialog; e: TTyEdit; mr: TModalResult;
+begin
+  d := TyBuildInputDialog(ACaption, APrompt, AValue, e);
+  mr := d.ShowModal;
+  Result := (mr = mrOk);
+  if Result then AValue := e.Text;
+  d.Free;
+end;
+
+{ TTyInputDialog }
+
+function TTyInputDialog.Execute: Boolean;
+begin Result := TyInputQuery(FCaption, FPrompt, FValue); end;
 
 end.
