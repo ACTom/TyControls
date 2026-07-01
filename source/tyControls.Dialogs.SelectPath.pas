@@ -36,6 +36,10 @@ type
     // Add one root node per configured source (a single FRoot, else every drive).
     procedure PopulateRoots;
     function  SelectedPath: string;
+    // Create a subfolder AName under AParent, refresh the tree so it shows, and
+    // focus/select it. Returns True on success. Non-modal — the headless-testable
+    // seam that NewFolderClick wraps around TyInputQuery.
+    function  CreateSubfolder(AParent: PTyTreeNode; const AName: string): Boolean;
     // Test/introspection seam: the display text a node renders (same path as OnGetText).
     function  NodeText(Node: PTyTreeNode): string;
     property  Tree: TTyTreeView read FTree;
@@ -214,26 +218,67 @@ begin
     PopulateChildren(Node);
 end;
 
+function TTySelectPathForm.CreateSubfolder(AParent: PTyTreeNode; const AName: string): Boolean;
+var full: string; child, found: PTyTreeNode;
+begin
+  Result := False;
+  if (AParent = nil) or (AName = '') then Exit;
+  full := IncludeTrailingPathDelimiter(NodePath(AParent)) + AName;
+  if not CreateDir(full) then Exit;
+  Result := True;
+
+  { Refresh so the new folder shows. The tree has NO re-init API (ivsReInit is
+    declared but never consumed; InitNode early-exits on nsInitialized), so the
+    "collapse + SetChildCount(0) + InitNode + expand" chain is a dead end —
+    SetChildCount(0) clears nsHasChildren and nothing re-stamps it, so the expand
+    bails. Use incremental add instead. }
+  if (nsExpanded in AParent^.States) and (AParent^.ChildCount > 0) then
+    { Parent already expanded + populated: append the new folder as a child.
+      AddChild also (re)sets nsHasChildren on the parent (TreeView.pas:2060). }
+    found := AddPathNode(AParent, full)
+  else
+  begin
+    { Parent not yet populated: force a full (sorted) populate so EVERY subdir —
+      including the new one — is listed. AddPathNode on the parent has already
+      created the dir on disk, so TyPathHasSubdir is now true; AddChild inside
+      PopulateChildren stamps nsHasChildren, letting the expand proceed. First
+      ensure children are cleared so PopulateChildren's ChildCount=0 guard runs. }
+    if AParent^.ChildCount > 0 then FTree.SetChildCount(AParent, 0);
+    { nsHasChildren is required by SetExpanded; the dir now has ≥1 subdir. Seed one
+      child so nsHasChildren is set, then re-clear and let the expand fully populate. }
+    if not (nsHasChildren in AParent^.States) then
+    begin
+      AddPathNode(AParent, full);          // sets nsHasChildren on AParent
+      FTree.SetChildCount(AParent, 0);     // drop the seed; keep nsHasChildren (ChildCount checked, not the flag)
+      Include(AParent^.States, nsHasChildren);  // SetChildCount(0) cleared it — re-assert
+    end;
+    FTree.Expanded[AParent] := True;       // OnExpanding -> PopulateChildren lists all subdirs sorted
+    { locate the freshly-created folder among the now-materialised children }
+    found := nil;
+    child := FTree.GetFirstChild(AParent);
+    while child <> nil do
+    begin
+      if SameFileName(ExcludeTrailingPathDelimiter(NodePath(child)),
+                      ExcludeTrailingPathDelimiter(full)) then
+      begin found := child; Break; end;
+      child := FTree.GetNextSibling(child);
+    end;
+  end;
+
+  if found <> nil then FTree.FocusedNode := found;
+end;
+
 procedure TTySelectPathForm.NewFolderClick(Sender: TObject);
-var parentNode: PTyTreeNode; nm, full: string;
+var parentNode: PTyTreeNode; nm: string;
 begin
   parentNode := FTree.FocusedNode;
   if parentNode = nil then Exit;
   nm := '';
   if not TyInputQuery(rsDlgNewFolder, rsDlgNewFolderPrompt, nm) then Exit;
   if nm = '' then Exit;
-  full := IncludeTrailingPathDelimiter(NodePath(parentNode)) + nm;
-  if CreateDir(full) then
-  begin
-    { re-expand the parent so the new folder appears. Clear its children so the
-      next expand re-enumerates the directory (now including the new folder). }
-    FTree.Expanded[parentNode] := False;
-    FTree.SetChildCount(parentNode, 0);
-    FTree.InitNode(parentNode);          // re-stamp has-children (it certainly does now)
-    FTree.Expanded[parentNode] := True;
-  end
-  else
-    TyMessageDlg(Format(rsDlgCreateFolderErr, [full]), mtError, [mbOK]);
+  if not CreateSubfolder(parentNode, nm) then
+    TyMessageDlg(Format(rsDlgCreateFolderErr,
+      [IncludeTrailingPathDelimiter(NodePath(parentNode)) + nm]), mtError, [mbOK]);
 end;
 
 procedure TTySelectPathForm.LayoutContent;

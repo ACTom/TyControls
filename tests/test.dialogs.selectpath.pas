@@ -18,6 +18,7 @@ type
   published
     procedure TestBuildRootedTreeHasButtons;
     procedure TestExpandPopulatesChildren;
+    procedure TestCreateSubfolderShowsAndFocuses;
   end;
 implementation
 
@@ -118,6 +119,48 @@ begin
   finally
     RemoveDir(root + PathDelim + 'alpha');
     RemoveDir(root + PathDelim + 'beta');
+    RemoveDir(root);
+  end;
+end;
+
+{ The refresh gate: after CreateSubfolder the new folder must exist on disk AND
+  appear as a materialised child of the parent (and be focused). This FAILS
+  against the old collapse+SetChildCount(0)+InitNode+expand chain (which no-ops:
+  SetChildCount clears nsHasChildren, InitNode early-exits on nsInitialized, so
+  the expand bails and the child never appears) and PASSES with incremental add. }
+procedure TSelectPathBuildTest.TestCreateSubfolderShowsAndFocuses;
+var
+  d: TTySelectPathForm; root: string;
+  rootNode, child, newNode: PTyTreeNode;
+  ok: Boolean;
+begin
+  root := IncludeTrailingPathDelimiter(GetTempDir) + 'tyselpath_mkdir';
+  ForceDirectories(root + PathDelim + 'alpha');   // one pre-existing subdir
+  try
+    d := TyBuildSelectPathDialog('Choose folder', root);
+    try
+      rootNode := d.Tree.GetFirst;
+      AssertTrue('root node exists', rootNode <> nil);
+      d.Tree.Expanded[rootNode] := True;          // populate (root now has 'alpha')
+
+      ok := d.CreateSubfolder(rootNode, 'newdir');
+      AssertTrue('CreateSubfolder returned True', ok);
+      AssertTrue('newdir exists on disk', DirectoryExists(root + PathDelim + 'newdir'));
+
+      { a child node named 'newdir' is now present under the root }
+      newNode := nil;
+      child := d.Tree.GetFirstChild(rootNode);
+      while child <> nil do
+      begin
+        if d.NodeText(child) = 'newdir' then begin newNode := child; Break; end;
+        child := d.Tree.GetNextSibling(child);
+      end;
+      AssertTrue('newdir node present under root', newNode <> nil);
+      AssertTrue('new folder is focused', d.Tree.FocusedNode = newNode);
+    finally d.Free; end;
+  finally
+    RemoveDir(root + PathDelim + 'newdir');
+    RemoveDir(root + PathDelim + 'alpha');
     RemoveDir(root);
   end;
 end;
