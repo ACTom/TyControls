@@ -230,3 +230,126 @@ if MsgConfirmExit.Execute = mrYes then
 - 内容区控件**直接放在窗体上**（`Parent := <对话框>`，如 §3.4 示例中的 `lbl.Parent := Self`），位于标题栏之下、底部按钮条之上——可用区域由 `ContentRect` 给出。通过 IDE 模板创建时会自动落在这一区域内。
 - 消息图标颜色（错误/警告/信息）在 S1 版本中使用语义固定色；后续版本将引入 `--error`/`--warning`/`--info` 主题令牌以实现完全主题驱动的图标色。
 - S1 消息对话框使用固定内容尺寸（消息标签约 260×40，`AutoSizeToContent(320, 56)`），过长或多行的消息文本可能被裁剪；自动文字量度与动态尺寸调整将在 S2 版本中跟进。
+
+---
+
+## 8. 输入类对话框（S2）
+
+S2 阶段新增一组**输入类**对话框，均位于 `tyControls.Dialogs` 单元（文件夹选择器另在 `tyControls.Dialogs.SelectPath`）。每个对话框都有对应的全局函数（主要 API）和非可视设计期组件（位于 **TyControls Dialogs** 组件面板页）。
+
+### 8.1 TyInputDialog — 单行文本输入
+
+`TTyInputDialog` / 全局函数 `TyInputQuery` 与 `TyInputBox`：弹出一个带单行文本框的模态对话框，用于获取用户输入的单行字符串。
+
+```pascal
+uses tyControls.Dialogs;
+
+// 方式一：query 风格，in-place 修改 value，返回是否点击"确定"
+var s: string;
+s := '初始值';
+if TyInputQuery('重命名', '请输入新名称：', s) then
+  Rename(OldName, s);
+
+// 方式二：box 风格，直接返回输入值（取消时返回 default）
+var name: string;
+name := TyInputBox('新建项目', '项目名称：', 'Untitled');
+```
+
+设计期：在窗体上放置 `TTyInputDialog`，在对象检视器中设置 `Caption`、`Prompt`、`Value`，代码中调用 `Execute: Boolean`。
+
+### 8.2 TyPasswordDialog — 掩码密码输入
+
+`TTyPasswordDialog` / 全局函数 `TyPasswordBox` 与 `TyPasswordQuery`：带掩码字符（默认 `●`）的密码输入对话框，输入内容不可见。
+
+```pascal
+uses tyControls.Dialogs;
+
+// 方式一：返回输入的密码字符串（取消时返回空字符串）
+var pwd: string;
+pwd := TyPasswordBox('登录', '请输入密码：');
+if pwd <> '' then
+  Login(User, pwd);
+
+// 方式二：query 风格，返回是否点击"确定"
+var pwd: string;
+pwd := '';
+if TyPasswordQuery('修改密码', '请输入新密码：', pwd) then
+  ChangePassword(pwd);
+```
+
+### 8.3 TyTextDialog — 多行文本输入（可缩放）
+
+`TTyTextDialog` / 全局函数 `TyTextQuery`：可缩放的多行文本输入对话框（基于 `TTyMemo`），适用于备注、描述等较长文本。
+
+> **注意：返回值末尾携带一个换行符**（`LineEnding`）——这与 `TTyMemo.Text` / `TStrings.Text` 的 LCL 语义一致；往返读取结果稳定，不会累积叠加。如果调用方需要去掉末尾换行，自行 `TrimRight` 一次即可。
+
+```pascal
+uses tyControls.Dialogs;
+
+var note: string;
+note := '';
+if TyTextQuery('编辑备注', '请输入备注内容：', note) then
+begin
+  // note 末尾含一个 LineEnding，按需裁剪：
+  note := TrimRight(note);
+  SaveNote(note);
+end;
+```
+
+### 8.4 TySelectValueDialog — 列表单选
+
+`TTySelectValueDialog` / 全局函数 `TySelectValue`：从 `TStrings` 列表中单选一项，双击直接确认。返回所选条目的索引（`items[index]` 即选中值）。
+
+```pascal
+uses tyControls.Dialogs;
+
+var
+  items: TStringList;
+  idx: Integer;
+begin
+  items := TStringList.Create;
+  try
+    items.Add('选项 A');
+    items.Add('选项 B');
+    items.Add('选项 C');
+    idx := 0; // 初始选中
+    if TySelectValue('请选择', '选择一个选项：', items, idx) then
+      ShowMessage('你选择了：' + items[idx]);
+  finally
+    items.Free;
+  end;
+end;
+```
+
+### 8.5 TySelectPathDialog — 文件夹选择器（可缩放）
+
+`TTySelectPathDialog` / 全局函数 `TySelectDirectory`（位于 `tyControls.Dialogs.SelectPath`）：懒加载目录树，仅显示目录、支持"新建文件夹"按钮，对话框可拖拽边框缩放。
+
+```pascal
+uses tyControls.Dialogs.SelectPath;
+
+var dir: string;
+dir := 'C:\Users';  // 初始路径，也是根路径
+if TySelectDirectory('选择输出目录', dir, dir) then
+  OutputDir := dir;
+```
+
+### 8.6 非可视设计期组件
+
+以下 5 个非可视组件位于 **TyControls Dialogs** 组件面板页，每个组件均封装了对应对话框的 published 属性，代码中一行 `Execute` 即可显示：
+
+| 组件 | 对应全局函数 | `Execute` 返回值 |
+|------|------------|----------------|
+| `TTyInputDialog` | `TyInputQuery` | `Boolean`（`True` = 确定） |
+| `TTyPasswordDialog` | `TyPasswordQuery` | `Boolean` |
+| `TTyTextDialog` | `TyTextQuery` | `Boolean` |
+| `TTySelectValueDialog` | `TySelectValue` | `Boolean` |
+| `TTySelectPathDialog` | `TySelectDirectory` | `Boolean` |
+
+```pascal
+// 示例：设计器中放置 TTyInputDialog，命名为 DlgRename
+DlgRename.Caption := '重命名';
+DlgRename.Prompt  := '请输入新名称：';
+DlgRename.Value   := CurrentName;
+if DlgRename.Execute then
+  Rename(CurrentName, DlgRename.Value);
