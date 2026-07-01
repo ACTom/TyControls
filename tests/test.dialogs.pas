@@ -56,6 +56,11 @@ type
     procedure TestBoxReturnsDefaultOnCancelLogic;
   end;
 
+  TPasswordDialogTest = class(TTestCase)
+  published
+    procedure TestBuildMasksEdit;
+  end;
+
 implementation
 
 procedure TDialogButtonBarTest.TestSingleButtonRightAligned;
@@ -289,6 +294,19 @@ begin
   finally d.Free; end;
 end;
 
+{ TPasswordDialogTest }
+
+procedure TPasswordDialogTest.TestBuildMasksEdit;
+var d: TTyDialog; e: TTyEdit;
+begin
+  d := TyBuildPasswordDialog('Login', 'Password:', '●', e);
+  try
+    AssertTrue('edit created', e <> nil);
+    AssertEquals('masked', '●', e.PasswordChar);
+    AssertEquals('two buttons', 2, TyDialogButtonCount(d));
+  finally d.Free; end;
+end;
+
 initialization
   RegisterTest(TDialogButtonBarTest);
   RegisterTest(TMsgMappingTest);
@@ -296,4 +314,5 @@ initialization
   RegisterTest(TMessageBuildTest);
   RegisterTest(TDialogResizeTest);
   RegisterTest(TInputDialogTest);
+  RegisterTest(TPasswordDialogTest);
 end.

@@ -99,6 +99,26 @@ type
     property Value: string read FValue write FValue;
   end;
 
+{ Password dialog — masked-edit delta on Input }
+const TyDefaultPasswordChar = '●';
+function TyBuildPasswordDialog(const ACaption, APrompt, APasswordChar: string; out AEdit: TTyEdit): TTyDialog;
+function TyPasswordBox(const ACaption, APrompt: string): string;
+function TyPasswordQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
+
+type
+  TTyPasswordDialog = class(TComponent)
+  private
+    FCaption, FPrompt, FValue, FPasswordChar: string;
+  public
+    constructor Create(AOwner: TComponent); override;
+    function Execute: Boolean;
+  published
+    property Caption: string read FCaption write FCaption;
+    property Prompt: string read FPrompt write FPrompt;
+    property Value: string read FValue write FValue;
+    property PasswordChar: string read FPasswordChar write FPasswordChar;
+  end;
+
 implementation
 
 function TyDialogButtonBar(const ASizes: array of TSize; ABarWidth, AMargin, ASpacing: Integer): TTyRectArray;
@@ -489,5 +509,59 @@ end;
 
 function TTyInputDialog.Execute: Boolean;
 begin Result := TyInputQuery(FCaption, FPrompt, FValue); end;
+
+{ Password dialog }
+
+function TyBuildPasswordDialog(const ACaption, APrompt, APasswordChar: string; out AEdit: TTyEdit): TTyDialog;
+var y: Integer;
+begin
+  Result := TTyDialog.CreateNew(Application);
+  Result.Caption := ACaption;
+  y := TyPlacePrompt(Result, APrompt, TyDlgEditW);
+  AEdit := TTyEdit.Create(Result);
+  AEdit.Parent := Result;
+  AEdit.PasswordChar := APasswordChar;
+  AEdit.SetBounds(Result.ContentRect.Left + TyDlgPad, y, TyDlgEditW, TyDlgEditH);
+  Result.AddButton(rsMsgBtnOK, mrOK, True, False);
+  Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
+  Result.AutoSizeToContent(TyDlgEditW + TyDlgPad, y + TyDlgEditH + TyDlgPad - Result.ContentRect.Top);
+end;
+
+function TyPasswordBox(const ACaption, APrompt: string): string;
+var d: TTyDialog; e: TTyEdit;
+begin
+  d := TyBuildPasswordDialog(ACaption, APrompt, TyDefaultPasswordChar, e);
+  try
+    if d.ShowModal = mrOK then Result := e.Text else Result := '';
+  finally d.Free; end;
+end;
+
+function TyPasswordQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
+var d: TTyDialog; e: TTyEdit;
+begin
+  d := TyBuildPasswordDialog(ACaption, APrompt, TyDefaultPasswordChar, e);
+  try
+    Result := (d.ShowModal = mrOK);
+    if Result then AValue := e.Text;
+  finally d.Free; end;
+end;
+
+{ TTyPasswordDialog }
+
+constructor TTyPasswordDialog.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FPasswordChar := TyDefaultPasswordChar;
+end;
+
+function TTyPasswordDialog.Execute: Boolean;
+var d: TTyDialog; e: TTyEdit;
+begin
+  d := TyBuildPasswordDialog(FCaption, FPrompt, FPasswordChar, e);
+  try
+    Result := (d.ShowModal = mrOK);
+    if Result then FValue := e.Text;
+  finally d.Free; end;
+end;
 
 end.
