@@ -43,8 +43,10 @@ TyButton:disabled { opacity: 0.5; }
 - **Dialog subsystem** — custom-drawn themed modal dialogs: `TyShowMessage` / `TyMessageDlg`
   (mtWarning / mtError / mtConfirmation / mtInformation + full LCL button set) global functions,
   `TTyDialog` derivable base class (Enter/Esc + right-aligned button bar), and a `TTyMessage`
-  design-time component; button captions and type titles are internationalized (resourcestring +
-  zh_CN).
+  design-time component; **input-family dialogs**: `TyInputQuery` (single-line text) /
+  `TyPasswordBox` (masked password) / `TyTextQuery` (resizable multi-line) / `TySelectValue`
+  (list single-select) / `TySelectDirectory` (folder picker); button captions and type titles are
+  internationalized (resourcestring + zh_CN).
 - **Internationalization (i18n)** — `resourcestring`s + English / Simplified-Chinese `.po` catalogs
   (theme diagnostics, design-time, demo); the demo switches language at runtime.
 - **State transition animations** — `TTyToggleSwitch` knob slides between ON/OFF, `TTyButton` hover
