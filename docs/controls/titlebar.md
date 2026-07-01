@@ -64,7 +64,7 @@
 
 | 方法 | 说明 |
 |------|------|
-| `procedure LayoutButtons` | 从右到左依次放置可见的 CloseButton、MaxButton、MinButton，每个宽度为 `ButtonWidth`（默认 46px），高度等于 `ClientHeight`。隐藏的按钮（`ShowMinimize`/`ShowMaximize` = False）不占位。 |
+| `procedure LayoutButtons` | 从右到左依次放置可见的 CloseButton、MaxButton、MinButton，每个宽度为 `ButtonWidth`（默认 46px），高度等于 `ClientHeight`。隐藏的按钮（`ShowMinimize`/`ShowMaximize`/`ShowClose` = False）不占位。关联到 `TTyForm` 后，这三个开关由窗体的 `BorderIcons` + `Resizable` 驱动。 |
 | `procedure Resize` | 重写 `TCustomControl.Resize`，在控件尺寸变化时调用 `LayoutButtons`。 |
 | `procedure AdjustClientRect(var ARect)` | 覆写：在 `inherited` 基础上左侧加标题/图标内缩、右侧减 `RightInset`（可见按钮总宽），返回中间内容条带，使对齐子控件自动约束于此。 |
 | `procedure RenderTo(...)` | 绘制背景框架和标题文本，文本左边距 8px，右边界止于系统按钮区左边缘（`ClientWidth - RightInset`）。 |

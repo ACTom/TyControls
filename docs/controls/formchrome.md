@@ -16,7 +16,7 @@
 | `Chrome.Active := True` 激活窗框 | 无需"激活"——继承 `TTyForm` 即是自绘窗框 |
 | `Chrome.TitleBar` | `TitleBar`（窗体的只读属性）|
 | `Chrome.TitleHeight` | `TitleHeight`（published）|
-| `Chrome.ShowMinimize` / `ShowMaximize` | `ShowMinimize` / `ShowMaximize`（published）|
+| `Chrome.ShowMinimize` / `ShowMaximize` | **已移除**——标题栏按钮由标准 `BorderIcons`（`biMinimize` / `biMaximize`，最大化另需 `Resizable`）决定 |
 | `Chrome.BorderZone` | **已移除**——缩放感应边框是固定的 6px 内部环 |
 | `Chrome.ToggleMaximize` | 引擎内部处理（最大化按钮 / 双击标题栏），无需直接调用 |
 | `Chrome.OnMinimize/OnMaximize/OnRestore` | **已废弃**——改用标准 `TForm` 生命周期（最大化由引擎处理，最小化即 `WindowState`）|
@@ -46,7 +46,7 @@ procedure TMainForm.FormCreate(Sender: TObject);
 begin
   ApplyChromeTheme(StyleCtrl);       // 背景取自 TyForm 主题令牌
   TitleBar.Caption := Caption;       // 同步标题
-  // ShowMinimize / ShowMaximize / TitleHeight 可在对象查看器或此处设置
+  // BorderIcons / Resizable / TitleHeight 可在对象查看器或此处设置
 end;
 ```
 
