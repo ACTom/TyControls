@@ -55,8 +55,9 @@ type
 { Test/introspection helpers (construct-only seam). }
 function TyDialogButtonCount(ADlg: TTyDialog): Integer;
 function TyDialogButton(ADlg: TTyDialog; AIndex: Integer): TTyButton;
-{ Build a message dialog WITHOUT showing it (the show is TyMessageDlg). }
-function TyBuildMessageDialog(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons): TTyDialog;
+{ Build a message dialog WITHOUT showing it (the show is TyMessageDlg).
+  ATitle overrides the type-derived window caption when non-empty. }
+function TyBuildMessageDialog(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; const ATitle: string = ''): TTyDialog;
 { Globals — the primary API. }
 procedure TyShowMessage(const AMsg: string);
 function TyMessageDlg(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; AHelpCtx: Longint = 0): TModalResult;
@@ -263,7 +264,11 @@ function TTyDialog.GetButtonCount: Integer;
 begin Result := Length(FButtons); end;
 
 function TTyDialog.GetButton(AIndex: Integer): TTyButton;
-begin Result := FButtons[AIndex]; end;
+begin
+  if (AIndex < 0) or (AIndex > High(FButtons)) then
+    raise EListError.CreateFmt('TTyDialog.Buttons index out of range: %d', [AIndex]);
+  Result := FButtons[AIndex];
+end;
 
 procedure TTyDialog.SetMessageIcon(const ASymbol: string; AType: TMsgDlgType);
 begin
@@ -323,11 +328,13 @@ begin Result := ADlg.ButtonCount; end;
 function TyDialogButton(ADlg: TTyDialog; AIndex: Integer): TTyButton;
 begin Result := ADlg.Buttons[AIndex]; end;
 
-function TyBuildMessageDialog(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons): TTyDialog;
+function TyBuildMessageDialog(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; const ATitle: string): TTyDialog;
 var lbl: TTyLabel; ordered: TMsgDlgBtnArray; i: Integer; def, can: TMsgDlgBtn;
 begin
   Result := TTyDialog.CreateNew(Application);
-  Result.Caption := TyMsgTypeCaption(ADlgType);   // human-readable title (i18n in Task 6)
+  // Explicit title wins; otherwise the human-readable type caption (i18n in Task 6).
+  if ATitle <> '' then Result.Caption := ATitle
+  else Result.Caption := TyMsgTypeCaption(ADlgType);
   ordered := TyMsgOrderedButtons(AButtons);
   lbl := TTyLabel.Create(Result);
   lbl.Parent := Result;
@@ -343,12 +350,18 @@ begin
   Result.AutoSizeToContent(320, 56);
 end;
 
+// Show a built dialog modally and free it (leak-safe). Shared by the globals + the component.
+function RunDialogModal(ADlg: TTyDialog): TModalResult;
+begin
+  try Result := ADlg.ShowModal; finally ADlg.Free; end;
+end;
+
 function TyMessageDlg(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; AHelpCtx: Longint): TModalResult;
 var d: TTyDialog;
 begin
   d := TyBuildMessageDialog(AMsg, ADlgType, AButtons);
   d.HelpContext := AHelpCtx;   // reserved for a future help-context wiring (LCL-API parity)
-  try Result := d.ShowModal; finally d.Free; end;
+  Result := RunDialogModal(d);
 end;
 
 function TyMessageDlgPos(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; AHelpCtx: Longint; X, Y: Integer): TModalResult;
@@ -356,7 +369,8 @@ var d: TTyDialog;
 begin
   d := TyBuildMessageDialog(AMsg, ADlgType, AButtons);
   d.HelpContext := AHelpCtx;   // reserved for a future help-context wiring (LCL-API parity)
-  try d.Position := poDesigned; d.Left := X; d.Top := Y; Result := d.ShowModal; finally d.Free; end;
+  d.Position := poDesigned; d.Left := X; d.Top := Y;
+  Result := RunDialogModal(d);
 end;
 
 procedure TyShowMessage(const AMsg: string);
@@ -372,9 +386,11 @@ begin
 end;
 
 function TTyMessage.Execute: TModalResult;
+var d: TTyDialog;
 begin
   if FButtons = [] then FButtons := [mbOK];
-  Result := TyMessageDlg(FMsg, FDlgType, FButtons);
+  d := TyBuildMessageDialog(FMsg, FDlgType, FButtons, FTitle);
+  Result := RunDialogModal(d);
 end;
 
 end.
