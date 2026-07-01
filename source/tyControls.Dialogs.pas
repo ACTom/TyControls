@@ -148,6 +148,13 @@ type
     property Value: string read FValue write FValue;
   end;
 
+{ Shared layout constants — exported so sub-units (e.g. SelectPath) can
+  reference them without hard-coding the same literals. }
+const
+  TyDlgPad   = 16;   // content padding
+  TyDlgEditW = 320;  // default single-line input width
+  TyDlgEditH = 30;
+
 { Select-value dialog — single-select listbox; double-click a row confirms. }
 function TyBuildSelectValueDialog(const ACaption, APrompt: string; AItems: TStrings;
   AInitialIndex: Integer; out AList: TTyListBox): TTyDialog;
@@ -512,11 +519,6 @@ begin
 end;
 
 { Input dialog }
-
-const
-  TyDlgPad   = 16;   // content padding
-  TyDlgEditW = 320;  // default single-line input width
-  TyDlgEditH = 30;
 
 // Places a wrapped prompt label at the top of the content area (parented to ADlg).
 // Returns the y (in dialog client coords) just below the prompt.

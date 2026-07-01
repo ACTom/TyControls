@@ -329,8 +329,8 @@ end;
 uses tyControls.Dialogs.SelectPath;
 
 var dir: string;
-dir := 'C:\Users';  // 初始路径，也是根路径
-if TySelectDirectory('选择输出目录', dir, dir) then
+dir := '';
+if TySelectDirectory('选择输出目录', 'C:\Users', dir) then
   OutputDir := dir;
 ```
 

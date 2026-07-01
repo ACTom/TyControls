@@ -286,8 +286,8 @@ var r: TRect;
 begin
   if FTree = nil then Exit;
   r := ContentRect;
-  FTree.SetBounds(r.Left + 16, r.Top + 16,
-    (r.Right - r.Left) - 2*16, (r.Bottom - r.Top) - 2*16);
+  FTree.SetBounds(r.Left + TyDlgPad, r.Top + TyDlgPad,
+    (r.Right - r.Left) - 2*TyDlgPad, (r.Bottom - r.Top) - 2*TyDlgPad);
 end;
 
 function TTySelectPathForm.SelectedPath: string;
