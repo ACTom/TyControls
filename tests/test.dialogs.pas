@@ -72,6 +72,7 @@ begin
   AssertEquals('no', Ord(mrNo), Ord(TyMsgButtonResult(mbNo)));
   AssertEquals('ok', Ord(mrOK), Ord(TyMsgButtonResult(mbOK)));
   AssertEquals('cancel', Ord(mrCancel), Ord(TyMsgButtonResult(mbCancel)));
+  AssertEquals('help', 0, Ord(TyMsgButtonResult(mbHelp)));
 end;
 
 procedure TMsgMappingTest.TestButtonCaptionNonEmpty;
@@ -96,6 +97,7 @@ begin
   AssertTrue('warning symbol', TyMsgTypeSymbol(mtWarning) <> '');
   AssertTrue('error symbol', TyMsgTypeSymbol(mtError) <> '');
   AssertTrue('confirmation symbol', TyMsgTypeSymbol(mtConfirmation) <> '');
+  AssertEquals('error exact', #$C3#$97, TyMsgTypeSymbol(mtError));
 end;
 
 procedure TMsgMappingTest.TestTypeCaption;

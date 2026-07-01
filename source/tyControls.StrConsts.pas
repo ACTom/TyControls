@@ -64,6 +64,24 @@ resourcestring
   rsSmImportTargetNotFound      = '@import target not found: "%s"';
   rsSmImportCycleDetected       = '@import cycle detected: "%s"';
 
+  // --- Message dialogs (button captions + type titles) — user-facing, translated ---
+  rsMsgBtnYes          = 'Yes';
+  rsMsgBtnNo           = 'No';
+  rsMsgBtnOK           = 'OK';
+  rsMsgBtnCancel       = 'Cancel';
+  rsMsgBtnAbort        = 'Abort';
+  rsMsgBtnRetry        = 'Retry';
+  rsMsgBtnIgnore       = 'Ignore';
+  rsMsgBtnAll          = 'All';
+  rsMsgBtnNoToAll      = 'No to All';
+  rsMsgBtnYesToAll     = 'Yes to All';
+  rsMsgBtnHelp         = 'Help';
+  rsMsgBtnClose        = 'Close';
+  rsMsgTypeWarning     = 'Warning';
+  rsMsgTypeError       = 'Error';
+  rsMsgTypeConfirm     = 'Confirm';
+  rsMsgTypeInformation = 'Information';
+
 implementation
 
 end.

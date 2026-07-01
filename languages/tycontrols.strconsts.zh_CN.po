@@ -221,3 +221,67 @@ msgstr "未找到 @import 目标：\"%s\""
 #, object-pascal-format
 msgid "@import cycle detected: \"%s\""
 msgstr "检测到 @import 循环引用：\"%s\""
+
+#: tycontrols.strconsts.rsmsgbtnyes
+msgid "Yes"
+msgstr "是"
+
+#: tycontrols.strconsts.rsmsgbtnno
+msgid "No"
+msgstr "否"
+
+#: tycontrols.strconsts.rsmsgbtnok
+msgid "OK"
+msgstr "确定"
+
+#: tycontrols.strconsts.rsmsgbtncancel
+msgid "Cancel"
+msgstr "取消"
+
+#: tycontrols.strconsts.rsmsgbtnabort
+msgid "Abort"
+msgstr "中止"
+
+#: tycontrols.strconsts.rsmsgbtnretry
+msgid "Retry"
+msgstr "重试"
+
+#: tycontrols.strconsts.rsmsgbtnignore
+msgid "Ignore"
+msgstr "忽略"
+
+#: tycontrols.strconsts.rsmsgbtnall
+msgid "All"
+msgstr "全部"
+
+#: tycontrols.strconsts.rsmsgbtnnotoall
+msgid "No to All"
+msgstr "全部否"
+
+#: tycontrols.strconsts.rsmsgbtnyestoall
+msgid "Yes to All"
+msgstr "全部是"
+
+#: tycontrols.strconsts.rsmsgbtnhelp
+msgid "Help"
+msgstr "帮助"
+
+#: tycontrols.strconsts.rsmsgbtnclose
+msgid "Close"
+msgstr "关闭"
+
+#: tycontrols.strconsts.rsmsgtypewarning
+msgid "Warning"
+msgstr "警告"
+
+#: tycontrols.strconsts.rsmsgtypeerror
+msgid "Error"
+msgstr "错误"
+
+#: tycontrols.strconsts.rsmsgtypeconfirm
+msgid "Confirm"
+msgstr "确认"
+
+#: tycontrols.strconsts.rsmsgtypeinformation
+msgid "Information"
+msgstr "信息"

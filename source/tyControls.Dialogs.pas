@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Controls, Dialogs, Forms,
   tyControls.Types, tyControls.Form, tyControls.Button, tyControls.Panel,
-  tyControls.TyLabel, tyControls.Painter;
+  tyControls.TyLabel, tyControls.Painter, tyControls.StrConsts;
 
 { Right-aligns caption buttons in a bar: index 0 is the RIGHTMOST (primary), each successive
   button sits to its left, ASpacing apart, AMargin from the right edge. Pure. }
@@ -101,18 +101,18 @@ end;
 function TyMsgButtonCaption(ABtn: TMsgDlgBtn): string;
 begin
   case ABtn of
-    mbYes:     Result := 'Yes';
-    mbNo:      Result := 'No';
-    mbOK:      Result := 'OK';
-    mbCancel:  Result := 'Cancel';
-    mbAbort:   Result := 'Abort';
-    mbRetry:   Result := 'Retry';
-    mbIgnore:  Result := 'Ignore';
-    mbAll:     Result := 'All';
-    mbNoToAll: Result := 'No to All';
-    mbYesToAll:Result := 'Yes to All';
-    mbHelp:    Result := 'Help';
-    mbClose:   Result := 'Close';
+    mbYes:     Result := rsMsgBtnYes;
+    mbNo:      Result := rsMsgBtnNo;
+    mbOK:      Result := rsMsgBtnOK;
+    mbCancel:  Result := rsMsgBtnCancel;
+    mbAbort:   Result := rsMsgBtnAbort;
+    mbRetry:   Result := rsMsgBtnRetry;
+    mbIgnore:  Result := rsMsgBtnIgnore;
+    mbAll:     Result := rsMsgBtnAll;
+    mbNoToAll: Result := rsMsgBtnNoToAll;
+    mbYesToAll:Result := rsMsgBtnYesToAll;
+    mbHelp:    Result := rsMsgBtnHelp;
+    mbClose:   Result := rsMsgBtnClose;
   else Result := '';
   end;
 end;
@@ -176,10 +176,10 @@ end;
 function TyMsgTypeCaption(ADlgType: TMsgDlgType): string;
 begin
   case ADlgType of
-    mtWarning:      Result := 'Warning';
-    mtError:        Result := 'Error';
-    mtConfirmation: Result := 'Confirm';
-    mtInformation:  Result := 'Information';
+    mtWarning:      Result := rsMsgTypeWarning;
+    mtError:        Result := rsMsgTypeError;
+    mtConfirmation: Result := rsMsgTypeConfirm;
+    mtInformation:  Result := rsMsgTypeInformation;
   else Result := '';
   end;
 end;

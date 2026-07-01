@@ -160,6 +160,70 @@ msgstr ""
 msgid "unreadable @import '%s'"
 msgstr ""
 
+#: tycontrols.strconsts.rsmsgbtnabort
+msgid "Abort"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgbtnall
+msgid "All"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgbtncancel
+msgid "Cancel"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgbtnclose
+msgid "Close"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgbtnhelp
+msgid "Help"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgbtnignore
+msgid "Ignore"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgbtnno
+msgid "No"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgbtnnotoall
+msgid "No to All"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgbtnok
+msgid "OK"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgbtnretry
+msgid "Retry"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgbtnyes
+msgid "Yes"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgbtnyestoall
+msgid "Yes to All"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgtypeconfirm
+msgid "Confirm"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgtypeerror
+msgid "Error"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgtypeinformation
+msgid "Information"
+msgstr ""
+
+#: tycontrols.strconsts.rsmsgtypewarning
+msgid "Warning"
+msgstr ""
+
 #: tycontrols.strconsts.rssmbackgroundimageneedsslice
 #, object-pascal-format
 msgid "background-image needs slice(): %s"
