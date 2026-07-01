@@ -211,6 +211,16 @@ type
     procedure TestMinCloseNoMaxIcon;
   end;
 
+  { A standalone TitleBar (no owning form): the three Show* switches toggle the
+    matching caption button Visible. }
+  TTitleBarSwitchesTest = class(TTestCase)
+  published
+    procedure TestDefaultsAllVisible;
+    procedure TestHideMinimize;
+    procedure TestHideMaximize;
+    procedure TestHideClose;
+  end;
+
 implementation
 
 type
@@ -1504,6 +1514,50 @@ begin
   end;
 end;
 
+{ TTitleBarSwitchesTest }
+
+procedure TTitleBarSwitchesTest.TestDefaultsAllVisible;
+var bar: TTyTitleBar;
+begin
+  bar := TTyTitleBar.Create(nil);
+  try
+    AssertTrue('min default', bar.ShowMinimize);
+    AssertTrue('max default', bar.ShowMaximize);
+    AssertTrue('close default', bar.ShowClose);
+  finally bar.Free; end;
+end;
+
+procedure TTitleBarSwitchesTest.TestHideMinimize;
+var bar: TTyTitleBar;
+begin
+  bar := TTyTitleBar.Create(nil);
+  try
+    bar.ShowMinimize := False;
+    AssertFalse('min hidden', bar.MinButton.Visible);
+    AssertTrue('max still', bar.MaxButton.Visible);
+  finally bar.Free; end;
+end;
+
+procedure TTitleBarSwitchesTest.TestHideMaximize;
+var bar: TTyTitleBar;
+begin
+  bar := TTyTitleBar.Create(nil);
+  try
+    bar.ShowMaximize := False;
+    AssertFalse('max hidden', bar.MaxButton.Visible);
+  finally bar.Free; end;
+end;
+
+procedure TTitleBarSwitchesTest.TestHideClose;
+var bar: TTyTitleBar;
+begin
+  bar := TTyTitleBar.Create(nil);
+  try
+    bar.ShowClose := False;
+    AssertFalse('close hidden', bar.CloseButton.Visible);
+  finally bar.Free; end;
+end;
+
 { TCaptionButtonsTest }
 
 procedure TCaptionButtonsTest.TestAllIconsResizable;
@@ -1555,5 +1609,6 @@ initialization
   RegisterTest(TTyFormBackdropTest);
   RegisterTest(TTyMenuFormTest);
   RegisterTest(TCaptionButtonsTest);
+  RegisterTest(TTitleBarSwitchesTest);
 
 end.

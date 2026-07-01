@@ -59,6 +59,12 @@ type
     procedure SetTitleAlignment(AValue: TAlignment);
     function VisibleButtonCount: Integer;
     function LeftInsetPx: Integer;
+    function GetShowMinimize: Boolean;
+    function GetShowMaximize: Boolean;
+    function GetShowClose: Boolean;
+    procedure SetShowMinimize(AValue: Boolean);
+    procedure SetShowMaximize(AValue: Boolean);
+    procedure SetShowClose(AValue: Boolean);
   protected
     procedure LayoutButtons;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -88,6 +94,11 @@ type
     property Align;
     property Anchors;
     property ButtonWidth: Integer read FButtonWidth write SetButtonWidth;
+    { Per-button visibility for a STANDALONE title bar (not associated with a TTyForm).
+      When associated, the owning form drives these from its BorderIcons + Resizable. }
+    property ShowMinimize: Boolean read GetShowMinimize write SetShowMinimize default True;
+    property ShowMaximize: Boolean read GetShowMaximize write SetShowMaximize default True;
+    property ShowClose: Boolean read GetShowClose write SetShowClose default True;
   end;
 
   TTyChromeEngine = class(TObject)
@@ -606,6 +617,39 @@ begin
     Exit;
   FTitleAlignment := AValue;
   Invalidate;
+end;
+
+function TTyTitleBar.GetShowMinimize: Boolean;
+begin Result := (FMinButton = nil) or FMinButton.Visible; end;
+
+function TTyTitleBar.GetShowMaximize: Boolean;
+begin Result := (FMaxButton = nil) or FMaxButton.Visible; end;
+
+function TTyTitleBar.GetShowClose: Boolean;
+begin Result := (FCloseButton = nil) or FCloseButton.Visible; end;
+
+procedure TTyTitleBar.SetShowMinimize(AValue: Boolean);
+begin
+  if FMinButton = nil then Exit;
+  if FMinButton.Visible = AValue then Exit;
+  FMinButton.Visible := AValue;
+  LayoutButtons;
+end;
+
+procedure TTyTitleBar.SetShowMaximize(AValue: Boolean);
+begin
+  if FMaxButton = nil then Exit;
+  if FMaxButton.Visible = AValue then Exit;
+  FMaxButton.Visible := AValue;
+  LayoutButtons;
+end;
+
+procedure TTyTitleBar.SetShowClose(AValue: Boolean);
+begin
+  if FCloseButton = nil then Exit;
+  if FCloseButton.Visible = AValue then Exit;
+  FCloseButton.Visible := AValue;
+  LayoutButtons;
 end;
 
 function TTyTitleBar.VisibleButtonCount: Integer;
