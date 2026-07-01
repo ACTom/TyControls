@@ -14,7 +14,7 @@ uses
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu, tyControls.NativeStyler,
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
   tyControls.Calendar, tyControls.DateTimePicker,
-  tyControls.TreeView;
+  tyControls.TreeView, tyControls.Dialogs;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -68,6 +68,20 @@ type
     function GetLocalizedDescription: string; override;
   end;
 
+  { File > New entry that creates a unit whose form descends from TTyDialog — a themed,
+    close-only, non-resizable modal dialog base. The generated form comes WITH a top-aligned
+    TTyTitleBar already associated and BorderIcons = [biSystemMenu] (close button only), so the
+    user can design custom dialog content + buttons and show it modally. }
+  TTyDialogFileDescriptor = class(TTyFormFileDescriptor)
+  public
+    constructor Create; override;
+    function GetInterfaceUsesSection: string; override;
+    function GetInterfaceSource(const Filename, SourceName, ResourceName: string): string; override;
+    function GetResourceSource(const ResourceName: string): string; override;
+    function GetLocalizedName: string; override;
+    function GetLocalizedDescription: string; override;
+  end;
+
   { File > New > Project > "TyControls Application": a normal LCL GUI app whose main form is
     a themed TTyForm (title bar + style controller), with the tycontrols package dependency
     pre-added. Mirrors the IDE's built-in Application descriptor. }
@@ -93,6 +107,9 @@ resourcestring
   rsDtMainFormName        = 'TyControls Main Form';
   rsDtMainFormDescription = 'A themed TTyForm carrying its own TTyStyleController, with the ' +
     'form and the title bar already associated to it — the root window for a TyControls application.';
+  rsDtDialogName        = 'TyControls Dialog';
+  rsDtDialogDescription = 'A themed custom-drawn modal dialog (TTyDialog): borderless, ' +
+    'close-only, non-resizable, centered — design your own dialog content and buttons.';
   rsDtAppName        = 'TyControls Application';
   rsDtAppDescription = 'A graphical TyControls application. The main form is a themed TTyForm ' +
     '(custom title bar + style controller); the tycontrols package is added automatically.';
@@ -444,6 +461,81 @@ begin
   Result := rsDtMainFormDescription;
 end;
 
+{ TTyDialogFileDescriptor }
+
+constructor TTyDialogFileDescriptor.Create;
+begin
+  inherited Create;
+  Name := 'TyControls dialog';      // internal id (distinct from the forms)
+  ResourceClass := TTyDialog;       // generated class descends from TTyDialog
+end;
+
+function TTyDialogFileDescriptor.GetInterfaceUsesSection: string;
+begin
+  // Base adds tyControls.Form (TTyTitleBar); the dialog form also needs tyControls.Dialogs
+  // so `class(TTyDialog)` resolves in the generated unit.
+  Result := inherited GetInterfaceUsesSection + ', tyControls.Dialogs';
+end;
+
+function TTyDialogFileDescriptor.GetInterfaceSource(const Filename, SourceName,
+  ResourceName: string): string;
+const
+  LE = LineEnding;
+begin
+  // Mirror the base, but the generated form descends from TTyDialog (the base hard-codes
+  // TTyForm). The pre-placed title bar is the only published field.
+  Result :=
+     'type' + LE
+    + '  T' + ResourceName + ' = class(TTyDialog)' + LE
+    + '    TyTitleBar1: TTyTitleBar;' + LE
+    + '  private' + LE
+    + LE
+    + '  public' + LE
+    + LE
+    + '  end;' + LE
+    + LE
+    + 'var' + LE
+    + '  ' + ResourceName + ': T' + ResourceName + ';' + LE
+    + LE;
+end;
+
+function TTyDialogFileDescriptor.GetResourceSource(const ResourceName: string): string;
+const
+  LE = LineEnding;
+begin
+  // Mirror the base .lfm (a TTyForm-shaped form + top TyTitleBar1), but the root object is a
+  // TTyDialog descendant and carries BorderIcons = [biSystemMenu] (close button only). The
+  // form-level `TitleBar =` is a forward ref the LFM reader resolves via fixups.
+  Result :=
+     'object ' + ResourceName + ': T' + ResourceName + LE
+    + '  Left = 300' + LE
+    + '  Height = 320' + LE
+    + '  Top = 200' + LE
+    + '  Width = 480' + LE
+    + '  BorderIcons = [biSystemMenu]' + LE
+    + '  Caption = ''' + ResourceName + '''' + LE
+    + '  TitleBar = TyTitleBar1' + LE
+    + '  object TyTitleBar1: TTyTitleBar' + LE
+    + '    Left = 0' + LE
+    + '    Height = 32' + LE
+    + '    Top = 0' + LE
+    + '    Width = 480' + LE
+    + '    Align = alTop' + LE
+    + '    Caption = ''' + ResourceName + '''' + LE
+    + '  end' + LE
+    + 'end' + LE;
+end;
+
+function TTyDialogFileDescriptor.GetLocalizedName: string;
+begin
+  Result := rsDtDialogName;
+end;
+
+function TTyDialogFileDescriptor.GetLocalizedDescription: string;
+begin
+  Result := rsDtDialogDescription;
+end;
+
 { TTyApplicationDescriptor }
 
 constructor TTyApplicationDescriptor.Create;
@@ -536,7 +628,12 @@ begin
   // (TitleBar / TitleHeight / BorderIcons / Resizable). RegisterComponents only
   // covers droppable controls, not base form classes — this is the form-level analog.
   if FormEditingHook <> nil then
+  begin
     FormEditingHook.RegisterDesignerBaseClass(TTyForm);
+    // TTyDialog is a distinct designer base class (close-only modal dialog): register it so
+    // `class(TTyDialog)` resolves as an ancestor and the OI shows its chrome, same as TTyForm.
+    FormEditingHook.RegisterDesignerBaseClass(TTyDialog);
+  end;
   RegisterComponents('TyControls',
     [TTyButton, TTyLabel, TTyEdit, TTyCheckBox, TTyRadioButton,
      TTyPanel, TTyComboBox, TTyScrollBar, TTyStyleController,
@@ -546,6 +643,9 @@ begin
      TTySplitter, TTyStatusBar, TTyToolBar, TTyToolSeparator,
      TTyCalendar, TTyDateTimePicker,
      TTyTreeView]);
+  // Dialogs palette group. TTyMessage is the non-visual message-dialog component (S1);
+  // a custom palette icon is a follow-up — the IDE shows a default glyph for now.
+  RegisterComponents('TyControls Dialogs', [TTyMessage]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',
@@ -567,10 +667,13 @@ begin
   // File > New > "TyControls Form": a unit whose form descends from TTyForm, pre-fitted
   // with a top-aligned title bar.
   RegisterProjectFileDescriptor(TTyFormFileDescriptor.Create);
-  // The themed main form (title bar + style controller). Registered so its lifetime is
-  // refcount-managed; reused by the TyControls Application project below.
+  // File > New > "TyControls Dialog": a unit whose form descends from TTyDialog (close-only,
+  // non-resizable modal), pre-fitted with a top-aligned title bar.
+  RegisterProjectFileDescriptor(TTyDialogFileDescriptor.Create);
+  // The themed main form (title bar + style controller). NOT offered in the File > New list
+  // (it is only meaningful as an application's root window); it is created + owned here so the
+  // TyControls Application project's CreateStartFiles can reuse the (refcounted) instance.
   TyMainFormDescriptor := TTyMainFormFileDescriptor.Create;
-  RegisterProjectFileDescriptor(TyMainFormDescriptor);
   // File > New > Project > "TyControls Application": a GUI app whose main form is that
   // themed TTyForm, with the tycontrols dependency pre-added.
   RegisterProjectDescriptor(TTyApplicationDescriptor.Create);
