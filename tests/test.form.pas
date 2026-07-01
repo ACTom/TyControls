@@ -228,6 +228,24 @@ type
     procedure TestAssignSizeableCoercedToNone;
   end;
 
+  { An associated form drives its bar's buttons from BorderIcons + Resizable.
+    Design-mode is used so SetTitleBar does not arm the runtime chrome engine. }
+  TFormDrivesBarTest = class(TTestCase)
+  private
+    function MakeFormWithBar: TTyForm;
+  published
+    procedure TestBorderIconsHideMinimize;
+    procedure TestCloseOnly;
+    procedure TestResizableFalseHidesMaximize;
+  end;
+
+  { A title bar belonging to another form cannot be associated. }
+  TTitleBarGuardTest = class(TTestCase)
+  published
+    procedure TestForeignBarRaises;
+    procedure TestOwnBarSucceeds;
+  end;
+
 implementation
 
 type
@@ -1348,15 +1366,16 @@ end;
 procedure TTyFormTest.TestNonResizableDisablesMaxButton;
 var F: TTyFormAccess;
 begin
-  { Setting Resizable=False disables the title-bar max button (a fixed window can't maximize). }
+  { Setting Resizable=False hides the title-bar max button (a fixed window can't maximize).
+    SyncCaptionButtons uses ShowMaximize (Visible), not just Enabled, so the button is hidden. }
   F := TTyFormAccess.CreateNew(nil);
   try
     F.MakeTitleBar;
-    AssertTrue('max button enabled while resizable', F.TB.MaxButton.Enabled);
+    AssertTrue('max button visible while resizable', F.TB.MaxButton.Visible);
     F.Resizable := False;
-    AssertFalse('max button disabled when not resizable', F.TB.MaxButton.Enabled);
+    AssertFalse('max button hidden when not resizable', F.TB.MaxButton.Visible);
     F.Resizable := True;
-    AssertTrue('max button re-enabled when resizable again', F.TB.MaxButton.Enabled);
+    AssertTrue('max button visible again when resizable', F.TB.MaxButton.Visible);
   finally
     F.Free;
   end;
@@ -1620,6 +1639,79 @@ begin
       = [cbfMinimize, cbfClose]);
 end;
 
+{ TFormDrivesBarTest }
+
+function TFormDrivesBarTest.MakeFormWithBar: TTyForm;
+var f: TTyFormAccess; bar: TTyTitleBar;
+begin
+  f := TTyFormAccess.CreateNew(nil);
+  f.SetDesigning(True, False);            // avoid arming the runtime engine (no Monitor/handle)
+  bar := TTyTitleBar.Create(f);           // Owner = the form; auto-assigns via Notification
+  Result := f;
+end;
+
+procedure TFormDrivesBarTest.TestBorderIconsHideMinimize;
+var f: TTyForm;
+begin
+  f := MakeFormWithBar;
+  try
+    f.BorderIcons := [biSystemMenu, biMaximize];   // no biMinimize
+    AssertFalse('min hidden', f.TitleBar.MinButton.Visible);
+    AssertTrue('max shown', f.TitleBar.MaxButton.Visible);
+    AssertTrue('close shown', f.TitleBar.CloseButton.Visible);
+  finally f.Free; end;
+end;
+
+procedure TFormDrivesBarTest.TestCloseOnly;
+var f: TTyForm;
+begin
+  f := MakeFormWithBar;
+  try
+    f.BorderIcons := [biSystemMenu];
+    AssertTrue('close', f.TitleBar.CloseButton.Visible);
+    AssertFalse('no min', f.TitleBar.MinButton.Visible);
+    AssertFalse('no max', f.TitleBar.MaxButton.Visible);
+  finally f.Free; end;
+end;
+
+procedure TFormDrivesBarTest.TestResizableFalseHidesMaximize;
+var f: TTyForm;
+begin
+  f := MakeFormWithBar;
+  try
+    f.BorderIcons := [biSystemMenu, biMinimize, biMaximize];
+    f.Resizable := False;
+    AssertFalse('max hidden when not resizable', f.TitleBar.MaxButton.Visible);
+    AssertTrue('min still', f.TitleBar.MinButton.Visible);
+  finally f.Free; end;
+end;
+
+procedure TTitleBarGuardTest.TestForeignBarRaises;
+var f1, f2: TTyFormAccess; bar: TTyTitleBar; raised: Boolean;
+begin
+  f1 := TTyFormAccess.CreateNew(nil); f2 := TTyFormAccess.CreateNew(nil);
+  f1.SetDesigning(True, False); f2.SetDesigning(True, False);
+  bar := TTyTitleBar.Create(f2);   // belongs to f2 (auto-assigns to f2)
+  raised := False;
+  try
+    f1.TitleBar := bar;
+  except
+    on E: EInvalidOperation do raised := True;
+  end;
+  try AssertTrue('foreign bar rejected', raised);
+  finally f1.Free; f2.Free; end;
+end;
+
+procedure TTitleBarGuardTest.TestOwnBarSucceeds;
+var f: TTyFormAccess; bar: TTyTitleBar;
+begin
+  f := TTyFormAccess.CreateNew(nil); f.SetDesigning(True, False);
+  bar := TTyTitleBar.Create(f);    // auto-assigns to f
+  try
+    AssertTrue('own bar associated', f.TitleBar = bar);
+  finally f.Free; end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeHitForTest);
@@ -1638,5 +1730,7 @@ initialization
   RegisterTest(TCaptionButtonsTest);
   RegisterTest(TTitleBarSwitchesTest);
   RegisterTest(TFormBorderStyleTest);
+  RegisterTest(TFormDrivesBarTest);
+  RegisterTest(TTitleBarGuardTest);
 
 end.

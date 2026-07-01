@@ -182,6 +182,9 @@ type
     procedure SetResizable(AValue: Boolean);
     function GetBorderStyleTy: TFormBorderStyle;
     procedure SetBorderStyleTy(AValue: TFormBorderStyle);
+    function GetBorderIconsTy: TBorderIcons;
+    procedure SetBorderIconsTy(AValue: TBorderIcons);
+    procedure SyncCaptionButtons;   // push TyResolveCaptionButtons(BorderIcons,Resizable) onto the bar
     { Per-platform resize-strategy application (WS_THICKFRAME on Win32, styleMask on
       Cocoa, gutter re-align on GTK/Qt). Stub for Phase A — the bodies land in later
       phases; the call sites (SetResizable + post-handle-creation) are wired now. }
@@ -252,6 +255,10 @@ type
     { Locked: a TTyForm is a borderless custom-chrome window. Any assignment is coerced
       to bsNone; hidden from the Object Inspector via a design-time property editor. }
     property BorderStyle: TFormBorderStyle read GetBorderStyleTy write SetBorderStyleTy default bsNone;
+    { Standard border icons drive the caption buttons: biSystemMenu->close,
+      biMinimize->minimize, biMaximize->maximize (only when Resizable). }
+    property BorderIcons: TBorderIcons read GetBorderIconsTy write SetBorderIconsTy
+      default [biSystemMenu, biMinimize, biMaximize];
   end;
 
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
@@ -991,6 +998,9 @@ procedure TTyForm.SetupChrome;
 begin
   BorderStyle := bsNone;
   FResizable := True;
+  // Seed the standard caption-button set so SyncCaptionButtons shows min/max/close by default.
+  // A CreateNew form does not inherit the full default set, and a streamed .lfm only overrides it.
+  BorderIcons := [biSystemMenu, biMinimize, biMaximize];
   FEngine := TTyChromeEngine.Create;
   FEngine.Form := Self;
 end;
@@ -1025,6 +1035,8 @@ end;
 procedure TTyForm.SetTitleBar(AValue: TTyTitleBar);
 begin
   if AValue = FTitleBar then Exit;
+  if (AValue <> nil) and (AValue.Owner <> Self) and (GetParentForm(AValue) <> Self) then
+    raise EInvalidOperation.Create('TTyTitleBar can only be associated with the form it belongs to');
   // unwire old bar
   if FTitleBar <> nil then
   begin
@@ -1041,6 +1053,7 @@ begin
   if AValue <> nil then
   begin
     AValue.FreeNotification(Self);
+    SyncCaptionButtons;   // reflect current BorderIcons onto the bar immediately
     // Arm the live engine ONLY at runtime — never in the designer (dragging the
     // title bar would move/maximize the window instead of selecting it), and not
     // mid-load: when the bar comes from the .lfm this setter runs at fixup time
@@ -1115,6 +1128,7 @@ begin
   if FController <> nil then
     ApplyChromeTheme(FController);
   ApplyWindowEffects;   // handle exists post-load -> apply corners + shadow
+  SyncCaptionButtons;   // streamed BorderIcons + bar: sync after all components loaded
 end;
 
 procedure TTyForm.UpdateFollowWatch;
@@ -1158,7 +1172,9 @@ end;
   auto-assigned via Notification(opInsert) its buttons aren't created yet. }
 procedure TTyForm.WireTitleBarButtons;
 begin
-  if (FTitleBar = nil) or (csDesigning in ComponentState) then Exit;
+  if FTitleBar = nil then Exit;
+  SyncCaptionButtons;                               // visibility: design-time too
+  if csDesigning in ComponentState then Exit;       // click handlers: runtime only
   if FTitleBar.MinButton <> nil then FTitleBar.MinButton.OnClick := @DoMinimizeClick;
   if FTitleBar.MaxButton <> nil then FTitleBar.MaxButton.OnClick := @DoMaxRestoreClick;
   if FTitleBar.CloseButton <> nil then FTitleBar.CloseButton.OnClick := @DoCloseClick;
@@ -1273,10 +1289,7 @@ procedure TTyForm.SetResizable(AValue: Boolean);
 begin
   if FResizable = AValue then Exit;
   FResizable := AValue;
-  // A fixed (non-resizable) window can't maximize: disable the title-bar max button
-  // (the double-click-maximize path is gated on FResizable in DoMaxRestoreClick).
-  if (FTitleBar <> nil) and (FTitleBar.MaxButton <> nil) then
-    FTitleBar.MaxButton.Enabled := AValue;
+  SyncCaptionButtons;   // Resizable gates the maximize button (hide, not just disable)
   ApplyResizeStrategy;   // per-platform style toggle (Windows: WS_THICKFRAME + NC subclass)
 end;
 
@@ -1286,6 +1299,31 @@ begin Result := inherited BorderStyle; end;
 procedure TTyForm.SetBorderStyleTy(AValue: TFormBorderStyle);
 begin
   if inherited BorderStyle <> bsNone then inherited BorderStyle := bsNone;
+end;
+
+function TTyForm.GetBorderIconsTy: TBorderIcons;
+begin Result := inherited BorderIcons; end;
+
+procedure TTyForm.SetBorderIconsTy(AValue: TBorderIcons);
+begin
+  // Resist the LCL auto-reset: SetFormBorderStyle(bsNone) would push [] because
+  // DefaultBorderIcons[bsNone]=[], but TTyForm is always bsNone and uses our own
+  // default ([biSystemMenu,biMinimize,biMaximize]). Ignore the [] auto-push so the
+  // user's explicit BorderIcons assignment is not silently cleared.
+  if (AValue = []) and (inherited BorderIcons <> []) then
+    Exit;
+  inherited BorderIcons := AValue;
+  SyncCaptionButtons;
+end;
+
+procedure TTyForm.SyncCaptionButtons;
+var flags: TTyCaptionButtonFlags;
+begin
+  if FTitleBar = nil then Exit;
+  flags := TyResolveCaptionButtons(BorderIcons, FResizable);
+  FTitleBar.ShowMinimize := cbfMinimize in flags;
+  FTitleBar.ShowMaximize := cbfMaximize in flags;
+  FTitleBar.ShowClose    := cbfClose in flags;
 end;
 
 procedure TTyForm.ApplyResizeStrategy;
