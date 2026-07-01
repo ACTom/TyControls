@@ -482,8 +482,10 @@ function TTyDialogFileDescriptor.GetInterfaceSource(const Filename, SourceName,
 const
   LE = LineEnding;
 begin
-  // Mirror the base, but the generated form descends from TTyDialog (the base hard-codes
-  // TTyForm). The pre-placed title bar is the only published field.
+  // NOTE: full override (base hard-codes TTyForm). Keep in sync with
+  // TTyFormFileDescriptor.GetInterfaceSource — only the ancestor class differs
+  // (class(TTyDialog) vs class(TTyForm)), and there is no controller field.
+  // The pre-placed title bar is the only published field.
   Result :=
      'type' + LE
     + '  T' + ResourceName + ' = class(TTyDialog)' + LE
@@ -503,8 +505,9 @@ function TTyDialogFileDescriptor.GetResourceSource(const ResourceName: string): 
 const
   LE = LineEnding;
 begin
-  // Mirror the base .lfm (a TTyForm-shaped form + top TyTitleBar1), but the root object is a
-  // TTyDialog descendant and carries BorderIcons = [biSystemMenu] (close button only). The
+  // NOTE: full override (base hard-codes TTyForm). Keep in sync with
+  // TTyFormFileDescriptor.GetResourceSource — only the ancestor class + the added
+  // BorderIcons = [biSystemMenu] line differ (and there is no controller object). The
   // form-level `TitleBar =` is a forward ref the LFM reader resolves via fixups.
   Result :=
      'object ' + ResourceName + ': T' + ResourceName + LE
@@ -670,9 +673,12 @@ begin
   // File > New > "TyControls Dialog": a unit whose form descends from TTyDialog (close-only,
   // non-resizable modal), pre-fitted with a top-aligned title bar.
   RegisterProjectFileDescriptor(TTyDialogFileDescriptor.Create);
-  // The themed main form (title bar + style controller). NOT offered in the File > New list
-  // (it is only meaningful as an application's root window); it is created + owned here so the
-  // TyControls Application project's CreateStartFiles can reuse the (refcounted) instance.
+  // The themed main form (title bar + style controller). Intentionally NOT registered as a
+  // New-item (so it doesn't appear in File > New) — it only makes sense as an application's
+  // root window. The instance is kept alive for the whole IDE session because the "TyControls
+  // Application" descriptor (CreateStartFiles) points File>New's project template at it.
+  // TProjectFileDescriptor descends from TPersistent (not a refcounted interface), so nothing
+  // owns this one now; the OS reclaims it at IDE shutdown — a benign one-per-session singleton.
   TyMainFormDescriptor := TTyMainFormFileDescriptor.Create;
   // File > New > Project > "TyControls Application": a GUI app whose main form is that
   // themed TTyForm, with the tycontrols dependency pre-added.
