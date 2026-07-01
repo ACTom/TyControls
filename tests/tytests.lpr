@@ -58,7 +58,8 @@ uses
   test.treeview.streaming,
   test.treeview.edit,
   test.treeview.drag,
-  test.dialogs;
+  test.dialogs,
+  test.dialogs.selectpath;
 
 type
   TTyTestRunner = class(TTestRunner)
