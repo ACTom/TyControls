@@ -11,6 +11,15 @@ type
     procedure TestTwoButtonsOrderedRightToLeft;
     procedure TestMarginAndSpacing;
   end;
+
+  TMsgMappingTest = class(TTestCase)
+  published
+    procedure TestButtonResult;
+    procedure TestButtonCaptionNonEmpty;
+    procedure TestOrderedButtonsCompleteAndStable;
+    procedure TestTypeSymbol;
+    procedure TestEmptyButtonsDefaultsOK;
+  end;
 implementation
 
 procedure TDialogButtonBarTest.TestSingleButtonRightAligned;
@@ -43,6 +52,47 @@ begin
   AssertEquals('r1.right', 134, r[1].Right);   // 190-50-6
 end;
 
+procedure TMsgMappingTest.TestButtonResult;
+begin
+  AssertEquals('yes', Ord(mrYes), Ord(TyMsgButtonResult(mbYes)));
+  AssertEquals('no', Ord(mrNo), Ord(TyMsgButtonResult(mbNo)));
+  AssertEquals('ok', Ord(mrOK), Ord(TyMsgButtonResult(mbOK)));
+  AssertEquals('cancel', Ord(mrCancel), Ord(TyMsgButtonResult(mbCancel)));
+end;
+
+procedure TMsgMappingTest.TestButtonCaptionNonEmpty;
+var b: TMsgDlgBtn;
+begin
+  for b := Low(TMsgDlgBtn) to High(TMsgDlgBtn) do
+    AssertTrue('caption for '+IntToStr(Ord(b)), TyMsgButtonCaption(b) <> '');
+end;
+
+procedure TMsgMappingTest.TestOrderedButtonsCompleteAndStable;
+var a: TMsgDlgBtnArray;
+begin
+  a := TyMsgOrderedButtons([mbYes, mbNo, mbCancel]);
+  AssertEquals('n', 3, Length(a));
+  AssertTrue('yes first', a[0] = mbYes);
+  AssertTrue('no second', a[1] = mbNo);
+  AssertTrue('cancel third', a[2] = mbCancel);
+end;
+
+procedure TMsgMappingTest.TestTypeSymbol;
+begin
+  AssertTrue('warning symbol', TyMsgTypeSymbol(mtWarning) <> '');
+  AssertTrue('error symbol', TyMsgTypeSymbol(mtError) <> '');
+  AssertTrue('confirmation symbol', TyMsgTypeSymbol(mtConfirmation) <> '');
+end;
+
+procedure TMsgMappingTest.TestEmptyButtonsDefaultsOK;
+var a: TMsgDlgBtnArray;
+begin
+  a := TyMsgOrderedButtons([]);
+  AssertEquals('empty -> OK', 1, Length(a));
+  AssertTrue('is OK', a[0] = mbOK);
+end;
+
 initialization
   RegisterTest(TDialogButtonBarTest);
+  RegisterTest(TMsgMappingTest);
 end.
