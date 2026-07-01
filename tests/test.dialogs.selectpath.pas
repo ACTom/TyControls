@@ -19,6 +19,7 @@ type
     procedure TestBuildRootedTreeHasButtons;
     procedure TestExpandPopulatesChildren;
     procedure TestCreateSubfolderShowsAndFocuses;
+    procedure TestCreateSubfolderUnderCollapsedParent;
   end;
 implementation
 
@@ -161,6 +162,64 @@ begin
   finally
     RemoveDir(root + PathDelim + 'newdir');
     RemoveDir(root + PathDelim + 'alpha');
+    RemoveDir(root);
+  end;
+end;
+
+{ Covers the COLLAPSED / first-child branch of CreateSubfolder (the seed-dance):
+  the parent 'outer' has NO subdirs yet (so nsHasChildren is false) and is
+  materialised-but-collapsed. Creating its first child must clear + re-assert
+  nsHasChildren and force a full populate so the new folder shows + is focused.
+  Guards the trickiest refresh logic against future TreeView refactors. }
+procedure TSelectPathBuildTest.TestCreateSubfolderUnderCollapsedParent;
+var
+  d: TTySelectPathForm; root, outer: string;
+  rootNode, outerNode, child, newNode: PTyTreeNode;
+  ok: Boolean; n: Integer;
+begin
+  root  := IncludeTrailingPathDelimiter(GetTempDir) + 'tyselpath_collapsed';
+  outer := root + PathDelim + 'outer';
+  ForceDirectories(outer);   // 'outer' exists but is EMPTY (no subdirs -> no nsHasChildren)
+  try
+    d := TyBuildSelectPathDialog('Choose folder', root);
+    try
+      rootNode := d.Tree.GetFirst;
+      AssertTrue('root node exists', rootNode <> nil);
+      d.Tree.Expanded[rootNode] := True;          // materialise 'outer' (but do NOT expand it)
+
+      { locate the 'outer' child of root }
+      outerNode := nil;
+      child := d.Tree.GetFirstChild(rootNode);
+      while child <> nil do
+      begin
+        if d.NodeText(child) = 'outer' then begin outerNode := child; Break; end;
+        child := d.Tree.GetNextSibling(child);
+      end;
+      AssertTrue('outer node materialised under root', outerNode <> nil);
+      AssertFalse('outer starts collapsed', d.Tree.Expanded[outerNode]);
+      AssertEquals('outer has no children yet', 0, Integer(outerNode^.ChildCount));
+
+      { first-child creation under the collapsed, childless 'outer' }
+      ok := d.CreateSubfolder(outerNode, 'first');
+      AssertTrue('CreateSubfolder returned True', ok);
+      AssertTrue('outer/first exists on disk', DirectoryExists(outer + PathDelim + 'first'));
+
+      { outer now reports exactly one child, named 'first' }
+      n := 0; newNode := nil;
+      child := d.Tree.GetFirstChild(outerNode);
+      while child <> nil do
+      begin
+        Inc(n);
+        if d.NodeText(child) = 'first' then newNode := child;
+        child := d.Tree.GetNextSibling(child);
+      end;
+      AssertEquals('outer now has one child', 1, n);
+      AssertTrue('first node present under outer', newNode <> nil);
+      AssertTrue('new folder is focused', d.Tree.FocusedNode = newNode);
+    finally d.Free; end;
+  finally
+    RemoveDir(outer + PathDelim + 'first');
+    RemoveDir(outer);
     RemoveDir(root);
   end;
 end;
