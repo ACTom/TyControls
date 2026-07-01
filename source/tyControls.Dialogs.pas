@@ -456,34 +456,33 @@ begin
   AEdit := TTyEdit.Create(Result);
   AEdit.Parent := Result;
   AEdit.Text := ADefault;
-  AEdit.SetBounds(TyDlgPad, y, TyDlgEditW, TyDlgEditH);
-  Result.AddButton(rsMsgBtnOK, mrOk, True, False);
+  AEdit.SetBounds(Result.ContentRect.Left + TyDlgPad, y, TyDlgEditW, TyDlgEditH);
+  Result.AddButton(rsMsgBtnOK, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
   Result.AutoSizeToContent(TyDlgEditW + TyDlgPad, y + TyDlgEditH + TyDlgPad - Result.ContentRect.Top);
 end;
 
 function TyInputResult(AEdit: TTyEdit; const ADefault: string; AResult: TModalResult): string;
 begin
-  if AResult = mrOk then Result := AEdit.Text else Result := ADefault;
+  if AResult = mrOK then Result := AEdit.Text else Result := ADefault;
 end;
 
 function TyInputBox(const ACaption, APrompt, ADefault: string): string;
-var d: TTyDialog; e: TTyEdit; mr: TModalResult;
+var d: TTyDialog; e: TTyEdit;
 begin
   d := TyBuildInputDialog(ACaption, APrompt, ADefault, e);
-  mr := d.ShowModal;
-  Result := TyInputResult(e, ADefault, mr);
-  d.Free;
+  try Result := TyInputResult(e, ADefault, d.ShowModal); finally d.Free; end;
 end;
 
 function TyInputQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
 var d: TTyDialog; e: TTyEdit; mr: TModalResult;
 begin
   d := TyBuildInputDialog(ACaption, APrompt, AValue, e);
-  mr := d.ShowModal;
-  Result := (mr = mrOk);
-  if Result then AValue := e.Text;
-  d.Free;
+  try
+    mr := d.ShowModal;
+    Result := (mr = mrOK);
+    if Result then AValue := e.Text;
+  finally d.Free; end;
 end;
 
 { TTyInputDialog }
