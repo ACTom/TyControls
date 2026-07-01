@@ -114,7 +114,7 @@ dlg.Free;
 
 | 枚举值 | 标题（已翻译） | 图标 |
 |--------|--------------|------|
-| `mtWarning` | Warning / 警告 | ⚠ 橙色圆 |
+| `mtWarning` | Warning / 警告 | ! 橙色圆 |
 | `mtError` | Error / 错误 | × 红色圆 |
 | `mtConfirmation` | Confirm / 确认 | ? 蓝色圆 |
 | `mtInformation` | Information / 信息 | i 蓝色圆 |
@@ -226,6 +226,6 @@ if MsgConfirmExit.Execute = mrYes then
 
 ## 7. 注意事项
 
-- 对话框本身不含 `TTyStyleController`；它从 `Application.MainForm` 所在的全局控制器（`TyDefaultController`）获取主题，与主窗口视觉风格保持一致。
-- `TTyDialog` 派生类在 `.lfm` 中流式序列化时，与普通 `TTyForm` 一样，内容区控件挂在 `ContentPanel` 下方。通过 IDE 模板创建时已自动处理好这一点。
+- 对话框本身不含 `TTyStyleController`；当其 `Controller` 未设置时，自动回退到库全局的默认控制器 `TyDefaultController`（`tyControls.Controller` 中惰性创建的全局单例）获取主题，从而与应用其余部分保持一致的视觉风格。
+- 内容区控件**直接放在窗体上**（`Parent := <对话框>`，如 §3.4 示例中的 `lbl.Parent := Self`），位于标题栏之下、底部按钮条之上——可用区域由 `ContentRect` 给出。通过 IDE 模板创建时会自动落在这一区域内。
 - 消息图标颜色（错误/警告/信息）在 S1 版本中使用语义固定色；后续版本将引入 `--error`/`--warning`/`--info` 主题令牌以实现完全主题驱动的图标色。
