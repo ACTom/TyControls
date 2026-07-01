@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, fpcunit, testregistry,
   tyControls.Types, tyControls.Dialogs, tyControls.Button, tyControls.Panel,
-  tyControls.Edit, tyControls.Memo;
+  tyControls.Edit, tyControls.Memo, tyControls.ListBox;
 type
   TDialogButtonBarTest = class(TTestCase)
   published
@@ -69,6 +69,12 @@ type
     procedure TestBuildSeedsMemoResizable;
     procedure TestMemoReflowsOnResize;
     procedure TestResizeInvokesLayoutContent;
+  end;
+
+  TSelectValueTest = class(TTestCase)
+  published
+    procedure TestBuildSeedsListAndSelection;
+    procedure TestResultIndexLogic;
   end;
 
 implementation
@@ -357,6 +363,38 @@ begin
   finally d.Free; end;
 end;
 
+{ TSelectValueTest }
+
+procedure TSelectValueTest.TestBuildSeedsListAndSelection;
+var d: TTyDialog; lb: TTyListBox; items: TStringList;
+begin
+  items := TStringList.Create;
+  try
+    items.Add('Red'); items.Add('Green'); items.Add('Blue');
+    d := TyBuildSelectValueDialog('Pick', 'Colour:', items, 1, lb);
+    try
+      AssertTrue('list created', lb <> nil);
+      AssertEquals('items copied', 3, lb.Items.Count);
+      AssertEquals('seeded selection', 1, lb.ItemIndex);
+    finally d.Free; end;
+  finally items.Free; end;
+end;
+
+procedure TSelectValueTest.TestResultIndexLogic;
+var d: TTyDialog; lb: TTyListBox; items: TStringList;
+begin
+  items := TStringList.Create;
+  try
+    items.Add('A'); items.Add('B');
+    d := TyBuildSelectValueDialog('X', 'p', items, 0, lb);
+    try
+      lb.ItemIndex := 1;
+      AssertEquals('ok -> chosen', 1, TySelectValueResult(lb, 0, mrOK));
+      AssertEquals('cancel -> initial', 0, TySelectValueResult(lb, 0, mrCancel));
+    finally d.Free; end;
+  finally items.Free; end;
+end;
+
 initialization
   RegisterTest(TDialogButtonBarTest);
   RegisterTest(TMsgMappingTest);
@@ -366,4 +404,5 @@ initialization
   RegisterTest(TInputDialogTest);
   RegisterTest(TPasswordDialogTest);
   RegisterTest(TTextDialogTest);
+  RegisterTest(TSelectValueTest);
 end.

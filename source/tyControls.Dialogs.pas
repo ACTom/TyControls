@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Graphics, Controls, Dialogs, Forms,
   tyControls.Types, tyControls.Form, tyControls.Button, tyControls.Panel,
   tyControls.TyLabel, tyControls.Edit, tyControls.Memo, tyControls.Painter,
-  tyControls.StrConsts;
+  tyControls.ListBox, tyControls.StrConsts;
 
 { Right-aligns caption buttons in a bar: index 0 is the RIGHTMOST (primary), each successive
   button sits to its left, ASpacing apart, AMargin from the right edge. Pure. }
@@ -146,6 +146,42 @@ type
     property Caption: string read FCaption write FCaption;
     property Prompt: string read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
+  end;
+
+{ Select-value dialog — single-select listbox; double-click a row confirms. }
+function TyBuildSelectValueDialog(const ACaption, APrompt: string; AItems: TStrings;
+  AInitialIndex: Integer; out AList: TTyListBox): TTyDialog;
+function TySelectValueResult(AList: TTyListBox; AInitialIndex: Integer;
+  AResult: TModalResult): Integer;
+function TySelectValue(const ACaption, APrompt: string; AItems: TStrings;
+  var AIndex: Integer): Boolean;
+
+{ TTySelectValueForm is the concrete form used by TyBuildSelectValueDialog.
+  It is declared in the interface only so the dbl-click method can be a proper
+  method pointer (TNotifyEvent requires "of object"). Callers hold a TTyDialog. }
+type
+  TTySelectValueForm = class(TTyDialog)
+  private
+    procedure ListDblClick(Sender: TObject);
+  end;
+
+type
+  TTySelectValueDialog = class(TComponent)
+  private
+    FCaption, FPrompt: string;
+    FItems: TStrings;
+    FItemIndex: Integer;
+    procedure SetItems(AValue: TStrings);
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    function Execute: Boolean;
+    function SelectedText: string;
+  published
+    property Caption: string read FCaption write FCaption;
+    property Prompt: string read FPrompt write FPrompt;
+    property Items: TStrings read FItems write SetItems;
+    property ItemIndex: Integer read FItemIndex write FItemIndex default -1;
   end;
 
 implementation
@@ -640,5 +676,87 @@ end;
 
 function TTyTextDialog.Execute: Boolean;
 begin Result := TyTextQuery(FCaption, FPrompt, FValue); end;
+
+{ TTySelectValueForm }
+
+// Double-clicking a row with a valid selection confirms the dialog.
+// Must be a method (TNotifyEvent = "of object") — plain procedures cannot be assigned.
+procedure TTySelectValueForm.ListDblClick(Sender: TObject);
+begin
+  if TTyListBox(Sender).ItemIndex >= 0 then ModalResult := mrOK;
+end;
+
+{ Select-value dialog }
+
+function TyBuildSelectValueDialog(const ACaption, APrompt: string; AItems: TStrings;
+  AInitialIndex: Integer; out AList: TTyListBox): TTyDialog;
+var f: TTySelectValueForm; y, listH: Integer;
+begin
+  f := TTySelectValueForm.CreateNew(Application);
+  Result := f;
+  Result.Caption := ACaption;
+  y := TyPlacePrompt(Result, APrompt, TyDlgEditW);
+  AList := TTyListBox.Create(Result);
+  AList.Parent := Result;
+  if AItems <> nil then AList.Items.Assign(AItems);
+  if (AInitialIndex >= 0) and (AInitialIndex < AList.Items.Count) then
+    AList.ItemIndex := AInitialIndex;
+  listH := 160;
+  AList.SetBounds(Result.ContentRect.Left + TyDlgPad, y, TyDlgEditW, listH);
+  AList.OnDblClick := @f.ListDblClick;   // double-click a row confirms
+  Result.AddButton(rsMsgBtnOK, mrOK, True, False);
+  Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
+  Result.AutoSizeToContent(TyDlgEditW + TyDlgPad, y + listH + TyDlgPad - Result.ContentRect.Top);
+end;
+
+function TySelectValueResult(AList: TTyListBox; AInitialIndex: Integer;
+  AResult: TModalResult): Integer;
+begin
+  if AResult = mrOK then Result := AList.ItemIndex else Result := AInitialIndex;
+end;
+
+function TySelectValue(const ACaption, APrompt: string; AItems: TStrings;
+  var AIndex: Integer): Boolean;
+var d: TTyDialog; lb: TTyListBox;
+begin
+  d := TyBuildSelectValueDialog(ACaption, APrompt, AItems, AIndex, lb);
+  try
+    Result := (d.ShowModal = mrOK);
+    if Result then AIndex := lb.ItemIndex;
+  finally d.Free; end;
+end;
+
+{ TTySelectValueDialog }
+
+constructor TTySelectValueDialog.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FItems := TStringList.Create;
+  FItemIndex := -1;
+end;
+
+destructor TTySelectValueDialog.Destroy;
+begin
+  FItems.Free;
+  inherited Destroy;
+end;
+
+procedure TTySelectValueDialog.SetItems(AValue: TStrings);
+begin
+  FItems.Assign(AValue);
+end;
+
+function TTySelectValueDialog.SelectedText: string;
+begin
+  if (FItemIndex >= 0) and (FItemIndex < FItems.Count) then
+    Result := FItems[FItemIndex]
+  else
+    Result := '';
+end;
+
+function TTySelectValueDialog.Execute: Boolean;
+begin
+  Result := TySelectValue(FCaption, FPrompt, FItems, FItemIndex);
+end;
 
 end.
