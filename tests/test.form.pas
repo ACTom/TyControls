@@ -200,6 +200,17 @@ type
     procedure TestNoMenuBarLeavesShortcutToInherited;
   end;
 
+  { Pure caption-button resolution: close<=biSystemMenu, min<=biMinimize,
+    max<=(biMaximize and Resizable). }
+  TCaptionButtonsTest = class(TTestCase)
+  published
+    procedure TestAllIconsResizable;
+    procedure TestMaximizeNeedsResizable;
+    procedure TestEmptyIconsNoButtons;
+    procedure TestCloseOnly;
+    procedure TestMinCloseNoMaxIcon;
+  end;
+
 implementation
 
 type
@@ -1493,6 +1504,41 @@ begin
   end;
 end;
 
+{ TCaptionButtonsTest }
+
+procedure TCaptionButtonsTest.TestAllIconsResizable;
+begin
+  AssertTrue('all three when all icons + resizable',
+    TyResolveCaptionButtons([biSystemMenu, biMinimize, biMaximize], True)
+      = [cbfMinimize, cbfMaximize, cbfClose]);
+end;
+
+procedure TCaptionButtonsTest.TestMaximizeNeedsResizable;
+begin
+  AssertTrue('no max when not resizable, even with biMaximize',
+    TyResolveCaptionButtons([biSystemMenu, biMinimize, biMaximize], False)
+      = [cbfMinimize, cbfClose]);
+end;
+
+procedure TCaptionButtonsTest.TestEmptyIconsNoButtons;
+begin
+  AssertTrue('empty icons -> no buttons',
+    TyResolveCaptionButtons([], True) = []);
+end;
+
+procedure TCaptionButtonsTest.TestCloseOnly;
+begin
+  AssertTrue('systemmenu only -> close only',
+    TyResolveCaptionButtons([biSystemMenu], True) = [cbfClose]);
+end;
+
+procedure TCaptionButtonsTest.TestMinCloseNoMaxIcon;
+begin
+  AssertTrue('min+close, no maximize icon -> no max even if resizable',
+    TyResolveCaptionButtons([biSystemMenu, biMinimize], True)
+      = [cbfMinimize, cbfClose]);
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeHitForTest);
@@ -1508,5 +1554,6 @@ initialization
   RegisterTest(TTyFormTest);
   RegisterTest(TTyFormBackdropTest);
   RegisterTest(TTyMenuFormTest);
+  RegisterTest(TCaptionButtonsTest);
 
 end.

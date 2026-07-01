@@ -19,6 +19,9 @@ type
 
   TTyCaptionButtonKind = (cbkClose, cbkMin, cbkMax, cbkRestore);
 
+  TTyCaptionButtonFlag  = (cbfMinimize, cbfMaximize, cbfClose);
+  TTyCaptionButtonFlags = set of TTyCaptionButtonFlag;
+
   TTyChromeEngine = class;
 
   TTyCaptionButton = class(TTyCustomControl)
@@ -250,6 +253,11 @@ function TyResizeHitFor(AResizable: Boolean; const AClient: TRect; const APt: TP
   (ANeedsGutter and AResizable and not AMaximized) — so alClient children stop short of the
   form edge and the edge strip receives the mouse — else returns AClient unchanged. }
 function TyResizeGutterRect(const AClient: TRect; AZone: Integer; AResizable, AMaximized, ANeedsGutter: Boolean): TRect;
+{ Which caption buttons a form's chrome shows, from the standard BorderIcons plus the
+  Resizable flag: close<=biSystemMenu, minimize<=biMinimize, maximize<=(biMaximize and
+  AResizable) — a fixed-size window shows no maximize. Pure (no window handle) so it is
+  unit-tested directly. }
+function TyResolveCaptionButtons(ABorderIcons: TBorderIcons; AResizable: Boolean): TTyCaptionButtonFlags;
 
 const
   { Win32 WM_NCHITTEST result codes, declared platform-neutrally so TyNcHitTest (a pure
@@ -365,6 +373,14 @@ begin
     Result := bhNone
   else
     Result := TyHitTestBorder(AClient, APt, AZone);
+end;
+
+function TyResolveCaptionButtons(ABorderIcons: TBorderIcons; AResizable: Boolean): TTyCaptionButtonFlags;
+begin
+  Result := [];
+  if biSystemMenu in ABorderIcons then Include(Result, cbfClose);
+  if biMinimize in ABorderIcons then Include(Result, cbfMinimize);
+  if (biMaximize in ABorderIcons) and AResizable then Include(Result, cbfMaximize);
 end;
 
 function TyResizeGutterRect(const AClient: TRect; AZone: Integer;
