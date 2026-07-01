@@ -14,7 +14,7 @@ uses
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu, tyControls.NativeStyler,
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
   tyControls.Calendar, tyControls.DateTimePicker,
-  tyControls.TreeView, tyControls.Dialogs;
+  tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -646,9 +646,11 @@ begin
      TTySplitter, TTyStatusBar, TTyToolBar, TTyToolSeparator,
      TTyCalendar, TTyDateTimePicker,
      TTyTreeView]);
-  // Dialogs palette group. TTyMessage is the non-visual message-dialog component (S1);
-  // a custom palette icon is a follow-up — the IDE shows a default glyph for now.
-  RegisterComponents('TyControls Dialogs', [TTyMessage]);
+  // Dialogs palette group. TTyMessage (S1) + the S2 input-family components.
+  // Custom palette icons are a follow-up — the IDE shows default glyphs for now.
+  RegisterComponents('TyControls Dialogs',
+    [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,
+     TTySelectValueDialog, TTySelectPathDialog]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',
