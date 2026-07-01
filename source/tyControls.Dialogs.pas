@@ -2,8 +2,9 @@ unit tyControls.Dialogs;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Dialogs, Forms,
-  tyControls.Types, tyControls.Form, tyControls.Button, tyControls.Panel;
+  Classes, SysUtils, Types, Graphics, Controls, Dialogs, Forms,
+  tyControls.Types, tyControls.Form, tyControls.Button, tyControls.Panel,
+  tyControls.TyLabel, tyControls.Painter;
 
 { Right-aligns caption buttons in a bar: index 0 is the RIGHTMOST (primary), each successive
   button sits to its left, ASpacing apart, AMargin from the right edge. Pure. }
@@ -16,6 +17,7 @@ function TyMsgButtonCaption(ABtn: TMsgDlgBtn): string;
 function TyMsgButtonResult(ABtn: TMsgDlgBtn): TModalResult;
 function TyMsgOrderedButtons(AButtons: TMsgDlgButtons): TMsgDlgBtnArray;
 function TyMsgTypeSymbol(ADlgType: TMsgDlgType): string;
+function TyMsgTypeCaption(ADlgType: TMsgDlgType): string;
 
 type
   TTyDialog = class(TTyForm)
@@ -23,8 +25,14 @@ type
     FButtonBar: TTyPanel;          // strip host for the buttons (transparent)
     FButtons: array of TTyButton;
     FDefaultResult, FCancelResult: TModalResult;
+    FMsgSymbol: string;            // '' = no message icon (a plain TTyDialog draws nothing)
+    FMsgType: TMsgDlgType;
+    // Draw the message icon (semantic circle + centred symbol) in the icon column.
+    // Guarded: no-op unless FMsgSymbol <> '' and the canvas is ready. GUI-only.
+    procedure DrawMessageIcon;
   protected
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure Paint; override;
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     function AddButton(const ACaption: string; AResult: TModalResult;
@@ -35,6 +43,39 @@ type
     // Esc / programmatic cancel -> FCancelResult. (The title-bar X closes the
     // modal and returns mrCancel via LCL's default; it does not call this.)
     procedure CancelDialog;
+    // Store the message-icon symbol + semantic type so Paint can draw it.
+    procedure SetMessageIcon(const ASymbol: string; AType: TMsgDlgType);
+    // Test/introspection seam onto the built buttons.
+    function GetButtonCount: Integer;
+    function GetButton(AIndex: Integer): TTyButton;
+    property ButtonCount: Integer read GetButtonCount;
+    property Buttons[AIndex: Integer]: TTyButton read GetButton;
+  end;
+
+{ Test/introspection helpers (construct-only seam). }
+function TyDialogButtonCount(ADlg: TTyDialog): Integer;
+function TyDialogButton(ADlg: TTyDialog; AIndex: Integer): TTyButton;
+{ Build a message dialog WITHOUT showing it (the show is TyMessageDlg). }
+function TyBuildMessageDialog(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons): TTyDialog;
+{ Globals — the primary API. }
+procedure TyShowMessage(const AMsg: string);
+function TyMessageDlg(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; AHelpCtx: Longint = 0): TModalResult;
+function TyMessageDlgPos(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; AHelpCtx: Longint; X, Y: Integer): TModalResult;
+
+type
+  TTyMessage = class(TComponent)
+  private
+    FTitle, FMsg: string;
+    FDlgType: TMsgDlgType;
+    FButtons: TMsgDlgButtons;
+  public
+    constructor Create(AOwner: TComponent); override;
+    function Execute: TModalResult;
+  published
+    property Title: string read FTitle write FTitle;
+    property Msg: string read FMsg write FMsg;
+    property DlgType: TMsgDlgType read FDlgType write FDlgType default mtInformation;
+    property Buttons: TMsgDlgButtons read FButtons write FButtons default [mbOK];
   end;
 
 implementation
@@ -131,6 +172,17 @@ begin
   end;
 end;
 
+function TyMsgTypeCaption(ADlgType: TMsgDlgType): string;
+begin
+  case ADlgType of
+    mtWarning:      Result := 'Warning';
+    mtError:        Result := 'Error';
+    mtConfirmation: Result := 'Confirm';
+    mtInformation:  Result := 'Information';
+  else Result := '';
+  end;
+end;
+
 { TTyDialog }
 
 constructor TTyDialog.CreateNew(AOwner: TComponent; Num: Integer);
@@ -205,6 +257,124 @@ begin
   if (Key = 13) and (FDefaultResult <> mrNone) then begin ModalResult := FDefaultResult; Key := 0; Exit; end;
   if Key = 27 then begin CancelDialog; Key := 0; Exit; end;
   inherited KeyDown(Key, Shift);
+end;
+
+function TTyDialog.GetButtonCount: Integer;
+begin Result := Length(FButtons); end;
+
+function TTyDialog.GetButton(AIndex: Integer): TTyButton;
+begin Result := FButtons[AIndex]; end;
+
+procedure TTyDialog.SetMessageIcon(const ASymbol: string; AType: TMsgDlgType);
+begin
+  FMsgSymbol := ASymbol;
+  FMsgType := AType;
+end;
+
+procedure TTyDialog.DrawMessageIcon;
+{ Semantic circle + centred symbol in the icon column (left of the message label).
+  Guarded: no-op unless a symbol is set and a canvas is available. Fixed semantic
+  colours are sanctioned for S1 (a --error/--warning/--info token pass is deferred). }
+var
+  P: TTyPainter;
+  fill: TTyFill;
+  d, cx, cy: Integer;
+  circle: TRect;
+begin
+  if FMsgSymbol = '' then Exit;                 // plain dialog -> nothing to draw
+  if (Canvas = nil) or (not HandleAllocated) then Exit;   // crash-safe: no canvas yet
+  fill := Default(TTyFill);
+  fill.Kind := tfkSolid;
+  case FMsgType of
+    mtError:   fill.Color := TyRGB(229, 57, 53);    // #E53935 red
+    mtWarning: fill.Color := TyRGB(255, 140, 0);    // #FF8C00 amber
+  else
+    fill.Color := TyRGB(0, 112, 192);               // #0070C0 blue (info / confirm)
+  end;
+  d := 28;                                          // ~28px circle
+  cx := 14;                                         // icon column left
+  cy := TitleHeight + 12;                           // aligns with the label top
+  circle := Rect(cx, cy, cx + d, cy + d);
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+    // Circle = square with a half-side radius.
+    P.FillBackground(circle, fill, TyUniformCorners(d div 2));
+    // Symbol centred in white (contrast against every semantic colour above).
+    P.DrawText(circle, FMsgSymbol, Font.Name, 14, 700, TyRGB(255, 255, 255),
+      taCenter, tlCenter, False, 0, False);
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyDialog.Paint;
+begin
+  inherited Paint;
+  DrawMessageIcon;
+end;
+
+{ Free functions / globals }
+
+function TyDialogButtonCount(ADlg: TTyDialog): Integer;
+begin Result := ADlg.ButtonCount; end;
+
+function TyDialogButton(ADlg: TTyDialog; AIndex: Integer): TTyButton;
+begin Result := ADlg.Buttons[AIndex]; end;
+
+function TyBuildMessageDialog(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons): TTyDialog;
+var lbl: TTyLabel; ordered: TMsgDlgBtnArray; i: Integer; def, can: TMsgDlgBtn;
+begin
+  Result := TTyDialog.CreateNew(Application);
+  Result.Caption := TyMsgTypeCaption(ADlgType);   // human-readable title (i18n in Task 6)
+  ordered := TyMsgOrderedButtons(AButtons);
+  lbl := TTyLabel.Create(Result);
+  lbl.Parent := Result;
+  lbl.Caption := AMsg;
+  lbl.WordWrap := True;
+  lbl.SetBounds(56, Result.TitleHeight + 12, 260, 40);   // right of the icon column
+  def := ordered[0]; can := ordered[High(ordered)];
+  for i := 0 to High(ordered) do
+    Result.AddButton(TyMsgButtonCaption(ordered[i]), TyMsgButtonResult(ordered[i]),
+      ordered[i] = def, ordered[i] = can);
+  // store the message-icon symbol + semantic colour so Paint can draw it
+  Result.SetMessageIcon(TyMsgTypeSymbol(ADlgType), ADlgType);
+  Result.AutoSizeToContent(320, 56);
+end;
+
+function TyMessageDlg(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; AHelpCtx: Longint): TModalResult;
+var d: TTyDialog;
+begin
+  d := TyBuildMessageDialog(AMsg, ADlgType, AButtons);
+  d.HelpContext := AHelpCtx;   // reserved for a future help-context wiring (LCL-API parity)
+  try Result := d.ShowModal; finally d.Free; end;
+end;
+
+function TyMessageDlgPos(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; AHelpCtx: Longint; X, Y: Integer): TModalResult;
+var d: TTyDialog;
+begin
+  d := TyBuildMessageDialog(AMsg, ADlgType, AButtons);
+  d.HelpContext := AHelpCtx;   // reserved for a future help-context wiring (LCL-API parity)
+  try d.Position := poDesigned; d.Left := X; d.Top := Y; Result := d.ShowModal; finally d.Free; end;
+end;
+
+procedure TyShowMessage(const AMsg: string);
+begin TyMessageDlg(AMsg, mtInformation, [mbOK]); end;
+
+{ TTyMessage }
+
+constructor TTyMessage.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FDlgType := mtInformation;
+  FButtons := [mbOK];
+end;
+
+function TTyMessage.Execute: TModalResult;
+begin
+  if FButtons = [] then FButtons := [mbOK];
+  Result := TyMessageDlg(FMsg, FDlgType, FButtons);
 end;
 
 end.

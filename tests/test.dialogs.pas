@@ -18,7 +18,14 @@ type
     procedure TestButtonCaptionNonEmpty;
     procedure TestOrderedButtonsCompleteAndStable;
     procedure TestTypeSymbol;
+    procedure TestTypeCaption;
     procedure TestEmptyButtonsDefaultsOK;
+  end;
+
+  TMessageBuildTest = class(TTestCase)
+  published
+    procedure TestBuildConfirmationHasYesNo;
+    procedure TestBuildInformationHasOK;
   end;
 
   TDialogBaseTest = class(TTestCase)
@@ -91,6 +98,15 @@ begin
   AssertTrue('confirmation symbol', TyMsgTypeSymbol(mtConfirmation) <> '');
 end;
 
+procedure TMsgMappingTest.TestTypeCaption;
+begin
+  AssertEquals('warning', 'Warning', TyMsgTypeCaption(mtWarning));
+  AssertEquals('error', 'Error', TyMsgTypeCaption(mtError));
+  AssertEquals('confirm', 'Confirm', TyMsgTypeCaption(mtConfirmation));
+  AssertEquals('information', 'Information', TyMsgTypeCaption(mtInformation));
+  AssertEquals('custom empty', '', TyMsgTypeCaption(mtCustom));
+end;
+
 procedure TMsgMappingTest.TestEmptyButtonsDefaultsOK;
 var a: TMsgDlgBtnArray;
 begin
@@ -143,8 +159,31 @@ begin
   finally d.Free; end;
 end;
 
+procedure TMessageBuildTest.TestBuildConfirmationHasYesNo;
+var d: TTyDialog;
+begin
+  d := TyBuildMessageDialog('Delete it?', mtConfirmation, [mbYes, mbNo]);
+  try
+    AssertEquals('two buttons', 2, TyDialogButtonCount(d));
+    AssertEquals('btn0 caption', 'Yes', TyDialogButton(d, 0).Caption);
+    AssertEquals('btn0 result', Ord(mrYes), Ord(TyDialogButton(d, 0).ModalResult));
+    AssertEquals('btn1 caption', 'No', TyDialogButton(d, 1).Caption);
+  finally d.Free; end;
+end;
+
+procedure TMessageBuildTest.TestBuildInformationHasOK;
+var d: TTyDialog;
+begin
+  d := TyBuildMessageDialog('Saved.', mtInformation, []);
+  try
+    AssertEquals('one button', 1, TyDialogButtonCount(d));
+    AssertEquals('OK', 'OK', TyDialogButton(d, 0).Caption);
+  finally d.Free; end;
+end;
+
 initialization
   RegisterTest(TDialogButtonBarTest);
   RegisterTest(TMsgMappingTest);
   RegisterTest(TDialogBaseTest);
+  RegisterTest(TMessageBuildTest);
 end.
