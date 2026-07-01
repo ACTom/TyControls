@@ -82,6 +82,11 @@ resourcestring
   rsMsgTypeConfirm     = 'Confirm';
   rsMsgTypeInformation = 'Information';
 
+  // --- Input-family dialogs (S2) — user-facing, translated ---
+  rsDlgNewFolder       = 'New Folder';
+  rsDlgNewFolderPrompt = 'Folder name:';
+  rsDlgCreateFolderErr = 'Could not create folder: %s';
+
 implementation
 
 end.
