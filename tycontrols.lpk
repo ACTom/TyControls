@@ -224,6 +224,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.TreeView.Columns.pas"/>
         <UnitName Value="tyControls.TreeView.Columns"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Dialogs.pas"/>
+        <UnitName Value="tyControls.Dialogs"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
