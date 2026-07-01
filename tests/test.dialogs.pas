@@ -26,6 +26,7 @@ type
   published
     procedure TestBuildConfirmationHasYesNo;
     procedure TestBuildInformationHasOK;
+    procedure TestConfirmationDismissIsMrCancel;
   end;
 
   TDialogBaseTest = class(TTestCase)
@@ -180,6 +181,18 @@ begin
   try
     AssertEquals('one button', 1, TyDialogButtonCount(d));
     AssertEquals('OK', 'OK', TyDialogButton(d, 0).Caption);
+  finally d.Free; end;
+end;
+
+procedure TMessageBuildTest.TestConfirmationDismissIsMrCancel;
+var d: TTyDialog;
+begin
+  // A [mbYes,mbNo] confirmation must dismiss (Esc / title-bar X) to mrCancel,
+  // NOT the negative button — Esc and the X agree.
+  d := TyBuildMessageDialog('Delete it?', mtConfirmation, [mbYes, mbNo]);
+  try
+    d.CancelDialog;                       // the Esc / programmatic dismiss path
+    AssertEquals('dismiss -> mrCancel', Ord(mrCancel), Ord(d.ModalResult));
   finally d.Free; end;
 end;
 

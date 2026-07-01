@@ -329,7 +329,7 @@ function TyDialogButton(ADlg: TTyDialog; AIndex: Integer): TTyButton;
 begin Result := ADlg.Buttons[AIndex]; end;
 
 function TyBuildMessageDialog(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; const ATitle: string): TTyDialog;
-var lbl: TTyLabel; ordered: TMsgDlgBtnArray; i: Integer; def, can: TMsgDlgBtn;
+var lbl: TTyLabel; ordered: TMsgDlgBtnArray; i: Integer; def: TMsgDlgBtn;
 begin
   Result := TTyDialog.CreateNew(Application);
   // Explicit title wins; otherwise the human-readable type caption (i18n in Task 6).
@@ -341,10 +341,12 @@ begin
   lbl.Caption := AMsg;
   lbl.WordWrap := True;
   lbl.SetBounds(56, Result.TitleHeight + 12, 260, 40);   // right of the icon column
-  def := ordered[0]; can := ordered[High(ordered)];
+  def := ordered[0];
+  // Esc / title-bar X both dismiss the message dialog to mrCancel (FCancelResult stays
+  // the CreateNew default); ACancel is left for custom TTyDialog subclasses to use.
   for i := 0 to High(ordered) do
     Result.AddButton(TyMsgButtonCaption(ordered[i]), TyMsgButtonResult(ordered[i]),
-      ordered[i] = def, ordered[i] = can);
+      ordered[i] = def, False);
   // store the message-icon symbol + semantic colour so Paint can draw it
   Result.SetMessageIcon(TyMsgTypeSymbol(ADlgType), ADlgType);
   Result.AutoSizeToContent(320, 56);
@@ -388,7 +390,6 @@ end;
 function TTyMessage.Execute: TModalResult;
 var d: TTyDialog;
 begin
-  if FButtons = [] then FButtons := [mbOK];
   d := TyBuildMessageDialog(FMsg, FDlgType, FButtons, FTitle);
   Result := RunDialogModal(d);
 end;

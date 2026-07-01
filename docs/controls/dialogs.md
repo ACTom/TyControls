@@ -229,3 +229,4 @@ if MsgConfirmExit.Execute = mrYes then
 - 对话框本身不含 `TTyStyleController`；当其 `Controller` 未设置时，自动回退到库全局的默认控制器 `TyDefaultController`（`tyControls.Controller` 中惰性创建的全局单例）获取主题，从而与应用其余部分保持一致的视觉风格。
 - 内容区控件**直接放在窗体上**（`Parent := <对话框>`，如 §3.4 示例中的 `lbl.Parent := Self`），位于标题栏之下、底部按钮条之上——可用区域由 `ContentRect` 给出。通过 IDE 模板创建时会自动落在这一区域内。
 - 消息图标颜色（错误/警告/信息）在 S1 版本中使用语义固定色；后续版本将引入 `--error`/`--warning`/`--info` 主题令牌以实现完全主题驱动的图标色。
+- S1 消息对话框使用固定内容尺寸（消息标签约 260×40，`AutoSizeToContent(320, 56)`），过长或多行的消息文本可能被裁剪；自动文字量度与动态尺寸调整将在 S2 版本中跟进。
