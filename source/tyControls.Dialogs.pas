@@ -33,6 +33,8 @@ type
   protected
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Paint; override;
+    procedure LayoutContent; virtual;
+    procedure Resize; override;
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     function AddButton(const ACaption: string; AResult: TModalResult;
@@ -318,6 +320,18 @@ procedure TTyDialog.Paint;
 begin
   inherited Paint;
   DrawMessageIcon;
+end;
+
+procedure TTyDialog.LayoutContent;
+begin
+  // default: fixed-size dialogs position content once at build time; nothing to reflow.
+end;
+
+procedure TTyDialog.Resize;
+begin
+  inherited Resize;
+  if FButtonBar <> nil then LayoutButtonBar;
+  LayoutContent;
 end;
 
 { Free functions / globals }

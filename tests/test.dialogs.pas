@@ -3,7 +3,7 @@ unit test.dialogs;
 interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, fpcunit, testregistry,
-  tyControls.Types, tyControls.Dialogs, tyControls.Button;
+  tyControls.Types, tyControls.Dialogs, tyControls.Button, tyControls.Panel;
 type
   TDialogButtonBarTest = class(TTestCase)
   published
@@ -35,6 +35,20 @@ type
     procedure TestCloseGivesCancel;
     procedure TestTwoButtonLayoutRightToLeft;
   end;
+
+  TResizeProbeDialog = class(TTyDialog)
+  public
+    Content: TTyPanel;   // stand-in windowed content widget
+    procedure LayoutContent; override;   // fills ContentRect
+    constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
+  end;
+
+  TDialogResizeTest = class(TTestCase)
+  published
+    procedure TestLayoutContentFillsContentRect;
+    procedure TestReflowOnClientResize;
+  end;
+
 implementation
 
 procedure TDialogButtonBarTest.TestSingleButtonRightAligned;
@@ -196,9 +210,57 @@ begin
   finally d.Free; end;
 end;
 
+{ TResizeProbeDialog }
+
+constructor TResizeProbeDialog.CreateNew(AOwner: TComponent; Num: Integer);
+begin
+  inherited CreateNew(AOwner, Num);
+  Resizable := True;
+  Content := TTyPanel.Create(Self);
+  Content.Parent := Self;
+  AddButton('OK', mrOk, True, False);
+  AutoSizeToContent(300, 200);
+end;
+
+procedure TResizeProbeDialog.LayoutContent;
+var r: TRect;
+begin
+  if Content = nil then Exit;
+  r := ContentRect;
+  Content.SetBounds(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+end;
+
+{ TDialogResizeTest }
+
+procedure TDialogResizeTest.TestLayoutContentFillsContentRect;
+var d: TResizeProbeDialog; r: TRect;
+begin
+  d := TResizeProbeDialog.CreateNew(nil);
+  try
+    d.LayoutContent;
+    r := d.ContentRect;
+    AssertEquals('content left', r.Left, d.Content.Left);
+    AssertEquals('content width', r.Right - r.Left, d.Content.Width);
+    AssertEquals('content bottom', r.Bottom, d.Content.Top + d.Content.Height);
+  finally d.Free; end;
+end;
+
+procedure TDialogResizeTest.TestReflowOnClientResize;
+var d: TResizeProbeDialog; w0: Integer;
+begin
+  d := TResizeProbeDialog.CreateNew(nil);
+  try
+    d.LayoutContent; w0 := d.Content.Width;
+    d.ClientWidth := d.ClientWidth + 120;   // grow
+    d.LayoutContent;                          // reflow (Resize would call this live)
+    AssertTrue('content widened with the dialog', d.Content.Width > w0);
+  finally d.Free; end;
+end;
+
 initialization
   RegisterTest(TDialogButtonBarTest);
   RegisterTest(TMsgMappingTest);
   RegisterTest(TDialogBaseTest);
   RegisterTest(TMessageBuildTest);
+  RegisterTest(TDialogResizeTest);
 end.
