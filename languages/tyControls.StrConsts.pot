@@ -106,6 +106,19 @@ msgstr ""
 msgid "Unterminated rule block"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgcreatefoldererr
+#, object-pascal-format
+msgid "Could not create folder: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgnewfolder
+msgid "New Folder"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgnewfolderprompt
+msgid "Folder name:"
+msgstr ""
+
 #: tycontrols.strconsts.rslintemptyimportpath
 msgid "empty @import path"
 msgstr ""

@@ -285,3 +285,16 @@ msgstr "确认"
 #: tycontrols.strconsts.rsmsgtypeinformation
 msgid "Information"
 msgstr "信息"
+
+#: tycontrols.strconsts.rsdlgnewfolder
+msgid "New Folder"
+msgstr "新建文件夹"
+
+#: tycontrols.strconsts.rsdlgnewfolderprompt
+msgid "Folder name:"
+msgstr "文件夹名称："
+
+#: tycontrols.strconsts.rsdlgcreatefoldererr
+#, object-pascal-format
+msgid "Could not create folder: %s"
+msgstr "无法创建文件夹：%s"
