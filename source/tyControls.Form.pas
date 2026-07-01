@@ -184,6 +184,8 @@ type
     procedure SetShowMinimize(AValue: Boolean);
     procedure SetShowMaximize(AValue: Boolean);
     procedure SetResizable(AValue: Boolean);
+    function GetBorderStyleTy: TFormBorderStyle;
+    procedure SetBorderStyleTy(AValue: TFormBorderStyle);
     { Per-platform resize-strategy application (WS_THICKFRAME on Win32, styleMask on
       Cocoa, gutter re-align on GTK/Qt). Stub for Phase A — the bodies land in later
       phases; the call sites (SetResizable + post-handle-creation) are wired now. }
@@ -253,6 +255,9 @@ type
       Published so it persists in the .lfm; applied at runtime (chrome paths guard
       csDesigning). }
     property Resizable: Boolean read FResizable write SetResizable default True;
+    { Locked: a TTyForm is a borderless custom-chrome window. Any assignment is coerced
+      to bsNone; hidden from the Object Inspector via a design-time property editor. }
+    property BorderStyle: TFormBorderStyle read GetBorderStyleTy write SetBorderStyleTy default bsNone;
   end;
 
 function TyHitTestBorder(const AClient: TRect; const APt: TPoint; AZone: Integer): TTyBorderHit;
@@ -1301,6 +1306,14 @@ begin
   if (FTitleBar <> nil) and (FTitleBar.MaxButton <> nil) then
     FTitleBar.MaxButton.Enabled := AValue;
   ApplyResizeStrategy;   // per-platform style toggle (Windows: WS_THICKFRAME + NC subclass)
+end;
+
+function TTyForm.GetBorderStyleTy: TFormBorderStyle;
+begin Result := inherited BorderStyle; end;
+
+procedure TTyForm.SetBorderStyleTy(AValue: TFormBorderStyle);
+begin
+  if inherited BorderStyle <> bsNone then inherited BorderStyle := bsNone;
 end;
 
 procedure TTyForm.ApplyResizeStrategy;

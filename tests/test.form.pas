@@ -221,6 +221,13 @@ type
     procedure TestHideClose;
   end;
 
+  { TTyForm is always bsNone: assigning any other border style is coerced back. }
+  TFormBorderStyleTest = class(TTestCase)
+  published
+    procedure TestDefaultIsNone;
+    procedure TestAssignSizeableCoercedToNone;
+  end;
+
 implementation
 
 type
@@ -1514,6 +1521,26 @@ begin
   end;
 end;
 
+{ TFormBorderStyleTest }
+
+procedure TFormBorderStyleTest.TestDefaultIsNone;
+var f: TTyForm;
+begin
+  f := TTyForm.CreateNew(nil);
+  try AssertTrue('default bsNone', f.BorderStyle = bsNone);
+  finally f.Free; end;
+end;
+
+procedure TFormBorderStyleTest.TestAssignSizeableCoercedToNone;
+var f: TTyForm;
+begin
+  f := TTyForm.CreateNew(nil);
+  try
+    f.BorderStyle := bsSizeable;
+    AssertTrue('coerced back to bsNone', f.BorderStyle = bsNone);
+  finally f.Free; end;
+end;
+
 { TTitleBarSwitchesTest }
 
 procedure TTitleBarSwitchesTest.TestDefaultsAllVisible;
@@ -1610,5 +1637,6 @@ initialization
   RegisterTest(TTyMenuFormTest);
   RegisterTest(TCaptionButtonsTest);
   RegisterTest(TTitleBarSwitchesTest);
+  RegisterTest(TFormBorderStyleTest);
 
 end.
