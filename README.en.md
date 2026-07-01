@@ -40,6 +40,11 @@ TyButton:disabled { opacity: 0.5; }
   across menus and controls.
 - **Native-control harmonization `TTyNativeStyler`** — themes third-party / native LCL controls to
   match the active theme.
+- **Dialog subsystem** — custom-drawn themed modal dialogs: `TyShowMessage` / `TyMessageDlg`
+  (mtWarning / mtError / mtConfirmation / mtInformation + full LCL button set) global functions,
+  `TTyDialog` derivable base class (Enter/Esc + right-aligned button bar), and a `TTyMessage`
+  design-time component; button captions and type titles are internationalized (resourcestring +
+  zh_CN).
 - **Internationalization (i18n)** — `resourcestring`s + English / Simplified-Chinese `.po` catalogs
   (theme diagnostics, design-time, demo); the demo switches language at runtime.
 - **State transition animations** — `TTyToggleSwitch` knob slides between ON/OFF, `TTyButton` hover
