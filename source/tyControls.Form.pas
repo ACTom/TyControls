@@ -154,8 +154,6 @@ type
   private
     FTitleBar: TTyTitleBar;
     FMenuBar: TTyMenuBar;             // the primary menu bar (shortcut dispatch / mac global bar)
-    FShowMinimize: Boolean;
-    FShowMaximize: Boolean;
     FResizable: Boolean;              // window edge-resize opt-out (default True); see SetResizable
     FController: TTyStyleController;   // set by ApplyChromeTheme; used by Paint
     FSharpBackdrop: TBGRABitmap;      // form bg snapshot, UNblurred (fills glass corners)
@@ -181,8 +179,6 @@ type
     function GetTitleHeight: Integer;
     procedure SetTitleHeight(AValue: Integer);
     procedure SetController(AValue: TTyStyleController);
-    procedure SetShowMinimize(AValue: Boolean);
-    procedure SetShowMaximize(AValue: Boolean);
     procedure SetResizable(AValue: Boolean);
     function GetBorderStyleTy: TFormBorderStyle;
     procedure SetBorderStyleTy(AValue: TFormBorderStyle);
@@ -246,8 +242,6 @@ type
       and the in-window bar is hidden. Freeing the bar nils this (FreeNotification). }
     property MenuBar: TTyMenuBar read FMenuBar write SetMenuBar;
     property TitleHeight: Integer read GetTitleHeight write SetTitleHeight default 32;
-    property ShowMinimize: Boolean read FShowMinimize write SetShowMinimize default True;
-    property ShowMaximize: Boolean read FShowMaximize write SetShowMaximize default True;
     { Whether the window can be edge-resized. Default True (the borderless window is
       resizable — the fix for the long-standing "no TTyForm could resize" bug). Setting
       False makes a fixed-size window AND disables maximize (a fixed window can't
@@ -996,8 +990,6 @@ end;
 procedure TTyForm.SetupChrome;
 begin
   BorderStyle := bsNone;
-  FShowMinimize := True;
-  FShowMaximize := True;
   FResizable := True;
   FEngine := TTyChromeEngine.Create;
   FEngine.Form := Self;
@@ -1277,26 +1269,6 @@ begin
   if (FTitleBar <> nil) and (FTitleBar.Height <> AValue) then FTitleBar.Height := AValue;
 end;
 
-procedure TTyForm.SetShowMinimize(AValue: Boolean);
-begin
-  FShowMinimize := AValue;
-  if FTitleBar <> nil then
-  begin
-    FTitleBar.MinButton.Visible := AValue;
-    FTitleBar.LayoutButtons;
-  end;
-end;
-
-procedure TTyForm.SetShowMaximize(AValue: Boolean);
-begin
-  FShowMaximize := AValue;
-  if FTitleBar <> nil then
-  begin
-    FTitleBar.MaxButton.Visible := AValue;
-    FTitleBar.LayoutButtons;
-  end;
-end;
-
 procedure TTyForm.SetResizable(AValue: Boolean);
 begin
   if FResizable = AValue then Exit;
@@ -1333,7 +1305,7 @@ begin
     if FEngine <> nil then zone := FEngine.BorderZone else zone := 6;
     TyWin32ApplyNcResize(Self, FResizable, zone, capH,
       (FEngine <> nil) and FEngine.Maximized,   // engine (work-area) maximize -> no NC inset
-      FResizable and FShowMaximize);             // allow native maximize (WS_MAXIMIZEBOX)
+      FResizable and (biMaximize in BorderIcons));   // allow native maximize (WS_MAXIMIZEBOX)
   end;
   {$ENDIF}
   // GTK/Qt: the AdjustClientRect gutter + WM handoff (Phase C). Cocoa: resizable styleMask

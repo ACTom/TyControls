@@ -533,7 +533,7 @@ begin
   // cannot resolve `class(TTyForm)` as an ancestor and silently falls back to TForm
   // (sourcefilemanager FindBaseComponentClass -> StandardDesignerBaseClasses[TForm]),
   // so the Object Inspector shows none of TTyForm's published chrome properties
-  // (TitleBar / TitleHeight / ShowMinimize / ShowMaximize). RegisterComponents only
+  // (TitleBar / TitleHeight / BorderIcons / Resizable). RegisterComponents only
   // covers droppable controls, not base form classes — this is the form-level analog.
   if FormEditingHook <> nil then
     FormEditingHook.RegisterDesignerBaseClass(TTyForm);
