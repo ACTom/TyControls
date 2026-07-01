@@ -3,7 +3,7 @@ unit test.dialogs;
 interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, fpcunit, testregistry,
-  tyControls.Types, tyControls.Dialogs;
+  tyControls.Types, tyControls.Dialogs, tyControls.Button;
 type
   TDialogButtonBarTest = class(TTestCase)
   published
@@ -19,6 +19,13 @@ type
     procedure TestOrderedButtonsCompleteAndStable;
     procedure TestTypeSymbol;
     procedure TestEmptyButtonsDefaultsOK;
+  end;
+
+  TTyDialogAccess = class(TTyDialog);   // same-unit access to protected SetDesigning
+  TDialogBaseTest = class(TTestCase)
+  published
+    procedure TestAddButtonWiresModalResult;
+    procedure TestCloseGivesCancel;
   end;
 implementation
 
@@ -92,7 +99,41 @@ begin
   AssertTrue('is OK', a[0] = mbOK);
 end;
 
+{ NOTE (deviation from the plan): we do NOT call SetDesigning here. Empirically, on the
+  headless LCL-Win32 runner, SetDesigning(True, False) on a TTyForm followed by parenting a
+  *windowed* child (TTyPanel/TTyButton) raises "Failed to create win32 control, error 1407"
+  (form is csDesigning, child is not -> handle-class mismatch). A bare TTyForm.CreateNew does
+  NOT arm the chrome engine at construction (ArmEngine runs on show/Loaded and self-guards on
+  csDesigning), and parenting windowed children to a plain runtime TTyForm succeeds, so the
+  construct-only path is safe without SetDesigning. The TTyDialogAccess subclass is retained
+  in case a future test needs the protected entry point. }
+
+procedure TDialogBaseTest.TestAddButtonWiresModalResult;
+var d: TTyDialog; b: TTyButton;
+begin
+  d := TTyDialog.CreateNew(nil);
+  try
+    b := d.AddButton('OK', mrOk, True, False);
+    AssertTrue('button created', b <> nil);
+    AssertEquals('caption', 'OK', b.Caption);
+    b.Click;                     // simulate press
+    AssertEquals('modal result set', Ord(mrOk), Ord(d.ModalResult));
+  finally d.Free; end;
+end;
+
+procedure TDialogBaseTest.TestCloseGivesCancel;
+var d: TTyDialog;
+begin
+  d := TTyDialog.CreateNew(nil);
+  try
+    d.AddButton('Cancel', mrCancel, False, True);
+    d.CancelDialog;              // the Esc/close path
+    AssertEquals('cancel', Ord(mrCancel), Ord(d.ModalResult));
+  finally d.Free; end;
+end;
+
 initialization
   RegisterTest(TDialogButtonBarTest);
   RegisterTest(TMsgMappingTest);
+  RegisterTest(TDialogBaseTest);
 end.

@@ -3,7 +3,7 @@ unit tyControls.Dialogs;
 interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, Forms,
-  tyControls.Types;
+  tyControls.Types, tyControls.Form, tyControls.Button, tyControls.Panel;
 
 { Right-aligns caption buttons in a bar: index 0 is the RIGHTMOST (primary), each successive
   button sits to its left, ASpacing apart, AMargin from the right edge. Pure. }
@@ -16,6 +16,26 @@ function TyMsgButtonCaption(ABtn: TMsgDlgBtn): string;
 function TyMsgButtonResult(ABtn: TMsgDlgBtn): TModalResult;
 function TyMsgOrderedButtons(AButtons: TMsgDlgButtons): TMsgDlgBtnArray;
 function TyMsgTypeSymbol(ADlgType: TMsgDlgType): string;
+
+type
+  TTyDialog = class(TTyForm)
+  private
+    FButtonBar: TTyPanel;          // strip host for the buttons (transparent)
+    FButtons: array of TTyButton;
+    FResults: array of TModalResult;
+    FDefaultResult, FCancelResult: TModalResult;
+    procedure ButtonClicked(Sender: TObject);
+  protected
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+  public
+    constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
+    function AddButton(const ACaption: string; AResult: TModalResult;
+      ADefault: Boolean = False; ACancel: Boolean = False): TTyButton;
+    procedure LayoutButtonBar;
+    function ContentRect: TRect;
+    procedure AutoSizeToContent(AContentW, AContentH: Integer);
+    procedure CancelDialog;       // title-bar close / Esc -> mrCancel-style
+  end;
 
 implementation
 
@@ -109,6 +129,84 @@ begin
     mtInformation:  Result := 'i';
   else Result := '';
   end;
+end;
+
+{ TTyDialog }
+
+constructor TTyDialog.CreateNew(AOwner: TComponent; Num: Integer);
+begin
+  inherited CreateNew(AOwner, Num);
+  BorderIcons := [biSystemMenu];      // close only (P1 chrome)
+  Resizable := False;
+  Position := poMainFormCenter;
+  KeyPreview := True;
+  FDefaultResult := mrNone; FCancelResult := mrCancel;
+  FButtonBar := TTyPanel.Create(Self);
+  FButtonBar.Parent := Self;
+  FButtonBar.Align := alBottom;
+  FButtonBar.Height := 44;
+  FButtonBar.StyleClass := 'ghost';   // transparent-ish; refine in theming
+end;
+
+procedure TTyDialog.ButtonClicked(Sender: TObject);
+begin
+  ModalResult := TModalResult(TComponent(Sender).Tag);
+end;
+
+function TTyDialog.AddButton(const ACaption: string; AResult: TModalResult;
+  ADefault, ACancel: Boolean): TTyButton;
+begin
+  Result := TTyButton.Create(Self);
+  Result.Parent := FButtonBar;
+  Result.Caption := ACaption;
+  Result.Tag := AResult;
+  Result.OnClick := @ButtonClicked;
+  SetLength(FButtons, Length(FButtons) + 1); FButtons[High(FButtons)] := Result;
+  SetLength(FResults, Length(FResults) + 1); FResults[High(FResults)] := AResult;
+  if ADefault then FDefaultResult := AResult;
+  if ACancel then FCancelResult := AResult;
+  LayoutButtonBar;
+end;
+
+procedure TTyDialog.LayoutButtonBar;
+var sizes: array of TSize; rects: TTyRectArray; i, y: Integer;
+begin
+  if Length(FButtons) = 0 then Exit;
+  SetLength(sizes, Length(FButtons));
+  for i := 0 to High(FButtons) do sizes[i] := Size(88, 30);   // fixed dialog-button size
+  rects := TyDialogButtonBar(sizes, FButtonBar.ClientWidth, 12, 8);
+  y := (FButtonBar.ClientHeight - 30) div 2;
+  for i := 0 to High(FButtons) do
+    FButtons[i].SetBounds(rects[i].Left, y, 88, 30);
+end;
+
+function TTyDialog.ContentRect: TRect;
+begin
+  Result := ClientRect;
+  Inc(Result.Top, TitleHeight);
+  Dec(Result.Bottom, FButtonBar.Height);
+end;
+
+procedure TTyDialog.AutoSizeToContent(AContentW, AContentH: Integer);
+var totalBtn, i, w: Integer;
+begin
+  totalBtn := 12; for i := 0 to High(FButtons) do totalBtn := totalBtn + 88 + 8;
+  w := AContentW; if totalBtn > w then w := totalBtn;
+  ClientWidth := w + 32;
+  ClientHeight := TitleHeight + AContentH + FButtonBar.Height + 16;
+  LayoutButtonBar;
+end;
+
+procedure TTyDialog.CancelDialog;
+begin
+  ModalResult := FCancelResult;
+end;
+
+procedure TTyDialog.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  if (Key = 13) and (FDefaultResult <> mrNone) then begin ModalResult := FDefaultResult; Key := 0; Exit; end;
+  if Key = 27 then begin CancelDialog; Key := 0; Exit; end;
+  inherited KeyDown(Key, Shift);
 end;
 
 end.
