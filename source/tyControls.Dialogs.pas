@@ -22,9 +22,7 @@ type
   private
     FButtonBar: TTyPanel;          // strip host for the buttons (transparent)
     FButtons: array of TTyButton;
-    FResults: array of TModalResult;
     FDefaultResult, FCancelResult: TModalResult;
-    procedure ButtonClicked(Sender: TObject);
   protected
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
@@ -34,7 +32,9 @@ type
     procedure LayoutButtonBar;
     function ContentRect: TRect;
     procedure AutoSizeToContent(AContentW, AContentH: Integer);
-    procedure CancelDialog;       // title-bar close / Esc -> mrCancel-style
+    // Esc / programmatic cancel -> FCancelResult. (The title-bar X closes the
+    // modal and returns mrCancel via LCL's default; it does not call this.)
+    procedure CancelDialog;
   end;
 
 implementation
@@ -148,21 +148,16 @@ begin
   FButtonBar.StyleClass := 'ghost';   // transparent-ish; refine in theming
 end;
 
-procedure TTyDialog.ButtonClicked(Sender: TObject);
-begin
-  ModalResult := TModalResult(TComponent(Sender).Tag);
-end;
-
 function TTyDialog.AddButton(const ACaption: string; AResult: TModalResult;
   ADefault, ACancel: Boolean): TTyButton;
 begin
   Result := TTyButton.Create(Self);
   Result.Parent := FButtonBar;
   Result.Caption := ACaption;
-  Result.Tag := AResult;
-  Result.OnClick := @ButtonClicked;
+  // TTyButton.Click sets the host form's ModalResult via GetParentForm (a pure
+  // Parent-chain walk, no handle needed) — reuse it instead of a Tag+OnClick shim.
+  Result.ModalResult := AResult;
   SetLength(FButtons, Length(FButtons) + 1); FButtons[High(FButtons)] := Result;
-  SetLength(FResults, Length(FResults) + 1); FResults[High(FResults)] := AResult;
   if ADefault then FDefaultResult := AResult;
   if ACancel then FCancelResult := AResult;
   LayoutButtonBar;
@@ -172,6 +167,7 @@ procedure TTyDialog.LayoutButtonBar;
 var sizes: array of TSize; rects: TTyRectArray; i, y: Integer;
 begin
   if Length(FButtons) = 0 then Exit;
+  sizes := nil;
   SetLength(sizes, Length(FButtons));
   for i := 0 to High(FButtons) do sizes[i] := Size(88, 30);   // fixed dialog-button size
   rects := TyDialogButtonBar(sizes, FButtonBar.ClientWidth, 12, 8);
@@ -199,6 +195,8 @@ end;
 
 procedure TTyDialog.CancelDialog;
 begin
+  // Esc / programmatic cancel -> FCancelResult. (The title-bar X closes the modal
+  // and returns mrCancel via LCL's default; it does not route through here.)
   ModalResult := FCancelResult;
 end;
 

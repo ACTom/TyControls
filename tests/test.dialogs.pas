@@ -21,11 +21,11 @@ type
     procedure TestEmptyButtonsDefaultsOK;
   end;
 
-  TTyDialogAccess = class(TTyDialog);   // same-unit access to protected SetDesigning
   TDialogBaseTest = class(TTestCase)
   published
     procedure TestAddButtonWiresModalResult;
     procedure TestCloseGivesCancel;
+    procedure TestTwoButtonLayoutRightToLeft;
   end;
 implementation
 
@@ -105,8 +105,7 @@ end;
   (form is csDesigning, child is not -> handle-class mismatch). A bare TTyForm.CreateNew does
   NOT arm the chrome engine at construction (ArmEngine runs on show/Loaded and self-guards on
   csDesigning), and parenting windowed children to a plain runtime TTyForm succeeds, so the
-  construct-only path is safe without SetDesigning. The TTyDialogAccess subclass is retained
-  in case a future test needs the protected entry point. }
+  construct-only path is safe without SetDesigning. }
 
 procedure TDialogBaseTest.TestAddButtonWiresModalResult;
 var d: TTyDialog; b: TTyButton;
@@ -116,7 +115,7 @@ begin
     b := d.AddButton('OK', mrOk, True, False);
     AssertTrue('button created', b <> nil);
     AssertEquals('caption', 'OK', b.Caption);
-    b.Click;                     // simulate press
+    b.Click;                     // TTyButton.Click routes its ModalResult to the host form
     AssertEquals('modal result set', Ord(mrOk), Ord(d.ModalResult));
   finally d.Free; end;
 end;
@@ -127,8 +126,20 @@ begin
   d := TTyDialog.CreateNew(nil);
   try
     d.AddButton('Cancel', mrCancel, False, True);
-    d.CancelDialog;              // the Esc/close path
+    d.CancelDialog;              // the Esc / programmatic cancel path
     AssertEquals('cancel', Ord(mrCancel), Ord(d.ModalResult));
+  finally d.Free; end;
+end;
+
+procedure TDialogBaseTest.TestTwoButtonLayoutRightToLeft;
+var d: TTyDialog; primary, secondary: TTyButton;
+begin
+  d := TTyDialog.CreateNew(nil);
+  try
+    primary := d.AddButton('OK', mrOk, True, False);      // index 0 -> rightmost
+    secondary := d.AddButton('Cancel', mrCancel, False, True);
+    d.AutoSizeToContent(200, 100);   // give the bar a real width + relayout
+    AssertTrue('primary is right of secondary', primary.Left > secondary.Left);
   finally d.Free; end;
 end;
 
