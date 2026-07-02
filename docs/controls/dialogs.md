@@ -465,6 +465,8 @@ FindDlg.Execute;
 tell them apart with `frReplaceAll in d.Options`. `Options` defaults to `[frDown]` (search down);
 `TTyReplaceDialog` also defaults `frReplace, frReplaceAll`.
 
+> **Note:** `Position` here is an LCL `TPosition` placement *strategy* (`poScreenCenter`, `poDesigned`, …), **not** LCL `TFindDialog.Position`'s `TPoint` window coordinate. Modeless Ty dialogs place themselves by strategy, so LCL Find/Replace code that assigns `Position := Point(x, y)` needs adjusting.
+
 ### Progress
 
 ```pascal

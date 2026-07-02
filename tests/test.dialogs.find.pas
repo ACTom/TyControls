@@ -15,6 +15,7 @@ type
     procedure TestChecksToOptionsRoundTrip;
     procedure TestBasePreserved;
     procedure TestExhaustiveRoundTrip;
+    procedure TestGateFlagsPreserved;
   end;
 
   TFindWiringTest = class(TTestCase)
@@ -25,6 +26,8 @@ type
     procedure HandleFind(Sender: TObject);
   published
     procedure TestFindNextFiresWithActionFlags;
+    procedure TestSyncFromPopulatesWidgets;
+    procedure TestFindFormShapeNoReplace;
   end;
 
   TReplaceWiringTest = class(TTestCase)
@@ -37,6 +40,9 @@ type
     procedure TestReplaceStampsReplaceFlag;
     procedure TestReplaceAllStampsReplaceAllFlag;
     procedure TestReplaceDefaultsHaveReplaceFlags;
+    procedure TestSyncFromPopulatesReplaceEdit;
+    procedure TestReplaceFormShapeHasReplace;
+    procedure TestReusedFormClearsStaleActionFlag;
   end;
 
 implementation
@@ -177,6 +183,83 @@ begin
     AssertTrue('frDown default', frDown in dlg.Options);
     AssertTrue('frReplace default', frReplace in dlg.Options);
     AssertTrue('frReplaceAll default', frReplaceAll in dlg.Options);
+  finally dlg.Free; end;
+end;
+
+procedure TFindMapTest.TestGateFlagsPreserved;
+var ch: TTyFindChecks; opts: TFindOptions;
+begin
+  ch.MatchCase := True; ch.WholeWord := False; ch.SearchUp := False;
+  // frHideUpDown / frDisableMatchCase are UI-gate flags the mapping must NOT touch
+  opts := TyChecksToFindOptions(ch, [frHideUpDown, frDisableMatchCase, frDown]);
+  AssertTrue('frHideUpDown kept', frHideUpDown in opts);
+  AssertTrue('frDisableMatchCase kept', frDisableMatchCase in opts);
+  AssertTrue('frMatchCase set', frMatchCase in opts);
+  AssertTrue('frDown set (searchup false)', frDown in opts);
+end;
+
+procedure TFindWiringTest.TestSyncFromPopulatesWidgets;
+var dlg: TTyFindDialog; frm: TTyFindForm;
+begin
+  dlg := TTyFindDialog.Create(nil);
+  try
+    dlg.FindText := 'abc';
+    dlg.Options := [frMatchCase];   // no frDown => SearchUp true; no frWholeWord
+    frm := dlg.BuildForm;
+    AssertEquals('find edit seeded from props', 'abc', frm.FindEdit.Text);
+    AssertTrue('matchcase checked from props', frm.MatchCaseCheck.Checked);
+    AssertFalse('wholeword unchecked', frm.WholeWordCheck.Checked);
+    AssertTrue('searchup checked (no frDown)', frm.SearchUpCheck.Checked);
+  finally dlg.Free; end;
+end;
+
+procedure TFindWiringTest.TestFindFormShapeNoReplace;
+var dlg: TTyFindDialog; frm: TTyFindForm;
+begin
+  dlg := TTyFindDialog.Create(nil);
+  try
+    frm := dlg.BuildForm;
+    AssertFalse('find form is not replace mode', frm.WithReplace);
+    AssertTrue('find form has no replace edit', frm.ReplaceEdit = nil);
+  finally dlg.Free; end;
+end;
+
+procedure TReplaceWiringTest.TestSyncFromPopulatesReplaceEdit;
+var dlg: TTyReplaceDialog; frm: TTyFindForm;
+begin
+  dlg := TTyReplaceDialog.Create(nil);
+  try
+    dlg.FindText := 'x';
+    dlg.ReplaceText := 'y';
+    frm := dlg.BuildForm;
+    AssertEquals('find seeded', 'x', frm.FindEdit.Text);
+    AssertEquals('replace seeded', 'y', frm.ReplaceEdit.Text);
+  finally dlg.Free; end;
+end;
+
+procedure TReplaceWiringTest.TestReplaceFormShapeHasReplace;
+var dlg: TTyReplaceDialog; frm: TTyFindForm;
+begin
+  dlg := TTyReplaceDialog.Create(nil);
+  try
+    frm := dlg.BuildForm;
+    AssertTrue('replace form is replace mode', frm.WithReplace);
+    AssertTrue('replace form has replace edit', frm.ReplaceEdit <> nil);
+  finally dlg.Free; end;
+end;
+
+procedure TReplaceWiringTest.TestReusedFormClearsStaleActionFlag;
+var dlg: TTyReplaceDialog; frm: TTyFindForm;
+begin
+  dlg := TTyReplaceDialog.Create(nil);
+  try
+    frm := dlg.BuildForm;
+    frm.DoReplaceAll;
+    AssertTrue('replaceall set after ReplaceAll', frReplaceAll in dlg.Options);
+    frm.DoFindNext;   // reuse the SAME form — subtractive stamping must clear stale flags
+    AssertTrue('findnext set', frFindNext in dlg.Options);
+    AssertFalse('stale replaceall cleared', frReplaceAll in dlg.Options);
+    AssertFalse('stale replace cleared', frReplace in dlg.Options);
   finally dlg.Free; end;
 end;
 
