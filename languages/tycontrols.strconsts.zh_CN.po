@@ -342,3 +342,45 @@ msgstr "颜色"
 #: tycontrols.strconsts.rsdlgfontsample
 msgid "AaBbYyZz 0123"
 msgstr "AaBbYyZz 0123"
+
+#: tycontrols.strconsts.rsdlgfindwhat
+msgid "Find what:"
+msgstr "查找内容："
+
+#: tycontrols.strconsts.rsdlgreplacewith
+msgid "Replace with:"
+msgstr "替换为："
+
+#: tycontrols.strconsts.rsdlgmatchcase
+msgid "Match case"
+msgstr "区分大小写"
+
+#: tycontrols.strconsts.rsdlgwholeword
+msgid "Whole word"
+msgstr "全字匹配"
+
+#: tycontrols.strconsts.rsdlgsearchup
+msgid "Search up"
+msgstr "向上查找"
+
+#: tycontrols.strconsts.rsdlgfindnext
+msgid "Find Next"
+msgstr "查找下一个"
+
+#: tycontrols.strconsts.rsdlgreplace
+msgid "Replace"
+msgstr "替换"
+
+#: tycontrols.strconsts.rsdlgreplaceall
+msgid "Replace All"
+msgstr "全部替换"
+
+#: tycontrols.strconsts.rsdlgfindclose
+msgctxt "tycontrols.strconsts.rsdlgfindclose"
+msgid "Close"
+msgstr "关闭"
+
+#: tycontrols.strconsts.rsdlgprogresscancel
+msgctxt "tycontrols.strconsts.rsdlgprogresscancel"
+msgid "Cancel"
+msgstr "取消"
