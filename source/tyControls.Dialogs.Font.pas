@@ -22,6 +22,8 @@ type
     FBold, FItalic, FUnderline, FStrike: TTyCheckBox;
     FColorBtn: TTyButton; FColorValue: TColor;
     FPreviewRect: TRect;
+    FSeedDisplay: Integer;   // display value shown in the spin at seed time
+    FSeedSize: Integer;      // caller's original Size (may be <= 0 for "default")
     procedure ColorBtnClick(Sender: TObject);
   protected
     procedure LayoutContent; override;
@@ -156,7 +158,10 @@ var ch: TTyFontChecks;
 begin
   if AFamilies <> nil then FList.Items.Assign(AFamilies);
   FList.ItemIndex := FList.Items.IndexOf(AFont.Name);
-  FSize.Value := Max(1, Min(999, AFont.Size));
+  if AFont.Size >= 1 then FSize.Value := Min(999, AFont.Size)
+  else FSize.Value := 9;          // display a sane default for a "use default" (Size<=0) font
+  FSeedDisplay := FSize.Value;     // what the user sees
+  FSeedSize := AFont.Size;         // the caller's original (may be <= 0)
   ch := TyFontStyleToChecks(AFont.Style);
   FBold.Checked := ch.Bold;
   FItalic.Checked := ch.Italic;
@@ -170,7 +175,8 @@ procedure TTyFontForm.WriteTo(AFont: TFont);
 var ch: TTyFontChecks;
 begin
   if SelectedFamily <> '' then AFont.Name := SelectedFamily;
-  AFont.Size := FSize.Value;
+  if FSize.Value = FSeedDisplay then AFont.Size := FSeedSize  // untouched → restore original (0 stays 0)
+  else AFont.Size := FSize.Value;                             // user changed the size → apply it
   ch.Bold := FBold.Checked;
   ch.Italic := FItalic.Checked;
   ch.Underline := FUnderline.Checked;

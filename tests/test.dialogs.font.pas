@@ -10,6 +10,7 @@ type
   TFontDialogTest = class(TTestCase)
   published
     procedure TestBuildSeedsChecksAndList;
+    procedure TestSeedWriteIdempotentSize;
   end;
 implementation
 procedure TFontMapTest.TestStyleRoundTrip;
@@ -45,6 +46,31 @@ begin
       AssertEquals('family selected', 'Courier New', d.SelectedFamily);
     finally d.Free; end;
   finally f.Free; fams.Free; end;
+end;
+
+procedure TFontDialogTest.TestSeedWriteIdempotentSize;
+var f: TFont; d: TTyFontForm; fams: TStringList;
+begin
+  fams := TStringList.Create;
+  try
+    fams.Add('Arial');
+    // (a) default font Size=0 must survive open + OK-untouched (was silently coerced to 1)
+    f := TFont.Create;
+    try
+      f.Size := 0;
+      d := TyBuildFontDialog('F', f, fams);
+      try d.WriteTo(f); finally d.Free; end;
+      AssertEquals('default size preserved', 0, f.Size);
+    finally f.Free; end;
+    // (b) an explicit size, untouched, must survive
+    f := TFont.Create;
+    try
+      f.Size := 14;
+      d := TyBuildFontDialog('F', f, fams);
+      try d.WriteTo(f); finally d.Free; end;
+      AssertEquals('explicit size preserved', 14, f.Size);
+    finally f.Free; end;
+  finally fams.Free; end;
 end;
 
 initialization
