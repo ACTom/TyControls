@@ -27,6 +27,18 @@ type
     procedure TestFindNextFiresWithActionFlags;
   end;
 
+  TReplaceWiringTest = class(TTestCase)
+  private
+    FReplaceFired: Boolean;
+    FLastOptions: TFindOptions;
+    FLastReplaceText: string;
+    procedure HandleReplace(Sender: TObject);
+  published
+    procedure TestReplaceStampsReplaceFlag;
+    procedure TestReplaceAllStampsReplaceAllFlag;
+    procedure TestReplaceDefaultsHaveReplaceFlags;
+  end;
+
 implementation
 
 procedure TFindMapTest.TestOptionsToChecks;
@@ -115,7 +127,61 @@ begin
   finally dlg.Free; end;
 end;
 
+procedure TReplaceWiringTest.HandleReplace(Sender: TObject);
+begin
+  FReplaceFired := True;
+  FLastOptions := (Sender as TTyReplaceDialog).Options;
+  FLastReplaceText := (Sender as TTyReplaceDialog).ReplaceText;
+end;
+
+procedure TReplaceWiringTest.TestReplaceStampsReplaceFlag;
+var dlg: TTyReplaceDialog; frm: TTyFindForm;
+begin
+  FReplaceFired := False;
+  dlg := TTyReplaceDialog.Create(nil);
+  try
+    dlg.OnReplace := @HandleReplace;
+    frm := dlg.BuildForm;
+    frm.FindEdit.Text := 'a';
+    frm.ReplaceEdit.Text := 'b';
+    frm.DoReplace;
+    AssertTrue('OnReplace fired', FReplaceFired);
+    AssertEquals('ReplaceText written back', 'b', FLastReplaceText);
+    AssertTrue('frReplace set', frReplace in FLastOptions);
+    AssertFalse('frReplaceAll clear', frReplaceAll in FLastOptions);
+    AssertFalse('frFindNext clear', frFindNext in FLastOptions);
+  finally dlg.Free; end;
+end;
+
+procedure TReplaceWiringTest.TestReplaceAllStampsReplaceAllFlag;
+var dlg: TTyReplaceDialog; frm: TTyFindForm;
+begin
+  FReplaceFired := False;
+  dlg := TTyReplaceDialog.Create(nil);
+  try
+    dlg.OnReplace := @HandleReplace;
+    frm := dlg.BuildForm;
+    frm.DoReplaceAll;
+    AssertTrue('OnReplace fired', FReplaceFired);
+    AssertTrue('frReplaceAll set', frReplaceAll in FLastOptions);
+    AssertFalse('frFindNext clear', frFindNext in FLastOptions);
+    AssertFalse('frReplace clear', frReplace in FLastOptions);
+  finally dlg.Free; end;
+end;
+
+procedure TReplaceWiringTest.TestReplaceDefaultsHaveReplaceFlags;
+var dlg: TTyReplaceDialog;
+begin
+  dlg := TTyReplaceDialog.Create(nil);
+  try
+    AssertTrue('frDown default', frDown in dlg.Options);
+    AssertTrue('frReplace default', frReplace in dlg.Options);
+    AssertTrue('frReplaceAll default', frReplaceAll in dlg.Options);
+  finally dlg.Free; end;
+end;
+
 initialization
   RegisterTest(TFindMapTest);
   RegisterTest(TFindWiringTest);
+  RegisterTest(TReplaceWiringTest);
 end.

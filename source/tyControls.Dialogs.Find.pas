@@ -76,6 +76,19 @@ type
     property OnFind: TNotifyEvent read FOnFind write FOnFind;
   end;
 
+  { TTyReplaceDialog — adds the Replace row + Replace/Replace All buttons. Replace
+    and Replace All both fire OnReplace; the app distinguishes them via
+    (frReplaceAll in Options). }
+  TTyReplaceDialog = class(TTyFindDialog)
+  protected
+    function WantReplace: Boolean; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ReplaceText: string read FReplaceText write FReplaceText;
+    property OnReplace: TNotifyEvent read FOnReplace write FOnReplace;
+  end;
+
 implementation
 
 function TyFindOptionsToChecks(AOpts: TFindOptions): TTyFindChecks;
@@ -272,6 +285,19 @@ end;
 procedure TTyFindDialog.CloseDialog;
 begin
   if FForm <> nil then FForm.Hide;
+end;
+
+{ TTyReplaceDialog }
+
+constructor TTyReplaceDialog.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FOptions := FOptions + [frReplace, frReplaceAll];   // LCL Replace defaults
+end;
+
+function TTyReplaceDialog.WantReplace: Boolean;
+begin
+  Result := True;
 end;
 
 end.
