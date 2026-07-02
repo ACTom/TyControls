@@ -5,7 +5,8 @@ unit test.dialogs.find;
 interface
 
 uses
-  Classes, SysUtils, Dialogs, fpcunit, testregistry, tyControls.Dialogs.Find;
+  Classes, SysUtils, Dialogs, fpcunit, testregistry,
+  tyControls.CheckBox, tyControls.Dialogs.Find;
 
 type
   TFindMapTest = class(TTestCase)
@@ -14,6 +15,16 @@ type
     procedure TestChecksToOptionsRoundTrip;
     procedure TestBasePreserved;
     procedure TestExhaustiveRoundTrip;
+  end;
+
+  TFindWiringTest = class(TTestCase)
+  private
+    FFired: Boolean;
+    FLastOptions: TFindOptions;
+    FLastFindText: string;
+    procedure HandleFind(Sender: TObject);
+  published
+    procedure TestFindNextFiresWithActionFlags;
   end;
 
 implementation
@@ -75,6 +86,36 @@ begin
   end;
 end;
 
+procedure TFindWiringTest.HandleFind(Sender: TObject);
+begin
+  FFired := True;
+  FLastOptions := (Sender as TTyFindDialog).Options;
+  FLastFindText := (Sender as TTyFindDialog).FindText;
+end;
+
+procedure TFindWiringTest.TestFindNextFiresWithActionFlags;
+var dlg: TTyFindDialog; frm: TTyFindForm;
+begin
+  FFired := False;
+  dlg := TTyFindDialog.Create(nil);
+  try
+    dlg.OnFind := @HandleFind;
+    frm := dlg.BuildForm;                 // builds the form, does NOT Show it
+    frm.FindEdit.Text := 'hello';
+    frm.MatchCaseCheck.Checked := True;
+    frm.SearchUpCheck.Checked := False;   // -> frDown set
+    frm.DoFindNext;
+    AssertTrue('OnFind fired', FFired);
+    AssertEquals('FindText written back', 'hello', FLastFindText);
+    AssertTrue('frFindNext stamped', frFindNext in FLastOptions);
+    AssertFalse('frReplace cleared', frReplace in FLastOptions);
+    AssertFalse('frReplaceAll cleared', frReplaceAll in FLastOptions);
+    AssertTrue('frMatchCase from check', frMatchCase in FLastOptions);
+    AssertTrue('frDown (searchup off)', frDown in FLastOptions);
+  finally dlg.Free; end;
+end;
+
 initialization
   RegisterTest(TFindMapTest);
+  RegisterTest(TFindWiringTest);
 end.

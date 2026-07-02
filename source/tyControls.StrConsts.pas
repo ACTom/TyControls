@@ -102,6 +102,17 @@ resourcestring
   rsDlgFontColor       = 'Color';
   rsDlgFontSample      = 'AaBbYyZz 0123';
 
+  // --- Find/Replace dialog (S4) — user-facing, translated ---
+  rsDlgFindWhat        = 'Find what:';
+  rsDlgReplaceWith     = 'Replace with:';
+  rsDlgMatchCase       = 'Match case';
+  rsDlgWholeWord       = 'Whole word';
+  rsDlgSearchUp        = 'Search up';
+  rsDlgFindNext        = 'Find Next';
+  rsDlgReplace         = 'Replace';
+  rsDlgReplaceAll      = 'Replace All';
+  rsDlgFindClose       = 'Close';
+
 implementation
 
 end.
