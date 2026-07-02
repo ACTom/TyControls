@@ -1,5 +1,4 @@
 unit tyControls.Dialogs.Find;
-
 {$mode objfpc}{$H+}
 
 interface

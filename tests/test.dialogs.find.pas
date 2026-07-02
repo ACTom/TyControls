@@ -13,6 +13,7 @@ type
     procedure TestOptionsToChecks;
     procedure TestChecksToOptionsRoundTrip;
     procedure TestBasePreserved;
+    procedure TestExhaustiveRoundTrip;
   end;
 
 implementation
@@ -57,6 +58,21 @@ begin
   AssertTrue('frEntireScope kept', frEntireScope in opts);
   AssertTrue('frWholeWord set', frWholeWord in opts);
   AssertFalse('frDown cleared (searchup true)', frDown in opts);
+end;
+
+procedure TFindMapTest.TestExhaustiveRoundTrip;
+var i: Integer; ch, ch2: TTyFindChecks; opts: TFindOptions;
+begin
+  for i := 0 to 7 do
+  begin
+    ch.MatchCase := (i and 1) <> 0;
+    ch.WholeWord := (i and 2) <> 0;
+    ch.SearchUp  := (i and 4) <> 0;
+    opts := TyChecksToFindOptions(ch, []);
+    ch2  := TyFindOptionsToChecks(opts);
+    AssertTrue('rt ' + IntToStr(i), (ch.MatchCase = ch2.MatchCase)
+      and (ch.WholeWord = ch2.WholeWord) and (ch.SearchUp = ch2.SearchUp));
+  end;
 end;
 
 initialization
