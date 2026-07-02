@@ -96,7 +96,6 @@ var
   pt: TPoint;
   wr: Windows.RECT;
   ncp: PNCCalcSizeParams;
-  z: Integer;
   maxed: Boolean;
 begin
   st := FindState(Wnd);
@@ -108,11 +107,12 @@ begin
     WM_NCCALCSIZE:
       if WP <> 0 then
       begin
-        // Remove the native caption/border (don't inset by the caption height) BUT keep a thin
-        // NON-CLIENT resize border on all sides: the alClient content fills only the inset client
-        // rect, so it can't cover the grabbable edge, and the WS_THICKFRAME border the OS sizes
-        // natively stays uncovered. Returning 0 makes the (modified) rgrc[0] the new client rect.
-        // Width = the engine's border zone (matches TyNcHitTest's zone) when resizable; 0 = fixed.
+        // Remove the native caption/border (don't inset by the caption height) so the themed client
+        // + children fill the WHOLE window. Returning 0 makes rgrc[0] the new client rect; we leave
+        // it equal to the full window rect (except the maximize branch, which pins it to the work
+        // area). WS_THICKFRAME still gives the OS a sizing border, and WM_NCHITTEST maps the outer
+        // BorderZone pixels to HTLEFT..HTBOTTOMRIGHT on the full window rect, so edge-resize works
+        // WITHOUT carving a physical client inset (which only exposed the raw frame as side stripes).
         if st^.Resizable then
         begin
           ncp := PNCCalcSizeParams(LP);
@@ -133,15 +133,14 @@ begin
               ncp^.rgrc[0].Bottom := st^.WorkArea.Bottom;
             end;
           end
-          else
-          begin
-            // Normal: thin NC resize border on L/R/B; top flush to the window edge (no inset) so
-            // the themed title bar sits at the very top with no thick system-frame strip (the
-            // VS Code / Windows Terminal custom-frame fix). Top-edge resize via the title bar hot-zone.
-            z := st^.BorderZone;
-            if z < 1 then z := 1;
-            Inc(ncp^.rgrc[0].Left, z);  Dec(ncp^.rgrc[0].Right, z);  Dec(ncp^.rgrc[0].Bottom, z);
-          end;
+          // else (normal, non-maximized): intentionally leave rgrc[0] = the whole window rect.
+          // No L/R/B inset — the themed client + children cover the ENTIRE window, identical to the
+          // non-resizable path. Edge-resize is provided by WM_NCHITTEST (TyNcHitTest hit-tests the
+          // FULL window rect and returns HTLEFT..HTBOTTOMRIGHT for the outer BorderZone pixels), so
+          // the physical inset bought nothing functionally — it only left the raw WS_THICKFRAME frame
+          // (DWM active-frame color) exposed under the themed client, showing as an ACCENT stripe on
+          // the left and a WHITE stripe on the right. Removing it fixes the stripes while
+          // WS_THICKFRAME + the full-window-rect hit-test keep native edge-resize intact.
         end;
         Result := 0;
         Exit;
