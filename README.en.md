@@ -166,13 +166,29 @@ catalog explicitly, right after `SetDefaultLang` and before any form is created:
 uses ..., LCLTranslator;
 ...
 SetDefaultLang('', LangDir);
-TranslateUnitResourceStringsEx('', LangDir, 'tycontrols.strconsts');
+TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');
 Application.CreateForm(TMainForm, MainForm);
 ```
 
-and deploy `languages/tycontrols.strconsts.<lang>.po` (built from this repo) next to your exe's own
-`languages/` folder, alongside your app's own `.po` files. See [examples/demo](examples/demo/) for a
-working setup (`demo.lpr` + `examples/demo/languages/tycontrols.strconsts.zh_CN.po`).
+Deploy the catalog as `languages/tycontrols.<lang>.po` (built from this repo) — a **dot-free** file
+stem — next to your exe's own `languages/` folder, alongside your app's own `.po` files. Do **not**
+name it `tycontrols.strconsts.<lang>.po`: LCL's `FindLocaleFileName` runs the file stem you pass
+through `ChangeFileExt`, which treats the dot before `strconsts` as an extension separator and
+strips it, so it would search for `tycontrols.<lang>.po` regardless of what you deployed. Passing
+`'tycontrols'` as the third argument (`LocaleFileName`) keeps the file lookup dot-free, while the
+fourth argument (`LocaleUnitName`) supplies the real dotted unit name `tyControls.StrConsts` so the
+resourcestring identifiers still match. See [examples/demo](examples/demo/) for a working setup
+(`demo.lpr` + `examples/demo/languages/tycontrols.zh_CN.po`).
+
+To force Chinese output regardless of the machine's OS locale (e.g. for testing), drive the language
+explicitly instead of relying on auto-detection — `SetDefaultLang('')` and `TranslateUnitResourceStringsEx`
+with an empty `Lang` argument auto-detect the OS locale (or honor a `--lang=` command-line
+parameter, already supported by the demo/example apps). Pass `'zh_CN'` directly instead:
+
+```pascal
+SetDefaultLang('zh_CN', LangDir);
+TranslateUnitResourceStringsEx('zh_CN', LangDir, 'tycontrols', 'tyControls.StrConsts');
+```
 
 ## License
 

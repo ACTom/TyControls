@@ -32,7 +32,7 @@ begin
   // SetDefaultLang only loads languages/tydialogs.<lang>.po (derived from the exe name). The tyControls
   // package's own resourcestrings (dialog buttons / type titles etc.) live in a separate catalog and
   // need their own load, or they stay at their English msgids no matter what UI language is active.
-  TranslateUnitResourceStringsEx('', LangDir, 'tycontrols.strconsts');
+  TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');
   Application.CreateForm(TDialogsMainForm, DialogsMainForm);
   Application.Run;
 end.

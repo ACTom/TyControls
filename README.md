@@ -122,14 +122,27 @@ resourcestring 目录。LCL 的 `SetDefaultLang('', LangDir)` 只会自动加载
 uses ..., LCLTranslator;
 ...
 SetDefaultLang('', LangDir);
-TranslateUnitResourceStringsEx('', LangDir, 'tycontrols.strconsts');
+TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');
 Application.CreateForm(TMainForm, MainForm);
 ```
 
-并将本仓库构建出的 `languages/tycontrols.strconsts.<lang>.po` 部署到你的可执行文件自身的
-`languages/` 目录下,与你应用自己的 `.po` 文件放在一起。完整示例见
-[examples/demo](examples/demo/)(`demo.lpr` +
-`examples/demo/languages/tycontrols.strconsts.zh_CN.po`)。
+请将目录部署为 `languages/tycontrols.<lang>.po`(本仓库构建产物)—— 一个**不含点号**的文件主名 ——
+与你应用自己的 `.po` 文件一起放在可执行文件自身的 `languages/` 目录下。**不要**命名为
+`tycontrols.strconsts.<lang>.po`:LCL 的 `FindLocaleFileName` 会对传入的文件主名调用
+`ChangeFileExt`,它会把 `strconsts` 前的那个点当成扩展名分隔符并将其剥离,导致无论实际部署了什么文件,
+查找的都会是 `tycontrols.<lang>.po`。把第三个参数(`LocaleFileName`)传成 `'tycontrols'`
+可以让文件查找保持无点号,而第四个参数(`LocaleUnitName`)则传入真实的带点单元名
+`tyControls.StrConsts`,以保证 resourcestring 标识符仍能正确匹配。完整示例见
+[examples/demo](examples/demo/)(`demo.lpr` + `examples/demo/languages/tycontrols.zh_CN.po`)。
+
+若要在非 zh_CN 环境的机器上强制输出中文(例如测试用途),需显式指定语言而非依赖自动检测 ——
+`SetDefaultLang('')` 与 `Lang` 参数为空的 `TranslateUnitResourceStringsEx` 都会自动检测操作系统区域
+(或读取已支持的 `--lang=` 命令行参数),此时应直接传入 `'zh_CN'`:
+
+```pascal
+SetDefaultLang('zh_CN', LangDir);
+TranslateUnitResourceStringsEx('zh_CN', LangDir, 'tycontrols', 'tyControls.StrConsts');
+```
 
 ## 许可
 
