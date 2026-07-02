@@ -20,6 +20,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     procedure SetHSV(H, S, V: Single);
+    // driven by the parent (hue bar) which Invalidates the square; bare field write is intentional
     property Hue: Single read FHue write FHue;
     property Sat: Single read FSat;
     property Val: Single read FVal;
@@ -46,8 +47,7 @@ type
   end;
 implementation
 
-function TyColorToBGRA(c: TTyColor): TBGRAPixel;
-begin Result := BGRA(TyRedOf(c), TyGreenOf(c), TyBlueOf(c), TyAlphaOf(c)); end;
+{ TyColorToBGRA lives in tyControls.Painter (public, imported above) — no local copy. }
 
 { TTyHSVSquare }
 
@@ -64,6 +64,9 @@ procedure TTyHSVSquare.ApplyXY(X, Y: Integer);
 var sv: TPointF;
 begin sv := TyHSVAreaToSV(Point(X, Y), ClientRect); FSat := sv.X; FVal := sv.Y; Invalidate; DoChange; end;
 
+// TODO(perf): the SV gradient only depends on FHue — cache the per-hue bitmap and redraw
+// just the ring on S/V change if a larger/resizable square is ever exposed. Fine at the
+// fixed 180px size for now.
 procedure TTyHSVSquare.Paint;
 var P: TTyPainter; bmp: TBGRABitmap; xx, yy, w, h, ix, iy: Integer; s, v: Single;
 begin
