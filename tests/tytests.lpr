@@ -60,7 +60,8 @@ uses
   test.treeview.drag,
   test.dialogs,
   test.dialogs.selectpath,
-  test.colormath;
+  test.colormath,
+  test.dialogs.color;
 
 type
   TTyTestRunner = class(TTestRunner)

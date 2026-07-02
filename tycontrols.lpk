@@ -236,6 +236,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.ColorMath.pas"/>
         <UnitName Value="tyControls.ColorMath"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Dialogs.Color.pas"/>
+        <UnitName Value="tyControls.Dialogs.Color"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
