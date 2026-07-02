@@ -87,6 +87,11 @@ resourcestring
   rsDlgNewFolderPrompt = 'Folder name:';
   rsDlgCreateFolderErr = 'Could not create folder: %s';
 
+  // --- Color picker dialog (S3) — section labels, user-facing, translated ---
+  rsDlgHex             = 'Hex';
+  rsDlgAlpha           = 'Alpha';
+  rsDlgPreview         = 'Preview';
+
 implementation
 
 end.
