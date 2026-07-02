@@ -22,7 +22,7 @@ TyButton:disabled { opacity: 0.5; }
 - **文本编辑能力** —— `TTyEdit` 单行(选区 / 剪贴板 / 水平滚动 / 词级导航)、`TTyMemo` 多行(2D 导航 / 跨行编辑 / 垂直滚动)、`TTySpinEdit` 数值微调;自绘编辑支持输入法(Qt6 / GTK2)
 - **键盘助记符** —— `&` 加速键,Alt 下划线显示 + Alt+字母激活,覆盖菜单与各控件
 - **原生控件协调 `TTyNativeStyler`** —— 让第三方 / LCL 原生控件跟随当前主题着色
-- **对话框子系统** —— 自绘主题化模态对话框：`TyShowMessage` / `TyMessageDlg`(mtWarning/mtError/mtConfirmation/mtInformation + 全套 LCL 按钮集)全局函数 + `TTyDialog` 可派生基类(Enter/Esc + 右对齐按钮条) + `TTyMessage` 设计期组件；**输入类对话框**：`TyInputQuery`(单行文本) / `TyPasswordBox`(掩码密码) / `TyTextQuery`(可缩放多行) / `TySelectValue`(列表单选) / `TySelectDirectory`(文件夹选择器)；**拾取器**：`TySelectColor`(HSV/RGB/CMYK/Alpha 全双向取色器) / `TyFontDialog`(字体族/字号/样式/颜色 + 实时预览)；按钮标题与类型名称已国际化(resourcestring + zh_CN)
+- **对话框子系统** —— 自绘主题化模态对话框：`TyShowMessage` / `TyMessageDlg`(mtWarning/mtError/mtConfirmation/mtInformation + 全套 LCL 按钮集)全局函数 + `TTyDialog` 可派生基类(Enter/Esc + 右对齐按钮条) + `TTyMessage` 设计期组件；**输入类对话框**：`TyInputQuery`(单行文本) / `TyPasswordBox`(掩码密码) / `TyTextQuery`(可缩放多行) / `TySelectValue`(列表单选) / `TySelectDirectory`(文件夹选择器)；**拾取器**：`TySelectColor`(HSV/RGB/CMYK/Alpha 全双向取色器) / `TyFontDialog`(字体族/字号/样式/颜色 + 实时预览)；按钮标题与类型名称已国际化(resourcestring + zh_CN)；以及**非模态**查找/替换（`TTyFindDialog` / `TTyReplaceDialog`，对齐 LCL `TFindDialog`）和进度对话框（`TTyProgressDialog`）
 - **国际化(i18n)** —— `resourcestring` + 英 / 简体中文 `.po` 词条(主题诊断、设计期、演示);演示程序可运行时切换语言
 - **状态切换动画** —— `TTyToggleSwitch` 旋钮在 ON/OFF 间滑动、`TTyButton` 悬停背景淡入淡出;可逐控件 `AnimationsEnabled` 开启,纯算法内核可步进、可测试
 - **零配置默认皮肤 + 运行时热切换** —— 未加载主题或在设计器中拖放即有合理外观;`LoadTheme` 一行换肤,全部控件即时重绘

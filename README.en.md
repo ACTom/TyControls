@@ -48,7 +48,8 @@ TyButton:disabled { opacity: 0.5; }
   (list single-select) / `TySelectDirectory` (folder picker); **picker dialogs**: `TySelectColor`
   (HSV/RGB/CMYK/Alpha color picker with full bidirectional sync) / `TyFontDialog` (family, size,
   style, color + live preview); button captions and type titles are internationalized
-  (resourcestring + zh_CN).
+  (resourcestring + zh_CN); plus **modeless** Find/Replace (`TTyFindDialog` / `TTyReplaceDialog`,
+  LCL `TFindDialog` parity) and a Progress dialog (`TTyProgressDialog`).
 - **Internationalization (i18n)** — `resourcestring`s + English / Simplified-Chinese `.po` catalogs
   (theme diagnostics, design-time, demo); the demo switches language at runtime.
 - **State transition animations** — `TTyToggleSwitch` knob slides between ON/OFF, `TTyButton` hover

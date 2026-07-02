@@ -433,3 +433,59 @@ if DlgFont.Execute then
 ```
 
 > **注意**：两个组件均在 **TyControls Dialogs** 组件面板页可以找到。字体对话框的颜色选择器复用 `TTyColorDialog` 内核，保证视觉一致性。
+
+---
+
+## 10. Modeless dialogs — Find / Replace / Progress (S4)
+
+Unlike the modal dialogs above, these are **non-modal**: they show with `Show`, stay open, and drive
+work through events. Each is a non-visual component that owns and reuses its window.
+
+### Find / Replace
+
+```pascal
+uses tyControls.Dialogs.Find;
+
+// once, e.g. in FormCreate:
+FindDlg := TTyFindDialog.Create(Self);
+FindDlg.OnFind := @DoFind;
+
+procedure TForm1.DoFind(Sender: TObject);
+var d: TTyFindDialog;
+begin
+  d := Sender as TTyFindDialog;
+  // search Memo1 for d.FindText using d.Options (frMatchCase, frWholeWord, frDown, ...)
+end;
+
+// to open it (modeless — returns immediately):
+FindDlg.Execute;
+```
+
+`TTyReplaceDialog` adds `ReplaceText` + `OnReplace`. **Replace and Replace All both fire `OnReplace`** —
+tell them apart with `frReplaceAll in d.Options`. `Options` defaults to `[frDown]` (search down);
+`TTyReplaceDialog` also defaults `frReplace, frReplaceAll`.
+
+### Progress
+
+```pascal
+uses tyControls.Dialogs.Progress;
+
+Prog := TTyProgressDialog.Create(Self);
+Prog.Caption := 'Working…';
+Prog.Min := 0; Prog.Max := N; Prog.Cancelable := True;
+Prog.OnCancel := @HandleCancel;   // MUST NOT Free Prog — just set a flag / call Close
+Prog.Show;
+try
+  for i := 0 to N - 1 do
+  begin
+    if Prog.Cancelled then Break;
+    DoWork(i);
+    Prog.SetProgress(i + 1, Format('Item %d of %d', [i + 1, N]));  // repaints + pumps
+  end;
+finally
+  Prog.Close;
+end;
+```
+
+`SetProgress` pumps the message loop so the bar repaints and a Cancel click is seen. It is determinate
+only (no marquee).
