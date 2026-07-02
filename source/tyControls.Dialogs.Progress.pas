@@ -85,7 +85,7 @@ begin
 
   if ACancelable then
   begin
-    FCancelBtn := AddButton(rsDlgProgressCancel, mrNone);
+    FCancelBtn := AddButton(rsMsgBtnCancel, mrNone);
     FCancelBtn.OnClick := @CancelClick;
   end;
 

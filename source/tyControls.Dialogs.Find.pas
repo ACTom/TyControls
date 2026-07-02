@@ -166,7 +166,7 @@ begin
     b := AddButton(rsDlgReplace, mrNone);    b.OnClick := @ReplaceClick;
     b := AddButton(rsDlgReplaceAll, mrNone); b.OnClick := @ReplaceAllClick;
   end;
-  b := AddButton(rsDlgFindClose, mrNone); b.OnClick := @CloseClick;
+  b := AddButton(rsMsgBtnClose, mrNone); b.OnClick := @CloseClick;
 
   AutoSizeToContent((editX - r.Left) + editW + TyDlgPad, (y - r.Top) + TyDlgPad);
 end;

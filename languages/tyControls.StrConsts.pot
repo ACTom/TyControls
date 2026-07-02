@@ -115,11 +115,6 @@ msgstr ""
 msgid "Could not create folder: %s"
 msgstr ""
 
-#: tycontrols.strconsts.rsdlgfindclose
-msgctxt "tycontrols.strconsts.rsdlgfindclose"
-msgid "Close"
-msgstr ""
-
 #: tycontrols.strconsts.rsdlgfindnext
 msgid "Find Next"
 msgstr ""
@@ -178,11 +173,6 @@ msgstr ""
 
 #: tycontrols.strconsts.rsdlgpreview
 msgid "Preview"
-msgstr ""
-
-#: tycontrols.strconsts.rsdlgprogresscancel
-msgctxt "tycontrols.strconsts.rsdlgprogresscancel"
-msgid "Cancel"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgreplace
@@ -268,12 +258,10 @@ msgid "All"
 msgstr ""
 
 #: tycontrols.strconsts.rsmsgbtncancel
-msgctxt "tycontrols.strconsts.rsmsgbtncancel"
 msgid "Cancel"
 msgstr ""
 
 #: tycontrols.strconsts.rsmsgbtnclose
-msgctxt "tycontrols.strconsts.rsmsgbtnclose"
 msgid "Close"
 msgstr ""
 
