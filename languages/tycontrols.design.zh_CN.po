@@ -73,3 +73,7 @@ msgstr "TyControls 对话框"
 #: tycontrols.design.rsdtdialogdescription
 msgid "A themed custom-drawn modal dialog (TTyDialog): borderless, close-only, non-resizable, centered — design your own dialog content and buttons."
 msgstr "一个主题化的自绘模态对话框（TTyDialog）：无边框、仅含关闭按钮、不可缩放、居中显示——在其中设计你自己的对话框内容与按钮。"
+
+#: tycontrols.design.rsdtdialogpreview
+msgid "Preview"
+msgstr "预览"

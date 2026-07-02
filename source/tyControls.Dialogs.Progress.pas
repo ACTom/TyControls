@@ -49,6 +49,7 @@ type
     constructor Create(AOwner: TComponent); override;
     function BuildForm: TTyProgressForm;   // test seam: lazy build, NO Show
     procedure Show;
+    procedure PreviewInDesigner;           // guard-free Show body, for the component editor
     procedure SetProgress(APos: Integer; const AText: string = '');
     procedure Step(ADelta: Integer = 1);
     procedure Close;
@@ -154,6 +155,13 @@ end;
 procedure TTyProgressDialog.Show;
 begin
   if csDesigning in ComponentState then Exit;
+  FCancelled := False;
+  BuildForm;
+  FForm.Show;
+end;
+
+procedure TTyProgressDialog.PreviewInDesigner;
+begin
   FCancelled := False;
   BuildForm;
   FForm.Show;

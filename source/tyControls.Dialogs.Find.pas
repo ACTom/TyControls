@@ -71,6 +71,7 @@ type
     constructor Create(AOwner: TComponent); override;
     function BuildForm: TTyFindForm;   // test seam: lazy build + sync, NO Show
     function Execute: Boolean;
+    procedure PreviewInDesigner;       // guard-free Execute body, for the component editor
     procedure CloseDialog;
   published
     property FindText: string read FFindText write FFindText;
@@ -288,6 +289,13 @@ begin
   FForm.Position := FPosition;
   FForm.Show;
   Result := True;
+end;
+
+procedure TTyFindDialog.PreviewInDesigner;
+begin
+  BuildForm;
+  FForm.Position := FPosition;
+  FForm.Show;
 end;
 
 procedure TTyFindDialog.CloseDialog;

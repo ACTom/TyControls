@@ -35,6 +35,17 @@ type
     procedure ExecuteVerb(Index: Integer); override;
   end;
 
+  { Previews a dialog component when it is double-clicked in the designer (verb 0),
+    mirroring LCL's TCommonDialogComponentEditor. Modal wrappers call Execute; the two
+    modeless ones (Find/Replace, Progress) call a guard-free PreviewInDesigner because
+    their Execute/Show early-exit under csDesigning. }
+  TTyDialogComponentEditor = class(TComponentEditor)
+  public
+    function GetVerbCount: Integer; override;
+    function GetVerb(Index: Integer): string; override;
+    procedure ExecuteVerb(Index: Integer); override;
+  end;
+
   { Read-only `About` property: shows TyVersion in the Object Inspector and opens the
     About dialog (version + clickable homepage link) when the '...' button is clicked. }
   TTyAboutEditor = class(TStringPropertyEditor)
@@ -123,6 +134,7 @@ resourcestring
   rsDtPageDelete   = 'Delete Page';
   rsDtPageShowNext = 'Show Next Page';
   rsDtPageShowPrev = 'Show Previous Page';
+  rsDtDialogPreview = 'Preview';
 
 var
   // The themed main-form descriptor, reused by the TyControls Application project's
@@ -344,6 +356,36 @@ begin
     3: if PC.PageCount > 0 then
          PC.ActivePageIndex := (PC.ActivePageIndex + PC.PageCount - 1) mod PC.PageCount;
   end;
+end;
+
+{ TTyDialogComponentEditor }
+
+function TTyDialogComponentEditor.GetVerbCount: Integer;
+begin
+  Result := 1;
+end;
+
+function TTyDialogComponentEditor.GetVerb(Index: Integer): string;
+begin
+  if Index = 0 then Result := rsDtDialogPreview
+  else Result := inherited GetVerb(Index);
+end;
+
+procedure TTyDialogComponentEditor.ExecuteVerb(Index: Integer);
+begin
+  if Index <> 0 then begin inherited ExecuteVerb(Index); Exit; end;
+  // Modeless components early-exit under csDesigning, so use their guard-free preview.
+  // TTyReplaceDialog IS a TTyFindDialog, so that branch covers it (must precede none).
+  if      Component is TTyProgressDialog then TTyProgressDialog(Component).PreviewInDesigner
+  else if Component is TTyFindDialog     then TTyFindDialog(Component).PreviewInDesigner
+  else if Component is TTyMessage        then TTyMessage(Component).Execute
+  else if Component is TTyInputDialog    then TTyInputDialog(Component).Execute
+  else if Component is TTyPasswordDialog then TTyPasswordDialog(Component).Execute
+  else if Component is TTyTextDialog     then TTyTextDialog(Component).Execute
+  else if Component is TTySelectValueDialog then TTySelectValueDialog(Component).Execute
+  else if Component is TTySelectPathDialog  then TTySelectPathDialog(Component).Execute
+  else if Component is TTyColorDialog    then TTyColorDialog(Component).Execute
+  else if Component is TTyFontDialog     then TTyFontDialog(Component).Execute;
 end;
 
 { TTyFormFileDescriptor }
@@ -672,6 +714,13 @@ begin
   RegisterPropertyEditor(TypeInfo(TFormBorderStyle), TTyForm, 'BorderStyle', THiddenPropertyEditor);
   // Page management verbs (Add/Delete/Show Next/Prev) for the page control.
   RegisterComponentEditor(TTyPageControl, TTyPageControlEditor);
+  // Double-click a dialog component in the designer to preview it (verb 0 = Preview),
+  // mirroring LCL's TCommonDialogComponentEditor.
+  RegisterComponentEditor(
+    [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,
+     TTySelectValueDialog, TTySelectPathDialog, TTyColorDialog, TTyFontDialog,
+     TTyFindDialog, TTyReplaceDialog, TTyProgressDialog],
+    TTyDialogComponentEditor);
   // File > New > "TyControls Form": a unit whose form descends from TTyForm, pre-fitted
   // with a top-aligned title bar.
   RegisterProjectFileDescriptor(TTyFormFileDescriptor.Create);
