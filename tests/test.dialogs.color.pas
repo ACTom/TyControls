@@ -49,7 +49,7 @@ var d: TTyColorForm;
 begin
   d := TyBuildColorDialog('Pick', TyRGB(0,0,0));
   try
-    d.SetColor(TyRGB($12,$34,$56));
+    d.SetColorValue(TyRGB($12,$34,$56));
     AssertEquals('hex', '#123456', LowerCase(d.HexText));
   finally d.Free; end;
 end;

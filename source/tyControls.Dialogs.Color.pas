@@ -74,11 +74,8 @@ type
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     function CurrentColor: TTyColor;
     function HexText: string;
-    // 'reintroduce' — intentionally hides the inherited protected TControl.SetColor(TColor);
-    // this is the dialog's model seam and takes a TTyColor. The form's LCL Color property
-    // is never used here.
-    procedure SetColor(AColor: TTyColor); reintroduce;   // public seam
-    procedure ApplyHexText(const AHex: string);          // public seam
+    procedure SetColorValue(AColor: TTyColor);   // public seam
+    procedure ApplyHexText(const AHex: string);  // public seam
   end;
 
 function TyBuildColorDialog(const ACaption: string; ASeed: TTyColor): TTyColorForm;
@@ -290,10 +287,10 @@ begin
   // content spans the picker column + the right editor column, down to the preview.
   AutoSizeToContent(colX + 4*(18 + spinW + 8) + TyDlgPad - (r.Left + TyDlgPad),
     (y0 + 180 + 30 + 40 + TyDlgPad) - r.Top);
-  SetColor(FColor);   // seed all views from the model
+  SetColorValue(FColor);   // seed all views from the model
 end;
 
-procedure TTyColorForm.SetColor(AColor: TTyColor);
+procedure TTyColorForm.SetColorValue(AColor: TTyColor);
 begin FColor := AColor; SyncViewsFromColor; end;
 
 procedure TTyColorForm.ApplyColor(AColor: TTyColor);
@@ -413,7 +410,7 @@ function TyBuildColorDialog(const ACaption: string; ASeed: TTyColor): TTyColorFo
 begin
   Result := TTyColorForm.CreateNew(Application);
   Result.Caption := ACaption;
-  Result.SetColor(ASeed);
+  Result.SetColorValue(ASeed);
 end;
 
 function TySelectColor(const ACaption: string; var AColor: TTyColor): Boolean;
