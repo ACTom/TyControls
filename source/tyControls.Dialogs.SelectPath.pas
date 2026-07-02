@@ -2,7 +2,7 @@ unit tyControls.Dialogs.SelectPath;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Dialogs, Forms,
+  Classes, SysUtils, Types, Controls, Dialogs, Forms, Graphics, ImgList,
   tyControls.Dialogs, tyControls.TreeView, tyControls.Button, tyControls.StrConsts;
 
 function TySubdirectories(const APath: string): TStringArray;
@@ -18,6 +18,8 @@ type
     FTree:  TTyTreeView;
     FPaths: TStringList;   // node-data index -> absolute path (owned; freed in dtor)
     FRoot:  string;        // '' = all drive roots, else a single rooted subtree
+    FIcons: TImageList;    // 16x16 folder glyph(s); owned by the form (Self)
+    procedure BuildIcons;
     // Node-data helpers (node data = an Integer index into FPaths).
     function  AddPathNode(AParent: PTyTreeNode; const AFullPath: string): PTyTreeNode;
     function  NodePath(Node: PTyTreeNode): string;
@@ -27,6 +29,8 @@ type
     procedure TreeInitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
     procedure TreeExpanding(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean);
+    procedure TreeGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+      Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
     procedure NewFolderClick(Sender: TObject);
   protected
     procedure LayoutContent; override;
@@ -138,6 +142,7 @@ begin
   Constraints.MinWidth  := 320;
   Constraints.MinHeight := 320;
   FPaths := TStringList.Create;
+  BuildIcons;
   FTree := TTyTreeView.Create(Self);
   FTree.Parent := Self;
   { node data = one Integer index into FPaths; no managed types in raw node memory }
@@ -145,6 +150,49 @@ begin
   FTree.OnGetText      := @TreeGetText;
   FTree.OnInitNode     := @TreeInitNode;
   FTree.OnExpanding    := @TreeExpanding;
+  FTree.Images         := FIcons;
+  FTree.OnGetImageIndex := @TreeGetImageIndex;
+  { Appearance: the default 18px row is cramped once a 16px icon is added;
+    ShowRoot=False left-aligns drive roots instead of over-indenting them
+    under a phantom root; HotTrack lights up the theme's TyTreeNode:hover
+    state on mouse-over (previously dead code — no hover feedback at all). }
+  FTree.DefaultNodeHeight := 22;
+  FTree.HotTrack          := True;
+  FTree.ShowRoot          := False;
+end;
+
+{ Build a single 16x16 manila-folder glyph (amber body + darker back-tab lip,
+  clFuchsia-keyed so it composites transparently on any theme). Ported from
+  the folder glyph in examples/treeview/showcasemain.pas (BuildFileIcons). }
+procedure TTySelectPathForm.BuildIcons;
+var
+  bmp: TBitmap;
+  C: TCanvas;
+begin
+  FIcons := TImageList.Create(Self);   { Owner = form -> auto-freed }
+  FIcons.Width  := 16;
+  FIcons.Height := 16;
+
+  bmp := TBitmap.Create;
+  try
+    bmp.SetSize(16, 16);
+    bmp.Canvas.Brush.Color := clFuchsia;   { transparency key }
+    bmp.Canvas.FillRect(0, 0, 16, 16);
+    bmp.Canvas.Pen.Style := psSolid;
+    bmp.Canvas.Pen.Width := 1;
+
+    C := bmp.Canvas;
+    C.Brush.Color := $0033B0E8;   { warm amber body (BGR of #E8B033) }
+    C.Pen.Color   := $001E84B8;   { darker amber edge }
+    C.RoundRect(1, 5, 15, 14, 3, 3);
+    { Back tab lip peeking over the top-left. }
+    C.Brush.Color := $0055C8F0;
+    C.Pen.Color   := $001E84B8;
+    C.Polygon([Point(2, 5), Point(2, 3), Point(6, 3), Point(8, 5)]);
+    FIcons.AddMasked(bmp, clFuchsia);
+  finally
+    bmp.Free;
+  end;
 end;
 
 destructor TTySelectPathForm.Destroy;
@@ -212,6 +260,14 @@ begin
   { show an expand arrow iff this directory actually has subdirectories }
   if TyPathHasSubdir(NodePath(Node)) then
     Include(InitStates, ivsHasChildren);
+end;
+
+procedure TTySelectPathForm.TreeGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
+  Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
+begin
+  { Single folder glyph for every node — every entry in this tree is a
+    directory, so there is no file/folder distinction to make. }
+  ImageIndex := 0;
 end;
 
 procedure TTySelectPathForm.TreeExpanding(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean);
