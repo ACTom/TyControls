@@ -240,6 +240,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Dialogs.Color.pas"/>
         <UnitName Value="tyControls.Dialogs.Color"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Dialogs.Font.pas"/>
+        <UnitName Value="tyControls.Dialogs.Font"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

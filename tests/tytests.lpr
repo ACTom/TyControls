@@ -61,7 +61,8 @@ uses
   test.dialogs,
   test.dialogs.selectpath,
   test.colormath,
-  test.dialogs.color;
+  test.dialogs.color,
+  test.dialogs.font;
 
 type
   TTyTestRunner = class(TTestRunner)
