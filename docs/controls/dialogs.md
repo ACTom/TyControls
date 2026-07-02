@@ -359,7 +359,7 @@ if DlgRename.Execute then
 
 ## 9. 拾取器对话框（S3）
 
-S3 阶段新增**取色器**与**字体对话框**两个拾取器，均位于 `tyControls.Dialogs` 单元，对应设计期组件在 **TyControls Dialogs** 组件面板页。
+S3 阶段新增**取色器**与**字体对话框**两个拾取器，取色器位于 `tyControls.Dialogs.Color`，字体对话框位于 `tyControls.Dialogs.Font`（设计期组件在 **TyControls Dialogs** 面板页）。
 
 ### 9.1 TyColorDialog — 取色器
 
@@ -376,7 +376,7 @@ function TySelectColor(const ACaption: string; var AColor: TColor; var AAlpha: B
 ```
 
 ```pascal
-uses tyControls.Dialogs;
+uses tyControls.Dialogs.Color;
 
 // 原生 TTyColor 用法
 var c: TTyColor;
@@ -417,7 +417,7 @@ function TyFontDialog(AFont: TFont): Boolean;
 ```
 
 ```pascal
-uses tyControls.Dialogs;
+uses tyControls.Dialogs.Font;
 
 if TyFontDialog(MyEdit.Font) then
   MyEdit.Invalidate; // 字体已就地更新，刷新控件即可
