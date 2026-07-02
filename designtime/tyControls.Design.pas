@@ -15,7 +15,8 @@ uses
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
   tyControls.Calendar, tyControls.DateTimePicker,
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
-  tyControls.Dialogs.Color, tyControls.Dialogs.Font;
+  tyControls.Dialogs.Color, tyControls.Dialogs.Font,
+  tyControls.Dialogs.Find, tyControls.Dialogs.Progress;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -652,7 +653,8 @@ begin
   RegisterComponents('TyControls Dialogs',
     [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,
      TTySelectValueDialog, TTySelectPathDialog,
-     TTyColorDialog, TTyFontDialog]);
+     TTyColorDialog, TTyFontDialog,
+     TTyFindDialog, TTyReplaceDialog, TTyProgressDialog]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',
