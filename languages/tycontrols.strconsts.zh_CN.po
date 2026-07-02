@@ -298,3 +298,47 @@ msgstr "文件夹名称："
 #, object-pascal-format
 msgid "Could not create folder: %s"
 msgstr "无法创建文件夹：%s"
+
+#: tycontrols.strconsts.rsdlghex
+msgid "Hex"
+msgstr "十六进制"
+
+#: tycontrols.strconsts.rsdlgalpha
+msgid "Alpha"
+msgstr "透明度"
+
+#: tycontrols.strconsts.rsdlgpreview
+msgid "Preview"
+msgstr "预览"
+
+#: tycontrols.strconsts.rsdlgfontfamily
+msgid "Family"
+msgstr "字体"
+
+#: tycontrols.strconsts.rsdlgfontsize
+msgid "Size"
+msgstr "字号"
+
+#: tycontrols.strconsts.rsdlgfontbold
+msgid "Bold"
+msgstr "粗体"
+
+#: tycontrols.strconsts.rsdlgfontitalic
+msgid "Italic"
+msgstr "斜体"
+
+#: tycontrols.strconsts.rsdlgfontunderline
+msgid "Underline"
+msgstr "下划线"
+
+#: tycontrols.strconsts.rsdlgfontstrike
+msgid "Strikeout"
+msgstr "删除线"
+
+#: tycontrols.strconsts.rsdlgfontcolor
+msgid "Color"
+msgstr "颜色"
+
+#: tycontrols.strconsts.rsdlgfontsample
+msgid "AaBbYyZz 0123"
+msgstr "AaBbYyZz 0123"

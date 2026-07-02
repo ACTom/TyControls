@@ -106,9 +106,49 @@ msgstr ""
 msgid "Unterminated rule block"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgalpha
+msgid "Alpha"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgcreatefoldererr
 #, object-pascal-format
 msgid "Could not create folder: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfontbold
+msgid "Bold"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfontcolor
+msgid "Color"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfontfamily
+msgid "Family"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfontitalic
+msgid "Italic"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfontsample
+msgid "AaBbYyZz 0123"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfontsize
+msgid "Size"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfontstrike
+msgid "Strikeout"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfontunderline
+msgid "Underline"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlghex
+msgid "Hex"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgnewfolder
@@ -117,6 +157,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsdlgnewfolderprompt
 msgid "Folder name:"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgpreview
+msgid "Preview"
 msgstr ""
 
 #: tycontrols.strconsts.rslintemptyimportpath
