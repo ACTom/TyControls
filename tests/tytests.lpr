@@ -59,6 +59,7 @@ uses
   test.treeview.edit,
   test.treeview.drag,
   test.dialogs,
+  test.dialogs.chrome,
   test.dialogs.selectpath,
   test.colormath,
   test.dialogs.color,

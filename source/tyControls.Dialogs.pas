@@ -3,7 +3,8 @@ unit tyControls.Dialogs;
 interface
 uses
   Classes, SysUtils, Types, Graphics, Controls, Dialogs, Forms,
-  tyControls.Types, tyControls.Form, tyControls.Button, tyControls.Panel,
+  tyControls.Types, tyControls.Form, tyControls.Base, tyControls.Controller,
+  tyControls.Button, tyControls.Panel,
   tyControls.TyLabel, tyControls.Edit, tyControls.Memo, tyControls.Painter,
   tyControls.ListBox, tyControls.StrConsts;
 
@@ -23,6 +24,7 @@ function TyMsgTypeCaption(ADlgType: TMsgDlgType): string;
 type
   TTyDialog = class(TTyForm)
   private
+    FTitle: TTyTitleBar;           // caption strip (close-only), created in CreateNew
     FButtonBar: TTyPanel;          // strip host for the buttons (transparent)
     FButtons: array of TTyButton;
     FDefaultResult, FCancelResult: TModalResult;
@@ -31,13 +33,27 @@ type
     // Draw the message icon (semantic circle + centred symbol) in the icon column.
     // Guarded: no-op unless FMsgSymbol <> '' and the canvas is ready. GUI-only.
     procedure DrawMessageIcon;
+    // Recurse AParent.Controls, assigning AController to every styleable child
+    // (TTyCustomControl / TTyGraphicControl — the two base classes share no common
+    // ancestor exposing Controller, so test each separately), then recurse into any
+    // TWinControl child. Invalidates as it goes so the new theme repaints.
+    procedure ApplyControllerToChildren(AParent: TWinControl; AController: TTyStyleController);
   protected
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Paint; override;
     procedure LayoutContent; virtual;
     procedure Resize; override;
+    procedure TextChanged; override;   // keep the title bar caption in sync with the form caption
+    procedure DoShow; override;        // fires for ShowModal + modeless Show: adopt the app's theme
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
+    // Resolve the app's style controller (owner TTyForm, else Application.MainForm) and
+    // apply it to this dialog + all its child controls, so a CreateNew dialog matches the
+    // themed app instead of falling back to the built-in default. Called from DoShow;
+    // public so headless tests can drive it without Show. No-op if none resolves.
+    procedure ApplyOwnerController;
+    // Test seam: identical to ApplyOwnerController, named for clarity at call sites.
+    procedure ApplyControllerNow;
     function AddButton(const ACaption: string; AResult: TModalResult;
       ADefault: Boolean = False; ACancel: Boolean = False): TTyButton;
     procedure LayoutButtonBar;
@@ -306,11 +322,87 @@ begin
   Position := poMainFormCenter;
   KeyPreview := True;
   FDefaultResult := mrNone; FCancelResult := mrCancel;
+  // A TTyForm is born chrome-less: the title bar is an associable property (Form.Menu
+  // pattern), so create + associate one here or GetTitleHeight stays 0 and the dialog
+  // renders with no caption strip / close button. Assigning it via the TitleBar property
+  // routes through SetTitleBar, which wires the chrome engine + caption buttons; because
+  // BorderIcons = [biSystemMenu] is already set, SyncCaptionButtons yields close-only.
+  FTitle := TTyTitleBar.Create(Self);
+  FTitle.Parent := Self;
+  FTitle.Align := alTop;              // dock as the top caption strip
+  FTitle.Caption := Caption;          // seed (usually '' here; builders set Caption later)
+  TitleBar := FTitle;                 // -> SetTitleBar: engine + close-button wiring
   FButtonBar := TTyPanel.Create(Self);
   FButtonBar.Parent := Self;
   FButtonBar.Align := alBottom;
   FButtonBar.Height := 44;
   FButtonBar.StyleClass := 'ghost';   // transparent-ish; refine in theming
+end;
+
+procedure TTyDialog.TextChanged;
+begin
+  inherited TextChanged;
+  // TControl.TextChanged fires on any Caption/Text change; mirror it onto the bar so a
+  // builder's `Result.Caption := ACaption` shows up as the window caption.
+  if FTitle <> nil then FTitle.Caption := Caption;
+end;
+
+procedure TTyDialog.ApplyControllerToChildren(AParent: TWinControl; AController: TTyStyleController);
+var i: Integer; c: TControl;
+begin
+  if (AParent = nil) or (AController = nil) then Exit;
+  for i := 0 to AParent.ControlCount - 1 do
+  begin
+    c := AParent.Controls[i];
+    // The two Ty base classes both publish Controller but share no common ancestor that
+    // exposes it, so test each separately (mirrors tyControls.Design.pas).
+    if c is TTyCustomControl then
+    begin
+      if TTyCustomControl(c).Controller <> AController then
+        TTyCustomControl(c).Controller := AController;
+    end
+    else if c is TTyGraphicControl then
+    begin
+      if TTyGraphicControl(c).Controller <> AController then
+        TTyGraphicControl(c).Controller := AController;
+    end;
+    c.Invalidate;
+    if c is TWinControl then
+      ApplyControllerToChildren(TWinControl(c), AController);   // recurse into windowed children
+  end;
+end;
+
+procedure TTyDialog.ApplyOwnerController;
+var c: TTyStyleController; mf: TCustomForm;
+begin
+  // Prefer the owner's controller (the form that spawned this dialog); else the app's
+  // main form. A CreateNew dialog has Controller = nil, so without this it falls back to
+  // the built-in TyDefaultController singleton — which the app never themes — and the
+  // dialog renders in the default theme instead of the app's.
+  c := nil;
+  if (Owner is TTyForm) and (TTyForm(Owner).Controller <> nil) then
+    c := TTyForm(Owner).Controller
+  else
+  begin
+    mf := Application.MainForm;
+    if (mf is TTyForm) and (TTyForm(mf).Controller <> nil) then
+      c := TTyForm(mf).Controller;
+  end;
+  if c = nil then Exit;
+  if Controller <> c then Controller := c;   // themes the form bg + chrome (title bar) via SetController
+  ApplyControllerToChildren(Self, c);          // then recurse the body controls
+  Invalidate;
+end;
+
+procedure TTyDialog.ApplyControllerNow;
+begin
+  ApplyOwnerController;
+end;
+
+procedure TTyDialog.DoShow;
+begin
+  ApplyOwnerController;   // adopt the app's theme before the window first paints
+  inherited DoShow;
 end;
 
 function TTyDialog.AddButton(const ACaption: string; AResult: TModalResult;
