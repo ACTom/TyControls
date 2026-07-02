@@ -244,6 +244,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Dialogs.Font.pas"/>
         <UnitName Value="tyControls.Dialogs.Font"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Dialogs.Find.pas"/>
+        <UnitName Value="tyControls.Dialogs.Find"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
