@@ -63,7 +63,8 @@ uses
   test.colormath,
   test.dialogs.color,
   test.dialogs.font,
-  test.dialogs.find;
+  test.dialogs.find,
+  test.dialogs.progress;
 
 type
   TTyTestRunner = class(TTestRunner)

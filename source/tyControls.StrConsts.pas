@@ -113,6 +113,9 @@ resourcestring
   rsDlgReplaceAll      = 'Replace All';
   rsDlgFindClose       = 'Close';
 
+  // --- Progress dialog (S4) — user-facing, translated ---
+  rsDlgProgressCancel  = 'Cancel';
+
 implementation
 
 end.
