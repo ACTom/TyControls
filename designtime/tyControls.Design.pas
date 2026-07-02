@@ -649,7 +649,6 @@ begin
      TTyCalendar, TTyDateTimePicker,
      TTyTreeView]);
   // Dialogs palette group. TTyMessage (S1) + the S2 input-family components.
-  // Custom palette icons are a follow-up — the IDE shows default glyphs for now.
   RegisterComponents('TyControls Dialogs',
     [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,
      TTySelectValueDialog, TTySelectPathDialog,

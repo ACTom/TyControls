@@ -13,18 +13,25 @@ $classes = @(
   'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu',
   'TTyNativeStyler','TTySplitter','TTyStatusBar','TTyToolBar','TTyToolSeparator',
   'TTyCalendar','TTyDateTimePicker',
-  'TTyTreeView'
+  'TTyTreeView',
+  # Dialogs palette group (RegisterComponents('TyControls Dialogs', ...))
+  'TTyMessage','TTyInputDialog','TTyPasswordDialog','TTyTextDialog',
+  'TTySelectValueDialog','TTySelectPathDialog','TTyColorDialog','TTyFontDialog',
+  'TTyFindDialog','TTyReplaceDialog','TTyProgressDialog'
 )
 
-# Drift guard: the icon set MUST match the components registered in Design.pas. Parse the
-# RegisterComponents('TyControls', [ ... ]) list and fail loudly if a registered control has
-# no icon (would show a blank palette icon) or an icon exists for an unregistered class.
+# Drift guard: the icon set MUST match the components registered in Design.pas. Parse EVERY
+# RegisterComponents('TyControls...', [ ... ]) group (the main 'TyControls' palette AND the
+# 'TyControls Dialogs' group) and fail loudly if a registered control has no icon (would show
+# a blank palette icon) or an icon exists for an unregistered class.
 Write-Host '== checking icon set vs RegisterComponents =='
 $designPas = Join-Path $root 'designtime/tyControls.Design.pas'
 $design = Get-Content $designPas -Raw
-$m = [regex]::Match($design, "RegisterComponents\s*\(\s*'TyControls'\s*,\s*\[(?<list>[^\]]+)\]")
-if (-not $m.Success) { throw "could not find RegisterComponents('TyControls', [...]) in $designPas" }
-$registered = [regex]::Matches($m.Groups['list'].Value, 'TTy\w+') | ForEach-Object { $_.Value } | Sort-Object -Unique
+$groups = [regex]::Matches($design, "RegisterComponents\s*\(\s*'TyControls[^']*'\s*,\s*\[(?<list>[^\]]+)\]")
+if ($groups.Count -eq 0) { throw "could not find any RegisterComponents('TyControls...', [...]) in $designPas" }
+$registered = @($groups | ForEach-Object {
+  [regex]::Matches($_.Groups['list'].Value, 'TTy\w+') | ForEach-Object { $_.Value }
+}) | Sort-Object -Unique
 $missingIcon = @($registered | Where-Object { $_ -notin $classes })
 $extraIcon   = @($classes    | Where-Object { $_ -notin $registered })
 if ($missingIcon.Count -or $extraIcon.Count) {

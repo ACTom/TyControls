@@ -164,12 +164,118 @@ begin
   Line(b,10.5,17,19,17,Ink);
 end;
 
+{ --- Dialogs palette group --------------------------------------------------- }
+
+{ TTyMessage: dialog rect + a centred accent "!" (exclamation) }
+procedure GTyMessage(b: TBGRABitmap);
+begin
+  RRect(b,4,4,20,20,3,Ink);
+  Line(b,12,7.5,12,13.5,Acc,2.2);
+  FillCirc(b,12,16.4,1.15,Acc);
+end;
+
+{ TTyInputDialog: dialog rect containing a small edit field with an accent caret }
+procedure GTyInputDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,5,21,19,2,Ink);
+  RRect(b,6,10,18,14,1.2,Faint,1.3);
+  Line(b,8,10.8,8,13.2,Acc,1.8);
+end;
+
+{ TTyPasswordDialog: dialog rect + a short row of accent dots (masked input) }
+procedure GTyPasswordDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,5,21,19,2,Ink);
+  RRect(b,6,10,18,14,1.2,Faint,1.3);
+  FillCirc(b,8.5,12,1.05,Acc);
+  FillCirc(b,11.2,12,1.05,Acc);
+  FillCirc(b,13.9,12,1.05,Ink);
+  FillCirc(b,16.6,12,1.05,Ink);
+end;
+
+{ TTyTextDialog: dialog rect + 3 text lines (multi-line, GMemo-inside-a-frame) }
+procedure GTyTextDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  Line(b,6,9,18,9,Ink);
+  Line(b,6,12,18,12,Ink);
+  Line(b,6,15,13,15,Acc);
+end;
+
+{ TTySelectValueDialog: dialog rect + a combo chevron (reuse the GCombo motif) }
+procedure GTySelectValueDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,7,21,17,2,Ink);
+  Line(b,15.5,7,15.5,17,Ink,1);
+  PolyL(b,[PointF(17,11),PointF(18.5,13),PointF(20,11)],Acc,1.8);
+  Line(b,6,12,13,12,Faint,1.3);
+end;
+
+{ TTySelectPathDialog: dialog rect + a folder glyph }
+procedure GTySelectPathDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,5,21,19,2,Ink);
+  // folder tab + body
+  PolyL(b,[PointF(7,9),PointF(9.5,9),PointF(11,10.5),PointF(16,10.5)],Acc,1.6);
+  RRect(b,7,10.5,17,16,1.2,Acc);
+end;
+
+{ TTyColorDialog: dialog rect + an accent-filled swatch square }
+procedure GTyColorDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  FillRRect(b,8,8,16,16,1.5,Acc);
+  RRect(b,8,8,16,16,1.5,Ink,1.2);
+end;
+
+{ TTyFontDialog: dialog rect + a serif "A" }
+procedure GTyFontDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  // 'A' strokes
+  PolyL(b,[PointF(9,17),PointF(12,7),PointF(15,17)],Acc,1.9);
+  Line(b,10.2,13,13.8,13,Acc,1.6);
+  // serif feet
+  Line(b,7.8,17,10.2,17,Ink,1.4);
+  Line(b,13.8,17,16.2,17,Ink,1.4);
+end;
+
+{ TTyFindDialog: dialog rect + a magnifier (circle + short handle) }
+procedure GTyFindDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  Circ(b,11,11,3.6,Acc,1.9);
+  Line(b,13.6,13.6,17,17,Acc,2);
+end;
+
+{ TTyReplaceDialog: a magnifier + two small swap arrows }
+procedure GTyReplaceDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  Circ(b,10,10,3.3,Ink,1.7);
+  Line(b,12.4,12.4,15,15,Ink,1.8);
+  // swap arrows (bottom-right)
+  Line(b,13.5,17,19,17,Acc,1.5);
+  PolyL(b,[PointF(17.5,15.5),PointF(19,17),PointF(17.5,18.5)],Acc,1.5);
+  Line(b,13.5,20,19,20,Acc,1.5);
+  PolyL(b,[PointF(15,18.5),PointF(13.5,20),PointF(15,21.5)],Acc,1.5);
+end;
+
+{ TTyProgressDialog: dialog rect + a progress-bar band (reuse the GProgress motif) }
+procedure GTyProgressDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  Line(b,6,9,18,9,Faint,1.3);
+  RRect(b,6,13,18,17,2,Ink);
+  FillRRect(b,6,13,13,17,2,Acc);
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..28] of TGlyph = (
+  Glyphs: array[0..39] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -198,7 +304,18 @@ const
     (Name:'TTyToolSeparator';   Draw:@GToolSeparator),
     (Name:'TTyCalendar';        Draw:@GCalendar),
     (Name:'TTyDateTimePicker';  Draw:@GDateTimePicker),
-    (Name:'TTyTreeView';        Draw:@GTreeView)
+    (Name:'TTyTreeView';        Draw:@GTreeView),
+    (Name:'TTyMessage';           Draw:@GTyMessage),
+    (Name:'TTyInputDialog';       Draw:@GTyInputDialog),
+    (Name:'TTyPasswordDialog';    Draw:@GTyPasswordDialog),
+    (Name:'TTyTextDialog';        Draw:@GTyTextDialog),
+    (Name:'TTySelectValueDialog'; Draw:@GTySelectValueDialog),
+    (Name:'TTySelectPathDialog';  Draw:@GTySelectPathDialog),
+    (Name:'TTyColorDialog';       Draw:@GTyColorDialog),
+    (Name:'TTyFontDialog';        Draw:@GTyFontDialog),
+    (Name:'TTyFindDialog';        Draw:@GTyFindDialog),
+    (Name:'TTyReplaceDialog';     Draw:@GTyReplaceDialog),
+    (Name:'TTyProgressDialog';    Draw:@GTyProgressDialog)
   );
 
 const
