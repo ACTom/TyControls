@@ -46,6 +46,9 @@ type
   TTyFontDialog = class(TComponent)
   private
     FFont: TFont; FCaption: string;
+    FOnShow: TNotifyEvent;
+    FOnClose: TCloseEvent;
+    FOnCanClose: TCloseQueryEvent;
     procedure SetFont(AValue: TFont);
   public
     constructor Create(AOwner: TComponent); override;
@@ -54,6 +57,9 @@ type
   published
     property Caption: string read FCaption write FCaption;
     property Font: TFont read FFont write SetFont;
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnClose: TCloseEvent read FOnClose write FOnClose;
+    property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
   end;
 
 implementation
@@ -313,8 +319,17 @@ begin
 end;
 
 function TTyFontDialog.Execute: Boolean;
+var d: TTyFontForm;
 begin
-  Result := TyFontDialog(FFont);
+  // Inline the build/show (rather than call TyFontDialog) so the wrapper's
+  // OnShow/OnClose/OnCanClose forward onto the form before ShowModal, and so the
+  // component's Caption is honoured.
+  d := TyBuildFontDialog(FCaption, FFont, Screen.Fonts);
+  try
+    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    Result := (d.ShowModal = mrOK);
+    if Result then d.WriteTo(FFont);
+  finally d.Free; end;
 end;
 
 end.

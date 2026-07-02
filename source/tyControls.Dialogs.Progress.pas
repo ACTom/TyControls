@@ -40,6 +40,9 @@ type
     FMin, FMax, FPosition: Integer;
     FCancelable, FCancelled: Boolean;
     FOnCancel: TNotifyEvent;
+    FOnShow: TNotifyEvent;
+    FOnClose: TCloseEvent;
+    FOnCanClose: TCloseQueryEvent;
     FForm: TTyProgressForm;
     FInPump: Boolean;
   public
@@ -59,6 +62,9 @@ type
     property Position: Integer read FPosition write FPosition default 0;
     property Cancelable: Boolean read FCancelable write FCancelable default False;
     property OnCancel: TNotifyEvent read FOnCancel write FOnCancel;
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnClose: TCloseEvent read FOnClose write FOnClose;
+    property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
   end;
 
 implementation
@@ -140,6 +146,8 @@ begin
   end;
   FForm.Caption := FCaption;
   FForm.UpdateView(FPosition, FMin, FMax, FText);
+  // Relay the LCL-parity events onto the modeless form (idempotent — safe each call).
+  TyForwardDialogEvents(FForm, FOnShow, FOnClose, FOnCanClose);
   Result := FForm;
 end;
 

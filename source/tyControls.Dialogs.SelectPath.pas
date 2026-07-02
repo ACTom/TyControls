@@ -55,12 +55,18 @@ type
   TTySelectPathDialog = class(TComponent)
   private
     FCaption, FRoot, FDirectory: string;
+    FOnShow: TNotifyEvent;
+    FOnClose: TCloseEvent;
+    FOnCanClose: TCloseQueryEvent;
   public
     function Execute: Boolean;
   published
     property Caption: string read FCaption write FCaption;
     property Root: string read FRoot write FRoot;
     property Directory: string read FDirectory write FDirectory;
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnClose: TCloseEvent read FOnClose write FOnClose;
+    property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
   end;
 
 implementation
@@ -333,8 +339,16 @@ end;
 { TTySelectPathDialog }
 
 function TTySelectPathDialog.Execute: Boolean;
+var d: TTySelectPathForm;
 begin
-  Result := TySelectDirectory(FCaption, FRoot, FDirectory);
+  // Inline the build/show (rather than call TySelectDirectory) so the wrapper's
+  // OnShow/OnClose/OnCanClose forward onto the form before ShowModal.
+  d := TyBuildSelectPathDialog(FCaption, FRoot);
+  try
+    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    Result := (d.ShowModal = mrOK);
+    if Result then FDirectory := d.SelectedPath;
+  finally d.Free; end;
 end;
 
 end.

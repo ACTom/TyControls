@@ -5,7 +5,7 @@ unit test.dialogs.find;
 interface
 
 uses
-  Classes, SysUtils, Dialogs, fpcunit, testregistry,
+  Classes, SysUtils, Dialogs, Forms, fpcunit, testregistry,
   tyControls.CheckBox, tyControls.Dialogs.Find;
 
 type
@@ -43,6 +43,18 @@ type
     procedure TestSyncFromPopulatesReplaceEdit;
     procedure TestReplaceFormShapeHasReplace;
     procedure TestReusedFormClearsStaleActionFlag;
+  end;
+
+  { LCL-parity events (OnShow/OnClose/OnCanClose) forward onto the modeless form.
+    BuildForm returns the form without Show, so assert the handlers landed on it. }
+  TFindEventForwardTest = class(TTestCase)
+  private
+    procedure HandleShow(Sender: TObject);
+    procedure HandleClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure HandleCanClose(Sender: TObject; var CanClose: Boolean);
+  published
+    procedure TestFindForwardsEvents;
+    procedure TestReplaceInheritsAndForwardsEvents;
   end;
 
 implementation
@@ -263,8 +275,52 @@ begin
   finally dlg.Free; end;
 end;
 
+{ TFindEventForwardTest }
+
+procedure TFindEventForwardTest.HandleShow(Sender: TObject);
+begin end;
+
+procedure TFindEventForwardTest.HandleClose(Sender: TObject; var CloseAction: TCloseAction);
+begin end;
+
+procedure TFindEventForwardTest.HandleCanClose(Sender: TObject; var CanClose: Boolean);
+begin end;
+
+procedure TFindEventForwardTest.TestFindForwardsEvents;
+var dlg: TTyFindDialog; frm: TTyFindForm;
+begin
+  dlg := TTyFindDialog.Create(nil);
+  try
+    dlg.OnShow := @HandleShow;
+    dlg.OnClose := @HandleClose;
+    dlg.OnCanClose := @HandleCanClose;
+    frm := dlg.BuildForm;   // build + forward, NO Show
+    AssertTrue('OnShow forwarded to form', frm.OnShow = TNotifyEvent(@HandleShow));
+    AssertTrue('OnClose forwarded to form', frm.OnClose = TCloseEvent(@HandleClose));
+    AssertTrue('OnCanClose -> form.OnCloseQuery',
+      frm.OnCloseQuery = TCloseQueryEvent(@HandleCanClose));
+  finally dlg.Free; end;
+end;
+
+procedure TFindEventForwardTest.TestReplaceInheritsAndForwardsEvents;
+var dlg: TTyReplaceDialog; frm: TTyFindForm;
+begin
+  // TTyReplaceDialog inherits the three events from TTyFindDialog (no re-declare);
+  // confirm they still forward through the inherited BuildForm.
+  dlg := TTyReplaceDialog.Create(nil);
+  try
+    dlg.OnShow := @HandleShow;
+    dlg.OnCanClose := @HandleCanClose;
+    frm := dlg.BuildForm;
+    AssertTrue('inherited OnShow forwarded', frm.OnShow = TNotifyEvent(@HandleShow));
+    AssertTrue('inherited OnCanClose -> OnCloseQuery',
+      frm.OnCloseQuery = TCloseQueryEvent(@HandleCanClose));
+  finally dlg.Free; end;
+end;
+
 initialization
   RegisterTest(TFindMapTest);
   RegisterTest(TFindWiringTest);
   RegisterTest(TReplaceWiringTest);
+  RegisterTest(TFindEventForwardTest);
 end.

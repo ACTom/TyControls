@@ -86,6 +86,9 @@ type
   TTyColorDialog = class(TComponent)
   private
     FColor: TTyColor; FCaption: string;
+    FOnShow: TNotifyEvent;
+    FOnClose: TCloseEvent;
+    FOnCanClose: TCloseQueryEvent;
     function GetLCL: TColor; procedure SetLCL(v: TColor);
     function GetAlpha: Byte; procedure SetAlpha(v: Byte);
   public
@@ -96,6 +99,9 @@ type
     property Caption: string read FCaption write FCaption;
     property Color: TTyColor read FColor write FColor default $FF000000;
     property Alpha: Byte read GetAlpha write SetAlpha default $FF;
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnClose: TCloseEvent read FOnClose write FOnClose;
+    property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
   end;
 
 implementation
@@ -458,6 +464,16 @@ procedure TTyColorDialog.SetAlpha(v: Byte);
 begin FColor := TyRGBA(TyRedOf(FColor), TyGreenOf(FColor), TyBlueOf(FColor), v); end;
 
 function TTyColorDialog.Execute: Boolean;
-begin Result := TySelectColor(FCaption, FColor); end;
+var d: TTyColorForm;
+begin
+  // Inline the build/show (rather than call TySelectColor) so the wrapper's
+  // OnShow/OnClose/OnCanClose forward onto the form before ShowModal.
+  d := TyBuildColorDialog(FCaption, FColor);
+  try
+    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    Result := (d.ShowModal = mrOK);
+    if Result then FColor := d.CurrentColor;
+  finally d.Free; end;
+end;
 
 end.

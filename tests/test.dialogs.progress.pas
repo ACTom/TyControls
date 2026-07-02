@@ -4,7 +4,7 @@ unit test.dialogs.progress;
 interface
 
 uses
-  Classes, SysUtils, Types, fpcunit, testregistry,
+  Classes, SysUtils, Types, Forms, fpcunit, testregistry,
   tyControls.ProgressBar, tyControls.Dialogs.Progress;
 
 type
@@ -19,6 +19,16 @@ type
     procedure TestDoCancelSetsFlagAndFires;
     procedure TestCloseResetsCancelled;
     procedure TestFillRectGeometry;
+  end;
+
+  { LCL-parity events forward onto the modeless progress form via BuildForm (NO Show). }
+  TProgressEventForwardTest = class(TTestCase)
+  private
+    procedure HandleShow(Sender: TObject);
+    procedure HandleClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure HandleCanClose(Sender: TObject; var CanClose: Boolean);
+  published
+    procedure TestProgressForwardsEvents;
   end;
 
 implementation
@@ -106,6 +116,34 @@ begin
   AssertEquals('half at mid', 50, TyProgressFillRect(track, 0, 100, 50).Right);
 end;
 
+{ TProgressEventForwardTest }
+
+procedure TProgressEventForwardTest.HandleShow(Sender: TObject);
+begin end;
+
+procedure TProgressEventForwardTest.HandleClose(Sender: TObject; var CloseAction: TCloseAction);
+begin end;
+
+procedure TProgressEventForwardTest.HandleCanClose(Sender: TObject; var CanClose: Boolean);
+begin end;
+
+procedure TProgressEventForwardTest.TestProgressForwardsEvents;
+var dlg: TTyProgressDialog; frm: TTyProgressForm;
+begin
+  dlg := TTyProgressDialog.Create(nil);
+  try
+    dlg.OnShow := @HandleShow;
+    dlg.OnClose := @HandleClose;
+    dlg.OnCanClose := @HandleCanClose;
+    frm := dlg.BuildForm;   // build + forward, NO Show
+    AssertTrue('OnShow forwarded to form', frm.OnShow = TNotifyEvent(@HandleShow));
+    AssertTrue('OnClose forwarded to form', frm.OnClose = TCloseEvent(@HandleClose));
+    AssertTrue('OnCanClose -> form.OnCloseQuery',
+      frm.OnCloseQuery = TCloseQueryEvent(@HandleCanClose));
+  finally dlg.Free; end;
+end;
+
 initialization
   RegisterTest(TProgressLogicTest);
+  RegisterTest(TProgressEventForwardTest);
 end.

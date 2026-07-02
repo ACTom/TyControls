@@ -2,7 +2,7 @@ unit test.dialogs;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Dialogs, fpcunit, testregistry,
+  Classes, SysUtils, Types, Controls, Dialogs, Forms, fpcunit, testregistry,
   tyControls.Types, tyControls.Dialogs, tyControls.Button, tyControls.Panel,
   tyControls.Edit, tyControls.Memo, tyControls.ListBox;
 type
@@ -75,6 +75,19 @@ type
   published
     procedure TestBuildSeedsListAndSelection;
     procedure TestResultIndexLogic;
+  end;
+
+  { The shared TyForwardDialogEvents helper is the exact seam every modal wrapper's
+    Execute uses just before ShowModal (build the form, forward the 3 events, show).
+    ShowModal can't run headlessly, so exercise the forward against a built dialog. }
+  TDialogEventForwardTest = class(TTestCase)
+  private
+    procedure HandleShow(Sender: TObject);
+    procedure HandleClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure HandleCanClose(Sender: TObject; var CanClose: Boolean);
+  published
+    procedure TestForwardOntoBuiltMessageDialog;
+    procedure TestForwardNilFormIsNoOp;
   end;
 
 implementation
@@ -395,6 +408,36 @@ begin
   finally items.Free; end;
 end;
 
+{ TDialogEventForwardTest }
+
+procedure TDialogEventForwardTest.HandleShow(Sender: TObject);
+begin end;
+
+procedure TDialogEventForwardTest.HandleClose(Sender: TObject; var CloseAction: TCloseAction);
+begin end;
+
+procedure TDialogEventForwardTest.HandleCanClose(Sender: TObject; var CanClose: Boolean);
+begin end;
+
+procedure TDialogEventForwardTest.TestForwardOntoBuiltMessageDialog;
+var d: TTyDialog;
+begin
+  d := TyBuildMessageDialog('Hi', mtInformation, [mbOK]);
+  try
+    TyForwardDialogEvents(d, @HandleShow, @HandleClose, @HandleCanClose);
+    AssertTrue('OnShow forwarded', d.OnShow = TNotifyEvent(@HandleShow));
+    AssertTrue('OnClose forwarded', d.OnClose = TCloseEvent(@HandleClose));
+    AssertTrue('OnCanClose -> OnCloseQuery', d.OnCloseQuery = TCloseQueryEvent(@HandleCanClose));
+  finally d.Free; end;
+end;
+
+procedure TDialogEventForwardTest.TestForwardNilFormIsNoOp;
+begin
+  // Must not raise on a nil form (the helper's guard).
+  TyForwardDialogEvents(nil, @HandleShow, @HandleClose, @HandleCanClose);
+  AssertTrue('nil form tolerated', True);
+end;
+
 initialization
   RegisterTest(TDialogButtonBarTest);
   RegisterTest(TMsgMappingTest);
@@ -405,4 +448,5 @@ initialization
   RegisterTest(TPasswordDialogTest);
   RegisterTest(TTextDialogTest);
   RegisterTest(TSelectValueTest);
+  RegisterTest(TDialogEventForwardTest);
 end.

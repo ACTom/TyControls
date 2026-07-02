@@ -71,6 +71,14 @@ type
     property Buttons[AIndex: Integer]: TTyButton read GetButton;
   end;
 
+{ Forward the LCL-parity events (OnShow/OnClose/OnCanClose) from a non-visual dialog
+  wrapper onto the transient TTyForm it built. The form's base TForm fires OnShow (on
+  first show), OnClose (on close, via CloseAction), and OnCloseQuery (the can-close gate)
+  natively, so the wrapper just relays its own three handlers. Shared by every wrapper so
+  the field-forward triple isn't repeated eleven times. AForm may be nil (no-op). }
+procedure TyForwardDialogEvents(AForm: TCustomForm;
+  AOnShow: TNotifyEvent; AOnClose: TCloseEvent; AOnCanClose: TCloseQueryEvent);
+
 { Test/introspection helpers (construct-only seam). }
 function TyDialogButtonCount(ADlg: TTyDialog): Integer;
 function TyDialogButton(ADlg: TTyDialog; AIndex: Integer): TTyButton;
@@ -88,6 +96,9 @@ type
     FTitle, FMsg: string;
     FDlgType: TMsgDlgType;
     FButtons: TMsgDlgButtons;
+    FOnShow: TNotifyEvent;
+    FOnClose: TCloseEvent;
+    FOnCanClose: TCloseQueryEvent;
   public
     constructor Create(AOwner: TComponent); override;
     function Execute: TModalResult;
@@ -96,6 +107,9 @@ type
     property Msg: string read FMsg write FMsg;
     property DlgType: TMsgDlgType read FDlgType write FDlgType default mtInformation;
     property Buttons: TMsgDlgButtons read FButtons write FButtons default [mbOK];
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnClose: TCloseEvent read FOnClose write FOnClose;
+    property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
   end;
 
 { Input dialog — construct-only builder returns the dialog + its edit (out param). }
@@ -108,12 +122,18 @@ type
   TTyInputDialog = class(TComponent)
   private
     FCaption, FPrompt, FValue: string;
+    FOnShow: TNotifyEvent;
+    FOnClose: TCloseEvent;
+    FOnCanClose: TCloseQueryEvent;
   public
     function Execute: Boolean;
   published
     property Caption: string read FCaption write FCaption;
     property Prompt: string read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnClose: TCloseEvent read FOnClose write FOnClose;
+    property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
   end;
 
 { Password dialog — masked-edit delta on Input }
@@ -126,6 +146,9 @@ type
   TTyPasswordDialog = class(TComponent)
   private
     FCaption, FPrompt, FValue, FPasswordChar: string;
+    FOnShow: TNotifyEvent;
+    FOnClose: TCloseEvent;
+    FOnCanClose: TCloseQueryEvent;
   public
     constructor Create(AOwner: TComponent); override;
     function Execute: Boolean;
@@ -134,6 +157,9 @@ type
     property Prompt: string read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
     property PasswordChar: string read FPasswordChar write FPasswordChar;
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnClose: TCloseEvent read FOnClose write FOnClose;
+    property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
   end;
 
 { Text dialog — resizable multi-line memo input }
@@ -156,12 +182,18 @@ type
   TTyTextDialog = class(TComponent)
   private
     FCaption, FPrompt, FValue: string;
+    FOnShow: TNotifyEvent;
+    FOnClose: TCloseEvent;
+    FOnCanClose: TCloseQueryEvent;
   public
     function Execute: Boolean;
   published
     property Caption: string read FCaption write FCaption;
     property Prompt: string read FPrompt write FPrompt;
     property Value: string read FValue write FValue;
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnClose: TCloseEvent read FOnClose write FOnClose;
+    property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
   end;
 
 { Shared layout constants — exported so sub-units (e.g. SelectPath) can
@@ -194,6 +226,9 @@ type
     FCaption, FPrompt: string;
     FItems: TStrings;
     FItemIndex: Integer;
+    FOnShow: TNotifyEvent;
+    FOnClose: TCloseEvent;
+    FOnCanClose: TCloseQueryEvent;
     procedure SetItems(AValue: TStrings);
   public
     constructor Create(AOwner: TComponent); override;
@@ -205,6 +240,9 @@ type
     property Prompt: string read FPrompt write FPrompt;
     property Items: TStrings read FItems write SetItems;
     property ItemIndex: Integer read FItemIndex write FItemIndex default -1;
+    property OnShow: TNotifyEvent read FOnShow write FOnShow;
+    property OnClose: TCloseEvent read FOnClose write FOnClose;
+    property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
   end;
 
 implementation
@@ -538,6 +576,15 @@ end;
 
 { Free functions / globals }
 
+procedure TyForwardDialogEvents(AForm: TCustomForm;
+  AOnShow: TNotifyEvent; AOnClose: TCloseEvent; AOnCanClose: TCloseQueryEvent);
+begin
+  if AForm = nil then Exit;
+  AForm.OnShow := AOnShow;
+  AForm.OnClose := AOnClose;
+  AForm.OnCloseQuery := AOnCanClose;
+end;
+
 function TyDialogButtonCount(ADlg: TTyDialog): Integer;
 begin Result := ADlg.ButtonCount; end;
 
@@ -607,6 +654,7 @@ function TTyMessage.Execute: TModalResult;
 var d: TTyDialog;
 begin
   d := TyBuildMessageDialog(FMsg, FDlgType, FButtons, FTitle);
+  TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);   // relay LCL-parity events
   Result := RunDialogModal(d);
 end;
 
@@ -667,7 +715,17 @@ end;
 { TTyInputDialog }
 
 function TTyInputDialog.Execute: Boolean;
-begin Result := TyInputQuery(FCaption, FPrompt, FValue); end;
+var d: TTyDialog; e: TTyEdit;
+begin
+  // Inline the build/show (rather than call TyInputQuery) so the wrapper's own
+  // OnShow/OnClose/OnCanClose can be forwarded onto the form before ShowModal.
+  d := TyBuildInputDialog(FCaption, FPrompt, FValue, e);
+  try
+    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    Result := (d.ShowModal = mrOK);
+    if Result then FValue := e.Text;
+  finally d.Free; end;
+end;
 
 { Password dialog }
 
@@ -718,6 +776,7 @@ var d: TTyDialog; e: TTyEdit;
 begin
   d := TyBuildPasswordDialog(FCaption, FPrompt, FPasswordChar, e);
   try
+    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then FValue := e.Text;
   finally d.Free; end;
@@ -769,7 +828,16 @@ end;
 { TTyTextDialog }
 
 function TTyTextDialog.Execute: Boolean;
-begin Result := TyTextQuery(FCaption, FPrompt, FValue); end;
+var d: TTyTextDialogForm; m: TTyMemo;
+begin
+  // Inline (rather than call TyTextQuery) so the wrapper's events forward before ShowModal.
+  d := TyBuildTextDialog(FCaption, FPrompt, FValue, m);
+  try
+    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    Result := (d.ShowModal = mrOK);
+    if Result then FValue := m.Text;
+  finally d.Free; end;
+end;
 
 { TTySelectValueForm }
 
@@ -849,8 +917,15 @@ begin
 end;
 
 function TTySelectValueDialog.Execute: Boolean;
+var d: TTyDialog; lb: TTyListBox;
 begin
-  Result := TySelectValue(FCaption, FPrompt, FItems, FItemIndex);
+  // Inline (rather than call TySelectValue) so the wrapper's events forward before ShowModal.
+  d := TyBuildSelectValueDialog(FCaption, FPrompt, FItems, FItemIndex, lb);
+  try
+    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    Result := (d.ShowModal = mrOK);
+    if Result then FItemIndex := lb.ItemIndex;
+  finally d.Free; end;
 end;
 
 end.
