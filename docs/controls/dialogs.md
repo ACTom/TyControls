@@ -353,3 +353,83 @@ DlgRename.Prompt  := '请输入新名称：';
 DlgRename.Value   := CurrentName;
 if DlgRename.Execute then
   Rename(CurrentName, DlgRename.Value);
+```
+
+---
+
+## 9. 拾取器对话框（S3）
+
+S3 阶段新增**取色器**与**字体对话框**两个拾取器，均位于 `tyControls.Dialogs` 单元，对应设计期组件在 **TyControls Dialogs** 组件面板页。
+
+### 9.1 TyColorDialog — 取色器
+
+弹出 HSV 色彩选择对话框，含色相条 + HSV 方块 + RGB / CMYK / Hex 输入框 + Alpha 滑块，所有通道全双向同步。
+
+**全局函数**（主要 API）：
+
+```pascal
+// 原生 TTyColor（含 alpha），返回是否点击"确定"
+function TySelectColor(const ACaption: string; var AColor: TTyColor): Boolean;
+
+// LCL TColor + 独立 Alpha 字节，返回是否点击"确定"
+function TySelectColor(const ACaption: string; var AColor: TColor; var AAlpha: Byte): Boolean;
+```
+
+```pascal
+uses tyControls.Dialogs;
+
+// 原生 TTyColor 用法
+var c: TTyColor;
+c := TyRGBA(255, 128, 0, 255);
+if TySelectColor('选择颜色', c) then
+  MyControl.Color := c;
+
+// LCL TColor + Alpha 用法
+var col: TColor;
+    alpha: Byte;
+col   := clBlue;
+alpha := 200;
+if TySelectColor('选择颜色', col, alpha) then
+begin
+  MyControl.Color := col;
+  MyControl.Alpha := alpha;
+end;
+```
+
+**设计期组件 `TTyColorDialog`**：`Color: TTyColor`（原生）/ `LCLColor: TColor` / `Alpha: Byte` 三者互为视图；调用 `Execute: Boolean` 显示对话框。
+
+```pascal
+// 在窗体上放置 TTyColorDialog，命名为 DlgColor
+DlgColor.Color := MyShape.FillColor;
+if DlgColor.Execute then
+  MyShape.FillColor := DlgColor.Color;
+```
+
+### 9.2 TyFontDialog — 字体对话框
+
+弹出字体选择对话框，可设置字体族、字号、粗体/斜体/下划线/删除线、颜色（内嵌取色器），并实时预览效果；对话框可拖拽边框缩放。
+
+**全局函数**（主要 API）：
+
+```pascal
+// 就地修改 AFont；用户点击"确定"返回 True，"取消"返回 False（AFont 保持不变）
+function TyFontDialog(AFont: TFont): Boolean;
+```
+
+```pascal
+uses tyControls.Dialogs;
+
+if TyFontDialog(MyEdit.Font) then
+  MyEdit.Invalidate; // 字体已就地更新，刷新控件即可
+```
+
+**设计期组件 `TTyFontDialog`**：`Font: TFont` 属性保存当前字体；调用 `Execute: Boolean` 显示对话框（`True` = 确定，字体已修改）。
+
+```pascal
+// 在窗体上放置 TTyFontDialog，命名为 DlgFont
+DlgFont.Font.Assign(Memo1.Font);
+if DlgFont.Execute then
+  Memo1.Font.Assign(DlgFont.Font);
+```
+
+> **注意**：两个组件均在 **TyControls Dialogs** 组件面板页可以找到。字体对话框的颜色选择器复用 `TTyColorDialog` 内核，保证视觉一致性。
