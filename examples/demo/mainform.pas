@@ -12,7 +12,9 @@ uses
   tyControls.BuiltinThemes, tyControls.NativeStyler, tyControls.ToolBar,
   tyControls.StatusBar, tyControls.Splitter, tyControls.Calendar,
   tyControls.DateTimePicker, tyControls.TreeView, tyControls.TreeView.Columns,
-  tyControls.Dialogs, tyControls.Dialogs.SelectPath;
+  tyControls.Dialogs, tyControls.Dialogs.SelectPath,
+  tyControls.Dialogs.Color, tyControls.Dialogs.Font,
+  tyControls.Dialogs.Find, tyControls.Dialogs.Progress;
 type
 
   { TDemoMainForm — ALL controls live in the designer (mainform.lfm), including the docked
@@ -46,6 +48,18 @@ type
     TyButton2: TTyButton;
     TyButton3: TTyButton;
     TyButton4: TTyButton;
+    BtnDlgInput: TTyButton;
+    BtnDlgPassword: TTyButton;
+    BtnDlgText: TTyButton;
+    BtnDlgSelValue: TTyButton;
+    BtnDlgColor: TTyButton;
+    BtnDlgFont: TTyButton;
+    BtnDlgFind: TTyButton;
+    BtnDlgReplace: TTyButton;
+    BtnDlgProgress: TTyButton;
+    FindDlg: TTyFindDialog;
+    ReplaceDlg: TTyReplaceDialog;
+    ProgressDlg: TTyProgressDialog;
     TyController: TTyStyleController;
     TyEdit1: TTyEdit;
     TyMessage1: TTyMessage;
@@ -121,6 +135,18 @@ type
     procedure RandomClick(Sender: TObject);
     procedure TyButton1Click(Sender: TObject);
     procedure TyButton3Click(Sender: TObject);
+    procedure BtnDlgInputClick(Sender: TObject);
+    procedure BtnDlgPasswordClick(Sender: TObject);
+    procedure BtnDlgTextClick(Sender: TObject);
+    procedure BtnDlgSelValueClick(Sender: TObject);
+    procedure BtnDlgColorClick(Sender: TObject);
+    procedure BtnDlgFontClick(Sender: TObject);
+    procedure BtnDlgFindClick(Sender: TObject);
+    procedure BtnDlgReplaceClick(Sender: TObject);
+    procedure BtnDlgProgressClick(Sender: TObject);
+    procedure FindDlgFind(Sender: TObject);
+    procedure ReplaceDlgReplace(Sender: TObject);
+    procedure ProgressDlgCancel(Sender: TObject);
   private
     function ThemeDir: string;
     procedure InitThemes;
@@ -270,6 +296,124 @@ end;
 procedure TDemoMainForm.TyButton3Click(Sender: TObject);
 begin
   TyButton3.Caption := TyButton3.Caption + '1';
+end;
+
+{ ---------------------------------------------------------------------------
+  Dialog demo handlers — one per PanelBox button. Each shows the result in
+  LblHello.Caption or StatusBar1.Panels[0].Text so the effect is visible.
+  --------------------------------------------------------------------------- }
+
+procedure TDemoMainForm.BtnDlgInputClick(Sender: TObject);
+var s: string;
+begin
+  s := LblHello.Caption;
+  if TyInputQuery('Input', 'Enter some text:', s) then
+    LblHello.Caption := s;
+end;
+
+procedure TDemoMainForm.BtnDlgPasswordClick(Sender: TObject);
+var pwd: string;
+begin
+  pwd := TyPasswordBox('Password', 'Enter a password:');
+  if pwd <> '' then
+    StatusBar1.Panels[0].Text := Format('Password: %d chars', [Length(pwd)]);
+end;
+
+procedure TDemoMainForm.BtnDlgTextClick(Sender: TObject);
+var note: string;
+begin
+  note := LblHello.Caption;
+  if TyTextQuery('Text', 'Enter a note:', note) then
+    LblHello.Caption := TrimRight(note);   // TyTextQuery result ends with a LineEnding
+end;
+
+procedure TDemoMainForm.BtnDlgSelValueClick(Sender: TObject);
+var items: TStringList; idx: Integer;
+begin
+  items := TStringList.Create;
+  try
+    items.Add('Alpha');
+    items.Add('Beta');
+    items.Add('Gamma');
+    items.Add('Delta');
+    idx := 0;
+    if TySelectValue('SelValue', 'Pick a value:', items, idx) then
+      LblHello.Caption := 'Selected: ' + items[idx];
+  finally
+    items.Free;
+  end;
+end;
+
+procedure TDemoMainForm.BtnDlgColorClick(Sender: TObject);
+var col: TColor; alpha: Byte;
+begin
+  col := LblHello.Font.Color;
+  alpha := 255;
+  if TySelectColor('Color', col, alpha) then
+  begin
+    LblHello.Font.Color := col;
+    LblHello.Invalidate;
+  end;
+end;
+
+procedure TDemoMainForm.BtnDlgFontClick(Sender: TObject);
+begin
+  if TyFontDialog(LblHello.Font) then
+    LblHello.Invalidate;   // font updated in-place
+end;
+
+procedure TDemoMainForm.BtnDlgFindClick(Sender: TObject);
+begin
+  FindDlg.Execute;   // modeless — returns immediately, OnFind fires on Find
+end;
+
+procedure TDemoMainForm.BtnDlgReplaceClick(Sender: TObject);
+begin
+  ReplaceDlg.Execute;
+end;
+
+procedure TDemoMainForm.BtnDlgProgressClick(Sender: TObject);
+var i, j: Integer; x: Double;
+begin
+  ProgressDlg.Min := 0;
+  ProgressDlg.Max := 100;
+  ProgressDlg.Cancelable := True;
+  ProgressDlg.Show;
+  try
+    for i := 0 to 100 do
+    begin
+      if ProgressDlg.Cancelled then Break;
+      // small busy-wait so the bar visibly advances
+      x := 0;
+      for j := 1 to 400000 do x := x + Sqrt(j);
+      ProgressDlg.SetProgress(i, Format('Working… %d%%', [i]));
+    end;
+  finally
+    ProgressDlg.Close;
+  end;
+  if ProgressDlg.Cancelled then
+    StatusBar1.Panels[0].Text := 'Progress: cancelled'
+  else
+    StatusBar1.Panels[0].Text := 'Progress: done';
+end;
+
+procedure TDemoMainForm.FindDlgFind(Sender: TObject);
+begin
+  StatusBar1.Panels[0].Text := 'Find: ' + FindDlg.FindText;
+end;
+
+procedure TDemoMainForm.ReplaceDlgReplace(Sender: TObject);
+var s: string;
+begin
+  s := Format('Replace "%s" -> "%s"', [ReplaceDlg.FindText, ReplaceDlg.ReplaceText]);
+  if frReplaceAll in ReplaceDlg.Options then s := s + ' (all)';
+  StatusBar1.Panels[0].Text := s;
+end;
+
+procedure TDemoMainForm.ProgressDlgCancel(Sender: TObject);
+begin
+  // MUST NOT Free ProgressDlg here — the busy loop reads Cancelled and calls Close.
+  StatusBar1.Panels[0].Text := 'Progress: cancel requested';
 end;
 
 procedure TDemoMainForm.MnuViewToggleClick(Sender: TObject);
