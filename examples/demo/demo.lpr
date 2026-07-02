@@ -3,7 +3,7 @@ program demo;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, SysUtils, LCLTranslator,
-  mainform, chromeform;
+  mainform;
 
 {$R *.res}
 
@@ -31,6 +31,5 @@ begin
   // SetDefaultLang('') autodetects the OS locale (or a --lang= param) + loads languages/demo.<lang>.po.
   SetDefaultLang('', LangDir);
   Application.CreateForm(TDemoMainForm, DemoMainForm);
-  Application.CreateForm(TChromeForm, ChromeFormWnd);
   Application.Run;
 end.
