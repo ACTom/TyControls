@@ -9,10 +9,10 @@ uses
   tyControls.ProgressBar, tyControls.ToggleSwitch, tyControls.TrackBar,
   tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu,
-  tyControls.BuiltinThemes, tyControls.NativeStyler,
-  tyControls.ToolBar, tyControls.StatusBar, tyControls.Splitter,
-  tyControls.Calendar, tyControls.DateTimePicker,
-  tyControls.TreeView, tyControls.TreeView.Columns;
+  tyControls.BuiltinThemes, tyControls.NativeStyler, tyControls.ToolBar,
+  tyControls.StatusBar, tyControls.Splitter, tyControls.Calendar,
+  tyControls.DateTimePicker, tyControls.TreeView, tyControls.TreeView.Columns,
+  tyControls.Dialogs, tyControls.Dialogs.SelectPath;
 type
 
   { TDemoMainForm — ALL controls live in the designer (mainform.lfm), including the docked
@@ -45,10 +45,13 @@ type
     TyButton1: TTyButton;
     TyButton2: TTyButton;
     TyButton3: TTyButton;
+    TyButton4: TTyButton;
     TyController: TTyStyleController;
     TyEdit1: TTyEdit;
+    TyMessage1: TTyMessage;
     TyNativeStyler1: TTyNativeStyler;
     TyPanel1: TTyPanel;
+    TySelectPathDialog1: TTySelectPathDialog;
     TyTabSheet1: TTyTabSheet;
     TyTabSheet2: TTyTabSheet;
     TyTabSheet3: TTyTabSheet;
@@ -87,6 +90,7 @@ type
     TyColTree: TTyTreeView;
     TyTabSheet4: TTyTabSheet;
     procedure FormCreate(Sender: TObject);
+    procedure TyButton4Click(Sender: TObject);
     procedure TyTree1InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
       var InitStates: TTyNodeInitStates);
     procedure TyTree1InitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
@@ -177,6 +181,11 @@ begin
   InitColTree;
 end;
 
+procedure TDemoMainForm.TyButton4Click(Sender: TObject);
+begin
+  TySelectPathDialog1.Execute;
+end;
+
 procedure TDemoMainForm.GroupBox1Click(Sender: TObject);
 begin
 
@@ -255,7 +264,7 @@ end;
 
 procedure TDemoMainForm.TyButton1Click(Sender: TObject);
 begin
-  TyButton1.Caption := TyButton1.Caption + '1';
+  TyMessage1.Execute;
 end;
 
 procedure TDemoMainForm.TyButton3Click(Sender: TObject);

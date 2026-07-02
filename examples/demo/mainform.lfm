@@ -3,7 +3,6 @@ object DemoMainForm: TDemoMainForm
   Height = 820
   Top = 120
   Width = 798
-  BorderStyle = bsNone
   Caption = 'TyControls Demo'
   ClientHeight = 820
   ClientWidth = 798
@@ -229,14 +228,24 @@ object DemoMainForm: TDemoMainForm
       TabOrder = 5
       Controller = TyController
       object TyButton1: TTyButton
-        Left = 22
+        Left = 24
         Height = 28
-        Top = 36
+        Top = 16
         Width = 154
         TabOrder = 0
         OnClick = TyButton1Click
         Controller = TyController
-        Caption = '&TyButton1'
+        Caption = 'MessageBox'
+      end
+      object TyButton4: TTyButton
+        Left = 24
+        Height = 28
+        Top = 48
+        Width = 154
+        TabOrder = 1
+        OnClick = TyButton4Click
+        Controller = TyController
+        Caption = 'SelectPath'
       end
     end
     object ComboKind: TTyComboBox
@@ -616,5 +625,15 @@ object DemoMainForm: TDemoMainForm
     Controller = TyController
     Left = 744
     Top = 424
+  end
+  object TyMessage1: TTyMessage
+    Title = 'Demo'
+    Msg = 'Hello World!'
+    Left = 708
+    Top = 99
+  end
+  object TySelectPathDialog1: TTySelectPathDialog
+    Left = 705
+    Top = 158
   end
 end
