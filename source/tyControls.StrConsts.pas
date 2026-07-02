@@ -92,6 +92,16 @@ resourcestring
   rsDlgAlpha           = 'Alpha';
   rsDlgPreview         = 'Preview';
 
+  // --- Font picker dialog (S3) — section labels, user-facing, translated ---
+  rsDlgFontFamily      = 'Family';
+  rsDlgFontSize        = 'Size';
+  rsDlgFontBold        = 'Bold';
+  rsDlgFontItalic      = 'Italic';
+  rsDlgFontUnderline   = 'Underline';
+  rsDlgFontStrike      = 'Strikeout';
+  rsDlgFontColor       = 'Color';
+  rsDlgFontSample      = 'AaBbYyZz 0123';
+
 implementation
 
 end.
