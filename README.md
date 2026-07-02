@@ -111,6 +111,26 @@ scripts/     构建与发布脚本
 
 仓库 `themes/` 提供 `light` / `dark` / `green` / `showcase` 等 `.tycss`,另有一组**编译内置**的精选双模式主题(`@mode` 亮/暗同文件)与 `system`(跟随操作系统亮暗 + 强调色)。所有主题共用同一套 `:root` 语义变量(`--accent` / `--surface` / `--on-surface` / `--border` / `--danger` / `--radius` …),换肤即换变量;`LoadTheme` 运行时热切换,全部控件即时重绘。
 
+## 启用翻译
+
+TyControls 自身的界面字符串(对话框按钮、标签、ThemeLint 诊断信息等)使用独立于宿主应用的
+resourcestring 目录。LCL 的 `SetDefaultLang('', LangDir)` 只会自动加载
+`languages/<exe名>.<lang>.po`,不会加载控件库自身的目录 —— 因此无论应用选了哪种界面语言,这些字符串
+都会停留在英文 msgid 上。需要在 `SetDefaultLang` 之后、创建任何窗体之前,显式加载控件库的目录:
+
+```pascal
+uses ..., LCLTranslator;
+...
+SetDefaultLang('', LangDir);
+TranslateUnitResourceStringsEx('', LangDir, 'tycontrols.strconsts');
+Application.CreateForm(TMainForm, MainForm);
+```
+
+并将本仓库构建出的 `languages/tycontrols.strconsts.<lang>.po` 部署到你的可执行文件自身的
+`languages/` 目录下,与你应用自己的 `.po` 文件放在一起。完整示例见
+[examples/demo](examples/demo/)(`demo.lpr` +
+`examples/demo/languages/tycontrols.strconsts.zh_CN.po`)。
+
 ## 许可
 
 TyControls 采用**修改版 LGPL**(与 FPC RTL / LCL / BGRABitmap 同款):允许将本库静态链接进闭源商业应用分发;若修改库本身的源码,修改部分需以同样许可开放。

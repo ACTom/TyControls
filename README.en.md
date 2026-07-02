@@ -154,6 +154,26 @@ OS light/dark + accent colour). All themes share one set of `:root` semantic var
 (`--accent` / `--surface` / `--on-surface` / `--border` / `--danger` / `--radius` …) — re-skinning
 just swaps the variables; `LoadTheme` hot-swaps at runtime and every control repaints instantly.
 
+## Enabling translations
+
+TyControls' own user-facing strings (dialog buttons, labels, ThemeLint diagnostics, …) live in a
+separate resourcestring catalog from your application's. LCL's `SetDefaultLang('', LangDir)` only
+auto-loads `languages/<exe-name>.<lang>.po` — it never touches the library's catalog, so those
+strings stay at their English msgids no matter what UI language your app picks. Load the package
+catalog explicitly, right after `SetDefaultLang` and before any form is created:
+
+```pascal
+uses ..., LCLTranslator;
+...
+SetDefaultLang('', LangDir);
+TranslateUnitResourceStringsEx('', LangDir, 'tycontrols.strconsts');
+Application.CreateForm(TMainForm, MainForm);
+```
+
+and deploy `languages/tycontrols.strconsts.<lang>.po` (built from this repo) next to your exe's own
+`languages/` folder, alongside your app's own `.po` files. See [examples/demo](examples/demo/) for a
+working setup (`demo.lpr` + `examples/demo/languages/tycontrols.strconsts.zh_CN.po`).
+
 ## License
 
 TyControls is licensed under the **modified LGPL** (the same as FPC RTL / LCL / BGRABitmap): you may

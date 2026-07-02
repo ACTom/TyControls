@@ -30,6 +30,10 @@ begin
   // during streaming (the reliable path — not runtime re-translation of an already-shown form).
   // SetDefaultLang('') autodetects the OS locale (or a --lang= param) + loads languages/demo.<lang>.po.
   SetDefaultLang('', LangDir);
+  // SetDefaultLang only loads languages/demo.<lang>.po (derived from the exe name). The tyControls
+  // package's own resourcestrings (dialog buttons/labels etc.) live in a separate catalog and need
+  // their own load, or they stay at their English msgids no matter what UI language is active.
+  TranslateUnitResourceStringsEx('', LangDir, 'tycontrols.strconsts');
   Application.CreateForm(TDemoMainForm, DemoMainForm);
   Application.Run;
 end.
