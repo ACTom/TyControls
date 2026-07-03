@@ -399,9 +399,19 @@ begin
   if AChild.Parent is TTyCustomControl then
   begin
     st := TTyCustomControl(AChild.Parent).CurrentStyle;
-    if not (tpBackground in st.Present) then Exit;
+    { A container with NO background, or a fully TRANSPARENT one (e.g. TyGroupBox
+      bg = alpha(#FFFFFF,0)), shows whatever is behind IT — so walk up to the next
+      opaque backdrop. Otherwise a child's corner-gap / parent fill would resolve to
+      a transparent color and the Win10 DWM glass would show through (an Edit inside
+      a group box had system-colored corners). }
+    if not (tpBackground in st.Present) then
+      Exit(TyResolveParentBg(AChild.Parent, AColor));
     case st.Background.Kind of
-      tfkSolid:          begin AColor := st.Background.Color;  Result := True; end;
+      tfkSolid:
+        if TyAlphaOf(st.Background.Color) = 0 then
+          Exit(TyResolveParentBg(AChild.Parent, AColor))
+        else
+        begin AColor := st.Background.Color;  Result := True; end;
       tfkLinearGradient: begin AColor := st.Background.GradTo; Result := True; end; // representative
     end;
   end
