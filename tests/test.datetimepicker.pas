@@ -200,6 +200,10 @@ type
     procedure TestCheckBoxToggle_FiresOnChecked_FlipsChecked;
     { After toggling Checked, editing is re-enabled (digit key works). }
     procedure TestCheckBoxToggle_ReEnablesEditing;
+    { REGRESSION: a picker themed via the global default has Controller=nil; opening
+      the dropdown used to deref FCalendar.Controller.Model -> AV. EnsurePopup must
+      give the calendar a non-nil (ActiveController) controller. }
+    procedure TestDropDownNilControllerNoCrash;
   end;
 
 implementation
@@ -1389,6 +1393,21 @@ begin
     should be non-empty — showing editing is unblocked. }
   AssertTrue('DigitBuffer non-empty after re-enabled edit',
     FPicker.DigitBuffer <> '');
+end;
+
+procedure TDateTimePickerC3Test.TestDropDownNilControllerNoCrash;
+begin
+  { FPicker (SetUp) has Controller=nil — the common case when a picker is themed via
+    the global TyDefaultController. EnsurePopup used to assign Self.Controller (nil)
+    to the calendar, and OpenDropDown then dereferenced FCalendar.Controller.Model,
+    crashing the dropdown with an access violation. EnsurePopup must instead hand the
+    calendar a valid ActiveController (never nil), so the deref is safe. }
+  AssertNull('precondition: picker Controller is nil', FPicker.Controller);
+  FPicker.EnsurePopupForTest;
+  AssertNotNull('EnsurePopup gave the calendar a non-nil (ActiveController) controller',
+    FPicker.Calendar.Controller);
+  AssertNotNull('calendar controller has a Model (the .Controller.Model deref that crashed)',
+    FPicker.Calendar.Controller.Model);
 end;
 
 initialization

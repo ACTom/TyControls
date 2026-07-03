@@ -980,13 +980,13 @@ begin
 
   { Create the calendar first (owned by Self, so FreeAndNil(FCalendar) frees it). }
   FCalendar             := TTyCalendar.Create(Self);
-  FCalendar.Controller  := Self.Controller;
+  FCalendar.Controller  := ActiveController;
   FCalendar.OnChange    := @CalendarChange;
   FCalendar.OnAccept    := @CalendarAccepted;
 
   { Create the popup helper (owns its form; does NOT own FCalendar). }
   FPopup            := TTyDropdownPopup.Create;
-  FPopup.Controller := Self.Controller;
+  FPopup.Controller := ActiveController;
   FPopup.OnClose    := @PopupClosed;
 
   { Parent the calendar into the popup form (SetContent does NOT transfer ownership). }
@@ -1018,13 +1018,16 @@ begin
   FCalendar.MinDate       := FMinDate;
   FCalendar.MaxDate       := FMaxDate;
   FCalendar.FirstDayOfWeek := wdSunday;
-  FCalendar.Controller    := Self.Controller;
+  FCalendar.Controller    := ActiveController;
 
   { Match the popup corner radius to the calendar's resolved border-radius. }
-  CalStyle := FCalendar.Controller.Model.ResolveStyle('TyCalendar', '', []);
+  { Use ActiveController (falls back to the global default when Controller is nil) —
+    a picker themed via the global TyDefaultController has Controller=nil, and the
+    old FCalendar.Controller.Model deref here crashed the dropdown with an AV. }
+  CalStyle := ActiveController.Model.ResolveStyle('TyCalendar', '', []);
   Radius   := CalStyle.BorderRadius;
   FPopup.CornerRadiusLogical := Radius;
-  FPopup.Controller := Self.Controller;
+  FPopup.Controller := ActiveController;
 
   if Assigned(FOnDropDown) then FOnDropDown(Self);
 
