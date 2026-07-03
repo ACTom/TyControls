@@ -7,8 +7,10 @@ unit tyControls.WindowEffects;
   Form.pas stays clean.
 
   - Windows: dwmapi.dll loaded DYNAMICALLY (GetProcAddress) so the binary still launches
-    on XP/7 (no static import). Win11 -> DWM corner preference (anti-aliased) + free shadow;
-    Vista..10 -> square + DwmExtendFrameIntoClientArea native shadow; XP -> square, no shadow.
+    on XP/7 (no static import). Win11 -> DWM corner preference (anti-aliased) + free shadow +
+    a pinned (COLOR_NONE) window-border so the 1px DWM frame stops flashing white/gray on
+    activation; Vista..10 -> square + DwmExtendFrameIntoClientArea native shadow; XP -> square,
+    no shadow.
   - macOS (Cocoa): contentView.layer cornerRadius (anti-aliased) + NSWindow.hasShadow.
   - Linux: documented no-op extension point (see TyApplyWindowEffects). }
 
@@ -63,6 +65,9 @@ end;
 {$IFDEF WINDOWS}
 const
   DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+  DWMWA_BORDER_COLOR             = 34;          // Win11 22000+: the 1px DWM window-border color
+  DWMWA_COLOR_NONE               = $FFFFFFFE;   // "no visible border" sentinel for DWMWA_BORDER_COLOR
+  Win11Build                     = 22000;       // first Win11 build; DWMWA_BORDER_COLOR is a no-op before it
 type
   TDwmMargins = record cxLeftWidth, cxRightWidth, cyTopHeight, cyBottomHeight: LongInt; end;
   TDwmSetWindowAttribute = function(h: HWND; a: DWORD; pv: Pointer; cb: DWORD): HRESULT; stdcall;
@@ -87,7 +92,7 @@ begin
 end;
 
 procedure ApplyWindows(AForm: TCustomForm; const E: TTyWindowEffect);
-var h: HWND; pref: DWORD; m: TDwmMargins; comp: BOOL;
+var h: HWND; pref, bcol: DWORD; m: TDwmMargins; comp: BOOL;
 begin
   LoadDwm;
   h := AForm.Handle;
@@ -95,6 +100,19 @@ begin
   begin
     pref := DWORD(TyRadiusToCornerPref(E.RadiusPx, E.Maximized));
     FnSetAttr(h, DWMWA_WINDOW_CORNER_PREFERENCE, @pref, SizeOf(pref));
+    // Pin the 1px DWM window border so it stops flashing white (deactivated) / gray (dragging)
+    // as focus moves to a popup/dialog and back. A resizable TTyForm carries WS_THICKFRAME, and
+    // Win11 draws a DWM border on such windows whose color tracks active/inactive; the form has
+    // its OWN custom chrome + rounded corners + shadow, so it needs no OS border for separation.
+    // COLOR_NONE removes the visible border entirely -> identical active/inactive.
+    // Win11 22000+ only; on Win10 DWMWA_BORDER_COLOR is unsupported -> the call errors harmlessly
+    // (no per-window border recolor there anyway). If a real machine shows no edge separation,
+    // the fallback is a fixed theme-matched COLORREF (0x00BBGGRR) instead of COLOR_NONE.
+    if (Win32MajorVersion >= 10) and (Win32BuildNumber >= Win11Build) then
+    begin
+      bcol := DWMWA_COLOR_NONE;
+      FnSetAttr(h, DWMWA_BORDER_COLOR, @bcol, SizeOf(bcol));
+    end;
   end;
   if Assigned(FnExtend) then        // Vista+: native shadow via 1px frame extension
   begin
