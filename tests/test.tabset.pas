@@ -7,6 +7,7 @@ type
   private
     FChanged: Boolean;
     procedure OnChangeHandler(Sender: TObject);
+    procedure OnChangingVeto(Sender: TObject; ANewIndex: Integer; var AllowChange: Boolean);
   published
     procedure TestTabCountFromTabs;
     procedure TestSelectFiresOnChange;
@@ -16,10 +17,16 @@ type
     procedure TestRemoveAfterSelected;
     procedure TestRemoveOnlyTab;
     procedure TestRemoveSelectedNotLast;
+    procedure TestRemoveVetoedKeepsIndexInRange;
   end;
 implementation
 
 procedure TTabSetTest.OnChangeHandler(Sender: TObject); begin FChanged := True; end;
+
+procedure TTabSetTest.OnChangingVeto(Sender: TObject; ANewIndex: Integer; var AllowChange: Boolean);
+begin
+  AllowChange := False;   // always veto the selection change
+end;
 
 procedure TTabSetTest.TestTabCountFromTabs;
 var t: TTyTabSet;
@@ -124,6 +131,20 @@ begin
     AssertEquals('tabs', 2, t.Tabs.Count);
     AssertEquals('numerically unchanged', 1, t.TabIndex);
     AssertFalse('OnChange did not fire (deliberate no-notify)', FChanged);
+  finally t.Free; end;
+end;
+
+procedure TTabSetTest.TestRemoveVetoedKeepsIndexInRange;
+var t: TTyTabSet;
+begin
+  t := TTyTabSet.Create(nil);
+  try
+    t.Tabs.AddStrings(['A','B','C']);
+    t.TabIndex := 2;
+    t.OnChanging := @OnChangingVeto;   // a veto makes SetTabIndex return early
+    t.RemoveTabForTest(2);             // close the selected (last) tab
+    AssertEquals('tabs', 2, t.Tabs.Count);
+    AssertTrue('TabIndex stays in range after vetoed close', t.TabIndex <= t.Tabs.Count - 1);
   finally t.Free; end;
 end;
 

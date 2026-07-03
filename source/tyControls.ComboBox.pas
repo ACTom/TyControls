@@ -42,6 +42,7 @@ type
     procedure SetText(const AValue: string);
     procedure SetDropDownCount(const AValue: Integer);
     procedure SetSorted(const AValue: Boolean);
+    procedure SetMaxLength(const AValue: Integer);
     procedure SetCharCase(const AValue: TEditCharCase);
     procedure SetStyle(AValue: TTyComboBoxStyle);
     { Set the embedded editor's text under the FSyncingText guard (exception-safe),
@@ -94,6 +95,8 @@ type
     function GetStyleTypeKey: string; override;
     { Test seam: True when the embedded editor exists and is visible (csDropDown). }
     function EditorVisibleForTest: Boolean;
+    { Test seam: the embedded editor's MaxLength (-1 when the editor is absent). }
+    function EditorMaxLengthForTest: Integer;
     procedure SelectItem(AIndex: Integer);
     function DroppedDown: Boolean;
     procedure DropDown; virtual;
@@ -113,7 +116,7 @@ type
       are forwarded to that field (CharCase transforms typed text; MaxLength caps
       its length). In csDropDownList mode there is no editable text, so they are
       inert — published for native-API parity and streaming round-trip. }
-    property MaxLength: Integer read FMaxLength write FMaxLength default 0;
+    property MaxLength: Integer read FMaxLength write SetMaxLength default 0;
     property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
     { csDropDownList (default) = read-only; csDropDown = editable + prefix autocomplete. }
     property Style: TTyComboBoxStyle read FStyle write SetStyle default csDropDownList;
@@ -302,17 +305,41 @@ begin
   Invalidate;
 end;
 
+procedure TTyComboBox.SetMaxLength(const AValue: Integer);
+begin
+  FMaxLength := AValue;
+  { Forward to the embedded field so csDropDown caps typed text (mirrors
+    SetCharCase). FEditor always exists post-construction, so this stays in sync
+    in every mode and streaming order. }
+  if FEditor <> nil then
+    FEditor.MaxLength := AValue;
+end;
+
 procedure TTyComboBox.SetCharCase(const AValue: TEditCharCase);
 begin
   FCharCase := AValue;
   { In editable mode the transform applies to the embedded field. }
   if FEditor <> nil then
+  begin
     FEditor.CharCase := AValue;
+    { TTyEdit re-cases its buffer in place without firing OnChange; keep our Text
+      in sync so the getter matches what the field now displays. }
+    if FStyle = csDropDown then
+      FText := FEditor.Text;
+  end;
 end;
 
 function TTyComboBox.EditorVisibleForTest: Boolean;
 begin
   Result := (FEditor <> nil) and FEditor.Visible;
+end;
+
+function TTyComboBox.EditorMaxLengthForTest: Integer;
+begin
+  if FEditor <> nil then
+    Result := FEditor.MaxLength
+  else
+    Result := -1;
 end;
 
 procedure TTyComboBox.SetEditorText(const S: string);

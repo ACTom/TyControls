@@ -1,7 +1,7 @@
 unit test.combobox;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, fpcunit, testregistry, tyControls.ComboBox;
+uses Classes, SysUtils, StdCtrls, fpcunit, testregistry, tyControls.ComboBox;
 type
   TComboFilterTest = class(TTestCase)
   published
@@ -14,6 +14,9 @@ type
   published
     procedure TestEditorPresentOnlyInDropDown;
     procedure TestFreeTextSurvivesItemsChange;
+    procedure TestMaxLengthForwardedToEditor;
+    procedure TestMaxLengthBeforeStyleSwitch;
+    procedure TestCharCaseSyncsText;
   end;
 implementation
 
@@ -75,6 +78,40 @@ begin
     c.Items.Add('Gamma');            // triggers ItemsChanged->ResyncIndexFromText
     AssertEquals('free text preserved', 'Gam', c.Text);
     AssertEquals('no item selected', -1, c.ItemIndex);
+  finally c.Free; end;
+end;
+
+procedure TComboEditableTest.TestMaxLengthForwardedToEditor;
+var c: TTyComboBox;
+begin
+  c := TTyComboBox.Create(nil);
+  try
+    c.Style := csDropDown;
+    c.MaxLength := 5;
+    AssertEquals('editor MaxLength forwarded', 5, c.EditorMaxLengthForTest);
+  finally c.Free; end;
+end;
+
+procedure TComboEditableTest.TestMaxLengthBeforeStyleSwitch;
+var c: TTyComboBox;
+begin
+  c := TTyComboBox.Create(nil);
+  try
+    c.MaxLength := 5;                // set BEFORE switching to editable style
+    c.Style := csDropDown;
+    AssertEquals('editor MaxLength holds across style switch', 5, c.EditorMaxLengthForTest);
+  finally c.Free; end;
+end;
+
+procedure TComboEditableTest.TestCharCaseSyncsText;
+var c: TTyComboBox;
+begin
+  c := TTyComboBox.Create(nil);
+  try
+    c.Style := csDropDown;
+    c.Text := 'hello';              // free text pushed into the editor
+    c.CharCase := ecUppercase;      // TTyEdit re-cases in place without OnChange
+    AssertEquals('Text re-read after CharCase change', 'HELLO', c.Text);
   finally c.Free; end;
 end;
 

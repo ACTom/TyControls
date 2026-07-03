@@ -97,6 +97,11 @@ begin
   else
     // Removing the selected tab (not last): TabIndex is numerically unchanged, so — for a caption-only strip keyed on index — we intentionally do NOT fire OnChange (only the underlying caption changed). Repaint only.
     TabsChanged;
+  { A vetoing OnChanging handler makes SetTabIndex return without updating
+    FTabIndex; the tab data is already gone, so clamp to keep the invariant.
+    (When FTabs.Count = 0 this yields -1, which is correct.) }
+  if FTabIndex > FTabs.Count - 1 then
+    FTabIndex := FTabs.Count - 1;
 end;
 
 procedure TTyTabSet.SetTabs(AValue: TStrings);
