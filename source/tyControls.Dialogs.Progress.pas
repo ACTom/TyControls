@@ -4,7 +4,7 @@ unit tyControls.Dialogs.Progress;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Forms, LCLType,
+  Classes, SysUtils, Types, Controls, Forms, LCLType, ExtCtrls,
   tyControls.Dialogs, tyControls.ProgressBar, tyControls.TyLabel,
   tyControls.Button, tyControls.StrConsts;
 
@@ -16,6 +16,7 @@ type
   TTyProgressForm = class(TTyDialog)
   private
     FDlg: TTyProgressDialog;
+    FPane: TPanel;                // double-buffered windowed host for the graphic label+bar
     FBar: TTyProgressBar;
     FLabel: TTyLabel;
     FCancelBtn: TTyButton;        // nil unless cancelable
@@ -80,23 +81,40 @@ begin
   y := r.Top + TyDlgPad;
   contentW := 360;
 
+  // The label and bar are GRAPHIC controls (they paint onto their parent's canvas).
+  // Parenting them straight to the form means every SetProgress repaint goes through
+  // the top-level window's WM_PAINT — erase, refill the surface, then redraw the bar,
+  // all straight to screen — which flickers. Host them on a windowed, DOUBLE-BUFFERED
+  // pane instead: their repaints composite offscreen and blit once (no flicker). The
+  // pane is a CHILD window, so the form's Win10 DWM glass extend does not apply and
+  // double buffering is safe; ParentColor keeps its opaque fill on the themed surface
+  // and it is borderless (bvNone) so the dialog looks unchanged.
+  FPane := TPanel.Create(Self);
+  FPane.Parent := Self;
+  FPane.BevelOuter := bvNone;
+  FPane.BorderStyle := bsNone;
+  FPane.Caption := '';
+  FPane.ParentBackground := False;   // paint a solid Color, not the parent's themed bg
+  FPane.ParentColor := True;         // Color follows the form's themed surface
+  FPane.DoubleBuffered := True;
+  FPane.SetBounds(x0, y, contentW, 48);
+
   FLabel := TTyLabel.Create(Self);
-  FLabel.Parent := Self;
+  FLabel.Parent := FPane;
   // Fixed-width status line: don't auto-resize/relayout (and repaint) on every text
   // change — that is a flicker source when SetProgress is called in a tight loop.
   FLabel.AutoSize := False;
-  FLabel.SetBounds(x0, y, contentW, 20);
-  Inc(y, 28);
+  FLabel.SetBounds(0, 0, contentW, 20);
 
   FBar := TTyProgressBar.Create(Self);
-  FBar.Parent := Self;
+  FBar.Parent := FPane;
   // The dialog is driven by discrete SetProgress calls (typically a tight loop that
   // pumps Application.ProcessMessages). The bar's 60fps tween timer, re-armed on
-  // every call, just churns repaints of this graphic control against the loop —
-  // seen as the text/bar "flicker". Snap directly to each reported position instead.
+  // every call, just churns repaints against the loop — snap to each reported
+  // position instead of animating.
   FBar.AnimationsEnabled := False;
-  FBar.SetBounds(x0, y, contentW, 20);
-  Inc(y, 28);
+  FBar.SetBounds(0, 28, contentW, 20);
+  Inc(y, 56);
 
   if ACancelable then
   begin
