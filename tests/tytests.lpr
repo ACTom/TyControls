@@ -66,7 +66,8 @@ uses
   test.dialogs.font,
   test.dialogs.find,
   test.dialogs.progress,
-  test.combobox;
+  test.combobox,
+  test.tabset;
 
 type
   TTyTestRunner = class(TTestRunner)

@@ -169,6 +169,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.TabStrip"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.TabSet.pas"/>
+        <UnitName Value="tyControls.TabSet"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.TabSheet.pas"/>
         <UnitName Value="tyControls.TabSheet"/>
       </Item>
