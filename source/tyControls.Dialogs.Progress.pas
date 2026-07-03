@@ -82,11 +82,19 @@ begin
 
   FLabel := TTyLabel.Create(Self);
   FLabel.Parent := Self;
+  // Fixed-width status line: don't auto-resize/relayout (and repaint) on every text
+  // change — that is a flicker source when SetProgress is called in a tight loop.
+  FLabel.AutoSize := False;
   FLabel.SetBounds(x0, y, contentW, 20);
   Inc(y, 28);
 
   FBar := TTyProgressBar.Create(Self);
   FBar.Parent := Self;
+  // The dialog is driven by discrete SetProgress calls (typically a tight loop that
+  // pumps Application.ProcessMessages). The bar's 60fps tween timer, re-armed on
+  // every call, just churns repaints of this graphic control against the loop —
+  // seen as the text/bar "flicker". Snap directly to each reported position instead.
+  FBar.AnimationsEnabled := False;
   FBar.SetBounds(x0, y, contentW, 20);
   Inc(y, 28);
 
