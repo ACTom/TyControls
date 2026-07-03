@@ -9,6 +9,12 @@ type
     procedure TestEmptyPrefixReturnsAll;
     procedure TestNoMatchReturnsEmpty;
   end;
+
+  TComboEditableTest = class(TTestCase)
+  published
+    procedure TestEditorPresentOnlyInDropDown;
+    procedure TestFreeTextSurvivesItemsChange;
+  end;
 implementation
 
 procedure TComboFilterTest.TestPrefixFilter;
@@ -47,6 +53,32 @@ begin
   finally src.Free; end;
 end;
 
+procedure TComboEditableTest.TestEditorPresentOnlyInDropDown;
+var c: TTyComboBox;
+begin
+  c := TTyComboBox.Create(nil);
+  try
+    AssertFalse('list-mode: no editor visible', c.EditorVisibleForTest);
+    c.Style := csDropDown;
+    AssertTrue('dropdown-mode: editor visible', c.EditorVisibleForTest);
+  finally c.Free; end;
+end;
+
+procedure TComboEditableTest.TestFreeTextSurvivesItemsChange;
+var c: TTyComboBox;
+begin
+  c := TTyComboBox.Create(nil);
+  try
+    c.Style := csDropDown;
+    c.Items.AddStrings(['Alpha','Beta']);
+    c.Text := 'Gam';                 // free text, not in Items
+    c.Items.Add('Gamma');            // triggers ItemsChanged->ResyncIndexFromText
+    AssertEquals('free text preserved', 'Gam', c.Text);
+    AssertEquals('no item selected', -1, c.ItemIndex);
+  finally c.Free; end;
+end;
+
 initialization
   RegisterTest(TComboFilterTest);
+  RegisterTest(TComboEditableTest);
 end.

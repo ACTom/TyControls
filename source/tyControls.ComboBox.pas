@@ -4,11 +4,15 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, StdCtrls, LCLType, LCLIntf,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
-  tyControls.ListBox, tyControls.Popup;
+  tyControls.ListBox, tyControls.Popup, tyControls.Edit;
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
 function TyFilterItemsByPrefix(AItems: TStrings; const APrefix: string): TStringList;
 
 type
+  { csDropDownList = read-only (pick from list only). csDropDown = editable field
+    with prefix autocomplete (an embedded TTyEdit overlays the text zone). }
+  TTyComboBoxStyle = (csDropDownList, csDropDown);
+
   TTyComboBox = class(TTyCustomControl)
   private
     FItems: TStringList;
@@ -18,6 +22,11 @@ type
     FSorted: Boolean;
     FMaxLength: Integer;
     FCharCase: TEditCharCase;
+    { Editable-mode (csDropDown) state }
+    FStyle: TTyComboBoxStyle;
+    FEditor: TTyEdit;             // embedded edit field; owned by Self, parented to Self
+    FVisibleItems: TStringList;   // prefix-filtered subset shown in the autocomplete popup
+    FSyncingText: Boolean;        // guard: True while we set FEditor.Text programmatically
     FOnChange: TNotifyEvent;
     FOnSelect: TNotifyEvent;
     FOnDropDown: TNotifyEvent;
@@ -34,6 +43,14 @@ type
     procedure SetDropDownCount(const AValue: Integer);
     procedure SetSorted(const AValue: Boolean);
     procedure SetCharCase(const AValue: TEditCharCase);
+    procedure SetStyle(AValue: TTyComboBoxStyle);
+    { Set the embedded editor's text under the FSyncingText guard (exception-safe),
+      so a programmatic write never re-triggers the autocomplete filter. }
+    procedure SetEditorText(const S: string);
+    procedure EditorChange(Sender: TObject);
+    procedure LayoutEditor;
+    procedure DropDownFiltered;
+    function PointInChevron(const P: TPoint): Boolean;
     { Re-locate FItemIndex from the currently-selected text after the item list
       has been reordered (e.g. by sorting). Keeps the SAME item selected. }
     procedure ResyncIndexFromText;
@@ -45,6 +62,8 @@ type
       only when the selection actually changed. Distinct from the programmatic
       ItemIndex setter, which fires OnChange but never OnSelect. }
     procedure UserSelect(AIndex: Integer);
+    { Lazily create the popup helper + list box (shared by DropDown/DropDownFiltered). }
+    procedure EnsurePopup;
     { Popup event handlers }
     procedure PopupListChange(Sender: TObject);
     procedure PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -65,6 +84,7 @@ type
     procedure DoCloseUp; virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    procedure Resize; override;
     procedure Click; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
@@ -72,6 +92,8 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetStyleTypeKey: string; override;
+    { Test seam: True when the embedded editor exists and is visible (csDropDown). }
+    function EditorVisibleForTest: Boolean;
     procedure SelectItem(AIndex: Integer);
     function DroppedDown: Boolean;
     procedure DropDown; virtual;
@@ -87,12 +109,14 @@ type
     { When True, Items are kept in ascending (case-insensitive) order and the
       previously-selected item stays selected (tracked by its text). }
     property Sorted: Boolean read FSorted write SetSorted default False;
-    { MaxLength/CharCase apply to the edit field of an editable combo. This combo
-      is read-only (csDropDownList); they are published for native-API parity and
-      streaming round-trip, and are reserved for a future editable mode. They have
-      no effect on the displayed (read-only) selected text. }
+    { MaxLength/CharCase apply to the embedded edit field. In csDropDown mode they
+      are forwarded to that field (CharCase transforms typed text; MaxLength caps
+      its length). In csDropDownList mode there is no editable text, so they are
+      inert — published for native-API parity and streaming round-trip. }
     property MaxLength: Integer read FMaxLength write FMaxLength default 0;
     property CharCase: TEditCharCase read FCharCase write SetCharCase default ecNormal;
+    { csDropDownList (default) = read-only; csDropDown = editable + prefix autocomplete. }
+    property Style: TTyComboBoxStyle read FStyle write SetStyle default csDropDownList;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property OnSelect: TNotifyEvent read FOnSelect write FOnSelect;
     property OnDropDown: TNotifyEvent read FOnDropDown write FOnDropDown;
@@ -150,6 +174,17 @@ begin
   TabStop := True;
   Width := 145;
   Height := 26;
+  { Editable-mode scaffolding. The editor stays hidden until Style := csDropDown. }
+  FStyle := csDropDownList;
+  FVisibleItems := TStringList.Create;
+  FSyncingText := False;
+  FEditor := TTyEdit.Create(Self);
+  FEditor.Parent := Self;
+  FEditor.Visible := False;
+  FEditor.OnChange := @EditorChange;
+  { Keep the (normally hidden) child editor out of the IDE designer's selectable
+    sub-control set — same rule as the TreeView inline editor. }
+  FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
 end;
 
 destructor TTyComboBox.Destroy;
@@ -162,6 +197,9 @@ begin
   { Free the list box (owned by Self; no longer parented to anything after the
     helper's form was freed above). }
   FreeAndNil(FPopupList);
+  { FEditor is owned by Self and auto-freed by the component chain; only the
+    filtered-subset list needs an explicit free. }
+  FVisibleItems.Free;
   FItems.Free;
   inherited Destroy;
 end;
@@ -182,6 +220,9 @@ begin
     from the updated theme. }
   if FPopup <> nil then
     FPopup.Controller := AValue;
+  { Keep the embedded editor themed by the same controller. }
+  if FEditor <> nil then
+    FEditor.Controller := AValue;
 end;
 
 procedure TTyComboBox.DoSelect;
@@ -223,6 +264,10 @@ procedure TTyComboBox.SetText(const AValue: string);
 begin
   if FText = AValue then Exit;
   FText := AValue;
+  { In editable mode keep the visible field in sync with a programmatic Text set,
+    but under the guard so it does not re-trigger the autocomplete filter/popup. }
+  if (FEditor <> nil) and (FStyle = csDropDown) and (FEditor.Text <> AValue) then
+    SetEditorText(AValue);
   Invalidate;
 end;
 
@@ -259,8 +304,87 @@ end;
 
 procedure TTyComboBox.SetCharCase(const AValue: TEditCharCase);
 begin
-  { Stored for API parity; read-only combo has no edit text to transform. }
   FCharCase := AValue;
+  { In editable mode the transform applies to the embedded field. }
+  if FEditor <> nil then
+    FEditor.CharCase := AValue;
+end;
+
+function TTyComboBox.EditorVisibleForTest: Boolean;
+begin
+  Result := (FEditor <> nil) and FEditor.Visible;
+end;
+
+procedure TTyComboBox.SetEditorText(const S: string);
+begin
+  if FEditor = nil then Exit;
+  FSyncingText := True;
+  try
+    FEditor.Text := S;
+  finally
+    FSyncingText := False;
+  end;
+end;
+
+procedure TTyComboBox.SetStyle(AValue: TTyComboBoxStyle);
+begin
+  if FStyle = AValue then Exit;
+  FStyle := AValue;
+  if FEditor <> nil then
+  begin
+    FEditor.Visible := (FStyle = csDropDown);
+    if FStyle = csDropDown then
+    begin
+      SetEditorText(FText);   // seed from current text without re-triggering filter
+      LayoutEditor;
+    end;
+  end;
+  Invalidate;
+end;
+
+procedure TTyComboBox.LayoutEditor;
+var
+  BtnW, PPI, PadL, PadT, PadR, PadB: Integer;
+  S: TTyStyleSet;
+begin
+  if (FEditor = nil) or (FStyle <> csDropDown) then Exit;
+  PPI  := Font.PixelsPerInch;
+  BtnW := MulDiv(ButtonWidthLogical, PPI, 96);
+  { Inset the editor to the same field rectangle RenderTo paints the text into:
+    the resolved Padding on all sides, stopping short of the chevron zone. Keeps
+    the embedded editor aligned with the frame on any theme. }
+  S    := CurrentStyle;
+  PadL := MulDiv(S.Padding.Left,   PPI, 96);
+  PadT := MulDiv(S.Padding.Top,    PPI, 96);
+  PadR := MulDiv(S.Padding.Right,  PPI, 96);
+  PadB := MulDiv(S.Padding.Bottom, PPI, 96);
+  FEditor.SetBounds(PadL, PadT,
+    ClientWidth - BtnW - PadL - PadR,
+    ClientHeight - PadT - PadB);
+end;
+
+procedure TTyComboBox.EditorChange(Sender: TObject);
+var filtered: TStringList;
+begin
+  if FSyncingText then Exit;
+  FText := FEditor.Text;
+  FItemIndex := FItems.IndexOf(FText);   // -1 if not a member; do NOT blank FText
+  filtered := TyFilterItemsByPrefix(FItems, FText);
+  try
+    FVisibleItems.Assign(filtered);
+  finally filtered.Free; end;
+  if FVisibleItems.Count = 0 then
+    CloseUp
+  else
+    DropDownFiltered;
+  if Assigned(FOnChange) then FOnChange(Self);
+end;
+
+function TTyComboBox.PointInChevron(const P: TPoint): Boolean;
+var BtnW: Integer;
+begin
+  BtnW := MulDiv(ButtonWidthLogical, Font.PixelsPerInch, 96);
+  Result := P.X >= ClientWidth - BtnW;
 end;
 
 procedure TTyComboBox.ResyncIndexFromText;
@@ -276,9 +400,11 @@ begin
     FItemIndex := Idx
   else
   begin
-    { Selected text no longer present — clear selection. }
+    { Selected text no longer present — clear selection. In editable mode the
+      field keeps its free text (it may just not be a list member); only the
+      read-only list-mode blanks the display. }
     FItemIndex := -1;
-    FText := '';
+    if FStyle = csDropDownList then FText := '';
   end;
 end;
 
@@ -339,6 +465,27 @@ begin
   Result := (FPopup <> nil) and FPopup.IsOpen;
 end;
 
+{ Lazily create the popup helper and the list box (both live for the combo's
+  lifetime — the helper reuses its form across multiple show/hide cycles). }
+procedure TTyComboBox.EnsurePopup;
+begin
+  if FPopup <> nil then Exit;
+  FPopup := TTyDropdownPopup.Create;
+  FPopup.Controller := Self.Controller;
+  FPopup.OnClose    := @PopupClosed;
+
+  FPopupList := TTyListBox.Create(Self);  // owned by the combo, not the form
+  FPopupList.ForceSquareSurface := TyQtIsWayland;
+  FPopupList.OnChange := @PopupListChange;
+
+  { Wire the list into the helper's form (alClient; SetContent is one-shot). }
+  FPopup.SetContent(FPopupList);
+
+  { Key handling on the popup form. }
+  FPopup.Form.KeyPreview := True;
+  FPopup.Form.OnKeyDown  := @PopupKeyDown;
+end;
+
 { Ensure the popup helper and its TTyListBox child exist, then show the popup. }
 procedure TTyComboBox.DropDown;
 var
@@ -346,26 +493,7 @@ var
   S: TTyStyleSet;
 begin
   if FItems.Count = 0 then Exit;
-
-  { Lazily create the popup helper and the list box (both live for the combo's
-    lifetime — the helper reuses its form across multiple show/hide cycles). }
-  if FPopup = nil then
-  begin
-    FPopup := TTyDropdownPopup.Create;
-    FPopup.Controller := Self.Controller;
-    FPopup.OnClose    := @PopupClosed;
-
-    FPopupList := TTyListBox.Create(Self);  // owned by the combo, not the form
-    FPopupList.ForceSquareSurface := TyQtIsWayland;
-    FPopupList.OnChange := @PopupListChange;
-
-    { Wire the list into the helper's form (alClient; SetContent is one-shot). }
-    FPopup.SetContent(FPopupList);
-
-    { Key handling on the popup form. }
-    FPopup.Form.KeyPreview := True;
-    FPopup.Form.OnKeyDown  := @PopupKeyDown;
-  end;
+  EnsurePopup;
 
   { Sync controller every DropDown so DPI/theme changes take effect. }
   FPopupList.Controller := Self.Controller;
@@ -389,6 +517,45 @@ begin
   DoDropDown;   // popup actually opened
 end;
 
+{ Editable-mode autocomplete: show the popup populated with the prefix-filtered
+  subset (FVisibleItems) instead of the full list. Mirrors DropDown otherwise. }
+procedure TTyComboBox.DropDownFiltered;
+var
+  PopupH, ScaledIH, VisibleRows: Integer;
+  S: TTyStyleSet;
+begin
+  if FVisibleItems.Count = 0 then Exit;
+  EnsurePopup;
+
+  FPopupList.Controller := Self.Controller;
+  FPopup.Controller     := Self.Controller;
+
+  { Populate from the filtered subset. No selection is forced — the field text
+    drives the match; picking a row is what commits a selection. }
+  FPopupList.OnChange := nil;
+  FPopupList.Items.Assign(FVisibleItems);
+  FPopupList.SelectItem(-1);
+  FPopupList.OnChange := @PopupListChange;
+
+  S := ActiveController.Model.ResolveStyle('TyListBox', '', []);
+  FPopup.CornerRadiusLogical := S.BorderRadius;
+
+  { Height off the FILTERED count (mirrors ComputePopupHeight's formula but on
+    FVisibleItems, which is what is actually shown). }
+  ScaledIH    := MulDiv(24, Font.PixelsPerInch, 96);   // cPopupRowHeight = 24
+  VisibleRows := Min(FVisibleItems.Count, FDropDownCount);
+  PopupH      := VisibleRows * ScaledIH + 2;
+
+  FPopup.Popup(Self, Width, PopupH);
+  DoDropDown;
+end;
+
+procedure TTyComboBox.Resize;
+begin
+  inherited Resize;
+  LayoutEditor;
+end;
+
 procedure TTyComboBox.CloseUp;
 begin
   { If the popup is open, close it — FPopup.Close fires PopupClosed (OnClose)
@@ -409,6 +576,9 @@ procedure TTyComboBox.Click;
 begin
   if not Enabled then Exit;
   inherited Click;
+  { In editable mode a click on the text zone belongs to the embedded editor
+    (caret placement / focus); only a click on the chevron toggles the dropdown. }
+  if (FStyle = csDropDown) and not PointInChevron(ScreenToClient(Mouse.CursorPos)) then Exit;
   { If dropped down, close. Otherwise open — but guard the reopen race:
     clicking the combo while it is open fires FormDeactivate→FPopup.Close→
     PopupClosed BEFORE this Click handler runs, so DroppedDown is already False
@@ -472,6 +642,9 @@ end;
 { Popup event handlers }
 
 procedure TTyComboBox.PopupListChange(Sender: TObject);
+var
+  Picked: string;
+  FullIdx, OldIndex: Integer;
 begin
   { User clicked / chose a row in the popup list -> a user-driven selection.
     Defer the close: hiding the popup synchronously here — still inside the list's
@@ -479,6 +652,25 @@ begin
     now-hidden popup form, raising EInvalidOperation
     '[TCustomForm.SetFocus] ... Can not focus'. Closing on the next message cycle
     lets the click finish first. }
+  if FStyle = csDropDown then
+  begin
+    { The popup holds the FILTERED subset, so its ItemIndex is not the full-Items
+      index. Commit by the row's text: seed the editor under the re-entrancy guard
+      (else EditorChange would re-filter and re-open the popup), map the text back
+      to the full list for FItemIndex, then fire OnChange/OnSelect. }
+    if (FPopupList.ItemIndex < 0) or (FPopupList.ItemIndex >= FVisibleItems.Count) then Exit;
+    Picked  := FVisibleItems[FPopupList.ItemIndex];
+    FullIdx := FItems.IndexOf(Picked);
+    OldIndex := FItemIndex;
+    SetEditorText(Picked);
+    FText := Picked;
+    FItemIndex := FullIdx;
+    Invalidate;
+    if Assigned(FOnChange) then FOnChange(Self);
+    if FItemIndex <> OldIndex then DoSelect;
+    Application.QueueAsyncCall(@DeferredCloseUp, 0);
+    Exit;
+  end;
   UserSelect(FPopupList.ItemIndex);
   Application.QueueAsyncCall(@DeferredCloseUp, 0);
 end;
