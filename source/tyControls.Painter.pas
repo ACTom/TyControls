@@ -11,7 +11,7 @@ uses
   tyControls.Types;
 
 type
-  TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck,
+  TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck, tgCheckIndeterminate,
     tgRadioDot, tgChevronDown, tgChevronRight, tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight);
 
   TTyPainter = class
@@ -448,6 +448,9 @@ begin
     tgCheck:
       FBmp.DrawPolyLineAntialias([PointF(l, cy), PointF(l + w * 0.35, b),
         PointF(r, t)], px, th);
+    tgCheckIndeterminate:
+      // centered filled square (Windows indeterminate look); m = min(w,h) from the setup vars
+      FBmp.FillRectAntialias(cx - m * 0.28, cy - m * 0.28, cx + m * 0.28, cy + m * 0.28, px);
     tgRadioDot:
       FBmp.FillEllipseAntialias(cx, cy, m * 0.3, m * 0.3, px);
     tgChevronDown:
