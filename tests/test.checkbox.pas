@@ -2,7 +2,7 @@ unit test.checkbox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
+  Classes, SysUtils, StdCtrls, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.CheckBox;
 type
@@ -44,6 +44,21 @@ type
     procedure TestBoxPaddingShiftsBoxRight;
     procedure TestCheckBoxOnChangeFires;
     procedure TestRadioOnChangeAndSiblings;
+  end;
+
+  TCheckBoxTriStateTest = class(TTestCase)
+  private
+    FChangeCount: Integer;
+    procedure HChange(Sender: TObject);
+  published
+    procedure TestClickCycleNoGrayed;
+    procedure TestClickCycleAllowGrayed;
+    procedure TestCheckedDerivedFromState;
+    procedure TestSetCheckedMapsState;
+    procedure TestGrayedEntersActiveState;
+    procedure TestOnChangeFiresOnDirectStateSet;
+    procedure TestGrayedRendersIndeterminateGlyph;
+    procedure TestAllowGrayedFalseStillAllowsProgrammaticGrayed;
   end;
 implementation
 
@@ -593,6 +608,176 @@ begin
   end;
 end;
 
+procedure TCheckBoxTriStateTest.TestClickCycleNoGrayed;
+var cb: TTyCheckBox;
+begin
+  cb := TTyCheckBox.Create(nil);
+  try
+    cb.AllowGrayed := False;
+    AssertEquals('init', Ord(cbUnchecked), Ord(cb.State));
+    cb.Click; AssertEquals('->checked', Ord(cbChecked), Ord(cb.State));
+    cb.Click; AssertEquals('->unchecked', Ord(cbUnchecked), Ord(cb.State));
+  finally cb.Free; end;
+end;
+
+procedure TCheckBoxTriStateTest.TestClickCycleAllowGrayed;
+var cb: TTyCheckBox;
+begin
+  cb := TTyCheckBox.Create(nil);
+  try
+    cb.AllowGrayed := True;
+    cb.Click; AssertEquals('->checked', Ord(cbChecked), Ord(cb.State));
+    cb.Click; AssertEquals('->grayed', Ord(cbGrayed), Ord(cb.State));
+    cb.Click; AssertEquals('->unchecked', Ord(cbUnchecked), Ord(cb.State));
+  finally cb.Free; end;
+end;
+
+procedure TCheckBoxTriStateTest.TestCheckedDerivedFromState;
+var cb: TTyCheckBox;
+begin
+  cb := TTyCheckBox.Create(nil);
+  try
+    cb.State := cbChecked;   AssertTrue('checked', cb.Checked);
+    cb.State := cbGrayed;    AssertFalse('grayed not Checked', cb.Checked);
+    cb.State := cbUnchecked; AssertFalse('unchecked', cb.Checked);
+  finally cb.Free; end;
+end;
+
+procedure TCheckBoxTriStateTest.TestSetCheckedMapsState;
+var cb: TTyCheckBox;
+begin
+  cb := TTyCheckBox.Create(nil);
+  try
+    cb.Checked := True;  AssertEquals('True->cbChecked', Ord(cbChecked), Ord(cb.State));
+    cb.Checked := False; AssertEquals('False->cbUnchecked', Ord(cbUnchecked), Ord(cb.State));
+  finally cb.Free; end;
+end;
+
+procedure TCheckBoxTriStateTest.HChange(Sender: TObject); begin Inc(FChangeCount); end;
+
+procedure TCheckBoxTriStateTest.TestGrayedEntersActiveState;
+{ Mirrors TestCheckedEntersActiveState: a grayed checkbox must also enter
+  tysActive (CurrentStates branches on FState in [cbChecked, cbGrayed]). }
+var
+  F: TCustomForm;
+  C: TTyCheckBoxAccess;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    C := TTyCheckBoxAccess.Create(F); C.Parent := F;
+    AssertFalse('unchecked: not active', tysActive in C.States);
+    C.State := cbGrayed;
+    AssertTrue('grayed: enters active', tysActive in C.States);
+    C.State := cbUnchecked;
+    AssertFalse('unchecked again: not active', tysActive in C.States);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxTriStateTest.TestOnChangeFiresOnDirectStateSet;
+{ OnChange must fire when State is set directly (SetState is the notify point);
+  the existing OnChange test only exercised the Checked-setter path. Setting the
+  same State value must NOT fire (early-out guard). }
+var
+  F: TCustomForm;
+  C: TTyCheckBox;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    C := TTyCheckBox.Create(F); C.Parent := F;
+    C.OnChange := @HChange;
+
+    FChangeCount := 0;
+    C.State := cbGrayed;
+    AssertEquals('State:=cbGrayed fires once', 1, FChangeCount);
+
+    FChangeCount := 0;
+    C.State := cbGrayed;             // same value -> no change, no fire
+    AssertEquals('State:=cbGrayed again (same) does not fire', 0, FChangeCount);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxTriStateTest.TestGrayedRendersIndeterminateGlyph;
+{ A cbGrayed checkbox must draw the indeterminate glyph into the box, so its
+  box region must differ from a cbUnchecked one (which draws no glyph). Mirrors
+  the pixel-sampling render tests: RenderTo into a TBitmap, reread via
+  TBGRABitmap, and compare ink inside the 16px box region (0,3)-(16,19). }
+var
+  F: TCustomForm;
+  C: TTyCheckBoxAccess;
+  BmpG, BmpU: TBitmap;
+  RG, RU: TBGRABitmap;
+  X, Y: Integer;
+  DiffFound, GrayedHasInk: Boolean;
+  PgPx, PuPx: TBGRAPixel;
+begin
+  F := TCustomForm.CreateNew(nil);
+  BmpG := TBitmap.Create;
+  BmpU := TBitmap.Create;
+  try
+    C := TTyCheckBoxAccess.Create(F);
+    C.Parent := F;
+    C.Font.PixelsPerInch := 96;
+    C.Caption := '';
+
+    BmpG.PixelFormat := pf32bit; BmpG.SetSize(120, 22);
+    BmpG.Canvas.Brush.Color := clWhite; BmpG.Canvas.FillRect(0, 0, 120, 22);
+    C.State := cbGrayed;
+    C.RenderTo(BmpG.Canvas, Rect(0, 0, 120, 22), 96);
+
+    BmpU.PixelFormat := pf32bit; BmpU.SetSize(120, 22);
+    BmpU.Canvas.Brush.Color := clWhite; BmpU.Canvas.FillRect(0, 0, 120, 22);
+    C.State := cbUnchecked;
+    C.RenderTo(BmpU.Canvas, Rect(0, 0, 120, 22), 96);
+
+    RG := TBGRABitmap.Create(BmpG);
+    RU := TBGRABitmap.Create(BmpU);
+    try
+      // Scan the box region: the grayed render must have at least one pixel that
+      // differs from the unchecked render (the glyph), and non-background ink.
+      DiffFound := False;
+      GrayedHasInk := False;
+      for Y := 3 to 18 do
+        for X := 0 to 15 do
+        begin
+          PgPx := RG.GetPixel(X, Y);
+          PuPx := RU.GetPixel(X, Y);
+          if (PgPx.red <> PuPx.red) or (PgPx.green <> PuPx.green) or
+             (PgPx.blue <> PuPx.blue) then
+            DiffFound := True;
+          if (PgPx.red < 230) or (PgPx.green < 230) or (PgPx.blue < 230) then
+            GrayedHasInk := True;
+        end;
+      AssertTrue('grayed box differs from unchecked box (glyph drawn)', DiffFound);
+      AssertTrue('grayed box region has ink (not blank white)', GrayedHasInk);
+    finally
+      RG.Free;
+      RU.Free;
+    end;
+  finally
+    BmpG.Free;
+    BmpU.Free;
+    F.Free;
+  end;
+end;
+
+procedure TCheckBoxTriStateTest.TestAllowGrayedFalseStillAllowsProgrammaticGrayed;
+{ LCL parity: AllowGrayed only gates the Click cycle, not programmatic State
+  assignment. cbGrayed must stick even with AllowGrayed=False. }
+var cb: TTyCheckBox;
+begin
+  cb := TTyCheckBox.Create(nil);
+  try
+    cb.AllowGrayed := False;
+    cb.State := cbGrayed;
+    AssertEquals('programmatic cbGrayed sticks', Ord(cbGrayed), Ord(cb.State));
+  finally cb.Free; end;
+end;
+
 initialization
   RegisterTest(TCheckBoxTest);
+  RegisterTest(TCheckBoxTriStateTest);
 end.

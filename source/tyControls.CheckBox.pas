@@ -2,13 +2,16 @@ unit tyControls.CheckBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, StdCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel;
 type
   TTyCheckBox = class(TTyCustomControl)
   private
-    FChecked: Boolean;
+    FState: TCheckBoxState;
+    FAllowGrayed: Boolean;
     FOnChange: TNotifyEvent;
+    function GetChecked: Boolean;
+    procedure SetState(const AValue: TCheckBoxState);
     procedure SetChecked(const AValue: Boolean);
   protected
     function GetStyleTypeKey: string; override;
@@ -22,7 +25,9 @@ type
     destructor Destroy; override;
     procedure Click; override;
   published
-    property Checked: Boolean read FChecked write SetChecked default False;
+    property State: TCheckBoxState read FState write SetState default cbUnchecked;
+    property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
+    property Checked: Boolean read GetChecked write SetChecked default False;
     property Caption;
     property Enabled;
     property Font;
@@ -107,22 +112,39 @@ begin
   // CAPTION too, so RenderTo resolves the caption text from a separate
   // active-free state set — keeping the accent + white-glyph effect box-only.
   Result := inherited CurrentStates;
-  if FChecked and Enabled then
+  if (FState in [cbChecked, cbGrayed]) and Enabled then
     Include(Result, tysActive);
+end;
+
+procedure TTyCheckBox.SetState(const AValue: TCheckBoxState);
+begin
+  if FState = AValue then Exit;
+  FState := AValue;
+  Invalidate;
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyCheckBox.SetChecked(const AValue: Boolean);
 begin
-  if FChecked = AValue then Exit;
-  FChecked := AValue;
-  Invalidate;
-  if Assigned(FOnChange) then FOnChange(Self);
+  if AValue then SetState(cbChecked) else SetState(cbUnchecked);
+end;
+
+function TTyCheckBox.GetChecked: Boolean;
+begin
+  Result := FState = cbChecked;
 end;
 
 procedure TTyCheckBox.Click;
 begin
   if not Enabled then Exit;
-  SetChecked(not FChecked);
+  if FAllowGrayed then
+    case FState of
+      cbUnchecked: SetState(cbChecked);
+      cbChecked:   SetState(cbGrayed);
+      cbGrayed:    SetState(cbUnchecked);
+    end
+  else
+    SetChecked(FState <> cbChecked);
   inherited Click;
 end;
 
@@ -182,8 +204,10 @@ begin
       ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2) + BoxSize);
     P.FillBackground(BoxRect, S.Background, S.BorderRadius);
     P.StrokeBorder(BoxRect, S.BorderRadius, S.BorderWidth, S.BorderColor);
-    if FChecked then
-      P.DrawGlyph(BoxRect, tgCheck, S.TextColor, 2);
+    case FState of
+      cbChecked: P.DrawGlyph(BoxRect, tgCheck, S.TextColor, 2);
+      cbGrayed:  P.DrawGlyph(BoxRect, tgCheckIndeterminate, S.TextColor, 2);
+    end;
     TextRect := Rect(BoxRect.Right + Gap, ContentRect.Top,
       ContentRect.Right, ContentRect.Bottom);
     TyParseMnemonic(Caption, disp, mp);
