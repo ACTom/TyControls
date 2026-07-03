@@ -23,6 +23,7 @@ type
     procedure CancelClick(Sender: TObject);
   protected
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure DoShow; override;
   public
     procedure Build(ACancelable: Boolean);
     procedure UpdateView(APos, AMin, AMax: Integer; const AText: string);
@@ -132,6 +133,16 @@ begin
   FBar.Max := AMax;
   FBar.Position := APos;
   FLabel.Caption := AText;
+end;
+
+procedure TTyProgressForm.DoShow;
+begin
+  inherited DoShow;   // TTyDialog.DoShow adopts the app theme first -> form Color = surface
+  // The host pane is a plain (unthemed) windowed control. Give its opaque fill the
+  // form's themed surface Color EXPLICITLY (ApplyChromeTheme set it) so it matches the
+  // dialog instead of the LCL default (white/grey) — ParentColor did not track the
+  // CreateNew dialog's DoShow-time colour set.
+  if FPane <> nil then FPane.Color := Color;
 end;
 
 procedure TTyProgressForm.CancelClick(Sender: TObject);
