@@ -354,6 +354,48 @@ object DemoMainForm: TDemoMainForm
       ItemIndex = 0
       Text = 'Alpha'
     end
+    object TriCheck: TTyCheckBox
+      Left = 240
+      Height = 22
+      Top = 322
+      Width = 120
+      TabOrder = 14
+      TabStop = True
+      Controller = TyController
+      AllowGrayed = True
+      State = cbGrayed
+      Caption = 'Tri-state'
+    end
+    object EditCombo: TTyComboBox
+      Left = 366
+      Height = 26
+      Top = 320
+      Width = 120
+      TabOrder = 15
+      Controller = TyController
+      Style = csDropDown
+      Items.Strings = (
+        'Alpha'
+        'Beta'
+        'Gamma'
+      )
+      ItemIndex = -1
+    end
+    object TabSet1: TTyTabSet
+      Left = 492
+      Height = 28
+      Top = 320
+      Width = 128
+      TabOrder = 16
+      TabStop = True
+      Controller = TyController
+      Tabs.Strings = (
+        'Tab 1'
+        'Tab 2'
+        'Tab 3'
+      )
+      TabIndex = 0
+    end
     object ScrollV: TTyScrollBar
       Left = 600
       Height = 161

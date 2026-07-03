@@ -10,7 +10,7 @@ uses
   tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu,
   tyControls.BuiltinThemes, tyControls.NativeStyler, tyControls.ToolBar,
-  tyControls.StatusBar, tyControls.Splitter, tyControls.Calendar,
+  tyControls.StatusBar, tyControls.Splitter, tyControls.TabSet, tyControls.Calendar,
   tyControls.DateTimePicker, tyControls.TreeView, tyControls.TreeView.Columns,
   tyControls.Dialogs, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
@@ -28,6 +28,9 @@ type
     Calendar1: TTyCalendar;
     ChkAgree: TTyCheckBox;
     ComboKind: TTyComboBox;
+    TriCheck: TTyCheckBox;
+    EditCombo: TTyComboBox;
+    TabSet1: TTyTabSet;
     DateField1: TTyDateTimePicker;
     EditName: TTyEdit;
     GroupBox1: TTyGroupBox;
