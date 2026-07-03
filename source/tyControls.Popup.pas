@@ -36,6 +36,7 @@ type
   private
     FForm        : TForm;
     FContent     : TControl;
+    FAnchor      : TControl;        // anchor control of the last Popup (for in-place Resize)
     FRect        : TRect;           // last computed screen rect (for deferred Qt re-apply)
     FCornerRadiusLogical: Integer;
     FOnClose     : TNotifyEvent;
@@ -62,6 +63,12 @@ type
       apply the rounded region.  AAnchor is the control the popup drops from
       (its ClientToScreen(Rect(0,0,Width,Height)) is used as the anchor rect). }
     procedure Popup(AAnchor: TControl; AContentWidth, AContentHeight: Integer);
+
+    { Re-anchor + resize an ALREADY-open popup in place — recomputes the drop rect
+      from the last anchor and re-applies the region, but does NOT re-Show and does
+      NOT activate. Used to refresh an autocomplete popup as the filtered row count
+      changes without stealing focus back from the owner's editor. No-op if closed. }
+    procedure Resize(AContentWidth, AContentHeight: Integer);
 
     { Hide the popup and fire OnClose (guarded against re-entrancy). }
     procedure Close;
@@ -142,6 +149,7 @@ begin
   FCloseUpTick := 0;
   FController := nil;
   FNoActivate := False;
+  FAnchor := nil;
 
   FForm := TForm.CreateNew(nil);
   FForm.BorderStyle  := bsNone;
@@ -189,6 +197,7 @@ var
   PopupW, PopupH: Integer;
   {$IFDEF WINDOWS}exStyle: PtrInt;{$ENDIF}
 begin
+  FAnchor := AAnchor;   // remembered so Resize can re-anchor an already-open popup
   // Resolve the anchor control's screen rectangle.
   AnchorTL := AAnchor.ClientToScreen(Types.Point(0, 0));
   AnchorScreen := Types.Rect(AnchorTL.X, AnchorTL.Y,
@@ -234,6 +243,26 @@ begin
   FForm.SetBounds(FRect.Left, FRect.Top, PopupW, PopupH);
   ApplyRegion(PopupW, PopupH);
   Application.QueueAsyncCall(@DeferredReapplyGeometry, 0);
+end;
+
+procedure TTyDropdownPopup.Resize(AContentWidth, AContentHeight: Integer);
+var
+  AnchorTL: TPoint;
+  AnchorScreen: TRect;
+  W, H: Integer;
+begin
+  if (FForm = nil) or (not FForm.Visible) or (FAnchor = nil) then Exit;
+  // Recompute the drop/flip rect from the same anchor (position may shift when the
+  // row count changes), then reposition WITHOUT re-Show — no activation, so the
+  // owner's editor keeps focus while the suggestion list refreshes.
+  AnchorTL := FAnchor.ClientToScreen(Types.Point(0, 0));
+  AnchorScreen := Types.Rect(AnchorTL.X, AnchorTL.Y,
+    AnchorTL.X + FAnchor.Width, AnchorTL.Y + FAnchor.Height);
+  FRect := TyPopupRect(AnchorScreen, AContentWidth, AContentHeight, Screen.Height);
+  W := FRect.Right - FRect.Left;
+  H := FRect.Bottom - FRect.Top;
+  FForm.SetBounds(FRect.Left, FRect.Top, W, H);
+  ApplyRegion(W, H);
 end;
 
 procedure TTyDropdownPopup.Close;
@@ -327,6 +356,10 @@ end;
 { Popup lost focus (user clicked away) → close. }
 procedure TTyDropdownPopup.FormDeactivate(Sender: TObject);
 begin
+  { A NoActivate (autocomplete) popup never legitimately takes activation, so a
+    deactivate here is spurious (e.g. the owner re-focusing its embedded editor
+    right after Show) — the OWNER drives close in that mode, not deactivate. }
+  if FNoActivate then Exit;
   Close;
 end;
 

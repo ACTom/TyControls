@@ -27,6 +27,7 @@ type
     FEditor: TTyEdit;             // embedded edit field; owned by Self, parented to Self
     FVisibleItems: TStringList;   // prefix-filtered subset shown in the autocomplete popup
     FSyncingText: Boolean;        // guard: True while we set FEditor.Text programmatically
+    FShowingPopup: Boolean;       // guard: True during the autocomplete first-open focus dance
     FOnChange: TNotifyEvent;
     FOnSelect: TNotifyEvent;
     FOnDropDown: TNotifyEvent;
@@ -186,6 +187,7 @@ begin
   FStyle := csDropDownList;
   FVisibleItems := TStringList.Create;
   FSyncingText := False;
+  FShowingPopup := False;
   FEditor := TTyEdit.Create(Self);
   FEditor.Parent := Self;
   FEditor.Visible := False;
@@ -416,12 +418,18 @@ end;
 
 procedure TTyComboBox.EditorExit(Sender: TObject);
 begin
-  { The autocomplete popup takes no activation, so it never auto-closes on
-    deactivate; close it when the editable field loses focus (click elsewhere). A
-    row click does NOT blur the editor (the popup is non-activating), so this does
-    not fire mid-pick and interrupt the commit. }
+  { Close the autocomplete popup when the editable field truly loses focus (click
+    elsewhere). Skip the transient blur while we are opening the popup and bouncing
+    focus back to the editor (FShowingPopup) — that is not a real focus-out. A row
+    click does not blur the editor (the popup is non-activating), so this does not
+    fire mid-pick and interrupt the commit. }
   if csDestroying in ComponentState then Exit;
-  if DroppedDown then CloseUp;
+  if FShowingPopup then Exit;
+  { Defer the close: if this blur was actually a click landing ON a popup row (an
+    edge if the OS ever activates the popup on click despite WS_EX_NOACTIVATE), the
+    row's PopupListChange still runs and commits first; the deferred CloseUp is
+    idempotent. Also avoids hiding the popup synchronously inside a focus event. }
+  if DroppedDown then Application.QueueAsyncCall(@DeferredCloseUp, 0);
 end;
 
 procedure TTyComboBox.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -609,8 +617,26 @@ begin
   VisibleRows := Min(FVisibleItems.Count, FDropDownCount);
   PopupH      := VisibleRows * ScaledIH + 2;
 
-  FPopup.Popup(Self, Width, PopupH);
-  DoDropDown;
+  { First open: show the popup, then immediately return focus to the editor. LCL
+    focuses the popup's list on Show (which WS_EX_NOACTIVATE alone does not stop),
+    so re-focusing keeps typing in the editor. FShowingPopup gates the editor's
+    OnExit so this transient blur does not self-close the popup; FormDeactivate is
+    suppressed for the NoActivate popup so the re-focus does not close it either.
+    On later keystrokes the popup is already open — resize it IN PLACE (no Show, no
+    focus churn / no per-keystroke flicker). }
+  if FPopup.IsOpen then
+    FPopup.Resize(Width, PopupH)
+  else
+  begin
+    FShowingPopup := True;
+    try
+      FPopup.Popup(Self, Width, PopupH);
+      if FEditor.HandleAllocated and FEditor.CanFocus then FEditor.SetFocus;
+    finally
+      FShowingPopup := False;
+    end;
+    DoDropDown;
+  end;
 end;
 
 procedure TTyComboBox.Resize;
