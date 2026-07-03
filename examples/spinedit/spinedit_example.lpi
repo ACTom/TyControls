@@ -7,7 +7,7 @@
         <MainUnitHasCreateFormStatements Value="True"/>
         <MainUnitHasTitleStatement Value="False"/>
       </Flags>
-      <Title Value="spinedit_example"/>
+      <Title Value="SpinEdit"/>
     </General>
     <BuildModes Count="1">
       <Item1 Name="Default" Default="True"/>

@@ -7,7 +7,7 @@
         <MainUnitHasCreateFormStatements Value="True"/>
         <MainUnitHasTitleStatement Value="False"/>
       </Flags>
-      <Title Value="memo_example"/>
+      <Title Value="Memo"/>
     </General>
     <BuildModes Count="1">
       <Item1 Name="Default" Default="True"/>

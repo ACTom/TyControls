@@ -1,10 +1,13 @@
 unit umain;
 
-{ TTyLabel 最小示例：
-  - TTyLabel 是无边框纯文本控件，文字颜色来自主题的 color 属性
-  - 可通过 StyleClass 选择不同主题变体（空字符串 = 基础样式）
-  - Enabled:=False 触发 :disabled 状态（主题里通常变灰）
-  - TTyButton 点击后修改某个 label 的 Caption
+{ TTyLabel 示例（TTyForm + TTyTitleBar）：
+  演示 TTyLabel 的核心已发布特性——
+    - Alignment：taLeftJustify / taCenter / taRightJustify 水平对齐
+    - WordWrap：长文本按控件宽度自动折行
+    - AutoSize：开 = 随文本自动收缩/增长；关 = 固定边框
+    - Font：自定义字体（字号 / 加粗 / 字体名）
+    - StyleClass：选择主题变体（如 'primary'）
+    - FocusControl + & 助记符：Alt+字母把焦点送给关联的 TTyEdit
   纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
 
 {$mode objfpc}{$H+}
@@ -12,15 +15,14 @@ unit umain;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.Button, tyControls.TyLabel;
+  Classes, SysUtils, Forms, Controls, Graphics,
+  tyControls.Controller, tyControls.Form,
+  tyControls.TyLabel, tyControls.Edit;
 
 type
-  TMainForm = class(TForm)
+  TMainForm = class(TTyForm)
   private
-    FClickCount: Integer;
-    FDynLabel: TTyLabel;   // 被按钮动态修改的 label
-    procedure ButtonClicked(Sender: TObject);
+    { fields + event handlers }
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -49,50 +51,90 @@ end;
 
 constructor TMainForm.Create(AOwner: TComponent);
 var
-  LBase, LDisabled: TTyLabel;
-  Btn: TTyButton;
+  Bar: TTyTitleBar;
+  LHead, L: TTyLabel;
+  LFocus: TTyLabel;
+  Ed: TTyEdit;
 begin
-  inherited CreateNew(AOwner, 0);
+  inherited CreateNew(AOwner, 0);          // TTyForm: 无边框 + 常驻引擎
   Caption := 'TTyLabel 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 360, 260);
+  SetBounds(0, 0, 480, 440);
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
 
-  // 加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> 自动关联为 TTyForm.TitleBar
+  Bar.Parent := Self;
+  Bar.Align := alTop;
+  Bar.Height := 34;
+  Bar.Caption := 'TTyLabel  · TyControls';
 
-  // 基础样式（StyleClass 为空 = TyLabel 默认外观）
-  LBase := TTyLabel.Create(Self);
-  LBase.Parent := Self;
-  LBase.SetBounds(24, 24, 280, 24);
-  LBase.Caption := '基础标签（无 StyleClass）';
-  LBase.StyleClass := '';   // 空字符串 = 主题中 TyLabel 的默认规则
+  // ===== 段标题：加粗大字体演示 Font =====
+  LHead := TTyLabel.Create(Self);
+  LHead.Parent := Self;
+  LHead.SetBounds(20, 46, 440, 26);
+  LHead.Caption := '标签特性一览';
+  LHead.Font.Size := 14;
+  LHead.Font.Style := [fsBold];
 
-  // 禁用态：Enabled:=False 会触发 :disabled 伪类，主题通常降低不透明度
-  LDisabled := TTyLabel.Create(Self);
-  LDisabled.Parent := Self;
-  LDisabled.SetBounds(24, 60, 280, 24);
-  LDisabled.Caption := '已禁用的标签';
-  LDisabled.Enabled := False;
+  // ===== Alignment：三种水平对齐（AutoSize=False 才能看出对齐效果）=====
+  L := TTyLabel.Create(Self);
+  L.Parent := Self;
+  L.SetBounds(20, 82, 440, 22);
+  L.AutoSize := False;
+  L.Alignment := taLeftJustify;
+  L.Caption := '左对齐（taLeftJustify）';
 
-  // 动态 label：内容由按钮点击后更新
-  FDynLabel := TTyLabel.Create(Self);
-  FDynLabel.Parent := Self;
-  FDynLabel.SetBounds(24, 100, 280, 24);
-  FDynLabel.Caption := '（等待点击…）';
+  L := TTyLabel.Create(Self);
+  L.Parent := Self;
+  L.SetBounds(20, 108, 440, 22);
+  L.AutoSize := False;
+  L.Alignment := taCenter;
+  L.Caption := '居中对齐（taCenter）';
 
-  // 按钮：点击后把点击次数写入 FDynLabel.Caption
-  Btn := TTyButton.Create(Self);
-  Btn.Parent := Self;
-  Btn.SetBounds(24, 144, 160, 32);
-  Btn.Caption := '修改标签文字';
-  Btn.StyleClass := 'primary';
-  Btn.OnClick := @ButtonClicked;
-end;
+  L := TTyLabel.Create(Self);
+  L.Parent := Self;
+  L.SetBounds(20, 134, 440, 22);
+  L.AutoSize := False;
+  L.Alignment := taRightJustify;
+  L.Caption := '右对齐（taRightJustify）';
 
-procedure TMainForm.ButtonClicked(Sender: TObject);
-begin
-  Inc(FClickCount);
-  FDynLabel.Caption := Format('已点击 %d 次', [FClickCount]);
+  // ===== StyleClass：主题变体（primary）=====
+  L := TTyLabel.Create(Self);
+  L.Parent := Self;
+  L.SetBounds(20, 166, 440, 22);
+  L.StyleClass := 'primary';
+  L.Caption := '带 StyleClass = primary 的标签';
+
+  // ===== AutoSize=True：边框随文字收紧（默认）=====
+  L := TTyLabel.Create(Self);
+  L.Parent := Self;
+  L.SetBounds(20, 194, 10, 10);           // 尺寸会被 AutoSize 覆盖
+  L.AutoSize := True;
+  L.Caption := 'AutoSize=True：宽高随文字自适应';
+
+  // ===== WordWrap：长文本在固定宽度内自动折行 =====
+  L := TTyLabel.Create(Self);
+  L.Parent := Self;
+  L.SetBounds(20, 224, 440, 60);
+  L.AutoSize := False;
+  L.WordWrap := True;
+  L.Alignment := taLeftJustify;
+  L.Caption := 'WordWrap=True：这是一段较长的说明文字，当它超过标签宽度时会自动换到下一行，'
+             + '而不是被裁剪或溢出到控件之外，方便展示多行文本内容。';
+
+  // ===== FocusControl + & 助记符：Alt+N 聚焦到下面的输入框 =====
+  Ed := TTyEdit.Create(Self);
+  Ed.Parent := Self;
+  Ed.SetBounds(180, 300, 240, 28);
+  Ed.Text := '';
+
+  LFocus := TTyLabel.Create(Self);
+  LFocus.Parent := Self;
+  LFocus.SetBounds(20, 304, 150, 22);
+  LFocus.Caption := '姓名(&N)：';        // & 生成助记符：按 Alt+N 触发
+  LFocus.FocusControl := Ed;             // 点击标签 / Alt+N -> Ed 获得焦点
+
+  ApplyChromeTheme(TyDefaultController);   // 最后统一给整个窗口铬 + 背景上色
 end;
 
 end.

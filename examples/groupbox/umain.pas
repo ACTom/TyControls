@@ -1,32 +1,39 @@
 unit umain;
 
-{ TTyGroupBox + TTyRadioButton 示例：
-  - 两个 TTyGroupBox，每个各含 3 个 TTyRadioButton
-  - TTyRadioButton.UncheckSiblings 按 Parent 分组：两组互相独立
-  - OnClick 事件更新底部标签，报告两组各自的当前选项
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+{ TTyGroupBox 示例：
+  - Caption：每个分组框带标题
+  - Alignment：标题左对齐 / 居中 / 右对齐三种（taLeftJustify / taCenter / taRightJustify）
+  - 容纳子控件：分组框内放 TTyRadioButton / TTyCheckBox
+  - 分组框内嵌一个 TTyEdit（输入框），演示任意子控件都能作为容器成员
+  - 事件汇总到底部 TTyLabel 状态栏
+  纯代码创建 UI（无 .lfm），主窗体为 TTyForm 并带 TTyTitleBar，
+  主题通过全局 TyDefaultController 加载。 }
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.GroupBox, tyControls.CheckBox,
+  Classes, SysUtils, StrUtils, Forms, Controls,
+  tyControls.Controller, tyControls.Form,
+  tyControls.GroupBox, tyControls.CheckBox, tyControls.Edit,
   tyControls.TyLabel;
 
 type
-  TMainForm = class(TForm)
+  TMainForm = class(TTyForm)
   private
-    FGroup1: TTyGroupBox;
-    FGroup2: TTyGroupBox;
+    FGroupSize: TTyGroupBox;      // 标题左对齐 + 单选按钮
+    FGroupOpt: TTyGroupBox;       // 标题居中 + 复选框
+    FGroupName: TTyGroupBox;      // 标题右对齐 + 内嵌输入框
     FStatus: TTyLabel;
-    // 每组 3 个单选按钮
-    FRadio1A, FRadio1B, FRadio1C: TTyRadioButton;
-    FRadio2A, FRadio2B, FRadio2C: TTyRadioButton;
+    FRadioA, FRadioB, FRadioC: TTyRadioButton;
+    FCheckBold, FCheckItalic: TTyCheckBox;
+    FNameEdit: TTyEdit;
     procedure RadioClick(Sender: TObject);
+    procedure CheckClick(Sender: TObject);
+    procedure NameChange(Sender: TObject);
     procedure UpdateStatus;
-    function SelectedInGroup(AGroup: TTyGroupBox): string;
+    function SelectedRadio: string;
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -53,87 +60,97 @@ begin
   Result := 'themes' + PathDelim;
 end;
 
-function TMainForm.SelectedInGroup(AGroup: TTyGroupBox): string;
-var
-  I: Integer;
-  Ctrl: TControl;
+function TMainForm.SelectedRadio: string;
 begin
   Result := '（未选）';
-  for I := 0 to AGroup.ControlCount - 1 do
-  begin
-    Ctrl := AGroup.Controls[I];
-    if (Ctrl is TTyRadioButton) and TTyRadioButton(Ctrl).Checked then
-    begin
-      Result := TTyRadioButton(Ctrl).Caption;
-      Exit;
-    end;
-  end;
+  if FRadioA.Checked then Result := FRadioA.Caption
+  else if FRadioB.Checked then Result := FRadioB.Caption
+  else if FRadioC.Checked then Result := FRadioC.Caption;
 end;
 
 constructor TMainForm.Create(AOwner: TComponent);
+var
+  Bar: TTyTitleBar;
 begin
-  inherited CreateNew(AOwner, 0);
+  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 常驻引擎
   Caption := 'TTyGroupBox 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 420, 320);
+  SetBounds(0, 0, 620, 320);
 
-  // 加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController
+  // 先加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  // ── 分组框一：字体大小 ────────────────────────────────────────────
-  FGroup1 := TTyGroupBox.Create(Self);
-  FGroup1.Parent := Self;
-  FGroup1.SetBounds(16, 16, 175, 120);
-  FGroup1.Caption := '字体大小';
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self → 自动关联为 TTyForm.TitleBar
+  Bar.Parent := Self;
+  Bar.Align := alTop;
+  Bar.Height := 34;
+  Bar.Caption := 'GroupBox  · TyControls';
 
-  FRadio1A := TTyRadioButton.Create(FGroup1);
-  FRadio1A.Parent := FGroup1;
-  FRadio1A.SetBounds(8, 8, 150, 24);
-  FRadio1A.Caption := '小（12pt）';
-  FRadio1A.OnClick := @RadioClick;
+  // ── 分组框一：标题左对齐（默认），内含单选按钮 ────────────────────
+  FGroupSize := TTyGroupBox.Create(Self);
+  FGroupSize.Parent := Self;
+  FGroupSize.SetBounds(16, 52, 185, 130);
+  FGroupSize.Caption := '字体大小（左对齐）';
+  FGroupSize.Alignment := taLeftJustify;
 
-  FRadio1B := TTyRadioButton.Create(FGroup1);
-  FRadio1B.Parent := FGroup1;
-  FRadio1B.SetBounds(8, 36, 150, 24);
-  FRadio1B.Caption := '中（14pt）';
-  FRadio1B.Checked := True;    // 默认选中
-  FRadio1B.OnClick := @RadioClick;
+  FRadioA := TTyRadioButton.Create(FGroupSize);
+  FRadioA.Parent := FGroupSize;
+  FRadioA.SetBounds(10, 8, 160, 26);
+  FRadioA.Caption := '小（12pt）';
+  FRadioA.OnClick := @RadioClick;
 
-  FRadio1C := TTyRadioButton.Create(FGroup1);
-  FRadio1C.Parent := FGroup1;
-  FRadio1C.SetBounds(8, 64, 150, 24);
-  FRadio1C.Caption := '大（18pt）';
-  FRadio1C.OnClick := @RadioClick;
+  FRadioB := TTyRadioButton.Create(FGroupSize);
+  FRadioB.Parent := FGroupSize;
+  FRadioB.SetBounds(10, 38, 160, 26);
+  FRadioB.Caption := '中（14pt）';
+  FRadioB.Checked := True;                 // 默认选中
+  FRadioB.OnClick := @RadioClick;
 
-  // ── 分组框二：主题色 ──────────────────────────────────────────────
-  FGroup2 := TTyGroupBox.Create(Self);
-  FGroup2.Parent := Self;
-  FGroup2.SetBounds(220, 16, 175, 120);
-  FGroup2.Caption := '主题色';
+  FRadioC := TTyRadioButton.Create(FGroupSize);
+  FRadioC.Parent := FGroupSize;
+  FRadioC.SetBounds(10, 68, 160, 26);
+  FRadioC.Caption := '大（18pt）';
+  FRadioC.OnClick := @RadioClick;
 
-  FRadio2A := TTyRadioButton.Create(FGroup2);
-  FRadio2A.Parent := FGroup2;
-  FRadio2A.SetBounds(8, 8, 150, 24);
-  FRadio2A.Caption := '浅色';
-  FRadio2A.Checked := True;    // 默认选中
-  FRadio2A.OnClick := @RadioClick;
+  // ── 分组框二：标题居中，内含复选框 ────────────────────────────────
+  FGroupOpt := TTyGroupBox.Create(Self);
+  FGroupOpt.Parent := Self;
+  FGroupOpt.SetBounds(217, 52, 185, 130);
+  FGroupOpt.Caption := '样式（居中）';
+  FGroupOpt.Alignment := taCenter;
 
-  FRadio2B := TTyRadioButton.Create(FGroup2);
-  FRadio2B.Parent := FGroup2;
-  FRadio2B.SetBounds(8, 36, 150, 24);
-  FRadio2B.Caption := '深色';
-  FRadio2B.OnClick := @RadioClick;
+  FCheckBold := TTyCheckBox.Create(FGroupOpt);
+  FCheckBold.Parent := FGroupOpt;
+  FCheckBold.SetBounds(10, 8, 160, 26);
+  FCheckBold.Caption := '加粗';
+  FCheckBold.OnClick := @CheckClick;
 
-  FRadio2C := TTyRadioButton.Create(FGroup2);
-  FRadio2C.Parent := FGroup2;
-  FRadio2C.SetBounds(8, 64, 150, 24);
-  FRadio2C.Caption := '跟随系统';
-  FRadio2C.OnClick := @RadioClick;
+  FCheckItalic := TTyCheckBox.Create(FGroupOpt);
+  FCheckItalic.Parent := FGroupOpt;
+  FCheckItalic.SetBounds(10, 38, 160, 26);
+  FCheckItalic.Caption := '斜体';
+  FCheckItalic.OnClick := @CheckClick;
 
+  // ── 分组框三：标题右对齐，内嵌一个输入框 ──────────────────────────
+  FGroupName := TTyGroupBox.Create(Self);
+  FGroupName.Parent := Self;
+  FGroupName.SetBounds(418, 52, 185, 130);
+  FGroupName.Caption := '名称（右对齐）';
+  FGroupName.Alignment := taRightJustify;
+
+  FNameEdit := TTyEdit.Create(FGroupName);
+  FNameEdit.Parent := FGroupName;
+  FNameEdit.SetBounds(10, 12, 160, 30);
+  FNameEdit.TextHint := '请输入名称…';
+  FNameEdit.OnChange := @NameChange;
+
+  // ── 底部状态栏 ────────────────────────────────────────────────────
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
-  FStatus.SetBounds(16, 220, 380, 40);
+  FStatus.SetBounds(16, 200, 588, 60);
   UpdateStatus;
+
+  ApplyChromeTheme(TyDefaultController);    // 最后统一主题化窗体外壳 + 背景
 end;
 
 procedure TMainForm.RadioClick(Sender: TObject);
@@ -141,10 +158,28 @@ begin
   UpdateStatus;
 end;
 
-procedure TMainForm.UpdateStatus;
+procedure TMainForm.CheckClick(Sender: TObject);
 begin
-  FStatus.Caption := Format('字体大小：%s    主题色：%s',
-    [SelectedInGroup(FGroup1), SelectedInGroup(FGroup2)]);
+  UpdateStatus;
+end;
+
+procedure TMainForm.NameChange(Sender: TObject);
+begin
+  UpdateStatus;
+end;
+
+procedure TMainForm.UpdateStatus;
+var
+  Styles: string;
+begin
+  Styles := '';
+  if FCheckBold.Checked then Styles := Styles + '加粗 ';
+  if FCheckItalic.Checked then Styles := Styles + '斜体 ';
+  if Styles = '' then Styles := '（无）';
+
+  FStatus.Caption := Format('字体大小：%s    样式：%s    名称：%s',
+    [SelectedRadio, Trim(Styles),
+     IfThen(FNameEdit.Text = '', '（空）', FNameEdit.Text)]);
 end;
 
 end.

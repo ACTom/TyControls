@@ -7,25 +7,16 @@
         <MainUnitHasCreateFormStatements Value="True"/>
         <MainUnitHasTitleStatement Value="False"/>
       </Flags>
-      <Title Value="PageControl"/>
+      <Title Value="StatusBar"/>
     </General>
-    <BuildModes Count="1">
-      <Item1 Name="Default" Default="True"/>
-    </BuildModes>
+    <BuildModes Count="1"><Item1 Name="Default" Default="True"/></BuildModes>
     <RequiredPackages Count="2">
       <Item1><PackageName Value="LCL"/></Item1>
       <Item2><PackageName Value="tycontrols"/></Item2>
     </RequiredPackages>
     <Units Count="2">
-      <Unit0>
-        <Filename Value="tabcontrol_example.lpr"/>
-        <IsPartOfProject Value="True"/>
-      </Unit0>
-      <Unit1>
-        <Filename Value="umain.pas"/>
-        <IsPartOfProject Value="True"/>
-        <UnitName Value="umain"/>
-      </Unit1>
+      <Unit0><Filename Value="statusbar_example.lpr"/><IsPartOfProject Value="True"/></Unit0>
+      <Unit1><Filename Value="umain.pas"/><IsPartOfProject Value="True"/><UnitName Value="umain"/></Unit1>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -34,8 +25,6 @@
       <OtherUnitFiles Value=".;../../source"/>
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
-    <SyntaxOptions>
-      <SyntaxMode Value="ObjFPC"/>
-    </SyntaxOptions>
+    <SyntaxOptions><SyntaxMode Value="ObjFPC"/></SyntaxOptions>
   </CompilerOptions>
 </CONFIG>

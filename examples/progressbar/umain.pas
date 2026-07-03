@@ -1,28 +1,36 @@
 unit umain;
 
-{ TTyProgressBar + TTyTrackBar 联动示例：
-  - TTyTrackBar（0..100）拖动 → TTyProgressBar.Position 实时跟随
-  - TTyLabel 分别显示进度条数值和轨迹条数值
-  - 展示跨控件事件联动（OnChange 驱动）
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+{ TTyProgressBar 特性示例（纯代码，无 .lfm）：
+  - Min / Max / Position：进度区间与当前值
+  - AnimationsEnabled：开/关填充缓动动画（复选框切换）
+  - StyleClass：为进度条设置样式类（演示 API）
+  - 定时器 + 按钮驱动 Position 前进 / 归零
+  - OnChange 事件驱动确定性数值读出（TTyLabel）
+  主窗体为 TTyForm + TTyTitleBar；主题经全局 TyDefaultController 加载。 }
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.ProgressBar, tyControls.TrackBar,
+  Classes, SysUtils, Forms, Controls, ExtCtrls,
+  tyControls.Controller, tyControls.Form,
+  tyControls.ProgressBar, tyControls.Button, tyControls.CheckBox,
   tyControls.TyLabel;
 
 type
-  TMainForm = class(TForm)
+  TMainForm = class(TTyForm)
   private
-    FTrackBar: TTyTrackBar;
-    FProgressBar: TTyProgressBar;
-    FTrackLabel: TTyLabel;
-    FProgressLabel: TTyLabel;
-    procedure TrackBarChange(Sender: TObject);
+    FBar: TTyProgressBar;
+    FReadout: TTyLabel;
+    FAnimChk: TTyCheckBox;
+    FTimer: TTimer;
+    procedure BarChange(Sender: TObject);
+    procedure StartClick(Sender: TObject);
+    procedure ResetClick(Sender: TObject);
+    procedure StepClick(Sender: TObject);
+    procedure AnimToggle(Sender: TObject);
+    procedure TimerTick(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -32,7 +40,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录（兼容 lib/<cpu>-<os>/ 与 .app 包） }
+{ 从 exe 所在目录向上查找仓库的 themes/ 目录 }
 function ThemesDir: string;
 var
   Dir: string;
@@ -51,66 +59,124 @@ end;
 
 constructor TMainForm.Create(AOwner: TComponent);
 var
-  LblTitle: TTyLabel;
+  Bar: TTyTitleBar;
+  Lbl: TTyLabel;
+  BtnStart, BtnStep, BtnReset: TTyButton;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'TTyProgressBar 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 360, 260);
+  SetBounds(0, 0, 420, 300);
 
-  // 加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  LblTitle := TTyLabel.Create(Self);
-  LblTitle.Parent := Self;
-  LblTitle.SetBounds(16, 16, 320, 20);
-  LblTitle.Caption := '拖动轨迹条驱动进度条：';
+  Bar := TTyTitleBar.Create(Self);
+  Bar.Parent := Self;
+  Bar.Align := alTop;
+  Bar.Height := 34;
+  Bar.Caption := 'ProgressBar  · TyControls';
 
-  // 进度条
-  FProgressBar := TTyProgressBar.Create(Self);
-  FProgressBar.Parent := Self;
-  FProgressBar.SetBounds(16, 48, 320, 20);
-  FProgressBar.Min := 0;
-  FProgressBar.Max := 100;
-  FProgressBar.Position := 0;
+  // 说明标题
+  Lbl := TTyLabel.Create(Self);
+  Lbl.Parent := Self;
+  Lbl.SetBounds(20, 50, 380, 20);
+  Lbl.Caption := '进度条：Min=0  Max=100，按钮 / 定时器驱动 Position';
 
-  FProgressLabel := TTyLabel.Create(Self);
-  FProgressLabel.Parent := Self;
-  FProgressLabel.SetBounds(16, 76, 320, 20);
-  FProgressLabel.Caption := '进度：0 / 100';
+  // 进度条：设置 Min / Max / Position / StyleClass
+  FBar := TTyProgressBar.Create(Self);
+  FBar.Parent := Self;
+  FBar.SetBounds(20, 78, 380, 22);
+  FBar.Min := 0;
+  FBar.Max := 100;
+  FBar.Position := 0;
+  FBar.StyleClass := '';            // 使用基础样式（演示 StyleClass API）
+  FBar.AnimationsEnabled := True;   // 默认开启填充缓动
+  FBar.OnChange := @BarChange;      // 数值变化 → 更新读出
 
-  // 分隔标题
-  TTyLabel.Create(Self).Parent := Self;
-  with TTyLabel(Self.Controls[Self.ControlCount - 1]) do
-  begin
-    SetBounds(16, 112, 320, 20);
-    Caption := '轨迹条（拖动或键盘左右键）：';
-  end;
+  // 确定性数值读出（由 OnChange 驱动）
+  FReadout := TTyLabel.Create(Self);
+  FReadout.Parent := Self;
+  FReadout.SetBounds(20, 108, 380, 20);
+  FReadout.Caption := '进度：0 / 100  (0%)';
 
-  // 轨迹条：OnChange → 进度条同步
-  FTrackBar := TTyTrackBar.Create(Self);
-  FTrackBar.Parent := Self;
-  FTrackBar.SetBounds(16, 140, 320, 24);
-  FTrackBar.Min := 0;
-  FTrackBar.Max := 100;
-  FTrackBar.Position := 0;
-  FTrackBar.OnChange := @TrackBarChange;
+  // 动画开关
+  FAnimChk := TTyCheckBox.Create(Self);
+  FAnimChk.Parent := Self;
+  FAnimChk.SetBounds(20, 140, 260, 22);
+  FAnimChk.Caption := '启用填充动画 (AnimationsEnabled)';
+  FAnimChk.Checked := True;
+  FAnimChk.OnClick := @AnimToggle;
 
-  FTrackLabel := TTyLabel.Create(Self);
-  FTrackLabel.Parent := Self;
-  FTrackLabel.SetBounds(16, 172, 320, 20);
-  FTrackLabel.Caption := '轨迹值：0';
+  // 按钮：开始/暂停自动前进
+  BtnStart := TTyButton.Create(Self);
+  BtnStart.Parent := Self;
+  BtnStart.SetBounds(20, 180, 110, 34);
+  BtnStart.Caption := '开始 / 暂停';
+  BtnStart.OnClick := @StartClick;
+
+  // 按钮：单步 +10
+  BtnStep := TTyButton.Create(Self);
+  BtnStep.Parent := Self;
+  BtnStep.SetBounds(145, 180, 110, 34);
+  BtnStep.Caption := '前进 +10';
+  BtnStep.OnClick := @StepClick;
+
+  // 按钮：归零
+  BtnReset := TTyButton.Create(Self);
+  BtnReset.Parent := Self;
+  BtnReset.SetBounds(270, 180, 110, 34);
+  BtnReset.Caption := '归零';
+  BtnReset.OnClick := @ResetClick;
+
+  // 驱动进度前进的定时器（默认不启用）
+  FTimer := TTimer.Create(Self);
+  FTimer.Interval := 250;
+  FTimer.Enabled := False;
+  FTimer.OnTimer := @TimerTick;
+
+  ApplyChromeTheme(TyDefaultController);
 end;
 
-procedure TMainForm.TrackBarChange(Sender: TObject);
+procedure TMainForm.BarChange(Sender: TObject);
 var
-  Val: Integer;
+  Span, Pct: Integer;
 begin
-  Val := (Sender as TTyTrackBar).Position;
-  // 轨迹条驱动进度条（跨控件联动）
-  FProgressBar.Position := Val;
-  FTrackLabel.Caption   := Format('轨迹值：%d', [Val]);
-  FProgressLabel.Caption := Format('进度：%d / 100', [Val]);
+  Span := FBar.Max - FBar.Min;
+  if Span > 0 then
+    Pct := Round((FBar.Position - FBar.Min) * 100 / Span)
+  else
+    Pct := 0;
+  FReadout.Caption := Format('进度：%d / %d  (%d%%)',
+    [FBar.Position, FBar.Max, Pct]);
+end;
+
+procedure TMainForm.StartClick(Sender: TObject);
+begin
+  FTimer.Enabled := not FTimer.Enabled;
+end;
+
+procedure TMainForm.StepClick(Sender: TObject);
+begin
+  FBar.Position := FBar.Position + 10;
+end;
+
+procedure TMainForm.ResetClick(Sender: TObject);
+begin
+  FTimer.Enabled := False;
+  FBar.Position := 0;
+end;
+
+procedure TMainForm.AnimToggle(Sender: TObject);
+begin
+  FBar.AnimationsEnabled := FAnimChk.Checked;
+end;
+
+procedure TMainForm.TimerTick(Sender: TObject);
+begin
+  if FBar.Position >= FBar.Max then
+    FBar.Position := 0
+  else
+    FBar.Position := FBar.Position + 5;
 end;
 
 end.

@@ -59,7 +59,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 | [CHANGELOG.md](CHANGELOG.md) | 版本更新日志 |
 | [KNOWN_GAPS.md](docs/KNOWN_GAPS.md) | 已知限制与后续计划 |
 
-> 较新的控件(`TTyTreeView`、`TTySplitter`、`TTyStatusBar`、`TTyToolBar`、`TTyDateTimePicker`、`TTyCalendar`)暂以示例工程演示,独立 API 文档待补 —— 见下方示例与 [CHANGELOG.md](CHANGELOG.md)。
+> 较新的控件(`TTyTreeView`、`TTySplitter`、`TTyStatusBar`、`TTyToolBar`、`TTyDateTimePicker`、`TTyCalendar`、`TTyTabSet`)均已提供独立示例工程(见下方),独立 API 文档待补 —— 另见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 示例
 
@@ -74,11 +74,18 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 | [examples/combobox](examples/combobox/) | Items / 选择 / OnChange、真实下拉弹层 |
 | [examples/listbox](examples/listbox/) | 条目列表、键盘导航、内嵌自动滚动条 |
 | [examples/spinedit](examples/spinedit/) | 数值微调、箭头 / 方向键 / 滚轮、Min/Max/Increment |
-| [examples/tabcontrol](examples/tabcontrol/) | 标签页切换、可关闭页签、键盘导航、溢出滚动、拖拽重排 |
+| [examples/tabcontrol](examples/tabcontrol/) | `TTyPageControl` + `TTyTabSheet`:多页签容器、切换 ActivePage、各页独立内容 |
+| [examples/tabset](examples/tabset/) | `TTyTabSet`:纯标签条、`TabIndex` 切换、OnChange |
+| [examples/calendar](examples/calendar/) | `TTyCalendar`:日期选择、日/月/年下钻、Min/MaxDate |
+| [examples/datetimepicker](examples/datetimepicker/) | `TTyDateTimePicker`:日期下拉日历 + 时间分段微调 |
+| [examples/splitter](examples/splitter/) | `TTySplitter`:面板间可拖拽分隔 |
+| [examples/statusbar](examples/statusbar/) | `TTyStatusBar`:底部多分区状态栏 |
+| [examples/toolbar](examples/toolbar/) | `TTyToolBar` + `TTyToolSeparator`:工具条与分隔符 |
+| [examples/menu](examples/menu/) | `TTyMenuBar` + `TTyPopupMenu`:菜单栏 + 右键弹出菜单 |
 | [examples/formchrome](examples/formchrome/) | 无边框自绘窗框窗口 |
 | [examples/theming](examples/theming/) | 自定义 `.tycss` 主题 + 运行时热切换 |
 
-其余每控件示例(button / label / checkbox / radiobutton / panel / groupbox / scrollbar / progressbar / toggleswitch / trackbar)见 [examples/](examples/)。构建任意示例:`lazbuild examples/<名称>/<名称>_example.lpi`(demo 为 `demo.lpi`,treeview 为 `treeviewshowcase.lpi`)。
+其余单控件示例(button / label / checkbox / radiobutton / panel / groupbox / scrollbar / progressbar / toggleswitch / trackbar)见 [examples/](examples/)。**所有示例窗体均采用 `TTyForm` + `TTyTitleBar` 自绘窗框。** 构建任意示例:`lazbuild examples/<名称>/<名称>_example.lpi`(demo 为 `demo.lpi`,treeview 为 `treeviewshowcase.lpi`)。
 
 ## 构建与测试
 

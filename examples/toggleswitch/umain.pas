@@ -1,10 +1,11 @@
 unit umain;
 
 { TTyToggleSwitch 示例：
-  - 两个开关：第一个默认关闭，第二个默认开启（Checked := True）
-  - ON 状态在内部通过 CurrentStates 映射为 :active，主题以此渲染高亮颜色
-  - OnChange 事件更新底部状态标签
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+  - Checked：默认关/开两种初始状态（ON 经 CurrentStates 映射为 :active，主题渲染高亮轨道）
+  - Caption：开关右侧内建文本标签
+  - Enabled：禁用状态的开关不可点击/切换
+  - OnChange：切换时刷新底部状态标签
+  纯代码创建 UI（无 .lfm），主窗体为 TTyForm + TTyTitleBar，主题由全局 TyDefaultController 加载。 }
 
 {$mode objfpc}{$H+}
 
@@ -12,13 +13,16 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.ToggleSwitch, tyControls.TyLabel;
+  tyControls.Controller, tyControls.Form,
+  tyControls.ToggleSwitch, tyControls.TyLabel;
 
 type
-  TMainForm = class(TForm)
+  TMainForm = class(TTyForm)
   private
-    FSwitch1: TTyToggleSwitch;
-    FSwitch2: TTyToggleSwitch;
+    FSwitchDark: TTyToggleSwitch;    // 默认关闭
+    FSwitchNotify: TTyToggleSwitch;  // 默认开启
+    FSwitchCaption: TTyToggleSwitch; // 带 Caption
+    FSwitchDisabled: TTyToggleSwitch; // 禁用
     FStatus: TTyLabel;
     procedure SwitchChange(Sender: TObject);
     procedure UpdateStatus;
@@ -48,51 +52,76 @@ begin
   Result := 'themes' + PathDelim;
 end;
 
-function BoolToStr(B: Boolean): string;
+function OnOff(B: Boolean): string;
 begin
   if B then Result := '开' else Result := '关';
 end;
 
 constructor TMainForm.Create(AOwner: TComponent);
 var
-  Lbl1, Lbl2: TTyLabel;
+  Bar: TTyTitleBar;
+  LblDark, LblNotify: TTyLabel;
 begin
-  inherited CreateNew(AOwner, 0);
-  Caption := 'TTyToggleSwitch 示例';
+  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 持久化引擎
+  Caption := 'ToggleSwitch 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 320, 220);
+  SetBounds(0, 0, 400, 300);
 
-  // 加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
 
-  // 开关一（默认关闭）
-  Lbl1 := TTyLabel.Create(Self);
-  Lbl1.Parent := Self;
-  Lbl1.SetBounds(16, 24, 200, 24);
-  Lbl1.Caption := '深色模式：';
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self → 自动关联为 TTyForm.TitleBar
+  Bar.Parent := Self;
+  Bar.Align := alTop;
+  Bar.Height := 34;
+  Bar.Caption := 'ToggleSwitch  · TyControls';
 
-  FSwitch1 := TTyToggleSwitch.Create(Self);
-  FSwitch1.Parent := Self;
-  FSwitch1.SetBounds(220, 24, 44, 24);
-  FSwitch1.Checked := False;   // 默认关闭
-  FSwitch1.OnChange := @SwitchChange;
+  // 开关一：默认关闭
+  LblDark := TTyLabel.Create(Self);
+  LblDark.Parent := Self;
+  LblDark.SetBounds(24, 56, 220, 24);
+  LblDark.Caption := '深色模式：';
 
-  // 开关二（默认开启；ON 映射 :active，主题以高亮色渲染轨道）
-  Lbl2 := TTyLabel.Create(Self);
-  Lbl2.Parent := Self;
-  Lbl2.SetBounds(16, 72, 200, 24);
-  Lbl2.Caption := '接收通知：';
+  FSwitchDark := TTyToggleSwitch.Create(Self);
+  FSwitchDark.Parent := Self;
+  FSwitchDark.SetBounds(250, 56, 44, 24);
+  FSwitchDark.Checked := False;            // 默认关闭
+  FSwitchDark.OnChange := @SwitchChange;
 
-  FSwitch2 := TTyToggleSwitch.Create(Self);
-  FSwitch2.Parent := Self;
-  FSwitch2.SetBounds(220, 72, 44, 24);
-  FSwitch2.Checked := True;    // 默认开启，CurrentStates 包含 tysActive
-  FSwitch2.OnChange := @SwitchChange;
+  // 开关二：默认开启（ON → :active，主题以高亮色渲染）
+  LblNotify := TTyLabel.Create(Self);
+  LblNotify.Parent := Self;
+  LblNotify.SetBounds(24, 100, 220, 24);
+  LblNotify.Caption := '接收通知：';
+
+  FSwitchNotify := TTyToggleSwitch.Create(Self);
+  FSwitchNotify.Parent := Self;
+  FSwitchNotify.SetBounds(250, 100, 44, 24);
+  FSwitchNotify.Checked := True;           // 默认开启，CurrentStates 含 tysActive
+  FSwitchNotify.OnChange := @SwitchChange;
+
+  // 开关三：内建 Caption（文本绘制在开关右侧）
+  FSwitchCaption := TTyToggleSwitch.Create(Self);
+  FSwitchCaption.Parent := Self;
+  FSwitchCaption.SetBounds(24, 144, 220, 24);
+  FSwitchCaption.Caption := '自动保存';    // Caption 属性
+  FSwitchCaption.Checked := True;
+  FSwitchCaption.OnChange := @SwitchChange;
+
+  // 开关四：禁用状态（不可点击/切换）
+  FSwitchDisabled := TTyToggleSwitch.Create(Self);
+  FSwitchDisabled.Parent := Self;
+  FSwitchDisabled.SetBounds(24, 188, 220, 24);
+  FSwitchDisabled.Caption := '试验功能（禁用）';
+  FSwitchDisabled.Checked := False;
+  FSwitchDisabled.Enabled := False;        // Enabled=False → 禁用
+  FSwitchDisabled.OnChange := @SwitchChange;
 
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
-  FStatus.SetBounds(16, 160, 280, 40);
+  FStatus.SetBounds(24, 240, 360, 40);
   UpdateStatus;
+
+  ApplyChromeTheme(TyDefaultController);   // 最后统一主题化整个 chrome + 窗体背景
 end;
 
 procedure TMainForm.SwitchChange(Sender: TObject);
@@ -102,8 +131,9 @@ end;
 
 procedure TMainForm.UpdateStatus;
 begin
-  FStatus.Caption := Format('深色模式：%s    接收通知：%s',
-    [BoolToStr(FSwitch1.Checked), BoolToStr(FSwitch2.Checked)]);
+  FStatus.Caption := Format('深色模式：%s   接收通知：%s   自动保存：%s',
+    [OnOff(FSwitchDark.Checked), OnOff(FSwitchNotify.Checked),
+     OnOff(FSwitchCaption.Checked)]);
 end;
 
 end.

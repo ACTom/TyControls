@@ -111,14 +111,21 @@ gallery and a dedicated TreeView showcase:
 | [examples/combobox](examples/combobox/) | Items / selection / OnChange, real drop-down popup |
 | [examples/listbox](examples/listbox/) | Item list, keyboard navigation, embedded auto scrollbar |
 | [examples/spinedit](examples/spinedit/) | Numeric spin, arrow buttons / arrow keys / wheel, Min/Max/Increment |
-| [examples/tabcontrol](examples/tabcontrol/) | Tab switching, closable tabs, keyboard navigation, overflow scroll, drag reorder |
+| [examples/tabcontrol](examples/tabcontrol/) | `TTyPageControl` + `TTyTabSheet`: multi-page container, switch ActivePage, independent per-page content |
+| [examples/tabset](examples/tabset/) | `TTyTabSet`: pure tab strip, `TabIndex` switching, OnChange |
+| [examples/calendar](examples/calendar/) | `TTyCalendar`: date picking, day/month/year drill-down, Min/MaxDate |
+| [examples/datetimepicker](examples/datetimepicker/) | `TTyDateTimePicker`: date drop-down calendar + time segment spin |
+| [examples/splitter](examples/splitter/) | `TTySplitter`: drag-resizable divider between panels |
+| [examples/statusbar](examples/statusbar/) | `TTyStatusBar`: bottom multi-panel status bar |
+| [examples/toolbar](examples/toolbar/) | `TTyToolBar` + `TTyToolSeparator`: toolbar with buttons and separators |
+| [examples/menu](examples/menu/) | `TTyMenuBar` + `TTyPopupMenu`: menu bar + right-click popup menu |
 | [examples/formchrome](examples/formchrome/) | Borderless custom-drawn window frame |
 | [examples/theming](examples/theming/) | A custom `.tycss` theme + runtime hot-swap |
 
 The remaining per-control examples (button / label / checkbox / radiobutton / panel / groupbox /
-scrollbar / progressbar / toggleswitch / trackbar) are under [examples/](examples/). Build any
-example with `lazbuild examples/<name>/<name>_example.lpi` (demo is `demo.lpi`, treeview is
-`treeviewshowcase.lpi`).
+scrollbar / progressbar / toggleswitch / trackbar) are under [examples/](examples/). **Every example
+form uses the `TTyForm` + `TTyTitleBar` custom-drawn window frame.** Build any example with
+`lazbuild examples/<name>/<name>_example.lpi` (demo is `demo.lpi`, treeview is `treeviewshowcase.lpi`).
 
 ## Build & test
 

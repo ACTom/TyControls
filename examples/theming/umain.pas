@@ -1,11 +1,11 @@
 unit umain;
 
-{ 运行时主题热切换示例：
-  - 三个按钮分别切换 light.tycss / dark.tycss / custom.tycss
-  - TyDefaultController.LoadTheme 内部调用 Changed()，
-    Changed() 遍历已注册控件并全部 Invalidate——无需额外调用。
-  - custom.tycss 通过 FindFileUpwards 从 exe 目录向上搜索
-    'examples/theming/custom.tycss'（兼容 lib/<cpu>-<os>/ 构建输出）。
+{ 运行时主题热切换示例（TTyForm + TTyTitleBar 版）：
+  - 顶部三个按钮分别 LoadTheme light.tycss / dark.tycss / green.tycss；
+  - LoadTheme 内部会调用 Changed()，遍历所有已注册控件并 Invalidate，
+    因此示例区的按钮 / 文本框 / 复选框 / 进度条会「实时」重新着色；
+  - 同时调用 ApplyChromeTheme 让窗口 chrome（标题栏 + 窗体背景）一并换肤；
+  - 一个状态标签实时显示当前主题名。
   纯代码 UI（无 .lfm）。}
 
 {$mode objfpc}{$H+}
@@ -14,19 +14,19 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls,
-  tyControls.Controller,
+  tyControls.Controller, tyControls.Form,
   tyControls.Button, tyControls.TyLabel,
-  tyControls.Edit, tyControls.CheckBox;
+  tyControls.Edit, tyControls.CheckBox, tyControls.ProgressBar;
 
 type
-  TMainForm = class(TForm)
+  TMainForm = class(TTyForm)
   private
     FStatusLabel: TTyLabel;
-    { 主题切换按钮 }
+    { 主题切换事件 }
     procedure SwitchLight(Sender: TObject);
     procedure SwitchDark(Sender: TObject);
-    procedure SwitchCustom(Sender: TObject);
-    procedure ApplyTheme(const APath: string);
+    procedure SwitchGreen(Sender: TObject);
+    procedure ApplyTheme(const AFileName: string);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -53,26 +53,6 @@ begin
   Result := 'themes' + PathDelim;
 end;
 
-{ 向上搜索 RelPath（相对路径片段，用 '/' 分隔），返回首个存在的绝对路径；
-  找不到返回空字符串。用于定位 examples/theming/custom.tycss。 }
-function FindFileUpwards(const ARelPath: string): string;
-var
-  Dir, Target, NormRel: string;
-  i: Integer;
-begin
-  NormRel := StringReplace(ARelPath, '/', PathDelim, [rfReplaceAll]);
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 10 do
-  begin
-    Target := Dir + NormRel;
-    if FileExists(Target) then
-      Exit(Target);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := '';
-end;
-
 constructor TMainForm.Create(AOwner: TComponent);
 
   function MakeSwitch(const ACaption, AClass: string; ALeft: Integer;
@@ -80,104 +60,115 @@ constructor TMainForm.Create(AOwner: TComponent);
   begin
     Result := TTyButton.Create(Self);
     Result.Parent := Self;
-    Result.SetBounds(ALeft, 16, 100, 32);
+    Result.SetBounds(ALeft, 52, 116, 34);
     Result.Caption := ACaption;
     Result.StyleClass := AClass;
     Result.OnClick := AHandler;
   end;
 
 var
-  SampleBtn:   TTyButton;
+  Bar:         TTyTitleBar;
   SampleLbl:   TTyLabel;
+  SampleBtn:   TTyButton;
+  GhostBtn:    TTyButton;
+  DisabledBtn: TTyButton;
   SampleEdit:  TTyEdit;
   SampleCheck: TTyCheckBox;
-  DisabledBtn: TTyButton;
+  Progress:    TTyProgressBar;
 begin
-  inherited CreateNew(AOwner, 0);
-  Caption := 'TyControls 运行时主题切换';
+  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 常驻绘制引擎
+  Caption := '主题系统 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 440, 260);
+  SetBounds(0, 0, 470, 340);
 
-  // 初始主题
+  // 先加载初始主题，再建 chrome
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  // ── 主题切换按钮行 ──────────────────────────────────────────
-  MakeSwitch('亮色 Light',   'primary', 16,  @SwitchLight);
-  MakeSwitch('暗色 Dark',    '',        128, @SwitchDark);
-  MakeSwitch('自定义 Custom','',        240, @SwitchCustom);
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self → 自动关联为 TTyForm.TitleBar
+  Bar.Parent := Self;
+  Bar.Align := alTop;
+  Bar.Height := 34;
+  Bar.Caption := '主题系统  · TyControls';
 
-  // 当前主题路径提示
+  // ── 主题切换按钮行（点击后 LoadTheme + ApplyChromeTheme 实时换肤）──
+  MakeSwitch('亮色 Light', 'primary', 16,  @SwitchLight);
+  MakeSwitch('暗色 Dark',  '',        148, @SwitchDark);
+  MakeSwitch('绿色 Green', '',        280, @SwitchGreen);
+
+  // 当前主题提示
   FStatusLabel := TTyLabel.Create(Self);
   FStatusLabel.Parent := Self;
-  FStatusLabel.SetBounds(16, 56, 400, 18);
+  FStatusLabel.SetBounds(16, 96, 430, 20);
   FStatusLabel.Caption := '当前主题：light.tycss';
 
-  // ── 示例控件区 ────────────────────────────────────────────
+  // ── 示例控件区：这些控件随主题实时重新着色 ──────────────
   SampleLbl := TTyLabel.Create(Self);
   SampleLbl.Parent := Self;
-  SampleLbl.SetBounds(16, 88, 200, 20);
+  SampleLbl.SetBounds(16, 128, 300, 20);
   SampleLbl.Caption := '示例标签 TTyLabel';
 
   SampleBtn := TTyButton.Create(Self);
   SampleBtn.Parent := Self;
-  SampleBtn.SetBounds(16, 116, 120, 32);
-  SampleBtn.Caption := '示例按钮';
+  SampleBtn.SetBounds(16, 156, 120, 34);
+  SampleBtn.Caption := '主要按钮';
   SampleBtn.StyleClass := 'primary';
+
+  GhostBtn := TTyButton.Create(Self);
+  GhostBtn.Parent := Self;
+  GhostBtn.SetBounds(148, 156, 100, 34);
+  GhostBtn.Caption := '幽灵按钮';
+  GhostBtn.StyleClass := 'ghost';
 
   DisabledBtn := TTyButton.Create(Self);
   DisabledBtn.Parent := Self;
-  DisabledBtn.SetBounds(148, 116, 100, 32);
+  DisabledBtn.SetBounds(260, 156, 100, 34);
   DisabledBtn.Caption := '禁用态';
   DisabledBtn.Enabled := False;
 
   SampleEdit := TTyEdit.Create(Self);
   SampleEdit.Parent := Self;
-  SampleEdit.SetBounds(16, 160, 200, 28);
+  SampleEdit.SetBounds(16, 204, 220, 30);
   SampleEdit.Text := '可编辑文本框';
 
   SampleCheck := TTyCheckBox.Create(Self);
   SampleCheck.Parent := Self;
-  SampleCheck.SetBounds(16, 200, 160, 24);
+  SampleCheck.SetBounds(260, 208, 160, 24);
   SampleCheck.Caption := '复选框示例';
   SampleCheck.Checked := True;
+
+  Progress := TTyProgressBar.Create(Self);
+  Progress.Parent := Self;
+  Progress.SetBounds(16, 252, 420, 18);
+  Progress.Min := 0;
+  Progress.Max := 100;
+  Progress.Position := 65;
+
+  ApplyChromeTheme(TyDefaultController);    // 最后统一给 chrome + 窗体背景换肤
 end;
 
-procedure TMainForm.ApplyTheme(const APath: string);
+procedure TMainForm.ApplyTheme(const AFileName: string);
 begin
-  // LoadTheme 内部：FModel.LoadFromFile → Changed()
-  // Changed() 遍历 FControls 列表并 Invalidate 所有已注册控件
-  // → 无需额外调用 TyDefaultController.Changed
-  TyDefaultController.LoadTheme(APath);
-  FStatusLabel.Caption := '当前主题：' + ExtractFileName(APath);
+  // LoadTheme 内部：FModel.LoadFromFile → Changed()，
+  // Changed() 遍历已注册控件并全部 Invalidate → 示例控件实时换肤；
+  // 再调 ApplyChromeTheme 让标题栏 + 窗体背景一起跟随。
+  TyDefaultController.LoadTheme(ThemesDir + AFileName);
+  ApplyChromeTheme(TyDefaultController);
+  FStatusLabel.Caption := '当前主题：' + AFileName;
 end;
 
 procedure TMainForm.SwitchLight(Sender: TObject);
 begin
-  ApplyTheme(ThemesDir + 'light.tycss');
+  ApplyTheme('light.tycss');
 end;
 
 procedure TMainForm.SwitchDark(Sender: TObject);
 begin
-  ApplyTheme(ThemesDir + 'dark.tycss');
+  ApplyTheme('dark.tycss');
 end;
 
-procedure TMainForm.SwitchCustom(Sender: TObject);
-var
-  Path: string;
+procedure TMainForm.SwitchGreen(Sender: TObject);
 begin
-  // 优先从 exe 向上查找仓库内的 examples/theming/custom.tycss
-  Path := FindFileUpwards('examples/theming/custom.tycss');
-  if Path = '' then
-  begin
-    // 回退：尝试与 exe 同目录（部署场景：将 custom.tycss 复制到 exe 旁）
-    Path := ExtractFilePath(ExpandFileName(ParamStr(0))) + 'custom.tycss';
-    if not FileExists(Path) then
-    begin
-      FStatusLabel.Caption := '未找到 custom.tycss（已找：examples/theming/ 或 exe 同级目录）';
-      Exit;
-    end;
-  end;
-  ApplyTheme(Path);
+  ApplyTheme('green.tycss');
 end;
 
 end.

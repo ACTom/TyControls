@@ -1,10 +1,11 @@
 unit umain;
 
-{ TTyRadioButton 最小示例：
+{ TTyRadioButton 示例（TTyForm + TitleBar 骨架）：
   - 两个 TTyPanel 容器，各含 3 个 TTyRadioButton
-  - 互斥只在同一 Parent（同一 Panel）内生效
-    —— 点击某选项只会取消同组其他选项，跨组不受影响
-  - TTyLabel 实时显示当前选中状态
+  - 互斥（UncheckSiblings）按 Parent 分组：同一 Panel 内互斥，跨组独立
+  - Checked：每组默认选中一项
+  - OnChange：任一按钮状态变化都刷新底部 TTyLabel 状态读数
+  - 演示一个 Enabled=False 的禁用项
   纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
 
 {$mode objfpc}{$H+}
@@ -13,13 +14,20 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.CheckBox, tyControls.Panel, tyControls.TyLabel;
+  tyControls.Controller, tyControls.Form,
+  tyControls.CheckBox, tyControls.Panel, tyControls.TyLabel;
 
 type
-  TMainForm = class(TForm)
+  TMainForm = class(TTyForm)
   private
     FStatus: TTyLabel;
-    procedure RadioClicked(Sender: TObject);
+    { 组 A：水果 }
+    FFruitApple, FFruitBanana, FFruitMango: TTyRadioButton;
+    { 组 B：颜色 }
+    FColorRed, FColorGreen, FColorBlue: TTyRadioButton;
+    procedure RadioChanged(Sender: TObject);
+    procedure UpdateStatus;
+    function SelectedIn(A, B, C: TTyRadioButton): string;
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -46,71 +54,87 @@ begin
   Result := 'themes' + PathDelim;
 end;
 
-{ 在指定 Panel 内创建一个 TTyRadioButton }
+{ 在指定 Panel 内创建一个 TTyRadioButton，事件挂到 OnChange }
 function AddRadio(APanel: TTyPanel; const ACaption: string; ATop: Integer;
   AHandler: TNotifyEvent): TTyRadioButton;
 begin
   Result := TTyRadioButton.Create(APanel);
   Result.Parent := APanel;
-  Result.SetBounds(8, ATop, 160, 28);
+  Result.SetBounds(12, ATop, 150, 26);
   Result.Caption := ACaption;
-  Result.OnClick := AHandler;
+  Result.OnChange := AHandler;
 end;
 
 constructor TMainForm.Create(AOwner: TComponent);
 var
+  Bar: TTyTitleBar;
   PanelA, PanelB: TTyPanel;
-  R: TTyRadioButton;
 begin
-  inherited CreateNew(AOwner, 0);
-  Caption := 'TTyRadioButton 示例';
+  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 持久引擎
+  Caption := 'RadioButton 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 420, 280);
+  SetBounds(0, 0, 440, 320);
 
-  { 加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController }
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
 
-  { --- 组 A：水果 --- }
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> 自动关联为 TTyForm.TitleBar
+  Bar.Parent := Self;
+  Bar.Align := alTop;
+  Bar.Height := 34;
+  Bar.Caption := 'RadioButton  · TyControls';
+
+  { --- 组 A：水果（同一 Panel 内互斥） --- }
   PanelA := TTyPanel.Create(Self);
   PanelA.Parent := Self;
   PanelA.Caption := '水果';
-  PanelA.SetBounds(16, 16, 176, 140);
+  PanelA.SetBounds(16, 52, 190, 160);
 
-  R := AddRadio(PanelA, '苹果', 28, @RadioClicked);
-  R.Checked := True;   // 默认选中第一项
-  AddRadio(PanelA, '香蕉', 64, @RadioClicked);
-  AddRadio(PanelA, '芒果', 100, @RadioClicked);
+  FFruitApple  := AddRadio(PanelA, '苹果', 34, @RadioChanged);
+  FFruitApple.Checked := True;             // 默认选中第一项
+  FFruitBanana := AddRadio(PanelA, '香蕉', 72, @RadioChanged);
+  FFruitMango  := AddRadio(PanelA, '芒果（缺货）', 110, @RadioChanged);
+  FFruitMango.Enabled := False;            // 禁用项：不可选、置灰
 
-  { --- 组 B：颜色 --- }
+  { --- 组 B：颜色（另一个 Panel，与组 A 互不影响） --- }
   PanelB := TTyPanel.Create(Self);
   PanelB.Parent := Self;
   PanelB.Caption := '颜色';
-  PanelB.SetBounds(212, 16, 176, 140);
+  PanelB.SetBounds(232, 52, 190, 160);
 
-  AddRadio(PanelB, '红色', 28, @RadioClicked);
-  R := AddRadio(PanelB, '绿色', 64, @RadioClicked);
-  R.Checked := True;   // 默认选中第二项
-  AddRadio(PanelB, '蓝色', 100, @RadioClicked);
+  FColorRed   := AddRadio(PanelB, '红色', 34, @RadioChanged);
+  FColorGreen := AddRadio(PanelB, '绿色', 72, @RadioChanged);
+  FColorGreen.Checked := True;             // 默认选中第二项
+  FColorBlue  := AddRadio(PanelB, '蓝色', 110, @RadioChanged);
 
-  { --- 状态标签 --- }
+  { --- 状态标签：OnChange 实时读数 --- }
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
-  FStatus.SetBounds(16, 172, 388, 24);
-  FStatus.Caption := '当前选中：苹果 / 绿色';
+  FStatus.SetBounds(16, 228, 408, 24);
+  UpdateStatus;
+
+  ApplyChromeTheme(TyDefaultController);    // 最后统一给 chrome + 窗体背景上主题
 end;
 
-procedure TMainForm.RadioClicked(Sender: TObject);
-var
-  RB: TTyRadioButton;
-  GroupName: string;
+{ 返回一组里当前选中项的 Caption }
+function TMainForm.SelectedIn(A, B, C: TTyRadioButton): string;
 begin
-  RB := Sender as TTyRadioButton;
-  { 通过 Parent 的 Caption 判断所属组 }
-  if RB.Parent is TTyPanel then
-    GroupName := TTyPanel(RB.Parent).Caption
-  else
-    GroupName := '?';
-  FStatus.Caption := Format('当前点击：%s（组：%s）', [RB.Caption, GroupName]);
+  if A.Checked then Result := A.Caption
+  else if B.Checked then Result := B.Caption
+  else if C.Checked then Result := C.Caption
+  else Result := '（无）';
+end;
+
+procedure TMainForm.UpdateStatus;
+begin
+  FStatus.Caption := Format('当前选中  →  水果：%s     颜色：%s',
+    [SelectedIn(FFruitApple, FFruitBanana, FFruitMango),
+     SelectedIn(FColorRed, FColorGreen, FColorBlue)]);
+end;
+
+procedure TMainForm.RadioChanged(Sender: TObject);
+begin
+  { 任一按钮的 Checked 变化（含被 UncheckSiblings 取消的）都会进来 }
+  UpdateStatus;
 end;
 
 end.

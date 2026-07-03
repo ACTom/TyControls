@@ -1,27 +1,30 @@
 unit umain;
-
-{ TTyCheckBox 最小示例：
-  - 两个 TTyCheckBox，OnClick 事件更新状态标签
-  - Checked 属性反映勾选状态（Toggle 在 Click 内自动完成）
-  - 一个禁用的 TTyCheckBox（Enabled:=False）
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
-
 {$mode objfpc}{$H+}
+
+{ TTyCheckBox 示例：TTyForm + TTyTitleBar 外壳，展示复选框的关键特性：
+  - 三态：AllowGrayed=True，点击在 未选/选中/半选 之间循环，OnChange 回显 State
+  - 普通两态复选框，OnChange 回显 Checked
+  - 预先勾选 (Checked:=True)
+  - 禁用态 (Enabled:=False)
+  - StyleClass 样式变体
+  纯代码创建 UI（无 .lfm）；未显式指定 Controller 的控件自动使用全局 TyDefaultController。 }
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.TyLabel,
-  tyControls.CheckBox;
+  Classes, SysUtils, StdCtrls, Forms, Controls,
+  tyControls.Controller, tyControls.Form,
+  tyControls.CheckBox, tyControls.TyLabel;
 
 type
-  TMainForm = class(TForm)
+  TMainForm = class(TTyForm)
   private
-    FCB1: TTyCheckBox;
-    FCB2: TTyCheckBox;
-    FStatusLabel: TTyLabel;
-    procedure CheckBoxClicked(Sender: TObject);
+    FTri: TTyCheckBox;
+    FTriStatus: TTyLabel;
+    FPlain: TTyCheckBox;
+    FStatus: TTyLabel;
+    procedure TriChange(Sender: TObject);
+    procedure PlainChange(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -31,7 +34,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录（兼容 lib/<cpu>-<os>/ 与 .app 包） }
+{ 从 exe 所在目录向上查找仓库的 themes/ 目录 }
 function ThemesDir: string;
 var
   Dir: string;
@@ -40,68 +43,120 @@ begin
   Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
   for i := 1 to 8 do
   begin
-    if DirectoryExists(Dir + 'themes') then
-      Exit(Dir + 'themes' + PathDelim);
+    if DirectoryExists(Dir + 'themes') then Exit(Dir + 'themes' + PathDelim);
     Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
     if Dir = '' then Break;
   end;
   Result := 'themes' + PathDelim;
 end;
 
-{ 把布尔值转为中文"是"/"否" }
-function BoolToZh(B: Boolean): string;
+function StateName(AState: TCheckBoxState): string;
 begin
-  if B then Result := '已勾选' else Result := '未勾选';
+  case AState of
+    cbChecked: Result := '选中 (cbChecked)';
+    cbGrayed:  Result := '半选 (cbGrayed)';
+  else
+    Result := '未选 (cbUnchecked)';
+  end;
+end;
+
+procedure TMainForm.TriChange(Sender: TObject);
+begin
+  FTriStatus.Caption := '三态状态：' + StateName(FTri.State);
+end;
+
+procedure TMainForm.PlainChange(Sender: TObject);
+begin
+  if FPlain.Checked then
+    FStatus.Caption := '两态状态：已勾选'
+  else
+    FStatus.Caption := '两态状态：未勾选';
 end;
 
 constructor TMainForm.Create(AOwner: TComponent);
 var
-  CBDisabled: TTyCheckBox;
+  Bar: TTyTitleBar;
+  Lbl: TTyLabel;
+  Cb: TTyCheckBox;
 begin
-  inherited CreateNew(AOwner, 0);
-  Caption := 'TTyCheckBox 示例';
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + persistent engine
+  Caption := 'CheckBox 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 360, 260);
+  SetBounds(0, 0, 460, 420);
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // load theme FIRST
 
-  // 加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> auto-associates as TTyForm.TitleBar
+  Bar.Parent := Self; Bar.Align := alTop; Bar.Height := 34;
+  Bar.Caption := 'CheckBox  · TyControls';
 
-  // 第一个复选框（初始未勾选）
-  FCB1 := TTyCheckBox.Create(Self);
-  FCB1.Parent := Self;
-  FCB1.SetBounds(24, 24, 280, 28);
-  FCB1.Caption := '选项 A（初始未勾选）';
-  FCB1.Checked := False;
-  FCB1.OnClick := @CheckBoxClicked;
+  { ---- 三态复选框：AllowGrayed + State 循环 ---- }
+  Lbl := TTyLabel.Create(Self);
+  Lbl.Parent := Self;
+  Lbl.SetBounds(20, 52, 420, 22);
+  Lbl.Caption := '三态复选框（点击循环 未选 → 选中 → 半选）：';
 
-  // 第二个复选框（初始已勾选）
-  FCB2 := TTyCheckBox.Create(Self);
-  FCB2.Parent := Self;
-  FCB2.SetBounds(24, 64, 280, 28);
-  FCB2.Caption := '选项 B（初始已勾选）';
-  FCB2.Checked := True;
-  FCB2.OnClick := @CheckBoxClicked;
+  FTri := TTyCheckBox.Create(Self);
+  FTri.Parent := Self;
+  FTri.SetBounds(24, 78, 280, 24);
+  FTri.Caption := '包含全部子项(&A)';
+  FTri.AllowGrayed := True;
+  FTri.State := cbGrayed;                   // 初始半选，展示三态之一
+  FTri.OnChange := @TriChange;
 
-  // 禁用态复选框：Enabled:=False，触发 :disabled 主题样式
-  CBDisabled := TTyCheckBox.Create(Self);
-  CBDisabled.Parent := Self;
-  CBDisabled.SetBounds(24, 104, 280, 28);
-  CBDisabled.Caption := '已禁用选项（无法交互）';
-  CBDisabled.Checked := True;
-  CBDisabled.Enabled := False;
+  FTriStatus := TTyLabel.Create(Self);
+  FTriStatus.Parent := Self;
+  FTriStatus.SetBounds(24, 106, 420, 22);
 
-  // 状态标签：显示两个复选框当前的 Checked 状态
-  FStatusLabel := TTyLabel.Create(Self);
-  FStatusLabel.Parent := Self;
-  FStatusLabel.SetBounds(24, 156, 300, 24);
-  FStatusLabel.Caption := Format('A：%s  B：%s', [BoolToZh(FCB1.Checked), BoolToZh(FCB2.Checked)]);
-end;
+  { ---- 普通两态复选框 + OnChange 状态回显 ---- }
+  Lbl := TTyLabel.Create(Self);
+  Lbl.Parent := Self;
+  Lbl.SetBounds(20, 148, 420, 22);
+  Lbl.Caption := '普通两态复选框（OnChange 回显）：';
 
-procedure TMainForm.CheckBoxClicked(Sender: TObject);
-begin
-  // OnClick 在 TTyCheckBox.Click 内、Checked 翻转之后触发，直接读取最新值
-  FStatusLabel.Caption := Format('A：%s  B：%s',
-    [BoolToZh(FCB1.Checked), BoolToZh(FCB2.Checked)]);
+  FPlain := TTyCheckBox.Create(Self);
+  FPlain.Parent := Self;
+  FPlain.SetBounds(24, 174, 280, 24);
+  FPlain.Caption := '接收邮件通知(&N)';
+  FPlain.OnChange := @PlainChange;
+
+  FStatus := TTyLabel.Create(Self);
+  FStatus.Parent := Self;
+  FStatus.SetBounds(24, 202, 420, 22);
+
+  { ---- 预先勾选 (Checked := True) ---- }
+  Cb := TTyCheckBox.Create(Self);
+  Cb.Parent := Self;
+  Cb.SetBounds(24, 244, 280, 24);
+  Cb.Caption := '默认已勾选 (Checked)';
+  Cb.Checked := True;
+
+  { ---- 禁用态 ---- }
+  Cb := TTyCheckBox.Create(Self);
+  Cb.Parent := Self;
+  Cb.SetBounds(24, 274, 280, 24);
+  Cb.Caption := '禁用且勾选 (Enabled=False)';
+  Cb.Checked := True;
+  Cb.Enabled := False;
+
+  Cb := TTyCheckBox.Create(Self);
+  Cb.Parent := Self;
+  Cb.SetBounds(24, 304, 280, 24);
+  Cb.Caption := '禁用且未勾选';
+  Cb.Enabled := False;
+
+  { ---- StyleClass 样式变体 ---- }
+  Cb := TTyCheckBox.Create(Self);
+  Cb.Parent := Self;
+  Cb.SetBounds(24, 346, 280, 24);
+  Cb.Caption := '自定义样式类 (StyleClass=accent)';
+  Cb.StyleClass := 'accent';
+  Cb.Checked := True;
+
+  // 初始化状态回显
+  TriChange(nil);
+  PlainChange(nil);
+
+  ApplyChromeTheme(TyDefaultController);   // theme the whole chrome + form bg LAST
 end;
 
 end.

@@ -1,26 +1,35 @@
 unit umain;
 
-{ TTyComboBox 最小示例：
-  - Items 填充、SelectItem/ItemIndex 初始选中
-  - OnChange 事件更新 TTyLabel 显示选中文本
-  - 单击控件打开真正的下拉弹出层（TTyListBox），再次单击或选择列表项后关闭
-  - 支持 DropDown/CloseUp/DroppedDown API；ESC 键和失焦均可关闭弹出层
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+{ TTyComboBox 示例（纯代码，无 .lfm）：
+    左列 csDropDownList（只读，仅能从列表挑选）——展示 Sorted 排序、
+      DropDownCount 限制可见行数、以及键盘 type-ahead 前缀跳转。
+    右列 csDropDown（可编辑字段 + 前缀自动完成）——键入前缀时弹出过滤后的
+      候选列表；同时演示 CharCase（自动转大写）与 MaxLength（限制长度）。
+    下方 TTyLabel 状态栏订阅四个事件：
+      OnChange / OnSelect / OnDropDown / OnCloseUp。
+  窗体继承 TTyForm（无边框自绘窗框）+ 一条 TTyTitleBar；主题经全局
+  TyDefaultController 加载后由 ApplyChromeTheme 统一上色。 }
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.ComboBox, tyControls.TyLabel;
+  Classes, SysUtils, Forms, Controls, StdCtrls,
+  tyControls.Controller, tyControls.Form,
+  tyControls.ComboBox, tyControls.TyLabel;
 
 type
-  TMainForm = class(TForm)
+  TMainForm = class(TTyForm)
   private
-    FCombo: TTyComboBox;
-    FStatus: TTyLabel;
-    procedure ComboChanged(Sender: TObject);
+    FListCombo: TTyComboBox;   // csDropDownList（只读）
+    FEditCombo: TTyComboBox;   // csDropDown（可编辑 + 自动完成）
+    FStatus: TTyLabel;         // 事件状态栏
+    procedure ComboChange(Sender: TObject);
+    procedure ComboSelect(Sender: TObject);
+    procedure ComboDropDown(Sender: TObject);
+    procedure ComboCloseUp(Sender: TObject);
+    procedure SetStatus(const AEvt: string; ACombo: TTyComboBox);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -49,52 +58,118 @@ end;
 
 constructor TMainForm.Create(AOwner: TComponent);
 var
-  Lbl: TTyLabel;
+  Bar: TTyTitleBar;
+  LblList, LblEdit: TTyLabel;
 begin
+  // TTyForm.CreateNew → 无边框 + 持久引擎，但默认无标题栏
   inherited CreateNew(AOwner, 0);
   Caption := 'TTyComboBox 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 320, 200);
+  SetBounds(0, 0, 520, 320);
 
-  { 加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController }
+  // 主题须先加载，再给整套窗框上色
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  { 静态标签：说明 v1 限制 }
-  Lbl := TTyLabel.Create(Self);
-  Lbl.Parent := Self;
-  Lbl.SetBounds(16, 16, 288, 20);
-  Lbl.Caption := '点击下拉框打开列表，选择后自动关闭';
+  // 标题栏：Owner=Self 即自动关联到本窗体的 TitleBar 属性
+  Bar := TTyTitleBar.Create(Self);
+  Bar.Parent := Self;
+  Bar.Align := alTop;
+  Bar.Height := 34;
+  Bar.Caption := 'TTyComboBox  · TyControls';
 
-  { TTyComboBox：填充 Items，设置初始选中项 }
-  FCombo := TTyComboBox.Create(Self);
-  FCombo.Parent := Self;
-  FCombo.SetBounds(16, 48, 200, 28);
+  // ── 左列：csDropDownList（只读下拉） ──
+  LblList := TTyLabel.Create(Self);
+  LblList.Parent := Self;
+  LblList.SetBounds(24, 52, 224, 20);
+  LblList.Caption := '只读下拉（Sorted 排序，可键盘 type-ahead）：';
 
-  { 填充选项 }
-  FCombo.Items.Add('北京');
-  FCombo.Items.Add('上海');
-  FCombo.Items.Add('广州');
-  FCombo.Items.Add('深圳');
-  FCombo.Items.Add('成都');
+  FListCombo := TTyComboBox.Create(Self);
+  FListCombo.Parent := Self;
+  FListCombo.SetBounds(24, 76, 224, 26);
+  FListCombo.Style := csDropDownList;   // 只能从列表中挑选
+  FListCombo.Sorted := True;            // 保持升序，插入项自动归位
+  FListCombo.DropDownCount := 5;        // 最多显示 5 行，超出则滚动
+  // 乱序加入 8 项：Sorted=True 会自动排成升序
+  FListCombo.Items.Add('Guangzhou');
+  FListCombo.Items.Add('Beijing');
+  FListCombo.Items.Add('Shanghai');
+  FListCombo.Items.Add('Chengdu');
+  FListCombo.Items.Add('Hangzhou');
+  FListCombo.Items.Add('Nanjing');
+  FListCombo.Items.Add('Wuhan');
+  FListCombo.Items.Add('Xian');
+  FListCombo.ItemIndex := 0;            // 预选首项（排序后为 Beijing）
+  FListCombo.OnChange   := @ComboChange;
+  FListCombo.OnSelect   := @ComboSelect;
+  FListCombo.OnDropDown := @ComboDropDown;
+  FListCombo.OnCloseUp  := @ComboCloseUp;
 
-  { OnChange：选中项变化时更新状态标签 }
-  FCombo.OnChange := @ComboChanged;
+  // ── 右列：csDropDown（可编辑 + 前缀自动完成） ──
+  LblEdit := TTyLabel.Create(Self);
+  LblEdit.Parent := Self;
+  LblEdit.SetBounds(272, 52, 224, 20);
+  LblEdit.Caption := '可编辑（前缀自动完成 / 大写 / 限长 10）：';
 
-  { 初始选中第 0 项；SelectItem 会触发 OnChange }
-  FCombo.SelectItem(0);
+  FEditCombo := TTyComboBox.Create(Self);
+  FEditCombo.Parent := Self;
+  FEditCombo.SetBounds(272, 76, 224, 26);
+  FEditCombo.Style := csDropDown;       // 可编辑字段 + 前缀自动完成弹窗
+  FEditCombo.CharCase := ecUppercase;   // 键入文本自动转大写
+  FEditCombo.MaxLength := 10;           // 限制字段长度为 10
+  FEditCombo.DropDownCount := 6;
+  FEditCombo.Items.Add('APPLE');
+  FEditCombo.Items.Add('APRICOT');
+  FEditCombo.Items.Add('AVOCADO');
+  FEditCombo.Items.Add('BANANA');
+  FEditCombo.Items.Add('BLUEBERRY');
+  FEditCombo.Items.Add('CHERRY');
+  FEditCombo.Items.Add('GRAPE');
+  FEditCombo.Items.Add('MANGO');
+  FEditCombo.OnChange   := @ComboChange;
+  FEditCombo.OnSelect   := @ComboSelect;
+  FEditCombo.OnDropDown := @ComboDropDown;
+  FEditCombo.OnCloseUp  := @ComboCloseUp;
 
-  { 状态标签：显示当前 ItemIndex 与 Text }
+  // ── 事件状态栏 ──
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
-  FStatus.SetBounds(16, 96, 288, 24);
-  { 初始文字由 ComboChanged 在 SelectItem(0) 时设置 }
+  FStatus.SetBounds(24, 140, 472, 22);
+  FStatus.Caption := '事件状态：（等待操作，尝试展开或键入前缀）';
+
+  // 整套窗框 + 背景色随主题
+  ApplyChromeTheme(TyDefaultController);
 end;
 
-procedure TMainForm.ComboChanged(Sender: TObject);
+procedure TMainForm.SetStatus(const AEvt: string; ACombo: TTyComboBox);
+var
+  Which: string;
 begin
-  { FCombo.Text 等于 FCombo.Items[FCombo.ItemIndex]（只读） }
-  FStatus.Caption := Format('当前选中：%s（ItemIndex = %d）',
-    [FCombo.Text, FCombo.ItemIndex]);
+  if ACombo = FListCombo then
+    Which := '只读'
+  else
+    Which := '可编辑';
+  FStatus.Caption := Format('事件状态：[%s] %s → Text="%s" (ItemIndex=%d)',
+    [Which, AEvt, ACombo.Text, ACombo.ItemIndex]);
+end;
+
+procedure TMainForm.ComboChange(Sender: TObject);
+begin
+  SetStatus('OnChange', Sender as TTyComboBox);
+end;
+
+procedure TMainForm.ComboSelect(Sender: TObject);
+begin
+  SetStatus('OnSelect', Sender as TTyComboBox);
+end;
+
+procedure TMainForm.ComboDropDown(Sender: TObject);
+begin
+  SetStatus('OnDropDown（展开）', Sender as TTyComboBox);
+end;
+
+procedure TMainForm.ComboCloseUp(Sender: TObject);
+begin
+  SetStatus('OnCloseUp（收起）', Sender as TTyComboBox);
 end;
 
 end.

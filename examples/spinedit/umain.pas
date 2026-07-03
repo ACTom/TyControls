@@ -1,10 +1,14 @@
 unit umain;
 
 { TTySpinEdit 示例：
-  - 第一个 SpinEdit（0..100，步进 1），OnChange 实时更新数值标签
-  - 支持点击上/下小箭头按钮、键盘上/下方向键、鼠标滚轮来改变 Value
-  - 第二个 SpinEdit 展示自定义范围（-10..10）与步进 2
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+  演示该整数微调框的主要已发布属性与事件（源码为整数实现，不支持小数）：
+    - Value / MinValue / MaxValue / Increment，OnChange 实时写入状态栏
+    - 负值范围（-50..50，步进 5）
+    - Alignment（右对齐）、MaxLength（限制输入位数）
+    - ReadOnly（锁定：禁止编辑/步进/滚轮）
+  交互方式：上/下小箭头按钮、键盘 ↑/↓、鼠标滚轮、直接键入后回车提交。
+  纯代码创建 UI（无 .lfm）；主窗体为 TTyForm + TTyTitleBar，主题经全局
+  TyDefaultController 加载。 }
 
 {$mode objfpc}{$H+}
 
@@ -12,17 +16,19 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.SpinEdit, tyControls.TyLabel;
+  tyControls.Controller, tyControls.Form,
+  tyControls.SpinEdit, tyControls.TyLabel;
 
 type
-  TMainForm = class(TForm)
+  TMainForm = class(TTyForm)
   private
-    FSpin1: TTySpinEdit;
-    FLabel1: TTyLabel;
-    FSpin2: TTySpinEdit;
-    FLabel2: TTyLabel;
-    procedure Spin1Change(Sender: TObject);
-    procedure Spin2Change(Sender: TObject);
+    FSpinQty: TTySpinEdit;      // 0..100 步进 1
+    FSpinOfs: TTySpinEdit;      // -50..50 步进 5（负值范围）
+    FSpinYear: TTySpinEdit;     // 右对齐 + MaxLength
+    FSpinLock: TTySpinEdit;     // ReadOnly 锁定
+    FStatus: TTyLabel;          // OnChange 状态输出
+    procedure SpinChange(Sender: TObject);
+    procedure UpdateStatus(const ATag: string; ASpin: TTySpinEdit);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -51,64 +57,102 @@ end;
 
 constructor TMainForm.Create(AOwner: TComponent);
 var
-  LblA, LblB: TTyLabel;
+  Bar: TTyTitleBar;
+  Lbl: TTyLabel;
+
+  function AddLabel(ATop: Integer; const ACaption: string): TTyLabel;
+  begin
+    Result := TTyLabel.Create(Self);
+    Result.Parent := Self;
+    Result.SetBounds(24, ATop, 380, 20);
+    Result.Caption := ACaption;
+  end;
+
 begin
-  inherited CreateNew(AOwner, 0);
+  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 常驻绘制引擎
   Caption := 'TTySpinEdit 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 360, 260);
+  SetBounds(0, 0, 440, 420);
 
-  // 加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
 
-  // SpinEdit 一：0..100，步进 1
-  LblA := TTyLabel.Create(Self);
-  LblA.Parent := Self;
-  LblA.SetBounds(16, 24, 320, 20);
-  LblA.Caption := '数量（0..100，箭头/方向键/滚轮）：';
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self → 自动关联为 TTyForm.TitleBar
+  Bar.Parent := Self;
+  Bar.Align := alTop;
+  Bar.Height := 34;
+  Bar.Caption := 'SpinEdit  · TyControls';
 
-  FSpin1 := TTySpinEdit.Create(Self);
-  FSpin1.Parent := Self;
-  FSpin1.SetBounds(16, 52, 120, 28);
-  FSpin1.MinValue := 0;
-  FSpin1.MaxValue := 100;
-  FSpin1.Value := 10;
-  FSpin1.OnChange := @Spin1Change;
+  // ① 数量：0..100，步进 1
+  AddLabel(52, '数量（0..100，步进 1；箭头/方向键/滚轮/键入）：');
+  FSpinQty := TTySpinEdit.Create(Self);
+  FSpinQty.Parent := Self;
+  FSpinQty.SetBounds(24, 76, 130, 28);
+  FSpinQty.MinValue := 0;
+  FSpinQty.MaxValue := 100;
+  FSpinQty.Increment := 1;
+  FSpinQty.Value := 10;
+  FSpinQty.OnChange := @SpinChange;
 
-  FLabel1 := TTyLabel.Create(Self);
-  FLabel1.Parent := Self;
-  FLabel1.SetBounds(16, 88, 320, 20);
-  FLabel1.Caption := Format('数量：%d', [FSpin1.Value]);
+  // ② 偏移：-50..50，步进 5（负值范围 + 自定义步进）
+  AddLabel(120, '偏移（-50..50，步进 5，含负值范围）：');
+  FSpinOfs := TTySpinEdit.Create(Self);
+  FSpinOfs.Parent := Self;
+  FSpinOfs.SetBounds(24, 144, 130, 28);
+  FSpinOfs.MinValue := -50;
+  FSpinOfs.MaxValue := 50;
+  FSpinOfs.Increment := 5;
+  FSpinOfs.Value := 0;
+  FSpinOfs.OnChange := @SpinChange;
 
-  // SpinEdit 二：-10..10，步进 2，展示负值范围与自定义步进
-  LblB := TTyLabel.Create(Self);
-  LblB.Parent := Self;
-  LblB.SetBounds(16, 140, 320, 20);
-  LblB.Caption := '偏移（-10..10，步进 2）：';
+  // ③ 年份：右对齐 + MaxLength=4（限制输入位数）
+  AddLabel(188, '年份（右对齐 Alignment，MaxLength=4）：');
+  FSpinYear := TTySpinEdit.Create(Self);
+  FSpinYear.Parent := Self;
+  FSpinYear.SetBounds(24, 212, 130, 28);
+  FSpinYear.MinValue := 1900;
+  FSpinYear.MaxValue := 2100;
+  FSpinYear.Alignment := taRightJustify;
+  FSpinYear.MaxLength := 4;
+  FSpinYear.Value := 2026;
+  FSpinYear.OnChange := @SpinChange;
 
-  FSpin2 := TTySpinEdit.Create(Self);
-  FSpin2.Parent := Self;
-  FSpin2.SetBounds(16, 168, 120, 28);
-  FSpin2.MinValue := -10;
-  FSpin2.MaxValue := 10;
-  FSpin2.Increment := 2;
-  FSpin2.Value := 0;
-  FSpin2.OnChange := @Spin2Change;
+  // ④ 锁定：ReadOnly=True（禁止编辑/步进/滚轮）
+  AddLabel(256, '锁定（ReadOnly=True：不可编辑/步进/滚轮）：');
+  FSpinLock := TTySpinEdit.Create(Self);
+  FSpinLock.Parent := Self;
+  FSpinLock.SetBounds(24, 280, 130, 28);
+  FSpinLock.MinValue := 0;
+  FSpinLock.MaxValue := 999;
+  FSpinLock.Value := 42;
+  FSpinLock.ReadOnly := True;
+  FSpinLock.OnChange := @SpinChange;
 
-  FLabel2 := TTyLabel.Create(Self);
-  FLabel2.Parent := Self;
-  FLabel2.SetBounds(16, 204, 320, 20);
-  FLabel2.Caption := '偏移：0';
+  // 状态栏：任一 SpinEdit 的 OnChange 都在此输出
+  Lbl := AddLabel(332, '状态：');
+  Lbl.SetBounds(24, 332, 60, 20);
+  FStatus := TTyLabel.Create(Self);
+  FStatus.Parent := Self;
+  FStatus.SetBounds(84, 332, 336, 20);
+  FStatus.Caption := '（改变任一数值以查看 OnChange 输出）';
+
+  ApplyChromeTheme(TyDefaultController);   // 最后统一为整套窗体外观 + 背景上色
 end;
 
-procedure TMainForm.Spin1Change(Sender: TObject);
+procedure TMainForm.UpdateStatus(const ATag: string; ASpin: TTySpinEdit);
 begin
-  FLabel1.Caption := Format('数量：%d', [(Sender as TTySpinEdit).Value]);
+  FStatus.Caption := Format('%s → %d', [ATag, ASpin.Value]);
 end;
 
-procedure TMainForm.Spin2Change(Sender: TObject);
+procedure TMainForm.SpinChange(Sender: TObject);
 begin
-  FLabel2.Caption := Format('偏移：%d', [(Sender as TTySpinEdit).Value]);
+  if Sender = FSpinQty then
+    UpdateStatus('数量', FSpinQty)
+  else if Sender = FSpinOfs then
+    UpdateStatus('偏移', FSpinOfs)
+  else if Sender = FSpinYear then
+    UpdateStatus('年份', FSpinYear)
+  else if Sender = FSpinLock then
+    UpdateStatus('锁定', FSpinLock);
 end;
 
 end.
