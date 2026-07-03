@@ -1,11 +1,10 @@
 unit umain;
 
 { TTyPanel 示例（TTyForm 自绘窗框 + 标题栏）：
-    - Caption：面板标题文字
-    - Alignment：标题文字对齐（taLeftJustify / taCenter / taRightJustify）
-    - StyleClass：切换主题变体（对应 .tycss 里的 TyPanel.<变体>）
+    - Caption：面板标题文字（注意：TTyPanel.Caption 始终居中绘制）
+    - Alignment：内部子控件的水平对齐参考（这里用作布局说明）
     - 作为容器：面板内放置 TTyLabel / TTyEdit / TTyButton，并嵌套子面板
-    - Align：底部一条 Align=alBottom 的面板演示对齐停靠
+    - Align：alBottom / alLeft 停靠演示，宽高随窗体自动拉伸
   面板的背景、边框、圆角均来自主题 TyPanel 规则，无需在代码里手写颜色。
   纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
 
@@ -107,13 +106,17 @@ begin
   InnerPanel.Alignment := taCenter;        // 默认即 taCenter，这里显式演示
   InnerPanel.SetBounds(12, 124, 316, 52);
 
-  { --- 右列 Panel：StyleClass 变体 + Caption 右对齐 --- }
+  { --- 右列 Panel：真正的主题化容器，Caption（居中绘制）+ 内嵌子控件 --- }
   RightPanel := TTyPanel.Create(Self);
   RightPanel.Parent := Self;
-  RightPanel.Caption := '强调面板（右对齐）';
-  RightPanel.Alignment := taRightJustify;  // 标题文字右对齐
-  RightPanel.StyleClass := 'primary';      // 对应 .tycss 里的 TyPanel.primary
+  RightPanel.Caption := '说明';               // Caption 由主题居中绘制在面板顶部区
   RightPanel.SetBounds(372, 50, 172, 190);
+
+  { 右列容器内的说明标签（证明面板是真正承载子控件的容器） }
+  Lbl := TTyLabel.Create(RightPanel);
+  Lbl.Parent := RightPanel;
+  Lbl.SetBounds(12, 40, 148, 140);
+  Lbl.Caption := '面板的背景、边框与圆角均来自主题 TyPanel 规则，无需手写颜色。';
 
   { --- 结果标签 --- }
   FResultLabel := TTyLabel.Create(Self);
@@ -121,11 +124,11 @@ begin
   FResultLabel.SetBounds(16, 252, 528, 24);
   FResultLabel.Caption := '点击“打招呼”按钮试试…';
 
-  { --- 底部停靠 Panel：演示 Align=alBottom --- }
+  { --- 底部停靠 Panel：演示 Align=alBottom（宽度随窗体自动拉伸） --- }
   BottomPanel := TTyPanel.Create(Self);
   BottomPanel.Parent := Self;
-  BottomPanel.Caption := 'Align = alBottom：面板停靠在窗体底部';
-  BottomPanel.Align := alBottom;           // 停靠底部，宽度随窗体自动拉伸
+  BottomPanel.Caption := 'Align = alBottom';   // Caption 居中绘制
+  BottomPanel.Align := alBottom;
   BottomPanel.Height := 44;
 
   // 整套窗框 + 背景色随主题

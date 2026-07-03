@@ -148,6 +148,7 @@ begin
   FMenuBar.Align := alTop;      // 紧贴标题栏下方，宽度随窗体拉伸
   FMenuBar.Height := 30;
   FMenuBar.Menu := FMainMenu;   // 绑定数据模型；点顶层项 / Alt+助记符打开下拉
+  MenuBar := FMenuBar;          // 关联为窗体主菜单栏：启用 TTyForm.IsShortcut 快捷键派发
 
   { ---- 右键菜单目标面板 ---- }
   BuildPopupMenu;

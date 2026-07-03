@@ -1,8 +1,8 @@
 unit umain;
 
 { TTyRadioButton 示例（TTyForm + TitleBar 骨架）：
-  - 两个 TTyPanel 容器，各含 3 个 TTyRadioButton
-  - 互斥（UncheckSiblings）按 Parent 分组：同一 Panel 内互斥，跨组独立
+  - 两个 TTyGroupBox 容器（标题栏由 GroupBox 顶部预留），各含 3 个 TTyRadioButton
+  - 互斥（UncheckSiblings）按 Parent 分组：同一 GroupBox 内互斥，跨组独立
   - Checked：每组默认选中一项
   - OnChange：任一按钮状态变化都刷新底部 TTyLabel 状态读数
   - 演示一个 Enabled=False 的禁用项
@@ -15,7 +15,7 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form,
-  tyControls.CheckBox, tyControls.Panel, tyControls.TyLabel;
+  tyControls.GroupBox, tyControls.CheckBox, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -54,13 +54,14 @@ begin
   Result := 'themes' + PathDelim;
 end;
 
-{ 在指定 Panel 内创建一个 TTyRadioButton，事件挂到 OnChange }
-function AddRadio(APanel: TTyPanel; const ACaption: string; ATop: Integer;
+{ 在指定 GroupBox 内创建一个 TTyRadioButton，事件挂到 OnChange。
+  Top 为 GroupBox 客户区坐标（GroupBox 已通过 AdjustClientRect 让出顶部标题带）。 }
+function AddRadio(AGroup: TTyGroupBox; const ACaption: string; ATop: Integer;
   AHandler: TNotifyEvent): TTyRadioButton;
 begin
-  Result := TTyRadioButton.Create(APanel);
-  Result.Parent := APanel;
-  Result.SetBounds(12, ATop, 150, 26);
+  Result := TTyRadioButton.Create(AGroup);
+  Result.Parent := AGroup;
+  Result.SetBounds(10, ATop, 160, 26);
   Result.Caption := ACaption;
   Result.OnChange := AHandler;
 end;
@@ -68,7 +69,7 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  PanelA, PanelB: TTyPanel;
+  GroupA, GroupB: TTyGroupBox;
 begin
   inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 持久引擎
   Caption := 'RadioButton 示例';
@@ -83,28 +84,30 @@ begin
   Bar.Height := 34;
   Bar.Caption := 'RadioButton  · TyControls';
 
-  { --- 组 A：水果（同一 Panel 内互斥） --- }
-  PanelA := TTyPanel.Create(Self);
-  PanelA.Parent := Self;
-  PanelA.Caption := '水果';
-  PanelA.SetBounds(16, 52, 190, 160);
+  { --- 组 A：水果（同一 GroupBox 内互斥，标题左对齐） --- }
+  GroupA := TTyGroupBox.Create(Self);
+  GroupA.Parent := Self;
+  GroupA.SetBounds(16, 52, 190, 160);
+  GroupA.Caption := '水果';
+  GroupA.Alignment := taLeftJustify;
 
-  FFruitApple  := AddRadio(PanelA, '苹果', 34, @RadioChanged);
+  FFruitApple  := AddRadio(GroupA, '苹果', 8, @RadioChanged);
   FFruitApple.Checked := True;             // 默认选中第一项
-  FFruitBanana := AddRadio(PanelA, '香蕉', 72, @RadioChanged);
-  FFruitMango  := AddRadio(PanelA, '芒果（缺货）', 110, @RadioChanged);
+  FFruitBanana := AddRadio(GroupA, '香蕉', 44, @RadioChanged);
+  FFruitMango  := AddRadio(GroupA, '芒果（缺货）', 80, @RadioChanged);
   FFruitMango.Enabled := False;            // 禁用项：不可选、置灰
 
-  { --- 组 B：颜色（另一个 Panel，与组 A 互不影响） --- }
-  PanelB := TTyPanel.Create(Self);
-  PanelB.Parent := Self;
-  PanelB.Caption := '颜色';
-  PanelB.SetBounds(232, 52, 190, 160);
+  { --- 组 B：颜色（另一个 GroupBox，与组 A 互不影响，标题居中） --- }
+  GroupB := TTyGroupBox.Create(Self);
+  GroupB.Parent := Self;
+  GroupB.SetBounds(232, 52, 190, 160);
+  GroupB.Caption := '颜色';
+  GroupB.Alignment := taCenter;
 
-  FColorRed   := AddRadio(PanelB, '红色', 34, @RadioChanged);
-  FColorGreen := AddRadio(PanelB, '绿色', 72, @RadioChanged);
+  FColorRed   := AddRadio(GroupB, '红色', 8, @RadioChanged);
+  FColorGreen := AddRadio(GroupB, '绿色', 44, @RadioChanged);
   FColorGreen.Checked := True;             // 默认选中第二项
-  FColorBlue  := AddRadio(PanelB, '蓝色', 110, @RadioChanged);
+  FColorBlue  := AddRadio(GroupB, '蓝色', 80, @RadioChanged);
 
   { --- 状态标签：OnChange 实时读数 --- }
   FStatus := TTyLabel.Create(Self);

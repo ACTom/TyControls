@@ -3,12 +3,14 @@ unit umain;
 { TTyLabel 示例（TTyForm + TTyTitleBar）：
   演示 TTyLabel 的核心已发布特性——
     - Alignment：taLeftJustify / taCenter / taRightJustify 水平对齐
-    - WordWrap：长文本按控件宽度自动折行
+    - Layout：tlTop / tlCenter / tlBottom 垂直对齐（固定高度内）
+    - WordWrap：长文本按控件宽度在空格处自动折行
     - AutoSize：开 = 随文本自动收缩/增长；关 = 固定边框
-    - Font：自定义字体（字号 / 加粗 / 字体名）
-    - StyleClass：选择主题变体（如 'primary'）
+    - Transparent：True = 背景透明；False = 用主题面板色填充
     - FocusControl + & 助记符：Alt+字母把焦点送给关联的 TTyEdit
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。
+  注意：字号/字重与 StyleClass.primary 由主题(light.tycss)控制，TyLabel
+  没有对应规则，故本示例不演示这些无效属性。 }
 
 {$mode objfpc}{$H+}
 
@@ -68,13 +70,11 @@ begin
   Bar.Height := 34;
   Bar.Caption := 'TTyLabel  · TyControls';
 
-  // ===== 段标题：加粗大字体演示 Font =====
+  // ===== 段标题（字号/字重由主题决定，此处不做无效的 Font 覆盖）=====
   LHead := TTyLabel.Create(Self);
   LHead.Parent := Self;
   LHead.SetBounds(20, 46, 440, 26);
   LHead.Caption := '标签特性一览';
-  LHead.Font.Size := 14;
-  LHead.Font.Style := [fsBold];
 
   // ===== Alignment：三种水平对齐（AutoSize=False 才能看出对齐效果）=====
   L := TTyLabel.Create(Self);
@@ -98,12 +98,14 @@ begin
   L.Alignment := taRightJustify;
   L.Caption := '右对齐（taRightJustify）';
 
-  // ===== StyleClass：主题变体（primary）=====
+  // ===== Transparent=False：用主题面板色填充背景（区别于其它透明标签）=====
   L := TTyLabel.Create(Self);
   L.Parent := Self;
   L.SetBounds(20, 166, 440, 22);
-  L.StyleClass := 'primary';
-  L.Caption := '带 StyleClass = primary 的标签';
+  L.AutoSize := False;
+  L.Transparent := False;
+  L.Alignment := taCenter;
+  L.Caption := 'Transparent=False：带填充背景';
 
   // ===== AutoSize=True：边框随文字收紧（默认）=====
   L := TTyLabel.Create(Self);
@@ -112,15 +114,17 @@ begin
   L.AutoSize := True;
   L.Caption := 'AutoSize=True：宽高随文字自适应';
 
-  // ===== WordWrap：长文本在固定宽度内自动折行 =====
+  // ===== WordWrap：长文本在空格处按控件宽度自动折行 =====
+  //  折行只在 ASCII 空格处发生，故此处用以空格分隔的词语，折行效果真实可见。
   L := TTyLabel.Create(Self);
   L.Parent := Self;
   L.SetBounds(20, 224, 440, 60);
   L.AutoSize := False;
   L.WordWrap := True;
   L.Alignment := taLeftJustify;
-  L.Caption := 'WordWrap=True：这是一段较长的说明文字，当它超过标签宽度时会自动换到下一行，'
-             + '而不是被裁剪或溢出到控件之外，方便展示多行文本内容。';
+  L.Caption := 'WordWrap=True : this label wraps onto several lines because '
+             + 'the words are separated by spaces — 中文 与 English 混排 也 '
+             + '能 在 空格 处 换行，超出 控件 宽度 就 自动 折行。';
 
   // ===== FocusControl + & 助记符：Alt+N 聚焦到下面的输入框 =====
   Ed := TTyEdit.Create(Self);

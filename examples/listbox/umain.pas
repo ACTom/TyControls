@@ -96,6 +96,12 @@ begin
   LblTitle.SetBounds(16, 46, 388, 20);
   LblTitle.Caption := '城市列表（上下键 / PageUp/Down / 滚轮可滚动）：';
 
+  // 底部状态栏：必须在 FListBox.OnChange 接线 / ItemIndex 赋值之前创建，
+  // 否则设置 ItemIndex 触发 OnChange → UpdateStatus 访问尚未创建的 FStatus → 崩溃
+  FStatus := TTyLabel.Create(Self);
+  FStatus.Parent := Self;
+  FStatus.SetBounds(16, 376, 388, 20);
+
   // 列表框：30 项，高度不足以显示全部 → 自动出现内置滚动条
   FListBox := TTyListBox.Create(Self);
   FListBox.Parent := Self;
@@ -138,10 +144,7 @@ begin
   FBtnClear.Caption := '清空选择';
   FBtnClear.OnClick := @DoClear;
 
-  // 底部状态栏
-  FStatus := TTyLabel.Create(Self);
-  FStatus.Parent := Self;
-  FStatus.SetBounds(16, 376, 388, 20);
+  // 所有控件就绪后刷新状态栏文本（FStatus 已在前面创建）
   UpdateStatus;
 
   ApplyChromeTheme(TyDefaultController);    // 最后统一给窗体 chrome + 背景上主题

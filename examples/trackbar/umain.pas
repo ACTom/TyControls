@@ -4,7 +4,7 @@ unit umain;
   - 水平轨迹条（0..100），OnChange 实时更新状态栏
   - 自定义范围轨迹条（-50..50，展示负值区间）
   - 垂直轨迹条（Orientation = toVertical）
-  - StyleClass 变体（'primary'）
+  - 精细轨迹条（PageSize / Frequency 演示，独立范围与状态读出）
   主窗体为 TTyForm + TTyTitleBar；纯代码创建 UI（无 .lfm），
   主题通过全局 TyDefaultController 加载。 }
 
@@ -27,6 +27,7 @@ type
     procedure Track1Change(Sender: TObject);
     procedure Track2Change(Sender: TObject);
     procedure Track3Change(Sender: TObject);
+    procedure Track4Change(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -56,8 +57,8 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  LblA, LblB, LblC, LblStyle: TTyLabel;
-  FTrack4: TTyTrackBar;   // StyleClass 变体演示
+  LblA, LblB, LblC, LblFine: TTyLabel;
+  FTrack4: TTyTrackBar;   // 精细步进演示（PageSize / Frequency）
 begin
   inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 常驻引擎
   Caption := 'TrackBar 示例';
@@ -101,20 +102,21 @@ begin
   FTrack2.Position := 0;
   FTrack2.OnChange := @Track2Change;
 
-  // 轨迹条四：StyleClass 变体（'primary'）
-  LblStyle := TTyLabel.Create(Self);
-  LblStyle.Parent := Self;
-  LblStyle.SetBounds(16, 168, 320, 20);
-  LblStyle.Caption := 'StyleClass = ''primary''：';
+  // 轨迹条四：精细步进（0..200，PageSize=25 翻页、Frequency=25 刻度）
+  LblFine := TTyLabel.Create(Self);
+  LblFine.Parent := Self;
+  LblFine.SetBounds(16, 168, 320, 20);
+  LblFine.Caption := '亮度（0..200，PageSize/Frequency=25）：';
 
   FTrack4 := TTyTrackBar.Create(Self);
   FTrack4.Parent := Self;
   FTrack4.SetBounds(16, 190, 300, 24);
   FTrack4.Min := 0;
-  FTrack4.Max := 100;
-  FTrack4.Position := 70;
-  FTrack4.StyleClass := 'primary';        // 对应 .tycss 中 TyTrackBar.primary
-  FTrack4.OnChange := @Track1Change;
+  FTrack4.Max := 200;
+  FTrack4.Position := 120;
+  FTrack4.Frequency := 25;         // 每 25 个单位一条刻度
+  FTrack4.PageSize := 25;          // PageUp/PageDown 每次翻 25
+  FTrack4.OnChange := @Track4Change;
 
   // 轨迹条三：垂直（Orientation = toVertical）
   LblC := TTyLabel.Create(Self);
@@ -153,6 +155,11 @@ end;
 procedure TMainForm.Track3Change(Sender: TObject);
 begin
   FStatus.Caption := Format('垂直：%d', [(Sender as TTyTrackBar).Position]);
+end;
+
+procedure TMainForm.Track4Change(Sender: TObject);
+begin
+  FStatus.Caption := Format('亮度：%d', [(Sender as TTyTrackBar).Position]);
 end;
 
 end.

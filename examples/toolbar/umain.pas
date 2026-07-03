@@ -68,7 +68,9 @@ begin
   inherited CreateNew(AOwner, 0);          // TTyForm:无边框 + 常驻引擎
   Caption := 'TTyToolBar 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 560, 320);
+  // 故意选一个较窄的宽度:6+ 个 72px 工具按钮放不进一行,
+  // 触发 Wrapable 自动换行,工具条随行数增高(演示核心特性)。
+  SetBounds(0, 0, 360, 340);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
 
@@ -81,13 +83,16 @@ begin
   // 顶部工具条:alTop 紧贴标题栏下方,工具条会随行数自动增高。
   ToolBar := TTyToolBar.Create(Self);
   ToolBar.Parent := Self;
-  ToolBar.Align := alTop;          // 默认即 alTop,这里显式声明
+  ToolBar.Align := alTop;          // 默认即 alTop,这里显式声明(自我说明)
   ToolBar.Top := 34;               // 位于标题栏之下
-  ToolBar.Flat := True;            // 平面工具按钮(子按钮被统一改成 ghost 变体)
-  ToolBar.Wrapable := True;        // 宽度不足时自动换行,行数增加则工具条增高
+  ToolBar.Flat := True;            // 平面工具按钮(子按钮被统一改成 ghost 变体;默认即 True,显式声明)
+  ToolBar.Wrapable := True;        // 宽度不足时自动换行,行数增加则工具条增高(本示例特意演示)
   ToolBar.ButtonHeight := 28;      // 统一按钮高度
   ToolBar.ButtonSpacing := 4;      // 相邻按钮间距
   ToolBar.Indent := 6;             // 首按钮/顶边留白
+
+  // 在 360px 的窄工具条里,以下 9 个 72px 工具按钮(加分隔线)一行放不下,
+  // 会自动折到第 2、第 3 行,工具条也随之增高 —— 这就是 Wrapable 的效果。
 
   // 第一组:文件操作
   AddTool(ToolBar, '新建', 72);
@@ -103,9 +108,19 @@ begin
   AddTool(ToolBar, '复制', 72);
   AddTool(ToolBar, '粘贴', 72);
 
+  // 分隔线:第二、三组之间
+  Sep := TTyToolSeparator.Create(Self);
+  Sep.Parent := ToolBar;
+
+  // 第三组:查找操作(把总数推到会换行为止)
+  AddTool(ToolBar, '查找', 72);
+  AddTool(ToolBar, '替换', 72);
+  AddTool(ToolBar, '全选', 72);
+
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
-  FStatus.SetBounds(24, 120, 512, 24);
+  // 放在工具条换行(最多 3 行)之后,避免被工具条覆盖。
+  FStatus.SetBounds(24, 190, 312, 24);
   FStatus.Caption := '就绪:点击任一工具按钮';
 
   ApplyChromeTheme(TyDefaultController);   // 最后统一主题化窗体外壳与背景

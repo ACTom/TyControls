@@ -6,7 +6,6 @@ unit umain;
   - 普通两态复选框，OnChange 回显 Checked
   - 预先勾选 (Checked:=True)
   - 禁用态 (Enabled:=False)
-  - StyleClass 样式变体
   纯代码创建 UI（无 .lfm）；未显式指定 Controller 的控件自动使用全局 TyDefaultController。 }
 
 interface
@@ -143,14 +142,6 @@ begin
   Cb.SetBounds(24, 304, 280, 24);
   Cb.Caption := '禁用且未勾选';
   Cb.Enabled := False;
-
-  { ---- StyleClass 样式变体 ---- }
-  Cb := TTyCheckBox.Create(Self);
-  Cb.Parent := Self;
-  Cb.SetBounds(24, 346, 280, 24);
-  Cb.Caption := '自定义样式类 (StyleClass=accent)';
-  Cb.StyleClass := 'accent';
-  Cb.Checked := True;
 
   // 初始化状态回显
   TriChange(nil);

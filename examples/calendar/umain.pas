@@ -92,7 +92,7 @@ begin
   inherited CreateNew(AOwner, 0);          // TTyForm: borderless + persistent engine
   Caption := 'Calendar 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 720, 470);
+  SetBounds(0, 0, 720, 590);
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // load theme FIRST
 
   Bar := TTyTitleBar.Create(Self);         // Owner=Self -> auto-associates as TTyForm.TitleBar
@@ -150,7 +150,7 @@ begin
 
   RO := TTyCalendar.Create(Self);
   RO.Parent := Self;
-  RO.SetBounds(360, 326, 320, 130);
+  RO.SetBounds(360, 326, 320, 230);
   RO.Date := Today;
   RO.FirstDayOfWeek := wdSunday;
   RO.ReadOnly := True;
