@@ -16,6 +16,7 @@ unit tyControls.Popup;
 interface
 uses
   Classes, SysUtils, Types, Controls, Forms, LCLType, LCLIntf,
+  {$IFDEF WINDOWS}Windows,{$ENDIF}
   tyControls.Types, tyControls.Controller, tyControls.QtWS;
 
 // ---------------------------------------------------------------------------
@@ -41,6 +42,7 @@ type
     FController  : TTyStyleController; // for resolving themed corner-radius in ApplyRegion
     FClosing     : Boolean;         // guard: prevents re-entrant deactivate→close→deactivate loops
     FCloseUpTick : QWord;           // tick when popup last closed (deactivate-reopen-race guard)
+    FNoActivate  : Boolean;         // show without stealing activation (autocomplete popups)
 
     procedure FormDeactivate(Sender: TObject);
     procedure FormResize(Sender: TObject);
@@ -77,6 +79,14 @@ type
       Color is left at its default.  Set before calling Popup. }
     property Controller: TTyStyleController
       read FController write FController;
+
+    { When True the popup is shown WITHOUT taking activation, so the owner control
+      (e.g. an editable ComboBox's embedded edit) keeps focus and keystrokes keep
+      flowing. Win32-only (WS_EX_NOACTIVATE); a no-op elsewhere. Because such a
+      window never activates it also never fires OnDeactivate, so the OWNER must
+      drive Close (focus-out / row-click / Escape). Default False (list-mode popups
+      activate and auto-close on deactivate, unchanged). Set before Popup. }
+    property NoActivate: Boolean read FNoActivate write FNoActivate;
 
     { Fired when the popup closes (user click-away, Escape, or programmatic Close). }
     property OnClose: TNotifyEvent read FOnClose write FOnClose;
@@ -131,6 +141,7 @@ begin
   FClosing := False;
   FCloseUpTick := 0;
   FController := nil;
+  FNoActivate := False;
 
   FForm := TForm.CreateNew(nil);
   FForm.BorderStyle  := bsNone;
@@ -176,6 +187,7 @@ var
   AnchorScreen: TRect;
   ParentForm: TCustomForm;
   PopupW, PopupH: Integer;
+  {$IFDEF WINDOWS}exStyle: PtrInt;{$ENDIF}
 begin
   // Resolve the anchor control's screen rectangle.
   AnchorTL := AAnchor.ClientToScreen(Types.Point(0, 0));
@@ -199,6 +211,21 @@ begin
   // Qt: re-type as Qt::Popup BEFORE Show (app-positioned, no top-left flash,
   // correct grab behaviour).  No-op on Win32/GTK2/Cocoa.
   TyQtMakePopup(FForm);
+
+  {$IFDEF WINDOWS}
+  // Toggle WS_EX_NOACTIVATE per NoActivate so the (reused) form matches the current
+  // mode: set it BEFORE Show so even ShowWindow(SW_SHOW) is passive and the owner's
+  // embedded editor keeps focus; clear it for ordinary activating popups. Needs the
+  // handle first.
+  if not FForm.HandleAllocated then FForm.HandleNeeded;
+  exStyle := Windows.GetWindowLongPtr(FForm.Handle, Windows.GWL_EXSTYLE);
+  if FNoActivate then
+    exStyle := exStyle or Windows.WS_EX_NOACTIVATE
+  else
+    exStyle := exStyle and not Windows.WS_EX_NOACTIVATE;
+  Windows.SetWindowLongPtr(FForm.Handle, Windows.GWL_EXSTYLE, exStyle);
+  {$ENDIF}
+
   FForm.SetBounds(FRect.Left, FRect.Top, PopupW, PopupH);
   FForm.Show;
 

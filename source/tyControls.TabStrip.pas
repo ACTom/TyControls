@@ -139,12 +139,17 @@ type
       TyMaxHeaderScroll:  largest valid FHeaderScroll (0 when content fits).
       TyTabScrollLeftRect/TyTabScrollRightRect: the prev/next arrow affordance
         rects, or (0,0,0,0) when the strip fits.
-      HeaderRectShifted:  header rect translated by the current scroll offset. }
+      HeaderRectShifted:  header rect translated by the current scroll offset.
+      HeaderShiftPx:      device-px translation from content-space to screen — the
+        scroll offset plus, when the overflow arrows show, a left inset equal to the
+        left-arrow width so the first tab starts AFTER the left arrow instead of
+        being clipped underneath it. }
     function TyHeaderStripWidth: Integer;
     function TyMaxHeaderScroll: Integer;
     function TyTabScrollLeftRect: TRect;
     function TyTabScrollRightRect: TRect;
     function HeaderRectShifted(AIndex: Integer): TRect;
+    function HeaderShiftPx: Integer;
     procedure SetHeaderScroll(AValue: Integer);
     procedure ScrollTabIntoView(AIndex: Integer);
 
@@ -506,7 +511,18 @@ begin
   if (AIndex < 0) or (AIndex >= Length(FHeaderRects)) then
     Exit(Rect(0, 0, 0, 0));
   Result := FHeaderRects[AIndex];
-  OffsetRect(Result, -FHeaderScroll, 0);
+  OffsetRect(Result, HeaderShiftPx, 0);
+end;
+
+{ Content-space → screen translation. FScrollLeftRect.Right is the left-arrow
+  width when the overflow arrows show (0 otherwise, so this is a no-op when the
+  strip fits). Insetting by it keeps tab headers inside the [leftArrow, rightArrow]
+  band the RenderTo clip reserves, so the first/last tab is never drawn under an
+  arrow. Callers must have run RebuildLayout so FScrollLeftRect/FHeaderScroll are
+  current. }
+function TTyCustomTabStrip.HeaderShiftPx: Integer;
+begin
+  Result := FScrollLeftRect.Right - FHeaderScroll;
 end;
 
 { Clamp the requested scroll into [0, TyMaxHeaderScroll] and repaint. }
@@ -537,11 +553,11 @@ begin
   if FShowScrollAffordance then
   begin
     ArrowW   := MulDiv(TyTabArrowBand, Font.PixelsPerInch, 96);
-    { The left arrow overlays the start of the strip, so the leftmost tab can
-      legitimately sit at x=0 (scroll 0). Align "into view from the left" to the
-      true left edge; reserve only the right arrow on the trailing side. }
+    { Tabs render inset by ArrowW (HeaderShiftPx), so content-x 0 maps to the band's
+      left edge. Measure "into view" in content-minus-scroll space, where the visible
+      band is [0, Width - 2*ArrowW] with BOTH arrow bands reserved. }
     VisLeft  := 0;
-    VisRight := Width - ArrowW;
+    VisRight := Width - 2 * ArrowW;
   end
   else
   begin
@@ -586,7 +602,7 @@ begin
   for I := 0 to GetTabCount - 1 do
   begin
     HR := FHeaderRects[I];
-    OffsetRect(HR, -FHeaderScroll, 0); // shifted midpoint
+    OffsetRect(HR, HeaderShiftPx, 0); // shifted midpoint (incl. left-arrow inset)
     Mid := (HR.Left + HR.Right) div 2;
     if X < Mid then
     begin
@@ -730,7 +746,7 @@ begin
       HdrRect   := HeaderRectShifted(I);
       CloseRect := FCloseRects[I];
       if GetTabClosableAt(I) then
-        OffsetRect(CloseRect, -FHeaderScroll, 0);
+        OffsetRect(CloseRect, HeaderShiftPx, 0);
 
       { Determine state }
       TabStates := [];
@@ -865,7 +881,7 @@ begin
         if (X >= HdrRect.Left) and (X < HdrRect.Right) then
         begin
           CloseRect := FCloseRects[I];
-          OffsetRect(CloseRect, -FHeaderScroll, 0);
+          OffsetRect(CloseRect, HeaderShiftPx, 0);
           if GetTabClosableAt(I) and
              (X >= CloseRect.Left) and (X < CloseRect.Right) and
              (Y >= CloseRect.Top) and (Y < CloseRect.Bottom) then
@@ -953,7 +969,7 @@ begin
           if GetTabClosableAt(I) then
           begin
             CloseRect := FCloseRects[I];
-            OffsetRect(CloseRect, -FHeaderScroll, 0);
+            OffsetRect(CloseRect, HeaderShiftPx, 0);
             if (X >= CloseRect.Left) and (X < CloseRect.Right) and
                (Y >= CloseRect.Top)  and (Y < CloseRect.Bottom) then
               NewHoverClose := I;

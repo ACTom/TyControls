@@ -49,6 +49,11 @@ type
       so a programmatic write never re-triggers the autocomplete filter. }
     procedure SetEditorText(const S: string);
     procedure EditorChange(Sender: TObject);
+    { The autocomplete popup shows non-activating (editor keeps focus), so it never
+      fires OnDeactivate and the popup form's key handler never runs — the editable
+      field drives close: OnExit closes on focus-out, OnKeyDown handles Escape. }
+    procedure EditorExit(Sender: TObject);
+    procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure LayoutEditor;
     procedure DropDownFiltered;
     function PointInChevron(const P: TPoint): Boolean;
@@ -184,7 +189,9 @@ begin
   FEditor := TTyEdit.Create(Self);
   FEditor.Parent := Self;
   FEditor.Visible := False;
-  FEditor.OnChange := @EditorChange;
+  FEditor.OnChange  := @EditorChange;
+  FEditor.OnExit    := @EditorExit;
+  FEditor.OnKeyDown := @EditorKeyDown;
   { Keep the (normally hidden) child editor out of the IDE designer's selectable
     sub-control set — same rule as the TreeView inline editor. }
   FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
@@ -407,6 +414,28 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
+procedure TTyComboBox.EditorExit(Sender: TObject);
+begin
+  { The autocomplete popup takes no activation, so it never auto-closes on
+    deactivate; close it when the editable field loses focus (click elsewhere). A
+    row click does NOT blur the editor (the popup is non-activating), so this does
+    not fire mid-pick and interrupt the commit. }
+  if csDestroying in ComponentState then Exit;
+  if DroppedDown then CloseUp;
+end;
+
+procedure TTyComboBox.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  { Popup keys can't reach the popup form (it never focuses); handle the essential
+    dismiss here so Escape closes the suggestion list. }
+  if not DroppedDown then Exit;
+  if Key = VK_ESCAPE then
+  begin
+    CloseUp;
+    Key := 0;
+  end;
+end;
+
 function TTyComboBox.PointInChevron(const P: TPoint): Boolean;
 var BtnW: Integer;
 begin
@@ -521,6 +550,11 @@ var
 begin
   if FItems.Count = 0 then Exit;
   EnsurePopup;
+  { Chevron/list-mode drop activates normally (auto-closes on deactivate). Only the
+    autocomplete popup (DropDownFiltered, opened WHILE typing) shows non-activating,
+    so the editor keeps focus; a chevron drop may happen with the editor unfocused,
+    where activate + deactivate-close is the robust behavior. }
+  FPopup.NoActivate := False;
 
   { Sync controller every DropDown so DPI/theme changes take effect. }
   FPopupList.Controller := Self.Controller;
@@ -553,6 +587,8 @@ var
 begin
   if FVisibleItems.Count = 0 then Exit;
   EnsurePopup;
+  { Autocomplete popup shows non-activating so typing in the editor is uninterrupted. }
+  FPopup.NoActivate := True;
 
   FPopupList.Controller := Self.Controller;
   FPopup.Controller     := Self.Controller;
@@ -681,12 +717,17 @@ begin
     lets the click finish first. }
   if FStyle = csDropDown then
   begin
-    { The popup holds the FILTERED subset, so its ItemIndex is not the full-Items
-      index. Commit by the row's text: seed the editor under the re-entrancy guard
-      (else EditorChange would re-filter and re-open the popup), map the text back
-      to the full list for FItemIndex, then fire OnChange/OnSelect. }
-    if (FPopupList.ItemIndex < 0) or (FPopupList.ItemIndex >= FVisibleItems.Count) then Exit;
-    Picked  := FVisibleItems[FPopupList.ItemIndex];
+    { Commit by the row's text read from the list ACTUALLY shown — the popup may
+      hold the filtered subset (autocomplete typing → DropDownFiltered) OR the full
+      Items (chevron → DropDown), so FPopupList.Items is the only reliable source;
+      reading a parallel FVisibleItems mis-maps when the chevron shows the full list
+      after a prior filter (clicking Alpha returned the filtered row's text), and its
+      count-guard rejected every click when no filter had run (empty FVisibleItems).
+      Seed the editor under the re-entrancy guard (else EditorChange would re-filter
+      and re-open the popup), map the text back to the full list for FItemIndex, then
+      fire OnChange/OnSelect. }
+    if (FPopupList.ItemIndex < 0) or (FPopupList.ItemIndex >= FPopupList.Items.Count) then Exit;
+    Picked  := FPopupList.Items[FPopupList.ItemIndex];
     FullIdx := FItems.IndexOf(Picked);
     OldIndex := FItemIndex;
     SetEditorText(Picked);

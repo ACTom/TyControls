@@ -686,19 +686,24 @@ end;
   The clamped value is observable through the shift of header 0. }
 procedure TTabStripTest.TestSetHeaderScrollClampsHighAndLow;
 var
-  MaxScroll, Base0: Integer;
+  MaxScroll, Base0, Inset: Integer;
 begin
   BuildOverflow(12, 120);
   MaxScroll := FStrip.TyMaxHeaderScroll;
-  Base0 := FStrip.TyTabHeaderRect(0).Left; // unshifted
+  Base0 := FStrip.TyTabHeaderRect(0).Left; // unshifted (0 for tab 0)
+  { HeaderRectShifted insets by the left-arrow width when the overflow arrows show,
+    so the shifted origin is Base0 + Inset - scroll (the fix for tab 0 being drawn
+    UNDER the left arrow). }
+  Inset := FStrip.TyTabScrollLeftRect.Right;
+  AssertTrue('overflow reserves a left-arrow inset', Inset > 0);
 
   FStrip.SetHeaderScroll(99999);
   AssertEquals('clamped high to max scroll',
-    Base0 - MaxScroll, FStrip.HeaderRectShifted(0).Left);
+    Base0 + Inset - MaxScroll, FStrip.HeaderRectShifted(0).Left);
 
   FStrip.SetHeaderScroll(-50);
-  AssertEquals('clamped low to zero scroll',
-    Base0, FStrip.HeaderRectShifted(0).Left);
+  AssertEquals('clamped low: tab 0 sits AFTER the left arrow, not under it',
+    Base0 + Inset, FStrip.HeaderRectShifted(0).Left);
 end;
 
 { Affordance rects are non-empty when overflowing and (0,0,0,0) when content fits. }
