@@ -9,7 +9,9 @@ unit tyControls.WindowEffects;
   - Windows: dwmapi.dll loaded DYNAMICALLY (GetProcAddress) so the binary still launches
     on XP/7 (no static import). Win11 -> DWM corner preference (anti-aliased) + free shadow +
     a pinned (COLOR_NONE) window-border so the 1px DWM frame stops flashing white/gray on
-    activation; Vista..10 -> square + DwmExtendFrameIntoClientArea native shadow; XP -> square,
+    activation; Vista..10 -> square + SHEET-OF-GLASS DwmExtendFrameIntoClientArea (margins -1)
+    for the native shadow WITHOUT the WS_THICKFRAME activation-coloured 1px edge ring (Win10's
+    equivalent of the Win11 COLOR_NONE fix; DWMWA_BORDER_COLOR is a no-op < Win11); XP -> square,
     no shadow.
   - macOS (Cocoa): contentView.layer cornerRadius (anti-aliased) + NSWindow.hasShadow.
   - Linux: documented no-op extension point (see TyApplyWindowEffects). }
@@ -114,13 +116,39 @@ begin
       FnSetAttr(h, DWMWA_BORDER_COLOR, @bcol, SizeOf(bcol));
     end;
   end;
-  if Assigned(FnExtend) then        // Vista+: native shadow via 1px frame extension
+  if Assigned(FnExtend) then        // Vista+: native shadow via frame extension
   begin
     comp := False;
     if Assigned(FnCompEnabled) then FnCompEnabled(comp);
     FillChar(m, SizeOf(m), 0);
     if E.Shadow and comp and (not E.Maximized) then
-    begin m.cxLeftWidth := 1; m.cxRightWidth := 1; m.cyTopHeight := 1; m.cyBottomHeight := 1; end;
+    begin
+      // The DWM drop shadow comes from extending the frame into the client. HOW we extend
+      // it decides whether Win10 also draws a visible 1px window-border LINE at the edge:
+      //
+      //  * Win11 22000+ : positive {1,1,1,1}. The border line is neutralised separately by
+      //    DWMWA_BORDER_COLOR = COLOR_NONE above (Win11-only attribute), so a plain 1px
+      //    extension is fine and keeps the corner/border behaviour that already works there.
+      //
+      //  * Win10 / Vista..8.1 : SHEET-OF-GLASS {-1,-1,-1,-1}. On Win10 a resizable TTyForm
+      //    carries WS_THICKFRAME (needed for native edge-resize), and WS_THICKFRAME +
+      //    a POSITIVE-margin DwmExtendFrameIntoClientArea makes DWM paint a 1px window
+      //    edge whose colour tracks activation (accent/gray active, WHITE when a dialog/
+      //    dropdown/menu steals focus). DWMWA_BORDER_COLOR can't recolour it (Win11-only),
+      //    and WS_POPUP would drop it but ALSO kills the shadow + minimize (per MS's own
+      //    guidance) — both are hard constraints here. Negative margins are documented by
+      //    DwmExtendFrameIntoClientArea as the "sheet of glass" effect: the client is a
+      //    single solid surface with NO window border, while the frame extension still
+      //    yields the drop shadow. TTyForm paints the whole client opaquely (themed
+      //    backdrop), so the glass surface never shows through — we get the shadow, keep
+      //    WS_THICKFRAME edge-resize, and lose the activation-coloured ring.
+      //    REAL-MACHINE CHECKPOINT (Win10 19044): confirm the white/gray ring is gone on
+      //    activation, and shadow + rounded fallback + resize still work.
+      if (Win32MajorVersion >= 10) and (Win32BuildNumber >= Win11Build) then
+      begin m.cxLeftWidth := 1; m.cxRightWidth := 1; m.cyTopHeight := 1; m.cyBottomHeight := 1; end
+      else
+      begin m.cxLeftWidth := -1; m.cxRightWidth := -1; m.cyTopHeight := -1; m.cyBottomHeight := -1; end;
+    end;
     FnExtend(h, m);
   end;
 end;
