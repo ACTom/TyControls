@@ -160,6 +160,21 @@ begin
         end;
         // GetWindowRect failed (degenerate): fall through to the original proc.
       end;
+    WM_NCACTIVATE:
+      begin
+        // Frameless custom-chrome window: when a popup (dialog / combobox dropdown / menu) steals
+        // focus, the main window DEACTIVATES and Win10 repaints the non-client frame in its INACTIVE
+        // color — a white 1px edge that only clears when the mouse hovers an edge (which triggers a
+        // per-edge NC repaint). We render the whole window ourselves (WM_NCCALCSIZE removes the frame,
+        // the shadow comes from DWM sheet-of-glass), so there is NO native frame that should change on
+        // (de)activation. Suppress that repaint by chaining to the original proc with lParam = -1:
+        // per MSDN, an lParam of -1 tells the default handler NOT to repaint the non-client area on
+        // activation-state change, while still updating the internal active/inactive state correctly.
+        // WP (TRUE/FALSE = becoming active/inactive) is left untouched so state bookkeeping stays sane.
+        // We route through st^.OrigProc (the captured LCL proc), NOT a raw DefWindowProc, so the
+        // subclass chain is preserved exactly like the fall-through below.
+        Exit(CallWindowProc(orig, Wnd, Msg, WP, LPARAM(-1)));
+      end;
     WM_NCDESTROY:
       begin
         // Restore the original proc BEFORE the window dies, then chain so LCL cleans up.
