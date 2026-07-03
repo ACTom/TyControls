@@ -270,12 +270,15 @@ begin
   FillRRect(b,6,13,13,17,2,Acc);
 end;
 
+{ TTyTabSet: a pure tab strip — one selected tab + two unselected + baseline }
+procedure GTabSet(b: TBGRABitmap); begin FillRRect(b,3,5,9,11,1.5,Acc); RRect(b,9.5,5,15.5,11,1.5,Ink); RRect(b,16,5,21,11,1.5,Ink); Line(b,3,11,21,11,Ink,1.4); end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..39] of TGlyph = (
+  Glyphs: array[0..40] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -315,7 +318,8 @@ const
     (Name:'TTyFontDialog';        Draw:@GTyFontDialog),
     (Name:'TTyFindDialog';        Draw:@GTyFindDialog),
     (Name:'TTyReplaceDialog';     Draw:@GTyReplaceDialog),
-    (Name:'TTyProgressDialog';    Draw:@GTyProgressDialog)
+    (Name:'TTyProgressDialog';    Draw:@GTyProgressDialog),
+    (Name:'TTyTabSet';            Draw:@GTabSet)
   );
 
 const
