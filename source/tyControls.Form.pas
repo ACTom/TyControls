@@ -1450,9 +1450,30 @@ begin
         P.Free;
       end;
       Exit;
+    end
+    else if tpBackground in bg.Present then
+    begin
+      // Solid/gradient themed background: actively paint the WHOLE client OPAQUE
+      // instead of leaning on the widgetset's erase. Under WS_CLIPCHILDREN the erase
+      // leaves client gaps (partial child coverage / borders) unpainted; on Win10
+      // those alpha-0 pixels show the DWM sheet-of-glass (transparent, white when the
+      // window is inactive). This is the same themed colour the erase used, just
+      // guaranteed across every client pixel — it fixed dialogs whose content area
+      // was only partly covered by children. App controls still paint in their own
+      // windows on top.
+      RebuildBackdrop;
+      P := TTyPainter.Create;
+      try
+        P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+        P.FillBackground(ClientRect, bg.Background, 0);
+        P.EndPaint;
+      finally
+        P.Free;
+      end;
+      Exit;
     end;
   end;
-  RebuildBackdrop;   // non-image theme: drop any stale backdrop
+  RebuildBackdrop;   // unthemed (no controller / no bg token): drop any stale backdrop
   inherited Paint;
 end;
 

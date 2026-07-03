@@ -207,6 +207,13 @@ procedure TySetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
   Exposed for tests. }
 function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
 
+{ Fill ARect with AControl's backdrop: the form's photo/glass on an image theme, else
+  the OPAQUE resolved parent background (solid); a no-op only when there is no parent
+  and no image host. Exposed so controls with regions DrawFrame does not cover (e.g. a
+  group box caption band) can fill them opaque instead of leaving transparent pixels. }
+procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
+  const AStyle: TTyStyleSet);
+
 implementation
 
 {$IFDEF WINDOWS}

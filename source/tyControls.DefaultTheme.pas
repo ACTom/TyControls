@@ -285,6 +285,23 @@ begin
     'TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyTabControl:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
+    '/* TTyPageControl mirrors TyTabControl (the tab container); TyTabSheet is the page' + LineEnding +
+    '   body inside the frame — opaque surface fill only (no border) so it never leaves' + LineEnding +
+    '   transparent pixels for the OS window backdrop to show through. */' + LineEnding +
+    'TyPageControl {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '}' + LineEnding +
+    'TyPageControl:hover  { border-color: var(--input-border-hover); }' + LineEnding +
+    'TyPageControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyPageControl:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyTabSheet {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     'TyTab {' + LineEnding +
     '  background: var(--surface-tab-rest);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +

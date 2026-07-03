@@ -269,6 +269,23 @@ TyTabControl:hover  { border-color: var(--input-border-hover); }
 TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyTabControl:disabled { opacity: var(--disabled-opacity); }
 
+/* TTyPageControl mirrors TyTabControl (incl. the container shadow); TyTabSheet is
+   the opaque page body inside the frame. */
+TyPageControl {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  shadow: 0px 1px 3px #0000001F;
+}
+TyPageControl:hover  { border-color: var(--input-border-hover); }
+TyPageControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyPageControl:disabled { opacity: var(--disabled-opacity); }
+TyTabSheet {
+  background: var(--surface);
+}
+
 TyTab {
   background: var(--surface-tab-rest);
   color: var(--on-surface);

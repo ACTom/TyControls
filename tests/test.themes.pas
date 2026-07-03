@@ -400,14 +400,15 @@ begin
 end;
 
 const
-  GGRID: array[0..50] of string = (
+  GGRID: array[0..52] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
     'TyCaptionButton|close', 'TyCaptionButton|min', 'TyCaptionButton|max',
     'TyListBox|', 'TyListItem|', 'TyProgressBar|', 'TyProgressFill|',
     'TyToggleSwitch|', 'TyToggleKnob|', 'TyTrackBar|', 'TyTrackThumb|',
-    'TyGroupBox|', 'TyTabControl|', 'TyTab|', 'TyTabClose|', 'TySpinEdit|',
+    'TyGroupBox|', 'TyTabControl|', 'TyPageControl|', 'TyTabSheet|',
+    'TyTab|', 'TyTabClose|', 'TySpinEdit|',
     'TyMemo|', 'TyTextSelection|', 'TyTextHint|',
     'TyMenuBar|', 'TyMenuItem|', 'TyMenuPopup|', 'TyMenuView|',
     'TySplitter|', 'TyStatusBar|', 'TyToolBar|',

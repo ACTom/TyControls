@@ -133,6 +133,16 @@ TyTabControl||1 => pres[0,1,2,3,4,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FF894
 TyTabControl||2 => pres[0,1,2,3,4,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=00000000/0/0
 TyTabControl||3 => pres[0,1,2,3,4,10,12,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FF7C3AED/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=FF7C3AED/2/0
 TyTabControl||4 => pres[0,1,2,3,4,9,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=450 sh=1F000000/3/0,1 ol=00000000/0/0
+TyPageControl||0 => pres[0,1,2,3,4,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=00000000/0/0
+TyPageControl||1 => pres[0,1,2,3,4,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FF894EEF/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=00000000/0/0
+TyPageControl||2 => pres[0,1,2,3,4,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=00000000/0/0
+TyPageControl||3 => pres[0,1,2,3,4,10,12,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FF7C3AED/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=FF7C3AED/2/0
+TyPageControl||4 => pres[0,1,2,3,4,9,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=450 sh=1F000000/3/0,1 ol=00000000/0/0
+TyTabSheet||0 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTabSheet||1 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTabSheet||2 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTabSheet||3 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyTabSheet||4 => pres[0,] bg=k1/FFF5F3FF ut=0 txt=00000000 bd=00000000/0/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTab||0 => pres[0,1,4,5,8,] bg=k1/FFE6E4F0 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=10/10,10,0,0 pad=6,6,6,6 fnt=/0/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTab||1 => pres[0,1,4,5,8,] bg=k1/FFEEECF7 ut=0 txt=FF2E1065 bd=00000000/0/0 rad=10/10,10,0,0 pad=6,6,6,6 fnt=/0/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTab||2 => pres[0,1,4,5,8,] bg=k1/FFF5F3FF ut=0 txt=FF7C3AED bd=00000000/0/0 rad=10/10,10,0,0 pad=6,6,6,6 fnt=/0/700 op=1000 sh=00000000/0/0,0 ol=00000000/0/0

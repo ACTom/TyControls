@@ -243,6 +243,22 @@ TyTabControl:hover  { border-color: darken(--border, 10%); }
 TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyTabControl:disabled { opacity: 0.5; }
 
+/* Image theme: keep the page container + body transparent so the photo shows
+   through (same intent as TyTabControl above — the frost/glass is deliberate). */
+TyPageControl {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: alpha(var(--surface), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+}
+TyPageControl:hover  { border-color: darken(--border, 10%); }
+TyPageControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyPageControl:disabled { opacity: 0.5; }
+TyTabSheet {
+  background: alpha(#FFFFFF, 0);
+}
+
 TyTab {
   background: alpha(#FFFFFF, 0);   /* transparent: photo shows through the tabs (no frost) */
   color: var(--on-surface);

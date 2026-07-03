@@ -126,9 +126,11 @@ begin
     DrawFrame(P, FrameRect, S);
 
     // The caption band strip sits ABOVE the frame, so DrawFrame never paints it.
-    // On an image theme fill it with the form's photo so it is not a white gap;
-    // off-image it is a no-op (the strip composites the parent as before).
-    FillSharpBackdrop(P, Rect(0, 0, W, CapH div 2));
+    // On an image theme fill it with the form's photo; off-image fill it with the
+    // OPAQUE resolved parent background so it is not a transparent gap (which the
+    // Win10 DWM glass would show as white on deactivate).
+    if not FillSharpBackdrop(P, Rect(0, 0, W, CapH div 2)) then
+      TyFillParentBg(Self, P, Rect(0, 0, W, CapH div 2), S);
 
     // Draw caption text with a background band behind it
     if FCaption <> '' then
@@ -159,11 +161,12 @@ begin
       if BandLeft < 0 then BandLeft := 0;
 
       // Break the top border behind the caption. On an image theme show the
-      // form's photo through the gap; otherwise erase to transparent so a plain
-      // parent composites through (and headless pixel tests see the backdrop).
+      // form's photo through the gap; otherwise fill the OPAQUE resolved parent
+      // background (not a transparent erase — the Win10 DWM glass shows an erased
+      // gap as white on deactivate).
       BandRect := Rect(BandLeft, 0, BandLeft + TextW + P.Scale(16), CapH);
       if not FillSharpBackdrop(P, BandRect) then
-        P.EraseRect(BandRect);
+        TyFillParentBg(Self, P, BandRect, S);
 
       // Draw caption text within the band, aligned per FAlignment.
       TextRect := Rect(BandLeft + P.Scale(4), 0, BandLeft + P.Scale(4) + TextW + P.Scale(8), CapH);
