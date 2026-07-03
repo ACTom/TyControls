@@ -65,7 +65,8 @@ uses
   test.dialogs.color,
   test.dialogs.font,
   test.dialogs.find,
-  test.dialogs.progress;
+  test.dialogs.progress,
+  test.combobox;
 
 type
   TTyTestRunner = class(TTestRunner)

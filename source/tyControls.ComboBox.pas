@@ -6,6 +6,7 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.ListBox, tyControls.Popup;
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
+function TyFilterItemsByPrefix(AItems: TStrings; const APrefix: string): TStringList;
 
 type
   TTyComboBox = class(TTyCustomControl)
@@ -120,6 +121,17 @@ begin
     if Copy(LowerCase(AItems[idx]), 1, Length(pfx)) = pfx then
       Exit(idx);
   end;
+end;
+
+function TyFilterItemsByPrefix(AItems: TStrings; const APrefix: string): TStringList;
+var i: Integer; p: string;
+begin
+  Result := TStringList.Create;
+  if AItems = nil then Exit;
+  p := LowerCase(APrefix);
+  for i := 0 to AItems.Count - 1 do
+    if (p = '') or (Copy(LowerCase(AItems[i]), 1, Length(p)) = p) then
+      Result.Add(AItems[i]);
 end;
 
 constructor TTyComboBox.Create(AOwner: TComponent);
