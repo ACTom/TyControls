@@ -69,6 +69,10 @@ msgstr "你好，TyControls"
 msgid "&Agree"
 msgstr "同意(&A)"
 
+#: tdemomainform.tricheck.caption
+msgid "Tri-state"
+msgstr "三态"
+
 #: tdemomainform.radone.caption
 msgid "Option &One"
 msgstr "选项一(&O)"

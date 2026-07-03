@@ -22,9 +22,10 @@ TyButton:disabled { opacity: 0.5; }
   `rgb/rgba/lighten/darken/alpha/mix` colour functions, `border` shorthand, linear gradients,
   9-slice images, plus dual `@mode` (light/dark in one file), `@import`, and OS light/dark + accent
   follow.
-- **20+ custom-drawn controls** — Button, Label, Edit, Memo, SpinEdit, CheckBox, RadioButton, Panel,
-  GroupBox, ComboBox, ListBox, ScrollBar, ProgressBar, ToggleSwitch, TrackBar, PageControl
-  (+ TabSheet), Splitter, StatusBar, ToolBar, DateTimePicker, Calendar, TitleBar, CaptionButton.
+- **20+ custom-drawn controls** — Button, Label, Edit, Memo, SpinEdit, CheckBox (tri-state), RadioButton,
+  Panel, GroupBox, ComboBox (editable + prefix autocomplete), ListBox, ScrollBar, ProgressBar,
+  ToggleSwitch, TrackBar, PageControl (+ TabSheet), TabSet, Splitter, StatusBar, ToolBar,
+  DateTimePicker, Calendar, TitleBar, CaptionButton.
 - **Virtual tree `TTyTreeView`** — a VirtualTreeView-class virtual tree: data-on-demand (scales to
   millions of nodes), multi-column with a draggable header (resize / reorder / sort), checkboxes +
   tri-state + radio nodes, multi-select (Ctrl/Shift) + full-row, variable row height, incremental
