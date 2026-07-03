@@ -4,7 +4,7 @@ unit tyControls.Dialogs.Progress;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Forms, LCLType, ExtCtrls,
+  Classes, SysUtils, Types, Controls, Forms, LCLType,
   tyControls.Dialogs, tyControls.ProgressBar, tyControls.TyLabel,
   tyControls.Button, tyControls.StrConsts;
 
@@ -16,14 +16,12 @@ type
   TTyProgressForm = class(TTyDialog)
   private
     FDlg: TTyProgressDialog;
-    FPane: TPanel;                // double-buffered windowed host for the graphic label+bar
     FBar: TTyProgressBar;
     FLabel: TTyLabel;
     FCancelBtn: TTyButton;        // nil unless cancelable
     procedure CancelClick(Sender: TObject);
   protected
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
-    procedure DoShow; override;
   public
     procedure Build(ACancelable: Boolean);
     procedure UpdateView(APos, AMin, AMax: Integer; const AText: string);
@@ -47,6 +45,7 @@ type
     FOnCanClose: TCloseQueryEvent;
     FForm: TTyProgressForm;
     FInPump: Boolean;
+    FLastViewTick: QWord;   // last time the view was actually repainted (refresh throttle)
   public
     constructor Create(AOwner: TComponent); override;
     function BuildForm: TTyProgressForm;   // test seam: lazy build, NO Show
@@ -82,40 +81,23 @@ begin
   y := r.Top + TyDlgPad;
   contentW := 360;
 
-  // The label and bar are GRAPHIC controls (they paint onto their parent's canvas).
-  // Parenting them straight to the form means every SetProgress repaint goes through
-  // the top-level window's WM_PAINT — erase, refill the surface, then redraw the bar,
-  // all straight to screen — which flickers. Host them on a windowed, DOUBLE-BUFFERED
-  // pane instead: their repaints composite offscreen and blit once (no flicker). The
-  // pane is a CHILD window, so the form's Win10 DWM glass extend does not apply and
-  // double buffering is safe; ParentColor keeps its opaque fill on the themed surface
-  // and it is borderless (bvNone) so the dialog looks unchanged.
-  FPane := TPanel.Create(Self);
-  FPane.Parent := Self;
-  FPane.BevelOuter := bvNone;
-  FPane.BorderStyle := bsNone;
-  FPane.Caption := '';
-  FPane.ParentBackground := False;   // paint a solid Color, not the parent's themed bg
-  FPane.ParentColor := True;         // Color follows the form's themed surface
-  FPane.DoubleBuffered := True;
-  FPane.SetBounds(x0, y, contentW, 48);
-
   FLabel := TTyLabel.Create(Self);
-  FLabel.Parent := FPane;
+  FLabel.Parent := Self;
   // Fixed-width status line: don't auto-resize/relayout (and repaint) on every text
   // change — that is a flicker source when SetProgress is called in a tight loop.
   FLabel.AutoSize := False;
-  FLabel.SetBounds(0, 0, contentW, 20);
+  FLabel.SetBounds(x0, y, contentW, 20);
+  Inc(y, 28);
 
   FBar := TTyProgressBar.Create(Self);
-  FBar.Parent := FPane;
+  FBar.Parent := Self;
   // The dialog is driven by discrete SetProgress calls (typically a tight loop that
   // pumps Application.ProcessMessages). The bar's 60fps tween timer, re-armed on
-  // every call, just churns repaints against the loop — snap to each reported
-  // position instead of animating.
+  // every call, just churns repaints of this graphic control against the loop —
+  // seen as the text/bar "flicker". Snap directly to each reported position instead.
   FBar.AnimationsEnabled := False;
-  FBar.SetBounds(0, 28, contentW, 20);
-  Inc(y, 56);
+  FBar.SetBounds(x0, y, contentW, 20);
+  Inc(y, 28);
 
   if ACancelable then
   begin
@@ -133,16 +115,6 @@ begin
   FBar.Max := AMax;
   FBar.Position := APos;
   FLabel.Caption := AText;
-end;
-
-procedure TTyProgressForm.DoShow;
-begin
-  inherited DoShow;   // TTyDialog.DoShow adopts the app theme first -> form Color = surface
-  // The host pane is a plain (unthemed) windowed control. Give its opaque fill the
-  // form's themed surface Color EXPLICITLY (ApplyChromeTheme set it) so it matches the
-  // dialog instead of the LCL default (white/grey) — ParentColor did not track the
-  // CreateNew dialog's DoShow-time colour set.
-  if FPane <> nil then FPane.Color := Color;
 end;
 
 procedure TTyProgressForm.CancelClick(Sender: TObject);
@@ -204,7 +176,17 @@ begin
   FForm.Show;
 end;
 
+const
+  { The bar + label are graphic controls: each repaint erases and redraws them
+    against the form, which flickers when the app drives SetProgress in a tight
+    loop. Coalesce the VISUAL refresh to ~20fps — the newest state is always kept
+    (FPosition/FText), a skipped call only defers its repaint to the next tick, and
+    completion always flushes so 100% is shown. This caps the repaint frequency
+    (the flicker) without changing the reported progress. }
+  cProgressRefreshMs = 50;
+
 procedure TTyProgressDialog.SetProgress(APos: Integer; const AText: string);
+var nowTick: QWord;
 begin
   if APos < FMin then APos := FMin;
   if APos > FMax then APos := FMax;
@@ -214,6 +196,10 @@ begin
   // headless (unshown) callers just clamp state, so tests never pump.
   if (FForm <> nil) and FForm.Visible then
   begin
+    nowTick := GetTickCount64;
+    // Throttle: repaint at most every cProgressRefreshMs, but always at completion.
+    if (FPosition < FMax) and (nowTick - FLastViewTick < cProgressRefreshMs) then Exit;
+    FLastViewTick := nowTick;
     FForm.UpdateView(FPosition, FMin, FMax, FText);
     if not FInPump then
     begin
