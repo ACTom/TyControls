@@ -8,73 +8,59 @@
 
 ## [2.2.0] — 2026-07-04
 
-一个大型功能版本。主角是**对话框子系统**:为 **TTyForm** 补齐了完整的窗口镶边(caption 按钮),
-新增 **11 个全自绘对话框组件**、配套的全局函数、IDE 集成与独立示例;同时新增**三个小控件**
-(三态 CheckBox、可编辑 ComboBox、TTyTabSet),并修复了大量在真机(尤其 Win10 DWM 玻璃)上才暴露的问题。
+一个大型功能版本。主角是**对话框子系统**:为 **TTyForm** 补齐完整的窗口镶边(caption 按钮),
+新增 **11 个全自绘对话框组件**及配套全局函数、IDE 集成与独立示例;同时新增**三个小控件**
+(三态 CheckBox、可编辑 ComboBox、TTyTabSet),为全部控件补齐 API 文档,并修复大量在真机上
+(尤其 Windows 10)才暴露的显示问题。
 
 ### 新增 — 对话框
 
-- **TTyForm 窗口镶边** —— caption 按钮由 **`BorderIcons` + `Resizable`** 驱动:`BorderIcons:=[]`
-  可去掉全部按钮;`BorderStyle` 锁定为 `bsNone`(强制 setter);把标题栏关联到别的窗口会抛异常
-  (跨窗口守卫)。`ShowMinimize` / `ShowMaximize` 旧开关移除,`BorderIcons` 成为唯一来源。
-- **11 个全自绘对话框组件** —— 与 LCL 对齐,既有组件也有全局函数:
-  - **TTyMessage** —— 消息框(`TyShowMessage` / `TyMessageDlg`),按钮标题 / 结果 / 顺序与类型图标齐全。
-  - **TTyInputDialog / TTyPasswordDialog / TTyTextDialog** —— 单行输入、掩码密码、可缩放多行文本
-    (`TyInputQuery` / `TyInputBox` / `TyPasswordQuery` / `TyTextQuery`)。
-  - **TTySelectValueDialog** —— 列表取值选择器。
-  - **TTySelectPathDialog** —— 惰性目录树的文件夹选择器,带**新建文件夹**、文件夹图标、更宽松且随
-    悬停高亮的行。
-  - **TTyColorDialog** —— 单模型多视图同步的取色器(HSV 方块 + 色相条 + RGB / CMYK / Alpha / Hex)。
-  - **TTyFontDialog** —— 字族 / 字号 / 样式 / 颜色 / 预览的字体选择器。
-  - **TTyFindDialog / TTyReplaceDialog** —— 无模态查找 / 替换(LCL `TFindOptions` 对齐,
-    `OnFind` / `OnReplace`)。
-  - **TTyProgressDialog** —— 应用驱动的无模态进度对话框,带 Cancel。
-  - 所有 11 个组件都补齐了 **`OnShow` / `OnClose` / `OnCanClose`** 事件(LCL 对齐)。
+- **TTyForm 窗口镶边** —— 标题栏的最小化 / 最大化 / 关闭按钮现由 `BorderIcons` 统一控制
+  (`BorderIcons:=[]` 去掉全部按钮),窗口可否缩放由 `Resizable` 决定;旧的 `ShowMinimize` /
+  `ShowMaximize` 属性已移除。
+- **11 个全自绘对话框组件** —— 与 LCL 对齐,既可作为组件拖放,也提供全局函数直接调用:
+  - **消息框**(`TyShowMessage` / `TyMessageDlg`)—— 完整的按钮组合、结果与类型图标。
+  - **输入 / 密码 / 多行文本**(`TyInputQuery` / `TyPasswordQuery` / `TyTextQuery`)。
+  - **列表取值**、**文件夹选择**(带新建文件夹、可展开目录树)。
+  - **取色器**(HSV + 色相条 + RGB / CMYK / Alpha / Hex)、**字体选择器**(字族 / 字号 / 样式 / 颜色 / 预览)。
+  - **查找 / 替换**(无模态,`OnFind` / `OnReplace`)、**进度对话框**(可取消)。
+  - 全部对话框都支持 `OnShow` / `OnClose` / `OnCanClose` 事件。
 - **IDE 集成** —— 新增 **TyControls Dialogs** 组件面板分组、11 个对话框的调色板图标、File > New 的
-  **TyControls Dialog** 新建项;在设计器中**双击**任一对话框组件即可预览。
-- **示例** —— 新增独立的 **dialogs 示例**展示全部 11 个对话框;主 demo 也加入了三列对话框网格。
+  **TyControls Dialog** 模板;设计器中双击任一对话框组件即可预览。
+- **示例** —— 新增独立的 **dialogs 示例**演示全部 11 个对话框;主 demo 也加入了对话框网格。
 
 ### 新增 — 三个小控件
 
-- **三态 CheckBox** —— `State` / `AllowGrayed`,带灰显(不确定态)glyph。
-- **可编辑 ComboBox** —— `csDropDown` 自由输入 + 前缀自动补全弹层,并转发 `MaxLength` / `CharCase`。
-- **TTyTabSet** —— 基于 TabStrip 引擎的纯标签条控件(带调色板图标与组件注册)。
+- **三态 CheckBox** —— `State` / `AllowGrayed`,带灰显(不确定态)。
+- **可编辑 ComboBox** —— `csDropDown` 自由输入 + 前缀自动补全。
+- **TTyTabSet** —— 纯标签条控件(非页容器)。
+
+### 新增 — 文档
+
+- 为**全部控件补齐逐控件 API 文档**(属性 / 事件 / 状态 / 主题变体 / 代码示例),覆盖此前缺文档的
+  TreeView、Calendar、DateTimePicker、Splitter、StatusBar、ToolBar、TabSet、菜单、NativeStyler 等,
+  并新增控件文档索引 `docs/controls/`。
 
 ### 新增 — 示例整体翻新
 
-- 所有单控件示例统一迁移到 **TTyForm + TTyTitleBar** 镶边骨架,不再是裸 LCL 窗口;每个示例都更
-  充分地演示了对应控件的关键特性(如 checkbox 演示三态、combobox 演示可编辑 + 自动补全)。
+- 所有单控件示例统一采用 **TTyForm + TTyTitleBar** 自绘窗框,并更充分地演示各控件特性。
 - 新增 7 个专属示例:tabset、calendar、datetimepicker、splitter、statusbar、toolbar、menu;
-  `tabcontrol` 示例改写为 TTyPageControl + TTyTabSheet。
+  `tabcontrol` 示例改用 TTyPageControl + TTyTabSheet。
 
 ### 修复
 
-- **Win10 DWM 玻璃穿透** —— 每个 TTyForm 都带整块客户区玻璃扩展,任何 alpha-0 像素都会透出玻璃
-  (失焦时发白)。多处修复:TTyPageControl / TTyTabSheet / TTyGroupBox 标题带 / 标签条右侧空白 /
-  对话框内容区改为**填充不透明主题背景**(新增 `TyPageControl` / `TyTabSheet` 主题规则并同步到全部
-  内置主题);Vista–10 阴影扩展改用 sheet-of-glass 边距 `{-1,-1,-1,-1}`,消除随激活变白 / 变灰的
-  1px 窗口边线;拦截 `WM_NCACTIVATE` 避免非激活态非客户区边框绘制;`TyResolveParentBg` 会向上
-  穿过透明容器找到不透明背景,补齐圆角控件的角落缝隙。
-- **禁用控件玻璃化** —— `:disabled` 的整体 opacity 之前用 `ApplyGlobalOpacity` 乘到每个像素的 alpha 上,
-  使不透明背景变半透明、透出 DWM 玻璃(失焦时全白)。改为 `TTyPainter.OpacityBase`:先铺一层不透明
-  底色再叠加淡化内容,观感一致但保持 alpha-255。
-- **可缩放 TTyForm 侧边条纹** —— `WM_NCCALCSIZE` 不再内缩客户区,避免把 `WS_THICKFRAME` 原生边框
-  (DWM 强调色 / 白)暴露成左右竖条。
-- **可编辑 ComboBox** —— 自动补全弹层弹出时不再抢走内嵌编辑器焦点(第二个字符不再丢失);
-  弹层就地 `Resize` 刷新过滤列表,不再闪烁;点击弹层行读取实际显示的列表(修正取错列表 / 提交错文本)。
-- **标签条溢出箭头**遮住首 / 尾标签 —— 引入 `HeaderShiftPx`,把标签统一渲染在左右箭头之间的带内
-  (影响 TTyTabSet 与 TTyPageControl)。
-- **TTyDateTimePicker** —— 通过全局默认控制器着色(`Controller` 为 nil,即常规用法)时,打开日期下拉
-  不再因 `FCalendar.Controller.Model` 空引用而崩溃;改用 nil-safe 的 `ActiveController`。
-- **TTyProgressDialog 闪烁** —— 放弃原生 TPanel 宿主方案,改为把可视刷新节流到 ~20fps(始终保留最新
-  进度 / 文本,完成时强制刷出 100%),并关闭进度条动画、固定状态标签宽度。
-- **TTyForm 双击最大化崩溃** —— `ToggleMaximize` 为 `Screen.MonitorFromWindow` 可能返回 nil 加了
-  守卫(回退到主显示器工作区)。
-- **国际化** —— 运行时加载 `tycontrols` 包词条目录(消息框按钮显示"确定"而非 "OK");catalog 部署为
-  无点号文件名以绕开 LCL `ChangeFileExt` 的截断;dialogs 示例补齐 exe 名词条目录并把代码中的英文
-  硬编码串改为 resourcestring;跟随系统语言自动检测。
-- **示例真机修复** —— 若干示例的启动崩溃(状态标签在 `OnChange` 之前尚未创建)、GroupBox 标题带遮挡、
-  splitter 停靠一侧不可拖动、以及把不存在的 `StyleClass` 变体当功能演示等问题。
+- **Windows 10 窗口发白 / 透明** —— 窗口及容器(对话框、分组框、页签、禁用控件)在 Windows 10 上
+  不再透出玻璃或白色,窗口失去焦点时也不再整片变白。
+- **禁用控件发虚** —— 禁用状态的控件文字不再发虚、背景不再透白。
+- **可缩放窗口侧边竖条** —— 可缩放窗口左右两侧不再出现主题色 / 白色竖条。
+- **可编辑 ComboBox 输入** —— 输入时不再丢失焦点或字符,自动补全弹层不再闪烁,点选补全项会填入正确的值。
+- **标签滚动箭头** —— 标签过多时,左右滚动箭头不再遮住首 / 尾标签。
+- **日期选择器下拉崩溃** —— 使用全局默认主题时,打开日历下拉不再崩溃。
+- **进度对话框闪烁** —— 进度对话框的文字与进度条不再闪烁。
+- **双击最大化崩溃** —— 多显示器 / 特殊配置下双击标题栏最大化不再崩溃。
+- **中文界面** —— 中文系统下消息框按钮显示"确定 / 取消"等,dialogs 与 demo 示例界面跟随系统语言显示中文。
+- **示例修复** —— 修复若干示例的启动崩溃与显示问题(radiobutton 启动崩溃、GroupBox 标题遮挡、
+  splitter 拖动方向等)。
 
 ## [2.1.1] — 2026-06-30
 

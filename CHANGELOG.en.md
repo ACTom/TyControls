@@ -12,88 +12,67 @@ Linux and macOS.
 A large feature release. The headline is the **dialog subsystem**: **TTyForm** gains complete window chrome
 (caption buttons), joined by **11 fully custom-drawn dialog components** with matching global functions, IDE
 integration and a standalone example. It also adds **three small controls** (tri-state CheckBox, editable
-ComboBox, TTyTabSet) and fixes a long list of issues that only surfaced on a real machine (notably the Win10
-DWM glass).
+ComboBox, TTyTabSet), completes the per-control API docs, and fixes many display issues that only surfaced on
+a real machine (notably Windows 10).
 
 ### Added — Dialogs
 
-- **TTyForm window chrome** — caption buttons are driven by **`BorderIcons` + `Resizable`**:
-  `BorderIcons:=[]` drops every button; `BorderStyle` is locked to `bsNone` (coercing setter); assigning a
-  title bar that belongs to another form raises (cross-form guard). The old `ShowMinimize` / `ShowMaximize`
-  switches are gone — `BorderIcons` is the single source of truth.
-- **11 fully custom-drawn dialog components** — LCL-parity, each as both a component and a global function:
-  - **TTyMessage** — message box (`TyShowMessage` / `TyMessageDlg`) with full button caption / result /
-    order and type glyphs.
-  - **TTyInputDialog / TTyPasswordDialog / TTyTextDialog** — single-line input, masked password and a
-    resizable multi-line text query (`TyInputQuery` / `TyInputBox` / `TyPasswordQuery` / `TyTextQuery`).
-  - **TTySelectValueDialog** — a list value picker.
-  - **TTySelectPathDialog** — a lazy directory-tree folder picker with **New Folder**, folder icons, and
-    roomier, hover-tracking rows.
-  - **TTyColorDialog** — a single-model, multi-view colour picker (HSV square + hue bar + RGB / CMYK /
-    Alpha / Hex kept in sync).
-  - **TTyFontDialog** — a font picker over family / size / style / colour / preview.
-  - **TTyFindDialog / TTyReplaceDialog** — modeless Find / Replace (LCL `TFindOptions` parity, `OnFind` /
-    `OnReplace`).
-  - **TTyProgressDialog** — an app-driven modeless progress dialog with Cancel.
-  - All 11 components carry **`OnShow` / `OnClose` / `OnCanClose`** events (LCL parity).
+- **TTyForm window chrome** — the title bar's minimize / maximize / close buttons are now controlled by
+  `BorderIcons` (`BorderIcons:=[]` removes every button); whether the window is resizable is set by
+  `Resizable`. The old `ShowMinimize` / `ShowMaximize` properties are removed.
+- **11 fully custom-drawn dialog components** — LCL-parity, usable both as drop-in components and via global
+  functions:
+  - **Message box** (`TyShowMessage` / `TyMessageDlg`) with full button sets, results and type glyphs.
+  - **Input / password / multi-line text** (`TyInputQuery` / `TyPasswordQuery` / `TyTextQuery`).
+  - **List value picker** and **folder picker** (New Folder, expandable directory tree).
+  - **Colour picker** (HSV + hue bar + RGB / CMYK / Alpha / Hex) and **font picker** (family / size / style /
+    colour / preview).
+  - **Find / Replace** (modeless, `OnFind` / `OnReplace`) and a cancelable **progress dialog**.
+  - Every dialog supports `OnShow` / `OnClose` / `OnCanClose`.
 - **IDE integration** — a new **TyControls Dialogs** palette group, palette icons for all 11 dialogs, a
-  File > New **TyControls Dialog** item, and **double-clicking** any dialog component in the designer
-  previews it.
-- **Examples** — a new standalone **dialogs example** showcasing all 11 dialogs; the main demo also gained a
-  three-column dialog grid.
+  File > New **TyControls Dialog** template, and double-click-to-preview in the designer.
+- **Examples** — a new standalone **dialogs example** demonstrating all 11 dialogs; the main demo gains a
+  dialog grid too.
 
-### Added — Three small controls
+### Added — three small controls
 
-- **Tri-state CheckBox** — `State` / `AllowGrayed` with a grayed (indeterminate) glyph.
-- **Editable ComboBox** — `csDropDown` free text with a prefix-autocomplete popup, forwarding `MaxLength` /
-  `CharCase` to the embedded editor.
-- **TTyTabSet** — a pure tab-strip control on the TabStrip engine (with a palette icon and component
-  registration).
+- **Tri-state CheckBox** — `State` / `AllowGrayed`, with a grayed (indeterminate) glyph.
+- **Editable ComboBox** — free text entry (`csDropDown`) with prefix autocomplete.
+- **TTyTabSet** — a pure tab strip (not a page container).
 
-### Added — Examples overhaul
+### Added — Documentation
 
-- Every single-control example was migrated to the **TTyForm + TTyTitleBar** chrome skeleton (no more raw
-  LCL windows), and each broadened to exercise its control's key features (e.g. checkbox demos the tri-state,
-  combobox the editable + autocomplete).
-- Added 7 dedicated examples: tabset, calendar, datetimepicker, splitter, statusbar, toolbar and menu; the
-  `tabcontrol` example was rewritten for TTyPageControl + TTyTabSheet.
+- **Per-control API docs for every control** (properties / events / states / theme variants / examples),
+  including the previously-undocumented TreeView, Calendar, DateTimePicker, Splitter, StatusBar, ToolBar,
+  TabSet, menus and NativeStyler, plus a controls index under `docs/controls/`.
+
+### Added — example overhaul
+
+- Every single-control example now uses the **TTyForm + TTyTitleBar** custom frame and shows more of each
+  control's features.
+- Seven new dedicated examples: tabset, calendar, datetimepicker, splitter, statusbar, toolbar, menu;
+  the `tabcontrol` example now uses TTyPageControl + TTyTabSheet.
 
 ### Fixed
 
-- **Win10 DWM glass bleed** — every TTyForm gets a whole-client sheet-of-glass extend, so any pixel a
-  control leaves at alpha 0 shows the glass (white when inactive). Fixed across the board: TTyPageControl /
-  TTyTabSheet / TTyGroupBox caption band / the strip past the last tab / dialog content areas now **fill an
-  opaque themed background** (new `TyPageControl` / `TyTabSheet` theme rules, synced to every built-in theme);
-  the Vista–10 shadow extension moved to sheet-of-glass margins `{-1,-1,-1,-1}` to kill the 1px window-edge
-  line that went white / grey on activation; `WM_NCACTIVATE` is intercepted so the inactive non-client frame
-  never paints; and `TyResolveParentBg` now walks up past transparent containers to an opaque backdrop so
-  rounded-control corner gaps fill.
-- **Disabled-control glass** — a `:disabled` control's overall opacity was applied as `ApplyGlobalOpacity`,
-  multiplying every pixel's alpha and turning the opaque background semi-transparent (white on deactivate).
-  Replaced by `TTyPainter.OpacityBase`: lay down an opaque base first, then draw the faded content over it —
-  identically dimmed, but alpha-255.
-- **Resizable TTyForm side stripes** — `WM_NCCALCSIZE` no longer insets the client rect, so the
-  `WS_THICKFRAME` native frame (DWM accent / white) is no longer exposed as left/right stripes.
-- **Editable ComboBox** — the autocomplete popup no longer steals focus from the embedded editor (the 2nd
-  keystroke was being lost); the popup re-sizes in place while typing (no flicker); and clicking a popup row
-  reads the list actually shown (fixing a wrong-list read / wrong-text commit).
-- **Tab-strip overflow arrows** overlapping the first / last tab — introduced `HeaderShiftPx` so tabs render
-  inside the band between the arrows (affects both TTyTabSet and TTyPageControl).
-- **TTyDateTimePicker** — opening the date drop-down no longer AVs when the picker is themed via the global
-  default controller (`Controller` left nil, the normal case): the dropdown path now uses the nil-safe
-  `ActiveController` instead of `FCalendar.Controller.Model`.
-- **TTyProgressDialog flicker** — dropped the native TPanel host in favour of throttling the visual refresh
-  to ~20fps (always keeping the newest position / text, and flushing 100% on completion), plus disabling the
-  bar animation and fixing the status label width.
-- **TTyForm double-click-maximize crash** — `ToggleMaximize` now guards a nil `Screen.MonitorFromWindow`
-  (falling back to the primary monitor work area).
-- **Internationalization** — load the `tycontrols` package catalog at runtime (the message-box button reads
-  确定, not OK); deploy the catalog with a dot-free filename to dodge LCL's `ChangeFileExt` truncation; give
-  the dialogs example its exe-name catalog and convert its hard-coded English code strings to
-  resourcestrings; follow the OS locale by autodetect.
-- **Example real-machine fixes** — several launch crashes (a status label used in `OnChange` before it was
-  created), GroupBox caption-band overlap, a splitter docked to an un-draggable side, and several examples
-  presenting a non-existent `StyleClass` variant as a feature.
+- **Windows 10 white / transparent windows** — windows and containers (dialogs, group boxes, tabs, disabled
+  controls) no longer bleed glass or white on Windows 10, and no longer wash out white when the window loses
+  focus.
+- **Washed-out disabled controls** — disabled controls no longer look faded or show a white background.
+- **Side stripes on resizable windows** — resizable windows no longer show accent / white vertical stripes on
+  the left and right edges.
+- **Editable ComboBox typing** — typing no longer loses focus or characters, the autocomplete popup no longer
+  flickers, and clicking a suggestion fills in the correct value.
+- **Tab scroll arrows** — with many tabs, the left / right scroll arrows no longer cover the first / last tab.
+- **Date picker dropdown crash** — opening the calendar dropdown no longer crashes when using the global
+  default theme.
+- **Progress dialog flicker** — the progress dialog's text and bar no longer flicker.
+- **Double-click-maximize crash** — double-clicking the title bar to maximize no longer crashes on
+  multi-monitor / unusual setups.
+- **Chinese UI** — on a Chinese OS, message-box buttons show 确定 / 取消 etc., and the dialogs and demo
+  examples follow the system language.
+- **Example fixes** — assorted example startup crashes and display glitches (radiobutton startup crash,
+  GroupBox title overlap, splitter drag direction, etc.).
 
 ## [2.1.1] — 2026-06-30
 
