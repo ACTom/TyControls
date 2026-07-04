@@ -26,13 +26,15 @@ begin
   RequireDerivedFormResource := True;
   Application.Scaled:=True;
   Application.Initialize;
-  // Apply the OS UI language BEFORE any form is created, so the LRSTranslator translates captions
-  // during streaming. SetDefaultLang('') autodetects the OS locale (or a --lang= param).
-  SetDefaultLang('', LangDir);
+  // Force Chinese BEFORE any form (or dialog) is created, so the LRSTranslator translates captions
+  // during streaming and the runtime resourcestrings resolve to zh_CN. We pass 'zh_CN' explicitly
+  // (not '' = autodetect) so a MessageBox shows 确定/取消 regardless of the host OS locale.
+  SetDefaultLang('zh_CN', LangDir);
   // SetDefaultLang only loads languages/tydialogs.<lang>.po (derived from the exe name). The tyControls
   // package's own resourcestrings (dialog buttons / type titles etc.) live in a separate catalog and
   // need their own load, or they stay at their English msgids no matter what UI language is active.
-  TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');
+  // The catalog stem is DOT-FREE ('tycontrols'); the real unit name is the last arg.
+  TranslateUnitResourceStringsEx('zh_CN', LangDir, 'tycontrols', 'tyControls.StrConsts');
   Application.CreateForm(TDialogsMainForm, DialogsMainForm);
   Application.Run;
 end.

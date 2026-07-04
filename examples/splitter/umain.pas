@@ -51,7 +51,7 @@ constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
   VSplit, HSplit: TTySplitter;
-  ClientHost: TTyPanel;
+  ClientHost, RightHost: TTyPanel;
 begin
   inherited CreateNew(AOwner, 0);          // TTyForm: borderless + persistent engine
   Caption := 'Splitter 示例';
@@ -77,40 +77,53 @@ begin
   ClientHost.Align := alClient;
   ClientHost.Caption := '';
 
-  // 左栏（alLeft）
+  // ── 竖直切分：左栏(alLeft) → 竖直分隔条(alLeft) → 右侧容器(alClient) ──
+  // LCL 中同级 alLeft 控件按创建/Left 顺序自左向右停靠，故左栏必须先于
+  // 分隔条创建并 parent，两者都先于 alClient 填充块。分隔条的 alLeft 邻居查找
+  // 要求其 Left 落在左栏右缘之后，因此显式将 Left 设为左栏宽度以固定停靠次序。
+
+  // 左栏（alLeft，先创建）
   FLeftPanel := TTyPanel.Create(Self);
   FLeftPanel.Parent := ClientHost;
   FLeftPanel.Align := alLeft;
   FLeftPanel.Width := 220;
   FLeftPanel.Caption := '左栏 (alLeft)';
 
-  // 竖直分隔条（Align=alLeft → 横向拖动，改变左栏宽度）
+  // 竖直分隔条（Align=alLeft → 横向拖动，改变左栏宽度；紧贴左栏右侧）
   VSplit := TTySplitter.Create(Self);
   VSplit.Parent := ClientHost;
-  VSplit.Align := alLeft;          // 紧贴左栏右侧
+  VSplit.Align := alLeft;
+  VSplit.Left := FLeftPanel.Width;  // 显式停靠到左栏右侧，避免落到左栏左边
   VSplit.Width := 6;
-  VSplit.MinSize := 120;           // 左栏最小宽度
-  VSplit.ResizeStyle := rsUpdate;  // 实时更新（另有 rsLine 延迟到松开）
+  VSplit.MinSize := 120;            // 左栏最小宽度
+  VSplit.ResizeStyle := rsUpdate;   // 实时更新（另有 rsLine 延迟到松开）
   VSplit.OnMoved := @HandleMoved;
   VSplit.OnCanResize := @HandleCanResize;
 
-  // 右侧客户区：再做一次水平切分（上区 alTop + 分隔条 + 下区 alClient）
+  // 右侧容器（alClient，最后创建）：承载嵌套的水平切分
+  RightHost := TTyPanel.Create(Self);
+  RightHost.Parent := ClientHost;
+  RightHost.Align := alClient;
+  RightHost.Caption := '';
+
+  // ── 嵌套水平切分：上区(alTop) → 水平分隔条(alTop) → 下区(alClient) ──
   FTopPanel := TTyPanel.Create(Self);
-  FTopPanel.Parent := ClientHost;
+  FTopPanel.Parent := RightHost;
   FTopPanel.Align := alTop;
   FTopPanel.Height := 200;
   FTopPanel.Caption := '上区 (alTop)';
 
   HSplit := TTySplitter.Create(Self);
-  HSplit.Parent := ClientHost;
-  HSplit.Align := alTop;           // 横放 → 纵向拖动，改变上区高度
+  HSplit.Parent := RightHost;
+  HSplit.Align := alTop;            // 横放 → 纵向拖动，改变上区高度
+  HSplit.Top := FTopPanel.Height;  // 显式停靠到上区下侧
   HSplit.Height := 6;
   HSplit.MinSize := 80;
   HSplit.ResizeStyle := rsUpdate;
   HSplit.OnMoved := @HandleMoved;
 
   FBottomPanel := TTyPanel.Create(Self);
-  FBottomPanel.Parent := ClientHost;
+  FBottomPanel.Parent := RightHost;
   FBottomPanel.Align := alClient;
   FBottomPanel.Caption := '下区 (alClient)';
 

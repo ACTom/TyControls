@@ -95,20 +95,20 @@ begin
 
   FRadioA := TTyRadioButton.Create(FGroupSize);
   FRadioA.Parent := FGroupSize;
-  FRadioA.SetBounds(10, 8, 160, 26);
+  FRadioA.SetBounds(10, 24, 160, 26);
   FRadioA.Caption := '小（12pt）';
   FRadioA.OnClick := @RadioClick;
 
   FRadioB := TTyRadioButton.Create(FGroupSize);
   FRadioB.Parent := FGroupSize;
-  FRadioB.SetBounds(10, 38, 160, 26);
+  FRadioB.SetBounds(10, 54, 160, 26);
   FRadioB.Caption := '中（14pt）';
   FRadioB.Checked := True;                 // 默认选中
   FRadioB.OnClick := @RadioClick;
 
   FRadioC := TTyRadioButton.Create(FGroupSize);
   FRadioC.Parent := FGroupSize;
-  FRadioC.SetBounds(10, 68, 160, 26);
+  FRadioC.SetBounds(10, 84, 160, 26);
   FRadioC.Caption := '大（18pt）';
   FRadioC.OnClick := @RadioClick;
 
@@ -121,13 +121,13 @@ begin
 
   FCheckBold := TTyCheckBox.Create(FGroupOpt);
   FCheckBold.Parent := FGroupOpt;
-  FCheckBold.SetBounds(10, 8, 160, 26);
+  FCheckBold.SetBounds(10, 24, 160, 26);
   FCheckBold.Caption := '加粗';
   FCheckBold.OnClick := @CheckClick;
 
   FCheckItalic := TTyCheckBox.Create(FGroupOpt);
   FCheckItalic.Parent := FGroupOpt;
-  FCheckItalic.SetBounds(10, 38, 160, 26);
+  FCheckItalic.SetBounds(10, 54, 160, 26);
   FCheckItalic.Caption := '斜体';
   FCheckItalic.OnClick := @CheckClick;
 
@@ -140,7 +140,7 @@ begin
 
   FNameEdit := TTyEdit.Create(FGroupName);
   FNameEdit.Parent := FGroupName;
-  FNameEdit.SetBounds(10, 12, 160, 30);
+  FNameEdit.SetBounds(10, 28, 160, 30);
   FNameEdit.TextHint := '请输入名称…';
   FNameEdit.OnChange := @NameChange;
 

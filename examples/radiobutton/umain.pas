@@ -84,36 +84,39 @@ begin
   Bar.Height := 34;
   Bar.Caption := 'RadioButton  · TyControls';
 
+  { --- 状态标签：先建好，OnChange 首次触发时它必须已存在 ---
+    （AddRadio 挂 OnChange，随后 .Checked := True 会立刻触发 RadioChanged
+     -> UpdateStatus -> FStatus.Caption；FStatus 必须先于任何单选组创建） }
+  FStatus := TTyLabel.Create(Self);
+  FStatus.Parent := Self;
+  FStatus.SetBounds(16, 236, 408, 24);
+
   { --- 组 A：水果（同一 GroupBox 内互斥，标题左对齐） --- }
   GroupA := TTyGroupBox.Create(Self);
   GroupA.Parent := Self;
-  GroupA.SetBounds(16, 52, 190, 160);
+  GroupA.SetBounds(16, 52, 190, 168);
   GroupA.Caption := '水果';
   GroupA.Alignment := taLeftJustify;
 
-  FFruitApple  := AddRadio(GroupA, '苹果', 8, @RadioChanged);
+  FFruitApple  := AddRadio(GroupA, '苹果', 24, @RadioChanged);  // Top>=24 让出 16px 标题带
   FFruitApple.Checked := True;             // 默认选中第一项
-  FFruitBanana := AddRadio(GroupA, '香蕉', 44, @RadioChanged);
-  FFruitMango  := AddRadio(GroupA, '芒果（缺货）', 80, @RadioChanged);
+  FFruitBanana := AddRadio(GroupA, '香蕉', 56, @RadioChanged);
+  FFruitMango  := AddRadio(GroupA, '芒果（缺货）', 88, @RadioChanged);
   FFruitMango.Enabled := False;            // 禁用项：不可选、置灰
 
   { --- 组 B：颜色（另一个 GroupBox，与组 A 互不影响，标题居中） --- }
   GroupB := TTyGroupBox.Create(Self);
   GroupB.Parent := Self;
-  GroupB.SetBounds(232, 52, 190, 160);
+  GroupB.SetBounds(232, 52, 190, 168);
   GroupB.Caption := '颜色';
   GroupB.Alignment := taCenter;
 
-  FColorRed   := AddRadio(GroupB, '红色', 8, @RadioChanged);
-  FColorGreen := AddRadio(GroupB, '绿色', 44, @RadioChanged);
+  FColorRed   := AddRadio(GroupB, '红色', 24, @RadioChanged);
+  FColorGreen := AddRadio(GroupB, '绿色', 56, @RadioChanged);
   FColorGreen.Checked := True;             // 默认选中第二项
-  FColorBlue  := AddRadio(GroupB, '蓝色', 80, @RadioChanged);
+  FColorBlue  := AddRadio(GroupB, '蓝色', 88, @RadioChanged);
 
-  { --- 状态标签：OnChange 实时读数 --- }
-  FStatus := TTyLabel.Create(Self);
-  FStatus.Parent := Self;
-  FStatus.SetBounds(16, 228, 408, 24);
-  UpdateStatus;
+  UpdateStatus;                            // 所有单选建完，刷一次最终读数
 
   ApplyChromeTheme(TyDefaultController);    // 最后统一给 chrome + 窗体背景上主题
 end;
