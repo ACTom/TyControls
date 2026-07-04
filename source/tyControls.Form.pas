@@ -959,6 +959,7 @@ end;
 procedure TTyChromeEngine.ToggleMaximize;
 var
   Wa: TRect;
+  Mon: TMonitor;
 begin
   if FForm = nil then
     Exit;
@@ -980,7 +981,14 @@ begin
   else
   begin
     FSavedBounds := FForm.BoundsRect;
-    Wa := Screen.MonitorFromWindow(FForm.Handle).WorkareaRect;
+    { Screen.MonitorFromWindow can return nil (an off-screen / not-yet-mapped handle,
+      or a multi-monitor edge case); guard it so double-click-to-maximize can't AV —
+      fall back to the primary monitor's work area. }
+    Mon := Screen.MonitorFromWindow(FForm.Handle);
+    if Mon <> nil then
+      Wa := Mon.WorkareaRect
+    else
+      Wa := Screen.WorkAreaRect;
     FForm.BoundsRect := TyMaximizedBounds(Wa);
     FMaximized := True;
     if FTitleBar <> nil then FTitleBar.MaxButton.Kind := cbkRestore;
