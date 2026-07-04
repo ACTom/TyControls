@@ -506,10 +506,17 @@ var
   corners, ringCorners: TTyCorners;
   off: Integer;
   ringRect: TRect;
+  pc: TTyColor;
 begin
   TyFillParentBg(Self, APainter, ARect, AStyle);
   if tpOpacity in AStyle.Present then
+  begin
     APainter.Opacity := AStyle.Opacity;
+    // Dim TOWARD the opaque parent/surface bg (not toward transparency) so a disabled control
+    // never exposes the Win10 DWM sheet-of-glass (blurry text / white bg / white on deactivate).
+    // See TTyPainter.EndPaint. 0 base = fall back to plain alpha-reduce.
+    if TyResolveParentBg(Self, pc) then APainter.OpacityBase := pc;
+  end;
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
   corners := TyEffectiveCorners(AStyle);
@@ -719,7 +726,13 @@ var
 begin
   TyFillParentBg(Self, APainter, ARect, AStyle);
   if tpOpacity in AStyle.Present then
+  begin
     APainter.Opacity := AStyle.Opacity;
+    // Dim TOWARD the opaque parent/surface bg (not toward transparency) so a disabled control
+    // never exposes the Win10 DWM sheet-of-glass (blurry text / white bg / white on deactivate).
+    // See TTyPainter.EndPaint. 0 base = fall back to plain alpha-reduce.
+    if TyResolveParentBg(Self, pc) then APainter.OpacityBase := pc;
+  end;
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
   corners := TyEffectiveCorners(AStyle);

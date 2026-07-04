@@ -28,6 +28,7 @@ type
     {$ENDIF}
   public
     Opacity: Single;
+    OpacityBase: TTyColor;   // when Opacity<1, dim TOWARD this opaque colour (0 = old alpha-reduce)
     procedure BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure EndPaint;
     function Scale(ALogical: Integer): Integer;
@@ -107,16 +108,42 @@ begin
   else
     FPPI := APPI;
   Opacity := 1.0;
+  OpacityBase := 0;   // 0 alpha = "not set" -> EndPaint uses the old alpha-reduce path
   FBmp := TBGRABitmap.Create(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
   FBmp.Fill(BGRAPixelTransparent);
 end;
 
 procedure TTyPainter.EndPaint;
+var
+  baseBmp: TBGRABitmap;
+  c: TBGRAPixel;
 begin
   if Assigned(FBmp) then
   begin
     if Assigned(FCanvas) then
     begin
+      if (Opacity < 1.0) and (TyAlphaOf(OpacityBase) > 0) then
+      begin
+        // Dim the control TOWARD an opaque base colour (its themed parent/surface background)
+        // rather than reducing the whole bitmap's alpha. A disabled control on the Win10 DWM
+        // sheet-of-glass window would otherwise go semi-transparent and the glass shows through
+        // (text looks blurry, background washes white, turns fully white on deactivate). Lay the
+        // OPAQUE base onto the canvas first, then draw the faded content over it with the SAME
+        // (non-gamma) blend as the normal path — so the dimmed pixels match the old look but the
+        // result stays alpha-255, and untouched areas show the opaque base, never glass.
+        c := TyColorToBGRA(OpacityBase);
+        c.alpha := 255;
+        baseBmp := TBGRABitmap.Create(FBmp.Width, FBmp.Height, c);
+        try
+          baseBmp.Draw(FCanvas, FRect.Left, FRect.Top, True);
+        finally
+          baseBmp.Free;
+        end;
+        FBmp.ApplyGlobalOpacity(Round(Opacity * 255));
+        FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False);
+        FreeAndNil(FBmp);
+        Exit;
+      end;
       if Opacity < 1.0 then
         FBmp.ApplyGlobalOpacity(Round(Opacity * 255));
       FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False);
