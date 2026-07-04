@@ -11,6 +11,9 @@ Linux and macOS.
 
 ### Added
 
+- **Gauge control (`TTyGauge`)** — a new value gauge: linear (horizontal/vertical bar), open-arc
+  (speedometer) and full-ring styles, with an eased value animation and an optional formatted value
+  readout; colours come from the theme's `TyGauge` / `TyGaugeFill` rules. Pixel-identical cross-platform.
 - **About dialog (`TTyAboutDialog`)** — a new reusable custom-drawn About dialog: a custom title
   bar + an accent header (app name + version) over description / copyright / license / a clickable
   homepage link; **empty fields are hidden automatically**, so the dialog shrinks to what it has.

@@ -65,6 +65,12 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyScrollBar](scrollbar.md) | 滚动条 |
 | [TTyProgressBar](progressbar.md) | 进度条 |
 
+## 图形与仪表
+
+| 控件 | 说明 |
+|------|------|
+| [TTyGauge](gauge.md) | 数值仪表：线性 / 弧形 / 环形，缓动值动画 |
+
 ## 文字
 
 | 控件 | 说明 |
