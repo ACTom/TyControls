@@ -65,6 +65,8 @@ procedure GCombo(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); PolyL(b,[Point
 procedure GToggle(b: TBGRABitmap); begin RRect(b,3,8,21,16,4,Ink); FillCirc(b,16.5,12,2.7,Acc); end;
 procedure GTrack(b: TBGRABitmap); begin Line(b,3,12,21,12,Ink); Line(b,6,10.4,6,13.6,Ink); Line(b,18,10.4,18,13.6,Ink); FillCirc(b,12,12,3,Acc); end;
 procedure GProgress(b: TBGRABitmap); begin RRect(b,3,9,21,15,3,Ink); FillRRect(b,3,9,13,15,3,Acc); end;
+{ TTyGauge: a speedometer — upper scale arc + accent needle + hub }
+procedure GGauge(b: TBGRABitmap); begin PolyL(b,[PointF(3.5,15),PointF(5,10.5),PointF(8.5,7.5),PointF(12,6.5),PointF(15.5,7.5),PointF(19,10.5),PointF(20.5,15)],Ink,1.8); Line(b,12,16,16.5,9,Acc,2); FillCirc(b,12,16,1.6,Acc); end;
 procedure GListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,6,9,18,9,Acc,2); Line(b,6,13,18,13,Ink); Line(b,6,17,15,17,Ink); end;
 procedure GTabControl(b: TBGRABitmap); begin FillRRect(b,3.5,5,11.5,10.5,1.5,Acc); RRect(b,12.5,6.2,20,10.5,1.5,Ink); RRect(b,3,10,21,20,2,Ink); end;
 procedure GTabSheet(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Acc,2); end;
@@ -286,7 +288,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..41] of TGlyph = (
+  Glyphs: array[0..42] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -296,6 +298,7 @@ const
     (Name:'TTyToggleSwitch';    Draw:@GToggle),
     (Name:'TTyTrackBar';        Draw:@GTrack),
     (Name:'TTyProgressBar';     Draw:@GProgress),
+    (Name:'TTyGauge';           Draw:@GGauge),
     (Name:'TTyListBox';         Draw:@GListBox),
     (Name:'TTyPageControl';     Draw:@GTabControl),
     (Name:'TTyTabSheet';        Draw:@GTabSheet),
