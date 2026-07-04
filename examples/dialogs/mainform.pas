@@ -61,6 +61,52 @@ implementation
 
 {$R *.lfm}
 
+resourcestring
+  { User-facing strings shown in the log pane and passed to the dialog APIs. English is the
+    msgid; Simplified-Chinese lives in examples/dialogs/languages/tydialogs.zh_CN.po, which
+    SetDefaultLang loads to translate BOTH these resourcestrings and the mainform.lfm captions. }
+  rsReady          = 'Ready. Click a button to open the matching dialog.';
+  rsMsgPrompt      = 'Delete the selected item?';
+  rsMsgYes         = 'Message: user chose Yes';
+  rsMsgNo          = 'Message: user chose No';
+  rsInputTitle     = 'Rename';
+  rsInputPrompt    = 'Enter a new name:';
+  rsInputDefault   = 'Untitled';
+  rsInputResult    = 'Input: %s';
+  rsInputCancelled = 'Input: cancelled';
+  rsPwdTitle       = 'Login';
+  rsPwdPrompt      = 'Enter your password:';
+  rsPwdResult      = 'Password: %d character(s) entered';
+  rsPwdEmpty       = 'Password: empty / cancelled';
+  rsTextTitle      = 'Edit note';
+  rsTextPrompt     = 'Enter a multiline note:';
+  rsTextResult     = 'Text: %s';
+  rsTextCancelled  = 'Text: cancelled';
+  rsSVTitle        = 'Pick one';
+  rsSVPrompt       = 'Choose an option:';
+  rsSVOptA         = 'Option A';
+  rsSVOptB         = 'Option B';
+  rsSVOptC         = 'Option C';
+  rsSVResult       = 'SelectValue: %s';
+  rsSVCancelled    = 'SelectValue: cancelled';
+  rsSPTitle        = 'Select a folder';
+  rsSPResult       = 'SelectPath: %s';
+  rsSPCancelled    = 'SelectPath: cancelled';
+  rsColorTitle     = 'Select a colour';
+  rsColorResult    = 'Color: R=%d G=%d B=%d A=%d';
+  rsColorCancelled = 'Color: cancelled';
+  rsFontResult     = 'Font: %s %dpt';
+  rsFontCancelled  = 'Font: cancelled';
+  rsFindOpened     = 'Find: dialog opened (modeless)';
+  rsFindNext       = '  Find Next: "%s"  (MatchCase=%s, WholeWord=%s)';
+  rsReplaceOpened  = 'Replace: dialog opened (modeless)';
+  rsReplaceAllMsg  = '  Replace ALL: "%s" -> "%s"';
+  rsReplaceOneMsg  = '  Replace: "%s" -> "%s"';
+  rsProgWorking    = 'Working…';
+  rsProgItem       = 'Item %d of %d';
+  rsProgCancelled  = 'Progress: cancelled by user';
+  rsProgDone       = 'Progress: completed';
+
 { TDialogsMainForm }
 
 procedure TDialogsMainForm.FormCreate(Sender: TObject);
@@ -71,7 +117,7 @@ begin
   FFindDlg.OnFind := @DoFind;
   FReplaceDlg := TTyReplaceDialog.Create(Self);
   FReplaceDlg.OnReplace := @DoReplace;
-  Log('Ready. Click a button to open the matching dialog.');
+  Log(rsReady);
 end;
 
 procedure TDialogsMainForm.InitThemes;
@@ -98,32 +144,32 @@ end;
 procedure TDialogsMainForm.BtnMessageClick(Sender: TObject);
 begin
   // Confirmation box via the primary global API; returns a TModalResult.
-  if TyMessageDlg('Delete the selected item?', mtConfirmation, [mbYes, mbNo]) = mrYes then
-    Log('Message: user chose Yes')
+  if TyMessageDlg(rsMsgPrompt, mtConfirmation, [mbYes, mbNo]) = mrYes then
+    Log(rsMsgYes)
   else
-    Log('Message: user chose No');
+    Log(rsMsgNo);
 end;
 
 procedure TDialogsMainForm.BtnInputClick(Sender: TObject);
 var
   s: string;
 begin
-  s := 'Untitled';
-  if TyInputQuery('Rename', 'Enter a new name:', s) then
-    Log('Input: ' + s)
+  s := rsInputDefault;
+  if TyInputQuery(rsInputTitle, rsInputPrompt, s) then
+    Log(Format(rsInputResult, [s]))
   else
-    Log('Input: cancelled');
+    Log(rsInputCancelled);
 end;
 
 procedure TDialogsMainForm.BtnPasswordClick(Sender: TObject);
 var
   pwd: string;
 begin
-  pwd := TyPasswordBox('Login', 'Enter your password:');
+  pwd := TyPasswordBox(rsPwdTitle, rsPwdPrompt);
   if pwd <> '' then
-    Log(Format('Password: %d character(s) entered', [Length(pwd)]))
+    Log(Format(rsPwdResult, [Length(pwd)]))
   else
-    Log('Password: empty / cancelled');
+    Log(rsPwdEmpty);
 end;
 
 procedure TDialogsMainForm.BtnTextClick(Sender: TObject);
@@ -131,13 +177,13 @@ var
   note: string;
 begin
   note := '';
-  if TyTextQuery('Edit note', 'Enter a multiline note:', note) then
+  if TyTextQuery(rsTextTitle, rsTextPrompt, note) then
   begin
     note := TrimRight(note);   // TyTextQuery appends a trailing LineEnding (TStrings.Text semantics)
-    Log('Text: ' + StringReplace(note, LineEnding, ' / ', [rfReplaceAll]));
+    Log(Format(rsTextResult, [StringReplace(note, LineEnding, ' / ', [rfReplaceAll])]));
   end
   else
-    Log('Text: cancelled');
+    Log(rsTextCancelled);
 end;
 
 procedure TDialogsMainForm.BtnSelectValueClick(Sender: TObject);
@@ -147,14 +193,14 @@ var
 begin
   items := TStringList.Create;
   try
-    items.Add('Option A');
-    items.Add('Option B');
-    items.Add('Option C');
+    items.Add(rsSVOptA);
+    items.Add(rsSVOptB);
+    items.Add(rsSVOptC);
     idx := 0;
-    if TySelectValue('Pick one', 'Choose an option:', items, idx) then
-      Log('SelectValue: ' + items[idx])
+    if TySelectValue(rsSVTitle, rsSVPrompt, items, idx) then
+      Log(Format(rsSVResult, [items[idx]]))
     else
-      Log('SelectValue: cancelled');
+      Log(rsSVCancelled);
   finally
     items.Free;
   end;
@@ -165,10 +211,10 @@ var
   dir: string;
 begin
   dir := '';
-  if TySelectDirectory('Select a folder', '', dir) then
-    Log('SelectPath: ' + dir)
+  if TySelectDirectory(rsSPTitle, '', dir) then
+    Log(Format(rsSPResult, [dir]))
   else
-    Log('SelectPath: cancelled');
+    Log(rsSPCancelled);
 end;
 
 procedure TDialogsMainForm.BtnColorClick(Sender: TObject);
@@ -176,11 +222,11 @@ var
   c: TTyColor;
 begin
   c := TyRGBA(255, 128, 0, 255);
-  if TySelectColor('Select a colour', c) then
-    Log(Format('Color: R=%d G=%d B=%d A=%d',
+  if TySelectColor(rsColorTitle, c) then
+    Log(Format(rsColorResult,
       [TyRedOf(c), TyGreenOf(c), TyBlueOf(c), TyAlphaOf(c)]))
   else
-    Log('Color: cancelled');
+    Log(rsColorCancelled);
 end;
 
 procedure TDialogsMainForm.BtnFontClick(Sender: TObject);
@@ -191,9 +237,9 @@ begin
   try
     f.Assign(Memo1.Font);
     if TyFontDialog(f) then
-      Log(Format('Font: %s %dpt', [f.Name, f.Size]))
+      Log(Format(rsFontResult, [f.Name, f.Size]))
     else
-      Log('Font: cancelled');
+      Log(rsFontCancelled);
   finally
     f.Free;
   end;
@@ -204,7 +250,7 @@ end;
 procedure TDialogsMainForm.BtnFindClick(Sender: TObject);
 begin
   // Modeless: Execute returns immediately; results surface through DoFind.
-  Log('Find: dialog opened (modeless)');
+  Log(rsFindOpened);
   FFindDlg.Execute;
 end;
 
@@ -213,14 +259,14 @@ var
   d: TTyFindDialog;
 begin
   d := Sender as TTyFindDialog;
-  Log(Format('  Find Next: "%s"  (MatchCase=%s, WholeWord=%s)',
+  Log(Format(rsFindNext,
     [d.FindText, BoolToStr(frMatchCase in d.Options, True),
      BoolToStr(frWholeWord in d.Options, True)]));
 end;
 
 procedure TDialogsMainForm.BtnReplaceClick(Sender: TObject);
 begin
-  Log('Replace: dialog opened (modeless)');
+  Log(rsReplaceOpened);
   FReplaceDlg.Execute;
 end;
 
@@ -231,9 +277,9 @@ begin
   d := Sender as TTyReplaceDialog;
   // Replace and Replace All both fire OnReplace; tell them apart via frReplaceAll.
   if frReplaceAll in d.Options then
-    Log(Format('  Replace ALL: "%s" -> "%s"', [d.FindText, d.ReplaceText]))
+    Log(Format(rsReplaceAllMsg, [d.FindText, d.ReplaceText]))
   else
-    Log(Format('  Replace: "%s" -> "%s"', [d.FindText, d.ReplaceText]));
+    Log(Format(rsReplaceOneMsg, [d.FindText, d.ReplaceText]));
 end;
 
 procedure TDialogsMainForm.BtnProgressClick(Sender: TObject);
@@ -246,7 +292,7 @@ var
 begin
   prog := TTyProgressDialog.Create(Self);
   try
-    prog.Caption := 'Working…';
+    prog.Caption := rsProgWorking;
     prog.Min := 0;
     prog.Max := N;
     prog.Cancelable := True;
@@ -255,15 +301,15 @@ begin
     begin
       if prog.Cancelled then
       begin
-        Log('Progress: cancelled by user');
+        Log(rsProgCancelled);
         Exit;
       end;
       // The real "work" is instant, so spin a tiny busy loop to let the bar visibly advance.
       busy := 0;
       for j := 1 to 2000000 do Inc(busy);
-      prog.SetProgress(i + 1, Format('Item %d of %d', [i + 1, N]));   // repaints + pumps
+      prog.SetProgress(i + 1, Format(rsProgItem, [i + 1, N]));   // repaints + pumps
     end;
-    Log('Progress: completed');
+    Log(rsProgDone);
   finally
     prog.Close;
     prog.Free;

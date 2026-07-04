@@ -1,0 +1,234 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-dialogs 2.1\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- code-set resourcestrings (mainform.pas) ---
+
+#: mainform.rsready
+msgid "Ready. Click a button to open the matching dialog."
+msgstr "就绪。点击按钮打开对应的对话框。"
+
+#: mainform.rsmsgprompt
+msgid "Delete the selected item?"
+msgstr "删除选中的项目吗？"
+
+#: mainform.rsmsgyes
+msgid "Message: user chose Yes"
+msgstr "消息：用户选择了“是”"
+
+#: mainform.rsmsgno
+msgid "Message: user chose No"
+msgstr "消息：用户选择了“否”"
+
+#: mainform.rsinputtitle
+msgid "Rename"
+msgstr "重命名"
+
+#: mainform.rsinputprompt
+msgid "Enter a new name:"
+msgstr "输入新名称："
+
+#: mainform.rsinputdefault
+msgid "Untitled"
+msgstr "未命名"
+
+#: mainform.rsinputresult
+msgid "Input: %s"
+msgstr "输入：%s"
+
+#: mainform.rsinputcancelled
+msgid "Input: cancelled"
+msgstr "输入：已取消"
+
+#: mainform.rspwdtitle
+msgid "Login"
+msgstr "登录"
+
+#: mainform.rspwdprompt
+msgid "Enter your password:"
+msgstr "请输入密码："
+
+#: mainform.rspwdresult
+msgid "Password: %d character(s) entered"
+msgstr "密码：已输入 %d 个字符"
+
+#: mainform.rspwdempty
+msgid "Password: empty / cancelled"
+msgstr "密码：为空/已取消"
+
+#: mainform.rstexttitle
+msgid "Edit note"
+msgstr "编辑备注"
+
+#: mainform.rstextprompt
+msgid "Enter a multiline note:"
+msgstr "输入多行备注："
+
+#: mainform.rstextresult
+msgid "Text: %s"
+msgstr "文本：%s"
+
+#: mainform.rstextcancelled
+msgid "Text: cancelled"
+msgstr "文本：已取消"
+
+#: mainform.rssvtitle
+msgid "Pick one"
+msgstr "选择一项"
+
+#: mainform.rssvprompt
+msgid "Choose an option:"
+msgstr "请选择一个选项："
+
+#: mainform.rssvopta
+msgid "Option A"
+msgstr "选项 A"
+
+#: mainform.rssvoptb
+msgid "Option B"
+msgstr "选项 B"
+
+#: mainform.rssvoptc
+msgid "Option C"
+msgstr "选项 C"
+
+#: mainform.rssvresult
+msgid "SelectValue: %s"
+msgstr "选择值：%s"
+
+#: mainform.rssvcancelled
+msgid "SelectValue: cancelled"
+msgstr "选择值：已取消"
+
+#: mainform.rssptitle
+msgid "Select a folder"
+msgstr "选择文件夹"
+
+#: mainform.rsspresult
+msgid "SelectPath: %s"
+msgstr "选择路径：%s"
+
+#: mainform.rsspcancelled
+msgid "SelectPath: cancelled"
+msgstr "选择路径：已取消"
+
+#: mainform.rscolortitle
+msgid "Select a colour"
+msgstr "选择颜色"
+
+#: mainform.rscolorresult
+msgid "Color: R=%d G=%d B=%d A=%d"
+msgstr "颜色：R=%d G=%d B=%d A=%d"
+
+#: mainform.rscolorcancelled
+msgid "Color: cancelled"
+msgstr "颜色：已取消"
+
+#: mainform.rsfontresult
+msgid "Font: %s %dpt"
+msgstr "字体：%s %d pt"
+
+#: mainform.rsfontcancelled
+msgid "Font: cancelled"
+msgstr "字体：已取消"
+
+#: mainform.rsfindopened
+msgid "Find: dialog opened (modeless)"
+msgstr "查找：对话框已打开（非模态）"
+
+#: mainform.rsfindnext
+msgid "  Find Next: \"%s\"  (MatchCase=%s, WholeWord=%s)"
+msgstr "  查找下一个：\"%s\"（区分大小写=%s，全字匹配=%s）"
+
+#: mainform.rsreplaceopened
+msgid "Replace: dialog opened (modeless)"
+msgstr "替换：对话框已打开（非模态）"
+
+#: mainform.rsreplaceallmsg
+msgid "  Replace ALL: \"%s\" -> \"%s\""
+msgstr "  全部替换：\"%s\" -> \"%s\""
+
+#: mainform.rsreplaceonemsg
+msgid "  Replace: \"%s\" -> \"%s\""
+msgstr "  替换：\"%s\" -> \"%s\""
+
+#: mainform.rsprogworking
+msgid "Working…"
+msgstr "处理中…"
+
+#: mainform.rsprogitem
+msgid "Item %d of %d"
+msgstr "第 %d 项，共 %d 项"
+
+#: mainform.rsprogcancelled
+msgid "Progress: cancelled by user"
+msgstr "进度：已被用户取消"
+
+#: mainform.rsprogdone
+msgid "Progress: completed"
+msgstr "进度：已完成"
+
+# --- form captions (key = <formclass>.<comp>.caption) ---
+
+#: tdialogsmainform.caption
+msgid "TyControls Dialogs"
+msgstr "TyControls 对话框"
+
+#: tdialogsmainform.tytitlebar1.caption
+msgid "TyControls Dialogs"
+msgstr "TyControls 对话框"
+
+#: tdialogsmainform.lblintro.caption
+msgid "Click a button to open the matching custom dialog. Results appear in the log below."
+msgstr "点击按钮打开对应的自定义对话框。结果显示在下方的日志中。"
+
+#: tdialogsmainform.btnmessage.caption
+msgid "Message"
+msgstr "消息"
+
+#: tdialogsmainform.btninput.caption
+msgid "Input"
+msgstr "输入"
+
+#: tdialogsmainform.btnpassword.caption
+msgid "Password"
+msgstr "密码"
+
+#: tdialogsmainform.btntext.caption
+msgid "Text (multiline)"
+msgstr "文本（多行）"
+
+#: tdialogsmainform.btnselectvalue.caption
+msgid "Select value"
+msgstr "选择值"
+
+#: tdialogsmainform.btnselectpath.caption
+msgid "Select path"
+msgstr "选择路径"
+
+#: tdialogsmainform.btncolor.caption
+msgid "Color"
+msgstr "颜色"
+
+#: tdialogsmainform.btnfont.caption
+msgid "Font"
+msgstr "字体"
+
+#: tdialogsmainform.btnfind.caption
+msgid "Find (modeless)"
+msgstr "查找（非模态）"
+
+#: tdialogsmainform.btnreplace.caption
+msgid "Replace (modeless)"
+msgstr "替换（非模态）"
+
+#: tdialogsmainform.btnprogress.caption
+msgid "Progress"
+msgstr "进度"
