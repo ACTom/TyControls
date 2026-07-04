@@ -99,7 +99,6 @@ begin
   GroupA.Alignment := taLeftJustify;
 
   FFruitApple  := AddRadio(GroupA, '苹果', 24, @RadioChanged);  // Top>=24 让出 16px 标题带
-  FFruitApple.Checked := True;             // 默认选中第一项
   FFruitBanana := AddRadio(GroupA, '香蕉', 56, @RadioChanged);
   FFruitMango  := AddRadio(GroupA, '芒果（缺货）', 88, @RadioChanged);
   FFruitMango.Enabled := False;            // 禁用项：不可选、置灰
@@ -113,9 +112,13 @@ begin
 
   FColorRed   := AddRadio(GroupB, '红色', 24, @RadioChanged);
   FColorGreen := AddRadio(GroupB, '绿色', 56, @RadioChanged);
-  FColorGreen.Checked := True;             // 默认选中第二项
   FColorBlue  := AddRadio(GroupB, '蓝色', 88, @RadioChanged);
 
+  { 默认选中必须放在所有单选字段创建之后：设 Checked 会立刻触发 OnChange ->
+    RadioChanged -> UpdateStatus，而 UpdateStatus 读取全部 6 个字段——若此时仍有
+    字段为 nil 就会崩溃(启动即 AV，这正是之前没修好的原因)。 }
+  FFruitApple.Checked := True;             // 水果：默认第一项
+  FColorGreen.Checked := True;             // 颜色：默认第二项
   UpdateStatus;                            // 所有单选建完，刷一次最终读数
 
   ApplyChromeTheme(TyDefaultController);    // 最后统一给 chrome + 窗体背景上主题

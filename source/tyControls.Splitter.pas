@@ -27,7 +27,8 @@ type
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
-    procedure Loaded; override;     // re-derive the cursor after Align streams in
+    procedure Loaded; override;      // re-derive the cursor after Align streams in
+    procedure MouseEnter; override;  // re-derive the cursor when Align was set at RUNTIME (code-created)
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -90,6 +91,16 @@ end;
 procedure TTySplitter.Loaded;
 begin
   inherited Loaded;
+  UpdateCursor;
+end;
+
+procedure TTySplitter.MouseEnter;
+begin
+  inherited MouseEnter;
+  { The cursor is derived from Align. Loaded covers streamed (.lfm) splitters, but a
+    code-created splitter that sets Align AFTER construction (e.g. Align:=alTop for a
+    horizontal bar) never re-derived it and kept the constructor's alLeft cursor.
+    Re-derive on hover so the resize cursor always matches the current Align. }
   UpdateCursor;
 end;
 
