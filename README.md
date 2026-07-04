@@ -59,7 +59,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 | [CHANGELOG.md](CHANGELOG.md) | 版本更新日志 |
 | [KNOWN_GAPS.md](docs/KNOWN_GAPS.md) | 已知限制与后续计划 |
 
-> 较新的控件(`TTyTreeView`、`TTySplitter`、`TTyStatusBar`、`TTyToolBar`、`TTyDateTimePicker`、`TTyCalendar`、`TTyTabSet`)均已提供独立示例工程(见下方),独立 API 文档待补 —— 另见 [CHANGELOG.md](CHANGELOG.md)。
+> 较新的控件(`TTyTreeView`、`TTySplitter`、`TTyStatusBar`、`TTyToolBar`、`TTyDateTimePicker`、`TTyCalendar`、`TTyTabSet`)均已提供独立示例工程(见下方)与 [控件 API 文档](docs/controls/)。
 
 ## 示例
 

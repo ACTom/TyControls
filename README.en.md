@@ -94,8 +94,8 @@ Full steps (install the package, first form, theme switching) are in
 | [KNOWN_GAPS.md](docs/KNOWN_GAPS.md) | Known limitations and planned work |
 
 > The newer controls (`TTyTreeView`, `TTySplitter`, `TTyStatusBar`, `TTyToolBar`,
-> `TTyDateTimePicker`, `TTyCalendar`, `TTyTabSet`) are demonstrated in example projects for now; standalone API
-> docs are pending — see the examples below and [CHANGELOG.en.md](CHANGELOG.en.md).
+> `TTyDateTimePicker`, `TTyCalendar`, `TTyTabSet`) ship both example projects (below) and
+> per-control [API docs](docs/controls/).
 
 ## Examples
 
