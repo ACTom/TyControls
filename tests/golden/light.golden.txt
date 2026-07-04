@@ -103,6 +103,16 @@ TyProgressFill||1 => pres[0,4,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0
 TyProgressFill||2 => pres[0,4,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyProgressFill||3 => pres[0,4,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyProgressFill||4 => pres[0,4,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGauge||0 => pres[0,1,2,3,4,] bg=k1/FFEBEBEB ut=0 txt=FF1F2937 bd=FFD1D5DB/1/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGauge||1 => pres[0,1,2,3,4,] bg=k1/FFEBEBEB ut=0 txt=FF1F2937 bd=FFD1D5DB/1/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGauge||2 => pres[0,1,2,3,4,] bg=k1/FFEBEBEB ut=0 txt=FF1F2937 bd=FFD1D5DB/1/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGauge||3 => pres[0,1,2,3,4,] bg=k1/FFEBEBEB ut=0 txt=FF1F2937 bd=FFD1D5DB/1/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGauge||4 => pres[0,1,2,3,4,9,] bg=k1/FFEBEBEB ut=0 txt=FF1F2937 bd=FFD1D5DB/1/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=500 sh=00000000/0/0,0 ol=00000000/0/0
+TyGaugeFill||0 => pres[0,4,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGaugeFill||1 => pres[0,4,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGaugeFill||2 => pres[0,4,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGaugeFill||3 => pres[0,4,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGaugeFill||4 => pres[0,4,] bg=k1/FF3B82F6 ut=0 txt=00000000 bd=00000000/0/0 rad=6/6,6,6,6 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToggleSwitch||0 => pres[0,1,4,] bg=k1/FFD1D1D1 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToggleSwitch||1 => pres[0,1,4,] bg=k1/FFC7C7C7 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToggleSwitch||2 => pres[0,1,4,] bg=k1/FF3B82F6 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0

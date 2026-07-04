@@ -220,6 +220,21 @@ TyProgressFill {
   border-radius: var(--radius);
 }
 
+TyGauge {
+  background: var(--surface-sunk);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+}
+TyGauge:disabled { opacity: var(--disabled-opacity); }
+
+TyGaugeFill {
+  background: var(--accent);
+  border-radius: var(--radius);
+}
+
+
 TyToggleSwitch {
   background: var(--surface-toggle-off);
   color: #FFFFFF;

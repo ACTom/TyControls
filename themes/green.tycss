@@ -197,6 +197,21 @@ TyProgressFill {
   border-radius: var(--radius);
 }
 
+TyGauge {
+  background: alpha(var(--surface), 0.35);
+  color: var(--on-surface);
+  border-color: alpha(var(--surface), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+}
+TyGauge:disabled { opacity: var(--disabled-opacity); }
+
+TyGaugeFill {
+  background: var(--accent);
+  border-radius: var(--radius);
+}
+
+
 TyToggleSwitch {
   background: darken(--surface, 18%);
   color: #FFFFFF;

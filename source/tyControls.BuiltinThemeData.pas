@@ -196,6 +196,21 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
+    'TyGauge {' + LineEnding +
+    '  background: var(--surface-sunk);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '}' + LineEnding +
+    'TyGauge:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '' + LineEnding +
+    'TyGaugeFill {' + LineEnding +
+    '  background: var(--accent);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '' + LineEnding +
     'TyToggleSwitch {' + LineEnding +
     '  background: var(--surface-toggle-off);' + LineEnding +
     '  color: #FFFFFF;' + LineEnding +
@@ -714,6 +729,21 @@ begin
     '  background: var(--accent);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
+    '' + LineEnding +
+    'TyGauge {' + LineEnding +
+    '  background: var(--surface-sunk);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '}' + LineEnding +
+    'TyGauge:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '' + LineEnding +
+    'TyGaugeFill {' + LineEnding +
+    '  background: var(--accent);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '' + LineEnding +
     'TyToggleSwitch {' + LineEnding +
     '  background: var(--surface-toggle-off);' + LineEnding +
