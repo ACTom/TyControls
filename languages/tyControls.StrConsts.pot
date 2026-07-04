@@ -110,6 +110,11 @@ msgstr ""
 msgid "Alpha"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgcolortitle
+msgctxt "tycontrols.strconsts.rsdlgcolortitle"
+msgid "Color"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgcreatefoldererr
 #, object-pascal-format
 msgid "Could not create folder: %s"
@@ -117,6 +122,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsdlgfindnext
 msgid "Find Next"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfindtitle
+msgid "Find"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgfindwhat
@@ -128,6 +137,7 @@ msgid "Bold"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgfontcolor
+msgctxt "tycontrols.strconsts.rsdlgfontcolor"
 msgid "Color"
 msgstr ""
 
@@ -149,6 +159,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsdlgfontstrike
 msgid "Strikeout"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfonttitle
+msgid "Font"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgfontunderline
@@ -176,11 +190,17 @@ msgid "Preview"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgreplace
+msgctxt "tycontrols.strconsts.rsdlgreplace"
 msgid "Replace"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgreplaceall
 msgid "Replace All"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgreplacetitle
+msgctxt "tycontrols.strconsts.rsdlgreplacetitle"
+msgid "Replace"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgreplacewith
@@ -189,6 +209,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsdlgsearchup
 msgid "Search up"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgselectpathtitle
+msgid "Select Folder"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgwholeword

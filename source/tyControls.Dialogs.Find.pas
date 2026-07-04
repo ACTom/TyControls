@@ -139,6 +139,8 @@ var
 
 begin
   FWithReplace := AWithReplace;
+  if AWithReplace then Caption := rsDlgReplaceTitle
+  else Caption := rsDlgFindTitle;
   r := ContentRect;
   x0 := r.Left + TyDlgPad;
   y := r.Top + TyDlgPad;

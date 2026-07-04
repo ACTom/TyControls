@@ -374,3 +374,23 @@ msgstr "替换"
 #: tycontrols.strconsts.rsdlgreplaceall
 msgid "Replace All"
 msgstr "全部替换"
+
+#: tycontrols.strconsts.rsdlgselectpathtitle
+msgid "Select Folder"
+msgstr "选择文件夹"
+
+#: tycontrols.strconsts.rsdlgcolortitle
+msgid "Color"
+msgstr "颜色"
+
+#: tycontrols.strconsts.rsdlgfonttitle
+msgid "Font"
+msgstr "字体"
+
+#: tycontrols.strconsts.rsdlgfindtitle
+msgid "Find"
+msgstr "查找"
+
+#: tycontrols.strconsts.rsdlgreplacetitle
+msgid "Replace"
+msgstr "替换"

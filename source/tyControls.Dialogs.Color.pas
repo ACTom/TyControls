@@ -206,9 +206,20 @@ begin inherited MouseUp(Button, Shift, X, Y); if Button = mbLeft then FDragging 
 { TTyColorForm }
 
 constructor TTyColorForm.CreateNew(AOwner: TComponent; Num: Integer);
+const
+  SquareSz  = 180;   // HSV square edge
+  HueW      = 18;    // hue bar width
+  PickGap   = 10;    // square -> hue bar gap
+  ColGap    = 20;    // hue bar -> right editor column gap
+  CellGap   = 10;    // gap between adjacent channel cells (label+spin)
+  RowGap    = 10;    // vertical gap between editor rows
+  LblGap    = 6;     // gap between a channel label and its spin
+  PrevGap   = 12;    // picker -> preview-section gap
+  PrevH     = 44;    // preview swatch height
 var
   r: TRect;
   x0, y0, colX, spinW, spinH, rowH, labelW: Integer;
+  labelTop, cellW, colRight, contentRight, pickerBottom, previewTop: Integer;
 
   function MkLabel(const ACaption: string; ALeft, ATop, AWidth: Integer): TTyLabel;
   begin
@@ -227,53 +238,72 @@ var
     Result.SetBounds(ALeft, ATop, AWidth, AHeight);
   end;
 
+  // Place one channel cell (single-char label + spin) at grid column AIndex within the
+  // right editor column, at vertical row-top ATop; returns the created spin.
+  function MkCell(const ACaption: string; AMin, AMax, AIndex, ATop: Integer): TTySpinEdit;
+  var cx: Integer;
+  begin
+    cx := colX + AIndex * (cellW + CellGap);
+    MkLabel(ACaption, cx, ATop + labelTop, labelW);
+    Result := MkSpin(AMin, AMax, cx + labelW + LblGap, ATop, spinW, spinH);
+  end;
+
 begin
   inherited CreateNew(AOwner, Num);
+  Caption := rsDlgColorTitle;   // title bar text (builders may override via ACaption)
   FColor := $FF000000;
   r := ContentRect;
   x0 := r.Left + TyDlgPad;
   y0 := r.Top + TyDlgPad;
-  spinW := 56; spinH := TyDlgEditH; rowH := spinH + 8; labelW := 16;
+  spinW := 56; spinH := TyDlgEditH; rowH := spinH + RowGap; labelW := 14;
+  // labels are 20px tall; nudge them so their text baseline centres against the 30px spin.
+  labelTop := (spinH - 20) div 2;
+  cellW := labelW + LblGap + spinW;                 // full width of one label+spin cell
 
-  // Picker: HSV square + hue bar at the top.
+  // Picker: HSV square + hue bar, top-left.
   FSquare := TTyHSVSquare.Create(Self);
   FSquare.Parent := Self;
-  FSquare.SetBounds(x0, y0, 180, 180);
+  FSquare.SetBounds(x0, y0, SquareSz, SquareSz);
   FHueBar := TTyHueBar.Create(Self);
   FHueBar.Parent := Self;
-  FHueBar.SetBounds(x0 + 180 + 10, y0, 18, 180);
+  FHueBar.SetBounds(x0 + SquareSz + PickGap, y0, HueW, SquareSz);
 
-  // Right column: Hex + channel editors.
-  colX := x0 + 180 + 10 + 18 + 16;
+  // Right editor column starts after the hue bar. Every row shares the same
+  // 4-cell grid so Hex / RGB / CMYK / Alpha align on the same left edges.
+  colX := x0 + SquareSz + PickGap + HueW + ColGap;
 
-  MkLabel(rsDlgHex, colX, y0, 40);
+  // Hex row: label + a wide edit spanning three cells.
+  MkLabel(rsDlgHex, colX, y0 + labelTop, labelW);
   FHex := TTyEdit.Create(Self);
   FHex.Parent := Self;
-  FHex.SetBounds(colX + 44, y0 - 4, 120, TyDlgEditH);
+  FHex.SetBounds(colX + labelW + LblGap, y0, 3 * cellW + 2 * CellGap - labelW - LblGap, spinH);
 
   // RGB row.
-  MkLabel('R', colX, y0 + rowH, labelW);
-  FR := MkSpin(0, 255, colX + 18, y0 + rowH - 4, spinW, spinH);
-  MkLabel('G', colX + 18 + spinW + 8, y0 + rowH, labelW);
-  FG := MkSpin(0, 255, colX + 18 + spinW + 8 + 18, y0 + rowH - 4, spinW, spinH);
-  MkLabel('B', colX + 2*(18 + spinW + 8), y0 + rowH, labelW);
-  FB := MkSpin(0, 255, colX + 2*(18 + spinW + 8) + 18, y0 + rowH - 4, spinW, spinH);
+  FR := MkCell('R', 0, 255, 0, y0 + rowH);
+  FG := MkCell('G', 0, 255, 1, y0 + rowH);
+  FB := MkCell('B', 0, 255, 2, y0 + rowH);
 
   // CMYK row.
-  MkLabel('C', colX, y0 + 2*rowH, labelW);
-  FC := MkSpin(0, 100, colX + 18, y0 + 2*rowH - 4, spinW, spinH);
-  MkLabel('M', colX + 18 + spinW + 8, y0 + 2*rowH, labelW);
-  FM := MkSpin(0, 100, colX + 18 + spinW + 8 + 18, y0 + 2*rowH - 4, spinW, spinH);
-  MkLabel('Y', colX + 2*(18 + spinW + 8), y0 + 2*rowH, labelW);
-  FY := MkSpin(0, 100, colX + 2*(18 + spinW + 8) + 18, y0 + 2*rowH - 4, spinW, spinH);
-  MkLabel('K', colX + 3*(18 + spinW + 8), y0 + 2*rowH, labelW);
-  FK := MkSpin(0, 100, colX + 3*(18 + spinW + 8) + 18, y0 + 2*rowH - 4, spinW, spinH);
+  FC := MkCell('C', 0, 100, 0, y0 + 2*rowH);
+  FM := MkCell('M', 0, 100, 1, y0 + 2*rowH);
+  FY := MkCell('Y', 0, 100, 2, y0 + 2*rowH);
+  FK := MkCell('K', 0, 100, 3, y0 + 2*rowH);
 
-  // Alpha + preview row.
-  MkLabel(rsDlgAlpha, colX, y0 + 3*rowH, 44);
-  FA := MkSpin(0, 255, colX + 44, y0 + 3*rowH - 4, spinW, spinH);
-  MkLabel(rsDlgPreview, x0, y0 + 180 + 8, 60);
-  FPreviewRect := Rect(x0, y0 + 180 + 30, x0 + 180, y0 + 180 + 30 + 40);
+  // Alpha row: keep the full "Alpha" label (resourcestring), spin aligned to the
+  // grid's second cell so it lines up under G / M.
+  MkLabel(rsDlgAlpha, colX, y0 + 3*rowH + labelTop, cellW);
+  FA := MkSpin(0, 255, colX + (cellW + CellGap), y0 + 3*rowH, spinW, spinH);
+
+  // Right column spans the widest row (the 4-cell CMYK row); overall content width
+  // is from the left edge to whichever of the picker / editor column reaches further.
+  colRight := colX + 4 * cellW + 3 * CellGap;
+  contentRight := Max(x0 + SquareSz + PickGap + HueW, colRight);
+
+  // Preview: a full-width labelled swatch band beneath the picker.
+  pickerBottom := y0 + SquareSz;
+  MkLabel(rsDlgPreview, x0, pickerBottom + PrevGap, 80);
+  previewTop := pickerBottom + PrevGap + 24;
+  FPreviewRect := Rect(x0, previewTop, contentRight, previewTop + PrevH);
 
   // Wire change handlers AFTER creation so no premature fires occur.
   FSquare.OnChange := @PickerChanged;
@@ -290,9 +320,9 @@ begin
 
   AddButton(rsMsgBtnOK, mrOK, True, False);
   AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  // content spans the picker column + the right editor column, down to the preview.
-  AutoSizeToContent(colX + 4*(18 + spinW + 8) + TyDlgPad - (r.Left + TyDlgPad),
-    (y0 + 180 + 30 + 40 + TyDlgPad) - r.Top);
+  // content spans left edge -> whichever column reaches furthest right, down to the
+  // preview swatch bottom.
+  AutoSizeToContent(contentRight - x0, (FPreviewRect.Bottom + TyDlgPad) - r.Top);
   SetColorValue(FColor);   // seed all views from the model
 end;
 

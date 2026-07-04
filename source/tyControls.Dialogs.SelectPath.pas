@@ -19,6 +19,7 @@ type
     FPaths: TStringList;   // node-data index -> absolute path (owned; freed in dtor)
     FRoot:  string;        // '' = all drive roots, else a single rooted subtree
     FIcons: TImageList;    // 16x16 folder glyph(s); owned by the form (Self)
+    FNewBtn: TTyButton;    // "New Folder" action button; enabled only when a node is selected
     procedure BuildIcons;
     // Node-data helpers (node data = an Integer index into FPaths).
     function  AddPathNode(AParent: PTyTreeNode; const AFullPath: string): PTyTreeNode;
@@ -31,6 +32,7 @@ type
     procedure TreeExpanding(Sender: TTyTreeView; Node: PTyTreeNode; var Allowed: Boolean);
     procedure TreeGetImageIndex(Sender: TTyTreeView; Node: PTyTreeNode;
       Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
+    procedure TreeFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
     procedure NewFolderClick(Sender: TObject);
   protected
     procedure LayoutContent; override;
@@ -152,13 +154,17 @@ begin
   FTree.OnExpanding    := @TreeExpanding;
   FTree.Images         := FIcons;
   FTree.OnGetImageIndex := @TreeGetImageIndex;
+  { Enable/disable the New-Folder button as the focused (folder) node changes. }
+  FTree.OnFocusChanged  := @TreeFocusChanged;
   { Appearance: the default 18px row is cramped once a 16px icon is added;
-    ShowRoot=False left-aligns drive roots instead of over-indenting them
-    under a phantom root; HotTrack lights up the theme's TyTreeNode:hover
-    state on mouse-over (previously dead code — no hover feedback at all). }
+    HotTrack lights up the theme's TyTreeNode:hover state on mouse-over
+    (previously dead code — no hover feedback at all). ShowRoot=True gives the
+    top-level (drive/root) nodes their own expand triangle — with ShowRoot=False
+    a root node's indent collapses to 0 and its expand button is pushed off the
+    left edge, so the user cannot expand roots from the triangle. }
   FTree.DefaultNodeHeight := 22;
   FTree.HotTrack          := True;
-  FTree.ShowRoot          := False;
+  FTree.ShowRoot          := True;
 end;
 
 { Build a single 16x16 manila-folder glyph (amber body + darker back-tab lip,
@@ -330,6 +336,14 @@ begin
   if found <> nil then FTree.FocusedNode := found;
 end;
 
+procedure TTySelectPathForm.TreeFocusChanged(Sender: TTyTreeView; Node: PTyTreeNode);
+begin
+  { Every node in this tree is a folder, so "a folder node is selected" reduces
+    to "the tree has a focused node". Node is nil when nothing is selected. }
+  if FNewBtn <> nil then
+    FNewBtn.Enabled := (Node <> nil);
+end;
+
 procedure TTySelectPathForm.NewFolderClick(Sender: TObject);
 var parentNode: PTyTreeNode; nm: string;
 begin
@@ -369,13 +383,21 @@ function TyBuildSelectPathDialog(const ACaption, ARoot: string): TTySelectPathFo
 var btn: TTyButton;
 begin
   Result := TTySelectPathForm.CreateNew(Application);
-  Result.Caption := ACaption;
+  { A TTyDialog title bar renders the form Caption; default to the localized
+    "Select Folder" so the title bar is never blank. }
+  if ACaption <> '' then
+    Result.Caption := ACaption
+  else
+    Result.Caption := rsDlgSelectPathTitle;
   Result.Root := ARoot;
   Result.PopulateRoots;
   { New Folder (left of OK/Cancel) is an mrNone action button — it must NOT close
-    the dialog; wire its click to create a folder under the focused node. }
+    the dialog; wire its click to create a folder under the focused node. Start
+    disabled; TreeFocusChanged enables it once a folder node is selected. }
   btn := Result.AddButton(rsDlgNewFolder, mrNone);
   btn.OnClick := @Result.NewFolderClick;
+  btn.Enabled := False;
+  Result.FNewBtn := btn;
   Result.AddButton(rsMsgBtnOK, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
   Result.AutoSizeToContent(360, 420);

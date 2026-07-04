@@ -84,17 +84,34 @@ end;
 
 { TTyFontForm }
 
+const
+  // Shared layout metrics — used by both CreateNew (initial geometry) and
+  // LayoutContent (resize re-flow) so the two never drift apart.
+  cListW      = 200;   // family list width (left column)
+  cColGap     = 20;    // gap between the list column and the right column
+  cColW       = 210;   // right column width (checks + color button)
+  cLabelH     = 20;    // caption-label height
+  cLabelGap   = 4;     // gap under a label before its control
+  cCheckH     = 24;    // style-checkbox height
+  cCheckStep  = 28;    // vertical stride between style checkboxes
+  cSizeLblW   = 44;    // "Size" label width
+  cSizeSpinW  = 74;    // size spin-edit width
+  cBtnH       = 30;    // color-button height
+  cSectionGap = 16;    // gap between logical groups in the right column
+  cPreviewH   = 52;    // preview strip height
+  cListMinH   = 180;   // minimum family-list height
+
 constructor TTyFontForm.CreateNew(AOwner: TComponent; Num: Integer);
 var
   r: TRect;
-  x0, y0, listW, listH, colX, rowH, y: Integer;
+  x0, y0, colX, y, contentW, contentH: Integer;
 
   function MkLabel(const ACaption: string; ALeft, ATop, AWidth: Integer): TTyLabel;
   begin
     Result := TTyLabel.Create(Self);
     Result.Parent := Self;
     Result.Caption := ACaption;
-    Result.SetBounds(ALeft, ATop, AWidth, 20);
+    Result.SetBounds(ALeft, ATop, AWidth, cLabelH);
   end;
 
   function MkCheck(const ACaption: string; ALeft, ATop: Integer): TTyCheckBox;
@@ -102,60 +119,69 @@ var
     Result := TTyCheckBox.Create(Self);
     Result.Parent := Self;
     Result.Caption := ACaption;
-    Result.SetBounds(ALeft, ATop, 130, 22);
+    Result.SetBounds(ALeft, ATop, cColW, cCheckH);
   end;
 
 begin
   inherited CreateNew(AOwner, Num);
   Resizable := True;
-  Constraints.MinWidth := 420;
-  Constraints.MinHeight := 320;
+  Constraints.MinWidth := 460;
+  Constraints.MinHeight := 360;
   FColorValue := clWindowText;
 
   r := ContentRect;
   x0 := r.Left + TyDlgPad;
   y0 := r.Top + TyDlgPad;
-  listW := 200; listH := 200; rowH := 32;
+  colX := x0 + cListW + cColGap;
 
-  // Left: family label + list.
-  MkLabel(rsDlgFontFamily, x0, y0, listW);
+  // Left column: family label + list. Height is finalized in LayoutContent so it
+  // stretches to just above the preview strip; seed a reasonable initial height.
+  MkLabel(rsDlgFontFamily, x0, y0, cListW);
   FList := TTyListBox.Create(Self);
   FList.Parent := Self;
-  FList.SetBounds(x0, y0 + 24, listW, listH);
+  FList.SetBounds(x0, y0 + cLabelH + cLabelGap, cListW, cListMinH);
 
-  // Right column: size spin + style checks + color button.
-  colX := x0 + listW + 16;
+  // Right column, top group: "Size" label + spin on one baseline-aligned row.
   y := y0;
-  MkLabel(rsDlgFontSize, colX, y, 60);
+  MkLabel(rsDlgFontSize, colX, y + ((TyDlgEditH - cLabelH) div 2), cSizeLblW);
   FSize := TTySpinEdit.Create(Self);
   FSize.Parent := Self;
   FSize.MinValue := 1;
   FSize.MaxValue := 999;
-  FSize.SetBounds(colX + 64, y - 4, 70, TyDlgEditH);
+  FSize.SetBounds(colX + cSizeLblW + 8, y, cSizeSpinW, TyDlgEditH);
 
-  Inc(y, rowH);
+  // Right column, style group: four checks with an even vertical rhythm.
+  Inc(y, TyDlgEditH + cSectionGap);
   FBold := MkCheck(rsDlgFontBold, colX, y);
-  Inc(y, 26);
+  Inc(y, cCheckStep);
   FItalic := MkCheck(rsDlgFontItalic, colX, y);
-  Inc(y, 26);
+  Inc(y, cCheckStep);
   FUnderline := MkCheck(rsDlgFontUnderline, colX, y);
-  Inc(y, 26);
+  Inc(y, cCheckStep);
   FStrike := MkCheck(rsDlgFontStrike, colX, y);
 
-  Inc(y, rowH);
+  // Right column, color group.
+  Inc(y, cCheckH + cSectionGap);
   FColorBtn := TTyButton.Create(Self);
   FColorBtn.Parent := Self;
   FColorBtn.Caption := rsDlgFontColor;
-  FColorBtn.SetBounds(colX, y, 130, 30);
+  FColorBtn.SetBounds(colX, y, cColW, cBtnH);
   FColorBtn.OnClick := @ColorBtnClick;
 
-  // Preview strip along the bottom of the content area.
-  FPreviewRect := Rect(x0, y0 + listH + 24 + 12, r.Right - TyDlgPad, y0 + listH + 24 + 12 + 48);
+  // Preview strip spans the full content width along the bottom (finalized by
+  // LayoutContent); seed it here so AutoSizeToContent can size the form.
+  FPreviewRect := Rect(x0, y0 + cLabelH + cLabelGap + cListMinH + cSectionGap,
+    r.Right - TyDlgPad,
+    y0 + cLabelH + cLabelGap + cListMinH + cSectionGap + cPreviewH);
 
   AddButton(rsMsgBtnOK, mrOK, True, False);
   AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  AutoSizeToContent(listW + 16 + 200 + TyDlgPad,
-    (y0 + listH + 24 + 12 + 48 + TyDlgPad) - r.Top);
+
+  // Content extents: left list column + gap + right column vs. the preview strip
+  // running the full width; whichever is taller/wider drives the form size.
+  contentW := cListW + cColGap + cColW;
+  contentH := (FPreviewRect.Bottom - y0) + TyDlgPad;
+  AutoSizeToContent(contentW, contentH);
   LayoutContent;
 end;
 
@@ -203,16 +229,17 @@ begin
 end;
 
 procedure TTyFontForm.LayoutContent;
-var r: TRect;
+var r: TRect; listTop: Integer;
 begin
   if FList = nil then Exit;
   r := ContentRect;
-  // Stretch the family list down to just above the preview strip; anchor the
-  // preview to the bottom of the content area on resize.
-  FPreviewRect := Rect(r.Left + TyDlgPad, r.Bottom - TyDlgPad - 48,
+  // Anchor the preview strip to the bottom of the content area and stretch the
+  // family list down to sit just above it, keeping a clear separating gap.
+  FPreviewRect := Rect(r.Left + TyDlgPad, r.Bottom - TyDlgPad - cPreviewH,
     r.Right - TyDlgPad, r.Bottom - TyDlgPad);
-  FList.SetBounds(r.Left + TyDlgPad, r.Top + TyDlgPad + 24,
-    200, FPreviewRect.Top - (r.Top + TyDlgPad + 24) - 12);
+  listTop := r.Top + TyDlgPad + cLabelH + cLabelGap;
+  FList.SetBounds(r.Left + TyDlgPad, listTop,
+    cListW, Max(cListMinH, FPreviewRect.Top - listTop - cSectionGap));
 end;
 
 procedure TTyFontForm.Paint;
@@ -280,7 +307,10 @@ end;
 function TyBuildFontDialog(const ACaption: string; AFont: TFont; AFamilies: TStrings): TTyFontForm;
 begin
   Result := TTyFontForm.CreateNew(Application);
-  Result.Caption := ACaption;
+  // A TTyDialog derives its title-bar text from the form Caption; fall back to the
+  // localized dialog title when the caller passes no caption so the bar isn't blank.
+  if ACaption <> '' then Result.Caption := ACaption
+  else Result.Caption := rsDlgFontTitle;
   Result.SeedFrom(AFont, AFamilies);
 end;
 

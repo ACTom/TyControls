@@ -82,6 +82,13 @@ resourcestring
   rsMsgTypeConfirm     = 'Confirm';
   rsMsgTypeInformation = 'Information';
 
+  // --- Dialog window titles — user-facing, translated ---
+  rsDlgSelectPathTitle = 'Select Folder';
+  rsDlgColorTitle      = 'Color';
+  rsDlgFontTitle       = 'Font';
+  rsDlgFindTitle       = 'Find';
+  rsDlgReplaceTitle    = 'Replace';
+
   // --- Input-family dialogs (S2) — user-facing, translated ---
   rsDlgNewFolder       = 'New Folder';
   rsDlgNewFolderPrompt = 'Folder name:';
