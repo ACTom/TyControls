@@ -232,3 +232,19 @@ msgstr "替换（非模态）"
 #: tdialogsmainform.btnprogress.caption
 msgid "Progress"
 msgstr "进度"
+
+#: tdialogsmainform.btnabout.caption
+msgid "About"
+msgstr "关于"
+
+#: mainform.rsabouttitle
+msgid "About TyControls"
+msgstr "关于 TyControls"
+
+#: mainform.rsaboutdesc
+msgid "A skinnable / styleable Lazarus component library"
+msgstr "可换肤 / 可样式化的 Lazarus 控件库"
+
+#: mainform.rsaboutshown
+msgid "About: dialog shown"
+msgstr "关于：已显示对话框"

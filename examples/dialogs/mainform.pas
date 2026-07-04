@@ -6,7 +6,8 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.Form, tyControls.Button,
   tyControls.TyLabel, tyControls.Panel, tyControls.Memo, tyControls.BuiltinThemes,
   tyControls.Dialogs, tyControls.Dialogs.SelectPath, tyControls.Dialogs.Color,
-  tyControls.Dialogs.Font, tyControls.Dialogs.Find, tyControls.Dialogs.Progress;
+  tyControls.Dialogs.Font, tyControls.Dialogs.Find, tyControls.Dialogs.Progress,
+  tyControls.Dialogs.About;
 
 type
 
@@ -32,6 +33,7 @@ type
     BtnFind: TTyButton;
     BtnReplace: TTyButton;
     BtnProgress: TTyButton;
+    BtnAbout: TTyButton;
     procedure FormCreate(Sender: TObject);
     procedure BtnMessageClick(Sender: TObject);
     procedure BtnInputClick(Sender: TObject);
@@ -44,6 +46,7 @@ type
     procedure BtnFindClick(Sender: TObject);
     procedure BtnReplaceClick(Sender: TObject);
     procedure BtnProgressClick(Sender: TObject);
+    procedure BtnAboutClick(Sender: TObject);
   private
     FFindDlg: TTyFindDialog;
     FReplaceDlg: TTyReplaceDialog;
@@ -106,6 +109,9 @@ resourcestring
   rsProgItem       = 'Item %d of %d';
   rsProgCancelled  = 'Progress: cancelled by user';
   rsProgDone       = 'Progress: completed';
+  rsAboutTitle     = 'About TyControls';
+  rsAboutDesc      = 'A skinnable / styleable Lazarus component library';
+  rsAboutShown     = 'About: dialog shown';
 
 { TDialogsMainForm }
 
@@ -314,6 +320,14 @@ begin
     prog.Close;
     prog.Free;
   end;
+end;
+
+procedure TDialogsMainForm.BtnAboutClick(Sender: TObject);
+begin
+  // Global one-liner: a themed About box. Empty fields (here: copyright) are hidden.
+  TyShowAbout(rsAboutTitle, 'TyControls', 'Version ' + TyVersion, rsAboutDesc,
+    '', 'LGPL', 'https://github.com/ACTom/TyControls');
+  Log(rsAboutShown);
 end;
 
 end.

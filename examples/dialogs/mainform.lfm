@@ -147,6 +147,16 @@ object DialogsMainForm: TDialogsMainForm
       Controller = TyController
       Caption = 'Progress'
     end
+    object BtnAbout: TTyButton
+      Left = 456
+      Height = 32
+      Top = 100
+      Width = 140
+      TabOrder = 11
+      OnClick = BtnAboutClick
+      Controller = TyController
+      Caption = 'About'
+    end
   end
   object Memo1: TTyMemo
     Left = 16
