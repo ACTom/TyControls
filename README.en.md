@@ -94,8 +94,8 @@ Full steps (install the package, first form, theme switching) are in
 | [KNOWN_GAPS.md](docs/KNOWN_GAPS.md) | Known limitations and planned work |
 
 > The newer controls (`TTyTreeView`, `TTySplitter`, `TTyStatusBar`, `TTyToolBar`,
-> `TTyDateTimePicker`, `TTyCalendar`) are demonstrated in example projects for now; standalone API
-> docs are pending — see the examples below and [CHANGELOG.md](CHANGELOG.md).
+> `TTyDateTimePicker`, `TTyCalendar`, `TTyTabSet`) are demonstrated in example projects for now; standalone API
+> docs are pending — see the examples below and [CHANGELOG.en.md](CHANGELOG.en.md).
 
 ## Examples
 
@@ -106,6 +106,7 @@ gallery and a dedicated TreeView showcase:
 |---|---|
 | [examples/treeview](examples/treeview/) | **TTyTreeView showcase**: million-node virtual tree / multi-column + sort / checkboxes + tri-state + radio / multi-select + full-row / inline editing / node drag-drop |
 | [examples/demo](examples/demo/) | Combined gallery: all controls + multi-theme switch + custom window frame + runtime language switch |
+| [examples/dialogs](examples/dialogs/) | **All 11 custom-drawn dialogs**: message / input / password / text / select-value / select-path / colour / font / find / replace / progress (modal and modeless) |
 | [examples/edit](examples/edit/) | Text input, selection, clipboard, word-level navigation, mouse positioning |
 | [examples/memo](examples/memo/) | Multi-line editing, cross-line editing, 2D navigation, embedded vertical scrollbar |
 | [examples/combobox](examples/combobox/) | Items / selection / OnChange, real drop-down popup |

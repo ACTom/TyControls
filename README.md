@@ -69,6 +69,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 |---|---|
 | [examples/treeview](examples/treeview/) | **TTyTreeView showcase**:百万级虚拟树 / 多列 + 排序 / 复选 + 三态 + 单选 / 多选 + 整行 / 内联编辑 / 节点拖放 |
 | [examples/demo](examples/demo/) | 综合 gallery:全部控件 + 多主题切换 + 自绘窗框 + 运行时切换语言 |
+| [examples/dialogs](examples/dialogs/) | **全部 11 个自绘对话框**:消息 / 输入 / 密码 / 文本 / 选值 / 选路径 / 颜色 / 字体 / 查找 / 替换 / 进度(含模态与无模态) |
 | [examples/edit](examples/edit/) | 文本输入、选区、剪贴板、词级导航、鼠标定位 |
 | [examples/memo](examples/memo/) | 多行编辑、跨行编辑、2D 导航、内嵌垂直滚动条 |
 | [examples/combobox](examples/combobox/) | Items / 选择 / OnChange、真实下拉弹层 |
