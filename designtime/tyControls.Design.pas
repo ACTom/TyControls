@@ -16,7 +16,7 @@ uses
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.TabSet,
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
-  tyControls.Dialogs.Find, tyControls.Dialogs.Progress;
+  tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -127,9 +127,9 @@ resourcestring
   rsDtAppDescription = 'A graphical TyControls application. The main form is a themed TTyForm ' +
     '(custom title bar + style controller); the tycontrols package is added automatically.';
   rsDtAboutTitle   = 'About TyControls';
-  rsDtAboutTagline = 'Themed LCL control library';
+  rsDtAboutTagline = 'BGRABitmap-drawn, .tycss-themed LCL control library';
   rsDtAboutVersion = 'Version %s';
-  rsDtAboutOK      = 'OK';
+  rsDtAboutLicense = 'Modified LGPL (LCL-compatible linking exception)';
   rsDtPageAdd      = 'Add Page';
   rsDtPageDelete   = 'Delete Page';
   rsDtPageShowNext = 'Show Next Page';
@@ -141,119 +141,14 @@ var
   // CreateStartFiles. Held here so registration owns its (refcounted) lifetime.
   TyMainFormDescriptor: TTyMainFormFileDescriptor;
 
-type
-  { Small code-built About form (no .lfm), so the design-time package stays resource-free. }
-  TTyAboutForm = class(TForm)
-    procedure LinkClick(Sender: TObject);
-  end;
-
-procedure TTyAboutForm.LinkClick(Sender: TObject);
-begin
-  OpenURL(TyHomepageUrl);
-end;
-
+{ The design-time 'About' property (OI '...' button) now opens the library's OWN themed
+  TTyAboutDialog — so what you see at design time is exactly the dialog consumers ship, custom
+  title bar and all — instead of the old code-built native TForm. Empty fields (here: copyright)
+  are omitted by the dialog. }
 procedure ShowTyAboutDialog;
-var
-  F: TTyAboutForm;
-  Hdr: TPanel;
-  LLink: TLabel;
-  Btn: TButton;
-  Accent: TColor;
-  sc: Double;
-  y, maxW, gap, margin, hdrH, btnH, bw: Integer;
-
-  // Measure at the form's REAL device context (after HandleNeeded) so the window is
-  // sized to the actually-rendered text — robust on any HiDPI/scaled display.
-  function FW(const S: string; ASize: Integer; ABold: Boolean): Integer;
-  begin
-    F.Canvas.Font.Assign(F.Font);
-    F.Canvas.Font.Size := ASize;
-    if ABold then F.Canvas.Font.Style := [fsBold];
-    Result := F.Canvas.TextWidth(S);
-  end;
-
-  function FH(ASize: Integer): Integer;
-  begin
-    F.Canvas.Font.Assign(F.Font);
-    F.Canvas.Font.Size := ASize;
-    Result := F.Canvas.TextHeight('Ag');
-  end;
-
-  // One centered row; height = line height + padding, then advance y by a full gap.
-  function AddRow(const Cap: string; ASize: Integer; AStyle: TFontStyles; AColor: TColor): TLabel;
-  var h: Integer;
-  begin
-    h := FH(ASize) + gap div 3;
-    Result := TLabel.Create(F);
-    Result.Parent := F;
-    Result.AutoSize := False;
-    Result.SetBounds(margin, y, F.ClientWidth - 2 * margin, h);
-    Result.Alignment := taCenter;
-    Result.Layout := tlCenter;
-    Result.Caption := Cap;
-    Result.Font.Size := ASize;
-    Result.Font.Style := AStyle;
-    Result.Font.Color := AColor;
-    Inc(y, h + gap);
-  end;
-
 begin
-  Accent := RGBToColor($3B, $82, $F6);   // TyControls default-theme accent
-  sc := Screen.PixelsPerInch / 96;
-  if sc < 1 then sc := 1;
-  F := TTyAboutForm.CreateNew(nil);
-  try
-    F.Caption := rsDtAboutTitle;
-    F.BorderStyle := bsDialog;
-    F.Position := poScreenCenter;
-    F.HandleNeeded;                       // so F.Canvas measures at the real DPI
-
-    gap := FH(13);                        // generous line spacing ~ one line height
-    if gap < Round(20 * sc) then gap := Round(20 * sc);
-    margin := gap + gap div 2;
-
-    maxW := FW('TyControls', 22, True);
-    if FW(rsDtAboutTagline, 13, False) > maxW then maxW := FW(rsDtAboutTagline, 13, False);
-    if FW(Format(rsDtAboutVersion, [TyVersion]), 11, False) > maxW then maxW := FW(Format(rsDtAboutVersion, [TyVersion]), 11, False);
-    if FW(TyHomepageUrl, 11, False) > maxW then maxW := FW(TyHomepageUrl, 11, False);
-    if maxW < Round(420 * sc) then maxW := Round(420 * sc);   // floor for narrow content
-    F.ClientWidth := maxW + 2 * margin;
-
-    hdrH := FH(22) + 2 * gap;
-    Hdr := TPanel.Create(F);
-    Hdr.Parent := F;
-    Hdr.SetBounds(0, 0, F.ClientWidth, hdrH);
-    Hdr.BevelOuter := bvNone;
-    Hdr.Color := Accent;
-    Hdr.Font.Color := clWhite;
-    Hdr.Font.Style := [fsBold];
-    Hdr.Font.Size := 22;
-    Hdr.Caption := 'TyControls';
-
-    y := hdrH + gap;
-    AddRow(rsDtAboutTagline, 13, [], clWindowText);
-    AddRow(Format(rsDtAboutVersion, [TyVersion]), 11, [], clGrayText);
-    LLink := AddRow(TyHomepageUrl, 11, [fsUnderline], clBlue);
-    LLink.Cursor := crHandPoint;
-    LLink.OnClick := @F.LinkClick;
-
-    Inc(y, gap div 2);
-    btnH := FH(11) + gap;
-    bw := FW(rsDtAboutOK, 11, False) + 3 * gap;
-    Btn := TButton.Create(F);
-    Btn.Parent := F;
-    Btn.Caption := rsDtAboutOK;
-    Btn.ModalResult := mrOk;
-    Btn.Default := True;
-    Btn.Cancel := True;
-    Btn.SetBounds((F.ClientWidth - bw) div 2, y, bw, btnH);
-    Inc(y, btnH + gap);
-    F.ClientHeight := y;
-
-    F.ShowModal;
-  finally
-    F.Free;
-  end;
+  TyShowAbout(rsDtAboutTitle, 'TyControls', Format(rsDtAboutVersion, [TyVersion]),
+    rsDtAboutTagline, '', rsDtAboutLicense, TyHomepageUrl);
 end;
 
 function TTyAboutEditor.GetAttributes: TPropertyAttributes;
@@ -385,7 +280,8 @@ begin
   else if Component is TTySelectValueDialog then TTySelectValueDialog(Component).Execute
   else if Component is TTySelectPathDialog  then TTySelectPathDialog(Component).Execute
   else if Component is TTyColorDialog    then TTyColorDialog(Component).Execute
-  else if Component is TTyFontDialog     then TTyFontDialog(Component).Execute;
+  else if Component is TTyFontDialog     then TTyFontDialog(Component).Execute
+  else if Component is TTyAboutDialog    then TTyAboutDialog(Component).Execute;
 end;
 
 { TTyFormFileDescriptor }
@@ -695,7 +591,7 @@ begin
     [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,
      TTySelectValueDialog, TTySelectPathDialog,
      TTyColorDialog, TTyFontDialog,
-     TTyFindDialog, TTyReplaceDialog, TTyProgressDialog]);
+     TTyFindDialog, TTyReplaceDialog, TTyProgressDialog, TTyAboutDialog]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',
@@ -719,7 +615,7 @@ begin
   RegisterComponentEditor(
     [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,
      TTySelectValueDialog, TTySelectPathDialog, TTyColorDialog, TTyFontDialog,
-     TTyFindDialog, TTyReplaceDialog, TTyProgressDialog],
+     TTyFindDialog, TTyReplaceDialog, TTyProgressDialog, TTyAboutDialog],
     TTyDialogComponentEditor);
   // File > New > "TyControls Form": a unit whose form descends from TTyForm, pre-fitted
   // with a top-aligned title bar.

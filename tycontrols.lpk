@@ -256,6 +256,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Dialogs.Progress.pas"/>
         <UnitName Value="tyControls.Dialogs.Progress"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Dialogs.About.pas"/>
+        <UnitName Value="tyControls.Dialogs.About"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

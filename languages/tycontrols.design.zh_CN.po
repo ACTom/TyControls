@@ -38,17 +38,17 @@ msgid "About TyControls"
 msgstr "关于 TyControls"
 
 #: tycontrols.design.rsdtabouttagline
-msgid "Themed LCL control library"
-msgstr "主题化 LCL 控件库"
+msgid "BGRABitmap-drawn, .tycss-themed LCL control library"
+msgstr "BGRABitmap 全自绘、.tycss 主题化的 LCL 控件库"
 
 #: tycontrols.design.rsdtaboutversion
 #, object-pascal-format
 msgid "Version %s"
 msgstr "版本 %s"
 
-#: tycontrols.design.rsdtaboutok
-msgid "OK"
-msgstr "确定"
+#: tycontrols.design.rsdtaboutlicense
+msgid "Modified LGPL (LCL-compatible linking exception)"
+msgstr "修改版 LGPL（与 LCL 兼容的链接例外）"
 
 #: tycontrols.design.rsdtpageadd
 msgid "Add Page"

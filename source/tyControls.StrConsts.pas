@@ -83,6 +83,7 @@ resourcestring
   rsMsgTypeInformation = 'Information';
 
   // --- Dialog window titles — user-facing, translated ---
+  rsDlgAboutTitle      = 'About';
   rsDlgSelectPathTitle = 'Select Folder';
   rsDlgColorTitle      = 'Color';
   rsDlgFontTitle       = 'Font';
@@ -90,6 +91,7 @@ resourcestring
   rsDlgReplaceTitle    = 'Replace';
 
   // --- Input-family dialogs (S2) — user-facing, translated ---
+  rsDlgFolderPath      = 'Folder path (type or paste, then Enter)';
   rsDlgNewFolder       = 'New Folder';
   rsDlgNewFolderPrompt = 'Folder name:';
   rsDlgCreateFolderErr = 'Could not create folder: %s';

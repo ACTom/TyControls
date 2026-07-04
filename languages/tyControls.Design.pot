@@ -1,12 +1,12 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=UTF-8"
 
-#: tycontrols.design.rsdtaboutok
-msgid "OK"
+#: tycontrols.design.rsdtaboutlicense
+msgid "Modified LGPL (LCL-compatible linking exception)"
 msgstr ""
 
 #: tycontrols.design.rsdtabouttagline
-msgid "Themed LCL control library"
+msgid "BGRABitmap-drawn, .tycss-themed LCL control library"
 msgstr ""
 
 #: tycontrols.design.rsdtabouttitle

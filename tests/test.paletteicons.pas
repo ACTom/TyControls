@@ -15,7 +15,7 @@ implementation
 const
   // Must stay in sync with RegisterComponents in designtime/tyControls.Design.pas and the
   // $classes list in scripts/gen-icons.ps1 (which enforces RegisterComponents <-> $classes).
-  CClasses: array[0..40] of string = (
+  CClasses: array[0..41] of string = (
     'TTyButton','TTyLabel','TTyEdit','TTyCheckBox','TTyRadioButton',
     'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyListBox',
     'TTyPageControl','TTyTabSheet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
@@ -26,7 +26,7 @@ const
     // Dialogs palette group
     'TTyMessage','TTyInputDialog','TTyPasswordDialog','TTyTextDialog',
     'TTySelectValueDialog','TTySelectPathDialog','TTyColorDialog','TTyFontDialog',
-    'TTyFindDialog','TTyReplaceDialog','TTyProgressDialog',
+    'TTyFindDialog','TTyReplaceDialog','TTyProgressDialog','TTyAboutDialog',
     'TTyTabSet');
 
 procedure TPaletteIconTest.TestAllResourcesPresentAndPng;

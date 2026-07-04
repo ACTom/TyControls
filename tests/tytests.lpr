@@ -66,6 +66,7 @@ uses
   test.dialogs.font,
   test.dialogs.find,
   test.dialogs.progress,
+  test.dialogs.about,
   test.combobox,
   test.tabset;
 

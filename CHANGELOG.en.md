@@ -7,6 +7,18 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
+## [Unreleased]
+
+### Added
+
+- **About dialog (`TTyAboutDialog`)** — a new reusable custom-drawn About dialog: a custom title
+  bar + an accent header (app name + version) over description / copyright / license / a clickable
+  homepage link; **empty fields are hidden automatically**, so the dialog shrinks to what it has.
+  Components' design-time `About` property now uses it too, so it looks exactly like the dialog
+  the library ships.
+- **Folder-picker dialog** — a path field across the top shows the current selection and lets you
+  **type or paste a folder path** and press Enter to jump straight to it.
+
 ## [2.2.0] — 2026-07-04
 
 A large feature release. The headline is the **dialog subsystem**: **TTyForm** gains complete window chrome

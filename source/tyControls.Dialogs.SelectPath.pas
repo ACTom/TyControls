@@ -3,7 +3,8 @@ unit tyControls.Dialogs.SelectPath;
 interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, Forms, Graphics, ImgList,
-  tyControls.Dialogs, tyControls.TreeView, tyControls.Button, tyControls.StrConsts;
+  tyControls.Dialogs, tyControls.TreeView, tyControls.Button, tyControls.Edit,
+  tyControls.StrConsts;
 
 function TySubdirectories(const APath: string): TStringArray;
 function TyPathHasSubdir(const APath: string): Boolean;
@@ -16,11 +17,19 @@ type
   TTySelectPathForm = class(TTyDialog)
   private
     FTree:  TTyTreeView;
+    FPathEdit: TTyEdit;    // top-of-content path field: shows the selection, accepts typed/pasted paths
+    FSyncing:  Boolean;    // guards the edit<->tree two-way sync from re-entering
     FPaths: TStringList;   // node-data index -> absolute path (owned; freed in dtor)
     FRoot:  string;        // '' = all drive roots, else a single rooted subtree
     FIcons: TImageList;    // 16x16 folder glyph(s); owned by the form (Self)
     FNewBtn: TTyButton;    // "New Folder" action button; enabled only when a node is selected
     procedure BuildIcons;
+    // Reveal APath in the tree (expand roots->leaf lazily) and return its node, or the
+    // deepest reachable one; nil if no root is a prefix. Best-effort (visual feedback only).
+    function  RevealPath(const APath: string): PTyTreeNode;
+    // The path field changed (typed / pasted): if it names an existing directory, reveal
+    // + select it in the tree. Guarded against the tree->edit sync.
+    procedure PathEditChanged(Sender: TObject);
     // Node-data helpers (node data = an Integer index into FPaths).
     function  AddPathNode(AParent: PTyTreeNode; const AFullPath: string): PTyTreeNode;
     function  NodePath(Node: PTyTreeNode): string;
@@ -165,6 +174,12 @@ begin
   FTree.DefaultNodeHeight := 22;
   FTree.HotTrack          := True;
   FTree.ShowRoot          := True;
+  { Path field at the top of the content: mirrors the tree selection and lets the
+    user type or paste a folder path to jump straight to it. }
+  FPathEdit := TTyEdit.Create(Self);
+  FPathEdit.Parent   := Self;
+  FPathEdit.TextHint := rsDlgFolderPath;
+  FPathEdit.OnChange := @PathEditChanged;
 end;
 
 { Build a single 16x16 manila-folder glyph (amber body + darker back-tab lip,
@@ -342,6 +357,75 @@ begin
     to "the tree has a focused node". Node is nil when nothing is selected. }
   if FNewBtn <> nil then
     FNewBtn.Enabled := (Node <> nil);
+  { Mirror the selection into the path field (guarded so the OnChange it triggers
+    does not bounce back into RevealPath). }
+  if FPathEdit <> nil then
+  begin
+    FSyncing := True;
+    try FPathEdit.Text := NodePath(Node); finally FSyncing := False; end;
+  end;
+end;
+
+function TTySelectPathForm.RevealPath(const APath: string): PTyTreeNode;
+
+  // True when ABase is ADir itself or a parent directory of it (case-insensitive,
+  // component-aware so 'C:\Us' is not treated as a prefix of 'C:\Users').
+  function IsSelfOrAncestor(const ABase, ADir: string): Boolean;
+  begin
+    Result := SameFileName(ABase, ADir) or
+      ((Length(ADir) > Length(ABase)) and
+       SameFileName(Copy(ADir, 1, Length(ABase)), ABase) and
+       (ADir[Length(ABase) + 1] = PathDelim));
+  end;
+
+var
+  target, cur: string;
+  node, child, match: PTyTreeNode;
+begin
+  Result := nil;
+  target := ExcludeTrailingPathDelimiter(Trim(APath));
+  if target = '' then Exit;
+
+  { Find the root node (drive root or FRoot) that contains the target. }
+  match := nil;
+  node := FTree.GetFirst;
+  while node <> nil do
+  begin
+    if IsSelfOrAncestor(ExcludeTrailingPathDelimiter(NodePath(node)), target) then
+    begin match := node; Break; end;
+    node := FTree.GetNextSibling(node);
+  end;
+  if match = nil then Exit;
+
+  { Descend segment by segment: expand (lazily populates children) then pick the
+    child that still contains the target. Stop at the target or the deepest reachable. }
+  node := match;
+  while not SameFileName(ExcludeTrailingPathDelimiter(NodePath(node)), target) do
+  begin
+    FTree.Expanded[node] := True;
+    match := nil;
+    child := FTree.GetFirstChild(node);
+    while child <> nil do
+    begin
+      cur := ExcludeTrailingPathDelimiter(NodePath(child));
+      if IsSelfOrAncestor(cur, target) then begin match := child; Break; end;
+      child := FTree.GetNextSibling(child);
+    end;
+    if match = nil then Break;   // a segment is missing (permissions / case) — stop here
+    node := match;
+  end;
+  Result := node;
+end;
+
+procedure TTySelectPathForm.PathEditChanged(Sender: TObject);
+var s: string; node: PTyTreeNode;
+begin
+  if FSyncing then Exit;   // change came from TreeFocusChanged, not the user
+  s := Trim(FPathEdit.Text);
+  if (s = '') or not DirectoryExists(s) then Exit;
+  node := RevealPath(s);
+  if node <> nil then
+    FTree.FocusedNode := node;   // fires TreeFocusChanged -> re-syncs the field (guarded)
 end;
 
 procedure TTySelectPathForm.NewFolderClick(Sender: TObject);
@@ -358,16 +442,33 @@ begin
 end;
 
 procedure TTySelectPathForm.LayoutContent;
-var r: TRect;
+const Gap = 8;
+var r: TRect; x, w, editH: Integer;
 begin
   if FTree = nil then Exit;
   r := ContentRect;
-  FTree.SetBounds(r.Left + TyDlgPad, r.Top + TyDlgPad,
-    (r.Right - r.Left) - 2*TyDlgPad, (r.Bottom - r.Top) - 2*TyDlgPad);
+  x := r.Left + TyDlgPad;
+  w := (r.Right - r.Left) - 2*TyDlgPad;
+  editH := TyDlgEditH;
+  { Path field across the top, tree fills the rest. }
+  if FPathEdit <> nil then
+    FPathEdit.SetBounds(x, r.Top + TyDlgPad, w, editH);
+  FTree.SetBounds(x, r.Top + TyDlgPad + editH + Gap, w,
+    (r.Bottom - r.Top) - 2*TyDlgPad - editH - Gap);
 end;
 
 function TTySelectPathForm.SelectedPath: string;
+var s: string;
 begin
+  { The path field is the source of truth: it mirrors the tree selection AND holds
+    any directly typed/pasted path. Prefer it when it names an existing folder (covers
+    a pasted path the tree could not reveal); otherwise fall back to the tree node. }
+  if FPathEdit <> nil then
+  begin
+    s := Trim(FPathEdit.Text);
+    if (s <> '') and DirectoryExists(s) then
+      Exit(s);
+  end;
   Result := NodePath(FTree.FocusedNode);
 end;
 

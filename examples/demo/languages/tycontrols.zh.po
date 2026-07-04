@@ -394,3 +394,11 @@ msgstr "查找"
 #: tycontrols.strconsts.rsdlgreplacetitle
 msgid "Replace"
 msgstr "替换"
+
+#: tycontrols.strconsts.rsdlgfolderpath
+msgid "Folder path (type or paste, then Enter)"
+msgstr "文件夹路径(输入或粘贴后回车)"
+
+#: tycontrols.strconsts.rsdlgabouttitle
+msgid "About"
+msgstr "关于"

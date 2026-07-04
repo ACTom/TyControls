@@ -106,6 +106,10 @@ msgstr ""
 msgid "Unterminated rule block"
 msgstr ""
 
+#: tycontrols.strconsts.rsdlgabouttitle
+msgid "About"
+msgstr ""
+
 #: tycontrols.strconsts.rsdlgalpha
 msgid "Alpha"
 msgstr ""
@@ -130,6 +134,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsdlgfindwhat
 msgid "Find what:"
+msgstr ""
+
+#: tycontrols.strconsts.rsdlgfolderpath
+msgid "Folder path (type or paste, then Enter)"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgfontbold
