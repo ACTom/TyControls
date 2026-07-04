@@ -362,39 +362,37 @@ object DemoMainForm: TDemoMainForm
       TabOrder = 14
       TabStop = True
       Controller = TyController
-      AllowGrayed = True
       State = cbGrayed
+      AllowGrayed = True
       Caption = 'Tri-state'
     end
     object EditCombo: TTyComboBox
-      Left = 366
+      Left = 336
       Height = 26
-      Top = 320
+      Top = 322
       Width = 120
       TabOrder = 15
       Controller = TyController
-      Style = csDropDown
       Items.Strings = (
         'Alpha'
         'Beta'
         'Gamma'
       )
       ItemIndex = -1
+      Style = csDropDown
     end
     object TabSet1: TTyTabSet
-      Left = 492
+      Left = 464
       Height = 28
       Top = 320
-      Width = 128
+      Width = 156
       TabOrder = 16
-      TabStop = True
       Controller = TyController
       Tabs.Strings = (
         'Tab 1'
         'Tab 2'
         'Tab 3'
       )
-      TabIndex = 0
     end
     object ScrollV: TTyScrollBar
       Left = 600
@@ -516,6 +514,20 @@ object DemoMainForm: TDemoMainForm
           OnClick = TyButton3Click
           Controller = TyController
           Caption = '&TyButton3'
+        end
+        object TabSet2: TTyTabSet
+          Left = 16
+          Height = 28
+          Top = 128
+          Width = 196
+          TabOrder = 2
+          Controller = TyController
+          Tabs.Strings = (
+            'Tab 1'
+            'Tab 2'
+            'Tab 3'
+          )
+          TabIndex = 0
         end
       end
       object TyTabSheet2: TTyTabSheet
@@ -774,6 +786,7 @@ object DemoMainForm: TDemoMainForm
     Top = 112
   end
   object ReplaceDlg: TTyReplaceDialog
+    Options = [frDown, frReplace, frReplaceAll]
     OnReplace = ReplaceDlgReplace
     Left = 640
     Top = 112

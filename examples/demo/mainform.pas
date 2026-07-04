@@ -28,6 +28,7 @@ type
     Calendar1: TTyCalendar;
     ChkAgree: TTyCheckBox;
     ComboKind: TTyComboBox;
+    TabSet2: TTyTabSet;
     TriCheck: TTyCheckBox;
     EditCombo: TTyComboBox;
     TabSet1: TTyTabSet;
