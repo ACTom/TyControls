@@ -1,0 +1,21 @@
+{
+  "UpdateLazPackages" : [
+    {
+      "ForceNotify" : false,
+      "InternalVersion" : 1,
+      "Name" : "tycontrols.lpk",
+      "Version" : "2.2.0.0"
+    },
+    {
+      "ForceNotify" : false,
+      "InternalVersion" : 1,
+      "Name" : "tycontrols_dt.lpk",
+      "Version" : "2.2.0.0"
+    }
+  ],
+  "UpdatePackageData" : {
+    "DisableInOPM" : false,
+    "DownloadZipURL" : "https://github.com/ACTom/TyControls/releases/download/v2.2.0/TyControls-2.2.0.zip",
+    "Name" : "TyControls"
+  }
+}
