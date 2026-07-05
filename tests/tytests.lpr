@@ -70,6 +70,7 @@ uses
   test.gauge,
   test.circularprogress,
   test.activityindicator,
+  test.meter,
   test.combobox,
   test.tabset;
 

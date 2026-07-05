@@ -15,9 +15,9 @@ implementation
 const
   // Must stay in sync with RegisterComponents in designtime/tyControls.Design.pas and the
   // $classes list in scripts/gen-icons.ps1 (which enforces RegisterComponents <-> $classes).
-  CClasses: array[0..44] of string = (
+  CClasses: array[0..45] of string = (
     'TTyButton','TTyLabel','TTyEdit','TTyCheckBox','TTyRadioButton',
-    'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyGauge','TTyCircularProgress','TTyActivityIndicator','TTyListBox',
+    'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyGauge','TTyCircularProgress','TTyActivityIndicator','TTyMeter','TTyListBox',
     'TTyPageControl','TTyTabSheet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
     'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu',
     'TTyNativeStyler','TTySplitter','TTyStatusBar','TTyToolBar','TTyToolSeparator',

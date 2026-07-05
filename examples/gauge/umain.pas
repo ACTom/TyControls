@@ -16,14 +16,15 @@ uses
   Classes, SysUtils, Forms, Controls, ExtCtrls,
   tyControls.Controller, tyControls.Form,
   tyControls.Gauge, tyControls.CircularProgress, tyControls.ActivityIndicator,
-  tyControls.TyLabel;
+  tyControls.Meter, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
   private
-    FArc, FRing, FBarH, FBarV: TTyGauge;
+    FArc, FRing, FBarH: TTyGauge;
     FCirc: TTyCircularProgress;
     FSpin: TTyActivityIndicator;
+    FMeter: TTyMeter;
     FStatus: TTyLabel;
     FTimer: TTimer;
     FTick: Integer;
@@ -130,13 +131,14 @@ begin
   FBarH.ShowValue := False;
   FBarH.Value := 62;
 
-  FBarV := TTyGauge.Create(Self);
-  FBarV.Parent := Self;
-  FBarV.SetBounds(340, 244, 24, 90);
-  FBarV.Style := gsLinearV;
-  FBarV.Thickness := 1;
-  FBarV.ShowValue := False;
-  FBarV.Value := 62;
+  // 模拟指针仪表
+  FMeter := TTyMeter.Create(Self);
+  FMeter.Parent := Self;
+  FMeter.SetBounds(348, 232, 180, 140);
+  FMeter.Min := 0;
+  FMeter.Max := 220;
+  FMeter.Ticks := 12;
+  FMeter.Value := 88;
 
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
@@ -163,7 +165,7 @@ begin
   FArc.Value := a;
   FRing.Value := r;
   FBarH.Value := b;
-  FBarV.Value := b;
+  FMeter.Value := b / 100 * 220;   // map 0..100 -> 0..220
   FCirc.Position := Round(r);
   FStatus.Caption := Format('弧=%.0f%%  环=%.0f  线=%.0f%%', [a, r, b]);
 end;
