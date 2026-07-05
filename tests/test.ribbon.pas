@@ -7,6 +7,9 @@ uses
 
 type
   TRibbonTest = class(TTestCase)
+  private
+    FChanged: Integer;
+    procedure HandleChange(Sender: TObject);
   published
     procedure GroupContentRectSubtractsBand;
     procedure GroupContentRectClampsBand;
@@ -14,10 +17,16 @@ type
     procedure AddPageGrowsCountAndActivates;
     procedure TabCaptionFollowsPages;
     procedure RemovePageReindexesActive;
+    procedure RemoveActivePageFiresOnChange;
     procedure DefaultAligns;
   end;
 
 implementation
+
+procedure TRibbonTest.HandleChange(Sender: TObject);
+begin
+  Inc(FChanged);
+end;
 
 procedure TRibbonTest.GroupContentRectSubtractsBand;
 var R: TRect;
@@ -107,6 +116,28 @@ begin
     AssertEquals('count', 2, Rib.PageCount);
     AssertEquals('active reindexed', 1, Rib.ActivePageIndex);
     AssertEquals('cap 0 now B', 'B', Rib.TabCaption(0));
+  finally
+    Rib.Free;
+  end;
+end;
+
+procedure TRibbonTest.RemoveActivePageFiresOnChange;
+var
+  Rib: TTyRibbon;
+begin
+  Rib := TTyRibbon.Create(nil);
+  try
+    Rib.AddPage('A'); Rib.AddPage('B'); Rib.AddPage('C');
+    Rib.ActivePageIndex := 2;      // C active
+    Rib.OnChange := @HandleChange;
+    FChanged := 0;
+    Rib.RemovePage(2);             // remove the ACTIVE page -> active becomes B -> OnChange fires
+    AssertEquals('OnChange fired when the active page was removed', 1, FChanged);
+    // Now [A, B] with B active (index 1). Removing A shifts B's index but keeps the
+    // SAME active page object -> no OnChange (matches TTyPageControl).
+    FChanged := 0;
+    Rib.RemovePage(0);
+    AssertEquals('no OnChange when the active page object is unchanged', 0, FChanged);
   finally
     Rib.Free;
   end;

@@ -94,9 +94,11 @@ type
     FCaption: string;
     FShowDialogLauncher: Boolean;
     FOnDialogLauncher: TTyRibbonLauncherEvent;
-    FLauncherRect: TRect;    // device px, hit-test for the launcher arrow
     procedure SetCaption(const AValue: string);
     procedure SetShowDialogLauncher(AValue: Boolean);
+    { The launcher arrow's client rect (device px) — computed from the current size,
+      NOT cached from the last Paint, so the hit-test works before the first paint. }
+    function LauncherRectPx: TRect;
   protected
     function GetStyleTypeKey: string; override;
     procedure AdjustClientRect(var ARect: TRect); override;
@@ -261,11 +263,13 @@ end;
 procedure TTyRibbon.UnregisterPage(APage: TTyRibbonPage; AFree: Boolean);
 var
   Idx, J: Integer;
+  OldActive: TTyRibbonPage;
 begin
   Idx := -1;
   for J := 0 to High(FPages) do
     if FPages[J] = APage then begin Idx := J; Break; end;
   if Idx < 0 then Exit;
+  OldActive := GetActivePage;
   for J := Idx to High(FPages) - 1 do FPages[J] := FPages[J + 1];
   SetLength(FPages, Length(FPages) - 1);
   if Length(FPages) = 0 then
@@ -278,6 +282,10 @@ begin
     APage.Free;
   ShowOnlyPage(FTabIndex);
   TabsChanged;
+  // Mirror TTyPageControl: notify when removal moved the active page (a data-bound
+  // OnChange handler must still fire on delete, not only on a user tab click).
+  if (GetActivePage <> OldActive) and Assigned(OnChange) then
+    OnChange(Self);
 end;
 
 procedure TTyRibbon.RemoveTabData(AIndex: Integer);
@@ -426,6 +434,8 @@ begin
   inherited AdjustClientRect(ARect);
   // Reserve the bottom caption band so hosted command controls sit above the title.
   Dec(ARect.Bottom, MulDiv(TyRibbonCaptionBand, Font.PixelsPerInch, 96));
+  // Guard a group shorter than the caption band: never invert the rect.
+  if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 
 procedure TTyRibbonGroup.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -467,14 +477,10 @@ begin
         S.TextColor, taCenter, tlCenter, True);
     end;
 
-    // Dialog-launcher arrow in the bottom-right of the caption band.
+    // Dialog-launcher arrow in the bottom-right of the caption band (same geometry
+    // as LauncherRectPx, which the hit-test uses).
     if FShowDialogLauncher then
-    begin
-      FLauncherRect := Rect(W - bandPx, H - bandPx, W, H);
-      P.DrawGlyph(FLauncherRect, tgArrowDown, S.TextColor, 1);
-    end
-    else
-      FLauncherRect := Rect(0, 0, 0, 0);
+      P.DrawGlyph(Rect(W - bandPx, H - bandPx, W, H), tgArrowDown, S.TextColor, 1);
 
     P.EndPaint;
   finally
@@ -487,12 +493,24 @@ begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
+function TTyRibbonGroup.LauncherRectPx: TRect;
+var
+  bandPx: Integer;
+begin
+  if not FShowDialogLauncher then Exit(Rect(0, 0, 0, 0));
+  bandPx := MulDiv(TyRibbonCaptionBand, Font.PixelsPerInch, 96);
+  Result := Rect(ClientWidth - bandPx, ClientHeight - bandPx, ClientWidth, ClientHeight);
+end;
+
 procedure TTyRibbonGroup.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  R: TRect;
 begin
   inherited MouseDown(Button, Shift, X, Y);
+  R := LauncherRectPx;
   if (Button = mbLeft) and FShowDialogLauncher and Assigned(FOnDialogLauncher) and
-     (X >= FLauncherRect.Left) and (X < FLauncherRect.Right) and
-     (Y >= FLauncherRect.Top) and (Y < FLauncherRect.Bottom) then
+     (R.Right > R.Left) and
+     (X >= R.Left) and (X < R.Right) and (Y >= R.Top) and (Y < R.Bottom) then
     FOnDialogLauncher(Self);
 end;
 
