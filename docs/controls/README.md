@@ -89,6 +89,13 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyShadowLabel](shadowlabel.md) | 带投影的文字标签 |
 | [TTyGlowLabel](glowlabel.md) | 带发光光晕的文字标签 |
 
+## 提示
+
+| 控件 | 说明 |
+|------|------|
+| [TTyHint](hint.md) | 主题化气泡提示（替换原生 LCL tooltip，全应用生效） |
+| [TTyBalloonHint](balloonhint.md) | 带指针的气泡标注（标题 + 正文 + 可选图标） |
+
 ## 菜单
 
 | 控件 | 说明 |

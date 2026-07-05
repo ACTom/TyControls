@@ -91,6 +91,10 @@ procedure GLinkLabel(b: TBGRABitmap); begin Circ(b,9,10,3,Ink,1.8); Circ(b,15,10
 procedure GShadowLabel(b: TBGRABitmap); begin PolyL(b,[PointF(7.6,19),PointF(13.6,7),PointF(19.6,19)],Faint); Line(b,10.2,14.2,17,14.2,Faint); PolyL(b,[PointF(6,18),PointF(12,6),PointF(18,18)],Ink); Line(b,8.6,13.2,15.4,13.2,Ink); end;
 { TTyGlowLabel: an "A" over a soft accent halo }
 procedure GGlowLabel(b: TBGRABitmap); begin FillCirc(b,12,13,7,Faint); PolyL(b,[PointF(6,18),PointF(12,6),PointF(18,18)],Ink); Line(b,8.6,13.2,15.4,13.2,Ink); end;
+{ TTyHint: a tooltip bubble with a tail + two text lines }
+procedure GHint(b: TBGRABitmap); begin FillRRect(b,3,4,21,16,3,Faint); FillPolyG(b,[PointF(7,16),PointF(7,20),PointF(12,16)],Faint); RRect(b,3,4,21,16,3,Ink); Line(b,6,9,18,9,Ink,1.5); Line(b,6,12,14,12,Ink,1.5); end;
+{ TTyBalloonHint: a callout with an accent icon dot + title/body lines + tail }
+procedure GBalloonHint(b: TBGRABitmap); begin FillRRect(b,3,3,21,15,3,Faint); FillPolyG(b,[PointF(8,15),PointF(8,20),PointF(13,15)],Faint); RRect(b,3,3,21,15,3,Ink); FillCirc(b,8,9,2.6,Acc); Line(b,12,8,18,8,Ink,1.5); Line(b,12,11,17,11,Ink,1.4); end;
 procedure GListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,6,9,18,9,Acc,2); Line(b,6,13,18,13,Ink); Line(b,6,17,15,17,Ink); end;
 procedure GTabControl(b: TBGRABitmap); begin FillRRect(b,3.5,5,11.5,10.5,1.5,Acc); RRect(b,12.5,6.2,20,10.5,1.5,Ink); RRect(b,3,10,21,20,2,Ink); end;
 procedure GTabSheet(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Acc,2); end;
@@ -312,7 +316,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..54] of TGlyph = (
+  Glyphs: array[0..56] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -335,6 +339,8 @@ const
     (Name:'TTyLinkLabel';        Draw:@GLinkLabel),
     (Name:'TTyShadowLabel';      Draw:@GShadowLabel),
     (Name:'TTyGlowLabel';        Draw:@GGlowLabel),
+    (Name:'TTyHint';             Draw:@GHint),
+    (Name:'TTyBalloonHint';      Draw:@GBalloonHint),
     (Name:'TTyListBox';         Draw:@GListBox),
     (Name:'TTyPageControl';     Draw:@GTabControl),
     (Name:'TTyTabSheet';        Draw:@GTabSheet),

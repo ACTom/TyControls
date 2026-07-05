@@ -211,6 +211,17 @@ TyGaugeFill {
   border-radius: var(--radius);
 }
 
+/* Themed tooltip surface (TTyHintWindow — replaces the native LCL hint).
+   Green is a standalone theme (no shared var set) — literal border/font like TyGauge. */
+TyHint {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 5px 9px;
+}
+
 
 TyToggleSwitch {
   background: darken(--surface, 18%);

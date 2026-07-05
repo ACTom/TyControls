@@ -11,7 +11,7 @@ $classes = @(
   'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyGauge','TTyCircularProgress','TTyActivityIndicator','TTyMeter','TTyLevelMeter','TTyDial','TTyAnalogClock','TTySparkline','TTyRating','TTyGearDial','TTyLinkLabel','TTyShadowLabel','TTyGlowLabel','TTyListBox',
   'TTyPageControl','TTyTabSheet','TTyTabSet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
   'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu',
-  'TTyNativeStyler','TTySplitter','TTyStatusBar','TTyToolBar','TTyToolSeparator',
+  'TTyNativeStyler','TTyHint','TTyBalloonHint','TTySplitter','TTyStatusBar','TTyToolBar','TTyToolSeparator',
   'TTyCalendar','TTyDateTimePicker',
   'TTyTreeView',
   # Dialogs palette group (RegisterComponents('TyControls Dialogs', ...))

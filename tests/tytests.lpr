@@ -80,6 +80,8 @@ uses
   test.linklabel,
   test.shadowlabel,
   test.glowlabel,
+  test.hint,
+  test.balloonhint,
   test.combobox,
   test.tabset;
 

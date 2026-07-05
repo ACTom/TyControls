@@ -14,6 +14,7 @@ uses
   tyControls.LevelMeter, tyControls.Dial, tyControls.AnalogClock,
   tyControls.Sparkline, tyControls.Rating, tyControls.GearDial,
   tyControls.LinkLabel, tyControls.ShadowLabel, tyControls.GlowLabel,
+  tyControls.Hint, tyControls.BalloonHint,
   tyControls.ToggleSwitch,
   tyControls.TrackBar, tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu, tyControls.NativeStyler,
@@ -590,7 +591,7 @@ begin
      TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
      TTyToggleSwitch, TTyTrackBar, TTyGroupBox,
      TTyPageControl, TTyTabSheet, TTyTabSet, TTySpinEdit, TTyMemo, TTyTitleBar,
-     TTyMenuBar, TTyPopupMenu, TTyNativeStyler,
+     TTyMenuBar, TTyPopupMenu, TTyNativeStyler, TTyHint, TTyBalloonHint,
      TTySplitter, TTyStatusBar, TTyToolBar, TTyToolSeparator,
      TTyCalendar, TTyDateTimePicker,
      TTyTreeView]);

@@ -47,6 +47,7 @@ Thumbs.db
 /tools/genicons/genicons.exe
 /tools/genicons/lib/
 /tools/genicons/_smoke/
+/tools/genicons/*.png
 
 # 发布包输出（make-release.ps1 生成，上传 GitHub release 用，不入库）
 /dist/

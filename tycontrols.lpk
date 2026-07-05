@@ -157,6 +157,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.GlowLabel"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Hint.pas"/>
+        <UnitName Value="tyControls.Hint"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.BalloonHint.pas"/>
+        <UnitName Value="tyControls.BalloonHint"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ToggleSwitch.pas"/>
         <UnitName Value="tyControls.ToggleSwitch"/>
       </Item>

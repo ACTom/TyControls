@@ -210,6 +210,17 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
+    '/* Themed tooltip surface (TTyHintWindow — replaces the native LCL hint). */' + LineEnding +
+    'TyHint {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius-sm);' + LineEnding +
+    '  padding: 5px 9px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '' + LineEnding +
     'TyToggleSwitch {' + LineEnding +
     '  background: var(--surface-toggle-off);' + LineEnding +
@@ -742,6 +753,17 @@ begin
     'TyGaugeFill {' + LineEnding +
     '  background: var(--accent);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Themed tooltip surface (TTyHintWindow — replaces the native LCL hint). */' + LineEnding +
+    'TyHint {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius-sm);' + LineEnding +
+    '  padding: 5px 9px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '' + LineEnding +

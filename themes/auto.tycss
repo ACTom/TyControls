@@ -192,6 +192,17 @@ TyGaugeFill {
   border-radius: var(--radius);
 }
 
+/* Themed tooltip surface (TTyHintWindow — replaces the native LCL hint). */
+TyHint {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+  font-size: var(--font-size-base);
+}
+
 
 TyToggleSwitch {
   background: var(--surface-toggle-off);
