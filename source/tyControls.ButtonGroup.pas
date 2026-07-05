@@ -165,10 +165,16 @@ begin
 end;
 
 procedure TTyButtonGroup.ItemsChanged(Sender: TObject);
+var
+  i: Integer;
 begin
-  EnsureSelectedLen;
-  // Clamp a stale single-select index if the list shrank.
-  if FItemIndex >= FItems.Count then FItemIndex := -1;
+  // The item list changed structurally. TStrings.OnChange carries no diff, so
+  // positional selection bits (and the single-select index) cannot be remapped —
+  // keeping them would silently move the selection onto a different item after an
+  // insert/delete. Reset selection to a clean state instead (safe over subtly wrong).
+  SetLength(FSelected, FItems.Count);
+  for i := 0 to High(FSelected) do FSelected[i] := False;
+  FItemIndex := -1;
   if FHoverSeg >= FItems.Count then FHoverSeg := -1;
   Invalidate;
 end;

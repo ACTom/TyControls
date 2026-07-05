@@ -78,6 +78,7 @@ type
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -219,6 +220,17 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
 end;
 
+procedure TTyDropDownButton.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  inherited MouseUp(Button, Shift, X, Y);
+  // A release OUTSIDE the client suppresses the native Click that would otherwise
+  // consume FDownX, so clear it here — otherwise a later keyboard/mnemonic/Default
+  // Click (which never sets FDownX afresh) would misroute an old arrow-zone press to
+  // the drop-down and swallow the primary OnClick.
+  if (X < 0) or (Y < 0) or (X >= Width) or (Y >= Height) then
+    FDownX := -1;
+end;
+
 procedure TTyDropDownButton.Click;
 var
   inArrow: Boolean;
@@ -341,8 +353,12 @@ end;
 procedure TTyMenuButton.Click;
 begin
   if not Enabled then Exit;
-  inherited Click;   // still runs the base ModalResult + OnClick contract
-  DoDropDown;        // a MenuButton's click IS the drop
+  // A MenuButton's click IS the drop — do it FIRST, then run the base OnClick/
+  // ModalResult contract. Order matters: an OnClick handler that frees this button
+  // (a common pattern) would leave DoDropDown dereferencing freed memory if it ran
+  // last, so DoDropDown goes before inherited Click.
+  DoDropDown;
+  inherited Click;
 end;
 
 procedure TTyMenuButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;

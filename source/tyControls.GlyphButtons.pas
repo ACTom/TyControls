@@ -239,7 +239,7 @@ end;
 procedure TTyGlyphButtonBase.DrawContent(APainter: TTyPainter;
   const AContentRect: TRect; const AStyle: TTyStyleSet);
 var
-  cw, ch, scaledSize, autoPx, glyphPx, gapPx, gx, gy: Integer;
+  cw, ch, scaledSize, autoPx, glyphPx, gapPx, gx, gy, renderPx: Integer;
   glyphCol: TTyColor;
   glyphRect, captionRect: TRect;
   glyph: TBGRABitmap;
@@ -286,9 +286,16 @@ begin
   else
     glyphCol := FGlyphColor;
 
+  // Render at the CLAMPED glyph-rect size (TyGlyphButtonSplit may have shrunk the
+  // rect to fit a small content box); rendering at the raw glyphPx would produce a
+  // bitmap larger than its rect and bleed past it (negative centering offset).
+  renderPx := glyphRect.Right - glyphRect.Left;
+  if (glyphRect.Bottom - glyphRect.Top) < renderPx then
+    renderPx := glyphRect.Bottom - glyphRect.Top;
+  if renderPx < 1 then renderPx := 1;
   // RenderGlyph never returns nil — an empty transparent bitmap when the glyph is
   // unmapped or the font family is unset, still safe to center + free (headless).
-  glyph := FIconFont.RenderGlyph(FGlyphName, glyphPx, glyphCol);
+  glyph := FIconFont.RenderGlyph(FGlyphName, renderPx, glyphCol);
   try
     gx := glyphRect.Left + ((glyphRect.Right - glyphRect.Left) - glyph.Width) div 2;
     gy := glyphRect.Top  + ((glyphRect.Bottom - glyphRect.Top) - glyph.Height) div 2;

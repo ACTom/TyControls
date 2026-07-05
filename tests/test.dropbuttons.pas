@@ -24,6 +24,9 @@ type
   TDropDownAccess = class(TTyDropDownButton)
   public
     procedure PressAndClickAt(X: Integer);
+    { Press in the arrow zone but release OUTSIDE the control (no Click fires), then a
+      later keyboard-style Click. Verifies FDownX is cleared so the key click is primary. }
+    procedure AbortedArrowPressThenKeyClick(AArrowX: Integer);
     procedure DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
@@ -48,6 +51,7 @@ type
     procedure TestDoDropDownNoMenuNoIntent;
     procedure TestArrowClickDropsNotPrimaryClick;
     procedure TestPrimaryClickFiresOnClickNotDrop;
+    procedure TestAbortedArrowPressDoesNotMisrouteKeyClick;
     procedure TestFreeNotificationNilsMenu;
     procedure TestPaintSmoke;
   end;
@@ -73,6 +77,13 @@ procedure TDropDownAccess.PressAndClickAt(X: Integer);
 begin
   MouseDown(mbLeft, [], X, 0);   // records the down-X
   Click;                          // native click synthesised after the up; routes on down-X
+end;
+
+procedure TDropDownAccess.AbortedArrowPressThenKeyClick(AArrowX: Integer);
+begin
+  MouseDown(mbLeft, [], AArrowX, 0);      // press in the arrow zone
+  MouseUp(mbLeft, [], Width + 20, 0);     // release OUTSIDE -> no Click; FDownX must clear
+  Click;                                   // keyboard-style Click -> must route PRIMARY
 end;
 
 procedure TDropDownAccess.DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -241,6 +252,35 @@ begin
     B.PressAndClickAt(20);   // firmly in the caption area
     AssertEquals('primary click fired OnClick', 1, FClicked);
     AssertEquals('primary click did NOT drop', 0, FDropped);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TDropDownButtonTest.TestAbortedArrowPressDoesNotMisrouteKeyClick;
+var
+  F: TCustomForm;
+  B: TDropDownAccess;
+  M: TTyPopupMenu;
+begin
+  // Regression: a press in the arrow zone released OUTSIDE the control leaves no Click;
+  // a LATER keyboard-style Click (no fresh MouseDown) must be treated as PRIMARY, not
+  // misrouted to the drop-down by a stale FDownX.
+  FDropped := 0;
+  FClicked := 0;
+  F := TCustomForm.CreateNew(nil);
+  M := TTyPopupMenu.Create(F);
+  try
+    B := TDropDownAccess.Create(F);
+    B.Parent := F;
+    B.SetBounds(0, 0, 100, 30);
+    B.ArrowWidth := 18;
+    B.DropDownMenu := M;
+    B.OnDropDown := @HandleDropDown;
+    B.OnClick := @HandleClick;
+    B.AbortedArrowPressThenKeyClick(92);   // 92 is inside the rightmost 18px arrow zone
+    AssertEquals('key click after aborted press fired PRIMARY OnClick', 1, FClicked);
+    AssertEquals('key click after aborted press did NOT drop', 0, FDropped);
   finally
     F.Free;
   end;
