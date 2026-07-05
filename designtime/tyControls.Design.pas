@@ -17,6 +17,8 @@ uses
   tyControls.Hint, tyControls.BalloonHint,
   tyControls.IconFont, tyControls.CharImage, tyControls.GlyphImageList,
   tyControls.Image, tyControls.ImageCollection,
+  tyControls.GlyphButtons, tyControls.DropButtons, tyControls.ColorButton,
+  tyControls.ButtonGroup,
   tyControls.ToggleSwitch,
   tyControls.TrackBar, tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu, tyControls.NativeStyler,
@@ -586,7 +588,10 @@ begin
     FormEditingHook.RegisterDesignerBaseClass(TTyDialog);
   end;
   RegisterComponents('TyControls',
-    [TTyButton, TTyLabel, TTyEdit, TTyCheckBox, TTyRadioButton,
+    [TTyButton,
+     TTyGlyphButton, TTyGlyphContainerButton, TTySpeedButton,
+     TTyDropDownButton, TTyMenuButton, TTyColorButton, TTyButtonGroup,
+     TTyLabel, TTyEdit, TTyCheckBox, TTyRadioButton,
      TTyPanel, TTyComboBox, TTyScrollBar, TTyStyleController,
      TTyListBox, TTyProgressBar, TTyGauge, TTyCircularProgress, TTyActivityIndicator, TTyMeter,
      TTyLevelMeter, TTyDial, TTyAnalogClock, TTySparkline, TTyRating, TTyGearDial,

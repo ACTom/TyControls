@@ -22,6 +22,18 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyRadioButton](radiobutton.md) | 单选按钮（同容器互斥） |
 | [TTyToggleSwitch](toggleswitch.md) | 开关（ON/OFF 滑块） |
 
+## 命令与分组按钮
+
+| 控件 | 说明 |
+|------|------|
+| [TTyGlyphButton](glyphbuttons.md) | 图标命令按钮（图标在左 + 标题，复用 TyButton 主题） |
+| [TTyGlyphContainerButton](glyphbuttons.md) | Ribbon 风格大按钮（大图标在上 + 标题） |
+| [TTySpeedButton](glyphbuttons.md) | 扁平工具栏切换按钮（可按 GroupIndex 分组单选） |
+| [TTyDropDownButton](dropbuttons.md) | 分裂式下拉按钮（主区点击 + 箭头区弹出菜单） |
+| [TTyMenuButton](dropbuttons.md) | 菜单按钮（整按钮点击即弹出菜单） |
+| [TTyColorButton](colorbutton.md) | 颜色按钮（色板 + 点击弹出取色对话框） |
+| [TTyButtonGroup](buttongroup.md) | 分段按钮条（等分 N 段，单选/多选） |
+
 ## 文本输入
 
 | 控件 | 说明 |

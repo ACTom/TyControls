@@ -87,6 +87,10 @@ uses
   test.glyphimagelist,
   test.image,
   test.imagecollection,
+  test.glyphbuttons,
+  test.dropbuttons,
+  test.colorbutton,
+  test.buttongroup,
   test.combobox,
   test.tabset;
 

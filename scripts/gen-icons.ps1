@@ -7,7 +7,9 @@ $lrs    = Join-Path $root 'designtime/tycontrols_icons.lrs'
 $lazres = 'C:\lazarus\tools\lazres.exe'
 
 $classes = @(
-  'TTyButton','TTyLabel','TTyEdit','TTyCheckBox','TTyRadioButton',
+  'TTyButton',
+  'TTyGlyphButton','TTyGlyphContainerButton','TTySpeedButton','TTyDropDownButton','TTyMenuButton','TTyColorButton','TTyButtonGroup',
+  'TTyLabel','TTyEdit','TTyCheckBox','TTyRadioButton',
   'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyGauge','TTyCircularProgress','TTyActivityIndicator','TTyMeter','TTyLevelMeter','TTyDial','TTyAnalogClock','TTySparkline','TTyRating','TTyGearDial','TTyLinkLabel','TTyShadowLabel','TTyGlowLabel','TTyListBox',
   'TTyPageControl','TTyTabSheet','TTyTabSet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
   'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu',

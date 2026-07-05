@@ -121,6 +121,20 @@ begin
     Line(b,12,7+y*6,20,7+y*6,Ink,1);
   end;
 end;
+{ TTyGlyphButton: a rounded command button — accent icon square on the left + caption lines }
+procedure GGlyphButton(b: TBGRABitmap); begin RRect(b,3,7,21,17,3,Ink); FillRRect(b,6,10,11,15,1.5,Acc); Line(b,13,11,18,11,Ink,1.4); Line(b,13,14,17,14,Ink,1.4); end;
+{ TTyGlyphContainerButton: a tall ribbon button — big accent icon on top over a caption line }
+procedure GGlyphContainerButton(b: TBGRABitmap); begin RRect(b,6,3,18,21,3,Ink); FillRRect(b,9,6,15,12,1.5,Acc); Line(b,8,16,16,16,Ink,1.4); end;
+{ TTySpeedButton: a flat toolbar button (faint outline only) with an accent glyph }
+procedure GSpeedButton(b: TBGRABitmap); begin RRect(b,4,4,20,20,3,Faint); FillCirc(b,12,12,4,Acc); end;
+{ TTyDropDownButton: a split button — a divider carving off a right zone with a down triangle }
+procedure GDropDownButton(b: TBGRABitmap); begin RRect(b,3,7,21,17,3,Ink); Line(b,15.5,7.5,15.5,16.5,Faint,1.3); FillPolyG(b,[PointF(16.4,11),PointF(19.6,11),PointF(18,13.6)],Acc); end;
+{ TTyMenuButton: a button with a caption line + a trailing down triangle (whole button drops) }
+procedure GMenuButton(b: TBGRABitmap); begin RRect(b,3,7,21,17,3,Ink); Line(b,7,12,14,12,Acc,2.2); FillPolyG(b,[PointF(15.4,10.8),PointF(18.6,10.8),PointF(17,13.4)],Ink); end;
+{ TTyColorButton: a button with an accent colour swatch + faint hex-text ticks }
+procedure GColorButton(b: TBGRABitmap); begin RRect(b,3,7,21,17,3,Ink); FillRRect(b,6,10,12,15,1.5,Acc); Line(b,15,11,19,11,Faint,1.3); Line(b,15,14,18,14,Faint,1.3); end;
+{ TTyButtonGroup: three adjacent segments in one rounded outline, the middle one accent-selected }
+procedure GButtonGroup(b: TBGRABitmap); begin FillRRect(b,9,8,15,16,0,Acc); RRect(b,3,8,21,16,2,Ink); Line(b,9,8,9,16,Ink,1); Line(b,15,8,15,16,Ink,1); end;
 procedure GListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,6,9,18,9,Acc,2); Line(b,6,13,18,13,Ink); Line(b,6,17,15,17,Ink); end;
 procedure GTabControl(b: TBGRABitmap); begin FillRRect(b,3.5,5,11.5,10.5,1.5,Acc); RRect(b,12.5,6.2,20,10.5,1.5,Ink); RRect(b,3,10,21,20,2,Ink); end;
 procedure GTabSheet(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Acc,2); end;
@@ -342,7 +356,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..62] of TGlyph = (
+  Glyphs: array[0..69] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -373,6 +387,13 @@ const
     (Name:'TTyImage';            Draw:@GImage),
     (Name:'TTyImageCollection';  Draw:@GImageCollection),
     (Name:'TTyVirtualImageList'; Draw:@GVirtualImageList),
+    (Name:'TTyGlyphButton';      Draw:@GGlyphButton),
+    (Name:'TTyGlyphContainerButton'; Draw:@GGlyphContainerButton),
+    (Name:'TTySpeedButton';      Draw:@GSpeedButton),
+    (Name:'TTyDropDownButton';   Draw:@GDropDownButton),
+    (Name:'TTyMenuButton';       Draw:@GMenuButton),
+    (Name:'TTyColorButton';      Draw:@GColorButton),
+    (Name:'TTyButtonGroup';      Draw:@GButtonGroup),
     (Name:'TTyListBox';         Draw:@GListBox),
     (Name:'TTyPageControl';     Draw:@GTabControl),
     (Name:'TTyTabSheet';        Draw:@GTabSheet),

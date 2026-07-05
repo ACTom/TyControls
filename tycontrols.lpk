@@ -185,6 +185,22 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ImageCollection"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.GlyphButtons.pas"/>
+        <UnitName Value="tyControls.GlyphButtons"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.DropButtons.pas"/>
+        <UnitName Value="tyControls.DropButtons"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ColorButton.pas"/>
+        <UnitName Value="tyControls.ColorButton"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ButtonGroup.pas"/>
+        <UnitName Value="tyControls.ButtonGroup"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ToggleSwitch.pas"/>
         <UnitName Value="tyControls.ToggleSwitch"/>
       </Item>
