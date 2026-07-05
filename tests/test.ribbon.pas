@@ -21,6 +21,8 @@ type
     procedure ContextPageHiddenUntilContextShown;
     procedure HidingActiveContextReanchorsAndFires;
     procedure SettingContextHidesTabWhenInactive;
+    procedure OverflowCountCollapsesTrailingGroups;
+    procedure MinimizedCollapsesAndRestoresHeight;
     procedure DefaultAligns;
   end;
 
@@ -208,6 +210,33 @@ begin
     AssertEquals('contextual page hidden', 1, Rib.TabCount);
     P.Context := '';                // back to a normal always-visible tab
     AssertEquals('visible again', 2, Rib.TabCount);
+  finally
+    Rib.Free;
+  end;
+end;
+
+procedure TRibbonTest.OverflowCountCollapsesTrailingGroups;
+begin
+  // 3 groups of natural width 100, collapsed button = 30.
+  AssertEquals('all fit -> 0', 0, TyRibbonOverflowCount([100, 100, 100], 400, 30));
+  AssertEquals('collapse 1 -> fits', 1, TyRibbonOverflowCount([100, 100, 100], 250, 30));
+  AssertEquals('collapse all 3', 3, TyRibbonOverflowCount([100, 100, 100], 150, 30));
+  AssertEquals('exactly fits -> 0', 0, TyRibbonOverflowCount([100, 100, 100], 300, 30));
+  AssertEquals('empty -> 0', 0, TyRibbonOverflowCount([], 100, 30));
+end;
+
+procedure TRibbonTest.MinimizedCollapsesAndRestoresHeight;
+var
+  Rib: TTyRibbon;
+  Full: Integer;
+begin
+  Rib := TTyRibbon.Create(nil);
+  try
+    Full := Rib.Height;                 // 118 by default
+    Rib.Minimized := True;
+    AssertTrue('minimized shrinks the height', Rib.Height < Full);
+    Rib.Minimized := False;
+    AssertEquals('restored to the full height', Full, Rib.Height);
   finally
     Rib.Free;
   end;

@@ -39,6 +39,9 @@ type
     FVisible: array of Integer;             // visible tab index -> FPages index
     FActiveContexts: TStringList;           // active context names (case-insensitive)
     FDestroying: Boolean;
+    FMinimized: Boolean;
+    FExpandedHeight: Integer;               // Height to restore when un-minimized
+    procedure SetMinimized(AValue: Boolean);
     function GetPage(AIndex: Integer): TTyRibbonPage;
     function GetActivePage: TTyRibbonPage;
     procedure SetActivePage(AValue: TTyRibbonPage);
@@ -80,6 +83,10 @@ type
     property ActivePage: TTyRibbonPage read GetActivePage write SetActivePage;
   published
     property ActivePageIndex: Integer read FTabIndex write SetTabIndex default -1;
+    { When True the group band collapses so only the tab strip shows (the ribbon's
+      Height shrinks to the tab-header height); setting it back restores the previous
+      Height. The transient show-page-on-tab-click overlay is a GUI follow-up. }
+    property Minimized: Boolean read FMinimized write SetMinimized default False;
     property Align default alTop;
   end;
 
@@ -146,6 +153,13 @@ const
   = the full client minus the bottom caption band (scaled from APadBottomPx). }
 function TyRibbonGroupContentRect(AWidthPx, AHeightPx, ACaptionBandPx: Integer): TRect;
 
+{ Pure overflow decision: given each group's natural width (device px) left->right and
+  the available band width, return how many TRAILING groups (lowest priority = last)
+  must collapse to a fixed ACollapsedPx button so the row fits. 0 = all fit; N (all) =
+  even fully collapsed it doesn't fit. Headless-testable. }
+function TyRibbonOverflowCount(const ANaturalWidths: array of Integer;
+  AAvailPx, ACollapsedPx: Integer): Integer;
+
 implementation
 
 // ---------------------------------------------------------------------------
@@ -156,6 +170,28 @@ begin
   if ACaptionBandPx < 0 then ACaptionBandPx := 0;
   if ACaptionBandPx > AHeightPx then ACaptionBandPx := AHeightPx;
   Result := Rect(0, 0, AWidthPx, AHeightPx - ACaptionBandPx);
+end;
+
+function TyRibbonOverflowCount(const ANaturalWidths: array of Integer;
+  AAvailPx, ACollapsedPx: Integer): Integer;
+var
+  N, I, Collapse, Total: Integer;
+begin
+  N := Length(ANaturalWidths);
+  if ACollapsedPx < 0 then ACollapsedPx := 0;
+  // Try collapsing the last 0, 1, 2 ... groups until the row fits.
+  for Collapse := 0 to N do
+  begin
+    Total := 0;
+    for I := 0 to N - 1 do
+      if I < N - Collapse then
+        Total := Total + ANaturalWidths[I]   // full width
+      else
+        Total := Total + ACollapsedPx;        // collapsed to a button
+    if Total <= AAvailPx then
+      Exit(Collapse);
+  end;
+  Result := N;   // even all-collapsed overflows
 end;
 
 // ===========================================================================
@@ -170,6 +206,7 @@ begin
   // Tab strip (TabHeight) + a group band tall enough for a large button + caption.
   Width := 600;
   Height := 118;
+  FExpandedHeight := 118;   // restored height if Minimized is set before any resize
   TabStop := True;
 end;
 
@@ -411,6 +448,20 @@ end;
 procedure TTyRibbon.PageContextChanged;
 begin
   ReconcileVisibleFrom(GetActivePage, True);
+end;
+
+procedure TTyRibbon.SetMinimized(AValue: Boolean);
+begin
+  if FMinimized = AValue then Exit;
+  FMinimized := AValue;
+  if FMinimized then
+  begin
+    FExpandedHeight := Height;                          // remember the full height
+    Height := MulDiv(TabHeight, Font.PixelsPerInch, 96); // collapse to just the tab strip
+  end
+  else if FExpandedHeight > 0 then
+    Height := FExpandedHeight;                 // restore the group band
+  Invalidate;
 end;
 
 procedure TTyRibbon.SetController(AValue: TTyStyleController);
