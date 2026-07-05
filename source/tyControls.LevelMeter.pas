@@ -297,8 +297,8 @@ var
   pos: Integer;
   lw: Double;
 begin
-  if APeak <= 0 then Exit;
-  if APeak < 0 then APeak := 0 else if APeak > 1 then APeak := 1;
+  if APeak < 0 then Exit;   // peak==0 still draws a marker at the low edge
+  if APeak > 1 then APeak := 1;
   ctx := P.Bitmap.Canvas2D;
   lw := Math.Max(2, P.Scale(2));
   ctx.lineWidth := lw;
