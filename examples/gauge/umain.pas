@@ -15,13 +15,15 @@ interface
 uses
   Classes, SysUtils, Forms, Controls, ExtCtrls,
   tyControls.Controller, tyControls.Form,
-  tyControls.Gauge, tyControls.CircularProgress, tyControls.TyLabel;
+  tyControls.Gauge, tyControls.CircularProgress, tyControls.ActivityIndicator,
+  tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
   private
     FArc, FRing, FBarH, FBarV: TTyGauge;
     FCirc: TTyCircularProgress;
+    FSpin: TTyActivityIndicator;
     FStatus: TTyLabel;
     FTimer: TTimer;
     FTick: Integer;
@@ -107,6 +109,12 @@ begin
   FCirc.SetBounds(400, 72, 110, 110);
   FCirc.Thickness := 12;
   FCirc.Position := 68;
+
+  // 忙碌指示器(不确定态,自转)
+  FSpin := TTyActivityIndicator.Create(Self);
+  FSpin.Parent := Self;
+  FSpin.SetBounds(430, 196, 40, 40);
+  FSpin.Thickness := 5;
 
   // 线性横 / 竖条
   LblBars := TTyLabel.Create(Self);

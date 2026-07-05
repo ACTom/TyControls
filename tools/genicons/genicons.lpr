@@ -69,6 +69,8 @@ procedure GProgress(b: TBGRABitmap); begin RRect(b,3,9,21,15,3,Ink); FillRRect(b
 procedure GGauge(b: TBGRABitmap); begin PolyL(b,[PointF(3.5,15),PointF(5,10.5),PointF(8.5,7.5),PointF(12,6.5),PointF(15.5,7.5),PointF(19,10.5),PointF(20.5,15)],Ink,1.8); Line(b,12,16,16.5,9,Acc,2); FillCirc(b,12,16,1.6,Acc); end;
 { TTyCircularProgress: a faint track ring + a ~3/4 accent progress arc }
 procedure GCircularProgress(b: TBGRABitmap); begin Circ(b,12,12,7,Faint,2); PolyL(b,[PointF(12,5),PointF(16.9,7),PointF(19,12),PointF(16.9,17),PointF(12,19),PointF(7.1,17)],Acc,2.4); end;
+{ TTyActivityIndicator: a spinning accent "C" arc (no track) }
+procedure GActivityIndicator(b: TBGRABitmap); begin PolyL(b,[PointF(7.1,17),PointF(12,19),PointF(16.9,17),PointF(19,12),PointF(16.9,7),PointF(12,5)],Acc,2.6); end;
 procedure GListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,6,9,18,9,Acc,2); Line(b,6,13,18,13,Ink); Line(b,6,17,15,17,Ink); end;
 procedure GTabControl(b: TBGRABitmap); begin FillRRect(b,3.5,5,11.5,10.5,1.5,Acc); RRect(b,12.5,6.2,20,10.5,1.5,Ink); RRect(b,3,10,21,20,2,Ink); end;
 procedure GTabSheet(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Acc,2); end;
@@ -290,7 +292,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..43] of TGlyph = (
+  Glyphs: array[0..44] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -302,6 +304,7 @@ const
     (Name:'TTyProgressBar';     Draw:@GProgress),
     (Name:'TTyGauge';           Draw:@GGauge),
     (Name:'TTyCircularProgress'; Draw:@GCircularProgress),
+    (Name:'TTyActivityIndicator'; Draw:@GActivityIndicator),
     (Name:'TTyListBox';         Draw:@GListBox),
     (Name:'TTyPageControl';     Draw:@GTabControl),
     (Name:'TTyTabSheet';        Draw:@GTabSheet),

@@ -113,6 +113,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.CircularProgress"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.ActivityIndicator.pas"/>
+        <UnitName Value="tyControls.ActivityIndicator"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ToggleSwitch.pas"/>
         <UnitName Value="tyControls.ToggleSwitch"/>
       </Item>

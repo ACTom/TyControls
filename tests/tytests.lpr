@@ -69,6 +69,7 @@ uses
   test.dialogs.about,
   test.gauge,
   test.circularprogress,
+  test.activityindicator,
   test.combobox,
   test.tabset;
 
