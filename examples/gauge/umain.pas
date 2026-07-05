@@ -15,12 +15,13 @@ interface
 uses
   Classes, SysUtils, Forms, Controls, ExtCtrls,
   tyControls.Controller, tyControls.Form,
-  tyControls.Gauge, tyControls.TyLabel;
+  tyControls.Gauge, tyControls.CircularProgress, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
   private
     FArc, FRing, FBarH, FBarV: TTyGauge;
+    FCirc: TTyCircularProgress;
     FStatus: TTyLabel;
     FTimer: TTimer;
     FTick: Integer;
@@ -53,12 +54,12 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  LblArc, LblRing, LblBars: TTyLabel;
+  LblArc, LblRing, LblBars, LblCirc: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Gauge 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 460, 380);
+  SetBounds(0, 0, 540, 380);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -94,6 +95,18 @@ begin
   FRing.Thickness := 14;
   FRing.ValueFormat := '%.0f';
   FRing.Value := 35;
+
+  // 环形进度(TTyCircularProgress,复用仪表主题)
+  LblCirc := TTyLabel.Create(Self);
+  LblCirc.Parent := Self;
+  LblCirc.SetBounds(392, 46, 140, 20);
+  LblCirc.Caption := '环形进度:';
+
+  FCirc := TTyCircularProgress.Create(Self);
+  FCirc.Parent := Self;
+  FCirc.SetBounds(400, 72, 110, 110);
+  FCirc.Thickness := 12;
+  FCirc.Position := 68;
 
   // 线性横 / 竖条
   LblBars := TTyLabel.Create(Self);
@@ -143,6 +156,7 @@ begin
   FRing.Value := r;
   FBarH.Value := b;
   FBarV.Value := b;
+  FCirc.Position := Round(r);
   FStatus.Caption := Format('弧=%.0f%%  环=%.0f  线=%.0f%%', [a, r, b]);
 end;
 

@@ -70,6 +70,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | 控件 | 说明 |
 |------|------|
 | [TTyGauge](gauge.md) | 数值仪表：线性 / 弧形 / 环形，缓动值动画 |
+| [TTyCircularProgress](circularprogress.md) | 环形进度指示器（ProgressBar 的环形版，复用仪表主题） |
 
 ## 文字
 
