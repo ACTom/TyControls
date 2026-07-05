@@ -16,7 +16,8 @@ uses
   Classes, SysUtils, Forms, Controls, ExtCtrls,
   tyControls.Controller, tyControls.Form,
   tyControls.Gauge, tyControls.CircularProgress, tyControls.ActivityIndicator,
-  tyControls.Meter, tyControls.TyLabel;
+  tyControls.Meter, tyControls.LevelMeter, tyControls.Dial, tyControls.AnalogClock,
+  tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -25,6 +26,9 @@ type
     FCirc: TTyCircularProgress;
     FSpin: TTyActivityIndicator;
     FMeter: TTyMeter;
+    FLevel: TTyLevelMeter;
+    FDial: TTyDial;
+    FClock: TTyAnalogClock;
     FStatus: TTyLabel;
     FTimer: TTimer;
     FTick: Integer;
@@ -62,7 +66,7 @@ begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Gauge 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 540, 380);
+  SetBounds(0, 0, 540, 540);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -140,10 +144,32 @@ begin
   FMeter.Ticks := 12;
   FMeter.Value := 88;
 
+  // 底部一行:电平条 / 旋钮 / 时钟
+  FLevel := TTyLevelMeter.Create(Self);
+  FLevel.Parent := Self;
+  FLevel.SetBounds(24, 396, 300, 26);
+  FLevel.Min := 0;
+  FLevel.Max := 100;
+  FLevel.Segments := 20;
+  FLevel.PeakHold := True;
+  FLevel.Value := 62;
+
+  FDial := TTyDial.Create(Self);
+  FDial.Parent := Self;
+  FDial.SetBounds(348, 388, 76, 76);
+  FDial.Min := 0;
+  FDial.Max := 100;
+  FDial.Value := 40;
+
+  FClock := TTyAnalogClock.Create(Self);
+  FClock.Parent := Self;
+  FClock.SetBounds(436, 388, 90, 90);
+  FClock.Running := True;
+
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
-  FStatus.SetBounds(24, 300, 300, 20);
-  FStatus.Caption := '每 1.2s 随机改变数值,观察缓动动画。';
+  FStatus.SetBounds(24, 470, 400, 20);
+  FStatus.Caption := '每 1.2s 随机改变数值(旋钮可拖动 / 滚轮),观察缓动动画。';
 
   // 定时改值,演示缓动
   FTimer := TTimer.Create(Self);
@@ -166,6 +192,7 @@ begin
   FRing.Value := r;
   FBarH.Value := b;
   FMeter.Value := b / 100 * 220;   // map 0..100 -> 0..220
+  FLevel.Value := a;
   FCirc.Position := Round(r);
   FStatus.Caption := Format('弧=%.0f%%  环=%.0f  线=%.0f%%', [a, r, b]);
 end;

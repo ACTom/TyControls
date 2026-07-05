@@ -121,6 +121,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Meter"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.LevelMeter.pas"/>
+        <UnitName Value="tyControls.LevelMeter"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Dial.pas"/>
+        <UnitName Value="tyControls.Dial"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AnalogClock.pas"/>
+        <UnitName Value="tyControls.AnalogClock"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ToggleSwitch.pas"/>
         <UnitName Value="tyControls.ToggleSwitch"/>
       </Item>

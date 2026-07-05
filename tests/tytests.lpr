@@ -71,6 +71,9 @@ uses
   test.circularprogress,
   test.activityindicator,
   test.meter,
+  test.levelmeter,
+  test.dial,
+  test.analogclock,
   test.combobox,
   test.tabset;
 

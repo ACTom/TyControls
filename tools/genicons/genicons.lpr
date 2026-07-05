@@ -73,6 +73,12 @@ procedure GCircularProgress(b: TBGRABitmap); begin Circ(b,12,12,7,Faint,2); Poly
 procedure GActivityIndicator(b: TBGRABitmap); begin PolyL(b,[PointF(7.1,17),PointF(12,19),PointF(16.9,17),PointF(19,12),PointF(16.9,7),PointF(12,5)],Acc,2.6); end;
 { TTyMeter: a dial arc with tick marks + accent needle + hub }
 procedure GMeter(b: TBGRABitmap); begin PolyL(b,[PointF(4,14),PointF(6,9),PointF(12,6.5),PointF(18,9),PointF(20,14)],Ink,1.6); Line(b,4,14,5.4,13.3,Ink,1.2); Line(b,12,6.5,12,8,Ink,1.2); Line(b,20,14,18.6,13.3,Ink,1.2); Line(b,12,16,15.5,9.5,Acc,2); FillCirc(b,12,16,1.6,Acc); end;
+{ TTyLevelMeter: a VU bar — track + lit accent segments + a peak line }
+procedure GLevelMeter(b: TBGRABitmap); begin RRect(b,3,8,21,16,2,Ink); FillRRect(b,5,10,7.5,14,0.8,Acc); FillRRect(b,8.5,10,11,14,0.8,Acc); FillRRect(b,12,10,14.5,14,0.8,Acc); FillRRect(b,15.5,10,18,14,0.8,Faint); Line(b,19.5,8,19.5,16,Acc,1.6); end;
+{ TTyDial: a knob body + accent pointer + hub }
+procedure GDial(b: TBGRABitmap); begin FillCirc(b,12,12,9,Faint); Circ(b,12,12,9,Ink); Line(b,12,12,6,6,Acc); FillCirc(b,12,12,2,Ink); end;
+{ TTyAnalogClock: a face with 4 ticks + hour/minute/accent-second hands + hub }
+procedure GAnalogClock(b: TBGRABitmap); begin Circ(b,12,12,8.5,Ink,1.4); Line(b,12,4.5,12,6,Ink,1); Line(b,12,18,12,19.5,Ink,1); Line(b,4.5,12,6,12,Ink,1); Line(b,18,12,19.5,12,Ink,1); Line(b,12,12,12,7.5,Ink,1.6); Line(b,12,12,15.5,12,Ink,1.4); Line(b,12,12,9,15.5,Acc,1); FillCirc(b,12,12,1.4,Acc); end;
 procedure GListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,6,9,18,9,Acc,2); Line(b,6,13,18,13,Ink); Line(b,6,17,15,17,Ink); end;
 procedure GTabControl(b: TBGRABitmap); begin FillRRect(b,3.5,5,11.5,10.5,1.5,Acc); RRect(b,12.5,6.2,20,10.5,1.5,Ink); RRect(b,3,10,21,20,2,Ink); end;
 procedure GTabSheet(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Acc,2); end;
@@ -294,7 +300,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..45] of TGlyph = (
+  Glyphs: array[0..48] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -308,6 +314,9 @@ const
     (Name:'TTyCircularProgress'; Draw:@GCircularProgress),
     (Name:'TTyActivityIndicator'; Draw:@GActivityIndicator),
     (Name:'TTyMeter';            Draw:@GMeter),
+    (Name:'TTyLevelMeter';       Draw:@GLevelMeter),
+    (Name:'TTyDial';             Draw:@GDial),
+    (Name:'TTyAnalogClock';      Draw:@GAnalogClock),
     (Name:'TTyListBox';         Draw:@GListBox),
     (Name:'TTyPageControl';     Draw:@GTabControl),
     (Name:'TTyTabSheet';        Draw:@GTabSheet),
