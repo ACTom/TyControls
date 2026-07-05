@@ -366,6 +366,8 @@ end;
 destructor TTyBalloonHint.Destroy;
 begin
   HideHint;
+  if FTimer <> nil then
+    FTimer.OnTimer := nil;   // detach before free so no queued tick re-enters us
   FreeAndNil(FTimer);
   FreeAndNil(FWin);
   inherited Destroy;

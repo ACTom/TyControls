@@ -24,12 +24,10 @@ type
     no configuration and reads the app-wide default theme (TyDefaultController). }
   TTyHintWindow = class(THintWindow)
   private
-    FRgnW, FRgnH: Integer;    // last size a rounded region was applied for
     procedure ApplyRoundRegion;
   protected
     procedure Paint; override;
   public
-    constructor Create(AOwner: TComponent); override;
     function CalcHintRect(MaxWidth: Integer; const AHint: string;
       AData: Pointer): TRect; override;
   end;
@@ -141,13 +139,6 @@ end;
 // ---------------------------------------------------------------------------
 // TTyHintWindow
 // ---------------------------------------------------------------------------
-constructor TTyHintWindow.Create(AOwner: TComponent);
-begin
-  inherited Create(AOwner);
-  FRgnW := -1;
-  FRgnH := -1;
-end;
-
 function TTyHintWindow.CalcHintRect(MaxWidth: Integer; const AHint: string;
   AData: Pointer): TRect;
 var
@@ -212,8 +203,10 @@ begin
 end;
 
 { Shape the hint window with a rounded region matching the themed radius (scaled
-  to device PPI), guarded so it only re-applies when the size changed. No-op on
-  Wayland (no XShape) — the surface-colored Color keeps square corners clean. }
+  to device PPI). Re-applied on every Paint so it follows size/PPI/theme changes
+  (a hint window is tiny and short-lived, so the redundant re-apply is cheap and
+  avoids a stale shape after a theme switch). No-op on Wayland (no XShape) — the
+  surface-colored Color keeps square corners clean. }
 procedure TTyHintWindow.ApplyRoundRegion;
 var
   S: TTyStyleSet;
@@ -222,19 +215,16 @@ var
 begin
   if not HandleAllocated then Exit;
   if TyQtIsWayland then Exit;
-  if (Width = FRgnW) and (Height = FRgnH) then Exit;
   S := HintStyle;
   d := MulDiv(S.BorderRadius, Font.PixelsPerInch, 96) * 2;
   if d <= 0 then
   begin
     SetWindowRgn(Handle, 0, True);
-    FRgnW := Width; FRgnH := Height;
     Exit;
   end;
   // +1: CreateRoundRectRgn right/bottom are exclusive. SetWindowRgn takes ownership.
   Rgn := CreateRoundRectRgn(0, 0, Width + 1, Height + 1, d, d);
   SetWindowRgn(Handle, Rgn, True);
-  FRgnW := Width; FRgnH := Height;
 end;
 
 // ---------------------------------------------------------------------------
