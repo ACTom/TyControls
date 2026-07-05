@@ -285,7 +285,7 @@ begin
       ang := DegToRad(TyGaugeSweepEnd(FStartAngle, FSweepAngle, frac));
       ca := Cos(ang); sa := Sin(ang);
       r0 := radius * 0.30;
-      r1 := radius - P.Scale(5);
+      r1 := Math.Max(r0 + P.Scale(2), radius - P.Scale(5));   // never point inward on tiny dials
       ctx.lineWidth := Math.Max(2, P.Scale(3));
       ctx.strokeStyle(TyColorToBGRA(pointerS.Background.Color));
       ctx.beginPath;
