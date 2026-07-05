@@ -158,6 +158,8 @@ begin
   end;
   FillPolyG(b,[PointF(9,20),PointF(15,20),PointF(12,23)],Ink);
 end;
+{ TTyRibbonBackstage: a window with an accent left sidebar (rows) + a content area (the File view) }
+procedure GRibbonBackstage(b: TBGRABitmap); begin FillRRect(b,3,4,9,20,1,Acc); RRect(b,3,4,21,20,2,Ink); Line(b,5,8,7,8,Faint); Line(b,5,12,7,12,Faint); Line(b,5,16,7,16,Faint); Line(b,12,8,19,8,Ink); Line(b,12,12,17,12,Faint); Line(b,12,16,18,16,Faint); end;
 procedure GListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,6,9,18,9,Acc,2); Line(b,6,13,18,13,Ink); Line(b,6,17,15,17,Ink); end;
 procedure GTabControl(b: TBGRABitmap); begin FillRRect(b,3.5,5,11.5,10.5,1.5,Acc); RRect(b,12.5,6.2,20,10.5,1.5,Ink); RRect(b,3,10,21,20,2,Ink); end;
 procedure GTabSheet(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Acc,2); end;
@@ -379,7 +381,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..75] of TGlyph = (
+  Glyphs: array[0..76] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -423,6 +425,7 @@ const
     (Name:'TTyRibbonAppMenu';    Draw:@GRibbonAppMenu),
     (Name:'TTyRibbonQuickAccess'; Draw:@GRibbonQuickAccess),
     (Name:'TTyRibbonGallery';     Draw:@GRibbonGallery),
+    (Name:'TTyRibbonBackstage';   Draw:@GRibbonBackstage),
     (Name:'TTyListBox';         Draw:@GListBox),
     (Name:'TTyPageControl';     Draw:@GTabControl),
     (Name:'TTyTabSheet';        Draw:@GTabSheet),

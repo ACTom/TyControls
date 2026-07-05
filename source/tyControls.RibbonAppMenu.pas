@@ -29,8 +29,8 @@ unit tyControls.RibbonAppMenu;
 interface
 
 uses
-  Classes, SysUtils, Menus,
-  tyControls.DropButtons, tyControls.Menu;
+  Classes, SysUtils, Menus, Controls, Forms, LCLType,
+  tyControls.DropButtons, tyControls.Menu, tyControls.RibbonBackstage;
 
 const
   { Default logical-px size of the app-menu button (96-PPI baseline). Wide + short like
@@ -56,8 +56,11 @@ type
     FCommands: TTyPopupMenu;
     FRecentItems: TStrings;
     FOnRecentItemClick: TTyRecentItemEvent;
+    FBackstage: TTyRibbonBackstage;
+    FBackstageTopInset: Integer;
     procedure SetCommands(AValue: TTyPopupMenu);
     procedure SetRecentItems(AValue: TStrings);
+    procedure SetBackstage(AValue: TTyRibbonBackstage);
     { OnClick target on each RECENT item: map the clicked item back to its RecentItems
       index (carried in the item's Tag) and fire OnRecentItemClick. }
     procedure HandleRecentClick(Sender: TObject);
@@ -91,6 +94,12 @@ type
     property RecentItems: TStrings read FRecentItems write SetRecentItems;
     { Fired when a recent-items row is chosen (AIndex = index into RecentItems). }
     property OnRecentItemClick: TTyRecentItemEvent read FOnRecentItemClick write FOnRecentItemClick;
+    { When assigned, clicking the button opens this FULL-WINDOW backstage (Office "File"
+      view) instead of the small dropdown menu. FreeNotification-tracked. }
+    property Backstage: TTyRibbonBackstage read FBackstage write SetBackstage;
+    { Logical-px inset from the form top the backstage is shown below (= the title-bar
+      height, so the backstage covers everything except the title bar). }
+    property BackstageTopInset: Integer read FBackstageTopInset write FBackstageTopInset default 0;
   end;
 
 implementation
@@ -231,13 +240,32 @@ begin
     Result := FMenu.Items[AIndex];
 end;
 
-procedure TTyRibbonAppMenu.DoDropDown;
+procedure TTyRibbonAppMenu.SetBackstage(AValue: TTyRibbonBackstage);
 begin
-  // Compose the internal menu, then let the base drop it: inherited DoDropDown fires
-  // OnDropDown and — only with a live window handle — pops DropDownMenu. Route the button
-  // at FMenu so the base pops the composed menu, not a user menu we'd otherwise mutate.
+  if FBackstage = AValue then Exit;
+  if FBackstage <> nil then FBackstage.RemoveFreeNotification(Self);
+  FBackstage := AValue;
+  if FBackstage <> nil then FBackstage.FreeNotification(Self);
+end;
+
+procedure TTyRibbonAppMenu.DoDropDown;
+var
+  Frm: TCustomForm;
+begin
+  // With a Backstage assigned, the click opens the FULL-WINDOW backstage (Office "File")
+  // instead of a dropdown. Still fire the base OnDropDown (via a nil DropDownMenu so the
+  // base pops nothing), then show the backstage over the host form below the title bar.
+  if FBackstage <> nil then
+  begin
+    DropDownMenu := nil;
+    inherited DoDropDown;
+    Frm := GetParentForm(Self);
+    if Frm <> nil then
+      FBackstage.ShowOver(Frm, MulDiv(FBackstageTopInset, Font.PixelsPerInch, 96));
+    Exit;
+  end;
+  // Otherwise compose + drop the small internal menu (Commands + RecentItems).
   RebuildMenu;
-  // Carry the app-menu's controller onto the internal menu so it themes with our theme.
   FMenu.Controller := ActiveController;
   DropDownMenu := FMenu;
   inherited DoDropDown;
@@ -248,6 +276,8 @@ begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FCommands) then
     FCommands := nil;
+  if (Operation = opRemove) and (AComponent = FBackstage) then
+    FBackstage := nil;
 end;
 
 end.
