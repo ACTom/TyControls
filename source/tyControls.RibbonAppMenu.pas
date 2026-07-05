@@ -58,9 +58,6 @@ type
     FOnRecentItemClick: TTyRecentItemEvent;
     procedure SetCommands(AValue: TTyPopupMenu);
     procedure SetRecentItems(AValue: TStrings);
-    { OnClick target on each cloned COMMAND item: re-fire the source command's OnClick so
-      the user's handler still runs (the source item is carried on the clone's Tag). }
-    procedure HandleCommandClick(Sender: TObject);
     { OnClick target on each RECENT item: map the clicked item back to its RecentItems
       index (carried in the item's Tag) and fire OnRecentItemClick. }
     procedure HandleRecentClick(Sender: TObject);
@@ -140,25 +137,16 @@ procedure TTyRibbonAppMenu.SetRecentItems(AValue: TStrings);
 begin
   // Own the storage; assign copies the caller's lines in (we keep our TStringList so the
   // OnChange -> Invalidate hook stays wired and we never alias a list the user may free).
-  FRecentItems.Assign(AValue);
+  // Guard nil (TStrings.Assign(nil) raises EConvertError) so `RecentItems := nil` clears.
+  if AValue = nil then
+    FRecentItems.Clear
+  else
+    FRecentItems.Assign(AValue);
 end;
 
 procedure TTyRibbonAppMenu.RecentItemsChanged(Sender: TObject);
 begin
   Invalidate;
-end;
-
-procedure TTyRibbonAppMenu.HandleCommandClick(Sender: TObject);
-var
-  Clone, Src: TMenuItem;
-begin
-  // The clone's OnClick routes here; the source command item is carried on the clone's
-  // Tag (set in RebuildMenu). Re-fire the source's OnClick so the user's handler runs.
-  if not (Sender is TMenuItem) then Exit;
-  Clone := TMenuItem(Sender);
-  Src := TMenuItem(Pointer(PtrInt(Clone.Tag)));
-  if (Src <> nil) and Assigned(Src.OnClick) then
-    Src.OnClick(Src);
 end;
 
 procedure TTyRibbonAppMenu.HandleRecentClick(Sender: TObject);
@@ -177,9 +165,11 @@ begin
   if FMenu = nil then Exit;
   FMenu.Items.Clear;
 
-  // 1) Copy the top-level command items (Caption + a forwarding OnClick). We never touch
-  //    the user's own items — each clone is a fresh TMenuItem owned by FMenu whose Tag
-  //    stashes the source item so HandleCommandClick can re-fire its OnClick.
+  // 1) Copy the top-level command items. Each clone is a fresh TMenuItem owned by FMenu
+  //    that carries the source's ACTIVATION HANDLES (OnClick / Action), NOT a raw pointer
+  //    back to the source item: so clicking a command still runs the user's handler (or
+  //    executes its Action), with no dangling-pointer window if Commands is freed while the
+  //    menu is open. A '-' caption stays a separator (IsLine keys off the caption).
   if FCommands <> nil then
   begin
     SrcRoot := FCommands.Items;
@@ -189,22 +179,34 @@ begin
       Clone := TMenuItem.Create(FMenu);
       Clone.Caption := Src.Caption;
       Clone.Enabled := Src.Enabled;
-      // A '-' caption stays a separator (IsLine keys off the caption), so command
-      // separators survive the copy without special-casing.
-      Clone.Tag := PtrInt(Pointer(Src));
+      Clone.ImageIndex := Src.ImageIndex;
       if not Src.IsLine then
-        Clone.OnClick := @HandleCommandClick;
+      begin
+        if Src.Action <> nil then
+          Clone.Action := Src.Action          // the Action drives execute/caption/state
+        else
+        begin
+          Clone.OnClick   := Src.OnClick;      // fires the user's handler directly
+          Clone.AutoCheck := Src.AutoCheck;
+          Clone.Checked   := Src.Checked;
+          Clone.RadioItem := Src.RadioItem;
+          Clone.GroupIndex := Src.GroupIndex;
+        end;
+      end;
       FMenu.Items.Add(Clone);
     end;
   end;
 
-  // 2) Recent-items section: a separator + one item per entry, each routing to
-  //    OnRecentItemClick with its 0-based index (carried on Tag). Skipped when empty.
+  // 2) Recent-items section: a separator (only when commands precede it) + one item per
+  //    entry, each routing to OnRecentItemClick with its 0-based index. Skipped when empty.
   if (FRecentItems <> nil) and (FRecentItems.Count > 0) then
   begin
-    Sep := TMenuItem.Create(FMenu);
-    Sep.Caption := '-';
-    FMenu.Items.Add(Sep);
+    if FMenu.Items.Count > 0 then
+    begin
+      Sep := TMenuItem.Create(FMenu);
+      Sep.Caption := '-';
+      FMenu.Items.Add(Sep);
+    end;
     for i := 0 to FRecentItems.Count - 1 do
     begin
       Clone := TMenuItem.Create(FMenu);

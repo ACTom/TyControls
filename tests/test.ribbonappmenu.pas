@@ -40,6 +40,7 @@ type
     procedure TestTypeKeyReusesButton;
     procedure TestDefaultCaptionAndStyleClass;
     procedure TestRecentItemsRoundTrip;
+    procedure TestRecentItemsNilAssignIsSafe;
     procedure TestCommandsFreeNotificationNilsIt;
     procedure TestRebuildComposesCommandsPlusRecent;
     procedure TestRebuildCommandsOnlyWhenRecentEmpty;
@@ -194,6 +195,21 @@ begin
   end;
 end;
 
+procedure TRibbonAppMenuTest.TestRecentItemsNilAssignIsSafe;
+var B: TAppMenuAccess;
+begin
+  // Regression: `RecentItems := nil` must clear (not raise EConvertError from Assign(nil)).
+  B := TAppMenuAccess.Create(nil);
+  try
+    B.RecentItems.Add('a');
+    B.RecentItems.Add('b');
+    B.RecentItems := nil;   // must not raise
+    AssertEquals('nil assign cleared the list', 0, B.RecentItems.Count);
+  finally
+    B.Free;
+  end;
+end;
+
 procedure TRibbonAppMenuTest.TestRebuildNilCommandsIsSafe;
 var B: TAppMenuAccess;
 begin
@@ -202,12 +218,12 @@ begin
   try
     B.DoRebuild;
     AssertEquals('nil commands + empty recent -> 0 rows', 0, B.ItemCount);
-    // Now nil commands but WITH recent -> just the recent section (separator + items).
+    // Now nil commands but WITH recent -> just the recent rows, NO leading separator
+    // (the separator only appears when commands precede it).
     B.RecentItems.Add('only-recent');
     B.DoRebuild;
-    AssertEquals('nil commands + 1 recent -> separator + 1', 2, B.ItemCount);
-    AssertTrue('row 0 is the separator', B.ItemAt(0).IsLine);
-    AssertEquals('recent caption', 'only-recent', B.ItemAt(1).Caption);
+    AssertEquals('nil commands + 1 recent -> just the 1 recent row', 1, B.ItemCount);
+    AssertEquals('recent caption', 'only-recent', B.ItemAt(0).Caption);
   finally
     B.Free;
   end;
@@ -229,8 +245,8 @@ begin
     B.RecentItems.Add('r1');
     B.RecentItems.Add('r2');
     B.DoRebuild;
-    // No commands: rows are [separator, r0, r1, r2]. r1 is at index 2.
-    Row := B.ItemAt(2);
+    // No commands: rows are [r0, r1, r2] (no leading separator). r1 is at index 1.
+    Row := B.ItemAt(1);
     AssertEquals('picked the r1 row', 'r1', Row.Caption);
     Row.Click;   // fires the clone's OnClick -> HandleRecentClick -> OnRecentItemClick
     AssertEquals('OnRecentItemClick fired once', 1, FRecentCount);
