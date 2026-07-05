@@ -337,6 +337,16 @@ object DemoMainForm: TDemoMainForm
         Controller = TyController
         Caption = 'Progress'
       end
+      object BtnDlgAbout: TTyButton
+        Left = 228
+        Height = 28
+        Top = 112
+        Width = 96
+        TabOrder = 11
+        OnClick = BtnDlgAboutClick
+        Controller = TyController
+        Caption = 'About'
+      end
     end
     object ComboKind: TTyComboBox
       Left = 16
@@ -527,7 +537,6 @@ object DemoMainForm: TDemoMainForm
             'Tab 2'
             'Tab 3'
           )
-          TabIndex = 0
         end
       end
       object TyTabSheet2: TTyTabSheet
@@ -690,6 +699,169 @@ object DemoMainForm: TDemoMainForm
           }
         end
       end
+      object TyTabSheet6: TTyTabSheet
+        Left = 0
+        Height = 334
+        Top = 28
+        Width = 604
+        TabOrder = 5
+        Controller = TyController
+        Caption = '命令按钮'
+        object DemoGlyphBtn: TTyGlyphButton
+          Left = 16
+          Height = 34
+          Top = 16
+          Width = 120
+          TabOrder = 0
+          Controller = TyController
+          IconFont = DemoIconFont
+          GlyphName = 'star'
+          Caption = '新建'
+        end
+        object DemoGlyphContainer: TTyGlyphContainerButton
+          Left = 148
+          Height = 64
+          Top = 16
+          Width = 84
+          TabOrder = 1
+          Controller = TyController
+          IconFont = DemoIconFont
+          GlyphName = 'star'
+          Caption = '打开'
+        end
+        object DemoSpeed1: TTySpeedButton
+          Left = 248
+          Height = 34
+          Top = 16
+          Width = 48
+          TabOrder = 2
+          StyleClass = 'ghost'
+          Controller = TyController
+          Down = True
+          GroupIndex = 1
+          Caption = '左'
+        end
+        object DemoSpeed2: TTySpeedButton
+          Left = 300
+          Height = 34
+          Top = 16
+          Width = 48
+          TabOrder = 3
+          StyleClass = 'ghost'
+          Controller = TyController
+          GroupIndex = 1
+          Caption = '中'
+        end
+        object DemoSpeed3: TTySpeedButton
+          Left = 352
+          Height = 34
+          Top = 16
+          Width = 48
+          TabOrder = 4
+          StyleClass = 'ghost'
+          Controller = TyController
+          GroupIndex = 1
+          Caption = '右'
+        end
+        object DemoDropBtn: TTyDropDownButton
+          Left = 16
+          Height = 34
+          Top = 100
+          Width = 130
+          TabOrder = 5
+          Controller = TyController
+          DropDownMenu = PopupCtx
+          Caption = '保存'
+        end
+        object DemoMenuBtn: TTyMenuButton
+          Left = 158
+          Height = 34
+          Top = 100
+          Width = 110
+          TabOrder = 6
+          Controller = TyController
+          DropDownMenu = PopupCtx
+          Caption = '更多'
+        end
+        object DemoColorBtn: TTyColorButton
+          Left = 16
+          Height = 34
+          Top = 150
+          Width = 150
+          TabOrder = 7
+          Controller = TyController
+          ShowText = True
+        end
+        object DemoBtnGroup: TTyButtonGroup
+          Left = 190
+          Height = 34
+          Top = 150
+          Width = 210
+          TabOrder = 8
+          StyleClass = 'ghost'
+          Controller = TyController
+          Items.Strings = (
+            '日'
+            '周'
+            '月'
+          )
+          ItemIndex = 0
+        end
+      end
+      object TyTabSheet7: TTyTabSheet
+        Left = 0
+        Height = 334
+        Top = 28
+        Width = 604
+        TabOrder = 6
+        Controller = TyController
+        Caption = '图标 · 文字'
+        object DemoLinkLabel: TTyLinkLabel
+          Left = 16
+          Height = 20
+          Top = 20
+          Width = 220
+          Controller = TyController
+          Caption = '访问项目主页'
+          URL = 'https://github.com/ACTom/TyControls'
+        end
+        object DemoShadowLabel: TTyShadowLabel
+          Left = 16
+          Height = 26
+          Top = 56
+          Width = 240
+          Controller = TyController
+          Caption = '投影文字 ShadowLabel'
+        end
+        object DemoGlowLabel: TTyGlowLabel
+          Left = 16
+          Height = 28
+          Top = 92
+          Width = 240
+          Controller = TyController
+          Caption = '发光文字 GlowLabel'
+        end
+        object DemoCharImage: TTyCharImage
+          Left = 16
+          Height = 40
+          Top = 132
+          Width = 40
+          Controller = TyController
+          IconFont = DemoIconFont
+          GlyphName = 'star'
+        end
+        object HintNote: TTyLabel
+          Left = 68
+          Height = 40
+          Top = 132
+          Width = 380
+          Controller = TyController
+          WordWrap = True
+          ShowHint = True
+          Hint = '这是主题化气泡提示(TTyHint)——悬停任意带 Hint 的控件即可看到。'
+          Caption = '← CharImage(图标字体字形)。把鼠标停在这行文字上看主题化 tooltip。'
+        end
+      end
     end
   end
   object TyController: TTyStyleController
@@ -770,6 +942,19 @@ object DemoMainForm: TDemoMainForm
     Left = 744
     Top = 424
   end
+  object DemoIconFont: TTyIconFont
+    FontFamily = 'Segoe UI Symbol'
+    Glyphs.Strings = (
+      'star=2605'
+    )
+    Left = 744
+    Top = 360
+  end
+  object DemoHint: TTyHint
+    Controller = TyController
+    Left = 744
+    Top = 296
+  end
   object TyMessage1: TTyMessage
     Title = 'Demo'
     Msg = 'Hello World!'
@@ -797,5 +982,16 @@ object DemoMainForm: TDemoMainForm
     OnCancel = ProgressDlgCancel
     Left = 680
     Top = 112
+  end
+  object TyAboutDlg: TTyAboutDialog
+    Title = 'TyControls About'
+    AppName = 'TyControls'
+    Version = '2.2.0'
+    Description = 'A skinnable / styleable Lazarus component library'
+    Copyright = 'ACTom'
+    License = 'LGPL'
+    Homepage = 'https://github.com/ACTom/TyControls'
+    Left = 680
+    Top = 64
   end
 end

@@ -45,8 +45,8 @@
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="363"/>
-        <CursorPos X="3" Y="365"/>
+        <TopLine Value="365"/>
+        <CursorPos X="22" Y="220"/>
         <UsageCount Value="103"/>
         <Loaded Value="True"/>
         <LoadedDesigner Value="True"/>
@@ -75,18 +75,6 @@
       </Unit>
     </Units>
     <JumpHistory HistoryIndex="29">
-      <Position>
-        <Filename Value="mainform.pas"/>
-        <Caret Line="191" Column="33" TopLine="166"/>
-      </Position>
-      <Position>
-        <Filename Value="mainform.pas"/>
-        <Caret Line="190" Column="33" TopLine="165"/>
-      </Position>
-      <Position>
-        <Filename Value="mainform.pas"/>
-        <Caret Line="189" Column="33" TopLine="164"/>
-      </Position>
       <Position>
         <Filename Value="mainform.pas"/>
         <Caret Line="188" Column="33" TopLine="163"/>
@@ -194,6 +182,18 @@
       <Position>
         <Filename Value="mainform.pas"/>
         <Caret Line="297" Column="3" TopLine="295"/>
+      </Position>
+      <Position>
+        <Filename Value="mainform.pas"/>
+        <Caret Line="371" Column="36" TopLine="364"/>
+      </Position>
+      <Position>
+        <Filename Value="mainform.pas"/>
+        <Caret Line="372" Column="36" TopLine="365"/>
+      </Position>
+      <Position>
+        <Filename Value="mainform.pas"/>
+        <Caret Line="379" Column="36" TopLine="372"/>
       </Position>
     </JumpHistory>
   </ProjectOptions>

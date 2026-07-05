@@ -10,11 +10,16 @@ uses
   tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu,
   tyControls.BuiltinThemes, tyControls.NativeStyler, tyControls.ToolBar,
-  tyControls.StatusBar, tyControls.Splitter, tyControls.TabSet, tyControls.Calendar,
-  tyControls.DateTimePicker, tyControls.TreeView, tyControls.TreeView.Columns,
-  tyControls.Dialogs, tyControls.Dialogs.SelectPath,
-  tyControls.Dialogs.Color, tyControls.Dialogs.Font,
-  tyControls.Dialogs.Find, tyControls.Dialogs.Progress;
+  tyControls.StatusBar, tyControls.Splitter, tyControls.TabSet,
+  tyControls.Calendar, tyControls.DateTimePicker, tyControls.TreeView,
+  tyControls.TreeView.Columns, tyControls.Dialogs,
+  tyControls.Dialogs.SelectPath, tyControls.Dialogs.Color,
+  tyControls.Dialogs.Font, tyControls.Dialogs.Find, tyControls.Dialogs.Progress,
+  tyControls.Dialogs.About,
+  tyControls.LinkLabel, tyControls.ShadowLabel, tyControls.GlowLabel,
+  tyControls.IconFont, tyControls.CharImage, tyControls.GlyphButtons,
+  tyControls.DropButtons, tyControls.ColorButton, tyControls.ButtonGroup,
+  tyControls.Hint;
 type
 
   { TDemoMainForm — ALL controls live in the designer (mainform.lfm), including the docked
@@ -24,6 +29,7 @@ type
 
   TDemoMainForm = class(TTyForm)
     BtnDanger: TTyButton;
+    BtnDlgAbout: TTyButton;
     BtnPrimary: TTyButton;
     Calendar1: TTyCalendar;
     ChkAgree: TTyCheckBox;
@@ -48,6 +54,7 @@ type
     Toggle1: TTyToggleSwitch;
     TrackBar1: TTyTrackBar;
     TreeView1: TTreeView;
+    TyAboutDlg: TTyAboutDialog;
     TyButton1: TTyButton;
     TyButton2: TTyButton;
     TyButton3: TTyButton;
@@ -107,6 +114,25 @@ type
     TyTree1: TTyTreeView;
     TyColTree: TTyTreeView;
     TyTabSheet4: TTyTabSheet;
+    TyTabSheet6: TTyTabSheet;
+    TyTabSheet7: TTyTabSheet;
+    DemoIconFont: TTyIconFont;
+    DemoHint: TTyHint;
+    DemoGlyphBtn: TTyGlyphButton;
+    DemoGlyphContainer: TTyGlyphContainerButton;
+    DemoSpeed1: TTySpeedButton;
+    DemoSpeed2: TTySpeedButton;
+    DemoSpeed3: TTySpeedButton;
+    DemoDropBtn: TTyDropDownButton;
+    DemoMenuBtn: TTyMenuButton;
+    DemoColorBtn: TTyColorButton;
+    DemoBtnGroup: TTyButtonGroup;
+    DemoLinkLabel: TTyLinkLabel;
+    DemoShadowLabel: TTyShadowLabel;
+    DemoGlowLabel: TTyGlowLabel;
+    DemoCharImage: TTyCharImage;
+    HintNote: TTyLabel;
+    procedure BtnDlgAboutClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure TyButton4Click(Sender: TObject);
     procedure TyTree1InitNode(Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
@@ -209,6 +235,11 @@ begin
   {$ENDIF}
   InitThemes;
   InitColTree;
+end;
+
+procedure TDemoMainForm.BtnDlgAboutClick(Sender: TObject);
+begin
+  TyAboutDlg.Execute;
 end;
 
 procedure TDemoMainForm.TyButton4Click(Sender: TObject);
