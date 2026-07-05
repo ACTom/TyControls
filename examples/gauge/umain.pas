@@ -17,7 +17,7 @@ uses
   tyControls.Controller, tyControls.Form,
   tyControls.Gauge, tyControls.CircularProgress, tyControls.ActivityIndicator,
   tyControls.Meter, tyControls.LevelMeter, tyControls.Dial, tyControls.AnalogClock,
-  tyControls.TyLabel;
+  tyControls.Sparkline, tyControls.Rating, tyControls.GearDial, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -29,6 +29,9 @@ type
     FLevel: TTyLevelMeter;
     FDial: TTyDial;
     FClock: TTyAnalogClock;
+    FSpark: TTySparkline;
+    FRating: TTyRating;
+    FGear: TTyGearDial;
     FStatus: TTyLabel;
     FTimer: TTimer;
     FTick: Integer;
@@ -66,7 +69,7 @@ begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Gauge 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 540, 540);
+  SetBounds(0, 0, 540, 660);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -166,10 +169,29 @@ begin
   FClock.SetBounds(436, 388, 90, 90);
   FClock.Running := True;
 
+  // 再一行:趋势图 / 评分 / 齿轮旋钮
+  FSpark := TTySparkline.Create(Self);
+  FSpark.Parent := Self;
+  FSpark.SetBounds(24, 500, 220, 40);
+  FSpark.SetValues([3, 5, 4, 8, 6, 9, 7, 11, 9, 13, 10, 14]);
+
+  FRating := TTyRating.Create(Self);
+  FRating.Parent := Self;
+  FRating.SetBounds(24, 552, 160, 28);
+  FRating.AllowHalf := True;
+  FRating.Value := 3.5;
+
+  FGear := TTyGearDial.Create(Self);
+  FGear.Parent := Self;
+  FGear.SetBounds(260, 500, 84, 84);
+  FGear.Min := 0;
+  FGear.Max := 100;
+  FGear.Value := 55;
+
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
-  FStatus.SetBounds(24, 470, 400, 20);
-  FStatus.Caption := '每 1.2s 随机改变数值(旋钮可拖动 / 滚轮),观察缓动动画。';
+  FStatus.SetBounds(24, 596, 460, 20);
+  FStatus.Caption := '每 1.2s 随机改变数值(旋钮 / 齿轮可拖动 / 滚轮,星星可点),观察缓动动画。';
 
   // 定时改值,演示缓动
   FTimer := TTimer.Create(Self);

@@ -74,6 +74,9 @@ uses
   test.levelmeter,
   test.dial,
   test.analogclock,
+  test.sparkline,
+  test.rating,
+  test.geardial,
   test.combobox,
   test.tabset;
 

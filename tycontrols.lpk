@@ -133,6 +133,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AnalogClock"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Sparkline.pas"/>
+        <UnitName Value="tyControls.Sparkline"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Rating.pas"/>
+        <UnitName Value="tyControls.Rating"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.GearDial.pas"/>
+        <UnitName Value="tyControls.GearDial"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ToggleSwitch.pas"/>
         <UnitName Value="tyControls.ToggleSwitch"/>
       </Item>

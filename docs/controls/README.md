@@ -76,6 +76,9 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyLevelMeter](levelmeter.md) | 电平条 / VU 表（连续或分段点亮 + 峰值保持，水平 / 垂直） |
 | [TTyDial](dial.md) | 可交互旋钮（拖动 / 滚轮 / 方向键改值） |
 | [TTyAnalogClock](analogclock.md) | 模拟时钟表盘（时 / 分 / 秒针，可自动走时） |
+| [TTySparkline](sparkline.md) | 内联迷你趋势图（折线 / 柱，无轴） |
+| [TTyRating](rating.md) | 星级评分（悬停预览 / 点击 / 半星） |
+| [TTyGearDial](geardial.md) | 齿轮旋钮（可拖动 / 滚轮的旋钮变体） |
 
 ## 文字
 

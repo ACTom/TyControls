@@ -79,6 +79,12 @@ procedure GLevelMeter(b: TBGRABitmap); begin RRect(b,3,8,21,16,2,Ink); FillRRect
 procedure GDial(b: TBGRABitmap); begin FillCirc(b,12,12,9,Faint); Circ(b,12,12,9,Ink); Line(b,12,12,6,6,Acc); FillCirc(b,12,12,2,Ink); end;
 { TTyAnalogClock: a face with 4 ticks + hour/minute/accent-second hands + hub }
 procedure GAnalogClock(b: TBGRABitmap); begin Circ(b,12,12,8.5,Ink,1.4); Line(b,12,4.5,12,6,Ink,1); Line(b,12,18,12,19.5,Ink,1); Line(b,4.5,12,6,12,Ink,1); Line(b,18,12,19.5,12,Ink,1); Line(b,12,12,12,7.5,Ink,1.6); Line(b,12,12,15.5,12,Ink,1.4); Line(b,12,12,9,15.5,Acc,1); FillCirc(b,12,12,1.4,Acc); end;
+{ TTySparkline: an accent trend polyline + last-point dot over a faint baseline }
+procedure GSparkline(b: TBGRABitmap); begin PolyL(b,[PointF(4,15),PointF(7,11),PointF(10,13),PointF(13,6),PointF(16,10),PointF(20,7)],Acc,2); FillCirc(b,20,7,1.8,Acc); Line(b,3,19,21,19,Faint,1.2); end;
+{ TTyRating: a single filled accent star }
+procedure GRating(b: TBGRABitmap); begin FillPolyG(b,[PointF(12,3.8),PointF(13.94,9.33),PointF(19.8,9.47),PointF(15.14,13.02),PointF(16.82,18.63),PointF(12,15.3),PointF(7.18,18.63),PointF(8.86,13.02),PointF(4.2,9.47),PointF(10.06,9.33)],Acc); end;
+{ TTyGearDial: a gear body (teeth around the rim) + accent pointer + hub }
+procedure GGearDial(b: TBGRABitmap); var i: Integer; a, cx, cy, rr, tr: Double; begin cx:=12; cy:=12; rr:=8; tr:=10.5; for i:=0 to 7 do begin a:=i*Pi/4; Line(b, cx+rr*Cos(a), cy+rr*Sin(a), cx+tr*Cos(a), cy+tr*Sin(a), Ink, 2.2); end; FillCirc(b,12,12,8,Faint); Circ(b,12,12,8,Ink); Circ(b,12,12,4.6,Ink); Line(b,12,12,6.5,6.5,Acc); FillCirc(b,12,12,1.8,Acc); end;
 procedure GListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,6,9,18,9,Acc,2); Line(b,6,13,18,13,Ink); Line(b,6,17,15,17,Ink); end;
 procedure GTabControl(b: TBGRABitmap); begin FillRRect(b,3.5,5,11.5,10.5,1.5,Acc); RRect(b,12.5,6.2,20,10.5,1.5,Ink); RRect(b,3,10,21,20,2,Ink); end;
 procedure GTabSheet(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Acc,2); end;
@@ -300,7 +306,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..48] of TGlyph = (
+  Glyphs: array[0..51] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -317,6 +323,9 @@ const
     (Name:'TTyLevelMeter';       Draw:@GLevelMeter),
     (Name:'TTyDial';             Draw:@GDial),
     (Name:'TTyAnalogClock';      Draw:@GAnalogClock),
+    (Name:'TTySparkline';        Draw:@GSparkline),
+    (Name:'TTyRating';           Draw:@GRating),
+    (Name:'TTyGearDial';         Draw:@GGearDial),
     (Name:'TTyListBox';         Draw:@GListBox),
     (Name:'TTyPageControl';     Draw:@GTabControl),
     (Name:'TTyTabSheet';        Draw:@GTabSheet),
