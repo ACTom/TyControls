@@ -343,9 +343,12 @@ end;
 
 destructor TTyRibbonGallery.Destroy;
 begin
-  // Popup first (it references the grid); the grid is owned by Self so TComponent
-  // would free it anyway, but free it explicitly here to keep ordering obvious.
-  FPopup.Free;   // Free is nil-safe
+  // Free the grid FIRST: it is owned by Self AND parented into the popup form, so
+  // FreeAndNil frees it once and unlinks it from BOTH the owner-component list and the
+  // popup form's child list — removing any ambiguity about whether freeing the popup
+  // form (next) or the inherited destructor would also free it (a double-free window).
+  FreeAndNil(FGrid);
+  FPopup.Free;   // now frees a child-less form (Free is nil-safe)
   FItems.Free;
   FGlyphNames.Free;
   inherited Destroy;
@@ -409,6 +412,12 @@ begin
   // Clamp a stale selection if the list shrank; fire OnSelect only if it changed.
   if FItemIndex >= FItems.Count then
     SelectAt(-1);
+  // Drop any popup-grid hover that may now point past the shrunk list (same unit).
+  if FGrid <> nil then
+  begin
+    FGrid.FHoverIndex := -1;
+    FGrid.Invalidate;
+  end;
   Invalidate;
 end;
 
