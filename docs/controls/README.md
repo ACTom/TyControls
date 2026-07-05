@@ -85,6 +85,9 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | 控件 | 说明 |
 |------|------|
 | [TTyLabel](label.md) | 文本标签（支持助记符下划线） |
+| [TTyLinkLabel](linklabel.md) | 超链接标签（accent + 下划线，点击打开 URL） |
+| [TTyShadowLabel](shadowlabel.md) | 带投影的文字标签 |
+| [TTyGlowLabel](glowlabel.md) | 带发光光晕的文字标签 |
 
 ## 菜单
 

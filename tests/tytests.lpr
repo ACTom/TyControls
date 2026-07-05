@@ -77,6 +77,9 @@ uses
   test.sparkline,
   test.rating,
   test.geardial,
+  test.linklabel,
+  test.shadowlabel,
+  test.glowlabel,
   test.combobox,
   test.tabset;
 

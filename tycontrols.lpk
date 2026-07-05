@@ -145,6 +145,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.GearDial"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.LinkLabel.pas"/>
+        <UnitName Value="tyControls.LinkLabel"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ShadowLabel.pas"/>
+        <UnitName Value="tyControls.ShadowLabel"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.GlowLabel.pas"/>
+        <UnitName Value="tyControls.GlowLabel"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ToggleSwitch.pas"/>
         <UnitName Value="tyControls.ToggleSwitch"/>
       </Item>
