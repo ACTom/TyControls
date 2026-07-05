@@ -165,6 +165,26 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.BalloonHint"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.IconFont.pas"/>
+        <UnitName Value="tyControls.IconFont"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.CharImage.pas"/>
+        <UnitName Value="tyControls.CharImage"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.GlyphImageList.pas"/>
+        <UnitName Value="tyControls.GlyphImageList"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Image.pas"/>
+        <UnitName Value="tyControls.Image"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ImageCollection.pas"/>
+        <UnitName Value="tyControls.ImageCollection"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ToggleSwitch.pas"/>
         <UnitName Value="tyControls.ToggleSwitch"/>
       </Item>

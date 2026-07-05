@@ -15,6 +15,8 @@ uses
   tyControls.Sparkline, tyControls.Rating, tyControls.GearDial,
   tyControls.LinkLabel, tyControls.ShadowLabel, tyControls.GlowLabel,
   tyControls.Hint, tyControls.BalloonHint,
+  tyControls.IconFont, tyControls.CharImage, tyControls.GlyphImageList,
+  tyControls.Image, tyControls.ImageCollection,
   tyControls.ToggleSwitch,
   tyControls.TrackBar, tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu, tyControls.NativeStyler,
@@ -592,6 +594,8 @@ begin
      TTyToggleSwitch, TTyTrackBar, TTyGroupBox,
      TTyPageControl, TTyTabSheet, TTyTabSet, TTySpinEdit, TTyMemo, TTyTitleBar,
      TTyMenuBar, TTyPopupMenu, TTyNativeStyler, TTyHint, TTyBalloonHint,
+     TTyIconFont, TTyCharImage, TTyGlyphImageList, TTyImage,
+     TTyImageCollection, TTyVirtualImageList,
      TTySplitter, TTyStatusBar, TTyToolBar, TTyToolSeparator,
      TTyCalendar, TTyDateTimePicker,
      TTyTreeView]);

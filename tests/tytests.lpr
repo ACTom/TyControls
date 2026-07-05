@@ -82,6 +82,11 @@ uses
   test.glowlabel,
   test.hint,
   test.balloonhint,
+  test.iconfont,
+  test.charimage,
+  test.glyphimagelist,
+  test.image,
+  test.imagecollection,
   test.combobox,
   test.tabset;
 

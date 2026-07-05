@@ -1,0 +1,138 @@
+# TTyImageCollection / TTyVirtualImageList
+
+## 1. 概述
+
+`TTyImageCollection` 与 `TTyVirtualImageList` 是一对**非可视**组件(`TComponent`),构成 ty-controls 的**光栅图像**基础设施——它们是矢量图标字体([[TTyIconFont]] / `TTyGlyphImageList`)的**光栅对应物**:照片、真彩 PNG 等位图放这里,单色可缩放字形放图标字体。
+
+- **TTyImageCollection** —— DPI 感知的**命名位图集合**。你用 `TBGRABitmap` 或 `TPicture` 按名字添加图像,集合为每个名字保留一张 master(最高分辨率源)位图。消费方按**目标像素尺寸**索取某个名字,得到一张缩放到该尺寸的新位图(保持宽高比、居中于透明方块)。一张 master 服务所有 DPI,调用方无需自行维护多套分辨率的图集。
+- **TTyVirtualImageList** —— 引用一个 `TTyImageCollection` 的**有序虚拟图像列表**。按名字暴露集合中的一个子集,并可在消费方的目标像素尺寸上**按需**渲染 / 绘制任意一项。形态与 `TTyGlyphImageList` 完全一致,只是源自光栅集合而非图标字体。
+
+两者都**按需渲染**、不缓存固定分辨率的图集,因此是带 `Draw` 方法的普通 `TComponent`,而非 `TCustomImageList` 后代——ty-controls 的自绘控件消费它们,而非 LCL 原生 `TImageList`。**headless 安全,无计时器。**
+
+```pascal
+uses tyControls.ImageCollection;
+```
+
+---
+
+## 2. 单元
+
+| 项目 | 值 |
+|------|-----|
+| 单元 | `tyControls.ImageCollection` |
+| 类 | `TTyImageCollection`、`TTyVirtualImageList` |
+| typeKey / 主题 | 无(非可视组件,不解析 `.tycss`,不绘制自身背景) |
+| 依赖 | `BGRABitmap`、`Graphics`(`TPicture` / `TBitmap` / `TCanvas`) |
+
+---
+
+## 3. TTyImageCollection API
+
+### 添加与清空
+
+| 方法 | 说明 |
+|------|------|
+| `procedure AddBitmap(const AName: string; ABmp: TBGRABitmap)` | 以 `AName` 添加(或替换)一张图像。取 `ABmp` 的**副本**(`Duplicate`),调用方保留自己那份的所有权。`AName` 为空或 `ABmp` 为 `nil` 时为空操作。 |
+| `procedure AddPicture(const AName: string; APicture: TPicture)` | 从 `APicture` 当前图形构建 master(任意 LCL 图形——PNG/BMP/JPG)。调用方保留 `APicture` 所有权。空名 / 空图形时为空操作。 |
+| `procedure Clear` | 清空所有图像(释放每张 master)。 |
+
+### 查询
+
+| 方法 | 返回 | 说明 |
+|------|------|------|
+| `function Count: Integer` | `Integer` | 已存图像数。 |
+| `function NameOf(AIndex: Integer): string` | `string` | `AIndex` 处的名字;越界返回 `''`。 |
+| `function IndexOf(const AName: string): Integer` | `Integer` | 名字索引(大小写敏感);不存在返回 `-1`。 |
+| `function Contains(const AName: string): Boolean` | `Boolean` | 名字是否存在。 |
+
+### 渲染
+
+| 方法 | 说明 |
+|------|------|
+| `function GetBitmap(const AName: string; ASizePx: Integer): TBGRABitmap` | 返回一张**新的、调用方拥有**的位图:`AName` 的 master 缩放到适配 `ASizePx` 见方(保持宽高比、居中于透明背景)。名字缺失时返回同尺寸的**空透明方块**(**永不为 `nil`、永不抛异常**);`ASizePx <= 0` 夹紧为 1px。**调用方负责 `Free`。** |
+
+---
+
+## 4. TTyVirtualImageList API
+
+### 属性(published)
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `Collection` | `TTyImageCollection` | `nil` | 光栅图像源。赋值时注册 `FreeNotification`,集合被先释放时引用自动置 `nil`。 |
+| `Names` | `TStrings` | 空 | 要暴露的图像**名字**(有序,每行一个)——每个都是 `Collection` 中的键。 |
+| `DefaultSize` | `Integer` | `16` | 默认项边长(**逻辑**像素),供不传尺寸的消费方使用。 |
+
+### 方法
+
+| 方法 | 说明 |
+|------|------|
+| `function Count: Integer` | 暴露项数(= `Names.Count`)。 |
+| `function NameOf(AIndex: Integer): string` | `AIndex` 处的名字;越界返回 `''`。 |
+| `function IndexOf(const AName: string): Integer` | 名字索引;不存在返回 `-1`。 |
+| `function RenderIndex(AIndex, ASizePx: Integer): TBGRABitmap` | 从 `Collection` 渲染第 `AIndex` 项到 `ASizePx` 见方。**调用方拥有**返回位图。`Collection` 未设 / 索引越界 / 名字缺失时返回空透明方块(**永不为 `nil`**);`ASizePx <= 0` 夹紧为 1px。 |
+| `procedure Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer)` | 渲染第 `AIndex` 项并绘制到 `ACanvas` 的 `(AX, AY)`。守护所有边界情况(`nil` 画布 / 集合、坏索引、`ASizePx <= 0`),**永不抛异常**。 |
+
+---
+
+## 5. 内存所有权
+
+- **`AddBitmap` 取副本** —— 传入的 `TBGRABitmap` 被 `Duplicate`;调用方之后可自由释放 / 复用自己那份。
+- **集合拥有 master** —— 每张 master 由集合持有,`Clear` / 析构时全部释放,无泄漏。
+- **`GetBitmap` / `RenderIndex` 返回值归调用方** —— 用完必须 `Free`(见示例)。
+- **`Draw` 自行管理** —— 内部渲染临时位图、绘制、随即释放,调用方无需理会。
+
+---
+
+## 6. 代码示例
+
+```pascal
+uses Graphics, BGRABitmap, BGRABitmapTypes, tyControls.ImageCollection;
+
+var
+  Coll: TTyImageCollection;
+  VList: TTyVirtualImageList;
+  Src, Bmp: TBGRABitmap;
+begin
+  Coll := TTyImageCollection.Create(Self);
+
+  // 从 TBGRABitmap 添加(集合取副本,调用方可释放自己那份)
+  Src := TBGRABitmap.Create(64, 64, BGRAWhite);
+  try
+    Coll.AddBitmap('logo', Src);
+  finally
+    Src.Free;
+  end;
+
+  // 从 TPicture 添加(PNG/BMP/JPG 均可)
+  // Coll.AddPicture('avatar', SomePicture);
+
+  // 按目标像素尺寸取图 —— 返回值归调用方
+  Bmp := Coll.GetBitmap('logo', 24);   // 24x24,居中于透明方块
+  try
+    Bmp.Draw(Canvas, 8, 8, False);
+  finally
+    Bmp.Free;
+  end;
+
+  // 虚拟列表:引用集合,按名字暴露有序子集
+  VList := TTyVirtualImageList.Create(Self);
+  VList.Collection := Coll;
+  VList.Names.Add('logo');
+  VList.Names.Add('avatar');
+  VList.DefaultSize := 20;
+
+  // 直接绘制第 0 项(内部渲染→绘制→释放)
+  VList.Draw(Canvas, 0, 40, 8, 32);
+end;
+```
+
+---
+
+## 7. 注意事项
+
+- **矢量 vs 光栅:** 单色、需任意缩放的图标用 [[TTyIconFont]] / `TTyGlyphImageList`(矢量按需光栅化);照片 / 真彩位图用本对组件(保留 master、按 DPI 缩放)。要把一张图当**可视控件**摆到界面上,用 [[TTyImage]]。
+- **DPI 感知:** `GetBitmap` / `RenderIndex` 的 `ASizePx` 是**设备(物理)像素**;`TTyVirtualImageList.DefaultSize` 是**逻辑**像素,消费方应自行乘以缩放因子后再传给渲染方法。
+- **宽高比:** 缩放采用 **contain**(整图适配方块,不裁剪),多余区域为透明——非方形 master 会有透明留白带。
+- **永不为 nil / 永不抛异常:** 缺失名字、坏索引、`ASizePx <= 0`、未设 `Collection` 等均安全返回空透明位图(`Draw` 直接安全空操作),消费方可无条件 blit。
+- **headless 安全:** 纯逻辑 + BGRA 光栅操作,无窗口句柄、无计时器依赖,可在无 GUI 的 fpcunit 中完整测试。

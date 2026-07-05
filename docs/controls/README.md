@@ -96,6 +96,17 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyHint](hint.md) | 主题化气泡提示（替换原生 LCL tooltip，全应用生效） |
 | [TTyBalloonHint](balloonhint.md) | 带指针的气泡标注（标题 + 正文 + 可选图标） |
 
+## 图标与图像
+
+| 控件 | 说明 |
+|------|------|
+| [TTyIconFont](iconfont.md) | 图标字体源（注册 .ttf、name→codepoint、渲染字形） |
+| [TTyCharImage](charimage.md) | 单个图标字体字形作为图像控件 |
+| [TTyGlyphImageList](glyphimagelist.md) | 图标字体字形图像列表（供 Ty 控件消费） |
+| [TTyImage](image.md) | 主题化位图图像控件（拉伸/等比/居中） |
+| [TTyImageCollection](imagecollection.md) | DPI 感知的命名位图集合 |
+| [TTyVirtualImageList](imagecollection.md) | 从集合按目标 DPI 绘制的虚拟图像列表 |
+
 ## 菜单
 
 | 控件 | 说明 |

@@ -95,6 +95,32 @@ procedure GGlowLabel(b: TBGRABitmap); begin FillCirc(b,12,13,7,Faint); PolyL(b,[
 procedure GHint(b: TBGRABitmap); begin FillRRect(b,3,4,21,16,3,Faint); FillPolyG(b,[PointF(7,16),PointF(7,20),PointF(12,16)],Faint); RRect(b,3,4,21,16,3,Ink); Line(b,6,9,18,9,Ink,1.5); Line(b,6,12,14,12,Ink,1.5); end;
 { TTyBalloonHint: a callout with an accent icon dot + title/body lines + tail }
 procedure GBalloonHint(b: TBGRABitmap); begin FillRRect(b,3,3,21,15,3,Faint); FillPolyG(b,[PointF(8,15),PointF(8,20),PointF(13,15)],Faint); RRect(b,3,3,21,15,3,Ink); FillCirc(b,8,9,2.6,Acc); Line(b,12,8,18,8,Ink,1.5); Line(b,12,11,17,11,Ink,1.4); end;
+{ TTyIconFont: a glyph tile — a filled rounded frame with an accent asterisk (a font of symbols) }
+procedure GIconFont(b: TBGRABitmap); begin FillRRect(b,3,3,21,21,4,Faint); RRect(b,3,3,21,21,4,Ink); Line(b,12,7,12,17,Acc,1.8); Line(b,7.5,9.5,16.5,14.5,Acc,1.8); Line(b,16.5,9.5,7.5,14.5,Acc,1.8); end;
+{ TTyCharImage: a rounded frame with an accent 5-point star (a single glyph char as an image) }
+procedure GCharImage(b: TBGRABitmap); begin RRect(b,3,3,21,21,4,Ink,2); FillPolyG(b,[PointF(12,6),PointF(13.6,10.1),PointF(18,10.4),PointF(14.6,13.2),PointF(15.7,17.5),PointF(12,15),PointF(8.3,17.5),PointF(9.4,13.2),PointF(6,10.4),PointF(10.4,10.1)],Acc); end;
+{ TTyGlyphImageList: two overlapping glyph tiles, the front carrying an accent mark }
+procedure GGlyphImageList(b: TBGRABitmap); begin FillRRect(b,3,3,16,16,3,Faint); RRect(b,3,3,16,16,3,Ink,1.2); Line(b,9.5,4,9.5,15,Ink,1); Line(b,4,9.5,15,9.5,Ink,1); FillRRect(b,8,8,21,21,3,Faint); RRect(b,8,8,21,21,3,Ink,1.2); PolyL(b,[PointF(11,15),PointF(13.5,18),PointF(18,12)],Acc,1.6); FillCirc(b,18.5,10.5,1.6,Acc); end;
+{ TTyImage: a rounded photo frame with an accent sun + a mountain silhouette }
+procedure GImage(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); FillCirc(b,7.5,9,2,Acc); PolyL(b,[PointF(4,18),PointF(9,12),PointF(12,15),PointF(16,9),PointF(20,18)],Ink); end;
+{ TTyImageCollection: a stack of overlapping photo tiles (mountain + sun in the front) }
+procedure GImageCollection(b: TBGRABitmap);
+begin
+  FillRRect(b,9,5,22,15,2,Faint); RRect(b,9,5,22,15,2,Ink,1);
+  FillRRect(b,5,9,18,19,2,Acc);   RRect(b,5,9,18,19,2,Ink,1);
+  FillCirc(b,9,12,1.4,Faint);
+  FillPolyG(b,[PointF(6,18),PointF(11,13),PointF(17,18)],Ink);
+end;
+{ TTyVirtualImageList: a list of image rows — a thumbnail square + a label line each }
+procedure GVirtualImageList(b: TBGRABitmap);
+var y: Integer;
+begin
+  for y := 0 to 2 do
+  begin
+    FillRRect(b,4,5+y*6,9,10+y*6,1,Acc); RRect(b,4,5+y*6,9,10+y*6,1,Ink,1);
+    Line(b,12,7+y*6,20,7+y*6,Ink,1);
+  end;
+end;
 procedure GListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,6,9,18,9,Acc,2); Line(b,6,13,18,13,Ink); Line(b,6,17,15,17,Ink); end;
 procedure GTabControl(b: TBGRABitmap); begin FillRRect(b,3.5,5,11.5,10.5,1.5,Acc); RRect(b,12.5,6.2,20,10.5,1.5,Ink); RRect(b,3,10,21,20,2,Ink); end;
 procedure GTabSheet(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Acc,2); end;
@@ -316,7 +342,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..56] of TGlyph = (
+  Glyphs: array[0..62] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -341,6 +367,12 @@ const
     (Name:'TTyGlowLabel';        Draw:@GGlowLabel),
     (Name:'TTyHint';             Draw:@GHint),
     (Name:'TTyBalloonHint';      Draw:@GBalloonHint),
+    (Name:'TTyIconFont';         Draw:@GIconFont),
+    (Name:'TTyCharImage';        Draw:@GCharImage),
+    (Name:'TTyGlyphImageList';   Draw:@GGlyphImageList),
+    (Name:'TTyImage';            Draw:@GImage),
+    (Name:'TTyImageCollection';  Draw:@GImageCollection),
+    (Name:'TTyVirtualImageList'; Draw:@GVirtualImageList),
     (Name:'TTyListBox';         Draw:@GListBox),
     (Name:'TTyPageControl';     Draw:@GTabControl),
     (Name:'TTyTabSheet';        Draw:@GTabSheet),
