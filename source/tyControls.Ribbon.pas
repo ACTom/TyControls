@@ -24,9 +24,9 @@ unit tyControls.Ribbon;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
-  tyControls.TabStrip;
+  tyControls.TabStrip, tyControls.RibbonBackstage;
 
 type
   TTyRibbonPage = class;
@@ -41,7 +41,18 @@ type
     FDestroying: Boolean;
     FMinimized: Boolean;
     FExpandedHeight: Integer;               // Height to restore when un-minimized
+    FShowFileTab: Boolean;
+    FFileTabCaption: string;
+    FFileTabWidth: Integer;                 // logical px
+    FBackstage: TTyRibbonBackstage;
+    FOnFileTab: TNotifyEvent;
     procedure SetMinimized(AValue: Boolean);
+    procedure SetShowFileTab(AValue: Boolean);
+    procedure SetFileTabCaption(const AValue: string);
+    procedure SetFileTabWidth(AValue: Integer);
+    procedure SetBackstage(AValue: TTyRibbonBackstage);
+    function FileTabWidthPx: Integer;
+    procedure DrawFileTab;
     function GetPage(AIndex: Integer): TTyRibbonPage;
     function GetActivePage: TTyRibbonPage;
     procedure SetActivePage(AValue: TTyRibbonPage);
@@ -59,6 +70,9 @@ type
     procedure DoSelectTab(AIndex: Integer); override;
     procedure DoReorderTabs(AFromIndex, AToIndex: Integer); override;
     procedure RemoveTabData(AIndex: Integer); override;
+    function  HeaderLeftInset: Integer; override;
+    procedure Paint; override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure SetController(AValue: TTyStyleController); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
@@ -87,6 +101,13 @@ type
       Height shrinks to the tab-header height); setting it back restores the previous
       Height. The transient show-page-on-tab-click overlay is a GUI follow-up. }
     property Minimized: Boolean read FMinimized write SetMinimized default False;
+    { A modern-Office "File" tab at the LEFT of the tab strip (accent-styled). Clicking
+      it opens Backstage (if assigned) and/or fires OnFileTab — it does NOT switch pages. }
+    property FileTab: Boolean read FShowFileTab write SetShowFileTab default False;
+    property FileTabCaption: string read FFileTabCaption write SetFileTabCaption;
+    property FileTabWidth: Integer read FFileTabWidth write SetFileTabWidth default 52;
+    property Backstage: TTyRibbonBackstage read FBackstage write SetBackstage;
+    property OnFileTab: TNotifyEvent read FOnFileTab write FOnFileTab;
     property Align default alTop;
   end;
 
@@ -207,6 +228,9 @@ begin
   Width := 600;
   Height := 118;
   FExpandedHeight := 118;   // restored height if Minimized is set before any resize
+  FShowFileTab := False;
+  FFileTabCaption := '文件';
+  FFileTabWidth := 52;
   TabStop := True;
 end;
 
@@ -464,6 +488,108 @@ begin
   Invalidate;
 end;
 
+function TTyRibbon.FileTabWidthPx: Integer;
+begin
+  Result := MulDiv(FFileTabWidth, Font.PixelsPerInch, 96);
+end;
+
+function TTyRibbon.HeaderLeftInset: Integer;
+begin
+  if FShowFileTab then Result := FileTabWidthPx else Result := 0;
+end;
+
+procedure TTyRibbon.SetShowFileTab(AValue: Boolean);
+begin
+  if FShowFileTab = AValue then Exit;
+  FShowFileTab := AValue;
+  Realign;      // the header shifts by the File-tab inset
+  Invalidate;
+end;
+
+procedure TTyRibbon.SetFileTabCaption(const AValue: string);
+begin
+  if FFileTabCaption = AValue then Exit;
+  FFileTabCaption := AValue;
+  Invalidate;
+end;
+
+procedure TTyRibbon.SetFileTabWidth(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FFileTabWidth = AValue then Exit;
+  FFileTabWidth := AValue;
+  Realign;
+  Invalidate;
+end;
+
+procedure TTyRibbon.SetBackstage(AValue: TTyRibbonBackstage);
+begin
+  if FBackstage = AValue then Exit;
+  if FBackstage <> nil then FBackstage.RemoveFreeNotification(Self);
+  FBackstage := AValue;
+  if FBackstage <> nil then FBackstage.FreeNotification(Self);
+end;
+
+{ Draw the accent File tab in the reserved left inset (its own small paint pass, sized
+  to the tab rect so it does not blit over the base's tab-strip drawing). }
+procedure TTyRibbon.DrawFileTab;
+var
+  P: TTyPainter;
+  S: TTyStyleSet;
+  ppi, w, h, fs: Integer;
+begin
+  if not FShowFileTab then Exit;
+  ppi := Font.PixelsPerInch;
+  w := FileTabWidthPx;
+  h := MulDiv(TabHeight, ppi, 96);
+  if (w <= 0) or (h <= 0) then Exit;
+  S := ActiveController.Model.ResolveStyle('TyButton', 'primary', []);
+  fs := S.FontSize; if fs <= 0 then fs := 9;
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(Canvas, Rect(0, 0, w, h), ppi);
+    if tpBackground in S.Present then
+      P.FillBackground(Rect(0, 0, w, h), S.Background, 0);
+    P.DrawText(Rect(0, 0, w, h), FFileTabCaption, S.FontName, fs, S.FontWeight,
+      S.TextColor, taCenter, tlCenter, True);
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyRibbon.Paint;
+begin
+  inherited Paint;   // base draws the tab strip (shifted right by HeaderLeftInset) + frame
+  DrawFileTab;
+end;
+
+procedure TTyRibbon.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  w, h: Integer;
+  Frm: TCustomForm;
+begin
+  if FShowFileTab and (Button = mbLeft) then
+  begin
+    w := FileTabWidthPx;
+    h := MulDiv(TabHeight, Font.PixelsPerInch, 96);
+    if (X >= 0) and (X < w) and (Y >= 0) and (Y < h) then
+    begin
+      // The File tab opens the backstage and/or fires OnFileTab — it does NOT switch
+      // pages, so swallow the click (don't call the base tab hit-test).
+      if FBackstage <> nil then
+      begin
+        Frm := GetParentForm(Self);
+        if Frm <> nil then
+          FBackstage.ShowOver(Frm, Top);   // cover everything below the title bar
+      end;
+      if Assigned(FOnFileTab) then FOnFileTab(Self);
+      Exit;
+    end;
+  end;
+  inherited MouseDown(Button, Shift, X, Y);
+end;
+
 procedure TTyRibbon.SetController(AValue: TTyStyleController);
 var
   I: Integer;
@@ -477,6 +603,8 @@ end;
 procedure TTyRibbon.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FBackstage) then
+    FBackstage := nil;
   if FDestroying then Exit;
   if (Operation = opRemove) and (AComponent is TTyRibbonPage) then
     UnregisterPage(TTyRibbonPage(AComponent), False);

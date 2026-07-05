@@ -23,6 +23,7 @@ type
     procedure SettingContextHidesTabWhenInactive;
     procedure OverflowCountCollapsesTrailingGroups;
     procedure MinimizedCollapsesAndRestoresHeight;
+    procedure FileTabRoundTripAndDefaults;
     procedure DefaultAligns;
   end;
 
@@ -237,6 +238,25 @@ begin
     AssertTrue('minimized shrinks the height', Rib.Height < Full);
     Rib.Minimized := False;
     AssertEquals('restored to the full height', Full, Rib.Height);
+  finally
+    Rib.Free;
+  end;
+end;
+
+procedure TRibbonTest.FileTabRoundTripAndDefaults;
+var Rib: TTyRibbon;
+begin
+  Rib := TTyRibbon.Create(nil);
+  try
+    AssertFalse('File tab off by default', Rib.FileTab);
+    AssertEquals('default caption', '文件', Rib.FileTabCaption);
+    AssertEquals('default width', 52, Rib.FileTabWidth);
+    Rib.FileTab := True;
+    Rib.FileTabCaption := 'File';
+    Rib.FileTabWidth := 60;
+    AssertTrue('File tab on', Rib.FileTab);
+    AssertEquals('caption set', 'File', Rib.FileTabCaption);
+    AssertEquals('width set', 60, Rib.FileTabWidth);
   finally
     Rib.Free;
   end;

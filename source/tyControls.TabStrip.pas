@@ -100,6 +100,10 @@ type
     procedure DoReorderTabs(AFromIndex, AToIndex: Integer); virtual;
     procedure RemoveTabData(AIndex: Integer); virtual;
     procedure TabsChanged; virtual;
+    { Device-px reserved at the LEFT of the header strip: the tab headers are shifted
+      right by this much so a subclass can draw its own leftmost element there (e.g. a
+      ribbon "File" tab). Default 0. }
+    function HeaderLeftInset: Integer; virtual;
     procedure SetController(AValue: TTyStyleController); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -269,6 +273,11 @@ end;
 procedure TTyCustomTabStrip.TabsChanged;
 begin
   if not (csLoading in ComponentState) then Invalidate;
+end;
+
+function TTyCustomTabStrip.HeaderLeftInset: Integer;
+begin
+  Result := 0;
 end;
 
 procedure TTyCustomTabStrip.EnsureTimer;
@@ -522,7 +531,9 @@ end;
   current. }
 function TTyCustomTabStrip.HeaderShiftPx: Integer;
 begin
-  Result := FScrollLeftRect.Right - FHeaderScroll;
+  // Reserve the subclass's left inset (e.g. a ribbon File tab) plus the overflow
+  // left-arrow width, minus the current scroll offset.
+  Result := FScrollLeftRect.Right - FHeaderScroll + HeaderLeftInset;
 end;
 
 { Clamp the requested scroll into [0, TyMaxHeaderScroll] and repaint. }

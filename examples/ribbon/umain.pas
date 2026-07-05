@@ -16,7 +16,7 @@ uses
   Classes, SysUtils, Forms, Controls, Menus,
   tyControls.Controller, tyControls.Form,
   tyControls.Panel, tyControls.Button, tyControls.IconFont, tyControls.GlyphButtons,
-  tyControls.Ribbon, tyControls.RibbonAppMenu, tyControls.RibbonQuickAccess,
+  tyControls.Ribbon, tyControls.RibbonQuickAccess,
   tyControls.RibbonGallery, tyControls.RibbonBackstage;
 
 const
@@ -86,7 +86,6 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  AppMenu: TTyRibbonAppMenu;
   QAT: TTyRibbonQuickAccess;
   Backstage: TTyRibbonBackstage;
   PgHome, PgInsert, PgTable: TTyRibbonPage;
@@ -139,9 +138,13 @@ begin
 
   // ── alTop stack, created BOTTOM-first (LCL puts the last-added alTop on top) ──
 
-  // 1) The ribbon — directly BELOW the title bar.
+  // 1) The ribbon — directly BELOW the title bar, with a modern-Office "File" tab as
+  //    the leftmost tab; clicking it opens the full-window backstage.
   FRibbon := TTyRibbon.Create(Self);
   FRibbon.Parent := Self;    // Align=alTop
+  FRibbon.FileTab := True;
+  FRibbon.FileTabCaption := '文件';
+  FRibbon.Backstage := Backstage;
 
   PgHome := FRibbon.AddPage('开始');
   // Add groups RIGHT-to-LEFT so they flow 剪贴板 | 字体 left->right.
@@ -168,22 +171,17 @@ begin
   g := NewGroup(PgTable, '表格', 120);
   BigButton(g, '选择', 6, 56);
 
-  // 2) The title bar LAST → topmost. It hosts the File app-menu + the QAT.
+  // 2) The title bar LAST → topmost. It hosts the Quick Access Toolbar (modern Office
+  //    keeps the QAT in the title bar; the File tab lives in the ribbon strip).
   Bar := TTyTitleBar.Create(Self);
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := CTitleH;
-  Bar.Caption := '';         // File + QAT occupy the left; keep the caption clear
-
-  AppMenu := TTyRibbonAppMenu.Create(Self);
-  AppMenu.Parent := Bar;     // in the title bar
-  AppMenu.SetBounds(6, 4, 56, 26);
-  AppMenu.Backstage := Backstage;    // click File -> full-window backstage
-  AppMenu.BackstageTopInset := CTitleH;
+  Bar.Caption := '工作簿1 - TyControls';
 
   QAT := TTyRibbonQuickAccess.Create(Self);
   QAT.Parent := Bar;
-  QAT.SetBounds(70, 4, 120, 26);
+  QAT.SetBounds(8, 4, 120, 26);
   QAT.AddButton('保存').GlyphName := '';
   QAT.AddButton('撤销').GlyphName := '';
 
