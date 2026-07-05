@@ -221,6 +221,23 @@ begin
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
+    '/* Ribbon (Phase-3): the command band surface + the labelled group box. */' + LineEnding +
+    'TyRibbon {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: 0;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '}' + LineEnding +
+    'TyRibbonGroup {' + LineEnding +
+    '  background: alpha(#FFFFFF, 0);' + LineEnding +
+    '  color: var(--muted);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
     '' + LineEnding +
     'TyToggleSwitch {' + LineEnding +
     '  background: var(--surface-toggle-off);' + LineEnding +
@@ -763,6 +780,23 @@ begin
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius-sm);' + LineEnding +
     '  padding: 5px 9px;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Ribbon (Phase-3): the command band surface + the labelled group box. */' + LineEnding +
+    'TyRibbon {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: 0;' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '}' + LineEnding +
+    'TyRibbonGroup {' + LineEnding +
+    '  background: alpha(#FFFFFF, 0);' + LineEnding +
+    '  color: var(--muted);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +

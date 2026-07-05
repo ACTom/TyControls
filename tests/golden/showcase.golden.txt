@@ -118,6 +118,16 @@ TyHint||1 => pres[0,1,2,3,4,5,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2
 TyHint||2 => pres[0,1,2,3,4,5,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=4/4,4,4,4 pad=9,5,9,5 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyHint||3 => pres[0,1,2,3,4,5,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=4/4,4,4,4 pad=9,5,9,5 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyHint||4 => pres[0,1,2,3,4,5,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=4/4,4,4,4 pad=9,5,9,5 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyRibbon||0 => pres[0,1,2,3,4,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyRibbon||1 => pres[0,1,2,3,4,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyRibbon||2 => pres[0,1,2,3,4,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyRibbon||3 => pres[0,1,2,3,4,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyRibbon||4 => pres[0,1,2,3,4,7,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyRibbonGroup||0 => pres[0,1,2,3,7,] bg=k1/00FFFFFF ut=0 txt=802E1065 bd=FFC4B5FD/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyRibbonGroup||1 => pres[0,1,2,3,7,] bg=k1/00FFFFFF ut=0 txt=802E1065 bd=FFC4B5FD/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyRibbonGroup||2 => pres[0,1,2,3,7,] bg=k1/00FFFFFF ut=0 txt=802E1065 bd=FFC4B5FD/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyRibbonGroup||3 => pres[0,1,2,3,7,] bg=k1/00FFFFFF ut=0 txt=802E1065 bd=FFC4B5FD/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyRibbonGroup||4 => pres[0,1,2,3,7,] bg=k1/00FFFFFF ut=0 txt=802E1065 bd=FFC4B5FD/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToggleSwitch||0 => pres[0,1,4,] bg=k1/FFD3D1DB ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToggleSwitch||1 => pres[0,1,4,] bg=k1/FFC9C7D1 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToggleSwitch||2 => pres[0,1,4,] bg=k1/FF7C3AED ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0

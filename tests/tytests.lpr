@@ -91,6 +91,7 @@ uses
   test.dropbuttons,
   test.colorbutton,
   test.buttongroup,
+  test.ribbon,
   test.combobox,
   test.tabset;
 

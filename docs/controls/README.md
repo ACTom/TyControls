@@ -34,6 +34,14 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyColorButton](colorbutton.md) | 颜色按钮（色板 + 点击弹出取色对话框） |
 | [TTyButtonGroup](buttongroup.md) | 分段按钮条（等分 N 段，单选/多选） |
 
+## Ribbon
+
+| 控件 | 说明 |
+|------|------|
+| [TTyRibbon](ribbon.md) | Office 式命令带宿主（标签条 + 分组带，复用 Batch-C 按钮） |
+| [TTyRibbonPage](ribbon.md) | Ribbon 标签页（托管分组，`GetChildren` 流式） |
+| [TTyRibbonGroup](ribbon.md) | 带标题的分组盒（可选对话框启动器箭头） |
+
 ## 文本输入
 
 | 控件 | 说明 |
