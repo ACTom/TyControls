@@ -11,6 +11,7 @@ type
     procedure ParsePrefixes;
     procedure ParseInvalid;
     procedure ParseOutOfRange;
+    procedure ParseRejectsSurrogate;
     procedure MapAndLookup;
     procedure GlyphTextMatchesUtf8;
     procedure HasGlyphReflectsMap;
@@ -44,6 +45,16 @@ procedure TIconFontTest.ParseOutOfRange;
 begin
   // Above the Unicode ceiling U+10FFFF.
   AssertEquals('too big', 0, TyParseCodepoint('110000'));
+end;
+
+procedure TIconFontTest.ParseRejectsSurrogate;
+begin
+  // Lone UTF-16 surrogates (U+D800..U+DFFF) are not valid scalar values.
+  AssertEquals('low surrogate start', 0, TyParseCodepoint('D800'));
+  AssertEquals('high surrogate end', 0, TyParseCodepoint('DFFF'));
+  // Just outside the surrogate gap stays valid.
+  AssertEquals('below gap', $D7FF, TyParseCodepoint('D7FF'));
+  AssertEquals('above gap', $E000, TyParseCodepoint('E000'));
 end;
 
 procedure TIconFontTest.MapAndLookup;

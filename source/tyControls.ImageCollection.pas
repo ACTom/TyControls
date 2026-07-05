@@ -135,7 +135,8 @@ constructor TTyImageCollection.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TStringList.Create;
-  FItems.OwnsObjects := True;   // frees each TTyImageEntry (and its master)
+  FItems.OwnsObjects := True;    // frees each TTyImageEntry (and its master)
+  FItems.CaseSensitive := True;  // names are case-sensitive keys (per the contract)
 end;
 
 destructor TTyImageCollection.Destroy;
@@ -239,13 +240,20 @@ begin
   if dw < 1 then dw := 1;
   if dh < 1 then dh := 1;
 
-  scaled := master.Resample(dw, dh, rmFineResample) as TBGRABitmap;
+  // Guard the always-created Result across the scale/composite so it is freed (not
+  // leaked) if Resample or PutImage raises (e.g. under allocation failure).
   try
-    ox := (ASizePx - dw) div 2;
-    oy := (ASizePx - dh) div 2;
-    Result.PutImage(ox, oy, scaled, dmDrawWithTransparency);
-  finally
-    scaled.Free;
+    scaled := master.Resample(dw, dh, rmFineResample) as TBGRABitmap;
+    try
+      ox := (ASizePx - dw) div 2;
+      oy := (ASizePx - dh) div 2;
+      Result.PutImage(ox, oy, scaled, dmDrawWithTransparency);
+    finally
+      scaled.Free;
+    end;
+  except
+    Result.Free;
+    raise;
   end;
 end;
 

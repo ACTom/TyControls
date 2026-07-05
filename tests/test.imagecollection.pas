@@ -15,6 +15,7 @@ type
     procedure AddAndQuery;
     procedure AddTakesCopy;
     procedure AddReplacesSameName;
+    procedure NamesAreCaseSensitive;
     procedure NameOfBounds;
     procedure GetBitmapSizesToRequest;
     procedure GetBitmapMissingIsEmptyNonNil;
@@ -126,6 +127,29 @@ begin
     finally
       got.Free;
     end;
+  finally
+    b1.Free;
+    b2.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.NamesAreCaseSensitive;
+var
+  c: TTyImageCollection;
+  b1, b2: TBGRABitmap;
+begin
+  c := TTyImageCollection.Create(nil);
+  b1 := MakeBmp(8, 8, BGRAWhite);
+  b2 := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('Save', b1);
+    c.AddBitmap('save', b2);   // a DIFFERENT key -> a second entry, not a replace
+    AssertEquals('two distinct entries', 2, c.Count);
+    AssertTrue('Save present', c.IndexOf('Save') >= 0);
+    AssertTrue('save present', c.IndexOf('save') >= 0);
+    AssertTrue('distinct indices', c.IndexOf('Save') <> c.IndexOf('save'));
+    AssertFalse('wrong case absent', c.Contains('SAVE'));
   finally
     b1.Free;
     b2.Free;

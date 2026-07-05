@@ -71,14 +71,15 @@ uses
   LazUTF8;
 
 {$IFDEF WINDOWS}
-// FPC's Windows unit does not export the *Ex font APIs; declare them (ANSI
-// variants, so PChar = PAnsiChar maps directly).
+// FPC's Windows unit does not export the *Ex font APIs; declare them. Use the
+// WIDE variants so a font path with non-ASCII characters (e.g. a Chinese user
+// profile) registers correctly — the LCL path is UTF-8, converted to UTF-16.
 const
   FR_PRIVATE = $10;
-function AddFontResourceEx(lpszFilename: PAnsiChar; fl: LongWord;
-  pdv: Pointer): LongInt; stdcall; external 'gdi32' name 'AddFontResourceExA';
-function RemoveFontResourceEx(lpFileName: PAnsiChar; fl: LongWord;
-  pdv: Pointer): LongBool; stdcall; external 'gdi32' name 'RemoveFontResourceExA';
+function AddFontResourceEx(lpszFilename: PWideChar; fl: LongWord;
+  pdv: Pointer): LongInt; stdcall; external 'gdi32' name 'AddFontResourceExW';
+function RemoveFontResourceEx(lpFileName: PWideChar; fl: LongWord;
+  pdv: Pointer): LongBool; stdcall; external 'gdi32' name 'RemoveFontResourceExW';
 {$ENDIF}
 
 function TyParseCodepoint(const AHex: string): Cardinal;
@@ -98,6 +99,7 @@ begin
   if s = '' then Exit(0);
   if not TryStrToInt64('$' + s, v) then Exit(0);
   if (v < 0) or (v > $10FFFF) then Exit(0);
+  if (v >= $D800) and (v <= $DFFF) then Exit(0);   // lone UTF-16 surrogate -> invalid
   Result := Cardinal(v);
 end;
 
@@ -179,20 +181,30 @@ begin
 end;
 
 procedure TTyIconFont.LoadFontFile(const APath: string);
+{$IFDEF WINDOWS}
+var w: UnicodeString;
+{$ENDIF}
 begin
   if (APath = '') or (not FileExists(APath)) then Exit;
   {$IFDEF WINDOWS}
-  if AddFontResourceEx(PChar(APath), FR_PRIVATE, nil) > 0 then
+  w := UTF8ToUTF16(APath);
+  if AddFontResourceEx(PWideChar(w), FR_PRIVATE, nil) > 0 then
     FLoadedFile := APath;
   {$ENDIF}
   // Non-Windows: no-op — install the family, or add a widgetset loader later.
 end;
 
 procedure TTyIconFont.UnloadFontFile;
+{$IFDEF WINDOWS}
+var w: UnicodeString;
+{$ENDIF}
 begin
   {$IFDEF WINDOWS}
   if FLoadedFile <> '' then
-    RemoveFontResourceEx(PChar(FLoadedFile), FR_PRIVATE, nil);
+  begin
+    w := UTF8ToUTF16(FLoadedFile);
+    RemoveFontResourceEx(PWideChar(w), FR_PRIVATE, nil);
+  end;
   {$ENDIF}
   FLoadedFile := '';
 end;
