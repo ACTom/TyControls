@@ -49,6 +49,13 @@ type
     function ResolveBadgeDisplay(out AText: string): Boolean;
     // Paint the badge (if visible) at the chosen corner, inset within AFullRect.
     procedure DrawBadge(P: TTyPainter; const AFullRect: TRect);
+    // Draw the button's content within the already-padded AContentRect using the
+    // resolved style AStyle. Base draws the centered caption; descendants (glyph /
+    // dropdown / colour buttons) override to add a glyph, arrow or swatch, and may
+    // call inherited with a narrowed rect to place the caption. The frame, hover
+    // bg-fade, states and badge are handled by RenderTo around this hook.
+    procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
+      const AStyle: TTyStyleSet); virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     function DialogChar(var Message: TLMKey): Boolean; override;
@@ -451,8 +458,6 @@ var
   S, NormalS, HoverS: TTyStyleSet;
   ContentRect, BadgeArea: TRect;
   Eased: Single;
-  disp: string;
-  mp: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -483,14 +488,23 @@ begin
       ContentRect.Right  - P.Scale(S.Padding.Right),
       ContentRect.Bottom - P.Scale(S.Padding.Bottom)
     );
-    TyParseMnemonic(Caption, disp, mp);
-    P.DrawText(ContentRect, disp, S.FontName, S.FontSize, S.FontWeight,
-      S.TextColor, taCenter, tlCenter, True, TyAccelGatePos(mp));
+    DrawContent(P, ContentRect, S);
     DrawBadge(P, BadgeArea);
     P.EndPaint;
   finally
     P.Free;
   end;
+end;
+
+procedure TTyButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
+  const AStyle: TTyStyleSet);
+var
+  disp: string;
+  mp: Integer;
+begin
+  TyParseMnemonic(Caption, disp, mp);
+  APainter.DrawText(AContentRect, disp, AStyle.FontName, AStyle.FontSize,
+    AStyle.FontWeight, AStyle.TextColor, taCenter, tlCenter, True, TyAccelGatePos(mp));
 end;
 
 procedure TTyButton.Paint;
