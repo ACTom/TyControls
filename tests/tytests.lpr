@@ -94,6 +94,7 @@ uses
   test.ribbon,
   test.ribbonappmenu,
   test.ribbonquickaccess,
+  test.ribbongallery,
   test.combobox,
   test.tabset;
 

@@ -43,6 +43,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyRibbonGroup](ribbon.md) | 带标题的分组盒（可选对话框启动器箭头） |
 | [TTyRibbonAppMenu](ribbonappmenu.md) | 左上角强调色应用（文件）按钮，下拉命令 + 最近项 |
 | [TTyRibbonQuickAccess](ribbonquickaccess.md) | 快速访问栏（标题栏行的紧凑命令带） |
+| [TTyRibbonGallery](ribbongallery.md) | 画廊（内联缩略格 + 下拉网格） |
 
 ## 文本输入
 
