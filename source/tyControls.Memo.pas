@@ -359,8 +359,6 @@ type
     // tail + whole interior lines + last-line head, joined by LineEnding. Renamed
     // from SelText so the published flat property SelText can read it.
     function GetSelText: string;
-    // Select the whole document (anchor->(0,0), caret->end of last line).
-    procedure SelectAll;
     // Collapse the selection onto the caret (anchor := caret).
     procedure ClearSelection;
     // Clipboard virtual hooks (override in tests to avoid the real OS clipboard;
@@ -457,6 +455,8 @@ type
     // AfterEdit so OnChange fires. Paste splits the clipboard text on CR/LF and
     // inserts it as one-or-more logical lines (the multi-line generalisation of
     // TTyEdit.PasteFromClipboard, which strips newlines for its single line).
+    // Select the whole document (anchor->(0,0), caret->end of last line).
+    procedure SelectAll;
     procedure CopyToClipboard;
     procedure CutToClipboard;
     procedure PasteFromClipboard;
