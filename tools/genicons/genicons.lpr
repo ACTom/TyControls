@@ -141,6 +141,10 @@ procedure GRibbon(b: TBGRABitmap); begin RRect(b,2,4,22,20,2,Ink); Line(b,2,9,22
 procedure GRibbonPage(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,10,4,10,20,Ink,1); Line(b,15,4,15,20,Ink,1); FillRRect(b,5,7,8,13,1,Acc); end;
 { TTyRibbonGroup: a labelled group box — a bottom caption band + an accent control + text lines }
 procedure GRibbonGroup(b: TBGRABitmap); begin RRect(b,4,4,20,20,2,Ink); Line(b,4,16,20,16,Ink,1); Line(b,8,18,16,18,Faint); FillRRect(b,7,7,10,14,1,Acc); Line(b,13,8,17,8,Faint); Line(b,13,12,17,12,Faint); end;
+{ TTyRibbonAppMenu: the accent "File" application button with a down triangle }
+procedure GRibbonAppMenu(b: TBGRABitmap); begin FillRRect(b,3,7,17,17,3,Acc); Line(b,6,12,12,12,Faint,1.6); RRect(b,3,7,17,17,3,Ink); FillPolyG(b,[PointF(18.4,10.6),PointF(21.6,10.6),PointF(20,13.4)],Ink); end;
+{ TTyRibbonQuickAccess: a compact command strip with three tiny command marks }
+procedure GRibbonQuickAccess(b: TBGRABitmap); begin FillRRect(b,2,8,22,16,3,Faint); RRect(b,2,8,22,16,3,Ink); FillRRect(b,4,10,8,14,1,Ink); FillCirc(b,12,12,2,Ink); FillRRect(b,15,10,19,14,1,Acc); end;
 procedure GListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,6,9,18,9,Acc,2); Line(b,6,13,18,13,Ink); Line(b,6,17,15,17,Ink); end;
 procedure GTabControl(b: TBGRABitmap); begin FillRRect(b,3.5,5,11.5,10.5,1.5,Acc); RRect(b,12.5,6.2,20,10.5,1.5,Ink); RRect(b,3,10,21,20,2,Ink); end;
 procedure GTabSheet(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Acc,2); end;
@@ -362,7 +366,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..72] of TGlyph = (
+  Glyphs: array[0..74] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -403,6 +407,8 @@ const
     (Name:'TTyRibbon';           Draw:@GRibbon),
     (Name:'TTyRibbonPage';       Draw:@GRibbonPage),
     (Name:'TTyRibbonGroup';      Draw:@GRibbonGroup),
+    (Name:'TTyRibbonAppMenu';    Draw:@GRibbonAppMenu),
+    (Name:'TTyRibbonQuickAccess'; Draw:@GRibbonQuickAccess),
     (Name:'TTyListBox';         Draw:@GListBox),
     (Name:'TTyPageControl';     Draw:@GTabControl),
     (Name:'TTyTabSheet';        Draw:@GTabSheet),

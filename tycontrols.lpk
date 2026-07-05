@@ -205,6 +205,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Ribbon"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.RibbonAppMenu.pas"/>
+        <UnitName Value="tyControls.RibbonAppMenu"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.RibbonQuickAccess.pas"/>
+        <UnitName Value="tyControls.RibbonQuickAccess"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ToggleSwitch.pas"/>
         <UnitName Value="tyControls.ToggleSwitch"/>
       </Item>

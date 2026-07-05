@@ -92,6 +92,8 @@ uses
   test.colorbutton,
   test.buttongroup,
   test.ribbon,
+  test.ribbonappmenu,
+  test.ribbonquickaccess,
   test.combobox,
   test.tabset;
 
