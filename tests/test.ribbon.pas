@@ -18,6 +18,9 @@ type
     procedure TabCaptionFollowsPages;
     procedure RemovePageReindexesActive;
     procedure RemoveActivePageFiresOnChange;
+    procedure ContextPageHiddenUntilContextShown;
+    procedure HidingActiveContextReanchorsAndFires;
+    procedure SettingContextHidesTabWhenInactive;
     procedure DefaultAligns;
   end;
 
@@ -138,6 +141,73 @@ begin
     FChanged := 0;
     Rib.RemovePage(0);
     AssertEquals('no OnChange when the active page object is unchanged', 0, FChanged);
+  finally
+    Rib.Free;
+  end;
+end;
+
+procedure TRibbonTest.ContextPageHiddenUntilContextShown;
+var
+  Rib: TTyRibbon;
+  Ctx: TTyRibbonPage;
+begin
+  Rib := TTyRibbon.Create(nil);
+  try
+    Rib.AddPage('Home');            // always visible
+    Ctx := Rib.AddPage('Table Tools');
+    Ctx.Context := 'table';         // contextual — hidden while 'table' inactive
+    AssertEquals('only the normal tab shows', 1, Rib.TabCount);
+    AssertFalse('table context inactive', Rib.IsContextActive('table'));
+    Rib.ShowContext('table');
+    AssertTrue('table context active', Rib.IsContextActive('table'));
+    AssertEquals('contextual tab now shows', 2, Rib.TabCount);
+    AssertEquals('contextual caption', 'Table Tools', Rib.TabCaption(1));
+    Rib.HideContext('table');
+    AssertEquals('contextual tab hidden again', 1, Rib.TabCount);
+  finally
+    Rib.Free;
+  end;
+end;
+
+procedure TRibbonTest.HidingActiveContextReanchorsAndFires;
+var
+  Rib: TTyRibbon;
+  Home, Ctx: TTyRibbonPage;
+begin
+  FChanged := 0;
+  Rib := TTyRibbon.Create(nil);
+  try
+    Home := Rib.AddPage('Home');
+    Ctx := Rib.AddPage('Ctx');
+    Ctx.Context := 'x';
+    Rib.ShowContext('x');           // now [Home, Ctx] both visible
+    Rib.ActivePage := Ctx;          // activate the contextual page
+    AssertTrue('ctx active', Rib.ActivePage = Ctx);
+    Rib.OnChange := @HandleChange;
+    FChanged := 0;
+    Rib.HideContext('x');           // the active contextual tab disappears
+    AssertEquals('active re-anchored to Home', PtrInt(Home), PtrInt(Rib.ActivePage));
+    AssertEquals('only Home visible', 1, Rib.TabCount);
+    AssertEquals('OnChange fired on active-context hide', 1, FChanged);
+  finally
+    Rib.Free;
+  end;
+end;
+
+procedure TRibbonTest.SettingContextHidesTabWhenInactive;
+var
+  Rib: TTyRibbon;
+  P: TTyRibbonPage;
+begin
+  Rib := TTyRibbon.Create(nil);
+  try
+    Rib.AddPage('Home');
+    P := Rib.AddPage('Maybe');
+    AssertEquals('both visible', 2, Rib.TabCount);
+    P.Context := 'ctx';             // becomes contextual, context inactive -> hides
+    AssertEquals('contextual page hidden', 1, Rib.TabCount);
+    P.Context := '';                // back to a normal always-visible tab
+    AssertEquals('visible again', 2, Rib.TabCount);
   finally
     Rib.Free;
   end;

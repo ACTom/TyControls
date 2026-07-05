@@ -35,12 +35,20 @@ type
     in shape to TTyPageControl). }
   TTyRibbon = class(TTyCustomTabStrip)
   private
-    FPages: array of TTyRibbonPage;
+    FPages: array of TTyRibbonPage;         // ALL pages, in child order
+    FVisible: array of Integer;             // visible tab index -> FPages index
+    FActiveContexts: TStringList;           // active context names (case-insensitive)
     FDestroying: Boolean;
     function GetPage(AIndex: Integer): TTyRibbonPage;
     function GetActivePage: TTyRibbonPage;
     procedure SetActivePage(AValue: TTyRibbonPage);
-    procedure ShowOnlyPage(AIndex: Integer);
+    procedure ShowOnlyVisible(AVisIdx: Integer);
+    procedure RebuildVisible;
+    function  PageVisible(APageIdx: Integer): Boolean;
+    { Re-derive the visible tab list + re-anchor the active tab on the SAME page object
+      (AOldActive) it had before the change, clamping to the first visible tab when that
+      page became hidden/removed. Callers capture AOldActive BEFORE mutating FPages. }
+    procedure ReconcileVisibleFrom(AOldActive: TTyRibbonPage; AFireChange: Boolean);
   protected
     function  GetTabCount: Integer; override;
     function  GetTabCaption(AIndex: Integer): string; override;
@@ -60,6 +68,14 @@ type
     function AddPage(const ACaption: string): TTyRibbonPage;
     procedure RemovePage(AIndex: Integer);
     function PageCount: Integer;
+    { Contextual tabs: a page whose Context is non-empty is only shown as a tab while
+      that context is active. Activating/deactivating a context re-lays the strip and
+      re-anchors the selection. Context names are case-insensitive. }
+    procedure ShowContext(const AName: string);
+    procedure HideContext(const AName: string);
+    function  IsContextActive(const AName: string): Boolean;
+    { Called by a page whose Context changed (same unit). }
+    procedure PageContextChanged;
     property Pages[AIndex: Integer]: TTyRibbonPage read GetPage;
     property ActivePage: TTyRibbonPage read GetActivePage write SetActivePage;
   published
@@ -71,7 +87,9 @@ type
   TTyRibbonPage = class(TTyCustomControl)
   private
     FCaption: string;
+    FContext: string;
     procedure SetCaption(const AValue: string);
+    procedure SetContext(const AValue: string);
   protected
     procedure SetParent(AParent: TWinControl); override;
     function GetStyleTypeKey: string; override;
@@ -81,6 +99,10 @@ type
     constructor Create(AOwner: TComponent); override;
   published
     property Caption: string read FCaption write SetCaption;
+    { When non-empty, this page is a CONTEXTUAL tab: shown only while its host ribbon's
+      context of this name is active (TTyRibbon.ShowContext/HideContext). Empty = a
+      normal always-visible tab. }
+    property Context: string read FContext write SetContext;
     property StyleClass;
     property Controller;
   end;
@@ -142,6 +164,8 @@ end;
 constructor TTyRibbon.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FActiveContexts := TStringList.Create;
+  FActiveContexts.CaseSensitive := False;
   Align := alTop;
   // Tab strip (TabHeight) + a group band tall enough for a large button + caption.
   Width := 600;
@@ -152,6 +176,7 @@ end;
 destructor TTyRibbon.Destroy;
 begin
   FDestroying := True;
+  FActiveContexts.Free;
   inherited Destroy;   // pages owned by the form are freed normally
 end;
 
@@ -165,15 +190,16 @@ begin
   Result := Length(FPages);
 end;
 
+// The tab strip enumerates only the VISIBLE pages (context-active or context-less).
 function TTyRibbon.GetTabCount: Integer;
 begin
-  Result := Length(FPages);
+  Result := Length(FVisible);
 end;
 
 function TTyRibbon.GetTabCaption(AIndex: Integer): string;
 begin
-  if (AIndex >= 0) and (AIndex < Length(FPages)) then
-    Result := FPages[AIndex].Caption
+  if (AIndex >= 0) and (AIndex < Length(FVisible)) then
+    Result := FPages[FVisible[AIndex]].Caption
   else
     Result := '';
 end;
@@ -186,78 +212,134 @@ begin
     Result := nil;
 end;
 
+// ActivePageIndex is the VISIBLE tab index (= the page index when no context hides a
+// page); map it to the page object.
 function TTyRibbon.GetActivePage: TTyRibbonPage;
 begin
-  Result := GetPage(ActivePageIndex);
+  if (FTabIndex >= 0) and (FTabIndex < Length(FVisible)) then
+    Result := FPages[FVisible[FTabIndex]]
+  else
+    Result := nil;
 end;
 
 procedure TTyRibbon.SetActivePage(AValue: TTyRibbonPage);
 var
   I: Integer;
 begin
-  for I := 0 to High(FPages) do
-    if FPages[I] = AValue then
+  for I := 0 to High(FVisible) do
+    if FPages[FVisible[I]] = AValue then
     begin
-      ActivePageIndex := I;
+      ActivePageIndex := I;   // the VISIBLE index
       Exit;
     end;
 end;
 
-procedure TTyRibbon.ShowOnlyPage(AIndex: Integer);
+function TTyRibbon.PageVisible(APageIdx: Integer): Boolean;
+begin
+  Result := (FPages[APageIdx].Context = '') or IsContextActive(FPages[APageIdx].Context);
+end;
+
+procedure TTyRibbon.RebuildVisible;
 var
   I: Integer;
 begin
+  SetLength(FVisible, 0);
+  for I := 0 to High(FPages) do
+    if PageVisible(I) then
+    begin
+      SetLength(FVisible, Length(FVisible) + 1);
+      FVisible[High(FVisible)] := I;
+    end;
+end;
+
+// Show the page at VISIBLE index AVisIdx; hide every other page (context-hidden pages
+// are hidden here too, since they are never the shown one).
+procedure TTyRibbon.ShowOnlyVisible(AVisIdx: Integer);
+var
+  I, ActivePageIdx: Integer;
+begin
+  if (AVisIdx >= 0) and (AVisIdx < Length(FVisible)) then
+    ActivePageIdx := FVisible[AVisIdx]
+  else
+    ActivePageIdx := -1;
   for I := 0 to High(FPages) do
   begin
     // csNoDesignVisible BEFORE Visible (the Visible change triggers the design-time
     // re-eval) — see [[designer-internal-subcontrol-leak]].
-    if I = AIndex then
+    if I = ActivePageIdx then
       FPages[I].ControlStyle := FPages[I].ControlStyle - [csNoDesignVisible]
     else
       FPages[I].ControlStyle := FPages[I].ControlStyle + [csNoDesignVisible];
-    FPages[I].Visible := (I = AIndex);
+    FPages[I].Visible := (I = ActivePageIdx);
   end;
   Invalidate;
 end;
 
+procedure TTyRibbon.ReconcileVisibleFrom(AOldActive: TTyRibbonPage; AFireChange: Boolean);
+var
+  I, NewIdx: Integer;
+begin
+  RebuildVisible;
+  // Follow the SAME active page object where possible (comparison only — AOldActive may
+  // be a just-freed pointer, which is safe to compare but never dereferenced).
+  NewIdx := -1;
+  if AOldActive <> nil then
+    for I := 0 to High(FVisible) do
+      if FPages[FVisible[I]] = AOldActive then begin NewIdx := I; Break; end;
+  if NewIdx < 0 then
+  begin
+    // The active page became hidden/removed: keep the same tab POSITION, clamped to the
+    // new visible range (matches TTyPageControl's clamp-to-last on active removal).
+    NewIdx := FTabIndex;
+    if NewIdx > High(FVisible) then NewIdx := High(FVisible);
+    if (NewIdx < 0) and (Length(FVisible) > 0) then NewIdx := 0;
+  end;
+  if Length(FVisible) = 0 then NewIdx := -1;
+  FTabIndex := NewIdx;
+  ShowOnlyVisible(FTabIndex);
+  TabsChanged;
+  if AFireChange and (GetActivePage <> AOldActive) and Assigned(OnChange) then
+    OnChange(Self);
+end;
+
 procedure TTyRibbon.DoSelectTab(AIndex: Integer);
 begin
-  ShowOnlyPage(AIndex);
+  ShowOnlyVisible(AIndex);
 end;
 
 procedure TTyRibbon.DoReorderTabs(AFromIndex, AToIndex: Integer);
 var
   Moved: TTyRibbonPage;
-  I: Integer;
+  FromPage, ToPage, I: Integer;
 begin
-  if (AFromIndex < 0) or (AFromIndex > High(FPages)) then Exit;
-  if (AToIndex < 0) or (AToIndex > High(FPages)) then Exit;
+  // The header engine reorders by VISIBLE index; map both ends to page indices, move
+  // within FPages, then rebuild the visible list.
+  if (AFromIndex < 0) or (AFromIndex > High(FVisible)) then Exit;
+  if (AToIndex < 0) or (AToIndex > High(FVisible)) then Exit;
   if AFromIndex = AToIndex then Exit;
-  Moved := FPages[AFromIndex];
-  if AFromIndex < AToIndex then
-    for I := AFromIndex to AToIndex - 1 do FPages[I] := FPages[I + 1]
+  FromPage := FVisible[AFromIndex];
+  ToPage := FVisible[AToIndex];
+  Moved := FPages[FromPage];
+  if FromPage < ToPage then
+    for I := FromPage to ToPage - 1 do FPages[I] := FPages[I + 1]
   else
-    for I := AFromIndex downto AToIndex + 1 do FPages[I] := FPages[I - 1];
-  FPages[AToIndex] := Moved;
+    for I := FromPage downto ToPage + 1 do FPages[I] := FPages[I - 1];
+  FPages[ToPage] := Moved;
+  RebuildVisible;
 end;
 
 procedure TTyRibbon.RegisterPage(APage: TTyRibbonPage);
 var
   I: Integer;
+  OldActive: TTyRibbonPage;
 begin
   for I := 0 to High(FPages) do
     if FPages[I] = APage then Exit;   // idempotent
+  OldActive := GetActivePage;         // BEFORE appending (append keeps old indices valid)
   SetLength(FPages, Length(FPages) + 1);
   FPages[High(FPages)] := APage;
   APage.Controller := Self.Controller;
-  if Length(FPages) = 1 then
-  begin
-    FTabIndex := 0;
-    ShowOnlyPage(0);
-  end
-  else
-    APage.Visible := (High(FPages) = FTabIndex);
-  TabsChanged;
+  ReconcileVisibleFrom(OldActive, False);   // no OnChange on add
 end;
 
 procedure TTyRibbon.UnregisterPage(APage: TTyRibbonPage; AFree: Boolean);
@@ -269,29 +351,19 @@ begin
   for J := 0 to High(FPages) do
     if FPages[J] = APage then begin Idx := J; Break; end;
   if Idx < 0 then Exit;
-  OldActive := GetActivePage;
+  OldActive := GetActivePage;         // capture BEFORE mutating FPages
   for J := Idx to High(FPages) - 1 do FPages[J] := FPages[J + 1];
   SetLength(FPages, Length(FPages) - 1);
-  if Length(FPages) = 0 then
-    FTabIndex := -1
-  else if Idx < FTabIndex then
-    Dec(FTabIndex)
-  else if (Idx = FTabIndex) and (FTabIndex > High(FPages)) then
-    FTabIndex := High(FPages);
   if AFree and (APage <> nil) then
     APage.Free;
-  ShowOnlyPage(FTabIndex);
-  TabsChanged;
-  // Mirror TTyPageControl: notify when removal moved the active page (a data-bound
-  // OnChange handler must still fire on delete, not only on a user tab click).
-  if (GetActivePage <> OldActive) and Assigned(OnChange) then
-    OnChange(Self);
+  ReconcileVisibleFrom(OldActive, True);    // fires OnChange when the active page moved
 end;
 
 procedure TTyRibbon.RemoveTabData(AIndex: Integer);
 begin
-  if (AIndex >= 0) and (AIndex < Length(FPages)) then
-    UnregisterPage(FPages[AIndex], True);
+  // AIndex is a VISIBLE tab index (the header engine's space).
+  if (AIndex >= 0) and (AIndex < Length(FVisible)) then
+    UnregisterPage(FPages[FVisible[AIndex]], True);
 end;
 
 procedure TTyRibbon.RemovePage(AIndex: Integer);
@@ -307,6 +379,38 @@ begin
   Result := TTyRibbonPage.Create(PageOwner);
   Result.Caption := ACaption;
   Result.Parent := Self;     // SetParent -> RegisterPage
+end;
+
+function TTyRibbon.IsContextActive(const AName: string): Boolean;
+begin
+  Result := (AName <> '') and (FActiveContexts.IndexOf(AName) >= 0);
+end;
+
+procedure TTyRibbon.ShowContext(const AName: string);
+var
+  OldActive: TTyRibbonPage;
+begin
+  if (AName = '') or IsContextActive(AName) then Exit;
+  OldActive := GetActivePage;
+  FActiveContexts.Add(AName);
+  ReconcileVisibleFrom(OldActive, True);
+end;
+
+procedure TTyRibbon.HideContext(const AName: string);
+var
+  Idx: Integer;
+  OldActive: TTyRibbonPage;
+begin
+  Idx := FActiveContexts.IndexOf(AName);
+  if Idx < 0 then Exit;
+  OldActive := GetActivePage;
+  FActiveContexts.Delete(Idx);
+  ReconcileVisibleFrom(OldActive, True);
+end;
+
+procedure TTyRibbon.PageContextChanged;
+begin
+  ReconcileVisibleFrom(GetActivePage, True);
 end;
 
 procedure TTyRibbon.SetController(AValue: TTyStyleController);
@@ -330,16 +434,14 @@ end;
 procedure TTyRibbon.Loaded;
 begin
   inherited Loaded;
+  // Build the visible-tab list from the streamed pages (each self-registered during
+  // streaming), anchoring the active tab on the first visible page.
+  ReconcileVisibleFrom(nil, False);
   if FPendingTabIndex <> -1 then
   begin
     SetTabIndex(FPendingTabIndex);
     FPendingTabIndex := -1;
-  end
-  else if (FTabIndex = -1) and (Length(FPages) > 0) then
-    FTabIndex := 0;
-  if Length(FPages) = 0 then
-    FTabIndex := -1;
-  ShowOnlyPage(FTabIndex);
+  end;
   Invalidate;
 end;
 
@@ -367,6 +469,15 @@ begin
   FCaption := AValue;
   if Parent <> nil then
     Parent.Invalidate;   // the tab label changed — re-lay the host strip
+end;
+
+procedure TTyRibbonPage.SetContext(const AValue: string);
+begin
+  if FContext = AValue then Exit;
+  FContext := AValue;
+  // A changed Context may show/hide this page as a tab — ask the host to re-lay.
+  if (Parent <> nil) and (Parent is TTyRibbon) then
+    TTyRibbon(Parent).PageContextChanged;
 end;
 
 procedure TTyRibbonPage.SetParent(AParent: TWinControl);
