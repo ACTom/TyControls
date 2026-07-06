@@ -92,6 +92,7 @@ type
     procedure DoReorderTabs(AFromIndex, AToIndex: Integer); override;
     procedure RemoveTabData(AIndex: Integer); override;
     function  HeaderLeftInset: Integer; override;
+    procedure AdjustClientRect(var ARect: TRect); override;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure SetController(AValue: TTyStyleController); override;
@@ -580,6 +581,21 @@ end;
 function TTyRibbon.HeaderLeftInset: Integer;
 begin
   if FShowFileTab then Result := FileTabWidthPx else Result := 0;
+end;
+
+procedure TTyRibbon.AdjustClientRect(var ARect: TRect);
+var
+  ppi: Integer;
+begin
+  inherited AdjustClientRect(ARect);   // reserves the tab-strip band on top
+  // Reserve the ribbon's own frame (+ a small bottom gap) so the active page and its group
+  // caption band don't paint OVER the ribbon's left/right/bottom border — the group names
+  // and dialog-launcher were covering the bottom edge line.
+  ppi := Font.PixelsPerInch;
+  Inc(ARect.Left,  MulDiv(1, ppi, 96));
+  Dec(ARect.Right, MulDiv(1, ppi, 96));
+  Dec(ARect.Bottom, MulDiv(3, ppi, 96));
+  if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 
 procedure TTyRibbon.SetShowFileTab(AValue: Boolean);

@@ -318,19 +318,37 @@ end;
 // Skin switcher (title bar)
 // ===========================================================================
 procedure TMainForm.ApplyTheme(Sender: TObject);
-var nm, md: string;
+var nm, md: string; dlg: TOpenDialog;
 begin
   if (FThemeCombo = nil) or (FThemeCombo.ItemIndex < 0) then Exit;
   nm := FThemeCombo.Items[FThemeCombo.ItemIndex];
   if (FModeCombo <> nil) and (FModeCombo.ItemIndex = 1) then md := 'dark' else md := 'light';
-  // Load the built-in theme's CSS (dual-mode) then pick the light/dark sub-mode; the
-  // controller notifies every control, so the whole UI re-themes live. Guarded because a
-  // theme referencing external url() assets can't resolve them without a base dir.
   try
-    TyDefaultController.LoadThemeCss(TyBuiltinThemeCss(nm));
-    TyDefaultController.Mode := md;
+    if nm = '自定义…' then
+    begin
+      // Pick any .tycss from disk — e.g. themes/green.tycss (photo background). LoadTheme
+      // (from a FILE) restores the theme's directory, so url() image assets resolve.
+      dlg := TOpenDialog.Create(Self);
+      try
+        dlg.Filter := 'tycss 主题 (*.tycss)|*.tycss|所有文件 (*.*)|*.*';
+        dlg.InitialDir := ExcludeTrailingPathDelimiter(ThemesDir);
+        if dlg.Execute then
+        begin
+          TyDefaultController.LoadTheme(dlg.FileName);
+          TyDefaultController.Mode := md;
+        end;
+      finally
+        dlg.Free;
+      end;
+    end
+    else
+    begin
+      // Built-in theme (dual-mode) + light/dark sub-mode; the controller re-themes live.
+      TyDefaultController.LoadThemeCss(TyBuiltinThemeCss(nm));
+      TyDefaultController.Mode := md;
+    end;
   except
-    // ignore a theme that fails to load (e.g. needs image assets)
+    // ignore a theme that fails to load (e.g. missing image assets)
   end;
 end;
 
@@ -851,6 +869,7 @@ begin
   FThemeCombo.SetBounds(208, 4, 130, 26);
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do FThemeCombo.Items.Add(names[i]);
+  FThemeCombo.Items.Add('自定义…');   // pick a .tycss from disk (e.g. the green photo theme)
   FThemeCombo.ItemIndex := FThemeCombo.Items.IndexOf('default');
   FThemeCombo.OnChange := @ApplyTheme;
 

@@ -529,17 +529,23 @@ end;
 
 procedure TTyPainter.DrawDropChevron(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
 var
-  cw, ch, gx, gy: Integer;
+  w, h, cx, cy, l, r, top, bot, th: Single;
+  px: TBGRAPixel;
 begin
-  cw := Scale(ASizeLogical);
-  if cw < 4 then cw := 4;
-  ch := (cw * 55) div 100;            // shallow: height ≈ 0.55 x width
-  if ch < 2 then ch := 2;
-  gx := (AZoneRect.Left + AZoneRect.Right) div 2;
-  gy := (AZoneRect.Top + AZoneRect.Bottom) div 2;
-  // pad 0 so the chevron fills exactly this small centered box (not the tall zone).
-  DrawGlyph(Rect(gx - cw div 2, gy - ch div 2, gx - cw div 2 + cw, gy - ch div 2 + ch),
-    tgChevronDown, AColor, 2, 0);
+  if FBmp = nil then Exit;
+  px := TyColorToBGRA(AColor);
+  w := Scale(ASizeLogical);
+  if w < 4 then w := 4;
+  h := w * 0.5;                 // a clean, not-too-flat V
+  // A THIN stroke (~w/6.5) — the old fixed 2px looked chubby on a small chevron.
+  th := w / 6.5;
+  if th < 1.1 then th := 1.1;
+  cx := (AZoneRect.Left + AZoneRect.Right) / 2;
+  cy := (AZoneRect.Top + AZoneRect.Bottom) / 2;
+  l := cx - w / 2; r := cx + w / 2;
+  top := cy - h / 2; bot := cy + h / 2;
+  // Drawn directly (not via DrawGlyph) so the stroke width is fractional, not a chunky int.
+  FBmp.DrawPolyLineAntialias([PointF(l, top), PointF(cx, bot), PointF(r, top)], px, th, False);
 end;
 
 procedure TTyPainter.BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect);
