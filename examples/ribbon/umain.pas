@@ -82,9 +82,11 @@ type
     // ---- ribbon builders ----
     function  NewGroup(APage: TTyRibbonPage; const ACaption: string; AWidth: Integer;
       ALauncher: Boolean): TTyRibbonGroup;
-    function  Big(AGroup: TTyRibbonGroup; const ACap: string; AX, AW: Integer;
+    function  Big(AGroup: TTyRibbonGroup; const ACap, AGlyph: string; AX, AW: Integer;
       AHandler: TNotifyEvent): TTyGlyphContainerButton;
-    function  Small(AGroup: TTyRibbonGroup; const ACap: string; AX, AY, AW: Integer;
+    function  Small(AGroup: TTyRibbonGroup; const ACap, AGlyph: string; AX, AY, AW: Integer;
+      AHandler: TNotifyEvent): TTyGlyphButton;
+    function  AddQat(AQat: TTyRibbonQuickAccess; const AHint, AGlyph: string;
       AHandler: TNotifyEvent): TTyGlyphButton;
     procedure BuildHomeTab(APage: TTyRibbonPage);
     procedure BuildInsertTab(APage: TTyRibbonPage);
@@ -125,7 +127,7 @@ begin
   Result.ShowDialogLauncher := ALauncher;
 end;
 
-function TMainForm.Big(AGroup: TTyRibbonGroup; const ACap: string; AX, AW: Integer;
+function TMainForm.Big(AGroup: TTyRibbonGroup; const ACap, AGlyph: string; AX, AW: Integer;
   AHandler: TNotifyEvent): TTyGlyphContainerButton;
 begin
   Result := TTyGlyphContainerButton.Create(Self);
@@ -133,11 +135,13 @@ begin
   Result.SetBounds(AX, 4, AW, 66);
   Result.Caption := ACap;
   Result.IconFont := FIcons;
-  Result.GlyphName := 'star';
+  Result.GlyphName := AGlyph;      // '' -> caption only
+  Result.Hint := ACap;             // ScreenTip
+  Result.ShowHint := True;
   Result.OnClick := AHandler;
 end;
 
-function TMainForm.Small(AGroup: TTyRibbonGroup; const ACap: string; AX, AY, AW: Integer;
+function TMainForm.Small(AGroup: TTyRibbonGroup; const ACap, AGlyph: string; AX, AY, AW: Integer;
   AHandler: TNotifyEvent): TTyGlyphButton;
 begin
   Result := TTyGlyphButton.Create(Self);
@@ -145,7 +149,24 @@ begin
   Result.SetBounds(AX, AY, AW, 24);
   Result.Caption := ACap;
   Result.IconFont := FIcons;
-  Result.GlyphName := 'star';
+  Result.GlyphName := AGlyph;      // '' -> caption only (e.g. B / I / U)
+  Result.Hint := ACap;             // ScreenTip
+  Result.ShowHint := True;
+  Result.OnClick := AHandler;
+end;
+
+{ A Quick-Access button is ICON-ONLY (no caption): a fixed ~28px square showing
+  just the glyph, with the command name as a ScreenTip. }
+function TMainForm.AddQat(AQat: TTyRibbonQuickAccess; const AHint, AGlyph: string;
+  AHandler: TNotifyEvent): TTyGlyphButton;
+begin
+  Result := AQat.AddButton('');    // no caption -> pure icon
+  Result.IconFont := FIcons;
+  Result.GlyphName := AGlyph;
+  Result.GlyphSize := 16;
+  Result.Width := 28;              // square-ish (Align=alLeft keeps this width)
+  Result.Hint := AHint;
+  Result.ShowHint := True;
   Result.OnClick := AHandler;
 end;
 
@@ -153,7 +174,6 @@ procedure TMainForm.BuildHomeTab(APage: TTyRibbonPage);
 var
   g: TTyRibbonGroup;
   fontc, sizec: TTyComboBox;
-  bold, ital, undl: TTyGlyphButton;
   col: TTyColorButton;
   alignGrp: TTyButtonGroup;
   i: Integer;
@@ -162,9 +182,9 @@ begin
 
   // 编辑
   g := NewGroup(APage, '编辑', 96, False);
-  Small(g, '查找', 6, 4, 88, @DoFind);
-  Small(g, '替换', 6, 30, 88, @DoReplace);
-  Small(g, '全选', 6, 56, 88, @DoSelectAll);
+  Small(g, '查找', 'find', 6, 4, 88, @DoFind);
+  Small(g, '替换', 'replace', 6, 30, 88, @DoReplace);
+  Small(g, '全选', 'selectall', 6, 56, 88, @DoSelectAll);
 
   // 段落
   g := NewGroup(APage, '段落', 150, True);
@@ -174,8 +194,8 @@ begin
   alignGrp.SetBounds(6, 6, 138, 26);
   alignGrp.Items.Add('左'); alignGrp.Items.Add('中'); alignGrp.Items.Add('右'); alignGrp.Items.Add('两端');
   alignGrp.ItemIndex := 0;
-  Small(g, '项目符号', 6, 40, 66, @DoNoop);
-  Small(g, '编号', 76, 40, 66, @DoNoop);
+  Small(g, '项目符号', 'bullets', 6, 40, 66, @DoNoop);
+  Small(g, '编号', 'number', 76, 40, 66, @DoNoop);
 
   // 字体
   g := NewGroup(APage, '字体', 240, True);
@@ -193,10 +213,10 @@ begin
   for i := 8 to 16 do sizec.Items.Add(IntToStr(i));
   sizec.Items.Add('18'); sizec.Items.Add('24'); sizec.Items.Add('36');
   sizec.Text := '11';
-  bold := Small(g, 'B', 6, 40, 26, @DoNoop);
-  ital := Small(g, 'I', 36, 40, 26, @DoNoop);
-  undl := Small(g, 'U', 66, 40, 26, @DoNoop);
-  bold.GlyphName := ''; ital.GlyphName := ''; undl.GlyphName := '';
+  // B / I / U show as styled letters (no glyph), like Office.
+  Small(g, 'B', '', 6, 40, 26, @DoNoop);
+  Small(g, 'I', '', 36, 40, 26, @DoNoop);
+  Small(g, 'U', '', 66, 40, 26, @DoNoop);
   col := TTyColorButton.Create(Self);
   col.Parent := g;
   col.SetBounds(100, 40, 48, 26);
@@ -205,10 +225,10 @@ begin
 
   // 剪贴板
   g := NewGroup(APage, '剪贴板', 150, False);
-  Big(g, '粘贴', 6, 56, @DoPaste);
-  Small(g, '剪切', 66, 4, 78, @DoCut);
-  Small(g, '复制', 66, 30, 78, @DoCopy);
-  Small(g, '格式刷', 66, 56, 78, @DoNoop);
+  Big(g, '粘贴', 'paste', 6, 56, @DoPaste);
+  Small(g, '剪切', 'cut', 66, 4, 78, @DoCut);
+  Small(g, '复制', 'copy', 66, 30, 78, @DoCopy);
+  Small(g, '格式刷', 'painter', 66, 56, 78, @DoNoop);
 end;
 
 procedure TMainForm.BuildInsertTab(APage: TTyRibbonPage);
@@ -219,8 +239,8 @@ var
 begin
   // 符号
   g := NewGroup(APage, '符号', 130, False);
-  Small(g, '符号', 6, 4, 116, @DoNoop);
-  Small(g, '日期时间', 6, 30, 116, @DoInsertDate);
+  Small(g, '符号', 'symbol', 6, 4, 116, @DoNoop);
+  Small(g, '日期时间', 'datetime', 6, 30, 116, @DoInsertDate);
 
   // 插图 (a styles gallery + 图片)
   g := NewGroup(APage, '样式库', 230, False);
@@ -246,14 +266,14 @@ var
 begin
   // 窗口
   g := NewGroup(APage, '窗口', 110, False);
-  Small(g, '新建窗口', 6, 4, 98, @DoNoop);
-  Small(g, '并排', 6, 30, 98, @DoNoop);
+  Small(g, '新建窗口', 'newwindow', 6, 4, 98, @DoNoop);
+  Small(g, '并排', 'arrange', 6, 30, 98, @DoNoop);
 
   // 缩放
   g := NewGroup(APage, '缩放', 130, False);
-  Small(g, '放大', 6, 4, 60, @DoNoop);
-  Small(g, '缩小', 68, 4, 60, @DoNoop);
-  Small(g, '100%', 6, 30, 122, @DoNoop);
+  Small(g, '放大', 'zoomin', 6, 4, 60, @DoNoop);
+  Small(g, '缩小', 'zoomout', 68, 4, 60, @DoNoop);
+  Small(g, '100%', 'zoom100', 6, 30, 122, @DoNoop);
 
   // 显示
   g := NewGroup(APage, '显示', 140, False);
@@ -558,9 +578,34 @@ begin
   FDocList := TList.Create;
   FFontColor := TyRGB(0, 0, 0);
 
+  // Distinct per-command icons from Segoe MDL2 Assets (ships with Win10/11).
+  // Each command maps to its own glyph, so the ribbon reads like real Office —
+  // not the same star everywhere. Code points are in the font's Private Use Area.
   FIcons := TTyIconFont.Create(Self);
-  FIcons.MapGlyph('star', $2605);
-  FIcons.FontFamily := 'Segoe UI Symbol';
+  FIcons.FontFamily := 'Segoe MDL2 Assets';
+  FIcons.MapGlyph('new',       $E7C3);   // Page
+  FIcons.MapGlyph('open',      $E8E5);   // OpenFile
+  FIcons.MapGlyph('save',      $E74E);   // Save
+  FIcons.MapGlyph('cut',       $E8C6);   // Cut
+  FIcons.MapGlyph('copy',      $E8C8);   // Copy
+  FIcons.MapGlyph('paste',     $E77F);   // Paste
+  FIcons.MapGlyph('painter',   $E790);   // Brush (format painter)
+  FIcons.MapGlyph('undo',      $E7A7);   // Undo
+  FIcons.MapGlyph('redo',      $E7A6);   // Redo
+  FIcons.MapGlyph('find',      $E721);   // Search
+  FIcons.MapGlyph('replace',   $E70F);   // Edit
+  FIcons.MapGlyph('selectall', $E8B3);   // SelectAll
+  FIcons.MapGlyph('bullets',   $E8FD);   // BulletedList
+  FIcons.MapGlyph('number',    $E8EF);   // numbered list
+  FIcons.MapGlyph('symbol',    $E76E);   // Emoji2
+  FIcons.MapGlyph('datetime',  $E787);   // Calendar
+  FIcons.MapGlyph('table',     $E8A9);   // GridView
+  FIcons.MapGlyph('crop',      $E7A8);   // Crop
+  FIcons.MapGlyph('newwindow', $E78B);   // NewWindow
+  FIcons.MapGlyph('arrange',   $E7C4);   // TaskView
+  FIcons.MapGlyph('zoomin',    $E8A3);   // ZoomIn
+  FIcons.MapGlyph('zoomout',   $E71F);   // Zoom
+  FIcons.MapGlyph('zoom100',   $E1CB);   // FitPage
 
   FFindDlg := TTyFindDialog.Create(Self);
   FReplaceDlg := TTyReplaceDialog.Create(Self);
@@ -599,7 +644,7 @@ begin
   PgPic := FRibbon.AddPage('图片工具');
   PgPic.Context := 'pic';
   g := NewGroup(PgPic, '调整', 120, False);
-  Big(g, '裁剪', 6, 56, @DoNoop);
+  Big(g, '裁剪', 'crop', 6, 56, @DoNoop);
 
   // 2) The title bar LAST → topmost. Hosts the QAT (save / undo / redo).
   Bar := TTyTitleBar.Create(Self);
@@ -608,12 +653,15 @@ begin
   Bar.Height := CTitleH;
   Bar.Caption := 'TyControls 文本编辑器';
 
+  // Icon-only Quick Access Toolbar (like Office): 新建 / 打开 / 保存 / 撤销 / 重做.
   QAT := TTyRibbonQuickAccess.Create(Self);
   QAT.Parent := Bar;
-  QAT.SetBounds(8, 4, 120, 26);
-  QAT.AddButton('保存').OnClick := @DoSave;
-  QAT.AddButton('撤销').OnClick := @DoUndo;
-  QAT.AddButton('重做').OnClick := @DoRedo;
+  QAT.SetBounds(8, 4, 160, 26);
+  AddQat(QAT, '新建', 'new',  @DoNew);
+  AddQat(QAT, '打开', 'open', @DoOpen);
+  AddQat(QAT, '保存', 'save', @DoSave);
+  AddQat(QAT, '撤销', 'undo', @DoUndo);
+  AddQat(QAT, '重做', 'redo', @DoRedo);
 
   // 3) The document tab area fills the middle (alClient).
   FDocPages := TTyPageControl.Create(Self);
