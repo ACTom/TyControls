@@ -236,8 +236,9 @@ var
   P: TTyPainter;
   BoxStyle: TTyStyleSet;
   R, CellR: TRect;
-  cols, cellW, cellH, i, cnt: Integer;
+  cols, cellW, cellH, i, cnt, inset, insetLogical: Integer;
   states: TTyStateSet;
+  savedClip: TRect;
 begin
   if FGallery = nil then Exit;
   P := TTyPainter.Create;
@@ -253,6 +254,19 @@ begin
     cellW := MulDiv(TyGalleryCellW, APPI, 96);
     cellH := MulDiv(TyGalleryGridCellH, APPI, 96);
 
+    // Hard-clip the cell fills to the interior, past the box chrome, so a selected cell's
+    // accent fill can't bleed through the semi-transparent border (see TTyRibbonGallery.RenderTo).
+    // The edge cells' fills are trimmed by the inset; cells keep their natural positions, so
+    // hit-testing (TyGalleryCellAt) and the popup size are unaffected. Same as TTyListBox.
+    insetLogical := BoxStyle.BorderWidth;
+    if (tpOutline in BoxStyle.Present) and (BoxStyle.OutlineWidth > 0) then
+      if BoxStyle.OutlineOffset + BoxStyle.OutlineWidth > insetLogical then
+        insetLogical := BoxStyle.OutlineOffset + BoxStyle.OutlineWidth;
+    if insetLogical > 0 then Inc(insetLogical);
+    inset := P.Scale(insetLogical);
+    savedClip := P.Bitmap.ClipRect;
+    P.Bitmap.ClipRect := Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset);
+
     for i := 0 to cnt - 1 do
     begin
       CellR := TyGalleryGridRect(i, cols, cellW, cellH);
@@ -264,6 +278,8 @@ begin
       else Include(states, tysNormal);
       FGallery.PaintCell(P, CellR, i, states, TyCorners(0, 0, 0, 0));
     end;
+
+    P.Bitmap.ClipRect := savedClip;   // restore before the border re-stroke
 
     // Re-stroke the border on top so a hovered/selected cell never eats the frame edge.
     if (tpBorderColor in BoxStyle.Present) and (BoxStyle.BorderWidth > 0) then
@@ -548,9 +564,10 @@ var
   P: TTyPainter;
   BoxStyle: TTyStyleSet;
   R, cellR, arrowR: TRect;
-  cellW, arrowW, visN, i, rowRight: Integer;
+  cellW, arrowW, visN, i, rowRight, inset, insetLogical, capR: Integer;
   states: TTyStateSet;
   cellCorners: TTyCorners;
+  savedClip: TRect;
 begin
   P := TTyPainter.Create;
   try
@@ -563,12 +580,31 @@ begin
     arrowW := MulDiv(TyGalleryArrowW, APPI, 96);
     rowRight := R.Right;
 
+    // Inset the cell fills PAST the box chrome (border + focus ring) and HARD-CLIP them there,
+    // so a selected cell's SOLID accent fill never reaches the border zone. Critical on image
+    // themes where the border is semi-transparent (alpha(--border,0.6)) — a bright fill behind
+    // a <100%-alpha border would otherwise bleed THROUGH it (the box border can't occlude it,
+    // no matter how it is re-stroked). Same technique as TTyListBox.RenderTo.
+    insetLogical := BoxStyle.BorderWidth;
+    if (tpOutline in BoxStyle.Present) and (BoxStyle.OutlineWidth > 0) then
+      if BoxStyle.OutlineOffset + BoxStyle.OutlineWidth > insetLogical then
+        insetLogical := BoxStyle.OutlineOffset + BoxStyle.OutlineWidth;
+    if insetLogical > 0 then Inc(insetLogical);   // +1px AA clearance
+    inset := P.Scale(insetLogical);
+    capR := BoxStyle.BorderRadius - insetLogical;
+    if capR < 0 then capR := 0;
+    savedClip := P.Bitmap.ClipRect;
+    P.Bitmap.ClipRect := Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset);
+
     // Inline cells: up to VisibleColumns, left->right, in the space left of the arrow.
     visN := FVisibleColumns;
     if visN > FItems.Count then visN := FItems.Count;
     for i := 0 to visN - 1 do
     begin
       cellR := TyGalleryInlineCellRect(i, cellW, R.Bottom - R.Top, arrowW);
+      cellR.Top := R.Top + inset;          // keep the fill off the top border band
+      cellR.Bottom := R.Bottom - inset;    // ...and the bottom
+      if i = 0 then cellR.Left := cellR.Left + inset;   // first cell clears the left border
       if cellR.Right > rowRight - arrowW then cellR.Right := rowRight - arrowW;
       if cellR.Left >= cellR.Right then Break;   // no room left before the arrow
 
@@ -577,25 +613,27 @@ begin
       if i = FItemIndex then Include(states, tysActive)
       else if i = FHoverCell then Include(states, tysHover)
       else Include(states, tysNormal);
-      // The first cell touches the box's LEFT rounded corners — round its TL/BL so a selected
-      // cell's square accent fill doesn't overhang the box border.
+      // The first cell hugs the box's LEFT rounded corner — round its TL/BL CONCENTRIC with the
+      // (inset) border (radius - inset) so a selected cell's fill nests inside it.
       cellCorners := TyCorners(0, 0, 0, 0);
       if i = 0 then
       begin
-        cellCorners.TL := BoxStyle.BorderRadius;
-        cellCorners.BL := BoxStyle.BorderRadius;
+        cellCorners.TL := capR;
+        cellCorners.BL := capR;
       end;
       PaintCell(P, cellR, i, states, cellCorners);
     end;
+
+    // Restore the clip BEFORE the arrow + border so neither is trimmed by the interior band.
+    P.Bitmap.ClipRect := savedClip;
 
     // Drop-down arrow affordance on the right — a FIXED small chevron (not stretched to
     // the row height), consistent with TTyComboBox / TTyDropDownButton.
     arrowR := Rect(rowRight - arrowW, R.Top, rowRight, R.Bottom);
     P.DrawDropChevron(arrowR, BoxStyle.TextColor);
 
-    // Re-stroke the box border LAST, so a hovered/selected cell fill (which spans the full
-    // row height, up to the edge) never paints over the frame — the hover no longer eats
-    // the border.
+    // Re-stroke the box border LAST as a belt-and-braces tidy of its AA edge (the fills are
+    // already inset away from it, so this no longer has to occlude anything).
     if (tpBorderColor in BoxStyle.Present) and (BoxStyle.BorderWidth > 0) then
       P.StrokeBorder(R, BoxStyle.BorderRadius, BoxStyle.BorderWidth, BoxStyle.BorderColor);
 

@@ -68,7 +68,7 @@ TyLabel:disabled { opacity: 0.5; }
 TyEdit {
   background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: alpha(var(--surface), 0.6);
+  border-color: alpha(var(--border), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 4px;
@@ -109,7 +109,7 @@ TyRadioButton:disabled { opacity: 0.5; }
 TyPanel {
   background: alpha(#FFFFFF, 0);   /* fully transparent: the sharp photo shows clean (no frosted glass) */
   color: var(--on-surface);
-  border-color: alpha(var(--surface), 0.6);
+  border-color: alpha(var(--border), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 8px;
@@ -118,7 +118,7 @@ TyPanel {
 TyComboBox {
   background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: alpha(var(--surface), 0.6);
+  border-color: alpha(var(--border), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 4px;
@@ -162,7 +162,7 @@ TyCaptionButton.max:hover    { background: alpha(var(--surface), 0.55); }
 TyListBox {
   background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: alpha(var(--surface), 0.6);
+  border-color: alpha(var(--border), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 2px;
@@ -184,7 +184,7 @@ TyListItem:active { background: var(--accent); color: #FFFFFF; border-radius: 0;
 
 TyProgressBar {
   background: alpha(#FFFFFF, 0);
-  border-color: alpha(var(--surface), 0.6);
+  border-color: alpha(var(--border), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   glass-blur: 16px;
@@ -200,7 +200,7 @@ TyProgressFill {
 TyGauge {
   background: alpha(var(--surface), 0.35);
   color: var(--on-surface);
-  border-color: alpha(var(--surface), 0.6);
+  border-color: alpha(var(--border), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
 }
@@ -272,7 +272,7 @@ TyTrackThumb:active { background: darken(--accent, 8%); }
 TyGroupBox {
   background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo shows clean (no frost) */
   color: var(--on-surface);
-  border-color: alpha(var(--surface), 0.6);
+  border-color: alpha(var(--border), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
 }
@@ -280,7 +280,7 @@ TyGroupBox {
 TyTabControl {
   background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo shows clean (no frost) */
   color: var(--on-surface);
-  border-color: alpha(var(--surface), 0.6);
+  border-color: alpha(var(--border), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
 }
@@ -293,7 +293,7 @@ TyTabControl:disabled { opacity: 0.5; }
 TyPageControl {
   background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: alpha(var(--surface), 0.6);
+  border-color: alpha(var(--border), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
 }
@@ -316,7 +316,7 @@ TyTab:active { color: var(--accent); font-weight: 700; }   /* active = accent + 
 TySpinEdit {
   background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: alpha(var(--surface), 0.6);
+  border-color: alpha(var(--border), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 4px;
@@ -331,7 +331,7 @@ TySpinEdit:disabled { opacity: 0.5; }
 TyMemo {
   background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
-  border-color: alpha(var(--surface), 0.6);
+  border-color: alpha(var(--border), 0.6);
   border-width: 1px;
   border-radius: var(--radius);
   padding: 4px;
