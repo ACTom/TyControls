@@ -15,8 +15,8 @@ interface
 
 uses
   Classes, SysUtils, StrUtils, Forms, Controls, Dialogs, Graphics,
-  tyControls.Types, tyControls.Controller, tyControls.Form, tyControls.Hint,
-  tyControls.Panel,
+  tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes,
+  tyControls.Form, tyControls.Hint, tyControls.Panel,
   tyControls.TyLabel, tyControls.Button, tyControls.CheckBox, tyControls.ComboBox,
   tyControls.IconFont, tyControls.GlyphButtons, tyControls.DropButtons,
   tyControls.ColorButton, tyControls.ButtonGroup, tyControls.Ribbon,
@@ -46,12 +46,15 @@ type
     FBsTitle: TTyLabel;
     FBsBrowse: TTyGlyphButton;
     FBsRecent: array[0..7] of TTyGlyphButton; // recent-file rows on the 打开 content page
+    FThemeCombo, FModeCombo: TTyComboBox;      // title-bar skin switcher
     FFindDlg: TTyFindDialog;
     FReplaceDlg: TTyReplaceDialog;
     FRecent: TStringList;
     FDocList: TList;
     FNewCount: Integer;
     FFontColor: TTyColor;
+    // ---- skin switcher ----
+    procedure ApplyTheme(Sender: TObject);
     // ---- backstage content page ----
     procedure BuildBackstageContent;
     procedure ShowOpenContent;
@@ -171,6 +174,7 @@ function TMainForm.AddQat(AQat: TTyRibbonQuickAccess; const AHint, AGlyph: strin
   AHandler: TNotifyEvent): TTyGlyphButton;
 begin
   Result := AQat.AddButton('');    // no caption -> pure icon
+  Result.StyleClass := 'ghost';    // flat: no frame at rest, subtle hover (Office QAT)
   Result.IconFont := FIcons;
   Result.GlyphName := AGlyph;
   Result.GlyphSize := 16;
@@ -296,6 +300,26 @@ begin
   ctx := TTyCheckBox.Create(Self);
   ctx.Parent := g; ctx.SetBounds(6, 54, 128, 22);
   ctx.Caption := '图片工具(上下文)'; ctx.OnClick := @DoToggleContext;
+end;
+
+// ===========================================================================
+// Skin switcher (title bar)
+// ===========================================================================
+procedure TMainForm.ApplyTheme(Sender: TObject);
+var nm, md: string;
+begin
+  if (FThemeCombo = nil) or (FThemeCombo.ItemIndex < 0) then Exit;
+  nm := FThemeCombo.Items[FThemeCombo.ItemIndex];
+  if (FModeCombo <> nil) and (FModeCombo.ItemIndex = 1) then md := 'dark' else md := 'light';
+  // Load the built-in theme's CSS (dual-mode) then pick the light/dark sub-mode; the
+  // controller notifies every control, so the whole UI re-themes live. Guarded because a
+  // theme referencing external url() assets can't resolve them without a base dir.
+  try
+    TyDefaultController.LoadThemeCss(TyBuiltinThemeCss(nm));
+    TyDefaultController.Mode := md;
+  except
+    // ignore a theme that fails to load (e.g. needs image assets)
+  end;
 end;
 
 // ===========================================================================
@@ -649,6 +673,8 @@ var
   QAT: TTyRibbonQuickAccess;
   PgHome, PgInsert, PgView, PgPic: TTyRibbonPage;
   g: TTyRibbonGroup;
+  names: TStringArray;
+  i: Integer;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'TyControls 文本编辑器';
@@ -724,7 +750,7 @@ begin
   // 1) The ribbon (below the title bar). File tab -> backstage.
   FRibbon := TTyRibbon.Create(Self);
   FRibbon.Parent := Self;
-  FRibbon.Height := 118;
+  FRibbon.Height := 140;   // room for 3 small-button rows above the group caption band
   FRibbon.FileTab := True;
   FRibbon.FileTabCaption := '文件';
   FRibbon.Backstage := FBackstage;
@@ -751,13 +777,34 @@ begin
   // Icon-only Quick Access Toolbar (like Office): 新建 / 打开 / 保存 / 撤销 / 重做.
   QAT := TTyRibbonQuickAccess.Create(Self);
   QAT.Parent := Bar;
-  QAT.SetBounds(8, 4, 160, 26);
+  QAT.SetBounds(8, 4, 152, 26);
   // Two-line hints (title + description) render as Office-style ScreenTips.
   AddQat(QAT, '新建'#10'新建一个空白文档', 'new',  @DoNew);
   AddQat(QAT, '打开'#10'打开已有文本文件', 'open', @DoOpen);
   AddQat(QAT, '保存'#10'把当前文档写入磁盘', 'save', @DoSave);
   AddQat(QAT, '撤销'#10'撤销上一步操作', 'undo', @DoUndo);
   AddQat(QAT, '重做'#10'重做被撤销的操作', 'redo', @DoRedo);
+
+  // Skin switcher on the right of the title bar: built-in theme + light/dark mode.
+  FThemeCombo := TTyComboBox.Create(Self);
+  FThemeCombo.Parent := Bar;
+  FThemeCombo.Style := csDropDownList;
+  FThemeCombo.SetBounds(Width - 360, 4, 140, 26);
+  FThemeCombo.Anchors := [akTop, akRight];
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do FThemeCombo.Items.Add(names[i]);
+  FThemeCombo.ItemIndex := FThemeCombo.Items.IndexOf('default');
+  FThemeCombo.OnChange := @ApplyTheme;
+
+  FModeCombo := TTyComboBox.Create(Self);
+  FModeCombo.Parent := Bar;
+  FModeCombo.Style := csDropDownList;
+  FModeCombo.SetBounds(Width - 212, 4, 64, 26);
+  FModeCombo.Anchors := [akTop, akRight];
+  FModeCombo.Items.Add('浅色');
+  FModeCombo.Items.Add('深色');
+  FModeCombo.ItemIndex := 0;
+  FModeCombo.OnChange := @ApplyTheme;
 
   // 3) The document tab area fills the middle (alClient).
   FDocPages := TTyPageControl.Create(Self);

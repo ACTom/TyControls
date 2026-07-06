@@ -159,14 +159,17 @@ begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(ACanvas, ARect, APPI);
-    S := CurrentStyle;
+    // The QAT sits on the TITLE-BAR row, so paint the TITLE-BAR surface (not the white
+    // ribbon body) — it blends with the caption bar behind it instead of drawing a white
+    // strip. Its command buttons (typically flat/ghost) supply the visible chrome.
+    S := ActiveController.Model.ResolveStyle('TyTitleBar', StyleClass, []);
     W := ARect.Right - ARect.Left;
     H := ARect.Bottom - ARect.Top;
     // Lay the form's photo down first so an alpha() background tints the photo
     // (glass), like TTyPanel/TTyToolBar. No-op (False) off-image and headless.
     FillSharpBackdrop(P, Rect(0, 0, W, H));
     // Draw the themed strip (background + any border/radius) via the shared
-    // DrawFrame with the resolved ribbon-band style. Safe with 0 children.
+    // DrawFrame with the resolved title-bar style. Safe with 0 children.
     DrawFrame(P, Rect(0, 0, W, H), S);
     P.EndPaint;
   finally
