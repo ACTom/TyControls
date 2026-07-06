@@ -248,6 +248,12 @@ begin
     bodyS := CurrentStyle;                                              // TyGauge body/border/text
     pointerS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);  // accent notch
 
+    // Windowed control (own HWND): fill the full rect with the parent/form background first, so
+    // the square corners around the round knob show the form (or the image-theme photo), not the
+    // HWND's white brush. Graphic siblings (TTyMeter/TTyAnalogClock) get this free by painting
+    // straight onto the form; a windowed control must paint its own backdrop.
+    TyFillParentBg(Self, P, R, bodyS);
+
     cx := (R.Left + R.Right) / 2;
     cy := (R.Top + R.Bottom) / 2;
     radius := Math.Min(R.Right - R.Left, R.Bottom - R.Top) / 2 - P.Scale(4);

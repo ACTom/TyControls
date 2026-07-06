@@ -236,6 +236,12 @@ begin
     faceS := CurrentStyle;                                              // TyGauge face/border/text
     fillS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);  // accent
 
+    // Windowed control (own HWND): fill the full rect with the parent/form background first, so
+    // the gaps around/between the stars show the form (or the image-theme photo), not the HWND's
+    // white brush. Graphic siblings paint straight onto the form; a windowed control must paint
+    // its own backdrop.
+    TyFillParentBg(Self, P, R, faceS);
+
     if (FCount > 0) and (R.Right > R.Left) and (R.Bottom > R.Top) then
     begin
       ctx := P.Bitmap.Canvas2D;

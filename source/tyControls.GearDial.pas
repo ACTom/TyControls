@@ -233,6 +233,12 @@ begin
     bodyS := CurrentStyle;                                              // TyGauge body/border/text
     pointerS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);  // accent notch/hub
 
+    // Windowed control (own HWND): fill the full rect with the parent/form background first, so
+    // the square corners around the round gear show the form (or the image-theme photo), not the
+    // HWND's white brush. Graphic siblings paint straight onto the form; a windowed control must
+    // paint its own backdrop.
+    TyFillParentBg(Self, P, R, bodyS);
+
     cx := (R.Left + R.Right) / 2;
     cy := (R.Top + R.Bottom) / 2;
     // Leave room for the protruding teeth (~P.Scale(6)) plus a small margin.
