@@ -20,9 +20,9 @@ uses
   tyControls.ImageCollection;
 
 const
-  TyBackstageSidebarW = 180;   // logical px, sidebar width
-  TyBackstageBackH    = 44;     // logical px, the back-arrow band height at the top
-  TyBackstageRowH     = 34;     // logical px, a command row height
+  TyBackstageSidebarW = 190;   // logical px, sidebar width
+  TyBackstageBackH    = 48;     // logical px, the back-arrow band height at the top
+  TyBackstageRowH     = 42;     // logical px, a command row height (roomier, like Office)
   TyBackstageBackRow  = -2;     // TyBackstageRowAt sentinel: the back-arrow band
   TyBackstageNoRow    = -1;     // TyBackstageRowAt sentinel: neither back nor a row
   TyBackstageIconX    = 14;     // logical px, left x of a row's icon (when present)
@@ -372,7 +372,8 @@ begin
     SideS := ActiveController.Model.ResolveStyle('TyButton', 'primary', []);
     if tpBackground in SideS.Present then
       P.FillBackground(Rect(0, 0, sbW, H), SideS.Background, 0);
-    fs := SideS.FontSize; if fs <= 0 then fs := 10;
+    // Bigger than the base font — the sidebar reads as a menu, not fine print.
+    fs := SideS.FontSize + 2; if fs <= 2 then fs := 12;
 
     // Back arrow (a left chevron) in the top band.
     arrowCx := P.Scale(22);

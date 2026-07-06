@@ -822,7 +822,7 @@ begin
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := CTitleH;
-  Bar.Caption := 'TyControls 文本编辑器';
+  Bar.Caption := '';   // QAT + skin switcher live on the left; keep the bar uncluttered
 
   // Icon-only Quick Access Toolbar (like Office): 新建 / 打开 / 保存 / 撤销 / 重做.
   QAT := TTyRibbonQuickAccess.Create(Self);
@@ -835,18 +835,19 @@ begin
   AddQat(QAT, '撤销'#10'撤销上一步操作', 'undo', @DoUndo);
   AddQat(QAT, '重做'#10'重做被撤销的操作', 'redo', @DoRedo);
 
-  // Skin switcher on the right of the title bar: a "皮肤" label + built-in theme + light/dark.
+  // Skin switcher: placed on the LEFT after the QAT with a FIXED position (no akRight
+  // anchor). The title bar reserves its right edge for the caption buttons via
+  // AdjustClientRect, so an akRight anchor set before the bar is sized pushed the combos
+  // off-screen — the reason they never showed. Left + fixed = always visible.
   SkinLbl := TTyLabel.Create(Self);
   SkinLbl.Parent := Bar;
-  SkinLbl.SetBounds(Width - 392, 8, 36, 20);
+  SkinLbl.SetBounds(172, 8, 36, 20);
   SkinLbl.Caption := '皮肤';
-  SkinLbl.Anchors := [akTop, akRight];
 
   FThemeCombo := TTyComboBox.Create(Self);
   FThemeCombo.Parent := Bar;
   FThemeCombo.Style := csDropDownList;
-  FThemeCombo.SetBounds(Width - 352, 4, 130, 26);
-  FThemeCombo.Anchors := [akTop, akRight];
+  FThemeCombo.SetBounds(208, 4, 130, 26);
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do FThemeCombo.Items.Add(names[i]);
   FThemeCombo.ItemIndex := FThemeCombo.Items.IndexOf('default');
@@ -855,8 +856,7 @@ begin
   FModeCombo := TTyComboBox.Create(Self);
   FModeCombo.Parent := Bar;
   FModeCombo.Style := csDropDownList;
-  FModeCombo.SetBounds(Width - 214, 4, 66, 26);
-  FModeCombo.Anchors := [akTop, akRight];
+  FModeCombo.SetBounds(344, 4, 66, 26);
   FModeCombo.Items.Add('浅色');
   FModeCombo.Items.Add('深色');
   FModeCombo.ItemIndex := 0;
