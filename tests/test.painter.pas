@@ -35,6 +35,7 @@ type
     procedure TestPerCornerTopRoundBottomSquare;
     procedure TestFallbackFontNameApplied;
     procedure TestMeasureTextAndUnscale;
+    procedure TestZeroFontSizeFallsBack;
   end;
 
 implementation
@@ -320,6 +321,19 @@ begin
   AssertTrue('measured width > 0', sz.cx > 0);
   AssertTrue('measured height > 0', sz.cy > 0);
   AssertEquals('unscale identity at 96ppi', 12, FPainter.Unscale(FPainter.Scale(12)));
+end;
+
+procedure TPainterTest.TestZeroFontSizeFallsBack;
+var szZero, szFallback: TSize;
+begin
+  MakePainter(60, 30, 96);
+  // A theme rule with no font-size resolves to 0; text must still be visible — the painter
+  // falls back to TyFallbackFontSize instead of rendering/measuring a size-0 (invisible) glyph.
+  szZero     := FPainter.MeasureText('Ag', '', 0, 400);
+  szFallback := FPainter.MeasureText('Ag', '', TyFallbackFontSize, 400);
+  AssertTrue('zero font-size measures non-empty', (szZero.cx > 0) and (szZero.cy > 0));
+  AssertEquals('zero width == fallback width', szFallback.cx, szZero.cx);
+  AssertEquals('zero height == fallback height', szFallback.cy, szZero.cy);
 end;
 
 initialization

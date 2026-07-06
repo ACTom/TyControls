@@ -80,6 +80,13 @@ var
   // mis-advances text in the real GUI, so substituting a concrete name fixes it.
   TyFallbackFontName: string;
 
+  // Fallback font size (logical px) used when a resolved style has font-size <= 0 — i.e.
+  // a theme rule that forgot to set font-size (which would otherwise render size-0 = INVISIBLE
+  // text, as green.tycss's TyRibbonGroup did). Applied at the single text chokepoint
+  // (TyConfigureTextFont), so every draw + measure gets a visible size without each control
+  // guarding or each theme repeating font-size on every rule. Apps may lower/raise it.
+  TyFallbackFontSize: Integer = 13;
+
 implementation
 
 function TyEffectiveFontName(const AName: string): string;
@@ -93,6 +100,8 @@ end;
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
   AFontSizeLogical, AWeight, APPI: Integer);
 begin
+  // A missing font-size (0) would render invisible text; fall back to a visible default.
+  if AFontSizeLogical <= 0 then AFontSizeLogical := TyFallbackFontSize;
   ABmp.FontName := TyEffectiveFontName(AFontName);
   ABmp.FontHeight := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
   ABmp.FontQuality := fqFineAntialiasing;
