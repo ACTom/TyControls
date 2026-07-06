@@ -594,7 +594,7 @@ begin
   ppi := Font.PixelsPerInch;
   Inc(ARect.Left,  MulDiv(1, ppi, 96));
   Dec(ARect.Right, MulDiv(1, ppi, 96));
-  Dec(ARect.Bottom, MulDiv(3, ppi, 96));
+  Dec(ARect.Bottom, MulDiv(6, ppi, 96));   // border + a clear gap above the bottom edge
   if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 
@@ -1281,7 +1281,9 @@ end;
 
 procedure TTyRibbonGroup.Paint;
 begin
-  RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+  // Paint the FULL bounds (ClientRect would exclude the reserved caption band, misplacing
+  // the caption band Y on any widgetset where GetClientRect honors AdjustClientRect).
+  RenderTo(Canvas, Rect(0, 0, Width, Height), Font.PixelsPerInch);
 end;
 
 function TTyRibbonGroup.LauncherRectPx: TRect;

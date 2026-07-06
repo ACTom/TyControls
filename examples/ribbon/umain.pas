@@ -336,6 +336,7 @@ begin
         begin
           TyDefaultController.LoadTheme(dlg.FileName);
           TyDefaultController.Mode := md;
+          ApplyChromeTheme(TyDefaultController);   // rebuild the form backdrop (photo themes)
         end;
       finally
         dlg.Free;
@@ -346,6 +347,7 @@ begin
       // Built-in theme (dual-mode) + light/dark sub-mode; the controller re-themes live.
       TyDefaultController.LoadThemeCss(TyBuiltinThemeCss(nm));
       TyDefaultController.Mode := md;
+      ApplyChromeTheme(TyDefaultController);       // rebuild chrome/backdrop for the new theme
     end;
   except
     // ignore a theme that fails to load (e.g. missing image assets)
