@@ -594,7 +594,10 @@ begin
   ppi := Font.PixelsPerInch;
   Inc(ARect.Left,  MulDiv(1, ppi, 96));
   Dec(ARect.Right, MulDiv(1, ppi, 96));
-  Dec(ARect.Bottom, MulDiv(6, ppi, 96));   // border + a clear gap above the bottom edge
+  // Reserve just the frame so the active page (windowed) can't paint over the bottom border,
+  // but keep it MINIMAL (2px) so the border reads as a single line right under the group band
+  // rather than a wide surface strip. (Runtime-verified: page bottom lands above the border.)
+  Dec(ARect.Bottom, MulDiv(2, ppi, 96));
   if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 

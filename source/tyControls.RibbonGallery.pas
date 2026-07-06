@@ -105,7 +105,7 @@ type
       AIndex indexes Items; AState is the resolved cell state. Glyph rendering is
       gated on a real handle so it is a no-op (safe) headlessly. }
     procedure PaintCell(APainter: TTyPainter; const ACellRect: TRect; AIndex: Integer;
-      AStates: TTyStateSet);
+      AStates: TTyStateSet; const ACorners: TTyCorners);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -262,7 +262,7 @@ begin
       if i = FGallery.FItemIndex then Include(states, tysActive)
       else if i = FHoverIndex then Include(states, tysHover)
       else Include(states, tysNormal);
-      FGallery.PaintCell(P, CellR, i, states);
+      FGallery.PaintCell(P, CellR, i, states, TyCorners(0, 0, 0, 0));
     end;
 
     // Re-stroke the border on top so a hovered/selected cell never eats the frame edge.
@@ -495,7 +495,7 @@ begin
 end;
 
 procedure TTyRibbonGallery.PaintCell(APainter: TTyPainter; const ACellRect: TRect;
-  AIndex: Integer; AStates: TTyStateSet);
+  AIndex: Integer; AStates: TTyStateSet; const ACorners: TTyCorners);
 var
   cellStyle: TTyStyleSet;
   gname: string;
@@ -506,9 +506,10 @@ begin
   if (AIndex < 0) or (AIndex >= FItems.Count) then Exit;
   cellStyle := ActiveController.Model.ResolveStyle('TyListItem', '', AStates);
 
-  // Cell fill for its state (selected/hover/normal). Square cells (tiles).
+  // Cell fill for its state. ACorners rounds a corner cell to match the box border, so a
+  // selected first/last cell's fill doesn't stick out past the box's rounded corner.
   if tpBackground in cellStyle.Present then
-    APainter.FillBackground(ACellRect, cellStyle.Background, 0);
+    APainter.FillBackground(ACellRect, cellStyle.Background, ACorners);
 
   pad := APainter.Scale(TyGalleryGlyphPad);
   textLeft := ACellRect.Left + APainter.Scale(cellStyle.Padding.Left);
@@ -549,6 +550,7 @@ var
   R, cellR, arrowR: TRect;
   cellW, arrowW, visN, i, rowRight: Integer;
   states: TTyStateSet;
+  cellCorners: TTyCorners;
 begin
   P := TTyPainter.Create;
   try
@@ -575,7 +577,15 @@ begin
       if i = FItemIndex then Include(states, tysActive)
       else if i = FHoverCell then Include(states, tysHover)
       else Include(states, tysNormal);
-      PaintCell(P, cellR, i, states);
+      // The first cell touches the box's LEFT rounded corners — round its TL/BL so a selected
+      // cell's square accent fill doesn't overhang the box border.
+      cellCorners := TyCorners(0, 0, 0, 0);
+      if i = 0 then
+      begin
+        cellCorners.TL := BoxStyle.BorderRadius;
+        cellCorners.BL := BoxStyle.BorderRadius;
+      end;
+      PaintCell(P, cellR, i, states, cellCorners);
     end;
 
     // Drop-down arrow affordance on the right — a FIXED small chevron (not stretched to

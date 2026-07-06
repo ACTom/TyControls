@@ -238,6 +238,7 @@ TyRibbonGroup {
   color: var(--on-surface);
   border-color: var(--border);
   border-width: 1px;
+  font-size: 9px;   /* without this the caption font-size is 0 -> the group name is invisible */
 }
 
 
