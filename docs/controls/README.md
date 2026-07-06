@@ -54,6 +54,8 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyNumericEdit](numericedit.md) | 数值编辑框（输入过滤 + 失焦分组格式化 + 限幅，Phase 4 参考实现） |
 | [TTyCurrencyEdit](currencyedit.md) | 货币编辑框（NumericEdit + 货币符号，仅显示态加符号） |
 | [TTyMaskEdit](maskedit.md) | 掩码编辑框（日期 / 电话 / IP，追加式录入 + 自动字面量） |
+| [TTyURLEdit](urledit.md) | URL 编辑框（尾部"打开"按钮，默认浏览器打开） |
+| [TTyComboEdit](comboedit.md) | 带下拉按钮的编辑框（OnDropDown 弹任意 popup，组合式基座） |
 | [TTyMemo](memo.md) | 多行编辑器：2D 导航、内嵌滚动条 |
 | [TTySpinEdit](spinedit.md) | 数值微调框（箭头 / 方向键 / 滚轮，Min/Max/Increment） |
 | [TTyUpDown](updown.md) | 独立上/下微调按钮对（按住连发，绑定到任意控件） |

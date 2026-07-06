@@ -11,7 +11,7 @@ uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form,
   tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.MaskEdit,
-  tyControls.TyLabel;
+  tyControls.URLEdit, tyControls.ComboEdit, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -19,8 +19,11 @@ type
     FQty, FPrice, FRanged: TTyNumericEdit;
     FMoney: TTyCurrencyEdit;
     FDate: TTyMaskEdit;
+    FUrl: TTyURLEdit;
+    FCombo: TTyComboEdit;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
+    procedure ComboDrop(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -47,12 +50,12 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  L1, L2, L3, L4, L5, LHint: TTyLabel;
+  L1, L2, L3, L4, L5, L6, L7, LHint: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 460, 388);
+  SetBounds(0, 0, 460, 484);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -117,14 +120,34 @@ begin
   FDate.SetBounds(240, 228, 180, 28);
   FDate.Mask := '##/##/####';
 
+  // URL(URLEdit:尾部 → 按钮用默认浏览器打开)
+  L6 := TTyLabel.Create(Self);
+  L6.Parent := Self;
+  L6.SetBounds(24, 276, 200, 20);
+  L6.Caption := 'URL(TTyURLEdit,点 →):';
+  FUrl := TTyURLEdit.Create(Self);
+  FUrl.Parent := Self;
+  FUrl.SetBounds(240, 272, 180, 28);
+  FUrl.Text := 'https://gitee.com/';
+
+  // 下拉(ComboEdit:点按钮触发 OnDropDown,弹什么由你决定)
+  L7 := TTyLabel.Create(Self);
+  L7.Parent := Self;
+  L7.SetBounds(24, 320, 200, 20);
+  L7.Caption := '下拉(TTyComboEdit):';
+  FCombo := TTyComboEdit.Create(Self);
+  FCombo.Parent := Self;
+  FCombo.SetBounds(240, 316, 180, 28);
+  FCombo.OnDropDown := @ComboDrop;
+
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;
-  FEcho.SetBounds(24, 272, 410, 20);
+  FEcho.SetBounds(24, 360, 410, 20);
   FEcho.Caption := '限幅值 = 42.00';
 
   LHint := TTyLabel.Create(Self);
   LHint.Parent := Self;
-  LHint.SetBounds(24, 312, 410, 40);
+  LHint.SetBounds(24, 404, 410, 40);
   LHint.Caption := '试试:只能输数字 / 负号 / 小数点;聚焦时去掉千分位方便编辑,'
     + '失焦后重新分组;限幅框输入 >100 的值,失焦后夹紧到 100。';
 
@@ -134,6 +157,12 @@ end;
 procedure TMainForm.RangedChange(Sender: TObject);
 begin
   FEcho.Caption := Format('限幅值 = %.2f  (失焦后夹紧到 0..100)', [FRanged.Value]);
+end;
+
+procedure TMainForm.ComboDrop(Sender: TObject);
+begin
+  // 真实用法:在这里弹颜色格 / 计算器 / 日期选择器,选完写回 FCombo.Text。
+  FCombo.Text := '你点了下拉按钮!';
 end;
 
 end.

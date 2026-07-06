@@ -7,7 +7,7 @@ uses
   LResources, tyControls.Types,
   tyControls.Base, tyControls.Controller, tyControls.StyleModel,
   tyControls.Button, tyControls.TyLabel, tyControls.Edit, tyControls.NumericEdit,
-  tyControls.CurrencyEdit, tyControls.MaskEdit,
+  tyControls.CurrencyEdit, tyControls.MaskEdit, tyControls.URLEdit, tyControls.ComboEdit,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
   tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.Gauge,
@@ -597,7 +597,8 @@ begin
   // Standard: everyday inputs, labels, panels.
   RegisterComponents('TyControls',
     [TTyButton, TTyLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
-     TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyMemo, TTyCheckBox, TTyRadioButton, TTyComboBox, TTyListBox,
+     TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit,
+     TTyMemo, TTyCheckBox, TTyRadioButton, TTyComboBox, TTyListBox,
      TTySpinEdit, TTyUpDown, TTyToggleSwitch, TTyTrackBar, TTyProgressBar, TTyScrollBar,
      TTyPanel, TTyGroupBox, TTyStyleController]);
   // Command / specialized buttons.

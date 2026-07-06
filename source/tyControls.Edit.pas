@@ -95,6 +95,12 @@ type
     procedure DoChange;
     // Text measurement helper (protected so headless access subclasses can call it)
     function TextStartX(APPI: Integer): Integer;
+    // Trailing-widget hook: a subclass reserves RightReserve device-px at the RIGHT of the
+    // text area (default 0 => plain edit, byte-identical) and paints its widget there via
+    // PaintTrailing; TrailingZone returns the same rect (client px) for hit-testing.
+    function RightReserve(APPI: Integer): Integer; virtual;
+    procedure PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet); virtual;
+    function TrailingZone(APPI: Integer): TRect;
     // Horizontal alignment offset (device px) added to the text/caret/selection
     // start under Alignment=taCenter/taRightJustify. Zero when left-aligned or
     // when the text overflows the view (scroll governs; alignment is moot).
@@ -672,7 +678,7 @@ begin
   if ClientWidth <= 0 then Exit;
   S := CurrentStyle;
   StartX := MulDiv(S.Padding.Left, APPI, 96);
-  RightPad := MulDiv(S.Padding.Right, APPI, 96);
+  RightPad := MulDiv(S.Padding.Right, APPI, 96) + RightReserve(APPI);
   ViewWidth := ClientWidth - StartX - RightPad;
   if ViewWidth <= 0 then Exit;
   Widths := MeasureCodepointWidths(APPI);
@@ -684,6 +690,30 @@ begin
     taRightJustify: Result := Slack;
     taCenter:       Result := Slack div 2;
   end;
+end;
+
+function TTyEdit.RightReserve(APPI: Integer): Integer;
+begin
+  Result := 0;   // plain edit reserves nothing on the right (byte-identical)
+end;
+
+procedure TTyEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet);
+begin
+  // default: no trailing widget
+end;
+
+function TTyEdit.TrailingZone(APPI: Integer): TRect;
+var
+  S: TTyStyleSet;
+  res, padR: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  res := RightReserve(APPI);
+  if res <= 0 then Exit;
+  S := CurrentStyle;
+  padR := MulDiv(S.Padding.Right, APPI, 96);
+  Result := Rect(ClientWidth - padR - res, MulDiv(S.Padding.Top, APPI, 96),
+    ClientWidth - padR, ClientHeight - MulDiv(S.Padding.Bottom, APPI, 96));
 end;
 
 function TTyEdit.DisplayText: string;
@@ -772,7 +802,7 @@ begin
   if ClientWidth <= 0 then Exit;
   S := CurrentStyle;
   StartX := MulDiv(S.Padding.Left, APPI, 96);
-  RightPad := MulDiv(S.Padding.Right, APPI, 96);
+  RightPad := MulDiv(S.Padding.Right, APPI, 96) + RightReserve(APPI);
   ViewWidth := (ClientWidth - StartX - RightPad);
   if ViewWidth < 0 then ViewWidth := 0;
   Widths := MeasureCodepointWidths(APPI);
@@ -794,7 +824,7 @@ begin
   if ClientWidth <= 0 then Exit;
   S := CurrentStyle;
   StartX := MulDiv(S.Padding.Left, APPI, 96);
-  RightPad := MulDiv(S.Padding.Right, APPI, 96);
+  RightPad := MulDiv(S.Padding.Right, APPI, 96) + RightReserve(APPI);
   ViewRight := ClientWidth - RightPad;
   ViewWidth := ViewRight - StartX;
   if ViewWidth < 0 then ViewWidth := 0;
@@ -1546,6 +1576,7 @@ var
   EffSize: Integer;
   TextClipRight: Integer;
   HintColor: TTyColor;
+  Reserve, ContentFullRight: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -1561,6 +1592,10 @@ begin
       ContentRect.Right  - P.Scale(S.Padding.Right),
       ContentRect.Bottom - P.Scale(S.Padding.Bottom)
     );
+    // Reserve a trailing-widget zone on the right (Reserve=0 for a plain edit -> unchanged).
+    Reserve := RightReserve(APPI);
+    ContentFullRight := ContentRect.Right;
+    ContentRect.Right := ContentRect.Right - Reserve;
 
     // Horizontal alignment offset: shifts the text-start / caret / selection
     // band right by AOff under taCenter/taRightJustify (0 when left-aligned or
@@ -1654,6 +1689,10 @@ begin
         TyQtImeUpdateCaret;           // Qt6: re-query so the candidate follows the caret (no-op elsewhere)
       end;
     end;
+
+    // 4. Trailing widget (URL open button, combo drop arrow, …) in the reserved right zone.
+    if Reserve > 0 then
+      PaintTrailing(P, Rect(ContentRect.Right, ContentRect.Top, ContentFullRight, ContentRect.Bottom), S);
 
     P.EndPaint;
   finally

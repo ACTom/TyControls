@@ -89,6 +89,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.MaskEdit"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.URLEdit.pas"/>
+        <UnitName Value="tyControls.URLEdit"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ComboEdit.pas"/>
+        <UnitName Value="tyControls.ComboEdit"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.CheckBox.pas"/>
         <UnitName Value="tyControls.CheckBox"/>
       </Item>
