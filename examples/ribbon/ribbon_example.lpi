@@ -16,7 +16,7 @@
       <Item1><PackageName Value="LCL"/></Item1>
       <Item2><PackageName Value="tycontrols"/></Item2>
     </RequiredPackages>
-    <Units Count="2">
+    <Units Count="3">
       <Unit0>
         <Filename Value="ribbon_example.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -26,6 +26,11 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="umain"/>
       </Unit1>
+      <Unit2>
+        <Filename Value="uicons.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uicons"/>
+      </Unit2>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

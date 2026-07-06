@@ -18,11 +18,12 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes,
   tyControls.Form, tyControls.Hint, tyControls.Panel,
   tyControls.TyLabel, tyControls.Button, tyControls.CheckBox, tyControls.ComboBox,
-  tyControls.IconFont, tyControls.GlyphButtons, tyControls.DropButtons,
+  tyControls.ImageCollection, tyControls.GlyphButtons, tyControls.DropButtons,
   tyControls.ColorButton, tyControls.ButtonGroup, tyControls.Ribbon,
   tyControls.RibbonQuickAccess, tyControls.RibbonGallery, tyControls.RibbonBackstage,
   tyControls.PageControl, tyControls.TabSheet, tyControls.Memo, tyControls.StatusBar,
-  tyControls.Dialogs.Find, tyControls.Dialogs.Color;
+  tyControls.Dialogs.Find, tyControls.Dialogs.Color,
+  uicons;
 
 const
   CTitleH = 34;
@@ -37,7 +38,7 @@ type
 
   TMainForm = class(TTyForm)
   private
-    FIcons: TTyIconFont;
+    FImgColl: TTyImageCollection;   // cross-platform BGRA command icons (uicons)
     FRibbon: TTyRibbon;
     FDocPages: TTyPageControl;
     FStatus: TTyStatusBar;
@@ -147,8 +148,8 @@ begin
   Result.Parent := AGroup;
   Result.SetBounds(AX, 4, AW, 66);
   Result.Caption := ACap;
-  Result.IconFont := FIcons;
-  Result.GlyphName := AGlyph;      // '' -> caption only
+  Result.Images := FImgColl;
+  Result.ImageName := AGlyph;      // '' -> caption only
   Result.Hint := ACap;             // ScreenTip
   Result.ShowHint := True;
   Result.OnClick := AHandler;
@@ -161,8 +162,8 @@ begin
   Result.Parent := AGroup;
   Result.SetBounds(AX, AY, AW, 24);
   Result.Caption := ACap;
-  Result.IconFont := FIcons;
-  Result.GlyphName := AGlyph;      // '' -> caption only (e.g. B / I / U)
+  Result.Images := FImgColl;
+  Result.ImageName := AGlyph;      // '' -> caption only (e.g. B / I / U)
   Result.Hint := ACap;             // ScreenTip
   Result.ShowHint := True;
   Result.OnClick := AHandler;
@@ -175,8 +176,8 @@ function TMainForm.AddQat(AQat: TTyRibbonQuickAccess; const AHint, AGlyph: strin
 begin
   Result := AQat.AddButton('');    // no caption -> pure icon
   Result.StyleClass := 'ghost';    // flat: no frame at rest, subtle hover (Office QAT)
-  Result.IconFont := FIcons;
-  Result.GlyphName := AGlyph;
+  Result.Images := FImgColl;
+  Result.ImageName := AGlyph;
   Result.GlyphSize := 16;
   Result.Width := 28;              // square-ish (Align=alLeft keeps this width)
   Result.Hint := AHint;
@@ -409,8 +410,8 @@ begin
   FBsBrowse.Parent := FBsPanel;
   FBsBrowse.SetBounds(28, 60, 200, 30);
   FBsBrowse.Caption := '浏览…';
-  FBsBrowse.IconFont := FIcons;
-  FBsBrowse.GlyphName := 'folder';
+  FBsBrowse.Images := FImgColl;
+  FBsBrowse.ImageName := 'folder';
   FBsBrowse.OnClick := @DoOpen;
 
   for i := 0 to High(FBsRecent) do
@@ -419,8 +420,8 @@ begin
     FBsRecent[i].Parent := FBsPanel;
     FBsRecent[i].StyleClass := 'ghost';
     FBsRecent[i].SetBounds(28, 108 + i * 34, 380, 30);
-    FBsRecent[i].IconFont := FIcons;
-    FBsRecent[i].GlyphName := 'recent';
+    FBsRecent[i].Images := FImgColl;
+    FBsRecent[i].ImageName := 'recent';
     FBsRecent[i].Tag := i;
     FBsRecent[i].OnClick := @DoOpenRecent;
     FBsRecent[i].Visible := False;
@@ -692,38 +693,11 @@ begin
   FDocList := TList.Create;
   FFontColor := TyRGB(0, 0, 0);
 
-  // Distinct per-command icons from Segoe MDL2 Assets (ships with Win10/11).
-  // Each command maps to its own glyph, so the ribbon reads like real Office —
-  // not the same star everywhere. Code points are in the font's Private Use Area.
-  FIcons := TTyIconFont.Create(Self);
-  FIcons.FontFamily := 'Segoe MDL2 Assets';
-  FIcons.MapGlyph('new',       $E7C3);   // Page
-  FIcons.MapGlyph('open',      $E8E5);   // OpenFile
-  FIcons.MapGlyph('save',      $E74E);   // Save
-  FIcons.MapGlyph('cut',       $E8C6);   // Cut
-  FIcons.MapGlyph('copy',      $E8C8);   // Copy
-  FIcons.MapGlyph('paste',     $E77F);   // Paste
-  FIcons.MapGlyph('painter',   $E790);   // Brush (format painter)
-  FIcons.MapGlyph('undo',      $E7A7);   // Undo
-  FIcons.MapGlyph('redo',      $E7A6);   // Redo
-  FIcons.MapGlyph('find',      $E721);   // Search
-  FIcons.MapGlyph('replace',   $E70F);   // Edit
-  FIcons.MapGlyph('selectall', $E8B3);   // SelectAll
-  FIcons.MapGlyph('bullets',   $E8FD);   // BulletedList
-  FIcons.MapGlyph('number',    $E8EF);   // numbered list
-  FIcons.MapGlyph('symbol',    $E76E);   // Emoji2
-  FIcons.MapGlyph('datetime',  $E787);   // Calendar
-  FIcons.MapGlyph('table',     $E8A9);   // GridView
-  FIcons.MapGlyph('crop',      $E7A8);   // Crop
-  FIcons.MapGlyph('newwindow', $E78B);   // NewWindow
-  FIcons.MapGlyph('arrange',   $E7C4);   // TaskView
-  FIcons.MapGlyph('zoomin',    $E8A3);   // ZoomIn
-  FIcons.MapGlyph('zoomout',   $E71F);   // Zoom
-  FIcons.MapGlyph('zoom100',   $E1CB);   // FitPage
-  FIcons.MapGlyph('close',     $E8BB);   // ChromeClose
-  FIcons.MapGlyph('exit',      $E7E8);   // Leave
-  FIcons.MapGlyph('folder',    $E838);   // OpenLocal (browse)
-  FIcons.MapGlyph('recent',    $E823);   // Recent
+  // Cross-platform command icons: hand-drawn BGRA vector glyphs (uicons), NOT a
+  // system icon font — so they render identically on Windows 7/10/11, macOS and
+  // Linux. Buttons draw them tinted to the theme text color (theme-adaptive).
+  FImgColl := TTyImageCollection.Create(Self);
+  BuildEditorIcons(FImgColl);
 
   FFindDlg := TTyFindDialog.Create(Self);
   FReplaceDlg := TTyReplaceDialog.Create(Self);
@@ -731,7 +705,7 @@ begin
   // Backstage (Office "File" view), opened by the File tab.
   FBackstage := TTyRibbonBackstage.Create(Self);
   FBackstage.Controller := TyDefaultController;
-  FBackstage.IconFont := FIcons;
+  FBackstage.Images := FImgColl;
   FBackstage.OnCommandSelect := @BackstageSelect;
   FBackstage.OnClose := @BackstageClosed;
   RebuildBackstage;
