@@ -257,7 +257,9 @@ begin
     begin
       CellR := TyGalleryGridRect(i, cols, cellW, cellH);
       states := [];
-      if i = FGallery.FItemIndex then Include(states, tysSelected)
+      // Selected cell uses tysActive (matches TyListItem:active = accent), the same state
+      // TTyListBox uses for its selected row — TyListItem has no :selected rule.
+      if i = FGallery.FItemIndex then Include(states, tysActive)
       else if i = FHoverIndex then Include(states, tysHover)
       else Include(states, tysNormal);
       FGallery.PaintCell(P, CellR, i, states);
@@ -569,7 +571,8 @@ begin
       if cellR.Left >= cellR.Right then Break;   // no room left before the arrow
 
       states := [];
-      if i = FItemIndex then Include(states, tysSelected)
+      // tysActive = TyListItem:active (accent), the selected look (no :selected rule exists).
+      if i = FItemIndex then Include(states, tysActive)
       else if i = FHoverCell then Include(states, tysHover)
       else Include(states, tysNormal);
       PaintCell(P, cellR, i, states);
