@@ -242,8 +242,8 @@ begin
   col.SelectedColor := FFontColor;
   col.OnColorChange := @DoFontColor;
 
-  // 剪贴板
-  g := NewGroup(APage, '剪贴板', 150, False);
+  // 剪贴板 (with a dialog launcher, like Word)
+  g := NewGroup(APage, '剪贴板', 150, True);
   Big(g, '粘贴', 'paste', 6, 56, @DoPaste);
   Small(g, '剪切', 'cut', 66, 4, 78, @DoCut);
   Small(g, '复制', 'copy', 66, 30, 78, @DoCopy);

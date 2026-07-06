@@ -187,9 +187,11 @@ type
   TTyRibbonGroup = class(TTyCustomControl)
   private
     FCaption: string;
+    FShowCaption: Boolean;
     FShowDialogLauncher: Boolean;
     FOnDialogLauncher: TTyRibbonLauncherEvent;
     procedure SetCaption(const AValue: string);
+    procedure SetShowCaption(AValue: Boolean);
     procedure SetShowDialogLauncher(AValue: Boolean);
     { The launcher arrow's client rect (device px) — computed from the current size,
       NOT cached from the last Paint, so the hit-test works before the first paint. }
@@ -204,6 +206,9 @@ type
     constructor Create(AOwner: TComponent); override;
   published
     property Caption: string read FCaption write SetCaption;
+    { Show the bottom caption band (the group name). False = the content fills the full
+      height and no caption/launcher is drawn (a caption-less group). }
+    property ShowCaption: Boolean read FShowCaption write SetShowCaption default True;
     { Show a small dialog-launcher arrow in the bottom-right of the caption band. }
     property ShowDialogLauncher: Boolean read FShowDialogLauncher write SetShowDialogLauncher default False;
     property OnDialogLauncher: TTyRibbonLauncherEvent read FOnDialogLauncher write FOnDialogLauncher;
@@ -1161,6 +1166,7 @@ begin
   Align := alLeft;
   Width := 96;
   FCaption := '';
+  FShowCaption := True;
   FShowDialogLauncher := False;
 end;
 
@@ -1176,6 +1182,14 @@ begin
   Invalidate;
 end;
 
+procedure TTyRibbonGroup.SetShowCaption(AValue: Boolean);
+begin
+  if FShowCaption = AValue then Exit;
+  FShowCaption := AValue;
+  Realign;      // the reserved caption band changed -> re-lay hosted controls
+  Invalidate;
+end;
+
 procedure TTyRibbonGroup.SetShowDialogLauncher(AValue: Boolean);
 begin
   if FShowDialogLauncher = AValue then Exit;
@@ -1186,6 +1200,7 @@ end;
 procedure TTyRibbonGroup.AdjustClientRect(var ARect: TRect);
 begin
   inherited AdjustClientRect(ARect);
+  if not FShowCaption then Exit;   // caption-less group: content fills the full height
   // Reserve the bottom caption band so hosted command controls sit above the title.
   Dec(ARect.Bottom, MulDiv(TyRibbonCaptionBand, Font.PixelsPerInch, 96));
   // Guard a group shorter than the caption band: never invert the rect.
@@ -1223,18 +1238,20 @@ begin
       P.FillBackground(Rect(W - sepW, P.Scale(4), W, H - P.Scale(4)), sepFill, 0);
     end;
 
-    // Caption centered in the bottom band.
-    if FCaption <> '' then
+    // Caption band (name + optional dialog launcher) — only when ShowCaption.
+    if FShowCaption then
     begin
-      capRect := Rect(P.Scale(2), H - bandPx, W - P.Scale(2), H);
-      P.DrawText(capRect, FCaption, S.FontName, S.FontSize, S.FontWeight,
-        S.TextColor, taCenter, tlCenter, True);
+      if FCaption <> '' then
+      begin
+        capRect := Rect(P.Scale(2), H - bandPx, W - P.Scale(2), H);
+        P.DrawText(capRect, FCaption, S.FontName, S.FontSize, S.FontWeight,
+          S.TextColor, taCenter, tlCenter, True);
+      end;
+      // Small Office-style dialog launcher (diagonal arrow) in the bottom-right corner.
+      if FShowDialogLauncher then
+        P.DrawGlyph(Rect(W - P.Scale(13), H - P.Scale(13), W - P.Scale(3), H - P.Scale(3)),
+          tgDialogLauncher, S.TextColor, 1, 0);
     end;
-
-    // Dialog-launcher arrow in the bottom-right of the caption band (same geometry
-    // as LauncherRectPx, which the hit-test uses).
-    if FShowDialogLauncher then
-      P.DrawGlyph(Rect(W - bandPx, H - bandPx, W, H), tgArrowDown, S.TextColor, 1);
 
     P.EndPaint;
   finally
@@ -1251,7 +1268,7 @@ function TTyRibbonGroup.LauncherRectPx: TRect;
 var
   bandPx: Integer;
 begin
-  if not FShowDialogLauncher then Exit(Rect(0, 0, 0, 0));
+  if (not FShowDialogLauncher) or (not FShowCaption) then Exit(Rect(0, 0, 0, 0));
   bandPx := MulDiv(TyRibbonCaptionBand, Font.PixelsPerInch, 96);
   Result := Rect(ClientWidth - bandPx, ClientHeight - bandPx, ClientWidth, ClientHeight);
 end;

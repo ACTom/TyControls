@@ -250,7 +250,7 @@ end;
 procedure TTyDropDownButton.DrawContent(APainter: TTyPainter; const AContentRect: TRect;
   const AStyle: TTyStyleSet);
 var
-  arrowW, divX, cx, cy, half, hh: Integer;
+  arrowW, divX: Integer;
   captionRect, arrowRect: TRect;
   ctx: TBGRACanvas2D;
 begin
@@ -286,23 +286,9 @@ begin
   ctx.strokeStyle(TyColorToBGRA(AStyle.BorderColor));
   ctx.stroke;
 
-  // Centered downward triangle filled with the text colour. Half-width ~ 1/4 of the
-  // arrow zone, height ~ half that, so it reads as a small caret regardless of PPI.
-  cx := (arrowRect.Left + arrowRect.Right) div 2;
-  cy := (arrowRect.Top + arrowRect.Bottom) div 2;
-  half := APainter.Scale(4);
-  if half < 3 then half := 3;
-  hh := (half * 6) div 10;   // ~0.6 aspect -> a squat, clearly-downward triangle
-  if hh < 2 then hh := 2;
-
-  ctx := APainter.Bitmap.Canvas2D;
-  ctx.beginPath;
-  ctx.moveTo(cx - half, cy - hh);   // top-left
-  ctx.lineTo(cx + half, cy - hh);   // top-right
-  ctx.lineTo(cx, cy + hh);          // bottom apex (points down)
-  ctx.closePath;
-  ctx.fillStyle(TyColorToBGRA(AStyle.TextColor));
-  ctx.fill;
+  // Centered small chevron (a shallow "v", fixed size), matching TTyComboBox's dropdown
+  // chevron — a clean caret regardless of the button height/PPI.
+  APainter.DrawDropChevron(arrowRect, AStyle.TextColor);
 end;
 
 { TTyMenuButton }

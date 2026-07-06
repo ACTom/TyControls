@@ -823,7 +823,7 @@ begin
     if FText <> '' then
       P.DrawText(TextR, FText, S.FontName, S.FontSize, S.FontWeight,
         S.TextColor, taLeftJustify, tlCenter, True);
-    P.DrawGlyph(BtnR, tgChevronDown, S.TextColor, 2);
+    P.DrawDropChevron(BtnR, S.TextColor);   // fixed small chevron (not stretched to height)
     P.EndPaint;
   finally
     P.Free;

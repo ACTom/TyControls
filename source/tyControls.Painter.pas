@@ -12,7 +12,8 @@ uses
 
 type
   TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck, tgCheckIndeterminate,
-    tgRadioDot, tgChevronDown, tgChevronRight, tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight);
+    tgRadioDot, tgChevronDown, tgChevronRight, tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight,
+    tgDialogLauncher);
 
   TTyPainter = class
   private
@@ -41,6 +42,10 @@ type
     procedure DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
     procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False);
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer = 4);
+    { A FIXED-SIZE dropdown chevron (a shallow wide "v"), centered in AZoneRect and NOT
+      stretched to the zone height — so a tall combo/button keeps a small clean chevron
+      instead of a big ugly V. ASizeLogical is the chevron width (height ≈ 0.55x). }
+    procedure DrawDropChevron(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer = 9);
     procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
     procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
     procedure FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
@@ -512,7 +517,29 @@ begin
         FBmp.DrawPolyLineAntialias([PointF(r - w * 0.35, t + h * 0.25),
           PointF(r, cy), PointF(r - w * 0.35, b - h * 0.25)], px, th);
       end;
+    tgDialogLauncher:
+      begin
+        // Office group dialog-launcher: a diagonal arrow into the bottom-right corner.
+        FBmp.DrawLineAntialias(l, t, r, b, px, th, True);
+        FBmp.DrawPolyLineAntialias([PointF(r - w * 0.5, b), PointF(r, b),
+          PointF(r, b - h * 0.5)], px, th);
+      end;
   end;
+end;
+
+procedure TTyPainter.DrawDropChevron(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
+var
+  cw, ch, gx, gy: Integer;
+begin
+  cw := Scale(ASizeLogical);
+  if cw < 4 then cw := 4;
+  ch := (cw * 55) div 100;            // shallow: height ≈ 0.55 x width
+  if ch < 2 then ch := 2;
+  gx := (AZoneRect.Left + AZoneRect.Right) div 2;
+  gy := (AZoneRect.Top + AZoneRect.Bottom) div 2;
+  // pad 0 so the chevron fills exactly this small centered box (not the tall zone).
+  DrawGlyph(Rect(gx - cw div 2, gy - ch div 2, gx - cw div 2 + cw, gy - ch div 2 + ch),
+    tgChevronDown, AColor, 2, 0);
 end;
 
 procedure TTyPainter.BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect);
