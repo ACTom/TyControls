@@ -8,6 +8,7 @@ uses
   tyControls.Base, tyControls.Controller, tyControls.StyleModel,
   tyControls.Button, tyControls.TyLabel, tyControls.Edit, tyControls.NumericEdit,
   tyControls.CurrencyEdit, tyControls.MaskEdit, tyControls.URLEdit, tyControls.ComboEdit,
+  tyControls.TrackEdit,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
   tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.Gauge,
@@ -597,7 +598,7 @@ begin
   // Standard: everyday inputs, labels, panels.
   RegisterComponents('TyControls',
     [TTyButton, TTyLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
-     TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit,
+     TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit, TTyTrackEdit,
      TTyMemo, TTyCheckBox, TTyRadioButton, TTyComboBox, TTyListBox,
      TTySpinEdit, TTyUpDown, TTyToggleSwitch, TTyTrackBar, TTyProgressBar, TTyScrollBar,
      TTyPanel, TTyGroupBox, TTyStyleController]);

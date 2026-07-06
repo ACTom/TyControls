@@ -11,7 +11,7 @@ uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form,
   tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.MaskEdit,
-  tyControls.URLEdit, tyControls.ComboEdit, tyControls.TyLabel;
+  tyControls.URLEdit, tyControls.ComboEdit, tyControls.TrackEdit, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -21,6 +21,7 @@ type
     FDate: TTyMaskEdit;
     FUrl: TTyURLEdit;
     FCombo: TTyComboEdit;
+    FTrack: TTyTrackEdit;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
@@ -50,12 +51,12 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  L1, L2, L3, L4, L5, L6, L7, LHint: TTyLabel;
+  L1, L2, L3, L4, L5, L6, L7, L8, LHint: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 460, 484);
+  SetBounds(0, 0, 460, 528);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -140,14 +141,26 @@ begin
   FCombo.SetBounds(240, 316, 180, 28);
   FCombo.OnDropDown := @ComboDrop;
 
+  // 数值 + 内嵌滑块(TrackEdit:拖滑块或直接键入)
+  L8 := TTyLabel.Create(Self);
+  L8.Parent := Self;
+  L8.SetBounds(24, 364, 200, 20);
+  L8.Caption := '滑块数值(TTyTrackEdit,0..255):';
+  FTrack := TTyTrackEdit.Create(Self);
+  FTrack.Parent := Self;
+  FTrack.SetBounds(240, 360, 180, 28);
+  FTrack.MinValue := 0;
+  FTrack.MaxValue := 255;
+  FTrack.Value := 128;
+
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;
-  FEcho.SetBounds(24, 360, 410, 20);
+  FEcho.SetBounds(24, 404, 410, 20);
   FEcho.Caption := '限幅值 = 42.00';
 
   LHint := TTyLabel.Create(Self);
   LHint.Parent := Self;
-  LHint.SetBounds(24, 404, 410, 40);
+  LHint.SetBounds(24, 448, 410, 40);
   LHint.Caption := '试试:只能输数字 / 负号 / 小数点;聚焦时去掉千分位方便编辑,'
     + '失焦后重新分组;限幅框输入 >100 的值,失焦后夹紧到 100。';
 
