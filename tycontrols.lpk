@@ -221,6 +221,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.RibbonBackstage"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.PopupSurface.pas"/>
+        <UnitName Value="tyControls.PopupSurface"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.ToggleSwitch.pas"/>
         <UnitName Value="tyControls.ToggleSwitch"/>
       </Item>

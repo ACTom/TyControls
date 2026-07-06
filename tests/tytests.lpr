@@ -96,6 +96,7 @@ uses
   test.ribbonquickaccess,
   test.ribbongallery,
   test.ribbonbackstage,
+  test.popupsurface,
   test.combobox,
   test.tabset;
 
