@@ -34,10 +34,15 @@ type
     procedure SetUseThousands(const AValue: Boolean);
     procedure SetMinValue(const AValue: Double);
     procedure SetMaxValue(const AValue: Double);
-    function Formatted(AValue: Double; AGroup: Boolean): string;
     function ClampVal(AValue: Double): Double;
-    procedure Reformat(AGroup: Boolean);
   protected
+    // Re-derive the displayed text from the current value (AGroup = grouped display form).
+    // Protected so a subclass can refresh after changing a display-affecting property.
+    procedure Reformat(AGroup: Boolean);
+    // Format AValue for display. AGroup = the blur/display form (grouped); False = the
+    // focused raw-edit form. Virtual so TTyCurrencyEdit can wrap it with a currency symbol
+    // (only on the grouped form, so the raw-edit form stays a clean editable number).
+    function Formatted(AValue: Double; AGroup: Boolean): string; virtual;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure DoEnter; override;   // show RAW (ungrouped) for editing
     procedure DoExit; override;    // clamp + re-display GROUPED on blur

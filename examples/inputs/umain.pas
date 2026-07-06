@@ -10,12 +10,15 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form,
-  tyControls.NumericEdit, tyControls.TyLabel;
+  tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.MaskEdit,
+  tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
   private
     FQty, FPrice, FRanged: TTyNumericEdit;
+    FMoney: TTyCurrencyEdit;
+    FDate: TTyMaskEdit;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
   public
@@ -44,12 +47,12 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  L1, L2, L3, LHint: TTyLabel;
+  L1, L2, L3, L4, L5, LHint: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 460, 300);
+  SetBounds(0, 0, 460, 388);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -93,14 +96,35 @@ begin
   FRanged.Value := 42;
   FRanged.OnChange := @RangedChange;
 
+  // 货币(CurrencyEdit:仅失焦显示态加符号)
+  L4 := TTyLabel.Create(Self);
+  L4.Parent := Self;
+  L4.SetBounds(24, 188, 200, 20);
+  L4.Caption := '货币(TTyCurrencyEdit,¥):';
+  FMoney := TTyCurrencyEdit.Create(Self);
+  FMoney.Parent := Self;
+  FMoney.SetBounds(240, 184, 180, 28);
+  FMoney.CurrencySymbol := '¥';
+  FMoney.Value := 1234.5;
+
+  // 掩码(MaskEdit:日期,追加式录入 + 自动补 /)
+  L5 := TTyLabel.Create(Self);
+  L5.Parent := Self;
+  L5.SetBounds(24, 232, 200, 20);
+  L5.Caption := '日期掩码(##/##/####):';
+  FDate := TTyMaskEdit.Create(Self);
+  FDate.Parent := Self;
+  FDate.SetBounds(240, 228, 180, 28);
+  FDate.Mask := '##/##/####';
+
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;
-  FEcho.SetBounds(24, 184, 410, 20);
+  FEcho.SetBounds(24, 272, 410, 20);
   FEcho.Caption := '限幅值 = 42.00';
 
   LHint := TTyLabel.Create(Self);
   LHint.Parent := Self;
-  LHint.SetBounds(24, 224, 410, 40);
+  LHint.SetBounds(24, 312, 410, 40);
   LHint.Caption := '试试:只能输数字 / 负号 / 小数点;聚焦时去掉千分位方便编辑,'
     + '失焦后重新分组;限幅框输入 >100 的值,失焦后夹紧到 100。';
 
