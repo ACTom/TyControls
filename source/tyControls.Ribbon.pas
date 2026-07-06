@@ -1223,6 +1223,10 @@ begin
     H := ARect.Bottom - ARect.Top;
     bandPx := MulDiv(TyRibbonCaptionBand, APPI, 96);
 
+    // Fill the OPAQUE parent (ribbon page) surface first, so the group's transparent bg
+    // shows the page — not the Win10 DWM glass (which blurs the caption + washes it white
+    // on deactivate). This is why group names looked faint and vanished when unfocused.
+    TyFillParentBg(Self, P, Rect(0, 0, W, H), S);
     // Group background (usually transparent/surface) via the resolved style.
     if tpBackground in S.Present then
       P.FillBackground(Rect(0, 0, W, H), S.Background, S.BorderRadius);

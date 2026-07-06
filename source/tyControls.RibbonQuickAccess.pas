@@ -115,8 +115,10 @@ end;
 
 function TTyRibbonQuickAccess.GetStyleTypeKey: string;
 begin
-  // Reuse the ribbon band surface token — the QAT sits on the ribbon/title band.
-  Result := 'TyRibbon';
+  // The QAT sits on the TITLE-BAR row, so it reads as the title-bar surface — this also
+  // makes its child buttons' TyResolveParentBg pick the title-bar colour, so flat/ghost
+  // QAT buttons blend with the bar instead of showing a white box.
+  Result := 'TyTitleBar';
 end;
 
 procedure TTyRibbonQuickAccess.SetIndent(AValue: Integer);
@@ -159,10 +161,9 @@ begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(ACanvas, ARect, APPI);
-    // The QAT sits on the TITLE-BAR row, so paint the TITLE-BAR surface (not the white
-    // ribbon body) — it blends with the caption bar behind it instead of drawing a white
-    // strip. Its command buttons (typically flat/ghost) supply the visible chrome.
-    S := ActiveController.Model.ResolveStyle('TyTitleBar', StyleClass, []);
+    // GetStyleTypeKey='TyTitleBar' -> CurrentStyle is the title-bar surface, so the strip
+    // blends with the caption bar instead of drawing a white ribbon-body strip.
+    S := CurrentStyle;
     W := ARect.Right - ARect.Left;
     H := ARect.Bottom - ARect.Top;
     // Lay the form's photo down first so an alpha() background tints the photo

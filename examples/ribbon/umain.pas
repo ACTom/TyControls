@@ -22,7 +22,7 @@ uses
   tyControls.ColorButton, tyControls.ButtonGroup, tyControls.Ribbon,
   tyControls.RibbonQuickAccess, tyControls.RibbonGallery, tyControls.RibbonBackstage,
   tyControls.PageControl, tyControls.TabSheet, tyControls.Memo, tyControls.StatusBar,
-  tyControls.Dialogs.Find, tyControls.Dialogs.Color,
+  tyControls.Dialogs, tyControls.Dialogs.Find, tyControls.Dialogs.Color,
   uicons;
 
 const
@@ -92,6 +92,7 @@ type
     procedure DoFontColor(Sender: TObject);
     procedure DoWordWrap(Sender: TObject);
     procedure DoToggleContext(Sender: TObject);
+    procedure DoLauncher(Sender: TTyRibbonGroup);
     procedure DoNoop(Sender: TObject);
     // ---- events ----
     procedure BackstageSelect(Sender: TObject; AIndex: Integer);
@@ -143,6 +144,12 @@ begin
   Result.Caption := ACaption;
   Result.Width := AWidth;
   Result.ShowDialogLauncher := ALauncher;
+  if ALauncher then Result.OnDialogLauncher := @DoLauncher;   // the launcher IS clickable
+end;
+
+procedure TMainForm.DoLauncher(Sender: TTyRibbonGroup);
+begin
+  TyShowMessage('“' + Sender.Caption + '”对话框(占位)');
 end;
 
 function TMainForm.Big(AGroup: TTyRibbonGroup; const ACap, AGlyph: string; AX, AW: Integer;
@@ -743,6 +750,7 @@ var
   g: TTyRibbonGroup;
   names: TStringArray;
   i: Integer;
+  SkinLbl: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'TyControls 文本编辑器';
@@ -775,6 +783,7 @@ begin
   FBackstage.Images := FImgColl;
   FBackstage.OnCommandSelect := @BackstageSelect;
   FBackstage.OnClose := @BackstageClosed;
+  FBackstage.DefaultItemIndex := 0;   // open on 信息 with its content shown (Office-like)
   RebuildBackstage;
   BuildBackstageContent;
 
@@ -826,11 +835,17 @@ begin
   AddQat(QAT, '撤销'#10'撤销上一步操作', 'undo', @DoUndo);
   AddQat(QAT, '重做'#10'重做被撤销的操作', 'redo', @DoRedo);
 
-  // Skin switcher on the right of the title bar: built-in theme + light/dark mode.
+  // Skin switcher on the right of the title bar: a "皮肤" label + built-in theme + light/dark.
+  SkinLbl := TTyLabel.Create(Self);
+  SkinLbl.Parent := Bar;
+  SkinLbl.SetBounds(Width - 392, 8, 36, 20);
+  SkinLbl.Caption := '皮肤';
+  SkinLbl.Anchors := [akTop, akRight];
+
   FThemeCombo := TTyComboBox.Create(Self);
   FThemeCombo.Parent := Bar;
   FThemeCombo.Style := csDropDownList;
-  FThemeCombo.SetBounds(Width - 360, 4, 140, 26);
+  FThemeCombo.SetBounds(Width - 352, 4, 130, 26);
   FThemeCombo.Anchors := [akTop, akRight];
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do FThemeCombo.Items.Add(names[i]);
@@ -840,12 +855,15 @@ begin
   FModeCombo := TTyComboBox.Create(Self);
   FModeCombo.Parent := Bar;
   FModeCombo.Style := csDropDownList;
-  FModeCombo.SetBounds(Width - 212, 4, 64, 26);
+  FModeCombo.SetBounds(Width - 214, 4, 66, 26);
   FModeCombo.Anchors := [akTop, akRight];
   FModeCombo.Items.Add('浅色');
   FModeCombo.Items.Add('深色');
   FModeCombo.ItemIndex := 0;
   FModeCombo.OnChange := @ApplyTheme;
+  SkinLbl.BringToFront;
+  FThemeCombo.BringToFront;
+  FModeCombo.BringToFront;
 
   // 3) The document tab area fills the middle (alClient).
   FDocPages := TTyPageControl.Create(Self);

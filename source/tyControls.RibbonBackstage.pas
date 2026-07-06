@@ -42,6 +42,7 @@ type
     FIconFont: TTyIconFont;
     FImages: TTyImageCollection;
     FItemIndex: Integer;
+    FDefaultItemIndex: Integer;
     FHoverIndex: Integer;
     FSidebarWidth: Integer;
     FOnCommandSelect: TTyBackstageSelectEvent;
@@ -96,6 +97,9 @@ type
       IconFont — the named icon is drawn tinted to the row text color, identically on every OS. }
     property Images: TTyImageCollection read FImages write SetImages;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
+    { Auto-selected on ShowOver (Office selects 信息/Info by default so the right side isn't
+      blank). -1 = no default. Point it at a CONTENT command, not an action one. }
+    property DefaultItemIndex: Integer read FDefaultItemIndex write FDefaultItemIndex default -1;
     property SidebarWidth: Integer read FSidebarWidth write FSidebarWidth default TyBackstageSidebarW;
     property OnCommandSelect: TTyBackstageSelectEvent read FOnCommandSelect write FOnCommandSelect;
     property OnClose: TNotifyEvent read FOnClose write FOnClose;
@@ -184,6 +188,7 @@ begin
   TStringList(FBottomCommands).OnChange := @CommandsChanged;
   FBottomCommandGlyphs := TStringList.Create;
   FItemIndex := -1;
+  FDefaultItemIndex := -1;
   FHoverIndex := TyBackstageNoRow;
   FSidebarWidth := TyBackstageSidebarW;
   TabStop := True;
@@ -321,6 +326,13 @@ begin
   BringToFront;
   if CanFocus then
     try SetFocus except end;
+  // Default-select a command (Office opens on 信息 with its content shown), so the right
+  // side isn't blank. Fired even if it equals the last index — force a fresh select.
+  if (FDefaultItemIndex >= 0) and (FDefaultItemIndex < TotalCount) then
+  begin
+    FItemIndex := -1;                 // ensure SetItemIndex fires OnCommandSelect
+    ItemIndex := FDefaultItemIndex;
+  end;
 end;
 
 procedure TTyRibbonBackstage.Close;

@@ -17,7 +17,7 @@ type
 
   TRibbonQuickAccessTest = class(TTestCase)
   published
-    procedure TestTypeKeyIsRibbon;
+    procedure TestTypeKeyIsTitleBar;
     procedure TestContentWidthEmpty;
     procedure TestContentWidthThreeItems;
     procedure TestContentWidthFloorsNegatives;
@@ -42,14 +42,15 @@ end;
 
 { TRibbonQuickAccessTest }
 
-procedure TRibbonQuickAccessTest.TestTypeKeyIsRibbon;
+procedure TRibbonQuickAccessTest.TestTypeKeyIsTitleBar;
 var
   Qat: TTyQatAccess;
 begin
   Qat := TTyQatAccess.Create(nil);
   try
-    // Reuses the ribbon band surface token (no new .tycss rule).
-    AssertEquals('typeKey', 'TyRibbon', Qat.TypeKey);
+    // The QAT reads as the TITLE-BAR surface (it sits on the caption bar), so its child
+    // buttons resolve the title-bar colour and blend instead of showing a white box.
+    AssertEquals('typeKey', 'TyTitleBar', Qat.TypeKey);
   finally
     Qat.Free;
   end;

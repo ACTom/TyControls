@@ -479,6 +479,10 @@ begin
         S.Background.Color := TyLerpColor(NormalS.Background.Color, HoverS.Background.Color, Eased);
     end;
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    // Fill the parent's OPAQUE surface first, so a transparent/ghost background (and the
+    // gaps outside the rounded frame) show the parent — not the Win10 DWM sheet-of-glass,
+    // which otherwise bleeds through a windowed button and washes white on deactivate.
+    TyFillParentBg(Self, P, ContentRect, S);
     DrawFrame(P, ContentRect, S);
     BadgeArea := ContentRect;   // full client rect for badge positioning (pre-padding)
     // Inset content by all four padding sides
