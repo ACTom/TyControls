@@ -27,7 +27,13 @@ unit tyControls.ImageCollection;
 interface
 
 uses
-  Classes, SysUtils, Graphics, BGRABitmap, BGRABitmapTypes;
+  Classes, SysUtils, Graphics, BGRABitmap, BGRABitmapTypes,
+  tyControls.Types;
+
+{ Recolor a BGRA icon bitmap's RGB to AColor while KEEPING its alpha (antialiased edges
+  included), so an icon authored as an opaque alpha mask takes on any theme text color.
+  In-place; a nil / empty bitmap is a no-op. }
+procedure TyTintBitmapAlpha(ABmp: TBGRABitmap; AColor: TTyColor);
 
 type
   { Internal wrapper: owns one master TBGRABitmap, so a TStringList(OwnsObjects)
@@ -114,6 +120,26 @@ type
   end;
 
 implementation
+
+procedure TyTintBitmapAlpha(ABmp: TBGRABitmap; AColor: TTyColor);
+var
+  p: PBGRAPixel;
+  i: Integer;
+  r, g, b: Byte;
+begin
+  if (ABmp = nil) or (ABmp.NbPixels <= 0) then Exit;
+  r := TyRedOf(AColor);
+  g := TyGreenOf(AColor);
+  b := TyBlueOf(AColor);
+  p := ABmp.Data;
+  for i := 0 to ABmp.NbPixels - 1 do
+  begin
+    // Keep the mask's alpha (incl. antialiased edges); replace only the RGB.
+    p^.red := r; p^.green := g; p^.blue := b;
+    Inc(p);
+  end;
+  ABmp.InvalidateBitmap;
+end;
 
 { ---- TTyImageEntry ---- }
 

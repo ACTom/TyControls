@@ -30,7 +30,8 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Button, tyControls.IconFont;
+  tyControls.Types, tyControls.Painter, tyControls.Button, tyControls.IconFont,
+  tyControls.ImageCollection;
 
 const
   { Sentinel GlyphColor meaning "use the resolved theme TextColor". A fully
@@ -56,10 +57,17 @@ type
     FGlyphName: string;
     FGlyphSize: Integer;
     FGlyphColor: TTyColor;
+    FImages: TTyImageCollection;
+    FImageName: string;
     procedure SetIconFont(AValue: TTyIconFont);
     procedure SetGlyphName(const AValue: string);
     procedure SetGlyphSize(AValue: Integer);
     procedure SetGlyphColor(AValue: TTyColor);
+    procedure SetImages(AValue: TTyImageCollection);
+    procedure SetImageName(const AValue: string);
+    { The glyph bitmap to draw at ASizePx in AColor: from Images[ImageName] (tinted to
+      AColor) when an image source is set, else from IconFont[GlyphName]. Caller owns it. }
+    function ResolveGlyphBitmap(ASizePx: Integer; AColor: TTyColor): TBGRABitmap;
   protected
     { The orientation this button paints in. Set once in each concrete class's
       constructor (glLeft for TTyGlyphButton/TTySpeedButton, glTop for
@@ -85,6 +93,13 @@ type
     { Glyph fill color. TyGlyphButtonColorDefault (the default) = use the theme's
       resolved TextColor (so the glyph matches the caption); any other value wins. }
     property GlyphColor: TTyColor read FGlyphColor write SetGlyphColor default TyGlyphButtonColorDefault;
+    { Cross-platform IMAGE glyph source (a TTyImageCollection of BGRA icons). When Images
+      and ImageName are both set they WIN over IconFont/GlyphName — the named icon is drawn
+      (tinted to GlyphColor/TextColor). Unlike a system icon font this renders identically
+      on every OS. Nilled via FreeNotification. }
+    property Images: TTyImageCollection read FImages write SetImages;
+    { The icon name in Images to draw. Empty -> fall back to the IconFont glyph. }
+    property ImageName: string read FImageName write SetImageName;
   end;
 
   { Compact command button: glyph on the LEFT, caption to its right. }
@@ -229,11 +244,43 @@ begin
   Invalidate;
 end;
 
+procedure TTyGlyphButtonBase.SetImages(AValue: TTyImageCollection);
+begin
+  if FImages = AValue then Exit;
+  if FImages <> nil then FImages.RemoveFreeNotification(Self);
+  FImages := AValue;
+  if FImages <> nil then FImages.FreeNotification(Self);
+  Invalidate;
+end;
+
+procedure TTyGlyphButtonBase.SetImageName(const AValue: string);
+begin
+  if FImageName = AValue then Exit;
+  FImageName := AValue;
+  Invalidate;
+end;
+
+function TTyGlyphButtonBase.ResolveGlyphBitmap(ASizePx: Integer; AColor: TTyColor): TBGRABitmap;
+begin
+  if (FImages <> nil) and (FImageName <> '') then
+  begin
+    // Image source wins: a cross-platform BGRA icon, tinted to the text color.
+    Result := FImages.GetBitmap(FImageName, ASizePx);
+    TyTintBitmapAlpha(Result, AColor);
+  end
+  else if FIconFont <> nil then
+    Result := FIconFont.RenderGlyph(FGlyphName, ASizePx, AColor)
+  else
+    Result := TBGRABitmap.Create(ASizePx, ASizePx);   // empty (guarded by DrawContent)
+end;
+
 procedure TTyGlyphButtonBase.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FIconFont) then
     FIconFont := nil;
+  if (Operation = opRemove) and (AComponent = FImages) then
+    FImages := nil;
 end;
 
 procedure TTyGlyphButtonBase.DrawContent(APainter: TTyPainter;
@@ -246,9 +293,10 @@ var
 begin
   cw := AContentRect.Right - AContentRect.Left;
   ch := AContentRect.Bottom - AContentRect.Top;
-  // No glyph source / no name / degenerate box: fall straight through to the
-  // inherited centered caption over the whole content rect (plain button).
-  if (FIconFont = nil) or (FGlyphName = '') or (cw <= 0) or (ch <= 0) then
+  // No glyph source (neither an image nor a font glyph) / degenerate box: fall straight
+  // through to the inherited centered caption over the whole content rect (plain button).
+  if (((FImages = nil) or (FImageName = '')) and ((FIconFont = nil) or (FGlyphName = '')))
+     or (cw <= 0) or (ch <= 0) then
   begin
     inherited DrawContent(APainter, AContentRect, AStyle);
     Exit;
@@ -293,9 +341,9 @@ begin
   if (glyphRect.Bottom - glyphRect.Top) < renderPx then
     renderPx := glyphRect.Bottom - glyphRect.Top;
   if renderPx < 1 then renderPx := 1;
-  // RenderGlyph never returns nil — an empty transparent bitmap when the glyph is
-  // unmapped or the font family is unset, still safe to center + free (headless).
-  glyph := FIconFont.RenderGlyph(FGlyphName, renderPx, glyphCol);
+  // Image icon (tinted) or font glyph — never nil; an empty transparent bitmap when the
+  // name is unmapped or the font family is unset, still safe to center + free (headless).
+  glyph := ResolveGlyphBitmap(renderPx, glyphCol);
   try
     gx := glyphRect.Left + ((glyphRect.Right - glyphRect.Left) - glyph.Width) div 2;
     gy := glyphRect.Top  + ((glyphRect.Bottom - glyphRect.Top) - glyph.Height) div 2;

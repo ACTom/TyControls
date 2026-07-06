@@ -16,7 +16,8 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.IconFont;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.IconFont,
+  tyControls.ImageCollection;
 
 const
   TyBackstageSidebarW = 180;   // logical px, sidebar width
@@ -36,6 +37,7 @@ type
     FCommands: TStrings;
     FCommandGlyphs: TStrings;
     FIconFont: TTyIconFont;
+    FImages: TTyImageCollection;
     FItemIndex: Integer;
     FHoverIndex: Integer;
     FSidebarWidth: Integer;
@@ -44,6 +46,7 @@ type
     procedure SetCommands(AValue: TStrings);
     procedure SetCommandGlyphs(AValue: TStrings);
     procedure SetIconFont(AValue: TTyIconFont);
+    procedure SetImages(AValue: TTyImageCollection);
     procedure SetItemIndex(AValue: Integer);
     procedure CommandsChanged(Sender: TObject);
   protected
@@ -71,8 +74,11 @@ type
     { Optional per-command glyph names (index-matched to Commands; an empty or missing
       entry = no icon), rendered from IconFont at the left of each row. }
     property CommandGlyphs: TStrings read FCommandGlyphs write SetCommandGlyphs;
-    { Icon-font source for the CommandGlyphs. }
+    { Icon-font source for the CommandGlyphs (font glyphs; Windows-only fonts like MDL2). }
     property IconFont: TTyIconFont read FIconFont write SetIconFont;
+    { Cross-platform IMAGE source for the CommandGlyphs (BGRA icons). When set it WINS over
+      IconFont — the named icon is drawn tinted to the row text color, identically on every OS. }
+    property Images: TTyImageCollection read FImages write SetImages;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
     property SidebarWidth: Integer read FSidebarWidth write FSidebarWidth default TyBackstageSidebarW;
     property OnCommandSelect: TTyBackstageSelectEvent read FOnCommandSelect write FOnCommandSelect;
@@ -159,11 +165,22 @@ begin
   Invalidate;
 end;
 
+procedure TTyRibbonBackstage.SetImages(AValue: TTyImageCollection);
+begin
+  if FImages = AValue then Exit;
+  if FImages <> nil then FImages.RemoveFreeNotification(Self);
+  FImages := AValue;
+  if FImages <> nil then FImages.FreeNotification(Self);
+  Invalidate;
+end;
+
 procedure TTyRibbonBackstage.Notification(AComponent: TComponent; Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FIconFont) then
     FIconFont := nil;
+  if (Operation = opRemove) and (AComponent = FImages) then
+    FImages := nil;
 end;
 
 function TTyRibbonBackstage.GetStyleTypeKey: string;
@@ -261,11 +278,21 @@ begin
       if (i = FItemIndex) or (i = FHoverIndex) then
         if tpBackground in RowS.Present then
           P.FillBackground(rr, RowS.Background, 0);
-      // Optional per-command icon at the left; text starts past the icon column.
-      if (FIconFont <> nil) and (i < FCommandGlyphs.Count) and (FCommandGlyphs[i] <> '') then
+      // Optional per-command icon at the left; text starts past the icon column. A
+      // cross-platform image (tinted) wins over the icon font.
+      if (i < FCommandGlyphs.Count) and (FCommandGlyphs[i] <> '') then
       begin
         gsz := P.Scale(TyBackstageIconSize);
-        glyph := FIconFont.RenderGlyph(FCommandGlyphs[i], gsz, RowS.TextColor);
+        if FImages <> nil then
+        begin
+          glyph := FImages.GetBitmap(FCommandGlyphs[i], gsz);
+          TyTintBitmapAlpha(glyph, RowS.TextColor);
+        end
+        else if FIconFont <> nil then
+          glyph := FIconFont.RenderGlyph(FCommandGlyphs[i], gsz, RowS.TextColor)
+        else
+          glyph := nil;
+        if glyph <> nil then
         try
           P.Bitmap.PutImage(P.Scale(TyBackstageIconX),
             rr.Top + (rowH - glyph.Height) div 2, glyph, dmDrawWithTransparency);
