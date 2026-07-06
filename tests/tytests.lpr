@@ -77,6 +77,8 @@ uses
   test.analogclock,
   test.sparkline,
   test.rating,
+  test.gearactivityindicator,
+  test.updown,
   test.geardial,
   test.linklabel,
   test.shadowlabel,

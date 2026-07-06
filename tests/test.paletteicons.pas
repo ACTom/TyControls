@@ -15,12 +15,12 @@ implementation
 const
   // Must stay in sync with RegisterComponents in designtime/tyControls.Design.pas and the
   // $classes list in scripts/gen-icons.ps1 (which enforces RegisterComponents <-> $classes).
-  CClasses: array[0..77] of string = (
+  CClasses: array[0..79] of string = (
     'TTyButton',
     'TTyGlyphButton','TTyGlyphContainerButton','TTySpeedButton','TTyDropDownButton','TTyMenuButton','TTyColorButton','TTyButtonGroup',
     'TTyRibbon','TTyRibbonPage','TTyRibbonGroup','TTyRibbonAppMenu','TTyRibbonQuickAccess','TTyRibbonGallery','TTyRibbonBackstage',
     'TTyLabel','TTyEdit','TTyCheckBox','TTyRadioButton',
-    'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyGauge','TTyCircularProgress','TTyActivityIndicator','TTyActivityBar','TTyMeter','TTyLevelMeter','TTyDial','TTyAnalogClock','TTySparkline','TTyRating','TTyGearDial','TTyLinkLabel','TTyShadowLabel','TTyGlowLabel','TTyListBox',
+    'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyGauge','TTyCircularProgress','TTyActivityIndicator','TTyActivityBar','TTyMeter','TTyLevelMeter','TTyDial','TTyAnalogClock','TTySparkline','TTyRating','TTyGearDial','TTyGearActivityIndicator','TTyUpDown','TTyLinkLabel','TTyShadowLabel','TTyGlowLabel','TTyListBox',
     'TTyPageControl','TTyTabSheet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
     'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu',
     'TTyNativeStyler','TTyHint','TTyBalloonHint',

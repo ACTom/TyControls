@@ -18,7 +18,8 @@ uses
   tyControls.Gauge, tyControls.CircularProgress, tyControls.ActivityIndicator,
   tyControls.Meter, tyControls.LevelMeter, tyControls.Dial, tyControls.AnalogClock,
   tyControls.Sparkline, tyControls.Rating, tyControls.GearDial,
-  tyControls.ActivityBar, tyControls.TyLabel;
+  tyControls.ActivityBar, tyControls.GearActivityIndicator, tyControls.UpDown,
+  tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -27,6 +28,9 @@ type
     FBusy: TTyActivityBar;
     FCirc: TTyCircularProgress;
     FSpin: TTyActivityIndicator;
+    FGearSpin: TTyGearActivityIndicator;
+    FUpDown: TTyUpDown;
+    FUpDownLbl: TTyLabel;
     FMeter: TTyMeter;
     FLevel: TTyLevelMeter;
     FDial: TTyDial;
@@ -38,6 +42,7 @@ type
     FTimer: TTimer;
     FTick: Integer;
     procedure Tick(Sender: TObject);
+    procedure UpDownChange(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -126,6 +131,11 @@ begin
   FSpin.SetBounds(430, 196, 40, 40);
   FSpin.Thickness := 5;
 
+  // 齿轮忙碌指示器(ActivityIndicator 的机械变体),挨着旋转弧
+  FGearSpin := TTyGearActivityIndicator.Create(Self);
+  FGearSpin.Parent := Self;
+  FGearSpin.SetBounds(480, 196, 40, 40);
+
   // 线性横 / 竖条
   LblBars := TTyLabel.Create(Self);
   LblBars.Parent := Self;
@@ -149,6 +159,20 @@ begin
   FBusy := TTyActivityBar.Create(Self);
   FBusy.Parent := Self;
   FBusy.SetBounds(24, 330, 300, 8);
+
+  // 独立上/下微调按钮对(按住连发),绑定到右边标签显示当前值
+  FUpDown := TTyUpDown.Create(Self);
+  FUpDown.Parent := Self;
+  FUpDown.SetBounds(24, 348, 22, 34);
+  FUpDown.Min := 0;
+  FUpDown.Max := 20;
+  FUpDown.Position := 5;
+  FUpDown.OnChange := @UpDownChange;
+
+  FUpDownLbl := TTyLabel.Create(Self);
+  FUpDownLbl.Parent := Self;
+  FUpDownLbl.SetBounds(54, 356, 260, 20);
+  FUpDownLbl.Caption := '微调(TTyUpDown) = 5';
 
   // 模拟指针仪表
   FMeter := TTyMeter.Create(Self);
@@ -229,6 +253,11 @@ begin
   FLevel.Value := a;
   FCirc.Position := Round(r);
   FStatus.Caption := Format('弧=%.0f%%  环=%.0f  线=%.0f%%', [a, r, b]);
+end;
+
+procedure TMainForm.UpDownChange(Sender: TObject);
+begin
+  FUpDownLbl.Caption := Format('微调(TTyUpDown) = %d', [FUpDown.Position]);
 end;
 
 end.

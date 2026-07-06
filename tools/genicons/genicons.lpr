@@ -87,6 +87,10 @@ procedure GSparkline(b: TBGRABitmap); begin PolyL(b,[PointF(4,15),PointF(7,11),P
 procedure GRating(b: TBGRABitmap); begin FillPolyG(b,[PointF(12,3.8),PointF(13.94,9.33),PointF(19.8,9.47),PointF(15.14,13.02),PointF(16.82,18.63),PointF(12,15.3),PointF(7.18,18.63),PointF(8.86,13.02),PointF(4.2,9.47),PointF(10.06,9.33)],Acc); end;
 { TTyGearDial: a gear body (teeth around the rim) + accent pointer + hub }
 procedure GGearDial(b: TBGRABitmap); var i: Integer; a, cx, cy, rr, tr: Double; begin cx:=12; cy:=12; rr:=8; tr:=10.5; for i:=0 to 7 do begin a:=i*Pi/4; Line(b, cx+rr*Cos(a), cy+rr*Sin(a), cx+tr*Cos(a), cy+tr*Sin(a), Ink, 2.2); end; FillCirc(b,12,12,8,Faint); Circ(b,12,12,8,Ink); Circ(b,12,12,4.6,Ink); Line(b,12,12,6.5,6.5,Acc); FillCirc(b,12,12,1.8,Acc); end;
+{ TTyGearActivityIndicator: a spinning accent gear (teeth + disc, faint hub, no pointer) }
+procedure GGearActivityIndicator(b: TBGRABitmap); var i: Integer; a, cx, cy, rr, tr: Double; begin cx:=12; cy:=12; rr:=7; tr:=9.5; for i:=0 to 7 do begin a:=i*Pi/4+0.2; Line(b, cx+rr*Cos(a), cy+rr*Sin(a), cx+tr*Cos(a), cy+tr*Sin(a), Acc, 2.4); end; FillCirc(b,12,12,7,Acc); FillCirc(b,12,12,3,Faint); end;
+{ TTyUpDown: stacked up/down spin buttons — a box split in two with accent arrows }
+procedure GUpDown(b: TBGRABitmap); begin RRect(b,7,3,17,21,3,Ink); Line(b,7,12,17,12,Ink,1.2); FillPolyG(b,[PointF(12,6),PointF(14.6,9.4),PointF(9.4,9.4)],Acc); FillPolyG(b,[PointF(12,18),PointF(14.6,14.6),PointF(9.4,14.6)],Acc); end;
 { TTyLinkLabel: a chain link + an accent underline }
 procedure GLinkLabel(b: TBGRABitmap); begin Circ(b,9,10,3,Ink,1.8); Circ(b,15,10,3,Ink,1.8); Line(b,10.5,10,13.5,10,Ink,1.8); Line(b,4,17,20,17,Acc,1.6); end;
 { TTyShadowLabel: an "A" with a faint offset shadow "A" behind it }
@@ -383,7 +387,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..77] of TGlyph = (
+  Glyphs: array[0..79] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -404,6 +408,8 @@ const
     (Name:'TTySparkline';        Draw:@GSparkline),
     (Name:'TTyRating';           Draw:@GRating),
     (Name:'TTyGearDial';         Draw:@GGearDial),
+    (Name:'TTyGearActivityIndicator'; Draw:@GGearActivityIndicator),
+    (Name:'TTyUpDown';           Draw:@GUpDown),
     (Name:'TTyLinkLabel';        Draw:@GLinkLabel),
     (Name:'TTyShadowLabel';      Draw:@GShadowLabel),
     (Name:'TTyGlowLabel';        Draw:@GGlowLabel),

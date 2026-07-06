@@ -13,6 +13,7 @@ uses
   tyControls.CircularProgress, tyControls.ActivityIndicator, tyControls.ActivityBar,
   tyControls.Meter, tyControls.LevelMeter, tyControls.Dial, tyControls.AnalogClock,
   tyControls.Sparkline, tyControls.Rating, tyControls.GearDial,
+  tyControls.GearActivityIndicator, tyControls.UpDown,
   tyControls.LinkLabel, tyControls.ShadowLabel, tyControls.GlowLabel,
   tyControls.Hint, tyControls.BalloonHint,
   tyControls.IconFont, tyControls.CharImage, tyControls.GlyphImageList,
@@ -596,7 +597,7 @@ begin
   RegisterComponents('TyControls',
     [TTyButton, TTyLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
      TTyEdit, TTyMemo, TTyCheckBox, TTyRadioButton, TTyComboBox, TTyListBox,
-     TTySpinEdit, TTyToggleSwitch, TTyTrackBar, TTyProgressBar, TTyScrollBar,
+     TTySpinEdit, TTyUpDown, TTyToggleSwitch, TTyTrackBar, TTyProgressBar, TTyScrollBar,
      TTyPanel, TTyGroupBox, TTyStyleController]);
   // Command / specialized buttons.
   RegisterComponents('TyControls Buttons',
@@ -605,7 +606,8 @@ begin
   // Instruments & indicators.
   RegisterComponents('TyControls Gauges',
     [TTyGauge, TTyMeter, TTyLevelMeter, TTyDial, TTyGearDial, TTyAnalogClock,
-     TTyCircularProgress, TTyActivityIndicator, TTyActivityBar, TTySparkline, TTyRating]);
+     TTyCircularProgress, TTyActivityIndicator, TTyActivityBar, TTyGearActivityIndicator,
+     TTySparkline, TTyRating]);
   // Layout, tabs, bars, complex views.
   RegisterComponents('TyControls Containers',
     [TTyPageControl, TTyTabSheet, TTyTabSet, TTySplitter,

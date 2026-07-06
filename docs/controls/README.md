@@ -53,6 +53,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyEdit](edit.md) | 单行文本框：选区、剪贴板、词级导航、IME |
 | [TTyMemo](memo.md) | 多行编辑器：2D 导航、内嵌滚动条 |
 | [TTySpinEdit](spinedit.md) | 数值微调框（箭头 / 方向键 / 滚轮，Min/Max/Increment） |
+| [TTyUpDown](updown.md) | 独立上/下微调按钮对（按住连发，绑定到任意控件） |
 | [TTyComboBox](combobox.md) | 下拉框：只读选择 + 可编辑 `csDropDown` + 前缀自动补全 |
 
 ## 列表与数据
@@ -97,6 +98,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyCircularProgress](circularprogress.md) | 环形进度指示器（ProgressBar 的环形版，复用仪表主题） |
 | [TTyActivityIndicator](activityindicator.md) | 不确定态忙碌指示器（旋转弧 spinner） |
 | [TTyActivityBar](activitybar.md) | 不确定态线性进度条（左右行进的 marching band） |
+| [TTyGearActivityIndicator](gearactivityindicator.md) | 不确定态忙碌指示器（旋转齿轮，ActivityIndicator 的机械变体） |
 | [TTyMeter](meter.md) | 模拟指针仪表（表盘 + 刻度 + 指针） |
 | [TTyLevelMeter](levelmeter.md) | 电平条 / VU 表（连续或分段点亮 + 峰值保持，水平 / 垂直） |
 | [TTyDial](dial.md) | 可交互旋钮（拖动 / 滚轮 / 方向键改值） |
