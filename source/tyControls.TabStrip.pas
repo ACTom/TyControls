@@ -737,6 +737,11 @@ begin
     if not FillSharpBackdrop(P, Rect(0, 0, W, TabH)) then
       TyFillParentBg(Self, P, Rect(0, 0, W, TabH), BoxStyle);
 
+    { Fill the content area with the form's photo (image theme) or the opaque parent bg
+      (solid) FIRST, so a transparent content surface (e.g. green's ribbon body) shows the
+      photo instead of a white hole; DrawFrame's own (possibly transparent) fill goes on top. }
+    if not FillSharpBackdrop(P, Rect(0, TabH - MulDiv(1, APPI, 96), W, H)) then
+      TyFillParentBg(Self, P, Rect(0, TabH - MulDiv(1, APPI, 96), W, H), BoxStyle);
     { Draw content area frame below header strip.
       Overlap by 1px so the active tab can visually merge with the content panel. }
     DrawFrame(P, Rect(0, TabH - MulDiv(1, APPI, 96), W, H), BoxStyle);

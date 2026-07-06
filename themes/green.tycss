@@ -222,9 +222,12 @@ TyHint {
   padding: 5px 9px;
 }
 
-/* Ribbon (Phase-3): command band surface + labelled group box (green = literals). */
+/* Ribbon (Phase-3): command band surface + labelled group box.
+   Image theme: transparent body so the sharp photo shows through (like TyPanel/TyTabControl);
+   the buttons carry their own opaque surface. Caption uses on-surface (not muted) to stay
+   readable over the photo. */
 TyRibbon {
-  background: var(--surface);
+  background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
   border-color: var(--border);
   border-width: 1px;
@@ -232,7 +235,7 @@ TyRibbon {
 }
 TyRibbonGroup {
   background: alpha(#FFFFFF, 0);
-  color: var(--muted);
+  color: var(--on-surface);
   border-color: var(--border);
   border-width: 1px;
 }

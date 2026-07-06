@@ -1016,6 +1016,10 @@ begin
   try
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
+    // Show the form photo (image theme) / opaque parent (solid) so a transparent ribbon
+    // surface reveals the backdrop instead of a white hole.
+    if not FillSharpBackdrop(P, Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top)) then
+      TyFillParentBg(Self, P, Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top), S);
     DrawFrame(P, Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top), S);
     P.EndPaint;
   finally
