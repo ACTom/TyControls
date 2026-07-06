@@ -59,6 +59,8 @@ end;
 procedure GButton(b: TBGRABitmap); begin RRect(b,3,7,21,17,3,Ink); Line(b,8,12,16,12,Acc,2.4); end;
 procedure GLabel(b: TBGRABitmap); begin PolyL(b,[PointF(6,18),PointF(12,6),PointF(18,18)],Ink); Line(b,8.6,13.2,15.4,13.2,Ink); end;
 procedure GEdit(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Line(b,7,9.5,7,14.5,Acc,2); Line(b,10,12,16,12,Faint,1.3); end;
+{ TTyNumericEdit: an edit box with accent digit bars + a decimal dot }
+procedure GNumericEdit(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Line(b,8,10,8,14,Acc,1.6); Line(b,11,10,11,14,Acc,1.6); Line(b,14,10,14,14,Acc,1.6); FillCirc(b,16.6,13.4,0.95,Acc); end;
 procedure GCheckBox(b: TBGRABitmap); begin RRect(b,4,4,20,20,3,Ink); PolyL(b,[PointF(8,12.4),PointF(11,15.4),PointF(16,8.6)],Acc,2.2); end;
 procedure GRadio(b: TBGRABitmap); begin Circ(b,12,12,8,Ink); FillCirc(b,12,12,3.1,Acc); end;
 procedure GCombo(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); PolyL(b,[PointF(13.5,10.8),PointF(16,13.4),PointF(18.5,10.8)],Ink); end;
@@ -387,10 +389,11 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..79] of TGlyph = (
+  Glyphs: array[0..80] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
+    (Name:'TTyNumericEdit';     Draw:@GNumericEdit),
     (Name:'TTyCheckBox';        Draw:@GCheckBox),
     (Name:'TTyRadioButton';     Draw:@GRadio),
     (Name:'TTyComboBox';        Draw:@GCombo),

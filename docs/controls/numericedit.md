@@ -1,0 +1,76 @@
+# TTyNumericEdit
+
+## 1. 概述
+
+TTyNumericEdit 是**数值编辑框**,继承自 [TTyEdit](edit.md),复用它的整套文本引擎(选区 / 撤销 / IME / 光标)与 `'TyEdit'` 主题。输入被过滤到数字 / 负号 / 小数点;**聚焦时编辑"原始值"(无千分位),失焦后重新按分组格式化显示**——从而避免"边打边格式化"带来的光标错乱。`Value` 是强类型访问器;`MinValue`/`MaxValue` 在失焦时夹紧。
+
+---
+
+## 2. 单元与 typeKey
+
+| 项目 | 值 |
+|------|-----|
+| 单元 | `tyControls.NumericEdit` |
+| `GetStyleTypeKey` | `'TyEdit'`(**继承**,不覆盖)|
+
+复用 `TTyEdit` 主题规则,无新增 `.tycss`。
+
+```pascal
+uses tyControls.NumericEdit;
+```
+
+---
+
+## 3. 属性表
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `Value` | `Double` | `0` | 强类型数值(读:解析当前文本并夹紧;写:格式化写入)。 |
+| `Decimals` | `Integer` | `2` | 小数位数(0 = 整数)。 |
+| `UseThousands` | `Boolean` | `True` | 是否用千分位分组显示。 |
+| `MinValue` | `Double` | `0` | 下限(仅当 `MaxValue > MinValue` 时启用夹紧)。 |
+| `MaxValue` | `Double` | `0` | 上限。 |
+
+另继承 [TTyEdit](edit.md) 的全部已发布属性(`Text` / `Alignment` / `ReadOnly` / `MaxLength` / `OnChange` …)。构造时默认 `Alignment = taRightJustify`(数字右对齐)。
+
+---
+
+## 4. 事件
+
+复用 `TTyEdit` 事件(`OnChange` 等)。见 [../events.md](../events.md)。
+
+---
+
+## 5. 行为与主题
+
+- **输入过滤**(`UTF8KeyPress`):只放行 `0-9` / `-` / 小数分隔符(且仅当 `Decimals>0`);其余可打印字符与多字节输入一律吞掉。
+- **聚焦**(`DoEnter`):去掉千分位,显示原始数字,方便编辑。
+- **失焦**(`DoExit`):解析当前文本 → 夹紧到 `[MinValue,MaxValue]` → 重新分组格式化。
+- 视觉全部来自 `'TyEdit'`。
+
+---
+
+## 6. 代码示例
+
+```pascal
+uses tyControls.Controller, tyControls.NumericEdit;
+
+TyDefaultController.LoadTheme('themes/light.tycss');
+
+var Price: TTyNumericEdit;
+Price := TTyNumericEdit.Create(Self);
+Price.Parent := Self;
+Price.SetBounds(20, 20, 160, 28);
+Price.Decimals := 2;            // 1,234.50 样式
+Price.Value := 1234.5;
+// Price.Value 读回 1234.5
+```
+
+---
+
+## 7. 注意事项
+
+- **不边打边格式化:** 分组只在失焦时应用,编辑时是原始数字——这是刻意的(避免光标在动态插入的千分位里跳)。
+- **纯逻辑可测:** `TyFormatNumber`(定点 + 分组,本地化安全)与 `TyParseNumber`(去分组 + 归一化小数点)都是纯函数,已单元测试(`test.numericedit`)。
+- **粘贴:** 粘贴的非数字文本不走输入过滤,但会在失焦解析时被清理 / 归零。
+- **货币 / 掩码:** 需要货币符号用后续 `TTyCurrencyEdit`;需要输入掩码(日期 / 电话)用 `TTyMaskEdit`。

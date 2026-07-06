@@ -77,6 +77,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Edit"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.NumericEdit.pas"/>
+        <UnitName Value="tyControls.NumericEdit"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.CheckBox.pas"/>
         <UnitName Value="tyControls.CheckBox"/>
       </Item>
