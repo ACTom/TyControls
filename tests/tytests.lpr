@@ -70,6 +70,7 @@ uses
   test.gauge,
   test.circularprogress,
   test.activityindicator,
+  test.activitybar,
   test.meter,
   test.levelmeter,
   test.dial,

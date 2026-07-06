@@ -71,6 +71,8 @@ procedure GGauge(b: TBGRABitmap); begin PolyL(b,[PointF(3.5,15),PointF(5,10.5),P
 procedure GCircularProgress(b: TBGRABitmap); begin Circ(b,12,12,7,Faint,2); PolyL(b,[PointF(12,5),PointF(16.9,7),PointF(19,12),PointF(16.9,17),PointF(12,19),PointF(7.1,17)],Acc,2.4); end;
 { TTyActivityIndicator: a spinning accent "C" arc (no track) }
 procedure GActivityIndicator(b: TBGRABitmap); begin PolyL(b,[PointF(7.1,17),PointF(12,19),PointF(16.9,17),PointF(19,12),PointF(16.9,7),PointF(12,5)],Acc,2.6); end;
+{ TTyActivityBar: an indeterminate linear bar — track outline + a mid-track accent segment (marching) }
+procedure GActivityBar(b: TBGRABitmap); begin RRect(b,3,9,21,15,3,Ink); FillRRect(b,9,9,15,15,3,Acc); end;
 { TTyMeter: a dial arc with tick marks + accent needle + hub }
 procedure GMeter(b: TBGRABitmap); begin PolyL(b,[PointF(4,14),PointF(6,9),PointF(12,6.5),PointF(18,9),PointF(20,14)],Ink,1.6); Line(b,4,14,5.4,13.3,Ink,1.2); Line(b,12,6.5,12,8,Ink,1.2); Line(b,20,14,18.6,13.3,Ink,1.2); Line(b,12,16,15.5,9.5,Acc,2); FillCirc(b,12,16,1.6,Acc); end;
 { TTyLevelMeter: a VU bar — track + lit accent segments + a peak line }
@@ -381,7 +383,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..76] of TGlyph = (
+  Glyphs: array[0..77] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -394,6 +396,7 @@ const
     (Name:'TTyGauge';           Draw:@GGauge),
     (Name:'TTyCircularProgress'; Draw:@GCircularProgress),
     (Name:'TTyActivityIndicator'; Draw:@GActivityIndicator),
+    (Name:'TTyActivityBar';      Draw:@GActivityBar),
     (Name:'TTyMeter';            Draw:@GMeter),
     (Name:'TTyLevelMeter';       Draw:@GLevelMeter),
     (Name:'TTyDial';             Draw:@GDial),

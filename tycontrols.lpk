@@ -117,6 +117,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ActivityIndicator"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.ActivityBar.pas"/>
+        <UnitName Value="tyControls.ActivityBar"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Meter.pas"/>
         <UnitName Value="tyControls.Meter"/>
       </Item>

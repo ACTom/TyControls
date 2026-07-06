@@ -96,6 +96,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyGauge](gauge.md) | 数值仪表：线性 / 弧形 / 环形，缓动值动画 |
 | [TTyCircularProgress](circularprogress.md) | 环形进度指示器（ProgressBar 的环形版，复用仪表主题） |
 | [TTyActivityIndicator](activityindicator.md) | 不确定态忙碌指示器（旋转弧 spinner） |
+| [TTyActivityBar](activitybar.md) | 不确定态线性进度条（左右行进的 marching band） |
 | [TTyMeter](meter.md) | 模拟指针仪表（表盘 + 刻度 + 指针） |
 | [TTyLevelMeter](levelmeter.md) | 电平条 / VU 表（连续或分段点亮 + 峰值保持，水平 / 垂直） |
 | [TTyDial](dial.md) | 可交互旋钮（拖动 / 滚轮 / 方向键改值） |

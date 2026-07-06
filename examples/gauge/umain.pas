@@ -17,12 +17,14 @@ uses
   tyControls.Controller, tyControls.Form,
   tyControls.Gauge, tyControls.CircularProgress, tyControls.ActivityIndicator,
   tyControls.Meter, tyControls.LevelMeter, tyControls.Dial, tyControls.AnalogClock,
-  tyControls.Sparkline, tyControls.Rating, tyControls.GearDial, tyControls.TyLabel;
+  tyControls.Sparkline, tyControls.Rating, tyControls.GearDial,
+  tyControls.ActivityBar, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
   private
     FArc, FRing, FBarH: TTyGauge;
+    FBusy: TTyActivityBar;
     FCirc: TTyCircularProgress;
     FSpin: TTyActivityIndicator;
     FMeter: TTyMeter;
@@ -64,7 +66,7 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  LblArc, LblRing, LblBars, LblCirc: TTyLabel;
+  LblArc, LblRing, LblBars, LblCirc, LblBusy: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Gauge 示例';
@@ -137,6 +139,16 @@ begin
   FBarH.Thickness := 1;
   FBarH.ShowValue := False;
   FBarH.Value := 62;
+
+  // 不确定态线性进度(marching band,自行连续行进,无需定时改值)
+  LblBusy := TTyLabel.Create(Self);
+  LblBusy.Parent := Self;
+  LblBusy.SetBounds(24, 306, 320, 20);
+  LblBusy.Caption := '不确定态(TTyActivityBar):';
+
+  FBusy := TTyActivityBar.Create(Self);
+  FBusy.Parent := Self;
+  FBusy.SetBounds(24, 330, 300, 8);
 
   // 模拟指针仪表
   FMeter := TTyMeter.Create(Self);
