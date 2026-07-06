@@ -1023,7 +1023,12 @@ begin
     // surface reveals the backdrop instead of a white hole.
     if not FillSharpBackdrop(P, Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top)) then
       TyFillParentBg(Self, P, Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top), S);
-    DrawFrame(P, Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top), S);
+    // Fill the surface only — NO border. The ribbon's own frame already draws the outer
+    // border; a page border here would DOUBLE the edge in the empty area (where no group
+    // covers it), making it look thicker than where groups sit. (Reported.)
+    if tpBackground in S.Present then
+      P.FillBackground(Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top),
+        S.Background, 0);
     P.EndPaint;
   finally
     P.Free;
