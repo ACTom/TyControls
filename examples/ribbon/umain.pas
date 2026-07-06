@@ -43,10 +43,12 @@ type
     FDocPages: TTyPageControl;
     FStatus: TTyStatusBar;
     FBackstage: TTyRibbonBackstage;
-    FBsPanel: TTyPanel;                       // backstage content host (right of the sidebar)
-    FBsTitle: TTyLabel;
-    FBsBrowse: TTyGlyphButton;
-    FBsRecent: array[0..7] of TTyGlyphButton; // recent-file rows on the 打开 content page
+    // Backstage content: one panel per command (the sidebar navigates; each command
+    // shows its own content on the right — new→templates, open→recent, about→version…).
+    FPgInfo, FPgNew, FPgOpen, FPgAbout, FPgOptions: TTyPanel;
+    FBsInfoLbl, FBsAboutLbl: TTyLabel;
+    FBsBrowse, FBsNewBlank: TTyGlyphButton;
+    FBsRecent: array[0..7] of TTyGlyphButton;
     FThemeCombo, FModeCombo: TTyComboBox;      // title-bar skin switcher
     FFindDlg: TTyFindDialog;
     FReplaceDlg: TTyReplaceDialog;
@@ -58,8 +60,10 @@ type
     procedure ApplyTheme(Sender: TObject);
     // ---- backstage content page ----
     procedure BuildBackstageContent;
-    procedure ShowOpenContent;
+    procedure ShowBsPage(APage: TTyPanel);
     procedure HideBsContent;
+    procedure RefreshOpenPage;
+    procedure RefreshInfoPage;
     procedure BackstageClosed(Sender: TObject);
     procedure DoOpenRecent(Sender: TObject);
     // ---- documents ----
@@ -379,61 +383,119 @@ end;
 
 procedure TMainForm.RebuildBackstage;
 begin
-  // Fixed top-level command list with per-row icons (Office File menu). Recent files
-  // now live on the 打开 CONTENT page (right of the sidebar), not inline in the sidebar.
+  // Top block (Office File menu) — some show a content page, some act immediately.
   FBackstage.Commands.Clear;
   FBackstage.CommandGlyphs.Clear;
-  FBackstage.Commands.Add('新建');   FBackstage.CommandGlyphs.Add('new');    // 0
-  FBackstage.Commands.Add('打开');   FBackstage.CommandGlyphs.Add('open');   // 1 -> content page
-  FBackstage.Commands.Add('保存');   FBackstage.CommandGlyphs.Add('save');   // 2
-  FBackstage.Commands.Add('另存为'); FBackstage.CommandGlyphs.Add('save');   // 3
-  FBackstage.Commands.Add('关闭');   FBackstage.CommandGlyphs.Add('close');  // 4
-  FBackstage.Commands.Add('退出');   FBackstage.CommandGlyphs.Add('exit');   // 5
+  FBackstage.Commands.Add('信息');   FBackstage.CommandGlyphs.Add('info');   // 0 -> content page
+  FBackstage.Commands.Add('新建');   FBackstage.CommandGlyphs.Add('new');    // 1 -> content page
+  FBackstage.Commands.Add('打开');   FBackstage.CommandGlyphs.Add('open');   // 2 -> content page
+  FBackstage.Commands.Add('保存');   FBackstage.CommandGlyphs.Add('save');   // 3 -> act
+  FBackstage.Commands.Add('另存为'); FBackstage.CommandGlyphs.Add('saveas'); // 4 -> act
+  FBackstage.Commands.Add('关闭');   FBackstage.CommandGlyphs.Add('close');  // 5 -> act
+  // Bottom-pinned block (with a separator above it) — caller-defined, not hardcoded.
+  FBackstage.BottomCommands.Clear;
+  FBackstage.BottomCommandGlyphs.Clear;
+  FBackstage.BottomCommands.Add('关于'); FBackstage.BottomCommandGlyphs.Add('info');     // 6
+  FBackstage.BottomCommands.Add('选项'); FBackstage.BottomCommandGlyphs.Add('settings'); // 7
+  FBackstage.BottomCommands.Add('退出'); FBackstage.BottomCommandGlyphs.Add('exit');     // 8
   FBackstage.ItemIndex := -1;
 end;
 
-// The backstage content host: a themed panel (right of the sidebar) with a title, a
-// 浏览… button and up to 8 recent-file rows. Built once; ShowOpenContent fills it.
+// Build the backstage content: ONE panel per command (parented to the backstage, over
+// the content area right of the sidebar). The sidebar navigates; ShowBsPage swaps which
+// panel is visible. Demonstrates the "每命令一个内容页" model (a PageControl would work
+// too, but panels avoid a redundant tab header since the sidebar is the navigation).
 procedure TMainForm.BuildBackstageContent;
+  function NewPage(const ATitle: string): TTyPanel;
+  var lbl: TTyLabel;
+  begin
+    Result := TTyPanel.Create(Self);
+    Result.Parent := FBackstage;
+    Result.Visible := False;
+    lbl := TTyLabel.Create(Self);
+    lbl.Parent := Result;
+    lbl.SetBounds(28, 22, 460, 34);
+    lbl.Caption := ATitle;
+  end;
 var i: Integer;
 begin
-  FBsPanel := TTyPanel.Create(Self);
-  FBsPanel.Parent := FBackstage;
-  FBsPanel.Visible := False;
+  // 信息
+  FPgInfo := NewPage('信息');
+  FBsInfoLbl := TTyLabel.Create(Self);
+  FBsInfoLbl.Parent := FPgInfo;
+  FBsInfoLbl.SetBounds(28, 68, 520, 140);
 
-  FBsTitle := TTyLabel.Create(Self);
-  FBsTitle.Parent := FBsPanel;
-  FBsTitle.SetBounds(28, 20, 300, 30);
-  FBsTitle.Caption := '打开';
+  // 新建 — a "空白文档" template button (placeholder for a template gallery)
+  FPgNew := NewPage('新建');
+  FBsNewBlank := TTyGlyphButton.Create(Self);
+  FBsNewBlank.Parent := FPgNew;
+  FBsNewBlank.SetBounds(28, 68, 160, 40);
+  FBsNewBlank.Caption := '空白文档';
+  FBsNewBlank.Images := FImgColl;
+  FBsNewBlank.ImageName := 'new';
+  FBsNewBlank.OnClick := @DoNew;
 
+  // 打开 — 浏览 + recent-file rows
+  FPgOpen := NewPage('打开');
   FBsBrowse := TTyGlyphButton.Create(Self);
-  FBsBrowse.Parent := FBsPanel;
-  FBsBrowse.SetBounds(28, 60, 200, 30);
+  FBsBrowse.Parent := FPgOpen;
+  FBsBrowse.SetBounds(28, 68, 200, 34);
   FBsBrowse.Caption := '浏览…';
   FBsBrowse.Images := FImgColl;
   FBsBrowse.ImageName := 'folder';
   FBsBrowse.OnClick := @DoOpen;
-
   for i := 0 to High(FBsRecent) do
   begin
     FBsRecent[i] := TTyGlyphButton.Create(Self);
-    FBsRecent[i].Parent := FBsPanel;
+    FBsRecent[i].Parent := FPgOpen;
     FBsRecent[i].StyleClass := 'ghost';
-    FBsRecent[i].SetBounds(28, 108 + i * 34, 380, 30);
+    FBsRecent[i].SetBounds(28, 116 + i * 34, 460, 30);
     FBsRecent[i].Images := FImgColl;
     FBsRecent[i].ImageName := 'recent';
     FBsRecent[i].Tag := i;
     FBsRecent[i].OnClick := @DoOpenRecent;
     FBsRecent[i].Visible := False;
   end;
+
+  // 关于
+  FPgAbout := NewPage('关于');
+  FBsAboutLbl := TTyLabel.Create(Self);
+  FBsAboutLbl.Parent := FPgAbout;
+  FBsAboutLbl.SetBounds(28, 68, 520, 180);
+  FBsAboutLbl.Caption :=
+    'TyControls 文本编辑器'#10 +
+    'Ribbon 综合示例'#10#10 +
+    '基于 ty-controls(BGRABitmap + .tycss 主题)'#10 +
+    '跨平台矢量图标 · 主题化 ScreenTips · 内置主题切换';
+
+  // 选项 (placeholder)
+  FPgOptions := NewPage('选项');
 end;
 
-procedure TMainForm.ShowOpenContent;
-var r: TRect; i: Integer;
+procedure TMainForm.ShowBsPage(APage: TTyPanel);
+var r: TRect;
 begin
+  if APage = nil then Exit;
+  HideBsContent;
   r := FBackstage.ContentRect;
-  FBsPanel.SetBounds(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
-  FBsPanel.Anchors := [akLeft, akTop, akRight, akBottom];
+  APage.SetBounds(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+  APage.Anchors := [akLeft, akTop, akRight, akBottom];
+  APage.Visible := True;
+  APage.BringToFront;
+end;
+
+procedure TMainForm.HideBsContent;
+  procedure H(P: TTyPanel);
+  begin
+    if P <> nil then P.Visible := False;
+  end;
+begin
+  H(FPgInfo); H(FPgNew); H(FPgOpen); H(FPgAbout); H(FPgOptions);
+end;
+
+procedure TMainForm.RefreshOpenPage;
+var i: Integer;
+begin
   for i := 0 to High(FBsRecent) do
     if i < FRecent.Count then
     begin
@@ -444,13 +506,21 @@ begin
     end
     else
       FBsRecent[i].Visible := False;
-  FBsPanel.Visible := True;
-  FBsPanel.BringToFront;
 end;
 
-procedure TMainForm.HideBsContent;
+procedure TMainForm.RefreshInfoPage;
+var d: TEditorDoc; s: string;
 begin
-  if FBsPanel <> nil then FBsPanel.Visible := False;
+  d := ActiveDoc;
+  if d = nil then
+    s := '(无打开的文档)'
+  else
+  begin
+    if d.FilePath <> '' then s := '路径:' + d.FilePath else s := '(尚未保存)';
+    s := s + #10 + Format('字符数:%d', [Length(d.Memo.Lines.Text)]);
+    s := s + #10 + Format('行数:%d', [d.Memo.Lines.Count]);
+  end;
+  if FBsInfoLbl <> nil then FBsInfoLbl.Caption := s;
 end;
 
 procedure TMainForm.BackstageClosed(Sender: TObject);
@@ -638,21 +708,18 @@ end;
 procedure TMainForm.BackstageSelect(Sender: TObject; AIndex: Integer);
 begin
   if AIndex < 0 then Exit;
-  // 打开 (1) shows a content page (recent files + 浏览) and stays open; the rest act + close.
-  if AIndex = 1 then
-  begin
-    ShowOpenContent;
-    Exit;
-  end;
-  HideBsContent;
+  // Content-page commands stay open + show their panel; action commands act + close.
   case AIndex of
-    0: DoNew(Sender);
-    2: DoSave(Sender);
-    3: DoSaveAs(Sender);
-    4: DoCloseDoc(Sender);
-    5: begin FBackstage.Close; Close; Exit; end;   // 退出
+    0: begin RefreshInfoPage; ShowBsPage(FPgInfo); end;                // 信息
+    1: ShowBsPage(FPgNew);                                             // 新建
+    2: begin RefreshOpenPage; ShowBsPage(FPgOpen); end;                // 打开
+    3: begin HideBsContent; DoSave(Sender);     FBackstage.Close; end; // 保存
+    4: begin HideBsContent; DoSaveAs(Sender);   FBackstage.Close; end; // 另存为
+    5: begin HideBsContent; DoCloseDoc(Sender); FBackstage.Close; end; // 关闭
+    6: ShowBsPage(FPgAbout);                                           // 关于
+    7: ShowBsPage(FPgOptions);                                         // 选项
+    8: begin FBackstage.Close; Close; end;                             // 退出
   end;
-  FBackstage.Close;
 end;
 
 procedure TMainForm.MemoChanged(Sender: TObject);

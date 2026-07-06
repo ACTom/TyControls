@@ -429,6 +429,31 @@ begin
   Dot(B, 16, 16, 1.2);             // centre pin
 end;
 
+// 29. info: an "i" inside a circle (a dot over a short stem)
+procedure DrawInfo(B: TBGRABitmap);
+begin
+  Circle(B, 16, 16, 11, 11);
+  Dot(B, 16, 11, 1.4);             // the "i" dot
+  Line(B, 16, 15, 16, 22, STROKE); // the "i" stem
+end;
+
+// 30. settings: a gear (a ring with eight short radial teeth) + a hub
+procedure DrawSettings(B: TBGRABitmap);
+var
+  i: Integer;
+  a, cx, cy, ri, ro: single;
+begin
+  cx := 16; cy := 16; ri := 7.5; ro := 11;
+  for i := 0 to 7 do
+  begin
+    a := i * (PI / 4);
+    Line(B, cx + ri * cos(a), cy + ri * sin(a),
+            cx + ro * cos(a), cy + ro * sin(a), STROKE);
+  end;
+  Circle(B, cx, cy, ri, ri);       // gear body
+  Circle(B, cx, cy, 3, 3, THIN);   // hub hole
+end;
+
 { ===================== the public builder ===================== }
 
 procedure BuildEditorIcons(AColl: TTyImageCollection);
@@ -466,6 +491,8 @@ begin
   B := NewIcon; DrawExit(B);       Commit(AColl, 'exit', B);
   B := NewIcon; DrawFolder(B);     Commit(AColl, 'folder', B);
   B := NewIcon; DrawRecent(B);     Commit(AColl, 'recent', B);
+  B := NewIcon; DrawInfo(B);       Commit(AColl, 'info', B);
+  B := NewIcon; DrawSettings(B);   Commit(AColl, 'settings', B);
 end;
 
 initialization

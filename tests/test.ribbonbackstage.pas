@@ -14,6 +14,8 @@ type
   published
     procedure RowRectStacksBelowBackBand;
     procedure RowAtBackBandRowsAndNone;
+    procedure BottomRowRectFlushToBottom;
+    procedure IndexAtSpansTopAndBottom;
     procedure TypeKey;
     procedure CommandsRoundTrip;
     procedure ItemIndexFiresSelectOnChange;
@@ -47,6 +49,33 @@ begin
   AssertEquals('third row', 2, TyBackstageRowAt(44 + 2 * 34 + 5, 44, 34, 3));
   AssertEquals('past last row', TyBackstageNoRow, TyBackstageRowAt(44 + 3 * 34 + 5, 44, 34, 3));
   AssertEquals('zero row height', TyBackstageNoRow, TyBackstageRowAt(50, 44, 0, 3));
+end;
+
+procedure TBackstageTest.BottomRowRectFlushToBottom;
+var R: TRect;
+begin
+  // client 600, sidebar 180, row 34, 3 bottom rows -> the block occupies 498..600.
+  // Bottom row j=0 is the TOP of the block; j=2 is flush to the bottom edge.
+  R := TyBackstageBottomRowRect(0, 3, 600, 180, 34);
+  AssertEquals('j0 top', 600 - 3 * 34, R.Top);
+  AssertEquals('j0 bottom', 600 - 2 * 34, R.Bottom);
+  AssertEquals('width', 180, R.Right);
+  R := TyBackstageBottomRowRect(2, 3, 600, 180, 34);
+  AssertEquals('last row bottom == client bottom', 600, R.Bottom);
+end;
+
+procedure TBackstageTest.IndexAtSpansTopAndBottom;
+begin
+  // back band 44, row 34, 2 top + 3 bottom, client 600 (bottom block = 498..600).
+  AssertEquals('back band', TyBackstageBackRow,
+    TyBackstageIndexAt(20, 600, 44, 34, 2, 3));
+  AssertEquals('top row 0', 0, TyBackstageIndexAt(50, 600, 44, 34, 2, 3));
+  AssertEquals('top row 1', 1, TyBackstageIndexAt(44 + 34 + 2, 600, 44, 34, 2, 3));
+  AssertEquals('gap between blocks -> none', TyBackstageNoRow,
+    TyBackstageIndexAt(300, 600, 44, 34, 2, 3));
+  // Bottom block: first bottom row = unified index 2 (top count), last = 4.
+  AssertEquals('bottom row 0 -> idx 2', 2, TyBackstageIndexAt(600 - 3 * 34 + 2, 600, 44, 34, 2, 3));
+  AssertEquals('bottom row 2 -> idx 4', 4, TyBackstageIndexAt(600 - 1, 600, 44, 34, 2, 3));
 end;
 
 procedure TBackstageTest.TypeKey;

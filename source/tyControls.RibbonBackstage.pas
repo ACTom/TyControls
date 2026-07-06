@@ -28,6 +28,7 @@ const
   TyBackstageIconX    = 14;     // logical px, left x of a row's icon (when present)
   TyBackstageIconSize = 18;     // logical px, row icon edge length
   TyBackstageTextInset = 40;    // logical px, left inset of a row's text (reserves the icon column)
+  TyBackstageSeparator = '-';   // a command whose text is this renders as a separator line
 
 type
   TTyBackstageSelectEvent = procedure(Sender: TObject; AIndex: Integer) of object;
@@ -36,6 +37,8 @@ type
   private
     FCommands: TStrings;
     FCommandGlyphs: TStrings;
+    FBottomCommands: TStrings;
+    FBottomCommandGlyphs: TStrings;
     FIconFont: TTyIconFont;
     FImages: TTyImageCollection;
     FItemIndex: Integer;
@@ -45,10 +48,17 @@ type
     FOnClose: TNotifyEvent;
     procedure SetCommands(AValue: TStrings);
     procedure SetCommandGlyphs(AValue: TStrings);
+    procedure SetBottomCommands(AValue: TStrings);
+    procedure SetBottomCommandGlyphs(AValue: TStrings);
     procedure SetIconFont(AValue: TTyIconFont);
     procedure SetImages(AValue: TTyImageCollection);
     procedure SetItemIndex(AValue: Integer);
     procedure CommandsChanged(Sender: TObject);
+    { Unified addressing across the top (Commands) + bottom (BottomCommands) blocks. }
+    function TotalCount: Integer;
+    function EntryCaption(AIdx: Integer): string;
+    function EntryGlyph(AIdx: Integer): string;
+    function EntryIsSeparator(AIdx: Integer): Boolean;
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -74,6 +84,12 @@ type
     { Optional per-command glyph names (index-matched to Commands; an empty or missing
       entry = no icon), rendered from IconFont at the left of each row. }
     property CommandGlyphs: TStrings read FCommandGlyphs write SetCommandGlyphs;
+    { A second command block PINNED to the BOTTOM of the sidebar (e.g. 关于 / 选项 / 退出 —
+      fully caller-defined, not hardcoded). A thin separator is drawn above it. Their unified
+      selection indices continue after the top Commands (Commands.Count + bottom index). A
+      command whose text is '-' renders as a non-selectable separator line. }
+    property BottomCommands: TStrings read FBottomCommands write SetBottomCommands;
+    property BottomCommandGlyphs: TStrings read FBottomCommandGlyphs write SetBottomCommandGlyphs;
     { Icon-font source for the CommandGlyphs (font glyphs; Windows-only fonts like MDL2). }
     property IconFont: TTyIconFont read FIconFont write SetIconFont;
     { Cross-platform IMAGE source for the CommandGlyphs (BGRA icons). When set it WINS over
@@ -94,6 +110,12 @@ function TyBackstageRowRect(AIndex, ASidebarWpx, ABackHpx, ARowHpx: Integer): TR
 { Which sidebar element a click Y falls on: TyBackstageBackRow (back band),
   a 0-based command index, or TyBackstageNoRow. AX must be inside the sidebar. }
 function TyBackstageRowAt(AY, ABackHpx, ARowHpx, ACount: Integer): Integer;
+{ The AJ-th BOTTOM-pinned row (0-based), flush to the sidebar's bottom edge. }
+function TyBackstageBottomRowRect(AJ, ABottomCount, AClientHpx, ASidebarWpx, ARowHpx: Integer): TRect;
+{ Unified hit-test across the TOP block (indices 0..ATopCount-1, laid from ABackHpx down)
+  and the BOTTOM-pinned block (indices ATopCount..ATopCount+ABottomCount-1, flush to the
+  bottom). Returns TyBackstageBackRow for the back band, a unified index, or TyBackstageNoRow. }
+function TyBackstageIndexAt(AY, AClientHpx, ABackHpx, ARowHpx, ATopCount, ABottomCount: Integer): Integer;
 
 implementation
 
@@ -118,6 +140,36 @@ begin
     Result := TyBackstageNoRow;
 end;
 
+function TyBackstageBottomRowRect(AJ, ABottomCount, AClientHpx, ASidebarWpx, ARowHpx: Integer): TRect;
+var
+  yTop: Integer;
+begin
+  yTop := AClientHpx - (ABottomCount - AJ) * ARowHpx;
+  Result := Rect(0, yTop, ASidebarWpx, yTop + ARowHpx);
+end;
+
+function TyBackstageIndexAt(AY, AClientHpx, ABackHpx, ARowHpx, ATopCount, ABottomCount: Integer): Integer;
+var
+  idx, bottomTopY: Integer;
+begin
+  if AY < ABackHpx then Exit(TyBackstageBackRow);
+  if ARowHpx <= 0 then Exit(TyBackstageNoRow);
+  // Top block, laid from the back band downward.
+  idx := (AY - ABackHpx) div ARowHpx;
+  if (idx >= 0) and (idx < ATopCount) then Exit(idx);
+  // Bottom-pinned block, flush to the sidebar's bottom edge.
+  if ABottomCount > 0 then
+  begin
+    bottomTopY := AClientHpx - ABottomCount * ARowHpx;
+    if (AY >= bottomTopY) and (AY < AClientHpx) then
+    begin
+      idx := (AY - bottomTopY) div ARowHpx;
+      if (idx >= 0) and (idx < ABottomCount) then Exit(ATopCount + idx);
+    end;
+  end;
+  Result := TyBackstageNoRow;
+end;
+
 // ---------------------------------------------------------------------------
 // TTyRibbonBackstage
 // ---------------------------------------------------------------------------
@@ -128,6 +180,9 @@ begin
   FCommands := TStringList.Create;
   TStringList(FCommands).OnChange := @CommandsChanged;
   FCommandGlyphs := TStringList.Create;
+  FBottomCommands := TStringList.Create;
+  TStringList(FBottomCommands).OnChange := @CommandsChanged;
+  FBottomCommandGlyphs := TStringList.Create;
   FItemIndex := -1;
   FHoverIndex := TyBackstageNoRow;
   FSidebarWidth := TyBackstageSidebarW;
@@ -139,7 +194,52 @@ destructor TTyRibbonBackstage.Destroy;
 begin
   FCommands.Free;
   FCommandGlyphs.Free;
+  FBottomCommands.Free;
+  FBottomCommandGlyphs.Free;
   inherited Destroy;
+end;
+
+function TTyRibbonBackstage.TotalCount: Integer;
+begin
+  Result := FCommands.Count + FBottomCommands.Count;
+end;
+
+function TTyRibbonBackstage.EntryCaption(AIdx: Integer): string;
+begin
+  if (AIdx >= 0) and (AIdx < FCommands.Count) then
+    Result := FCommands[AIdx]
+  else if (AIdx >= FCommands.Count) and (AIdx < TotalCount) then
+    Result := FBottomCommands[AIdx - FCommands.Count]
+  else
+    Result := '';
+end;
+
+function TTyRibbonBackstage.EntryGlyph(AIdx: Integer): string;
+begin
+  Result := '';
+  if (AIdx >= 0) and (AIdx < FCommands.Count) then
+  begin
+    if AIdx < FCommandGlyphs.Count then Result := FCommandGlyphs[AIdx];
+  end
+  else if (AIdx >= FCommands.Count) and (AIdx < TotalCount) then
+    if (AIdx - FCommands.Count) < FBottomCommandGlyphs.Count then
+      Result := FBottomCommandGlyphs[AIdx - FCommands.Count];
+end;
+
+function TTyRibbonBackstage.EntryIsSeparator(AIdx: Integer): Boolean;
+begin
+  Result := EntryCaption(AIdx) = TyBackstageSeparator;
+end;
+
+procedure TTyRibbonBackstage.SetBottomCommands(AValue: TStrings);
+begin
+  if AValue = nil then FBottomCommands.Clear else FBottomCommands.Assign(AValue);
+end;
+
+procedure TTyRibbonBackstage.SetBottomCommandGlyphs(AValue: TStrings);
+begin
+  if AValue = nil then FBottomCommandGlyphs.Clear else FBottomCommandGlyphs.Assign(AValue);
+  Invalidate;
 end;
 
 function TTyRibbonBackstage.ContentRect: TRect;
@@ -195,15 +295,15 @@ end;
 
 procedure TTyRibbonBackstage.CommandsChanged(Sender: TObject);
 begin
-  if FItemIndex >= FCommands.Count then FItemIndex := -1;
-  if FHoverIndex >= FCommands.Count then FHoverIndex := TyBackstageNoRow;
+  if FItemIndex >= TotalCount then FItemIndex := -1;
+  if FHoverIndex >= TotalCount then FHoverIndex := TyBackstageNoRow;
   Invalidate;
 end;
 
 procedure TTyRibbonBackstage.SetItemIndex(AValue: Integer);
 begin
   if AValue < -1 then AValue := -1;
-  if AValue >= FCommands.Count then AValue := FCommands.Count - 1;
+  if AValue >= TotalCount then AValue := TotalCount - 1;
   if FItemIndex = AValue then Exit;
   FItemIndex := AValue;
   Invalidate;
@@ -234,10 +334,13 @@ procedure TTyRibbonBackstage.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI
 var
   P: TTyPainter;
   ContentS, SideS, RowS: TTyStyleSet;
-  W, H, sbW, backH, rowH, i, cy, fs, gsz: Integer;
+  W, H, sbW, backH, rowH, cy, fs, gsz: Integer;
+  nt, nb, k, divY, lineH: Integer;
   rr: TRect;
   arrowCx, arrowCy: Integer;
   glyph: TBGRABitmap;
+  glyphName: string;
+  sepFill: TTyFill;
 begin
   P := TTyPainter.Create;
   try
@@ -265,31 +368,60 @@ begin
     P.DrawGlyph(Rect(arrowCx - P.Scale(9), arrowCy - P.Scale(9),
       arrowCx + P.Scale(9), arrowCy + P.Scale(9)), tgArrowLeft, SideS.TextColor, 2);
 
-    // Command rows.
-    for i := 0 to FCommands.Count - 1 do
+    // Command rows: the TOP block (Commands) from the back band down, then the
+    // BOTTOM-pinned block (BottomCommands) flush to the sidebar's bottom edge.
+    nt := FCommands.Count;
+    nb := FBottomCommands.Count;
+    lineH := P.Scale(1); if lineH < 1 then lineH := 1;
+    sepFill := Default(TTyFill);
+    sepFill.Kind := tfkSolid;
+    sepFill.Color := SideS.TextColor;
+
+    // A divider line just above the bottom-pinned block.
+    if nb > 0 then
     begin
-      rr := Rect(0, backH + i * rowH, sbW, backH + (i + 1) * rowH);
-      if i = FItemIndex then
+      divY := H - nb * rowH - P.Scale(6);
+      P.FillBackground(Rect(P.Scale(16), divY, sbW - P.Scale(16), divY + lineH), sepFill, 0);
+    end;
+
+    for k := 0 to nt + nb - 1 do
+    begin
+      if k < nt then
+        rr := Rect(0, backH + k * rowH, sbW, backH + (k + 1) * rowH)
+      else
+        rr := TyBackstageBottomRowRect(k - nt, nb, H, sbW, rowH);
+
+      // A '-' entry is a non-selectable separator line (no bg / icon / text).
+      if EntryIsSeparator(k) then
+      begin
+        P.FillBackground(Rect(P.Scale(16), rr.Top + rowH div 2,
+          sbW - P.Scale(16), rr.Top + rowH div 2 + lineH), sepFill, 0);
+        Continue;
+      end;
+
+      if k = FItemIndex then
         RowS := ActiveController.Model.ResolveStyle('TyButton', 'primary', [tysActive])
-      else if i = FHoverIndex then
+      else if k = FHoverIndex then
         RowS := ActiveController.Model.ResolveStyle('TyButton', 'primary', [tysHover])
       else
         RowS := SideS;
-      if (i = FItemIndex) or (i = FHoverIndex) then
+      if (k = FItemIndex) or (k = FHoverIndex) then
         if tpBackground in RowS.Present then
           P.FillBackground(rr, RowS.Background, 0);
+
       // Optional per-command icon at the left; text starts past the icon column. A
       // cross-platform image (tinted) wins over the icon font.
-      if (i < FCommandGlyphs.Count) and (FCommandGlyphs[i] <> '') then
+      glyphName := EntryGlyph(k);
+      if glyphName <> '' then
       begin
         gsz := P.Scale(TyBackstageIconSize);
         if FImages <> nil then
         begin
-          glyph := FImages.GetBitmap(FCommandGlyphs[i], gsz);
+          glyph := FImages.GetBitmap(glyphName, gsz);
           TyTintBitmapAlpha(glyph, RowS.TextColor);
         end
         else if FIconFont <> nil then
-          glyph := FIconFont.RenderGlyph(FCommandGlyphs[i], gsz, RowS.TextColor)
+          glyph := FIconFont.RenderGlyph(glyphName, gsz, RowS.TextColor)
         else
           glyph := nil;
         if glyph <> nil then
@@ -300,16 +432,18 @@ begin
           glyph.Free;
         end;
       end;
+
       cy := rr.Left + P.Scale(TyBackstageTextInset);
       P.DrawText(Rect(cy, rr.Top, rr.Right - P.Scale(8), rr.Bottom),
-        FCommands[i], SideS.FontName, fs, SideS.FontWeight, RowS.TextColor,
+        EntryCaption(k), SideS.FontName, fs, SideS.FontWeight, RowS.TextColor,
         taLeftJustify, tlCenter, True);
     end;
 
-    // Content: the selected command's caption, large, in the content area.
-    if (FItemIndex >= 0) and (FItemIndex < FCommands.Count) then
+    // Fallback content: the selected command's caption (large) — an app that hosts its own
+    // content control over ContentRect covers this; kept for headless / un-wired use.
+    if (FItemIndex >= 0) and (FItemIndex < TotalCount) and not EntryIsSeparator(FItemIndex) then
       P.DrawText(Rect(sbW + P.Scale(40), P.Scale(30), W - P.Scale(20), P.Scale(70)),
-        FCommands[FItemIndex], ContentS.FontName, fs + 8, 600, ContentS.TextColor,
+        EntryCaption(FItemIndex), ContentS.FontName, fs + 8, 600, ContentS.TextColor,
         taLeftJustify, tlTop, True);
 
     P.EndPaint;
@@ -333,10 +467,10 @@ begin
   if X >= sbW then Exit;   // clicks in the content area do nothing here
   backH := MulDiv(TyBackstageBackH, Font.PixelsPerInch, 96);
   rowH := MulDiv(TyBackstageRowH, Font.PixelsPerInch, 96);
-  r := TyBackstageRowAt(Y, backH, rowH, FCommands.Count);
+  r := TyBackstageIndexAt(Y, ClientHeight, backH, rowH, FCommands.Count, FBottomCommands.Count);
   if r = TyBackstageBackRow then
     Close
-  else if r >= 0 then
+  else if (r >= 0) and not EntryIsSeparator(r) then
     ItemIndex := r;
 end;
 
@@ -351,8 +485,8 @@ begin
   begin
     backH := MulDiv(TyBackstageBackH, Font.PixelsPerInch, 96);
     rowH := MulDiv(TyBackstageRowH, Font.PixelsPerInch, 96);
-    r := TyBackstageRowAt(Y, backH, rowH, FCommands.Count);
-    if r < 0 then r := TyBackstageNoRow;   // back band / none -> no row hover
+    r := TyBackstageIndexAt(Y, ClientHeight, backH, rowH, FCommands.Count, FBottomCommands.Count);
+    if (r < 0) or EntryIsSeparator(r) then r := TyBackstageNoRow;   // back band / sep / none
   end;
   if r <> FHoverIndex then
   begin
