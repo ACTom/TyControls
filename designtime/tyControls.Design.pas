@@ -588,25 +588,38 @@ begin
     // `class(TTyDialog)` resolves as an ancestor and the OI shows its chrome, same as TTyForm.
     FormEditingHook.RegisterDesignerBaseClass(TTyDialog);
   end;
+  // The palette is split into functional groups so no single tab is overcrowded. NOTE: the
+  // gen-icons.ps1 drift-guard parses EVERY RegisterComponents('TyControls...', [...]) group and
+  // requires each registered class to have a generated icon — a new control must land in one of
+  // these groups (and get its icon + $classes/CClasses entry), never a standalone unlisted class.
+  // Standard: everyday inputs, labels, panels.
   RegisterComponents('TyControls',
-    [TTyButton,
-     TTyGlyphButton, TTyGlyphContainerButton, TTySpeedButton,
-     TTyDropDownButton, TTyMenuButton, TTyColorButton, TTyButtonGroup,
-     TTyLabel, TTyEdit, TTyCheckBox, TTyRadioButton,
-     TTyPanel, TTyComboBox, TTyScrollBar, TTyStyleController,
-     TTyListBox, TTyProgressBar, TTyGauge, TTyCircularProgress, TTyActivityIndicator, TTyActivityBar, TTyMeter,
-     TTyLevelMeter, TTyDial, TTyAnalogClock, TTySparkline, TTyRating, TTyGearDial,
-     TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
-     TTyToggleSwitch, TTyTrackBar, TTyGroupBox,
-     TTyPageControl, TTyTabSheet, TTyTabSet, TTyRibbon, TTyRibbonPage, TTyRibbonGroup,
-     TTyRibbonAppMenu, TTyRibbonQuickAccess, TTyRibbonGallery, TTyRibbonBackstage,
-     TTySpinEdit, TTyMemo, TTyTitleBar,
-     TTyMenuBar, TTyPopupMenu, TTyNativeStyler, TTyHint, TTyBalloonHint,
-     TTyIconFont, TTyCharImage, TTyGlyphImageList, TTyImage,
+    [TTyButton, TTyLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
+     TTyEdit, TTyMemo, TTyCheckBox, TTyRadioButton, TTyComboBox, TTyListBox,
+     TTySpinEdit, TTyToggleSwitch, TTyTrackBar, TTyProgressBar, TTyScrollBar,
+     TTyPanel, TTyGroupBox, TTyStyleController]);
+  // Command / specialized buttons.
+  RegisterComponents('TyControls Buttons',
+    [TTyGlyphButton, TTyGlyphContainerButton, TTySpeedButton,
+     TTyDropDownButton, TTyMenuButton, TTyColorButton, TTyButtonGroup]);
+  // Instruments & indicators.
+  RegisterComponents('TyControls Gauges',
+    [TTyGauge, TTyMeter, TTyLevelMeter, TTyDial, TTyGearDial, TTyAnalogClock,
+     TTyCircularProgress, TTyActivityIndicator, TTyActivityBar, TTySparkline, TTyRating]);
+  // Layout, tabs, bars, complex views.
+  RegisterComponents('TyControls Containers',
+    [TTyPageControl, TTyTabSheet, TTyTabSet, TTySplitter,
+     TTyStatusBar, TTyToolBar, TTyToolSeparator, TTyTitleBar,
+     TTyMenuBar, TTyPopupMenu, TTyCalendar, TTyDateTimePicker, TTyTreeView]);
+  // Office-style ribbon parts.
+  RegisterComponents('TyControls Ribbon',
+    [TTyRibbon, TTyRibbonPage, TTyRibbonGroup, TTyRibbonAppMenu,
+     TTyRibbonQuickAccess, TTyRibbonGallery, TTyRibbonBackstage]);
+  // Icon-font, images, hints, styler.
+  RegisterComponents('TyControls Images',
+    [TTyIconFont, TTyCharImage, TTyGlyphImageList, TTyImage,
      TTyImageCollection, TTyVirtualImageList,
-     TTySplitter, TTyStatusBar, TTyToolBar, TTyToolSeparator,
-     TTyCalendar, TTyDateTimePicker,
-     TTyTreeView]);
+     TTyHint, TTyBalloonHint, TTyNativeStyler]);
   // Dialogs palette group. TTyMessage (S1) + the S2 input-family components.
   RegisterComponents('TyControls Dialogs',
     [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,
