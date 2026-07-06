@@ -26,10 +26,12 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
-  tyControls.TabStrip, tyControls.RibbonBackstage;
+  tyControls.TabStrip, tyControls.RibbonBackstage, tyControls.PopupSurface,
+  tyControls.Button, tyControls.KeyTips;
 
 type
   TTyRibbonPage = class;
+  TTyRibbonGroup = class;
 
   { The ribbon host. Extends the tab-header engine; adds page management (identical
     in shape to TTyPageControl). }
@@ -46,7 +48,22 @@ type
     FFileTabWidth: Integer;                 // logical px
     FBackstage: TTyRibbonBackstage;
     FShowCollapseBtn: Boolean;
+    FFlyout: TTyPopupSurface;        // transient page band shown while Minimized
+    FKeyTips: Boolean;
+    FKeyTipsActive: Boolean;
+    FKeyTipKeys: TKeyTipArray;       // one access key per VISIBLE tab (+ 'F' for the File tab)
+    FHookedForm: TCustomForm;
+    FSavedFormKeyDown: TKeyEvent;
+    FSavedKeyPreview: Boolean;
     FOnFileTab: TNotifyEvent;
+    procedure ShowFlyout;
+    procedure FlyoutClosed(Sender: TObject);
+    procedure SetKeyTips(AValue: Boolean);
+    procedure HookForm;
+    procedure UnhookForm;
+    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure RebuildKeyTipKeys;
+    procedure DrawKeyTips;
     procedure SetMinimized(AValue: Boolean);
     procedure SetShowFileTab(AValue: Boolean);
     procedure SetFileTabCaption(const AValue: string);
@@ -80,11 +97,17 @@ type
     procedure SetController(AValue: TTyStyleController); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
+    procedure CreateWnd; override;
     procedure UnregisterPage(APage: TTyRibbonPage; AFree: Boolean);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     { Public so TTyRibbonPage.SetParent (same unit) can self-register. Idempotent. }
+    { KeyTips: show/hide the Alt access-key badges over the tab strip. Pressing a tab's key
+      switches to it. Also toggled by pressing Alt on the parent form. }
+    procedure ShowKeyTips;
+    procedure HideKeyTips;
+    procedure ToggleKeyTips;
     procedure RegisterPage(APage: TTyRibbonPage);
     function AddPage(const ACaption: string): TTyRibbonPage;
     procedure RemovePage(AIndex: Integer);
@@ -114,6 +137,9 @@ type
     { A collapse/expand chevron at the RIGHT end of the tab strip that toggles Minimized
       (like Office). Double-clicking any tab also toggles Minimized. }
     property ShowCollapseButton: Boolean read FShowCollapseBtn write SetShowCollapseButton default True;
+    { When True (default), pressing Alt on the parent form shows access-key badges over the
+      tabs (Office KeyTips); typing a badge's letter switches to that tab, Escape hides them. }
+    property KeyTips: Boolean read FKeyTips write SetKeyTips default True;
     property OnFileTab: TNotifyEvent read FOnFileTab write FOnFileTab;
     property Align default alTop;
   end;
@@ -123,13 +149,26 @@ type
   private
     FCaption: string;
     FContext: string;
+    // Group-overflow (F3): the trailing groups that don't fit collapse into a "more" popup.
+    FVisualGroups: array of TTyRibbonGroup;   // groups in stable left-to-right (visual) order
+    FMoreBtn: TTyButton;                       // the "»" overflow button
+    FPopup: TTyPopupSurface;                    // hosts the overflow groups while open
+    FOverflowFrom: Integer;                     // FVisualGroups index where the overflow set begins
+    FInLayout: Boolean;
+    FCaptured: Boolean;
     procedure SetCaption(const AValue: string);
     procedure SetContext(const AValue: string);
+    procedure CaptureGroups;
+    procedure LayoutOverflow;
+    procedure EnsureMoreButton;
+    procedure MoreClick(Sender: TObject);
+    procedure OverflowPopupClosed(Sender: TObject);
   protected
     procedure SetParent(AParent: TWinControl); override;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    procedure AlignControls(AControl: TControl; var ARect: TRect); override;
   public
     constructor Create(AOwner: TComponent); override;
   published
@@ -142,7 +181,6 @@ type
     property Controller;
   end;
 
-  TTyRibbonGroup = class;
   TTyRibbonLauncherEvent = procedure(Sender: TTyRibbonGroup) of object;
 
   { A labelled group box inside a ribbon page. }
@@ -192,6 +230,11 @@ function TyRibbonOverflowCount(const ANaturalWidths: array of Integer;
   end of the tab strip. Empty when the client is too narrow to hold it. Headless-testable. }
 function TyRibbonCollapseRect(AClientWpx, ATabHpx: Integer): TRect;
 
+{ How many LEADING groups (device-px widths, left-to-right) fit in AAvailPx before the row
+  overflows — always at least 1 (the first group shows even if it alone overflows). The rest
+  are the overflow set that collapses into the "more" popup. Headless-testable. }
+function TyRibbonVisibleGroupCount(const AWidths: array of Integer; AAvailPx: Integer): Integer;
+
 implementation
 
 // ---------------------------------------------------------------------------
@@ -233,6 +276,21 @@ begin
   Result := Rect(AClientWpx - ATabHpx, 0, AClientWpx, ATabHpx);
 end;
 
+function TyRibbonVisibleGroupCount(const AWidths: array of Integer; AAvailPx: Integer): Integer;
+var
+  i, total: Integer;
+begin
+  Result := 0;
+  total := 0;
+  for i := 0 to High(AWidths) do
+  begin
+    // Stop once adding this group would overflow — but always keep at least one.
+    if (Result > 0) and (total + AWidths[i] > AAvailPx) then Exit;
+    Inc(total, AWidths[i]);
+    Inc(Result);
+  end;
+end;
+
 // ===========================================================================
 // TTyRibbon
 // ===========================================================================
@@ -250,12 +308,14 @@ begin
   FFileTabCaption := '文件';
   FFileTabWidth := 52;
   FShowCollapseBtn := True;
+  FKeyTips := True;
   TabStop := True;
 end;
 
 destructor TTyRibbon.Destroy;
 begin
   FDestroying := True;
+  UnhookForm;
   FActiveContexts.Free;
   inherited Destroy;   // pages owned by the form are freed normally
 end;
@@ -613,11 +673,183 @@ begin
   end;
 end;
 
+{ Show the active page's group band in a transient flyout just below the tab strip
+  (used while Minimized). The real page control is temporarily re-parented into the
+  popup so its live command buttons keep working; closing restores it to the ribbon. }
+procedure TTyRibbon.ShowFlyout;
+var
+  pg: TTyRibbonPage;
+  stripH, bandHpx: Integer;
+  tl: TPoint;
+begin
+  pg := GetActivePage;
+  if (pg = nil) or not FMinimized then Exit;
+  if FFlyout = nil then
+  begin
+    FFlyout := TTyPopupSurface.CreateNew(Self);
+    FFlyout.StyleKey := 'TyRibbon';
+    FFlyout.OnPopupClose := @FlyoutClosed;
+  end;
+  stripH := MulDiv(TabHeight, Font.PixelsPerInch, 96);
+  bandHpx := FExpandedHeight - stripH;             // the expanded group-band height
+  if bandHpx < stripH then bandHpx := MulDiv(90, Font.PixelsPerInch, 96);
+  tl := ClientToScreen(Point(0, stripH));          // just below the tab strip
+  FFlyout.AdoptContent(pg);
+  FFlyout.ShowAt(Rect(tl.x, tl.y, tl.x + Width, tl.y + bandHpx));
+end;
+
+procedure TTyRibbon.FlyoutClosed(Sender: TObject);
+begin
+  // The popup already released the page back to the ribbon; re-lay the (minimized) band.
+  if not (csDestroying in ComponentState) then
+    Realign;
+end;
+
+// ---------------------------------------------------------------------------
+// KeyTips (Alt access-key overlay)
+// ---------------------------------------------------------------------------
+procedure TTyRibbon.SetKeyTips(AValue: Boolean);
+begin
+  if FKeyTips = AValue then Exit;
+  FKeyTips := AValue;
+  if not FKeyTips then HideKeyTips;
+end;
+
+procedure TTyRibbon.RebuildKeyTipKeys;
+var
+  caps: array of string;
+  i: Integer;
+begin
+  SetLength(caps, GetTabCount);
+  for i := 0 to GetTabCount - 1 do
+    caps[i] := GetTabCaption(i);
+  FKeyTipKeys := TyAssignKeyTips(caps);
+end;
+
+procedure TTyRibbon.ShowKeyTips;
+begin
+  if not FKeyTips then Exit;
+  RebuildKeyTipKeys;
+  FKeyTipsActive := True;
+  Invalidate;
+end;
+
+procedure TTyRibbon.HideKeyTips;
+begin
+  if not FKeyTipsActive then Exit;
+  FKeyTipsActive := False;
+  Invalidate;
+end;
+
+procedure TTyRibbon.ToggleKeyTips;
+begin
+  if FKeyTipsActive then HideKeyTips else ShowKeyTips;
+end;
+
+procedure TTyRibbon.HookForm;
+var
+  frm: TCustomForm;
+begin
+  if csDesigning in ComponentState then Exit;
+  frm := GetParentForm(Self);
+  if (frm = nil) or (frm = FHookedForm) then Exit;
+  UnhookForm;
+  FHookedForm := frm;
+  FSavedFormKeyDown := frm.OnKeyDown;
+  FSavedKeyPreview := frm.KeyPreview;
+  frm.KeyPreview := True;
+  frm.OnKeyDown := @FormKeyDown;
+end;
+
+procedure TTyRibbon.UnhookForm;
+begin
+  if FHookedForm = nil then Exit;
+  // Only restore if OUR handler is still installed (don't clobber a later hook).
+  if TMethod(FHookedForm.OnKeyDown).Data = Pointer(Self) then
+  begin
+    FHookedForm.OnKeyDown := FSavedFormKeyDown;
+    FHookedForm.KeyPreview := FSavedKeyPreview;
+  end;
+  FHookedForm := nil;
+end;
+
+procedure TTyRibbon.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+var
+  i: Integer;
+  ch: Char;
+begin
+  // Bare Alt toggles the KeyTip badges.
+  if FKeyTips and (Key = VK_MENU) and (Shift * [ssShift, ssCtrl] = []) then
+  begin
+    ToggleKeyTips;
+    Key := 0;
+    Exit;
+  end;
+  if FKeyTipsActive then
+  begin
+    if Key = VK_ESCAPE then begin HideKeyTips; Key := 0; Exit; end;
+    if (Key >= Ord('0')) and (Key <= Ord('Z')) then
+    begin
+      ch := UpCase(Chr(Key));
+      for i := 0 to High(FKeyTipKeys) do
+        if (FKeyTipKeys[i] <> '') and (UpCase(FKeyTipKeys[i][1]) = ch) then
+        begin
+          ActivePageIndex := i;
+          HideKeyTips;
+          Key := 0;
+          Exit;
+        end;
+    end;
+  end;
+  if Assigned(FSavedFormKeyDown) then FSavedFormKeyDown(Sender, Key, Shift);
+end;
+
+procedure TTyRibbon.DrawKeyTips;
+var
+  P: TTyPainter;
+  chipS: TTyStyleSet;
+  i, cw, bx, by: Integer;
+  hr: TRect;
+  key: string;
+begin
+  if not FKeyTipsActive then Exit;
+  if Length(FKeyTipKeys) <> GetTabCount then RebuildKeyTipKeys;
+  chipS := ActiveController.Model.ResolveStyle('TyButton', 'primary', []);
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(Canvas, Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+    cw := P.Scale(15);
+    for i := 0 to GetTabCount - 1 do
+    begin
+      if i > High(FKeyTipKeys) then Break;
+      key := FKeyTipKeys[i];
+      if key = '' then Continue;
+      hr := HeaderRectShifted(i);                 // tab rect (device px)
+      bx := (hr.Left + hr.Right) div 2 - cw div 2;
+      by := hr.Bottom - P.Scale(2) - cw;          // a small chip near the tab's bottom
+      if tpBackground in chipS.Present then
+        P.FillBackground(Rect(bx, by, bx + cw, by + cw), chipS.Background, P.Scale(3));
+      P.DrawText(Rect(bx, by, bx + cw, by + cw), key, chipS.FontName, 8,
+        chipS.FontWeight, chipS.TextColor, taCenter, tlCenter, False);
+    end;
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
 procedure TTyRibbon.Paint;
 begin
   inherited Paint;   // base draws the tab strip (shifted right by HeaderLeftInset) + frame
   DrawFileTab;
   DrawCollapseButton;
+  DrawKeyTips;
+end;
+
+procedure TTyRibbon.CreateWnd;
+begin
+  inherited CreateWnd;
+  HookForm;   // the parent form exists by now -> install the Alt key hook
 end;
 
 procedure TTyRibbon.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -626,6 +858,7 @@ var
   Frm: TCustomForm;
   R: TRect;
 begin
+  if FKeyTipsActive then HideKeyTips;   // any click dismisses the KeyTip overlay
   if FShowFileTab and (Button = mbLeft) then
   begin
     w := FileTabWidthPx;
@@ -665,7 +898,16 @@ begin
       Exit;
     end;
   end;
-  inherited MouseDown(Button, Shift, X, Y);
+  inherited MouseDown(Button, Shift, X, Y);   // base does the tab hit-test + selection
+  // While Minimized, a single click on a tab flies the active page's band out below the strip.
+  if FMinimized and (Button = mbLeft) and not (ssDouble in Shift) then
+  begin
+    h := MulDiv(TabHeight, Font.PixelsPerInch, 96);
+    R := CollapseRectPx;
+    if (Y >= 0) and (Y < h) and (X >= HeaderLeftInset) and
+       ((R.Right <= R.Left) or (X < R.Left)) then
+      ShowFlyout;
+  end;
 end;
 
 procedure TTyRibbon.SetController(AValue: TTyStyleController);
@@ -763,6 +1005,150 @@ end;
 procedure TTyRibbonPage.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+procedure TTyRibbonPage.AlignControls(AControl: TControl; var ARect: TRect);
+begin
+  inherited AlignControls(AControl, ARect);   // first pass lays the alLeft groups
+  LayoutOverflow;                             // then apply overflow collapse (page owns layout)
+end;
+
+procedure TTyRibbonPage.CaptureGroups;
+var
+  i, j, n, maxLeft: Integer;
+  tmp: TTyRibbonGroup;
+begin
+  n := 0;
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyRibbonGroup then Inc(n);
+  if n = 0 then Exit;
+  // Capture only once the groups have actually been laid out (distinct Lefts). Before the
+  // first layout every Left is 0 and CHILD order is the REVERSE of the visual order, so a
+  // premature capture would scramble the group order.
+  maxLeft := 0;
+  for i := 0 to ControlCount - 1 do
+    if (Controls[i] is TTyRibbonGroup) and (Controls[i].Left > maxLeft) then
+      maxLeft := Controls[i].Left;
+  if (n > 1) and (maxLeft = 0) then Exit;
+  SetLength(FVisualGroups, n);
+  j := 0;
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyRibbonGroup then
+    begin FVisualGroups[j] := TTyRibbonGroup(Controls[i]); Inc(j); end;
+  // Insertion sort by current Left -> stable left-to-right (visual) order.
+  for i := 1 to n - 1 do
+  begin
+    tmp := FVisualGroups[i];
+    j := i - 1;
+    while (j >= 0) and (FVisualGroups[j].Left > tmp.Left) do
+    begin FVisualGroups[j + 1] := FVisualGroups[j]; Dec(j); end;
+    FVisualGroups[j + 1] := tmp;
+  end;
+  FCaptured := True;
+end;
+
+procedure TTyRibbonPage.EnsureMoreButton;
+begin
+  if FMoreBtn <> nil then Exit;
+  FMoreBtn := TTyButton.Create(Self);
+  FMoreBtn.Parent := Self;
+  FMoreBtn.Caption := '»';
+  FMoreBtn.Hint := '更多分组';
+  FMoreBtn.ShowHint := True;
+  FMoreBtn.OnClick := @MoreClick;
+end;
+
+procedure TTyRibbonPage.LayoutOverflow;
+var
+  i, n, x, moreW, visCount, bandH, total: Integer;
+  widths: array of Integer;
+begin
+  if FInLayout then Exit;
+  if (FPopup <> nil) and FPopup.Visible then Exit;   // groups are in the popup; don't touch
+  if not FCaptured then CaptureGroups;
+  n := Length(FVisualGroups);
+  if n = 0 then Exit;
+  FInLayout := True;
+  try
+    bandH := ClientHeight;
+    moreW := MulDiv(30, Font.PixelsPerInch, 96);
+    SetLength(widths, n);
+    total := 0;
+    for i := 0 to n - 1 do
+    begin widths[i] := FVisualGroups[i].Width; Inc(total, widths[i]); end;
+    if total <= ClientWidth then
+    begin
+      visCount := n;
+      if FMoreBtn <> nil then FMoreBtn.Visible := False;
+    end
+    else
+    begin
+      visCount := TyRibbonVisibleGroupCount(widths, ClientWidth - moreW);
+      EnsureMoreButton;
+    end;
+    x := 0;
+    for i := 0 to n - 1 do
+    begin
+      FVisualGroups[i].Align := alNone;   // page owns the layout from here
+      if i < visCount then
+      begin
+        FVisualGroups[i].SetBounds(x, 0, widths[i], bandH);
+        FVisualGroups[i].Visible := True;
+        Inc(x, widths[i]);
+      end
+      else
+        FVisualGroups[i].Visible := False;
+    end;
+    FOverflowFrom := visCount;
+    if visCount < n then
+    begin
+      FMoreBtn.SetBounds(x, 0, moreW, bandH);
+      FMoreBtn.Visible := True;
+      FMoreBtn.BringToFront;
+    end;
+  finally
+    FInLayout := False;
+  end;
+end;
+
+procedure TTyRibbonPage.MoreClick(Sender: TObject);
+var
+  i, x, bandH: Integer;
+  tl: TPoint;
+begin
+  if (FOverflowFrom < 0) or (FOverflowFrom >= Length(FVisualGroups)) then Exit;
+  if FPopup = nil then
+  begin
+    FPopup := TTyPopupSurface.CreateNew(Self);
+    FPopup.StyleKey := 'TyRibbon';
+    FPopup.OnPopupClose := @OverflowPopupClosed;
+  end;
+  bandH := ClientHeight;
+  x := 0;
+  for i := FOverflowFrom to High(FVisualGroups) do
+  begin
+    FVisualGroups[i].Parent := FPopup;   // move the overflow groups into the flyout
+    FVisualGroups[i].Align := alNone;
+    FVisualGroups[i].SetBounds(x, 0, FVisualGroups[i].Width, bandH);
+    FVisualGroups[i].Visible := True;
+    Inc(x, FVisualGroups[i].Width);
+  end;
+  if x <= 0 then Exit;
+  tl := FMoreBtn.ClientToScreen(Point(0, FMoreBtn.Height));
+  FPopup.ShowAt(Rect(tl.x, tl.y, tl.x + x, tl.y + bandH));
+end;
+
+procedure TTyRibbonPage.OverflowPopupClosed(Sender: TObject);
+var
+  i: Integer;
+begin
+  for i := FOverflowFrom to High(FVisualGroups) do
+    if FVisualGroups[i] <> nil then
+    begin
+      FVisualGroups[i].Parent := Self;      // restore to the page (still overflowing -> hidden)
+      FVisualGroups[i].Visible := False;
+    end;
+  LayoutOverflow;
 end;
 
 // ===========================================================================

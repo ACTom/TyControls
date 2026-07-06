@@ -22,6 +22,7 @@ type
     procedure HidingActiveContextReanchorsAndFires;
     procedure SettingContextHidesTabWhenInactive;
     procedure OverflowCountCollapsesTrailingGroups;
+    procedure VisibleGroupCountFits;
     procedure CollapseRectAtRightEnd;
     procedure MinimizedCollapsesAndRestoresHeight;
     procedure FileTabRoundTripAndDefaults;
@@ -225,6 +226,16 @@ begin
   AssertEquals('collapse all 3', 3, TyRibbonOverflowCount([100, 100, 100], 150, 30));
   AssertEquals('exactly fits -> 0', 0, TyRibbonOverflowCount([100, 100, 100], 300, 30));
   AssertEquals('empty -> 0', 0, TyRibbonOverflowCount([], 100, 30));
+end;
+
+procedure TRibbonTest.VisibleGroupCountFits;
+begin
+  // 3 groups of 100; how many LEADING groups fit in the available width.
+  AssertEquals('all fit', 3, TyRibbonVisibleGroupCount([100, 100, 100], 300));
+  AssertEquals('two fit', 2, TyRibbonVisibleGroupCount([100, 100, 100], 250));
+  AssertEquals('one fits', 1, TyRibbonVisibleGroupCount([100, 100, 100], 150));
+  AssertEquals('always at least one', 1, TyRibbonVisibleGroupCount([100, 100, 100], 10));
+  AssertEquals('empty -> 0', 0, TyRibbonVisibleGroupCount([], 300));
 end;
 
 procedure TRibbonTest.CollapseRectAtRightEnd;
