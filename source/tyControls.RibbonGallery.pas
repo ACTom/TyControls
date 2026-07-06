@@ -263,6 +263,10 @@ begin
       FGallery.PaintCell(P, CellR, i, states);
     end;
 
+    // Re-stroke the border on top so a hovered/selected cell never eats the frame edge.
+    if (tpBorderColor in BoxStyle.Present) and (BoxStyle.BorderWidth > 0) then
+      P.StrokeBorder(R, BoxStyle.BorderRadius, BoxStyle.BorderWidth, BoxStyle.BorderColor);
+
     P.EndPaint;
   finally
     P.Free;
@@ -571,9 +575,16 @@ begin
       PaintCell(P, cellR, i, states);
     end;
 
-    // Drop-down arrow affordance on the right.
+    // Drop-down arrow affordance on the right — a FIXED small chevron (not stretched to
+    // the row height), consistent with TTyComboBox / TTyDropDownButton.
     arrowR := Rect(rowRight - arrowW, R.Top, rowRight, R.Bottom);
-    P.DrawGlyph(arrowR, tgChevronDown, BoxStyle.TextColor, 0);
+    P.DrawDropChevron(arrowR, BoxStyle.TextColor);
+
+    // Re-stroke the box border LAST, so a hovered/selected cell fill (which spans the full
+    // row height, up to the edge) never paints over the frame — the hover no longer eats
+    // the border.
+    if (tpBorderColor in BoxStyle.Present) and (BoxStyle.BorderWidth > 0) then
+      P.StrokeBorder(R, BoxStyle.BorderRadius, BoxStyle.BorderWidth, BoxStyle.BorderColor);
 
     P.EndPaint;
   finally
