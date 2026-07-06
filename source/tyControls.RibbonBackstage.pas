@@ -15,7 +15,8 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.IconFont;
 
 const
   TyBackstageSidebarW = 180;   // logical px, sidebar width
@@ -23,6 +24,9 @@ const
   TyBackstageRowH     = 34;     // logical px, a command row height
   TyBackstageBackRow  = -2;     // TyBackstageRowAt sentinel: the back-arrow band
   TyBackstageNoRow    = -1;     // TyBackstageRowAt sentinel: neither back nor a row
+  TyBackstageIconX    = 14;     // logical px, left x of a row's icon (when present)
+  TyBackstageIconSize = 18;     // logical px, row icon edge length
+  TyBackstageTextInset = 40;    // logical px, left inset of a row's text (reserves the icon column)
 
 type
   TTyBackstageSelectEvent = procedure(Sender: TObject; AIndex: Integer) of object;
@@ -30,12 +34,16 @@ type
   TTyRibbonBackstage = class(TTyCustomControl)
   private
     FCommands: TStrings;
+    FCommandGlyphs: TStrings;
+    FIconFont: TTyIconFont;
     FItemIndex: Integer;
     FHoverIndex: Integer;
     FSidebarWidth: Integer;
     FOnCommandSelect: TTyBackstageSelectEvent;
     FOnClose: TNotifyEvent;
     procedure SetCommands(AValue: TStrings);
+    procedure SetCommandGlyphs(AValue: TStrings);
+    procedure SetIconFont(AValue: TTyIconFont);
     procedure SetItemIndex(AValue: Integer);
     procedure CommandsChanged(Sender: TObject);
   protected
@@ -46,6 +54,7 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -53,8 +62,17 @@ type
       and bring to front. Anchored so it tracks the host's size. }
     procedure ShowOver(AHost: TWinControl; ATopPx: Integer);
     procedure Close;
+    { The content area (device px, client-local) to the RIGHT of the sidebar — where an
+      app can place its own content control for the selected command (a recent-files list,
+      document info, …). Anchor it [akLeft,akTop,akRight,akBottom] so it tracks resizes. }
+    function ContentRect: TRect;
   published
     property Commands: TStrings read FCommands write SetCommands;
+    { Optional per-command glyph names (index-matched to Commands; an empty or missing
+      entry = no icon), rendered from IconFont at the left of each row. }
+    property CommandGlyphs: TStrings read FCommandGlyphs write SetCommandGlyphs;
+    { Icon-font source for the CommandGlyphs. }
+    property IconFont: TTyIconFont read FIconFont write SetIconFont;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
     property SidebarWidth: Integer read FSidebarWidth write FSidebarWidth default TyBackstageSidebarW;
     property OnCommandSelect: TTyBackstageSelectEvent read FOnCommandSelect write FOnCommandSelect;
@@ -100,9 +118,10 @@ end;
 constructor TTyRibbonBackstage.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  ControlStyle := ControlStyle + [csNoDesignVisible];
+  ControlStyle := ControlStyle + [csNoDesignVisible, csAcceptsControls];
   FCommands := TStringList.Create;
   TStringList(FCommands).OnChange := @CommandsChanged;
+  FCommandGlyphs := TStringList.Create;
   FItemIndex := -1;
   FHoverIndex := TyBackstageNoRow;
   FSidebarWidth := TyBackstageSidebarW;
@@ -113,7 +132,38 @@ end;
 destructor TTyRibbonBackstage.Destroy;
 begin
   FCommands.Free;
+  FCommandGlyphs.Free;
   inherited Destroy;
+end;
+
+function TTyRibbonBackstage.ContentRect: TRect;
+var
+  sbW: Integer;
+begin
+  sbW := MulDiv(FSidebarWidth, Font.PixelsPerInch, 96);
+  Result := Rect(sbW, 0, ClientWidth, ClientHeight);
+end;
+
+procedure TTyRibbonBackstage.SetCommandGlyphs(AValue: TStrings);
+begin
+  if AValue = nil then FCommandGlyphs.Clear else FCommandGlyphs.Assign(AValue);
+  Invalidate;
+end;
+
+procedure TTyRibbonBackstage.SetIconFont(AValue: TTyIconFont);
+begin
+  if FIconFont = AValue then Exit;
+  if FIconFont <> nil then FIconFont.RemoveFreeNotification(Self);
+  FIconFont := AValue;
+  if FIconFont <> nil then FIconFont.FreeNotification(Self);
+  Invalidate;
+end;
+
+procedure TTyRibbonBackstage.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FIconFont) then
+    FIconFont := nil;
 end;
 
 function TTyRibbonBackstage.GetStyleTypeKey: string;
@@ -167,9 +217,10 @@ procedure TTyRibbonBackstage.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI
 var
   P: TTyPainter;
   ContentS, SideS, RowS: TTyStyleSet;
-  W, H, sbW, backH, rowH, i, cy, fs: Integer;
+  W, H, sbW, backH, rowH, i, cy, fs, gsz: Integer;
   rr: TRect;
   arrowCx, arrowCy: Integer;
+  glyph: TBGRABitmap;
 begin
   P := TTyPainter.Create;
   try
@@ -210,7 +261,19 @@ begin
       if (i = FItemIndex) or (i = FHoverIndex) then
         if tpBackground in RowS.Present then
           P.FillBackground(rr, RowS.Background, 0);
-      cy := rr.Left + P.Scale(20);
+      // Optional per-command icon at the left; text starts past the icon column.
+      if (FIconFont <> nil) and (i < FCommandGlyphs.Count) and (FCommandGlyphs[i] <> '') then
+      begin
+        gsz := P.Scale(TyBackstageIconSize);
+        glyph := FIconFont.RenderGlyph(FCommandGlyphs[i], gsz, RowS.TextColor);
+        try
+          P.Bitmap.PutImage(P.Scale(TyBackstageIconX),
+            rr.Top + (rowH - glyph.Height) div 2, glyph, dmDrawWithTransparency);
+        finally
+          glyph.Free;
+        end;
+      end;
+      cy := rr.Left + P.Scale(TyBackstageTextInset);
       P.DrawText(Rect(cy, rr.Top, rr.Right - P.Scale(8), rr.Bottom),
         FCommands[i], SideS.FontName, fs, SideS.FontWeight, RowS.TextColor,
         taLeftJustify, tlCenter, True);

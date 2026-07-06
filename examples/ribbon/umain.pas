@@ -15,7 +15,8 @@ interface
 
 uses
   Classes, SysUtils, StrUtils, Forms, Controls, Dialogs, Graphics,
-  tyControls.Types, tyControls.Controller, tyControls.Form, tyControls.Panel,
+  tyControls.Types, tyControls.Controller, tyControls.Form, tyControls.Hint,
+  tyControls.Panel,
   tyControls.TyLabel, tyControls.Button, tyControls.CheckBox, tyControls.ComboBox,
   tyControls.IconFont, tyControls.GlyphButtons, tyControls.DropButtons,
   tyControls.ColorButton, tyControls.ButtonGroup, tyControls.Ribbon,
@@ -41,13 +42,22 @@ type
     FDocPages: TTyPageControl;
     FStatus: TTyStatusBar;
     FBackstage: TTyRibbonBackstage;
+    FBsPanel: TTyPanel;                       // backstage content host (right of the sidebar)
+    FBsTitle: TTyLabel;
+    FBsBrowse: TTyGlyphButton;
+    FBsRecent: array[0..7] of TTyGlyphButton; // recent-file rows on the 打开 content page
     FFindDlg: TTyFindDialog;
     FReplaceDlg: TTyReplaceDialog;
     FRecent: TStringList;
     FDocList: TList;
-    FRecentStart, FExitIndex: Integer;
     FNewCount: Integer;
     FFontColor: TTyColor;
+    // ---- backstage content page ----
+    procedure BuildBackstageContent;
+    procedure ShowOpenContent;
+    procedure HideBsContent;
+    procedure BackstageClosed(Sender: TObject);
+    procedure DoOpenRecent(Sender: TObject);
     // ---- documents ----
     function  ActiveDoc: TEditorDoc;
     function  ActiveMemo: TTyMemo;
@@ -339,27 +349,101 @@ begin
   if i >= 0 then FRecent.Delete(i);
   FRecent.Insert(0, APath);
   while FRecent.Count > 8 do FRecent.Delete(FRecent.Count - 1);
-  RebuildBackstage;
+  // The recent list is read live by ShowOpenContent — no sidebar rebuild needed.
 end;
 
 procedure TMainForm.RebuildBackstage;
+begin
+  // Fixed top-level command list with per-row icons (Office File menu). Recent files
+  // now live on the 打开 CONTENT page (right of the sidebar), not inline in the sidebar.
+  FBackstage.Commands.Clear;
+  FBackstage.CommandGlyphs.Clear;
+  FBackstage.Commands.Add('新建');   FBackstage.CommandGlyphs.Add('new');    // 0
+  FBackstage.Commands.Add('打开');   FBackstage.CommandGlyphs.Add('open');   // 1 -> content page
+  FBackstage.Commands.Add('保存');   FBackstage.CommandGlyphs.Add('save');   // 2
+  FBackstage.Commands.Add('另存为'); FBackstage.CommandGlyphs.Add('save');   // 3
+  FBackstage.Commands.Add('关闭');   FBackstage.CommandGlyphs.Add('close');  // 4
+  FBackstage.Commands.Add('退出');   FBackstage.CommandGlyphs.Add('exit');   // 5
+  FBackstage.ItemIndex := -1;
+end;
+
+// The backstage content host: a themed panel (right of the sidebar) with a title, a
+// 浏览… button and up to 8 recent-file rows. Built once; ShowOpenContent fills it.
+procedure TMainForm.BuildBackstageContent;
 var i: Integer;
 begin
-  FBackstage.Commands.Clear;
-  FBackstage.Commands.Add('新建');    // 0
-  FBackstage.Commands.Add('打开');    // 1
-  FBackstage.Commands.Add('保存');    // 2
-  FBackstage.Commands.Add('另存为');  // 3
-  FBackstage.Commands.Add('关闭');    // 4
-  FRecentStart := FBackstage.Commands.Count;
-  if FRecent.Count = 0 then
-    FBackstage.Commands.Add('  (无最近文件)')
-  else
-    for i := 0 to FRecent.Count - 1 do
-      FBackstage.Commands.Add('  ' + ExtractFileName(FRecent[i]));
-  FExitIndex := FBackstage.Commands.Count;
-  FBackstage.Commands.Add('退出');
-  FBackstage.ItemIndex := -1;
+  FBsPanel := TTyPanel.Create(Self);
+  FBsPanel.Parent := FBackstage;
+  FBsPanel.Visible := False;
+
+  FBsTitle := TTyLabel.Create(Self);
+  FBsTitle.Parent := FBsPanel;
+  FBsTitle.SetBounds(28, 20, 300, 30);
+  FBsTitle.Caption := '打开';
+
+  FBsBrowse := TTyGlyphButton.Create(Self);
+  FBsBrowse.Parent := FBsPanel;
+  FBsBrowse.SetBounds(28, 60, 200, 30);
+  FBsBrowse.Caption := '浏览…';
+  FBsBrowse.IconFont := FIcons;
+  FBsBrowse.GlyphName := 'folder';
+  FBsBrowse.OnClick := @DoOpen;
+
+  for i := 0 to High(FBsRecent) do
+  begin
+    FBsRecent[i] := TTyGlyphButton.Create(Self);
+    FBsRecent[i].Parent := FBsPanel;
+    FBsRecent[i].StyleClass := 'ghost';
+    FBsRecent[i].SetBounds(28, 108 + i * 34, 380, 30);
+    FBsRecent[i].IconFont := FIcons;
+    FBsRecent[i].GlyphName := 'recent';
+    FBsRecent[i].Tag := i;
+    FBsRecent[i].OnClick := @DoOpenRecent;
+    FBsRecent[i].Visible := False;
+  end;
+end;
+
+procedure TMainForm.ShowOpenContent;
+var r: TRect; i: Integer;
+begin
+  r := FBackstage.ContentRect;
+  FBsPanel.SetBounds(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+  FBsPanel.Anchors := [akLeft, akTop, akRight, akBottom];
+  for i := 0 to High(FBsRecent) do
+    if i < FRecent.Count then
+    begin
+      FBsRecent[i].Caption := ExtractFileName(FRecent[i]);
+      FBsRecent[i].Hint := FRecent[i];
+      FBsRecent[i].ShowHint := True;
+      FBsRecent[i].Visible := True;
+    end
+    else
+      FBsRecent[i].Visible := False;
+  FBsPanel.Visible := True;
+  FBsPanel.BringToFront;
+end;
+
+procedure TMainForm.HideBsContent;
+begin
+  if FBsPanel <> nil then FBsPanel.Visible := False;
+end;
+
+procedure TMainForm.BackstageClosed(Sender: TObject);
+begin
+  HideBsContent;
+  if FBackstage <> nil then FBackstage.ItemIndex := -1;   // fresh selection next open
+end;
+
+procedure TMainForm.DoOpenRecent(Sender: TObject);
+var i: Integer;
+begin
+  if not (Sender is TTyGlyphButton) then Exit;
+  i := TTyGlyphButton(Sender).Tag;
+  if (i >= 0) and (i < FRecent.Count) then
+  begin
+    FBackstage.Close;
+    OpenFile(FRecent[i]);
+  end;
 end;
 
 procedure TMainForm.UpdateStatus;
@@ -529,20 +613,19 @@ end;
 procedure TMainForm.BackstageSelect(Sender: TObject; AIndex: Integer);
 begin
   if AIndex < 0 then Exit;
+  // 打开 (1) shows a content page (recent files + 浏览) and stays open; the rest act + close.
+  if AIndex = 1 then
+  begin
+    ShowOpenContent;
+    Exit;
+  end;
+  HideBsContent;
   case AIndex of
     0: DoNew(Sender);
-    1: DoOpen(Sender);
     2: DoSave(Sender);
     3: DoSaveAs(Sender);
     4: DoCloseDoc(Sender);
-  else
-    if AIndex = FExitIndex then
-    begin
-      Close;
-      Exit;
-    end
-    else if (AIndex >= FRecentStart) and (AIndex < FExitIndex) then
-      if FRecent.Count > 0 then OpenFile(FRecent[AIndex - FRecentStart]);
+    5: begin FBackstage.Close; Close; Exit; end;   // 退出
   end;
   FBackstage.Close;
 end;
@@ -573,6 +656,11 @@ begin
   SetBounds(0, 0, 900, 620);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+
+  // Themed ScreenTips: installing a TTyHint swaps LCL's tooltip for the themed
+  // TTyHintWindow app-wide, so every button's Hint (set in Big/Small/AddQat) shows
+  // as an Office-style ScreenTip instead of the OS tooltip.
+  TTyHint.Create(Self);
 
   FRecent := TStringList.Create;
   FDocList := TList.Create;
@@ -606,6 +694,10 @@ begin
   FIcons.MapGlyph('zoomin',    $E8A3);   // ZoomIn
   FIcons.MapGlyph('zoomout',   $E71F);   // Zoom
   FIcons.MapGlyph('zoom100',   $E1CB);   // FitPage
+  FIcons.MapGlyph('close',     $E8BB);   // ChromeClose
+  FIcons.MapGlyph('exit',      $E7E8);   // Leave
+  FIcons.MapGlyph('folder',    $E838);   // OpenLocal (browse)
+  FIcons.MapGlyph('recent',    $E823);   // Recent
 
   FFindDlg := TTyFindDialog.Create(Self);
   FReplaceDlg := TTyReplaceDialog.Create(Self);
@@ -613,8 +705,11 @@ begin
   // Backstage (Office "File" view), opened by the File tab.
   FBackstage := TTyRibbonBackstage.Create(Self);
   FBackstage.Controller := TyDefaultController;
+  FBackstage.IconFont := FIcons;
   FBackstage.OnCommandSelect := @BackstageSelect;
+  FBackstage.OnClose := @BackstageClosed;
   RebuildBackstage;
+  BuildBackstageContent;
 
   // Status bar (bottom).
   FStatus := TTyStatusBar.Create(Self);
@@ -657,11 +752,12 @@ begin
   QAT := TTyRibbonQuickAccess.Create(Self);
   QAT.Parent := Bar;
   QAT.SetBounds(8, 4, 160, 26);
-  AddQat(QAT, '新建', 'new',  @DoNew);
-  AddQat(QAT, '打开', 'open', @DoOpen);
-  AddQat(QAT, '保存', 'save', @DoSave);
-  AddQat(QAT, '撤销', 'undo', @DoUndo);
-  AddQat(QAT, '重做', 'redo', @DoRedo);
+  // Two-line hints (title + description) render as Office-style ScreenTips.
+  AddQat(QAT, '新建'#10'新建一个空白文档', 'new',  @DoNew);
+  AddQat(QAT, '打开'#10'打开已有文本文件', 'open', @DoOpen);
+  AddQat(QAT, '保存'#10'把当前文档写入磁盘', 'save', @DoSave);
+  AddQat(QAT, '撤销'#10'撤销上一步操作', 'undo', @DoUndo);
+  AddQat(QAT, '重做'#10'重做被撤销的操作', 'redo', @DoRedo);
 
   // 3) The document tab area fills the middle (alClient).
   FDocPages := TTyPageControl.Create(Self);
