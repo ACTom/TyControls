@@ -22,6 +22,7 @@ type
     procedure HidingActiveContextReanchorsAndFires;
     procedure SettingContextHidesTabWhenInactive;
     procedure OverflowCountCollapsesTrailingGroups;
+    procedure CollapseRectAtRightEnd;
     procedure MinimizedCollapsesAndRestoresHeight;
     procedure FileTabRoundTripAndDefaults;
     procedure DefaultAligns;
@@ -224,6 +225,22 @@ begin
   AssertEquals('collapse all 3', 3, TyRibbonOverflowCount([100, 100, 100], 150, 30));
   AssertEquals('exactly fits -> 0', 0, TyRibbonOverflowCount([100, 100, 100], 300, 30));
   AssertEquals('empty -> 0', 0, TyRibbonOverflowCount([], 100, 30));
+end;
+
+procedure TRibbonTest.CollapseRectAtRightEnd;
+var R: TRect;
+begin
+  // A TabH-square at the right end of a TabH-tall strip.
+  R := TyRibbonCollapseRect(300, 28);
+  AssertEquals('left', 300 - 28, R.Left);
+  AssertEquals('top', 0, R.Top);
+  AssertEquals('right', 300, R.Right);
+  AssertEquals('bottom', 28, R.Bottom);
+  // Too narrow to hold the button -> empty (no negative rect).
+  R := TyRibbonCollapseRect(20, 28);
+  AssertTrue('empty when narrower than the button', (R.Right - R.Left) <= 0);
+  R := TyRibbonCollapseRect(0, 28);
+  AssertTrue('empty at zero width', (R.Right - R.Left) <= 0);
 end;
 
 procedure TRibbonTest.MinimizedCollapsesAndRestoresHeight;

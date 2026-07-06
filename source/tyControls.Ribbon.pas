@@ -45,14 +45,18 @@ type
     FFileTabCaption: string;
     FFileTabWidth: Integer;                 // logical px
     FBackstage: TTyRibbonBackstage;
+    FShowCollapseBtn: Boolean;
     FOnFileTab: TNotifyEvent;
     procedure SetMinimized(AValue: Boolean);
     procedure SetShowFileTab(AValue: Boolean);
     procedure SetFileTabCaption(const AValue: string);
     procedure SetFileTabWidth(AValue: Integer);
     procedure SetBackstage(AValue: TTyRibbonBackstage);
+    procedure SetShowCollapseButton(AValue: Boolean);
     function FileTabWidthPx: Integer;
+    function CollapseRectPx: TRect;
     procedure DrawFileTab;
+    procedure DrawCollapseButton;
     function GetPage(AIndex: Integer): TTyRibbonPage;
     function GetActivePage: TTyRibbonPage;
     procedure SetActivePage(AValue: TTyRibbonPage);
@@ -107,6 +111,9 @@ type
     property FileTabCaption: string read FFileTabCaption write SetFileTabCaption;
     property FileTabWidth: Integer read FFileTabWidth write SetFileTabWidth default 52;
     property Backstage: TTyRibbonBackstage read FBackstage write SetBackstage;
+    { A collapse/expand chevron at the RIGHT end of the tab strip that toggles Minimized
+      (like Office). Double-clicking any tab also toggles Minimized. }
+    property ShowCollapseButton: Boolean read FShowCollapseBtn write SetShowCollapseButton default True;
     property OnFileTab: TNotifyEvent read FOnFileTab write FOnFileTab;
     property Align default alTop;
   end;
@@ -181,6 +188,10 @@ function TyRibbonGroupContentRect(AWidthPx, AHeightPx, ACaptionBandPx: Integer):
 function TyRibbonOverflowCount(const ANaturalWidths: array of Integer;
   AAvailPx, ACollapsedPx: Integer): Integer;
 
+{ The collapse/expand button rect (device px, (0,0)-local): an ATabHpx square at the RIGHT
+  end of the tab strip. Empty when the client is too narrow to hold it. Headless-testable. }
+function TyRibbonCollapseRect(AClientWpx, ATabHpx: Integer): TRect;
+
 implementation
 
 // ---------------------------------------------------------------------------
@@ -215,6 +226,13 @@ begin
   Result := N;   // even all-collapsed overflows
 end;
 
+function TyRibbonCollapseRect(AClientWpx, ATabHpx: Integer): TRect;
+begin
+  if (AClientWpx <= 0) or (ATabHpx <= 0) or (ATabHpx > AClientWpx) then
+    Exit(Rect(0, 0, 0, 0));
+  Result := Rect(AClientWpx - ATabHpx, 0, AClientWpx, ATabHpx);
+end;
+
 // ===========================================================================
 // TTyRibbon
 // ===========================================================================
@@ -231,6 +249,7 @@ begin
   FShowFileTab := False;
   FFileTabCaption := '文件';
   FFileTabWidth := 52;
+  FShowCollapseBtn := True;
   TabStop := True;
 end;
 
@@ -530,6 +549,42 @@ begin
   if FBackstage <> nil then FBackstage.FreeNotification(Self);
 end;
 
+procedure TTyRibbon.SetShowCollapseButton(AValue: Boolean);
+begin
+  if FShowCollapseBtn = AValue then Exit;
+  FShowCollapseBtn := AValue;
+  Invalidate;
+end;
+
+function TTyRibbon.CollapseRectPx: TRect;
+begin
+  if not FShowCollapseBtn then Exit(Rect(0, 0, 0, 0));
+  Result := TyRibbonCollapseRect(ClientWidth, MulDiv(TabHeight, Font.PixelsPerInch, 96));
+end;
+
+{ Draw the collapse/expand chevron at the right of the tab strip: an up chevron when the
+  ribbon is expanded (click to collapse), a down chevron when minimized (click to expand). }
+procedure TTyRibbon.DrawCollapseButton;
+var
+  P: TTyPainter;
+  S: TTyStyleSet;
+  R: TRect;
+  g: TTyGlyphKind;
+begin
+  R := CollapseRectPx;
+  if R.Right <= R.Left then Exit;
+  S := ActiveController.Model.ResolveStyle('TyTab', '', []);
+  if FMinimized then g := tgArrowDown else g := tgArrowUp;
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(Canvas, R, Font.PixelsPerInch);
+    P.DrawGlyph(Rect(0, 0, R.Right - R.Left, R.Bottom - R.Top), g, S.TextColor, 1, 9);
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
 { Draw the accent File tab in the reserved left inset (its own small paint pass, sized
   to the tab rect so it does not blit over the base's tab-strip drawing). }
 procedure TTyRibbon.DrawFileTab;
@@ -562,12 +617,14 @@ procedure TTyRibbon.Paint;
 begin
   inherited Paint;   // base draws the tab strip (shifted right by HeaderLeftInset) + frame
   DrawFileTab;
+  DrawCollapseButton;
 end;
 
 procedure TTyRibbon.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   w, h: Integer;
   Frm: TCustomForm;
+  R: TRect;
 begin
   if FShowFileTab and (Button = mbLeft) then
   begin
@@ -584,6 +641,27 @@ begin
           FBackstage.ShowOver(Frm, Top);   // cover everything below the title bar
       end;
       if Assigned(FOnFileTab) then FOnFileTab(Self);
+      Exit;
+    end;
+  end;
+  // Collapse/expand chevron at the right of the strip toggles Minimized.
+  if (Button = mbLeft) and FShowCollapseBtn then
+  begin
+    R := CollapseRectPx;
+    if (R.Right > R.Left) and (X >= R.Left) and (X < R.Right) and
+       (Y >= R.Top) and (Y < R.Bottom) then
+    begin
+      Minimized := not Minimized;
+      Exit;
+    end;
+  end;
+  // Double-clicking a tab (anywhere in the header band, past the File tab) toggles Minimized.
+  if (Button = mbLeft) and (ssDouble in Shift) then
+  begin
+    h := MulDiv(TabHeight, Font.PixelsPerInch, 96);
+    if (Y >= 0) and (Y < h) and (X >= HeaderLeftInset) then
+    begin
+      Minimized := not Minimized;
       Exit;
     end;
   end;
