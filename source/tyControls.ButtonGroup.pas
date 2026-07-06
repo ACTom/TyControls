@@ -300,6 +300,11 @@ begin
     W := ARect.Right - ARect.Left;
     H := ARect.Bottom - ARect.Top;
     P.BeginPaint(ACanvas, ARect, APPI);
+    // Fill the parent's OPAQUE surface first: unselected ghost segments resolve to a
+    // transparent background, which on the Win10 DWM sheet-of-glass would otherwise bleed
+    // through as white/mismatched patches on dark themes (same fix as TTyButton).
+    TyFillParentBg(Self, P, Rect(0, 0, W, H),
+      ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysNormal]));
     n := FItems.Count;
     if n <= 0 then
     begin

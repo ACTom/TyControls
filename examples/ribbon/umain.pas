@@ -800,6 +800,7 @@ begin
   // 1) The ribbon (below the title bar). File tab -> backstage.
   FRibbon := TTyRibbon.Create(Self);
   FRibbon.Parent := Self;
+  FRibbon.Controller := TyDefaultController;   // register as a theme listener (live re-theme)
   FRibbon.Height := 140;   // room for 3 small-button rows above the group caption band
   FRibbon.FileTab := True;
   FRibbon.FileTabCaption := '文件';
