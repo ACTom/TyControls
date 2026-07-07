@@ -20,6 +20,7 @@ type
     procedure TestExpandPopulatesChildren;
     procedure TestCreateSubfolderShowsAndFocuses;
     procedure TestCreateSubfolderUnderCollapsedParent;
+    procedure TestDirectoryPreselectsPath;
   end;
 implementation
 
@@ -220,6 +221,31 @@ begin
   finally
     RemoveDir(outer + PathDelim + 'first');
     RemoveDir(outer);
+    RemoveDir(root);
+  end;
+end;
+
+{ Assigning Directory before ShowModal pre-selects a path: reveal (expand roots->leaf) + focus the
+  node, so the dialog opens ON the current value instead of at the root. Reading it back gives the
+  selection — the idiomatic in/out dialog property. }
+procedure TSelectPathBuildTest.TestDirectoryPreselectsPath;
+var
+  d: TTySelectPathForm; root, target: string;
+begin
+  root   := IncludeTrailingPathDelimiter(GetTempDir) + 'tyselpath_initial';
+  target := root + PathDelim + 'alpha' + PathDelim + 'child';
+  ForceDirectories(target);
+  try
+    d := TyBuildSelectPathDialog('Choose folder', root);
+    try
+      d.Directory := target;   // in
+      AssertTrue('a node is focused after Directory:=', d.Tree.FocusedNode <> nil);
+      AssertEquals('the initial path is pre-selected',
+        ExcludeTrailingPathDelimiter(target), ExcludeTrailingPathDelimiter(d.Directory));   // out
+    finally d.Free; end;
+  finally
+    RemoveDir(target);
+    RemoveDir(root + PathDelim + 'alpha');
     RemoveDir(root);
   end;
 end;

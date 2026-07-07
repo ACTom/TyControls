@@ -444,9 +444,11 @@ begin
   VR.AddChild('Name', 'Segoe UI');
   VR.AddChild('Size', '9').EditorKind := vekInteger;
   VR.AddChild('Color', 'clWindowText').EditorKind := vekColor;
-  VS := VR.AddChild('Style', '[]');                // 二级子级(层级无上限:Font→Style→Bold)
+  VS := VR.AddChild('Style', 'Regular');           // 二级子级(层级无上限:Font→Style→Bold)
   VS.AddChild('Bold', 'False').EditorKind := vekBoolean;
   VS.AddChild('Italic', 'False').EditorKind := vekBoolean;
+  VS.AddChild('Underline', 'False').EditorKind := vekBoolean;
+  VS.AddChild('StrikeOut', 'False').EditorKind := vekBoolean;
   FVLE.UpdateRows;                                 // 加了子行后刷新
   FVLE.OnValueChanged := @VleChange;
   FVLE.OnEditRow := @VleEditDialog;

@@ -13,7 +13,7 @@ TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是*
 | `vekBoolean` | `True` / `False` 下拉 |
 | `vekEnum` | `EnumValues`(每行一项)下拉 |
 | `vekColor` | **色板下拉**(每项一个色块),最后一行"更多…"弹主题色对话框(`TySelectColor`);单元显示色块 |
-| `vekFont` | 文本 + 尾部"**…**"按钮——文本可选中/复制,**只有点"…"** 才弹字体对话框(`TTyFontDialog`);若该行有子行(`Name`/`Size`/`Bold`/`Italic`/`Color`,或嵌套 `Style→Bold/Italic`),选好字体后**回写这些子行** |
+| `vekFont` | 文本 + 尾部"**…**"按钮——文本可选中/复制,**只有点"…"** 才弹字体对话框(`TTyFontDialog`);若该行有子行(`Name`/`Size`/`Color` + 四个样式位 `Bold`/`Italic`/`Underline`/`StrikeOut`,或嵌套 `Style` 节点下的样式位),选好字体后**回写这些子行** |
 | `vekDialog` | 文本 + 尾部"**…**"按钮——只有点"…"才触发 `OnEditRow`(应用弹**库自带**对话框如 `TySelectDirectory` 写回 `ARow.Value`) |
 | `vekReadOnly` | 不可编辑 |
 
@@ -51,10 +51,12 @@ uses tyControls.ValueListEditor;
 | `DeleteRow(i)` / `Clear` | 删根行 / 清空。 |
 | `SetExpanded(ARow, bool)` | 展开/收起。 |
 | `UpdateRows` | 直接 `AddChild` 加了子行后调用,刷新可见列表。 |
+| `SetRowValue(ARow, AText)` | 按行对象改值(触发 `OnValueChanged`,并**向上更新复合父行**——见 §6)。 |
+| `InvokeRowDialog(flat)` | 编程触发 `vekFont`/`vekDialog` 行的对话框(等同点"…")。 |
 | `KeyColumnWidth` | 键列宽 / 分隔线位置(逻辑 px,默认 110,可拖)。 |
 | `ReadOnly` / `Images` / `OnValueChanged(Sender, ARow)` | 全局只读 / 值单元图像源 / 值提交事件。 |
 
-**`TTyValueRow`**:`Key`、`DisplayKey`、`Value`、`DisplayValue`、`EditorKind`、`EnumValues`、`ReadOnly`、`Bold`、`TextColor`、`ImageIndex`、`Expanded`;`AddChild(k,v)` / `ChildCount` / `Child[i]` / `HasChildren` / `EffectiveKey` / `EffectiveValue`。
+**`TTyValueRow`**:`Key`、`DisplayKey`、`Value`、`DisplayValue`、`EditorKind`、`EnumValues`、`ReadOnly`、`Bold`、`TextColor`、`ImageIndex`、`Expanded`;`AddChild(k,v)` / `ChildCount` / `Child[i]` / `Parent` / `HasChildren` / `EffectiveKey` / `EffectiveValue`。
 
 ---
 
@@ -101,6 +103,7 @@ VLE.OnValueChanged := @HandleChange;   // (Sender; ARow: TTyValueRow)
 - **`AddChild` 后要 `UpdateRows`:** 行对象是直接被你改的,控件观察不到;`AddRow` / `InsertRow` / `DeleteRow` / `SetExpanded` 会自己刷新,只有直接 `AddChild` 需要手动 `UpdateRows`。
 - **`DisplayKey`/`DisplayValue`:** 仅影响显示,不改实际 `Key`/`Value`(供 i18n / 格式化);值单元还可带 `ImageIndex`(图文)+ `Bold` / `TextColor`。
 - **内联编辑器是内部子控件:** `csNoDesignVisible`,不漏进设计器;`Enter`/失焦提交、`Esc` 取消,主题跟随 `Controller`;滚动会先提交并关闭。
-- **字体子行同步按键名匹配:** `vekFont` 行的直接子行里键名为 `Name`/`Size`/`Bold`/`Italic`/`Color`(或嵌套 `Style` 节点下的 `Bold`/`Italic`)会在选字体后被回写;其它结构请自己在 `OnValueChanged` 里处理。
+- **字体子行同步按键名匹配:** `vekFont` 行的直接子行里键名为 `Name`/`Size`/`Color` 或四个样式位 `Bold`/`Italic`/`Underline`/`StrikeOut`(也可放在嵌套 `Style` 节点下)会在选字体后被回写。**显示哪些子属性由你决定**——只 `AddChild` 你要暴露的那些即可(控件不设 `Options` 之类的隐藏开关,因为结构本就由你搭)。其它结构请自己在 `OnValueChanged` 里处理。
+- **复合父行双向联动(Font / Style):** 改子行(如 `Bold`)会**向上**重算 `Style` 与 `Font` 的显示值(`Style`→`Regular`/`Bold, Italic`;`Font`→`Name, Size` + 尾随样式词);点 `Font` 的"…"选字体则**向下**回写全部子行并重算 `Style`/`Font`。编程改值用 `SetRowValue`(会触发同样的向上联动),别直接写 `ARow.Value`。仅 `style` 键名 + `Bold`/`Italic` 子行、及 `vekFont` 行被识别为复合;其它复合语义自理。
 - **颜色"更多…"对话框是延迟弹的:** 走 `Application.QueueAsyncCall`,让弹出列表的鼠标事件先退栈(析构里 `RemoveAsyncCalls` 取消未决调用)。
 - **交互是真机验证项:** 数据 / 嵌套 / 展开 / 显示覆盖 / 只读 / 列宽钳制 / 数字过滤已 headless 单测;分隔拖动、三角点击、下拉圆角、"…"按钮、颜色/字体对话框、字体子行回写需真机验证。

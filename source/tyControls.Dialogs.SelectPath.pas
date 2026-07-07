@@ -51,6 +51,10 @@ type
     // Add one root node per configured source (a single FRoot, else every drive).
     procedure PopulateRoots;
     function  SelectedPath: string;
+    procedure SetDirectory(const APath: string);
+    // The in/out selection (idiomatic dialog pattern): assign before ShowModal to pre-select a
+    // folder (reveal + focus it); read after OK for the chosen folder. No-op if unreachable.
+    property  Directory: string read SelectedPath write SetDirectory;
     // Create a subfolder AName under AParent, refresh the tree so it shows, and
     // focus/select it. Returns True on success. Non-modal — the headless-testable
     // seam that NewFolderClick wraps around TyInputQuery.
@@ -457,6 +461,18 @@ begin
     (r.Bottom - r.Top) - 2*TyDlgPad - editH - Gap);
 end;
 
+procedure TTySelectPathForm.SetDirectory(const APath: string);
+var node: PTyTreeNode;
+begin
+  if Trim(APath) = '' then Exit;
+  node := RevealPath(APath);
+  if node <> nil then
+  begin
+    FTree.FocusedNode := node;    // fires TreeFocusChanged -> syncs the path field
+    FTree.ScrollIntoView(node);   // FocusedNode does not scroll on its own; bring a deep node into view
+  end;
+end;
+
 function TTySelectPathForm.SelectedPath: string;
 var s: string;
 begin
@@ -510,8 +526,9 @@ var d: TTySelectPathForm;
 begin
   d := TyBuildSelectPathDialog(ACaption, ARoot);
   try
+    d.Directory := ADir;                    // pre-select the current directory (in)
     Result := (d.ShowModal = mrOK);
-    if Result then ADir := d.SelectedPath;
+    if Result then ADir := d.Directory;     // chosen directory (out)
   finally d.Free; end;
 end;
 
@@ -524,9 +541,10 @@ begin
   // OnShow/OnClose/OnCanClose forward onto the form before ShowModal.
   d := TyBuildSelectPathDialog(FCaption, FRoot);
   try
+    d.Directory := FDirectory;              // pre-select the current directory (in)
     TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
-    if Result then FDirectory := d.SelectedPath;
+    if Result then FDirectory := d.Directory;   // chosen directory (out)
   finally d.Free; end;
 end;
 

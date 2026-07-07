@@ -19,6 +19,7 @@ type
   TTyValueRow = class
   private
     FChildren: array of TTyValueRow;
+    FParent: TTyValueRow;    // back-reference (NOT owned); nil for a root row
     function GetChild(AIndex: Integer): TTyValueRow;
   public
     Key: string;
@@ -38,6 +39,7 @@ type
     function AddChild(const AKey, AValue: string): TTyValueRow;
     function ChildCount: Integer;
     property Child[AIndex: Integer]: TTyValueRow read GetChild;
+    property Parent: TTyValueRow read FParent;   // owning row (nil for a root row)
     function HasChildren: Boolean;
     function EffectiveKey: string;     // DisplayKey or Key
     function EffectiveValue: string;   // DisplayValue or Value
@@ -123,6 +125,13 @@ type
     procedure CommitEditor(AFlat: Integer; const AText: string);
     procedure CommitEditorRow(ARow: TTyValueRow; const AText: string);
     function RowExists(ARow: TTyValueRow): Boolean;
+    function ChildByKey(ARow: TTyValueRow; const AKey: string): TTyValueRow;
+    function StyleFlags(ARow: TTyValueRow): string;      // 'Bold Italic' from bold/italic children
+    function IsStyleComposite(ARow: TTyValueRow): Boolean;
+    function IsFontComposite(ARow: TTyValueRow): Boolean;
+    function ComposeValue(ARow: TTyValueRow; out AValue: string): Boolean;   // font/style summary
+    procedure PropagateUp(ARow: TTyValueRow);            // update composite ancestors after a child edit
+    procedure RecomputeComposite(ARow: TTyValueRow);     // recompute a subtree's composite values
     procedure BeginInlineEdit(AFlat: Integer; ANumeric: TTyValueNumericMode; AEllipsis: Boolean);
     procedure BeginDropdown(AFlat: Integer; const AOptions: string);
     procedure BeginColorDropdown(AFlat: Integer);
@@ -177,6 +186,9 @@ type
     procedure BeginEdit(AFlat: Integer);
     // Run the dialog editor for a vekFont / vekDialog row (what the inline "…" button triggers).
     procedure InvokeRowDialog(AFlat: Integer);
+    // Set a row's value programmatically (by identity): fires OnValueChanged and propagates to
+    // composite ancestors (a Font/Style parent's value re-summarises from its children).
+    procedure SetRowValue(ARow: TTyValueRow; const AText: string);
     // Number of VISIBLE (expanded) rows — root rows plus expanded descendants.
     function VisibleRowCount: Integer;
     // The visible (flat) index being edited, or -1.
@@ -305,6 +317,7 @@ begin
   Result := TTyValueRow.Create;
   Result.Key := AKey;
   Result.Value := AValue;
+  Result.FParent := Self;
   SetLength(FChildren, Length(FChildren) + 1);
   FChildren[High(FChildren)] := Result;
 end;
@@ -623,8 +636,113 @@ procedure TTyValueListEditor.CommitEditorRow(ARow: TTyValueRow; const AText: str
 begin
   if (ARow = nil) or (ARow.Value = AText) then Exit;
   ARow.Value := AText;
-  Invalidate;
   if Assigned(FOnValueChanged) then FOnValueChanged(Self, ARow);
+  PropagateUp(ARow);   // a Font/Style parent re-summarises from its (now-changed) children
+  Invalidate;
+end;
+
+procedure TTyValueListEditor.SetRowValue(ARow: TTyValueRow; const AText: string);
+begin
+  CommitEditorRow(ARow, AText);
+end;
+
+function TTyValueListEditor.ChildByKey(ARow: TTyValueRow; const AKey: string): TTyValueRow;
+var i: Integer;
+begin
+  Result := nil;
+  if ARow = nil then Exit;
+  for i := 0 to ARow.ChildCount - 1 do
+    if SameText(ARow.Child[i].Key, AKey) then Exit(ARow.Child[i]);
+end;
+
+{ Space-separated enabled style words from the Bold/Italic/Underline/StrikeOut children (the four
+  TFont.Style flags), in that order — e.g. '' / 'Bold' / 'Bold Underline'. }
+function TTyValueListEditor.StyleFlags(ARow: TTyValueRow): string;
+
+  function On_(const AKey: string): Boolean;
+  var c: TTyValueRow;
+  begin
+    c := ChildByKey(ARow, AKey);
+    Result := (c <> nil) and SameText(Trim(c.Value), 'True');
+  end;
+
+begin
+  Result := '';
+  if On_('bold')      then Result := Result + 'Bold ';
+  if On_('italic')    then Result := Result + 'Italic ';
+  if On_('underline') then Result := Result + 'Underline ';
+  if On_('strikeout') then Result := Result + 'StrikeOut ';
+  Result := Trim(Result);
+end;
+
+function TTyValueListEditor.IsStyleComposite(ARow: TTyValueRow): Boolean;
+begin
+  Result := SameText(ARow.Key, 'style') and
+    ((ChildByKey(ARow, 'bold') <> nil) or (ChildByKey(ARow, 'italic') <> nil) or
+     (ChildByKey(ARow, 'underline') <> nil) or (ChildByKey(ARow, 'strikeout') <> nil));
+end;
+
+function TTyValueListEditor.IsFontComposite(ARow: TTyValueRow): Boolean;
+begin
+  Result := (ARow.EditorKind = vekFont) and ARow.HasChildren;
+end;
+
+{ The summarised value for a recognised composite row (font / style), else False. A Style node
+  reads 'Regular' or e.g. 'Bold, Italic'; a Font node reads 'Name, Size' + trailing style words
+  (so a Bold change is visible on the Font row too), pulling style from a nested Style child if
+  present, else from direct Bold/Italic children. }
+function TTyValueListEditor.ComposeValue(ARow: TTyValueRow; out AValue: string): Boolean;
+var nm, sz, flags: string; c, styleNode: TTyValueRow;
+begin
+  Result := True;
+  if IsStyleComposite(ARow) then
+  begin
+    flags := StyleFlags(ARow);
+    if flags = '' then AValue := 'Regular'
+    else AValue := StringReplace(flags, ' ', ', ', [rfReplaceAll]);
+  end
+  else if IsFontComposite(ARow) then
+  begin
+    nm := ''; c := ChildByKey(ARow, 'name'); if c <> nil then nm := c.Value;
+    sz := ''; c := ChildByKey(ARow, 'size'); if c <> nil then sz := c.Value;
+    styleNode := ChildByKey(ARow, 'style');
+    if styleNode <> nil then flags := StyleFlags(styleNode) else flags := StyleFlags(ARow);
+    AValue := nm;
+    if sz <> '' then AValue := AValue + ', ' + sz;
+    if flags <> '' then AValue := AValue + ' ' + flags;   // e.g. 'Segoe UI, 9 Bold Italic'
+  end
+  else
+    Result := False;
+end;
+
+procedure TTyValueListEditor.PropagateUp(ARow: TTyValueRow);
+var p, nextP: TTyValueRow; nv: string;
+begin
+  p := ARow.Parent;
+  while p <> nil do
+  begin
+    nextP := p.Parent;   // capture BEFORE the OnValueChanged handler can restructure/free the tree
+    if ComposeValue(p, nv) and (nv <> p.Value) then
+    begin
+      p.Value := nv;
+      if Assigned(FOnValueChanged) then FOnValueChanged(Self, p);
+    end;
+    if (nextP <> nil) and not RowExists(nextP) then Break;   // the handler freed the ancestor chain
+    p := nextP;
+  end;
+end;
+
+{ Recompute composite values across a subtree, deepest first (so a Style node is summarised
+  before the Font node that folds it in). Used after the font dialog writes the leaf children. }
+procedure TTyValueListEditor.RecomputeComposite(ARow: TTyValueRow);
+var i: Integer; nv: string;
+begin
+  for i := 0 to ARow.ChildCount - 1 do RecomputeComposite(ARow.Child[i]);
+  if ComposeValue(ARow, nv) and (nv <> ARow.Value) then
+  begin
+    ARow.Value := nv;
+    if Assigned(FOnValueChanged) then FOnValueChanged(Self, ARow);
+  end;
 end;
 
 { Is ARow still somewhere in the tree? Guards the deferred colour dialog against a row freed
@@ -657,13 +775,24 @@ begin
   if r.ReadOnly or (r.EditorKind = vekReadOnly) then Exit;
   if FEditFlat = AFlat then Exit;
   if FEditFlat >= 0 then EndEdit(True);
+  { A Font/Style COMPOSITE row's value is DERIVED from its children (see ComposeValue), so it must
+    NOT be freely typed — the typed text would be overwritten by the next child edit, or left as a
+    stray value if the font dialog is cancelled. A Style composite has no dialog of its own, so
+    there is nothing to edit inline (the user edits its child flags). }
+  if IsStyleComposite(r) then Exit;
   case r.EditorKind of
     vekBoolean: BeginDropdown(AFlat, 'False'#10'True');
     vekEnum:    BeginDropdown(AFlat, r.EnumValues);
     vekColor:   BeginColorDropdown(AFlat);
     vekInteger: BeginInlineEdit(AFlat, vnmInteger, False);
     vekFloat:   BeginInlineEdit(AFlat, vnmFloat, False);
-    vekFont:    BeginInlineEdit(AFlat, vnmNone, True);   // editable text + "…" -> font dialog
+    vekFont:
+      begin
+        BeginInlineEdit(AFlat, vnmNone, True);   // text + "…" -> font dialog
+        { A Font COMPOSITE keeps the "…" dialog but its (derived) text is read-only — still
+          selectable / copyable, just not typeable. A leaf Font row stays freely editable. }
+        if IsFontComposite(r) then FEditor.ReadOnly := True;
+      end;
     vekDialog:  BeginInlineEdit(AFlat, vnmNone, True);   // editable text + "…" -> OnEditRow
   else
     BeginInlineEdit(AFlat, vnmNone, False);              // vekText
@@ -858,13 +987,14 @@ begin
   if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
   r := FFlatRow[AFlat];
   if FReadOnly or r.ReadOnly then Exit;
+  { Commit + CLOSE the inline editor before the modal opens. Otherwise the editor loses focus to
+    the dialog, its OnExit commits the (stale) editor text, and that overwrites the value the
+    dialog just set — the classic "font dialog changes nothing" bug. }
+  if FEditFlat = AFlat then EndEdit(True);
   case r.EditorKind of
     vekFont:   EditFontRow(AFlat);
     vekDialog: if Assigned(FOnEditRow) then begin FOnEditRow(Self, r); Invalidate; end;
   end;
-  { reflect the picked value in the still-open inline field }
-  if (FEditFlat = AFlat) and (FEditor <> nil) and FEditor.Visible then
-    FEditor.Text := r.Value;
 end;
 
 { Seed a TFont from a Font row: from its child rows (Name/Size/Bold/Italic/Color) if it has
@@ -875,8 +1005,21 @@ begin
   else AFont.Style := AFont.Style - [AFlag];
 end;
 
+{ Map a child key to its TFont.Style flag (all four: bold/italic/underline/strikeout). }
+function TyFontStyleKey(const AKey: string; out AFlag: TFontStyle): Boolean;
+var k: string;
+begin
+  Result := True;
+  k := LowerCase(AKey);
+  if k = 'bold' then AFlag := fsBold
+  else if k = 'italic' then AFlag := fsItalic
+  else if k = 'underline' then AFlag := fsUnderline
+  else if k = 'strikeout' then AFlag := fsStrikeOut
+  else Result := False;
+end;
+
 procedure TTyValueListEditor.SeedFontFromRow(ARow: TTyValueRow; AFont: TFont);
-var i, j, sz: Integer; c, g: TTyValueRow; k, gk, nm: string;
+var i, j, sz: Integer; c, g: TTyValueRow; k, nm: string; flag: TFontStyle;
 begin
   if ARow.HasChildren then
   begin
@@ -886,15 +1029,13 @@ begin
       k := LowerCase(c.Key);
       if k = 'name' then begin if Trim(c.Value) <> '' then AFont.Name := c.Value; end
       else if k = 'size' then begin if StrToIntDef(c.Value, 0) > 0 then AFont.Size := StrToIntDef(c.Value, AFont.Size); end
-      else if k = 'bold' then ApplyStyleFlag(AFont, fsBold, c.Value)
-      else if k = 'italic' then ApplyStyleFlag(AFont, fsItalic, c.Value)
       else if k = 'color' then AFont.Color := StringToColorDef(c.Value, AFont.Color)
-      else if (k = 'style') and c.HasChildren then     // OI-style Font -> Style -> Bold/Italic
+      else if TyFontStyleKey(k, flag) then ApplyStyleFlag(AFont, flag, c.Value)
+      else if (k = 'style') and c.HasChildren then     // OI-style Font -> Style -> Bold/Italic/...
         for j := 0 to c.ChildCount - 1 do
         begin
-          g := c.Child[j]; gk := LowerCase(g.Key);
-          if gk = 'bold' then ApplyStyleFlag(AFont, fsBold, g.Value)
-          else if gk = 'italic' then ApplyStyleFlag(AFont, fsItalic, g.Value);
+          g := c.Child[j];
+          if TyFontStyleKey(g.Key, flag) then ApplyStyleFlag(AFont, flag, g.Value);
         end;
     end;
   end
@@ -927,7 +1068,7 @@ var didChange: Boolean;
     end;
   end;
 
-var i, j: Integer; c, g: TTyValueRow; k, gk: string;
+var i, j: Integer; c, g: TTyValueRow; k: string; flag: TFontStyle;
 begin
   didChange := False;
   for i := 0 to ARow.ChildCount - 1 do
@@ -936,15 +1077,13 @@ begin
     k := LowerCase(c.Key);
     if k = 'name' then SetChild(c, AFont.Name)
     else if k = 'size' then SetChild(c, IntToStr(AFont.Size))
-    else if k = 'bold' then SetChild(c, BoolStr(fsBold in AFont.Style))
-    else if k = 'italic' then SetChild(c, BoolStr(fsItalic in AFont.Style))
     else if k = 'color' then SetChild(c, ColorToString(AFont.Color))
-    else if (k = 'style') and c.HasChildren then     // OI-style Font -> Style -> Bold/Italic
+    else if TyFontStyleKey(k, flag) then SetChild(c, BoolStr(flag in AFont.Style))
+    else if (k = 'style') and c.HasChildren then     // OI-style Font -> Style -> Bold/Italic/...
       for j := 0 to c.ChildCount - 1 do
       begin
-        g := c.Child[j]; gk := LowerCase(g.Key);
-        if gk = 'bold' then SetChild(g, BoolStr(fsBold in AFont.Style))
-        else if gk = 'italic' then SetChild(g, BoolStr(fsItalic in AFont.Style));
+        g := c.Child[j];
+        if TyFontStyleKey(g.Key, flag) then SetChild(g, BoolStr(flag in AFont.Style));
       end;
   end;
   if didChange then RebuildFlat;
@@ -959,8 +1098,14 @@ begin
     SeedFontFromRow(r, dlg.Font);
     if dlg.Execute then
     begin
-      CommitEditor(AFlat, Format('%s, %d', [dlg.Font.Name, dlg.Font.Size]));
-      if r.HasChildren then SyncFontChildren(r, dlg.Font);
+      if r.HasChildren then
+      begin
+        SyncFontChildren(r, dlg.Font);   // write Name/Size/Bold/Italic/Color leaves
+        RecomputeComposite(r);           // re-summarise the Style node + the Font row from the leaves
+        Invalidate;
+      end
+      else
+        CommitEditor(AFlat, Format('%s, %d', [dlg.Font.Name, dlg.Font.Size]));
     end;
   finally
     dlg.Free;

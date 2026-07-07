@@ -39,6 +39,8 @@ type
     procedure TestCollapsedChildDeselects;
     procedure TestFontDescriptorParse;
     procedure TestNumericEditorFilter;
+    procedure TestCompositeFontStyleSync;
+    procedure TestCompositeRowsNotFreelyEditable;
   end;
 implementation
 
@@ -393,6 +395,74 @@ begin
   // Garbled tail is not an integer: keep whole as name, no size
   AssertFalse('non-int tail', TyParseFontDescriptor('Bad, xyz', nm, sz));
   AssertEquals('garbled kept whole', 'Bad, xyz', nm);
+end;
+
+procedure TValueListEditorTest.TestCompositeFontStyleSync;
+var e: TTyValueListEditor; font, style, size, bold, under: TTyValueRow;
+begin
+  // Editing a leaf (Bold) re-summarises its composite ancestors upward: Style, then Font.
+  e := TTyValueListEditor.Create(nil);
+  try
+    font := e.AddRow('Font', 'Segoe UI, 9');
+    font.EditorKind := vekFont;
+    font.AddChild('Name', 'Segoe UI');
+    size := font.AddChild('Size', '9');
+    style := font.AddChild('Style', 'Regular');
+    bold := style.AddChild('Bold', 'False');
+    style.AddChild('Italic', 'False');
+    under := style.AddChild('Underline', 'False');
+    e.UpdateRows;
+
+    e.SetRowValue(bold, 'True');
+    AssertEquals('style reflects bold', 'Bold', style.Value);
+    AssertEquals('font reflects style', 'Segoe UI, 9 Bold', font.Value);
+
+    e.SetRowValue(under, 'True');   // a second (Underline) flag joins in the fixed order
+    AssertEquals('style lists bold + underline', 'Bold, Underline', style.Value);
+    AssertEquals('font reflects both flags', 'Segoe UI, 9 Bold Underline', font.Value);
+
+    e.SetRowValue(bold, 'False');
+    AssertEquals('only underline remains', 'Underline', style.Value);
+    AssertEquals('font keeps underline', 'Segoe UI, 9 Underline', font.Value);
+
+    e.SetRowValue(under, 'False');
+    AssertEquals('style back to regular', 'Regular', style.Value);
+    AssertEquals('font drops the style suffix', 'Segoe UI, 9', font.Value);
+
+    e.SetRowValue(size, '14');
+    AssertEquals('font reflects the size change', 'Segoe UI, 14', font.Value);
+  finally e.Free; end;
+end;
+
+procedure TValueListEditorTest.TestCompositeRowsNotFreelyEditable;
+var e: TTyValueListEditor; font, style, leaf: TTyValueRow;
+begin
+  // A composite value is DERIVED from its children, so it must not be freely typed: a Font
+  // composite gets a READ-ONLY inline editor (still "…"-dialogable); a Style composite refuses
+  // inline editing entirely. A leaf (childless) Font row stays editable.
+  e := TTyValueListEditor.Create(nil);
+  try
+    e.SetBounds(0, 0, 220, 220); e.Font.PixelsPerInch := 96;
+    font := e.AddRow('Font', 'Segoe UI, 9'); font.EditorKind := vekFont;
+    font.AddChild('Name', 'Segoe UI');
+    font.AddChild('Size', '9');
+    style := font.AddChild('Style', 'Regular');   // flat 3
+    style.AddChild('Bold', 'False');
+    style.AddChild('Italic', 'False');
+    leaf := e.AddRow('LeafFont', 'Arial, 10'); leaf.EditorKind := vekFont;   // no children
+    e.UpdateRows;   // flat: Font0 Name1 Size2 Style3 Bold4 Italic5 LeafFont6
+
+    e.BeginEdit(0);
+    AssertEquals('font composite entered edit', 0, e.EditingRow);
+    AssertTrue('font composite inline text is read-only', e.InlineEditor.ReadOnly);
+
+    e.BeginEdit(3);   // Style composite: closes the Font editor, then refuses
+    AssertEquals('style composite refuses inline edit', -1, e.EditingRow);
+
+    e.BeginEdit(6);
+    AssertEquals('leaf font entered edit', 6, e.EditingRow);
+    AssertFalse('leaf font is freely editable', e.InlineEditor.ReadOnly);
+  finally e.Free; end;
 end;
 
 initialization
