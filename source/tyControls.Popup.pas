@@ -54,9 +54,10 @@ type
     destructor Destroy; override;
 
     { Parent AControl into the form with Align=alClient.  Call before Popup.
-      Can be called only once; subsequent calls are ignored. The helper only
-      PARENTS the content; the caller retains ownership (unless AControl.Owner =
-      the form), so the caller is responsible for freeing it. }
+      May be called repeatedly to SWAP content (e.g. a text list vs a colour list);
+      the previous content is un-parented (NOT freed) first. Passing the same control
+      again is a no-op. The helper only PARENTS the content; the caller retains
+      ownership (unless AControl.Owner = the form) and is responsible for freeing it. }
     procedure SetContent(AControl: TControl);
 
     { Compute the screen rect via TyPopupRect, size/show the form non-activating,
@@ -177,10 +178,14 @@ end;
 
 procedure TTyDropdownPopup.SetContent(AControl: TControl);
 begin
-  if FContent <> nil then Exit;   // already set; ownership is for the form's lifetime
+  if FContent = AControl then Exit;               // no change
+  if FContent <> nil then FContent.Parent := nil; // un-host the previous content (do NOT free — caller owns it)
   FContent := AControl;
-  FContent.Parent := FForm;
-  FContent.Align  := alClient;
+  if FContent <> nil then
+  begin
+    FContent.Parent := FForm;
+    FContent.Align  := alClient;
+  end;
 end;
 
 function TTyDropdownPopup.IsOpen: Boolean;

@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types,
   fpcunit, testregistry,
-  tyControls.Popup;
+  tyControls.Popup, tyControls.ListBox;
 
 type
   { Pure geometry tests for TyPopupRect. }
@@ -22,6 +22,7 @@ type
   published
     procedure TestCreateDestroyNoRaise;
     procedure TestCloseOnHiddenIsNoOp;
+    procedure TestSetContentSwaps;
   end;
 
 implementation
@@ -81,6 +82,29 @@ begin
     AssertEquals('no OnClose for a never-open popup', 0, FCloses);
   finally
     p.Free;
+  end;
+end;
+
+procedure TPopupSmokeTest.TestSetContentSwaps;
+var
+  p: TTyDropdownPopup;
+  a, b: TTyListBox;
+begin
+  // SetContent must SWAP (not latch the first control) so one popup can host an enum list then a
+  // colour list — TTyValueListEditor relies on this.
+  p := TTyDropdownPopup.Create;
+  a := TTyListBox.Create(nil);
+  b := TTyListBox.Create(nil);
+  try
+    p.SetContent(a);
+    AssertTrue('a hosted in the popup form', a.Parent = p.Form);
+    p.SetContent(b);
+    AssertTrue('b now hosted', b.Parent = p.Form);
+    AssertTrue('a un-parented on swap', a.Parent = nil);
+    p.SetContent(b);   // same control -> no-op
+    AssertTrue('b still hosted after re-set', b.Parent = p.Form);
+  finally
+    a.Free; b.Free; p.Free;
   end;
 end;
 

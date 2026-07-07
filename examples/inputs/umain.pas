@@ -8,7 +8,7 @@ unit umain;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, BGRABitmap,
+  Classes, SysUtils, Forms, Controls, Graphics, BGRABitmap,
   tyControls.Controller, tyControls.Form, tyControls.IconFont,
   tyControls.ImageCollection, tyControls.ColorMath,
   tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.MaskEdit,
@@ -19,7 +19,8 @@ uses
   tyControls.OfficeListBox, tyControls.OfficeComboBox, tyControls.ColorGrid,
   tyControls.LColorPicker, tyControls.HSColorPicker, tyControls.CheckComboBox,
   tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.ValueListEditor,
-  tyControls.CalcEdit, tyControls.CalcCurrencyEdit, tyControls.TyLabel;
+  tyControls.CalcEdit, tyControls.CalcCurrencyEdit, tyControls.TyLabel,
+  tyControls.Dialogs.SelectPath;
 
 type
   TMainForm = class(TTyForm)
@@ -87,7 +88,7 @@ var
   Icf: TTyIconFont;
   Coll: TTyImageCollection;
   Imgs: TTyVirtualImageList;
-  VR: TTyValueRow;
+  VR, VS: TTyValueRow;
 
   { Rasterise one system-symbol glyph into the collection + register it in the image list.
     (No .ttf shipped, so this uses a Unicode symbol via the system font — same placeholder
@@ -431,17 +432,21 @@ begin
   VR := FVLE.AddRow('对齐', 'taCenter');           // 枚举 → 下拉
   VR.EditorKind := vekEnum;
   VR.EnumValues := 'taLeftJustify'#10'taCenter'#10'taRightJustify';
-  FVLE.AddRow('前景色', 'clNavy').EditorKind := vekColor;    // 颜色 → 色板对话框 + 色块
-  FVLE.AddRow('字体', 'Segoe UI, 9').EditorKind := vekFont;  // 字体 → 字体对话框
-  VR := FVLE.AddRow('数据路径', 'D:\data');         // 自定义 "…" 对话框(走 OnEditRow)
+  FVLE.AddRow('前景色', 'clNavy').EditorKind := vekColor;    // 颜色 → 色板下拉(末行"更多…"弹对话框)
+  FVLE.AddRow('字体', 'Segoe UI, 9').EditorKind := vekFont;  // 叶字体 → 文本 + "…"弹字体对话框
+  VR := FVLE.AddRow('数据路径', 'D:\data');         // 文本 + "…" → 库自带路径对话框(OnEditRow)
   VR.EditorKind := vekDialog;
   VR := FVLE.AddRow('主题', 'light.tycss');        // 只读 + 显示名覆盖(国际化)
   VR.DisplayKey := '主题(只读)';
   VR.ReadOnly := True;
-  VR := FVLE.AddRow('Font', '(TFont)');            // 可展开的多级 + 类型化子行
+  VR := FVLE.AddRow('Font', 'Segoe UI, 9');        // 可展开的多级 + vekFont:"…"弹字体对话框并回写子属性
+  VR.EditorKind := vekFont;
+  VR.AddChild('Name', 'Segoe UI');
   VR.AddChild('Size', '9').EditorKind := vekInteger;
-  VR.AddChild('Bold', 'False').EditorKind := vekBoolean;
   VR.AddChild('Color', 'clWindowText').EditorKind := vekColor;
+  VS := VR.AddChild('Style', '[]');                // 二级子级(层级无上限:Font→Style→Bold)
+  VS.AddChild('Bold', 'False').EditorKind := vekBoolean;
+  VS.AddChild('Italic', 'False').EditorKind := vekBoolean;
   FVLE.UpdateRows;                                 // 加了子行后刷新
   FVLE.OnValueChanged := @VleChange;
   FVLE.OnEditRow := @VleEditDialog;
@@ -503,10 +508,15 @@ begin
 end;
 
 procedure TMainForm.VleEditDialog(Sender: TObject; ARow: TTyValueRow);
+var dir: string;
 begin
-  // vekDialog:真实用法在这里弹自定义对话框(选路径 / 输入等),选完写回 ARow.Value。
-  if InputQuery('数据路径', '输入路径:', ARow.Value) then
+  // vekDialog:点"…"弹【控件库自带】的路径对话框(而非原生),选完写回 ARow.Value。
+  dir := ARow.Value;
+  if TySelectDirectory('选择数据路径', '', dir) then
+  begin
+    ARow.Value := dir;
     FEcho.Caption := Format('改了「%s」= %s', [ARow.Key, ARow.Value]);
+  end;
 end;
 
 end.

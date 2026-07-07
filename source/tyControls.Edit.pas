@@ -65,8 +65,6 @@ type
     // Word-wise deletion (splice modelled on DeleteSelection)
     procedure DeleteWordBackward;
     procedure DeleteWordForward;
-    // Insert a raw UTF-8 string at the current caret position
-    procedure InjectStringAt(const AStr: string);
     // Text measurement helper (moved to protected so subclasses can expose it)
     procedure InvalidateWidthCache;
     function EffectiveFontSize(const S: TTyStyleSet): Integer;
@@ -101,6 +99,14 @@ type
     function RightReserve(APPI: Integer): Integer; virtual;
     procedure PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet); virtual;
     function TrailingZone(APPI: Integer): TRect;
+    // Filter text about to be inserted (typing / paste / IME). Default returns AText unchanged so
+    // plain edits are byte-identical. Called at the single insertion chokepoints (InjectKey after
+    // any selected text is deleted, and InjectStringAt), so a subclass sees the residual FText +
+    // FCaret (the insert point) and can accept/reject/scrub (e.g. numeric-only). '' => insert nothing.
+    function FilterInsert(const AText: string): string; virtual;
+    // Insert a raw UTF-8 string at the caret (the bulk path paste/IME funnel through; protected so
+    // a headless access subclass can drive it and so subclasses can insert programmatically).
+    procedure InjectStringAt(const AStr: string);
     // Horizontal alignment offset (device px) added to the text/caret/selection
     // start under Alignment=taCenter/taRightJustify. Zero when left-aligned or
     // when the text overflows the view (scroll governs; alignment is moot).
@@ -1066,13 +1072,22 @@ begin
     DoChange;
 end;
 
+function TTyEdit.FilterInsert(const AText: string): string;
+begin
+  Result := AText;   // no filtering by default => plain edits are byte-identical
+end;
+
 procedure TTyEdit.InjectStringAt(const AStr: string);
 var Before, After, Ins: string; InsLen, room, APPI: Integer;
 begin
   if AStr = '' then Exit;
   if FReadOnly then Exit;
+  // Subclass filter (numeric-only etc.); selection is already deleted by the caller (paste/IME),
+  // so FText/FCaret here are the residual text + insert point the filter judges against.
+  Ins := FilterInsert(AStr);
+  if Ins = '' then Exit;
   // CharCase also applies to bulk insertion (paste / SelText write).
-  Ins := ApplyCharCase(AStr);
+  Ins := ApplyCharCase(Ins);
   if FMaxLength > 0 then
   begin
     room := FMaxLength - UTF8Length(FText);
@@ -1176,6 +1191,14 @@ begin
     finally
       FSuspendUndo := False;
     end;
+  end;
+  // Subclass filter runs AFTER the selection is removed, so it sees the residual FText + FCaret
+  // (the insert point) — a valid '-' / '.' typed to REPLACE a selection is therefore accepted.
+  Ch := FilterInsert(Ch);
+  if Ch = '' then
+  begin
+    if FText <> TextBefore then DoChange;   // the selection was deleted even though the key is rejected
+    Exit;
   end;
   if (FMaxLength > 0) and (UTF8Length(FText) >= FMaxLength) then
   begin

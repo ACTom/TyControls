@@ -1,9 +1,17 @@
 unit test.valuelisteditor;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, fpcunit, testregistry,
+uses Classes, SysUtils, LCLType, fpcunit, testregistry,
   tyControls.ValueListEditor;
 type
+  { Drive the input paths to test the numeric filter headlessly. }
+  TValueEditAccess = class(TTyValueEdit)
+  public
+    procedure FeedKey(const AKey: string);      // per-char typing path (UTF8KeyPress -> InjectKey)
+    procedure FeedString(const AStr: string);   // bulk path (paste / IME route through InjectStringAt)
+    procedure SelAll;
+  end;
+
   TValueListEditorTest = class(TTestCase)
   private
     FFired: Integer;
@@ -30,8 +38,27 @@ type
     procedure TestCollapseRepinsSelectionByIdentity;
     procedure TestCollapsedChildDeselects;
     procedure TestFontDescriptorParse;
+    procedure TestNumericEditorFilter;
   end;
 implementation
+
+procedure TValueEditAccess.FeedKey(const AKey: string);
+var k: TUTF8Char;
+begin
+  k := AKey;
+  UTF8KeyPress(k);
+end;
+
+procedure TValueEditAccess.FeedString(const AStr: string);
+begin
+  InjectStringAt(AStr);
+end;
+
+procedure TValueEditAccess.SelAll;
+begin
+  SelectAll;
+end;
+
 
 procedure TValueListEditorTest.OnValChanged(Sender: TObject; ARow: TTyValueRow);
 begin
@@ -223,14 +250,15 @@ end;
 procedure TValueListEditorTest.TestDialogEditorFiresCallback;
 var e: TTyValueListEditor; r: TTyValueRow;
 begin
-  // A vekDialog row routes BeginEdit through OnEditRow (the app shows a dialog + sets the value).
+  // A vekDialog row's "…" (InvokeRowDialog) routes through OnEditRow (the app shows a dialog
+  // and sets the value). Clicking the value cell only enters text edit — not the dialog.
   e := TTyValueListEditor.Create(nil);
   try
     FFired := 0;
     r := e.AddRow('Path', 'C:\old');
     r.EditorKind := vekDialog;
     e.OnEditRow := @OnEditDialogRow;
-    e.BeginEdit(0);            // flat 0 = the row; dispatch -> OnEditRow (no handle needed)
+    e.InvokeRowDialog(0);     // flat 0 = the row; dispatch -> OnEditRow (no handle needed)
     AssertEquals('callback fired', 1, FFired);
     AssertEquals('value set by callback', 'picked', r.Value);
     AssertEquals('not left in edit mode', -1, e.EditingRow);
@@ -247,10 +275,49 @@ begin
     r.EditorKind := vekDialog;
     r.ReadOnly := True;        // per-row read-only
     e.OnEditRow := @OnEditDialogRow;
-    e.BeginEdit(0);            // must be refused
+    e.InvokeRowDialog(0);      // must be refused
     AssertEquals('callback NOT fired', 0, FFired);
     AssertEquals('value unchanged', 'C:\old', r.Value);
   finally e.Free; end;
+end;
+
+procedure TValueListEditorTest.TestNumericEditorFilter;
+var ed: TValueEditAccess;
+begin
+  // The inline editor restricts typing when NumericMode is set (letters/extra dots swallowed).
+  ed := TValueEditAccess.Create(nil);
+  try
+    ed.NumericMode := vnmInteger;
+    ed.Text := '';
+    ed.FeedKey('1'); ed.FeedKey('a'); ed.FeedKey('2'); ed.FeedKey('.'); ed.FeedKey('5');
+    AssertEquals('integer: letters + dot rejected', '125', ed.Text);
+
+    ed.NumericMode := vnmFloat;
+    ed.Text := '';
+    ed.FeedKey('3'); ed.FeedKey('.'); ed.FeedKey('.'); ed.FeedKey('1'); ed.FeedKey('x');
+    AssertEquals('float: a single dot, no letters', '3.1', ed.Text);
+
+    ed.NumericMode := vnmNone;
+    ed.Text := '';
+    ed.FeedKey('a'); ed.FeedKey('7');
+    AssertEquals('plain: anything allowed', 'a7', ed.Text);
+
+    // Typing '-' / '.' to REPLACE a full selection is allowed (filter runs post-deletion).
+    ed.NumericMode := vnmInteger;
+    ed.Text := '5'; ed.SelAll; ed.FeedKey('-');
+    AssertEquals('minus replaces selection', '-', ed.Text);
+    ed.NumericMode := vnmFloat;
+    ed.Text := '1.5'; ed.SelAll; ed.FeedKey('.');
+    AssertEquals('dot replaces selection', '.', ed.Text);
+
+    // The bulk (paste / IME) path is filtered too, not just per-char typing.
+    ed.NumericMode := vnmInteger;
+    ed.Text := ''; ed.FeedString('1a2b3');
+    AssertEquals('paste scrubbed to digits', '123', ed.Text);
+    ed.NumericMode := vnmFloat;
+    ed.Text := ''; ed.FeedString('12.34.56');
+    AssertEquals('paste keeps a single dot', '12.3456', ed.Text);
+  finally ed.Free; end;
 end;
 
 procedure TValueListEditorTest.TestExpandRepinsSelectionByIdentity;
