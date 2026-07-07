@@ -101,6 +101,10 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTySplitter](splitter.md) | 面板间可拖拽分隔条 |
 | [TTyToolBar](toolbar.md) | 工具条 + `TTyToolSeparator` 分隔符 |
 | [TTyStatusBar](statusbar.md) | 底部多分区状态栏 |
+| [TTyBevel](bevel.md) | 装饰性 3D 线条 / 边框（凹槽 / 凸脊，主题驱动） |
+| [TTyDivider](divider.md) | 带标题的水平分割线（标题 + 细线，`Alignment` 决定标题左/中/右） |
+| [TTyPaintPanel](paintpanel.md) | 自绘表面面板（`OnPaintSurface` 把 `TTyPainter` 交给应用同遍绘制） |
+| [TTySizeBox](sizebox.md) | 右下角尺寸拖拽手柄 |
 
 ## 日期与时间
 

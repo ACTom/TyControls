@@ -277,6 +277,40 @@ begin
   Line(b,12,7,12,17,Ink,1.8);
 end;
 
+{ TTyBevel: a 3D framed rectangle (outer bevel highlight/shadow + inset inner ring -> groove/ridge) }
+procedure GBevel(b: TBGRABitmap);
+begin
+  Line(b,4,4,20,4,Acc,1.7); Line(b,4,4,4,20,Acc,1.7);
+  Line(b,4,20,20,20,Ink,1.7); Line(b,20,4,20,20,Ink,1.7);
+  Line(b,7,7,17,7,Ink,1.3); Line(b,7,7,7,17,Ink,1.3);
+  Line(b,7,17,17,17,Faint,1.3); Line(b,17,7,17,17,Faint,1.3);
+end;
+
+{ TTyDivider: a short accent caption bar on the left + a thin rule filling to the right }
+procedure GDivider(b: TBGRABitmap);
+begin
+  Line(b,4,12,9,12,Acc,2.4); Line(b,11,12,20,12,Ink,1.4);
+  Line(b,4,7,7,7,Faint,1.1); Line(b,4,17,6,17,Faint,1.1);
+end;
+
+{ TTyPaintPanel: a panel frame with an accent paint swipe + brush nib (owner-draw surface) }
+procedure GPaintPanel(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2.5,Ink);
+  PolyL(b,[PointF(6,17),PointF(10,10),PointF(15,8)],Acc,2.2);
+  FillPolyG(b,[PointF(15,8),PointF(18.4,6.2),PointF(16.8,10.4)],Acc);
+  Line(b,7.2,14.6,9.2,13.6,Faint,1.2);
+end;
+
+{ TTySizeBox: a panel corner with a diagonal 3/2/1 ladder of dots (the Windows size grip) }
+procedure GSizeBox(b: TBGRABitmap);
+begin
+  RRect(b,3,3,21,21,2,Ink);
+  FillCirc(b,9,17,1.15,Acc);  FillCirc(b,13,17,1.15,Ink);  FillCirc(b,17,17,1.15,Ink);
+  FillCirc(b,13,13,1.15,Ink); FillCirc(b,17,13,1.15,Ink);
+  FillCirc(b,17,9,1.15,Ink);
+end;
+
 { TTyCalendar: rounded rect with a top header bar + two rows of day dots }
 procedure GCalendar(b: TBGRABitmap);
 begin
@@ -441,7 +475,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..106] of TGlyph = (
+  Glyphs: array[0..110] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -548,7 +582,11 @@ const
     (Name:'TTyReplaceDialog';     Draw:@GTyReplaceDialog),
     (Name:'TTyProgressDialog';    Draw:@GTyProgressDialog),
     (Name:'TTyAboutDialog';       Draw:@GTyAboutDialog),
-    (Name:'TTyTabSet';            Draw:@GTabSet)
+    (Name:'TTyTabSet';            Draw:@GTabSet),
+    (Name:'TTyBevel';             Draw:@GBevel),
+    (Name:'TTyDivider';           Draw:@GDivider),
+    (Name:'TTyPaintPanel';        Draw:@GPaintPanel),
+    (Name:'TTySizeBox';           Draw:@GSizeBox)
   );
 
 const

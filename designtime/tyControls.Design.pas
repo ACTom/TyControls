@@ -37,7 +37,8 @@ uses
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.TabSet,
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
-  tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About;
+  tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
+  tyControls.Bevel, tyControls.Divider, tyControls.PaintPanel, tyControls.SizeBox;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -630,7 +631,8 @@ begin
   RegisterComponents('TyControls Containers',
     [TTyPageControl, TTyTabSheet, TTyTabSet, TTySplitter,
      TTyStatusBar, TTyToolBar, TTyToolSeparator, TTyTitleBar,
-     TTyMenuBar, TTyPopupMenu, TTyCalendar, TTyDateTimePicker, TTyTreeView]);
+     TTyMenuBar, TTyPopupMenu, TTyCalendar, TTyDateTimePicker, TTyTreeView,
+     TTyBevel, TTyDivider, TTyPaintPanel, TTySizeBox]);
   // Office-style ribbon parts.
   RegisterComponents('TyControls Ribbon',
     [TTyRibbon, TTyRibbonPage, TTyRibbonGroup, TTyRibbonAppMenu,

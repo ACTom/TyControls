@@ -22,7 +22,9 @@ $classes = @(
   # Dialogs palette group (RegisterComponents('TyControls Dialogs', ...))
   'TTyMessage','TTyInputDialog','TTyPasswordDialog','TTyTextDialog',
   'TTySelectValueDialog','TTySelectPathDialog','TTyColorDialog','TTyFontDialog',
-  'TTyFindDialog','TTyReplaceDialog','TTyProgressDialog','TTyAboutDialog'
+  'TTyFindDialog','TTyReplaceDialog','TTyProgressDialog','TTyAboutDialog',
+  # Phase 5 containers & layout
+  'TTyBevel','TTyDivider','TTyPaintPanel','TTySizeBox'
 )
 
 # Drift guard: the icon set MUST match the components registered in Design.pas. Parse EVERY
