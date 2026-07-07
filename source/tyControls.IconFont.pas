@@ -8,10 +8,12 @@ unit tyControls.IconFont;
   consumed by TTyCharImage, TTyGlyphImageList and (later) the ribbon buttons.
 
   Rendering reuses BGRABitmap's system font renderer via the registered family
-  name — no extra FreeType dependency. Font-file loading is Windows-native
-  (AddFontResourceEx / FR_PRIVATE); on other widgetsets install the family (or
-  a per-widgetset loader can be added later). The name->codepoint map is pure
-  and unit-tested headlessly; the rasterized pixels need a real machine + font.
+  name — no extra FreeType dependency. Font-file loading is done with each OS's
+  NATIVE runtime-registration API (no install needed): Windows AddFontResourceEx/
+  FR_PRIVATE, macOS/Cocoa CTFontManagerRegisterFontsForURL, Qt5/Qt6
+  QFontDatabase.addApplicationFont, GTK2 fontconfig FcConfigAppFontAddFile. The
+  name->codepoint map is pure and unit-tested headlessly; the rasterized pixels
+  (and the non-Windows loaders) need a real machine + font to verify.
 
   Glyphs are stored as 'name=HEX' lines (e.g. save=F0C7) in the published Glyphs
   list, so they can be edited in the designer or loaded from a file. }
@@ -29,6 +31,9 @@ type
     FFontFamily: string;
     FFontFile: string;
     FLoadedFile: string;       // the file currently registered (for clean removal)
+    {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
+    FQtFontId: Integer;        // Qt application-font id (>=0) for removeApplicationFont
+    {$ENDIF}
     procedure SetGlyphs(AValue: TStringList);
     procedure SetFontFile(const AValue: string);
     procedure LoadFontFile(const APath: string);
@@ -56,7 +61,7 @@ type
     property FontFamily: string read FFontFamily write FFontFamily;
     { Optional path to a .ttf loaded PRIVATE to the process (Windows). Setting it
       registers the font; clearing/reassigning unregisters the previous one. }
-    property FontFile: string read FFontFile write SetFontFile;
+    property FontFile: string read FFontFile write SetFontFile;   // .ttf, loaded per-OS native
     { 'name=HEX' codepoint map, e.g. save=F0C7. }
     property Glyphs: TStringList read FGlyphs write SetGlyphs;
   end;
@@ -68,7 +73,23 @@ function TyParseCodepoint(const AHex: string): Cardinal;
 implementation
 
 uses
-  LazUTF8;
+  LazUTF8
+  {$IFDEF LCLQt5}, qt5{$ENDIF}
+  {$IFDEF LCLQt6}, qt6{$ENDIF}
+  {$IFDEF LCLCocoa}, MacOSAll{$ENDIF}
+  ;
+
+{$IFDEF LCLGtk2}
+// GTK2/Pango resolve fonts through fontconfig; FPC ships no fontconfig binding, so
+// declare the two C calls we need (libfontconfig is already linked by the GTK2 stack).
+// FcConfigAppFontAddFile adds an app-scoped font file to the CURRENT config; contexts
+// created AFTER this see the family (load at startup, before drawing).
+type
+  PFcConfig = Pointer;
+function FcConfigGetCurrent: PFcConfig; cdecl; external 'fontconfig';
+function FcConfigAppFontAddFile(config: PFcConfig; fileName: PAnsiChar): LongInt;
+  cdecl; external 'fontconfig';
+{$ENDIF}
 
 {$IFDEF WINDOWS}
 // FPC's Windows unit does not export the *Ex font APIs; declare them. Use the
@@ -108,6 +129,9 @@ begin
   inherited Create(AOwner);
   FGlyphs := TStringList.Create;
   FGlyphs.NameValueSeparator := '=';
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
+  FQtFontId := -1;
+  {$ENDIF}
 end;
 
 destructor TTyIconFont.Destroy;
@@ -181,8 +205,19 @@ begin
 end;
 
 procedure TTyIconFont.LoadFontFile(const APath: string);
-{$IFDEF WINDOWS}
-var w: UnicodeString;
+{$IF DEFINED(WINDOWS) OR DEFINED(LCLQt5) OR DEFINED(LCLQt6) OR DEFINED(LCLCocoa)}
+var
+  {$IFDEF WINDOWS}
+  w: UnicodeString;
+  {$ENDIF}
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
+  ws: WideString;
+  {$ENDIF}
+  {$IFDEF LCLCocoa}
+  url: CFURLRef;
+  err: CFErrorRef;
+  u8: RawByteString;
+  {$ENDIF}
 {$ENDIF}
 begin
   if (APath = '') or (not FileExists(APath)) then Exit;
@@ -191,12 +226,42 @@ begin
   if AddFontResourceEx(PWideChar(w), FR_PRIVATE, nil) > 0 then
     FLoadedFile := APath;
   {$ENDIF}
-  // Non-Windows: no-op — install the family, or add a widgetset loader later.
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
+  ws := UTF8ToUTF16(APath);                          // Qt takes a QString (PWideString)
+  FQtFontId := QFontDatabase_addApplicationFont(@ws);
+  if FQtFontId >= 0 then FLoadedFile := APath;       // font ids start at 0; -1 = failure
+  {$ENDIF}
+  {$IFDEF LCLCocoa}
+  u8 := APath;                                        // UTF-8 filesystem path
+  url := CFURLCreateFromFileSystemRepresentation(nil, CStringPtr(PAnsiChar(u8)),
+    Length(u8), False);
+  if url <> nil then
+  try
+    err := nil;
+    if CTFontManagerRegisterFontsForURL(url, kCTFontManagerScopeProcess, err) <> 0 then
+      FLoadedFile := APath;
+  finally
+    CFRelease(url);
+  end;
+  {$ENDIF}
+  {$IFDEF LCLGtk2}
+  // fontconfig wants the raw UTF-8 path; new Pango contexts then resolve the family.
+  if FcConfigAppFontAddFile(FcConfigGetCurrent, PAnsiChar(APath)) <> 0 then
+    FLoadedFile := APath;
+  {$ENDIF}
 end;
 
 procedure TTyIconFont.UnloadFontFile;
-{$IFDEF WINDOWS}
-var w: UnicodeString;
+{$IF DEFINED(WINDOWS) OR DEFINED(LCLCocoa)}
+var
+  {$IFDEF WINDOWS}
+  w: UnicodeString;
+  {$ENDIF}
+  {$IFDEF LCLCocoa}
+  url: CFURLRef;
+  err: CFErrorRef;
+  u8: RawByteString;
+  {$ENDIF}
 {$ENDIF}
 begin
   {$IFDEF WINDOWS}
@@ -205,6 +270,32 @@ begin
     w := UTF8ToUTF16(FLoadedFile);
     RemoveFontResourceEx(PWideChar(w), FR_PRIVATE, nil);
   end;
+  {$ENDIF}
+  {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
+  if FQtFontId >= 0 then
+  begin
+    QFontDatabase_removeApplicationFont(FQtFontId);
+    FQtFontId := -1;
+  end;
+  {$ENDIF}
+  {$IFDEF LCLCocoa}
+  if FLoadedFile <> '' then
+  begin
+    u8 := FLoadedFile;
+    url := CFURLCreateFromFileSystemRepresentation(nil, CStringPtr(PAnsiChar(u8)),
+      Length(u8), False);
+    if url <> nil then
+    try
+      err := nil;
+      CTFontManagerUnregisterFontsForURL(url, kCTFontManagerScopeProcess, err);
+    finally
+      CFRelease(url);
+    end;
+  end;
+  {$ENDIF}
+  {$IFDEF LCLGtk2}
+  // fontconfig has no per-file app-font removal (only FcConfigAppFontClear wipes ALL),
+  // so an added font stays registered for the process lifetime — nothing to undo here.
   {$ENDIF}
   FLoadedFile := '';
 end;
