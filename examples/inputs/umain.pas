@@ -12,7 +12,8 @@ uses
   tyControls.Controller, tyControls.Form,
   tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.MaskEdit,
   tyControls.URLEdit, tyControls.ComboEdit, tyControls.TrackEdit,
-  tyControls.ColorBox, tyControls.TyLabel;
+  tyControls.ColorBox, tyControls.ColorListBox, tyControls.FontComboBox,
+  tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -24,6 +25,8 @@ type
     FCombo: TTyComboEdit;
     FTrack: TTyTrackEdit;
     FColor: TTyColorBox;
+    FColorList: TTyColorListBox;
+    FFont: TTyFontComboBox;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
@@ -53,12 +56,12 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  L1, L2, L3, L4, L5, L6, L7, L8, L9, LHint: TTyLabel;
+  L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, LHint: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 460, 572);
+  SetBounds(0, 0, 640, 600);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -164,14 +167,32 @@ begin
   FColor.Parent := Self;
   FColor.SetBounds(240, 404, 180, 28);
 
+  // 字体组合框(FontComboBox:每项用自己的字体画)
+  L10 := TTyLabel.Create(Self);
+  L10.Parent := Self;
+  L10.SetBounds(24, 452, 200, 20);
+  L10.Caption := '字体(TTyFontComboBox):';
+  FFont := TTyFontComboBox.Create(Self);
+  FFont.Parent := Self;
+  FFont.SetBounds(240, 448, 180, 28);
+
+  // 颜色列表(ColorListBox:右侧常驻列表,每行色块+名)
+  L11 := TTyLabel.Create(Self);
+  L11.Parent := Self;
+  L11.SetBounds(440, 52, 190, 20);
+  L11.Caption := '颜色列表(TTyColorListBox):';
+  FColorList := TTyColorListBox.Create(Self);
+  FColorList.Parent := Self;
+  FColorList.SetBounds(440, 76, 180, 300);
+
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;
-  FEcho.SetBounds(24, 448, 410, 20);
+  FEcho.SetBounds(24, 496, 400, 20);
   FEcho.Caption := '限幅值 = 42.00';
 
   LHint := TTyLabel.Create(Self);
   LHint.Parent := Self;
-  LHint.SetBounds(24, 492, 410, 40);
+  LHint.SetBounds(24, 536, 400, 40);
   LHint.Caption := '试试:只能输数字 / 负号 / 小数点;聚焦时去掉千分位方便编辑,'
     + '失焦后重新分组;限幅框输入 >100 的值,失焦后夹紧到 100。';
 

@@ -73,6 +73,10 @@ procedure GComboEdit(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Line(b,6,9
 procedure GTrackEdit(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Line(b,6,12,18,12,Faint,1.4); FillCirc(b,13,12,2,Acc); end;
 { TTyColorBox: a combo box with an accent colour swatch + a drop chevron }
 procedure GColorBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); FillRRect(b,6,9.5,11,14.5,1,Acc); PolyL(b,[PointF(14,10.8),PointF(16.5,13.4),PointF(19,10.8)],Ink,1.4); end;
+{ TTyColorListBox: a list box with swatch rows }
+procedure GColorListBox(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); FillRRect(b,5.5,7,8.5,10,0.6,Acc); Line(b,10.5,8.5,18,8.5,Faint,1.2); FillRRect(b,5.5,10.8,8.5,13.8,0.6,Ink); Line(b,10.5,12.3,18,12.3,Faint,1.2); FillRRect(b,5.5,14.6,8.5,17.6,0.6,Faint); Line(b,10.5,16.1,18,16.1,Faint,1.2); end;
+{ TTyFontComboBox: a combo box with an "A" glyph + a drop chevron }
+procedure GFontComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); PolyL(b,[PointF(6,15),PointF(8.5,9),PointF(11,15)],Acc,1.6); Line(b,7,12.6,10,12.6,Acc,1.2); PolyL(b,[PointF(14,10.8),PointF(16.5,13.4),PointF(19,10.8)],Ink,1.4); end;
 procedure GCheckBox(b: TBGRABitmap); begin RRect(b,4,4,20,20,3,Ink); PolyL(b,[PointF(8,12.4),PointF(11,15.4),PointF(16,8.6)],Acc,2.2); end;
 procedure GRadio(b: TBGRABitmap); begin Circ(b,12,12,8,Ink); FillCirc(b,12,12,3.1,Acc); end;
 procedure GCombo(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); PolyL(b,[PointF(13.5,10.8),PointF(16,13.4),PointF(18.5,10.8)],Ink); end;
@@ -401,7 +405,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..86] of TGlyph = (
+  Glyphs: array[0..88] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -412,6 +416,8 @@ const
     (Name:'TTyComboEdit';       Draw:@GComboEdit),
     (Name:'TTyTrackEdit';       Draw:@GTrackEdit),
     (Name:'TTyColorBox';        Draw:@GColorBox),
+    (Name:'TTyColorListBox';    Draw:@GColorListBox),
+    (Name:'TTyFontComboBox';    Draw:@GFontComboBox),
     (Name:'TTyCheckBox';        Draw:@GCheckBox),
     (Name:'TTyRadioButton';     Draw:@GRadio),
     (Name:'TTyComboBox';        Draw:@GCombo),

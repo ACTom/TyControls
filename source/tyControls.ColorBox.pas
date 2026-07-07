@@ -10,6 +10,18 @@ uses
 function TyTColorToTy(AColor: TColor): TTyColor;
 { The colour carried in AItems.Objects[AIndex] (clNone if out of range). }
 function TyColorOfItem(AItems: TStrings; AIndex: Integer): TColor;
+{ Append (AName, AColor) to AItems, storing the colour intrinsically in Objects[]. }
+procedure TyAddColorItem(AItems: TStrings; const AName: string; AColor: TColor);
+{ Fill AItems with the classic 16-colour VGA palette (via TyAddColorItem). }
+procedure TyAddDefaultColorPalette(AItems: TStrings);
+{ Index to select for AColor: the matching item, or a freshly-appended '#RRGGBB' item;
+  -1 for clNone (clear). The caller assigns the result to its ItemIndex. Shared by the
+  colour combo + list so the (review-hardened) select-or-append logic lives in one place. }
+function TySelectColorIndex(AItems: TStrings; AColor: TColor): Integer;
+{ Draw a colour swatch (left) + name (right) into ARect; AFontSize is the caller's resolved
+  size. Shared by the colour combo field, its popup list, and TTyColorListBox. }
+procedure TyDrawColorRow(P: TTyPainter; const ARect: TRect; AColor: TColor;
+  const AName: string; const AStyle: TTyStyleSet; AFontSize: Integer);
 
 type
   { Drop-down list for TTyColorBox: draws a colour swatch + name per row via the
@@ -66,6 +78,45 @@ begin
     Result := clNone;
 end;
 
+procedure TyAddColorItem(AItems: TStrings; const AName: string; AColor: TColor);
+begin
+  AItems.AddObject(AName, TObject(PtrInt(AColor)));
+end;
+
+procedure TyAddDefaultColorPalette(AItems: TStrings);
+begin
+  TyAddColorItem(AItems, 'Black',   clBlack);
+  TyAddColorItem(AItems, 'Maroon',  clMaroon);
+  TyAddColorItem(AItems, 'Green',   clGreen);
+  TyAddColorItem(AItems, 'Olive',   clOlive);
+  TyAddColorItem(AItems, 'Navy',    clNavy);
+  TyAddColorItem(AItems, 'Purple',  clPurple);
+  TyAddColorItem(AItems, 'Teal',    clTeal);
+  TyAddColorItem(AItems, 'Gray',    clGray);
+  TyAddColorItem(AItems, 'Silver',  clSilver);
+  TyAddColorItem(AItems, 'Red',     clRed);
+  TyAddColorItem(AItems, 'Lime',    clLime);
+  TyAddColorItem(AItems, 'Yellow',  clYellow);
+  TyAddColorItem(AItems, 'Blue',    clBlue);
+  TyAddColorItem(AItems, 'Fuchsia', clFuchsia);
+  TyAddColorItem(AItems, 'Aqua',    clAqua);
+  TyAddColorItem(AItems, 'White',   clWhite);
+end;
+
+function TySelectColorIndex(AItems: TStrings; AColor: TColor): Integer;
+var
+  i: Integer;
+  target: LongInt;
+begin
+  if AColor = clNone then Exit(-1);   // clear
+  target := ColorToRGB(AColor);
+  for i := 0 to AItems.Count - 1 do
+    if ColorToRGB(TyColorOfItem(AItems, i)) = target then Exit(i);
+  // Not present: append a hex-named item and select it.
+  TyAddColorItem(AItems, Format('#%.2x%.2x%.2x', [Red(target), Green(target), Blue(target)]), AColor);
+  Result := AItems.Count - 1;
+end;
+
 { Shared swatch-row draw: a square colour swatch on the left + the name to its right.
   AFontSize is the caller's resolved size (list rows differ from the field). }
 procedure TyDrawColorRow(P: TTyPainter; const ARect: TRect; AColor: TColor;
@@ -108,22 +159,7 @@ constructor TTyColorBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // Curated 16-colour palette (the classic VGA names). Users can ClearColors + AddColor.
-  AddColor('Black',   clBlack);
-  AddColor('Maroon',  clMaroon);
-  AddColor('Green',   clGreen);
-  AddColor('Olive',   clOlive);
-  AddColor('Navy',    clNavy);
-  AddColor('Purple',  clPurple);
-  AddColor('Teal',    clTeal);
-  AddColor('Gray',    clGray);
-  AddColor('Silver',  clSilver);
-  AddColor('Red',     clRed);
-  AddColor('Lime',    clLime);
-  AddColor('Yellow',  clYellow);
-  AddColor('Blue',    clBlue);
-  AddColor('Fuchsia', clFuchsia);
-  AddColor('Aqua',    clAqua);
-  AddColor('White',   clWhite);
+  TyAddDefaultColorPalette(Items);
   if Items.Count > 0 then ItemIndex := 0;
 end;
 
@@ -142,7 +178,7 @@ end;
 procedure TTyColorBox.AddColor(const AName: string; AColor: TColor);
 begin
   // Store the colour in the item's Objects[] so it can never desync from the name.
-  Items.AddObject(AName, TObject(PtrInt(AColor)));
+  TyAddColorItem(Items, AName, AColor);
 end;
 
 function TTyColorBox.ColorAt(AIndex: Integer): TColor;
@@ -156,25 +192,8 @@ begin
 end;
 
 procedure TTyColorBox.SetSelected(const AValue: TColor);
-var
-  i: Integer;
-  target: LongInt;
 begin
-  if AValue = clNone then
-  begin
-    ItemIndex := -1;   // clear (mirrors GetSelected returning clNone for ItemIndex < 0)
-    Exit;
-  end;
-  target := ColorToRGB(AValue);
-  for i := 0 to Items.Count - 1 do
-    if ColorToRGB(ColorAt(i)) = target then
-    begin
-      ItemIndex := i;
-      Exit;
-    end;
-  // Not in the palette: append a hex-named item and select it.
-  AddColor(Format('#%.2x%.2x%.2x', [Red(target), Green(target), Blue(target)]), AValue);
-  ItemIndex := Items.Count - 1;
+  ItemIndex := TySelectColorIndex(Items, AValue);   // matches / appends / -1 for clNone
 end;
 
 function TTyColorBox.CreatePopupList: TTyListBox;

@@ -105,6 +105,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ColorBox"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.ColorListBox.pas"/>
+        <UnitName Value="tyControls.ColorListBox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.FontComboBox.pas"/>
+        <UnitName Value="tyControls.FontComboBox"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.CheckBox.pas"/>
         <UnitName Value="tyControls.CheckBox"/>
       </Item>
