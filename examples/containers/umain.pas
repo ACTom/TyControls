@@ -12,7 +12,8 @@ uses
   Classes, SysUtils, Graphics, Forms, Controls, BGRABitmap, BGRABitmapTypes, BGRACanvas2D,
   tyControls.Controller, tyControls.Form, tyControls.Types, tyControls.Painter,
   tyControls.ColorMath, tyControls.TyLabel, tyControls.Bevel, tyControls.Divider,
-  tyControls.PaintPanel, tyControls.SizeBox;
+  tyControls.PaintPanel, tyControls.SizeBox,
+  tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel;
 
 type
   TMainForm = class(TTyForm)
@@ -20,6 +21,7 @@ type
     FSurface: TTyPaintPanel;
     procedure PaintSurface(Sender: TObject; APainter: TTyPainter; const AContent: TRect);
     procedure BuildUI;
+    procedure BuildGroups(AX, AY: Integer);
     function Divider(const ACap: string; AAlign: TAlignment; AY: Integer): TTyDivider;
     function Bevel(AShape: TTyBevelShape; AStyle: TTyBevelStyle; AL, AT, AW, AH: Integer): TTyBevel;
     function Lbl(const AText: string; AL, AT: Integer): TTyLabel;
@@ -49,9 +51,9 @@ constructor TMainForm.Create(AOwner: TComponent);
 var Bar: TTyTitleBar;
 begin
   inherited CreateNew(AOwner, 0);
-  Caption := 'TyControls — 容器与布局(Phase 5 · Batch 1)';
+  Caption := 'TyControls — 容器与布局(Phase 5)';
   Position := poScreenCenter;
-  SetBounds(0, 0, 620, 470);
+  SetBounds(0, 0, 920, 520);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -107,6 +109,38 @@ begin
     TyColorFromLCL(clWhite, 255), taCenter, tlBottom, True);
 end;
 
+procedure TMainForm.BuildGroups(AX, AY: Integer);
+var RG: TTyRadioGroup; CG: TTyCheckGroup; TG: TTyToolGroupPanel;
+begin
+  Divider('分组容器 Radio / Check / ToolGroup', taLeftJustify, AY + 4);
+
+  RG := TTyRadioGroup.Create(Self);
+  RG.Parent := Self;
+  RG.Caption := '尺寸(2 列 · 互斥单选)';
+  RG.Columns := 2;
+  RG.Items.CommaText := '特小,小,中,大';
+  RG.ItemIndex := 1;
+  RG.SetBounds(AX, AY + 34, 260, 96);
+
+  CG := TTyCheckGroup.Create(Self);
+  CG.Parent := Self;
+  CG.Caption := '启用功能(2 列 · 独立多选)';
+  CG.Columns := 2;
+  CG.Items.CommaText := '自动保存,拼写检查,深色模式,行号,自动缩进,代码折叠';
+  CG.Checked[0] := True;
+  CG.Checked[2] := True;
+  CG.SetBounds(AX, AY + 142, 260, 120);
+
+  TG := TTyToolGroupPanel.Create(Self);
+  TG.Parent := Self;
+  TG.Caption := '剪贴板(流式工具按钮)';
+  TG.SetBounds(AX, AY + 274, 260, 100);
+  TG.AddButton('剪切');
+  TG.AddButton('复制');
+  TG.AddButton('粘贴');
+  TG.AddButton('格式刷');   // 放不下时自动换行
+end;
+
 procedure TMainForm.BuildUI;
 var grip: TTySizeBox; baseY: Integer;
 begin
@@ -131,6 +165,9 @@ begin
   FSurface.OnPaintSurface := @PaintSurface;
 
   Lbl('右下角 → 尺寸手柄 TTySizeBox(拖动改窗口大小)', 20, baseY + 386);
+
+  // —— 右栏:Batch 2 分组容器 ——
+  BuildGroups(430, baseY);
 
   // 右下角尺寸手柄:拖动缩放本窗体(Target 默认取 owner 窗体)。
   grip := TTySizeBox.Create(Self);

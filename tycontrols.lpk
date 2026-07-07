@@ -520,6 +520,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.SizeBox.pas"/>
         <UnitName Value="tyControls.SizeBox"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.RadioGroup.pas"/>
+        <UnitName Value="tyControls.RadioGroup"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.CheckGroup.pas"/>
+        <UnitName Value="tyControls.CheckGroup"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ToolGroupPanel.pas"/>
+        <UnitName Value="tyControls.ToolGroupPanel"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

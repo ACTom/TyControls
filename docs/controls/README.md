@@ -105,6 +105,9 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyDivider](divider.md) | 带标题的水平分割线（标题 + 细线，`Alignment` 决定标题左/中/右） |
 | [TTyPaintPanel](paintpanel.md) | 自绘表面面板（`OnPaintSurface` 把 `TTyPainter` 交给应用同遍绘制） |
 | [TTySizeBox](sizebox.md) | 右下角尺寸拖拽手柄 |
+| [TTyRadioGroup](radiogroup.md) | 单选组容器（`Items` 自动生成互斥单选,`Columns` 分列） |
+| [TTyCheckGroup](checkgroup.md) | 复选组容器（每项一复选框,各项独立） |
+| [TTyToolGroupPanel](toolgrouppanel.md) | 带标题的工具按钮组（Ribbon 组风格,流式换行 + `AddButton`） |
 
 ## 日期与时间
 

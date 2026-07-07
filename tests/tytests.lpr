@@ -14,6 +14,7 @@ uses
   test.hscolorpicker, test.advancedlistbox, test.advancedcombobox, test.checkcombobox, test.valuelisteditor,
   test.calculator, test.calcedit,
   test.bevel, test.divider, test.paintpanel, test.sizebox,
+  test.radiogroup, test.checkgroup, test.toolgrouppanel,
   test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
   test.controls.scrollbar, test.form, test.themes,

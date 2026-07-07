@@ -311,6 +311,32 @@ begin
   FillCirc(b,17,9,1.15,Ink);
 end;
 
+{ TTyRadioGroup: a group-box frame (caption stub) enclosing a selected + an unselected radio row }
+procedure GRadioGroup(b: TBGRABitmap);
+begin
+  RRect(b,4,7,20,20,2,Ink); Line(b,6.5,7,11.5,7,Acc,2.6);
+  Circ(b,8,12,2,Ink,1.2); FillCirc(b,8,12,0.9,Acc); Line(b,11.5,12,17,12,Faint,1.2);
+  Circ(b,8,16.5,2,Ink,1.2); Line(b,11.5,16.5,17,16.5,Faint,1.2);
+end;
+
+{ TTyCheckGroup: a titled group frame with two check rows — first ticked (accent), second empty }
+procedure GCheckGroup(b: TBGRABitmap);
+begin
+  RRect(b,3,6,21,20,2,Ink); Line(b,6,6,11,6,Acc,2.6);
+  RRect(b,6,9.5,9,12.5,0.6,Ink); PolyL(b,[PointF(6.4,11),PointF(7.3,11.9),PointF(8.7,10.1)],Acc,1.3);
+  Line(b,11,11,18,11,Faint,1.2);
+  RRect(b,6,14.5,9,17.5,0.6,Ink); Line(b,11,16,18,16,Faint,1.2);
+end;
+
+{ TTyToolGroupPanel: a group box with a bottom caption band + a row of small tool-button tiles }
+procedure GToolGroupPanel(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink); Line(b,3,16,21,16,Ink,1); Line(b,8,18,16,18,Faint);
+  FillRRect(b,5.5,6.5,9.5,13.5,1,Acc);
+  FillRRect(b,10.5,6.5,14.5,13.5,1,Faint);
+  FillRRect(b,15.5,6.5,19.5,13.5,1,Faint);
+end;
+
 { TTyCalendar: rounded rect with a top header bar + two rows of day dots }
 procedure GCalendar(b: TBGRABitmap);
 begin
@@ -475,7 +501,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..110] of TGlyph = (
+  Glyphs: array[0..113] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -586,7 +612,10 @@ const
     (Name:'TTyBevel';             Draw:@GBevel),
     (Name:'TTyDivider';           Draw:@GDivider),
     (Name:'TTyPaintPanel';        Draw:@GPaintPanel),
-    (Name:'TTySizeBox';           Draw:@GSizeBox)
+    (Name:'TTySizeBox';           Draw:@GSizeBox),
+    (Name:'TTyRadioGroup';        Draw:@GRadioGroup),
+    (Name:'TTyCheckGroup';        Draw:@GCheckGroup),
+    (Name:'TTyToolGroupPanel';    Draw:@GToolGroupPanel)
   );
 
 const

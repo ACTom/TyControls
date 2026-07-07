@@ -38,7 +38,8 @@ uses
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
-  tyControls.Bevel, tyControls.Divider, tyControls.PaintPanel, tyControls.SizeBox;
+  tyControls.Bevel, tyControls.Divider, tyControls.PaintPanel, tyControls.SizeBox,
+  tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -632,7 +633,8 @@ begin
     [TTyPageControl, TTyTabSheet, TTyTabSet, TTySplitter,
      TTyStatusBar, TTyToolBar, TTyToolSeparator, TTyTitleBar,
      TTyMenuBar, TTyPopupMenu, TTyCalendar, TTyDateTimePicker, TTyTreeView,
-     TTyBevel, TTyDivider, TTyPaintPanel, TTySizeBox]);
+     TTyBevel, TTyDivider, TTyPaintPanel, TTySizeBox,
+     TTyRadioGroup, TTyCheckGroup, TTyToolGroupPanel]);
   // Office-style ribbon parts.
   RegisterComponents('TyControls Ribbon',
     [TTyRibbon, TTyRibbonPage, TTyRibbonGroup, TTyRibbonAppMenu,
