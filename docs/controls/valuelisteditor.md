@@ -2,7 +2,9 @@
 
 ## 1. 概述
 
-TTyValueListEditor 是**名/值两列编辑器**(轻量「属性表」):每行是一对 `键=值`,存在继承来的 `Items`(一个 `TStringList`,故 `Items.Names[i]` / `Items.ValueFromIndex[i]` 就是两列)。**键列**是只读标签,**值列**用一个主题化 [TTyEdit](edit.md) 覆盖层**就地编辑**(点值单元格,或在选中行按 `F2` / `Enter`;`Enter`/失焦提交,`Esc` 取消)。两列的分界由 `KeyColumnWidth`(逻辑 px)控制。行布局、选择、滚动都来自 [TTyListBox](listbox.md);一条细的主题色分隔线隔开两列。用 `InsertRow`(或 `Items.Add('键=值')`)构建,用 `Keys[]` / `Values[]` / `ValueOf[]` 读写。
+TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是**键**(可展开的多级树,带三角),右列是**可编辑的值**,中间是**可拖动的分隔条**。每行是一个 `TTyValueRow` 对象——`Key`/`DisplayKey`、`Value`/`DisplayValue`、值类型 `EditorKind`、`ReadOnly`、逐行样式(`Bold`/`TextColor`/`ImageIndex`)以及**子行**(嵌套)。用 `AddRow`(返回行对象,便于嵌套 / 定类型 / 设样式)构建,或用简单的 `InsertRow(key, value)`。行布局、选择、滚动来自 [TTyListBox](listbox.md);值单元用主题化 [TTyEdit](edit.md) 覆盖层就地编辑。
+
+> **分层建设:** 本层(地基)= 行对象模型 + 多级树 + 分隔拖动 + 只读 + `DisplayKey`/`DisplayValue` + 值加粗/变色/图标 + **文本**内联编辑。**类型编辑器**(布尔 / 枚举 / 颜色下拉 / 字体 · "…" 对话框)按 `EditorKind` 分派,后续层加入。
 
 ---
 
@@ -11,6 +13,7 @@ TTyValueListEditor 是**名/值两列编辑器**(轻量「属性表」):每行�
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ValueListEditor` |
+| 类型 | `TTyValueListEditor` + `TTyValueRow` + `TTyValueEditorKind` |
 | typeKey | `'TyListBox'` / `'TyListItem'`(行)+ 值编辑器用 `'TyEdit'` |
 
 无新增 `.tycss`。
@@ -21,32 +24,33 @@ uses tyControls.ValueListEditor;
 
 ---
 
-## 3. 属性 / 方法 / 事件
+## 3. 关键成员
+
+**`TTyValueListEditor`**
 
 | 成员 | 说明 |
 |------|------|
-| `InsertRow(const AKey, AValue)` | 追加一行 `键=值`。 |
-| `DeleteRow(AIndex)` | 删除某行(会先结束进行中的编辑)。 |
-| `RowCount: Integer` | 行数。 |
-| `Keys[AIndex]: string` | 第 i 行的键(只读)。 |
-| `Values[AIndex]: string` | 第 i 行的值(读/写;写会提交并触发 `OnValueChanged`)。 |
-| `ValueOf[const AKey]: string` | 按键名读/写值(键不存在时读为 `''`)。 |
-| `BeginEdit(ARow)` | 就地编辑某行的值(`ReadOnly` 或越界时空操作)。 |
-| `EditingRow: Integer` | 正在编辑的行,或 `-1`。 |
-| `KeyColumnWidth: Integer` | 键列宽度 / 分界线位置(逻辑 px,默认 100)。 |
-| `ReadOnly: Boolean` | 为 `True` 时值列不可编辑(仅显示)。 |
-| `OnValueChanged` | 值提交且发生变化后触发(带行号 / 键 / 新值)。 |
+| `AddRow(AKey, AValue): TTyValueRow` | 追加一根行,返回它(可继续 `AddChild` 嵌套 / 设 `EditorKind` / 样式)。 |
+| `InsertRow(AKey, AValue)` | 简单形式,追加纯文本根行。 |
+| `Row(AIndex): TTyValueRow` / `RowCount` | 第 i 根行 / 根行数。 |
+| `VisibleRowCount` | 可见(展开后)行数。 |
+| `Keys[i]` / `Values[i]` / `ValueOf[key]` | 根行的键/值读写(`Values[]` 写会触发 `OnValueChanged`)。 |
+| `DeleteRow(i)` / `Clear` | 删根行 / 清空。 |
+| `SetExpanded(ARow, bool)` | 展开/收起。 |
+| `UpdateRows` | 直接 `AddChild` 加了子行后调用,刷新可见列表。 |
+| `KeyColumnWidth` | 键列宽 / 分隔线位置(逻辑 px,默认 110,可拖)。 |
+| `ReadOnly` / `Images` / `OnValueChanged(Sender, ARow)` | 全局只读 / 值单元图像源 / 值提交事件。 |
 
-另继承 `TTyListBox` 的 `Items` / `ItemIndex` / `OnChange` 等。
+**`TTyValueRow`**:`Key`、`DisplayKey`、`Value`、`DisplayValue`、`EditorKind`、`EnumValues`、`ReadOnly`、`Bold`、`TextColor`、`ImageIndex`、`Expanded`;`AddChild(k,v)` / `ChildCount` / `Child[i]` / `HasChildren` / `EffectiveKey` / `EffectiveValue`。
 
 ---
 
 ## 4. 交互
 
-- **点值列** → 就地弹出编辑框改该行的值;**点键列** → 仅选中该行(并提交正在进行的编辑)。
-- 选中行按 **`F2` / `Enter`** → 开始编辑值。
-- 编辑中:**`Enter`** / 点别处 / 失焦 → 提交;**`Esc`** → 取消。
-- 编程 `Values[i] := ...` / `ValueOf['键'] := ...` 直接改值。
+- **点值列** → 就地编辑(文本);**点键列** → 选中该行。选中行按 **F2 / Enter** 也进入编辑。
+- **点键列前的三角** → 展开/收起子行。
+- **拖分隔条**(光标变 ↔)→ 调整键/值列宽。
+- 编辑中:**Enter** / 点别处 / 失焦 → 提交;**Esc** → 取消。`ReadOnly` 行 / 全局 `ReadOnly` 不可编辑。
 
 ---
 
@@ -55,25 +59,28 @@ uses tyControls.ValueListEditor;
 ```pascal
 uses tyControls.Controller, tyControls.ValueListEditor;
 
-var VLE: TTyValueListEditor;
+var VLE: TTyValueListEditor; Row: TTyValueRow;
 VLE := TTyValueListEditor.Create(Self);
-VLE.Parent := Self;
-VLE.SetBounds(20, 20, 260, 180);
-VLE.KeyColumnWidth := 90;
-VLE.InsertRow('宽度', '100');
-VLE.InsertRow('高度', '50');
-VLE.InsertRow('标题', '未命名');
-VLE.OnValueChanged := @HandleValueChanged;   // (Sender; ARow; const AKey, AValue: string)
-// 读回:VLE.ValueOf['宽度']
+VLE.Parent := Self; VLE.SetBounds(20, 20, 300, 240);
+VLE.InsertRow('宽度', '1280');
+
+Row := VLE.AddRow('主题', 'light.tycss');
+Row.DisplayKey := '主题(只读)';      // 显示名覆盖(国际化 / 特殊显示)
+Row.ReadOnly := True;
+
+Row := VLE.AddRow('Font', '(TFont)');  // 多级
+Row.AddChild('Size', '9');
+Row.AddChild('Bold', 'False');
+VLE.UpdateRows;                        // 直接加子行后刷新
+
+VLE.OnValueChanged := @HandleChange;   // (Sender; ARow: TTyValueRow)
 ```
 
 ---
 
 ## 6. 注意事项
 
-- **每行是 `键=值`:** `Items.NameValueSeparator` 被设为 `'='`;别把不含 `=` 的裸串塞进 `Items`。
-- **值列可编辑、键列只读:** 首版键作为标签(不可改);需要改键名可另起扩展。
-- **内联编辑器是内部子控件:** 打了 `csNoDesignVisible`,不会漏进窗体设计器;`Enter`/失焦提交、`Esc` 取消(同 TreeView 内联编辑);编辑器主题跟随本控件的 `Controller`。
-- **编辑时列表滚动会先提交并关闭编辑器**(编辑器无法跟着行走);改列宽 / 缩放会让打开的编辑器随动;删掉正在编辑的行或其上方的行会取消编辑。
-- **不要排序:** 值编辑器的行序是有意义的;`Sorted` 无意义(提交时会强制取消排序以避免 `TStringList` 报错)。键不能含 `=`(首个 `=` 即键/值分界),但值可以含 `=`。
-- **交互是真机验证项:** 纯数据逻辑(增删 / 读写 / 按键名 / 空值 / 列宽钳制 / 只读拦截 / 排序不崩溃 / 值含等号)已 headless 单测;就地编辑器的显示、聚焦、滚动提交、销毁安全需真机验证。
+- **`AddChild` 后要 `UpdateRows`:** 行对象是直接被你改的,控件观察不到;`AddRow` / `InsertRow` / `DeleteRow` / `SetExpanded` 会自己刷新,只有直接 `AddChild` 需要手动 `UpdateRows`。
+- **`DisplayKey`/`DisplayValue`:** 仅影响显示,不改实际 `Key`/`Value`(供 i18n / 格式化);值单元还可带 `ImageIndex`(图文)+ `Bold` / `TextColor`。
+- **内联编辑器是内部子控件:** `csNoDesignVisible`,不漏进设计器;`Enter`/失焦提交、`Esc` 取消,主题跟随 `Controller`;滚动会先提交并关闭。
+- **交互是真机验证项:** 数据 / 嵌套 / 展开 / 显示覆盖 / 只读 / 列宽钳制已 headless 单测;分隔拖动、三角点击、内联编辑器显示需真机验证。

@@ -54,7 +54,7 @@ type
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
     procedure LumChange(Sender: TObject);
-    procedure VleChange(Sender: TObject; ARow: Integer; const AKey, AValue: string);
+    procedure VleChange(Sender: TObject; ARow: TTyValueRow);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -86,6 +86,7 @@ var
   Icf: TTyIconFont;
   Coll: TTyImageCollection;
   Imgs: TTyVirtualImageList;
+  VR: TTyValueRow;
 
   { Rasterise one system-symbol glyph into the collection + register it in the image list.
     (No .ttf shipped, so this uses a Unicode symbol via the system font — same placeholder
@@ -426,8 +427,15 @@ begin
   FVLE.KeyColumnWidth := 96;
   FVLE.InsertRow('宽度', '1280');
   FVLE.InsertRow('高度', '800');
-  FVLE.InsertRow('标题', 'Rich Inputs 示例');
-  FVLE.InsertRow('主题', 'light.tycss');
+  FVLE.AddRow('标题', 'Rich Inputs 示例');
+  VR := FVLE.AddRow('主题', 'light.tycss');   // 只读行 + 显示名覆盖(国际化)
+  VR.DisplayKey := '主题(只读)';
+  VR.ReadOnly := True;
+  VR := FVLE.AddRow('Font', '(TFont)');       // 可展开的多级行
+  VR.AddChild('Size', '9');
+  VR.AddChild('Bold', 'False');
+  VR.AddChild('Color', 'clWindowText');
+  FVLE.UpdateRows;                              // 加了子行后刷新
   FVLE.OnValueChanged := @VleChange;
 
   // 计算器下拉(CalcEdit / CalcCurrencyEdit:点尾部按钮弹计算器,= 或关闭写回),放 VLE 右侧
@@ -481,9 +489,9 @@ begin
   FHS.Value := FLColor.Position;
 end;
 
-procedure TMainForm.VleChange(Sender: TObject; ARow: Integer; const AKey, AValue: string);
+procedure TMainForm.VleChange(Sender: TObject; ARow: TTyValueRow);
 begin
-  FEcho.Caption := Format('改了「%s」= %s  (第 %d 行)', [AKey, AValue, ARow]);
+  FEcho.Caption := Format('改了「%s」= %s', [ARow.Key, ARow.Value]);
 end;
 
 end.
