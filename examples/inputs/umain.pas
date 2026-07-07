@@ -18,7 +18,8 @@ uses
   tyControls.ColorComboBox, tyControls.MRUComboBox, tyControls.ComboBoxEx,
   tyControls.OfficeListBox, tyControls.OfficeComboBox, tyControls.ColorGrid,
   tyControls.LColorPicker, tyControls.HSColorPicker, tyControls.CheckComboBox,
-  tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.TyLabel;
+  tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.ValueListEditor,
+  tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -46,10 +47,12 @@ type
     FHS: TTyHSColorPicker;
     FAdvList: TTyAdvancedListBox;
     FAdvCombo: TTyAdvancedComboBox;
+    FVLE: TTyValueListEditor;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
     procedure LumChange(Sender: TObject);
+    procedure VleChange(Sender: TObject; ARow: Integer; const AKey, AValue: string);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -77,7 +80,7 @@ constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
   L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, L13, L14: TTyLabel;
-  L15, L16, L17, L18, L19, L20, L21, L22, L23, LHint: TTyLabel;
+  L15, L16, L17, L18, L19, L20, L21, L22, L23, L24, LHint: TTyLabel;
   Icf: TTyIconFont;
   Coll: TTyImageCollection;
   Imgs: TTyVirtualImageList;
@@ -102,7 +105,7 @@ begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 1300, 600);
+  SetBounds(0, 0, 1300, 800);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -410,6 +413,21 @@ begin
   FAdvCombo.AddItem('打印', '发送到打印机', 2);
   FAdvCombo.ItemIndex := 0;
 
+  // 名/值编辑器(ValueListEditor:属性表,值列内联编辑),放底部
+  L24 := TTyLabel.Create(Self);
+  L24.Parent := Self;
+  L24.SetBounds(24, 600, 340, 20);
+  L24.Caption := '名/值编辑器(TTyValueListEditor,点值列 / F2 编辑):';
+  FVLE := TTyValueListEditor.Create(Self);
+  FVLE.Parent := Self;
+  FVLE.SetBounds(24, 624, 360, 160);
+  FVLE.KeyColumnWidth := 96;
+  FVLE.InsertRow('宽度', '1280');
+  FVLE.InsertRow('高度', '800');
+  FVLE.InsertRow('标题', 'Rich Inputs 示例');
+  FVLE.InsertRow('主题', 'light.tycss');
+  FVLE.OnValueChanged := @VleChange;
+
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;
   FEcho.SetBounds(24, 496, 400, 20);
@@ -439,6 +457,11 @@ procedure TMainForm.LumChange(Sender: TObject);
 begin
   // 明度条驱动 HS 方块的亮度:两个控件合成一个经典 HSL 取色器。
   FHS.Value := FLColor.Position;
+end;
+
+procedure TMainForm.VleChange(Sender: TObject; ARow: Integer; const AKey, AValue: string);
+begin
+  FEcho.Caption := Format('改了「%s」= %s  (第 %d 行)', [AKey, AValue, ARow]);
 end;
 
 end.

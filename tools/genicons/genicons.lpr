@@ -95,6 +95,8 @@ procedure GAdvancedListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Fill
 procedure GAdvancedComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); FillRRect(b,5,9.5,9,13.5,0.6,Acc); Line(b,10.5,10.6,15,10.6,Ink,1.3); Line(b,10.5,12.8,13.5,12.8,Faint,1); PolyL(b,[PointF(16.5,10.8),PointF(18,12.6),PointF(19.5,10.8)],Ink,1.2); end;
 { TTyCheckComboBox: a combo box with a ticked checkbox + a drop chevron }
 procedure GCheckComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); RRect(b,5.5,9.5,9,13,0.6,Ink); PolyL(b,[PointF(6,11.2),PointF(6.9,12.1),PointF(8.4,10.3)],Acc,1.3); PolyL(b,[PointF(15.5,10.8),PointF(17.5,13),PointF(19.5,10.8)],Ink,1.3); end;
+{ TTyValueListEditor: a 2-column name/value grid — a divider + key tiles left, value lines right }
+procedure GValueListEditor(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); Line(b,10,5,10,19,Faint,1); FillRRect(b,5,7,8.5,8.8,0.3,Acc); Line(b,11.5,7.9,18,7.9,Faint,1.1); FillRRect(b,5,11,8.5,12.8,0.3,Faint); Line(b,11.5,11.9,16,11.9,Faint,1.1); FillRRect(b,5,15,8.5,16.8,0.3,Faint); Line(b,11.5,15.9,17,15.9,Faint,1.1); end;
 { TTyColorListBox: a list box with swatch rows }
 procedure GColorListBox(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); FillRRect(b,5.5,7,8.5,10,0.6,Acc); Line(b,10.5,8.5,18,8.5,Faint,1.2); FillRRect(b,5.5,10.8,8.5,13.8,0.6,Ink); Line(b,10.5,12.3,18,12.3,Faint,1.2); FillRRect(b,5.5,14.6,8.5,17.6,0.6,Faint); Line(b,10.5,16.1,18,16.1,Faint,1.2); end;
 { TTyFontComboBox: a combo box with an "A" glyph + a drop chevron }
@@ -433,7 +435,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..102] of TGlyph = (
+  Glyphs: array[0..103] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -455,6 +457,7 @@ const
     (Name:'TTyAdvancedListBox'; Draw:@GAdvancedListBox),
     (Name:'TTyAdvancedComboBox';Draw:@GAdvancedComboBox),
     (Name:'TTyCheckComboBox';   Draw:@GCheckComboBox),
+    (Name:'TTyValueListEditor'; Draw:@GValueListEditor),
     (Name:'TTyColorListBox';    Draw:@GColorListBox),
     (Name:'TTyFontComboBox';    Draw:@GFontComboBox),
     (Name:'TTyFontListBox';     Draw:@GFontListBox),

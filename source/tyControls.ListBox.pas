@@ -34,7 +34,6 @@ type
     procedure ItemsChanged(Sender: TObject);
     procedure SetItemIndex(const AValue: Integer);
     procedure SetItemHeight(const AValue: Integer);
-    procedure SetTopIndex(const AValue: Integer);
     function ScaledItemHeight: Integer;
     function MaxTopIndex: Integer;
     procedure EnsureSelectionVisible;
@@ -58,6 +57,10 @@ type
     // Row index at client device Y (or -1 if outside any item). For subclasses that
     // hit-test rows, e.g. TTyCheckListBox's checkbox column.
     function RowAtY(AY: Integer): Integer;
+    { TopIndex setter — protected virtual so a subclass with an inline editor
+      (TTyValueListEditor) can commit/close it before the list scrolls (all scroll paths —
+      wheel, scrollbar, keyboard auto-scroll — funnel through here). }
+    procedure SetTopIndex(const AValue: Integer); virtual;
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;

@@ -14,6 +14,7 @@ uses
   tyControls.OfficeListBox, tyControls.OfficeComboBox,
   tyControls.ColorGrid, tyControls.LColorPicker, tyControls.HSColorPicker,
   tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.CheckComboBox,
+  tyControls.ValueListEditor,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
   tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.Gauge,
@@ -607,7 +608,7 @@ begin
      TTyMemo, TTyCheckBox, TTyRadioButton,
      TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox, TTyAdvancedComboBox,
      TTyCheckComboBox,
-     TTyListBox, TTyCheckListBox, TTyOfficeListBox, TTyAdvancedListBox,
+     TTyListBox, TTyCheckListBox, TTyOfficeListBox, TTyAdvancedListBox, TTyValueListEditor,
      TTySpinEdit, TTyUpDown, TTyToggleSwitch, TTyTrackBar, TTyProgressBar, TTyScrollBar,
      TTyPanel, TTyGroupBox, TTyStyleController]);
   // Rich pickers: colour / font / value selectors (Phase 4 B/C/E).
