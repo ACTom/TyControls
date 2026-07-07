@@ -14,7 +14,7 @@ uses
   tyControls.URLEdit, tyControls.ComboEdit, tyControls.TrackEdit,
   tyControls.ColorBox, tyControls.ColorListBox, tyControls.FontComboBox,
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.CheckListBox,
-  tyControls.TyLabel;
+  tyControls.ColorComboBox, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -31,6 +31,7 @@ type
     FFontList: TTyFontListBox;
     FSize: TTyFontSizeComboBox;
     FCheckList: TTyCheckListBox;
+    FColorCombo: TTyColorComboBox;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
@@ -60,7 +61,7 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, L13, LHint: TTyLabel;
+  L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, L13, L14, LHint: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
@@ -220,6 +221,16 @@ begin
   FCheckList.Items.Add('显示行号 Line numbers');
   FCheckList.Checked[0] := True;
   FCheckList.Checked[2] := True;
+
+  // 颜色组合框 + "更多…"(ColorComboBox:下拉选"更多…"开取色对话框)
+  L14 := TTyLabel.Create(Self);
+  L14.Parent := Self;
+  L14.SetBounds(640, 380, 190, 20);
+  L14.Caption := '颜色 + 更多(TTyColorComboBox):';
+  FColorCombo := TTyColorComboBox.Create(Self);
+  FColorCombo.Parent := Self;
+  FColorCombo.SetBounds(640, 404, 180, 28);
+  FColorCombo.MoreCaption := '更多颜色…';
 
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;

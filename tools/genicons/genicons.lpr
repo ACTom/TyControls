@@ -73,6 +73,8 @@ procedure GComboEdit(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Line(b,6,9
 procedure GTrackEdit(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Line(b,6,12,18,12,Faint,1.4); FillCirc(b,13,12,2,Acc); end;
 { TTyColorBox: a combo box with an accent colour swatch + a drop chevron }
 procedure GColorBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); FillRRect(b,6,9.5,11,14.5,1,Acc); PolyL(b,[PointF(14,10.8),PointF(16.5,13.4),PointF(19,10.8)],Ink,1.4); end;
+{ TTyColorComboBox: a colour combo with a "+" (more…) + a drop chevron }
+procedure GColorComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); FillRRect(b,5.5,9.5,9.5,14.5,1,Acc); Line(b,12,12,14.5,12,Ink,1.2); Line(b,13.25,10.75,13.25,13.25,Ink,1.2); PolyL(b,[PointF(16,10.8),PointF(17.5,12.6),PointF(19,10.8)],Ink,1.3); end;
 { TTyColorListBox: a list box with swatch rows }
 procedure GColorListBox(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); FillRRect(b,5.5,7,8.5,10,0.6,Acc); Line(b,10.5,8.5,18,8.5,Faint,1.2); FillRRect(b,5.5,10.8,8.5,13.8,0.6,Ink); Line(b,10.5,12.3,18,12.3,Faint,1.2); FillRRect(b,5.5,14.6,8.5,17.6,0.6,Faint); Line(b,10.5,16.1,18,16.1,Faint,1.2); end;
 { TTyFontComboBox: a combo box with an "A" glyph + a drop chevron }
@@ -411,7 +413,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..91] of TGlyph = (
+  Glyphs: array[0..92] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -422,6 +424,7 @@ const
     (Name:'TTyComboEdit';       Draw:@GComboEdit),
     (Name:'TTyTrackEdit';       Draw:@GTrackEdit),
     (Name:'TTyColorBox';        Draw:@GColorBox),
+    (Name:'TTyColorComboBox';   Draw:@GColorComboBox),
     (Name:'TTyColorListBox';    Draw:@GColorListBox),
     (Name:'TTyFontComboBox';    Draw:@GFontComboBox),
     (Name:'TTyFontListBox';     Draw:@GFontListBox),

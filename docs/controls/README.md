@@ -58,6 +58,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyComboEdit](comboedit.md) | 带下拉按钮的编辑框（OnDropDown 弹任意 popup，组合式基座） |
 | [TTyTrackEdit](trackedit.md) | 数值编辑框 + 内嵌迷你滑块（拖动设值，NumericEdit 派生） |
 | [TTyColorBox](colorbox.md) | 命名颜色组合框（字段/下拉每项色块+名，逐项自绘地基控件） |
+| [TTyColorComboBox](colorcombobox.md) | ColorBox + “更多…”行开取色对话框 |
 | [TTyColorListBox](colorlistbox.md) | 命名颜色列表框（ColorBox 的列表版，每行色块+名） |
 | [TTyFontComboBox](fontcombobox.md) | 字体族组合框（每项用自己的字体画，所见即所得） |
 | [TTyFontListBox](fontlistbox.md) | 字体族列表框（FontComboBox 的列表版） |
