@@ -39,6 +39,7 @@ type
     procedure TestDragResizesExplicitTarget;
     procedure TestDragClampsToTargetMinConstraint;
     procedure TestDragOutsideGripDoesNothing;
+    procedure TestButtonlessMoveStopsDrag;
     procedure TestGripDotsDerivedFromBorderColor;
   end;
 
@@ -333,6 +334,41 @@ begin
 
     AssertEquals('width unchanged (no drag started)', 200, Victim.Width);
     AssertEquals('height unchanged (no drag started)', 150, Victim.Height);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TSizeBoxControlTest.TestButtonlessMoveStopsDrag;
+var
+  F: TForm;
+  Acc: TSizeBoxAccess;
+  Victim: TControl;
+  gx, gy: Integer;
+begin
+  // A stolen/missed MouseUp (capture theft, modal, Alt+Tab) leaves the drag armed; a later
+  // button-less move (Shift=[]) must NOT keep resizing — the ssLeft guard clears the drag.
+  F := TForm.CreateNew(nil);
+  try
+    F.SetBounds(0, 0, 400, 400);
+    Victim := TControl.Create(F);
+    Victim.Parent := F;
+    Victim.SetBounds(10, 10, 200, 150);
+
+    Acc := TSizeBoxAccess.Create(F);
+    Acc.Parent := F;
+    Acc.Font.PixelsPerInch := 96;
+    Acc.SetBounds(300, 300, 16, 16);
+    Acc.Target := Victim;
+
+    gx := 15; gy := 15;
+    Acc.PressLeft([], gx, gy);            // drag armed
+    Acc.DragTo([], gx + 50, gy + 30);     // button NOT held -> guard bails, no resize
+    AssertEquals('width unchanged on button-less move', 200, Victim.Width);
+    AssertEquals('height unchanged on button-less move', 150, Victim.Height);
+    // The drag was cleared, so even a subsequent ssLeft move does nothing (must re-press).
+    Acc.DragTo([ssLeft], gx + 80, gy + 60);
+    AssertEquals('still unchanged — drag was cleared, not just skipped', 200, Victim.Width);
   finally
     F.Free;
   end;

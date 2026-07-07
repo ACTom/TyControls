@@ -193,6 +193,9 @@ var
 begin
   inherited MouseMove(Shift, X, Y);
   if not FDragging then Exit;
+  // If the left button is no longer held (a stolen/missed MouseUp — capture theft, modal, Alt+Tab),
+  // stop dragging instead of resizing under a released cursor on later button-less hover moves.
+  if not (ssLeft in Shift) then begin FDragging := False; Exit; end;
   tgt := ResolveTarget;
   if tgt = nil then Exit;
   scr := ClientToScreen(Point(X, Y));

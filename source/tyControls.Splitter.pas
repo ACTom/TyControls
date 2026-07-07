@@ -180,6 +180,9 @@ var
 begin
   inherited MouseMove(Shift, X, Y);
   if not FDragging then Exit;
+  // Left button no longer held (stolen/missed MouseUp — capture theft, modal, Alt+Tab): stop
+  // dragging rather than resize under a released cursor on later button-less hover moves.
+  if not (ssLeft in Shift) then begin FDragging := False; Exit; end;
   if Vertical then delta := ClientToScreen(Point(X, Y)).X - FMouseStart
   else delta := ClientToScreen(Point(X, Y)).Y - FMouseStart;
   if FResizeStyle = rsUpdate then
