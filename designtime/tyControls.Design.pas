@@ -12,7 +12,8 @@ uses
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.CheckListBox,
   tyControls.ColorComboBox, tyControls.MRUComboBox, tyControls.ComboBoxEx,
   tyControls.OfficeListBox, tyControls.OfficeComboBox,
-  tyControls.ColorGrid, tyControls.LColorPicker,
+  tyControls.ColorGrid, tyControls.LColorPicker, tyControls.HSColorPicker,
+  tyControls.AdvancedListBox, tyControls.AdvancedComboBox,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
   tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.Gauge,
@@ -604,14 +605,14 @@ begin
     [TTyButton, TTyLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
      TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit, TTyTrackEdit,
      TTyMemo, TTyCheckBox, TTyRadioButton,
-     TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox,
-     TTyListBox, TTyCheckListBox, TTyOfficeListBox,
+     TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox, TTyAdvancedComboBox,
+     TTyListBox, TTyCheckListBox, TTyOfficeListBox, TTyAdvancedListBox,
      TTySpinEdit, TTyUpDown, TTyToggleSwitch, TTyTrackBar, TTyProgressBar, TTyScrollBar,
      TTyPanel, TTyGroupBox, TTyStyleController]);
   // Rich pickers: colour / font / value selectors (Phase 4 B/C/E).
   RegisterComponents('TyControls Pickers',
     [TTyColorBox, TTyColorComboBox, TTyColorListBox, TTyColorGrid, TTyLColorPicker,
-     TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox]);
+     TTyHSColorPicker, TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox]);
   // Command / specialized buttons.
   RegisterComponents('TyControls Buttons',
     [TTyGlyphButton, TTyGlyphContainerButton, TTySpeedButton,

@@ -87,6 +87,12 @@ procedure GOfficeComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); FillR
 procedure GColorGrid(b: TBGRABitmap); begin FillRRect(b,5,5,9.5,9.5,0.6,Acc); FillRRect(b,10.5,5,15,9.5,0.6,Faint); FillRRect(b,16,5,20.5,9.5,0.6,Ink); FillRRect(b,5,10.5,9.5,15,0.6,Faint); FillRRect(b,10.5,10.5,15,15,0.6,Ink); FillRRect(b,16,10.5,20.5,15,0.6,Acc); FillRRect(b,5,16,9.5,20.5,0.6,Ink); FillRRect(b,10.5,16,15,20.5,0.6,Acc); FillRRect(b,16,16,20.5,20.5,0.6,Faint); RRect(b,10,10,15.5,15.5,0.8,Acc,1.6); end;
 { TTyLColorPicker: a vertical brightness bar (light->accent->dark) + a marker triangle }
 procedure GLColorPicker(b: TBGRABitmap); begin RRect(b,8,3,16,21,1.5,Ink); FillRRect(b,9,4,15,8.5,0,Faint); FillRRect(b,9,8.5,15,14,0,Acc); FillRRect(b,9,14,15,20,0,Ink); Line(b,7,11,17,11,Ink,1.6); FillPolyG(b,[PointF(17.6,11),PointF(19,9.7),PointF(19,12.3)],Acc); end;
+{ TTyHSColorPicker: a hue/sat square with an accent gradient corner + a crosshair marker }
+procedure GHSColorPicker(b: TBGRABitmap); begin RRect(b,4,4,20,20,2,Ink); FillRRect(b,5,5,19,19,1,Faint); FillPolyG(b,[PointF(5,5),PointF(15,5),PointF(5,15)],Acc); Circ(b,9.5,9.5,2.2,Ink,1.4); Line(b,9.5,6.4,9.5,12.6,Ink,0.9); Line(b,6.4,9.5,12.6,9.5,Ink,0.9); end;
+{ TTyAdvancedListBox: rich rows = an image tile + a title line + a dim subtitle line }
+procedure GAdvancedListBox(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); FillRRect(b,5,6,9,10,0.6,Acc); Line(b,10.5,7,18,7,Ink,1.3); Line(b,10.5,9.2,15,9.2,Faint,1); FillRRect(b,5,13,9,17,0.6,Faint); Line(b,10.5,14,18,14,Ink,1.3); Line(b,10.5,16.2,15,16.2,Faint,1); end;
+{ TTyAdvancedComboBox: a combo box with an image tile + title + subtitle + a drop chevron }
+procedure GAdvancedComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); FillRRect(b,5,9.5,9,13.5,0.6,Acc); Line(b,10.5,10.6,15,10.6,Ink,1.3); Line(b,10.5,12.8,13.5,12.8,Faint,1); PolyL(b,[PointF(16.5,10.8),PointF(18,12.6),PointF(19.5,10.8)],Ink,1.2); end;
 { TTyColorListBox: a list box with swatch rows }
 procedure GColorListBox(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); FillRRect(b,5.5,7,8.5,10,0.6,Acc); Line(b,10.5,8.5,18,8.5,Faint,1.2); FillRRect(b,5.5,10.8,8.5,13.8,0.6,Ink); Line(b,10.5,12.3,18,12.3,Faint,1.2); FillRRect(b,5.5,14.6,8.5,17.6,0.6,Faint); Line(b,10.5,16.1,18,16.1,Faint,1.2); end;
 { TTyFontComboBox: a combo box with an "A" glyph + a drop chevron }
@@ -425,7 +431,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..98] of TGlyph = (
+  Glyphs: array[0..101] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -443,6 +449,9 @@ const
     (Name:'TTyOfficeComboBox';  Draw:@GOfficeComboBox),
     (Name:'TTyColorGrid';       Draw:@GColorGrid),
     (Name:'TTyLColorPicker';    Draw:@GLColorPicker),
+    (Name:'TTyHSColorPicker';   Draw:@GHSColorPicker),
+    (Name:'TTyAdvancedListBox'; Draw:@GAdvancedListBox),
+    (Name:'TTyAdvancedComboBox';Draw:@GAdvancedComboBox),
     (Name:'TTyColorListBox';    Draw:@GColorListBox),
     (Name:'TTyFontComboBox';    Draw:@GFontComboBox),
     (Name:'TTyFontListBox';     Draw:@GFontListBox),

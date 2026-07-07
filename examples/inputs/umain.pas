@@ -17,7 +17,8 @@ uses
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.CheckListBox,
   tyControls.ColorComboBox, tyControls.MRUComboBox, tyControls.ComboBoxEx,
   tyControls.OfficeListBox, tyControls.OfficeComboBox, tyControls.ColorGrid,
-  tyControls.LColorPicker, tyControls.TyLabel;
+  tyControls.LColorPicker, tyControls.HSColorPicker,
+  tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -41,9 +42,13 @@ type
     FOfficeList: TTyOfficeListBox;
     FColorGrid: TTyColorGrid;
     FLColor: TTyLColorPicker;
+    FHS: TTyHSColorPicker;
+    FAdvList: TTyAdvancedListBox;
+    FAdvCombo: TTyAdvancedComboBox;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
+    procedure LumChange(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -71,7 +76,7 @@ constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
   L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, L13, L14: TTyLabel;
-  L15, L16, L17, L18, L19, LHint: TTyLabel;
+  L15, L16, L17, L18, L19, L20, L21, L22, LHint: TTyLabel;
   Icf: TTyIconFont;
   Coll: TTyImageCollection;
   Imgs: TTyVirtualImageList;
@@ -96,7 +101,7 @@ begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 1060, 600);
+  SetBounds(0, 0, 1300, 600);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -345,6 +350,48 @@ begin
   FLColor.Hue := 210;
   FLColor.Sat := 0.8;
   FLColor.Position := 0.6;
+  FLColor.OnChange := @LumChange;   // 拖明度条 → 驱动 HS 方块的亮度(经典 HSL 联动)
+
+  // ---- 第 5 列 ----
+  // 色相×饱和度取色方块(HSColorPicker:2D 拖动选 Hue/Sat;亮度由上面的 LColorPicker 驱动)
+  L20 := TTyLabel.Create(Self);
+  L20.Parent := Self;
+  L20.SetBounds(1080, 52, 220, 20);
+  L20.Caption := 'HS 取色方块(TTyHSColorPicker):';
+  FHS := TTyHSColorPicker.Create(Self);
+  FHS.Parent := Self;
+  FHS.SetBounds(1080, 76, 180, 130);
+  FHS.Hue := 210;
+  FHS.Sat := 0.8;
+  FHS.Value := 0.6;   // 与 FLColor.Position 一致;拖 L 条会更新它
+
+  // 富行列表(AdvancedListBox:每行 图标 + 加粗标题 + 暗色副标题;复用上面的 Imgs)
+  L21 := TTyLabel.Create(Self);
+  L21.Parent := Self;
+  L21.SetBounds(1080, 218, 220, 20);
+  L21.Caption := '富行列表(TTyAdvancedListBox):';
+  FAdvList := TTyAdvancedListBox.Create(Self);
+  FAdvList.Parent := Self;
+  FAdvList.SetBounds(1080, 242, 200, 150);
+  FAdvList.Images := Imgs;
+  FAdvList.AddItem('保存草稿', '未同步 · 2 分钟前', 0);
+  FAdvList.AddItem('打开项目', 'D:\work\ty-controls', 1);
+  FAdvList.AddItem('打印报表', '默认打印机', 2);
+  FAdvList.AddItem('无图标项', '副标题可留空', -1);
+
+  // 富行组合框(AdvancedComboBox:下拉两行富项,字段显图标+标题)
+  L22 := TTyLabel.Create(Self);
+  L22.Parent := Self;
+  L22.SetBounds(1080, 404, 220, 20);
+  L22.Caption := '富行组合(TTyAdvancedComboBox):';
+  FAdvCombo := TTyAdvancedComboBox.Create(Self);
+  FAdvCombo.Parent := Self;
+  FAdvCombo.SetBounds(1080, 428, 200, 28);
+  FAdvCombo.Images := Imgs;
+  FAdvCombo.AddItem('保存', '写入磁盘', 0);
+  FAdvCombo.AddItem('打开', '选择文件', 1);
+  FAdvCombo.AddItem('打印', '发送到打印机', 2);
+  FAdvCombo.ItemIndex := 0;
 
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;
@@ -369,6 +416,12 @@ procedure TMainForm.ComboDrop(Sender: TObject);
 begin
   // 真实用法:在这里弹颜色格 / 计算器 / 日期选择器,选完写回 FCombo.Text。
   FCombo.Text := '你点了下拉按钮!';
+end;
+
+procedure TMainForm.LumChange(Sender: TObject);
+begin
+  // 明度条驱动 HS 方块的亮度:两个控件合成一个经典 HSL 取色器。
+  FHS.Value := FLColor.Position;
 end;
 
 end.

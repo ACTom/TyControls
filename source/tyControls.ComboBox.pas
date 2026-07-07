@@ -499,17 +499,17 @@ begin
 end;
 
 function TTyComboBox.ComputePopupHeight(APPI: Integer): Integer;
-const
-  { The dropdown popup uses a default TTyListBox, whose ItemHeight default is 24
-    (TTyListBox.ItemHeight default). The popup never overrides it. }
-  cPopupRowHeight = 24;
 var
-  ScaledIH, VisibleRows: Integer;
+  RowH, ScaledIH, VisibleRows: Integer;
 begin
-  { Visible rows = min(Items.Count, DropDownCount); each row scaled to the given
-    PPI; plus the 2px popup frame chrome. Single source of the sizing formula —
-    DropDown calls this so the live popup and the headless calc stay in sync. }
-  ScaledIH := MulDiv(cPopupRowHeight, APPI, 96);
+  { Row height = the popup list's ItemHeight (a subclass may draw taller rich rows —
+    e.g. TTyAdvancedComboBox uses 40); fall back to the TTyListBox default (24) before the
+    popup list exists (headless calc). Visible rows = min(Items.Count, DropDownCount), each
+    scaled to the given PPI, + the 2px popup frame chrome. Single source of the sizing
+    formula — DropDown calls this so the live popup and the headless calc stay in sync. }
+  RowH := 24;
+  if FPopupList <> nil then RowH := FPopupList.ItemHeight;
+  ScaledIH := MulDiv(RowH, APPI, 96);
   VisibleRows := Min(FItems.Count, FDropDownCount);
   Result := VisibleRows * ScaledIH + 2;
 end;
@@ -631,7 +631,10 @@ begin
 
   { Height off the FILTERED count (mirrors ComputePopupHeight's formula but on
     FVisibleItems, which is what is actually shown). }
-  ScaledIH    := MulDiv(24, Font.PixelsPerInch, 96);   // cPopupRowHeight = 24
+  if FPopupList <> nil then                            // honour a subclass's taller rows
+    ScaledIH := MulDiv(FPopupList.ItemHeight, Font.PixelsPerInch, 96)
+  else
+    ScaledIH := MulDiv(24, Font.PixelsPerInch, 96);
   VisibleRows := Min(FVisibleItems.Count, FDropDownCount);
   PopupH      := VisibleRows * ScaledIH + 2;
 

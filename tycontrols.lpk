@@ -153,6 +153,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.LColorPicker"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.HSColorPicker.pas"/>
+        <UnitName Value="tyControls.HSColorPicker"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvancedListBox.pas"/>
+        <UnitName Value="tyControls.AdvancedListBox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvancedComboBox.pas"/>
+        <UnitName Value="tyControls.AdvancedComboBox"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.CheckBox.pas"/>
         <UnitName Value="tyControls.CheckBox"/>
       </Item>

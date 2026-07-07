@@ -62,6 +62,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyColorListBox](colorlistbox.md) | 命名颜色列表框（ColorBox 的列表版，每行色块+名） |
 | [TTyColorGrid](colorgrid.md) | 色板网格（网格排列色块，点格选色，16 色默认调色板） |
 | [TTyLColorPicker](lcolorpicker.md) | 明度取色竖条（固定色相/饱和度，拖动取明度值） |
+| [TTyHSColorPicker](hscolorpicker.md) | 色相×饱和度取色方块（2D，配 LColorPicker 成 HSL 取色器，拖动选色） |
 | [TTyFontComboBox](fontcombobox.md) | 字体族组合框（每项用自己的字体画，所见即所得） |
 | [TTyFontListBox](fontlistbox.md) | 字体族列表框（FontComboBox 的列表版） |
 | [TTyFontSizeComboBox](fontsizecombobox.md) | 可编辑字号组合框（预设 6…72，也可手输） |
@@ -79,6 +80,8 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyCheckListBox](checklistbox.md) | 每行带勾选框的列表（勾选状态存 Objects，排序不错位；空格 / 点框切换） |
 | [TTyOfficeListBox](officelistbox.md) | 带不可选分组标题行的列表框（Office 风格分组） |
 | [TTyOfficeComboBox](officecombobox.md) | 带分组标题行的组合框（下拉按组分节，标题行不可选） |
+| [TTyAdvancedListBox](advancedlistbox.md) | 富行列表框（每行 图标 + 加粗标题 + 暗色副标题） |
+| [TTyAdvancedComboBox](advancedcombobox.md) | 富行组合框（下拉每项 图标+标题+副标题；字段显图标+标题） |
 | [TTyListBox](listbox.md) | 列表框：键盘导航、内嵌自动滚动条 |
 | [TTyTreeView](treeview.md) | 虚拟树（VirtualTreeView 级）：百万节点、多列 + 排序、复选 + 三态 + 单选、多选 + 整行、内联编辑、节点拖放、逐单元格自绘 |
 
