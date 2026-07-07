@@ -64,9 +64,19 @@ begin
 end;
 
 function TTyCheckListBox.CheckZoneWidth: Integer;
+var
+  s: TTyStyleSet;
+  sh, pad, sz: Integer;
 begin
-  // The checkbox is a square ~row-height wide on the left; that whole column toggles.
-  Result := MulDiv(ItemHeight, Font.PixelsPerInch, 96);
+  // Everything left of the item TEXT is the toggle column: the row's left padding + the
+  // checkbox square (row-height minus insets) + a gap. Tracks the actual box geometry
+  // (same as PaintItemContent) rather than assuming a fixed width.
+  s := CurrentStyle;
+  sh := MulDiv(ItemHeight, Font.PixelsPerInch, 96);
+  pad := MulDiv(4, Font.PixelsPerInch, 96);
+  sz := sh - 2 * pad;
+  if sz < 6 then sz := 6;
+  Result := MulDiv(s.Padding.Left, Font.PixelsPerInch, 96) + pad + sz + pad;
 end;
 
 procedure TTyCheckListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
@@ -106,7 +116,9 @@ begin
   // Let the base handle focus + row selection first, THEN toggle if the click landed in the
   // checkbox column (so clicking a checkbox both selects the row and flips its check).
   inherited MouseDown(Button, Shift, X, Y);
-  if (Button = mbLeft) and (Shift = []) and (X < CheckZoneWidth) then
+  // NOTE: in LCL, MouseDown's Shift set INCLUDES the pressed button (ssLeft), so do NOT
+  // gate on `Shift = []` — that is never true during a left click.
+  if (Button = mbLeft) and (X < CheckZoneWidth) then
   begin
     row := RowAtY(Y);
     if row >= 0 then ToggleCheck(row);

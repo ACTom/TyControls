@@ -139,7 +139,7 @@ begin
   FUrl := TTyURLEdit.Create(Self);
   FUrl.Parent := Self;
   FUrl.SetBounds(240, 272, 180, 28);
-  FUrl.Text := 'https://gitee.com/';
+  FUrl.Text := 'https://github.com/ACTom/TyControls';
 
   // 下拉(ComboEdit:点按钮触发 OnDropDown,弹什么由你决定)
   L7 := TTyLabel.Create(Self);
