@@ -3,7 +3,7 @@ unit tyControls.Dialogs.Font;
 interface
 uses
   Classes, SysUtils, Types, Graphics, Controls, Forms,
-  tyControls.Dialogs, tyControls.ListBox, tyControls.SpinEdit,
+  tyControls.Dialogs, tyControls.ListBox, tyControls.FontListBox, tyControls.SpinEdit,
   tyControls.CheckBox, tyControls.Button, tyControls.TyLabel,
   tyControls.Painter, tyControls.ColorMath,
   tyControls.Dialogs.Color, tyControls.StrConsts;
@@ -18,7 +18,7 @@ type
     Seed a TFont with SeedFrom; write the chosen values back with WriteTo. }
   TTyFontForm = class(TTyDialog)
   private
-    FList: TTyListBox; FSize: TTySpinEdit;
+    FList: TTyFontListBox; FSize: TTySpinEdit;   // WYSIWYG: each family in its own typeface
     FBold, FItalic, FUnderline, FStrike: TTyCheckBox;
     FColorBtn: TTyButton; FColorValue: TColor;
     FPreviewRect: TRect;
@@ -137,7 +137,7 @@ begin
   // Left column: family label + list. Height is finalized in LayoutContent so it
   // stretches to just above the preview strip; seed a reasonable initial height.
   MkLabel(rsDlgFontFamily, x0, y0, cListW);
-  FList := TTyListBox.Create(Self);
+  FList := TTyFontListBox.Create(Self);
   FList.Parent := Self;
   FList.SetBounds(x0, y0 + cLabelH + cLabelGap, cListW, cListMinH);
 
