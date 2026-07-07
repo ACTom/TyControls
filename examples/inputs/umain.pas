@@ -13,7 +13,7 @@ uses
   tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.MaskEdit,
   tyControls.URLEdit, tyControls.ComboEdit, tyControls.TrackEdit,
   tyControls.ColorBox, tyControls.ColorListBox, tyControls.FontComboBox,
-  tyControls.TyLabel;
+  tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -27,6 +27,8 @@ type
     FColor: TTyColorBox;
     FColorList: TTyColorListBox;
     FFont: TTyFontComboBox;
+    FFontList: TTyFontListBox;
+    FSize: TTyFontSizeComboBox;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
@@ -56,7 +58,7 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, LHint: TTyLabel;
+  L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, LHint: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
@@ -174,7 +176,13 @@ begin
   L10.Caption := '字体(TTyFontComboBox):';
   FFont := TTyFontComboBox.Create(Self);
   FFont.Parent := Self;
-  FFont.SetBounds(240, 448, 180, 28);
+  FFont.SetBounds(240, 448, 128, 28);
+
+  // 字号(FontSizeComboBox:可编辑,预设 + 手输),紧挨字体框
+  FSize := TTyFontSizeComboBox.Create(Self);
+  FSize.Parent := Self;
+  FSize.SetBounds(372, 448, 48, 28);
+  FSize.FontSize := 14;
 
   // 颜色列表(ColorListBox:右侧常驻列表,每行色块+名)
   L11 := TTyLabel.Create(Self);
@@ -183,7 +191,16 @@ begin
   L11.Caption := '颜色列表(TTyColorListBox):';
   FColorList := TTyColorListBox.Create(Self);
   FColorList.Parent := Self;
-  FColorList.SetBounds(440, 76, 180, 300);
+  FColorList.SetBounds(440, 76, 180, 296);
+
+  // 字体列表(FontListBox:右侧,每行用自己的字体画)
+  L12 := TTyLabel.Create(Self);
+  L12.Parent := Self;
+  L12.SetBounds(440, 380, 190, 20);
+  L12.Caption := '字体列表(TTyFontListBox):';
+  FFontList := TTyFontListBox.Create(Self);
+  FFontList.Parent := Self;
+  FFontList.SetBounds(440, 404, 180, 164);
 
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;

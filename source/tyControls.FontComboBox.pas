@@ -6,6 +6,12 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Base,
   tyControls.ListBox, tyControls.ComboBox;
 
+{ Draw AFontName into ARect USING AFontName as the typeface (WYSIWYG), inset by the style
+  padding; AFontSize is the caller's resolved size. Shared by the font combo's popup list
+  and TTyFontListBox. }
+procedure TyDrawFontRow(P: TTyPainter; const ARect: TRect; const AFontName: string;
+  const AStyle: TTyStyleSet; AFontSize: Integer);
+
 type
   { The drop-down list for TTyFontComboBox: each row is drawn IN ITS OWN font (the row's
     text is a font-family name, so it is rendered using that family). }
@@ -37,17 +43,23 @@ type
 
 implementation
 
+procedure TyDrawFontRow(P: TTyPainter; const ARect: TRect; const AFontName: string;
+  const AStyle: TTyStyleSet; AFontSize: Integer);
+begin
+  P.DrawText(
+    Rect(ARect.Left + P.Scale(AStyle.Padding.Left), ARect.Top,
+         ARect.Right - P.Scale(AStyle.Padding.Right), ARect.Bottom),
+    AFontName, AFontName, AFontSize, AStyle.FontWeight, AStyle.TextColor,
+    taLeftJustify, tlCenter, True);
+end;
+
 { TTyFontPopupList }
 
 procedure TTyFontPopupList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
   // Font name = the row's own text -> draw it in that very family (WYSIWYG).
-  P.DrawText(
-    Rect(ARowRect.Left + P.Scale(AStyle.Padding.Left), ARowRect.Top,
-         ARowRect.Right - P.Scale(AStyle.Padding.Right), ARowRect.Bottom),
-    Items[AIndex], Items[AIndex], ResolveFontSize(AStyle), AStyle.FontWeight,
-    AStyle.TextColor, taLeftJustify, tlCenter, True);
+  TyDrawFontRow(P, ARowRect, Items[AIndex], AStyle, ResolveFontSize(AStyle));
 end;
 
 { TTyFontComboBox }
