@@ -71,6 +71,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 
 | 控件 | 说明 |
 |------|------|
+| [TTyCheckListBox](checklistbox.md) | 每行带勾选框的列表（勾选状态存 Objects，排序不错位；空格 / 点框切换） |
 | [TTyListBox](listbox.md) | 列表框：键盘导航、内嵌自动滚动条 |
 | [TTyTreeView](treeview.md) | 虚拟树（VirtualTreeView 级）：百万节点、多列 + 排序、复选 + 三态 + 单选、多选 + 整行、内联编辑、节点拖放、逐单元格自绘 |
 

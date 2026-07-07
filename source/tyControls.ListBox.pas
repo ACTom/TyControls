@@ -55,6 +55,9 @@ type
     // resolved 'TyListItem' style for the row's current state. Used by TTyColorListBox etc.
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); virtual;
+    // Row index at client device Y (or -1 if outside any item). For subclasses that
+    // hit-test rows, e.g. TTyCheckListBox's checkbox column.
+    function RowAtY(AY: Integer): Integer;
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -843,6 +846,15 @@ begin
     AStyle.TextColor,
     taLeftJustify, tlCenter, True
   );
+end;
+
+function TTyListBox.RowAtY(AY: Integer): Integer;
+var SH: Integer;
+begin
+  SH := ScaledItemHeight;
+  if SH <= 0 then Exit(-1);
+  Result := FTopIndex + (AY div SH);
+  if (Result < 0) or (Result >= FItems.Count) then Result := -1;
 end;
 
 procedure TTyListBox.Paint;

@@ -9,7 +9,7 @@ uses
   tyControls.Button, tyControls.TyLabel, tyControls.Edit, tyControls.NumericEdit,
   tyControls.CurrencyEdit, tyControls.MaskEdit, tyControls.URLEdit, tyControls.ComboEdit,
   tyControls.TrackEdit, tyControls.ColorBox, tyControls.ColorListBox, tyControls.FontComboBox,
-  tyControls.FontListBox, tyControls.FontSizeComboBox,
+  tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.CheckListBox,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
   tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.Gauge,
@@ -600,7 +600,7 @@ begin
   RegisterComponents('TyControls',
     [TTyButton, TTyLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
      TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit, TTyTrackEdit,
-     TTyMemo, TTyCheckBox, TTyRadioButton, TTyComboBox, TTyListBox,
+     TTyMemo, TTyCheckBox, TTyRadioButton, TTyComboBox, TTyListBox, TTyCheckListBox,
      TTySpinEdit, TTyUpDown, TTyToggleSwitch, TTyTrackBar, TTyProgressBar, TTyScrollBar,
      TTyPanel, TTyGroupBox, TTyStyleController]);
   // Rich pickers: colour / font / value selectors (Phase 4 B/C/E).

@@ -13,7 +13,8 @@ uses
   tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.MaskEdit,
   tyControls.URLEdit, tyControls.ComboEdit, tyControls.TrackEdit,
   tyControls.ColorBox, tyControls.ColorListBox, tyControls.FontComboBox,
-  tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.TyLabel;
+  tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.CheckListBox,
+  tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -29,6 +30,7 @@ type
     FFont: TTyFontComboBox;
     FFontList: TTyFontListBox;
     FSize: TTyFontSizeComboBox;
+    FCheckList: TTyCheckListBox;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
@@ -58,12 +60,12 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, LHint: TTyLabel;
+  L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, L13, LHint: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 640, 600);
+  SetBounds(0, 0, 840, 600);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -201,6 +203,23 @@ begin
   FFontList := TTyFontListBox.Create(Self);
   FFontList.Parent := Self;
   FFontList.SetBounds(440, 404, 180, 164);
+
+  // 勾选列表(CheckListBox:点框 / 空格切换,勾选状态存 Objects)
+  L13 := TTyLabel.Create(Self);
+  L13.Parent := Self;
+  L13.SetBounds(640, 52, 190, 20);
+  L13.Caption := '勾选列表(TTyCheckListBox):';
+  FCheckList := TTyCheckListBox.Create(Self);
+  FCheckList.Parent := Self;
+  FCheckList.SetBounds(640, 76, 180, 280);
+  FCheckList.Items.Add('粗体 Bold');
+  FCheckList.Items.Add('斜体 Italic');
+  FCheckList.Items.Add('下划线 Underline');
+  FCheckList.Items.Add('删除线 Strikeout');
+  FCheckList.Items.Add('自动换行 Word wrap');
+  FCheckList.Items.Add('显示行号 Line numbers');
+  FCheckList.Checked[0] := True;
+  FCheckList.Checked[2] := True;
 
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;

@@ -121,6 +121,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.FontSizeComboBox"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.CheckListBox.pas"/>
+        <UnitName Value="tyControls.CheckListBox"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.CheckBox.pas"/>
         <UnitName Value="tyControls.CheckBox"/>
       </Item>
