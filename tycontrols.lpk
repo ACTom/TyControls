@@ -165,6 +165,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvancedComboBox"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.CheckComboBox.pas"/>
+        <UnitName Value="tyControls.CheckComboBox"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.CheckBox.pas"/>
         <UnitName Value="tyControls.CheckBox"/>
       </Item>

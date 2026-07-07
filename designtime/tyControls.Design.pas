@@ -13,7 +13,7 @@ uses
   tyControls.ColorComboBox, tyControls.MRUComboBox, tyControls.ComboBoxEx,
   tyControls.OfficeListBox, tyControls.OfficeComboBox,
   tyControls.ColorGrid, tyControls.LColorPicker, tyControls.HSColorPicker,
-  tyControls.AdvancedListBox, tyControls.AdvancedComboBox,
+  tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.CheckComboBox,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
   tyControls.ScrollBar, tyControls.Form,
   tyControls.ListBox, tyControls.ProgressBar, tyControls.Gauge,
@@ -606,6 +606,7 @@ begin
      TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit, TTyTrackEdit,
      TTyMemo, TTyCheckBox, TTyRadioButton,
      TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox, TTyAdvancedComboBox,
+     TTyCheckComboBox,
      TTyListBox, TTyCheckListBox, TTyOfficeListBox, TTyAdvancedListBox,
      TTySpinEdit, TTyUpDown, TTyToggleSwitch, TTyTrackBar, TTyProgressBar, TTyScrollBar,
      TTyPanel, TTyGroupBox, TTyStyleController]);

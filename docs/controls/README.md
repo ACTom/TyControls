@@ -78,6 +78,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | 控件 | 说明 |
 |------|------|
 | [TTyCheckListBox](checklistbox.md) | 每行带勾选框的列表（勾选状态存 Objects，排序不错位；空格 / 点框切换） |
+| [TTyCheckComboBox](checkcombobox.md) | 下拉勾选组合框（多选、弹层常开，字段显勾选汇总） |
 | [TTyOfficeListBox](officelistbox.md) | 带不可选分组标题行的列表框（Office 风格分组） |
 | [TTyOfficeComboBox](officecombobox.md) | 带分组标题行的组合框（下拉按组分节，标题行不可选） |
 | [TTyAdvancedListBox](advancedlistbox.md) | 富行列表框（每行 图标 + 加粗标题 + 暗色副标题） |

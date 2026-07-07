@@ -89,6 +89,10 @@ type
     { Fires when the editable (csDropDown) field loses focus with committed text.
       Default no-op; TTyMRUComboBox overrides it to remember the typed value. }
     procedure DoEditorCommit; virtual;
+    { A row was picked in the popup (the csDropDownList path). Default: commit it via
+      UserSelect and close the dropdown. TTyCheckComboBox overrides this to toggle a
+      checkbox and KEEP the popup open (multi-select) instead of committing/closing. }
+    procedure DoPopupPick(AIndex: Integer); virtual;
     procedure DoDropDown; virtual;
     procedure DoCloseUp; virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -257,6 +261,12 @@ end;
 procedure TTyComboBox.DoEditorCommit;
 begin
   // default: no-op (see TTyMRUComboBox)
+end;
+
+procedure TTyComboBox.DoPopupPick(AIndex: Integer);
+begin
+  UserSelect(AIndex);                                 // commit the picked row...
+  Application.QueueAsyncCall(@DeferredCloseUp, 0);     // ...and close the dropdown
 end;
 
 procedure TTyComboBox.DoDropDown;
@@ -786,8 +796,7 @@ begin
     Application.QueueAsyncCall(@DeferredCloseUp, 0);
     Exit;
   end;
-  UserSelect(FPopupList.ItemIndex);
-  Application.QueueAsyncCall(@DeferredCloseUp, 0);
+  DoPopupPick(FPopupList.ItemIndex);
 end;
 
 procedure TTyComboBox.DeferredCloseUp(Data: PtrInt);

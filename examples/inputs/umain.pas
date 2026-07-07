@@ -17,7 +17,7 @@ uses
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.CheckListBox,
   tyControls.ColorComboBox, tyControls.MRUComboBox, tyControls.ComboBoxEx,
   tyControls.OfficeListBox, tyControls.OfficeComboBox, tyControls.ColorGrid,
-  tyControls.LColorPicker, tyControls.HSColorPicker,
+  tyControls.LColorPicker, tyControls.HSColorPicker, tyControls.CheckComboBox,
   tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.TyLabel;
 
 type
@@ -42,6 +42,7 @@ type
     FOfficeList: TTyOfficeListBox;
     FColorGrid: TTyColorGrid;
     FLColor: TTyLColorPicker;
+    FCheckCombo: TTyCheckComboBox;
     FHS: TTyHSColorPicker;
     FAdvList: TTyAdvancedListBox;
     FAdvCombo: TTyAdvancedComboBox;
@@ -76,7 +77,7 @@ constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
   L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, L13, L14: TTyLabel;
-  L15, L16, L17, L18, L19, L20, L21, L22, LHint: TTyLabel;
+  L15, L16, L17, L18, L19, L20, L21, L22, L23, LHint: TTyLabel;
   Icf: TTyIconFont;
   Coll: TTyImageCollection;
   Imgs: TTyVirtualImageList;
@@ -266,6 +267,22 @@ begin
   FColorCombo.Parent := Self;
   FColorCombo.SetBounds(640, 404, 180, 28);
   FColorCombo.MoreCaption := '更多颜色…';
+
+  // 勾选下拉(CheckComboBox:多选、弹层常开,字段显勾选汇总),放第 3 列 ColorCombo 下方
+  L23 := TTyLabel.Create(Self);
+  L23.Parent := Self;
+  L23.SetBounds(640, 452, 190, 20);
+  L23.Caption := '勾选下拉(TTyCheckComboBox):';
+  FCheckCombo := TTyCheckComboBox.Create(Self);
+  FCheckCombo.Parent := Self;
+  FCheckCombo.SetBounds(640, 476, 190, 28);
+  FCheckCombo.Items.Add('粗体');
+  FCheckCombo.Items.Add('斜体');
+  FCheckCombo.Items.Add('下划线');
+  FCheckCombo.Items.Add('删除线');
+  FCheckCombo.EmptyText := '(未选择样式)';
+  FCheckCombo.Checked[0] := True;
+  FCheckCombo.Checked[2] := True;
 
   // ---- 第 4 列:批量新控件 ----
   // 最近使用组合框(MRUComboBox:可编辑,选中/录入自动去重置顶)
