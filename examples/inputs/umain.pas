@@ -8,8 +8,9 @@ unit umain;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics,
-  tyControls.Controller, tyControls.Form,
+  Classes, SysUtils, Forms, Controls, Graphics, BGRABitmap,
+  tyControls.Controller, tyControls.Form, tyControls.IconFont,
+  tyControls.ImageCollection, tyControls.ColorMath,
   tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.MaskEdit,
   tyControls.URLEdit, tyControls.ComboEdit, tyControls.TrackEdit,
   tyControls.ColorBox, tyControls.ColorListBox, tyControls.FontComboBox,
@@ -71,6 +72,26 @@ var
   Bar: TTyTitleBar;
   L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, L13, L14: TTyLabel;
   L15, L16, L17, L18, L19, LHint: TTyLabel;
+  Icf: TTyIconFont;
+  Coll: TTyImageCollection;
+  Imgs: TTyVirtualImageList;
+
+  { Rasterise one system-symbol glyph into the collection + register it in the image list.
+    (No .ttf shipped, so this uses a Unicode symbol via the system font — same placeholder
+    convention as the buttons example; on a real machine point IconFont at an icon .ttf.) }
+  procedure AddGlyph(const AName: string; ACodepoint: Cardinal; AColor: TColor);
+  var B: TBGRABitmap;
+  begin
+    Icf.MapGlyph(AName, ACodepoint);
+    B := Icf.RenderGlyph(AName, 32, TyColorFromLCL(AColor, 255));
+    try
+      Coll.AddBitmap(AName, B);   // takes a copy — free ours
+    finally
+      B.Free;
+    end;
+    Imgs.Names.Add(AName);
+  end;
+
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
@@ -255,7 +276,16 @@ begin
   FMRU.AddToHistory('第二次搜索');
   FMRU.AddToHistory('最近这次(在最上)');
 
-  // 带图标组合框(ComboBoxEx:每项可带图标;此处未设 Images 故为纯文本)
+  // 带图标组合框(ComboBoxEx:每项带图标)。图标源 = 图标字体渲染的 3 个符号 → 图像集 → 虚拟图像列表。
+  Icf := TTyIconFont.Create(Self);
+  Icf.FontFamily := 'Segoe UI Symbol';   // 系统符号字体(无它 RenderGlyph 返回透明图=无图标)
+  Coll := TTyImageCollection.Create(Self);
+  Imgs := TTyVirtualImageList.Create(Self);
+  Imgs.Collection := Coll;
+  AddGlyph('save',  $2B07, clNavy);    // ⬇ 保存
+  AddGlyph('open',  $25B6, clGreen);   // ▶ 打开
+  AddGlyph('print', $2699, clMaroon);  // ⚙ 打印
+
   L16 := TTyLabel.Create(Self);
   L16.Parent := Self;
   L16.SetBounds(840, 116, 200, 20);
@@ -263,9 +293,10 @@ begin
   FComboEx := TTyComboBoxEx.Create(Self);
   FComboEx.Parent := Self;
   FComboEx.SetBounds(840, 140, 190, 28);
-  FComboEx.AddItem('保存(设 Images 后带图标)', -1);
-  FComboEx.AddItem('打开', -1);
-  FComboEx.AddItem('打印', -1);
+  FComboEx.Images := Imgs;
+  FComboEx.AddItem('保存', 0);
+  FComboEx.AddItem('打开', 1);
+  FComboEx.AddItem('打印', 2);
   FComboEx.ItemIndex := 0;
 
   // 分组组合框(OfficeComboBox:下拉按组分节,标题行不可选)
