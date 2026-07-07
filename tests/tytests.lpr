@@ -9,7 +9,7 @@ uses
   test.controller.hotreload, test.base,
   test.baseevents,
   test.eventfiring,
-  test.base.drawframe, test.button, test.tylabel, test.edit, test.edit.word, test.edit.undo, test.numericedit, test.currencyedit, test.maskedit, test.urledit, test.comboedit, test.trackedit, test.checkbox,
+  test.base.drawframe, test.button, test.tylabel, test.edit, test.edit.word, test.edit.undo, test.numericedit, test.currencyedit, test.maskedit, test.urledit, test.comboedit, test.trackedit, test.colorbox, test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
   test.controls.scrollbar, test.form, test.themes,
   test.listbox,

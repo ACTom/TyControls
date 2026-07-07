@@ -45,7 +45,6 @@ type
     procedure SetSorted(const AValue: Boolean);
     procedure SetMaxLength(const AValue: Integer);
     procedure SetCharCase(const AValue: TEditCharCase);
-    procedure SetStyle(AValue: TTyComboBoxStyle);
     { Set the embedded editor's text under the FSyncingText guard (exception-safe),
       so a programmatic write never re-triggers the autocomplete filter. }
     procedure SetEditorText(const S: string);
@@ -90,6 +89,15 @@ type
     procedure DoDropDown; virtual;
     procedure DoCloseUp; virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    // Field content paint (default: the selected item's text). A subclass draws a
+    // swatch / glyph + text; ATextRect is the field's text zone (left of the chevron).
+    procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); virtual;
+    // Factory for the drop-down list (default: a plain TTyListBox). A subclass returns a
+    // custom TTyListBox (e.g. one whose PaintItemContent draws colour swatches).
+    function CreatePopupList: TTyListBox; virtual;
+    // Style setter is virtual so a subclass can lock the mode (e.g. TTyColorBox forces
+    // csDropDownList — a filtered editable popup would desync its per-item swatches).
+    procedure SetStyle(AValue: TTyComboBoxStyle); virtual;
     procedure Paint; override;
     procedure Resize; override;
     procedure Click; override;
@@ -538,7 +546,7 @@ begin
   FPopup.Controller := Self.Controller;
   FPopup.OnClose    := @PopupClosed;
 
-  FPopupList := TTyListBox.Create(Self);  // owned by the combo, not the form
+  FPopupList := CreatePopupList;  // owned by the combo (virtual: a subclass may return a custom list)
   FPopupList.ForceSquareSurface := TyQtIsWayland;
   FPopupList.OnChange := @PopupListChange;
 
@@ -820,14 +828,25 @@ begin
     // the right edge stops at the chevron button zone.
     TextR := Types.Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
-    if FText <> '' then
-      P.DrawText(TextR, FText, S.FontName, S.FontSize, S.FontWeight,
-        S.TextColor, taLeftJustify, tlCenter, True);
+    PaintFieldContent(P, TextR, S);
     P.DrawDropChevron(BtnR, S.TextColor);   // fixed small chevron (not stretched to height)
     P.EndPaint;
   finally
     P.Free;
   end;
+end;
+
+procedure TTyComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
+begin
+  // Default: the selected item's text (unchanged from the old inline draw).
+  if FText <> '' then
+    P.DrawText(ATextRect, FText, AStyle.FontName, AStyle.FontSize, AStyle.FontWeight,
+      AStyle.TextColor, taLeftJustify, tlCenter, True);
+end;
+
+function TTyComboBox.CreatePopupList: TTyListBox;
+begin
+  Result := TTyListBox.Create(Self);
 end;
 
 procedure TTyComboBox.Paint;

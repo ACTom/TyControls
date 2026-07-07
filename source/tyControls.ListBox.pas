@@ -50,6 +50,11 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    // Per-item content paint (default: the item text). A subclass overrides to draw a
+    // swatch / glyph / checkbox before the text. ARowRect is the full row; AStyle the
+    // resolved 'TyListItem' style for the row's current state. Used by TTyColorListBox etc.
+    procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
+      const AStyle: TTyStyleSet); virtual;
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -812,17 +817,8 @@ begin
           RowStyle.Background, rowCorners);
       end;
 
-      // Draw item text, inset by item padding
-      P.DrawText(
-        Rect(RowRect.Left + P.Scale(RowStyle.Padding.Left),
-             RowRect.Top,
-             RowRect.Right - P.Scale(RowStyle.Padding.Right),
-             RowRect.Bottom),
-        FItems[i],
-        RowStyle.FontName, ResolveFontSize(RowStyle), RowStyle.FontWeight,
-        RowStyle.TextColor,
-        taLeftJustify, tlCenter, True
-      );
+      // Per-item content (default: the text; a subclass draws a swatch/glyph + text).
+      PaintItemContent(P, RowRect, i, RowStyle);
     end;
 
     P.Bitmap.ClipRect := savedClip;   // restore (rows were clipped to the interior)
@@ -831,6 +827,22 @@ begin
   finally
     P.Free;
   end;
+end;
+
+procedure TTyListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
+  AIndex: Integer; const AStyle: TTyStyleSet);
+begin
+  // Default: the item text, inset by the item padding (unchanged from the old inline draw).
+  P.DrawText(
+    Rect(ARowRect.Left + P.Scale(AStyle.Padding.Left),
+         ARowRect.Top,
+         ARowRect.Right - P.Scale(AStyle.Padding.Right),
+         ARowRect.Bottom),
+    FItems[AIndex],
+    AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
+    AStyle.TextColor,
+    taLeftJustify, tlCenter, True
+  );
 end;
 
 procedure TTyListBox.Paint;

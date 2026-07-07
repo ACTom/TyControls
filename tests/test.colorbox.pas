@@ -1,0 +1,101 @@
+unit test.colorbox;
+{$mode objfpc}{$H+}
+interface
+uses Classes, SysUtils, Graphics, fpcunit, testregistry,
+  tyControls.Types, tyControls.ComboBox, tyControls.ColorBox;
+type
+  TColorBoxTest = class(TTestCase)
+  published
+    procedure TestTColorConversion;
+    procedure TestPaletteAndColorAt;
+    procedure TestSelected;
+    procedure TestAddAndClear;
+    procedure TestSortedKeepsColors;
+    procedure TestStyleLocked;
+  end;
+implementation
+
+procedure TColorBoxTest.TestTColorConversion;
+begin
+  AssertEquals('red',   'FFFF0000', IntToHex(TyTColorToTy(clRed), 8));
+  AssertEquals('lime',  'FF00FF00', IntToHex(TyTColorToTy(clLime), 8));
+  AssertEquals('blue',  'FF0000FF', IntToHex(TyTColorToTy(clBlue), 8));
+  AssertEquals('black', 'FF000000', IntToHex(TyTColorToTy(clBlack), 8));
+  AssertEquals('white', 'FFFFFFFF', IntToHex(TyTColorToTy(clWhite), 8));
+end;
+
+procedure TColorBoxTest.TestPaletteAndColorAt;
+var c: TTyColorBox;
+begin
+  c := TTyColorBox.Create(nil);
+  try
+    AssertEquals('16-colour palette', 16, c.Items.Count);
+    AssertTrue('item 0 is black', c.ColorAt(0) = clBlack);
+    AssertTrue('item 9 is red', c.ColorAt(9) = clRed);
+    AssertTrue('out of range -> clNone', c.ColorAt(99) = clNone);
+    AssertEquals('default selection', 0, c.ItemIndex);
+  finally c.Free; end;
+end;
+
+procedure TColorBoxTest.TestSelected;
+var c: TTyColorBox;
+begin
+  c := TTyColorBox.Create(nil);
+  try
+    AssertTrue('initial selected black', c.Selected = clBlack);
+    c.Selected := clRed;
+    AssertEquals('picks red index', 9, c.ItemIndex);
+    AssertTrue('selected red', c.Selected = clRed);
+    // A colour not in the palette is appended and selected.
+    c.Selected := TColor($00123456);
+    AssertEquals('appended custom', 17, c.Items.Count);
+    AssertTrue('selected custom', c.Selected = TColor($00123456));
+    AssertEquals('custom is selected item', 16, c.ItemIndex);
+  finally c.Free; end;
+end;
+
+procedure TColorBoxTest.TestAddAndClear;
+var c: TTyColorBox;
+begin
+  c := TTyColorBox.Create(nil);
+  try
+    c.ClearColors;
+    AssertEquals('cleared', 0, c.Items.Count);
+    c.AddColor('Sky', clSkyBlue);
+    AssertEquals('one item', 1, c.Items.Count);
+    AssertTrue('color kept', c.ColorAt(0) = clSkyBlue);
+    AssertEquals('name kept', 'Sky', c.Items[0]);
+  finally c.Free; end;
+end;
+
+procedure TColorBoxTest.TestSortedKeepsColors;
+var c: TTyColorBox; idx: Integer;
+begin
+  c := TTyColorBox.Create(nil);
+  try
+    c.Sorted := True;   // reorders the NAMES; colours (in Objects[]) must follow
+    idx := c.Items.IndexOf('Red');
+    AssertTrue('Red present', idx >= 0);
+    AssertTrue('Red -> clRed after sort', c.ColorAt(idx) = clRed);
+    idx := c.Items.IndexOf('White');
+    AssertTrue('White present', idx >= 0);
+    AssertTrue('White -> clWhite after sort', c.ColorAt(idx) = clWhite);
+    idx := c.Items.IndexOf('Black');
+    AssertTrue('Black -> clBlack after sort', c.ColorAt(idx) = clBlack);
+  finally c.Free; end;
+end;
+
+procedure TColorBoxTest.TestStyleLocked;
+var c: TTyColorBox;
+begin
+  c := TTyColorBox.Create(nil);
+  try
+    AssertTrue('starts list-only', c.Style = csDropDownList);
+    c.Style := csDropDown;   // must be ignored (filtered popup would desync swatches)
+    AssertTrue('stays list-only', c.Style = csDropDownList);
+  finally c.Free; end;
+end;
+
+initialization
+  RegisterTest(TColorBoxTest);
+end.

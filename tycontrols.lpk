@@ -101,6 +101,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.TrackEdit"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.ColorBox.pas"/>
+        <UnitName Value="tyControls.ColorBox"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.CheckBox.pas"/>
         <UnitName Value="tyControls.CheckBox"/>
       </Item>

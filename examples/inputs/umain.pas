@@ -11,7 +11,8 @@ uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form,
   tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.MaskEdit,
-  tyControls.URLEdit, tyControls.ComboEdit, tyControls.TrackEdit, tyControls.TyLabel;
+  tyControls.URLEdit, tyControls.ComboEdit, tyControls.TrackEdit,
+  tyControls.ColorBox, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -22,6 +23,7 @@ type
     FUrl: TTyURLEdit;
     FCombo: TTyComboEdit;
     FTrack: TTyTrackEdit;
+    FColor: TTyColorBox;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
@@ -51,12 +53,12 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  L1, L2, L3, L4, L5, L6, L7, L8, LHint: TTyLabel;
+  L1, L2, L3, L4, L5, L6, L7, L8, L9, LHint: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 460, 528);
+  SetBounds(0, 0, 460, 572);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -153,14 +155,23 @@ begin
   FTrack.MaxValue := 255;
   FTrack.Value := 128;
 
+  // 颜色组合框(ColorBox:字段/下拉每项都带色块)
+  L9 := TTyLabel.Create(Self);
+  L9.Parent := Self;
+  L9.SetBounds(24, 408, 200, 20);
+  L9.Caption := '颜色(TTyColorBox):';
+  FColor := TTyColorBox.Create(Self);
+  FColor.Parent := Self;
+  FColor.SetBounds(240, 404, 180, 28);
+
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;
-  FEcho.SetBounds(24, 404, 410, 20);
+  FEcho.SetBounds(24, 448, 410, 20);
   FEcho.Caption := '限幅值 = 42.00';
 
   LHint := TTyLabel.Create(Self);
   LHint.Parent := Self;
-  LHint.SetBounds(24, 448, 410, 40);
+  LHint.SetBounds(24, 492, 410, 40);
   LHint.Caption := '试试:只能输数字 / 负号 / 小数点;聚焦时去掉千分位方便编辑,'
     + '失焦后重新分组;限幅框输入 >100 的值,失焦后夹紧到 100。';
 
