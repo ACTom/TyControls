@@ -19,7 +19,7 @@ uses
   tyControls.OfficeListBox, tyControls.OfficeComboBox, tyControls.ColorGrid,
   tyControls.LColorPicker, tyControls.HSColorPicker, tyControls.CheckComboBox,
   tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.ValueListEditor,
-  tyControls.TyLabel;
+  tyControls.CalcEdit, tyControls.CalcCurrencyEdit, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -48,6 +48,8 @@ type
     FAdvList: TTyAdvancedListBox;
     FAdvCombo: TTyAdvancedComboBox;
     FVLE: TTyValueListEditor;
+    FCalcEdit: TTyCalcEdit;
+    FCalcCurr: TTyCalcCurrencyEdit;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
@@ -80,7 +82,7 @@ constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
   L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, L13, L14: TTyLabel;
-  L15, L16, L17, L18, L19, L20, L21, L22, L23, L24, LHint: TTyLabel;
+  L15, L16, L17, L18, L19, L20, L21, L22, L23, L24, L25, L26, LHint: TTyLabel;
   Icf: TTyIconFont;
   Coll: TTyImageCollection;
   Imgs: TTyVirtualImageList;
@@ -427,6 +429,26 @@ begin
   FVLE.InsertRow('标题', 'Rich Inputs 示例');
   FVLE.InsertRow('主题', 'light.tycss');
   FVLE.OnValueChanged := @VleChange;
+
+  // 计算器下拉(CalcEdit / CalcCurrencyEdit:点尾部按钮弹计算器,= 或关闭写回),放 VLE 右侧
+  L25 := TTyLabel.Create(Self);
+  L25.Parent := Self;
+  L25.SetBounds(410, 600, 260, 20);
+  L25.Caption := '计算器数值(TTyCalcEdit,点尾部小按钮):';
+  FCalcEdit := TTyCalcEdit.Create(Self);
+  FCalcEdit.Parent := Self;
+  FCalcEdit.SetBounds(410, 624, 200, 28);
+  FCalcEdit.Value := 1000;
+
+  L26 := TTyLabel.Create(Self);
+  L26.Parent := Self;
+  L26.SetBounds(410, 662, 260, 20);
+  L26.Caption := '计算器货币(TTyCalcCurrencyEdit):';
+  FCalcCurr := TTyCalcCurrencyEdit.Create(Self);
+  FCalcCurr.Parent := Self;
+  FCalcCurr.SetBounds(410, 686, 200, 28);
+  FCalcCurr.CurrencySymbol := '¥';
+  FCalcCurr.Value := 1234.5;
 
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;

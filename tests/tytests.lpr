@@ -12,6 +12,7 @@ uses
   test.base.drawframe, test.button, test.tylabel, test.edit, test.edit.word, test.edit.undo, test.numericedit, test.currencyedit, test.maskedit, test.urledit, test.comboedit, test.trackedit, test.colorbox, test.colorcombobox, test.colorlistbox, test.fontcombobox, test.fontlistbox, test.fontsizecombobox, test.checklistbox,
   test.mrucombobox, test.comboboxex, test.officelistbox, test.officecombobox, test.colorgrid, test.lcolorpicker,
   test.hscolorpicker, test.advancedlistbox, test.advancedcombobox, test.checkcombobox, test.valuelisteditor,
+  test.calculator, test.calcedit,
   test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
   test.controls.scrollbar, test.form, test.themes,

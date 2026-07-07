@@ -173,6 +173,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ValueListEditor"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Calculator.pas"/>
+        <UnitName Value="tyControls.Calculator"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.CalcEdit.pas"/>
+        <UnitName Value="tyControls.CalcEdit"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.CalcCurrencyEdit.pas"/>
+        <UnitName Value="tyControls.CalcCurrencyEdit"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.CheckBox.pas"/>
         <UnitName Value="tyControls.CheckBox"/>
       </Item>

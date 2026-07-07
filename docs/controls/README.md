@@ -57,6 +57,9 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyURLEdit](urledit.md) | URL 编辑框（尾部"打开"按钮，默认浏览器打开） |
 | [TTyComboEdit](comboedit.md) | 带下拉按钮的编辑框（OnDropDown 弹任意 popup，组合式基座） |
 | [TTyTrackEdit](trackedit.md) | 数值编辑框 + 内嵌迷你滑块（拖动设值，NumericEdit 派生） |
+| [TTyCalculator](calculator.md) | 四则运算计算器（显示 + 5×4 键盘阵，可键盘输入；供下拉复用） |
+| [TTyCalcEdit](calcedit.md) | 数值编辑框 + 计算器下拉（尾部按钮弹计算器，结果写回） |
+| [TTyCalcCurrencyEdit](calcedit.md) | 货币编辑框 + 计算器下拉（CurrencyEdit + 计算器弹层） |
 | [TTyColorBox](colorbox.md) | 命名颜色组合框（字段/下拉每项色块+名，逐项自绘地基控件） |
 | [TTyColorComboBox](colorcombobox.md) | ColorBox + “更多…”行开取色对话框 |
 | [TTyColorListBox](colorlistbox.md) | 命名颜色列表框（ColorBox 的列表版，每行色块+名） |

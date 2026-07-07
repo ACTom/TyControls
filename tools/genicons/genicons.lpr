@@ -97,6 +97,12 @@ procedure GAdvancedComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Fil
 procedure GCheckComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); RRect(b,5.5,9.5,9,13,0.6,Ink); PolyL(b,[PointF(6,11.2),PointF(6.9,12.1),PointF(8.4,10.3)],Acc,1.3); PolyL(b,[PointF(15.5,10.8),PointF(17.5,13),PointF(19.5,10.8)],Ink,1.3); end;
 { TTyValueListEditor: a 2-column name/value grid — a divider + key tiles left, value lines right }
 procedure GValueListEditor(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); Line(b,10,5,10,19,Faint,1); FillRRect(b,5,7,8.5,8.8,0.3,Acc); Line(b,11.5,7.9,18,7.9,Faint,1.1); FillRRect(b,5,11,8.5,12.8,0.3,Faint); Line(b,11.5,11.9,16,11.9,Faint,1.1); FillRRect(b,5,15,8.5,16.8,0.3,Faint); Line(b,11.5,15.9,17,15.9,Faint,1.1); end;
+{ TTyCalculator: a calculator body — a display band over a grid of button dots (right col = ops) }
+procedure GCalculator(b: TBGRABitmap); begin RRect(b,5,3,19,21,2,Ink); FillRRect(b,6.5,4.5,17.5,8,0.6,Faint); FillCirc(b,8,11,0.9,Ink); FillCirc(b,10.5,11,0.9,Ink); FillCirc(b,13,11,0.9,Ink); FillCirc(b,15.5,11,0.9,Acc); FillCirc(b,8,14,0.9,Ink); FillCirc(b,10.5,14,0.9,Ink); FillCirc(b,13,14,0.9,Ink); FillCirc(b,15.5,14,0.9,Acc); FillCirc(b,8,17,0.9,Ink); FillCirc(b,10.5,17,0.9,Ink); FillCirc(b,13,17,0.9,Ink); FillCirc(b,15.5,17,0.9,Acc); end;
+{ TTyCalcEdit: a numeric edit with a trailing 2x2 keypad (calculator) button }
+procedure GCalcEdit(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Line(b,6,12,10,12,Ink,1.4); FillCirc(b,14.6,10.6,0.8,Acc); FillCirc(b,17.4,10.6,0.8,Acc); FillCirc(b,14.6,13.4,0.8,Acc); FillCirc(b,17.4,13.4,0.8,Acc); end;
+{ TTyCalcCurrencyEdit: a currency (¥) edit with a trailing calculator button }
+procedure GCalcCurrencyEdit(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); PolyL(b,[PointF(5,9.5),PointF(6.6,11.6),PointF(8.2,9.5)],Acc,1.1); Line(b,6.6,11.6,6.6,14.5,Acc,1.1); Line(b,5.2,12.6,8,12.6,Acc,1); Line(b,5.2,13.8,8,13.8,Acc,1); FillCirc(b,14.6,10.6,0.8,Ink); FillCirc(b,17.4,10.6,0.8,Ink); FillCirc(b,14.6,13.4,0.8,Ink); FillCirc(b,17.4,13.4,0.8,Ink); end;
 { TTyColorListBox: a list box with swatch rows }
 procedure GColorListBox(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); FillRRect(b,5.5,7,8.5,10,0.6,Acc); Line(b,10.5,8.5,18,8.5,Faint,1.2); FillRRect(b,5.5,10.8,8.5,13.8,0.6,Ink); Line(b,10.5,12.3,18,12.3,Faint,1.2); FillRRect(b,5.5,14.6,8.5,17.6,0.6,Faint); Line(b,10.5,16.1,18,16.1,Faint,1.2); end;
 { TTyFontComboBox: a combo box with an "A" glyph + a drop chevron }
@@ -435,7 +441,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..103] of TGlyph = (
+  Glyphs: array[0..106] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -458,6 +464,9 @@ const
     (Name:'TTyAdvancedComboBox';Draw:@GAdvancedComboBox),
     (Name:'TTyCheckComboBox';   Draw:@GCheckComboBox),
     (Name:'TTyValueListEditor'; Draw:@GValueListEditor),
+    (Name:'TTyCalculator';      Draw:@GCalculator),
+    (Name:'TTyCalcEdit';        Draw:@GCalcEdit),
+    (Name:'TTyCalcCurrencyEdit';Draw:@GCalcCurrencyEdit),
     (Name:'TTyColorListBox';    Draw:@GColorListBox),
     (Name:'TTyFontComboBox';    Draw:@GFontComboBox),
     (Name:'TTyFontListBox';     Draw:@GFontListBox),
