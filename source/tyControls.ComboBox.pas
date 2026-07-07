@@ -86,6 +86,9 @@ type
       can be exercised without building a real win32 popup form. }
     function ComputePopupHeight(APPI: Integer): Integer;
     procedure DoSelect; virtual;
+    { Fires when the editable (csDropDown) field loses focus with committed text.
+      Default no-op; TTyMRUComboBox overrides it to remember the typed value. }
+    procedure DoEditorCommit; virtual;
     procedure DoDropDown; virtual;
     procedure DoCloseUp; virtual;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -111,7 +114,7 @@ type
     function EditorVisibleForTest: Boolean;
     { Test seam: the embedded editor's MaxLength (-1 when the editor is absent). }
     function EditorMaxLengthForTest: Integer;
-    procedure SelectItem(AIndex: Integer);
+    procedure SelectItem(AIndex: Integer); virtual;
     function DroppedDown: Boolean;
     procedure DropDown; virtual;
     procedure CloseUp;
@@ -172,7 +175,8 @@ begin
   p := LowerCase(APrefix);
   for i := 0 to AItems.Count - 1 do
     if (p = '') or (Copy(LowerCase(AItems[i]), 1, Length(p)) = p) then
-      Result.Add(AItems[i]);
+      Result.AddObject(AItems[i], AItems.Objects[i]);   // carry Objects[] so a subclass's
+      // per-item data (e.g. TTyComboBoxEx image indices) survives the prefix filter
 end;
 
 constructor TTyComboBox.Create(AOwner: TComponent);
@@ -248,6 +252,11 @@ end;
 procedure TTyComboBox.DoSelect;
 begin
   if Assigned(FOnSelect) then FOnSelect(Self);
+end;
+
+procedure TTyComboBox.DoEditorCommit;
+begin
+  // default: no-op (see TTyMRUComboBox)
 end;
 
 procedure TTyComboBox.DoDropDown;
@@ -438,6 +447,7 @@ begin
     row's PopupListChange still runs and commits first; the deferred CloseUp is
     idempotent. Also avoids hiding the popup synchronously inside a focus event. }
   if DroppedDown then Application.QueueAsyncCall(@DeferredCloseUp, 0);
+  DoEditorCommit;   // genuine focus-out: let a subclass (MRU) remember the typed text
 end;
 
 procedure TTyComboBox.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);

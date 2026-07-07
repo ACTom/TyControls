@@ -70,7 +70,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    procedure SelectItem(AIndex: Integer);
+    procedure SelectItem(AIndex: Integer); virtual;
     function VisibleRows: Integer;
     // Public helper for headless keyboard tests
     procedure SimulateKeyDown(AKey: Word);

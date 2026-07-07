@@ -75,6 +75,18 @@ procedure GTrackEdit(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Line(b,6,1
 procedure GColorBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); FillRRect(b,6,9.5,11,14.5,1,Acc); PolyL(b,[PointF(14,10.8),PointF(16.5,13.4),PointF(19,10.8)],Ink,1.4); end;
 { TTyColorComboBox: a colour combo with a "+" (more…) + a drop chevron }
 procedure GColorComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); FillRRect(b,5.5,9.5,9.5,14.5,1,Acc); Line(b,12,12,14.5,12,Ink,1.2); Line(b,13.25,10.75,13.25,13.25,Ink,1.2); PolyL(b,[PointF(16,10.8),PointF(17.5,12.6),PointF(19,10.8)],Ink,1.3); end;
+{ TTyMRUComboBox: a combo box with a small clock (history) + a drop chevron }
+procedure GMRUComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); Circ(b,8,12,2.8,Acc,1.2); Line(b,8,12,8,10.4,Acc,1); Line(b,8,12,9.2,12.6,Acc,1); PolyL(b,[PointF(15,10.8),PointF(17,13),PointF(19,10.8)],Ink,1.3); end;
+{ TTyComboBoxEx: a combo box with an image tile + two text lines + a drop chevron }
+procedure GComboBoxEx(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); FillRRect(b,5,9.5,9,13.5,0.8,Acc); Line(b,10.5,10.6,15,10.6,Faint,1.2); Line(b,10.5,13,14,13,Faint,1.2); PolyL(b,[PointF(16.5,10.8),PointF(18,12.6),PointF(19.5,10.8)],Ink,1.2); end;
+{ TTyOfficeListBox: a list box with a tinted group-header band + item rows }
+procedure GOfficeListBox(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); FillRRect(b,4,6,20,9,0.5,Faint); Line(b,6,7.5,13,7.5,Ink,1.4); Line(b,6,12,18,12,Faint,1.1); Line(b,6,15,18,15,Faint,1.1); Line(b,6,18,14,18,Faint,1.1); end;
+{ TTyOfficeComboBox: a combo box with a tinted group-header hint band + a drop chevron }
+procedure GOfficeComboBox(b: TBGRABitmap); begin RRect(b,3,7,21,17,2,Ink); FillRRect(b,5,9,12,11,0.4,Faint); Line(b,5,13.4,12,13.4,Faint,1.1); PolyL(b,[PointF(15.5,10.8),PointF(17.5,13),PointF(19.5,10.8)],Ink,1.3); end;
+{ TTyColorGrid: a 3x3 grid of colour swatches with one selected (accent ring) }
+procedure GColorGrid(b: TBGRABitmap); begin FillRRect(b,5,5,9.5,9.5,0.6,Acc); FillRRect(b,10.5,5,15,9.5,0.6,Faint); FillRRect(b,16,5,20.5,9.5,0.6,Ink); FillRRect(b,5,10.5,9.5,15,0.6,Faint); FillRRect(b,10.5,10.5,15,15,0.6,Ink); FillRRect(b,16,10.5,20.5,15,0.6,Acc); FillRRect(b,5,16,9.5,20.5,0.6,Ink); FillRRect(b,10.5,16,15,20.5,0.6,Acc); FillRRect(b,16,16,20.5,20.5,0.6,Faint); RRect(b,10,10,15.5,15.5,0.8,Acc,1.6); end;
+{ TTyLColorPicker: a vertical brightness bar (light->accent->dark) + a marker triangle }
+procedure GLColorPicker(b: TBGRABitmap); begin RRect(b,8,3,16,21,1.5,Ink); FillRRect(b,9,4,15,8.5,0,Faint); FillRRect(b,9,8.5,15,14,0,Acc); FillRRect(b,9,14,15,20,0,Ink); Line(b,7,11,17,11,Ink,1.6); FillPolyG(b,[PointF(17.6,11),PointF(19,9.7),PointF(19,12.3)],Acc); end;
 { TTyColorListBox: a list box with swatch rows }
 procedure GColorListBox(b: TBGRABitmap); begin RRect(b,3,5,21,19,2,Ink); FillRRect(b,5.5,7,8.5,10,0.6,Acc); Line(b,10.5,8.5,18,8.5,Faint,1.2); FillRRect(b,5.5,10.8,8.5,13.8,0.6,Ink); Line(b,10.5,12.3,18,12.3,Faint,1.2); FillRRect(b,5.5,14.6,8.5,17.6,0.6,Faint); Line(b,10.5,16.1,18,16.1,Faint,1.2); end;
 { TTyFontComboBox: a combo box with an "A" glyph + a drop chevron }
@@ -413,7 +425,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..92] of TGlyph = (
+  Glyphs: array[0..98] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -425,6 +437,12 @@ const
     (Name:'TTyTrackEdit';       Draw:@GTrackEdit),
     (Name:'TTyColorBox';        Draw:@GColorBox),
     (Name:'TTyColorComboBox';   Draw:@GColorComboBox),
+    (Name:'TTyMRUComboBox';     Draw:@GMRUComboBox),
+    (Name:'TTyComboBoxEx';      Draw:@GComboBoxEx),
+    (Name:'TTyOfficeListBox';   Draw:@GOfficeListBox),
+    (Name:'TTyOfficeComboBox';  Draw:@GOfficeComboBox),
+    (Name:'TTyColorGrid';       Draw:@GColorGrid),
+    (Name:'TTyLColorPicker';    Draw:@GLColorPicker),
     (Name:'TTyColorListBox';    Draw:@GColorListBox),
     (Name:'TTyFontComboBox';    Draw:@GFontComboBox),
     (Name:'TTyFontListBox';     Draw:@GFontListBox),

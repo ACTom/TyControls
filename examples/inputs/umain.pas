@@ -8,13 +8,15 @@ unit umain;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls,
+  Classes, SysUtils, Forms, Controls, Graphics,
   tyControls.Controller, tyControls.Form,
   tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.MaskEdit,
   tyControls.URLEdit, tyControls.ComboEdit, tyControls.TrackEdit,
   tyControls.ColorBox, tyControls.ColorListBox, tyControls.FontComboBox,
   tyControls.FontListBox, tyControls.FontSizeComboBox, tyControls.CheckListBox,
-  tyControls.ColorComboBox, tyControls.TyLabel;
+  tyControls.ColorComboBox, tyControls.MRUComboBox, tyControls.ComboBoxEx,
+  tyControls.OfficeListBox, tyControls.OfficeComboBox, tyControls.ColorGrid,
+  tyControls.LColorPicker, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
@@ -32,6 +34,12 @@ type
     FSize: TTyFontSizeComboBox;
     FCheckList: TTyCheckListBox;
     FColorCombo: TTyColorComboBox;
+    FMRU: TTyMRUComboBox;
+    FComboEx: TTyComboBoxEx;
+    FOfficeCombo: TTyOfficeComboBox;
+    FOfficeList: TTyOfficeListBox;
+    FColorGrid: TTyColorGrid;
+    FLColor: TTyLColorPicker;
     FEcho: TTyLabel;
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
@@ -61,12 +69,13 @@ end;
 constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
-  L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, L13, L14, LHint: TTyLabel;
+  L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12, L13, L14: TTyLabel;
+  L15, L16, L17, L18, L19, LHint: TTyLabel;
 begin
   inherited CreateNew(AOwner, 0);
   Caption := 'Rich Inputs 示例';
   Position := poScreenCenter;
-  SetBounds(0, 0, 840, 600);
+  SetBounds(0, 0, 1060, 600);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -231,6 +240,80 @@ begin
   FColorCombo.Parent := Self;
   FColorCombo.SetBounds(640, 404, 180, 28);
   FColorCombo.MoreCaption := '更多颜色…';
+
+  // ---- 第 4 列:批量新控件 ----
+  // 最近使用组合框(MRUComboBox:可编辑,选中/录入自动去重置顶)
+  L15 := TTyLabel.Create(Self);
+  L15.Parent := Self;
+  L15.SetBounds(840, 52, 200, 20);
+  L15.Caption := '最近使用(TTyMRUComboBox):';
+  FMRU := TTyMRUComboBox.Create(Self);
+  FMRU.Parent := Self;
+  FMRU.SetBounds(840, 76, 190, 28);
+  FMRU.MaxItems := 6;
+  FMRU.AddToHistory('第一次搜索');
+  FMRU.AddToHistory('第二次搜索');
+  FMRU.AddToHistory('最近这次(在最上)');
+
+  // 带图标组合框(ComboBoxEx:每项可带图标;此处未设 Images 故为纯文本)
+  L16 := TTyLabel.Create(Self);
+  L16.Parent := Self;
+  L16.SetBounds(840, 116, 200, 20);
+  L16.Caption := '图文组合(TTyComboBoxEx):';
+  FComboEx := TTyComboBoxEx.Create(Self);
+  FComboEx.Parent := Self;
+  FComboEx.SetBounds(840, 140, 190, 28);
+  FComboEx.AddItem('保存(设 Images 后带图标)', -1);
+  FComboEx.AddItem('打开', -1);
+  FComboEx.AddItem('打印', -1);
+  FComboEx.ItemIndex := 0;
+
+  // 分组组合框(OfficeComboBox:下拉按组分节,标题行不可选)
+  L17 := TTyLabel.Create(Self);
+  L17.Parent := Self;
+  L17.SetBounds(840, 180, 200, 20);
+  L17.Caption := '分组组合(TTyOfficeComboBox):';
+  FOfficeCombo := TTyOfficeComboBox.Create(Self);
+  FOfficeCombo.Parent := Self;
+  FOfficeCombo.SetBounds(840, 204, 190, 28);
+  FOfficeCombo.AddHeader('水果');
+  FOfficeCombo.AddItem('苹果');
+  FOfficeCombo.AddItem('芒果');
+  FOfficeCombo.AddHeader('蔬菜');
+  FOfficeCombo.AddItem('胡萝卜');
+  FOfficeCombo.ItemIndex := 1;
+
+  // 分组列表(OfficeListBox:标题行加粗、不可选)
+  L18 := TTyLabel.Create(Self);
+  L18.Parent := Self;
+  L18.SetBounds(840, 244, 200, 20);
+  L18.Caption := '分组列表(TTyOfficeListBox):';
+  FOfficeList := TTyOfficeListBox.Create(Self);
+  FOfficeList.Parent := Self;
+  FOfficeList.SetBounds(840, 268, 190, 150);
+  FOfficeList.AddHeader('收件箱');
+  FOfficeList.AddItem('会议纪要');
+  FOfficeList.AddItem('周报');
+  FOfficeList.AddHeader('已发送');
+  FOfficeList.AddItem('给客户的报价');
+  FOfficeList.AddItem('回执确认');
+
+  // 色板网格 + 明度取色条(ColorGrid 点格选色 / LColorPicker 拖动取明度)
+  L19 := TTyLabel.Create(Self);
+  L19.Parent := Self;
+  L19.SetBounds(840, 428, 220, 20);
+  L19.Caption := '色板 ColorGrid + 明度 LColorPicker:';
+  FColorGrid := TTyColorGrid.Create(Self);
+  FColorGrid.Parent := Self;
+  FColorGrid.SetBounds(840, 452, 150, 96);
+  FColorGrid.Columns := 8;
+  FColorGrid.Selected := clRed;
+  FLColor := TTyLColorPicker.Create(Self);
+  FLColor.Parent := Self;
+  FLColor.SetBounds(1000, 452, 28, 96);
+  FLColor.Hue := 210;
+  FLColor.Sat := 0.8;
+  FLColor.Position := 0.6;
 
   FEcho := TTyLabel.Create(Self);
   FEcho.Parent := Self;

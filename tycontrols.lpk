@@ -129,6 +129,30 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ColorComboBox"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.MRUComboBox.pas"/>
+        <UnitName Value="tyControls.MRUComboBox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ComboBoxEx.pas"/>
+        <UnitName Value="tyControls.ComboBoxEx"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.OfficeListBox.pas"/>
+        <UnitName Value="tyControls.OfficeListBox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.OfficeComboBox.pas"/>
+        <UnitName Value="tyControls.OfficeComboBox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ColorGrid.pas"/>
+        <UnitName Value="tyControls.ColorGrid"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.LColorPicker.pas"/>
+        <UnitName Value="tyControls.LColorPicker"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.CheckBox.pas"/>
         <UnitName Value="tyControls.CheckBox"/>
       </Item>
