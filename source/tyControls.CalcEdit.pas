@@ -133,6 +133,8 @@ begin
   { Apply the current value on close — but NOT while in the error state (Value is 0 there, which
     would silently wipe the field). }
   if (FCalc <> nil) and not FCalc.IsError then FEdit.Value := FCalc.Value;
+  { Return focus to the edit we were editing (not wherever it was before the button click). }
+  if FEdit.CanFocus then FEdit.SetFocus;
 end;
 
 { ---- TTyCalcEdit ---- }

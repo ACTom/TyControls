@@ -9,7 +9,8 @@ type
     procedure Press(c: TTyCalculator; const AKeys: string);
   published
     procedure TestAddition;
-    procedure TestChainIsLeftToRight;
+    procedure TestPrecedence;
+    procedure TestExpressionShown;
     procedure TestSubtractMultiplyDivide;
     procedure TestDivideByZeroError;
     procedure TestErrorIsSticky;
@@ -22,6 +23,8 @@ type
     procedure TestNegate;
     procedure TestSetValueThenContinue;
     procedure TestOpAfterEqualsUsesResult;
+    procedure TestEvalRejectsMalformed;
+    procedure TestNegateOnEResult;
   end;
 implementation
 
@@ -43,14 +46,31 @@ begin
   finally c.Free; end;
 end;
 
-procedure TCalculatorTest.TestChainIsLeftToRight;
+procedure TCalculatorTest.TestPrecedence;
 var c: TTyCalculator;
 begin
-  // No operator precedence: 2 + 3 * 4 evaluates left-to-right = (2+3)*4 = 20.
+  // Operator precedence: 2 + 3 * 4 = 2 + 12 = 14 (× before +), NOT left-to-right 20.
   c := TTyCalculator.Create(nil);
   try
     Press(c, '2+3*4=');
-    AssertEquals('left-to-right', 20.0, c.Value, 1e-9);
+    AssertEquals('precedence', 14.0, c.Value, 1e-9);
+    AssertEquals('display', '14', c.Display);
+  finally c.Free; end;
+end;
+
+procedure TCalculatorTest.TestExpressionShown;
+var c: TTyCalculator;
+begin
+  // The full expression is shown for proof-reading; the bottom line live-previews the value.
+  c := TTyCalculator.Create(nil);
+  try
+    Press(c, '333*222');
+    AssertEquals('expression shown', '333*222', c.Expression);
+    AssertEquals('current entry on the big line', '222', c.Display);
+    AssertEquals('value = full expression result', 73926.0, c.Value, 1e-9);
+    Press(c, '=');
+    AssertEquals('result', '73926', c.Display);
+    AssertEquals('value', 73926.0, c.Value, 1e-9);
   finally c.Free; end;
 end;
 
@@ -203,6 +223,33 @@ begin
     Press(c, '2+3=');       // 5
     Press(c, '*4=');        // 5 * 4 = 20 (op right after '=' continues from the result)
     AssertEquals('continues from result', 20.0, c.Value, 1e-9);
+  finally c.Free; end;
+end;
+
+procedure TCalculatorTest.TestEvalRejectsMalformed;
+var r: Double;
+begin
+  // TyEvalExpr must reject digit-less / incomplete tokens (StrToFloatDef tolerates some of them).
+  AssertFalse('incomplete exponent 1e+', TyEvalExpr('1e+', r));
+  AssertFalse('lone dot', TyEvalExpr('.', r));
+  AssertFalse('digit-less operand 9*.', TyEvalExpr('9*.', r));
+  AssertFalse('trailing operator 5+', TyEvalExpr('5+', r));
+  AssertTrue('precedence still ok', TyEvalExpr('2+3*4', r));
+  AssertEquals('=14', 14.0, r, 1e-9);
+  AssertTrue('sci-notation ok', TyEvalExpr('1E3', r));
+  AssertEquals('1E3 = 1000', 1000.0, r, 1e-9);
+end;
+
+procedure TCalculatorTest.TestNegateOnEResult;
+var c: TTyCalculator;
+begin
+  // A result formatted in E-notation ('1E-7') must negate as a WHOLE number, not corrupt the
+  // exponent (the old TrailingNumberStart mistook '-7' for the entry and made '1E--7').
+  c := TTyCalculator.Create(nil);
+  try
+    c.Value := 1e-7;
+    c.PressKey('N');
+    AssertEquals('negated E-result', -1e-7, c.Value, 1e-13);
   finally c.Free; end;
 end;
 
