@@ -40,6 +40,7 @@ type
     procedure TestSpaceNotConsumedInSingleSelect;
     procedure TestSortedSortsAndKeepsSelection;
     procedure TestSortedKeepsMultiSelection;
+    procedure TestRowAtYAccountsForPaddingTop;
   end;
 
   { A2 regression: embedded scrollbar must inherit controller and DPI width }
@@ -61,6 +62,8 @@ type
     procedure DoMouseDown(Shift: TShiftState; X, Y: Integer);
     procedure DoKeyDown(Key: Word; Shift: TShiftState);
     function PressKey(Key: Word; Shift: TShiftState): Word;
+    function CallRowAtY(AY: Integer): Integer;
+    function CallContentTopOffset: Integer;
   end;
 
   { Hard-cast target to drive the embedded scrollbar's protected mouse handlers. }
@@ -145,6 +148,16 @@ function TListBoxAccess.PressKey(Key: Word; Shift: TShiftState): Word;
 begin
   KeyDown(Key, Shift);
   Result := Key;
+end;
+
+function TListBoxAccess.CallRowAtY(AY: Integer): Integer;
+begin
+  Result := RowAtY(AY);
+end;
+
+function TListBoxAccess.CallContentTopOffset: Integer;
+begin
+  Result := ContentTopOffset;
 end;
 
 { TTyListBoxTest }
@@ -929,6 +942,31 @@ begin
   AssertTrue('Delta selected (now index 3)',   FList.Selected[3]);
   AssertFalse('Alpha not selected (now index 0)', FList.Selected[0]);
   AssertFalse('Bravo not selected (now index 1)', FList.Selected[1]);
+end;
+
+procedure TTyListBoxTest.TestRowAtYAccountsForPaddingTop;
+var Acc: TListBoxAccess; off, SH: Integer;
+begin
+  // Rows are PAINTED starting at device-Y = padding-top (RenderTo insets ContentRect by it),
+  // so the row hit-test must subtract that same offset. Regression: previously RowAtY used
+  // `Y div SH` with no offset, so a band at the top of every row mapped to the wrong row.
+  Acc := TListBoxAccess.Create(FForm);
+  Acc.Parent := FForm;
+  Acc.Font.PixelsPerInch := 96;
+  try
+    Acc.Items.Add('a'); Acc.Items.Add('b'); Acc.Items.Add('c');
+    off := Acc.CallContentTopOffset;
+    SH := 24;   // default ItemHeight at 96ppi
+    AssertTrue('default theme gives a non-zero padding-top', off > 0);
+    AssertEquals('top padding band clamps to row 0', 0, Acc.CallRowAtY(off - 1));
+    AssertEquals('row 0 top edge', 0, Acc.CallRowAtY(off));
+    AssertEquals('row 0 bottom edge', 0, Acc.CallRowAtY(off + SH - 1));
+    AssertEquals('row 1 starts one SH below the offset', 1, Acc.CallRowAtY(off + SH));
+    AssertEquals('row 2', 2, Acc.CallRowAtY(off + 2 * SH + 3));
+    AssertEquals('below all rows', -1, Acc.CallRowAtY(off + 3 * SH + 5));
+  finally
+    Acc.Free;
+  end;
 end;
 
 initialization

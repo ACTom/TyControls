@@ -8,7 +8,7 @@ unit umain;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, BGRABitmap,
+  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, BGRABitmap,
   tyControls.Controller, tyControls.Form, tyControls.IconFont,
   tyControls.ImageCollection, tyControls.ColorMath,
   tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.MaskEdit,
@@ -55,6 +55,7 @@ type
     procedure ComboDrop(Sender: TObject);
     procedure LumChange(Sender: TObject);
     procedure VleChange(Sender: TObject; ARow: TTyValueRow);
+    procedure VleEditDialog(Sender: TObject; ARow: TTyValueRow);
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -425,18 +426,25 @@ begin
   FVLE.Parent := Self;
   FVLE.SetBounds(24, 624, 360, 160);
   FVLE.KeyColumnWidth := 96;
-  FVLE.InsertRow('宽度', '1280');
-  FVLE.InsertRow('高度', '800');
-  FVLE.AddRow('标题', 'Rich Inputs 示例');
-  VR := FVLE.AddRow('主题', 'light.tycss');   // 只读行 + 显示名覆盖(国际化)
+  FVLE.AddRow('宽度', '1280').EditorKind := vekInteger;
+  FVLE.AddRow('标题', 'Rich Inputs 示例');         // 纯文本
+  VR := FVLE.AddRow('对齐', 'taCenter');           // 枚举 → 下拉
+  VR.EditorKind := vekEnum;
+  VR.EnumValues := 'taLeftJustify'#10'taCenter'#10'taRightJustify';
+  FVLE.AddRow('前景色', 'clNavy').EditorKind := vekColor;    // 颜色 → 色板对话框 + 色块
+  FVLE.AddRow('字体', 'Segoe UI, 9').EditorKind := vekFont;  // 字体 → 字体对话框
+  VR := FVLE.AddRow('数据路径', 'D:\data');         // 自定义 "…" 对话框(走 OnEditRow)
+  VR.EditorKind := vekDialog;
+  VR := FVLE.AddRow('主题', 'light.tycss');        // 只读 + 显示名覆盖(国际化)
   VR.DisplayKey := '主题(只读)';
   VR.ReadOnly := True;
-  VR := FVLE.AddRow('Font', '(TFont)');       // 可展开的多级行
-  VR.AddChild('Size', '9');
-  VR.AddChild('Bold', 'False');
-  VR.AddChild('Color', 'clWindowText');
-  FVLE.UpdateRows;                              // 加了子行后刷新
+  VR := FVLE.AddRow('Font', '(TFont)');            // 可展开的多级 + 类型化子行
+  VR.AddChild('Size', '9').EditorKind := vekInteger;
+  VR.AddChild('Bold', 'False').EditorKind := vekBoolean;
+  VR.AddChild('Color', 'clWindowText').EditorKind := vekColor;
+  FVLE.UpdateRows;                                 // 加了子行后刷新
   FVLE.OnValueChanged := @VleChange;
+  FVLE.OnEditRow := @VleEditDialog;
 
   // 计算器下拉(CalcEdit / CalcCurrencyEdit:点尾部按钮弹计算器,= 或关闭写回),放 VLE 右侧
   L25 := TTyLabel.Create(Self);
@@ -492,6 +500,13 @@ end;
 procedure TMainForm.VleChange(Sender: TObject; ARow: TTyValueRow);
 begin
   FEcho.Caption := Format('改了「%s」= %s', [ARow.Key, ARow.Value]);
+end;
+
+procedure TMainForm.VleEditDialog(Sender: TObject; ARow: TTyValueRow);
+begin
+  // vekDialog:真实用法在这里弹自定义对话框(选路径 / 输入等),选完写回 ARow.Value。
+  if InputQuery('数据路径', '输入路径:', ARow.Value) then
+    FEcho.Caption := Format('改了「%s」= %s', [ARow.Key, ARow.Value]);
 end;
 
 end.

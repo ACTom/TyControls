@@ -266,20 +266,29 @@ begin
 end;
 
 procedure TTyDropdownPopup.Close;
+var WasVisible: Boolean;
 begin
   if FClosing then Exit;
   FClosing := True;
   try
-    if (FForm <> nil) and FForm.Visible then
+    WasVisible := (FForm <> nil) and FForm.Visible;
+    if WasVisible then
     begin
       // Detach deactivate to prevent re-entering Close from TForm.Hide.
       FForm.OnDeactivate := nil;
       FForm.Hide;
       FForm.OnDeactivate := @FormDeactivate;
     end;
-    FCloseUpTick := GetTickCount64;
-    if Assigned(FOnClose) then
-      FOnClose(Self);
+    { Only stamp the reopen-race tick and notify when a genuinely-open popup closed. A Close on
+      an already-hidden popup is a true no-op — this makes Close idempotent, so a pick that both
+      commits and closes cannot fire OnClose twice (commit→Close, then a trailing deactivate
+      →Close) or re-run cleanup on a stale state. }
+    if WasVisible then
+    begin
+      FCloseUpTick := GetTickCount64;
+      if Assigned(FOnClose) then
+        FOnClose(Self);
+    end;
   finally
     FClosing := False;
   end;

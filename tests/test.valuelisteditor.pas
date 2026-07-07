@@ -9,6 +9,7 @@ type
     FFired: Integer;
     FLastRow: TTyValueRow;
     procedure OnValChanged(Sender: TObject; ARow: TTyValueRow);
+    procedure OnEditDialogRow(Sender: TObject; ARow: TTyValueRow);
     function MakeWH: TTyValueListEditor;   // Width=100, Height=50
   published
     procedure TestInsertAndRead;
@@ -23,6 +24,12 @@ type
     procedure TestAddRowReturnsRow;
     procedure TestNestingAndExpand;
     procedure TestDisplayKeyValueAndStyle;
+    procedure TestDialogEditorFiresCallback;
+    procedure TestReadOnlyRowBlocksDialog;
+    procedure TestExpandRepinsSelectionByIdentity;
+    procedure TestCollapseRepinsSelectionByIdentity;
+    procedure TestCollapsedChildDeselects;
+    procedure TestFontDescriptorParse;
   end;
 implementation
 
@@ -30,6 +37,12 @@ procedure TValueListEditorTest.OnValChanged(Sender: TObject; ARow: TTyValueRow);
 begin
   Inc(FFired);
   FLastRow := ARow;
+end;
+
+procedure TValueListEditorTest.OnEditDialogRow(Sender: TObject; ARow: TTyValueRow);
+begin
+  Inc(FFired);
+  ARow.Value := 'picked';   // a real app would show a dialog; here just set the value
 end;
 
 function TValueListEditorTest.MakeWH: TTyValueListEditor;
@@ -205,6 +218,114 @@ begin
     AssertEquals('actual key untouched', 'color', r.Key);
     AssertEquals('actual value untouched', '$FF0000', r.Value);
   finally e.Free; end;
+end;
+
+procedure TValueListEditorTest.TestDialogEditorFiresCallback;
+var e: TTyValueListEditor; r: TTyValueRow;
+begin
+  // A vekDialog row routes BeginEdit through OnEditRow (the app shows a dialog + sets the value).
+  e := TTyValueListEditor.Create(nil);
+  try
+    FFired := 0;
+    r := e.AddRow('Path', 'C:\old');
+    r.EditorKind := vekDialog;
+    e.OnEditRow := @OnEditDialogRow;
+    e.BeginEdit(0);            // flat 0 = the row; dispatch -> OnEditRow (no handle needed)
+    AssertEquals('callback fired', 1, FFired);
+    AssertEquals('value set by callback', 'picked', r.Value);
+    AssertEquals('not left in edit mode', -1, e.EditingRow);
+  finally e.Free; end;
+end;
+
+procedure TValueListEditorTest.TestReadOnlyRowBlocksDialog;
+var e: TTyValueListEditor; r: TTyValueRow;
+begin
+  e := TTyValueListEditor.Create(nil);
+  try
+    FFired := 0;
+    r := e.AddRow('Path', 'C:\old');
+    r.EditorKind := vekDialog;
+    r.ReadOnly := True;        // per-row read-only
+    e.OnEditRow := @OnEditDialogRow;
+    e.BeginEdit(0);            // must be refused
+    AssertEquals('callback NOT fired', 0, FFired);
+    AssertEquals('value unchanged', 'C:\old', r.Value);
+  finally e.Free; end;
+end;
+
+procedure TValueListEditorTest.TestExpandRepinsSelectionByIdentity;
+var e: TTyValueListEditor; b: TTyValueRow;
+begin
+  // Selecting C, then expanding a node ABOVE it must keep C selected (its numeric index shifts).
+  e := TTyValueListEditor.Create(nil);
+  try
+    e.SetBounds(0, 0, 200, 200); e.Font.PixelsPerInch := 96;
+    e.AddRow('A', '1');
+    b := e.AddRow('B', '(node)');
+    b.AddChild('b1', 'x'); b.AddChild('b2', 'y');
+    e.AddRow('C', '3');
+    e.SetExpanded(b, False);              // flat: [A, B, C]
+    AssertEquals('3 visible collapsed', 3, e.VisibleRowCount);
+    e.ItemIndex := 2;                     // select C
+    AssertEquals('C selected', 2, e.ItemIndex);
+    e.SetExpanded(b, True);               // flat: [A, B, b1, b2, C] -> C now at 4
+    AssertEquals('5 visible expanded', 5, e.VisibleRowCount);
+    AssertEquals('C re-pinned by identity', 4, e.ItemIndex);
+  finally e.Free; end;
+end;
+
+procedure TValueListEditorTest.TestCollapseRepinsSelectionByIdentity;
+var e: TTyValueListEditor; b: TTyValueRow;
+begin
+  e := TTyValueListEditor.Create(nil);
+  try
+    e.SetBounds(0, 0, 200, 200); e.Font.PixelsPerInch := 96;
+    e.AddRow('A', '1');
+    b := e.AddRow('B', '(node)');
+    b.AddChild('b1', 'x'); b.AddChild('b2', 'y');
+    e.AddRow('C', '3');
+    e.UpdateRows;                         // expanded by default: [A, B, b1, b2, C]
+    e.ItemIndex := 4;                     // select C
+    e.SetExpanded(b, False);              // -> [A, B, C], C back to 2
+    AssertEquals('C re-pinned on collapse', 2, e.ItemIndex);
+  finally e.Free; end;
+end;
+
+procedure TValueListEditorTest.TestCollapsedChildDeselects;
+var e: TTyValueListEditor; b: TTyValueRow;
+begin
+  // A selected child that collapses out of view clears the selection (not a stale index).
+  e := TTyValueListEditor.Create(nil);
+  try
+    e.SetBounds(0, 0, 200, 200); e.Font.PixelsPerInch := 96;
+    b := e.AddRow('B', '(node)');
+    b.AddChild('b1', 'x'); b.AddChild('b2', 'y');
+    e.UpdateRows;                         // [B, b1, b2]
+    e.ItemIndex := 1;                     // select b1
+    AssertEquals('b1 selected', 1, e.ItemIndex);
+    e.SetExpanded(b, False);              // b1 gone
+    AssertEquals('selection cleared', -1, e.ItemIndex);
+  finally e.Free; end;
+end;
+
+procedure TValueListEditorTest.TestFontDescriptorParse;
+var nm: string; sz: Integer;
+begin
+  // Well-formed 'Name, Size'
+  AssertTrue('simple ok', TyParseFontDescriptor('Arial, 12', nm, sz));
+  AssertEquals('name', 'Arial', nm); AssertEquals('size', 12, sz);
+  // Family name with spaces
+  AssertTrue('spaced name ok', TyParseFontDescriptor('Times New Roman, 9', nm, sz));
+  AssertEquals('spaced name', 'Times New Roman', nm); AssertEquals('spaced size', 9, sz);
+  // Family name that itself contains commas: last integer token is the size
+  AssertTrue('comma name ok', TyParseFontDescriptor('Font, With, Commas, 14', nm, sz));
+  AssertEquals('comma name kept', 'Font, With, Commas', nm); AssertEquals('comma size', 14, sz);
+  // No numeric token: whole thing is the name, size NOT forced (returns False)
+  AssertFalse('no size', TyParseFontDescriptor('JustAName', nm, sz));
+  AssertEquals('name is whole', 'JustAName', nm);
+  // Garbled tail is not an integer: keep whole as name, no size
+  AssertFalse('non-int tail', TyParseFontDescriptor('Bad, xyz', nm, sz));
+  AssertEquals('garbled kept whole', 'Bad, xyz', nm);
 end;
 
 initialization

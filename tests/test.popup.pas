@@ -16,8 +16,12 @@ type
 
   { Smoke test for TTyDropdownPopup: Create/Destroy + IsOpen, no real window. }
   TPopupSmokeTest = class(TTestCase)
+  private
+    FCloses: Integer;
+    procedure OnClose(Sender: TObject);
   published
     procedure TestCreateDestroyNoRaise;
+    procedure TestCloseOnHiddenIsNoOp;
   end;
 
 implementation
@@ -52,6 +56,29 @@ begin
   p := TTyDropdownPopup.Create;
   try
     AssertFalse('not open initially', p.IsOpen);
+  finally
+    p.Free;
+  end;
+end;
+
+procedure TPopupSmokeTest.OnClose(Sender: TObject);
+begin
+  Inc(FCloses);
+end;
+
+procedure TPopupSmokeTest.TestCloseOnHiddenIsNoOp;
+var
+  p: TTyDropdownPopup;
+begin
+  // Close is idempotent: closing a popup that was never shown must NOT fire OnClose
+  // (a pick that commits+closes could otherwise re-fire it via a trailing deactivate).
+  FCloses := 0;
+  p := TTyDropdownPopup.Create;
+  try
+    p.OnClose := @OnClose;
+    p.Close;
+    p.Close;
+    AssertEquals('no OnClose for a never-open popup', 0, FCloses);
   finally
     p.Free;
   end;

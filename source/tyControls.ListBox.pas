@@ -57,6 +57,14 @@ type
     // Row index at client device Y (or -1 if outside any item). For subclasses that
     // hit-test rows, e.g. TTyCheckListBox's checkbox column.
     function RowAtY(AY: Integer): Integer;
+    { Device-Y offset where row 0 begins = the listbox padding-top, scaled. Row hit-tests
+      (MouseDown/MouseMove/RowAtY) subtract it so clicks agree with the painted row positions
+      (RenderTo draws the first row at ContentRect.Top = padding-top, not at Y=0). }
+    function ContentTopOffset: Integer;
+    { Re-pin the selected index WITHOUT firing OnChange — for a subclass that keeps the same
+      logical selection across a structural rebuild (only positions shifted, selection set
+      unchanged). Mirrors ResyncSelectionFromTexts' silent contract, but caller-driven. }
+    procedure SetItemIndexSilent(const AIndex: Integer);
     { TopIndex setter — protected virtual so a subclass with an inline editor
       (TTyValueListEditor) can commit/close it before the list scrolls (all scroll paths —
       wheel, scrollbar, keyboard auto-scroll — funnel through here). }
@@ -609,7 +617,7 @@ begin
   if Button = mbLeft then
   begin
     SH := ScaledItemHeight;
-    Row := FTopIndex + (Y div SH);
+    Row := FTopIndex + ((Y - ContentTopOffset) div SH);
     if (Row >= 0) and (Row < FItems.Count) then
     begin
       if not FMultiSelect then
@@ -652,7 +660,7 @@ var
 begin
   inherited MouseMove(Shift, X, Y);
   SH := ScaledItemHeight;
-  NewRow := FTopIndex + (Y div SH);
+  NewRow := FTopIndex + ((Y - ContentTopOffset) div SH);
   if (NewRow < 0) or (NewRow >= FItems.Count) then
     NewRow := -1;
   if NewRow <> FHoverRow then
@@ -856,8 +864,22 @@ var SH: Integer;
 begin
   SH := ScaledItemHeight;
   if SH <= 0 then Exit(-1);
-  Result := FTopIndex + (AY div SH);
+  Result := FTopIndex + ((AY - ContentTopOffset) div SH);
   if (Result < 0) or (Result >= FItems.Count) then Result := -1;
+end;
+
+function TTyListBox.ContentTopOffset: Integer;
+begin
+  { Same scale RenderTo uses (P.Scale = MulDiv(x, APPI, 96)); Font.PixelsPerInch tracks APPI. }
+  Result := MulDiv(CurrentStyle.Padding.Top, Font.PixelsPerInch, 96);
+end;
+
+procedure TTyListBox.SetItemIndexSilent(const AIndex: Integer);
+begin
+  if (AIndex >= 0) and (AIndex < FItems.Count) then
+    FItemIndex := AIndex
+  else
+    FItemIndex := -1;
 end;
 
 procedure TTyListBox.Paint;

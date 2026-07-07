@@ -4,7 +4,7 @@
 
 TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是**键**(可展开的多级树,带三角),右列是**可编辑的值**,中间是**可拖动的分隔条**。每行是一个 `TTyValueRow` 对象——`Key`/`DisplayKey`、`Value`/`DisplayValue`、值类型 `EditorKind`、`ReadOnly`、逐行样式(`Bold`/`TextColor`/`ImageIndex`)以及**子行**(嵌套)。用 `AddRow`(返回行对象,便于嵌套 / 定类型 / 设样式)构建,或用简单的 `InsertRow(key, value)`。行布局、选择、滚动来自 [TTyListBox](listbox.md);值单元用主题化 [TTyEdit](edit.md) 覆盖层就地编辑。
 
-> **分层建设:** 本层(地基)= 行对象模型 + 多级树 + 分隔拖动 + 只读 + `DisplayKey`/`DisplayValue` + 值加粗/变色/图标 + **文本**内联编辑。**类型编辑器**(布尔 / 枚举 / 颜色下拉 / 字体 · "…" 对话框)按 `EditorKind` 分派,后续层加入。
+**按 `EditorKind` 分派的值编辑器:** `vekText`/`vekInteger`/`vekFloat` = 文本内联;`vekBoolean` = `True`/`False` 下拉;`vekEnum` = `EnumValues`(每行一项)下拉;`vekColor` = 色板对话框(`TySelectColor`)+ 单元色块;`vekFont` = 字体对话框(`TTyFontDialog`);`vekDialog` = 触发 `OnEditRow`(应用弹自定义对话框写回 `ARow.Value`);`vekReadOnly` = 不可编辑。
 
 ---
 
@@ -47,7 +47,7 @@ uses tyControls.ValueListEditor;
 
 ## 4. 交互
 
-- **点值列** → 就地编辑(文本);**点键列** → 选中该行。选中行按 **F2 / Enter** 也进入编辑。
+- **点值列** → 按该行 `EditorKind` 编辑:文本内联 / 布尔·枚举下拉 / 颜色·字体·自定义弹对话框;**点键列** → 选中该行。选中行按 **F2 / Enter** 也进入编辑。
 - **点键列前的三角** → 展开/收起子行。
 - **拖分隔条**(光标变 ↔)→ 调整键/值列宽。
 - 编辑中:**Enter** / 点别处 / 失焦 → 提交;**Esc** → 取消。`ReadOnly` 行 / 全局 `ReadOnly` 不可编辑。

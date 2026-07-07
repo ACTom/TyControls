@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
   tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Base,
-  tyControls.Controller, tyControls.ListBox, tyControls.Edit, tyControls.ImageCollection;
+  tyControls.Controller, tyControls.ListBox, tyControls.Edit, tyControls.ImageCollection,
+  tyControls.Popup;
 
 type
   { How a row's VALUE cell is edited. Layer 1 implements vekText (inline TTyEdit) and vekReadOnly;
@@ -59,12 +60,17 @@ type
     FEditFlat: Integer;               // flat index being edited, or -1
     FEndingEdit: Boolean;
     FRebuilding: Boolean;
+    FDropMode: Boolean;               // a boolean/enum dropdown is open (suppresses OnExit commit)
+    FDropSeeding: Boolean;            // guard while seeding the dropdown's selection
+    FEnumPopup: TTyDropdownPopup;     // lazy dropdown for vekBoolean / vekEnum
+    FEnumList: TTyListBox;
     FKeyColumnWidth: Integer;         // logical px
     FIndent: Integer;                 // logical px per nesting level
     FReadOnly: Boolean;
     FDraggingSplit: Boolean;
     FImages: TTyVirtualImageList;
     FOnValueChanged: TTyValueEditEvent;
+    FOnEditRow: TTyValueEditEvent;    // vekDialog: the app shows a dialog + sets ARow.Value
     function Dp(ALogical: Integer): Integer;
     function ContentLeftDp: Integer;
     function ContentRightDp: Integer;
@@ -85,6 +91,13 @@ type
     procedure SetKeyColumnWidth(AValue: Integer);
     procedure SetImages(const AValue: TTyVirtualImageList);
     procedure CommitEditor(AFlat: Integer; const AText: string);
+    procedure BeginTextEdit(AFlat: Integer);
+    procedure BeginDropdown(AFlat: Integer; const AOptions: string);
+    procedure DropPick(Sender: TObject);
+    procedure DropClick(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure DropClosed(Sender: TObject);
+    procedure EditColorRow(AFlat: Integer);
+    procedure EditFontRow(AFlat: Integer);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure EditorExit(Sender: TObject);
     procedure EndEdit(ACommit: Boolean; ARestoreFocus: Boolean = False);
@@ -136,12 +149,37 @@ type
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
     property Images: TTyVirtualImageList read FImages write SetImages;
     property OnValueChanged: TTyValueEditEvent read FOnValueChanged write FOnValueChanged;
+    // Fires for a vekDialog row (click its value / '…'): show a custom dialog and set ARow.Value.
+    property OnEditRow: TTyValueEditEvent read FOnEditRow write FOnEditRow;
   end;
+
+{ Parse a 'Name, Size' font descriptor defensively. The LAST comma-separated token that is a
+  pure integer is the size; everything before it rejoins as the name (so a family name that
+  itself contains commas is preserved). Returns True only when a numeric size was found —
+  callers must NOT force a default size when it's False, or a real stored size is silently lost. }
+function TyParseFontDescriptor(const ADesc: string; out AName: string; out ASize: Integer): Boolean;
 
 implementation
 
 uses
-  BGRABitmap, BGRABitmapTypes, BGRACanvas2D, tyControls.ColorMath;
+  BGRABitmap, BGRABitmapTypes, BGRACanvas2D, tyControls.ColorMath,
+  tyControls.Dialogs.Color, tyControls.Dialogs.Font;
+
+function TyParseFontDescriptor(const ADesc: string; out AName: string; out ASize: Integer): Boolean;
+var i, p: Integer;
+begin
+  p := 0;
+  for i := Length(ADesc) downto 1 do
+    if ADesc[i] = ',' then begin p := i; Break; end;
+  Result := (p > 0) and TryStrToInt(Trim(Copy(ADesc, p + 1, MaxInt)), ASize);
+  if Result then
+    AName := Trim(Copy(ADesc, 1, p - 1))
+  else
+  begin
+    AName := Trim(ADesc);   // no numeric token: the whole descriptor is the name
+    ASize := 0;
+  end;
+end;
 
 { ---- TTyValueRow ---- }
 
@@ -214,6 +252,8 @@ end;
 
 destructor TTyValueListEditor.Destroy;
 begin
+  FreeAndNil(FEnumPopup);   // free the popup (its form) before the list it only parented
+  FreeAndNil(FEnumList);
   FreeRows;
   inherited Destroy;
 end;
@@ -241,12 +281,18 @@ begin
 end;
 
 procedure TTyValueListEditor.RebuildFlat;
-var i: Integer;
+var i, newIdx: Integer; sel: TTyValueRow;
 begin
   if FRebuilding then Exit;
   if FEditFlat >= 0 then EndEdit(True);   // commit before the flat indices change
   FRebuilding := True;
   try
+    { Remember the selected ROW OBJECT so we can re-pin the selection by identity, not by
+      position: expand/collapse/add/delete renumber the flat rows, and the base only clamps
+      FItemIndex on a shrink — an expand would silently leave it pointing at a different row. }
+    sel := nil;
+    if (ItemIndex >= 0) and (ItemIndex <= High(FFlatRow)) then
+      sel := FFlatRow[ItemIndex];
     SetLength(FFlatRow, 0);
     SetLength(FFlatLevel, 0);
     for i := 0 to High(FRoot) do
@@ -259,6 +305,13 @@ begin
     finally
       Items.EndUpdate;
     end;
+    { Re-pin selection to the same row (or clear it if that row scrolled out of the tree,
+      e.g. its parent collapsed). Silent: only the position moved, the selection set didn't. }
+    newIdx := -1;
+    if sel <> nil then
+      for i := 0 to High(FFlatRow) do
+        if FFlatRow[i] = sel then begin newIdx := i; Break; end;
+    SetItemIndexSilent(newIdx);
   finally
     FRebuilding := False;
   end;
@@ -477,19 +530,125 @@ begin
   if r.ReadOnly or (r.EditorKind = vekReadOnly) then Exit;
   if FEditFlat = AFlat then Exit;
   if FEditFlat >= 0 then EndEdit(True);
+  case r.EditorKind of
+    vekBoolean: BeginDropdown(AFlat, 'False'#10'True');
+    vekEnum:    BeginDropdown(AFlat, r.EnumValues);
+    vekColor:   EditColorRow(AFlat);
+    vekFont:    EditFontRow(AFlat);
+    vekDialog:  if Assigned(FOnEditRow) then begin FOnEditRow(Self, r); Invalidate; end;
+  else
+    BeginTextEdit(AFlat);   // vekText / vekInteger / vekFloat
+  end;
+end;
+
+procedure TTyValueListEditor.BeginTextEdit(AFlat: Integer);
+begin
   FEditFlat := AFlat;
+  FEditor.ReadOnly := False;
   FEditor.Controller := Controller;
-  FEditor.Text := r.Value;
+  FEditor.Text := FFlatRow[AFlat].Value;
   FEditor.BoundsRect := CellRect(AFlat, 1);
   FEditor.Visible := True;
   if CanFocus and FEditor.CanFocus then FEditor.SetFocus;
   Invalidate;
 end;
 
+procedure TTyValueListEditor.BeginDropdown(AFlat: Integer; const AOptions: string);
+var cell: TRect; rows: Integer;
+begin
+  FEditFlat := AFlat;
+  FDropMode := True;
+  cell := CellRect(AFlat, 1);
+  { The edit overlay is the field + the popup anchor — read-only, so the value is PICKED. }
+  FEditor.ReadOnly := True;
+  FEditor.Controller := Controller;
+  FEditor.Text := FFlatRow[AFlat].Value;
+  FEditor.BoundsRect := cell;
+  FEditor.Visible := True;
+  if FEnumPopup = nil then
+  begin
+    FEnumPopup := TTyDropdownPopup.Create;
+    FEnumPopup.OnClose := @DropClosed;
+    FEnumList := TTyListBox.Create(nil);
+    FEnumList.OnChange := @DropPick;      // a real selection change picks + closes
+    FEnumList.OnMouseUp := @DropClick;    // ...and so does clicking the ALREADY-selected row
+    FEnumPopup.SetContent(FEnumList);
+  end;
+  FEnumList.Controller := Controller;
+  FDropSeeding := True;   // seeding the selection must not fire a pick
+  FEnumList.Items.Text := StringReplace(AOptions, LineEnding, #10, [rfReplaceAll]);
+  FEnumList.ItemIndex := FEnumList.Items.IndexOf(FFlatRow[AFlat].Value);
+  FDropSeeding := False;
+  rows := FEnumList.Items.Count;
+  if rows > 8 then rows := 8;
+  if rows < 1 then rows := 1;
+  FEnumPopup.Popup(FEditor, cell.Right - cell.Left, rows * Dp(ItemHeight) + Dp(2));
+end;
+
+procedure TTyValueListEditor.DropPick(Sender: TObject);
+begin
+  if FDropSeeding then Exit;
+  if (FEnumList.ItemIndex >= 0) and (FEditFlat >= 0) then
+    CommitEditor(FEditFlat, FEnumList.Items[FEnumList.ItemIndex]);
+  if FEnumPopup <> nil then FEnumPopup.Close;
+end;
+
+{ Clicking a row that is ALREADY selected fires no OnChange (SelectItem exits early), so the
+  pick would be a dead interaction. MouseUp fires on every click, so commit+close from here
+  too; on a changing click OnChange already ran and FEditFlat is -1, making this a safe no-op. }
+procedure TTyValueListEditor.DropClick(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+begin
+  if FDropSeeding or (Button <> mbLeft) then Exit;
+  if (FEnumList.ItemIndex >= 0) and (FEditFlat >= 0) then
+    CommitEditor(FEditFlat, FEnumList.Items[FEnumList.ItemIndex]);
+  if FEnumPopup <> nil then FEnumPopup.Close;
+end;
+
+procedure TTyValueListEditor.DropClosed(Sender: TObject);
+begin
+  FDropMode := False;
+  if FEditor <> nil then begin FEditor.ReadOnly := False; FEditor.Visible := False; end;
+  FEditFlat := -1;
+  Invalidate;
+  if CanFocus then SetFocus;
+end;
+
+procedure TTyValueListEditor.EditColorRow(AFlat: Integer);
+var col: TColor; a: Byte;
+begin
+  col := StringToColorDef(FFlatRow[AFlat].Value, clBlack);
+  a := 255;
+  if TySelectColor('选择颜色', col, a) then
+    CommitEditor(AFlat, ColorToString(col));
+  if CanFocus then SetFocus;
+end;
+
+procedure TTyValueListEditor.EditFontRow(AFlat: Integer);
+var dlg: TTyFontDialog; nm: string; sz: Integer; hasSize: Boolean;
+begin
+  dlg := TTyFontDialog.Create(nil);
+  try
+    hasSize := TyParseFontDescriptor(FFlatRow[AFlat].Value, nm, sz);
+    if nm <> '' then dlg.Font.Name := nm;
+    if hasSize and (sz > 0) then dlg.Font.Size := sz;   // else keep the dialog's own default size
+    if dlg.Execute then
+      CommitEditor(AFlat, Format('%s, %d', [dlg.Font.Name, dlg.Font.Size]));
+  finally
+    dlg.Free;
+  end;
+  if CanFocus then SetFocus;
+end;
+
 procedure TTyValueListEditor.EndEdit(ACommit: Boolean; ARestoreFocus: Boolean);
 var flat: Integer;
 begin
   if FEditor = nil then Exit;
+  if FDropMode then
+  begin
+    if FEnumPopup <> nil then FEnumPopup.Close;   // the dropdown's cleanup runs in DropClosed
+    Exit;
+  end;
   if FEditFlat < 0 then Exit;
   if FEndingEdit then Exit;
   FEndingEdit := True;
@@ -525,6 +684,7 @@ end;
 procedure TTyValueListEditor.EditorExit(Sender: TObject);
 begin
   if csDestroying in ComponentState then Exit;
+  if FDropMode then Exit;   // the popup took focus; the dropdown drives commit/close, not this
   if (FEditFlat >= 0) and not FEndingEdit then EndEdit(True);
 end;
 
@@ -558,8 +718,8 @@ procedure TTyValueListEditor.PaintItemContent(P: TTyPainter; const ARowRect: TRe
   AIndex: Integer; const AStyle: TTyStyleSet);
 var
   r: TTyValueRow;
-  level, splitX, lo, hi, pad, indentX, sz, weight, imgSz: Integer;
-  keyR, valR, tri: TRect;
+  level, splitX, lo, hi, pad, indentX, sz, weight, imgSz, sw: Integer;
+  keyR, valR, tri, swR: TRect;
   divider, keyCol, valCol: TTyColor;
   ctx: TBGRACanvas2D;
   bmp: TBGRABitmap;
@@ -622,6 +782,25 @@ begin
   if AIndex <> FEditFlat then
   begin
     valR := Rect(splitX + pad, ARowRect.Top, ARowRect.Right - P.Scale(4), ARowRect.Bottom);
+    // '…' affordance for the dialog-based editors (colour / font / custom), at the right edge.
+    if r.EditorKind in [vekColor, vekFont, vekDialog] then
+    begin
+      P.DrawText(Rect(valR.Right - P.Scale(16), valR.Top, valR.Right, valR.Bottom), '…',
+        AStyle.FontName, ResolveFontSize(AStyle) + 2, 700, AStyle.TextColor, taCenter, tlCenter, False);
+      valR.Right := valR.Right - P.Scale(18);
+    end;
+    // colour swatch for a colour row.
+    if r.EditorKind = vekColor then
+    begin
+      sw := (ARowRect.Bottom - ARowRect.Top) - P.Scale(8);
+      if sw < 6 then sw := 6;
+      swR := Rect(valR.Left, ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top) - sw) div 2,
+        valR.Left + sw, ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top) - sw) div 2 + sw);
+      P.Bitmap.Canvas2D.fillStyle(TyColorToBGRA(TyColorFromLCL(StringToColorDef(r.Value, clBlack), 255)));
+      P.Bitmap.Canvas2D.fillRect(swR.Left, swR.Top, sw, sw);
+      P.StrokeBorder(swR, 0, 1, AStyle.TextColor);
+      valR.Left := valR.Left + sw + P.Scale(5);
+    end;
     // optional image
     if (FImages <> nil) and (r.ImageIndex >= 0) and (r.ImageIndex < FImages.Count) then
     begin
