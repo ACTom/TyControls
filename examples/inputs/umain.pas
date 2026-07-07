@@ -20,7 +20,7 @@ uses
   tyControls.LColorPicker, tyControls.HSColorPicker, tyControls.CheckComboBox,
   tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.ValueListEditor,
   tyControls.CalcEdit, tyControls.CalcCurrencyEdit, tyControls.TyLabel,
-  tyControls.Dialogs.SelectPath;
+  tyControls.Dialogs.SelectPath, tyControls.Dialogs.About;
 
 type
   TMainForm = class(TTyForm)
@@ -436,6 +436,8 @@ begin
   FVLE.AddRow('字体', 'Segoe UI, 9').EditorKind := vekFont;  // 叶字体 → 文本 + "…"弹字体对话框
   VR := FVLE.AddRow('数据路径', 'D:\data');         // 文本 + "…" → 库自带路径对话框(OnEditRow)
   VR.EditorKind := vekDialog;
+  VR := FVLE.AddRow('关于', 'TyControls 2.2.0');    // 用户侧自定义:"…" 弹只读关于对话框,不写回值
+  VR.EditorKind := vekDialog;
   VR := FVLE.AddRow('主题', 'light.tycss');        // 只读 + 显示名覆盖(国际化)
   VR.DisplayKey := '主题(只读)';
   VR.ReadOnly := True;
@@ -512,12 +514,21 @@ end;
 procedure TMainForm.VleEditDialog(Sender: TObject; ARow: TTyValueRow);
 var dir: string;
 begin
-  // vekDialog:点"…"弹【控件库自带】的路径对话框(而非原生),选完写回 ARow.Value。
-  dir := ARow.Value;
-  if TySelectDirectory('选择数据路径', '', dir) then
+  // vekDialog = 完全用户侧自定义:点"…"触发本事件,按行自己决定弹什么、是否写回值。
+  if SameText(ARow.Key, '关于') then
+    // 纯信息(内容只读):弹库自带只读关于对话框,不改 ARow.Value。
+    TyShowAbout('关于', 'TyControls Rich Inputs 示例', 'v2.2.0',
+      'ValueListEditor 用户侧自定义行处理演示', '© 2026 ACTom', 'MIT 许可',
+      'https://github.com/ACTom/TyControls')
+  else
   begin
-    ARow.Value := dir;
-    FEcho.Caption := Format('改了「%s」= %s', [ARow.Key, ARow.Value]);
+    // 弹【控件库自带】路径对话框(而非原生),选完写回 ARow.Value(会随之更新显示)。
+    dir := ARow.Value;
+    if TySelectDirectory('选择数据路径', '', dir) then
+    begin
+      ARow.Value := dir;
+      FEcho.Caption := Format('改了「%s」= %s', [ARow.Key, ARow.Value]);
+    end;
   end;
 end;
 

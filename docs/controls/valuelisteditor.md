@@ -13,11 +13,13 @@ TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是*
 | `vekBoolean` | `True` / `False` 下拉 |
 | `vekEnum` | `EnumValues`(每行一项)下拉 |
 | `vekColor` | **色板下拉**(每项一个色块),最后一行"更多…"弹主题色对话框(`TySelectColor`);单元显示色块 |
-| `vekFont` | 文本 + 尾部"**…**"按钮——文本可选中/复制,**只有点"…"** 才弹字体对话框(`TTyFontDialog`);若该行有子行(`Name`/`Size`/`Color` + 四个样式位 `Bold`/`Italic`/`Underline`/`StrikeOut`,或嵌套 `Style` 节点下的样式位),选好字体后**回写这些子行** |
-| `vekDialog` | 文本 + 尾部"**…**"按钮——只有点"…"才触发 `OnEditRow`(应用弹**库自带**对话框如 `TySelectDirectory` 写回 `ARow.Value`) |
+| `vekFont` | **只读**文本(可点/选/复制)+ 尾部"**…**"按钮——**只有点"…"** 才弹字体对话框(`TTyFontDialog`);若该行有子行(`Name`/`Size`/`Color` + 四个样式位 `Bold`/`Italic`/`Underline`/`StrikeOut`,或嵌套 `Style` 节点下的样式位),选好字体后**回写这些子行** |
+| `vekDialog` | **用户侧自定义**:**只读**文本 + 尾部"**…**"按钮——点"…"触发 `OnEditRow`,应用**自己决定弹什么**(库自带 `TySelectDirectory` / `TyShowAbout` / `TyMessageDlg` …)、是否写回 `ARow.Value`(如"关于"这类纯只读信息就不写回) |
 | `vekReadOnly` | 不可编辑 |
 
-用 `InvokeRowDialog(flat)` 可编程触发 `vekFont`/`vekDialog` 行的对话框(即"…"按钮所做的)。
+- **`vekFont`/`vekDialog` 的内联文本是只读的**:值由对话框决定,文本只供查看/复制,编辑一律走"…"(避免手输脏值,也让复合 Font 行与子行不脱节)。
+- 用 `InvokeRowDialog(flat)` 可编程触发 `vekFont`/`vekDialog` 行的对话框(即"…"按钮所做的)。
+- **`vekDialog` 就是"用户侧自定义"入口**:一个 `OnEditRow` 事件覆盖全部 `vekDialog` 行,在处理器里按 `ARow.Key`(或行对象)分派到各自的动作——弹只读的关于框、选路径、跳消息框皆可。
 
 ---
 

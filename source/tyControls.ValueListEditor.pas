@@ -786,14 +786,14 @@ begin
     vekColor:   BeginColorDropdown(AFlat);
     vekInteger: BeginInlineEdit(AFlat, vnmInteger, False);
     vekFloat:   BeginInlineEdit(AFlat, vnmFloat, False);
-    vekFont:
+    vekFont, vekDialog:
       begin
-        BeginInlineEdit(AFlat, vnmNone, True);   // text + "…" -> font dialog
-        { A Font COMPOSITE keeps the "…" dialog but its (derived) text is read-only — still
-          selectable / copyable, just not typeable. A leaf Font row stays freely editable. }
-        if IsFontComposite(r) then FEditor.ReadOnly := True;
+        { The value is authoritative FROM the dialog (font picker / OnEditRow), so the inline text
+          is READ-ONLY — still clickable / selectable / copyable, just edited via the "…" button
+          (not free-typed). This also keeps a Font composite in sync with its children. }
+        BeginInlineEdit(AFlat, vnmNone, True);
+        FEditor.ReadOnly := True;
       end;
-    vekDialog:  BeginInlineEdit(AFlat, vnmNone, True);   // editable text + "…" -> OnEditRow
   else
     BeginInlineEdit(AFlat, vnmNone, False);              // vekText
   end;

@@ -435,11 +435,11 @@ begin
 end;
 
 procedure TValueListEditorTest.TestCompositeRowsNotFreelyEditable;
-var e: TTyValueListEditor; font, style, leaf: TTyValueRow;
+var e: TTyValueListEditor; font, style, leaf, dlg: TTyValueRow;
 begin
-  // A composite value is DERIVED from its children, so it must not be freely typed: a Font
-  // composite gets a READ-ONLY inline editor (still "…"-dialogable); a Style composite refuses
-  // inline editing entirely. A leaf (childless) Font row stays editable.
+  // Dialog-backed rows (vekFont / vekDialog) have READ-ONLY inline text — clickable/copyable but
+  // edited only via the "…" dialog (so a derived Font value can't desync from its children, and a
+  // vekDialog value is set by its handler). A Style composite refuses inline editing entirely.
   e := TTyValueListEditor.Create(nil);
   try
     e.SetBounds(0, 0, 220, 220); e.Font.PixelsPerInch := 96;
@@ -450,7 +450,8 @@ begin
     style.AddChild('Bold', 'False');
     style.AddChild('Italic', 'False');
     leaf := e.AddRow('LeafFont', 'Arial, 10'); leaf.EditorKind := vekFont;   // no children
-    e.UpdateRows;   // flat: Font0 Name1 Size2 Style3 Bold4 Italic5 LeafFont6
+    dlg := e.AddRow('About', 'v2.2.0');          dlg.EditorKind := vekDialog;
+    e.UpdateRows;   // flat: Font0 Name1 Size2 Style3 Bold4 Italic5 LeafFont6 About7
 
     e.BeginEdit(0);
     AssertEquals('font composite entered edit', 0, e.EditingRow);
@@ -461,7 +462,11 @@ begin
 
     e.BeginEdit(6);
     AssertEquals('leaf font entered edit', 6, e.EditingRow);
-    AssertFalse('leaf font is freely editable', e.InlineEditor.ReadOnly);
+    AssertTrue('leaf font inline text is read-only too', e.InlineEditor.ReadOnly);
+
+    e.BeginEdit(7);
+    AssertEquals('vekDialog row entered edit', 7, e.EditingRow);
+    AssertTrue('vekDialog inline text is read-only', e.InlineEditor.ReadOnly);
   finally e.Free; end;
 end;
 
