@@ -10,8 +10,8 @@ interface
 
 uses
   Classes, SysUtils, Graphics, Forms, Controls, BGRABitmap, BGRABitmapTypes, BGRACanvas2D,
-  tyControls.Form, tyControls.Types, tyControls.Painter, tyControls.ColorMath,
-  tyControls.TyLabel, tyControls.Bevel, tyControls.Divider,
+  tyControls.Controller, tyControls.Form, tyControls.Types, tyControls.Painter,
+  tyControls.ColorMath, tyControls.TyLabel, tyControls.Bevel, tyControls.Divider,
   tyControls.PaintPanel, tyControls.SizeBox;
 
 type
@@ -24,7 +24,7 @@ type
     function Bevel(AShape: TTyBevelShape; AStyle: TTyBevelStyle; AL, AT, AW, AH: Integer): TTyBevel;
     function Lbl(const AText: string; AL, AT: Integer): TTyLabel;
   public
-    constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
+    constructor Create(AOwner: TComponent); override;
   end;
 
 var
@@ -32,14 +32,37 @@ var
 
 implementation
 
-constructor TMainForm.CreateNew(AOwner: TComponent; Num: Integer);
+function ThemesDir: string;
+var Dir: string; i: Integer;
 begin
-  inherited CreateNew(AOwner, Num);
+  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
+  for i := 1 to 8 do
+  begin
+    if DirectoryExists(Dir + 'themes') then Exit(Dir + 'themes' + PathDelim);
+    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
+    if Dir = '' then Break;
+  end;
+  Result := 'themes' + PathDelim;
+end;
+
+constructor TMainForm.Create(AOwner: TComponent);
+var Bar: TTyTitleBar;
+begin
+  inherited CreateNew(AOwner, 0);
   Caption := 'TyControls — 容器与布局(Phase 5 · Batch 1)';
-  Width := 620;
-  Height := 460;
   Position := poScreenCenter;
+  SetBounds(0, 0, 620, 470);
+
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+
+  Bar := TTyTitleBar.Create(Self);
+  Bar.Parent := Self;
+  Bar.Align := alTop;
+  Bar.Height := 34;
+  Bar.Caption := '容器与布局  · TyControls';
+
   BuildUI;
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 function TMainForm.Lbl(const AText: string; AL, AT: Integer): TTyLabel;
@@ -85,34 +108,35 @@ begin
 end;
 
 procedure TMainForm.BuildUI;
-var grip: TTySizeBox;
+var grip: TTySizeBox; baseY: Integer;
 begin
-  Divider('分割线 TTyDivider(左 / 中 / 右)', taLeftJustify, 16);
-  Divider('居中标题', taCenter, 44);
-  Divider('右对齐', taRightJustify, 72);
+  baseY := 44;   // below the title bar
+  Divider('分割线 TTyDivider(左 / 中 / 右)', taLeftJustify, baseY + 4);
+  Divider('居中标题', taCenter, baseY + 32);
+  Divider('右对齐', taRightJustify, baseY + 60);
 
-  Divider('装饰 TTyBevel', taLeftJustify, 108);
-  Lbl('Box / Frame(凹 / 凸)', 20, 134);
-  Bevel(tbsBox,   tbsLowered, 20,  154, 120, 60);
-  Bevel(tbsFrame, tbsLowered, 152, 154, 120, 60);
-  Bevel(tbsFrame, tbsRaised,  284, 154, 120, 60);
-  Lbl('单边线', 430, 134);
-  Bevel(tbsTopLine,    tbsLowered, 430, 158, 160, 2);
-  Bevel(tbsBottomLine, tbsRaised,  430, 182, 160, 2);
+  Divider('装饰 TTyBevel', taLeftJustify, baseY + 96);
+  Lbl('Box / Frame(凹 / 凸)', 20, baseY + 122);
+  Bevel(tbsBox,   tbsLowered, 20,  baseY + 142, 120, 60);
+  Bevel(tbsFrame, tbsLowered, 152, baseY + 142, 120, 60);
+  Bevel(tbsFrame, tbsRaised,  284, baseY + 142, 120, 60);
+  Lbl('单边线', 430, baseY + 122);
+  Bevel(tbsTopLine,    tbsLowered, 430, baseY + 146, 160, 2);
+  Bevel(tbsBottomLine, tbsRaised,  430, baseY + 170, 160, 2);
 
-  Divider('自绘表面 TTyPaintPanel', taLeftJustify, 232);
+  Divider('自绘表面 TTyPaintPanel', taLeftJustify, baseY + 220);
   FSurface := TTyPaintPanel.Create(Self);
   FSurface.Parent := Self;
-  FSurface.SetBounds(20, 258, 384, 150);
+  FSurface.SetBounds(20, baseY + 246, 384, 130);
   FSurface.OnPaintSurface := @PaintSurface;
 
-  Lbl('右下角 → 尺寸手柄 TTySizeBox(拖动改窗口大小)', 20, 420);
+  Lbl('右下角 → 尺寸手柄 TTySizeBox(拖动改窗口大小)', 20, baseY + 386);
 
   // 右下角尺寸手柄:拖动缩放本窗体(Target 默认取 owner 窗体)。
   grip := TTySizeBox.Create(Self);
   grip.Parent := Self;
   grip.Anchors := [akRight, akBottom];
-  grip.SetBounds(Width - 20, Height - 20, 16, 16);
+  grip.SetBounds(ClientWidth - 20, ClientHeight - 20, 16, 16);
 end;
 
 end.
