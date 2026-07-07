@@ -3,7 +3,7 @@ unit test.radiogroup;
 interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
-  tyControls.Base, tyControls.CheckBox, tyControls.RadioGroup;
+  tyControls.Base, tyControls.Controller, tyControls.CheckBox, tyControls.RadioGroup;
 type
   TRadioGroupTest = class(TTestCase)
   private
@@ -39,6 +39,8 @@ type
     // rebuild survives selection
     procedure TestRebuildPreservesValidIndex;
     procedure TestRebuildDropsNowInvalidIndex;
+    procedure TestRebuildPreservesSelectionByIdentity;
+    procedure TestControllerPropagatesToChildren;
     // events
     procedure TestClickFiresSelectionChanged;
     procedure TestProgrammaticSetIsSilent;
@@ -49,6 +51,40 @@ type
   end;
 
 implementation
+
+procedure TRadioGroupTest.TestRebuildPreservesSelectionByIdentity;
+begin
+  // A mid-list delete must keep the selection on its OWN item, not on the raw slot.
+  FGrp.Items.CommaText := 'A,B,C';
+  FGrp.ItemIndex := 2;                 // 'C'
+  FGrp.Items.Delete(0);                // -> ['B','C']; the selection must FOLLOW 'C' to index 1
+  AssertEquals('selection follows the item, not the slot', 1, FGrp.ItemIndex);
+end;
+
+procedure TRadioGroupTest.TestControllerPropagatesToChildren;
+var
+  Ctl: TTyStyleController;
+  i, seen: Integer;
+begin
+  // A controller assigned AFTER population must re-push onto the existing radio children.
+  FGrp.Items.CommaText := 'A,B';       // radios built with the current controller
+  Ctl := TTyStyleController.Create(nil);
+  try
+    FGrp.Controller := Ctl;
+    seen := 0;
+    for i := 0 to FGrp.ControlCount - 1 do
+      if FGrp.Controls[i] is TTyRadioButton then
+      begin
+        AssertTrue('child follows the group controller',
+          TTyRadioButton(FGrp.Controls[i]).Controller = Ctl);
+        Inc(seen);
+      end;
+    AssertEquals('both radios present', 2, seen);
+  finally
+    FGrp.Controller := nil;            // detach children before freeing the controller
+    Ctl.Free;
+  end;
+end;
 
 function TRadioGroupTest.SelChangeFired: Boolean;
 begin

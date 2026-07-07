@@ -34,6 +34,7 @@ type
     procedure TestToggleFiresOnItemChange;
     procedure TestSetCheckedFiresOnItemChange;
     procedure TestRebuildPreservesCheckedByIndex;
+    procedure TestRebuildPreservesCheckedByIdentityOnDelete;
     procedure TestRebuildDoesNotFireOnItemChange;
     procedure TestIsDesignerContainerInherited;
   end;
@@ -362,6 +363,27 @@ begin
     AssertFalse('index 1 stayed unchecked across rebuild', G.Checked[1]);
     AssertTrue('index 2 stayed checked across rebuild', G.Checked[2]);
     AssertFalse('new index 3 defaults unchecked', G.Checked[3]);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TCheckGroupTest.TestRebuildPreservesCheckedByIdentityOnDelete;
+var
+  F: TForm;
+  G: TTyCheckGroup;
+begin
+  // A mid-list delete must keep each check on its OWN item (by identity), not on the raw slot.
+  F := TForm.CreateNew(nil);
+  try
+    G := TTyCheckGroup.Create(F);
+    G.Parent := F;
+    G.Items.CommaText := 'A,B,C';
+    G.Checked[2] := True;              // only 'C' is checked
+    G.Items.Delete(0);                 // -> ['B','C']; the check must FOLLOW 'C' to index 1
+    AssertEquals('two items remain', 2, G.Items.Count);
+    AssertFalse('B (new index 0) is not checked', G.Checked[0]);
+    AssertTrue('C survived to index 1 and stays checked', G.Checked[1]);
   finally
     F.Free;
   end;

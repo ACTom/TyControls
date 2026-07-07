@@ -163,18 +163,22 @@ end;
 
 procedure TTyCheckGroup.RebuildCheckBoxes;
 var
-  i, n: Integer;
-  prevChecked: array of Boolean;
+  i, n, idx: Integer;
+  oldChecked: TStringList;
   cb: TTyCheckBox;
 begin
   if FRebuilding then Exit;   // guard against re-entrancy (child churn shouldn't recurse)
   FRebuilding := True;
+  oldChecked := TStringList.Create;
   try
-    // Snapshot the current checked states BY INDEX so a rebuild preserves them where
-    // the item still exists (new items default unchecked, removed ones drop off).
-    SetLength(prevChecked, Length(FCheckBoxes));
+    // Snapshot the CHECKED items BY IDENTITY (caption), not by raw slot index — so a mid-list
+    // edit (delete/insert), not just an append, preserves each user check on its OWN item
+    // instead of migrating it onto whatever slides into that index. Duplicate captions are
+    // consumed one-for-one (Delete below) so N checked "A"s restore onto the first N "A"s.
+    oldChecked.CaseSensitive := True;
     for i := 0 to High(FCheckBoxes) do
-      prevChecked[i] := (FCheckBoxes[i] <> nil) and FCheckBoxes[i].Checked;
+      if (FCheckBoxes[i] <> nil) and FCheckBoxes[i].Checked then
+        oldChecked.Add(FCheckBoxes[i].Caption);
 
     ClearCheckBoxes;
 
@@ -188,8 +192,12 @@ begin
       cb.Parent := Self;
       cb.Caption := FItems[i];
       cb.Controller := Controller;         // follow the group's controller (nil-safe)
-      if (i <= High(prevChecked)) and prevChecked[i] then
+      idx := oldChecked.IndexOf(FItems[i]);
+      if idx >= 0 then
+      begin
         cb.Checked := True;
+        oldChecked.Delete(idx);            // consume so duplicate captions match one-for-one
+      end;
       cb.OnChange := @ChildChanged;        // wired AFTER the initial Checked set above,
                                            // so restoring state does not fire OnItemChange
       FCheckBoxes[i] := cb;
@@ -197,6 +205,7 @@ begin
 
     LayoutCheckBoxes;
   finally
+    oldChecked.Free;
     FRebuilding := False;
   end;
   Invalidate;

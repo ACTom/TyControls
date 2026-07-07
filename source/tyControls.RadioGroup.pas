@@ -3,7 +3,7 @@ unit tyControls.RadioGroup;
 interface
 uses
   Classes, SysUtils, Types, Controls,
-  tyControls.Base, tyControls.GroupBox, tyControls.CheckBox;
+  tyControls.Base, tyControls.Controller, tyControls.GroupBox, tyControls.CheckBox;
 type
   { TTyRadioGroup — a titled frame (subclass of TTyGroupBox, so it inherits the themed
     caption band + the AdjustClientRect inset) that AUTO-POPULATES one TTyRadioButton
@@ -39,6 +39,9 @@ type
   protected
     procedure SetParent(AParent: TWinControl); override;
     procedure DoOnResize; override;
+    // Keep the internal radio children on the group's controller so a controller assigned
+    // AFTER population still themes them (mirrors TTyCheckGroup.SetController).
+    procedure SetController(AValue: TTyStyleController); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -172,15 +175,30 @@ begin
   SetLength(FButtons, 0);
 end;
 
+procedure TTyRadioGroup.SetController(AValue: TTyStyleController);
+var i: Integer;
+begin
+  inherited SetController(AValue);
+  for i := 0 to High(FButtons) do
+    if FButtons[i] <> nil then
+      FButtons[i].Controller := AValue;
+end;
+
 procedure TTyRadioGroup.RebuildButtons;
 var
-  prevIndex, i: Integer;
+  prevIndex, newIndex, i: Integer;
+  prevCaption: string;
+  hadSel: Boolean;
   rb: TTyRadioButton;
 begin
   if FRebuilding then Exit;
   FRebuilding := True;
   try
-    prevIndex := GetItemIndex;   // remember the selection across the rebuild
+    // Remember the selection by IDENTITY (caption), not raw index — so a mid-list Items edit
+    // (delete/insert) doesn't migrate the selection onto a different item.
+    prevIndex := GetItemIndex;
+    hadSel := (prevIndex >= 0) and (prevIndex <= High(FButtons)) and (FButtons[prevIndex] <> nil);
+    if hadSel then prevCaption := FButtons[prevIndex].Caption else prevCaption := '';
     ClearButtons;
     SetLength(FButtons, FItems.Count);
     for i := 0 to FItems.Count - 1 do
@@ -197,14 +215,18 @@ begin
       FButtons[i] := rb;
     end;
     LayoutButtons;
-    // Re-apply the previous selection if it still points at a valid item.
-    if (prevIndex >= 0) and (prevIndex < Length(FButtons)) then
+    // Re-apply the previous selection to the SAME item if it survived the edit.
+    if hadSel then
     begin
-      FUpdatingIndex := True;   // silent: a rebuild is not a user selection change
-      try
-        FButtons[prevIndex].Checked := True;
-      finally
-        FUpdatingIndex := False;
+      newIndex := FItems.IndexOf(prevCaption);
+      if (newIndex >= 0) and (newIndex < Length(FButtons)) then
+      begin
+        FUpdatingIndex := True;   // silent: a rebuild is not a user selection change
+        try
+          FButtons[newIndex].Checked := True;
+        finally
+          FUpdatingIndex := False;
+        end;
       end;
     end;
   finally
