@@ -261,13 +261,17 @@ function TTyCoolBar.BandRectFor(ACtl: TControl): TRect;
 var
   gw: Integer;
 begin
-  // The band spans the child's bounds grown LEFT by the gripper strip (the gripper
-  // column sits to the left of the hosted content). Device px, control-local.
+  // The base (TTyControlBar) reserves + draws ONE gripper per band-ROW, at the row's left edge
+  // (x = 0..gw). So only the row's FIRST child — the one placed at Left = gw (the content-left
+  // after that single gripper) — is a resize target; a child packed further right on the same row
+  // shares no gripper and must NOT be grippable (else its hit-zone is a phantom strip with nothing
+  // drawn, resizing the wrong band). Return the real row-left gripper rect for a first child, else
+  // an empty rect. Device px, control-local.
   if ACtl = nil then Exit(Rect(0, 0, 0, 0));
   gw := GripperWidthPx;
+  if ACtl.Left > gw + 1 then Exit(Rect(0, 0, 0, 0));   // not the row's first child -> no gripper
   Result := ACtl.BoundsRect;
-  Result.Left := Result.Left - gw;
-  if Result.Left < 0 then Result.Left := 0;
+  Result.Left := 0;   // the drawn gripper spans x = 0..gw at this row's Y range
 end;
 
 function TTyCoolBar.BandAtPoint(AX, AY: Integer): TControl;

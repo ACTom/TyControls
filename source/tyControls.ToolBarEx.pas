@@ -44,6 +44,7 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     { The count of buttons currently pushed into the overflow popup (0 = all fit / the bar
       is wrapping). Exposed for tests + host code that wants to reflect the overflow state. }
     function OverflowCount: Integer;
@@ -102,6 +103,25 @@ begin
   inherited Create(AOwner);
   // Overflow is the differentiator, so default to the non-wrapping mode where it applies.
   Wrapable := False;
+end;
+
+destructor TTyToolBarEx.Destroy;
+var i: Integer;
+begin
+  // If we're freed while the overflow popup is still open, its adopted buttons (form-owned but
+  // re-parented INTO the popup) would be left orphaned: freeing the popup only un-parents them
+  // (Parent := nil) — it neither frees them (the form owns them) nor restores them, and the
+  // normal PopupClosed restore is skipped under csDestroying. Re-home them to OUR parent (the
+  // surviving container) first so they stay reachable/freeable and never dangle invisible.
+  if (FPopup <> nil) and FPopup.Visible and (Parent <> nil) then
+    for i := 0 to High(FOverflow) do
+      if FOverflow[i] <> nil then
+      begin
+        FOverflow[i].Parent := Parent;
+        FOverflow[i].Visible := False;   // they were hidden overflow — don't leave strays showing
+      end;
+  FreeAndNil(FPopup);
+  inherited Destroy;
 end;
 
 function TTyToolBarEx.ChevronWidthPx: Integer;

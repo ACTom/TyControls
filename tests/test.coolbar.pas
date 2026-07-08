@@ -50,7 +50,8 @@ type
     procedure TestDefaultMinWidthWhenUnset;
     procedure TestPerBandMinOverridesDefault;
     procedure TestMaxWidthUnboundedByDefault;
-    procedure TestBandRectGrowsLeftByGripper;
+    procedure TestBandRectIsRowLeftGripper;
+    procedure TestNonFirstBandChildNotGrippable;
     procedure TestGripperDragResizesBand;
     procedure TestGripperDragHonoursMinClamp;
   end;
@@ -239,35 +240,50 @@ begin
   AssertEquals('max stored', 300, CB.BandMaxWidth(b));
 end;
 
-procedure TCoolBarControlTest.TestBandRectGrowsLeftByGripper;
+procedure TCoolBarControlTest.TestBandRectIsRowLeftGripper;
 var CB: TCoolBarAccess; b: TControl; r: TRect;
 begin
-  // At 96 PPI the gripper is GripperWidth (10) px; the band rect starts 10px left of the
-  // hosted child's bounds.
+  // The base draws ONE gripper per band-row at the row's left edge (x = 0..gripW). The row's
+  // FIRST child is placed at Left = gripW (the content-left after that gripper), so its band rect
+  // is the row-left gripper column: left = 0, and the hit-zone is 0..gripW.
   CB := TCoolBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
-  b := MakeBand(CB, 40, 0, 80, 30);
+  b := MakeBand(CB, 10, 0, 80, 30);   // first-of-row child sits at Left = gripW (10)
   AssertEquals('gripper is 10px at 96 PPI', 10, CB.GripPx);
   r := CB.BandRect(b);
-  AssertEquals('band left = child left - gripper', 30, r.Left);
-  AssertEquals('band right = child right', 120, r.Right);
+  AssertEquals('band left = row left (0), where the gripper is drawn', 0, r.Left);
+  AssertEquals('band right = child right', 90, r.Right);
   AssertEquals('band top = child top', 0, r.Top);
   AssertEquals('band bottom = child bottom', 30, r.Bottom);
+end;
+
+procedure TCoolBarControlTest.TestNonFirstBandChildNotGrippable;
+var CB: TCoolBarAccess; b0, b1: TControl;
+begin
+  // A child packed further right on the SAME row (Left > gripW) shares no drawn gripper, so it
+  // must NOT be a resize target — an empty band rect, no phantom hit zone resizing the wrong band.
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b0 := MakeBand(CB, 10, 0, 80, 30);    // first of row -> grippable
+  b1 := MakeBand(CB, 200, 0, 80, 30);   // packed to the right -> NOT grippable
+  AssertFalse('first-of-row band is grippable', IsRectEmpty(CB.BandRect(b0)));
+  AssertTrue('non-first band has no gripper (empty rect)', IsRectEmpty(CB.BandRect(b1)));
 end;
 
 procedure TCoolBarControlTest.TestGripperDragResizesBand;
 var CB: TCoolBarAccess; b: TControl;
 begin
-  // Grab the gripper (band left..left+10), drag right by 50 -> the band width grows 50.
+  // Grab the row-left gripper (x in 0..10), drag right by 50 -> the band width grows 50.
   CB := TCoolBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
-  b := MakeBand(CB, 40, 0, 80, 30);     // gripper column = x in [30..40)
+  b := MakeBand(CB, 10, 0, 80, 30);     // first-of-row: gripper column = x in [0..10)
   CB.SetBandWidth(b, 80);
-  CB.CallMouseDown(32, 15);             // on the gripper
-  CB.CallMouseMove(82, 15);             // +50 px
-  CB.CallMouseUp(82, 15);
+  CB.CallMouseDown(5, 15);              // on the gripper
+  CB.CallMouseMove(55, 15);            // +50 px
+  CB.CallMouseUp(55, 15);
   AssertEquals('band width grew by the drag delta', 130, CB.GetBandWidth(b));
 end;
 
@@ -277,12 +293,12 @@ begin
   CB := TCoolBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
-  b := MakeBand(CB, 40, 0, 80, 30);
+  b := MakeBand(CB, 10, 0, 80, 30);
   CB.SetBandWidth(b, 80);
   CB.SetBandMinWidth(b, 50);
-  CB.CallMouseDown(32, 15);
-  CB.CallMouseMove(32 - 500, 15);       // drag far left, way past the floor
-  CB.CallMouseUp(32 - 500, 15);
+  CB.CallMouseDown(5, 15);
+  CB.CallMouseMove(5 - 500, 15);        // drag far left, way past the floor
+  CB.CallMouseUp(5 - 500, 15);
   AssertEquals('drag clamps to the per-band min', 50, CB.GetBandWidth(b));
 end;
 
