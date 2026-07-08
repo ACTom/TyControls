@@ -22,7 +22,7 @@ unit tyControls.ToolBarEx;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, Forms,
   tyControls.Base, tyControls.Button,
   tyControls.PopupSurface, tyControls.ToolBar;
 
@@ -35,11 +35,15 @@ type
     FPopupItems: array of TControl;      // authoritative copy of the buttons adopted into the OPEN
                                          // flyout — restore (PopupClosed/Destroy) uses THIS, not the
                                          // FOverflow that relayouts rebuild underneath us
+    FSavedClicks: array of TNotifyEvent; // each adopted button's own OnClick, parallel to FPopupItems;
+                                         // restored on close (we temporarily wrap it to auto-dismiss)
     FInExLayout: Boolean;                // re-entrancy guard for the overflow relayout
     FPopupOpen: Boolean;                 // flyout is open/opening: freeze the fit-relayout so the
                                          // reparent-into-popup pass can't rebuild FOverflow mid-loop
     procedure EnsureMoreButton;
     procedure MoreClick(Sender: TObject);
+    procedure PopupItemClick(Sender: TObject);
+    procedure DeferredClosePopup(Data: PtrInt);
     procedure PopupClosed(Sender: TObject);
     procedure ClearOverflow;
     function ChevronWidthPx: Integer;
@@ -113,6 +117,7 @@ end;
 destructor TTyToolBarEx.Destroy;
 var i: Integer;
 begin
+  Application.RemoveAsyncCalls(Self);   // drop any queued DeferredClosePopup before we go
   // If we're freed while the overflow popup is still open, its adopted buttons (form-owned but
   // re-parented INTO the popup) would be left orphaned: freeing the popup only un-parents them
   // (Parent := nil) — it neither frees them (the form owns them) nor restores them, and the
@@ -293,6 +298,7 @@ begin
 
   x := pad;
   y := pad;
+  SetLength(FSavedClicks, Length(FPopupItems));
   for i := 0 to High(FPopupItems) do
   begin
     if FPopupItems[i] = nil then Continue;
@@ -300,12 +306,43 @@ begin
     FPopupItems[i].Align := alNone;
     FPopupItems[i].SetBounds(x, y, maxW, itemH);
     FPopupItems[i].Visible := True;
+    // Wrap the button's OnClick so picking an item runs its own handler THEN dismisses the flyout
+    // (menu semantics). The original is stashed + restored on close.
+    if FPopupItems[i] is TTyButton then
+    begin
+      FSavedClicks[i] := TTyButton(FPopupItems[i]).OnClick;
+      TTyButton(FPopupItems[i]).OnClick := @PopupItemClick;
+    end;
     Inc(y, itemH + gap);
   end;
 
   w := maxW + pad * 2;
   tl := FMoreBtn.ClientToScreen(Point(0, FMoreBtn.Height));
   FPopup.ShowAt(Rect(tl.x, tl.y, tl.x + w, tl.y + y + pad - gap));
+end;
+
+procedure TTyToolBarEx.PopupItemClick(Sender: TObject);
+var
+  i: Integer;
+  orig: TNotifyEvent;
+begin
+  orig := nil;
+  for i := 0 to High(FPopupItems) do
+    if FPopupItems[i] = Sender then
+    begin
+      if i <= High(FSavedClicks) then orig := FSavedClicks[i];
+      Break;
+    end;
+  if Assigned(orig) then orig(Sender);   // run the app's command first
+  // Defer the dismiss to the next message-loop turn: closing now would re-parent + hide THIS button
+  // while it is still mid-click (inside its own OnClick), which is fragile. QueueAsyncCall runs
+  // after the click fully unwinds.
+  Application.QueueAsyncCall(@DeferredClosePopup, 0);
+end;
+
+procedure TTyToolBarEx.DeferredClosePopup(Data: PtrInt);
+begin
+  if (FPopup <> nil) and FPopup.Visible then FPopup.ClosePopup;
 end;
 
 procedure TTyToolBarEx.PopupClosed(Sender: TObject);
@@ -316,14 +353,18 @@ begin
   if csDestroying in ComponentState then Exit;
   // Restore EVERY adopted button to the bar from the authoritative snapshot (NOT FOverflow, which
   // a relayout may have rebuilt to a different subset). They stay hidden — still overflowing —
-  // until the next relayout decides afresh which ones fit.
+  // until the next relayout decides afresh which ones fit. Also restore each button's own OnClick
+  // (we wrapped it to auto-dismiss while adopted).
   for i := 0 to High(FPopupItems) do
     if FPopupItems[i] <> nil then
     begin
+      if (FPopupItems[i] is TTyButton) and (i <= High(FSavedClicks)) then
+        TTyButton(FPopupItems[i]).OnClick := FSavedClicks[i];
       FPopupItems[i].Parent := Self;
       FPopupItems[i].Visible := False;
     end;
   SetLength(FPopupItems, 0);
+  SetLength(FSavedClicks, 0);
   Realign;    // recompute the fit now the popup is gone
 end;
 
