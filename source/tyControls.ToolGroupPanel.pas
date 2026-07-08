@@ -161,8 +161,11 @@ begin
       sizes[i].cy := list[i].Height;
     end;
 
-    // ClientRect is already inset below the caption band by the inherited AdjustClientRect.
+    // GetClientRect returns the RAW client rect — LCL applies AdjustClientRect only to ALIGNED
+    // children, and our flowed buttons are alNone + placed by SetBounds. Inset it ourselves so
+    // they drop below the caption band (else they paint over the group caption).
     cr := ClientRect;
+    AdjustClientRect(cr);             // TTyGroupBox insets Top below the caption band
     rects := TyToolFlowRects(cr, sizes, FSpacing, FButtonHeight);
     for i := 0 to n - 1 do
       list[i].SetBounds(rects[i].Left, rects[i].Top, list[i].Width, FButtonHeight);

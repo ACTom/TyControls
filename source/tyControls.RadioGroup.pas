@@ -242,9 +242,11 @@ var
 begin
   n := Length(FButtons);
   if n = 0 then Exit;
-  // ClientRect is already inset below the caption band by the inherited AdjustClientRect,
-  // so the children lay out INSIDE the framed content area.
+  // GetClientRect returns the RAW client rect — LCL applies AdjustClientRect only to ALIGNED
+  // children, and our radios are alNone + placed by SetBounds. Inset it ourselves so they drop
+  // below the caption band (else they paint over the group caption).
   client := ClientRect;
+  AdjustClientRect(client);             // TTyGroupBox insets Top below the caption band
   for i := 0 to n - 1 do
   begin
     if FButtons[i] = nil then Continue;
