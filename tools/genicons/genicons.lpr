@@ -363,6 +363,21 @@ begin
   Line(b,11,7.4,17,7.4,Ink,1.2); Line(b,6,13,18,13,Faint,1.2); Line(b,6,16.5,15,16.5,Faint,1.2);
 end;
 
+{ TTyGridPanel: a rounded frame carved into a 3x2 cell grid, top-left cell accent-filled }
+procedure GGridPanel(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink); FillRRect(b,4,5,10,11,1,Acc);
+  Line(b,10,4,10,20,Ink,1); Line(b,16,4,16,20,Ink,1); Line(b,3,12,21,12,Ink,1);
+end;
+
+{ TTyRelativePanel: an accent tile top-left + a sibling tile to its right with a connector arrow }
+procedure GRelativePanel(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink); FillRRect(b,5.5,6.5,10.5,11.5,1,Acc); RRect(b,13,6.5,18.5,11.5,1,Faint);
+  Line(b,10.5,9,13,9,Ink,1.2); PolyL(b,[PointF(12,7.8),PointF(13,9),PointF(12,10.2)],Ink,1.1);
+  Line(b,5.5,14.5,18.5,14.5,Faint,1.2); Line(b,5.5,17.2,15,17.2,Faint,1.2);
+end;
+
 { TTyCalendar: rounded rect with a top header bar + two rows of day dots }
 procedure GCalendar(b: TBGRABitmap);
 begin
@@ -527,7 +542,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..116] of TGlyph = (
+  Glyphs: array[0..118] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -644,7 +659,9 @@ const
     (Name:'TTyToolGroupPanel';    Draw:@GToolGroupPanel),
     (Name:'TTyScrollBox';         Draw:@GScrollBox),
     (Name:'TTyScrollPanel';       Draw:@GScrollPanel),
-    (Name:'TTyExPanel';           Draw:@GExPanel)
+    (Name:'TTyExPanel';           Draw:@GExPanel),
+    (Name:'TTyGridPanel';         Draw:@GGridPanel),
+    (Name:'TTyRelativePanel';     Draw:@GRelativePanel)
   );
 
 const

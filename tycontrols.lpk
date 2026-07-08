@@ -544,6 +544,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.ExPanel.pas"/>
         <UnitName Value="tyControls.ExPanel"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.GridPanel.pas"/>
+        <UnitName Value="tyControls.GridPanel"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.RelativePanel.pas"/>
+        <UnitName Value="tyControls.RelativePanel"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

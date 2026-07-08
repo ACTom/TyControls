@@ -111,6 +111,8 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyScrollBox](scrollbox.md) | 滚动视口容器（内容溢出自动显示内嵌滚动条） |
 | [TTyScrollPanel](scrollpanel.md) | 自动平移滚动容器（拖到视口边缘朝该边自动滚） |
 | [TTyExPanel](expanel.md) | 可折叠/展开面板（点标题栏折叠,高度缓动动画） |
+| [TTyGridPanel](gridpanel.md) | 固定网格布局（列×行轨道:绝对/百分比/star,`SetCell` 跨格摆放） |
+| [TTyRelativePanel](relativepanel.md) | 相对布局（子控件按规则相对兄弟/父容器摆放,拓扑求解,环安全） |
 
 ## 日期与时间
 

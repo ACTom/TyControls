@@ -14,7 +14,8 @@ uses
   tyControls.ColorMath, tyControls.TyLabel, tyControls.Bevel, tyControls.Divider,
   tyControls.PaintPanel, tyControls.SizeBox,
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
-  tyControls.ScrollBox, tyControls.ExPanel, tyControls.Button, tyControls.CheckBox;
+  tyControls.ScrollBox, tyControls.ExPanel, tyControls.Button, tyControls.CheckBox,
+  tyControls.GridPanel, tyControls.RelativePanel, tyControls.Edit;
 
 type
   TMainForm = class(TTyForm)
@@ -24,6 +25,7 @@ type
     procedure BuildUI;
     procedure BuildGroups(AX, AY: Integer);
     procedure BuildScroll(AX, AY: Integer);
+    procedure BuildLayout(AX, AY: Integer);
     function Divider(const ACap: string; AAlign: TAlignment; AY: Integer): TTyDivider;
     function Bevel(AShape: TTyBevelShape; AStyle: TTyBevelStyle; AL, AT, AW, AH: Integer): TTyBevel;
     function Lbl(const AText: string; AL, AT: Integer): TTyLabel;
@@ -55,7 +57,7 @@ begin
   inherited CreateNew(AOwner, 0);
   Caption := 'TyControls — 容器与布局(Phase 5)';
   Position := poScreenCenter;
-  SetBounds(0, 0, 940, 520);
+  SetBounds(0, 0, 1180, 520);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -143,6 +145,43 @@ begin
   TG.AddButton('格式刷');   // 放不下时自动换行
 end;
 
+procedure TMainForm.BuildLayout(AX, AY: Integer);
+var Grid: TTyGridPanel; RP: TTyRelativePanel; i: Integer; L: TTyLabel; E: TTyEdit;
+    Title, BtnOK, BtnCancel: TTyButton;
+const Fields: array[0..2] of string = ('用户名', '邮箱', '电话');
+begin
+  Divider('网格 / 相对布局', taLeftJustify, AY + 4);
+
+  // 网格布局:左列固定 60px 放标签,右列 star 放输入框;3 行 star。
+  Grid := TTyGridPanel.Create(Self);
+  Grid.Parent := Self;
+  Grid.SetBounds(AX, AY + 34, 220, 120);
+  Grid.Spacing := 6;
+  Grid.ColumnCount := 2;
+  Grid.RowCount := 3;
+  Grid.SetColumnStyle(0, tgtAbsolute, 56);
+  Grid.SetColumnStyle(1, tgtStar);
+  for i := 0 to 2 do
+  begin
+    L := TTyLabel.Create(Grid); L.Parent := Grid; L.Caption := Fields[i];
+    Grid.SetCell(L, 0, i);
+    E := TTyEdit.Create(Grid); E.Parent := Grid;
+    Grid.SetCell(E, 1, i);
+  end;
+
+  // 相对布局:标题居中贴顶;取消贴右下;确定在取消左侧、与其顶对齐。
+  RP := TTyRelativePanel.Create(Self);
+  RP.Parent := Self;
+  RP.SetBounds(AX, AY + 166, 220, 100);
+  Title := TTyButton.Create(RP); Title.Parent := RP; Title.SetBounds(0, 0, 100, 26);
+  Title.Caption := '标题'; RP.SetRules(Title, [traCenterHorizontal, traAlignParentTop]);
+  BtnCancel := TTyButton.Create(RP); BtnCancel.Parent := RP; BtnCancel.SetBounds(0, 0, 80, 28);
+  BtnCancel.Caption := '取消'; RP.SetRules(BtnCancel, [traAlignParentRight, traAlignParentBottom]);
+  BtnOK := TTyButton.Create(RP); BtnOK.Parent := RP; BtnOK.SetBounds(0, 0, 80, 28);
+  BtnOK.Caption := '确定'; RP.SetRules(BtnOK, [trLeftOf, traAlignBottomOf], BtnCancel);
+  RP.PerformLayout;
+end;
+
 procedure TMainForm.BuildScroll(AX, AY: Integer);
 var EP: TTyExPanel; Box: TTyScrollBox; Chk: TTyCheckBox; Btn: TTyButton; i: Integer;
 begin
@@ -202,8 +241,10 @@ begin
 
   // —— 中栏:Batch 2 分组容器 ——
   BuildGroups(430, baseY);
-  // —— 右栏:Batch 3 滚动/折叠容器 ——
+  // —— 第三列:Batch 3 滚动/折叠容器 ——
   BuildScroll(710, baseY);
+  // —— 第四列:Batch 4 布局容器 ——
+  BuildLayout(950, baseY);
 
   // 右下角尺寸手柄:拖动缩放本窗体(Target 默认取 owner 窗体)。
   grip := TTySizeBox.Create(Self);
