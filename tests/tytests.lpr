@@ -17,6 +17,7 @@ uses
   test.radiogroup, test.checkgroup, test.toolgrouppanel,
   test.scrollbox, test.scrollpanel, test.expanel,
   test.gridpanel, test.relativepanel,
+  test.toolbarex, test.controlbar, test.coolbar,
   test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
   test.controls.scrollbar, test.form, test.themes,

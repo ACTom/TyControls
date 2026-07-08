@@ -113,6 +113,9 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyExPanel](expanel.md) | 可折叠/展开面板（点标题栏折叠,高度缓动动画） |
 | [TTyGridPanel](gridpanel.md) | 固定网格布局（列×行轨道:绝对/百分比/star,`SetCell` 跨格摆放） |
 | [TTyRelativePanel](relativepanel.md) | 相对布局（子控件按规则相对兄弟/父容器摆放,拓扑求解,环安全） |
+| [TTyToolBarEx](toolbarex.md) | 带溢出 `»` 折叠的工具条（非换行时尾部按钮收进弹出浮层） |
+| [TTyControlBar](controlbar.md) | 可停靠工具带宿主（子控件排成水平 band/行,带左侧抓手） |
+| [TTyCoolBar](coolbar.md) | Rebar：每条 band 可拖拽/抓手拖拽调宽（继承 TTyControlBar） |
 
 ## 日期与时间
 

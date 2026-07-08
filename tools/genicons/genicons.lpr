@@ -378,6 +378,34 @@ begin
   Line(b,5.5,14.5,18.5,14.5,Faint,1.2); Line(b,5.5,17.2,15,17.2,Faint,1.2);
 end;
 
+{ TTyToolBarEx: a toolbar strip (2 command dots) with a "»" overflow chevron at the right }
+procedure GToolBarEx(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink); Line(b,3,10,21,10,Ink); FillRRect(b,3.5,4.5,20.5,9.5,1,Faint);
+  FillCirc(b,7,7,1.7,Acc); FillCirc(b,11,7,1.7,Ink);
+  PolyL(b,[PointF(14.5,5.5),PointF(16.5,7),PointF(14.5,8.5)],Acc,1.4);
+  PolyL(b,[PointF(16.5,5.5),PointF(18.5,7),PointF(16.5,8.5)],Acc,1.4);
+end;
+
+{ TTyControlBar: two horizontal bands, each with a left gripper rail + tool dots (a band host) }
+procedure GControlBar(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  Line(b,5.5,6,5.5,10,Acc,1.3); Line(b,7,6,7,10,Acc,1.3);
+  FillCirc(b,10,8,1.3,Ink); FillCirc(b,13.5,8,1.3,Ink); FillCirc(b,17,8,1.3,Faint);
+  Line(b,3,12,21,12,Faint,1);
+  Line(b,5.5,14,5.5,18,Acc,1.3); Line(b,7,14,7,18,Acc,1.3);
+  FillCirc(b,10,16,1.3,Ink); FillCirc(b,13.5,16,1.3,Faint);
+end;
+
+{ TTyCoolBar: a rebar — two stacked draggable bands with accent dot-grippers + faint content bars }
+procedure GCoolBar(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink); Line(b,3,12,21,12,Ink,1);
+  FillCirc(b,5.4,7.4,0.8,Acc); FillCirc(b,5.4,9.4,0.8,Acc); FillRRect(b,8,7,18,10,0.8,Faint);
+  FillCirc(b,5.4,15,0.8,Acc); FillCirc(b,5.4,17,0.8,Acc); FillRRect(b,8,14.6,15,17.6,0.8,Faint);
+end;
+
 { TTyCalendar: rounded rect with a top header bar + two rows of day dots }
 procedure GCalendar(b: TBGRABitmap);
 begin
@@ -542,7 +570,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..118] of TGlyph = (
+  Glyphs: array[0..121] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -661,7 +689,10 @@ const
     (Name:'TTyScrollPanel';       Draw:@GScrollPanel),
     (Name:'TTyExPanel';           Draw:@GExPanel),
     (Name:'TTyGridPanel';         Draw:@GGridPanel),
-    (Name:'TTyRelativePanel';     Draw:@GRelativePanel)
+    (Name:'TTyRelativePanel';     Draw:@GRelativePanel),
+    (Name:'TTyToolBarEx';         Draw:@GToolBarEx),
+    (Name:'TTyControlBar';        Draw:@GControlBar),
+    (Name:'TTyCoolBar';           Draw:@GCoolBar)
   );
 
 const

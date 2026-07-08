@@ -1,0 +1,315 @@
+unit tyControls.ToolBarEx;
+{$mode objfpc}{$H+}
+
+{ TTyToolBarEx — a TTyToolBar that adds an OVERFLOW chevron.
+
+  When the bar is NOT wrapping (Wrapable = False) and its tool buttons are wider than
+  the bar, the trailing buttons that don't fit are hidden and a "»" chevron button
+  (csNoDesignVisible, docked at the right edge) appears. Clicking it opens a
+  TTyPopupSurface hosting those overflow buttons in a vertical stack; picking one still
+  fires its own OnClick (the button is only re-parented, never re-created).
+
+  On resize the overflow set is recomputed (via the pure TyToolbarOverflowCount solver,
+  which mirrors the ribbon's TyRibbonOverflowCount style) and the chevron is shown/hidden
+  automatically — there is no published toggle for it.
+
+  Wrapable = True behaves EXACTLY like the base TTyToolBar (the chevron path is skipped
+  entirely and the base wrapping layout runs); only the non-wrapping overflow path is new.
+
+  The fit decision + the which-buttons-are-hidden set are the pure/thin-shell seam that is
+  headless-unit-tested; the on-screen popup adopt/show + click routing need a real machine. }
+
+interface
+
+uses
+  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  tyControls.Base, tyControls.Button,
+  tyControls.PopupSurface, tyControls.ToolBar;
+
+type
+  TTyToolBarEx = class(TTyToolBar)
+  private
+    FMoreBtn: TTyButton;                 // the "»" chevron (csNoDesignVisible, owned by Self)
+    FPopup: TTyPopupSurface;             // hosts the overflow buttons while open
+    FOverflow: array of TControl;        // the buttons currently hidden into the overflow set
+    FInExLayout: Boolean;                // re-entrancy guard for the overflow relayout
+    procedure EnsureMoreButton;
+    procedure MoreClick(Sender: TObject);
+    procedure PopupClosed(Sender: TObject);
+    procedure ClearOverflow;
+    function ChevronWidthPx: Integer;
+    function IsInternalChild(AControl: TControl): Boolean;
+  protected
+    procedure AlignControls(AControl: TControl; var ARect: TRect); override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    { The count of buttons currently pushed into the overflow popup (0 = all fit / the bar
+      is wrapping). Exposed for tests + host code that wants to reflect the overflow state. }
+    function OverflowCount: Integer;
+    { True when the "»" chevron is currently shown. }
+    function OverflowVisible: Boolean;
+  published
+    property Wrapable;
+  end;
+
+{ Pure overflow decision (device px, left-to-right): given each lead button's width and the
+  available bar width, return how many LEADING buttons fit before the "»" chevron is needed.
+  When every button fits (their total <= AAvailPx) the result is Length(AButtonWidths) and NO
+  chevron is required. Otherwise the chevron (AChevronW wide) is reserved at the right and the
+  result is how many lead buttons fit in the remaining space — ALWAYS at least 1 (the first
+  button shows even if it alone overflows). Headless-testable; mirrors TyRibbonOverflowCount. }
+function TyToolbarOverflowCount(const AButtonWidths: array of Integer;
+  AAvailPx, AChevronW: Integer): Integer;
+
+implementation
+
+// ---------------------------------------------------------------------------
+// Pure fit decision
+// ---------------------------------------------------------------------------
+function TyToolbarOverflowCount(const AButtonWidths: array of Integer;
+  AAvailPx, AChevronW: Integer): Integer;
+var
+  n, i, total, avail: Integer;
+begin
+  n := Length(AButtonWidths);
+  if n = 0 then Exit(0);
+  if AChevronW < 0 then AChevronW := 0;
+
+  // Everything fits with no chevron?
+  total := 0;
+  for i := 0 to n - 1 do Inc(total, AButtonWidths[i]);
+  if total <= AAvailPx then Exit(n);
+
+  // Overflowing: reserve the chevron on the right, then count the lead buttons that fit in
+  // the remaining space. Always show at least the first button.
+  avail := AAvailPx - AChevronW;
+  Result := 0;
+  total := 0;
+  for i := 0 to n - 1 do
+  begin
+    if (Result > 0) and (total + AButtonWidths[i] > avail) then Exit;
+    Inc(total, AButtonWidths[i]);
+    Inc(Result);
+  end;
+end;
+
+// ===========================================================================
+// TTyToolBarEx
+// ===========================================================================
+constructor TTyToolBarEx.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  // Overflow is the differentiator, so default to the non-wrapping mode where it applies.
+  Wrapable := False;
+end;
+
+function TTyToolBarEx.ChevronWidthPx: Integer;
+begin
+  // The chevron's cell width, in the SAME units the base layout works in (ClientWidth /
+  // Indent / ButtonSpacing are all treated as logical px by TyToolbarLayout, and match
+  // device px at PPI 96). A compact fixed cell like the ribbon's "more" button.
+  Result := 30;
+end;
+
+function TTyToolBarEx.IsInternalChild(AControl: TControl): Boolean;
+begin
+  Result := (AControl <> nil) and (AControl = FMoreBtn);
+end;
+
+procedure TTyToolBarEx.EnsureMoreButton;
+begin
+  if FMoreBtn <> nil then Exit;
+  FMoreBtn := TTyButton.Create(Self);       // owned by Self -> freed with the bar
+  FMoreBtn.Parent := Self;
+  FMoreBtn.Caption := '»';
+  FMoreBtn.Hint := '更多命令';
+  FMoreBtn.ShowHint := True;
+  FMoreBtn.StyleClass := 'ghost';            // match the flat toolbar look
+  FMoreBtn.OnClick := @MoreClick;
+  // Internal helper: keep it out of the IDE designer's child list.
+  FMoreBtn.ControlStyle := FMoreBtn.ControlStyle + [csNoDesignVisible];
+  FMoreBtn.Visible := False;
+end;
+
+procedure TTyToolBarEx.ClearOverflow;
+begin
+  SetLength(FOverflow, 0);
+end;
+
+procedure TTyToolBarEx.AlignControls(AControl: TControl; var ARect: TRect);
+var
+  i, n, visCount, x, chevW: Integer;
+  list: array of TControl;
+  widths: array of Integer;
+  ctl: TControl;
+begin
+  // Wrapping path (or a live popup) is 100% the base behaviour — the chevron is not used.
+  // While the popup is open the overflow buttons live in it; don't fight that layout.
+  if Wrapable or ((FPopup <> nil) and FPopup.Visible) then
+  begin
+    if (FMoreBtn <> nil) and Wrapable then FMoreBtn.Visible := False;
+    inherited AlignControls(AControl, ARect);
+    Exit;
+  end;
+
+  if FInExLayout then Exit;
+  FInExLayout := True;
+  try
+    // Collect content children (everything except the chevron) in child order. Our own
+    // overflow-hidden buttons remain candidates: they are re-shown below so the fit is
+    // re-computed over the FULL set every layout (a wider bar restores hidden buttons).
+    SetLength(list, ControlCount);
+    n := 0;
+    for i := 0 to ControlCount - 1 do
+    begin
+      ctl := Controls[i];
+      if IsInternalChild(ctl) then Continue;   // the chevron is placed by us, not laid out
+      list[n] := ctl;
+      Inc(n);
+    end;
+    SetLength(list, n);
+
+    if n = 0 then
+    begin
+      ClearOverflow;
+      if FMoreBtn <> nil then FMoreBtn.Visible := False;
+      Exit;
+    end;
+
+    // Re-show all candidates before measuring, apply ghost/flat, gather widths.
+    SetLength(widths, n);
+    for i := 0 to n - 1 do
+    begin
+      list[i].Visible := True;
+      if list[i] is TTyButton then
+      begin
+        if Flat then TTyButton(list[i]).StyleClass := 'ghost'
+        else TTyButton(list[i]).StyleClass := '';
+      end;
+      widths[i] := list[i].Width;
+    end;
+
+    chevW := ChevronWidthPx;
+    visCount := TyToolbarOverflowCount(widths, ClientWidth - Indent, chevW);
+    if visCount > n then visCount := n;
+
+    // Place the lead (fitting) buttons; hide + record the overflow set.
+    ClearOverflow;
+    x := Indent;
+    for i := 0 to n - 1 do
+    begin
+      list[i].Align := alNone;
+      if i < visCount then
+      begin
+        list[i].SetBounds(x, Indent, list[i].Width, ButtonHeight);
+        list[i].Visible := True;
+        Inc(x, list[i].Width + ButtonSpacing);
+      end
+      else
+      begin
+        list[i].Visible := False;
+        SetLength(FOverflow, Length(FOverflow) + 1);
+        FOverflow[High(FOverflow)] := list[i];
+      end;
+    end;
+
+    if visCount < n then
+    begin
+      EnsureMoreButton;
+      FMoreBtn.SetBounds(ClientWidth - chevW - Indent, Indent, chevW, ButtonHeight);
+      FMoreBtn.Visible := True;
+      FMoreBtn.BringToFront;
+    end
+    else if FMoreBtn <> nil then
+      FMoreBtn.Visible := False;
+  finally
+    FInExLayout := False;
+  end;
+end;
+
+procedure TTyToolBarEx.MoreClick(Sender: TObject);
+var
+  i, x, y, w, maxW, itemH, pad, gap: Integer;
+  tl: TPoint;
+begin
+  if Length(FOverflow) = 0 then Exit;
+  if FPopup = nil then
+  begin
+    FPopup := TTyPopupSurface.CreateNew(Self);
+    FPopup.StyleKey := 'TyToolBar';          // reuse the bar's themed surface/border
+    FPopup.OnPopupClose := @PopupClosed;
+  end;
+
+  pad := 4;
+  gap := ButtonSpacing;
+  itemH := ButtonHeight;
+
+  // Stack the overflow buttons vertically in the popup; keep their own OnClick intact.
+  maxW := 0;
+  for i := 0 to High(FOverflow) do
+    if (FOverflow[i] <> nil) and (FOverflow[i].Width > maxW) then maxW := FOverflow[i].Width;
+  if maxW <= 0 then maxW := 80;
+
+  x := pad;
+  y := pad;
+  for i := 0 to High(FOverflow) do
+  begin
+    if FOverflow[i] = nil then Continue;
+    FOverflow[i].Parent := FPopup;            // move into the flyout (live control keeps working)
+    FOverflow[i].Align := alNone;
+    FOverflow[i].SetBounds(x, y, maxW, itemH);
+    FOverflow[i].Visible := True;
+    Inc(y, itemH + gap);
+  end;
+
+  w := maxW + pad * 2;
+  tl := FMoreBtn.ClientToScreen(Point(0, FMoreBtn.Height));
+  FPopup.ShowAt(Rect(tl.x, tl.y, tl.x + w, tl.y + y + pad - gap));
+end;
+
+procedure TTyToolBarEx.PopupClosed(Sender: TObject);
+var
+  i: Integer;
+begin
+  if csDestroying in ComponentState then Exit;
+  // Restore the overflow buttons to the bar (they stay hidden — still overflowing — until
+  // the next relayout decides afresh which ones fit).
+  for i := 0 to High(FOverflow) do
+    if FOverflow[i] <> nil then
+    begin
+      FOverflow[i].Parent := Self;
+      FOverflow[i].Visible := False;
+    end;
+  Realign;    // recompute the fit now the popup is gone
+end;
+
+procedure TTyToolBarEx.Notification(AComponent: TComponent; Operation: TOperation);
+var
+  i, j: Integer;
+begin
+  inherited Notification(AComponent, Operation);
+  if Operation = opRemove then
+  begin
+    if AComponent = FMoreBtn then FMoreBtn := nil;
+    // Drop a freed child from the per-child overflow assignment.
+    for i := High(FOverflow) downto 0 do
+      if FOverflow[i] = AComponent then
+      begin
+        for j := i to High(FOverflow) - 1 do FOverflow[j] := FOverflow[j + 1];
+        SetLength(FOverflow, Length(FOverflow) - 1);
+      end;
+  end;
+end;
+
+function TTyToolBarEx.OverflowCount: Integer;
+begin
+  Result := Length(FOverflow);
+end;
+
+function TTyToolBarEx.OverflowVisible: Boolean;
+begin
+  Result := (FMoreBtn <> nil) and FMoreBtn.Visible;
+end;
+
+end.

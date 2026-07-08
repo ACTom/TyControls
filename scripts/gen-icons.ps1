@@ -27,7 +27,8 @@ $classes = @(
   'TTyBevel','TTyDivider','TTyPaintPanel','TTySizeBox',
   'TTyRadioGroup','TTyCheckGroup','TTyToolGroupPanel',
   'TTyScrollBox','TTyScrollPanel','TTyExPanel',
-  'TTyGridPanel','TTyRelativePanel'
+  'TTyGridPanel','TTyRelativePanel',
+  'TTyToolBarEx','TTyControlBar','TTyCoolBar'
 )
 
 # Drift guard: the icon set MUST match the components registered in Design.pas. Parse EVERY

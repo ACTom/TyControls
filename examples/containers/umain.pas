@@ -15,7 +15,8 @@ uses
   tyControls.PaintPanel, tyControls.SizeBox,
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
   tyControls.ScrollBox, tyControls.ExPanel, tyControls.Button, tyControls.CheckBox,
-  tyControls.GridPanel, tyControls.RelativePanel, tyControls.Edit;
+  tyControls.GridPanel, tyControls.RelativePanel, tyControls.Edit,
+  tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar, tyControls.Panel;
 
 type
   TMainForm = class(TTyForm)
@@ -26,6 +27,7 @@ type
     procedure BuildGroups(AX, AY: Integer);
     procedure BuildScroll(AX, AY: Integer);
     procedure BuildLayout(AX, AY: Integer);
+    procedure BuildBands(AY: Integer);
     function Divider(const ACap: string; AAlign: TAlignment; AY: Integer): TTyDivider;
     function Bevel(AShape: TTyBevelShape; AStyle: TTyBevelStyle; AL, AT, AW, AH: Integer): TTyBevel;
     function Lbl(const AText: string; AL, AT: Integer): TTyLabel;
@@ -57,7 +59,7 @@ begin
   inherited CreateNew(AOwner, 0);
   Caption := 'TyControls — 容器与布局(Phase 5)';
   Position := poScreenCenter;
-  SetBounds(0, 0, 1180, 520);
+  SetBounds(0, 0, 1180, 620);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -143,6 +145,41 @@ begin
   TG.AddButton('复制');
   TG.AddButton('粘贴');
   TG.AddButton('格式刷');   // 放不下时自动换行
+end;
+
+procedure TMainForm.BuildBands(AY: Integer);
+var Bar: TTyToolBarEx; Cool: TTyCoolBar; Band: TTyPanel; B: TTyButton; i: Integer;
+begin
+  Divider('底部:溢出工具条 TTyToolBarEx / Rebar TTyCoolBar', taLeftJustify, AY);
+
+  // 溢出工具条:12 个命令,窗口放不下时尾部收进右端的 » 浮层。
+  Bar := TTyToolBarEx.Create(Self);
+  Bar.Parent := Self;
+  Bar.Align := alNone;
+  Bar.Wrapable := False;
+  Bar.SetBounds(20, AY + 28, 560, 32);
+  Bar.ButtonHeight := 26;
+  for i := 1 to 12 do
+  begin
+    B := TTyButton.Create(Self);
+    B.Parent := Bar;
+    B.Width := 74;
+    B.Caption := Format('命令 %d', [i]);
+  end;
+
+  // Rebar:两条可拖拽/抓手调宽的 band。
+  Cool := TTyCoolBar.Create(Self);
+  Cool.Parent := Self;
+  Cool.SetBounds(600, AY + 28, 540, 68);
+  Cool.GripperWidth := 10;
+  for i := 0 to 1 do
+  begin
+    Band := TTyPanel.Create(Self);
+    Band.Parent := Cool;
+    Band.Caption := Format('带 %d(拖抓手改宽)', [i + 1]);
+    Cool.SetBandWidth(Band, 220 + i * 40);
+    Cool.SetBandMinWidth(Band, 90);
+  end;
 end;
 
 procedure TMainForm.BuildLayout(AX, AY: Integer);
@@ -245,6 +282,8 @@ begin
   BuildScroll(710, baseY);
   // —— 第四列:Batch 4 布局容器 ——
   BuildLayout(950, baseY);
+  // —— 底部整宽:Batch 5 条带/工具栏 ——
+  BuildBands(baseY + 456);
 
   // 右下角尺寸手柄:拖动缩放本窗体(Target 默认取 owner 窗体)。
   grip := TTySizeBox.Create(Self);

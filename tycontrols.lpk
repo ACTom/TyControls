@@ -552,6 +552,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.RelativePanel.pas"/>
         <UnitName Value="tyControls.RelativePanel"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.ToolBarEx.pas"/>
+        <UnitName Value="tyControls.ToolBarEx"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ControlBar.pas"/>
+        <UnitName Value="tyControls.ControlBar"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.CoolBar.pas"/>
+        <UnitName Value="tyControls.CoolBar"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
