@@ -125,7 +125,16 @@ begin
 end;
 
 procedure TTyPopupSurface.ShowAt(const AScreenRect: TRect);
+var
+  S: TTyStyleSet;
 begin
+  // Set the form's Color to the resolved surface bg BEFORE showing. Windowed children with a
+  // transparent/ghost fill erase to their parent's Color (TyResolveParentBg's last resort); without
+  // this the popup keeps the OS default clBtnFace — which is DARK on a dark-mode OS — so flat/ghost
+  // child buttons would render on a dark plate even under a light theme.
+  S := TyDefaultController.Model.ResolveStyle(FStyleKey, '', []);
+  if (tpBackground in S.Present) and (S.Background.Kind = tfkSolid) then
+    Color := TyColorToLCL(S.Background.Color);
   SetBounds(AScreenRect.Left, AScreenRect.Top,
     AScreenRect.Right - AScreenRect.Left, AScreenRect.Bottom - AScreenRect.Top);
   Show;

@@ -169,16 +169,18 @@ var
   widths: array of Integer;
   ctl: TControl;
 begin
-  // Wrapping path (or an open flyout) is 100% the base behaviour — the chevron is not used.
-  // FPopupOpen (not FPopup.Visible) is the guard: MoreClick sets it BEFORE reparenting the
-  // overflow buttons into the not-yet-shown popup, so those reparent-triggered relayouts take
-  // this no-op branch instead of rebuilding FOverflow underneath MoreClick's loop.
-  if Wrapable or FPopupOpen then
+  // Wrapping path is 100% the base behaviour — the chevron is not used.
+  if Wrapable then
   begin
-    if (FMoreBtn <> nil) and Wrapable then FMoreBtn.Visible := False;
+    if FMoreBtn <> nil then FMoreBtn.Visible := False;
     inherited AlignControls(AControl, ARect);
     Exit;
   end;
+  // Flyout open/opening: FREEZE the layout. MoreClick sets FPopupOpen BEFORE reparenting the
+  // overflow buttons OUT, and each reparent fires AlignControls; doing nothing here keeps the
+  // remaining lead buttons AND the chevron exactly where the last closed-state layout put them
+  // (no re-flow, no chevron shift), and leaves FOverflow intact for MoreClick's loop.
+  if FPopupOpen then Exit;
 
   if FInExLayout then Exit;
   FInExLayout := True;
