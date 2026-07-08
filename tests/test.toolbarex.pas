@@ -26,6 +26,16 @@ type
     function StyleTypeKey: string;
   end;
 
+  { A button that counts hidden->visible transitions, to prove a steady re-layout does not
+    force overflow buttons back on (the old AlignControls re-showed EVERY candidate before
+    measuring, so each pass toggled the overflow set on then off — that per-pass churn is what
+    made LCL abort with an InvalidatePreferredSize loop in the real GUI). }
+  TCountingButton = class(TTyButton)
+  public
+    ShowCount: Integer;
+    procedure SetVisible(Value: Boolean); override;
+  end;
+
   { The control: which-buttons-hidden set, the chevron show/hide, the wrapping passthrough. }
   TToolBarExControlTest = class(TTestCase)
   private
@@ -43,6 +53,7 @@ type
     procedure TestChevronNotInOverflowSet;
     procedure TestWrapableSkipsOverflow;
     procedure TestFreedChildDropsFromOverflow;
+    procedure TestSteadyRelayoutDoesNotReshowOverflow;
   end;
 
 implementation
@@ -105,6 +116,12 @@ begin
   // ClientWidth matches Width so positions are deterministic.
   dummy := Rect(0, 0, Width, Height);
   AlignControls(nil, dummy);
+end;
+
+procedure TCountingButton.SetVisible(Value: Boolean);
+begin
+  if Value and not Visible then Inc(ShowCount);
+  inherited SetVisible(Value);
 end;
 
 function TTyToolBarExAccess.StyleTypeKey: string;
@@ -329,6 +346,47 @@ begin
   B3.Free;   // fires Notification(opRemove) on the bar
   AssertTrue('overflow count dropped by the freed child',
     TB.OverflowCount <= 1);   // was 2 (B2,B3); B3 removed -> 1
+end;
+
+procedure TToolBarExControlTest.TestSteadyRelayoutDoesNotReshowOverflow;
+var
+  TB: TTyToolBarExAccess;
+  B3, B4: TCountingButton;
+  i: Integer;
+begin
+  // A steady re-layout (nothing changed) must leave the overflow buttons hidden WITHOUT
+  // toggling them back on first. Re-showing an overflow button every pass is what invalidated
+  // the preferred size each time and made the real GUI abort with an InvalidatePreferredSize
+  // loop. Here we count hidden->visible transitions on the two overflow buttons across a second
+  // layout: it must be zero.
+  TB := TTyToolBarExAccess.Create(FForm);
+  TB.Parent := FForm;
+  TB.Font.PixelsPerInch := 96;
+  TB.Align := alNone;
+  TB.Wrapable := False;
+  TB.Indent := 0;
+  TB.ButtonSpacing := 0;
+  TB.ButtonHeight := 24;
+  TB.Width := 200;   // avail - chevron(30) = 170
+
+  // Two lead buttons fit (120 <= 170); the last two overflow.
+  MakeBtn(TB, 60);
+  MakeBtn(TB, 60);
+  B3 := TCountingButton.Create(FForm); B3.Parent := TB; B3.Width := 60;
+  B4 := TCountingButton.Create(FForm); B4.Parent := TB; B4.Width := 60;
+
+  TB.ForceLayout;                       // initial: B3/B4 pushed to overflow (hidden)
+  AssertFalse('B3 hidden after first layout', B3.Visible);
+  AssertFalse('B4 hidden after first layout', B4.Visible);
+
+  B3.ShowCount := 0;
+  B4.ShowCount := 0;
+  for i := 1 to 3 do TB.ForceLayout;    // steady re-layouts: overflow set is unchanged
+
+  AssertEquals('B3 never re-shown during steady re-layout', 0, B3.ShowCount);
+  AssertEquals('B4 never re-shown during steady re-layout', 0, B4.ShowCount);
+  AssertFalse('B3 still hidden', B3.Visible);
+  AssertFalse('B4 still hidden', B4.Visible);
 end;
 
 initialization

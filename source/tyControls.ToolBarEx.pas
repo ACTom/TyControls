@@ -197,11 +197,14 @@ begin
       Exit;
     end;
 
-    // Re-show all candidates before measuring, apply ghost/flat, gather widths.
+    // Gather widths + apply ghost/flat. DON'T force Visible:=True here — a hidden overflow
+    // button's Width is still valid to measure, and toggling Visible every layout pass (shown
+    // here, hidden below) invalidates the preferred size each time and never converges (LCL then
+    // aborts with an InvalidatePreferredSize loop). The placement loop below sets each button's
+    // FINAL Visible state, which is a no-op once it matches — so the layout settles.
     SetLength(widths, n);
     for i := 0 to n - 1 do
     begin
-      list[i].Visible := True;
       if list[i] is TTyButton then
       begin
         if Flat then TTyButton(list[i]).StyleClass := 'ghost'
