@@ -25,7 +25,8 @@ $classes = @(
   'TTyFindDialog','TTyReplaceDialog','TTyProgressDialog','TTyAboutDialog',
   # Phase 5 containers & layout
   'TTyBevel','TTyDivider','TTyPaintPanel','TTySizeBox',
-  'TTyRadioGroup','TTyCheckGroup','TTyToolGroupPanel'
+  'TTyRadioGroup','TTyCheckGroup','TTyToolGroupPanel',
+  'TTyScrollBox','TTyScrollPanel','TTyExPanel'
 )
 
 # Drift guard: the icon set MUST match the components registered in Design.pas. Parse EVERY

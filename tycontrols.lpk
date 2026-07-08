@@ -532,6 +532,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.ToolGroupPanel.pas"/>
         <UnitName Value="tyControls.ToolGroupPanel"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.ScrollBox.pas"/>
+        <UnitName Value="tyControls.ScrollBox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ScrollPanel.pas"/>
+        <UnitName Value="tyControls.ScrollPanel"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ExPanel.pas"/>
+        <UnitName Value="tyControls.ExPanel"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

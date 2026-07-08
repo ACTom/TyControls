@@ -13,7 +13,8 @@ uses
   tyControls.Controller, tyControls.Form, tyControls.Types, tyControls.Painter,
   tyControls.ColorMath, tyControls.TyLabel, tyControls.Bevel, tyControls.Divider,
   tyControls.PaintPanel, tyControls.SizeBox,
-  tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel;
+  tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
+  tyControls.ScrollBox, tyControls.ExPanel, tyControls.Button, tyControls.CheckBox;
 
 type
   TMainForm = class(TTyForm)
@@ -22,6 +23,7 @@ type
     procedure PaintSurface(Sender: TObject; APainter: TTyPainter; const AContent: TRect);
     procedure BuildUI;
     procedure BuildGroups(AX, AY: Integer);
+    procedure BuildScroll(AX, AY: Integer);
     function Divider(const ACap: string; AAlign: TAlignment; AY: Integer): TTyDivider;
     function Bevel(AShape: TTyBevelShape; AStyle: TTyBevelStyle; AL, AT, AW, AH: Integer): TTyBevel;
     function Lbl(const AText: string; AL, AT: Integer): TTyLabel;
@@ -53,7 +55,7 @@ begin
   inherited CreateNew(AOwner, 0);
   Caption := 'TyControls — 容器与布局(Phase 5)';
   Position := poScreenCenter;
-  SetBounds(0, 0, 920, 520);
+  SetBounds(0, 0, 940, 520);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -141,6 +143,38 @@ begin
   TG.AddButton('格式刷');   // 放不下时自动换行
 end;
 
+procedure TMainForm.BuildScroll(AX, AY: Integer);
+var EP: TTyExPanel; Box: TTyScrollBox; Chk: TTyCheckBox; Btn: TTyButton; i: Integer;
+begin
+  Divider('滚动 / 折叠容器', taLeftJustify, AY + 4);
+
+  // 可折叠面板:点标题栏折叠/展开,body 承载真实子控件。
+  EP := TTyExPanel.Create(Self);
+  EP.Parent := Self;
+  EP.Caption := '高级选项(点标题折叠)';
+  EP.SetBounds(AX, AY + 34, 210, 120);
+  for i := 0 to 2 do
+  begin
+    Chk := TTyCheckBox.Create(EP);
+    Chk.Parent := EP;
+    Chk.SetBounds(12, 10 + i * 26, 180, 22);
+    Chk.Caption := Format('选项 %d', [i + 1]);
+  end;
+
+  // 滚动视口:内容(10 个按钮)比视口高 → 右侧自动出现垂直滚动条。
+  Box := TTyScrollBox.Create(Self);
+  Box.Parent := Self;
+  Box.SetBounds(AX, AY + 166, 210, 208);
+  for i := 0 to 9 do
+  begin
+    Btn := TTyButton.Create(Box);
+    Btn.Parent := Box;
+    Btn.SetBounds(10, 10 + i * 40, 160, 30);
+    Btn.Caption := Format('第 %d 项', [i + 1]);
+  end;
+  Box.UpdateScrollRange;
+end;
+
 procedure TMainForm.BuildUI;
 var grip: TTySizeBox; baseY: Integer;
 begin
@@ -166,8 +200,10 @@ begin
 
   Lbl('右下角 → 尺寸手柄 TTySizeBox(拖动改窗口大小)', 20, baseY + 386);
 
-  // —— 右栏:Batch 2 分组容器 ——
+  // —— 中栏:Batch 2 分组容器 ——
   BuildGroups(430, baseY);
+  // —— 右栏:Batch 3 滚动/折叠容器 ——
+  BuildScroll(710, baseY);
 
   // 右下角尺寸手柄:拖动缩放本窗体(Target 默认取 owner 窗体)。
   grip := TTySizeBox.Create(Self);

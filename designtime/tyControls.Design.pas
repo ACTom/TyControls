@@ -39,7 +39,8 @@ uses
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
   tyControls.Bevel, tyControls.Divider, tyControls.PaintPanel, tyControls.SizeBox,
-  tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel;
+  tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
+  tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ExPanel;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -634,7 +635,8 @@ begin
      TTyStatusBar, TTyToolBar, TTyToolSeparator, TTyTitleBar,
      TTyMenuBar, TTyPopupMenu, TTyCalendar, TTyDateTimePicker, TTyTreeView,
      TTyBevel, TTyDivider, TTyPaintPanel, TTySizeBox,
-     TTyRadioGroup, TTyCheckGroup, TTyToolGroupPanel]);
+     TTyRadioGroup, TTyCheckGroup, TTyToolGroupPanel,
+     TTyScrollBox, TTyScrollPanel, TTyExPanel]);
   // Office-style ribbon parts.
   RegisterComponents('TyControls Ribbon',
     [TTyRibbon, TTyRibbonPage, TTyRibbonGroup, TTyRibbonAppMenu,

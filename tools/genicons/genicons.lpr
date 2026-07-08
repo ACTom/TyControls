@@ -337,6 +337,32 @@ begin
   FillRRect(b,15.5,6.5,19.5,13.5,1,Faint);
 end;
 
+{ TTyScrollBox: a panel frame with a right-edge scrollbar track + accent thumb (a scrolling viewport) }
+procedure GScrollBox(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink); Line(b,16.5,4,16.5,20,Faint,1);
+  FillRRect(b,17.5,5,19.5,19,1,Faint); FillRRect(b,17.5,6.5,19.5,12,1,Acc);
+  Line(b,6,8,13,8,Faint,1.2); Line(b,6,11.5,13,11.5,Faint,1.2); Line(b,6,15,10,15,Faint,1.2);
+end;
+
+{ TTyScrollPanel: a panel frame with four accent arrowheads fanning toward each edge + a centre dot }
+procedure GScrollPanel(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2.5,Ink); FillCirc(b,12,12,1.1,Ink);
+  PolyL(b,[PointF(10.6,8),PointF(12,6.4),PointF(13.4,8)],Acc,1.5);
+  PolyL(b,[PointF(10.6,16),PointF(12,17.6),PointF(13.4,16)],Acc,1.5);
+  PolyL(b,[PointF(7,10.6),PointF(5.4,12),PointF(7,13.4)],Acc,1.5);
+  PolyL(b,[PointF(17,10.6),PointF(18.6,12),PointF(17,13.4)],Acc,1.5);
+end;
+
+{ TTyExPanel: a collapsible panel — a rounded frame with a tinted header band, a down-chevron + title }
+procedure GExPanel(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink); FillRRect(b,4,5,20,9.5,1,Faint);
+  FillPolyG(b,[PointF(6,7),PointF(9,7),PointF(7.5,9)],Acc);
+  Line(b,11,7.4,17,7.4,Ink,1.2); Line(b,6,13,18,13,Faint,1.2); Line(b,6,16.5,15,16.5,Faint,1.2);
+end;
+
 { TTyCalendar: rounded rect with a top header bar + two rows of day dots }
 procedure GCalendar(b: TBGRABitmap);
 begin
@@ -501,7 +527,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..113] of TGlyph = (
+  Glyphs: array[0..116] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -615,7 +641,10 @@ const
     (Name:'TTySizeBox';           Draw:@GSizeBox),
     (Name:'TTyRadioGroup';        Draw:@GRadioGroup),
     (Name:'TTyCheckGroup';        Draw:@GCheckGroup),
-    (Name:'TTyToolGroupPanel';    Draw:@GToolGroupPanel)
+    (Name:'TTyToolGroupPanel';    Draw:@GToolGroupPanel),
+    (Name:'TTyScrollBox';         Draw:@GScrollBox),
+    (Name:'TTyScrollPanel';       Draw:@GScrollPanel),
+    (Name:'TTyExPanel';           Draw:@GExPanel)
   );
 
 const

@@ -108,6 +108,9 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyRadioGroup](radiogroup.md) | 单选组容器（`Items` 自动生成互斥单选,`Columns` 分列） |
 | [TTyCheckGroup](checkgroup.md) | 复选组容器（每项一复选框,各项独立） |
 | [TTyToolGroupPanel](toolgrouppanel.md) | 带标题的工具按钮组（Ribbon 组风格,流式换行 + `AddButton`） |
+| [TTyScrollBox](scrollbox.md) | 滚动视口容器（内容溢出自动显示内嵌滚动条） |
+| [TTyScrollPanel](scrollpanel.md) | 自动平移滚动容器（拖到视口边缘朝该边自动滚） |
+| [TTyExPanel](expanel.md) | 可折叠/展开面板（点标题栏折叠,高度缓动动画） |
 
 ## 日期与时间
 
