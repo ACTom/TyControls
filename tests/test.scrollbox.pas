@@ -34,6 +34,7 @@ type
     procedure TestWheelScrollsVertically;
     procedure TestScrollBarsAreNoDesignVisible;
     procedure TestBarInheritsController;
+    procedure TestScrollByDeltaReclampsAfterContentShrinks;
   end;
 implementation
 
@@ -44,6 +45,7 @@ type
     function VBar: TTyScrollBar;
     function HBar: TTyScrollBar;
     procedure CallWheel(WheelDelta: Integer);
+    procedure CallScrollByDelta(ADx, ADy: Integer);
   end;
 
 function TScrollBoxAccess.StyleTypeKey: string;
@@ -74,6 +76,11 @@ end;
 procedure TScrollBoxAccess.CallWheel(WheelDelta: Integer);
 begin
   DoMouseWheel([], WheelDelta, Point(0, 0));
+end;
+
+procedure TScrollBoxAccess.CallScrollByDelta(ADx, ADy: Integer);
+begin
+  ScrollByDelta(ADx, ADy);
 end;
 
 { helper: a plain child of a given size at a given position }
@@ -152,6 +159,24 @@ begin
     (SB.VBar = nil) or (not SB.VBar.Visible));
   AssertTrue('no horizontal bar when content fits',
     (SB.HBar = nil) or (not SB.HBar.Visible));
+end;
+
+procedure TTyScrollBoxTest.TestScrollByDeltaReclampsAfterContentShrinks;
+var SB: TScrollBoxAccess; child: TControl;
+begin
+  // ScrollByDelta (the auto-pan hook) must re-measure so it clamps to the FRESH range, not a
+  // stale scrollbar Max — else a live reflow that shrinks the content lets it scroll past the end.
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 200, 200);
+  child := MakeChild(SB, 0, 0, 100, 600);   // taller than the viewport -> vertical overflow
+  SB.UpdateScrollRange;
+  SB.CallScrollByDelta(0, 1000);            // scroll to the bottom
+  AssertTrue('scrolled down', SB.ScrollY > 0);
+  child.Height := 60;                        // content now fits — WITHOUT a manual UpdateScrollRange
+  SB.CallScrollByDelta(0, 1000);            // must re-measure: no overflow -> offset clamps to 0
+  AssertEquals('re-measured to the fresh range (offset 0)', 0, SB.ScrollY);
 end;
 
 procedure TTyScrollBoxTest.TestVerticalBarWhenContentTaller;

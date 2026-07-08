@@ -291,8 +291,12 @@ procedure TTyScrollBox.ScrollByDelta(ADx, ADy: Integer);
 var
   nx, ny: Integer;
 begin
-  // Target offset, clamped to the current per-axis scrollable range (the bar Max, fresh from the
-  // last UpdateScrollRange; 0 when that axis has no visible bar).
+  // Re-measure first so the clamp below uses a FRESH range: an auto-pan tick may fire while the
+  // content is reflowing (a live drag) without the caller having re-run UpdateScrollRange, and a
+  // stale (too-large) bar Max would otherwise let us scroll past the real content end.
+  UpdateScrollRange;
+  // Target offset, clamped to the current per-axis scrollable range (the bar Max; 0 when that axis
+  // has no visible bar).
   nx := FScrollX + ADx;
   ny := FScrollY + ADy;
   if (FHScrollBar = nil) or not FHScrollBar.Visible then nx := 0

@@ -246,8 +246,12 @@ begin
   FCollapsed := AValue;
   if FCollapsed then
   begin
-    // Remember the full height so expanding restores it, then shrink to just the header.
-    FExpandedHeight := Height;
+    // Remember the full height so expanding restores it. But if a height animation is still in
+    // flight (e.g. collapsing mid-EXPAND), the live Height is an interim eased value — keep the
+    // already-captured FExpandedHeight (the settled full height from before the animation) so the
+    // panel still restores to its true size.
+    if (FTimer = nil) or not FTimer.Enabled then
+      FExpandedHeight := Height;
     targetH := ScaledHeaderHeight;
     StartHeightAnimation(targetH);
     if Assigned(FOnCollapse) then FOnCollapse(Self);
