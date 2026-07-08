@@ -40,6 +40,7 @@ type
     // interaction
     procedure TestClickTogglesSortAndFires;
     procedure TestResizeDragChangesWidth;
+    procedure TestNonLeftUpEndsResize;
     procedure TestRenderSelectedRowAccent;
   end;
 
@@ -53,6 +54,7 @@ type
     procedure PressDown(Shift: TShiftState; X, Y: Integer);
     procedure PressMove(Shift: TShiftState; X, Y: Integer);
     procedure PressUp(Shift: TShiftState; X, Y: Integer);
+    procedure PressUpRight(Shift: TShiftState; X, Y: Integer);   // a RIGHT-button release
   end;
 
   TClickProbe = class
@@ -92,6 +94,11 @@ end;
 procedure THeaderAccess.PressUp(Shift: TShiftState; X, Y: Integer);
 begin
   MouseUp(mbLeft, Shift, X, Y);
+end;
+
+procedure THeaderAccess.PressUpRight(Shift: TShiftState; X, Y: Integer);
+begin
+  MouseUp(mbRight, Shift, X, Y);
 end;
 
 constructor TClickProbe.Create;
@@ -383,6 +390,24 @@ begin
   finally
     Probe.Free;
   end;
+end;
+
+procedure TTyHeaderControlTest.TestNonLeftUpEndsResize;
+var Acc: THeaderAccess;
+begin
+  // A right-button-up mid-resize (the control holds MouseCapture, so it's delivered here too) must
+  // END the resize — otherwise FResizing stays armed and a later button-less move keeps resizing.
+  Acc := THeaderAccess.Create(FForm);
+  Acc.Parent := FForm;
+  Acc.Font.PixelsPerInch := 96;
+  Acc.SetBounds(0, 0, 300, 26);
+  Acc.AddSection('A', 100);
+  Acc.AddSection('B', 100);
+  Acc.AddSection('C', 100);
+  Acc.PressDown([], 100, 12);          // grab boundary 0 -> resizing
+  Acc.PressUpRight([], 100, 12);       // RIGHT-button up mid-drag -> must tear down the resize
+  Acc.PressMove([], 200, 12);          // button-less move: if still armed it would widen section A
+  AssertEquals('resize ended: section width unchanged by the button-less move', 100, Acc.SectionWidth[0]);
 end;
 
 procedure TTyHeaderControlTest.TestResizeDragChangesWidth;

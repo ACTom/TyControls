@@ -552,7 +552,10 @@ var
   widths: TIntegerDynArray;
   hit, movedX: Integer;
 begin
-  if FResizing and (Button = mbLeft) then
+  // Tear down a resize on ANY button-up (not just left): the control holds MouseCapture during the
+  // drag, so a right/middle button-up is delivered here too — gating on mbLeft would leave the
+  // resize armed and the mouse captured, sticking the strip in resize mode.
+  if FResizing then
   begin
     FResizing := False;
     if HandleAllocated and (MouseCapture) then MouseCapture := False;

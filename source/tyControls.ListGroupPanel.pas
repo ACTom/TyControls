@@ -310,10 +310,14 @@ end;
 
 function TTyListGroupPanel.MaxScrollOffset: Integer;
 var
-  contentH: Integer;
+  contentH, bw: Integer;
 begin
   contentH := TyListGroupContentHeight(BuildLayout);
-  Result := contentH - Height;
+  // Content is painted inside the frame INTERIOR (inset by the border on top and bottom), so the
+  // scrollable range is against the interior height, not the full Height — else the last row's
+  // bottom stays hidden behind the border and can never be scrolled fully into view.
+  bw := MulDiv(CurrentStyle.BorderWidth, Font.PixelsPerInch, 96);
+  Result := contentH - (Height - 2 * bw);
   if Result < 0 then Result := 0;
 end;
 
@@ -487,12 +491,15 @@ procedure TTyListGroupPanel.MouseDown(Button: TMouseButton; Shift: TShiftState; 
 var
   parts: TTyListGroupParts;
   hit: TTyListGroupHit;
+  bw: Integer;
 begin
   if not Enabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   parts := BuildLayout;
-  hit := TyListGroupHitTest(parts, Point(X, Y + FScrollOffset));
+  // Map device Y -> content Y: undo the top-border inset the paint adds, then add the scroll.
+  bw := MulDiv(CurrentStyle.BorderWidth, Font.PixelsPerInch, 96);
+  hit := TyListGroupHitTest(parts, Point(X, Y - bw + FScrollOffset));
   if hit.Hit then
   begin
     if hit.Kind = lgpHeader then
@@ -512,11 +519,12 @@ var
   parts: TTyListGroupParts;
   hit: TTyListGroupHit;
   newKind: TTyListGroupPartKind;
-  newGroup, newItem: Integer;
+  newGroup, newItem, bw: Integer;
 begin
   inherited MouseMove(Shift, X, Y);
   parts := BuildLayout;
-  hit := TyListGroupHitTest(parts, Point(X, Y + FScrollOffset));
+  bw := MulDiv(CurrentStyle.BorderWidth, Font.PixelsPerInch, 96);
+  hit := TyListGroupHitTest(parts, Point(X, Y - bw + FScrollOffset));
   if hit.Hit then
   begin
     newKind := hit.Kind;
@@ -609,9 +617,11 @@ begin
 
     for i := 0 to High(parts) do
     begin
-      // Shift content up by the scroll offset.
+      // Inset content down past the top border (so the first row isn't clipped behind it), then
+      // shift up by the scroll offset. Paired with MaxScrollOffset's interior-height range, both
+      // the first row's top and the last row's bottom become fully reachable.
       partR := parts[i].Rect;
-      OffsetRect(partR, 0, -FScrollOffset);
+      OffsetRect(partR, 0, P.Scale(BoxStyle.BorderWidth) - FScrollOffset);
       // Skip parts entirely outside the visible band.
       if (partR.Bottom <= R.Top) or (partR.Top >= R.Bottom) then Continue;
 
