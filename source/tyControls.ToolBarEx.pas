@@ -32,7 +32,12 @@ type
     FMoreBtn: TTyButton;                 // the "»" chevron (csNoDesignVisible, owned by Self)
     FPopup: TTyPopupSurface;             // hosts the overflow buttons while open
     FOverflow: array of TControl;        // the buttons currently hidden into the overflow set
+    FPopupItems: array of TControl;      // authoritative copy of the buttons adopted into the OPEN
+                                         // flyout — restore (PopupClosed/Destroy) uses THIS, not the
+                                         // FOverflow that relayouts rebuild underneath us
     FInExLayout: Boolean;                // re-entrancy guard for the overflow relayout
+    FPopupOpen: Boolean;                 // flyout is open/opening: freeze the fit-relayout so the
+                                         // reparent-into-popup pass can't rebuild FOverflow mid-loop
     procedure EnsureMoreButton;
     procedure MoreClick(Sender: TObject);
     procedure PopupClosed(Sender: TObject);
@@ -114,11 +119,11 @@ begin
   // normal PopupClosed restore is skipped under csDestroying. Re-home them to OUR parent (the
   // surviving container) first so they stay reachable/freeable and never dangle invisible.
   if (FPopup <> nil) and FPopup.Visible and (Parent <> nil) then
-    for i := 0 to High(FOverflow) do
-      if FOverflow[i] <> nil then
+    for i := 0 to High(FPopupItems) do
+      if FPopupItems[i] <> nil then
       begin
-        FOverflow[i].Parent := Parent;
-        FOverflow[i].Visible := False;   // they were hidden overflow — don't leave strays showing
+        FPopupItems[i].Parent := Parent;
+        FPopupItems[i].Visible := False;   // they were hidden overflow — don't leave strays showing
       end;
   FreeAndNil(FPopup);
   inherited Destroy;
@@ -164,9 +169,11 @@ var
   widths: array of Integer;
   ctl: TControl;
 begin
-  // Wrapping path (or a live popup) is 100% the base behaviour — the chevron is not used.
-  // While the popup is open the overflow buttons live in it; don't fight that layout.
-  if Wrapable or ((FPopup <> nil) and FPopup.Visible) then
+  // Wrapping path (or an open flyout) is 100% the base behaviour — the chevron is not used.
+  // FPopupOpen (not FPopup.Visible) is the guard: MoreClick sets it BEFORE reparenting the
+  // overflow buttons into the not-yet-shown popup, so those reparent-triggered relayouts take
+  // this no-op branch instead of rebuilding FOverflow underneath MoreClick's loop.
+  if Wrapable or FPopupOpen then
   begin
     if (FMoreBtn <> nil) and Wrapable then FMoreBtn.Visible := False;
     inherited AlignControls(AControl, ARect);
@@ -257,6 +264,14 @@ var
   tl: TPoint;
 begin
   if Length(FOverflow) = 0 then Exit;
+  // Freeze the fit-relayout FIRST: every reparent below yanks a button out of the bar, which
+  // fires AlignControls — without this it would ClearOverflow + rebuild FOverflow mid-loop, so
+  // most buttons never made it into the flyout (only the last one showed) and stale pointers
+  // later AV'd. Snapshot the set into FPopupItems so the loop + restore never read a mutating field.
+  FPopupOpen := True;
+  SetLength(FPopupItems, Length(FOverflow));
+  for i := 0 to High(FOverflow) do FPopupItems[i] := FOverflow[i];
+
   if FPopup = nil then
   begin
     FPopup := TTyPopupSurface.CreateNew(Self);
@@ -270,19 +285,19 @@ begin
 
   // Stack the overflow buttons vertically in the popup; keep their own OnClick intact.
   maxW := 0;
-  for i := 0 to High(FOverflow) do
-    if (FOverflow[i] <> nil) and (FOverflow[i].Width > maxW) then maxW := FOverflow[i].Width;
+  for i := 0 to High(FPopupItems) do
+    if (FPopupItems[i] <> nil) and (FPopupItems[i].Width > maxW) then maxW := FPopupItems[i].Width;
   if maxW <= 0 then maxW := 80;
 
   x := pad;
   y := pad;
-  for i := 0 to High(FOverflow) do
+  for i := 0 to High(FPopupItems) do
   begin
-    if FOverflow[i] = nil then Continue;
-    FOverflow[i].Parent := FPopup;            // move into the flyout (live control keeps working)
-    FOverflow[i].Align := alNone;
-    FOverflow[i].SetBounds(x, y, maxW, itemH);
-    FOverflow[i].Visible := True;
+    if FPopupItems[i] = nil then Continue;
+    FPopupItems[i].Parent := FPopup;          // move into the flyout (live control keeps working)
+    FPopupItems[i].Align := alNone;
+    FPopupItems[i].SetBounds(x, y, maxW, itemH);
+    FPopupItems[i].Visible := True;
     Inc(y, itemH + gap);
   end;
 
@@ -295,15 +310,18 @@ procedure TTyToolBarEx.PopupClosed(Sender: TObject);
 var
   i: Integer;
 begin
+  FPopupOpen := False;
   if csDestroying in ComponentState then Exit;
-  // Restore the overflow buttons to the bar (they stay hidden — still overflowing — until
-  // the next relayout decides afresh which ones fit).
-  for i := 0 to High(FOverflow) do
-    if FOverflow[i] <> nil then
+  // Restore EVERY adopted button to the bar from the authoritative snapshot (NOT FOverflow, which
+  // a relayout may have rebuilt to a different subset). They stay hidden — still overflowing —
+  // until the next relayout decides afresh which ones fit.
+  for i := 0 to High(FPopupItems) do
+    if FPopupItems[i] <> nil then
     begin
-      FOverflow[i].Parent := Self;
-      FOverflow[i].Visible := False;
+      FPopupItems[i].Parent := Self;
+      FPopupItems[i].Visible := False;
     end;
+  SetLength(FPopupItems, 0);
   Realign;    // recompute the fit now the popup is gone
 end;
 
@@ -315,12 +333,19 @@ begin
   if Operation = opRemove then
   begin
     if AComponent = FMoreBtn then FMoreBtn := nil;
-    // Drop a freed child from the per-child overflow assignment.
+    // Drop a freed child from BOTH the overflow set and the open-flyout snapshot, so neither
+    // restore loop can dereference a dangling pointer.
     for i := High(FOverflow) downto 0 do
       if FOverflow[i] = AComponent then
       begin
         for j := i to High(FOverflow) - 1 do FOverflow[j] := FOverflow[j + 1];
         SetLength(FOverflow, Length(FOverflow) - 1);
+      end;
+    for i := High(FPopupItems) downto 0 do
+      if FPopupItems[i] = AComponent then
+      begin
+        for j := i to High(FPopupItems) - 1 do FPopupItems[j] := FPopupItems[j + 1];
+        SetLength(FPopupItems, Length(FPopupItems) - 1);
       end;
   end;
 end;
