@@ -308,6 +308,7 @@ begin
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
     '' + LineEnding +
     'TyGroupBox {' + LineEnding +
+    '  padding: 4px 12px;' + LineEnding +
     '  background: alpha(#FFFFFF, 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +

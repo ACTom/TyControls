@@ -249,6 +249,7 @@ TyTrackThumb:hover  { background: var(--accent-hover); }
 TyTrackThumb:active { background: var(--accent-active); }
 
 TyGroupBox {
+  padding: 4px 12px;
   background: var(--transparent-fill);
   color: var(--on-surface);
   border-color: var(--border);

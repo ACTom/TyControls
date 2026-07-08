@@ -148,11 +148,11 @@ TyTrackThumb||1 => pres[0,4,] bg=k2/FF915AF0>FF8142EE@9000 ut=0 txt=00000000 bd=
 TyTrackThumb||2 => pres[0,4,] bg=k1/FF7034D5 ut=0 txt=00000000 bd=00000000/0/0 rad=8/8,8,8,8 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTrackThumb||3 => pres[0,4,] bg=k2/FF894EEF>FF7C3AED@9000 ut=0 txt=00000000 bd=00000000/0/0 rad=8/8,8,8,8 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTrackThumb||4 => pres[0,4,] bg=k2/FF894EEF>FF7C3AED@9000 ut=0 txt=00000000 bd=00000000/0/0 rad=8/8,8,8,8 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyGroupBox||0 => pres[0,1,2,3,4,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyGroupBox||1 => pres[0,1,2,3,4,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyGroupBox||2 => pres[0,1,2,3,4,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyGroupBox||3 => pres[0,1,2,3,4,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyGroupBox||4 => pres[0,1,2,3,4,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGroupBox||0 => pres[0,1,2,3,4,5,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=12,4,12,4 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGroupBox||1 => pres[0,1,2,3,4,5,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=12,4,12,4 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGroupBox||2 => pres[0,1,2,3,4,5,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=12,4,12,4 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGroupBox||3 => pres[0,1,2,3,4,5,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=12,4,12,4 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyGroupBox||4 => pres[0,1,2,3,4,5,] bg=k1/00FFFFFF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=12,4,12,4 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyTabControl||0 => pres[0,1,2,3,4,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=00000000/0/0
 TyTabControl||1 => pres[0,1,2,3,4,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FF894EEF/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=00000000/0/0
 TyTabControl||2 => pres[0,1,2,3,4,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/2/0 rad=10/10,10,10,10 pad=0,0,0,0 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=00000000/0/0

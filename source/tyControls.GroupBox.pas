@@ -43,9 +43,24 @@ begin
 end;
 
 procedure TTyGroupBox.AdjustClientRect(var ARect: TRect);
+var
+  S: TTyStyleSet;
+  ppi: Integer;
 begin
   inherited AdjustClientRect(ARect);
-  Inc(ARect.Top, CapHAtPPI(Font.PixelsPerInch));
+  ppi := Font.PixelsPerInch;
+  S := CurrentStyle;
+  // Reserve the caption band (Top) AND the themed content padding on every side, so children
+  // never paint over the frame's left/right/bottom border. Padding is theme-token-driven
+  // (TyGroupBox) — matching how TTyPanel insets its content.
+  // Top: the caption band ONLY (it already separates content from the caption; adding padding.Top
+  // would double-space). Left/Right/Bottom: the themed padding, so children clear the frame border.
+  Inc(ARect.Left,   MulDiv(S.Padding.Left, ppi, 96));
+  Inc(ARect.Top,    CapHAtPPI(ppi));
+  Dec(ARect.Right,  MulDiv(S.Padding.Right, ppi, 96));
+  Dec(ARect.Bottom, MulDiv(S.Padding.Bottom, ppi, 96));
+  if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
+  if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
 
 constructor TTyGroupBox.Create(AOwner: TComponent);
