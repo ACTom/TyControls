@@ -10,6 +10,7 @@ object MainForm: TMainForm
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
+  TitleBar = TitleBar1
   object TitleBar1: TTyTitleBar
     Left = 0
     Height = 34
