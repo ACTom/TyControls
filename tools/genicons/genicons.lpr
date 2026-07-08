@@ -406,6 +406,26 @@ begin
   FillCirc(b,5.4,15,0.8,Acc); FillCirc(b,5.4,17,0.8,Acc); FillRRect(b,8,14.6,15,17.6,0.8,Faint);
 end;
 
+{ TTyHeaderControl: a column-header strip — 3 sections divided by rules, first with a sort triangle }
+procedure GHeaderControl(b: TBGRABitmap);
+begin
+  RRect(b,3,5,21,19,2,Ink); Line(b,3,10.5,21,10.5,Ink,1.1);
+  Line(b,9,5,9,10.5,Ink,1); Line(b,15,5,15,10.5,Ink,1);
+  FillPolyG(b,[PointF(5.5,6.6),PointF(8,6.6),PointF(6.75,9)],Acc);
+  Line(b,10.5,7.8,13.5,7.8,Faint,1); Line(b,16.5,7.8,19,7.8,Faint,1);
+end;
+
+{ TTyListGroupPanel: an Outlook grouped list — an expanded group-header (down-chevron + items) over a
+  collapsed group-header (right-chevron) }
+procedure GListGroupPanel(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink); FillRRect(b,4,5,20,8.5,0.5,Faint);
+  PolyL(b,[PointF(6,6.4),PointF(7.2,7.6),PointF(8.4,6.4)],Ink,1.1); Line(b,10,7,17,7,Ink,1.3);
+  Line(b,7,11,18,11,Faint,1.1); Line(b,7,13.5,16,13.5,Faint,1.1);
+  FillRRect(b,4,15.5,20,19,0.5,Faint);
+  PolyL(b,[PointF(6,16.4),PointF(7.2,17.6),PointF(6,18.8)],Ink,1.1); Line(b,10,17.6,17,17.6,Ink,1.3);
+end;
+
 { TTyCalendar: rounded rect with a top header bar + two rows of day dots }
 procedure GCalendar(b: TBGRABitmap);
 begin
@@ -570,7 +590,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..121] of TGlyph = (
+  Glyphs: array[0..123] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -692,7 +712,9 @@ const
     (Name:'TTyRelativePanel';     Draw:@GRelativePanel),
     (Name:'TTyToolBarEx';         Draw:@GToolBarEx),
     (Name:'TTyControlBar';        Draw:@GControlBar),
-    (Name:'TTyCoolBar';           Draw:@GCoolBar)
+    (Name:'TTyCoolBar';           Draw:@GCoolBar),
+    (Name:'TTyHeaderControl';     Draw:@GHeaderControl),
+    (Name:'TTyListGroupPanel';    Draw:@GListGroupPanel)
   );
 
 const

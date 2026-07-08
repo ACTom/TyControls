@@ -15,7 +15,7 @@ implementation
 const
   // Must stay in sync with RegisterComponents in designtime/tyControls.Design.pas and the
   // $classes list in scripts/gen-icons.ps1 (which enforces RegisterComponents <-> $classes).
-  CClasses: array[0..121] of string = (
+  CClasses: array[0..123] of string = (
     'TTyButton',
     'TTyGlyphButton','TTyGlyphContainerButton','TTySpeedButton','TTyDropDownButton','TTyMenuButton','TTyColorButton','TTyButtonGroup',
     'TTyRibbon','TTyRibbonPage','TTyRibbonGroup','TTyRibbonAppMenu','TTyRibbonQuickAccess','TTyRibbonGallery','TTyRibbonBackstage',
@@ -37,7 +37,8 @@ const
     'TTyRadioGroup','TTyCheckGroup','TTyToolGroupPanel',
     'TTyScrollBox','TTyScrollPanel','TTyExPanel',
     'TTyGridPanel','TTyRelativePanel',
-    'TTyToolBarEx','TTyControlBar','TTyCoolBar');
+    'TTyToolBarEx','TTyControlBar','TTyCoolBar',
+    'TTyHeaderControl','TTyListGroupPanel');
 
 procedure TPaletteIconTest.TestAllResourcesPresentAndPng;
 const

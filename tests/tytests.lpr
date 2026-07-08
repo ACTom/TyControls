@@ -18,6 +18,7 @@ uses
   test.scrollbox, test.scrollpanel, test.expanel,
   test.gridpanel, test.relativepanel,
   test.toolbarex, test.controlbar, test.coolbar,
+  test.headercontrol, test.listgrouppanel,
   test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
   test.controls.scrollbar, test.form, test.themes,

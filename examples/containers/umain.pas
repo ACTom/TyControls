@@ -16,7 +16,8 @@ uses
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
   tyControls.ScrollBox, tyControls.ExPanel, tyControls.Button, tyControls.CheckBox,
   tyControls.GridPanel, tyControls.RelativePanel, tyControls.Edit,
-  tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar, tyControls.Panel;
+  tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar, tyControls.Panel,
+  tyControls.HeaderControl, tyControls.ListGroupPanel;
 
 type
   TMainForm = class(TTyForm)
@@ -28,6 +29,7 @@ type
     procedure BuildScroll(AX, AY: Integer);
     procedure BuildLayout(AX, AY: Integer);
     procedure BuildBands(AY: Integer);
+    procedure BuildHeaderGroup(AY: Integer);
     function Divider(const ACap: string; AAlign: TAlignment; AY: Integer): TTyDivider;
     function Bevel(AShape: TTyBevelShape; AStyle: TTyBevelStyle; AL, AT, AW, AH: Integer): TTyBevel;
     function Lbl(const AText: string; AL, AT: Integer): TTyLabel;
@@ -59,7 +61,7 @@ begin
   inherited CreateNew(AOwner, 0);
   Caption := 'TyControls — 容器与布局(Phase 5)';
   Position := poScreenCenter;
-  SetBounds(0, 0, 1180, 620);
+  SetBounds(0, 0, 1180, 800);
 
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
@@ -145,6 +147,33 @@ begin
   TG.AddButton('复制');
   TG.AddButton('粘贴');
   TG.AddButton('格式刷');   // 放不下时自动换行
+end;
+
+procedure TMainForm.BuildHeaderGroup(AY: Integer);
+var H: TTyHeaderControl; LGP: TTyListGroupPanel; g: Integer;
+begin
+  Divider('列头条 TTyHeaderControl / 分组列表 TTyListGroupPanel', taLeftJustify, AY);
+
+  // 列头条:点标题切换排序,拖分节边界调宽。
+  H := TTyHeaderControl.Create(Self);
+  H.Parent := Self;
+  H.SetBounds(20, AY + 28, 540, 26);
+  H.AddSection('名称', 220);
+  H.AddSection('大小', 120);
+  H.AddSection('修改日期', 180);
+
+  // Outlook 式分组可折叠列表(手风琴)。
+  LGP := TTyListGroupPanel.Create(Self);
+  LGP.Parent := Self;
+  LGP.SetBounds(600, AY + 28, 300, 170);
+  g := LGP.AddGroup('联系人');
+  LGP.AddItem(g, 'Alice');
+  LGP.AddItem(g, 'Bob');
+  LGP.AddItem(g, 'Carol');
+  LGP.Expanded[g] := True;
+  g := LGP.AddGroup('任务');
+  LGP.AddItem(g, '写报告');
+  LGP.AddItem(g, '发布版本');
 end;
 
 procedure TMainForm.BuildBands(AY: Integer);
@@ -284,6 +313,8 @@ begin
   BuildLayout(950, baseY);
   // —— 底部整宽:Batch 5 条带/工具栏 ——
   BuildBands(baseY + 456);
+  // —— 底部:Batch 6 列头条 / 分组列表 ——
+  BuildHeaderGroup(baseY + 560);
 
   // 右下角尺寸手柄:拖动缩放本窗体(Target 默认取 owner 窗体)。
   grip := TTySizeBox.Create(Self);

@@ -42,7 +42,8 @@ uses
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
   tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ExPanel,
   tyControls.GridPanel, tyControls.RelativePanel,
-  tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar;
+  tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar,
+  tyControls.HeaderControl, tyControls.ListGroupPanel;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -640,7 +641,8 @@ begin
      TTyRadioGroup, TTyCheckGroup, TTyToolGroupPanel,
      TTyScrollBox, TTyScrollPanel, TTyExPanel,
      TTyGridPanel, TTyRelativePanel,
-     TTyToolBarEx, TTyControlBar, TTyCoolBar]);
+     TTyToolBarEx, TTyControlBar, TTyCoolBar,
+     TTyHeaderControl, TTyListGroupPanel]);
   // Office-style ribbon parts.
   RegisterComponents('TyControls Ribbon',
     [TTyRibbon, TTyRibbonPage, TTyRibbonGroup, TTyRibbonAppMenu,

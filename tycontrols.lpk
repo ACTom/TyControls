@@ -564,6 +564,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.CoolBar.pas"/>
         <UnitName Value="tyControls.CoolBar"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.HeaderControl.pas"/>
+        <UnitName Value="tyControls.HeaderControl"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ListGroupPanel.pas"/>
+        <UnitName Value="tyControls.ListGroupPanel"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

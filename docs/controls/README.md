@@ -116,6 +116,8 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyToolBarEx](toolbarex.md) | 带溢出 `»` 折叠的工具条（非换行时尾部按钮收进弹出浮层） |
 | [TTyControlBar](controlbar.md) | 可停靠工具带宿主（子控件排成水平 band/行,带左侧抓手） |
 | [TTyCoolBar](coolbar.md) | Rebar：每条 band 可拖拽/抓手拖拽调宽（继承 TTyControlBar） |
+| [TTyHeaderControl](headercontrol.md) | 独立列头条（分节:标题/宽度/对齐/排序,点击排序 + 拖边界调宽） |
+| [TTyListGroupPanel](listgrouppanel.md) | Outlook 式分组可展开列表（手风琴,`AddGroup`/`AddItem`） |
 
 ## 日期与时间
 
