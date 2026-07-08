@@ -1,11 +1,11 @@
 object MainForm: TMainForm
   Left = 200
-  Height = 852
-  Top = 120
-  Width = 1240
+  Height = 690
+  Top = 90
+  Width = 1200
   Caption = 'TyControls — 容器与布局(Phase 5)'
-  ClientHeight = 852
-  ClientWidth = 1240
+  ClientHeight = 690
+  ClientWidth = 1200
   Font.Height = -12
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -15,125 +15,125 @@ object MainForm: TMainForm
     Left = 0
     Height = 34
     Top = 0
-    Width = 1240
+    Width = 1200
     Align = alTop
     Caption = '容器与布局  ·  TyControls'
     TitleAlignment = taLeftJustify
   end
   object DivLeft: TTyDivider
-    Left = 24
-    Height = 24
-    Top = 48
-    Width = 548
+    Left = 20
+    Height = 22
+    Top = 42
+    Width = 530
     Caption = '分割线 TTyDivider — 左对齐(标题 + 右侧线)'
     Alignment = taLeftJustify
   end
   object DivCenter: TTyDivider
-    Left = 24
-    Height = 24
-    Top = 78
-    Width = 548
+    Left = 20
+    Height = 22
+    Top = 68
+    Width = 530
     Caption = '居中标题'
     Alignment = taCenter
   end
   object DivRight: TTyDivider
-    Left = 24
-    Height = 24
-    Top = 108
-    Width = 548
+    Left = 20
+    Height = 22
+    Top = 94
+    Width = 530
     Caption = '右对齐'
     Alignment = taRightJustify
   end
   object DivBevel: TTyDivider
-    Left = 24
-    Height = 24
-    Top = 146
-    Width = 548
+    Left = 20
+    Height = 22
+    Top = 126
+    Width = 530
     Caption = '装饰边框 TTyBevel'
     Alignment = taLeftJustify
   end
   object LblBox: TTyLabel
-    Left = 24
+    Left = 20
     Height = 18
-    Top = 178
+    Top = 152
     Width = 300
     Caption = 'Box / Frame(凹陷 / 凸起)'
   end
   object BevelBox: TTyBevel
-    Left = 24
-    Height = 64
-    Top = 200
-    Width = 120
+    Left = 20
+    Height = 56
+    Top = 172
+    Width = 116
     Shape = tbsBox
     Style = tbsLowered
   end
   object BevelFrameLo: TTyBevel
-    Left = 156
-    Height = 64
-    Top = 200
-    Width = 120
+    Left = 148
+    Height = 56
+    Top = 172
+    Width = 116
     Shape = tbsFrame
     Style = tbsLowered
   end
   object BevelFrameHi: TTyBevel
-    Left = 288
-    Height = 64
-    Top = 200
-    Width = 120
+    Left = 276
+    Height = 56
+    Top = 172
+    Width = 116
     Shape = tbsFrame
     Style = tbsRaised
   end
   object LblLines: TTyLabel
-    Left = 424
+    Left = 410
     Height = 18
-    Top = 178
-    Width = 148
+    Top = 152
+    Width = 140
     Caption = '单边线'
   end
   object BevelTopLine: TTyBevel
-    Left = 424
+    Left = 410
     Height = 3
-    Top = 210
-    Width = 148
+    Top = 180
+    Width = 140
     Shape = tbsTopLine
     Style = tbsLowered
   end
   object BevelBottomLine: TTyBevel
-    Left = 424
+    Left = 410
     Height = 3
-    Top = 238
-    Width = 148
+    Top = 208
+    Width = 140
     Shape = tbsBottomLine
     Style = tbsRaised
   end
   object DivPaint: TTyDivider
-    Left = 24
-    Height = 24
-    Top = 282
-    Width = 548
+    Left = 20
+    Height = 22
+    Top = 240
+    Width = 530
     Caption = '自绘表面 TTyPaintPanel(OnPaintSurface)'
     Alignment = taLeftJustify
   end
   object PaintSurface1: TTyPaintPanel
-    Left = 24
-    Height = 108
-    Top = 312
-    Width = 548
+    Left = 20
+    Height = 90
+    Top = 266
+    Width = 530
     OnPaintSurface = PaintSurface
   end
   object DivGroups: TTyDivider
-    Left = 596
-    Height = 24
-    Top = 48
-    Width = 300
+    Left = 570
+    Height = 22
+    Top = 42
+    Width = 290
     Caption = '分组容器 Radio / Check / ToolGroup'
     Alignment = taLeftJustify
   end
   object RadioSize: TTyRadioGroup
-    Left = 596
-    Height = 100
-    Top = 80
-    Width = 300
+    Left = 570
+    Height = 94
+    Top = 68
+    Width = 290
     Caption = '尺寸(2 列 · 互斥单选)'
     Columns = 2
     Items.Strings = (
@@ -145,10 +145,10 @@ object MainForm: TMainForm
     ItemIndex = 1
   end
   object CheckFeatures: TTyCheckGroup
-    Left = 596
-    Height = 140
-    Top = 192
-    Width = 300
+    Left = 570
+    Height = 128
+    Top = 170
+    Width = 290
     Caption = '启用功能(2 列 · 独立多选)'
     Columns = 2
     Items.Strings = (
@@ -161,10 +161,10 @@ object MainForm: TMainForm
     )
   end
   object ToolClip: TTyToolGroupPanel
-    Left = 596
-    Height = 100
-    Top = 344
-    Width = 300
+    Left = 570
+    Height = 88
+    Top = 306
+    Width = 290
     Caption = '剪贴板(流式工具按钮)'
     object BtnCut: TTyButton
       Left = 0
@@ -200,46 +200,46 @@ object MainForm: TMainForm
     end
   end
   object DivScroll: TTyDivider
-    Left = 920
-    Height = 24
-    Top = 48
-    Width = 296
+    Left = 880
+    Height = 22
+    Top = 42
+    Width = 300
     Caption = '滚动 / 折叠容器'
     Alignment = taLeftJustify
   end
   object ExAdvanced: TTyExPanel
-    Left = 920
-    Height = 128
-    Top = 80
-    Width = 296
+    Left = 880
+    Height = 116
+    Top = 68
+    Width = 300
     Caption = '高级选项(点标题折叠)'
     object ChkWrap: TTyCheckBox
       Left = 16
       Height = 22
-      Top = 36
+      Top = 34
       Width = 200
       Caption = '自动换行'
     end
     object ChkMinimap: TTyCheckBox
       Left = 16
       Height = 22
-      Top = 64
+      Top = 60
       Width = 200
       Caption = '显示小地图'
     end
     object ChkWhitespace: TTyCheckBox
       Left = 16
       Height = 22
-      Top = 92
+      Top = 86
       Width = 200
       Caption = '显示空白字符'
     end
   end
   object ScrollDemo: TTyScrollBox
-    Left = 920
-    Height = 224
-    Top = 224
-    Width = 296
+    Left = 880
+    Height = 200
+    Top = 192
+    Width = 300
     object SbBtn1: TTyButton
       Left = 12
       Height = 32
@@ -312,18 +312,18 @@ object MainForm: TMainForm
     end
   end
   object DivLayout: TTyDivider
-    Left = 24
-    Height = 24
-    Top = 464
-    Width = 1192
+    Left = 20
+    Height = 22
+    Top = 404
+    Width = 1160
     Caption = '网格布局 TTyGridPanel / 相对布局 TTyRelativePanel / 分组列表 TTyListGroupPanel / 列头条 TTyHeaderControl'
     Alignment = taLeftJustify
   end
   object GridForm: TTyGridPanel
-    Left = 24
-    Height = 150
-    Top = 496
-    Width = 300
+    Left = 20
+    Height = 138
+    Top = 434
+    Width = 290
     ColumnCount = 2
     RowCount = 3
     Spacing = 6
@@ -371,10 +371,10 @@ object MainForm: TMainForm
     end
   end
   object RelForm: TTyRelativePanel
-    Left = 348
-    Height = 150
-    Top = 496
-    Width = 300
+    Left = 330
+    Height = 138
+    Top = 434
+    Width = 290
     object BtnTitle: TTyButton
       Left = 0
       Height = 26
@@ -399,36 +399,36 @@ object MainForm: TMainForm
     end
   end
   object ListGroups: TTyListGroupPanel
-    Left = 672
-    Height = 170
-    Top = 496
-    Width = 300
+    Left = 640
+    Height = 148
+    Top = 434
+    Width = 290
   end
   object HeaderCols: TTyHeaderControl
-    Left = 996
+    Left = 950
     Height = 26
-    Top = 524
-    Width = 220
+    Top = 456
+    Width = 230
   end
   object LblHeader: TTyLabel
-    Left = 996
+    Left = 950
     Height = 18
-    Top = 500
-    Width = 220
+    Top = 432
+    Width = 230
     Caption = '列头:点标题排序 · 拖边界调宽'
   end
   object DivBands: TTyDivider
-    Left = 24
-    Height = 24
-    Top = 690
-    Width = 1192
+    Left = 20
+    Height = 22
+    Top = 592
+    Width = 1160
     Caption = '溢出工具条 TTyToolBarEx / Rebar TTyCoolBar'
     Alignment = taLeftJustify
   end
   object BarTools: TTyToolBarEx
-    Left = 24
+    Left = 20
     Height = 32
-    Top = 724
+    Top = 620
     Width = 560
     Align = alNone
     Wrapable = False
@@ -519,10 +519,10 @@ object MainForm: TMainForm
     end
   end
   object Rebar: TTyCoolBar
-    Left = 620
-    Height = 68
-    Top = 724
-    Width = 596
+    Left = 600
+    Height = 58
+    Top = 620
+    Width = 580
     Align = alNone
     object Band1: TTyPanel
       Left = 0
@@ -540,16 +540,16 @@ object MainForm: TMainForm
     end
   end
   object LblGrip: TTyLabel
-    Left = 620
+    Left = 20
     Height = 18
-    Top = 800
-    Width = 500
+    Top = 660
+    Width = 540
     Caption = '右下角 → 尺寸手柄 TTySizeBox(拖动改变窗口大小)'
   end
   object Grip: TTySizeBox
-    Left = 1216
+    Left = 1180
     Height = 16
-    Top = 828
+    Top = 668
     Width = 16
     Anchors = [akRight, akBottom]
   end
