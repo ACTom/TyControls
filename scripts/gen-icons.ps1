@@ -13,7 +13,7 @@ $classes = @(
   'TTyLabel','TTyEdit','TTyNumericEdit','TTyCurrencyEdit','TTyMaskEdit','TTyURLEdit','TTyComboEdit','TTyTrackEdit','TTyColorBox','TTyColorComboBox','TTyMRUComboBox','TTyComboBoxEx','TTyOfficeListBox','TTyOfficeComboBox','TTyColorGrid','TTyLColorPicker','TTyHSColorPicker','TTyAdvancedListBox','TTyAdvancedComboBox','TTyCheckComboBox','TTyValueListEditor','TTyCalculator','TTyCalcEdit','TTyCalcCurrencyEdit','TTyColorListBox','TTyFontComboBox','TTyFontListBox','TTyFontSizeComboBox','TTyCheckListBox','TTyCheckBox','TTyRadioButton',
   'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyProgressBar','TTyGauge','TTyCircularProgress','TTyActivityIndicator','TTyActivityBar','TTyMeter','TTyLevelMeter','TTyDial','TTyAnalogClock','TTySparkline','TTyRating','TTyGearDial','TTyGearActivityIndicator','TTyUpDown','TTyLinkLabel','TTyShadowLabel','TTyGlowLabel','TTyListBox',
   'TTyPageControl','TTyTabSheet','TTyTabSet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit',
-  'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu',
+  'TTyMemo','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu','TTyImagesMenu','TTyMenuEx',
   'TTyNativeStyler','TTyHint','TTyBalloonHint',
   'TTyIconFont','TTyCharImage','TTyGlyphImageList','TTyImage','TTyImageCollection','TTyVirtualImageList',
   'TTySplitter','TTyStatusBar','TTyToolBar','TTyToolSeparator',

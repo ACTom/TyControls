@@ -232,6 +232,8 @@ procedure GTitleBar(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,
 procedure GMenuBar(b: TBGRABitmap); begin RRect(b,3,6,21,12,2,Ink); Line(b,6,9,8,9,Acc); Line(b,10,9,12,9,Ink); Line(b,14,9,16,9,Ink); end;
 procedure GStyleController(b: TBGRABitmap); begin RRect(b,4,4,20,20,3,Ink); FillPolyG(b,[PointF(5,19),PointF(19,19),PointF(5,5)],Acc); end;
 procedure GPopupMenu(b: TBGRABitmap); begin RRect(b,4,3,19,21,2,Ink); Line(b,7,7,16,7,Ink); Line(b,7,11,16,11,Acc); Line(b,7,15,16,15,Ink); end;
+procedure GImagesMenu(b: TBGRABitmap); begin RRect(b,4,3,19,21,2,Ink); FillRRect(b,6,6,9,9,1,Acc); Line(b,11,7.5,16,7.5,Ink); FillRRect(b,6,11,9,14,1,Acc); Line(b,11,12.5,16,12.5,Ink); FillRRect(b,6,16,9,19,1,Acc); Line(b,11,17.5,16,17.5,Ink); end;
+procedure GMenuEx(b: TBGRABitmap); begin RRect(b,4,3,19,21,2,Ink); Line(b,7,7,12,7,Acc); Line(b,7,11,16,11,Ink); Line(b,7,15,16,15,Ink); Line(b,7,18.5,16,18.5,Ink); end;
 
 { TTyNativeStyler: a plain rect (native control) with an accent paint-drop swatch in the corner }
 procedure GNativeStyler(b: TBGRABitmap);
@@ -590,7 +592,7 @@ type
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..123] of TGlyph = (
+  Glyphs: array[0..125] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -677,6 +679,8 @@ const
     (Name:'TTyMenuBar';         Draw:@GMenuBar),
     (Name:'TTyStyleController';  Draw:@GStyleController),
     (Name:'TTyPopupMenu';       Draw:@GPopupMenu),
+    (Name:'TTyImagesMenu';      Draw:@GImagesMenu),
+    (Name:'TTyMenuEx';          Draw:@GMenuEx),
     (Name:'TTyNativeStyler';   Draw:@GNativeStyler),
     (Name:'TTySplitter';        Draw:@GSplitter),
     (Name:'TTyStatusBar';       Draw:@GStatusBar),

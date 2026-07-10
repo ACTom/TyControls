@@ -636,7 +636,7 @@ begin
   RegisterComponents('TyControls Containers',
     [TTyPageControl, TTyTabSheet, TTyTabSet, TTySplitter,
      TTyStatusBar, TTyToolBar, TTyToolSeparator, TTyTitleBar,
-     TTyMenuBar, TTyPopupMenu, TTyCalendar, TTyDateTimePicker, TTyTreeView,
+     TTyMenuBar, TTyPopupMenu, TTyImagesMenu, TTyMenuEx, TTyCalendar, TTyDateTimePicker, TTyTreeView,
      TTyBevel, TTyDivider, TTyPaintPanel, TTySizeBox,
      TTyRadioGroup, TTyCheckGroup, TTyToolGroupPanel,
      TTyScrollBox, TTyScrollPanel, TTyExPanel,
