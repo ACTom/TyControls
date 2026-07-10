@@ -372,7 +372,9 @@ const
     of this control found. }
   TyLvIconLabelW  = 88;   { lvsIcon: label under the icon }
   TyLvSmallLabelW = 150;  { lvsSmallIcon / lvsList: label right of a small icon }
-  TyLvTileLabelW  = 180;  { lvsTile: two lines right of a large icon }
+  { lvsTile: two lines right of a large icon. 150 keeps three tiles across a ~700px pane
+    while still fitting a '2026-07-10 08:30' second line; 180 dropped it to two. }
+  TyLvTileLabelW  = 150;
   TyLvTextMargin = 4;   { text inset inside a report cell / header cell }
   { Rubber-band translucency. The colour comes from the theme; see RenderMarquee. }
   TyLvMarqueeFillAlpha = 60;
