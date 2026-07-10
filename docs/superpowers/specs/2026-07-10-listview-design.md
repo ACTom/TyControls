@@ -121,8 +121,10 @@ function TyListVisibleRange(ACount: Integer; const M: TTyListMetrics;
 function TyListNavigate(ACurrent, ACount: Integer; AKey: TTyListNavKey;
   const M: TTyListMetrics): Integer;
 function TyListRangeBounds(AAnchor, ATarget: Integer; out ALo, AHi: Integer): Boolean;
+{ 返回索引数组,不是区间:流式布局里一个框选矩形命中的索引通常不连续
+  (icon 模式框住 2×2 = 4 个跨行的索引)。}
 function TyListMarqueeHits(const ABox: TRect; ACount: Integer; const M: TTyListMetrics;
-  AScrollX, AScrollY: Integer; out ALo, AHi: Integer): Boolean;
+  AScrollX, AScrollY: Integer): TTyIntArray;
 function TyListPrefixMatch(AGetText: TTyItemTextFn; ACount, AStartAfter: Integer;
   const APrefix: string): Integer;
 function TyListCompareCells(const A, B: string; AKind: TTyListSortKind;
