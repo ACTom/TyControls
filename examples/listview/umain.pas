@@ -99,27 +99,82 @@ end;
   Setup
   --------------------------------------------------------------------------- }
 
-{ Four flat 32px glyphs, drawn with BGRA so the example needs no asset files.
+{ Glyphs drawn with BGRA, so the example needs no asset files.
+
+  MASTER SIZE MATTERS. TTyImageCollection keeps ONE master per name and resamples it to
+  whatever size the view asks for. The large-icon view wants 48 logical px -- 96 at 200%
+  DPI -- so a 32px master gets UPSAMPLED and looks soft. Drawing the masters at 128px means
+  every size the control asks for is a DOWNSAMPLE, which rmFineResample does crisply.
+
   AddBitmap copies, so the caller frees. }
 procedure TMainForm.BuildIcons;
+const
+  G = 128;   { master edge, in px }
 
-  procedure AddGlyph(const AName: string; ABody: TBGRAPixel; AFolder: Boolean);
+  { A slightly darker shade of the body colour, for the folder tab and the page fold. }
+  function Shade(const C: TBGRAPixel; AFactor: Single): TBGRAPixel;
+  begin
+    Result := BGRA(Round(C.red * AFactor), Round(C.green * AFactor),
+                   Round(C.blue * AFactor), C.alpha);
+  end;
+
+  procedure AddFolder(const AName: string; ABody: TBGRAPixel);
   var
     bmp: TBGRABitmap;
   begin
-    bmp := TBGRABitmap.Create(32, 32, BGRAPixelTransparent);
+    bmp := TBGRABitmap.Create(G, G, BGRAPixelTransparent);
     try
-      if AFolder then
-      begin
-        bmp.FillRoundRectAntialias(2, 10, 30, 28, 3, 3, ABody);
-        bmp.FillRoundRectAntialias(2, 5, 14, 12, 2, 2, ABody);
-      end
-      else
-      begin
-        bmp.FillRoundRectAntialias(5, 2, 27, 30, 3, 3, ABody);
-        bmp.FillRectAntialias(9, 9, 23, 11, BGRA(255, 255, 255, 190));
-        bmp.FillRectAntialias(9, 15, 23, 17, BGRA(255, 255, 255, 150));
-        bmp.FillRectAntialias(9, 21, 19, 23, BGRA(255, 255, 255, 120));
+      { tab, then body over it }
+      bmp.FillRoundRectAntialias(8, 20, 60, 46, 6, 6, Shade(ABody, 0.82));
+      bmp.FillRoundRectAntialias(8, 34, 120, 112, 8, 8, ABody);
+      { a lighter lip along the top of the body }
+      bmp.FillRectAntialias(8, 34, 120, 42, BGRA(255, 255, 255, 40));
+      FIcons.AddBitmap(AName, bmp);
+    finally
+      bmp.Free;
+    end;
+  end;
+
+  { A page with a folded top-right corner, plus per-kind content. }
+  procedure AddPage(const AName: string; ABody: TBGRAPixel; AKind: Integer);
+  const
+    L = 22; T = 8; R = 106; B = 120; Fold = 26;
+  var
+    bmp: TBGRABitmap;
+    i, y: Integer;
+  begin
+    bmp := TBGRABitmap.Create(G, G, BGRAPixelTransparent);
+    try
+      { page body, with the folded corner cut out }
+      bmp.FillPolyAntialias([PointF(L, T), PointF(R - Fold, T), PointF(R, T + Fold),
+                             PointF(R, B), PointF(L, B)], ABody);
+      { the fold itself }
+      bmp.FillPolyAntialias([PointF(R - Fold, T), PointF(R, T + Fold),
+                             PointF(R - Fold, T + Fold)], Shade(ABody, 0.72));
+      case AKind of
+        0:  { document: text lines }
+          for i := 0 to 3 do
+          begin
+            y := 52 + i * 14;
+            bmp.FillRectAntialias(36, y, 92 - i * 14, y + 6,
+              BGRA(255, 255, 255, 200 - i * 30));
+          end;
+        1:  { sheet: a small grid }
+          begin
+            bmp.FillRectAntialias(36, 50, 92, 100, BGRA(255, 255, 255, 60));
+            for i := 0 to 2 do
+              bmp.FillRectAntialias(36, 50 + i * 17, 92, 52 + i * 17, BGRA(255, 255, 255, 190));
+            for i := 0 to 2 do
+              bmp.FillRectAntialias(36 + i * 19, 50, 38 + i * 19, 100, BGRA(255, 255, 255, 190));
+          end;
+      else  { image: a sun over a mountain }
+        begin
+          bmp.FillEllipseAntialias(50, 60, 9, 9, BGRA(255, 255, 255, 220));
+          bmp.FillPolyAntialias([PointF(34, 104), PointF(60, 70), PointF(86, 104)],
+            BGRA(255, 255, 255, 190));
+          bmp.FillPolyAntialias([PointF(60, 104), PointF(78, 82), PointF(96, 104)],
+            BGRA(255, 255, 255, 140));
+        end;
       end;
       FIcons.AddBitmap(AName, bmp);
     finally
@@ -129,10 +184,10 @@ procedure TMainForm.BuildIcons;
 
 begin
   FIcons := TTyImageCollection.Create(Self);
-  AddGlyph('folder',   BGRA(226, 176, 66),  True);    // 0
-  AddGlyph('document', BGRA(72, 128, 200),  False);   // 1
-  AddGlyph('sheet',    BGRA(72, 160, 100),  False);   // 2
-  AddGlyph('image',    BGRA(190, 96, 176),  False);   // 3
+  AddFolder('folder',   BGRA(226, 176, 66));      // 0
+  AddPage('document', BGRA(72, 128, 200), 0);     // 1
+  AddPage('sheet',    BGRA(72, 160, 100), 1);     // 2
+  AddPage('image',    BGRA(190, 96, 176), 2);     // 3
 
   FImages := TTyVirtualImageList.Create(Self);
   FImages.Collection := FIcons;
