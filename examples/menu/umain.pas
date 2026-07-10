@@ -195,21 +195,23 @@ begin
   // 主题须先加载
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  // 标题栏：Owner=Self 即自动关联为 TTyForm.TitleBar
+  { ---- 顶部菜单栏（先建）---- }
+  // 注意顺序：代码建的同向 alTop 兄弟按【反创建序】显示——后建的排到最上方。
+  // 所以菜单栏先建、标题栏后建，标题栏才会压在最顶、菜单栏在其下方。
+  BuildMainMenu;
+  FMenuBar := TTyMenuBar.Create(Self);
+  FMenuBar.Parent := Self;
+  FMenuBar.Align := alTop;
+  FMenuBar.Height := 30;
+  FMenuBar.Menu := FMainMenu;   // 绑定数据模型；点顶层项 / Alt+助记符打开下拉
+  MenuBar := FMenuBar;          // 关联为窗体主菜单栏：启用 TTyForm.IsShortcut 快捷键派发
+
+  // 标题栏（后建 → 排到最上方；Owner=Self 即自动关联为 TTyForm.TitleBar）
   Bar := TTyTitleBar.Create(Self);
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := '增强菜单 + 双击标题栏卷起  · TyControls';
-
-  { ---- 顶部菜单栏 ---- }
-  BuildMainMenu;
-  FMenuBar := TTyMenuBar.Create(Self);
-  FMenuBar.Parent := Self;
-  FMenuBar.Align := alTop;      // 紧贴标题栏下方，宽度随窗体拉伸
-  FMenuBar.Height := 30;
-  FMenuBar.Menu := FMainMenu;   // 绑定数据模型；点顶层项 / Alt+助记符打开下拉
-  MenuBar := FMenuBar;          // 关联为窗体主菜单栏：启用 TTyForm.IsShortcut 快捷键派发
 
   { ---- 右键菜单目标面板 ---- }
   BuildPopupMenu;
