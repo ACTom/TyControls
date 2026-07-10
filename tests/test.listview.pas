@@ -15,7 +15,7 @@ unit test.listview;
 interface
 
 uses
-  Classes, SysUtils, Types, LCLType, fpcunit, testregistry,
+  Classes, SysUtils, Types, LCLType, Controls, fpcunit, testregistry,
   tyControls.Columns,          { TTySortDirection, sdAscending, sdDescending }
   tyControls.ListView.Layout,  { TTyListViewStyle, TTyListSortKind }
   tyControls.ScrollBar,        { TTyScrollBar (the embedded bars) }
@@ -41,6 +41,8 @@ type
     function XVBar: TTyScrollBar;
     function XHBar: TTyScrollBar;
     function XContentHeight: Integer;
+    { Mouse hover, for the header-divider cursor. }
+    procedure XMouseMove(X, Y: Integer);
   end;
 
   { -----------------------------------------------------------------------
@@ -178,6 +180,24 @@ type
   end;
 
   { -----------------------------------------------------------------------
+    HEADER DIVIDER — hit part and the resize cursor
+    ----------------------------------------------------------------------- }
+  TListViewHeaderTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestHitPartIsDividerOnTheColumnEdge;
+    procedure TestHitPartIsHeaderInTheMiddleOfASection;
+    procedure TestHitPartIsNowhereWhenResizeDisabled;
+    procedure TestCursorBecomesSplitOverTheDivider;
+    procedure TestCursorIsRestoredWhenLeavingTheDivider;
+    procedure TestCursorRestoresTheAppsOwnCursorNotCrDefault;
+  end;
+
+  { -----------------------------------------------------------------------
     TYPE-AHEAD — a fresh key cycles, a refining key may stay put
     ----------------------------------------------------------------------- }
   TListViewTypeAheadTest = class(TTestCase)
@@ -258,6 +278,11 @@ var
 begin
   m := CurrentMetrics;
   Result := TyListContentExtent(GetItemCount, m).cy;
+end;
+
+procedure TTyListViewAccess.XMouseMove(X, Y: Integer);
+begin
+  MouseMove([], X, Y);
 end;
 
 { ===========================================================================
@@ -889,6 +914,77 @@ begin
 end;
 
 { ===========================================================================
+  HEADER DIVIDER
+  =========================================================================== }
+
+procedure TListViewHeaderTest.SetUp;
+var
+  c: TTyColumn;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+  { The console runner has no screen, so a TFont reports 72 PPI and the control's
+    device<->logical scaling stops being the identity: a divider at logical x=120 would
+    sit at device x=90. Pin 96 so the coordinates below mean what they say. }
+  FLV.Font.PixelsPerInch := 96;
+  FLV.SetBounds(0, 0, 400, 200);
+  FLV.ViewStyle := lvsReport;
+  c := FLV.Header.Columns.Add as TTyColumn; c.Text := 'a'; c.Width := 120;
+  c := FLV.Header.Columns.Add as TTyColumn; c.Text := 'b'; c.Width := 120;
+  FLV.Header.Options := FLV.Header.Options + [hoVisible, hoColumnResize];
+  FLV.Items.Add.Caption := 'row';
+  FLV.ItemsChanged;
+end;
+
+procedure TListViewHeaderTest.TearDown;
+begin
+  FreeAndNil(FLV);
+end;
+
+{ The header band is Header.Height tall; column 'a' ends at x = 120. }
+
+procedure TListViewHeaderTest.TestHitPartIsDividerOnTheColumnEdge;
+begin
+  AssertEquals('hit part at the edge', Ord(lhpDivider), Ord(FLV.GetHitPart(120, 5)));
+end;
+
+procedure TListViewHeaderTest.TestHitPartIsHeaderInTheMiddleOfASection;
+begin
+  AssertTrue('mid-section', FLV.GetHitPart(60, 5) = lhpHeader);
+end;
+
+procedure TListViewHeaderTest.TestHitPartIsNowhereWhenResizeDisabled;
+begin
+  FLV.Header.Options := FLV.Header.Options - [hoColumnResize];
+  AssertTrue('no resize -> plain header, not a divider',
+    FLV.GetHitPart(120, 5) = lhpHeader);
+end;
+
+procedure TListViewHeaderTest.TestCursorBecomesSplitOverTheDivider;
+begin
+  FLV.XMouseMove(120, 5);
+  AssertTrue('crHSplit over the divider', FLV.Cursor = crHSplit);
+end;
+
+procedure TListViewHeaderTest.TestCursorIsRestoredWhenLeavingTheDivider;
+begin
+  FLV.XMouseMove(120, 5);
+  AssertTrue('precondition', FLV.Cursor = crHSplit);
+  FLV.XMouseMove(60, 5);
+  AssertTrue('back to default off the divider', FLV.Cursor = crDefault);
+end;
+
+procedure TListViewHeaderTest.TestCursorRestoresTheAppsOwnCursorNotCrDefault;
+{ TTyTreeView writes `Cursor := crDefault` here, which quietly destroys a Cursor the app
+  set on the control. Save what was there and put it back instead. }
+begin
+  FLV.Cursor := crHandPoint;
+  FLV.XMouseMove(120, 5);
+  AssertTrue('overridden while over the divider', FLV.Cursor = crHSplit);
+  FLV.XMouseMove(60, 5);
+  AssertTrue('the app''s own cursor comes back', FLV.Cursor = crHandPoint);
+end;
+
+{ ===========================================================================
   TYPE-AHEAD
   =========================================================================== }
 
@@ -992,5 +1088,6 @@ initialization
   RegisterTest(TListViewSelectionTest);
   RegisterTest(TListViewVirtualTest);
   RegisterTest(TListViewScrollTest);
+  RegisterTest(TListViewHeaderTest);
   RegisterTest(TListViewTypeAheadTest);
 end.

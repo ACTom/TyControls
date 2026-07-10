@@ -142,6 +142,11 @@ type
     FItemIndex:   Integer;        { focused item index, -1 = none }
     FAnchor:      Integer;        { shift-range anchor, item index }
     FHot:         Integer;        { hot-tracked item index, -1 = none }
+    { Cursor feedback over a header divider. We RESTORE what was there rather than forcing
+      crDefault, so an app that set its own Cursor keeps it once the pointer moves off the
+      divider. }
+    FSavedCursor:      TCursor;
+    FCursorOverridden: Boolean;
     FSelected:    array of Boolean;
     { order maps (private only) }
     FOrder:   array of Integer;   { display pos -> item index }
@@ -247,6 +252,8 @@ type
     procedure ItemMouseSelect(AItem: Integer; Shift: TShiftState);
     procedure ApplyMarquee;
     procedure EndInteractions;
+    procedure SetDividerCursor(AOn: Boolean);
+    procedure UpdateHoverCursor(X, Y: Integer);
   protected
     { The boundary between the two index spaces. FOrder/FRank themselves stay private --
       a descendant has no business reshuffling the display order -- but reading the map
@@ -1892,6 +1899,7 @@ begin
     FResizing := False;
     FMarquee := False;
     MouseCapture := False;
+    { The next MouseMove re-decides; MouseLeave restores if the pointer went away. }
     Invalidate;
   end;
 end;
@@ -1929,6 +1937,9 @@ begin
       FResizeCol := dividerCol;
       FResizeStartX := X;
       FResizeStartW := (FHeader.Columns.Items[dividerCol] as TTyColumn).Width;
+      { A press with no prior MouseMove (a tap, a synthetic click) still shows the grab
+        cursor for the duration of the drag; MouseMove exits early while FResizing. }
+      SetDividerCursor(True);
       MouseCapture := True;
       Exit;
     end;
@@ -1978,6 +1989,27 @@ begin
   end;
 end;
 
+{ Show the horizontal-split cursor while the pointer can grab a column divider. The
+  predicate is GetHitPart, the SAME one MouseDown uses to start a resize, so what the
+  cursor promises and what a click does cannot drift apart. }
+procedure TTyListView.SetDividerCursor(AOn: Boolean);
+begin
+  if AOn = FCursorOverridden then Exit;
+  if AOn then
+  begin
+    FSavedCursor := Cursor;
+    Cursor := crHSplit;
+  end
+  else
+    Cursor := FSavedCursor;
+  FCursorOverridden := AOn;
+end;
+
+procedure TTyListView.UpdateHoverCursor(X, Y: Integer);
+begin
+  SetDividerCursor(GetHitPart(X, Y) = lhpDivider);
+end;
+
 procedure TTyListView.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   m: TTyListMetrics;
@@ -2004,6 +2036,8 @@ begin
     Invalidate;
     Exit;
   end;
+
+  UpdateHoverCursor(X, Y);
 
   if FHotTrack then
   begin
@@ -2039,6 +2073,7 @@ end;
 procedure TTyListView.MouseLeave;
 begin
   inherited MouseLeave;
+  SetDividerCursor(False);
   if FHot <> -1 then
   begin
     FHot := -1;
