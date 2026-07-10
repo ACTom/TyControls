@@ -31,7 +31,9 @@ $classes = @(
   'TTyToolBarEx','TTyControlBar','TTyCoolBar',
   'TTyHeaderControl','TTyListGroupPanel',
   # Phase 9 vector shapes
-  'TTyShape','TTyStarShape','TTyArrow'
+  'TTyShape','TTyStarShape','TTyArrow',
+  # Phase 8 data views (pulled forward: Phase 7 depends on it)
+  'TTyListView'
 )
 
 # Drift guard: the icon set MUST match the components registered in Design.pas. Parse EVERY

@@ -618,12 +618,28 @@ begin
   PolyL(b,[Arr[0],Arr[1],Arr[2],Arr[3],Arr[4],Arr[5],Arr[6],Arr[0]],Ink,1.2);
 end;
 
+{ TTyListView: a report view -- header band on top, then rows of icon + text }
+procedure GListView(b: TBGRABitmap);
+var i: Integer; y: single;
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  FillRRect(b,3.6,4.6,20.4,8.4,1.2,Faint);      // header band
+  Line(b,3,8.5,21,8.5,Ink,1.1);
+  Line(b,12,4.6,12,8.4,Ink,0.9);                // one column divider
+  for i := 0 to 2 do
+  begin
+    y := 11.0 + i * 3.4;
+    FillRRect(b,5.2,y-1.3,7.6,y+1.3,0.6,Acc);   // per-row icon
+    Line(b,9.4,y,18.6,y,Ink,1.1);               // per-row text
+  end;
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..128] of TGlyph = (
+  Glyphs: array[0..129] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -752,7 +768,8 @@ const
     (Name:'TTyListGroupPanel';    Draw:@GListGroupPanel),
     (Name:'TTyShape';             Draw:@GShape),
     (Name:'TTyStarShape';         Draw:@GStarShape),
-    (Name:'TTyArrow';             Draw:@GArrow)
+    (Name:'TTyArrow';             Draw:@GArrow),
+    (Name:'TTyListView';          Draw:@GListView)
   );
 
 const

@@ -89,6 +89,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyAdvancedComboBox](advancedcombobox.md) | 富行组合框（下拉每项 图标+标题+副标题；字段显图标+标题） |
 | [TTyListBox](listbox.md) | 列表框：键盘导航、内嵌自动滚动条 |
 | [TTyTreeView](treeview.md) | 虚拟树（VirtualTreeView 级）：百万节点、多列 + 排序、复选 + 三态 + 单选、多选 + 整行、内联编辑、节点拖放、逐单元格自绘 |
+| [TTyListView](listview.md) | 平铺项视图（TreeView 的非层级兄弟）：报表 / 列表 / 大图标 / 小图标 / 平铺五种模式、列 + 排序、多选 + 框选、虚拟模式（十万行零对象） |
 
 ## 容器与布局
 
