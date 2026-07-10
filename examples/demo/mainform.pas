@@ -12,7 +12,7 @@ uses
   tyControls.BuiltinThemes, tyControls.NativeStyler, tyControls.ToolBar,
   tyControls.StatusBar, tyControls.Splitter, tyControls.TabSet,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.TreeView,
-  tyControls.TreeView.Columns, tyControls.Dialogs,
+  tyControls.Columns, tyControls.Dialogs,
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.Color,
   tyControls.Dialogs.Font, tyControls.Dialogs.Find, tyControls.Dialogs.Progress,
   tyControls.Dialogs.About,
@@ -554,7 +554,7 @@ procedure TDemoMainForm.InitColTree;
   TPersistent + TCollection hierarchy by hand in a .lfm is error-prone;
   code path is simpler and equally correct). }
 var
-  col: TTyTreeColumn;
+  col: TTyColumn;
 begin
   { FIX 6: each node stores a stable TColNode key so sort does not scramble data }
   TyColTree.NodeDataSize := SizeOf(TColNode);
@@ -571,17 +571,17 @@ begin
                 hoHeaderClickAutoSort, hoDrag];
     MainColumn := 0;
     { Column 0: Name }
-    col := Columns.Add as TTyTreeColumn;
+    col := Columns.Add as TTyColumn;
     col.Text := 'Name';
     col.Width := 180;
     col.Alignment := taLeftJustify;
     { Column 1: Size }
-    col := Columns.Add as TTyTreeColumn;
+    col := Columns.Add as TTyColumn;
     col.Text := 'Size';
     col.Width := 80;
     col.Alignment := taRightJustify;
     { Column 2: Modified }
-    col := Columns.Add as TTyTreeColumn;
+    col := Columns.Add as TTyColumn;
     col.Text := 'Modified';
     col.Width := 120;
     col.Alignment := taLeftJustify;

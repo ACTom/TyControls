@@ -16,7 +16,7 @@ uses
   tyControls.Controller, tyControls.Form, tyControls.Button,
   tyControls.TyLabel, tyControls.PageControl, tyControls.TabSheet,
   tyControls.StatusBar, tyControls.BuiltinThemes,
-  tyControls.TreeView, tyControls.TreeView.Columns;
+  tyControls.TreeView, tyControls.Columns;
 
 { -----------------------------------------------------------------------
   Stable per-node data for the Columns tab (mirrors demo TColNode).
@@ -498,7 +498,7 @@ end;
 procedure TShowcaseForm.InitColTab(APage: TTyTabSheet);
 var
   Lbl: TTyLabel;
-  col: TTyTreeColumn;
+  col: TTyColumn;
 begin
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := APage;
@@ -548,22 +548,22 @@ begin
     Options := [hoVisible, hoColumnResize, hoShowSortGlyphs,
                 hoHeaderClickAutoSort, hoDrag];
 
-    col := Columns.Add as TTyTreeColumn;
+    col := Columns.Add as TTyColumn;
     col.Text := 'Name';
     col.Width := 200;
     col.Alignment := taLeftJustify;
 
-    col := Columns.Add as TTyTreeColumn;
+    col := Columns.Add as TTyColumn;
     col.Text := 'Type';
     col.Width := 110;
     col.Alignment := taLeftJustify;
 
-    col := Columns.Add as TTyTreeColumn;
+    col := Columns.Add as TTyColumn;
     col.Text := 'Size';
     col.Width := 90;
     col.Alignment := taRightJustify;
 
-    col := Columns.Add as TTyTreeColumn;
+    col := Columns.Add as TTyColumn;
     col.Text := 'Modified';
     col.Width := 120;
     col.Alignment := taLeftJustify;

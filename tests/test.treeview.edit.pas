@@ -15,7 +15,7 @@ uses
   fpcunit, testregistry,
   tyControls.Types,
   tyControls.Edit,
-  tyControls.TreeView.Columns,
+  tyControls.Columns,
   tyControls.TreeView,
   tyControls.Controller;
 
@@ -303,7 +303,7 @@ end;
   row 0 (root) y=[22..44). }
 procedure TTreeEditE3Test.BuildTree(AColumns: Boolean);
 var
-  col0, col1, col2: TTyTreeColumn;
+  col0, col1, col2: TTyColumn;
 begin
   FCtl := TTyStyleController.Create(nil);
   FCtl.LoadThemeCss(EDIT_THEME_CSS);
@@ -323,11 +323,11 @@ begin
 
   if AColumns then
   begin
-    col0 := FTree.Header.Columns.Add as TTyTreeColumn;
+    col0 := FTree.Header.Columns.Add as TTyColumn;
     col0.Width := 120; col0.Text := 'Name';
-    col1 := FTree.Header.Columns.Add as TTyTreeColumn;
+    col1 := FTree.Header.Columns.Add as TTyColumn;
     col1.Width := 80;  col1.Text := 'Info';
-    col2 := FTree.Header.Columns.Add as TTyTreeColumn;
+    col2 := FTree.Header.Columns.Add as TTyColumn;
     col2.Width := 100; col2.Text := 'Size';
     FTree.Header.MainColumn := 0;
     FTree.Header.Options    := [hoVisible];
@@ -809,11 +809,11 @@ end;
 procedure TTreeEditE4Test.TestPartialScrollUnderHeaderCommits;
 var
   node0: PTyTreeNode;
-  col0: TTyTreeColumn;
+  col0: TTyColumn;
   cr, cell: TRect;
 begin
   { Give the fixture a visible single-column header, then re-lay-out. }
-  col0 := FTree.Header.Columns.Add as TTyTreeColumn;
+  col0 := FTree.Header.Columns.Add as TTyColumn;
   col0.Width := 140; col0.Text := 'Name';
   FTree.Header.MainColumn := 0;
   FTree.Header.Options    := [hoVisible];
@@ -1057,7 +1057,7 @@ end;
 procedure TTreeEditFix1Test.Build(APPI: Integer);
 var
   redBmp: TBitmap;
-  col0, col1, col2: TTyTreeColumn;
+  col0, col1, col2: TTyColumn;
   root: PTyTreeNode;
 begin
   FCtl := TTyStyleController.Create(nil);
@@ -1093,11 +1093,11 @@ begin
   end;
   FTree.Images := FImages;
 
-  col0 := FTree.Header.Columns.Add as TTyTreeColumn;
+  col0 := FTree.Header.Columns.Add as TTyColumn;
   col0.Width := 140; col0.Text := 'Name';
-  col1 := FTree.Header.Columns.Add as TTyTreeColumn;
+  col1 := FTree.Header.Columns.Add as TTyColumn;
   col1.Width := 80;  col1.Text := 'Info';
-  col2 := FTree.Header.Columns.Add as TTyTreeColumn;
+  col2 := FTree.Header.Columns.Add as TTyColumn;
   col2.Width := 80;  col2.Text := 'Size';
   FTree.Header.MainColumn := 0;
   FTree.Header.Options    := [hoVisible];

@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LCLIntf, LazUTF8, ImgList,
   BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar,
-  tyControls.TreeView.Columns, tyControls.Edit;
+  tyControls.Columns, tyControls.Edit;
 
 type
   { C4: hit-test result — which part of a node row the mouse landed in }
@@ -291,7 +291,7 @@ type
     FRangeX:    Integer;        // max content width; accumulated by paint pass (C3); reset to 0 by InvalidateTreeLayout on every structural change
     FSyncingScroll: Boolean;    // reentrancy guard (mirrors ListBox pattern)
     { B (columns): header sub-object }
-    FHeader:    TTyTreeHeader;
+    FHeader:    TTyHeader;
     { D2: column resize state }
     FResizeColumn:     Integer;   // NoColumn when not resizing
     FResizeStartWidth: Integer;   // col.Width at drag start (logical px)
@@ -334,7 +334,7 @@ type
     procedure UpdateScrollBars;
     { B (columns): header/column change handler }
     procedure HeaderChanged(Sender: TObject);
-    procedure SetHeader(AValue: TTyTreeHeader);
+    procedure SetHeader(AValue: TTyHeader);
     procedure SetIndent(AValue: Integer);
     procedure SetImages(AValue: TImageList);
     procedure SetShowButtons(AValue: Boolean);
@@ -571,7 +571,7 @@ type
     { B1: option flags set (default [] = ③a/③b behaviour) }
     property Options: TTyTreeOptions read FOptions write SetOptions default [];
     { B (columns): header sub-object }
-    property Header: TTyTreeHeader read FHeader write SetHeader;
+    property Header: TTyHeader read FHeader write SetHeader;
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
     property DefaultNodeHeight: Integer read FDefaultNodeHeight write FDefaultNodeHeight default 18;
     property RootNodeCount: Cardinal read GetRootNodeCount write SetRootNodeCount default 0;
@@ -1767,7 +1767,7 @@ begin
   Invalidate;
 end;
 
-procedure TTyTreeView.SetHeader(AValue: TTyTreeHeader);
+procedure TTyTreeView.SetHeader(AValue: TTyHeader);
 begin
   FHeader.Assign(AValue);
 end;
@@ -1847,7 +1847,7 @@ begin
   FHScroll.Visible           := False;
   FHScroll.ControlStyle      := FHScroll.ControlStyle + [csNoDesignVisible];   // internal: hide in the designer
   { B (columns): create the header sub-object and wire its change notification }
-  FHeader := TTyTreeHeader.Create;
+  FHeader := TTyHeader.Create;
   FHeader.OnChange := @HeaderChanged;
   { ③e E1: the persistent inline editor — hidden, non-tab-stop, parented to the
     tree so it shares the tree's Controller (themed automatically) and lives in
@@ -3045,7 +3045,7 @@ end;
 function TTyTreeView.InternalCellRect(const CR: TRect;
   ARowTop, ARowH, AColumn, APPI: Integer; out ACellRect: TRect): Boolean;
 var
-  col: TTyTreeColumn;
+  col: TTyColumn;
   colObj: TObject;
   effCol: Integer;
   cLeft, cRight: Integer;
@@ -3068,8 +3068,8 @@ begin
 
   if (effCol < 0) or (effCol >= FHeader.Columns.Count) then Exit;
   colObj := FHeader.Columns.Items[effCol];
-  if not (colObj is TTyTreeColumn) then Exit;
-  col := TTyTreeColumn(colObj);
+  if not (colObj is TTyColumn) then Exit;
+  col := TTyColumn(colObj);
   if not (coVisible in col.Options) then Exit;
 
   { Verbatim the RenderTo cell-left/right math (device px, scroll-adjusted). }
@@ -3210,7 +3210,7 @@ var
   headerBandRect: TRect;        // device rect for the header band
   headerBgStyle, headerSecStyle: TTyStyleSet;
   colCount, posIdx, colIdx: Integer;
-  col: TTyTreeColumn;
+  col: TTyColumn;
   cellLeft, cellRight: Integer;
   cellRect, clipR: TRect;
   colCellLeft, colCellRight: Integer;
@@ -3465,7 +3465,7 @@ begin
           accentPx := TyColorToBGRA(S.BorderColor);
         { Ghost: draw a semi-transparent filled rect over the dragged column's
           header cell at its current position (not yet moved) }
-        col := FHeader.Columns.Items[FDragColumn] as TTyTreeColumn;
+        col := FHeader.Columns.Items[FDragColumn] as TTyColumn;
         cellLeft  := CR.Left + P.Scale(col.Left) + FOffsetX;
         cellRight := cellLeft + P.Scale(col.Width);
         { Clamp to visible area }
@@ -4447,7 +4447,7 @@ var
   node: PTyTreeNode;
   headerPart: TTyTreeHitPart;
   headerCol: Integer;
-  col: TTyTreeColumn;
+  col: TTyColumn;
   col2: Integer;   { E3: column under the cursor (out param of the hit-test) }
 begin
   inherited MouseDown(Button, Shift, X, Y);
@@ -4464,7 +4464,7 @@ begin
        (headerCol <> NoColumn) and
        (hoColumnResize in FHeader.Options) then
     begin
-      col := FHeader.Columns.Items[headerCol] as TTyTreeColumn;
+      col := FHeader.Columns.Items[headerCol] as TTyColumn;
       FResizeColumn     := headerCol;
       FResizeStartWidth := col.Width;
       FResizeStartX     := X;
@@ -4478,7 +4478,7 @@ begin
         (E3 header-click); a drag-reorder only ENGAGES in MouseMove when
         hoDrag + coDraggable allow it — so header-click sort works even when
         drag-reorder is disabled (decoupled from hoDrag/coDraggable). }
-      col := FHeader.Columns.Items[headerCol] as TTyTreeColumn;
+      col := FHeader.Columns.Items[headerCol] as TTyColumn;
       FDragColumn    := headerCol;
       FDragPending   := True;
       FDragStartX    := X;
@@ -4648,7 +4648,7 @@ var
   node: PTyTreeNode;
   hPart: TTyTreeHitPart;
   hCol, PPI, newWidth: Integer;
-  col: TTyTreeColumn;
+  col: TTyColumn;
   threshold, logX, logScroll, hitColIdx, targetPos: Integer;
   allowed: Boolean;   { ③f F2: per-move CanMoveNode + OnDragOver verdict }
 begin
@@ -4708,7 +4708,7 @@ begin
   begin
     PPI := Font.PixelsPerInch;
     newWidth := FResizeStartWidth + MulDiv(X - FResizeStartX, 96, PPI);
-    col := FHeader.Columns.Items[FResizeColumn] as TTyTreeColumn;
+    col := FHeader.Columns.Items[FResizeColumn] as TTyColumn;
     col.Width := newWidth;  // setter clamps + UpdatePositions + fires HeaderChanged → repaint
     if Assigned(FOnColumnResized) then
       FOnColumnResized(Self, FResizeColumn);
@@ -4734,7 +4734,7 @@ begin
     if not FDragging and (Abs(X - FDragStartX) > threshold) and
        (hoDrag in FHeader.Options) and
        (FDragColumn >= 0) and (FDragColumn < FHeader.Columns.Count) and
-       (coDraggable in (FHeader.Columns.Items[FDragColumn] as TTyTreeColumn).Options) then
+       (coDraggable in (FHeader.Columns.Items[FDragColumn] as TTyColumn).Options) then
     begin
       FDragging := True;
       Invalidate;
@@ -4750,7 +4750,7 @@ begin
 
       if hitColIdx <> NoColumn then
       begin
-        col := FHeader.Columns.Items[hitColIdx] as TTyTreeColumn;
+        col := FHeader.Columns.Items[hitColIdx] as TTyColumn;
         targetPos := col.Position;
       end
       else
@@ -4799,7 +4799,7 @@ end;
 
 procedure TTyTreeView.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
-  draggedCol: TTyTreeColumn;
+  draggedCol: TTyColumn;
   oldPos, newPos: Integer;
 begin
   inherited MouseUp(Button, Shift, X, Y);
@@ -4835,7 +4835,7 @@ begin
   begin
     if FDragging and (FDragColumn <> NoColumn) then
     begin
-      draggedCol := FHeader.Columns.Items[FDragColumn] as TTyTreeColumn;
+      draggedCol := FHeader.Columns.Items[FDragColumn] as TTyColumn;
       oldPos := draggedCol.Position;
       newPos := FDragTargetPos;
       if newPos <> Integer(oldPos) then
@@ -5420,12 +5420,12 @@ end;
   FSorting prevents re-entry from the programmatic SortColumn/SortDirection setters. }
 procedure TTyTreeView._HandleHeaderClick(ColIndex: Integer);
 var
-  col: TTyTreeColumn;
+  col: TTyColumn;
 begin
   if FHeader = nil then Exit;
   if (ColIndex < 0) or (ColIndex >= FHeader.Columns.Count) then Exit;
 
-  col := FHeader.Columns.Items[ColIndex] as TTyTreeColumn;
+  col := FHeader.Columns.Items[ColIndex] as TTyColumn;
 
   { Guard: column must allow click and header must have auto-sort on }
   if not (coAllowClick in col.Options) then Exit;

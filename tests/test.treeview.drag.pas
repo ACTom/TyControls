@@ -11,7 +11,7 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType,
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
-  tyControls.TreeView.Columns,
+  tyControls.Columns,
   tyControls.TreeView,
   tyControls.Controller;
 

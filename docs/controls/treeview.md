@@ -10,14 +10,14 @@
 
 | 项目 | 值 |
 |------|-----|
-| 单元 | `tyControls.TreeView`（列 / 表头模型在 `tyControls.TreeView.Columns`） |
+| 单元 | `tyControls.TreeView`（列 / 表头模型在 `tyControls.Columns`） |
 | `GetStyleTypeKey` 返回值 | `'TyTreeView'` |
 | 基类 | `TTyCustomControl`（继承自 `TCustomControl`） |
 
 在 `.tycss` 文件中，控件外框对应选择器前缀 `TyTreeView`。此外控件在绘制时还会解析若干**子部件 typeKey**（均不是独立控件，只是主题查找键）：`TyTreeNode`（行）、`TyTreeHeader`（表头带）、`TyTreeHeaderSection`（表头分区）、`TyTreeCheckBox`（复选 / 单选框槽）。详见第 5 节。
 
 ```pascal
-uses tyControls.TreeView, tyControls.TreeView.Columns;
+uses tyControls.TreeView, tyControls.Columns;
 ```
 
 ---
@@ -29,7 +29,7 @@ uses tyControls.TreeView, tyControls.TreeView.Columns;
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Options` | `TTyTreeOptions` | `[]` | 树级功能开关集合（见下表），默认全部关闭 |
-| `Header` | `TTyTreeHeader` | 见下 | 表头 / 列模型子对象（`TPersistent`，随控件流式保存） |
+| `Header` | `TTyHeader` | 见下 | 表头 / 列模型子对象（`TPersistent`，随控件流式保存） |
 | `NodeDataSize` | `Integer` | `-1` | 每个节点尾部附带的用户数据块字节数；`-1` 表示无数据块。设置后每个节点分配 `TreeNodeSize + NodeDataSize` 字节 |
 | `DefaultNodeHeight` | `Integer` | `18` | 未启用变高时每行的逻辑像素高度 |
 | `RootNodeCount` | `Cardinal` | `0` | 根级（顶层）节点数量。写入即创建这么多未初始化的根节点骨架 |
@@ -58,18 +58,18 @@ uses tyControls.TreeView, tyControls.TreeView.Columns;
 | `toEditable` | 启用就地编辑：F2 / 双击可编辑单元格弹出主题化 `TTyEdit` 覆盖框 |
 | `toNodeDrag` | 启用树内节点拖放（拖动节点在兄弟间重排 / 重设父级） |
 
-#### `Header`（`TTyTreeHeader`）子对象属性
+#### `Header`（`TTyHeader`）子对象属性
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Height` | `Integer` | `22` | 表头带高度 |
-| `Columns` | `TTyTreeColumns` | 空集合 | 列集合（`TCollection`）；`Columns.Add` 追加一个 `TTyTreeColumn` |
+| `Columns` | `TTyColumns` | 空集合 | 列集合（`TCollection`）；`Columns.Add` 追加一个 `TTyColumn` |
 | `MainColumn` | `Integer` | `0` | **主列**（绘制展开按钮 / 图标 / 树缩进的那一列）。见下方警告 |
 | `SortColumn` | `Integer` | `-1` | 当前排序列（`-1` = 未排序）；点击表头自动更新 |
 | `SortDirection` | `TTySortDirection` | `sdAscending` | 当前排序方向 |
 | `AutoSizeIndex` | `Integer` | `-1` | 自动填充剩余宽度的列索引（配合 `hoAutoResize`） |
 | `Images` | `TCustomImageList` | `nil` | 表头图标图像列表 |
-| `Options` | `TTyTreeHeaderOptions` | `[hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]` | 表头选项（见下） |
+| `Options` | `TTyHeaderOptions` | `[hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]` | 表头选项（见下） |
 
 > **⚠️ 关键陷阱：`MainColumn` 必须在列添加之后设置。** `SetMainColumn` 在 `Columns.Count = 0` 时会把任何赋值**夹紧为 `NoColumn`（-1）**。若在添加任何列之前写 `MainColumn := 0`，它会被夹成 -1，导致主列块永远不匹配——展开按钮、节点图标、主列文字**全部消失**，只剩平铺文本格。**正确顺序是先 `Columns.Add`，再设 `MainColumn`。** 作为兜底，控件在**添加第一列**且 `MainColumn` 仍为 `NoColumn` 时会自动把它默认为 `0`（与 VirtualTreeView 一致）；但显式的错误顺序仍应避免。示例（来自 showcase）：
 >
@@ -81,7 +81,7 @@ uses tyControls.TreeView, tyControls.TreeView.Columns;
 > end;
 > ```
 
-#### `Header.Options`（`TTyTreeHeaderOption`）
+#### `Header.Options`（`TTyHeaderOption`）
 
 | 标志 | 作用 |
 |------|------|
@@ -93,7 +93,7 @@ uses tyControls.TreeView, tyControls.TreeView.Columns;
 | `hoAutoResize` | 令 `AutoSizeIndex` 列填充剩余宽度 |
 | `hoHotTrack` | 高亮悬停的表头分区 |
 
-#### `TTyTreeColumn`（列项）自有 published 属性
+#### `TTyColumn`（列项）自有 published 属性
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -105,7 +105,7 @@ uses tyControls.TreeView, tyControls.TreeView.Columns;
 | `CaptionAlignment` | `TAlignment` | `taLeftJustify` | 表头标题对齐 |
 | `Text` | `string` | `''` | 表头标题文字 |
 | `ImageIndex` | `Integer` | `-1` | 表头图标索引 |
-| `Options` | `TTyTreeColumnOptions` | `[coVisible, coResizable, coAllowClick, coDraggable]` | 列级选项（`coVisible` / `coResizable` / `coAllowClick` / `coDraggable` / `coAutoSpring`） |
+| `Options` | `TTyColumnOptions` | `[coVisible, coResizable, coAllowClick, coDraggable]` | 列级选项（`coVisible` / `coResizable` / `coAllowClick` / `coDraggable` / `coAutoSpring`） |
 | `Tag` | `NativeInt` | `0` | 用户自定义标记 |
 
 ### 继承的通用成员
@@ -274,7 +274,7 @@ TyTreeCheckBox:disabled { color: var(--muted); }
 
 ```pascal
 uses
-  tyControls.Controller, tyControls.TreeView, tyControls.TreeView.Columns;
+  tyControls.Controller, tyControls.TreeView, tyControls.Columns;
 
 type
   { 稳定的逐节点数据（存在节点数据块里，不依赖 Node^.Index，排序后仍随行走） }
@@ -307,8 +307,8 @@ with Tree.Header do
 begin
   Options := [hoVisible, hoColumnResize, hoShowSortGlyphs,
               hoHeaderClickAutoSort, hoDrag];
-  (Columns.Add as TTyTreeColumn).Text := 'Name';
-  (Columns.Add as TTyTreeColumn).Text := 'Size';
+  (Columns.Add as TTyColumn).Text := 'Name';
+  (Columns.Add as TTyColumn).Text := 'Size';
   MainColumn := 0;                 // ← 一定在 Columns.Add 之后
 end;
 

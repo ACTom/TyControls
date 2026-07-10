@@ -469,6 +469,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.TreeView"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Columns.pas"/>
+        <UnitName Value="tyControls.Columns"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.TreeView.Columns.pas"/>
         <UnitName Value="tyControls.TreeView.Columns"/>
       </Item>

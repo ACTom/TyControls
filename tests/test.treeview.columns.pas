@@ -1,13 +1,13 @@
 unit test.treeview.columns;
 { Phase A — pure column model tests (A1–A4).
-  Phase B — TTyTreeHeader + Header/Columns wired into TTyTreeView.
+  Phase B — TTyHeader + Header/Columns wired into TTyTreeView.
   A-tests: headless, no TTyTreeView.
   B-tests: use TTyTreeView headlessly (Create(nil), no windowing). }
 {$mode objfpc}{$H+}
 interface
 uses
   Classes, SysUtils, Types, LCLType, fpcunit, testregistry,
-  tyControls.TreeView.Columns,
+  tyControls.Columns,
   tyControls.TreeView;
 
 type
@@ -16,8 +16,8 @@ type
     ----------------------------------------------------------------------- }
   TColumnA1Test = class(TTestCase)
   private
-    FCols: TTyTreeColumns;
-    FA, FB, FC: TTyTreeColumn;
+    FCols: TTyColumns;
+    FA, FB, FC: TTyColumn;
   protected
     procedure Setup; override;
     procedure TearDown; override;
@@ -51,8 +51,8 @@ type
     ----------------------------------------------------------------------- }
   TColumnA2Test = class(TTestCase)
   private
-    FCols: TTyTreeColumns;
-    FA, FB, FC: TTyTreeColumn;
+    FCols: TTyColumns;
+    FA, FB, FC: TTyColumn;
   protected
     procedure Setup; override;
     procedure TearDown; override;
@@ -78,8 +78,8 @@ type
     ----------------------------------------------------------------------- }
   TColumnA3Test = class(TTestCase)
   private
-    FCols: TTyTreeColumns;
-    FA, FB, FC: TTyTreeColumn;
+    FCols: TTyColumns;
+    FA, FB, FC: TTyColumn;
   protected
     procedure Setup; override;
     procedure TearDown; override;
@@ -115,8 +115,8 @@ type
     ----------------------------------------------------------------------- }
   TColumnA4Test = class(TTestCase)
   private
-    FCols: TTyTreeColumns;
-    FA, FB, FC: TTyTreeColumn;
+    FCols: TTyColumns;
+    FA, FB, FC: TTyColumn;
   protected
     procedure Setup; override;
     procedure TearDown; override;
@@ -144,7 +144,7 @@ type
   end;
 
   { -----------------------------------------------------------------------
-    B1: TTyTreeHeader + published Header/Columns wired to TTyTreeView
+    B1: TTyHeader + published Header/Columns wired to TTyTreeView
     ----------------------------------------------------------------------- }
   TColumnB1Test = class(TTestCase)
   private
@@ -207,7 +207,7 @@ type
     ----------------------------------------------------------------------- }
   TColumnB3Test = class(TTestCase)
   private
-    FHeader: TTyTreeHeader;
+    FHeader: TTyHeader;
   protected
     procedure Setup; override;
     procedure TearDown; override;
@@ -224,7 +224,7 @@ type
   end;
 
   { -----------------------------------------------------------------------
-    F3: design-time streaming — TTyTreeHeader.Assign deep-copies columns
+    F3: design-time streaming — TTyHeader.Assign deep-copies columns
     ----------------------------------------------------------------------- }
   TColumnF3Test = class(TTestCase)
   published
@@ -232,7 +232,7 @@ type
     procedure TestHeaderAssignDeepCopiesColumns;
     { Assigned columns are independent (changing src does not affect dst) }
     procedure TestHeaderAssignIsDeepNotShallow;
-    { RegisterClass registered TTyTreeColumn, TTyTreeColumns, TTyTreeHeader }
+    { RegisterClass registered TTyColumn, TTyColumns, TTyHeader }
     procedure TestRegisterClassForStreaming;
   end;
 
@@ -244,10 +244,10 @@ implementation
 
 procedure TColumnA1Test.Setup;
 begin
-  FCols := TTyTreeColumns.Create;
-  FA := FCols.Add as TTyTreeColumn;  FA.Text := 'A';
-  FB := FCols.Add as TTyTreeColumn;  FB.Text := 'B';
-  FC := FCols.Add as TTyTreeColumn;  FC.Text := 'C';
+  FCols := TTyColumns.Create;
+  FA := FCols.Add as TTyColumn;  FA.Text := 'A';
+  FB := FCols.Add as TTyColumn;  FB.Text := 'B';
+  FC := FCols.Add as TTyColumn;  FC.Text := 'C';
   FCols.UpdatePositions;
 end;
 
@@ -267,7 +267,7 @@ end;
 
 procedure TColumnA1Test.TestColumnByPosition;
 var
-  col: TTyTreeColumn;
+  col: TTyColumn;
 begin
   col := FCols.ColumnByPosition(1);
   AssertTrue('ColumnByPosition(1) is B', col = FB);
@@ -327,10 +327,10 @@ end;
 
 procedure TColumnA1Test.TestColumnDefaults;
 var
-  col: TTyTreeColumn;
+  col: TTyColumn;
 begin
   { Use a fresh column to check defaults }
-  col := FCols.Add as TTyTreeColumn;
+  col := FCols.Add as TTyColumn;
   AssertEquals('Default Width', 100, col.Width);
   AssertEquals('Default MinWidth', 10, col.MinWidth);
   AssertEquals('Default MaxWidth', 10000, col.MaxWidth);
@@ -342,7 +342,7 @@ end;
 
 procedure TColumnA1Test.TestOptionsDefault;
 var
-  expected: TTyTreeColumnOptions;
+  expected: TTyColumnOptions;
 begin
   expected := [coVisible, coResizable, coAllowClick, coDraggable];
   AssertTrue('Default Options', FA.Options = expected);
@@ -354,10 +354,10 @@ end;
 
 procedure TColumnA2Test.Setup;
 begin
-  FCols := TTyTreeColumns.Create;
-  FA := FCols.Add as TTyTreeColumn;  FA.Text := 'A';  FA.Width := 100;
-  FB := FCols.Add as TTyTreeColumn;  FB.Text := 'B';  FB.Width := 50;
-  FC := FCols.Add as TTyTreeColumn;  FC.Text := 'C';  FC.Width := 80;
+  FCols := TTyColumns.Create;
+  FA := FCols.Add as TTyColumn;  FA.Text := 'A';  FA.Width := 100;
+  FB := FCols.Add as TTyColumn;  FB.Text := 'B';  FB.Width := 50;
+  FC := FCols.Add as TTyColumn;  FC.Text := 'C';  FC.Width := 80;
   FCols.UpdatePositions;
 end;
 
@@ -433,10 +433,10 @@ end;
 
 procedure TColumnA3Test.Setup;
 begin
-  FCols := TTyTreeColumns.Create;
-  FA := FCols.Add as TTyTreeColumn;  FA.Text := 'A';  FA.Width := 100;
-  FB := FCols.Add as TTyTreeColumn;  FB.Text := 'B';  FB.Width := 50;
-  FC := FCols.Add as TTyTreeColumn;  FC.Text := 'C';  FC.Width := 80;
+  FCols := TTyColumns.Create;
+  FA := FCols.Add as TTyColumn;  FA.Text := 'A';  FA.Width := 100;
+  FB := FCols.Add as TTyColumn;  FB.Text := 'B';  FB.Width := 50;
+  FC := FCols.Add as TTyColumn;  FC.Text := 'C';  FC.Width := 80;
   FCols.UpdatePositions;
   { FLeft: A=0, B=100, C=150 }
 end;
@@ -541,10 +541,10 @@ end;
 
 procedure TColumnA4Test.Setup;
 begin
-  FCols := TTyTreeColumns.Create;
-  FA := FCols.Add as TTyTreeColumn;  FA.Text := 'A';  FA.Width := 100;
-  FB := FCols.Add as TTyTreeColumn;  FB.Text := 'B';  FB.Width := 50;
-  FC := FCols.Add as TTyTreeColumn;  FC.Text := 'C';  FC.Width := 80;
+  FCols := TTyColumns.Create;
+  FA := FCols.Add as TTyColumn;  FA.Text := 'A';  FA.Width := 100;
+  FB := FCols.Add as TTyColumn;  FB.Text := 'B';  FB.Width := 50;
+  FC := FCols.Add as TTyColumn;  FC.Text := 'C';  FC.Width := 80;
   FCols.UpdatePositions;
 end;
 
@@ -723,10 +723,10 @@ end;
 
 procedure TColumnB1Test.TestColumnWidthChangeFiresHeaderChanged;
 var
-  colA, colB: TTyTreeColumn;
+  colA, colB: TTyColumn;
 begin
-  colA := FTree.Header.Columns.Add as TTyTreeColumn;  colA.Width := 100;
-  colB := FTree.Header.Columns.Add as TTyTreeColumn;  colB.Width := 50;
+  colA := FTree.Header.Columns.Add as TTyColumn;  colA.Width := 100;
+  colB := FTree.Header.Columns.Add as TTyColumn;  colB.Width := 50;
   { After adding columns, FRangeX = TotalWidth (150) }
   AssertEquals('FRangeX = TotalWidth after add', 150, FTree.RangeX);
   { Change colA.Width -> TotalWidth becomes 200 }
@@ -736,9 +736,9 @@ end;
 
 procedure TColumnB1Test.TestHeaderHeightChangeFiresHeaderChanged;
 var
-  colA: TTyTreeColumn;
+  colA: TTyColumn;
 begin
-  colA := FTree.Header.Columns.Add as TTyTreeColumn;  colA.Width := 80;
+  colA := FTree.Header.Columns.Add as TTyColumn;  colA.Width := 80;
   { Changing Header.Height fires HeaderChanged -> FRangeX still = TotalWidth }
   FTree.Header.Height := 30;
   AssertEquals('FRangeX = TotalWidth after Height change', 80, FTree.RangeX);
@@ -746,7 +746,7 @@ end;
 
 procedure TColumnB1Test.TestHeaderOptionsDefault;
 var
-  defaultOpts: TTyTreeHeaderOptions;
+  defaultOpts: TTyHeaderOptions;
 begin
   defaultOpts := [hoVisible, hoColumnResize, hoShowSortGlyphs,
                   hoHeaderClickAutoSort, hoDrag];
@@ -784,7 +784,7 @@ end;
 procedure TColumnB2Test.TestContentRectTopNoPadZeroColumns;
 var
   CR0, CR1: TRect;
-  colA: TTyTreeColumn;
+  colA: TTyColumn;
 begin
   { 0 columns: record the ③a baseline top.
     Then add columns + hoVisible to check the inset is ON TOP of that baseline.
@@ -792,7 +792,7 @@ begin
     MINUS the header inset. }
   CR0 := FTree.ContentRect;   { ③a baseline (includes any theme padding) }
 
-  colA := FTree.Header.Columns.Add as TTyTreeColumn;
+  colA := FTree.Header.Columns.Add as TTyColumn;
   colA.Width := 100;
   AssertTrue('hoVisible active', hoVisible in FTree.Header.Options);
   CR1 := FTree.ContentRect;   { with columns + hoVisible }
@@ -846,10 +846,10 @@ end;
 
 procedure TColumnB2Test.TestRangeXEqualsTotalWidthWithColumns;
 var
-  colA, colB: TTyTreeColumn;
+  colA, colB: TTyColumn;
 begin
-  colA := FTree.Header.Columns.Add as TTyTreeColumn;  colA.Width := 100;
-  colB := FTree.Header.Columns.Add as TTyTreeColumn;  colB.Width := 80;
+  colA := FTree.Header.Columns.Add as TTyColumn;  colA.Width := 100;
+  colB := FTree.Header.Columns.Add as TTyColumn;  colB.Width := 80;
   AssertEquals('FRangeX = TotalWidth = 180',
     FTree.Header.Columns.TotalWidth, FTree.RangeX);
 end;
@@ -864,9 +864,9 @@ end;
 
 procedure TColumnB2Test.TestRangeXUpdatesOnColumnWidthChange;
 var
-  colA: TTyTreeColumn;
+  colA: TTyColumn;
 begin
-  colA := FTree.Header.Columns.Add as TTyTreeColumn;
+  colA := FTree.Header.Columns.Add as TTyColumn;
   colA.Width := 100;
   AssertEquals('RangeX = 100 initially', 100, FTree.RangeX);
   colA.Width := 200;
@@ -879,7 +879,7 @@ end;
 
 procedure TColumnB3Test.Setup;
 begin
-  FHeader := TTyTreeHeader.Create;
+  FHeader := TTyHeader.Create;
 end;
 
 procedure TColumnB3Test.TearDown;
@@ -936,30 +936,30 @@ begin
 end;
 
 { ===========================================================================
-  F3: TTyTreeHeader.Assign deep-copy tests
+  F3: TTyHeader.Assign deep-copy tests
   =========================================================================== }
 
 procedure TColumnF3Test.TestHeaderAssignDeepCopiesColumns;
 var
-  src, dst: TTyTreeHeader;
-  colA, colB, colC: TTyTreeColumn;
+  src, dst: TTyHeader;
+  colA, colB, colC: TTyColumn;
 begin
-  src := TTyTreeHeader.Create;
-  dst := TTyTreeHeader.Create;
+  src := TTyHeader.Create;
+  dst := TTyHeader.Create;
   try
-    colA := src.Columns.Add as TTyTreeColumn;  colA.Width := 120;  colA.Text := 'Name';
-    colB := src.Columns.Add as TTyTreeColumn;  colB.Width := 80;   colB.Text := 'Size';
-    colC := src.Columns.Add as TTyTreeColumn;  colC.Width := 100;  colC.Text := 'Modified';
+    colA := src.Columns.Add as TTyColumn;  colA.Width := 120;  colA.Text := 'Name';
+    colB := src.Columns.Add as TTyColumn;  colB.Width := 80;   colB.Text := 'Size';
+    colC := src.Columns.Add as TTyColumn;  colC.Width := 100;  colC.Text := 'Modified';
 
     dst.Assign(src);
 
     AssertEquals('Assign: Columns.Count = 3', 3, dst.Columns.Count);
-    AssertEquals('Assign: col0.Width = 120', 120, (dst.Columns.Items[0] as TTyTreeColumn).Width);
-    AssertEquals('Assign: col0.Text = Name', 'Name', (dst.Columns.Items[0] as TTyTreeColumn).Text);
-    AssertEquals('Assign: col1.Width = 80', 80, (dst.Columns.Items[1] as TTyTreeColumn).Width);
-    AssertEquals('Assign: col1.Text = Size', 'Size', (dst.Columns.Items[1] as TTyTreeColumn).Text);
-    AssertEquals('Assign: col2.Width = 100', 100, (dst.Columns.Items[2] as TTyTreeColumn).Width);
-    AssertEquals('Assign: col2.Text = Modified', 'Modified', (dst.Columns.Items[2] as TTyTreeColumn).Text);
+    AssertEquals('Assign: col0.Width = 120', 120, (dst.Columns.Items[0] as TTyColumn).Width);
+    AssertEquals('Assign: col0.Text = Name', 'Name', (dst.Columns.Items[0] as TTyColumn).Text);
+    AssertEquals('Assign: col1.Width = 80', 80, (dst.Columns.Items[1] as TTyColumn).Width);
+    AssertEquals('Assign: col1.Text = Size', 'Size', (dst.Columns.Items[1] as TTyColumn).Text);
+    AssertEquals('Assign: col2.Width = 100', 100, (dst.Columns.Items[2] as TTyColumn).Width);
+    AssertEquals('Assign: col2.Text = Modified', 'Modified', (dst.Columns.Items[2] as TTyColumn).Text);
   finally
     src.Free;
     dst.Free;
@@ -968,22 +968,22 @@ end;
 
 procedure TColumnF3Test.TestHeaderAssignIsDeepNotShallow;
 var
-  src, dst: TTyTreeHeader;
-  colA: TTyTreeColumn;
+  src, dst: TTyHeader;
+  colA: TTyColumn;
 begin
-  src := TTyTreeHeader.Create;
-  dst := TTyTreeHeader.Create;
+  src := TTyHeader.Create;
+  dst := TTyHeader.Create;
   try
-    colA := src.Columns.Add as TTyTreeColumn;  colA.Width := 200;  colA.Text := 'Alpha';
+    colA := src.Columns.Add as TTyColumn;  colA.Width := 200;  colA.Text := 'Alpha';
 
     dst.Assign(src);
 
     { Mutate src column after assign — dst must not be affected }
-    (src.Columns.Items[0] as TTyTreeColumn).Width := 999;
-    (src.Columns.Items[0] as TTyTreeColumn).Text  := 'Changed';
+    (src.Columns.Items[0] as TTyColumn).Width := 999;
+    (src.Columns.Items[0] as TTyColumn).Text  := 'Changed';
 
-    AssertEquals('Deep copy: dst Width unchanged', 200, (dst.Columns.Items[0] as TTyTreeColumn).Width);
-    AssertEquals('Deep copy: dst Text unchanged', 'Alpha', (dst.Columns.Items[0] as TTyTreeColumn).Text);
+    AssertEquals('Deep copy: dst Width unchanged', 200, (dst.Columns.Items[0] as TTyColumn).Width);
+    AssertEquals('Deep copy: dst Text unchanged', 'Alpha', (dst.Columns.Items[0] as TTyColumn).Text);
   finally
     src.Free;
     dst.Free;
@@ -992,12 +992,12 @@ end;
 
 procedure TColumnF3Test.TestRegisterClassForStreaming;
 begin
-  { RegisterClass was called in initialization of tyControls.TreeView.Columns.
+  { RegisterClass was called in initialization of tyControls.Columns.
     FindClass raises EClassNotFound if the class was not registered.
     These are the three classes needed for LFM round-trip of Header/Columns. }
-  AssertNotNull('TTyTreeColumn registered', FindClass('TTyTreeColumn'));
-  AssertNotNull('TTyTreeColumns registered', FindClass('TTyTreeColumns'));
-  AssertNotNull('TTyTreeHeader registered', FindClass('TTyTreeHeader'));
+  AssertNotNull('TTyColumn registered', FindClass('TTyColumn'));
+  AssertNotNull('TTyColumns registered', FindClass('TTyColumns'));
+  AssertNotNull('TTyHeader registered', FindClass('TTyHeader'));
 end;
 
 initialization

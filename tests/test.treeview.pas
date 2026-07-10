@@ -6,7 +6,7 @@ uses
   fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.TreeView,
-  tyControls.TreeView.Columns;
+  tyControls.Columns;
 
 type
   { A1: basic allocation and GetNodeData }
@@ -4043,7 +4043,7 @@ function TTreeColumnPaintTest.BuildColumnTree(out Ctl: TTyStyleController;
   out F: TForm; ASortColumn: Integer): TTyTreeView;
 var
   t: TTyTreeView;
-  col0, col1, col2: TTyTreeColumn;
+  col0, col1, col2: TTyColumn;
   n0: PTyTreeNode;
 begin
   Ctl := TTyStyleController.Create(nil);
@@ -4067,19 +4067,19 @@ begin
   t.OnInitChildren := @OnInitChildren3;
 
   { Set up 3 columns }
-  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0 := t.Header.Columns.Add as TTyColumn;
   col0.Width := COL0_W;
   col0.Text  := 'Name';
   col0.Alignment := taLeftJustify;
   col0.CaptionAlignment := taLeftJustify;
 
-  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1 := t.Header.Columns.Add as TTyColumn;
   col1.Width := COL1_W;
   col1.Text  := 'Info';
   col1.Alignment := taLeftJustify;
   col1.CaptionAlignment := taLeftJustify;
 
-  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2 := t.Header.Columns.Add as TTyColumn;
   col2.Width := COL2_W;
   col2.Text  := 'Size';
   col2.Alignment := taRightJustify;
@@ -4595,7 +4595,7 @@ end;
 function TTreeD1D2Test.BuildD1D2Tree(out Ctl: TTyStyleController; out F: TForm): TTyTreeView;
 var
   t: TTyTreeView;
-  col0, col1, col2: TTyTreeColumn;
+  col0, col1, col2: TTyColumn;
   n0: PTyTreeNode;
 begin
   Ctl := TTyStyleController.Create(nil);
@@ -4614,15 +4614,15 @@ begin
   t.SetBounds(0, 0, 300, 200);
 
   { Set up 3 columns: widths 120 / 80 / 100 }
-  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0 := t.Header.Columns.Add as TTyColumn;
   col0.Width := 120;
   col0.Text  := 'Name';
 
-  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1 := t.Header.Columns.Add as TTyColumn;
   col1.Width := 80;
   col1.Text  := 'Info';
 
-  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2 := t.Header.Columns.Add as TTyColumn;
   col2.Width := 100;
   col2.Text  := 'Size';
 
@@ -4631,7 +4631,7 @@ begin
   t.Header.Height        := 22;
   t.Header.Options       := [hoVisible, hoColumnResize, hoShowSortGlyphs];
 
-  { All columns get default Options including coResizable (set in TTyTreeColumn.Create) }
+  { All columns get default Options including coResizable (set in TTyColumn.Create) }
 
   { Materialise 1 root node }
   n0 := t.AddChild(nil);
@@ -4779,11 +4779,11 @@ var
   Ctl: TTyStyleController;
   F: TForm;
   t: TTyTreeView;
-  col0: TTyTreeColumn;
+  col0: TTyColumn;
 begin
   t := BuildD1D2Tree(Ctl, F);
   try
-    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col0 := t.Header.Columns.Items[0] as TTyColumn;
     AssertEquals('D2: col0 initial width', 120, col0.Width);
 
     { Simulate: MouseDown on divider at (120,11), drag to (150,11), release }
@@ -4805,11 +4805,11 @@ var
   Ctl: TTyStyleController;
   F: TForm;
   t: TTyTreeView;
-  col0: TTyTreeColumn;
+  col0: TTyColumn;
 begin
   t := BuildD1D2Tree(Ctl, F);
   try
-    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col0 := t.Header.Columns.Items[0] as TTyColumn;
     col0.MaxWidth := 130;   // clamp at 130
 
     TTyTreeViewAccess(t).MouseDown(mbLeft, [], 120, 11);
@@ -4829,11 +4829,11 @@ var
   Ctl: TTyStyleController;
   F: TForm;
   t: TTyTreeView;
-  col0: TTyTreeColumn;
+  col0: TTyColumn;
 begin
   t := BuildD1D2Tree(Ctl, F);
   try
-    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col0 := t.Header.Columns.Items[0] as TTyColumn;
     col0.Options := col0.Options - [coResizable];   // remove coResizable
 
     TTyTreeViewAccess(t).MouseDown(mbLeft, [], 120, 11);
@@ -4910,7 +4910,7 @@ function TTreeD3DragTest.BuildD3Tree(out Ctl: TTyStyleController;
   out F: TForm): TTyTreeView;
 var
   t: TTyTreeView;
-  col0, col1, col2: TTyTreeColumn;
+  col0, col1, col2: TTyColumn;
 begin
   Ctl := TTyStyleController.Create(nil);
   Ctl.LoadThemeCss(COLUMN_THEME_CSS);
@@ -4924,17 +4924,17 @@ begin
   t.SetBounds(0, 0, 300, 200);
 
   { 3 columns 鈥?widths 100/80/60 }
-  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0 := t.Header.Columns.Add as TTyColumn;
   col0.Width := 100;
   col0.Text  := 'Col0';
   col0.Options := [coVisible, coResizable, coAllowClick, coDraggable];
 
-  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1 := t.Header.Columns.Add as TTyColumn;
   col1.Width := 80;
   col1.Text  := 'Col1';
   col1.Options := [coVisible, coResizable, coAllowClick, coDraggable];
 
-  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2 := t.Header.Columns.Add as TTyColumn;
   col2.Width := 60;
   col2.Text  := 'Col2';
   col2.Options := [coVisible, coResizable, coAllowClick, coDraggable];
@@ -4953,14 +4953,14 @@ var
   Ctl: TTyStyleController;
   F: TForm;
   t: TTyTreeView;
-  col0, col1, col2: TTyTreeColumn;
+  col0, col1, col2: TTyColumn;
   oldCol0Pos, oldCol1Pos, oldCol2Pos: Integer;
 begin
   t := BuildD3Tree(Ctl, F);
   try
-    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
-    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
-    col2 := t.Header.Columns.Items[2] as TTyTreeColumn;
+    col0 := t.Header.Columns.Items[0] as TTyColumn;
+    col1 := t.Header.Columns.Items[1] as TTyColumn;
+    col2 := t.Header.Columns.Items[2] as TTyColumn;
 
     { Remember initial positions }
     oldCol0Pos := col0.Position;  { = 0 }
@@ -4999,11 +4999,11 @@ var
   Ctl: TTyStyleController;
   F: TForm;
   t: TTyTreeView;
-  col0: TTyTreeColumn;
+  col0: TTyColumn;
 begin
   t := BuildD3Tree(Ctl, F);
   try
-    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col0 := t.Header.Columns.Items[0] as TTyColumn;
 
     { Press and release at the same spot (no movement) }
     TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
@@ -5023,11 +5023,11 @@ var
   Ctl: TTyStyleController;
   F: TForm;
   t: TTyTreeView;
-  col0: TTyTreeColumn;
+  col0: TTyColumn;
 begin
   t := BuildD3Tree(Ctl, F);
   try
-    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
+    col0 := t.Header.Columns.Items[0] as TTyColumn;
 
     { Press then move only 2px (below 4px threshold) then release }
     TTyTreeViewAccess(t).MouseDown(mbLeft, [], 50, 11);
@@ -5095,7 +5095,7 @@ function TTreeD4AutoSizeTest.BuildD4Tree(out Ctl: TTyStyleController;
   out F: TForm): TTyTreeView;
 var
   t: TTyTreeView;
-  col0, col1, col2: TTyTreeColumn;
+  col0, col1, col2: TTyColumn;
 begin
   Ctl := TTyStyleController.Create(nil);
   Ctl.LoadThemeCss(COLUMN_THEME_CSS);
@@ -5109,15 +5109,15 @@ begin
   { Width=300, header=22px 鈫?content width=300 (no scrollbars, no padding in theme) }
   t.SetBounds(0, 0, 300, 200);
 
-  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0 := t.Header.Columns.Add as TTyColumn;
   col0.Width := 100;
   col0.Text  := 'A';
 
-  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1 := t.Header.Columns.Add as TTyColumn;
   col1.Width := 50;   { will be reset by ApplyAutoSize to fill remainder }
   col1.Text  := 'B';
 
-  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2 := t.Header.Columns.Add as TTyColumn;
   col2.Width := 80;
   col2.Text  := 'C';
 
@@ -5136,12 +5136,12 @@ var
   Ctl: TTyStyleController;
   F: TForm;
   t: TTyTreeView;
-  col1: TTyTreeColumn;
+  col1: TTyColumn;
   expected: Integer;
 begin
   t := BuildD4Tree(Ctl, F);
   try
-    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
+    col1 := t.Header.Columns.Items[1] as TTyColumn;
     { Apply auto-size manually to simulate the Resize trigger }
     t.Header.Columns.ApplyAutoSize(
       MulDiv(t.ContentRect.Width, 96, t.Font.PixelsPerInch), 1);
@@ -5159,12 +5159,12 @@ var
   Ctl: TTyStyleController;
   F: TForm;
   t: TTyTreeView;
-  col1: TTyTreeColumn;
+  col1: TTyColumn;
   expected: Integer;
 begin
   t := BuildD4Tree(Ctl, F);
   try
-    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
+    col1 := t.Header.Columns.Items[1] as TTyColumn;
     { Resize the control to 350 wide 鈥?Resize override should run ApplyAutoSize }
     t.SetBounds(0, 0, 350, 200);
     { SetBounds calls Resize; verify col1 absorbed the extra 50px }
@@ -5179,21 +5179,21 @@ end;
 { D4: spring distribution 鈥?two coAutoSpring columns share delta evenly }
 procedure TTreeD4AutoSizeTest.TestD4_SpringDistribution;
 var
-  col0: TTyTreeColumn;
-  cols: TTyTreeColumns;
-  col1, col2: TTyTreeColumn;
+  col0: TTyColumn;
+  cols: TTyColumns;
+  col1, col2: TTyColumn;
 begin
-  cols := TTyTreeColumns.Create;
+  cols := TTyColumns.Create;
   try
-    col0 := cols.Add as TTyTreeColumn;
+    col0 := cols.Add as TTyColumn;
     col0.Width   := 100;
     col0.Options := [coVisible, coAutoSpring];
 
-    col1 := cols.Add as TTyTreeColumn;
+    col1 := cols.Add as TTyColumn;
     col1.Width   := 100;
     col1.Options := [coVisible, coAutoSpring];
 
-    col2 := cols.Add as TTyTreeColumn;
+    col2 := cols.Add as TTyColumn;
     col2.Width   := 50;
     col2.Options := [coVisible];   { not a spring column }
 
@@ -5214,12 +5214,12 @@ var
   Ctl: TTyStyleController;
   F: TForm;
   t: TTyTreeView;
-  col0, col1: TTyTreeColumn;
+  col0, col1: TTyColumn;
 begin
   t := BuildD4Tree(Ctl, F);
   try
-    col0 := t.Header.Columns.Items[0] as TTyTreeColumn;
-    col1 := t.Header.Columns.Items[1] as TTyTreeColumn;
+    col0 := t.Header.Columns.Items[0] as TTyColumn;
+    col1 := t.Header.Columns.Items[1] as TTyColumn;
 
     { Simulate resizing col0 from 100 to 130 via header drag }
     TTyTreeViewAccess(t).MouseDown(mbLeft, [], 100, 11);  { col0 right edge }
@@ -5752,7 +5752,7 @@ function TTreeE3HeaderClickTest.BuildE3Tree(out Ctl: TTyStyleController;
   out F: TForm): TTyTreeView;
 var
   t: TTyTreeView;
-  col0, col1: TTyTreeColumn;
+  col0, col1: TTyColumn;
   n: PTyTreeNode;
   i: Integer;
 const
@@ -5770,9 +5770,9 @@ begin
   t.NodeDataSize       := SizeOf(Integer);
   t.SetBounds(0, 0, 300, 200);
 
-  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0 := t.Header.Columns.Add as TTyColumn;
   col0.Width := 100; col0.Text := 'Col0';
-  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1 := t.Header.Columns.Add as TTyColumn;
   col1.Width := 100; col1.Text := 'Col1';
 
   t.Header.MainColumn    := 0;
@@ -8024,7 +8024,7 @@ function TTreeGetCellRectTest.BuildTree(out Ctl: TTyStyleController; out F: TFor
   out ARoot, AChild0: PTyTreeNode; APPI: Integer): TTyTreeView;
 var
   t: TTyTreeView;
-  col0, col1, col2: TTyTreeColumn;
+  col0, col1, col2: TTyColumn;
 begin
   Ctl := TTyStyleController.Create(nil);
   Ctl.LoadThemeCss(COLUMN_THEME_CSS);
@@ -8046,13 +8046,13 @@ begin
   t.OnInitNode        := @OnInitNodeHasChildren;
   t.OnInitChildren    := @OnInitChildren2;
 
-  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0 := t.Header.Columns.Add as TTyColumn;
   col0.Width := 120; col0.Text := 'Name';
   col0.Alignment := taLeftJustify; col0.CaptionAlignment := taLeftJustify;
-  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1 := t.Header.Columns.Add as TTyColumn;
   col1.Width := 80; col1.Text := 'Info';
   col1.Alignment := taLeftJustify; col1.CaptionAlignment := taLeftJustify;
-  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2 := t.Header.Columns.Add as TTyColumn;
   col2.Width := 100; col2.Text := 'Size';
   col2.Alignment := taRightJustify; col2.CaptionAlignment := taLeftJustify;
 
@@ -8325,7 +8325,7 @@ procedure TTreeGetCellRectTest.TestCellRectShiftsWithScroll;
 var
   Ctl: TTyStyleController; F: TForm;
   t: TTyTreeView;
-  col0, col1: TTyTreeColumn;
+  col0, col1: TTyColumn;
   n0: PTyTreeNode;
   rBefore, rAfter: TRect;
   offX: Integer;
@@ -8345,11 +8345,11 @@ begin
     t.SetBounds(0, 0, 200, 200);
     t.OnGetTextWithType := @OnGetTextWithType;
 
-    col0 := t.Header.Columns.Add as TTyTreeColumn;
+    col0 := t.Header.Columns.Add as TTyColumn;
     col0.Width := 120; col0.Text := 'Name';
-    col1 := t.Header.Columns.Add as TTyTreeColumn;
+    col1 := t.Header.Columns.Add as TTyColumn;
     col1.Width := 80;  col1.Text := 'Info';
-    with t.Header.Columns.Add as TTyTreeColumn do begin Width := 100; Text := 'Size'; end;
+    with t.Header.Columns.Add as TTyColumn do begin Width := 100; Text := 'Size'; end;
     t.Header.MainColumn := 0;
     t.Header.Options := [hoVisible];
 
@@ -8491,7 +8491,7 @@ function TTreeD1OwnerDrawTest.BuildTree(out Ctl: TTyStyleController; out F: TFor
   out ARoot, AChild0: PTyTreeNode): TTyTreeView;
 var
   t: TTyTreeView;
-  col0, col1, col2: TTyTreeColumn;
+  col0, col1, col2: TTyColumn;
 begin
   Ctl := TTyStyleController.Create(nil);
   Ctl.LoadThemeCss(COLUMN_THEME_CSS);
@@ -8512,13 +8512,13 @@ begin
   t.OnInitNode        := @OnInitNodeHasChildren;
   t.OnInitChildren    := @OnInitChildren2;
 
-  col0 := t.Header.Columns.Add as TTyTreeColumn;
+  col0 := t.Header.Columns.Add as TTyColumn;
   col0.Width := 120; col0.Text := 'Name';
   col0.Alignment := taLeftJustify; col0.CaptionAlignment := taLeftJustify;
-  col1 := t.Header.Columns.Add as TTyTreeColumn;
+  col1 := t.Header.Columns.Add as TTyColumn;
   col1.Width := 80; col1.Text := 'Info';
   col1.Alignment := taLeftJustify; col1.CaptionAlignment := taLeftJustify;
-  col2 := t.Header.Columns.Add as TTyTreeColumn;
+  col2 := t.Header.Columns.Add as TTyColumn;
   col2.Width := 100; col2.Text := 'Size';
   col2.Alignment := taLeftJustify; col2.CaptionAlignment := taLeftJustify;
 
@@ -9361,7 +9361,7 @@ var
   t: TTyTreeView;
   il: TImageList;
   redBmp: TBitmap;
-  col0, col1, col2: TTyTreeColumn;
+  col0, col1, col2: TTyColumn;
   outBmp: TBitmap;
   x, y: Integer;
   col: TColor;
@@ -9404,11 +9404,11 @@ begin
     t.OnGetImageIndex := @OnGetImageIndex;
 
     { Three columns, main = 0. }
-    col0 := t.Header.Columns.Add as TTyTreeColumn;
+    col0 := t.Header.Columns.Add as TTyColumn;
     col0.Width := 120; col0.Text := 'Name'; col0.Alignment := taLeftJustify;
-    col1 := t.Header.Columns.Add as TTyTreeColumn;
+    col1 := t.Header.Columns.Add as TTyColumn;
     col1.Width := 80;  col1.Text := 'Info'; col1.Alignment := taLeftJustify;
-    col2 := t.Header.Columns.Add as TTyTreeColumn;
+    col2 := t.Header.Columns.Add as TTyColumn;
     col2.Width := 100; col2.Text := 'Size'; col2.Alignment := taLeftJustify;
     t.Header.MainColumn := 0;
     t.Header.Options    := [hoVisible];

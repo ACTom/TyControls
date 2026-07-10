@@ -113,6 +113,7 @@ uses
   test.keytips,
   test.combobox,
   test.tabset,
+  test.columns.compat,
   test.shape,
   test.starshape,
   test.arrow;
