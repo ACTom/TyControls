@@ -157,6 +157,9 @@ type
     FVScroll, FHScroll: TTyScrollBar;
     FSyncingScroll:     Boolean;
     { interaction state }
+    { What the last MouseDown landed on. DblClick carries no coordinates, and a
+      double-click in the header must not activate the focused ITEM. }
+    FPressHit:     TTyListHitPart;
     FResizing:     Boolean;
     FResizeCol:    Integer;
     FResizeStartX: Integer;
@@ -252,6 +255,8 @@ type
     procedure ItemMouseSelect(AItem: Integer; Shift: TShiftState);
     procedure ApplyMarquee;
     procedure EndInteractions;
+    function  MeasureTextW(ABmp: TBGRABitmap; const AText: string;
+                           const AStyle: TTyStyleSet): Integer;   { device px }
     procedure SetDividerCursor(AOn: Boolean);
     procedure UpdateHoverCursor(X, Y: Integer);
   protected
@@ -325,6 +330,9 @@ type
     function  GetItemAt(X, Y: Integer): Integer;
     function  GetHitPart(X, Y: Integer): TTyListHitPart;
     procedure ScrollIntoView(AIndex: Integer);
+    { Widen/narrow a column to fit its header caption and its cell text. Also bound to a
+      double-click on the column's right divider. }
+    procedure AutoFitColumn(AColumn: Integer);
 
     property ItemIndex: Integer read GetItemIndex write SetItemIndex;
   published
@@ -1922,6 +1930,7 @@ begin
   SyncArrays;
   m := CurrentMetrics;
   cnt := GetItemCount;
+  FPressHit := GetHitPart(X, Y);
 
   { Header band (report mode). }
   if (FViewStyle = lvsReport) and (m.HeaderH > 0) and (Y < m.HeaderH) then
@@ -1933,6 +1942,12 @@ begin
       dividerCol := FHeader.Columns.DetermineSplitterIndex(logX, logScroll);
     if dividerCol <> NoColumn then
     begin
+      { Double-click on a divider fits the column to its content, as in Explorer. }
+      if ssDouble in Shift then
+      begin
+        AutoFitColumn(dividerCol);
+        Exit;
+      end;
       FResizing := True;
       FResizeCol := dividerCol;
       FResizeStartX := X;
@@ -1987,6 +2002,73 @@ begin
       MouseCapture := True;
     end;
   end;
+end;
+
+{ Width of AText in DEVICE px, using the same font configuration DrawText would. ABmp is a
+  scratch 1x1 bitmap the caller owns -- BGRA text measurement wants a bitmap but not a canvas,
+  so this works with no window. }
+function TTyListView.MeasureTextW(ABmp: TBGRABitmap; const AText: string;
+  const AStyle: TTyStyleSet): Integer;
+begin
+  if AText = '' then Exit(0);
+  TyConfigureTextFont(ABmp, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
+    Font.PixelsPerInch);
+  Result := ABmp.TextSize(AText).cx;
+end;
+
+{ Fit a column to its content: the header caption and the cell text of the first
+  TyLvAutoFitSample display rows. The extras mirror what the two renderers actually add --
+  TyLvTextMargin on each side, the main column's small icon, and the sort glyph (reserved
+  whether or not this column is currently sorted, so the width does not jump when it is).
+
+  Measuring EVERY row is what Explorer does, but BGRA text measurement is far too slow for a
+  100k-row virtual list, so the sample is capped. For any list that fits the cap -- which is
+  every ordinary one -- the fit is exact. }
+procedure TTyListView.AutoFitColumn(AColumn: Integer);
+const
+  TyLvAutoFitSample = 500;
+var
+  col: TTyColumn;
+  bmp: TBGRABitmap;
+  rowS, hdrS: TTyStyleSet;
+  cnt, sample, i, item, w, bestDev, iconDev: Integer;
+begin
+  if FHeader = nil then Exit;
+  if (AColumn < 0) or (AColumn >= FHeader.Columns.Count) then Exit;
+  col := FHeader.Columns.Items[AColumn] as TTyColumn;
+  if not (coResizable in col.Options) then Exit;
+
+  SyncArrays;
+  rowS := ActiveController.Model.ResolveStyle('TyTreeNode', '', []);
+  hdrS := ActiveController.Model.ResolveStyle('TyTreeHeaderSection', '', []);
+
+  iconDev := 0;
+  if (AColumn = FHeader.MainColumn) and (FSmallImages <> nil) then
+    iconDev := ScaleI(TyLvSmallIcon) + ScaleI(2);
+
+  bmp := TBGRABitmap.Create(1, 1);
+  try
+    bestDev := MeasureTextW(bmp, col.Text, hdrS);
+    if hoShowSortGlyphs in FHeader.Options then
+      Inc(bestDev, ScaleI(10));
+
+    cnt := GetItemCount;
+    sample := Min(cnt, TyLvAutoFitSample);
+    for i := 0 to sample - 1 do
+    begin
+      item := DisplayToItem(i);          { display pos -> item index }
+      if item < 0 then Continue;
+      w := MeasureTextW(bmp, GetItemText(item, AColumn), rowS) + iconDev;
+      if w > bestDev then bestDev := w;
+    end;
+  finally
+    bmp.Free;
+  end;
+
+  { Width is LOGICAL; the setter clamps to the column's Min/MaxWidth. }
+  col.Width := UnscaleI(bestDev) + 2 * TyLvTextMargin;
+  UpdateScrollBars;
+  Invalidate;
 end;
 
 { Show the horizontal-split cursor while the pointer can grab a column divider. The
@@ -2084,6 +2166,10 @@ end;
 procedure TTyListView.DblClick;
 begin
   inherited DblClick;
+  { DblClick carries no coordinates, so lean on what the press landed on. Without this a
+    double-click in the header band -- including the auto-fit gesture -- activates whatever
+    item happens to be focused. }
+  if not (FPressHit in [lhpIcon, lhpLabel]) then Exit;
   if (FItemIndex >= 0) and Assigned(FOnItemActivate) then
     FOnItemActivate(Self, FItemIndex);
 end;

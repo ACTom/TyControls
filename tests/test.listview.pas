@@ -43,6 +43,9 @@ type
     function XContentHeight: Integer;
     { Mouse hover, for the header-divider cursor. }
     procedure XMouseMove(X, Y: Integer);
+    { A left press, optionally the second click of a double-click. }
+    procedure XMouseDown(X, Y: Integer; ADouble: Boolean = False);
+    procedure XDblClick;
   end;
 
   { -----------------------------------------------------------------------
@@ -185,6 +188,9 @@ type
   TListViewHeaderTest = class(TTestCase)
   private
     FLV: TTyListViewAccess;
+    FActivated: Integer;
+    function Col(AIndex: Integer): TTyColumn;
+    procedure HActivate(Sender: TObject; AIndex: Integer);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -195,6 +201,14 @@ type
     procedure TestCursorBecomesSplitOverTheDivider;
     procedure TestCursorIsRestoredWhenLeavingTheDivider;
     procedure TestCursorRestoresTheAppsOwnCursorNotCrDefault;
+    { double-click the divider -> fit the column to its content }
+    procedure TestAutoFitWidensANarrowColumnToItsContent;
+    procedure TestAutoFitShrinksAnOverWideColumn;
+    procedure TestAutoFitRespectsMinAndMaxWidth;
+    procedure TestAutoFitIgnoresANonResizableColumn;
+    procedure TestDoubleClickOnDividerAutoFitsAndDoesNotStartAResize;
+    procedure TestDoubleClickInTheHeaderDoesNotActivateAnItem;
+    procedure TestDoubleClickOnAnItemDoesActivateIt;
   end;
 
   { -----------------------------------------------------------------------
@@ -283,6 +297,21 @@ end;
 procedure TTyListViewAccess.XMouseMove(X, Y: Integer);
 begin
   MouseMove([], X, Y);
+end;
+
+procedure TTyListViewAccess.XMouseDown(X, Y: Integer; ADouble: Boolean);
+var
+  sh: TShiftState;
+begin
+  { LCL's WMLButtonDblClk calls DoMouseDown with [ssDouble] -- see lcl/include/control.inc. }
+  sh := [ssLeft];
+  if ADouble then Include(sh, ssDouble);
+  MouseDown(mbLeft, sh, X, Y);
+end;
+
+procedure TTyListViewAccess.XDblClick;
+begin
+  DblClick;
 end;
 
 { ===========================================================================
@@ -933,11 +962,23 @@ begin
   FLV.Header.Options := FLV.Header.Options + [hoVisible, hoColumnResize];
   FLV.Items.Add.Caption := 'row';
   FLV.ItemsChanged;
+  FActivated := 0;
+  FLV.OnItemActivate := @HActivate;
 end;
 
 procedure TListViewHeaderTest.TearDown;
 begin
   FreeAndNil(FLV);
+end;
+
+function TListViewHeaderTest.Col(AIndex: Integer): TTyColumn;
+begin
+  Result := FLV.Header.Columns.Items[AIndex] as TTyColumn;
+end;
+
+procedure TListViewHeaderTest.HActivate(Sender: TObject; AIndex: Integer);
+begin
+  Inc(FActivated);
 end;
 
 { The header band is Header.Height tall; column 'a' ends at x = 120. }
@@ -982,6 +1023,90 @@ begin
   AssertTrue('overridden while over the divider', FLV.Cursor = crHSplit);
   FLV.XMouseMove(60, 5);
   AssertTrue('the app''s own cursor comes back', FLV.Cursor = crHandPoint);
+end;
+
+procedure TListViewHeaderTest.TestAutoFitWidensANarrowColumnToItsContent;
+begin
+  FLV.Items.Add.Caption := 'a distinctly long file name indeed.txt';
+  FLV.ItemsChanged;
+  Col(0).Width := 20;
+  FLV.AutoFitColumn(0);
+  AssertTrue('narrow column grew to fit its widest cell', Col(0).Width > 20);
+end;
+
+procedure TListViewHeaderTest.TestAutoFitShrinksAnOverWideColumn;
+var
+  wide: Integer;
+begin
+  Col(0).Width := 400;
+  wide := Col(0).Width;
+  FLV.AutoFitColumn(0);
+  AssertTrue('over-wide column shrank to its content', Col(0).Width < wide);
+  AssertTrue('but not below its minimum', Col(0).Width >= Col(0).MinWidth);
+end;
+
+procedure TListViewHeaderTest.TestAutoFitRespectsMinAndMaxWidth;
+begin
+  FLV.Items.Add.Caption := 'a distinctly long file name indeed.txt';
+  FLV.ItemsChanged;
+  Col(0).MaxWidth := 40;
+  Col(0).Width := 20;
+  FLV.AutoFitColumn(0);
+  AssertEquals('clamped by MaxWidth', 40, Col(0).Width);
+
+  Col(0).MinWidth := 200;
+  Col(0).MaxWidth := 10000;
+  FLV.Items.Clear;
+  FLV.Items.Add.Caption := 'x';
+  FLV.ItemsChanged;
+  FLV.AutoFitColumn(0);
+  AssertEquals('clamped by MinWidth', 200, Col(0).Width);
+end;
+
+procedure TListViewHeaderTest.TestAutoFitIgnoresANonResizableColumn;
+begin
+  FLV.Items.Add.Caption := 'a distinctly long file name indeed.txt';
+  FLV.ItemsChanged;
+  Col(0).Options := Col(0).Options - [coResizable];
+  Col(0).Width := 20;
+  FLV.AutoFitColumn(0);
+  AssertEquals('a column the user cannot resize is not auto-fitted', 20, Col(0).Width);
+end;
+
+procedure TListViewHeaderTest.TestDoubleClickOnDividerAutoFitsAndDoesNotStartAResize;
+var
+  fitted: Integer;
+begin
+  FLV.Items.Add.Caption := 'a distinctly long file name indeed.txt';
+  FLV.ItemsChanged;
+  Col(0).Width := 20;
+  { The divider of column 0 sits at its right edge, x = 20 after the shrink above. }
+  FLV.XMouseDown(20, 5, True);
+  fitted := Col(0).Width;
+  AssertTrue('the double-click fitted the column', fitted > 20);
+
+  { A resize drag must NOT have started: moving the mouse now would otherwise keep
+    rewriting the width. }
+  FLV.XMouseMove(300, 5);
+  AssertEquals('no resize drag is in progress', fitted, Col(0).Width);
+end;
+
+procedure TListViewHeaderTest.TestDoubleClickInTheHeaderDoesNotActivateAnItem;
+{ DblClick carries no coordinates. Without a guard, double-clicking the header -- including
+  the auto-fit gesture itself -- activates whatever item happens to be focused. }
+begin
+  FLV.ItemIndex := 0;
+  FLV.XMouseDown(60, 5, True);   { middle of a header section, not a divider }
+  FLV.XDblClick;
+  AssertEquals('header double-click activates nothing', 0, FActivated);
+end;
+
+procedure TListViewHeaderTest.TestDoubleClickOnAnItemDoesActivateIt;
+begin
+  FLV.XMouseDown(50, 30, True);  { below the 22px header band = row 0 }
+  FLV.XDblClick;
+  AssertEquals('item double-click activates it', 1, FActivated);
+  AssertEquals('and it is the row that was clicked', 0, FLV.ItemIndex);
 end;
 
 { ===========================================================================
