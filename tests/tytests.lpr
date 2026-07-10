@@ -114,6 +114,7 @@ uses
   test.combobox,
   test.tabset,
   test.columns.compat,
+  test.listview.layout,
   test.shape,
   test.starshape,
   test.arrow;

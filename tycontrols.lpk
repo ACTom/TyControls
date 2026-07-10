@@ -588,6 +588,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Arrow.pas"/>
         <UnitName Value="tyControls.Arrow"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.ListView.Layout.pas"/>
+        <UnitName Value="tyControls.ListView.Layout"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

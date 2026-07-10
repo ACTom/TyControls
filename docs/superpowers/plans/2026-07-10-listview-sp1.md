@@ -105,7 +105,11 @@ function TyListItemAt(const APt: TPoint; ACount: Integer; const M: TTyListMetric
   AScrollX, AScrollY: Integer): Integer;
 ```
 `TyListItemRect` 的逆。返回 item 的 **display 位置**,未命中返回 `-1`。
-- 点落在 `HeaderH` 以内 → `-1`(表头不是 item)
+- **`APt.Y < HeaderH` → `-1`。** 一条规则同时表达两件事:报表模式下这是表头带,其余模式
+  `HeaderH = 0`,这是客户区之上。**item 区从 `HeaderH` 开始。**
+  这条判断**优先于**下面的 `PtInRect` 校验,是有意的:垂直滚动会把报表行推到表头**底下**
+  (`ScrollY=95` 时第 3 行占 `Y=-1..23`),此时 `Y=0` 同时落在表头和第 3 行里 —— 表头必须赢,
+  被表头盖住的行不可点击。
 - 点落在**格间间隙**里 → `-1`(不能吸附到最近格)
 - 反算出的位置 `>= ACount` → `-1`
 - `lvsReport` 的行占满 `ReportWidth`;`APt.X` 超出 `ReportWidth - AScrollX` → `-1`
@@ -116,7 +120,8 @@ function TyListItemAt(const APt: TPoint; ACount: Integer; const M: TTyListMetric
 function TyListVisibleRange(ACount: Integer; const M: TTyListMetrics;
   AScrollX, AScrollY: Integer; out AFirst, ALast: Integer): Boolean;
 ```
-O(1) 闭式虚拟化窗口。`ACount = 0` → `False`,两个 out 参数置 `-1`。
+O(1) 闭式虚拟化窗口。**只要返回 `False`,两个 out 参数一律置 `-1`**(空列表、或已滚过内容末尾)——
+一条规则,忽略返回值的调用方不会拿脏索引去循环。
 - 结果是**闭区间** `[AFirst, ALast]`,含所有与视口相交的格(部分可见也算)。
 - `AFirst` 钳到 `≥ 0`,`ALast` 钳到 `≤ ACount-1`。
 - `lvsReport`:`vh = ViewportH - HeaderH`;`AFirst = AScrollY div RowH`;`ALast = (AScrollY + vh - 1) div RowH`
@@ -173,9 +178,14 @@ function TyListCompareCells(const A, B: string; AKind: TTyListSortKind;
   ADir: TTySortDirection): Integer;
 ```
 - `lskText`:`UTF8CompareText(A, B)`(不区分大小写)
-- `lskNumber`:两边都能 `TryStrToFloat`(用 `TFormatSettings` 固定 `'.'`)→ 数值比较;**只有一边**能解析 → 能解析的排前;**都不能** → 退化为 `lskText`
-- `lskDateTime`:同上,`TryStrToDateTime`;不可解析的排后
-- `ADir = sdDescending` → 结果取反
+- `lskNumber`:两边都能 `TryStrToFloat`(`TFormatSettings` 固定小数点 `'.'`、千分位 `#0`)→ 数值比较;
+  **都不能** → 退化为 `lskText`
+- `lskDateTime`:同上,`TryStrToDateTime`,格式**钉死为 ISO**(`yyyy-mm-dd`,分隔符 `-` / `:`),
+  否则排序结果依赖机器 locale。文本更花哨的列请走 `OnCompare`,不要指望这里
+- `ADir = sdDescending` → **只翻转两个可解析值之间的比较**
+- **只有一边能解析 → 能解析的永远排前,与方向无关。** 方向不该翻转"不可解析排后"这条摆放规则:
+  按 Size 降序排文件,想看到的是最大的文件在顶上,不是一堆空白。同 SQL 里 `NULLS LAST` 与
+  `ASC`/`DESC` 正交
 - 相等返回 0(调用方负责稳定性:比较相等时按 item index 兜底)
 
 ```pascal
@@ -189,9 +199,12 @@ function TyReportRowAt(AY, AScrollY, AHeaderH, ARowH, ARowCount: Integer): Integ
 2. 视口比一个单元格还窄/矮:`Tracks` 仍为 1。
 3. `PitchX` / `PitchY` = 0(CellW=HGap=0):不得除零。
 4. 最后一行/列只有部分格:`VisibleRange` 的 `ALast` 必须钳到 `ACount-1`;`ItemAt` 对那一行的空位返回 `-1`。
-5. `ItemRect` 与 `ItemAt` 在所有 5 种 ViewStyle 上**互逆**:对每个 `pos`,`ItemAt(ItemRect(pos).TopLeft + (1,1)) = pos`。
+5. `ItemRect` 与 `ItemAt` 在所有 5 种 ViewStyle 上**互逆**,但只在 **item 区之内**:探测点取
+   `ItemRect(pos).TopLeft + (1,1)`,若其 `Y < HeaderH` 则钳到 `HeaderH`;若钳完已越过该格底边
+   (整格滚出 item 区)则跳过。**互逆性质不适用于滚到表头底下 / 客户区之上的格** —— 那里按定义
+   命不中。
 6. 间隙:`HGap > 0` 时,两格之间的点返回 `-1`。
-7. 滚动偏移非 0 时 5 和 6 仍成立。
+7. 滚动偏移非 0(**含垂直滚动**)时 5 和 6 仍成立。
 8. `Navigate`:首行 ↑ / 末行 ↓ / 首项 ← / 末项 → 均**不移动**;`Home`/`End` 总是移动;`PageUp`/`PageDown` 钳位。
 9. `MarqueeHits`:icon 模式下框住 2×2 返回 4 个**不相邻**的位置;空框返回长度 0。
 10. `PrefixMatch`:环绕;大小写无关;`AStartAfter = ACount-1` 时能绕回 0;查不到返回 `-1`。
