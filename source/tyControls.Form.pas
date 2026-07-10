@@ -45,6 +45,12 @@ type
     property OnClick;
   end;
 
+  { What a double-click on the caption / title bar does:
+      tcaMaximize — toggle maximize/restore (the standard Windows behaviour, default).
+      tcaRollUp   — "window shade": collapse the window to just its title bar, toggling.
+      tcaNone     — do nothing. }
+  TTyCaptionAction = (tcaMaximize, tcaRollUp, tcaNone);
+
   TTyTitleBar = class(TTyCustomControl, ITyTitleBarTag)
   private
     FCaption: string;
@@ -162,6 +168,9 @@ type
     FGlassBlurLogical: Integer;       // theme-wide glass blur radius (0 = no glass)
     FFollowTimer: TTimer;             // P4 live-follow: polls the OS scheme/accent while following (nil unless armed)
     FDidInitialClamp: Boolean;        // macOS: clamp the window onto a visible monitor on first show only
+    FCaptionAction: TTyCaptionAction; // what caption double-click does (maximize / roll-up / none)
+    FRolledUp: Boolean;               // window-shade state (rolled to the title bar)
+    FUnrolledHeight: Integer;         // full height saved while rolled up
     procedure DoFollowTick(Sender: TObject);
     procedure UpdateFollowWatch;      // (re)arm/disarm FFollowTimer per the controller's Follow policy
     // ITyGlassHost
@@ -228,6 +237,11 @@ type
     destructor Destroy; override;
     procedure ApplyChromeTheme(AController: TTyStyleController);
     procedure ApplyWindowEffects;   // (re)apply OS rounded corners + native shadow from the TyForm style
+    { Window-shade toggle: collapse the window to just its title bar (saving the full height),
+      or restore it. No-op without an associated title bar. Also driven by caption double-click
+      when CaptionAction = tcaRollUp. }
+    procedure ToggleRollUp;
+    property RolledUp: Boolean read FRolledUp;
     function GetAbout: string;
   published
     { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
@@ -252,6 +266,9 @@ type
       Published so it persists in the .lfm; applied at runtime (chrome paths guard
       csDesigning). }
     property Resizable: Boolean read FResizable write SetResizable default True;
+    { What a caption/title-bar double-click does: maximize (default), roll-up (window shade),
+      or nothing. Persists in the .lfm. }
+    property CaptionAction: TTyCaptionAction read FCaptionAction write FCaptionAction default tcaMaximize;
     { Locked: a TTyForm is a borderless custom-chrome window. Any assignment is coerced
       to bsNone; hidden from the Object Inspector via a design-time property editor. }
     property BorderStyle: TFormBorderStyle read GetBorderStyleTy write SetBorderStyleTy default bsNone;
@@ -860,6 +877,12 @@ end;
 
 procedure TTyChromeEngine.TitleBarDblClick;
 begin
+  FDragging := False;   // the double-click's press armed a drag; cancel it before we resize
+  if FForm is TTyForm then
+    case TTyForm(FForm).CaptionAction of
+      tcaRollUp: begin TTyForm(FForm).ToggleRollUp; Exit; end;
+      tcaNone:   Exit;
+    end;
   ToggleMaximize;
 end;
 
@@ -1286,6 +1309,27 @@ end;
 function TTyForm.GetTitleHeight: Integer;
 begin
   if FTitleBar <> nil then Result := FTitleBar.Height else Result := 0;
+end;
+
+procedure TTyForm.ToggleRollUp;
+var
+  th: Integer;
+begin
+  th := GetTitleHeight;
+  if th <= 0 then Exit;   // no title bar -> nothing to roll up to
+  if FRolledUp then
+  begin
+    if FUnrolledHeight > th then Height := FUnrolledHeight;
+    FRolledUp := False;
+  end
+  else
+  begin
+    if Height <= th then Exit;   // already at/under the title bar height -> nothing to collapse
+    FUnrolledHeight := Height;
+    Height := th;
+    FRolledUp := True;
+  end;
+  ApplyWindowEffects;   // OS corners follow the new height
 end;
 
 procedure TTyForm.SetTitleHeight(AValue: Integer);

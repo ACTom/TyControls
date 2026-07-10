@@ -247,6 +247,17 @@ type
     procedure TestOwnBarSucceeds;
   end;
 
+  { Window-shade (roll-up): CaptionAction routes caption double-click; ToggleRollUp collapses
+    the form to its title bar height and restores it. }
+  TRollUpTest = class(TTestCase)
+  published
+    procedure TestDefaultCaptionActionIsMaximize;
+    procedure TestRollUpCollapsesToTitleBar;
+    procedure TestRollUpRestoresFullHeight;
+    procedure TestDblClickRollsUpWhenModeSet;
+    procedure TestNoOpWithoutTitleBar;
+  end;
+
 implementation
 
 type
@@ -1728,6 +1739,75 @@ begin
   finally f.Free; end;
 end;
 
+{ TRollUpTest }
+
+procedure TRollUpTest.TestDefaultCaptionActionIsMaximize;
+var f: TTyFormAccess;
+begin
+  f := TTyFormAccess.CreateNew(nil);
+  try
+    AssertEquals('default caption action is maximize', Ord(tcaMaximize), Ord(f.CaptionAction));
+  finally f.Free; end;
+end;
+
+procedure TRollUpTest.TestRollUpCollapsesToTitleBar;
+var f: TTyFormAccess; bar: TTyTitleBar;
+begin
+  f := TTyFormAccess.CreateNew(nil);
+  try
+    bar := TTyTitleBar.Create(f);   // auto-associates at runtime
+    bar.Height := 34;
+    f.SetBounds(0, 0, 400, 300);
+    f.CaptionAction := tcaRollUp;
+    f.ToggleRollUp;
+    AssertTrue('rolled up', f.RolledUp);
+    AssertEquals('height collapsed to the title bar', f.TitleHeight, f.Height);
+  finally f.Free; end;
+end;
+
+procedure TRollUpTest.TestRollUpRestoresFullHeight;
+var f: TTyFormAccess; bar: TTyTitleBar;
+begin
+  f := TTyFormAccess.CreateNew(nil);
+  try
+    bar := TTyTitleBar.Create(f);
+    bar.Height := 34;
+    f.SetBounds(0, 0, 400, 300);
+    f.ToggleRollUp;   // collapse
+    f.ToggleRollUp;   // restore
+    AssertFalse('no longer rolled', f.RolledUp);
+    AssertEquals('full height restored', 300, f.Height);
+  finally f.Free; end;
+end;
+
+procedure TRollUpTest.TestDblClickRollsUpWhenModeSet;
+var f: TTyFormAccess; bar: TTitleBarAccess;
+begin
+  f := TTyFormAccess.CreateNew(nil);
+  try
+    bar := TTitleBarAccess.Create(f);   // auto-associates + arms the engine
+    bar.Height := 34;
+    f.SetBounds(0, 0, 400, 300);
+    f.CaptionAction := tcaRollUp;
+    bar.InjectDblClick;
+    AssertTrue('caption double-click rolled up', f.RolledUp);
+    AssertEquals('collapsed to the title bar', f.TitleHeight, f.Height);
+  finally f.Free; end;
+end;
+
+procedure TRollUpTest.TestNoOpWithoutTitleBar;
+var f: TTyFormAccess;
+begin
+  f := TTyFormAccess.CreateNew(nil);
+  try
+    f.SetBounds(0, 0, 400, 300);
+    f.CaptionAction := tcaRollUp;
+    f.ToggleRollUp;   // no title bar -> nothing to roll up to
+    AssertFalse('not rolled without a title bar', f.RolledUp);
+    AssertEquals('height unchanged', 300, f.Height);
+  finally f.Free; end;
+end;
+
 initialization
   RegisterTest(TFormHelpersTest);
   RegisterTest(TResizeHitForTest);
@@ -1748,5 +1828,6 @@ initialization
   RegisterTest(TFormBorderStyleTest);
   RegisterTest(TFormDrivesBarTest);
   RegisterTest(TTitleBarGuardTest);
+  RegisterTest(TRollUpTest);
 
 end.
