@@ -135,6 +135,20 @@ LV.Sort;
 | `OwnerData` | `Boolean` | `False` | 虚拟模式开关 |
 | `ItemCount` | `Integer` | `0` | 虚拟模式下的行数 |
 
+### 分组视图
+
+| 属性 / 事件 | 说明 |
+|---|---|
+| `GroupView: Boolean` | 打开后按 `Groups` 把项分成可折叠的组;`lvsList`(列优先)不支持分组,会忽略此开关 |
+| `Groups: TTyListGroups` | 组集合,每组有 `Caption` 和 `Collapsed` |
+| `TTyListItem.GroupIndex` | 项属于哪个组(item index → 组序号);无效值归入末尾的**隐式桶**(无组头) |
+| `OnGetItemGroup` | 虚拟模式取组:`(Sender; AIndex; var AGroup)` |
+| `OnGroupCollapsed` | **点击组头**折叠 / 展开后触发(程序性 `Collapsed :=` 不触发) |
+
+> **折叠一个组,里面的选中和勾选不丢。** 展开回来还在。因为选中态按 **item index** 存,而"可见顺序"
+> 只是折叠时把该组的项从显示序里抽走 —— 和排序不动数据是同一套机制。`SelectAll` 选中**全部**项(含
+> 折叠组里的);`ScrollIntoView` 一个折叠组里的项是 no-op(不自动展开)。
+
 ### 复选框 / 重命名
 
 | 属性 | 类型 | 默认值 | 说明 |

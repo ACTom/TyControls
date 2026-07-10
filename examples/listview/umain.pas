@@ -37,6 +37,7 @@ type
     ChkGrid: TTyCheckBox;
     ChkMulti: TTyCheckBox;
     ChkBoxes: TTyCheckBox;
+    ChkGroup: TTyCheckBox;
     LV1: TTyListView;
     LblStatus: TTyLabel;
     LblHint: TTyLabel;
@@ -57,6 +58,7 @@ type
     procedure ChkGridChange(Sender: TObject);
     procedure ChkMultiChange(Sender: TObject);
     procedure ChkBoxesChange(Sender: TObject);
+    procedure ChkGroupChange(Sender: TObject);
     procedure LV1SelectItem(Sender: TObject; AIndex: Integer);
     procedure LV1Change(Sender: TObject);
     procedure LV1ColumnClick(Sender: TObject; AColumn: Integer);
@@ -79,6 +81,7 @@ type
     FVChecked: array of Boolean;
     procedure BuildIcons;
     procedure BuildColumns;
+    procedure BuildGroups;
     procedure BuildRows;
     procedure BuildVirtual;
     procedure UpdateStatus;
@@ -235,6 +238,21 @@ begin
   LV2.Header.Options := LV2.Header.Options + [hoVisible, hoColumnResize, hoShowSortGlyphs];
 end;
 
+procedure TMainForm.BuildGroups;
+
+  procedure AddGroup(const ACaption: string);
+  begin
+    LV1.Groups.Add.Caption := ACaption;
+  end;
+
+begin
+  { One group per kind; the index lines up with the item's ImageIndex/GroupIndex. }
+  AddGroup('文件夹');       // 0
+  AddGroup('文本文档');     // 1
+  AddGroup('电子表格');     // 2
+  AddGroup('图像');         // 3
+end;
+
 procedure TMainForm.BuildRows;
 
   procedure AddFile(const AName, ASize, AKind, AWhen: string; AImage: Integer);
@@ -246,6 +264,7 @@ procedure TMainForm.BuildRows;
       SubItems.Add(AKind);
       SubItems.Add(AWhen);
       ImageIndex := AImage;
+      GroupIndex := AImage;   { groups are indexed to match the kind icon }
     end;
   end;
 
@@ -261,6 +280,7 @@ procedure TMainForm.BuildRows;
       SubItems.Add('文件夹');
       SubItems.Add('');
       ImageIndex := 0;
+      GroupIndex := 0;   { folders group }
     end;
   end;
 
@@ -311,6 +331,7 @@ begin
 
   BuildIcons;
   BuildColumns;
+  BuildGroups;
   BuildRows;
   BuildVirtual;
   UpdateStatus;
@@ -342,6 +363,13 @@ end;
 procedure TMainForm.ChkBoxesChange(Sender: TObject);
 begin
   LV1.Checkboxes := ChkBoxes.Checked;
+end;
+
+procedure TMainForm.ChkGroupChange(Sender: TObject);
+begin
+  { Items already carry a GroupIndex, so turning this on partitions them by kind.
+    Click a group header to collapse/expand it -- the selection survives. }
+  LV1.GroupView := ChkGroup.Checked;
 end;
 
 procedure TMainForm.LV1ItemChecked(Sender: TObject; AIndex: Integer);

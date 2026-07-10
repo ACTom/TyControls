@@ -23,7 +23,7 @@ object MainForm: TMainForm
     Height = 22
     Top = 44
     Width = 700
-    Caption = '集合模式 — 点表头排序 · Ctrl / Shift 多选 · 空白处拖拽框选 · 敲字母定位'
+    Caption = '集合模式 — 点表头排序 · 多选 · 框选 · 敲字母定位 · 勾「分组」按类型折叠'
     Alignment = taLeftJustify
   end
   object BtnReport: TTyButton
@@ -70,27 +70,35 @@ object MainForm: TMainForm
     Left = 424
     Height = 22
     Top = 76
-    Width = 90
+    Width = 74
     Caption = '网格线'
     OnChange = ChkGridChange
   end
   object ChkMulti: TTyCheckBox
-    Left = 512
+    Left = 502
     Height = 22
     Top = 76
-    Width = 90
+    Width = 66
     Caption = '多选'
     Checked = True
     State = cbChecked
     OnChange = ChkMultiChange
   end
   object ChkBoxes: TTyCheckBox
-    Left = 600
+    Left = 570
     Height = 22
     Top = 76
-    Width = 100
+    Width = 66
     Caption = '复选框'
     OnChange = ChkBoxesChange
+  end
+  object ChkGroup: TTyCheckBox
+    Left = 638
+    Height = 22
+    Top = 76
+    Width = 78
+    Caption = '分组'
+    OnChange = ChkGroupChange
   end
   object LV1: TTyListView
     Left = 16
