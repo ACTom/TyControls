@@ -121,6 +121,7 @@ gallery and a dedicated TreeView showcase:
 | [examples/toolbar](examples/toolbar/) | `TTyToolBar` + `TTyToolSeparator`: toolbar with buttons and separators |
 | [examples/menu](examples/menu/) | `TTyMenuBar` + `TTyPopupMenu`: menu bar + right-click popup menu |
 | [examples/shapes](examples/shapes/) | `TTyShape` / `TTyStarShape` / `TTyArrow`: vector shapes, recolouring via `StyleOverride`, live sliders, theme switch |
+| [examples/listview](examples/listview/) | `TTyListView`: five view styles, click-to-sort columns, multi-select + marquee, a 100k-row virtual mode |
 | [examples/theming](examples/theming/) | A custom `.tycss` theme + runtime hot-swap |
 
 The remaining per-control examples (button / label / checkbox / radiobutton / panel / groupbox /

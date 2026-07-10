@@ -84,6 +84,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 | [examples/toolbar](examples/toolbar/) | `TTyToolBar` + `TTyToolSeparator`:工具条与分隔符 |
 | [examples/menu](examples/menu/) | `TTyMenuBar` + `TTyPopupMenu`:菜单栏 + 右键弹出菜单 |
 | [examples/shapes](examples/shapes/) | `TTyShape` / `TTyStarShape` / `TTyArrow`:矢量形状、`StyleOverride` 改色、滑块调参、换主题 |
+| [examples/listview](examples/listview/) | `TTyListView`:报表 / 图标 / 平铺五种视图、点表头排序、多选 + 框选、10 万行虚拟模式 |
 | [examples/theming](examples/theming/) | 自定义 `.tycss` 主题 + 运行时热切换 |
 
 其余单控件示例(button / label / checkbox / radiobutton / panel / groupbox / scrollbar / progressbar / toggleswitch / trackbar)见 [examples/](examples/)。**所有示例窗体均采用 `TTyForm` + `TTyTitleBar` 自绘窗框。** 构建任意示例:`lazbuild examples/<名称>/<名称>_example.lpi`(demo 为 `demo.lpi`,treeview 为 `treeviewshowcase.lpi`)。

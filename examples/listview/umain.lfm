@@ -1,0 +1,162 @@
+object MainForm: TMainForm
+  Left = 200
+  Height = 700
+  Top = 90
+  Width = 1200
+  Caption = 'TyControls — TTyListView(报表 / 图标 / 平铺 · 排序 · 多选 · 虚拟模式)'
+  ClientHeight = 700
+  ClientWidth = 1200
+  Font.Height = -12
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = TitleBar1
+  object TitleBar1: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 1200
+    Align = alTop
+  end
+  object DivLeft: TTyDivider
+    Left = 16
+    Height = 22
+    Top = 44
+    Width = 700
+    Caption = '集合模式 — 点表头排序 · Ctrl / Shift 多选 · 空白处拖拽框选 · 敲字母定位'
+    Alignment = taLeftJustify
+  end
+  object BtnReport: TTyButton
+    Left = 16
+    Height = 30
+    Top = 72
+    Width = 88
+    Caption = '报表'
+    OnClick = BtnReportClick
+  end
+  object BtnList: TTyButton
+    Left = 112
+    Height = 30
+    Top = 72
+    Width = 88
+    Caption = '列表'
+    OnClick = BtnListClick
+  end
+  object BtnIcon: TTyButton
+    Left = 208
+    Height = 30
+    Top = 72
+    Width = 88
+    Caption = '大图标'
+    OnClick = BtnIconClick
+  end
+  object BtnSmallIcon: TTyButton
+    Left = 304
+    Height = 30
+    Top = 72
+    Width = 88
+    Caption = '小图标'
+    OnClick = BtnSmallIconClick
+  end
+  object BtnTile: TTyButton
+    Left = 400
+    Height = 30
+    Top = 72
+    Width = 88
+    Caption = '平铺'
+    OnClick = BtnTileClick
+  end
+  object ChkGrid: TTyCheckBox
+    Left = 504
+    Height = 22
+    Top = 76
+    Width = 90
+    Caption = '网格线'
+    OnChange = ChkGridChange
+  end
+  object ChkMulti: TTyCheckBox
+    Left = 602
+    Height = 22
+    Top = 76
+    Width = 90
+    Caption = '多选'
+    Checked = True
+    State = cbChecked
+    OnChange = ChkMultiChange
+  end
+  object LV1: TTyListView
+    Left = 16
+    Height = 496
+    Top = 112
+    Width = 700
+    MultiSelect = True
+    HotTrack = True
+    OnSelectItem = LV1SelectItem
+    OnChange = LV1Change
+    OnColumnClick = LV1ColumnClick
+    OnItemActivate = LV1ItemActivate
+  end
+  object LblStatus: TTyLabel
+    Left = 16
+    Height = 18
+    Top = 618
+    Width = 700
+    Caption = '未选中'
+  end
+  object LblHint: TTyLabel
+    Left = 16
+    Height = 18
+    Top = 644
+    Width = 700
+    Caption = '按「大小」降序排:没有大小的文件夹仍然排在最后 —— 方向不该翻转「不可解析排后」这条规则'
+  end
+  object DivRight: TTyDivider
+    Left = 736
+    Height = 22
+    Top = 44
+    Width = 448
+    Caption = '虚拟模式 — 100,000 行'
+    Alignment = taLeftJustify
+  end
+  object BtnSortVirtual: TTyButton
+    Left = 736
+    Height = 30
+    Top = 72
+    Width = 130
+    Caption = '按「值」排序'
+    OnClick = BtnSortVirtualClick
+  end
+  object BtnJumpEnd: TTyButton
+    Left = 874
+    Height = 30
+    Top = 72
+    Width = 130
+    Caption = '跳到第 99999 行'
+    OnClick = BtnJumpEndClick
+  end
+  object LV2: TTyListView
+    Left = 736
+    Height = 496
+    Top = 112
+    Width = 448
+    OwnerData = True
+    GridLines = True
+    HotTrack = True
+    OnGetItemText = LV2GetItemText
+    OnSelectItem = LV2SelectItem
+  end
+  object LblVirtual: TTyLabel
+    Left = 736
+    Height = 18
+    Top = 618
+    Width = 448
+    Caption = 'ItemCount = 100000,行对象 = 0'
+  end
+  object LblVirtualNote: TTyLabel
+    Left = 736
+    Height = 18
+    Top = 644
+    Width = 448
+    Caption = '文本由 OnGetItemText 按需生成;排序只置换显示顺序,不建对象'
+  end
+end
