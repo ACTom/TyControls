@@ -522,8 +522,7 @@ begin
   corners := TyEffectiveCorners(AStyle);
   if tpBackground in AStyle.Present then
     APainter.FillBackground(ARect, AStyle.Background, corners);
-  if (tpBorderColor in AStyle.Present) and (AStyle.BorderWidth > 0)
-     and not ((tpBorderStyle in AStyle.Present) and (AStyle.BorderStyle = tbsNone)) then
+  if TyBorderVisible(AStyle) then
     APainter.StrokeBorder(ARect, corners, AStyle.BorderWidth, AStyle.BorderColor);
   // Focus ring: only present when a ':focus { outline: ... }' rule resolved.
   if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
@@ -738,8 +737,7 @@ begin
   corners := TyEffectiveCorners(AStyle);
   if tpBackground in AStyle.Present then
     APainter.FillBackground(ARect, AStyle.Background, corners);
-  if (tpBorderColor in AStyle.Present) and (AStyle.BorderWidth > 0)
-     and not ((tpBorderStyle in AStyle.Present) and (AStyle.BorderStyle = tbsNone)) then
+  if TyBorderVisible(AStyle) then
     APainter.StrokeBorder(ARect, corners, AStyle.BorderWidth, AStyle.BorderColor);
   // A windowed control paints into its own opaque bitmap, so a drop shadow's blur bleeds
   // into the corner gaps OUTSIDE the rounded background — it can't cast onto the parent, so

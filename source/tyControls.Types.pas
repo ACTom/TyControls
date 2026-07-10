@@ -118,6 +118,12 @@ function TyEffectiveCorners(const AStyle: TTyStyleSet): TTyCorners;
   theme radius is honored but the geometry can never exceed a perfect circle.
   ARadius and AHalf MUST be in the SAME unit (both logical or both device). }
 function TyClampRadius(ARadius, AHalf: Integer): Integer;
+{ True when a resolved style asks for a visible border: it needs a declared colour and a
+  non-zero width, and `border-style: none` kills it outright — but only when the theme
+  actually declared that property (an ABSENT border-style means "unspecified", not "none").
+  Every control that strokes a border gates on this, so `border-width: 0` and
+  `border-style: none` behave identically everywhere. }
+function TyBorderVisible(const AStyle: TTyStyleSet): Boolean;
 function EmptyStyleSet: TTyStyleSet;
 
 implementation
@@ -185,6 +191,12 @@ begin
     Result := TyUniformCorners(AStyle.BorderRadius)
   else
     Result := AStyle.Radius;
+end;
+
+function TyBorderVisible(const AStyle: TTyStyleSet): Boolean;
+begin
+  Result := (tpBorderColor in AStyle.Present) and (AStyle.BorderWidth > 0)
+    and not ((tpBorderStyle in AStyle.Present) and (AStyle.BorderStyle = tbsNone));
 end;
 
 function EmptyStyleSet: TTyStyleSet;

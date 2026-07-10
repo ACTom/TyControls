@@ -349,8 +349,7 @@ begin
       // Border around the segment. Adjacent cells share a seam so the doubled 1px
       // stroke reads as a single divider — simple, clean, and keeps each segment's
       // state border (e.g. selected/accent) visible on its own edges.
-      if (tpBorderColor in segStyle.Present) and (segStyle.BorderWidth > 0)
-         and not ((tpBorderStyle in segStyle.Present) and (segStyle.BorderStyle = tbsNone)) then
+      if TyBorderVisible(segStyle) then
         P.StrokeBorder(segRect, corners, segStyle.BorderWidth, segStyle.BorderColor);
 
       // Centered caption, inset horizontally by the style's left/right padding.

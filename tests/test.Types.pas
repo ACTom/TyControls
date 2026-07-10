@@ -22,6 +22,9 @@ type
     procedure TestEffectiveCornersFallsBackToUniformBorderRadius;
     procedure TestClampRadius;
     procedure TestSpacingConstants;
+    procedure TestBorderVisibleNeedsColourAndWidth;
+    procedure TestBorderVisibleSuppressedByBorderStyleNone;
+    procedure TestBorderVisibleIgnoresAbsentBorderStyle;
   end;
 
 implementation
@@ -134,6 +137,59 @@ begin
   AssertEquals(6,  TyTabMargin);
   AssertEquals(8,  TyTitleBarPad);
   AssertEquals(46, TyTitleButtonWidth);
+end;
+
+{ TyBorderVisible is the single predicate every control gates its border stroke on. }
+
+procedure TTestTypes.TestBorderVisibleNeedsColourAndWidth;
+var
+  S: TTyStyleSet;
+begin
+  S := EmptyStyleSet;
+  AssertFalse('no colour, no width', TyBorderVisible(S));
+
+  S.BorderWidth := 1;
+  AssertFalse('width alone is not enough — colour must be declared', TyBorderVisible(S));
+
+  S := EmptyStyleSet;
+  Include(S.Present, tpBorderColor);
+  S.BorderColor := TyRGB(0, 0, 0);
+  AssertFalse('border-width: 0 hides the border', TyBorderVisible(S));
+
+  S.BorderWidth := 1;
+  AssertTrue('declared colour + non-zero width', TyBorderVisible(S));
+end;
+
+procedure TTestTypes.TestBorderVisibleSuppressedByBorderStyleNone;
+var
+  S: TTyStyleSet;
+begin
+  S := EmptyStyleSet;
+  Include(S.Present, tpBorderColor);
+  S.BorderColor := TyRGB(0, 0, 0);
+  S.BorderWidth := 2;
+  AssertTrue('visible before', TyBorderVisible(S));
+
+  Include(S.Present, tpBorderStyle);
+  S.BorderStyle := tbsNone;
+  AssertFalse('border-style: none is a kill-switch', TyBorderVisible(S));
+
+  S.BorderStyle := tbsSolid;
+  AssertTrue('border-style: solid restores it', TyBorderVisible(S));
+end;
+
+procedure TTestTypes.TestBorderVisibleIgnoresAbsentBorderStyle;
+var
+  S: TTyStyleSet;
+begin
+  // An UNDECLARED border-style means "unspecified", not "none" — even though tbsNone is
+  // not the zero value, a style that never mentions border-style must still draw.
+  S := EmptyStyleSet;
+  Include(S.Present, tpBorderColor);
+  S.BorderColor := TyRGB(0, 0, 0);
+  S.BorderWidth := 1;
+  S.BorderStyle := tbsNone;             // set, but NOT in Present
+  AssertTrue('absent border-style does not suppress', TyBorderVisible(S));
 end;
 
 initialization
