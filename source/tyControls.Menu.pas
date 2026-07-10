@@ -25,7 +25,7 @@ type
     host (TTyMenuBar, Task 5) rotates the open dropdown to the adjacent top item. }
   TTyMenuAdjacentEvent = procedure(Sender: TObject; ADelta: Integer) of object;
 
-  TTyMenuRowKind = (mrkItem, mrkSeparator);
+  TTyMenuRowKind = (mrkItem, mrkSeparator, mrkHeader);
   TTyMenuRow = record
     Kind: TTyMenuRowKind;
     Item: TMenuItem;        // source item (for activation / submenu)
@@ -39,12 +39,15 @@ type
     RadioItem: Boolean;
     HasSubmenu: Boolean;
     DefaultItem: Boolean;   // render bold
+    ImageIndex: Integer;    // icon-column index into the menu's Images (-1 = none)
   end;
   TTyMenuRowArray = array of TTyMenuRow;
 
 { Flatten a root TMenuItem's visible children into render rows. Caption '-' => separator.
+  When AAllowHeaders, a Caption of '-Text' (a dash followed by text) becomes a non-selectable
+  SECTION HEADER captioned 'Text' (a bare '-' stays a plain separator) — the TTyMenuEx opt-in.
   (TyParseMnemonic lives in tyControls.Accel — the shared mnemonic facility.) }
-function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
+function TyBuildMenuRows(ARoot: TMenuItem; AAllowHeaders: Boolean = False): TTyMenuRowArray;
 
 type
   { Themed renderer for a TTyMenuRowArray. Shared by the bar dropdown, submenu
@@ -162,6 +165,7 @@ type
     FPopupRect: TRect;        // computed screen rect of the last Popup (for the deferred Qt re-apply)
     FOnNavigateAdjacent: TTyMenuAdjacentEvent;
     FOnClose: TNotifyEvent;   // fired by CloseAll so a host (bar) can reset its open state
+    FAllowHeaders: Boolean;   // TTyMenuEx opt-in: build '-Text' items as section headers
     procedure EnsureForm;
     procedure HandleActivateRow(Sender: TObject; AIndex: Integer);
     procedure HandleOpenSubmenu(Sender: TObject; AIndex: Integer);
@@ -220,6 +224,8 @@ type
     { Test seam: activate a row as if it were clicked (same path as a real click). }
     procedure ActivateRowForTest(AIndex: Integer);
     property Controller: TTyStyleController read FController write FController;
+    { When True, '-Text' items build as section headers (propagated to submenu cascades). }
+    property AllowHeaders: Boolean read FAllowHeaders write FAllowHeaders;
     property Root: TMenuItem read FRoot;
     { Left/Right at the bar-root dropdown: ADelta -1/+1. A bare popup has no adjacent
       top to rotate to, so this is meaningful only when a host (TTyMenuBar, Task 5)
@@ -328,6 +334,10 @@ type
     FRenderer: TTyMenuPopup;     // lazy themed popup host; created on first PopUp
     FController: TTyStyleController;
     procedure EnsureRenderer;
+  protected
+    { Hook for subclasses to configure the shared renderer (e.g. opt into section headers)
+      after its controller is set and BEFORE its rows are built. Base does nothing. }
+    procedure ConfigureRenderer(ARenderer: TTyMenuPopup); virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -346,6 +356,15 @@ type
     property Controller: TTyStyleController read FController write FController;
   end;
 
+  { Enhanced themed context menu: on top of TTyPopupMenu it renders SECTION HEADERS — a
+    menu item captioned '-Text' (a dash then text) draws as a non-selectable 'Text' section
+    label; a bare '-' stays a plain separator. Same LCL TPopupMenu model + Controller; assign
+    it to a control's PopupMenu exactly like TTyPopupMenu. (Icon column + side banner: later.) }
+  TTyMenuEx = class(TTyPopupMenu)
+  protected
+    procedure ConfigureRenderer(ARenderer: TTyMenuPopup); override;
+  end;
+
 implementation
 
 // Rounded popup corners use the CROSS-PLATFORM LCLIntf SetWindowRgn/CreateRoundRectRgn (the
@@ -353,7 +372,7 @@ implementation
 // sites remain qualified Types.* — harmless now that the Windows POINT=TPOINT shadow is gone.)
 uses Math, BGRABitmap;
 
-function TyBuildMenuRows(ARoot: TMenuItem): TTyMenuRowArray;
+function TyBuildMenuRows(ARoot: TMenuItem; AAllowHeaders: Boolean): TTyMenuRowArray;
 var i, n: Integer; mi: TMenuItem;
 begin
   SetLength(Result, 0);
@@ -366,8 +385,17 @@ begin
     if not mi.Visible then Continue;
     Result[n] := Default(TTyMenuRow);
     Result[n].Item := mi;
+    Result[n].ImageIndex := -1;   // Default() would zero it, but 0 is a valid image index
     if mi.IsLine then
       Result[n].Kind := mrkSeparator
+    else if AAllowHeaders and (Length(mi.Caption) > 1) and (mi.Caption[1] = '-') then
+    begin
+      // '-Text' => section header captioned 'Text' (a bare '-' was caught by IsLine above).
+      Result[n].Kind := mrkHeader;
+      Result[n].Caption := Trim(Copy(mi.Caption, 2, Length(mi.Caption)));
+      // Strip any '&' for display; the parsed mnemonic is stored but unused (headers aren't activatable).
+      Result[n].Mnemonic := TyParseMnemonic(Result[n].Caption, Result[n].Display, Result[n].MnemonicPos);
+    end
     else
     begin
       Result[n].Kind := mrkItem;
@@ -382,6 +410,7 @@ begin
       Result[n].RadioItem := mi.RadioItem;
       Result[n].HasSubmenu := mi.Count > 0;
       Result[n].DefaultItem := mi.Default;
+      Result[n].ImageIndex := mi.ImageIndex;
     end;
     Inc(n);
   end;
@@ -578,8 +607,8 @@ begin
     if FRows[i].Kind = mrkSeparator then h := sepH else h := itemH;
     if (AY >= rowT) and (AY < rowT + h) then
     begin
-      // Separators are not selectable.
-      if FRows[i].Kind = mrkSeparator then Exit(-1);
+      // Separators and section headers are not selectable.
+      if FRows[i].Kind <> mrkItem then Exit(-1);
       Exit(i);
     end;
   end;
@@ -787,6 +816,19 @@ begin
         Continue;
       end;
 
+      if FRows[i].Kind = mrkHeader then
+      begin
+        // Section header: a non-interactive, muted + bold label (TyMenuItem :disabled color).
+        RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', [tysDisabled]);
+        RowRect := Types.Rect(R.Left + P.Scale(S.Padding.Left), RowTop(i, APPI),
+          R.Right - P.Scale(S.Padding.Right), RowTop(i, APPI) + itemH);
+        padL := P.Scale(RowStyle.Padding.Left);
+        P.DrawText(Types.Rect(RowRect.Left + padL, RowRect.Top, RowRect.Right, RowRect.Bottom),
+          FRows[i].Display, RowStyle.FontName, ResolveFontSize(RowStyle),
+          700, RowStyle.TextColor, taLeftJustify, tlCenter, True);
+        Continue;
+      end;
+
       // Resolve TyMenuItem in the row's interaction state.
       RowStates := [];
       if not FRows[i].Enabled then
@@ -883,7 +925,7 @@ procedure TTyMenuPopup.SetRoot(AItem: TMenuItem);
 begin
   FRoot := AItem;
   if FView <> nil then
-    FView.SetRows(TyBuildMenuRows(AItem));
+    FView.SetRows(TyBuildMenuRows(AItem, FAllowHeaders));
 end;
 
 procedure TTyMenuPopup.EnsureForm;
@@ -910,7 +952,7 @@ begin
   FView.OnNavigateAdjacentBar := @HandleNavigateAdjacent;
   FView.OnNavigateLeft := @HandleNavigateLeft;
   if FRoot <> nil then
-    FView.SetRows(TyBuildMenuRows(FRoot));
+    FView.SetRows(TyBuildMenuRows(FRoot, FAllowHeaders));
 end;
 
 function TTyMenuPopup.ComputeBounds(const AAnchor: TRect;
@@ -1082,7 +1124,7 @@ var
   rows: TTyMenuRowArray;
   rootPopup: TTyMenuPopup;
 begin
-  rows := TyBuildMenuRows(FRoot);
+  rows := TyBuildMenuRows(FRoot, FAllowHeaders);
   if (AIndex < 0) or (AIndex > High(rows)) then Exit;
   if rows[AIndex].Kind <> mrkItem then Exit;
   if not rows[AIndex].Enabled then Exit;
@@ -1110,13 +1152,14 @@ var
   rows: TTyMenuRowArray;
   anchor: TRect;
 begin
-  rows := TyBuildMenuRows(FRoot);
+  rows := TyBuildMenuRows(FRoot, FAllowHeaders);
   if (AIndex < 0) or (AIndex > High(rows)) then Exit;
   if not rows[AIndex].HasSubmenu then Exit;
 
   FreeAndNil(FChild);   // only one open submenu per level
   FChild := TTyMenuPopup.Create(Self);
   FChild.Controller := FController;
+  FChild.AllowHeaders := FAllowHeaders;   // submenus honour section headers too
   // Create the child's form+view and set its root BEFORE any FView access: SetRoot only
   // populates rows when FView already exists (FView is built lazily by EnsureForm), so we
   // build the view first, then root it — guaranteeing FChild.FView exists and is filled.
@@ -1681,8 +1724,20 @@ begin
   if FRenderer = nil then
     FRenderer := TTyMenuPopup.Create(Self);
   FRenderer.Controller := FController;
+  ConfigureRenderer(FRenderer);   // subclasses opt into headers/etc. BEFORE the rows are built
   // Root the shared renderer at this popup menu's items (the inherited LCL model).
   FRenderer.SetRoot(Items);
+end;
+
+procedure TTyPopupMenu.ConfigureRenderer(ARenderer: TTyMenuPopup);
+begin
+  // Base: no extra configuration.
+end;
+
+procedure TTyMenuEx.ConfigureRenderer(ARenderer: TTyMenuPopup);
+begin
+  inherited ConfigureRenderer(ARenderer);
+  ARenderer.AllowHeaders := True;   // '-Text' items render as section headers
 end;
 
 procedure TTyPopupMenu.PopUp(X, Y: Integer);

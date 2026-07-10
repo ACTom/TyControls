@@ -8,6 +8,10 @@ type
     procedure TestBuildRowsMapsFields;
     procedure TestParseMnemonic;
     procedure TestBuildRowsParsesMnemonic;
+    procedure TestHeaderRowWhenAllowed;
+    procedure TestNoHeaderByDefault;
+    procedure TestBareDashStaysSeparator;
+    procedure TestBuildRowsCarriesImageIndex;
   end;
 
   { Probe subclass: exposes TTyMenuView's protected geometry + navigation seams so
@@ -35,6 +39,7 @@ type
     procedure TestMeasureAndHitTest;
     procedure TestKeyboardHighlightSkipsSeparatorsAndDisabled;
     procedure TestHoverOnSubmenuRowFiresOpenAfterTick;
+    procedure TestHeaderRowNotSelectable;
   end;
 
   { Probe subclass: exposes TTyMenuPopup's protected ComputeBounds seam so the
@@ -178,6 +183,63 @@ begin
     AssertEquals('exit display', 'Exit', rows[1].Display);
     AssertEquals('exit mnemonic', 'X', rows[1].Mnemonic);
     AssertEquals('exit mnemonic pos', 2, rows[1].MnemonicPos);
+  finally mm.Free; end;
+end;
+
+procedure TMenuModelTest.TestHeaderRowWhenAllowed;
+var mm: TMainMenu; top, it: TMenuItem; rows: TTyMenuRowArray;
+begin
+  // With AAllowHeaders, a '-Text' caption builds as a non-item SECTION HEADER captioned 'Text'.
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); top.Caption := 'File'; mm.Items.Add(top);
+    it := TMenuItem.Create(mm); it.Caption := '- File Operations'; top.Add(it);
+    it := TMenuItem.Create(mm); it.Caption := '&Open'; top.Add(it);
+    rows := TyBuildMenuRows(top, True);
+    AssertEquals('row 0 is a header', Ord(mrkHeader), Ord(rows[0].Kind));
+    AssertEquals('header display trimmed', 'File Operations', rows[0].Display);
+    AssertEquals('row 1 is a normal item', Ord(mrkItem), Ord(rows[1].Kind));
+  finally mm.Free; end;
+end;
+
+procedure TMenuModelTest.TestNoHeaderByDefault;
+var mm: TMainMenu; top, it: TMenuItem; rows: TTyMenuRowArray;
+begin
+  // Default (AAllowHeaders=False): '-Text' stays a plain clickable item — the base menu is unchanged.
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); top.Caption := 'File'; mm.Items.Add(top);
+    it := TMenuItem.Create(mm); it.Caption := '-Not A Header'; top.Add(it);
+    rows := TyBuildMenuRows(top);
+    AssertEquals('stays a normal item', Ord(mrkItem), Ord(rows[0].Kind));
+  finally mm.Free; end;
+end;
+
+procedure TMenuModelTest.TestBareDashStaysSeparator;
+var mm: TMainMenu; top: TMenuItem; rows: TTyMenuRowArray;
+begin
+  // A bare '-' is a plain separator in BOTH modes (headers need text after the dash).
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); mm.Items.Add(top);
+    top.Add(NewLine);
+    rows := TyBuildMenuRows(top, True);
+    AssertEquals('bare dash is a separator even with headers on', Ord(mrkSeparator), Ord(rows[0].Kind));
+  finally mm.Free; end;
+end;
+
+procedure TMenuModelTest.TestBuildRowsCarriesImageIndex;
+var mm: TMainMenu; top, it: TMenuItem; rows: TTyMenuRowArray;
+begin
+  // Items carry their ImageIndex (for the icon column); non-items default to -1.
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); mm.Items.Add(top);
+    it := TMenuItem.Create(mm); it.Caption := 'Save'; it.ImageIndex := 3; top.Add(it);
+    top.Add(NewLine);
+    rows := TyBuildMenuRows(top);
+    AssertEquals('item keeps its image index', 3, rows[0].ImageIndex);
+    AssertEquals('separator has no image', -1, rows[1].ImageIndex);
   finally mm.Free; end;
 end;
 
@@ -362,6 +424,28 @@ begin
       v.MoveHighlight(+1); AssertEquals('skip sep+disabled to C', 3, v.Highlight);
       v.MoveHighlight(+1); AssertEquals('wraps to A', 0, v.Highlight);
       v.MoveHighlight(-1); AssertEquals('prev wraps to C', 3, v.Highlight);
+    finally v.Free; end;
+  finally mm.Free; end;
+end;
+
+procedure TMenuViewTest.TestHeaderRowNotSelectable;
+var v: TTyMenuViewAccess; mm: TMainMenu; top, it: TMenuItem;
+begin
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); mm.Items.Add(top);
+    it := TMenuItem.Create(mm); it.Caption := '-Section'; top.Add(it);   // header  (row 0)
+    it := TMenuItem.Create(mm); it.Caption := 'A';        top.Add(it);   // item    (row 1)
+    it := TMenuItem.Create(mm); it.Caption := 'B';        top.Add(it);   // item    (row 2)
+    v := TTyMenuViewAccess.Create(nil);
+    try
+      v.SetRows(TyBuildMenuRows(top, True));
+      v.SetHighlight(-1);
+      v.MoveHighlight(+1);
+      AssertEquals('keyboard highlight skips the header onto the first item', 1, v.Highlight);
+      AssertEquals('header row does not hit-test as selectable',
+        -1, v.RowAtY(v.RowTop(0, 96) + 2, 96));
+      AssertEquals('the item row below it does', 1, v.RowAtY(v.RowTop(1, 96) + 2, 96));
     finally v.Free; end;
   finally mm.Free; end;
 end;
