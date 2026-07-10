@@ -385,6 +385,11 @@ public
 `AnimationsEnabled := False`、`ControlStyle + [csNoDesignVisible]`)。滚动量以**设备像素**计,
 两轴都是 —— 不学 TreeView 的"垂直用逻辑行、水平用像素"混合制。
 
+**`TTyScrollBar.Max` 是最大位置,不是内容尺寸。** `TyScrollThumbRect` 按
+`PageSize / ((Max-Min) + PageSize)` 算拇指长度,且只有 `Position = Max` 时拇指才碰到轨道末端。
+所以必须传 `内容 - 一屏`(即钳位偏移量用的那个 `maxV` / `maxH`),照 `TTyListBox` 的做法。
+传内容总尺寸的后果:拇指偏短、底下永远留一截空隙、拖到底会被弹回去。无头测不到,只能靠这条规矩。
+
 ### 绘制接缝
 
 ```pascal

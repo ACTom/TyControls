@@ -15,7 +15,7 @@ unit test.listview;
 interface
 
 uses
-  Classes, SysUtils, Types, fpcunit, testregistry,
+  Classes, SysUtils, Types, LCLType, fpcunit, testregistry,
   tyControls.Columns,          { TTySortDirection, sdAscending, sdDescending }
   tyControls.ListView.Layout,  { TTyListViewStyle, TTyListSortKind }
   tyControls.ListView;         { TTyListView + item / state types + events }
@@ -33,6 +33,8 @@ type
       descendant has no business reshuffling the display order) and this is the same
       seam TTyShellListView will read. }
     function OrderAt(ADisplayPos: Integer): Integer;
+    { Type-ahead is driven through the protected UTF8KeyPress. }
+    procedure XType(const AKey: string);
   end;
 
   { -----------------------------------------------------------------------
@@ -154,6 +156,25 @@ type
     procedure TestItemIndexAssignedOutOfRangeIsClamped;
   end;
 
+  { -----------------------------------------------------------------------
+    TYPE-AHEAD — a fresh key cycles, a refining key may stay put
+    ----------------------------------------------------------------------- }
+  TListViewTypeAheadTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+    procedure Add(const ACaption: string);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestFirstKeyFindsFirstMatch;
+    procedure TestRepeatedKeyCyclesThroughMatches;
+    procedure TestRefiningKeyKeepsTheCurrentMatch;
+    procedure TestRefiningKeyAdvancesWhenCurrentNoLongerMatches;
+    procedure TestUnmatchedRefinementFallsBackToCyclingOnTheLastKey;
+    procedure TestTypeAheadFollowsDisplayOrderNotItemOrder;
+  end;
+
 implementation
 
 { ===========================================================================
@@ -183,6 +204,14 @@ end;
 function TTyListViewAccess.OrderAt(ADisplayPos: Integer): Integer;
 begin
   Result := DisplayToItem(ADisplayPos);
+end;
+
+procedure TTyListViewAccess.XType(const AKey: string);
+var
+  k: TUTF8Char;
+begin
+  k := AKey;
+  UTF8KeyPress(k);
 end;
 
 { ===========================================================================
@@ -754,9 +783,108 @@ begin
   AssertEquals('last valid index sticks', 19, FLV.ItemIndex);
 end;
 
+{ ===========================================================================
+  TYPE-AHEAD
+  =========================================================================== }
+
+procedure TListViewTypeAheadTest.SetUp;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+end;
+
+procedure TListViewTypeAheadTest.TearDown;
+begin
+  FreeAndNil(FLV);
+end;
+
+procedure TListViewTypeAheadTest.Add(const ACaption: string);
+begin
+  FLV.Items.Add.Caption := ACaption;
+  FLV.ItemsChanged;
+end;
+
+procedure TListViewTypeAheadTest.TestFirstKeyFindsFirstMatch;
+begin
+  Add('Alpha'); Add('Report'); Add('Resume'); Add('Zulu');
+  FLV.XType('r');
+  AssertEquals('first r-match', 1, FLV.ItemIndex);
+end;
+
+procedure TListViewTypeAheadTest.TestRepeatedKeyCyclesThroughMatches;
+{ A FRESH single key scans from the row AFTER the focused one, so pressing the same letter
+  again advances. That exclusive origin is what makes cycling work. }
+begin
+  Add('Alpha'); Add('Report'); Add('Resume'); Add('Rocket');
+  FLV.XType('r');
+  AssertEquals('1st r', 1, FLV.ItemIndex);
+  FLV.XType('r');
+  AssertEquals('2nd r cycles', 2, FLV.ItemIndex);
+  FLV.XType('r');
+  AssertEquals('3rd r cycles', 3, FLV.ItemIndex);
+  FLV.XType('r');
+  AssertEquals('4th r wraps', 1, FLV.ItemIndex);
+end;
+
+procedure TListViewTypeAheadTest.TestRefiningKeyKeepsTheCurrentMatch;
+{ The bug this test was written for: 'r' lands on "Report"; 're' must KEEP "Report" rather
+  than skip past it to "Resume". A refining keystroke scans INCLUSIVE of the focused row. }
+begin
+  Add('Alpha'); Add('Report'); Add('Resume');
+  FLV.XType('r');
+  AssertEquals('r -> Report', 1, FLV.ItemIndex);
+  FLV.XType('e');
+  AssertEquals('re -> still Report', 1, FLV.ItemIndex);
+  FLV.XType('p');
+  AssertEquals('rep -> still Report', 1, FLV.ItemIndex);
+end;
+
+procedure TListViewTypeAheadTest.TestRefiningKeyAdvancesWhenCurrentNoLongerMatches;
+{ Inclusive does not mean sticky: once the buffer stops matching the focused row, the search
+  moves on. }
+begin
+  Add('Alpha'); Add('Report'); Add('Resume');
+  FLV.XType('r');
+  AssertEquals('r -> Report', 1, FLV.ItemIndex);
+  FLV.XType('e');
+  FLV.XType('s');
+  AssertEquals('res -> Resume', 2, FLV.ItemIndex);
+end;
+
+procedure TListViewTypeAheadTest.TestUnmatchedRefinementFallsBackToCyclingOnTheLastKey;
+{ 'r' then 'r' makes the buffer 'rr', which matches nothing; the search falls back to the
+  last key alone and cycles. }
+begin
+  Add('Alpha'); Add('Report'); Add('Resume');
+  FLV.XType('r');
+  AssertEquals('r -> Report', 1, FLV.ItemIndex);
+  FLV.XType('r');
+  AssertEquals('rr matches nothing -> cycle on r', 2, FLV.ItemIndex);
+end;
+
+procedure TListViewTypeAheadTest.TestTypeAheadFollowsDisplayOrderNotItemOrder;
+{ The search walks what the user SEES. After a descending sort the item indices are shuffled,
+  but typing 'r' must land on the first r-row on screen -- and ItemIndex reports that row's
+  stable ITEM index. }
+var
+  firstOnScreen: Integer;
+begin
+  Add('Resume'); Add('Alpha'); Add('Report'); Add('Zulu');
+  FLV.SortColumn := 0;
+  FLV.SortDirection := sdDescending;
+  FLV.Sort;
+  { display order is now Zulu(3), Resume(0), Report(2), Alpha(1) -- the first r-row on
+    screen is Resume, item index 0. }
+  FLV.XType('r');
+  firstOnScreen := FLV.ItemIndex;
+  AssertEquals('lands on the first r-row in DISPLAY order', 0, firstOnScreen);
+  FLV.XType('r');
+  AssertEquals('cycles to the next r-row in display order', 2, FLV.ItemIndex);
+end;
+
 initialization
   RegisterTest(TListViewDataTest);
   RegisterTest(TListViewSortTest);
   RegisterTest(TListViewSelectionTest);
   RegisterTest(TListViewVirtualTest);
+  RegisterTest(TListViewTypeAheadTest);
 end.

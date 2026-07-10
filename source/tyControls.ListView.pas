@@ -923,7 +923,11 @@ begin
     FSyncingScroll := True;
     try
       FVScroll.Min      := 0;
-      FVScroll.Max      := ext.cy;
+      { Max is the maximum POSITION, not the content size -- TyScrollThumbRect sizes the
+        thumb as PageSize/((Max-Min)+PageSize) and only reaches the track end at
+        Position = Max. Feeding it ext.cy would undersize the thumb, leave a permanent gap
+        below it, and make a drag to the bottom snap back. Same convention as TTyListBox. }
+      FVScroll.Max      := maxV;
       FVScroll.PageSize := regionH;
       FVScroll.Position := FOffsetY;
     finally
@@ -947,7 +951,7 @@ begin
     FSyncingScroll := True;
     try
       FHScroll.Min      := 0;
-      FHScroll.Max      := ext.cx;
+      FHScroll.Max      := maxH;   { maximum position, not content width -- see above }
       FHScroll.PageSize := vw;
       FHScroll.Position := FOffsetX;
     finally
@@ -2106,7 +2110,7 @@ end;
 
 procedure TTyListView.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
-  cnt, startDisp, foundDisp, item: Integer;
+  cnt, startDisp, searchFrom, foundDisp, item: Integer;
 begin
   inherited UTF8KeyPress(UTF8Key);
   if UTF8Key = '' then Exit;
@@ -2124,8 +2128,19 @@ begin
 
   { search in DISPLAY order: the callback + returned index are display positions }
   startDisp := ItemToDisplay(FItemIndex);   { item index -> display pos }
-  foundDisp := TyListPrefixMatch(@GetDisplayText, cnt, startDisp, FSearchBuffer);
-  { a repeated single key cycles to the next match of that letter }
+
+  { A REFINING keystroke -- one that lengthens an existing buffer -- must be able to stay on
+    the item the previous keystroke landed on. Type 'r', land on "Report"; type 'e', and "re"
+    should keep "Report", not skip past it to "Resume". TyListPrefixMatch scans from
+    AStartAfter + 1, so step the origin back one position to make the scan inclusive of the
+    current row. A fresh single key keeps the exclusive origin, which is what makes repeating
+    the same letter cycle through its matches. Same rule as TTyTreeView.DoIncrementalSearch. }
+  searchFrom := startDisp;
+  if (Length(FSearchBuffer) > Length(UTF8Key)) and (startDisp >= 0) then
+    Dec(searchFrom);   { never below -1: that already means "scan from position 0" }
+
+  foundDisp := TyListPrefixMatch(@GetDisplayText, cnt, searchFrom, FSearchBuffer);
+  { the refined prefix matches nothing: fall back to cycling on the last key alone }
   if (foundDisp < 0) and (Length(FSearchBuffer) > Length(UTF8Key)) then
   begin
     FSearchBuffer := UTF8Key;
