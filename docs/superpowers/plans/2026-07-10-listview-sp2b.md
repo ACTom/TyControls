@@ -193,7 +193,10 @@ published
   property GroupView: Boolean default False;
   property Groups: TTyListGroups;
   property OnGetItemGroup: TTyListGroupEvent... { 见下,签名用 var }
-  property OnGroupCollapsed: TTyListGroupEvent; { 折叠状态改变后触发,收组序号 }
+  property OnGroupCollapsed: TTyListGroupEvent; { **用户点组头**折叠/展开后触发,收组序号。
+                                                   程序性 `Groups[g].Collapsed := x` 不触发
+                                                   (app 自己改的自己知道,且避免重入)——
+                                                   但仍会重建 order + 重绘。 }
 ```
 
 `TTyListItem` 增 `published GroupIndex: Integer default -1`。
@@ -204,11 +207,12 @@ published
 
 ```pascal
 protected
-  function GetItemGroup(AItemIndex: Integer): Integer; virtual;   { 返回组序号,或 -1 = 隐式桶 }
+  function GetItemGroup(AItemIndex: Integer): Integer; virtual;   { 返回数据声明的原始组号 }
 ```
 
 默认实现:`OwnerData` → 触发 `OnGetItemGroup(Self, i, var g)`(未接则 `-1`);否则读 `Items[i].GroupIndex`。
-返回值不在 `[0, Groups.Count-1]` 内 → 归到**隐式桶**。
+**原样返回**,不归一化 —— 数据说 99 就返回 99。把越界值归到隐式桶是**order 构建器**的策略,不是取值方法的职责
+(这样 `TTyShellListView` override 时直接返回它天然的组号即可)。
 
 ### 隐式桶
 

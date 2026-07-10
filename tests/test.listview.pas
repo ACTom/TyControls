@@ -52,6 +52,12 @@ type
     { The inline rename editor (protected InlineEditor seam), so a headless test can
       set the text that EndEdit(True) will commit. }
     function XEditor: TTyEdit;
+    { SP2b grouping seams. XItemToDisplay is the second index-space direction (item
+      index -> display position, -1 when the item is in a collapsed group or out of
+      range); OrderAt above is its inverse. XGetItemGroup reaches the new fifth virtual
+      accessor that grouping is built on. }
+    function XItemToDisplay(AItem: Integer): Integer;
+    function XGetItemGroup(AItem: Integer): Integer;
   end;
 
   { -----------------------------------------------------------------------
@@ -337,6 +343,78 @@ type
     procedure TestUserClearedFieldAlsoAbandonsCommit;
   end;
 
+  { -----------------------------------------------------------------------
+    GROUPED VIEW (SP2b) — written FROM THE CONTRACT
+    (docs/superpowers/plans/2026-07-10-listview-sp2b.md, "任务 2 契约") and NOT from
+    the implementation. Pins the ten grouped-mode invariants.
+
+    The load-bearing idea, straight from the contract: enabling grouping only bends the
+    two index spaces. "item index" stays stable; a "display position" now covers ONLY the
+    currently-visible items, so a collapsed group's items leave FOrder (their
+    ItemToDisplay becomes -1) yet keep their check / selection bits, which are keyed by
+    item index. Display order is observed through OrderAt (= DisplayToItem) and its inverse
+    XItemToDisplay (= ItemToDisplay); VisibleCount is the length of the visible order,
+    discovered by scanning OrderAt (the arrays stay private). Every published member and
+    every event still takes / returns an ITEM index. }
+  TListViewGroupTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+    FGroupCollapsedEvents: Integer;
+    FLastCollapsedGroup: Integer;
+    FGetGroupCalls: Integer;
+    procedure AddItem(const ACaption: string; AGroupIndex: Integer);
+    procedure MakeTwoGroups;
+    { Length of the visible display order = number of items currently in FOrder. Scans
+      OrderAt from 0; display positions are contiguous [0, VisibleCount-1] and every item
+      index is >= 0, so the first -1 marks the end (bounded by ItemCount for safety). }
+    function VisibleCount: Integer;
+    { Round-trips both index spaces: every visible display position maps to a real item
+      and back, and every item whose rank is set maps back to itself. }
+    procedure AssertOrderConsistent(const AMsg: string);
+    procedure HGroupCollapsed(Sender: TObject; AGroup: Integer);
+    procedure HGetItemGroup(Sender: TObject; AItemIndex: Integer; var AGroup: Integer);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { GroupView = False takes the unchanged SP1 flat path (grouping ignored). }
+    procedure TestGroupViewFalseKeepsFlatSP1Order;
+    { Collection: display order is group 0's items then group 1's; item-index order
+      within a group when unsorted. }
+    procedure TestCollectionDisplayOrderIsGroupThenItemIndex;
+    { Each group sorts independently; blocks never interleave. }
+    procedure TestSortSortsEachGroupIndependentlyNeverInterleaving;
+    { THE test: collapsing removes a group's items from the display order (ItemToDisplay
+      = -1) but leaves their Checked / selection bits; expanding restores them. }
+    procedure TestCollapseHidesItemsButKeepsCheckedAndSelection;
+    { SelectAll selects every item including those in a collapsed group; SelCount counts
+      them. }
+    procedure TestSelectAllIncludesCollapsedGroupItems;
+    { ScrollIntoView(an item in a collapsed group) is a silent no-op; it does not raise
+      and does not auto-expand. }
+    procedure TestScrollIntoViewCollapsedItemIsNoOp;
+    { GetItemGroup returns the raw value; out-of-range is bucketed by the order builder. }
+    procedure TestGetItemGroupReturnsTheRawOutOfRangeValue;
+    { A programmatic Groups[g].Collapsed := does NOT fire OnGroupCollapsed but does rebuild. }
+    procedure TestProgrammaticCollapseDoesNotFireEventButRebuilds;
+    { GetItemGroup: collection reads TTyListItem.GroupIndex. }
+    procedure TestGetItemGroupCollectionReadsGroupIndex;
+    { GetItemGroup: OwnerData fires OnGetItemGroup. }
+    procedure TestGetItemGroupOwnerDataFiresOnGetItemGroup;
+    { GetItemGroup: OwnerData with no handler falls back to -1 (the implicit bucket). }
+    procedure TestGetItemGroupOwnerDataNoHandlerIsMinusOne;
+    { An out-of-range / -1 group index lands the item in the implicit bucket, which
+      renders after every real group and adds no group of its own. }
+    procedure TestOutOfRangeGroupIndexLandsInImplicitBucketLast;
+    { Toggling GroupView on then off keeps FOrder / FRank self-consistent, does not crash. }
+    procedure TestTogglingGroupViewKeepsOrderSelfConsistent;
+    { Clicking a group header toggles Collapsed and fires OnGroupCollapsed with the group
+      index. }
+    procedure TestClickingGroupHeaderFiresOnGroupCollapsed;
+    { lvsList + GroupView = True ignores grouping and behaves as the flat path. }
+    procedure TestListViewStyleIgnoresGrouping;
+  end;
+
 implementation
 
 { ===========================================================================
@@ -432,6 +510,16 @@ end;
 function TTyListViewAccess.XEditor: TTyEdit;
 begin
   Result := InlineEditor;
+end;
+
+function TTyListViewAccess.XItemToDisplay(AItem: Integer): Integer;
+begin
+  Result := ItemToDisplay(AItem);
+end;
+
+function TTyListViewAccess.XGetItemGroup(AItem: Integer): Integer;
+begin
+  Result := GetItemGroup(AItem);
 end;
 
 { ===========================================================================
@@ -1886,6 +1974,414 @@ begin
   AssertFalse('F2 on a read-only list does nothing', FLV.Editing);
 end;
 
+{ ===========================================================================
+  GROUPED VIEW
+  =========================================================================== }
+
+procedure TListViewGroupTest.SetUp;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+  { The console runner reports Font.PixelsPerInch = 72, so device<->logical scaling stops
+    being the identity; pin 96 so the header-click coordinates mean what they say. }
+  FLV.Font.PixelsPerInch := 96;
+  FLV.SetBounds(0, 0, 400, 300);
+  { Row-major style with no report column-header band (HeaderH = 0): grouping is supported
+    here, and a group header sits at the very top of the item area (client y = 0). }
+  FLV.ViewStyle := lvsSmallIcon;
+  FGroupCollapsedEvents := 0;
+  FLastCollapsedGroup := -999;
+  FGetGroupCalls := 0;
+end;
+
+procedure TListViewGroupTest.TearDown;
+begin
+  FreeAndNil(FLV);
+end;
+
+procedure TListViewGroupTest.AddItem(const ACaption: string; AGroupIndex: Integer);
+var
+  it: TTyListItem;
+begin
+  it := FLV.Items.Add;
+  it.Caption := ACaption;
+  it.GroupIndex := AGroupIndex;
+end;
+
+procedure TListViewGroupTest.MakeTwoGroups;
+var
+  g: TTyListGroup;
+begin
+  g := FLV.Groups.Add; g.Caption := 'G0';
+  g := FLV.Groups.Add; g.Caption := 'G1';
+end;
+
+function TListViewGroupTest.VisibleCount: Integer;
+begin
+  Result := 0;
+  while (Result < FLV.XGetItemCount) and (FLV.OrderAt(Result) >= 0) do
+    Inc(Result);
+end;
+
+procedure TListViewGroupTest.AssertOrderConsistent(const AMsg: string);
+var
+  vc, p, i, item: Integer;
+begin
+  vc := VisibleCount;
+  { forward: every visible display position maps to a real item and back to itself }
+  for p := 0 to vc - 1 do
+  begin
+    item := FLV.OrderAt(p);
+    AssertTrue(AMsg + ': display -> real item index',
+      (item >= 0) and (item < FLV.XGetItemCount));
+    AssertEquals(AMsg + ': display round-trips', p, FLV.XItemToDisplay(item));
+  end;
+  { backward: every item with a set rank maps back to the same item }
+  for i := 0 to FLV.XGetItemCount - 1 do
+  begin
+    p := FLV.XItemToDisplay(i);
+    if p >= 0 then
+    begin
+      AssertTrue(AMsg + ': rank within visible range', p < vc);
+      AssertEquals(AMsg + ': item round-trips', i, FLV.OrderAt(p));
+    end;
+  end;
+end;
+
+procedure TListViewGroupTest.HGroupCollapsed(Sender: TObject; AGroup: Integer);
+begin
+  Inc(FGroupCollapsedEvents);
+  FLastCollapsedGroup := AGroup;
+end;
+
+procedure TListViewGroupTest.HGetItemGroup(Sender: TObject; AItemIndex: Integer;
+  var AGroup: Integer);
+begin
+  Inc(FGetGroupCalls);
+  AGroup := AItemIndex mod 2;   { even -> group 0, odd -> group 1 }
+end;
+
+procedure TListViewGroupTest.TestGroupViewFalseKeepsFlatSP1Order;
+{ GroupView defaults False; even with groups defined and GroupIndex set, the flat SP1
+  path must ignore them and keep the identity display order. Flip on then off to prove
+  the flat order comes back. }
+var
+  k: Integer;
+begin
+  MakeTwoGroups;
+  { GroupIndex values that WOULD reorder if grouping were active. }
+  AddItem('a', 1); AddItem('b', 0); AddItem('c', 1); AddItem('d', 0); AddItem('e', 1);
+  FLV.GroupView := False;
+  FLV.ItemsChanged;
+  AssertEquals('flat: all items visible', 5, VisibleCount);
+  for k := 0 to 4 do
+    AssertEquals(Format('flat identity at display %d', [k]), k, FLV.OrderAt(k));
+
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  FLV.GroupView := False;
+  FLV.ItemsChanged;
+  AssertEquals('flat again: all items visible', 5, VisibleCount);
+  for k := 0 to 4 do
+    AssertEquals(Format('flat identity restored at display %d', [k]), k, FLV.OrderAt(k));
+end;
+
+procedure TListViewGroupTest.TestCollectionDisplayOrderIsGroupThenItemIndex;
+{ Two groups; items assigned to them out of order. Display order = group 0's items then
+  group 1's; within a group, ascending item-index order (unsorted). }
+begin
+  MakeTwoGroups;
+  AddItem('a', 1);   { item 0 -> group 1 }
+  AddItem('b', 0);   { item 1 -> group 0 }
+  AddItem('c', 1);   { item 2 -> group 1 }
+  AddItem('d', 0);   { item 3 -> group 0 }
+  AddItem('e', 1);   { item 4 -> group 1 }
+  AddItem('f', 0);   { item 5 -> group 0 }
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  { group 0 = items [1,3,5], group 1 = items [0,2,4]. }
+  AssertEquals('display 0 = item 1', 1, FLV.OrderAt(0));
+  AssertEquals('display 1 = item 3', 3, FLV.OrderAt(1));
+  AssertEquals('display 2 = item 5', 5, FLV.OrderAt(2));
+  AssertEquals('display 3 = item 0', 0, FLV.OrderAt(3));
+  AssertEquals('display 4 = item 2', 2, FLV.OrderAt(4));
+  AssertEquals('display 5 = item 4', 4, FLV.OrderAt(5));
+  AssertEquals('everything is visible', 6, VisibleCount);
+end;
+
+procedure TListViewGroupTest.TestSortSortsEachGroupIndependentlyNeverInterleaving;
+{ Each group is sorted with the same comparator; a group-1 item with a small item index
+  can end up after a group-1 item with a large one, but a group-1 item never interleaves
+  into group 0's block. }
+var
+  p: Integer;
+begin
+  MakeTwoGroups;
+  AddItem('z1', 1);   { item 0 -> group 1 }
+  AddItem('b0', 0);   { item 1 -> group 0 }
+  AddItem('a1', 1);   { item 2 -> group 1 }
+  AddItem('a0', 0);   { item 3 -> group 0 }
+  AddItem('m1', 1);   { item 4 -> group 1 }
+  AddItem('c0', 0);   { item 5 -> group 0 }
+  FLV.GroupView := True;
+  FLV.SortKind := lskText;
+  FLV.SortColumn := 0;
+  FLV.SortDirection := sdAscending;
+  FLV.ItemsChanged;
+  FLV.Sort;
+  { group 0 sorted by caption: a0(item3), b0(item1), c0(item5).
+    group 1 sorted by caption: a1(item2), m1(item4), z1(item0) -- item 0 (smallest index)
+    sorts LAST, proving the sort ran per group rather than by item index. }
+  AssertEquals('display 0 = item 3 (a0)', 3, FLV.OrderAt(0));
+  AssertEquals('display 1 = item 1 (b0)', 1, FLV.OrderAt(1));
+  AssertEquals('display 2 = item 5 (c0)', 5, FLV.OrderAt(2));
+  AssertEquals('display 3 = item 2 (a1)', 2, FLV.OrderAt(3));
+  AssertEquals('display 4 = item 4 (m1)', 4, FLV.OrderAt(4));
+  AssertEquals('display 5 = item 0 (z1)', 0, FLV.OrderAt(5));
+  { No interleave: the first block is all group-0 items, the second all group-1. }
+  for p := 0 to 2 do
+    AssertEquals(Format('display %d is a group-0 item', [p]),
+      0, FLV.Items[FLV.OrderAt(p)].GroupIndex);
+  for p := 3 to 5 do
+    AssertEquals(Format('display %d is a group-1 item', [p]),
+      1, FLV.Items[FLV.OrderAt(p)].GroupIndex);
+end;
+
+procedure TListViewGroupTest.TestCollapseHidesItemsButKeepsCheckedAndSelection;
+{ THE test. Collapsing group 0 pulls items 0,1,2 out of the display order (their
+  ItemToDisplay becomes -1) while their Checked and Selected bits -- keyed by item index --
+  are untouched; expanding restores their display positions with the bits intact. }
+begin
+  MakeTwoGroups;
+  AddItem('a', 0); AddItem('b', 0); AddItem('c', 0);   { items 0,1,2 -> group 0 }
+  AddItem('d', 1); AddItem('e', 1); AddItem('f', 1);   { items 3,4,5 -> group 1 }
+  FLV.GroupView := True;
+  FLV.MultiSelect := True;
+  FLV.ItemsChanged;
+  FLV.Checked[1] := True;
+  FLV.Selected[2] := True;
+  AssertTrue('precondition: item 1 has a display position', FLV.XItemToDisplay(1) >= 0);
+  AssertTrue('precondition: item 2 has a display position', FLV.XItemToDisplay(2) >= 0);
+
+  FLV.Groups[0].Collapsed := True;
+  FLV.ItemsChanged;
+  AssertEquals('item 0 left the display order', -1, FLV.XItemToDisplay(0));
+  AssertEquals('item 1 left the display order', -1, FLV.XItemToDisplay(1));
+  AssertEquals('item 2 left the display order', -1, FLV.XItemToDisplay(2));
+  AssertTrue('group-1 item 3 still visible', FLV.XItemToDisplay(3) >= 0);
+  AssertEquals('only group 1 is visible now', 3, VisibleCount);
+  { The bits are DATA, keyed by item index -- collapsing must not touch them. }
+  AssertTrue('checked bit survived the collapse', FLV.Checked[1]);
+  AssertTrue('selection bit survived the collapse', FLV.Selected[2]);
+
+  FLV.Groups[0].Collapsed := False;
+  FLV.ItemsChanged;
+  AssertTrue('item 1 has a display position again', FLV.XItemToDisplay(1) >= 0);
+  AssertTrue('item 2 has a display position again', FLV.XItemToDisplay(2) >= 0);
+  AssertEquals('everything is visible again', 6, VisibleCount);
+  AssertTrue('still checked after expanding', FLV.Checked[1]);
+  AssertTrue('still selected after expanding', FLV.Selected[2]);
+end;
+
+procedure TListViewGroupTest.TestSelectAllIncludesCollapsedGroupItems;
+{ SelectAll is a data-level operation: it selects EVERY item, including those hidden in a
+  collapsed group, and SelCount counts them all. }
+begin
+  MakeTwoGroups;
+  AddItem('a', 0); AddItem('b', 0); AddItem('c', 0);
+  AddItem('d', 1); AddItem('e', 1); AddItem('f', 1);
+  FLV.GroupView := True;
+  FLV.MultiSelect := True;
+  FLV.ItemsChanged;
+  FLV.Groups[0].Collapsed := True;
+  FLV.ItemsChanged;
+  AssertEquals('precondition: group 0 is hidden', 3, VisibleCount);
+
+  FLV.SelectAll;
+  AssertEquals('SelectAll counts every item, hidden included', 6, FLV.SelCount);
+  AssertTrue('a collapsed-group item is selected', FLV.Selected[0]);
+  AssertTrue('a visible-group item is selected', FLV.Selected[5]);
+end;
+
+procedure TListViewGroupTest.TestScrollIntoViewCollapsedItemIsNoOp;
+{ ScrollIntoView(item in a collapsed group) has ItemToDisplay = -1, so it returns
+  silently: no exception, and it does NOT auto-expand the group. }
+begin
+  MakeTwoGroups;
+  AddItem('a', 0); AddItem('b', 0); AddItem('c', 0);
+  AddItem('d', 1); AddItem('e', 1); AddItem('f', 1);
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  FLV.Groups[0].Collapsed := True;
+  FLV.ItemsChanged;
+  AssertEquals('precondition: item 1 is hidden', -1, FLV.XItemToDisplay(1));
+
+  FLV.ScrollIntoView(1);   { must not raise }
+  AssertTrue('the group was not auto-expanded', FLV.Groups[0].Collapsed);
+  AssertEquals('the item is still hidden', -1, FLV.XItemToDisplay(1));
+end;
+
+procedure TListViewGroupTest.TestGetItemGroupCollectionReadsGroupIndex;
+{ In collection mode GetItemGroup returns the item's own GroupIndex. }
+begin
+  MakeTwoGroups;
+  AddItem('a', 0); AddItem('b', 1); AddItem('c', 0);
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  AssertEquals('item 0 group = its GroupIndex', 0, FLV.XGetItemGroup(0));
+  AssertEquals('item 1 group = its GroupIndex', 1, FLV.XGetItemGroup(1));
+  AssertEquals('item 2 group = its GroupIndex', 0, FLV.XGetItemGroup(2));
+end;
+
+procedure TListViewGroupTest.TestGetItemGroupReturnsTheRawOutOfRangeValue;
+{ GetItemGroup returns exactly what the data declares -- it does NOT normalise an
+  out-of-range group to -1. Bucketing 99 into the implicit bucket is the order builder's
+  job, so a TTyShellListView override can return its natural group id without knowing
+  Groups.Count. }
+begin
+  MakeTwoGroups;
+  AddItem('a', 0); AddItem('b', 99);   { 99 is out of range for a 2-group list }
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  AssertEquals('raw group index is returned verbatim, not clamped to -1',
+    99, FLV.XGetItemGroup(1));
+end;
+
+procedure TListViewGroupTest.TestProgrammaticCollapseDoesNotFireEventButRebuilds;
+{ OnGroupCollapsed is a USER-gesture notification, like OnClick: clicking the header fires
+  it, but `Groups[g].Collapsed := True` in code does not (the app already knows, and it
+  avoids re-entrancy). The programmatic set must still rebuild the order. }
+begin
+  MakeTwoGroups;
+  AddItem('a', 0); AddItem('b', 0); AddItem('c', 1);
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  FLV.OnGroupCollapsed := @HGroupCollapsed;
+  AssertEquals('precondition: 3 visible', 3, VisibleCount);
+
+  FLV.Groups[0].Collapsed := True;
+  AssertEquals('no event on a programmatic collapse', 0, FGroupCollapsedEvents);
+  AssertEquals('but the order rebuilt: group 0 items are gone', 1, VisibleCount);
+  AssertEquals('and the surviving item is c', 2, FLV.OrderAt(0));
+end;
+
+procedure TListViewGroupTest.TestGetItemGroupOwnerDataFiresOnGetItemGroup;
+{ In OwnerData mode GetItemGroup routes through OnGetItemGroup (Groups stay a real
+  collection even under OwnerData). }
+begin
+  FLV.OwnerData := True;
+  FLV.ItemCount := 6;
+  MakeTwoGroups;
+  FLV.OnGetItemGroup := @HGetItemGroup;   { even -> 0, odd -> 1 }
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  AssertEquals('OnGetItemGroup decided item 3 -> group 1', 1, FLV.XGetItemGroup(3));
+  AssertEquals('OnGetItemGroup decided item 4 -> group 0', 0, FLV.XGetItemGroup(4));
+  AssertTrue('OnGetItemGroup was actually consulted', FGetGroupCalls > 0);
+end;
+
+procedure TListViewGroupTest.TestGetItemGroupOwnerDataNoHandlerIsMinusOne;
+{ OwnerData with no OnGetItemGroup handler: every item falls into the implicit bucket,
+  so GetItemGroup returns -1. }
+begin
+  FLV.OwnerData := True;
+  FLV.ItemCount := 3;
+  MakeTwoGroups;
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  AssertEquals('no handler -> -1 (implicit bucket)', -1, FLV.XGetItemGroup(0));
+end;
+
+procedure TListViewGroupTest.TestOutOfRangeGroupIndexLandsInImplicitBucketLast;
+{ Items whose group index is -1 or out of range collect into ONE implicit bucket that
+  renders after every real group, in item-index order. The bucket is not a member of
+  Groups, so it adds no group header. }
+begin
+  MakeTwoGroups;
+  AddItem('a', 0);    { item 0 -> group 0 }
+  AddItem('b', 1);    { item 1 -> group 1 }
+  AddItem('c', -1);   { item 2 -> implicit bucket (explicit -1) }
+  AddItem('d', 99);   { item 3 -> implicit bucket (out of range) }
+  AddItem('e', 0);    { item 4 -> group 0 }
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  { group 0 = items [0,4], group 1 = item [1], bucket = items [2,3] -- last, in index order. }
+  AssertEquals('display 0 = item 0 (group 0)', 0, FLV.OrderAt(0));
+  AssertEquals('display 1 = item 4 (group 0)', 4, FLV.OrderAt(1));
+  AssertEquals('display 2 = item 1 (group 1)', 1, FLV.OrderAt(2));
+  AssertEquals('display 3 = item 2 (bucket, index order)', 2, FLV.OrderAt(3));
+  AssertEquals('display 4 = item 3 (bucket, index order)', 3, FLV.OrderAt(4));
+  AssertEquals('all items are visible', 5, VisibleCount);
+  { The bucket is not a real group: no third group ever appeared in the Groups collection,
+    so there is no header band for it. }
+  AssertEquals('the implicit bucket is not a Groups member', 2, FLV.Groups.Count);
+end;
+
+procedure TListViewGroupTest.TestTogglingGroupViewKeepsOrderSelfConsistent;
+{ Flipping GroupView (and collapsing a group along the way) keeps the two index spaces
+  self-consistent -- every visible display position maps back to a valid item and vice
+  versa -- and never crashes. }
+begin
+  MakeTwoGroups;
+  AddItem('a', 0); AddItem('b', 1); AddItem('c', 0);
+  AddItem('d', 1); AddItem('e', 0); AddItem('f', 1);
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  AssertOrderConsistent('grouped');
+
+  FLV.Groups[0].Collapsed := True;
+  FLV.ItemsChanged;
+  AssertOrderConsistent('grouped + one collapsed group');
+  AssertTrue('some items are hidden while collapsed', VisibleCount < 6);
+
+  FLV.GroupView := False;
+  FLV.ItemsChanged;
+  AssertOrderConsistent('flat');
+  AssertEquals('flat shows every item regardless of the collapse flag', 6, VisibleCount);
+end;
+
+procedure TListViewGroupTest.TestClickingGroupHeaderFiresOnGroupCollapsed;
+{ Clicking a group header toggles that group's Collapsed and fires OnGroupCollapsed with
+  the group index. In lvsSmallIcon (HeaderH = 0, ScrollY = 0) group 0's header sits at the
+  very top of the client, so a click near (x, 2) lands on it. }
+begin
+  MakeTwoGroups;
+  AddItem('a', 0); AddItem('b', 0); AddItem('c', 0);
+  AddItem('d', 1); AddItem('e', 1); AddItem('f', 1);
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  FLV.OnGroupCollapsed := @HGroupCollapsed;
+  AssertEquals('precondition: nothing collapsed', 6, VisibleCount);
+
+  FLV.XMouseDown(4, 2);   { the top-of-client group-0 header band }
+  AssertTrue('OnGroupCollapsed fired', FGroupCollapsedEvents > 0);
+  AssertEquals('it reported group 0', 0, FLastCollapsedGroup);
+  AssertTrue('group 0 is now collapsed', FLV.Groups[0].Collapsed);
+  AssertEquals('its items left the display order', 3, VisibleCount);
+end;
+
+procedure TListViewGroupTest.TestListViewStyleIgnoresGrouping;
+{ lvsList flows column-major and cannot host group headers, so the control ignores
+  GroupView there and takes the flat path: identity order, and Collapsed does nothing. }
+var
+  k: Integer;
+begin
+  FLV.ViewStyle := lvsList;
+  MakeTwoGroups;
+  AddItem('a', 1); AddItem('b', 0); AddItem('c', 1); AddItem('d', 0); AddItem('e', 1);
+  FLV.GroupView := True;
+  FLV.ItemsChanged;
+  AssertEquals('lvsList: grouping ignored, all visible', 5, VisibleCount);
+  for k := 0 to 4 do
+    AssertEquals(Format('lvsList flat identity at display %d', [k]), k, FLV.OrderAt(k));
+
+  { Collapsing a group must have no effect while grouping is ignored. }
+  FLV.Groups[0].Collapsed := True;
+  FLV.ItemsChanged;
+  AssertEquals('lvsList: collapse has no effect', 5, VisibleCount);
+  for k := 0 to 4 do
+    AssertEquals(Format('lvsList identity unchanged at display %d', [k]), k, FLV.OrderAt(k));
+end;
+
 initialization
   RegisterTest(TListViewDataTest);
   RegisterTest(TListViewSortTest);
@@ -1897,4 +2393,5 @@ initialization
   RegisterTest(TListViewCheckboxTest);
   RegisterTest(TListViewRenameTest);
   RegisterTest(TListViewInteractionTest);
+  RegisterTest(TListViewGroupTest);
 end.
