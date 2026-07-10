@@ -167,7 +167,9 @@ procedure TMainForm.BuildPopupMenu;
 begin
   BuildImages;
   FPopup := TTyMenuEx.Create(Self);
-  FPopup.Images := FImages;   // 图标列
+  FPopup.Images := FImages;              // 图标列
+  FPopup.BannerWidth := 26;              // 左侧装饰 banner(强调色竖条)
+  FPopup.BannerCaption := 'TyControls';  // banner 上竖排文字
   // 分节标题（'-文本'）+ 带图标的项 + 勾选项
   FPopup.Items.Add(NewHeader(FPopup, '剪贴板'));
   FPopup.Items.Add(NewIconLeaf(FPopup, '剪切(&T)', 0, @MenuItemClicked));

@@ -61,6 +61,8 @@ type
   private
     FRows: TTyMenuRowArray;
     FImages: TTyVirtualImageList;   // icon-column source (transient; set per popup by the host)
+    FBannerCaption: string;         // decorative left-strip caption (rotated), '' = no banner text
+    FBannerWidth: Integer;          // decorative left-strip width in logical px, 0 = no banner
     FHighlight: Integer;
     FOnActivateRow: TTyMenuRowEvent;
     FOnOpenSubmenu: TTyMenuRowEvent;
@@ -132,6 +134,10 @@ type
     { Icon-column source: when set, an item's ImageIndex renders in the left slot (unless the
       item is checked, where the check glyph wins). Set transiently by the host each popup. }
     property Images: TTyVirtualImageList read FImages write FImages;
+    { Decorative left banner (classic Office style): a themed accent strip BannerWidth px wide
+      down the left, with BannerCaption drawn rotated. 0 width = no banner. Set per popup. }
+    property BannerCaption: string read FBannerCaption write FBannerCaption;
+    property BannerWidth: Integer read FBannerWidth write FBannerWidth;
     { Activation/navigation events consumed by the host popup/bar (Tasks 4/5/7). }
     property OnActivateRow: TTyMenuRowEvent read FOnActivateRow write FOnActivateRow;
     property OnOpenSubmenu: TTyMenuRowEvent read FOnOpenSubmenu write FOnOpenSubmenu;
@@ -171,6 +177,8 @@ type
     FOnClose: TNotifyEvent;   // fired by CloseAll so a host (bar) can reset its open state
     FAllowHeaders: Boolean;   // TTyMenuEx opt-in: build '-Text' items as section headers
     FImages: TTyVirtualImageList;   // icon-column source (TTyImagesMenu/TTyMenuEx opt-in)
+    FBannerCaption: string;   // decorative left-banner caption (root menu only)
+    FBannerWidth: Integer;    // decorative left-banner width (logical px), 0 = none
     procedure EnsureForm;
     procedure HandleActivateRow(Sender: TObject; AIndex: Integer);
     procedure HandleOpenSubmenu(Sender: TObject; AIndex: Integer);
@@ -233,6 +241,9 @@ type
     property AllowHeaders: Boolean read FAllowHeaders write FAllowHeaders;
     { Icon-column source (propagated to the view + submenu cascades). }
     property Images: TTyVirtualImageList read FImages write FImages;
+    { Decorative left banner on THIS level's view (root only — not propagated to submenus). }
+    property BannerCaption: string read FBannerCaption write FBannerCaption;
+    property BannerWidth: Integer read FBannerWidth write FBannerWidth;
     property Root: TMenuItem read FRoot;
     { Left/Right at the bar-root dropdown: ADelta -1/+1. A bare popup has no adjacent
       top to rotate to, so this is meaningful only when a host (TTyMenuBar, Task 5)
@@ -378,12 +389,20 @@ type
     property Images: TTyVirtualImageList read FImages write SetImages;
   end;
 
-  { Enhanced themed context menu: everything TTyImagesMenu does (icon column) PLUS SECTION
-    HEADERS — a menu item captioned '-Text' (a dash then text) draws as a non-selectable 'Text'
-    section label; a bare '-' stays a plain separator. (Side banner: later.) }
+  { Enhanced themed context menu: everything TTyImagesMenu does (icon column) PLUS SECTION HEADERS
+    ('-Text' captions → non-selectable section labels; a bare '-' stays a separator) and an
+    optional decorative SIDE BANNER (a themed accent strip down the left with a rotated caption). }
   TTyMenuEx = class(TTyImagesMenu)
+  private
+    FBannerCaption: string;
+    FBannerWidth: Integer;
   protected
     procedure ConfigureRenderer(ARenderer: TTyMenuPopup); override;
+  published
+    { Decorative left banner: a BannerWidth-px accent strip with BannerCaption drawn rotated
+      down it (classic Office look). BannerWidth = 0 (default) = no banner. }
+    property BannerCaption: string read FBannerCaption write FBannerCaption;
+    property BannerWidth: Integer read FBannerWidth write FBannerWidth default 0;
   end;
 
 implementation
@@ -594,6 +613,8 @@ begin
     Bmp.Free;
   end;
   Inc(Result, rowW);
+  if FBannerWidth > 0 then
+    Inc(Result, MulDiv(FBannerWidth, APPI, 96));   // reserve the decorative left banner
   if Result < 1 then Result := 1;
 end;
 
@@ -794,9 +815,9 @@ end;
 procedure TTyMenuView.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S, RowStyle: TTyStyleSet;
+  S, RowStyle, BannerStyle: TTyStyleSet;
   R, RowRect, TextRect: TRect;
-  i, itemH, sepH, padL, padR, leftSlot, rightSlot, capWeight, iconSz: Integer;
+  i, itemH, sepH, padL, padR, leftSlot, rightSlot, capWeight, iconSz, bannerPx: Integer;
   RowStates: TTyStateSet;
   SepFill: TTyFill;
   SepY: Integer;
@@ -817,6 +838,24 @@ begin
     end;
     DrawFrame(P, R, S);
 
+    // Decorative left banner (classic Office style): a themed accent strip that reuses the
+    // TyMenuItem:active bg/text (NO new theme token), with the caption drawn rotated down it.
+    // Every row's content is already shifted right by bannerPx. bannerPx = 0 disables it.
+    bannerPx := P.Scale(FBannerWidth);
+    if bannerPx < 0 then bannerPx := 0;   // a negative width must not push rows left of the frame
+    if bannerPx > 0 then
+    begin
+      BannerStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', [tysActive]);
+      P.FillBackground(Types.Rect(R.Left, R.Top, R.Left + bannerPx, R.Bottom), BannerStyle.Background, 0);
+      if FBannerCaption <> '' then
+      begin
+        TyConfigureTextFont(P.Bitmap, BannerStyle.FontName, ResolveFontSize(BannerStyle) + 1, 600, APPI);
+        // 90° CCW: reads bottom-to-top up the strip, anchored near the bottom, centered across it.
+        P.Bitmap.TextOutAngle(R.Left + bannerPx div 2, R.Bottom - P.Scale(8), 900,
+          FBannerCaption, TyColorToBGRA(BannerStyle.TextColor), taLeftJustify);
+      end;
+    end;
+
     itemH := ItemRowHeight(APPI);
     sepH := MulDiv(TyMenuSeparatorHeight, APPI, 96);
     leftSlot := P.Scale(TyMenuCheckSlot);
@@ -833,7 +872,7 @@ begin
         SepFill := Default(TTyFill);
         SepFill.Kind := tfkSolid;
         SepFill.Color := RowStyle.BorderColor;
-        P.FillBackground(Types.Rect(R.Left + P.Scale(S.Padding.Left), SepY,
+        P.FillBackground(Types.Rect(R.Left + bannerPx + P.Scale(S.Padding.Left), SepY,
           R.Right - P.Scale(S.Padding.Right), SepY + Max(1, P.Scale(1))), SepFill, 0);
         Continue;
       end;
@@ -842,7 +881,7 @@ begin
       begin
         // Section header: a non-interactive, muted + bold label (TyMenuItem :disabled color).
         RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', [tysDisabled]);
-        RowRect := Types.Rect(R.Left + P.Scale(S.Padding.Left), RowTop(i, APPI),
+        RowRect := Types.Rect(R.Left + bannerPx + P.Scale(S.Padding.Left), RowTop(i, APPI),
           R.Right - P.Scale(S.Padding.Right), RowTop(i, APPI) + itemH);
         padL := P.Scale(RowStyle.Padding.Left);
         P.DrawText(Types.Rect(RowRect.Left + padL, RowRect.Top, RowRect.Right, RowRect.Bottom),
@@ -861,7 +900,7 @@ begin
         Include(RowStates, tysNormal);
       RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', RowStates);
 
-      RowRect := Types.Rect(R.Left + P.Scale(S.Padding.Left), RowTop(i, APPI),
+      RowRect := Types.Rect(R.Left + bannerPx + P.Scale(S.Padding.Left), RowTop(i, APPI),
         R.Right - P.Scale(S.Padding.Right), RowTop(i, APPI) + itemH);
 
       if tpBackground in RowStyle.Present then
@@ -980,6 +1019,8 @@ begin
   FView.Parent := FForm;
   FView.Align := alClient;
   FView.Images := FImages;   // icon-column source (set before the rows render)
+  FView.BannerCaption := FBannerCaption;   // decorative left banner (this level only)
+  FView.BannerWidth := FBannerWidth;
   FView.ForceSquareSurface := TyQtIsWayland;   // Wayland can't shape-mask the window -> square paint
 
   FView.OnActivateRow := @HandleActivateRow;
@@ -1795,7 +1836,9 @@ end;
 procedure TTyMenuEx.ConfigureRenderer(ARenderer: TTyMenuPopup);
 begin
   inherited ConfigureRenderer(ARenderer);   // TTyImagesMenu: sets Images
-  ARenderer.AllowHeaders := True;            // + '-Text' items render as section headers
+  ARenderer.AllowHeaders := True;            // '-Text' items render as section headers
+  ARenderer.BannerCaption := FBannerCaption; // + the decorative left banner
+  ARenderer.BannerWidth := FBannerWidth;
 end;
 
 procedure TTyPopupMenu.PopUp(X, Y: Integer);

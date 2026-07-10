@@ -20,6 +20,7 @@ type
   public
     function RowCount: Integer;
     function MeasureHeight(APPI: Integer): Integer;
+    function MeasureWidth(APPI: Integer): Integer;
     function RowTop(AIndex, APPI: Integer): Integer;
     function RowAtY(AY, APPI: Integer): Integer;
     procedure SetHighlight(AIndex: Integer);
@@ -40,6 +41,7 @@ type
     procedure TestKeyboardHighlightSkipsSeparatorsAndDisabled;
     procedure TestHoverOnSubmenuRowFiresOpenAfterTick;
     procedure TestHeaderRowNotSelectable;
+    procedure TestBannerWidensPopup;
   end;
 
   { Probe subclass: exposes TTyMenuPopup's protected ComputeBounds seam so the
@@ -255,6 +257,11 @@ begin
   Result := inherited MeasureHeight(APPI);
 end;
 
+function TTyMenuViewAccess.MeasureWidth(APPI: Integer): Integer;
+begin
+  Result := inherited MeasureWidth(APPI);
+end;
+
 function TTyMenuViewAccess.RowTop(AIndex, APPI: Integer): Integer;
 begin
   Result := inherited RowTop(AIndex, APPI);
@@ -446,6 +453,24 @@ begin
       AssertEquals('header row does not hit-test as selectable',
         -1, v.RowAtY(v.RowTop(0, 96) + 2, 96));
       AssertEquals('the item row below it does', 1, v.RowAtY(v.RowTop(1, 96) + 2, 96));
+    finally v.Free; end;
+  finally mm.Free; end;
+end;
+
+procedure TMenuViewTest.TestBannerWidensPopup;
+var v: TTyMenuViewAccess; mm: TMainMenu; top: TMenuItem; w0, w1: Integer;
+begin
+  mm := TMainMenu.Create(nil);
+  try
+    top := TMenuItem.Create(mm); mm.Items.Add(top);
+    top.Add(NewItem('Item', 0, False, True, nil, 0, ''));
+    v := TTyMenuViewAccess.Create(nil);
+    try
+      v.SetRows(TyBuildMenuRows(top));
+      w0 := v.MeasureWidth(96);
+      v.BannerWidth := 30;            // 30 logical px @ 96 PPI
+      w1 := v.MeasureWidth(96);
+      AssertEquals('the banner reserves its width in the popup', w0 + 30, w1);
     finally v.Free; end;
   finally mm.Free; end;
 end;
