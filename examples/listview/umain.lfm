@@ -30,44 +30,44 @@ object MainForm: TMainForm
     Left = 16
     Height = 30
     Top = 72
-    Width = 88
+    Width = 74
     Caption = '报表'
     OnClick = BtnReportClick
   end
   object BtnList: TTyButton
-    Left = 112
+    Left = 96
     Height = 30
     Top = 72
-    Width = 88
+    Width = 74
     Caption = '列表'
     OnClick = BtnListClick
   end
   object BtnIcon: TTyButton
-    Left = 208
+    Left = 176
     Height = 30
     Top = 72
-    Width = 88
+    Width = 74
     Caption = '大图标'
     OnClick = BtnIconClick
   end
   object BtnSmallIcon: TTyButton
-    Left = 304
+    Left = 256
     Height = 30
     Top = 72
-    Width = 88
+    Width = 74
     Caption = '小图标'
     OnClick = BtnSmallIconClick
   end
   object BtnTile: TTyButton
-    Left = 400
+    Left = 336
     Height = 30
     Top = 72
-    Width = 88
+    Width = 74
     Caption = '平铺'
     OnClick = BtnTileClick
   end
   object ChkGrid: TTyCheckBox
-    Left = 504
+    Left = 424
     Height = 22
     Top = 76
     Width = 90
@@ -75,7 +75,7 @@ object MainForm: TMainForm
     OnChange = ChkGridChange
   end
   object ChkMulti: TTyCheckBox
-    Left = 602
+    Left = 512
     Height = 22
     Top = 76
     Width = 90
@@ -83,6 +83,14 @@ object MainForm: TMainForm
     Checked = True
     State = cbChecked
     OnChange = ChkMultiChange
+  end
+  object ChkBoxes: TTyCheckBox
+    Left = 600
+    Height = 22
+    Top = 76
+    Width = 100
+    Caption = '复选框'
+    OnChange = ChkBoxesChange
   end
   object LV1: TTyListView
     Left = 16
@@ -108,7 +116,7 @@ object MainForm: TMainForm
     Height = 18
     Top = 644
     Width = 700
-    Caption = '按「大小」降序排:没有大小的文件夹仍然排在最后 —— 方向不该翻转「不可解析排后」这条规则'
+    Caption = '按「大小」降序排,文件夹仍在最后;F2 重命名焦点项;双击表头分隔线自适应列宽'
   end
   object DivRight: TTyDivider
     Left = 736
@@ -157,6 +165,6 @@ object MainForm: TMainForm
     Height = 18
     Top = 644
     Width = 448
-    Caption = '文本由 OnGetItemText 按需生成;排序只置换显示顺序,不建对象'
+    Caption = '勾选态存在 app 自己的数组里 —— OwnerData 模式下控件不缓存任何状态'
   end
 end

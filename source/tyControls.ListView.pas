@@ -31,12 +31,14 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.ScrollBar, tyControls.Columns, tyControls.ImageCollection,
-  tyControls.ListView.Layout;
+  tyControls.Edit, tyControls.ListView.Layout;
 
 const
   { The RowHeight property's default, in logical px. Public because a published property's
     `default` directive needs a compile-time constant visible where the property is declared. }
   TyLvRowHeight = 22;
+  { Row-checkbox edge length, in logical px (DPI-scaled at paint time). }
+  TyLvCheckPx = 14;
 
 type
   { Per-item state flags. lisChecked/lisCut are surfaced through GetItemState so a
@@ -113,6 +115,13 @@ type
   TTyListColumnEvent   = procedure(Sender: TObject; AColumn: Integer) of object;
   TTyListItemEvent     = procedure(Sender: TObject; AIndex: Integer) of object;
 
+  { Inline-rename events. AIndex is an ITEM index. OnEditing can veto (AAllow := False);
+    OnEdited may rewrite the committed text (var AText) and treats '' as "abandon". }
+  TTyListEditingEvent  = procedure(Sender: TObject; AIndex: Integer;
+                                   var AAllow: Boolean) of object;
+  TTyListEditedEvent   = procedure(Sender: TObject; AIndex: Integer;
+                                   var AText: string) of object;
+
   { ===================================================================
     TTyListView
     =================================================================== }
@@ -182,6 +191,20 @@ type
     FOnItemActivate:  TTyListItemEvent;
     FOnSelectItem:    TTyListItemEvent;
     FOnChange:        TNotifyEvent;
+    { checkboxes }
+    FCheckboxes:      Boolean;
+    FOnItemChecked:   TTyListItemEvent;
+    { inline rename }
+    FReadOnly:        Boolean;
+    FEditor:          TTyEdit;
+    { The item being edited. It is an ITEM index, never a display position, so an edit
+      survives a re-sort (rule 9): the row moves, the index does not. -1 = not editing. }
+    FEditItem:        Integer;
+    { Re-entry guard: EndEdit hides the editor (which fires OnExit -> EndEdit again) and
+      may SetFocus (another OnExit); without this the commit path recurses. }
+    FEndingEdit:      Boolean;
+    FOnEditing:       TTyListEditingEvent;
+    FOnEdited:        TTyListEditedEvent;
 
     procedure ItemsCollectionChanged(Sender: TObject);
     procedure HeaderChanged(Sender: TObject);
@@ -209,6 +232,9 @@ type
     procedure SetItemIndex(AValue: Integer);
     function  GetSelected(AIndex: Integer): Boolean;
     procedure SetSelected(AIndex: Integer; AValue: Boolean);
+    procedure SetCheckboxes(AValue: Boolean);
+    function  GetChecked(AIndex: Integer): Boolean;    { item index }
+    procedure SetChecked(AIndex: Integer; AValue: Boolean);   { item index }
 
     { device-pixel scale from the control's DPI (mirrors ListBox: no painter needed) }
     function  Dpi: Integer;
@@ -250,6 +276,18 @@ type
       const AStyle: TTyStyleSet);
     procedure DrawImage(P: TTyPainter; AList: TTyVirtualImageList;
       AImageIndex, AX, AY, ASizePx: Integer);
+    { The single box-geometry source for the control: it computes the main-column sub-rect
+      (report) or passes the whole cell (flow) into the pure TyListCheckRect. Paint and
+      hit-test both call it. ACell is a client-coord cell rect. Empty rect = no box. }
+    function  CheckRectForCell(const ACell: TRect): TRect;
+    procedure RenderCheckBox(P: TTyPainter; const ABox: TRect; AChecked: Boolean);
+
+    { inline rename }
+    { Editor bounds for an ITEM index = that item's label rect, derived from TyListItemRect
+      (report: the main column's text rect; flow: the cell's label rect). No separate geometry. }
+    function  EditorBoundsFor(AIndex: Integer): TRect;   { item index }
+    procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure EditorExit(Sender: TObject);
 
     { mouse helpers }
     procedure ItemMouseSelect(AItem: Integer; Shift: TShiftState);
@@ -283,6 +321,18 @@ type
     function GetItemText(AIndex, AColumn: Integer): string; virtual;
     function GetItemImageIndex(AIndex, AColumn: Integer): Integer; virtual;
     function GetItemState(AIndex: Integer): TTyListItemStates; virtual;
+
+    { Write the check state for an ITEM index. Collection mode writes lisChecked into
+      Items[AIndex].States; OwnerData does NOTHING — the control caches no check state, the
+      app mutates its own store from OnItemChecked. Reads always go through GetItemState, so
+      both modes share a single read path. }
+    procedure SetItemChecked(AIndex: Integer; AValue: Boolean); virtual;   { item index }
+    { Commit an inline rename for an ITEM index. Fires OnEdited (app may rewrite / abandon).
+      Collection mode writes Items[AIndex].Caption; OwnerData does NOTHING — the app owns the
+      data and updates its store from OnEdited. }
+    procedure CommitEdit(AIndex: Integer; const AText: string); virtual;   { item index }
+    { The persistent inline editor, read-only to descendants. }
+    property InlineEditor: TTyEdit read FEditor;
 
     function GetStyleTypeKey: string; override;
     procedure SetController(AValue: TTyStyleController); override;
@@ -334,6 +384,15 @@ type
       double-click on the column's right divider. }
     procedure AutoFitColumn(AColumn: Integer);
 
+    { Checkbox state — ITEM index. Reads lisChecked via GetItemState (one read path for
+      both data modes); the writer ignores an out-of-range index silently. }
+    property Checked[AIndex: Integer]: Boolean read GetChecked write SetChecked;
+
+    { Inline rename — all ITEM indices. }
+    function  Editing: Boolean;
+    procedure BeginEdit(AIndex: Integer);                                { item index }
+    procedure EndEdit(ACommit: Boolean; ARestoreFocus: Boolean = False);
+
     property ItemIndex: Integer read GetItemIndex write SetItemIndex;
   published
     property ViewStyle: TTyListViewStyle read FViewStyle write SetViewStyle default lvsReport;
@@ -355,6 +414,13 @@ type
     property AutoSort: Boolean read FAutoSort write SetAutoSort default True;
     property LargeImages: TTyVirtualImageList read FLargeImages write SetLargeImages;
     property SmallImages: TTyVirtualImageList read FSmallImages write SetSmallImages;
+    { Row-first checkboxes. A click on the box, or Space on the focused row, toggles the
+      check without touching the selection. Zero new theme tokens: the box resolves the
+      existing 'TyTreeCheckBox'. }
+    property Checkboxes: Boolean read FCheckboxes write SetCheckboxes default False;
+    { Inline rename is opt-in, like TTyTreeView's toEditable and UNLIKE LCL
+      TListView.ReadOnly=False: a file panel must not enter rename on a stray F2. }
+    property ReadOnly: Boolean read FReadOnly write FReadOnly default True;
 
     property OnGetItemText:  TTyListGetTextEvent  read FOnGetItemText  write FOnGetItemText;
     property OnGetItemImage: TTyListGetImageEvent read FOnGetItemImage write FOnGetItemImage;
@@ -364,6 +430,9 @@ type
     property OnItemActivate: TTyListItemEvent     read FOnItemActivate write FOnItemActivate;
     property OnSelectItem:   TTyListItemEvent     read FOnSelectItem   write FOnSelectItem;
     property OnChange:       TNotifyEvent         read FOnChange       write FOnChange;
+    property OnItemChecked:  TTyListItemEvent     read FOnItemChecked  write FOnItemChecked;
+    property OnEditing:      TTyListEditingEvent  read FOnEditing      write FOnEditing;
+    property OnEdited:       TTyListEditedEvent   read FOnEdited       write FOnEdited;
 
     property TabStop default True;
     property Align;
@@ -566,6 +635,22 @@ begin
   FHScroll.ControlStyle      := FHScroll.ControlStyle + [csNoDesignVisible];
   FHScroll.Visible           := False;
 
+  FCheckboxes := False;
+  FReadOnly   := True;    { rename is opt-in }
+  FEditItem   := -1;
+
+  { The persistent inline rename editor — hidden, non-tab-stop, parented to Self so it
+    shares the list's client coordinate space and Controller (rule 3). Shown + positioned
+    on demand by BeginEdit; dormant while ReadOnly. Rule 8: set csNoDesignVisible BEFORE
+    Visible so the hidden editor never leaks into the IDE designer. }
+  FEditor := TTyEdit.Create(Self);
+  FEditor.Parent      := Self;
+  FEditor.TabStop     := False;
+  FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
+  FEditor.Visible     := False;
+  FEditor.OnKeyDown   := @EditorKeyDown;   { Enter commits, Esc cancels }
+  FEditor.OnExit      := @EditorExit;      { focus loss commits Explorer-style }
+
   TabStop := True;
   Width   := 280;
   Height  := 180;
@@ -594,6 +679,9 @@ begin
   inherited SetController(AValue);
   if FVScroll <> nil then FVScroll.Controller := AValue;
   if FHScroll <> nil then FHScroll.Controller := AValue;
+  { Rule 3: push the controller down, else an inline editor inside a single-instance-themed
+    list pops up wearing the global default skin. }
+  if FEditor <> nil then FEditor.Controller := AValue;
 end;
 
 procedure TTyListView.Notification(AComponent: TComponent; Operation: TOperation);
@@ -1005,6 +1093,7 @@ end;
 procedure TTyListView.VScrollChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
+  EndEdit(True);   { rule 4: the edited cell scrolls away — commit + close before it moves }
   FOffsetY := FVScroll.Position;
   Invalidate;
 end;
@@ -1012,6 +1101,7 @@ end;
 procedure TTyListView.HScrollChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
+  EndEdit(True);   { rule 4 }
   FOffsetX := FHScroll.Position;
   Invalidate;
 end;
@@ -1073,6 +1163,11 @@ procedure TTyListView.Sort;
 var
   cnt: Integer;
 begin
+  { Rule 4: rows move under a sort. Commit + close the editor first so it never hangs over a
+    stale cell. (FEditItem is an item index, so a commit lands on the right row regardless.)
+    EndEdit clears FEditItem before CommitEdit, so the caption write this triggers cannot
+    recurse back into Sort. }
+  EndEdit(True);
   cnt := GetItemCount;
   if Length(FOrder) <> cnt then
     RebuildOrder;
@@ -1115,13 +1210,20 @@ var
 begin
   if FUpdateCount > 0 then Exit;
   cnt := GetItemCount;
+  { Rule 5: if the row being edited vanished (Clear / shorter ItemCount / deletion), CANCEL the
+    edit — never commit into a row that no longer exists. }
+  if (FEditor <> nil) and (FEditItem >= 0) and (FEditItem >= cnt) then
+    EndEdit(False);
   SetLength(FSelected, cnt);   { keep existing bits; new slots default False }
   RebuildOrder;                { identity order + rank }
   ClampIndex(FItemIndex);
   ClampIndex(FAnchor);
   ClampIndex(FHot);
   if FAutoSort and (FSortColumn >= 0) then
-    Sort;                      { re-permute FOrder + SyncRank }
+    Sort                       { rule 9: a sort commits the surviving edit (EndEdit inside Sort) }
+  else if (FEditor <> nil) and (FEditItem >= 0) and (FEditItem < GetItemCount) then
+    { No sort, but RebuildOrder may have moved the edited row: follow it (edit survives, rule 9). }
+    FEditor.BoundsRect := EditorBoundsFor(FEditItem);
   Invalidate;
 end;
 
@@ -1256,6 +1358,46 @@ begin
 end;
 
 { ---------------------------------------------------------------------------
+  Checkboxes
+  --------------------------------------------------------------------------- }
+
+procedure TTyListView.SetCheckboxes(AValue: Boolean);
+begin
+  if FCheckboxes = AValue then Exit;
+  FCheckboxes := AValue;
+  { Report mode only shifts the main column's icon+text at PAINT time; cell geometry and the
+    content extent are unchanged, so a repaint is all that is needed (no UpdateScrollBars). }
+  Invalidate;
+end;
+
+function TTyListView.GetChecked(AIndex: Integer): Boolean;
+begin
+  { The control does NOT own check state: read lisChecked through the single data path. }
+  Result := lisChecked in GetItemState(AIndex);
+end;
+
+procedure TTyListView.SetChecked(AIndex: Integer; AValue: Boolean);
+begin
+  { Public writer: AIndex is an ITEM index. Out-of-range is silently ignored (never raises). }
+  if (AIndex < 0) or (AIndex >= GetItemCount) then Exit;
+  if GetChecked(AIndex) = AValue then Exit;
+  SetItemChecked(AIndex, AValue);   { collection: writes lisChecked; owner-data: no-op }
+  if Assigned(FOnItemChecked) then FOnItemChecked(Self, AIndex);   { item index }
+  Invalidate;
+end;
+
+procedure TTyListView.SetItemChecked(AIndex: Integer; AValue: Boolean);
+var
+  st: TTyListItemStates;
+begin
+  if FOwnerData then Exit;   { the app owns the state; it mutates its store from OnItemChecked }
+  if (AIndex < 0) or (AIndex >= FItems.Count) then Exit;
+  st := FItems[AIndex].States;
+  if AValue then Include(st, lisChecked) else Exclude(st, lisChecked);
+  FItems[AIndex].States := st;
+end;
+
+{ ---------------------------------------------------------------------------
   Public API — hit-testing / scrolling
   --------------------------------------------------------------------------- }
 
@@ -1274,7 +1416,8 @@ end;
 function TTyListView.GetHitPart(X, Y: Integer): TTyListHitPart;
 var
   m: TTyListMetrics;
-  logX, logScroll: Integer;
+  logX, logScroll, pos: Integer;
+  cell, chk: TRect;
 begin
   SyncArrays;
   m := CurrentMetrics;
@@ -1289,10 +1432,19 @@ begin
       Result := lhpHeader;
     Exit;
   end;
-  if TyListItemAt(Point(X, Y), GetItemCount, m, FOffsetX, FOffsetY) >= 0 then
-    Result := lhpLabel
-  else
-    Result := lhpNowhere;
+  pos := TyListItemAt(Point(X, Y), GetItemCount, m, FOffsetX, FOffsetY);   { -> display pos }
+  if pos < 0 then
+    Exit(lhpNowhere);
+  if FCheckboxes then
+  begin
+    { Same geometry the painter uses (CheckRectForCell -> TyListCheckRect): a hit inside the
+      box is lhpCheck, so a click there toggles the check instead of selecting the row. }
+    cell := TyListItemRect(pos, GetItemCount, m, FOffsetX, FOffsetY);
+    chk  := CheckRectForCell(cell);
+    if (chk.Right > chk.Left) and PtInRect(chk, Point(X, Y)) then
+      Exit(lhpCheck);
+  end;
+  Result := lhpLabel;
 end;
 
 procedure TTyListView.ScrollIntoView(AIndex: Integer);
@@ -1337,6 +1489,181 @@ begin
 end;
 
 { ---------------------------------------------------------------------------
+  Inline rename
+  --------------------------------------------------------------------------- }
+
+function TTyListView.Editing: Boolean;
+begin
+  Result := (FEditor <> nil) and (FEditItem >= 0) and FEditor.Visible;
+end;
+
+{ The editor's bounds for an ITEM index = the item's label rect, derived from the same
+  TyListItemRect the painter uses (report: the main column's text rect after the checkbox +
+  icon shifts; flow: the cell's label rect). No geometry is invented here. }
+function TTyListView.EditorBoundsFor(AIndex: Integer): TRect;
+var
+  m: TTyListMetrics;
+  pos, mainIdx, colLeft, colRight, cbShift, imgPx, ii, pad, ix: Integer;
+  cell, chk: TRect;
+  mainCol: TTyColumn;
+begin
+  Result := Rect(0, 0, 0, 0);
+  m := CurrentMetrics;
+  pos := ItemToDisplay(AIndex);   { item index -> display pos }
+  if pos < 0 then Exit;
+  cell := TyListItemRect(pos, GetItemCount, m, FOffsetX, FOffsetY);
+
+  if FViewStyle = lvsReport then
+  begin
+    mainIdx := FHeader.MainColumn;
+    if (mainIdx < 0) or (mainIdx >= FHeader.Columns.Count) then Exit;
+    mainCol := FHeader.Columns.Items[mainIdx] as TTyColumn;
+    colLeft  := cell.Left + ScaleI(mainCol.Left);
+    colRight := colLeft + ScaleI(mainCol.Width);
+    cbShift := 0;
+    if FCheckboxes then
+    begin
+      chk := CheckRectForCell(cell);
+      if chk.Right > chk.Left then cbShift := ScaleI(TyLvCheckPx) + ScaleI(TyLvPad);
+    end;
+    imgPx := ScaleI(TyLvSmallIcon);
+    ii := GetItemImageIndex(AIndex, mainIdx);
+    if (FSmallImages <> nil) and (ii >= 0) then
+      Result := Rect(colLeft + cbShift + ScaleI(TyLvTextMargin) + imgPx + ScaleI(2),
+                     cell.Top, colRight - ScaleI(TyLvTextMargin), cell.Bottom)
+    else
+      Result := Rect(colLeft + cbShift + ScaleI(TyLvTextMargin),
+                     cell.Top, colRight - ScaleI(TyLvTextMargin), cell.Bottom);
+  end
+  else
+  begin
+    pad := ScaleI(TyLvPad);
+    if FViewStyle in [lvsIcon, lvsTile] then imgPx := ScaleI(TyLvLargeIcon)
+    else imgPx := ScaleI(TyLvSmallIcon);
+    case FViewStyle of
+      lvsIcon:
+        { icon on top, label below (mirrors RenderFlowCell) }
+        Result := Rect(cell.Left + pad, cell.Top + 2 * pad + imgPx + pad,
+                       cell.Right - pad, cell.Bottom - pad);
+      lvsTile:
+        begin
+          { first text line, right of the icon }
+          ix := cell.Left + pad + imgPx + 2 * pad;
+          Result := Rect(ix, cell.Top + pad, cell.Right - pad,
+                         cell.Top + pad + ScaleI(TyLvLabelH));
+        end;
+    else
+      begin
+        { lvsSmallIcon / lvsList: single label right of the icon }
+        ix := cell.Left + pad + imgPx + 2 * pad;
+        Result := Rect(ix, cell.Top, cell.Right - pad, cell.Bottom);
+      end;
+    end;
+  end;
+end;
+
+procedure TTyListView.BeginEdit(AIndex: Integer);
+var
+  allow: Boolean;
+begin
+  { Rule 2: the base constructor runs Resize before this subclass creates FEditor, so every
+    editor-touching path guards against a nil editor. }
+  if FEditor = nil then Exit;
+  if FReadOnly then Exit;                          { opt-in, like toEditable }
+  if (AIndex < 0) or (AIndex >= GetItemCount) then Exit;
+  allow := True;
+  if Assigned(FOnEditing) then FOnEditing(Self, AIndex, allow);   { item index; may veto }
+  if not allow then Exit;
+  if FEditItem = AIndex then Exit;
+  if FEditItem >= 0 then EndEdit(True);            { commit a prior edit before starting a new one }
+
+  FEditItem := AIndex;                             { rule 6/9: store the ITEM index }
+  FEditor.Controller := Self.Controller;           { rule 3: themed like the list }
+  FEditor.Text := GetItemText(AIndex, 0);          { column 0 = the caption }
+  FEditor.BoundsRect := EditorBoundsFor(AIndex);
+  FEditor.Visible := True;
+  try
+    if CanFocus and FEditor.CanFocus then FEditor.SetFocus;
+  except
+    { headless / test environments may reject focus }
+  end;
+  if FEditor.CanFocus then FEditor.SelectAll;
+  Invalidate;
+end;
+
+procedure TTyListView.EndEdit(ACommit: Boolean; ARestoreFocus: Boolean);
+var
+  item: Integer;
+  txt: string;
+begin
+  if FEditor = nil then Exit;          { rule 2 }
+  if FEditItem < 0 then Exit;
+  if FEndingEdit then Exit;            { re-entry guard: Visible:=False / SetFocus refire OnExit }
+  FEndingEdit := True;
+  try
+    item := FEditItem;                 { rule 6/9: an ITEM index — stable across any re-sort }
+    txt  := FEditor.Text;
+    FEditItem := -1;
+    FEditor.Visible := False;
+    if ACommit then
+    begin
+      { Rule 6: re-confirm the row still exists after any async / modal boundary before
+        committing into it. }
+      if (item >= 0) and (item < GetItemCount) then
+        CommitEdit(item, txt)
+      else
+        Invalidate;
+    end
+    else
+      Invalidate;
+    { Rule 7: a keyboard commit/cancel returns focus to the list; a focus-loss commit does
+      NOT (focus is already elsewhere), so the caller passes ARestoreFocus accordingly. }
+    if ARestoreFocus then
+      try
+        if CanFocus then SetFocus;
+      except
+      end;
+  finally
+    FEndingEdit := False;
+  end;
+end;
+
+procedure TTyListView.CommitEdit(AIndex: Integer; const AText: string);
+var
+  s: string;
+begin
+  if (AIndex < 0) or (AIndex >= GetItemCount) then Exit;
+  s := AText;
+  if Assigned(FOnEdited) then FOnEdited(Self, AIndex, s);   { item index; app may rewrite text }
+  if s = '' then Exit;                 { '' after the handler means "abandon" (per contract) }
+  { Collection mode writes the caption; OwnerData does nothing — the app updated its own store
+    inside OnEdited. Same single-writer discipline as SetItemChecked. }
+  if not FOwnerData then
+  begin
+    if (AIndex >= 0) and (AIndex < FItems.Count) then
+      FItems[AIndex].Caption := s;
+  end;
+  Invalidate;
+end;
+
+procedure TTyListView.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  case Key of
+    VK_RETURN: begin EndEdit(True,  True); Key := 0; end;   { commit + return focus (rule 7) }
+    VK_ESCAPE: begin EndEdit(False, True); Key := 0; end;   { cancel + return focus (rule 7) }
+  end;
+end;
+
+procedure TTyListView.EditorExit(Sender: TObject);
+begin
+  { Rule 1: during form teardown the Items may already be freed — never commit into them. }
+  if csDestroying in ComponentState then Exit;
+  if FEditor = nil then Exit;   { rule 2 }
+  { Rule 7: focus-loss commits but does NOT restore focus (it has already moved away). }
+  if (FEditItem >= 0) and not FEndingEdit then EndEdit(True, False);
+end;
+
+{ ---------------------------------------------------------------------------
   Property setters
   --------------------------------------------------------------------------- }
 
@@ -1368,6 +1695,7 @@ end;
 procedure TTyListView.SetViewStyle(AValue: TTyListViewStyle);
 begin
   if FViewStyle = AValue then Exit;
+  EndEdit(True);   { rule 4: the cell geometry changes wholesale — commit + close first }
   FViewStyle := AValue;
   { A view switch changes the scrolling axis: reset offsets so nothing is stranded. }
   FOffsetX := 0;
@@ -1519,14 +1847,67 @@ begin
   end;
 end;
 
+function TTyListView.CheckRectForCell(const ACell: TRect): TRect;
+var
+  sub: TRect;
+  mainIdx: Integer;
+  mainCol: TTyColumn;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if not FCheckboxes then Exit;
+  if FViewStyle = lvsReport then
+  begin
+    { Report: the box lives in the MAIN COLUMN's sub-rect. The layout unit knows nothing
+      about columns, so compute that sub-rect here and pass it to the pure function. }
+    mainIdx := FHeader.MainColumn;
+    if (mainIdx < 0) or (mainIdx >= FHeader.Columns.Count) then Exit;
+    mainCol := FHeader.Columns.Items[mainIdx] as TTyColumn;
+    if not (coVisible in mainCol.Options) then Exit;
+    sub := Rect(ACell.Left + ScaleI(mainCol.Left), ACell.Top,
+                ACell.Left + ScaleI(mainCol.Left) + ScaleI(mainCol.Width), ACell.Bottom);
+  end
+  else
+    sub := ACell;   { flow: the whole cell }
+  Result := TyListCheckRect(sub, FViewStyle, ScaleI(TyLvCheckPx), ScaleI(TyLvPad));
+end;
+
+{ Draw the box resolving the existing 'TyTreeCheckBox' token ([tysActive] when checked, ''
+  otherwise) — zero new tokens, no literal colours. Mirrors the checkbox path in TTyTreeView. }
+procedure TTyListView.RenderCheckBox(P: TTyPainter; const ABox: TRect; AChecked: Boolean);
+var
+  cb, S: TTyStyleSet;
+begin
+  if (ABox.Right <= ABox.Left) or (ABox.Bottom <= ABox.Top) then Exit;
+  S := CurrentStyle;
+  if AChecked then
+    cb := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
+  else
+    cb := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', []);
+  if tpBackground in cb.Present then
+    P.FillBackground(ABox, cb.Background, cb.BorderRadius)
+  else
+    P.FillBackground(ABox, S.Background, 2);
+  if tpBorderColor in cb.Present then
+    P.StrokeBorder(ABox, cb.BorderRadius, cb.BorderWidth, cb.BorderColor)
+  else
+    P.StrokeBorder(ABox, 2, 1, S.BorderColor);
+  if AChecked then
+  begin
+    if tpTextColor in cb.Present then
+      P.DrawGlyph(ABox, tgCheck, cb.TextColor, 2)
+    else
+      P.DrawGlyph(ABox, tgCheck, S.TextColor, 2);
+  end;
+end;
+
 procedure TTyListView.RenderReportRow(P: TTyPainter; AIndex: Integer; const ACell: TRect;
   const AStyle: TTyStyleSet);
 var
-  posIdx, colIdx, colLeft, colRight, textLeft, mainCol, imgPx, ii: Integer;
+  posIdx, colIdx, colLeft, colRight, textLeft, mainCol, imgPx, ii, cbShift: Integer;
   col: TTyColumn;
   txt: string;
   tc: TTyColor;
-  tr: TRect;
+  tr, chk: TRect;
 begin
   mainCol := FHeader.MainColumn;
   if tpTextColor in AStyle.Present then tc := AStyle.TextColor
@@ -1544,12 +1925,25 @@ begin
     textLeft := colLeft + ScaleI(TyLvTextMargin);
     if colIdx = mainCol then
     begin
+      { When checkboxes are on the box occupies the main column's left; the icon+text shift
+        right by CheckPx + Pad. The box rect comes from the single geometry source. }
+      cbShift := 0;
+      if FCheckboxes then
+      begin
+        chk := CheckRectForCell(ACell);
+        if chk.Right > chk.Left then
+        begin
+          RenderCheckBox(P, chk, GetChecked(AIndex));   { AIndex is an item index }
+          cbShift := ScaleI(TyLvCheckPx) + ScaleI(TyLvPad);
+        end;
+      end;
+      textLeft := colLeft + cbShift + ScaleI(TyLvTextMargin);
       ii := GetItemImageIndex(AIndex, colIdx);
       if (FSmallImages <> nil) and (ii >= 0) then
       begin
-        DrawImage(P, FSmallImages, ii, colLeft + ScaleI(2),
+        DrawImage(P, FSmallImages, ii, colLeft + cbShift + ScaleI(2),
           ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2, imgPx);
-        textLeft := colLeft + ScaleI(TyLvTextMargin) + imgPx + ScaleI(2);
+        textLeft := colLeft + cbShift + ScaleI(TyLvTextMargin) + imgPx + ScaleI(2);
       end;
     end;
     txt := GetItemText(AIndex, colIdx);
@@ -1567,7 +1961,7 @@ var
   imgPx, ii, pad, ix, iy, tx: Integer;
   tc: TTyColor;
   lbl, sub: string;
-  tr: TRect;
+  tr, chk: TRect;
 begin
   if tpTextColor in AStyle.Present then tc := AStyle.TextColor
   else tc := CurrentStyle.TextColor;
@@ -1625,6 +2019,14 @@ begin
         P.DrawText(tr, lbl, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
           tc, taLeftJustify, tlCenter, True);
     end;
+  end;
+  { Flow modes OVERLAY the box (top-left for lvsIcon, left-centre otherwise) and do NOT
+    change the cell size; draw it last so it sits on top of the icon/label. }
+  if FCheckboxes then
+  begin
+    chk := CheckRectForCell(ACell);
+    if chk.Right > chk.Left then
+      RenderCheckBox(P, chk, GetChecked(AIndex));   { AIndex is an item index }
   end;
 end;
 
@@ -1837,6 +2239,9 @@ end;
 procedure TTyListView.Resize;
 begin
   inherited Resize;
+  { Rule 4: a resize moves cells. Commit + close the editor first. Rule 2: the base
+    constructor calls Resize before FEditor exists, so EndEdit's own nil-guard covers that. }
+  EndEdit(True);
   UpdateScrollBars;
 end;
 
@@ -1987,7 +2392,16 @@ begin
   begin
     item := DisplayToItem(pos);   { display pos -> item index }
     if item >= 0 then
+    begin
+      if FPressHit = lhpCheck then
+      begin
+        { A click on the box toggles the check and returns WITHOUT touching the selection or
+          the focus — straight Exit, never into the selection logic. }
+        SetChecked(item, not GetChecked(item));   { item index; fires OnItemChecked + Invalidate }
+        Exit;
+      end;
       ItemMouseSelect(item, Shift);
+    end;
   end
   else
   begin
@@ -2192,6 +2606,14 @@ begin
   SyncArrays;
   m := CurrentMetrics;
 
+  if (Key = VK_F2) and (Shift = []) and (FItemIndex >= 0) then
+  begin
+    { Rename on F2 only — no slow double-click, which would fight OnItemActivate's double-click.
+      BeginEdit itself guards ReadOnly and the OnEditing veto. }
+    BeginEdit(FItemIndex);   { item index }
+    Key := 0;
+    Exit;
+  end;
   if (Key = VK_A) and (ssCtrl in Shift) and FMultiSelect then
   begin
     SelectAll;
@@ -2205,16 +2627,27 @@ begin
     Key := 0;
     Exit;
   end;
-  if (Key = VK_SPACE) and FMultiSelect and (FItemIndex >= 0) then
+  if (Key = VK_SPACE) and (FItemIndex >= 0) then
   begin
-    EnsureSelectedLen;
-    if FItemIndex < Length(FSelected) then
-      FSelected[FItemIndex] := not FSelected[FItemIndex];
-    FAnchor := FItemIndex;
-    Invalidate;
-    DoChange;
-    Key := 0;
-    Exit;
+    { Checkboxes on: Space toggles the focused row's CHECK; Ctrl+Space still toggles the
+      SELECTION (multi-select). Checkboxes off: Space keeps the original selection toggle. }
+    if FCheckboxes and not (ssCtrl in Shift) then
+    begin
+      SetChecked(FItemIndex, not GetChecked(FItemIndex));   { item index }
+      Key := 0;
+      Exit;
+    end;
+    if FMultiSelect then
+    begin
+      EnsureSelectedLen;
+      if FItemIndex < Length(FSelected) then
+        FSelected[FItemIndex] := not FSelected[FItemIndex];
+      FAnchor := FItemIndex;
+      Invalidate;
+      DoChange;
+      Key := 0;
+      Exit;
+    end;
   end;
 
   mapped := True;
@@ -2309,6 +2742,7 @@ var
 begin
   if not Enabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
+  EndEdit(True);   { rule 4: wheel scroll moves the edited cell — commit + close first }
   m := CurrentMetrics;
   if FViewStyle = lvsList then
   begin

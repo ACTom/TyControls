@@ -36,6 +36,7 @@ type
     BtnTile: TTyButton;
     ChkGrid: TTyCheckBox;
     ChkMulti: TTyCheckBox;
+    ChkBoxes: TTyCheckBox;
     LV1: TTyListView;
     LblStatus: TTyLabel;
     LblHint: TTyLabel;
@@ -55,17 +56,27 @@ type
     procedure BtnTileClick(Sender: TObject);
     procedure ChkGridChange(Sender: TObject);
     procedure ChkMultiChange(Sender: TObject);
+    procedure ChkBoxesChange(Sender: TObject);
     procedure LV1SelectItem(Sender: TObject; AIndex: Integer);
     procedure LV1Change(Sender: TObject);
     procedure LV1ColumnClick(Sender: TObject; AColumn: Integer);
     procedure LV1ItemActivate(Sender: TObject; AIndex: Integer);
     procedure LV2GetItemText(Sender: TObject; AIndex, AColumn: Integer; var AText: string);
     procedure LV2SelectItem(Sender: TObject; AIndex: Integer);
+    procedure LV2GetItemState(Sender: TObject; AIndex: Integer;
+      var AStates: TTyListItemStates);
+    procedure LV2ItemChecked(Sender: TObject; AIndex: Integer);
+    procedure LV1ItemChecked(Sender: TObject; AIndex: Integer);
+    procedure LV1Edited(Sender: TObject; AIndex: Integer; var AText: string);
     procedure BtnSortVirtualClick(Sender: TObject);
     procedure BtnJumpEndClick(Sender: TObject);
   private
     FIcons: TTyImageCollection;
     FImages: TTyVirtualImageList;
+    { The virtual list's check state lives HERE, not in the control. OwnerData means the
+      control caches nothing: it asks OnGetItemState and tells us to flip via OnItemChecked.
+      Forget to flip it and the box looks stuck. }
+    FVChecked: array of Boolean;
     procedure BuildIcons;
     procedure BuildColumns;
     procedure BuildRows;
@@ -280,15 +291,23 @@ end;
 
 procedure TMainForm.BuildVirtual;
 begin
-  { 100,000 rows, zero row objects. Nothing is allocated here but an Integer. }
+  { 100,000 rows, zero row objects. The only allocation is our own check-state array. }
   LV2.OwnerData := True;
   LV2.ItemCount := 100000;
   LV2.SortKind := lskText;
+  LV2.Checkboxes := True;
+  SetLength(FVChecked, LV2.ItemCount);
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+
+  LV1.ReadOnly := False;        { F2 renames; the default is read-only on purpose }
+  LV1.OnItemChecked := @LV1ItemChecked;
+  LV1.OnEdited := @LV1Edited;
+  LV2.OnGetItemState := @LV2GetItemState;
+  LV2.OnItemChecked := @LV2ItemChecked;
 
   BuildIcons;
   BuildColumns;
@@ -318,6 +337,24 @@ procedure TMainForm.ChkMultiChange(Sender: TObject);
 begin
   LV1.MultiSelect := ChkMulti.Checked;
   UpdateStatus;
+end;
+
+procedure TMainForm.ChkBoxesChange(Sender: TObject);
+begin
+  LV1.Checkboxes := ChkBoxes.Checked;
+end;
+
+procedure TMainForm.LV1ItemChecked(Sender: TObject; AIndex: Integer);
+begin
+  { Collection mode: the control already wrote Items[AIndex].States for us. }
+  UpdateStatus;
+end;
+
+procedure TMainForm.LV1Edited(Sender: TObject; AIndex: Integer; var AText: string);
+begin
+  { AIndex is an ITEM index and stays valid across a re-sort. Returning AText unchanged
+    lets the control write it into Items[AIndex].Caption. Blank it to abandon. }
+  LblStatus.Caption := Format('重命名 item index %d → %s', [AIndex, AText]);
 end;
 
 procedure TMainForm.LV1ColumnClick(Sender: TObject; AColumn: Integer);
@@ -382,6 +419,29 @@ begin
   if AIndex >= 0 then
     LblVirtual.Caption := Format('ItemCount = %d,行对象 = 0   ·   焦点 item index = %d',
       [LV2.ItemCount, AIndex]);
+end;
+
+{ OwnerData: the control asks us for every row's state, and never remembers the answer. }
+procedure TMainForm.LV2GetItemState(Sender: TObject; AIndex: Integer;
+  var AStates: TTyListItemStates);
+begin
+  if (AIndex >= 0) and (AIndex < Length(FVChecked)) and FVChecked[AIndex] then
+    Include(AStates, lisChecked);
+end;
+
+{ ...so the flip has to happen HERE. Skip this and the checkbox never appears to toggle:
+  the control computes `not Checked[i]`, and Checked[i] is whatever LV2GetItemState says. }
+procedure TMainForm.LV2ItemChecked(Sender: TObject; AIndex: Integer);
+var
+  i, n: Integer;
+begin
+  if (AIndex < 0) or (AIndex >= Length(FVChecked)) then Exit;
+  FVChecked[AIndex] := not FVChecked[AIndex];
+  n := 0;
+  for i := 0 to High(FVChecked) do
+    if FVChecked[i] then Inc(n);
+  LblVirtual.Caption := Format('ItemCount = %d,行对象 = 0   ·   已勾选 %d 项',
+    [LV2.ItemCount, n]);
 end;
 
 procedure TMainForm.BtnSortVirtualClick(Sender: TObject);

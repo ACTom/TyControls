@@ -19,6 +19,7 @@ uses
   tyControls.Columns,          { TTySortDirection, sdAscending, sdDescending }
   tyControls.ListView.Layout,  { TTyListViewStyle, TTyListSortKind }
   tyControls.ScrollBar,        { TTyScrollBar (the embedded bars) }
+  tyControls.Edit,             { TTyEdit (the inline rename editor) }
   tyControls.ListView;         { TTyListView + item / state types + events }
 
 type
@@ -46,6 +47,11 @@ type
     { A left press, optionally the second click of a double-click. }
     procedure XMouseDown(X, Y: Integer; ADouble: Boolean = False);
     procedure XDblClick;
+    { A key press, for the F2 / Space / Ctrl+Space wiring. }
+    procedure XKeyDown(AKey: Word; AShift: TShiftState = []);
+    { The inline rename editor (protected InlineEditor seam), so a headless test can
+      set the text that EndEdit(True) will commit. }
+    function XEditor: TTyEdit;
   end;
 
   { -----------------------------------------------------------------------
@@ -230,6 +236,107 @@ type
     procedure TestTypeAheadFollowsDisplayOrderNotItemOrder;
   end;
 
+  { -----------------------------------------------------------------------
+    CHECKBOXES (SP2a) — Checked[] is a DATA property keyed by ITEM index; the
+    control caches no check state, reading only through GetItemState in both modes.
+    Written from docs/superpowers/plans/2026-07-10-listview-sp2a.md, section 一.
+    ----------------------------------------------------------------------- }
+  TListViewCheckboxTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+    FCheckedEvents: Integer;
+    FLastCheckedIndex: Integer;
+    FStore: array of Boolean;        { the app's own store, for OwnerData mode }
+    procedure Populate(const ACaps: array of string);
+    procedure HGetStateFromStore(Sender: TObject; AIndex: Integer; var AStates: TTyListItemStates);
+    procedure HItemChecked(Sender: TObject; AIndex: Integer);
+    procedure HItemCheckedMutatesStore(Sender: TObject; AIndex: Integer);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { Checked[i] = lisChecked in GetItemState(i) — collection mode }
+    procedure TestCheckedReadsItemStateInCollectionMode;
+    { SetChecked writes Items[i].States and fires OnItemChecked with the ITEM index }
+    procedure TestSetCheckedCollectionWritesStatesAndFiresWithItemIndex;
+    { Checked[i] = lisChecked in GetItemState(i) — OwnerData mode }
+    procedure TestCheckedReadsItemStateInOwnerDataMode;
+    { OwnerData: SetChecked caches nothing; Checked[] follows the app store }
+    procedure TestSetCheckedOwnerDataDoesNotCacheReliesOnAppStore;
+    { Checked[] out of range neither crashes nor fires the event }
+    procedure TestCheckedOutOfRangeNeitherCrashesNorFires;
+    { Check state is keyed by item index, so it survives a re-sort both ways }
+    procedure TestCheckStateKeyedByItemIndexSurvivesReSort;
+    { Checking an item does not select or focus it }
+    procedure TestCheckingDoesNotSelectOrFocus;
+    { Selecting an item does not check it }
+    procedure TestSelectingDoesNotCheck;
+  end;
+
+  { -----------------------------------------------------------------------
+    INLINE RENAME (SP2a) — one test per editor-lifetime rule, named after the rule.
+    Written from docs/superpowers/plans/2026-07-10-listview-sp2a.md, section 二.
+    ----------------------------------------------------------------------- }
+  { -----------------------------------------------------------------------
+    INTERACTION WIRING — the gestures the contract describes, driven for real.
+    The checkbox and rename suites exercise Checked[] / BeginEdit directly; nothing
+    proved that a CLICK on the box, the SPACE key or F2 actually reach them.
+    ----------------------------------------------------------------------- }
+  TListViewInteractionTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+    { The box's location is found by asking GetHitPart, not by reproducing the control's
+      geometry: the test then pins the gesture a user can actually perform. }
+    function BoxPointOfFirstRow(out P: TPoint): Boolean;
+    function LabelPointOfFirstRow: TPoint;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestClickOnTheBoxTogglesCheckWithoutSelecting;
+    procedure TestClickOnTheBoxAgainUnchecks;
+    procedure TestClickOnTheLabelSelectsAndDoesNotCheck;
+    procedure TestSpaceTogglesTheFocusedItemsCheck;
+    procedure TestCtrlSpaceStillTogglesTheSelection;
+    procedure TestSpaceTogglesSelectionWhenCheckboxesAreOff;
+    procedure TestF2StartsRenamingTheFocusedItem;
+    procedure TestF2DoesNothingWhenReadOnly;
+  end;
+
+  TListViewRenameTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+    FEditingEvents: Integer;
+    FEditedEvents: Integer;
+    FLastEditedIndex: Integer;
+    FLastEditedText: string;
+    FVetoEditing: Boolean;
+    FUseRewrite: Boolean;
+    FRewriteTo: string;
+    procedure Populate(const ACaps: array of string);
+    procedure HEditing(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
+    procedure HEdited(Sender: TObject; AIndex: Integer; var AText: string);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestReadOnlyDefaultMakesBeginEditNoOp;
+    procedure TestOnEditingVetoKeepsEditingFalse;
+    procedure TestEndEditTrueCommitsCollectionCaption;
+    procedure TestOnEditedFiresWithItemIndexAndCanRewriteText;
+    procedure TestOwnerDataEndEditDoesNotWriteOnlyFires;
+    procedure TestEndEditFalseCancelsCaptionUntouched;
+    procedure TestCommitIsByItemIndexNotDisplayPosition;
+    procedure TestItemsClearCancelsEdit;
+    procedure TestShrinkItemCountPastEditedRowCancelsEdit;
+    procedure TestSortWhileEditingCommitsFirst;
+    procedure TestChangingViewStyleWhileEditingCommitsFirst;
+    procedure TestBeginEditOutOfRangeIsNoOp;
+    procedure TestDestroyingControlMidEditDoesNotCommitOrCrash;
+    procedure TestOnEditedBlankingTextAbandonsCommit;
+    procedure TestUserClearedFieldAlsoAbandonsCommit;
+  end;
+
 implementation
 
 { ===========================================================================
@@ -312,6 +419,19 @@ end;
 procedure TTyListViewAccess.XDblClick;
 begin
   DblClick;
+end;
+
+procedure TTyListViewAccess.XKeyDown(AKey: Word; AShift: TShiftState);
+var
+  k: Word;
+begin
+  k := AKey;
+  KeyDown(k, AShift);
+end;
+
+function TTyListViewAccess.XEditor: TTyEdit;
+begin
+  Result := InlineEditor;
 end;
 
 { ===========================================================================
@@ -1207,6 +1327,565 @@ begin
   AssertEquals('cycles to the next r-row in display order', 2, FLV.ItemIndex);
 end;
 
+{ ===========================================================================
+  CHECKBOXES
+  =========================================================================== }
+
+procedure TListViewCheckboxTest.SetUp;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+  FLV.Font.PixelsPerInch := 96;
+  { Checkboxes on: a defensive implementation might gate SetChecked on this, and the
+    check data path is what these tests exercise. (See the returned notes: whether
+    SetChecked is gated on Checkboxes is a contract looseness.) }
+  FLV.Checkboxes := True;
+  FCheckedEvents := 0;
+  FLastCheckedIndex := -999;
+  SetLength(FStore, 0);
+end;
+
+procedure TListViewCheckboxTest.TearDown;
+begin
+  FreeAndNil(FLV);
+end;
+
+procedure TListViewCheckboxTest.Populate(const ACaps: array of string);
+var
+  i: Integer;
+begin
+  for i := Low(ACaps) to High(ACaps) do
+    FLV.Items.Add.Caption := ACaps[i];
+  FLV.ItemsChanged;
+end;
+
+procedure TListViewCheckboxTest.HGetStateFromStore(Sender: TObject; AIndex: Integer;
+  var AStates: TTyListItemStates);
+begin
+  AStates := [];
+  if (AIndex >= 0) and (AIndex <= High(FStore)) and FStore[AIndex] then
+    AStates := [lisChecked];
+end;
+
+procedure TListViewCheckboxTest.HItemChecked(Sender: TObject; AIndex: Integer);
+begin
+  Inc(FCheckedEvents);
+  FLastCheckedIndex := AIndex;
+end;
+
+procedure TListViewCheckboxTest.HItemCheckedMutatesStore(Sender: TObject; AIndex: Integer);
+begin
+  Inc(FCheckedEvents);
+  FLastCheckedIndex := AIndex;
+  { The app updates its OWN store; the control cached nothing. }
+  if (AIndex >= 0) and (AIndex <= High(FStore)) then
+    FStore[AIndex] := True;
+end;
+
+procedure TListViewCheckboxTest.TestCheckedReadsItemStateInCollectionMode;
+begin
+  Populate(['A', 'B', 'C']);
+  FLV.Items[1].States := [lisChecked];
+  AssertTrue('item 1 reads checked from its state', FLV.Checked[1]);
+  AssertFalse('item 0 unchecked', FLV.Checked[0]);
+  AssertFalse('item 2 unchecked', FLV.Checked[2]);
+end;
+
+procedure TListViewCheckboxTest.TestSetCheckedCollectionWritesStatesAndFiresWithItemIndex;
+begin
+  Populate(['A', 'B', 'C']);
+  FLV.OnItemChecked := @HItemChecked;
+  FLV.Checked[1] := True;
+  AssertTrue('lisChecked written into Items[1].States', lisChecked in FLV.Items[1].States);
+  AssertTrue('and Checked[1] reads back True', FLV.Checked[1]);
+  AssertEquals('OnItemChecked fired once', 1, FCheckedEvents);
+  AssertEquals('event carried the ITEM index', 1, FLastCheckedIndex);
+end;
+
+procedure TListViewCheckboxTest.TestCheckedReadsItemStateInOwnerDataMode;
+begin
+  FLV.OwnerData := True;
+  FLV.ItemCount := 6;
+  SetLength(FStore, 6);
+  FStore[4] := True;
+  FStore[2] := True;
+  FLV.OnGetItemState := @HGetStateFromStore;
+  FLV.ItemsChanged;
+  AssertTrue('item 4 checked per the app store', FLV.Checked[4]);
+  AssertTrue('item 2 checked per the app store', FLV.Checked[2]);
+  AssertFalse('item 3 unchecked per the app store', FLV.Checked[3]);
+end;
+
+procedure TListViewCheckboxTest.TestSetCheckedOwnerDataDoesNotCacheReliesOnAppStore;
+begin
+  FLV.OwnerData := True;
+  FLV.ItemCount := 6;
+  SetLength(FStore, 6);           { all False }
+  FLV.OnGetItemState := @HGetStateFromStore;
+  FLV.OnItemChecked := @HItemChecked;   { records the event but does NOT touch the store }
+  FLV.ItemsChanged;
+
+  FLV.Checked[2] := True;
+  AssertEquals('OnItemChecked fired', 1, FCheckedEvents);
+  AssertEquals('with the ITEM index', 2, FLastCheckedIndex);
+  { The control kept NO cache: the store still says unchecked, so Checked[] must too. }
+  AssertFalse('SetChecked cached nothing; store unchanged -> still unchecked', FLV.Checked[2]);
+
+  { A handler that DOES update the store makes Checked[] follow it. }
+  FLV.OnItemChecked := @HItemCheckedMutatesStore;
+  FLV.Checked[3] := True;
+  AssertTrue('Checked[] reflects the app store after the handler updates it', FLV.Checked[3]);
+end;
+
+procedure TListViewCheckboxTest.TestCheckedOutOfRangeNeitherCrashesNorFires;
+begin
+  Populate(['A', 'B', 'C']);
+  FLV.OnItemChecked := @HItemChecked;
+  AssertFalse('read past end = False', FLV.Checked[9999]);
+  AssertFalse('read negative = False', FLV.Checked[-1]);
+  FLV.Checked[9999] := True;
+  FLV.Checked[-1] := True;
+  AssertEquals('no event for out-of-range writes', 0, FCheckedEvents);
+end;
+
+procedure TListViewCheckboxTest.TestCheckStateKeyedByItemIndexSurvivesReSort;
+begin
+  Populate(['e', 'd', 'c', 'b', 'a']);
+  FLV.Checked[3] := True;
+  AssertTrue('precondition: item 3 checked', FLV.Checked[3]);
+
+  FLV.SortColumn := 0;
+  FLV.SortDirection := sdAscending;
+  FLV.Sort;
+  AssertTrue('after asc sort: item 3 still checked', FLV.Checked[3]);
+
+  FLV.SortDirection := sdDescending;
+  FLV.Sort;
+  AssertTrue('after desc sort: item 3 still checked', FLV.Checked[3]);
+end;
+
+procedure TListViewCheckboxTest.TestCheckingDoesNotSelectOrFocus;
+begin
+  Populate(['A', 'B', 'C', 'D']);
+  FLV.Checked[2] := True;
+  AssertEquals('checking did not move the focus', -1, FLV.ItemIndex);
+  AssertFalse('checking did not select', FLV.Selected[2]);
+  AssertEquals('nothing is selected', 0, FLV.SelCount);
+  AssertTrue('but the item is checked', FLV.Checked[2]);
+end;
+
+procedure TListViewCheckboxTest.TestSelectingDoesNotCheck;
+begin
+  Populate(['A', 'B', 'C', 'D']);
+  FLV.ItemIndex := 2;               { focus-selects item 2 }
+  AssertTrue('precondition: item 2 selected', FLV.Selected[2]);
+  AssertFalse('focus/select did not check it', FLV.Checked[2]);
+
+  FLV.MultiSelect := True;
+  FLV.Selected[3] := True;
+  AssertFalse('selecting item 3 did not check it', FLV.Checked[3]);
+end;
+
+{ ===========================================================================
+  INLINE RENAME
+  =========================================================================== }
+
+procedure TListViewRenameTest.SetUp;
+var
+  c: TTyColumn;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+  FLV.Font.PixelsPerInch := 96;
+  FLV.SetBounds(0, 0, 400, 200);
+  FLV.ViewStyle := lvsReport;
+  c := FLV.Header.Columns.Add as TTyColumn;
+  c.Text := 'Name';
+  c.Width := 200;
+  FLV.OnEditing := @HEditing;
+  FLV.OnEdited := @HEdited;
+  FEditingEvents := 0;
+  FEditedEvents := 0;
+  FLastEditedIndex := -999;
+  FLastEditedText := #1;            { a sentinel no real edit produces }
+  FVetoEditing := False;
+  FUseRewrite := False;
+  FRewriteTo := '';
+end;
+
+procedure TListViewRenameTest.TearDown;
+begin
+  FreeAndNil(FLV);
+end;
+
+procedure TListViewRenameTest.Populate(const ACaps: array of string);
+var
+  i: Integer;
+begin
+  for i := Low(ACaps) to High(ACaps) do
+    FLV.Items.Add.Caption := ACaps[i];
+  FLV.ItemsChanged;
+end;
+
+procedure TListViewRenameTest.HEditing(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
+begin
+  Inc(FEditingEvents);
+  if FVetoEditing then
+    AAllow := False;
+end;
+
+procedure TListViewRenameTest.HEdited(Sender: TObject; AIndex: Integer; var AText: string);
+begin
+  Inc(FEditedEvents);
+  FLastEditedIndex := AIndex;
+  FLastEditedText := AText;          { the text as handed in, BEFORE any rewrite }
+  if FUseRewrite then
+    AText := FRewriteTo;
+end;
+
+procedure TListViewRenameTest.TestReadOnlyDefaultMakesBeginEditNoOp;
+{ ReadOnly defaults to True (opt-in editing, unlike LCL), so BeginEdit is a silent no-op. }
+begin
+  Populate(['Alpha', 'Beta', 'Gamma']);
+  AssertTrue('precondition: ReadOnly defaults True', FLV.ReadOnly);
+  FLV.BeginEdit(1);
+  AssertFalse('BeginEdit did nothing while ReadOnly', FLV.Editing);
+end;
+
+procedure TListViewRenameTest.TestOnEditingVetoKeepsEditingFalse;
+{ OnEditing returning AAllow := False vetoes the edit; Editing stays False. }
+begin
+  Populate(['Alpha', 'Beta', 'Gamma']);
+  FLV.ReadOnly := False;
+  FVetoEditing := True;
+  FLV.BeginEdit(1);
+  AssertTrue('OnEditing was consulted', FEditingEvents > 0);
+  AssertFalse('a veto kept editing off', FLV.Editing);
+end;
+
+procedure TListViewRenameTest.TestEndEditTrueCommitsCollectionCaption;
+{ EndEdit(True) writes the editor text into Items[i].Caption (collection mode). }
+begin
+  Populate(['Alpha', 'Beta', 'Gamma']);
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(1);
+  AssertTrue('editing started', FLV.Editing);
+  FLV.XEditor.Text := 'Renamed';
+  FLV.EndEdit(True);
+  AssertEquals('caption committed', 'Renamed', FLV.Items[1].Caption);
+  AssertFalse('editing is over', FLV.Editing);
+  AssertEquals('OnEdited fired once', 1, FEditedEvents);
+  AssertEquals('OnEdited got the ITEM index', 1, FLastEditedIndex);
+end;
+
+procedure TListViewRenameTest.TestOnEditedFiresWithItemIndexAndCanRewriteText;
+{ OnEdited fires with the item index and may rewrite the text through its var param;
+  the rewritten text is what gets committed. }
+begin
+  Populate(['Alpha', 'Beta', 'Gamma']);
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(0);
+  FLV.XEditor.Text := 'Typed';
+  FUseRewrite := True;
+  FRewriteTo := 'Final';
+  FLV.EndEdit(True);
+  AssertEquals('OnEdited saw the ITEM index', 0, FLastEditedIndex);
+  AssertEquals('OnEdited was handed the typed text', 'Typed', FLastEditedText);
+  AssertEquals('the rewritten text is what committed', 'Final', FLV.Items[0].Caption);
+end;
+
+procedure TListViewRenameTest.TestOwnerDataEndEditDoesNotWriteOnlyFires;
+{ OwnerData mode: EndEdit(True) writes nothing itself (the control owns no data);
+  it only fires OnEdited so the app can update its own store. }
+begin
+  FLV.OwnerData := True;
+  FLV.ItemCount := 5;
+  FLV.ItemsChanged;
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(3);
+  AssertTrue('editing started in OwnerData mode', FLV.Editing);
+  FLV.XEditor.Text := 'NewName';
+  FLV.EndEdit(True);
+  AssertEquals('OnEdited fired once', 1, FEditedEvents);
+  AssertEquals('with the ITEM index', 3, FLastEditedIndex);
+  AssertEquals('carrying the edited text', 'NewName', FLastEditedText);
+  AssertEquals('the built-in collection was NOT written to', 0, FLV.Items.Count);
+  AssertFalse('editing is over', FLV.Editing);
+end;
+
+procedure TListViewRenameTest.TestEndEditFalseCancelsCaptionUntouched;
+{ EndEdit(False) cancels: the caption is left untouched and OnEdited never fires. }
+begin
+  Populate(['Alpha', 'Beta']);
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(1);
+  FLV.XEditor.Text := 'ZZZ';
+  FLV.EndEdit(False);
+  AssertEquals('caption untouched by a cancel', 'Beta', FLV.Items[1].Caption);
+  AssertEquals('cancel does not commit', 0, FEditedEvents);
+  AssertFalse('editing is over', FLV.Editing);
+end;
+
+procedure TListViewRenameTest.TestCommitIsByItemIndexNotDisplayPosition;
+{ The edit target is an ITEM index, not a display position. Sort first so item 3
+  sits at a DIFFERENT display position (1), then edit item 3 and commit: item 3 --
+  not the item now at display position 3 -- must receive the text. }
+begin
+  Populate(['e', 'd', 'c', 'b', 'a']);
+  FLV.ReadOnly := False;
+  FLV.SortColumn := 0;
+  FLV.SortDirection := sdAscending;
+  FLV.Sort;
+  { display order now a(item4) b(item3) c(item2) d(item1) e(item0):
+    item 3 is at display pos 1; display pos 3 holds item 1. }
+  AssertEquals('precondition: item 3 is at display pos 1', 3, FLV.OrderAt(1));
+  AssertEquals('precondition: display pos 3 is item 1', 1, FLV.OrderAt(3));
+
+  FLV.BeginEdit(3);
+  FLV.XEditor.Text := 'RENAMED';
+  FLV.EndEdit(True);
+
+  AssertEquals('the ITEM at index 3 received the text', 'RENAMED', FLV.Items[3].Caption);
+  AssertEquals('the item at display pos 3 (item 1) was NOT touched', 'd', FLV.Items[1].Caption);
+  AssertEquals('OnEdited reported the ITEM index', 3, FLastEditedIndex);
+end;
+
+procedure TListViewRenameTest.TestItemsClearCancelsEdit;
+{ Clearing the collection out from under an open edit CANCELS it (no commit into a
+  row that no longer exists). }
+begin
+  Populate(['a', 'b', 'c']);
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(1);
+  AssertTrue('editing started', FLV.Editing);
+  FLV.Items.Clear;
+  AssertFalse('the edit was cancelled', FLV.Editing);
+  AssertEquals('nothing was committed', 0, FEditedEvents);
+end;
+
+procedure TListViewRenameTest.TestShrinkItemCountPastEditedRowCancelsEdit;
+{ OwnerData: shrinking ItemCount below the edited row + ItemsChanged CANCELS the edit. }
+begin
+  FLV.OwnerData := True;
+  FLV.ItemCount := 10;
+  FLV.ItemsChanged;
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(7);
+  AssertTrue('editing started', FLV.Editing);
+  FLV.XEditor.Text := 'X';
+  FLV.ItemCount := 5;
+  FLV.ItemsChanged;
+  AssertFalse('row 7 is gone -> edit cancelled', FLV.Editing);
+  AssertEquals('nothing was committed', 0, FEditedEvents);
+end;
+
+procedure TListViewRenameTest.TestSortWhileEditingCommitsFirst;
+{ Sorting while editing COMMITS first (the cell is about to move). }
+begin
+  Populate(['e', 'd', 'c', 'b', 'a']);
+  FLV.ReadOnly := False;
+  FLV.SortColumn := 0;
+  FLV.BeginEdit(2);
+  AssertTrue('editing started', FLV.Editing);
+  FLV.XEditor.Text := 'CC';
+  FLV.Sort;
+  AssertFalse('the sort committed and closed the edit', FLV.Editing);
+  AssertEquals('the edit was committed to item 2 first', 'CC', FLV.Items[2].Caption);
+  AssertEquals('OnEdited fired for item 2', 2, FLastEditedIndex);
+end;
+
+procedure TListViewRenameTest.TestChangingViewStyleWhileEditingCommitsFirst;
+{ Switching ViewStyle while editing COMMITS first. }
+begin
+  Populate(['e', 'd', 'c', 'b', 'a']);
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(2);
+  AssertTrue('editing started', FLV.Editing);
+  FLV.XEditor.Text := 'VV';
+  FLV.ViewStyle := lvsIcon;
+  AssertFalse('the view switch committed and closed the edit', FLV.Editing);
+  AssertEquals('the edit was committed to item 2 first', 'VV', FLV.Items[2].Caption);
+end;
+
+procedure TListViewRenameTest.TestBeginEditOutOfRangeIsNoOp;
+{ BeginEdit on an out-of-range index is a no-op (Editing stays False, no crash). }
+begin
+  Populate(['a', 'b']);
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(9999);
+  AssertFalse('too-large index did nothing', FLV.Editing);
+  FLV.BeginEdit(-1);
+  AssertFalse('negative index did nothing', FLV.Editing);
+end;
+
+procedure TListViewRenameTest.TestDestroyingControlMidEditDoesNotCommitOrCrash;
+{ Destroying the control mid-edit must not commit (the csDestroying guard) and must
+  not crash. Freeing FLV here; TearDown's FreeAndNil then sees nil. }
+begin
+  Populate(['a', 'b', 'c']);
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(0);
+  FLV.XEditor.Text := 'Typed';
+  FreeAndNil(FLV);
+  AssertEquals('destroy did not commit', 0, FEditedEvents);
+end;
+
+procedure TListViewRenameTest.TestOnEditedBlankingTextAbandonsCommit;
+{ Per the OnEdited contract ("var AText; setting '' is treated as abandon"), a handler
+  that blanks the text abandons the commit: the caption is left untouched. }
+begin
+  Populate(['a', 'b', 'c']);
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(1);
+  FLV.XEditor.Text := 'typed';
+  FUseRewrite := True;
+  FRewriteTo := '';
+  FLV.EndEdit(True);
+  AssertTrue('OnEdited still fired', FEditedEvents = 1);
+  AssertEquals('a blanked text abandons -> caption untouched', 'b', FLV.Items[1].Caption);
+  AssertFalse('editing is over', FLV.Editing);
+end;
+
+procedure TListViewRenameTest.TestUserClearedFieldAlsoAbandonsCommit;
+{ The contract only pins "the HANDLER setting AText := '' means abandon". The implementation
+  is broader: any empty text after the handler runs abandons, including a field the user
+  cleared themselves. That is LCL's rename semantics -- an empty name is a cancel, not a
+  rename to nothing -- so pin it rather than leave it to chance. }
+begin
+  Populate(['a', 'b', 'c']);
+  FLV.ReadOnly := False;
+  FLV.BeginEdit(1);
+  FLV.XEditor.Text := '';          { the user cleared it; no handler rewrite }
+  FLV.EndEdit(True);
+  AssertTrue('OnEdited still fired', FEditedEvents = 1);
+  AssertEquals('an empty name is a cancel, not a rename to nothing', 'b', FLV.Items[1].Caption);
+  AssertFalse('editing is over', FLV.Editing);
+end;
+
+{ ===========================================================================
+  INTERACTION WIRING
+  =========================================================================== }
+
+procedure TListViewInteractionTest.SetUp;
+var
+  c: TTyColumn;
+  i: Integer;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+  FLV.Font.PixelsPerInch := 96;   { the runner reports 72; see the header suite }
+  FLV.SetBounds(0, 0, 400, 300);
+  FLV.ViewStyle := lvsReport;
+  c := FLV.Header.Columns.Add as TTyColumn; c.Text := 'name'; c.Width := 300;
+  FLV.Header.Options := FLV.Header.Options + [hoVisible];
+  FLV.Header.MainColumn := 0;   { must be set AFTER the column exists }
+  FLV.Checkboxes := True;
+  for i := 0 to 4 do
+    FLV.Items.Add.Caption := 'item' + IntToStr(i);
+  FLV.ItemsChanged;
+end;
+
+procedure TListViewInteractionTest.TearDown;
+begin
+  FreeAndNil(FLV);
+end;
+
+{ Row 0 sits just below the header band; walk x until GetHitPart says we are on the box. }
+function TListViewInteractionTest.BoxPointOfFirstRow(out P: TPoint): Boolean;
+var
+  x, y: Integer;
+begin
+  Result := False;
+  y := FLV.Header.Height + FLV.RowHeight div 2;
+  for x := 0 to 60 do
+    if FLV.GetHitPart(x, y) = lhpCheck then
+    begin
+      P := Point(x + 1, y);
+      Exit(True);
+    end;
+end;
+
+function TListViewInteractionTest.LabelPointOfFirstRow: TPoint;
+begin
+  Result := Point(200, FLV.Header.Height + FLV.RowHeight div 2);
+end;
+
+procedure TListViewInteractionTest.TestClickOnTheBoxTogglesCheckWithoutSelecting;
+var
+  p: TPoint;
+begin
+  AssertTrue('the box is hit-testable', BoxPointOfFirstRow(p));
+  AssertTrue('label point is not the box', FLV.GetHitPart(200, p.Y) <> lhpCheck);
+
+  FLV.XMouseDown(p.X, p.Y);
+  AssertTrue('the click checked item 0', FLV.Checked[0]);
+  AssertEquals('and selected nothing', 0, FLV.SelCount);
+  AssertEquals('and moved no focus', -1, FLV.ItemIndex);
+end;
+
+procedure TListViewInteractionTest.TestClickOnTheBoxAgainUnchecks;
+var
+  p: TPoint;
+begin
+  AssertTrue(BoxPointOfFirstRow(p));
+  FLV.XMouseDown(p.X, p.Y);
+  FLV.XMouseDown(p.X, p.Y);
+  AssertFalse('a second click unchecks', FLV.Checked[0]);
+end;
+
+procedure TListViewInteractionTest.TestClickOnTheLabelSelectsAndDoesNotCheck;
+var
+  p: TPoint;
+begin
+  p := LabelPointOfFirstRow;
+  AssertTrue('precondition: that point is the label', FLV.GetHitPart(p.X, p.Y) = lhpLabel);
+  FLV.XMouseDown(p.X, p.Y);
+  AssertEquals('the label click focused item 0', 0, FLV.ItemIndex);
+  AssertFalse('and did not check it', FLV.Checked[0]);
+end;
+
+procedure TListViewInteractionTest.TestSpaceTogglesTheFocusedItemsCheck;
+begin
+  FLV.ItemIndex := 2;
+  FLV.XKeyDown(VK_SPACE);
+  AssertTrue('Space checked the focused item', FLV.Checked[2]);
+  FLV.XKeyDown(VK_SPACE);
+  AssertFalse('Space unchecked it again', FLV.Checked[2]);
+end;
+
+procedure TListViewInteractionTest.TestCtrlSpaceStillTogglesTheSelection;
+begin
+  FLV.MultiSelect := True;
+  FLV.ItemIndex := 2;          { focus-selects }
+  FLV.XKeyDown(VK_SPACE, [ssCtrl]);
+  AssertFalse('Ctrl+Space did not touch the check', FLV.Checked[2]);
+  AssertEquals('it toggled the selection off', 0, FLV.SelCount);
+end;
+
+procedure TListViewInteractionTest.TestSpaceTogglesSelectionWhenCheckboxesAreOff;
+begin
+  FLV.Checkboxes := False;
+  FLV.MultiSelect := True;
+  FLV.ItemIndex := 2;
+  FLV.XKeyDown(VK_SPACE);
+  AssertEquals('with no checkboxes, Space is the old selection toggle', 0, FLV.SelCount);
+  AssertFalse('and still no check state', FLV.Checked[2]);
+end;
+
+procedure TListViewInteractionTest.TestF2StartsRenamingTheFocusedItem;
+begin
+  FLV.ReadOnly := False;
+  FLV.ItemIndex := 1;
+  FLV.XKeyDown(VK_F2);
+  AssertTrue('F2 entered rename', FLV.Editing);
+  FLV.EndEdit(False);
+end;
+
+procedure TListViewInteractionTest.TestF2DoesNothingWhenReadOnly;
+begin
+  AssertTrue('precondition: ReadOnly is the default', FLV.ReadOnly);
+  FLV.ItemIndex := 1;
+  FLV.XKeyDown(VK_F2);
+  AssertFalse('F2 on a read-only list does nothing', FLV.Editing);
+end;
+
 initialization
   RegisterTest(TListViewDataTest);
   RegisterTest(TListViewSortTest);
@@ -1215,4 +1894,7 @@ initialization
   RegisterTest(TListViewScrollTest);
   RegisterTest(TListViewHeaderTest);
   RegisterTest(TListViewTypeAheadTest);
+  RegisterTest(TListViewCheckboxTest);
+  RegisterTest(TListViewRenameTest);
+  RegisterTest(TListViewInteractionTest);
 end.

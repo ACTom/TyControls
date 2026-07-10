@@ -202,6 +202,23 @@ type
     procedure TestZeroPitchGeometryDoesNotDivideByZero;
   end;
 
+  { --- TyListCheckRect (SP2a: the ONE source of the row checkbox rect) ---
+    Written from docs/superpowers/plans/2026-07-10-listview-sp2a.md, section
+    「一、行首复选框 / 纯函数」. Every expected value is derived by hand from that
+    contract; the implementation was NOT read. Names pin the RULE, not the function. }
+  TListCheckRectTest = class(TTestCase)
+  published
+    procedure TestReportCheckRectIsLeftAlignedVerticallyCentred;
+    procedure TestListSmallIconTileFollowTheSameCentredRule;
+    procedure TestIconCheckRectIsTopLeftNotCentred;
+    procedure TestZeroCheckPxIsEmptyRect;
+    procedure TestNegativeCheckPxIsEmptyRect;
+    procedure TestCellTooNarrowIsEmptyRect;
+    procedure TestCellTooShortIsEmptyRect;
+    procedure TestExactFitIsNotEmptyRect;
+    procedure TestOddCentringDifferenceFloors;
+  end;
+
 implementation
 
 { ===========================================================================
@@ -1232,6 +1249,99 @@ begin
   end;
 end;
 
+{ ===========================================================================
+  TyListCheckRect
+  ---------------------------------------------------------------------------
+  Contract (sp2a):
+    function TyListCheckRect(const ACell: TRect; AStyle: TTyListViewStyle;
+      ACheckPx, APad: Integer): TRect;
+    - report / list / smallicon / tile : left-aligned, VERTICALLY CENTRED,
+      inset from the left by APad.
+    - lvsIcon                          : TOP-LEFT, inset by APad on both axes.
+    - box is ACheckPx x ACheckPx.
+    - ACheckPx <= 0, OR the cell cannot hold ACheckPx + APad in EITHER axis
+      -> Rect(0,0,0,0).
+  =========================================================================== }
+
+procedure TListCheckRectTest.TestReportCheckRectIsLeftAlignedVerticallyCentred;
+{ Cell (100,50)-(300,74): width 200, height 24. ACheckPx=14 APad=3.
+  Left = 100+3 = 103; centred Top = 50 + (24-14) div 2 = 55;
+  Right = 103+14 = 117; Bottom = 55+14 = 69.
+  (Height difference 10 is EVEN, so floor-vs-round centring cannot disagree here.) }
+begin
+  AssertRectEquals('report check', 103, 55, 117, 69,
+    TyListCheckRect(Rect(100, 50, 300, 74), lvsReport, 14, 3));
+end;
+
+procedure TListCheckRectTest.TestListSmallIconTileFollowTheSameCentredRule;
+{ The three non-report, non-icon styles share the left-aligned + vertically-centred rule.
+  Cell (0,0)-(134,40): Left=3; Top=(40-14) div 2 = 13; Right=17; Bottom=27.
+  (Difference 26 is EVEN.) }
+begin
+  AssertRectEquals('smallicon check', 3, 13, 17, 27,
+    TyListCheckRect(Rect(0, 0, 134, 40), lvsSmallIcon, 14, 3));
+  AssertRectEquals('list check', 3, 13, 17, 27,
+    TyListCheckRect(Rect(0, 0, 134, 40), lvsList, 14, 3));
+  AssertRectEquals('tile check', 3, 13, 17, 27,
+    TyListCheckRect(Rect(0, 0, 134, 40), lvsTile, 14, 3));
+end;
+
+procedure TListCheckRectTest.TestIconCheckRectIsTopLeftNotCentred;
+{ Same cell as the report test, but lvsIcon puts the box at the TOP-left:
+  Left = 100+3 = 103; Top = 50+3 = 53; Right = 117; Bottom = 53+14 = 67.
+  If icon were (wrongly) centred like the others its Top would be 55, so this
+  discriminates the two placements. }
+begin
+  AssertRectEquals('icon check top-left', 103, 53, 117, 67,
+    TyListCheckRect(Rect(100, 50, 300, 74), lvsIcon, 14, 3));
+end;
+
+procedure TListCheckRectTest.TestZeroCheckPxIsEmptyRect;
+begin
+  AssertRectEquals('checkpx 0 -> empty', 0, 0, 0, 0,
+    TyListCheckRect(Rect(100, 50, 300, 74), lvsReport, 0, 3));
+end;
+
+procedure TListCheckRectTest.TestNegativeCheckPxIsEmptyRect;
+begin
+  AssertRectEquals('checkpx <0 -> empty', 0, 0, 0, 0,
+    TyListCheckRect(Rect(100, 50, 300, 74), lvsReport, -5, 3));
+end;
+
+procedure TListCheckRectTest.TestCellTooNarrowIsEmptyRect;
+{ Needs width >= ACheckPx + APad = 17; width 16 is one short -> empty. }
+begin
+  AssertRectEquals('too narrow -> empty', 0, 0, 0, 0,
+    TyListCheckRect(Rect(0, 0, 16, 40), lvsReport, 14, 3));
+end;
+
+procedure TListCheckRectTest.TestCellTooShortIsEmptyRect;
+{ Needs height >= ACheckPx + APad = 17; height 16 is one short -> empty. }
+begin
+  AssertRectEquals('too short -> empty', 0, 0, 0, 0,
+    TyListCheckRect(Rect(0, 0, 200, 16), lvsReport, 14, 3));
+end;
+
+procedure TListCheckRectTest.TestExactFitIsNotEmptyRect;
+{ A cell exactly ACheckPx + APad in BOTH axes (17x17) CAN hold the box, so the
+  result is NOT empty. lvsIcon is used so the top-left placement makes the
+  coordinates exact with no centring rounding: Left=3, Top=3, Right=17, Bottom=17.
+  This is the < vs <= boundary of the refusal rule -- see the notes returned with
+  these tests: "cannot hold ACheckPx + APad" is read literally as "equal fits". }
+begin
+  AssertRectEquals('exact fit is not empty', 3, 3, 17, 17,
+    TyListCheckRect(Rect(0, 0, 17, 17), lvsIcon, 14, 3));
+end;
+
+procedure TListCheckRectTest.TestOddCentringDifferenceFloors;
+{ Every other centred case here happens to use an EVEN (Height - ACheckPx), where floor and
+  round agree -- so nothing pinned which one the contract means. Height 25, box 14: the
+  difference is 11, and floor gives Top = 5 while round would give 6. Pin floor. }
+begin
+  AssertRectEquals('odd centring difference floors', 3, 5, 17, 19,
+    TyListCheckRect(Rect(0, 0, 200, 25), lvsReport, 14, 3));
+end;
+
 initialization
   RegisterTest(TListCellSizeTest);
   RegisterTest(TListTracksTest);
@@ -1247,4 +1357,5 @@ initialization
   RegisterTest(TListCompareTest);
   RegisterTest(TListReportRowAtTest);
   RegisterTest(TListDegenerateTest);
+  RegisterTest(TListCheckRectTest);
 end.

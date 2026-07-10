@@ -135,6 +135,28 @@ LV.Sort;
 | `OwnerData` | `Boolean` | `False` | 虚拟模式开关 |
 | `ItemCount` | `Integer` | `0` | 虚拟模式下的行数 |
 
+### 复选框 / 重命名
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `Checkboxes` | `Boolean` | `False` | 每行左侧画一个复选框(复用 `TyTreeCheckBox` 主题 token) |
+| `ReadOnly` | `Boolean` | `True` | **默认禁止改名**。这与 LCL `TListView.ReadOnly = False` 相反,是有意的:文件对话框的文件面板不该因为误按 F2 就进入改名。设 `False` 才能 F2 重命名 |
+
+| 成员 | 说明 |
+|---|---|
+| `Checked[AIndex]: Boolean` | 勾选态(item index)。读 = `lisChecked in GetItemState(i)` |
+| `BeginEdit(AIndex)` / `EndEdit(ACommit)` / `Editing` | 行内重命名 |
+| `OnItemChecked` | 勾选变化,收 item index |
+| `OnEditing(Sender; AIndex; var AAllow)` | `AAllow := False` 否决改名 |
+| `OnEdited(Sender; AIndex; var AText)` | 提交前触发;可改写 `AText`;**置 `''` 视为放弃**(用户自己清空也一样) |
+
+> **勾选态和选中态一样,按 item index 存,跨排序稳定。**
+>
+> ⚠️ **`OwnerData` 模式下控件不缓存勾选态。** 点击和 `Space` 算的是 `not Checked[i]`,而 `Checked[i]`
+> 读的是你的 `OnGetItemState`。所以你**必须**在 `OnItemChecked` 里改自己的存储 —— 否则
+> `GetItemState` 永远返回旧值,勾选框看起来点不动。这是"控件不拥有数据"的必然代价,和
+> `OnEdited` 必须自己写回标题是同一回事。
+
 ### 排序 / 选择
 
 | 属性 | 类型 | 默认值 | 说明 |

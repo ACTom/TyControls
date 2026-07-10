@@ -97,6 +97,19 @@ function TyListContentExtent(ACount: Integer; const M: TTyListMetrics): TSize;
 function TyListItemRect(ADisplayPos, ACount: Integer; const M: TTyListMetrics;
   AScrollX, AScrollY: Integer): TRect;
 
+{ The checkbox rect inside a cell (DEVICE px, CLIENT coords). Both painting and
+  hit-testing MUST call it; like TyListItemRect it is the single geometry source for
+  the box, so the two can never drift.
+    - ACell: in report mode this is the MAIN COLUMN's sub-rect; in every other mode it
+      is the whole cell. (This unit knows nothing about the column model, so the control
+      computes the column geometry and passes the sub-rect in.)
+    - lvsIcon: pinned to the TOP-LEFT corner, inset by APad.
+    - every other style: at the LEFT, VERTICALLY CENTERED, inset by APad.
+    - ACheckPx <= 0, or a cell too small to hold the box (width OR height less than
+      ACheckPx + APad) -> Rect(0,0,0,0). }
+function TyListCheckRect(const ACell: TRect; AStyle: TTyListViewStyle;
+  ACheckPx, APad: Integer): TRect;
+
 { Inverse of TyListItemRect. Takes a CLIENT-coord point, returns the display position
   under it, or -1. -1 means: inside the header band, inside an inter-cell gap, or past
   the last populated cell. It computes a candidate position then VERIFIES it by calling
@@ -324,6 +337,32 @@ begin
   Result.Top    := M.HeaderH + row * PitchY - AScrollY;
   Result.Right  := Result.Left + M.CellW;
   Result.Bottom := Result.Top + M.CellH;
+end;
+
+{ ---------------------------------------------------------------------------
+  TyListCheckRect
+  --------------------------------------------------------------------------- }
+
+function TyListCheckRect(const ACell: TRect; AStyle: TTyListViewStyle;
+  ACheckPx, APad: Integer): TRect;
+var
+  cw, ch, l, t: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if ACheckPx <= 0 then
+    Exit;
+  cw := ACell.Right - ACell.Left;
+  ch := ACell.Bottom - ACell.Top;
+  { The box needs its own edge length plus one inset; a cell that cannot spare that on
+    either axis shows no box at all. }
+  if (cw < ACheckPx + APad) or (ch < ACheckPx + APad) then
+    Exit;
+  l := ACell.Left + APad;
+  if AStyle = lvsIcon then
+    t := ACell.Top + APad                    { icon flow: top-left corner }
+  else
+    t := ACell.Top + (ch - ACheckPx) div 2;  { else: left edge, vertically centred }
+  Result := Rect(l, t, l + ACheckPx, t + ACheckPx);
 end;
 
 { ---------------------------------------------------------------------------
