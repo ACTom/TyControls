@@ -157,11 +157,115 @@ function TyListGroupNavigate(const AMap: TTyListGroupMap; ACurrent: Integer;
 
 ---
 
-## 任务 2 —— 控件(本文档在任务 1 落地后补写)
+## 任务 2 契约 —— 控件接线
 
-预告(实现者不要提前动):`TTyListGroup` / `TTyListGroups` 集合、`GroupView`、
-`TTyListItem.GroupIndex`、`OnGetItemGroup`(虚拟模式)、`OnGroupCollapsed`、
-点击组头折叠/展开、`SyncArrays` 与 `Sort` 改成按组构建 `FOrder`。
+> 前置:任务 1(`e5d48c4`)已合并。**零新增主题 token**:组头带复用已有的 `'TyTreeHeader'`。
+
+### 核心思路 —— 为什么改动比看上去小
+
+控件现有的绘制 / 命中 / 导航 / 选择**几乎全部**经 `DisplayToItem`(=`FOrder[pos]`)和
+`ItemToDisplay`(=`FRank[item]`)转换。所以启用分组只需两件事:
+
+1. `FOrder` 改成**只装可见项**(按组顺序,折叠组的项不进);
+2. `FRank[item]` 对折叠组的项 = `-1`(`ItemToDisplay` 已经对 `-1` 做了正确处理)。
+
+于是白拿:`SelectAll` / `GetNextSelected` 本来就按 item index 遍历 → **折叠不丢选中、SelectAll 含隐藏项**,
+一行不用改。`ScrollIntoView(item)` 里 `ItemToDisplay(item) = -1` 时本就该 `Exit` → 隐藏项自动 no-op。
+
+### 分组模型
+
+```pascal
+type
+  TTyListGroup = class(TCollectionItem)
+  published
+    property Caption: string;
+    property Collapsed: Boolean default False;
+  end;
+
+  TTyListGroups = class(TCollection)
+    function Add: TTyListGroup;
+    property Items[i: Integer]: TTyListGroup read GetItem write SetItem; default;
+  end;
+
+  TTyListGroupEvent = procedure(Sender: TObject; AGroup: Integer) of object;
+
+published
+  property GroupView: Boolean default False;
+  property Groups: TTyListGroups;
+  property OnGetItemGroup: TTyListGroupEvent... { 见下,签名用 var }
+  property OnGroupCollapsed: TTyListGroupEvent; { 折叠状态改变后触发,收组序号 }
+```
+
+`TTyListItem` 增 `published GroupIndex: Integer default -1`。
+
+**`Groups` 始终是真实集合**,即便 `OwnerData` —— 虚拟模式只虚拟**项**,不虚拟组(组数总是很小)。
+
+### 取组 —— 第五个虚方法,和取数四方法并列
+
+```pascal
+protected
+  function GetItemGroup(AItemIndex: Integer): Integer; virtual;   { 返回组序号,或 -1 = 隐式桶 }
+```
+
+默认实现:`OwnerData` → 触发 `OnGetItemGroup(Self, i, var g)`(未接则 `-1`);否则读 `Items[i].GroupIndex`。
+返回值不在 `[0, Groups.Count-1]` 内 → 归到**隐式桶**。
+
+### 隐式桶
+
+组序号无效(`-1` 或越界)的项收进**一个隐式桶**,排在所有真实组**之后**,`HasHeader = False`(不画组头、不占组头高度)、**不可折叠**。全部项都有有效组时,桶为空、不出现。
+
+### `FOrder` 的分组构建
+
+`GroupView = True` 且 `FViewStyle <> lvsList` 时,`RebuildOrder` / `Sort` 改走分组路径:
+
+1. 按 item index 升序,把每项分进 `groupItems[g]`(g ∈ `[0, Groups.Count]`,最后一个是隐式桶)。
+2. 排序时,对**每个** `groupItems[g]` 用同一个比较器稳定排序(平局按 item index)。
+3. `FOrder` := 依次拼接**未折叠**组的 `groupItems[g]`。
+4. `FRank` 全置 `-1`,再遍历 `FOrder` 回填。
+5. 缓存 `FGroupMap := TyListBuildGroupMap(infoArray, m, groupHeaderH)`,`infoArray[g]` 的
+   `Count = Length(groupItems[g])`、`Collapsed`(桶恒 False)、`HasHeader`(桶 False)。
+
+**`lvsList` 或 `GroupView = False` → 一字不动地走 SP1 扁平路径。** 这是 2623 个既有测试原样通过的保证。
+
+`VisibleCount = Length(FOrder)`。
+
+### 绘制
+
+`RenderTo` 顶层分支:分组时用 `TyListGroupVisibleRange` 取可见组区间,逐组:
+
+- `HasHeader` → 画组头带(`ResolveStyle('TyTreeHeader', …)`,内容 = `Caption + ' (' + Count + ')'` + 折叠三角);
+- 组未折叠 → 逐可见项:`item := FOrder[FirstVisible[g] + i]`,`cell := TyListGroupItemRect(...)`,`RenderItem`。
+
+组头带**不横滚**(X 固定 `[0, ViewportW]`),但**随内容纵滚**。
+
+### 命中 / 交互
+
+- `GetItemAt` / `GetHitPart`:分组时走 `TyListGroupHitTest`。命中组头(`AIndexInGroup = -1`)→ 新 hit part
+  `lhpGroupHeader`(加进 `TTyListHitPart`);命中项 → `FOrder[FirstVisible[g]+i]` 换回 item index。
+- **点击组头** → 切换 `Groups[g].Collapsed`,重建 order,触发 `OnGroupCollapsed(Self, g)`,`Invalidate`。
+  折叠后 `FItemIndex` 若落进被折叠的组(`ItemToDisplay = -1`)→ 焦点不动、但它已不可见(可接受;不自动改焦点)。
+- 键盘导航:分组时 `TyListGroupNavigate(FGroupMap, curPos, key, m)`,收/返 display 位置。
+- 滚动量程:分组时 `TyListGroupContentHeight(FGroupMap)` 取代 `TyListContentExtent`。
+
+### 不变式(逐条测)
+
+1. `GroupView = False`:所有行为 = SP1(既有 2623 测试原样过)。
+2. `lvsList` + `GroupView = True`:忽略分组,走扁平路径。
+3. 集合模式:`FOrder` 按 `Groups` 顺序、组内按 item index(未排序时)/ 比较器(排序时)。
+4. 折叠一个组:该组的项从 `FOrder` 消失,`FRank[它们] = -1`;**它们的选中位不变**,展开回来仍选中。
+5. `SelectAll` 选中**全部**项(含折叠组里的)。`SelCount` 计全部。
+6. `ScrollIntoView(隐藏项)` → no-op(不自动展开)。
+7. `GetItemGroup`:集合读 `GroupIndex`;OwnerData 触发 `OnGetItemGroup`;越界 → 隐式桶。
+8. 无效组序号的项进隐式桶,排在最后,无组头。
+9. 切 `GroupView` 开 / 关,`FOrder`/`FRank` 长度与内容自洽,不崩。
+10. 点组头切换 `Collapsed` 并触发 `OnGroupCollapsed`。
+
+## 验收(任务 2)
+
+- 全量测试 0 失败(基线 2676 + 新增)
+- `themes/*.tycss`、`DefaultTheme.pas`、`BuiltinThemeData.pas`、`tests/golden/*`、
+  `tyControls.TreeView.pas` **零改动**
+- **未开启分组的既有测试全部原样通过**(退化证据)
 
 ## 验收
 
