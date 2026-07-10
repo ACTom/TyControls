@@ -1,0 +1,762 @@
+unit test.listview;
+{ Headless state-machine tests for TTyListView, written FROM THE CONTRACT
+  (docs/superpowers/plans/2026-07-10-listview-sp1.md, "任务 2 契约") and NOT from
+  the implementation. No windowing: controls are Create(nil), never parented to a
+  shown form, never painted, no Handle touched. Everything asserted here is the
+  control's data / sort / selection / virtual-staleness state machine.
+
+  The four data accessors (GetItemCount/GetItemText/GetItemImageIndex/GetItemState)
+  are protected; they are reached through a TTyListViewAccess subclass declared in
+  this unit, exactly as the rest of the repo reaches protected members. The same
+  subclass exposes OrderAt(), which calls the protected DisplayToItem seam: the public
+  API deliberately hides display order, so the sort's permutation can only be observed
+  from a descendant — which is also how TTyShellListView will read it. }
+{$mode objfpc}{$H+}
+interface
+
+uses
+  Classes, SysUtils, Types, fpcunit, testregistry,
+  tyControls.Columns,          { TTySortDirection, sdAscending, sdDescending }
+  tyControls.ListView.Layout,  { TTyListViewStyle, TTyListSortKind }
+  tyControls.ListView;         { TTyListView + item / state types + events }
+
+type
+  { Reaches the protected data accessors and the internal display order. }
+  TTyListViewAccess = class(TTyListView)
+  public
+    function XGetItemCount: Integer;
+    function XGetItemText(AIndex, AColumn: Integer): string;
+    function XGetItemImageIndex(AIndex, AColumn: Integer): Integer;
+    function XGetItemState(AIndex: Integer): TTyListItemStates;
+    { Display position -> stable item index. Goes through the control's protected
+      DisplayToItem seam rather than reaching into FOrder: the arrays stay private (a
+      descendant has no business reshuffling the display order) and this is the same
+      seam TTyShellListView will read. }
+    function OrderAt(ADisplayPos: Integer): Integer;
+  end;
+
+  { -----------------------------------------------------------------------
+    DATA ACCESS — collection mode + OwnerData fan-out through the four accessors
+    ----------------------------------------------------------------------- }
+  TListViewDataTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+    procedure HGetText(Sender: TObject; AIndex, AColumn: Integer; var AText: string);
+    procedure HGetImage(Sender: TObject; AIndex, AColumn: Integer; var AImageIndex: Integer);
+    procedure HGetState(Sender: TObject; AIndex: Integer; var AStates: TTyListItemStates);
+    procedure AddRow(const ACaption, ASub1, ASub2: string);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { Collection: column 0 is Caption }
+    procedure TestCollectionColumn0IsCaption;
+    { Collection: column N>0 is SubItems[N-1] }
+    procedure TestCollectionColumnNIsSubItem;
+    { Collection: an out-of-range column returns '' }
+    procedure TestCollectionOutOfRangeColumnEmpty;
+    { Collection: GetItemCount tracks Items.Count }
+    procedure TestCollectionItemCountTracksItems;
+    { OwnerData: GetItemCount is the published ItemCount }
+    procedure TestOwnerDataItemCount;
+    { OwnerData: OnGetItemText fans out with the right (index, column) }
+    procedure TestOwnerDataTextFanOut;
+    { OwnerData: OnGetItemImage fans out with the right (index, column) }
+    procedure TestOwnerDataImageFanOut;
+    { OwnerData: OnGetItemState fans out with the right index }
+    procedure TestOwnerDataStateFanOut;
+    { OwnerData with NO handlers: '' / -1 / [] rather than a crash }
+    procedure TestOwnerDataNoHandlerDefaults;
+    { Toggling OwnerData does not corrupt the state arrays / does not crash }
+    procedure TestSwitchingOwnerDataKeepsArraysSane;
+  end;
+
+  { -----------------------------------------------------------------------
+    SORT — FOrder permutation, Items untouched, stability, direction, OnCompare,
+    and the headline: selection survives a re-sort and a view-style switch
+    ----------------------------------------------------------------------- }
+  TListViewSortTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+    FCompareCalls: Integer;
+    FCompareBadCol: Boolean;
+    FCompareBadIdx: Boolean;
+    procedure HCompareByIndexDesc(Sender: TObject; AIndex1, AIndex2, AColumn: Integer;
+      var ACompare: Integer);
+    procedure PopulateCaptions(const ACaps: array of string);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { SortColumn = -1 restores the identity display order }
+    procedure TestSortColumnMinusOneRestoresIdentity;
+    { A sort permutes display order but leaves Items[k].Caption untouched }
+    procedure TestSortLeavesItemsUntouched;
+    { Equal captions keep their relative item order (ties broken by item index) }
+    procedure TestSortIsStableOnTies;
+    { sdDescending reverses comparable values }
+    procedure TestSortDescendingReversesOrder;
+    { OnCompare wins over the built-in comparator and gets ITEM indices + SortColumn }
+    procedure TestOnCompareWinsAndGetsItemIndices;
+    { THE key test: selection + ItemIndex survive a re-sort in both directions }
+    procedure TestSelectionSurvivesReSort;
+    { Selection + ItemIndex survive a ViewStyle switch }
+    procedure TestSelectionSurvivesViewStyleSwitch;
+  end;
+
+  { -----------------------------------------------------------------------
+    SELECTION — multiselect collapse, SelectAll/ClearSelection/SelCount,
+    GetNextSelected walk, out-of-range safety
+    ----------------------------------------------------------------------- }
+  TListViewSelectionTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+    procedure Populate(ACount: Integer);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { MultiSelect := False collapses the selection to ItemIndex alone }
+    procedure TestMultiSelectFalseCollapsesToItemIndex;
+    procedure TestCollapseWithNoFocusAdoptsFirstSelected;
+    procedure TestCollapseWithNothingSelectedStaysEmpty;
+    procedure TestItemIndexIsFocusSelects;
+    { SelectAll selects every item }
+    procedure TestSelectAll;
+    { ClearSelection empties the selection }
+    procedure TestClearSelection;
+    { SelCount reflects the number of set bits }
+    procedure TestSelCount;
+    { GetNextSelected(var i) from -1 walks every selected item index ascending }
+    procedure TestGetNextSelectedWalk;
+    { Selected[] with an out-of-range index neither crashes nor changes SelCount }
+    procedure TestSelectedOutOfRangeIsSafe;
+  end;
+
+  { -----------------------------------------------------------------------
+    VIRTUAL-MODE STALENESS — shrink/grow ItemCount + ItemsChanged clamping
+    ----------------------------------------------------------------------- }
+  TListViewVirtualTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+    procedure SetVirtual(ACount: Integer);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { Shrinking ItemCount + ItemsChanged clamps ItemIndex and drops stale selection }
+    procedure TestShrinkClampsIndexAndSelection;
+    { A surviving in-range selection is still counted after a shrink }
+    procedure TestShrinkKeepsSurvivingSelection;
+    { Growing ItemCount + ItemsChanged leaves the new items unselected }
+    procedure TestGrowLeavesNewItemsUnselected;
+    { ItemIndex assigned out of range is clamped, never raises }
+    procedure TestItemIndexAssignedOutOfRangeIsClamped;
+  end;
+
+implementation
+
+{ ===========================================================================
+  TTyListViewAccess
+  =========================================================================== }
+
+function TTyListViewAccess.XGetItemCount: Integer;
+begin
+  Result := GetItemCount;
+end;
+
+function TTyListViewAccess.XGetItemText(AIndex, AColumn: Integer): string;
+begin
+  Result := GetItemText(AIndex, AColumn);
+end;
+
+function TTyListViewAccess.XGetItemImageIndex(AIndex, AColumn: Integer): Integer;
+begin
+  Result := GetItemImageIndex(AIndex, AColumn);
+end;
+
+function TTyListViewAccess.XGetItemState(AIndex: Integer): TTyListItemStates;
+begin
+  Result := GetItemState(AIndex);
+end;
+
+function TTyListViewAccess.OrderAt(ADisplayPos: Integer): Integer;
+begin
+  Result := DisplayToItem(ADisplayPos);
+end;
+
+{ ===========================================================================
+  DATA ACCESS
+  =========================================================================== }
+
+procedure TListViewDataTest.SetUp;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+  FLV.Font.PixelsPerInch := 96;
+end;
+
+procedure TListViewDataTest.TearDown;
+begin
+  FLV.Free;
+end;
+
+procedure TListViewDataTest.AddRow(const ACaption, ASub1, ASub2: string);
+var
+  it: TTyListItem;
+begin
+  it := FLV.Items.Add;
+  it.Caption := ACaption;
+  it.SubItems.Add(ASub1);
+  it.SubItems.Add(ASub2);
+end;
+
+procedure TListViewDataTest.HGetText(Sender: TObject; AIndex, AColumn: Integer;
+  var AText: string);
+begin
+  { Encode both coordinates so the test can prove the right pair arrived. }
+  AText := Format('r%dc%d', [AIndex, AColumn]);
+end;
+
+procedure TListViewDataTest.HGetImage(Sender: TObject; AIndex, AColumn: Integer;
+  var AImageIndex: Integer);
+begin
+  AImageIndex := AIndex * 100 + AColumn;
+end;
+
+procedure TListViewDataTest.HGetState(Sender: TObject; AIndex: Integer;
+  var AStates: TTyListItemStates);
+begin
+  if AIndex mod 2 = 0 then
+    AStates := [lisChecked]
+  else
+    AStates := [];
+end;
+
+procedure TListViewDataTest.TestCollectionColumn0IsCaption;
+begin
+  AddRow('Alpha', 'one', 'two');
+  AddRow('Beta',  'three', 'four');
+  FLV.ItemsChanged;
+  AssertEquals('col 0 row 0 = Caption', 'Alpha', FLV.XGetItemText(0, 0));
+  AssertEquals('col 0 row 1 = Caption', 'Beta',  FLV.XGetItemText(1, 0));
+end;
+
+procedure TListViewDataTest.TestCollectionColumnNIsSubItem;
+begin
+  AddRow('Alpha', 'one', 'two');
+  FLV.ItemsChanged;
+  AssertEquals('col 1 = SubItems[0]', 'one', FLV.XGetItemText(0, 1));
+  AssertEquals('col 2 = SubItems[1]', 'two', FLV.XGetItemText(0, 2));
+end;
+
+procedure TListViewDataTest.TestCollectionOutOfRangeColumnEmpty;
+begin
+  AddRow('Alpha', 'one', 'two');
+  FLV.ItemsChanged;
+  { Only columns 0..2 have data; column 3 is past SubItems -> '' }
+  AssertEquals('out-of-range column is empty', '', FLV.XGetItemText(0, 3));
+end;
+
+procedure TListViewDataTest.TestCollectionItemCountTracksItems;
+begin
+  AssertEquals('empty count = 0', 0, FLV.XGetItemCount);
+  AddRow('A', '', '');
+  AddRow('B', '', '');
+  AddRow('C', '', '');
+  FLV.ItemsChanged;
+  AssertEquals('count tracks Items.Count', FLV.Items.Count, FLV.XGetItemCount);
+  AssertEquals('count = 3', 3, FLV.XGetItemCount);
+end;
+
+procedure TListViewDataTest.TestOwnerDataItemCount;
+begin
+  FLV.OwnerData := True;
+  FLV.ItemCount := 42;
+  FLV.ItemsChanged;
+  AssertEquals('OwnerData count = published ItemCount', 42, FLV.XGetItemCount);
+end;
+
+procedure TListViewDataTest.TestOwnerDataTextFanOut;
+begin
+  FLV.OwnerData := True;
+  FLV.ItemCount := 10;
+  FLV.OnGetItemText := @HGetText;
+  FLV.ItemsChanged;
+  AssertEquals('(7,2) fanned out', 'r7c2', FLV.XGetItemText(7, 2));
+  AssertEquals('(0,0) fanned out', 'r0c0', FLV.XGetItemText(0, 0));
+end;
+
+procedure TListViewDataTest.TestOwnerDataImageFanOut;
+begin
+  FLV.OwnerData := True;
+  FLV.ItemCount := 10;
+  FLV.OnGetItemImage := @HGetImage;
+  FLV.ItemsChanged;
+  AssertEquals('(3,1) image fanned out', 301, FLV.XGetItemImageIndex(3, 1));
+end;
+
+procedure TListViewDataTest.TestOwnerDataStateFanOut;
+begin
+  FLV.OwnerData := True;
+  FLV.ItemCount := 10;
+  FLV.OnGetItemState := @HGetState;
+  FLV.ItemsChanged;
+  AssertTrue('even index -> [lisChecked]', FLV.XGetItemState(4) = [lisChecked]);
+  AssertTrue('odd index -> []',            FLV.XGetItemState(3) = []);
+end;
+
+procedure TListViewDataTest.TestOwnerDataNoHandlerDefaults;
+begin
+  FLV.OwnerData := True;
+  FLV.ItemCount := 5;
+  FLV.ItemsChanged;
+  { No handlers assigned: defensive defaults, never a crash. }
+  AssertEquals('text default = empty', '', FLV.XGetItemText(0, 0));
+  AssertEquals('image default = -1', -1, FLV.XGetItemImageIndex(0, 0));
+  AssertTrue('state default = []', FLV.XGetItemState(0) = []);
+end;
+
+procedure TListViewDataTest.TestSwitchingOwnerDataKeepsArraysSane;
+var
+  probe: Integer;
+begin
+  { Populate a collection, select an item, then flip modes back and forth. The
+    invariant: no crash, SelCount stays within [0, count], the accessors and
+    GetNextSelected keep working. }
+  AddRow('A', '', ''); AddRow('B', '', ''); AddRow('C', '', '');
+  AddRow('D', '', ''); AddRow('E', '', '');
+  FLV.ItemsChanged;
+  FLV.MultiSelect := True;
+  FLV.Selected[2] := True;
+
+  FLV.OwnerData := True;
+  FLV.ItemCount := 3;
+  FLV.ItemsChanged;
+  AssertTrue('SelCount within range after -> OwnerData',
+    (FLV.SelCount >= 0) and (FLV.SelCount <= FLV.XGetItemCount));
+
+  FLV.OwnerData := False;
+  FLV.ItemsChanged;
+  AssertEquals('collection count restored', 5, FLV.XGetItemCount);
+  AssertTrue('SelCount within range after -> collection',
+    (FLV.SelCount >= 0) and (FLV.SelCount <= 5));
+
+  { GetNextSelected must terminate (bounded walk), never spin. }
+  probe := -1;
+  while FLV.GetNextSelected(probe) do
+    if probe > 5 then
+      Break;
+  AssertTrue('GetNextSelected terminated in range', probe <= 5);
+end;
+
+{ ===========================================================================
+  SORT
+  =========================================================================== }
+
+procedure TListViewSortTest.SetUp;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+  FLV.Font.PixelsPerInch := 96;
+  FCompareCalls := 0;
+  FCompareBadCol := False;
+  FCompareBadIdx := False;
+end;
+
+procedure TListViewSortTest.TearDown;
+begin
+  FLV.Free;
+end;
+
+procedure TListViewSortTest.PopulateCaptions(const ACaps: array of string);
+var
+  i: Integer;
+  it: TTyListItem;
+begin
+  for i := Low(ACaps) to High(ACaps) do
+  begin
+    it := FLV.Items.Add;
+    it.Caption := ACaps[i];
+  end;
+  FLV.ItemsChanged;
+end;
+
+procedure TListViewSortTest.HCompareByIndexDesc(Sender: TObject;
+  AIndex1, AIndex2, AColumn: Integer; var ACompare: Integer);
+begin
+  Inc(FCompareCalls);
+  if AColumn <> FLV.SortColumn then
+    FCompareBadCol := True;
+  if (AIndex1 < 0) or (AIndex1 >= FLV.XGetItemCount) or
+     (AIndex2 < 0) or (AIndex2 >= FLV.XGetItemCount) then
+    FCompareBadIdx := True;
+  { Descending by item index: the larger item index sorts first. }
+  ACompare := AIndex2 - AIndex1;
+end;
+
+procedure TListViewSortTest.TestSortColumnMinusOneRestoresIdentity;
+var
+  k: Integer;
+begin
+  PopulateCaptions(['d', 'c', 'b', 'a']);
+  FLV.SortKind := lskText;
+  FLV.SortColumn := 0;
+  FLV.SortDirection := sdAscending;
+  FLV.Sort;
+  { Now scramble is in place; -1 must give the identity map back. }
+  FLV.SortColumn := -1;
+  FLV.Sort;
+  for k := 0 to FLV.XGetItemCount - 1 do
+    AssertEquals(Format('identity at display %d', [k]), k, FLV.OrderAt(k));
+end;
+
+procedure TListViewSortTest.TestSortLeavesItemsUntouched;
+begin
+  PopulateCaptions(['e', 'd', 'c', 'b', 'a']);
+  FLV.SortKind := lskText;
+  FLV.SortColumn := 0;
+  FLV.SortDirection := sdAscending;
+  FLV.Sort;
+  { Items must NOT be reordered — a design that sorts the collection fails here. }
+  AssertEquals('Items[0] still e', 'e', FLV.Items[0].Caption);
+  AssertEquals('Items[1] still d', 'd', FLV.Items[1].Caption);
+  AssertEquals('Items[2] still c', 'c', FLV.Items[2].Caption);
+  AssertEquals('Items[3] still b', 'b', FLV.Items[3].Caption);
+  AssertEquals('Items[4] still a', 'a', FLV.Items[4].Caption);
+end;
+
+procedure TListViewSortTest.TestSortIsStableOnTies;
+begin
+  { Items 0..3 = b, a, a, c. Ascending text order with ties broken by item index:
+    a(item1), a(item2), b(item0), c(item3) -> FOrder = [1,2,0,3]. }
+  PopulateCaptions(['b', 'a', 'a', 'c']);
+  FLV.SortKind := lskText;
+  FLV.SortColumn := 0;
+  FLV.SortDirection := sdAscending;
+  FLV.Sort;
+  AssertEquals('display 0 = item 1 (first a)',  1, FLV.OrderAt(0));
+  AssertEquals('display 1 = item 2 (second a)', 2, FLV.OrderAt(1));
+  AssertEquals('display 2 = item 0 (b)',        0, FLV.OrderAt(2));
+  AssertEquals('display 3 = item 3 (c)',        3, FLV.OrderAt(3));
+end;
+
+procedure TListViewSortTest.TestSortDescendingReversesOrder;
+begin
+  PopulateCaptions(['a', 'b', 'c']);
+  FLV.SortKind := lskText;
+  FLV.SortColumn := 0;
+
+  FLV.SortDirection := sdAscending;
+  FLV.Sort;
+  AssertEquals('asc display 0 = item 0', 0, FLV.OrderAt(0));
+  AssertEquals('asc display 2 = item 2', 2, FLV.OrderAt(2));
+
+  FLV.SortDirection := sdDescending;
+  FLV.Sort;
+  AssertEquals('desc display 0 = item 2', 2, FLV.OrderAt(0));
+  AssertEquals('desc display 1 = item 1', 1, FLV.OrderAt(1));
+  AssertEquals('desc display 2 = item 0', 0, FLV.OrderAt(2));
+end;
+
+procedure TListViewSortTest.TestOnCompareWinsAndGetsItemIndices;
+begin
+  { Built-in text sort of a,b,c,d,e ascending would give identity. OnCompare sorts
+    by item index descending, so the result proves the handler was used. }
+  PopulateCaptions(['a', 'b', 'c', 'd', 'e']);
+  FLV.SortKind := lskText;
+  FLV.SortColumn := 0;
+  FLV.SortDirection := sdAscending;
+  FLV.OnCompare := @HCompareByIndexDesc;
+  FLV.Sort;
+
+  AssertTrue('OnCompare was actually called', FCompareCalls > 0);
+  AssertTrue('OnCompare AColumn was always SortColumn', not FCompareBadCol);
+  AssertTrue('OnCompare got valid ITEM indices', not FCompareBadIdx);
+  AssertEquals('display 0 = item 4', 4, FLV.OrderAt(0));
+  AssertEquals('display 1 = item 3', 3, FLV.OrderAt(1));
+  AssertEquals('display 4 = item 0', 0, FLV.OrderAt(4));
+end;
+
+procedure TListViewSortTest.TestSelectionSurvivesReSort;
+begin
+  { Item indices are stable across a sort; only the display position moves. }
+  PopulateCaptions(['e', 'd', 'c', 'b', 'a']);
+  FLV.SortKind := lskText;
+  FLV.SortColumn := 0;
+  FLV.ItemIndex := 3;
+  FLV.Selected[3] := True;
+  AssertTrue('precondition: item 3 selected', FLV.Selected[3]);
+
+  FLV.SortDirection := sdAscending;
+  FLV.Sort;
+  AssertTrue('after asc sort: item 3 still selected', FLV.Selected[3]);
+  AssertEquals('after asc sort: ItemIndex still 3', 3, FLV.ItemIndex);
+
+  FLV.SortDirection := sdDescending;
+  FLV.Sort;
+  AssertTrue('after desc sort: item 3 still selected', FLV.Selected[3]);
+  AssertEquals('after desc sort: ItemIndex still 3', 3, FLV.ItemIndex);
+end;
+
+procedure TListViewSortTest.TestSelectionSurvivesViewStyleSwitch;
+begin
+  PopulateCaptions(['e', 'd', 'c', 'b', 'a']);
+  FLV.ItemIndex := 3;
+  FLV.Selected[3] := True;
+
+  FLV.ViewStyle := lvsIcon;
+  AssertTrue('after view switch: item 3 still selected', FLV.Selected[3]);
+  AssertEquals('after view switch: ItemIndex still 3', 3, FLV.ItemIndex);
+end;
+
+{ ===========================================================================
+  SELECTION
+  =========================================================================== }
+
+procedure TListViewSelectionTest.SetUp;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+  FLV.Font.PixelsPerInch := 96;
+end;
+
+procedure TListViewSelectionTest.TearDown;
+begin
+  FLV.Free;
+end;
+
+procedure TListViewSelectionTest.Populate(ACount: Integer);
+var
+  i: Integer;
+  it: TTyListItem;
+begin
+  for i := 0 to ACount - 1 do
+  begin
+    it := FLV.Items.Add;
+    it.Caption := 'item' + IntToStr(i);
+  end;
+  FLV.ItemsChanged;
+end;
+
+procedure TListViewSelectionTest.TestMultiSelectFalseCollapsesToItemIndex;
+{ The focused item wins the collapse. Note the setup order: `ItemIndex := 2` is
+  focus-SELECTS (it exclusively selects 2, same rule as TTyTreeView.SetFocusedNode), so
+  the extra bits have to be added afterwards. }
+begin
+  Populate(6);
+  FLV.MultiSelect := True;
+  FLV.ItemIndex := 2;              { focus + exclusive select }
+  FLV.Selected[1] := True;         { add, without moving the focus }
+  FLV.Selected[3] := True;
+  AssertEquals('precondition: 3 selected', 3, FLV.SelCount);
+  AssertEquals('precondition: focus still 2', 2, FLV.ItemIndex);
+
+  FLV.MultiSelect := False;
+  AssertEquals('collapsed to a single selection', 1, FLV.SelCount);
+  AssertEquals('the survivor is the focused item', 2, FLV.ItemIndex);
+  AssertTrue('and it is selected', FLV.Selected[2]);
+end;
+
+procedure TListViewSelectionTest.TestItemIndexIsFocusSelects;
+{ Pins the coupling the collapse test depends on: assigning ItemIndex exclusively selects
+  that item, while Selected[] adds without moving the focus. }
+begin
+  Populate(6);
+  FLV.MultiSelect := True;
+  FLV.Selected[1] := True;
+  FLV.Selected[3] := True;
+  AssertEquals('Selected[] leaves focus alone', -1, FLV.ItemIndex);
+
+  FLV.ItemIndex := 4;
+  AssertEquals('ItemIndex assignment selects exclusively', 1, FLV.SelCount);
+  AssertTrue('and it is item 4', FLV.Selected[4]);
+  AssertFalse('the old bits are gone', FLV.Selected[1]);
+end;
+
+procedure TListViewSelectionTest.TestCollapseWithNoFocusAdoptsFirstSelected;
+{ `Selected[i] := True` is "select", not "focus" -- it must not move ItemIndex. So a
+  multi-selection can exist with ItemIndex still -1. Collapsing then has no focused item
+  to keep; discarding the whole selection would be the surprising answer, so the first
+  selected item is adopted as the focus. }
+begin
+  Populate(6);
+  FLV.MultiSelect := True;
+  FLV.Selected[4] := True;
+  FLV.Selected[2] := True;
+  AssertEquals('Selected[] does not move the focus', -1, FLV.ItemIndex);
+  AssertEquals('precondition: 2 selected', 2, FLV.SelCount);
+
+  FLV.MultiSelect := False;
+  AssertEquals('first selected item adopted as focus', 2, FLV.ItemIndex);
+  AssertEquals('exactly one survivor', 1, FLV.SelCount);
+  AssertTrue('and it is selected', FLV.Selected[2]);
+end;
+
+procedure TListViewSelectionTest.TestCollapseWithNothingSelectedStaysEmpty;
+begin
+  Populate(6);
+  FLV.MultiSelect := True;
+  AssertEquals('precondition: nothing selected', 0, FLV.SelCount);
+  FLV.MultiSelect := False;
+  AssertEquals('still no focus', -1, FLV.ItemIndex);
+  AssertEquals('still nothing selected', 0, FLV.SelCount);
+end;
+
+procedure TListViewSelectionTest.TestSelectAll;
+begin
+  Populate(5);
+  FLV.MultiSelect := True;
+  FLV.SelectAll;
+  AssertEquals('SelectAll selects all', 5, FLV.SelCount);
+  AssertTrue('first selected', FLV.Selected[0]);
+  AssertTrue('last selected',  FLV.Selected[4]);
+end;
+
+procedure TListViewSelectionTest.TestClearSelection;
+begin
+  Populate(5);
+  FLV.MultiSelect := True;
+  FLV.SelectAll;
+  FLV.ClearSelection;
+  AssertEquals('ClearSelection empties', 0, FLV.SelCount);
+  AssertTrue('nothing selected', not FLV.Selected[0]);
+end;
+
+procedure TListViewSelectionTest.TestSelCount;
+begin
+  Populate(8);
+  FLV.MultiSelect := True;
+  FLV.Selected[0] := True;
+  FLV.Selected[4] := True;
+  FLV.Selected[7] := True;
+  AssertEquals('SelCount counts set bits', 3, FLV.SelCount);
+  FLV.Selected[4] := False;
+  AssertEquals('SelCount after deselect', 2, FLV.SelCount);
+end;
+
+procedure TListViewSelectionTest.TestGetNextSelectedWalk;
+var
+  i: Integer;
+begin
+  Populate(6);
+  FLV.MultiSelect := True;
+  FLV.Selected[1] := True;
+  FLV.Selected[3] := True;
+  FLV.Selected[4] := True;
+
+  i := -1;
+  AssertTrue('first step', FLV.GetNextSelected(i));
+  AssertEquals('first selected = 1', 1, i);
+  AssertTrue('second step', FLV.GetNextSelected(i));
+  AssertEquals('second selected = 3', 3, i);
+  AssertTrue('third step', FLV.GetNextSelected(i));
+  AssertEquals('third selected = 4', 4, i);
+  AssertTrue('walk ends', not FLV.GetNextSelected(i));
+end;
+
+procedure TListViewSelectionTest.TestSelectedOutOfRangeIsSafe;
+begin
+  Populate(5);
+  FLV.MultiSelect := True;
+  { Reads of out-of-range indices are False, not a crash. }
+  AssertTrue('read past end = False', not FLV.Selected[9999]);
+  AssertTrue('read negative = False', not FLV.Selected[-1]);
+  { Writes to out-of-range indices are ignored, not a crash. }
+  FLV.Selected[9999] := True;
+  FLV.Selected[-1] := True;
+  AssertEquals('out-of-range writes changed nothing', 0, FLV.SelCount);
+end;
+
+{ ===========================================================================
+  VIRTUAL-MODE STALENESS
+  =========================================================================== }
+
+procedure TListViewVirtualTest.SetUp;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+  FLV.Font.PixelsPerInch := 96;
+  FLV.OwnerData := True;
+  FLV.MultiSelect := True;
+end;
+
+procedure TListViewVirtualTest.TearDown;
+begin
+  FLV.Free;
+end;
+
+procedure TListViewVirtualTest.SetVirtual(ACount: Integer);
+begin
+  FLV.ItemCount := ACount;
+  FLV.ItemsChanged;
+end;
+
+procedure TListViewVirtualTest.TestShrinkClampsIndexAndSelection;
+begin
+  SetVirtual(100);
+  FLV.Selected[3] := True;
+  FLV.Selected[50] := True;
+  FLV.Selected[99] := True;
+  FLV.ItemIndex := 99;
+
+  { App shrinks its own store to 5 and tells the control. }
+  FLV.ItemCount := 5;
+  FLV.ItemsChanged;
+
+  { ItemIndex clamped into [-1, ItemCount-1]. }
+  AssertTrue('ItemIndex clamped in range',
+    (FLV.ItemIndex >= -1) and (FLV.ItemIndex <= 4));
+  { Nothing out of range survives; SelCount counts only survivors. }
+  AssertTrue('SelCount only survivors', FLV.SelCount <= 5);
+  AssertTrue('SelCount is a valid count', FLV.SelCount >= 0);
+  { The stale bit at 50/99 must not be reachable / counted. Reading it is safe. }
+  AssertTrue('stale index read safe', not FLV.Selected[50]);
+  AssertTrue('stale index read safe (99)', not FLV.Selected[99]);
+end;
+
+procedure TListViewVirtualTest.TestShrinkKeepsSurvivingSelection;
+begin
+  SetVirtual(100);
+  FLV.Selected[3] := True;    { survives the shrink }
+  FLV.Selected[50] := True;   { dropped by the shrink }
+
+  FLV.ItemCount := 5;
+  FLV.ItemsChanged;
+
+  AssertTrue('in-range selection survived', FLV.Selected[3]);
+  AssertEquals('only the survivor is counted', 1, FLV.SelCount);
+end;
+
+procedure TListViewVirtualTest.TestGrowLeavesNewItemsUnselected;
+begin
+  SetVirtual(5);
+  FLV.Selected[2] := True;
+
+  FLV.ItemCount := 20;
+  FLV.ItemsChanged;
+
+  AssertTrue('old selection intact', FLV.Selected[2]);
+  AssertTrue('new item 10 unselected', not FLV.Selected[10]);
+  AssertTrue('new item 19 unselected', not FLV.Selected[19]);
+  AssertEquals('still exactly one selected', 1, FLV.SelCount);
+end;
+
+procedure TListViewVirtualTest.TestItemIndexAssignedOutOfRangeIsClamped;
+begin
+  SetVirtual(20);
+  { Out of range in EITHER direction means "no focus", not "focus the nearest row":
+    assigning an index that does not exist must never silently focus a different item.
+    (The old assertion only checked the range [-1,19], which -1 satisfies -- it would
+    have passed against a clamp-to-last implementation too.) }
+  FLV.ItemIndex := 99999;
+  AssertEquals('too-large ItemIndex resets to -1', -1, FLV.ItemIndex);
+  FLV.ItemIndex := -50;
+  AssertEquals('negative ItemIndex resets to -1', -1, FLV.ItemIndex);
+  { A valid index still sticks. }
+  FLV.ItemIndex := 19;
+  AssertEquals('last valid index sticks', 19, FLV.ItemIndex);
+end;
+
+initialization
+  RegisterTest(TListViewDataTest);
+  RegisterTest(TListViewSortTest);
+  RegisterTest(TListViewSelectionTest);
+  RegisterTest(TListViewVirtualTest);
+end.

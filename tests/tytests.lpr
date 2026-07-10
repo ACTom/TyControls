@@ -115,6 +115,7 @@ uses
   test.tabset,
   test.columns.compat,
   test.listview.layout,
+  test.listview,
   test.shape,
   test.starshape,
   test.arrow;

@@ -320,8 +320,23 @@ published
   property OnChange: TNotifyEvent;
 ```
 
-`FSelected: array of Boolean`,长度 = `ItemCount`,**下标是 item index**。
-`MultiSelect := False` 时把选择集压缩到只剩 `ItemIndex` 一位。
+`FSelected: array of Boolean`,长度 = `ItemCount`,**下标是 item index**(单选模式下选中态直接由
+`ItemIndex` 推出,`FSelected` 不参与)。
+
+`ItemIndex := N`,`N` 不在 `[0, ItemCount-1]` 内 → **一律置 -1(无焦点)**,不钳到最后一项:
+赋一个不存在的索引不该悄悄把焦点挪到别的行。`ItemsChanged` 同理。
+
+`MultiSelect := False` 折叠规则(**顺序确定**):
+1. `ItemIndex` 在范围内 → 幸存者就是它;
+2. 否则若有任何选中位 → **取第一个选中位**作为 `ItemIndex`(程序性地 `Selected[i] := True`
+   不会移动焦点,于是可能出现"有选中、无焦点";此时静默清空整个选择是错的);
+3. 否则 → 无选中,`ItemIndex` 保持 -1。
+
+两个方向都要记住:
+
+- `Selected[i] := True` **不移动 `ItemIndex`** —— 它是"选中",不是"聚焦"。
+- `ItemIndex := N` **独占选中 N**(focus-selects)。沿用 `TTyTreeView.SetFocusedNode` 的既有规则。
+  所以"有选中、无焦点"只能靠 `Selected[]` 造出来,这正是折叠规则第 2 条要处理的情形。
 
 Shift 区间选择用 `TyListRangeBounds`,但它给出的是 **display 位置**区间 —— 要经 `FOrder` 映射回
 item index 再置位。锚点 `FAnchor` 存 **item index**。
