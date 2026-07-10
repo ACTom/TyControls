@@ -212,21 +212,182 @@ function TyReportRowAt(AY, AScrollY, AHeaderH, ARowH, ARowCount: Integer): Integ
 
 ---
 
-## 任务 2 —— 控件
+## 任务 2 契约 —— `tyControls.ListView`
 
-`TTyListView = class(TTyCustomControl)`,`GetStyleTypeKey = 'TyTreeView'`。
+`TTyListView = class(TTyCustomControl)`,`GetStyleTypeKey = 'TyTreeView'`。**零新增主题 token**:
+行解析 `'TyTreeNode'`,表头解析 `'TyTreeHeader'` / `'TyTreeHeaderSection'`,网格线取控件 frame 的 `BorderColor`。
 
-取数四虚方法(设计文档已定)。绘制路径唯一:`RenderTo` → 按 `ViewStyle` 分派 → 逐格调 `RenderItem`。
+### 索引的两套坐标 —— 全文最容易出 bug 的地方
 
-排序只置换 `FOrder: array of Integer`(display 位置 → item index);选择集 `FSelected: array of Boolean` **按 item index 存**。公开 API 一律收/返 item index;display 位置只在内部流转。
+- **item index**:稳定,`0..ItemCount-1`,与排序无关。**所有 public / published 成员和所有事件
+  都只用它。**
+- **display 位置**:排序后的可见次序,`0..ItemCount-1`。**只在 `private`/`protected` 里流转**,
+  喂给 `tyControls.ListView.Layout` 的纯函数。
 
-内嵌两个 `TTyScrollBar`,`csNoDesignVisible`。
+  `FOrder: array of Integer`,`FOrder[displayPos] = itemIndex`。未排序时是恒等映射。
+  逆映射 `FRank: array of Integer`,`FRank[itemIndex] = displayPos`,和 `FOrder` 同步维护
+  (`ScrollIntoView` / 键盘导航要 O(1) 反查)。
 
-抄现成的坑清单:
-- `TTyListBox.ContentTopOffset` —— 行命中必须减去 padding-top,否则每行顶部一条带子命中上一行。
-- 拖拽 `MouseMove` 必须在 `not (ssLeft in Shift)` 时退出。
-- LCL `MouseDown` 的 `Shift` **含 `ssLeft`**,不要用 `Shift = []` 判断。
-- 内部子控件设 `csNoDesignVisible`,且要在 `Visible` 之前设。
+### 类型
+
+```pascal
+type
+  TTyListItemState  = (lisChecked, lisCut, lisDisabled);
+  TTyListItemStates = set of TTyListItemState;
+
+  TTyListItem = class(TCollectionItem)
+  public
+    property Data: Pointer read FData write FData;      { 不流式化 }
+  published
+    property Caption: string;
+    property SubItems: TStrings;                          { 第 1..N 列 }
+    property ImageIndex: Integer default -1;
+  end;
+
+  TTyListItems = class(TCollection)
+    function Add: TTyListItem;
+    property Items[AIndex: Integer]: TTyListItem read GetItem write SetItem; default;
+  end;
+
+  { 事件用 var 出参,LCL 惯例 }
+  TTyListGetTextEvent   = procedure(Sender: TObject; AIndex, AColumn: Integer;
+                                    var AText: string) of object;
+  TTyListGetImageEvent  = procedure(Sender: TObject; AIndex, AColumn: Integer;
+                                    var AImageIndex: Integer) of object;
+  TTyListGetStateEvent  = procedure(Sender: TObject; AIndex: Integer;
+                                    var AStates: TTyListItemStates) of object;
+  TTyListCompareEvent   = procedure(Sender: TObject; AIndex1, AIndex2, AColumn: Integer;
+                                    var ACompare: Integer) of object;
+  TTyListColumnEvent    = procedure(Sender: TObject; AColumn: Integer) of object;
+  TTyListItemEvent      = procedure(Sender: TObject; AIndex: Integer) of object;
+```
+
+### 取数 —— 唯一入口
+
+```pascal
+protected
+  function GetItemCount: Integer; virtual;
+  function GetItemText(AIndex, AColumn: Integer): string; virtual;
+  function GetItemImageIndex(AIndex, AColumn: Integer): Integer; virtual;
+  function GetItemState(AIndex: Integer): TTyListItemStates; virtual;
+```
+
+默认实现:
+
+- `OwnerData = True` → 返回 `FItemCount` / 触发 `OnGetItemText` 等事件(未接事件则返回 `''` / `-1` / `[]`)
+- `OwnerData = False` → 读 `FItems` 集合(`AColumn = 0` 取 `Caption`,`>0` 取 `SubItems[AColumn-1]`,
+  越界返回 `''`)
+
+**绘制、命中、排序、首字母定位一律只调这四个方法。** 代码里不得出现第二处 `if OwnerData then`。
+`TTyShellListView` 就是 override 其中两个。
+
+### 排序
+
+```pascal
+published
+  property SortColumn: Integer default -1;              { -1 = 不排序 }
+  property SortDirection: TTySortDirection default sdAscending;
+  property SortKind: TTyListSortKind default lskText;   { 内建比较器用哪种 }
+  property AutoSort: Boolean default True;              { 点表头即排序 }
+  property OnCompare: TTyListCompareEvent;
+public
+  procedure Sort;
+```
+
+`Sort` 重排 `FOrder`:
+
+- 比较器 = `OnCompare` 已接则用它(收两个 **item index** + `SortColumn`);否则
+  `TyListCompareCells(GetItemText(a, SortColumn), GetItemText(b, SortColumn), SortKind, SortDirection)`
+- **平局按 item index 兜底**,保证稳定
+- `SortColumn < 0` → `FOrder` 恢复恒等映射
+- **`Sort` 从不改动 `FItems`,也从不调用任何写入方法。** shell 数据源本来就不可变
+
+排序后 `FSelected` 一位不动(它按 item index 存),`ItemIndex` 也不变 —— **选中项跨排序、跨视图切换稳定**。
+
+### 选择
+
+```pascal
+public
+  property ItemIndex: Integer;                     { 焦点 item index,-1 = 无 }
+  property Selected[AIndex: Integer]: Boolean;     { item index }
+  function SelCount: Integer;
+  procedure SelectAll;
+  procedure ClearSelection;
+  function GetNextSelected(var AIndex: Integer): Boolean;   { 传 -1 取第一个 }
+published
+  property MultiSelect: Boolean default False;
+  property OnSelectItem: TTyListItemEvent;
+  property OnChange: TNotifyEvent;
+```
+
+`FSelected: array of Boolean`,长度 = `ItemCount`,**下标是 item index**。
+`MultiSelect := False` 时把选择集压缩到只剩 `ItemIndex` 一位。
+
+Shift 区间选择用 `TyListRangeBounds`,但它给出的是 **display 位置**区间 —— 要经 `FOrder` 映射回
+item index 再置位。锚点 `FAnchor` 存 **item index**。
+
+### 虚拟模式的失效防护
+
+```pascal
+public
+  procedure BeginUpdate;
+  procedure EndUpdate;
+  procedure ItemsChanged;    { 虚拟模式下 app 改了自己的存储,必须调 }
+published
+  property OwnerData: Boolean default False;
+  property ItemCount: Integer;   { 仅 OwnerData 有意义 }
+```
+
+`ItemsChanged` 必须:重设 `FOrder` / `FRank` / `FSelected` 长度;把 `ItemIndex`、`FAnchor`、
+`FHot` 钳进 `[-1, ItemCount-1]`;`AutoSort` 则重排;`Invalidate`。
+
+**绘制和命中对任何越界索引一律防御性钳制,不得崩。** 控件观察不到 app 改自己的存储。
+
+### 视图 / 命中 / 滚动
+
+```pascal
+published
+  property ViewStyle: TTyListViewStyle default lvsReport;
+  property Header: TTyHeader;              { 拥有 Columns }
+  property ShowColumnHeaders: Boolean default True;
+  property GridLines: Boolean default False;
+  property RowSelect: Boolean default True;
+  property HotTrack: Boolean default False;
+  property LargeImages: TTyVirtualImageList;
+  property SmallImages: TTyVirtualImageList;
+  property OnColumnClick: TTyListColumnEvent;
+  property OnItemActivate: TTyListItemEvent;    { 双击 / Enter }
+public
+  function GetItemAt(X, Y: Integer): Integer;          { → item index,-1 未命中 }
+  function GetHitPart(X, Y: Integer): TTyListHitPart;
+  procedure ScrollIntoView(AIndex: Integer);           { item index }
+```
+
+`GetItemAt` = `TyListItemAt(...)` 得 display 位置,再 `FOrder[pos]` 换成 item index。
+**没有第二处几何计算。**
+
+内嵌两个 `TTyScrollBar`(照 `tyControls.TreeView.pas:1835-1848`:构造函数里建、`Visible := False`、
+`AnimationsEnabled := False`、`ControlStyle + [csNoDesignVisible]`)。滚动量以**设备像素**计,
+两轴都是 —— 不学 TreeView 的"垂直用逻辑行、水平用像素"混合制。
+
+### 绘制接缝
+
+```pascal
+protected
+  procedure RenderItem(P: TTyPainter; AIndex: Integer; const ACell: TRect;
+    const AStyle: TTyStyleSet; AStates: TTyStateSet); virtual;
+```
+
+`RenderTo` 按 `ViewStyle` 分派到流式路径或报表路径,两条都:`TyListVisibleRange` 取窗口 →
+逐个 `TyListItemRect` 取格 → `RenderItem`。**只画可见的格。**
+
+### 抄现成的坑
+
+- `TTyListBox.ContentTopOffset` —— 行命中必须减去 padding-top,否则每行顶部一条带子命中上一行
+- 拖拽 `MouseMove` 必须在 `not (ssLeft in Shift)` 时退出(被抢走的 MouseUp 会让松手后还在拖)
+- LCL `MouseDown` 的 `Shift` **含 `ssLeft`**,绝不要用 `Shift = []` 判断
+- 内部子控件设 `csNoDesignVisible`,且要在 `Visible` 之前设
+- 局部变量别叫 `Top` / `Color` / `Name` / `Checked` / `Default`(遮蔽继承成员)
 
 ## 任务 3 —— 集成
 
