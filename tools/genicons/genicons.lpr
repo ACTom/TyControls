@@ -587,12 +587,43 @@ end;
 { TTyTabSet: a pure tab strip — one selected tab + two unselected + baseline }
 procedure GTabSet(b: TBGRABitmap); begin FillRRect(b,3,5,9,11,1.5,Acc); RRect(b,9.5,5,15.5,11,1.5,Ink); RRect(b,16,5,21,11,1.5,Ink); Line(b,3,11,21,11,Ink,1.4); end;
 
+{ TTyShape: the classic shape-primitive pair — an outlined square overlapped by a filled circle }
+procedure GShape(b: TBGRABitmap);
+begin
+  RRect(b,3.5,3.5,15.5,15.5,2,Ink);
+  FillCirc(b,16,16,5.4,Acc);
+end;
+
+{ TTyStarShape: a filled 5-point star (outer r=9, inner r=3.9), first point straight up }
+procedure GStarShape(b: TBGRABitmap);
+const
+  Star: array[0..9] of TPointF = (
+    (x:12.00; y: 3.00), (x:14.29; y: 8.84), (x:20.56; y: 9.22), (x:15.71; y:13.21),
+    (x:17.29; y:19.28), (x:12.00; y:15.90), (x: 6.71; y:19.28), (x: 8.29; y:13.21),
+    (x: 3.44; y: 9.22), (x: 9.71; y: 8.84));
+begin
+  FillPolyG(b,Star,Acc);
+  PolyL(b,[Star[0],Star[1],Star[2],Star[3],Star[4],Star[5],
+           Star[6],Star[7],Star[8],Star[9],Star[0]],Ink,1.2);
+end;
+
+{ TTyArrow: a right-pointing block arrow (7 vertices), filled accent + ink outline }
+procedure GArrow(b: TBGRABitmap);
+const
+  Arr: array[0..6] of TPointF = (
+    (x:21.0; y:12.0), (x:12.9; y: 5.0), (x:12.9; y: 8.5), (x: 3.0; y: 8.5),
+    (x: 3.0; y:15.5), (x:12.9; y:15.5), (x:12.9; y:19.0));
+begin
+  FillPolyG(b,Arr,Acc);
+  PolyL(b,[Arr[0],Arr[1],Arr[2],Arr[3],Arr[4],Arr[5],Arr[6],Arr[0]],Ink,1.2);
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..125] of TGlyph = (
+  Glyphs: array[0..128] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -718,7 +749,10 @@ const
     (Name:'TTyControlBar';        Draw:@GControlBar),
     (Name:'TTyCoolBar';           Draw:@GCoolBar),
     (Name:'TTyHeaderControl';     Draw:@GHeaderControl),
-    (Name:'TTyListGroupPanel';    Draw:@GListGroupPanel)
+    (Name:'TTyListGroupPanel';    Draw:@GListGroupPanel),
+    (Name:'TTyShape';             Draw:@GShape),
+    (Name:'TTyStarShape';         Draw:@GStarShape),
+    (Name:'TTyArrow';             Draw:@GArrow)
   );
 
 const

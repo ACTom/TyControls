@@ -151,6 +151,14 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyRating](rating.md) | 星级评分（悬停预览 / 点击 / 半星） |
 | [TTyGearDial](geardial.md) | 齿轮旋钮（可拖动 / 滚轮的旋钮变体） |
 
+## 矢量形状
+
+| 控件 | 说明 |
+|------|------|
+| [TTyShape](shape.md) | 矢量形状图元：矩形 / 圆角矩形 / 正方形 / 椭圆 / 圆 / 三角形 / 菱形 / 线 |
+| [TTyStarShape](starshape.md) | N 角星（点数与内外半径比可调） |
+| [TTyArrow](arrow.md) | 块状方向箭头（上 / 下 / 左 / 右，头部与箭杆比例可调） |
+
 ## 文字
 
 | 控件 | 说明 |

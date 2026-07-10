@@ -43,7 +43,8 @@ uses
   tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ExPanel,
   tyControls.GridPanel, tyControls.RelativePanel,
   tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar,
-  tyControls.HeaderControl, tyControls.ListGroupPanel;
+  tyControls.HeaderControl, tyControls.ListGroupPanel,
+  tyControls.Shape, tyControls.StarShape, tyControls.Arrow;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -643,6 +644,9 @@ begin
      TTyGridPanel, TTyRelativePanel,
      TTyToolBarEx, TTyControlBar, TTyCoolBar,
      TTyHeaderControl, TTyListGroupPanel]);
+  // Decorative vector primitives for diagrams (theme-driven fill/border, no new tokens).
+  RegisterComponents('TyControls Shapes',
+    [TTyShape, TTyStarShape, TTyArrow]);
   // Office-style ribbon parts.
   RegisterComponents('TyControls Ribbon',
     [TTyRibbon, TTyRibbonPage, TTyRibbonGroup, TTyRibbonAppMenu,

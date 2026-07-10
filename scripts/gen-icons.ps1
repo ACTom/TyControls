@@ -29,7 +29,9 @@ $classes = @(
   'TTyScrollBox','TTyScrollPanel','TTyExPanel',
   'TTyGridPanel','TTyRelativePanel',
   'TTyToolBarEx','TTyControlBar','TTyCoolBar',
-  'TTyHeaderControl','TTyListGroupPanel'
+  'TTyHeaderControl','TTyListGroupPanel',
+  # Phase 9 vector shapes
+  'TTyShape','TTyStarShape','TTyArrow'
 )
 
 # Drift guard: the icon set MUST match the components registered in Design.pas. Parse EVERY

@@ -572,6 +572,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.ListGroupPanel.pas"/>
         <UnitName Value="tyControls.ListGroupPanel"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Shape.pas"/>
+        <UnitName Value="tyControls.Shape"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.StarShape.pas"/>
+        <UnitName Value="tyControls.StarShape"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Arrow.pas"/>
+        <UnitName Value="tyControls.Arrow"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

@@ -112,7 +112,10 @@ uses
   test.popupsurface,
   test.keytips,
   test.combobox,
-  test.tabset;
+  test.tabset,
+  test.shape,
+  test.starshape,
+  test.arrow;
 
 type
   TTyTestRunner = class(TTestRunner)
