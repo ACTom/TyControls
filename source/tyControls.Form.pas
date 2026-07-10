@@ -171,6 +171,7 @@ type
     FCaptionAction: TTyCaptionAction; // what caption double-click does (maximize / roll-up / none)
     FRolledUp: Boolean;               // window-shade state (rolled to the title bar)
     FUnrolledHeight: Integer;         // full height saved while rolled up
+    FSavedMinHeight: Integer;         // Constraints.MinHeight saved while rolled up
     procedure DoFollowTick(Sender: TObject);
     procedure UpdateFollowWatch;      // (re)arm/disarm FFollowTimer per the controller's Follow policy
     // ITyGlassHost
@@ -1319,6 +1320,7 @@ begin
   if th <= 0 then Exit;   // no title bar -> nothing to roll up to
   if FRolledUp then
   begin
+    Constraints.MinHeight := FSavedMinHeight;   // restore before growing back
     if FUnrolledHeight > th then Height := FUnrolledHeight;
     FRolledUp := False;
   end
@@ -1326,6 +1328,11 @@ begin
   begin
     if Height <= th then Exit;   // already at/under the title bar height -> nothing to collapse
     FUnrolledHeight := Height;
+    // A shown WS_THICKFRAME window won't shrink below the OS minimum-window-height, which would
+    // leave a content sliver under the title bar. Lower Constraints.MinHeight so it can collapse
+    // to exactly the title bar; restored on unroll.
+    FSavedMinHeight := Constraints.MinHeight;
+    Constraints.MinHeight := th;
     Height := th;
     FRolledUp := True;
   end;
