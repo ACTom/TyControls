@@ -219,6 +219,119 @@ type
     procedure TestOddCentringDifferenceFloors;
   end;
 
+  { ===========================================================================
+    SP2b — grouped view. Written from the CONTRACT ONLY
+    (docs/superpowers/plans/2026-07-10-listview-sp2b.md, section "任务 1 契约").
+    The new group code in tyControls.ListView.Layout.pas was NOT read: every
+    expected value is derived by hand from the plan's formulas, so a mismatch pins
+    a contract gap, not a ratified bug. Procedure names pin the RULE, not the
+    function. The SP1 surface (TyListTracks etc.) may be reused; only the group
+    formulas are re-derived.
+    =========================================================================== }
+
+  { --- TyListBuildGroupMap : Tops / FirstVisible / heights --- }
+  TListGroupMapTest = class(TTestCase)
+  published
+    procedure TestTopsIsPrefixSumOfGroupHeights;
+    procedure TestContentHeightIsLastTop;
+    procedure TestTopsIsMonotonicNonDecreasing;
+    procedure TestCollapsedGroupIsHeaderOnly;
+    procedure TestEmptyCountGroupKeepsFirstVisible;
+    procedure TestHeaderlessGroupAddsNoHeaderHeight;
+    procedure TestFirstVisibleCountsExpandedItemsOnly;
+    procedure TestReportBodyIsCountTimesRowH;
+    procedure TestAllCollapsedContentHeightIsGTimesHeader;
+  end;
+
+  { --- TyListGroupHeaderRect --- }
+  TListGroupHeaderRectTest = class(TTestCase)
+  published
+    procedure TestHeaderRectSpansViewportAtGroupTop;
+    procedure TestHeaderRectSubtractsVerticalScroll;
+    procedure TestHeaderlessGroupHasEmptyHeaderRect;
+    procedure TestOutOfRangeGroupHasEmptyHeaderRect;
+  end;
+
+  { --- TyListGroupItemRect --- }
+  TListGroupItemRectTest = class(TTestCase)
+  published
+    procedure TestFirstItemSitsAtBodyTopLeft;
+    procedure TestItemRowColFromIndexInGroup;
+    procedure TestItemRectSubtractsScroll;
+    procedure TestCollapsedGroupItemRectIsEmpty;
+    procedure TestOutOfRangeGroupOrIndexIsEmpty;
+  end;
+
+  { --- TyListGroupHitTest : header band, collapsed body, refusals --- }
+  TListGroupHitTestTest = class(TTestCase)
+  published
+    procedure TestHeaderBandPointReturnsIndexMinusOne;
+    procedure TestCollapsedGroupHeaderStillHittable;
+    procedure TestPointBelowCollapsedHeaderBelongsToNextGroup;
+    procedure TestCollapsedGroupItemsAllEmptyRects;
+  end;
+
+  { --- TyListGroupItemRect / TyListGroupHitTest mutual inverse --- }
+  TListGroupInverseTest = class(TTestCase)
+  private
+    procedure CheckGroupInverse(const AName: string; const AMap: TTyListGroupMap;
+      const M: TTyListMetrics; AHeaderH, ASx, ASy: Integer);
+  published
+    procedure TestItemRectHitTestInverseNoScroll;
+    procedure TestItemRectHitTestInverseWithScroll;
+    procedure TestReportItemRectHitTestInverse;
+  end;
+
+  { --- TyListGroupOfDisplayPos / TyListGroupDisplayPos mutual inverse --- }
+  TListGroupDisplayPosTest = class(TTestCase)
+  private
+    procedure CheckDisplayInverse(const AName: string; const AMap: TTyListGroupMap);
+  published
+    procedure TestDisplayPosIsFirstVisiblePlusIndex;
+    procedure TestOfDisplayPosAndDisplayPosAreInverse;
+    procedure TestCollapsedGroupItemHasNoDisplayPos;
+    procedure TestOutOfRangeDisplayPosReturnsFalse;
+  end;
+
+  { --- TyListGroupVisibleRange (must window, not scan) --- }
+  TListGroupVisibleRangeTest = class(TTestCase)
+  published
+    procedure TestMiddleScrollReturnsOnlyViewportGroups;
+    procedure TestGroupWhoseBottomEqualsViewportTopIsNotVisible;
+    procedure TestScrolledPastAllContentReturnsFalse;
+    procedure TestTopScrollStartsAtFirstGroup;
+    procedure TestEmptyMapReturnsFalseAndMinusOne;
+  end;
+
+  { --- TyListGroupNavigate --- }
+  TListGroupNavigateTest = class(TTestCase)
+  published
+    procedure TestDownWithinGroupMovesByTracks;
+    procedure TestDownFromAPartialLastRowStaysInTheGroup;
+    procedure TestDownFromTheTrueLastRowLeavesThePartialGroup;
+    procedure TestDownOutOfGroupLandsOnNextExpandedNonEmptyKeepingColumn;
+    procedure TestDownOutOfGroupClampsColumnToRowLastItem;
+    procedure TestDownSkipsCollapsedAndEmptyGroups;
+    procedure TestUpWithinGroupMovesByTracks;
+    procedure TestUpOutOfGroupLandsOnPrevExpandedNonEmptyKeepingColumn;
+    procedure TestUpOutOfGroupClampsColumnToRowLastItem;
+    procedure TestLastRowOfLastGroupDownDoesNotMove;
+    procedure TestFirstRowOfFirstGroupUpDoesNotMove;
+    procedure TestLeftRightAreFlatDisplayStep;
+    procedure TestHomeAndEndAlwaysMove;
+    procedure TestPageDownAndPageUpClamp;
+    procedure TestReportUpDownMoveByOneAcrossGroups;
+    procedure TestGroupedReportLeftRightMoveByOne;
+    procedure TestAllCollapsedNavigationReturnsMinusOne;
+  end;
+
+  { --- degenerate: G=0, zero pitch, no crash, no divide-by-zero --- }
+  TListGroupDegenerateTest = class(TTestCase)
+  published
+    procedure TestEmptyGroupsEveryFunctionIsSafe;
+    procedure TestZeroPitchGroupGeometryDoesNotDivideByZero;
+  end;
+
 implementation
 
 { ===========================================================================
@@ -1342,6 +1455,823 @@ begin
     TyListCheckRect(Rect(0, 0, 200, 25), lvsReport, 14, 3));
 end;
 
+{ ===========================================================================
+  SP2b group helpers — a tiny local builder so each test states only the group
+  shape it cares about (count / collapsed / has-header).
+  =========================================================================== }
+
+function GroupInfo(ACount: Integer; ACollapsed, AHasHeader: Boolean): TTyListGroupInfo;
+begin
+  Result.Count := ACount;
+  Result.Collapsed := ACollapsed;
+  Result.HasHeader := AHasHeader;
+end;
+
+{ Copy an open array of group infos into the dynamic-array type the unit wants,
+  then build the map. Lets tests write MakeMap([GroupInfo(...), ...], M, hh). }
+function MakeMap(const AGroups: array of TTyListGroupInfo;
+  const M: TTyListMetrics; AHeaderH: Integer): TTyListGroupMap;
+var
+  arr: TTyListGroupInfoArray;
+  i: Integer;
+begin
+  SetLength(arr, Length(AGroups));
+  for i := 0 to High(AGroups) do
+    arr[i] := AGroups[i];
+  Result := TyListBuildGroupMap(arr, M, AHeaderH);
+end;
+
+{ ===========================================================================
+  TListGroupMapTest
+  ---------------------------------------------------------------------------
+  Canonical mixed map, IconMetrics (Tracks=4, PitchX=PitchY=70, Cell 60x60,
+  HGap=VGap=10, ViewportW=300, M.HeaderH=0), group-header band AHeaderH=30.
+
+    g  Count Collapsed HasHeader | rows body            header height Tops[g]
+    0    5      no        yes    |  2   2*70-10=130       30    160     0
+    1    0      no        yes    |  -   0                 30     30    160
+    2    3      yes       yes    |  -   0 (collapsed)     30     30    190
+    3    8      no        NO     |  2   2*70-10=130        0    130    220
+                                                                        350 = Tops[4]
+  FirstVisible (expanded groups contribute Count, collapsed contribute 0):
+    FV[0]=0  FV[1]=5  FV[2]=5  FV[3]=5  FV[4]=13
+  =========================================================================== }
+
+function CanonicalMap: TTyListGroupMap;
+begin
+  Result := MakeMap([GroupInfo(5, False, True),
+                     GroupInfo(0, False, True),
+                     GroupInfo(3, True,  True),
+                     GroupInfo(8, False, False)], IconMetrics, 30);
+end;
+
+procedure TListGroupMapTest.TestTopsIsPrefixSumOfGroupHeights;
+var
+  m: TTyListGroupMap;
+begin
+  m := CanonicalMap;
+  AssertEquals('Tops length is G+1', 5, Length(m.Tops));
+  AssertEquals('Tops[0]', 0,   m.Tops[0]);
+  AssertEquals('Tops[1]', 160, m.Tops[1]);
+  AssertEquals('Tops[2]', 190, m.Tops[2]);
+  AssertEquals('Tops[3]', 220, m.Tops[3]);
+  AssertEquals('Tops[4]=total content height', 350, m.Tops[4]);
+end;
+
+procedure TListGroupMapTest.TestContentHeightIsLastTop;
+{ ContentHeight = Tops[High(Tops)] = Tops[G]. }
+var
+  m: TTyListGroupMap;
+begin
+  m := CanonicalMap;
+  AssertEquals('content height = Tops[G]', 350, TyListGroupContentHeight(m));
+end;
+
+procedure TListGroupMapTest.TestTopsIsMonotonicNonDecreasing;
+{ Non-decreasing must hold even when a group adds ZERO height. A collapsed,
+  header-less group contributes header 0 + body 0 = 0, so Tops repeats:
+    G0 expanded hasHeader Count=4 : rows 1, body 70-10=60, +30 = 90 ; Tops 0->90
+    G1 collapsed NO header        : 0                                ; Tops 90->90
+    G2 expanded hasHeader Count=2 : rows 1, body 60, +30 = 90        ; Tops 90->180 }
+var
+  m: TTyListGroupMap;
+  g: Integer;
+begin
+  m := MakeMap([GroupInfo(4, False, True),
+                GroupInfo(5, True,  False),
+                GroupInfo(2, False, True)], IconMetrics, 30);
+  AssertEquals('Tops[0]', 0,   m.Tops[0]);
+  AssertEquals('Tops[1]', 90,  m.Tops[1]);
+  AssertEquals('Tops[2] repeats (zero-height group)', 90, m.Tops[2]);
+  AssertEquals('Tops[3]', 180, m.Tops[3]);
+  for g := 0 to High(m.Tops) - 1 do
+    AssertTrue(Format('Tops non-decreasing at %d', [g]), m.Tops[g + 1] >= m.Tops[g]);
+end;
+
+procedure TListGroupMapTest.TestCollapsedGroupIsHeaderOnly;
+{ Group 2 is collapsed: its height is exactly the header band (30), so
+  Tops[3]-Tops[2] = 30, and it adds nothing to the visible count. }
+var
+  m: TTyListGroupMap;
+begin
+  m := CanonicalMap;
+  AssertEquals('collapsed group height = header only',
+    30, m.Tops[3] - m.Tops[2]);
+  AssertEquals('collapsed group adds no visible items',
+    m.FirstVisible[2], m.FirstVisible[3]);
+end;
+
+procedure TListGroupMapTest.TestEmptyCountGroupKeepsFirstVisible;
+{ Group 1 has Count=0: it still occupies a header (height 30) but contributes
+  no items, so FirstVisible[2] = FirstVisible[1]. }
+var
+  m: TTyListGroupMap;
+begin
+  m := CanonicalMap;
+  AssertEquals('empty group still has a header band', 30, m.Tops[2] - m.Tops[1]);
+  AssertEquals('empty group keeps FirstVisible', m.FirstVisible[1], m.FirstVisible[2]);
+end;
+
+procedure TListGroupMapTest.TestHeaderlessGroupAddsNoHeaderHeight;
+{ Group 3 has HasHeader=False: its height is pure body (130), no header band.
+  Compare against the same body WITH a header (group 0, also body 130): the
+  difference is exactly AHeaderH=30. }
+var
+  m: TTyListGroupMap;
+begin
+  m := CanonicalMap;
+  AssertEquals('header-less group is body-only', 130, m.Tops[4] - m.Tops[3]);
+  AssertEquals('header-ful group of same body adds AHeaderH',
+    30, (m.Tops[1] - m.Tops[0]) - (m.Tops[4] - m.Tops[3]));
+end;
+
+procedure TListGroupMapTest.TestFirstVisibleCountsExpandedItemsOnly;
+{ FirstVisible accumulates Count for every EXPANDED group (header-ful or not)
+  and 0 for collapsed ones. Note group 3 is header-LESS yet still contributes
+  its 8 items — HasHeader affects layout height, never visibility. }
+var
+  m: TTyListGroupMap;
+begin
+  m := CanonicalMap;
+  AssertEquals('FV length is G+1', 5, Length(m.FirstVisible));
+  AssertEquals('FV[0]', 0,  m.FirstVisible[0]);
+  AssertEquals('FV[1]', 5,  m.FirstVisible[1]);
+  AssertEquals('FV[2]', 5,  m.FirstVisible[2]);
+  AssertEquals('FV[3]', 5,  m.FirstVisible[3]);
+  AssertEquals('FV[4]=total visible count', 13, m.FirstVisible[4]);
+end;
+
+procedure TListGroupMapTest.TestReportBodyIsCountTimesRowH;
+{ In lvsReport the body is Count*RowH (RowH=24), not a row/track grid.
+  Group 0 expanded hasHeader Count=5 : body 5*24=120, +AHeaderH 20 = 140.
+  Group 1 collapsed hasHeader Count=9: header only 20.
+  M.HeaderH (report list header, 22) is NOT part of the content Tops — the
+  content Y origin is the item region top. }
+var
+  m: TTyListGroupMap;
+begin
+  m := MakeMap([GroupInfo(5, False, True),
+                GroupInfo(9, True,  True)], ReportMetrics, 20);
+  AssertEquals('Tops[0]', 0,   m.Tops[0]);
+  AssertEquals('report body = Count*RowH + header', 140, m.Tops[1]);
+  AssertEquals('collapsed report group = header only', 160, m.Tops[2]);
+end;
+
+procedure TListGroupMapTest.TestAllCollapsedContentHeightIsGTimesHeader;
+{ Every group collapsed with a header: ContentHeight = G * AHeaderH, and the
+  total visible count is 0. G=3, AHeaderH=30 -> 90. }
+var
+  m: TTyListGroupMap;
+begin
+  m := MakeMap([GroupInfo(5, True, True),
+                GroupInfo(3, True, True),
+                GroupInfo(7, True, True)], IconMetrics, 30);
+  AssertEquals('all-collapsed content height', 90, TyListGroupContentHeight(m));
+  AssertEquals('all-collapsed visible count', 0, m.FirstVisible[3]);
+end;
+
+{ ===========================================================================
+  TListGroupHeaderRectTest
+  ---------------------------------------------------------------------------
+  Header band of group g is at content Y = Tops[g], spans [0, ViewportW], and
+  is returned in CLIENT coords: client Y = Tops[g] + M.HeaderH - AScrollY,
+  height = AHeaderH. Icon metrics -> M.HeaderH = 0.
+  =========================================================================== }
+
+procedure TListGroupHeaderRectTest.TestHeaderRectSpansViewportAtGroupTop;
+{ Group 2 header at content Y = Tops[2] = 190. No scroll, M.HeaderH=0:
+  Rect(0, 190, ViewportW=300, 190+30=220). }
+begin
+  AssertRectEquals('group2 header band', 0, 190, 300, 220,
+    TyListGroupHeaderRect(CanonicalMap, 2, IconMetrics, 30, 0));
+end;
+
+procedure TListGroupHeaderRectTest.TestHeaderRectSubtractsVerticalScroll;
+{ Same band with AScrollY=40: client Y = 190-40 = 150 .. 180. Width unchanged. }
+begin
+  AssertRectEquals('group2 header scrolled', 0, 150, 300, 180,
+    TyListGroupHeaderRect(CanonicalMap, 2, IconMetrics, 30, 40));
+end;
+
+procedure TListGroupHeaderRectTest.TestHeaderlessGroupHasEmptyHeaderRect;
+{ Group 3 has HasHeader=False -> no header band -> Rect(0,0,0,0). }
+begin
+  AssertRectEquals('header-less group header rect', 0, 0, 0, 0,
+    TyListGroupHeaderRect(CanonicalMap, 3, IconMetrics, 30, 0));
+end;
+
+procedure TListGroupHeaderRectTest.TestOutOfRangeGroupHasEmptyHeaderRect;
+begin
+  AssertRectEquals('group -1', 0, 0, 0, 0,
+    TyListGroupHeaderRect(CanonicalMap, -1, IconMetrics, 30, 0));
+  AssertRectEquals('group =G', 0, 0, 0, 0,
+    TyListGroupHeaderRect(CanonicalMap, 4, IconMetrics, 30, 0));
+end;
+
+{ ===========================================================================
+  TListGroupItemRectTest
+  ---------------------------------------------------------------------------
+  Body of group g starts (content Y) at Tops[g] + (HasHeader ? AHeaderH : 0).
+  Within the body, item i is row-major: row = i div Tracks, col = i mod Tracks,
+  at (col*PitchX, bodyTop + row*PitchY). Client = content + M.HeaderH - scroll.
+  Group 0: Tops[0]=0, header 30 -> bodyTop=30 (content). Icon: M.HeaderH=0.
+  =========================================================================== }
+
+procedure TListGroupItemRectTest.TestFirstItemSitsAtBodyTopLeft;
+{ (g=0,i=0): row0 col0 -> content (0, 30) -> Rect(0,30,60,90). }
+begin
+  AssertRectEquals('group0 item0', 0, 30, 60, 90,
+    TyListGroupItemRect(CanonicalMap, 0, 0, IconMetrics, 30, 0, 0));
+end;
+
+procedure TListGroupItemRectTest.TestItemRowColFromIndexInGroup;
+{ (g=0,i=1): row0 col1 -> (70, 30) -> Rect(70,30,130,90).
+  (g=0,i=4): row1 col0 -> (0, 30+70=100) -> Rect(0,100,60,160). }
+begin
+  AssertRectEquals('group0 item1 (col1)', 70, 30, 130, 90,
+    TyListGroupItemRect(CanonicalMap, 0, 1, IconMetrics, 30, 0, 0));
+  AssertRectEquals('group0 item4 (row1 col0)', 0, 100, 60, 160,
+    TyListGroupItemRect(CanonicalMap, 0, 4, IconMetrics, 30, 0, 0));
+end;
+
+procedure TListGroupItemRectTest.TestItemRectSubtractsScroll;
+{ (g=0,i=0) with scroll (25,10): Rect(-25,20,35,80). }
+begin
+  AssertRectEquals('group0 item0 scrolled', -25, 20, 35, 80,
+    TyListGroupItemRect(CanonicalMap, 0, 0, IconMetrics, 30, 25, 10));
+end;
+
+procedure TListGroupItemRectTest.TestCollapsedGroupItemRectIsEmpty;
+{ Group 2 is collapsed: every one of its items has an empty rect. }
+var
+  m: TTyListGroupMap;
+  i: Integer;
+begin
+  m := CanonicalMap;
+  for i := 0 to 2 do
+    AssertRectEquals(Format('collapsed group item %d', [i]), 0, 0, 0, 0,
+      TyListGroupItemRect(m, 2, i, IconMetrics, 30, 0, 0));
+end;
+
+procedure TListGroupItemRectTest.TestOutOfRangeGroupOrIndexIsEmpty;
+var
+  m: TTyListGroupMap;
+begin
+  m := CanonicalMap;
+  AssertRectEquals('group -1', 0, 0, 0, 0,
+    TyListGroupItemRect(m, -1, 0, IconMetrics, 30, 0, 0));
+  AssertRectEquals('group =G', 0, 0, 0, 0,
+    TyListGroupItemRect(m, 4, 0, IconMetrics, 30, 0, 0));
+  AssertRectEquals('index =Count', 0, 0, 0, 0,
+    TyListGroupItemRect(m, 0, 5, IconMetrics, 30, 0, 0));
+  AssertRectEquals('index -1', 0, 0, 0, 0,
+    TyListGroupItemRect(m, 0, -1, IconMetrics, 30, 0, 0));
+end;
+
+{ ===========================================================================
+  TListGroupHitTestTest
+  =========================================================================== }
+
+procedure TListGroupHitTestTest.TestHeaderBandPointReturnsIndexMinusOne;
+{ A point inside group 0's header band (content Y [0,30), client the same with
+  M.HeaderH=0) hits the group with AIndexInGroup = -1. Probe the band centre. }
+var
+  r: TRect;
+  g, i: Integer;
+begin
+  r := TyListGroupHeaderRect(CanonicalMap, 0, IconMetrics, 30, 0);
+  AssertTrue('header point hits',
+    TyListGroupHitTest(CanonicalMap, Point((r.Left + r.Right) div 2,
+      (r.Top + r.Bottom) div 2), IconMetrics, 30, 0, 0, g, i));
+  AssertEquals('header group', 0, g);
+  AssertEquals('header indexInGroup = -1', -1, i);
+end;
+
+procedure TListGroupHitTestTest.TestCollapsedGroupHeaderStillHittable;
+{ Group 2 is collapsed but its header band is still clickable (that is how you
+  expand it): a point in it -> True, group 2, index -1. }
+var
+  r: TRect;
+  g, i: Integer;
+begin
+  r := TyListGroupHeaderRect(CanonicalMap, 2, IconMetrics, 30, 0);
+  AssertTrue('collapsed header hits',
+    TyListGroupHitTest(CanonicalMap, Point((r.Left + r.Right) div 2,
+      (r.Top + r.Bottom) div 2), IconMetrics, 30, 0, 0, g, i));
+  AssertEquals('collapsed header group', 2, g);
+  AssertEquals('collapsed header index -1', -1, i);
+end;
+
+procedure TListGroupHitTestTest.TestPointBelowCollapsedHeaderBelongsToNextGroup;
+{ Dedicated map:
+    G0 collapsed hasHeader Count=5 : header [0,30), height 30 ; Tops 0->30
+    G1 expanded  hasHeader Count=3 : header [30,60), body from 60
+  If G0 were expanded its first item would sit at content Y ~35. Because G0 is
+  collapsed that space is reclaimed by G1's HEADER, so a point at Y=35 must hit
+  (G1, -1) — never (G0, 0). This is the geometry-cannot-drift rule for collapse. }
+var
+  m: TTyListGroupMap;
+  g, i: Integer;
+begin
+  m := MakeMap([GroupInfo(5, True,  True),
+                GroupInfo(3, False, True)], IconMetrics, 30);
+  AssertTrue('point below collapsed header hits',
+    TyListGroupHitTest(m, Point(20, 35), IconMetrics, 30, 0, 0, g, i));
+  AssertEquals('belongs to next group', 1, g);
+  AssertEquals('is that group''s header, not an item', -1, i);
+end;
+
+procedure TListGroupHitTestTest.TestCollapsedGroupItemsAllEmptyRects;
+{ Companion to the previous test: the collapsed group really has no item cells. }
+var
+  m: TTyListGroupMap;
+  i: Integer;
+begin
+  m := MakeMap([GroupInfo(5, True,  True),
+                GroupInfo(3, False, True)], IconMetrics, 30);
+  for i := 0 to 4 do
+    AssertRectEquals(Format('collapsed item %d empty', [i]), 0, 0, 0, 0,
+      TyListGroupItemRect(m, 0, i, IconMetrics, 30, 0, 0));
+end;
+
+{ ===========================================================================
+  TListGroupInverseTest
+  ---------------------------------------------------------------------------
+  For every visible (g,i): the cell's top-left +(1,1) point must hit back (g,i)
+  through TyListGroupHitTest. Same discipline as SP1's ItemRect/ItemAt inverse.
+  Count probes and assert at least one, so a skip cannot pass vacuously.
+  =========================================================================== }
+
+procedure TListGroupInverseTest.CheckGroupInverse(const AName: string;
+  const AMap: TTyListGroupMap; const M: TTyListMetrics; AHeaderH, ASx, ASy: Integer);
+var
+  g, i, probed, hg, hi: Integer;
+  r: TRect;
+  pt: TPoint;
+begin
+  probed := 0;
+  for g := 0 to High(AMap.Groups) do
+    if not AMap.Groups[g].Collapsed then
+      for i := 0 to AMap.Groups[g].Count - 1 do
+      begin
+        r := TyListGroupItemRect(AMap, g, i, M, AHeaderH, ASx, ASy);
+        pt := Point(r.Left + 1, r.Top + 1);
+        { Clamp the probe down into the item region: under a vertical scroll a
+          cell's top can sit above the report list-header band (or above 0),
+          where nothing is hittable by design. The clamped point still lands in
+          the same cell's visible sliver because item bodies never overlap a
+          header band. Skip cells that are wholly above the item area. }
+        if pt.Y < M.HeaderH then
+          pt.Y := M.HeaderH;
+        if pt.Y >= r.Bottom then
+          Continue;
+        Inc(probed);
+        AssertTrue(Format('%s: (%d,%d) hits', [AName, g, i]),
+          TyListGroupHitTest(AMap, pt, M, AHeaderH, ASx, ASy, hg, hi));
+        AssertEquals(Format('%s: (%d,%d) group', [AName, g, i]), g, hg);
+        AssertEquals(Format('%s: (%d,%d) index', [AName, g, i]), i, hi);
+      end;
+  AssertTrue(Format('%s: at least one probe', [AName]), probed > 0);
+end;
+
+procedure TListGroupInverseTest.TestItemRectHitTestInverseNoScroll;
+begin
+  CheckGroupInverse('canonical', CanonicalMap, IconMetrics, 30, 0, 0);
+end;
+
+procedure TListGroupInverseTest.TestItemRectHitTestInverseWithScroll;
+{ A modest scroll pushes early cells' tops negative; the round-trip must hold. }
+begin
+  CheckGroupInverse('canonical+sx', CanonicalMap, IconMetrics, 30, 20, 0);
+  CheckGroupInverse('canonical+sy', CanonicalMap, IconMetrics, 30, 0, 45);
+  CheckGroupInverse('canonical+both', CanonicalMap, IconMetrics, 30, 20, 45);
+end;
+
+procedure TListGroupInverseTest.TestReportItemRectHitTestInverse;
+{ Report mode (Tracks=1, RowH=24, M.HeaderH=22) with a collapsed group between
+  two expanded ones, so the inverse also proves the collapsed group's rows are
+  simply absent from the probe set. }
+var
+  m: TTyListGroupMap;
+begin
+  m := MakeMap([GroupInfo(3, False, True),
+                GroupInfo(2, True,  True),
+                GroupInfo(4, False, True)], ReportMetrics, 20);
+  CheckGroupInverse('report', m, ReportMetrics, 20, 0, 0);
+  CheckGroupInverse('report+sy', m, ReportMetrics, 20, 0, 15);
+end;
+
+{ ===========================================================================
+  TListGroupDisplayPosTest
+  ---------------------------------------------------------------------------
+  For an expanded group g, item i has display position FirstVisible[g] + i.
+  Collapsed groups occupy no display positions. Canonical map visible layout:
+    group 0 -> display 0..4   (FV[0]=0, Count 5)
+    group 1 -> (empty)
+    group 2 -> (collapsed)
+    group 3 -> display 5..12  (FV[3]=5, Count 8)   VisibleCount=13
+  =========================================================================== }
+
+procedure TListGroupDisplayPosTest.CheckDisplayInverse(const AName: string;
+  const AMap: TTyListGroupMap);
+var
+  g, i, pos, probed, og, oi: Integer;
+begin
+  probed := 0;
+  { forward: every visible (g,i) -> a display position and back. }
+  for g := 0 to High(AMap.Groups) do
+    if not AMap.Groups[g].Collapsed then
+      for i := 0 to AMap.Groups[g].Count - 1 do
+      begin
+        pos := TyListGroupDisplayPos(AMap, g, i);
+        AssertEquals(Format('%s: displaypos(%d,%d)', [AName, g, i]),
+          AMap.FirstVisible[g] + i, pos);
+        AssertTrue(Format('%s: ofdisplaypos(%d) ok', [AName, pos]),
+          TyListGroupOfDisplayPos(AMap, pos, og, oi));
+        AssertEquals(Format('%s: ofdisplaypos(%d) group', [AName, pos]), g, og);
+        AssertEquals(Format('%s: ofdisplaypos(%d) index', [AName, pos]), i, oi);
+        Inc(probed);
+      end;
+  AssertTrue(Format('%s: at least one probe', [AName]), probed > 0);
+end;
+
+procedure TListGroupDisplayPosTest.TestDisplayPosIsFirstVisiblePlusIndex;
+{ Spot-check the two boundary items that a fencepost bug would move:
+  group 3 item 0 is the first display after group 0's block (5), and the last
+  item of the last group is VisibleCount-1 (12). }
+var
+  m: TTyListGroupMap;
+begin
+  m := CanonicalMap;
+  AssertEquals('group0 item0 -> 0',   0,  TyListGroupDisplayPos(m, 0, 0));
+  AssertEquals('group0 item4 -> 4',   4,  TyListGroupDisplayPos(m, 0, 4));
+  AssertEquals('group3 item0 -> 5',   5,  TyListGroupDisplayPos(m, 3, 0));
+  AssertEquals('group3 item7 -> 12',  12, TyListGroupDisplayPos(m, 3, 7));
+end;
+
+procedure TListGroupDisplayPosTest.TestOfDisplayPosAndDisplayPosAreInverse;
+begin
+  CheckDisplayInverse('canonical', CanonicalMap);
+end;
+
+procedure TListGroupDisplayPosTest.TestCollapsedGroupItemHasNoDisplayPos;
+{ An item that lives inside the collapsed group is not visible: it has no
+  display position, so TyListGroupDisplayPos returns -1. }
+begin
+  AssertEquals('collapsed group item -> -1', -1,
+    TyListGroupDisplayPos(CanonicalMap, 2, 0));
+end;
+
+procedure TListGroupDisplayPosTest.TestOutOfRangeDisplayPosReturnsFalse;
+var
+  m: TTyListGroupMap;
+  g, i: Integer;
+begin
+  m := CanonicalMap;   { VisibleCount = 13 }
+  AssertFalse('pos -1 -> False', TyListGroupOfDisplayPos(m, -1, g, i));
+  AssertEquals('pos -1 group -1', -1, g);
+  AssertEquals('pos -1 index -1', -1, i);
+  AssertFalse('pos =VisibleCount -> False', TyListGroupOfDisplayPos(m, 13, g, i));
+  AssertEquals('pos =VC group -1', -1, g);
+  AssertEquals('pos =VC index -1', -1, i);
+end;
+
+{ ===========================================================================
+  TListGroupVisibleRangeTest
+  ---------------------------------------------------------------------------
+  200 uniform groups, IconMetrics: each expanded hasHeader Count=4 -> rows 1,
+  body 70-10=60, +header 30 = height 90. Tops[g] = 90*g, ContentHeight=18000.
+  ViewportH=300, M.HeaderH=0.
+  =========================================================================== }
+
+function UniformGroups(ACount: Integer): TTyListGroupInfoArray;
+var
+  i: Integer;
+begin
+  SetLength(Result, ACount);
+  for i := 0 to ACount - 1 do
+    Result[i] := GroupInfo(4, False, True);
+end;
+
+procedure TListGroupVisibleRangeTest.TestMiddleScrollReturnsOnlyViewportGroups;
+{ ScrollY=9000: viewport content Y = [9000, 9300). Group g spans [90g, 90g+90).
+  First group with Tops[g] <= 9000 is g=100 (Tops=9000). Last group intersecting
+  9300 is g=103 (Tops=9270 < 9300; g=104 Tops=9360 >= 9300). So [100,103] — a
+  4-group window out of 200, NOT the whole array. }
+var
+  m: TTyListGroupMap;
+  f, l: Integer;
+begin
+  m := TyListBuildGroupMap(UniformGroups(200), IconMetrics, 30);
+  AssertTrue('middle scroll visible',
+    TyListGroupVisibleRange(m, IconMetrics, 9000, f, l));
+  AssertEquals('first group', 100, f);
+  AssertEquals('last group', 103, l);
+  AssertTrue('window is small, not the whole array', (l - f) < 10);
+  AssertTrue('window does not start at 0', f > 0);
+  AssertTrue('window does not reach the end', l < 199);
+end;
+
+procedure TListGroupVisibleRangeTest.TestGroupWhoseBottomEqualsViewportTopIsNotVisible;
+{ Half-open window, same convention SP1 uses. Each uniform group is 90px tall, so group 0
+  spans content Y [0,90). Scroll exactly 90: the viewport top is 90, group 0's bottom edge
+  is 90 -> they touch but do not overlap, so group 0 is NOT in the range; it starts at 1. }
+var
+  m: TTyListGroupMap;
+  f, l: Integer;
+begin
+  m := TyListBuildGroupMap(UniformGroups(200), IconMetrics, 30);
+  AssertTrue('range at the exact boundary', TyListGroupVisibleRange(m, IconMetrics, 90, f, l));
+  AssertEquals('a group whose bottom == viewport top is excluded', 1, f);
+end;
+
+procedure TListGroupVisibleRangeTest.TestScrolledPastAllContentReturnsFalse;
+{ A valid map scrolled well past its total content height has nothing visible. }
+var
+  m: TTyListGroupMap;
+  f, l: Integer;
+begin
+  m := TyListBuildGroupMap(UniformGroups(200), IconMetrics, 30);
+  AssertFalse('scrolled past content -> False',
+    TyListGroupVisibleRange(m, IconMetrics, 100000, f, l));
+  AssertEquals('first -1', -1, f);
+  AssertEquals('last -1', -1, l);
+end;
+
+procedure TListGroupVisibleRangeTest.TestTopScrollStartsAtFirstGroup;
+{ ScrollY=0: [0,300) -> groups 0..3 (Tops[3]=270<300; Tops[4]=360>=300). }
+var
+  m: TTyListGroupMap;
+  f, l: Integer;
+begin
+  m := TyListBuildGroupMap(UniformGroups(200), IconMetrics, 30);
+  AssertTrue('top visible', TyListGroupVisibleRange(m, IconMetrics, 0, f, l));
+  AssertEquals('first group 0', 0, f);
+  AssertEquals('last group 3', 3, l);
+end;
+
+procedure TListGroupVisibleRangeTest.TestEmptyMapReturnsFalseAndMinusOne;
+{ Empty AGroups -> empty map -> False, both out params -1. }
+var
+  m: TTyListGroupMap;
+  f, l: Integer;
+begin
+  m := MakeMap([], IconMetrics, 30);
+  AssertFalse('empty map -> False', TyListGroupVisibleRange(m, IconMetrics, 0, f, l));
+  AssertEquals('empty first -1', -1, f);
+  AssertEquals('empty last -1', -1, l);
+end;
+
+{ ===========================================================================
+  TListGroupNavigateTest
+  ---------------------------------------------------------------------------
+  Main nav map, IconMetrics (Tracks=4):
+    G0 expanded hasHeader Count=8 : display 0..7 (row0 idx0-3, row1 idx4-7)
+    G1 collapsed hasHeader Count=3 : (skipped)
+    G2 expanded hasHeader Count=0 : (empty, skipped)
+    G3 expanded hasHeader Count=2 : display 8..9 (row0 idx0,1)
+  FirstVisible = [0,8,8,8,10], VisibleCount=10.
+  =========================================================================== }
+
+function NavMap: TTyListGroupMap;
+begin
+  Result := MakeMap([GroupInfo(8, False, True),
+                     GroupInfo(3, True,  True),
+                     GroupInfo(0, False, True),
+                     GroupInfo(2, False, True)], IconMetrics, 30);
+end;
+
+procedure TListGroupNavigateTest.TestDownWithinGroupMovesByTracks;
+{ display 0 (G0 idx0 row0col0) -> down = idx4 (row1col0) -> display 4.
+  display 1 (col1) -> idx5 -> display 5. }
+begin
+  AssertEquals('down within col0', 4, TyListGroupNavigate(NavMap, 0, lnDown, IconMetrics));
+  AssertEquals('down within col1', 5, TyListGroupNavigate(NavMap, 1, lnDown, IconMetrics));
+end;
+
+function PartialNavMap: TTyListGroupMap;
+{ Two expanded groups. G0 has 6 items in Tracks=4: a FULL row 0 (idx0-3) and a PARTIAL
+  row 1 (idx4-5, only columns 0-1). G1 has 4 items. FirstVisible=[0,6,10]. }
+begin
+  Result := MakeMap([GroupInfo(6, False, True),
+                     GroupInfo(4, False, True)], IconMetrics, 30);
+end;
+
+procedure TListGroupNavigateTest.TestDownFromAPartialLastRowStaysInTheGroup;
+{ THE regression this batch was written for. From G0 idx2 (row0 col2), down. The cell
+  directly beneath (idx6, col2 of row1) does NOT exist -- row1 only has cols 0-1 -- but
+  row1 DOES exist, so down must stay in G0 and clamp to its last item idx5 (display 5),
+  NOT jump to G1. The bug read `i + Tracks < Count` and jumped. }
+begin
+  AssertEquals('partial row down clamps to the group last item, not the next group',
+    5, TyListGroupNavigate(PartialNavMap, 2, lnDown, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestDownFromTheTrueLastRowLeavesThePartialGroup;
+{ From G0 idx5 (row1 col1, the genuine last row): down really does leave G0 and lands on
+  G1's first row keeping column 1 -> G1 idx1 -> display 6 (FirstVisible[1]=6) + 1 = 7. }
+begin
+  AssertEquals('true last row down crosses to the next group',
+    7, TyListGroupNavigate(PartialNavMap, 5, lnDown, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestDownOutOfGroupLandsOnNextExpandedNonEmptyKeepingColumn;
+{ display 4 (G0 idx4 row1 col0): down leaves G0 -> lands on G3's first row at the
+  SAME column 0 -> G3 idx0 -> display 8. }
+begin
+  AssertEquals('cross-down keeps col0', 8, TyListGroupNavigate(NavMap, 4, lnDown, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestDownOutOfGroupClampsColumnToRowLastItem;
+{ display 7 (G0 idx7 row1 col3): down -> G3 first row, but that row only has
+  cols 0..1, so column 3 clamps to the row's last item idx1 -> display 9. }
+begin
+  AssertEquals('cross-down clamps column', 9, TyListGroupNavigate(NavMap, 7, lnDown, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestDownSkipsCollapsedAndEmptyGroups;
+{ From G0's last row, down reaches G3 — proving G1 (collapsed) and G2 (empty)
+  are both skipped as landing targets. }
+begin
+  AssertEquals('down skips collapsed+empty', 8, TyListGroupNavigate(NavMap, 4, lnDown, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestUpWithinGroupMovesByTracks;
+{ Up-clamp map: G0 Count=2 (row0 idx0,1), G1 Count=8 (row0 idx0-3, row1 idx4-7).
+  display 6 (G1 idx4 row1 col0) -> up = idx0 -> display 2. }
+var
+  m: TTyListGroupMap;
+begin
+  m := MakeMap([GroupInfo(2, False, True),
+                GroupInfo(8, False, True)], IconMetrics, 30);
+  AssertEquals('up within group', 2, TyListGroupNavigate(m, 6, lnUp, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestUpOutOfGroupLandsOnPrevExpandedNonEmptyKeepingColumn;
+{ Main nav map: display 8 (G3 idx0 col0): up leaves G3 -> lands on G0's LAST row
+  (row1) at column 0 -> idx4 -> display 4.
+  display 9 (G3 idx1 col1) -> G0 row1 col1 -> idx5 -> display 5. }
+begin
+  AssertEquals('cross-up keeps col0', 4, TyListGroupNavigate(NavMap, 8, lnUp, IconMetrics));
+  AssertEquals('cross-up keeps col1', 5, TyListGroupNavigate(NavMap, 9, lnUp, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestUpOutOfGroupClampsColumnToRowLastItem;
+{ Up-clamp map: display 5 (G1 idx3 row0 col3): up -> G0's last row, which has
+  only cols 0..1, so column 3 clamps to idx1 -> display 1. }
+var
+  m: TTyListGroupMap;
+begin
+  m := MakeMap([GroupInfo(2, False, True),
+                GroupInfo(8, False, True)], IconMetrics, 30);
+  AssertEquals('cross-up clamps column', 1, TyListGroupNavigate(m, 5, lnUp, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestLastRowOfLastGroupDownDoesNotMove;
+{ display 9 is the last visible position (G3 idx1). Down finds no further
+  expanded non-empty group -> stays put. }
+begin
+  AssertEquals('last row down stays', 9, TyListGroupNavigate(NavMap, 9, lnDown, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestFirstRowOfFirstGroupUpDoesNotMove;
+{ display 0 (G0 idx0 row0). Up finds no earlier group -> stays put. }
+begin
+  AssertEquals('first row up stays', 0, TyListGroupNavigate(NavMap, 0, lnUp, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestLeftRightAreFlatDisplayStep;
+{ Left/Right ignore groups: they are flat display +-1 over visible positions,
+  crossing group boundaries, and do not move at the ends. }
+begin
+  AssertEquals('right +1', 1, TyListGroupNavigate(NavMap, 0, lnRight, IconMetrics));
+  AssertEquals('right crosses group', 8, TyListGroupNavigate(NavMap, 7, lnRight, IconMetrics));
+  AssertEquals('left crosses group', 7, TyListGroupNavigate(NavMap, 8, lnLeft, IconMetrics));
+  AssertEquals('left at start stays', 0, TyListGroupNavigate(NavMap, 0, lnLeft, IconMetrics));
+  AssertEquals('right at end stays', 9, TyListGroupNavigate(NavMap, 9, lnRight, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestHomeAndEndAlwaysMove;
+{ Home -> 0, End -> VisibleCount-1 = 9, from anywhere. }
+begin
+  AssertEquals('home', 0, TyListGroupNavigate(NavMap, 5, lnHome, IconMetrics));
+  AssertEquals('end',  9, TyListGroupNavigate(NavMap, 5, lnEnd, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestPageDownAndPageUpClamp;
+{ PageDown/PageUp move by one screen of cells (>=1) and clamp to [0,VC-1].
+  From display 8 any positive page step clamps to 9; from display 1 any positive
+  step clamps to 0 — so the clamp is asserted without pinning the exact step. }
+begin
+  AssertEquals('pagedown clamps to last', 9, TyListGroupNavigate(NavMap, 8, lnPageDown, IconMetrics));
+  AssertEquals('pageup clamps to first',  0, TyListGroupNavigate(NavMap, 1, lnPageUp, IconMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestReportUpDownMoveByOneAcrossGroups;
+{ lvsReport: Up/Down are +-1 in display order (group headers take no display
+  position), crossing group boundaries seamlessly.
+  Two expanded report groups Count 4 each: display 0..3 | 4..7. }
+var
+  m: TTyListGroupMap;
+begin
+  m := MakeMap([GroupInfo(4, False, True),
+                GroupInfo(4, False, True)], ReportMetrics, 20);
+  AssertEquals('report down within', 1, TyListGroupNavigate(m, 0, lnDown, ReportMetrics));
+  AssertEquals('report down crosses group', 4, TyListGroupNavigate(m, 3, lnDown, ReportMetrics));
+  AssertEquals('report up crosses group',   3, TyListGroupNavigate(m, 4, lnUp, ReportMetrics));
+  AssertEquals('report down at end stays',  7, TyListGroupNavigate(m, 7, lnDown, ReportMetrics));
+  AssertEquals('report up at start stays',  0, TyListGroupNavigate(m, 0, lnUp, ReportMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestGroupedReportLeftRightMoveByOne;
+{ Deliberate divergence from SP1's FLAT report path, where Left/Right do not move. In a
+  GROUPED report the contract makes Left/Right the flat display step +-1 in every mode, so
+  the grouped path moves. Pinned so the divergence is a decision, not an accident. }
+var
+  m: TTyListGroupMap;
+begin
+  m := MakeMap([GroupInfo(4, False, True),
+                GroupInfo(4, False, True)], ReportMetrics, 20);
+  AssertEquals('grouped report right = +1', 4, TyListGroupNavigate(m, 3, lnRight, ReportMetrics));
+  AssertEquals('grouped report left = -1',  3, TyListGroupNavigate(m, 4, lnLeft, ReportMetrics));
+  AssertEquals('right at the very end stays', 7,
+    TyListGroupNavigate(m, 7, lnRight, ReportMetrics));
+end;
+
+procedure TListGroupNavigateTest.TestAllCollapsedNavigationReturnsMinusOne;
+{ When every group is collapsed VisibleCount=0, so navigation has nowhere to go:
+  every key returns -1 (like an empty flat list). }
+var
+  m: TTyListGroupMap;
+begin
+  m := MakeMap([GroupInfo(5, True, True),
+                GroupInfo(3, True, True),
+                GroupInfo(7, True, True)], IconMetrics, 30);
+  AssertEquals('down',  -1, TyListGroupNavigate(m, 0, lnDown, IconMetrics));
+  AssertEquals('up',    -1, TyListGroupNavigate(m, 0, lnUp, IconMetrics));
+  AssertEquals('home',  -1, TyListGroupNavigate(m, 0, lnHome, IconMetrics));
+  AssertEquals('end',   -1, TyListGroupNavigate(m, 0, lnEnd, IconMetrics));
+end;
+
+{ ===========================================================================
+  TListGroupDegenerateTest
+  =========================================================================== }
+
+procedure TListGroupDegenerateTest.TestEmptyGroupsEveryFunctionIsSafe;
+{ G=0 (empty AGroups): ContentHeight=0, every accessor returns its documented
+  empty result and none crash. }
+var
+  m: TTyListGroupMap;
+  f, l, g, i: Integer;
+begin
+  m := MakeMap([], IconMetrics, 30);
+  AssertEquals('content height 0', 0, TyListGroupContentHeight(m));
+  AssertRectEquals('header rect empty', 0, 0, 0, 0,
+    TyListGroupHeaderRect(m, 0, IconMetrics, 30, 0));
+  AssertRectEquals('item rect empty', 0, 0, 0, 0,
+    TyListGroupItemRect(m, 0, 0, IconMetrics, 30, 0, 0));
+  AssertFalse('hittest false',
+    TyListGroupHitTest(m, Point(5, 5), IconMetrics, 30, 0, 0, g, i));
+  AssertEquals('hittest group -1', -1, g);
+  AssertEquals('hittest index -1', -1, i);
+  AssertFalse('visiblerange false', TyListGroupVisibleRange(m, IconMetrics, 0, f, l));
+  AssertFalse('ofdisplaypos false', TyListGroupOfDisplayPos(m, 0, g, i));
+  AssertEquals('displaypos -1', -1, TyListGroupDisplayPos(m, 0, 0));
+  AssertEquals('navigate -1', -1, TyListGroupNavigate(m, 0, lnDown, IconMetrics));
+end;
+
+procedure TListGroupDegenerateTest.TestZeroPitchGroupGeometryDoesNotDivideByZero;
+{ PitchX=PitchY=0 (icon) and RowH=0 (report) must not divide by zero anywhere in
+  the group path — build, geometry, hit-test, range and navigation. }
+var
+  Mi, Mr: TTyListMetrics;
+  mi_map, mr_map: TTyListGroupMap;
+  f, l, g, i: Integer;
+begin
+  Mi := IconMetrics;  Mi.CellW := 0; Mi.CellH := 0; Mi.HGap := 0; Mi.VGap := 0;
+  Mr := ReportMetrics; Mr.RowH := 0;
+  try
+    mi_map := MakeMap([GroupInfo(5, False, True),
+                       GroupInfo(3, False, True)], Mi, 30);
+    TyListGroupContentHeight(mi_map);
+    TyListGroupItemRect(mi_map, 0, 2, Mi, 30, 0, 0);
+    TyListGroupHitTest(mi_map, Point(1, 1), Mi, 30, 0, 0, g, i);
+    TyListGroupVisibleRange(mi_map, Mi, 0, f, l);
+    TyListGroupNavigate(mi_map, 0, lnDown, Mi);
+
+    mr_map := MakeMap([GroupInfo(4, False, True),
+                       GroupInfo(2, False, True)], Mr, 20);
+    TyListGroupContentHeight(mr_map);
+    TyListGroupItemRect(mr_map, 0, 1, Mr, 20, 0, 0);
+    TyListGroupHitTest(mr_map, Point(1, 30), Mr, 20, 0, 0, g, i);
+    TyListGroupVisibleRange(mr_map, Mr, 0, f, l);
+    TyListGroupNavigate(mr_map, 0, lnDown, Mr);
+  except
+    on E: Exception do
+      Fail('zero-pitch group geometry raised: ' + E.ClassName + ': ' + E.Message);
+  end;
+end;
+
 initialization
   RegisterTest(TListCellSizeTest);
   RegisterTest(TListTracksTest);
@@ -1358,4 +2288,13 @@ initialization
   RegisterTest(TListReportRowAtTest);
   RegisterTest(TListDegenerateTest);
   RegisterTest(TListCheckRectTest);
+  RegisterTest(TListGroupMapTest);
+  RegisterTest(TListGroupHeaderRectTest);
+  RegisterTest(TListGroupItemRectTest);
+  RegisterTest(TListGroupHitTestTest);
+  RegisterTest(TListGroupInverseTest);
+  RegisterTest(TListGroupDisplayPosTest);
+  RegisterTest(TListGroupVisibleRangeTest);
+  RegisterTest(TListGroupNavigateTest);
+  RegisterTest(TListGroupDegenerateTest);
 end.

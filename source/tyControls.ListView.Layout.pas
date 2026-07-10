@@ -78,6 +78,49 @@ type
     Pad:         Integer;   { cell inner padding, input to TyListCellSize }
   end;
 
+  { --- Grouped view (SP2b) -------------------------------------------------
+    Grouping partitions the items into vertical bands. Within a group the grid is
+    still uniform, so group-local geometry stays closed-form; only the global Y of a
+    group is data-dependent, so a per-layout PREFIX SUM (TyListGroupMap.Tops) turns
+    "viewport Y -> group" into an O(log G) binary search plus a closed-form solve.
+
+    Two things stay flat and are NOT re-derived here:
+      - lvsList (column-major) does not support grouping; the control falls back to the
+        flat SP1 path there. These functions assume row-major (icon/smallicon/tile) or
+        lvsReport layout inside every group.
+      - Grouping never touches lvsList's flow classification; group bodies are always
+        laid out row-major (or one row per item in report). }
+
+  { One group's data-level facts. Count may be 0 (an empty group still shows a header). }
+  TTyListGroupInfo = record
+    Count:     Integer;   { items in the group; 0 is allowed }
+    Collapsed: Boolean;   { collapsed groups show only their header, contribute no body
+                            and no display positions }
+    HasHeader: Boolean;   { False = the implicit bucket that holds items with no valid
+                            group; it draws no header band and occupies no header height }
+  end;
+  TTyListGroupInfoArray = array of TTyListGroupInfo;
+
+  { The vertical map built once per layout pass. O(G) to build.
+
+    Tops and FirstVisible are both length G+1 (a leading 0 plus one running total per
+    group), so Tops[g]/FirstVisible[g] is group g's start and Tops[g+1]/FirstVisible[g+1]
+    is its end.
+
+    Content Y origin is the ITEM region top, i.e. it excludes the report column-header
+    band (M.HeaderH). Every function that returns CLIENT coords adds M.HeaderH back and
+    subtracts the scroll offset, exactly like TyListItemRect. }
+  TTyListGroupMap = record
+    Groups:       TTyListGroupInfoArray;
+    Tops:         TTyIntArray;   { length G+1. Tops[g] = content Y of group g's top (its
+                                   header band top). Tops[G] = total content height.
+                                   Non-decreasing (a zero-height group repeats a value). }
+    FirstVisible: TTyIntArray;   { length G+1. FirstVisible[g] = display position of
+                                   group g's first item, accumulating EXPANDED groups only.
+                                   FirstVisible[G] = total visible item count. A collapsed
+                                   group contributes 0 (FirstVisible[g+1] = FirstVisible[g]). }
+  end;
+
 { Cell dimensions derived from IconPx/LabelH/Pad (or ReportWidth/RowH for report),
   which the control writes back into M.CellW/M.CellH before calling anything else. }
 function TyListCellSize(const M: TTyListMetrics): TSize;
@@ -167,6 +210,74 @@ function TyListCompareCells(const A, B: string; AKind: TTyListSortKind;
 { Report-mode row hit on a raw Y (client coord). AY < AHeaderH -> -1. ARowH <= 0 -> -1.
   Otherwise (AY - AHeaderH + AScrollY) div ARowH, or -1 if outside [0, ARowCount-1]. }
 function TyReportRowAt(AY, AScrollY, AHeaderH, ARowH, ARowCount: Integer): Integer;
+
+{ ---------------------------------------------------------------------------
+  Grouped view (SP2b). Everything below operates on a TTyListGroupMap.
+  --------------------------------------------------------------------------- }
+
+{ Build the vertical map. O(G). AHeaderH is the GROUP header-band height in DEVICE
+  pixels (distinct from M.HeaderH, the report column header). A HasHeader=False group
+  contributes 0 header height.
+    group height = header + body; a collapsed group has body 0.
+    body (row-major): rows := Ceil(Count/Tracks); body := Max(0, rows*PitchY - VGap).
+    body (lvsReport): body := Count * RowH.
+    Count = 0 -> body = 0.
+  Tops[0] = 0; Tops[g+1] = Tops[g] + header + body; Tops[G] = total content height.
+  FirstVisible accumulates Count for expanded groups only. }
+function TyListBuildGroupMap(const AGroups: TTyListGroupInfoArray;
+  const M: TTyListMetrics; AHeaderH: Integer): TTyListGroupMap;
+
+{ Total scrollable content height of the item region = Tops[G]. Empty map -> 0. }
+function TyListGroupContentHeight(const AMap: TTyListGroupMap): Integer;
+
+{ Group g's header band in CLIENT coords. HasHeader=False or g out of range ->
+  Rect(0,0,0,0). It spans the full width [0, ViewportW] and does NOT move with AScrollX
+  (headers never scroll horizontally); only AScrollY and M.HeaderH shift it vertically. }
+function TyListGroupHeaderRect(const AMap: TTyListGroupMap; AGroup: Integer;
+  const M: TTyListMetrics; AHeaderH, AScrollY: Integer): TRect;
+
+{ Group g, item i's cell in CLIENT coords. THE single geometry source for a grouped
+  item, so paint and hit-test can never drift. g/i out of range, or a collapsed group,
+  -> Rect(0,0,0,0). }
+function TyListGroupItemRect(const AMap: TTyListGroupMap; AGroup, AIndexInGroup: Integer;
+  const M: TTyListMetrics; AHeaderH, AScrollX, AScrollY: Integer): TRect;
+
+{ CLOSED group-index interval [AFirst, ALast] of every group whose band intersects the
+  viewport. Binary-searches Tops (never a linear group walk). Empty map or no
+  intersection -> False with both out params -1. }
+function TyListGroupVisibleRange(const AMap: TTyListGroupMap; const M: TTyListMetrics;
+  AScrollY: Integer; out AFirst, ALast: Integer): Boolean;
+
+{ Hit-test a CLIENT-coord point.
+    - on an item  -> True, AGroup/AIndexInGroup valid;
+    - on a header band -> True, AIndexInGroup = -1;
+    - a miss (inter-cell gap, a collapsed group's body area, the report column-header
+      band, viewport blank space) -> False with both out params -1.
+  Same discipline as TyListItemAt: it computes a candidate then VERIFIES it through
+  TyListGroupItemRect + PtInRect, so hit geometry cannot drift from paint geometry. }
+function TyListGroupHitTest(const AMap: TTyListGroupMap; const APt: TPoint;
+  const M: TTyListMetrics; AHeaderH, AScrollX, AScrollY: Integer;
+  out AGroup, AIndexInGroup: Integer): Boolean;
+
+{ display position <-> (group, index-in-group). Both cover VISIBLE items only (items in
+  collapsed groups have no display position). Out of range -> False / -1. Binary-searches
+  FirstVisible. }
+function TyListGroupOfDisplayPos(const AMap: TTyListGroupMap; APos: Integer;
+  out AGroup, AIndexInGroup: Integer): Boolean;
+function TyListGroupDisplayPos(const AMap: TTyListGroupMap;
+  AGroup, AIndexInGroup: Integer): Integer;
+
+{ 2-D grid navigation across groups. Takes and returns a DISPLAY POSITION (visible order).
+    - lnLeft/lnRight are flat display position -1/+1; out of range does not move.
+    - lnHome -> 0, lnEnd -> VisibleCount-1 (always move; empty -> -1).
+    - lnPageUp/lnPageDown move one viewport of cells and CLAMP to [0, VisibleCount-1].
+    - row-major lnUp/lnDown move within the group by Tracks; when that leaves the group,
+      lnDown lands on the NEXT expanded non-empty group's first row and lnUp on the
+      PREVIOUS one's last row, KEEPING the column (clamped to that row's last item);
+      collapsed and empty groups are skipped; no such group -> does not move.
+    - lvsReport lnUp/lnDown are flat -1/+1 (headers hold no display position). }
+function TyListGroupNavigate(const AMap: TTyListGroupMap; ACurrent: Integer;
+  AKey: TTyListNavKey; const M: TTyListMetrics): Integer;
 
 implementation
 
@@ -868,6 +979,486 @@ begin
   if (row < 0) or (row >= ARowCount) then
     Exit;
   Result := row;
+end;
+
+{ ---------------------------------------------------------------------------
+  Grouped view (SP2b)
+  --------------------------------------------------------------------------- }
+
+{ Which group owns content Y = ACy, i.e. the g with Tops[g] <= ACy < Tops[g+1], or -1
+  when ACy is above the first group or at/beyond total height. upper_bound skips any
+  zero-height group naturally (it never "contains" a coordinate). }
+function GroupAtContentY(const AMap: TTyListGroupMap; ACy: Integer): Integer;
+var
+  G, lo, hi, mid: Integer;
+begin
+  Result := -1;
+  G := Length(AMap.Groups);
+  if G = 0 then
+    Exit;
+  if (ACy < AMap.Tops[0]) or (ACy >= AMap.Tops[G]) then
+    Exit;
+  { first index p in [0, G] with Tops[p] > ACy; the owning group is p-1 }
+  lo := 0;
+  hi := G + 1;
+  while lo < hi do
+  begin
+    mid := (lo + hi) div 2;
+    if AMap.Tops[mid] > ACy then hi := mid else lo := mid + 1;
+  end;
+  Result := lo - 1;
+  if (Result < 0) or (Result >= G) then
+    Result := -1;
+end;
+
+{ ---------------------------------------------------------------------------
+  TyListBuildGroupMap
+  --------------------------------------------------------------------------- }
+
+function TyListBuildGroupMap(const AGroups: TTyListGroupInfoArray;
+  const M: TTyListMetrics; AHeaderH: Integer): TTyListGroupMap;
+var
+  GCount, gi, Tracks, PitchY, rows, body, hh, acc, vacc: Integer;
+begin
+  { Managed Result: explicit array init, then deep-copy the group facts. }
+  Result.Groups := nil;
+  Result.Tops := nil;
+  Result.FirstVisible := nil;
+  GCount := Length(AGroups);
+  SetLength(Result.Groups, GCount);
+  if GCount > 0 then
+    Move(AGroups[0], Result.Groups[0], GCount * SizeOf(TTyListGroupInfo));
+  SetLength(Result.Tops, GCount + 1);
+  SetLength(Result.FirstVisible, GCount + 1);
+  Result.Tops[0] := 0;
+  Result.FirstVisible[0] := 0;
+  if GCount = 0 then
+    Exit;
+
+  Tracks := TyListTracks(M);   { >= 1, safe divisor }
+  PitchY := M.CellH + M.VGap;
+  acc := 0;
+  vacc := 0;
+  for gi := 0 to GCount - 1 do
+  begin
+    if AGroups[gi].HasHeader then hh := AHeaderH else hh := 0;
+    body := 0;
+    if not AGroups[gi].Collapsed then
+    begin
+      if AGroups[gi].Count > 0 then
+      begin
+        if M.ViewStyle = lvsReport then
+          body := AGroups[gi].Count * M.RowH
+        else
+        begin
+          rows := (AGroups[gi].Count + Tracks - 1) div Tracks;   { Ceil(Count/Tracks) }
+          body := Max(0, rows * PitchY - M.VGap);
+        end;
+      end;
+      Inc(vacc, AGroups[gi].Count);   { expanded groups contribute display positions }
+    end;
+    Inc(acc, hh + body);
+    Result.Tops[gi + 1] := acc;
+    Result.FirstVisible[gi + 1] := vacc;
+  end;
+end;
+
+{ ---------------------------------------------------------------------------
+  TyListGroupContentHeight
+  --------------------------------------------------------------------------- }
+
+function TyListGroupContentHeight(const AMap: TTyListGroupMap): Integer;
+begin
+  if Length(AMap.Tops) = 0 then
+    Result := 0
+  else
+    Result := AMap.Tops[High(AMap.Tops)];
+end;
+
+{ ---------------------------------------------------------------------------
+  TyListGroupHeaderRect
+  --------------------------------------------------------------------------- }
+
+function TyListGroupHeaderRect(const AMap: TTyListGroupMap; AGroup: Integer;
+  const M: TTyListMetrics; AHeaderH, AScrollY: Integer): TRect;
+var
+  G, top: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  G := Length(AMap.Groups);
+  if (AGroup < 0) or (AGroup >= G) then
+    Exit;
+  if not AMap.Groups[AGroup].HasHeader then
+    Exit;
+  { content Y -> client Y: add the report column header, subtract the vertical scroll }
+  top := M.HeaderH + AMap.Tops[AGroup] - AScrollY;
+  Result := Rect(0, top, M.ViewportW, top + AHeaderH);
+end;
+
+{ ---------------------------------------------------------------------------
+  TyListGroupItemRect
+  --------------------------------------------------------------------------- }
+
+function TyListGroupItemRect(const AMap: TTyListGroupMap; AGroup, AIndexInGroup: Integer;
+  const M: TTyListMetrics; AHeaderH, AScrollX, AScrollY: Integer): TRect;
+var
+  G, hh, bodyTopCy, Tracks, col, row, PitchX, PitchY: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  G := Length(AMap.Groups);
+  if (AGroup < 0) or (AGroup >= G) then
+    Exit;
+  if AMap.Groups[AGroup].Collapsed then
+    Exit;
+  if (AIndexInGroup < 0) or (AIndexInGroup >= AMap.Groups[AGroup].Count) then
+    Exit;
+
+  if AMap.Groups[AGroup].HasHeader then hh := AHeaderH else hh := 0;
+  bodyTopCy := AMap.Tops[AGroup] + hh;   { content Y of this group's body top }
+
+  if M.ViewStyle = lvsReport then
+  begin
+    Result.Left   := -AScrollX;
+    Result.Top    := M.HeaderH + bodyTopCy + AIndexInGroup * M.RowH - AScrollY;
+    Result.Right  := Result.Left + M.ReportWidth;
+    Result.Bottom := Result.Top + M.RowH;
+    Exit;
+  end;
+
+  { row-major grid inside the group body }
+  Tracks := TyListTracks(M);
+  PitchX := M.CellW + M.HGap;
+  PitchY := M.CellH + M.VGap;
+  col := AIndexInGroup mod Tracks;
+  row := AIndexInGroup div Tracks;
+  Result.Left   := col * PitchX - AScrollX;
+  Result.Top    := M.HeaderH + bodyTopCy + row * PitchY - AScrollY;
+  Result.Right  := Result.Left + M.CellW;
+  Result.Bottom := Result.Top + M.CellH;
+end;
+
+{ ---------------------------------------------------------------------------
+  TyListGroupVisibleRange
+  --------------------------------------------------------------------------- }
+
+function TyListGroupVisibleRange(const AMap: TTyListGroupMap; const M: TTyListMetrics;
+  AScrollY: Integer; out AFirst, ALast: Integer): Boolean;
+var
+  G, visTop, visBottom, lo, hi, mid, firstG, lastG: Integer;
+begin
+  AFirst := -1;
+  ALast := -1;
+  Result := False;
+  G := Length(AMap.Groups);
+  if G = 0 then
+    Exit;
+
+  { Visible content-Y window is half-open [visTop, visBottom). A group's band
+    [Tops[g], Tops[g+1]) is visible iff Tops[g+1] > visTop and Tops[g] < visBottom. }
+  visTop := AScrollY;
+  visBottom := AScrollY + (M.ViewportH - M.HeaderH);
+
+  { firstG = leftmost g in [0, G-1] with Tops[g+1] > visTop (Tops[g+1] is non-decreasing
+    in g). No such g -> firstG = G (nothing visible). Binary search, not a linear walk. }
+  lo := 0;
+  hi := G;
+  while lo < hi do
+  begin
+    mid := (lo + hi) div 2;
+    if AMap.Tops[mid + 1] > visTop then hi := mid else lo := mid + 1;
+  end;
+  firstG := lo;
+
+  { lastG = rightmost g with Tops[g] < visBottom = (first p in [0, G] with
+    Tops[p] >= visBottom) - 1. }
+  lo := 0;
+  hi := G + 1;
+  while lo < hi do
+  begin
+    mid := (lo + hi) div 2;
+    if AMap.Tops[mid] >= visBottom then hi := mid else lo := mid + 1;
+  end;
+  lastG := lo - 1;
+  if lastG > G - 1 then
+    lastG := G - 1;
+
+  if (firstG <= lastG) and (firstG <= G - 1) and (lastG >= 0) then
+  begin
+    AFirst := firstG;
+    ALast := lastG;
+    Result := True;
+  end;
+end;
+
+{ ---------------------------------------------------------------------------
+  TyListGroupHitTest
+  --------------------------------------------------------------------------- }
+
+function TyListGroupHitTest(const AMap: TTyListGroupMap; const APt: TPoint;
+  const M: TTyListMetrics; AHeaderH, AScrollX, AScrollY: Integer;
+  out AGroup, AIndexInGroup: Integer): Boolean;
+var
+  GCount, cy, gi, hh, bodyTopCy, cnt, localY, Tracks, PitchX, PitchY, col, row, cand: Integer;
+  cell, hdr: TRect;
+begin
+  AGroup := -1;
+  AIndexInGroup := -1;
+  Result := False;
+  GCount := Length(AMap.Groups);
+  if GCount = 0 then
+    Exit;
+
+  { The report column-header band wins, exactly as in TyListItemAt: a point above the
+    item area is never an item, even if a scrolled row rect slides up under it. }
+  if APt.Y < M.HeaderH then
+    Exit;
+
+  cy := APt.Y - M.HeaderH + AScrollY;   { client Y -> content Y }
+  gi := GroupAtContentY(AMap, cy);
+  if gi < 0 then
+    Exit;
+
+  if AMap.Groups[gi].HasHeader then hh := AHeaderH else hh := 0;
+  bodyTopCy := AMap.Tops[gi] + hh;
+
+  { Header band: verify against the same header rect the painter uses. }
+  if (hh > 0) and (cy < bodyTopCy) then
+  begin
+    hdr := TyListGroupHeaderRect(AMap, gi, M, AHeaderH, AScrollY);
+    if PtInRect(hdr, APt) then
+    begin
+      AGroup := gi;
+      AIndexInGroup := -1;
+      Result := True;
+    end;
+    Exit;
+  end;
+
+  { Below the header: only an expanded, non-empty group has a body. }
+  if AMap.Groups[gi].Collapsed then
+    Exit;
+  cnt := AMap.Groups[gi].Count;
+  if cnt <= 0 then
+    Exit;
+
+  localY := cy - bodyTopCy;   { content Y within the group body, >= 0 }
+  if M.ViewStyle = lvsReport then
+  begin
+    if M.RowH <= 0 then
+      Exit;
+    cand := localY div M.RowH;
+  end
+  else
+  begin
+    Tracks := TyListTracks(M);
+    PitchX := M.CellW + M.HGap;
+    PitchY := M.CellH + M.VGap;
+    if (PitchX <= 0) or (PitchY <= 0) then
+      Exit;   { degenerate cells: nothing hittable }
+    col := (APt.X + AScrollX) div PitchX;
+    row := localY div PitchY;
+    cand := row * Tracks + col;
+  end;
+
+  if (cand < 0) or (cand >= cnt) then
+    Exit;
+
+  { Verify against the single geometry source: rejects inter-cell gaps, points past
+    ReportWidth, and any candidate whose real cell does not contain the point. }
+  cell := TyListGroupItemRect(AMap, gi, cand, M, AHeaderH, AScrollX, AScrollY);
+  if PtInRect(cell, APt) then
+  begin
+    AGroup := gi;
+    AIndexInGroup := cand;
+    Result := True;
+  end;
+end;
+
+{ ---------------------------------------------------------------------------
+  TyListGroupOfDisplayPos / TyListGroupDisplayPos
+  --------------------------------------------------------------------------- }
+
+function TyListGroupOfDisplayPos(const AMap: TTyListGroupMap; APos: Integer;
+  out AGroup, AIndexInGroup: Integer): Boolean;
+var
+  G, vc, lo, hi, mid: Integer;
+begin
+  AGroup := -1;
+  AIndexInGroup := -1;
+  Result := False;
+  G := Length(AMap.Groups);
+  if G = 0 then
+    Exit;
+  vc := AMap.FirstVisible[G];
+  if (APos < 0) or (APos >= vc) then
+    Exit;
+
+  { first index p in [0, G] with FirstVisible[p] > APos; the owning group is p-1.
+    Collapsed groups (FirstVisible[g] = FirstVisible[g+1]) are skipped naturally. }
+  lo := 0;
+  hi := G + 1;
+  while lo < hi do
+  begin
+    mid := (lo + hi) div 2;
+    if AMap.FirstVisible[mid] > APos then hi := mid else lo := mid + 1;
+  end;
+  AGroup := lo - 1;
+  if (AGroup < 0) or (AGroup >= G) then
+  begin
+    AGroup := -1;
+    Exit;
+  end;
+  AIndexInGroup := APos - AMap.FirstVisible[AGroup];
+  Result := True;
+end;
+
+function TyListGroupDisplayPos(const AMap: TTyListGroupMap;
+  AGroup, AIndexInGroup: Integer): Integer;
+var
+  G: Integer;
+begin
+  Result := -1;
+  G := Length(AMap.Groups);
+  if (AGroup < 0) or (AGroup >= G) then
+    Exit;
+  if AMap.Groups[AGroup].Collapsed then
+    Exit;   { items in a collapsed group have no display position }
+  if (AIndexInGroup < 0) or (AIndexInGroup >= AMap.Groups[AGroup].Count) then
+    Exit;
+  Result := AMap.FirstVisible[AGroup] + AIndexInGroup;
+end;
+
+{ ---------------------------------------------------------------------------
+  TyListGroupNavigate
+  --------------------------------------------------------------------------- }
+
+function TyListGroupNavigate(const AMap: TTyListGroupMap; ACurrent: Integer;
+  AKey: TTyListNavKey; const M: TTyListMetrics): Integer;
+var
+  GCount, vc, cur, gi, i, Tracks, col, row, cand, g2, lastRow, step: Integer;
+
+  function ClampPos(x: Integer): Integer;
+  begin
+    if x < 0 then x := 0;
+    if x > vc - 1 then x := vc - 1;
+    Result := x;
+  end;
+
+  { Flat step: move to x, or stay put when x leaves the visible range (no clamp). }
+  function MoveFlat(x: Integer): Integer;
+  begin
+    if (x < 0) or (x >= vc) then Result := cur else Result := x;
+  end;
+
+  { First expanded, non-empty group after AFrom, or -1. }
+  function NextItemGroup(AFrom: Integer): Integer;
+  var
+    k: Integer;
+  begin
+    Result := -1;
+    for k := AFrom + 1 to GCount - 1 do
+      if (not AMap.Groups[k].Collapsed) and (AMap.Groups[k].Count > 0) then
+        Exit(k);
+  end;
+
+  { Last expanded, non-empty group before AFrom, or -1. }
+  function PrevItemGroup(AFrom: Integer): Integer;
+  var
+    k: Integer;
+  begin
+    Result := -1;
+    for k := AFrom - 1 downto 0 do
+      if (not AMap.Groups[k].Collapsed) and (AMap.Groups[k].Count > 0) then
+        Exit(k);
+  end;
+
+begin
+  GCount := Length(AMap.Groups);
+  vc := 0;
+  if GCount > 0 then
+    vc := AMap.FirstVisible[GCount];
+  if vc <= 0 then
+    Exit(-1);
+
+  { Absolute keys ignore the current position. }
+  if AKey = lnHome then
+    Exit(0);
+  if AKey = lnEnd then
+    Exit(vc - 1);
+
+  cur := ACurrent;
+  if cur < 0 then
+    { No current item: the first arrow/page press lands on 0. }
+    Exit(0);
+
+  { Flat and paging keys are independent of grouping. }
+  case AKey of
+    lnLeft:     Exit(MoveFlat(cur - 1));
+    lnRight:    Exit(MoveFlat(cur + 1));
+    lnPageUp:   begin step := PageStep(M); Exit(ClampPos(cur - step)); end;
+    lnPageDown: begin step := PageStep(M); Exit(ClampPos(cur + step)); end;
+  end;
+
+  { lnUp / lnDown. Report holds no display position for headers, so it is flat +/-1. }
+  if M.ViewStyle = lvsReport then
+  begin
+    if AKey = lnUp then
+      Exit(MoveFlat(cur - 1));
+    if AKey = lnDown then
+      Exit(MoveFlat(cur + 1));
+    Exit(cur);
+  end;
+
+  { Row-major grid, crossing group boundaries. }
+  if not TyListGroupOfDisplayPos(AMap, cur, gi, i) then
+    Exit(cur);
+  Tracks := TyListTracks(M);
+  col := i mod Tracks;
+  row := i div Tracks;
+
+  if AKey = lnDown then
+  begin
+    lastRow := (AMap.Groups[gi].Count - 1) div Tracks;
+    if row < lastRow then
+    begin
+      { A row below still exists inside this group. The cell directly beneath may not --
+        with Count=6, Tracks=4 nothing sits under column 2 -- so clamp to the group's last
+        item. Testing `i + Tracks < Count` instead would call a partial last row "off the
+        bottom" and jump to the next group, skipping the items that ARE on that row. }
+      cand := i + Tracks;
+      if cand > AMap.Groups[gi].Count - 1 then
+        cand := AMap.Groups[gi].Count - 1;
+      Exit(AMap.FirstVisible[gi] + cand);
+    end;
+    { Off the bottom: first row of the next expanded non-empty group, keeping the
+      column (clamped to that row's last item). }
+    g2 := NextItemGroup(gi);
+    if g2 < 0 then
+      Exit(cur);
+    cand := col;
+    if cand > AMap.Groups[g2].Count - 1 then
+      cand := AMap.Groups[g2].Count - 1;
+    Exit(AMap.FirstVisible[g2] + cand);
+  end;
+
+  if AKey = lnUp then
+  begin
+    cand := i - Tracks;   { same column, previous row within the group }
+    if cand >= 0 then
+      Exit(AMap.FirstVisible[gi] + cand);
+    { Off the top: last row of the previous expanded non-empty group, keeping the
+      column (clamped to that group's last item). }
+    g2 := PrevItemGroup(gi);
+    if g2 < 0 then
+      Exit(cur);
+    lastRow := (AMap.Groups[g2].Count - 1) div Tracks;
+    cand := lastRow * Tracks + col;
+    if cand > AMap.Groups[g2].Count - 1 then
+      cand := AMap.Groups[g2].Count - 1;
+    Exit(AMap.FirstVisible[g2] + cand);
+  end;
+
+  Result := cur;
 end;
 
 end.

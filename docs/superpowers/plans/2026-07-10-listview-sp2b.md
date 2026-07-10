@@ -116,7 +116,11 @@ function TyListGroupDisplayPos(const AMap: TTyListGroupMap;
 { 跨组的二维网格导航。收/返 **display 位置**(可见项序)。
   - lnLeft/lnRight/lnHome/lnEnd:就是扁平的 display 位置 ±1 / 0 / VisibleCount-1;
     方向键越界不移动(同 SP1)。
-  - 行优先的 lnUp/lnDown:先在**组内**按 Tracks 上下移;若越出本组:
+  - 行优先的 lnUp/lnDown:先在**组内**按 Tracks 上下移。
+    判据是「**本组还有没有下一行 / 上一行**」,**不是**「正下方那格存不存在」——
+    最后一行可能是残行(`Count=6, Tracks=4` 时第 2 列下方没有格子),此时应**钳到本组最后一项**,
+    而不是当成"越出本组"跳去下一组、把那一行上真实存在的项跳过去。
+    只有当前已在本组的**最后一行 / 第一行**,才算越出本组:
       * lnDown 落到**下一个展开且非空**的组的第一行,**保持列号**(不足则取该行最后一项);
       * lnUp 落到**上一个展开且非空**的组的最后一行,同样保持列号;
       * 再没有这样的组 → 不移动。
