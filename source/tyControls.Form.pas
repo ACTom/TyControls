@@ -1320,21 +1320,24 @@ begin
   if th <= 0 then Exit;   // no title bar -> nothing to roll up to
   if FRolledUp then
   begin
-    Constraints.MinHeight := FSavedMinHeight;   // restore before growing back
-    if FUnrolledHeight > th then Height := FUnrolledHeight;
     FRolledUp := False;
+    ApplyResizeStrategy;                        // restore WS_THICKFRAME BEFORE growing back
+    Constraints.MinHeight := FSavedMinHeight;
+    if FUnrolledHeight > th then Height := FUnrolledHeight;
   end
   else
   begin
     if Height <= th then Exit;   // already at/under the title bar height -> nothing to collapse
     FUnrolledHeight := Height;
-    // A shown WS_THICKFRAME window won't shrink below the OS minimum-window-height, which would
-    // leave a content sliver under the title bar. Lower Constraints.MinHeight so it can collapse
-    // to exactly the title bar; restored on unroll.
+    // A shown WS_THICKFRAME window won't shrink below the OS sizing-border minimum, which leaves a
+    // content sliver under the title bar (Constraints can't override it). Drop the thick frame
+    // while rolled (via ApplyResizeStrategy reading FRolledUp) so it collapses to exactly the title
+    // bar; also lower Constraints.MinHeight. Both restored on unroll.
     FSavedMinHeight := Constraints.MinHeight;
     Constraints.MinHeight := th;
-    Height := th;
     FRolledUp := True;
+    ApplyResizeStrategy;                        // strip WS_THICKFRAME BEFORE shrinking
+    Height := th;
   end;
   ApplyWindowEffects;   // OS corners follow the new height
 end;
@@ -1381,7 +1384,7 @@ end;
 
 procedure TTyForm.ApplyResizeStrategy;
 {$IFDEF WINDOWS}
-var capH, zone: Integer;
+var capH, zone: Integer; resiz: Boolean;
 {$ENDIF}
 begin
   if csDesigning in ComponentState then Exit;   // never poke the window on the design surface
@@ -1394,9 +1397,13 @@ begin
   begin
     if FTitleBar <> nil then capH := FTitleBar.Height else capH := 0;
     if FEngine <> nil then zone := FEngine.BorderZone else zone := 6;
-    TyWin32ApplyNcResize(Self, FResizable, zone, capH,
+    // A rolled-up (window-shade) window drops WS_THICKFRAME: its sizing border enforces an OS
+    // minimum window height that would otherwise leave a content sliver under the title bar, and
+    // a collapsed window needs no edge-resize anyway. Restored when unrolled.
+    resiz := FResizable and not FRolledUp;
+    TyWin32ApplyNcResize(Self, resiz, zone, capH,
       (FEngine <> nil) and FEngine.Maximized,   // engine (work-area) maximize -> no NC inset
-      FResizable and (biMaximize in BorderIcons));   // allow native maximize (WS_MAXIMIZEBOX)
+      resiz and (biMaximize in BorderIcons));   // allow native maximize (WS_MAXIMIZEBOX)
   end;
   {$ENDIF}
   // GTK/Qt: the AdjustClientRect gutter + WM handoff (Phase C). Cocoa: resizable styleMask
