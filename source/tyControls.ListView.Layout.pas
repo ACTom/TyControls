@@ -72,6 +72,9 @@ type
     ReportWidth: Integer;   { lvsReport content width = Columns.TotalWidth }
     IconPx:      Integer;   { icon edge length, input to TyListCellSize }
     LabelH:      Integer;   { label line height, input to TyListCellSize }
+    LabelW:      Integer;   { label column width, input to TyListCellSize. The label needs a
+                              width of its OWN: deriving the cell width from the icon size
+                              leaves room for about four characters. }
     Pad:         Integer;   { cell inner padding, input to TyListCellSize }
   end;
 
@@ -186,20 +189,21 @@ begin
   case M.ViewStyle of
     lvsIcon:
       begin
-        { icon on top, label below }
-        Result.cx := M.IconPx + 4 * M.Pad;
+        { icon centred on top, label below: the cell is as wide as the label wants, but
+          never narrower than the icon plus its padding }
+        Result.cx := Max(M.IconPx + 4 * M.Pad, M.LabelW);
         Result.cy := M.IconPx + M.LabelH + 3 * M.Pad;
       end;
     lvsSmallIcon, lvsList:
       begin
         { icon at left, single label at right }
-        Result.cx := M.IconPx + 12 * M.Pad;
+        Result.cx := M.IconPx + 3 * M.Pad + M.LabelW;
         Result.cy := Max(M.IconPx, M.LabelH) + 2 * M.Pad;
       end;
     lvsTile:
       begin
         { icon at left, two text lines at right }
-        Result.cx := M.IconPx + 20 * M.Pad;
+        Result.cx := M.IconPx + 3 * M.Pad + M.LabelW;
         Result.cy := Max(M.IconPx, 2 * M.LabelH) + 2 * M.Pad;
       end;
   else

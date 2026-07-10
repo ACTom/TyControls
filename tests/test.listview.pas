@@ -18,6 +18,7 @@ uses
   Classes, SysUtils, Types, LCLType, fpcunit, testregistry,
   tyControls.Columns,          { TTySortDirection, sdAscending, sdDescending }
   tyControls.ListView.Layout,  { TTyListViewStyle, TTyListSortKind }
+  tyControls.ScrollBar,        { TTyScrollBar (the embedded bars) }
   tyControls.ListView;         { TTyListView + item / state types + events }
 
 type
@@ -35,6 +36,11 @@ type
     function OrderAt(ADisplayPos: Integer): Integer;
     { Type-ahead is driven through the protected UTF8KeyPress. }
     procedure XType(const AKey: string);
+    { The scrollbars and the layout pass that configures them. }
+    procedure XUpdateScrollBars;
+    function XVBar: TTyScrollBar;
+    function XHBar: TTyScrollBar;
+    function XContentHeight: Integer;
   end;
 
   { -----------------------------------------------------------------------
@@ -157,6 +163,21 @@ type
   end;
 
   { -----------------------------------------------------------------------
+    SCROLLBARS — Max is the maximum POSITION, not the content size
+    ----------------------------------------------------------------------- }
+  TListViewScrollTest = class(TTestCase)
+  private
+    FLV: TTyListViewAccess;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestVerticalMaxIsContentMinusOnePage;
+    procedure TestThumbReachesTheEndWhenScrolledToTheEnd;
+    procedure TestBarHiddenWhenContentFits;
+  end;
+
+  { -----------------------------------------------------------------------
     TYPE-AHEAD — a fresh key cycles, a refining key may stay put
     ----------------------------------------------------------------------- }
   TListViewTypeAheadTest = class(TTestCase)
@@ -212,6 +233,31 @@ var
 begin
   k := AKey;
   UTF8KeyPress(k);
+end;
+
+procedure TTyListViewAccess.XUpdateScrollBars;
+begin
+  UpdateScrollBars;
+end;
+
+function TTyListViewAccess.XVBar: TTyScrollBar;
+begin
+  Result := VScrollBar;
+end;
+
+function TTyListViewAccess.XHBar: TTyScrollBar;
+begin
+  Result := HScrollBar;
+end;
+
+{ Content height of the item region, straight from the pure layout unit -- the same value
+  UpdateScrollBars feeds the bar. }
+function TTyListViewAccess.XContentHeight: Integer;
+var
+  m: TTyListMetrics;
+begin
+  m := CurrentMetrics;
+  Result := TyListContentExtent(GetItemCount, m).cy;
 end;
 
 { ===========================================================================
@@ -784,6 +830,65 @@ begin
 end;
 
 { ===========================================================================
+  SCROLLBARS
+  =========================================================================== }
+
+procedure TListViewScrollTest.SetUp;
+var
+  i: Integer;
+  c: TTyColumn;
+begin
+  FLV := TTyListViewAccess.Create(nil);
+  FLV.SetBounds(0, 0, 400, 220);
+  FLV.ViewStyle := lvsReport;
+  FLV.RowHeight := 20;
+  c := FLV.Header.Columns.Add as TTyColumn;
+  c.Text := 'name';
+  c.Width := 200;
+  FLV.Header.Options := FLV.Header.Options + [hoVisible];
+  for i := 0 to 99 do
+    FLV.Items.Add.Caption := 'row' + IntToStr(i);
+  FLV.ItemsChanged;
+  FLV.XUpdateScrollBars;
+end;
+
+procedure TListViewScrollTest.TearDown;
+begin
+  FreeAndNil(FLV);
+end;
+
+procedure TListViewScrollTest.TestVerticalMaxIsContentMinusOnePage;
+{ TTyScrollBar.Max is the maximum POSITION. TyScrollThumbRect sizes the thumb as
+  PageSize / ((Max - Min) + PageSize) and only reaches the track end at Position = Max, so
+  feeding it the CONTENT height undersizes the thumb and leaves a permanent gap below it.
+  Max must be content - one page, exactly as TTyListBox does. }
+var
+  page: Integer;
+begin
+  AssertTrue('the bar is needed', FLV.XVBar.Visible);
+  page := FLV.XVBar.PageSize;
+  AssertTrue('page size is a real viewport', page > 0);
+  AssertEquals('Max = content - page', FLV.XContentHeight - page, FLV.XVBar.Max);
+end;
+
+procedure TListViewScrollTest.TestThumbReachesTheEndWhenScrolledToTheEnd;
+{ The user-visible symptom: the last row is on screen but the thumb sits mid-track. }
+begin
+  FLV.ScrollIntoView(99);
+  FLV.XUpdateScrollBars;
+  AssertEquals('scrolled fully down -> Position = Max', FLV.XVBar.Max, FLV.XVBar.Position);
+end;
+
+procedure TListViewScrollTest.TestBarHiddenWhenContentFits;
+begin
+  FLV.Items.Clear;
+  FLV.Items.Add.Caption := 'only row';
+  FLV.ItemsChanged;
+  FLV.XUpdateScrollBars;
+  AssertFalse('one row needs no vertical bar', FLV.XVBar.Visible);
+end;
+
+{ ===========================================================================
   TYPE-AHEAD
   =========================================================================== }
 
@@ -886,5 +991,6 @@ initialization
   RegisterTest(TListViewSortTest);
   RegisterTest(TListViewSelectionTest);
   RegisterTest(TListViewVirtualTest);
+  RegisterTest(TListViewScrollTest);
   RegisterTest(TListViewTypeAheadTest);
 end.

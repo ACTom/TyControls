@@ -30,6 +30,8 @@ type
   TListCellSizeTest = class(TTestCase)
   published
     procedure TestIconCellSizeIsIconPlusLabelBelow;
+    procedure TestIconCellNeverNarrowerThanItsIcon;
+    procedure TestCellWidthTracksLabelWidthNotIconSize;
     procedure TestSmallIconCellSizeIsIconLeftLabelRight;
     procedure TestListCellSizeMatchesSmallIcon;
     procedure TestTileCellSizeIsTwoLabelLines;
@@ -285,6 +287,7 @@ begin
   Result.ViewStyle := AStyle;
   Result.IconPx := 32;
   Result.LabelH := 16;
+  Result.LabelW := 90;
   Result.Pad := 4;
   Result.ReportWidth := 230;
   Result.RowH := 24;
@@ -329,27 +332,55 @@ end;
   =========================================================================== }
 
 procedure TListCellSizeTest.TestIconCellSizeIsIconPlusLabelBelow;
-{ lvsIcon: (IconPx + 4*Pad, IconPx + LabelH + 3*Pad) = (32+16, 32+16+12) = (48, 60) }
+{ lvsIcon: (Max(IconPx + 4*Pad, LabelW), IconPx + LabelH + 3*Pad)
+         = (Max(32+16, 90), 32+16+12) = (90, 60) -- the LABEL decides the width here. }
 begin
-  AssertSize('icon cell', 48, 60, TyListCellSize(CellSizeMetrics(lvsIcon)));
+  AssertSize('icon cell', 90, 60, TyListCellSize(CellSizeMetrics(lvsIcon)));
+end;
+
+procedure TListCellSizeTest.TestIconCellNeverNarrowerThanItsIcon;
+{ ... but a very narrow label must not clip the icon: the floor is IconPx + 4*Pad = 48. }
+var
+  m: TTyListMetrics;
+begin
+  m := CellSizeMetrics(lvsIcon);
+  m.LabelW := 10;
+  AssertSize('icon cell floors at the icon', 48, 60, TyListCellSize(m));
 end;
 
 procedure TListCellSizeTest.TestSmallIconCellSizeIsIconLeftLabelRight;
-{ lvsSmallIcon: (IconPx + 12*Pad, Max(IconPx,LabelH) + 2*Pad) = (32+48, 32+8) = (80, 40) }
+{ lvsSmallIcon: (IconPx + 3*Pad + LabelW, Max(IconPx,LabelH) + 2*Pad)
+              = (32+12+90, 32+8) = (134, 40) }
 begin
-  AssertSize('smallicon cell', 80, 40, TyListCellSize(CellSizeMetrics(lvsSmallIcon)));
+  AssertSize('smallicon cell', 134, 40, TyListCellSize(CellSizeMetrics(lvsSmallIcon)));
 end;
 
 procedure TListCellSizeTest.TestListCellSizeMatchesSmallIcon;
-{ lvsList shares the smallicon formula: (80, 40) }
+{ lvsList shares the smallicon formula: (134, 40) }
 begin
-  AssertSize('list cell', 80, 40, TyListCellSize(CellSizeMetrics(lvsList)));
+  AssertSize('list cell', 134, 40, TyListCellSize(CellSizeMetrics(lvsList)));
 end;
 
 procedure TListCellSizeTest.TestTileCellSizeIsTwoLabelLines;
-{ lvsTile: (IconPx + 20*Pad, Max(IconPx, 2*LabelH) + 2*Pad) = (32+80, Max(32,32)+8) = (112, 40) }
+{ lvsTile: (IconPx + 3*Pad + LabelW, Max(IconPx, 2*LabelH) + 2*Pad)
+         = (32+12+90, Max(32,32)+8) = (134, 40) }
 begin
-  AssertSize('tile cell', 112, 40, TyListCellSize(CellSizeMetrics(lvsTile)));
+  AssertSize('tile cell', 134, 40, TyListCellSize(CellSizeMetrics(lvsTile)));
+end;
+
+procedure TListCellSizeTest.TestCellWidthTracksLabelWidthNotIconSize;
+{ The regression this whole batch is about: growing the label must grow the cell, and
+  growing the icon must NOT be the only thing that can. }
+var
+  m: TTyListMetrics;
+  narrow, wide: TSize;
+begin
+  m := CellSizeMetrics(lvsSmallIcon);
+  m.LabelW := 60;   narrow := TyListCellSize(m);
+  m.LabelW := 160;  wide   := TyListCellSize(m);
+  AssertEquals('a wider label widens the cell by exactly that much',
+    100, wide.cx - narrow.cx);
+  AssertEquals('and leaves the height alone', narrow.cy, wide.cy);
 end;
 
 procedure TListCellSizeTest.TestReportCellSizeIsReportWidthByRowH;

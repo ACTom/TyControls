@@ -65,11 +65,21 @@ type
 ```pascal
 function TyListCellSize(const M: TTyListMetrics): TSize;
 ```
-按 `ViewStyle` 从 `IconPx` / `LabelH` / `Pad` 算出单元格尺寸,供控件回填 `M.CellW/CellH`。
-- `lvsIcon`:`(IconPx + 4*Pad, IconPx + LabelH + 3*Pad)` —— 图标在上、标签在下
-- `lvsSmallIcon` / `lvsList`:`(IconPx + 12*Pad, Max(IconPx, LabelH) + 2*Pad)` —— 图标在左、标签在右
-- `lvsTile`:`(IconPx + 20*Pad, Max(IconPx, 2*LabelH) + 2*Pad)` —— 图标在左、两行文字在右
+按 `ViewStyle` 从 `IconPx` / `LabelH` / **`LabelW`** / `Pad` 算出单元格尺寸,供控件回填 `M.CellW/CellH`。
+
+> **标签有自己的宽度。** 第一版把单元格宽度从图标尺寸推出来(`IconPx + 4*Pad`),结果大图标模式下
+> 只能显示四个字母,小图标模式下连文件名是什么都看不出来 —— 真机第一轮就撞上了。宽度该由
+> "想显示多少字"决定。
+
+- `lvsIcon`:`(Max(IconPx + 4*Pad, LabelW), IconPx + LabelH + 3*Pad)` —— 图标居中在上、标签在下;
+  宽度由标签决定,但**不得窄于图标本身**
+- `lvsSmallIcon` / `lvsList`:`(IconPx + 3*Pad + LabelW, Max(IconPx, LabelH) + 2*Pad)` —— 图标在左、标签在右
+- `lvsTile`:`(IconPx + 3*Pad + LabelW, Max(IconPx, 2*LabelH) + 2*Pad)` —— 图标在左、两行文字在右
 - `lvsReport`:`(ReportWidth, RowH)`
+
+控件侧的逻辑像素常量:大图标 `48`(`lvsIcon` / `lvsTile`),小图标 `16`;标签宽 `88` / `150` / `180`。
+**`RenderFlowCell` 取图标尺寸的条件必须和 `FillMetrics` 一致**(`lvsIcon` **和** `lvsTile` 都用大图标)——
+第一版只判了 `lvsIcon`,于是平铺模式在按 48px 排的格子里画了个 16px 的图标。
 
 ```pascal
 function TyListTracks(const M: TTyListMetrics): Integer;

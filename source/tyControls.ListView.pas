@@ -227,8 +227,6 @@ type
 
     { layout / metrics (all device pixels) }
     procedure FillMetrics(out AMetrics: TTyListMetrics; AViewW, AViewH: Integer);
-    function  CurrentMetrics: TTyListMetrics;
-    procedure UpdateScrollBars;
 
     { compare + stable sort of FOrder }
     function  CompareItems(AItemA, AItemB: Integer): Integer;
@@ -256,6 +254,15 @@ type
       which item a display row is showing, without ever seeing the arrays. }
     function  DisplayToItem(APos: Integer): Integer;   { display pos -> item index, -1 if out of range }
     function  ItemToDisplay(AItem: Integer): Integer;  { item index -> display pos, -1 if out of range }
+
+    { The embedded bars, read-only. A descendant may want to observe them, and the thumb's
+      Max/PageSize contract is otherwise only verifiable by eye -- which is exactly how a
+      wrong Max survived the first pass. }
+    property VScrollBar: TTyScrollBar read FVScroll;
+    property HScrollBar: TTyScrollBar read FHScroll;
+    procedure UpdateScrollBars;
+    { The device-px metrics of the current layout pass. A RenderItem override needs them. }
+    function  CurrentMetrics: TTyListMetrics;
 
     { The single data intake. Painting, hit-testing, sorting and type-ahead call ONLY
       these four; there is no second "if OwnerData" anywhere else. Override two of them
@@ -358,8 +365,14 @@ const
   TyLvVGap      = 8;    { vertical gap between flow cells / rows }
   TyLvPad       = 3;    { cell inner padding unit (fed to TyListCellSize) }
   TyLvLabelH    = 16;   { label line height }
-  TyLvLargeIcon = 32;   { icon edge for lvsIcon / lvsTile }
+  TyLvLargeIcon = 48;   { icon edge for lvsIcon / lvsTile }
   TyLvSmallIcon = 16;   { icon edge for the other styles }
+  { Label column widths. The label gets a width of its OWN -- sizing a cell from the icon
+    alone leaves room for about four characters, which is what the first real-machine pass
+    of this control found. }
+  TyLvIconLabelW  = 88;   { lvsIcon: label under the icon }
+  TyLvSmallLabelW = 150;  { lvsSmallIcon / lvsList: label right of a small icon }
+  TyLvTileLabelW  = 180;  { lvsTile: two lines right of a large icon }
   TyLvTextMargin = 4;   { text inset inside a report cell / header cell }
   { Rubber-band translucency. The colour comes from the theme; see RenderMarquee. }
   TyLvMarqueeFillAlpha = 60;
@@ -839,6 +852,12 @@ begin
   if FViewStyle in [lvsIcon, lvsTile] then icon := TyLvLargeIcon else icon := TyLvSmallIcon;
   AMetrics.IconPx := ScaleI(icon);
   AMetrics.LabelH := ScaleI(TyLvLabelH);
+  case FViewStyle of
+    lvsIcon: AMetrics.LabelW := ScaleI(TyLvIconLabelW);
+    lvsTile: AMetrics.LabelW := ScaleI(TyLvTileLabelW);
+  else
+    AMetrics.LabelW := ScaleI(TyLvSmallLabelW);
+  end;
   AMetrics.RowH   := ScaleI(FRowHeight);
   if (FViewStyle = lvsReport) and FShowColumnHeaders and (hoVisible in FHeader.Options) then
     AMetrics.HeaderH := ScaleI(FHeader.Height)
@@ -1536,7 +1555,9 @@ begin
   if tpTextColor in AStyle.Present then tc := AStyle.TextColor
   else tc := CurrentStyle.TextColor;
   pad := ScaleI(TyLvPad);
-  if FViewStyle = lvsIcon then
+  { Must agree with FillMetrics, which sizes the cell from the LARGE icon for both lvsIcon
+    and lvsTile. Testing only lvsIcon here drew a 16px glyph inside a cell laid out for 48. }
+  if FViewStyle in [lvsIcon, lvsTile] then
   begin
     imgList := FLargeImages; imgPx := ScaleI(TyLvLargeIcon);
   end
