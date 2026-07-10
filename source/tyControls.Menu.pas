@@ -3,7 +3,7 @@ unit tyControls.Menu;
 interface
 uses Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLProc, LCLIntf, LMessages, Menus,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel,
-  tyControls.QtWS;
+  tyControls.QtWS, tyControls.ImageCollection;
 
 const
   { Layout metrics (logical px, 96-PPI baseline). These are spacing/size tokens, not
@@ -60,6 +60,7 @@ type
   TTyMenuView = class(TTyCustomControl)
   private
     FRows: TTyMenuRowArray;
+    FImages: TTyVirtualImageList;   // icon-column source (transient; set per popup by the host)
     FHighlight: Integer;
     FOnActivateRow: TTyMenuRowEvent;
     FOnOpenSubmenu: TTyMenuRowEvent;
@@ -128,6 +129,9 @@ type
       host popup sets this on Wayland, where the window can't be shape-masked, so a square paint
       matches the square window and avoids the rounded-paint-vs-square-window edge artifact. }
     ForceSquareSurface: Boolean;
+    { Icon-column source: when set, an item's ImageIndex renders in the left slot (unless the
+      item is checked, where the check glyph wins). Set transiently by the host each popup. }
+    property Images: TTyVirtualImageList read FImages write FImages;
     { Activation/navigation events consumed by the host popup/bar (Tasks 4/5/7). }
     property OnActivateRow: TTyMenuRowEvent read FOnActivateRow write FOnActivateRow;
     property OnOpenSubmenu: TTyMenuRowEvent read FOnOpenSubmenu write FOnOpenSubmenu;
@@ -166,6 +170,7 @@ type
     FOnNavigateAdjacent: TTyMenuAdjacentEvent;
     FOnClose: TNotifyEvent;   // fired by CloseAll so a host (bar) can reset its open state
     FAllowHeaders: Boolean;   // TTyMenuEx opt-in: build '-Text' items as section headers
+    FImages: TTyVirtualImageList;   // icon-column source (TTyImagesMenu/TTyMenuEx opt-in)
     procedure EnsureForm;
     procedure HandleActivateRow(Sender: TObject; AIndex: Integer);
     procedure HandleOpenSubmenu(Sender: TObject; AIndex: Integer);
@@ -226,6 +231,8 @@ type
     property Controller: TTyStyleController read FController write FController;
     { When True, '-Text' items build as section headers (propagated to submenu cascades). }
     property AllowHeaders: Boolean read FAllowHeaders write FAllowHeaders;
+    { Icon-column source (propagated to the view + submenu cascades). }
+    property Images: TTyVirtualImageList read FImages write FImages;
     property Root: TMenuItem read FRoot;
     { Left/Right at the bar-root dropdown: ADelta -1/+1. A bare popup has no adjacent
       top to rotate to, so this is meaningful only when a host (TTyMenuBar, Task 5)
@@ -356,11 +363,25 @@ type
     property Controller: TTyStyleController read FController write FController;
   end;
 
-  { Enhanced themed context menu: on top of TTyPopupMenu it renders SECTION HEADERS — a
-    menu item captioned '-Text' (a dash then text) draws as a non-selectable 'Text' section
-    label; a bare '-' stays a plain separator. Same LCL TPopupMenu model + Controller; assign
-    it to a control's PopupMenu exactly like TTyPopupMenu. (Icon column + side banner: later.) }
-  TTyMenuEx = class(TTyPopupMenu)
+  { Image-list-backed themed context menu: renders each item's ImageIndex icon (from Images,
+    a TTyVirtualImageList) in the left slot; a checked item shows its check glyph instead.
+    Same LCL TPopupMenu model + Controller; assign it to a control's PopupMenu like TTyPopupMenu. }
+  TTyImagesMenu = class(TTyPopupMenu)
+  private
+    FImages: TTyVirtualImageList;
+    procedure SetImages(AValue: TTyVirtualImageList);
+  protected
+    procedure ConfigureRenderer(ARenderer: TTyMenuPopup); override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  published
+    { The icon source; each item's ImageIndex draws from here. }
+    property Images: TTyVirtualImageList read FImages write SetImages;
+  end;
+
+  { Enhanced themed context menu: everything TTyImagesMenu does (icon column) PLUS SECTION
+    HEADERS — a menu item captioned '-Text' (a dash then text) draws as a non-selectable 'Text'
+    section label; a bare '-' stays a plain separator. (Side banner: later.) }
+  TTyMenuEx = class(TTyImagesMenu)
   protected
     procedure ConfigureRenderer(ARenderer: TTyMenuPopup); override;
   end;
@@ -370,7 +391,7 @@ implementation
 // Rounded popup corners use the CROSS-PLATFORM LCLIntf SetWindowRgn/CreateRoundRectRgn (the
 // win32/gtk2/qt widgetsets all implement them) — no Windows unit needed. (Rect()/Point() call
 // sites remain qualified Types.* — harmless now that the Windows POINT=TPOINT shadow is gone.)
-uses Math, BGRABitmap;
+uses Math, BGRABitmap, BGRABitmapTypes;
 
 function TyBuildMenuRows(ARoot: TMenuItem; AAllowHeaders: Boolean): TTyMenuRowArray;
 var i, n: Integer; mi: TMenuItem;
@@ -775,10 +796,11 @@ var
   P: TTyPainter;
   S, RowStyle: TTyStyleSet;
   R, RowRect, TextRect: TRect;
-  i, itemH, sepH, padL, padR, leftSlot, rightSlot, capWeight: Integer;
+  i, itemH, sepH, padL, padR, leftSlot, rightSlot, capWeight, iconSz: Integer;
   RowStates: TTyStateSet;
   SepFill: TTyFill;
   SepY: Integer;
+  icon: TBGRABitmap;
 begin
   P := TTyPainter.Create;
   try
@@ -848,7 +870,7 @@ begin
       padL := P.Scale(RowStyle.Padding.Left);
       padR := P.Scale(RowStyle.Padding.Right);
 
-      // Check / radio glyph in the left slot.
+      // Check / radio glyph OR the item's icon in the left slot (a check wins when both apply).
       if FRows[i].Checked then
       begin
         if FRows[i].RadioItem then
@@ -857,6 +879,20 @@ begin
         else
           P.DrawGlyph(Types.Rect(RowRect.Left + padL, RowRect.Top, RowRect.Left + padL + leftSlot,
             RowRect.Bottom), tgCheck, RowStyle.TextColor, 2);
+      end
+      else if (FImages <> nil) and (FRows[i].ImageIndex >= 0)
+              and (FRows[i].ImageIndex < FImages.Count) then
+      begin
+        iconSz := leftSlot - P.Scale(2);
+        if iconSz < 8 then iconSz := 8;
+        icon := FImages.RenderIndex(FRows[i].ImageIndex, iconSz);   // BGRA, cross-platform; we free it
+        if icon <> nil then
+          try
+            P.Bitmap.PutImage(RowRect.Left + padL + (leftSlot - icon.Width) div 2,
+              RowRect.Top + (itemH - icon.Height) div 2, icon, dmDrawWithTransparency);
+          finally
+            icon.Free;
+          end;
       end;
 
       // Caption: left-aligned after the check slot, ellipsized before the right slot.
@@ -943,6 +979,7 @@ begin
   FView := TTyMenuView.Create(FForm);
   FView.Parent := FForm;
   FView.Align := alClient;
+  FView.Images := FImages;   // icon-column source (set before the rows render)
   FView.ForceSquareSurface := TyQtIsWayland;   // Wayland can't shape-mask the window -> square paint
 
   FView.OnActivateRow := @HandleActivateRow;
@@ -1160,6 +1197,7 @@ begin
   FChild := TTyMenuPopup.Create(Self);
   FChild.Controller := FController;
   FChild.AllowHeaders := FAllowHeaders;   // submenus honour section headers too
+  FChild.Images := FImages;               // ...and the icon column
   // Create the child's form+view and set its root BEFORE any FView access: SetRoot only
   // populates rows when FView already exists (FView is built lazily by EnsureForm), so we
   // build the view first, then root it — guaranteeing FChild.FView exists and is filled.
@@ -1734,10 +1772,30 @@ begin
   // Base: no extra configuration.
 end;
 
-procedure TTyMenuEx.ConfigureRenderer(ARenderer: TTyMenuPopup);
+procedure TTyImagesMenu.SetImages(AValue: TTyVirtualImageList);
+begin
+  if FImages = AValue then Exit;
+  if FImages <> nil then FImages.RemoveFreeNotification(Self);
+  FImages := AValue;
+  if FImages <> nil then FImages.FreeNotification(Self);
+end;
+
+procedure TTyImagesMenu.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FImages) then FImages := nil;
+end;
+
+procedure TTyImagesMenu.ConfigureRenderer(ARenderer: TTyMenuPopup);
 begin
   inherited ConfigureRenderer(ARenderer);
-  ARenderer.AllowHeaders := True;   // '-Text' items render as section headers
+  ARenderer.Images := FImages;   // plumb the icon source to the shared renderer
+end;
+
+procedure TTyMenuEx.ConfigureRenderer(ARenderer: TTyMenuPopup);
+begin
+  inherited ConfigureRenderer(ARenderer);   // TTyImagesMenu: sets Images
+  ARenderer.AllowHeaders := True;            // + '-Text' items render as section headers
 end;
 
 procedure TTyPopupMenu.PopUp(X, Y: Integer);
