@@ -1,0 +1,444 @@
+object MainForm: TMainForm
+  Left = 200
+  Height = 690
+  Top = 90
+  Width = 1180
+  Caption = 'TyControls — 矢量形状(TTyShape / TTyStarShape / TTyArrow)'
+  ClientHeight = 690
+  ClientWidth = 1180
+  Font.Height = -12
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = TitleBar1
+  object TitleBar1: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 1180
+    Align = alTop
+  end
+  object DivKinds: TTyDivider
+    Left = 24
+    Height = 22
+    Top = 44
+    Width = 1132
+    Caption = 'TTyShape — 八种形状(填充取 TyPanel 背景,描边取其边框,均随主题变化)'
+    Alignment = taLeftJustify
+  end
+  object ShRect: TTyShape
+    Left = 24
+    Height = 88
+    Top = 72
+    Width = 118
+    Shape = tskRectangle
+  end
+  object ShRound: TTyShape
+    Left = 160
+    Height = 88
+    Top = 72
+    Width = 118
+    Shape = tskRoundRect
+  end
+  object ShSquare: TTyShape
+    Left = 296
+    Height = 88
+    Top = 72
+    Width = 118
+    Shape = tskSquare
+  end
+  object ShEllipse: TTyShape
+    Left = 432
+    Height = 88
+    Top = 72
+    Width = 118
+    Shape = tskEllipse
+  end
+  object ShCircle: TTyShape
+    Left = 568
+    Height = 88
+    Top = 72
+    Width = 118
+    Shape = tskCircle
+  end
+  object ShTriangle: TTyShape
+    Left = 704
+    Height = 88
+    Top = 72
+    Width = 118
+    Shape = tskTriangle
+  end
+  object ShDiamond: TTyShape
+    Left = 840
+    Height = 88
+    Top = 72
+    Width = 118
+    Shape = tskDiamond
+  end
+  object ShLine: TTyShape
+    Left = 976
+    Height = 88
+    Top = 72
+    Width = 118
+    Shape = tskLine
+  end
+  object LblRect: TTyLabel
+    Left = 24
+    Height = 18
+    Top = 164
+    Width = 118
+    Caption = 'tskRectangle'
+  end
+  object LblRound: TTyLabel
+    Left = 160
+    Height = 18
+    Top = 164
+    Width = 118
+    Caption = 'tskRoundRect'
+  end
+  object LblSquare: TTyLabel
+    Left = 296
+    Height = 18
+    Top = 164
+    Width = 118
+    Caption = 'tskSquare'
+  end
+  object LblEllipse: TTyLabel
+    Left = 432
+    Height = 18
+    Top = 164
+    Width = 118
+    Caption = 'tskEllipse'
+  end
+  object LblCircle: TTyLabel
+    Left = 568
+    Height = 18
+    Top = 164
+    Width = 118
+    Caption = 'tskCircle'
+  end
+  object LblTriangle: TTyLabel
+    Left = 704
+    Height = 18
+    Top = 164
+    Width = 118
+    Caption = 'tskTriangle'
+  end
+  object LblDiamond: TTyLabel
+    Left = 840
+    Height = 18
+    Top = 164
+    Width = 118
+    Caption = 'tskDiamond'
+  end
+  object LblLine: TTyLabel
+    Left = 976
+    Height = 18
+    Top = 164
+    Width = 118
+    Caption = 'tskLine'
+  end
+  object DivStyle: TTyDivider
+    Left = 24
+    Height = 22
+    Top = 194
+    Width = 1132
+    Caption = '单实例改色与边框开关 — 全部通过 StyleOverride,控件代码不含任何颜色'
+    Alignment = taLeftJustify
+  end
+  object ShOver1: TTyShape
+    Left = 24
+    Height = 80
+    Top = 222
+    Width = 140
+    Shape = tskTriangle
+    StyleOverride = 'background: #E1442C; border-color: #7A1E12;'
+  end
+  object ShOver2: TTyShape
+    Left = 176
+    Height = 80
+    Top = 222
+    Width = 140
+    Shape = tskCircle
+    StyleOverride = 'background: var(--accent); border-color: var(--accent);'
+  end
+  object ShNoBorder: TTyShape
+    Left = 328
+    Height = 80
+    Top = 222
+    Width = 140
+    Shape = tskRoundRect
+    StyleOverride = 'background: #3D8B57; border-style: none;'
+  end
+  object ShZeroWidth: TTyShape
+    Left = 480
+    Height = 80
+    Top = 222
+    Width = 140
+    Shape = tskEllipse
+    StyleOverride = 'background: #B07CC6; border-width: 0;'
+  end
+  object ShThick: TTyShape
+    Left = 632
+    Height = 80
+    Top = 222
+    Width = 140
+    Shape = tskSquare
+    StyleOverride = 'background: #E8C547; border-color: #6B5310; border-width: 6px;'
+  end
+  object ShLineThick: TTyShape
+    Left = 784
+    Height = 80
+    Top = 222
+    Width = 140
+    Shape = tskLine
+    StyleOverride = 'border-color: #2F6FB0; border-width: 5px;'
+  end
+  object LblOver1: TTyLabel
+    Left = 24
+    Height = 18
+    Top = 306
+    Width = 140
+    Caption = '字面色'
+  end
+  object LblOver2: TTyLabel
+    Left = 176
+    Height = 18
+    Top = 306
+    Width = 140
+    Caption = 'var(--accent)'
+  end
+  object LblNoBorder: TTyLabel
+    Left = 328
+    Height = 18
+    Top = 306
+    Width = 140
+    Caption = 'border-style: none'
+  end
+  object LblZeroWidth: TTyLabel
+    Left = 480
+    Height = 18
+    Top = 306
+    Width = 140
+    Caption = 'border-width: 0'
+  end
+  object LblThick: TTyLabel
+    Left = 632
+    Height = 18
+    Top = 306
+    Width = 140
+    Caption = '6px 粗边(不裁边)'
+  end
+  object LblLineThick: TTyLabel
+    Left = 784
+    Height = 18
+    Top = 306
+    Width = 140
+    Caption = 'tskLine 粗线'
+  end
+  object DivStar: TTyDivider
+    Left = 24
+    Height = 22
+    Top = 334
+    Width = 550
+    Caption = 'TTyStarShape — 拖滑块实时改点数 / 内外半径比'
+    Alignment = taLeftJustify
+  end
+  object StarBig: TTyStarShape
+    Left = 24
+    Height = 200
+    Top = 362
+    Width = 200
+    Points = 5
+    InnerRatio = 0.42
+    StyleOverride = 'background: #E8C547; border-color: #6B5310;'
+  end
+  object LblPoints: TTyLabel
+    Left = 248
+    Height = 18
+    Top = 370
+    Width = 320
+    Caption = '角数 Points = 5'
+  end
+  object TrackPoints: TTyTrackBar
+    Left = 248
+    Height = 28
+    Top = 394
+    Width = 320
+    Min = 3
+    Max = 12
+    Position = 5
+    OnChange = TrackPointsChange
+  end
+  object LblInner: TTyLabel
+    Left = 248
+    Height = 18
+    Top = 438
+    Width = 320
+    Caption = '内半径比 InnerRatio = 0.42'
+  end
+  object TrackInner: TTyTrackBar
+    Left = 248
+    Height = 28
+    Top = 462
+    Width = 320
+    Min = 5
+    Max = 95
+    Position = 42
+    OnChange = TrackInnerChange
+  end
+  object LblStarHint: TTyLabel
+    Left = 248
+    Height = 18
+    Top = 508
+    Width = 320
+    Caption = 'Points<3 与越界的 InnerRatio 会被 setter 夹紧'
+  end
+  object DivArrow: TTyDivider
+    Left = 604
+    Height = 22
+    Top = 334
+    Width = 552
+    Caption = 'TTyArrow — 四个方向 + 可调头部 / 箭杆比例'
+    Alignment = taLeftJustify
+  end
+  object ArrRight: TTyArrow
+    Left = 604
+    Height = 70
+    Top = 362
+    Width = 120
+    Direction = tadRight
+  end
+  object ArrLeft: TTyArrow
+    Left = 736
+    Height = 70
+    Top = 362
+    Width = 120
+    Direction = tadLeft
+  end
+  object ArrUp: TTyArrow
+    Left = 868
+    Height = 70
+    Top = 362
+    Width = 120
+    Direction = tadUp
+  end
+  object ArrDown: TTyArrow
+    Left = 1000
+    Height = 70
+    Top = 362
+    Width = 120
+    Direction = tadDown
+  end
+  object LblArrRight: TTyLabel
+    Left = 604
+    Height = 18
+    Top = 438
+    Width = 120
+    Caption = 'tadRight'
+  end
+  object LblArrLeft: TTyLabel
+    Left = 736
+    Height = 18
+    Top = 438
+    Width = 120
+    Caption = 'tadLeft'
+  end
+  object LblArrUp: TTyLabel
+    Left = 868
+    Height = 18
+    Top = 438
+    Width = 120
+    Caption = 'tadUp'
+  end
+  object LblArrDown: TTyLabel
+    Left = 1000
+    Height = 18
+    Top = 438
+    Width = 120
+    Caption = 'tadDown'
+  end
+  object ArrowBig: TTyArrow
+    Left = 604
+    Height = 120
+    Top = 470
+    Width = 250
+    Direction = tadRight
+    HeadRatio = 0.45
+    ShaftRatio = 0.5
+    StyleOverride = 'background: var(--accent); border-color: var(--accent);'
+  end
+  object LblHead: TTyLabel
+    Left = 872
+    Height = 18
+    Top = 470
+    Width = 284
+    Caption = '头部占长度 HeadRatio = 0.45'
+  end
+  object TrackHead: TTyTrackBar
+    Left = 872
+    Height = 28
+    Top = 494
+    Width = 284
+    Min = 10
+    Max = 90
+    Position = 45
+    OnChange = TrackHeadChange
+  end
+  object LblShaft: TTyLabel
+    Left = 872
+    Height = 18
+    Top = 534
+    Width = 284
+    Caption = '箭杆占宽度 ShaftRatio = 0.50'
+  end
+  object TrackShaft: TTyTrackBar
+    Left = 872
+    Height = 28
+    Top = 558
+    Width = 284
+    Min = 10
+    Max = 90
+    Position = 50
+    OnChange = TrackShaftChange
+  end
+  object DivTheme: TTyDivider
+    Left = 24
+    Height = 22
+    Top = 594
+    Width = 1132
+    Caption = '换主题 — 未用 StyleOverride 的形状会整体跟着变色'
+    Alignment = taLeftJustify
+  end
+  object BtnLight: TTyButton
+    Left = 24
+    Height = 32
+    Top = 624
+    Width = 104
+    Caption = '浅色'
+    OnClick = BtnLightClick
+  end
+  object BtnDark: TTyButton
+    Left = 140
+    Height = 32
+    Top = 624
+    Width = 104
+    Caption = '深色'
+    OnClick = BtnDarkClick
+  end
+  object BtnGreen: TTyButton
+    Left = 256
+    Height = 32
+    Top = 624
+    Width = 104
+    Caption = '绿色'
+    OnClick = BtnGreenClick
+  end
+  object LblThemeHint: TTyLabel
+    Left = 376
+    Height = 18
+    Top = 630
+    Width = 780
+    Caption = '本批新增控件不引入任何主题 token:三者的 GetStyleTypeKey 都返回 TyPanel'
+  end
+end
