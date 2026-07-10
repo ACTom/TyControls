@@ -1,23 +1,22 @@
 unit umain;
 
-{ TTyMenuBar + TTyPopupMenu 示例（TTyForm 自绘窗框 + 标题栏）：
-    - TTyMenuBar：顶部菜单栏，绑定标准 LCL 的 TMainMenu 数据模型
-        · Menu：关联的 TMainMenu（文件 / 编辑 / 视图 三个顶层项 + 子项）
-        · Align=alTop：停靠在标题栏下方，随窗体宽度自动拉伸
-        · 顶层项 Alt+助记符（&文件 → Alt+F）打开下拉，子项 OnClick → 状态标签
-    - TTyPopupMenu：主题化右键菜单（继承 TPopupMenu）
-        · 挂到面板的 PopupMenu 属性上，右键面板即弹出themed菜单
-        · 子项 OnClick → 状态标签
-  菜单的背景、边框、圆角、悬停高亮均来自主题规则，无需在代码里手写颜色。
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+{ TTyMenuBar + TTyMenuEx + 窗口卷起 示例（TTyForm 自绘窗框 + 标题栏）：
+    - TTyMenuBar：顶部菜单栏，绑定标准 LCL 的 TMainMenu（文件 / 编辑 / 视图）
+        · Align=alTop 停靠在标题栏下方；Alt+助记符（&文件 → Alt+F）打开下拉
+    - TTyMenuEx：增强右键菜单（继承 TTyPopupMenu），挂在面板的 PopupMenu 上，右键弹出
+        · 分节标题：Caption='-剪贴板' → 渲染成不可点的“剪贴板”分节标题（纯 '-' 仍是分隔线）
+        · 图标列：项的 ImageIndex 从 Images（TTyVirtualImageList，本例用 TTyImageCollection
+          现画三个圆角方块）在左槽画图标；勾选项显示对勾（对勾优先于图标）
+    - 窗口卷起：CaptionAction=tcaRollUp → 双击标题栏把窗口收起到只剩标题栏，再双击还原
+  所有颜色/边框/圆角/高亮均来自主题规则；纯代码创建 UI（无 .lfm），主题走全局 TyDefaultController。 }
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Menus,
-  tyControls.Controller, tyControls.Form,
+  Classes, SysUtils, Forms, Controls, Menus, BGRABitmap, BGRABitmapTypes,
+  tyControls.Controller, tyControls.Form, tyControls.ImageCollection,
   tyControls.Menu, tyControls.Panel, tyControls.TyLabel;
 
 type
@@ -25,14 +24,18 @@ type
   private
     FMainMenu: TMainMenu;
     FMenuBar: TTyMenuBar;
-    FPopup: TTyPopupMenu;
+    FPopup: TTyMenuEx;              // 增强右键菜单:分节标题 + 图标列
+    FImgColl: TTyImageCollection;   // 图标位图源
+    FImages: TTyVirtualImageList;   // 菜单图标列的 Images
     FHintPanel: TTyPanel;
     FStatusLabel: TTyLabel;
     { 通用菜单项点击：把项的 Caption 回显到状态标签 }
     procedure MenuItemClicked(Sender: TObject);
     { 构建顶层菜单栏的数据模型 }
     procedure BuildMainMenu;
-    { 构建右键弹出菜单的数据模型 }
+    { 构建增强右键菜单的图标源(TTyImageCollection + TTyVirtualImageList) }
+    procedure BuildImages;
+    { 构建增强右键弹出菜单(TTyMenuEx:分节标题 + 图标列 + 勾选项) }
     procedure BuildPopupMenu;
   public
     constructor Create(AOwner: TComponent); override;
@@ -75,6 +78,43 @@ begin
   Result.Caption := '-';   // LCL 约定：Caption='-' 即分隔线
 end;
 
+{ 分节标题：Caption='-文本' → TTyMenuEx 渲染成不可点的分节标题（纯 '-' 仍是分隔线） }
+function NewHeader(AOwner: TComponent; const AText: string): TMenuItem;
+begin
+  Result := TMenuItem.Create(AOwner);
+  Result.Caption := '-' + AText;
+end;
+
+{ 带图标的菜单项：ImageIndex 指向菜单 Images 里的图标 }
+function NewIconLeaf(AOwner: TComponent; const ACaption: string;
+  AImageIndex: Integer; AOnClick: TNotifyEvent): TMenuItem;
+begin
+  Result := NewLeaf(AOwner, ACaption, AOnClick);
+  Result.ImageIndex := AImageIndex;
+end;
+
+{ 勾选项：勾选态显示对勾（对勾优先于图标） }
+function NewCheckLeaf(AOwner: TComponent; const ACaption: string;
+  AOnClick: TNotifyEvent): TMenuItem;
+begin
+  Result := NewLeaf(AOwner, ACaption, AOnClick);
+  Result.AutoCheck := True;
+  Result.Checked := True;
+end;
+
+{ 画一个 16px 圆角方块图标（指定颜色）加进集合；AddBitmap 复制存储，调用方保留所有权 }
+procedure AddIcon(AColl: TTyImageCollection; const AName: string; AColor: TBGRAPixel);
+var bmp: TBGRABitmap;
+begin
+  bmp := TBGRABitmap.Create(16, 16, BGRAPixelTransparent);
+  try
+    bmp.FillRoundRectAntialias(1.5, 1.5, 14.5, 14.5, 4, 4, AColor);
+    AColl.AddBitmap(AName, bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
 procedure TMainForm.BuildMainMenu;
 var
   TopItem: TMenuItem;
@@ -112,11 +152,31 @@ begin
   TopItem.Add(NewLeaf(FMainMenu, '全屏(&F)', @MenuItemClicked));
 end;
 
+procedure TMainForm.BuildImages;
+begin
+  FImgColl := TTyImageCollection.Create(Self);
+  AddIcon(FImgColl, 'cut',   BGRA(220, 70, 70));    // 红
+  AddIcon(FImgColl, 'copy',  BGRA(80, 170, 90));    // 绿
+  AddIcon(FImgColl, 'paste', BGRA(70, 120, 220));   // 蓝
+  FImages := TTyVirtualImageList.Create(Self);
+  FImages.Collection := FImgColl;
+  FImages.Names.Text := 'cut' + LineEnding + 'copy' + LineEnding + 'paste';   // 索引 0/1/2
+end;
+
 procedure TMainForm.BuildPopupMenu;
 begin
-  FPopup := TTyPopupMenu.Create(Self);
+  BuildImages;
+  FPopup := TTyMenuEx.Create(Self);
+  FPopup.Images := FImages;   // 图标列
+  // 分节标题（'-文本'）+ 带图标的项 + 勾选项
+  FPopup.Items.Add(NewHeader(FPopup, '剪贴板'));
+  FPopup.Items.Add(NewIconLeaf(FPopup, '剪切(&T)', 0, @MenuItemClicked));
+  FPopup.Items.Add(NewIconLeaf(FPopup, '复制(&C)', 1, @MenuItemClicked));
+  FPopup.Items.Add(NewIconLeaf(FPopup, '粘贴(&P)', 2, @MenuItemClicked));
+  FPopup.Items.Add(NewSep(FPopup));
+  FPopup.Items.Add(NewHeader(FPopup, '视图'));
+  FPopup.Items.Add(NewCheckLeaf(FPopup, '显示网格', @MenuItemClicked));   // 勾选态显示对勾
   FPopup.Items.Add(NewLeaf(FPopup, '刷新(&R)', @MenuItemClicked));
-  FPopup.Items.Add(NewLeaf(FPopup, '重命名(&M)', @MenuItemClicked));
   FPopup.Items.Add(NewSep(FPopup));
   FPopup.Items.Add(NewLeaf(FPopup, '属性(&P)', @MenuItemClicked));
 end;
@@ -127,9 +187,10 @@ var
 begin
   // TTyForm.CreateNew → 无边框 + 持久引擎，但默认无标题栏
   inherited CreateNew(AOwner, 0);
-  Caption := 'TTyMenuBar / TTyPopupMenu 示例';
+  Caption := 'TTyMenuEx / 窗口卷起 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 560, 380);
+  CaptionAction := tcaRollUp;   // 双击标题栏 → 卷起到标题栏(再双击还原)
 
   // 主题须先加载
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
@@ -139,7 +200,7 @@ begin
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
-  Bar.Caption := 'TTyMenuBar / TTyPopupMenu  · TyControls';
+  Bar.Caption := '增强菜单 + 双击标题栏卷起  · TyControls';
 
   { ---- 顶部菜单栏 ---- }
   BuildMainMenu;
@@ -154,15 +215,15 @@ begin
   BuildPopupMenu;
   FHintPanel := TTyPanel.Create(Self);
   FHintPanel.Parent := Self;
-  FHintPanel.Caption := '在此面板上点击鼠标右键 → 弹出主题化右键菜单';
+  FHintPanel.Caption := '右键此面板 → 增强菜单(分节标题 + 图标列 + 勾选项)';
   FHintPanel.SetBounds(16, 80, 528, 200);
-  FHintPanel.PopupMenu := FPopup;   // 挂到面板：右键即弹themed菜单
+  FHintPanel.PopupMenu := FPopup;   // 挂到面板：右键即弹增强 themed 菜单
 
   { ---- 状态标签：菜单项点击回显 ---- }
   FStatusLabel := TTyLabel.Create(Self);
   FStatusLabel.Parent := Self;
   FStatusLabel.SetBounds(16, 296, 528, 24);
-  FStatusLabel.Caption := '就绪：从上方菜单栏选择命令，或右键面板试试…';
+  FStatusLabel.Caption := '就绪：右键面板试增强菜单；双击标题栏可卷起窗口（再双击还原）';
 
   // 整套窗框 + 背景色随主题
   ApplyChromeTheme(TyDefaultController);
