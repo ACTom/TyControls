@@ -616,6 +616,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.ShellComboBox.pas"/>
         <UnitName Value="tyControls.ShellComboBox"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Dialogs.FileDialog.pas"/>
+        <UnitName Value="tyControls.Dialogs.FileDialog"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

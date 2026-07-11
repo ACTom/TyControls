@@ -686,12 +686,51 @@ begin
   PolyL(b,[PointF(15.5,10.8),PointF(17.5,13),PointF(19.5,10.8)],Ink,1.3);
 end;
 
+{ TTyOpenDialog: an open folder (back box + a lifted front flap) }
+procedure GOpenDialog(b: TBGRABitmap);
+begin
+  FillRRect(b,3,6,10,8,0.5,Acc);                        // tab
+  RRect(b,3,7,21,19,1.5,Ink);                           // folder back box
+  FillPolyG(b,[PointF(3,19),PointF(6.5,12.5),PointF(20.5,12.5),PointF(17,19)],Faint); // front flap
+  PolyL(b,[PointF(3,19),PointF(6.5,12.5),PointF(20.5,12.5)],Ink,1);
+end;
+
+{ TTySaveDialog: a floppy disk (classic save) }
+procedure GSaveDialog(b: TBGRABitmap);
+begin
+  RRect(b,4,4,20,20,2,Ink);                             // disk body
+  FillRRect(b,8,4,16,9,0.4,Acc);                        // top shutter
+  FillRRect(b,13,4.5,15,8.5,0.3,Ink);                   // notch
+  RRect(b,7,12,17,19,1,Ink);                            // label
+  Line(b,9,15,15,15,Faint,1);
+end;
+
+{ TTyOpenPictureDialog: a folder framing a small picture (sun + mountain) }
+procedure GOpenPictureDialog(b: TBGRABitmap);
+begin
+  FillRRect(b,3,5,9,7,0.4,Acc);                         // tab
+  RRect(b,3,6,21,20,1.5,Ink);                           // folder frame
+  RRect(b,6,10,18,17.5,1,Ink);                          // picture
+  FillCirc(b,9,12.5,1.2,Acc);                           // sun
+  FillPolyG(b,[PointF(6.5,17),PointF(11,12.5),PointF(15,17)],Faint); // mountain
+end;
+
+{ TTySavePictureDialog: a picture with a down arrow (save an image) }
+procedure GSavePictureDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,4,17,15,1.5,Ink);                           // picture frame
+  FillCirc(b,7,7.5,1.3,Acc);                            // sun
+  FillPolyG(b,[PointF(4,13),PointF(9,7.5),PointF(13.5,13)],Faint);  // mountain
+  Line(b,19,9,19,17,Ink,1.4);                           // down arrow shaft
+  PolyL(b,[PointF(16.5,14.5),PointF(19,17.2),PointF(21.5,14.5)],Ink,1.4);
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..133] of TGlyph = (
+  Glyphs: array[0..137] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -825,7 +864,11 @@ const
     (Name:'TTyShellListView';     Draw:@GShellListView),
     (Name:'TTyShellTreeView';     Draw:@GShellTreeView),
     (Name:'TTyFilterComboBox';    Draw:@GFilterComboBox),
-    (Name:'TTyShellComboBox';     Draw:@GShellComboBox)
+    (Name:'TTyShellComboBox';     Draw:@GShellComboBox),
+    (Name:'TTyOpenDialog';        Draw:@GOpenDialog),
+    (Name:'TTySaveDialog';        Draw:@GSaveDialog),
+    (Name:'TTyOpenPictureDialog'; Draw:@GOpenPictureDialog),
+    (Name:'TTySavePictureDialog'; Draw:@GSavePictureDialog)
   );
 
 const

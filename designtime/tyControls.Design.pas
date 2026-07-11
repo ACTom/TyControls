@@ -38,6 +38,7 @@ uses
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
+  tyControls.Dialogs.FileDialog,
   tyControls.Bevel, tyControls.Divider, tyControls.PaintPanel, tyControls.SizeBox,
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
   tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ExPanel,
@@ -665,7 +666,8 @@ begin
     [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,
      TTySelectValueDialog, TTySelectPathDialog,
      TTyColorDialog, TTyFontDialog,
-     TTyFindDialog, TTyReplaceDialog, TTyProgressDialog, TTyAboutDialog]);
+     TTyFindDialog, TTyReplaceDialog, TTyProgressDialog, TTyAboutDialog,
+     TTyOpenDialog, TTySaveDialog, TTyOpenPictureDialog, TTySavePictureDialog]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',

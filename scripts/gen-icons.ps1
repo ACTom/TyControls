@@ -34,7 +34,9 @@ $classes = @(
   'TTyShape','TTyStarShape','TTyArrow',
   # Phase 8 data views (pulled forward: Phase 7 depends on it)
   'TTyListView','TTyShellListView','TTyShellTreeView',
-  'TTyFilterComboBox','TTyShellComboBox'
+  'TTyFilterComboBox','TTyShellComboBox',
+  # Phase 7 file dialogs
+  'TTyOpenDialog','TTySaveDialog','TTyOpenPictureDialog','TTySavePictureDialog'
 )
 
 # Drift guard: the icon set MUST match the components registered in Design.pas. Parse EVERY
@@ -72,17 +74,26 @@ Write-Host '== packing .lrs (3 sizes per class for HiDPI) =='
 # base = 100% (24px), _150 = 150% (36px), _200 = 200% (48px). The IDE picks the variant
 # matching the display scaling, so palette icons stay crisp instead of upscaling 24px.
 $suffixes = @('', '_150', '_200')
-$lazArgs = @($lrs)
+# Pass the 'png=name' pairs through a lazres RESPONSE FILE (lazres reads entries from
+# a @listfile). A single command line with all ~400+ paths overruns the Windows 32k
+# command-line limit once the component count grows -- the response file has no such cap.
+$listFile = Join-Path $icons '_lazres_list.txt'
+$lines = New-Object System.Collections.Generic.List[string]
 $count = 0
 foreach ($c in $classes) {
   foreach ($sfx in $suffixes) {
     $name = "$c$sfx"
     $png = Join-Path $icons "$name.png"
     if (-not (Test-Path $png)) { throw "missing PNG: $png" }
-    $lazArgs += ('{0}={1}' -f $png, $name)
+    $lines.Add(('{0}={1}' -f $png, $name))
     $count++
   }
 }
-& $lazres @lazArgs
-if ($LASTEXITCODE -ne 0) { throw 'lazres failed' }
+Set-Content -Encoding ascii -Path $listFile -Value $lines
+try {
+  & $lazres $lrs "@$listFile"
+  if ($LASTEXITCODE -ne 0) { throw 'lazres failed' }
+} finally {
+  Remove-Item $listFile -ErrorAction SilentlyContinue
+}
 Write-Host "Packed $count icon resources ($($classes.Count) classes x $($suffixes.Count) sizes) into $lrs"
