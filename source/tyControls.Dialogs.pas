@@ -478,7 +478,7 @@ end;
 
 function TTyDialog.BottomGutter: Integer;
 begin
-  if Resizable then Result := 8 else Result := 0;
+  if Resizable then Result := 2 else Result := 0;
 end;
 
 function TTyDialog.ContentRect: TRect;
