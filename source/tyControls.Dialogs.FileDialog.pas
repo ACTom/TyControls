@@ -30,6 +30,7 @@ uses
   tyControls.Dialogs, tyControls.ShellTreeView, tyControls.ShellListView,
   tyControls.ShellComboBox, tyControls.FilterComboBox,
   tyControls.Edit, tyControls.Button, tyControls.TyLabel, tyControls.PreviewBox,
+  tyControls.Panel, tyControls.Splitter,
   tyControls.ListView, tyControls.FileSystem, tyControls.StrConsts;
 
 { ---------------------------------------------------------------------------
@@ -67,8 +68,11 @@ type
     { Composed children (all owned by the form -> auto-freed). The mode-conditional
       ones (FBtnNewFolder, FPreview) are created lazily by the flag setters. }
     FLookIn:       TTyShellComboBox;
+    FMidPanel:     TTyPanel;         { invisible layout host for the tree|list|preview band }
     FTree:         TTyShellTreeView;
+    FSplitTree:    TTySplitter;      { drag: resize the tree (its left neighbour) }
     FList:         TTyShellListView;
+    FSplitPrev:    TTySplitter;      { drag: resize the preview (its right neighbour); PreviewMode }
     FFilter:       TTyFilterComboBox;
     FNameEdit:     TTyEdit;
     FBtnUp:        TTyButton;
@@ -329,12 +333,32 @@ begin
   FLookIn.Parent := Self;
   FLookIn.OnSelectPath := @LookInSelectPath;
 
+  { The tree | list | preview band lives inside an invisible host panel so LCL alignment
+    + TTySplitter give draggable dividers. The host keeps the theme surface fill (same as
+    the dialog, so it does not read as a box) but drops the panel padding + border, and the
+    aligned children cover it edge-to-edge anyway. Explicit Left values order the same-align
+    siblings deterministically (code-created alLeft/alRight otherwise dock in reverse order). }
+  FMidPanel := TTyPanel.Create(Self);
+  FMidPanel.Parent := Self;
+  FMidPanel.StyleOverride := 'padding: 0; border-width: 0;';
+
   FTree := TTyShellTreeView.Create(Self);
-  FTree.Parent := Self;
+  FTree.Parent := FMidPanel;
+  FTree.Align := alLeft;
+  FTree.Width := 240;
+  FTree.Left := 0;
   FTree.OnPathChange := @TreePathChange;
 
+  FSplitTree := TTySplitter.Create(Self);
+  FSplitTree.Parent := FMidPanel;
+  FSplitTree.Align := alLeft;
+  FSplitTree.Left := 240;         { sorts after the tree -> sits to its right }
+  FSplitTree.Width := 6;
+  FSplitTree.MinSize := 140;      { min tree width }
+
   FList := TTyShellListView.Create(Self);
-  FList.Parent := Self;
+  FList.Parent := FMidPanel;
+  FList.Align := alClient;        { fills between the tree splitter and the preview splitter }
   FList.OnDirectoryChange := @ListDirectoryChange;
   FList.OnSelectItem      := @ListSelectItem;   { selection change -> name edit + preview }
   FList.OnFileActivate    := @ListFileActivate; { double-click a file (folders navigate internally) }
@@ -384,11 +408,25 @@ begin
   FPreviewMode := AValue;
   if AValue and (FPreview = nil) then
   begin
+    { Right-docked preview + a splitter to its left, both in the layout host. The preview
+      sorts rightmost (large Left); the splitter sorts just left of it. }
     FPreview := TTyPreviewBox.Create(Self);
-    FPreview.Parent := Self;
+    FPreview.Parent := FMidPanel;
+    FPreview.Align := alRight;
+    FPreview.Width := 220;
+    FPreview.Left := 10000;
+
+    FSplitPrev := TTySplitter.Create(Self);
+    FSplitPrev.Parent := FMidPanel;
+    FSplitPrev.Align := alRight;
+    FSplitPrev.Left := 9990;      { sorts just left of the preview }
+    FSplitPrev.Width := 6;
+    FSplitPrev.MinSize := 140;    { min preview width }
   end;
   if FPreview <> nil then
     FPreview.Visible := AValue;
+  if FSplitPrev <> nil then
+    FSplitPrev.Visible := AValue;
   if FList <> nil then
     LayoutContent;
 end;
@@ -656,14 +694,12 @@ const
   LblW   = 64;
   UpW    = 72;
   NfW    = 96;
-  TreeW  = 240;
-  PrevW  = 220;
 var
   cr: TRect;
   pad, x0, w, y, curRight, lookInX: Integer;
-  yA, yB, midTop, midH, listX, listW: Integer;
+  yA, yB, midTop, midH: Integer;
 begin
-  if FList = nil then Exit;   { called during construction, before children exist }
+  if (FList = nil) or (FMidPanel = nil) then Exit;   { called during construction, before children exist }
   cr := ContentRect;
   pad := TyDlgPad;
   x0 := cr.Left + pad;
@@ -691,21 +727,12 @@ begin
   FLblFilter.SetBounds(x0, yB + (RowH - LblH) div 2, LblW, LblH);
   FFilter.SetBounds(x0 + LblW + Gap, yB, w - LblW - Gap, RowH);
 
-  { Middle band: tree (left) | list (center) | preview (right, PreviewMode only). }
+  { Middle band: the host panel fills between the look-in row and the name/filter rows;
+    LCL alignment + the two splitters lay out tree | list | preview inside it. }
   midTop := y + RowH + Gap;
   midH := yA - Gap - midTop;
   if midH < 60 then midH := 60;
-  listX := x0 + TreeW + Gap;
-  if FPreviewMode and (FPreview <> nil) then
-  begin
-    FPreview.SetBounds(cr.Right - pad - PrevW, midTop, PrevW, midH);
-    listW := (cr.Right - pad - PrevW - Gap) - listX;
-  end
-  else
-    listW := (cr.Right - pad) - listX;
-  if listW < 80 then listW := 80;
-  FTree.SetBounds(x0, midTop, TreeW, midH);
-  FList.SetBounds(listX, midTop, listW, midH);
+  FMidPanel.SetBounds(x0, midTop, w, midH);
 end;
 
 { ---------------------------------------------------------------------------
@@ -730,7 +757,12 @@ begin
   else
     Result.AddButton(rsFdBtnOpen, mrOK, True, False);
   Result.AddButton(rsMsgBtnCancel, mrCancel, False, True);
-  Result.AutoSizeToContent(540, 360);
+  { A preview pane needs room of its own -- widen so the file list is not squeezed to the
+    same width as the no-preview dialog. }
+  if APreviewMode then
+    Result.AutoSizeToContent(540 + 220 + 8, 360)
+  else
+    Result.AutoSizeToContent(540, 360);
   Result.LayoutContent;
 end;
 
