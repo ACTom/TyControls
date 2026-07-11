@@ -794,6 +794,14 @@ begin
   begin
     FPressed := True;
     Invalidate;
+    { LCL does NOT auto-focus a custom-drawn TCustomControl on click -- only native
+      widgets do -- so without this a click never moves focus (it lingers on whatever
+      had it, e.g. the Edit you clicked away from). Focus a click on a focusable control
+      so a plain click behaves like Tab. Gated on TabStop (the "participates in focus"
+      signal, so panels/labels/non-activating popups with TabStop=False never steal it)
+      and guarded for the headless test runner (CanFocus is False there anyway). }
+    if TabStop and CanFocus and not Focused then
+      try SetFocus except end;
   end;
 end;
 
