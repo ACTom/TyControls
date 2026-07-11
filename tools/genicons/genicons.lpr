@@ -755,12 +755,22 @@ begin
   Line(b,18.7,12.2,21,14.5,Ink,1.6);                   // handle
 end;
 
+{ TTyImageView: a framed picture (sun + mountain) with a magnifier -- view/zoom }
+procedure GImageView(b: TBGRABitmap);
+begin
+  RRect(b,3,4,17,16,1.5,Ink);                          // picture frame
+  FillCirc(b,7,8,1.4,Acc);                             // sun
+  FillPolyG(b,[PointF(4,14),PointF(9,8),PointF(14,14)],Faint);  // mountain
+  Circ(b,16,15,3.4,Acc,1.5);                           // lens
+  Line(b,18.4,17.4,21,20,Ink,1.7);                     // handle
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..140] of TGlyph = (
+  Glyphs: array[0..141] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -901,7 +911,8 @@ const
     (Name:'TTySavePictureDialog'; Draw:@GSavePictureDialog),
     (Name:'TTyPreviewBox';        Draw:@GPreviewBox),
     (Name:'TTyOpenPreviewDialog'; Draw:@GOpenPreviewDialog),
-    (Name:'TTySavePreviewDialog'; Draw:@GSavePreviewDialog)
+    (Name:'TTySavePreviewDialog'; Draw:@GSavePreviewDialog),
+    (Name:'TTyImageView';         Draw:@GImageView)
   );
 
 const

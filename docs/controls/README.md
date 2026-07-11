@@ -124,6 +124,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyHeaderControl](headercontrol.md) | 独立列头条（分节:标题/宽度/对齐/排序,点击排序 + 拖边界调宽） |
 | [TTyListGroupPanel](listgrouppanel.md) | Outlook 式分组可展开列表（手风琴,`AddGroup`/`AddItem`） |
 | [TTyPreviewBox](previewbox.md) | 可复用预览控件（图片走 TTyImage / 文本走只读 TTyMemo / 占位 / 交出位图·文本自定义） |
+| [TTyImageView](imageview.md) | 图片查看器：平移/缩放（平滑动画）+ 非破坏性 BGRA 滤镜（灰度/模糊/锐化/反相/着色） |
 
 ## 日期与时间
 

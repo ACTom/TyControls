@@ -38,7 +38,7 @@ uses
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
-  tyControls.Dialogs.FileDialog, tyControls.PreviewBox,
+  tyControls.Dialogs.FileDialog, tyControls.PreviewBox, tyControls.ImageView,
   tyControls.Bevel, tyControls.Divider, tyControls.PaintPanel, tyControls.SizeBox,
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
   tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ExPanel,
@@ -648,7 +648,7 @@ begin
      TTyGridPanel, TTyRelativePanel,
      TTyToolBarEx, TTyControlBar, TTyCoolBar,
      TTyHeaderControl, TTyListGroupPanel, TTyListView, TTyShellListView,
-     TTyShellTreeView, TTyPreviewBox]);
+     TTyShellTreeView, TTyPreviewBox, TTyImageView]);
   // Decorative vector primitives for diagrams (theme-driven fill/border, no new tokens).
   RegisterComponents('TyControls Shapes',
     [TTyShape, TTyStarShape, TTyArrow]);

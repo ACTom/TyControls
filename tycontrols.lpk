@@ -621,6 +621,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.PreviewBox"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.ImageView.pas"/>
+        <UnitName Value="tyControls.ImageView"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Dialogs.FileDialog.pas"/>
         <UnitName Value="tyControls.Dialogs.FileDialog"/>
       </Item>

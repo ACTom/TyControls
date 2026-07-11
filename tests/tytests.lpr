@@ -123,6 +123,7 @@ uses
   test.shellcombobox,
   test.dialogs.filedialog,
   test.previewbox,
+  test.imageview,
   test.shape,
   test.starshape,
   test.arrow;
