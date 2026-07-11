@@ -608,6 +608,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.ShellTreeView.pas"/>
         <UnitName Value="tyControls.ShellTreeView"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.FilterComboBox.pas"/>
+        <UnitName Value="tyControls.FilterComboBox"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ShellComboBox.pas"/>
+        <UnitName Value="tyControls.ShellComboBox"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

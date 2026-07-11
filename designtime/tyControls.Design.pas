@@ -45,7 +45,8 @@ uses
   tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar,
   tyControls.HeaderControl, tyControls.ListGroupPanel,
   tyControls.Shape, tyControls.StarShape, tyControls.Arrow,
-  tyControls.ListView, tyControls.ShellListView, tyControls.ShellTreeView;
+  tyControls.ListView, tyControls.ShellListView, tyControls.ShellTreeView,
+  tyControls.FilterComboBox, tyControls.ShellComboBox;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -624,7 +625,8 @@ begin
   // Rich pickers: colour / font / value selectors (Phase 4 B/C/E).
   RegisterComponents('TyControls Pickers',
     [TTyColorBox, TTyColorComboBox, TTyColorListBox, TTyColorGrid, TTyLColorPicker,
-     TTyHSColorPicker, TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox]);
+     TTyHSColorPicker, TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox,
+     TTyFilterComboBox, TTyShellComboBox]);
   // Command / specialized buttons.
   RegisterComponents('TyControls Buttons',
     [TTyGlyphButton, TTyGlyphContainerButton, TTySpeedButton,

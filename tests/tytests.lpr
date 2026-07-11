@@ -119,6 +119,8 @@ uses
   test.filesystem,
   test.shelllistview,
   test.shelltreeview,
+  test.filtercombobox,
+  test.shellcombobox,
   test.shape,
   test.starshape,
   test.arrow;

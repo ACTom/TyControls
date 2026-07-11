@@ -668,12 +668,30 @@ begin
   RRect(b,10,18,20,20.6,0.7,Ink);
 end;
 
+{ TTyFilterComboBox: a combo field with a funnel (filter) + a drop chevron }
+procedure GFilterComboBox(b: TBGRABitmap);
+begin
+  RRect(b,3,7,21,17,2,Ink);
+  FillPolyG(b,[PointF(5.5,9.5),PointF(11.5,9.5),PointF(9.2,12),PointF(9.2,15.2),
+               PointF(7.8,14.2),PointF(7.8,12)],Acc);
+  PolyL(b,[PointF(15.5,10.8),PointF(17.5,13),PointF(19.5,10.8)],Ink,1.3);
+end;
+
+{ TTyShellComboBox: a "look in" combo -- a small folder + a drop chevron }
+procedure GShellComboBox(b: TBGRABitmap);
+begin
+  RRect(b,3,7,21,17,2,Ink);
+  FillRRect(b,5,9.8,7.6,10.8,0.2,Acc);      // folder tab
+  FillRRect(b,5,10.5,11,14.6,0.6,Acc);      // folder body
+  PolyL(b,[PointF(15.5,10.8),PointF(17.5,13),PointF(19.5,10.8)],Ink,1.3);
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..131] of TGlyph = (
+  Glyphs: array[0..133] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -805,7 +823,9 @@ const
     (Name:'TTyArrow';             Draw:@GArrow),
     (Name:'TTyListView';          Draw:@GListView),
     (Name:'TTyShellListView';     Draw:@GShellListView),
-    (Name:'TTyShellTreeView';     Draw:@GShellTreeView)
+    (Name:'TTyShellTreeView';     Draw:@GShellTreeView),
+    (Name:'TTyFilterComboBox';    Draw:@GFilterComboBox),
+    (Name:'TTyShellComboBox';     Draw:@GShellComboBox)
   );
 
 const

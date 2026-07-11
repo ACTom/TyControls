@@ -92,6 +92,8 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyListView](listview.md) | 平铺项视图（TreeView 的非层级兄弟）：报表 / 列表 / 大图标 / 小图标 / 平铺五种模式、列 + 排序、多选 + 框选、虚拟模式（十万行零对象） |
 | [TTyShellListView](shelllistview.md) | 文件系统后备的项视图（TTyListView 适配器）：显示目录内容、四列、排序、F2 重命名、按类型分组 |
 | [TTyShellTreeView](shelltreeview.md) | 文件系统后备的目录树（TTyTreeView 适配器）：只显示文件夹、懒加载展开、路径定位 |
+| [TTyFilterComboBox](filtercombobox.md) | 过滤预设下拉（TTyComboBox 适配器）：解析 LCL 过滤串，选中段即生效掩码 |
+| [TTyShellComboBox](shellcombobox.md) | 查找范围下拉（TTyComboBox 适配器）：当前目录面包屑 + 盘符，点行跳转 |
 
 ## 容器与布局
 
