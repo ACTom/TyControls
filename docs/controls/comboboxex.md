@@ -4,7 +4,7 @@
 
 TTyComboBoxEx 是**每个条目可带一张图片 + 文字**的下拉框。继承自 [TTyComboBox](combobox.md),覆写 `PaintFieldContent`(字段区)与自定义弹出列表的 `PaintItemContent`(下拉行),在图片右侧画文字——**字段和下拉里画的是同一套图文布局**(共享 `DrawImageText`)。
 
-**图片索引存在 `Items.Objects[i]`(以 `索引 + 1` 保存,`0` 表示无图)**,与条目名天然对齐:排序 / 删除都跟着走,不会错位;下拉列表通过 `Items.Assign` 连 `Objects[]` 一起拷贝,所以下拉和字段读到的是同一份索引。图片来源为 [`TTyVirtualImageList`](imagecollection.md)(按索引寻址、`RenderIndex(索引, 像素尺寸)` 返回按目标像素缩放的位图)。
+**图片索引存在 `Items.Objects[i]`(以 `索引 + 1` 保存,`0` 表示无图)**,与条目名天然对齐:排序 / 删除都跟着走,不会错位;下拉列表通过 `Items.Assign` 连 `Objects[]` 一起拷贝,所以下拉和字段读到的是同一份索引。图片来源为 [`TTyVirtualImageList`](imagecollection.md)(按索引寻址、`CachedIndex(索引, 像素尺寸)` 借用一张按目标像素缩放的缓存位图)。
 
 ---
 
@@ -39,7 +39,7 @@ uses tyControls.ComboBoxEx, tyControls.ImageCollection;
 ## 4. 主题
 
 - 文字用行 / 字段解析出的 `FontName` / 字号(`ResolveFontSize`)/ `FontWeight` / `TextColor`,不硬编码。
-- 图片按行高自适应(`行高 - 6` 逻辑像素,最小 8px),纵向居中;由 `Images.RenderIndex` 按目标像素缩放,一份母图服务各 DPI。
+- 图片按行高自适应(`行高 - 6` 逻辑像素,最小 8px),纵向居中;由 `Images.CachedIndex` 按目标像素缩放(结果缓存复用),一份母图服务各 DPI。
 
 ---
 

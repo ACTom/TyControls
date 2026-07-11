@@ -24,6 +24,24 @@ type
     procedure AddPictureBuildsMaster;
     procedure ClearEmpties;
     procedure IgnoresEmptyNameAndNil;
+    { Version / render cache. }
+    procedure VersionStartsAtZero;
+    procedure VersionBumpsOnAddBitmap;
+    procedure VersionBumpsOnAddPicture;
+    procedure VersionBumpsOnClear;
+    procedure CachedBitmapHitReturnsSameInstance;
+    procedure CachedBitmapDistinctPerSize;
+    procedure CachedBitmapMissingIsNil;
+    procedure CachedBitmapClampsSizeToOne;
+    procedure GetBitmapHitReturnsSamePixels;
+    procedure GetBitmapCopyIsIndependentOfCache;
+    procedure ReplacingMasterInvalidatesCache;
+    procedure ClearInvalidatesCache;
+    procedure CacheCapBoundsTheCache;
+    procedure CacheEvictsLeastRecentlyUsed;
+    procedure IsCachedDoesNotDisturbLruOrder;
+    procedure LoweringCacheCapacityEvictsNow;
+    procedure CacheCapacityClampsToOne;
   end;
 
   TVirtualImageListTest = class(TTestCase)
@@ -38,9 +56,31 @@ type
     procedure DrawDoesNotRaise;
     procedure DrawBadIndexDoesNotRaise;
     procedure CollectionFreedNilsReference;
+    { Borrowed (cached) accessor. }
+    procedure CachedIndexHitReturnsSameInstance;
+    procedure CachedIndexBadIndexIsNil;
+    procedure CachedIndexNoCollectionIsNil;
   end;
 
 implementation
+
+{ True when both bitmaps have the same dimensions and byte-identical pixels. }
+function PixelsEqual(A, B: TBGRABitmap): Boolean;
+var
+  i: Integer;
+  pa, pb: PBGRAPixel;
+begin
+  Result := (A <> nil) and (B <> nil) and (A.Width = B.Width) and (A.Height = B.Height);
+  if not Result then Exit;
+  pa := A.Data;
+  pb := B.Data;
+  for i := 0 to A.NbPixels - 1 do
+  begin
+    if not (pa^ = pb^) then Exit(False);
+    Inc(pa);
+    Inc(pb);
+  end;
+end;
 
 { ---- TImageCollectionTest ---- }
 
@@ -336,6 +376,365 @@ begin
   end;
 end;
 
+{ ---- TImageCollectionTest: version + render cache ---- }
+
+procedure TImageCollectionTest.VersionStartsAtZero;
+var
+  c: TTyImageCollection;
+begin
+  c := TTyImageCollection.Create(nil);
+  try
+    AssertEquals('fresh version', 0, Integer(c.Version));
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.VersionBumpsOnAddBitmap;
+var
+  c: TTyImageCollection;
+  b: TBGRABitmap;
+  v0: Cardinal;
+begin
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    v0 := c.Version;
+    c.AddBitmap('x', b);
+    AssertTrue('add bumps', c.Version > v0);
+    v0 := c.Version;
+    c.AddBitmap('x', b);   // replacing a master must bump too
+    AssertTrue('replace bumps', c.Version > v0);
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.VersionBumpsOnAddPicture;
+var
+  c: TTyImageCollection;
+  pic: TPicture;
+  v0: Cardinal;
+begin
+  c := TTyImageCollection.Create(nil);
+  pic := TPicture.Create;
+  try
+    pic.Bitmap.SetSize(12, 12);
+    pic.Bitmap.Canvas.Brush.Color := clRed;
+    pic.Bitmap.Canvas.FillRect(0, 0, 12, 12);
+    v0 := c.Version;
+    c.AddPicture('pic', pic);
+    AssertTrue('addpicture bumps', c.Version > v0);
+  finally
+    pic.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.VersionBumpsOnClear;
+var
+  c: TTyImageCollection;
+  v0: Cardinal;
+begin
+  c := TTyImageCollection.Create(nil);
+  try
+    v0 := c.Version;
+    c.Clear;
+    AssertTrue('clear bumps', c.Version > v0);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.CachedBitmapHitReturnsSameInstance;
+var
+  c: TTyImageCollection;
+  b, p1, p2: TBGRABitmap;
+begin
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('x', b);
+    p1 := c.GetCachedBitmap('x', 16);
+    p2 := c.GetCachedBitmap('x', 16);
+    AssertNotNull('first', p1);
+    AssertSame('cache hit is the same borrowed instance', p1, p2);
+    AssertEquals('one entry', 1, c.CacheCount);
+    AssertEquals('sized', 16, p1.Width);
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.CachedBitmapDistinctPerSize;
+var
+  c: TTyImageCollection;
+  b, p8, p16: TBGRABitmap;
+begin
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('x', b);
+    p8 := c.GetCachedBitmap('x', 8);
+    p16 := c.GetCachedBitmap('x', 16);
+    AssertEquals('8px', 8, p8.Width);
+    AssertEquals('16px', 16, p16.Width);
+    AssertEquals('keyed by (name, size)', 2, c.CacheCount);
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.CachedBitmapMissingIsNil;
+var
+  c: TTyImageCollection;
+begin
+  c := TTyImageCollection.Create(nil);
+  try
+    // The borrowed accessor reports "nothing to draw" as nil (unlike GetBitmap,
+    // which owes the caller an empty square).
+    AssertNull('missing name', c.GetCachedBitmap('missing', 16));
+    AssertEquals('nothing cached', 0, c.CacheCount);
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.CachedBitmapClampsSizeToOne;
+var
+  c: TTyImageCollection;
+  b, got: TBGRABitmap;
+begin
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('x', b);
+    got := c.GetCachedBitmap('x', 0);
+    AssertNotNull('non-nil', got);
+    AssertEquals('w', 1, got.Width);
+    AssertEquals('h', 1, got.Height);
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.GetBitmapHitReturnsSamePixels;
+var
+  c: TTyImageCollection;
+  b, g1, g2: TBGRABitmap;
+begin
+  // A cache hit must not change what GetBitmap renders.
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(9, 5, BGRAWhite);   // non-square: exercises the aspect-fit path
+  try
+    c.AddBitmap('x', b);
+    g1 := c.GetBitmap('x', 16);
+    g2 := c.GetBitmap('x', 16);
+    try
+      AssertTrue('same pixels across calls', PixelsEqual(g1, g2));
+      AssertTrue('but distinct owned copies', g1 <> g2);
+    finally
+      g1.Free;
+      g2.Free;
+    end;
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.GetBitmapCopyIsIndependentOfCache;
+var
+  c: TTyImageCollection;
+  b, g1, g2: TBGRABitmap;
+begin
+  // GetBitmap hands back an OWNED copy. Callers such as TTyGlyphButtonBase and
+  // TTyRibbonBackstage tint it in place (TyTintBitmapAlpha); that must never
+  // reach the shared cache entry.
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('x', b);
+    g1 := c.GetBitmap('x', 16);
+    try
+      TyTintBitmapAlpha(g1, $FFFF0000);   // opaque red, in place
+    finally
+      g1.Free;
+    end;
+    g2 := c.GetBitmap('x', 16);
+    try
+      // The master is white; a leaked tint would show up here.
+      AssertEquals('red untouched', 255, g2.GetPixel(8, 8).red);
+      AssertEquals('green untouched', 255, g2.GetPixel(8, 8).green);
+      AssertEquals('blue untouched', 255, g2.GetPixel(8, 8).blue);
+    finally
+      g2.Free;
+    end;
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.ReplacingMasterInvalidatesCache;
+var
+  c: TTyImageCollection;
+  white, blue, got: TBGRABitmap;
+begin
+  c := TTyImageCollection.Create(nil);
+  white := MakeBmp(8, 8, BGRAWhite);
+  blue := MakeBmp(8, 8, BGRA(0, 0, 255, 255));
+  try
+    c.AddBitmap('x', white);
+    got := c.GetCachedBitmap('x', 16);          // populate the cache
+    AssertEquals('white cached', 255, got.GetPixel(8, 8).red);
+
+    c.AddBitmap('x', blue);                      // bumps Version under the live cache
+    got := c.GetCachedBitmap('x', 16);
+    AssertEquals('re-rendered blue', 0, got.GetPixel(8, 8).red);
+    AssertEquals('re-rendered blue', 255, got.GetPixel(8, 8).blue);
+  finally
+    white.Free;
+    blue.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.ClearInvalidatesCache;
+var
+  c: TTyImageCollection;
+  b: TBGRABitmap;
+begin
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('x', b);
+    AssertNotNull('cached', c.GetCachedBitmap('x', 16));
+    c.Clear;
+    AssertEquals('cache dropped', 0, c.CacheCount);
+    AssertNull('name gone', c.GetCachedBitmap('x', 16));
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.CacheCapBoundsTheCache;
+var
+  c: TTyImageCollection;
+  b: TBGRABitmap;
+  sz: Integer;
+begin
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('x', b);
+    c.CacheCapacity := 3;
+    for sz := 1 to 20 do
+      c.GetCachedBitmap('x', sz);   // 20 distinct sizes, cap of 3
+    AssertEquals('bounded', 3, c.CacheCount);
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.CacheEvictsLeastRecentlyUsed;
+var
+  c: TTyImageCollection;
+  b: TBGRABitmap;
+begin
+  // Eviction is asserted via IsCached, never by comparing against a pointer we
+  // expect to have been freed: the allocator happily hands the same address back
+  // for the replacement render, so such a comparison passes even when the LRU
+  // order is inverted.
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('x', b);
+    c.CacheCapacity := 2;
+    c.GetCachedBitmap('x', 8);
+    c.GetCachedBitmap('x', 16);
+    c.GetCachedBitmap('x', 8);    // touch 8 -> 16 is now the least recently used
+    c.GetCachedBitmap('x', 24);   // must evict 16, not 8
+    AssertEquals('still bounded', 2, c.CacheCount);
+    AssertTrue('8px survived (recently used)', c.IsCached('x', 8));
+    AssertFalse('16px evicted (least recently used)', c.IsCached('x', 16));
+    AssertTrue('24px inserted', c.IsCached('x', 24));
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.IsCachedDoesNotDisturbLruOrder;
+var
+  c: TTyImageCollection;
+  b: TBGRABitmap;
+begin
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('x', b);
+    c.CacheCapacity := 2;
+    c.GetCachedBitmap('x', 8);
+    c.GetCachedBitmap('x', 16);
+    c.IsCached('x', 8);           // a pure query: must NOT make 8 the most recent
+    c.GetCachedBitmap('x', 24);   // so 8 is still the LRU and must be the victim
+    AssertFalse('8px evicted despite the IsCached query', c.IsCached('x', 8));
+    AssertTrue('16px survived', c.IsCached('x', 16));
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.LoweringCacheCapacityEvictsNow;
+var
+  c: TTyImageCollection;
+  b: TBGRABitmap;
+begin
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('x', b);
+    c.GetCachedBitmap('x', 8);
+    c.GetCachedBitmap('x', 16);
+    c.GetCachedBitmap('x', 24);
+    AssertEquals('three cached', 3, c.CacheCount);
+    c.CacheCapacity := 1;   // shrinking must evict immediately, not lazily
+    AssertEquals('trimmed', 1, c.CacheCount);
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
+procedure TImageCollectionTest.CacheCapacityClampsToOne;
+var
+  c: TTyImageCollection;
+  b: TBGRABitmap;
+begin
+  // A zero/negative cap would evict the entry GetCachedBitmap is about to hand
+  // back, leaving the caller with a dangling reference.
+  c := TTyImageCollection.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('x', b);
+    c.CacheCapacity := 0;
+    AssertEquals('clamped', 1, c.CacheCapacity);
+    AssertNotNull('still serves a borrowed render', c.GetCachedBitmap('x', 16));
+    AssertEquals('one entry', 1, c.CacheCount);
+  finally
+    b.Free;
+    c.Free;
+  end;
+end;
+
 { ---- TVirtualImageListTest ---- }
 
 function TVirtualImageListTest.MakeBmp(AW, AH: Integer; AColor: TBGRAPixel): TBGRABitmap;
@@ -515,6 +914,62 @@ begin
   finally
     v.Free;
     c.Free;
+  end;
+end;
+
+procedure TVirtualImageListTest.CachedIndexHitReturnsSameInstance;
+var
+  c: TTyImageCollection;
+  v: TTyVirtualImageList;
+  b, p1, p2: TBGRABitmap;
+begin
+  c := TTyImageCollection.Create(nil);
+  v := TTyVirtualImageList.Create(nil);
+  b := MakeBmp(8, 8, BGRAWhite);
+  try
+    c.AddBitmap('one', b);
+    v.Collection := c;
+    v.Names.Add('one');
+    p1 := v.CachedIndex(0, 24);
+    p2 := v.CachedIndex(0, 24);
+    AssertNotNull('non-nil', p1);
+    AssertEquals('sized', 24, p1.Width);
+    AssertSame('borrowed, cached', p1, p2);
+    // The borrowed reference is the collection's entry, not a copy.
+    AssertSame('same entry as the collection serves', c.GetCachedBitmap('one', 24), p1);
+  finally
+    b.Free;
+    v.Free;
+    c.Free;
+  end;
+end;
+
+procedure TVirtualImageListTest.CachedIndexBadIndexIsNil;
+var
+  c: TTyImageCollection;
+  v: TTyVirtualImageList;
+begin
+  c := TTyImageCollection.Create(nil);
+  v := TTyVirtualImageList.Create(nil);
+  try
+    v.Collection := c;
+    AssertNull('out of range', v.CachedIndex(99, 16));
+  finally
+    v.Free;
+    c.Free;
+  end;
+end;
+
+procedure TVirtualImageListTest.CachedIndexNoCollectionIsNil;
+var
+  v: TTyVirtualImageList;
+begin
+  v := TTyVirtualImageList.Create(nil);
+  try
+    v.Names.Add('x');   // named, but no collection assigned
+    AssertNull('no collection', v.CachedIndex(0, 16));
+  finally
+    v.Free;
   end;
 end;
 

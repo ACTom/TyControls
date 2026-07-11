@@ -208,7 +208,7 @@ begin
   FImages.Names.Text := 'folder' + LineEnding + 'document' + LineEnding +
                         'sheet' + LineEnding + 'image';
 
-  { One list serves both: RenderIndex scales to whatever the view style asks for. }
+  { One list serves both: the collection scales (and caches) whatever size the view asks for. }
   LV1.LargeImages := FImages;
   LV1.SmallImages := FImages;
 end;

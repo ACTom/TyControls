@@ -1286,13 +1286,11 @@ begin
     begin
       imgSz := (ARowRect.Bottom - ARowRect.Top) - P.Scale(6);
       if imgSz < 8 then imgSz := 8;
-      bmp := FImages.RenderIndex(r.ImageIndex, imgSz);
+      bmp := FImages.CachedIndex(r.ImageIndex, imgSz);   // borrowed; do NOT free
       if bmp <> nil then
-        try
-          P.Bitmap.PutImage(valR.Left,
-            ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top - bmp.Height) div 2), bmp,
-            dmDrawWithTransparency);
-        finally bmp.Free; end;
+        P.Bitmap.PutImage(valR.Left,
+          ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top - bmp.Height) div 2), bmp,
+          dmDrawWithTransparency);
       valR.Left := valR.Left + imgSz + P.Scale(4);
     end;
     if r.TextColor <> clDefault then valCol := TyColorFromLCL(r.TextColor, 255)

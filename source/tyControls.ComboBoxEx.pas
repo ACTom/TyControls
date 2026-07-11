@@ -11,8 +11,9 @@ unit tyControls.ComboBoxEx;
   are copied into the popup list via Items.Assign, so the popup reads the same indices.
 
   The images come from a TTyVirtualImageList (Images property): the index-addressed
-  raster source whose RenderIndex(AIndex, ASizePx) returns a fresh caller-owned bitmap
-  scaled to the target pixel size. }
+  raster source whose CachedIndex(AIndex, ASizePx) borrows a bitmap scaled to the
+  target pixel size from the collection's render cache — we blit it, we never free
+  or modify it. }
 
 interface
 uses
@@ -125,14 +126,10 @@ begin
   begin
     sz := (ARect.Bottom - ARect.Top) - P.Scale(6);
     if sz < 8 then sz := 8;
-    bmp := FImages.RenderIndex(AImageIndex, sz);   // caller frees
+    bmp := FImages.CachedIndex(AImageIndex, sz);   // borrowed; do NOT free
     if bmp <> nil then
-      try
-        P.Bitmap.PutImage(x, ARect.Top + ((ARect.Bottom - ARect.Top - bmp.Height) div 2),
-          bmp, dmDrawWithTransparency);
-      finally
-        bmp.Free;
-      end;
+      P.Bitmap.PutImage(x, ARect.Top + ((ARect.Bottom - ARect.Top - bmp.Height) div 2),
+        bmp, dmDrawWithTransparency);
     x := x + sz + P.Scale(4);
   end;
   textR := Rect(x, ARect.Top, ARect.Right - P.Scale(4), ARect.Bottom);

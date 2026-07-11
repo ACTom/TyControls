@@ -15,8 +15,9 @@ unit tyControls.AdvancedListBox;
   the expected order.
 
   The images come from a TTyVirtualImageList (Images property): its index-addressed
-  RenderIndex(AIndex, ASizePx) returns a fresh caller-owned bitmap scaled to the target
-  pixel size. A FreeNotification nils the reference if the list is freed first.
+  CachedIndex(AIndex, ASizePx) borrows a bitmap scaled to the target pixel size from
+  the collection's render cache — we blit it, we never free or modify it.
+  A FreeNotification nils the reference if the list is freed first.
 
   The row draw is factored into TyDrawAdvancedRow so a combo's popup list can render the
   identical two-line row. All chrome colours/sizes come from the resolved 'TyListItem'
@@ -109,19 +110,15 @@ begin
   x := ARect.Left + pad;
 
   // Optional left image: a square sized to the row height minus vertical padding,
-  // vertically centered. RenderIndex returns a caller-owned bitmap we must free.
+  // vertically centered. CachedIndex borrows the collection's render — nothing to free.
   if (AImages <> nil) and (AImageIndex >= 0) and (AImageIndex < AImages.Count) then
   begin
     sz := rowH - P.Scale(8);
     if sz < 8 then sz := 8;
-    bmp := AImages.RenderIndex(AImageIndex, sz);   // caller frees
+    bmp := AImages.CachedIndex(AImageIndex, sz);   // borrowed; do NOT free
     if bmp <> nil then
-      try
-        P.Bitmap.PutImage(x, ARect.Top + ((rowH - bmp.Height) div 2),
-          bmp, dmDrawWithTransparency);
-      finally
-        bmp.Free;
-      end;
+      P.Bitmap.PutImage(x, ARect.Top + ((rowH - bmp.Height) div 2),
+        bmp, dmDrawWithTransparency);
     x := x + sz + pad;
   end;
   textLeft := x;

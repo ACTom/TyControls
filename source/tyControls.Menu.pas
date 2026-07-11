@@ -924,14 +924,11 @@ begin
       begin
         iconSz := leftSlot - P.Scale(2);
         if iconSz < 8 then iconSz := 8;
-        icon := FImages.RenderIndex(FRows[i].ImageIndex, iconSz);   // BGRA, cross-platform; we free it
+        // BGRA, cross-platform; borrowed from the collection's render cache (do NOT free).
+        icon := FImages.CachedIndex(FRows[i].ImageIndex, iconSz);
         if icon <> nil then
-          try
-            P.Bitmap.PutImage(RowRect.Left + padL + (leftSlot - icon.Width) div 2,
-              RowRect.Top + (itemH - icon.Height) div 2, icon, dmDrawWithTransparency);
-          finally
-            icon.Free;
-          end;
+          P.Bitmap.PutImage(RowRect.Left + padL + (leftSlot - icon.Width) div 2,
+            RowRect.Top + (itemH - icon.Height) div 2, icon, dmDrawWithTransparency);
       end;
 
       // Caption: left-aligned after the check slot, ellipsized before the right slot.

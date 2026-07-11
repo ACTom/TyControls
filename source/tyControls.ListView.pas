@@ -2336,12 +2336,12 @@ var
   bmp: TBGRABitmap;
 begin
   if (AList = nil) or (AImageIndex < 0) or (ASizePx <= 0) then Exit;
-  bmp := AList.RenderIndex(AImageIndex, ASizePx);
-  try
+  { Borrowed from the collection's render cache -- no per-icon allocation and no per-icon
+    resample. This is the hot path: with HotTrack a mouse move repaints the whole control,
+    so every visible icon comes through here. The bitmap is owned by the cache, not us. }
+  bmp := AList.CachedIndex(AImageIndex, ASizePx);
+  if bmp <> nil then
     P.Bitmap.PutImage(AX, AY, bmp, dmDrawWithTransparency);
-  finally
-    bmp.Free;
-  end;
 end;
 
 function TTyListView.CheckRectForCell(const ACell: TRect): TRect;

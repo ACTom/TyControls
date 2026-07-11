@@ -49,7 +49,21 @@ uses tyControls.ImageCollection;
 
 | 方法 | 说明 |
 |------|------|
-| `function GetBitmap(const AName: string; ASizePx: Integer): TBGRABitmap` | 返回一张**新的、调用方拥有**的位图:`AName` 的 master 缩放到适配 `ASizePx` 见方(保持宽高比、居中于透明背景)。名字缺失时返回同尺寸的**空透明方块**(**永不为 `nil`、永不抛异常**);`ASizePx <= 0` 夹紧为 1px。**调用方负责 `Free`。** |
+| `function GetBitmap(const AName: string; ASizePx: Integer): TBGRABitmap` | 返回一张**新的、调用方拥有**的位图:`AName` 的 master 缩放到适配 `ASizePx` 见方(保持宽高比、居中于透明背景)。名字缺失时返回同尺寸的**空透明方块**(**永不为 `nil`、永不抛异常**);`ASizePx <= 0` 夹紧为 1px。**调用方负责 `Free`。** 缩放结果取自渲染缓存,因此重复调用只有一次分配 + 拷贝,不再重新 `Resample`。**正因为是副本,就地改像素(如 `TyTintBitmapAlpha` 着色)是安全的**,不会污染缓存。 |
+| `function GetCachedBitmap(const AName: string; ASizePx: Integer): TBGRABitmap` | 返回缓存中 `(AName, ASizePx)` 的渲染结果——一个**借用引用**,归集合所有。**不要 `Free`、不要改它的像素**,也不要跨下一次调用继续持有。名字缺失时返回 `nil`(即"没什么可画的")。命中缓存时**零分配**:绘制代码 blit 图标应当走这条路径。`ASizePx <= 0` 夹紧为 1px。 |
+
+### 渲染缓存
+
+缩放结果按 `(名字, 像素尺寸)` 缓存,**LRU 淘汰**,并在集合发生任何变更时整体失效。
+
+| 成员 | 说明 |
+|------|------|
+| `property Version: Cardinal` | 每次变更(`AddBitmap` / `AddPicture` / `Clear`)自增。外部若缓存了由本集合派生的数据,可比较它来检测过期。2^32 次变更后回绕。 |
+| `property CacheCapacity: Integer` | 缓存条数上限(默认 `TyImageCacheDefaultCapacity` = 64),超出按最近最少使用淘汰。**调小时立即淘汰**。小于 1 夹紧为 1(上限为 0 会把 `GetCachedBitmap` 正要返回的那一条也淘汰掉)。 |
+| `function CacheCount: Integer` | 当前缓存的渲染条数。诊断 / 测试用。 |
+| `function IsCached(const AName: string; ASizePx: Integer): Boolean` | `(AName, ASizePx)` 当前是否在缓存里。**纯查询**:与 `GetCachedBitmap` 不同,它不计一次"使用",不会打乱 LRU 次序。诊断 / 测试用。 |
+
+> 缓存非线程安全 —— 与消费它的控件一样,假定运行在 LCL 主线程。
 
 ---
 
@@ -71,7 +85,8 @@ uses tyControls.ImageCollection;
 | `function NameOf(AIndex: Integer): string` | `AIndex` 处的名字;越界返回 `''`。 |
 | `function IndexOf(const AName: string): Integer` | 名字索引;不存在返回 `-1`。 |
 | `function RenderIndex(AIndex, ASizePx: Integer): TBGRABitmap` | 从 `Collection` 渲染第 `AIndex` 项到 `ASizePx` 见方。**调用方拥有**返回位图。`Collection` 未设 / 索引越界 / 名字缺失时返回空透明方块(**永不为 `nil`**);`ASizePx <= 0` 夹紧为 1px。 |
-| `procedure Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer)` | 渲染第 `AIndex` 项并绘制到 `ACanvas` 的 `(AX, AY)`。守护所有边界情况(`nil` 画布 / 集合、坏索引、`ASizePx <= 0`),**永不抛异常**。 |
+| `function CachedIndex(AIndex, ASizePx: Integer): TBGRABitmap` | 第 `AIndex` 项在 `Collection` 渲染缓存中的结果——**借用引用**:**不要 `Free`、不要改像素**,也不要跨下一次调用继续持有。没什么可画时(`Collection` 未设 / 索引越界 / 名字缺失)返回 `nil`。这是绘制代码的**零分配**路径;需要拥有或修改位图时才用 `RenderIndex`。`ASizePx <= 0` 夹紧为 1px。 |
+| `procedure Draw(ACanvas: TCanvas; AIndex, AX, AY, ASizePx: Integer)` | 绘制第 `AIndex` 项到 `ACanvas` 的 `(AX, AY)`(走 `CachedIndex`,无临时位图)。守护所有边界情况(`nil` 画布 / 集合、坏索引、`ASizePx <= 0`),**永不抛异常**。 |
 
 ---
 
@@ -79,8 +94,9 @@ uses tyControls.ImageCollection;
 
 - **`AddBitmap` 取副本** —— 传入的 `TBGRABitmap` 被 `Duplicate`;调用方之后可自由释放 / 复用自己那份。
 - **集合拥有 master** —— 每张 master 由集合持有,`Clear` / 析构时全部释放,无泄漏。
-- **`GetBitmap` / `RenderIndex` 返回值归调用方** —— 用完必须 `Free`(见示例)。
-- **`Draw` 自行管理** —— 内部渲染临时位图、绘制、随即释放,调用方无需理会。
+- **`GetBitmap` / `RenderIndex` 返回值归调用方** —— 用完必须 `Free`(见示例)。它们返回的是缓存渲染的**副本**,可以随意就地修改。
+- **`GetCachedBitmap` / `CachedIndex` 返回值是借用的** —— 归集合的渲染缓存所有:**不要 `Free`、不要改像素**,blit 完即弃,别跨下一次调用继续持有(可能已被 LRU 淘汰或因变更失效)。绘制路径用它可以做到每个图标零分配、零重采样。
+- **`Draw` 自行管理** —— 走借用路径直接绘制,调用方无需理会。
 
 ---
 
@@ -132,7 +148,7 @@ end;
 ## 7. 注意事项
 
 - **矢量 vs 光栅:** 单色、需任意缩放的图标用 [[TTyIconFont]] / `TTyGlyphImageList`(矢量按需光栅化);照片 / 真彩位图用本对组件(保留 master、按 DPI 缩放)。要把一张图当**可视控件**摆到界面上,用 [[TTyImage]]。
-- **DPI 感知:** `GetBitmap` / `RenderIndex` 的 `ASizePx` 是**设备(物理)像素**;`TTyVirtualImageList.DefaultSize` 是**逻辑**像素,消费方应自行乘以缩放因子后再传给渲染方法。
+- **DPI 感知:** `GetBitmap` / `GetCachedBitmap` / `RenderIndex` / `CachedIndex` 的 `ASizePx` 是**设备(物理)像素**;`TTyVirtualImageList.DefaultSize` 是**逻辑**像素,消费方应自行乘以缩放因子后再传给渲染方法。
 - **宽高比:** 缩放采用 **contain**(整图适配方块,不裁剪),多余区域为透明——非方形 master 会有透明留白带。
 - **永不为 nil / 永不抛异常:** 缺失名字、坏索引、`ASizePx <= 0`、未设 `Collection` 等均安全返回空透明位图(`Draw` 直接安全空操作),消费方可无条件 blit。
 - **headless 安全:** 纯逻辑 + BGRA 光栅操作,无窗口句柄、无计时器依赖,可在无 GUI 的 fpcunit 中完整测试。
