@@ -38,6 +38,11 @@ type
     // ancestor exposing Controller, so test each separately), then recurse into any
     // TWinControl child. Invalidates as it goes so the new theme repaints.
     procedure ApplyControllerToChildren(AParent: TWinControl; AController: TTyStyleController);
+    // A resizable, custom-frame (bsNone) window resizes via WM_NCHITTEST on the form's own
+    // HWND, but a child control at the very bottom edge (the button bar) steals those
+    // messages, so the bottom sizing border is dead. Expose it by leaving this many px of
+    // form window below the button bar when Resizable (0 for a fixed dialog -> no change).
+    function BottomGutter: Integer;
   protected
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Paint; override;
@@ -471,11 +476,16 @@ begin
     FButtons[i].SetBounds(rects[i].Left, y, 88, 30);
 end;
 
+function TTyDialog.BottomGutter: Integer;
+begin
+  if Resizable then Result := 8 else Result := 0;
+end;
+
 function TTyDialog.ContentRect: TRect;
 begin
   Result := ClientRect;
   Inc(Result.Top, TitleHeight);
-  Dec(Result.Bottom, FButtonBar.Height);
+  Dec(Result.Bottom, FButtonBar.Height + BottomGutter);   { keep content above the pushed-up bar }
 end;
 
 procedure TTyDialog.AutoSizeToContent(AContentW, AContentH: Integer);
@@ -484,7 +494,7 @@ begin
   totalBtn := 12; for i := 0 to High(FButtons) do totalBtn := totalBtn + 88 + 8;
   w := AContentW; if totalBtn > w then w := totalBtn;
   ClientWidth := w + 32;
-  ClientHeight := TitleHeight + AContentH + FButtonBar.Height + 16;
+  ClientHeight := TitleHeight + AContentH + FButtonBar.Height + BottomGutter + 16;
   LayoutButtonBar;
 end;
 
@@ -568,9 +578,19 @@ begin
 end;
 
 procedure TTyDialog.Resize;
+var
+  g: Integer;
 begin
   inherited Resize;
-  if FButtonBar <> nil then LayoutButtonBar;
+  if FButtonBar <> nil then
+  begin
+    { Leave the bottom sizing border below the button bar on a resizable dialog. Guarded
+      so re-setting the same value does not re-enter Resize. }
+    g := BottomGutter;
+    if FButtonBar.BorderSpacing.Bottom <> g then
+      FButtonBar.BorderSpacing.Bottom := g;
+    LayoutButtonBar;
+  end;
   LayoutContent;
 end;
 
