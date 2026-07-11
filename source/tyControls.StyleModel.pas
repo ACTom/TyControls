@@ -114,8 +114,8 @@ type
     { A7 property cascade. False (default) = today's all-or-nothing: a user rule for a
       typeKey suppresses the ENTIRE built-in layer for that typeKey (golden baseline).
       True = ResolveStyle ALWAYS applies the base layer then the user layer, so a thin
-      theme that sets only one property inherits the base's other properties (省略=继承,
-      D4). Default stays False so the golden is byte-identical until a theme opts in. }
+      theme that sets only one property inherits the base's other properties (omitted
+      = inherited, D4). Default stays False so the golden is byte-identical until a theme opts in. }
     property PropertyCascade: Boolean read FPropertyCascade write FPropertyCascade;
   end;
 
@@ -1244,7 +1244,7 @@ begin
       when the user theme defines NO rule for this typeKey — all-or-nothing: a fully-
       themed control gets no base bleed; the golden baseline. With PropertyCascade ON
       the base layer ALWAYS applies first, then the user layer overwrites per-property
-      (omitted user props inherit the base; 省略=继承, D4). Both layers' raw declarations
+      (omitted user props inherit the base; omission = inheritance, D4). Both layers' raw declarations
       evaluate against the MERGED vars, so overriding a seed reaches base rules (D2). }
     if FPropertyCascade or not UserHasTypeKey(ATypeKey) then
       ResolveLayer(FBaseRules, ATypeKey, AStyleClass, AStates, Result);

@@ -1,17 +1,18 @@
 unit tyControls.BuiltinThemes;
 {$mode objfpc}{$H+}
-{ 12 套内置主题(编译进二进制):default(双模中性基底)+ 10 套 curated 双模设计师调色板
-  + system(OS 强调色)。curated 主题 = 双模基底 + @mode light/dark 各覆盖 5 个颜色种子,
-  其余令牌 resolve 时按新种子派生(on()/darken/lighten)。明暗由 Controller.Mode/Follow 控制。
-  调色板取自各开源项目官方色值(One/Dracula+Alucard/Nord/Solarized/Gruvbox/GitHub/Catppuccin/
-  Tokyo Night/Monokai Pro/Material),仅借用色值并致谢。 }
+{ 12 built-in themes (compiled into the binary): default (dual-mode neutral base) + 10 curated
+  dual-mode designer palettes + system (OS accent color). A curated theme = the dual-mode base
+  + @mode light/dark each overriding 5 color seeds; the remaining tokens are derived from the new
+  seeds at resolve time (on()/darken/lighten). Light/dark is driven by Controller.Mode/Follow.
+  Palettes use the official color values of the respective open-source projects (One/Dracula+Alucard/
+  Nord/Solarized/Gruvbox/GitHub/Catppuccin/Tokyo Night/Monokai Pro/Material) -- values borrowed with thanks. }
 interface
 uses
   Classes, SysUtils, tyControls.ThemeRegistry, tyControls.BuiltinThemeData;
 
-function TyBuiltinThemeNames: TStringArray;             // 12 个名字(default..material, system)
+function TyBuiltinThemeNames: TStringArray;             // 12 names (default..material, system)
 function TyBuiltinThemeCss(const AName: string): string;
-procedure TyRegisterBuiltinThemes;                      // 全部注册为 CSS 源(显式调用)
+procedure TyRegisterBuiltinThemes;                      // register all as CSS sources (explicit call)
 
 implementation
 

@@ -85,7 +85,7 @@ type
     { Optional per-command glyph names (index-matched to Commands; an empty or missing
       entry = no icon), rendered from IconFont at the left of each row. }
     property CommandGlyphs: TStrings read FCommandGlyphs write SetCommandGlyphs;
-    { A second command block PINNED to the BOTTOM of the sidebar (e.g. 关于 / 选项 / 退出 —
+    { A second command block PINNED to the BOTTOM of the sidebar (e.g. About / Options / Exit —
       fully caller-defined, not hardcoded). A thin separator is drawn above it. Their unified
       selection indices continue after the top Commands (Commands.Count + bottom index). A
       command whose text is '-' renders as a non-selectable separator line. }
@@ -97,7 +97,7 @@ type
       IconFont — the named icon is drawn tinted to the row text color, identically on every OS. }
     property Images: TTyImageCollection read FImages write SetImages;
     property ItemIndex: Integer read FItemIndex write SetItemIndex default -1;
-    { Auto-selected on ShowOver (Office selects 信息/Info by default so the right side isn't
+    { Auto-selected on ShowOver (Office selects Info by default so the right side isn't
       blank). -1 = no default. Point it at a CONTENT command, not an action one. }
     property DefaultItemIndex: Integer read FDefaultItemIndex write FDefaultItemIndex default -1;
     property SidebarWidth: Integer read FSidebarWidth write FSidebarWidth default TyBackstageSidebarW;
@@ -326,7 +326,7 @@ begin
   BringToFront;
   if CanFocus then
     try SetFocus except end;
-  // Default-select a command (Office opens on 信息 with its content shown), so the right
+  // Default-select a command (Office opens on Info with its content shown), so the right
   // side isn't blank. Fired even if it equals the last index — force a fresh select.
   if (FDefaultItemIndex >= 0) and (FDefaultItemIndex < TotalCount) then
   begin

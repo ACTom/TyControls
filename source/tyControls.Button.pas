@@ -105,13 +105,15 @@ type
     // ModalResult (closing a modal dialog).
     property Default: Boolean read FDefault write SetDefault default False;
     property Cancel: Boolean read FCancel write SetCancel default False;
-    // VS Code 风格常驻选中态:为 True 时 CurrentStates 注入 tysSelected,触发主题里的
-    // ':selected' 规则(如 TyButton.ghost:selected)。互斥分组由应用在 OnClick 里自行
-    // 切换各按钮的 Down(本期不内建 GroupIndex)。
+    // VS Code-style persistent selected state: when True, CurrentStates injects
+    // tysSelected, triggering the theme's ':selected' rules (e.g. TyButton.ghost:selected).
+    // Mutually-exclusive grouping is left to the app, which toggles each button's Down
+    // in OnClick (no built-in GroupIndex this round).
     property Down: Boolean read FDown write SetDown default False;
     property ModalResult: TModalResult read FModalResult write FModalResult default mrNone;
-    // 角标(badge):仅数字,>99 显示 '99+'。ShowBadge 为总开关;默认显示含 0,可经
-    // OnBadgeDisplay 改写文本或置 AVisible:=False 自定义隐藏。样式由 TyBadge typeKey 主题化。
+    // Badge: numeric only, >99 shows '99+'. ShowBadge is the master switch; by default
+    // it shows even for 0, and OnBadgeDisplay may rewrite the text or set AVisible:=False
+    // to hide it. Styled via the TyBadge typeKey theme.
     property ShowBadge: Boolean read FShowBadge write SetShowBadge default False;
     property BadgeValue: Integer read FBadgeValue write SetBadgeValue default 0;
     property BadgePosition: TTyBadgePosition read FBadgePosition write SetBadgePosition default bpBottomRight;

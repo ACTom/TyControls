@@ -4,7 +4,7 @@ unit tyControls.KeyTips;
 { KeyTips — the Office "press Alt for access-key badges" model. Given a list of captions
   (ribbon tabs, and — later — commands), assign each a UNIQUE single-character access key:
   prefer the caption's first ASCII letter/digit; if that is taken or the caption has no ASCII
-  alnum (e.g. a CJK label like 开始), fall back to the next free key from a 1-9 / A-Z pool.
+  alnum (e.g. a CJK label like "Start"), fall back to the next free key from a 1-9 / A-Z pool.
 
   This is pure + headless-unit-tested. The overlay rendering + the Alt key handling live in
   TTyRibbon and need a real machine. }
