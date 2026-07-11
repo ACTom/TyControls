@@ -54,10 +54,12 @@ type
   private
     FRoot: string;                 { enumerated directory, no trailing delimiter }
     FLV:   TTyShellListViewAccess;
+    FDirChangeCount: Integer;      { OnDirectoryChange fire counter }
     { --- column indices per the four-column contract (Name/Size/Type/Modified) --- }
     const COL_NAME = 0; COL_SIZE = 1; COL_TYPE = 2; COL_MODIFIED = 3;
   private
     procedure WriteBytes(const AFullName: string; ACount: Integer);
+    procedure HandleDirChange(Sender: TObject);
     function  ItemIndexOfName(const AName: string): Integer;
     function  HasItemNamed(const AName: string): Boolean;
     function  CountItems: Integer;
@@ -123,6 +125,11 @@ type
       differ; two same-extension files share a group; two different-extension files
       differ. (Only the equality relation is asserted, never the numeric group id.) }
     procedure TestGroupByKindBucketsByKind;
+
+    { ----- OnDirectoryChange ----- }
+    { LoadDirectory fires OnDirectoryChange, and again when it navigates into a
+      subfolder; Directory reflects the new path each time. }
+    procedure TestOnDirectoryChangeFiresOnLoadAndNavigate;
   end;
 
 implementation
@@ -193,6 +200,11 @@ begin
   finally
     FileClose(h);
   end;
+end;
+
+procedure TShellListViewTest.HandleDirChange(Sender: TObject);
+begin
+  Inc(FDirChangeCount);
 end;
 
 function TShellListViewTest.ItemIndexOfName(const AName: string): Integer;
@@ -603,6 +615,24 @@ begin
   { a directory and a file are different groups }
   AssertTrue('a directory and a file are different groups',
     FLV.XGetItemGroup(iDirA) <> FLV.XGetItemGroup(iTxt1));
+end;
+
+procedure TShellListViewTest.TestOnDirectoryChangeFiresOnLoadAndNavigate;
+var
+  subdir: string;
+begin
+  FLV.OnDirectoryChange := @HandleDirChange;
+  FDirChangeCount := 0;
+
+  FLV.LoadDirectory(FRoot);
+  AssertEquals('OnDirectoryChange fired on the initial load', 1, FDirChangeCount);
+  AssertEquals('Directory reflects the loaded path', FRoot, FLV.Directory);
+
+  { navigate into a subfolder (what HandleItemActivate does for a directory row) }
+  subdir := AppendPathDelim(FRoot) + 'dir_a';
+  FLV.LoadDirectory(subdir);
+  AssertEquals('OnDirectoryChange fired again on navigate', 2, FDirChangeCount);
+  AssertEquals('Directory reflects the subfolder', subdir, FLV.Directory);
 end;
 
 initialization

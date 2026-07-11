@@ -60,6 +60,7 @@ type
                                     bucket that drives the glyphs -- so a .txt and a .md, which the
                                     Type column shows as different, are different groups too. }
     FOnFileActivate: TTyListItemEvent;
+    FOnDirectoryChange: TNotifyEvent;
 
     procedure BuildColumns;
     procedure BuildGlyphs;
@@ -111,6 +112,9 @@ type
     property GroupByKind: Boolean read FGroupByKind write SetGroupByKind default False;
     { Fires on Enter / double-click over a FILE (folders navigate instead). }
     property OnFileActivate: TTyListItemEvent read FOnFileActivate write FOnFileActivate;
+    { Fires after LoadDirectory (re)loads a directory -- the seam a host uses to keep a
+      path box / companion tree in sync when the list navigates into a folder itself. }
+    property OnDirectoryChange: TNotifyEvent read FOnDirectoryChange write FOnDirectoryChange;
   end;
 
 implementation
@@ -394,6 +398,11 @@ procedure TTyShellListView.LoadDirectory(const APath: string);
 begin
   FDirectory := APath;
   ReloadEntries;
+  { One sync point for consumers: fires whether the load came from a property write,
+    a tree-driven LoadDirectory, or the user diving into a folder (HandleItemActivate).
+    A file dialog keeps its path box / tree in step from here. }
+  if Assigned(FOnDirectoryChange) then
+    FOnDirectoryChange(Self);
 end;
 
 procedure TTyShellListView.Refresh;

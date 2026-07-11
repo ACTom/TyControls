@@ -1,0 +1,102 @@
+object MainForm: TMainForm
+  Left = 200
+  Height = 680
+  Top = 90
+  Width = 1024
+  Caption = 'TyControls — 文件浏览器(TTyShellTreeView + TTyShellListView)'
+  ClientHeight = 680
+  ClientWidth = 1024
+  Font.Height = -12
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = TitleBar1
+  object TitleBar1: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 1024
+    Align = alTop
+  end
+  object BtnUp: TTyButton
+    Left = 16
+    Height = 30
+    Top = 46
+    Width = 90
+    Caption = '上一级'
+    OnClick = BtnUpClick
+  end
+  object ChkHidden: TTyCheckBox
+    Left = 120
+    Height = 22
+    Top = 50
+    Width = 100
+    Caption = '显示隐藏'
+    OnChange = ChkHiddenChange
+  end
+  object ChkGroup: TTyCheckBox
+    Left = 232
+    Height = 22
+    Top = 50
+    Width = 120
+    Caption = '按类型分组'
+    OnChange = ChkGroupChange
+  end
+  object BtnMaskAll: TTyButton
+    Left = 452
+    Height = 30
+    Top = 46
+    Width = 84
+    Caption = '全部'
+    OnClick = BtnMaskAllClick
+  end
+  object BtnMaskCode: TTyButton
+    Left = 544
+    Height = 30
+    Top = 46
+    Width = 132
+    Caption = '代码文件'
+    OnClick = BtnMaskCodeClick
+  end
+  object BtnMaskDoc: TTyButton
+    Left = 684
+    Height = 30
+    Top = 46
+    Width = 132
+    Caption = '文档文件'
+    OnClick = BtnMaskDocClick
+  end
+  object LblPath: TTyLabel
+    Left = 16
+    Height = 20
+    Top = 88
+    Width = 992
+    Anchors = [akTop, akLeft, akRight]
+    Caption = '当前目录:'
+  end
+  object Tree1: TTyShellTreeView
+    Left = 16
+    Height = 520
+    Top = 116
+    Width = 300
+    Anchors = [akTop, akLeft, akBottom]
+    OnPathChange = Tree1PathChange
+  end
+  object List1: TTyShellListView
+    Left = 328
+    Height = 520
+    Top = 116
+    Width = 680
+    Anchors = [akTop, akLeft, akRight, akBottom]
+    OnFileActivate = List1FileActivate
+    OnDirectoryChange = List1DirectoryChange
+  end
+  object LblStatus: TTyLabel
+    Left = 16
+    Height = 20
+    Top = 648
+    Width = 992
+    Anchors = [akLeft, akRight, akBottom]
+    Caption = '双击文件夹进入,双击文件打开,F2 重命名'
+  end
+end
