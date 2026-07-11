@@ -6,8 +6,9 @@
 面包屑祖先链**(根 → 当前,按深度缩进)加上**其它根**(盘符 / places),用户点任一行即跳到该目录。
 字段里显示当前目录的干净标签(叶名 / 根 Display)。
 
-锁 `csDropDownList`。**零新增主题 token**(继承 `TTyComboBox`)。**无图标**(缩进 + 文本表达层级;文件对话框
-需要文件夹/盘符图标时再单独加)。
+锁 `csDropDownList`。**零新增主题 token**(继承 `TTyComboBox`)。下拉行与字段带**图标**:深度 0 的行(根)用
+驱动器字形、更深的面包屑行用文件夹字形;层级用**像素缩进**表达。字形是固定调色板的内容图标(同
+[[shelltreeview]]/[[shelllistview]],128px master 降采样,构造时主题未解析),内建于控件,无需图片资源。
 
 ## 用法
 
@@ -49,6 +50,9 @@ function TyLookInPlaces(const ADir: string): TTyLookInPlaceArray;
 
 - **锁 `csDropDownList`** + **每行模型索引存 `Objects[]`**(同 [[filtercombobox]] / ColorBox);读侧 `SelectedPath`/`DoSelect`
   与写侧的当前行匹配都经它,Sort-safe。
+- **图标**:私有 `TTyImageCollection`(drive/folder 两个 128px 字形)经 `TTyVirtualImageList` 索引寻址;下拉行由
+  自定义 popup 列表(`TTyListBox.PaintItemContent`)按 `DepthOfModel` 取深度 → `GlyphForDepth` 选字形 + 像素缩进绘制,
+  字段由 `PaintFieldContent` 画当前目录字形 + 标签(不缩进)。模式照搬 `TTyAdvancedComboBox`。
 - **`SetDirectory` 同路径 early-exit**:用户点行 → `OnSelectPath` → 宿主导航 → 宿主回写 `Directory :=` 同一路径 →
   early-exit,不二次触发,循环终止。
 - **`FUpdating` 守护重建**:重建 Items + 设 `ItemIndex` 期间 `DoSelect` 被挡,不误触发 `OnSelectPath`。
