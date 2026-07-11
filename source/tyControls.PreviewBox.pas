@@ -29,7 +29,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, StdCtrls, LazFileUtils,
   BGRABitmap,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
-  tyControls.Image, tyControls.Memo, tyControls.PaintPanel;
+  tyControls.Image, tyControls.Memo, tyControls.PaintPanel, tyControls.StrConsts;
 
 type
   { What kind of preview a file's extension implies. }
@@ -101,11 +101,6 @@ type
   end;
 
 implementation
-
-resourcestring
-  { Local (not centralised in tyControls.StrConsts) -- see the FileDialog note; still
-    translatable via this unit's own .po. }
-  rsPvCannotPreview = 'Cannot preview this file';
 
 const
   PreviewHeadBytes = 64 * 1024;   { how much of a text file the preview reads }

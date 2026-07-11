@@ -227,6 +227,64 @@ msgstr ""
 msgid "Whole word"
 msgstr ""
 
+#: tycontrols.strconsts.rsfdallfilesfilter
+msgid "All Files (*.*)|*.*"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdbtnopen
+msgctxt "tycontrols.strconsts.rsfdbtnopen"
+msgid "Open"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdbtnsave
+msgid "Save"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdcommonfilter
+msgid "Common Formats (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|All Files (*.*)|*.*"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdfilenamelbl
+msgid "File name:"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdfiletypelbl
+msgid "File type:"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdlookin
+msgid "Look in:"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdmustexist
+#, object-pascal-format
+msgid "The file \"%s\" does not exist."
+msgstr ""
+
+#: tycontrols.strconsts.rsfdopentitle
+msgctxt "tycontrols.strconsts.rsfdopentitle"
+msgid "Open"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdoverwriteprompt
+#, object-pascal-format
+msgid ""
+"The file \"%s\" already exists.\n"
+"Do you want to replace it?"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdpicturefilter
+msgid "Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdsavetitle
+msgid "Save As"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdup
+msgid "Up"
+msgstr ""
+
 #: tycontrols.strconsts.rslintemptyimportpath
 msgid "empty @import path"
 msgstr ""
@@ -343,6 +401,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsmsgtypewarning
 msgid "Warning"
+msgstr ""
+
+#: tycontrols.strconsts.rspvcannotpreview
+msgid "Cannot preview this file"
 msgstr ""
 
 #: tycontrols.strconsts.rssmbackgroundimageneedsslice

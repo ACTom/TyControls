@@ -402,3 +402,67 @@ msgstr "文件夹路径(输入或粘贴后回车)"
 #: tycontrols.strconsts.rsdlgabouttitle
 msgid "About"
 msgstr "关于"
+
+#: tycontrols.strconsts.rsfdallfilesfilter
+msgid "All Files (*.*)|*.*"
+msgstr "所有文件 (*.*)|*.*"
+
+#: tycontrols.strconsts.rsfdbtnopen
+msgctxt "tycontrols.strconsts.rsfdbtnopen"
+msgid "Open"
+msgstr "打开"
+
+#: tycontrols.strconsts.rsfdbtnsave
+msgid "Save"
+msgstr "保存"
+
+#: tycontrols.strconsts.rsfdcommonfilter
+msgid "Common Formats (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|All Files (*.*)|*.*"
+msgstr "常用格式 (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|所有文件 (*.*)|*.*"
+
+#: tycontrols.strconsts.rsfdfilenamelbl
+msgid "File name:"
+msgstr "文件名:"
+
+#: tycontrols.strconsts.rsfdfiletypelbl
+msgid "File type:"
+msgstr "文件类型:"
+
+#: tycontrols.strconsts.rsfdlookin
+msgid "Look in:"
+msgstr "查找范围:"
+
+#: tycontrols.strconsts.rsfdmustexist
+#, object-pascal-format
+msgid "The file \"%s\" does not exist."
+msgstr "文件 \"%s\" 不存在。"
+
+#: tycontrols.strconsts.rsfdopentitle
+msgctxt "tycontrols.strconsts.rsfdopentitle"
+msgid "Open"
+msgstr "打开"
+
+#: tycontrols.strconsts.rsfdoverwriteprompt
+#, object-pascal-format
+msgid ""
+"The file \"%s\" already exists.\n"
+"Do you want to replace it?"
+msgstr ""
+"文件 \"%s\" 已存在。\n"
+"是否替换?"
+
+#: tycontrols.strconsts.rsfdpicturefilter
+msgid "Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*"
+msgstr "图片 (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有文件 (*.*)|*.*"
+
+#: tycontrols.strconsts.rsfdsavetitle
+msgid "Save As"
+msgstr "另存为"
+
+#: tycontrols.strconsts.rsfdup
+msgid "Up"
+msgstr "上一级"
+
+#: tycontrols.strconsts.rspvcannotpreview
+msgid "Cannot preview this file"
+msgstr "无法预览此文件"

@@ -22,10 +22,21 @@ TyButton:disabled { opacity: 0.5; }
   `rgb/rgba/lighten/darken/alpha/mix` colour functions, `border` shorthand, linear gradients,
   9-slice images, plus dual `@mode` (light/dark in one file), `@import`, and OS light/dark + accent
   follow.
-- **20+ custom-drawn controls** — Button, Label, Edit, Memo, SpinEdit, CheckBox (tri-state), RadioButton,
+- **20+ core custom-drawn controls** — Button, Label, Edit, Memo, SpinEdit, CheckBox (tri-state), RadioButton,
   Panel, GroupBox, ComboBox (editable + prefix autocomplete), ListBox, ScrollBar, ProgressBar,
   ToggleSwitch, TrackBar, PageControl (+ TabSheet), TabSet, Splitter, StatusBar, ToolBar,
   DateTimePicker, Calendar, TitleBar, CaptionButton.
+- **Extended control families (140+ types, all custom-drawn · cross-platform)** — **instruments/charts**:
+  Gauge / Meter / Dial / AnalogClock / Sparkline / Rating / CircularProgress / activity indicators +
+  `TTyChart` (line/bar/pie); **Ribbon & navigation**: Ribbon (page/group/app-menu/QAT/Gallery/Backstage);
+  **rich inputs & pickers**: numeric/currency/mask/URL/combo/track/calculator edits, colour/font/file
+  combos, colour & HS pickers, `TTyValueListEditor` (property inspector); **containers & layout**:
+  Bevel/Divider/PaintPanel, RadioGroup/CheckGroup, ScrollBox/ExPanel, GridPanel/RelativePanel,
+  ToolBarEx/ControlBar/CoolBar, HeaderControl, ListGroupPanel; **lists/trees/shell**: `TTyListView`
+  (report/icon/tile + virtual), `TTyShellTreeView`/`TTyShellListView`/`TTyShellComboBox`/`TTyFilterComboBox`
+  (file-system-backed); **menus/effects**: MenuEx/ImagesMenu, vector primitives (Shape/Star/Arrow),
+  `TTyImageView` (pan/zoom + BGRA filters), `TTyHtmlLabel` (inline HTML subset), `tyControls.Transitions`
+  (slide/fade appearance animations).
 - **Virtual tree `TTyTreeView`** — a VirtualTreeView-class virtual tree: data-on-demand (scales to
   millions of nodes), multi-column with a draggable header (resize / reorder / sort), checkboxes +
   tri-state + radio nodes, multi-select (Ctrl/Shift) + full-row, variable row height, incremental
@@ -50,7 +61,9 @@ TyButton:disabled { opacity: 0.5; }
   (HSV/RGB/CMYK/Alpha color picker with full bidirectional sync) / `TyFontDialog` (family, size,
   style, color + live preview); button captions and type titles are internationalized
   (resourcestring + zh_CN); plus **modeless** Find/Replace (`TTyFindDialog` / `TTyReplaceDialog`,
-  LCL `TFindDialog` parity) and a Progress dialog (`TTyProgressDialog`).
+  LCL `TFindDialog` parity) and a Progress dialog (`TTyProgressDialog`); **file dialogs**:
+  `TTyOpenDialog` / `TTySaveDialog` + Picture and Preview variants (right-hand image/text preview +
+  an `OnPreview` custom hook), a 3-tier API mirroring LCL.
 - **Internationalization (i18n)** — `resourcestring`s + English / Simplified-Chinese `.po` catalogs
   (theme diagnostics, design-time, demo); the demo switches language at runtime.
 - **State transition animations** — `TTyToggleSwitch` knob slides between ON/OFF, `TTyButton` hover
@@ -60,7 +73,7 @@ TyButton:disabled { opacity: 0.5; }
 - **HiDPI** — every length scales by PPI; vector drawing stays crisp.
 - **Design-time integration** — a "TyControls" component-palette page, a StyleClass property
   drop-down, the PageControl page-manager component editor, and a read-only `About` on every control.
-- **1500+ unit tests**, whole suite leak-free (verified with heaptrc).
+- **2800+ unit tests**, whole suite leak-free (verified with heaptrc).
 
 ## Quick start
 

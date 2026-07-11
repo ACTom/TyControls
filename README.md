@@ -16,19 +16,20 @@ TyButton:disabled { opacity: 0.5; }
 
 - **三层解耦架构** —— 控件层 / 样式引擎 / 绘图原语(`TTyPainter`),控件不写死任何颜色
 - **CSS-lite 主题语言** —— `:root` 变量、类型/变体/状态选择器、`rgb/rgba/lighten/darken/alpha/mix` 颜色函数、`border` 简写、线性渐变、9-slice 贴图,以及双 `@mode`(亮/暗同文件)、`@import`、跟随系统亮暗 + 强调色
-- **20+ 自绘控件** —— Button、Label、Edit、Memo、SpinEdit、CheckBox(三态)、RadioButton、Panel、GroupBox、ComboBox(可编辑 + 前缀自动补全)、ListBox、ScrollBar、ProgressBar、ToggleSwitch、TrackBar、PageControl(+TabSheet)、TabSet、Splitter、StatusBar、ToolBar、DateTimePicker、Calendar、TitleBar、CaptionButton
+- **20+ 核心自绘控件** —— Button、Label、Edit、Memo、SpinEdit、CheckBox(三态)、RadioButton、Panel、GroupBox、ComboBox(可编辑 + 前缀自动补全)、ListBox、ScrollBar、ProgressBar、ToggleSwitch、TrackBar、PageControl(+TabSheet)、TabSet、Splitter、StatusBar、ToolBar、DateTimePicker、Calendar、TitleBar、CaptionButton
+- **扩展控件族(140+ 个类型,全部自绘 · 跨平台)** —— **仪表/图表**:Gauge / Meter / Dial / AnalogClock / Sparkline / Rating / CircularProgress / 活动指示器 + `TTyChart`(折线/柱/饼);**Ribbon 与导航**:Ribbon(页/组/应用菜单/QAT/Gallery/Backstage);**富输入与选择器**:数值/货币/掩码/URL/Combo/滑块/计算器编辑、颜色/字体/文件 combo、颜色/HS 拾取器、`TTyValueListEditor`(属性检视);**容器与布局**:Bevel/Divider/PaintPanel、RadioGroup/CheckGroup、ScrollBox/ExPanel、GridPanel/RelativePanel、ToolBarEx/ControlBar/CoolBar、HeaderControl、ListGroupPanel;**列表/树/shell**:`TTyListView`(报表/图标/平铺 + 虚拟)、`TTyShellTreeView`/`TTyShellListView`/`TTyShellComboBox`/`TTyFilterComboBox`(文件系统后备);**菜单/效果**:MenuEx/ImagesMenu、矢量图元(Shape/Star/Arrow)、`TTyImageView`(平移/缩放 + BGRA 滤镜)、`TTyHtmlLabel`(行内 HTML 子集)、`tyControls.Transitions`(滑入/淡入过渡)
 - **虚拟树 `TTyTreeView`** —— VirtualTreeView 级别的虚拟树:数据按需加载(可承载百万级节点)、多列 + 可拖拽表头(调宽 / 重排 / 排序)、复选框 + 三态 + 单选节点、多选(Ctrl/Shift)+ 整行选择、可变行高、增量输入查找、单元格自绘、**内联编辑**(F2 / 双击)、**节点拖放**(重排 / 改变父子关系)
 - **原生窗口 `TTyForm`** —— 无边框 + 自绘标题栏(可关联 `TTyTitleBar`):Windows 原生窗口缩放(`Resizable`)、最大化避让任务栏、系统圆角 + 原生投影(Windows 11 DWM / macOS,可经 CSS 关闭)
 - **文本编辑能力** —— `TTyEdit` 单行(选区 / 剪贴板 / 水平滚动 / 词级导航)、`TTyMemo` 多行(2D 导航 / 跨行编辑 / 垂直滚动)、`TTySpinEdit` 数值微调;自绘编辑支持输入法(Qt6 / GTK2)
 - **键盘助记符** —— `&` 加速键,Alt 下划线显示 + Alt+字母激活,覆盖菜单与各控件
 - **原生控件协调 `TTyNativeStyler`** —— 让第三方 / LCL 原生控件跟随当前主题着色
-- **对话框子系统** —— 自绘主题化模态对话框：`TyShowMessage` / `TyMessageDlg`(mtWarning/mtError/mtConfirmation/mtInformation + 全套 LCL 按钮集)全局函数 + `TTyDialog` 可派生基类(Enter/Esc + 右对齐按钮条) + `TTyMessage` 设计期组件；**输入类对话框**：`TyInputQuery`(单行文本) / `TyPasswordBox`(掩码密码) / `TyTextQuery`(可缩放多行) / `TySelectValue`(列表单选) / `TySelectDirectory`(文件夹选择器)；**拾取器**：`TySelectColor`(HSV/RGB/CMYK/Alpha 全双向取色器) / `TyFontDialog`(字体族/字号/样式/颜色 + 实时预览)；按钮标题与类型名称已国际化(resourcestring + zh_CN)；以及**非模态**查找/替换（`TTyFindDialog` / `TTyReplaceDialog`，对齐 LCL `TFindDialog`）和进度对话框（`TTyProgressDialog`）
+- **对话框子系统** —— 自绘主题化模态对话框：`TyShowMessage` / `TyMessageDlg`(mtWarning/mtError/mtConfirmation/mtInformation + 全套 LCL 按钮集)全局函数 + `TTyDialog` 可派生基类(Enter/Esc + 右对齐按钮条) + `TTyMessage` 设计期组件；**输入类对话框**：`TyInputQuery`(单行文本) / `TyPasswordBox`(掩码密码) / `TyTextQuery`(可缩放多行) / `TySelectValue`(列表单选) / `TySelectDirectory`(文件夹选择器)；**拾取器**：`TySelectColor`(HSV/RGB/CMYK/Alpha 全双向取色器) / `TyFontDialog`(字体族/字号/样式/颜色 + 实时预览)；按钮标题与类型名称已国际化(resourcestring + zh_CN)；以及**非模态**查找/替换（`TTyFindDialog` / `TTyReplaceDialog`，对齐 LCL `TFindDialog`）和进度对话框（`TTyProgressDialog`）；**文件对话框**：`TTyOpenDialog` / `TTySaveDialog` + 图片版 + 预览版（右侧图片/文本预览 + `OnPreview` 自定义），三层 API 对齐 LCL
 - **国际化(i18n)** —— `resourcestring` + 英 / 简体中文 `.po` 词条(主题诊断、设计期、演示);演示程序可运行时切换语言
 - **状态切换动画** —— `TTyToggleSwitch` 旋钮在 ON/OFF 间滑动、`TTyButton` 悬停背景淡入淡出;可逐控件 `AnimationsEnabled` 开启,纯算法内核可步进、可测试
 - **零配置默认皮肤 + 运行时热切换** —— 未加载主题或在设计器中拖放即有合理外观;`LoadTheme` 一行换肤,全部控件即时重绘
 - **HiDPI** —— 所有长度按 PPI 缩放,矢量绘制天然清晰
 - **设计期集成** —— 组件面板 "TyControls" 分页、StyleClass 属性下拉、PageControl 页管理组件编辑器、每控件只读 `About`
-- **1500+ 个单元测试**,全套件内存零泄漏(heaptrc 验证)
+- **2800+ 个单元测试**,全套件内存零泄漏(heaptrc 验证)
 
 ## 快速开始
 

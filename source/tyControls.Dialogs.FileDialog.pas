@@ -240,26 +240,8 @@ function TySavePreviewDialog(var AFileName, ADefaultExt: string): Boolean;
 
 implementation
 
-resourcestring
-  { Local (not centralised in tyControls.StrConsts) -- see the report note. Still
-    translatable via this unit's own .po. }
-  rsFdOpenTitle      = 'Open';
-  rsFdSaveTitle      = 'Save As';
-  rsFdBtnOpen        = 'Open';
-  rsFdBtnSave        = 'Save';
-  rsFdLookIn         = 'Look in:';
-  rsFdFileNameLbl    = 'File name:';
-  rsFdFileTypeLbl    = 'File type:';
-  rsFdUp             = 'Up';
-  rsFdOverwritePrompt = 'The file "%s" already exists.'#10'Do you want to replace it?';
-  rsFdMustExist      = 'The file "%s" does not exist.';
-  rsFdAllFilesFilter = 'All Files (*.*)|*.*';
-  rsFdPictureFilter  = 'Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|' +
-                       '*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*';
-  rsFdCommonFilter   = 'Common Formats (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;' +
-                       '*.json;*.xml;*.csv;*.log;*.ini)|' +
-                       '*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;' +
-                       '*.log;*.ini|All Files (*.*)|*.*';
+{ The rsFd* / rsPvCannotPreview strings live in tyControls.StrConsts (already in uses)
+  so they share the central package .po like every other user-facing string. }
 
 const
   Gap = 8;   { inter-control gap inside the content area }
