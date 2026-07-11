@@ -127,6 +127,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyImageView](imageview.md) | 图片查看器：平移/缩放（平滑动画）+ 非破坏性 BGRA 滤镜（灰度/模糊/锐化/反相/着色） |
 | [TTyChart](chart.md) | 折线/柱/饼图：设计期系列、自动量程 + nice 刻度、网格、图例、标题（BGRA Canvas2D） |
 | [Transitions](transitions.md) | 过渡动画工具（非控件）：滑入（跨平台）/ 淡入（Win）出现动画,基于动画内核 |
+| [TTyHtmlLabel](htmllabel.md) | 迷你 HTML 标签：行内子集（粗/斜/下/删、字体色·字号、链接、`<br>`）+ 自动换行 |
 
 ## 日期与时间
 

@@ -775,12 +775,22 @@ begin
   FillRRect(b,14.5,5,17.5,20,0.4,Acc);
 end;
 
+{ TTyHtmlLabel: text lines with a bold first line + an accent link underline ("<>" mark) }
+procedure GHtmlLabel(b: TBGRABitmap);
+begin
+  Line(b,4,6,20,6,Ink,2);                      // bold title line
+  Line(b,4,11,18,11,Faint,1.2);                // body lines
+  Line(b,4,14.5,16,14.5,Faint,1.2);
+  Line(b,4,18,12,18,Acc,1.4);                  // an accent (link) line
+  Line(b,4,19.4,12,19.4,Acc,0.7);              // its underline
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..142] of TGlyph = (
+  Glyphs: array[0..143] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -923,7 +933,8 @@ const
     (Name:'TTyOpenPreviewDialog'; Draw:@GOpenPreviewDialog),
     (Name:'TTySavePreviewDialog'; Draw:@GSavePreviewDialog),
     (Name:'TTyImageView';         Draw:@GImageView),
-    (Name:'TTyChart';             Draw:@GChart)
+    (Name:'TTyChart';             Draw:@GChart),
+    (Name:'TTyHtmlLabel';         Draw:@GHtmlLabel)
   );
 
 const

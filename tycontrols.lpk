@@ -633,6 +633,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Transitions"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.HtmlLabel.pas"/>
+        <UnitName Value="tyControls.HtmlLabel"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Dialogs.FileDialog.pas"/>
         <UnitName Value="tyControls.Dialogs.FileDialog"/>
       </Item>

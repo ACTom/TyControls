@@ -1,0 +1,37 @@
+object MainForm: TMainForm
+  Left = 240
+  Height = 400
+  Top = 130
+  Width = 680
+  Caption = 'TyControls — 迷你 HTML 标签(TTyHtmlLabel)'
+  ClientHeight = 400
+  ClientWidth = 680
+  Font.Height = -12
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = TitleBar1
+  object TitleBar1: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 680
+    Align = alTop
+  end
+  object Rich: TTyHtmlLabel
+    Left = 24
+    Height = 260
+    Top = 52
+    Width = 632
+    Anchors = [akTop, akLeft, akRight]
+    WordWrap = True
+  end
+  object LblStatus: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 360
+    Width = 632
+    Anchors = [akLeft, akRight, akBottom]
+    Caption = '点击上面的链接试试'
+  end
+end

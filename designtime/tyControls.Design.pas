@@ -39,7 +39,7 @@ uses
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
   tyControls.Dialogs.FileDialog, tyControls.PreviewBox, tyControls.ImageView,
-  tyControls.Chart,
+  tyControls.Chart, tyControls.HtmlLabel,
   tyControls.Bevel, tyControls.Divider, tyControls.PaintPanel, tyControls.SizeBox,
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
   tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ExPanel,
@@ -615,7 +615,7 @@ begin
   // these groups (and get its icon + $classes/CClasses entry), never a standalone unlisted class.
   // Standard: everyday inputs, labels, panels.
   RegisterComponents('TyControls',
-    [TTyButton, TTyLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
+    [TTyButton, TTyLabel, TTyHtmlLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
      TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit, TTyTrackEdit,
      TTyCalculator, TTyCalcEdit, TTyCalcCurrencyEdit,
      TTyMemo, TTyCheckBox, TTyRadioButton,

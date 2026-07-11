@@ -51,6 +51,8 @@ type
     FLayout: TTyHtmlFragArray;
     FWordWrap: Boolean;
     FOnLinkClick: TTyHtmlLinkEvent;
+    FOverLink: Boolean;      { hovering a link -> Cursor forced to crHandPoint }
+    FSavedCursor: TCursor;   { the app's Cursor, saved on link-enter, restored on leave }
     procedure SetHtml(const AValue: string);
     procedure SetWordWrap(AValue: Boolean);
     { Wrap FRuns into positioned fragments within [AContentLeft .. AContentLeft+AContentWidth],
@@ -71,6 +73,7 @@ type
       WithThemeSpace: Boolean); override;
     procedure DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -150,8 +153,11 @@ begin
         end
         else
         begin
+          { A bare (unquoted) value ends at whitespace OR the self-closing slash / tag
+            close, so <font size=14/> yields '14' not '14/'. }
           e := q;
-          while (e <= Length(ATag)) and (ATag[e] <> ' ') and (ATag[e] <> #9) do Inc(e);
+          while (e <= Length(ATag)) and (ATag[e] <> ' ') and (ATag[e] <> #9)
+            and (ATag[e] <> '/') and (ATag[e] <> '>') do Inc(e);
           Result := Copy(ATag, q, e - q);
         end;
         Exit;
@@ -674,13 +680,35 @@ begin
 end;
 
 procedure TTyHtmlLabel.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  onLink: Boolean;
 begin
   EnsureLayout;
-  if LinkAt(X, Y) <> '' then
-    Cursor := crHandPoint
-  else
-    Cursor := crDefault;
+  onLink := LinkAt(X, Y) <> '';
+  { Only OVERRIDE the cursor while over a link, and restore the app-set Cursor when
+    leaving it -- do not hard-clobber to crDefault (that would eat a user's Cursor). }
+  if onLink and not FOverLink then
+  begin
+    FSavedCursor := Cursor;
+    Cursor := crHandPoint;
+    FOverLink := True;
+  end
+  else if (not onLink) and FOverLink then
+  begin
+    Cursor := FSavedCursor;
+    FOverLink := False;
+  end;
   inherited MouseMove(Shift, X, Y);
+end;
+
+procedure TTyHtmlLabel.MouseLeave;
+begin
+  if FOverLink then
+  begin
+    Cursor := FSavedCursor;   { restore if the mouse left the control while over a link }
+    FOverLink := False;
+  end;
+  inherited MouseLeave;
 end;
 
 procedure TTyHtmlLabel.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);

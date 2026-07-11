@@ -126,6 +126,7 @@ uses
   test.imageview,
   test.chart,
   test.transitions,
+  test.htmllabel,
   test.shape,
   test.starshape,
   test.arrow;
