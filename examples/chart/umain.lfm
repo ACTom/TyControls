@@ -1,0 +1,70 @@
+object MainForm: TMainForm
+  Left = 220
+  Height = 600
+  Top = 100
+  Width = 820
+  Caption = 'TyControls — 图表(TTyChart)'
+  ClientHeight = 600
+  ClientWidth = 820
+  Font.Height = -12
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = TitleBar1
+  object TitleBar1: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 820
+    Align = alTop
+  end
+  object BtnLine: TTyButton
+    Left = 16
+    Height = 30
+    Top = 46
+    Width = 72
+    Caption = '折线'
+    OnClick = BtnLineClick
+  end
+  object BtnBar: TTyButton
+    Left = 96
+    Height = 30
+    Top = 46
+    Width = 72
+    Caption = '柱状'
+    OnClick = BtnBarClick
+  end
+  object BtnPie: TTyButton
+    Left = 176
+    Height = 30
+    Top = 46
+    Width = 72
+    Caption = '饼图'
+    OnClick = BtnPieClick
+  end
+  object ChkLegend: TTyCheckBox
+    Left = 280
+    Height = 22
+    Top = 50
+    Width = 90
+    Caption = '图例'
+    Checked = True
+    State = cbChecked
+    OnChange = ChkLegendChange
+  end
+  object ChkValues: TTyCheckBox
+    Left = 372
+    Height = 22
+    Top = 50
+    Width = 100
+    Caption = '数值标注'
+    OnChange = ChkValuesChange
+  end
+  object Chart: TTyChart
+    Left = 16
+    Height = 508
+    Top = 84
+    Width = 788
+    Anchors = [akTop, akLeft, akRight, akBottom]
+  end
+end

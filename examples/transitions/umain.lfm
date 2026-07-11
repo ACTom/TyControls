@@ -1,0 +1,74 @@
+object MainForm: TMainForm
+  Left = 240
+  Height = 520
+  Top = 120
+  Width = 720
+  Caption = 'TyControls — 过渡动画(Transitions)'
+  ClientHeight = 520
+  ClientWidth = 720
+  Font.Height = -12
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = TitleBar1
+  object TitleBar1: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 720
+    Align = alTop
+  end
+  object BtnFade: TTyButton
+    Left = 16
+    Height = 30
+    Top = 46
+    Width = 90
+    Caption = '淡入'
+    OnClick = BtnFadeClick
+  end
+  object BtnUp: TTyButton
+    Left = 116
+    Height = 30
+    Top = 46
+    Width = 90
+    Caption = '上滑入'
+    OnClick = BtnUpClick
+  end
+  object BtnDown: TTyButton
+    Left = 216
+    Height = 30
+    Top = 46
+    Width = 90
+    Caption = '下滑入'
+    OnClick = BtnDownClick
+  end
+  object BtnLeft: TTyButton
+    Left = 316
+    Height = 30
+    Top = 46
+    Width = 90
+    Caption = '左滑入'
+    OnClick = BtnLeftClick
+  end
+  object BtnRight: TTyButton
+    Left = 416
+    Height = 30
+    Top = 46
+    Width = 90
+    Caption = '右滑入'
+    OnClick = BtnRightClick
+  end
+  object Target: TTyPanel
+    Left = 160
+    Height = 380
+    Top = 96
+    Width = 400
+    object LblIn: TTyLabel
+      Left = 24
+      Height = 24
+      Top = 24
+      Width = 352
+      Caption = '这个面板会以选定的过渡重新出现'
+    end
+  end
+end
