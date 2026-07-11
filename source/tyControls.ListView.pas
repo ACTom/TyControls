@@ -385,6 +385,11 @@ type
       which item a display row is showing, without ever seeing the arrays. }
     function  DisplayToItem(APos: Integer): Integer;   { display pos -> item index, -1 if out of range }
     function  ItemToDisplay(AItem: Integer): Integer;  { item index -> display pos, -1 if out of range }
+    { How far a flow cell's icon+label shift right to clear the checkbox. lvsIcon overlays
+      the box in the free top-left corner (not shifted); every other flow mode draws the
+      icon at the left edge, where the box would otherwise sit on top of it. 0 when
+      checkboxes are off or the box does not fit. }
+    function  FlowCheckShift(const ACell: TRect): Integer;
 
     { The embedded bars, read-only. A descendant may want to observe them, and the thumb's
       Max/PageSize contract is otherwise only verifiable by eye -- which is exactly how a
@@ -1987,15 +1992,15 @@ begin
                        cell.Right - pad, cell.Bottom - pad);
       lvsTile:
         begin
-          { first text line, right of the icon }
-          ix := cell.Left + pad + imgPx + 2 * pad;
+          { first text line, right of the icon (past the checkbox, if any) }
+          ix := cell.Left + pad + FlowCheckShift(cell) + imgPx + 2 * pad;
           Result := Rect(ix, cell.Top + pad, cell.Right - pad,
                          cell.Top + pad + ScaleI(TyLvLabelH));
         end;
     else
       begin
-        { lvsSmallIcon / lvsList: single label right of the icon }
-        ix := cell.Left + pad + imgPx + 2 * pad;
+        { lvsSmallIcon / lvsList: single label right of the icon (past the checkbox, if any) }
+        ix := cell.Left + pad + FlowCheckShift(cell) + imgPx + 2 * pad;
         Result := Rect(ix, cell.Top, cell.Right - pad, cell.Bottom);
       end;
     end;
@@ -2363,6 +2368,17 @@ begin
   Result := TyListCheckRect(sub, FViewStyle, ScaleI(TyLvCheckPx), ScaleI(TyLvPad));
 end;
 
+function TTyListView.FlowCheckShift(const ACell: TRect): Integer;
+var
+  chk: TRect;
+begin
+  Result := 0;
+  if (not FCheckboxes) or (FViewStyle = lvsIcon) then Exit;
+  chk := CheckRectForCell(ACell);
+  if chk.Right > chk.Left then
+    Result := ScaleI(TyLvCheckPx) + ScaleI(TyLvPad);
+end;
+
 { Draw the box resolving the existing 'TyTreeCheckBox' token ([tysActive] when checked, ''
   otherwise) — zero new tokens, no literal colours. Mirrors the checkbox path in TTyTreeView. }
 procedure TTyListView.RenderCheckBox(P: TTyPainter; const ABox: TRect; AChecked: Boolean);
@@ -2450,7 +2466,7 @@ procedure TTyListView.RenderFlowCell(P: TTyPainter; AIndex: Integer; const ACell
   const AStyle: TTyStyleSet);
 var
   imgList: TTyVirtualImageList;
-  imgPx, ii, pad, ix, iy, tx: Integer;
+  imgPx, ii, pad, ix, iy, tx, cbShift: Integer;
   tc: TTyColor;
   lbl, sub: string;
   tr, chk: TRect;
@@ -2458,6 +2474,8 @@ begin
   if tpTextColor in AStyle.Present then tc := AStyle.TextColor
   else tc := CurrentStyle.TextColor;
   pad := ScaleI(TyLvPad);
+  { The icon+label of every flow mode but lvsIcon shift right to make room for the box. }
+  cbShift := FlowCheckShift(ACell);
   { Must agree with FillMetrics, which sizes the cell from the LARGE icon for both lvsIcon
     and lvsTile. Testing only lvsIcon here drew a 16px glyph inside a cell laid out for 48. }
   if FViewStyle in [lvsIcon, lvsTile] then
@@ -2485,7 +2503,7 @@ begin
     lvsTile:
       begin
         { icon at left, two text lines at right }
-        ix := ACell.Left + pad;
+        ix := ACell.Left + pad + cbShift;
         iy := ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2;
         DrawImage(P, imgList, ii, ix, iy, imgPx);
         tx  := ix + imgPx + 2 * pad;
@@ -2502,7 +2520,7 @@ begin
   else
     begin
       { lvsSmallIcon / lvsList: icon at left, single label at right }
-      ix := ACell.Left + pad;
+      ix := ACell.Left + pad + cbShift;
       iy := ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2;
       DrawImage(P, imgList, ii, ix, iy, imgPx);
       tx := ix + imgPx + 2 * pad;

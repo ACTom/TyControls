@@ -52,6 +52,8 @@ type
     { The inline rename editor (protected InlineEditor seam), so a headless test can
       set the text that EndEdit(True) will commit. }
     function XEditor: TTyEdit;
+    { How far a flow cell's content shifts right to clear the checkbox. }
+    function XFlowCheckShift(const ACell: TRect): Integer;
     { SP2b grouping seams. XItemToDisplay is the second index-space direction (item
       index -> display position, -1 when the item is in a collapsed group or out of
       range); OrderAt above is its inverse. XGetItemGroup reaches the new fifth virtual
@@ -277,6 +279,11 @@ type
     procedure TestCheckingDoesNotSelectOrFocus;
     { Selecting an item does not check it }
     procedure TestSelectingDoesNotCheck;
+    { A flow cell's icon+label shift right to clear the checkbox (the real-machine bug:
+      list / small-icon drew the box ON TOP of the icon). }
+    procedure TestFlowContentShiftsRightToClearTheBox;
+    procedure TestIconModeDoesNotShiftItsContent;
+    procedure TestNoShiftWhenCheckboxesAreOff;
   end;
 
   { -----------------------------------------------------------------------
@@ -510,6 +517,11 @@ end;
 function TTyListViewAccess.XEditor: TTyEdit;
 begin
   Result := InlineEditor;
+end;
+
+function TTyListViewAccess.XFlowCheckShift(const ACell: TRect): Integer;
+begin
+  Result := FlowCheckShift(ACell);
 end;
 
 function TTyListViewAccess.XItemToDisplay(AItem: Integer): Integer;
@@ -1571,6 +1583,49 @@ begin
   FLV.MultiSelect := True;
   FLV.Selected[3] := True;
   AssertFalse('selecting item 3 did not check it', FLV.Checked[3]);
+end;
+
+procedure TListViewCheckboxTest.TestFlowContentShiftsRightToClearTheBox;
+{ A generous flow cell (200x40, plenty for a 14px box + insets). The shift must be at
+  least the checkbox width, or the box would draw on top of the icon -- the reported bug. }
+var
+  cell: TRect;
+begin
+  Populate(['A']);
+  FLV.Font.PixelsPerInch := 96;
+  FLV.ViewStyle := lvsSmallIcon;
+  cell := Rect(0, 0, 200, 40);
+  AssertTrue('small-icon content clears the box',
+    FLV.XFlowCheckShift(cell) >= 14);
+  FLV.ViewStyle := lvsList;
+  AssertTrue('list content clears the box too', FLV.XFlowCheckShift(cell) >= 14);
+  FLV.ViewStyle := lvsTile;
+  AssertTrue('tile content clears the box', FLV.XFlowCheckShift(cell) >= 14);
+end;
+
+procedure TListViewCheckboxTest.TestIconModeDoesNotShiftItsContent;
+{ lvsIcon overlays the box in the free top-left corner (icon is centred), so its content
+  is NOT shifted -- shifting a centred icon would look wrong and is unnecessary. }
+var
+  cell: TRect;
+begin
+  Populate(['A']);
+  FLV.Font.PixelsPerInch := 96;
+  FLV.ViewStyle := lvsIcon;
+  cell := Rect(0, 0, 90, 74);
+  AssertEquals('icon mode does not shift', 0, FLV.XFlowCheckShift(cell));
+end;
+
+procedure TListViewCheckboxTest.TestNoShiftWhenCheckboxesAreOff;
+var
+  cell: TRect;
+begin
+  Populate(['A']);
+  FLV.Font.PixelsPerInch := 96;
+  FLV.Checkboxes := False;
+  FLV.ViewStyle := lvsSmallIcon;
+  cell := Rect(0, 0, 200, 40);
+  AssertEquals('no box, no shift', 0, FLV.XFlowCheckShift(cell));
 end;
 
 { ===========================================================================
