@@ -645,12 +645,35 @@ begin
   Line(b,15,16.5,20,16.5,Ink,1.1);
 end;
 
+{ TTyShellTreeView: a root folder branching down to two child folders -- a
+  directory hierarchy (distinct from GTreeView's rows and GShellListView's frame) }
+procedure GShellTreeView(b: TBGRABitmap);
+begin
+  // root folder (top-left): tab + body
+  FillRRect(b,3,5.5,7,7,0.4,Acc);
+  FillRRect(b,3,6.5,11,11,1,Acc);
+  RRect(b,3,6.5,11,11,1,Ink);
+  // tree connectors down the left, each stubbing right into a child folder
+  Line(b,6.5,11,6.5,15,Faint,1.2);
+  Line(b,6.5,15,9.5,15,Faint,1.2);
+  Line(b,6.5,15,6.5,19,Faint,1.2);
+  Line(b,6.5,19,9.5,19,Faint,1.2);
+  // child folder 1
+  FillRRect(b,10,13.4,13.5,14.4,0.3,Faint);
+  FillRRect(b,10,14,20,16.6,0.7,Faint);
+  RRect(b,10,14,20,16.6,0.7,Ink);
+  // child folder 2
+  FillRRect(b,10,17.4,13.5,18.4,0.3,Faint);
+  FillRRect(b,10,18,20,20.6,0.7,Faint);
+  RRect(b,10,18,20,20.6,0.7,Ink);
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..130] of TGlyph = (
+  Glyphs: array[0..131] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -781,7 +804,8 @@ const
     (Name:'TTyStarShape';         Draw:@GStarShape),
     (Name:'TTyArrow';             Draw:@GArrow),
     (Name:'TTyListView';          Draw:@GListView),
-    (Name:'TTyShellListView';     Draw:@GShellListView)
+    (Name:'TTyShellListView';     Draw:@GShellListView),
+    (Name:'TTyShellTreeView';     Draw:@GShellTreeView)
   );
 
 const

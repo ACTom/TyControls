@@ -125,6 +125,13 @@ procedure TyFsSortEntries(var AEntries: TTyFsEntryArray; AKey: TTyFsSortKey;
   conditional platform branch. }
 function TyFsRoots: TTyFsRootArray;
 
+{ True when APath contains at least one subdirectory. Stops at the FIRST one
+  found via FindFirstUTF8 with faDirectory (skipping '.'/'..') -- it never
+  enumerates the whole directory, so it is the cheap has-children probe a lazy
+  directory tree stamps its expand arrow from. A non-existent / unreadable
+  directory returns False, never raises. }
+function TyFsHasSubdir(const APath: string): Boolean;
+
 { The parent directory of APath, via ExtractFileDir(ChompPathDelim(APath)).
   Stable at a root: a drive/filesystem root maps to itself (or '' for ''). }
 function TyFsParent(const APath: string): string;
@@ -487,6 +494,30 @@ begin
   ScanMounts('/Volumes');             { macOS mounts }
 end;
 {$ENDIF}
+
+function TyFsHasSubdir(const APath: string): Boolean;
+var
+  sr: TSearchRec;
+  base: string;
+begin
+  Result := False;
+  base := AppendPathDelim(APath);
+  { faDirectory is a "may include" filter, not exclusive -- FindFirst still hands
+    back files, so each survivor's attr is re-checked. Break on the first real
+    subdirectory: this must stay cheap (it runs once per node during lazy init). }
+  if FindFirstUTF8(base + '*', faDirectory, sr) = 0 then
+    try
+      repeat
+        if ((sr.Attr and faDirectory) <> 0) and (sr.Name <> '.') and (sr.Name <> '..') then
+        begin
+          Result := True;
+          Break;
+        end;
+      until FindNextUTF8(sr) <> 0;
+    finally
+      FindCloseUTF8(sr);
+    end;
+end;
 
 function TyFsParent(const APath: string): string;
 begin

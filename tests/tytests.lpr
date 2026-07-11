@@ -118,6 +118,7 @@ uses
   test.listview,
   test.filesystem,
   test.shelllistview,
+  test.shelltreeview,
   test.shape,
   test.starshape,
   test.arrow;

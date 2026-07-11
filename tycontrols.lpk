@@ -604,6 +604,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.ShellListView.pas"/>
         <UnitName Value="tyControls.ShellListView"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.ShellTreeView.pas"/>
+        <UnitName Value="tyControls.ShellTreeView"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

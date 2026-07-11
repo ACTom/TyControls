@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, Forms, Graphics, ImgList,
   tyControls.Dialogs, tyControls.TreeView, tyControls.Button, tyControls.Edit,
-  tyControls.StrConsts;
+  tyControls.StrConsts, tyControls.FileSystem;
 
 function TySubdirectories(const APath: string): TStringArray;
 function TyPathHasSubdir(const APath: string): Boolean;
@@ -92,25 +92,20 @@ implementation
 
 function TySubdirectories(const APath: string): TStringArray;
 var
-  sr: TSearchRec;
+  entries: TTyFsEntryArray;
   list: TStringList;
-  base: string;
   i: Integer;
 begin
   Result := nil;
+  { Delegate the enumeration to the shell FileSystem unit (UTF8-correct, one code
+    path) but keep this helper's own contract: subdirectory NAMES, hidden included,
+    case-insensitively sorted. fotFolders drops files; fotHidden keeps hidden dirs. }
+  entries := TyFsReadDirectory(APath, '*', [fotFolders, fotHidden]);
   list := TStringList.Create;
   try
     list.CaseSensitive := False;
-    base := IncludeTrailingPathDelimiter(APath);
-    if FindFirst(base + '*', faDirectory, sr) = 0 then
-    try
-      repeat
-        if ((sr.Attr and faDirectory) <> 0) and (sr.Name <> '.') and (sr.Name <> '..') then
-          list.Add(sr.Name);
-      until FindNext(sr) <> 0;
-    finally
-      FindClose(sr);
-    end;
+    for i := 0 to High(entries) do
+      list.Add(entries[i].Name);
     list.Sort;   // case-insensitive because CaseSensitive := False
     SetLength(Result, list.Count);
     for i := 0 to list.Count - 1 do
@@ -122,9 +117,14 @@ end;
 
 function TyPathHasSubdir(const APath: string): Boolean;
 begin
-  Result := Length(TySubdirectories(APath)) > 0;
+  { Same semantics as Length(TySubdirectories(APath)) > 0 -- any subdirectory,
+    hidden counted -- but stops at the first hit instead of listing them all. }
+  Result := TyFsHasSubdir(APath);
 end;
 
+{ Deliberately NOT delegated to tyControls.FileSystem.TyFsRoots: this picker's root
+  set is drives-only (Unix = just '/'), while TyFsRoots also surfaces home + mounted
+  volumes. Folding them would change this dialog's root list, so it stays standalone. }
 function TyDriveRoots: TStringArray;
 {$IFDEF MSWINDOWS}
 var

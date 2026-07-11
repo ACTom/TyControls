@@ -45,7 +45,7 @@ uses
   tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar,
   tyControls.HeaderControl, tyControls.ListGroupPanel,
   tyControls.Shape, tyControls.StarShape, tyControls.Arrow,
-  tyControls.ListView, tyControls.ShellListView;
+  tyControls.ListView, tyControls.ShellListView, tyControls.ShellTreeView;
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)
   public
@@ -644,7 +644,8 @@ begin
      TTyScrollBox, TTyScrollPanel, TTyExPanel,
      TTyGridPanel, TTyRelativePanel,
      TTyToolBarEx, TTyControlBar, TTyCoolBar,
-     TTyHeaderControl, TTyListGroupPanel, TTyListView, TTyShellListView]);
+     TTyHeaderControl, TTyListGroupPanel, TTyListView, TTyShellListView,
+     TTyShellTreeView]);
   // Decorative vector primitives for diagrams (theme-driven fill/border, no new tokens).
   RegisterComponents('TyControls Shapes',
     [TTyShape, TTyStarShape, TTyArrow]);

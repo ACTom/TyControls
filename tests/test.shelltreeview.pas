@@ -1,0 +1,471 @@
+unit test.shelltreeview;
+{ Phase 7 batch 3 — headless state-machine tests for TTyShellTreeView.
+
+  Written FROM THE PLAN/SPEC CONTRACT ONLY
+  (docs/superpowers/plans/2026-07-11-phase7-shelltreeview.md +
+   docs/superpowers/specs/2026-07-11-phase7-shell-filedialogs-design.md). The
+  implementation (source/tyControls.ShellTreeView.pas) is being written
+  independently by another agent and is deliberately NOT consulted here, so
+  nothing in this file can ratify an implementation bug.
+
+  No windowing: the control is Create(nil), never parented, never painted, never
+  given a Handle. The lazy directory tree runs its whole state machine (seed roots
+  / lazy-expand / path->node mapping / focus) headless — the same way the
+  TTySelectPathForm template does.
+
+  The protected NodePath seam is reached through a TTyShellTreeViewAccess
+  subclass declared in this unit — a descendant declared here can read its
+  ancestor's protected members across units, which is exactly the mechanism the
+  plan prescribes. Node walking (GetFirst / GetFirstChild / GetNextSibling /
+  Expanded / SetChildCount / FocusedNode / Selected) is done through the PUBLIC
+  TTyTreeView surface the control inherits.
+
+  Every filesystem touch goes through the LazFileUtils *UTF8 wrappers so the tree
+  behaves the same on every platform.
+
+  A note on reachability (a genuine contract looseness, see the return summary):
+  GetTempDir on Windows sits under a HIDDEN ancestor (…\AppData\…). SelectPath
+  navigates the visible tree (like the template's RevealPath), so with
+  ShowHidden=False that hidden ancestor is never enumerated and the temp subtree
+  cannot be reached. Every test that must navigate to the temp root therefore sets
+  ShowHidden:=True first. }
+{$mode objfpc}{$H+}
+interface
+
+uses
+  Classes, SysUtils, Types,
+  LazFileUtils, FileUtil,
+  fpcunit, testregistry,
+  tyControls.FileSystem,   { TyFsHasSubdir, TyFsRoots, TTyFsRootArray, kinds }
+  tyControls.TreeView,     { PTyTreeNode, TTyNodeState, nsHasChildren }
+  tyControls.ShellTreeView;{ the unit under test }
+
+type
+  { Re-exposes the protected NodePath seam. A descendant declared here can read
+    its ancestor's protected members even across units, which is precisely why
+    the contract routes the tests through this subclass. }
+  TTyShellTreeViewAccess = class(TTyShellTreeView)
+  public
+    { node -> the absolute directory path it maps to (the protected NodePath). }
+    function XNodePath(ANode: PTyTreeNode): string;
+  end;
+
+  { One controlled temp tree per test, a fresh control per test.
+
+    Tree built in SetUp (under a process-unique dir name — a fixed name would let
+    a crashed prior run leave stale state, as batch 2 learned):
+
+      <root>/
+        a/              (dir, has subdirs -> TyFsHasSubdir True)
+          b/            (empty leaf dir)
+          c/            (empty leaf dir)
+        d/              (empty leaf dir -> TyFsHasSubdir False)
+        files_only/     (dir with only a FILE inside -> TyFsHasSubdir False)
+          only.txt
+        hsub/           (HIDDEN dir -> ShowHidden toggles its visibility)
+        f1.txt          (file, must be filtered out of the folders-only tree)
+        f2.dat          (file, must be filtered out of the folders-only tree) }
+  TShellTreeViewTest = class(TTestCase)
+  private
+    FRoot:  string;   { enumerated directory, no trailing delimiter }
+    FDirA:  string;   { <root>/a  — has subdirs }
+    FDirD:  string;   { <root>/d  — empty leaf }
+    FFilesOnly: string;{ <root>/files_only — only a file inside }
+    FHidden: string;  { <root>/hsub — hidden dir }
+    FFile1: string;   { <root>/f1.txt }
+    FFile2: string;   { <root>/f2.dat }
+    FTree:  TTyShellTreeViewAccess;
+    { OnPathChange observation }
+    FPathChangeCount: Integer;
+    FPathChangeSeen:  string;
+    procedure WriteByteFile(const AFullName: string);
+    procedure HandlePathChange(Sender: TObject);
+    { Reach the temp root node via SelectPath (needs ShowHidden=True, see header).
+      Asserts it was reached; returns the focused node. }
+    function ReachTempRoot: PTyTreeNode;
+    { True when ANode has an immediate child whose basename = ABaseName. }
+    function ChildHasBaseName(ANode: PTyTreeNode; const ABaseName: string): Boolean;
+    { Count of ANode's immediate children. }
+    function ChildCountOf(ANode: PTyTreeNode): Integer;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    { PopulateRoots seeds one node per TyFsRoots, and the roots include the kind
+      expected for this OS (a drive on Windows; '/' on Unix). }
+    procedure TestPopulateRootsSeedsRootsWithExpectedKind;
+    { SelectPath(temp root) sets SelectedPath to that path; Directory reads it back. }
+    procedure TestSelectPathSetsSelectedPathAndDirectoryReadsBack;
+    { Expanding a directory node yields children that are ALL directories and NONE
+      of the files created in that directory. }
+    procedure TestExpandingDirYieldsOnlyDirectoriesNoFiles;
+    { LAZY: a freshly-populated-roots node has 0 children until expanded; after
+      expand it has > 0 (for a root that has subdirs). }
+    procedure TestLazyRootHasNoChildrenUntilExpanded;
+    { TyFsHasSubdir: a dir with a subdir is True; a leaf dir (and a dir with only
+      files) is False; a non-existent path is False. }
+    procedure TestHasSubdirTrueForParentFalseForLeafAndMissing;
+    { ShowHidden toggles whether a hidden subdirectory appears among a node's
+      children. }
+    procedure TestShowHiddenTogglesHiddenSubdirInChildren;
+    { OnPathChange fires when the focused directory changes, and SelectedPath is
+      the new path. }
+    procedure TestOnPathChangeFiresOnDirectoryChangeWithNewPath;
+  end;
+
+implementation
+
+const
+  DIR_NAME = 'tyshell_test_';
+
+{ Normalised path equality: trailing-delimiter- and case-insensitive (on Windows).
+  ExcludeTrailingPathDelimiter collapses 'C:\' -> 'C:' and '/' -> '' consistently
+  on both sides, then SameFileName applies the OS case rule. }
+function SamePath(const A, B: string): Boolean;
+begin
+  Result := SameFileName(ExcludeTrailingPathDelimiter(A),
+                         ExcludeTrailingPathDelimiter(B))
+            or SameFileName(A, B);
+end;
+
+{ The display basename of a directory path (the last component). }
+function BaseNameOf(const APath: string): string;
+begin
+  Result := ExtractFileName(ExcludeTrailingPathDelimiter(APath));
+end;
+
+{ ===========================================================================
+  TTyShellTreeViewAccess
+  =========================================================================== }
+
+function TTyShellTreeViewAccess.XNodePath(ANode: PTyTreeNode): string;
+begin
+  Result := NodePath(ANode);
+end;
+
+{ ===========================================================================
+  TShellTreeViewTest — fixture
+  =========================================================================== }
+
+procedure TShellTreeViewTest.WriteByteFile(const AFullName: string);
+var
+  h: THandle;
+  b: Byte;
+begin
+  h := FileCreateUTF8(AFullName);
+  try
+    b := Ord('x');
+    FileWrite(h, b, 1);
+  finally
+    FileClose(h);
+  end;
+end;
+
+procedure TShellTreeViewTest.SetUp;
+begin
+  FPathChangeCount := 0;
+  FPathChangeSeen  := '';
+
+  FRoot := ChompPathDelim(AppendPathDelim(GetTempDir) + DIR_NAME + IntToStr(GetProcessID));
+  if DirectoryExistsUTF8(FRoot) then
+    DeleteDirectory(FRoot, False);
+  ForceDirectoriesUTF8(FRoot);
+
+  FDirA := AppendPathDelim(FRoot) + 'a';
+  FDirD := AppendPathDelim(FRoot) + 'd';
+  FFilesOnly := AppendPathDelim(FRoot) + 'files_only';
+  FHidden := AppendPathDelim(FRoot) + 'hsub';
+  FFile1 := AppendPathDelim(FRoot) + 'f1.txt';
+  FFile2 := AppendPathDelim(FRoot) + 'f2.dat';
+
+  ForceDirectoriesUTF8(FDirA);
+  ForceDirectoriesUTF8(AppendPathDelim(FDirA) + 'b');   { empty leaf }
+  ForceDirectoriesUTF8(AppendPathDelim(FDirA) + 'c');   { empty leaf }
+  ForceDirectoriesUTF8(FDirD);                          { empty leaf }
+  ForceDirectoriesUTF8(FFilesOnly);
+  WriteByteFile(AppendPathDelim(FFilesOnly) + 'only.txt');  { a file, but no subdir }
+
+  { hidden subdir: leading dot hides on Unix; also flag faHidden on Windows }
+  ForceDirectoriesUTF8(FHidden);
+  {$IFDEF MSWINDOWS}
+  FileSetAttrUTF8(FHidden, faHidden);
+  {$ENDIF}
+
+  { two files directly in the root — must never appear in the folders-only tree }
+  WriteByteFile(FFile1);
+  WriteByteFile(FFile2);
+
+  FTree := TTyShellTreeViewAccess.Create(nil);
+end;
+
+procedure TShellTreeViewTest.TearDown;
+begin
+  FreeAndNil(FTree);
+  if (FRoot <> '') and DirectoryExistsUTF8(FRoot) then
+    DeleteDirectory(FRoot, False);
+end;
+
+procedure TShellTreeViewTest.HandlePathChange(Sender: TObject);
+begin
+  Inc(FPathChangeCount);
+  FPathChangeSeen := FTree.SelectedPath;
+end;
+
+function TShellTreeViewTest.ReachTempRoot: PTyTreeNode;
+begin
+  { ShowHidden must be on so SelectPath can descend through a hidden ancestor
+    (…\AppData\… on Windows); on Unix (/tmp) it is harmless. }
+  FTree.ShowHidden := True;
+  FTree.PopulateRoots;
+  FTree.SelectPath(FRoot);
+  Result := FTree.FocusedNode;
+  AssertTrue('SelectPath reached the temp root (a node is focused)', Result <> nil);
+  AssertTrue('focused node path = temp root',
+    SamePath(FTree.XNodePath(Result), FRoot));
+end;
+
+function TShellTreeViewTest.ChildHasBaseName(ANode: PTyTreeNode;
+  const ABaseName: string): Boolean;
+var
+  ch: PTyTreeNode;
+begin
+  Result := False;
+  if ANode = nil then Exit;
+  ch := FTree.GetFirstChild(ANode);
+  while ch <> nil do
+  begin
+    if SameFileName(BaseNameOf(FTree.XNodePath(ch)), ABaseName) then
+      Exit(True);
+    ch := FTree.GetNextSibling(ch);
+  end;
+end;
+
+function TShellTreeViewTest.ChildCountOf(ANode: PTyTreeNode): Integer;
+var
+  ch: PTyTreeNode;
+begin
+  Result := 0;
+  if ANode = nil then Exit;
+  ch := FTree.GetFirstChild(ANode);
+  while ch <> nil do
+  begin
+    Inc(Result);
+    ch := FTree.GetNextSibling(ch);
+  end;
+end;
+
+{ ===========================================================================
+  Tests
+  =========================================================================== }
+
+procedure TShellTreeViewTest.TestPopulateRootsSeedsRootsWithExpectedKind;
+var
+  roots: TTyFsRootArray;
+  node: PTyTreeNode;
+  i, rootNodeCount: Integer;
+  found: Boolean;
+  {$IFDEF MSWINDOWS}
+  anyDrive: Boolean;
+  {$ELSE}
+  hasUnixRoot: Boolean;
+  {$ENDIF}
+begin
+  FTree.PopulateRoots;
+
+  { at least one root node exists }
+  node := FTree.GetFirst;
+  AssertTrue('PopulateRoots produced at least one root node', node <> nil);
+
+  { one node per TyFsRoots entry (the plan: '每个 TyFsRoots 一个根节点') }
+  rootNodeCount := 0;
+  node := FTree.GetFirst;
+  while node <> nil do
+  begin
+    Inc(rootNodeCount);
+    node := FTree.GetNextSibling(node);
+  end;
+  roots := TyFsRoots;
+  AssertEquals('one root node per TyFsRoots entry', Length(roots), rootNodeCount);
+
+  { every TyFsRoots path appears as some root node's path }
+  for i := 0 to High(roots) do
+  begin
+    found := False;
+    node := FTree.GetFirst;
+    while node <> nil do
+    begin
+      if SamePath(FTree.XNodePath(node), roots[i].Path) then
+      begin found := True; Break; end;
+      node := FTree.GetNextSibling(node);
+    end;
+    AssertTrue('root ' + roots[i].Path + ' is present as a tree node', found);
+  end;
+
+  { OS-expected kind is present among the roots }
+  {$IFDEF MSWINDOWS}
+  anyDrive := False;
+  {$ELSE}
+  hasUnixRoot := False;
+  {$ENDIF}
+  node := FTree.GetFirst;
+  while node <> nil do
+  begin
+    {$IFDEF MSWINDOWS}
+    { a drive root: 'X:\...' — second char is the drive delimiter, and it exists }
+    if (Length(FTree.XNodePath(node)) >= 2)
+       and (FTree.XNodePath(node)[2] = DriveDelim)
+       and DirectoryExistsUTF8(FTree.XNodePath(node)) then
+      anyDrive := True;
+    {$ELSE}
+    if SamePath(FTree.XNodePath(node), '/') then
+      hasUnixRoot := True;
+    {$ENDIF}
+    node := FTree.GetNextSibling(node);
+  end;
+  {$IFDEF MSWINDOWS}
+  AssertTrue('a drive root is present on Windows', anyDrive);
+  {$ELSE}
+  AssertTrue('the filesystem root ''/'' is present on Unix', hasUnixRoot);
+  {$ENDIF}
+end;
+
+procedure TShellTreeViewTest.TestSelectPathSetsSelectedPathAndDirectoryReadsBack;
+begin
+  ReachTempRoot;   { asserts the node was reached }
+  AssertTrue('SelectedPath = the selected path', SamePath(FTree.SelectedPath, FRoot));
+  AssertTrue('Directory reads SelectedPath back', SamePath(FTree.Directory, FRoot));
+end;
+
+procedure TShellTreeViewTest.TestExpandingDirYieldsOnlyDirectoriesNoFiles;
+var
+  node, ch: PTyTreeNode;
+  p: string;
+begin
+  node := ReachTempRoot;
+  FTree.Expanded[node] := True;   { lazy population happens here }
+
+  AssertTrue('the root has children after expand', ChildCountOf(node) > 0);
+
+  { every child is a real directory, and none is one of the files we created }
+  ch := FTree.GetFirstChild(node);
+  while ch <> nil do
+  begin
+    p := FTree.XNodePath(ch);
+    AssertTrue('child is a directory: ' + p, DirectoryExistsUTF8(p));
+    AssertTrue('child is not file f1.txt', not SamePath(p, FFile1));
+    AssertTrue('child is not file f2.dat', not SamePath(p, FFile2));
+    ch := FTree.GetNextSibling(ch);
+  end;
+
+  { the real subdirectories ARE present (the folders were not dropped) }
+  AssertTrue('subdir a present', ChildHasBaseName(node, 'a'));
+  AssertTrue('subdir d present', ChildHasBaseName(node, 'd'));
+  AssertTrue('subdir files_only present', ChildHasBaseName(node, 'files_only'));
+  { and the files are NOT present by basename }
+  AssertTrue('file f1.txt not among children', not ChildHasBaseName(node, 'f1.txt'));
+  AssertTrue('file f2.dat not among children', not ChildHasBaseName(node, 'f2.dat'));
+end;
+
+procedure TShellTreeViewTest.TestLazyRootHasNoChildrenUntilExpanded;
+var
+  node, pick: PTyTreeNode;
+begin
+  FTree.PopulateRoots;
+
+  { pick a freshly-seeded root node that actually has subdirectories (a drive on
+    Windows / '/' on Unix) — the lazy contract is about "expand triggers the first
+    enumeration", so we need a node whose expansion yields children. }
+  pick := nil;
+  node := FTree.GetFirst;
+  while node <> nil do
+  begin
+    if TyFsHasSubdir(FTree.XNodePath(node)) then
+    begin pick := node; Break; end;
+    node := FTree.GetNextSibling(node);
+  end;
+  AssertTrue('a root with at least one subdirectory exists', pick <> nil);
+
+  { LAZY: not enumerated until first expand }
+  AssertEquals('root has 0 children before expand', 0, ChildCountOf(pick));
+
+  FTree.Expanded[pick] := True;
+  AssertTrue('root has > 0 children after expand', ChildCountOf(pick) > 0);
+end;
+
+procedure TShellTreeViewTest.TestHasSubdirTrueForParentFalseForLeafAndMissing;
+begin
+  { a directory that contains a subdirectory }
+  AssertTrue('dir with a subdir -> True', TyFsHasSubdir(FDirA));
+  { an empty leaf directory }
+  AssertTrue('empty leaf dir -> False', not TyFsHasSubdir(FDirD));
+  { a directory that holds only a FILE (no subdirectory) }
+  AssertTrue('dir with only a file -> False', not TyFsHasSubdir(FFilesOnly));
+  { a path that does not exist }
+  AssertTrue('non-existent path -> False',
+    not TyFsHasSubdir(AppendPathDelim(FRoot) + 'does_not_exist_xyz'));
+end;
+
+procedure TShellTreeViewTest.TestShowHiddenTogglesHiddenSubdirInChildren;
+var
+  node: PTyTreeNode;
+begin
+  { --- ShowHidden ON: the hidden subdir appears among the children --- }
+  node := ReachTempRoot;                { ReachTempRoot already sets ShowHidden:=True }
+  FTree.Expanded[node] := True;
+  AssertTrue('hidden subdir hsub present with ShowHidden on',
+    ChildHasBaseName(node, 'hsub'));
+  { sanity: a normal subdir is present too }
+  AssertTrue('normal subdir a present with ShowHidden on',
+    ChildHasBaseName(node, 'a'));
+
+  { --- ShowHidden OFF: re-enumerate the same node's children --- }
+  FTree.ShowHidden := False;
+  { Force a fresh enumeration of THIS node with the new flag. Collapse, drop the
+    cached children, then re-expand. SetChildCount(0) also clears nsHasChildren
+    (a base-tree gotcha the SelectPath template documents), so re-assert it or the
+    re-expand bails before OnExpanding -> PopulateChildren runs. }
+  FTree.Expanded[node] := False;
+  FTree.SetChildCount(node, 0);
+  Include(node^.States, nsHasChildren);
+  FTree.Expanded[node] := True;
+
+  AssertTrue('hidden subdir hsub absent with ShowHidden off',
+    not ChildHasBaseName(node, 'hsub'));
+  AssertTrue('normal subdir a still present with ShowHidden off',
+    ChildHasBaseName(node, 'a'));
+end;
+
+procedure TShellTreeViewTest.TestOnPathChangeFiresOnDirectoryChangeWithNewPath;
+var
+  node, child: PTyTreeNode;
+  childPath: string;
+begin
+  node := ReachTempRoot;
+  FTree.Expanded[node] := True;
+
+  child := FTree.GetFirstChild(node);
+  AssertTrue('the root has a child directory', child <> nil);
+  childPath := FTree.XNodePath(child);
+  AssertTrue('the child is a directory', DirectoryExistsUTF8(childPath));
+
+  { observe from a clean slate — ignore any path changes during setup/navigation }
+  FTree.OnPathChange := @HandlePathChange;
+  FPathChangeCount := 0;
+  FPathChangeSeen  := '';
+
+  { change the focused directory to the child. Drive both the focus-change and the
+    selection-change paths so the test does not depend on which of the two the
+    implementation routes OnPathChange through. }
+  FTree.FocusedNode := child;
+  FTree.Selected[child] := True;
+
+  AssertTrue('OnPathChange fired on the directory change', FPathChangeCount > 0);
+  AssertTrue('SelectedPath is the new (child) path',
+    SamePath(FTree.SelectedPath, childPath));
+  AssertTrue('SelectedPath seen at fire time is the new path',
+    SamePath(FPathChangeSeen, childPath));
+end;
+
+initialization
+  RegisterTest(TShellTreeViewTest);
+end.
