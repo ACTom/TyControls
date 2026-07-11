@@ -104,9 +104,13 @@ published
 
 控件在构造函数里建一个私有 `TTyImageCollection` + `TTyVirtualImageList`,画一小组 BGRA 字形
 (文件夹、通用文件、文本、图像、表格、可执行),`GetItemImageIndex` 按 `FEntries[i]` 的 IsDir/扩展名映射。
-字形用 `Canvas2D`/`FillRoundRect` 画,**不硬编码颜色**——从当前主题的 `on-surface`/`accent` 取
-(参照 `examples/listview` 的画法,但色彩取主题)。master 画 **128px**(降采样锐利,见图标缓存的教训)。
-应用可用 `SmallImages`/`LargeImages` 覆盖成自己的图标。
+字形用 BGRA `FillRoundRectAntialias`/`FillPolyAntialias` 画,master **128px**(降采样锐利,见图标缓存的教训),
+参照 `examples/listview/umain.pas` 的 `BuildIcons`。
+
+**这些是内容图标,用一小组固定的、雅致的调色板**(和调色板字形、示例图标一样),**不**从主题取色 ——
+理由:构造时 `Controller`/主题可能还没解析,主题取色会引入"构造时无主题 + 换主题要重建"的复杂度,不值得;
+而且这是**内容**(文件类型),不是控件 chrome。这是对"视觉值主题驱动"规则的一个**有意豁免**,和
+`examples/listview` 的做法一致,理由写进代码注释。应用可用 `SmallImages`/`LargeImages` 整个覆盖。
 
 ## 无头测试要点
 
