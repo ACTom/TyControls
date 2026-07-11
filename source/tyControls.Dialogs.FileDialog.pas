@@ -345,16 +345,16 @@ begin
   FTree := TTyShellTreeView.Create(Self);
   FTree.Parent := FMidPanel;
   FTree.Align := alLeft;
-  FTree.Width := 240;
+  FTree.Width := 190;             { narrow-ish -> more room for the file list }
   FTree.Left := 0;
   FTree.OnPathChange := @TreePathChange;
 
   FSplitTree := TTySplitter.Create(Self);
   FSplitTree.Parent := FMidPanel;
   FSplitTree.Align := alLeft;
-  FSplitTree.Left := 240;         { sorts after the tree -> sits to its right }
+  FSplitTree.Left := 190;         { sorts after the tree -> sits to its right }
   FSplitTree.Width := 6;
-  FSplitTree.MinSize := 140;      { min tree width }
+  FSplitTree.MinSize := 120;      { min tree width }
 
   FList := TTyShellListView.Create(Self);
   FList.Parent := FMidPanel;
