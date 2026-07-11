@@ -634,12 +634,23 @@ begin
   end;
 end;
 
+{ TTyShellListView: a folder over a couple of file rows -- a folder-contents view }
+procedure GShellListView(b: TBGRABitmap);
+begin
+  FillRRect(b,3,4,13,11,1.5,Acc);              // folder tab+body (top-left)
+  FillRRect(b,3,6.5,13,15,1.5,Acc);
+  RRect(b,3,4,21,20,2,Ink);                    // outer frame
+  FillRRect(b,15.5,7.5,17.5,9.5,0.4,Faint);    // a file glyph + row
+  Line(b,15,13,20,13,Ink,1.1);
+  Line(b,15,16.5,20,16.5,Ink,1.1);
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..129] of TGlyph = (
+  Glyphs: array[0..130] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -769,7 +780,8 @@ const
     (Name:'TTyShape';             Draw:@GShape),
     (Name:'TTyStarShape';         Draw:@GStarShape),
     (Name:'TTyArrow';             Draw:@GArrow),
-    (Name:'TTyListView';          Draw:@GListView)
+    (Name:'TTyListView';          Draw:@GListView),
+    (Name:'TTyShellListView';     Draw:@GShellListView)
   );
 
 const

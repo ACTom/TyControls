@@ -117,6 +117,7 @@ uses
   test.listview.layout,
   test.listview,
   test.filesystem,
+  test.shelllistview,
   test.shape,
   test.starshape,
   test.arrow;

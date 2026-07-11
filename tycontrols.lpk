@@ -600,6 +600,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.FileSystem.pas"/>
         <UnitName Value="tyControls.FileSystem"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.ShellListView.pas"/>
+        <UnitName Value="tyControls.ShellListView"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
