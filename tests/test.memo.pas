@@ -36,6 +36,10 @@ type
     procedure ProbeScrollBarChange;
     // --- T5 mouse caret hit-test ---
     procedure ProbeMouseDown(X, Y: Integer);
+    // --- Perf regression: widest-line scan must not use the O(L^2) per-char path ---
+    function ProbeWidestLineWidth(APPI: Integer): Integer;
+    function ProbeMeasureLineTotalWidth(const ALine: string; APPI: Integer): Integer;
+    function ProbeMeasureLineWidthsCalls: Integer;
   end;
 
   { Clipboard-access subclass: routes the virtual clipboard hooks to an in-memory
@@ -121,6 +125,9 @@ type
     // T6 MaxLength: content-codepoint cap on typing + paste truncation.
     procedure TestMemoMaxLengthCapsTyping;
     procedure TestMemoMaxLengthTruncatesPaste;
+    // --- Perf regression (file-preview bulk-load stall) ---
+    procedure TestWidestScanSkipsPerCharMeasure;
+    procedure TestTotalWidthEqualsLastPrefix;
   end;
 
 implementation
@@ -244,6 +251,21 @@ end;
 procedure TTyMemoProbe.ProbeMouseDown(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);
+end;
+
+function TTyMemoProbe.ProbeWidestLineWidth(APPI: Integer): Integer;
+begin
+  Result := WidestLineWidth(APPI);
+end;
+
+function TTyMemoProbe.ProbeMeasureLineTotalWidth(const ALine: string; APPI: Integer): Integer;
+begin
+  Result := MeasureLineTotalWidth(ALine, APPI);
+end;
+
+function TTyMemoProbe.ProbeMeasureLineWidthsCalls: Integer;
+begin
+  Result := FMeasureLineWidthsCalls;
 end;
 
 { TTyMemoClipAccess }
@@ -1159,6 +1181,82 @@ begin
     M.ClipText := 'XXXXXXXX'; M.PasteFromClipboard;
     AssertEquals('paste truncated to remaining room', 5, MemoContentCodepoints(M));
   finally M.Free; end;
+end;
+
+procedure TTyMemoTest.TestWidestScanSkipsPerCharMeasure;
+// Regression for the file-preview stall: loading a large document + computing the horizontal
+// scroll range (WidestLineWidth) must NOT run the O(L^2) per-character MeasureLineWidths once per
+// line. We instrument the per-char entry counter and assert the widest-width scan barely touches it,
+// while still producing a real width (headless BGRA measurement works — FMeasureBmp is a live bitmap).
+const
+  N = 3000;
+var
+  L: TStringList;
+  i, callsBefore, callsAfter, widest: Integer;
+  LongLine: string;
+begin
+  SetUpWithCss('TyMemo { background:#FFFFFF; color:#000000; padding:4px; font-size:14px; }');
+  FMemo.WordWrap := False;   // no-wrap: horizontal scroll range == WidestLineWidth (the hot path)
+  // Build 3000 varied lines plus one very long (~50KB) single line — the worst case for O(L^2).
+  LongLine := '';
+  for i := 1 to 5000 do
+    LongLine := LongLine + 'abcdefghij';   // 50000 chars
+  L := TStringList.Create;
+  try
+    for i := 0 to N - 1 do
+      L.Add('line ' + IntToStr(i) + ' some words to measure ' + StringOfChar('x', i mod 40));
+    L.Add(LongLine);
+    FMemo.Lines := L;   // SetLines: assignment done, layout invalidated
+  finally
+    L.Free;
+  end;
+
+  // Count ONLY the per-char entries triggered by the widest-width scroll-range scan.
+  callsBefore := FMemo.ProbeMeasureLineWidthsCalls;
+  widest := FMemo.ProbeWidestLineWidth(96);
+  callsAfter := FMemo.ProbeMeasureLineWidthsCalls;
+
+  AssertTrue('headless measurement produced a real widest width (>0)', widest > 0);
+  // The whole point: the scan uses the cheap one-TextSize-per-line total path, so the O(L^2)
+  // per-char MeasureLineWidths is NOT entered once per line. It should be entered ZERO times here;
+  // allow a tiny slack but assert it is nowhere near the line count.
+  AssertTrue(Format('widest scan must not per-char-measure every line: %d calls for %d lines',
+    [callsAfter - callsBefore, FMemo.Lines.Count]),
+    (callsAfter - callsBefore) < FMemo.Lines.Count div 10);
+  AssertTrue(Format('widest scan per-char calls should be ~0, got %d',
+    [callsAfter - callsBefore]), (callsAfter - callsBefore) <= 2);
+  // A second scan is fully memoised — no new per-char calls, same result.
+  AssertEquals('widest is stable across repeat scans', widest, FMemo.ProbeWidestLineWidth(96));
+end;
+
+procedure TTyMemoTest.TestTotalWidthEqualsLastPrefix;
+// The cheap total-width MUST equal the old total (the LAST element of the per-char prefix array),
+// so switching WidestLineWidth to the total path does not change any measured width. Checked both
+// orders (fresh total, and total reusing an already per-char-measured line) and for CJK.
+var
+  Widths: TTyIntArray;
+  total: Integer;
+  sample, cjk: string;
+begin
+  SetUpWithCss('TyMemo { background:#FFFFFF; color:#000000; padding:4px; font-size:14px; }');
+
+  sample := 'The quick brown fox jumps 12345 ABCDEFG';
+  // Fresh line: total computed by a single TextSize, prefix array computed independently.
+  total := FMemo.ProbeMeasureLineTotalWidth(sample, 96);
+  Widths := FMemo.ProbeMeasureLineWidths(sample, 96);
+  AssertTrue('measurement is non-trivial', total > 0);
+  AssertEquals('total width == last per-char prefix (fresh line)',
+    Widths[High(Widths)], total);
+
+  // Reuse order: per-char array cached first, then the total reuses its last element.
+  cjk := '你好世界 hello 世界 12345';
+  Widths := FMemo.ProbeMeasureLineWidths(cjk, 96);
+  total := FMemo.ProbeMeasureLineTotalWidth(cjk, 96);
+  AssertEquals('total width == last per-char prefix (CJK, reuse path)',
+    Widths[High(Widths)], total);
+
+  // Empty line: zero width, matches MeasureLineWidths[0] = 0.
+  AssertEquals('empty line total width is 0', 0, FMemo.ProbeMeasureLineTotalWidth('', 96));
 end;
 
 procedure TTyMemoCursorTest.TestMemoUsesIBeam;

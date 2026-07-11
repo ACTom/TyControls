@@ -109,6 +109,18 @@ type
     // and EXACT (kerning preserved, unlike summing per-char advances). Middle edits fall back to full.
     FLastMeasuredLine: string;
     FLastMeasuredWidths: TTyIntArray;
+    // Cheap per-line TOTAL-width cache (line content -> full line pixel width). WidestLineWidth
+    // only needs each line's TOTAL width (the LAST prefix of MeasureLineWidths), so it uses a
+    // SINGLE FMeasureBmp.TextSize(line).cx per line (O(L)) instead of the O(L^2) per-character
+    // prefix path. Same content key + font-signature drop discipline as FLineWidthCache; the
+    // total equals MeasureLineWidths(line)[High] exactly (both are TextSize of the whole line).
+    FLineTotalWidthCache: specialize TDictionary<string, Integer>;
+    // Memoised widest logical-line width (px) + the font signature it was computed for. Cleared by
+    // InvalidateVisualRows (every text mutation funnels through it), so a scroll/paint/scrollbar
+    // pass does not re-scan all lines. FWidestWidthValid=False => recompute on next WidestLineWidth.
+    FWidestWidth: Integer;
+    FWidestWidthValid: Boolean;
+    FWidestWidthSig: string;
     // Headless-only override of the LCL focused state. Real focus is unavailable
     // when rendering offscreen, so tests can force the caret to draw. Production
     // paint uses (Focused or FForceFocused) so this is a no-op unless set.
@@ -228,6 +240,10 @@ type
     procedure DeleteWordBackward;
     procedure DeleteWordForward;
   protected
+    // Diagnostic: number of times the O(L^2) per-character MeasureLineWidths was ENTERED (bumped at
+    // function entry, incl. cache hits). The perf-regression test asserts a bulk load + widest-width
+    // scroll-range scan does NOT enter it once per line (WidestLineWidth uses the cheap total path).
+    FMeasureLineWidthsCalls: Integer;
     // Blinking caret (Task 10). FCaretVisible defaults True; the timer is created
     // lazily and started ONLY when HandleAllocated, so headless tests never blink
     // and the static-caret pixel tests stay deterministic.
@@ -291,6 +307,10 @@ type
     // measurement matches drawing (lifted from TTyEdit.MeasureCodepointWidths,
     // generalised to take the line as a parameter — no per-line cache).
     function MeasureLineWidths(const ALine: string; APPI: Integer): TTyIntArray;
+    // Cheap TOTAL width of ALine (px) = a single TextSize(ALine).cx, cached by content. Equals
+    // MeasureLineWidths(ALine)[High] exactly but skips the O(L^2) per-character prefix work. Used by
+    // WidestLineWidth (which only needs the total), NOT for caret/selection/render geometry.
+    function MeasureLineTotalWidth(const ALine: string; APPI: Integer): Integer;
     // Pixel x of the caret boundary before codepoint ACol on ALine.
     function ColPixelXAt(const ALine: string; ACol, APPI: Integer): Integer;
     // Nearest codepoint boundary to device-x AX on ALine (midpoint rule).
@@ -590,7 +610,12 @@ begin
   FSyncingScroll := False;
   FMeasureBmp := nil;
   FLineWidthCache := specialize TDictionary<string, TTyIntArray>.Create;
+  FLineTotalWidthCache := specialize TDictionary<string, Integer>.Create;
   FWidthCacheSig := '';
+  FWidestWidth := 0;
+  FWidestWidthValid := False;
+  FWidestWidthSig := '';
+  FMeasureLineWidthsCalls := 0;
   FForceFocused := False;
   FUndoStack := TTyUndoStack.Create;
   FSuspendUndo := False;
@@ -615,6 +640,7 @@ begin
   FUndoStack.Free;
   FMeasureBmp.Free;
   FLineWidthCache.Free;
+  FLineTotalWidthCache.Free;
   FLines.Free;
   inherited Destroy;
 end;
@@ -1393,17 +1419,30 @@ end;
 // stays byte-identical to today (FScrollX = 0 collapses every X term).
 
 function TTyMemo.WidestLineWidth(APPI: Integer): Integer;
+// Widest logical line, in px. Only each line's TOTAL width is needed, so this uses the O(L) cheap
+// total-width path (one TextSize per line) instead of the O(L^2) per-character MeasureLineWidths —
+// loading N KB no longer re-measures every character-prefix of every line (the ~10s file-preview
+// stall). The scan result is memoised and cleared by InvalidateVisualRows on any text change, so
+// scroll/paint/scrollbar passes reuse it. Font-signature guarded so a theme/DPI change recomputes.
 var
   i, W: Integer;
-  Widths: TTyIntArray;
+  S: TTyStyleSet;
+  sig: string;
 begin
+  S := CurrentStyle;
+  sig := S.FontName + '|' + IntToStr(EffectiveFontSize(S)) + '|'
+    + IntToStr(S.FontWeight) + '|' + IntToStr(APPI);
+  if FWidestWidthValid and (sig = FWidestWidthSig) then
+    Exit(FWidestWidth);
   Result := 0;
   for i := 0 to FLines.Count - 1 do
   begin
-    Widths := MeasureLineWidths(FLines[i], APPI);
-    W := Widths[Length(Widths) - 1];
+    W := MeasureLineTotalWidth(FLines[i], APPI);
     if W > Result then Result := W;
   end;
+  FWidestWidth := Result;
+  FWidestWidthValid := True;
+  FWidestWidthSig := sig;
 end;
 
 procedure TTyMemo.ClampScrollX(APPI: Integer);
@@ -2121,6 +2160,10 @@ end;
 procedure TTyMemo.InvalidateVisualRows;
 begin
   FVisualRowsValid := False;
+  // Every text mutation funnels through here (SetText/SetLines/edits/undo/redo -> AfterEdit ->
+  // InvalidateVisualRows), so this is the one seam that must drop the memoised widest-line width;
+  // otherwise a stale widest would drive the horizontal scroll range after the text changed.
+  FWidestWidthValid := False;
 end;
 
 procedure TTyMemo.CaretToVisual(ALine, ACol, AContentWidth, APPI: Integer;
@@ -2479,6 +2522,7 @@ var
   i, Len, lastLen, lastBLen, aBLen: Integer;
   sig: string;
 begin
+  Inc(FMeasureLineWidthsCalls);   // diagnostic: entries into the O(L^2) per-char path (perf test)
   S := CurrentStyle;
   EffSize := EffectiveFontSize(S);
   // Drop the caches if the font (name/size/weight/PPI) changed — all widths would be stale.
@@ -2486,6 +2530,7 @@ begin
   if sig <> FWidthCacheSig then
   begin
     FLineWidthCache.Clear;
+    FLineTotalWidthCache.Clear;
     FLastMeasuredLine := '';
     FLastMeasuredWidths := nil;
     FWidthCacheSig := sig;
@@ -2535,6 +2580,53 @@ begin
   if FLineWidthCache.Count > 1024 then
     FLineWidthCache.Clear;
   FLineWidthCache.AddOrSetValue(ALine, Result);
+end;
+
+function TTyMemo.MeasureLineTotalWidth(const ALine: string; APPI: Integer): Integer;
+// Cheap O(L) total width: a SINGLE TextSize(whole line), cached by content. Equivalent to
+// MeasureLineWidths(ALine)[High] (the last prefix IS the whole line, same font config) but without
+// the O(L^2) per-character prefix loop. Same font-signature drop discipline as FLineWidthCache so a
+// theme/DPI change recomputes. Does NOT touch the per-char cache/incremental hint — those stay
+// exclusively for visible-line render / caret / selection geometry, whose pixel positions are
+// unchanged by this cheap path.
+var
+  S: TTyStyleSet;
+  EffSize: Integer;
+  sig: string;
+  cachedW: TTyIntArray;
+begin
+  Result := 0;
+  if ALine = '' then Exit;   // empty line has zero width (matches MeasureLineWidths[0] = 0)
+  S := CurrentStyle;
+  EffSize := EffectiveFontSize(S);
+  sig := S.FontName + '|' + IntToStr(EffSize) + '|' + IntToStr(S.FontWeight) + '|' + IntToStr(APPI);
+  if sig <> FWidthCacheSig then
+  begin
+    // Font changed: both caches are stale. Mirror MeasureLineWidths' reset so they stay coherent.
+    FLineWidthCache.Clear;
+    FLineTotalWidthCache.Clear;
+    FLastMeasuredLine := '';
+    FLastMeasuredWidths := nil;
+    FWidthCacheSig := sig;
+  end;
+  if FLineTotalWidthCache.TryGetValue(ALine, Result) then
+    Exit;   // cache hit — no measurement
+  // Reuse an already-cached per-char array if present (its last element is the total) — avoids a
+  // redundant TextSize for lines the render/caret path already measured. Read into a LOCAL: never
+  // clobber the (FLastMeasuredLine, FLastMeasuredWidths) incremental-edit hint pair, or the next
+  // MeasureLineWidths prefix fast-path could reuse a mismatched array.
+  if FLineWidthCache.TryGetValue(ALine, cachedW) and (Length(cachedW) > 0) then
+    Result := cachedW[High(cachedW)]
+  else
+  begin
+    if FMeasureBmp = nil then
+      FMeasureBmp := TBGRABitmap.Create(1, 1);
+    TyConfigureTextFont(FMeasureBmp, S.FontName, EffSize, S.FontWeight, APPI);
+    Result := FMeasureBmp.TextSize(ALine).cx;
+  end;
+  if FLineTotalWidthCache.Count > 4096 then
+    FLineTotalWidthCache.Clear;
+  FLineTotalWidthCache.AddOrSetValue(ALine, Result);
 end;
 
 function TTyMemo.ColPixelXAt(const ALine: string; ACol, APPI: Integer): Integer;

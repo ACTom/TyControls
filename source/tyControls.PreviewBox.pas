@@ -307,7 +307,11 @@ procedure TTyPreviewBox.ShowText(const AText: string);
 begin
   HideChildren;
   FMessage := '';
-  FMemo.Lines.Text := AText;
+  { Use the Text SETTER, not FMemo.Lines.Text: TTyMemo.GetLines exposes the raw FLines
+    with no change hook, so a direct Lines.Text mutation skips the memo's invalidation
+    (stale visual rows + widest-width across a reused preview). SetText funnels through
+    AfterEdit -> InvalidateVisualRows, so each file re-lays out correctly + fast. }
+  FMemo.Text := AText;
   FMemo.Visible := True;
   Invalidate;
 end;
