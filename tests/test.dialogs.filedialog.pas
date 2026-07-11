@@ -7,8 +7,8 @@ unit test.dialogs.filedialog;
 
   The dialog FORM and its windowed child controls cannot be created under the
   console test runner (no win32 handle), so nothing here instantiates a form or
-  a component -- every rule from the plan's "纯解析函数" section is pinned against
-  the pure function alone.
+  a component -- every rule from the plan's "pure resolver function" section is
+  pinned against the pure function alone.
 
   Semantics under test (plan lines):
     Save  : bare name expands against ADir + ADefaultExt appended when the
@@ -77,7 +77,7 @@ end;
 
 { Save, bare name 'report', defExt 'txt' -> <dir>/report.txt, and this must
   equal TyFsResolveSaveName (the Save branch IS that helper). Plan:
-  "Save,裸名 report ... → <tmp>/report.txt(= TyFsResolveSaveName,交叉验证)". }
+  "Save, bare name report ... -> <tmp>/report.txt (= TyFsResolveSaveName, cross-checked)". }
 procedure TFileDialogResolveTest.TestSaveBareNameGetsDirAndDefaultExt;
 var got, expect: string;
 begin
@@ -89,7 +89,7 @@ begin
 end;
 
 { Save, 'report.md' + defExt 'txt' -> <dir>/report.md (existing ext kept). Plan:
-  "Save,report.md + defExt txt → <tmp>/report.md(已有扩展名不动)". }
+  "Save, report.md + defExt txt -> <tmp>/report.md (existing extension left alone)". }
 procedure TFileDialogResolveTest.TestSaveKeepsExistingExtension;
 var got: string;
 begin
@@ -98,7 +98,7 @@ begin
     SamePath(got, FDir + PathDelim + 'report.md'));
 end;
 
-{ Save, empty typed -> ''. Plan: "Save,空名 → ''". }
+{ Save, empty typed -> ''. Plan: "Save, empty name -> ''". }
 procedure TFileDialogResolveTest.TestSaveEmptyNameIsEmpty;
 begin
   AssertEquals('empty save name -> empty result',
@@ -106,7 +106,7 @@ begin
 end;
 
 { Open, ATyped='' , ASelected=<dir>/a.txt -> <dir>/a.txt (the focused item).
-  Plan: "Open,ATyped='',ASelected=<tmp>/a.txt → <tmp>/a.txt". }
+  Plan: "Open, ATyped='', ASelected=<tmp>/a.txt -> <tmp>/a.txt". }
 procedure TFileDialogResolveTest.TestOpenEmptyTypedUsesSelected;
 var got: string;
 begin
@@ -116,7 +116,7 @@ begin
 end;
 
 { Open, ATyped='b.txt' (bare) + dir -> <dir>/b.txt (expanded against dir). Plan:
-  "Open,ATyped='b.txt'(裸名),dir <tmp> → <tmp>/b.txt(对 dir 展开)". }
+  "Open, ATyped='b.txt' (bare name), dir <tmp> -> <tmp>/b.txt (expanded against dir)". }
 procedure TFileDialogResolveTest.TestOpenBareTypedExpandsAgainstDir;
 var got: string;
 begin
@@ -138,7 +138,7 @@ begin
 end;
 
 { Open, ATyped=<abs>/c.txt (carries a directory part) -> returned verbatim. Plan:
-  "Open,ATyped=<abs>/c.txt(带路径)→ 原样". }
+  "Open, ATyped=<abs>/c.txt (carries a path) -> verbatim". }
 procedure TFileDialogResolveTest.TestOpenTypedWithPathVerbatim;
 var typed, got: string;
 begin
@@ -148,7 +148,7 @@ begin
     SamePath(got, typed));
 end;
 
-{ Open, ATyped='' and ASelected='' -> ''. Plan: "Open,ATyped='' 且 ASelected='' → ''". }
+{ Open, ATyped='' and ASelected='' -> ''. Plan: "Open, ATyped='' and ASelected='' -> ''". }
 procedure TFileDialogResolveTest.TestOpenAllEmptyIsEmpty;
 begin
   AssertEquals('nothing typed and nothing selected -> empty result',

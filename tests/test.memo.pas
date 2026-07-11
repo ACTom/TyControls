@@ -463,7 +463,7 @@ begin
   px1 := FMemo.ProbeColPixelXAt(Line, 1, 96);
   idx := FMemo.ProbeColIndexAtX(Line, px1, 96);
   AssertEquals('codepoint boundary 1 maps to col 1', 1, idx);
-  // Boundary after codepoint 2 ('中') -> col 2
+  // Boundary after codepoint 2 (the CJK char) -> col 2
   px2 := FMemo.ProbeColPixelXAt(Line, 2, 96);
   idx := FMemo.ProbeColIndexAtX(Line, px2, 96);
   AssertEquals('codepoint boundary 2 maps to col 2', 2, idx);
@@ -761,7 +761,7 @@ procedure TTyMemoTest.TestCJKBackspace;
 begin
   SetUpWithPadding(0);
   LoadLines(['a中b']);
-  FMemo.ProbeSetCaret(0, 2);  // after '中'
+  FMemo.ProbeSetCaret(0, 2);  // after the CJK char
   FMemo.InjectBackspace;
   AssertEquals('whole CJK codepoint removed', 'ab', FMemo.Lines[0]);
   AssertEquals('caret col 1', 1, FMemo.ProbeCaretCol);

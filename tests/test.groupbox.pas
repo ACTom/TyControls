@@ -107,8 +107,8 @@ begin
 end;
 
 procedure TTyGroupBoxTest.TestCaptionBandErasedBorderNotVisible;
-{ With a red border, transparent background, and caption '组' rendered over a
-  white bitmap:
+{ With a red border, transparent background, and a single-glyph CJK caption
+  rendered over a white bitmap:
   (a) A border pixel on the top edge OUTSIDE the caption band x-range must be
       red-dominant (border visible where no text erasing occurred).
   (b) A pixel INSIDE the band at the border's y (capH div 2 = 8) must NOT be

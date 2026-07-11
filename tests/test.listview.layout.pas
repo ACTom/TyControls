@@ -1,7 +1,7 @@
 unit test.listview.layout;
 { Pure headless tests for the layout unit tyControls.ListView.Layout.
   Written from the CONTRACT ONLY (docs/superpowers/plans/2026-07-10-listview-sp1.md,
-  section "任务 1 契约"); the implementation was NOT read. Every expected value below
+  section "Task 1 contract"); the implementation was NOT read. Every expected value below
   is derived by hand from the plan's formulas, so a mismatch pins a contract gap, not
   a ratified bug.
 
@@ -204,7 +204,7 @@ type
 
   { --- TyListCheckRect (SP2a: the ONE source of the row checkbox rect) ---
     Written from docs/superpowers/plans/2026-07-10-listview-sp2a.md, section
-    「一、行首复选框 / 纯函数」. Every expected value is derived by hand from that
+    "1. Row-leading checkbox / pure functions". Every expected value is derived by hand from that
     contract; the implementation was NOT read. Names pin the RULE, not the function. }
   TListCheckRectTest = class(TTestCase)
   published
@@ -221,7 +221,7 @@ type
 
   { ===========================================================================
     SP2b — grouped view. Written from the CONTRACT ONLY
-    (docs/superpowers/plans/2026-07-10-listview-sp2b.md, section "任务 1 契约").
+    (docs/superpowers/plans/2026-07-10-listview-sp2b.md, section "Task 1 contract").
     The new group code in tyControls.ListView.Layout.pas was NOT read: every
     expected value is derived by hand from the plan's formulas, so a mismatch pins
     a contract gap, not a ratified bug. Procedure names pin the RULE, not the

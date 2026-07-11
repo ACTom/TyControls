@@ -238,8 +238,8 @@ begin
   AssertEquals('Prev(4)', 0, FEdit.PrevWordBoundary(4));
 end;
 
-// '你好 世界': each CJK char = 1 codepoint. '你好'=2, space at 2, '世界'=2 -> total 5.
-// Next(0)=3 (skip word '你好' (2), skip space -> 3, lands on '世').
+// CJK string (2 chars + space + 2 chars): each CJK char = 1 codepoint. First word=2, space at 2, second word=2 -> total 5.
+// Next(0)=3 (skip first word (2), skip space -> 3, lands on the third char).
 // Prev(5)=3, Prev(3)=0.
 procedure TEditWordTest.TestCJK;
 begin

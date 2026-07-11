@@ -10,7 +10,7 @@ unit test.transitions;
 // AlphaBlend fade are all real-machine and are NOT exercised here.
 //
 // Slide-offset SIGN convention -- pinned from plan section ③ line 108
-//   ("ttSlideUp -> 从下方 +AH 之类,依约定钉死") and the task contract:
+//   ("ttSlideUp -> starts from below by +AH etc., pinned by convention") and the task contract:
 //   the offset is the START position RELATIVE to the target (t=0 at offset,
 //   t=1 at 0). A control "slides up" INTO place, so it must start BELOW the
 //   target; screen Y grows downward, hence a POSITIVE DY.

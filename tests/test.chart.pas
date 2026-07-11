@@ -82,7 +82,7 @@ var
   nMin, nMax, step: Double;
   ticks: Double;
 begin
-  // Plan: "刻度数≈ATarget" (~5 ticks). Don't over-pin: assert a sane band.
+  // Plan: "tick count ~= ATarget" (~5 ticks). Don't over-pin: assert a sane band.
   TyChartNiceRange(0, 97, 5, nMin, nMax, step);
   ticks := (nMax - nMin) / step;
   AssertTrue('roughly ATarget ticks (>=3)', ticks >= 3 - 1e-9);

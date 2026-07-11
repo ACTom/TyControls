@@ -1208,15 +1208,16 @@ begin
 end;
 
 { TestWordNavCJK
-  ['中文 abc']: a CJK run is treated as a word (IsWordCodepoint true for CJK). From
-  col 0 Ctrl+Right skips '中文' + the space to col 3 (start of 'abc'). }
+  For LINE (a 2-codepoint CJK word followed by ' abc'): a CJK run is treated as a
+  word (IsWordCodepoint true for CJK). From col 0 Ctrl+Right skips the CJK word +
+  the space to col 3 (start of 'abc'). }
 procedure TTyMemoSelectionTest.TestWordNavCJK;
 const
   LINE = '中文 abc';
 begin
   SetUpMemo;
   LoadLines([LINE]);
-  // Next(0): skip the CJK word '中文' (2 cp) then the space -> col 3.
+  // Next(0): skip the 2-codepoint CJK word then the space -> col 3.
   AssertEquals('Next(0)=3 (CJK run + space)', 3,
     FMemo.ProbeNextWordBoundary(LINE, 0));
   FMemo.ProbeSetCaret(0, 0);

@@ -116,7 +116,7 @@ end;
 procedure TButtonTest.HideUnderThree(Sender: TObject; AValue: Integer;
   var AText: string; var AVisible: Boolean);
 begin
-  if AValue < 3 then AVisible := False;   // 用户策略:<3 不显示
+  if AValue < 3 then AVisible := False;   // user policy: hide when < 3
 end;
 
 procedure TButtonTest.TestTypeKey;
@@ -332,7 +332,7 @@ begin
     B.Down := True;
     AssertTrue('Down adds tysSelected', tysSelected in B.States);
     AssertFalse('selected excludes normal', tysNormal in B.States);
-    // disabled 优先:Down 不叠加
+    // disabled takes priority: Down does not stack on top
     B.Enabled := False;
     AssertFalse('disabled drops selected', tysSelected in B.States);
     AssertTrue('disabled present', tysDisabled in B.States);
@@ -348,10 +348,14 @@ var
   Reread: TBGRABitmap;
   Px: TBGRAPixel;
 begin
-  // 选中的 ghost 按钮、hover 淡入中间帧:静止端应是 ghost:selected(不透明 surface-active)。
-  // 修复前混色取 normal(透明)<->hover,中间帧是半透明 over 黑底 -> 绿通道塌到 ~66;
-  // 修复后取 selected<->selected+hover,两端皆不透明浅灰 -> 绿通道 ~234。以绿通道判别。
-  // 用专属 controller(全新 = 内置 light 主题),隔离全局 TyDefaultController 可能被其它测试污染。
+  // Selected ghost button, mid-frame of a hover fade-in: the resting end should be
+  // ghost:selected (opaque surface-active).
+  // Before the fix the blend went normal (transparent) <-> hover, so the mid-frame was
+  // semi-transparent over a black background -> green channel collapsed to ~66;
+  // after the fix it goes selected <-> selected+hover, both ends opaque light grey ->
+  // green channel ~234. We discriminate on the green channel.
+  // Use a dedicated controller (fresh = built-in light theme), isolating from a global
+  // TyDefaultController that other tests may have polluted.
   Bmp := TBitmap.Create;
   Ctl := TTyStyleController.Create(nil);
   B := TTyButtonAccess.Create(nil);
@@ -363,10 +367,10 @@ begin
     B.Font.PixelsPerInch := 96;
     Bmp.PixelFormat := pf32bit;
     Bmp.SetSize(80, 28);
-    Bmp.Canvas.Brush.Color := clBlack;          // 黑底:半透明会明显塌绿
+    Bmp.Canvas.Brush.Color := clBlack;          // black background: transparency clearly collapses green
     Bmp.Canvas.FillRect(0, 0, 80, 28);
-    B.ArmBg(1);                                  // 朝 hover 端推进
-    B.AdvanceAnim(12);                           // 12/120=0.1 -> Eased=0.271,落在混色区间
+    B.ArmBg(1);                                  // drive toward the hover end
+    B.AdvanceAnim(12);                           // 12/120=0.1 -> Eased=0.271, lands in the blend range
     B.RenderTo(Bmp.Canvas, Rect(0, 0, 80, 28), 96);
     Reread := TBGRABitmap.Create(Bmp);
     try
@@ -385,10 +389,10 @@ begin
     AssertTrue('BadgePosition default bottom-right', B.BadgePosition = bpBottomRight);
     AssertTrue('badge props published', IsPublishedProp(B, 'ShowBadge')
       and IsPublishedProp(B, 'BadgeValue') and IsPublishedProp(B, 'BadgePosition'));
-    // 关:不显示
+    // off: not shown
     B.ShowBadge := False; B.BadgeValue := 5;
     AssertFalse('off -> not visible', B.CallResolveBadge(txt));
-    // 开 + 值0:默认显示 "0"
+    // on + value 0: shows "0" by default
     B.ShowBadge := True; B.BadgeValue := 0;
     AssertTrue('on, value 0 -> visible by default', B.CallResolveBadge(txt));
     AssertEquals('value 0 text', '0', txt);
@@ -396,7 +400,7 @@ begin
     B.BadgeValue := 150;
     AssertTrue(B.CallResolveBadge(txt));
     AssertEquals('cap at 99+', '99+', txt);
-    // 事件隐藏 <3
+    // event hides < 3
     B.OnBadgeDisplay := @HideUnderThree;
     B.BadgeValue := 2;
     AssertFalse('event hides <3', B.CallResolveBadge(txt));
@@ -423,8 +427,10 @@ procedure TButtonTest.TestBadgeRendersAtCorner;
 var
   B: TTyButtonAccess; Ctl: TTyStyleController; Bmp: TBitmap; Reread: TBGRABitmap;
 begin
-  // 内置 TyBadge 背景 = var(--accent) = #3B82F6。右下角应出现 accent 蓝;关掉后没有。
-  // 专属 controller(内置 light),隔离全局 TyDefaultController 被其它测试改主题的可能。
+  // Built-in TyBadge background = var(--accent) = #3B82F6. Accent blue should appear in
+  // the bottom-right corner; once disabled it should not.
+  // Dedicated controller (built-in light), isolating from the chance that other tests
+  // changed the theme on the global TyDefaultController.
   Bmp := TBitmap.Create;
   Ctl := TTyStyleController.Create(nil);
   B := TTyButtonAccess.Create(nil);
@@ -444,7 +450,8 @@ begin
       AssertTrue('badge (accent blue) drawn in bottom-right', AccentBlueInCorner(Reread));
     finally Reread.Free; end;
 
-    // 关掉角标:右下角不应再有 accent 蓝(默认按钮底为白,红通道高,被排除)。
+    // disable the badge: the bottom-right should no longer have accent blue (a default
+    // button's fill is white, high red channel, so it is excluded).
     B.ShowBadge := False;
     Bmp.Canvas.Brush.Color := clBlack; Bmp.Canvas.FillRect(0, 0, 100, 40);
     B.RenderTo(Bmp.Canvas, Rect(0, 0, 100, 40), 96);

@@ -450,7 +450,7 @@ var s: TTyStyleSet;
 begin
   // Flag ON: a thin theme that sets ONLY color on TyButton inherits the base's other
   // properties (background + border-color + border-width + border-radius), the
-  // headline A7 win (省略=继承, D4). Built-in base TyButton supplies all of these.
+  // headline A7 win (omitted = inherited, D4). Built-in base TyButton supplies all of these.
   FModel.PropertyCascade := True;
   FModel.LoadFromCss('TyButton { color: #FF0000; }');
   s := FModel.ResolveStyle('TyButton', '', []);
@@ -821,18 +821,18 @@ var
   m: TTyStyleModel;
   s: TTyStyleSet;
 begin
-  // selected 作为常驻底层,hover 应能逐属性覆盖其 background,但保留 selected 独有的 border-color
+  // selected sits as the persistent base layer; hover should override its background per-property while keeping selected's own border-color
   m := TTyStyleModel.Create;
   try
     m.LoadFromCss(
       'TyButton.ghost { background:#000000; }' + LineEnding +
       'TyButton.ghost:selected { background:#111111; border-color:#FF0000; }' + LineEnding +
       'TyButton.ghost:hover { background:#222222; }');
-    // 仅 selected
+    // selected only
     s := m.ResolveStyle('TyButton', 'ghost', [tysSelected]);
     AssertEquals('selected bg', $11, TyRedOf(s.Background.Color));
     AssertEquals('selected border R', $FF, TyRedOf(s.BorderColor));
-    // selected + hover:hover 覆盖 background,selected 的 border-color 保留
+    // selected + hover: hover overrides background, selected's border-color is preserved
     s := m.ResolveStyle('TyButton', 'ghost', [tysSelected, tysHover]);
     AssertEquals('hover overrides bg', $22, TyRedOf(s.Background.Color));
     AssertEquals('selected border survives', $FF, TyRedOf(s.BorderColor));
@@ -849,11 +849,11 @@ begin
     AssertTrue('builtin has primary', list.IndexOf('primary') >= 0);
     AssertTrue('builtin has danger',  list.IndexOf('danger')  >= 0);
     AssertTrue('builtin has ghost',   list.IndexOf('ghost')   >= 0);
-    // variant 不串到别的控件
+    // variants do not leak to other control types
     list.Clear;
     m.GetVariantsForType('TyEdit', list);
     AssertEquals('TyEdit has no variants', 0, list.Count);
-    // 加载自定义主题后,新 class 出现且去重(.cta 与 .cta:hover 只计一次)
+    // after loading a custom theme, the new class appears and is deduped (.cta and .cta:hover count once)
     list.Clear;
     m.LoadFromCss('TyButton.cta { background:#FF0000; } TyButton.cta:hover { background:#EE0000; }');
     m.GetVariantsForType('TyButton', list);

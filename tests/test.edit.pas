@@ -289,7 +289,7 @@ begin
   try
     E := TTyEdit.Create(F);
     E.Parent := F;
-    // 'a' + Chinese char '你' (UTF-8: 3 bytes E4 BD A0)
+    // 'a' + a CJK char U+4F60 (UTF-8: 3 bytes E4 BD A0)
     E.Text := 'a你';
     E.InjectBackspace;
     AssertEquals('UTF-8 backspace removes whole codepoint', 'a', E.Text);
@@ -393,7 +393,7 @@ begin
   try
     E := TTyEdit.Create(F);
     E.Parent := F;
-    // Set text then position caret after '你' (index 2)
+    // Set text then position caret after the CJK char (index 2)
     E.Text := 'a你b';
     E.CaretPos := 2;
     E.InjectBackspace;
@@ -526,7 +526,7 @@ begin
     E.CaretPos := 0;
     E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
     E.SimulateKeyDownShift(VK_RIGHT, [ssShift]);
-    // selection covers 'a你', inject 'X' should replace it
+    // selection covers the first two codepoints ('a' + CJK), inject 'X' should replace it
     E.InjectKey('X');
     AssertEquals('Text after replace selection', 'Xbc', E.Text);
     AssertEquals('CaretPos after replace', 1, E.CaretPos);
@@ -1347,7 +1347,7 @@ end;
 // ---- EDIT.10: hit-test round-trip ----
 
 procedure TEditTest.TestHitTestRoundTrip;
-// For 'iW你il', for each boundary b in 0..5,
+// For the 5-codepoint text (i, W, CJK, i, l), for each boundary b in 0..5,
 // CaretIndexAtX(CaretPixelXAt(b, PPI)) = b, using the same PPI both ways.
 var
   F: TCustomForm;

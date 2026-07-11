@@ -408,7 +408,7 @@ var
   sheet: TTyCssStylesheet;
   rule: TTyCssRule;
 begin
-  // ':selected' 与别名 ':checked' 都应解析为 tysSelected
+  // ':selected' and its ':checked' alias should both parse to tysSelected
   parser := TTyCssParser.Create('TyButton.ghost:selected { background:#FF0000; }');
   try
     sheet := parser.Parse;

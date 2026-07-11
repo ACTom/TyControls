@@ -43,7 +43,7 @@ begin
   TyUnregisterTheme('__t_css');
   AssertFalse('not registered yet', TyResolveThemeCss('__t_css', css));
   TyRegisterThemeCss('__t_css', 'TyButton { background:#010203; }');
-  AssertTrue('resolves after register', TyResolveThemeCss('__T_CSS', css)); // 大小写不敏感
+  AssertTrue('resolves after register', TyResolveThemeCss('__T_CSS', css)); // case-insensitive
   AssertTrue('css round-trips', Pos('#010203', css) > 0);
   AssertTrue('registered flag', TyThemeRegistered('__t_css'));
   TyUnregisterTheme('__t_css');

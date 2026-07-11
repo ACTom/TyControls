@@ -276,7 +276,7 @@ begin
   node := FTree.GetFirst;
   AssertTrue('PopulateRoots produced at least one root node', node <> nil);
 
-  { one node per TyFsRoots entry (the plan: '每个 TyFsRoots 一个根节点') }
+  { one node per TyFsRoots entry (the plan: 'one root node per TyFsRoots entry') }
   rootNodeCount := 0;
   node := FTree.GetFirst;
   while node <> nil do

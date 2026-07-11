@@ -65,7 +65,7 @@ end;
 
 procedure TTyImageViewTest.TestFitZoomWidthBound;
 begin
-  // Plan: "把 src 完整装进 view 的缩放(contain)". A 200x100 src in a 100x100
+  // Plan: "the zoom that fits src entirely inside the view (contain)". A 200x100 src in a 100x100
   // view is width-bound: min(100/200, 100/100) = 0.5.
   AssertEquals('200x100 into 100x100 is width-bound -> 0.5',
     0.5, TyImageViewFitZoom(200, 100, 100, 100), 1e-9);
@@ -73,7 +73,7 @@ end;
 
 procedure TTyImageViewTest.TestFitZoomDegenerateReturnsOne;
 begin
-  // Plan: "src 或 view 退化(<=0)-> 1.0".
+  // Plan: "src or view degenerate (<=0) -> 1.0".
   AssertEquals('zero src width -> 1.0',  1.0, TyImageViewFitZoom(0, 100, 100, 100), 1e-9);
   AssertEquals('zero src height -> 1.0', 1.0, TyImageViewFitZoom(200, 0, 100, 100), 1e-9);
   AssertEquals('zero view width -> 1.0', 1.0, TyImageViewFitZoom(200, 100, 0, 100), 1e-9);
@@ -84,7 +84,7 @@ end;
 
 procedure TTyImageViewTest.TestClampBelowLoAboveHiInside;
 begin
-  // Plan: "夹取到 [lo,hi]".
+  // Plan: "clamp to [lo,hi]".
   AssertEquals('below lo -> lo',    2.0, TyImageViewClamp(-5.0, 2.0, 8.0), 1e-9);
   AssertEquals('above hi -> hi',    8.0, TyImageViewClamp(100.0, 2.0, 8.0), 1e-9);
   AssertEquals('inside -> unchanged', 5.0, TyImageViewClamp(5.0, 2.0, 8.0), 1e-9);
@@ -164,7 +164,7 @@ procedure TTyImageViewTest.TestClampOffsetSmallImageCenters;
 var
   offX, offY: Double;
 begin
-  // Plan: "图像小于视口 -> 居中(off=0)". 100x100 src at zoom 0.5 = 50x50,
+  // Plan: "image smaller than viewport -> centred (off=0)". 100x100 src at zoom 0.5 = 50x50,
   // smaller than the 200x200 view -> any requested pan clamps to 0 (centred).
   offX := 50.0;
   offY := -37.0;
@@ -177,7 +177,7 @@ procedure TTyImageViewTest.TestClampOffsetLargeImageHalfRevealBound;
 var
   offX, offY, bound: Double;
 begin
-  // Plan: "大于 -> 不露出超过一半的空白(off 限制在 ±(scaled-view)/2)".
+  // Plan: "larger -> never reveal more than half the empty gap (off limited to +/-(scaled-view)/2)".
   // 400x400 src at zoom 1.0 in a 200x200 view: scaled=400, bound=(400-200)/2=100.
   bound := (400 * 1.0 - 200) / 2;   // 100
 
@@ -205,7 +205,7 @@ var
   src, outp: TBGRABitmap;
   px: TBGRAPixel;
 begin
-  // Plan: "小图应用灰度后每像素 r=g=b"; a pure blue -> a mid-grey (r=g=b,
+  // Plan: "after grayscale every pixel has r=g=b on a small image"; a pure blue -> a mid-grey (r=g=b,
   // not pinned to 0 or 255).
   src := TBGRABitmap.Create(4, 4, BGRA(0, 0, 255, 255));
   try
@@ -229,7 +229,7 @@ var
   src, outp: TBGRABitmap;
   px: TBGRAPixel;
 begin
-  // Plan: "反相后 r'=255-r" (and g'/b' likewise).
+  // Plan: "after invert r'=255-r" (and g'/b' likewise).
   src := TBGRABitmap.Create(4, 4, BGRA(10, 20, 30, 255));
   try
     outp := TyImageViewApplyFilters(src, False, 0, False, {invert}True, clNone, 0);
@@ -252,7 +252,7 @@ var
   px: TBGRAPixel;
   tint: TColor;
 begin
-  // Plan: "tint amount=100 全覆盖成 tint 色" -- every pixel becomes the tint.
+  // Plan: "tint amount=100 fully covers with the tint colour" -- every pixel becomes the tint.
   tint := RGBToColor(200, 50, 100);
   src := TBGRABitmap.Create(4, 4, BGRA(10, 20, 30, 255));
   try
@@ -276,7 +276,7 @@ var
   x, y: Integer;
   sp, op: TBGRAPixel;
 begin
-  // Plan: "全关 -> 返回 ASource 的副本" AND "ASource 不变" (non-destructive).
+  // Plan: "all off -> return a copy of ASource" AND "ASource unchanged" (non-destructive).
   // Distinct per-pixel colours so an accidental fill/mutation would be caught.
   src := TBGRABitmap.Create(4, 4);
   for y := 0 to 3 do
@@ -320,8 +320,8 @@ const
   FromV = 100.0;
   ToV = 300.0;
 begin
-  // Plan: "TyAnimatorInit + 手动 Advance(半程) -> TyLerpF(from,to,eased) 在
-  // (from,to) 之间; Advance 到时长后 Running=False 且值=to."
+  // Plan: "TyAnimatorInit + manual Advance(halfway) -> TyLerpF(from,to,eased) lies
+  // between (from,to); after Advance reaches the duration Running=False and value=to."
   a := TyAnimatorInit(200, teEaseOutCubic);
 
   a.Advance(100);                     // half the 200ms duration

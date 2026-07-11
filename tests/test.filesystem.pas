@@ -2,7 +2,7 @@ unit test.filesystem;
 { Phase 7 batch 1 — headless tests for the PURE tyControls.FileSystem unit.
 
   Written from the SPEC CONTRACT ONLY (docs/superpowers/specs/2026-07-11-phase7-
-  shell-filedialogs-design.md, section "底座 —— tyControls.FileSystem.pas" + its
+  shell-filedialogs-design.md, section "Foundation —— tyControls.FileSystem.pas" + its
   9-item edge-case checklist). The implementation is being written independently by
   another agent and is deliberately NOT consulted, so nothing here can ratify an
   implementation bug.
@@ -29,7 +29,7 @@ type
   private
     FRoot: string;         { the enumerated directory, no trailing delimiter }
     FSubA: string;         { an EMPTY subdirectory — doubles as the empty-dir case }
-    FUnicodeName: string;  { '测试文件.bin', built from code points, UTF-8 bytes }
+    FUnicodeName: string;  { 'test-file.bin' (Chinese name), built from code points, UTF-8 bytes }
     procedure WriteBytes(const AFullName: string; ACount: Integer);
     function IndexOfName(const A: TTyFsEntryArray; const AName: string): Integer;
     function HasName(const A: TTyFsEntryArray; const AName: string): Boolean;
@@ -199,7 +199,7 @@ implementation
 
 const
   DIR_NAME = 'tyfs_test_readdir';
-  { code points for 测 试 文 件 -> UTF-8 via UTF8Encode, then '.bin' appended }
+  { the four Chinese code points -> UTF-8 via UTF8Encode, then '.bin' appended }
   CN_TEST  = UnicodeString(#$6D4B#$8BD5#$6587#$4EF6);
 
 { ===========================================================================

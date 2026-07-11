@@ -1,6 +1,6 @@
 unit test.listview;
 { Headless state-machine tests for TTyListView, written FROM THE CONTRACT
-  (docs/superpowers/plans/2026-07-10-listview-sp1.md, "任务 2 契约") and NOT from
+  (docs/superpowers/plans/2026-07-10-listview-sp1.md, "task 2 contract") and NOT from
   the implementation. No windowing: controls are Create(nil), never parented to a
   shown form, never painted, no Handle touched. Everything asserted here is the
   control's data / sort / selection / virtual-staleness state machine.
@@ -247,7 +247,7 @@ type
   { -----------------------------------------------------------------------
     CHECKBOXES (SP2a) — Checked[] is a DATA property keyed by ITEM index; the
     control caches no check state, reading only through GetItemState in both modes.
-    Written from docs/superpowers/plans/2026-07-10-listview-sp2a.md, section 一.
+    Written from docs/superpowers/plans/2026-07-10-listview-sp2a.md, section 1.
     ----------------------------------------------------------------------- }
   TListViewCheckboxTest = class(TTestCase)
   private
@@ -288,7 +288,7 @@ type
 
   { -----------------------------------------------------------------------
     INLINE RENAME (SP2a) — one test per editor-lifetime rule, named after the rule.
-    Written from docs/superpowers/plans/2026-07-10-listview-sp2a.md, section 二.
+    Written from docs/superpowers/plans/2026-07-10-listview-sp2a.md, section 2.
     ----------------------------------------------------------------------- }
   { -----------------------------------------------------------------------
     INTERACTION WIRING — the gestures the contract describes, driven for real.
@@ -352,7 +352,7 @@ type
 
   { -----------------------------------------------------------------------
     GROUPED VIEW (SP2b) — written FROM THE CONTRACT
-    (docs/superpowers/plans/2026-07-10-listview-sp2b.md, "任务 2 契约") and NOT from
+    (docs/superpowers/plans/2026-07-10-listview-sp2b.md, "task 2 contract") and NOT from
     the implementation. Pins the ten grouped-mode invariants.
 
     The load-bearing idea, straight from the contract: enabling grouping only bends the

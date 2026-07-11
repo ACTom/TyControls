@@ -16,7 +16,8 @@ unit test.shelllistview;
   GetItemImageIndex / GetItemGroup / CommitEdit) and the inherited display<->item
   index seams (DisplayToItem / ItemToDisplay) are reached through a
   TTyShellListViewAccess subclass declared in this unit — exactly the mechanism
-  the plan prescribes ("用 TTyShellListViewAccess 子类暴露 protected").
+  the plan prescribes ("expose the protected members via a TTyShellListViewAccess
+  subclass").
 
   Every filesystem touch goes through the LazFileUtils *UTF8 wrappers so the tree
   behaves the same on every platform. }
