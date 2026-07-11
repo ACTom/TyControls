@@ -613,59 +613,69 @@ begin
   // gen-icons.ps1 drift-guard parses EVERY RegisterComponents('TyControls...', [...]) group and
   // requires each registered class to have a generated icon — a new control must land in one of
   // these groups (and get its icon + $classes/CClasses entry), never a standalone unlisted class.
-  // Standard: everyday inputs, labels, panels.
+  // === Palette groups, organised by control TYPE (same class set as before) ===
+  // Core (non-visual).
   RegisterComponents('TyControls',
-    [TTyButton, TTyLabel, TTyHtmlLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
-     TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit, TTyTrackEdit,
-     TTyCalculator, TTyCalcEdit, TTyCalcCurrencyEdit,
-     TTyMemo, TTyCheckBox, TTyRadioButton,
-     TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox, TTyAdvancedComboBox,
+    [TTyStyleController, TTyNativeStyler]);
+  // Buttons.
+  RegisterComponents('TyControls Buttons',
+    [TTyButton, TTyGlyphButton, TTyGlyphContainerButton, TTySpeedButton,
+     TTyDropDownButton, TTyMenuButton, TTyColorButton, TTyButtonGroup]);
+  // Labels.
+  RegisterComponents('TyControls Labels',
+    [TTyLabel, TTyHtmlLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel]);
+  // Text edits: single/multi-line, formatted, calculator, spin.
+  RegisterComponents('TyControls Edits',
+    [TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit,
+     TTyTrackEdit, TTyCalcEdit, TTyCalcCurrencyEdit, TTyCalculator,
+     TTyMemo, TTySpinEdit, TTyUpDown]);
+  // Checks / radios / switches + their groups.
+  RegisterComponents('TyControls Choices',
+    [TTyCheckBox, TTyRadioButton, TTyToggleSwitch, TTyRadioGroup, TTyCheckGroup]);
+  // Combo boxes & list boxes.
+  RegisterComponents('TyControls Lists',
+    [TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox, TTyAdvancedComboBox,
      TTyCheckComboBox,
-     TTyListBox, TTyCheckListBox, TTyOfficeListBox, TTyAdvancedListBox, TTyValueListEditor,
-     TTySpinEdit, TTyUpDown, TTyToggleSwitch, TTyTrackBar, TTyProgressBar, TTyScrollBar,
-     TTyPanel, TTyGroupBox, TTyStyleController]);
-  // Rich pickers: colour / font / value selectors (Phase 4 B/C/E).
+     TTyListBox, TTyCheckListBox, TTyOfficeListBox, TTyAdvancedListBox, TTyValueListEditor]);
+  // Rich pickers: colour / font / filter / shell selectors.
   RegisterComponents('TyControls Pickers',
     [TTyColorBox, TTyColorComboBox, TTyColorListBox, TTyColorGrid, TTyLColorPicker,
      TTyHSColorPicker, TTyFontComboBox, TTyFontListBox, TTyFontSizeComboBox,
      TTyFilterComboBox, TTyShellComboBox]);
-  // Command / specialized buttons.
-  RegisterComponents('TyControls Buttons',
-    [TTyGlyphButton, TTyGlyphContainerButton, TTySpeedButton,
-     TTyDropDownButton, TTyMenuButton, TTyColorButton, TTyButtonGroup]);
   // Instruments & indicators.
   RegisterComponents('TyControls Gauges',
     [TTyGauge, TTyMeter, TTyLevelMeter, TTyDial, TTyGearDial, TTyAnalogClock,
      TTyCircularProgress, TTyActivityIndicator, TTyActivityBar, TTyGearActivityIndicator,
      TTySparkline, TTyRating]);
-  // Layout, tabs, bars, complex views.
+  // Bars: sliders / progress / scroll / status / tool bars + header.
+  RegisterComponents('TyControls Bars',
+    [TTyTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar,
+     TTyToolBar, TTyToolSeparator, TTyToolBarEx, TTyControlBar, TTyCoolBar, TTyHeaderControl]);
+  // Containers & layout.
   RegisterComponents('TyControls Containers',
-    [TTyPageControl, TTyTabSheet, TTyTabSet, TTySplitter,
-     TTyStatusBar, TTyToolBar, TTyToolSeparator, TTyTitleBar,
-     TTyMenuBar, TTyPopupMenu, TTyImagesMenu, TTyMenuEx, TTyCalendar, TTyDateTimePicker, TTyTreeView,
-     TTyBevel, TTyDivider, TTyPaintPanel, TTySizeBox,
-     TTyRadioGroup, TTyCheckGroup, TTyToolGroupPanel,
-     TTyScrollBox, TTyScrollPanel, TTyExPanel,
-     TTyGridPanel, TTyRelativePanel,
-     TTyToolBarEx, TTyControlBar, TTyCoolBar,
-     TTyHeaderControl, TTyListGroupPanel, TTyListView, TTyShellListView,
-     TTyShellTreeView, TTyPreviewBox, TTyImageView]);
-  // Decorative vector primitives for diagrams (theme-driven fill/border, no new tokens).
-  RegisterComponents('TyControls Shapes',
-    [TTyShape, TTyStarShape, TTyArrow]);
-  // Charts.
-  RegisterComponents('TyControls Charts',
-    [TTyChart]);
+    [TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel, TTySizeBox,
+     TTyScrollBox, TTyScrollPanel, TTyExPanel, TTyGridPanel, TTyRelativePanel,
+     TTyToolGroupPanel, TTyListGroupPanel,
+     TTyPageControl, TTyTabSheet, TTyTabSet, TTyTitleBar]);
+  // Data views + shell/file views + date/time.
+  RegisterComponents('TyControls Data Views',
+    [TTyTreeView, TTyListView, TTyShellListView, TTyShellTreeView, TTyPreviewBox, TTyImageView,
+     TTyCalendar, TTyDateTimePicker]);
+  // Menus.
+  RegisterComponents('TyControls Menus',
+    [TTyMenuBar, TTyPopupMenu, TTyImagesMenu, TTyMenuEx]);
   // Office-style ribbon parts.
   RegisterComponents('TyControls Ribbon',
     [TTyRibbon, TTyRibbonPage, TTyRibbonGroup, TTyRibbonAppMenu,
      TTyRibbonQuickAccess, TTyRibbonGallery, TTyRibbonBackstage]);
-  // Icon-font, images, hints, styler.
+  // Icon-font, images, hints.
   RegisterComponents('TyControls Images',
     [TTyIconFont, TTyCharImage, TTyGlyphImageList, TTyImage,
-     TTyImageCollection, TTyVirtualImageList,
-     TTyHint, TTyBalloonHint, TTyNativeStyler]);
-  // Dialogs palette group. TTyMessage (S1) + the S2 input-family components.
+     TTyImageCollection, TTyVirtualImageList, TTyHint, TTyBalloonHint]);
+  // Decorative vector shapes + charts.
+  RegisterComponents('TyControls Shapes & Charts',
+    [TTyShape, TTyStarShape, TTyArrow, TTyChart]);
+  // Dialogs: message / input family / pickers / find-replace / progress / about / file.
   RegisterComponents('TyControls Dialogs',
     [TTyMessage, TTyInputDialog, TTyPasswordDialog, TTyTextDialog,
      TTySelectValueDialog, TTySelectPathDialog,
