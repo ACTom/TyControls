@@ -1,12 +1,12 @@
 unit umain;
 
-{ TTyGauge 示例:一个小仪表盘。
-  - 弧形仪表(gsArc,速度表样式)
-  - 环形进度(gsRing)
-  - 线性横条(gsLinearH)与竖条(gsLinearV)
-  一个 TTimer 周期性改变各仪表的 Value,展示数值缓动动画。
-  主窗体为 TTyForm + TTyTitleBar;纯代码创建 UI(无 .lfm),
-  主题通过全局 TyDefaultController 加载。 }
+{ TTyGauge demo: a small instrument panel.
+  - arc gauge (gsArc, speedometer style)
+  - ring progress (gsRing)
+  - horizontal bar (gsLinearH) and vertical bar (gsLinearV)
+  A TTimer periodically changes each gauge's Value to show the value-easing animation.
+  The main form is a TTyForm + TTyTitleBar; the UI is built purely in code (no .lfm),
+  and the theme is loaded via the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -54,7 +54,7 @@ implementation
 
 uses Math;
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录 }
+{ Search upward from the exe's directory for the repo's themes/ folder }
 function ThemesDir: string;
 var Dir: string; i: Integer;
 begin
@@ -86,7 +86,7 @@ begin
   Bar.Height := 34;
   Bar.Caption := 'Gauge  · TyControls';
 
-  // 弧形仪表(速度表)
+  // Arc gauge (speedometer)
   LblArc := TTyLabel.Create(Self);
   LblArc.Parent := Self;
   LblArc.SetBounds(24, 46, 160, 20);
@@ -99,7 +99,7 @@ begin
   FArc.ValueFormat := '%.0f%%';
   FArc.Value := 62;
 
-  // 环形进度
+  // Ring progress
   LblRing := TTyLabel.Create(Self);
   LblRing.Parent := Self;
   LblRing.SetBounds(210, 46, 160, 20);
@@ -113,7 +113,7 @@ begin
   FRing.ValueFormat := '%.0f';
   FRing.Value := 35;
 
-  // 环形进度(TTyCircularProgress,复用仪表主题)
+  // Ring progress (TTyCircularProgress, reuses the gauge theme)
   LblCirc := TTyLabel.Create(Self);
   LblCirc.Parent := Self;
   LblCirc.SetBounds(392, 46, 140, 20);
@@ -125,18 +125,18 @@ begin
   FCirc.Thickness := 12;
   FCirc.Position := 68;
 
-  // 忙碌指示器(不确定态,自转)
+  // Busy indicator (indeterminate, self-spinning)
   FSpin := TTyActivityIndicator.Create(Self);
   FSpin.Parent := Self;
   FSpin.SetBounds(430, 196, 40, 40);
   FSpin.Thickness := 5;
 
-  // 齿轮忙碌指示器(ActivityIndicator 的机械变体),挨着旋转弧
+  // Gear busy indicator (mechanical variant of ActivityIndicator), next to the spinning arc
   FGearSpin := TTyGearActivityIndicator.Create(Self);
   FGearSpin.Parent := Self;
   FGearSpin.SetBounds(480, 196, 40, 40);
 
-  // 线性横 / 竖条
+  // Linear horizontal / vertical bars
   LblBars := TTyLabel.Create(Self);
   LblBars.Parent := Self;
   LblBars.SetBounds(24, 244, 200, 20);
@@ -150,7 +150,7 @@ begin
   FBarH.ShowValue := False;
   FBarH.Value := 62;
 
-  // 不确定态线性进度(marching band,自行连续行进,无需定时改值)
+  // Indeterminate linear progress (marching band, animates continuously on its own, no timed value changes needed)
   LblBusy := TTyLabel.Create(Self);
   LblBusy.Parent := Self;
   LblBusy.SetBounds(24, 306, 320, 20);
@@ -160,7 +160,7 @@ begin
   FBusy.Parent := Self;
   FBusy.SetBounds(24, 330, 300, 8);
 
-  // 独立上/下微调按钮对(按住连发),绑定到右边标签显示当前值
+  // Standalone up/down spin button pair (auto-repeat on hold), bound to the label on the right to show the current value
   FUpDown := TTyUpDown.Create(Self);
   FUpDown.Parent := Self;
   FUpDown.SetBounds(24, 348, 22, 34);
@@ -174,7 +174,7 @@ begin
   FUpDownLbl.SetBounds(54, 356, 260, 20);
   FUpDownLbl.Caption := '微调(TTyUpDown) = 5';
 
-  // 模拟指针仪表
+  // Analog needle meter
   FMeter := TTyMeter.Create(Self);
   FMeter.Parent := Self;
   FMeter.SetBounds(348, 232, 180, 140);
@@ -183,7 +183,7 @@ begin
   FMeter.Ticks := 12;
   FMeter.Value := 88;
 
-  // 底部一行:电平条 / 旋钮 / 时钟
+  // Bottom row: level meter / dial / clock
   FLevel := TTyLevelMeter.Create(Self);
   FLevel.Parent := Self;
   FLevel.SetBounds(24, 396, 300, 26);
@@ -205,7 +205,7 @@ begin
   FClock.SetBounds(436, 388, 90, 90);
   FClock.Running := True;
 
-  // 再一行:趋势图 / 评分 / 齿轮旋钮
+  // Another row: sparkline / rating / gear dial
   FSpark := TTySparkline.Create(Self);
   FSpark.Parent := Self;
   FSpark.SetBounds(24, 500, 220, 40);
@@ -229,7 +229,7 @@ begin
   FStatus.SetBounds(24, 596, 460, 20);
   FStatus.Caption := '每 1.2s 随机改变数值(旋钮 / 齿轮可拖动 / 滚轮,星星可点),观察缓动动画。';
 
-  // 定时改值,演示缓动
+  // Change values on a timer to demonstrate easing
   FTimer := TTimer.Create(Self);
   FTimer.Interval := 1200;
   FTimer.OnTimer := @Tick;
@@ -242,7 +242,7 @@ procedure TMainForm.Tick(Sender: TObject);
 var a, r, b: Double;
 begin
   Inc(FTick);
-  // 平滑的伪随机值(用三个不同周期的正弦)
+  // Smooth pseudo-random values (three sines with different periods)
   a := 50 + 45 * Sin(FTick * 0.7);
   r := 50 + 45 * Sin(FTick * 0.41 + 1.3);
   b := 50 + 45 * Sin(FTick * 0.9 + 2.1);

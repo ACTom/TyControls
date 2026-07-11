@@ -1,13 +1,18 @@
 unit umain;
 
-{ Ribbon 综合示例 = 一个 MSO 风格的多标签纯文本编辑器,用来真实检验 Ribbon 组件的完成度。
-  标题栏(QAT:保存/撤销/重做)→ Ribbon(文件标签开 backstage;开始/插入/视图 三个标签,分组 +
-  命令按钮/下拉/颜色/分段/画廊)→ 多文档标签区(每个文档一个 TTyMemo)→ 状态栏。
-  文件的 新建/打开/保存/另存为/关闭/最近文件 走真实磁盘读写;剪切/复制/粘贴/撤销/重做/全选/查找
-  接到当前文档;其余(格式刷、B/I/U、对齐、表格、符号…)做占位但界面完整。纯代码创建(无 .lfm)。
+{ Ribbon showcase = an MSO-style multi-tab plain-text editor, used to genuinely stress-test
+  how complete the Ribbon components are.
+  Title bar (QAT: save/undo/redo) -> Ribbon (File tab opens the backstage; Home/Insert/View
+  three tabs, with groups + command buttons/drop-downs/color/segmented/gallery) -> multi-document
+  tab area (one TTyMemo per document) -> status bar.
+  File New/Open/Save/Save As/Close/Recent do real on-disk reads and writes; Cut/Copy/Paste/
+  Undo/Redo/Select All/Find act on the current document; everything else (format painter,
+  B/I/U, alignment, table, symbol...) is a placeholder but the UI is complete. Built entirely
+  in code (no .lfm).
 
-  ⚠ LCL 布局坑:同为 alTop 的兄弟控件,后添加的排到顶——所以先建 Ribbon(在下)、标题栏最后建
-  (在上);分组也从右往左加。见记忆 lcl-code-created-align-order。 }
+  WARNING LCL layout pitfall: among sibling controls that are all alTop, the last-added one
+  goes on top -- so the Ribbon is built first (below) and the title bar last (on top);
+  groups are likewise added right-to-left. See memory lcl-code-created-align-order. }
 
 {$mode objfpc}{$H+}
 
@@ -204,15 +209,15 @@ var
   alignGrp: TTyButtonGroup;
   i: Integer;
 begin
-  // Groups are added RIGHT-to-LEFT so they flow 剪贴板 | 字体 | 段落 | 编辑 left->right.
+  // Groups are added RIGHT-to-LEFT so they flow Clipboard | Font | Paragraph | Editing left->right.
 
-  // 编辑
+  // Editing
   g := NewGroup(APage, '编辑', 96, False);
   Small(g, '查找', 'find', 6, 4, 88, @DoFind);
   Small(g, '替换', 'replace', 6, 30, 88, @DoReplace);
   Small(g, '全选', 'selectall', 6, 56, 88, @DoSelectAll);
 
-  // 段落
+  // Paragraph
   g := NewGroup(APage, '段落', 150, True);
   alignGrp := TTyButtonGroup.Create(Self);
   alignGrp.Parent := g;
@@ -223,7 +228,7 @@ begin
   Small(g, '项目符号', 'bullets', 6, 40, 66, @DoNoop);
   Small(g, '编号', 'number', 76, 40, 66, @DoNoop);
 
-  // 字体
+  // Font
   g := NewGroup(APage, '字体', 240, True);
   fontc := TTyComboBox.Create(Self);
   fontc.Parent := g;
@@ -249,7 +254,7 @@ begin
   col.SelectedColor := FFontColor;
   col.OnColorChange := @DoFontColor;
 
-  // 剪贴板 (with a dialog launcher, like Word)
+  // Clipboard (with a dialog launcher, like Word)
   g := NewGroup(APage, '剪贴板', 150, True);
   Big(g, '粘贴', 'paste', 6, 56, @DoPaste);
   Small(g, '剪切', 'cut', 66, 4, 78, @DoCut);
@@ -263,12 +268,12 @@ var
   gal: TTyRibbonGallery;
   dd: TTyDropDownButton;
 begin
-  // 符号
+  // Symbol
   g := NewGroup(APage, '符号', 130, False);
   Small(g, '符号', 'symbol', 6, 4, 116, @DoNoop);
   Small(g, '日期时间', 'datetime', 6, 30, 116, @DoInsertDate);
 
-  // 插图 (a styles gallery + 图片)
+  // Illustrations (a styles gallery + picture)
   g := NewGroup(APage, '样式库', 230, False);
   gal := TTyRibbonGallery.Create(Self);
   gal.Parent := g;
@@ -277,7 +282,7 @@ begin
   gal.Items.Add('样式 4'); gal.Items.Add('样式 5'); gal.Items.Add('样式 6');
   gal.ItemIndex := 0;
 
-  // 表格 (a drop-down button)
+  // Table (a drop-down button)
   g := NewGroup(APage, '表格', 90, False);
   dd := TTyDropDownButton.Create(Self);
   dd.Parent := g;
@@ -290,18 +295,18 @@ var
   g: TTyRibbonGroup;
   wrap, statusbar, ctx: TTyCheckBox;
 begin
-  // 窗口
+  // Window
   g := NewGroup(APage, '窗口', 110, False);
   Small(g, '新建窗口', 'newwindow', 6, 4, 98, @DoNoop);
   Small(g, '并排', 'arrange', 6, 30, 98, @DoNoop);
 
-  // 缩放
+  // Zoom
   g := NewGroup(APage, '缩放', 130, False);
   Small(g, '放大', 'zoomin', 6, 4, 60, @DoNoop);
   Small(g, '缩小', 'zoomout', 68, 4, 60, @DoNoop);
   Small(g, '100%', 'zoom100', 6, 30, 122, @DoNoop);
 
-  // 显示
+  // View options
   g := NewGroup(APage, '显示', 140, False);
   wrap := TTyCheckBox.Create(Self);
   wrap.Parent := g; wrap.SetBounds(6, 6, 128, 22);
@@ -430,7 +435,7 @@ end;
 
 // Build the backstage content: ONE panel per command (parented to the backstage, over
 // the content area right of the sidebar). The sidebar navigates; ShowBsPage swaps which
-// panel is visible. Demonstrates the "每命令一个内容页" model (a PageControl would work
+// panel is visible. Demonstrates the "one content page per command" model (a PageControl would work
 // too, but panels avoid a redundant tab header since the sidebar is the navigation).
 procedure TMainForm.BuildBackstageContent;
   function NewPage(const ATitle: string): TTyPanel;
@@ -446,13 +451,13 @@ procedure TMainForm.BuildBackstageContent;
   end;
 var i: Integer;
 begin
-  // 信息
+  // Info
   FPgInfo := NewPage('信息');
   FBsInfoLbl := TTyLabel.Create(Self);
   FBsInfoLbl.Parent := FPgInfo;
   FBsInfoLbl.SetBounds(28, 68, 520, 140);
 
-  // 新建 — a "空白文档" template button (placeholder for a template gallery)
+  // New -- a "blank document" template button (placeholder for a template gallery)
   FPgNew := NewPage('新建');
   FBsNewBlank := TTyGlyphButton.Create(Self);
   FBsNewBlank.Parent := FPgNew;
@@ -462,7 +467,7 @@ begin
   FBsNewBlank.ImageName := 'new';
   FBsNewBlank.OnClick := @DoNew;
 
-  // 打开 — 浏览 + recent-file rows
+  // Open -- Browse + recent-file rows
   FPgOpen := NewPage('打开');
   FBsBrowse := TTyGlyphButton.Create(Self);
   FBsBrowse.Parent := FPgOpen;
@@ -484,7 +489,7 @@ begin
     FBsRecent[i].Visible := False;
   end;
 
-  // 关于
+  // About
   FPgAbout := NewPage('关于');
   FBsAboutLbl := TTyLabel.Create(Self);
   FBsAboutLbl.Parent := FPgAbout;
@@ -495,7 +500,7 @@ begin
     '基于 ty-controls(BGRABitmap + .tycss 主题)'#10 +
     '跨平台矢量图标 · 主题化 ScreenTips · 内置主题切换';
 
-  // 选项 (placeholder)
+  // Options (placeholder)
   FPgOptions := NewPage('选项');
 end;
 
@@ -737,15 +742,15 @@ begin
   if AIndex < 0 then Exit;
   // Content-page commands stay open + show their panel; action commands act + close.
   case AIndex of
-    0: begin RefreshInfoPage; ShowBsPage(FPgInfo); end;                // 信息
-    1: ShowBsPage(FPgNew);                                             // 新建
-    2: begin RefreshOpenPage; ShowBsPage(FPgOpen); end;                // 打开
-    3: begin HideBsContent; DoSave(Sender);     FBackstage.Close; end; // 保存
-    4: begin HideBsContent; DoSaveAs(Sender);   FBackstage.Close; end; // 另存为
-    5: begin HideBsContent; DoCloseDoc(Sender); FBackstage.Close; end; // 关闭
-    6: ShowBsPage(FPgAbout);                                           // 关于
-    7: ShowBsPage(FPgOptions);                                         // 选项
-    8: begin FBackstage.Close; Close; end;                             // 退出
+    0: begin RefreshInfoPage; ShowBsPage(FPgInfo); end;                // Info
+    1: ShowBsPage(FPgNew);                                             // New
+    2: begin RefreshOpenPage; ShowBsPage(FPgOpen); end;                // Open
+    3: begin HideBsContent; DoSave(Sender);     FBackstage.Close; end; // Save
+    4: begin HideBsContent; DoSaveAs(Sender);   FBackstage.Close; end; // Save As
+    5: begin HideBsContent; DoCloseDoc(Sender); FBackstage.Close; end; // Close
+    6: ShowBsPage(FPgAbout);                                           // About
+    7: ShowBsPage(FPgOptions);                                         // Options
+    8: begin FBackstage.Close; Close; end;                             // Exit
   end;
 end;
 
@@ -803,7 +808,7 @@ begin
   FBackstage.Images := FImgColl;
   FBackstage.OnCommandSelect := @BackstageSelect;
   FBackstage.OnClose := @BackstageClosed;
-  FBackstage.DefaultItemIndex := 0;   // open on 信息 with its content shown (Office-like)
+  FBackstage.DefaultItemIndex := 0;   // open on Info with its content shown (Office-like)
   RebuildBackstage;
   BuildBackstageContent;
 
@@ -845,7 +850,7 @@ begin
   Bar.Height := CTitleH;
   Bar.Caption := '';   // QAT + skin switcher live on the left; keep the bar uncluttered
 
-  // Icon-only Quick Access Toolbar (like Office): 新建 / 打开 / 保存 / 撤销 / 重做.
+  // Icon-only Quick Access Toolbar (like Office): New / Open / Save / Undo / Redo.
   QAT := TTyRibbonQuickAccess.Create(Self);
   QAT.Parent := Bar;
   QAT.SetBounds(8, 4, 152, 26);

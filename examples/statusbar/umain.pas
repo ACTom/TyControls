@@ -1,12 +1,12 @@
 unit umain;
 
-{ TTyStatusBar 示例:
-  - 底部状态栏(Align=alBottom),多面板 Panels(每个面板 Text/Width/Alignment)
-  - 宽度 <=0 的面板自动填满剩余空间(fill 面板)
-  - SizeGrip 右下角尺寸手柄
-  - SimplePanel/SimpleText:切换到单一整条文本模式
-  - 点击按钮更新面板文本(多面板模式)或整条文本(简单模式)
-  纯代码创建 UI(无 .lfm),主体为 TTyForm + TTyTitleBar,主题经全局 TyDefaultController 加载。 }
+{ TTyStatusBar demo:
+  - Bottom status bar (Align=alBottom) with multiple Panels (each panel has Text/Width/Alignment)
+  - A panel with Width <=0 auto-fills the remaining space (fill panel)
+  - SizeGrip -- bottom-right resize handle
+  - SimplePanel/SimpleText: switch to a single full-width text mode
+  - Clicking a button updates a panel's text (multi-panel mode) or the whole-bar text (simple mode)
+  UI built entirely in code (no .lfm); the shell is TTyForm + TTyTitleBar, themed via the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -22,8 +22,8 @@ type
   private
     FBar: TTyStatusBar;
     FClicks: Integer;
-    procedure UpdatePanel(Sender: TObject);       // 更新左侧面板文本
-    procedure ToggleSimple(Sender: TObject);      // 切换 SimplePanel 模式
+    procedure UpdatePanel(Sender: TObject);       // update the left panel's text
+    procedure ToggleSimple(Sender: TObject);      // toggle SimplePanel mode
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -33,7 +33,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录(兼容 lib/<cpu>-<os>/ 与 .app 包) }
+{ Walk up from the exe's directory to find the repo's themes/ folder (handles lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -57,48 +57,48 @@ var
   BtnUpdate, BtnSimple: TTyButton;
   P: TTyStatusPanel;
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm:无边框 + 常驻引擎
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + resident engine
   Caption := 'TTyStatusBar 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 520, 320);
 
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // load the theme first
 
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> 自动关联为 TTyForm.TitleBar
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> auto-associated as TTyForm.TitleBar
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := 'TTyStatusBar  · TyControls';
 
-  // 说明标签
+  // description label
   HintLbl := TTyLabel.Create(Self);
   HintLbl.Parent := Self;
   HintLbl.SetBounds(24, 56, 472, 24);
   HintLbl.Caption := '底部状态栏:多面板 + 尺寸手柄。点击按钮更新面板文本。';
 
-  // 底部状态栏 —— 三个固定面板 + 一个自动填满的 fill 面板。
+  // bottom status bar -- three fixed panels + one auto-filling fill panel.
   FBar := TTyStatusBar.Create(Self);
   FBar.Parent := Self;
-  FBar.Align := alBottom;                   // 停靠底部(默认已是 alBottom)
+  FBar.Align := alBottom;                   // dock to the bottom (alBottom is already the default)
   FBar.Height := 24;
-  FBar.SizeGrip := True;                     // 右下角尺寸手柄
+  FBar.SizeGrip := True;                     // bottom-right resize handle
 
-  P := FBar.Panels.Add;                      // 面板 0:状态(fill,Width<=0 撑满剩余)
+  P := FBar.Panels.Add;                      // panel 0: status (fill; Width<=0 stretches over the remaining space)
   P.Text := '就绪';
-  P.Width := 0;                              // 填充面板
+  P.Width := 0;                              // fill panel
   P.Alignment := taLeftJustify;
 
-  P := FBar.Panels.Add;                      // 面板 1:点击计数(居中,固定宽)
+  P := FBar.Panels.Add;                      // panel 1: click count (centered, fixed width)
   P.Text := '点击:0';
   P.Width := 110;
   P.Alignment := taCenter;
 
-  P := FBar.Panels.Add;                      // 面板 2:右对齐提示(固定宽)
+  P := FBar.Panels.Add;                      // panel 2: right-aligned label (fixed width)
   P.Text := 'TyControls';
   P.Width := 110;
   P.Alignment := taRightJustify;
 
-  // 操作按钮
+  // action buttons
   BtnUpdate := TTyButton.Create(Self);
   BtnUpdate.Parent := Self;
   BtnUpdate.SetBounds(24, 100, 200, 34);
@@ -112,18 +112,18 @@ begin
   BtnSimple.Caption := '切换 SimplePanel 模式';
   BtnSimple.OnClick := @ToggleSimple;
 
-  ApplyChromeTheme(TyDefaultController);   // 最后统一主题化窗体外壳与背景
+  ApplyChromeTheme(TyDefaultController);   // finally, theme the form shell and background together
 end;
 
 procedure TMainForm.UpdatePanel(Sender: TObject);
 begin
   Inc(FClicks);
   if FBar.SimplePanel then
-    // 简单模式:更新整条文本(SetSimpleText 会触发重绘)
+    // simple mode: update the whole-bar text (SetSimpleText triggers a repaint)
     FBar.SimpleText := Format('SimplePanel 模式 · 已点击 %d 次', [FClicks])
   else
   begin
-    // 多面板模式:分别更新填充面板与计数面板
+    // multi-panel mode: update the fill panel and the count panel separately
     FBar.Panels[0].Text := Format('已更新 · %s', [FormatDateTime('hh:nn:ss', Now)]);
     FBar.Panels[1].Text := Format('点击:%d', [FClicks]);
   end;
@@ -131,7 +131,7 @@ end;
 
 procedure TMainForm.ToggleSimple(Sender: TObject);
 begin
-  FBar.SimplePanel := not FBar.SimplePanel;   // 在多面板 / 整条文本之间切换
+  FBar.SimplePanel := not FBar.SimplePanel;   // switch between multi-panel and whole-bar text
   if FBar.SimplePanel then
     FBar.SimpleText := 'SimplePanel:单一整条状态文本'
   else

@@ -1,12 +1,12 @@
 unit umain;
 
-{ TTyRadioButton 示例（TTyForm + TitleBar 骨架）：
-  - 两个 TTyGroupBox 容器（标题栏由 GroupBox 顶部预留），各含 3 个 TTyRadioButton
-  - 互斥（UncheckSiblings）按 Parent 分组：同一 GroupBox 内互斥，跨组独立
-  - Checked：每组默认选中一项
-  - OnChange：任一按钮状态变化都刷新底部 TTyLabel 状态读数
-  - 演示一个 Enabled=False 的禁用项
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+{ TTyRadioButton demo (TTyForm + TitleBar skeleton):
+  - Two TTyGroupBox containers (title band reserved at the top of each GroupBox), each holding 3 TTyRadioButtons
+  - Mutual exclusion (UncheckSiblings) is grouped by Parent: exclusive within a GroupBox, independent across groups
+  - Checked: each group has one item selected by default
+  - OnChange: any button state change refreshes the status readout in the bottom TTyLabel
+  - Demonstrates one disabled item (Enabled=False)
+  UI is built purely in code (no .lfm); the theme is loaded via the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -21,9 +21,9 @@ type
   TMainForm = class(TTyForm)
   private
     FStatus: TTyLabel;
-    { 组 A：水果 }
+    { Group A: fruit }
     FFruitApple, FFruitBanana, FFruitMango: TTyRadioButton;
-    { 组 B：颜色 }
+    { Group B: color }
     FColorRed, FColorGreen, FColorBlue: TTyRadioButton;
     procedure RadioChanged(Sender: TObject);
     procedure UpdateStatus;
@@ -37,7 +37,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录（兼容 lib/<cpu>-<os>/ 与 .app 包） }
+{ Walk up from the exe's directory to find the repo's themes/ dir (handles lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -54,8 +54,8 @@ begin
   Result := 'themes' + PathDelim;
 end;
 
-{ 在指定 GroupBox 内创建一个 TTyRadioButton，事件挂到 OnChange。
-  Top 为 GroupBox 客户区坐标（GroupBox 已通过 AdjustClientRect 让出顶部标题带）。 }
+{ Create a TTyRadioButton inside the given GroupBox and hook its OnChange event.
+  Top is in GroupBox client coordinates (the GroupBox already yields the top title band via AdjustClientRect). }
 function AddRadio(AGroup: TTyGroupBox; const ACaption: string; ATop: Integer;
   AHandler: TNotifyEvent): TTyRadioButton;
 begin
@@ -71,39 +71,39 @@ var
   Bar: TTyTitleBar;
   GroupA, GroupB: TTyGroupBox;
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 持久引擎
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + persistent engine
   Caption := 'RadioButton 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 440, 320);
 
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // load the theme first
 
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> 自动关联为 TTyForm.TitleBar
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> auto-associated as TTyForm.TitleBar
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := 'RadioButton  · TyControls';
 
-  { --- 状态标签：先建好，OnChange 首次触发时它必须已存在 ---
-    （AddRadio 挂 OnChange，随后 .Checked := True 会立刻触发 RadioChanged
-     -> UpdateStatus -> FStatus.Caption；FStatus 必须先于任何单选组创建） }
+  { --- Status label: create it first, it must already exist when OnChange first fires ---
+    (AddRadio hooks OnChange, then .Checked := True fires RadioChanged immediately
+     -> UpdateStatus -> FStatus.Caption; FStatus must be created before any radio group) }
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
   FStatus.SetBounds(16, 236, 408, 24);
 
-  { --- 组 A：水果（同一 GroupBox 内互斥，标题左对齐） --- }
+  { --- Group A: fruit (exclusive within this GroupBox, title left-aligned) --- }
   GroupA := TTyGroupBox.Create(Self);
   GroupA.Parent := Self;
   GroupA.SetBounds(16, 52, 190, 168);
   GroupA.Caption := '水果';
   GroupA.Alignment := taLeftJustify;
 
-  FFruitApple  := AddRadio(GroupA, '苹果', 24, @RadioChanged);  // Top>=24 让出 16px 标题带
+  FFruitApple  := AddRadio(GroupA, '苹果', 24, @RadioChanged);  // Top>=24 yields the 16px title band
   FFruitBanana := AddRadio(GroupA, '香蕉', 56, @RadioChanged);
   FFruitMango  := AddRadio(GroupA, '芒果（缺货）', 88, @RadioChanged);
-  FFruitMango.Enabled := False;            // 禁用项：不可选、置灰
+  FFruitMango.Enabled := False;            // disabled item: unselectable, greyed out
 
-  { --- 组 B：颜色（另一个 GroupBox，与组 A 互不影响，标题居中） --- }
+  { --- Group B: color (a separate GroupBox, independent of group A, title centered) --- }
   GroupB := TTyGroupBox.Create(Self);
   GroupB.Parent := Self;
   GroupB.SetBounds(232, 52, 190, 168);
@@ -114,17 +114,17 @@ begin
   FColorGreen := AddRadio(GroupB, '绿色', 56, @RadioChanged);
   FColorBlue  := AddRadio(GroupB, '蓝色', 88, @RadioChanged);
 
-  { 默认选中必须放在所有单选字段创建之后：设 Checked 会立刻触发 OnChange ->
-    RadioChanged -> UpdateStatus，而 UpdateStatus 读取全部 6 个字段——若此时仍有
-    字段为 nil 就会崩溃(启动即 AV，这正是之前没修好的原因)。 }
-  FFruitApple.Checked := True;             // 水果：默认第一项
-  FColorGreen.Checked := True;             // 颜色：默认第二项
-  UpdateStatus;                            // 所有单选建完，刷一次最终读数
+  { Default selection must come after all radio fields are created: setting Checked fires OnChange immediately ->
+    RadioChanged -> UpdateStatus, and UpdateStatus reads all 6 fields -- if any field is still
+    nil at that point it crashes (AV on startup, which is exactly what was previously left unfixed). }
+  FFruitApple.Checked := True;             // fruit: first item by default
+  FColorGreen.Checked := True;             // color: second item by default
+  UpdateStatus;                            // all radios built, refresh the final readout once
 
-  ApplyChromeTheme(TyDefaultController);    // 最后统一给 chrome + 窗体背景上主题
+  ApplyChromeTheme(TyDefaultController);    // finally apply the theme to the chrome + form background in one pass
 end;
 
-{ 返回一组里当前选中项的 Caption }
+{ Return the Caption of the currently selected item in a group }
 function TMainForm.SelectedIn(A, B, C: TTyRadioButton): string;
 begin
   if A.Checked then Result := A.Caption
@@ -142,7 +142,7 @@ end;
 
 procedure TMainForm.RadioChanged(Sender: TObject);
 begin
-  { 任一按钮的 Checked 变化（含被 UncheckSiblings 取消的）都会进来 }
+  { Any button's Checked change (including one cleared by UncheckSiblings) lands here }
   UpdateStatus;
 end;
 

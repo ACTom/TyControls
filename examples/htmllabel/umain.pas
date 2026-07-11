@@ -1,6 +1,6 @@
 unit umain;
 
-{ TTyHtmlLabel 示例 —— 行内 HTML 子集富文本 + 链接。 }
+{ TTyHtmlLabel demo -- inline HTML-subset rich text + links. }
 
 {$mode objfpc}{$H+}
 

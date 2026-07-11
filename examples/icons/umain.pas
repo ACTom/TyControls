@@ -1,10 +1,10 @@
 unit umain;
 
-{ 图标与图像示例:
-  · TTyImage —— 同一张(代码生成的)位图在 拉伸 / 等比 / 居中 三种模式下的表现(开箱即用)。
-  · TTyIconFont + TTyCharImage —— 图标字体结构演示;真正显示字形需把 FontFile 指向一个
-    图标 .ttf(如 FontAwesome)——见下方说明标签。
-  主窗体 TTyForm + TTyTitleBar,纯代码创建(无 .lfm)。 }
+{ Icons & images demo:
+  · TTyImage —— one (code-generated) bitmap shown in Stretch / Proportional / Center modes (works out of the box).
+  · TTyIconFont + TTyCharImage —— icon-font structure demo; to actually see a glyph point FontFile at an
+    icon .ttf (e.g. FontAwesome) —— see the note label below.
+  Main window is a TTyForm + TTyTitleBar, built purely in code (no .lfm). }
 
 {$mode objfpc}{$H+}
 

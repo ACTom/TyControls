@@ -1,11 +1,13 @@
 unit umain;
 
-{ TTyImageView 示例 —— 图片查看器。
+{ TTyImageView demo -- an image viewer.
 
-  「打开图片」用 TTyOpenPictureDialog(右侧带预览)选一张图,加载进 TTyImageView。
-  然后:滚轮以光标为中心缩放、拖拽平移、双击在 适配↔100% 间切换 —— 都带平滑动画;
-  也可以用工具栏按钮缩放。底部一排复选框切非破坏性滤镜(灰度/锐化/反相/模糊),源图不变、
-  只重算显示。缩放百分比实时显示在标题。全程 BGRA、跨平台,不需要任何图片资源(图自己选)。 }
+  "Open image" picks a file with TTyOpenPictureDialog (preview pane on the right) and loads it
+  into TTyImageView. Then: mouse-wheel zoom centered on the cursor, drag to pan, double-click to
+  toggle between fit and 100% -- all smoothly animated; the toolbar buttons zoom too. The row of
+  checkboxes at the bottom toggles non-destructive filters (grayscale/sharpen/invert/blur): the
+  source image is untouched, only the display is recomputed. The zoom percentage is shown live in
+  the caption. Everything is BGRA and cross-platform, needing no image assets (you pick the image). }
 
 {$mode objfpc}{$H+}
 

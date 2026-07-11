@@ -1,7 +1,8 @@
 unit umain;
 
-{ Phase-4 富输入 & 选择器示例。随各控件建成逐步扩充;当前展示 TTyNumericEdit
-  (数值编辑:输入过滤 + 失焦分组格式化 + 限幅)。纯代码创建,主题走全局 TyDefaultController。 }
+{ Phase-4 rich-input & picker demo. Grows as each control lands; currently showcases
+  TTyNumericEdit (numeric editing: input filtering + on-blur grouped formatting + clamping).
+  Built purely in code; themed via the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -66,7 +67,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录 }
+{ Walk up from the exe's directory to locate the repo's themes/ directory }
 function ThemesDir: string;
 var Dir: string; i: Integer;
 begin
@@ -120,7 +121,7 @@ begin
   Bar.Height := 34;
   Bar.Caption := 'Rich Inputs  · TyControls';
 
-  // 整数(无小数、带千分位)
+  // Integer (no decimals, thousands separators)
   L1 := TTyLabel.Create(Self);
   L1.Parent := Self;
   L1.SetBounds(24, 56, 200, 20);
@@ -131,7 +132,7 @@ begin
   FQty.Decimals := 0;
   FQty.Value := 1250;
 
-  // 金额(2 位小数 + 千分位)
+  // Amount (2 decimals + thousands separators)
   L2 := TTyLabel.Create(Self);
   L2.Parent := Self;
   L2.SetBounds(24, 100, 200, 20);
@@ -141,7 +142,7 @@ begin
   FPrice.SetBounds(240, 96, 180, 28);
   FPrice.Value := 1234567.5;
 
-  // 限幅 0..100
+  // Clamp 0..100
   L3 := TTyLabel.Create(Self);
   L3.Parent := Self;
   L3.SetBounds(24, 144, 200, 20);
@@ -154,7 +155,7 @@ begin
   FRanged.Value := 42;
   FRanged.OnChange := @RangedChange;
 
-  // 货币(CurrencyEdit:仅失焦显示态加符号)
+  // Currency (CurrencyEdit: symbol shown only in the on-blur display state)
   L4 := TTyLabel.Create(Self);
   L4.Parent := Self;
   L4.SetBounds(24, 188, 200, 20);
@@ -165,7 +166,7 @@ begin
   FMoney.CurrencySymbol := '¥';
   FMoney.Value := 1234.5;
 
-  // 掩码(MaskEdit:日期,追加式录入 + 自动补 /)
+  // Mask (MaskEdit: date, append-style entry + auto-inserted /)
   L5 := TTyLabel.Create(Self);
   L5.Parent := Self;
   L5.SetBounds(24, 232, 200, 20);
@@ -175,7 +176,7 @@ begin
   FDate.SetBounds(240, 228, 180, 28);
   FDate.Mask := '##/##/####';
 
-  // URL(URLEdit:尾部 → 按钮用默认浏览器打开)
+  // URL (URLEdit: trailing → button opens it in the default browser)
   L6 := TTyLabel.Create(Self);
   L6.Parent := Self;
   L6.SetBounds(24, 276, 200, 20);
@@ -185,7 +186,7 @@ begin
   FUrl.SetBounds(240, 272, 180, 28);
   FUrl.Text := 'https://github.com/ACTom/TyControls';
 
-  // 下拉(ComboEdit:点按钮触发 OnDropDown,弹什么由你决定)
+  // Dropdown (ComboEdit: clicking the button fires OnDropDown; you decide what pops up)
   L7 := TTyLabel.Create(Self);
   L7.Parent := Self;
   L7.SetBounds(24, 320, 200, 20);
@@ -195,7 +196,7 @@ begin
   FCombo.SetBounds(240, 316, 180, 28);
   FCombo.OnDropDown := @ComboDrop;
 
-  // 数值 + 内嵌滑块(TrackEdit:拖滑块或直接键入)
+  // Value + inline slider (TrackEdit: drag the thumb or type directly)
   L8 := TTyLabel.Create(Self);
   L8.Parent := Self;
   L8.SetBounds(24, 364, 200, 20);
@@ -207,7 +208,7 @@ begin
   FTrack.MaxValue := 255;
   FTrack.Value := 128;
 
-  // 颜色组合框(ColorBox:字段/下拉每项都带色块)
+  // Color combo (ColorBox: the field and every dropdown item carry a swatch)
   L9 := TTyLabel.Create(Self);
   L9.Parent := Self;
   L9.SetBounds(24, 408, 200, 20);
@@ -216,7 +217,7 @@ begin
   FColor.Parent := Self;
   FColor.SetBounds(240, 404, 180, 28);
 
-  // 字体组合框(FontComboBox:每项用自己的字体画)
+  // Font combo (FontComboBox: each item is drawn in its own font)
   L10 := TTyLabel.Create(Self);
   L10.Parent := Self;
   L10.SetBounds(24, 452, 200, 20);
@@ -225,13 +226,13 @@ begin
   FFont.Parent := Self;
   FFont.SetBounds(240, 448, 128, 28);
 
-  // 字号(FontSizeComboBox:可编辑,预设 + 手输),紧挨字体框
+  // Font size (FontSizeComboBox: editable, presets + free entry), right next to the font combo
   FSize := TTyFontSizeComboBox.Create(Self);
   FSize.Parent := Self;
   FSize.SetBounds(372, 448, 48, 28);
   FSize.FontSize := 14;
 
-  // 颜色列表(ColorListBox:右侧常驻列表,每行色块+名)
+  // Color list (ColorListBox: persistent list on the right, each row a swatch + name)
   L11 := TTyLabel.Create(Self);
   L11.Parent := Self;
   L11.SetBounds(440, 52, 190, 20);
@@ -240,7 +241,7 @@ begin
   FColorList.Parent := Self;
   FColorList.SetBounds(440, 76, 180, 296);
 
-  // 字体列表(FontListBox:右侧,每行用自己的字体画)
+  // Font list (FontListBox: on the right, each row drawn in its own font)
   L12 := TTyLabel.Create(Self);
   L12.Parent := Self;
   L12.SetBounds(440, 380, 190, 20);
@@ -249,7 +250,7 @@ begin
   FFontList.Parent := Self;
   FFontList.SetBounds(440, 404, 180, 164);
 
-  // 勾选列表(CheckListBox:点框 / 空格切换,勾选状态存 Objects)
+  // Check list (CheckListBox: click the box / Space to toggle; checked state stored in Objects)
   L13 := TTyLabel.Create(Self);
   L13.Parent := Self;
   L13.SetBounds(640, 52, 190, 20);
@@ -266,7 +267,7 @@ begin
   FCheckList.Checked[0] := True;
   FCheckList.Checked[2] := True;
 
-  // 颜色组合框 + "更多…"(ColorComboBox:下拉选"更多…"开取色对话框)
+  // Color combo + "More…" (ColorComboBox: picking "More…" from the dropdown opens the color dialog)
   L14 := TTyLabel.Create(Self);
   L14.Parent := Self;
   L14.SetBounds(640, 380, 190, 20);
@@ -276,7 +277,7 @@ begin
   FColorCombo.SetBounds(640, 404, 180, 28);
   FColorCombo.MoreCaption := '更多颜色…';
 
-  // 勾选下拉(CheckComboBox:多选、弹层常开,字段显勾选汇总),放第 3 列 ColorCombo 下方
+  // Check dropdown (CheckComboBox: multi-select, popup stays open, field shows a summary of the checks), placed under ColorCombo in column 3
   L23 := TTyLabel.Create(Self);
   L23.Parent := Self;
   L23.SetBounds(640, 452, 190, 20);
@@ -292,8 +293,8 @@ begin
   FCheckCombo.Checked[0] := True;
   FCheckCombo.Checked[2] := True;
 
-  // ---- 第 4 列:批量新控件 ----
-  // 最近使用组合框(MRUComboBox:可编辑,选中/录入自动去重置顶)
+  // ---- Column 4: a batch of new controls ----
+  // Most-recently-used combo (MRUComboBox: editable; selecting/typing auto-dedupes and moves to top)
   L15 := TTyLabel.Create(Self);
   L15.Parent := Self;
   L15.SetBounds(840, 52, 200, 20);
@@ -306,15 +307,15 @@ begin
   FMRU.AddToHistory('第二次搜索');
   FMRU.AddToHistory('最近这次(在最上)');
 
-  // 带图标组合框(ComboBoxEx:每项带图标)。图标源 = 图标字体渲染的 3 个符号 → 图像集 → 虚拟图像列表。
+  // Combo with icons (ComboBoxEx: every item carries an icon). Icon source = 3 symbols rendered from the icon font → image collection → virtual image list.
   Icf := TTyIconFont.Create(Self);
-  Icf.FontFamily := 'Segoe UI Symbol';   // 系统符号字体(无它 RenderGlyph 返回透明图=无图标)
+  Icf.FontFamily := 'Segoe UI Symbol';   // system symbol font (without it RenderGlyph returns a transparent bitmap = no icon)
   Coll := TTyImageCollection.Create(Self);
   Imgs := TTyVirtualImageList.Create(Self);
   Imgs.Collection := Coll;
-  AddGlyph('save',  $2B07, clNavy);    // ⬇ 保存
-  AddGlyph('open',  $25B6, clGreen);   // ▶ 打开
-  AddGlyph('print', $2699, clMaroon);  // ⚙ 打印
+  AddGlyph('save',  $2B07, clNavy);    // ⬇ save
+  AddGlyph('open',  $25B6, clGreen);   // ▶ open
+  AddGlyph('print', $2699, clMaroon);  // ⚙ print
 
   L16 := TTyLabel.Create(Self);
   L16.Parent := Self;
@@ -329,7 +330,7 @@ begin
   FComboEx.AddItem('打印', 2);
   FComboEx.ItemIndex := 0;
 
-  // 分组组合框(OfficeComboBox:下拉按组分节,标题行不可选)
+  // Grouped combo (OfficeComboBox: dropdown split into sections by group, header rows not selectable)
   L17 := TTyLabel.Create(Self);
   L17.Parent := Self;
   L17.SetBounds(840, 180, 200, 20);
@@ -344,7 +345,7 @@ begin
   FOfficeCombo.AddItem('胡萝卜');
   FOfficeCombo.ItemIndex := 1;
 
-  // 分组列表(OfficeListBox:标题行加粗、不可选)
+  // Grouped list (OfficeListBox: header rows bold and not selectable)
   L18 := TTyLabel.Create(Self);
   L18.Parent := Self;
   L18.SetBounds(840, 244, 200, 20);
@@ -359,7 +360,7 @@ begin
   FOfficeList.AddItem('给客户的报价');
   FOfficeList.AddItem('回执确认');
 
-  // 色板网格 + 明度取色条(ColorGrid 点格选色 / LColorPicker 拖动取明度)
+  // Swatch grid + luminance bar (ColorGrid: click a cell to pick a color / LColorPicker: drag to pick luminance)
   L19 := TTyLabel.Create(Self);
   L19.Parent := Self;
   L19.SetBounds(840, 428, 220, 20);
@@ -375,10 +376,10 @@ begin
   FLColor.Hue := 210;
   FLColor.Sat := 0.8;
   FLColor.Position := 0.6;
-  FLColor.OnChange := @LumChange;   // 拖明度条 → 驱动 HS 方块的亮度(经典 HSL 联动)
+  FLColor.OnChange := @LumChange;   // dragging the luminance bar → drives the HS square's brightness (classic HSL linkage)
 
-  // ---- 第 5 列 ----
-  // 色相×饱和度取色方块(HSColorPicker:2D 拖动选 Hue/Sat;亮度由上面的 LColorPicker 驱动)
+  // ---- Column 5 ----
+  // Hue × saturation picker square (HSColorPicker: 2D drag to pick Hue/Sat; brightness driven by the LColorPicker above)
   L20 := TTyLabel.Create(Self);
   L20.Parent := Self;
   L20.SetBounds(1080, 52, 220, 20);
@@ -388,9 +389,9 @@ begin
   FHS.SetBounds(1080, 76, 180, 130);
   FHS.Hue := 210;
   FHS.Sat := 0.8;
-  FHS.Value := 0.6;   // 与 FLColor.Position 一致;拖 L 条会更新它
+  FHS.Value := 0.6;   // matches FLColor.Position; dragging the L bar updates it
 
-  // 富行列表(AdvancedListBox:每行 图标 + 加粗标题 + 暗色副标题;复用上面的 Imgs)
+  // Rich-row list (AdvancedListBox: each row has icon + bold title + dimmed subtitle; reuses the Imgs above)
   L21 := TTyLabel.Create(Self);
   L21.Parent := Self;
   L21.SetBounds(1080, 218, 220, 20);
@@ -404,7 +405,7 @@ begin
   FAdvList.AddItem('打印报表', '默认打印机', 2);
   FAdvList.AddItem('无图标项', '副标题可留空', -1);
 
-  // 富行组合框(AdvancedComboBox:下拉两行富项,字段显图标+标题)
+  // Rich-row combo (AdvancedComboBox: two-line rich items in the dropdown, field shows icon + title)
   L22 := TTyLabel.Create(Self);
   L22.Parent := Self;
   L22.SetBounds(1080, 404, 220, 20);
@@ -418,7 +419,7 @@ begin
   FAdvCombo.AddItem('打印', '发送到打印机', 2);
   FAdvCombo.ItemIndex := 0;
 
-  // 名/值编辑器(ValueListEditor:属性表,值列内联编辑),放底部
+  // Name/value editor (ValueListEditor: property sheet, inline editing in the value column), placed at the bottom
   L24 := TTyLabel.Create(Self);
   L24.Parent := Self;
   L24.SetBounds(24, 600, 340, 20);
@@ -428,34 +429,34 @@ begin
   FVLE.SetBounds(24, 624, 360, 160);
   FVLE.KeyColumnWidth := 96;
   FVLE.AddRow('宽度', '1280').EditorKind := vekInteger;
-  FVLE.AddRow('标题', 'Rich Inputs 示例');         // 纯文本
-  VR := FVLE.AddRow('对齐', 'taCenter');           // 枚举 → 下拉
+  FVLE.AddRow('标题', 'Rich Inputs 示例');         // plain text
+  VR := FVLE.AddRow('对齐', 'taCenter');           // enum → dropdown
   VR.EditorKind := vekEnum;
   VR.EnumValues := 'taLeftJustify'#10'taCenter'#10'taRightJustify';
-  FVLE.AddRow('前景色', 'clNavy').EditorKind := vekColor;    // 颜色 → 色板下拉(末行"更多…"弹对话框)
-  FVLE.AddRow('字体', 'Segoe UI, 9').EditorKind := vekFont;  // 叶字体 → 文本 + "…"弹字体对话框
-  VR := FVLE.AddRow('数据路径', 'D:\data');         // 文本 + "…" → 库自带路径对话框(OnEditRow)
+  FVLE.AddRow('前景色', 'clNavy').EditorKind := vekColor;    // color → swatch dropdown (last "More…" row opens the dialog)
+  FVLE.AddRow('字体', 'Segoe UI, 9').EditorKind := vekFont;  // leaf font → text + "…" opens the font dialog
+  VR := FVLE.AddRow('数据路径', 'D:\data');         // text + "…" → the library's own path dialog (OnEditRow)
   VR.EditorKind := vekDialog;
-  VR := FVLE.AddRow('关于', 'TyControls 2.2.0');    // 用户侧自定义:"…" 弹只读关于对话框,不写回值
+  VR := FVLE.AddRow('关于', 'TyControls 2.2.0');    // user-side custom: "…" opens a read-only About dialog, no write-back
   VR.EditorKind := vekDialog;
-  VR := FVLE.AddRow('主题', 'light.tycss');        // 只读 + 显示名覆盖(国际化)
+  VR := FVLE.AddRow('主题', 'light.tycss');        // read-only + display-name override (i18n)
   VR.DisplayKey := '主题(只读)';
   VR.ReadOnly := True;
-  VR := FVLE.AddRow('Font', 'Segoe UI, 9');        // 可展开的多级 + vekFont:"…"弹字体对话框并回写子属性
+  VR := FVLE.AddRow('Font', 'Segoe UI, 9');        // expandable multi-level + vekFont: "…" opens the font dialog and writes back the child properties
   VR.EditorKind := vekFont;
   VR.AddChild('Name', 'Segoe UI');
   VR.AddChild('Size', '9').EditorKind := vekInteger;
   VR.AddChild('Color', 'clWindowText').EditorKind := vekColor;
-  VS := VR.AddChild('Style', 'Regular');           // 二级子级(层级无上限:Font→Style→Bold)
+  VS := VR.AddChild('Style', 'Regular');           // second-level child (unlimited nesting: Font→Style→Bold)
   VS.AddChild('Bold', 'False').EditorKind := vekBoolean;
   VS.AddChild('Italic', 'False').EditorKind := vekBoolean;
   VS.AddChild('Underline', 'False').EditorKind := vekBoolean;
   VS.AddChild('StrikeOut', 'False').EditorKind := vekBoolean;
-  FVLE.UpdateRows;                                 // 加了子行后刷新
+  FVLE.UpdateRows;                                 // refresh after adding child rows
   FVLE.OnValueChanged := @VleChange;
   FVLE.OnEditRow := @VleEditDialog;
 
-  // 计算器下拉(CalcEdit / CalcCurrencyEdit:点尾部按钮弹计算器,= 或关闭写回),放 VLE 右侧
+  // Calculator dropdown (CalcEdit / CalcCurrencyEdit: click the trailing button to pop the calculator; = or close writes back), placed to the right of the VLE
   L25 := TTyLabel.Create(Self);
   L25.Parent := Self;
   L25.SetBounds(410, 600, 260, 20);
@@ -496,13 +497,13 @@ end;
 
 procedure TMainForm.ComboDrop(Sender: TObject);
 begin
-  // 真实用法:在这里弹颜色格 / 计算器 / 日期选择器,选完写回 FCombo.Text。
+  // Real-world use: pop a color grid / calculator / date picker here, then write the result back into FCombo.Text.
   FCombo.Text := '你点了下拉按钮!';
 end;
 
 procedure TMainForm.LumChange(Sender: TObject);
 begin
-  // 明度条驱动 HS 方块的亮度:两个控件合成一个经典 HSL 取色器。
+  // The luminance bar drives the HS square's brightness: the two controls together form a classic HSL color picker.
   FHS.Value := FLColor.Position;
 end;
 
@@ -514,15 +515,15 @@ end;
 procedure TMainForm.VleEditDialog(Sender: TObject; ARow: TTyValueRow);
 var dir: string;
 begin
-  // vekDialog = 完全用户侧自定义:点"…"触发本事件,按行自己决定弹什么、是否写回值。
+  // vekDialog = fully user-side custom: clicking "…" fires this event; each row decides what to pop up and whether to write the value back.
   if SameText(ARow.Key, '关于') then
-    // 纯信息(内容只读):弹库自带只读关于对话框,不改 ARow.Value。
+    // Informational only (read-only content): pop the library's own read-only About dialog; leave ARow.Value unchanged.
     TyShowAbout('关于', 'TyControls Rich Inputs 示例', 'v2.2.0',
       'ValueListEditor 用户侧自定义行处理演示', '© 2026 ACTom', 'MIT 许可',
       'https://github.com/ACTom/TyControls')
   else
   begin
-    // 弹【控件库自带】路径对话框(而非原生),选完写回 ARow.Value(会随之更新显示)。
+    // Pop the [library's own] path dialog (not the native one), then write the result back into ARow.Value (which updates the display).
     dir := ARow.Value;
     if TySelectDirectory('选择数据路径', '', dir) then
     begin

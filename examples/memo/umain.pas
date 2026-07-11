@@ -1,12 +1,12 @@
 unit umain;
 
-{ TTyMemo 示例（TTyForm 无边框自绘窗框 + TTyTitleBar）：
-  - Lines：多行文本模型（回车换行、退格/删除跨行合并、方向键/Home/End 导航）
-  - ScrollBars：默认 ssAutoVertical，内容溢出时右侧出现垂直滚动条；支持鼠标滚轮
-  - ReadOnly：勾选后忽略一切用户编辑（仍可导航/选择/复制）
-  - WordWrap：勾选后长逻辑行按词边界软换行为多个视觉行
-  - OnChange：文本模型变化时触发，实时更新行数/字符数标签
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+{ TTyMemo demo (borderless self-drawn TTyForm chrome + TTyTitleBar):
+  - Lines: multi-line text model (Enter for new line, Backspace/Delete merge across lines, arrow/Home/End navigation)
+  - ScrollBars: defaults to ssAutoVertical; a vertical scrollbar appears on the right when content overflows; mouse wheel supported
+  - ReadOnly: when checked, all user edits are ignored (navigation/selection/copy still work)
+  - WordWrap: when checked, long logical lines soft-wrap at word boundaries into multiple visual lines
+  - OnChange: fires whenever the text model changes; updates the line/character count labels live
+  UI is created purely in code (no .lfm); the theme is loaded via the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -37,7 +37,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录（兼容 lib/<cpu>-<os>/ 与 .app 包） }
+{ Walk up from the exe's directory to locate the repo's themes/ directory (handles lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -59,36 +59,36 @@ var
   Bar: TTyTitleBar;
   Lbl: TTyLabel;
 begin
-  // TTyForm.CreateNew → 无边框 + 持久引擎，但默认无标题栏
+  // TTyForm.CreateNew -> borderless + persistence engine, but no title bar by default
   inherited CreateNew(AOwner, 0);
   Caption := 'TTyMemo 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 480, 420);
 
-  // 主题须先加载，未显式指定 Controller 的控件自动使用全局 TyDefaultController
+  // Load the theme first; controls without an explicit Controller fall back to the global TyDefaultController
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  // 标题栏：Owner=Self 即自动关联到本窗体的 TitleBar 属性
+  // Title bar: Owner=Self auto-associates it with this form's TitleBar property
   Bar := TTyTitleBar.Create(Self);
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := 'TTyMemo  · TyControls';
 
-  // ── 客户区内容（标题栏下方） ──
+  // ── Client-area content (below the title bar) ──
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := Self;
   Lbl.SetBounds(16, 46, 448, 20);
   Lbl.Caption := '多行文本编辑器（回车换行、方向键导航、滚轮滚动）：';
 
-  // 可编辑的多行 TTyMemo
+  // Editable multi-line TTyMemo
   FMemo := TTyMemo.Create(Self);
   FMemo.Parent := Self;
   FMemo.SetBounds(16, 72, 448, 240);
-  // ssAutoVertical 为默认值：内容溢出时右侧自动出现垂直滚动条
+  // ssAutoVertical is the default: a vertical scrollbar appears on the right when content overflows
   FMemo.ScrollBars := ssAutoVertical;
-  FMemo.WordWrap := False;   // 初始不软换行，长行可横向滚动
-  // 预置若干行以演示垂直滚动条
+  FMemo.WordWrap := False;   // no soft-wrap initially, so long lines can scroll horizontally
+  // Seed a few lines to demonstrate the vertical scrollbar
   FMemo.Lines.Text :=
     '第一行：欢迎使用 TyControls TTyMemo 多行编辑控件。' + LineEnding +
     '第二行：按回车换行，退格/删除可跨行合并。' + LineEnding +
@@ -100,27 +100,27 @@ begin
     '第八行：最后一行。';
   FMemo.OnChange := @MemoChange;
 
-  // 只读切换
+  // Read-only toggle
   FReadOnlyChk := TTyCheckBox.Create(Self);
   FReadOnlyChk.Parent := Self;
   FReadOnlyChk.SetBounds(16, 322, 120, 24);
   FReadOnlyChk.Caption := '只读 (ReadOnly)';
   FReadOnlyChk.OnClick := @ReadOnlyClick;
 
-  // 自动换行切换
+  // Word-wrap toggle
   FWordWrapChk := TTyCheckBox.Create(Self);
   FWordWrapChk.Parent := Self;
   FWordWrapChk.SetBounds(150, 322, 140, 24);
   FWordWrapChk.Caption := '自动换行 (WordWrap)';
   FWordWrapChk.OnClick := @WordWrapClick;
 
-  // 状态标签（行数 / 字符数）
+  // Status label (line count / character count)
   FInfo := TTyLabel.Create(Self);
   FInfo.Parent := Self;
   FInfo.SetBounds(16, 356, 448, 20);
   UpdateInfo;
 
-  // 整套窗框 + 背景色随主题
+  // Apply the theme to the whole window frame + background color
   ApplyChromeTheme(TyDefaultController);
 end;
 
@@ -132,7 +132,7 @@ end;
 
 procedure TMainForm.MemoChange(Sender: TObject);
 begin
-  // OnChange：文本模型每次变化时刷新统计
+  // OnChange: refresh the stats whenever the text model changes
   UpdateInfo;
 end;
 

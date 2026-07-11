@@ -1,17 +1,20 @@
 unit umain;
 
-{ TTyListView 示例。
+{ TTyListView demo.
 
-  左边是集合模式:30 行文件清单,四列,可切五种视图、点表头排序、Ctrl/Shift 多选、框选、
-  敲字母定位。数据里故意混了几个「文件夹」——它们没有大小、没有修改时间,用来演示
-  「不可解析的单元格永远排最后,与升降序无关」:按大小降序时,顶上应该是最大的文件,
-  而不是一堆空白。
+  On the left is collection mode: a 30-row file listing, four columns, with five switchable
+  view styles, click-to-sort headers, Ctrl/Shift multi-select, rubber-band selection, and
+  type-to-locate. The data deliberately mixes in a few "folders" -- they have no size and no
+  modified time, to demonstrate that "an unparseable cell always sorts last, regardless of
+  ascending/descending": when sorting by size descending, the top should be the largest file,
+  not a run of blanks.
 
-  右边是虚拟模式:ItemCount = 100000,一个行对象都不建。文本在 OnGetItemText 里按需生成,
-  排序也只是置换内部的显示顺序。切换、滚动、排序都应该是瞬时的。
+  On the right is virtual mode: ItemCount = 100000, with not a single row object created. Text
+  is generated on demand in OnGetItemText, and sorting merely permutes the internal display
+  order. Switching, scrolling and sorting should all be instantaneous.
 
-  两边都会随主题变色——本控件不引入任何新的主题 token,外框/行/表头分别复用
-  TyTreeView / TyTreeNode / TyTreeHeader。 }
+  Both sides recolour with the theme -- this control introduces no new theme tokens; the frame,
+  rows and header reuse TyTreeView / TyTreeNode / TyTreeHeader respectively. }
 
 {$mode objfpc}{$H+}
 
@@ -387,8 +390,9 @@ end;
 
 procedure TMainForm.LV1ColumnClick(Sender: TObject; AColumn: Integer);
 begin
-  { AutoSort已经用旧的 SortKind 排过一次了;这里按列挑对比较器再排一次。
-    大小是数字,修改时间是 ISO 日期,其余按文本。 }
+  { AutoSort has already sorted once using the old SortKind; here we pick the right comparator
+    for the clicked column and sort again. Size is numeric, modified time is an ISO date, the
+    rest sort as text. }
   case AColumn of
     1: LV1.SortKind := lskNumber;
     3: LV1.SortKind := lskDateTime;

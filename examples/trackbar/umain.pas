@@ -1,12 +1,12 @@
 unit umain;
 
-{ TTyTrackBar 示例：
-  - 水平轨迹条（0..100），OnChange 实时更新状态栏
-  - 自定义范围轨迹条（-50..50，展示负值区间）
-  - 垂直轨迹条（Orientation = toVertical）
-  - 精细轨迹条（PageSize / Frequency 演示，独立范围与状态读出）
-  主窗体为 TTyForm + TTyTitleBar；纯代码创建 UI（无 .lfm），
-  主题通过全局 TyDefaultController 加载。 }
+{ TTyTrackBar demo:
+  - Horizontal track bar (0..100), OnChange updates the status label live
+  - Custom-range track bar (-50..50, shows a negative range)
+  - Vertical track bar (Orientation = toVertical)
+  - Fine-stepping track bar (PageSize / Frequency demo, its own range and readout)
+  The main form is a TTyForm + TTyTitleBar; the UI is built entirely in code (no .lfm),
+  and the theme is loaded through the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -20,10 +20,10 @@ uses
 type
   TMainForm = class(TTyForm)
   private
-    FTrack1: TTyTrackBar;   // 0..100 水平
-    FTrack2: TTyTrackBar;   // -50..50 水平
-    FTrack3: TTyTrackBar;   // 垂直
-    FStatus: TTyLabel;      // OnChange 状态读出
+    FTrack1: TTyTrackBar;   // 0..100 horizontal
+    FTrack2: TTyTrackBar;   // -50..50 horizontal
+    FTrack3: TTyTrackBar;   // vertical
+    FStatus: TTyLabel;      // OnChange readout
     procedure Track1Change(Sender: TObject);
     procedure Track2Change(Sender: TObject);
     procedure Track3Change(Sender: TObject);
@@ -37,7 +37,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录（兼容 lib/<cpu>-<os>/ 与 .app 包） }
+{ Walk upward from the exe's directory to find the repo's themes/ folder (handles lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -58,22 +58,22 @@ constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
   LblA, LblB, LblC, LblFine: TTyLabel;
-  FTrack4: TTyTrackBar;   // 精细步进演示（PageSize / Frequency）
+  FTrack4: TTyTrackBar;   // fine-stepping demo (PageSize / Frequency)
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 常驻引擎
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + always-on engine
   Caption := 'TrackBar 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 460, 380);
 
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // load the theme first
 
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self → 自动关联为 TTyForm.TitleBar
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> auto-associated as TTyForm.TitleBar
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := 'TrackBar  · TyControls';
 
-  // 轨迹条一：0..100（水平），拖动 / 键盘左右键步进 / 滚轮
+  // Track bar 1: 0..100 (horizontal), drag / arrow-key stepping / mouse wheel
   LblA := TTyLabel.Create(Self);
   LblA.Parent := Self;
   LblA.SetBounds(16, 48, 320, 20);
@@ -85,10 +85,10 @@ begin
   FTrack1.Min := 0;
   FTrack1.Max := 100;
   FTrack1.Position := 50;
-  FTrack1.Frequency := 10;         // 每 10 个单位一条刻度
+  FTrack1.Frequency := 10;         // a tick every 10 units
   FTrack1.OnChange := @Track1Change;
 
-  // 轨迹条二：-50..50（水平），展示负值范围
+  // Track bar 2: -50..50 (horizontal), demonstrates a negative range
   LblB := TTyLabel.Create(Self);
   LblB.Parent := Self;
   LblB.SetBounds(16, 108, 320, 20);
@@ -102,7 +102,7 @@ begin
   FTrack2.Position := 0;
   FTrack2.OnChange := @Track2Change;
 
-  // 轨迹条四：精细步进（0..200，PageSize=25 翻页、Frequency=25 刻度）
+  // Track bar 4: fine stepping (0..200, PageSize=25 paging, Frequency=25 ticks)
   LblFine := TTyLabel.Create(Self);
   LblFine.Parent := Self;
   LblFine.SetBounds(16, 168, 320, 20);
@@ -114,11 +114,11 @@ begin
   FTrack4.Min := 0;
   FTrack4.Max := 200;
   FTrack4.Position := 120;
-  FTrack4.Frequency := 25;         // 每 25 个单位一条刻度
-  FTrack4.PageSize := 25;          // PageUp/PageDown 每次翻 25
+  FTrack4.Frequency := 25;         // a tick every 25 units
+  FTrack4.PageSize := 25;          // PageUp/PageDown steps by 25 each time
   FTrack4.OnChange := @Track4Change;
 
-  // 轨迹条三：垂直（Orientation = toVertical）
+  // Track bar 3: vertical (Orientation = toVertical)
   LblC := TTyLabel.Create(Self);
   LblC.Parent := Self;
   LblC.SetBounds(350, 48, 100, 20);
@@ -127,19 +127,19 @@ begin
   FTrack3 := TTyTrackBar.Create(Self);
   FTrack3.Parent := Self;
   FTrack3.SetBounds(380, 70, 24, 200);
-  FTrack3.Orientation := toVertical;      // 垂直方向
+  FTrack3.Orientation := toVertical;      // vertical orientation
   FTrack3.Min := 0;
   FTrack3.Max := 100;
   FTrack3.Position := 40;
   FTrack3.OnChange := @Track3Change;
 
-  // 状态栏：任一轨迹条 OnChange 都会写入这里
+  // Status label: any track bar's OnChange writes here
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
   FStatus.SetBounds(16, 236, 320, 20);
   FStatus.Caption := Format('音量：%d', [FTrack1.Position]);
 
-  ApplyChromeTheme(TyDefaultController);   // 最后统一应用 chrome + 窗体背景主题
+  ApplyChromeTheme(TyDefaultController);   // finally apply the chrome + form-background theme in one pass
 end;
 
 procedure TMainForm.Track1Change(Sender: TObject);

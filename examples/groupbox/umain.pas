@@ -1,13 +1,13 @@
 unit umain;
 
-{ TTyGroupBox 示例：
-  - Caption：每个分组框带标题
-  - Alignment：标题左对齐 / 居中 / 右对齐三种（taLeftJustify / taCenter / taRightJustify）
-  - 容纳子控件：分组框内放 TTyRadioButton / TTyCheckBox
-  - 分组框内嵌一个 TTyEdit（输入框），演示任意子控件都能作为容器成员
-  - 事件汇总到底部 TTyLabel 状态栏
-  纯代码创建 UI（无 .lfm），主窗体为 TTyForm 并带 TTyTitleBar，
-  主题通过全局 TyDefaultController 加载。 }
+{ TTyGroupBox demo:
+  - Caption: each group box carries a title
+  - Alignment: title left / center / right (taLeftJustify / taCenter / taRightJustify)
+  - Hosting child controls: TTyRadioButton / TTyCheckBox placed inside a group box
+  - A TTyEdit embedded in a group box, showing that any child control can be a container member
+  - Events funnel into the bottom TTyLabel status bar
+  UI built purely in code (no .lfm); the main form is a TTyForm with a TTyTitleBar,
+  and the theme is loaded through the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -22,9 +22,9 @@ uses
 type
   TMainForm = class(TTyForm)
   private
-    FGroupSize: TTyGroupBox;      // 标题左对齐 + 单选按钮
-    FGroupOpt: TTyGroupBox;       // 标题居中 + 复选框
-    FGroupName: TTyGroupBox;      // 标题右对齐 + 内嵌输入框
+    FGroupSize: TTyGroupBox;      // left-aligned title + radio buttons
+    FGroupOpt: TTyGroupBox;       // centered title + check boxes
+    FGroupName: TTyGroupBox;      // right-aligned title + embedded edit
     FStatus: TTyLabel;
     FRadioA, FRadioB, FRadioC: TTyRadioButton;
     FCheckBold, FCheckItalic: TTyCheckBox;
@@ -43,7 +43,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录（兼容 lib/<cpu>-<os>/ 与 .app 包） }
+{ Search upward from the exe's directory for the repo's themes/ folder (handles lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -72,21 +72,21 @@ constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 常驻引擎
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + resident engine
   Caption := 'TTyGroupBox 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 620, 320);
 
-  // 先加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController
+  // Load the theme first: controls without an explicit Controller fall back to the global TyDefaultController
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self → 自动关联为 TTyForm.TitleBar
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self → auto-associated as TTyForm.TitleBar
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := 'GroupBox  · TyControls';
 
-  // ── 分组框一：标题左对齐（默认），内含单选按钮 ────────────────────
+  // ── Group box 1: left-aligned title (default), containing radio buttons ──
   FGroupSize := TTyGroupBox.Create(Self);
   FGroupSize.Parent := Self;
   FGroupSize.SetBounds(16, 52, 185, 130);
@@ -103,7 +103,7 @@ begin
   FRadioB.Parent := FGroupSize;
   FRadioB.SetBounds(10, 54, 160, 26);
   FRadioB.Caption := '中（14pt）';
-  FRadioB.Checked := True;                 // 默认选中
+  FRadioB.Checked := True;                 // checked by default
   FRadioB.OnClick := @RadioClick;
 
   FRadioC := TTyRadioButton.Create(FGroupSize);
@@ -112,7 +112,7 @@ begin
   FRadioC.Caption := '大（18pt）';
   FRadioC.OnClick := @RadioClick;
 
-  // ── 分组框二：标题居中，内含复选框 ────────────────────────────────
+  // ── Group box 2: centered title, containing check boxes ──
   FGroupOpt := TTyGroupBox.Create(Self);
   FGroupOpt.Parent := Self;
   FGroupOpt.SetBounds(217, 52, 185, 130);
@@ -131,7 +131,7 @@ begin
   FCheckItalic.Caption := '斜体';
   FCheckItalic.OnClick := @CheckClick;
 
-  // ── 分组框三：标题右对齐，内嵌一个输入框 ──────────────────────────
+  // ── Group box 3: right-aligned title, embedding an edit box ──
   FGroupName := TTyGroupBox.Create(Self);
   FGroupName.Parent := Self;
   FGroupName.SetBounds(418, 52, 185, 130);
@@ -144,13 +144,13 @@ begin
   FNameEdit.TextHint := '请输入名称…';
   FNameEdit.OnChange := @NameChange;
 
-  // ── 底部状态栏 ────────────────────────────────────────────────────
+  // ── Bottom status bar ──
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
   FStatus.SetBounds(16, 200, 588, 60);
   UpdateStatus;
 
-  ApplyChromeTheme(TyDefaultController);    // 最后统一主题化窗体外壳 + 背景
+  ApplyChromeTheme(TyDefaultController);    // finally, theme the form chrome + background in one pass
 end;
 
 procedure TMainForm.RadioClick(Sender: TObject);

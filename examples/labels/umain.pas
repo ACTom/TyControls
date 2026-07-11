@@ -1,7 +1,7 @@
 unit umain;
 
-{ 标签家族示例:普通标签 / 超链接标签 / 投影标签 / 发光标签。
-  主窗体为 TTyForm + TTyTitleBar;纯代码创建 UI(无 .lfm)。 }
+{ Label family demo: plain label / hyperlink label / shadow label / glow label.
+  Main form is a TTyForm + TTyTitleBar; UI is built entirely in code (no .lfm). }
 
 {$mode objfpc}{$H+}
 

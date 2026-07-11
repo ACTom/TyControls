@@ -43,7 +43,7 @@ end;
 
 procedure TMainForm.HandleCanResize(Sender: TObject; var ANewSize: Integer; var AAccept: Boolean);
 begin
-  // OnCanResize：可在此否决或钳制新尺寸。此处仅作即时预览。
+  // OnCanResize: veto or clamp the new size here. This just does a live preview.
   FStatus.Caption := Format('拖动中 · 目标尺寸 %d px', [ANewSize]);
 end;
 
@@ -63,7 +63,7 @@ begin
   Bar.Parent := Self; Bar.Align := alTop; Bar.Height := 34;
   Bar.Caption := 'Splitter  · TyControls';
 
-  // 底部状态条：显示拖动读数
+  // Bottom status bar: shows the drag readout
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
   FStatus.Align := alBottom;
@@ -71,42 +71,43 @@ begin
   FStatus.Alignment := taCenter;
   FStatus.Caption := '拖动竖直分隔条改变左栏宽度；拖动水平分隔条改变上区高度';
 
-  // ClientHost 承载“左栏 + 竖直分隔条 + 右侧客户区”，避开标题栏/状态条
+  // ClientHost holds "left column + vertical splitter + right client area", clear of the title bar/status bar
   ClientHost := TTyPanel.Create(Self);
   ClientHost.Parent := Self;
   ClientHost.Align := alClient;
   ClientHost.Caption := '';
 
-  // ── 竖直切分：左栏(alLeft) → 竖直分隔条(alLeft) → 右侧容器(alClient) ──
-  // LCL 中同级 alLeft 控件按创建/Left 顺序自左向右停靠，故左栏必须先于
-  // 分隔条创建并 parent，两者都先于 alClient 填充块。分隔条的 alLeft 邻居查找
-  // 要求其 Left 落在左栏右缘之后，因此显式将 Left 设为左栏宽度以固定停靠次序。
+  // ── Vertical split: left column (alLeft) → vertical splitter (alLeft) → right container (alClient) ──
+  // In LCL, sibling alLeft controls dock left-to-right in creation/Left order, so the left
+  // column must be created and parented before the splitter, and both before the alClient
+  // fill block. The splitter's alLeft neighbor lookup requires its Left to fall past the left
+  // column's right edge, so we set Left explicitly to the column width to lock the dock order.
 
-  // 左栏（alLeft，先创建）
+  // Left column (alLeft, created first)
   FLeftPanel := TTyPanel.Create(Self);
   FLeftPanel.Parent := ClientHost;
   FLeftPanel.Align := alLeft;
   FLeftPanel.Width := 220;
   FLeftPanel.Caption := '左栏 (alLeft)';
 
-  // 竖直分隔条（Align=alLeft → 横向拖动，改变左栏宽度；紧贴左栏右侧）
+  // Vertical splitter (Align=alLeft → drags horizontally, changing the left column width; sits against the column's right edge)
   VSplit := TTySplitter.Create(Self);
   VSplit.Parent := ClientHost;
   VSplit.Align := alLeft;
-  VSplit.Left := FLeftPanel.Width;  // 显式停靠到左栏右侧，避免落到左栏左边
+  VSplit.Left := FLeftPanel.Width;  // dock explicitly to the column's right edge, so it doesn't land on the left
   VSplit.Width := 6;
-  VSplit.MinSize := 120;            // 左栏最小宽度
-  VSplit.ResizeStyle := rsUpdate;   // 实时更新（另有 rsLine 延迟到松开）
+  VSplit.MinSize := 120;            // minimum left-column width
+  VSplit.ResizeStyle := rsUpdate;   // update live (rsLine instead would defer until release)
   VSplit.OnMoved := @HandleMoved;
   VSplit.OnCanResize := @HandleCanResize;
 
-  // 右侧容器（alClient，最后创建）：承载嵌套的水平切分
+  // Right container (alClient, created last): hosts the nested horizontal split
   RightHost := TTyPanel.Create(Self);
   RightHost.Parent := ClientHost;
   RightHost.Align := alClient;
   RightHost.Caption := '';
 
-  // ── 嵌套水平切分：上区(alTop) → 水平分隔条(alTop) → 下区(alClient) ──
+  // ── Nested horizontal split: top pane (alTop) → horizontal splitter (alTop) → bottom pane (alClient) ──
   FTopPanel := TTyPanel.Create(Self);
   FTopPanel.Parent := RightHost;
   FTopPanel.Align := alTop;
@@ -115,8 +116,8 @@ begin
 
   HSplit := TTySplitter.Create(Self);
   HSplit.Parent := RightHost;
-  HSplit.Align := alTop;            // 横放 → 纵向拖动，改变上区高度
-  HSplit.Top := FTopPanel.Height;  // 显式停靠到上区下侧
+  HSplit.Align := alTop;            // horizontal bar → drags vertically, changing the top pane height
+  HSplit.Top := FTopPanel.Height;  // dock explicitly below the top pane
   HSplit.Height := 6;
   HSplit.MinSize := 80;
   HSplit.ResizeStyle := rsUpdate;

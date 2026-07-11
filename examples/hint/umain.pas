@@ -1,8 +1,8 @@
 unit umain;
 
-{ 提示示例:TTyHint(主题化 tooltip,全应用生效)+ TTyBalloonHint(带指针气泡)。
-  主窗体 TTyForm + TTyTitleBar;纯代码创建(无 .lfm)。
-  把鼠标悬停到按钮上看主题化 tooltip;点“显示气泡”看带指针的气泡标注。 }
+{ Hint demo: TTyHint (themed tooltip, applies app-wide) + TTyBalloonHint (balloon with a pointer).
+  Main form is TTyForm + TTyTitleBar; built entirely in code (no .lfm).
+  Hover a button to see the themed tooltip; click "Show balloon" to see the pointed balloon callout. }
 
 {$mode objfpc}{$H+}
 

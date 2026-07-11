@@ -1,12 +1,12 @@
 unit umain;
 
-{ 运行时主题热切换示例（TTyForm + TTyTitleBar 版）：
-  - 顶部三个按钮分别 LoadTheme light.tycss / dark.tycss / green.tycss；
-  - LoadTheme 内部会调用 Changed()，遍历所有已注册控件并 Invalidate，
-    因此示例区的按钮 / 文本框 / 复选框 / 进度条会「实时」重新着色；
-  - 同时调用 ApplyChromeTheme 让窗口 chrome（标题栏 + 窗体背景）一并换肤；
-  - 一个状态标签实时显示当前主题名。
-  纯代码 UI（无 .lfm）。}
+{ Runtime theme hot-swap demo (TTyForm + TTyTitleBar edition):
+  - the three buttons at the top call LoadTheme with light.tycss / dark.tycss / green.tycss;
+  - internally LoadTheme calls Changed(), which walks every registered control and Invalidates it,
+    so the buttons / edit / checkbox / progress bar in the sample area are recolored "live";
+  - it also calls ApplyChromeTheme so the window chrome (title bar + form background) reskins too;
+  - a status label shows the current theme name in real time.
+  Pure-code UI (no .lfm). }
 
 {$mode objfpc}{$H+}
 
@@ -22,7 +22,7 @@ type
   TMainForm = class(TTyForm)
   private
     FStatusLabel: TTyLabel;
-    { 主题切换事件 }
+    { Theme-switch handlers }
     procedure SwitchLight(Sender: TObject);
     procedure SwitchDark(Sender: TObject);
     procedure SwitchGreen(Sender: TObject);
@@ -36,7 +36,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找 themes/ 目录 }
+{ Search upward from the exe's directory for a themes/ directory }
 function ThemesDir: string;
 var
   Dir: string;
@@ -76,32 +76,32 @@ var
   SampleCheck: TTyCheckBox;
   Progress:    TTyProgressBar;
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 常驻绘制引擎
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + always-on paint engine
   Caption := '主题系统 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 470, 340);
 
-  // 先加载初始主题，再建 chrome
+  // Load the initial theme first, then build the chrome
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self → 自动关联为 TTyForm.TitleBar
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self → auto-associated as TTyForm.TitleBar
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := '主题系统  · TyControls';
 
-  // ── 主题切换按钮行（点击后 LoadTheme + ApplyChromeTheme 实时换肤）──
+  // ── Theme-switch button row (a click runs LoadTheme + ApplyChromeTheme for a live reskin) ──
   MakeSwitch('亮色 Light', 'primary', 16,  @SwitchLight);
   MakeSwitch('暗色 Dark',  '',        148, @SwitchDark);
   MakeSwitch('绿色 Green', '',        280, @SwitchGreen);
 
-  // 当前主题提示
+  // Current-theme indicator
   FStatusLabel := TTyLabel.Create(Self);
   FStatusLabel.Parent := Self;
   FStatusLabel.SetBounds(16, 96, 430, 20);
   FStatusLabel.Caption := '当前主题：light.tycss';
 
-  // ── 示例控件区：这些控件随主题实时重新着色 ──────────────
+  // ── Sample-control area: these controls recolor live with the theme ──────────────
   SampleLbl := TTyLabel.Create(Self);
   SampleLbl.Parent := Self;
   SampleLbl.SetBounds(16, 128, 300, 20);
@@ -143,14 +143,14 @@ begin
   Progress.Max := 100;
   Progress.Position := 65;
 
-  ApplyChromeTheme(TyDefaultController);    // 最后统一给 chrome + 窗体背景换肤
+  ApplyChromeTheme(TyDefaultController);    // Finally, reskin the chrome + form background together
 end;
 
 procedure TMainForm.ApplyTheme(const AFileName: string);
 begin
-  // LoadTheme 内部：FModel.LoadFromFile → Changed()，
-  // Changed() 遍历已注册控件并全部 Invalidate → 示例控件实时换肤；
-  // 再调 ApplyChromeTheme 让标题栏 + 窗体背景一起跟随。
+  // Inside LoadTheme: FModel.LoadFromFile → Changed(),
+  // Changed() walks every registered control and Invalidates them all → sample controls reskin live;
+  // then ApplyChromeTheme makes the title bar + form background follow along.
   TyDefaultController.LoadTheme(ThemesDir + AFileName);
   ApplyChromeTheme(TyDefaultController);
   FStatusLabel.Caption := '当前主题：' + AFileName;

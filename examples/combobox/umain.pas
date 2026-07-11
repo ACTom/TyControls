@@ -1,14 +1,17 @@
 unit umain;
 
-{ TTyComboBox 示例（纯代码，无 .lfm）：
-    左列 csDropDownList（只读，仅能从列表挑选）——展示 Sorted 排序、
-      DropDownCount 限制可见行数、以及键盘 type-ahead 前缀跳转。
-    右列 csDropDown（可编辑字段 + 前缀自动完成）——键入前缀时弹出过滤后的
-      候选列表；同时演示 CharCase（自动转大写）与 MaxLength（限制长度）。
-    下方 TTyLabel 状态栏订阅四个事件：
-      OnChange / OnSelect / OnDropDown / OnCloseUp。
-  窗体继承 TTyForm（无边框自绘窗框）+ 一条 TTyTitleBar；主题经全局
-  TyDefaultController 加载后由 ApplyChromeTheme 统一上色。 }
+{ TTyComboBox demo (pure code, no .lfm):
+    Left column csDropDownList (read-only, selection only from the list) -- shows
+      Sorted ordering, DropDownCount limiting the visible rows, and keyboard
+      type-ahead prefix jumping.
+    Right column csDropDown (editable field + prefix auto-complete) -- typing a
+      prefix pops up the filtered candidate list; also demonstrates CharCase
+      (auto-uppercase) and MaxLength (length limit).
+    A TTyLabel status bar below subscribes to four events:
+      OnChange / OnSelect / OnDropDown / OnCloseUp.
+  The form descends from TTyForm (borderless self-drawn window frame) plus a
+  single TTyTitleBar; the theme is loaded through the global TyDefaultController
+  and then uniformly colored by ApplyChromeTheme. }
 
 {$mode objfpc}{$H+}
 
@@ -22,9 +25,9 @@ uses
 type
   TMainForm = class(TTyForm)
   private
-    FListCombo: TTyComboBox;   // csDropDownList（只读）
-    FEditCombo: TTyComboBox;   // csDropDown（可编辑 + 自动完成）
-    FStatus: TTyLabel;         // 事件状态栏
+    FListCombo: TTyComboBox;   // csDropDownList (read-only)
+    FEditCombo: TTyComboBox;   // csDropDown (editable + auto-complete)
+    FStatus: TTyLabel;         // event status bar
     procedure ComboChange(Sender: TObject);
     procedure ComboSelect(Sender: TObject);
     procedure ComboDropDown(Sender: TObject);
@@ -39,7 +42,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录（兼容 lib/<cpu>-<os>/ 与 .app 包） }
+{ Search upward from the exe's directory for the repo's themes/ dir (handles lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -61,23 +64,23 @@ var
   Bar: TTyTitleBar;
   LblList, LblEdit: TTyLabel;
 begin
-  // TTyForm.CreateNew → 无边框 + 持久引擎，但默认无标题栏
+  // TTyForm.CreateNew -> borderless + persistent engine, but no title bar by default
   inherited CreateNew(AOwner, 0);
   Caption := 'TTyComboBox 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 520, 320);
 
-  // 主题须先加载，再给整套窗框上色
+  // The theme must be loaded first, before coloring the whole window frame
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  // 标题栏：Owner=Self 即自动关联到本窗体的 TitleBar 属性
+  // Title bar: Owner=Self auto-associates it with this form's TitleBar property
   Bar := TTyTitleBar.Create(Self);
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := 'TTyComboBox  · TyControls';
 
-  // ── 左列：csDropDownList（只读下拉） ──
+  // ── Left column: csDropDownList (read-only drop-down) ──
   LblList := TTyLabel.Create(Self);
   LblList.Parent := Self;
   LblList.SetBounds(24, 52, 224, 20);
@@ -86,10 +89,10 @@ begin
   FListCombo := TTyComboBox.Create(Self);
   FListCombo.Parent := Self;
   FListCombo.SetBounds(24, 76, 224, 26);
-  FListCombo.Style := csDropDownList;   // 只能从列表中挑选
-  FListCombo.Sorted := True;            // 保持升序，插入项自动归位
-  FListCombo.DropDownCount := 5;        // 最多显示 5 行，超出则滚动
-  // 乱序加入 8 项：Sorted=True 会自动排成升序
+  FListCombo.Style := csDropDownList;   // selection only from the list
+  FListCombo.Sorted := True;            // stays ascending, inserts fall into place
+  FListCombo.DropDownCount := 5;        // show at most 5 rows, scroll beyond that
+  // Add 8 items out of order: Sorted=True auto-arranges them ascending
   FListCombo.Items.Add('Guangzhou');
   FListCombo.Items.Add('Beijing');
   FListCombo.Items.Add('Shanghai');
@@ -98,13 +101,13 @@ begin
   FListCombo.Items.Add('Nanjing');
   FListCombo.Items.Add('Wuhan');
   FListCombo.Items.Add('Xian');
-  FListCombo.ItemIndex := 0;            // 预选首项（排序后为 Beijing）
+  FListCombo.ItemIndex := 0;            // preselect the first item (Beijing after sorting)
   FListCombo.OnChange   := @ComboChange;
   FListCombo.OnSelect   := @ComboSelect;
   FListCombo.OnDropDown := @ComboDropDown;
   FListCombo.OnCloseUp  := @ComboCloseUp;
 
-  // ── 右列：csDropDown（可编辑 + 前缀自动完成） ──
+  // ── Right column: csDropDown (editable + prefix auto-complete) ──
   LblEdit := TTyLabel.Create(Self);
   LblEdit.Parent := Self;
   LblEdit.SetBounds(272, 52, 224, 20);
@@ -113,9 +116,9 @@ begin
   FEditCombo := TTyComboBox.Create(Self);
   FEditCombo.Parent := Self;
   FEditCombo.SetBounds(272, 76, 224, 26);
-  FEditCombo.Style := csDropDown;       // 可编辑字段 + 前缀自动完成弹窗
-  FEditCombo.CharCase := ecUppercase;   // 键入文本自动转大写
-  FEditCombo.MaxLength := 10;           // 限制字段长度为 10
+  FEditCombo.Style := csDropDown;       // editable field + prefix auto-complete popup
+  FEditCombo.CharCase := ecUppercase;   // typed text is auto-uppercased
+  FEditCombo.MaxLength := 10;           // limit the field length to 10
   FEditCombo.DropDownCount := 6;
   FEditCombo.Items.Add('APPLE');
   FEditCombo.Items.Add('APRICOT');
@@ -130,13 +133,13 @@ begin
   FEditCombo.OnDropDown := @ComboDropDown;
   FEditCombo.OnCloseUp  := @ComboCloseUp;
 
-  // ── 事件状态栏 ──
+  // ── Event status bar ──
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
   FStatus.SetBounds(24, 140, 472, 22);
   FStatus.Caption := '事件状态：（等待操作，尝试展开或键入前缀）';
 
-  // 整套窗框 + 背景色随主题
+  // Whole window frame + background color follow the theme
   ApplyChromeTheme(TyDefaultController);
 end;
 

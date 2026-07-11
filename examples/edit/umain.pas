@@ -1,16 +1,18 @@
 unit umain;
 
-{ TTyEdit 示例（TTyForm 自绘窗框 + TTyTitleBar）：
-    演示 TTyEdit 的核心已发布属性，每个输入框展示一种模式：
-      - TextHint      占位提示（空文本时以暗色显示）
-      - PasswordChar  密码遮罩字符
-      - CharCase      大小写强制（ecUppercase）
-      - MaxLength     最大字符数限制
-      - NumbersOnly   仅允许数字
-      - ReadOnly      只读
-      - Alignment     文本对齐（taRightJustify）
-    第一个输入框接 OnChange，实时把内容写到底部状态栏 TTyLabel。
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+{ TTyEdit demo (TTyForm custom-drawn window frame + TTyTitleBar):
+    Showcases TTyEdit's core published properties, one mode per input box:
+      - TextHint      placeholder hint (shown dimmed when the text is empty)
+      - PasswordChar  password mask character
+      - CharCase      case forcing (ecUppercase)
+      - MaxLength     maximum character-count limit
+      - NumbersOnly   digits only
+      - ReadOnly      read-only
+      - Alignment     text alignment (taRightJustify)
+    The first input box hooks OnChange to echo its content live into the
+    bottom status-bar TTyLabel.
+  UI is built purely in code (no .lfm); the theme is loaded via the global
+  TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -25,7 +27,7 @@ type
   TMainForm = class(TTyForm)
   private
     FStatus: TTyLabel;
-    procedure EditChanged(Sender: TObject);   // OnChange -> 状态栏
+    procedure EditChanged(Sender: TObject);   // OnChange -> status bar
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -35,7 +37,8 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录（兼容 lib/<cpu>-<os>/ 与 .app 包） }
+{ Walk up from the exe's directory to find the repo's themes/ folder (handles
+  lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -54,7 +57,8 @@ end;
 
 constructor TMainForm.Create(AOwner: TComponent);
 
-  { 便捷：创建一个左侧说明 label + 右侧输入框，返回输入框以便进一步设置 }
+  { Helper: create a description label on the left + an input box on the right,
+    returning the input box for further tweaking }
   function AddRow(const ACaption: string; ATop: Integer): TTyEdit;
   var
     Lbl: TTyLabel;
@@ -73,66 +77,66 @@ var
   Bar: TTyTitleBar;
   Ed: TTyEdit;
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 持久引擎
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + persistent engine
   Caption := 'TTyEdit 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 460, 400);
 
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // load the theme first
 
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self 自动关联为 TTyForm.TitleBar
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self auto-associates as TTyForm.TitleBar
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := 'TTyEdit  · TyControls';
 
-  // 1) TextHint：空文本占位提示 + OnChange 接状态栏
+  // 1) TextHint: empty-text placeholder hint + OnChange wired to the status bar
   Ed := AddRow('占位提示 + OnChange', 52);
   Ed.TextHint := '在此输入，下方实时回显…';
-  Ed.OnChange := @EditChanged;             // 输入即回显
+  Ed.OnChange := @EditChanged;             // echo on every keystroke
 
-  // 2) PasswordChar：密码遮罩
+  // 2) PasswordChar: password mask
   Ed := AddRow('密码遮罩', 92);
-  Ed.PasswordChar := '●';                  // 显示为圆点
+  Ed.PasswordChar := '●';                  // shown as bullets
   Ed.Text := 'secret';
 
-  // 3) CharCase：强制大写
+  // 3) CharCase: force uppercase
   Ed := AddRow('强制大写', 132);
-  Ed.CharCase := ecUppercase;              // 输入自动转大写
+  Ed.CharCase := ecUppercase;              // input auto-uppercased
   Ed.TextHint := '输入将转为大写';
 
-  // 4) MaxLength：最多 8 个字符
+  // 4) MaxLength: at most 8 characters
   Ed := AddRow('最大长度 8', 172);
   Ed.MaxLength := 8;
   Ed.TextHint := '最多 8 字';
 
-  // 5) NumbersOnly：仅数字
+  // 5) NumbersOnly: digits only
   Ed := AddRow('仅数字', 212);
-  Ed.NumbersOnly := True;                  // 非数字字符被拒绝
+  Ed.NumbersOnly := True;                  // non-digit characters are rejected
   Ed.TextHint := '只能输入 0-9';
 
-  // 6) ReadOnly：只读
+  // 6) ReadOnly: read-only
   Ed := AddRow('只读', 252);
   Ed.ReadOnly := True;
   Ed.Text := '只读内容，无法编辑';
 
-  // 7) Alignment：右对齐
+  // 7) Alignment: right-justified
   Ed := AddRow('右对齐', 292);
   Ed.Alignment := taRightJustify;
   Ed.Text := '1234.56';
 
-  // 底部状态栏
+  // bottom status bar
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
   FStatus.SetBounds(24, 348, 412, 24);
   FStatus.Caption := '（第一个输入框内容将在此显示）';
 
-  ApplyChromeTheme(TyDefaultController);   // 最后给整套窗框 + 背景上色
+  ApplyChromeTheme(TyDefaultController);   // finally, color the whole frame + background
 end;
 
 procedure TMainForm.EditChanged(Sender: TObject);
 begin
-  // 实时读取 TTyEdit.Text
+  // read TTyEdit.Text live
   FStatus.Caption := '当前输入：' + (Sender as TTyEdit).Text;
 end;
 

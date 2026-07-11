@@ -1,12 +1,12 @@
 unit umain;
 
-{ TTyToolBar + TTyToolSeparator 示例:
-  - alTop 顶部工具条,内含多个 TTyButton 工具按钮(工具条会把 Flat 按钮统一改成 ghost 变体)
-  - TTyToolSeparator 在按钮组之间插入分隔竖线
-  - ButtonHeight / ButtonSpacing / Indent 控制按钮尺寸与排布
-  - Flat(平面/ghost) · Wrapable(超宽自动换行,行数变化时工具条自动增高)
-  - 每个工具按钮的 OnClick 汇报到底部 TTyLabel 状态标签
-  纯代码创建 UI(无 .lfm),主体为 TTyForm + TTyTitleBar,主题经全局 TyDefaultController 加载。 }
+{ TTyToolBar + TTyToolSeparator demo:
+  - alTop top toolbar holding several TTyButton tool buttons (the toolbar rewrites Flat buttons into the ghost variant)
+  - TTyToolSeparator inserts a vertical divider between button groups
+  - ButtonHeight / ButtonSpacing / Indent control button size and layout
+  - Flat (flat/ghost) . Wrapable (auto-wrap when too wide; toolbar grows taller as the row count changes)
+  - each tool button's OnClick reports to the bottom TTyLabel status label
+  UI is built purely in code (no .lfm); the shell is TTyForm + TTyTitleBar, with the theme loaded via the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -31,7 +31,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录(兼容 lib/<cpu>-<os>/ 与 .app 包) }
+{ Walk up from the exe's directory to find the repo's themes/ directory (handles lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -50,12 +50,12 @@ end;
 
 constructor TMainForm.Create(AOwner: TComponent);
 
-  { 往工具条添加一个工具按钮。Parent=工具条 -> 由工具条负责排布与 ghost 变体。 }
+  { Add a tool button to the toolbar. Parent=toolbar -> the toolbar handles layout and the ghost variant. }
   function AddTool(ABar: TTyToolBar; const ACaption: string; AWidth: Integer): TTyButton;
   begin
     Result := TTyButton.Create(Self);
     Result.Parent := ABar;
-    Result.Width := AWidth;   { 高度由工具条 ButtonHeight 统一接管 }
+    Result.Width := AWidth;   { height is governed uniformly by the toolbar's ButtonHeight }
     Result.Caption := ACaption;
     Result.OnClick := @ToolClicked;
   end;
@@ -65,65 +65,65 @@ var
   ToolBar: TTyToolBar;
   Sep: TTyToolSeparator;
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm:无边框 + 常驻引擎
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + resident engine
   Caption := 'TTyToolBar 示例';
   Position := poScreenCenter;
-  // 故意选一个较窄的宽度:6+ 个 72px 工具按钮放不进一行,
-  // 触发 Wrapable 自动换行,工具条随行数增高(演示核心特性)。
+  // Deliberately pick a narrow width: 6+ 72px tool buttons won't fit on one row,
+  // triggering Wrapable auto-wrap so the toolbar grows with the row count (the core feature on show).
   SetBounds(0, 0, 360, 340);
 
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // load the theme first
 
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> 自动关联为 TTyForm.TitleBar
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> auto-associated as TTyForm.TitleBar
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := 'TTyToolBar  · TyControls';
 
-  // 顶部工具条:alTop 紧贴标题栏下方,工具条会随行数自动增高。
+  // Top toolbar: alTop sits right below the title bar and grows taller with the row count.
   ToolBar := TTyToolBar.Create(Self);
   ToolBar.Parent := Self;
-  ToolBar.Align := alTop;          // 默认即 alTop,这里显式声明(自我说明)
-  ToolBar.Top := 34;               // 位于标题栏之下
-  ToolBar.Flat := True;            // 平面工具按钮(子按钮被统一改成 ghost 变体;默认即 True,显式声明)
-  ToolBar.Wrapable := True;        // 宽度不足时自动换行,行数增加则工具条增高(本示例特意演示)
-  ToolBar.ButtonHeight := 28;      // 统一按钮高度
-  ToolBar.ButtonSpacing := 4;      // 相邻按钮间距
-  ToolBar.Indent := 6;             // 首按钮/顶边留白
+  ToolBar.Align := alTop;          // alTop is the default; stated explicitly here (self-documenting)
+  ToolBar.Top := 34;               // positioned below the title bar
+  ToolBar.Flat := True;            // flat tool buttons (child buttons rewritten to the ghost variant; True by default, stated explicitly)
+  ToolBar.Wrapable := True;        // auto-wrap when width is insufficient; more rows makes the toolbar taller (deliberately shown here)
+  ToolBar.ButtonHeight := 28;      // uniform button height
+  ToolBar.ButtonSpacing := 4;      // spacing between adjacent buttons
+  ToolBar.Indent := 6;             // margin before the first button / top edge
 
-  // 在 360px 的窄工具条里,以下 9 个 72px 工具按钮(加分隔线)一行放不下,
-  // 会自动折到第 2、第 3 行,工具条也随之增高 —— 这就是 Wrapable 的效果。
+  // In the narrow 360px toolbar the following 9 72px tool buttons (plus separators) won't fit on one row;
+  // they wrap onto rows 2 and 3 and the toolbar grows accordingly -- that's the Wrapable effect.
 
-  // 第一组:文件操作
+  // First group: file operations
   AddTool(ToolBar, '新建', 72);
   AddTool(ToolBar, '打开', 72);
   AddTool(ToolBar, '保存', 72);
 
-  // 分隔线:在两组之间插入一条竖线(Parent=工具条,参与排布)
+  // Separator: insert a vertical divider between the two groups (Parent=toolbar, takes part in layout)
   Sep := TTyToolSeparator.Create(Self);
   Sep.Parent := ToolBar;
 
-  // 第二组:编辑操作
+  // Second group: edit operations
   AddTool(ToolBar, '剪切', 72);
   AddTool(ToolBar, '复制', 72);
   AddTool(ToolBar, '粘贴', 72);
 
-  // 分隔线:第二、三组之间
+  // Separator: between the second and third groups
   Sep := TTyToolSeparator.Create(Self);
   Sep.Parent := ToolBar;
 
-  // 第三组:查找操作(把总数推到会换行为止)
+  // Third group: search operations (pushes the total high enough to force wrapping)
   AddTool(ToolBar, '查找', 72);
   AddTool(ToolBar, '替换', 72);
   AddTool(ToolBar, '全选', 72);
 
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
-  // 放在工具条换行(最多 3 行)之后,避免被工具条覆盖。
+  // Placed after the toolbar's wrap (up to 3 rows) so it isn't covered by the toolbar.
   FStatus.SetBounds(24, 190, 312, 24);
   FStatus.Caption := '就绪:点击任一工具按钮';
 
-  ApplyChromeTheme(TyDefaultController);   // 最后统一主题化窗体外壳与背景
+  ApplyChromeTheme(TyDefaultController);   // finally theme the form shell and background in one pass
 end;
 
 procedure TMainForm.ToolClicked(Sender: TObject);

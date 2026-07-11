@@ -1,12 +1,12 @@
 unit umain;
 
-{ TTyPageControl + TTyTabSheet 示例：
-  - 一个 TTyPageControl，内含三个 TTyTabSheet 页面（常规 / 外观 / 关于）
-  - 每个页面承载不同内容：标签、按钮、输入框
-  - 通过底部按钮切换 ActivePage（写 TabIndex / ActivePageIndex / ActivePage）
-  - “新增页面”按钮演示运行期 AddPage 动态添加标签页
-  - OnChange 事件：状态栏实时显示当前页标题与索引
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+{ TTyPageControl + TTyTabSheet demo:
+  - One TTyPageControl hosting three TTyTabSheet pages (General / Appearance / About)
+  - Each page carries different content: labels, buttons, edits
+  - Switch ActivePage via the bottom buttons (writing TabIndex / ActivePageIndex / ActivePage)
+  - The "Add page" button demonstrates adding a tab at run time via AddPage
+  - OnChange event: the status bar shows the current page's title and index live
+  UI is built entirely in code (no .lfm); the theme is loaded through the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -25,10 +25,10 @@ type
     FStatus:   TTyLabel;
     FExtraCount: Integer;
     procedure PageChanged(Sender: TObject);
-    procedure GotoGeneral(Sender: TObject);   { 用 TabIndex 切换 }
-    procedure GotoAppearance(Sender: TObject); { 用 ActivePageIndex 切换 }
-    procedure GotoAbout(Sender: TObject);      { 用 ActivePage 切换 }
-    procedure AddNewPage(Sender: TObject);     { 运行期 AddPage }
+    procedure GotoGeneral(Sender: TObject);   { switch via TabIndex }
+    procedure GotoAppearance(Sender: TObject); { switch via ActivePageIndex }
+    procedure GotoAbout(Sender: TObject);      { switch via ActivePage }
+    procedure AddNewPage(Sender: TObject);     { AddPage at run time }
     procedure BuildGeneralPage(APage: TTyTabSheet);
     procedure BuildAppearancePage(APage: TTyTabSheet);
     procedure BuildAboutPage(APage: TTyTabSheet);
@@ -41,7 +41,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录（兼容 lib/<cpu>-<os>/ 与 .app 包） }
+{ Walk up from the exe's directory to find the repo's themes/ directory (handles lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -55,7 +55,7 @@ begin
     Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
     if Dir = '' then Break;
   end;
-  Result := 'themes' + PathDelim; { 兜底：相对当前目录 }
+  Result := 'themes' + PathDelim; { fallback: relative to the current directory }
 end;
 
 constructor TMainForm.Create(AOwner: TComponent);
@@ -63,29 +63,29 @@ var
   Bar: TTyTitleBar;
   P1, P2, P3: TTyTabSheet;
 begin
-  inherited CreateNew(AOwner, 0);          { TTyForm：无边框 + 常驻主题引擎 }
+  inherited CreateNew(AOwner, 0);          { TTyForm: borderless + resident theme engine }
   Caption  := 'TTyPageControl 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 560, 420);
 
-  { 先加载亮色主题；未指定 Controller 的控件自动使用全局 TyDefaultController }
+  { Load the light theme first; controls without an explicit Controller fall back to the global TyDefaultController }
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  { ── 标题栏（Owner=Self 自动关联为 TTyForm.TitleBar） ─────────────────── }
+  { ── Title bar (Owner=Self auto-associates it as TTyForm.TitleBar) ─────── }
   Bar := TTyTitleBar.Create(Self);
   Bar.Parent  := Self;
   Bar.Align   := alTop;
   Bar.Height  := 34;
   Bar.Caption := 'TTyPageControl  · TyControls';
 
-  { ── 页控件 ───────────────────────────────────────────────────────────── }
+  { ── Page control ─────────────────────────────────────────────────────── }
   FPageCtrl := TTyPageControl.Create(Self);
   FPageCtrl.Parent    := Self;
   FPageCtrl.SetBounds(16, 48, 528, 296);
-  FPageCtrl.TabHeight := 32;             { 页签头高度（逻辑像素） }
-  FPageCtrl.OnChange  := @PageChanged;   { 页切换时更新状态栏 }
+  FPageCtrl.TabHeight := 32;             { tab header height (logical pixels) }
+  FPageCtrl.OnChange  := @PageChanged;   { update the status bar on page switch }
 
-  { 三个页面：AddPage 返回 TTyTabSheet；Caption 即页签标签 }
+  { Three pages: AddPage returns a TTyTabSheet; its Caption is the tab label }
   P1 := FPageCtrl.AddPage('常规');
   P2 := FPageCtrl.AddPage('外观');
   P3 := FPageCtrl.AddPage('关于');
@@ -94,7 +94,7 @@ begin
   BuildAppearancePage(P2);
   BuildAboutPage(P3);
 
-  { ── 底部切换按钮：分别演示三种切换 API ───────────────────────────────── }
+  { ── Bottom switch buttons: each demonstrates one of the three switch APIs ─ }
   with TTyButton.Create(Self) do
   begin
     Parent  := Self;
@@ -128,17 +128,17 @@ begin
     OnClick    := @AddNewPage;
   end;
 
-  { ── 状态栏 ───────────────────────────────────────────────────────────── }
+  { ── Status bar ───────────────────────────────────────────────────────── }
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
   FStatus.SetBounds(16, 394, 528, 20);
   FStatus.Caption := Format('当前页：%s（索引 %d，共 %d 页）',
     [FPageCtrl.ActivePage.Caption, FPageCtrl.ActivePageIndex, FPageCtrl.PageCount]);
 
-  ApplyChromeTheme(TyDefaultController);  { 最后统一为整窗 chrome + 背景着色 }
+  ApplyChromeTheme(TyDefaultController);  { finally, apply window chrome + background tint uniformly }
 end;
 
-{ ── 各页内容：控件父级为 TTyTabSheet（页面为 alClient，坐标相对页面） ───── }
+{ ── Per-page content: child controls parent to the TTyTabSheet (page is alClient, coords relative to the page) ─ }
 
 procedure TMainForm.BuildGeneralPage(APage: TTyTabSheet);
 begin
@@ -220,35 +220,35 @@ begin
   end;
 end;
 
-{ ── 事件处理 ─────────────────────────────────────────────────────────────── }
+{ ── Event handlers ───────────────────────────────────────────────────────── }
 
-{ 页切换回调：更新状态栏显示当前页标题与索引 }
+{ Page-switch callback: update the status bar with the current page's title and index }
 procedure TMainForm.PageChanged(Sender: TObject);
 begin
-  if FStatus = nil then Exit;   { 首次自动选页时状态栏尚未创建 }
+  if FStatus = nil then Exit;   { the status bar isn't built yet during the initial auto-select }
   FStatus.Caption := Format('当前页：%s（索引 %d，共 %d 页）',
     [FPageCtrl.ActivePage.Caption, FPageCtrl.ActivePageIndex, FPageCtrl.PageCount]);
 end;
 
-{ 方式一：直接写 TabIndex（基类选择索引） }
+{ Approach 1: write TabIndex directly (the base class's selected index) }
 procedure TMainForm.GotoGeneral(Sender: TObject);
 begin
   FPageCtrl.TabIndex := 0;
 end;
 
-{ 方式二：写 ActivePageIndex（TTyPageControl 发布的别名） }
+{ Approach 2: write ActivePageIndex (the alias published by TTyPageControl) }
 procedure TMainForm.GotoAppearance(Sender: TObject);
 begin
   FPageCtrl.ActivePageIndex := 1;
 end;
 
-{ 方式三：写 ActivePage（按页面对象切换） }
+{ Approach 3: write ActivePage (switch by page object) }
 procedure TMainForm.GotoAbout(Sender: TObject);
 begin
   FPageCtrl.ActivePage := FPageCtrl.Pages[2];
 end;
 
-{ 运行期动态新增一页，并立即切换过去 }
+{ Add a page dynamically at run time and switch to it immediately }
 procedure TMainForm.AddNewPage(Sender: TObject);
 var
   NewPage: TTyTabSheet;
@@ -261,7 +261,7 @@ begin
     Caption := Format('这是运行期第 %d 次新增的页面。', [FExtraCount]);
     SetBounds(16, 20, 460, 22);
   end;
-  { 切换到刚新增的页（它是最后一页） }
+  { switch to the page just added (it's the last one) }
   FPageCtrl.ActivePageIndex := FPageCtrl.PageCount - 1;
 end;
 

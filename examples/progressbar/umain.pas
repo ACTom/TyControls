@@ -1,12 +1,12 @@
 unit umain;
 
-{ TTyProgressBar 特性示例（纯代码，无 .lfm）：
-  - Min / Max / Position：进度区间与当前值
-  - AnimationsEnabled：开/关填充缓动动画（复选框切换）
-  - StyleClass：为进度条设置样式类（演示 API）
-  - 定时器 + 按钮驱动 Position 前进 / 归零
-  - OnChange 事件驱动确定性数值读出（TTyLabel）
-  主窗体为 TTyForm + TTyTitleBar；主题经全局 TyDefaultController 加载。 }
+{ TTyProgressBar feature demo (pure code, no .lfm):
+  - Min / Max / Position: value range and current value
+  - AnimationsEnabled: turn the fill easing animation on/off (toggled by a checkbox)
+  - StyleClass: assign a style class to the bar (demonstrates the API)
+  - Timer + buttons drive Position forward / back to zero
+  - OnChange event drives a deterministic numeric readout (TTyLabel)
+  The main form is a TTyForm + TTyTitleBar; the theme is loaded via the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -40,7 +40,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录 }
+{ Walk up from the exe's directory to find the repo's themes/ directory }
 function ThemesDir: string;
 var
   Dir: string;
@@ -76,30 +76,30 @@ begin
   Bar.Height := 34;
   Bar.Caption := 'ProgressBar  · TyControls';
 
-  // 说明标题
+  // Caption / description
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := Self;
   Lbl.SetBounds(20, 50, 380, 20);
   Lbl.Caption := '进度条：Min=0  Max=100，按钮 / 定时器驱动 Position';
 
-  // 进度条：设置 Min / Max / Position / StyleClass
+  // Progress bar: set Min / Max / Position / StyleClass
   FBar := TTyProgressBar.Create(Self);
   FBar.Parent := Self;
   FBar.SetBounds(20, 78, 380, 22);
   FBar.Min := 0;
   FBar.Max := 100;
   FBar.Position := 0;
-  FBar.StyleClass := '';            // 使用基础样式（演示 StyleClass API）
-  FBar.AnimationsEnabled := True;   // 默认开启填充缓动
-  FBar.OnChange := @BarChange;      // 数值变化 → 更新读出
+  FBar.StyleClass := '';            // use the base style (demonstrates the StyleClass API)
+  FBar.AnimationsEnabled := True;   // fill easing on by default
+  FBar.OnChange := @BarChange;      // value change -> update the readout
 
-  // 确定性数值读出（由 OnChange 驱动）
+  // Deterministic numeric readout (driven by OnChange)
   FReadout := TTyLabel.Create(Self);
   FReadout.Parent := Self;
   FReadout.SetBounds(20, 108, 380, 20);
   FReadout.Caption := '进度：0 / 100  (0%)';
 
-  // 动画开关
+  // Animation toggle
   FAnimChk := TTyCheckBox.Create(Self);
   FAnimChk.Parent := Self;
   FAnimChk.SetBounds(20, 140, 260, 22);
@@ -107,28 +107,28 @@ begin
   FAnimChk.Checked := True;
   FAnimChk.OnClick := @AnimToggle;
 
-  // 按钮：开始/暂停自动前进
+  // Button: start/pause automatic advance
   BtnStart := TTyButton.Create(Self);
   BtnStart.Parent := Self;
   BtnStart.SetBounds(20, 180, 110, 34);
   BtnStart.Caption := '开始 / 暂停';
   BtnStart.OnClick := @StartClick;
 
-  // 按钮：单步 +10
+  // Button: step +10
   BtnStep := TTyButton.Create(Self);
   BtnStep.Parent := Self;
   BtnStep.SetBounds(145, 180, 110, 34);
   BtnStep.Caption := '前进 +10';
   BtnStep.OnClick := @StepClick;
 
-  // 按钮：归零
+  // Button: reset to zero
   BtnReset := TTyButton.Create(Self);
   BtnReset.Parent := Self;
   BtnReset.SetBounds(270, 180, 110, 34);
   BtnReset.Caption := '归零';
   BtnReset.OnClick := @ResetClick;
 
-  // 驱动进度前进的定时器（默认不启用）
+  // Timer that drives the progress forward (disabled by default)
   FTimer := TTimer.Create(Self);
   FTimer.Interval := 250;
   FTimer.Enabled := False;

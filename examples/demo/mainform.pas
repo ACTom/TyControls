@@ -202,7 +202,7 @@ var
   Dir: string;
   i: Integer;
 begin
-  // 从 exe 所在目录向上逐级查找 themes/(兼容工程目录 / lib/<cpu>-<os>/ / macOS .app 包)。
+  // Walk up from the exe directory looking for themes/ (handles the project dir / lib/<cpu>-<os>/ / a macOS .app bundle).
   Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
   for i := 1 to 8 do
   begin
@@ -211,7 +211,7 @@ begin
     Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
     if Dir = '' then Break;
   end;
-  Result := 'themes' + PathDelim; // 兜底:相对当前目录
+  Result := 'themes' + PathDelim; // fallback: relative to the current directory
 end;
 
 procedure TDemoMainForm.TrackBar1Change(Sender: TObject);
@@ -222,7 +222,7 @@ end;
 
 procedure TDemoMainForm.FormCreate(Sender: TObject);
 begin
-  Randomize;                  // 给「随机换肤」一个种子
+  Randomize;                  // seed the "random theme" button
   // Controls (incl. the title bar/tabs/spin/memo AND the theme switcher) come from the
   // .lfm. Associate the themed menu bar (shortcut dispatch / macOS global menu), then
   // fill the theme dropdown + set the initial theme/appearance — data only, no UI build.
@@ -257,7 +257,7 @@ var
   names: TStringArray;
   i: Integer;
 begin
-  // 控件全部来自 .lfm;这里只填数据 + 设初始状态,绝不创建控件。
+  // All controls come from the .lfm; this only fills data + sets initial state, never creates controls.
   TyRegisterBuiltinThemes;
   names := TyBuiltinThemeNames;
   ThemeCombo.Items.Clear;
@@ -265,12 +265,12 @@ begin
   ThemeCombo.Items.Add(rsDemoThemeCustom);
   ThemeCombo.ItemIndex := 0;                 // default
   ApplyBuiltin('default');
-  SetAppearance(tfFollowSystem, '', nil);   // 初始外观:跟随系统
+  SetAppearance(tfFollowSystem, '', nil);   // initial appearance: follow the system
 end;
 
 procedure TDemoMainForm.ApplyBuiltin(const AName: string);
 begin
-  // 只换主题,不动 Follow/Mode(外观轴由三态独占)。
+  // Swap the theme only; leave Follow/Mode alone (the appearance axis is owned by the tri-state buttons).
   TyController.ThemeName := AName;
   ApplyChromeTheme(TyController);
 end;
@@ -288,7 +288,7 @@ begin
       dlg.InitialDir := ThemeDir;
       if dlg.Execute then
       begin
-        TyController.ThemeFile := dlg.FileName;   // 自定义文件(REPLACE)
+        TyController.ThemeFile := dlg.FileName;   // custom file (REPLACE)
         ApplyChromeTheme(TyController);
       end;
     finally dlg.Free; end;
@@ -301,8 +301,8 @@ procedure TDemoMainForm.SetAppearance(AFollow: TTyThemeFollow; const AMode: stri
   ASelected: TTyButton);
 begin
   TyController.Follow := AFollow;
-  if AFollow = tfManual then TyController.Mode := AMode;   // 跟随系统时 Mode 由 OS 决定
-  // 三态互斥:用 ghost 的 Down 选中态高亮当前外观。
+  if AFollow = tfManual then TyController.Mode := AMode;   // when following the system, the OS decides Mode
+  // Mutually exclusive tri-state: highlight the current appearance via the ghost buttons' Down state.
   BtnApLight.Down := (ASelected = BtnApLight);
   BtnApDark.Down  := (ASelected = BtnApDark);
   ApplyChromeTheme(TyController);

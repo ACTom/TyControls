@@ -1,13 +1,14 @@
 unit umain;
 
-{ Phase-9 矢量形状示例(TTyShape / TTyStarShape / TTyArrow)。
+{ Phase-9 vector shape example (TTyShape / TTyStarShape / TTyArrow).
 
-  控件全部在设计器里摆放(umain.lfm),运行时由 TTyForm 流式加载;代码只做两件 .lfm 表达不了的事:
-  加载主题、把滑块接到形状属性上。
+  All controls are laid out in the designer (umain.lfm) and streamed in at runtime by TTyForm;
+  the code only does the two things the .lfm can't express:
+  load a theme, and wire the trackbars to the shape properties.
 
-  三个控件的填充 / 描边都来自解析后的 TyPanel 样式,所以:
-    - 换主题 → 没写 StyleOverride 的形状整体换色;
-    - 写了 StyleOverride 的形状按自己的规则走(字面色或 var(--accent) 之类的主题变量)。 }
+  The fill / stroke of all three controls come from the resolved TyPanel style, so:
+    - switch theme -> shapes without a StyleOverride recolor as a whole;
+    - shapes with a StyleOverride follow their own rules (literal colors, or theme variables like var(--accent)). }
 
 {$mode objfpc}{$H+}
 
@@ -103,7 +104,8 @@ implementation
 
 {$R *.lfm}
 
-{ 从 exe 位置向上找 themes/,这样双击 exe 和从仓库根跑都能找到主题。 }
+{ Walk up from the exe location looking for themes/, so the theme is found both when
+  double-clicking the exe and when running from the repo root. }
 function ThemesDir: string;
 var
   Dir: string;
@@ -121,9 +123,9 @@ end;
 
 procedure TMainForm.UseTheme(const AFile: string);
 begin
-  // 全局默认控制器:Controller=nil 的控件都经 ActiveController 回退到它。
+  // Global default controller: controls with Controller=nil fall back to it via ActiveController.
   TyDefaultController.LoadTheme(ThemesDir + AFile);
-  ApplyChromeTheme(TyDefaultController);   // 标题栏 + 窗口圆角/阴影
+  ApplyChromeTheme(TyDefaultController);   // title bar + window rounded corners/shadow
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);

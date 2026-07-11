@@ -1,6 +1,6 @@
 unit umain;
 
-{ TTyChart 示例 —— 折线 / 柱 / 饼三种图切换,同一份数据。 }
+{ TTyChart demo -- switch between line / bar / pie charts over the same data. }
 
 {$mode objfpc}{$H+}
 

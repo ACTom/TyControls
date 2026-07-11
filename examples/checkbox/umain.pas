@@ -1,12 +1,12 @@
 unit umain;
 {$mode objfpc}{$H+}
 
-{ TTyCheckBox 示例：TTyForm + TTyTitleBar 外壳，展示复选框的关键特性：
-  - 三态：AllowGrayed=True，点击在 未选/选中/半选 之间循环，OnChange 回显 State
-  - 普通两态复选框，OnChange 回显 Checked
-  - 预先勾选 (Checked:=True)
-  - 禁用态 (Enabled:=False)
-  纯代码创建 UI（无 .lfm）；未显式指定 Controller 的控件自动使用全局 TyDefaultController。 }
+{ TTyCheckBox demo: a TTyForm + TTyTitleBar shell showcasing the key checkbox features:
+  - Tri-state: AllowGrayed=True, clicking cycles through unchecked/checked/grayed, OnChange echoes State
+  - Plain two-state checkbox, OnChange echoes Checked
+  - Pre-checked (Checked:=True)
+  - Disabled (Enabled:=False)
+  UI is built entirely in code (no .lfm); controls with no explicit Controller fall back to the global TyDefaultController. }
 
 interface
 
@@ -33,7 +33,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录 }
+{ Walk up from the exe's directory to locate the repo's themes/ folder }
 function ThemesDir: string;
 var
   Dir: string;
@@ -88,7 +88,7 @@ begin
   Bar.Parent := Self; Bar.Align := alTop; Bar.Height := 34;
   Bar.Caption := 'CheckBox  · TyControls';
 
-  { ---- 三态复选框：AllowGrayed + State 循环 ---- }
+  { ---- Tri-state checkbox: AllowGrayed + State cycling ---- }
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := Self;
   Lbl.SetBounds(20, 52, 420, 22);
@@ -99,14 +99,14 @@ begin
   FTri.SetBounds(24, 78, 280, 24);
   FTri.Caption := '包含全部子项(&A)';
   FTri.AllowGrayed := True;
-  FTri.State := cbGrayed;                   // 初始半选，展示三态之一
+  FTri.State := cbGrayed;                   // start grayed, to show one of the three states
   FTri.OnChange := @TriChange;
 
   FTriStatus := TTyLabel.Create(Self);
   FTriStatus.Parent := Self;
   FTriStatus.SetBounds(24, 106, 420, 22);
 
-  { ---- 普通两态复选框 + OnChange 状态回显 ---- }
+  { ---- Plain two-state checkbox + OnChange state echo ---- }
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := Self;
   Lbl.SetBounds(20, 148, 420, 22);
@@ -122,14 +122,14 @@ begin
   FStatus.Parent := Self;
   FStatus.SetBounds(24, 202, 420, 22);
 
-  { ---- 预先勾选 (Checked := True) ---- }
+  { ---- Pre-checked (Checked := True) ---- }
   Cb := TTyCheckBox.Create(Self);
   Cb.Parent := Self;
   Cb.SetBounds(24, 244, 280, 24);
   Cb.Caption := '默认已勾选 (Checked)';
   Cb.Checked := True;
 
-  { ---- 禁用态 ---- }
+  { ---- Disabled ---- }
   Cb := TTyCheckBox.Create(Self);
   Cb.Parent := Self;
   Cb.SetBounds(24, 274, 280, 24);
@@ -143,7 +143,7 @@ begin
   Cb.Caption := '禁用且未勾选';
   Cb.Enabled := False;
 
-  // 初始化状态回显
+  // prime the status echoes
   TriChange(nil);
   PlainChange(nil);
 

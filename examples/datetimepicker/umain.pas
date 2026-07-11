@@ -1,14 +1,18 @@
 unit umain;
 
-{ TTyDateTimePicker 示例：
-  - dtkDate 日期选择器：右侧 chevron 打开下拉日历（TTyCalendar），支持
-    分段编辑（←/→ 切换字段、↑/↓ 或滚轮步进、直接键入数字）、DateFormat 自定义格式
-  - dtkTime 时间选择器：右侧上/下箭头步进当前字段，TimeFormat 自定义格式
-  - DateTime 属性统一读写日期与时间；MinDate/MaxDate 限定范围
-  - ShowCheckBox：勾选框为空时字段置灰（inert），OnChecked 事件反馈
-  - OnChange 事件将当前值实时回显到 TTyLabel 状态栏
-  纯代码创建 UI（无 .lfm），主窗体为 TTyForm + TTyTitleBar，
-  主题通过全局 TyDefaultController 加载。 }
+{ TTyDateTimePicker example:
+  - dtkDate date picker: chevron on the right opens a drop-down calendar
+    (TTyCalendar); supports segmented editing (Left/Right to switch fields,
+    Up/Down or wheel to step, direct numeric entry) and a custom DateFormat
+  - dtkTime time picker: up/down arrows on the right step the current field,
+    with a custom TimeFormat
+  - the DateTime property reads/writes both date and time; MinDate/MaxDate
+    constrain the range
+  - ShowCheckBox: when the check box is cleared the fields are greyed out
+    (inert); the OnChecked event reports the change
+  - the OnChange event echoes the current value live into a TTyLabel status bar
+  UI is built purely in code (no .lfm); the main form is a TTyForm +
+  TTyTitleBar, and the theme is loaded through the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -22,9 +26,9 @@ uses
 type
   TMainForm = class(TTyForm)
   private
-    FDatePicker:  TTyDateTimePicker;   // dtkDate + 下拉日历
-    FTimePicker:  TTyDateTimePicker;   // dtkTime + 上/下步进
-    FCheckPicker: TTyDateTimePicker;   // ShowCheckBox 可空日期
+    FDatePicker:  TTyDateTimePicker;   // dtkDate + drop-down calendar
+    FTimePicker:  TTyDateTimePicker;   // dtkTime + up/down stepping
+    FCheckPicker: TTyDateTimePicker;   // ShowCheckBox nullable date
     FStatus:      TTyLabel;
     procedure DateChanged(Sender: TObject);
     procedure TimeChanged(Sender: TObject);
@@ -42,7 +46,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录 }
+{ Walk up from the exe's directory to locate the repo's themes/ directory }
 function ThemesDir: string;
 var
   Dir: string;
@@ -64,18 +68,18 @@ var
   Bar: TTyTitleBar;
   Lbl: TTyLabel;
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 持久引擎
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + persistent engine
   Caption := 'TTyDateTimePicker 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 420, 320);
 
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // load the theme first
 
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self → 自动关联为 TTyForm.TitleBar
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> auto-associated as TTyForm.TitleBar
   Bar.Parent := Self; Bar.Align := alTop; Bar.Height := 34;
   Bar.Caption := 'DateTimePicker  · TyControls';
 
-  { ── 日期选择器（下拉日历）── }
+  { ── Date picker (drop-down calendar) ── }
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := Self; Lbl.SetBounds(20, 56, 120, 22);
   Lbl.Caption := '日期 (dtkDate)：';
@@ -92,7 +96,7 @@ begin
   FDatePicker.OnDropDown := @DropDownOpened;
   FDatePicker.OnCloseUp := @DropDownClosed;
 
-  { ── 时间选择器（上/下步进）── }
+  { ── Time picker (up/down stepping) ── }
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := Self; Lbl.SetBounds(20, 96, 120, 22);
   Lbl.Caption := '时间 (dtkTime)：';
@@ -105,7 +109,7 @@ begin
   FTimePicker.DateTime := Now;
   FTimePicker.OnChange := @TimeChanged;
 
-  { ── 可空日期（ShowCheckBox）── }
+  { ── Nullable date (ShowCheckBox) ── }
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := Self; Lbl.SetBounds(20, 136, 120, 22);
   Lbl.Caption := '可空日期：';
@@ -116,19 +120,19 @@ begin
   FCheckPicker.Kind := dtkDate;
   FCheckPicker.DateFormat := 'yyyy/mm/dd';
   FCheckPicker.ShowCheckBox := True;
-  FCheckPicker.Checked := False;           // 初始为空（字段置灰）
+  FCheckPicker.Checked := False;           // initially empty (fields greyed out)
   FCheckPicker.DateTime := Now;
   FCheckPicker.OnChange := @CheckPickerChanged;
   FCheckPicker.OnChecked := @CheckPickerChecked;
 
-  { ── 状态栏 ── }
+  { ── Status bar ── }
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
   FStatus.SetBounds(20, 180, 380, 110);
   FStatus.WordWrap := True;
   RefreshStatus;
 
-  ApplyChromeTheme(TyDefaultController);   // 最后统一给窗体铬饰与背景应用主题
+  ApplyChromeTheme(TyDefaultController);   // finally apply the theme to the form chrome and background
 end;
 
 procedure TMainForm.RefreshStatus;

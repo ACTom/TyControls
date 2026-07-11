@@ -1,14 +1,14 @@
 unit umain;
 
-{ TTyMenuBar + TTyMenuEx + 窗口卷起 示例（TTyForm 自绘窗框 + 标题栏）：
-    - TTyMenuBar：顶部菜单栏，绑定标准 LCL 的 TMainMenu（文件 / 编辑 / 视图）
-        · Align=alTop 停靠在标题栏下方；Alt+助记符（&文件 → Alt+F）打开下拉
-    - TTyMenuEx：增强右键菜单（继承 TTyPopupMenu），挂在面板的 PopupMenu 上，右键弹出
-        · 分节标题：Caption='-剪贴板' → 渲染成不可点的“剪贴板”分节标题（纯 '-' 仍是分隔线）
-        · 图标列：项的 ImageIndex 从 Images（TTyVirtualImageList，本例用 TTyImageCollection
-          现画三个圆角方块）在左槽画图标；勾选项显示对勾（对勾优先于图标）
-    - 窗口卷起：CaptionAction=tcaRollUp → 双击标题栏把窗口收起到只剩标题栏，再双击还原
-  所有颜色/边框/圆角/高亮均来自主题规则；纯代码创建 UI（无 .lfm），主题走全局 TyDefaultController。 }
+{ TTyMenuBar + TTyMenuEx + window roll-up demo (TTyForm custom-drawn frame + title bar):
+    - TTyMenuBar: top menu bar, bound to a standard LCL TMainMenu (File / Edit / View)
+        · Align=alTop docks it below the title bar; Alt+mnemonic (&File -> Alt+F) opens the dropdown
+    - TTyMenuEx: enhanced context menu (descends from TTyPopupMenu), attached to the panel's PopupMenu, popped up on right-click
+        · Section header: Caption='-Clipboard' -> rendered as a non-clickable "Clipboard" section header (a bare '-' is still a separator)
+        · Icon column: an item's ImageIndex draws an icon in the left slot from Images (TTyVirtualImageList, here backed by a TTyImageCollection
+          that draws three rounded squares on the fly); checked items show a check mark (the check mark takes priority over the icon)
+    - Window roll-up: CaptionAction=tcaRollUp -> double-clicking the title bar collapses the window down to just the title bar, double-click again restores
+  All colors/borders/corners/highlights come from theme rules; the UI is built purely in code (no .lfm), themed via the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -24,18 +24,18 @@ type
   private
     FMainMenu: TMainMenu;
     FMenuBar: TTyMenuBar;
-    FPopup: TTyMenuEx;              // 增强右键菜单:分节标题 + 图标列
-    FImgColl: TTyImageCollection;   // 图标位图源
-    FImages: TTyVirtualImageList;   // 菜单图标列的 Images
+    FPopup: TTyMenuEx;              // enhanced context menu: section headers + icon column
+    FImgColl: TTyImageCollection;   // icon bitmap source
+    FImages: TTyVirtualImageList;   // Images for the menu's icon column
     FHintPanel: TTyPanel;
     FStatusLabel: TTyLabel;
-    { 通用菜单项点击：把项的 Caption 回显到状态标签 }
+    { Generic menu-item click: echo the item's Caption to the status label }
     procedure MenuItemClicked(Sender: TObject);
-    { 构建顶层菜单栏的数据模型 }
+    { Build the top-level menu bar's data model }
     procedure BuildMainMenu;
-    { 构建增强右键菜单的图标源(TTyImageCollection + TTyVirtualImageList) }
+    { Build the icon source for the enhanced context menu (TTyImageCollection + TTyVirtualImageList) }
     procedure BuildImages;
-    { 构建增强右键弹出菜单(TTyMenuEx:分节标题 + 图标列 + 勾选项) }
+    { Build the enhanced popup menu (TTyMenuEx: section headers + icon column + checked items) }
     procedure BuildPopupMenu;
   public
     constructor Create(AOwner: TComponent); override;
@@ -46,7 +46,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录 }
+{ Search upward from the exe's directory for the repo's themes/ folder }
 function ThemesDir: string;
 var
   Dir: string;
@@ -63,7 +63,7 @@ begin
   Result := 'themes' + PathDelim;
 end;
 
-{ 新建一个 TMenuItem：设 Caption + OnClick，Owner 决定生命周期 }
+{ Create a new TMenuItem: set Caption + OnClick, Owner governs its lifetime }
 function NewLeaf(AOwner: TComponent; const ACaption: string;
   AOnClick: TNotifyEvent): TMenuItem;
 begin
@@ -75,17 +75,17 @@ end;
 function NewSep(AOwner: TComponent): TMenuItem;
 begin
   Result := TMenuItem.Create(AOwner);
-  Result.Caption := '-';   // LCL 约定：Caption='-' 即分隔线
+  Result.Caption := '-';   // LCL convention: Caption='-' means a separator
 end;
 
-{ 分节标题：Caption='-文本' → TTyMenuEx 渲染成不可点的分节标题（纯 '-' 仍是分隔线） }
+{ Section header: Caption='-text' -> TTyMenuEx renders a non-clickable section header (a bare '-' is still a separator) }
 function NewHeader(AOwner: TComponent; const AText: string): TMenuItem;
 begin
   Result := TMenuItem.Create(AOwner);
   Result.Caption := '-' + AText;
 end;
 
-{ 带图标的菜单项：ImageIndex 指向菜单 Images 里的图标 }
+{ Menu item with an icon: ImageIndex points to an icon in the menu's Images }
 function NewIconLeaf(AOwner: TComponent; const ACaption: string;
   AImageIndex: Integer; AOnClick: TNotifyEvent): TMenuItem;
 begin
@@ -93,7 +93,7 @@ begin
   Result.ImageIndex := AImageIndex;
 end;
 
-{ 勾选项：勾选态显示对勾（对勾优先于图标） }
+{ Checked item: shows a check mark when checked (the check mark takes priority over the icon) }
 function NewCheckLeaf(AOwner: TComponent; const ACaption: string;
   AOnClick: TNotifyEvent): TMenuItem;
 begin
@@ -102,7 +102,7 @@ begin
   Result.Checked := True;
 end;
 
-{ 画一个 16px 圆角方块图标（指定颜色）加进集合；AddBitmap 复制存储，调用方保留所有权 }
+{ Draw a 16px rounded-square icon (in the given color) and add it to the collection; AddBitmap stores a copy, the caller keeps ownership }
 procedure AddIcon(AColl: TTyImageCollection; const AName: string; AColor: TBGRAPixel);
 var bmp: TBGRABitmap;
 begin
@@ -121,7 +121,7 @@ var
 begin
   FMainMenu := TMainMenu.Create(Self);
 
-  { ---- 文件（Alt+F） ---- }
+  { ---- File (Alt+F) ---- }
   TopItem := TMenuItem.Create(FMainMenu);
   TopItem.Caption := '文件(&F)';
   FMainMenu.Items.Add(TopItem);
@@ -131,7 +131,7 @@ begin
   TopItem.Add(NewSep(FMainMenu));
   TopItem.Add(NewLeaf(FMainMenu, '退出(&X)', @MenuItemClicked));
 
-  { ---- 编辑（Alt+E） ---- }
+  { ---- Edit (Alt+E) ---- }
   TopItem := TMenuItem.Create(FMainMenu);
   TopItem.Caption := '编辑(&E)';
   FMainMenu.Items.Add(TopItem);
@@ -142,7 +142,7 @@ begin
   TopItem.Add(NewLeaf(FMainMenu, '复制(&C)', @MenuItemClicked));
   TopItem.Add(NewLeaf(FMainMenu, '粘贴(&P)', @MenuItemClicked));
 
-  { ---- 视图（Alt+V） ---- }
+  { ---- View (Alt+V) ---- }
   TopItem := TMenuItem.Create(FMainMenu);
   TopItem.Caption := '视图(&V)';
   FMainMenu.Items.Add(TopItem);
@@ -155,29 +155,29 @@ end;
 procedure TMainForm.BuildImages;
 begin
   FImgColl := TTyImageCollection.Create(Self);
-  AddIcon(FImgColl, 'cut',   BGRA(220, 70, 70));    // 红
-  AddIcon(FImgColl, 'copy',  BGRA(80, 170, 90));    // 绿
-  AddIcon(FImgColl, 'paste', BGRA(70, 120, 220));   // 蓝
+  AddIcon(FImgColl, 'cut',   BGRA(220, 70, 70));    // red
+  AddIcon(FImgColl, 'copy',  BGRA(80, 170, 90));    // green
+  AddIcon(FImgColl, 'paste', BGRA(70, 120, 220));   // blue
   FImages := TTyVirtualImageList.Create(Self);
   FImages.Collection := FImgColl;
-  FImages.Names.Text := 'cut' + LineEnding + 'copy' + LineEnding + 'paste';   // 索引 0/1/2
+  FImages.Names.Text := 'cut' + LineEnding + 'copy' + LineEnding + 'paste';   // indices 0/1/2
 end;
 
 procedure TMainForm.BuildPopupMenu;
 begin
   BuildImages;
   FPopup := TTyMenuEx.Create(Self);
-  FPopup.Images := FImages;              // 图标列
-  FPopup.BannerWidth := 26;              // 左侧装饰 banner(强调色竖条)
-  FPopup.BannerCaption := 'TyControls';  // banner 上竖排文字
-  // 分节标题（'-文本'）+ 带图标的项 + 勾选项
+  FPopup.Images := FImages;              // icon column
+  FPopup.BannerWidth := 26;              // decorative banner on the left (accent-color vertical bar)
+  FPopup.BannerCaption := 'TyControls';  // vertical text on the banner
+  // section headers ('-text') + items with icons + checked items
   FPopup.Items.Add(NewHeader(FPopup, '剪贴板'));
   FPopup.Items.Add(NewIconLeaf(FPopup, '剪切(&T)', 0, @MenuItemClicked));
   FPopup.Items.Add(NewIconLeaf(FPopup, '复制(&C)', 1, @MenuItemClicked));
   FPopup.Items.Add(NewIconLeaf(FPopup, '粘贴(&P)', 2, @MenuItemClicked));
   FPopup.Items.Add(NewSep(FPopup));
   FPopup.Items.Add(NewHeader(FPopup, '视图'));
-  FPopup.Items.Add(NewCheckLeaf(FPopup, '显示网格', @MenuItemClicked));   // 勾选态显示对勾
+  FPopup.Items.Add(NewCheckLeaf(FPopup, '显示网格', @MenuItemClicked));   // shows a check mark when checked
   FPopup.Items.Add(NewLeaf(FPopup, '刷新(&R)', @MenuItemClicked));
   FPopup.Items.Add(NewSep(FPopup));
   FPopup.Items.Add(NewLeaf(FPopup, '属性(&P)', @MenuItemClicked));
@@ -187,49 +187,49 @@ constructor TMainForm.Create(AOwner: TComponent);
 var
   Bar: TTyTitleBar;
 begin
-  // TTyForm.CreateNew → 无边框 + 持久引擎，但默认无标题栏
+  // TTyForm.CreateNew -> borderless + persistent engine, but no title bar by default
   inherited CreateNew(AOwner, 0);
   Caption := 'TTyMenuEx / 窗口卷起 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 560, 380);
-  CaptionAction := tcaRollUp;   // 双击标题栏 → 卷起到标题栏(再双击还原)
+  CaptionAction := tcaRollUp;   // double-click the title bar -> roll up to the title bar (double-click again restores)
 
-  // 主题须先加载
+  // the theme must be loaded first
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  { ---- 顶部菜单栏（先建）---- }
-  // 注意顺序：代码建的同向 alTop 兄弟按【反创建序】显示——后建的排到最上方。
-  // 所以菜单栏先建、标题栏后建，标题栏才会压在最顶、菜单栏在其下方。
+  { ---- top menu bar (built first) ---- }
+  // Mind the order: code-created same-direction alTop siblings display in [reverse creation order] -- the last built ends up on top.
+  // So the menu bar is built first and the title bar second, so the title bar sits at the very top with the menu bar below it.
   BuildMainMenu;
   FMenuBar := TTyMenuBar.Create(Self);
   FMenuBar.Parent := Self;
   FMenuBar.Align := alTop;
   FMenuBar.Height := 30;
-  FMenuBar.Menu := FMainMenu;   // 绑定数据模型；点顶层项 / Alt+助记符打开下拉
-  MenuBar := FMenuBar;          // 关联为窗体主菜单栏：启用 TTyForm.IsShortcut 快捷键派发
+  FMenuBar.Menu := FMainMenu;   // bind the data model; click a top-level item / Alt+mnemonic opens the dropdown
+  MenuBar := FMenuBar;          // associate as the form's main menu bar: enables TTyForm.IsShortcut key dispatch
 
-  // 标题栏（后建 → 排到最上方；Owner=Self 即自动关联为 TTyForm.TitleBar）
+  // title bar (built last -> ends up on top; Owner=Self auto-associates it as TTyForm.TitleBar)
   Bar := TTyTitleBar.Create(Self);
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := '增强菜单 + 双击标题栏卷起  · TyControls';
 
-  { ---- 右键菜单目标面板 ---- }
+  { ---- target panel for the context menu ---- }
   BuildPopupMenu;
   FHintPanel := TTyPanel.Create(Self);
   FHintPanel.Parent := Self;
   FHintPanel.Caption := '右键此面板 → 增强菜单(分节标题 + 图标列 + 勾选项)';
   FHintPanel.SetBounds(16, 80, 528, 200);
-  FHintPanel.PopupMenu := FPopup;   // 挂到面板：右键即弹增强 themed 菜单
+  FHintPanel.PopupMenu := FPopup;   // attach to the panel: right-click pops the enhanced themed menu
 
-  { ---- 状态标签：菜单项点击回显 ---- }
+  { ---- status label: echoes menu-item clicks ---- }
   FStatusLabel := TTyLabel.Create(Self);
   FStatusLabel.Parent := Self;
   FStatusLabel.SetBounds(16, 296, 528, 24);
   FStatusLabel.Caption := '就绪：右键面板试增强菜单；双击标题栏可卷起窗口（再双击还原）';
 
-  // 整套窗框 + 背景色随主题
+  // whole window frame + background color follow the theme
   ApplyChromeTheme(TyDefaultController);
 end;
 
@@ -239,7 +239,7 @@ var
 begin
   if not (Sender is TMenuItem) then Exit;
   Item := TMenuItem(Sender);
-  // 去掉助记符 '&' 后回显（StripHotkey 由 Menus 单元提供）
+  // echo with the mnemonic '&' stripped (StripHotkey is provided by the Menus unit)
   FStatusLabel.Caption := Format('已选择菜单命令：%s', [StripHotkey(Item.Caption)]);
 end;
 

@@ -1,14 +1,15 @@
 unit umain;
 
-{ TTySpinEdit 示例：
-  演示该整数微调框的主要已发布属性与事件（源码为整数实现，不支持小数）：
-    - Value / MinValue / MaxValue / Increment，OnChange 实时写入状态栏
-    - 负值范围（-50..50，步进 5）
-    - Alignment（右对齐）、MaxLength（限制输入位数）
-    - ReadOnly（锁定：禁止编辑/步进/滚轮）
-  交互方式：上/下小箭头按钮、键盘 ↑/↓、鼠标滚轮、直接键入后回车提交。
-  纯代码创建 UI（无 .lfm）；主窗体为 TTyForm + TTyTitleBar，主题经全局
-  TyDefaultController 加载。 }
+{ TTySpinEdit demo:
+  Showcases the main published properties and events of this integer spin box
+  (the implementation is integer-only; decimals are not supported):
+    - Value / MinValue / MaxValue / Increment, with OnChange writing live to the status bar
+    - Negative range (-50..50, step 5)
+    - Alignment (right-justified), MaxLength (limits the number of digits entered)
+    - ReadOnly (locked: no editing/stepping/wheel)
+  Interaction: up/down arrow buttons, keyboard ↑/↓, mouse wheel, or typing then Enter to commit.
+  The UI is built entirely in code (no .lfm); the main form is TTyForm + TTyTitleBar, and the
+  theme is loaded through the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -22,11 +23,11 @@ uses
 type
   TMainForm = class(TTyForm)
   private
-    FSpinQty: TTySpinEdit;      // 0..100 步进 1
-    FSpinOfs: TTySpinEdit;      // -50..50 步进 5（负值范围）
-    FSpinYear: TTySpinEdit;     // 右对齐 + MaxLength
-    FSpinLock: TTySpinEdit;     // ReadOnly 锁定
-    FStatus: TTyLabel;          // OnChange 状态输出
+    FSpinQty: TTySpinEdit;      // 0..100 step 1
+    FSpinOfs: TTySpinEdit;      // -50..50 step 5 (negative range)
+    FSpinYear: TTySpinEdit;     // right-justified + MaxLength
+    FSpinLock: TTySpinEdit;     // ReadOnly locked
+    FStatus: TTyLabel;          // OnChange status output
     procedure SpinChange(Sender: TObject);
     procedure UpdateStatus(const ATag: string; ASpin: TTySpinEdit);
   public
@@ -38,7 +39,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录（兼容 lib/<cpu>-<os>/ 与 .app 包） }
+{ Walk up from the exe's directory to find the repo's themes/ folder (handles lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -69,20 +70,20 @@ var
   end;
 
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 常驻绘制引擎
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + persistent paint engine
   Caption := 'TTySpinEdit 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 440, 420);
 
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // load the theme first
 
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self → 自动关联为 TTyForm.TitleBar
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self → auto-associated as TTyForm.TitleBar
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := 'SpinEdit  · TyControls';
 
-  // ① 数量：0..100，步进 1
+  // ① Quantity: 0..100, step 1
   AddLabel(52, '数量（0..100，步进 1；箭头/方向键/滚轮/键入）：');
   FSpinQty := TTySpinEdit.Create(Self);
   FSpinQty.Parent := Self;
@@ -93,7 +94,7 @@ begin
   FSpinQty.Value := 10;
   FSpinQty.OnChange := @SpinChange;
 
-  // ② 偏移：-50..50，步进 5（负值范围 + 自定义步进）
+  // ② Offset: -50..50, step 5 (negative range + custom step)
   AddLabel(120, '偏移（-50..50，步进 5，含负值范围）：');
   FSpinOfs := TTySpinEdit.Create(Self);
   FSpinOfs.Parent := Self;
@@ -104,7 +105,7 @@ begin
   FSpinOfs.Value := 0;
   FSpinOfs.OnChange := @SpinChange;
 
-  // ③ 年份：右对齐 + MaxLength=4（限制输入位数）
+  // ③ Year: right-justified + MaxLength=4 (limits the number of digits entered)
   AddLabel(188, '年份（右对齐 Alignment，MaxLength=4）：');
   FSpinYear := TTySpinEdit.Create(Self);
   FSpinYear.Parent := Self;
@@ -116,7 +117,7 @@ begin
   FSpinYear.Value := 2026;
   FSpinYear.OnChange := @SpinChange;
 
-  // ④ 锁定：ReadOnly=True（禁止编辑/步进/滚轮）
+  // ④ Locked: ReadOnly=True (no editing/stepping/wheel)
   AddLabel(256, '锁定（ReadOnly=True：不可编辑/步进/滚轮）：');
   FSpinLock := TTySpinEdit.Create(Self);
   FSpinLock.Parent := Self;
@@ -127,7 +128,7 @@ begin
   FSpinLock.ReadOnly := True;
   FSpinLock.OnChange := @SpinChange;
 
-  // 状态栏：任一 SpinEdit 的 OnChange 都在此输出
+  // Status bar: the OnChange of any SpinEdit prints here
   Lbl := AddLabel(332, '状态：');
   Lbl.SetBounds(24, 332, 60, 20);
   FStatus := TTyLabel.Create(Self);
@@ -135,7 +136,7 @@ begin
   FStatus.SetBounds(84, 332, 336, 20);
   FStatus.Caption := '（改变任一数值以查看 OnChange 输出）';
 
-  ApplyChromeTheme(TyDefaultController);   // 最后统一为整套窗体外观 + 背景上色
+  ApplyChromeTheme(TyDefaultController);   // finally apply the whole-form look + background coloring in one pass
 end;
 
 procedure TMainForm.UpdateStatus(const ATag: string; ASpin: TTySpinEdit);

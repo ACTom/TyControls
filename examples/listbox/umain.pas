@@ -1,17 +1,19 @@
 unit umain;
 
-{ TTyListBox 示例（TTyForm + TTyTitleBar 无边框窗体）：
-  演示要点：
-    - Items / ItemIndex：填充大量列表项（30 项城市），内容高度超过可视区域 →
-      自动出现内置滚动条；键盘上下键 / PageUp/PageDown / Home/End、鼠标滚轮均可滚动
-    - OnChange：选择变化时更新底部 TTyLabel 状态栏（单选显示项文本+序号，
-      多选显示已选数量）
-    - MultiSelect：复选框切换单选 / 多选模式（多选下 Ctrl 点选、Shift 连选、
-      空格切换）
-    - Sorted：复选框切换升序排序（选中项按文本重新定位后保持选中）
-    - ItemHeight：按钮在 24 / 32 之间切换行高
-    - SelectAll / ClearSelection：多选模式下全选 / 清空
-  纯代码创建 UI（无 .lfm），主题通过全局 TyDefaultController 加载。 }
+{ TTyListBox demo (TTyForm + TTyTitleBar borderless window):
+  Highlights:
+    - Items / ItemIndex: fill with many items (30 cities); content taller than the
+      viewport -> the built-in scrollbar appears automatically. Up/Down keys,
+      PageUp/PageDown, Home/End and the mouse wheel all scroll.
+    - OnChange: update the bottom TTyLabel status bar whenever the selection changes
+      (single-select shows the item text + index, multi-select shows the count).
+    - MultiSelect: checkbox toggles single- / multi-select mode (in multi-select,
+      Ctrl-click, Shift-range-select and Space toggle).
+    - Sorted: checkbox toggles ascending sort (the selected item keeps its selection
+      after being repositioned by text).
+    - ItemHeight: button toggles the row height between 24 and 32.
+    - SelectAll / ClearSelection: select all / clear in multi-select mode.
+  UI built purely in code (no .lfm); the theme is loaded via the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -49,7 +51,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录（兼容 lib/<cpu>-<os>/ 与 .app 包） }
+{ Walk up from the exe's directory to find the repo's themes/ folder (handles lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -77,15 +79,15 @@ var
     '贵阳', '哈尔滨', '沈阳', '石家庄', '太原', '兰州');
   i: Integer;
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm：无边框 + 持久化引擎
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + persistence engine
   Caption := 'TTyListBox 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 420, 420);
 
-  // 先加载主题：未显式指定 Controller 的控件自动使用全局 TyDefaultController
+  // Load the theme first: controls without an explicit Controller use the global TyDefaultController
   TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
 
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self → 自动关联为 TTyForm.TitleBar
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> auto-associated as TTyForm.TitleBar
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
@@ -96,13 +98,13 @@ begin
   LblTitle.SetBounds(16, 46, 388, 20);
   LblTitle.Caption := '城市列表（上下键 / PageUp/Down / 滚轮可滚动）：';
 
-  // 底部状态栏：必须在 FListBox.OnChange 接线 / ItemIndex 赋值之前创建，
-  // 否则设置 ItemIndex 触发 OnChange → UpdateStatus 访问尚未创建的 FStatus → 崩溃
+  // Bottom status bar: must be created before wiring FListBox.OnChange / assigning ItemIndex,
+  // otherwise setting ItemIndex fires OnChange -> UpdateStatus touches the not-yet-created FStatus -> crash
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
   FStatus.SetBounds(16, 376, 388, 20);
 
-  // 列表框：30 项，高度不足以显示全部 → 自动出现内置滚动条
+  // List box: 30 items, too short to show them all -> the built-in scrollbar appears automatically
   FListBox := TTyListBox.Create(Self);
   FListBox.Parent := Self;
   FListBox.SetBounds(16, 70, 388, 220);
@@ -110,9 +112,9 @@ begin
   FListBox.OnChange := @ListBoxChange;
   for i := Low(Cities) to High(Cities) do
     FListBox.Items.Add(Cities[i]);
-  FListBox.ItemIndex := 0;                  // 默认选中第一项
+  FListBox.ItemIndex := 0;                  // select the first item by default
 
-  // 多选 / 排序 复选框
+  // Multi-select / sort checkboxes
   FChkMulti := TTyCheckBox.Create(Self);
   FChkMulti.Parent := Self;
   FChkMulti.SetBounds(16, 300, 130, 24);
@@ -125,7 +127,7 @@ begin
   FChkSorted.Caption := '升序排序';
   FChkSorted.OnChange := @SortedChange;
 
-  // 行高切换 / 全选 / 清空 按钮
+  // Row-height toggle / select-all / clear buttons
   FBtnHeight := TTyButton.Create(Self);
   FBtnHeight.Parent := Self;
   FBtnHeight.SetBounds(16, 332, 120, 30);
@@ -144,10 +146,10 @@ begin
   FBtnClear.Caption := '清空选择';
   FBtnClear.OnClick := @DoClear;
 
-  // 所有控件就绪后刷新状态栏文本（FStatus 已在前面创建）
+  // Refresh the status-bar text once all controls are ready (FStatus was created earlier)
   UpdateStatus;
 
-  ApplyChromeTheme(TyDefaultController);    // 最后统一给窗体 chrome + 背景上主题
+  ApplyChromeTheme(TyDefaultController);    // finally theme the form chrome + background together
 end;
 
 procedure TMainForm.UpdateStatus;
@@ -190,13 +192,13 @@ end;
 
 procedure TMainForm.DoSelectAll(Sender: TObject);
 begin
-  FListBox.SelectAll;   // 仅多选模式生效
+  FListBox.SelectAll;   // only effective in multi-select mode
   UpdateStatus;
 end;
 
 procedure TMainForm.DoClear(Sender: TObject);
 begin
-  FListBox.ClearSelection;   // 仅多选模式生效
+  FListBox.ClearSelection;   // only effective in multi-select mode
   UpdateStatus;
 end;
 

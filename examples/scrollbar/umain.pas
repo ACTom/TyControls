@@ -1,10 +1,10 @@
 unit umain;
 
-{ TTyScrollBar 示例：
-  - 一个垂直滚动条（Kind=sbVertical）与一个水平滚动条（Kind=sbHorizontal）
-  - 演示 Min / Max / Position / PageSize / SmallChange
-  - OnChange 将两条滚动条的 Position 实时汇总到 TTyLabel 状态栏
-  纯代码创建 UI（无 .lfm），主界面为 TTyForm + TTyTitleBar。 }
+{ TTyScrollBar example:
+  - a vertical scroll bar (Kind=sbVertical) and a horizontal one (Kind=sbHorizontal)
+  - demonstrates Min / Max / Position / PageSize / SmallChange
+  - OnChange live-aggregates both bars' Position into a TTyLabel status line
+  UI is built purely in code (no .lfm); the main window is TTyForm + TTyTitleBar. }
 
 {$mode objfpc}{$H+}
 interface
@@ -15,9 +15,9 @@ uses
 type
   TMainForm = class(TTyForm)
   private
-    FVBar: TTyScrollBar;      // 垂直滚动条
-    FHBar: TTyScrollBar;      // 水平滚动条
-    FStatus: TTyLabel;        // OnChange 状态读出
+    FVBar: TTyScrollBar;      // vertical scroll bar
+    FHBar: TTyScrollBar;      // horizontal scroll bar
+    FStatus: TTyLabel;        // OnChange status readout
     procedure BarChange(Sender: TObject);
     procedure UpdateStatus;
   public
@@ -52,7 +52,7 @@ end;
 
 procedure TMainForm.BarChange(Sender: TObject);
 begin
-  UpdateStatus;   // 任一滚动条改变均刷新状态栏
+  UpdateStatus;   // refresh the status line whenever either bar changes
 end;
 
 constructor TMainForm.Create(AOwner: TComponent);
@@ -67,13 +67,13 @@ begin
   Bar.Parent := Self; Bar.Align := alTop; Bar.Height := 34;
   Bar.Caption := 'ScrollBar  · TyControls';
 
-  { 提示文字 }
+  { hint text }
   Tip := TTyLabel.Create(Self);
   Tip.Parent := Self;
   Tip.Caption := '拖动滑块、点击轨道/箭头，或用方向键/PageUp/PageDown 滚动';
   Tip.SetBounds(24, 48, 432, 20);
 
-  { ==== 垂直滚动条：范围 0..200, PageSize 20, SmallChange 5, 起始居中 ==== }
+  { ==== vertical scroll bar: range 0..200, PageSize 20, SmallChange 5, starts centered ==== }
   FVBar := TTyScrollBar.Create(Self);
   FVBar.Parent := Self;
   FVBar.Kind := sbVertical;
@@ -85,7 +85,7 @@ begin
   FVBar.SetBounds(28, 80, 18, 236);
   FVBar.OnChange := @BarChange;
 
-  { ==== 水平滚动条：范围 0..100, PageSize 10, SmallChange 2 ==== }
+  { ==== horizontal scroll bar: range 0..100, PageSize 10, SmallChange 2 ==== }
   FHBar := TTyScrollBar.Create(Self);
   FHBar.Parent := Self;
   FHBar.Kind := sbHorizontal;
@@ -97,13 +97,13 @@ begin
   FHBar.SetBounds(80, 298, 372, 18);
   FHBar.OnChange := @BarChange;
 
-  { ==== 状态标签：反映两条滚动条的 Position 及其参数 ==== }
+  { ==== status label: reflects both bars' Position and their parameters ==== }
   FStatus := TTyLabel.Create(Self);
   FStatus.Parent := Self;
   FStatus.WordWrap := True;
   FStatus.SetBounds(80, 96, 372, 90);
 
-  UpdateStatus;                            // 初始读出
+  UpdateStatus;                            // initial readout
 
   ApplyChromeTheme(TyDefaultController);   // theme the whole chrome + form bg LAST
 end;

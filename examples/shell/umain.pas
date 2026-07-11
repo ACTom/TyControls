@@ -1,18 +1,22 @@
 unit umain;
 
-{ TTyShellTreeView + TTyShellListView + TTyShellComboBox + TTyFilterComboBox 示例
-  —— 一个迷你「文件浏览器」,也是 Phase 7 文件对话框的布局雏形。
+{ TTyShellTreeView + TTyShellListView + TTyShellComboBox + TTyFilterComboBox demo
+  -- a mini "file browser", also the layout prototype for the Phase 7 file dialog.
 
-  顶部是「查找范围」下拉(TTyShellComboBox):当前目录的面包屑祖先 + 各盘符,点一行就跳过去。
-  左边是目录树(TTyShellTreeView):只显示文件夹,懒加载。右边是文件列表(TTyShellListView):
-  当前目录内容,四列,可切视图 / 点表头排序 / F2 改名 / 按类型分组。底部是「文件类型」下拉
-  (TTyFilterComboBox):选一个过滤预设,列表的 Mask 跟着变(目录恒显)。
+  Top is the "look-in" dropdown (TTyShellComboBox): the breadcrumb ancestors of the current
+  directory + each drive; click a row to jump there.
+  Left is the directory tree (TTyShellTreeView): folders only, lazy-loaded. Right is the file
+  list (TTyShellListView): the current directory's contents, four columns, with view switching /
+  header-click sorting / F2 rename / grouping by kind. Bottom is the "file type" dropdown
+  (TTyFilterComboBox): pick a filter preset and the list's Mask follows (directories always show).
 
-  四者联动:树点目录、列表双击文件夹、查找范围选祖先/盘符 —— 任一处导航,其它三处都跟着到位。
-  一个 FSyncing 标志把「树→列表→树」的回环挡掉。查找范围下拉是纯显示同步(设它的 Directory 不触发事件),
-  所以在同步里直接写,不进 FSyncing。
+  All four stay in sync: click a directory in the tree, double-click a folder in the list, pick an
+  ancestor/drive in look-in -- navigate anywhere and the other three follow. An FSyncing flag blocks
+  the "tree -> list -> tree" feedback loop. The look-in dropdown is display-only sync (setting its
+  Directory fires no event), so it is written directly inside the sync, outside FSyncing.
 
-  四个控件都不引入任何新主题 token;不需要任何图片资源(文件夹/文件字形是控件自带的)。 }
+  None of the four controls introduce any new theme token; no image assets are needed (the
+  folder/file glyphs are built into the controls). }
 
 {$mode objfpc}{$H+}
 

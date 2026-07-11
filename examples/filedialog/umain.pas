@@ -1,17 +1,17 @@
 unit umain;
 
-{ 文件对话框示例 —— 六个变体全在这:
+{ File-dialog demo -- all six variants live here:
 
-  普通    TTyOpenDialog / TTySaveDialog          （树+列表+查找范围+过滤+文件名）
-  图片    TTyOpenPictureDialog / TTySavePictureDialog   （右侧图片预览）
-  预览    TTyOpenPreviewDialog / TTySavePreviewDialog   （右侧图片/文本预览 + OnPreview 自定义）
+  Plain    TTyOpenDialog / TTySaveDialog                 (tree + list + look-in + filter + file name)
+  Picture  TTyOpenPictureDialog / TTySavePictureDialog   (image preview on the right)
+  Preview  TTyOpenPreviewDialog / TTySavePreviewDialog   (image/text preview on the right + custom OnPreview)
 
-  「打开」演示多选(Options 含 fdoAllowMultiSelect + fdoFileMustExist),结果里列出全部选中项。
-  「保存」演示默认扩展名 + 覆盖确认(fdoOverwritePrompt)。
-  「打开预览」挂了一个自定义 OnPreview:遇到没有内建预览器的格式(如 .exe/.zip),交出一段自定义文本
-  显示,而不是"无法预览"占位 —— 这就是"不认识的格式用户自己来"。
+  "Open" demonstrates multi-select (Options includes fdoAllowMultiSelect + fdoFileMustExist); the result lists every selected item.
+  "Save" demonstrates a default extension + overwrite confirmation (fdoOverwritePrompt).
+  "Open Preview" hooks up a custom OnPreview: for formats with no built-in previewer (e.g. .exe/.zip), it hands back a
+  block of custom text instead of the "cannot preview" placeholder -- i.e. "the app handles the formats it doesn't recognize".
 
-  六个对话框都是同一个自绘 TTyFileDialogForm 靠标志拼出来的,主题化、跨平台,不需要任何图片资源。 }
+  All six dialogs are the same custom-drawn TTyFileDialogForm assembled from flags: themed, cross-platform, and needing no image assets. }
 
 {$mode objfpc}{$H+}
 
@@ -111,7 +111,7 @@ begin
   FOpenPrev := TTyOpenPreviewDialog.Create(Self);
   FOpenPrev.Title := '打开(带预览)';
   FOpenPrev.InitialDir := home;
-  FOpenPrev.OnPreview := @PreviewCustom;   { 自定义:处理没有内建预览器的格式 }
+  FOpenPrev.OnPreview := @PreviewCustom;   { custom: handle formats with no built-in previewer }
 
   FSavePrev := TTySavePreviewDialog.Create(Self);
   FSavePrev.Title := '保存(带预览)';
@@ -120,8 +120,9 @@ begin
   ApplyChromeTheme(TyDefaultController);
 end;
 
-{ 自定义预览:内建认识图片和常见文本;这里演示接管"不认识"的格式(pkOther,如 .exe/.zip)——
-  交出一段自定义文本,而不是让它落到"无法预览"占位。置 AHandled 跳过内建分派。 }
+{ Custom preview: the built-in path recognizes images and common text; here we demonstrate taking over the
+  "unrecognized" formats (pkOther, e.g. .exe/.zip) -- handing back a block of custom text instead of letting it
+  fall through to the "cannot preview" placeholder. Set AHandled to skip the built-in dispatch. }
 procedure TMainForm.PreviewCustom(Sender: TObject; const AFileName: string;
   APreview: TTyPreviewBox; var AHandled: Boolean);
 begin
@@ -136,7 +137,7 @@ begin
       '真实场景里你可以把它解码成位图(ShowImage)或文本(ShowText)。');
     AHandled := True;
   end;
-  { 其它格式不 handled -> 内建:图片 -> 文本 -> "无法预览" }
+  { other formats stay un-handled -> built-in: image -> text -> "cannot preview" }
 end;
 
 procedure TMainForm.Report(const ATitle: string; AOk: Boolean; ADlg: TTyCustomFileDialog);

@@ -1,9 +1,9 @@
 unit umain;
 
-{ 命令与分组按钮示例:GlyphButton / GlyphContainerButton / SpeedButton(分组)/
-  DropDownButton / MenuButton / ColorButton / ButtonGroup。
-  主窗体 TTyForm + TTyTitleBar,纯代码创建(无 .lfm)。
-  glyph 按钮用系统符号字体渲染一个星形(★),真机换成图标 .ttf 效果更佳。 }
+{ Command and grouped button demo: GlyphButton / GlyphContainerButton / SpeedButton (grouped) /
+  DropDownButton / MenuButton / ColorButton / ButtonGroup.
+  Main form TTyForm + TTyTitleBar, built entirely in code (no .lfm).
+  The glyph buttons render a star (★) from the system symbol font; on a real machine an icon .ttf looks better. }
 
 {$mode objfpc}{$H+}
 

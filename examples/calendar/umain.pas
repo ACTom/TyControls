@@ -1,16 +1,16 @@
 unit umain;
 {$mode objfpc}{$H+}
 
-{ TTyCalendar 示例：TTyForm + TTyTitleBar 外壳，展示日历控件的关键特性：
-  - Date：初始选中日期；OnChange 回显所选日期
-  - OnAccept：点击日期格 / 回车 时确认（回显“已确认”）
-  - OnViewChange：点标题下钻 天→月→年→十年，回显当前视图层级
-  - MinDate/MaxDate：限定可选日期区间，越界灰显不可选
-  - FirstDayOfWeek：周起始日（此处 wdMonday 周一起始）
-  - WeekNumbers：显示 ISO 周数列
-  - ShowToday：今日高亮描边
-  - 第二个日历：ReadOnly=True 只读展示
-  纯代码创建 UI（无 .lfm）；未显式指定 Controller 的控件自动使用全局 TyDefaultController。 }
+{ TTyCalendar demo: a TTyForm + TTyTitleBar shell showcasing the calendar's key features:
+  - Date: initially selected date; OnChange echoes the picked date
+  - OnAccept: confirmed on clicking a day cell / pressing Enter (echoes "confirmed")
+  - OnViewChange: click the header to drill down day->month->year->decade, echoing the current view level
+  - MinDate/MaxDate: constrain the selectable date range; out-of-range dates are greyed out and unselectable
+  - FirstDayOfWeek: first day of the week (here wdMonday, Monday start)
+  - WeekNumbers: show the ISO week-number column
+  - ShowToday: outline highlight on today
+  - Second calendar: ReadOnly=True, read-only display
+  UI is created purely in code (no .lfm); controls with no explicit Controller automatically use the global TyDefaultController. }
 
 interface
 
@@ -38,7 +38,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录 }
+{ Walk up from the exe's directory to find the repo's themes/ directory }
 function ThemesDir: string;
 var
   Dir: string;
@@ -101,7 +101,7 @@ begin
 
   Today := DateOf(Now);
 
-  { ---- 主日历：可交互，演示大部分特性 ---- }
+  { ---- Main calendar: interactive, demonstrates most features ---- }
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := Self;
   Lbl.SetBounds(20, 48, 320, 22);
@@ -110,18 +110,18 @@ begin
   FCal := TTyCalendar.Create(Self);
   FCal.Parent := Self;
   FCal.SetBounds(20, 74, 320, 300);
-  FCal.Date := Today;                       // 初始选中今天
-  FCal.FirstDayOfWeek := wdMonday;          // 周一为每周第一天
-  FCal.WeekNumbers := True;                 // 左侧显示 ISO 周数列
-  FCal.ShowToday := True;                   // 今日描边高亮
-  { 限定可选区间：今天前后各 20 天，越界日期灰显不可选 }
+  FCal.Date := Today;                       // initially select today
+  FCal.FirstDayOfWeek := wdMonday;          // Monday is the first day of the week
+  FCal.WeekNumbers := True;                 // show the ISO week-number column on the left
+  FCal.ShowToday := True;                   // outline highlight on today
+  { Constrain the selectable range: 20 days either side of today; out-of-range dates are greyed out and unselectable }
   FCal.MinDate := IncDay(Today, -20);
   FCal.MaxDate := IncDay(Today, 20);
   FCal.OnChange := @CalChange;
   FCal.OnAccept := @CalAccept;
   FCal.OnViewChange := @CalViewChange;
 
-  { ---- 状态回显 ---- }
+  { ---- Status echo ---- }
   FPicked := TTyLabel.Create(Self);
   FPicked.Parent := Self;
   FPicked.SetBounds(360, 74, 340, 22);
@@ -142,7 +142,7 @@ begin
     FormatDateTime('yyyy-mm-dd', FCal.MaxDate) + sLineBreak +
     '键盘：方向键移动，PageUp/Down 换月，Home/End 月首末。';
 
-  { ---- 只读日历：ReadOnly=True，展示禁止选择 ---- }
+  { ---- Read-only calendar: ReadOnly=True, demonstrates selection being disabled ---- }
   Lbl := TTyLabel.Create(Self);
   Lbl.Parent := Self;
   Lbl.SetBounds(360, 300, 340, 22);
@@ -155,7 +155,7 @@ begin
   RO.FirstDayOfWeek := wdSunday;
   RO.ReadOnly := True;
 
-  // 初始化状态回显
+  // initialize the status echo
   CalChange(nil);
   CalViewChange(nil);
   FAccepted.Caption := '尚未确认（点击一个日期格或按回车）';

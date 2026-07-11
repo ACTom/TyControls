@@ -1,14 +1,14 @@
 unit umain;
 
-{ TTyButton 示例：
-  - StyleClass 变体：默认 / primary / danger / ghost
-  - Down(:selected 常驻选中态,点击切换)
-  - 角标 ShowBadge / BadgeValue / BadgePosition(>99 显示 99+)
-  - Default(回车触发) / Cancel(Esc 触发) / ModalResult
-  - & 助记符(Alt+字母激活)
-  - Enabled 禁用态
-  - OnClick 汇报到状态标签
-  纯代码创建 UI(无 .lfm),主体为 TTyForm + TTyTitleBar,主题经全局 TyDefaultController 加载。 }
+{ TTyButton demo:
+  - StyleClass variants: default / primary / danger / ghost
+  - Down (:selected sticky checked state, toggled by click)
+  - badge ShowBadge / BadgeValue / BadgePosition (>99 shows 99+)
+  - Default (triggered by Enter) / Cancel (triggered by Esc) / ModalResult
+  - & mnemonics (Alt+letter activation)
+  - Enabled disabled state
+  - OnClick reported to the status label
+  UI is built purely in code (no .lfm); the shell is a TTyForm + TTyTitleBar, with the theme loaded via the global TyDefaultController. }
 
 {$mode objfpc}{$H+}
 
@@ -25,7 +25,7 @@ type
     FCount: Integer;
     FStatus: TTyLabel;
     procedure ButtonClicked(Sender: TObject);
-    procedure GhostToggle(Sender: TObject);   // 点击切换 ghost 按钮的选中态
+    procedure GhostToggle(Sender: TObject);   // click toggles the ghost button's checked state
     procedure DefaultClicked(Sender: TObject);
     procedure CancelClicked(Sender: TObject);
   public
@@ -37,7 +37,7 @@ var
 
 implementation
 
-{ 从 exe 所在目录向上查找仓库的 themes/ 目录(兼容 lib/<cpu>-<os>/ 与 .app 包) }
+{ Walk up from the exe's directory to find the repo's themes/ directory (handles lib/<cpu>-<os>/ and .app bundles) }
 function ThemesDir: string;
 var
   Dir: string;
@@ -63,7 +63,7 @@ constructor TMainForm.Create(AOwner: TComponent);
     Result.Parent := Self;
     Result.SetBounds(ALeft, ATop, 168, 32);
     Result.Caption := ACaption;
-    Result.StyleClass := AStyleClass;   // 对应 .tycss 里的 TyButton.<变体>
+    Result.StyleClass := AStyleClass;   // maps to TyButton.<variant> in the .tycss
     Result.OnClick := @ButtonClicked;
   end;
 
@@ -71,43 +71,43 @@ var
   Bar: TTyTitleBar;
   B: TTyButton;
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm:无边框 + 常驻引擎
+  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + resident engine
   Caption := 'TTyButton 示例';
   Position := poScreenCenter;
   SetBounds(0, 0, 460, 420);
 
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // 先加载主题
+  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // load the theme first
 
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> 自动关联为 TTyForm.TitleBar
+  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> auto-associated as TTyForm.TitleBar
   Bar.Parent := Self;
   Bar.Align := alTop;
   Bar.Height := 34;
   Bar.Caption := 'TTyButton  · TyControls';
 
-  // 左列:StyleClass 变体 + 禁用态。& 前缀 = 助记符(Alt+字母触发)。
+  // Left column: StyleClass variants + disabled state. The & prefix = mnemonic (Alt+letter triggers).
   AddButton('默认按钮(&D)', '', 24, 52);
   AddButton('主要按钮(&P)', 'primary', 24, 92);   // TyButton.primary
   AddButton('危险按钮(&X)', 'danger', 24, 132);   // TyButton.danger
 
   B := AddButton('禁用按钮', 'primary', 24, 172);
-  B.Enabled := False;                     // :disabled(主题里通常用 opacity 变暗)
+  B.Enabled := False;                     // :disabled (the theme usually dims it via opacity)
 
-  // 左列:Ghost(透明)+ 选中态 —— 平时透明,hover/点击/选中才显边框底色。
+  // Left column: Ghost (transparent) + checked state -- transparent normally, only showing a border/fill on hover/click/checked.
   B := TTyButton.Create(Self);
   B.Parent := Self;
   B.SetBounds(24, 212, 168, 32);
   B.Caption := 'Ghost / 选中';
   B.StyleClass := 'ghost';                 // TyButton.ghost
-  B.Down := True;                          // 常驻选中(:selected)
-  B.OnClick := @GhostToggle;               // 点击切换选中
+  B.Down := True;                          // sticky checked (:selected)
+  B.OnClick := @GhostToggle;               // click toggles checked
 
-  // 右列:数字角标 —— 不同角位,>99 显示 99+,样式由 TyBadge 主题键控制。
+  // Right column: numeric badges -- different corners, >99 shows 99+, styling driven by the TyBadge theme keys.
   B := TTyButton.Create(Self);
   B.Parent := Self;
   B.SetBounds(256, 52, 168, 32);
   B.Caption := '消息';
   B.ShowBadge := True;
-  B.BadgeValue := 128;                     // 显示 "99+"
+  B.BadgeValue := 128;                     // shows "99+"
   B.BadgePosition := bpTopRight;
   B.OnClick := @ButtonClicked;
 
@@ -120,14 +120,14 @@ begin
   B.BadgePosition := bpBottomRight;
   B.OnClick := @ButtonClicked;
 
-  // 右列:Default / Cancel / ModalResult —— 回车触发 Default,Esc 触发 Cancel。
+  // Right column: Default / Cancel / ModalResult -- Enter triggers Default, Esc triggers Cancel.
   B := AddButton('确定(回车)', 'primary', 256, 132);
-  B.Default := True;                       // 表单回车激活
-  B.ModalResult := mrOk;                   // 模态时置 Form.ModalResult
+  B.Default := True;                       // activated by the form's Enter key
+  B.ModalResult := mrOk;                   // sets Form.ModalResult when modal
   B.OnClick := @DefaultClicked;
 
   B := AddButton('取消(Esc)', '', 256, 172);
-  B.Cancel := True;                        // 表单 Esc 激活
+  B.Cancel := True;                        // activated by the form's Esc key
   B.ModalResult := mrCancel;
   B.OnClick := @CancelClicked;
 
@@ -136,7 +136,7 @@ begin
   FStatus.SetBounds(24, 356, 412, 24);
   FStatus.Caption := '点击次数:0';
 
-  ApplyChromeTheme(TyDefaultController);   // 最后统一主题化窗体外壳与背景
+  ApplyChromeTheme(TyDefaultController);   // finally theme the form shell and background together
 end;
 
 procedure TMainForm.ButtonClicked(Sender: TObject);
@@ -149,7 +149,7 @@ end;
 procedure TMainForm.GhostToggle(Sender: TObject);
 begin
   with Sender as TTyButton do
-    Down := not Down;   // 切换常驻选中态
+    Down := not Down;   // toggle the sticky checked state
   ButtonClicked(Sender);
 end;
 

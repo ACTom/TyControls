@@ -1,7 +1,9 @@
 unit umain;
 
-{ Transitions 示例 —— 点按钮让内容面板以不同过渡「重新出现」(滑入 / 淡入)。
-  滑入跨平台(动位置);淡入用 AlphaBlend,仅 Windows,其它平台降级为直接显示。 }
+{ Transitions demo -- click a button to make the content panel "reappear" with a
+  different transition (slide-in / fade-in).
+  Slide-in is cross-platform (it animates the position); fade-in uses AlphaBlend,
+  Windows-only, and degrades to a plain show on other platforms. }
 
 {$mode objfpc}{$H+}
 
