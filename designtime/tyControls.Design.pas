@@ -39,6 +39,7 @@ uses
   tyControls.Dialogs.Color, tyControls.Dialogs.Font,
   tyControls.Dialogs.Find, tyControls.Dialogs.Progress, tyControls.Dialogs.About,
   tyControls.Dialogs.FileDialog, tyControls.PreviewBox, tyControls.ImageView,
+  tyControls.Chart,
   tyControls.Bevel, tyControls.Divider, tyControls.PaintPanel, tyControls.SizeBox,
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
   tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ExPanel,
@@ -652,6 +653,9 @@ begin
   // Decorative vector primitives for diagrams (theme-driven fill/border, no new tokens).
   RegisterComponents('TyControls Shapes',
     [TTyShape, TTyStarShape, TTyArrow]);
+  // Charts.
+  RegisterComponents('TyControls Charts',
+    [TTyChart]);
   // Office-style ribbon parts.
   RegisterComponents('TyControls Ribbon',
     [TTyRibbon, TTyRibbonPage, TTyRibbonGroup, TTyRibbonAppMenu,

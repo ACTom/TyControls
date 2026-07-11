@@ -124,6 +124,8 @@ uses
   test.dialogs.filedialog,
   test.previewbox,
   test.imageview,
+  test.chart,
+  test.transitions,
   test.shape,
   test.starshape,
   test.arrow;

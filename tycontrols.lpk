@@ -625,6 +625,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ImageView"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Chart.pas"/>
+        <UnitName Value="tyControls.Chart"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Transitions.pas"/>
+        <UnitName Value="tyControls.Transitions"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Dialogs.FileDialog.pas"/>
         <UnitName Value="tyControls.Dialogs.FileDialog"/>
       </Item>

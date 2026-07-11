@@ -765,12 +765,22 @@ begin
   Line(b,18.4,17.4,21,20,Ink,1.7);                     // handle
 end;
 
+{ TTyChart: a bar chart -- axes + three bars of different heights }
+procedure GChart(b: TBGRABitmap);
+begin
+  Line(b,4,4,4,20,Ink,1.4);                    // Y axis
+  Line(b,4,20,21,20,Ink,1.4);                  // X axis
+  FillRRect(b,6.5,12,9.5,20,0.4,Acc);          // bars
+  FillRRect(b,10.5,8,13.5,20,0.4,Faint);
+  FillRRect(b,14.5,5,17.5,20,0.4,Acc);
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..141] of TGlyph = (
+  Glyphs: array[0..142] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -912,7 +922,8 @@ const
     (Name:'TTyPreviewBox';        Draw:@GPreviewBox),
     (Name:'TTyOpenPreviewDialog'; Draw:@GOpenPreviewDialog),
     (Name:'TTySavePreviewDialog'; Draw:@GSavePreviewDialog),
-    (Name:'TTyImageView';         Draw:@GImageView)
+    (Name:'TTyImageView';         Draw:@GImageView),
+    (Name:'TTyChart';             Draw:@GChart)
   );
 
 const
