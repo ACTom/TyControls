@@ -70,8 +70,36 @@ if Dlg.Execute then
 - **图片预览**:选中图片时 `TTyImage.Picture.LoadFromFile`(`try/except`,读不了清空),`Proportional+Center` 缩放适配;
   跨平台(PNG/JPG/BMP/GIF)。
 
+## 通用预览对话框
+
+`TTyOpenPreviewDialog` / `TTySavePreviewDialog` —— 右侧预览框默认支持**图片 + 文本**,并可经
+`OnPreview` 事件自定义:
+
+```pascal
+Dlg := TTyOpenPreviewDialog.Create(Self);
+Dlg.OnPreview := @MyPreview;
+Dlg.Execute;
+
+procedure TForm1.MyPreview(Sender: TObject; const AFileName: string;
+  APreview: TTyPreviewBox; var AHandled: Boolean);
+begin
+  if ExtractFileExt(AFileName) = '.myfmt' then
+  begin
+    APreview.ShowImage(DecodeMyFormat(AFileName));   // 交出位图
+    AHandled := True;                                // 跳过内建分派
+  end;
+  // 不 handled → 内建:图片→文本→"无法预览"
+end;
+```
+
+预览框是可复用的 [TTyPreviewBox](previewbox.md);**图片变体也用同一个 box**(`AllowText=False`,图片-only),
+全库一套预览机制。自定义 = 交出 bitmap/text(`APreview.ShowImage`/`ShowText`/`ShowMessage`),低层
+`APreview.OnPaintPreview` 兜底。
+
+六个组件:普通 `TTyOpenDialog`/`TTySaveDialog`、图片 `TTyOpenPictureDialog`/`TTySavePictureDialog`
+(对齐 LCL)、通用预览 `TTyOpenPreviewDialog`/`TTySavePreviewDialog`(加值)。
+
 ## 待办 / 后续
 
-- **通用预览对话框** `TTyOpenPreviewDialog`/`TTySavePreviewDialog`(图片 + 文本 + `OnPreview` 自定义)——
-  将把预览抽成可复用的 `TTyPreviewBox`,图片变体也切过去共用。见 phase 7 设计与后续计划。
-- 真机眼验(四变体组装/联动/Save 覆盖流/图片预览);i18n 集中化到 `tyControls.StrConsts`(合并回 main 时统一做)。
+- 真机眼验(六变体组装/联动/Save 覆盖流/图片+文本预览/自定义 `OnPreview`);i18n 集中化到
+  `tyControls.StrConsts`(合并回 main 时统一做)。

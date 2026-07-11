@@ -617,6 +617,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ShellComboBox"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.PreviewBox.pas"/>
+        <UnitName Value="tyControls.PreviewBox"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Dialogs.FileDialog.pas"/>
         <UnitName Value="tyControls.Dialogs.FileDialog"/>
       </Item>

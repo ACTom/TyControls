@@ -29,7 +29,7 @@ uses
   LazFileUtils,
   tyControls.Dialogs, tyControls.ShellTreeView, tyControls.ShellListView,
   tyControls.ShellComboBox, tyControls.FilterComboBox,
-  tyControls.Edit, tyControls.Button, tyControls.TyLabel, tyControls.Image,
+  tyControls.Edit, tyControls.Button, tyControls.TyLabel, tyControls.PreviewBox,
   tyControls.ListView, tyControls.FileSystem, tyControls.StrConsts;
 
 { ---------------------------------------------------------------------------
@@ -50,6 +50,13 @@ type
                           fdoAllowMultiSelect);
   TTyFileDialogOptions = set of TTyFileDialogOption;
 
+  { Fires as the preview refreshes for AFileName (the focused selection; '' or a
+    directory when nothing previewable is focused). Draw into APreview yourself
+    (ShowImage / ShowText / ShowMessage / ShowCustom) and set AHandled := True to
+    skip the built-in image/text dispatch. }
+  TTyFileDialogPreviewEvent = procedure(Sender: TObject; const AFileName: string;
+    APreview: TTyPreviewBox; var AHandled: Boolean) of object;
+
   { ===================================================================
     TTyFileDialogForm -- the composed, two-flag file dialog form.
     =================================================================== }
@@ -66,7 +73,7 @@ type
     FNameEdit:     TTyEdit;
     FBtnUp:        TTyButton;
     FBtnNewFolder: TTyButton;
-    FPreview:      TTyImage;
+    FPreview:      TTyPreviewBox;
     FLblLookIn:    TTyLabel;
     FLblName:      TTyLabel;
     FLblFilter:    TTyLabel;
@@ -76,6 +83,8 @@ type
     FDefaultExt: string;
     FFiles:      TStrings;   { the Open multi-select result set (a TStringList instance) }
     FOptions:    TTyFileDialogOptions;
+    FPreviewAllowsText: Boolean;   { seeds FPreview.AllowText each refresh (picture=False) }
+    FOnPreview:  TTyFileDialogPreviewEvent;
     { Flag setters -- create/toggle the conditional children. }
     procedure SetSaveMode(AValue: Boolean);
     procedure SetPreviewMode(AValue: Boolean);
@@ -122,6 +131,10 @@ type
     property FilterIndex: Integer read GetFilterIndex write SetFilterIndex;
     property DefaultExt: string read FDefaultExt write FDefaultExt;
     property Options: TTyFileDialogOptions read FOptions write SetOptions;
+    { PreviewMode extras: whether the preview pane also renders text files, and a
+      hook to render an unrecognised format yourself. Seeded before ShowModal. }
+    property PreviewAllowsText: Boolean read FPreviewAllowsText write FPreviewAllowsText;
+    property OnPreview: TTyFileDialogPreviewEvent read FOnPreview write FOnPreview;
   end;
 
 { Construct-only builder: create + set the two flags + OK/Cancel + size + layout. }
@@ -146,10 +159,14 @@ type
     FOnShow: TNotifyEvent;
     FOnClose: TCloseEvent;
     FOnCanClose: TCloseQueryEvent;
+    FOnPreview: TTyFileDialogPreviewEvent;
   protected
     { Subclasses override to pick the variant. }
     function SaveMode: Boolean; virtual;
     function PreviewMode: Boolean; virtual;
+    { PreviewMode panes: whether text files also preview (picture variants keep the
+      default False -> image-only; the preview-dialog variants override True). }
+    function PreviewAllowsText: Boolean; virtual;
     { The filter used when Filter is empty (picture subclasses give an image filter). }
     function DefaultFilter: string; virtual;
   public
@@ -169,6 +186,9 @@ type
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
+    { PreviewMode-only: render a selection into the preview pane yourself. Ignored by
+      non-preview variants (no preview pane to draw into). }
+    property OnPreview: TTyFileDialogPreviewEvent read FOnPreview write FOnPreview;
   end;
 
   { Open a single/multiple existing file(s). }
@@ -194,6 +214,26 @@ type
     function DefaultFilter: string; override;
   end;
 
+  { Open a file with a general preview pane (image AND text). }
+  TTyOpenPreviewDialog = class(TTyOpenDialog)
+  protected
+    function PreviewMode: Boolean; override;
+    function PreviewAllowsText: Boolean; override;
+    function DefaultFilter: string; override;
+  end;
+
+  { Save a file with a general preview pane (image AND text). }
+  TTySavePreviewDialog = class(TTySaveDialog)
+  protected
+    function PreviewMode: Boolean; override;
+    function PreviewAllowsText: Boolean; override;
+    function DefaultFilter: string; override;
+  end;
+
+{ Globals -- LCL-parity one-liners for the general preview dialogs. }
+function TyOpenPreviewDialog(var AFileName: string): Boolean;
+function TySavePreviewDialog(var AFileName, ADefaultExt: string): Boolean;
+
 implementation
 
 resourcestring
@@ -212,6 +252,10 @@ resourcestring
   rsFdAllFilesFilter = 'All Files (*.*)|*.*';
   rsFdPictureFilter  = 'Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|' +
                        '*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*';
+  rsFdCommonFilter   = 'Common Formats (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;' +
+                       '*.json;*.xml;*.csv;*.log;*.ini)|' +
+                       '*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;' +
+                       '*.log;*.ini|All Files (*.*)|*.*';
 
 const
   Gap = 8;   { inter-control gap inside the content area }
@@ -248,17 +292,6 @@ begin
   end;
 end;
 
-{ True when APath's extension is one the preview pane can plausibly load. }
-function TyFdIsImagePath(const APath: string): Boolean;
-var
-  ext: string;
-begin
-  ext := LowerCase(ExtractFileExt(APath));
-  Result := (ext = '.png') or (ext = '.jpg') or (ext = '.jpeg') or
-            (ext = '.bmp') or (ext = '.gif') or (ext = '.ico') or
-            (ext = '.tif') or (ext = '.tiff');
-end;
-
 { ---------------------------------------------------------------------------
   TTyFileDialogForm -- lifecycle
   --------------------------------------------------------------------------- }
@@ -280,6 +313,7 @@ begin
 
   FSaveMode := False;
   FPreviewMode := False;
+  FPreviewAllowsText := False;
   FSyncing := False;
   FDefaultExt := '';
   FOptions := [];
@@ -350,10 +384,8 @@ begin
   FPreviewMode := AValue;
   if AValue and (FPreview = nil) then
   begin
-    FPreview := TTyImage.Create(Self);
+    FPreview := TTyPreviewBox.Create(Self);
     FPreview.Parent := Self;
-    FPreview.Proportional := True;   { contain-fit }
-    FPreview.Center := True;
   end;
   if FPreview <> nil then
     FPreview.Visible := AValue;
@@ -527,19 +559,21 @@ end;
 procedure TTyFileDialogForm.RefreshPreview;
 var
   path: string;
+  handled: Boolean;
 begin
   if (not FPreviewMode) or (FPreview = nil) then Exit;
+  FPreview.AllowText := FPreviewAllowsText;
   path := FList.SelectedFile;
-  if (path = '') or DirectoryExistsUTF8(path) or not TyFdIsImagePath(path) then
+  { Let a wired OnPreview render it (custom formats); AHandled skips the built-in. }
+  handled := False;
+  if Assigned(FOnPreview) then
+    FOnPreview(Self, path, FPreview, handled);
+  if not handled then
   begin
-    FPreview.Picture.Clear;
-    Exit;
-  end;
-  { A corrupt / unreadable / unsupported image must not crash the dialog. }
-  try
-    FPreview.Picture.LoadFromFile(path);
-  except
-    FPreview.Picture.Clear;
+    if (path = '') or DirectoryExistsUTF8(path) then
+      FPreview.Clear
+    else
+      FPreview.PreviewFile(path);   { crash-safe; unpreviewable -> a placeholder }
   end;
 end;
 
@@ -789,6 +823,11 @@ begin
   Result := False;
 end;
 
+function TTyCustomFileDialog.PreviewAllowsText: Boolean;
+begin
+  Result := False;   { picture variants keep this False -> image-only preview }
+end;
+
 function TTyCustomFileDialog.DefaultFilter: string;
 begin
   Result := rsFdAllFilesFilter;
@@ -805,6 +844,8 @@ begin
     d.FilterIndex := FFilterIndex;
     d.DefaultExt := FDefaultExt;
     d.Options := FOptions;
+    d.PreviewAllowsText := PreviewAllowsText;   { virtual: image-only vs image+text }
+    d.OnPreview := FOnPreview;                  { custom-render hook (PreviewMode only) }
     d.FileName := FFileName;   { seed AFTER InitialDir so a path-bearing name wins }
     TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
@@ -845,11 +886,80 @@ begin
   Result := rsFdPictureFilter;
 end;
 
+function TTyOpenPreviewDialog.PreviewMode: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyOpenPreviewDialog.PreviewAllowsText: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyOpenPreviewDialog.DefaultFilter: string;
+begin
+  Result := rsFdCommonFilter;
+end;
+
+function TTySavePreviewDialog.PreviewMode: Boolean;
+begin
+  Result := True;
+end;
+
+function TTySavePreviewDialog.PreviewAllowsText: Boolean;
+begin
+  Result := True;
+end;
+
+function TTySavePreviewDialog.DefaultFilter: string;
+begin
+  Result := rsFdCommonFilter;
+end;
+
+{ ---------------------------------------------------------------------------
+  Preview-dialog globals
+  --------------------------------------------------------------------------- }
+
+function TyOpenPreviewDialog(var AFileName: string): Boolean;
+var
+  d: TTyFileDialogForm;
+begin
+  d := TyBuildFileDialog(False, True, '');
+  try
+    d.PreviewAllowsText := True;
+    d.Filter := rsFdCommonFilter;
+    d.FileName := AFileName;
+    Result := (d.ShowModal = mrOK);
+    if Result then AFileName := d.FileName;
+  finally
+    d.Free;
+  end;
+end;
+
+function TySavePreviewDialog(var AFileName, ADefaultExt: string): Boolean;
+var
+  d: TTyFileDialogForm;
+begin
+  d := TyBuildFileDialog(True, True, '');
+  try
+    d.PreviewAllowsText := True;
+    d.Filter := rsFdCommonFilter;
+    d.DefaultExt := ADefaultExt;
+    d.FileName := AFileName;
+    Result := (d.ShowModal = mrOK);
+    if Result then AFileName := d.FileName;
+  finally
+    d.Free;
+  end;
+end;
+
 initialization
   { So a .lfm that streams any of these resolves the class. }
   RegisterClass(TTyOpenDialog);
   RegisterClass(TTySaveDialog);
   RegisterClass(TTyOpenPictureDialog);
   RegisterClass(TTySavePictureDialog);
+  RegisterClass(TTyOpenPreviewDialog);
+  RegisterClass(TTySavePreviewDialog);
 
 end.

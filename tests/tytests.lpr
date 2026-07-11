@@ -122,6 +122,7 @@ uses
   test.filtercombobox,
   test.shellcombobox,
   test.dialogs.filedialog,
+  test.previewbox,
   test.shape,
   test.starshape,
   test.arrow;

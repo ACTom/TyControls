@@ -725,12 +725,42 @@ begin
   PolyL(b,[PointF(16.5,14.5),PointF(19,17.2),PointF(21.5,14.5)],Ink,1.4);
 end;
 
+{ TTyPreviewBox: a preview pane -- a little picture over text lines }
+procedure GPreviewBox(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);                            // pane frame
+  FillCirc(b,7,8,1.1,Acc);                             // sun
+  FillPolyG(b,[PointF(5,12),PointF(9,8),PointF(13,12)],Faint);  // mountain
+  Line(b,4,12.5,20,12.5,Faint,1);                      // divider
+  Line(b,6,15,18,15,Faint,1.1);                        // text lines
+  Line(b,6,17.5,15,17.5,Faint,1.1);
+end;
+
+{ TTyOpenPreviewDialog: a folder + a magnifier (preview) }
+procedure GOpenPreviewDialog(b: TBGRABitmap);
+begin
+  FillRRect(b,3,6,9,8,0.4,Acc);                        // tab
+  RRect(b,3,7,14,18,1.5,Ink);                          // folder box
+  Circ(b,16,11,3,Acc,1.4);                             // lens
+  Line(b,18.2,13.2,20.5,15.5,Ink,1.6);                 // handle
+end;
+
+{ TTySavePreviewDialog: a floppy + a magnifier (preview) }
+procedure GSavePreviewDialog(b: TBGRABitmap);
+begin
+  RRect(b,3,4,14,17,1.5,Ink);                          // floppy body
+  FillRRect(b,6,4,11,7.5,0.4,Acc);                     // shutter
+  RRect(b,5.5,10,11.5,15,0.8,Ink);                     // label
+  Circ(b,16.5,10,3,Acc,1.4);                           // lens
+  Line(b,18.7,12.2,21,14.5,Ink,1.6);                   // handle
+end;
+
 type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
 const
-  Glyphs: array[0..137] of TGlyph = (
+  Glyphs: array[0..140] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -868,7 +898,10 @@ const
     (Name:'TTyOpenDialog';        Draw:@GOpenDialog),
     (Name:'TTySaveDialog';        Draw:@GSaveDialog),
     (Name:'TTyOpenPictureDialog'; Draw:@GOpenPictureDialog),
-    (Name:'TTySavePictureDialog'; Draw:@GSavePictureDialog)
+    (Name:'TTySavePictureDialog'; Draw:@GSavePictureDialog),
+    (Name:'TTyPreviewBox';        Draw:@GPreviewBox),
+    (Name:'TTyOpenPreviewDialog'; Draw:@GOpenPreviewDialog),
+    (Name:'TTySavePreviewDialog'; Draw:@GSavePreviewDialog)
   );
 
 const

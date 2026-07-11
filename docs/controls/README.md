@@ -123,6 +123,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyCoolBar](coolbar.md) | Rebar：每条 band 可拖拽/抓手拖拽调宽（继承 TTyControlBar） |
 | [TTyHeaderControl](headercontrol.md) | 独立列头条（分节:标题/宽度/对齐/排序,点击排序 + 拖边界调宽） |
 | [TTyListGroupPanel](listgrouppanel.md) | Outlook 式分组可展开列表（手风琴,`AddGroup`/`AddItem`） |
+| [TTyPreviewBox](previewbox.md) | 可复用预览控件（图片走 TTyImage / 文本走只读 TTyMemo / 占位 / 交出位图·文本自定义） |
 
 ## 日期与时间
 
@@ -202,7 +203,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | 控件 | 说明 |
 |------|------|
 | [对话框](dialogs.md) | 全部 11 个自绘对话框组件 + 全局函数（消息 / 输入 / 密码 / 文本 / 选值 / 选路径 / 颜色 / 字体 / 查找 / 替换 / 进度） |
-| [文件对话框](filedialog.md) | TTyOpenDialog/TTySaveDialog + 图片版（右侧预览）：树+列表+查找范围+过滤+文件名,三层 API 对齐 LCL |
+| [文件对话框](filedialog.md) | TTyOpen/Save + 图片版 + 通用预览版（右侧图片/文本预览 + OnPreview 自定义）：树+列表+查找范围+过滤+文件名,三层 API 对齐 LCL |
 
 ## 主题与集成
 

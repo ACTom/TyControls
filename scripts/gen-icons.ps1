@@ -35,8 +35,9 @@ $classes = @(
   # Phase 8 data views (pulled forward: Phase 7 depends on it)
   'TTyListView','TTyShellListView','TTyShellTreeView',
   'TTyFilterComboBox','TTyShellComboBox',
-  # Phase 7 file dialogs
-  'TTyOpenDialog','TTySaveDialog','TTyOpenPictureDialog','TTySavePictureDialog'
+  # Phase 7 file dialogs + preview
+  'TTyOpenDialog','TTySaveDialog','TTyOpenPictureDialog','TTySavePictureDialog',
+  'TTyPreviewBox','TTyOpenPreviewDialog','TTySavePreviewDialog'
 )
 
 # Drift guard: the icon set MUST match the components registered in Design.pas. Parse EVERY
