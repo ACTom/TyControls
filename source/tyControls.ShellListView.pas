@@ -398,6 +398,12 @@ procedure TTyShellListView.LoadDirectory(const APath: string);
 begin
   FDirectory := APath;
   ReloadEntries;
+  { Entering a directory starts with NOTHING selected. ItemsChanged only resizes the
+    selection arrays, so without this the focus/selection would linger at the position
+    of the just-double-clicked folder and auto-pick the same-row item in the new dir.
+    (Refresh re-reads the same dir via ReloadEntries directly, so it keeps its selection.) }
+  ClearSelection;
+  ItemIndex := -1;
   { One sync point for consumers: fires whether the load came from a property write,
     a tree-driven LoadDirectory, or the user diving into a folder (HandleItemActivate).
     A file dialog keeps its path box / tree in step from here. }

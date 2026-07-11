@@ -130,6 +130,11 @@ type
     { LoadDirectory fires OnDirectoryChange, and again when it navigates into a
       subfolder; Directory reflects the new path each time. }
     procedure TestOnDirectoryChangeFiresOnLoadAndNavigate;
+
+    { ----- navigation clears selection ----- }
+    { LoadDirectory (a navigation) clears the focus + selection, so entering a new
+      directory never auto-picks the same-row item as the just-double-clicked folder. }
+    procedure TestLoadDirectoryClearsSelection;
   end;
 
 implementation
@@ -633,6 +638,23 @@ begin
   FLV.LoadDirectory(subdir);
   AssertEquals('OnDirectoryChange fired again on navigate', 2, FDirChangeCount);
   AssertEquals('Directory reflects the subfolder', subdir, FLV.Directory);
+end;
+
+procedure TShellListViewTest.TestLoadDirectoryClearsSelection;
+var
+  i: Integer;
+begin
+  FLV.LoadDirectory(FRoot);
+  i := ItemIndexOfName('a.txt');
+  AssertTrue('a.txt present', i >= 0);
+  FLV.MultiSelect := True;
+  FLV.ItemIndex := i;              { focus + select a row, as a click would }
+  AssertTrue('a row is selected before navigating', FLV.SelCount > 0);
+
+  { navigate (LoadDirectory) -> the focus + selection must be cleared }
+  FLV.LoadDirectory(FRoot);
+  AssertEquals('ItemIndex cleared after navigation', -1, FLV.ItemIndex);
+  AssertEquals('selection cleared after navigation', 0, FLV.SelCount);
 end;
 
 initialization
