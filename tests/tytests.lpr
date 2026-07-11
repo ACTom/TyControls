@@ -116,6 +116,7 @@ uses
   test.columns.compat,
   test.listview.layout,
   test.listview,
+  test.filesystem,
   test.shape,
   test.starshape,
   test.arrow;

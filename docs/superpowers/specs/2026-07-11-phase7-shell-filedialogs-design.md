@@ -87,9 +87,20 @@ function TyFsRoots: TTyFsRootArray;
 
 { 父目录、面包屑、Save 名解析。都走 LazFileUtils 的可移植调用。 }
 function TyFsParent(const APath: string): string;
-function TyFsBreadcrumb(const APath: string): TStringArray;
+function TyFsBreadcrumb(const APath: string): TStringArray;   { 见下:累积可导航路径 }
 function TyFsResolveSaveName(const ADir, ATyped, ADefaultExt: string): string;
 function TyFsTypeName(const AEntry: TTyFsEntry): string;
+```
+
+三处契约收口(交叉核对指出两 agent 碰巧一致、契约未定;现定死):
+
+- **`TyFsBreadcrumb` 返回累积可导航路径,根在前**,而非纯显示段:`/home/tom` →
+  `['/', '/home', '/home/tom']`;`C:\Users\Tom` → `['C:\', 'C:\Users', 'C:\Users\Tom']`。盘符根保留尾分隔符,
+  其余不带。消费者用 `ExtractFileName` 派生显示标签。**理由**:combo 点每段跳的是完整路径,显示标签可派生、
+  路径不可反推,累积路径是信息更全的原语。batch-4 的 look-in combo 直接用。
+- **`TyFsReadDirectory` 内部对显示掩码用 case-insensitive**(`ACaseSens=False`,文件对话框各平台惯例);
+  目录**排序**仍走 OS 感知的 `CompareFilenames`。只有显示过滤强制不敏感。
+- **`TyFsFilterPatterns` 越界钳到首/末段**(`AIndex<1`→第 1 段,`>len`→末段);仅当零段时返回 `''`。
 ```
 
 ### 跨平台要点

@@ -596,6 +596,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.ListView.pas"/>
         <UnitName Value="tyControls.ListView"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.FileSystem.pas"/>
+        <UnitName Value="tyControls.FileSystem"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>
