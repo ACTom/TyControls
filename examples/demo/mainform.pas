@@ -3,7 +3,8 @@ unit mainform;
 interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus, ComCtrls,
-  tyControls.Controller, tyControls.Button, tyControls.TyLabel, tyControls.Edit,
+  tyControls.Controller, tyControls.Types, tyControls.Css.Values,
+  tyControls.Button, tyControls.TyLabel, tyControls.Edit,
   tyControls.CheckBox, tyControls.Panel, tyControls.ComboBox,
   tyControls.ScrollBar, tyControls.Form, tyControls.ListBox,
   tyControls.ProgressBar, tyControls.ToggleSwitch, tyControls.TrackBar,
@@ -92,6 +93,8 @@ type
     ThemeCombo: TTyComboBox;
     BtnApLight: TTyButton;
     BtnApDark: TTyButton;
+    BtnAccent: TTyButton;
+    BtnAccentReset: TTyButton;
     MainMenu1: TMainMenu;
     MnuFile: TMenuItem;
     MnuFileNew: TMenuItem;
@@ -163,6 +166,8 @@ type
     procedure ApDarkClick(Sender: TObject);
     procedure ApAutoClick(Sender: TObject);
     procedure RandomClick(Sender: TObject);
+    procedure PickAccent(Sender: TObject);
+    procedure ResetAccentClick(Sender: TObject);
     procedure TyButton1Click(Sender: TObject);
     procedure TyButton3Click(Sender: TObject);
     procedure BtnDlgInputClick(Sender: TObject);
@@ -182,6 +187,7 @@ type
     procedure InitThemes;
     procedure InitColTree;
     procedure ApplyBuiltin(const AName: string);
+    procedure UpdateAccentBtn;   // enable "Reset" only while a user accent override is active
     procedure PickCustomTheme(Data: PtrInt);   // deferred: opening the modal file dialog straight from
                                                // the combo's OnChange crashes on Qt6 (the still-open
                                                // dropdown popup is the modal's focus-restore target)
@@ -276,6 +282,41 @@ begin
   // Swap the theme only; leave Follow/Mode alone (the appearance axis is owned by the tri-state buttons).
   TyController.ThemeName := AName;
   ApplyChromeTheme(TyController);
+  UpdateAccentBtn;   // a theme switch clears any accent override (D2)
+end;
+
+procedure TDemoMainForm.UpdateAccentBtn;
+begin
+  BtnAccentReset.Enabled := TyController.AccentOverride <> '';
+end;
+
+{ Runtime accent picker: recolour any theme on the fly (independent of light/dark). The whole
+  interactive palette re-derives from the one --accent seed; the pick clears on a theme switch. }
+procedure TDemoMainForm.PickAccent(Sender: TObject);
+var col: TColor; alpha: Byte; c: TTyColor; hex: string;
+begin
+  alpha := 255;
+  if TyController.AccentOverride <> '' then          // seed the picker with the current pick
+  begin
+    c := TyParseColor(TyController.AccentOverride);
+    col := RGBToColor(TyRedOf(c), TyGreenOf(c), TyBlueOf(c));
+  end
+  else
+    col := RGBToColor($33, $66, $CC);
+  if TySelectColor('Accent', col, alpha) then
+  begin
+    hex := '#' + IntToHex(Red(col), 2) + IntToHex(Green(col), 2) + IntToHex(Blue(col), 2);
+    TyController.SetAccent(hex);                      // recolours every registered control + chrome
+    ApplyChromeTheme(TyController);
+    UpdateAccentBtn;
+  end;
+end;
+
+procedure TDemoMainForm.ResetAccentClick(Sender: TObject);
+begin
+  TyController.ResetAccent;                           // back to the theme's own accent
+  ApplyChromeTheme(TyController);
+  UpdateAccentBtn;
 end;
 
 procedure TDemoMainForm.ThemeComboChange(Sender: TObject);
@@ -308,6 +349,7 @@ begin
     begin
       TyController.ThemeFile := dlg.FileName;   // custom file (REPLACE)
       ApplyChromeTheme(TyController);
+      UpdateAccentBtn;                          // REPLACE clears the accent override (D2)
     end;
   finally dlg.Free; end;
 end;

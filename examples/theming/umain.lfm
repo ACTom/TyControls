@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 340
+  Height = 388
   Top = 0
   Width = 470
   Caption = '主题系统 示例'
-  ClientHeight = 340
+  ClientHeight = 388
   ClientWidth = 470
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -51,24 +51,42 @@ object MainForm: TMainForm
     Caption = '绿色 Green'
     OnClick = SwitchGreen
   end
+  object BtnAccent: TTyButton
+    Left = 16
+    Height = 34
+    Top = 96
+    Width = 140
+    Caption = '主题色…'
+    OnClick = PickAccent
+  end
+  object BtnAccentReset: TTyButton
+    Left = 164
+    Height = 34
+    Top = 96
+    Width = 116
+    Caption = '复位默认'
+    StyleClass = 'ghost'
+    Enabled = False
+    OnClick = ResetAccentClick
+  end
   object LblStatus: TTyLabel
     Left = 16
     Height = 20
-    Top = 96
+    Top = 144
     Width = 430
     Caption = '当前主题：default'
   end
   object LblSample: TTyLabel
     Left = 16
     Height = 20
-    Top = 128
+    Top = 176
     Width = 300
     Caption = '示例标签 TTyLabel'
   end
   object BtnSample: TTyButton
     Left = 16
     Height = 34
-    Top = 156
+    Top = 204
     Width = 120
     Caption = '主要按钮'
     StyleClass = 'primary'
@@ -76,7 +94,7 @@ object MainForm: TMainForm
   object BtnGhost: TTyButton
     Left = 148
     Height = 34
-    Top = 156
+    Top = 204
     Width = 100
     Caption = '幽灵按钮'
     StyleClass = 'ghost'
@@ -84,7 +102,7 @@ object MainForm: TMainForm
   object BtnDisabled: TTyButton
     Left = 260
     Height = 34
-    Top = 156
+    Top = 204
     Width = 100
     Caption = '禁用态'
     Enabled = False
@@ -92,14 +110,14 @@ object MainForm: TMainForm
   object EdSample: TTyEdit
     Left = 16
     Height = 30
-    Top = 204
+    Top = 252
     Width = 220
     Text = '可编辑文本框'
   end
   object ChkSample: TTyCheckBox
     Left = 260
     Height = 24
-    Top = 208
+    Top = 256
     Width = 160
     Caption = '复选框示例'
     Checked = True
@@ -107,7 +125,7 @@ object MainForm: TMainForm
   object ProgSample: TTyProgressBar
     Left = 16
     Height = 18
-    Top = 252
+    Top = 300
     Width = 420
     Min = 0
     Max = 100

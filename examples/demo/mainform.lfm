@@ -64,6 +64,29 @@ object DemoMainForm: TDemoMainForm
       Controller = TyController
       Caption = 'Dark'
     end
+    object BtnAccent: TTyButton
+      Left = 368
+      Height = 28
+      Top = 4
+      Width = 64
+      TabOrder = 7
+      OnClick = PickAccent
+      StyleClass = 'ghost'
+      Controller = TyController
+      Caption = 'Accent'
+    end
+    object BtnAccentReset: TTyButton
+      Left = 436
+      Height = 28
+      Top = 4
+      Width = 54
+      TabOrder = 8
+      OnClick = ResetAccentClick
+      StyleClass = 'ghost'
+      Enabled = False
+      Controller = TyController
+      Caption = 'Reset'
+    end
   end
   object ToolBar1: TTyToolBar
     Left = 0
