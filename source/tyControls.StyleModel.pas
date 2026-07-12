@@ -476,10 +476,22 @@ begin
   end;
 end;
 
+// Map a border-style keyword to TTyBorderStyle. solid/none plus the v3/B2 two-tone bevels
+// outset/inset. Returns False for anything else (caller decides the default).
+function TyParseBorderStyleKw(const ALc: string; out AResult: TTyBorderStyle): Boolean;
+begin
+  Result := True;
+  if ALc = 'none' then AResult := tbsNone
+  else if ALc = 'solid' then AResult := tbsSolid
+  else if ALc = 'outset' then AResult := tbsOutset
+  else if ALc = 'inset' then AResult := tbsInset
+  else Result := False;
+end;
+
 // Parse the 'border' shorthand: 'border: <width> [style] <color>'. Tokens are
 // split on TOP-LEVEL whitespace but paren-aware, so function/var() values such
 // as 'var(--a)' or 'rgb(0, 0, 0)' survive as a single token despite inner
-// spaces and commas. Each token is classified by shape: 'solid'/'none' -> style;
+// spaces and commas. Each token is classified by shape: solid/none/outset/inset -> style;
 // a leading digit -> width; anything else -> color. A border shorthand always
 // implies a style, so an omitted style defaults to solid (and is marked present).
 procedure ApplyBorderShorthand(var AStyle: TTyStyleSet; const ARaw: string; Vars: TStrings);
@@ -488,6 +500,7 @@ var
   i, depth, start: Integer;
   ch: Char;
   tok, lc: string;
+  bs: TTyBorderStyle;
 begin
   toks := TStringList.Create;
   try
@@ -510,9 +523,9 @@ begin
     begin
       tok := toks[i];
       lc := LowerCase(tok);
-      if (lc = 'solid') or (lc = 'none') then
+      if TyParseBorderStyleKw(lc, bs) then
       begin
-        if lc = 'none' then AStyle.BorderStyle := tbsNone else AStyle.BorderStyle := tbsSolid;
+        AStyle.BorderStyle := bs;
         Include(AStyle.Present, tpBorderStyle);
       end
       else if (tok <> '') and (tok[1] in ['0'..'9']) then
@@ -718,9 +731,7 @@ begin
   end
   else if prop = 'border-style' then
   begin
-    if LowerCase(raw) = 'none' then
-      AStyle.BorderStyle := tbsNone
-    else
+    if not TyParseBorderStyleKw(LowerCase(raw), AStyle.BorderStyle) then
       AStyle.BorderStyle := tbsSolid;
     Include(AStyle.Present, tpBorderStyle);
   end

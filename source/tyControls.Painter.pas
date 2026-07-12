@@ -39,6 +39,10 @@ type
     procedure FillBackground(const ARect: TRect; const AFill: TTyFill; const ACorners: TTyCorners); overload;
     procedure StrokeBorder(const ARect: TRect; ARadiusLogical, AWidthLogical: Integer; AColor: TTyColor); overload;
     procedure StrokeBorder(const ARect: TRect; const ACorners: TTyCorners; AWidthLogical: Integer; AColor: TTyColor); overload;
+    { v3/B2: a crisp, square, two-tone 3D bevel. The top+left edges get ATLColor and the
+      bottom+right get ABRColor (light/dark for outset; swapped for inset). Corners: the
+      light L-shape wins the shared corners. AWidthLogical is the (logical-px) edge width. }
+    procedure DrawEdge(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
     procedure DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
     procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False);
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer = 4);
@@ -331,6 +335,22 @@ begin
     FBmp.RectangleAntialias(l, t, rr, b, px, w)
   else
     FBmp.RoundRectAntialias(l, t, rr, b, r, r, px, w, opts);
+end;
+
+procedure TTyPainter.DrawEdge(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
+var w: Integer; tl, br: TBGRAPixel;
+begin
+  if FBmp = nil then Exit;
+  w := Scale(AWidthLogical);
+  if w <= 0 then Exit;
+  tl := TyColorToBGRA(ATLColor);
+  br := TyColorToBGRA(ABRColor);
+  // Bottom + right edges first (the dark side of a raised bevel)...
+  FBmp.FillRect(ARect.Left, ARect.Bottom - w, ARect.Right, ARect.Bottom, br, dmDrawWithTransparency);
+  FBmp.FillRect(ARect.Right - w, ARect.Top, ARect.Right, ARect.Bottom, br, dmDrawWithTransparency);
+  // ...then top + left on top, so the light L wins the shared (TR/BL) corners.
+  FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Top + w, tl, dmDrawWithTransparency);
+  FBmp.FillRect(ARect.Left, ARect.Top, ARect.Left + w, ARect.Bottom, tl, dmDrawWithTransparency);
 end;
 
 procedure TTyPainter.DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);

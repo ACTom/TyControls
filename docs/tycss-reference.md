@@ -356,20 +356,27 @@ TyButton.primary { color: #FFFFFF; }
 ```
 border-color: <颜色表达式> ;
 border-width: <长度> ;
-border-style: none | solid ;
+border-style: none | solid | outset | inset ;
 ```
 
 三者配合:`border-width` 为 0(或未声明 `border-color`)时不描边。
-边框沿圆角矩形内侧描绘。
+`solid` 边框沿圆角矩形内侧描绘。
 
-`border-style` 取 `none` 或 `solid`,**默认 `solid`**;`none` 会**强制不描边**,
-即便 `border-width > 0` 也不绘制边框。仅此两种取值,**不支持** `dashed`、`dotted` 等。
+`border-style` 取值,**默认 `solid`**:
+- `none` — **强制不描边**,即便 `border-width > 0`;
+- `solid` — 单色描边(沿圆角内侧);
+- `outset` / `inset`(v3)— **两色 3D 立体斜角**:上/左与下/右分别用较亮/较暗的边色,
+  `outset` 凸起、`inset` 凹陷。亮/暗两色从 `border-color` **自动派生**(lighten 上左 / darken 下右)。
+  斜角天然是**方角**(不套用圆角半径),适合经典风格控件(配 `border-radius: 0`)。
+
+不支持 `dashed`、`dotted`、`groove`、`ridge` 等其它样式。
 
 ```css
 TyEdit       { border-color: var(--border); border-width: 1px; }
 TyEdit:focus { border-color: var(--accent); }
 TyPanel      { border-style: none; }   /* 显式去掉边框,即便有 border-width */
-```
+/* 经典凸起按钮:面色作为 border-color,自动派生高亮/阴影边 */
+TyButton.classic { border: 2px outset #C0C0C0; border-radius: 0; background: #C0C0C0; }
 
 ### 5.5 `border` — 边框简写
 
@@ -378,7 +385,7 @@ border: <宽度> [<样式>] <颜色> ;
 ```
 
 一次性设置 `border-width`、`border-style`、`border-color` 三者,**完全等价**于分别书写它们。
-顺序为宽度在前、颜色在后,中间可选写 `solid` / `none` 样式(省略时为 `solid`)。
+顺序为宽度在前、颜色在后,中间可选写 `solid` / `none` / `outset` / `inset` 样式(省略时为 `solid`)。
 颜色可用任意颜色表达式(`#hex`、`var(--x)`、`rgb(...)` / `rgba(...)`,见第 6 节):
 
 ```css
@@ -757,8 +764,9 @@ TyButton.primary {
 10. **子部件着色分 tier-a / tier-b（Batch ④）**：thumb / knob / fill 等着色面由专属子部件 typeKey（`TyScrollThumb`、`TyToggleKnob`、`TyTrackThumb`、`TyProgressFill`）的 `background` 着色；勾号 / 箭头 / 关闭 × 等单色字形借用所属控件的 `color`(`TextColor`)作墨色。二者均为官方约定（§8.3）。`TyScrollThumb` / `TyToggleKnob` 的默认值与早前借用 `color` 渲染时**逐字一致**。
 11. **`TyTabControl` 页签溢出可横向滚动（v1.10）**：所有页签头宽度之和超过控件宽度时，页签头条带进入溢出模式可横向滚动——条带左右两端渲染 `tgArrowLeft` / `tgArrowRight` 箭头按钮，鼠标在条带上滚轮也能滚动，且切换选中页时会自动把目标页签滚入可见区。绘制时页签头被裁剪到两个箭头之间的可见带（箭头始终绘制在最上层）。详见 [controls/tabcontrol.md](controls/tabcontrol.md) 第 13 节。
 12. 不支持 `@media`、`@import`、`!important`、转义字符串、`//` 行注释。
-13. **边框/盒模型的取舍(v1.6)**:`border-style` 仅支持 `none` / `solid`,**无** `dashed`、
-    `dotted` 等;**不存在 `margin` 属性**(外边距请用容器布局实现)。`border` 简写只是
+13. **边框/盒模型的取舍(v1.6,v3 起加 3D 斜角)**:`border-style` 支持 `none` / `solid` /
+    `outset` / `inset`(后两者为两色 3D 斜角,见 5.4),**无** `dashed`、`dotted`、`groove`、
+    `ridge`;**不存在 `margin` 属性**(外边距请用容器布局实现)。`border` 简写只是
     `border-width` / `border-style` / `border-color` 三者的合写,并不引入额外能力。
 14. **`border-radius` 不支持的形式**:每角长手写法(`border-top-left-radius` 等)、
     百分比半径、椭圆双半径语法(`<a> / <b>`)均不支持(§5.6)。`outline-offset`

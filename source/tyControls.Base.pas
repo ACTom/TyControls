@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LMessages, LCLType, BGRABitmap,
   tyControls.Types, tyControls.Controller, tyControls.StyleModel,
-  tyControls.Painter;
+  tyControls.Css.Values, tyControls.Painter;
 type
   ITyStyleable = interface
     ['{A1B2C3D4-0001-0002-0003-000000000001}']
@@ -501,6 +501,20 @@ begin
   end;
 end;
 
+{ v3/B2. Draw an outset/inset two-tone 3D bevel for the border, deriving the light/dark edge
+  colours from border-color (lighten TL / darken BR for a raised outset; swapped for a sunken
+  inset). Bevels are square by nature — the fill's corner radius is not applied to the edges. }
+procedure TyDrawBevelBorder(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
+var light, dark: TTyColor;
+begin
+  light := TyLighten(AStyle.BorderColor, 40);   // Pct is 0..100
+  dark := TyDarken(AStyle.BorderColor, 40);
+  if AStyle.BorderStyle = tbsInset then
+    APainter.DrawEdge(ARect, AStyle.BorderWidth, dark, light)   // sunken: TL dark, BR light
+  else
+    APainter.DrawEdge(ARect, AStyle.BorderWidth, light, dark);  // raised (outset): TL light, BR dark
+end;
+
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
 var
   corners, ringCorners: TTyCorners;
@@ -523,7 +537,10 @@ begin
   if tpBackground in AStyle.Present then
     APainter.FillBackground(ARect, AStyle.Background, corners);
   if TyBorderVisible(AStyle) then
-    APainter.StrokeBorder(ARect, corners, AStyle.BorderWidth, AStyle.BorderColor);
+    if AStyle.BorderStyle in [tbsOutset, tbsInset] then
+      TyDrawBevelBorder(APainter, ARect, AStyle)   // v3/B2 two-tone 3D bevel
+    else
+      APainter.StrokeBorder(ARect, corners, AStyle.BorderWidth, AStyle.BorderColor);
   // Focus ring: only present when a ':focus { outline: ... }' rule resolved.
   if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
   begin
@@ -738,7 +755,10 @@ begin
   if tpBackground in AStyle.Present then
     APainter.FillBackground(ARect, AStyle.Background, corners);
   if TyBorderVisible(AStyle) then
-    APainter.StrokeBorder(ARect, corners, AStyle.BorderWidth, AStyle.BorderColor);
+    if AStyle.BorderStyle in [tbsOutset, tbsInset] then
+      TyDrawBevelBorder(APainter, ARect, AStyle)   // v3/B2 two-tone 3D bevel
+    else
+      APainter.StrokeBorder(ARect, corners, AStyle.BorderWidth, AStyle.BorderColor);
   // A windowed control paints into its own opaque bitmap, so a drop shadow's blur bleeds
   // into the corner gaps OUTSIDE the rounded background — it can't cast onto the parent, so
   // it just leaves a dirty patch there. Re-paint those gaps with the flat parent background

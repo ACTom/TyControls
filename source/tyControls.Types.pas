@@ -30,7 +30,7 @@ type
   // How a plain background image (tfkImage) maps into the target rect.
   TTyImageMode = (timCover, timStretch, timCenter);
 
-  TTyBorderStyle = (tbsSolid, tbsNone);
+  TTyBorderStyle = (tbsSolid, tbsNone, tbsOutset, tbsInset);   // v3/B2: outset/inset = two-tone 3D bevel
 
   TTyCorners = record
     TL, TR, BR, BL: Integer;   // per-corner radii, logical px
