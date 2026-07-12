@@ -244,7 +244,7 @@ TyRibbonGroup {
 
 TyToggleSwitch {
   background: darken(--surface, 18%);
-  color: #FFFFFF;
+  color: var(--on-surface);
   border-radius: 12px;
 }
 TyToggleSwitch:hover    { background: darken(--surface, 22%); }

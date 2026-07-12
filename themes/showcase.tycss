@@ -267,7 +267,7 @@ TyRibbonGroup {
 
 TyToggleSwitch {
   background: var(--surface-toggle-off);
-  color: #FFFFFF;
+  color: var(--on-surface);
   border-radius: var(--radius-round);
 }
 TyToggleSwitch:hover    { background: var(--surface-toggle-off-hover); }

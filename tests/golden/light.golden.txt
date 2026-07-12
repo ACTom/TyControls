@@ -128,11 +128,11 @@ TyRibbonGroup||1 => pres[0,1,2,3,7,] bg=k1/00FFFFFF ut=0 txt=801F2937 bd=FFD1D5D
 TyRibbonGroup||2 => pres[0,1,2,3,7,] bg=k1/00FFFFFF ut=0 txt=801F2937 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyRibbonGroup||3 => pres[0,1,2,3,7,] bg=k1/00FFFFFF ut=0 txt=801F2937 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyRibbonGroup||4 => pres[0,1,2,3,7,] bg=k1/00FFFFFF ut=0 txt=801F2937 bd=FFD1D5DB/1/0 rad=0/0,0,0,0 pad=0,0,0,0 fnt=/9/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToggleSwitch||0 => pres[0,1,4,] bg=k1/FFD1D1D1 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToggleSwitch||1 => pres[0,1,4,] bg=k1/FFC7C7C7 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToggleSwitch||2 => pres[0,1,4,] bg=k1/FF3B82F6 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
-TyToggleSwitch||3 => pres[0,1,4,12,] bg=k1/FFD1D1D1 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=FF3B82F6/2/0
-TyToggleSwitch||4 => pres[0,1,4,9,] bg=k1/FFD1D1D1 ut=0 txt=FFFFFFFF bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=500 sh=00000000/0/0,0 ol=00000000/0/0
+TyToggleSwitch||0 => pres[0,1,4,] bg=k1/FFD1D1D1 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToggleSwitch||1 => pres[0,1,4,] bg=k1/FFC7C7C7 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToggleSwitch||2 => pres[0,1,4,] bg=k1/FF3B82F6 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyToggleSwitch||3 => pres[0,1,4,12,] bg=k1/FFD1D1D1 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=FF3B82F6/2/0
+TyToggleSwitch||4 => pres[0,1,4,9,] bg=k1/FFD1D1D1 ut=0 txt=FF1F2937 bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=500 sh=00000000/0/0,0 ol=00000000/0/0
 TyToggleKnob||0 => pres[0,4,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToggleKnob||1 => pres[0,4,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyToggleKnob||2 => pres[0,4,] bg=k1/FFFFFFFF ut=0 txt=00000000 bd=00000000/0/0 rad=12/12,12,12,12 pad=0,0,0,0 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0

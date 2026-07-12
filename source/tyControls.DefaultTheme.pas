@@ -284,7 +284,7 @@ begin
     '' + LineEnding +
     'TyToggleSwitch {' + LineEnding +
     '  background: var(--surface-toggle-off);' + LineEnding +
-    '  color: #FFFFFF;' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
     '  border-radius: var(--radius-round);' + LineEnding +
     '}' + LineEnding +
     'TyToggleSwitch:hover    { background: var(--surface-toggle-off-hover); }' + LineEnding +
