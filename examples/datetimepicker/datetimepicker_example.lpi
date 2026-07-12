@@ -8,6 +8,8 @@
         <MainUnitHasTitleStatement Value="False"/>
       </Flags>
       <Title Value="DateTimePicker"/>
+      <Scaled Value="True"/>
+      <UseXPManifest Value="True"/>
     </General>
     <BuildModes Count="1"><Item1 Name="Default" Default="True"/></BuildModes>
     <RequiredPackages Count="2">
@@ -26,5 +28,12 @@
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <SyntaxOptions><SyntaxMode Value="ObjFPC"/></SyntaxOptions>
+    <Linking>
+      <Options>
+        <Win32>
+          <GraphicApplication Value="True"/>
+        </Win32>
+      </Options>
+    </Linking>
   </CompilerOptions>
 </CONFIG>

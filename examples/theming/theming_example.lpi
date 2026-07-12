@@ -8,6 +8,8 @@
         <MainUnitHasTitleStatement Value="False"/>
       </Flags>
       <Title Value="TyControls Theming Example"/>
+      <Scaled Value="True"/>
+      <UseXPManifest Value="True"/>
     </General>
     <BuildModes Count="1">
       <Item1 Name="Default" Default="True"/>
@@ -37,5 +39,12 @@
     <SyntaxOptions>
       <SyntaxMode Value="ObjFPC"/>
     </SyntaxOptions>
+    <Linking>
+      <Options>
+        <Win32>
+          <GraphicApplication Value="True"/>
+        </Win32>
+      </Options>
+    </Linking>
   </CompilerOptions>
 </CONFIG>
