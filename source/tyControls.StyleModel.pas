@@ -255,13 +255,59 @@ begin
   end;
 end;
 
-// Parse 'linear-gradient(<angle>deg, <colorA>, <colorB>)' into a gradient fill.
+// A colour-stop's optional trailing position: a number or percentage. Returns False (and
+// leaves the whole token as the colour) when the last paren-depth-0 token isn't a position.
+function TryParsePos(const AText: string; out APos: Single): Boolean;
+var t: string; fmt: TFormatSettings; v: Double; isPct: Boolean;
+begin
+  Result := False;
+  t := Trim(AText);
+  if t = '' then Exit;
+  isPct := t[Length(t)] = '%';
+  if isPct then t := Trim(Copy(t, 1, Length(t) - 1));
+  fmt := DefaultFormatSettings; fmt.DecimalSeparator := '.';
+  if TryStrToFloat(t, v, fmt) then
+  begin
+    if isPct then APos := v / 100 else APos := v;
+    if APos < 0 then APos := 0;
+    if APos > 1 then APos := 1;
+    Result := True;
+  end;
+end;
+
+// Split 'colorExpr [pos]' — the position is the LAST paren-depth-0 token when it parses as a
+// number/percentage (so 'lighten(--a, 10%) 50%' splits, but 'lighten(--a, 10%)' does not).
+procedure SplitStopColorPos(const AStop: string; out AColor: string; out APos: Single; out AHasPos: Boolean);
+var s: string; depth, i, sp: Integer;
+begin
+  s := Trim(AStop);
+  AColor := s; APos := 0; AHasPos := False;
+  depth := 0; sp := 0;
+  for i := 1 to Length(s) do
+    case s[i] of
+      '(': Inc(depth);
+      ')': if depth > 0 then Dec(depth);
+      ' ', #9: if depth = 0 then sp := i;   // remember the LAST depth-0 whitespace
+    end;
+  if sp = 0 then Exit;   // no depth-0 space -> the whole token is the colour
+  if TryParsePos(Copy(s, sp + 1, Length(s) - sp), APos) then
+  begin
+    AHasPos := True;
+    AColor := Trim(Copy(s, 1, sp - 1));
+  end;
+end;
+
+// Parse 'linear-gradient(<angle>deg, <stop1>, <stop2>[, ...])' into a gradient fill. Each stop
+// is 'color [pos]'; N>=2 stops are supported (v3/B1). Missing positions are CSS-normalised
+// (first->0, last->1, interior interpolated between defined anchors) and forced non-decreasing.
+// GradFrom/GradTo mirror the first/last stop so the 2-stop painter fast path stays byte-identical.
 function ParseLinearGradient(const ARaw: string; Vars: TStrings): TTyFill;
 var
-  inner, angleTok: string;
-  p, q: Integer;
+  inner, angleTok, colTok: string;
+  p, q, i, k, n: Integer;
   parts: TStringList;
   fmt: TFormatSettings;
+  hasPos: array of Boolean;
 begin
   Result.Kind := tfkLinearGradient;
   Result.Color := tyTransparent;
@@ -274,10 +320,10 @@ begin
   inner := Copy(ARaw, p + 1, q - p - 1);
   parts := TStringList.Create;
   try
-    // angle, colorA, colorB; nested-paren-aware so function color args with
-    // inner commas (e.g. 'lighten(--accent, 16%)') are not mis-split.
+    // angle, then >=2 colour stops; nested-paren-aware so function color args with inner
+    // commas (e.g. 'lighten(--accent, 16%)') are not mis-split.
     SplitArgs(inner, parts);
-    if parts.Count <> 3 then
+    if parts.Count < 3 then
       raise Exception.CreateFmt(rsSmInvalidLinearGradient, [ARaw]);
     angleTok := LowerCase(Trim(parts[0]));
     if (Length(angleTok) >= 3) and (Copy(angleTok, Length(angleTok) - 2, 3) = 'deg') then
@@ -285,8 +331,35 @@ begin
     fmt := DefaultFormatSettings;
     fmt.DecimalSeparator := '.';
     Result.GradAngleDeg := StrToFloat(angleTok, fmt);
-    Result.GradFrom := TyEvalColor(Trim(parts[1]), Vars);
-    Result.GradTo := TyEvalColor(Trim(parts[2]), Vars);
+    n := parts.Count - 1;
+    SetLength(Result.GradStops, n);
+    SetLength(hasPos, n);
+    for i := 0 to n - 1 do
+    begin
+      SplitStopColorPos(Trim(parts[i + 1]), colTok, Result.GradStops[i].Pos, hasPos[i]);
+      Result.GradStops[i].Color := TyEvalColor(colTok, Vars);
+    end;
+    // Normalise positions (CSS): the first defaults to 0, the last to 1, and any interior gap
+    // is spread evenly between the nearest defined anchors.
+    if not hasPos[0] then begin Result.GradStops[0].Pos := 0; hasPos[0] := True; end;
+    if not hasPos[n - 1] then begin Result.GradStops[n - 1].Pos := 1; hasPos[n - 1] := True; end;
+    i := 1;
+    while i < n do
+    begin
+      if hasPos[i] then begin Inc(i); Continue; end;
+      k := i + 1;
+      while (k < n) and not hasPos[k] do Inc(k);   // next defined anchor (k, n-1 is always defined)
+      for p := i to k - 1 do
+        Result.GradStops[p].Pos := Result.GradStops[i - 1].Pos +
+          (Result.GradStops[k].Pos - Result.GradStops[i - 1].Pos) * (p - (i - 1)) / (k - (i - 1));
+      i := k;
+    end;
+    // Positions must be non-decreasing (a lower one is clamped up to its predecessor).
+    for i := 1 to n - 1 do
+      if Result.GradStops[i].Pos < Result.GradStops[i - 1].Pos then
+        Result.GradStops[i].Pos := Result.GradStops[i - 1].Pos;
+    Result.GradFrom := Result.GradStops[0].Color;
+    Result.GradTo := Result.GradStops[n - 1].Color;
   finally
     parts.Free;
   end;

@@ -298,11 +298,11 @@ TyButton { background: #00FF00; }   /* 被忽略 */
 
 ```
 background: <颜色表达式> ;
-background: linear-gradient(<角度>deg, <起始色>, <终止色>) ;
+background: linear-gradient(<角度>deg, <色标1>, <色标2>[, …]) ;
 ```
 
 - 纯色:任何颜色表达式(`#hex`、`var()`、裸 `--x`、颜色函数,见第 6 节);
-- 渐变:见第 7 节;**角度必须是第一个参数**,值以 `linear-gradient(` 开头才按渐变解析。
+- 渐变:见第 7 节;**角度必须是第一个参数**,值以 `linear-gradient(` 开头才按渐变解析;支持 2+ 多色标(可带位置)。
 
 ```css
 TyPanel  { background: var(--surface); }
@@ -623,13 +623,24 @@ TyButton:hover {
 ## 7. 线性渐变
 
 ```
-background: linear-gradient(<角度>deg, <起始色>, <终止色>) ;
+background: linear-gradient(<角度>deg, <色标1>, <色标2>[, …<色标N>]) ;
 ```
 
-- **角度必须是第一个参数**(angle-first),恰好三个参数;`deg` 后缀可省略;
-  角度可带小数;
-- 两个颜色参数是完整的颜色表达式(可用函数、变量,内部逗号不会引起误切分);
-- 不支持多于两个色标,不支持 `to right` 等关键字方向。
+- **角度必须是第一个参数**(angle-first),`deg` 后缀可省略,角度可带小数;
+- 其后是 **2 个或更多颜色色标**(v3 起支持多色标,用于光泽等效果);少于 2 个色标报错;
+- 每个色标是 `颜色 [位置]`:颜色是完整的颜色表达式(可用函数、变量,内部逗号不会误切分),
+  位置是可选的百分比或 `0..1` 数值(如 `#fff 0%`、`var(--accent) 50%`);
+- 位置按 CSS 规则归一化:首个缺省为 `0`、末个为 `1`,中间缺省的在相邻已定位色标间**均匀插值**,
+  且强制**不递减**(更小的位置会被上钳到前一个);
+- 不支持 `to right` 等关键字方向(方向仍由角度决定,见 7.1)。
+
+多色标示例(经典玻璃光泽:顶部高亮带):
+
+```css
+TyButton.primary {
+  background: linear-gradient(90deg, #FFFFFF 0%, #EAEAEA 48%, #DADADA 52%, #EDEDED 100%);
+}
+```
 
 ### 7.1 角度方向(与 CSS 不同!)
 

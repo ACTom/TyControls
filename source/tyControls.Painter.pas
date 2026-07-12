@@ -225,6 +225,10 @@ var
   px: TBGRAPixel;
   p1f, p2f: TPointF;
   grad: TBGRAGradientScanner;
+  multi: TBGRAMultiGradient;
+  cols: array of TBGRAPixel;
+  poss: array of Single;
+  i: Integer;
 begin
   if FBmp = nil then Exit;
   r := ACorners.TL;
@@ -250,14 +254,40 @@ begin
     tfkLinearGradient:
       begin
         GradientEndpoints(ARect, AFill.GradAngleDeg, p1f, p2f);
-        grad := TBGRAGradientScanner.Create(TyColorToBGRA(AFill.GradFrom), TyColorToBGRA(AFill.GradTo), gtLinear, p1f, p2f);
-        try
-          if r <= 0 then
-            FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, grad, dmDrawWithTransparency, daNearestNeighbor)
-          else
-            FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, grad, opts + [rrDefault]);
-        finally
-          grad.Free;
+        if Length(AFill.GradStops) > 2 then
+        begin
+          // v3/B1 multi-stop: build a BGRA multi-gradient from the N stops. (2-stop keeps the
+          // exact 2-colour scanner below, so existing themes / the golden are byte-identical.)
+          SetLength(cols, Length(AFill.GradStops));
+          SetLength(poss, Length(AFill.GradStops));
+          for i := 0 to High(AFill.GradStops) do
+          begin
+            cols[i] := TyColorToBGRA(AFill.GradStops[i].Color);
+            poss[i] := AFill.GradStops[i].Pos;
+          end;
+          multi := TBGRAMultiGradient.Create(cols, poss, False, False);
+          grad := TBGRAGradientScanner.Create(multi, gtLinear, p1f, p2f);
+          try
+            if r <= 0 then
+              FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, grad, dmDrawWithTransparency, daNearestNeighbor)
+            else
+              FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, grad, opts + [rrDefault]);
+          finally
+            grad.Free;
+            multi.Free;
+          end;
+        end
+        else
+        begin
+          grad := TBGRAGradientScanner.Create(TyColorToBGRA(AFill.GradFrom), TyColorToBGRA(AFill.GradTo), gtLinear, p1f, p2f);
+          try
+            if r <= 0 then
+              FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom, grad, dmDrawWithTransparency, daNearestNeighbor)
+            else
+              FBmp.FillRoundRectAntialias(ARect.Left, ARect.Top, ARect.Right - 1, ARect.Bottom - 1, r, r, grad, opts + [rrDefault]);
+          finally
+            grad.Free;
+          end;
         end;
       end;
     tfkNineSlice: NineSlice(ARect, AFill.ImagePath, AFill.SliceInsets);

@@ -36,10 +36,17 @@ type
     TL, TR, BR, BL: Integer;   // per-corner radii, logical px
   end;
 
+  // v3/B1: one colour stop of a (multi-stop) linear gradient.
+  TTyGradStop = record
+    Color: TTyColor;
+    Pos: Single;   // 0..1 along the gradient axis
+  end;
+
   TTyFill = record
     Kind: TTyFillKind;
     Color: TTyColor;
-    GradFrom, GradTo: TTyColor;
+    GradFrom, GradTo: TTyColor;    // 2-stop fast path (kept byte-identical; = stops[0]/[last])
+    GradStops: array of TTyGradStop;  // v3/B1: >=2 stops; the painter uses a multi-stop scanner only when >2
     GradAngleDeg: Single;
     ImagePath: string;
     SliceInsets: TRect;
