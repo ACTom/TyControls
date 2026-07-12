@@ -20,11 +20,13 @@ uses
   tyControls.ScrollBox, tyControls.ExPanel, tyControls.Button, tyControls.CheckBox,
   tyControls.GridPanel, tyControls.RelativePanel, tyControls.Edit,
   tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar, tyControls.Panel,
-  tyControls.HeaderControl, tyControls.ListGroupPanel;
+  tyControls.HeaderControl, tyControls.ListGroupPanel,
+  tyControls.BuiltinThemes, tyControls.ComboBox;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
     DivLeft: TTyDivider;
     DivCenter: TTyDivider;
     DivRight: TTyDivider;
@@ -97,6 +99,7 @@ type
     LblGrip: TTyLabel;
     Grip: TTySizeBox;
     procedure FormCreate(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
     procedure PaintSurface(Sender: TObject; APainter: TTyPainter; const AContent: TRect);
   private
     procedure WireGrid;
@@ -126,10 +129,19 @@ begin
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
+var
+  names: TStringArray;
+  i: Integer;
 begin
   // Global default controller: once the theme is loaded, every control with Controller=nil uses it
-  // (the ActiveController fallback).
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  // (the ActiveController fallback). Built-in themes are compiled in, so the switcher works without
+  // locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  TyDefaultController.ThemeName := 'default';
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
 
   // Initial checks for the check-group (Items were streamed in from the .lfm, so the child controls
   // already exist by FormCreate time).
@@ -147,6 +159,13 @@ begin
 
   // Apply the window chrome theme (title bar + rounded corners/shadow), equivalent to building it in code.
   ApplyChromeTheme(TyDefaultController);
+end;
+
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 procedure TMainForm.WireGrid;

@@ -17,6 +17,14 @@ object MainForm: TMainForm
     Top = 0
     Width = 720
     Align = alTop
+    Caption = '过渡动画  ·  TyControls'
+    object ThemeCombo: TTyComboBox
+      Left = 546
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
   end
   object BtnFade: TTyButton
     Left = 16

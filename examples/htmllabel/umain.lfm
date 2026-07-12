@@ -17,6 +17,15 @@ object MainForm: TMainForm
     Top = 0
     Width = 680
     Align = alTop
+    Caption = 'TTyHtmlLabel  ·  TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 506
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
   end
   object Rich: TTyHtmlLabel
     Left = 24

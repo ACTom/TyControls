@@ -17,6 +17,15 @@ object MainForm: TMainForm
     Top = 0
     Width = 900
     Align = alTop
+    Caption = 'TTyImageView  ·  TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 726
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
   end
   object BtnOpen: TTyButton
     Left = 16

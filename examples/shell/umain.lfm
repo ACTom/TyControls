@@ -17,6 +17,14 @@ object MainForm: TMainForm
     Top = 0
     Width = 1024
     Align = alTop
+    Caption = '文件浏览器  ·  TyControls'
+    object ThemeCombo: TTyComboBox
+      Left = 850
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
   end
   object BtnUp: TTyButton
     Left = 16

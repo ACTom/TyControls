@@ -17,6 +17,14 @@ object MainForm: TMainForm
     Top = 0
     Width = 1200
     Align = alTop
+    Caption = 'TTyListView  ·  TyControls'
+    object ThemeCombo: TTyComboBox
+      Left = 1026
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
   end
   object DivLeft: TTyDivider
     Left = 16

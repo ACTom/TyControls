@@ -9,16 +9,18 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.TyLabel,
-  tyControls.HtmlLabel;
+  tyControls.HtmlLabel, tyControls.BuiltinThemes, tyControls.ComboBox;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
     Rich:   TTyHtmlLabel;
     LblStatus: TTyLabel;
 
     procedure FormCreate(Sender: TObject);
     procedure RichLinkClick(Sender: TObject; const AHref: string);
+    procedure ThemeComboChange(Sender: TObject);
   end;
 
 var
@@ -28,24 +30,19 @@ implementation
 
 {$R *.lfm}
 
-function ThemesDir: string;
+procedure TMainForm.FormCreate(Sender: TObject);
 var
-  Dir: string;
+  names: TStringArray;
   i: Integer;
 begin
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 8 do
-  begin
-    if DirectoryExists(Dir + 'themes') then Exit(Dir + 'themes' + PathDelim);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := 'themes' + PathDelim;
-end;
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  TyDefaultController.ThemeName := 'default';
 
-procedure TMainForm.FormCreate(Sender: TObject);
-begin
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
 
   Rich.OnLinkClick := @RichLinkClick;
   Rich.Html :=
@@ -57,6 +54,13 @@ begin
     '实体也可以:&lt;tag&gt; &amp; &quot;引号&quot;。';
 
   ApplyChromeTheme(TyDefaultController);
+end;
+
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 procedure TMainForm.RichLinkClick(Sender: TObject; const AHref: string);

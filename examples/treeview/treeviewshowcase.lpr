@@ -8,6 +8,7 @@ uses
 {$R *.res}
 
 begin
+  RequireDerivedFormResource := True;
   Application.Scaled := True;
   Application.Initialize;
   Application.CreateForm(TShowcaseForm, ShowcaseForm);

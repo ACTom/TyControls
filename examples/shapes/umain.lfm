@@ -17,6 +17,15 @@ object MainForm: TMainForm
     Top = 0
     Width = 1180
     Align = alTop
+    Caption = '矢量形状  ·  TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 1006
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
   end
   object DivKinds: TTyDivider
     Left = 24

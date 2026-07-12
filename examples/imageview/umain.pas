@@ -17,11 +17,13 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics,
   tyControls.Controller, tyControls.Form, tyControls.TyLabel,
   tyControls.Button, tyControls.CheckBox, tyControls.Divider,
+  tyControls.ComboBox, tyControls.BuiltinThemes,
   tyControls.ImageView, tyControls.Dialogs.FileDialog;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
     BtnOpen:   TTyButton;
     BtnZoomIn: TTyButton;
     BtnZoomOut: TTyButton;
@@ -46,6 +48,7 @@ type
     procedure ChkInvertChange(Sender: TObject);
     procedure ChkBlurChange(Sender: TObject);
     procedure ViewZoomChange(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
   private
     FOpenPic: TTyOpenPictureDialog;
   end;
@@ -57,24 +60,13 @@ implementation
 
 {$R *.lfm}
 
-function ThemesDir: string;
+procedure TMainForm.FormCreate(Sender: TObject);
 var
-  Dir: string;
+  names: TStringArray;
   i: Integer;
 begin
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 8 do
-  begin
-    if DirectoryExists(Dir + 'themes') then Exit(Dir + 'themes' + PathDelim);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := 'themes' + PathDelim;
-end;
-
-procedure TMainForm.FormCreate(Sender: TObject);
-begin
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyDefaultController.ThemeName := 'default';
   View.OnZoomChange := @ViewZoomChange;
 
   FOpenPic := TTyOpenPictureDialog.Create(Self);
@@ -82,6 +74,19 @@ begin
   FOpenPic.InitialDir := ExcludeTrailingPathDelimiter(GetUserDir);
 
   ApplyChromeTheme(TyDefaultController);
+
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+end;
+
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 procedure TMainForm.BtnOpenClick(Sender: TObject);

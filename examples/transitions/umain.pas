@@ -12,11 +12,13 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.Button, tyControls.TyLabel,
-  tyControls.Panel, tyControls.Transitions;
+  tyControls.Panel, tyControls.Transitions, tyControls.BuiltinThemes,
+  tyControls.ComboBox;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
     BtnFade:  TTyButton;
     BtnUp:    TTyButton;
     BtnDown:  TTyButton;
@@ -31,6 +33,7 @@ type
     procedure BtnDownClick(Sender: TObject);
     procedure BtnLeftClick(Sender: TObject);
     procedure BtnRightClick(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
   private
     procedure Replay(AKind: TTyTransitionKind);
   end;
@@ -58,9 +61,25 @@ begin
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
+var
+  names: TStringArray;
+  i: Integer;
 begin
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  TyDefaultController.ThemeName := 'default';
   ApplyChromeTheme(TyDefaultController);
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+end;
+
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 { Re-show the panel with the chosen transition. }

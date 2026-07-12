@@ -24,12 +24,14 @@ uses
   Classes, SysUtils, Graphics, Forms, Controls, Math,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Controller, tyControls.Form, tyControls.TyLabel, tyControls.Divider,
-  tyControls.Button, tyControls.CheckBox, tyControls.Columns,
+  tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.Columns,
+  tyControls.BuiltinThemes,
   tyControls.ImageCollection, tyControls.ListView.Layout, tyControls.ListView;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
 
     DivLeft: TTyDivider;
     BtnReport: TTyButton;
@@ -53,6 +55,7 @@ type
     LblVirtualNote: TTyLabel;
 
     procedure FormCreate(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
     procedure BtnReportClick(Sender: TObject);
     procedure BtnListClick(Sender: TObject);
     procedure BtnIconClick(Sender: TObject);
@@ -323,8 +326,17 @@ begin
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
+var
+  names: TStringArray;
+  i: Integer;
 begin
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  { Built-in themes are compiled in, so the switcher works without locating a themes/ folder. }
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+  TyDefaultController.ThemeName := 'default';
 
   LV1.ReadOnly := False;        { F2 renames; the default is read-only on purpose }
   LV1.OnItemChecked := @LV1ItemChecked;
@@ -340,6 +352,13 @@ begin
   UpdateStatus;
 
   ApplyChromeTheme(TyDefaultController);
+end;
+
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   { re-theme the shell on every skin change }
 end;
 
 { ---------------------------------------------------------------------------

@@ -16,13 +16,15 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.Form, tyControls.TyLabel, tyControls.Divider,
-  tyControls.Button, tyControls.TrackBar,
+  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
+  tyControls.TyLabel, tyControls.Divider,
+  tyControls.Button, tyControls.TrackBar, tyControls.ComboBox,
   tyControls.Shape, tyControls.StarShape, tyControls.Arrow;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
 
     DivKinds: TTyDivider;
     ShRect: TTyShape;
@@ -86,6 +88,7 @@ type
     LblThemeHint: TTyLabel;
 
     procedure FormCreate(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
     procedure TrackPointsChange(Sender: TObject);
     procedure TrackInnerChange(Sender: TObject);
     procedure TrackHeadChange(Sender: TObject);
@@ -129,8 +132,25 @@ begin
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
+var
+  names: TStringArray;
+  i: Integer;
 begin
-  UseTheme('light.tycss');
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  TyDefaultController.ThemeName := 'default';
+  ApplyChromeTheme(TyDefaultController);   // title bar + window rounded corners/shadow
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+end;
+
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 procedure TMainForm.TrackPointsChange(Sender: TObject);

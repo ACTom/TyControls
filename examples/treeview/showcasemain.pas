@@ -1,13 +1,22 @@
 unit showcasemain;
-{ TTyTreeView showcase — 4 tabbed pages demonstrating:
+{ TTyTreeView showcase — 5 tabbed pages demonstrating:
     1. Virtual (1 000 000 nodes, multi-level lazy expansion)
     2. Columns + sort (4 columns, stable per-node data, header click sorts)
     3. Checkboxes  (tri-state folders / plain-check files / radio group)
     4. Multi-select (full-row, Ctrl/Shift/Ctrl+A, live count in status bar)
+    5. Drag to move (small, reparent-safe, toNodeDrag)
 
-  All UI is built in code (no .lfm).  The single TTyStyleController is wired
-  to every tree so all pages share the same theme.  Light/Dark toggle buttons
-  call TyController.Mode directly (manual follow). }
+  The window, the title bar (with the Light / Dark buttons + the built-in-theme
+  switcher), the page control, its five pages, the per-tab description labels, the
+  five trees and the status bar are all DESIGNED in showcasemain.lfm (a TTyForm +
+  TTyTitleBar).  The code here is theme setup + event handlers + the tree
+  configuration (columns / options / images / node-data population) that is NOT a
+  simple published property, exactly as before — it just now operates on the
+  streamed controls instead of creating them.
+
+  Skin switching: the Light / Dark buttons flip TyDefaultController.Mode; the
+  ThemeCombo swaps TyDefaultController.ThemeName.  All three drive the SAME
+  controller (the global TyDefaultController) so every page stays in sync. }
 
 {$mode objfpc}{$H+}
 interface
@@ -15,7 +24,7 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics, ImgList,
   tyControls.Controller, tyControls.Form, tyControls.Button,
   tyControls.TyLabel, tyControls.PageControl, tyControls.TabSheet,
-  tyControls.StatusBar, tyControls.BuiltinThemes,
+  tyControls.StatusBar, tyControls.ComboBox, tyControls.BuiltinThemes,
   tyControls.TreeView, tyControls.Columns;
 
 { -----------------------------------------------------------------------
@@ -37,33 +46,47 @@ type
 
 type
   TShowcaseForm = class(TTyForm)
+    { Streamed from showcasemain.lfm }
+    ChromeBar:   TTyTitleBar;
+    BtnLight:    TTyButton;
+    BtnDark:     TTyButton;
+    ThemeCombo:  TTyComboBox;
+    Pages:       TTyPageControl;
+    PgVirtual:   TTyTabSheet;
+    LblVirtual:  TTyLabel;
+    VirtualTree: TTyTreeView;   // Tab 1: Virtual
+    PgCol:       TTyTabSheet;
+    LblCol:      TTyLabel;
+    ColTree:     TTyTreeView;   // Tab 2: Columns + sort
+    PgCheck:     TTyTabSheet;
+    LblCheck:    TTyLabel;
+    CheckTree:   TTyTreeView;   // Tab 3: Checkboxes
+    PgMulti:     TTyTabSheet;
+    LblMulti:    TTyLabel;
+    MultiTree:   TTyTreeView;   // Tab 4: Multi-select
+    PgDrag:      TTyTabSheet;
+    LblDrag:     TTyLabel;
+    DragTree:    TTyTreeView;   // Tab 5: Drag to move
+    StatusBar:   TTyStatusBar;
+    { .lfm-bound handlers (must stay published) }
+    procedure FormCreate(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
+    procedure LightClick(Sender: TObject);
+    procedure DarkClick (Sender: TObject);
   private
-    { Infrastructure }
-    TyController: TTyStyleController;
-    StatusBar:    TTyStatusBar;
-    ChromeBar:    TTyTitleBar;
-    Pages:        TTyPageControl;
-
-    { Per-tab trees }
-    VirtualTree:  TTyTreeView;   // Tab 1: Virtual
-    ColTree:      TTyTreeView;   // Tab 2: Columns + sort
-    CheckTree:    TTyTreeView;   // Tab 3: Checkboxes
-    MultiTree:    TTyTreeView;   // Tab 4: Multi-select
-    DragTree:     TTyTreeView;   // Tab 5: Drag to move
-
     { Explorer-style row icons for the Columns tab (owned by the form) }
     FFileIcons:   TImageList;
 
-    { Helpers }
-    function  ThemeDir: string;
-    procedure InitTheme;
-    procedure BuildTitleBar;
-    procedure BuildToolbar(AParent: TWinControl);
-    procedure BuildStatusBar;
-    procedure BuildPages;
+    { Per-tab tree configuration (kept in code — columns / options / images /
+      node-data population are not simple published properties). }
+    procedure InitVirtualTab;
+    procedure InitColTab;
+    procedure BuildFileIcons;
+    procedure InitCheckTab;
+    procedure InitMultiTab;
+    procedure InitDragTab;
 
     { Tab 1 — Virtual }
-    procedure InitVirtualTab(APage: TTyTabSheet);
     procedure VirtualInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
                                   var InitStates: TTyNodeInitStates);
     procedure VirtualInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
@@ -72,8 +95,6 @@ type
                                   var AText: string);
 
     { Tab 2 — Columns + sort }
-    procedure BuildFileIcons;
-    procedure InitColTab(APage: TTyTabSheet);
     procedure ColInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
                               var InitStates: TTyNodeInitStates);
     procedure ColInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
@@ -92,7 +113,6 @@ type
                               Column: Integer; var Allowed: Boolean);
 
     { Tab 3 — Checkboxes }
-    procedure InitCheckTab(APage: TTyTabSheet);
     procedure CheckInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
                                 var InitStates: TTyNodeInitStates);
     procedure CheckInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
@@ -102,7 +122,6 @@ type
     procedure CheckOnChecked   (Sender: TTyTreeView; Node: PTyTreeNode);
 
     { Tab 4 — Multi-select }
-    procedure InitMultiTab(APage: TTyTabSheet);
     procedure MultiInitNode    (Sender: TTyTreeView; ParentNode, Node: PTyTreeNode;
                                 var InitStates: TTyNodeInitStates);
     procedure MultiInitChildren(Sender: TTyTreeView; Node: PTyTreeNode;
@@ -112,22 +131,17 @@ type
     procedure MultiSelectionChanged(Sender: TObject);
 
     { Tab 5 — Drag to move (small, reparent-safe) }
-    procedure InitDragTab(APage: TTyTabSheet);
     procedure DragGetText   (Sender: TTyTreeView; Node: PTyTreeNode;
                              var AText: string);
     procedure DragNodeMoved (Sender: TTyTreeView; Node: PTyTreeNode);
-
-    { Toolbar button handlers }
-    procedure LightClick(Sender: TObject);
-    procedure DarkClick (Sender: TObject);
-  public
-    constructor Create(AOwner: TComponent); override;
   end;
 
 var
   ShowcaseForm: TShowcaseForm;
 
 implementation
+
+{$R *.lfm}
 
 { -----------------------------------------------------------------------
   Column-tab data tables (mirrors demo's ColTree* constants).
@@ -169,39 +183,53 @@ const
     ('game_a',      'game_b',      'game_c',     'launcher.exe')
   );
 
-{ -----------------------------------------------------------------------
-  Helper: locate the themes/ directory by walking up from the exe.
-  ----------------------------------------------------------------------- }
-function TShowcaseForm.ThemeDir: string;
-var Dir: string; i: Integer;
+{ =======================================================================
+  Form bootstrap — all controls stream from the .lfm; FormCreate wires the
+  theme, adds the status panel and configures each streamed tree.
+  ======================================================================= }
+procedure TShowcaseForm.FormCreate(Sender: TObject);
+var
+  names: TStringArray;
+  i:     Integer;
+  Panel: TTyStatusPanel;
 begin
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 8 do
-  begin
-    if DirectoryExists(Dir + 'themes') then
-      Exit(Dir + 'themes' + PathDelim);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := 'themes' + PathDelim;
+  { Built-in themes are compiled in, so the switcher works without locating a
+    themes/ folder. }
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+
+  { 'default' is a dual-mode theme; seed a mode so its @mode-only vars resolve.
+    The Light/Dark buttons flip this at runtime; the combo swaps ThemeName. All
+    three drive the SAME controller (the global TyDefaultController). }
+  TyDefaultController.ThemeName := 'default';
+  TyDefaultController.Follow    := tfManual;
+  TyDefaultController.Mode      := 'light';
+  ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
+
+  { Status bar: one panel (the bar is streamed; the panel is data, added here). }
+  Panel := StatusBar.Panels.Add;
+  Panel.Width := 600;
+  Panel.Text  := 'Ready';
+
+  { Configure each streamed tree (columns / options / images / node-data
+    population stay in code, exactly as before). }
+  InitVirtualTab;
+  InitColTab;
+  InitCheckTab;
+  InitMultiTab;
+  InitDragTab;
+
+  Pages.ActivePageIndex := 0;
 end;
 
-{ -----------------------------------------------------------------------
-  Theme bootstrap
-  ----------------------------------------------------------------------- }
-procedure TShowcaseForm.InitTheme;
+procedure TShowcaseForm.ThemeComboChange(Sender: TObject);
 begin
-  TyRegisterBuiltinThemes;
-  TyController := TTyStyleController.Create(Self);
-  TyController.ThemeName := 'default';
-  { 'default' is a dual-mode theme; pick a mode so its @mode-only vars resolve.
-    (The Light/Dark buttons flip this at runtime.) }
-  TyController.Follow := tfManual;
-  TyController.Mode   := 'light';
-  { Wire the controller to the form so ApplyChromeTheme propagates to all
-    child controls that have Controller set to the same instance. }
-  Controller := TyController;
-  ApplyChromeTheme(TyController);
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 { -----------------------------------------------------------------------
@@ -209,126 +237,23 @@ end;
   ----------------------------------------------------------------------- }
 procedure TShowcaseForm.LightClick(Sender: TObject);
 begin
-  TyController.Follow := tfManual;
-  TyController.Mode   := 'light';
-  ApplyChromeTheme(TyController);
+  TyDefaultController.Follow := tfManual;
+  TyDefaultController.Mode   := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 procedure TShowcaseForm.DarkClick(Sender: TObject);
 begin
-  TyController.Follow := tfManual;
-  TyController.Mode   := 'dark';
-  ApplyChromeTheme(TyController);
-end;
-
-{ -----------------------------------------------------------------------
-  Top toolbar: Light + Dark buttons
-  ----------------------------------------------------------------------- }
-procedure TShowcaseForm.BuildTitleBar;
-begin
-  { TTyForm is born borderless (SetupChrome sets BorderStyle=bsNone) with NO title
-    bar. Associating a TTyTitleBar arms the chrome engine — drag, edge-resize, and
-    the min/max/close buttons. Without it the window can't be moved, sized, or closed. }
-  ChromeBar := TTyTitleBar.Create(Self);
-  ChromeBar.Parent         := Self;
-  ChromeBar.Align          := alTop;
-  ChromeBar.Caption        := 'TTyTreeView Feature Showcase';
-  ChromeBar.TitleAlignment := taCenter;
-  ChromeBar.Controller     := TyController;
-  TitleBar := ChromeBar;             // associate -> arms engine + wires caption buttons
-  ApplyChromeTheme(TyController);     // re-theme chrome now that the bar exists
-end;
-
-{ -----------------------------------------------------------------------
-  Light / Dark theme buttons — hosted inside the title bar (left side).
-  ----------------------------------------------------------------------- }
-procedure TShowcaseForm.BuildToolbar(AParent: TWinControl);
-var
-  BtnLight, BtnDark: TTyButton;
-begin
-  BtnLight := TTyButton.Create(Self);
-  BtnLight.Parent := AParent;
-  BtnLight.SetBounds(8, 4, 76, 24);
-  BtnLight.Caption := 'Light';
-  BtnLight.StyleClass := 'ghost';
-  BtnLight.Anchors := [akLeft, akTop];
-  BtnLight.OnClick := @LightClick;
-  BtnLight.Controller := TyController;
-
-  BtnDark := TTyButton.Create(Self);
-  BtnDark.Parent := AParent;
-  BtnDark.SetBounds(88, 4, 76, 24);
-  BtnDark.Caption := 'Dark';
-  BtnDark.StyleClass := 'ghost';
-  BtnDark.Anchors := [akLeft, akTop];
-  BtnDark.OnClick := @DarkClick;
-  BtnDark.Controller := TyController;
-end;
-
-{ -----------------------------------------------------------------------
-  Status bar (1 panel, bottom)
-  ----------------------------------------------------------------------- }
-procedure TShowcaseForm.BuildStatusBar;
-var
-  Panel: TTyStatusPanel;
-begin
-  StatusBar := TTyStatusBar.Create(Self);
-  StatusBar.Parent := Self;
-  StatusBar.Align := alBottom;
-  StatusBar.Controller := TyController;
-  Panel := StatusBar.Panels.Add;
-  Panel.Width := 600;
-  Panel.Text := 'Ready';
-end;
-
-{ -----------------------------------------------------------------------
-  Page control + all tabs
-  ----------------------------------------------------------------------- }
-procedure TShowcaseForm.BuildPages;
-var
-  Tab1, Tab2, Tab3, Tab4, Tab5: TTyTabSheet;
-begin
-  Pages := TTyPageControl.Create(Self);
-  Pages.Parent := Self;
-  Pages.Align := alClient;
-  Pages.Controller := TyController;
-
-  Tab1 := Pages.AddPage('Virtual (1M nodes)');
-  Tab2 := Pages.AddPage('Columns + Sort');
-  Tab3 := Pages.AddPage('Checkboxes');
-  Tab4 := Pages.AddPage('Multi-Select');
-  Tab5 := Pages.AddPage('Drag to Move');
-
-  InitVirtualTab(Tab1);
-  InitColTab(Tab2);
-  InitCheckTab(Tab3);
-  InitMultiTab(Tab4);
-  InitDragTab(Tab5);
-
-  Pages.ActivePageIndex := 0;
+  TyDefaultController.Follow := tfManual;
+  TyDefaultController.Mode   := 'dark';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 { =======================================================================
   TAB 1 — Virtual tree: 1 000 000 root nodes, 5 levels deep, 10 children
   ======================================================================= }
-procedure TShowcaseForm.InitVirtualTab(APage: TTyTabSheet);
-var
-  Lbl: TTyLabel;
+procedure TShowcaseForm.InitVirtualTab;
 begin
-  Lbl := TTyLabel.Create(Self);
-  Lbl.Parent := APage;
-  Lbl.Align := alTop;
-  Lbl.Height := 26;
-  Lbl.BorderSpacing.Left := 8;
-  Lbl.Caption :=
-    'Virtual engine: 1 000 000 root nodes; up to level 4 each has 10 children. ' +
-    'All nodes initialised lazily (OnInitNode / OnInitChildren).';
-  Lbl.Controller := TyController;
-
-  VirtualTree := TTyTreeView.Create(Self);
-  VirtualTree.Parent := APage;
-  VirtualTree.Align := alClient;
-  VirtualTree.Controller := TyController;
   { NOTE: intra-tree node drag (toNodeDrag) is deliberately NOT enabled here. The
     1M root nodes form one flat sibling list; a drop calls ReindexSiblings over the
     whole list (O(siblings), same class as DeleteNode) which would freeze the UI on
@@ -495,32 +420,12 @@ begin
   end;
 end;
 
-procedure TShowcaseForm.InitColTab(APage: TTyTabSheet);
+procedure TShowcaseForm.InitColTab;
 var
-  Lbl: TTyLabel;
   col: TTyColumn;
 begin
-  Lbl := TTyLabel.Create(Self);
-  Lbl.Parent := APage;
-  Lbl.Align := alTop;
-  Lbl.Height := 26;
-  Lbl.BorderSpacing.Left := 8;
-  Lbl.Caption :=
-    'Data lives in the node (NodeDataSize = SizeOf(TRowRec)). ' +
-    'Sort reads PRowRec(GetNodeData(Node)) — never Node^.Index — so column ' +
-    'sorts are always stable.  Click a column header to sort.  ' +
-    'Each Name shows an Explorer-style icon (folder / file / image / archive) ' +
-    'via Images + OnGetImageIndex.  Double-click / F2 a Name to edit it ' +
-    '(OnNewText writes the text into the node blob, so it survives re-sorts).';
-  Lbl.Controller := TyController;
-
   { Explorer-style row icons (drawn in code, owned by the form) }
   BuildFileIcons;
-
-  ColTree := TTyTreeView.Create(Self);
-  ColTree.Parent := APage;
-  ColTree.Align := alClient;
-  ColTree.Controller := TyController;
 
   { Allocate the per-node TRowRec blob }
   ColTree.NodeDataSize := SizeOf(TRowRec);
@@ -808,25 +713,8 @@ end;
   Options = [toCheckSupport, toAutoTristateTracking]
   OnChecked updates the status bar with the toggled node's name.
   ======================================================================= }
-procedure TShowcaseForm.InitCheckTab(APage: TTyTabSheet);
-var
-  Lbl: TTyLabel;
+procedure TShowcaseForm.InitCheckTab;
 begin
-  Lbl := TTyLabel.Create(Self);
-  Lbl.Parent := APage;
-  Lbl.Align := alTop;
-  Lbl.Height := 26;
-  Lbl.BorderSpacing.Left := 8;
-  Lbl.Caption :=
-    'Folders: tri-state checkboxes (auto-propagate). ' +
-    'Music/Videos files: plain checkboxes. ' +
-    'Games entries: radio buttons (one active at a time).';
-  Lbl.Controller := TyController;
-
-  CheckTree := TTyTreeView.Create(Self);
-  CheckTree.Parent := APage;
-  CheckTree.Align := alClient;
-  CheckTree.Controller := TyController;
   CheckTree.Options := [toCheckSupport, toAutoTristateTracking];
 
   CheckTree.OnInitNode     := @CheckInitNode;
@@ -890,24 +778,8 @@ end;
   Options = [toMultiSelect, toFullRowSelect]
   OnSelectionChanged updates the status bar with the selected count.
   ======================================================================= }
-procedure TShowcaseForm.InitMultiTab(APage: TTyTabSheet);
-var
-  Lbl: TTyLabel;
+procedure TShowcaseForm.InitMultiTab;
 begin
-  Lbl := TTyLabel.Create(Self);
-  Lbl.Parent := APage;
-  Lbl.Align := alTop;
-  Lbl.Height := 26;
-  Lbl.BorderSpacing.Left := 8;
-  Lbl.Caption :=
-    'Multi-select + full-row highlight. Ctrl+click / Shift+click / Ctrl+A. ' +
-    'OnSelectionChanged shows live count in the status bar.';
-  Lbl.Controller := TyController;
-
-  MultiTree := TTyTreeView.Create(Self);
-  MultiTree.Parent := APage;
-  MultiTree.Align := alClient;
-  MultiTree.Controller := TyController;
   MultiTree.Options := [toMultiSelect, toFullRowSelect];
 
   MultiTree.OnInitNode        := @MultiInitNode;
@@ -968,28 +840,13 @@ type
     LabelId: Integer;
   end;
 
-procedure TShowcaseForm.InitDragTab(APage: TTyTabSheet);
+procedure TShowcaseForm.InitDragTab;
 var
-  Lbl:     TTyLabel;
   group:   PTyTreeNode;
   child:   PTyTreeNode;
   data:    PDragRec;
   g, c, id: Integer;
 begin
-  Lbl := TTyLabel.Create(Self);
-  Lbl.Parent := APage;
-  Lbl.Align := alTop;
-  Lbl.Height := 26;
-  Lbl.BorderSpacing.Left := 8;
-  Lbl.Caption :=
-    'Drag to move: drag a node ABOVE / ONTO / BELOW another to reorder or ' +
-    'reparent it (toNodeDrag). Each node keeps its name when moved.';
-  Lbl.Controller := TyController;
-
-  DragTree := TTyTreeView.Create(Self);
-  DragTree.Parent := APage;
-  DragTree.Align := alClient;
-  DragTree.Controller := TyController;
   DragTree.Options := [toNodeDrag];
   DragTree.NodeDataSize := SizeOf(TDragRec);
   DragTree.OnGetText   := @DragGetText;
@@ -1037,31 +894,6 @@ begin
   DragGetText(Sender, Node, s);
   if (StatusBar <> nil) and (StatusBar.Panels.Count > 0) then
     StatusBar.Panels[0].Text := 'Moved ' + s;
-end;
-
-{ =======================================================================
-  Form constructor
-  ======================================================================= }
-constructor TShowcaseForm.Create(AOwner: TComponent);
-begin
-  inherited CreateNew(AOwner, 0);
-  Caption  := 'TTyTreeView Feature Showcase';
-  Position := poScreenCenter;
-  SetBounds(0, 0, 900, 650);
-
-  { 1. Bootstrap theme controller FIRST (all controls below set Controller) }
-  InitTheme;
-
-  { 2. Title bar — TTyForm is borderless by design; the bar provides drag /
-       min-max-close and arms the edge-resize engine. Theme buttons live in it. }
-  BuildTitleBar;
-  BuildToolbar(ChromeBar);
-
-  { 3. Status bar }
-  BuildStatusBar;
-
-  { 4. Tabbed pages (fills remaining client area via alClient) }
-  BuildPages;
 end;
 
 end.

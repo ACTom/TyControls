@@ -25,13 +25,15 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.TyLabel,
-  tyControls.Button, tyControls.CheckBox,
+  tyControls.Button, tyControls.CheckBox, tyControls.ComboBox,
+  tyControls.BuiltinThemes,
   tyControls.FileSystem, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.ShellComboBox, tyControls.FilterComboBox, tyControls.ListView;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
 
     BtnUp:     TTyButton;
     ChkHidden: TTyCheckBox;
@@ -56,6 +58,7 @@ type
     procedure ChkHiddenChange(Sender: TObject);
     procedure ChkGroupChange(Sender: TObject);
     procedure BtnUpClick(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
   private
     { Guards the tree<->list two-way sync so a tree-driven list load, or a list-driven
       tree reveal, does not bounce back and re-fire forever. }
@@ -89,8 +92,14 @@ end;
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   startDir: string;
+  i: Integer;
 begin
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  { Built-in themes are compiled in, so the switcher works without locating a themes/ folder. }
+  TyRegisterBuiltinThemes;
+  TyDefaultController.ThemeName := 'default';
+  for i := 0 to High(TyBuiltinThemeNames) do
+    ThemeCombo.Items.Add(TyBuiltinThemeNames[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
 
   { The list renames on F2 (opt-in; the default is read-only so a stray F2 can't rename). }
   List1.ReadOnly := False;
@@ -202,6 +211,13 @@ end;
 procedure TMainForm.ChkGroupChange(Sender: TObject);
 begin
   List1.GroupByKind := ChkGroup.Checked;
+end;
+
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 end.

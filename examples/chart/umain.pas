@@ -8,12 +8,14 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.Form, tyControls.Button, tyControls.CheckBox,
+  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
+  tyControls.Button, tyControls.CheckBox, tyControls.ComboBox,
   tyControls.Chart;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
     BtnLine: TTyButton;
     BtnBar:  TTyButton;
     BtnPie:  TTyButton;
@@ -27,6 +29,7 @@ type
     procedure BtnPieClick(Sender: TObject);
     procedure ChkLegendChange(Sender: TObject);
     procedure ChkValuesChange(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
   end;
 
 var
@@ -36,25 +39,11 @@ implementation
 
 {$R *.lfm}
 
-function ThemesDir: string;
+procedure TMainForm.FormCreate(Sender: TObject);
 var
-  Dir: string;
+  names: TStringArray;
   i: Integer;
 begin
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 8 do
-  begin
-    if DirectoryExists(Dir + 'themes') then Exit(Dir + 'themes' + PathDelim);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := 'themes' + PathDelim;
-end;
-
-procedure TMainForm.FormCreate(Sender: TObject);
-begin
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
-
   Chart.Title := '季度销量';
   Chart.Categories.Text := 'Q1' + LineEnding + 'Q2' + LineEnding + 'Q3' + LineEnding + 'Q4';
   with Chart.Series.Add do begin Name := '华东'; Values := '12, 19, 15, 22'; end;
@@ -62,7 +51,21 @@ begin
   with Chart.Series.Add do begin Name := '华北'; Values := '7, 11, 13, 20'; end;
   Chart.ChartType := ctBar;
 
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+  TyDefaultController.ThemeName := 'default';
   ApplyChromeTheme(TyDefaultController);
+end;
+
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 procedure TMainForm.BtnLineClick(Sender: TObject); begin Chart.ChartType := ctLine; end;

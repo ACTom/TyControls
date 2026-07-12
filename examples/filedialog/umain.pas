@@ -20,12 +20,13 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.TyLabel, tyControls.Button,
-  tyControls.Memo, tyControls.Divider,
+  tyControls.Memo, tyControls.Divider, tyControls.ComboBox, tyControls.BuiltinThemes,
   tyControls.PreviewBox, tyControls.Dialogs.FileDialog;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
     DivFile: TTyDivider;
     BtnOpen:  TTyButton;
     BtnSave:  TTyButton;
@@ -44,6 +45,7 @@ type
     procedure BtnSavePicClick(Sender: TObject);
     procedure BtnOpenPrevClick(Sender: TObject);
     procedure BtnSavePrevClick(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
   private
     FOpen:     TTyOpenDialog;
     FSave:     TTySaveDialog;
@@ -81,8 +83,14 @@ end;
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   home: string;
+  i: Integer;
 begin
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  TyDefaultController.ThemeName := 'default';
+  for i := 0 to High(TyBuiltinThemeNames) do
+    ThemeCombo.Items.Add(TyBuiltinThemeNames[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
 
   home := ExcludeTrailingPathDelimiter(GetUserDir);
 
@@ -187,6 +195,13 @@ end;
 procedure TMainForm.BtnSavePrevClick(Sender: TObject);
 begin
   Report('保存预览', FSavePrev.Execute, FSavePrev);
+end;
+
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 end.
