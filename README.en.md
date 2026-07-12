@@ -112,8 +112,8 @@ Full steps (install the package, first form, theme switching) are in
 
 ## Examples
 
-One independently-buildable minimal project per control (UI built in pure code), plus a combined
-gallery and a dedicated TreeView showcase:
+One independently-buildable minimal project per control (each form is a designed `.lfm`, not built
+in code), plus a combined gallery and a dedicated TreeView showcase:
 
 | Example | What it shows |
 |---|---|
@@ -139,7 +139,8 @@ gallery and a dedicated TreeView showcase:
 
 The remaining per-control examples (button / label / checkbox / radiobutton / panel / groupbox /
 scrollbar / progressbar / toggleswitch / trackbar) are under [examples/](examples/). **Every example
-form uses the `TTyForm` + `TTyTitleBar` custom-drawn window frame.** Build any example with
+form is a designed `.lfm` using the `TTyForm` + `TTyTitleBar` custom-drawn window frame, with an
+in-title-bar theme switcher for live skin changes.** Build any example with
 `lazbuild examples/<name>/<name>_example.lpi` (demo is `demo.lpi`, treeview is `treeviewshowcase.lpi`).
 
 ## Build & test

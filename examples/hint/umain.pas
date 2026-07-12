@@ -4,7 +4,7 @@ unit umain;
   The window, the app-wide hint installer, both hinted buttons, the balloon and the live theme
   switcher are all designed in umain.lfm (a TTyForm + TTyTitleBar); the code here is event
   handlers + theme setup only.
-  Hover a button to see the themed tooltip; click "显示气泡" to see the pointed balloon callout. }
+  Hover a button to see the themed tooltip; click the show-balloon button to see the pointed callout. }
 
 {$mode objfpc}{$H+}
 

@@ -64,7 +64,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 
 ## 示例
 
-每个控件一个可独立构建的最小工程(纯代码建 UI),外加综合 gallery 与 TreeView 专项 showcase:
+每个控件一个可独立构建的最小工程(窗体均为**设计式 `.lfm`**,非代码创建),外加综合 gallery 与 TreeView 专项 showcase:
 
 | 示例 | 演示内容 |
 |---|---|
@@ -88,7 +88,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 | [examples/listview](examples/listview/) | `TTyListView`:五视图、排序、多选 + 框选、复选框 + F2 改名、**按类型分组折叠**、10 万行虚拟模式 |
 | [examples/theming](examples/theming/) | 自定义 `.tycss` 主题 + 运行时热切换 |
 
-其余单控件示例(button / label / checkbox / radiobutton / panel / groupbox / scrollbar / progressbar / toggleswitch / trackbar)见 [examples/](examples/)。**所有示例窗体均采用 `TTyForm` + `TTyTitleBar` 自绘窗框。** 构建任意示例:`lazbuild examples/<名称>/<名称>_example.lpi`(demo 为 `demo.lpi`,treeview 为 `treeviewshowcase.lpi`)。
+其余单控件示例(button / label / checkbox / radiobutton / panel / groupbox / scrollbar / progressbar / toggleswitch / trackbar)见 [examples/](examples/)。**所有示例窗体均为设计式 `.lfm`,采用 `TTyForm` + `TTyTitleBar` 自绘窗框,并在标题栏内置换肤下拉(运行时切换内置主题)。** 构建任意示例:`lazbuild examples/<名称>/<名称>_example.lpi`(demo 为 `demo.lpi`,treeview 为 `treeviewshowcase.lpi`)。
 
 ## 构建与测试
 
