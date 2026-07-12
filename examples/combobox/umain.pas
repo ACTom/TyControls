@@ -1,6 +1,6 @@
 unit umain;
 
-{ TTyComboBox demo (pure code, no .lfm):
+{ TTyComboBox demo:
     Left column csDropDownList (read-only, selection only from the list) -- shows
       Sorted ordering, DropDownCount limiting the visible rows, and keyboard
       type-ahead prefix jumping.
@@ -9,32 +9,36 @@ unit umain;
       (auto-uppercase) and MaxLength (length limit).
     A TTyLabel status bar below subscribes to four events:
       OnChange / OnSelect / OnDropDown / OnCloseUp.
-  The form descends from TTyForm (borderless self-drawn window frame) plus a
-  single TTyTitleBar; the theme is loaded through the global TyDefaultController
-  and then uniformly colored by ApplyChromeTheme. }
+  The window, both combo boxes, their labels, the status bar and the live theme
+  switcher are designed in umain.lfm (a TTyForm + TTyTitleBar); the code here is
+  the (Sorted-dependent) item population, the event handlers and the theme setup. }
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, StdCtrls,
-  tyControls.Controller, tyControls.Form,
+  Classes, SysUtils, Forms, Controls,
+  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.ComboBox, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
-  private
-    FListCombo: TTyComboBox;   // csDropDownList (read-only)
-    FEditCombo: TTyComboBox;   // csDropDown (editable + auto-complete)
-    FStatus: TTyLabel;         // event status bar
+    Bar: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
+    LblList: TTyLabel;
+    ListCombo: TTyComboBox;       // csDropDownList (read-only)
+    LblEdit: TTyLabel;
+    EditCombo: TTyComboBox;       // csDropDown (editable + auto-complete)
+    LblStatus: TTyLabel;          // event status bar
+    procedure FormCreate(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
     procedure ComboChange(Sender: TObject);
     procedure ComboSelect(Sender: TObject);
     procedure ComboDropDown(Sender: TObject);
     procedure ComboCloseUp(Sender: TObject);
+  private
     procedure SetStatus(const AEvt: string; ACombo: TTyComboBox);
-  public
-    constructor Create(AOwner: TComponent); override;
   end;
 
 var
@@ -42,116 +46,62 @@ var
 
 implementation
 
-{ Search upward from the exe's directory for the repo's themes/ dir (handles lib/<cpu>-<os>/ and .app bundles) }
-function ThemesDir: string;
+{$R *.lfm}
+
+procedure TMainForm.FormCreate(Sender: TObject);
 var
-  Dir: string;
+  names: TStringArray;
   i: Integer;
 begin
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 8 do
-  begin
-    if DirectoryExists(Dir + 'themes') then
-      Exit(Dir + 'themes' + PathDelim);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := 'themes' + PathDelim;
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+  TyDefaultController.ThemeName := 'default';
+  ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
+
+  // Add 8 items out of order: Sorted=True (set in the .lfm) auto-arranges them ascending
+  ListCombo.Items.Add('Guangzhou');
+  ListCombo.Items.Add('Beijing');
+  ListCombo.Items.Add('Shanghai');
+  ListCombo.Items.Add('Chengdu');
+  ListCombo.Items.Add('Hangzhou');
+  ListCombo.Items.Add('Nanjing');
+  ListCombo.Items.Add('Wuhan');
+  ListCombo.Items.Add('Xian');
+  ListCombo.ItemIndex := 0;            // preselect the first item (Beijing after sorting)
+
+  EditCombo.Items.Add('APPLE');
+  EditCombo.Items.Add('APRICOT');
+  EditCombo.Items.Add('AVOCADO');
+  EditCombo.Items.Add('BANANA');
+  EditCombo.Items.Add('BLUEBERRY');
+  EditCombo.Items.Add('CHERRY');
+  EditCombo.Items.Add('GRAPE');
+  EditCombo.Items.Add('MANGO');
+
+  // Restore the initial "waiting" status (setting ItemIndex above fires OnChange)
+  LblStatus.Caption := '事件状态：（等待操作，尝试展开或键入前缀）';
 end;
 
-constructor TMainForm.Create(AOwner: TComponent);
-var
-  Bar: TTyTitleBar;
-  LblList, LblEdit: TTyLabel;
+procedure TMainForm.ThemeComboChange(Sender: TObject);
 begin
-  // TTyForm.CreateNew -> borderless + persistent engine, but no title bar by default
-  inherited CreateNew(AOwner, 0);
-  Caption := 'TTyComboBox 示例';
-  Position := poScreenCenter;
-  SetBounds(0, 0, 520, 320);
-
-  // The theme must be loaded first, before coloring the whole window frame
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
-
-  // Title bar: Owner=Self auto-associates it with this form's TitleBar property
-  Bar := TTyTitleBar.Create(Self);
-  Bar.Parent := Self;
-  Bar.Align := alTop;
-  Bar.Height := 34;
-  Bar.Caption := 'TTyComboBox  · TyControls';
-
-  // ── Left column: csDropDownList (read-only drop-down) ──
-  LblList := TTyLabel.Create(Self);
-  LblList.Parent := Self;
-  LblList.SetBounds(24, 52, 224, 20);
-  LblList.Caption := '只读下拉（Sorted 排序，可键盘 type-ahead）：';
-
-  FListCombo := TTyComboBox.Create(Self);
-  FListCombo.Parent := Self;
-  FListCombo.SetBounds(24, 76, 224, 26);
-  FListCombo.Style := csDropDownList;   // selection only from the list
-  FListCombo.Sorted := True;            // stays ascending, inserts fall into place
-  FListCombo.DropDownCount := 5;        // show at most 5 rows, scroll beyond that
-  // Add 8 items out of order: Sorted=True auto-arranges them ascending
-  FListCombo.Items.Add('Guangzhou');
-  FListCombo.Items.Add('Beijing');
-  FListCombo.Items.Add('Shanghai');
-  FListCombo.Items.Add('Chengdu');
-  FListCombo.Items.Add('Hangzhou');
-  FListCombo.Items.Add('Nanjing');
-  FListCombo.Items.Add('Wuhan');
-  FListCombo.Items.Add('Xian');
-  FListCombo.ItemIndex := 0;            // preselect the first item (Beijing after sorting)
-  FListCombo.OnChange   := @ComboChange;
-  FListCombo.OnSelect   := @ComboSelect;
-  FListCombo.OnDropDown := @ComboDropDown;
-  FListCombo.OnCloseUp  := @ComboCloseUp;
-
-  // ── Right column: csDropDown (editable + prefix auto-complete) ──
-  LblEdit := TTyLabel.Create(Self);
-  LblEdit.Parent := Self;
-  LblEdit.SetBounds(272, 52, 224, 20);
-  LblEdit.Caption := '可编辑（前缀自动完成 / 大写 / 限长 10）：';
-
-  FEditCombo := TTyComboBox.Create(Self);
-  FEditCombo.Parent := Self;
-  FEditCombo.SetBounds(272, 76, 224, 26);
-  FEditCombo.Style := csDropDown;       // editable field + prefix auto-complete popup
-  FEditCombo.CharCase := ecUppercase;   // typed text is auto-uppercased
-  FEditCombo.MaxLength := 10;           // limit the field length to 10
-  FEditCombo.DropDownCount := 6;
-  FEditCombo.Items.Add('APPLE');
-  FEditCombo.Items.Add('APRICOT');
-  FEditCombo.Items.Add('AVOCADO');
-  FEditCombo.Items.Add('BANANA');
-  FEditCombo.Items.Add('BLUEBERRY');
-  FEditCombo.Items.Add('CHERRY');
-  FEditCombo.Items.Add('GRAPE');
-  FEditCombo.Items.Add('MANGO');
-  FEditCombo.OnChange   := @ComboChange;
-  FEditCombo.OnSelect   := @ComboSelect;
-  FEditCombo.OnDropDown := @ComboDropDown;
-  FEditCombo.OnCloseUp  := @ComboCloseUp;
-
-  // ── Event status bar ──
-  FStatus := TTyLabel.Create(Self);
-  FStatus.Parent := Self;
-  FStatus.SetBounds(24, 140, 472, 22);
-  FStatus.Caption := '事件状态：（等待操作，尝试展开或键入前缀）';
-
-  // Whole window frame + background color follow the theme
-  ApplyChromeTheme(TyDefaultController);
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 procedure TMainForm.SetStatus(const AEvt: string; ACombo: TTyComboBox);
 var
   Which: string;
 begin
-  if ACombo = FListCombo then
+  if ACombo = ListCombo then
     Which := '只读'
   else
     Which := '可编辑';
-  FStatus.Caption := Format('事件状态：[%s] %s → Text="%s" (ItemIndex=%d)',
+  LblStatus.Caption := Format('事件状态：[%s] %s → Text="%s" (ItemIndex=%d)',
     [Which, AEvt, ACombo.Text, ACombo.ItemIndex]);
 end;
 

@@ -6,26 +6,33 @@ unit umain;
   - Plain two-state checkbox, OnChange echoes Checked
   - Pre-checked (Checked:=True)
   - Disabled (Enabled:=False)
-  UI is built entirely in code (no .lfm); controls with no explicit Controller fall back to the global TyDefaultController. }
+  The window, every checkbox, the labels and the live theme switcher are designed in umain.lfm
+  (a TTyForm + TTyTitleBar); the code here is event handlers + theme setup only. }
 
 interface
 
 uses
   Classes, SysUtils, StdCtrls, Forms, Controls,
-  tyControls.Controller, tyControls.Form,
-  tyControls.CheckBox, tyControls.TyLabel;
+  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
+  tyControls.CheckBox, tyControls.TyLabel, tyControls.ComboBox;
 
 type
   TMainForm = class(TTyForm)
-  private
-    FTri: TTyCheckBox;
-    FTriStatus: TTyLabel;
-    FPlain: TTyCheckBox;
-    FStatus: TTyLabel;
+    Bar: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
+    LblTri: TTyLabel;
+    CbTri: TTyCheckBox;
+    LblTriStatus: TTyLabel;
+    LblPlain: TTyLabel;
+    CbPlain: TTyCheckBox;
+    LblStatus: TTyLabel;
+    CbChecked: TTyCheckBox;
+    CbDisabledChecked: TTyCheckBox;
+    CbDisabled: TTyCheckBox;
+    procedure FormCreate(Sender: TObject);
     procedure TriChange(Sender: TObject);
     procedure PlainChange(Sender: TObject);
-  public
-    constructor Create(AOwner: TComponent); override;
+    procedure ThemeComboChange(Sender: TObject);
   end;
 
 var
@@ -33,21 +40,7 @@ var
 
 implementation
 
-{ Walk up from the exe's directory to locate the repo's themes/ folder }
-function ThemesDir: string;
-var
-  Dir: string;
-  i: Integer;
-begin
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 8 do
-  begin
-    if DirectoryExists(Dir + 'themes') then Exit(Dir + 'themes' + PathDelim);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := 'themes' + PathDelim;
-end;
+{$R *.lfm}
 
 function StateName(AState: TCheckBoxState): string;
 begin
@@ -59,95 +52,43 @@ begin
   end;
 end;
 
+procedure TMainForm.FormCreate(Sender: TObject);
+var
+  names: TStringArray;
+  i: Integer;
+begin
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+  TyDefaultController.ThemeName := 'default';
+  ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
+
+  // prime the status echoes from the checkboxes' designed initial state
+  TriChange(nil);
+  PlainChange(nil);
+end;
+
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
 procedure TMainForm.TriChange(Sender: TObject);
 begin
-  FTriStatus.Caption := '三态状态：' + StateName(FTri.State);
+  LblTriStatus.Caption := '三态状态：' + StateName(CbTri.State);
 end;
 
 procedure TMainForm.PlainChange(Sender: TObject);
 begin
-  if FPlain.Checked then
-    FStatus.Caption := '两态状态：已勾选'
+  if CbPlain.Checked then
+    LblStatus.Caption := '两态状态：已勾选'
   else
-    FStatus.Caption := '两态状态：未勾选';
-end;
-
-constructor TMainForm.Create(AOwner: TComponent);
-var
-  Bar: TTyTitleBar;
-  Lbl: TTyLabel;
-  Cb: TTyCheckBox;
-begin
-  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + persistent engine
-  Caption := 'CheckBox 示例';
-  Position := poScreenCenter;
-  SetBounds(0, 0, 460, 420);
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');   // load theme FIRST
-
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> auto-associates as TTyForm.TitleBar
-  Bar.Parent := Self; Bar.Align := alTop; Bar.Height := 34;
-  Bar.Caption := 'CheckBox  · TyControls';
-
-  { ---- Tri-state checkbox: AllowGrayed + State cycling ---- }
-  Lbl := TTyLabel.Create(Self);
-  Lbl.Parent := Self;
-  Lbl.SetBounds(20, 52, 420, 22);
-  Lbl.Caption := '三态复选框（点击循环 未选 → 选中 → 半选）：';
-
-  FTri := TTyCheckBox.Create(Self);
-  FTri.Parent := Self;
-  FTri.SetBounds(24, 78, 280, 24);
-  FTri.Caption := '包含全部子项(&A)';
-  FTri.AllowGrayed := True;
-  FTri.State := cbGrayed;                   // start grayed, to show one of the three states
-  FTri.OnChange := @TriChange;
-
-  FTriStatus := TTyLabel.Create(Self);
-  FTriStatus.Parent := Self;
-  FTriStatus.SetBounds(24, 106, 420, 22);
-
-  { ---- Plain two-state checkbox + OnChange state echo ---- }
-  Lbl := TTyLabel.Create(Self);
-  Lbl.Parent := Self;
-  Lbl.SetBounds(20, 148, 420, 22);
-  Lbl.Caption := '普通两态复选框（OnChange 回显）：';
-
-  FPlain := TTyCheckBox.Create(Self);
-  FPlain.Parent := Self;
-  FPlain.SetBounds(24, 174, 280, 24);
-  FPlain.Caption := '接收邮件通知(&N)';
-  FPlain.OnChange := @PlainChange;
-
-  FStatus := TTyLabel.Create(Self);
-  FStatus.Parent := Self;
-  FStatus.SetBounds(24, 202, 420, 22);
-
-  { ---- Pre-checked (Checked := True) ---- }
-  Cb := TTyCheckBox.Create(Self);
-  Cb.Parent := Self;
-  Cb.SetBounds(24, 244, 280, 24);
-  Cb.Caption := '默认已勾选 (Checked)';
-  Cb.Checked := True;
-
-  { ---- Disabled ---- }
-  Cb := TTyCheckBox.Create(Self);
-  Cb.Parent := Self;
-  Cb.SetBounds(24, 274, 280, 24);
-  Cb.Caption := '禁用且勾选 (Enabled=False)';
-  Cb.Checked := True;
-  Cb.Enabled := False;
-
-  Cb := TTyCheckBox.Create(Self);
-  Cb.Parent := Self;
-  Cb.SetBounds(24, 304, 280, 24);
-  Cb.Caption := '禁用且未勾选';
-  Cb.Enabled := False;
-
-  // prime the status echoes
-  TriChange(nil);
-  PlainChange(nil);
-
-  ApplyChromeTheme(TyDefaultController);   // theme the whole chrome + form bg LAST
+    LblStatus.Caption := '两态状态：未勾选';
 end;
 
 end.

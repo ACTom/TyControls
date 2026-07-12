@@ -1,0 +1,95 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 320
+  Top = 0
+  Width = 460
+  Caption = 'Icons & Images 示例'
+  ClientHeight = 320
+  ClientWidth = 460
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 460
+    Align = alTop
+    Caption = 'Icons & Images  · TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 286
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object Cap1: TTyLabel
+    Left = 16
+    Height = 20
+    Top = 52
+    Width = 120
+    Caption = '拉伸 Stretch'
+  end
+  object Img1: TTyImage
+    Left = 16
+    Height = 100
+    Top = 74
+    Width = 120
+    Stretch = True
+    Transparent = False
+  end
+  object Cap2: TTyLabel
+    Left = 168
+    Height = 20
+    Top = 52
+    Width = 120
+    Caption = '等比 Proportional'
+  end
+  object Img2: TTyImage
+    Left = 168
+    Height = 100
+    Top = 74
+    Width = 120
+    Proportional = True
+    Transparent = False
+  end
+  object Cap3: TTyLabel
+    Left = 320
+    Height = 20
+    Top = 52
+    Width = 120
+    Caption = '居中 Center'
+  end
+  object Img3: TTyImage
+    Left = 320
+    Height = 100
+    Top = 74
+    Width = 120
+    Transparent = False
+  end
+  object Icons: TTyIconFont
+    FontFamily = 'Segoe UI Symbol'
+    Glyphs.Strings = (
+      'star=2605'
+    )
+  end
+  object Ch: TTyCharImage
+    Left = 16
+    Height = 40
+    Top = 196
+    Width = 40
+    IconFont = Icons
+    GlyphName = 'star'
+  end
+  object Note: TTyLabel
+    Left = 64
+    Height = 60
+    Top = 196
+    Width = 380
+    Caption = 'TTyIconFont/TTyCharImage:把 FontFile 指向图标 .ttf(如 FontAwesome)、FontFamily 设为其族名,再用 name→codepoint 映射即可渲染矢量图标。左侧尝试用系统符号字体渲染一个星形(★),不同平台字体族不同,显示效果可能不一。'
+    WordWrap = True
+  end
+end

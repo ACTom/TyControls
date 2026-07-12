@@ -1,0 +1,141 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 400
+  Top = 0
+  Width = 460
+  Caption = 'TTyEdit 示例'
+  ClientHeight = 400
+  ClientWidth = 460
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 460
+    Align = alTop
+    Caption = 'TTyEdit  ·  TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 286
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object LblHint: TTyLabel
+    Left = 24
+    Height = 22
+    Top = 57
+    Width = 130
+    Caption = '占位提示 + OnChange'
+  end
+  object EdHint: TTyEdit
+    Left = 160
+    Height = 30
+    Top = 52
+    Width = 260
+    TextHint = '在此输入，下方实时回显…'
+    OnChange = EditChanged
+  end
+  object LblPassword: TTyLabel
+    Left = 24
+    Height = 22
+    Top = 97
+    Width = 130
+    Caption = '密码遮罩'
+  end
+  object EdPassword: TTyEdit
+    Left = 160
+    Height = 30
+    Top = 92
+    Width = 260
+    Text = 'secret'
+    PasswordChar = '●'
+  end
+  object LblUpper: TTyLabel
+    Left = 24
+    Height = 22
+    Top = 137
+    Width = 130
+    Caption = '强制大写'
+  end
+  object EdUpper: TTyEdit
+    Left = 160
+    Height = 30
+    Top = 132
+    Width = 260
+    TextHint = '输入将转为大写'
+    CharCase = ecUppercase
+  end
+  object LblMaxLen: TTyLabel
+    Left = 24
+    Height = 22
+    Top = 177
+    Width = 130
+    Caption = '最大长度 8'
+  end
+  object EdMaxLen: TTyEdit
+    Left = 160
+    Height = 30
+    Top = 172
+    Width = 260
+    MaxLength = 8
+    TextHint = '最多 8 字'
+  end
+  object LblNumbers: TTyLabel
+    Left = 24
+    Height = 22
+    Top = 217
+    Width = 130
+    Caption = '仅数字'
+  end
+  object EdNumbers: TTyEdit
+    Left = 160
+    Height = 30
+    Top = 212
+    Width = 260
+    TextHint = '只能输入 0-9'
+    NumbersOnly = True
+  end
+  object LblReadOnly: TTyLabel
+    Left = 24
+    Height = 22
+    Top = 257
+    Width = 130
+    Caption = '只读'
+  end
+  object EdReadOnly: TTyEdit
+    Left = 160
+    Height = 30
+    Top = 252
+    Width = 260
+    Text = '只读内容，无法编辑'
+    ReadOnly = True
+  end
+  object LblRight: TTyLabel
+    Left = 24
+    Height = 22
+    Top = 297
+    Width = 130
+    Caption = '右对齐'
+  end
+  object EdRight: TTyEdit
+    Left = 160
+    Height = 30
+    Top = 292
+    Width = 260
+    Text = '1234.56'
+    Alignment = taRightJustify
+  end
+  object LblStatus: TTyLabel
+    Left = 24
+    Height = 24
+    Top = 348
+    Width = 412
+    Caption = '（第一个输入框内容将在此显示）'
+  end
+end

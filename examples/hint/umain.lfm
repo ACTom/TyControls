@@ -1,0 +1,69 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 280
+  Top = 0
+  Width = 440
+  Caption = 'Hint 示例'
+  ClientHeight = 280
+  ClientWidth = 440
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 440
+    Align = alTop
+    Caption = 'Hint  ·  TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 266
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object AppHint: TTyHint
+  end
+  object LblIntro: TTyLabel
+    Left = 24
+    Height = 24
+    Top = 52
+    Width = 392
+    Caption = '悬停按钮看主题化 tooltip;点“显示气泡”看带指针气泡。'
+  end
+  object BtnSave: TTyButton
+    Left = 24
+    Height = 34
+    Top = 92
+    Width = 120
+    Caption = '保存'
+    Hint = '保存当前文档 (Ctrl+S)'
+    ShowHint = True
+  end
+  object BtnDel: TTyButton
+    Left = 160
+    Height = 34
+    Top = 92
+    Width = 120
+    Caption = '删除'
+    Hint = '删除选中项'#13#10'此操作不可撤销'
+    ShowHint = True
+  end
+  object BtnBalloon: TTyButton
+    Left = 24
+    Height = 34
+    Top = 150
+    Width = 160
+    Caption = '显示气泡'
+    OnClick = ShowBalloon
+  end
+  object Balloon: TTyBalloonHint
+    Title = '已保存'
+    Description = '文档已写入磁盘。'
+    Icon = biInfo
+  end
+end

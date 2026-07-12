@@ -4,7 +4,8 @@ unit umain;
   · TTyImage —— one (code-generated) bitmap shown in Stretch / Proportional / Center modes (works out of the box).
   · TTyIconFont + TTyCharImage —— icon-font structure demo; to actually see a glyph point FontFile at an
     icon .ttf (e.g. FontAwesome) —— see the note label below.
-  Main window is a TTyForm + TTyTitleBar, built purely in code (no .lfm). }
+  The window, every control and the live theme switcher are designed in umain.lfm (a TTyForm + TTyTitleBar);
+  the code here is theme setup, the code-generated sample bitmap and the glyph colour only. }
 
 {$mode objfpc}{$H+}
 
@@ -12,13 +13,25 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls, Graphics,
-  tyControls.Types, tyControls.Controller, tyControls.Form,
-  tyControls.TyLabel, tyControls.Image, tyControls.IconFont, tyControls.CharImage;
+  tyControls.Types, tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
+  tyControls.TyLabel, tyControls.Image, tyControls.IconFont, tyControls.CharImage,
+  tyControls.ComboBox;
 
 type
   TMainForm = class(TTyForm)
-  public
-    constructor Create(AOwner: TComponent); override;
+    Bar: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
+    Cap1: TTyLabel;
+    Img1: TTyImage;
+    Cap2: TTyLabel;
+    Img2: TTyImage;
+    Cap3: TTyLabel;
+    Img3: TTyImage;
+    Icons: TTyIconFont;
+    Ch: TTyCharImage;
+    Note: TTyLabel;
+    procedure FormCreate(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
   end;
 
 var
@@ -26,18 +39,7 @@ var
 
 implementation
 
-function ThemesDir: string;
-var Dir: string; i: Integer;
-begin
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 8 do
-  begin
-    if DirectoryExists(Dir + 'themes') then Exit(Dir + 'themes' + PathDelim);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := 'themes' + PathDelim;
-end;
+{$R *.lfm}
 
 { A small colorful source bitmap drawn in code (so the demo needs no asset file). }
 function MakeSampleBitmap: TBitmap;
@@ -54,79 +56,40 @@ begin
   Result.Canvas.Polygon([Point(0, 80), Point(55, 34), Point(120, 80)]);
 end;
 
-procedure AddImage(AOwner: TWinControl; AX: Integer; const ACaption: string;
-  ABmp: TBitmap; AStretch, AProportional, ACenter: Boolean);
+procedure TMainForm.FormCreate(Sender: TObject);
 var
-  cap: TTyLabel;
-  img: TTyImage;
-begin
-  cap := TTyLabel.Create(AOwner);
-  cap.Parent := AOwner;
-  cap.SetBounds(AX, 52, 120, 20);
-  cap.Caption := ACaption;
-
-  img := TTyImage.Create(AOwner);
-  img.Parent := AOwner;
-  img.SetBounds(AX, 74, 120, 100);
-  img.Transparent := False;               // paint the TyPanel surface behind it
-  img.Stretch := AStretch;
-  img.Proportional := AProportional;
-  img.Center := ACenter;
-  img.Picture.Bitmap.Assign(ABmp);
-end;
-
-constructor TMainForm.Create(AOwner: TComponent);
-var
-  Bar: TTyTitleBar;
+  names: TStringArray;
+  i: Integer;
   Bmp: TBitmap;
-  Icons: TTyIconFont;
-  Ch: TTyCharImage;
-  Note: TTyLabel;
 begin
-  inherited CreateNew(AOwner, 0);
-  Caption := 'Icons & Images 示例';
-  Position := poScreenCenter;
-  SetBounds(0, 0, 460, 320);
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+  TyDefaultController.ThemeName := 'default';
+  ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
-
-  Bar := TTyTitleBar.Create(Self);
-  Bar.Parent := Self;
-  Bar.Align := alTop;
-  Bar.Height := 34;
-  Bar.Caption := 'Icons & Images  · TyControls';
-
+  // The sample bitmap is generated in code, so feed it into the three designed images.
   Bmp := MakeSampleBitmap;
   try
-    AddImage(Self, 16,  '拉伸 Stretch',       Bmp, True,  False, True);
-    AddImage(Self, 168, '等比 Proportional',  Bmp, False, True,  True);
-    AddImage(Self, 320, '居中 Center',        Bmp, False, False, True);
+    Img1.Picture.Bitmap.Assign(Bmp);
+    Img2.Picture.Bitmap.Assign(Bmp);
+    Img3.Picture.Bitmap.Assign(Bmp);
   finally
     Bmp.Free;
   end;
 
-  // Icon-font structure. Point FontFile at a real icon .ttf (e.g. FontAwesome) and
-  // FontFamily at its family name to see the glyph — otherwise CharImage is blank.
-  Icons := TTyIconFont.Create(Self);
-  Icons.MapGlyph('star', $2605);          // a BMP star; renders if the family has it
-  Icons.FontFamily := 'Segoe UI Symbol';  // a commonly-present family on Windows
-
-  Ch := TTyCharImage.Create(Self);
-  Ch.Parent := Self;
-  Ch.SetBounds(16, 196, 40, 40);
-  Ch.IconFont := Icons;
-  Ch.GlyphName := 'star';
+  // GlyphColor is an ARGB TTyColor value computed at runtime.
   Ch.GlyphColor := TyRGB($3B, $82, $F6);
+end;
 
-  Note := TTyLabel.Create(Self);
-  Note.Parent := Self;
-  Note.SetBounds(64, 196, 380, 60);
-  Note.WordWrap := True;
-  Note.Caption := 'TTyIconFont/TTyCharImage:把 FontFile 指向图标 .ttf(如 FontAwesome)、'
-    + 'FontFamily 设为其族名,再用 name→codepoint 映射即可渲染矢量图标。左侧尝试用系统符号字体'
-    + '渲染一个星形(★),不同平台字体族不同,显示效果可能不一。';
-
-  ApplyChromeTheme(TyDefaultController);
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 end.

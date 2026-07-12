@@ -1,0 +1,105 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 440
+  Top = 0
+  Width = 480
+  Caption = 'TTyLabel 示例'
+  ClientHeight = 440
+  ClientWidth = 480
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 480
+    Align = alTop
+    Caption = 'TTyLabel  ·  TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 306
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object LblHead: TTyLabel
+    Left = 20
+    Height = 26
+    Top = 46
+    Width = 440
+    Caption = '标签特性一览'
+  end
+  object LblLeft: TTyLabel
+    Left = 20
+    Height = 22
+    Top = 82
+    Width = 440
+    AutoSize = False
+    Alignment = taLeftJustify
+    Caption = '左对齐（taLeftJustify）'
+  end
+  object LblCenter: TTyLabel
+    Left = 20
+    Height = 22
+    Top = 108
+    Width = 440
+    AutoSize = False
+    Alignment = taCenter
+    Caption = '居中对齐（taCenter）'
+  end
+  object LblRight: TTyLabel
+    Left = 20
+    Height = 22
+    Top = 134
+    Width = 440
+    AutoSize = False
+    Alignment = taRightJustify
+    Caption = '右对齐（taRightJustify）'
+  end
+  object LblFilled: TTyLabel
+    Left = 20
+    Height = 22
+    Top = 166
+    Width = 440
+    AutoSize = False
+    Alignment = taCenter
+    Transparent = False
+    Caption = 'Transparent=False：带填充背景'
+  end
+  object LblAuto: TTyLabel
+    Left = 20
+    Height = 10
+    Top = 194
+    Width = 10
+    AutoSize = True
+    Caption = 'AutoSize=True：宽高随文字自适应'
+  end
+  object LblWrap: TTyLabel
+    Left = 20
+    Height = 60
+    Top = 224
+    Width = 440
+    AutoSize = False
+    WordWrap = True
+    Alignment = taLeftJustify
+    Caption = 'WordWrap=True : this label wraps onto several lines because the words are separated by spaces — 中文 与 English 混排 也 能 在 空格 处 换行，超出 控件 宽度 就 自动 折行。'
+  end
+  object EdName: TTyEdit
+    Left = 180
+    Height = 28
+    Top = 300
+    Width = 240
+  end
+  object LblFocus: TTyLabel
+    Left = 20
+    Height = 22
+    Top = 304
+    Width = 150
+    Caption = '姓名(&N)：'
+    FocusControl = EdName
+  end
+end

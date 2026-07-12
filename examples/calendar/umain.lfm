@@ -1,0 +1,87 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 590
+  Top = 0
+  Width = 720
+  Caption = 'Calendar 示例'
+  ClientHeight = 590
+  ClientWidth = 720
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 720
+    Align = alTop
+    Caption = 'TTyCalendar  ·  TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 546
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object LblMainHdr: TTyLabel
+    Left = 20
+    Height = 22
+    Top = 48
+    Width = 320
+    Caption = '可交互日历（周一起始 · 显示周数 · 今日高亮）：'
+  end
+  object Cal: TTyCalendar
+    Left = 20
+    Height = 300
+    Top = 74
+    Width = 320
+    FirstDayOfWeek = wdMonday
+    WeekNumbers = True
+    ShowToday = True
+    OnChange = CalChange
+    OnAccept = CalAccept
+    OnViewChange = CalViewChange
+  end
+  object LblPicked: TTyLabel
+    Left = 360
+    Height = 22
+    Top = 74
+    Width = 340
+  end
+  object LblAccepted: TTyLabel
+    Left = 360
+    Height = 44
+    Top = 100
+    Width = 340
+  end
+  object LblView: TTyLabel
+    Left = 360
+    Height = 44
+    Top = 150
+    Width = 340
+  end
+  object LblRange: TTyLabel
+    Left = 360
+    Height = 88
+    Top = 206
+    Width = 340
+  end
+  object LblReadOnlyHdr: TTyLabel
+    Left = 360
+    Height = 22
+    Top = 300
+    Width = 340
+    Caption = '只读日历 (ReadOnly=True · 周日起始)：'
+  end
+  object ROCal: TTyCalendar
+    Left = 360
+    Height = 230
+    Top = 326
+    Width = 320
+    FirstDayOfWeek = wdSunday
+    ReadOnly = True
+  end
+end

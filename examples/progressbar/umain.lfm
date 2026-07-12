@@ -1,0 +1,94 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 300
+  Top = 0
+  Width = 420
+  Caption = 'TTyProgressBar 示例'
+  ClientHeight = 300
+  ClientWidth = 420
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 420
+    Align = alTop
+    Caption = 'TTyProgressBar  ·  TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 246
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object LblDesc: TTyLabel
+    Left = 20
+    Height = 20
+    Top = 50
+    Width = 380
+    Caption = '进度条：Min=0  Max=100，按钮 / 定时器驱动 Position'
+  end
+  object ProgBar: TTyProgressBar
+    Left = 20
+    Height = 22
+    Top = 78
+    Width = 380
+    Min = 0
+    Max = 100
+    Position = 0
+    AnimationsEnabled = True
+    OnChange = BarChange
+  end
+  object LblReadout: TTyLabel
+    Left = 20
+    Height = 20
+    Top = 108
+    Width = 380
+    Caption = '进度：0 / 100  (0%)'
+  end
+  object AnimChk: TTyCheckBox
+    Left = 20
+    Height = 22
+    Top = 140
+    Width = 260
+    Caption = '启用填充动画 (AnimationsEnabled)'
+    Checked = True
+    OnClick = AnimToggle
+  end
+  object BtnStart: TTyButton
+    Left = 20
+    Height = 34
+    Top = 180
+    Width = 110
+    Caption = '开始 / 暂停'
+    OnClick = StartClick
+  end
+  object BtnStep: TTyButton
+    Left = 145
+    Height = 34
+    Top = 180
+    Width = 110
+    Caption = '前进 +10'
+    OnClick = StepClick
+  end
+  object BtnReset: TTyButton
+    Left = 270
+    Height = 34
+    Top = 180
+    Width = 110
+    Caption = '归零'
+    OnClick = ResetClick
+  end
+  object Timer: TTimer
+    Enabled = False
+    Interval = 250
+    OnTimer = TimerTick
+    Left = 344
+    Top = 232
+  end
+end

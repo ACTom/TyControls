@@ -1,0 +1,124 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 420
+  Top = 0
+  Width = 460
+  Caption = 'TTyButton 示例'
+  ClientHeight = 420
+  ClientWidth = 460
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 460
+    Align = alTop
+    Caption = 'TTyButton  ·  TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 286
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object BtnDefault: TTyButton
+    Left = 24
+    Height = 32
+    Top = 52
+    Width = 168
+    Caption = '默认按钮(&D)'
+    OnClick = ButtonClicked
+  end
+  object BtnPrimary: TTyButton
+    Left = 24
+    Height = 32
+    Top = 92
+    Width = 168
+    Caption = '主要按钮(&P)'
+    StyleClass = 'primary'
+    OnClick = ButtonClicked
+  end
+  object BtnDanger: TTyButton
+    Left = 24
+    Height = 32
+    Top = 132
+    Width = 168
+    Caption = '危险按钮(&X)'
+    StyleClass = 'danger'
+    OnClick = ButtonClicked
+  end
+  object BtnDisabled: TTyButton
+    Left = 24
+    Height = 32
+    Top = 172
+    Width = 168
+    Caption = '禁用按钮'
+    Enabled = False
+    StyleClass = 'primary'
+    OnClick = ButtonClicked
+  end
+  object BtnGhost: TTyButton
+    Left = 24
+    Height = 32
+    Top = 212
+    Width = 168
+    Caption = 'Ghost / 选中'
+    Down = True
+    StyleClass = 'ghost'
+    OnClick = GhostToggle
+  end
+  object BtnMsg: TTyButton
+    Left = 256
+    Height = 32
+    Top = 52
+    Width = 168
+    Caption = '消息'
+    ShowBadge = True
+    BadgeValue = 128
+    BadgePosition = bpTopRight
+    OnClick = ButtonClicked
+  end
+  object BtnNotify: TTyButton
+    Left = 256
+    Height = 32
+    Top = 92
+    Width = 168
+    Caption = '通知'
+    ShowBadge = True
+    BadgeValue = 3
+    OnClick = ButtonClicked
+  end
+  object BtnOK: TTyButton
+    Left = 256
+    Height = 32
+    Top = 132
+    Width = 168
+    Caption = '确定(回车)'
+    Default = True
+    ModalResult = 1
+    StyleClass = 'primary'
+    OnClick = DefaultClicked
+  end
+  object BtnCancel: TTyButton
+    Left = 256
+    Height = 32
+    Top = 172
+    Width = 168
+    Caption = '取消(Esc)'
+    Cancel = True
+    ModalResult = 2
+    OnClick = CancelClicked
+  end
+  object LblStatus: TTyLabel
+    Left = 24
+    Height = 24
+    Top = 356
+    Width = 412
+    Caption = '点击次数:0'
+  end
+end

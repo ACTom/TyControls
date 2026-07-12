@@ -1,26 +1,34 @@
 unit umain;
 
 { Hint demo: TTyHint (themed tooltip, applies app-wide) + TTyBalloonHint (balloon with a pointer).
-  Main form is TTyForm + TTyTitleBar; built entirely in code (no .lfm).
-  Hover a button to see the themed tooltip; click "Show balloon" to see the pointed balloon callout. }
+  The window, the app-wide hint installer, both hinted buttons, the balloon and the live theme
+  switcher are all designed in umain.lfm (a TTyForm + TTyTitleBar); the code here is event
+  handlers + theme setup only.
+  Hover a button to see the themed tooltip; click "显示气泡" to see the pointed balloon callout. }
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.Form,
-  tyControls.TyLabel, tyControls.Button, tyControls.Hint, tyControls.BalloonHint;
+  Classes, SysUtils, Types, Forms, Controls,
+  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
+  tyControls.TyLabel, tyControls.Button, tyControls.ComboBox,
+  tyControls.Hint, tyControls.BalloonHint;
 
 type
   TMainForm = class(TTyForm)
-  private
-    FBalloon: TTyBalloonHint;
-    FBalloonBtn: TTyButton;
+    Bar: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
+    AppHint: TTyHint;
+    LblIntro: TTyLabel;
+    BtnSave: TTyButton;
+    BtnDel: TTyButton;
+    BtnBalloon: TTyButton;
+    Balloon: TTyBalloonHint;
+    procedure FormCreate(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
     procedure ShowBalloon(Sender: TObject);
-  public
-    constructor Create(AOwner: TComponent); override;
   end;
 
 var
@@ -28,77 +36,33 @@ var
 
 implementation
 
-function ThemesDir: string;
-var Dir: string; i: Integer;
+{$R *.lfm}
+
+procedure TMainForm.FormCreate(Sender: TObject);
+var
+  names: TStringArray;
+  i: Integer;
 begin
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 8 do
-  begin
-    if DirectoryExists(Dir + 'themes') then Exit(Dir + 'themes' + PathDelim);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := 'themes' + PathDelim;
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+  TyDefaultController.ThemeName := 'default';
+  ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 end;
 
-constructor TMainForm.Create(AOwner: TComponent);
-var
-  Bar: TTyTitleBar;
-  Lbl: TTyLabel;
-  Save, Del: TTyButton;
+procedure TMainForm.ThemeComboChange(Sender: TObject);
 begin
-  inherited CreateNew(AOwner, 0);
-  Caption := 'Hint 示例';
-  Position := poScreenCenter;
-  SetBounds(0, 0, 440, 280);
-
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
-
-  Bar := TTyTitleBar.Create(Self);
-  Bar.Parent := Self;
-  Bar.Align := alTop;
-  Bar.Height := 34;
-  Bar.Caption := 'Hint  · TyControls';
-
-  // Install the app-wide themed tooltip. Every control's Hint now uses it.
-  TTyHint.Create(Self);
-
-  Lbl := TTyLabel.Create(Self);
-  Lbl.Parent := Self;
-  Lbl.SetBounds(24, 52, 392, 24);
-  Lbl.Caption := '悬停按钮看主题化 tooltip;点“显示气泡”看带指针气泡。';
-
-  Save := TTyButton.Create(Self);
-  Save.Parent := Self;
-  Save.SetBounds(24, 92, 120, 34);
-  Save.Caption := '保存';
-  Save.Hint := '保存当前文档 (Ctrl+S)';
-  Save.ShowHint := True;
-
-  Del := TTyButton.Create(Self);
-  Del.Parent := Self;
-  Del.SetBounds(160, 92, 120, 34);
-  Del.Caption := '删除';
-  Del.Hint := '删除选中项' + LineEnding + '此操作不可撤销';
-  Del.ShowHint := True;
-
-  FBalloonBtn := TTyButton.Create(Self);
-  FBalloonBtn.Parent := Self;
-  FBalloonBtn.SetBounds(24, 150, 160, 34);
-  FBalloonBtn.Caption := '显示气泡';
-  FBalloonBtn.OnClick := @ShowBalloon;
-
-  FBalloon := TTyBalloonHint.Create(Self);
-  FBalloon.Title := '已保存';
-  FBalloon.Description := '文档已写入磁盘。';
-  FBalloon.Icon := biInfo;
-
-  ApplyChromeTheme(TyDefaultController);
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 procedure TMainForm.ShowBalloon(Sender: TObject);
 begin
-  FBalloon.ShowFor(FBalloonBtn);
+  Balloon.ShowFor(BtnBalloon);
 end;
 
 end.

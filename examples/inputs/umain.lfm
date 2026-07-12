@@ -1,0 +1,415 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 800
+  Top = 0
+  Width = 1300
+  Caption = 'Rich Inputs 示例'
+  ClientHeight = 800
+  ClientWidth = 1300
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 1300
+    Align = alTop
+    Caption = 'Rich Inputs  · TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 1126
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object L1: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 56
+    Width = 200
+    Caption = '数量(整数,Decimals=0):'
+  end
+  object FQty: TTyNumericEdit
+    Left = 240
+    Height = 28
+    Top = 52
+    Width = 180
+    Decimals = 0
+  end
+  object L2: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 100
+    Width = 200
+    Caption = '金额(2 位小数 + 千分位):'
+  end
+  object FPrice: TTyNumericEdit
+    Left = 240
+    Height = 28
+    Top = 96
+    Width = 180
+  end
+  object L3: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 144
+    Width = 200
+    Caption = '限幅(MinValue=0 / MaxValue=100):'
+  end
+  object FRanged: TTyNumericEdit
+    Left = 240
+    Height = 28
+    Top = 140
+    Width = 180
+    MinValue = 0
+    MaxValue = 100
+  end
+  object L4: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 188
+    Width = 200
+    Caption = '货币(TTyCurrencyEdit,¥):'
+  end
+  object FMoney: TTyCurrencyEdit
+    Left = 240
+    Height = 28
+    Top = 184
+    Width = 180
+    CurrencySymbol = '¥'
+  end
+  object L5: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 232
+    Width = 200
+    Caption = '日期掩码(##/##/####):'
+  end
+  object FDate: TTyMaskEdit
+    Left = 240
+    Height = 28
+    Top = 228
+    Width = 180
+    Mask = '##/##/####'
+  end
+  object L6: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 276
+    Width = 200
+    Caption = 'URL(TTyURLEdit,点 →):'
+  end
+  object FUrl: TTyURLEdit
+    Left = 240
+    Height = 28
+    Top = 272
+    Width = 180
+    Text = 'https://github.com/ACTom/TyControls'
+  end
+  object L7: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 320
+    Width = 200
+    Caption = '下拉(TTyComboEdit):'
+  end
+  object FCombo: TTyComboEdit
+    Left = 240
+    Height = 28
+    Top = 316
+    Width = 180
+    OnDropDown = ComboDrop
+  end
+  object L8: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 364
+    Width = 200
+    Caption = '滑块数值(TTyTrackEdit,0..255):'
+  end
+  object FTrack: TTyTrackEdit
+    Left = 240
+    Height = 28
+    Top = 360
+    Width = 180
+    MinValue = 0
+    MaxValue = 255
+  end
+  object L9: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 408
+    Width = 200
+    Caption = '颜色(TTyColorBox):'
+  end
+  object FColor: TTyColorBox
+    Left = 240
+    Height = 28
+    Top = 404
+    Width = 180
+  end
+  object L10: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 452
+    Width = 200
+    Caption = '字体(TTyFontComboBox):'
+  end
+  object FFont: TTyFontComboBox
+    Left = 240
+    Height = 28
+    Top = 448
+    Width = 128
+  end
+  object FSize: TTyFontSizeComboBox
+    Left = 372
+    Height = 28
+    Top = 448
+    Width = 48
+  end
+  object L11: TTyLabel
+    Left = 440
+    Height = 20
+    Top = 52
+    Width = 190
+    Caption = '颜色列表(TTyColorListBox):'
+  end
+  object FColorList: TTyColorListBox
+    Left = 440
+    Height = 296
+    Top = 76
+    Width = 180
+  end
+  object L12: TTyLabel
+    Left = 440
+    Height = 20
+    Top = 380
+    Width = 190
+    Caption = '字体列表(TTyFontListBox):'
+  end
+  object FFontList: TTyFontListBox
+    Left = 440
+    Height = 164
+    Top = 404
+    Width = 180
+  end
+  object L13: TTyLabel
+    Left = 640
+    Height = 20
+    Top = 52
+    Width = 190
+    Caption = '勾选列表(TTyCheckListBox):'
+  end
+  object FCheckList: TTyCheckListBox
+    Left = 640
+    Height = 280
+    Top = 76
+    Width = 180
+  end
+  object L14: TTyLabel
+    Left = 640
+    Height = 20
+    Top = 380
+    Width = 190
+    Caption = '颜色 + 更多(TTyColorComboBox):'
+  end
+  object FColorCombo: TTyColorComboBox
+    Left = 640
+    Height = 28
+    Top = 404
+    Width = 180
+    MoreCaption = '更多颜色…'
+  end
+  object L23: TTyLabel
+    Left = 640
+    Height = 20
+    Top = 452
+    Width = 190
+    Caption = '勾选下拉(TTyCheckComboBox):'
+  end
+  object FCheckCombo: TTyCheckComboBox
+    Left = 640
+    Height = 28
+    Top = 476
+    Width = 190
+    EmptyText = '(未选择样式)'
+  end
+  object L15: TTyLabel
+    Left = 840
+    Height = 20
+    Top = 52
+    Width = 200
+    Caption = '最近使用(TTyMRUComboBox):'
+  end
+  object FMRU: TTyMRUComboBox
+    Left = 840
+    Height = 28
+    Top = 76
+    Width = 190
+    MaxItems = 6
+  end
+  object L16: TTyLabel
+    Left = 840
+    Height = 20
+    Top = 116
+    Width = 200
+    Caption = '图文组合(TTyComboBoxEx):'
+  end
+  object FComboEx: TTyComboBoxEx
+    Left = 840
+    Height = 28
+    Top = 140
+    Width = 190
+  end
+  object L17: TTyLabel
+    Left = 840
+    Height = 20
+    Top = 180
+    Width = 200
+    Caption = '分组组合(TTyOfficeComboBox):'
+  end
+  object FOfficeCombo: TTyOfficeComboBox
+    Left = 840
+    Height = 28
+    Top = 204
+    Width = 190
+  end
+  object L18: TTyLabel
+    Left = 840
+    Height = 20
+    Top = 244
+    Width = 200
+    Caption = '分组列表(TTyOfficeListBox):'
+  end
+  object FOfficeList: TTyOfficeListBox
+    Left = 840
+    Height = 150
+    Top = 268
+    Width = 190
+  end
+  object L19: TTyLabel
+    Left = 840
+    Height = 20
+    Top = 428
+    Width = 220
+    Caption = '色板 ColorGrid + 明度 LColorPicker:'
+  end
+  object FColorGrid: TTyColorGrid
+    Left = 840
+    Height = 96
+    Top = 452
+    Width = 150
+    Columns = 8
+    Selected = clRed
+  end
+  object FLColor: TTyLColorPicker
+    Left = 1000
+    Height = 96
+    Top = 452
+    Width = 28
+    Hue = 210
+    Sat = 0.8
+    Position = 0.6
+  end
+  object L20: TTyLabel
+    Left = 1080
+    Height = 20
+    Top = 52
+    Width = 220
+    Caption = 'HS 取色方块(TTyHSColorPicker):'
+  end
+  object FHS: TTyHSColorPicker
+    Left = 1080
+    Height = 130
+    Top = 76
+    Width = 180
+    Hue = 210
+    Sat = 0.8
+    Value = 0.6
+  end
+  object L21: TTyLabel
+    Left = 1080
+    Height = 20
+    Top = 218
+    Width = 220
+    Caption = '富行列表(TTyAdvancedListBox):'
+  end
+  object FAdvList: TTyAdvancedListBox
+    Left = 1080
+    Height = 150
+    Top = 242
+    Width = 200
+  end
+  object L22: TTyLabel
+    Left = 1080
+    Height = 20
+    Top = 404
+    Width = 220
+    Caption = '富行组合(TTyAdvancedComboBox):'
+  end
+  object FAdvCombo: TTyAdvancedComboBox
+    Left = 1080
+    Height = 28
+    Top = 428
+    Width = 200
+  end
+  object L24: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 600
+    Width = 340
+    Caption = '名/值编辑器(TTyValueListEditor,点值列 / F2 编辑):'
+  end
+  object FVLE: TTyValueListEditor
+    Left = 24
+    Height = 160
+    Top = 624
+    Width = 360
+    KeyColumnWidth = 96
+  end
+  object L25: TTyLabel
+    Left = 410
+    Height = 20
+    Top = 600
+    Width = 260
+    Caption = '计算器数值(TTyCalcEdit,点尾部小按钮):'
+  end
+  object FCalcEdit: TTyCalcEdit
+    Left = 410
+    Height = 28
+    Top = 624
+    Width = 200
+  end
+  object L26: TTyLabel
+    Left = 410
+    Height = 20
+    Top = 662
+    Width = 260
+    Caption = '计算器货币(TTyCalcCurrencyEdit):'
+  end
+  object FCalcCurr: TTyCalcCurrencyEdit
+    Left = 410
+    Height = 28
+    Top = 686
+    Width = 200
+    CurrencySymbol = '¥'
+  end
+  object FEcho: TTyLabel
+    Left = 24
+    Height = 20
+    Top = 496
+    Width = 400
+    Caption = '限幅值 = 42.00'
+  end
+  object LHint: TTyLabel
+    Left = 24
+    Height = 40
+    Top = 536
+    Width = 400
+    Caption = '试试:只能输数字 / 负号 / 小数点;聚焦时去掉千分位方便编辑,失焦后重新分组;限幅框输入 >100 的值,失焦后夹紧到 100。'
+  end
+end
