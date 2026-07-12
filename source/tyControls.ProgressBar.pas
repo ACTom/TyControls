@@ -5,17 +5,21 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, ExtCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
 type
+  TTyProgressOrientation = (tpoHorizontal, tpoVertical);   // v3/C4: fill along X or (bottom-up) Y
+
   TTyProgressBar = class(TTyGraphicControl)
   private
     FMin, FMax, FPosition: Integer;
     FAnimEnabled: Boolean;
     FOnChange: TNotifyEvent;
+    FOrientation: TTyProgressOrientation;
     FPosAnim: TTyAnimator;     // 0..1 traversal driving FAnimFrom -> FAnimTo
     FAnimFrom, FAnimTo: Single; // displayed-position endpoints (in Min..Max units)
     FTimer: TTimer;            // lazy; only created when actually animating
     procedure SetMin(const AValue: Integer);
     procedure SetMax(const AValue: Integer);
     procedure SetPosition(const AValue: Integer);
+    procedure SetOrientation(const AValue: TTyProgressOrientation);
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
   protected
@@ -40,6 +44,9 @@ type
     property Min: Integer read FMin write SetMin default 0;
     property Max: Integer read FMax write SetMax default 100;
     property Position: Integer read FPosition write SetPosition default 0;
+    // v3/C4: horizontal (default, left->right) or vertical (bottom->up). A per-instance
+    // layout choice (mirrors LCL TProgressBar.Orientation), not a theme metric.
+    property Orientation: TTyProgressOrientation read FOrientation write SetOrientation default tpoHorizontal;
     // On by default. When enabled and the control has a window handle, changing
     // Position eases the fill from the old to the new value; with no handle
     // (every render test) it snaps, preserving the existing exact-pixel tests.
@@ -53,35 +60,48 @@ type
     property Controller;
   end;
 
-function TyProgressFillRect(const ATrack: TRect; AMin, AMax, APosition: Integer): TRect;
+function TyProgressFillRect(const ATrack: TRect; AMin, AMax, APosition: Integer;
+  AOrientation: TTyProgressOrientation = tpoHorizontal): TRect;
 
 implementation
 
-function TyProgressFillRect(const ATrack: TRect; AMin, AMax, APosition: Integer): TRect;
+function TyProgressFillRect(const ATrack: TRect; AMin, AMax, APosition: Integer;
+  AOrientation: TTyProgressOrientation = tpoHorizontal): TRect;
 var
-  TrackW, Travel, Pos0, FillW: Integer;
+  TrackLen, Travel, Pos0, FillLen: Integer;
 begin
   Result := ATrack;
-  Result.Right := Result.Left;  // default: empty (zero width)
-  TrackW := ATrack.Right - ATrack.Left;
+  // Default: empty. Horizontal collapses to zero WIDTH from the left; vertical to zero
+  // HEIGHT from the bottom (a vertical bar fills upward).
+  if AOrientation = tpoVertical then
+  begin
+    Result.Top := Result.Bottom;
+    TrackLen := ATrack.Bottom - ATrack.Top;
+  end
+  else
+  begin
+    Result.Right := Result.Left;
+    TrackLen := ATrack.Right - ATrack.Left;
+  end;
   Travel := AMax - AMin;
   if Travel <= 0 then
     Exit;  // degenerate: Max <= Min → zero fill
   Pos0 := APosition - AMin;
   if Pos0 <= 0 then
-  begin
-    // Pos <= Min → zero fill (Result already has Right=Left)
-    Exit;
-  end;
+    Exit;  // Pos <= Min → zero fill
   if Pos0 >= Travel then
   begin
     // Pos >= Max → full fill
-    Result.Right := ATrack.Right;
+    if AOrientation = tpoVertical then Result.Top := ATrack.Top
+    else Result.Right := ATrack.Right;
     Exit;
   end;
-  // Normal case: scale by Pos0/Travel
-  FillW := (TrackW * Pos0) div Travel;
-  Result.Right := ATrack.Left + FillW;
+  // Normal case: scale the fill length by Pos0/Travel.
+  FillLen := (TrackLen * Pos0) div Travel;
+  if AOrientation = tpoVertical then
+    Result.Top := ATrack.Bottom - FillLen   // grows from the bottom up
+  else
+    Result.Right := ATrack.Left + FillLen;
 end;
 
 { TTyProgressBar }
@@ -219,6 +239,13 @@ begin
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
+procedure TTyProgressBar.SetOrientation(const AValue: TTyProgressOrientation);
+begin
+  if FOrientation = AValue then Exit;
+  FOrientation := AValue;
+  Invalidate;
+end;
+
 procedure TTyProgressBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
@@ -240,18 +267,21 @@ begin
     // so headless renders are pixel-identical to the pre-animation behavior.
     DispPos := Round(DisplayPos);
     FillS := ActiveController.Model.ResolveStyle('TyProgressFill', '', []);
-    FillR := TyProgressFillRect(TrackR, FMin, FMax, DispPos);
-    if FillR.Right > FillR.Left then
+    FillR := TyProgressFillRect(TrackR, FMin, FMax, DispPos, FOrientation);
+    if (FillR.Right > FillR.Left) and (FillR.Bottom > FillR.Top) then
     begin
-      // Full fill (Position >= Max) matches the track edge-to-edge, so round all
-      // four corners. A partial fill is left-anchored and its leading (right) edge
-      // sits mid-track, so round only the LEFT (origin) corners and keep the right
-      // edge square — otherwise the fill looks like a floating pill.
+      // Full fill (Position >= Max) matches the track edge-to-edge, so round all four
+      // corners. A partial fill is anchored at its origin (left for horizontal, bottom for
+      // vertical) and its leading edge sits mid-track, so round only the ORIGIN corners and
+      // keep the leading edge square — otherwise the fill looks like a floating pill.
       if DispPos >= FMax then
         P.FillBackground(FillR, FillS.Background, TyUniformCorners(FillS.BorderRadius))
+      else if FOrientation = tpoVertical then
+        P.FillBackground(FillR, FillS.Background,
+          TyCorners(0, 0, FillS.BorderRadius, FillS.BorderRadius))  // bottom-anchored: BR, BL
       else
         P.FillBackground(FillR, FillS.Background,
-          TyCorners(FillS.BorderRadius, 0, 0, FillS.BorderRadius)); // TL, TR, BR, BL
+          TyCorners(FillS.BorderRadius, 0, 0, FillS.BorderRadius)); // left-anchored: TL, BL
     end;
     P.EndPaint;
   finally

@@ -31,6 +31,10 @@ type
     procedure TestMaxEqualsMinGivesWidthZero;
     procedure TestPosAboveMaxGivesFull;
     procedure TestPosBelowMinGivesZero;
+    // v3/C4 vertical orientation (fills bottom -> up)
+    procedure TestVerticalPosZeroEmpty;
+    procedure TestVerticalPosMidBottomHalf;
+    procedure TestVerticalPosMaxFull;
   end;
 
   TTyProgressBarControlTest = class(TTestCase)
@@ -146,6 +150,33 @@ begin
   // Pure fn: Pos < Min → width 0
   R := TyProgressFillRect(Rect(0, 0, 200, 20), 0, 100, -10);
   AssertEquals('Pos < Min → fill width 0', 0, R.Right - R.Left);
+end;
+
+procedure TTyProgressBarGeometryTest.TestVerticalPosZeroEmpty;
+var R: TRect;
+begin
+  // Track 20x100, Pos=0 -> empty (zero height, collapsed to the bottom edge).
+  R := TyProgressFillRect(Rect(0, 0, 20, 100), 0, 100, 0, tpoVertical);
+  AssertEquals('vertical Pos=0 -> height 0', 0, R.Bottom - R.Top);
+  AssertEquals('vertical empty collapses to the bottom', 100, R.Top);
+end;
+
+procedure TTyProgressBarGeometryTest.TestVerticalPosMidBottomHalf;
+var R: TRect;
+begin
+  // Pos=50 -> the BOTTOM half is filled: top = 100 - 50 = 50, bottom = 100.
+  R := TyProgressFillRect(Rect(0, 0, 20, 100), 0, 100, 50, tpoVertical);
+  AssertEquals('vertical Pos=50 -> top = 50 (fills upward from bottom)', 50, R.Top);
+  AssertEquals('vertical fill reaches the bottom', 100, R.Bottom);
+  AssertEquals('vertical fill spans the full width', 20, R.Right - R.Left);
+end;
+
+procedure TTyProgressBarGeometryTest.TestVerticalPosMaxFull;
+var R: TRect;
+begin
+  R := TyProgressFillRect(Rect(0, 0, 20, 100), 0, 100, 100, tpoVertical);
+  AssertEquals('vertical Pos=Max -> top = 0 (full height)', 0, R.Top);
+  AssertEquals('vertical full reaches the bottom', 100, R.Bottom);
 end;
 
 { TTyProgressBarControlTest }
