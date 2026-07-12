@@ -89,6 +89,17 @@ type
       tick (the next GOOD save differs again and reloads). Reentrancy-guarded. This is the
       fully headless-testable seam: tests call it directly instead of pumping a GUI loop. }
     function PollThemeFile: Boolean;
+    { Theme-system v3 · Phase A. Runtime accent picker over the model's var-override layer.
+      SetAccent overrides --accent (the whole interactive palette — hover/active/focus-ring/
+      selection/on-accent — re-derives from it), winning over the theme's per-mode accent
+      AND the OS accent and surviving a light/dark flip; ResetAccent drops it back to the
+      theme's own accent; AccentOverride is the current pick ('' = using the theme accent —
+      drives a 'reset' control's enabled state). Both mutators repaint every registered
+      control + fire change-listeners (Changed). The override also resets automatically on a
+      theme switch (ThemeName/ThemeFile/LoadThemeCss REPLACE). }
+    procedure SetAccent(const AHex: string);
+    procedure ResetAccent;
+    function AccentOverride: string;
     function GetAbout: string;
   published
     { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
@@ -405,6 +416,26 @@ procedure TTyStyleController.LoadThemeCssAdditive(const ASource: string);
 begin
   FModel.LoadFromCssAdditive(ASource);
   Changed;
+end;
+
+procedure TTyStyleController.SetAccent(const AHex: string);
+{ v3/A. Override --accent (whole palette re-derives) + repaint. See the interface comment. }
+begin
+  FModel.SetVarOverride('accent', AHex);
+  Changed;
+end;
+
+procedure TTyStyleController.ResetAccent;
+{ v3/A. Drop the accent override -> back to the theme's own accent + repaint. }
+begin
+  FModel.ClearVarOverride('accent');
+  Changed;
+end;
+
+function TTyStyleController.AccentOverride: string;
+{ v3/A. The current picked accent, or '' when using the theme's own accent. }
+begin
+  Result := FModel.VarOverride('accent');
 end;
 
 procedure TTyStyleController.RegisterStyleable(AControl: TControl);

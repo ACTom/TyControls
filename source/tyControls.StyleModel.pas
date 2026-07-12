@@ -45,6 +45,7 @@ type
     FPropertyCascade: Boolean; // A7: False=all-or-nothing (default, golden); True=base->user per-prop merge
     FMode: string;            // P3 (D7): active @mode name ('' = no mode override)
     FModeVars: TStringList;   // loaded @mode blocks: Names[i]=lower(mode), Objects[i]=owned TStringList of that mode's vars
+    FVarOverrides: TStringList; // v3/A: runtime var overrides (accent picker). TOP merge layer — above @mode + system tokens. name=value, no leading '--'. Cleared on REPLACE load / Clear.
     procedure ClearList(ARules: TFPList);
     procedure ClearModeVars;
     function ModeVarsFor(const AMode: string): TStringList;
@@ -104,6 +105,17 @@ type
       Inert for themes that use no sentinel (the merge is identical), but always bumps the
       version + lets the caller repaint. }
     procedure RefreshSystemTokens;
+    { Theme-system v3 · Phase A. Runtime var-override layer, applied as the TOP of the
+      merge — ABOVE the active @mode block AND above the OS 'system-accent'/'system-mode'
+      sentinels — so a user-picked accent wins over both and survives a light/dark flip.
+      Names are stored WITHOUT a leading '--' (SetVarOverride normalises). Each mutator
+      re-merges and bumps ThemeVersion (the §3.8 cache anchor). The whole layer is CLEARED
+      on a REPLACE theme load and on Clear (a new theme is a curated whole); an additive
+      load and SetMode KEEP it. VarOverride returns '' for a name that is not overridden. }
+    procedure SetVarOverride(const AName, AValue: string);
+    procedure ClearVarOverride(const AName: string);
+    procedure ClearVarOverrides;
+    function VarOverride(const AName: string): string;
     property Mode: string read FMode write SetMode;
     { The mode a follower should adopt when the OS scheme is unreadable (e.g. Linux has no registry
       hook): 'light' if a light @mode exists, else the first declared @mode, else '' (single-mode).
@@ -691,6 +703,7 @@ begin
   FBaseVars := TStringList.Create;
   FMergedVars := TStringList.Create;
   FModeVars := TStringList.Create;
+  FVarOverrides := TStringList.Create;
   { Seed the built-in default skin once. It is never cleared by user theme
     loads — it only applies (per-typeKey) when the user layer is silent. }
   LoadInto(FBaseRules, FBaseVars, TyBuiltinThemeCss);
@@ -707,6 +720,7 @@ begin
   FBaseVars.Free;
   FMergedVars.Free;
   FModeVars.Free;
+  FVarOverrides.Free;
   inherited Destroy;
 end;
 
@@ -746,6 +760,7 @@ begin
   ClearList(FRules);
   FVars.Clear;
   ClearModeVars;
+  FVarOverrides.Clear;   // v3/A: a full clear drops the runtime accent override too
   FThemeBaseDir := '';   // no user theme -> no asset base dir
   RebuildMergedVars;
   Inc(FVersion);
@@ -778,6 +793,52 @@ begin
   Inc(FVersion);
 end;
 
+function TyNormVarName(const AName: string): string;
+{ Trim + drop a leading '--' so callers may pass either '--accent' or 'accent';
+  the merged var set keys custom properties WITHOUT the leading '--' (see FVars). }
+begin
+  Result := Trim(AName);
+  if (Length(Result) >= 2) and (Result[1] = '-') and (Result[2] = '-') then
+    Delete(Result, 1, 2);
+end;
+
+procedure TTyStyleModel.SetVarOverride(const AName, AValue: string);
+{ v3/A. Set/replace a top-layer var override and re-resolve. See the interface comment. }
+var n: string;
+begin
+  n := TyNormVarName(AName);
+  if n = '' then Exit;
+  FVarOverrides.Values[n] := AValue;
+  RebuildMergedVars;
+  Inc(FVersion);
+end;
+
+procedure TTyStyleModel.ClearVarOverride(const AName: string);
+{ v3/A. Drop one override (no-op if it was not set). }
+var idx: Integer;
+begin
+  idx := FVarOverrides.IndexOfName(TyNormVarName(AName));
+  if idx < 0 then Exit;
+  FVarOverrides.Delete(idx);
+  RebuildMergedVars;
+  Inc(FVersion);
+end;
+
+procedure TTyStyleModel.ClearVarOverrides;
+{ v3/A. Drop every override (no-op if none). }
+begin
+  if FVarOverrides.Count = 0 then Exit;
+  FVarOverrides.Clear;
+  RebuildMergedVars;
+  Inc(FVersion);
+end;
+
+function TTyStyleModel.VarOverride(const AName: string): string;
+{ v3/A. The current override value for AName, or '' if not overridden. }
+begin
+  Result := FVarOverrides.Values[TyNormVarName(AName)];
+end;
+
 procedure TTyStyleModel.RebuildMergedVars;
 { Merge the token layers ONCE per load/mode-switch: base derives first, the user :root
   overrides same-named vars, then the ACTIVE @mode block's vars overlay on top (so a
@@ -798,6 +859,11 @@ begin
     'system-mode' sentinel VALUE for the live OS state, so '--accent: system-accent;'
     resolves to the OS accent and ResolveStyle sees a concrete hex/mode. }
   ApplySystemTokens(FMergedVars);
+  { v3/A runtime overrides — the TOP layer. Applied AFTER the @mode overlay AND after
+    ApplySystemTokens, so a user-picked --accent beats both the theme's per-mode accent
+    and the live OS accent, and survives a light/dark flip (the override outranks @mode). }
+  for i := 0 to FVarOverrides.Count - 1 do
+    FMergedVars.Values[FVarOverrides.Names[i]] := FVarOverrides.ValueFromIndex[i];
 end;
 
 procedure TTyStyleModel.ValidateRules(ARules: TFPList; AVars: TStrings);
@@ -1060,6 +1126,7 @@ begin
       ClearList(ARules);
       AVars.Clear;
       ClearModeVars;
+      FVarOverrides.Clear;   // v3/A (D2): a REPLACE theme load resets the runtime accent override
       // §3.8 REPLACE adopts the new theme's asset base dir (set by LoadFromFile/
       // LoadFromSource via the GThemeBaseDir global; '' for a pure-string load).
       // Additive loads keep the current theme's dir (compose onto the active theme).
