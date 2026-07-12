@@ -28,12 +28,13 @@ What's missing is a var layer that outranks `@mode`. The additive `:root` path c
 - New field `FVarOverrides: TStringList` (name=value, **no leading `--`**, matching `FVars`). Create in ctor, free in dtor.
 - `RebuildMergedVars` (`:781-801`): after `ApplySystemTokens(FMergedVars)`, overlay `FVarOverrides` as the **final/top layer** (`FMergedVars.Values[name] := value`). This is the load-bearing change (D1: beats OS accent; survives `@mode`).
 - Public API:
-  - `procedure SetVarOverride(const AName, AValue: string);` — normalise `AName` (trim, strip a leading `--`); store; `RebuildMergedVars`; `Inc(FVersion)`.
+  - `procedure SetVarOverride(const AName, AValue: string);` — normalise `AName` (trim, strip a leading `--`); **fail-fast validate** the value (`TyEvalColor(AValue, FMergedVars)` trial-resolve) so a bad value RAISES here with the prior state intact, instead of committing a value that then crashes every subsequent paint (the main resolve path is unguarded, unlike `ResolveOverride`); an **empty value folds into `ClearVarOverride`** (making the `TStringList` delete-on-empty quirk explicit); then store; `RebuildMergedVars`; `Inc(FVersion)`.
   - `procedure ClearVarOverride(const AName: string);` — remove one; re-merge; bump.
   - `procedure ClearVarOverrides;` — remove all; re-merge; bump.
   - `function VarOverride(const AName: string): string;` — current value or `''` (for UI state + tests).
-- D2 reset points: clear `FVarOverrides` in `Clear` (`:741`) and in `LoadInto`'s `if AReplace then` commit branch (`:1058-1067`). NOT in the additive branch, NOT in `SetMode`, NOT in `RefreshSystemTokens`.
-- Validation (`LoadInto` `tmpMerged` `:1040-1054`) is unchanged: overrides are always concrete colours that can't make a valid theme unresolvable, and on a REPLACE they're about to be cleared anyway.
+- D2 reset points: clear `FVarOverrides` in `Clear` and in `LoadInto`'s `if AReplace then` commit branch. NOT in the additive branch, NOT in `SetMode`, NOT in `RefreshSystemTokens`.
+- **Hot-reload is the one exception:** `TTyStyleController.PollThemeFile` reloads the SAME theme file through the REPLACE path, but that is an EDIT, not a switch — so it snapshots the accent override before the reload and re-applies it after (D2 must not fire for a hot-reload). It is the only replace that carries "this is a reload, not a switch" knowledge.
+- Validation (`LoadInto` `tmpMerged`) is unchanged: overrides are colour-validated at the `SetVarOverride` seam instead, and on a REPLACE they're cleared anyway.
 
 ## Controller — `TTyStyleController` (`source/tyControls.Controller.pas`)
 
@@ -49,15 +50,22 @@ What's missing is a var layer that outranks `@mode`. The additive `:root` path c
 - Home: `examples/theming` (the theming showcase) gets the picker. The MAIN demo's theme controls are the user's design surface — confirm with the user before adding UI there.
 - Persistence of the chosen hex is app-side, out of engine scope.
 
-## Tests (`tests/`, TDD first)
+## Tests (`tests/test.accent.pas`, TDD first — 12 cases)
 
-1. Override beats `@mode`: load a dual-mode theme whose `@mode dark` sets `--accent`; `SetVarOverride('accent', X)`; resolve in dark → accent is X.
-2. Override beats `system-accent`: theme with `--accent: system-accent` + a stub accent hook returning Y; `SetVarOverride('--accent', X)` (leading `--` normalised) → resolves X, not Y.
-3. Derived recolour: after override, a button's `:hover`/`:active`/focus-ring/selection resolve from the new accent (spot-check `lighten`/`alpha`).
-4. `ClearVarOverride('accent')` restores the theme's own accent; `VarOverride` returns `''`.
-5. Version bump: `SetVarOverride`/`ClearVarOverride`/`ClearVarOverrides` each increment `ThemeVersion` (cache/switch anchor).
-6. D2: a REPLACE `LoadFromCss` clears the override; an additive `LoadFromCssAdditive` and a `SetMode` do NOT.
-7. Golden unchanged: default accent untouched → the pixel golden is byte-identical.
+1. Override beats `@mode` (dual-mode, resolve in dark → the picked accent).
+2. Override beats `system-accent` (stubbed accent hook; leading `--` normalised).
+3. Derived recolour — EXACT: `border-color: lighten(var(--accent),20%)` and `:selected` `alpha(var(--accent),0.30)` resolve to `TyEvalColor('lighten(#…,20%)')` / `alpha(#…,0.30)` on the picked colour (covers `lighten` AND `alpha`, exact-value not `<>`).
+4. `on(var(--accent))` contrast re-derives: a dark seed → light ink; a picked light accent flips the ink dark, and equals `on(picked)` exactly (the "invisible text" guard).
+5. Mode-varying non-accent token still flips while the accent stays pinned (D1: override doesn't freeze other per-mode tokens).
+6. `RefreshSystemTokens` (live OS-accent change) with an override set keeps the pick (D1 live path).
+7. `ClearVarOverride` restores the theme accent; `VarOverride` → `''`.
+8. Every mutator bumps `ThemeVersion` (each isolated).
+9. D2: REPLACE `LoadFromCss` clears; additive load + `SetMode` KEEP (checked by resolve, not just the stored string).
+10. Bad value (`'#12'`) raises at the call site, `ThemeVersion` unchanged, prior pick intact, resolve still works; empty value folds into a clear.
+11. Controller `SetAccent`/`ResetAccent`/`AccentOverride` + `Changed` fires.
+12. Hot-reload (`PollThemeFile`, temp file) preserves the pick across a same-file edit.
+
+Golden byte-identical (default accent untouched). Mutation-verified: disabling the overlay reds 5 apply-path cases; disabling the D2 clear reds the replace case; disabling the value-validation reds the bad-value case; disabling the hot-reload re-apply reds the hot-reload case.
 
 ## Out of scope (later phases)
 

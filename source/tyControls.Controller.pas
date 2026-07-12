@@ -356,6 +356,7 @@ var
   age: LongInt;
   size: Int64;
   sr: TSearchRec;
+  savedAccent: string;
 begin
   Result := False;
   // Off / no target / reentrant -> no-op. The reentrancy guard matters because the
@@ -379,7 +380,14 @@ begin
   FInPoll := True;
   try
     try
+      // A hot-reload re-applies the SAME theme with edits — NOT a switch to a different
+      // theme — so the D2 reset must not fire. But LoadFromFile goes through the REPLACE
+      // path (which clears overrides), so snapshot the user's accent pick and re-apply it
+      // after the reload. (PollThemeFile is the one replace that isn't a theme switch.)
+      savedAccent := FModel.VarOverride('accent');
       FModel.LoadFromFile(FThemeFile);
+      if savedAccent <> '' then
+        FModel.SetVarOverride('accent', savedAccent);
       // FThemeFile unchanged; named-theme already cleared when ThemeFile was set.
       Changed;
       Result := True;

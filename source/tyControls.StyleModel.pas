@@ -803,11 +803,18 @@ begin
 end;
 
 procedure TTyStyleModel.SetVarOverride(const AName, AValue: string);
-{ v3/A. Set/replace a top-layer var override and re-resolve. See the interface comment. }
+{ v3/A. Set/replace a top-layer var override and re-resolve. The value is FAIL-FAST
+  validated (trial-resolved as a colour against the live vars) BEFORE it is committed, so
+  a bad value raises HERE with the prior state intact — NOT committed to then crash every
+  subsequent paint (the main resolve path is unguarded, unlike ResolveOverride). An empty
+  value folds into ClearVarOverride (the TStringList delete-on-empty quirk made bare). The
+  colour-only check matches Phase A's scope (only --accent is overridden today). }
 var n: string;
 begin
   n := TyNormVarName(AName);
   if n = '' then Exit;
+  if Trim(AValue) = '' then begin ClearVarOverride(n); Exit; end;
+  TyEvalColor(AValue, FMergedVars);   // trial-resolve; raises on a bad value -> reject, prior state intact
   FVarOverrides.Values[n] := AValue;
   RebuildMergedVars;
   Inc(FVersion);
