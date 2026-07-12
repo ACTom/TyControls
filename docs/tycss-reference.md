@@ -777,5 +777,6 @@ TyButton.primary {
     `margin`/`gap` 属性,控件尺寸与排布归 `.lfm`/LCL),但部分控件的**内在几何**可用
     `:root` 里的命名长度令牌调整,控件按名读取、未设时回退到内置常数(故 golden 不变):
     - `--checkbox-size` / `--checkbox-gap` — 复选框指示框边长 / 与标题的间距(默认 16 / 6);
-    - `--radio-size` / `--radio-gap` — 单选钮同上(圆点随框尺寸等比缩放)。
+    - `--radio-size` / `--radio-gap` — 单选钮同上(圆点随框尺寸等比缩放);
+    - `--groupbox-caption-height` — GroupBox 顶部标题带高度(默认 16)。
     值可为 `16`、`16px` 或 `var()`。(后续版本会陆续把更多写死几何提升为度量令牌。)

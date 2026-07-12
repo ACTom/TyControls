@@ -38,7 +38,8 @@ implementation
 
 function TTyGroupBox.CapHAtPPI(APPI: Integer): Integer;
 begin
-  Result := MulDiv(16, APPI, 96);
+  // v3/C2: caption-band height is a skin-tunable metric (default 16 logical px).
+  Result := MulDiv(ActiveController.Metric('--groupbox-caption-height', 16), APPI, 96);
   if Result < 1 then Result := 1;
 end;
 

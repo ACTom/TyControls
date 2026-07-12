@@ -8,11 +8,17 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
-  tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.CheckBox;
+  tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.CheckBox,
+  tyControls.GroupBox;
 type
   TCheckBoxProbe = class(TTyCheckBox)   // expose the protected RenderTo for headless sampling
   public
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+  TGroupBoxProbe = class(TTyGroupBox)   // expose the reserved top inset (caption band)
+  public
+    function TopInset: Integer;
   end;
 
   TMetricTest = class(TTestCase)
@@ -27,6 +33,7 @@ type
     procedure TestMetricLeadingDashesNormalised;
     procedure TestControllerMetricPassthrough;
     procedure TestCheckBoxBoxSizeFollowsMetric;
+    procedure TestGroupBoxCaptionBandFollowsMetric;
   end;
 
 implementation
@@ -34,6 +41,14 @@ implementation
 procedure TCheckBoxProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+function TGroupBoxProbe.TopInset: Integer;
+var r: TRect;
+begin
+  r := Rect(0, 0, 100, 100);
+  AdjustClientRect(r);   // reserves the caption band at the top
+  Result := r.Top;
 end;
 
 procedure TMetricTest.TestMetricAbsentReturnsDefault;
@@ -163,6 +178,28 @@ begin
   AssertFalse('default box (16) does not reach x=25', CheckBoxBoxIsRedAt(BOX_THEME, 25));
   AssertTrue('metric box (30) reaches x=25',
     CheckBoxBoxIsRedAt(':root { --checkbox-size: 30px; } ' + BOX_THEME, 25));
+end;
+
+procedure TMetricTest.TestGroupBoxCaptionBandFollowsMetric;
+var ctrlDef, ctrlBig: TTyStyleController; gbDef, gbBig: TGroupBoxProbe; topDef, topBig: Integer;
+begin
+  // The reserved top inset is the caption band. Growing --groupbox-caption-height must grow it.
+  ctrlDef := TTyStyleController.Create(nil);
+  ctrlBig := TTyStyleController.Create(nil);
+  gbDef := TGroupBoxProbe.Create(nil);
+  gbBig := TGroupBoxProbe.Create(nil);
+  try
+    ctrlDef.LoadThemeCss('TyGroupBox { background: #FFFFFF; }');                          // band = 16 (default)
+    ctrlBig.LoadThemeCss(':root { --groupbox-caption-height: 30px; } TyGroupBox { background: #FFFFFF; }');
+    gbDef.Controller := ctrlDef;
+    gbBig.Controller := ctrlBig;
+    topDef := gbDef.TopInset;
+    topBig := gbBig.TopInset;
+    AssertTrue('caption band reserves a positive top inset', topDef > 0);
+    AssertTrue('metric grows the caption band (30 vs 16)', topBig > topDef);
+  finally
+    gbBig.Free; gbDef.Free; ctrlBig.Free; ctrlDef.Free;
+  end;
 end;
 
 initialization
