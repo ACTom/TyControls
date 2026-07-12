@@ -25,7 +25,7 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.TyLabel,
-  tyControls.Button, tyControls.CheckBox, tyControls.ComboBox,
+  tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.BuiltinThemes,
   tyControls.FileSystem, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.ShellComboBox, tyControls.FilterComboBox, tyControls.ListView;
@@ -33,6 +33,7 @@ uses
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
 
     BtnUp:     TTyButton;
@@ -59,6 +60,7 @@ type
     procedure ChkGroupChange(Sender: TObject);
     procedure BtnUpClick(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
   private
     { Guards the tree<->list two-way sync so a tree-driven list load, or a list-driven
       tree reveal, does not bounce back and re-fire forever. }
@@ -218,6 +220,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 end.

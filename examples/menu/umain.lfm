@@ -20,6 +20,14 @@ object MainForm: TMainForm
     Align = alTop
     Caption = '增强菜单 + 双击标题栏卷起  · TyControls'
     TitleAlignment = taLeftJustify
+    object DarkSwitch: TTyToggleSwitch
+      Left = 302
+      Height = 24
+      Top = 5
+      Width = 74
+      Caption = '暗色'
+      OnChange = DarkSwitchChange
+    end
     object ThemeCombo: TTyComboBox
       Left = 386
       Height = 26

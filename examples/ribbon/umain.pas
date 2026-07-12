@@ -27,7 +27,7 @@ uses
   Classes, SysUtils, StrUtils, Forms, Controls, Dialogs, Graphics,
   tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes,
   tyControls.Form, tyControls.Hint, tyControls.Panel,
-  tyControls.TyLabel, tyControls.Button, tyControls.CheckBox, tyControls.ComboBox,
+  tyControls.TyLabel, tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.ImageCollection, tyControls.GlyphButtons, tyControls.DropButtons,
   tyControls.ColorButton, tyControls.ButtonGroup, tyControls.Ribbon,
   tyControls.RibbonQuickAccess, tyControls.RibbonGallery, tyControls.RibbonBackstage,
@@ -45,9 +45,11 @@ type
 
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;                   // title-bar built-in skin switcher
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
   private
     FImgColl: TTyImageCollection;   // cross-platform BGRA command icons (uicons)
     FRibbon: TTyRibbon;
@@ -320,6 +322,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 // ===========================================================================

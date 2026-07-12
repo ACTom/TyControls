@@ -9,12 +9,13 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
-  tyControls.Button, tyControls.CheckBox, tyControls.ComboBox,
+  tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.Chart;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
     BtnLine: TTyButton;
     BtnBar:  TTyButton;
@@ -30,6 +31,7 @@ type
     procedure ChkLegendChange(Sender: TObject);
     procedure ChkValuesChange(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
   end;
 
 var
@@ -66,6 +68,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 procedure TMainForm.BtnLineClick(Sender: TObject); begin Chart.ChartType := ctLine; end;

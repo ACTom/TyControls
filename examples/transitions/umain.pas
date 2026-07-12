@@ -13,11 +13,12 @@ uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.Button, tyControls.TyLabel,
   tyControls.Panel, tyControls.Transitions, tyControls.BuiltinThemes,
-  tyControls.ComboBox;
+  tyControls.ComboBox, tyControls.ToggleSwitch;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
     BtnFade:  TTyButton;
     BtnUp:    TTyButton;
@@ -34,6 +35,7 @@ type
     procedure BtnLeftClick(Sender: TObject);
     procedure BtnRightClick(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
   private
     procedure Replay(AKind: TTyTransitionKind);
   end;
@@ -80,6 +82,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 { Re-show the panel with the chosen transition. }

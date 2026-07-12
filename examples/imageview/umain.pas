@@ -17,12 +17,13 @@ uses
   Classes, SysUtils, Forms, Controls, Graphics,
   tyControls.Controller, tyControls.Form, tyControls.TyLabel,
   tyControls.Button, tyControls.CheckBox, tyControls.Divider,
-  tyControls.ComboBox, tyControls.BuiltinThemes,
+  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.BuiltinThemes,
   tyControls.ImageView, tyControls.Dialogs.FileDialog;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
     BtnOpen:   TTyButton;
     BtnZoomIn: TTyButton;
@@ -49,6 +50,7 @@ type
     procedure ChkBlurChange(Sender: TObject);
     procedure ViewZoomChange(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
   private
     FOpenPic: TTyOpenPictureDialog;
   end;
@@ -87,6 +89,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 procedure TMainForm.BtnOpenClick(Sender: TObject);

@@ -23,11 +23,12 @@ uses
   tyControls.LColorPicker, tyControls.HSColorPicker, tyControls.CheckComboBox,
   tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.ValueListEditor,
   tyControls.CalcEdit, tyControls.CalcCurrencyEdit, tyControls.TyLabel,
-  tyControls.ComboBox, tyControls.Dialogs.SelectPath, tyControls.Dialogs.About;
+  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Dialogs.SelectPath, tyControls.Dialogs.About;
 
 type
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
     L1: TTyLabel;
     L2: TTyLabel;
@@ -87,6 +88,7 @@ type
     FEcho: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
     procedure RangedChange(Sender: TObject);
     procedure ComboDrop(Sender: TObject);
     procedure LumChange(Sender: TObject);
@@ -258,6 +260,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 procedure TMainForm.RangedChange(Sender: TObject);

@@ -9,11 +9,12 @@ interface
 uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.TyLabel,
-  tyControls.HtmlLabel, tyControls.BuiltinThemes, tyControls.ComboBox;
+  tyControls.HtmlLabel, tyControls.BuiltinThemes, tyControls.ComboBox, tyControls.ToggleSwitch;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
     Rich:   TTyHtmlLabel;
     LblStatus: TTyLabel;
@@ -21,6 +22,7 @@ type
     procedure FormCreate(Sender: TObject);
     procedure RichLinkClick(Sender: TObject; const AHref: string);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
   end;
 
 var
@@ -61,6 +63,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 procedure TMainForm.RichLinkClick(Sender: TObject; const AHref: string);

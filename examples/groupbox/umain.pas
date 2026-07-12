@@ -17,11 +17,12 @@ uses
   Classes, SysUtils, StrUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.GroupBox, tyControls.CheckBox, tyControls.Edit,
-  tyControls.TyLabel, tyControls.ComboBox;
+  tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch;
 
 type
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
     GroupSize: TTyGroupBox;      // left-aligned title + radio buttons
     RadioA: TTyRadioButton;
@@ -35,6 +36,7 @@ type
     LblStatus: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
     procedure RadioClick(Sender: TObject);
     procedure CheckClick(Sender: TObject);
     procedure NameChange(Sender: TObject);
@@ -72,6 +74,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 function TMainForm.SelectedRadio: string;

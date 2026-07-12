@@ -24,13 +24,14 @@ uses
   Classes, SysUtils, Graphics, Forms, Controls, Math,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Controller, tyControls.Form, tyControls.TyLabel, tyControls.Divider,
-  tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.Columns,
+  tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Columns,
   tyControls.BuiltinThemes,
   tyControls.ImageCollection, tyControls.ListView.Layout, tyControls.ListView;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
 
     DivLeft: TTyDivider;
@@ -56,6 +57,7 @@ type
 
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
     procedure BtnReportClick(Sender: TObject);
     procedure BtnListClick(Sender: TObject);
     procedure BtnIconClick(Sender: TObject);
@@ -359,6 +361,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   { re-theme the shell on every skin change }
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 { ---------------------------------------------------------------------------

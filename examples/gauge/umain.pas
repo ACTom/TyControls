@@ -19,11 +19,12 @@ uses
   tyControls.Meter, tyControls.LevelMeter, tyControls.Dial, tyControls.AnalogClock,
   tyControls.Sparkline, tyControls.Rating, tyControls.GearDial,
   tyControls.ActivityBar, tyControls.GearActivityIndicator, tyControls.UpDown,
-  tyControls.ComboBox, tyControls.TyLabel;
+  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.TyLabel;
 
 type
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
     LblArc: TTyLabel;
     Arc: TTyGauge;
@@ -50,6 +51,7 @@ type
     Timer: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
     procedure Tick(Sender: TObject);
     procedure UpDownChange(Sender: TObject);
   private
@@ -88,6 +90,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 procedure TMainForm.Tick(Sender: TObject);

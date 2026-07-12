@@ -17,11 +17,12 @@ uses
   Classes, SysUtils, Forms, Controls, ExtCtrls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.ProgressBar, tyControls.Button, tyControls.CheckBox,
-  tyControls.TyLabel, tyControls.ComboBox;
+  tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch;
 
 type
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
     LblDesc: TTyLabel;
     ProgBar: TTyProgressBar;
@@ -33,6 +34,7 @@ type
     Timer: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
     procedure BarChange(Sender: TObject);
     procedure StartClick(Sender: TObject);
     procedure ResetClick(Sender: TObject);
@@ -70,6 +72,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 procedure TMainForm.BarChange(Sender: TObject);

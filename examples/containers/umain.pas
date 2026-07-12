@@ -21,11 +21,12 @@ uses
   tyControls.GridPanel, tyControls.RelativePanel, tyControls.Edit,
   tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar, tyControls.Panel,
   tyControls.HeaderControl, tyControls.ListGroupPanel,
-  tyControls.BuiltinThemes, tyControls.ComboBox;
+  tyControls.BuiltinThemes, tyControls.ComboBox, tyControls.ToggleSwitch;
 
 type
   TMainForm = class(TTyForm)
     TitleBar1: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
     DivLeft: TTyDivider;
     DivCenter: TTyDivider;
@@ -100,6 +101,7 @@ type
     Grip: TTySizeBox;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
     procedure PaintSurface(Sender: TObject; APainter: TTyPainter; const AContent: TRect);
   private
     procedure WireGrid;
@@ -166,6 +168,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 procedure TMainForm.WireGrid;

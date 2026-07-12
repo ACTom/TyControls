@@ -18,11 +18,12 @@ uses
   Classes, SysUtils, Forms, Controls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.PageControl, tyControls.TabSheet,
-  tyControls.Button, tyControls.TyLabel, tyControls.Edit, tyControls.ComboBox;
+  tyControls.Button, tyControls.TyLabel, tyControls.Edit, tyControls.ComboBox, tyControls.ToggleSwitch;
 
 type
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
+    DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;
     PageCtrl: TTyPageControl;
     PgGeneral: TTyTabSheet;
@@ -45,6 +46,7 @@ type
     LblStatus: TTyLabel;
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
+    procedure DarkSwitchChange(Sender: TObject);
     procedure PageChanged(Sender: TObject);
     procedure GotoGeneral(Sender: TObject);    { switch via TabIndex }
     procedure GotoAppearance(Sender: TObject); { switch via ActivePageIndex }
@@ -85,6 +87,16 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+end;
+
+procedure TMainForm.DarkSwitchChange(Sender: TObject);
+begin
+  // Flip the light/dark @mode axis (independent of which theme ThemeCombo picked).
+  if DarkSwitch.Checked then
+    TyDefaultController.Mode := 'dark'
+  else
+    TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
 end;
 
 { ── Event handlers ───────────────────────────────────────────────────────── }
