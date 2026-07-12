@@ -100,6 +100,10 @@ type
     procedure SetAccent(const AHex: string);
     procedure ResetAccent;
     function AccentOverride: string;
+    { v3/C. Resolve a named length metric from the active theme (e.g. '--checkbox-size'),
+      falling back to ADefault (logical px). Controls call this instead of a hard-coded
+      constant so a skin can retune their intrinsic geometry. }
+    function Metric(const AName: string; ADefault: Integer): Integer;
     function GetAbout: string;
   published
     { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
@@ -444,6 +448,12 @@ function TTyStyleController.AccentOverride: string;
 { v3/A. The current picked accent, or '' when using the theme's own accent. }
 begin
   Result := FModel.VarOverride('accent');
+end;
+
+function TTyStyleController.Metric(const AName: string; ADefault: Integer): Integer;
+{ v3/C. Named theme length metric, ADefault when unset. See the interface comment. }
+begin
+  Result := FModel.ResolveMetric(AName, ADefault);
 end;
 
 procedure TTyStyleController.RegisterStyleable(AControl: TControl);

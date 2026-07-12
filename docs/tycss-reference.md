@@ -773,3 +773,9 @@ TyButton.primary {
 14. **`border-radius` 不支持的形式**:每角长手写法(`border-top-left-radius` 等)、
     百分比半径、椭圆双半径语法(`<a> / <b>`)均不支持(§5.6)。`outline-offset`
     单独声明时不激活焦点环——必须同时声明 `outline`(§5.13)。
+15. **度量令牌(metric tokens,v3)**:虽然主题**不能**做通用布局(无 `width`/`height`/
+    `margin`/`gap` 属性,控件尺寸与排布归 `.lfm`/LCL),但部分控件的**内在几何**可用
+    `:root` 里的命名长度令牌调整,控件按名读取、未设时回退到内置常数(故 golden 不变):
+    - `--checkbox-size` / `--checkbox-gap` — 复选框指示框边长 / 与标题的间距(默认 16 / 6);
+    - `--radio-size` / `--radio-gap` — 单选钮同上(圆点随框尺寸等比缩放)。
+    值可为 `16`、`16px` 或 `var()`。(后续版本会陆续把更多写死几何提升为度量令牌。)

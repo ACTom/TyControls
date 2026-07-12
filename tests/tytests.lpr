@@ -5,7 +5,7 @@ program tytests;
 uses
   Interfaces, consoletestrunner, tyControls.Painter, tyControls.Controller,
   test.Types, test.Css.Tokens, test.Css.Lexer, test.Css.Parser,
-  test.Css.Values, test.StyleModel, test.accent, test.gradient, test.bevelborder, test.nineslice, test.painter, test.controller,
+  test.Css.Values, test.StyleModel, test.accent, test.gradient, test.bevelborder, test.nineslice, test.metric, test.painter, test.controller,
   test.controller.hotreload, test.base,
   test.baseevents,
   test.eventfiring,

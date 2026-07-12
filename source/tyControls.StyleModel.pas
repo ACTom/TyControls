@@ -116,6 +116,12 @@ type
     procedure ClearVarOverride(const AName: string);
     procedure ClearVarOverrides;
     function VarOverride(const AName: string): string;
+    { v3/C. Resolve a named LENGTH metric (e.g. '--checkbox-size') from the merged vars, so a
+      skin can retune a control's intrinsic geometry (indicator size, caption-band height, …)
+      without a general width/height/margin vocabulary. Returns ADefault (a logical-px value)
+      when the var is absent or unparseable — a theme that doesn't set it keeps the built-in
+      constant, so the golden is unaffected. Value may be '16', '16px' or a var(). }
+    function ResolveMetric(const AName: string; ADefault: Integer): Integer;
     property Mode: string read FMode write SetMode;
     { The mode a follower should adopt when the OS scheme is unreadable (e.g. Linux has no registry
       hook): 'light' if a light @mode exists, else the first declared @mode, else '' (single-mode).
@@ -931,6 +937,20 @@ function TTyStyleModel.VarOverride(const AName: string): string;
 { v3/A. The current override value for AName, or '' if not overridden. }
 begin
   Result := FVarOverrides.Values[TyNormVarName(AName)];
+end;
+
+function TTyStyleModel.ResolveMetric(const AName: string; ADefault: Integer): Integer;
+{ v3/C. Named length metric from the merged vars; ADefault when absent/unparseable. }
+var v: string;
+begin
+  Result := ADefault;
+  v := Trim(FMergedVars.Values[TyNormVarName(AName)]);
+  if v = '' then Exit;
+  try
+    Result := TyEvalLength(v, FMergedVars);
+  except
+    Result := ADefault;
+  end;
 end;
 
 procedure TTyStyleModel.RebuildMergedVars;

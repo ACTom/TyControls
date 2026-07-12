@@ -196,8 +196,9 @@ begin
       ContentRect.Right  - P.Scale(S.Padding.Right),
       ContentRect.Bottom - P.Scale(S.Padding.Bottom)
     );
-    BoxSize := P.Scale(TyCheckBoxBox);
-    Gap := P.Scale(TyCheckBoxGap);
+    // v3/C: box size + caption gap are skin-tunable metrics (default = the built-in constants).
+    BoxSize := P.Scale(ActiveController.Metric('--checkbox-size', TyCheckBoxBox));
+    Gap := P.Scale(ActiveController.Metric('--checkbox-gap', TyCheckBoxGap));
     BoxRect := Rect(ContentRect.Left,
       ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2),
       ContentRect.Left + BoxSize,
@@ -346,8 +347,9 @@ begin
       ContentRect.Right  - P.Scale(S.Padding.Right),
       ContentRect.Bottom - P.Scale(S.Padding.Bottom)
     );
-    BoxSize := P.Scale(TyCheckBoxBox);
-    Gap := P.Scale(TyCheckBoxGap);
+    // v3/C: radio indicator size + caption gap are skin-tunable (default = the built-in constants).
+    BoxSize := P.Scale(ActiveController.Metric('--radio-size', TyCheckBoxBox));
+    Gap := P.Scale(ActiveController.Metric('--radio-gap', TyCheckBoxGap));
     DotRect := Rect(ContentRect.Left,
       ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2),
       ContentRect.Left + BoxSize,
