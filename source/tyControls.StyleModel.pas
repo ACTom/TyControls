@@ -122,6 +122,10 @@ type
       when the var is absent or unparseable — a theme that doesn't set it keeps the built-in
       constant, so the golden is unaffected. Value may be '16', '16px' or a var(). }
     function ResolveMetric(const AName: string; ADefault: Integer): Integer;
+    { v3/C5. Raw (un-evaluated) merged-var value for AName, '' if unset. Used to read
+      STRUCTURED tokens the value grammar doesn't parse — e.g. a glyph override
+      '"Family" "\e5ca"'. Names may be passed with or without the leading '--'. }
+    function RawVar(const AName: string): string;
     property Mode: string read FMode write SetMode;
     { The mode a follower should adopt when the OS scheme is unreadable (e.g. Linux has no registry
       hook): 'light' if a light @mode exists, else the first declared @mode, else '' (single-mode).
@@ -951,6 +955,12 @@ begin
   except
     Result := ADefault;
   end;
+end;
+
+function TTyStyleModel.RawVar(const AName: string): string;
+{ v3/C5. Raw merged-var value ('' if unset). No evaluation. }
+begin
+  Result := FMergedVars.Values[TyNormVarName(AName)];
 end;
 
 procedure TTyStyleModel.RebuildMergedVars;

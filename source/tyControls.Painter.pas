@@ -43,6 +43,9 @@ type
       bottom+right get ABRColor (light/dark for outset; swapped for inset). Corners: the
       light L-shape wins the shared corners. AWidthLogical is the (logical-px) edge width. }
     procedure DrawEdge(const ARect: TRect; AWidthLogical: Integer; ATLColor, ABRColor: TTyColor);
+    { v3/C5: blit a pre-rendered glyph bitmap centered in ARect (used for icon-font glyph
+      overrides; a nil/empty bitmap draws nothing). }
+    procedure DrawGlyphBitmap(const ARect: TRect; ABmp: TBGRABitmap);
     procedure DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
     procedure DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False);
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer = 4);
@@ -351,6 +354,15 @@ begin
   // ...then top + left on top, so the light L wins the shared (TR/BL) corners.
   FBmp.FillRect(ARect.Left, ARect.Top, ARect.Right, ARect.Top + w, tl, dmDrawWithTransparency);
   FBmp.FillRect(ARect.Left, ARect.Top, ARect.Left + w, ARect.Bottom, tl, dmDrawWithTransparency);
+end;
+
+procedure TTyPainter.DrawGlyphBitmap(const ARect: TRect; ABmp: TBGRABitmap);
+var x, y: Integer;
+begin
+  if (FBmp = nil) or (ABmp = nil) then Exit;
+  x := ARect.Left + ((ARect.Right - ARect.Left) - ABmp.Width) div 2;
+  y := ARect.Top + ((ARect.Bottom - ARect.Top) - ABmp.Height) div 2;
+  FBmp.PutImage(x, y, ABmp, dmDrawWithTransparency);
 end;
 
 procedure TTyPainter.DropShadow(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);

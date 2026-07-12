@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LMessages, LCLType, BGRABitmap,
   tyControls.Types, tyControls.Controller, tyControls.StyleModel,
-  tyControls.Css.Values, tyControls.Painter;
+  tyControls.Css.Values, tyControls.Painter, tyControls.IconFont;
 type
   ITyStyleable = interface
     ['{A1B2C3D4-0001-0002-0003-000000000001}']
@@ -213,6 +213,13 @@ function TyResolveParentBg(AChild: TControl; out AColor: TTyColor): Boolean;
   group box caption band) can fill them opaque instead of leaving transparent pixels. }
 procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: TRect;
   const AStyle: TTyStyleSet);
+{ v3/C5. Draw a control glyph: if the active theme sets ATokenName (e.g. '--glyph-check')
+  to a valid override '"Family" "\cp"', render that icon-font glyph; otherwise draw the
+  built-in vector AVectorKind. A valid override is honoured even if it yields no ink (the
+  theme asked for it); only an unset/malformed token falls back to the vector. }
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+  const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
+  AColor: TTyColor; AThickness: Integer);
 
 implementation
 
@@ -513,6 +520,33 @@ begin
     APainter.DrawEdge(ARect, AStyle.BorderWidth, dark, light)   // sunken: TL dark, BR light
   else
     APainter.DrawEdge(ARect, AStyle.BorderWidth, light, dark);  // raised (outset): TL light, BR dark
+end;
+
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+  const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
+  AColor: TTyColor; AThickness: Integer);
+var
+  token: string;
+  sz: Integer;
+  bmp: TBGRABitmap;
+begin
+  token := '';
+  if AController <> nil then
+    token := AController.Model.RawVar(ATokenName);
+  if token <> '' then
+  begin
+    sz := ARect.Right - ARect.Left;
+    if ARect.Bottom - ARect.Top < sz then sz := ARect.Bottom - ARect.Top;
+    bmp := TyRenderGlyphToken(token, sz, AColor);   // nil when the token is malformed
+    if bmp <> nil then
+      try
+        APainter.DrawGlyphBitmap(ARect, bmp);   // honoured even if blank (theme asked for it)
+        Exit;
+      finally
+        bmp.Free;
+      end;
+  end;
+  APainter.DrawGlyph(ARect, AVectorKind, AColor, AThickness);
 end;
 
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);

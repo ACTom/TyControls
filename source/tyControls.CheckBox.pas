@@ -205,9 +205,10 @@ begin
       ContentRect.Top + ((ContentRect.Bottom - ContentRect.Top - BoxSize) div 2) + BoxSize);
     P.FillBackground(BoxRect, S.Background, S.BorderRadius);
     P.StrokeBorder(BoxRect, S.BorderRadius, S.BorderWidth, S.BorderColor);
+    // v3/C5: the check/indeterminate glyph is theme-overridable with an icon-font codepoint.
     case FState of
-      cbChecked: P.DrawGlyph(BoxRect, tgCheck, S.TextColor, 2);
-      cbGrayed:  P.DrawGlyph(BoxRect, tgCheckIndeterminate, S.TextColor, 2);
+      cbChecked: TyDrawGlyph(P, ActiveController, BoxRect, '--glyph-check', tgCheck, S.TextColor, 2);
+      cbGrayed:  TyDrawGlyph(P, ActiveController, BoxRect, '--glyph-check-indeterminate', tgCheckIndeterminate, S.TextColor, 2);
     end;
     TextRect := Rect(BoxRect.Right + Gap, ContentRect.Top,
       ContentRect.Right, ContentRect.Bottom);
@@ -363,7 +364,7 @@ begin
     P.FillBackground(DotRect, S.Background, DotRadiusLogical);
     P.StrokeBorder(DotRect, DotRadiusLogical, S.BorderWidth, S.BorderColor);
     if FChecked then
-      P.DrawGlyph(DotRect, tgRadioDot, S.TextColor, 2);
+      TyDrawGlyph(P, ActiveController, DotRect, '--glyph-radio', tgRadioDot, S.TextColor, 2);
     TextRect := Rect(DotRect.Right + Gap, ContentRect.Top,
       ContentRect.Right, ContentRect.Bottom);
     TyParseMnemonic(Caption, disp, mp);

@@ -780,3 +780,10 @@ TyButton.primary {
     - `--radio-size` / `--radio-gap` — 单选钮同上(圆点随框尺寸等比缩放);
     - `--groupbox-caption-height` — GroupBox 顶部标题带高度(默认 16)。
     值可为 `16`、`16px` 或 `var()`。(后续版本会陆续把更多写死几何提升为度量令牌。)
+16. **字形覆盖令牌(glyph override,v3)**:勾号/圆点等内置矢量字形可用图标字体码点替换。
+    在 `:root` 里写 `--glyph-<槽>: "字体族名" "\<码点>";`——族名须为**系统已安装或应用已注册**
+    的字体(自带 `.ttf` 的 `url()` 加载为后续扩展),码点为十六进制(前导 `\` 可省)。当前支持的槽:
+    - `--glyph-check` / `--glyph-check-indeterminate` — 复选框勾号 / 中间态;
+    - `--glyph-radio` — 单选钮圆点。
+    例:`--glyph-check: "Segoe MDL2 Assets" "\e73e";`。未设时用内置矢量字形。**注意**:设了有效覆盖
+    就一定用图标字体渲染(即便该字体/码点渲染为空);只有未设或格式错误才回退矢量。
