@@ -19,18 +19,20 @@ object MainForm: TMainForm
     Caption = 'Splitter  · TyControls'
     TitleAlignment = taLeftJustify
     object DarkSwitch: TTyToggleSwitch
-      Left = 502
+      Left = 412
       Height = 24
       Top = 5
       Width = 74
+      Anchors = [akTop, akRight]
       Caption = '暗色'
       OnChange = DarkSwitchChange
     end
     object ThemeCombo: TTyComboBox
-      Left = 586
+      Left = 494
       Height = 26
       Top = 4
       Width = 120
+      Anchors = [akTop, akRight]
       OnChange = ThemeComboChange
     end
   end

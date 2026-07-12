@@ -2,10 +2,10 @@ object MainForm: TMainForm
   Left = 0
   Height = 340
   Top = 0
-  Width = 360
+  Width = 520
   Caption = 'TTyToolBar 示例'
   ClientHeight = 340
-  ClientWidth = 360
+  ClientWidth = 520
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
@@ -14,23 +14,25 @@ object MainForm: TMainForm
     Left = 0
     Height = 34
     Top = 0
-    Width = 360
+    Width = 520
     Align = alTop
     Caption = 'TTyToolBar  · TyControls'
     TitleAlignment = taLeftJustify
     object DarkSwitch: TTyToggleSwitch
-      Left = 102
+      Left = 172
       Height = 24
       Top = 5
       Width = 74
+      Anchors = [akTop, akRight]
       Caption = '暗色'
       OnChange = DarkSwitchChange
     end
     object ThemeCombo: TTyComboBox
-      Left = 186
+      Left = 254
       Height = 26
       Top = 4
       Width = 120
+      Anchors = [akTop, akRight]
       OnChange = ThemeComboChange
     end
   end
@@ -38,7 +40,7 @@ object MainForm: TMainForm
     Left = 0
     Height = 104
     Top = 34
-    Width = 360
+    Width = 520
     Align = alTop
     ButtonHeight = 28
     ButtonSpacing = 4

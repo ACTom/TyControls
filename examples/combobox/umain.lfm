@@ -19,18 +19,20 @@ object MainForm: TMainForm
     Caption = 'TTyComboBox  ·  TyControls'
     TitleAlignment = taLeftJustify
     object DarkSwitch: TTyToggleSwitch
-      Left = 262
+      Left = 172
       Height = 24
       Top = 5
       Width = 74
+      Anchors = [akTop, akRight]
       Caption = '暗色'
       OnChange = DarkSwitchChange
     end
     object ThemeCombo: TTyComboBox
-      Left = 346
+      Left = 254
       Height = 26
       Top = 4
       Width = 120
+      Anchors = [akTop, akRight]
       OnChange = ThemeComboChange
     end
   end
