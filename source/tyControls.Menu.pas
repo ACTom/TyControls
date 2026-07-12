@@ -274,6 +274,11 @@ type
     FPendingTop: Integer;     // deferred keyboard-rotation target, or -1
     FAutoSizeWidth: Boolean;  // shrink-to-fit the top cells (see FitWidth)
     FInAutoSizeWidth: Boolean;// re-entrancy guard around the Width := FitWidth set
+    FHoverPollTimer: TTimer;  // non-Win32: poll the cursor to switch top menus on hover while a
+                              // dropdown is open (its mouse grab starves the bar's own MouseMove)
+    procedure StartHoverPoll;
+    procedure StopHoverPoll;
+    procedure HoverPollTick(Sender: TObject);
     procedure SetMenu(AValue: TMainMenu);
     procedure SetAutoSizeWidth(AValue: Boolean);
     { Apply content-fit sizing when enabled and Align permits it (not alTop/alBottom,
@@ -1389,6 +1394,7 @@ destructor TTyMenuBar.Destroy;
 begin
   TyAccelUnregister(Self);
   Application.RemoveAsyncCalls(Self);   // cancel any pending DeferredOpenTop
+  StopHoverPoll;
   FreeAndNil(FPopup);
   inherited Destroy;
 end;
@@ -1573,6 +1579,7 @@ end;
 procedure TTyMenuBar.ClosePopup;
 begin
   FOpenIndex := -1;
+  StopHoverPoll;
   FreeAndNil(FPopup);
   Invalidate;
 end;
@@ -1583,7 +1590,46 @@ begin
   // open-index and repaint the active cell. Do NOT free FPopup — this fires from inside the
   // popup's own CloseAll, and the bar keeps the (now hidden) host for reuse.
   FOpenIndex := -1;
+  StopHoverPoll;
   Invalidate;
+end;
+
+procedure TTyMenuBar.StartHoverPoll;
+begin
+  {$IFNDEF LCLWin32}
+  if FHoverPollTimer = nil then
+  begin
+    FHoverPollTimer := TTimer.Create(Self);
+    FHoverPollTimer.Interval := 60;
+    FHoverPollTimer.OnTimer := @HoverPollTick;
+  end;
+  FHoverPollTimer.Enabled := True;
+  {$ENDIF}
+end;
+
+procedure TTyMenuBar.StopHoverPoll;
+begin
+  if FHoverPollTimer <> nil then FHoverPollTimer.Enabled := False;   // ref'd on all widgetsets (nil off-poll)
+end;
+
+procedure TTyMenuBar.HoverPollTick(Sender: TObject);
+{$IFNDEF LCLWin32}
+var
+  p: TPoint;
+  idx, ppi: Integer;
+{$ENDIF}
+begin
+  {$IFNDEF LCLWin32}
+  if (FOpenIndex < 0) or not HandleAllocated then begin StopHoverPoll; Exit; end;
+  // A Qt/GTK dropdown grabs the mouse, so the bar never receives MouseMove while open. Poll the
+  // GLOBAL cursor instead and reuse the exact same "hover a different top cell -> switch" rule.
+  p := ScreenToClient(Mouse.CursorPos);
+  if (p.Y < 0) or (p.Y >= Height) then Exit;   // cursor is in the dropdown / off the bar -> no switch
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  idx := TopAtX(p.X, ppi);
+  if (idx >= 0) and (idx <> FOpenIndex) then OpenTop(idx);
+  {$ENDIF}
 end;
 
 procedure TTyMenuBar.OpenTop(AIndex: Integer);
@@ -1619,6 +1665,7 @@ begin
     anchor := Types.Rect(origin.X + cellL, origin.Y,
       origin.X + cellL + cellW, origin.Y + Height);
     FPopup.Popup(anchor, False);
+    StartHoverPoll;   // non-Win32: track the cursor for hover-switch while the dropdown is up
   end;
   Invalidate;
 end;
