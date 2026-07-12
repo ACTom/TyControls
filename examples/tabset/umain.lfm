@@ -1,0 +1,57 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 220
+  Top = 0
+  Width = 520
+  Caption = 'TTyTabSet 示例'
+  ClientHeight = 220
+  ClientWidth = 520
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 520
+    Align = alTop
+    Caption = 'TTyTabSet  · TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 346
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object TabStrip: TTyTabSet
+    Left = 20
+    Height = 34
+    Top = 56
+    Width = 480
+    TabHeight = 32
+    Tabs.Strings = (
+      '概览'
+      '详情'
+      '通知(锁定)'
+      '设置'
+      '关于'
+    )
+    TabIndex = 0
+    TabsClosable = True
+    OnChange = TabChanged
+    OnChanging = TabChanging
+    OnTabClose = TabClosing
+    OnReorder = TabReordered
+  end
+  object LblStatus: TTyLabel
+    Left = 20
+    Height = 66
+    Top = 110
+    Width = 480
+    Caption = '当前页签：概览'#13#10'提示：点击切换 · 拖拽可重排 · 点 × 关闭 · "通知(锁定)"页禁止选中'
+    WordWrap = True
+  end
+end

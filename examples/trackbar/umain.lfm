@@ -1,0 +1,108 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 380
+  Top = 0
+  Width = 460
+  Caption = 'TrackBar 示例'
+  ClientHeight = 380
+  ClientWidth = 460
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 460
+    Align = alTop
+    Caption = 'TrackBar  · TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 286
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object LblVolume: TTyLabel
+    Left = 16
+    Height = 20
+    Top = 48
+    Width = 320
+    Caption = '音量（0..100，Min/Max/Position）：'
+  end
+  object Track1: TTyTrackBar
+    Left = 16
+    Height = 24
+    Top = 70
+    Width = 300
+    Min = 0
+    Max = 100
+    Position = 50
+    Frequency = 10
+    OnChange = Track1Change
+  end
+  object LblBalance: TTyLabel
+    Left = 16
+    Height = 20
+    Top = 108
+    Width = 320
+    Caption = '平衡（-50..50）：'
+  end
+  object Track2: TTyTrackBar
+    Left = 16
+    Height = 24
+    Top = 130
+    Width = 300
+    Min = -50
+    Max = 50
+    Position = 0
+    OnChange = Track2Change
+  end
+  object LblBrightness: TTyLabel
+    Left = 16
+    Height = 20
+    Top = 168
+    Width = 320
+    Caption = '亮度（0..200，PageSize/Frequency=25）：'
+  end
+  object Track4: TTyTrackBar
+    Left = 16
+    Height = 24
+    Top = 190
+    Width = 300
+    Min = 0
+    Max = 200
+    Position = 120
+    Frequency = 25
+    PageSize = 25
+    OnChange = Track4Change
+  end
+  object LblVertical: TTyLabel
+    Left = 350
+    Height = 20
+    Top = 48
+    Width = 100
+    Caption = '垂直：'
+  end
+  object Track3: TTyTrackBar
+    Left = 380
+    Height = 200
+    Top = 70
+    Width = 24
+    Orientation = toVertical
+    Min = 0
+    Max = 100
+    Position = 40
+    OnChange = Track3Change
+  end
+  object LblStatus: TTyLabel
+    Left = 16
+    Height = 20
+    Top = 236
+    Width = 320
+    Caption = '音量：50'
+  end
+end

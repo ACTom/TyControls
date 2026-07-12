@@ -1,0 +1,130 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 340
+  Top = 0
+  Width = 360
+  Caption = 'TTyToolBar 示例'
+  ClientHeight = 340
+  ClientWidth = 360
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 360
+    Align = alTop
+    Caption = 'TTyToolBar  · TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 186
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object ToolBar: TTyToolBar
+    Left = 0
+    Height = 104
+    Top = 34
+    Width = 360
+    Align = alTop
+    ButtonHeight = 28
+    ButtonSpacing = 4
+    Indent = 6
+    object BtnNew: TTyButton
+      Left = 6
+      Height = 28
+      Top = 6
+      Width = 72
+      Caption = '新建'
+      OnClick = ToolClicked
+    end
+    object BtnOpen: TTyButton
+      Left = 82
+      Height = 28
+      Top = 6
+      Width = 72
+      Caption = '打开'
+      OnClick = ToolClicked
+    end
+    object BtnSave: TTyButton
+      Left = 158
+      Height = 28
+      Top = 6
+      Width = 72
+      Caption = '保存'
+      OnClick = ToolClicked
+    end
+    object Sep1: TTyToolSeparator
+      Left = 234
+      Height = 28
+      Top = 6
+      Width = 8
+    end
+    object BtnCut: TTyButton
+      Left = 246
+      Height = 28
+      Top = 6
+      Width = 72
+      Caption = '剪切'
+      OnClick = ToolClicked
+    end
+    object BtnCopy: TTyButton
+      Left = 6
+      Height = 28
+      Top = 38
+      Width = 72
+      Caption = '复制'
+      OnClick = ToolClicked
+    end
+    object BtnPaste: TTyButton
+      Left = 82
+      Height = 28
+      Top = 38
+      Width = 72
+      Caption = '粘贴'
+      OnClick = ToolClicked
+    end
+    object Sep2: TTyToolSeparator
+      Left = 158
+      Height = 28
+      Top = 38
+      Width = 8
+    end
+    object BtnFind: TTyButton
+      Left = 170
+      Height = 28
+      Top = 38
+      Width = 72
+      Caption = '查找'
+      OnClick = ToolClicked
+    end
+    object BtnReplace: TTyButton
+      Left = 246
+      Height = 28
+      Top = 38
+      Width = 72
+      Caption = '替换'
+      OnClick = ToolClicked
+    end
+    object BtnSelectAll: TTyButton
+      Left = 6
+      Height = 28
+      Top = 70
+      Width = 72
+      Caption = '全选'
+      OnClick = ToolClicked
+    end
+  end
+  object LblStatus: TTyLabel
+    Left = 24
+    Height = 24
+    Top = 190
+    Width = 312
+    Caption = '就绪:点击任一工具按钮'
+  end
+end
