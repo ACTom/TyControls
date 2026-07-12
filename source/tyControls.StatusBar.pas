@@ -39,14 +39,22 @@ type
     FSimplePanel: Boolean;
     FSimpleText: string;
     FSizeGrip: Boolean;
+    FSavedCursor: TCursor;
+    FShowResizeCur: Boolean;
     procedure SetPanels(AValue: TTyStatusPanels);
     procedure SetSimplePanel(AValue: Boolean);
     procedure SetSimpleText(const AValue: string);
     procedure SetSizeGrip(AValue: Boolean);
+    { Which window-resize edge (0 = none) the point sits on, so the status bar -- which covers the
+      form's bottom edge + the size-grip corner -- can hand the drag to the OS window resize. }
+    function ResizeHitAt(X, Y: Integer): Integer;
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseLeave; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -66,8 +74,13 @@ function TyStatusPanelRects(const AWidths: array of Integer; ATotalWidth, APaddi
 
 implementation
 
+uses
+  tyControls.WindowEffects;   // TyStartNativeResize / TyWindowResizable (Windows-gated inside)
+
 const
   CStatusBarPadX = 6;   // logical-px horizontal padding (panels + simple text)
+  { Win32 WM_NCHITTEST edge codes (== winuser.h), used to hand a bottom/corner drag to the OS. }
+  cHTBOTTOM = 15; cHTBOTTOMLEFT = 16; cHTBOTTOMRIGHT = 17;
 
 function TyStatusPanelRects(const AWidths: array of Integer; ATotalWidth, APadding: Integer): TTyRectArray;
 var
@@ -224,6 +237,71 @@ begin
   finally
     P.Free;
   end;
+end;
+
+function TTyStatusBar.ResizeHitAt(X, Y: Integer): Integer;
+var
+  zone, grip, W, H: Integer;
+begin
+  Result := 0;
+  W := Width; H := Height;
+  zone := (5 * Font.PixelsPerInch) div 96;   if zone < 4 then zone := 4;   // bottom-edge strip
+  grip := (18 * Font.PixelsPerInch) div 96;  if grip < 14 then grip := 14; // size-grip corner
+  if FSizeGrip and (X >= W - grip) and (Y >= H - grip) then
+    Result := cHTBOTTOMRIGHT
+  else if Y >= H - zone then
+  begin
+    if X <= zone then Result := cHTBOTTOMLEFT
+    else if X >= W - zone then Result := cHTBOTTOMRIGHT
+    else Result := cHTBOTTOM;
+  end;
+end;
+
+procedure TTyStatusBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  { The status bar covers the form's bottom edge, so the OS never sees a resize-border hit there.
+    On the size grip / bottom edge, hand the drag to the OS window resize the way any custom resize
+    grip does (Windows-only, resizable, non-maximized -- all gated inside TyStartNativeResize). }
+  if (Button = mbLeft) and TyStartNativeResize(Self, ResizeHitAt(X, Y)) then
+    Exit;   // the OS now owns the drag; don't run the normal click path
+  inherited MouseDown(Button, Shift, X, Y);
+end;
+
+procedure TTyStatusBar.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  cur: TCursor;
+begin
+  cur := crDefault;
+  if TyWindowResizable(Self) then
+    case ResizeHitAt(X, Y) of
+      cHTBOTTOM:      cur := crSizeNS;
+      cHTBOTTOMRIGHT: cur := crSizeNWSE;
+      cHTBOTTOMLEFT:  cur := crSizeNESW;
+    end;
+  { Show the resize cursor over a resize zone; restore the control's own cursor on leaving,
+    without permanently clobbering it (a control that blindly writes crDefault destroys the
+    app's chosen cursor -- see the ListView cursor-restore rule). }
+  if cur <> crDefault then
+  begin
+    if not FShowResizeCur then begin FSavedCursor := Cursor; FShowResizeCur := True; end;
+    if Cursor <> cur then Cursor := cur;
+  end
+  else if FShowResizeCur then
+  begin
+    Cursor := FSavedCursor;
+    FShowResizeCur := False;
+  end;
+  inherited MouseMove(Shift, X, Y);
+end;
+
+procedure TTyStatusBar.MouseLeave;
+begin
+  if FShowResizeCur then
+  begin
+    Cursor := FSavedCursor;
+    FShowResizeCur := False;
+  end;
+  inherited MouseLeave;
 end;
 
 end.

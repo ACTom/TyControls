@@ -43,6 +43,15 @@ function TyRadiusToCornerPref(ARadiusPx: Integer; AMaximized: Boolean): Integer;
   Safe to call repeatedly and when AForm has no handle (no-op). Never raises. }
 procedure TyApplyWindowEffects(AForm: TCustomForm; const AEffect: TTyWindowEffect);
 
+{ True when AControl's window is an OS-resizable, non-maximized window (WS_THICKFRAME on Windows;
+  False on other platforms). }
+function TyWindowResizable(AControl: TControl): Boolean;
+{ Hand a bottom/corner drag from a child control (e.g. a status bar that covers the form's bottom
+  edge) to the OS window-resize loop. AEdge is a Win32 WM_NCHITTEST edge code (HTBOTTOM=15,
+  HTBOTTOMLEFT=16, HTBOTTOMRIGHT=17; 0 = none). Returns True iff it started an OS resize (Windows,
+  resizable, non-maximized); a no-op returning False otherwise. }
+function TyStartNativeResize(AControl: TControl; AEdge: Integer): Boolean;
+
 implementation
 
 {$IFDEF WINDOWS}uses Windows;{$ENDIF}
@@ -191,6 +200,38 @@ begin
   except
     // capability/quirk failures must never crash the host app -- degrade silently
   end;
+end;
+
+function TyWindowResizable(AControl: TControl): Boolean;
+{$IFDEF WINDOWS}
+var frm: TCustomForm;
+{$ENDIF}
+begin
+  Result := False;
+  {$IFDEF WINDOWS}
+  frm := GetParentForm(AControl);
+  if (frm <> nil) and frm.HandleAllocated and (frm.WindowState <> wsMaximized) then
+    Result := (GetWindowLong(frm.Handle, GWL_STYLE) and WS_THICKFRAME) <> 0;
+  {$ENDIF}
+end;
+
+function TyStartNativeResize(AControl: TControl; AEdge: Integer): Boolean;
+{$IFDEF WINDOWS}
+var frm: TCustomForm;
+{$ENDIF}
+begin
+  Result := False;
+  if AEdge = 0 then Exit;
+  {$IFDEF WINDOWS}
+  frm := GetParentForm(AControl);
+  if (frm <> nil) and frm.HandleAllocated and (frm.WindowState <> wsMaximized)
+    and ((GetWindowLong(frm.Handle, GWL_STYLE) and WS_THICKFRAME) <> 0) then
+  begin
+    ReleaseCapture;                                          // release the child's mouse capture
+    SendMessage(frm.Handle, WM_NCLBUTTONDOWN, WPARAM(AEdge), 0);  // OS takes over the resize drag
+    Result := True;
+  end;
+  {$ENDIF}
 end;
 
 {$IFDEF WINDOWS}
