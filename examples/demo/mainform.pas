@@ -182,6 +182,9 @@ type
     procedure InitThemes;
     procedure InitColTree;
     procedure ApplyBuiltin(const AName: string);
+    procedure PickCustomTheme(Data: PtrInt);   // deferred: opening the modal file dialog straight from
+                                               // the combo's OnChange crashes on Qt6 (the still-open
+                                               // dropdown popup is the modal's focus-restore target)
     procedure SetAppearance(AFollow: TTyThemeFollow; const AMode: string; ASelected: TTyButton);
   end;
 var
@@ -276,25 +279,33 @@ begin
 end;
 
 procedure TDemoMainForm.ThemeComboChange(Sender: TObject);
-var idx: Integer; dlg: TOpenDialog;
+var idx: Integer;
 begin
   idx := ThemeCombo.ItemIndex;
   if idx < 0 then Exit;
   if ThemeCombo.Items[idx] = rsDemoThemeCustom then
-  begin
-    dlg := TOpenDialog.Create(Self);
-    try
-      dlg.Filter := rsDemoThemeFilter;
-      dlg.InitialDir := ThemeDir;
-      if dlg.Execute then
-      begin
-        TyController.ThemeFile := dlg.FileName;   // custom file (REPLACE)
-        ApplyChromeTheme(TyController);
-      end;
-    finally dlg.Free; end;
-  end
+    // Defer the modal so the combo's dropdown popup finishes closing first: opening it synchronously
+    // here makes the popup the modal's focus-restore target, and on Qt6 restoring focus to the now-
+    // hidden popup raises EInvalidOperation '[TCustomForm.SetFocus] Cannot focus' (the codebase's
+    // ColorComboBox / ValueListEditor open their dialogs the same deferred way for the same reason).
+    Application.QueueAsyncCall(@PickCustomTheme, 0)
   else
     ApplyBuiltin(ThemeCombo.Items[idx]);
+end;
+
+procedure TDemoMainForm.PickCustomTheme(Data: PtrInt);
+var dlg: TOpenDialog;
+begin
+  dlg := TOpenDialog.Create(Self);
+  try
+    dlg.Filter := rsDemoThemeFilter;
+    dlg.InitialDir := ThemeDir;
+    if dlg.Execute then
+    begin
+      TyController.ThemeFile := dlg.FileName;   // custom file (REPLACE)
+      ApplyChromeTheme(TyController);
+    end;
+  finally dlg.Free; end;
 end;
 
 procedure TDemoMainForm.SetAppearance(AFollow: TTyThemeFollow; const AMode: string;
