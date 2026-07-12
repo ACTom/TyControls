@@ -1,0 +1,445 @@
+/* TyControls — Green theme (nature background image demo) */
+:root {
+  --accent:     #16A34A;
+  --surface:    #FFFFFF;
+  --on-surface: #14532D;
+  --border:     #BBD8C4;
+  --danger:     #EF4444;
+  --radius:     6px;
+  --focus-ring: var(--accent);
+  --selection:     alpha(var(--accent), 0.30);
+  --muted:         alpha(var(--on-surface), 0.5);
+  --overlay-hover: alpha(var(--on-surface), 0.12);
+}
+
+/* Window/form backdrop — a nature photo, covering the whole client. */
+TyForm {
+  background: darken(--surface, 4%);
+  background-image: url(assets/background.jpg);
+  background-size: cover;
+  background-under-titlebar: true;
+}
+
+TyButton {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 6px;
+  font-size: 9px;
+  font-weight: 400;
+}
+TyButton:hover    { background: darken(--surface, 4%); border-color: darken(--border, 10%); }
+TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyButton:active   { background: darken(--surface, 10%); }
+TyButton:disabled { opacity: 0.5; }
+TyButton.primary  { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+TyButton.primary:hover    { background: lighten(--accent, 8%); }
+TyButton.primary:active   { background: darken(--accent, 8%); }
+TyButton.danger   { background: var(--danger); color: #FFFFFF; border-color: var(--danger); }
+TyButton.danger:hover     { background: lighten(--danger, 8%); }
+TyButton.danger:active    { background: darken(--danger, 8%); }
+/* Ghost (VS Code 风格): 平时透明,仅 hover/active/选中显示。 */
+TyButton.ghost {
+  background: alpha(var(--surface), 0);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 6px;
+  font-size: 9px;
+  font-weight: 400;
+}
+TyButton.ghost:hover    { background: darken(--surface, 4%); border-color: darken(--border, 10%); }
+TyButton.ghost:active   { background: darken(--surface, 10%); }
+TyButton.ghost:selected { background: darken(--surface, 10%); border-color: var(--accent); }
+TyButton.ghost:focus    { outline: 2px var(--focus-ring); }
+TyButton.ghost:disabled { opacity: 0.5; }
+
+TyLabel {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  font-size: 9px;
+  font-weight: 400;
+}
+TyLabel:disabled { opacity: 0.5; }
+
+TyEdit {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: 9px;
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.42);
+}
+TyEdit:hover    { border-color: darken(--border, 10%); }
+TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyEdit:disabled { opacity: 0.5; }
+
+TyCheckBox {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: 3px;
+  padding: 4px;
+}
+TyCheckBox:hover    { border-color: var(--accent); }
+TyCheckBox:active   { background: var(--accent); color: #FFFFFF; }
+TyCheckBox:focus    { outline: 2px var(--focus-ring); }
+TyCheckBox:disabled { opacity: 0.5; }
+
+TyRadioButton {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: 8px;
+  padding: 4px;
+}
+TyRadioButton:hover    { border-color: var(--accent); }
+TyRadioButton:active   { background: var(--accent); color: #FFFFFF; }
+TyRadioButton:focus { outline: 2px var(--focus-ring); }
+TyRadioButton:disabled { opacity: 0.5; }
+
+TyPanel {
+  background: alpha(#FFFFFF, 0);   /* fully transparent: the sharp photo shows clean (no frosted glass) */
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 8px;
+}
+
+TyComboBox {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: 9px;
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.42);
+}
+TyComboBox:hover    { border-color: darken(--border, 10%); }
+TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyComboBox:disabled { opacity: 0.5; }
+
+TyScrollBar {
+  background: alpha(#FFFFFF, 0);   /* transparent track: photo shows through (overlay-scrollbar look) */
+  color: var(--border);
+  border-radius: 4px;
+}
+TyScrollBar:hover  { color: darken(--border, 15%); }
+TyScrollBar:active { color: var(--accent); }
+TyScrollBar:focus  { outline: 2px var(--focus-ring); }
+TyScrollBar:disabled { opacity: 0.5; }
+
+TyTitleBar {
+  background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo under the titlebar (no frost) */
+  color: var(--on-surface);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+TyCaptionButton {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-radius: 0px;
+}
+TyCaptionButton:hover  { background: alpha(var(--surface), 0.55); }   /* translucent: photo shows under the titlebar */
+TyCaptionButton:active { background: alpha(var(--surface), 0.75); }
+TyCaptionButton.close:hover  { background: var(--danger); color: #FFFFFF; }
+TyCaptionButton.close:active { background: darken(--danger, 10%); color: #FFFFFF; }
+TyCaptionButton.min:hover    { background: alpha(var(--surface), 0.55); }
+TyCaptionButton.max:hover    { background: alpha(var(--surface), 0.55); }
+
+TyListBox {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 2px;
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.42);
+}
+TyListBox:hover   { border-color: darken(--border, 10%); }
+TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyListBox:disabled { opacity: 0.5; }
+
+TyListItem {
+  background: alpha(#000000, 0);
+  color: var(--on-surface);
+  border-radius: var(--radius);
+  padding: 4px;
+}
+TyListItem:hover  { background: darken(--surface, 5%); }
+TyListItem:active { background: var(--accent); color: #FFFFFF; border-radius: 0; }
+
+TyProgressBar {
+  background: alpha(#FFFFFF, 0);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.25);
+}
+TyProgressBar:disabled { opacity: 0.5; }
+
+TyProgressFill {
+  background: var(--accent);
+  border-radius: var(--radius);
+}
+
+TyGauge {
+  background: alpha(var(--surface), 0.35);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+}
+TyGauge:disabled { opacity: var(--disabled-opacity); }
+
+TyGaugeFill {
+  background: var(--accent);
+  border-radius: var(--radius);
+}
+
+/* Themed tooltip surface (TTyHintWindow — replaces the native LCL hint).
+   Green is a standalone theme (no shared var set) — literal border/font like TyGauge. */
+TyHint {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 5px 9px;
+}
+
+/* Ribbon (Phase-3): command band surface + labelled group box.
+   Image theme: transparent body so the sharp photo shows through (like TyPanel/TyTabControl);
+   the buttons carry their own opaque surface. Caption uses on-surface (not muted) to stay
+   readable over the photo. */
+TyRibbon {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: 0;
+}
+TyRibbonGroup {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  font-size: 9px;   /* without this the caption font-size is 0 -> the group name is invisible */
+}
+
+
+TyToggleSwitch {
+  background: darken(--surface, 18%);
+  color: #FFFFFF;
+  border-radius: 12px;
+}
+TyToggleSwitch:hover    { background: darken(--surface, 22%); }
+TyToggleSwitch:active   { background: var(--accent); }
+TyToggleSwitch:focus { outline: 2px var(--focus-ring); }
+TyToggleSwitch:disabled { opacity: 0.5; }
+
+TyTrackBar {
+  background: alpha(#FFFFFF, 0);
+  border-radius: 3px;
+  padding: 0px;
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.25);
+}
+TyTrackBar:focus    { outline: 2px var(--focus-ring); }
+TyTrackBar:disabled { opacity: 0.5; }
+
+TyTrackThumb {
+  background: var(--accent);
+  border-radius: 8px;
+}
+TyTrackThumb:hover  { background: lighten(--accent, 8%); }
+TyTrackThumb:active { background: darken(--accent, 8%); }
+
+TyGroupBox {
+  padding: 4px 12px;
+  background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo shows clean (no frost) */
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+}
+
+TyTabControl {
+  background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo shows clean (no frost) */
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+}
+TyTabControl:hover  { border-color: darken(--border, 10%); }
+TyTabControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyTabControl:disabled { opacity: 0.5; }
+
+/* Image theme: keep the page container + body transparent so the photo shows
+   through (same intent as TyTabControl above — the frost/glass is deliberate). */
+TyPageControl {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+}
+TyPageControl:hover  { border-color: darken(--border, 10%); }
+TyPageControl:focus  { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyPageControl:disabled { opacity: 0.5; }
+TyTabSheet {
+  background: alpha(#FFFFFF, 0);
+}
+
+TyTab {
+  background: alpha(#FFFFFF, 0);   /* transparent: photo shows through the tabs (no frost) */
+  color: var(--on-surface);
+  padding: 4px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+TyTab:hover  { color: var(--accent); }
+TyTab:active { color: var(--accent); font-weight: 700; }   /* active = accent + bold, no bg (photo shows) */
+
+TySpinEdit {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: 9px;
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.42);
+}
+TySpinEdit:hover    { border-color: darken(--border, 10%); }
+TySpinEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TySpinEdit:disabled { opacity: 0.5; }
+
+TyMemo {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: 9px;
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.42);
+}
+TyMemo:hover    { border-color: darken(--border, 10%); }
+TyMemo:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyMemo:disabled { opacity: 0.5; }
+
+TyTextSelection { background: var(--selection); }
+TyTextHint      { color: var(--muted); }
+TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }
+
+TyScrollThumb { background: alpha(var(--on-surface), 0.50); border-radius: 4px; }   /* translucent thumb over the photo */
+TyScrollThumb:hover  { background: alpha(var(--on-surface), 0.65); }
+TyScrollThumb:active { background: var(--accent); }
+TyToggleKnob  { background: #FFFFFF; border-radius: 12px; }
+
+/* 数字角标 (TTyButton badge): accent 绿胶囊。 */
+TyBadge {
+  background: var(--accent);
+  color: #FFFFFF;
+  border-radius: 12px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0px 4px;
+}
+
+/* ── Lightweight trio ──────────────────────────────────────────────────── */
+
+TySplitter {
+  background: none;
+  color: var(--muted);
+}
+TySplitter:hover {
+  color: var(--accent);
+}
+
+TyStatusBar {
+  background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo shows clean (no frost) */
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  font-size: 9px;
+  font-weight: 400;
+}
+
+TyToolBar {
+  background: alpha(#FFFFFF, 0);   /* fully transparent: sharp photo shows clean (no frost) */
+  border-color: var(--border);
+  border-width: 1px;
+}
+
+/* ── Calendar + DateTimePicker ─────────────────────────────────────────── */
+/* green lacks several token aliases; concrete equivalents used below:
+   --input-bg          = alpha(#FFFFFF, 0) (glass, matching TyEdit/TyComboBox)
+   --surface-hover     = darken(--surface, 4%)
+   --surface-chrome    = darken(--surface, 6%)
+   --input-border-width= 1px
+   --font-size-base    = 9px
+   --font-weight-bold  = 700
+   --input-border-hover= darken(--border, 10%)
+   --disabled-opacity  = 0.5
+   --radius-sm         = 3px
+   --on-accent         = #FFFFFF                                         */
+
+TyCalendar { background: alpha(#FFFFFF, 0); color: var(--on-surface); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 6px; font-size: 9px; glass-blur: 16px; glass-tint: alpha(var(--surface), 0.42); }
+TyCalendarTitle { color: var(--on-surface); font-weight: 700; }
+TyCalendarTitle:hover { color: var(--accent); }
+TyCalendarWeekday { color: var(--muted); font-size: 9px; }
+TyCalendarCell { background: none; color: var(--on-surface); border-radius: 3px; }
+TyCalendarCell:hover { background: darken(--surface, 4%); }
+TyCalendarCell:selected { background: var(--accent); color: #FFFFFF; }
+TyCalendarCell:disabled { color: var(--muted); }
+TyDateTimePicker { background: alpha(#FFFFFF, 0); color: var(--on-surface); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 4px 6px; font-size: 9px; glass-blur: 16px; glass-tint: alpha(var(--surface), 0.42); }
+TyDateTimePicker:hover { border-color: darken(--border, 10%); }
+TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyDateTimePicker:disabled { opacity: 0.5; }
+TyDateTimeButton { background: darken(--surface, 6%); color: var(--on-surface); }
+TyDateTimeButton:hover { background: darken(--surface, 4%); color: var(--accent); }
+
+/* ── TreeView ──────────────────────────────────────────────────────────── */
+/* green lacks several token aliases; concrete equivalents used below:
+   --input-bg          = alpha(#FFFFFF, 0) (glass, matching TyEdit/TyCalendar)
+   --surface-hover     = darken(--surface, 4%)
+   --input-border-width= 1px
+   --font-size-base    = 9px
+   --on-accent         = #FFFFFF                                            */
+
+TyTreeView { background: alpha(#FFFFFF, 0); color: var(--on-surface); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 2px; font-size: 9px; glass-blur: 16px; glass-tint: alpha(var(--surface), 0.42); }
+TyTreeNode { background: none; color: var(--on-surface); }
+TyTreeNode:hover { background: darken(--surface, 4%); }
+TyTreeNode:selected { background: var(--accent); color: #FFFFFF; }
+TyTreeNode:disabled { color: var(--muted); }
+/* green lacks --surface-chrome/hover/active/font-weight-bold/font-size-base tokens;
+   concrete equivalents: chrome=darken(--surface,6%), hover=darken(--surface,4%),
+   active=darken(--surface,10%), bold=700, base=9px                               */
+TyTreeHeader { background: darken(--surface, 6%); border-color: var(--border); border-width: 1px; color: var(--on-surface); font-size: 9px; font-weight: 700; }
+TyTreeHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }
+TyTreeHeaderSection:hover { background: darken(--surface, 4%); }
+TyTreeHeaderSection:selected { background: darken(--surface, 10%); }
+/* TyTreeCheckBox: green lacks --input-bg/--input-border-width/--radius-sm/--on-accent;
+   concrete equivalents: input-bg=alpha(#FFFFFF,0) (glass), border-width=1px,
+   radius-sm=3px, on-accent=#FFFFFF (green accent is deep green, luma<0.5)    */
+TyTreeCheckBox { background: alpha(#FFFFFF, 0); color: var(--on-surface); border-color: var(--border); border-width: 1px; border-radius: 3px; }
+TyTreeCheckBox:active   { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+TyTreeCheckBox:selected { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+TyTreeCheckBox:disabled { color: var(--muted); }

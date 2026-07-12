@@ -2,7 +2,8 @@ unit umain;
 
 { Runtime theme hot-swap demo (TTyForm + TTyTitleBar edition):
   - the ThemeCombo in the title bar switches between the 12 compiled-in built-in themes live;
-  - the three preset buttons jump straight to a light / dark / distinct look, updating the status label;
+  - the three preset buttons jump to light / dark (built-in) and green (a FILE image-theme shipped
+    in this example's own folder, so it is self-contained), updating the status label;
   - switching internally re-Invalidates every registered control, so the sample buttons / edit /
     checkbox / progress bar recolor "live", and ApplyChromeTheme reskins the window chrome + background;
   - the status label shows the current theme in real time.
@@ -51,6 +52,23 @@ implementation
 
 {$R *.lfm}
 
+{ Find a file shipped alongside this example (its own green.tycss) by walking up from the exe --
+  the built binary sits in examples/theming/lib/<cpu>-<os>/, the theme + its assets/ two levels up. }
+function LocalThemeFile(const AName: string): string;
+var
+  Dir: string;
+  i: Integer;
+begin
+  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
+  for i := 1 to 8 do
+  begin
+    if FileExists(Dir + AName) then Exit(Dir + AName);
+    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
+    if Dir = '' then Break;
+  end;
+  Result := AName;
+end;
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
@@ -97,7 +115,12 @@ end;
 
 procedure TMainForm.SwitchGreen(Sender: TObject);
 begin
-  ApplyPreset('nord', 'light', '当前主题：nord');
+  { The green theme is an IMAGE theme (photo background). A private copy lives in this example's
+    own folder (green.tycss + assets/background.jpg) so it survives future edits to the repo's
+    themes/. Loading it as a FILE resolves its url(assets/background.jpg) relative to that copy. }
+  TyDefaultController.ThemeFile := LocalThemeFile('green.tycss');
+  ApplyChromeTheme(TyDefaultController);
+  LblStatus.Caption := '当前主题：green（图片背景）';
 end;
 
 end.
