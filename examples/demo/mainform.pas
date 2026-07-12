@@ -296,6 +296,10 @@ end;
 procedure TDemoMainForm.PickCustomTheme(Data: PtrInt);
 var dlg: TOpenDialog;
 begin
+  // The dropdown is still open at this deferred point (its own DeferredCloseUp is queued AFTER this
+  // one), so close it synchronously now -- before the modal -- or the still-open popup becomes the
+  // modal's focus-restore target and Qt6 crashes / freezes on close.
+  ThemeCombo.CloseUp;
   dlg := TOpenDialog.Create(Self);
   try
     dlg.Filter := rsDemoThemeFilter;
