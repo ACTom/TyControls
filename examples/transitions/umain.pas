@@ -101,7 +101,12 @@ begin
   TyPlayTransition(Target, AKind, 300);
 end;
 
-procedure TMainForm.BtnFadeClick(Sender: TObject);  begin Replay(ttFade);       end;
+procedure TMainForm.BtnFadeClick(Sender: TObject);
+begin
+  // ttFade animates a FORM's opacity via AlphaBlend (Windows; a plain show elsewhere), so it
+  // applies to the WINDOW -- a TTyPanel has no AlphaBlend. The slide buttons animate the panel.
+  TyPlayTransition(Self, ttFade, 300);
+end;
 procedure TMainForm.BtnUpClick(Sender: TObject);    begin Replay(ttSlideUp);    end;
 procedure TMainForm.BtnDownClick(Sender: TObject);  begin Replay(ttSlideDown);  end;
 procedure TMainForm.BtnLeftClick(Sender: TObject);  begin Replay(ttSlideLeft);  end;
