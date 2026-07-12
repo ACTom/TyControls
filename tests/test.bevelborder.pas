@@ -20,6 +20,7 @@ type
   TBevelBorderTest = class(TTestCase)
   private
     function BorderStyleOf(const ACss: string): TTyBorderStyle;
+    function RenderStyleOf(const ACss: string): TTyRenderStyle;
     procedure RenderFrame(const AStyle: TTyStyleSet; out ATL, ABR: TBGRAPixel);
   published
     procedure TestParseOutsetLonghand;
@@ -28,6 +29,12 @@ type
     procedure TestDrawEdgePrimitiveTwoTone;
     procedure TestDrawFrameOutsetRaised;
     procedure TestDrawFrameInsetSunken;
+    // v3/D render-style family preset
+    procedure TestParseRenderStyleBevel3D;
+    procedure TestRenderStyleBevel3DAutoRaised;
+    procedure TestRenderStyleInset3DAutoSunken;
+    // v3/E: the shipped classic skin file parses and uses the render-style bevels
+    procedure TestClassicSkinFileValid;
   end;
 
 implementation
@@ -49,6 +56,18 @@ begin
   try
     m.LoadFromCss('TyButton { ' + ACss + ' }');
     Result := m.ResolveStyle('TyButton', '', []).BorderStyle;
+  finally
+    m.Free;
+  end;
+end;
+
+function TBevelBorderTest.RenderStyleOf(const ACss: string): TTyRenderStyle;
+var m: TTyStyleModel;
+begin
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromCss('TyButton { ' + ACss + ' }');
+    Result := m.ResolveStyle('TyButton', '', []).RenderStyle;
   finally
     m.Free;
   end;
@@ -170,6 +189,64 @@ begin
   AssertTrue('sunken TL darker than base', tl.red < $80);
   AssertTrue('sunken BR lighter than base', br.red > $80);
   AssertTrue('sunken BR lighter than TL', br.red > tl.red);
+end;
+
+procedure TBevelBorderTest.TestParseRenderStyleBevel3D;
+begin
+  AssertEquals('render-style: bevel3d -> trsBevel3D', Ord(trsBevel3D),
+    Ord(RenderStyleOf('render-style: bevel3d;')));
+  AssertEquals('render-style: flat -> trsFlat', Ord(trsFlat),
+    Ord(RenderStyleOf('render-style: flat;')));
+end;
+
+procedure TBevelBorderTest.TestRenderStyleBevel3DAutoRaised;
+var style: TTyStyleSet; tl, br: TBGRAPixel;
+begin
+  // render-style: bevel3d + a solid grey face and NO explicit border tokens must, on its own,
+  // produce a RAISED bevel (outset auto-applied, edges derived from the face).
+  style := EmptyStyleSet;
+  style.Background.Kind := tfkSolid;
+  style.Background.Color := TyRGB($80, $80, $80);
+  Include(style.Present, tpBackground);
+  style.RenderStyle := trsBevel3D;
+  Include(style.Present, tpRenderStyle);
+  RenderFrame(style, tl, br);
+  AssertTrue('preset raised: TL lighter than face', tl.red > $80);
+  AssertTrue('preset raised: BR darker than face', br.red < $80);
+  AssertTrue('preset raised: TL lighter than BR', tl.red > br.red);
+end;
+
+procedure TBevelBorderTest.TestRenderStyleInset3DAutoSunken;
+var style: TTyStyleSet; tl, br: TBGRAPixel;
+begin
+  style := EmptyStyleSet;
+  style.Background.Kind := tfkSolid;
+  style.Background.Color := TyRGB($80, $80, $80);
+  Include(style.Present, tpBackground);
+  style.RenderStyle := trsInset3D;
+  Include(style.Present, tpRenderStyle);
+  RenderFrame(style, tl, br);
+  AssertTrue('preset sunken: TL darker than face', tl.red < $80);
+  AssertTrue('preset sunken: BR lighter than face', br.red > $80);
+end;
+
+procedure TBevelBorderTest.TestClassicSkinFileValid;
+var m: TTyStyleModel; s: TTyStyleSet; fn: string;
+begin
+  // The classic skin ships in examples/theming/ (one level up from the test exe's tests/ dir).
+  fn := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples' + PathDelim +
+        'theming' + PathDelim + 'classic.tycss';
+  AssertTrue('classic.tycss exists', FileExists(fn));
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromFile(fn);   // raises on any syntax/value error
+    s := m.ResolveStyle('TyButton', '', []);
+    AssertEquals('classic TyButton uses render-style bevel3d', Ord(trsBevel3D), Ord(s.RenderStyle));
+    s := m.ResolveStyle('TyEdit', '', []);
+    AssertEquals('classic TyEdit uses render-style inset3d', Ord(trsInset3D), Ord(s.RenderStyle));
+  finally
+    m.Free;
+  end;
 end;
 
 initialization

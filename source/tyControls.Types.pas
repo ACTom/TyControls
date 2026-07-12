@@ -32,6 +32,10 @@ type
 
   TTyBorderStyle = (tbsSolid, tbsNone, tbsOutset, tbsInset);   // v3/B2: outset/inset = two-tone 3D bevel
 
+  // v3/D: a control's render-style FAMILY. A one-word preset that bundles a look so a skin
+  // need not spell out the individual border/radius tokens on every control.
+  TTyRenderStyle = (trsFlat, trsBevel3D, trsInset3D);
+
   TTyCorners = record
     TL, TR, BR, BL: Integer;   // per-corner radii, logical px
   end;
@@ -60,7 +64,7 @@ type
 
   TTyProp = (tpBackground, tpTextColor, tpBorderColor, tpBorderWidth, tpBorderRadius,
              tpPadding, tpFontName, tpFontSize, tpFontWeight, tpOpacity, tpShadow,
-             tpBorderStyle, tpOutline, tpGlass, tpBgUnderTitle, tpWindowShadow);
+             tpBorderStyle, tpOutline, tpGlass, tpBgUnderTitle, tpWindowShadow, tpRenderStyle);
   TTyPropSet = set of TTyProp;
 
   TTyStyleSet = record
@@ -72,6 +76,7 @@ type
     BorderColor: TTyColor;
     BorderWidth: Integer;
     BorderStyle: TTyBorderStyle;
+    RenderStyle: TTyRenderStyle;   // v3/D: family preset (flat/bevel3d/inset3d)
     BorderRadius: Integer;
     Radius: TTyCorners;          // per-corner radii; falls back to BorderRadius when all 0.
                                  // Carried under tpBorderRadius (not a separate Present flag).

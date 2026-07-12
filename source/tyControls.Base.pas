@@ -549,12 +549,41 @@ begin
   APainter.DrawGlyph(ARect, AVectorKind, AColor, AThickness);
 end;
 
+{ v3/D. Expand a render-style FAMILY preset into concrete border/radius defaults — only for
+  properties the theme did NOT set explicitly — so a skin writes 'render-style: bevel3d'
+  instead of border-style + border-width + border-color + border-radius on every control.
+  bevel3d = raised (outset), inset3d = sunken (inset); both are square and, when the theme
+  gives no border-color, derive the bevel from the (solid) background face. }
+procedure TyApplyRenderStyle(var AStyle: TTyStyleSet; var ACorners: TTyCorners);
+begin
+  if not (tpRenderStyle in AStyle.Present) then Exit;
+  if AStyle.RenderStyle = trsFlat then Exit;
+  if not (tpBorderStyle in AStyle.Present) then
+  begin
+    if AStyle.RenderStyle = trsInset3D then AStyle.BorderStyle := tbsInset
+    else AStyle.BorderStyle := tbsOutset;
+    Include(AStyle.Present, tpBorderStyle);
+  end;
+  if not (tpBorderWidth in AStyle.Present) then
+  begin
+    AStyle.BorderWidth := 2;   // classic 3D default
+    Include(AStyle.Present, tpBorderWidth);
+  end;
+  if (not (tpBorderColor in AStyle.Present)) and (tpBackground in AStyle.Present) then
+  begin
+    AStyle.BorderColor := AStyle.Background.Color;   // derive the bevel from the face
+    Include(AStyle.Present, tpBorderColor);
+  end;
+  ACorners := TyUniformCorners(0);   // 3D bevels are square
+end;
+
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
 var
   corners, ringCorners: TTyCorners;
   off: Integer;
   ringRect: TRect;
   pc: TTyColor;
+  effStyle: TTyStyleSet;
 begin
   TyFillParentBg(Self, APainter, ARect, AStyle);
   if tpOpacity in AStyle.Present then
@@ -568,13 +597,15 @@ begin
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
   corners := TyEffectiveCorners(AStyle);
-  if tpBackground in AStyle.Present then
-    APainter.FillBackground(ARect, AStyle.Background, corners);
-  if TyBorderVisible(AStyle) then
-    if AStyle.BorderStyle in [tbsOutset, tbsInset] then
-      TyDrawBevelBorder(APainter, ARect, AStyle)   // v3/B2 two-tone 3D bevel
+  effStyle := AStyle;
+  TyApplyRenderStyle(effStyle, corners);   // v3/D: expand a render-style family preset
+  if tpBackground in effStyle.Present then
+    APainter.FillBackground(ARect, effStyle.Background, corners);
+  if TyBorderVisible(effStyle) then
+    if effStyle.BorderStyle in [tbsOutset, tbsInset] then
+      TyDrawBevelBorder(APainter, ARect, effStyle)   // v3/B2 two-tone 3D bevel
     else
-      APainter.StrokeBorder(ARect, corners, AStyle.BorderWidth, AStyle.BorderColor);
+      APainter.StrokeBorder(ARect, corners, effStyle.BorderWidth, effStyle.BorderColor);
   // Focus ring: only present when a ':focus { outline: ... }' rule resolved.
   if (tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0) then
   begin
@@ -773,6 +804,7 @@ var
   pc: TTyColor;
   gHost: ITyGlassHost;
   gOff: TPoint;
+  effStyle: TTyStyleSet;
 begin
   TyFillParentBg(Self, APainter, ARect, AStyle);
   if tpOpacity in AStyle.Present then
@@ -786,13 +818,15 @@ begin
   if (tpShadow in AStyle.Present) and (TyAlphaOf(AStyle.ShadowColor) > 0) then
     APainter.DropShadow(ARect, AStyle.BorderRadius, AStyle.ShadowColor, AStyle.ShadowBlur, AStyle.ShadowOffset);
   corners := TyEffectiveCorners(AStyle);
-  if tpBackground in AStyle.Present then
-    APainter.FillBackground(ARect, AStyle.Background, corners);
-  if TyBorderVisible(AStyle) then
-    if AStyle.BorderStyle in [tbsOutset, tbsInset] then
-      TyDrawBevelBorder(APainter, ARect, AStyle)   // v3/B2 two-tone 3D bevel
+  effStyle := AStyle;
+  TyApplyRenderStyle(effStyle, corners);   // v3/D: expand a render-style family preset
+  if tpBackground in effStyle.Present then
+    APainter.FillBackground(ARect, effStyle.Background, corners);
+  if TyBorderVisible(effStyle) then
+    if effStyle.BorderStyle in [tbsOutset, tbsInset] then
+      TyDrawBevelBorder(APainter, ARect, effStyle)   // v3/B2 two-tone 3D bevel
     else
-      APainter.StrokeBorder(ARect, corners, AStyle.BorderWidth, AStyle.BorderColor);
+      APainter.StrokeBorder(ARect, corners, effStyle.BorderWidth, effStyle.BorderColor);
   // A windowed control paints into its own opaque bitmap, so a drop shadow's blur bleeds
   // into the corner gaps OUTSIDE the rounded background — it can't cast onto the parent, so
   // it just leaves a dirty patch there. Re-paint those gaps with the flat parent background

@@ -787,3 +787,9 @@ TyButton.primary {
     - `--glyph-radio` — 单选钮圆点。
     例:`--glyph-check: "Segoe MDL2 Assets" "\e73e";`。未设时用内置矢量字形。**注意**:设了有效覆盖
     就一定用图标字体渲染(即便该字体/码点渲染为空);只有未设或格式错误才回退矢量。
+17. **`render-style` 家族预设(v3)**:控件属性 `render-style: flat | bevel3d | inset3d;`——
+    `bevel3d`/`inset3d` 让 `DrawFrame` 自动应用凸起/凹陷两色 3D 斜角 + 方角 + 默认边宽(2)+
+    边色缺省从(纯色)背景派生,省去在每个控件上重复写 `border-style`/`border-width`/
+    `border-color`/`border-radius`。`flat`(默认)= 原有行为。只作用于走 `DrawFrame` 的控件外框
+    (按钮/输入框/面板/进度条轨道/窗体等);复选框指示框等单独绘制的子部件不受其影响。
+    示例皮肤见 `examples/theming/classic.tycss`(经典 3D 风)。

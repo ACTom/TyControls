@@ -748,6 +748,14 @@ begin
       AStyle.BorderStyle := tbsSolid;
     Include(AStyle.Present, tpBorderStyle);
   end
+  else if prop = 'render-style' then
+  begin
+    // v3/D: a family preset. bevel3d/inset3d, else flat.
+    if LowerCase(Trim(raw)) = 'bevel3d' then AStyle.RenderStyle := trsBevel3D
+    else if LowerCase(Trim(raw)) = 'inset3d' then AStyle.RenderStyle := trsInset3D
+    else AStyle.RenderStyle := trsFlat;
+    Include(AStyle.Present, tpRenderStyle);
+  end
   else if prop = 'padding' then
   begin
     AStyle.Padding := ParsePadding(raw, Vars);

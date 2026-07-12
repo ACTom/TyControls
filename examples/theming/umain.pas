@@ -30,6 +30,7 @@ type
     BtnGreen: TTyButton;
     BtnAccent: TTyButton;
     BtnAccentReset: TTyButton;
+    BtnClassic: TTyButton;
     LblStatus: TTyLabel;
     LblSample: TTyLabel;
     BtnSample: TTyButton;
@@ -43,6 +44,7 @@ type
     procedure SwitchLight(Sender: TObject);
     procedure SwitchDark(Sender: TObject);
     procedure SwitchGreen(Sender: TObject);
+    procedure SwitchClassic(Sender: TObject);
     procedure PickAccent(Sender: TObject);
     procedure ResetAccentClick(Sender: TObject);
   private
@@ -132,6 +134,16 @@ begin
   TyDefaultController.ThemeFile := LocalThemeFile('green.tycss');
   ApplyChromeTheme(TyDefaultController);
   LblStatus.Caption := '当前主题：green（图片背景）';
+  UpdateAccentBtn;
+end;
+
+procedure TMainForm.SwitchClassic(Sender: TObject);
+begin
+  { The classic 3D skin (v3 skin engine showcase) is a FILE shipped in this example's folder —
+    render-style bevels + a grey system palette + a gradient title bar. }
+  TyDefaultController.ThemeFile := LocalThemeFile('classic.tycss');
+  ApplyChromeTheme(TyDefaultController);
+  LblStatus.Caption := '当前主题：经典 3D（render-style 斜角皮肤）';
   UpdateAccentBtn;
 end;
 

@@ -1,0 +1,34 @@
+/* Classic 3D skin — inspired by the Windows 9x look (an ORIGINAL take, not a pixel clone).
+   Shows the v3 skin engine composing: render-style bevels (D + B2), a grey system palette,
+   square corners, and a gradient title bar (B1). Loaded as a FILE by the theming example. */
+
+TyForm          { background: #C0C0C0; }
+TyTitleBar      { background: linear-gradient(0deg, #10318C, #7BA2E0, #A6CAF0); color: #FFFFFF; border-radius: 0; }
+TyCaptionButton { render-style: bevel3d; background: #C0C0C0; color: #000000; }
+
+TyLabel         { color: #000000; }
+
+/* Buttons: raised bevel at rest, sunken (pressed) on :active — the classic push-button feel.
+   'render-style: bevel3d' alone gives the outset bevel, square corners and edge colours
+   derived from the grey face; no need to spell out border-style/width/color/radius. */
+TyButton                { render-style: bevel3d; background: #C0C0C0; color: #000000; font-weight: normal; padding: 6px; }
+TyButton:hover          { render-style: bevel3d; background: #C8C8C8; color: #000000; }
+TyButton:active         { render-style: inset3d;  background: #C0C0C0; color: #000000; }
+TyButton:disabled       { render-style: bevel3d; background: #C0C0C0; color: #808080; }
+TyButton.primary        { render-style: bevel3d; background: #C0C0C0; color: #000000; }
+TyButton.primary:hover  { render-style: bevel3d; background: #C8C8C8; }
+TyButton.primary:active { render-style: inset3d;  background: #C0C0C0; }
+TyButton.ghost          { render-style: bevel3d; background: #C0C0C0; color: #000000; }
+TyButton.ghost:active   { render-style: inset3d;  background: #C0C0C0; }
+
+/* Fields: sunken white wells. */
+TyEdit          { render-style: inset3d; background: #FFFFFF; color: #000000; padding: 4px; }
+TyComboBox      { render-style: inset3d; background: #FFFFFF; color: #000000; }
+
+/* Check box: a white well with a grey border (the indicator box is stroked, not beveled). */
+TyCheckBox      { background: #FFFFFF; color: #000000; border: 1px solid #808080; border-radius: 0; }
+TyCheckBox:active { background: #FFFFFF; color: #000000; border: 1px solid #808080; border-radius: 0; }
+
+/* Progress: a sunken grey track with a solid blue fill. */
+TyProgressBar   { render-style: inset3d; background: #C0C0C0; }
+TyProgressFill  { background: #10318C; border-radius: 0; }

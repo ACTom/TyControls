@@ -69,6 +69,14 @@ object MainForm: TMainForm
     Enabled = False
     OnClick = ResetAccentClick
   end
+  object BtnClassic: TTyButton
+    Left = 290
+    Height = 34
+    Top = 96
+    Width = 164
+    Caption = '经典 3D 皮肤'
+    OnClick = SwitchClassic
+  end
   object LblStatus: TTyLabel
     Left = 16
     Height = 20
