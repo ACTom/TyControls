@@ -16,7 +16,7 @@ unit tyControls.Popup;
 interface
 uses
   Classes, SysUtils, Types, Controls, Forms, LCLType, LCLIntf,
-  {$IFDEF WINDOWS}Windows,{$ENDIF}
+  {$IFDEF LCLWin32}Windows,{$ENDIF}
   tyControls.Types, tyControls.Controller, tyControls.QtWS;
 
 // ---------------------------------------------------------------------------
@@ -200,7 +200,7 @@ var
   AnchorScreen: TRect;
   ParentForm: TCustomForm;
   PopupW, PopupH: Integer;
-  {$IFDEF WINDOWS}exStyle: PtrInt;{$ENDIF}
+  {$IFDEF LCLWin32}exStyle: PtrInt;{$ENDIF}
 begin
   FAnchor := AAnchor;   // remembered so Resize can re-anchor an already-open popup
   // Resolve the anchor control's screen rectangle.
@@ -226,7 +226,7 @@ begin
   // correct grab behaviour).  No-op on Win32/GTK2/Cocoa.
   TyQtMakePopup(FForm);
 
-  {$IFDEF WINDOWS}
+  {$IFDEF LCLWin32}
   // Toggle WS_EX_NOACTIVATE per NoActivate so the (reused) form matches the current
   // mode: set it BEFORE Show so even ShowWindow(SW_SHOW) is passive and the owner's
   // embedded editor keeps focus; clear it for ordinary activating popups. Needs the

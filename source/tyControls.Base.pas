@@ -216,7 +216,7 @@ procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: 
 
 implementation
 
-{$IFDEF WINDOWS}
+{$IFDEF LCLWin32}   // IMM32 IME caret positioning is Win32-widgetset-only (HWND-based); Qt/GTK use their own IME path
 const
   CFS_POINT = 2;
 type
@@ -234,13 +234,13 @@ function ImmSetCompositionWindow(AImc: THandle; ACompForm: Pointer): LongBool; s
 {$ENDIF}
 
 procedure TySetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
-{$IFDEF WINDOWS}
+{$IFDEF LCLWin32}
 var
   imc: THandle;
   cf: TTyImeCompForm;
 {$ENDIF}
 begin
-{$IFDEF WINDOWS}
+{$IFDEF LCLWin32}
   if (AControl = nil) or not AControl.HandleAllocated then Exit;
   imc := ImmGetContext(AControl.Handle);
   if imc = 0 then Exit;

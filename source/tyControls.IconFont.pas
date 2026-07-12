@@ -91,7 +91,7 @@ function FcConfigAppFontAddFile(config: PFcConfig; fileName: PAnsiChar): LongInt
   cdecl; external 'fontconfig';
 {$ENDIF}
 
-{$IFDEF WINDOWS}
+{$IFDEF LCLWin32}
 // FPC's Windows unit does not export the *Ex font APIs; declare them. Use the
 // WIDE variants so a font path with non-ASCII characters (e.g. a Chinese user
 // profile) registers correctly — the LCL path is UTF-8, converted to UTF-16.
@@ -207,7 +207,7 @@ end;
 procedure TTyIconFont.LoadFontFile(const APath: string);
 {$IF DEFINED(WINDOWS) OR DEFINED(LCLQt5) OR DEFINED(LCLQt6) OR DEFINED(LCLCocoa)}
 var
-  {$IFDEF WINDOWS}
+  {$IFDEF LCLWin32}
   w: UnicodeString;
   {$ENDIF}
   {$IF DEFINED(LCLQt5) OR DEFINED(LCLQt6)}
@@ -221,7 +221,7 @@ var
 {$ENDIF}
 begin
   if (APath = '') or (not FileExists(APath)) then Exit;
-  {$IFDEF WINDOWS}
+  {$IFDEF LCLWin32}
   w := UTF8ToUTF16(APath);
   if AddFontResourceEx(PWideChar(w), FR_PRIVATE, nil) > 0 then
     FLoadedFile := APath;
@@ -254,7 +254,7 @@ end;
 procedure TTyIconFont.UnloadFontFile;
 {$IF DEFINED(WINDOWS) OR DEFINED(LCLCocoa)}
 var
-  {$IFDEF WINDOWS}
+  {$IFDEF LCLWin32}
   w: UnicodeString;
   {$ENDIF}
   {$IFDEF LCLCocoa}
@@ -264,7 +264,7 @@ var
   {$ENDIF}
 {$ENDIF}
 begin
-  {$IFDEF WINDOWS}
+  {$IFDEF LCLWin32}
   if FLoadedFile <> '' then
   begin
     w := UTF8ToUTF16(FLoadedFile);

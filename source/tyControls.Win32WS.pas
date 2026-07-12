@@ -43,7 +43,7 @@ procedure TyWin32BeginTopResize(AForm: TCustomForm);
 
 implementation
 
-{$IFDEF WINDOWS}
+{$IFDEF LCLWin32}
 uses
   Windows,
   Types,             // listed AFTER Windows so Types.Rect/Point (functions) shadow Windows' TYPES

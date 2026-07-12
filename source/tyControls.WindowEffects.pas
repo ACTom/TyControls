@@ -54,7 +54,7 @@ function TyStartNativeResize(AControl: TControl; AEdge: Integer): Boolean;
 
 implementation
 
-{$IFDEF WINDOWS}uses Windows;{$ENDIF}
+{$IFDEF LCLWin32}uses Windows;{$ENDIF}
 {$IFDEF LCLCOCOA}uses CocoaAll;{$ENDIF}
 
 function TyResolveWindowEffect(const AStyle: TTyStyleSet; AMaximized: Boolean): TTyWindowEffect;
@@ -73,7 +73,7 @@ begin
   else Result := 2;                                           // DWMWCP_ROUND
 end;
 
-{$IFDEF WINDOWS}
+{$IFDEF LCLWin32}
 const
   DWMWA_WINDOW_CORNER_PREFERENCE = 33;
   DWMWA_BORDER_COLOR             = 34;          // Win11 22000+: the 1px DWM window-border color
@@ -190,7 +190,7 @@ procedure TyApplyWindowEffects(AForm: TCustomForm; const AEffect: TTyWindowEffec
 begin
   if (AForm = nil) or (not AForm.HandleAllocated) then Exit;
   try
-    {$IFDEF WINDOWS}ApplyWindows(AForm, AEffect);{$ENDIF}
+    {$IFDEF LCLWin32}ApplyWindows(AForm, AEffect);{$ENDIF}
     {$IFDEF LCLCOCOA}ApplyCocoa(AForm, AEffect);{$ENDIF}
     { Linux extension point — documented no-ops for now:
       LCLQT5/LCLQT6: translucent window + AA paint + custom shadow (Qt composites
@@ -203,12 +203,12 @@ begin
 end;
 
 function TyWindowResizable(AControl: TControl): Boolean;
-{$IFDEF WINDOWS}
+{$IFDEF LCLWin32}
 var frm: TCustomForm;
 {$ENDIF}
 begin
   Result := False;
-  {$IFDEF WINDOWS}
+  {$IFDEF LCLWin32}
   frm := GetParentForm(AControl);
   if (frm <> nil) and frm.HandleAllocated and (frm.WindowState <> wsMaximized) then
     Result := (GetWindowLong(frm.Handle, GWL_STYLE) and WS_THICKFRAME) <> 0;
@@ -216,13 +216,13 @@ begin
 end;
 
 function TyStartNativeResize(AControl: TControl; AEdge: Integer): Boolean;
-{$IFDEF WINDOWS}
+{$IFDEF LCLWin32}
 var frm: TCustomForm;
 {$ENDIF}
 begin
   Result := False;
   if AEdge = 0 then Exit;
-  {$IFDEF WINDOWS}
+  {$IFDEF LCLWin32}
   frm := GetParentForm(AControl);
   if (frm <> nil) and frm.HandleAllocated and (frm.WindowState <> wsMaximized)
     and ((GetWindowLong(frm.Handle, GWL_STYLE) and WS_THICKFRAME) <> 0) then
@@ -234,7 +234,7 @@ begin
   {$ENDIF}
 end;
 
-{$IFDEF WINDOWS}
+{$IFDEF LCLWin32}
 finalization
   if GLib <> 0 then FreeLibrary(GLib);
   GLib := 0; FnSetAttr := nil; FnExtend := nil; FnCompEnabled := nil;  // no dangling procs post-unload

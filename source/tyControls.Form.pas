@@ -753,7 +753,7 @@ end;
 
 procedure TTyTitleBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  {$IFDEF WINDOWS}
+  {$IFDEF LCLWin32}
   // Top-edge resize hot-zone: the bar sits flush at the window top (no NC strip there — that
   // would be an ugly thick frame), so the OS can't resize from the top edge. Grab the top
   // FBorderZone px ourselves and hand a NATIVE top-resize to the OS instead of starting a drag.
@@ -772,7 +772,7 @@ end;
 procedure TTyTitleBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
-  {$IFDEF WINDOWS}
+  {$IFDEF LCLWin32}
   // Show the N-S resize cursor over the top hot-zone (matches the MouseDown top-resize above).
   if (FEngine <> nil) and not (csDesigning in ComponentState)
      and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZone) then
@@ -817,10 +817,10 @@ end;
 
 function TTyChromeEngine.ManualResizeEnabled: Boolean;
 begin
-  {$IFDEF WINDOWS}
-  Result := False;   // native NC resize (WS_THICKFRAME + WM_NCHITTEST) owns it on Windows
+  {$IFDEF LCLWin32}
+  Result := False;   // native NC resize (WS_THICKFRAME + WM_NCHITTEST) owns it on the Win32 widgetset
   {$ELSE}
-  Result := FormResizable;
+  Result := FormResizable;   // Qt6/GTK (any OS): drive resize manually via the edge gutter + FormMouse*
   {$ENDIF}
 end;
 
@@ -1383,13 +1383,13 @@ begin
 end;
 
 procedure TTyForm.ApplyResizeStrategy;
-{$IFDEF WINDOWS}
+{$IFDEF LCLWin32}
 var capH, zone: Integer; resiz: Boolean;
 {$ENDIF}
 begin
   if csDesigning in ComponentState then Exit;   // never poke the window on the design surface
-  {$IFDEF WINDOWS}
-  // Windows native NC resize: assert/clear WS_THICKFRAME per FResizable + (re)install the HWND
+  {$IFDEF LCLWin32}
+  // Win32 widgetset native NC resize: assert/clear WS_THICKFRAME per FResizable + (re)install the HWND
   // subclass that handles WM_NCCALCSIZE/WM_NCHITTEST (see tyControls.Win32WS / the B1 note).
   // Caption-drag band height = the title bar's height when one is associated, else 0 (no caption
   // zone). Guarded by HandleAllocated (the helper also no-ops without a handle).
