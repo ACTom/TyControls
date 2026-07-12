@@ -205,7 +205,7 @@ begin
 end;
 
 procedure TTyIconFont.LoadFontFile(const APath: string);
-{$IF DEFINED(WINDOWS) OR DEFINED(LCLQt5) OR DEFINED(LCLQt6) OR DEFINED(LCLCocoa)}
+{$IF DEFINED(LCLWin32) OR DEFINED(LCLQt5) OR DEFINED(LCLQt6) OR DEFINED(LCLCocoa)}
 var
   {$IFDEF LCLWin32}
   w: UnicodeString;
@@ -252,7 +252,7 @@ begin
 end;
 
 procedure TTyIconFont.UnloadFontFile;
-{$IF DEFINED(WINDOWS) OR DEFINED(LCLCocoa)}
+{$IF DEFINED(LCLWin32) OR DEFINED(LCLCocoa)}
 var
   {$IFDEF LCLWin32}
   w: UnicodeString;
