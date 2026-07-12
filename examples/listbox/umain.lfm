@@ -1,0 +1,89 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 420
+  Top = 0
+  Width = 420
+  Caption = 'TTyListBox 示例'
+  ClientHeight = 420
+  ClientWidth = 420
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 420
+    Align = alTop
+    Caption = 'TTyListBox  ·  TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 246
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object LblTitle: TTyLabel
+    Left = 16
+    Height = 20
+    Top = 46
+    Width = 388
+    Caption = '城市列表（上下键 / PageUp/Down / 滚轮可滚动）：'
+  end
+  object ListBox: TTyListBox
+    Left = 16
+    Height = 220
+    Top = 70
+    Width = 388
+    OnChange = ListBoxChange
+  end
+  object ChkMulti: TTyCheckBox
+    Left = 16
+    Height = 24
+    Top = 300
+    Width = 130
+    Caption = '多选模式'
+    OnChange = MultiChange
+  end
+  object ChkSorted: TTyCheckBox
+    Left = 150
+    Height = 24
+    Top = 300
+    Width = 130
+    Caption = '升序排序'
+    OnChange = SortedChange
+  end
+  object BtnHeight: TTyButton
+    Left = 16
+    Height = 30
+    Top = 332
+    Width = 120
+    Caption = '行高 24 / 32'
+    OnClick = ToggleHeight
+  end
+  object BtnSelAll: TTyButton
+    Left = 146
+    Height = 30
+    Top = 332
+    Width = 120
+    Caption = '全选'
+    OnClick = DoSelectAll
+  end
+  object BtnClear: TTyButton
+    Left = 276
+    Height = 30
+    Top = 332
+    Width = 120
+    Caption = '清空选择'
+    OnClick = DoClear
+  end
+  object LblStatus: TTyLabel
+    Left = 16
+    Height = 20
+    Top = 376
+    Width = 388
+  end
+end

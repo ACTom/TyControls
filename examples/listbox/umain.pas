@@ -13,7 +13,9 @@ unit umain;
       after being repositioned by text).
     - ItemHeight: button toggles the row height between 24 and 32.
     - SelectAll / ClearSelection: select all / clear in multi-select mode.
-  UI built purely in code (no .lfm); the theme is loaded via the global TyDefaultController. }
+  The window, the list box, every control and the live theme switcher are designed in
+  umain.lfm (a TTyForm + TTyTitleBar); the code here is event handlers + theme setup
+  plus the runtime Items population only. }
 
 {$mode objfpc}{$H+}
 
@@ -21,29 +23,32 @@ interface
 
 uses
   Classes, SysUtils, Forms, Controls,
-  tyControls.Controller, tyControls.Form,
+  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.ListBox, tyControls.TyLabel, tyControls.Button,
-  tyControls.CheckBox;
+  tyControls.CheckBox, tyControls.ComboBox;
 
 type
   TMainForm = class(TTyForm)
-  private
-    FListBox: TTyListBox;
-    FStatus: TTyLabel;
-    FChkMulti: TTyCheckBox;
-    FChkSorted: TTyCheckBox;
-    FBtnHeight: TTyButton;
-    FBtnSelAll: TTyButton;
-    FBtnClear: TTyButton;
+    Bar: TTyTitleBar;
+    ThemeCombo: TTyComboBox;
+    LblTitle: TTyLabel;
+    ListBox: TTyListBox;
+    ChkMulti: TTyCheckBox;
+    ChkSorted: TTyCheckBox;
+    BtnHeight: TTyButton;
+    BtnSelAll: TTyButton;
+    BtnClear: TTyButton;
+    LblStatus: TTyLabel;
+    procedure FormCreate(Sender: TObject);
     procedure ListBoxChange(Sender: TObject);
     procedure MultiChange(Sender: TObject);
     procedure SortedChange(Sender: TObject);
     procedure ToggleHeight(Sender: TObject);
     procedure DoSelectAll(Sender: TObject);
     procedure DoClear(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
+  private
     procedure UpdateStatus;
-  public
-    constructor Create(AOwner: TComponent); override;
   end;
 
 var
@@ -51,118 +56,55 @@ var
 
 implementation
 
-{ Walk up from the exe's directory to find the repo's themes/ folder (handles lib/<cpu>-<os>/ and .app bundles) }
-function ThemesDir: string;
-var
-  Dir: string;
-  i: Integer;
-begin
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 8 do
-  begin
-    if DirectoryExists(Dir + 'themes') then
-      Exit(Dir + 'themes' + PathDelim);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := 'themes' + PathDelim;
-end;
+{$R *.lfm}
 
-constructor TMainForm.Create(AOwner: TComponent);
-var
-  Bar: TTyTitleBar;
-  LblTitle: TTyLabel;
+procedure TMainForm.FormCreate(Sender: TObject);
+const
   Cities: array[0..29] of string = (
     '北京', '上海', '广州', '深圳', '成都', '杭州', '武汉', '西安',
     '南京', '天津', '重庆', '苏州', '长沙', '郑州', '青岛', '大连',
     '厦门', '宁波', '无锡', '合肥', '福州', '济南', '昆明', '南昌',
     '贵阳', '哈尔滨', '沈阳', '石家庄', '太原', '兰州');
+var
+  names: TStringArray;
   i: Integer;
 begin
-  inherited CreateNew(AOwner, 0);          // TTyForm: borderless + persistence engine
-  Caption := 'TTyListBox 示例';
-  Position := poScreenCenter;
-  SetBounds(0, 0, 420, 420);
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+  TyDefaultController.ThemeName := 'default';
+  ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 
-  // Load the theme first: controls without an explicit Controller use the global TyDefaultController
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
-
-  Bar := TTyTitleBar.Create(Self);         // Owner=Self -> auto-associated as TTyForm.TitleBar
-  Bar.Parent := Self;
-  Bar.Align := alTop;
-  Bar.Height := 34;
-  Bar.Caption := 'ListBox  · TyControls';
-
-  LblTitle := TTyLabel.Create(Self);
-  LblTitle.Parent := Self;
-  LblTitle.SetBounds(16, 46, 388, 20);
-  LblTitle.Caption := '城市列表（上下键 / PageUp/Down / 滚轮可滚动）：';
-
-  // Bottom status bar: must be created before wiring FListBox.OnChange / assigning ItemIndex,
-  // otherwise setting ItemIndex fires OnChange -> UpdateStatus touches the not-yet-created FStatus -> crash
-  FStatus := TTyLabel.Create(Self);
-  FStatus.Parent := Self;
-  FStatus.SetBounds(16, 376, 388, 20);
-
-  // List box: 30 items, too short to show them all -> the built-in scrollbar appears automatically
-  FListBox := TTyListBox.Create(Self);
-  FListBox.Parent := Self;
-  FListBox.SetBounds(16, 70, 388, 220);
-  FListBox.ItemHeight := 24;
-  FListBox.OnChange := @ListBoxChange;
+  // Fill the list box (30 items, too short to show them all -> the built-in scrollbar
+  // appears automatically), then select the first item by default.
   for i := Low(Cities) to High(Cities) do
-    FListBox.Items.Add(Cities[i]);
-  FListBox.ItemIndex := 0;                  // select the first item by default
+    ListBox.Items.Add(Cities[i]);
+  ListBox.ItemIndex := 0;
 
-  // Multi-select / sort checkboxes
-  FChkMulti := TTyCheckBox.Create(Self);
-  FChkMulti.Parent := Self;
-  FChkMulti.SetBounds(16, 300, 130, 24);
-  FChkMulti.Caption := '多选模式';
-  FChkMulti.OnChange := @MultiChange;
+  UpdateStatus;   // refresh the status-bar text once all controls are ready
+end;
 
-  FChkSorted := TTyCheckBox.Create(Self);
-  FChkSorted.Parent := Self;
-  FChkSorted.SetBounds(150, 300, 130, 24);
-  FChkSorted.Caption := '升序排序';
-  FChkSorted.OnChange := @SortedChange;
-
-  // Row-height toggle / select-all / clear buttons
-  FBtnHeight := TTyButton.Create(Self);
-  FBtnHeight.Parent := Self;
-  FBtnHeight.SetBounds(16, 332, 120, 30);
-  FBtnHeight.Caption := '行高 24 / 32';
-  FBtnHeight.OnClick := @ToggleHeight;
-
-  FBtnSelAll := TTyButton.Create(Self);
-  FBtnSelAll.Parent := Self;
-  FBtnSelAll.SetBounds(146, 332, 120, 30);
-  FBtnSelAll.Caption := '全选';
-  FBtnSelAll.OnClick := @DoSelectAll;
-
-  FBtnClear := TTyButton.Create(Self);
-  FBtnClear.Parent := Self;
-  FBtnClear.SetBounds(276, 332, 120, 30);
-  FBtnClear.Caption := '清空选择';
-  FBtnClear.OnClick := @DoClear;
-
-  // Refresh the status-bar text once all controls are ready (FStatus was created earlier)
-  UpdateStatus;
-
-  ApplyChromeTheme(TyDefaultController);    // finally theme the form chrome + background together
+procedure TMainForm.ThemeComboChange(Sender: TObject);
+begin
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 procedure TMainForm.UpdateStatus;
 begin
-  if FListBox.MultiSelect then
-    FStatus.Caption := Format('多选模式：已选 %d 项（Ctrl 点选 / Shift 连选 / 空格切换）',
-      [FListBox.SelCount])
-  else if FListBox.ItemIndex >= 0 then
-    FStatus.Caption := Format('当前选中：%s（第 %d 项，共 %d 项）',
-      [FListBox.Items[FListBox.ItemIndex], FListBox.ItemIndex + 1,
-       FListBox.Items.Count])
+  if ListBox.MultiSelect then
+    LblStatus.Caption := Format('多选模式：已选 %d 项（Ctrl 点选 / Shift 连选 / 空格切换）',
+      [ListBox.SelCount])
+  else if ListBox.ItemIndex >= 0 then
+    LblStatus.Caption := Format('当前选中：%s（第 %d 项，共 %d 项）',
+      [ListBox.Items[ListBox.ItemIndex], ListBox.ItemIndex + 1,
+       ListBox.Items.Count])
   else
-    FStatus.Caption := '当前选中：（无）';
+    LblStatus.Caption := '当前选中：（无）';
 end;
 
 procedure TMainForm.ListBoxChange(Sender: TObject);
@@ -172,33 +114,33 @@ end;
 
 procedure TMainForm.MultiChange(Sender: TObject);
 begin
-  FListBox.MultiSelect := FChkMulti.Checked;
+  ListBox.MultiSelect := ChkMulti.Checked;
   UpdateStatus;
 end;
 
 procedure TMainForm.SortedChange(Sender: TObject);
 begin
-  FListBox.Sorted := FChkSorted.Checked;
+  ListBox.Sorted := ChkSorted.Checked;
   UpdateStatus;
 end;
 
 procedure TMainForm.ToggleHeight(Sender: TObject);
 begin
-  if FListBox.ItemHeight = 24 then
-    FListBox.ItemHeight := 32
+  if ListBox.ItemHeight = 24 then
+    ListBox.ItemHeight := 32
   else
-    FListBox.ItemHeight := 24;
+    ListBox.ItemHeight := 24;
 end;
 
 procedure TMainForm.DoSelectAll(Sender: TObject);
 begin
-  FListBox.SelectAll;   // only effective in multi-select mode
+  ListBox.SelectAll;   // only effective in multi-select mode
   UpdateStatus;
 end;
 
 procedure TMainForm.DoClear(Sender: TObject);
 begin
-  FListBox.ClearSelection;   // only effective in multi-select mode
+  ListBox.ClearSelection;   // only effective in multi-select mode
   UpdateStatus;
 end;
 

@@ -7,12 +7,17 @@ unit umain;
   tab area (one TTyMemo per document) -> status bar.
   File New/Open/Save/Save As/Close/Recent do real on-disk reads and writes; Cut/Copy/Paste/
   Undo/Redo/Select All/Find act on the current document; everything else (format painter,
-  B/I/U, alignment, table, symbol...) is a placeholder but the UI is complete. Built entirely
-  in code (no .lfm).
+  B/I/U, alignment, table, symbol...) is a placeholder but the UI is complete.
 
-  WARNING LCL layout pitfall: among sibling controls that are all alTop, the last-added one
-  goes on top -- so the Ribbon is built first (below) and the title bar last (on top);
-  groups are likewise added right-to-left. See memory lcl-code-created-align-order. }
+  The window, title bar and theme switcher are designed in umain.lfm (a TTyForm + TTyTitleBar).
+  Everything else -- the ribbon, its pages/groups/command buttons, the QAT, the backstage, the
+  document tabs and the status bar -- is a dynamic control tree that cannot be expressed as .lfm
+  objects (icons assigned from a code-built collection, command lists filled in loops, ribbon
+  pages/groups created via method calls), so it is built in FormCreate code (see BuildEditor).
+
+  WARNING LCL layout pitfall: the title bar and the ribbon are both alTop siblings. The title
+  bar now streams from the .lfm FIRST, so the ribbon is given an explicit Top to dock BELOW it;
+  ribbon groups are likewise added right-to-left. See memory lcl-code-created-align-order. }
 
 {$mode objfpc}{$H+}
 
@@ -30,9 +35,6 @@ uses
   tyControls.Dialogs, tyControls.Dialogs.Find, tyControls.Dialogs.Color,
   uicons;
 
-const
-  CTitleH = 34;
-
 type
   { One open document: its tab sheet + memo + on-disk path. }
   TEditorDoc = class
@@ -42,6 +44,10 @@ type
   end;
 
   TMainForm = class(TTyForm)
+    Bar: TTyTitleBar;
+    ThemeCombo: TTyComboBox;                   // title-bar built-in skin switcher
+    procedure FormCreate(Sender: TObject);
+    procedure ThemeComboChange(Sender: TObject);
   private
     FImgColl: TTyImageCollection;   // cross-platform BGRA command icons (uicons)
     FRibbon: TTyRibbon;
@@ -54,15 +60,14 @@ type
     FBsInfoLbl, FBsAboutLbl: TTyLabel;
     FBsBrowse, FBsNewBlank: TTyGlyphButton;
     FBsRecent: array[0..7] of TTyGlyphButton;
-    FThemeCombo, FModeCombo: TTyComboBox;      // title-bar skin switcher
     FFindDlg: TTyFindDialog;
     FReplaceDlg: TTyReplaceDialog;
     FRecent: TStringList;
     FDocList: TList;
     FNewCount: Integer;
     FFontColor: TTyColor;
-    // ---- skin switcher ----
-    procedure ApplyTheme(Sender: TObject);
+    // ---- editor construction (dynamic tree; was the old constructor body) ----
+    procedure BuildEditor;
     // ---- backstage content page ----
     procedure BuildBackstageContent;
     procedure ShowBsPage(APage: TTyPanel);
@@ -116,7 +121,6 @@ type
     procedure BuildInsertTab(APage: TTyRibbonPage);
     procedure BuildViewTab(APage: TTyRibbonPage);
   public
-    constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
   end;
 
@@ -125,18 +129,7 @@ var
 
 implementation
 
-function ThemesDir: string;
-var Dir: string; i: Integer;
-begin
-  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
-  for i := 1 to 8 do
-  begin
-    if DirectoryExists(Dir + 'themes') then Exit(Dir + 'themes' + PathDelim);
-    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
-    if Dir = '' then Break;
-  end;
-  Result := 'themes' + PathDelim;
-end;
+{$R *.lfm}
 
 // ===========================================================================
 // Ribbon builders
@@ -320,43 +313,13 @@ begin
 end;
 
 // ===========================================================================
-// Skin switcher (title bar)
+// Skin switcher (title bar) — built-in dual-mode themes, live re-theme
 // ===========================================================================
-procedure TMainForm.ApplyTheme(Sender: TObject);
-var nm, md: string; dlg: TOpenDialog;
+procedure TMainForm.ThemeComboChange(Sender: TObject);
 begin
-  if (FThemeCombo = nil) or (FThemeCombo.ItemIndex < 0) then Exit;
-  nm := FThemeCombo.Items[FThemeCombo.ItemIndex];
-  if (FModeCombo <> nil) and (FModeCombo.ItemIndex = 1) then md := 'dark' else md := 'light';
-  try
-    if nm = '自定义…' then
-    begin
-      // Pick any .tycss from disk — e.g. themes/green.tycss (photo background). LoadTheme
-      // (from a FILE) restores the theme's directory, so url() image assets resolve.
-      dlg := TOpenDialog.Create(Self);
-      try
-        dlg.Filter := 'tycss 主题 (*.tycss)|*.tycss|所有文件 (*.*)|*.*';
-        dlg.InitialDir := ExcludeTrailingPathDelimiter(ThemesDir);
-        if dlg.Execute then
-        begin
-          TyDefaultController.LoadTheme(dlg.FileName);
-          TyDefaultController.Mode := md;
-          ApplyChromeTheme(TyDefaultController);   // rebuild the form backdrop (photo themes)
-        end;
-      finally
-        dlg.Free;
-      end;
-    end
-    else
-    begin
-      // Built-in theme (dual-mode) + light/dark sub-mode; the controller re-themes live.
-      TyDefaultController.LoadThemeCss(TyBuiltinThemeCss(nm));
-      TyDefaultController.Mode := md;
-      ApplyChromeTheme(TyDefaultController);       // rebuild chrome/backdrop for the new theme
-    end;
-  except
-    // ignore a theme that fails to load (e.g. missing image assets)
-  end;
+  if ThemeCombo.ItemIndex < 0 then Exit;
+  TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
+  ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
 end;
 
 // ===========================================================================
@@ -767,23 +730,32 @@ end;
 // ===========================================================================
 // Construction
 // ===========================================================================
-constructor TMainForm.Create(AOwner: TComponent);
+procedure TMainForm.FormCreate(Sender: TObject);
 var
-  Bar: TTyTitleBar;
+  names: TStringArray;
+  i: Integer;
+begin
+  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
+  TyDefaultController.ThemeName := 'default';
+  ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
+
+  // The rest of the editor is a dynamic control tree that can't live in the .lfm.
+  BuildEditor;
+end;
+
+{ Build the whole editor shell in code (was the old constructor body). Runs from FormCreate,
+  AFTER the .lfm (Bar + ThemeCombo) has streamed and the built-in 'default' theme is active. }
+procedure TMainForm.BuildEditor;
+var
   QAT: TTyRibbonQuickAccess;
   PgHome, PgInsert, PgView, PgPic: TTyRibbonPage;
   g: TTyRibbonGroup;
-  names: TStringArray;
-  i: Integer;
-  SkinLbl: TTyLabel;
 begin
-  inherited CreateNew(AOwner, 0);
-  Caption := 'TyControls 文本编辑器';
-  Position := poScreenCenter;
-  SetBounds(0, 0, 900, 620);
-
-  TyDefaultController.LoadTheme(ThemesDir + 'light.tycss');
-
   // Themed ScreenTips: installing a TTyHint swaps LCL's tooltip for the themed
   // TTyHintWindow app-wide, so every button's Hint (set in Big/Small/AddQat) shows
   // as an Office-style ScreenTip instead of the OS tooltip.
@@ -820,11 +792,12 @@ begin
   FStatus.Panels.Add.Width := 140;
   FStatus.Panels.Add.Width := 100;
 
-  // ── alTop stack, created BOTTOM-first (LCL puts the last-added alTop on top) ──
-
-  // 1) The ribbon (below the title bar). File tab -> backstage.
+  // The ribbon docks below the title bar. Both are alTop siblings; because the title bar
+  // now streams from the .lfm FIRST, give the ribbon an explicit Top so LCL stacks it
+  // BELOW the bar rather than on top of it (see memory lcl-code-created-align-order).
   FRibbon := TTyRibbon.Create(Self);
   FRibbon.Parent := Self;
+  FRibbon.Top := Bar.Height;
   FRibbon.Controller := TyDefaultController;   // register as a theme listener (live re-theme)
   FRibbon.Height := 140;   // room for 3 small-button rows above the group caption band
   FRibbon.FileTab := True;
@@ -843,17 +816,11 @@ begin
   g := NewGroup(PgPic, '调整', 120, False);
   Big(g, '裁剪', 'crop', 6, 56, @DoNoop);
 
-  // 2) The title bar LAST → topmost. Hosts the QAT (save / undo / redo).
-  Bar := TTyTitleBar.Create(Self);
-  Bar.Parent := Self;
-  Bar.Align := alTop;
-  Bar.Height := CTitleH;
-  Bar.Caption := '';   // QAT + skin switcher live on the left; keep the bar uncluttered
-
-  // Icon-only Quick Access Toolbar (like Office): New / Open / Save / Undo / Redo.
+  // Icon-only Quick Access Toolbar (like Office) on the title bar: New / Open / Save /
+  // Undo / Redo. Placed to the right of the bar caption so they do not overlap it.
   QAT := TTyRibbonQuickAccess.Create(Self);
   QAT.Parent := Bar;
-  QAT.SetBounds(8, 4, 152, 26);
+  QAT.SetBounds(240, 4, 152, 26);
   // Two-line hints (title + description) render as Office-style ScreenTips.
   AddQat(QAT, '新建'#10'新建一个空白文档', 'new',  @DoNew);
   AddQat(QAT, '打开'#10'打开已有文本文件', 'open', @DoOpen);
@@ -861,45 +828,14 @@ begin
   AddQat(QAT, '撤销'#10'撤销上一步操作', 'undo', @DoUndo);
   AddQat(QAT, '重做'#10'重做被撤销的操作', 'redo', @DoRedo);
 
-  // Skin switcher: placed on the LEFT after the QAT with a FIXED position (no akRight
-  // anchor). The title bar reserves its right edge for the caption buttons via
-  // AdjustClientRect, so an akRight anchor set before the bar is sized pushed the combos
-  // off-screen — the reason they never showed. Left + fixed = always visible.
-  SkinLbl := TTyLabel.Create(Self);
-  SkinLbl.Parent := Bar;
-  SkinLbl.SetBounds(172, 8, 36, 20);
-  SkinLbl.Caption := '皮肤';
-
-  FThemeCombo := TTyComboBox.Create(Self);
-  FThemeCombo.Parent := Bar;
-  FThemeCombo.Style := csDropDownList;
-  FThemeCombo.SetBounds(208, 4, 130, 26);
-  names := TyBuiltinThemeNames;
-  for i := 0 to High(names) do FThemeCombo.Items.Add(names[i]);
-  FThemeCombo.Items.Add('自定义…');   // pick a .tycss from disk (e.g. the green photo theme)
-  FThemeCombo.ItemIndex := FThemeCombo.Items.IndexOf('default');
-  FThemeCombo.OnChange := @ApplyTheme;
-
-  FModeCombo := TTyComboBox.Create(Self);
-  FModeCombo.Parent := Bar;
-  FModeCombo.Style := csDropDownList;
-  FModeCombo.SetBounds(344, 4, 66, 26);
-  FModeCombo.Items.Add('浅色');
-  FModeCombo.Items.Add('深色');
-  FModeCombo.ItemIndex := 0;
-  FModeCombo.OnChange := @ApplyTheme;
-  SkinLbl.BringToFront;
-  FThemeCombo.BringToFront;
-  FModeCombo.BringToFront;
-
-  // 3) The document tab area fills the middle (alClient).
+  // The document tab area fills the middle (alClient).
   FDocPages := TTyPageControl.Create(Self);
   FDocPages.Parent := Self;
   FDocPages.Align := alClient;
   FDocPages.Controller := TyDefaultController;
   FDocPages.OnChange := @PageChanged;
 
-  ApplyChromeTheme(TyDefaultController);
+  ApplyChromeTheme(TyDefaultController);   // re-theme the fully-built shell
 
   // Start with one empty document.
   DoNew(Self);

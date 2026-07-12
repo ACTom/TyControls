@@ -1,0 +1,178 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 380
+  Top = 0
+  Width = 560
+  Caption = 'TTyMenuEx / 窗口卷起 示例'
+  ClientHeight = 380
+  ClientWidth = 560
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  MenuBar = TyMenuBar1
+  CaptionAction = tcaRollUp
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 560
+    Align = alTop
+    Caption = '增强菜单 + 双击标题栏卷起  · TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 386
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object TyMenuBar1: TTyMenuBar
+    Left = 0
+    Height = 30
+    Top = 34
+    Width = 560
+    Align = alTop
+    Menu = MainMenu1
+  end
+  object HintPanel: TTyPanel
+    Left = 16
+    Height = 200
+    Top = 80
+    Width = 528
+    Caption = '右键此面板 → 增强菜单(分节标题 + 图标列 + 勾选项)'
+    PopupMenu = Popup
+  end
+  object StatusLabel: TTyLabel
+    Left = 16
+    Height = 24
+    Top = 296
+    Width = 528
+    Caption = '就绪：右键面板试增强菜单；双击标题栏可卷起窗口（再双击还原）'
+  end
+  object MainMenu1: TMainMenu
+    object MnuFile: TMenuItem
+      Caption = '文件(&F)'
+      object MnuFileNew: TMenuItem
+        Caption = '新建(&N)'
+        OnClick = MenuItemClicked
+      end
+      object MnuFileOpen: TMenuItem
+        Caption = '打开…(&O)'
+        OnClick = MenuItemClicked
+      end
+      object MnuFileSave: TMenuItem
+        Caption = '保存(&S)'
+        OnClick = MenuItemClicked
+      end
+      object MnuFileSep1: TMenuItem
+        Caption = '-'
+      end
+      object MnuFileExit: TMenuItem
+        Caption = '退出(&X)'
+        OnClick = MenuItemClicked
+      end
+    end
+    object MnuEdit: TMenuItem
+      Caption = '编辑(&E)'
+      object MnuEditUndo: TMenuItem
+        Caption = '撤销(&U)'
+        OnClick = MenuItemClicked
+      end
+      object MnuEditRedo: TMenuItem
+        Caption = '重做(&R)'
+        OnClick = MenuItemClicked
+      end
+      object MnuEditSep1: TMenuItem
+        Caption = '-'
+      end
+      object MnuEditCut: TMenuItem
+        Caption = '剪切(&T)'
+        OnClick = MenuItemClicked
+      end
+      object MnuEditCopy: TMenuItem
+        Caption = '复制(&C)'
+        OnClick = MenuItemClicked
+      end
+      object MnuEditPaste: TMenuItem
+        Caption = '粘贴(&P)'
+        OnClick = MenuItemClicked
+      end
+    end
+    object MnuView: TMenuItem
+      Caption = '视图(&V)'
+      object MnuViewZoomIn: TMenuItem
+        Caption = '放大(&I)'
+        OnClick = MenuItemClicked
+      end
+      object MnuViewZoomOut: TMenuItem
+        Caption = '缩小(&O)'
+        OnClick = MenuItemClicked
+      end
+      object MnuViewSep1: TMenuItem
+        Caption = '-'
+      end
+      object MnuViewFull: TMenuItem
+        Caption = '全屏(&F)'
+        OnClick = MenuItemClicked
+      end
+    end
+  end
+  object Popup: TTyMenuEx
+    BannerCaption = 'TyControls'
+    BannerWidth = 26
+    Images = MenuImages
+    object PopHdrClip: TMenuItem
+      Caption = '-剪贴板'
+    end
+    object PopCut: TMenuItem
+      Caption = '剪切(&T)'
+      ImageIndex = 0
+      OnClick = MenuItemClicked
+    end
+    object PopCopy: TMenuItem
+      Caption = '复制(&C)'
+      ImageIndex = 1
+      OnClick = MenuItemClicked
+    end
+    object PopPaste: TMenuItem
+      Caption = '粘贴(&P)'
+      ImageIndex = 2
+      OnClick = MenuItemClicked
+    end
+    object PopSep1: TMenuItem
+      Caption = '-'
+    end
+    object PopHdrView: TMenuItem
+      Caption = '-视图'
+    end
+    object PopGrid: TMenuItem
+      AutoCheck = True
+      Caption = '显示网格'
+      Checked = True
+      OnClick = MenuItemClicked
+    end
+    object PopRefresh: TMenuItem
+      Caption = '刷新(&R)'
+      OnClick = MenuItemClicked
+    end
+    object PopSep2: TMenuItem
+      Caption = '-'
+    end
+    object PopProps: TMenuItem
+      Caption = '属性(&P)'
+      OnClick = MenuItemClicked
+    end
+  end
+  object IconColl: TTyImageCollection
+  end
+  object MenuImages: TTyVirtualImageList
+    Collection = IconColl
+    Names.Strings = (
+      'cut'
+      'copy'
+      'paste'
+    )
+  end
+end

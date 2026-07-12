@@ -1,0 +1,101 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 320
+  Top = 0
+  Width = 440
+  Caption = 'RadioButton 示例'
+  ClientHeight = 320
+  ClientWidth = 440
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 440
+    Align = alTop
+    Caption = 'RadioButton  · TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 266
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+  object GroupA: TTyGroupBox
+    Left = 16
+    Height = 168
+    Top = 52
+    Width = 190
+    Caption = '水果'
+    Alignment = taLeftJustify
+    object FFruitApple: TTyRadioButton
+      Left = 10
+      Height = 26
+      Top = 24
+      Width = 160
+      Caption = '苹果'
+      OnChange = RadioChanged
+    end
+    object FFruitBanana: TTyRadioButton
+      Left = 10
+      Height = 26
+      Top = 56
+      Width = 160
+      Caption = '香蕉'
+      OnChange = RadioChanged
+    end
+    object FFruitMango: TTyRadioButton
+      Left = 10
+      Height = 26
+      Top = 88
+      Width = 160
+      Caption = '芒果（缺货）'
+      Enabled = False
+      OnChange = RadioChanged
+    end
+  end
+  object GroupB: TTyGroupBox
+    Left = 232
+    Height = 168
+    Top = 52
+    Width = 190
+    Caption = '颜色'
+    Alignment = taCenter
+    object FColorRed: TTyRadioButton
+      Left = 10
+      Height = 26
+      Top = 24
+      Width = 160
+      Caption = '红色'
+      OnChange = RadioChanged
+    end
+    object FColorGreen: TTyRadioButton
+      Left = 10
+      Height = 26
+      Top = 56
+      Width = 160
+      Caption = '绿色'
+      OnChange = RadioChanged
+    end
+    object FColorBlue: TTyRadioButton
+      Left = 10
+      Height = 26
+      Top = 88
+      Width = 160
+      Caption = '蓝色'
+      OnChange = RadioChanged
+    end
+  end
+  object LblStatus: TTyLabel
+    Left = 16
+    Height = 24
+    Top = 236
+    Width = 408
+    Caption = ''
+  end
+end

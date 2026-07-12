@@ -1,0 +1,29 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 620
+  Top = 0
+  Width = 900
+  Caption = 'TyControls 文本编辑器'
+  ClientHeight = 620
+  ClientWidth = 900
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Bar: TTyTitleBar
+    Left = 0
+    Height = 34
+    Top = 0
+    Width = 900
+    Align = alTop
+    Caption = 'TTyRibbon  ·  TyControls'
+    TitleAlignment = taLeftJustify
+    object ThemeCombo: TTyComboBox
+      Left = 726
+      Height = 26
+      Top = 4
+      Width = 120
+      OnChange = ThemeComboChange
+    end
+  end
+end
