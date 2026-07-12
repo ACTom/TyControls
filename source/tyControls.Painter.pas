@@ -104,7 +104,15 @@ begin
   if AFontSizeLogical <= 0 then AFontSizeLogical := TyFallbackFontSize;
   ABmp.FontName := TyEffectiveFontName(AFontName);
   ABmp.FontHeight := MulDiv(Round(AFontSizeLogical * 96 / 72), APPI, 96);
+  // Text quality is a WIDGETSET choice, not a platform one. BGRABitmap's fqFineAntialiasing
+  // renders BLANK on the Qt/GTK LCL font renderer (its fine-AA path expects the Win32/Cocoa
+  // system renderer; diagnostic on Windows+Qt6: fqFine=0 px vs fqSystemClearType=621). Use the
+  // widgetset's native text (fqSystemClearType) there; keep crisp fqFineAntialiasing on Win32/Cocoa.
+  {$IF DEFINED(LCLQt5) or DEFINED(LCLQt6) or DEFINED(LCLGtk2) or DEFINED(LCLGtk3)}
+  ABmp.FontQuality := fqSystemClearType;
+  {$ELSE}
   ABmp.FontQuality := fqFineAntialiasing;
+  {$ENDIF}
   if AWeight >= 600 then ABmp.FontStyle := [fsBold] else ABmp.FontStyle := [];
 end;
 
