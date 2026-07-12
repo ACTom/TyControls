@@ -395,6 +395,7 @@ begin
   Result.Kind := tfkNineSlice;
   Result.Color := tyTransparent;
   Result.GradAngleDeg := 0;
+  Result.SliceRepeat := False;
   lo := ARaw;
   pu := Pos('url(', LowerCase(lo));
   if pu = 0 then raise Exception.CreateFmt(rsSmBackgroundImageNeedsUrl, [ARaw]);
@@ -429,6 +430,8 @@ begin
   finally
     nums.Free;
   end;
+  // v3/B3: an optional trailing 'repeat' after slice(...) tiles the edges/center.
+  Result.SliceRepeat := Pos('repeat', Copy(LowerCase(lo), qs + 1, Length(lo))) > 0;
 end;
 
 // Parse 'url(path)' into a plain image fill (no slice). Mode defaults to cover and

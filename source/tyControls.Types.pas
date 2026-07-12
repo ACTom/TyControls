@@ -50,6 +50,7 @@ type
     GradAngleDeg: Single;
     ImagePath: string;
     SliceInsets: TRect;
+    SliceRepeat: Boolean;      // v3/B3: nine-slice edges/center TILE instead of stretch
     ImageMode: TTyImageMode;   // tfkImage only
     Blur: Integer;             // tfkImage Gaussian blur radius, logical px (0 = none)
     GlassBlur: Integer;        // frosted-glass: blur radius of the backdrop seen through

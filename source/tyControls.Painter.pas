@@ -22,7 +22,7 @@ type
     FRect: TRect;
     FPPI: Integer;
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
-    procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect);
+    procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
     {$IF defined(LINUX) or defined(DARWIN)}
     procedure DrawTextSupersampled(const ARect: TRect; const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout);
@@ -50,7 +50,7 @@ type
       stretched to the zone height — so a tall combo/button keeps a small clean chevron
       instead of a big ugly V. ASizeLogical is the chevron width (height ≈ 0.55x). }
     procedure DrawDropChevron(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer = 9);
-    procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
+    procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean = False);
     procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
     procedure FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
     procedure FillGlass(const ARect: TRect; AGlass: TBGRABitmap; const ASrcOffset: TPoint; const ATint: TTyColor; const ACorners: TTyCorners);
@@ -294,7 +294,7 @@ begin
           end;
         end;
       end;
-    tfkNineSlice: NineSlice(ARect, AFill.ImagePath, AFill.SliceInsets);
+    tfkNineSlice: NineSlice(ARect, AFill.ImagePath, AFill.SliceInsets, AFill.SliceRepeat);
     tfkImage: DrawImageFill(ARect, AFill.ImagePath, AFill.ImageMode, AFill.Blur);
   end;
 end;
@@ -615,9 +615,11 @@ begin
   FBmp.DrawPolyLineAntialias([PointF(l, top), PointF(cx, bot), PointF(r, top)], px, th, False);
 end;
 
-procedure TTyPainter.BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect);
+procedure TTyPainter.BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
 var
   part: TBGRABitmap;
+  x, y: Integer;
+  oldClip: TRect;
 begin
   if (ASrcR.Right <= ASrcR.Left) or (ASrcR.Bottom <= ASrcR.Top) then
     Exit;
@@ -625,13 +627,38 @@ begin
     Exit;
   part := ASrc.GetPart(ASrcR) as TBGRABitmap;
   try
-    FBmp.StretchPutImage(ADstR, part, dmDrawWithTransparency);
+    // v3/B3: TILE the region at 1:1 (repeat) when it must EXPAND and tiling is asked; clip to
+    // the region so tiles can't bleed into neighbouring nine-slice cells. Otherwise stretch
+    // (also the path for corners, whose dst == src size, so tiling would be a no-op anyway).
+    if ATile and (part.Width > 0) and (part.Height > 0)
+       and ((ADstR.Right - ADstR.Left > part.Width) or (ADstR.Bottom - ADstR.Top > part.Height)) then
+    begin
+      oldClip := FBmp.ClipRect;
+      FBmp.ClipRect := ADstR;
+      try
+        y := ADstR.Top;
+        while y < ADstR.Bottom do
+        begin
+          x := ADstR.Left;
+          while x < ADstR.Right do
+          begin
+            FBmp.PutImage(x, y, part, dmDrawWithTransparency);
+            Inc(x, part.Width);
+          end;
+          Inc(y, part.Height);
+        end;
+      finally
+        FBmp.ClipRect := oldClip;
+      end;
+    end
+    else
+      FBmp.StretchPutImage(ADstR, part, dmDrawWithTransparency);
   finally
     part.Free;
   end;
 end;
 
-procedure TTyPainter.NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect);
+procedure TTyPainter.NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean);
 var
   src: TBGRABitmap;
   iw, ih: Integer;
@@ -659,14 +686,15 @@ begin
     dt := ARect.Top;
     dr := ARect.Right;
     db := ARect.Bottom;
+    // corners (0/2/6/8) stay 1:1; edges (1/3/5/7) + center (4) tile when ATile (else stretch).
     BlitRegion(src, Rect(0, 0, sxL, syT), Rect(dl, dt, dl + sl, dt + st));
-    BlitRegion(src, Rect(sxL, 0, sxR, syT), Rect(dl + sl, dt, dr - sr, dt + st));
+    BlitRegion(src, Rect(sxL, 0, sxR, syT), Rect(dl + sl, dt, dr - sr, dt + st), ATile);
     BlitRegion(src, Rect(sxR, 0, iw, syT), Rect(dr - sr, dt, dr, dt + st));
-    BlitRegion(src, Rect(0, syT, sxL, syB), Rect(dl, dt + st, dl + sl, db - sb));
-    BlitRegion(src, Rect(sxL, syT, sxR, syB), Rect(dl + sl, dt + st, dr - sr, db - sb));
-    BlitRegion(src, Rect(sxR, syT, iw, syB), Rect(dr - sr, dt + st, dr, db - sb));
+    BlitRegion(src, Rect(0, syT, sxL, syB), Rect(dl, dt + st, dl + sl, db - sb), ATile);
+    BlitRegion(src, Rect(sxL, syT, sxR, syB), Rect(dl + sl, dt + st, dr - sr, db - sb), ATile);
+    BlitRegion(src, Rect(sxR, syT, iw, syB), Rect(dr - sr, dt + st, dr, db - sb), ATile);
     BlitRegion(src, Rect(0, syB, sxL, ih), Rect(dl, db - sb, dl + sl, db));
-    BlitRegion(src, Rect(sxL, syB, sxR, ih), Rect(dl + sl, db - sb, dr - sr, db));
+    BlitRegion(src, Rect(sxL, syB, sxR, ih), Rect(dl + sl, db - sb, dr - sr, db), ATile);
     BlitRegion(src, Rect(sxR, syB, iw, ih), Rect(dr - sr, db - sb, dr, db));
   finally
     src.Free;
