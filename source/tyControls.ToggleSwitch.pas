@@ -224,6 +224,13 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
 
+    // This is a WINDOWED control (unlike TTyLabel, a graphic control that draws straight over the
+    // parent's painted surface). The track + caption cover only part of the client, so fill the
+    // WHOLE background with the parent's themed surface first -- otherwise the uncovered strips
+    // (around the pill, behind the caption) show the raw parent LCL Color (e.g. the OS grey on a
+    // title bar). Solid + image themes both handled here.
+    TyFillParentBg(Self, P, FullR, S);
+
     DevH := R.Bottom - R.Top;
     if FCaption <> '' then
     begin
