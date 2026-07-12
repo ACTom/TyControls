@@ -1563,7 +1563,7 @@ begin
 end;
 
 procedure TTyForm.ApplyChromeTheme(AController: TTyStyleController);
-var bg: TTyStyleSet;
+var bg, tbBg: TTyStyleSet;
 
   { Theme-switch glass-backdrop ordering: the form (parent) paints first and rebuilds the photo/
     glass backdrop that windowed children SAMPLE for their own glass corners; force the children
@@ -1595,6 +1595,20 @@ begin
     FTitleBar.MinButton.Controller := AController;
     FTitleBar.MaxButton.Controller := AController;
     FTitleBar.CloseButton.Controller := AController;
+    { Theme the title bar's OWN LCL Color, not just the form's. A windowed control hosted on
+      the bar (a theme switcher, a light/dark toggle, a ghost button in its transparent state)
+      erases its unpainted background to its PARENT's LCL Color -- if that stays the default
+      clBtnFace the child shows a jarring OS-grey strip on top of the themed bar. Match it to the
+      resolved title-bar surface (fall back to the form surface) so those areas read as themed. }
+    tbBg := AController.Model.ResolveStyle('TyTitleBar', '', []);
+    if (tpBackground in tbBg.Present) and (tbBg.Background.Kind = tfkSolid) then
+      FTitleBar.Color := TyColorToLCL(tbBg.Background.Color)
+    else
+    begin
+      tbBg := AController.Model.ResolveStyle('TyForm', '', []);
+      if (tpBackground in tbBg.Present) and (tbBg.Background.Kind = tfkSolid) then
+        FTitleBar.Color := TyColorToLCL(tbBg.Background.Color);
+    end;
   end;
   bg := AController.Model.ResolveStyle('TyForm', '', []);
   if (tpBackground in bg.Present) and (bg.Background.Kind = tfkSolid) then
