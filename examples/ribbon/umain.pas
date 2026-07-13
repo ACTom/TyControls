@@ -26,7 +26,7 @@ interface
 uses
   Classes, SysUtils, StrUtils, Forms, Controls, Dialogs, Graphics,
   tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes, tyControls.BuiltinSkins,
-  tyControls.ThemeRegistry,
+  tyControls.ThemeRegistry, tyControls.Base, tyControls.Painter,
   tyControls.Form, tyControls.Hint, tyControls.Panel,
   tyControls.TyLabel, tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.ImageCollection, tyControls.GlyphButtons, tyControls.DropButtons,
@@ -63,6 +63,7 @@ type
     // title bar's text colour (white on Office's accent band, dark on a light caption) — not the
     // surface ink, which would be invisible on a coloured caption. See ReinkTitleBar.
     FQatButtons: array of TTyGlyphButton;   // title-bar QAT icons, re-inked to the caption colour
+    FQat: TTyRibbonQuickAccess;             // the QAT strip itself, glued right after the caption
     // Backstage content: one panel per command (the sidebar navigates; each command
     // shows its own content on the right — new→templates, open→recent, about→version…).
     FPgInfo, FPgNew, FPgOpen, FPgAbout, FPgOptions: TTyPanel;
@@ -131,6 +132,8 @@ type
     procedure BuildViewTab(APage: TTyRibbonPage);
     // Re-tint the title-bar-hosted controls (QAT icons + dark switch) to the caption's text colour.
     procedure ReinkTitleBar;
+    // Position the QAT strip immediately after the (measured) caption text — re-run on theme change.
+    procedure LayoutQat;
   public
     destructor Destroy; override;
   end;
@@ -215,8 +218,8 @@ begin
   Result.StyleClass := 'ghost';    // flat: no frame at rest, subtle hover (Office QAT)
   Result.Images := FImgColl;
   Result.ImageName := AGlyph;
-  Result.GlyphSize := 16;
-  Result.Width := 28;              // square-ish (Align=alLeft keeps this width)
+  Result.GlyphSize := 20;          // Office-QAT proportions (was 16 → looked tiny on a 34px bar)
+  Result.Width := 26;              // tight square (Align=alLeft keeps this width)
   Result.Hint := AHint;
   Result.ShowHint := True;
   Result.OnClick := AHandler;
@@ -235,6 +238,38 @@ begin
   hex := 'color: #' + IntToHex(TyRedOf(ink), 2) + IntToHex(TyGreenOf(ink), 2) + IntToHex(TyBlueOf(ink), 2);
   if DarkSwitch <> nil then
     DarkSwitch.StyleOverride := hex;   // the '暗色' caption -> caption ink
+  LayoutQat;                           // the caption font can change per theme -> reposition the QAT
+end;
+
+{ Glue the QAT strip to the caption: measure the caption exactly as the title bar draws it (same
+  painter + resolved theme font), then place the QAT just past its right edge. Re-run whenever the
+  theme changes (via ReinkTitleBar) because each skin's title font has a different width. }
+procedure TMainForm.LayoutQat;
+var
+  s: TTyStyleSet;
+  P: TTyPainter;
+  bmp: TBitmap;
+  fs, capW, leftPad, gap: Integer;
+begin
+  if FQat = nil then Exit;
+  s  := TyDefaultController.Model.ResolveStyle('TyTitleBar', '', []);
+  // Bar carries no explicit font (see umain.lfm) → ParentFont=True: the caption size is the
+  // theme's --font-size-base (or the style's own font-size), exactly what the bar draws with.
+  fs := TyResolveFontSize(s, True, Bar.Font.Size, TyDefaultController);
+  bmp := TBitmap.Create;
+  P := TTyPainter.Create;
+  try
+    bmp.SetSize(8, 8);                                  // scratch: MeasureText needs a paint context
+    P.BeginPaint(bmp.Canvas, Rect(0, 0, 8, 8), Bar.Font.PixelsPerInch);
+    capW := P.MeasureText(Bar.Caption, s.FontName, fs, s.FontWeight).cx;
+    P.EndPaint;
+  finally
+    P.Free;
+    bmp.Free;
+  end;
+  leftPad := TyTitleBarPad * Bar.Font.PixelsPerInch div 96;   // where the caption text starts (device px)
+  gap     := 16 * Bar.Font.PixelsPerInch div 96;             // breathing room between title and QAT
+  FQat.Left := leftPad + capW + gap;
 end;
 
 procedure TMainForm.BuildHomeTab(APage: TTyRibbonPage);
@@ -871,7 +906,6 @@ end;
   AFTER the .lfm (Bar + ThemeCombo) has streamed and the built-in 'default' theme is active. }
 procedure TMainForm.BuildEditor;
 var
-  QAT: TTyRibbonQuickAccess;
   PgHome, PgInsert, PgView, PgPic: TTyRibbonPage;
   g: TTyRibbonGroup;
 begin
@@ -936,16 +970,17 @@ begin
   Big(g, '裁剪', 'crop', 6, 56, @DoNoop);
 
   // Icon-only Quick Access Toolbar (like Office) on the title bar: New / Open / Save /
-  // Undo / Redo. Placed to the right of the bar caption so they do not overlap it.
-  QAT := TTyRibbonQuickAccess.Create(Self);
-  QAT.Parent := Bar;
-  QAT.SetBounds(240, 4, 152, 26);
+  // Undo / Redo. Width = 5 buttons flush (alLeft, no layout spacing); Left is glued right
+  // after the measured caption by LayoutQat (run here + on every theme change).
+  FQat := TTyRibbonQuickAccess.Create(Self);
+  FQat.Parent := Bar;
+  FQat.SetBounds(Bar.ClientWidth, 3, 5 * 26 + 8, 28);   // 5 flush buttons + tiny slack; Left set by LayoutQat
   // Two-line hints (title + description) render as Office-style ScreenTips.
-  AddQat(QAT, '新建'#10'新建一个空白文档', 'new',  @DoNew);
-  AddQat(QAT, '打开'#10'打开已有文本文件', 'open', @DoOpen);
-  AddQat(QAT, '保存'#10'把当前文档写入磁盘', 'save', @DoSave);
-  AddQat(QAT, '撤销'#10'撤销上一步操作', 'undo', @DoUndo);
-  AddQat(QAT, '重做'#10'重做被撤销的操作', 'redo', @DoRedo);
+  AddQat(FQat, '新建'#10'新建一个空白文档', 'new',  @DoNew);
+  AddQat(FQat, '打开'#10'打开已有文本文件', 'open', @DoOpen);
+  AddQat(FQat, '保存'#10'把当前文档写入磁盘', 'save', @DoSave);
+  AddQat(FQat, '撤销'#10'撤销上一步操作', 'undo', @DoUndo);
+  AddQat(FQat, '重做'#10'重做被撤销的操作', 'redo', @DoRedo);
 
   // The document tab area fills the middle (alClient).
   FDocPages := TTyPageControl.Create(Self);
