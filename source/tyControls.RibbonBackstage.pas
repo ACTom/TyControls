@@ -432,10 +432,10 @@ begin
         if FImages <> nil then
         begin
           glyph := FImages.GetBitmap(glyphName, gsz);
-          TyTintBitmapAlpha(glyph, RowS.TextColor);
+          TyTintBitmapAlpha(glyph, SideS.TextColor);
         end
         else if FIconFont <> nil then
-          glyph := FIconFont.RenderGlyph(glyphName, gsz, RowS.TextColor)
+          glyph := FIconFont.RenderGlyph(glyphName, gsz, SideS.TextColor)
         else
           glyph := nil;
         if glyph <> nil then
@@ -449,7 +449,7 @@ begin
 
       cy := rr.Left + P.Scale(TyBackstageTextInset);
       P.DrawText(Rect(cy, rr.Top, rr.Right - P.Scale(8), rr.Bottom),
-        EntryCaption(k), SideS.FontName, fs, SideS.FontWeight, RowS.TextColor,
+        EntryCaption(k), SideS.FontName, fs, SideS.FontWeight, SideS.TextColor,
         taLeftJustify, tlCenter, True);
     end;
 
