@@ -399,13 +399,13 @@ begin
     begin
       if FKind = sbVertical then
       begin
-        P.DrawGlyph(LoR, tgArrowUp, S.TextColor, 2);
-        P.DrawGlyph(HiR, tgArrowDown, S.TextColor, 2);
+        TyDrawGlyph(P, ActiveController, LoR, tgArrowUp, S.TextColor, 2);     // v3/C5 overridable
+        TyDrawGlyph(P, ActiveController, HiR, tgArrowDown, S.TextColor, 2);
       end
       else
       begin
-        P.DrawGlyph(LoR, tgArrowLeft, S.TextColor, 2);
-        P.DrawGlyph(HiR, tgArrowRight, S.TextColor, 2);
+        TyDrawGlyph(P, ActiveController, LoR, tgArrowLeft, S.TextColor, 2);
+        TyDrawGlyph(P, ActiveController, HiR, tgArrowRight, S.TextColor, 2);
       end;
     end;
     P.EndPaint;

@@ -10,8 +10,9 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, StdCtrls, BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
-  tyControls.Types, tyControls.StyleModel, tyControls.Controller,
-  tyControls.IconFont, tyControls.CheckBox, tyControls.Form;
+  tyControls.Types, tyControls.Painter, tyControls.Base,
+  tyControls.StyleModel, tyControls.Controller,
+  tyControls.IconFont, tyControls.CheckBox, tyControls.Form, tyControls.SpinEdit;
 type
   TCbProbe = class(TTyCheckBox)
   public
@@ -23,10 +24,16 @@ type
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
 
+  TSpinProbe = class(TTySpinEdit)
+  public
+    procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
   TGlyphTest = class(TTestCase)
   private
     function BoxInkPixels(const AThemeCss: string): Integer;
     function CaptionCloseInk(const AThemeCss: string): Integer;
+    function SpinUpArrowInk(const AThemeCss: string): Integer;
   published
     procedure TestParseFamilyAndCodepointBackslash;
     procedure TestParseCodepointNoBackslash;
@@ -36,6 +43,8 @@ type
     procedure TestRawVarReadsToken;
     procedure TestOverrideBypassesVectorGlyph;
     procedure TestCaptionGlyphOverrideBypassesVector;
+    procedure TestGlyphKindTokenMapping;
+    procedure TestSpinEditArrowOverrideBypassesVector;
   end;
 
 implementation
@@ -46,6 +55,11 @@ begin
 end;
 
 procedure TCaptionProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TSpinProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
 end;
@@ -204,6 +218,70 @@ begin
   inkOv := CaptionCloseInk(':root { --glyph-close: "Arial" "\20"; } ' + CB);
   AssertTrue('vector close (x) glyph draws ink', inkVec > 0);
   AssertEquals('override (space) leaves the close button glyphless', 0, inkOv);
+end;
+
+procedure TGlyphTest.TestGlyphKindTokenMapping;
+begin
+  // The derived TyDrawGlyph overload maps each kind to a canonical --glyph-<kind> token.
+  AssertEquals('arrow-up',     '--glyph-arrow-up',     TyGlyphKindToken(tgArrowUp));
+  AssertEquals('arrow-down',   '--glyph-arrow-down',   TyGlyphKindToken(tgArrowDown));
+  AssertEquals('arrow-left',   '--glyph-arrow-left',   TyGlyphKindToken(tgArrowLeft));
+  AssertEquals('arrow-right',  '--glyph-arrow-right',  TyGlyphKindToken(tgArrowRight));
+  AssertEquals('chevron-down', '--glyph-chevron-down', TyGlyphKindToken(tgChevronDown));
+  AssertEquals('check',        '--glyph-check',        TyGlyphKindToken(tgCheck));
+  AssertEquals('close',        '--glyph-close',        TyGlyphKindToken(tgClose));
+end;
+
+function TGlyphTest.SpinUpArrowInk(const AThemeCss: string): Integer;
+var
+  ctrl: TTyStyleController;
+  sp: TSpinProbe;
+  bmp: TBitmap;
+  reread: TBGRABitmap;
+  px: TBGRAPixel;
+  x, y: Integer;
+begin
+  Result := 0;
+  ctrl := TTyStyleController.Create(nil);
+  sp := TSpinProbe.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    ctrl.LoadThemeCss(AThemeCss);
+    sp.Controller := ctrl;
+    bmp.SetSize(140, 28);
+    sp.Render(bmp.Canvas, Rect(0, 0, 140, 28), 96);
+    reread := TBGRABitmap.Create(bmp);
+    try
+      // Up/down arrows live in the ~18px button zone at the right edge; count black ink there.
+      for y := 2 to 26 do
+        for x := 122 to 139 do
+        begin
+          px := reread.GetPixel(x, y);
+          if (px.alpha > 128) and (px.red < 60) and (px.green < 60) and (px.blue < 60) then
+            Inc(Result);
+        end;
+    finally
+      reread.Free;
+    end;
+  finally
+    bmp.Free;
+    sp.Free;
+    ctrl.Free;
+  end;
+end;
+
+procedure TGlyphTest.TestSpinEditArrowOverrideBypassesVector;
+const
+  SP = 'TySpinEdit { background: #FF0000; color: #000000; border-width: 0; } ' +
+       'TyEdit { background: #FF0000; color: #000000; border-width: 0; }';
+var inkVec, inkOv: Integer;
+begin
+  // Proves the derived TyDrawGlyph overload is wired in a real control: overriding both spin
+  // arrows to a space codepoint erases the vector arrows (font-independent dispatch proof).
+  inkVec := SpinUpArrowInk(SP);
+  inkOv := SpinUpArrowInk(':root { --glyph-arrow-up: "Arial" "\20"; --glyph-arrow-down: "Arial" "\20"; } ' + SP);
+  AssertTrue('vector spin arrows draw ink', inkVec > 0);
+  AssertEquals('override (space) leaves the spin arrows glyphless', 0, inkOv);
 end;
 
 initialization

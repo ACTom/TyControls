@@ -851,7 +851,9 @@ begin
     TextR := Types.Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
     PaintFieldContent(P, TextR, S);
-    P.DrawDropChevron(BtnR, S.TextColor);   // fixed small chevron (not stretched to height)
+    // v3/C5: the dropdown indicator is theme-overridable (--glyph-dropdown); else the built-in chevron.
+    if not TyTryDrawGlyphOverride(P, ActiveController, BtnR, '--glyph-dropdown', S.TextColor) then
+      P.DrawDropChevron(BtnR, S.TextColor);   // fixed small chevron (not stretched to height)
     P.EndPaint;
   finally
     P.Free;

@@ -216,10 +216,20 @@ procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: 
 { v3/C5. Draw a control glyph: if the active theme sets ATokenName (e.g. '--glyph-check')
   to a valid override '"Family" "\cp"', render that icon-font glyph; otherwise draw the
   built-in vector AVectorKind. A valid override is honoured even if it yields no ink (the
-  theme asked for it); only an unset/malformed token falls back to the vector. }
+  theme asked for it); only an unset/malformed token falls back to the vector. The second
+  overload derives the token from the kind (--glyph-<kind>) — the 1-line form for the many
+  P.DrawGlyph(rect, kind, ...) call sites. }
 procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
   const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
-  AColor: TTyColor; AThickness: Integer);
+  AColor: TTyColor; AThickness: Integer); overload;
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+  const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer); overload;
+{ v3/C5. Try to draw a theme glyph override into ARect; True = drawn (icon path), False =
+  unset/malformed so the CALLER draws its own default (used where the default isn't a plain
+  vector kind, e.g. the drop chevron). And the canonical token for a vector kind. }
+function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleController;
+  const ARect: TRect; const ATokenName: string; AColor: TTyColor): Boolean;
+function TyGlyphKindToken(AKind: TTyGlyphKind): string;
 
 implementation
 
@@ -522,31 +532,68 @@ begin
     APainter.DrawEdge(ARect, AStyle.BorderWidth, light, dark);  // raised (outset): TL light, BR dark
 end;
 
-procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
-  const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
-  AColor: TTyColor; AThickness: Integer);
+function TyTryDrawGlyphOverride(APainter: TTyPainter; AController: TTyStyleController;
+  const ARect: TRect; const ATokenName: string; AColor: TTyColor): Boolean;
+{ v3/C5 core. If the theme sets ATokenName to a valid glyph override, render that icon-font
+  glyph into ARect and return True (honoured even if it renders blank — the theme asked for
+  it); else return False so the caller draws its OWN default (a vector glyph, DrawDropChevron,
+  …). This is the seam controls that don't use a plain vector kind (e.g. the drop chevron) hook. }
 var
   token: string;
   sz: Integer;
   bmp: TBGRABitmap;
 begin
-  token := '';
-  if AController <> nil then
-    token := AController.Model.RawVar(ATokenName);
-  if token <> '' then
-  begin
-    sz := ARect.Right - ARect.Left;
-    if ARect.Bottom - ARect.Top < sz then sz := ARect.Bottom - ARect.Top;
-    bmp := TyRenderGlyphToken(token, sz, AColor);   // nil when the token is malformed
-    if bmp <> nil then
-      try
-        APainter.DrawGlyphBitmap(ARect, bmp);   // honoured even if blank (theme asked for it)
-        Exit;
-      finally
-        bmp.Free;
-      end;
+  Result := False;
+  if AController = nil then Exit;
+  token := AController.Model.RawVar(ATokenName);
+  if token = '' then Exit;
+  sz := ARect.Right - ARect.Left;
+  if ARect.Bottom - ARect.Top < sz then sz := ARect.Bottom - ARect.Top;
+  bmp := TyRenderGlyphToken(token, sz, AColor);   // nil when the token is malformed
+  if bmp = nil then Exit;
+  try
+    APainter.DrawGlyphBitmap(ARect, bmp);
+  finally
+    bmp.Free;
   end;
-  APainter.DrawGlyph(ARect, AVectorKind, AColor, AThickness);
+  Result := True;
+end;
+
+function TyGlyphKindToken(AKind: TTyGlyphKind): string;
+{ v3/C5. Canonical '--glyph-<kind>' override token for a vector glyph kind ('' = no token). }
+begin
+  case AKind of
+    tgClose:              Result := '--glyph-close';
+    tgMinimize:           Result := '--glyph-minimize';
+    tgMaximize:           Result := '--glyph-maximize';
+    tgRestore:            Result := '--glyph-restore';
+    tgCheck:              Result := '--glyph-check';
+    tgCheckIndeterminate: Result := '--glyph-check-indeterminate';
+    tgRadioDot:           Result := '--glyph-radio';
+    tgChevronDown:        Result := '--glyph-chevron-down';
+    tgChevronRight:       Result := '--glyph-chevron-right';
+    tgArrowUp:            Result := '--glyph-arrow-up';
+    tgArrowDown:          Result := '--glyph-arrow-down';
+    tgArrowLeft:          Result := '--glyph-arrow-left';
+    tgArrowRight:         Result := '--glyph-arrow-right';
+  else
+    Result := '';
+  end;
+end;
+
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+  const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
+  AColor: TTyColor; AThickness: Integer);
+begin
+  if not TyTryDrawGlyphOverride(APainter, AController, ARect, ATokenName, AColor) then
+    APainter.DrawGlyph(ARect, AVectorKind, AColor, AThickness);
+end;
+
+procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
+  const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer);
+{ v3/C5. Convenience: the override token is derived from the kind (--glyph-<kind>). }
+begin
+  TyDrawGlyph(APainter, AController, ARect, TyGlyphKindToken(AVectorKind), AVectorKind, AColor, AThickness);
 end;
 
 { v3/D. Expand a render-style FAMILY preset into concrete border/radius defaults — only for

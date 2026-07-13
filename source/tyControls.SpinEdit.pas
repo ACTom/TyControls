@@ -384,8 +384,8 @@ begin
     EffSize := ResolveFontSize(S);   // same size feeds DrawText and CaretPixelX (caret alignment)
     P.DrawText(TextR, FEditText, S.FontName, EffSize, S.FontWeight,
       S.TextColor, FAlignment, tlCenter, True);
-    P.DrawGlyph(UpR, tgArrowUp, S.TextColor, 2);
-    P.DrawGlyph(DownR, tgArrowDown, S.TextColor, 2);
+    TyDrawGlyph(P, ActiveController, UpR, tgArrowUp, S.TextColor, 2);     // v3/C5 overridable
+    TyDrawGlyph(P, ActiveController, DownR, tgArrowDown, S.TextColor, 2);
     if Focused and FCaretVisible then
     begin
       cx := CaretPixelX(FCaret, APPI);

@@ -785,7 +785,12 @@ TyButton.primary {
     的字体(自带 `.ttf` 的 `url()` 加载为后续扩展),码点为十六进制(前导 `\` 可省)。当前支持的槽:
     - `--glyph-check` / `--glyph-check-indeterminate` — 复选框勾号 / 中间态;
     - `--glyph-radio` — 单选钮圆点;
-    - `--glyph-close` / `--glyph-minimize` / `--glyph-maximize` / `--glyph-restore` — 标题栏按钮图标。
+    - `--glyph-close` / `--glyph-minimize` / `--glyph-maximize` / `--glyph-restore` — 标题栏按钮图标;
+    - `--glyph-arrow-up` / `--glyph-arrow-down` / `--glyph-arrow-left` / `--glyph-arrow-right` — SpinEdit / 滚动条箭头;
+    - `--glyph-dropdown` — ComboBox 下拉指示箭头。
+
+    令牌名遵循 `--glyph-<kind>` 约定,内部字形绘制统一走一个可覆盖入口,所以其余字形槽(菜单/
+    Ribbon/树/列表/日历等)如需也能一行接入——只是这些内部字形一般无人换肤,暂未接。
     例:`--glyph-check: "Segoe MDL2 Assets" "\e73e";`。未设时用内置矢量字形。**注意**:设了有效覆盖
     就一定用图标字体渲染(即便该字体/码点渲染为空);只有未设或格式错误才回退矢量。
 17. **`render-style` 家族预设(v3)**:控件属性 `render-style: flat | bevel3d | inset3d;`——
