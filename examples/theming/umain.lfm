@@ -19,10 +19,11 @@ object MainForm: TMainForm
     Caption = '主题系统  · TyControls'
     TitleAlignment = taLeftJustify
     object ThemeCombo: TTyComboBox
-      Left = 296
+      Left = 202
       Height = 26
       Top = 4
       Width = 120
+      Anchors = [akTop, akRight]
       OnChange = ThemeComboChange
     end
   end
