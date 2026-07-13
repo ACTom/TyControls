@@ -69,7 +69,7 @@ begin
       ARowRect.Right - ARowRect.Left, ARowRect.Bottom - ARowRect.Top);
   end;
   textR := Rect(ARowRect.Left + P.Scale(6), ARowRect.Top, ARowRect.Right, ARowRect.Bottom);
-  P.DrawText(textR, S, hs.FontName, hs.FontSize, 700, hs.TextColor,
+  P.DrawText(textR, S, hs.FontName, TyResolveFontSize(hs, True, 0, AController), 700, hs.TextColor,
     taLeftJustify, tlCenter, True);
 end;
 

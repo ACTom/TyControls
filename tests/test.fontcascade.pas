@@ -10,7 +10,7 @@ interface
 uses
   Classes, SysUtils, Controls, fpcunit, testregistry,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.Base,
-  tyControls.ThemeRegistry, tyControls.BuiltinThemes;
+  tyControls.ThemeRegistry, tyControls.BuiltinThemes, tyControls.Painter;
 type
   { Exposes the protected ResolveFontSize so the control-level fix can be tested. }
   TFontProbe = class(TTyCustomControl)
@@ -31,6 +31,7 @@ type
     procedure TestAppPathThemeNameSeededMode;
     procedure TestNilControllerFallsBackToDefault;
     procedure TestSkinFontSizeMatchesDefault;
+    procedure TestControllerSyncsPainterFallback;
   end;
 
 implementation
@@ -226,6 +227,27 @@ begin
   finally
     parent.Free;
     TyDefaultController.ThemeName := savedTheme;
+  end;
+end;
+
+procedure TFontCascadeTest.TestControllerSyncsPainterFallback;
+{ Safety net: applying a theme syncs the painter's zero-size text fallback to that theme's
+  --font-size-base, so any draw site that slips through with a suppressed (0) font-size still
+  renders at the theme size (9), not a hardcoded default. }
+var c: TTyStyleController; saved: Integer;
+begin
+  TyRegisterBuiltinThemes;
+  TyRegisterThemeDir(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim);
+  saved := TyFallbackFontSize;
+  try
+    c := TTyStyleController.Create(nil);
+    try
+      TyFallbackFontSize := 99;      // clobber to prove the sync actually writes it
+      c.ThemeName := 'breeze';       // triggers Changed → sync from --font-size-base
+      AssertEquals('painter fallback synced to theme base', 9, TyFallbackFontSize);
+    finally c.Free; end;
+  finally
+    TyFallbackFontSize := saved;
   end;
 end;
 

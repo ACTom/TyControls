@@ -95,7 +95,7 @@ end;
 procedure TTyColorComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
 begin
   if (ItemIndex >= 0) and (ItemIndex < Items.Count) and not IsMoreIndex(ItemIndex) then
-    TyDrawColorRow(P, ATextRect, ColorAt(ItemIndex), Items[ItemIndex], AStyle, AStyle.FontSize)
+    TyDrawColorRow(P, ATextRect, ColorAt(ItemIndex), Items[ItemIndex], AStyle, ResolveFontSize(AStyle))
   else
     inherited PaintFieldContent(P, ATextRect, AStyle);   // "more…" / none -> plain text
 end;

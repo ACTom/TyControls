@@ -1276,7 +1276,7 @@ begin
       if FCaption <> '' then
       begin
         capRect := Rect(P.Scale(2), H - bandPx, W - P.Scale(2), H);
-        P.DrawText(capRect, FCaption, S.FontName, S.FontSize, S.FontWeight,
+        P.DrawText(capRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
           S.TextColor, taCenter, tlCenter, True);
       end;
       // Small Office-style dialog launcher (diagonal arrow) in the bottom-right corner.

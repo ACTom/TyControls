@@ -425,7 +425,7 @@ begin
   CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
   if not (tpTextColor in CellStyle.Present) then CellStyle.TextColor := S.TextColor;
   if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
-  P.DrawText(TitleRect, TitleText, CellStyle.FontName, CellStyle.FontSize,
+  P.DrawText(TitleRect, TitleText, CellStyle.FontName, ResolveFontSize(CellStyle),
     FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
 
   // 4x3 month grid
@@ -454,7 +454,7 @@ begin
       P.FillBackground(CellRect, CellStyle.Background, 0);
 
     P.DrawText(CellRect, DefaultFormatSettings.ShortMonthNames[i + 1],
-      CellStyle.FontName, CellStyle.FontSize,
+      CellStyle.FontName, ResolveFontSize(CellStyle),
       FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
   end;
 end;
@@ -500,7 +500,7 @@ begin
   CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
   if not (tpTextColor in CellStyle.Present) then CellStyle.TextColor := S.TextColor;
   if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
-  P.DrawText(TitleRect, TitleText, CellStyle.FontName, CellStyle.FontSize,
+  P.DrawText(TitleRect, TitleText, CellStyle.FontName, ResolveFontSize(CellStyle),
     FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
 
   // 4x3 grid: cells 0..11 = years (DS-1) .. (DS+10)
@@ -539,7 +539,7 @@ begin
       P.FillBackground(CellRect, CellStyle.Background, 0);
 
     P.DrawText(CellRect, IntToStr(cellYear),
-      CellStyle.FontName, CellStyle.FontSize,
+      CellStyle.FontName, ResolveFontSize(CellStyle),
       FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
   end;
 end;
@@ -587,7 +587,7 @@ begin
   CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
   if not (tpTextColor in CellStyle.Present) then CellStyle.TextColor := S.TextColor;
   if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
-  P.DrawText(TitleRect, TitleText, CellStyle.FontName, CellStyle.FontSize,
+  P.DrawText(TitleRect, TitleText, CellStyle.FontName, ResolveFontSize(CellStyle),
     FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
 
   // 4x3 grid: cells 0..11 = decades (CentStart-10) .. (CentStart+100) — spill layout
@@ -627,7 +627,7 @@ begin
       P.FillBackground(CellRect, CellStyle.Background, 0);
 
     P.DrawText(CellRect, IntToStr(cellDecade),
-      CellStyle.FontName, CellStyle.FontSize,
+      CellStyle.FontName, ResolveFontSize(CellStyle),
       FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
   end;
 end;
@@ -734,7 +734,7 @@ begin
       CellStyle.TextColor := S.TextColor;
     if CellStyle.FontSize <= 0 then
       CellStyle.FontSize := FontSz;
-    P.DrawText(TitleRect, TitleText, CellStyle.FontName, CellStyle.FontSize,
+    P.DrawText(TitleRect, TitleText, CellStyle.FontName, ResolveFontSize(CellStyle),
       FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
 
     // Weekday name row
@@ -749,7 +749,7 @@ begin
     if FWeekNumbers then
     begin
       WkNumRect := Rect(0, HeaderH, WkNumW, HeaderH + WeekdayH);
-      P.DrawText(WkNumRect, '#', CellStyle.FontName, CellStyle.FontSize,
+      P.DrawText(WkNumRect, '#', CellStyle.FontName, ResolveFontSize(CellStyle),
         FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
     end;
 
@@ -762,7 +762,7 @@ begin
         HeaderH,
         GridRect.Left + (col + 1) * ColW,
         HeaderH + WeekdayH);
-      P.DrawText(CellRect, DayName, CellStyle.FontName, CellStyle.FontSize,
+      P.DrawText(CellRect, DayName, CellStyle.FontName, ResolveFontSize(CellStyle),
         FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
     end;
 
@@ -830,7 +830,7 @@ begin
       end;
 
       // Day number
-      P.DrawText(CellRect, IntToStr(CellD), CellStyle.FontName, CellStyle.FontSize,
+      P.DrawText(CellRect, IntToStr(CellD), CellStyle.FontName, ResolveFontSize(CellStyle),
         FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
 
       // Week number (leftmost column only)
@@ -847,7 +847,7 @@ begin
           CellStyle.TextColor := S.TextColor;
         if CellStyle.FontSize <= 0 then
           CellStyle.FontSize := FontSz;
-        P.DrawText(WkNumRect, IntToStr(wkNum), CellStyle.FontName, CellStyle.FontSize,
+        P.DrawText(WkNumRect, IntToStr(wkNum), CellStyle.FontName, ResolveFontSize(CellStyle),
           FontWt, CellStyle.TextColor, taCenter, tlCenter, False);
       end;
     end;

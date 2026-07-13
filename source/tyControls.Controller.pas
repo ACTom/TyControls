@@ -489,6 +489,11 @@ var
   i: Integer;
 begin
   SeedModeIfDual;
+  // Belt-and-suspenders behind each control's ResolveFontSize: keep the painter's zero-size text
+  // fallback in step with the active theme's base font. If any draw site slips through with a
+  // suppressed (0) font-size — a skin declaring its own typeKey rule drops the base font-size
+  // under the all-or-nothing cascade — it then renders at the theme size, not a hardcoded default.
+  TyFallbackFontSize := FModel.ResolveMetric('--font-size-base', TyFallbackFontSize);
   for i := FControls.Count - 1 downto 0 do
     TControl(FControls[i]).Invalidate;
   FChangeListeners.CallNotifyEvents(Self);

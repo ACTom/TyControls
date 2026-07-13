@@ -372,8 +372,9 @@ begin
     SideS := ActiveController.Model.ResolveStyle('TyButton', 'primary', []);
     if tpBackground in SideS.Present then
       P.FillBackground(Rect(0, 0, sbW, H), SideS.Background, 0);
-    // Bigger than the base font — the sidebar reads as a menu, not fine print.
-    fs := SideS.FontSize + 2; if fs <= 2 then fs := 12;
+    // Bigger than the base font — the sidebar reads as a menu, not fine print. Resolve through
+    // the shared helper so a skin that omits font-size still gets the theme base (+2), not 12.
+    fs := ResolveFontSize(SideS) + 2;
 
     // Back arrow (a left chevron) in the top band.
     arrowCx := P.Scale(22);

@@ -125,7 +125,7 @@ begin
     capRect := Rect(swatch.Right + gap, AContentRect.Top, AContentRect.Right, AContentRect.Bottom);
     if capRect.Right > capRect.Left then
       APainter.DrawText(capRect, TyColorHex(FSelectedColor), AStyle.FontName,
-        AStyle.FontSize, AStyle.FontWeight, AStyle.TextColor, taLeftJustify, tlCenter, True);
+        ResolveFontSize(AStyle), AStyle.FontWeight, AStyle.TextColor, taLeftJustify, tlCenter, True);
   end;
 end;
 

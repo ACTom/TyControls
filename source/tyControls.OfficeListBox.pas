@@ -63,7 +63,7 @@ begin
   end;
   // Bold header text, left-aligned with a small left pad.
   textR := Rect(ARowRect.Left + P.Scale(6), ARowRect.Top, ARowRect.Right, ARowRect.Bottom);
-  P.DrawText(textR, S, hs.FontName, hs.FontSize, 700, hs.TextColor,
+  P.DrawText(textR, S, hs.FontName, TyResolveFontSize(hs, True, 0, AController), 700, hs.TextColor,
     taLeftJustify, tlCenter, True);
 end;
 

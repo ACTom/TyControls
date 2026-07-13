@@ -509,7 +509,7 @@ var
   mp: Integer;
 begin
   TyParseMnemonic(Caption, disp, mp);
-  APainter.DrawText(AContentRect, disp, AStyle.FontName, AStyle.FontSize,
+  APainter.DrawText(AContentRect, disp, AStyle.FontName, ResolveFontSize(AStyle),
     AStyle.FontWeight, AStyle.TextColor, taCenter, tlCenter, True, TyAccelGatePos(mp));
 end;
 

@@ -864,7 +864,7 @@ procedure TTyComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; c
 begin
   // Default: the selected item's text (unchanged from the old inline draw).
   if FText <> '' then
-    P.DrawText(ATextRect, FText, AStyle.FontName, AStyle.FontSize, AStyle.FontWeight,
+    P.DrawText(ATextRect, FText, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
       AStyle.TextColor, taLeftJustify, tlCenter, True);
 end;
 

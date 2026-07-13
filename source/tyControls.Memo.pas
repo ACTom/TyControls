@@ -2466,11 +2466,9 @@ end;
 
 function TTyMemo.EffectiveFontSize(const S: TTyStyleSet): Integer;
 begin
-  // Verbatim from TTyEdit.EffectiveFontSize.
-  if S.FontSize > 0 then
-    Result := S.FontSize
-  else
-    Result := 12;  // fallback 12pt
+  // Verbatim from TTyEdit.EffectiveFontSize: route through the shared resolver so a skin that
+  // suppresses the font-size gets the theme's --font-size-base, not a hardcoded 12pt.
+  Result := ResolveFontSize(S);
 end;
 
 function TTyMemo.TextStartX(APPI: Integer): Integer;

@@ -90,7 +90,7 @@ end;
 procedure TTyFontComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
 begin
   if (ItemIndex >= 0) and (ItemIndex < Items.Count) then
-    P.DrawText(ATextRect, Items[ItemIndex], Items[ItemIndex], AStyle.FontSize,
+    P.DrawText(ATextRect, Items[ItemIndex], Items[ItemIndex], ResolveFontSize(AStyle),
       AStyle.FontWeight, AStyle.TextColor, taLeftJustify, tlCenter, True)
   else
     inherited PaintFieldContent(P, ATextRect, AStyle);

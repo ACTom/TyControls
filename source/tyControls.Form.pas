@@ -751,7 +751,7 @@ begin
     DrawFrame(P, R, S);
     TextRect := Rect(R.Left + P.Scale(TyTitleBarPad), R.Top,
                      R.Left + W - RightInset, R.Top + H);
-    P.DrawText(TextRect, FCaption, S.FontName, S.FontSize, S.FontWeight,
+    P.DrawText(TextRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
       S.TextColor, FTitleAlignment, tlCenter, True);
     P.EndPaint;
   finally

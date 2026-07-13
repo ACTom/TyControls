@@ -656,10 +656,9 @@ end;
 
 function TTyEdit.EffectiveFontSize(const S: TTyStyleSet): Integer;
 begin
-  if S.FontSize > 0 then
-    Result := S.FontSize
-  else
-    Result := 12;  // fallback 12pt
+  // Route through the shared resolver so a skin that suppresses TyEdit's font-size gets the
+  // theme's --font-size-base (matching default), not a hardcoded 12pt that reads as enlarged.
+  Result := ResolveFontSize(S);
 end;
 
 // ---- Text measurement helpers ----
