@@ -163,7 +163,7 @@ lazbuild tests/tytests.lpi && ./tests/tytests -a --format=plain
 ```
 source/      runtime units (style engine / TTyPainter / controls)
 designtime/  design-time registration units
-themes/      theme files (light / dark / green / showcase / system …)
+themes/      theme sources: root auto/dark/light/green/system; builtin/ = compiled-in structural skins; palettes/ = curated palettes
 examples/    example projects (one per control + the combined demo + the treeview showcase)
 tests/       FPCUnit test suite
 docs/        documentation
@@ -172,11 +172,16 @@ scripts/     build & release scripts
 
 ## Themes
 
-`themes/` ships `light` / `dark` / `green` / `showcase` and more `.tycss` files, plus a set of
-**compiled-in** curated dual-mode themes (`@mode` light/dark in one file) and `system` (follows the
-OS light/dark + accent colour). All themes share one set of `:root` semantic variables
+Every built-in theme is **compiled into the binary** — `default` (a neutral `@mode` light/dark base),
+`system` (follows the OS light/dark + accent colour), and a whole set of **structural skins**
+(`office` / `win11` / `xp` / `classic` / `macos` / `material3` …). An app switches to any of them by
+name with no `themes/` folder (`TyBuiltinThemeNames` lists them all). Each skin's `.tycss` source is
+also kept in `themes/builtin/` as a **reference for users to base their own themes on** — it is not
+read dynamically at runtime. The repo also ships `green` (an image theme, still a file) and the
+curated palettes in `themes/palettes/`. All themes share one set of `:root` semantic variables
 (`--accent` / `--surface` / `--on-surface` / `--border` / `--danger` / `--radius` …) — re-skinning
-just swaps the variables; `LoadTheme` hot-swaps at runtime and every control repaints instantly.
+just swaps the variables; `--accent` can be overridden at runtime (one theme in any brand colour);
+`LoadTheme` / `ThemeName` hot-swaps and every control repaints instantly.
 
 ## Enabling translations
 

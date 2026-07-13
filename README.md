@@ -110,7 +110,7 @@ lazbuild tests/tytests.lpi && ./tests/tytests -a --format=plain
 ```
 source/      运行期单元(样式引擎 / TTyPainter / 控件)
 designtime/  设计期注册单元
-themes/      主题文件(light / dark / green / showcase / system …)
+themes/      主题源:根目录 auto/dark/light/green/system;builtin/ 为编译内置的结构皮肤源;palettes/ 为精选调色板
 examples/    示例工程(每控件一个 + 综合 demo + treeview showcase)
 tests/       FPCUnit 测试套件
 docs/        文档
@@ -119,7 +119,7 @@ scripts/     构建与发布脚本
 
 ## 主题
 
-仓库 `themes/` 提供 `light` / `dark` / `green` / `showcase` 等 `.tycss`,另有一组**编译内置**的精选双模式主题(`@mode` 亮/暗同文件)与 `system`(跟随操作系统亮暗 + 强调色)。所有主题共用同一套 `:root` 语义变量(`--accent` / `--surface` / `--on-surface` / `--border` / `--danger` / `--radius` …),换肤即换变量;`LoadTheme` 运行时热切换,全部控件即时重绘。
+全部内置主题都**编译进二进制**——`default`(`@mode` 亮/暗同文件的中性基底)、`system`(跟随操作系统亮暗 + 强调色),以及一整套**结构皮肤**(`office` / `win11` / `xp` / `classic` / `macos` / `material3` …),应用无需 `themes/` 文件夹即可按名切换(`TyBuiltinThemeNames` 列出全部)。这些皮肤的 `.tycss` 源同时保留在 `themes/builtin/`,是给使用者**照着改自己主题的参考**,运行时并不动态读取。仓库另提供 `green`(图片主题,仍是文件)与 `themes/palettes/` 精选调色板。所有主题共用同一套 `:root` 语义变量(`--accent` / `--surface` / `--on-surface` / `--border` / `--danger` / `--radius` …),换肤即换变量;`--accent` 可运行时覆盖(一套主题看任意品牌色);`LoadTheme` / `ThemeName` 热切换,全部控件即时重绘。
 
 ## 启用翻译
 
