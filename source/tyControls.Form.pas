@@ -1600,6 +1600,11 @@ begin
       try
         P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
         P.FillBackground(ClientRect, bg.Background, 0);
+        // Themed window frame: a TyForm border-color/-width draws a frame around the client edge
+        // (e.g. the XP Luna blue window border). The title bar (alTop) covers the top run; the
+        // side + bottom runs show in the client margins.
+        if (tpBorderColor in bg.Present) and (bg.BorderWidth > 0) then
+          P.StrokeBorder(ClientRect, bg.BorderRadius, bg.BorderWidth, bg.BorderColor);
         P.EndPaint;
       finally
         P.Free;

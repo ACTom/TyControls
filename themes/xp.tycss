@@ -9,11 +9,11 @@
 
 :root {
   --radius: 3px;
-  /* XP caption buttons: small glossy rounded squares, slightly inset, a hair of gap. */
+  /* XP caption buttons: small glossy rounded squares, slightly inset, each with a white ring. */
   --caption-button-width:    22;
-  --caption-button-margin:    3;
+  --caption-button-margin:    4;
   --caption-button-margin-y:  3;
-  --caption-button-gap:       1;
+  --caption-button-gap:       3;
 }
 
 /* Light palette = the authentic XP Luna look. */
@@ -55,8 +55,9 @@
   }
 }
 
-/* Window: the Luna beige client area. */
-TyForm { background: var(--surface); }
+/* Window: the Luna beige client area, wrapped in the iconic blue XP window frame (drawn on the
+   side + bottom edges; the caption bar is the top). */
+TyForm { background: var(--surface); border-color: var(--accent); border-width: 3px; }
 
 /* Caption: glossy Luna blue that STAYS blue — a bright highlight at the very top, the body
    blue, then a subtle lower gloss band and a slightly darker bottom edge. Accent-derived. */
@@ -78,13 +79,13 @@ TyTitleBar {
 TyCaptionButton {
   background: linear-gradient(90deg, lighten(var(--accent), 34%) 0%, lighten(var(--accent), 4%) 46%, darken(var(--accent), 10%) 100%);
   color: #FFFFFF;
-  border-color: lighten(var(--accent), 14%);
+  border-color: #FFFFFF;
   border-width: 1px;
   border-radius: 3px;
 }
 TyCaptionButton:hover        { background: linear-gradient(90deg, lighten(var(--accent), 46%) 0%, lighten(var(--accent), 16%) 46%, var(--accent) 100%); }
 TyCaptionButton:active       { background: linear-gradient(90deg, darken(var(--accent), 6%) 0%, darken(var(--accent), 18%) 100%); }
-TyCaptionButton.close        { background: linear-gradient(90deg, var(--close-top) 0%, var(--close-mid) 46%, var(--close-bot) 100%); border-color: #EA8A72; }
+TyCaptionButton.close        { background: linear-gradient(90deg, var(--close-top) 0%, var(--close-mid) 46%, var(--close-bot) 100%); border-color: #FFFFFF; }
 TyCaptionButton.close:hover  { background: linear-gradient(90deg, #F9C4AF 0%, #EE6046 46%, #CB3B1E 100%); }
 TyCaptionButton.close:active { background: linear-gradient(90deg, #B23018 0%, #8C2310 100%); }
 
