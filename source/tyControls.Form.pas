@@ -74,6 +74,7 @@ type
       Lets a skin (classic) float the caption buttons as gapped 3D squares; the title bar shows in
       the gaps (the buttons are smaller windows over it). }
     function CapMarginPx: Integer;
+    function CapMarginYPx: Integer;
     function CapGapPx: Integer;
     function LeftInsetPx: Integer;
     function GetShowMinimize: Boolean;
@@ -723,6 +724,15 @@ begin
   Result := MulDiv(ActiveController.Metric('--caption-button-margin', 0), Font.PixelsPerInch, 96);
 end;
 
+function TTyTitleBar.CapMarginYPx: Integer;
+{ Vertical (top/bottom) inset. --caption-button-margin-y if set, else the uniform margin. }
+var my: Integer;
+begin
+  my := ActiveController.Metric('--caption-button-margin-y', -1);
+  if my < 0 then my := ActiveController.Metric('--caption-button-margin', 0);
+  Result := MulDiv(my, Font.PixelsPerInch, 96);
+end;
+
 function TTyTitleBar.CapGapPx: Integer;
 begin
   Result := MulDiv(ActiveController.Metric('--caption-button-gap', 0), Font.PixelsPerInch, 96);
@@ -744,17 +754,18 @@ end;
 
 procedure TTyTitleBar.LayoutButtons;
 var
-  W, H, X, Y, m, g: Integer;
+  W, H, X, Y, m, my, g: Integer;
 begin
   if (FCloseButton = nil) or (FMaxButton = nil) or (FMinButton = nil) then
     Exit;
   m := CapMarginPx;
+  my := CapMarginYPx;
   g := CapGapPx;
   W := EffectiveButtonWidthPx;
-  H := ClientHeight - 2 * m;               // inset top+bottom by the margin (0 = full height)
+  H := ClientHeight - 2 * my;              // inset top+bottom by the vertical margin (0 = full height)
   if H < 1 then H := ClientHeight;
-  Y := m;
-  X := ClientWidth - m;                    // start inset from the right edge
+  Y := my;
+  X := ClientWidth - m;                    // start inset from the right edge (horizontal margin)
   if FCloseButton.Visible then begin Dec(X, W); FCloseButton.SetBounds(X, Y, W, H); Dec(X, g); end;
   if FMaxButton.Visible  then begin Dec(X, W); FMaxButton.SetBounds(X, Y, W, H); Dec(X, g); end;
   if FMinButton.Visible  then begin Dec(X, W); FMinButton.SetBounds(X, Y, W, H); end;
