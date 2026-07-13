@@ -42,7 +42,15 @@
 
 TyForm          { background: var(--face); }
 TyTitleBar      { background: linear-gradient(0deg, var(--accent), var(--title-mid), var(--title-light)); color: var(--title-ink); border-radius: 0; }
-TyCaptionButton { render-style: bevel3d; background: var(--face); color: var(--ink); }
+
+/* Caption buttons: FLAT and flush into the title bar (no raised 3D box), white glyph on the blue
+   band, a translucent-white hover/press wash, and the classic red close hover — so they sit
+   flush against the title bar instead of reading as three bordered grey buttons. */
+TyCaptionButton              { background: alpha(#FFFFFF, 0); color: var(--title-ink); border-radius: 0; }
+TyCaptionButton:hover        { background: alpha(#FFFFFF, 0.20); color: var(--title-ink); }
+TyCaptionButton:active       { background: alpha(#FFFFFF, 0.32); color: var(--title-ink); }
+TyCaptionButton.close:hover  { background: #C0392B; color: #FFFFFF; }
+TyCaptionButton.close:active { background: #96271B; color: #FFFFFF; }
 
 TyLabel         { color: var(--ink); }
 
