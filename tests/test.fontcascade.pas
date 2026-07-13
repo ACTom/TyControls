@@ -30,6 +30,7 @@ type
     procedure TestSharedHelperPriority;
     procedure TestAppPathThemeNameSeededMode;
     procedure TestNilControllerFallsBackToDefault;
+    procedure TestSkinFontSizeMatchesDefault;
   end;
 
 implementation
@@ -188,6 +189,43 @@ begin
   finally
     parent.Free;
     TyDefaultController.ThemeName := savedTheme;  // restore global state
+  end;
+end;
+
+procedure TFontCascadeTest.TestSkinFontSizeMatchesDefault;
+{ The direct answer to "are the skin fonts the same size as default?": resolve the effective
+  font size for several controls under a SKIN (adwaita) exactly as the app does (global
+  TyDefaultController, nil-controller control, a big inherited system font) and assert each
+  equals default's 9px. Any skin that sets no font-size (all 13 do) matches default. }
+var
+  parent, p: TFontProbe;
+  savedTheme: string;
+
+  procedure ExpectNine(const AKey: string);
+  var s: TTyStyleSet;
+  begin
+    s := TyDefaultController.Model.ResolveStyle(AKey, '', []);
+    AssertEquals(AKey + ' under adwaita resolves to 9 (== default)', 9, p.CallFS(s));
+  end;
+
+begin
+  TyRegisterBuiltinThemes;
+  TyRegisterThemeDir(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim);
+  savedTheme := TyDefaultController.ThemeName;
+  parent := TFontProbe.Create(nil);
+  try
+    TyDefaultController.ThemeName := 'adwaita';
+    parent.Font.Size := 20;                     // big inherited system font, like a real machine
+    p := TFontProbe.Create(parent);
+    p.Parent := parent;                         // nil controller → ActiveController = TyDefaultController
+    ExpectNine('TyButton');
+    ExpectNine('TyLabel');
+    ExpectNine('TyCheckBox');
+    ExpectNine('TyComboBox');
+    ExpectNine('TyEdit');
+  finally
+    parent.Free;
+    TyDefaultController.ThemeName := savedTheme;
   end;
 end;
 
