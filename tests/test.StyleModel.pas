@@ -91,6 +91,7 @@ type
     procedure TestOverrideVarRebindsOnThemeSwitch;
     procedure TestOverrideBadValueDoesNotRaise;
     procedure TestOverrideEmptyIsNoOp;
+    procedure TestOverridePaddingShrinksContentBox;
   end;
 
   { Phase 3 (theme v2): single-file dual-mode (@mode, D7) — SetMode overlays the active
@@ -736,6 +737,32 @@ begin
   AssertTrue('empty override has no present flags', ovr.Present = []);
   ovr := FModel.ResolveOverride('   ');
   AssertTrue('blank override has no present flags', ovr.Present = []);
+end;
+
+procedure TTestStyleOverride.TestOverridePaddingShrinksContentBox;
+var themed, ovr, merged: TTyStyleSet;
+begin
+  // The ribbon-QAT icon-size fix: an icon-only ghost button inherits the theme's wide button
+  // padding (office ghost = 5px 10px), which shrinks the content box and CLAMPS the glyph tiny
+  // (the glyph can't exceed the content box — see test.glyphbuttons TestSplitOversizedGlyphClamps).
+  // A per-instance StyleOverride 'padding: 4px' must collapse that inset so the box (and glyph) grow.
+  FModel.LoadFromCss('TyButton.ghost { color:#000000; background:#FFFFFF; padding: 5px 10px; }');
+  themed := FModel.ResolveStyle('TyButton', 'ghost', []);
+  AssertEquals('theme ghost h-padding is wide (left)', 10, themed.Padding.Left);
+  AssertEquals('theme ghost h-padding is wide (right)', 10, themed.Padding.Right);
+  // Content width for a 28px button under the theme padding = 28 - 10 - 10 = 8px (glyph clamped to 8).
+  AssertEquals('theme content box is tiny (the bug)', 8, 28 - themed.Padding.Left - themed.Padding.Right);
+
+  ovr := FModel.ResolveOverride('padding: 4px');
+  AssertTrue('override sets padding present', tpPadding in ovr.Present);
+  merged := themed;
+  TyMergeStyleSet(merged, ovr);
+  AssertEquals('override collapses padding (left)', 4, merged.Padding.Left);
+  AssertEquals('override collapses padding (right)', 4, merged.Padding.Right);
+  AssertEquals('override collapses padding (top)', 4, merged.Padding.Top);
+  AssertEquals('override collapses padding (bottom)', 4, merged.Padding.Bottom);
+  // Content width for a 28px button after the override = 28 - 4 - 4 = 20px (glyph fills → big icon).
+  AssertEquals('overridden content box fits a 20px glyph', 20, 28 - merged.Padding.Left - merged.Padding.Right);
 end;
 
 procedure TTestStyleResolve.SetUp;

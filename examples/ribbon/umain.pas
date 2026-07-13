@@ -219,7 +219,11 @@ begin
   Result.Images := FImgColl;
   Result.ImageName := AGlyph;
   Result.GlyphSize := 20;          // Office-QAT proportions (was 16 → looked tiny on a 34px bar)
-  Result.Width := 26;              // tight square (Align=alLeft keeps this width)
+  Result.Width := 28;              // square; Align=alLeft keeps this width
+  // The ghost button's THEME padding (office: 5px 10px) shrinks the content box to ~6px, which
+  // CLAMPS the glyph tiny no matter how big GlyphSize is. Override to a small uniform pad so the
+  // 20px icon actually fills the box (content = 28 − 2·4 = 20px). This is the real size fix.
+  Result.StyleOverride := 'padding: 4px';
   Result.Hint := AHint;
   Result.ShowHint := True;
   Result.OnClick := AHandler;
@@ -972,7 +976,7 @@ begin
   // after the measured caption by LayoutQat (run here + on every theme change).
   FQat := TTyRibbonQuickAccess.Create(Self);
   FQat.Parent := Bar;
-  FQat.SetBounds(Bar.ClientWidth, 3, 5 * 26 + 8, 28);   // 5 flush buttons + tiny slack; Left set by LayoutQat
+  FQat.SetBounds(Bar.ClientWidth, 3, 5 * 28 + 8, 28);   // 5 flush buttons + tiny slack; Left set by LayoutQat
   // Two-line hints (title + description) render as Office-style ScreenTips.
   AddQat(FQat, '新建'#10'新建一个空白文档', 'new',  @DoNew);
   AddQat(FQat, '打开'#10'打开已有文本文件', 'open', @DoOpen);
