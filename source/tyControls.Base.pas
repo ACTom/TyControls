@@ -831,12 +831,33 @@ begin
 end;
 
 function TTyCustomControl.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+var
+  ctl: TTyStyleController;
+  base: Integer;
 begin
-  // Text size priority: theme font-size, then the control's own Font.Size, then a
-  // readable default — so a typeKey without a font-size rule (or an unstyled Font)
-  // never renders zero-height text.
+  // Text size priority:
+  //   1. the typeKey's own theme font-size;
+  //   2. an EXPLICITLY-set control Font.Size (ParentFont=False — an OI/code override to honour);
+  //   3. the theme's --font-size-base var;
+  //   4. an inherited Font.Size / a readable default.
+  //   Step 3 fixes the "file-skins look font-enlarged" bug: a SKIN that declares its own
+  //   `TyButton {}` rule suppresses the ENTIRE built-in TyButton layer under the all-or-nothing
+  //   property cascade — including the base's `font-size: var(--font-size-base)` — so
+  //   AStyle.FontSize resolves to 0. Without step 3 the control fell through to the INHERITED
+  //   OS/system font (ParentFont=True, typically LARGER), so every skin rendered oversized text.
+  //   The --font-size-base var survives the skin load (vars merge separately from typeKey rules),
+  //   and ty controls are theme-locked, so their size follows the theme, not the inherited system
+  //   font. Step 2 keeps an explicit per-control Font.Size winning (a documented contract).
   if AStyle.FontSize > 0 then
-    Result := AStyle.FontSize
+    Exit(AStyle.FontSize);
+  if (not ParentFont) and (Font.Size > 0) then
+    Exit(Font.Size);
+  ctl := ActiveController;
+  base := 0;
+  if ctl <> nil then
+    base := ctl.Metric('--font-size-base', 0);
+  if base > 0 then
+    Result := base
   else if Font.Size > 0 then
     Result := Font.Size
   else
