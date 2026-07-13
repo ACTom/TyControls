@@ -46,8 +46,6 @@ type
     procedure PickAccent(Sender: TObject);
     procedure ResetAccentClick(Sender: TObject);
   private
-    { Apply a built-in theme (optionally forcing a light/dark mode) and update the status label. }
-    procedure ApplyPreset(const AThemeName, AMode, AStatus: string);
     { Enable the "复位默认" button only while a user accent override is active (it clears on a
       theme switch, so this keeps the button in sync with AccentOverride). }
     procedure UpdateAccentBtn;
@@ -130,26 +128,20 @@ begin
   UpdateAccentBtn;   // a theme switch clears any accent override (D2)
 end;
 
-{ LoadTheme's Changed() walks every registered control and Invalidates them, so the sample
-  controls reskin live; ApplyChromeTheme makes the title bar + form background follow along. }
-procedure TMainForm.ApplyPreset(const AThemeName, AMode, AStatus: string);
-begin
-  TyDefaultController.ThemeName := AThemeName;
-  if AMode <> '' then
-    TyDefaultController.Mode := AMode;    // dual-mode themes: force the light/dark block
-  ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := AStatus;
-  UpdateAccentBtn;
-end;
-
+{ Light/Dark toggle the mode of the CURRENTLY-active theme (NOT a switch to the default theme),
+  so the picked skin stays and a custom accent survives (a mode change keeps the override). }
 procedure TMainForm.SwitchLight(Sender: TObject);
 begin
-  ApplyPreset('default', 'light', '当前主题：default（亮色）');
+  TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
+  LblStatus.Caption := '模式：浅色';
 end;
 
 procedure TMainForm.SwitchDark(Sender: TObject);
 begin
-  ApplyPreset('default', 'dark', '当前主题：default（暗色）');
+  TyDefaultController.Mode := 'dark';
+  ApplyChromeTheme(TyDefaultController);
+  LblStatus.Caption := '模式：深色';
 end;
 
 procedure TMainForm.SwitchGreen(Sender: TObject);
