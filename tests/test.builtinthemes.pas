@@ -117,19 +117,23 @@ begin
 end;
 
 procedure TBuiltinThemesTest.TestNamesCountAndContents;
-var n: TStringArray; i: Integer; sawDefault, sawSystem: Boolean;
+var n: TStringArray; i: Integer; sawDefault, sawSystem, sawOffice: Boolean;
 begin
-  // Only default + system stay compiled in; the curated palettes moved to themes/ files.
+  // The compiled-in pack = the 'default'+'system' pair PLUS every structural skin (office/xp/…),
+  // so an app ships them all with no themes/ folder. (The curated palettes stay as files.)
   n := TyBuiltinThemeNames;
-  AssertEquals('2 compiled-in themes', 2, Length(n));
-  sawDefault := False; sawSystem := False;
+  AssertEquals('compiled-in themes = default + system + all skins',
+    2 + Length(TyBuiltinSkinNames), Length(n));
+  sawDefault := False; sawSystem := False; sawOffice := False;
   for i := 0 to High(n) do
   begin
     if n[i] = 'default' then sawDefault := True;
     if n[i] = 'system'  then sawSystem := True;
+    if n[i] = 'office'  then sawOffice := True;
   end;
   AssertTrue('has default', sawDefault);
   AssertTrue('has system', sawSystem);
+  AssertTrue('has a structural skin (office)', sawOffice);
 end;
 
 procedure TBuiltinThemesTest.TestAllBuiltinsLoad;

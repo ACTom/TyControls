@@ -1,14 +1,15 @@
 unit test.builtinskins;
 { The structural skins (classic, xp, office, win11, …) are compiled IN from themes/builtin/*.tycss
-  via the GENERATED unit tyControls.BuiltinSkins. This guard keeps the two in sync: every
-  themes/builtin/<name>.tycss file must have a matching compiled-in skin whose registered CSS is
-  line-for-line identical. If you edit a themes/builtin/*.tycss and forget to re-run
-  gen-builtinskins.ps1 (or vice-versa), this test fails and names the drifting skin. }
+  via the GENERATED unit tyControls.BuiltinThemeData. This guard keeps the two in sync: every
+  themes/builtin/<name>.tycss file must have a matching compiled-in skin whose CSS is line-for-line
+  identical. If you edit a themes/builtin/*.tycss and forget to re-run gen-builtinthemes.ps1 (or
+  vice-versa), this test fails and names the drifting skin. The themes/builtin/ files themselves are
+  a REFERENCE copy for users — the library never loads them at runtime, it uses the compiled-in CSS. }
 {$mode objfpc}{$H+}
 interface
 uses
   Classes, SysUtils, fpcunit, testregistry,
-  tyControls.ThemeRegistry, tyControls.BuiltinSkins;
+  tyControls.BuiltinThemeData;
 type
   TBuiltinSkinsSyncTest = class(TTestCase)
   private
@@ -51,7 +52,6 @@ var
   sr: TSearchRec;
   i: Integer;
 begin
-  TyRegisterBuiltinSkins;
   names := TyBuiltinSkinNames;
   onDisk := TStringList.Create;
   try
@@ -77,29 +77,29 @@ begin
 end;
 
 procedure TBuiltinSkinsSyncTest.TestEachSkinMatchesItsFile;
-{ Each compiled-in skin's registered CSS must be line-for-line identical to its source file. }
+{ Each compiled-in skin's CSS must be line-for-line identical to its source file. }
 var
   names: TStringArray;
   i: Integer;
   css, fileText, failed: string;
   f: TStringList;
 begin
-  TyRegisterBuiltinSkins;
   names := TyBuiltinSkinNames;
   failed := '';
   f := TStringList.Create;
   try
     for i := 0 to High(names) do
     begin
-      if not TyResolveThemeCss(names[i], css) then
+      css := TyBuiltinSkinCss(names[i]);
+      if css = '' then
       begin
-        failed := failed + names[i] + ' <not registered>; ';
+        failed := failed + names[i] + ' <TyBuiltinSkinCss returned empty>; ';
         Continue;
       end;
       f.LoadFromFile(BuiltinDir + names[i] + '.tycss');
       fileText := f.Text;
       if NormLines(css) <> NormLines(fileText) then
-        failed := failed + names[i] + ' <compiled-in CSS differs from file — re-run gen-builtinskins.ps1>; ';
+        failed := failed + names[i] + ' <compiled-in CSS differs from file — re-run gen-builtinthemes.ps1>; ';
     end;
   finally
     f.Free;

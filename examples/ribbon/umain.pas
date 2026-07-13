@@ -25,7 +25,7 @@ interface
 
 uses
   Classes, SysUtils, StrUtils, Forms, Controls, Dialogs, Graphics,
-  tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes, tyControls.BuiltinSkins,
+  tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes,
   tyControls.ThemeRegistry, tyControls.Base, tyControls.Painter,
   tyControls.Form, tyControls.Hint, tyControls.Panel,
   tyControls.TyLabel, tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.ToggleSwitch,
@@ -863,14 +863,12 @@ var
   i: Integer;
   base: string;
 begin
-  // Every skin — Office included — is compiled IN: TyRegisterBuiltinThemes registers the
-  // 'default'+'system' pair AND every structural skin (TyRegisterBuiltinSkins), so this ribbon
-  // example needs no themes/ folder. It DEFAULTS to Office; the combo lists the whole built-in
-  // pack, plus any extra theme FILE dropped in themes/ during development (e.g. the green demo).
+  // Every skin — Office included — is compiled IN: TyRegisterBuiltinThemes registers the whole
+  // built-in pack ('default'+'system' + every structural skin), so this ribbon example needs no
+  // themes/ folder. It DEFAULTS to Office; the combo lists the whole pack, plus any extra theme
+  // FILE dropped in themes/ during development (e.g. the green image demo).
   TyRegisterBuiltinThemes;
-  ThemeCombo.Items.Add('default');
-  ThemeCombo.Items.Add('system');
-  names := TyBuiltinSkinNames;                 // office, xp, win11, … (sorted, compiled in)
+  names := TyBuiltinThemeNames;                 // default, system, office, xp, win11, … (compiled in)
   for i := 0 to High(names) do
     ThemeCombo.Items.Add(names[i]);
   names := TyRegisterThemeDir(LocalThemesDir);  // extra local theme files, if any (green, …)

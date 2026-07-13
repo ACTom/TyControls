@@ -16,8 +16,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Forms, Controls,
-  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.BuiltinSkins,
-  tyControls.ThemeRegistry,
+  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.ThemeRegistry,
   tyControls.Button, tyControls.TyLabel, tyControls.ComboBox,
   tyControls.Edit, tyControls.CheckBox, tyControls.ProgressBar,
   tyControls.Types, tyControls.Css.Values, tyControls.Dialogs.Color;
@@ -99,14 +98,11 @@ var
   i: Integer;
   base: string;
 begin
-  // The compiled-in pack — the 'default'+'system' pair AND every structural skin (all now
+  // The whole compiled-in pack — the 'default'+'system' pair AND every structural skin (all
   // compiled IN via TyRegisterBuiltinThemes) — plus any extra theme FILE dropped in themes/
   // during development (the curated palettes, the green image demo): all pickable from one combo.
   TyRegisterBuiltinThemes;
-  names := TyBuiltinThemeNames;                // default, system
-  for i := 0 to High(names) do
-    ThemeCombo.Items.Add(names[i]);
-  names := TyBuiltinSkinNames;                 // classic, office, xp, win11, … (sorted, compiled in)
+  names := TyBuiltinThemeNames;                // default, system, classic, office, xp, win11, … (compiled in)
   for i := 0 to High(names) do
     ThemeCombo.Items.Add(names[i]);
   names := TyRegisterThemeDir(LocalThemesDir);  // extra local theme files, if any
