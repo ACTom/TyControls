@@ -120,6 +120,7 @@ type
     procedure TestExplicitButtonWidthOverridesMetric;
     procedure TestClassicCaptionButtonsGapped;
     procedure TestDefaultCaptionButtonsFlush;
+    procedure TestCloseButtonSyncsCloseVariant;
   end;
 
   TCaptionButtonPaintTest = class(TTestCase)
@@ -848,6 +849,18 @@ begin
     AssertEquals('flush right', tb.ClientWidth, tb.CloseButton.Left + tb.CloseButton.Width);
     AssertEquals('contiguous (no gap)', tb.MaxButton.Left + tb.MaxButton.Width, tb.CloseButton.Left);
   finally tb.Free; c.Free; end;
+end;
+
+procedure TTitleBarTest.TestCloseButtonSyncsCloseVariant;
+{ cbkClose is the enum default (0); setting Kind := cbkClose on a fresh button must STILL sync
+  StyleClass to 'close' (else `TyCaptionButton.close {}` rules — XP's red close — never match). }
+var b: TTyCaptionButton;
+begin
+  b := TTyCaptionButton.Create(nil);
+  try
+    b.Kind := cbkClose;
+    AssertEquals('close button StyleClass synced', 'close', b.StyleClass);
+  finally b.Free; end;
 end;
 
 procedure TTitleBarTest.TestButtonWidthFollowsThemeMetric;

@@ -506,8 +506,10 @@ end;
 
 procedure TTyCaptionButton.SetKind(AValue: TTyCaptionButtonKind);
 begin
-  if FKind = AValue then
-    Exit;
+  // NB: do NOT early-exit on FKind = AValue. cbkClose is the enum default (0), so the close
+  // button (created then set to cbkClose) would otherwise never sync StyleClass to 'close' —
+  // leaving `TyCaptionButton.close { }` rules (e.g. XP's red close) unmatched. StyleClass has
+  // its own no-op guard, so re-assigning the same value is cheap.
   FKind := AValue;
   StyleClass := KindVariant;
   Invalidate;

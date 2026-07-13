@@ -9,10 +9,10 @@
 
 :root {
   --radius: 3px;
-  /* XP caption buttons: small glossy rounded squares, slightly inset, each with a white ring. */
-  --caption-button-width:    22;
+  /* XP caption buttons: small glossy rounded squares (a touch wider than tall), each white-ringed. */
+  --caption-button-width:    24;
   --caption-button-margin:    4;
-  --caption-button-margin-y:  3;
+  --caption-button-margin-y:  6;
   --caption-button-gap:       3;
 }
 
