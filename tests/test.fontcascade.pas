@@ -9,7 +9,8 @@ unit test.fontcascade;
 interface
 uses
   Classes, SysUtils, Controls, fpcunit, testregistry,
-  tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.Base;
+  tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.Base,
+  tyControls.ThemeRegistry, tyControls.BuiltinThemes;
 type
   { Exposes the protected ResolveFontSize so the control-level fix can be tested. }
   TFontProbe = class(TTyCustomControl)
@@ -27,6 +28,8 @@ type
     procedure TestControlRecoversBaseFontUnderSkin;
     procedure TestExplicitControlFontStillWins;
     procedure TestSharedHelperPriority;
+    procedure TestAppPathThemeNameSeededMode;
+    procedure TestNilControllerFallsBackToDefault;
   end;
 
 implementation
@@ -145,6 +148,47 @@ begin
     AssertEquals('3. explicit control font honoured',    14, TyResolveFontSize(sEmpty, False, 14, c));
     AssertEquals('4. no controller -> readable default',  9, TyResolveFontSize(sEmpty, True,   0, nil));
   finally c.Free; end;
+end;
+
+procedure TFontCascadeTest.TestAppPathThemeNameSeededMode;
+{ Reproduce the theming example EXACTLY: register the themes/ dir, set ThemeName (not ThemeFile),
+  and do NOT set an explicit mode — the controller must SEED a mode itself. Then the recovery
+  var must still resolve to 9. This isolates "explicit mode (unit test) vs seeded mode (app)". }
+var c: TTyStyleController;
+begin
+  TyRegisterBuiltinThemes;
+  TyRegisterThemeDir(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim);
+  c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := 'breeze';            // app path: pick from the combo, no explicit mode
+    AssertTrue('a mode was seeded (not empty)', c.Mode <> '');
+    AssertEquals('--font-size-base resolves under seeded-mode ThemeName', 9, c.Metric('--font-size-base', 0));
+  finally c.Free; end;
+end;
+
+procedure TFontCascadeTest.TestNilControllerFallsBackToDefault;
+{ The EXACT app path: the theming form's controls have Controller=nil and are themed by the
+  GLOBAL TyDefaultController (set to a skin). ActiveController must fall back to it so the
+  --font-size-base recovery still fires — else a nil AController skips the var and the control
+  uses the big inherited font (the reported "其他主题字体都很大"). }
+var parent, p: TFontProbe; empty: TTyStyleSet; savedTheme: string;
+begin
+  TyRegisterBuiltinThemes;
+  TyRegisterThemeDir(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim);
+  savedTheme := TyDefaultController.ThemeName;
+  parent := TFontProbe.Create(nil);
+  try
+    TyDefaultController.ThemeName := 'breeze';   // global default = a skin, like the app
+    parent.Font.Size := 20;
+    p := TFontProbe.Create(parent);
+    p.Parent := parent;                          // Controller stays nil → ActiveController = TyDefaultController
+    empty := Default(TTyStyleSet);
+    AssertTrue('probe has no explicit controller', p.Controller = nil);
+    AssertEquals('nil-controller control recovers theme base font (not OS font)', 9, p.CallFS(empty));
+  finally
+    parent.Free;
+    TyDefaultController.ThemeName := savedTheme;  // restore global state
+  end;
 end;
 
 initialization
