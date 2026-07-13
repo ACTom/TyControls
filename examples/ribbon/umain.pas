@@ -25,7 +25,7 @@ interface
 
 uses
   Classes, SysUtils, StrUtils, Forms, Controls, Dialogs, Graphics,
-  tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes,
+  tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes, tyControls.ThemeRegistry,
   tyControls.Form, tyControls.Hint, tyControls.Panel,
   tyControls.TyLabel, tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.ImageCollection, tyControls.GlyphButtons, tyControls.DropButtons,
@@ -132,6 +132,23 @@ var
 implementation
 
 {$R *.lfm}
+
+{ Locate the repo themes/ folder by walking up from the exe until themes/auto.tycss is found,
+  so the ribbon skin switcher lists the structural skins (office, xp, win11, …) — not just the
+  two compiled-in themes. Empty if not found (e.g. a stand-alone deployed exe). }
+function LocalThemesDir: string;
+var Dir: string; i: Integer;
+begin
+  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
+  for i := 1 to 8 do
+  begin
+    if FileExists(Dir + 'themes' + PathDelim + 'auto.tycss') then
+      Exit(Dir + 'themes' + PathDelim);
+    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
+    if Dir = '' then Break;
+  end;
+  Result := '';
+end;
 
 // ===========================================================================
 // Ribbon builders
@@ -746,12 +763,23 @@ procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
   i: Integer;
+  base: string;
 begin
-  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  // The compiled-in pair (default + system) PLUS every skin FILE in themes/ (office, xp, win11,
+  // material3, …) — all pickable from the one combo, so you can see Office's accent title bar etc.
   TyRegisterBuiltinThemes;
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do
     ThemeCombo.Items.Add(names[i]);
+  names := TyRegisterThemeDir(LocalThemesDir);
+  for i := 0 to High(names) do
+  begin
+    base := LowerCase(names[i]);
+    // auto == default; light/dark are just the default's single-mode halves — skip as picks.
+    if (base = 'auto') or (base = 'light') or (base = 'dark') then Continue;
+    if ThemeCombo.Items.IndexOf(names[i]) < 0 then
+      ThemeCombo.Items.Add(names[i]);
+  end;
   ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
   TyDefaultController.ThemeName := 'default';
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
