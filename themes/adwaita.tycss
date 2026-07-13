@@ -1,0 +1,68 @@
+/* adwaita — an ORIGINAL "inspired-by" take on GNOME's Adwaita (light), not a pixel clone.
+   Restrained and flat: a soft off-white window, a slightly darker flat headerbar with dark
+   text, crisp white fields, hairline #DADADA borders, gentle 6px radii, and the GNOME blue
+   as the single accent. Single fixed mode. --accent drives every accent surface so the
+   runtime accent-picker recolours the whole skin. */
+
+:root {
+  --accent:  #3584E4;   /* GNOME blue — brand/accent seed */
+  --window:  #FAFAFA;    /* window background            */
+  --header:  #EBEBEB;    /* headerbar / title bar        */
+  --field:   #FFFFFF;    /* text-entry wells             */
+  --ink:     #2E3436;    /* primary dark text            */
+  --muted:   #9A9996;    /* disabled / secondary ink     */
+  --border:  #DADADA;    /* hairline separators & edges  */
+  --fill:    #F6F5F4;    /* flat-button rest fill        */
+}
+
+/* --- window + chrome ----------------------------------------------------- */
+TyForm            { background: var(--window); }
+TyTitleBar        { background: var(--header); color: var(--ink); border-bottom: 1px solid var(--border); border-radius: 0; }
+TyCaptionButton   { render-style: flat; background: transparent; color: var(--ink); border-radius: 6; }
+TyCaptionButton:hover  { background: darken(var(--header), 8); color: var(--ink); }
+TyCaptionButton:active { background: darken(var(--header), 14); color: var(--ink); }
+
+TyLabel           { color: var(--ink); }
+
+/* --- buttons ------------------------------------------------------------- */
+/* Flat/light with a hairline border and a soft 6px radius — modern GNOME. */
+TyButton                { render-style: flat; background: var(--fill); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 6px 14px; font-weight: bold; }
+TyButton:hover          { background: darken(var(--fill), 5); border-color: darken(var(--border), 6); }
+TyButton:active         { background: darken(var(--fill), 11); border-color: darken(var(--border), 12); }
+TyButton:disabled       { background: var(--fill); color: var(--muted); border-color: lighten(var(--border), 3); }
+
+/* Primary = solid accent, white ink, matching accent border. */
+TyButton.primary        { background: var(--accent); color: on(var(--accent)); border: 1px solid darken(var(--accent), 6); }
+TyButton.primary:hover  { background: darken(var(--accent), 6); border-color: darken(var(--accent), 12); }
+TyButton.primary:active { background: darken(var(--accent), 13); border-color: darken(var(--accent), 18); }
+TyButton.primary:disabled { background: alpha(var(--accent), 0.45); color: alpha(#FFFFFF, 0.9); border-color: transparent; }
+
+/* Ghost = borderless flat button; a faint fill appears on interaction. */
+TyButton.ghost          { background: transparent; color: var(--ink); border: 1px solid transparent; border-radius: 6; }
+TyButton.ghost:hover    { background: alpha(var(--ink), 0.06); border-color: transparent; }
+TyButton.ghost:active   { background: alpha(var(--ink), 0.11); border-color: transparent; }
+TyButton.ghost:disabled { background: transparent; color: var(--muted); border-color: transparent; }
+
+/* --- text inputs --------------------------------------------------------- */
+TyEdit            { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 5px 8px; }
+TyEdit:hover      { border-color: darken(var(--border), 8); }
+TyEdit:focus      { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.45); outline-offset: 1; }
+TyEdit:disabled   { background: var(--window); color: var(--muted); border-color: lighten(var(--border), 3); }
+
+TyComboBox        { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 5px 8px; }
+TyComboBox:hover  { border-color: darken(var(--border), 8); }
+TyComboBox:focus  { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.45); outline-offset: 1; }
+TyComboBox:disabled { background: var(--window); color: var(--muted); border-color: lighten(var(--border), 3); }
+
+/* --- checkbox ------------------------------------------------------------ */
+/* Stroked indicator (render-style does not bevel it): white well, hairline
+   border, accent-inked tick. */
+TyCheckBox        { background: var(--field); color: var(--accent); border: 1px solid darken(var(--border), 4); border-radius: 5; }
+TyCheckBox:hover  { border-color: var(--accent); }
+TyCheckBox:active { background: alpha(var(--accent), 0.10); color: var(--accent); border: 1px solid var(--accent); border-radius: 5; }
+TyCheckBox:disabled { background: var(--window); color: var(--muted); border-color: lighten(var(--border), 3); }
+
+/* --- progress ------------------------------------------------------------ */
+/* A slim, fully-rounded light trough with a solid accent fill. */
+TyProgressBar     { background: darken(var(--window), 8); border: 1px solid var(--border); border-radius: 8; }
+TyProgressFill    { background: var(--accent); border-radius: 8; }

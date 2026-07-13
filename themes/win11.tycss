@@ -1,0 +1,96 @@
+/* win11 — an ORIGINAL "inspired-by" ty-controls skin evoking Windows 11 (Fluent / Mica):
+   ROUNDED (radius 8), light mica surfaces, hairline 1px borders, soft drop shadows on
+   buttons, roomy 8px padding, and a #0067C0 brand accent. NOT a pixel clone — a
+   ty-controls interpretation. Single fixed palette (no @mode). Loaded as a FILE.
+   Set --accent so the runtime accent-picker recolours the primary/accent surfaces. */
+:root {
+  /* ── Brand accent (recoloured by the picker) ── */
+  --accent:          #0067C0;
+  --accent-hover:    lighten(--accent, 8%);
+  --accent-active:   darken(--accent, 8%);
+  --accent-border:   darken(--accent, 8%);
+  --accent-disabled: alpha(var(--accent), 0.40);
+  --accent-soft:     alpha(var(--accent), 0.12);   /* subtle selected wash */
+  --on-accent:       on(var(--accent));            /* readable ink on accent */
+  --on-accent-dim:   alpha(#FFFFFF, 0.82);         /* pressed accent ink */
+
+  /* ── Mica-ish neutrals ── */
+  --mica:   #F3F3F3;   /* window + title-bar surface */
+  --field:  #FFFFFF;   /* text-field wells */
+  --card:   #FBFBFB;   /* default button face */
+  --ink:    #1A1A1A;   /* primary text */
+  --ink-dim: alpha(var(--ink), 0.65);
+  --border:        #D6D6D6;   /* hairline borders */
+  --border-hover:  #C4C4C4;
+  --border-strong: #9A9A9A;   /* check-box outline */
+  --track:         #E6E6E6;   /* progress track */
+
+  /* ── Neutral overlays (subtle Fluent hover/press fills) ── */
+  --hover-fill:  alpha(#000000, 0.06);
+  --active-fill: alpha(#000000, 0.10);
+
+  /* ── Geometry ── */
+  --radius:    8px;
+  --radius-sm: 4px;
+}
+
+/* Window backdrop — the light mica surface. */
+TyForm { background: var(--mica); }
+
+/* Title bar: same mica surface with dark ink — no coloured band (very Win 11). */
+TyTitleBar { background: var(--mica); color: var(--ink); border-radius: 0; }
+
+/* Caption buttons: square, full-height, transparent → soft grey hover; close → red. */
+TyCaptionButton              { background: alpha(#FFFFFF, 0); color: var(--ink); border-radius: 0; }
+TyCaptionButton:hover        { background: var(--hover-fill); }
+TyCaptionButton:active       { background: var(--active-fill); }
+TyCaptionButton.close:hover  { background: #C42B1C; color: #FFFFFF; }
+TyCaptionButton.close:active { background: #B0271A; color: #FFFFFF; }
+
+TyLabel          { color: var(--ink); }
+TyLabel:disabled { color: var(--ink-dim); }
+
+/* Default button: light rounded card, hairline border, soft drop shadow, roomy padding. */
+TyButton          { background: var(--card); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 8px; font-weight: normal; shadow: 0 1 3 #00000022; }
+TyButton:hover    { background: #F5F5F5; border-color: var(--border-hover); }
+TyButton:active   { background: #EFEFEF; color: var(--ink-dim); shadow: 0 0 0 #00000000; }
+TyButton:focus    { border-color: var(--accent); outline: 2px var(--accent); outline-offset: 1px; }
+TyButton:disabled { background: #F0F0F0; color: #A0A0A0; border-color: #E4E4E4; shadow: 0 0 0 #00000000; }
+
+/* Primary: solid accent, white ink, rounded, soft shadow — the default action. */
+TyButton.primary          { background: var(--accent); color: var(--on-accent); border-color: var(--accent-border); border-width: 1px; border-radius: var(--radius); padding: 8px; font-weight: normal; shadow: 0 1 3 #00000022; }
+TyButton.primary:hover    { background: var(--accent-hover); }
+TyButton.primary:active   { background: var(--accent-active); color: var(--on-accent-dim); shadow: 0 0 0 #00000000; }
+TyButton.primary:focus    { border-color: var(--accent-border); outline: 2px var(--accent); outline-offset: 1px; }
+TyButton.primary:disabled { background: var(--accent-disabled); border-color: var(--accent-disabled); color: #FFFFFF; shadow: 0 0 0 #00000000; }
+
+/* Ghost / subtle: transparent + shadowless until hovered; a light grey fill appears. */
+TyButton.ghost          { background: alpha(#000000, 0); color: var(--ink); border-radius: var(--radius); padding: 8px; font-weight: normal; }
+TyButton.ghost:hover    { background: var(--hover-fill); }
+TyButton.ghost:active   { background: var(--active-fill); color: var(--ink-dim); }
+TyButton.ghost:selected { background: var(--accent-soft); color: var(--accent); }
+TyButton.ghost:focus    { outline: 2px var(--accent); outline-offset: 1px; }
+TyButton.ghost:disabled { color: #A0A0A0; }
+
+/* Fields: white wells, hairline border, rounded; accent border + ring on focus. */
+TyEdit          { background: var(--field); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 6px 8px; }
+TyEdit:hover    { border-color: var(--border-hover); }
+TyEdit:focus    { border-color: var(--accent); outline: 2px var(--accent); }
+TyEdit:disabled { background: #F5F5F5; color: #A0A0A0; }
+
+TyComboBox          { background: var(--field); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 6px 8px; }
+TyComboBox:hover    { border-color: var(--border-hover); }
+TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--accent); }
+TyComboBox:disabled { background: #F5F5F5; color: #A0A0A0; }
+
+/* Check box: a white box with a medium hairline border (stroked, not beveled);
+   accent fill + white tick when checked (:active). 'color' inks the tick. */
+TyCheckBox          { background: var(--field); color: var(--accent); border-color: var(--border-strong); border-width: 1px; border-radius: var(--radius-sm); padding: 4px; }
+TyCheckBox:hover    { border-color: var(--accent); }
+TyCheckBox:active   { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+TyCheckBox:focus    { outline: 2px var(--accent); outline-offset: 1px; }
+TyCheckBox:disabled { background: #F0F0F0; color: #B8B8B8; border-color: #D0D0D0; }
+
+/* Progress: a light rounded track with a rounded accent fill (soft pill ends). */
+TyProgressBar  { background: var(--track); border-color: var(--border); border-width: 1px; border-radius: 6px; }
+TyProgressFill { background: var(--accent); border-radius: 6px; }

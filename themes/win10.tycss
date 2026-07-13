@@ -1,0 +1,70 @@
+/* win10 — an ORIGINAL "inspired-by" Windows 10 skin (not a pixel clone).
+   The whole language of this look is: FLAT, SHARP, SQUARE. Solid light-grey
+   surfaces, hairline 1px borders, zero corner radius, and one bold accent that
+   the runtime accent-picker can recolour (everything blue derives from --accent). */
+
+:root {
+  --accent:  #0078D7;   /* Windows 10 signature blue — brand colour */
+  --surface: #F3F3F3;   /* window / app background */
+  --field:   #FFFFFF;   /* editable well */
+  --border:  #CCCCCC;   /* hairline chrome border */
+  --ink:     #1F1F1F;   /* primary dark text */
+  --ink-dim: #A0A0A0;   /* disabled text */
+}
+
+/* Window: solid, quiet light grey. */
+TyForm { background: var(--surface); }
+
+/* Title bar: white with dark text and a single hairline divider all round
+   (reads as the thin bottom rule under the caption). Flat, square. */
+TyTitleBar      { background: var(--field); color: var(--ink); border: 1px solid #E1E1E1; border-radius: 0; }
+TyCaptionButton { render-style: flat; background: transparent; color: var(--ink); border-radius: 0; }
+TyCaptionButton:hover  { background: #E5E5E5; color: var(--ink); }
+TyCaptionButton:active { background: #CCCCCC; color: var(--ink); }
+
+/* Labels: near-black on the light surface. */
+TyLabel { color: var(--ink); }
+
+/* Default button: white face, grey hairline border. On :hover the border turns
+   accent over a pale accent wash; :active presses a slightly deeper wash. */
+TyButton          { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 0; padding: 6px; font-weight: normal; }
+TyButton:hover    { background: lighten(var(--accent), 82%); color: var(--ink); border: 1px solid var(--accent); }
+TyButton:active   { background: lighten(var(--accent), 70%); color: var(--ink); border: 1px solid var(--accent); }
+TyButton:focus    { outline: 1 var(--accent); outline-offset: 2px; }
+TyButton:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid #E0E0E0; }
+
+/* Primary button: solid accent fill, white ink; hover/press just darken it. */
+TyButton.primary          { render-style: flat; background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); border-radius: 0; padding: 6px; font-weight: normal; }
+TyButton.primary:hover    { background: darken(var(--accent), 8%);  border: 1px solid darken(var(--accent), 8%);  color: on(var(--accent)); }
+TyButton.primary:active   { background: darken(var(--accent), 16%); border: 1px solid darken(var(--accent), 16%); color: on(var(--accent)); }
+TyButton.primary:focus    { outline: 1 var(--accent); outline-offset: 2px; }
+TyButton.primary:disabled { background: var(--border); color: var(--field); border: 1px solid var(--border); }
+
+/* Ghost button: no chrome at rest — accent-tinted text, pale accent wash on interaction. */
+TyButton.ghost          { render-style: flat; background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 0; padding: 6px; font-weight: normal; }
+TyButton.ghost:hover    { background: lighten(var(--accent), 82%); color: var(--accent); border: 1px solid transparent; }
+TyButton.ghost:active   { background: lighten(var(--accent), 70%); color: var(--accent); border: 1px solid transparent; }
+TyButton.ghost:disabled { background: transparent; color: var(--ink-dim); border: 1px solid transparent; }
+
+/* Fields: crisp white wells, hairline border, square. Border darkens on hover,
+   turns accent on focus — the Windows 10 text-box behaviour. */
+TyEdit         { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 0; padding: 4px; }
+TyEdit:hover   { border: 1px solid #767676; }
+TyEdit:focus   { border: 1px solid var(--accent); }
+TyEdit:disabled{ background: var(--surface); color: var(--ink-dim); border: 1px solid #E0E0E0; }
+
+TyComboBox        { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 0; padding: 4px; }
+TyComboBox:hover  { border: 1px solid #767676; }
+TyComboBox:focus  { border: 1px solid var(--accent); }
+TyComboBox:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid #E0E0E0; }
+
+/* Check box: a white square well with a darker-grey stroked border; the tick is
+   inked with the accent. Border/wash go accent on hover/press. (Stroked, not beveled.) */
+TyCheckBox         { background: var(--field); color: var(--accent); border: 1px solid #767676; border-radius: 0; }
+TyCheckBox:hover   { background: var(--field); color: var(--accent); border: 1px solid var(--accent); border-radius: 0; }
+TyCheckBox:active  { background: lighten(var(--accent), 70%); color: var(--accent); border: 1px solid var(--accent); border-radius: 0; }
+TyCheckBox:disabled{ background: var(--surface); color: var(--ink-dim); border: 1px solid #D0D0D0; border-radius: 0; }
+
+/* Progress: a flat light-grey track with a hairline border and a solid accent fill. */
+TyProgressBar  { render-style: flat; background: #E6E6E6; border: 1px solid var(--border); border-radius: 0; }
+TyProgressFill { background: var(--accent); border-radius: 0; }

@@ -1,0 +1,63 @@
+/* Ant Design — an ORIGINAL "inspired-by" ty-controls skin (NOT a pixel-perfect clone).
+   Professional, flat with subtle depth: white surfaces, hair-thin #D9D9D9 borders,
+   a #1677FF brand accent, 6px radii and crisp near-black (85%) ink. Single fixed mode.
+   --accent drives every primary/accent surface, so the runtime accent-picker recolours
+   the whole skin (hover/active shades are derived from it with lighten()/darken()). */
+
+:root {
+  --accent: #1677FF;   /* brand blue — primary buttons, focus, checks, progress fill */
+}
+
+/* Window: a soft neutral canvas so the white surfaces read as raised cards. */
+TyForm { background: #F5F5F5; color: #000000D9; }
+
+/* Title bar: clean white header with near-black ink (Ant's flat chrome). */
+TyTitleBar      { background: #FFFFFF; color: #000000D9; border-radius: 0; }
+TyCaptionButton { background: #FFFFFF; color: #000000A6; border-radius: 0; }
+TyCaptionButton:hover  { background: #0000000F; color: #000000D9; }
+TyCaptionButton:active { background: #00000017; color: #000000D9; }
+
+TyLabel { color: #000000D9; }
+
+/* Default button: white face, hair-line border, near-black ink, gentle 6px radius and a
+   whisper of depth. On hover the border + text adopt the accent (Ant's signature). */
+TyButton                { background: #FFFFFF; color: #000000D9; border: 1px solid #D9D9D9; border-radius: 6; padding: 5px 15px; font-weight: normal; shadow: 0 2 0 #00000004; }
+TyButton:hover          { background: #FFFFFF; color: var(--accent); border-color: var(--accent); }
+TyButton:active         { background: #FFFFFF; color: darken(var(--accent), 12); border-color: darken(var(--accent), 12); }
+TyButton:focus          { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.2); outline-offset: 0; }
+TyButton:disabled       { background: #F5F5F5; color: #00000040; border-color: #D9D9D9; shadow: 0 0 0 transparent; }
+
+/* Primary button: solid accent fill, readable ink, faint accent-tinted drop shadow. */
+TyButton.primary          { background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); border-radius: 6; padding: 5px 15px; font-weight: normal; shadow: 0 2 0 #1677FF1A; }
+TyButton.primary:hover    { background: lighten(var(--accent), 10); border-color: lighten(var(--accent), 10); color: on(var(--accent)); }
+TyButton.primary:active   { background: darken(var(--accent), 8); border-color: darken(var(--accent), 8); color: on(var(--accent)); }
+TyButton.primary:focus    { outline: 2 alpha(var(--accent), 0.25); outline-offset: 1px; }
+TyButton.primary:disabled { background: #F5F5F5; color: #00000040; border-color: #D9D9D9; shadow: 0 0 0 transparent; }
+
+/* Ghost button: borderless text button that tints toward the accent on interaction. */
+TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6; padding: 5px 15px; font-weight: normal; }
+TyButton.ghost:hover    { background: alpha(var(--accent), 0.08); color: var(--accent); }
+TyButton.ghost:active   { background: alpha(var(--accent), 0.15); color: darken(var(--accent), 12); }
+TyButton.ghost:disabled { background: transparent; color: #00000040; }
+
+/* Fields: white wells with a hair-line border, accent on hover, an accent glow ring on focus. */
+TyEdit            { background: #FFFFFF; color: #000000D9; border: 1px solid #D9D9D9; border-radius: 6; padding: 5px 11px; }
+TyEdit:hover      { border-color: var(--accent); }
+TyEdit:focus      { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.2); outline-offset: 0; }
+TyEdit:disabled   { background: #F5F5F5; color: #00000040; border-color: #D9D9D9; }
+
+TyComboBox          { background: #FFFFFF; color: #000000D9; border: 1px solid #D9D9D9; border-radius: 6; padding: 5px 11px; }
+TyComboBox:hover    { border-color: var(--accent); }
+TyComboBox:focus    { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.2); outline-offset: 0; }
+TyComboBox:disabled { background: #F5F5F5; color: #00000040; border-color: #D9D9D9; }
+
+/* Check box: a small white well with a hair-line border and an accent tick; the box is
+   stroked (render-style would not bevel it), border warms to the accent on interaction. */
+TyCheckBox          { background: #FFFFFF; color: var(--accent); border: 1px solid #D9D9D9; border-radius: 4; }
+TyCheckBox:hover    { border-color: var(--accent); }
+TyCheckBox:active   { background: #FFFFFF; color: var(--accent); border: 1px solid var(--accent); border-radius: 4; }
+TyCheckBox:disabled { background: #F5F5F5; color: #00000040; border-color: #D9D9D9; }
+
+/* Progress: a faint rounded trail with a solid accent fill (both pill-rounded). */
+TyProgressBar  { background: #0000000F; border-radius: 100; }
+TyProgressFill { background: var(--accent); border-radius: 100; }

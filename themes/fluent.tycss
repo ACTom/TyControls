@@ -1,0 +1,142 @@
+/* fluent — an ORIGINAL "inspired-by" skin evoking Microsoft Fluent 2 (Win11-web).
+   Not a pixel clone: soft rounded (radius 6) surfaces, an acrylic-ish light chrome,
+   hairline neutral borders, roomy padding, and gentle soft shadows. Single fixed
+   palette. --accent drives every accent surface so the runtime picker recolours it. */
+
+:root {
+  /* ── SEED ── brand + Fluent neutral ramp ── */
+  --accent:        #0F6CBD;               /* Fluent brand primary */
+  --form:          #FAF9F8;               /* window backdrop (soft off-white) */
+  --field:         #FFFFFF;               /* input wells */
+  --ink:           #201F1E;               /* neutral foreground */
+  --muted:         #605E5C;               /* secondary text */
+  --border:        #E1DFDD;               /* hairline neutral stroke */
+  --border-strong: #C7C6C4;               /* hover stroke */
+  --check-border:  #8A8886;               /* unchecked indicator stroke */
+  --hover:         #F5F4F3;               /* neutral hover fill */
+  --pressed:       #E1DFDD;               /* neutral pressed fill */
+  --subtle-hover:  #F3F2F1;               /* transparent-button hover */
+  --track:         #EDEBE9;               /* progress track */
+  --danger:        #C42B1C;               /* Fluent close-button red */
+
+  /* ── MAP: derive accent states so the accent-picker follows ── */
+  --accent-hover:  darken(var(--accent), 8%);    /* ~#115EA3 */
+  --accent-active: darken(var(--accent), 15%);   /* ~#0F548C */
+  --on-accent:     on(var(--accent));            /* readable ink -> #FFFFFF */
+
+  /* ── COMPONENT scalars ── */
+  --radius:       6px;
+  --radius-sm:    3px;
+  --radius-track: 4px;
+  --disabled:     0.45;
+}
+
+/* Window backdrop. */
+TyForm { background: var(--form); }
+
+/* Chrome: a faint top-lit acrylic band, semibold caption ink. */
+TyTitleBar {
+  background: linear-gradient(180deg, #FDFCFC, #F5F4F3);
+  color: var(--ink);
+  font-weight: 600;
+  border-radius: 0;
+}
+
+/* Caption buttons: transparent, square hover fills; close goes Fluent-red. */
+TyCaptionButton        { background: alpha(#FFFFFF, 0); color: var(--ink); border-radius: 0; }
+TyCaptionButton:hover  { background: var(--subtle-hover); }
+TyCaptionButton:active { background: var(--pressed); }
+TyCaptionButton.close:hover  { background: var(--danger); color: #FFFFFF; }
+TyCaptionButton.close:active { background: darken(var(--danger), 10%); color: #FFFFFF; }
+
+TyLabel          { color: var(--ink); }
+TyLabel:disabled { opacity: var(--disabled); }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────
+   Default (secondary): white, hairline border, soft rounded, gentle shadow.
+   On :hover the neutral stroke turns accent — the Fluent "emphasis" feel. */
+TyButton {
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  font-weight: 600;
+  shadow: 0 1 2 #00000024;
+}
+TyButton:hover    { background: var(--hover); border-color: var(--accent); }
+TyButton:active   { background: var(--pressed); border-color: var(--border-strong); }
+TyButton:focus    { border-color: var(--accent); outline: 2px var(--accent); outline-offset: 2px; }
+TyButton:disabled { opacity: var(--disabled); }
+
+/* Primary: solid accent, white ink, borderless-look, soft elevation. */
+TyButton.primary          { background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: var(--radius); padding: 6px 14px; font-weight: 600; shadow: 0 1 2 #00000024; }
+TyButton.primary:hover    { background: var(--accent-hover);  border-color: var(--accent-hover); }
+TyButton.primary:active   { background: var(--accent-active); border-color: var(--accent-active); }
+TyButton.primary:focus    { outline: 2px var(--accent); outline-offset: 2px; }
+TyButton.primary:disabled { opacity: var(--disabled); }
+
+/* Ghost (Fluent "subtle"): transparent until hover; no elevation. */
+TyButton.ghost {
+  background: alpha(var(--hover), 0);
+  color: var(--ink);
+  border: 1px solid alpha(var(--border), 0);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  font-weight: 600;
+}
+TyButton.ghost:hover    { background: var(--subtle-hover); }
+TyButton.ghost:active   { background: var(--pressed); }
+TyButton.ghost:selected { background: alpha(var(--accent), 0.12); color: var(--accent); }
+TyButton.ghost:focus    { outline: 2px var(--accent); outline-offset: 2px; }
+TyButton.ghost:disabled { opacity: var(--disabled); }
+
+/* ── Inputs ──────────────────────────────────────────────────────────────
+   White well, hairline border, roomy padding; focus lights the accent. */
+TyEdit {
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+}
+TyEdit:hover    { border-color: var(--border-strong); }
+TyEdit:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.35); outline-offset: 1px; }
+TyEdit:disabled { opacity: var(--disabled); }
+
+TyComboBox {
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+}
+TyComboBox:hover    { border-color: var(--border-strong); }
+TyComboBox:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.35); outline-offset: 1px; }
+TyComboBox:disabled { opacity: var(--disabled); }
+
+/* Checkbox: a small stroked well; checked fills accent with a white tick. */
+TyCheckBox {
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--check-border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+}
+TyCheckBox:hover    { border-color: var(--accent); }
+TyCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+TyCheckBox:focus    { outline: 2px var(--accent); outline-offset: 2px; }
+TyCheckBox:disabled { opacity: var(--disabled); }
+
+/* Progress: a thin light rounded track with a rounded accent fill. */
+TyProgressBar {
+  background: var(--track);
+  border-width: 0;
+  border-radius: var(--radius-track);
+}
+TyProgressBar:disabled { opacity: var(--disabled); }
+
+TyProgressFill {
+  background: var(--accent);
+  border-radius: var(--radius-track);
+}

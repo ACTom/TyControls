@@ -1,0 +1,135 @@
+/* office — an ORIGINAL "inspired-by" skin evoking the Microsoft Office Ribbon era
+   (a fresh interpretation, not a pixel clone). The signature move: an ACCENT-COLOURED
+   title band, just like Word/Excel/PowerPoint. Set --accent to recolour the whole
+   brand identity at runtime — Word-blue by default, Excel-green (#217346),
+   PowerPoint-orange (#B7472A), etc. Otherwise a flat, near-white, thin-bordered
+   Fluent-ish surface with 2px radii and a solid accent primary button. SINGLE mode. */
+
+:root {
+  --accent:     #2B579A;   /* Word blue — the runtime accent-picker recolours everything */
+  --surface:    #F3F2F1;   /* near-white Fluent neutral background */
+  --field:      #FFFFFF;   /* white input wells */
+  --ink:        #201F1E;   /* near-black text */
+  --muted:      #A19F9D;   /* disabled / secondary ink */
+  --line:       #C8C6C4;   /* thin neutral hairline border */
+  --line-field: #8A8886;   /* slightly stronger field border */
+}
+
+/* Window: flat near-white canvas. */
+TyForm { background: var(--surface); }
+
+/* Title bar: the accent band — the whole point of this skin. */
+TyTitleBar {
+  background: var(--accent);
+  color: on(var(--accent));
+  border-radius: 0;
+}
+TyCaptionButton {
+  background: transparent;
+  color: on(var(--accent));
+  border-radius: 0;
+}
+TyCaptionButton:hover  { background: alpha(on(var(--accent)), 0.18); color: on(var(--accent)); }
+TyCaptionButton:active { background: alpha(on(var(--accent)), 0.30); color: on(var(--accent)); }
+
+/* Labels: near-black on the light canvas. */
+TyLabel { color: var(--ink); }
+
+/* Buttons: flat, thin-bordered, quiet — the ribbon/command-bar feel.
+   Hover tints toward the accent; pressed reads slightly deeper. */
+TyButton {
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  font-weight: normal;
+  padding: 6px 12px;
+}
+TyButton:hover {
+  background: alpha(var(--accent), 0.10);
+  color: var(--ink);
+  border: 1px solid alpha(var(--accent), 0.45);
+}
+TyButton:active {
+  background: alpha(var(--accent), 0.20);
+  color: var(--ink);
+  border: 1px solid var(--accent);
+}
+TyButton:focus  { outline: 2px var(--accent); outline-offset: 1px; }
+TyButton:disabled {
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+/* Primary: solid accent, readable ink, the emphasised command. */
+TyButton.primary {
+  background: var(--accent);
+  color: on(var(--accent));
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  font-weight: bold;
+}
+TyButton.primary:hover  { background: darken(var(--accent), 8);  border: 1px solid darken(var(--accent), 8); }
+TyButton.primary:active { background: darken(var(--accent), 16); border: 1px solid darken(var(--accent), 16); }
+TyButton.primary:disabled {
+  background: alpha(var(--accent), 0.40);
+  color: alpha(on(var(--accent)), 0.75);
+  border: 1px solid alpha(var(--accent), 0.40);
+}
+
+/* Ghost: chrome-less until touched — a toolbar/command-bar affordance. */
+TyButton.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+TyButton.ghost:hover  { background: alpha(var(--accent), 0.10); color: var(--accent); border: 1px solid transparent; }
+TyButton.ghost:active { background: alpha(var(--accent), 0.20); color: var(--accent); border: 1px solid transparent; }
+TyButton.ghost:disabled { background: transparent; color: var(--muted); border: 1px solid transparent; }
+
+/* Fields: white wells, thin stronger border, accent focus ring. */
+TyEdit {
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--line-field);
+  border-radius: 2px;
+  padding: 5px 8px;
+}
+TyEdit:hover    { border: 1px solid var(--ink); }
+TyEdit:focus    { border: 1px solid var(--accent); outline: 2px alpha(var(--accent), 0.35); outline-offset: 0px; }
+TyEdit:disabled { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+
+TyComboBox {
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--line-field);
+  border-radius: 2px;
+  padding: 5px 8px;
+}
+TyComboBox:hover    { border: 1px solid var(--ink); }
+TyComboBox:focus    { border: 1px solid var(--accent); outline: 2px alpha(var(--accent), 0.35); outline-offset: 0px; }
+TyComboBox:disabled { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+
+/* Check box: white indicator, thin border, accent tick (color inks the check). */
+TyCheckBox {
+  background: var(--field);
+  color: var(--accent);
+  border: 1px solid var(--line-field);
+  border-radius: 2px;
+}
+TyCheckBox:hover    { background: var(--field); color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; }
+TyCheckBox:active   { background: alpha(var(--accent), 0.12); color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; }
+TyCheckBox:disabled { background: var(--surface); color: var(--muted); border: 1px solid var(--line); border-radius: 2px; }
+
+/* Progress: flat light track, solid accent fill. */
+TyProgressBar {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+TyProgressFill {
+  background: var(--accent);
+  border-radius: 2px;
+}

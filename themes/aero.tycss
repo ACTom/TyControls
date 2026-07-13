@@ -1,0 +1,144 @@
+/* Aero — an ORIGINAL "inspired-by" take on the Windows Vista/7 glass look (NOT a pixel clone).
+   Faked glass with no real blur: light top-white-sheen gradients, cool grays/blues, thin light
+   borders, rounded 4px corners and soft cool shadows for an airy, glossy feel. Single fixed mode.
+   Gradient angle note: 90deg runs TOP->BOTTOM, so the first stop is the top sheen. */
+:root {
+  --accent:      #3A8DDE;   /* brand blue — runtime accent-picker recolours from here */
+  --ink:         #1E2B3A;   /* cool dark-slate text */
+  --border-cool: #A9C6E0;   /* thin light glass border */
+  --border-hi:   #6EA8DE;   /* accent-tinted border on hover/focus */
+  --focus-ring:  alpha(var(--accent), 0.55);
+}
+
+/* Window: an airy, very light cool gray-blue wash (top lighter, bottom a touch deeper). */
+TyForm { background: linear-gradient(90deg, #EEF4FB 0%, #E2ECF6 100%); }
+
+/* Title bar: light frosted gradient — near-white sheen fading to pale blue, with a soft lower edge. */
+TyTitleBar {
+  background: linear-gradient(90deg, #FCFEFF 0%, #EBF4FC 55%, #D4E6F6 100%);
+  color: #24313F;
+  font-weight: bold;
+}
+
+/* Caption buttons: glassy translucent lift; a warm red glow on close. */
+TyCaptionButton        { background: alpha(#FFFFFF, 0); color: #24313F; border-radius: 0; }
+TyCaptionButton:hover  { background: alpha(#FFFFFF, 0.55); }
+TyCaptionButton:active { background: alpha(#FFFFFF, 0.78); }
+TyCaptionButton.min:hover    { background: alpha(#FFFFFF, 0.55); }
+TyCaptionButton.max:hover    { background: alpha(#FFFFFF, 0.55); }
+TyCaptionButton.close:hover  { background: #E04747; color: #FFFFFF; }
+TyCaptionButton.close:active { background: #C23030; color: #FFFFFF; }
+
+TyLabel          { background: alpha(#FFFFFF, 0); color: var(--ink); font-weight: normal; }
+TyLabel:disabled { opacity: 0.5; }
+
+/* Buttons: a subtle top-white sheen over a light glassy fill, thin light border, radius 4, soft shadow.
+   The 45%/50% break fakes the classic two-part Aero gloss (bright upper, deeper lower that lifts again). */
+TyButton {
+  background: linear-gradient(90deg, #FDFEFF 0%, #ECF4FC 45%, #DCEAF6 50%, #E7F1FB 100%);
+  color: var(--ink);
+  border-color: var(--border-cool);
+  border-width: 1px;
+  border-radius: 4px;
+  padding: 7px;
+  font-weight: normal;
+  shadow: 0 2 5 #2B5E8E2E;
+}
+TyButton:hover {
+  background: linear-gradient(90deg, #FFFFFF 0%, #F3F9FE 45%, #E3F0FB 50%, #EFF7FE 100%);
+  border-color: var(--border-hi);
+}
+TyButton:active {
+  background: linear-gradient(90deg, #CBDFF1 0%, #D6E6F4 50%, #E1EDF8 100%);
+  border-color: #5E97CE;
+  shadow: 0 1 2 #2B5E8E33;
+}
+TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); outline-offset: 1px; }
+TyButton:disabled { opacity: 0.5; }
+
+/* Primary: glossy blue Aero glass — bright accent sheen up top, deeper mid break, accent base. */
+TyButton.primary {
+  background: linear-gradient(90deg, lighten(--accent, 30%) 0%, lighten(--accent, 8%) 45%, darken(--accent, 6%) 50%, var(--accent) 100%);
+  color: on(var(--accent));
+  border-color: darken(--accent, 12%);
+  shadow: 0 2 6 #1E5FA240;
+}
+TyButton.primary:hover {
+  background: linear-gradient(90deg, lighten(--accent, 38%) 0%, lighten(--accent, 16%) 45%, var(--accent) 50%, lighten(--accent, 4%) 100%);
+  border-color: darken(--accent, 8%);
+}
+TyButton.primary:active {
+  background: linear-gradient(90deg, darken(--accent, 4%) 0%, darken(--accent, 12%) 100%);
+  border-color: darken(--accent, 18%);
+  shadow: 0 1 2 #1E5FA240;
+}
+TyButton.primary:disabled { opacity: 0.5; }
+
+/* Ghost: transparent at rest, fades into a faint glass panel on hover/press. */
+TyButton.ghost {
+  background: alpha(#FFFFFF, 0);
+  color: var(--ink);
+  border-color: alpha(var(--border-cool), 0);
+  border-width: 1px;
+  border-radius: 4px;
+  padding: 7px;
+  font-weight: normal;
+}
+TyButton.ghost:hover    { background: alpha(#FFFFFF, 0.5); border-color: var(--border-hi); }
+TyButton.ghost:active   { background: alpha(#D6E6F4, 0.85); border-color: #5E97CE; }
+TyButton.ghost:selected { background: alpha(#D6E6F4, 0.9); border-color: var(--accent); }
+TyButton.ghost:focus    { outline: 2px var(--focus-ring); outline-offset: 1px; }
+TyButton.ghost:disabled { opacity: 0.5; }
+
+/* Fields: crisp white wells with a faint top shade (fakes a soft inner recess) + blue focus glow. */
+TyEdit {
+  background: linear-gradient(90deg, #EDF4FB 0%, #FFFFFF 24%, #FFFFFF 100%);
+  color: var(--ink);
+  border-color: #9FBEDC;
+  border-width: 1px;
+  border-radius: 4px;
+  padding: 4px;
+}
+TyEdit:hover    { border-color: var(--border-hi); }
+TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyEdit:disabled { opacity: 0.5; }
+
+TyComboBox {
+  background: linear-gradient(90deg, #EDF4FB 0%, #FFFFFF 24%, #FFFFFF 100%);
+  color: var(--ink);
+  border-color: #9FBEDC;
+  border-width: 1px;
+  border-radius: 4px;
+  padding: 4px;
+}
+TyComboBox:hover    { border-color: var(--border-hi); }
+TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyComboBox:disabled { opacity: 0.5; }
+
+/* Check box: a faint glassy white box (stroked, not beveled); accent fill + white tick when checked. */
+TyCheckBox {
+  background: linear-gradient(90deg, #F1F7FC 0%, #FFFFFF 45%);
+  color: var(--ink);
+  border-color: #7FA8CE;
+  border-width: 1px;
+  border-radius: 3px;
+  padding: 4px;
+}
+TyCheckBox:hover    { border-color: var(--accent); }
+TyCheckBox:active   { background: var(--accent); color: on(var(--accent)); border-color: darken(--accent, 12%); }
+TyCheckBox:focus    { outline: 2px var(--focus-ring); }
+TyCheckBox:disabled { opacity: 0.5; }
+
+/* Progress: a light sunken glass track with a glossy accent fill (bright sheen band along the top). */
+TyProgressBar {
+  background: linear-gradient(90deg, #DCE6F0 0%, #EAF1F8 100%);
+  border-color: #A7C0D8;
+  border-width: 1px;
+  border-radius: 4px;
+}
+TyProgressBar:disabled { opacity: 0.5; }
+
+TyProgressFill {
+  background: linear-gradient(90deg, lighten(--accent, 30%) 0%, var(--accent) 45%, darken(--accent, 6%) 55%, lighten(--accent, 10%) 100%);
+  border-radius: 3px;
+}

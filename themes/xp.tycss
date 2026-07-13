@@ -1,0 +1,159 @@
+/* xp — an ORIGINAL "inspired-by" take on the Windows XP "Luna" (blue) look.
+   Not a pixel clone: glossy vertical gradients, 3px rounded corners, a soft blue
+   button border, a deep->pale blue gradient title bar, white fields with a blue
+   focus ring, and the iconic Luna beige client. Single fixed palette (no @mode).
+   Accent-driven: the title bar, primary button, progress fill, checked box and all
+   focus rings resolve from var(--accent), so the runtime accent-picker recolours
+   the whole skin. 90deg = a vertical top->bottom gradient in this engine. */
+
+:root {
+  --accent:       #2F6FE0;                    /* Luna blue brand colour */
+  --on-accent:    #FFFFFF;
+  --surface:      #ECE9D8;                    /* the classic XP client "beige" */
+  --on-surface:   #1B1B1B;
+  --field:        #FFFFFF;
+  --field-border: lighten(var(--accent), 22%); /* soft steel-blue field edge */
+  --btn-border:   lighten(var(--accent), 14%); /* soft blue button edge */
+  --radius:       3px;
+}
+
+/* Window: the iconic Luna beige client area. */
+TyForm { background: var(--surface); }
+
+/* Title bar: glossy deep-blue -> medium -> pale-blue vertical gradient (a subtle
+   darker "gloss cut" at 55% gives the wet Luna sheen). Derived from the accent. */
+TyTitleBar {
+  background: linear-gradient(90deg,
+    darken(var(--accent), 26%) 0%,
+    var(--accent) 42%,
+    darken(var(--accent), 6%) 55%,
+    lighten(var(--accent), 34%) 100%);
+  color: #FFFFFF;
+  font-weight: bold;
+  border-radius: 0;
+}
+
+/* Caption buttons: translucent white wash; close glows XP red. */
+TyCaptionButton            { background: alpha(#FFFFFF, 0); color: #FFFFFF; border-radius: 3px; }
+TyCaptionButton:hover      { background: alpha(#FFFFFF, 0.22); }
+TyCaptionButton:active     { background: alpha(#FFFFFF, 0.34); }
+TyCaptionButton.min:hover  { background: alpha(#FFFFFF, 0.22); }
+TyCaptionButton.max:hover  { background: alpha(#FFFFFF, 0.22); }
+TyCaptionButton.close:hover  { background: #E0483D; color: #FFFFFF; }
+TyCaptionButton.close:active { background: #C13529; color: #FFFFFF; }
+
+TyLabel           { background: alpha(#FFFFFF, 0); color: var(--on-surface); }
+TyLabel:disabled  { opacity: 0.5; }
+
+/* Buttons: glossy vertical gradient, near-white top -> pale mid -> light steel
+   bottom, with a soft rounded blue border. :active inverts (darker top) to read
+   pressed/inset while keeping the rounded corners. */
+TyButton {
+  background: linear-gradient(90deg, #FDFEFF 0%, #EEF3FB 50%, #D6E3F5 100%);
+  color: var(--on-surface);
+  border-color: var(--btn-border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 6px;
+  font-weight: normal;
+}
+TyButton:hover    { background: linear-gradient(90deg, #FFFFFF 0%, #F2F8FF 50%, #DBEAFC 100%); border-color: var(--accent); }
+TyButton:active   { background: linear-gradient(90deg, #C7D8EF 0%, #D9E6F8 55%, #E9F1FC 100%); border-color: darken(var(--accent), 10%); }
+TyButton:focus    { border-color: var(--accent); outline: 2px var(--accent); outline-offset: 1px; }
+TyButton:disabled { opacity: 0.5; }
+
+/* Primary: the glossy blue default button — pale-blue top -> accent -> deeper
+   bottom, so the accent-picker recolours it wholesale. */
+TyButton.primary {
+  background: linear-gradient(90deg, lighten(var(--accent), 24%) 0%, var(--accent) 50%, darken(var(--accent), 12%) 100%);
+  color: var(--on-accent);
+  border-color: darken(var(--accent), 18%);
+  font-weight: bold;
+}
+TyButton.primary:hover    { background: linear-gradient(90deg, lighten(var(--accent), 32%) 0%, lighten(var(--accent), 8%) 50%, darken(var(--accent), 6%) 100%); }
+TyButton.primary:active   { background: linear-gradient(90deg, darken(var(--accent), 10%) 0%, var(--accent) 60%, lighten(var(--accent), 8%) 100%); border-color: darken(var(--accent), 24%); }
+TyButton.primary:focus    { border-color: darken(var(--accent), 18%); outline: 2px var(--accent); outline-offset: 1px; }
+TyButton.primary:disabled { opacity: 0.5; }
+
+/* Ghost: flat until touched, then a soft blue wash. */
+TyButton.ghost {
+  background: alpha(var(--accent), 0);
+  color: var(--on-surface);
+  border-color: alpha(var(--accent), 0);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 6px;
+  font-weight: normal;
+}
+TyButton.ghost:hover    { background: alpha(var(--accent), 0.12); border-color: alpha(var(--accent), 0.40); }
+TyButton.ghost:active   { background: alpha(var(--accent), 0.20); }
+TyButton.ghost:selected { background: alpha(var(--accent), 0.20); border-color: var(--accent); }
+TyButton.ghost:focus    { outline: 2px var(--accent); outline-offset: 1px; }
+TyButton.ghost:disabled { opacity: 0.5; }
+
+/* Fields: crisp white wells, soft blue border, blue focus ring. */
+TyEdit {
+  background: var(--field);
+  color: var(--on-surface);
+  border-color: var(--field-border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 4px;
+}
+TyEdit:hover    { border-color: var(--accent); }
+TyEdit:focus    { border-color: var(--accent); outline: 2px var(--accent); }
+TyEdit:disabled { opacity: 0.5; }
+
+TyComboBox {
+  background: var(--field);
+  color: var(--on-surface);
+  border-color: var(--field-border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 4px;
+}
+TyComboBox:hover    { border-color: var(--accent); }
+TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--accent); }
+TyComboBox:disabled { opacity: 0.5; }
+
+/* Check box: white box, soft blue border, accent tick; checked = solid accent fill. */
+TyCheckBox {
+  background: var(--field);
+  color: var(--accent);
+  border-color: var(--field-border);
+  border-width: 1px;
+  border-radius: 3px;
+  padding: 4px;
+}
+TyCheckBox:hover    { border-color: var(--accent); }
+TyCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: darken(var(--accent), 12%); }
+TyCheckBox:focus    { outline: 2px var(--accent); }
+TyCheckBox:disabled { opacity: 0.5; }
+
+/* Radio: sibling of the check box, fully rounded. */
+TyRadioButton {
+  background: var(--field);
+  color: var(--accent);
+  border-color: var(--field-border);
+  border-width: 1px;
+  border-radius: 9px;
+  padding: 4px;
+}
+TyRadioButton:hover    { border-color: var(--accent); }
+TyRadioButton:active   { background: var(--accent); color: var(--on-accent); border-color: darken(var(--accent), 12%); }
+TyRadioButton:focus    { outline: 2px var(--accent); }
+TyRadioButton:disabled { opacity: 0.5; }
+
+/* Progress: a white sunken trough with a glossy accent-blue fill. */
+TyProgressBar {
+  background: var(--field);
+  border-color: var(--field-border);
+  border-width: 1px;
+  border-radius: 3px;
+}
+TyProgressBar:disabled { opacity: 0.5; }
+
+TyProgressFill {
+  background: linear-gradient(90deg, lighten(var(--accent), 26%) 0%, var(--accent) 55%, darken(var(--accent), 10%) 100%);
+  border-radius: 2px;
+}

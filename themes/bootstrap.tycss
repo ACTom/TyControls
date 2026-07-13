@@ -1,0 +1,203 @@
+/* Bootstrap — an original ty-controls skin inspired by Bootstrap 5's flat, clean web look.
+   Solid blue primary on white ink, subtle grey secondary/outline, 6px radii,
+   white fields with soft grey borders and an accent focus ring. Single fixed palette. */
+
+:root {
+  --accent:  #0D6EFD;   /* Bootstrap primary blue */
+  --surface: #FFFFFF;   /* cards / fields */
+  --window:  #F8F9FA;   /* body-bg (bootstrap gray-100) */
+  --border:  #DEE2E6;   /* gray-300 dividers */
+  --field-border: #CED4DA; /* gray-400 input border */
+  --ink:     #212529;   /* gray-900 body text */
+  --muted:   #6C757D;   /* gray-600 secondary */
+}
+
+/* ---- Window & chrome ---------------------------------------------------- */
+TyForm {
+  background: var(--window);
+  color: var(--ink);
+}
+
+TyTitleBar {
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 0;
+}
+
+TyCaptionButton {
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 4px;
+}
+TyCaptionButton:hover {
+  background: #E9ECEF;
+  color: var(--ink);
+}
+TyCaptionButton:active {
+  background: #DEE2E6;
+  color: var(--ink);
+}
+
+/* ---- Text --------------------------------------------------------------- */
+TyLabel {
+  color: var(--ink);
+}
+
+/* ---- Buttons ------------------------------------------------------------ */
+/* Default = Bootstrap "secondary" grey solid */
+TyButton {
+  background: var(--muted);
+  color: #FFFFFF;
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  font-weight: normal;
+  padding: 7px 14px;
+}
+TyButton:hover {
+  background: #5C636A;
+  border-color: #565E64;
+}
+TyButton:active {
+  background: #565E64;
+  border-color: #51585E;
+}
+TyButton:focus {
+  outline: 3px alpha(var(--muted), 0.5);
+  outline-offset: 1px;
+}
+TyButton:disabled {
+  background: var(--muted);
+  border-color: var(--muted);
+  color: #FFFFFF;
+  opacity: 0.65;
+}
+
+/* Primary = solid brand blue, white ink */
+TyButton.primary {
+  background: var(--accent);
+  color: on(var(--accent));
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+TyButton.primary:hover {
+  background: darken(var(--accent), 8);
+  border-color: darken(var(--accent), 12);
+}
+TyButton.primary:active {
+  background: darken(var(--accent), 14);
+  border-color: darken(var(--accent), 18);
+}
+TyButton.primary:focus {
+  outline: 3px alpha(var(--accent), 0.5);
+  outline-offset: 1px;
+}
+TyButton.primary:disabled {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: on(var(--accent));
+  opacity: 0.65;
+}
+
+/* Ghost = outline-primary: transparent fill, blue ink + blue border */
+TyButton.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+TyButton.ghost:hover {
+  background: var(--accent);
+  color: on(var(--accent));
+  border-color: var(--accent);
+}
+TyButton.ghost:active {
+  background: darken(var(--accent), 8);
+  color: on(var(--accent));
+  border-color: darken(var(--accent), 8);
+}
+TyButton.ghost:focus {
+  outline: 3px alpha(var(--accent), 0.5);
+  outline-offset: 1px;
+}
+TyButton.ghost:disabled {
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent);
+  opacity: 0.65;
+}
+
+/* ---- Inputs ------------------------------------------------------------- */
+TyEdit {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+TyEdit:focus {
+  border-color: lighten(var(--accent), 15);
+  outline: 4px alpha(var(--accent), 0.25);
+  outline-offset: 0px;
+}
+TyEdit:disabled {
+  background: #E9ECEF;
+  color: var(--muted);
+  border-color: var(--field-border);
+}
+
+TyComboBox {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+TyComboBox:focus {
+  border-color: lighten(var(--accent), 15);
+  outline: 4px alpha(var(--accent), 0.25);
+  outline-offset: 0px;
+}
+TyComboBox:disabled {
+  background: #E9ECEF;
+  color: var(--muted);
+  border-color: var(--field-border);
+}
+
+/* ---- Checkbox (stroked indicator: background + border + tick color) ----- */
+TyCheckBox {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+}
+TyCheckBox:hover {
+  border-color: var(--accent);
+}
+TyCheckBox:active {
+  border-color: darken(var(--accent), 10);
+}
+TyCheckBox:focus {
+  outline: 4px alpha(var(--accent), 0.25);
+  outline-offset: 1px;
+}
+TyCheckBox:selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: on(var(--accent));
+}
+TyCheckBox:disabled {
+  background: #E9ECEF;
+  border-color: var(--field-border);
+  color: var(--muted);
+  opacity: 0.65;
+}
+
+/* ---- Progress ----------------------------------------------------------- */
+TyProgressBar {
+  background: #E9ECEF;
+  border-radius: 6px;
+}
+TyProgressFill {
+  background: var(--accent);
+  border-radius: 6px;
+}
