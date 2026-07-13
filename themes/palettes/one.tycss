@@ -1,5 +1,5 @@
 /* one — curated dual-mode palette (moved out of the compiled-in pack into themes/).
    The dual-mode neutral base is imported; only the 5 colour seeds differ per mode. */
-@import "auto.tycss";
+@import "../auto.tycss";
 @mode light { :root { --accent: #4078F2; --surface: #FAFAFA; --on-surface: #383A42; --border: #D4D4D4; --danger: #E45649; } }
 @mode dark  { :root { --accent: #61AFEF; --surface: #282C34; --on-surface: #ABB2BF; --border: #3E4451; --danger: #E06C75; } }

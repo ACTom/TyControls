@@ -1,5 +1,5 @@
 /* nord — curated dual-mode palette (moved out of the compiled-in pack into themes/).
    The dual-mode neutral base is imported; only the 5 colour seeds differ per mode. */
-@import "auto.tycss";
+@import "../auto.tycss";
 @mode light { :root { --accent: #5E81AC; --surface: #ECEFF4; --on-surface: #2E3440; --border: #D8DEE9; --danger: #BF616A; } }
 @mode dark  { :root { --accent: #88C0D0; --surface: #2E3440; --on-surface: #ECEFF4; --border: #4C566A; --danger: #BF616A; } }

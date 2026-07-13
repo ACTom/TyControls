@@ -1,5 +1,5 @@
 /* solarized — curated dual-mode palette (moved out of the compiled-in pack into themes/).
    The dual-mode neutral base is imported; only the 5 colour seeds differ per mode. */
-@import "auto.tycss";
+@import "../auto.tycss";
 @mode light { :root { --accent: #268BD2; --surface: #FDF6E3; --on-surface: #657B83; --border: #EEE8D5; --danger: #DC322F; } }
 @mode dark  { :root { --accent: #268BD2; --surface: #002B36; --on-surface: #839496; --border: #073642; --danger: #DC322F; } }

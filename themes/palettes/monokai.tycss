@@ -1,5 +1,5 @@
 /* monokai — curated dual-mode palette (moved out of the compiled-in pack into themes/).
    The dual-mode neutral base is imported; only the 5 colour seeds differ per mode. */
-@import "auto.tycss";
+@import "../auto.tycss";
 @mode light { :root { --accent: #1C8CA8; --surface: #FAF4F2; --on-surface: #29242A; --border: #D3CDCC; --danger: #E14775; } }
 @mode dark  { :root { --accent: #78DCE8; --surface: #2D2A2E; --on-surface: #FCFCFA; --border: #403E41; --danger: #FF6188; } }

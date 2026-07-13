@@ -1,5 +1,5 @@
 /* tokyonight — curated dual-mode palette (moved out of the compiled-in pack into themes/).
    The dual-mode neutral base is imported; only the 5 colour seeds differ per mode. */
-@import "auto.tycss";
+@import "../auto.tycss";
 @mode light { :root { --accent: #2959AA; --surface: #E6E7ED; --on-surface: #343B59; --border: #C1C2C7; --danger: #BD4040; } }
 @mode dark  { :root { --accent: #7AA2F7; --surface: #1A1B26; --on-surface: #A9B1D6; --border: #3B4261; --danger: #DB4B4B; } }

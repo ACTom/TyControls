@@ -156,7 +156,7 @@ var m: TTyStyleModel; s: TTyStyleSet;
 begin
   m := TTyStyleModel.Create;
   try
-    m.LoadFromFile(ThemesPath('dracula.tycss'));   // curated palette now a themes/ file (@import auto + seeds)
+    m.LoadFromFile(ThemesPath('palettes' + PathDelim + 'dracula.tycss'));   // curated palettes archived in themes/palettes/
     m.SetMode('light');
     s := m.ResolveStyle('TyButton', 'primary', []);   // primary bg = var(--accent)
     AssertEquals('dracula light accent R', $64, TyRedOf(s.Background.Color));
@@ -175,7 +175,7 @@ var m: TTyStyleModel; s: TTyStyleSet;
 begin
   m := TTyStyleModel.Create;
   try
-    m.LoadFromFile(ThemesPath('nord.tycss'));
+    m.LoadFromFile(ThemesPath('palettes' + PathDelim + 'nord.tycss'));
     m.SetMode('dark');
     s := m.ResolveStyle('TyButton', '', []);
     AssertEquals('nord dark surface R', $2E, TyRedOf(s.Background.Color));
@@ -189,7 +189,7 @@ procedure TControllerThemeNameTest.TestThemeNameLoadsBuiltinCss;
 var c: TTyStyleController; s: TTyStyleSet;
 begin
   TyRegisterBuiltinThemes;
-  TyRegisterThemeDir(ThemesPath(''));   // curated palettes now resolve by name from themes/ files
+  TyRegisterThemeDir(ThemesPath('palettes' + PathDelim));   // curated palettes now resolve by name from themes/ files
   c := TTyStyleController.Create(nil);
   try
     c.ThemeName := 'gruvbox';
@@ -204,7 +204,7 @@ procedure TControllerThemeNameTest.TestModePersistsAcrossThemeSwitch;
 var c: TTyStyleController;
 begin
   TyRegisterBuiltinThemes;
-  TyRegisterThemeDir(ThemesPath(''));
+  TyRegisterThemeDir(ThemesPath('palettes' + PathDelim));
   c := TTyStyleController.Create(nil);
   try
     c.Mode := 'dark';

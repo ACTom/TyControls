@@ -1,5 +1,5 @@
 /* gruvbox — curated dual-mode palette (moved out of the compiled-in pack into themes/).
    The dual-mode neutral base is imported; only the 5 colour seeds differ per mode. */
-@import "auto.tycss";
+@import "../auto.tycss";
 @mode light { :root { --accent: #D65D0E; --surface: #FBF1C7; --on-surface: #3C3836; --border: #D5C4A1; --danger: #CC241D; } }
 @mode dark  { :root { --accent: #FE8019; --surface: #282828; --on-surface: #EBDBB2; --border: #504945; --danger: #FB4934; } }
