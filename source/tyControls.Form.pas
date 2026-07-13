@@ -69,6 +69,12 @@ type
     { Device-px caption-button width: an explicit ButtonWidth wins; otherwise the theme's
       --caption-button-width metric (logical, DPI-scaled); otherwise TyTitleButtonWidth. }
     function EffectiveButtonWidthPx: Integer;
+    { Theme-driven spacing (device px, DPI-scaled; default 0 = flush): --caption-button-margin
+      insets the buttons from the title-bar edges, --caption-button-gap separates adjacent buttons.
+      Lets a skin (classic) float the caption buttons as gapped 3D squares; the title bar shows in
+      the gaps (the buttons are smaller windows over it). }
+    function CapMarginPx: Integer;
+    function CapGapPx: Integer;
     function LeftInsetPx: Integer;
     function GetShowMinimize: Boolean;
     function GetShowMaximize: Boolean;
@@ -712,9 +718,23 @@ begin
   Result := Ord(FMinButton.Visible) + Ord(FMaxButton.Visible) + Ord(FCloseButton.Visible);
 end;
 
-function TTyTitleBar.RightInset: Integer;
+function TTyTitleBar.CapMarginPx: Integer;
 begin
-  Result := VisibleButtonCount * EffectiveButtonWidthPx;
+  Result := MulDiv(ActiveController.Metric('--caption-button-margin', 0), Font.PixelsPerInch, 96);
+end;
+
+function TTyTitleBar.CapGapPx: Integer;
+begin
+  Result := MulDiv(ActiveController.Metric('--caption-button-gap', 0), Font.PixelsPerInch, 96);
+end;
+
+function TTyTitleBar.RightInset: Integer;
+var n: Integer;
+begin
+  n := VisibleButtonCount;
+  if n = 0 then Exit(0);
+  // right margin + N buttons + (N-1) gaps + a left margin (title text gap before the group)
+  Result := 2 * CapMarginPx + n * EffectiveButtonWidthPx + (n - 1) * CapGapPx;
 end;
 
 function TTyTitleBar.LeftInsetPx: Integer;
@@ -724,16 +744,20 @@ end;
 
 procedure TTyTitleBar.LayoutButtons;
 var
-  W, H, X: Integer;
+  W, H, X, Y, m, g: Integer;
 begin
   if (FCloseButton = nil) or (FMaxButton = nil) or (FMinButton = nil) then
     Exit;
+  m := CapMarginPx;
+  g := CapGapPx;
   W := EffectiveButtonWidthPx;
-  H := ClientHeight;
-  X := ClientWidth;
-  if FCloseButton.Visible then begin Dec(X, W); FCloseButton.SetBounds(X, 0, W, H); end;
-  if FMaxButton.Visible then begin Dec(X, W); FMaxButton.SetBounds(X, 0, W, H); end;
-  if FMinButton.Visible then begin Dec(X, W); FMinButton.SetBounds(X, 0, W, H); end;
+  H := ClientHeight - 2 * m;               // inset top+bottom by the margin (0 = full height)
+  if H < 1 then H := ClientHeight;
+  Y := m;
+  X := ClientWidth - m;                    // start inset from the right edge
+  if FCloseButton.Visible then begin Dec(X, W); FCloseButton.SetBounds(X, Y, W, H); Dec(X, g); end;
+  if FMaxButton.Visible  then begin Dec(X, W); FMaxButton.SetBounds(X, Y, W, H); Dec(X, g); end;
+  if FMinButton.Visible  then begin Dec(X, W); FMinButton.SetBounds(X, Y, W, H); end;
 end;
 
 procedure TTyTitleBar.Resize;

@@ -118,6 +118,8 @@ type
     procedure TestLayoutPacksRemainingVisibleButton;
     procedure TestButtonWidthFollowsThemeMetric;
     procedure TestExplicitButtonWidthOverridesMetric;
+    procedure TestClassicCaptionButtonsGapped;
+    procedure TestDefaultCaptionButtonsFlush;
   end;
 
   TCaptionButtonPaintTest = class(TTestCase)
@@ -814,6 +816,40 @@ begin
   end;
 end;
 
+procedure TTitleBarTest.TestClassicCaptionButtonsGapped;
+{ classic sets --caption-button-margin/-gap, so the caption buttons float inset from the title-bar
+  edges with a gap between them (Win9x 3D squares). }
+var tb: TTitleBarAccess; c: TTyStyleController;
+begin
+  TyRegisterBuiltinThemes;
+  TyRegisterThemeDir(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim);
+  tb := TTitleBarAccess.Create(nil); c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := 'classic';
+    tb.Controller := c; tb.SetBounds(0, 0, 200, 34); tb.CallLayoutButtons;
+    AssertTrue('caption buttons inset from the top (margin)', tb.CloseButton.Top > 0);
+    AssertTrue('close inset from the right edge (margin)',
+      tb.CloseButton.Left + tb.CloseButton.Width < tb.ClientWidth);
+    AssertTrue('gap between adjacent buttons',
+      tb.CloseButton.Left > tb.MaxButton.Left + tb.MaxButton.Width);
+  finally tb.Free; c.Free; end;
+end;
+
+procedure TTitleBarTest.TestDefaultCaptionButtonsFlush;
+{ Themes without the spacing metrics keep the flush look: top-aligned, flush-right, contiguous. }
+var tb: TTitleBarAccess; c: TTyStyleController;
+begin
+  TyRegisterBuiltinThemes;
+  tb := TTitleBarAccess.Create(nil); c := TTyStyleController.Create(nil);
+  try
+    c.ThemeName := 'default';
+    tb.Controller := c; tb.SetBounds(0, 0, 200, 34); tb.CallLayoutButtons;
+    AssertEquals('flush top', 0, tb.CloseButton.Top);
+    AssertEquals('flush right', tb.ClientWidth, tb.CloseButton.Left + tb.CloseButton.Width);
+    AssertEquals('contiguous (no gap)', tb.MaxButton.Left + tb.MaxButton.Width, tb.CloseButton.Left);
+  finally tb.Free; c.Free; end;
+end;
+
 procedure TTitleBarTest.TestButtonWidthFollowsThemeMetric;
 { A theme's --caption-button-width metric sizes the caption buttons: classic sets 32, default
   has none (falls back to 46). Assert RELATIVELY (headless PPI != 96): classic < default. }
@@ -848,11 +884,10 @@ begin
   try
     T.SetBounds(0, 0, 300, 32);
     T.Controller := c;
-    c.ThemeName := 'classic';                 // metric would give 32
+    c.ThemeName := 'classic';                 // width metric would give 28
     T.ButtonWidth := 50;                      // explicit override
-    T.MinButton.Visible := False;
-    T.MaxButton.Visible := False;             // only close -> RightInset = 1 * 50
-    AssertEquals('explicit ButtonWidth wins over the theme metric', 50, T.RightInset);
+    // Check the button's own width (not RightInset — classic's margin metric also adds to that).
+    AssertEquals('explicit ButtonWidth wins over the theme width metric', 50, T.CloseButton.Width);
   finally
     T.Free; c.Free;
   end;
