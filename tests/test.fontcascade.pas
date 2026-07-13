@@ -42,8 +42,10 @@ begin
 end;
 
 function TFontCascadeTest.ThemePath(const AName: string): string;
+{ the structural skins (breeze, …) moved to themes/builtin/ when they were compiled in. }
 begin
-  Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim + AName;
+  Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim
+            + 'builtin' + PathDelim + AName;
 end;
 
 procedure TFontCascadeTest.TestBaseButtonHasFontSize;

@@ -70,6 +70,9 @@ begin
   // depend on the current working directory.
   Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim
     + 'themes' + PathDelim + AName;
+  if not FileExists(Result) then      // structural skins (showcase, …) live in themes/builtin/
+    Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim
+      + 'themes' + PathDelim + 'builtin' + PathDelim + AName;
 end;
 
 procedure TTestThemes.TestAllThemesHaveGhostAndBadge;
@@ -422,6 +425,9 @@ const
 function TTestThemeGolden.ThemePath(const AName: string): string;
 begin
   Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim + AName;
+  if not FileExists(Result) then      // structural skins (showcase, …) live in themes/builtin/
+    Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim
+      + 'builtin' + PathDelim + AName;
 end;
 
 function TTestThemeGolden.GoldenPath(const AName: string): string;

@@ -74,7 +74,8 @@ begin
   AssertTrue('themes/ dir exists', DirectoryExists(base));
   failed := '';
   n := 0;
-  ScanDir(base);                              // the structural skins
+  ScanDir(base);                              // the dual-mode bases (auto/dark/light) + green
+  ScanDir(base + 'builtin' + PathDelim);      // the compiled-in structural skins (classic/xp/office/…)
   ScanDir(base + 'palettes' + PathDelim);     // the archived curated palettes
   AssertTrue('found some theme files', n > 0);
   AssertEquals('all theme files load + resolve', '', failed);

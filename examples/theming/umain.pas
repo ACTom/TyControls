@@ -1,7 +1,7 @@
 unit umain;
 
 { Runtime theme hot-swap demo (TTyForm + TTyTitleBar edition):
-  - the ThemeCombo in the title bar switches between the 12 compiled-in built-in themes live;
+  - the ThemeCombo in the title bar switches between all the compiled-in built-in themes live;
   - the three preset buttons jump to light / dark (built-in) and green (a FILE image-theme shipped
     in this example's own folder, so it is self-contained), updating the status label;
   - switching internally re-Invalidates every registered control, so the sample buttons / edit /
@@ -16,7 +16,8 @@ interface
 
 uses
   Classes, SysUtils, Types, Forms, Controls,
-  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.ThemeRegistry,
+  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.BuiltinSkins,
+  tyControls.ThemeRegistry,
   tyControls.Button, tyControls.TyLabel, tyControls.ComboBox,
   tyControls.Edit, tyControls.CheckBox, tyControls.ProgressBar,
   tyControls.Types, tyControls.Css.Values, tyControls.Dialogs.Color;
@@ -98,18 +99,23 @@ var
   i: Integer;
   base: string;
 begin
-  // The compiled-in pair (default + system) plus every theme FILE in themes/ (the curated
-  // palettes AND the structural skins) — all pickable from the one combo.
+  // The compiled-in pack — the 'default'+'system' pair AND every structural skin (all now
+  // compiled IN via TyRegisterBuiltinThemes) — plus any extra theme FILE dropped in themes/
+  // during development (the curated palettes, the green image demo): all pickable from one combo.
   TyRegisterBuiltinThemes;
-  names := TyBuiltinThemeNames;
+  names := TyBuiltinThemeNames;                // default, system
   for i := 0 to High(names) do
     ThemeCombo.Items.Add(names[i]);
-  names := TyRegisterThemeDir(LocalThemesDir);
+  names := TyBuiltinSkinNames;                 // classic, office, xp, win11, … (sorted, compiled in)
+  for i := 0 to High(names) do
+    ThemeCombo.Items.Add(names[i]);
+  names := TyRegisterThemeDir(LocalThemesDir);  // extra local theme files, if any
   for i := 0 to High(names) do
   begin
     base := LowerCase(names[i]);
-    // auto == default; light/dark are just the default's single-mode halves — skip as picks.
-    if (base = 'auto') or (base = 'light') or (base = 'dark') then Continue;
+    // auto == default; light/dark are the default's single-mode halves; default/system already added.
+    if (base = 'auto') or (base = 'light') or (base = 'dark')
+       or (base = 'default') or (base = 'system') then Continue;
     if ThemeCombo.Items.IndexOf(names[i]) < 0 then
       ThemeCombo.Items.Add(names[i]);
   end;

@@ -25,7 +25,8 @@ interface
 
 uses
   Classes, SysUtils, StrUtils, Forms, Controls, Dialogs, Graphics,
-  tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes, tyControls.ThemeRegistry,
+  tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes, tyControls.BuiltinSkins,
+  tyControls.ThemeRegistry,
   tyControls.Form, tyControls.Hint, tyControls.Panel,
   tyControls.TyLabel, tyControls.Button, tyControls.CheckBox, tyControls.ComboBox, tyControls.ToggleSwitch,
   tyControls.ImageCollection, tyControls.GlyphButtons, tyControls.DropButtons,
@@ -33,7 +34,7 @@ uses
   tyControls.RibbonQuickAccess, tyControls.RibbonGallery, tyControls.RibbonBackstage,
   tyControls.PageControl, tyControls.TabSheet, tyControls.Memo, tyControls.StatusBar,
   tyControls.Dialogs, tyControls.Dialogs.Find, tyControls.Dialogs.Color,
-  uicons, uoffice;
+  uicons;
 
 type
   { One open document: its tab sheet + memo + on-disk path. }
@@ -58,6 +59,10 @@ type
     FDocPages: TTyPageControl;
     FStatus: TTyStatusBar;
     FBackstage: TTyRibbonBackstage;
+    // The QAT icons + the dark-mode switch sit ON the title bar, so their ink must match the
+    // title bar's text colour (white on Office's accent band, dark on a light caption) — not the
+    // surface ink, which would be invisible on a coloured caption. See ReinkTitleBar.
+    FQatButtons: array of TTyGlyphButton;   // title-bar QAT icons, re-inked to the caption colour
     // Backstage content: one panel per command (the sidebar navigates; each command
     // shows its own content on the right — new→templates, open→recent, about→version…).
     FPgInfo, FPgNew, FPgOpen, FPgAbout, FPgOptions: TTyPanel;
@@ -124,6 +129,8 @@ type
     procedure BuildHomeTab(APage: TTyRibbonPage);
     procedure BuildInsertTab(APage: TTyRibbonPage);
     procedure BuildViewTab(APage: TTyRibbonPage);
+    // Re-tint the title-bar-hosted controls (QAT icons + dark switch) to the caption's text colour.
+    procedure ReinkTitleBar;
   public
     destructor Destroy; override;
   end;
@@ -213,6 +220,21 @@ begin
   Result.Hint := AHint;
   Result.ShowHint := True;
   Result.OnClick := AHandler;
+  SetLength(FQatButtons, Length(FQatButtons) + 1);
+  FQatButtons[High(FQatButtons)] := Result;   // collect for ReinkTitleBar
+end;
+
+{ Tint the title-bar-hosted controls (QAT icons + dark switch) to the CAPTION's text colour so
+  they stay visible on a coloured title bar (Office's accent band → white; a light caption → dark). }
+procedure TMainForm.ReinkTitleBar;
+var ink: TTyColor; hex: string; i: Integer;
+begin
+  ink := TyDefaultController.Model.ResolveStyle('TyTitleBar', '', []).TextColor;
+  for i := 0 to High(FQatButtons) do
+    FQatButtons[i].GlyphColor := ink;
+  hex := 'color: #' + IntToHex(TyRedOf(ink), 2) + IntToHex(TyGreenOf(ink), 2) + IntToHex(TyBlueOf(ink), 2);
+  if DarkSwitch <> nil then
+    DarkSwitch.StyleOverride := hex;   // the '暗色' caption -> caption ink
 end;
 
 procedure TMainForm.BuildHomeTab(APage: TTyRibbonPage);
@@ -341,6 +363,7 @@ begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
   ApplyChromeTheme(TyDefaultController);   // re-theme the shell on every skin change
+  ReinkTitleBar;
 end;
 
 procedure TMainForm.DarkSwitchChange(Sender: TObject);
@@ -351,6 +374,7 @@ begin
   else
     TyDefaultController.Mode := 'light';
   ApplyChromeTheme(TyDefaultController);
+  ReinkTitleBar;
 end;
 
 { Accent presets: recolour any skin live from the one --accent seed. On the Office skin this turns
@@ -387,6 +411,7 @@ begin
   else
     TyDefaultController.SetAccent(sel);                   // an Office-app preset
   ApplyChromeTheme(TyDefaultController);
+  ReinkTitleBar;
 end;
 
 // ===========================================================================
@@ -803,22 +828,23 @@ var
   i: Integer;
   base: string;
 begin
-  // Office is compiled IN (uoffice) so this ribbon example DEFAULTS to Office with no themes/
-  // folder needed. The compiled-in pair (default + system) + office + every other skin FILE in
-  // themes/ (if present) are all pickable from the combo.
+  // Every skin — Office included — is compiled IN: TyRegisterBuiltinThemes registers the
+  // 'default'+'system' pair AND every structural skin (TyRegisterBuiltinSkins), so this ribbon
+  // example needs no themes/ folder. It DEFAULTS to Office; the combo lists the whole built-in
+  // pack, plus any extra theme FILE dropped in themes/ during development (e.g. the green demo).
   TyRegisterBuiltinThemes;
-  TyRegisterThemeCss('office', OfficeThemeCss);
-  names := TyBuiltinThemeNames;
+  ThemeCombo.Items.Add('default');
+  ThemeCombo.Items.Add('system');
+  names := TyBuiltinSkinNames;                 // office, xp, win11, … (sorted, compiled in)
   for i := 0 to High(names) do
     ThemeCombo.Items.Add(names[i]);
-  if ThemeCombo.Items.IndexOf('office') < 0 then
-    ThemeCombo.Items.Add('office');
-  names := TyRegisterThemeDir(LocalThemesDir);
+  names := TyRegisterThemeDir(LocalThemesDir);  // extra local theme files, if any (green, …)
   for i := 0 to High(names) do
   begin
     base := LowerCase(names[i]);
-    // auto == default; light/dark are just the default's single-mode halves — skip as picks.
-    if (base = 'auto') or (base = 'light') or (base = 'dark') then Continue;
+    // auto == default; light/dark are the default's single-mode halves; default/system already added.
+    if (base = 'auto') or (base = 'light') or (base = 'dark')
+       or (base = 'default') or (base = 'system') then Continue;
     if ThemeCombo.Items.IndexOf(names[i]) < 0 then
       ThemeCombo.Items.Add(names[i]);
   end;
@@ -929,6 +955,7 @@ begin
   FDocPages.OnChange := @PageChanged;
 
   ApplyChromeTheme(TyDefaultController);   // re-theme the fully-built shell
+  ReinkTitleBar;                           // QAT icons + switch -> caption ink (visible on Office's band)
 
   // Start with one empty document.
   DoNew(Self);

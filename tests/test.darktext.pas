@@ -23,6 +23,17 @@ begin
   Result := (TyRedOf(c) * 299 + TyGreenOf(c) * 587 + TyBlueOf(c) * 114) div 1000;
 end;
 
+function SkinPath(const AName: string): string;
+{ green still lives in themes/ (it references url(assets/…)); the structural skins moved to themes/builtin/. }
+var themesDir: string;
+begin
+  themesDir := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim;
+  if SameText(AName, 'green') then
+    Result := themesDir + 'green.tycss'
+  else
+    Result := themesDir + 'builtin' + PathDelim + AName + '.tycss';
+end;
+
 procedure TDarkTextTest.TestExtraControlsReadableInSkinDark;
 const
   KEYS: array[0..13] of string = (
@@ -34,19 +45,18 @@ const
     'bootstrap', 'material3', 'fluent', 'xp', 'aero', 'classic', 'green');
   MIN_CONTRAST = 55;
 var
-  base, failed: string;
+  failed: string;
   i, k: Integer;
   m: TTyStyleModel;
   s: TTyStyleSet;
   surfLum, txtLum: Integer;
 begin
-  base := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim;
   failed := '';
   for i := 0 to High(SKINS) do
   begin
     m := TTyStyleModel.Create;
     try
-      m.LoadFromFile(base + SKINS[i] + '.tycss');
+      m.LoadFromFile(SkinPath(SKINS[i]));
       if m.DefaultModeName = '' then Continue;
       m.SetMode('dark');
       // Reference surface = the menu popup (a solid themed surface most floating controls sit on).
@@ -72,13 +82,12 @@ end;
 procedure TDarkTextTest.TestSkinIdentitySurvivesImport;
 { @import "auto.tycss" precedes the skin's own palette + rules, so the skin (later, "new wins")
   must still win: its brand accent and its distinctive control geometry are NOT clobbered by auto. }
-var base: string; m: TTyStyleModel; s: TTyStyleSet;
+var m: TTyStyleModel; s: TTyStyleSet;
 begin
-  base := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim;
   // win11: dark brand accent #60CDFF (primary fill), 5px button radius (auto's is 6).
   m := TTyStyleModel.Create;
   try
-    m.LoadFromFile(base + 'win11.tycss');
+    m.LoadFromFile(SkinPath('win11'));
     m.SetMode('dark');
     s := m.ResolveStyle('TyButton', 'primary', []);
     AssertEquals('win11 keeps its dark accent R', $60, TyRedOf(s.Background.Color));
@@ -89,7 +98,7 @@ begin
   // antdesign light: brand blue #1677FF primary.
   m := TTyStyleModel.Create;
   try
-    m.LoadFromFile(base + 'antdesign.tycss');
+    m.LoadFromFile(SkinPath('antdesign'));
     m.SetMode('light');
     s := m.ResolveStyle('TyButton', 'primary', []);
     AssertEquals('antdesign keeps its accent R', $16, TyRedOf(s.Background.Color));

@@ -10,7 +10,7 @@ uses
   tyControls.ProgressBar, tyControls.ToggleSwitch, tyControls.TrackBar,
   tyControls.GroupBox, tyControls.PageControl, tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.Memo, tyControls.Menu,
-  tyControls.BuiltinThemes, tyControls.ThemeRegistry, tyControls.NativeStyler, tyControls.ToolBar,
+  tyControls.BuiltinThemes, tyControls.BuiltinSkins, tyControls.ThemeRegistry, tyControls.NativeStyler, tyControls.ToolBar,
   tyControls.StatusBar, tyControls.Splitter, tyControls.TabSet,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.TreeView,
   tyControls.Columns, tyControls.Dialogs,
@@ -268,16 +268,19 @@ var
   base: string;
 begin
   // All controls come from the .lfm; this only fills data + sets initial state, never creates controls.
-  TyRegisterBuiltinThemes;                    // default + system (compiled in)
-  names := TyBuiltinThemeNames;
+  TyRegisterBuiltinThemes;                    // default + system + every structural skin (compiled in)
+  names := TyBuiltinThemeNames;               // default, system
   ThemeCombo.Items.Clear;
   for i := 0 to High(names) do ThemeCombo.Items.Add(names[i]);
-  // Publish every theme FILE in themes/ (curated palettes + structural skins) into the picker.
+  names := TyBuiltinSkinNames;                // classic, office, xp, win11, … (sorted, compiled in)
+  for i := 0 to High(names) do ThemeCombo.Items.Add(names[i]);
+  // Publish any extra theme FILE dropped in themes/ (curated palettes, the green image demo) too.
   names := TyRegisterThemeDir(ThemeDir);
   for i := 0 to High(names) do
   begin
     base := LowerCase(names[i]);
-    if (base = 'auto') or (base = 'light') or (base = 'dark') then Continue;
+    if (base = 'auto') or (base = 'light') or (base = 'dark')
+       or (base = 'default') or (base = 'system') then Continue;
     if ThemeCombo.Items.IndexOf(names[i]) < 0 then ThemeCombo.Items.Add(names[i]);
   end;
   ThemeCombo.Items.Add(rsDemoThemeCustom);

@@ -44,6 +44,7 @@ uses
   test.themelint,
   test.menu,
   test.builtinthemes,
+  test.builtinskins,
   test.paletteicons,
   test.tabsheet,
   test.pagecontrol,

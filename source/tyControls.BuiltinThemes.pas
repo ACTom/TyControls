@@ -14,6 +14,8 @@ procedure TyRegisterBuiltinThemes;                      // register the compiled
 
 implementation
 
+uses tyControls.BuiltinSkins;   // the compiled-in structural skins (classic/xp/office/…)
+
 const
   cDefault = 'default';
   cSystem  = 'system';
@@ -38,6 +40,7 @@ begin
   n := TyBuiltinThemeNames;
   for i := 0 to High(n) do
     TyRegisterThemeCss(n[i], TyBuiltinThemeCss(n[i]));
+  TyRegisterBuiltinSkins;   // + the structural skins, compiled in from themes/builtin/
 end;
 
 end.
