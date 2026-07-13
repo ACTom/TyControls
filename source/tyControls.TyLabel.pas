@@ -17,8 +17,9 @@ type
     procedure SetWordWrap(AValue: Boolean);
     procedure SetTransparent(AValue: Boolean);
     procedure SetFocusControl(AValue: TWinControl);
-    { Resolve the effective font size (theme, then control Font, then a default).
-      TTyGraphicControl has no ResolveFontSize helper, so it lives here. }
+    { Resolve the effective font size. TTyGraphicControl has no ResolveFontSize, so this
+      thin method delegates to the shared TyResolveFontSize (theme font-size → explicit
+      control font → theme --font-size-base var → inherited/default). }
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
     { Greedy word-wrap of AText so each line fits AMaxWidth pixels, measured with
       the given (already PPI-scaled) canvas font. Returns the lines. }
@@ -99,12 +100,10 @@ end;
 
 function TTyLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
-  if AStyle.FontSize > 0 then
-    Result := AStyle.FontSize
-  else if Font.Size > 0 then
-    Result := Font.Size
-  else
-    Result := 9;
+  { TTyGraphicControl has no ResolveFontSize helper, so it delegates to the shared one —
+    which recovers the theme's --font-size-base when a skin suppresses the typeKey font-size
+    (else graphic labels fall back to the inherited OS font and render enlarged). }
+  Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
 procedure TTyLabel.SetAlignment(AValue: TAlignment);

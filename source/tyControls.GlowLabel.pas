@@ -92,12 +92,7 @@ end;
 
 function TTyGlowLabel.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
-  if AStyle.FontSize > 0 then
-    Result := AStyle.FontSize
-  else if Font.Size > 0 then
-    Result := Font.Size
-  else
-    Result := 9;
+  Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
 procedure TTyGlowLabel.SetAlignment(AValue: TAlignment);

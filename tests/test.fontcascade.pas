@@ -26,6 +26,7 @@ type
     procedure TestSkinStillResolvesFontSizeBaseVar;
     procedure TestControlRecoversBaseFontUnderSkin;
     procedure TestExplicitControlFontStillWins;
+    procedure TestSharedHelperPriority;
   end;
 
 implementation
@@ -126,6 +127,24 @@ begin
     p.Free;
     c.Free;
   end;
+end;
+
+procedure TFontCascadeTest.TestSharedHelperPriority;
+{ The single shared brain every ty control (windowed + the graphic label family) delegates to.
+  Covers all four priority branches directly. }
+var c: TTyStyleController; sTheme, sEmpty: TTyStyleSet;
+begin
+  c := TTyStyleController.Create(nil);
+  try
+    c.ThemeFile := ThemePath('breeze.tycss');
+    c.Mode := 'light';
+    sEmpty := Default(TTyStyleSet);                    // FontSize 0 (skin suppressed the base rule)
+    sTheme := Default(TTyStyleSet); sTheme.FontSize := 12;
+    AssertEquals('1. theme font-size wins',              12, TyResolveFontSize(sTheme, True,  20, c));
+    AssertEquals('2. inherited font -> theme base var',   9, TyResolveFontSize(sEmpty, True,  20, c));
+    AssertEquals('3. explicit control font honoured',    14, TyResolveFontSize(sEmpty, False, 14, c));
+    AssertEquals('4. no controller -> readable default',  9, TyResolveFontSize(sEmpty, True,   0, nil));
+  finally c.Free; end;
 end;
 
 initialization

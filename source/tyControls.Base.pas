@@ -199,6 +199,21 @@ type
   off Windows or when the control has no allocated handle. }
 procedure TySetImeCaretPos(AControl: TWinControl; AClientX, AClientY: Integer);
 
+{ Shared font-size resolution for every ty control (windowed AND graphic — the label family
+  each carried its own copy). Priority:
+    1. the typeKey's own theme font-size (AStyle.FontSize);
+    2. an EXPLICITLY-set control Font.Size (AParentFont=False — an OI/code override to honour);
+    3. the theme's --font-size-base var, via AController;
+    4. an inherited control Font.Size / a readable 9px default.
+  Step 3 is the fix for "file-skins render font-enlarged": a skin's own `TyButton {}` (etc.) rule
+  suppresses the built-in typeKey layer under the all-or-nothing cascade — INCLUDING its
+  `font-size: var(--font-size-base)` — so AStyle.FontSize=0 and the control would otherwise fall
+  through to its INHERITED OS/system font (larger at real DPI). The --font-size-base var survives
+  the skin load (vars merge separately), and ty controls are theme-locked, so their size follows
+  the theme, not the inherited system font. (Headless masks the bug: rootless Font.Size is 0.) }
+function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
+  AControlFontSize: Integer; AController: TTyStyleController): Integer;
+
 { Resolve the SOLID background a windowed child should composite onto (it does not
   inherit its parent's painted bg, so corner-gaps / transparent fills would otherwise
   show the child's own window colour). Styleable parent -> its themed CurrentStyle;
@@ -830,38 +845,29 @@ begin
   end;
 end;
 
-function TTyCustomControl.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
+  AControlFontSize: Integer; AController: TTyStyleController): Integer;
 var
-  ctl: TTyStyleController;
   base: Integer;
 begin
-  // Text size priority:
-  //   1. the typeKey's own theme font-size;
-  //   2. an EXPLICITLY-set control Font.Size (ParentFont=False — an OI/code override to honour);
-  //   3. the theme's --font-size-base var;
-  //   4. an inherited Font.Size / a readable default.
-  //   Step 3 fixes the "file-skins look font-enlarged" bug: a SKIN that declares its own
-  //   `TyButton {}` rule suppresses the ENTIRE built-in TyButton layer under the all-or-nothing
-  //   property cascade — including the base's `font-size: var(--font-size-base)` — so
-  //   AStyle.FontSize resolves to 0. Without step 3 the control fell through to the INHERITED
-  //   OS/system font (ParentFont=True, typically LARGER), so every skin rendered oversized text.
-  //   The --font-size-base var survives the skin load (vars merge separately from typeKey rules),
-  //   and ty controls are theme-locked, so their size follows the theme, not the inherited system
-  //   font. Step 2 keeps an explicit per-control Font.Size winning (a documented contract).
   if AStyle.FontSize > 0 then
     Exit(AStyle.FontSize);
-  if (not ParentFont) and (Font.Size > 0) then
-    Exit(Font.Size);
-  ctl := ActiveController;
+  if (not AParentFont) and (AControlFontSize > 0) then
+    Exit(AControlFontSize);
   base := 0;
-  if ctl <> nil then
-    base := ctl.Metric('--font-size-base', 0);
+  if AController <> nil then
+    base := AController.Metric('--font-size-base', 0);
   if base > 0 then
     Result := base
-  else if Font.Size > 0 then
-    Result := Font.Size
+  else if AControlFontSize > 0 then
+    Result := AControlFontSize
   else
     Result := 9;
+end;
+
+function TTyCustomControl.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
+begin
+  Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
 end;
 
 procedure TTyCustomControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
