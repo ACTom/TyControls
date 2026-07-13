@@ -21,8 +21,19 @@ var
   base, failed: string;
   n: Integer;
 
+  procedure ResolveAll(m: TTyStyleModel);
+  begin
+    m.ResolveStyle('TyButton', '', []);
+    m.ResolveStyle('TyButton', 'primary', []);
+    m.ResolveStyle('TyEdit', '', []);
+    m.ResolveStyle('TyComboBox', '', []);
+    m.ResolveStyle('TyCheckBox', '', []);
+    m.ResolveStyle('TyProgressBar', '', []);
+    m.ResolveStyle('TyTitleBar', '', []);
+  end;
+
   procedure ScanDir(const ADir: string);
-  var sr: TSearchRec; m: TTyStyleModel;
+  var sr: TSearchRec; m: TTyStyleModel; modes: TStringArray; mi: Integer;
   begin
     if not DirectoryExists(ADir) then Exit;
     if FindFirst(ADir + '*.tycss', faAnyFile, sr) = 0 then
@@ -35,12 +46,15 @@ var
             try
               try
                 m.LoadFromFile(ADir + sr.Name);
-                if m.DefaultModeName <> '' then
-                  m.SetMode(m.DefaultModeName);   // dual-mode files: seed so @mode-only vars resolve
-                m.ResolveStyle('TyButton', '', []);
-                m.ResolveStyle('TyButton', 'primary', []);
-                m.ResolveStyle('TyEdit', '', []);
-                m.ResolveStyle('TyTitleBar', '', []);
+                modes := m.ModeNames;
+                if Length(modes) = 0 then
+                  ResolveAll(m)                    // single-mode: resolve as-is
+                else
+                  for mi := 0 to High(modes) do
+                  begin
+                    m.SetMode(modes[mi]);          // EVERY declared @mode must resolve (light AND dark)
+                    ResolveAll(m);
+                  end;
               except
                 on E: Exception do
                   failed := failed + sr.Name + ' <' + E.Message + '>; ';

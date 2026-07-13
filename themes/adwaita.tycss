@@ -1,18 +1,37 @@
-/* adwaita — an ORIGINAL "inspired-by" take on GNOME's Adwaita (light), not a pixel clone.
-   Restrained and flat: a soft off-white window, a slightly darker flat headerbar with dark
-   text, crisp white fields, hairline #DADADA borders, gentle 6px radii, and the GNOME blue
-   as the single accent. Single fixed mode. --accent drives every accent surface so the
-   runtime accent-picker recolours the whole skin. */
+/* adwaita — an ORIGINAL "inspired-by" take on GNOME's Adwaita, now DUAL-MODE, not a pixel clone.
+   Restrained and flat in both modes. LIGHT: a soft off-white window, a slightly darker flat
+   headerbar with dark text, crisp white fields, hairline #DADADA borders, gentle 6px radii, and
+   the GNOME blue as the single accent. DARK: ~#242424 surfaces, a slightly different #303030
+   headerbar, ~#1E1E1E fields, light text, subtle borders, the same (slightly brightened) blue.
+   Only the PALETTE flips per @mode — every radius/gradient/padding/render-style is shared.
+   --accent drives every accent surface so the runtime accent-picker recolours the whole skin. */
 
-:root {
-  --accent:  #3584E4;   /* GNOME blue — brand/accent seed */
-  --window:  #FAFAFA;    /* window background            */
-  --header:  #EBEBEB;    /* headerbar / title bar        */
-  --field:   #FFFFFF;    /* text-entry wells             */
-  --ink:     #2E3436;    /* primary dark text            */
-  --muted:   #9A9996;    /* disabled / secondary ink     */
-  --border:  #DADADA;    /* hairline separators & edges  */
-  --fill:    #F6F5F4;    /* flat-button rest fill        */
+/* --- palette: light (the original look) ---------------------------------- */
+@mode light {
+  :root {
+    --accent:  #3584E4;   /* GNOME blue — brand/accent seed */
+    --window:  #FAFAFA;    /* window background            */
+    --header:  #EBEBEB;    /* headerbar / title bar        */
+    --field:   #FFFFFF;    /* text-entry wells             */
+    --ink:     #2E3436;    /* primary dark text            */
+    --muted:   #9A9996;    /* disabled / secondary ink     */
+    --border:  #DADADA;    /* hairline separators & edges  */
+    --fill:    #F6F5F4;    /* flat-button rest fill        */
+  }
+}
+
+/* --- palette: dark ------------------------------------------------------- */
+@mode dark {
+  :root {
+    --accent:  #4A90E4;   /* GNOME blue, brightened for dark-mode contrast */
+    --window:  #242424;    /* window background            */
+    --header:  #303030;    /* headerbar / title bar        */
+    --field:   #1E1E1E;    /* text-entry wells             */
+    --ink:     #EEEEEC;    /* primary light text           */
+    --muted:   #8A8A8A;    /* disabled / secondary ink     */
+    --border:  #3A3A3A;    /* subtle separators & edges    */
+    --fill:    #383838;    /* flat-button rest fill        */
+  }
 }
 
 /* --- window + chrome ----------------------------------------------------- */
@@ -55,7 +74,7 @@ TyComboBox:focus  { border-color: var(--accent); outline: 2 alpha(var(--accent),
 TyComboBox:disabled { background: var(--window); color: var(--muted); border-color: lighten(var(--border), 3); }
 
 /* --- checkbox ------------------------------------------------------------ */
-/* Stroked indicator (render-style does not bevel it): white well, hairline
+/* Stroked indicator (render-style does not bevel it): light well, hairline
    border, accent-inked tick. */
 TyCheckBox        { background: var(--field); color: var(--accent); border: 1px solid darken(var(--border), 4); border-radius: 5; }
 TyCheckBox:hover  { border-color: var(--accent); }
@@ -63,6 +82,6 @@ TyCheckBox:active { background: alpha(var(--accent), 0.10); color: var(--accent)
 TyCheckBox:disabled { background: var(--window); color: var(--muted); border-color: lighten(var(--border), 3); }
 
 /* --- progress ------------------------------------------------------------ */
-/* A slim, fully-rounded light trough with a solid accent fill. */
+/* A slim, fully-rounded trough with a solid accent fill. */
 TyProgressBar     { background: darken(var(--window), 8); border: 1px solid var(--border); border-radius: 8; }
 TyProgressFill    { background: var(--accent); border-radius: 8; }

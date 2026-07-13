@@ -1,46 +1,110 @@
-/* win11 — an ORIGINAL "inspired-by" ty-controls skin evoking Windows 11 (Fluent / Mica):
-   ROUNDED (radius 8), light mica surfaces, hairline 1px borders, soft drop shadows on
-   buttons, roomy 8px padding, and a #0067C0 brand accent. NOT a pixel clone — a
-   ty-controls interpretation. Single fixed palette (no @mode). Loaded as a FILE.
-   Set --accent so the runtime accent-picker recolours the primary/accent surfaces. */
+/* win11 — an ORIGINAL "inspired-by" ty-controls skin evoking Windows 11 (Fluent / Mica),
+   now DUAL-MODE (light + dark). NOT a pixel clone — a ty-controls interpretation.
+   ROUNDED (radius 8), hairline 1px borders, soft drop shadows on buttons, roomy 8px
+   padding, and a #0067C0 brand accent. Only the PALETTE flips between @mode light and
+   @mode dark — every radius / gradient shape / padding / font-weight / shadow stays shared.
+   LIGHT = the original look: light mica surfaces, white wells, dark ink.
+   DARK  = dark mica surfaces (~#202020 form, ~#2C2C2C fields), light ink, soft dark borders,
+           the same rounded/soft look, shadows kept dark, the accent brightened for contrast.
+   --accent is the brand seed used via var(--accent) in BOTH modes, so the runtime
+   accent-picker still recolours the primary/accent surfaces. */
+
+/* ── palette: light (the original fixed palette) ─────────────────────────── */
+@mode light {
+  :root {
+    /* Brand accent (recoloured by the picker) */
+    --accent:  #0067C0;
+
+    /* Mica-ish neutrals */
+    --mica:    #F3F3F3;   /* window + title-bar surface */
+    --field:   #FFFFFF;   /* text-field wells */
+    --card:    #FBFBFB;   /* default button face */
+    --ink:     #1A1A1A;   /* primary text */
+    --border:        #D6D6D6;   /* hairline borders */
+    --border-hover:  #C4C4C4;
+    --border-strong: #9A9A9A;   /* check-box outline */
+    --track:         #E6E6E6;   /* progress track */
+
+    /* Solid button hover / press faces */
+    --card-hover:  #F5F5F5;
+    --card-active: #EFEFEF;
+
+    /* Neutral overlays (subtle Fluent hover/press fills) */
+    --hover-fill:  alpha(#000000, 0.06);
+    --active-fill: alpha(#000000, 0.10);
+
+    /* Disabled surfaces */
+    --disabled-bg:     #F0F0F0;
+    --disabled-ink:    #A0A0A0;
+    --disabled-border: #E4E4E4;
+    --field-disabled:  #F5F5F5;
+    --check-disabled-bg:     #F0F0F0;
+    --check-disabled-ink:    #B8B8B8;
+    --check-disabled-border: #D0D0D0;
+  }
+}
+
+/* ── palette: dark (dark Mica) ───────────────────────────────────────────── */
+@mode dark {
+  :root {
+    /* Brand accent — brightened for dark-mode contrast (still recoloured by the picker) */
+    --accent:  #4CC2FF;
+
+    /* Dark mica-ish neutrals */
+    --mica:    #202020;   /* window + title-bar surface */
+    --field:   #2C2C2C;   /* text-field wells */
+    --card:    #2D2D2D;   /* default button face */
+    --ink:     #F5F5F5;   /* primary light text */
+    --border:        #383838;   /* soft dark borders */
+    --border-hover:  #4A4A4A;
+    --border-strong: #6A6A6A;   /* check-box outline */
+    --track:         #383838;   /* progress track */
+
+    /* Solid button hover / press faces (hover lightens, press darkens) */
+    --card-hover:  #333333;
+    --card-active: #292929;
+
+    /* Neutral overlays (subtle Fluent hover/press fills, now white) */
+    --hover-fill:  alpha(#FFFFFF, 0.06);
+    --active-fill: alpha(#FFFFFF, 0.10);
+
+    /* Disabled surfaces */
+    --disabled-bg:     #252525;
+    --disabled-ink:    #6E6E6E;
+    --disabled-border: #303030;
+    --field-disabled:  #262626;
+    --check-disabled-bg:     #252525;
+    --check-disabled-ink:    #5A5A5A;
+    --check-disabled-border: #383838;
+  }
+}
+
+/* ── mode-invariant: accent-derived inks + geometry ──────────────────────── */
 :root {
-  /* ── Brand accent (recoloured by the picker) ── */
-  --accent:          #0067C0;
-  --accent-hover:    lighten(--accent, 8%);
-  --accent-active:   darken(--accent, 8%);
-  --accent-border:   darken(--accent, 8%);
+  /* Accent states — derived from --accent so the picker follows in both modes */
+  --accent-hover:    lighten(var(--accent), 8%);
+  --accent-active:   darken(var(--accent), 8%);
+  --accent-border:   darken(var(--accent), 8%);
   --accent-disabled: alpha(var(--accent), 0.40);
   --accent-soft:     alpha(var(--accent), 0.12);   /* subtle selected wash */
   --on-accent:       on(var(--accent));            /* readable ink on accent */
-  --on-accent-dim:   alpha(#FFFFFF, 0.82);         /* pressed accent ink */
+  --on-accent-dim:   alpha(var(--on-accent), 0.82);/* pressed accent ink */
 
-  /* ── Mica-ish neutrals ── */
-  --mica:   #F3F3F3;   /* window + title-bar surface */
-  --field:  #FFFFFF;   /* text-field wells */
-  --card:   #FBFBFB;   /* default button face */
-  --ink:    #1A1A1A;   /* primary text */
+  /* Secondary ink — derived from the per-mode --ink */
   --ink-dim: alpha(var(--ink), 0.65);
-  --border:        #D6D6D6;   /* hairline borders */
-  --border-hover:  #C4C4C4;
-  --border-strong: #9A9A9A;   /* check-box outline */
-  --track:         #E6E6E6;   /* progress track */
 
-  /* ── Neutral overlays (subtle Fluent hover/press fills) ── */
-  --hover-fill:  alpha(#000000, 0.06);
-  --active-fill: alpha(#000000, 0.10);
-
-  /* ── Geometry ── */
+  /* Geometry */
   --radius:    8px;
   --radius-sm: 4px;
 }
 
-/* Window backdrop — the light mica surface. */
+/* Window backdrop — the mica surface. */
 TyForm { background: var(--mica); }
 
-/* Title bar: same mica surface with dark ink — no coloured band (very Win 11). */
+/* Title bar: same mica surface with primary ink — no coloured band (very Win 11). */
 TyTitleBar { background: var(--mica); color: var(--ink); border-radius: 0; }
 
-/* Caption buttons: square, full-height, transparent → soft grey hover; close → red. */
+/* Caption buttons: square, full-height, transparent → soft hover; close → red. */
 TyCaptionButton              { background: alpha(#FFFFFF, 0); color: var(--ink); border-radius: 0; }
 TyCaptionButton:hover        { background: var(--hover-fill); }
 TyCaptionButton:active       { background: var(--active-fill); }
@@ -50,47 +114,47 @@ TyCaptionButton.close:active { background: #B0271A; color: #FFFFFF; }
 TyLabel          { color: var(--ink); }
 TyLabel:disabled { color: var(--ink-dim); }
 
-/* Default button: light rounded card, hairline border, soft drop shadow, roomy padding. */
+/* Default button: rounded card, hairline border, soft drop shadow, roomy padding. */
 TyButton          { background: var(--card); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 8px; font-weight: normal; shadow: 0 1 3 #00000022; }
-TyButton:hover    { background: #F5F5F5; border-color: var(--border-hover); }
-TyButton:active   { background: #EFEFEF; color: var(--ink-dim); shadow: 0 0 0 #00000000; }
+TyButton:hover    { background: var(--card-hover); border-color: var(--border-hover); }
+TyButton:active   { background: var(--card-active); color: var(--ink-dim); shadow: 0 0 0 #00000000; }
 TyButton:focus    { border-color: var(--accent); outline: 2px var(--accent); outline-offset: 1px; }
-TyButton:disabled { background: #F0F0F0; color: #A0A0A0; border-color: #E4E4E4; shadow: 0 0 0 #00000000; }
+TyButton:disabled { background: var(--disabled-bg); color: var(--disabled-ink); border-color: var(--disabled-border); shadow: 0 0 0 #00000000; }
 
-/* Primary: solid accent, white ink, rounded, soft shadow — the default action. */
+/* Primary: solid accent, readable ink, rounded, soft shadow — the default action. */
 TyButton.primary          { background: var(--accent); color: var(--on-accent); border-color: var(--accent-border); border-width: 1px; border-radius: var(--radius); padding: 8px; font-weight: normal; shadow: 0 1 3 #00000022; }
 TyButton.primary:hover    { background: var(--accent-hover); }
 TyButton.primary:active   { background: var(--accent-active); color: var(--on-accent-dim); shadow: 0 0 0 #00000000; }
 TyButton.primary:focus    { border-color: var(--accent-border); outline: 2px var(--accent); outline-offset: 1px; }
-TyButton.primary:disabled { background: var(--accent-disabled); border-color: var(--accent-disabled); color: #FFFFFF; shadow: 0 0 0 #00000000; }
+TyButton.primary:disabled { background: var(--accent-disabled); border-color: var(--accent-disabled); color: var(--on-accent); shadow: 0 0 0 #00000000; }
 
-/* Ghost / subtle: transparent + shadowless until hovered; a light grey fill appears. */
+/* Ghost / subtle: transparent + shadowless until hovered; a light fill appears. */
 TyButton.ghost          { background: alpha(#000000, 0); color: var(--ink); border-radius: var(--radius); padding: 8px; font-weight: normal; }
 TyButton.ghost:hover    { background: var(--hover-fill); }
 TyButton.ghost:active   { background: var(--active-fill); color: var(--ink-dim); }
 TyButton.ghost:selected { background: var(--accent-soft); color: var(--accent); }
 TyButton.ghost:focus    { outline: 2px var(--accent); outline-offset: 1px; }
-TyButton.ghost:disabled { color: #A0A0A0; }
+TyButton.ghost:disabled { color: var(--disabled-ink); }
 
-/* Fields: white wells, hairline border, rounded; accent border + ring on focus. */
+/* Fields: wells, hairline border, rounded; accent border + ring on focus. */
 TyEdit          { background: var(--field); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 6px 8px; }
 TyEdit:hover    { border-color: var(--border-hover); }
 TyEdit:focus    { border-color: var(--accent); outline: 2px var(--accent); }
-TyEdit:disabled { background: #F5F5F5; color: #A0A0A0; }
+TyEdit:disabled { background: var(--field-disabled); color: var(--disabled-ink); }
 
 TyComboBox          { background: var(--field); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius); padding: 6px 8px; }
 TyComboBox:hover    { border-color: var(--border-hover); }
 TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--accent); }
-TyComboBox:disabled { background: #F5F5F5; color: #A0A0A0; }
+TyComboBox:disabled { background: var(--field-disabled); color: var(--disabled-ink); }
 
-/* Check box: a white box with a medium hairline border (stroked, not beveled);
-   accent fill + white tick when checked (:active). 'color' inks the tick. */
+/* Check box: a well with a medium hairline border (stroked, not beveled);
+   accent fill + readable tick when checked (:active). 'color' inks the tick. */
 TyCheckBox          { background: var(--field); color: var(--accent); border-color: var(--border-strong); border-width: 1px; border-radius: var(--radius-sm); padding: 4px; }
 TyCheckBox:hover    { border-color: var(--accent); }
-TyCheckBox:active   { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+TyCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyCheckBox:focus    { outline: 2px var(--accent); outline-offset: 1px; }
-TyCheckBox:disabled { background: #F0F0F0; color: #B8B8B8; border-color: #D0D0D0; }
+TyCheckBox:disabled { background: var(--check-disabled-bg); color: var(--check-disabled-ink); border-color: var(--check-disabled-border); }
 
-/* Progress: a light rounded track with a rounded accent fill (soft pill ends). */
+/* Progress: a rounded track with a rounded accent fill (soft pill ends). */
 TyProgressBar  { background: var(--track); border-color: var(--border); border-width: 1px; border-radius: 6px; }
 TyProgressFill { background: var(--accent); border-radius: 6px; }

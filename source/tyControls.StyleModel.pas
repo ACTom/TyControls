@@ -132,6 +132,10 @@ type
       Lets a host keep a dual-mode theme from being left mode-less — its @mode-only vars would
       otherwise be undefined at resolve. Pure query; does NOT change the active mode. }
     function DefaultModeName: string;
+    { Every @mode name this model declares (lower-cased, in declaration order); [] for a
+      single-mode theme. Lets a host/tool enumerate a theme's modes (e.g. to resolve/validate
+      each). Pure query. }
+    function ModeNames: TStringArray;
     property ThemeVersion: Cardinal read FVersion;  // bumps on every load/clear
     { A7 property cascade. False (default) = today's all-or-nothing: a user rule for a
       typeKey suppresses the ENTIRE built-in layer for that typeKey (golden baseline).
@@ -855,6 +859,14 @@ begin
   if FModeVars.Count = 0 then Result := ''
   else if FModeVars.IndexOf('light') >= 0 then Result := 'light'
   else Result := FModeVars[0];
+end;
+
+function TTyStyleModel.ModeNames: TStringArray;
+var i: Integer;
+begin
+  SetLength(Result, FModeVars.Count);
+  for i := 0 to FModeVars.Count - 1 do
+    Result[i] := FModeVars[i];
 end;
 
 procedure TTyStyleModel.Clear;

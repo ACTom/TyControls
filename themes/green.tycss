@@ -1,15 +1,40 @@
-/* TyControls — Green theme (nature background image demo) */
+/* TyControls — Green theme (nature background image demo) — DUAL-MODE (light + dark).
+   Image-background theme: the nature photo stays IDENTICAL in both modes (see TyForm);
+   only the CONTROL COLOURS flip. Light = white translucent controls with deep-green
+   ink; Dark = near-black translucent controls with light-green ink. All translucency /
+   glass tints derive from --surface, so they flip automatically. --accent stays the
+   brand seed (brightened a touch in dark for contrast) so the runtime accent-picker
+   still recolours the skin. Non-colour structure (radii, padding, glass-blur, gradients'
+   shape, font-weight, render-style) is unchanged from the original. */
 :root {
-  --accent:     #16A34A;
-  --surface:    #FFFFFF;
-  --on-surface: #14532D;
-  --border:     #BBD8C4;
-  --danger:     #EF4444;
-  --radius:     6px;
-  --focus-ring: var(--accent);
+  --radius:        6px;
+  /* derived tokens — reference the per-mode palette, so they flip automatically */
+  --focus-ring:    var(--accent);
   --selection:     alpha(var(--accent), 0.30);
   --muted:         alpha(var(--on-surface), 0.5);
   --overlay-hover: alpha(var(--on-surface), 0.12);
+}
+
+/* @mode light = the CURRENT green look (unchanged colours). */
+@mode light {
+  :root {
+    --accent:     #16A34A;
+    --surface:    #FFFFFF;
+    --on-surface: #14532D;
+    --border:     #BBD8C4;
+    --danger:     #EF4444;
+  }
+}
+
+/* @mode dark = near-black translucent controls + light-green ink; same photo bg. */
+@mode dark {
+  :root {
+    --accent:     #22C55E;   /* brightened green — stands out on dark, still the brand seed */
+    --surface:    #0C1610;   /* near-#000000 with a faint green tint; glass/tints derive from this */
+    --on-surface: #DCFCE7;   /* light-green ink for readability over the photo */
+    --border:     #2E4A3A;   /* deep-green border */
+    --danger:     #F87171;   /* brightened red for dark contrast */
+  }
 }
 
 /* Window/form backdrop — a nature photo, covering the whole client. */

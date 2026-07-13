@@ -1,70 +1,132 @@
-/* win10 — an ORIGINAL "inspired-by" Windows 10 skin (not a pixel clone).
-   The whole language of this look is: FLAT, SHARP, SQUARE. Solid light-grey
-   surfaces, hairline 1px borders, zero corner radius, and one bold accent that
-   the runtime accent-picker can recolour (everything blue derives from --accent). */
+/* win10 — an ORIGINAL "inspired-by" Windows 10 skin (not a pixel clone), now DUAL-MODE.
+   The whole language of this look is: FLAT, SHARP, SQUARE. Solid surfaces, hairline
+   1px borders, zero corner radius, and one bold accent that the runtime accent-picker
+   can recolour (everything blue derives from --accent).
+     @mode light = the classic light-grey Windows 10 look (colours unchanged).
+     @mode dark  = a native Windows 10 dark palette: near-black surfaces, light ink,
+                   subtle borders, the SAME flat/square geometry, a slightly brighter accent.
+   Only the COLOURS flip between modes — every radius, border width, wash shape and
+   font-weight is identical in both. */
 
-:root {
-  --accent:  #0078D7;   /* Windows 10 signature blue — brand colour */
-  --surface: #F3F3F3;   /* window / app background */
-  --field:   #FFFFFF;   /* editable well */
-  --border:  #CCCCCC;   /* hairline chrome border */
-  --ink:     #1F1F1F;   /* primary dark text */
-  --ink-dim: #A0A0A0;   /* disabled text */
+/* ---- LIGHT palette (the current look) ---- */
+@mode light {
+  :root {
+    --accent:  #0078D7;   /* Windows 10 signature blue — brand seed */
+    --surface: #F3F3F3;   /* window / app background */
+    --field:   #FFFFFF;   /* editable well / raised bar */
+    --border:  #CCCCCC;   /* hairline chrome border */
+    --ink:     #1F1F1F;   /* primary text */
+    --ink-dim: #A0A0A0;   /* disabled text */
+
+    /* chrome greys */
+    --titlebar-border:          #E1E1E1;
+    --caption-hover:            #E5E5E5;
+    --caption-active:           #CCCCCC;
+    --field-hover-border:       #767676;
+    --disabled-border:          #E0E0E0;
+    --checkbox-border:          #767676;
+    --checkbox-disabled-border: #D0D0D0;
+    --progress-track:           #E6E6E6;
+
+    /* accent-derived washes — follow the accent-picker */
+    --accent-wash:        lighten(var(--accent), 82%);
+    --accent-wash-strong: lighten(var(--accent), 70%);
+
+    /* disabled primary fill */
+    --primary-disabled-bg:  var(--border);
+    --primary-disabled-ink: var(--field);
+  }
 }
 
-/* Window: solid, quiet light grey. */
+/* ---- DARK palette ---- */
+@mode dark {
+  :root {
+    --accent:  #2A9DF4;   /* brightened Windows 10 blue for dark-surface contrast */
+    --surface: #1F1F1F;   /* window / app background */
+    --field:   #2B2B2B;   /* editable well / raised bar */
+    --border:  #444444;   /* subtle chrome border */
+    --ink:     #FFFFFF;   /* primary text */
+    --ink-dim: #6E6E6E;   /* disabled text */
+
+    /* chrome greys */
+    --titlebar-border:          #444444;
+    --caption-hover:            #3A3A3A;
+    --caption-active:           #4A4A4A;
+    --field-hover-border:       #6E6E6E;
+    --disabled-border:          #383838;
+    --checkbox-border:          #6E6E6E;
+    --checkbox-disabled-border: #3A3A3A;
+    --progress-track:           #333333;
+
+    /* accent-derived washes — follow the accent-picker */
+    --accent-wash:        mix(var(--accent), var(--surface), 22%);
+    --accent-wash-strong: mix(var(--accent), var(--surface), 38%);
+
+    /* disabled primary fill */
+    --primary-disabled-bg:  #333333;
+    --primary-disabled-ink: #777777;
+  }
+}
+
+/* Window: solid, quiet surface. */
 TyForm { background: var(--surface); }
 
-/* Title bar: white with dark text and a single hairline divider all round
+/* Title bar: raised surface with primary text and a single hairline divider all round
    (reads as the thin bottom rule under the caption). Flat, square. */
-TyTitleBar      { background: var(--field); color: var(--ink); border: 1px solid #E1E1E1; border-radius: 0; }
+TyTitleBar      { background: var(--field); color: var(--ink); border: 1px solid var(--titlebar-border); border-radius: 0; }
 TyCaptionButton { render-style: flat; background: transparent; color: var(--ink); border-radius: 0; }
-TyCaptionButton:hover  { background: #E5E5E5; color: var(--ink); }
-TyCaptionButton:active { background: #CCCCCC; color: var(--ink); }
+TyCaptionButton:hover  { background: var(--caption-hover); color: var(--ink); }
+TyCaptionButton:active { background: var(--caption-active); color: var(--ink); }
 
-/* Labels: near-black on the light surface. */
+/* Labels: primary ink on the surface. */
 TyLabel { color: var(--ink); }
 
-/* Default button: white face, grey hairline border. On :hover the border turns
-   accent over a pale accent wash; :active presses a slightly deeper wash. */
+/* Default button: field face, hairline border. On :hover the border turns accent
+   over a pale accent wash; :active presses a slightly deeper wash. */
 TyButton          { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 0; padding: 6px; font-weight: normal; }
-TyButton:hover    { background: lighten(var(--accent), 82%); color: var(--ink); border: 1px solid var(--accent); }
-TyButton:active   { background: lighten(var(--accent), 70%); color: var(--ink); border: 1px solid var(--accent); }
+TyButton:hover    { background: var(--accent-wash); color: var(--ink); border: 1px solid var(--accent); }
+TyButton:active   { background: var(--accent-wash-strong); color: var(--ink); border: 1px solid var(--accent); }
 TyButton:focus    { outline: 1 var(--accent); outline-offset: 2px; }
-TyButton:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid #E0E0E0; }
+TyButton:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid var(--disabled-border); }
 
-/* Primary button: solid accent fill, white ink; hover/press just darken it. */
+/* Primary button: solid accent fill, readable ink; hover/press just darken it. */
 TyButton.primary          { render-style: flat; background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); border-radius: 0; padding: 6px; font-weight: normal; }
 TyButton.primary:hover    { background: darken(var(--accent), 8%);  border: 1px solid darken(var(--accent), 8%);  color: on(var(--accent)); }
 TyButton.primary:active   { background: darken(var(--accent), 16%); border: 1px solid darken(var(--accent), 16%); color: on(var(--accent)); }
 TyButton.primary:focus    { outline: 1 var(--accent); outline-offset: 2px; }
-TyButton.primary:disabled { background: var(--border); color: var(--field); border: 1px solid var(--border); }
+TyButton.primary:disabled { background: var(--primary-disabled-bg); color: var(--primary-disabled-ink); border: 1px solid var(--primary-disabled-bg); }
 
 /* Ghost button: no chrome at rest — accent-tinted text, pale accent wash on interaction. */
 TyButton.ghost          { render-style: flat; background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 0; padding: 6px; font-weight: normal; }
-TyButton.ghost:hover    { background: lighten(var(--accent), 82%); color: var(--accent); border: 1px solid transparent; }
-TyButton.ghost:active   { background: lighten(var(--accent), 70%); color: var(--accent); border: 1px solid transparent; }
+TyButton.ghost:hover    { background: var(--accent-wash); color: var(--accent); border: 1px solid transparent; }
+TyButton.ghost:active   { background: var(--accent-wash-strong); color: var(--accent); border: 1px solid transparent; }
 TyButton.ghost:disabled { background: transparent; color: var(--ink-dim); border: 1px solid transparent; }
 
-/* Fields: crisp white wells, hairline border, square. Border darkens on hover,
+/* Fields: crisp wells, hairline border, square. Border darkens on hover,
    turns accent on focus — the Windows 10 text-box behaviour. */
 TyEdit         { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 0; padding: 4px; }
-TyEdit:hover   { border: 1px solid #767676; }
+TyEdit:hover   { border: 1px solid var(--field-hover-border); }
 TyEdit:focus   { border: 1px solid var(--accent); }
-TyEdit:disabled{ background: var(--surface); color: var(--ink-dim); border: 1px solid #E0E0E0; }
+TyEdit:disabled{ background: var(--surface); color: var(--ink-dim); border: 1px solid var(--disabled-border); }
 
 TyComboBox        { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 0; padding: 4px; }
-TyComboBox:hover  { border: 1px solid #767676; }
+TyComboBox:hover  { border: 1px solid var(--field-hover-border); }
 TyComboBox:focus  { border: 1px solid var(--accent); }
-TyComboBox:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid #E0E0E0; }
+TyComboBox:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid var(--disabled-border); }
 
-/* Check box: a white square well with a darker-grey stroked border; the tick is
+/* Check box: a field-coloured square well with a darker-grey stroked border; the tick is
    inked with the accent. Border/wash go accent on hover/press. (Stroked, not beveled.) */
-TyCheckBox         { background: var(--field); color: var(--accent); border: 1px solid #767676; border-radius: 0; }
+TyCheckBox         { background: var(--field); color: var(--accent); border: 1px solid var(--checkbox-border); border-radius: 0; }
 TyCheckBox:hover   { background: var(--field); color: var(--accent); border: 1px solid var(--accent); border-radius: 0; }
-TyCheckBox:active  { background: lighten(var(--accent), 70%); color: var(--accent); border: 1px solid var(--accent); border-radius: 0; }
-TyCheckBox:disabled{ background: var(--surface); color: var(--ink-dim); border: 1px solid #D0D0D0; border-radius: 0; }
+TyCheckBox:active  { background: var(--accent-wash-strong); color: var(--accent); border: 1px solid var(--accent); border-radius: 0; }
+TyCheckBox:disabled{ background: var(--surface); color: var(--ink-dim); border: 1px solid var(--checkbox-disabled-border); border-radius: 0; }
 
-/* Progress: a flat light-grey track with a hairline border and a solid accent fill. */
-TyProgressBar  { render-style: flat; background: #E6E6E6; border: 1px solid var(--border); border-radius: 0; }
+/* Radio button: mirrors the check box — same stroked well, accent dot, accent-on-interaction. */
+TyRadioButton         { background: var(--field); color: var(--accent); border: 1px solid var(--checkbox-border); border-radius: 0; }
+TyRadioButton:hover   { background: var(--field); color: var(--accent); border: 1px solid var(--accent); border-radius: 0; }
+TyRadioButton:active  { background: var(--accent-wash-strong); color: var(--accent); border: 1px solid var(--accent); border-radius: 0; }
+TyRadioButton:disabled{ background: var(--surface); color: var(--ink-dim); border: 1px solid var(--checkbox-disabled-border); border-radius: 0; }
+
+/* Progress: a flat track with a hairline border and a solid accent fill. */
+TyProgressBar  { render-style: flat; background: var(--progress-track); border: 1px solid var(--border); border-radius: 0; }
 TyProgressFill { background: var(--accent); border-radius: 0; }

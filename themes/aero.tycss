@@ -1,57 +1,172 @@
 /* Aero — an ORIGINAL "inspired-by" take on the Windows Vista/7 glass look (NOT a pixel clone).
    Faked glass with no real blur: light top-white-sheen gradients, cool grays/blues, thin light
-   borders, rounded 4px corners and soft cool shadows for an airy, glossy feel. Single fixed mode.
-   Gradient angle note: 90deg runs TOP->BOTTOM, so the first stop is the top sheen. */
+   borders, rounded 4px corners and soft cool shadows for an airy, glossy feel.
+   Gradient angle note: 90deg runs TOP->BOTTOM, so the first stop is the top sheen.
+
+   DUAL-MODE: Aero glass is inherently light and has no natural dark variant, so @mode dark is
+   made IDENTICAL to @mode light — the palette below is duplicated verbatim in both blocks.
+   --accent stays the brand seed (used via var(--accent) in both modes) so the runtime
+   accent-picker still recolours the whole skin. */
+
+/* Mode-invariant derived value: focus ring is always the accent at 55% (accent is per-mode). */
 :root {
-  --accent:      #3A8DDE;   /* brand blue — runtime accent-picker recolours from here */
-  --ink:         #1E2B3A;   /* cool dark-slate text */
-  --border-cool: #A9C6E0;   /* thin light glass border */
-  --border-hi:   #6EA8DE;   /* accent-tinted border on hover/focus */
-  --focus-ring:  alpha(var(--accent), 0.55);
+  --focus-ring: alpha(var(--accent), 0.55);
+}
+
+/* ---- LIGHT palette (the current Aero look) ---- */
+@mode light {
+  :root {
+    --accent:            #3A8DDE;   /* brand blue — runtime accent-picker recolours from here */
+    --ink:               #1E2B3A;   /* cool dark-slate text */
+    --titlebar-ink:      #24313F;   /* title bar + caption-button caption ink */
+
+    --border-cool:       #A9C6E0;   /* thin light glass border */
+    --border-hi:         #6EA8DE;   /* accent-tinted border on hover/focus */
+    --field-border:      #9FBEDC;   /* edit / combo well border */
+    --check-border:      #7FA8CE;   /* check box border */
+    --progress-border:   #A7C0D8;   /* progress track border */
+    --btn-active-border: #5E97CE;   /* pressed button / ghost-active border */
+
+    --glass:             #FFFFFF;   /* white glass base for translucent lifts */
+
+    --form-bg-top:       #EEF4FB;   /* window wash, top */
+    --form-bg-bottom:    #E2ECF6;   /* window wash, bottom */
+
+    --titlebar-1:        #FCFEFF;   /* frosted title bar sheen */
+    --titlebar-2:        #EBF4FC;
+    --titlebar-3:        #D4E6F6;
+
+    --close:             #E04747;   /* close-button warm glow */
+    --close-active:      #C23030;
+    --close-ink:         #FFFFFF;
+
+    --btn-1:             #FDFEFF;   /* button gloss (bright upper -> deeper lower) */
+    --btn-2:             #ECF4FC;
+    --btn-3:             #DCEAF6;
+    --btn-4:             #E7F1FB;
+    --btn-h1:            #FFFFFF;   /* button hover gloss */
+    --btn-h2:            #F3F9FE;
+    --btn-h3:            #E3F0FB;
+    --btn-h4:            #EFF7FE;
+    --btn-a1:            #CBDFF1;   /* button pressed gloss */
+    --btn-a2:            #D6E6F4;
+    --btn-a3:            #E1EDF8;
+
+    --btn-shadow:        #2B5E8E2E;   /* soft cool button shadow */
+    --btn-active-shadow: #2B5E8E33;
+    --primary-shadow:    #1E5FA240;   /* deeper accent shadow under primary */
+
+    --field-1:           #EDF4FB;   /* field top shade */
+    --field-2:           #FFFFFF;   /* field white well */
+
+    --check-1:           #F1F7FC;   /* check box glass */
+    --check-2:           #FFFFFF;
+
+    --track-1:           #DCE6F0;   /* progress track */
+    --track-2:           #EAF1F8;
+
+    --ghost-active:      #D6E6F4;   /* ghost pressed/selected fill */
+  }
+}
+
+/* ---- DARK palette (Aero has no natural dark variant — IDENTICAL to light) ---- */
+@mode dark {
+  :root {
+    --accent:            #3A8DDE;
+    --ink:               #1E2B3A;
+    --titlebar-ink:      #24313F;
+
+    --border-cool:       #A9C6E0;
+    --border-hi:         #6EA8DE;
+    --field-border:      #9FBEDC;
+    --check-border:      #7FA8CE;
+    --progress-border:   #A7C0D8;
+    --btn-active-border: #5E97CE;
+
+    --glass:             #FFFFFF;
+
+    --form-bg-top:       #EEF4FB;
+    --form-bg-bottom:    #E2ECF6;
+
+    --titlebar-1:        #FCFEFF;
+    --titlebar-2:        #EBF4FC;
+    --titlebar-3:        #D4E6F6;
+
+    --close:             #E04747;
+    --close-active:      #C23030;
+    --close-ink:         #FFFFFF;
+
+    --btn-1:             #FDFEFF;
+    --btn-2:             #ECF4FC;
+    --btn-3:             #DCEAF6;
+    --btn-4:             #E7F1FB;
+    --btn-h1:            #FFFFFF;
+    --btn-h2:            #F3F9FE;
+    --btn-h3:            #E3F0FB;
+    --btn-h4:            #EFF7FE;
+    --btn-a1:            #CBDFF1;
+    --btn-a2:            #D6E6F4;
+    --btn-a3:            #E1EDF8;
+
+    --btn-shadow:        #2B5E8E2E;
+    --btn-active-shadow: #2B5E8E33;
+    --primary-shadow:    #1E5FA240;
+
+    --field-1:           #EDF4FB;
+    --field-2:           #FFFFFF;
+
+    --check-1:           #F1F7FC;
+    --check-2:           #FFFFFF;
+
+    --track-1:           #DCE6F0;
+    --track-2:           #EAF1F8;
+
+    --ghost-active:      #D6E6F4;
+  }
 }
 
 /* Window: an airy, very light cool gray-blue wash (top lighter, bottom a touch deeper). */
-TyForm { background: linear-gradient(90deg, #EEF4FB 0%, #E2ECF6 100%); }
+TyForm { background: linear-gradient(90deg, var(--form-bg-top) 0%, var(--form-bg-bottom) 100%); }
 
 /* Title bar: light frosted gradient — near-white sheen fading to pale blue, with a soft lower edge. */
 TyTitleBar {
-  background: linear-gradient(90deg, #FCFEFF 0%, #EBF4FC 55%, #D4E6F6 100%);
-  color: #24313F;
+  background: linear-gradient(90deg, var(--titlebar-1) 0%, var(--titlebar-2) 55%, var(--titlebar-3) 100%);
+  color: var(--titlebar-ink);
   font-weight: bold;
 }
 
 /* Caption buttons: glassy translucent lift; a warm red glow on close. */
-TyCaptionButton        { background: alpha(#FFFFFF, 0); color: #24313F; border-radius: 0; }
-TyCaptionButton:hover  { background: alpha(#FFFFFF, 0.55); }
-TyCaptionButton:active { background: alpha(#FFFFFF, 0.78); }
-TyCaptionButton.min:hover    { background: alpha(#FFFFFF, 0.55); }
-TyCaptionButton.max:hover    { background: alpha(#FFFFFF, 0.55); }
-TyCaptionButton.close:hover  { background: #E04747; color: #FFFFFF; }
-TyCaptionButton.close:active { background: #C23030; color: #FFFFFF; }
+TyCaptionButton        { background: alpha(var(--glass), 0); color: var(--titlebar-ink); border-radius: 0; }
+TyCaptionButton:hover  { background: alpha(var(--glass), 0.55); }
+TyCaptionButton:active { background: alpha(var(--glass), 0.78); }
+TyCaptionButton.min:hover    { background: alpha(var(--glass), 0.55); }
+TyCaptionButton.max:hover    { background: alpha(var(--glass), 0.55); }
+TyCaptionButton.close:hover  { background: var(--close); color: var(--close-ink); }
+TyCaptionButton.close:active { background: var(--close-active); color: var(--close-ink); }
 
-TyLabel          { background: alpha(#FFFFFF, 0); color: var(--ink); font-weight: normal; }
+TyLabel          { background: alpha(var(--glass), 0); color: var(--ink); font-weight: normal; }
 TyLabel:disabled { opacity: 0.5; }
 
 /* Buttons: a subtle top-white sheen over a light glassy fill, thin light border, radius 4, soft shadow.
    The 45%/50% break fakes the classic two-part Aero gloss (bright upper, deeper lower that lifts again). */
 TyButton {
-  background: linear-gradient(90deg, #FDFEFF 0%, #ECF4FC 45%, #DCEAF6 50%, #E7F1FB 100%);
+  background: linear-gradient(90deg, var(--btn-1) 0%, var(--btn-2) 45%, var(--btn-3) 50%, var(--btn-4) 100%);
   color: var(--ink);
   border-color: var(--border-cool);
   border-width: 1px;
   border-radius: 4px;
   padding: 7px;
   font-weight: normal;
-  shadow: 0 2 5 #2B5E8E2E;
+  shadow: 0 2 5 var(--btn-shadow);
 }
 TyButton:hover {
-  background: linear-gradient(90deg, #FFFFFF 0%, #F3F9FE 45%, #E3F0FB 50%, #EFF7FE 100%);
+  background: linear-gradient(90deg, var(--btn-h1) 0%, var(--btn-h2) 45%, var(--btn-h3) 50%, var(--btn-h4) 100%);
   border-color: var(--border-hi);
 }
 TyButton:active {
-  background: linear-gradient(90deg, #CBDFF1 0%, #D6E6F4 50%, #E1EDF8 100%);
-  border-color: #5E97CE;
-  shadow: 0 1 2 #2B5E8E33;
+  background: linear-gradient(90deg, var(--btn-a1) 0%, var(--btn-a2) 50%, var(--btn-a3) 100%);
+  border-color: var(--btn-active-border);
+  shadow: 0 1 2 var(--btn-active-shadow);
 }
 TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); outline-offset: 1px; }
 TyButton:disabled { opacity: 0.5; }
@@ -61,7 +176,7 @@ TyButton.primary {
   background: linear-gradient(90deg, lighten(--accent, 30%) 0%, lighten(--accent, 8%) 45%, darken(--accent, 6%) 50%, var(--accent) 100%);
   color: on(var(--accent));
   border-color: darken(--accent, 12%);
-  shadow: 0 2 6 #1E5FA240;
+  shadow: 0 2 6 var(--primary-shadow);
 }
 TyButton.primary:hover {
   background: linear-gradient(90deg, lighten(--accent, 38%) 0%, lighten(--accent, 16%) 45%, var(--accent) 50%, lighten(--accent, 4%) 100%);
@@ -70,13 +185,13 @@ TyButton.primary:hover {
 TyButton.primary:active {
   background: linear-gradient(90deg, darken(--accent, 4%) 0%, darken(--accent, 12%) 100%);
   border-color: darken(--accent, 18%);
-  shadow: 0 1 2 #1E5FA240;
+  shadow: 0 1 2 var(--primary-shadow);
 }
 TyButton.primary:disabled { opacity: 0.5; }
 
 /* Ghost: transparent at rest, fades into a faint glass panel on hover/press. */
 TyButton.ghost {
-  background: alpha(#FFFFFF, 0);
+  background: alpha(var(--glass), 0);
   color: var(--ink);
   border-color: alpha(var(--border-cool), 0);
   border-width: 1px;
@@ -84,17 +199,17 @@ TyButton.ghost {
   padding: 7px;
   font-weight: normal;
 }
-TyButton.ghost:hover    { background: alpha(#FFFFFF, 0.5); border-color: var(--border-hi); }
-TyButton.ghost:active   { background: alpha(#D6E6F4, 0.85); border-color: #5E97CE; }
-TyButton.ghost:selected { background: alpha(#D6E6F4, 0.9); border-color: var(--accent); }
+TyButton.ghost:hover    { background: alpha(var(--glass), 0.5); border-color: var(--border-hi); }
+TyButton.ghost:active   { background: alpha(var(--ghost-active), 0.85); border-color: var(--btn-active-border); }
+TyButton.ghost:selected { background: alpha(var(--ghost-active), 0.9); border-color: var(--accent); }
 TyButton.ghost:focus    { outline: 2px var(--focus-ring); outline-offset: 1px; }
 TyButton.ghost:disabled { opacity: 0.5; }
 
 /* Fields: crisp white wells with a faint top shade (fakes a soft inner recess) + blue focus glow. */
 TyEdit {
-  background: linear-gradient(90deg, #EDF4FB 0%, #FFFFFF 24%, #FFFFFF 100%);
+  background: linear-gradient(90deg, var(--field-1) 0%, var(--field-2) 24%, var(--field-2) 100%);
   color: var(--ink);
-  border-color: #9FBEDC;
+  border-color: var(--field-border);
   border-width: 1px;
   border-radius: 4px;
   padding: 4px;
@@ -104,9 +219,9 @@ TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyEdit:disabled { opacity: 0.5; }
 
 TyComboBox {
-  background: linear-gradient(90deg, #EDF4FB 0%, #FFFFFF 24%, #FFFFFF 100%);
+  background: linear-gradient(90deg, var(--field-1) 0%, var(--field-2) 24%, var(--field-2) 100%);
   color: var(--ink);
-  border-color: #9FBEDC;
+  border-color: var(--field-border);
   border-width: 1px;
   border-radius: 4px;
   padding: 4px;
@@ -117,9 +232,9 @@ TyComboBox:disabled { opacity: 0.5; }
 
 /* Check box: a faint glassy white box (stroked, not beveled); accent fill + white tick when checked. */
 TyCheckBox {
-  background: linear-gradient(90deg, #F1F7FC 0%, #FFFFFF 45%);
+  background: linear-gradient(90deg, var(--check-1) 0%, var(--check-2) 45%);
   color: var(--ink);
-  border-color: #7FA8CE;
+  border-color: var(--check-border);
   border-width: 1px;
   border-radius: 3px;
   padding: 4px;
@@ -131,8 +246,8 @@ TyCheckBox:disabled { opacity: 0.5; }
 
 /* Progress: a light sunken glass track with a glossy accent fill (bright sheen band along the top). */
 TyProgressBar {
-  background: linear-gradient(90deg, #DCE6F0 0%, #EAF1F8 100%);
-  border-color: #A7C0D8;
+  background: linear-gradient(90deg, var(--track-1) 0%, var(--track-2) 100%);
+  border-color: var(--progress-border);
   border-width: 1px;
   border-radius: 4px;
 }

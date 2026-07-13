@@ -1,34 +1,72 @@
 /* fluent — an ORIGINAL "inspired-by" skin evoking Microsoft Fluent 2 (Win11-web).
-   Not a pixel clone: soft rounded (radius 6) surfaces, an acrylic-ish light chrome,
-   hairline neutral borders, roomy padding, and gentle soft shadows. Single fixed
-   palette. --accent drives every accent surface so the runtime picker recolours it. */
+   Not a pixel clone: soft rounded (radius 6) surfaces, an acrylic-ish chrome,
+   hairline neutral borders, roomy padding, and gentle soft shadows.
+   DUAL-MODE: @mode light is the classic soft off-white Fluent; @mode dark is a
+   Fluent 2 dark palette (~#1F1F1F / #292929 surfaces, #333333 fields, light ink,
+   a touch-brighter blue accent). Non-colour structure is identical across modes —
+   only the palette flips. --accent drives every accent surface so the runtime
+   picker recolours either mode. */
 
+/* ── Mode-invariant scalars (geometry, opacity) ── */
 :root {
-  /* ── SEED ── brand + Fluent neutral ramp ── */
-  --accent:        #0F6CBD;               /* Fluent brand primary */
-  --form:          #FAF9F8;               /* window backdrop (soft off-white) */
-  --field:         #FFFFFF;               /* input wells */
-  --ink:           #201F1E;               /* neutral foreground */
-  --muted:         #605E5C;               /* secondary text */
-  --border:        #E1DFDD;               /* hairline neutral stroke */
-  --border-strong: #C7C6C4;               /* hover stroke */
-  --check-border:  #8A8886;               /* unchecked indicator stroke */
-  --hover:         #F5F4F3;               /* neutral hover fill */
-  --pressed:       #E1DFDD;               /* neutral pressed fill */
-  --subtle-hover:  #F3F2F1;               /* transparent-button hover */
-  --track:         #EDEBE9;               /* progress track */
-  --danger:        #C42B1C;               /* Fluent close-button red */
-
-  /* ── MAP: derive accent states so the accent-picker follows ── */
-  --accent-hover:  darken(var(--accent), 8%);    /* ~#115EA3 */
-  --accent-active: darken(var(--accent), 15%);   /* ~#0F548C */
-  --on-accent:     on(var(--accent));            /* readable ink -> #FFFFFF */
-
-  /* ── COMPONENT scalars ── */
   --radius:       6px;
   --radius-sm:    3px;
   --radius-track: 4px;
   --disabled:     0.45;
+}
+
+/* ── LIGHT palette — the classic Fluent look (unchanged colours) ── */
+@mode light {
+  :root {
+    /* SEED — brand + Fluent neutral ramp */
+    --accent:        #0F6CBD;               /* Fluent brand primary */
+    --form:          #FAF9F8;               /* window backdrop (soft off-white) */
+    --field:         #FFFFFF;               /* input wells */
+    --ink:           #201F1E;               /* neutral foreground */
+    --muted:         #605E5C;               /* secondary text */
+    --border:        #E1DFDD;               /* hairline neutral stroke */
+    --border-strong: #C7C6C4;               /* hover stroke */
+    --check-border:  #8A8886;               /* unchecked indicator stroke */
+    --hover:         #F5F4F3;               /* neutral hover fill */
+    --pressed:       #E1DFDD;               /* neutral pressed fill */
+    --subtle-hover:  #F3F2F1;               /* transparent-button hover */
+    --track:         #EDEBE9;               /* progress track */
+    --danger:        #C42B1C;               /* Fluent close-button red */
+    --chrome-top:    #FDFCFC;               /* title-bar acrylic band, top-lit */
+    --chrome-bottom: #F5F4F3;               /* title-bar acrylic band, base */
+
+    /* MAP — derive accent states so the accent-picker follows */
+    --accent-hover:  darken(var(--accent), 8%);    /* ~#115EA3 */
+    --accent-active: darken(var(--accent), 15%);   /* ~#0F548C */
+    --on-accent:     on(var(--accent));            /* readable ink -> #FFFFFF */
+  }
+}
+
+/* ── DARK palette — Fluent 2 dark (surfaces #1F1F1F/#292929, fields #333333) ── */
+@mode dark {
+  :root {
+    /* SEED — brand (a touch brighter for contrast) + dark neutral ramp */
+    --accent:        #2886DE;               /* brighter Fluent blue for dark */
+    --form:          #1F1F1F;               /* window backdrop */
+    --field:         #333333;               /* input wells */
+    --ink:           #F5F5F5;               /* light foreground */
+    --muted:         #C7C7C7;               /* secondary text */
+    --border:        #3D3D3D;               /* hairline neutral stroke */
+    --border-strong: #565656;               /* hover stroke */
+    --check-border:  #949494;               /* unchecked indicator stroke */
+    --hover:         #292929;               /* neutral hover fill (raised surface) */
+    --pressed:       #383838;               /* neutral pressed fill */
+    --subtle-hover:  #2E2E2E;               /* transparent-button hover */
+    --track:         #383838;               /* progress track */
+    --danger:        #D13438;               /* Fluent dark close-button red */
+    --chrome-top:    #2D2D2D;               /* title-bar band, top-lit */
+    --chrome-bottom: #292929;               /* title-bar band, base */
+
+    /* MAP — derive accent states so the accent-picker follows */
+    --accent-hover:  lighten(var(--accent), 10%);
+    --accent-active: darken(var(--accent), 8%);
+    --on-accent:     on(var(--accent));            /* readable ink on accent */
+  }
 }
 
 /* Window backdrop. */
@@ -36,7 +74,7 @@ TyForm { background: var(--form); }
 
 /* Chrome: a faint top-lit acrylic band, semibold caption ink. */
 TyTitleBar {
-  background: linear-gradient(180deg, #FDFCFC, #F5F4F3);
+  background: linear-gradient(180deg, var(--chrome-top), var(--chrome-bottom));
   color: var(--ink);
   font-weight: 600;
   border-radius: 0;
@@ -53,7 +91,7 @@ TyLabel          { color: var(--ink); }
 TyLabel:disabled { opacity: var(--disabled); }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────
-   Default (secondary): white, hairline border, soft rounded, gentle shadow.
+   Default (secondary): field-fill, hairline border, soft rounded, gentle shadow.
    On :hover the neutral stroke turns accent — the Fluent "emphasis" feel. */
 TyButton {
   background: var(--field);
@@ -69,7 +107,7 @@ TyButton:active   { background: var(--pressed); border-color: var(--border-stron
 TyButton:focus    { border-color: var(--accent); outline: 2px var(--accent); outline-offset: 2px; }
 TyButton:disabled { opacity: var(--disabled); }
 
-/* Primary: solid accent, white ink, borderless-look, soft elevation. */
+/* Primary: solid accent, on-accent ink, borderless-look, soft elevation. */
 TyButton.primary          { background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: var(--radius); padding: 6px 14px; font-weight: 600; shadow: 0 1 2 #00000024; }
 TyButton.primary:hover    { background: var(--accent-hover);  border-color: var(--accent-hover); }
 TyButton.primary:active   { background: var(--accent-active); border-color: var(--accent-active); }
@@ -92,7 +130,7 @@ TyButton.ghost:focus    { outline: 2px var(--accent); outline-offset: 2px; }
 TyButton.ghost:disabled { opacity: var(--disabled); }
 
 /* ── Inputs ──────────────────────────────────────────────────────────────
-   White well, hairline border, roomy padding; focus lights the accent. */
+   Field well, hairline border, roomy padding; focus lights the accent. */
 TyEdit {
   background: var(--field);
   color: var(--ink);
@@ -115,7 +153,7 @@ TyComboBox:hover    { border-color: var(--border-strong); }
 TyComboBox:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.35); outline-offset: 1px; }
 TyComboBox:disabled { opacity: var(--disabled); }
 
-/* Checkbox: a small stroked well; checked fills accent with a white tick. */
+/* Checkbox: a small stroked well; checked fills accent with an on-accent tick. */
 TyCheckBox {
   background: var(--field);
   color: var(--ink);
@@ -128,7 +166,7 @@ TyCheckBox:active   { background: var(--accent); color: var(--on-accent); border
 TyCheckBox:focus    { outline: 2px var(--accent); outline-offset: 2px; }
 TyCheckBox:disabled { opacity: var(--disabled); }
 
-/* Progress: a thin light rounded track with a rounded accent fill. */
+/* Progress: a thin rounded track with a rounded accent fill. */
 TyProgressBar {
   background: var(--track);
   border-width: 0;

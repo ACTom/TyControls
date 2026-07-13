@@ -1,34 +1,65 @@
 /* Classic 3D skin — inspired by the Windows 9x look (an ORIGINAL take, not a pixel clone).
    Shows the v3 skin engine composing: render-style bevels (D + B2), a grey system palette,
-   square corners, and a gradient title bar (B1). Loaded as a FILE by the theming example. */
+   square corners, and a gradient title bar (B1). Loaded as a FILE by the theming example.
+   DUAL-MODE: this skin has no natural dark variant, so @mode dark is IDENTICAL to @mode light. */
 
-TyForm          { background: #C0C0C0; }
-TyTitleBar      { background: linear-gradient(0deg, #10318C, #7BA2E0, #A6CAF0); color: #FFFFFF; border-radius: 0; }
-TyCaptionButton { render-style: bevel3d; background: #C0C0C0; color: #000000; }
+/* --accent is the brand seed; the runtime accent-picker recolours the skin through it. */
+@mode light {
+  :root {
+    --accent:       #10318C;   /* brand seed — title-bar dark stop + progress fill */
+    --title-mid:    #7BA2E0;   /* title-bar gradient mid stop */
+    --title-light:  #A6CAF0;   /* title-bar gradient light stop */
+    --title-ink:    #FFFFFF;   /* title-bar caption text */
+    --face:         #C0C0C0;   /* grey 3D system surface */
+    --face-hover:   #C8C8C8;   /* lightly lit face on hover */
+    --ink:          #000000;   /* primary text */
+    --ink-disabled: #808080;   /* greyed text */
+    --field:        #FFFFFF;   /* white input well */
+    --border:       #808080;   /* stroked indicator / edge grey */
+  }
+}
+@mode dark {
+  :root {
+    --accent:       #10318C;   /* identical to light — no natural dark variant */
+    --title-mid:    #7BA2E0;
+    --title-light:  #A6CAF0;
+    --title-ink:    #FFFFFF;
+    --face:         #C0C0C0;
+    --face-hover:   #C8C8C8;
+    --ink:          #000000;
+    --ink-disabled: #808080;
+    --field:        #FFFFFF;
+    --border:       #808080;
+  }
+}
 
-TyLabel         { color: #000000; }
+TyForm          { background: var(--face); }
+TyTitleBar      { background: linear-gradient(0deg, var(--accent), var(--title-mid), var(--title-light)); color: var(--title-ink); border-radius: 0; }
+TyCaptionButton { render-style: bevel3d; background: var(--face); color: var(--ink); }
+
+TyLabel         { color: var(--ink); }
 
 /* Buttons: raised bevel at rest, sunken (pressed) on :active — the classic push-button feel.
    'render-style: bevel3d' alone gives the outset bevel, square corners and edge colours
    derived from the grey face; no need to spell out border-style/width/color/radius. */
-TyButton                { render-style: bevel3d; background: #C0C0C0; color: #000000; font-weight: normal; padding: 6px; }
-TyButton:hover          { render-style: bevel3d; background: #C8C8C8; color: #000000; }
-TyButton:active         { render-style: inset3d;  background: #C0C0C0; color: #000000; }
-TyButton:disabled       { render-style: bevel3d; background: #C0C0C0; color: #808080; }
-TyButton.primary        { render-style: bevel3d; background: #C0C0C0; color: #000000; }
-TyButton.primary:hover  { render-style: bevel3d; background: #C8C8C8; }
-TyButton.primary:active { render-style: inset3d;  background: #C0C0C0; }
-TyButton.ghost          { render-style: bevel3d; background: #C0C0C0; color: #000000; }
-TyButton.ghost:active   { render-style: inset3d;  background: #C0C0C0; }
+TyButton                { render-style: bevel3d; background: var(--face); color: var(--ink); font-weight: normal; padding: 6px; }
+TyButton:hover          { render-style: bevel3d; background: var(--face-hover); color: var(--ink); }
+TyButton:active         { render-style: inset3d;  background: var(--face); color: var(--ink); }
+TyButton:disabled       { render-style: bevel3d; background: var(--face); color: var(--ink-disabled); }
+TyButton.primary        { render-style: bevel3d; background: var(--face); color: var(--ink); }
+TyButton.primary:hover  { render-style: bevel3d; background: var(--face-hover); }
+TyButton.primary:active { render-style: inset3d;  background: var(--face); }
+TyButton.ghost          { render-style: bevel3d; background: var(--face); color: var(--ink); }
+TyButton.ghost:active   { render-style: inset3d;  background: var(--face); }
 
 /* Fields: sunken white wells. */
-TyEdit          { render-style: inset3d; background: #FFFFFF; color: #000000; padding: 4px; }
-TyComboBox      { render-style: inset3d; background: #FFFFFF; color: #000000; }
+TyEdit          { render-style: inset3d; background: var(--field); color: var(--ink); padding: 4px; }
+TyComboBox      { render-style: inset3d; background: var(--field); color: var(--ink); }
 
 /* Check box: a white well with a grey border (the indicator box is stroked, not beveled). */
-TyCheckBox      { background: #FFFFFF; color: #000000; border: 1px solid #808080; border-radius: 0; }
-TyCheckBox:active { background: #FFFFFF; color: #000000; border: 1px solid #808080; border-radius: 0; }
+TyCheckBox      { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 0; }
+TyCheckBox:active { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 0; }
 
 /* Progress: a sunken grey track with a solid blue fill. */
-TyProgressBar   { render-style: inset3d; background: #C0C0C0; }
-TyProgressFill  { background: #10318C; border-radius: 0; }
+TyProgressBar   { render-style: inset3d; background: var(--face); }
+TyProgressFill  { background: var(--accent); border-radius: 0; }
