@@ -1,44 +1,47 @@
-/* xp — an ORIGINAL "inspired-by" take on the Windows XP "Luna" (blue) look,
-   now DUAL-MODE. Glossy vertical gradients, 3px rounded corners, a soft blue
-   button border, a deep->pale blue gradient title bar, white fields with a blue
-   focus ring, and the iconic Luna beige client.
-   Accent-driven: the title bar, primary button, progress fill, checked box and all
-   focus rings resolve from var(--accent), so the runtime accent-picker recolours
-   the whole skin in BOTH modes. 90deg = a vertical top->bottom gradient here.
-   DARK MODE: XP Luna is inherently a light theme with no natural dark variant, so
-   @mode dark is deliberately IDENTICAL to @mode light. */
+/* xp — an ORIGINAL "inspired-by" take on the authentic Windows XP "Luna" (blue)
+   look. Luna beige client, a glossy blue caption bar with bold white text, silver-
+   blue glossy default buttons with a navy edge, an orange "Luna glow" on hover, an
+   orange focus edge on fields, 3px rounded corners, and the iconic GREEN progress
+   chunks. Accent-driven: the caption bar, primary button and checked box resolve
+   from var(--accent), so the runtime accent-picker recolours the blue chrome in
+   BOTH modes. 90deg = a vertical top->bottom gradient here. DARK MODE: Luna has no
+   natural dark variant, so @mode dark is deliberately IDENTICAL to @mode light. */
 
 /* Non-colour, mode-invariant tokens. */
 :root {
   --radius: 3px;
 }
 
-/* Light palette = the current XP Luna look. */
+/* Light palette = the authentic XP Luna look. */
 @mode light {
   :root {
-    --accent:       #2F6FE0;                     /* Luna blue brand colour */
+    --accent:       #2F6FE0;   /* Luna blue brand colour (also caption top stop) */
     --on-accent:    #FFFFFF;
-    --surface:      #ECE9D8;                     /* the classic XP client "beige" */
+    --surface:      #ECE9D8;    /* the classic XP client "beige" */
     --on-surface:   #1B1B1B;
     --field:        #FFFFFF;
-    --field-border: lighten(var(--accent), 22%); /* soft steel-blue field edge */
-    --btn-border:   lighten(var(--accent), 14%); /* soft blue button edge */
+    --field-border: #7B9EBD;    /* soft steel-blue field edge */
+    --focus:        #E58B00;    /* orange focus edge (XP field/button focus glow) */
+    --btn-border:   #003C74;    /* navy Luna button edge */
 
-    --title-ink:    #FFFFFF;                      /* white caption text */
-    --caption-wash: #FFFFFF;                      /* translucent caption-button wash base */
-    --close-hover:  #E0483D;                      /* XP close-button red */
+    --title-ink:    #FFFFFF;    /* white bold caption text */
+    --caption-wash: #FFFFFF;    /* translucent caption-button wash base */
+    --close-hover:  #E0483D;    /* XP close-button red */
     --close-active: #C13529;
 
-    /* Glossy button gradient stops (near-white top -> pale mid -> light steel). */
+    /* Silver-blue glossy default-button stops. */
     --btn-top:        #FDFEFF;
-    --btn-mid:        #EEF3FB;
-    --btn-bot:        #D6E3F5;
-    --btn-hover-top:  #FFFFFF;
-    --btn-hover-mid:  #F2F8FF;
-    --btn-hover-bot:  #DBEAFC;
-    --btn-active-top: #C7D8EF;
-    --btn-active-mid: #D9E6F8;
-    --btn-active-bot: #E9F1FC;
+    --btn-mid:        #EFF3F8;
+    --btn-bot:        #DCE6F2;
+    /* Orange "Luna glow" hover. */
+    --btn-hover-top:  #FFF6E9;
+    --btn-hover-bot:  #FDE7C4;
+    --btn-hover-edge: #E68B2C;
+    /* Pressed silver. */
+    --btn-active-top: #D5DEEA;
+    --btn-active-bot: #E6EDF6;
+
+    --progress-fill:  #6BBF3A;  /* iconic XP green progress chunks */
   }
 }
 
@@ -50,8 +53,9 @@
     --surface:      #ECE9D8;
     --on-surface:   #1B1B1B;
     --field:        #FFFFFF;
-    --field-border: lighten(var(--accent), 22%);
-    --btn-border:   lighten(var(--accent), 14%);
+    --field-border: #7B9EBD;
+    --focus:        #E58B00;
+    --btn-border:   #003C74;
 
     --title-ink:    #FFFFFF;
     --caption-wash: #FFFFFF;
@@ -59,92 +63,93 @@
     --close-active: #C13529;
 
     --btn-top:        #FDFEFF;
-    --btn-mid:        #EEF3FB;
-    --btn-bot:        #D6E3F5;
-    --btn-hover-top:  #FFFFFF;
-    --btn-hover-mid:  #F2F8FF;
-    --btn-hover-bot:  #DBEAFC;
-    --btn-active-top: #C7D8EF;
-    --btn-active-mid: #D9E6F8;
-    --btn-active-bot: #E9F1FC;
+    --btn-mid:        #EFF3F8;
+    --btn-bot:        #DCE6F2;
+    --btn-hover-top:  #FFF6E9;
+    --btn-hover-bot:  #FDE7C4;
+    --btn-hover-edge: #E68B2C;
+    --btn-active-top: #D5DEEA;
+    --btn-active-bot: #E6EDF6;
+
+    --progress-fill:  #6BBF3A;
   }
 }
 
 /* Window: the iconic Luna beige client area. */
 TyForm { background: var(--surface); }
 
-/* Title bar: glossy deep-blue -> medium -> pale-blue vertical gradient (a subtle
-   darker "gloss cut" at 55% gives the wet Luna sheen). Derived from the accent. */
+/* Caption bar: glossy blue top->mid->pale-blue vertical gradient, bold white text.
+   Accent-derived so the runtime picker recolours the whole blue chrome. */
 TyTitleBar {
   background: linear-gradient(90deg,
-    darken(var(--accent), 26%) 0%,
-    var(--accent) 42%,
-    darken(var(--accent), 6%) 55%,
-    lighten(var(--accent), 34%) 100%);
+    var(--accent) 0%,
+    lighten(var(--accent), 12%) 50%,
+    lighten(var(--accent), 52%) 100%);
   color: var(--title-ink);
   font-weight: bold;
   border-radius: 0;
 }
 
 /* Caption buttons: translucent white wash; close glows XP red. */
-TyCaptionButton            { background: alpha(var(--caption-wash), 0); color: var(--title-ink); border-radius: 3px; }
-TyCaptionButton:hover      { background: alpha(var(--caption-wash), 0.22); }
-TyCaptionButton:active     { background: alpha(var(--caption-wash), 0.34); }
-TyCaptionButton.min:hover  { background: alpha(var(--caption-wash), 0.22); }
-TyCaptionButton.max:hover  { background: alpha(var(--caption-wash), 0.22); }
+TyCaptionButton             { background: alpha(var(--caption-wash), 0); color: var(--title-ink); border-radius: 3px; }
+TyCaptionButton:hover       { background: alpha(var(--caption-wash), 0.22); }
+TyCaptionButton:active      { background: alpha(var(--caption-wash), 0.34); }
+TyCaptionButton.min:hover   { background: alpha(var(--caption-wash), 0.22); }
+TyCaptionButton.max:hover   { background: alpha(var(--caption-wash), 0.22); }
 TyCaptionButton.close:hover  { background: var(--close-hover); color: var(--title-ink); }
 TyCaptionButton.close:active { background: var(--close-active); color: var(--title-ink); }
 
 TyLabel           { background: alpha(var(--caption-wash), 0); color: var(--on-surface); }
 TyLabel:disabled  { opacity: 0.5; }
 
-/* Buttons: glossy vertical gradient, near-white top -> pale mid -> light steel
-   bottom, with a soft rounded blue border. :active inverts (darker top) to read
-   pressed/inset while keeping the rounded corners. */
+/* Default button: silver-blue glossy gradient, 1px navy rounded edge, a soft
+   shadow. :hover lights an orange Luna glow; :active reads pressed silver. */
 TyButton {
   background: linear-gradient(90deg, var(--btn-top) 0%, var(--btn-mid) 50%, var(--btn-bot) 100%);
   color: var(--on-surface);
   border-color: var(--btn-border);
   border-width: 1px;
   border-radius: var(--radius);
-  padding: 6px;
+  padding: 5px 10px;
   font-weight: normal;
+  shadow: 0 1px 2px #00000022;
 }
-TyButton:hover    { background: linear-gradient(90deg, var(--btn-hover-top) 0%, var(--btn-hover-mid) 50%, var(--btn-hover-bot) 100%); border-color: var(--accent); }
-TyButton:active   { background: linear-gradient(90deg, var(--btn-active-top) 0%, var(--btn-active-mid) 55%, var(--btn-active-bot) 100%); border-color: darken(var(--accent), 10%); }
-TyButton:focus    { border-color: var(--accent); outline: 2px var(--accent); outline-offset: 1px; }
+TyButton:hover    { background: linear-gradient(90deg, var(--btn-hover-top) 0%, var(--btn-hover-bot) 100%); border-color: var(--btn-hover-edge); }
+TyButton:active   { background: linear-gradient(90deg, var(--btn-active-top) 0%, var(--btn-active-bot) 100%); border-color: var(--btn-border); }
+TyButton:focus    { border-color: var(--focus); outline: 2px var(--focus); outline-offset: 1px; }
 TyButton:disabled { opacity: 0.5; }
 
-/* Primary: the glossy blue default button — pale-blue top -> accent -> deeper
-   bottom, so the accent-picker recolours it wholesale. */
+/* Primary: the glossy blue default button — pale-blue top -> accent bottom, white
+   text, navy edge, so the accent-picker recolours it wholesale. */
 TyButton.primary {
-  background: linear-gradient(90deg, lighten(var(--accent), 24%) 0%, var(--accent) 50%, darken(var(--accent), 12%) 100%);
+  background: linear-gradient(90deg, lighten(var(--accent), 18%) 0%, var(--accent) 100%);
   color: var(--on-accent);
-  border-color: darken(var(--accent), 18%);
-  font-weight: bold;
+  border-color: var(--btn-border);
+  border-radius: var(--radius);
+  font-weight: normal;
 }
-TyButton.primary:hover    { background: linear-gradient(90deg, lighten(var(--accent), 32%) 0%, lighten(var(--accent), 8%) 50%, darken(var(--accent), 6%) 100%); }
-TyButton.primary:active   { background: linear-gradient(90deg, darken(var(--accent), 10%) 0%, var(--accent) 60%, lighten(var(--accent), 8%) 100%); border-color: darken(var(--accent), 24%); }
-TyButton.primary:focus    { border-color: darken(var(--accent), 18%); outline: 2px var(--accent); outline-offset: 1px; }
+TyButton.primary:hover    { background: linear-gradient(90deg, lighten(var(--accent), 28%) 0%, lighten(var(--accent), 6%) 100%); border-color: var(--btn-hover-edge); }
+TyButton.primary:active   { background: linear-gradient(90deg, var(--accent) 0%, darken(var(--accent), 12%) 100%); border-color: var(--btn-border); }
+TyButton.primary:focus    { border-color: var(--btn-border); outline: 2px var(--focus); outline-offset: 1px; }
 TyButton.primary:disabled { opacity: 0.5; }
 
-/* Ghost: flat until touched, then a soft blue wash. */
+/* Ghost: transparent with accent text; a soft blue wash on touch. */
 TyButton.ghost {
   background: alpha(var(--accent), 0);
-  color: var(--on-surface);
+  color: var(--accent);
   border-color: alpha(var(--accent), 0);
   border-width: 1px;
   border-radius: var(--radius);
-  padding: 6px;
+  padding: 5px 10px;
   font-weight: normal;
 }
 TyButton.ghost:hover    { background: alpha(var(--accent), 0.12); border-color: alpha(var(--accent), 0.40); }
 TyButton.ghost:active   { background: alpha(var(--accent), 0.20); }
 TyButton.ghost:selected { background: alpha(var(--accent), 0.20); border-color: var(--accent); }
-TyButton.ghost:focus    { outline: 2px var(--accent); outline-offset: 1px; }
+TyButton.ghost:focus    { outline: 2px var(--focus); outline-offset: 1px; }
 TyButton.ghost:disabled { opacity: 0.5; }
 
-/* Fields: crisp white wells, soft blue border, blue focus ring. */
+/* Fields: crisp white wells, steel-blue border, orange focus edge. */
 TyEdit {
   background: var(--field);
   color: var(--on-surface);
@@ -154,7 +159,7 @@ TyEdit {
   padding: 4px;
 }
 TyEdit:hover    { border-color: var(--accent); }
-TyEdit:focus    { border-color: var(--accent); outline: 2px var(--accent); }
+TyEdit:focus    { border-color: var(--focus); outline: 2px var(--focus); }
 TyEdit:disabled { opacity: 0.5; }
 
 TyComboBox {
@@ -166,47 +171,48 @@ TyComboBox {
   padding: 4px;
 }
 TyComboBox:hover    { border-color: var(--accent); }
-TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--accent); }
+TyComboBox:focus    { border-color: var(--focus); outline: 2px var(--focus); }
 TyComboBox:disabled { opacity: 0.5; }
 
-/* Check box: white box, soft blue border, accent tick; checked = solid accent fill. */
+/* Check box: white box, navy border, accent tick; checked = solid accent fill. */
 TyCheckBox {
   background: var(--field);
   color: var(--accent);
-  border-color: var(--field-border);
+  border-color: var(--btn-border);
   border-width: 1px;
-  border-radius: 3px;
+  border-radius: 2px;
   padding: 4px;
 }
 TyCheckBox:hover    { border-color: var(--accent); }
 TyCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: darken(var(--accent), 12%); }
-TyCheckBox:focus    { outline: 2px var(--accent); }
+TyCheckBox:focus    { outline: 2px var(--focus); }
 TyCheckBox:disabled { opacity: 0.5; }
 
 /* Radio: sibling of the check box, fully rounded. */
 TyRadioButton {
   background: var(--field);
   color: var(--accent);
-  border-color: var(--field-border);
+  border-color: var(--btn-border);
   border-width: 1px;
   border-radius: 9px;
   padding: 4px;
 }
 TyRadioButton:hover    { border-color: var(--accent); }
 TyRadioButton:active   { background: var(--accent); color: var(--on-accent); border-color: darken(var(--accent), 12%); }
-TyRadioButton:focus    { outline: 2px var(--accent); }
+TyRadioButton:focus    { outline: 2px var(--focus); }
 TyRadioButton:disabled { opacity: 0.5; }
 
-/* Progress: a white sunken trough with a glossy accent-blue fill. */
+/* Progress: a sunken white trough with the iconic XP green fill. */
 TyProgressBar {
   background: var(--field);
   border-color: var(--field-border);
   border-width: 1px;
   border-radius: 3px;
+  render-style: inset3d;
 }
 TyProgressBar:disabled { opacity: 0.5; }
 
 TyProgressFill {
-  background: linear-gradient(90deg, lighten(var(--accent), 26%) 0%, var(--accent) 55%, darken(var(--accent), 10%) 100%);
+  background: linear-gradient(90deg, lighten(var(--progress-fill), 20%) 0%, var(--progress-fill) 55%, darken(var(--progress-fill), 8%) 100%);
   border-radius: 2px;
 }

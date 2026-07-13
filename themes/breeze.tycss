@@ -1,108 +1,130 @@
-/* breeze — an ORIGINAL "inspired-by" take on KDE Plasma's Breeze, now DUAL-MODE.
-   Crisp, flat, blue. LIGHT mode is the original Breeze-light look: #EFF0F1
-   surfaces, near-white #FCFCFC fields, #BDC3C7 hairline borders. DARK mode is a
-   Breeze-dark palette: #232629 surfaces, #31363B fields, light #EFF0F1 ink, thin
-   dark borders — still flat, still the Breeze blue accent. Every mode-flipping
-   colour is a --var overridden per @mode; all NON-colour structure (render-style,
-   radii, gradients, padding, weights) is identical across modes. Accent-driven
-   so the runtime picker still re-tints the whole skin. NOT a pixel clone. */
+/* breeze — KDE Plasma "Breeze", re-authored to feel GENUINELY NATIVE, DUAL-MODE.
+   Breeze's identity is flatness: grey #EFF0F1 chrome, clean white fields, thin
+   #BCC0C4 hairlines, small 3px corners, the #3DAEE9 Breeze blue that lights up
+   borders on hover/focus. LIGHT is Breeze-light; DARK is Breeze-dark (#232629
+   chrome, #1B1E20 wells, #31363B raised buttons, light #EFF0F1 ink). Every
+   mode-flipping colour is a --var overridden per @mode; the flat render-style,
+   3px radii, tight padding and normal weight are identical across modes. --accent
+   is the Breeze-blue brand seed so the runtime picker still re-tints everything. */
 
 /* Mode-invariant seed: the Breeze blue brand accent (runtime-picker overridable). */
 :root { --accent: #3DAEE9; }
 
-/* LIGHT palette — the current Breeze-light colours, unchanged. */
+/* LIGHT palette — Breeze-light. */
 @mode light {
   :root {
-    --surface:         #EFF0F1;   /* window + title-bar band                  */
-    --ink:             #232629;   /* primary text                             */
-    --ink-disabled:    #A0A4A8;   /* muted / disabled text                    */
-    --on-accent:       #FFFFFF;   /* ink on solid accent fills                */
-    --field:           #FCFCFC;   /* near-white input / button face           */
-    --field-hover:     #FFFFFF;   /* face lifts to pure white on hover        */
-    --field-active:    #E0E4E7;   /* press settles to soft gray               */
-    --field-disabled:  #F4F5F6;   /* disabled well                            */
-    --border:          #BDC3C7;   /* hairline border                          */
-    --border-hover:    #9DA5AB;   /* field hover edge                         */
-    --border-disabled: #D8DCDF;   /* disabled edge                            */
-    --groove:          #D8DCDF;   /* progress groove                          */
-    --caption-hover:   darken(#EFF0F1, 7);   /* caption-button hover wash     */
-    --caption-active:  darken(#EFF0F1, 12);  /* caption-button press wash     */
+    --surface:           #EFF0F1;   /* window body                             */
+    --titlebar:          #E3E5E7;   /* header band, a touch darker than window */
+    --ink:               #232627;   /* primary text                            */
+    --ink-disabled:      #A0A4A8;   /* muted / disabled text                   */
+    --on-accent:         #FFFFFF;   /* ink on solid accent fills               */
+    --field:             #FFFFFF;   /* white input well                        */
+    --field-border:      #BCC0C4;   /* hairline field border                   */
+    --field-hover-brd:   #9DA5AB;   /* field hover edge                        */
+    --field-disabled:    #F4F5F6;   /* disabled well                           */
+    --btn-face:          #FCFCFC;   /* near-white button face                  */
+    --btn-border:        #BCC0C4;   /* button hairline                         */
+    --btn-hover-face:    #F3FAFE;   /* hover face, faint blue wash             */
+    --btn-active-face:   #E7F4FB;   /* press face, deeper blue wash            */
+    --check-bg:          #FFFFFF;   /* checkbox / radio well                   */
+    --check-border:      #9DA1A5;   /* checkbox / radio edge                   */
+    --groove:            #D3D6D9;   /* progress groove                         */
+    --groove-border:     #BCC0C4;   /* progress groove edge                    */
+    --border-disabled:   #D8DCDF;   /* disabled edge                           */
+    --btn-shadow:        #0000000F;   /* whisper-soft lift (Breeze is near-flat) */
+    --caption-hover:     darken(#E3E5E7, 6);   /* caption hover wash           */
+    --caption-active:    darken(#E3E5E7, 11);  /* caption press wash           */
   }
 }
 
-/* DARK palette — Breeze-dark: dark surfaces, lighter fields, light ink, thin
-   dark borders. Same accent, same structure — only the colours flip. */
+/* DARK palette — Breeze-dark. Same structure, only the colours flip; shadows off. */
 @mode dark {
   :root {
-    --surface:         #232629;   /* window + title-bar band                  */
-    --ink:             #EFF0F1;   /* primary text                             */
-    --ink-disabled:    #6E7377;   /* muted / disabled text                    */
-    --on-accent:       #FFFFFF;   /* ink on solid accent fills                */
-    --field:           #31363B;   /* raised input / button face               */
-    --field-hover:     #3B4045;   /* face lifts a touch on hover              */
-    --field-active:    #2A2E32;   /* press settles slightly darker            */
-    --field-disabled:  #2A2E32;   /* disabled well                            */
-    --border:          #4C5155;   /* thin dark border                         */
-    --border-hover:    #5C6165;   /* field hover edge                         */
-    --border-disabled: #3A3E42;   /* disabled edge                            */
-    --groove:          #1B1E20;   /* progress groove (darker than field)      */
-    --caption-hover:   lighten(#232629, 7);   /* caption-button hover wash    */
-    --caption-active:  lighten(#232629, 12);  /* caption-button press wash    */
+    --surface:           #232629;
+    --titlebar:          #2A2E32;
+    --ink:               #EFF0F1;
+    --ink-disabled:      #6E7377;
+    --on-accent:         #FFFFFF;
+    --field:             #1B1E20;
+    --field-border:      #31363B;
+    --field-hover-brd:   #454A4F;
+    --field-disabled:    #26292C;
+    --btn-face:          #31363B;
+    --btn-border:        #3E4348;
+    --btn-hover-face:    #3B4045;
+    --btn-active-face:   #2A2E32;
+    --check-bg:          #1B1E20;
+    --check-border:      #5A5F63;
+    --groove:            #1B1E20;
+    --groove-border:     #31363B;
+    --border-disabled:   #2E3236;
+    --btn-shadow:        #00000000;
+    --caption-hover:     lighten(#2A2E32, 7);
+    --caption-active:    lighten(#2A2E32, 12);
   }
 }
 
 /* Window: the flat Breeze surface. */
 TyForm          { background: var(--surface); }
 
-/* Title bar: surface-toned band with contrasting ink (Breeze headerbar look). */
-TyTitleBar      { background: var(--surface); color: var(--ink); border-radius: 3; }
+/* Title bar: header band, a hair darker than the window, with high-contrast ink. */
+TyTitleBar      { background: var(--titlebar); color: var(--ink); border-radius: 3; }
 TyCaptionButton { render-style: flat; background: transparent; color: var(--ink); border-radius: 3; }
-TyCaptionButton:hover    { background: var(--caption-hover); color: var(--ink); }
-TyCaptionButton:active   { background: var(--caption-active); color: var(--ink); }
-TyCaptionButton:disabled { background: transparent; color: var(--ink-disabled); }
+TyCaptionButton:hover        { background: var(--caption-hover); color: var(--ink); }
+TyCaptionButton:active       { background: var(--caption-active); color: var(--ink); }
+TyCaptionButton:disabled     { background: transparent; color: var(--ink-disabled); }
+TyCaptionButton.close:hover  { background: #DA4453; color: #FFFFFF; }
+TyCaptionButton.close:active { background: #C0392B; color: #FFFFFF; }
 
 TyLabel         { color: var(--ink); }
 
-/* Buttons: flat field-toned face, hairline border, 3px corners. Hover lifts the
-   face with an accent-blue edge; press settles to a slightly deeper tone. */
-TyButton                { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 3; padding: 6px; font-weight: normal; }
-TyButton:hover          { background: var(--field-hover); color: var(--ink); border-color: var(--accent); }
-TyButton:active         { background: var(--field-active); color: var(--ink); border-color: var(--accent); }
+/* Buttons: flat near-white face, #BCC0C4 hairline, 3px corners, tight padding.
+   Hover lights the border Breeze-blue over a faint blue face; press deepens it. */
+TyButton                { render-style: flat; background: var(--btn-face); color: var(--ink); border: 1px solid var(--btn-border); border-radius: 3; padding: 5px 9px; font-weight: normal; shadow: 0 1 2 var(--btn-shadow); }
+TyButton:hover          { background: var(--btn-hover-face); color: var(--ink); border-color: var(--accent); }
+TyButton:active         { background: var(--btn-active-face); color: var(--ink); border-color: var(--accent); }
 TyButton:focus          { outline: 1 var(--accent); outline-offset: 1px; }
-TyButton:disabled       { background: var(--field-disabled); color: var(--ink-disabled); border-color: var(--border-disabled); }
+TyButton:disabled       { background: var(--field-disabled); color: var(--ink-disabled); border-color: var(--border-disabled); shadow: 0 0 0 #00000000; }
 
-/* Primary: solid Breeze-blue fill, white ink. */
-TyButton.primary        { render-style: flat; background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: 3; padding: 6px; font-weight: normal; }
-TyButton.primary:hover  { background: lighten(var(--accent), 8); border-color: lighten(var(--accent), 8); color: var(--on-accent); }
-TyButton.primary:active { background: darken(var(--accent), 10); border-color: darken(var(--accent), 10); color: var(--on-accent); }
-TyButton.primary:focus  { outline: 1 var(--accent); outline-offset: 2px; }
+/* Primary: solid Breeze-blue fill, white ink, same tight footprint. */
+TyButton.primary          { render-style: flat; background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: 3; padding: 5px 9px; font-weight: normal; }
+TyButton.primary:hover    { background: lighten(var(--accent), 8); border-color: lighten(var(--accent), 8); color: var(--on-accent); }
+TyButton.primary:active   { background: darken(var(--accent), 10); border-color: darken(var(--accent), 10); color: var(--on-accent); }
+TyButton.primary:focus    { outline: 1 var(--accent); outline-offset: 2px; }
 TyButton.primary:disabled { background: alpha(var(--accent), 0.4); border-color: transparent; color: var(--on-accent); }
 
-/* Ghost: borderless until touched; hover paints a translucent accent wash. */
-TyButton.ghost          { render-style: flat; background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 3; padding: 6px; font-weight: normal; }
+/* Ghost: borderless accent text; hover paints a translucent Breeze-blue wash. */
+TyButton.ghost          { render-style: flat; background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 3; padding: 5px 9px; font-weight: normal; }
 TyButton.ghost:hover    { background: alpha(var(--accent), 0.12); color: var(--accent); border-color: transparent; }
-TyButton.ghost:active   { background: alpha(var(--accent), 0.22); color: var(--accent); border-color: transparent; }
+TyButton.ghost:active   { background: alpha(var(--accent), 0.20); color: var(--accent); border-color: transparent; }
 TyButton.ghost:disabled { background: transparent; color: var(--ink-disabled); border-color: transparent; }
 
-/* Fields: crisp field-toned wells, hairline border, accent edge on focus. */
-TyEdit          { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 3; padding: 4px; }
-TyEdit:hover    { border-color: var(--border-hover); }
+/* Fields: crisp white (dark: deep) wells, hairline border, accent edge on focus. */
+TyEdit          { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--field-border); border-radius: 3; padding: 4px 6px; }
+TyEdit:hover    { border-color: var(--field-hover-brd); }
 TyEdit:focus    { border-color: var(--accent); outline: 1 alpha(var(--accent), 0.5); outline-offset: 0px; }
 TyEdit:disabled { background: var(--field-disabled); color: var(--ink-disabled); border-color: var(--border-disabled); }
 
-TyComboBox          { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 3; padding: 4px; }
-TyComboBox:hover    { border-color: var(--border-hover); }
+TyComboBox          { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--field-border); border-radius: 3; padding: 4px 6px; }
+TyComboBox:hover    { border-color: var(--field-hover-brd); }
 TyComboBox:focus    { border-color: var(--accent); outline: 1 alpha(var(--accent), 0.5); outline-offset: 0px; }
 TyComboBox:disabled { background: var(--field-disabled); color: var(--ink-disabled); border-color: var(--border-disabled); }
 
-/* Check box: field-toned box, hairline border, accent tick. Hover/focus draw the
-   accent edge; checked (:selected) flips to a solid accent box with white tick. */
-TyCheckBox           { background: var(--field); color: var(--accent); border: 1px solid var(--border); border-radius: 3; }
-TyCheckBox:hover     { background: var(--field-hover); color: var(--accent); border: 1px solid var(--accent); border-radius: 3; }
-TyCheckBox:active    { background: var(--field-hover); color: var(--accent); border: 1px solid var(--accent); border-radius: 3; }
-TyCheckBox:selected  { background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: 3; }
-TyCheckBox:disabled  { background: var(--field-disabled); color: var(--ink-disabled); border: 1px solid var(--border-disabled); border-radius: 3; }
+/* Check box: white well, #9DA1A5 edge, accent tick, 2px corners. Hover/active
+   light the edge blue; checked flips to a solid accent box with a white tick. */
+TyCheckBox           { background: var(--check-bg); color: var(--accent); border: 1px solid var(--check-border); border-radius: 2; }
+TyCheckBox:hover     { background: var(--check-bg); color: var(--accent); border: 1px solid var(--accent); border-radius: 2; }
+TyCheckBox:active    { background: var(--check-bg); color: var(--accent); border: 1px solid var(--accent); border-radius: 2; }
+TyCheckBox:selected  { background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: 2; }
+TyCheckBox:disabled  { background: var(--field-disabled); color: var(--ink-disabled); border: 1px solid var(--border-disabled); border-radius: 2; }
+
+/* Radio: same treatment as the check box (the control paints the circle itself). */
+TyRadioButton           { background: var(--check-bg); color: var(--accent); border: 1px solid var(--check-border); border-radius: 2; }
+TyRadioButton:hover     { background: var(--check-bg); color: var(--accent); border: 1px solid var(--accent); border-radius: 2; }
+TyRadioButton:active    { background: var(--check-bg); color: var(--accent); border: 1px solid var(--accent); border-radius: 2; }
+TyRadioButton:selected  { background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: 2; }
+TyRadioButton:disabled  { background: var(--field-disabled); color: var(--ink-disabled); border: 1px solid var(--border-disabled); border-radius: 2; }
 
 /* Progress: a thin groove with a solid Breeze-blue fill. */
-TyProgressBar   { render-style: flat; background: var(--groove); color: var(--ink); border: 1px solid var(--border); border-radius: 3; }
+TyProgressBar   { render-style: flat; background: var(--groove); color: var(--ink); border: 1px solid var(--groove-border); border-radius: 3; }
 TyProgressFill  { background: var(--accent); border-radius: 2; }

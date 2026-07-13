@@ -1,88 +1,103 @@
-/* ubuntu — an ORIGINAL "inspired-by" take on Ubuntu's Yaru look (not a pixel clone).
-   Warm & flat: Ubuntu orange accent, an aubergine title-bar band, 4px radii, thin
-   warm borders. DUAL-MODE: @mode light = the classic warm Yaru light; @mode dark =
-   a Yaru-dark aubergine/charcoal palette (dark surfaces, light ink, vivid orange). */
+/* ubuntu — a faithful take on Ubuntu's Yaru desktop look (light + dark).
+   Native, not "zoomed": flat neutral surfaces, a light headerbar (no aubergine
+   band), thin grey borders, 6px radii, the Ubuntu-orange accent, normal-weight
+   buttons at compact GTK padding. DUAL-MODE: @mode light = Yaru light; @mode dark
+   = Yaru dark (neutral #1E1E1E charcoal, NOT aubergine). Control rules resolve every
+   mode-varying colour through var(--…); --accent stays the brand seed in both. */
 
-/* Mode-invariant: the iconic aubergine title-bar band stays dark in BOTH modes,
-   with white caption ink. Non-colour structure (radii/padding) lives inline. */
-:root {
-  --aubergine:  #2C001E;   /* the classic Ubuntu title-bar band — dark in both modes */
-  --title-ink:  #FFFFFF;   /* caption text on the aubergine band */
-}
-
-/* LIGHT — the current look, unchanged. */
+/* LIGHT — Yaru light. */
 @mode light {
   :root {
-    --accent:   #E95420;   /* Ubuntu orange — brand; runtime accent-picker recolours from here */
-    --surface:  #FAFAFA;   /* window / warm off-white */
-    --field:    #FFFFFF;   /* input wells */
-    --border:   #C7C2BD;   /* thin warm-grey hairline */
-    --ink:      #2C2C2C;   /* primary text */
-    --muted:    #8E8A85;   /* disabled / secondary ink */
-    --btn-face: #F6F5F4;   /* neutral button face (Yaru "light") */
-    --track:    #E4E1DE;   /* progress track */
+    --accent:     #E95420;   /* Ubuntu orange — brand seed; runtime picker recolours from here */
+    --surface:    #FAFAFA;   /* window */
+    --headerbar:  #F5F5F5;   /* Yaru headerbar */
+    --title-ink:  #1D1D1D;   /* caption text */
+    --field:      #FFFFFF;   /* input wells */
+    --border:     #C7C7C7;   /* field / control hairline */
+    --ink:        #1D1D1D;   /* primary text */
+    --muted:      #9A9A9A;   /* disabled / secondary ink */
+    --btn-face:   #F7F7F7;   /* neutral button face */
+    --btn-border: #C7C7C7;   /* button border */
+    --btn-hover:  #EFEFEF;   /* button hover face */
+    --btn-active: #E6E6E6;   /* button pressed face */
+    --check-border: #B0B0B0; /* unchecked checkbox border */
+    --track:      #D8D8D8;   /* progress track */
   }
 }
 
-/* DARK — Yaru dark: aubergine/charcoal surfaces, light ink, orange kept vivid. */
+/* DARK — Yaru dark: neutral charcoal surfaces, light ink, orange kept vivid. */
 @mode dark {
   :root {
-    --accent:   #F26B3F;   /* Ubuntu orange, brightened a touch for dark contrast */
-    --surface:  #1E1B1E;   /* dark charcoal, faintly aubergine */
-    --field:    #2A262A;   /* input wells — slightly elevated well */
-    --border:   #423C44;   /* dark warm hairline */
-    --ink:      #F2EEF0;   /* primary light text */
-    --muted:    #9A9298;   /* disabled / secondary ink */
-    --btn-face: #332E34;   /* neutral dark button face */
-    --track:    #2A262A;   /* progress track */
+    --accent:     #E95420;   /* Ubuntu orange — brand seed, unchanged in dark */
+    --surface:    #1E1E1E;   /* window — Yaru dark neutral */
+    --headerbar:  #2C2C2C;   /* dark headerbar */
+    --title-ink:  #FFFFFF;   /* caption text */
+    --field:      #2C2C2C;   /* input wells */
+    --border:     #3D3D3D;   /* field hairline */
+    --ink:        #FFFFFF;   /* primary text */
+    --muted:      #7A7A7A;   /* disabled / secondary ink */
+    --btn-face:   #333333;   /* neutral dark button face */
+    --btn-border: #454545;   /* button border */
+    --btn-hover:  #3C3C3C;   /* button hover face (lighter in dark) */
+    --btn-active: #454545;   /* button pressed face */
+    --check-border: #5A5A5A; /* unchecked checkbox border */
+    --track:      #3D3D3D;   /* progress track */
   }
 }
 
 /* Window & text */
 TyForm   { background: var(--surface); }
-TyLabel  { color: var(--ink); font-family: Ubuntu; }
+TyLabel  { color: var(--ink); }
 
-/* Title bar — aubergine band, white caption, flat and square. */
-TyTitleBar      { background: var(--aubergine); color: var(--title-ink); border-radius: 0; font-family: Ubuntu; }
-TyCaptionButton { background: var(--aubergine); color: var(--title-ink); border-radius: 4px; }
-TyCaptionButton:hover  { background: lighten(var(--aubergine), 14%); color: var(--title-ink); }
+/* Title bar — light headerbar matching the window, flat and square. */
+TyTitleBar      { background: var(--headerbar); color: var(--title-ink); border-radius: 0; }
+TyCaptionButton { background: transparent; color: var(--title-ink); border-radius: 5px; }
+TyCaptionButton:hover  { background: alpha(var(--title-ink), 0.10); color: var(--title-ink); }
 TyCaptionButton:active { background: var(--accent); color: on(var(--accent)); }
+TyCaptionButton.close:hover  { background: var(--accent); color: on(var(--accent)); }
+TyCaptionButton.close:active { background: darken(var(--accent), 8%); color: on(var(--accent)); }
 
-/* Neutral button — light warm face, thin border, rounded. */
-TyButton          { background: var(--btn-face); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 6px 14px; font-family: Ubuntu; font-weight: bold; }
-TyButton:hover    { background: darken(var(--btn-face), 4%); border-color: darken(var(--border), 6%); }
-TyButton:active   { background: darken(var(--btn-face), 9%); border-color: darken(var(--border), 12%); }
-TyButton:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.45); outline-offset: 2px; }
-TyButton:disabled { background: var(--btn-face); color: var(--muted); border-color: var(--border); opacity: 0.6; }
+/* Neutral button — flat warm-grey face, thin border, 6px radius, NORMAL weight. */
+TyButton          { background: linear-gradient(90deg, lighten(var(--btn-face), 2%), var(--btn-face)); color: var(--ink); border: 1px solid var(--btn-border); border-radius: 6px; padding: 5px 10px; font-weight: normal; shadow: 0 1px 1px #00000012; }
+TyButton:hover    { background: var(--btn-hover); border-color: darken(var(--btn-border), 6%); }
+TyButton:active   { background: var(--btn-active); border-color: darken(var(--btn-border), 10%); shadow: 0 0 0 transparent; }
+TyButton:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.40); outline-offset: 1px; }
+TyButton:disabled { background: var(--btn-face); color: var(--muted); border-color: var(--btn-border); opacity: 0.6; shadow: 0 0 0 transparent; }
 
-/* Primary — solid Ubuntu orange, white ink, borderless. */
-TyButton.primary          { background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); border-radius: 4px; padding: 6px 14px; font-weight: bold; }
-TyButton.primary:hover    { background: darken(var(--accent), 6%); border-color: darken(var(--accent), 6%); }
-TyButton.primary:active   { background: darken(var(--accent), 12%); border-color: darken(var(--accent), 12%); }
-TyButton.primary:focus    { outline: 2px alpha(var(--accent), 0.55); outline-offset: 2px; }
-TyButton.primary:disabled { background: alpha(var(--accent), 0.5); border-color: transparent; color: #FFFFFF; opacity: 0.8; }
+/* Primary — solid Ubuntu orange, white ink, 6px radius, normal weight (Yaru). */
+TyButton.primary          { background: linear-gradient(90deg, lighten(var(--accent), 4%), var(--accent)); color: #FFFFFF; border: 1px solid darken(var(--accent), 6%); border-radius: 6px; padding: 5px 10px; font-weight: normal; shadow: 0 1px 1px #00000018; }
+TyButton.primary:hover    { background: darken(var(--accent), 5%); border-color: darken(var(--accent), 10%); }
+TyButton.primary:active   { background: darken(var(--accent), 11%); border-color: darken(var(--accent), 14%); shadow: 0 0 0 transparent; }
+TyButton.primary:focus    { outline: 2px alpha(var(--accent), 0.50); outline-offset: 1px; }
+TyButton.primary:disabled { background: alpha(var(--accent), 0.5); border-color: transparent; color: #FFFFFF; opacity: 0.8; shadow: 0 0 0 transparent; }
 
 /* Ghost — flat, orange ink, tint on interaction. */
-TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 4px; padding: 6px 14px; font-weight: bold; }
+TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6px; padding: 5px 10px; font-weight: normal; }
 TyButton.ghost:hover    { background: alpha(var(--accent), 0.10); color: var(--accent); }
 TyButton.ghost:active   { background: alpha(var(--accent), 0.18); color: darken(var(--accent), 8%); }
 TyButton.ghost:disabled { background: transparent; color: var(--muted); opacity: 0.6; }
 
-/* Fields — crisp wells, thin border, orange focus. */
-TyEdit          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 5px 8px; font-family: Ubuntu; }
-TyEdit:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.35); outline-offset: 0px; }
-TyEdit:disabled { background: darken(var(--field), 4%); color: var(--muted); }
-TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; padding: 5px 8px; font-family: Ubuntu; }
-TyComboBox:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.35); }
-TyComboBox:disabled { background: darken(var(--field), 4%); color: var(--muted); }
+/* Fields — crisp white wells, thin border, 6px radius, orange focus. */
+TyEdit          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+TyEdit:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.30); outline-offset: 0px; }
+TyEdit:disabled { background: darken(var(--field), 3%); color: var(--muted); }
+TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+TyComboBox:focus    { border-color: var(--accent); outline: 2px alpha(var(--accent), 0.30); }
+TyComboBox:disabled { background: darken(var(--field), 3%); color: var(--muted); }
 
-/* Check box — stroked box; checked fills solid orange with a white tick. */
-TyCheckBox           { background: var(--field); color: var(--accent); border: 1px solid var(--border); border-radius: 4px; }
+/* Check box — white box, grey border, 5px radius; checked fills solid orange. */
+TyCheckBox           { background: var(--field); color: var(--accent); border: 1px solid var(--check-border); border-radius: 5px; }
 TyCheckBox:hover     { border-color: var(--accent); }
 TyCheckBox:active    { background: var(--field); border-color: var(--accent); }
 TyCheckBox:selected  { background: var(--accent); color: on(var(--accent)); border-color: var(--accent); }
-TyCheckBox:focus     { outline: 2px alpha(var(--accent), 0.40); outline-offset: 2px; }
+TyCheckBox:focus     { outline: 2px alpha(var(--accent), 0.35); outline-offset: 2px; }
 
-/* Progress — flat warm track, solid orange fill. */
-TyProgressBar  { background: var(--track); border: 1px solid var(--border); border-radius: 4px; }
-TyProgressFill { background: var(--accent); border-radius: 4px; }
+/* Radio — round mirror of the checkbox. */
+TyRadioButton          { background: var(--field); color: var(--accent); border: 1px solid var(--check-border); border-radius: 100px; }
+TyRadioButton:hover    { border-color: var(--accent); }
+TyRadioButton:selected { background: var(--accent); color: on(var(--accent)); border-color: var(--accent); }
+TyRadioButton:focus    { outline: 2px alpha(var(--accent), 0.35); outline-offset: 2px; }
+
+/* Progress — flat pill track, solid orange fill. */
+TyProgressBar  { background: var(--track); border: none; border-radius: 100px; }
+TyProgressFill { background: var(--accent); border-radius: 100px; }

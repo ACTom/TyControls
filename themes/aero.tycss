@@ -1,6 +1,5 @@
-/* Aero — an ORIGINAL "inspired-by" take on the Windows Vista/7 glass look (NOT a pixel clone).
-   Faked glass with no real blur: light top-white-sheen gradients, cool grays/blues, thin light
-   borders, rounded 4px corners and soft cool shadows for an airy, glossy feel.
+/* Aero — authentic Windows 7 "Aero" glossy glass. Light steel-glass window, wet-gloss
+   3-stop buttons, thin cool blue borders, 3px corners, crisp white fields, soft shadow.
    Gradient angle note: 90deg runs TOP->BOTTOM, so the first stop is the top sheen.
 
    DUAL-MODE: Aero glass is inherently light and has no natural dark variant, so @mode dark is
@@ -13,126 +12,102 @@
   --focus-ring: alpha(var(--accent), 0.55);
 }
 
-/* ---- LIGHT palette (the current Aero look) ---- */
+/* ---- LIGHT palette (authentic Aero glass) ---- */
 @mode light {
   :root {
-    --accent:            #3A8DDE;   /* brand blue — runtime accent-picker recolours from here */
-    --ink:               #1E2B3A;   /* cool dark-slate text */
-    --titlebar-ink:      #24313F;   /* title bar + caption-button caption ink */
+    --accent:            #2C7FD6;   /* brand blue — runtime accent-picker recolours from here */
+    --ink:               #1E2B3A;   /* cool dark-slate body text */
+    --titlebar-ink:      #0A1A2A;   /* deep glass-caption ink */
 
-    --border-cool:       #A9C6E0;   /* thin light glass border */
-    --border-hi:         #6EA8DE;   /* accent-tinted border on hover/focus */
-    --field-border:      #9FBEDC;   /* edit / combo well border */
-    --check-border:      #7FA8CE;   /* check box border */
+    --form-1:            #EEF3F9;   /* window steel-glass wash, top */
+    --form-2:            #DCE6F0;   /* window steel-glass wash, bottom */
+
+    --titlebar-1:        #E4EEF7;   /* Aero glass caption, top sheen */
+    --titlebar-2:        #C4D8EC;   /* Aero glass caption, base */
+
+    --field-bg:          #FFFFFF;   /* crisp white field well */
+    --field-border:      #7DA2CE;   /* cool blue field / check border */
+    --field-focus:       #3C7FB1;   /* focus border blue */
+
+    --btn-1:             #FDFEFF;   /* button gloss: wet upper sheen */
+    --btn-2:             #ECF2F9;   /* button gloss: mid */
+    --btn-3:             #DBE7F4;   /* button gloss: deeper base */
+    --btn-border:        #718DB5;   /* button cool steel border */
+    --btn-shadow:        #00000014; /* soft neutral drop shadow */
+
+    --btn-h1:            #EAF6FD;   /* hover glow, top */
+    --btn-h2:            #D2ECFB;   /* hover glow, base */
+
+    --btn-a1:            #C4DCF0;   /* pressed, top (darker -> sunken) */
+    --btn-a2:            #D9E9F8;   /* pressed, base (lifts back up) */
+
+    --check-bg:          #FFFFFF;   /* white check box well */
+
+    --track:             #DCE6F0;   /* progress track */
     --progress-border:   #A7C0D8;   /* progress track border */
-    --btn-active-border: #5E97CE;   /* pressed button / ghost-active border */
 
     --glass:             #FFFFFF;   /* white glass base for translucent lifts */
-
-    --form-bg-top:       #EEF4FB;   /* window wash, top */
-    --form-bg-bottom:    #E2ECF6;   /* window wash, bottom */
-
-    --titlebar-1:        #FCFEFF;   /* frosted title bar sheen */
-    --titlebar-2:        #EBF4FC;
-    --titlebar-3:        #D4E6F6;
 
     --close:             #E04747;   /* close-button warm glow */
     --close-active:      #C23030;
     --close-ink:         #FFFFFF;
 
-    --btn-1:             #FDFEFF;   /* button gloss (bright upper -> deeper lower) */
-    --btn-2:             #ECF4FC;
-    --btn-3:             #DCEAF6;
-    --btn-4:             #E7F1FB;
-    --btn-h1:            #FFFFFF;   /* button hover gloss */
-    --btn-h2:            #F3F9FE;
-    --btn-h3:            #E3F0FB;
-    --btn-h4:            #EFF7FE;
-    --btn-a1:            #CBDFF1;   /* button pressed gloss */
-    --btn-a2:            #D6E6F4;
-    --btn-a3:            #E1EDF8;
-
-    --btn-shadow:        #2B5E8E2E;   /* soft cool button shadow */
-    --btn-active-shadow: #2B5E8E33;
-    --primary-shadow:    #1E5FA240;   /* deeper accent shadow under primary */
-
-    --field-1:           #EDF4FB;   /* field top shade */
-    --field-2:           #FFFFFF;   /* field white well */
-
-    --check-1:           #F1F7FC;   /* check box glass */
-    --check-2:           #FFFFFF;
-
-    --track-1:           #DCE6F0;   /* progress track */
-    --track-2:           #EAF1F8;
-
-    --ghost-active:      #D6E6F4;   /* ghost pressed/selected fill */
+    --primary-shadow:    #10467A33; /* deeper accent shadow under primary */
   }
 }
 
 /* ---- DARK palette (Aero has no natural dark variant — IDENTICAL to light) ---- */
 @mode dark {
   :root {
-    --accent:            #3A8DDE;
+    --accent:            #2C7FD6;
     --ink:               #1E2B3A;
-    --titlebar-ink:      #24313F;
+    --titlebar-ink:      #0A1A2A;
 
-    --border-cool:       #A9C6E0;
-    --border-hi:         #6EA8DE;
-    --field-border:      #9FBEDC;
-    --check-border:      #7FA8CE;
+    --form-1:            #EEF3F9;
+    --form-2:            #DCE6F0;
+
+    --titlebar-1:        #E4EEF7;
+    --titlebar-2:        #C4D8EC;
+
+    --field-bg:          #FFFFFF;
+    --field-border:      #7DA2CE;
+    --field-focus:       #3C7FB1;
+
+    --btn-1:             #FDFEFF;
+    --btn-2:             #ECF2F9;
+    --btn-3:             #DBE7F4;
+    --btn-border:        #718DB5;
+    --btn-shadow:        #00000014;
+
+    --btn-h1:            #EAF6FD;
+    --btn-h2:            #D2ECFB;
+
+    --btn-a1:            #C4DCF0;
+    --btn-a2:            #D9E9F8;
+
+    --check-bg:          #FFFFFF;
+
+    --track:             #DCE6F0;
     --progress-border:   #A7C0D8;
-    --btn-active-border: #5E97CE;
 
     --glass:             #FFFFFF;
-
-    --form-bg-top:       #EEF4FB;
-    --form-bg-bottom:    #E2ECF6;
-
-    --titlebar-1:        #FCFEFF;
-    --titlebar-2:        #EBF4FC;
-    --titlebar-3:        #D4E6F6;
 
     --close:             #E04747;
     --close-active:      #C23030;
     --close-ink:         #FFFFFF;
 
-    --btn-1:             #FDFEFF;
-    --btn-2:             #ECF4FC;
-    --btn-3:             #DCEAF6;
-    --btn-4:             #E7F1FB;
-    --btn-h1:            #FFFFFF;
-    --btn-h2:            #F3F9FE;
-    --btn-h3:            #E3F0FB;
-    --btn-h4:            #EFF7FE;
-    --btn-a1:            #CBDFF1;
-    --btn-a2:            #D6E6F4;
-    --btn-a3:            #E1EDF8;
-
-    --btn-shadow:        #2B5E8E2E;
-    --btn-active-shadow: #2B5E8E33;
-    --primary-shadow:    #1E5FA240;
-
-    --field-1:           #EDF4FB;
-    --field-2:           #FFFFFF;
-
-    --check-1:           #F1F7FC;
-    --check-2:           #FFFFFF;
-
-    --track-1:           #DCE6F0;
-    --track-2:           #EAF1F8;
-
-    --ghost-active:      #D6E6F4;
+    --primary-shadow:    #10467A33;
   }
 }
 
-/* Window: an airy, very light cool gray-blue wash (top lighter, bottom a touch deeper). */
-TyForm { background: linear-gradient(90deg, var(--form-bg-top) 0%, var(--form-bg-bottom) 100%); }
+/* Window: light steel-glass wash, top lighter, bottom a touch deeper. */
+TyForm { background: linear-gradient(90deg, var(--form-1), var(--form-2)); }
 
-/* Title bar: light frosted gradient — near-white sheen fading to pale blue, with a soft lower edge. */
+/* Title bar: Aero glass — pale sheen fading to steel blue; deep caption ink, normal weight. */
 TyTitleBar {
-  background: linear-gradient(90deg, var(--titlebar-1) 0%, var(--titlebar-2) 55%, var(--titlebar-3) 100%);
+  background: linear-gradient(90deg, var(--titlebar-1), var(--titlebar-2));
   color: var(--titlebar-ink);
-  font-weight: bold;
+  font-weight: normal;
 }
 
 /* Caption buttons: glassy translucent lift; a warm red glow on close. */
@@ -147,113 +122,128 @@ TyCaptionButton.close:active { background: var(--close-active); color: var(--clo
 TyLabel          { background: alpha(var(--glass), 0); color: var(--ink); font-weight: normal; }
 TyLabel:disabled { opacity: 0.5; }
 
-/* Buttons: a subtle top-white sheen over a light glassy fill, thin light border, radius 4, soft shadow.
-   The 45%/50% break fakes the classic two-part Aero gloss (bright upper, deeper lower that lifts again). */
+/* Buttons: the classic wet-glass gloss — 3-stop vertical gradient (bright sheen -> mid -> deeper
+   base), thin cool steel border, 3px corners, a soft neutral shadow. Compact padding so demo
+   captions never truncate. */
 TyButton {
-  background: linear-gradient(90deg, var(--btn-1) 0%, var(--btn-2) 45%, var(--btn-3) 50%, var(--btn-4) 100%);
+  background: linear-gradient(90deg, var(--btn-1), var(--btn-2), var(--btn-3));
   color: var(--ink);
-  border-color: var(--border-cool);
+  border-color: var(--btn-border);
   border-width: 1px;
-  border-radius: 4px;
-  padding: 7px;
+  border-radius: 3px;
+  padding: 6px;
   font-weight: normal;
-  shadow: 0 2 5 var(--btn-shadow);
+  shadow: 0 1 2 var(--btn-shadow);
 }
 TyButton:hover {
-  background: linear-gradient(90deg, var(--btn-h1) 0%, var(--btn-h2) 45%, var(--btn-h3) 50%, var(--btn-h4) 100%);
-  border-color: var(--border-hi);
+  background: linear-gradient(90deg, var(--btn-h1), var(--btn-h2));
+  border-color: var(--field-focus);
 }
 TyButton:active {
-  background: linear-gradient(90deg, var(--btn-a1) 0%, var(--btn-a2) 50%, var(--btn-a3) 100%);
-  border-color: var(--btn-active-border);
-  shadow: 0 1 2 var(--btn-active-shadow);
+  background: linear-gradient(90deg, var(--btn-a1), var(--btn-a2));
+  border-color: var(--field-focus);
+  shadow: 0 1 1 var(--btn-shadow);
 }
 TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); outline-offset: 1px; }
 TyButton:disabled { opacity: 0.5; }
 
-/* Primary: glossy blue Aero glass — bright accent sheen up top, deeper mid break, accent base. */
+/* Primary: glossy accent glass — bright accent sheen up top fading into the solid accent base. */
 TyButton.primary {
-  background: linear-gradient(90deg, lighten(--accent, 30%) 0%, lighten(--accent, 8%) 45%, darken(--accent, 6%) 50%, var(--accent) 100%);
+  background: linear-gradient(90deg, lighten(var(--accent), 18%), var(--accent));
   color: on(var(--accent));
-  border-color: darken(--accent, 12%);
-  shadow: 0 2 6 var(--primary-shadow);
+  border-color: darken(var(--accent), 10%);
+  shadow: 0 1 2 var(--primary-shadow);
 }
 TyButton.primary:hover {
-  background: linear-gradient(90deg, lighten(--accent, 38%) 0%, lighten(--accent, 16%) 45%, var(--accent) 50%, lighten(--accent, 4%) 100%);
-  border-color: darken(--accent, 8%);
+  background: linear-gradient(90deg, lighten(var(--accent), 26%), lighten(var(--accent), 6%));
+  border-color: darken(var(--accent), 6%);
 }
 TyButton.primary:active {
-  background: linear-gradient(90deg, darken(--accent, 4%) 0%, darken(--accent, 12%) 100%);
-  border-color: darken(--accent, 18%);
-  shadow: 0 1 2 var(--primary-shadow);
+  background: linear-gradient(90deg, darken(var(--accent), 4%), darken(var(--accent), 12%));
+  border-color: darken(var(--accent), 16%);
+  shadow: 0 1 1 var(--primary-shadow);
 }
 TyButton.primary:disabled { opacity: 0.5; }
 
-/* Ghost: transparent at rest, fades into a faint glass panel on hover/press. */
+/* Ghost: transparent with accent text; fades into a faint glass panel on hover/press. */
 TyButton.ghost {
   background: alpha(var(--glass), 0);
-  color: var(--ink);
-  border-color: alpha(var(--border-cool), 0);
+  color: var(--accent);
+  border-color: alpha(var(--field-border), 0);
   border-width: 1px;
-  border-radius: 4px;
-  padding: 7px;
+  border-radius: 3px;
+  padding: 6px;
   font-weight: normal;
 }
-TyButton.ghost:hover    { background: alpha(var(--glass), 0.5); border-color: var(--border-hi); }
-TyButton.ghost:active   { background: alpha(var(--ghost-active), 0.85); border-color: var(--btn-active-border); }
-TyButton.ghost:selected { background: alpha(var(--ghost-active), 0.9); border-color: var(--accent); }
+TyButton.ghost:hover    { background: alpha(var(--glass), 0.5); border-color: var(--field-focus); }
+TyButton.ghost:active   { background: alpha(var(--btn-a1), 0.9); border-color: var(--field-focus); }
+TyButton.ghost:selected { background: alpha(var(--btn-a1), 0.95); border-color: var(--accent); }
 TyButton.ghost:focus    { outline: 2px var(--focus-ring); outline-offset: 1px; }
 TyButton.ghost:disabled { opacity: 0.5; }
 
-/* Fields: crisp white wells with a faint top shade (fakes a soft inner recess) + blue focus glow. */
+/* Fields: crisp white wells, cool blue border, 3px corners, blue focus glow. */
 TyEdit {
-  background: linear-gradient(90deg, var(--field-1) 0%, var(--field-2) 24%, var(--field-2) 100%);
+  background: var(--field-bg);
   color: var(--ink);
   border-color: var(--field-border);
-  border-width: 1px;
-  border-radius: 4px;
-  padding: 4px;
-}
-TyEdit:hover    { border-color: var(--border-hi); }
-TyEdit:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
-TyEdit:disabled { opacity: 0.5; }
-
-TyComboBox {
-  background: linear-gradient(90deg, var(--field-1) 0%, var(--field-2) 24%, var(--field-2) 100%);
-  color: var(--ink);
-  border-color: var(--field-border);
-  border-width: 1px;
-  border-radius: 4px;
-  padding: 4px;
-}
-TyComboBox:hover    { border-color: var(--border-hi); }
-TyComboBox:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
-TyComboBox:disabled { opacity: 0.5; }
-
-/* Check box: a faint glassy white box (stroked, not beveled); accent fill + white tick when checked. */
-TyCheckBox {
-  background: linear-gradient(90deg, var(--check-1) 0%, var(--check-2) 45%);
-  color: var(--ink);
-  border-color: var(--check-border);
   border-width: 1px;
   border-radius: 3px;
   padding: 4px;
 }
+TyEdit:hover    { border-color: var(--field-focus); }
+TyEdit:focus    { border-color: var(--field-focus); outline: 2px var(--focus-ring); }
+TyEdit:disabled { opacity: 0.5; }
+
+TyComboBox {
+  background: var(--field-bg);
+  color: var(--ink);
+  border-color: var(--field-border);
+  border-width: 1px;
+  border-radius: 3px;
+  padding: 4px;
+}
+TyComboBox:hover    { border-color: var(--field-focus); }
+TyComboBox:focus    { border-color: var(--field-focus); outline: 2px var(--focus-ring); }
+TyComboBox:disabled { opacity: 0.5; }
+
+/* Check box: white well, cool blue border, 2px corners; accent fill + white tick when checked. */
+TyCheckBox {
+  background: var(--check-bg);
+  color: var(--ink);
+  border-color: var(--field-border);
+  border-width: 1px;
+  border-radius: 2px;
+  padding: 4px;
+}
 TyCheckBox:hover    { border-color: var(--accent); }
-TyCheckBox:active   { background: var(--accent); color: on(var(--accent)); border-color: darken(--accent, 12%); }
+TyCheckBox:active   { background: var(--accent); color: on(var(--accent)); border-color: darken(var(--accent), 10%); }
 TyCheckBox:focus    { outline: 2px var(--focus-ring); }
 TyCheckBox:disabled { opacity: 0.5; }
 
-/* Progress: a light sunken glass track with a glossy accent fill (bright sheen band along the top). */
+/* Radio: mirrors the check box (control rounds it into a dot). */
+TyRadioButton {
+  background: var(--check-bg);
+  color: var(--ink);
+  border-color: var(--field-border);
+  border-width: 1px;
+  border-radius: 2px;
+  padding: 4px;
+}
+TyRadioButton:hover    { border-color: var(--accent); }
+TyRadioButton:active   { background: var(--accent); color: on(var(--accent)); border-color: darken(var(--accent), 10%); }
+TyRadioButton:focus    { outline: 2px var(--focus-ring); }
+TyRadioButton:disabled { opacity: 0.5; }
+
+/* Progress: light glass track with a glossy accent fill (bright sheen fading to accent). */
 TyProgressBar {
-  background: linear-gradient(90deg, var(--track-1) 0%, var(--track-2) 100%);
+  background: var(--track);
   border-color: var(--progress-border);
   border-width: 1px;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 TyProgressBar:disabled { opacity: 0.5; }
 
 TyProgressFill {
-  background: linear-gradient(90deg, lighten(--accent, 30%) 0%, var(--accent) 45%, darken(--accent, 6%) 55%, lighten(--accent, 10%) 100%);
+  background: linear-gradient(90deg, lighten(var(--accent), 15%), var(--accent));
   border-radius: 3px;
 }

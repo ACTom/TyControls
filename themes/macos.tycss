@@ -1,167 +1,161 @@
-/* macOS — an ORIGINAL "inspired-by" Aqua / Big Sur take, now DUAL-MODE (not a pixel clone).
-   LIGHT: light-gray surfaces, white fields, hairline borders, a system-blue accent, soft
-   rounded buttons with a whisper of a top gradient, and a soft focus ring (the CURRENT look).
-   DARK: ~#1E1E1E surfaces, ~#2A2A2A fields, light #F5F5F7 text, subtle borders, the same
-   rounded shapes, and a slightly brightened system blue.
-   Only the PALETTE flips per @mode — every radius, gradient shape, padding, font-weight and
-   shadow geometry is shared. --accent stays the brand seed in both modes, so the runtime
-   accent-picker still recolours the whole skin. */
+/* macOS — an authentic Aqua / Big Sur+ take, DUAL-MODE. Nativeness comes from colour,
+   hairline borders, 6px corners, a whisper of a vertical gloss and a soft accent focus
+   ring — never from size (controls inherit the base 9px, buttons stay tight so CJK/short
+   labels never truncate). Only the PALETTE flips per @mode; every radius, gradient shape,
+   padding, weight and shadow geometry is shared. --accent is the brand seed in both modes,
+   so the runtime accent-picker recolours the whole skin through it. */
 
-/* --- palette: light (the original look) ---------------------------------- */
+/* --- palette: light (macOS light, system grey) --------------------------- */
 @mode light {
   :root {
-    --accent:               #0A84FF;   /* macOS system blue — drives every primary/accent surface */
-    --surface:              #ECECEC;   /* window / control chrome */
+    --accent:               #007AFF;   /* macOS system blue — seeds every accent/primary surface */
+    --surface:              #ECECEC;   /* window chrome */
     --field:                #FFFFFF;   /* editable wells */
-    --border:               #D0D0D0;   /* hairline */
+    --border:               #C6C6C6;   /* hairline field / button border */
     --ink:                  #1D1D1F;   /* near-black label text */
 
     /* title bar + caption buttons */
-    --titlebar-a:           #E4E4E4;
-    --titlebar-b:           #F1F1F1;
-    --titlebar-ink:         #3A3A3C;
+    --titlebar-bg:          #E8E8E8;
+    --titlebar-ink:         #000000;
     --caption-ink:          #5B5B5D;
-    --caption-ink-hover:    #2A2A2C;
+    --caption-ink-hover:    #1D1D1F;
     --overlay:              #000000;   /* caption hover/press wash base */
 
     /* default button */
-    --btn-face-a:           #F3F3F3;
-    --btn-face-b:           #FFFFFF;
+    --btn-face-top:         #FFFFFF;
+    --btn-face-bot:         #F3F3F3;
     --btn-ink:              #1D1D1F;
-    --btn-shadow:           #0000001F;
-    --btn-hover-a:          #ECECEC;
-    --btn-hover-b:          #FBFBFB;
-    --btn-hover-border:     #C6C6C6;
-    --btn-active-a:         #E0E0E0;
-    --btn-active-b:         #E9E9E9;
+    --btn-shadow:           #0000001A;
+    --btn-hover-top:        #FFFFFF;
+    --btn-hover-bot:        #ECECEC;
+    --btn-active-top:       #E9E9E9;
+    --btn-active-bot:       #DEDEDE;
     --btn-active-border:    #BFBFBF;
     --btn-disabled-bg:      #F2F2F2;
     --btn-disabled-ink:     #A6A6A8;
     --btn-disabled-border:  #DCDCDC;
 
     /* primary button */
-    --primary-shadow:        #0A84FF59;
-    --primary-shadow-active: #0A84FF4D;
-    --primary-disabled-mix:  #FFFFFF;   /* accent is blended toward this for disabled */
+    --primary-shadow:        #00000026;
+    --primary-shadow-active: #0000001A;
+    --primary-disabled-mix:  #FFFFFF;   /* accent blends toward this for disabled */
     --primary-disabled-ink:  #FFFFFF;
 
     /* fields */
-    --field-hover-border:   #BFBFBF;
+    --field-hover-border:   #B0B0B0;
     --field-disabled-bg:    #F5F5F5;
     --field-disabled-ink:   #A6A6A8;
     --field-disabled-border:#E0E0E0;
 
-    /* check box */
-    --check-border:         #B8B8B8;
+    /* check / radio */
+    --check-border:         #B0B0B0;
     --check-active-bg:      #F0F0F0;
     --check-disabled-bg:    #F5F5F5;
     --check-disabled-ink:   #C4C4C4;
     --check-disabled-border:#DCDCDC;
 
     /* progress */
-    --track:                #E2E2E2;
-    --track-border:         #D6D6D6;
+    --track:                #D9D9D9;
+    --track-border:         #C6C6C6;
   }
 }
 
-/* --- palette: dark (macOS dark mode) ------------------------------------- */
+/* --- palette: dark (macOS dark) ------------------------------------------ */
 @mode dark {
   :root {
-    --accent:               #409CFF;   /* system blue, brightened a touch for dark-mode contrast */
-    --surface:              #1E1E1E;   /* window / control chrome */
-    --field:                #2A2A2A;   /* editable wells */
-    --border:               #3A3A3C;   /* subtle hairline */
+    --accent:               #0A84FF;   /* system blue for dark mode */
+    --surface:              #323232;   /* window chrome */
+    --field:                #1E1E1E;   /* editable wells */
+    --border:               #48484A;   /* hairline field / button border */
     --ink:                  #F5F5F7;   /* light label text */
 
     /* title bar + caption buttons */
-    --titlebar-a:           #2A2A2C;
-    --titlebar-b:           #323234;
-    --titlebar-ink:         #C7C7CC;
+    --titlebar-bg:          #2A2A2A;
+    --titlebar-ink:         #F5F5F7;
     --caption-ink:          #AEAEB2;
     --caption-ink-hover:    #F5F5F7;
     --overlay:              #FFFFFF;   /* caption hover/press wash base */
 
     /* default button */
-    --btn-face-a:           #3A3A3C;
-    --btn-face-b:           #48484A;
-    --btn-ink:              #F5F5F7;
-    --btn-shadow:           #00000066;
-    --btn-hover-a:          #454547;
-    --btn-hover-b:          #545456;
-    --btn-hover-border:     #4A4A4C;
-    --btn-active-a:         #2E2E30;
-    --btn-active-b:         #38383A;
+    --btn-face-top:         #5A5A5C;
+    --btn-face-bot:         #48484A;
+    --btn-ink:              #FFFFFF;
+    --btn-shadow:           #00000040;
+    --btn-hover-top:        #6A6A6C;
+    --btn-hover-bot:        #545456;
+    --btn-active-top:       #48484A;
+    --btn-active-bot:       #3A3A3C;
     --btn-active-border:    #565658;
     --btn-disabled-bg:      #2A2A2C;
     --btn-disabled-ink:     #6E6E73;
     --btn-disabled-border:  #333335;
 
     /* primary button */
-    --primary-shadow:        #409CFF66;
-    --primary-shadow-active: #409CFF4D;
-    --primary-disabled-mix:  #1E1E1E;   /* accent is blended toward the dark surface for disabled */
+    --primary-shadow:        #00000059;
+    --primary-shadow-active: #00000040;
+    --primary-disabled-mix:  #323232;   /* accent blends toward the dark surface for disabled */
     --primary-disabled-ink:  #E5E5E7;
 
     /* fields */
-    --field-hover-border:   #4A4A4C;
+    --field-hover-border:   #5A5A5C;
     --field-disabled-bg:    #252527;
     --field-disabled-ink:   #6E6E73;
     --field-disabled-border:#333335;
 
-    /* check box */
-    --check-border:         #48484A;
+    /* check / radio */
+    --check-border:         #565658;
     --check-active-bg:      #333335;
     --check-disabled-bg:    #252527;
     --check-disabled-ink:   #58585A;
     --check-disabled-border:#333335;
 
     /* progress */
-    --track:                #333335;
-    --track-border:         #3A3A3C;
+    --track:                #3A3A3C;
+    --track-border:         #48484A;
   }
 }
 
-/* Window + unified title bar. */
+/* Window + unified title bar (flat system grey, hairline-rounded top). */
 TyForm          { background: var(--surface); }
-TyTitleBar      { background: linear-gradient(0deg, var(--titlebar-a), var(--titlebar-b)); color: var(--titlebar-ink); border-radius: 6 6 0 0; }
+TyTitleBar      { background: var(--titlebar-bg); color: var(--titlebar-ink); border-radius: 6 6 0 0; }
 TyCaptionButton { background: transparent; color: var(--caption-ink); border-radius: 4; }
 TyCaptionButton:hover  { background: alpha(var(--overlay), 0.08); color: var(--caption-ink-hover); }
 TyCaptionButton:active { background: alpha(var(--overlay), 0.14); }
 
 TyLabel         { color: var(--ink); }
 
-/* Buttons: face with a very subtle top-lighter gradient, hairline, soft shadow, rounded. */
-TyButton                { background: linear-gradient(0deg, var(--btn-face-a), var(--btn-face-b)); color: var(--btn-ink); border: 1px solid var(--border); border-radius: 6; padding: 5px 14px; font-weight: normal; shadow: 0 1 2 var(--btn-shadow); }
-TyButton:hover          { background: linear-gradient(0deg, var(--btn-hover-a), var(--btn-hover-b)); border-color: var(--btn-hover-border); }
-TyButton:active         { background: linear-gradient(0deg, var(--btn-active-a), var(--btn-active-b)); border-color: var(--btn-active-border); shadow: 0 0 0 transparent; }
-TyButton:focus          { border-color: var(--accent); outline: 3 alpha(var(--accent), 0.40); outline-offset: 1; }
+/* Default button: white→grey vertical gloss, hairline, 6px corners, soft shadow, tight padding. */
+TyButton                { background: linear-gradient(90deg, var(--btn-face-top), var(--btn-face-bot)); color: var(--btn-ink); border: 1px solid var(--border); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 1 1 var(--btn-shadow); }
+TyButton:hover          { background: linear-gradient(90deg, var(--btn-hover-top), var(--btn-hover-bot)); }
+TyButton:active         { background: linear-gradient(90deg, var(--btn-active-top), var(--btn-active-bot)); border-color: var(--btn-active-border); shadow: 0 0 0 transparent; }
+TyButton:focus          { border-color: var(--accent); outline: 3 alpha(var(--accent), 0.35); outline-offset: 1; }
 TyButton:disabled       { background: var(--btn-disabled-bg); color: var(--btn-disabled-ink); border-color: var(--btn-disabled-border); opacity: 0.55; shadow: 0 0 0 transparent; }
 
-/* Primary: solid system-blue pill, contrasting ink, glossy top, soft blue shadow. */
-TyButton.primary        { background: linear-gradient(0deg, var(--accent), lighten(var(--accent), 10%)); color: on(var(--accent)); border: 1px solid darken(var(--accent), 8%); border-radius: 6; padding: 5px 14px; font-weight: bold; shadow: 0 1 3 var(--primary-shadow); }
-TyButton.primary:hover  { background: linear-gradient(0deg, lighten(var(--accent), 4%), lighten(var(--accent), 14%)); }
-TyButton.primary:active { background: linear-gradient(0deg, darken(var(--accent), 8%), var(--accent)); shadow: 0 1 2 var(--primary-shadow-active); }
-TyButton.primary:focus  { outline: 3 alpha(var(--accent), 0.40); outline-offset: 1; }
+/* Primary (the default macOS action button): accent gloss, white ink, NOT bold. */
+TyButton.primary        { background: linear-gradient(90deg, lighten(var(--accent), 8%), var(--accent)); color: on(var(--accent)); border: 1px solid darken(var(--accent), 8%); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 1 2 var(--primary-shadow); }
+TyButton.primary:hover  { background: linear-gradient(90deg, lighten(var(--accent), 12%), lighten(var(--accent), 4%)); }
+TyButton.primary:active { background: linear-gradient(90deg, var(--accent), darken(var(--accent), 8%)); shadow: 0 1 1 var(--primary-shadow-active); }
+TyButton.primary:focus  { outline: 3 alpha(var(--accent), 0.35); outline-offset: 1; }
 TyButton.primary:disabled { background: mix(var(--accent), var(--primary-disabled-mix), 55%); color: var(--primary-disabled-ink); border-color: mix(var(--accent), var(--primary-disabled-mix), 40%); opacity: 0.6; shadow: 0 0 0 transparent; }
 
-/* Ghost: text-style blue button, transparent until hovered. */
-TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6; padding: 5px 14px; font-weight: normal; shadow: 0 0 0 transparent; }
+/* Ghost: transparent accent-text button, faint accent wash on interaction. */
+TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 0 0 transparent; }
 TyButton.ghost:hover    { background: alpha(var(--accent), 0.10); color: darken(var(--accent), 6%); }
 TyButton.ghost:active   { background: alpha(var(--accent), 0.18); }
 TyButton.ghost:disabled { background: transparent; color: var(--btn-disabled-ink); opacity: 0.55; }
 
-/* Fields: clean wells, hairline border, soft blue focus ring. */
-TyEdit          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 5px 8px; }
+/* Fields: white wells, hairline border, soft accent focus ring. */
+TyEdit          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 4px 8px; }
 TyEdit:hover    { border-color: var(--field-hover-border); }
 TyEdit:focus    { border-color: var(--accent); outline: 3 alpha(var(--accent), 0.35); outline-offset: 0; }
 TyEdit:disabled { background: var(--field-disabled-bg); color: var(--field-disabled-ink); border-color: var(--field-disabled-border); }
 
-TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 5px 8px; }
+TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 4px 8px; }
 TyComboBox:hover    { border-color: var(--field-hover-border); }
 TyComboBox:focus    { border-color: var(--accent); outline: 3 alpha(var(--accent), 0.35); outline-offset: 0; }
 TyComboBox:disabled { background: var(--field-disabled-bg); color: var(--field-disabled-ink); border-color: var(--field-disabled-border); }
 
-/* Check box: rounded well; checked = accent fill with contrasting tick (stroked, not beveled). */
+/* Check box: white well, #B0B0B0 rim, accent fill when checked, 4px corners. */
 TyCheckBox          { background: var(--field); color: var(--accent); border: 1px solid var(--check-border); border-radius: 4; }
 TyCheckBox:hover    { border-color: var(--accent); }
 TyCheckBox:active   { background: var(--check-active-bg); border-color: var(--accent); }
@@ -169,6 +163,14 @@ TyCheckBox:selected { background: var(--accent); color: on(var(--accent)); borde
 TyCheckBox:focus    { border-color: var(--accent); outline: 3 alpha(var(--accent), 0.35); outline-offset: 1; }
 TyCheckBox:disabled { background: var(--check-disabled-bg); color: var(--check-disabled-ink); border-color: var(--check-disabled-border); }
 
-/* Progress: soft track, glossy accent fill, both fully rounded. */
-TyProgressBar   { background: var(--track); color: var(--ink); border: 1px solid var(--track-border); border-radius: 5; }
-TyProgressFill  { background: linear-gradient(0deg, var(--accent), lighten(var(--accent), 12%)); border-radius: 5; }
+/* Radio: same material as the check box (the control paints the circle). */
+TyRadioButton          { background: var(--field); color: var(--accent); border: 1px solid var(--check-border); }
+TyRadioButton:hover    { border-color: var(--accent); }
+TyRadioButton:active   { background: var(--check-active-bg); border-color: var(--accent); }
+TyRadioButton:selected { background: var(--accent); color: on(var(--accent)); border-color: darken(var(--accent), 8%); }
+TyRadioButton:focus    { border-color: var(--accent); outline: 3 alpha(var(--accent), 0.35); outline-offset: 1; }
+TyRadioButton:disabled { background: var(--check-disabled-bg); color: var(--check-disabled-ink); border-color: var(--check-disabled-border); }
+
+/* Progress: soft grey track, flat accent fill, both fully rounded. */
+TyProgressBar   { background: var(--track); color: var(--ink); border: 1px solid var(--track-border); border-radius: 100; }
+TyProgressFill  { background: var(--accent); border-radius: 100; }

@@ -1,48 +1,52 @@
-/* office — an ORIGINAL "inspired-by" skin evoking the Microsoft Office Ribbon era
-   (a fresh interpretation, not a pixel clone). The signature move: an ACCENT-COLOURED
-   title band, just like Word/Excel/PowerPoint. Set --accent to recolour the whole
-   brand identity at runtime — Word-blue by default, Excel-green (#217346),
-   PowerPoint-orange (#B7472A), etc. Otherwise a flat, thin-bordered, Fluent-ish
-   surface with 2px radii and a solid accent primary button.
+/* office — Microsoft Office (Fluent). A neutral near-white workspace with a single
+   signature move: an ACCENT-COLOURED caption band (Word/Excel/PowerPoint), kept in
+   BOTH modes. Set --accent to rebrand the whole identity at runtime — Word-blue by
+   default (#2B579A), Excel-green, PowerPoint-orange, etc.
 
-   NOW DUAL-MODE. The palette (surfaces, fields, ink, borders, accent) lives in the
-   @mode light / @mode dark blocks below; the control rules only reference var(--…),
-   so switching Controller.Mode recolours the whole skin. NON-colour structure
-   (render-style, radii, gradients, padding, font-weight) is identical across modes.
-   @mode light = the classic near-white Office look. @mode dark = an Office BLACK
-   theme: ~#1B1A19 / #323130 dark surfaces + light ink, with the accent title band
-   kept in BOTH modes (the coloured band is the whole point). The runtime
-   accent-picker still recolours everything via var(--accent). */
+   Genuinely native, NOT zoomed: Fluent's flat surfaces, small 2px radii, thin
+   #C8C6C4→#8A8886 hairlines and tight command-bar padding. Nativeness comes from
+   colour + border + radius, never from size — controls inherit the base 9px font.
 
-/* ── Palette: light = the current look, dark = Office black ──────────────── */
+   DUAL-MODE. The palette (surfaces, fields, ink, borders, accent) lives in the
+   @mode light / @mode dark blocks; control rules only reference var(--…), so
+   switching Controller.Mode recolours everything. @mode light = the classic
+   near-white Fluent look. @mode dark = Office dark: #252423 window / #1B1A19
+   content / #292827 wells + light ink, with the accent caption band kept in BOTH
+   modes. The runtime accent-picker recolours through var(--accent). */
+
+/* ── Palette: light = classic Fluent, dark = Office dark ─────────────────── */
 @mode light {
   :root {
-    --accent:     #2B579A;   /* Word blue — the runtime accent-picker recolours everything */
-    --surface:    #F3F2F1;   /* near-white Fluent neutral background */
-    --field:      #FFFFFF;   /* white input wells */
-    --ink:        #201F1E;   /* near-black text */
-    --muted:      #A19F9D;   /* disabled / secondary ink */
-    --line:       #C8C6C4;   /* thin neutral hairline border */
-    --line-field: #8A8886;   /* slightly stronger field border */
+    --accent:        #2B579A;   /* Office blue — the runtime accent-picker recolours everything */
+    --surface:       #F3F2F1;   /* Fluent neutral window; also default-button hover face */
+    --field:         #FFFFFF;   /* white content + input wells + default button face */
+    --pressed:       #EDEBE9;   /* pressed neutral: button :active + progress track */
+    --ink:           #201F1E;   /* near-black text */
+    --muted:         #A19F9D;   /* disabled / secondary ink */
+    --line:          #C8C6C4;   /* thin neutral hairline */
+    --line-field:    #8A8886;   /* stronger field / default-button border */
+    --hover-overlay: #0000000A; /* faint neutral wash for ghost hover */
   }
 }
 
 @mode dark {
   :root {
-    --accent:     #3A6BC0;   /* Word blue, brightened a touch for contrast on black — still var(--accent) */
-    --surface:    #1B1A19;   /* Office-dark canvas (near-black neutral) */
-    --field:      #323130;   /* raised dark input wells */
-    --ink:        #F3F2F1;   /* light text on the dark canvas */
-    --muted:      #797775;   /* disabled / secondary ink */
-    --line:       #3B3A39;   /* subtle hairline border on dark */
-    --line-field: #605E5C;   /* slightly stronger field border on dark */
+    --accent:        #2B579A;   /* same brand seed — the picker recolours through it */
+    --surface:       #252423;   /* Office-dark window; also default-button hover face */
+    --field:         #292827;   /* raised dark input wells + default button face */
+    --pressed:       #1B1A19;   /* deep content tone: button :active + progress track */
+    --ink:           #FFFFFF;   /* light text on the dark canvas */
+    --muted:         #797775;   /* disabled / secondary ink */
+    --line:          #3B3A39;   /* subtle hairline on dark */
+    --line-field:    #484644;   /* stronger field / default-button border on dark */
+    --hover-overlay: #FFFFFF14; /* faint light wash for ghost hover on dark */
   }
 }
 
-/* Window: flat canvas. */
+/* Window: flat neutral canvas. */
 TyForm { background: var(--surface); }
 
-/* Title bar: the accent band — the whole point of this skin (kept in BOTH modes). */
+/* Title bar: the accent caption band — the whole identity, white text in BOTH modes. */
 TyTitleBar {
   background: var(--accent);
   color: on(var(--accent));
@@ -59,25 +63,25 @@ TyCaptionButton:active { background: alpha(on(var(--accent)), 0.30); color: on(v
 /* Labels: theme ink on the canvas. */
 TyLabel { color: var(--ink); }
 
-/* Buttons: flat, thin-bordered, quiet — the ribbon/command-bar feel.
-   Hover tints toward the accent; pressed reads slightly deeper. */
+/* Default button: white face, thin field-strength border, tight command-bar padding.
+   Hover recedes to the neutral window tone; pressed reads a touch deeper. Flat, quiet. */
 TyButton {
   background: var(--field);
   color: var(--ink);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-field);
   border-radius: 2px;
   font-weight: normal;
-  padding: 6px 12px;
+  padding: 5px 10px;
 }
 TyButton:hover {
-  background: alpha(var(--accent), 0.10);
+  background: var(--surface);
   color: var(--ink);
-  border: 1px solid alpha(var(--accent), 0.45);
+  border: 1px solid var(--line);
 }
 TyButton:active {
-  background: alpha(var(--accent), 0.20);
+  background: var(--pressed);
   color: var(--ink);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--line-field);
 }
 TyButton:focus  { outline: 2px var(--accent); outline-offset: 1px; }
 TyButton:disabled {
@@ -86,34 +90,39 @@ TyButton:disabled {
   border: 1px solid var(--line);
 }
 
-/* Primary: solid accent, readable ink, the emphasised command. */
+/* Primary: solid accent, white ink, Fluent's semibold weight + a hairline shadow. */
 TyButton.primary {
   background: var(--accent);
   color: on(var(--accent));
   border: 1px solid var(--accent);
   border-radius: 2px;
-  font-weight: bold;
+  font-weight: 600;
+  padding: 5px 10px;
+  shadow: 0 1 2 #00000024;
 }
 TyButton.primary:hover  { background: darken(var(--accent), 8);  border: 1px solid darken(var(--accent), 8); }
-TyButton.primary:active { background: darken(var(--accent), 16); border: 1px solid darken(var(--accent), 16); }
+TyButton.primary:active { background: darken(var(--accent), 16); border: 1px solid darken(var(--accent), 16); shadow: 0 0 0 #00000000; }
 TyButton.primary:disabled {
   background: alpha(var(--accent), 0.40);
   color: alpha(on(var(--accent)), 0.75);
   border: 1px solid alpha(var(--accent), 0.40);
+  shadow: 0 0 0 #00000000;
 }
 
-/* Ghost: chrome-less until touched — a toolbar/command-bar affordance. */
+/* Ghost: chrome-less until touched — a command-bar affordance, faint neutral wash. */
 TyButton.ghost {
   background: transparent;
   color: var(--accent);
   border: 1px solid transparent;
   border-radius: 2px;
+  font-weight: normal;
+  padding: 5px 10px;
 }
-TyButton.ghost:hover  { background: alpha(var(--accent), 0.10); color: var(--accent); border: 1px solid transparent; }
-TyButton.ghost:active { background: alpha(var(--accent), 0.20); color: var(--accent); border: 1px solid transparent; }
+TyButton.ghost:hover  { background: var(--hover-overlay); color: var(--accent); border: 1px solid transparent; }
+TyButton.ghost:active { background: var(--pressed);       color: var(--accent); border: 1px solid transparent; }
 TyButton.ghost:disabled { background: transparent; color: var(--muted); border: 1px solid transparent; }
 
-/* Fields: dark/light wells, thin stronger border, accent focus ring. */
+/* Fields: bright wells, stronger hairline, accent focus. */
 TyEdit {
   background: var(--field);
   color: var(--ink);
@@ -136,7 +145,7 @@ TyComboBox:hover    { border: 1px solid var(--ink); }
 TyComboBox:focus    { border: 1px solid var(--accent); outline: 2px alpha(var(--accent), 0.35); outline-offset: 0px; }
 TyComboBox:disabled { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
 
-/* Check box: field-coloured indicator, thin border, accent tick (color inks the check). */
+/* Check box: white indicator, thin field border, accent tick (color inks the check). */
 TyCheckBox {
   background: var(--field);
   color: var(--accent);
@@ -147,7 +156,7 @@ TyCheckBox:hover    { background: var(--field); color: var(--accent); border: 1p
 TyCheckBox:active   { background: alpha(var(--accent), 0.12); color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; }
 TyCheckBox:disabled { background: var(--surface); color: var(--muted); border: 1px solid var(--line); border-radius: 2px; }
 
-/* Radio: mirror the check box — field well, accent dot, thin field border. */
+/* Radio: mirror the check box — white well, accent dot, thin field border, circular. */
 TyRadioButton {
   background: var(--field);
   color: var(--accent);
@@ -158,9 +167,9 @@ TyRadioButton:hover    { background: var(--field); color: var(--accent); border:
 TyRadioButton:active   { background: alpha(var(--accent), 0.12); color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; }
 TyRadioButton:disabled { background: var(--surface); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; }
 
-/* Progress: flat track, solid accent fill. */
+/* Progress: flat neutral groove, solid accent fill. */
 TyProgressBar {
-  background: var(--surface);
+  background: var(--pressed);
   border: 1px solid var(--line);
   border-radius: 2px;
 }

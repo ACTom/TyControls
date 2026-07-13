@@ -1,48 +1,55 @@
-/* Bootstrap — an original ty-controls skin inspired by Bootstrap 5's flat, clean web look, now DUAL-MODE.
-   Solid blue primary on white ink, subtle grey secondary/outline, 6px radii, soft-grey field borders and an
-   accent focus ring. LIGHT (the original look): white surfaces on a #F8F9FA body, #CED4DA field borders,
-   #212529 ink, the #0D6EFD brand blue. DARK (like data-bs-theme=dark): a #212529 body, #2B3035 field wells,
-   #495057 borders, light #DEE2E6 ink, the same blue brightened a touch (#3D8BFD) for contrast. Only the
-   PALETTE flips per @mode — every radius, padding, border-width, render-style and font-weight is shared, and
-   the secondary-button grey shades stay fixed. --accent drives every primary/accent/focus surface, so the
-   runtime accent-picker recolours the whole skin in both modes. */
+/* Bootstrap — an original ty-controls skin faithful to Bootstrap 5's flat web look, DUAL-MODE.
+   White body (BS default body IS #fff, not gray-100), 6px (.375rem) field/button radii, soft grey field
+   borders (#CED4DA) with a lightened-accent focus border + a 4px .25-alpha accent ring. Default button = btn-light
+   (light-grey face, dark ink, normal weight), primary = solid #0D6EFD brand blue, ghost = btn-outline-primary.
+   LIGHT: white surfaces + white body, #212529 ink. DARK (data-bs-theme=dark): #212529 body, #2B3035 field wells,
+   #495057 borders, #343A40 button face, light #DEE2E6 ink. Only the PALETTE flips per @mode — every radius,
+   padding, border-width, render-style and font-weight is shared. --accent stays the #0D6EFD brand seed in BOTH
+   modes, so the runtime accent-picker recolours every primary / focus / progress surface through it. Flat, weight
+   normal, tight padding — nativeness comes from colour + border + radius, never from size. */
 
-/* --- palette: light (the original look) ---------------------------------- */
+/* --- palette: light ------------------------------------------------------ */
 @mode light {
   :root {
-    --accent:       #0D6EFD;   /* Bootstrap primary blue                       */
-    --surface:      #FFFFFF;   /* cards / fields                               */
-    --window:       #F8F9FA;   /* body-bg (bootstrap gray-100)                 */
-    --border:       #DEE2E6;   /* gray-300 dividers                            */
-    --field-border: #CED4DA;   /* gray-400 input border                       */
-    --ink:          #212529;   /* gray-900 body text                          */
-    --muted:        #6C757D;   /* gray-600 secondary (caption + secondary btn) */
-    --subtle:       #E9ECEF;   /* gray-200 hover / disabled fill / track       */
-    --cap-active:   #DEE2E6;   /* caption-button pressed fill                  */
+    --accent:            #0D6EFD;   /* Bootstrap primary blue (brand seed)        */
+    --window:            #FFFFFF;   /* body-bg — BS default is white              */
+    --surface:           #FFFFFF;   /* title bar / cards / field wells            */
+    --field-border:      #CED4DA;   /* gray-400 input border                      */
+    --border:            #DEE2E6;   /* gray-300 dividers / btn-light border       */
+    --ink:               #212529;   /* gray-900 body text                         */
+    --muted:             #6C757D;   /* gray-600 caption glyphs                    */
+    --subtle:            #E9ECEF;   /* gray-200 hover fill / disabled well        */
+    --track:             #E9ECEF;   /* progress track                             */
+    --cap-active:        #DEE2E6;   /* caption-button pressed fill                */
+    --btn-face:          #F8F9FA;   /* btn-light face                             */
+    --btn-border:        #DEE2E6;   /* btn-light border                           */
+    --btn-hover:         #E9ECEF;   /* btn-light :hover face                      */
+    --btn-hover-border:  #C6C9CB;   /* btn-light :hover border                    */
+    --btn-active:        #DDE0E3;   /* btn-light :active face                     */
+    --btn-active-border: #BABDBF;   /* btn-light :active border                   */
   }
 }
 
 /* --- palette: dark (data-bs-theme=dark) ---------------------------------- */
 @mode dark {
   :root {
-    --accent:       #3D8BFD;   /* brand blue, brightened a touch for dark contrast */
-    --surface:      #2B3035;   /* field wells / cards                              */
-    --window:       #212529;   /* body-bg (bootstrap dark body)                    */
-    --border:       #495057;   /* gray-700 dividers                                */
-    --field-border: #495057;   /* input border                                    */
-    --ink:          #DEE2E6;   /* light body text                                 */
-    --muted:        #6C757D;   /* secondary (kept mid-grey for secondary btn)     */
-    --subtle:       #343A40;   /* elevated dark fill / disabled / track           */
-    --cap-active:   #495057;   /* caption-button pressed fill                     */
+    --accent:            #0D6EFD;   /* SAME brand seed — picker recolours through it */
+    --window:            #212529;   /* dark body-bg                               */
+    --surface:           #2B3035;   /* field wells / slightly-elevated title bar  */
+    --field-border:      #495057;   /* gray-700 input border                      */
+    --border:            #495057;   /* dividers / button border                   */
+    --ink:               #DEE2E6;   /* light body text                           */
+    --muted:             #ADB5BD;   /* caption glyphs                             */
+    --subtle:            #343A40;   /* elevated hover fill / disabled well        */
+    --track:             #343A40;   /* progress track                             */
+    --cap-active:        #495057;   /* caption-button pressed fill                */
+    --btn-face:          #343A40;   /* default button face                        */
+    --btn-border:        #495057;   /* default button border                      */
+    --btn-hover:         #3B4147;   /* :hover face (lighter)                      */
+    --btn-hover-border:  #545B62;   /* :hover border                              */
+    --btn-active:        #41474D;   /* :active face                               */
+    --btn-active-border: #5C636A;   /* :active border                             */
   }
-}
-
-/* --- mode-invariant: fixed secondary-button grey shades ------------------- */
-:root {
-  --btn2-hover-bg:      #5C636A;
-  --btn2-hover-border:  #565E64;
-  --btn2-active-bg:     #565E64;
-  --btn2-active-border: #51585E;
 }
 
 /* ---- Window & chrome ---------------------------------------------------- */
@@ -77,52 +84,56 @@ TyLabel {
 }
 
 /* ---- Buttons ------------------------------------------------------------ */
-/* Default = Bootstrap "secondary" grey solid */
+/* Default = btn-light: light-grey face, dark ink, NORMAL weight, tight padding */
 TyButton {
-  background: var(--muted);
-  color: on(var(--muted));
-  border: 1px solid var(--muted);
+  background: var(--btn-face);
+  color: var(--ink);
+  border: 1px solid var(--btn-border);
   border-radius: 6px;
+  render-style: flat;
   font-weight: normal;
-  padding: 7px 14px;
+  padding: 6px 10px;
 }
 TyButton:hover {
-  background: var(--btn2-hover-bg);
-  border-color: var(--btn2-hover-border);
+  background: var(--btn-hover);
+  border-color: var(--btn-hover-border);
 }
 TyButton:active {
-  background: var(--btn2-active-bg);
-  border-color: var(--btn2-active-border);
+  background: var(--btn-active);
+  border-color: var(--btn-active-border);
 }
 TyButton:focus {
-  outline: 3px alpha(var(--muted), 0.5);
-  outline-offset: 1px;
+  outline: 4px alpha(var(--btn-border), 0.5);
+  outline-offset: 0px;
 }
 TyButton:disabled {
-  background: var(--muted);
-  border-color: var(--muted);
-  color: on(var(--muted));
+  background: var(--btn-face);
+  border-color: var(--btn-border);
+  color: var(--ink);
   opacity: 0.65;
 }
 
-/* Primary = solid brand blue, white ink */
+/* Primary = btn-primary: solid brand blue, white ink */
 TyButton.primary {
   background: var(--accent);
   color: on(var(--accent));
   border: 1px solid var(--accent);
   border-radius: 6px;
+  render-style: flat;
+  font-weight: normal;
+  padding: 6px 10px;
 }
 TyButton.primary:hover {
   background: darken(var(--accent), 8);
   border-color: darken(var(--accent), 12);
 }
 TyButton.primary:active {
-  background: darken(var(--accent), 14);
-  border-color: darken(var(--accent), 18);
+  background: darken(var(--accent), 11);
+  border-color: darken(var(--accent), 15);
 }
 TyButton.primary:focus {
-  outline: 3px alpha(var(--accent), 0.5);
-  outline-offset: 1px;
+  outline: 4px alpha(var(--accent), 0.5);
+  outline-offset: 0px;
 }
 TyButton.primary:disabled {
   background: var(--accent);
@@ -131,12 +142,15 @@ TyButton.primary:disabled {
   opacity: 0.65;
 }
 
-/* Ghost = outline-primary: transparent fill, blue ink + blue border */
+/* Ghost = btn-outline-primary: transparent, blue ink + blue border; fills on hover */
 TyButton.ghost {
   background: transparent;
   color: var(--accent);
   border: 1px solid var(--accent);
   border-radius: 6px;
+  render-style: flat;
+  font-weight: normal;
+  padding: 6px 10px;
 }
 TyButton.ghost:hover {
   background: var(--accent);
@@ -149,8 +163,8 @@ TyButton.ghost:active {
   border-color: darken(var(--accent), 8);
 }
 TyButton.ghost:focus {
-  outline: 3px alpha(var(--accent), 0.5);
-  outline-offset: 1px;
+  outline: 4px alpha(var(--accent), 0.5);
+  outline-offset: 0px;
 }
 TyButton.ghost:disabled {
   background: transparent;
@@ -165,10 +179,11 @@ TyEdit {
   color: var(--ink);
   border: 1px solid var(--field-border);
   border-radius: 6px;
-  padding: 7px 10px;
+  render-style: flat;
+  padding: 4px 8px;
 }
 TyEdit:focus {
-  border-color: lighten(var(--accent), 15);
+  border-color: lighten(var(--accent), 20);
   outline: 4px alpha(var(--accent), 0.25);
   outline-offset: 0px;
 }
@@ -183,10 +198,11 @@ TyComboBox {
   color: var(--ink);
   border: 1px solid var(--field-border);
   border-radius: 6px;
-  padding: 7px 10px;
+  render-style: flat;
+  padding: 4px 8px;
 }
 TyComboBox:focus {
-  border-color: lighten(var(--accent), 15);
+  border-color: lighten(var(--accent), 20);
   outline: 4px alpha(var(--accent), 0.25);
   outline-offset: 0px;
 }
@@ -196,12 +212,13 @@ TyComboBox:disabled {
   border-color: var(--field-border);
 }
 
-/* ---- Checkbox (stroked indicator: background + border + tick color) ----- */
+/* ---- Checkbox (white well, gray-300 border, accent fill when checked) ---- */
 TyCheckBox {
   background: var(--surface);
   color: var(--ink);
-  border: 1px solid var(--field-border);
+  border: 1px solid var(--border);
   border-radius: 4px;
+  render-style: flat;
 }
 TyCheckBox:hover {
   border-color: var(--accent);
@@ -220,17 +237,48 @@ TyCheckBox:selected {
 }
 TyCheckBox:disabled {
   background: var(--subtle);
-  border-color: var(--field-border);
+  border-color: var(--border);
+  color: var(--muted);
+  opacity: 0.65;
+}
+
+/* ---- Radio (same treatment; the control rounds it into a dot) ----------- */
+TyRadioButton {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  render-style: flat;
+}
+TyRadioButton:hover {
+  border-color: var(--accent);
+}
+TyRadioButton:active {
+  border-color: darken(var(--accent), 10);
+}
+TyRadioButton:focus {
+  outline: 4px alpha(var(--accent), 0.25);
+  outline-offset: 1px;
+}
+TyRadioButton:selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: on(var(--accent));
+}
+TyRadioButton:disabled {
+  background: var(--subtle);
+  border-color: var(--border);
   color: var(--muted);
   opacity: 0.65;
 }
 
 /* ---- Progress ----------------------------------------------------------- */
 TyProgressBar {
-  background: var(--subtle);
+  background: var(--track);
   border-radius: 6px;
+  render-style: flat;
 }
 TyProgressFill {
   background: var(--accent);
   border-radius: 6px;
+  render-style: flat;
 }

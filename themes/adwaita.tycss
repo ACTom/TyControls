@@ -1,36 +1,54 @@
-/* adwaita — an ORIGINAL "inspired-by" take on GNOME's Adwaita, now DUAL-MODE, not a pixel clone.
-   Restrained and flat in both modes. LIGHT: a soft off-white window, a slightly darker flat
-   headerbar with dark text, crisp white fields, hairline #DADADA borders, gentle 6px radii, and
-   the GNOME blue as the single accent. DARK: ~#242424 surfaces, a slightly different #303030
-   headerbar, ~#1E1E1E fields, light text, subtle borders, the same (slightly brightened) blue.
-   Only the PALETTE flips per @mode — every radius/gradient/padding/render-style is shared.
-   --accent drives every accent surface so the runtime accent-picker recolours the whole skin. */
+/* adwaita — GNOME libadwaita, re-authored to read GENUINELY NATIVE (not "zoomed").
+   Restrained and flat. LIGHT: soft off-white window, a slightly darker flat headerbar with
+   dark ink, crisp white fields, hairline borders, gentle 6px radii, and the GNOME blue as the
+   single accent. DARK: ~#242424 surfaces, a #303030 headerbar, ~#1E1E1E fields, light ink,
+   subtle borders, the same blue. Only the PALETTE flips per @mode — every radius/gradient/
+   padding/render-style is shared. Default buttons are NORMAL weight with compact 5x9 padding so
+   short CJK/label captions fit without truncation. --accent is the brand seed the picker recolours. */
 
-/* --- palette: light (the original look) ---------------------------------- */
+/* --- palette: light ------------------------------------------------------ */
 @mode light {
   :root {
-    --accent:  #3584E4;   /* GNOME blue — brand/accent seed */
-    --window:  #FAFAFA;    /* window background            */
-    --header:  #EBEBEB;    /* headerbar / title bar        */
-    --field:   #FFFFFF;    /* text-entry wells             */
-    --ink:     #2E3436;    /* primary dark text            */
-    --muted:   #9A9996;    /* disabled / secondary ink     */
-    --border:  #DADADA;    /* hairline separators & edges  */
-    --fill:    #F6F5F4;    /* flat-button rest fill        */
+    --accent:       #3584E4;   /* GNOME blue — brand/accent seed              */
+    --window:       #FAFAFA;   /* window background                            */
+    --header:       #EBEBEB;   /* headerbar / title bar (a touch darker)       */
+    --field:        #FFFFFF;   /* text-entry wells                             */
+    --ink:          #2E3436;   /* primary dark text                            */
+    --muted:        #9A9996;   /* disabled / secondary ink                     */
+    --border:       #DCDCDC;   /* hairline separators & field edges            */
+    --btn-face:     #FFFFFF;   /* default button face (top gradient stop)      */
+    --btn-face2:    #F6F6F6;   /* default button face (bottom gradient stop)   */
+    --btn-border:   #DBDBDB;   /* default button edge                          */
+    --btn-hover:    #F2F2F2;   /* default button hover fill                    */
+    --btn-active:   #E8E8E8;   /* default button pressed fill                  */
+    --check-border: #C0C0C0;   /* checkbox / radio edge                        */
+    --track:        #DCDCDC;   /* progress trough                              */
+    --ghost-hover:  #0000000D; /* flat/ghost hover wash                        */
+    --ghost-active: #0000001A; /* flat/ghost pressed wash                      */
+    --shadow:       #0000001A; /* subtle button lift                           */
   }
 }
 
 /* --- palette: dark ------------------------------------------------------- */
 @mode dark {
   :root {
-    --accent:  #4A90E4;   /* GNOME blue, brightened for dark-mode contrast */
-    --window:  #242424;    /* window background            */
-    --header:  #303030;    /* headerbar / title bar        */
-    --field:   #1E1E1E;    /* text-entry wells             */
-    --ink:     #EEEEEC;    /* primary light text           */
-    --muted:   #8A8A8A;    /* disabled / secondary ink     */
-    --border:  #3A3A3A;    /* subtle separators & edges    */
-    --fill:    #383838;    /* flat-button rest fill        */
+    --accent:       #3584E4;   /* same GNOME blue — brand/accent seed          */
+    --window:       #242424;   /* window background                            */
+    --header:       #303030;   /* headerbar / title bar                        */
+    --field:        #1E1E1E;   /* text-entry wells                             */
+    --ink:          #FFFFFF;   /* primary light text                           */
+    --muted:        #8A8A8A;   /* disabled / secondary ink                     */
+    --border:       #3A3A3A;   /* subtle separators & field edges              */
+    --btn-face:     #363636;   /* default button face (top gradient stop)      */
+    --btn-face2:    #323232;   /* default button face (bottom gradient stop)   */
+    --btn-border:   #4A4A4A;   /* default button edge                          */
+    --btn-hover:    #404040;   /* default button hover fill                    */
+    --btn-active:   #2E2E2E;   /* default button pressed fill                  */
+    --check-border: #5A5A5A;   /* checkbox / radio edge                        */
+    --track:        #3A3A3A;   /* progress trough                              */
+    --ghost-hover:  #FFFFFF14; /* flat/ghost hover wash                        */
+    --ghost-active: #FFFFFF26; /* flat/ghost pressed wash                      */
+    --shadow:       #00000040; /* subtle button lift                           */
   }
 }
 
@@ -38,28 +56,33 @@
 TyForm            { background: var(--window); }
 TyTitleBar        { background: var(--header); color: var(--ink); border-bottom: 1px solid var(--border); border-radius: 0; }
 TyCaptionButton   { render-style: flat; background: transparent; color: var(--ink); border-radius: 6; }
-TyCaptionButton:hover  { background: darken(var(--header), 8); color: var(--ink); }
-TyCaptionButton:active { background: darken(var(--header), 14); color: var(--ink); }
+TyCaptionButton:hover  { background: var(--ghost-hover);  color: var(--ink); }
+TyCaptionButton:active { background: var(--ghost-active); color: var(--ink); }
+TyCaptionButton.close:hover  { background: var(--ghost-hover);  color: var(--ink); }
+TyCaptionButton.close:active { background: var(--ghost-active); color: var(--ink); }
 
 TyLabel           { color: var(--ink); }
 
 /* --- buttons ------------------------------------------------------------- */
-/* Flat/light with a hairline border and a soft 6px radius — modern GNOME. */
-TyButton                { render-style: flat; background: var(--fill); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 6px 14px; font-weight: bold; }
-TyButton:hover          { background: darken(var(--fill), 5); border-color: darken(var(--border), 6); }
-TyButton:active         { background: darken(var(--fill), 11); border-color: darken(var(--border), 12); }
-TyButton:disabled       { background: var(--fill); color: var(--muted); border-color: lighten(var(--border), 3); }
+/* Native GNOME default: near-white face with a whisper of top-to-bottom shading, a hairline
+   edge, a 6px radius, a soft lift, and NORMAL-weight ink. Compact 5x9 padding. */
+TyButton                { render-style: flat; background: linear-gradient(90deg, var(--btn-face), var(--btn-face2)); color: var(--ink); border: 1px solid var(--btn-border); border-radius: 6; padding: 5px 9px; font-weight: normal; shadow: 0 1 1 var(--shadow); }
+TyButton:hover          { background: var(--btn-hover);  border-color: darken(var(--btn-border), 5); }
+TyButton:active         { background: var(--btn-active); border-color: darken(var(--btn-border), 10); shadow: 0 0 0 transparent; }
+TyButton:focus          { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.4); outline-offset: 1; }
+TyButton:disabled       { background: var(--btn-face); color: var(--muted); border-color: lighten(var(--btn-border), 2); shadow: 0 0 0 transparent; }
 
-/* Primary = solid accent, white ink, matching accent border. */
-TyButton.primary        { background: var(--accent); color: on(var(--accent)); border: 1px solid darken(var(--accent), 6); }
-TyButton.primary:hover  { background: darken(var(--accent), 6); border-color: darken(var(--accent), 12); }
-TyButton.primary:active { background: darken(var(--accent), 13); border-color: darken(var(--accent), 18); }
-TyButton.primary:disabled { background: alpha(var(--accent), 0.45); color: alpha(#FFFFFF, 0.9); border-color: transparent; }
+/* Suggested-action = solid accent, auto-contrast ink, NORMAL weight (GNOME never bolds it). */
+TyButton.primary          { background: var(--accent); color: on(var(--accent)); border: 1px solid darken(var(--accent), 8); border-radius: 6; padding: 5px 9px; font-weight: normal; shadow: 0 1 1 var(--shadow); }
+TyButton.primary:hover    { background: lighten(var(--accent), 6); border-color: darken(var(--accent), 4); }
+TyButton.primary:active   { background: darken(var(--accent), 10); border-color: darken(var(--accent), 16); shadow: 0 0 0 transparent; }
+TyButton.primary:focus    { border-color: darken(var(--accent), 12); outline: 2 alpha(var(--accent), 0.5); outline-offset: 1; }
+TyButton.primary:disabled { background: alpha(var(--accent), 0.4); color: alpha(#FFFFFF, 0.85); border-color: transparent; shadow: 0 0 0 transparent; }
 
-/* Ghost = borderless flat button; a faint fill appears on interaction. */
-TyButton.ghost          { background: transparent; color: var(--ink); border: 1px solid transparent; border-radius: 6; }
-TyButton.ghost:hover    { background: alpha(var(--ink), 0.06); border-color: transparent; }
-TyButton.ghost:active   { background: alpha(var(--ink), 0.11); border-color: transparent; }
+/* Flat/ghost = borderless; a faint wash appears on interaction. */
+TyButton.ghost          { render-style: flat; background: transparent; color: var(--ink); border: 1px solid transparent; border-radius: 6; padding: 5px 9px; font-weight: normal; shadow: 0 0 0 transparent; }
+TyButton.ghost:hover    { background: var(--ghost-hover);  border-color: transparent; }
+TyButton.ghost:active   { background: var(--ghost-active); border-color: transparent; }
 TyButton.ghost:disabled { background: transparent; color: var(--muted); border-color: transparent; }
 
 /* --- text inputs --------------------------------------------------------- */
@@ -74,14 +97,19 @@ TyComboBox:focus  { border-color: var(--accent); outline: 2 alpha(var(--accent),
 TyComboBox:disabled { background: var(--window); color: var(--muted); border-color: lighten(var(--border), 3); }
 
 /* --- checkbox ------------------------------------------------------------ */
-/* Stroked indicator (render-style does not bevel it): light well, hairline
-   border, accent-inked tick. */
-TyCheckBox        { background: var(--field); color: var(--accent); border: 1px solid darken(var(--border), 4); border-radius: 5; }
+/* White well, hairline edge, accent tick; checked = solid-accent box with white tick. */
+TyCheckBox        { background: var(--field); color: var(--accent); border: 1px solid var(--check-border); border-radius: 5; }
 TyCheckBox:hover  { border-color: var(--accent); }
-TyCheckBox:active { background: alpha(var(--accent), 0.10); color: var(--accent); border: 1px solid var(--accent); border-radius: 5; }
-TyCheckBox:disabled { background: var(--window); color: var(--muted); border-color: lighten(var(--border), 3); }
+TyCheckBox:active { background: var(--accent); color: #FFFFFF; border: 1px solid var(--accent); border-radius: 5; }
+TyCheckBox:disabled { background: var(--window); color: var(--muted); border-color: lighten(var(--check-border), 3); }
+
+/* --- radio --------------------------------------------------------------- */
+TyRadioButton        { background: var(--field); color: var(--accent); border: 1px solid var(--check-border); }
+TyRadioButton:hover  { border-color: var(--accent); }
+TyRadioButton:active { background: var(--accent); color: #FFFFFF; border: 1px solid var(--accent); }
+TyRadioButton:disabled { background: var(--window); color: var(--muted); border-color: lighten(var(--check-border), 3); }
 
 /* --- progress ------------------------------------------------------------ */
-/* A slim, fully-rounded trough with a solid accent fill. */
-TyProgressBar     { background: darken(var(--window), 8); border: 1px solid var(--border); border-radius: 8; }
-TyProgressFill    { background: var(--accent); border-radius: 8; }
+/* Slim, fully-rounded trough with a solid accent fill. */
+TyProgressBar     { background: var(--track); border: none; border-radius: 100; }
+TyProgressFill    { background: var(--accent); border-radius: 100; }

@@ -1,94 +1,112 @@
-/* material3 — an ORIGINAL "inspired-by" take on Material Design 3 (Material You),
-   now DUAL-MODE (light + dark). Not a pixel clone: rounded/pill-ish geometry,
-   tonal purple surfaces, soft elevation shadows and flat (no-bevel) fills.
-   Only the PALETTE flips per @mode — every radius, mix/gradient shape, padding,
-   font-weight and shadow is shared across both modes.
-   LIGHT: the original look — a faint purple-tinted-white surface, white fields,
-   dark on-surface ink, M3 primary purple.
-   DARK: ~#141218 surfaces, ~#1D1B20 fields, light on-surface ink, subtle outline,
-   and a lighter tonal purple accent (~#D0BCFF) for contrast — rounded + soft
-   elevation kept.
-   --accent is the M3 primary in each mode; everything tonal is derived from it via
-   mix()/alpha() so the runtime accent-picker recolours the whole skin coherently. */
+/* material3 — Material Design 3 (Material You), re-authored for a GENUINELY NATIVE
+   feel. DUAL-MODE: only the PALETTE flips per @mode; every radius, padding, shadow
+   and font-weight is shared. Nativeness comes from COLOUR + M3 OUTLINE + PILL RADII
+   + SOFT ELEVATION, never from oversized padding (buttons stay compact so short CJK
+   captions never truncate). --accent is the brand seed in BOTH modes (the runtime
+   accent-picker recolours through it); the visible mode-varying primary is --primary,
+   which in light IS the seed and in dark is M3's brightened #D0BCFF tone.
+   LIGHT: near-white surface, white outlined fields, #6750A4 primary, #E8DEF8
+   secondary-container tonal buttons, dark on-surface ink.
+   DARK:  #141218 surface, #1D1B20 fields, #D0BCFF primary on #381E72, #4A4458 tonal
+   container, light on-surface ink. */
 
-/* --- palette: light (the original look) ---------------------------------- */
+/* --- palette: light ------------------------------------------------------ */
 @mode light {
   :root {
-    --accent:      #6750A4;   /* M3 primary purple — brand/accent seed        */
-    --surface:     #FEF7FF;   /* window: tonal surface (faint purple-white)   */
-    --tonal-base:  #FFFFFF;   /* base that accent is mixed into for tonal fills */
-    --field:       #FFFFFF;   /* text-entry / checkbox wells                  */
-    --ink:         #1D1B20;   /* primary on-surface ink                       */
-    --ink-muted:   #49454F;   /* secondary on-surface ink (caption glyphs)    */
-    --outline:     #79747E;   /* field / checkbox outline stroke              */
-    --btn-ink:     darken(var(--accent), 45%);  /* filled-tonal button ink    */
+    --accent:     #6750A4;   /* M3 primary — brand/accent seed (picker target)   */
+    --primary:    var(--accent); /* visible primary; light == the seed           */
+    --on-primary: #FFFFFF;   /* ink on filled primary / checked check-mark        */
+    --surface:    #FAFAFA;   /* window + top app bar: near-white surface          */
+    --field:      #FFFFFF;   /* outlined text-field / checkbox well               */
+    --outline:    #79747E;   /* M3 outline: field / checkbox / radio stroke       */
+    --tonal:      #E8DEF8;   /* secondary-container: tonal (default) button fill   */
+    --on-tonal:   #1D192B;   /* on-secondary-container ink                         */
+    --track:      #E7E0EC;   /* progress track (surface-variant)                  */
+    --ink:        #1C1B1F;   /* primary on-surface ink                            */
+    --ink-muted:  #49454F;   /* secondary on-surface ink (caption glyphs)         */
   }
 }
 
 /* --- palette: dark ------------------------------------------------------- */
 @mode dark {
   :root {
-    --accent:      #D0BCFF;   /* M3 primary, brightened for dark-mode contrast */
-    --surface:     #141218;   /* window: darkest tonal surface                */
-    --tonal-base:  #1D1B20;   /* dark base that accent is mixed into (elevation) */
-    --field:       #1D1B20;   /* text-entry / checkbox wells                  */
-    --ink:         #E6E0E9;   /* primary on-surface ink (light)               */
-    --ink-muted:   #CAC4D0;   /* secondary on-surface ink                     */
-    --outline:     #938F99;   /* field / checkbox outline stroke              */
-    --btn-ink:     lighten(var(--accent), 15%);  /* filled-tonal button ink   */
+    --accent:     #6750A4;   /* brand seed stays constant across modes            */
+    --primary:    #D0BCFF;   /* M3 primary, brightened for dark contrast          */
+    --on-primary: #381E72;   /* dark ink on the light-purple filled primary       */
+    --surface:    #141218;   /* window + top app bar: darkest tonal surface       */
+    --field:      #1D1B20;   /* outlined text-field / checkbox well               */
+    --outline:    #938F99;   /* M3 outline (dark)                                 */
+    --tonal:      #4A4458;   /* secondary-container (dark) tonal button fill       */
+    --on-tonal:   #E8DEF8;   /* on-secondary-container ink (dark)                  */
+    --track:      #49454F;   /* progress track (surface-variant, dark)            */
+    --ink:        #E6E1E5;   /* primary on-surface ink (light)                    */
+    --ink-muted:  #CAC4D0;   /* secondary on-surface ink                          */
   }
 }
 
-/* Window: the M3 tonal "surface". */
+/* Window: the M3 surface. */
 TyForm          { background: var(--surface); }
 
-/* Top app bar: a low-elevation tonal surface-container, on-surface ink. */
-TyTitleBar      { background: mix(var(--tonal-base), var(--accent), 8%); color: var(--ink); border-radius: 0; font-family: Roboto; }
-TyCaptionButton { background: transparent; color: var(--ink-muted); border-radius: 12px; }
-TyCaptionButton:hover  { background: alpha(var(--accent), 0.12); color: var(--ink); }
-TyCaptionButton:active { background: alpha(var(--accent), 0.20); color: var(--ink); }
+/* Top app bar: flat surface, on-surface ink, circular icon-button state layers. */
+TyTitleBar      { background: var(--surface); color: var(--ink); border-radius: 0; }
+TyCaptionButton { background: transparent; color: var(--ink-muted); border-radius: 20px; }
+TyCaptionButton:hover  { background: alpha(var(--primary), 0.10); color: var(--ink); }
+TyCaptionButton:active { background: alpha(var(--primary), 0.16); color: var(--ink); }
 
-TyLabel         { color: var(--ink); font-family: Roboto; }
+TyLabel         { color: var(--ink); }
 
-/* Default button = M3 "filled tonal": light-tonal secondary-container fill,
-   tonal ink, pill-ish 12px corners, generous 10px padding, faint elevation. */
-TyButton          { background: mix(var(--tonal-base), var(--accent), 16%); color: var(--btn-ink); border-width: 0; border-radius: 12px; padding: 10px; font-family: Roboto; font-weight: 500; shadow: 0 1 2 #00000022; }
-TyButton:hover    { background: mix(var(--tonal-base), var(--accent), 24%); shadow: 0 2 5 #0000002E; }
-TyButton:active   { background: mix(var(--tonal-base), var(--accent), 32%); shadow: 0 1 2 #00000022; }
+/* Default button = M3 "filled tonal": secondary-container fill, tonal ink, full-pill
+   20px corners, compact padding, normal weight, faint level-1 elevation. */
+TyButton          { background: var(--tonal); color: var(--on-tonal); border-width: 0; border-radius: 20px; padding: 6px 10px; font-weight: normal; shadow: 0 1 2 #0000001F; }
+TyButton:hover    { background: mix(var(--tonal), var(--primary), 8%);  shadow: 0 2 4 #00000029; }
+TyButton:active   { background: mix(var(--tonal), var(--primary), 12%); shadow: 0 1 2 #0000001F; }
+TyButton:selected { background: mix(var(--tonal), var(--primary), 16%); shadow: 0 1 2 #0000001F; }
+TyButton:focus    { background: mix(var(--tonal), var(--primary), 12%); outline: 2px var(--primary); outline-offset: 2px; }
 TyButton:disabled { background: alpha(var(--ink), 0.08); color: alpha(var(--ink), 0.38); shadow: 0 0 0 #00000000; }
 
-/* Primary = M3 "filled" button: solid accent, auto-contrast ink, soft shadow;
-   hover/press lighten via a white state layer and lift/settle the elevation. */
-TyButton.primary          { background: var(--accent); color: on(var(--accent)); border-width: 0; border-radius: 12px; padding: 10px; font-family: Roboto; font-weight: 500; shadow: 0 1 3 #0000002A; }
-TyButton.primary:hover    { background: mix(var(--accent), #FFFFFF, 8%); shadow: 0 2 6 #00000033; }
-TyButton.primary:active   { background: mix(var(--accent), #FFFFFF, 14%); shadow: 0 1 2 #0000002A; }
+/* Primary = M3 "filled" button: solid primary, on-primary ink, medium (500) weight,
+   soft elevation; a white state layer lightens hover/press. */
+TyButton.primary          { background: var(--primary); color: var(--on-primary); border-width: 0; border-radius: 20px; padding: 6px 10px; font-weight: 500; shadow: 0 1 3 #00000026; }
+TyButton.primary:hover    { background: mix(var(--primary), #FFFFFF, 8%);  shadow: 0 2 6 #00000033; }
+TyButton.primary:active   { background: mix(var(--primary), #FFFFFF, 12%); shadow: 0 1 2 #00000026; }
+TyButton.primary:selected { background: mix(var(--primary), #FFFFFF, 12%); shadow: 0 1 2 #00000026; }
+TyButton.primary:focus    { background: mix(var(--primary), #FFFFFF, 8%);  outline: 2px var(--primary); outline-offset: 2px; }
 TyButton.primary:disabled { background: alpha(var(--ink), 0.12); color: alpha(var(--ink), 0.38); shadow: 0 0 0 #00000000; }
 
-/* Ghost = M3 "text" button: no fill/border, accent ink, tonal state layer on hover. */
-TyButton.ghost          { background: transparent; color: var(--accent); border-width: 0; border-radius: 12px; padding: 10px; font-family: Roboto; font-weight: 500; shadow: 0 0 0 #00000000; }
-TyButton.ghost:hover    { background: alpha(var(--accent), 0.10); color: var(--accent); }
-TyButton.ghost:active   { background: alpha(var(--accent), 0.16); color: var(--accent); }
+/* Ghost = M3 "text" button: no fill/border, primary ink, tonal state layer on hover. */
+TyButton.ghost          { background: transparent; color: var(--primary); border-width: 0; border-radius: 20px; padding: 6px 10px; font-weight: normal; shadow: 0 0 0 #00000000; }
+TyButton.ghost:hover    { background: alpha(var(--primary), 0.08); color: var(--primary); }
+TyButton.ghost:active   { background: alpha(var(--primary), 0.12); color: var(--primary); }
+TyButton.ghost:selected { background: alpha(var(--primary), 0.12); color: var(--primary); }
+TyButton.ghost:focus    { background: alpha(var(--primary), 0.10); outline: 2px var(--primary); outline-offset: 0px; }
 TyButton.ghost:disabled { background: transparent; color: alpha(var(--ink), 0.38); }
 
-/* Fields = M3 "outlined" text field: field well, outline stroke, 10px corners;
-   hover darkens the outline to ink, focus swaps to a 2px accent outline. */
-TyEdit          { background: var(--field); color: var(--ink); border: 1px solid var(--outline); border-radius: 10px; padding: 10px; font-family: Roboto; }
+/* Fields = M3 "outlined" text field: 1px outline stroke, small 4px corner; hover
+   darkens the outline to on-surface, focus swaps to a 2px primary outline. */
+TyEdit          { background: var(--field); color: var(--ink); border: 1px solid var(--outline); border-radius: 4px; padding: 4px 8px; }
 TyEdit:hover    { border-color: var(--ink); }
-TyEdit:focus    { border: 2px solid var(--accent); }
+TyEdit:focus    { border: 2px solid var(--primary); }
 TyEdit:disabled { background: alpha(var(--ink), 0.04); color: alpha(var(--ink), 0.38); border-color: alpha(var(--ink), 0.12); }
 
-TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--outline); border-radius: 10px; padding: 10px; font-family: Roboto; }
+TyComboBox          { background: var(--field); color: var(--ink); border: 1px solid var(--outline); border-radius: 4px; padding: 4px 8px; }
 TyComboBox:hover    { border-color: var(--ink); }
-TyComboBox:focus    { border: 2px solid var(--accent); }
+TyComboBox:focus    { border: 2px solid var(--primary); }
 TyComboBox:disabled { background: alpha(var(--ink), 0.04); color: alpha(var(--ink), 0.38); border-color: alpha(var(--ink), 0.12); }
 
-/* Checkbox: unchecked = field well, 2px outline stroke, small 4px radius.
-   Checked resolves :active -> the box fills with accent and the tick inks via on(). */
-TyCheckBox          { background: var(--field); color: var(--accent); border: 2px solid var(--outline); border-radius: 4px; }
-TyCheckBox:hover    { border-color: var(--accent); }
-TyCheckBox:active   { background: var(--accent); color: on(var(--accent)); border: 2px solid var(--accent); border-radius: 4px; }
+/* Checkbox: unchecked = field well, 2px M3 outline, near-square 2px radius. Checked
+   (:active) fills with primary and inks the check-mark with on-primary. */
+TyCheckBox          { background: var(--field); color: var(--primary); border: 2px solid var(--outline); border-radius: 2px; }
+TyCheckBox:hover    { border-color: var(--primary); }
+TyCheckBox:active   { background: var(--primary); color: var(--on-primary); border: 2px solid var(--primary); border-radius: 2px; }
 TyCheckBox:disabled { background: alpha(var(--ink), 0.04); color: alpha(var(--ink), 0.38); border-color: alpha(var(--ink), 0.20); }
 
-/* Linear progress: light tonal track, solid accent fill, both fully pill-rounded. */
-TyProgressBar   { background: mix(var(--tonal-base), var(--accent), 14%); border-radius: 8px; }
-TyProgressFill  { background: var(--accent); border-radius: 8px; }
+/* Radio: circular M3 control; selected fills the target with primary. */
+TyRadioButton          { background: var(--field); color: var(--primary); border: 2px solid var(--outline); border-radius: 100px; }
+TyRadioButton:hover    { border-color: var(--primary); }
+TyRadioButton:active   { background: var(--primary); color: var(--on-primary); border: 2px solid var(--primary); border-radius: 100px; }
+TyRadioButton:selected { background: var(--primary); color: var(--on-primary); border: 2px solid var(--primary); border-radius: 100px; }
+TyRadioButton:disabled { background: alpha(var(--ink), 0.04); color: alpha(var(--ink), 0.38); border-color: alpha(var(--ink), 0.20); }
+
+/* Linear progress: surface-variant track, solid primary fill, both fully pill-rounded. */
+TyProgressBar   { background: var(--track);   border-radius: 100px; }
+TyProgressFill  { background: var(--primary); border-radius: 100px; }

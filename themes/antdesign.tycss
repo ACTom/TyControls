@@ -1,28 +1,31 @@
-/* Ant Design — an ORIGINAL "inspired-by" ty-controls skin (NOT a pixel-perfect clone), now DUAL-MODE.
-   Professional, flat with subtle depth: hair-thin borders, a blue brand accent, 6px radii and crisp ink.
-   LIGHT (the original look): a soft #F5F5F5 canvas, white surfaces, #D9D9D9 hairlines, near-black 85% ink,
-   the #1677FF brand blue. DARK: ~#141414 canvas, ~#1F1F1F surfaces/fields, ~#FFFFFFD9 ink, #424242 borders,
-   the same blue brightened a touch (#1668DC) for contrast. Only the PALETTE flips per @mode — every radius,
-   padding, gradient shape, font-weight and render-style is shared. --accent drives every primary/accent
-   surface, so the runtime accent-picker recolours the whole skin in both modes (hover/active shades are
-   derived from it with lighten()/darken()). */
+/* Ant Design v5 — an ORIGINAL "inspired-by" ty-controls skin, DUAL-MODE, tuned to feel genuinely native.
+   Ant's chrome is flat and airy: pure-white surfaces, hair-thin #D9D9D9 borders, 6px radii, near-black 88%
+   ink and the #1677FF brand blue. No gradients, no bevels — depth comes only from a whisper of drop shadow.
+   LIGHT: a WHITE #FFFFFF canvas and surfaces (the demo has no cards, so the window itself is white), a
+   flat borderless title band. DARK: #141414 canvas, #1F1F1F surfaces/fields, #424242 borders,
+   #FFFFFFD9 ink, the blue nudged to #1668DC for contrast. Only the PALETTE flips per @mode — radii, padding,
+   font-weight and shadow shape are shared. --accent stays the brand seed in both modes, so the runtime
+   accent-picker recolours the whole skin through it; the #4096FF hover / #0958D9 active shades are derived
+   from --accent with lighten()/darken() so they track the picked colour. No font-size is set — controls
+   inherit the compact 9px base (no "zoomed" look) — and only tight 4px/10px button padding keeps CJK labels
+   like "绿色 Green" from truncating. */
 
-/* --- palette: light (the original look) ---------------------------------- */
+/* --- palette: light ------------------------------------------------------ */
 @mode light {
   :root {
-    --accent:         #1677FF;   /* brand blue — primary buttons, focus, checks, progress fill */
-    --window:         #F5F5F5;   /* soft neutral canvas so surfaces read as raised cards        */
-    --surface:        #FFFFFF;   /* title bar, button face, field wells, checkbox              */
-    --ink:            #000000D9;  /* near-black 85% primary text                                */
-    --muted:          #000000A6;  /* caption-button ink                                         */
-    --ink-disabled:   #00000040;  /* disabled text                                              */
-    --border:         #D9D9D9;   /* hair-line borders & edges                                   */
-    --disabled-fill:  #F5F5F5;   /* disabled surface fill                                       */
-    --cap-hover:      #0000000F;  /* caption-button hover overlay                               */
-    --cap-active:     #00000017;  /* caption-button pressed overlay                             */
-    --track:          #0000000F;  /* progress trough                                            */
-    --shadow-soft:    #00000004;  /* default-button drop shadow                                 */
-    --shadow-primary: #1677FF1A;  /* primary-button accent-tinted drop shadow                   */
+    --accent:         #1677FF;   /* brand blue — primary fill, focus ring, checkbox tick, progress fill */
+    --window:         #FFFFFF;   /* WHITE canvas (no cards in the demo)                                 */
+    --surface:        #FFFFFF;   /* title bar, button face, field wells, checkbox                       */
+    --ink:            #000000E0;  /* near-black 88% primary text                                        */
+    --muted:          #000000A6;  /* caption-button ink                                                 */
+    --ink-disabled:   #00000040;  /* disabled text                                                      */
+    --border:         #D9D9D9;   /* hair-line borders & field edges                                     */
+    --disabled-fill:  #F5F5F5;   /* disabled surface fill                                                */
+    --track:          #F5F5F5;   /* progress trough                                                      */
+    --cap-hover:      #0000000F;  /* caption-button hover overlay                                        */
+    --cap-active:     #00000017;  /* caption-button pressed overlay                                      */
+    --shadow-soft:    #0000000A;  /* default-button drop shadow (0 1 0)                                  */
+    --shadow-primary: #1677FF1A;  /* primary-button accent-tinted drop shadow (0 2 0)                    */
   }
 }
 
@@ -35,66 +38,70 @@
     --ink:            #FFFFFFD9;  /* light 85% primary text                                */
     --muted:          #FFFFFFA6;  /* caption-button ink                                    */
     --ink-disabled:   #FFFFFF40;  /* disabled text                                         */
-    --border:         #424242;   /* subtle borders & edges                                 */
+    --border:         #424242;   /* subtle borders & field edges                          */
     --disabled-fill:  #262626;   /* disabled surface fill                                  */
+    --track:          #303030;   /* progress trough                                        */
     --cap-hover:      #FFFFFF14;  /* caption-button hover overlay                           */
-    --cap-active:     #FFFFFF1F;  /* caption-button pressed overlay                         */
-    --track:          #FFFFFF14;  /* progress trough                                        */
-    --shadow-soft:    #00000040;  /* default-button drop shadow (deeper on dark)            */
-    --shadow-primary: #1668DC40;  /* primary-button accent-tinted glow                      */
+    --cap-active:     #FFFFFF1F;  /* caption-button pressed overlay                        */
+    --shadow-soft:    #00000030;  /* default-button drop shadow (deeper on dark)           */
+    --shadow-primary: #1668DC40;  /* primary-button accent-tinted glow                     */
   }
 }
 
-/* Window: a soft neutral canvas so the surfaces read as raised cards. */
+/* Window: a plain surface canvas — no cards, so the window itself is white in light mode. */
 TyForm { background: var(--window); color: var(--ink); }
 
-/* Title bar: clean surface header with primary ink (Ant's flat chrome). */
+/* Title bar: flat surface header with primary ink (Ant's title area is borderless — flat). */
 TyTitleBar      { background: var(--surface); color: var(--ink); border-radius: 0; }
-TyCaptionButton { background: var(--surface); color: var(--muted); border-radius: 0; }
+TyCaptionButton { background: transparent; color: var(--muted); border-radius: 0; }
 TyCaptionButton:hover  { background: var(--cap-hover); color: var(--ink); }
 TyCaptionButton:active { background: var(--cap-active); color: var(--ink); }
 
 TyLabel { color: var(--ink); }
 
-/* Default button: surface face, hair-line border, primary ink, gentle 6px radius and a
-   whisper of depth. On hover the border + text adopt the accent (Ant's signature). */
-TyButton                { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 5px 15px; font-weight: normal; shadow: 0 2 0 var(--shadow-soft); }
-TyButton:hover          { background: var(--surface); color: var(--accent); border-color: var(--accent); }
+/* Default button: white face, #D9D9D9 hairline, 88% ink, 6px radius, a 0 1 0 whisper of shadow. On hover the
+   border + text lift to #4096FF (lighten of accent); on press they sink to #0958D9 (darken). Tight padding. */
+TyButton                { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 1 0 var(--shadow-soft); }
+TyButton:hover          { background: var(--surface); color: lighten(var(--accent), 12); border-color: lighten(var(--accent), 12); }
 TyButton:active         { background: var(--surface); color: darken(var(--accent), 12); border-color: darken(var(--accent), 12); }
-TyButton:focus          { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.2); outline-offset: 0; }
+TyButton:focus          { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.12); outline-offset: 0; }
 TyButton:disabled       { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); shadow: 0 0 0 transparent; }
 
-/* Primary button: solid accent fill, readable ink, faint accent-tinted drop shadow. */
-TyButton.primary          { background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); border-radius: 6; padding: 5px 15px; font-weight: normal; shadow: 0 2 0 var(--shadow-primary); }
-TyButton.primary:hover    { background: lighten(var(--accent), 10); border-color: lighten(var(--accent), 10); color: on(var(--accent)); }
-TyButton.primary:active   { background: darken(var(--accent), 8); border-color: darken(var(--accent), 8); color: on(var(--accent)); }
-TyButton.primary:focus    { outline: 2 alpha(var(--accent), 0.25); outline-offset: 1px; }
+/* Primary button: solid accent fill, white ink, 6px radius, a faint accent-tinted 0 2 0 shadow. */
+TyButton.primary          { background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 2 0 var(--shadow-primary); }
+TyButton.primary:hover    { background: lighten(var(--accent), 12); border-color: lighten(var(--accent), 12); color: on(var(--accent)); }
+TyButton.primary:active   { background: darken(var(--accent), 12); border-color: darken(var(--accent), 12); color: on(var(--accent)); }
+TyButton.primary:focus    { outline: 2 alpha(var(--accent), 0.2); outline-offset: 1px; }
 TyButton.primary:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); shadow: 0 0 0 transparent; }
 
-/* Ghost button: borderless text button that tints toward the accent on interaction. */
-TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6; padding: 5px 15px; font-weight: normal; }
+/* Ghost = Ant's link/text button: transparent, accent text, a faint #1677FF14 wash on interaction. */
+TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6; padding: 4px 10px; font-weight: normal; }
 TyButton.ghost:hover    { background: alpha(var(--accent), 0.08); color: var(--accent); }
 TyButton.ghost:active   { background: alpha(var(--accent), 0.15); color: darken(var(--accent), 12); }
 TyButton.ghost:disabled { background: transparent; color: var(--ink-disabled); }
 
-/* Fields: surface wells with a hair-line border, accent on hover, an accent glow ring on focus. */
-TyEdit            { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 5px 11px; }
-TyEdit:hover      { border-color: var(--accent); }
-TyEdit:focus      { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.2); outline-offset: 0; }
+/* Fields: white wells, #D9D9D9 hairline, #4096FF border on hover, #1677FF border + a soft accent ring on focus. */
+TyEdit            { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 4px 11px; }
+TyEdit:hover      { border-color: lighten(var(--accent), 12); }
+TyEdit:focus      { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.12); outline-offset: 0; }
 TyEdit:disabled   { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); }
 
-TyComboBox          { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 5px 11px; }
-TyComboBox:hover    { border-color: var(--accent); }
-TyComboBox:focus    { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.2); outline-offset: 0; }
+TyComboBox          { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 4px 11px; }
+TyComboBox:hover    { border-color: lighten(var(--accent), 12); }
+TyComboBox:focus    { border-color: var(--accent); outline: 2 alpha(var(--accent), 0.12); outline-offset: 0; }
 TyComboBox:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); }
 
-/* Check box: a small surface well with a hair-line border and an accent tick; the box is
-   stroked (render-style would not bevel it), border warms to the accent on interaction. */
+/* Check box: a small white well, #D9D9D9 hairline, #1677FF tick, 4px radius; border warms to accent. */
 TyCheckBox          { background: var(--surface); color: var(--accent); border: 1px solid var(--border); border-radius: 4; }
-TyCheckBox:hover    { border-color: var(--accent); }
+TyCheckBox:hover    { border-color: lighten(var(--accent), 12); }
 TyCheckBox:active   { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); border-radius: 4; }
 TyCheckBox:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); }
 
-/* Progress: a faint rounded trail with a solid accent fill (both pill-rounded). */
+/* Radio: same well, rounded fully by the control; hairline warms to accent, accent dot drawn in color. */
+TyRadioButton          { background: var(--surface); color: var(--accent); border: 1px solid var(--border); }
+TyRadioButton:hover    { border-color: lighten(var(--accent), 12); }
+TyRadioButton:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); }
+
+/* Progress: a #F5F5F5 pill trough with a solid #1677FF pill fill (Ant's rounded bar). */
 TyProgressBar  { background: var(--track); border-radius: 100; }
 TyProgressFill { background: var(--accent); border-radius: 100; }
