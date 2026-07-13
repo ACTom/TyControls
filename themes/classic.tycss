@@ -3,6 +3,13 @@
    square corners, and a gradient title bar (B1). Loaded as a FILE by the theming example.
    DUAL-MODE: this skin has no natural dark variant, so @mode dark is IDENTICAL to @mode light. */
 
+/* Mode-invariant metrics. Win9x caption buttons were small squares in the top-right, so the
+   classic skin shrinks the title-bar buttons from the 46px default via the --caption-button-width
+   theme metric (device px are DPI-scaled from this logical value). */
+:root {
+  --caption-button-width: 32;
+}
+
 /* --accent is the brand seed; the runtime accent-picker recolours the skin through it. */
 @mode light {
   :root {
@@ -53,8 +60,8 @@ TyButton.ghost          { render-style: bevel3d; background: var(--face); color:
 TyButton.ghost:active   { render-style: inset3d;  background: var(--face); }
 
 /* Fields: sunken white wells. */
-TyEdit          { render-style: inset3d; background: var(--field); color: var(--ink); padding: 4px; }
-TyComboBox      { render-style: inset3d; background: var(--field); color: var(--ink); }
+TyEdit          { render-style: inset3d; background: var(--field); color: var(--ink); padding: 4px 6px; }
+TyComboBox      { render-style: inset3d; background: var(--field); color: var(--ink); padding: 4px 6px; }
 
 /* Check box: a white well with a grey border (the indicator box is stroked, not beveled). */
 TyCheckBox      { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 0; }

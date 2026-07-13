@@ -9,7 +9,7 @@ uses
   BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Form,
-  tyControls.Base, tyControls.Menu;
+  tyControls.Base, tyControls.Menu, tyControls.ThemeRegistry, tyControls.BuiltinThemes;
 
 type
   TFormHelpersTest = class(TTestCase)
@@ -116,6 +116,8 @@ type
     procedure TestRightInsetHonorsHiddenButtons;
     procedure TestAdjustClientRectLeavesMiddleStrip;
     procedure TestLayoutPacksRemainingVisibleButton;
+    procedure TestButtonWidthFollowsThemeMetric;
+    procedure TestExplicitButtonWidthOverridesMetric;
   end;
 
   TCaptionButtonPaintTest = class(TTestCase)
@@ -812,6 +814,50 @@ begin
   end;
 end;
 
+procedure TTitleBarTest.TestButtonWidthFollowsThemeMetric;
+{ A theme's --caption-button-width metric sizes the caption buttons: classic sets 32, default
+  has none (falls back to 46). Assert RELATIVELY (headless PPI != 96): classic < default. }
+var T: TTyTitleBar; c: TTyStyleController; wDefault, wClassic: Integer;
+begin
+  TyRegisterBuiltinThemes;
+  TyRegisterThemeDir(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim);
+  T := TTyTitleBar.Create(nil);
+  c := TTyStyleController.Create(nil);
+  try
+    T.SetBounds(0, 0, 300, 32);
+    T.Controller := c;
+    c.ThemeName := 'default';                 // no metric -> 46 default
+    wDefault := T.RightInset;                 // RightInset reads the metric fresh
+    c.ThemeName := 'classic';                 // --caption-button-width: 32
+    wClassic := T.RightInset;
+    AssertTrue('classic caption buttons narrower than default', wClassic < wDefault);
+    AssertTrue('classic width still positive', wClassic > 0);
+  finally
+    T.Free; c.Free;
+  end;
+end;
+
+procedure TTitleBarTest.TestExplicitButtonWidthOverridesMetric;
+{ An explicitly-set ButtonWidth pins the width, overriding the theme metric (per-instance wins). }
+var T: TTyTitleBar; c: TTyStyleController;
+begin
+  TyRegisterBuiltinThemes;
+  TyRegisterThemeDir(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim);
+  T := TTyTitleBar.Create(nil);
+  c := TTyStyleController.Create(nil);
+  try
+    T.SetBounds(0, 0, 300, 32);
+    T.Controller := c;
+    c.ThemeName := 'classic';                 // metric would give 32
+    T.ButtonWidth := 50;                      // explicit override
+    T.MinButton.Visible := False;
+    T.MaxButton.Visible := False;             // only close -> RightInset = 1 * 50
+    AssertEquals('explicit ButtonWidth wins over the theme metric', 50, T.RightInset);
+  finally
+    T.Free; c.Free;
+  end;
+end;
+
 procedure TTitleBarTest.TestButtonKinds;
 var
   T: TTyTitleBar;
@@ -850,7 +896,9 @@ begin
     T.MinButton.Visible := False;
     T.MaxButton.Visible := False;   { only close visible -> right inset = 1 button }
     AssertEquals('close still flush right', 300, T.CloseButton.Left + T.CloseButton.Width);
-    AssertEquals('right inset = one button width', T.ButtonWidth, T.RightInset);
+    // RightInset = 1 visible button's EFFECTIVE (device-px) width. Compare to the button's own
+    // width, not the logical ButtonWidth property — they differ once DPI-scaled (headless PPI != 96).
+    AssertEquals('right inset = one button width', T.CloseButton.Width, T.RightInset);
   finally
     T.Free;
   end;

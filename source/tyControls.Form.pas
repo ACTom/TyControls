@@ -59,12 +59,16 @@ type
     FMaxButton: TTyCaptionButton;
     FCloseButton: TTyCaptionButton;
     FButtonWidth: Integer;
+    FButtonWidthExplicit: Boolean;   // True once ButtonWidth is set in code/OI (overrides the theme metric)
     FTitleAlignment: TAlignment;
     FEngine: TTyChromeEngine;
     procedure SetCaption(const AValue: string);
     procedure SetButtonWidth(AValue: Integer);
     procedure SetTitleAlignment(AValue: TAlignment);
     function VisibleButtonCount: Integer;
+    { Device-px caption-button width: an explicit ButtonWidth wins; otherwise the theme's
+      --caption-button-width metric (logical, DPI-scaled); otherwise TyTitleButtonWidth. }
+    function EffectiveButtonWidthPx: Integer;
     function LeftInsetPx: Integer;
     function GetShowMinimize: Boolean;
     function GetShowMaximize: Boolean;
@@ -641,11 +645,23 @@ end;
 
 procedure TTyTitleBar.SetButtonWidth(AValue: Integer);
 begin
+  FButtonWidthExplicit := True;   // an explicit set pins the width, overriding the theme metric
   if FButtonWidth = AValue then
     Exit;
   FButtonWidth := AValue;
   LayoutButtons;
   Invalidate;
+end;
+
+function TTyTitleBar.EffectiveButtonWidthPx: Integer;
+begin
+  if FButtonWidthExplicit then
+    Result := FButtonWidth   // already device-px (form DPI-rescales it); honour the per-instance value
+  else
+    // Theme-driven default: --caption-button-width is logical px; scale to the current PPI. A skin
+    // (e.g. classic's small Win9x caption buttons) sets it; unset falls back to TyTitleButtonWidth.
+    Result := MulDiv(ActiveController.Metric('--caption-button-width', TyTitleButtonWidth),
+                     Font.PixelsPerInch, 96);
 end;
 
 procedure TTyTitleBar.SetTitleAlignment(AValue: TAlignment);
@@ -698,7 +714,7 @@ end;
 
 function TTyTitleBar.RightInset: Integer;
 begin
-  Result := VisibleButtonCount * FButtonWidth;
+  Result := VisibleButtonCount * EffectiveButtonWidthPx;
 end;
 
 function TTyTitleBar.LeftInsetPx: Integer;
@@ -712,7 +728,7 @@ var
 begin
   if (FCloseButton = nil) or (FMaxButton = nil) or (FMinButton = nil) then
     Exit;
-  W := FButtonWidth;
+  W := EffectiveButtonWidthPx;
   H := ClientHeight;
   X := ClientWidth;
   if FCloseButton.Visible then begin Dec(X, W); FCloseButton.SetBounds(X, 0, W, H); end;
@@ -761,6 +777,10 @@ end;
 
 procedure TTyTitleBar.Paint;
 begin
+  // Re-apply the (theme-metric) button width on every repaint, so switching to a skin that sets
+  // --caption-button-width resizes the caption buttons live. LayoutButtons no-ops when the bounds
+  // are already correct, so a normal repaint costs a var lookup + three unchanged SetBounds.
+  LayoutButtons;
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
 end;
 
