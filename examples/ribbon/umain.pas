@@ -47,9 +47,13 @@ type
     Bar: TTyTitleBar;
     DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;                   // title-bar built-in skin switcher
+    BtnAccent: TTyButton;                      // pick a runtime accent (recolours any skin)
+    BtnAccentReset: TTyButton;                 // back to the skin's own accent
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
+    procedure PickAccent(Sender: TObject);
+    procedure ResetAccentClick(Sender: TObject);
   private
     FImgColl: TTyImageCollection;   // cross-platform BGRA command icons (uicons)
     FRibbon: TTyRibbon;
@@ -348,6 +352,33 @@ begin
     TyDefaultController.Mode := 'dark'
   else
     TyDefaultController.Mode := 'light';
+  ApplyChromeTheme(TyDefaultController);
+end;
+
+{ Pick a runtime accent: any skin is recoloured live from the one --accent seed. On the Office
+  skin this turns the caption band + ribbon accents Word-blue / Excel-green / PowerPoint-orange /
+  … so you can see the SAME Office layout in every Office-app colour. }
+procedure TMainForm.PickAccent(Sender: TObject);
+var dlg: TTyColorDialog; hex: string;
+begin
+  dlg := TTyColorDialog.Create(nil);
+  try
+    dlg.Caption := '选择主题色';
+    if dlg.Execute then
+    begin
+      hex := '#' + IntToHex(TyRedOf(dlg.Color), 2) + IntToHex(TyGreenOf(dlg.Color), 2)
+                 + IntToHex(TyBlueOf(dlg.Color), 2);
+      TyDefaultController.SetAccent(hex);       // recolours every registered control + chrome
+      ApplyChromeTheme(TyDefaultController);
+    end;
+  finally
+    dlg.Free;
+  end;
+end;
+
+procedure TMainForm.ResetAccentClick(Sender: TObject);
+begin
+  TyDefaultController.ResetAccent;              // back to the skin's own accent
   ApplyChromeTheme(TyDefaultController);
 end;
 
