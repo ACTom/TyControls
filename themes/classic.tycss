@@ -7,9 +7,9 @@
    classic skin shrinks the title-bar buttons from the 46px default via the --caption-button-width
    theme metric (device px are DPI-scaled from this logical value). */
 :root {
-  --caption-button-width:  28;   /* small squarish caption buttons */
+  --caption-button-width:  25;   /* small squarish caption buttons */
   --caption-button-margin: 3;    /* gap between the buttons and the title-bar edges */
-  --caption-button-gap:    2;    /* gap between adjacent buttons */
+  --caption-button-gap:    4;    /* gap between adjacent buttons */
 }
 
 /* --accent is the brand seed; the runtime accent-picker recolours the skin through it. */
