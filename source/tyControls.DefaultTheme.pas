@@ -11,8 +11,22 @@ unit tyControls.DefaultTheme;
 interface
 
 function TyBuiltinThemeCss: string;
+{ Per-mode contrast tokens for the seeded base — NOT part of the light theme (which is
+  single-mode and byte-synced to light.tycss). The model layers these UNDER a dual-mode user
+  theme so a skin that overrides the surface but omits the ink inherits a readable per-mode
+  value for the controls it does not restyle (menu/tree/tabset/…). Values match auto.tycss, so
+  the default theme is unchanged; a single-mode theme keeps the light :root defaults. Derived
+  tokens (--muted etc.) re-derive from these. Hand-written (not generated). }
+function TyBuiltinBaseModeCss: string;
 
 implementation
+
+function TyBuiltinBaseModeCss: string;
+begin
+  Result :=
+    '@mode light { :root { --on-surface: #1F2937; --surface: #FFFFFF; --border: #D1D5DB; } }' + LineEnding +
+    '@mode dark  { :root { --on-surface: #E5E7EB; --surface: #1E1E1E; --border: #3F3F46; } }' + LineEnding;
+end;
 
 function TyBuiltinThemeCss: string;
 begin

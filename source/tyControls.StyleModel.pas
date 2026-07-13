@@ -45,9 +45,15 @@ type
     FPropertyCascade: Boolean; // A7: False=all-or-nothing (default, golden); True=base->user per-prop merge
     FMode: string;            // P3 (D7): active @mode name ('' = no mode override)
     FModeVars: TStringList;   // loaded @mode blocks: Names[i]=lower(mode), Objects[i]=owned TStringList of that mode's vars
+    FBaseModeVars: TStringList; // the BUILT-IN base's @mode blocks, snapshot once + NEVER cleared. Layered UNDER a
+                              // dual-mode user theme so a skin that omits a per-mode token (e.g. --on-surface) inherits
+                              // the base's readable per-mode value for the controls it does not restyle.
     FVarOverrides: TStringList; // v3/A: runtime var overrides (accent picker). TOP merge layer — above @mode + system tokens. name=value, no leading '--'. Cleared on REPLACE load / Clear.
     procedure ClearList(ARules: TFPList);
     procedure ClearModeVars;
+    procedure ClearBaseModeVars;
+    procedure SnapshotBaseModeVars;
+    function BaseModeVarsFor(const AMode: string): TStringList;
     function ModeVarsFor(const AMode: string): TStringList;
     procedure RebuildMergedVars;
     procedure ValidateRules(ARules: TFPList; AVars: TStrings);
@@ -812,10 +818,19 @@ begin
   FBaseVars := TStringList.Create;
   FMergedVars := TStringList.Create;
   FModeVars := TStringList.Create;
+  FBaseModeVars := TStringList.Create;
   FVarOverrides := TStringList.Create;
   { Seed the built-in default skin once. It is never cleared by user theme
     loads — it only applies (per-typeKey) when the user layer is silent. }
-  LoadInto(FBaseRules, FBaseVars, TyBuiltinThemeCss);
+  { Seed the light base PLUS the per-mode contrast @mode snippet, so FModeVars picks up the base's
+    per-mode --on-surface/--surface/--border. (TyBuiltinThemeCss alone is single-mode — it is
+    byte-synced to light.tycss and must not change; the @mode lives in a separate constant.) }
+  LoadInto(FBaseRules, FBaseVars, TyBuiltinThemeCss + LineEnding + TyBuiltinBaseModeCss);
+  { Snapshot those base @mode blocks so they survive later (clearing) user loads and can be
+    layered under a dual-mode user theme's own @mode. Then clear FModeVars: the base @mode must
+    NOT be the ACTIVE user @mode layer (only the preserved fallback). }
+  SnapshotBaseModeVars;
+  ClearModeVars;
 end;
 
 destructor TTyStyleModel.Destroy;
@@ -823,12 +838,14 @@ begin
   ClearList(FRules);
   ClearList(FBaseRules);
   ClearModeVars;
+  ClearBaseModeVars;
   FRules.Free;
   FBaseRules.Free;
   FVars.Free;
   FBaseVars.Free;
   FMergedVars.Free;
   FModeVars.Free;
+  FBaseModeVars.Free;
   FVarOverrides.Free;
   inherited Destroy;
 end;
@@ -851,6 +868,39 @@ begin
   idx := FModeVars.IndexOf(LowerCase(Trim(AMode)));
   if idx >= 0 then
     Result := TStringList(FModeVars.Objects[idx]);
+end;
+
+procedure TTyStyleModel.ClearBaseModeVars;
+var i: Integer;
+begin
+  for i := 0 to FBaseModeVars.Count - 1 do
+    FBaseModeVars.Objects[i].Free;
+  FBaseModeVars.Clear;
+end;
+
+procedure TTyStyleModel.SnapshotBaseModeVars;
+{ Deep-copy the base's currently-loaded @mode blocks (just seeded, so FModeVars holds ONLY the
+  base) into FBaseModeVars, which survives later user loads that clear FModeVars. }
+var i: Integer; dst: TStringList;
+begin
+  ClearBaseModeVars;
+  for i := 0 to FModeVars.Count - 1 do
+  begin
+    dst := TStringList.Create;
+    dst.Assign(TStringList(FModeVars.Objects[i]));
+    FBaseModeVars.AddObject(FModeVars[i], dst);
+  end;
+end;
+
+function TTyStyleModel.BaseModeVarsFor(const AMode: string): TStringList;
+{ The base's @mode vars for AMode (case-insensitive), or nil. }
+var idx: Integer;
+begin
+  Result := nil;
+  if AMode = '' then Exit;
+  idx := FBaseModeVars.IndexOf(LowerCase(Trim(AMode)));
+  if idx >= 0 then
+    Result := TStringList(FBaseModeVars.Objects[idx]);
 end;
 
 function TTyStyleModel.DefaultModeName: string;
@@ -989,10 +1039,24 @@ procedure TTyStyleModel.RebuildMergedVars;
   dual-mode theme's per-mode :root wins, P3/D7). ResolveStyle evaluates every rule
   against this set, so overriding a SEED re-derives the whole family (var-on-var resolves
   through TyEvalColor at resolve time). An unset/unknown FMode contributes nothing. }
-var i: Integer; mv: TStringList;
+var i: Integer; mv, bmv: TStringList;
 begin
   FMergedVars.Clear;
   FMergedVars.Assign(FBaseVars);
+  { Base @mode UNDER the user layer (only when the USER theme itself is dual-mode). A skin's
+    @mode blocks otherwise carry ONLY the tokens it overrides, so per-mode base tokens it omits
+    (notably --on-surface) would fall back to the mode-less default and render dark ink on a dark
+    surface. Layering the base's per-mode vars here fixes the controls a skin does not restyle
+    (menu/tree/tabset/…), while the user :root + user @mode below still WIN for anything the skin
+    sets (its accent, radius, surfaces), so identity is preserved. A single-mode theme (no @mode)
+    keeps its one look — the guard skips this layer. }
+  if FModeVars.Count > 0 then
+  begin
+    bmv := BaseModeVarsFor(FMode);
+    if bmv <> nil then
+      for i := 0 to bmv.Count - 1 do
+        FMergedVars.Values[bmv.Names[i]] := bmv.ValueFromIndex[i];
+  end;
   for i := 0 to FVars.Count - 1 do
     FMergedVars.Values[FVars.Names[i]] := FVars.ValueFromIndex[i];
   mv := ModeVarsFor(FMode);
