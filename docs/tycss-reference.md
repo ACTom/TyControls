@@ -784,7 +784,8 @@ TyButton.primary {
     在 `:root` 里写 `--glyph-<槽>: "字体族名" "\<码点>";`——族名须为**系统已安装或应用已注册**
     的字体(自带 `.ttf` 的 `url()` 加载为后续扩展),码点为十六进制(前导 `\` 可省)。当前支持的槽:
     - `--glyph-check` / `--glyph-check-indeterminate` — 复选框勾号 / 中间态;
-    - `--glyph-radio` — 单选钮圆点。
+    - `--glyph-radio` — 单选钮圆点;
+    - `--glyph-close` / `--glyph-minimize` / `--glyph-maximize` / `--glyph-restore` — 标题栏按钮图标。
     例:`--glyph-check: "Segoe MDL2 Assets" "\e73e";`。未设时用内置矢量字形。**注意**:设了有效覆盖
     就一定用图标字体渲染(即便该字体/码点渲染为空);只有未设或格式错误才回退矢量。
 17. **`render-style` 家族预设(v3)**:控件属性 `render-style: flat | bevel3d | inset3d;`——

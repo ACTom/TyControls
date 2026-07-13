@@ -11,9 +11,14 @@ uses
   Classes, SysUtils, Types, Graphics, StdCtrls, BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller,
-  tyControls.IconFont, tyControls.CheckBox;
+  tyControls.IconFont, tyControls.CheckBox, tyControls.Form;
 type
   TCbProbe = class(TTyCheckBox)
+  public
+    procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
+  TCaptionProbe = class(TTyCaptionButton)
   public
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
   end;
@@ -21,6 +26,7 @@ type
   TGlyphTest = class(TTestCase)
   private
     function BoxInkPixels(const AThemeCss: string): Integer;
+    function CaptionCloseInk(const AThemeCss: string): Integer;
   published
     procedure TestParseFamilyAndCodepointBackslash;
     procedure TestParseCodepointNoBackslash;
@@ -29,11 +35,17 @@ type
     procedure TestParseBadCodepointFails;
     procedure TestRawVarReadsToken;
     procedure TestOverrideBypassesVectorGlyph;
+    procedure TestCaptionGlyphOverrideBypassesVector;
   end;
 
 implementation
 
 procedure TCbProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TCaptionProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
 end;
@@ -140,6 +152,58 @@ begin
   AssertTrue('vector checkmark draws ink', inkVector > 0);
   AssertTrue('override bypasses the vector glyph (no ink)', inkOverride < inkVector);
   AssertEquals('override glyph (space) leaves the box empty', 0, inkOverride);
+end;
+
+function TGlyphTest.CaptionCloseInk(const AThemeCss: string): Integer;
+var
+  ctrl: TTyStyleController;
+  cb: TCaptionProbe;
+  bmp: TBitmap;
+  reread: TBGRABitmap;
+  px: TBGRAPixel;
+  x, y: Integer;
+begin
+  Result := 0;
+  ctrl := TTyStyleController.Create(nil);
+  cb := TCaptionProbe.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    ctrl.LoadThemeCss(AThemeCss);
+    cb.Controller := ctrl;
+    cb.Kind := cbkClose;
+    bmp.SetSize(46, 32);
+    cb.Render(bmp.Canvas, Rect(0, 0, 46, 32), 96);
+    reread := TBGRABitmap.Create(bmp);
+    try
+      // The glyph is centred (18px box in a 46x32 button); count black ink in its core.
+      for y := 9 to 23 do
+        for x := 16 to 30 do
+        begin
+          px := reread.GetPixel(x, y);
+          if (px.alpha > 128) and (px.red < 60) and (px.green < 60) and (px.blue < 60) then
+            Inc(Result);
+        end;
+    finally
+      reread.Free;
+    end;
+  finally
+    bmp.Free;
+    cb.Free;
+    ctrl.Free;
+  end;
+end;
+
+procedure TGlyphTest.TestCaptionGlyphOverrideBypassesVector;
+const
+  CB = 'TyCaptionButton { background: #FF0000; color: #000000; border-width: 0; }';
+var inkVec, inkOv: Integer;
+begin
+  // Same font-independent dispatch proof for the title-bar close button: a "\20" (space)
+  // override erases the vector × glyph.
+  inkVec := CaptionCloseInk(CB);
+  inkOv := CaptionCloseInk(':root { --glyph-close: "Arial" "\20"; } ' + CB);
+  AssertTrue('vector close (x) glyph draws ink', inkVec > 0);
+  AssertEquals('override (space) leaves the close button glyphless', 0, inkOv);
 end;
 
 initialization

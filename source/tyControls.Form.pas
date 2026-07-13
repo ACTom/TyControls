@@ -38,6 +38,7 @@ type
     function GetStyleTypeKey: string; override;
     function KindVariant: string;
     function KindGlyph: TTyGlyphKind;
+    function KindGlyphToken: string;   // v3/C5: theme glyph-override token name for this kind
   published
     property Kind: TTyCaptionButtonKind read FKind write SetKind;
     property ShowGlyphOnHoverOnly: Boolean read FShowGlyphOnHoverOnly
@@ -526,6 +527,17 @@ begin
   end;
 end;
 
+function TTyCaptionButton.KindGlyphToken: string;
+begin
+  case FKind of
+    cbkClose: Result := '--glyph-close';
+    cbkMin: Result := '--glyph-minimize';
+    cbkMax: Result := '--glyph-maximize';
+    cbkRestore: Result := '--glyph-restore';
+  else Result := '';
+  end;
+end;
+
 procedure TTyCaptionButton.SetShowGlyphOnHoverOnly(AValue: Boolean);
 begin
   if FShowGlyphOnHoverOnly = AValue then
@@ -567,7 +579,8 @@ begin
       CX := R.Left + (R.Right - R.Left - GlyphSize) div 2;
       CY := R.Top + (R.Bottom - R.Top - GlyphSize) div 2;
       GlyphRect := Rect(CX, CY, CX + GlyphSize, CY + GlyphSize);
-      P.DrawGlyph(GlyphRect, KindGlyph, S.TextColor, P.Scale(1));
+      // v3/C5: the caption glyph is theme-overridable with an icon-font codepoint.
+      TyDrawGlyph(P, ActiveController, GlyphRect, KindGlyphToken, KindGlyph, S.TextColor, P.Scale(1));
     end;
     P.EndPaint;
   finally
