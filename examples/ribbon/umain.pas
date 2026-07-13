@@ -33,7 +33,7 @@ uses
   tyControls.RibbonQuickAccess, tyControls.RibbonGallery, tyControls.RibbonBackstage,
   tyControls.PageControl, tyControls.TabSheet, tyControls.Memo, tyControls.StatusBar,
   tyControls.Dialogs, tyControls.Dialogs.Find, tyControls.Dialogs.Color,
-  uicons;
+  uicons, uoffice;
 
 type
   { One open document: its tab sheet + memo + on-disk path. }
@@ -47,13 +47,11 @@ type
     Bar: TTyTitleBar;
     DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;                   // title-bar built-in skin switcher
-    BtnAccent: TTyButton;                      // pick a runtime accent (recolours any skin)
-    BtnAccentReset: TTyButton;                 // back to the skin's own accent
+    AccentCombo: TTyComboBox;                  // Office-app accent presets (Word/Excel/PPT/…) + custom
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
-    procedure PickAccent(Sender: TObject);
-    procedure ResetAccentClick(Sender: TObject);
+    procedure AccentComboChange(Sender: TObject);
   private
     FImgColl: TTyImageCollection;   // cross-platform BGRA command icons (uicons)
     FRibbon: TTyRibbon;
@@ -355,30 +353,39 @@ begin
   ApplyChromeTheme(TyDefaultController);
 end;
 
-{ Pick a runtime accent: any skin is recoloured live from the one --accent seed. On the Office
-  skin this turns the caption band + ribbon accents Word-blue / Excel-green / PowerPoint-orange /
-  … so you can see the SAME Office layout in every Office-app colour. }
-procedure TMainForm.PickAccent(Sender: TObject);
-var dlg: TTyColorDialog; hex: string;
+{ Accent presets: recolour any skin live from the one --accent seed. On the Office skin this turns
+  the caption band + ribbon accents into the real Office-app colours, so you can see the SAME Office
+  layout Word-blue / Excel-green / PowerPoint-orange / … — plus 跟随主题 (the skin's own accent) and
+  自定义… (a colour dialog). Item order matches ACCENT_HEX below. }
+procedure TMainForm.AccentComboChange(Sender: TObject);
+const
+  // '' = 跟随主题 (reset); '?' = 自定义… (dialog); else a preset hex.
+  ACCENT_HEX: array[0..6] of string =
+    ('', '#2B579A', '#217346', '#B7472A', '#7719AA', '#0F6CBD', '?');
+var
+  i: Integer;
+  sel: string;
+  dlg: TTyColorDialog;
 begin
-  dlg := TTyColorDialog.Create(nil);
-  try
-    dlg.Caption := '选择主题色';
-    if dlg.Execute then
-    begin
-      hex := '#' + IntToHex(TyRedOf(dlg.Color), 2) + IntToHex(TyGreenOf(dlg.Color), 2)
-                 + IntToHex(TyBlueOf(dlg.Color), 2);
-      TyDefaultController.SetAccent(hex);       // recolours every registered control + chrome
-      ApplyChromeTheme(TyDefaultController);
+  i := AccentCombo.ItemIndex;
+  if (i < 0) or (i > High(ACCENT_HEX)) then Exit;
+  sel := ACCENT_HEX[i];
+  if sel = '' then
+    TyDefaultController.ResetAccent                       // 跟随主题
+  else if sel = '?' then
+  begin
+    dlg := TTyColorDialog.Create(nil);
+    try
+      dlg.Caption := '选择主题色';
+      if dlg.Execute then
+        TyDefaultController.SetAccent('#' + IntToHex(TyRedOf(dlg.Color), 2)
+          + IntToHex(TyGreenOf(dlg.Color), 2) + IntToHex(TyBlueOf(dlg.Color), 2));
+    finally
+      dlg.Free;
     end;
-  finally
-    dlg.Free;
-  end;
-end;
-
-procedure TMainForm.ResetAccentClick(Sender: TObject);
-begin
-  TyDefaultController.ResetAccent;              // back to the skin's own accent
+  end
+  else
+    TyDefaultController.SetAccent(sel);                   // an Office-app preset
   ApplyChromeTheme(TyDefaultController);
 end;
 
@@ -796,12 +803,16 @@ var
   i: Integer;
   base: string;
 begin
-  // The compiled-in pair (default + system) PLUS every skin FILE in themes/ (office, xp, win11,
-  // material3, …) — all pickable from the one combo, so you can see Office's accent title bar etc.
+  // Office is compiled IN (uoffice) so this ribbon example DEFAULTS to Office with no themes/
+  // folder needed. The compiled-in pair (default + system) + office + every other skin FILE in
+  // themes/ (if present) are all pickable from the combo.
   TyRegisterBuiltinThemes;
+  TyRegisterThemeCss('office', OfficeThemeCss);
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do
     ThemeCombo.Items.Add(names[i]);
+  if ThemeCombo.Items.IndexOf('office') < 0 then
+    ThemeCombo.Items.Add('office');
   names := TyRegisterThemeDir(LocalThemesDir);
   for i := 0 to High(names) do
   begin
@@ -811,8 +822,19 @@ begin
     if ThemeCombo.Items.IndexOf(names[i]) < 0 then
       ThemeCombo.Items.Add(names[i]);
   end;
-  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
-  TyDefaultController.ThemeName := 'default';
+  ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('office');
+  TyDefaultController.ThemeName := 'office';   // default to Office
+
+  // Office-app accent presets (item order MUST match ACCENT_HEX in AccentComboChange).
+  AccentCombo.Items.Add('跟随主题');
+  AccentCombo.Items.Add('Word 蓝');
+  AccentCombo.Items.Add('Excel 绿');
+  AccentCombo.Items.Add('PowerPoint 橙');
+  AccentCombo.Items.Add('OneNote 紫');
+  AccentCombo.Items.Add('Outlook 蓝');
+  AccentCombo.Items.Add('自定义…');
+  AccentCombo.ItemIndex := 0;
+
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 
   // The rest of the editor is a dynamic control tree that can't live in the .lfm.

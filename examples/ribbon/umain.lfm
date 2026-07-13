@@ -35,23 +35,13 @@ object MainForm: TMainForm
       Anchors = [akTop, akRight]
       OnChange = ThemeComboChange
     end
-    object BtnAccent: TTyButton
-      Left = 400
+    object AccentCombo: TTyComboBox
+      Left = 402
       Height = 26
       Top = 4
-      Width = 70
+      Width = 138
       Anchors = [akTop, akRight]
-      Caption = '主题色'
-      OnClick = PickAccent
-    end
-    object BtnAccentReset: TTyButton
-      Left = 476
-      Height = 26
-      Top = 4
-      Width = 60
-      Anchors = [akTop, akRight]
-      Caption = '复位'
-      OnClick = ResetAccentClick
+      OnChange = AccentComboChange
     end
   end
 end
