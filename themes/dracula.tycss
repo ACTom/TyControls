@@ -1,0 +1,5 @@
+/* dracula — curated dual-mode palette (moved out of the compiled-in pack into themes/).
+   The dual-mode neutral base is imported; only the 5 colour seeds differ per mode. */
+@import "auto.tycss";
+@mode light { :root { --accent: #644AC9; --surface: #FFFBEB; --on-surface: #1F1F1F; --border: #CFCFDE; --danger: #CB3A2A; } }
+@mode dark  { :root { --accent: #BD93F9; --surface: #282A36; --on-surface: #F8F8F2; --border: #44475A; --danger: #FF5555; } }

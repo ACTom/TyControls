@@ -1,0 +1,5 @@
+/* catppuccin — curated dual-mode palette (moved out of the compiled-in pack into themes/).
+   The dual-mode neutral base is imported; only the 5 colour seeds differ per mode. */
+@import "auto.tycss";
+@mode light { :root { --accent: #1E66F5; --surface: #EFF1F5; --on-surface: #4C4F69; --border: #CCD0DA; --danger: #D20F39; } }
+@mode dark  { :root { --accent: #89B4FA; --surface: #1E1E2E; --on-surface: #CDD6F4; --border: #313244; --danger: #F38BA8; } }

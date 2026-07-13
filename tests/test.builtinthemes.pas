@@ -37,6 +37,11 @@ type
   end;
 implementation
 
+function ThemesPath(const AName: string): string;
+begin
+  Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim + AName;
+end;
+
 procedure TThemeRegistryCssTest.TestRegisterResolveCss;
 var css: string;
 begin
@@ -112,20 +117,19 @@ begin
 end;
 
 procedure TBuiltinThemesTest.TestNamesCountAndContents;
-var n: TStringArray; i: Integer; sawDefault, sawSystem, sawDracula: Boolean;
+var n: TStringArray; i: Integer; sawDefault, sawSystem: Boolean;
 begin
+  // Only default + system stay compiled in; the curated palettes moved to themes/ files.
   n := TyBuiltinThemeNames;
-  AssertEquals('12 built-in themes', 12, Length(n));
-  sawDefault := False; sawSystem := False; sawDracula := False;
+  AssertEquals('2 compiled-in themes', 2, Length(n));
+  sawDefault := False; sawSystem := False;
   for i := 0 to High(n) do
   begin
     if n[i] = 'default' then sawDefault := True;
     if n[i] = 'system'  then sawSystem := True;
-    if n[i] = 'dracula' then sawDracula := True;
   end;
   AssertTrue('has default', sawDefault);
   AssertTrue('has system', sawSystem);
-  AssertTrue('has dracula', sawDracula);
 end;
 
 procedure TBuiltinThemesTest.TestAllBuiltinsLoad;
@@ -152,7 +156,7 @@ var m: TTyStyleModel; s: TTyStyleSet;
 begin
   m := TTyStyleModel.Create;
   try
-    m.LoadFromCss(TyBuiltinThemeCss('dracula'));
+    m.LoadFromFile(ThemesPath('dracula.tycss'));   // curated palette now a themes/ file (@import auto + seeds)
     m.SetMode('light');
     s := m.ResolveStyle('TyButton', 'primary', []);   // primary bg = var(--accent)
     AssertEquals('dracula light accent R', $64, TyRedOf(s.Background.Color));
@@ -171,7 +175,7 @@ var m: TTyStyleModel; s: TTyStyleSet;
 begin
   m := TTyStyleModel.Create;
   try
-    m.LoadFromCss(TyBuiltinThemeCss('nord'));
+    m.LoadFromFile(ThemesPath('nord.tycss'));
     m.SetMode('dark');
     s := m.ResolveStyle('TyButton', '', []);
     AssertEquals('nord dark surface R', $2E, TyRedOf(s.Background.Color));
@@ -185,6 +189,7 @@ procedure TControllerThemeNameTest.TestThemeNameLoadsBuiltinCss;
 var c: TTyStyleController; s: TTyStyleSet;
 begin
   TyRegisterBuiltinThemes;
+  TyRegisterThemeDir(ThemesPath(''));   // curated palettes now resolve by name from themes/ files
   c := TTyStyleController.Create(nil);
   try
     c.ThemeName := 'gruvbox';
@@ -199,6 +204,7 @@ procedure TControllerThemeNameTest.TestModePersistsAcrossThemeSwitch;
 var c: TTyStyleController;
 begin
   TyRegisterBuiltinThemes;
+  TyRegisterThemeDir(ThemesPath(''));
   c := TTyStyleController.Create(nil);
   try
     c.Mode := 'dark';

@@ -29,6 +29,11 @@ procedure TyRegisterThemeFile(const AName, AFileName: string);
   (Back-compat seam for the Bundles feature; today it just composes the entry path.) }
 procedure TyRegisterThemeFolder(const AName, ADir: string);
 
+{ Register every '*.tycss' file in ADir as a theme named after its base filename (no
+  extension), returning the registered names (sorted). Missing dir -> empty. Publishes a
+  whole themes/ folder into the picker without compiling anything in. }
+function TyRegisterThemeDir(const ADir: string): TStringArray;
+
 { Resolve a registered NAME to its source (today: the .tycss file path). Case-insensitive.
   Returns False (and ASource='') if the name is not registered. }
 function TyResolveTheme(const AName: string; out ASource: string): Boolean;
@@ -137,6 +142,42 @@ begin
     d := d + PathDelim;
   // Bundle dirs use theme.tycss as the entry sheet (matches the Bundles design default).
   TyRegisterThemeFile(AName, d + 'theme.tycss');
+end;
+
+function TyRegisterThemeDir(const ADir: string): TStringArray;
+var
+  sr: TSearchRec;
+  d, base: string;
+  names: TStringList;
+  i: Integer;
+begin
+  SetLength(Result, 0);
+  d := ADir;
+  if d = '' then Exit;
+  if d[Length(d)] <> PathDelim then d := d + PathDelim;
+  names := TStringList.Create;
+  try
+    names.Sorted := True;
+    names.Duplicates := dupIgnore;
+    if FindFirst(d + '*.tycss', faAnyFile, sr) = 0 then
+      try
+        repeat
+          if (sr.Attr and faDirectory) = 0 then
+          begin
+            base := ChangeFileExt(sr.Name, '');
+            TyRegisterThemeFile(base, d + sr.Name);
+            names.Add(base);
+          end;
+        until FindNext(sr) <> 0;
+      finally
+        FindClose(sr);
+      end;
+    SetLength(Result, names.Count);
+    for i := 0 to names.Count - 1 do
+      Result[i] := names[i];
+  finally
+    names.Free;
+  end;
 end;
 
 function TyResolveTheme(const AName: string; out ASource: string): Boolean;

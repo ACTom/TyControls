@@ -16,7 +16,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Forms, Controls,
-  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
+  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.ThemeRegistry,
   tyControls.Button, tyControls.TyLabel, tyControls.ComboBox,
   tyControls.Edit, tyControls.CheckBox, tyControls.ProgressBar,
   tyControls.Types, tyControls.Css.Values, tyControls.Dialogs.Color;
@@ -30,7 +30,6 @@ type
     BtnGreen: TTyButton;
     BtnAccent: TTyButton;
     BtnAccentReset: TTyButton;
-    BtnClassic: TTyButton;
     LblStatus: TTyLabel;
     LblSample: TTyLabel;
     BtnSample: TTyButton;
@@ -44,7 +43,6 @@ type
     procedure SwitchLight(Sender: TObject);
     procedure SwitchDark(Sender: TObject);
     procedure SwitchGreen(Sender: TObject);
-    procedure SwitchClassic(Sender: TObject);
     procedure PickAccent(Sender: TObject);
     procedure ResetAccentClick(Sender: TObject);
   private
@@ -79,16 +77,44 @@ begin
   Result := AName;
 end;
 
+{ Locate the repo themes/ folder by walking up from the exe until themes/auto.tycss is found. }
+function LocalThemesDir: string;
+var
+  Dir: string;
+  i: Integer;
+begin
+  Dir := ExtractFilePath(ExpandFileName(ParamStr(0)));
+  for i := 1 to 8 do
+  begin
+    if FileExists(Dir + 'themes' + PathDelim + 'auto.tycss') then
+      Exit(Dir + 'themes' + PathDelim);
+    Dir := ExtractFilePath(ExcludeTrailingPathDelimiter(Dir));
+    if Dir = '' then Break;
+  end;
+  Result := '';
+end;
+
 procedure TMainForm.FormCreate(Sender: TObject);
 var
   names: TStringArray;
   i: Integer;
+  base: string;
 begin
-  // Built-in themes are compiled in, so the switcher works without locating a themes/ folder.
+  // The compiled-in pair (default + system) plus every theme FILE in themes/ (the curated
+  // palettes AND the structural skins) — all pickable from the one combo.
   TyRegisterBuiltinThemes;
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do
     ThemeCombo.Items.Add(names[i]);
+  names := TyRegisterThemeDir(LocalThemesDir);
+  for i := 0 to High(names) do
+  begin
+    base := LowerCase(names[i]);
+    // auto == default; light/dark are just the default's single-mode halves — skip as picks.
+    if (base = 'auto') or (base = 'light') or (base = 'dark') then Continue;
+    if ThemeCombo.Items.IndexOf(names[i]) < 0 then
+      ThemeCombo.Items.Add(names[i]);
+  end;
   ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
   TyDefaultController.ThemeName := 'default';
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
@@ -134,16 +160,6 @@ begin
   TyDefaultController.ThemeFile := LocalThemeFile('green.tycss');
   ApplyChromeTheme(TyDefaultController);
   LblStatus.Caption := '当前主题：green（图片背景）';
-  UpdateAccentBtn;
-end;
-
-procedure TMainForm.SwitchClassic(Sender: TObject);
-begin
-  { The classic 3D skin (v3 skin engine showcase) is a FILE shipped in this example's folder —
-    render-style bevels + a grey system palette + a gradient title bar. }
-  TyDefaultController.ThemeFile := LocalThemeFile('classic.tycss');
-  ApplyChromeTheme(TyDefaultController);
-  LblStatus.Caption := '当前主题：经典 3D（render-style 斜角皮肤）';
   UpdateAccentBtn;
 end;
 

@@ -1,0 +1,5 @@
+/* github — curated dual-mode palette (moved out of the compiled-in pack into themes/).
+   The dual-mode neutral base is imported; only the 5 colour seeds differ per mode. */
+@import "auto.tycss";
+@mode light { :root { --accent: #0969DA; --surface: #FFFFFF; --on-surface: #1F2328; --border: #D1D9E0; --danger: #D1242F; } }
+@mode dark  { :root { --accent: #4493F8; --surface: #0D1117; --on-surface: #F0F6FC; --border: #3D444D; --danger: #F85149; } }

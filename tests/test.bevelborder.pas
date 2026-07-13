@@ -233,9 +233,8 @@ end;
 procedure TBevelBorderTest.TestClassicSkinFileValid;
 var m: TTyStyleModel; s: TTyStyleSet; fn: string;
 begin
-  // The classic skin ships in examples/theming/ (one level up from the test exe's tests/ dir).
-  fn := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples' + PathDelim +
-        'theming' + PathDelim + 'classic.tycss';
+  // The classic skin ships in themes/ (one level up from the test exe's tests/ dir).
+  fn := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim + 'classic.tycss';
   AssertTrue('classic.tycss exists', FileExists(fn));
   m := TTyStyleModel.Create;
   try
