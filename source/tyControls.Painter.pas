@@ -77,6 +77,10 @@ procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
 // few LCL-canvas caption-width measures (GroupBox/TabControl) go through this so
 // measured width matches drawn glyphs even when the theme sets no font-family.
 function TyEffectiveFontName(const AName: string): string;
+{ Clamp a device-px corner radius to half the shorter side of a WxH rect, so an oversized
+  "pill" radius (e.g. border-radius:100 on a short progress track) renders as a rounded pill
+  instead of overshooting the corner arcs into a pointed lens. Exposed for tests. }
+function TyClampRadiusPx(ARadiusPx, AWidthPx, AHeightPx: Integer): Integer;
 
 var
   // Concrete font used when a style/theme provides no font-family.
@@ -220,6 +224,20 @@ begin
   P2.y := cy + dy * t;
 end;
 
+{ Clamp a device-px corner radius to half the shorter side of its target rect. A large radius
+  (e.g. a "pill" progress bar with border-radius:100 on an 18px-tall track) would otherwise
+  overshoot the corner arcs into a pointed LENS shape; clamping makes it a proper rounded pill. }
+function TyClampRadiusPx(ARadiusPx, AWidthPx, AHeightPx: Integer): Integer;
+var m: Integer;
+begin
+  Result := ARadiusPx;
+  if Result < 0 then Result := 0;
+  m := AWidthPx;
+  if AHeightPx < m then m := AHeightPx;
+  m := m div 2;
+  if Result > m then Result := m;
+end;
+
 procedure TTyPainter.FillBackground(const ARect: TRect; const AFill: TTyFill; ARadiusLogical: Integer);
 begin
   FillBackground(ARect, AFill, TyUniformCorners(ARadiusLogical));
@@ -243,6 +261,7 @@ begin
   if ACorners.BR > r then r := ACorners.BR;
   if ACorners.BL > r then r := ACorners.BL;
   r := Scale(r);
+  r := TyClampRadiusPx(r, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
   opts := [];
   if ACorners.TL <= 0 then Include(opts, rrTopLeftSquare);
   if ACorners.TR <= 0 then Include(opts, rrTopRightSquare);
@@ -334,6 +353,7 @@ begin
   t := ARect.Top + half;
   rr := ARect.Right - 1 - half;
   b := ARect.Bottom - 1 - half;
+  r := TyClampRadiusPx(r, Round(rr - l), Round(b - t));   // hug the fill's clamped corner (no lens)
   if r <= 0 then
     FBmp.RectangleAntialias(l, t, rr, b, px, w)
   else
@@ -374,6 +394,7 @@ begin
   if FBmp = nil then
     Exit;
   r := Scale(ARadiusLogical);
+  r := TyClampRadiusPx(r, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
   blur := Scale(ABlurLogical);
   ox := Scale(AOffsetLogical.X);
   oy := Scale(AOffsetLogical.Y);
@@ -781,6 +802,7 @@ begin
     if ACorners.BR > r then r := ACorners.BR;
     if ACorners.BL > r then r := ACorners.BL;
     r := Scale(r);
+    r := TyClampRadiusPx(r, w, h);
     if r > 0 then
     begin
       opts := [];
@@ -818,6 +840,7 @@ begin
   if ACorners.BR > r then r := ACorners.BR;
   if ACorners.BL > r then r := ACorners.BL;
   r := Scale(r);
+  r := TyClampRadiusPx(r, w, h);
   if r <= 0 then Exit;   // square control -> no corner gaps to clean
   opts := [];
   if ACorners.TL <= 0 then Include(opts, rrTopLeftSquare);

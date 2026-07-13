@@ -36,6 +36,8 @@ type
     procedure TestFallbackFontNameApplied;
     procedure TestMeasureTextAndUnscale;
     procedure TestZeroFontSizeFallsBack;
+    procedure TestClampRadiusPx;
+    procedure TestLargeRadiusRendersPillNotLens;
   end;
 
 implementation
@@ -334,6 +336,32 @@ begin
   AssertTrue('zero font-size measures non-empty', (szZero.cx > 0) and (szZero.cy > 0));
   AssertEquals('zero width == fallback width', szFallback.cx, szZero.cx);
   AssertEquals('zero height == fallback height', szFallback.cy, szZero.cy);
+end;
+
+procedure TPainterTest.TestClampRadiusPx;
+{ A radius is clamped to half the SHORTER side (pill), never larger. }
+begin
+  AssertEquals('pill radius on a short track clamps to half-height', 9, TyClampRadiusPx(100, 420, 18));
+  AssertEquals('small radius passes through', 6, TyClampRadiusPx(6, 116, 34));
+  AssertEquals('clamps to half the shorter side (width here)', 10, TyClampRadiusPx(50, 20, 200));
+  AssertEquals('negative radius floors at 0', 0, TyClampRadiusPx(-3, 40, 40));
+end;
+
+procedure TPainterTest.TestLargeRadiusRendersPillNotLens;
+{ A wide, short rect with a huge "pill" radius (100 >> half-height 10) must render as a rounded
+  PILL, not a pointed lens. A near-end pixel (5,3) lies inside the pill's left semicircle
+  (centre (10,10) r=10) → filled; without the clamp the corner is cut into a point → transparent. }
+var
+  fill: TTyFill;
+  px: TBGRAPixel;
+begin
+  MakePainter(200, 20, 96);
+  fill := Default(TTyFill);
+  fill.Kind := tfkSolid;
+  fill.Color := TyRGB(255, 0, 0);
+  FPainter.FillBackground(Rect(0, 0, 200, 20), fill, 100);
+  px := FPainter.Bitmap.GetPixel(5, 3);
+  AssertEquals('near-end pixel filled (pill), not cut to a point (lens)', 255, px.alpha);
 end;
 
 initialization
