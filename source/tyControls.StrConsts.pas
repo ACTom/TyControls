@@ -144,11 +144,6 @@ resourcestring
 
   // --- TTyFormSurface (content host) ---
   rsTySurfacePurpose = 'TTyForm content host — click for details';
-  rsTySurfaceDeleted =
-    'You just deleted the form''s content host (Surface) — and with it every control it hosted.'#10#10 +
-    'Press Ctrl+Z now to undo.'#10#10 +
-    'If undo does not restore it, close this form WITHOUT saving and reopen it — the Surface is not ' +
-    'on the component palette, so it cannot be dropped back.';
 
   // --- Design-time hints (shown in the IDE designer) ---
   rsTyGraphicControlOnForm =

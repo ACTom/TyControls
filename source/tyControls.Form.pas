@@ -1394,15 +1394,13 @@ begin
      and (AComponent is TTyFormSurface) then
     FSurface := TTyFormSurface(AComponent)   // wire the content host (streamed or designer-added)
   else if (Operation = opRemove) and (AComponent = FSurface) then
-  begin
-    FSurface := nil;      // dropped ref: the one-surface guard relaxes so a new one can be added back
-    { Deleting the content host in the designer silently takes every control it hosted with it, and it
-      is not on the palette to drop back — so say so and point at Undo. Design surface only, and never
-      while the form itself is going away (that frees the surface too). }
-    if (csDesigning in ComponentState) and not (csDestroying in ComponentState)
-       and not (csLoading in ComponentState) then
-      MessageDlg('TyControls', rsTySurfaceDeleted, mtWarning, [mbOK], 0);
-  end
+    { Dropped ref: the one-surface guard relaxes so undo can paste the surface back in.
+      Deliberately NO dialog here. A warning used to live in this branch and it was actively harmful:
+      opRemove fires for EVERY removal — including the ones the designer performs internally while
+      undoing — so it popped on Ctrl+Z, and running a modal loop inside a destruction notification
+      interferes with the designer's own delete/undo bookkeeping. An undo that works protects the
+      user far better than a dialog that breaks it. }
+    FSurface := nil
   else if (Operation = opRemove) and (AComponent = FController) then
     FController := nil;   // the bound controller was freed: drop the dangling ref
 end;
