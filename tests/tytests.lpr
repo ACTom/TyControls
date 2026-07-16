@@ -21,7 +21,7 @@ uses
   test.headercontrol, test.listgrouppanel,
   test.checkbox,
   test.radiobutton, test.controls.panel, test.controls.combobox,
-  test.controls.scrollbar, test.form, test.themes,
+  test.controls.scrollbar, test.form, test.formsurface, test.themes,
   test.listbox,
   test.progressbar,
   test.toggleswitch,

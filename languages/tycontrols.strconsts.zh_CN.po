@@ -466,3 +466,32 @@ msgstr "上一级"
 #: tycontrols.strconsts.rspvcannotpreview
 msgid "Cannot preview this file"
 msgstr "无法预览此文件"
+
+#: tycontrols.strconsts.rstygraphiccontrolonform
+#, object-pascal-format
+msgid ""
+"The graphic control \"%s\" was placed directly on the form.\n"
+"Windowless (graphic) controls paint onto the form itself and will be HIDDEN behind the \n"
+"content area. Move it into the Surface content container so it stays visible."
+msgstr ""
+"图形控件 \"%s\" 被直接放在了窗体上。\n"
+"无窗口的图形控件绘制在窗体自身上,会被内容区遮挡而看不见。\n"
+"请把它移进 Surface 内容容器,它才会显示。"
+
+#: tycontrols.strconsts.rstysurfacedeleted
+msgid ""
+"You just deleted the form's content host (Surface) — and with it every control it hosted.\n"
+"\n"
+"Without it the window cannot paint its outermost right/bottom pixels, and it is not on the component palette, so it cannot simply be dropped back.\n"
+"\n"
+"Press Ctrl+Z to undo."
+msgstr ""
+"你刚刚删除了窗体的内容宿主(Surface)—— 它承载的所有控件也随之一起被删除了。\n"
+"\n"
+"没有它,窗口就画不到最外圈的右/下边缘像素;而且它不在组件面板上,无法直接拖回来。\n"
+"\n"
+"请按 Ctrl+Z 撤销。"
+
+#: tycontrols.strconsts.rstysurfacepurpose
+msgid "TTyForm content host — click for details"
+msgstr "TTyForm 内容宿主 —— 点击查看说明"

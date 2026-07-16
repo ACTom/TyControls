@@ -70,3 +70,18 @@ msgstr ""
 msgid "Show Previous Page"
 msgstr ""
 
+#: tycontrols.design.rsdtsurfacepurposetext
+msgid ""
+"TyFormSurface is the content host of a TTyForm — the panel every control on the form lives on.\n"
+"\n"
+"A borderless, resizable window cannot paint its own outermost pixels: the compositor gives it a backing surface smaller than the window, which leaves an unpainted band along the right and bottom edges. A CHILD window has no such limit and paints edge to edge, so TTyForm renders its themed background onto this surface instead of onto itself.\n"
+"\n"
+"Your controls must live on the surface. Graphic (windowless) controls such as TTyLabel paint onto their parent, so one placed directly on the form is hidden behind the surface.\n"
+"\n"
+"Keep exactly one surface per form, leave it filling the form, and do not delete it."
+msgstr ""
+
+#: tycontrols.design.rsdtsurfacepurposetitle
+msgid "Why this control exists"
+msgstr ""
+

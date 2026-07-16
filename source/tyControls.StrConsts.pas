@@ -142,6 +142,20 @@ resourcestring
   // --- Preview box ---
   rsPvCannotPreview  = 'Cannot preview this file';
 
+  // --- TTyFormSurface (content host) ---
+  rsTySurfacePurpose = 'TTyForm content host — click for details';
+  rsTySurfaceDeleted =
+    'You just deleted the form''s content host (Surface) — and with it every control it hosted.'#10#10 +
+    'Without it the window cannot paint its outermost right/bottom pixels, and it is not on the ' +
+    'component palette, so it cannot simply be dropped back.'#10#10 +
+    'Press Ctrl+Z to undo.';
+
+  // --- Design-time hints (shown in the IDE designer) ---
+  rsTyGraphicControlOnForm =
+    'The graphic control "%s" was placed directly on the form.'#10 +
+    'Windowless (graphic) controls paint onto the form itself and will be HIDDEN behind the '#10 +
+    'content area. Move it into the Surface content container so it stays visible.';
+
 implementation
 
 end.
