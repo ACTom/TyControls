@@ -1308,16 +1308,28 @@ begin
 end;
 
 function TTyForm.ChildClassAllowed(ChildClass: TClass): Boolean;
+var
+  I, N: Integer;
 begin
-  { One content host per form. The surface is not on the component palette, so the only way to get a
-    second one is copy/paste — refuse it. Everything ELSE is allowed: blocking ordinary controls here
-    would raise from SetParent (the designer reports "Error moving component"), and we deliberately
-    only HINT about those (see InsertControl). Design surface only, and never mid-load, since this
-    also gates SetParent at runtime — library users must stay free to parent controls in code. }
+  { One content host per form: refuse a SECOND surface. Everything ELSE is allowed — blocking ordinary
+    controls here would raise from SetParent (the designer reports "Error moving component"), and we
+    deliberately only HINT about those (see InsertControl). Design surface only, and never mid-load,
+    since this also gates SetParent at runtime — library users must stay free to parent in code.
+
+    "Already have one" is decided by counting surfaces actually PARENTED to the form, NOT by FSurface:
+    Notification(opInsert) points FSurface at a new surface the moment it joins the form's components,
+    which happens BEFORE its SetParent — so testing FSurface here made the guard veto the very paste
+    that undo uses to restore a deleted surface (it read as "a second one"). The pasted surface is not
+    parented yet, so the count is 0 and undo goes through, while a genuine second one still sees 1. }
   if (csDesigning in ComponentState) and not (csLoading in ComponentState)
-     and (FSurface <> nil) and (ChildClass <> nil)
-     and ChildClass.InheritsFrom(TTyFormSurface) then
-    Result := False
+     and (ChildClass <> nil) and ChildClass.InheritsFrom(TTyFormSurface) then
+  begin
+    N := 0;
+    for I := 0 to ControlCount - 1 do
+      if Controls[I] is TTyFormSurface then
+        Inc(N);
+    Result := N = 0;
+  end
   else
     Result := inherited ChildClassAllowed(ChildClass);
 end;
