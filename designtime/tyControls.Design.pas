@@ -729,6 +729,14 @@ begin
      TTyFindDialog, TTyReplaceDialog, TTyProgressDialog, TTyAboutDialog,
      TTyOpenDialog, TTySaveDialog, TTyOpenPictureDialog, TTySavePictureDialog,
      TTyOpenPreviewDialog, TTySavePreviewDialog]);
+  { The content host must be a REGISTERED COMPONENT CLASS — undo and paste both rebuild components
+    through that registry, so without it deleting the surface is IRREVERSIBLE: it takes every control
+    it hosted with it and Ctrl+Z then fails with "class is not a registered component class". (The
+    designer cannot be stopped from deleting it: its gates only cover the root, inherited components,
+    and components not owned by the lookup root — and ours must be form-owned to reach the .lfm.) So
+    make deletion RECOVERABLE instead. RegisterNoIcon, not RegisterComponents: registered, but with no
+    palette icon — the surface comes from the form template, not from users dropping it. }
+  RegisterNoIcon([TTyFormSurface]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',
