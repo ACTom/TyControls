@@ -144,8 +144,6 @@ resourcestring
 
   // --- TTyFormSurface (content host) ---
   rsTySurfacePurpose = 'TTyForm content host — click for details';
-  rsTySurfaceWrongParent =
-    'A TyFormSurface is a TTyForm''s content host: it can only be placed directly on a TTyForm.';
   rsTySurfaceDeleted =
     'You just deleted the form''s content host (Surface) — and with it every control it hosted.'#10#10 +
     'Press Ctrl+Z to undo.'#10#10 +

@@ -34,7 +34,7 @@ uses
   WM_NCCALCSIZE/WM_NCHITTEST are handled with the current Resizable / border-zone / caption
   height. Safe to call repeatedly and when AForm has no handle (no-op). No-op off Windows. }
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
-  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean; ABgColor: Cardinal);
+  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean);
 
 { Begin a native top-edge resize of AForm. The flush title bar covers the top (there is no NC
   strip there), so the OS can't start a top resize itself; the title bar calls this from its top
@@ -70,7 +70,6 @@ type
     CaptionH: Integer;
     Maximized: Boolean;   // engine (work-area) maximize -> suppress the NC resize inset
     WorkArea: TRect;      // monitor work area (LCL-sourced) -> pin the client when maximized
-    BgColor: COLORREF;    // themed form background -> fill the SYSRGN-unreachable right/bottom edge band
   end;
 
 var
@@ -269,7 +268,7 @@ begin
 end;
 
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
-  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean; ABgColor: Cardinal);
+  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean);
 var
   Wnd: HWND;
   st: PNcState;
@@ -292,7 +291,6 @@ begin
   st^.BorderZone := ABorderZone;
   st^.CaptionH := ACaptionHeight;
   st^.Maximized := AMaximized;
-  st^.BgColor := ABgColor;
   if AForm.Monitor <> nil then
     st^.WorkArea := AForm.Monitor.WorkareaRect;   // LCL-sourced; pins the client when maximized
   ApplyThickFrame(Wnd, AResizable, AAllowMaximize);
@@ -322,7 +320,7 @@ end;
 {$ELSE}
 
 procedure TyWin32ApplyNcResize(AForm: TCustomForm; AResizable: Boolean;
-  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean; ABgColor: Cardinal);
+  ABorderZone, ACaptionHeight: Integer; AMaximized, AAllowMaximize: Boolean);
 begin
   // Non-Windows widgetset: native NC resize is a Win32-only strategy. GTK/Qt use the
   // AdjustClientRect gutter + WM handoff; Cocoa uses the resizable styleMask (later phases).

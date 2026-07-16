@@ -482,7 +482,3 @@ msgstr ""
 msgid "TTyForm content host — click for details"
 msgstr ""
 
-#: tycontrols.strconsts.rstysurfacewrongparent
-msgid "A TyFormSurface is a TTyForm's content host: it can only be placed directly on a TTyForm."
-msgstr ""
-

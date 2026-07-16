@@ -734,10 +734,11 @@ begin
     CopySelectionToStream) and undoes it by PASTING that text back — so undo runs through the same
     registry paste does. RegisterNoIcon, not RegisterComponents: registered (so undo works) but with
     no palette icon, since the surface only ever comes from the form template.
-    Pasting a SECOND surface still fails — TTyForm.ChildClassAllowed refuses it once the form has one
-    (the paste surfaces that as a raw LFM read error; blocking is what matters). Undo is unaffected:
-    by then the old surface is gone, so the guard lets it back in. Nesting is refused by
-    TTyFormSurface.ChildClassAllowed. }
+    Pasting a stray surface is NOT blocked: the designer's paste reaches its parent without routing
+    through the SetParent a guard could hook, so the guards we tried only ever caught the form itself
+    while every other container let one through — half a fence, so they were removed. Harmless in
+    practice: the surface is not on the palette, so a stray one only appears if you deliberately copy
+    it, and a form ignores any surface that is not its own. }
   RegisterNoIcon([TTyFormSurface]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.

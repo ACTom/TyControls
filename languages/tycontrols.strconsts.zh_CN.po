@@ -482,10 +482,6 @@ msgstr ""
 msgid "TTyForm content host — click for details"
 msgstr "TTyForm 内容宿主 —— 点击查看说明"
 
-#: tycontrols.strconsts.rstysurfacewrongparent
-msgid "A TyFormSurface is a TTyForm's content host: it can only be placed directly on a TTyForm."
-msgstr "TyFormSurface 是 TTyForm 的内容宿主:它只能直接放在 TTyForm 上。"
-
 #: tycontrols.strconsts.rstysurfacedeleted
 msgid ""
 "You just deleted the form's content host (Surface) — and with it every control it hosted.\n"

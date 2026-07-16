@@ -20,7 +20,7 @@ unit tyControls.FormSurface;
 interface
 
 uses
-  Classes, SysUtils, Controls, tyControls.Base, tyControls.StrConsts;
+  Classes, Controls, tyControls.Base, tyControls.StrConsts;
 
 type
   TTyFormSurface = class(TTyCustomControl)
@@ -29,20 +29,6 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure Paint; override;
-    { CLASS INVARIANT: a surface is a TTyForm's content host, so its parent is always a TTyForm.
-      Enforced ungated (design time, load time and runtime alike) — legitimate use always parents to a
-      TTyForm, so it costs nothing; an earlier csDesigning/csLoading gate was pointless anyway, since
-      pasting IS streaming and csLoading is set exactly when you would want to catch it.
-
-      KNOWN LIMIT — this does NOT stop the designer from pasting a surface into another container
-      (the title bar, a panel, even another surface): verified in the real IDE, the paste evidently
-      reaches its parent without routing through the SetParent that would run this check, so only
-      TTyForm.ChildClassAllowed (which the base CheckNewParent does consult, via the parent) still
-      bites — hence pasting onto the FORM is refused while pasting elsewhere is not. Accepted: the
-      surface is not on the palette, so a stray one only happens if you deliberately copy/paste it,
-      and the form simply ignores any surface that is not its own. What this override still buys is
-      the invariant against code-level misuse. }
-    procedure CheckNewParent(AParent: TWinControl); override;
   public
     constructor Create(AOwner: TComponent); override;
   published
@@ -79,13 +65,6 @@ constructor TTyFormSurface.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls];   // it hosts the form's controls (drop target)
-end;
-
-procedure TTyFormSurface.CheckNewParent(AParent: TWinControl);
-begin
-  inherited CheckNewParent(AParent);
-  if (AParent <> nil) and not (AParent is TTyForm) then
-    raise EInvalidOperation.Create(rsTySurfaceWrongParent);
 end;
 
 function TTyFormSurface.GetPurpose: string;

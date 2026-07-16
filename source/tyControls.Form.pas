@@ -237,10 +237,6 @@ type
       Surface — is allowed, but a GRAPHIC (windowless) control there renders onto the form and is
       occluded by the Surface, so we warn the user to move it into the Surface. Runtime unaffected. }
     procedure InsertControl(AControl: TControl; Index: Integer); override;
-    { DESIGN-TIME block: exactly ONE content Surface per form. Everything else stays allowed (a
-      control may sit on the form; it only gets the hint above). Gated on csDesigning and never
-      during load, because ChildClassAllowed also gates SetParent at RUNTIME. }
-    function ChildClassAllowed(ChildClass: TClass): Boolean; override;
     { Non-mac: the associated menu bar owns shortcut dispatch — forward the key to
       its TMainMenu before the inherited (Form.Menu / action-list) handling. On mac
       the global Form.Menu already does this, so the override just calls inherited. }
@@ -1311,33 +1307,6 @@ begin
       Format(rsTyGraphicControlOnForm, [AControl.ClassName]), mtWarning, [mbOK], 0);
 end;
 
-function TTyForm.ChildClassAllowed(ChildClass: TClass): Boolean;
-var
-  I, N: Integer;
-begin
-  { One content host per form: refuse a SECOND surface. Everything ELSE is allowed — blocking ordinary
-    controls here would raise from SetParent (the designer reports "Error moving component"), and we
-    deliberately only HINT about those (see InsertControl). Design surface only, and never mid-load,
-    since this also gates SetParent at runtime — library users must stay free to parent in code.
-
-    "Already have one" is decided by counting surfaces actually PARENTED to the form, NOT by FSurface:
-    Notification(opInsert) points FSurface at a new surface the moment it joins the form's components,
-    which happens BEFORE its SetParent — so testing FSurface here made the guard veto the very paste
-    that undo uses to restore a deleted surface (it read as "a second one"). The pasted surface is not
-    parented yet, so the count is 0 and undo goes through, while a genuine second one still sees 1. }
-  if (csDesigning in ComponentState) and not (csLoading in ComponentState)
-     and (ChildClass <> nil) and ChildClass.InheritsFrom(TTyFormSurface) then
-  begin
-    N := 0;
-    for I := 0 to ControlCount - 1 do
-      if Controls[I] is TTyFormSurface then
-        Inc(N);
-    Result := N = 0;
-  end
-  else
-    Result := inherited ChildClassAllowed(ChildClass);
-end;
-
 procedure TTyForm.DoWarnSurfaceDeleted(Data: PtrInt);
 begin
   MessageDlg('TyControls', rsTySurfaceDeleted, mtWarning, [mbOK], 0);
@@ -1578,7 +1547,7 @@ end;
 
 procedure TTyForm.ApplyResizeStrategy;
 {$IFDEF LCLWin32}
-var capH, zone: Integer; resiz: Boolean; bandRGB: Cardinal; tc: TTyColor;
+var capH, zone: Integer; resiz: Boolean;
 {$ENDIF}
 begin
   if csDesigning in ComponentState then Exit;   // never poke the window on the design surface
@@ -1595,17 +1564,9 @@ begin
     // minimum window height that would otherwise leave a content sliver under the title bar, and
     // a collapsed window needs no edge-resize anyway. Restored when unrolled.
     resiz := FResizable and not FRolledUp;
-    // The themed form background, as a COLORREF, for the subclass to fill the SYSRGN-unreachable
-    // right/bottom sizing-border band (the borderless-WS_THICKFRAME edge stripe). $FFFFFFFF = no
-    // theme -> the subclass skips the band fill.
-    if ThemedBgColor(tc) then
-      bandRGB := Cardinal(TyRedOf(tc)) or (Cardinal(TyGreenOf(tc)) shl 8) or (Cardinal(TyBlueOf(tc)) shl 16)
-    else
-      bandRGB := $FFFFFFFF;
     TyWin32ApplyNcResize(Self, resiz, zone, capH,
       (FEngine <> nil) and FEngine.Maximized,   // engine (work-area) maximize -> no NC inset
-      resiz and (biMaximize in BorderIcons),    // allow native maximize (WS_MAXIMIZEBOX)
-      bandRGB);
+      resiz and (biMaximize in BorderIcons));   // allow native maximize (WS_MAXIMIZEBOX)
   end;
   {$ENDIF}
   // GTK/Qt: the AdjustClientRect gutter + WM handoff (Phase C). Cocoa: resizable styleMask
