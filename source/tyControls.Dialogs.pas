@@ -52,6 +52,8 @@ type
     procedure DoShow; override;        // fires for ShowModal + modeless Show: adopt the app's theme
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
+    { FTitle/FButtonBar are Owner-less (see CreateNew), so free them ourselves. }
+    destructor Destroy; override;
     // Resolve the app's style controller (owner TTyForm, else Application.MainForm) and
     // apply it to this dialog + all its child controls, so a CreateNew dialog matches the
     // themed app instead of falling back to the built-in default. Called from DoShow;
@@ -357,6 +359,16 @@ end;
 
 { TTyDialog }
 
+destructor TTyDialog.Destroy;
+begin
+  { Owner-less (CreateNew) -> nothing auto-frees these. Release them BEFORE inherited: freeing FTitle
+    fires the FreeNotification that SetTitleBar registered, which nils the inherited FTitleBar, so the
+    base destructor no longer touches a dangling bar. }
+  FreeAndNil(FTitle);
+  FreeAndNil(FButtonBar);
+  inherited Destroy;
+end;
+
 constructor TTyDialog.CreateNew(AOwner: TComponent; Num: Integer);
 begin
   inherited CreateNew(AOwner, Num);
@@ -370,12 +382,18 @@ begin
   // renders with no caption strip / close button. Assigning it via the TitleBar property
   // routes through SetTitleBar, which wires the chrome engine + caption buttons; because
   // BorderIcons = [biSystemMenu] is already set, SyncCaptionButtons yields close-only.
-  FTitle := TTyTitleBar.Create(Self);
+  { Owner = NIL, deliberately. Owned by the dialog, these code-created controls satisfy
+    TCustomForm.GetChildren's "Owner = Root" test, so the DESIGNER writes them into the .lfm — and the
+    running app then fails to stream them back ("Class TTyPanel not found", since these classes are
+    not RegisterClass'd) or, once registered, builds a SECOND title bar and button bar on top of the
+    ones CreateNew just made. Owner-less keeps them internal: never streamed, never in the Object
+    Inspector. Destroy frees them. }
+  FTitle := TTyTitleBar.Create(nil);
   FTitle.Parent := Self;
   FTitle.Align := alTop;              // dock as the top caption strip
   FTitle.Caption := Caption;          // seed (usually '' here; builders set Caption later)
   TitleBar := FTitle;                 // -> SetTitleBar: engine + close-button wiring
-  FButtonBar := TTyPanel.Create(Self);
+  FButtonBar := TTyPanel.Create(nil);
   FButtonBar.Parent := Self;
   FButtonBar.Align := alBottom;
   FButtonBar.Height := 44;
