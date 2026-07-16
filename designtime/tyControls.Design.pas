@@ -122,10 +122,12 @@ type
     function GetLocalizedDescription: string; override;
   end;
 
-  { File > New entry that creates a unit whose form descends from TTyDialog — a themed,
-    close-only, non-resizable modal dialog base. The generated form comes WITH a top-aligned
-    TTyTitleBar already associated and BorderIcons = [biSystemMenu] (close button only), so the
-    user can design custom dialog content + buttons and show it modally. }
+  { File > New entry that creates a unit whose form descends from TTyDialog — a themed, close-only,
+    non-resizable modal dialog base, with BorderIcons = [biSystemMenu] (close button only), ready for
+    the user to design content + buttons on and show modally.
+    The generated .lfm is BARE — no title bar, no content surface. TTyDialog builds its own title bar
+    and bottom button bar in CreateNew (emitting one here gave the dialog TWO stacked title bars), and
+    being non-resizable it has no WS_THICKFRAME edge band for a surface to cover. }
   TTyDialogFileDescriptor = class(TTyFormFileDescriptor)
   public
     constructor Create; override;
@@ -500,14 +502,11 @@ function TTyDialogFileDescriptor.GetInterfaceSource(const Filename, SourceName,
 const
   LE = LineEnding;
 begin
-  // NOTE: full override (base hard-codes TTyForm). Keep in sync with
-  // TTyFormFileDescriptor.GetInterfaceSource — only the ancestor class differs
-  // (class(TTyDialog) vs class(TTyForm)), and there is no controller field.
-  // The pre-placed title bar is the only published field.
+  { Full override (the base hard-codes TTyForm). No published fields: TTyDialog brings its own title
+    bar and button bar from CreateNew, and there is no surface (see GetResourceSource). }
   Result :=
      'type' + LE
     + '  T' + ResourceName + ' = class(TTyDialog)' + LE
-    + '    TyTitleBar1: TTyTitleBar;' + LE
     + '  private' + LE
     + LE
     + '  public' + LE
@@ -523,10 +522,12 @@ function TTyDialogFileDescriptor.GetResourceSource(const ResourceName: string): 
 const
   LE = LineEnding;
 begin
-  // NOTE: full override (base hard-codes TTyForm). Keep in sync with
-  // TTyFormFileDescriptor.GetResourceSource — only the ancestor class + the added
-  // BorderIcons = [biSystemMenu] line differ (and there is no controller object). The
-  // form-level `TitleBar =` is a forward ref the LFM reader resolves via fixups.
+  { Full override (the base hard-codes TTyForm). Unlike the FORM template this emits NO title bar and
+    NO content surface, because TTyDialog is not TTyForm:
+      - TTyDialog.CreateNew already BUILDS and associates its own title bar (and a bottom button bar).
+        Emitting one here produced a second, stacked title bar and hijacked the `TitleBar =` binding.
+      - A dialog is Resizable=False, so it has no WS_THICKFRAME and none of the unpaintable edge band
+        the surface exists to cover — controls sit directly on the dialog, as they always have. }
   Result :=
      'object ' + ResourceName + ': T' + ResourceName + LE
     + '  Left = 300' + LE
@@ -535,15 +536,6 @@ begin
     + '  Width = 480' + LE
     + '  BorderIcons = [biSystemMenu]' + LE
     + '  Caption = ''' + ResourceName + '''' + LE
-    + '  TitleBar = TyTitleBar1' + LE
-    + '  object TyTitleBar1: TTyTitleBar' + LE
-    + '    Left = 0' + LE
-    + '    Height = 32' + LE
-    + '    Top = 0' + LE
-    + '    Width = 480' + LE
-    + '    Align = alTop' + LE
-    + '    Caption = ''' + ResourceName + '''' + LE
-    + '  end' + LE
     + 'end' + LE;
 end;
 
