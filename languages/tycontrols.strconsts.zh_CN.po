@@ -480,17 +480,25 @@ msgstr ""
 
 #: tycontrols.strconsts.rstysurfacedeleted
 msgid ""
-"You just deleted the form's content host (Surface) — and with it every control it hosted.\n"
-"\n"
-"Without it the window cannot paint its outermost right/bottom pixels, and it is not on the component palette, so it cannot simply be dropped back.\n"
-"\n"
-"Press Ctrl+Z to undo."
+"You just deleted the form's content host (Surface) — and with it every control it hosted.
+"
+"
+"
+"Undo will NOT bring it back, and it is not on the component palette, so it cannot be dropped back either.
+"
+"
+"
+"To recover: close this form WITHOUT saving, then reopen it."
 msgstr ""
-"你刚刚删除了窗体的内容宿主(Surface)—— 它承载的所有控件也随之一起被删除了。\n"
-"\n"
-"没有它,窗口就画不到最外圈的右/下边缘像素;而且它不在组件面板上,无法直接拖回来。\n"
-"\n"
-"请按 Ctrl+Z 撤销。"
+"你刚刚删除了窗体的内容宿主(Surface)—— 它承载的所有控件也随之一起被删除了。
+"
+"
+"
+"撤销**无法**把它找回来,它也不在组件面板上、拖不回来。
+"
+"
+"
+"补救办法:**不要保存**,直接关闭这个窗体,然后重新打开。"
 
 #: tycontrols.strconsts.rstysurfacepurpose
 msgid "TTyForm content host — click for details"
