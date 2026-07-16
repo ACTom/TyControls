@@ -469,7 +469,20 @@ msgid ""
 "content area. Move it into the Surface content container so it stays visible."
 msgstr ""
 
+#: tycontrols.strconsts.rstysurfacedeleted
+msgid ""
+"You just deleted the form's content host (Surface) — and with it every control it hosted.\n"
+"\n"
+"Press Ctrl+Z to undo.\n"
+"\n"
+"If undo does not restore it, close this form WITHOUT saving and reopen it — the Surface is not on the component palette, so it cannot be dropped back."
+msgstr ""
+
 #: tycontrols.strconsts.rstysurfacepurpose
 msgid "TTyForm content host — click for details"
+msgstr ""
+
+#: tycontrols.strconsts.rstysurfacewrongparent
+msgid "A TyFormSurface is a TTyForm's content host: it can only be placed directly on a TTyForm."
 msgstr ""
 

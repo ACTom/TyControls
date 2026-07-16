@@ -194,6 +194,10 @@ type
     FUnrolledHeight: Integer;         // full height saved while rolled up
     FSavedMinHeight: Integer;         // Constraints.MinHeight saved while rolled up
     procedure DoFollowTick(Sender: TObject);
+    { Deferred so the dialog runs AFTER the designer's delete finishes. Showing it straight from
+      Notification(opRemove) — i.e. inside a destruction notification — ran a modal loop in the middle
+      of the designer's own delete/undo bookkeeping. }
+    procedure DoWarnSurfaceDeleted(Data: PtrInt);
     procedure UpdateFollowWatch;      // (re)arm/disarm FFollowTimer per the controller's Follow policy
     // ITyGlassHost
     function GlassBackdrop: TBGRABitmap;
@@ -1334,6 +1338,11 @@ begin
     Result := inherited ChildClassAllowed(ChildClass);
 end;
 
+procedure TTyForm.DoWarnSurfaceDeleted(Data: PtrInt);
+begin
+  MessageDlg('TyControls', rsTySurfaceDeleted, mtWarning, [mbOK], 0);
+end;
+
 procedure TTyForm.UpdateFollowWatch;
 { P4 (D8 / §3.7) LIVE FOLLOW. Arm a low-frequency poll timer exactly while the bound
   controller is following the OS; free it otherwise. We POLL rather than hook a window
@@ -1406,13 +1415,16 @@ begin
      and (AComponent is TTyFormSurface) then
     FSurface := TTyFormSurface(AComponent)   // wire the content host (streamed or designer-added)
   else if (Operation = opRemove) and (AComponent = FSurface) then
-    { Dropped ref: the one-surface guard relaxes so undo can paste the surface back in.
-      Deliberately NO dialog here. A warning used to live in this branch and it was actively harmful:
-      opRemove fires for EVERY removal — including the ones the designer performs internally while
-      undoing — so it popped on Ctrl+Z, and running a modal loop inside a destruction notification
-      interferes with the designer's own delete/undo bookkeeping. An undo that works protects the
-      user far better than a dialog that breaks it. }
-    FSurface := nil
+  begin
+    FSurface := nil;   // dropped ref: the one-surface guard relaxes so undo can paste it back in
+    { Deleting the host takes every control it hosted with it, so say so — but NEVER from inside this
+      notification (a modal loop there breaks the designer's delete/undo bookkeeping). Queue it to run
+      once the delete has finished. Undo restores by PASTING, which fires opInsert, not opRemove, so
+      this cannot pop spuriously on Ctrl+Z. }
+    if (csDesigning in ComponentState) and not (csDestroying in ComponentState)
+       and not (csLoading in ComponentState) then
+      Application.QueueAsyncCall(@DoWarnSurfaceDeleted, 0);
+  end
   else if (Operation = opRemove) and (AComponent = FController) then
     FController := nil;   // the bound controller was freed: drop the dangling ref
 end;

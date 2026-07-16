@@ -20,7 +20,7 @@ unit tyControls.FormSurface;
 interface
 
 uses
-  Classes, Controls, tyControls.Base, tyControls.StrConsts;
+  Classes, SysUtils, Controls, tyControls.Base, tyControls.StrConsts;
 
 type
   TTyFormSurface = class(TTyCustomControl)
@@ -29,11 +29,13 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure Paint; override;
-    { DESIGN-TIME block: a surface must never host another surface (it is the form's one content
-      host, not a general panel). TTyForm refuses a second one at the form level; this closes the
-      other way in — pasting/dropping one INSIDE the existing surface. Gated on csDesigning and never
-      during load, because ChildClassAllowed also gates SetParent at runtime. }
-    function ChildClassAllowed(ChildClass: TClass): Boolean; override;
+    { DESIGN-TIME block, on the CHILD side: a surface belongs directly on a TTyForm and nowhere else.
+      Guarding here rather than in each container's ChildClassAllowed is what makes it airtight —
+      otherwise a surface can be pasted into the title bar, a group box, any container at all, since
+      only TTyForm and the surface itself would ever refuse it. Covers the nested-surface case too (a
+      surface is not a TTyForm). Gated on csDesigning and never mid-load: SetParent runs this at
+      runtime as well, and library users must stay free to parent in code. }
+    procedure CheckNewParent(AParent: TWinControl); override;
   public
     constructor Create(AOwner: TComponent); override;
   published
@@ -72,13 +74,12 @@ begin
   ControlStyle := ControlStyle + [csAcceptsControls];   // it hosts the form's controls (drop target)
 end;
 
-function TTyFormSurface.ChildClassAllowed(ChildClass: TClass): Boolean;
+procedure TTyFormSurface.CheckNewParent(AParent: TWinControl);
 begin
+  inherited CheckNewParent(AParent);
   if (csDesigning in ComponentState) and not (csLoading in ComponentState)
-     and (ChildClass <> nil) and ChildClass.InheritsFrom(TTyFormSurface) then
-    Result := False    // no surface inside a surface
-  else
-    Result := inherited ChildClassAllowed(ChildClass);
+     and (AParent <> nil) and not (AParent is TTyForm) then
+    raise EInvalidOperation.Create(rsTySurfaceWrongParent);
 end;
 
 function TTyFormSurface.GetPurpose: string;

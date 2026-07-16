@@ -481,3 +481,21 @@ msgstr ""
 #: tycontrols.strconsts.rstysurfacepurpose
 msgid "TTyForm content host — click for details"
 msgstr "TTyForm 内容宿主 —— 点击查看说明"
+
+#: tycontrols.strconsts.rstysurfacewrongparent
+msgid "A TyFormSurface is a TTyForm's content host: it can only be placed directly on a TTyForm."
+msgstr "TyFormSurface 是 TTyForm 的内容宿主:它只能直接放在 TTyForm 上。"
+
+#: tycontrols.strconsts.rstysurfacedeleted
+msgid ""
+"You just deleted the form's content host (Surface) — and with it every control it hosted.\n"
+"\n"
+"Press Ctrl+Z to undo.\n"
+"\n"
+"If undo does not restore it, close this form WITHOUT saving and reopen it — the Surface is not on the component palette, so it cannot be dropped back."
+msgstr ""
+"你刚刚删除了窗体的内容宿主(Surface)—— 它承载的所有控件也随之一起被删除了。\n"
+"\n"
+"请按 Ctrl+Z 撤销。\n"
+"\n"
+"如果撤销没能恢复,请不要保存、直接关闭这个窗体再重新打开 —— Surface 不在组件面板上,拖不回来。"
