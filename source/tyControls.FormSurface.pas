@@ -29,6 +29,11 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure Paint; override;
+    { DESIGN-TIME block: a surface must never host another surface (it is the form's one content
+      host, not a general panel). TTyForm refuses a second one at the form level; this closes the
+      other way in — pasting/dropping one INSIDE the existing surface. Gated on csDesigning and never
+      during load, because ChildClassAllowed also gates SetParent at runtime. }
+    function ChildClassAllowed(ChildClass: TClass): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
   published
@@ -65,6 +70,15 @@ constructor TTyFormSurface.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls];   // it hosts the form's controls (drop target)
+end;
+
+function TTyFormSurface.ChildClassAllowed(ChildClass: TClass): Boolean;
+begin
+  if (csDesigning in ComponentState) and not (csLoading in ComponentState)
+     and (ChildClass <> nil) and ChildClass.InheritsFrom(TTyFormSurface) then
+    Result := False    // no surface inside a surface
+  else
+    Result := inherited ChildClassAllowed(ChildClass);
 end;
 
 function TTyFormSurface.GetPurpose: string;

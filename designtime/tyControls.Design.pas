@@ -729,13 +729,16 @@ begin
      TTyFindDialog, TTyReplaceDialog, TTyProgressDialog, TTyAboutDialog,
      TTyOpenDialog, TTySaveDialog, TTyOpenPictureDialog, TTySavePictureDialog,
      TTyOpenPreviewDialog, TTySavePreviewDialog]);
-  { NOTE — do NOT register TTyFormSurface as a component class (no RegisterComponents, no
-    RegisterNoIcon). Tried, and it is a net loss: it does NOT make deleting the surface undoable (the
-    designer's undo cannot restore it either way), while it lets the paste machinery get far enough to
-    fail with a raw "read error in <unit>.lfm", and it lets a surface be pasted INSIDE another one.
-    Leaving it stream-only (RegisterClass, in tyControls.FormSurface) makes the designer refuse both
-    pastes up front with a clear "class is not a registered component class" — which is exactly the
-    outcome we want, since the surface only ever comes from the form template. }
+  { The content host MUST be a registered component class, or deleting it is unrecoverable. The
+    designer records a delete by SERIALIZING the component to LFM text (TDesigner.AddUndoAction ->
+    CopySelectionToStream) and undoes it by PASTING that text back — so undo runs through the same
+    registry paste does. RegisterNoIcon, not RegisterComponents: registered (so undo works) but with
+    no palette icon, since the surface only ever comes from the form template.
+    Pasting a SECOND surface still fails — TTyForm.ChildClassAllowed refuses it once the form has one
+    (the paste surfaces that as a raw LFM read error; blocking is what matters). Undo is unaffected:
+    by then the old surface is gone, so the guard lets it back in. Nesting is refused by
+    TTyFormSurface.ChildClassAllowed. }
+  RegisterNoIcon([TTyFormSurface]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',

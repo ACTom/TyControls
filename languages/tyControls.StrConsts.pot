@@ -473,9 +473,9 @@ msgstr ""
 msgid ""
 "You just deleted the form's content host (Surface) — and with it every control it hosted.\n"
 "\n"
-"Undo will NOT bring it back, and it is not on the component palette, so it cannot be dropped back either.\n"
+"Press Ctrl+Z now to undo.\n"
 "\n"
-"To recover: close this form WITHOUT saving, then reopen it."
+"If undo does not restore it, close this form WITHOUT saving and reopen it — the Surface is not on the component palette, so it cannot be dropped back."
 msgstr ""
 
 #: tycontrols.strconsts.rstysurfacepurpose

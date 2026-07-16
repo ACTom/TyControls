@@ -484,21 +484,21 @@ msgid ""
 "
 "
 "
-"Undo will NOT bring it back, and it is not on the component palette, so it cannot be dropped back either.
+"Press Ctrl+Z now to undo.
 "
 "
 "
-"To recover: close this form WITHOUT saving, then reopen it."
+"If undo does not restore it, close this form WITHOUT saving and reopen it — the Surface is not on the component palette, so it cannot be dropped back."
 msgstr ""
 "你刚刚删除了窗体的内容宿主(Surface)—— 它承载的所有控件也随之一起被删除了。
 "
 "
 "
-"撤销**无法**把它找回来,它也不在组件面板上、拖不回来。
+"请立刻按 Ctrl+Z 撤销。
 "
 "
 "
-"补救办法:**不要保存**,直接关闭这个窗体,然后重新打开。"
+"如果撤销没能恢复,请**不要保存**、直接关闭这个窗体再重新打开 —— Surface 不在组件面板上,拖不回来。"
 
 #: tycontrols.strconsts.rstysurfacepurpose
 msgid "TTyForm content host — click for details"
