@@ -29,6 +29,7 @@ type
     it NEVER creates UI controls (project rule: demo UI is edited in the .lfm only). }
 
   TDemoMainForm = class(TTyForm)
+    Surface: TTyFormSurface;
     BtnDanger: TTyButton;
     BtnDlgAbout: TTyButton;
     BtnPrimary: TTyButton;

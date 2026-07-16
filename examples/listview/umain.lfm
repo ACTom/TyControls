@@ -11,186 +11,193 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = TitleBar1
-  object TitleBar1: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 700
     Top = 0
     Width = 1200
-    Align = alTop
-    Caption = 'TTyListView  ·  TyControls'
-    object DarkSwitch: TTyToggleSwitch
-      Left = 852
-      Height = 24
-      Top = 5
+    Align = alClient
+    object TitleBar1: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 1200
+      Align = alTop
+      Caption = 'TTyListView  ·  TyControls'
+      object DarkSwitch: TTyToggleSwitch
+        Left = 852
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 934
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object DivLeft: TTyDivider
+      Left = 16
+      Height = 22
+      Top = 44
+      Width = 700
+      Caption = '集合模式 — 点表头排序 · 多选 · 框选 · 敲字母定位 · 勾「分组」按类型折叠'
+      Alignment = taLeftJustify
+    end
+    object BtnReport: TTyButton
+      Left = 16
+      Height = 30
+      Top = 72
       Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+      Caption = '报表'
+      OnClick = BtnReportClick
     end
-    object ThemeCombo: TTyComboBox
-      Left = 934
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+    object BtnList: TTyButton
+      Left = 96
+      Height = 30
+      Top = 72
+      Width = 74
+      Caption = '列表'
+      OnClick = BtnListClick
     end
-  end
-  object DivLeft: TTyDivider
-    Left = 16
-    Height = 22
-    Top = 44
-    Width = 700
-    Caption = '集合模式 — 点表头排序 · 多选 · 框选 · 敲字母定位 · 勾「分组」按类型折叠'
-    Alignment = taLeftJustify
-  end
-  object BtnReport: TTyButton
-    Left = 16
-    Height = 30
-    Top = 72
-    Width = 74
-    Caption = '报表'
-    OnClick = BtnReportClick
-  end
-  object BtnList: TTyButton
-    Left = 96
-    Height = 30
-    Top = 72
-    Width = 74
-    Caption = '列表'
-    OnClick = BtnListClick
-  end
-  object BtnIcon: TTyButton
-    Left = 176
-    Height = 30
-    Top = 72
-    Width = 74
-    Caption = '大图标'
-    OnClick = BtnIconClick
-  end
-  object BtnSmallIcon: TTyButton
-    Left = 256
-    Height = 30
-    Top = 72
-    Width = 74
-    Caption = '小图标'
-    OnClick = BtnSmallIconClick
-  end
-  object BtnTile: TTyButton
-    Left = 336
-    Height = 30
-    Top = 72
-    Width = 74
-    Caption = '平铺'
-    OnClick = BtnTileClick
-  end
-  object ChkGrid: TTyCheckBox
-    Left = 424
-    Height = 22
-    Top = 76
-    Width = 74
-    Caption = '网格线'
-    OnChange = ChkGridChange
-  end
-  object ChkMulti: TTyCheckBox
-    Left = 502
-    Height = 22
-    Top = 76
-    Width = 66
-    Caption = '多选'
-    Checked = True
-    State = cbChecked
-    OnChange = ChkMultiChange
-  end
-  object ChkBoxes: TTyCheckBox
-    Left = 570
-    Height = 22
-    Top = 76
-    Width = 66
-    Caption = '复选框'
-    OnChange = ChkBoxesChange
-  end
-  object ChkGroup: TTyCheckBox
-    Left = 638
-    Height = 22
-    Top = 76
-    Width = 78
-    Caption = '分组'
-    OnChange = ChkGroupChange
-  end
-  object LV1: TTyListView
-    Left = 16
-    Height = 496
-    Top = 112
-    Width = 700
-    MultiSelect = True
-    HotTrack = True
-    OnSelectItem = LV1SelectItem
-    OnChange = LV1Change
-    OnColumnClick = LV1ColumnClick
-    OnItemActivate = LV1ItemActivate
-  end
-  object LblStatus: TTyLabel
-    Left = 16
-    Height = 18
-    Top = 618
-    Width = 700
-    Caption = '未选中'
-  end
-  object LblHint: TTyLabel
-    Left = 16
-    Height = 18
-    Top = 644
-    Width = 700
-    Caption = '按「大小」降序排,文件夹仍在最后;F2 重命名焦点项;双击表头分隔线自适应列宽'
-  end
-  object DivRight: TTyDivider
-    Left = 736
-    Height = 22
-    Top = 44
-    Width = 448
-    Caption = '虚拟模式 — 100,000 行'
-    Alignment = taLeftJustify
-  end
-  object BtnSortVirtual: TTyButton
-    Left = 736
-    Height = 30
-    Top = 72
-    Width = 130
-    Caption = '按「值」排序'
-    OnClick = BtnSortVirtualClick
-  end
-  object BtnJumpEnd: TTyButton
-    Left = 874
-    Height = 30
-    Top = 72
-    Width = 130
-    Caption = '跳到第 99999 行'
-    OnClick = BtnJumpEndClick
-  end
-  object LV2: TTyListView
-    Left = 736
-    Height = 496
-    Top = 112
-    Width = 448
-    OwnerData = True
-    GridLines = True
-    HotTrack = True
-    OnGetItemText = LV2GetItemText
-    OnSelectItem = LV2SelectItem
-  end
-  object LblVirtual: TTyLabel
-    Left = 736
-    Height = 18
-    Top = 618
-    Width = 448
-    Caption = 'ItemCount = 100000,行对象 = 0'
-  end
-  object LblVirtualNote: TTyLabel
-    Left = 736
-    Height = 18
-    Top = 644
-    Width = 448
-    Caption = '勾选态存在 app 自己的数组里 —— OwnerData 模式下控件不缓存任何状态'
+    object BtnIcon: TTyButton
+      Left = 176
+      Height = 30
+      Top = 72
+      Width = 74
+      Caption = '大图标'
+      OnClick = BtnIconClick
+    end
+    object BtnSmallIcon: TTyButton
+      Left = 256
+      Height = 30
+      Top = 72
+      Width = 74
+      Caption = '小图标'
+      OnClick = BtnSmallIconClick
+    end
+    object BtnTile: TTyButton
+      Left = 336
+      Height = 30
+      Top = 72
+      Width = 74
+      Caption = '平铺'
+      OnClick = BtnTileClick
+    end
+    object ChkGrid: TTyCheckBox
+      Left = 424
+      Height = 22
+      Top = 76
+      Width = 74
+      Caption = '网格线'
+      OnChange = ChkGridChange
+    end
+    object ChkMulti: TTyCheckBox
+      Left = 502
+      Height = 22
+      Top = 76
+      Width = 66
+      Caption = '多选'
+      Checked = True
+      State = cbChecked
+      OnChange = ChkMultiChange
+    end
+    object ChkBoxes: TTyCheckBox
+      Left = 570
+      Height = 22
+      Top = 76
+      Width = 66
+      Caption = '复选框'
+      OnChange = ChkBoxesChange
+    end
+    object ChkGroup: TTyCheckBox
+      Left = 638
+      Height = 22
+      Top = 76
+      Width = 78
+      Caption = '分组'
+      OnChange = ChkGroupChange
+    end
+    object LV1: TTyListView
+      Left = 16
+      Height = 496
+      Top = 112
+      Width = 700
+      MultiSelect = True
+      HotTrack = True
+      OnSelectItem = LV1SelectItem
+      OnChange = LV1Change
+      OnColumnClick = LV1ColumnClick
+      OnItemActivate = LV1ItemActivate
+    end
+    object LblStatus: TTyLabel
+      Left = 16
+      Height = 18
+      Top = 618
+      Width = 700
+      Caption = '未选中'
+    end
+    object LblHint: TTyLabel
+      Left = 16
+      Height = 18
+      Top = 644
+      Width = 700
+      Caption = '按「大小」降序排,文件夹仍在最后;F2 重命名焦点项;双击表头分隔线自适应列宽'
+    end
+    object DivRight: TTyDivider
+      Left = 736
+      Height = 22
+      Top = 44
+      Width = 448
+      Caption = '虚拟模式 — 100,000 行'
+      Alignment = taLeftJustify
+    end
+    object BtnSortVirtual: TTyButton
+      Left = 736
+      Height = 30
+      Top = 72
+      Width = 130
+      Caption = '按「值」排序'
+      OnClick = BtnSortVirtualClick
+    end
+    object BtnJumpEnd: TTyButton
+      Left = 874
+      Height = 30
+      Top = 72
+      Width = 130
+      Caption = '跳到第 99999 行'
+      OnClick = BtnJumpEndClick
+    end
+    object LV2: TTyListView
+      Left = 736
+      Height = 496
+      Top = 112
+      Width = 448
+      OwnerData = True
+      GridLines = True
+      HotTrack = True
+      OnGetItemText = LV2GetItemText
+      OnSelectItem = LV2SelectItem
+    end
+    object LblVirtual: TTyLabel
+      Left = 736
+      Height = 18
+      Top = 618
+      Width = 448
+      Caption = 'ItemCount = 100000,行对象 = 0'
+    end
+    object LblVirtualNote: TTyLabel
+      Left = 736
+      Height = 18
+      Top = 644
+      Width = 448
+      Caption = '勾选态存在 app 自己的数组里 —— OwnerData 模式下控件不缓存任何状态'
+    end
   end
 end

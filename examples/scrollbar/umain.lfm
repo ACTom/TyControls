@@ -10,70 +10,77 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 360
     Top = 0
     Width = 480
-    Align = alTop
-    Caption = 'TTyScrollBar  ·  TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 132
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 480
+      Align = alTop
+      Caption = 'TTyScrollBar  ·  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 132
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 214
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
     end
-    object ThemeCombo: TTyComboBox
-      Left = 214
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+    object LblTip: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 48
+      Width = 432
+      Caption = '拖动滑块、点击轨道/箭头，或用方向键/PageUp/PageDown 滚动'
     end
-  end
-  object LblTip: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 48
-    Width = 432
-    Caption = '拖动滑块、点击轨道/箭头，或用方向键/PageUp/PageDown 滚动'
-  end
-  object VBar: TTyScrollBar
-    Left = 28
-    Height = 236
-    Top = 80
-    Width = 18
-    Kind = sbVertical
-    Min = 0
-    Max = 200
-    Position = 100
-    PageSize = 20
-    SmallChange = 5
-    OnChange = BarChange
-  end
-  object HBar: TTyScrollBar
-    Left = 80
-    Height = 18
-    Top = 298
-    Width = 372
-    Kind = sbHorizontal
-    Min = 0
-    Max = 100
-    Position = 25
-    PageSize = 10
-    SmallChange = 2
-    OnChange = BarChange
-  end
-  object LblStatus: TTyLabel
-    Left = 80
-    Height = 90
-    Top = 96
-    Width = 372
-    WordWrap = True
+    object VBar: TTyScrollBar
+      Left = 28
+      Height = 236
+      Top = 80
+      Width = 18
+      Kind = sbVertical
+      Min = 0
+      Max = 200
+      Position = 100
+      PageSize = 20
+      SmallChange = 5
+      OnChange = BarChange
+    end
+    object HBar: TTyScrollBar
+      Left = 80
+      Height = 18
+      Top = 298
+      Width = 372
+      Kind = sbHorizontal
+      Min = 0
+      Max = 100
+      Position = 25
+      PageSize = 10
+      SmallChange = 2
+      OnChange = BarChange
+    end
+    object LblStatus: TTyLabel
+      Left = 80
+      Height = 90
+      Top = 96
+      Width = 372
+      WordWrap = True
+    end
   end
 end

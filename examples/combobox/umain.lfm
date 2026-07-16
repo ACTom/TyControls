@@ -10,78 +10,85 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 320
     Top = 0
     Width = 520
-    Align = alTop
-    Caption = 'TTyComboBox  ·  TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 172
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 520
+      Align = alTop
+      Caption = 'TTyComboBox  ·  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 172
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 254
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
     end
-    object ThemeCombo: TTyComboBox
-      Left = 254
+    object LblList: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 52
+      Width = 224
+      Caption = '只读下拉（Sorted 排序，可键盘 type-ahead）：'
+    end
+    object ListCombo: TTyComboBox
+      Left = 24
       Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+      Top = 76
+      Width = 224
+      Style = csDropDownList
+      Sorted = True
+      DropDownCount = 5
+      OnChange = ComboChange
+      OnSelect = ComboSelect
+      OnDropDown = ComboDropDown
+      OnCloseUp = ComboCloseUp
     end
-  end
-  object LblList: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 52
-    Width = 224
-    Caption = '只读下拉（Sorted 排序，可键盘 type-ahead）：'
-  end
-  object ListCombo: TTyComboBox
-    Left = 24
-    Height = 26
-    Top = 76
-    Width = 224
-    Style = csDropDownList
-    Sorted = True
-    DropDownCount = 5
-    OnChange = ComboChange
-    OnSelect = ComboSelect
-    OnDropDown = ComboDropDown
-    OnCloseUp = ComboCloseUp
-  end
-  object LblEdit: TTyLabel
-    Left = 272
-    Height = 20
-    Top = 52
-    Width = 224
-    Caption = '可编辑（前缀自动完成 / 大写 / 限长 10）：'
-  end
-  object EditCombo: TTyComboBox
-    Left = 272
-    Height = 26
-    Top = 76
-    Width = 224
-    Style = csDropDown
-    DropDownCount = 6
-    MaxLength = 10
-    CharCase = ecUppercase
-    OnChange = ComboChange
-    OnSelect = ComboSelect
-    OnDropDown = ComboDropDown
-    OnCloseUp = ComboCloseUp
-  end
-  object LblStatus: TTyLabel
-    Left = 24
-    Height = 22
-    Top = 140
-    Width = 472
-    Caption = '事件状态：（等待操作，尝试展开或键入前缀）'
+    object LblEdit: TTyLabel
+      Left = 272
+      Height = 20
+      Top = 52
+      Width = 224
+      Caption = '可编辑（前缀自动完成 / 大写 / 限长 10）：'
+    end
+    object EditCombo: TTyComboBox
+      Left = 272
+      Height = 26
+      Top = 76
+      Width = 224
+      Style = csDropDown
+      DropDownCount = 6
+      MaxLength = 10
+      CharCase = ecUppercase
+      OnChange = ComboChange
+      OnSelect = ComboSelect
+      OnDropDown = ComboDropDown
+      OnCloseUp = ComboCloseUp
+    end
+    object LblStatus: TTyLabel
+      Left = 24
+      Height = 22
+      Top = 140
+      Width = 472
+      Caption = '事件状态：（等待操作，尝试展开或键入前缀）'
+    end
   end
 end

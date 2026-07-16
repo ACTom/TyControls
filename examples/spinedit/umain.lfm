@@ -10,117 +10,125 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 420
     Top = 0
     Width = 440
-    Align = alTop
-    Caption = 'TTySpinEdit  ·  TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 92
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+    TabOrder = 0
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 440
+      Align = alTop
+      Caption = 'TTySpinEdit  ·  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 92
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 174
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
     end
-    object ThemeCombo: TTyComboBox
-      Left = 174
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+    object LblQty: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 52
+      Width = 380
+      Caption = '数量（0..100，步进 1；箭头/方向键/滚轮/键入）：'
     end
-  end
-  object LblQty: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 52
-    Width = 380
-    Caption = '数量（0..100，步进 1；箭头/方向键/滚轮/键入）：'
-  end
-  object SpinQty: TTySpinEdit
-    Left = 24
-    Height = 28
-    Top = 76
-    Width = 130
-    MinValue = 0
-    MaxValue = 100
-    Increment = 1
-    Value = 10
-    OnChange = SpinChange
-  end
-  object LblOfs: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 120
-    Width = 380
-    Caption = '偏移（-50..50，步进 5，含负值范围）：'
-  end
-  object SpinOfs: TTySpinEdit
-    Left = 24
-    Height = 28
-    Top = 144
-    Width = 130
-    MinValue = -50
-    MaxValue = 50
-    Increment = 5
-    Value = 0
-    OnChange = SpinChange
-  end
-  object LblYear: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 188
-    Width = 380
-    Caption = '年份（右对齐 Alignment，MaxLength=4）：'
-  end
-  object SpinYear: TTySpinEdit
-    Left = 24
-    Height = 28
-    Top = 212
-    Width = 130
-    MinValue = 1900
-    MaxValue = 2100
-    Value = 2026
-    Alignment = taRightJustify
-    MaxLength = 4
-    OnChange = SpinChange
-  end
-  object LblLock: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 256
-    Width = 380
-    Caption = '锁定（ReadOnly=True：不可编辑/步进/滚轮）：'
-  end
-  object SpinLock: TTySpinEdit
-    Left = 24
-    Height = 28
-    Top = 280
-    Width = 130
-    MinValue = 0
-    MaxValue = 999
-    Value = 42
-    ReadOnly = True
-    OnChange = SpinChange
-  end
-  object LblStatusCap: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 332
-    Width = 60
-    Caption = '状态：'
-  end
-  object LblStatus: TTyLabel
-    Left = 84
-    Height = 20
-    Top = 332
-    Width = 336
-    Caption = '（改变任一数值以查看 OnChange 输出）'
+    object SpinQty: TTySpinEdit
+      Left = 24
+      Height = 28
+      Top = 76
+      Width = 130
+      MinValue = 0
+      MaxValue = 100
+      Increment = 1
+      Value = 10
+      OnChange = SpinChange
+    end
+    object LblOfs: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 120
+      Width = 380
+      Caption = '偏移（-50..50，步进 5，含负值范围）：'
+    end
+    object SpinOfs: TTySpinEdit
+      Left = 24
+      Height = 28
+      Top = 144
+      Width = 130
+      MinValue = -50
+      MaxValue = 50
+      Increment = 5
+      Value = 0
+      OnChange = SpinChange
+    end
+    object LblYear: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 188
+      Width = 380
+      Caption = '年份（右对齐 Alignment，MaxLength=4）：'
+    end
+    object SpinYear: TTySpinEdit
+      Left = 24
+      Height = 28
+      Top = 212
+      Width = 130
+      MinValue = 1900
+      MaxValue = 2100
+      Value = 2026
+      Alignment = taRightJustify
+      MaxLength = 4
+      OnChange = SpinChange
+    end
+    object LblLock: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 256
+      Width = 380
+      Caption = '锁定（ReadOnly=True：不可编辑/步进/滚轮）：'
+    end
+    object SpinLock: TTySpinEdit
+      Left = 24
+      Height = 28
+      Top = 280
+      Width = 130
+      MinValue = 0
+      MaxValue = 999
+      Value = 42
+      ReadOnly = True
+      OnChange = SpinChange
+    end
+    object LblStatusCap: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 332
+      Width = 60
+      Caption = '状态：'
+    end
+    object LblStatus: TTyLabel
+      Left = 84
+      Height = 20
+      Top = 332
+      Width = 336
+      Caption = '（改变任一数值以查看 OnChange 输出）'
+    end
   end
 end

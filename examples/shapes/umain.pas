@@ -23,6 +23,7 @@ uses
 
 type
   TMainForm = class(TTyForm)
+    Surface: TTyFormSurface;
     TitleBar1: TTyTitleBar;
     ThemeCombo: TTyComboBox;
 

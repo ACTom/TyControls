@@ -10,97 +10,104 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 520
     Top = 0
     Width = 760
-    Align = alTop
-    Caption = 'Splitter  · TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 412
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
-    end
-    object ThemeCombo: TTyComboBox
-      Left = 494
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
-    end
-  end
-  object LblStatus: TTyLabel
-    Left = 0
-    Height = 30
-    Top = 490
-    Width = 760
-    Align = alBottom
-    Alignment = taCenter
-    Caption = '拖动竖直分隔条改变左栏宽度；拖动水平分隔条改变上区高度'
-  end
-  object ClientHost: TTyPanel
-    Left = 0
-    Height = 456
-    Top = 34
-    Width = 760
     Align = alClient
-    object LeftPanel: TTyPanel
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 760
+      Align = alTop
+      Caption = 'Splitter  · TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 412
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 494
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object LblStatus: TTyLabel
+      Left = 0
+      Height = 30
+      Top = 490
+      Width = 760
+      Align = alBottom
+      Alignment = taCenter
+      Caption = '拖动竖直分隔条改变左栏宽度；拖动水平分隔条改变上区高度'
+    end
+    object ClientHost: TTyPanel
       Left = 0
       Height = 456
-      Top = 0
-      Width = 220
-      Align = alLeft
-      Caption = '左栏 (alLeft)'
-    end
-    object VSplit: TTySplitter
-      Left = 220
-      Height = 456
-      Top = 0
-      Width = 6
-      Align = alLeft
-      MinSize = 120
-      ResizeStyle = rsUpdate
-      OnCanResize = HandleCanResize
-      OnMoved = HandleMoved
-    end
-    object RightHost: TTyPanel
-      Left = 226
-      Height = 456
-      Top = 0
-      Width = 534
+      Top = 34
+      Width = 760
       Align = alClient
-      object TopPanel: TTyPanel
+      object LeftPanel: TTyPanel
         Left = 0
-        Height = 200
+        Height = 456
         Top = 0
-        Width = 534
-        Align = alTop
-        Caption = '上区 (alTop)'
+        Width = 220
+        Align = alLeft
+        Caption = '左栏 (alLeft)'
       end
-      object HSplit: TTySplitter
-        Left = 0
-        Height = 6
-        Top = 200
-        Width = 534
-        Align = alTop
-        MinSize = 80
+      object VSplit: TTySplitter
+        Left = 220
+        Height = 456
+        Top = 0
+        Width = 6
+        Align = alLeft
+        MinSize = 120
         ResizeStyle = rsUpdate
+        OnCanResize = HandleCanResize
         OnMoved = HandleMoved
       end
-      object BottomPanel: TTyPanel
-        Left = 0
-        Height = 250
-        Top = 206
+      object RightHost: TTyPanel
+        Left = 226
+        Height = 456
+        Top = 0
         Width = 534
         Align = alClient
-        Caption = '下区 (alClient)'
+        object TopPanel: TTyPanel
+          Left = 0
+          Height = 200
+          Top = 0
+          Width = 534
+          Align = alTop
+          Caption = '上区 (alTop)'
+        end
+        object HSplit: TTySplitter
+          Left = 0
+          Height = 6
+          Top = 200
+          Width = 534
+          Align = alTop
+          MinSize = 80
+          ResizeStyle = rsUpdate
+          OnMoved = HandleMoved
+        end
+        object BottomPanel: TTyPanel
+          Left = 0
+          Height = 250
+          Top = 206
+          Width = 534
+          Align = alClient
+          Caption = '下区 (alClient)'
+        end
       end
     end
   end

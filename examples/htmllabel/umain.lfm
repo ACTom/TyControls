@@ -11,46 +11,53 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = TitleBar1
-  object TitleBar1: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 400
     Top = 0
     Width = 680
-    Align = alTop
-    Caption = 'TTyHtmlLabel  ·  TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 332
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+    Align = alClient
+    object TitleBar1: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 680
+      Align = alTop
+      Caption = 'TTyHtmlLabel  ·  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 332
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 414
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
     end
-    object ThemeCombo: TTyComboBox
-      Left = 414
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+    object Rich: TTyHtmlLabel
+      Left = 24
+      Height = 260
+      Top = 52
+      Width = 632
+      Anchors = [akTop, akLeft, akRight]
+      WordWrap = True
     end
-  end
-  object Rich: TTyHtmlLabel
-    Left = 24
-    Height = 260
-    Top = 52
-    Width = 632
-    Anchors = [akTop, akLeft, akRight]
-    WordWrap = True
-  end
-  object LblStatus: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 360
-    Width = 632
-    Anchors = [akLeft, akRight, akBottom]
-    Caption = '点击上面的链接试试'
+    object LblStatus: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 360
+      Width = 632
+      Anchors = [akLeft, akRight, akBottom]
+      Caption = '点击上面的链接试试'
+    end
   end
 end

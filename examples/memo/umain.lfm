@@ -10,78 +10,85 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 420
     Top = 0
     Width = 480
-    Align = alTop
-    Caption = 'TTyMemo  · TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 132
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 480
+      Align = alTop
+      Caption = 'TTyMemo  · TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 132
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 214
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object LblPrompt: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 46
+      Width = 448
+      Caption = '多行文本编辑器（回车换行、方向键导航、滚轮滚动）：'
+    end
+    object Memo: TTyMemo
+      Left = 16
+      Height = 240
+      Top = 72
+      Width = 448
+      ScrollBars = ssAutoVertical
+      WordWrap = False
+      Lines.Strings = (
+        '第一行：欢迎使用 TyControls TTyMemo 多行编辑控件。'
+        '第二行：按回车换行，退格/删除可跨行合并。'
+        '第三行：方向键、Home/End 用于光标导航，支持选择与复制粘贴。'
+        '第四行：内容超出可见区域时右侧出现垂直滚动条。'
+        '第五行：也可以用鼠标滚轮上下滚动。'
+        '第六行：勾选下方“自动换行”后，超长的一行会按词边界折行为多个视觉行——这是一条足够长用于演示软换行效果的文字。'
+        '第七行：勾选“只读”后将无法编辑，但仍可导航与复制。'
+        '第八行：最后一行。'
+      )
+      OnChange = MemoChange
+    end
+    object ChkReadOnly: TTyCheckBox
+      Left = 16
       Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
-    end
-    object ThemeCombo: TTyComboBox
-      Left = 214
-      Height = 26
-      Top = 4
+      Top = 322
       Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+      Caption = '只读 (ReadOnly)'
+      OnClick = ReadOnlyClick
     end
-  end
-  object LblPrompt: TTyLabel
-    Left = 16
-    Height = 20
-    Top = 46
-    Width = 448
-    Caption = '多行文本编辑器（回车换行、方向键导航、滚轮滚动）：'
-  end
-  object Memo: TTyMemo
-    Left = 16
-    Height = 240
-    Top = 72
-    Width = 448
-    ScrollBars = ssAutoVertical
-    WordWrap = False
-    Lines.Strings = (
-      '第一行：欢迎使用 TyControls TTyMemo 多行编辑控件。'
-      '第二行：按回车换行，退格/删除可跨行合并。'
-      '第三行：方向键、Home/End 用于光标导航，支持选择与复制粘贴。'
-      '第四行：内容超出可见区域时右侧出现垂直滚动条。'
-      '第五行：也可以用鼠标滚轮上下滚动。'
-      '第六行：勾选下方“自动换行”后，超长的一行会按词边界折行为多个视觉行——这是一条足够长用于演示软换行效果的文字。'
-      '第七行：勾选“只读”后将无法编辑，但仍可导航与复制。'
-      '第八行：最后一行。'
-    )
-    OnChange = MemoChange
-  end
-  object ChkReadOnly: TTyCheckBox
-    Left = 16
-    Height = 24
-    Top = 322
-    Width = 120
-    Caption = '只读 (ReadOnly)'
-    OnClick = ReadOnlyClick
-  end
-  object ChkWordWrap: TTyCheckBox
-    Left = 150
-    Height = 24
-    Top = 322
-    Width = 140
-    Caption = '自动换行 (WordWrap)'
-    OnClick = WordWrapClick
-  end
-  object LblInfo: TTyLabel
-    Left = 16
-    Height = 20
-    Top = 356
-    Width = 448
+    object ChkWordWrap: TTyCheckBox
+      Left = 150
+      Height = 24
+      Top = 322
+      Width = 140
+      Caption = '自动换行 (WordWrap)'
+      OnClick = WordWrapClick
+    end
+    object LblInfo: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 356
+      Width = 448
+    end
   end
 end

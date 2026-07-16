@@ -11,109 +11,117 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = TitleBar1
-  object TitleBar1: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 720
     Top = 0
     Width = 1024
-    Align = alTop
-    Caption = '文件浏览器  ·  TyControls'
-    object DarkSwitch: TTyToggleSwitch
-      Left = 676
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+    TabOrder = 0
+    Align = alClient
+    object TitleBar1: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 1024
+      Align = alTop
+      Caption = '文件浏览器  ·  TyControls'
+      object DarkSwitch: TTyToggleSwitch
+        Left = 676
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 758
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
     end
-    object ThemeCombo: TTyComboBox
-      Left = 758
-      Height = 26
-      Top = 4
+    object BtnUp: TTyButton
+      Left = 16
+      Height = 30
+      Top = 46
+      Width = 90
+      Caption = '上一级'
+      OnClick = BtnUpClick
+    end
+    object ChkHidden: TTyCheckBox
+      Left = 120
+      Height = 22
+      Top = 50
+      Width = 100
+      Caption = '显示隐藏'
+      OnChange = ChkHiddenChange
+    end
+    object ChkGroup: TTyCheckBox
+      Left = 232
+      Height = 22
+      Top = 50
       Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+      Caption = '按类型分组'
+      OnChange = ChkGroupChange
     end
-  end
-  object BtnUp: TTyButton
-    Left = 16
-    Height = 30
-    Top = 46
-    Width = 90
-    Caption = '上一级'
-    OnClick = BtnUpClick
-  end
-  object ChkHidden: TTyCheckBox
-    Left = 120
-    Height = 22
-    Top = 50
-    Width = 100
-    Caption = '显示隐藏'
-    OnChange = ChkHiddenChange
-  end
-  object ChkGroup: TTyCheckBox
-    Left = 232
-    Height = 22
-    Top = 50
-    Width = 120
-    Caption = '按类型分组'
-    OnChange = ChkGroupChange
-  end
-  object LblLookIn: TTyLabel
-    Left = 16
-    Height = 20
-    Top = 90
-    Width = 62
-    Caption = '查找范围:'
-  end
-  object LookIn: TTyShellComboBox
-    Left = 84
-    Height = 30
-    Top = 84
-    Width = 924
-    Anchors = [akTop, akLeft, akRight]
-    OnSelectPath = LookInSelectPath
-  end
-  object Tree1: TTyShellTreeView
-    Left = 16
-    Height = 528
-    Top = 124
-    Width = 300
-    Anchors = [akTop, akLeft, akBottom]
-    OnPathChange = Tree1PathChange
-  end
-  object List1: TTyShellListView
-    Left = 328
-    Height = 528
-    Top = 124
-    Width = 680
-    Anchors = [akTop, akLeft, akRight, akBottom]
-    OnFileActivate = List1FileActivate
-    OnDirectoryChange = List1DirectoryChange
-  end
-  object LblFilter: TTyLabel
-    Left = 16
-    Height = 20
-    Top = 668
-    Width = 62
-    Anchors = [akLeft, akBottom]
-    Caption = '文件类型:'
-  end
-  object FilterCombo: TTyFilterComboBox
-    Left = 84
-    Height = 30
-    Top = 662
-    Width = 360
-    Anchors = [akLeft, akBottom]
-    OnFilterChange = FilterComboFilterChange
-  end
-  object LblStatus: TTyLabel
-    Left = 16
-    Height = 20
-    Top = 698
-    Width = 992
-    Anchors = [akLeft, akRight, akBottom]
-    Caption = '双击文件夹进入,双击文件打开,F2 重命名'
+    object LblLookIn: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 90
+      Width = 62
+      Caption = '查找范围:'
+    end
+    object LookIn: TTyShellComboBox
+      Left = 84
+      Height = 30
+      Top = 84
+      Width = 924
+      Anchors = [akTop, akLeft, akRight]
+      OnSelectPath = LookInSelectPath
+    end
+    object Tree1: TTyShellTreeView
+      Left = 16
+      Height = 528
+      Top = 124
+      Width = 300
+      Anchors = [akTop, akLeft, akBottom]
+      OnPathChange = Tree1PathChange
+    end
+    object List1: TTyShellListView
+      Left = 328
+      Height = 528
+      Top = 124
+      Width = 680
+      Anchors = [akTop, akLeft, akRight, akBottom]
+      OnFileActivate = List1FileActivate
+      OnDirectoryChange = List1DirectoryChange
+    end
+    object LblFilter: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 668
+      Width = 62
+      Anchors = [akLeft, akBottom]
+      Caption = '文件类型:'
+    end
+    object FilterCombo: TTyFilterComboBox
+      Left = 84
+      Height = 30
+      Top = 662
+      Width = 360
+      Anchors = [akLeft, akBottom]
+      OnFilterChange = FilterComboFilterChange
+    end
+    object LblStatus: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 698
+      Width = 992
+      Anchors = [akLeft, akRight, akBottom]
+      Caption = '双击文件夹进入,双击文件打开,F2 重命名'
+    end
   end
 end

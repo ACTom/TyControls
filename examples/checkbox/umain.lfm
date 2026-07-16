@@ -10,101 +10,108 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 420
     Top = 0
     Width = 460
-    Align = alTop
-    Caption = 'TTyCheckBox  ·  TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 112
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 460
+      Align = alTop
+      Caption = 'TTyCheckBox  ·  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 112
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 194
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object LblTri: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 52
+      Width = 420
+      Caption = '三态复选框（点击循环 未选 → 选中 → 半选）：'
+    end
+    object CbTri: TTyCheckBox
+      Left = 24
       Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+      Top = 78
+      Width = 280
+      Caption = '包含全部子项(&A)'
+      AllowGrayed = True
+      State = cbGrayed
+      OnChange = TriChange
     end
-    object ThemeCombo: TTyComboBox
-      Left = 194
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+    object LblTriStatus: TTyLabel
+      Left = 24
+      Height = 22
+      Top = 106
+      Width = 420
     end
-  end
-  object LblTri: TTyLabel
-    Left = 20
-    Height = 22
-    Top = 52
-    Width = 420
-    Caption = '三态复选框（点击循环 未选 → 选中 → 半选）：'
-  end
-  object CbTri: TTyCheckBox
-    Left = 24
-    Height = 24
-    Top = 78
-    Width = 280
-    Caption = '包含全部子项(&A)'
-    AllowGrayed = True
-    State = cbGrayed
-    OnChange = TriChange
-  end
-  object LblTriStatus: TTyLabel
-    Left = 24
-    Height = 22
-    Top = 106
-    Width = 420
-  end
-  object LblPlain: TTyLabel
-    Left = 20
-    Height = 22
-    Top = 148
-    Width = 420
-    Caption = '普通两态复选框（OnChange 回显）：'
-  end
-  object CbPlain: TTyCheckBox
-    Left = 24
-    Height = 24
-    Top = 174
-    Width = 280
-    Caption = '接收邮件通知(&N)'
-    OnChange = PlainChange
-  end
-  object LblStatus: TTyLabel
-    Left = 24
-    Height = 22
-    Top = 202
-    Width = 420
-  end
-  object CbChecked: TTyCheckBox
-    Left = 24
-    Height = 24
-    Top = 244
-    Width = 280
-    Caption = '默认已勾选 (Checked)'
-    Checked = True
-    State = cbChecked
-  end
-  object CbDisabledChecked: TTyCheckBox
-    Left = 24
-    Height = 24
-    Top = 274
-    Width = 280
-    Caption = '禁用且勾选 (Enabled=False)'
-    Checked = True
-    State = cbChecked
-    Enabled = False
-  end
-  object CbDisabled: TTyCheckBox
-    Left = 24
-    Height = 24
-    Top = 304
-    Width = 280
-    Caption = '禁用且未勾选'
-    Enabled = False
+    object LblPlain: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 148
+      Width = 420
+      Caption = '普通两态复选框（OnChange 回显）：'
+    end
+    object CbPlain: TTyCheckBox
+      Left = 24
+      Height = 24
+      Top = 174
+      Width = 280
+      Caption = '接收邮件通知(&N)'
+      OnChange = PlainChange
+    end
+    object LblStatus: TTyLabel
+      Left = 24
+      Height = 22
+      Top = 202
+      Width = 420
+    end
+    object CbChecked: TTyCheckBox
+      Left = 24
+      Height = 24
+      Top = 244
+      Width = 280
+      Caption = '默认已勾选 (Checked)'
+      Checked = True
+      State = cbChecked
+    end
+    object CbDisabledChecked: TTyCheckBox
+      Left = 24
+      Height = 24
+      Top = 274
+      Width = 280
+      Caption = '禁用且勾选 (Enabled=False)'
+      Checked = True
+      State = cbChecked
+      Enabled = False
+    end
+    object CbDisabled: TTyCheckBox
+      Left = 24
+      Height = 24
+      Top = 304
+      Width = 280
+      Caption = '禁用且未勾选'
+      Enabled = False
+    end
   end
 end

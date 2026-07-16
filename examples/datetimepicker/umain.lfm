@@ -10,90 +10,97 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 320
     Top = 0
     Width = 420
-    Align = alTop
-    Caption = 'TTyDateTimePicker  ·  TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 72
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 420
+      Align = alTop
+      Caption = 'TTyDateTimePicker  ·  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 72
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 154
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
     end
-    object ThemeCombo: TTyComboBox
-      Left = 154
-      Height = 26
-      Top = 4
+    object LblDate: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 56
       Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+      Caption = '日期 (dtkDate)：'
     end
-  end
-  object LblDate: TTyLabel
-    Left = 20
-    Height = 22
-    Top = 56
-    Width = 120
-    Caption = '日期 (dtkDate)：'
-  end
-  object DatePicker: TTyDateTimePicker
-    Left = 150
-    Height = 26
-    Top = 54
-    Width = 180
-    Kind = dtkDate
-    DateFormat = 'yyyy-mm-dd'
-    OnChange = DateChanged
-    OnDropDown = DropDownOpened
-    OnCloseUp = DropDownClosed
-  end
-  object LblTime: TTyLabel
-    Left = 20
-    Height = 22
-    Top = 96
-    Width = 120
-    Caption = '时间 (dtkTime)：'
-  end
-  object TimePicker: TTyDateTimePicker
-    Left = 150
-    Height = 26
-    Top = 94
-    Width = 180
-    Kind = dtkTime
-    TimeFormat = 'hh:nn:ss'
-    OnChange = TimeChanged
-  end
-  object LblCheck: TTyLabel
-    Left = 20
-    Height = 22
-    Top = 136
-    Width = 120
-    Caption = '可空日期：'
-  end
-  object CheckPicker: TTyDateTimePicker
-    Left = 150
-    Height = 26
-    Top = 134
-    Width = 180
-    Kind = dtkDate
-    DateFormat = 'yyyy/mm/dd'
-    ShowCheckBox = True
-    Checked = False
-    OnChange = CheckPickerChanged
-    OnChecked = CheckPickerChecked
-  end
-  object LblStatus: TTyLabel
-    Left = 20
-    Height = 110
-    Top = 180
-    Width = 380
-    WordWrap = True
+    object DatePicker: TTyDateTimePicker
+      Left = 150
+      Height = 26
+      Top = 54
+      Width = 180
+      Kind = dtkDate
+      DateFormat = 'yyyy-mm-dd'
+      OnChange = DateChanged
+      OnDropDown = DropDownOpened
+      OnCloseUp = DropDownClosed
+    end
+    object LblTime: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 96
+      Width = 120
+      Caption = '时间 (dtkTime)：'
+    end
+    object TimePicker: TTyDateTimePicker
+      Left = 150
+      Height = 26
+      Top = 94
+      Width = 180
+      Kind = dtkTime
+      TimeFormat = 'hh:nn:ss'
+      OnChange = TimeChanged
+    end
+    object LblCheck: TTyLabel
+      Left = 20
+      Height = 22
+      Top = 136
+      Width = 120
+      Caption = '可空日期：'
+    end
+    object CheckPicker: TTyDateTimePicker
+      Left = 150
+      Height = 26
+      Top = 134
+      Width = 180
+      Kind = dtkDate
+      DateFormat = 'yyyy/mm/dd'
+      ShowCheckBox = True
+      Checked = False
+      OnChange = CheckPickerChanged
+      OnChecked = CheckPickerChecked
+    end
+    object LblStatus: TTyLabel
+      Left = 20
+      Height = 110
+      Top = 180
+      Width = 380
+      WordWrap = True
+    end
   end
 end

@@ -10,86 +10,93 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 300
     Top = 0
     Width = 400
-    Align = alTop
-    Caption = 'ToggleSwitch  · TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 52
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 400
+      Align = alTop
+      Caption = 'ToggleSwitch  · TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 52
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 134
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object LblDark: TTyLabel
+      Left = 24
       Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+      Top = 56
+      Width = 220
+      Caption = '深色模式：'
     end
-    object ThemeCombo: TTyComboBox
-      Left = 134
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+    object SwitchDark: TTyToggleSwitch
+      Left = 250
+      Height = 24
+      Top = 56
+      Width = 44
+      Checked = False
+      OnChange = SwitchChange
     end
-  end
-  object LblDark: TTyLabel
-    Left = 24
-    Height = 24
-    Top = 56
-    Width = 220
-    Caption = '深色模式：'
-  end
-  object SwitchDark: TTyToggleSwitch
-    Left = 250
-    Height = 24
-    Top = 56
-    Width = 44
-    Checked = False
-    OnChange = SwitchChange
-  end
-  object LblNotify: TTyLabel
-    Left = 24
-    Height = 24
-    Top = 100
-    Width = 220
-    Caption = '接收通知：'
-  end
-  object SwitchNotify: TTyToggleSwitch
-    Left = 250
-    Height = 24
-    Top = 100
-    Width = 44
-    Checked = True
-    OnChange = SwitchChange
-  end
-  object SwitchCaption: TTyToggleSwitch
-    Left = 24
-    Height = 24
-    Top = 144
-    Width = 220
-    Caption = '自动保存'
-    Checked = True
-    OnChange = SwitchChange
-  end
-  object SwitchDisabled: TTyToggleSwitch
-    Left = 24
-    Height = 24
-    Top = 188
-    Width = 220
-    Caption = '试验功能（禁用）'
-    Checked = False
-    Enabled = False
-    OnChange = SwitchChange
-  end
-  object LblStatus: TTyLabel
-    Left = 24
-    Height = 40
-    Top = 240
-    Width = 360
-    Caption = ''
+    object LblNotify: TTyLabel
+      Left = 24
+      Height = 24
+      Top = 100
+      Width = 220
+      Caption = '接收通知：'
+    end
+    object SwitchNotify: TTyToggleSwitch
+      Left = 250
+      Height = 24
+      Top = 100
+      Width = 44
+      Checked = True
+      OnChange = SwitchChange
+    end
+    object SwitchCaption: TTyToggleSwitch
+      Left = 24
+      Height = 24
+      Top = 144
+      Width = 220
+      Caption = '自动保存'
+      Checked = True
+      OnChange = SwitchChange
+    end
+    object SwitchDisabled: TTyToggleSwitch
+      Left = 24
+      Height = 24
+      Top = 188
+      Width = 220
+      Caption = '试验功能（禁用）'
+      Checked = False
+      Enabled = False
+      OnChange = SwitchChange
+    end
+    object LblStatus: TTyLabel
+      Left = 24
+      Height = 40
+      Top = 240
+      Width = 360
+      Caption = ''
+    end
   end
 end

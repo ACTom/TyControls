@@ -11,125 +11,132 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = TitleBar1
-  object TitleBar1: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 640
     Top = 0
     Width = 900
-    Align = alTop
-    Caption = 'TTyImageView  ·  TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 552
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+    Align = alClient
+    object TitleBar1: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 900
+      Align = alTop
+      Caption = 'TTyImageView  ·  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 552
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 634
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
     end
-    object ThemeCombo: TTyComboBox
-      Left = 634
-      Height = 26
-      Top = 4
+    object BtnOpen: TTyButton
+      Left = 16
+      Height = 30
+      Top = 46
+      Width = 100
+      Caption = '打开图片'
+      OnClick = BtnOpenClick
+    end
+    object BtnZoomOut: TTyButton
+      Left = 132
+      Height = 30
+      Top = 46
+      Width = 44
+      Caption = '−'
+      OnClick = BtnZoomOutClick
+    end
+    object BtnZoomIn: TTyButton
+      Left = 180
+      Height = 30
+      Top = 46
+      Width = 44
+      Caption = '+'
+      OnClick = BtnZoomInClick
+    end
+    object BtnFit: TTyButton
+      Left = 236
+      Height = 30
+      Top = 46
+      Width = 72
+      Caption = '适配'
+      OnClick = BtnFitClick
+    end
+    object BtnActual: TTyButton
+      Left = 316
+      Height = 30
+      Top = 46
+      Width = 72
+      Caption = '100%'
+      OnClick = BtnActualClick
+    end
+    object LblZoom: TTyLabel
+      Left = 404
+      Height = 20
+      Top = 51
       Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+      Caption = '缩放:—'
     end
-  end
-  object BtnOpen: TTyButton
-    Left = 16
-    Height = 30
-    Top = 46
-    Width = 100
-    Caption = '打开图片'
-    OnClick = BtnOpenClick
-  end
-  object BtnZoomOut: TTyButton
-    Left = 132
-    Height = 30
-    Top = 46
-    Width = 44
-    Caption = '−'
-    OnClick = BtnZoomOutClick
-  end
-  object BtnZoomIn: TTyButton
-    Left = 180
-    Height = 30
-    Top = 46
-    Width = 44
-    Caption = '+'
-    OnClick = BtnZoomInClick
-  end
-  object BtnFit: TTyButton
-    Left = 236
-    Height = 30
-    Top = 46
-    Width = 72
-    Caption = '适配'
-    OnClick = BtnFitClick
-  end
-  object BtnActual: TTyButton
-    Left = 316
-    Height = 30
-    Top = 46
-    Width = 72
-    Caption = '100%'
-    OnClick = BtnActualClick
-  end
-  object LblZoom: TTyLabel
-    Left = 404
-    Height = 20
-    Top = 51
-    Width = 120
-    Caption = '缩放:—'
-  end
-  object Div1: TTyDivider
-    Left = 16
-    Height = 22
-    Top = 84
-    Width = 868
-    Anchors = [akTop, akLeft, akRight]
-    Caption = '非破坏性滤镜(源图不变)'
-    Alignment = taLeftJustify
-  end
-  object ChkGray: TTyCheckBox
-    Left = 16
-    Height = 22
-    Top = 112
-    Width = 80
-    Caption = '灰度'
-    OnChange = ChkGrayChange
-  end
-  object ChkSharpen: TTyCheckBox
-    Left = 104
-    Height = 22
-    Top = 112
-    Width = 80
-    Caption = '锐化'
-    OnChange = ChkSharpenChange
-  end
-  object ChkInvert: TTyCheckBox
-    Left = 192
-    Height = 22
-    Top = 112
-    Width = 80
-    Caption = '反相'
-    OnChange = ChkInvertChange
-  end
-  object ChkBlur: TTyCheckBox
-    Left = 280
-    Height = 22
-    Top = 112
-    Width = 80
-    Caption = '模糊'
-    OnChange = ChkBlurChange
-  end
-  object View: TTyImageView
-    Left = 16
-    Height = 484
-    Top = 144
-    Width = 868
-    Anchors = [akTop, akLeft, akRight, akBottom]
+    object Div1: TTyDivider
+      Left = 16
+      Height = 22
+      Top = 84
+      Width = 868
+      Anchors = [akTop, akLeft, akRight]
+      Caption = '非破坏性滤镜(源图不变)'
+      Alignment = taLeftJustify
+    end
+    object ChkGray: TTyCheckBox
+      Left = 16
+      Height = 22
+      Top = 112
+      Width = 80
+      Caption = '灰度'
+      OnChange = ChkGrayChange
+    end
+    object ChkSharpen: TTyCheckBox
+      Left = 104
+      Height = 22
+      Top = 112
+      Width = 80
+      Caption = '锐化'
+      OnChange = ChkSharpenChange
+    end
+    object ChkInvert: TTyCheckBox
+      Left = 192
+      Height = 22
+      Top = 112
+      Width = 80
+      Caption = '反相'
+      OnChange = ChkInvertChange
+    end
+    object ChkBlur: TTyCheckBox
+      Left = 280
+      Height = 22
+      Top = 112
+      Width = 80
+      Caption = '模糊'
+      OnChange = ChkBlurChange
+    end
+    object View: TTyImageView
+      Left = 16
+      Height = 484
+      Top = 144
+      Width = 868
+      Anchors = [akTop, akLeft, akRight, akBottom]
+    end
   end
 end

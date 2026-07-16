@@ -22,6 +22,7 @@ type
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
     DarkSwitch: TTyToggleSwitch;
+    Surface: TTyFormSurface;
     ThemeCombo: TTyComboBox;
     ToolBar: TTyToolBar;
     BtnNew: TTyButton;

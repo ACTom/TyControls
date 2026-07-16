@@ -47,6 +47,7 @@ type
 type
   TShowcaseForm = class(TTyForm)
     { Streamed from showcasemain.lfm }
+    Surface:     TTyFormSurface;
     ChromeBar:   TTyTitleBar;
     BtnLight:    TTyButton;
     BtnDark:     TTyButton;
