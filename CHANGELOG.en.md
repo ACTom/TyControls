@@ -7,6 +7,20 @@ Linux and macOS.
 
 > 中文版见 [CHANGELOG.md](CHANGELOG.md)。
 
+## [Unreleased]
+
+### Changed — form structure (existing forms need migrating)
+
+- **A `TTyForm`'s controls now live on a content container, `TTyFormSurface`** — one per form, named `Surface`, filling the form, with **every control inside it**. The File > New *TyControls Form / Application* templates ship with it, so new forms need no extra work, and dropping controls in the designer lands them in it.
+  **Existing forms need migrating**: move the controls that sat directly on the form into the `Surface` (non-visual components — style controllers, timers, dialog components — stay where they are).
+  **Graphic controls (`TTyLabel`, `TTyShape`, …) must be inside the `Surface`** — they paint onto their parent, so one left on the form is hidden behind it and will not be visible; the designer warns you when you do this.
+  Dialogs (`TTyDialog`) are unaffected: they are not resizable, have no `Surface`, and take controls directly as before.
+
+### Fixed
+
+- **The unpainted white/transparent strip along the right and bottom edge of borderless resizable windows is gone** — such a window cannot paint its own outermost pixels; the content container now paints to the true edge. This is why the structural change above exists.
+- **File > New *TyControls Dialog* no longer produces two title bars**, and a dialog created from it no longer fails at startup with `EClassNotFound: Class "TTyPanel" not found`.
+
 ## [2.2.0] — 2026-07-04
 
 A large feature release. The headline is the **dialog subsystem**: **TTyForm** gains complete window chrome
