@@ -29,14 +29,19 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure Paint; override;
-    { CLASS INVARIANT, enforced on the CHILD side: a surface is a TTyForm's content host, so its parent
-      is ALWAYS a TTyForm. Guarding here rather than in each container's ChildClassAllowed is what
-      makes it airtight — only TTyForm and the surface itself would ever refuse it, so every OTHER
-      container (the title bar, a group box, any panel) happily accepted a pasted surface. Covers the
-      nested case too (a surface is not a TTyForm).
-      Deliberately UNGATED: an earlier csDesigning/csLoading gate never fired, because pasting IS
-      streaming — csLoading is set — and that is exactly the case to catch. Legitimate use always
-      parents to a TTyForm, so the invariant costs nothing at design time, load time or runtime. }
+    { CLASS INVARIANT: a surface is a TTyForm's content host, so its parent is always a TTyForm.
+      Enforced ungated (design time, load time and runtime alike) — legitimate use always parents to a
+      TTyForm, so it costs nothing; an earlier csDesigning/csLoading gate was pointless anyway, since
+      pasting IS streaming and csLoading is set exactly when you would want to catch it.
+
+      KNOWN LIMIT — this does NOT stop the designer from pasting a surface into another container
+      (the title bar, a panel, even another surface): verified in the real IDE, the paste evidently
+      reaches its parent without routing through the SetParent that would run this check, so only
+      TTyForm.ChildClassAllowed (which the base CheckNewParent does consult, via the parent) still
+      bites — hence pasting onto the FORM is refused while pasting elsewhere is not. Accepted: the
+      surface is not on the palette, so a stray one only happens if you deliberately copy/paste it,
+      and the form simply ignores any surface that is not its own. What this override still buys is
+      the invariant against code-level misuse. }
     procedure CheckNewParent(AParent: TWinControl); override;
   public
     constructor Create(AOwner: TComponent); override;
