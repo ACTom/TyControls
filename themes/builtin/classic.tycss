@@ -24,6 +24,7 @@
     --face-hover:   #C8C8C8;   /* lightly lit face on hover */
     --ink:          #000000;   /* primary text */
     --ink-disabled: #808080;   /* greyed text */
+    --danger:       #800000;   /* destructive ink — the system-palette dark red (maroon) */
     --field:        #FFFFFF;   /* white input well */
     --border:       #808080;   /* stroked indicator / edge grey */
   }
@@ -38,6 +39,7 @@
     --face-hover:   #C8C8C8;
     --ink:          #000000;
     --ink-disabled: #808080;
+    --danger:       #800000;
     --field:        #FFFFFF;
     --border:       #808080;
   }
@@ -64,6 +66,13 @@ TyButton:disabled       { render-style: bevel3d; background: var(--face); color:
 TyButton.primary        { render-style: bevel3d; background: var(--face); color: var(--ink); }
 TyButton.primary:hover  { render-style: bevel3d; background: var(--face-hover); }
 TyButton.primary:active { render-style: inset3d;  background: var(--face); }
+/* Danger: Win9x never tinted a button FACE — the grey 3D face IS the system look — so the
+   destructive variant speaks through maroon label ink instead. Each state restates the ink:
+   the plain TyButton:hover/:active rules above also set 'color' and are applied AFTER
+   TyButton.danger, so an unstated colour would fall back to --ink. */
+TyButton.danger         { render-style: bevel3d; background: var(--face); color: var(--danger); }
+TyButton.danger:hover   { render-style: bevel3d; background: var(--face-hover); color: var(--danger); }
+TyButton.danger:active  { render-style: inset3d;  background: var(--face); color: var(--danger); }
 TyButton.ghost          { render-style: bevel3d; background: var(--face); color: var(--ink); }
 TyButton.ghost:active   { render-style: inset3d;  background: var(--face); }
 

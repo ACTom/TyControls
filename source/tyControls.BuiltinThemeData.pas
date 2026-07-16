@@ -1103,6 +1103,7 @@ begin
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:       #3584E4;   /* GNOME blue — brand/accent seed              */' + LineEnding +
+    '    --danger:       #E01B24;   /* GNOME red 3 — destructive action             */' + LineEnding +
     '    --window:       #FAFAFA;   /* window background                            */' + LineEnding +
     '    --header:       #EBEBEB;   /* headerbar / title bar (a touch darker)       */' + LineEnding +
     '    --field:        #FFFFFF;   /* text-entry wells                             */' + LineEnding +
@@ -1126,6 +1127,7 @@ begin
     '@mode dark {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:       #3584E4;   /* same GNOME blue — brand/accent seed          */' + LineEnding +
+    '    --danger:       #C01C28;   /* GNOME red 4 — destructive action, dark       */' + LineEnding +
     '    --window:       #242424;   /* window background                            */' + LineEnding +
     '    --header:       #303030;   /* headerbar / title bar                        */' + LineEnding +
     '    --field:        #1E1E1E;   /* text-entry wells                             */' + LineEnding +
@@ -1171,6 +1173,13 @@ begin
     'TyButton.primary:active   { background: darken(var(--accent), 10); border-color: darken(var(--accent), 16); shadow: 0 0 0 transparent; }' + LineEnding +
     'TyButton.primary:focus    { border-color: darken(var(--accent), 12); outline: 2 alpha(var(--accent), 0.5); outline-offset: 1; }' + LineEnding +
     'TyButton.primary:disabled { background: alpha(var(--accent), 0.4); color: alpha(#FFFFFF, 0.85); border-color: transparent; shadow: 0 0 0 transparent; }' + LineEnding +
+    '' + LineEnding +
+    '/* Destructive-action = the same solid slab as suggested-action, driven by GNOME red instead. */' + LineEnding +
+    'TyButton.danger          { background: var(--danger); color: on(var(--danger)); border: 1px solid darken(var(--danger), 8); border-radius: 6; padding: 5px 9px; font-weight: normal; shadow: 0 1 1 var(--shadow); }' + LineEnding +
+    'TyButton.danger:hover    { background: lighten(var(--danger), 6); border-color: darken(var(--danger), 4); }' + LineEnding +
+    'TyButton.danger:active   { background: darken(var(--danger), 10); border-color: darken(var(--danger), 16); shadow: 0 0 0 transparent; }' + LineEnding +
+    'TyButton.danger:focus    { border-color: darken(var(--danger), 12); outline: 2 alpha(var(--danger), 0.5); outline-offset: 1; }' + LineEnding +
+    'TyButton.danger:disabled { background: alpha(var(--danger), 0.4); color: alpha(#FFFFFF, 0.85); border-color: transparent; shadow: 0 0 0 transparent; }' + LineEnding +
     '' + LineEnding +
     '/* Flat/ghost = borderless; a faint wash appears on interaction. */' + LineEnding +
     'TyButton.ghost          { render-style: flat; background: transparent; color: var(--ink); border: 1px solid transparent; border-radius: 6; padding: 5px 9px; font-weight: normal; shadow: 0 0 0 transparent; }' + LineEnding +
@@ -1265,7 +1274,10 @@ begin
     '    --close-active:      #C23030;' + LineEnding +
     '    --close-ink:         #FFFFFF;' + LineEnding +
     '' + LineEnding +
+    '    --danger:            #E04747;   /* destructive red — the Aero close-glass red */' + LineEnding +
+    '' + LineEnding +
     '    --primary-shadow:    #10467A33; /* deeper accent shadow under primary */' + LineEnding +
+    '    --danger-shadow:     #7A101033; /* deeper red shadow under danger */' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -1309,7 +1321,10 @@ begin
     '    --close-active:      #C23030;' + LineEnding +
     '    --close-ink:         #FFFFFF;' + LineEnding +
     '' + LineEnding +
+    '    --danger:            #E04747;' + LineEnding +
+    '' + LineEnding +
     '    --primary-shadow:    #10467A33;' + LineEnding +
+    '    --danger-shadow:     #7A101033;' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -1377,6 +1392,24 @@ begin
     '  shadow: 0 1 1 var(--primary-shadow);' + LineEnding +
     '}' + LineEnding +
     'TyButton.primary:disabled { opacity: 0.5; }' + LineEnding +
+    '' + LineEnding +
+    '/* Danger: the same wet-glass gloss as primary, driven by the destructive red instead of the accent. */' + LineEnding +
+    'TyButton.danger {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(var(--danger), 18%), var(--danger));' + LineEnding +
+    '  color: on(var(--danger));' + LineEnding +
+    '  border-color: darken(var(--danger), 10%);' + LineEnding +
+    '  shadow: 0 1 2 var(--danger-shadow);' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.danger:hover {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(var(--danger), 26%), lighten(var(--danger), 6%));' + LineEnding +
+    '  border-color: darken(var(--danger), 6%);' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.danger:active {' + LineEnding +
+    '  background: linear-gradient(90deg, darken(var(--danger), 4%), darken(var(--danger), 12%));' + LineEnding +
+    '  border-color: darken(var(--danger), 16%);' + LineEnding +
+    '  shadow: 0 1 1 var(--danger-shadow);' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.danger:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     '/* Ghost: transparent with accent text; fades into a faint glass panel on hover/press. */' + LineEnding +
     'TyButton.ghost {' + LineEnding +
@@ -1481,6 +1514,7 @@ begin
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:         #1677FF;   /* brand blue — primary fill, focus ring, checkbox tick, progress fill */' + LineEnding +
+    '    --danger:         #FF4D4F;   /* Ant error red — danger-button fill                                  */' + LineEnding +
     '    --window:         #FFFFFF;   /* WHITE canvas (no cards in the demo)                                 */' + LineEnding +
     '    --surface:        #FFFFFF;   /* title bar, button face, field wells, checkbox                       */' + LineEnding +
     '    --ink:            #000000E0;  /* near-black 88% primary text                                        */' + LineEnding +
@@ -1493,6 +1527,7 @@ begin
     '    --cap-active:     #00000017;  /* caption-button pressed overlay                                      */' + LineEnding +
     '    --shadow-soft:    #0000000A;  /* default-button drop shadow (0 1 0)                                  */' + LineEnding +
     '    --shadow-primary: #1677FF1A;  /* primary-button accent-tinted drop shadow (0 2 0)                    */' + LineEnding +
+    '    --shadow-danger:  #FF4D4F1A;  /* danger-button red-tinted drop shadow (0 2 0)                        */' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -1500,6 +1535,7 @@ begin
     '@mode dark {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:         #1668DC;   /* brand blue, brightened a touch for dark-mode contrast */' + LineEnding +
+    '    --danger:         #DC4446;   /* Ant error red, deepened for dark-mode contrast         */' + LineEnding +
     '    --window:         #141414;   /* deep neutral canvas                                    */' + LineEnding +
     '    --surface:        #1F1F1F;   /* title bar, button face, field wells, checkbox         */' + LineEnding +
     '    --ink:            #FFFFFFD9;  /* light 85% primary text                                */' + LineEnding +
@@ -1512,6 +1548,7 @@ begin
     '    --cap-active:     #FFFFFF1F;  /* caption-button pressed overlay                        */' + LineEnding +
     '    --shadow-soft:    #00000030;  /* default-button drop shadow (deeper on dark)           */' + LineEnding +
     '    --shadow-primary: #1668DC40;  /* primary-button accent-tinted glow                     */' + LineEnding +
+    '    --shadow-danger:  #DC444640;  /* danger-button red-tinted glow                         */' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -1540,6 +1577,13 @@ begin
     'TyButton.primary:active   { background: darken(var(--accent), 12); border-color: darken(var(--accent), 12); color: on(var(--accent)); }' + LineEnding +
     'TyButton.primary:focus    { outline: 2 alpha(var(--accent), 0.2); outline-offset: 1px; }' + LineEnding +
     'TyButton.primary:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); shadow: 0 0 0 transparent; }' + LineEnding +
+    '' + LineEnding +
+    '/* Danger button: primary''s twin driven by Ant''s #FF4D4F error red — solid fill, white ink, red-tinted 0 2 0 shadow. */' + LineEnding +
+    'TyButton.danger          { background: var(--danger); color: on(var(--danger)); border: 1px solid var(--danger); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 2 0 var(--shadow-danger); }' + LineEnding +
+    'TyButton.danger:hover    { background: lighten(var(--danger), 12); border-color: lighten(var(--danger), 12); color: on(var(--danger)); }' + LineEnding +
+    'TyButton.danger:active   { background: darken(var(--danger), 12); border-color: darken(var(--danger), 12); color: on(var(--danger)); }' + LineEnding +
+    'TyButton.danger:focus    { outline: 2 alpha(var(--danger), 0.2); outline-offset: 1px; }' + LineEnding +
+    'TyButton.danger:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); shadow: 0 0 0 transparent; }' + LineEnding +
     '' + LineEnding +
     '/* Ghost = Ant''s link/text button: transparent, accent text, a faint #1677FF14 wash on interaction. */' + LineEnding +
     'TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6; padding: 4px 10px; font-weight: normal; }' + LineEnding +
@@ -1591,6 +1635,7 @@ begin
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:            #0D6EFD;   /* Bootstrap primary blue (brand seed)        */' + LineEnding +
+    '    --danger:            #DC3545;   /* $danger — BS red-500                       */' + LineEnding +
     '    --window:            #FFFFFF;   /* body-bg — BS default is white              */' + LineEnding +
     '    --surface:           #FFFFFF;   /* title bar / cards / field wells            */' + LineEnding +
     '    --field-border:      #CED4DA;   /* gray-400 input border                      */' + LineEnding +
@@ -1613,6 +1658,7 @@ begin
     '@mode dark {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:            #0D6EFD;   /* SAME brand seed — picker recolours through it */' + LineEnding +
+    '    --danger:            #DC3545;   /* SAME $danger — BS 5.3 dark keeps red-500   */' + LineEnding +
     '    --window:            #212529;   /* dark body-bg                               */' + LineEnding +
     '    --surface:           #2B3035;   /* field wells / slightly-elevated title bar  */' + LineEnding +
     '    --field-border:      #495057;   /* gray-700 input border                      */' + LineEnding +
@@ -1718,6 +1764,35 @@ begin
     '  background: var(--accent);' + LineEnding +
     '  border-color: var(--accent);' + LineEnding +
     '  color: on(var(--accent));' + LineEnding +
+    '  opacity: 0.65;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Danger = btn-danger: solid red-500, white ink */' + LineEnding +
+    'TyButton.danger {' + LineEnding +
+    '  background: var(--danger);' + LineEnding +
+    '  color: on(var(--danger));' + LineEnding +
+    '  border: 1px solid var(--danger);' + LineEnding +
+    '  border-radius: 6px;' + LineEnding +
+    '  render-style: flat;' + LineEnding +
+    '  font-weight: normal;' + LineEnding +
+    '  padding: 6px 10px;' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.danger:hover {' + LineEnding +
+    '  background: darken(var(--danger), 8);' + LineEnding +
+    '  border-color: darken(var(--danger), 12);' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.danger:active {' + LineEnding +
+    '  background: darken(var(--danger), 11);' + LineEnding +
+    '  border-color: darken(var(--danger), 15);' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.danger:focus {' + LineEnding +
+    '  outline: 4px alpha(var(--danger), 0.5);' + LineEnding +
+    '  outline-offset: 0px;' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.danger:disabled {' + LineEnding +
+    '  background: var(--danger);' + LineEnding +
+    '  border-color: var(--danger);' + LineEnding +
+    '  color: on(var(--danger));' + LineEnding +
     '  opacity: 0.65;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -1886,6 +1961,7 @@ begin
     '    --ink:               #232627;   /* primary text                            */' + LineEnding +
     '    --ink-disabled:      #A0A4A8;   /* muted / disabled text                   */' + LineEnding +
     '    --on-accent:         #FFFFFF;   /* ink on solid accent fills               */' + LineEnding +
+    '    --danger:            #DA4453;   /* Breeze negative / destructive red       */' + LineEnding +
     '    --field:             #FFFFFF;   /* white input well                        */' + LineEnding +
     '    --field-border:      #BCC0C4;   /* hairline field border                   */' + LineEnding +
     '    --field-hover-brd:   #9DA5AB;   /* field hover edge                        */' + LineEnding +
@@ -1913,6 +1989,7 @@ begin
     '    --ink:               #EFF0F1;' + LineEnding +
     '    --ink-disabled:      #6E7377;' + LineEnding +
     '    --on-accent:         #FFFFFF;' + LineEnding +
+    '    --danger:            #DA4453;' + LineEnding +
     '    --field:             #1B1E20;' + LineEnding +
     '    --field-border:      #31363B;' + LineEnding +
     '    --field-hover-brd:   #454A4F;' + LineEnding +
@@ -1960,6 +2037,13 @@ begin
     'TyButton.primary:active   { background: darken(var(--accent), 10); border-color: darken(var(--accent), 10); color: var(--on-accent); }' + LineEnding +
     'TyButton.primary:focus    { outline: 1 var(--accent); outline-offset: 2px; }' + LineEnding +
     'TyButton.primary:disabled { background: alpha(var(--accent), 0.4); border-color: transparent; color: var(--on-accent); }' + LineEnding +
+    '' + LineEnding +
+    '/* Danger: solid Breeze-negative fill, white ink, same tight footprint as primary. */' + LineEnding +
+    'TyButton.danger          { render-style: flat; background: var(--danger); color: var(--on-accent); border: 1px solid var(--danger); border-radius: 3; padding: 5px 9px; font-weight: normal; }' + LineEnding +
+    'TyButton.danger:hover    { background: lighten(var(--danger), 8); border-color: lighten(var(--danger), 8); color: var(--on-accent); }' + LineEnding +
+    'TyButton.danger:active   { background: darken(var(--danger), 10); border-color: darken(var(--danger), 10); color: var(--on-accent); }' + LineEnding +
+    'TyButton.danger:focus    { outline: 1 var(--danger); outline-offset: 2px; }' + LineEnding +
+    'TyButton.danger:disabled { background: alpha(var(--danger), 0.4); border-color: transparent; color: var(--on-accent); }' + LineEnding +
     '' + LineEnding +
     '/* Ghost: borderless accent text; hover paints a translucent Breeze-blue wash. */' + LineEnding +
     'TyButton.ghost          { render-style: flat; background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 3; padding: 5px 9px; font-weight: normal; }' + LineEnding +
@@ -2027,6 +2111,7 @@ begin
     '    --face-hover:   #C8C8C8;   /* lightly lit face on hover */' + LineEnding +
     '    --ink:          #000000;   /* primary text */' + LineEnding +
     '    --ink-disabled: #808080;   /* greyed text */' + LineEnding +
+    '    --danger:       #800000;   /* destructive ink — the system-palette dark red (maroon) */' + LineEnding +
     '    --field:        #FFFFFF;   /* white input well */' + LineEnding +
     '    --border:       #808080;   /* stroked indicator / edge grey */' + LineEnding +
     '  }' + LineEnding +
@@ -2041,6 +2126,7 @@ begin
     '    --face-hover:   #C8C8C8;' + LineEnding +
     '    --ink:          #000000;' + LineEnding +
     '    --ink-disabled: #808080;' + LineEnding +
+    '    --danger:       #800000;' + LineEnding +
     '    --field:        #FFFFFF;' + LineEnding +
     '    --border:       #808080;' + LineEnding +
     '  }' + LineEnding +
@@ -2067,6 +2153,13 @@ begin
     'TyButton.primary        { render-style: bevel3d; background: var(--face); color: var(--ink); }' + LineEnding +
     'TyButton.primary:hover  { render-style: bevel3d; background: var(--face-hover); }' + LineEnding +
     'TyButton.primary:active { render-style: inset3d;  background: var(--face); }' + LineEnding +
+    '/* Danger: Win9x never tinted a button FACE — the grey 3D face IS the system look — so the' + LineEnding +
+    '   destructive variant speaks through maroon label ink instead. Each state restates the ink:' + LineEnding +
+    '   the plain TyButton:hover/:active rules above also set ''color'' and are applied AFTER' + LineEnding +
+    '   TyButton.danger, so an unstated colour would fall back to --ink. */' + LineEnding +
+    'TyButton.danger         { render-style: bevel3d; background: var(--face); color: var(--danger); }' + LineEnding +
+    'TyButton.danger:hover   { render-style: bevel3d; background: var(--face-hover); color: var(--danger); }' + LineEnding +
+    'TyButton.danger:active  { render-style: inset3d;  background: var(--face); color: var(--danger); }' + LineEnding +
     'TyButton.ghost          { render-style: bevel3d; background: var(--face); color: var(--ink); }' + LineEnding +
     'TyButton.ghost:active   { render-style: inset3d;  background: var(--face); }' + LineEnding +
     '' + LineEnding +
@@ -2128,6 +2221,9 @@ begin
     '    --accent-hover:  darken(var(--accent), 7%);    /* ~#115EA3 */' + LineEnding +
     '    --accent-active: darken(var(--accent), 15%);   /* ~#0E4775 */' + LineEnding +
     '    --on-accent:     on(var(--accent));            /* readable ink -> #FFFFFF */' + LineEnding +
+    '    --danger-hover:  darken(var(--danger), 7%);    /* ~#B6281A */' + LineEnding +
+    '    --danger-active: darken(var(--danger), 15%);   /* ~#A72518 */' + LineEnding +
+    '    --on-danger:     on(var(--danger));            /* readable ink -> #FFFFFF */' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -2156,6 +2252,9 @@ begin
     '    --accent-hover:  lighten(var(--accent), 9%);   /* ~#62ABF5 */' + LineEnding +
     '    --accent-active: darken(var(--accent), 8%);    /* ~#2886DE */' + LineEnding +
     '    --on-accent:     on(var(--accent));            /* readable ink on accent */' + LineEnding +
+    '    --danger-hover:  lighten(var(--danger), 9%);   /* ~#D5464A */' + LineEnding +
+    '    --danger-active: darken(var(--danger), 8%);    /* ~#C03034 */' + LineEnding +
+    '    --on-danger:     on(var(--danger));            /* readable ink on danger */' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -2210,6 +2309,22 @@ begin
     'TyButton.primary:active   { background: var(--accent-active); border-color: var(--accent-active); }' + LineEnding +
     'TyButton.primary:focus    { outline: 2px var(--accent); outline-offset: 1px; }' + LineEnding +
     'TyButton.primary:disabled { opacity: var(--disabled); }' + LineEnding +
+    '' + LineEnding +
+    '/* Danger: primary''s shape driven by the Fluent red — solid fill, white ink,' + LineEnding +
+    '   semibold; the destructive twin of the primary button. */' + LineEnding +
+    'TyButton.danger {' + LineEnding +
+    '  background: var(--danger);' + LineEnding +
+    '  color: var(--on-danger);' + LineEnding +
+    '  border: 1px solid var(--danger);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 5px 10px;' + LineEnding +
+    '  font-weight: 600;' + LineEnding +
+    '  shadow: 0 1 1 var(--btn-shadow);' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.danger:hover    { background: var(--danger-hover);  border-color: var(--danger-hover); }' + LineEnding +
+    'TyButton.danger:active   { background: var(--danger-active); border-color: var(--danger-active); }' + LineEnding +
+    'TyButton.danger:focus    { outline: 2px var(--danger); outline-offset: 1px; }' + LineEnding +
+    'TyButton.danger:disabled { opacity: var(--disabled); }' + LineEnding +
     '' + LineEnding +
     '/* Ghost (Fluent "subtle"): transparent, regular weight, faint hover wash. */' + LineEnding +
     'TyButton.ghost {' + LineEnding +
@@ -2304,6 +2419,7 @@ begin
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:               #007AFF;   /* macOS system blue — seeds every accent/primary surface */' + LineEnding +
+    '    --danger:               #FF3B30;   /* Apple systemRed — destructive actions */' + LineEnding +
     '    --surface:              #ECECEC;   /* window chrome */' + LineEnding +
     '    --field:                #FFFFFF;   /* editable wells */' + LineEnding +
     '    --border:               #C6C6C6;   /* hairline field / button border */' + LineEnding +
@@ -2359,6 +2475,7 @@ begin
     '@mode dark {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:               #0A84FF;   /* system blue for dark mode */' + LineEnding +
+    '    --danger:               #FF453A;   /* systemRed for dark mode */' + LineEnding +
     '    --surface:              #323232;   /* window chrome */' + LineEnding +
     '    --field:                #1E1E1E;   /* editable wells */' + LineEnding +
     '    --border:               #48484A;   /* hairline field / button border */' + LineEnding +
@@ -2433,6 +2550,14 @@ begin
     'TyButton.primary:focus  { outline: 3 alpha(var(--accent), 0.35); outline-offset: 1; }' + LineEnding +
     'TyButton.primary:disabled { background: mix(var(--accent), var(--primary-disabled-mix), 55%); color: var(--primary-disabled-ink); border-color: mix(var(--accent), var(--primary-disabled-mix), 40%); opacity: 0.6; shadow: 0 0 0 transparent; }' + LineEnding +
     '' + LineEnding +
+    '/* Danger (a destructive macOS action button): systemRed gloss, white ink, NOT bold —' + LineEnding +
+    '   the primary material driven by --danger, so it shares primary''s shadow/disabled recipe. */' + LineEnding +
+    'TyButton.danger         { background: linear-gradient(90deg, lighten(var(--danger), 8%), var(--danger)); color: on(var(--danger)); border: 1px solid darken(var(--danger), 8%); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 1 2 var(--primary-shadow); }' + LineEnding +
+    'TyButton.danger:hover   { background: linear-gradient(90deg, lighten(var(--danger), 12%), lighten(var(--danger), 4%)); }' + LineEnding +
+    'TyButton.danger:active  { background: linear-gradient(90deg, var(--danger), darken(var(--danger), 8%)); shadow: 0 1 1 var(--primary-shadow-active); }' + LineEnding +
+    'TyButton.danger:focus   { border-color: darken(var(--danger), 8%); outline: 3 alpha(var(--danger), 0.35); outline-offset: 1; }' + LineEnding +
+    'TyButton.danger:disabled { background: mix(var(--danger), var(--primary-disabled-mix), 55%); color: var(--primary-disabled-ink); border-color: mix(var(--danger), var(--primary-disabled-mix), 40%); opacity: 0.6; shadow: 0 0 0 transparent; }' + LineEnding +
+    '' + LineEnding +
     '/* Ghost: transparent accent-text button, faint accent wash on interaction. */' + LineEnding +
     'TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 0 0 transparent; }' + LineEnding +
     'TyButton.ghost:hover    { background: alpha(var(--accent), 0.10); color: darken(var(--accent), 6%); }' + LineEnding +
@@ -2497,6 +2622,8 @@ begin
     '    --outline:    #79747E;   /* M3 outline: field / checkbox / radio stroke       */' + LineEnding +
     '    --tonal:      #E8DEF8;   /* secondary-container: tonal (default) button fill   */' + LineEnding +
     '    --on-tonal:   #1D192B;   /* on-secondary-container ink                         */' + LineEnding +
+    '    --danger:     #B3261E;   /* M3 error role: destructive/filled danger fill     */' + LineEnding +
+    '    --on-danger:  #FFFFFF;   /* on-error ink                                      */' + LineEnding +
     '    --track:      #E7E0EC;   /* progress track (surface-variant)                  */' + LineEnding +
     '    --ink:        #1C1B1F;   /* primary on-surface ink                            */' + LineEnding +
     '    --ink-muted:  #49454F;   /* secondary on-surface ink (caption glyphs)         */' + LineEnding +
@@ -2514,6 +2641,8 @@ begin
     '    --outline:    #938F99;   /* M3 outline (dark)                                 */' + LineEnding +
     '    --tonal:      #4A4458;   /* secondary-container (dark) tonal button fill       */' + LineEnding +
     '    --on-tonal:   #E8DEF8;   /* on-secondary-container ink (dark)                  */' + LineEnding +
+    '    --danger:     #F2B8B5;   /* M3 error role, brightened for dark contrast       */' + LineEnding +
+    '    --on-danger:  #601410;   /* dark ink on the light-red filled error            */' + LineEnding +
     '    --track:      #49454F;   /* progress track (surface-variant, dark)            */' + LineEnding +
     '    --ink:        #E6E1E5;   /* primary on-surface ink (light)                    */' + LineEnding +
     '    --ink-muted:  #CAC4D0;   /* secondary on-surface ink                          */' + LineEnding +
@@ -2548,6 +2677,15 @@ begin
     'TyButton.primary:selected { background: mix(var(--primary), #FFFFFF, 12%); shadow: 0 1 2 #00000026; }' + LineEnding +
     'TyButton.primary:focus    { background: mix(var(--primary), #FFFFFF, 8%);  outline: 2px var(--primary); outline-offset: 2px; }' + LineEnding +
     'TyButton.primary:disabled { background: alpha(var(--ink), 0.12); color: alpha(var(--ink), 0.38); shadow: 0 0 0 #00000000; }' + LineEnding +
+    '' + LineEnding +
+    '/* Danger = the same M3 "filled" button in the error role: solid error, on-error ink,' + LineEnding +
+    '   medium (500) weight, soft elevation; a white state layer lightens hover/press. */' + LineEnding +
+    'TyButton.danger          { background: var(--danger); color: var(--on-danger); border-width: 0; border-radius: 20px; padding: 6px 10px; font-weight: 500; shadow: 0 1 3 #00000026; }' + LineEnding +
+    'TyButton.danger:hover    { background: mix(var(--danger), #FFFFFF, 8%);  shadow: 0 2 6 #00000033; }' + LineEnding +
+    'TyButton.danger:active   { background: mix(var(--danger), #FFFFFF, 12%); shadow: 0 1 2 #00000026; }' + LineEnding +
+    'TyButton.danger:selected { background: mix(var(--danger), #FFFFFF, 12%); shadow: 0 1 2 #00000026; }' + LineEnding +
+    'TyButton.danger:focus    { background: mix(var(--danger), #FFFFFF, 8%);  outline: 2px var(--danger); outline-offset: 2px; }' + LineEnding +
+    'TyButton.danger:disabled { background: alpha(var(--ink), 0.12); color: alpha(var(--ink), 0.38); shadow: 0 0 0 #00000000; }' + LineEnding +
     '' + LineEnding +
     '/* Ghost = M3 "text" button: no fill/border, primary ink, tonal state layer on hover. */' + LineEnding +
     'TyButton.ghost          { background: transparent; color: var(--primary); border-width: 0; border-radius: 20px; padding: 6px 10px; font-weight: normal; shadow: 0 0 0 #00000000; }' + LineEnding +
@@ -2611,6 +2749,7 @@ begin
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:        #2B579A;   /* Office blue — the runtime accent-picker recolours everything */' + LineEnding +
+    '    --danger:        #A4262C;   /* Office error red — fixed, never follows the accent-picker */' + LineEnding +
     '    --surface:       #F3F2F1;   /* Fluent neutral window; also default-button hover face */' + LineEnding +
     '    --field:         #FFFFFF;   /* white content + input wells + default button face */' + LineEnding +
     '    --pressed:       #EDEBE9;   /* pressed neutral: button :active + progress track */' + LineEnding +
@@ -2625,6 +2764,7 @@ begin
     '@mode dark {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:        #2B579A;   /* same brand seed — the picker recolours through it */' + LineEnding +
+    '    --danger:        #D13438;   /* lighter Office error red — lifts off the dark canvas */' + LineEnding +
     '    --surface:       #252423;   /* Office-dark window; also default-button hover face */' + LineEnding +
     '    --field:         #292827;   /* raised dark input wells + default button face */' + LineEnding +
     '    --pressed:       #1B1A19;   /* deep content tone: button :active + progress track */' + LineEnding +
@@ -2699,6 +2839,26 @@ begin
     '  background: alpha(var(--accent), 0.40);' + LineEnding +
     '  color: alpha(on(var(--accent)), 0.75);' + LineEnding +
     '  border: 1px solid alpha(var(--accent), 0.40);' + LineEnding +
+    '  shadow: 0 0 0 #00000000;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Danger: the primary chip inked with Office''s error red — same solid Fluent face,' + LineEnding +
+    '   semibold weight and hairline shadow, but fixed, so the accent-picker can''t soften it. */' + LineEnding +
+    'TyButton.danger {' + LineEnding +
+    '  background: var(--danger);' + LineEnding +
+    '  color: on(var(--danger));' + LineEnding +
+    '  border: 1px solid var(--danger);' + LineEnding +
+    '  border-radius: 2px;' + LineEnding +
+    '  font-weight: 600;' + LineEnding +
+    '  padding: 5px 10px;' + LineEnding +
+    '  shadow: 0 1 2 #00000024;' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.danger:hover  { background: darken(var(--danger), 8);  border: 1px solid darken(var(--danger), 8); }' + LineEnding +
+    'TyButton.danger:active { background: darken(var(--danger), 16); border: 1px solid darken(var(--danger), 16); shadow: 0 0 0 #00000000; }' + LineEnding +
+    'TyButton.danger:disabled {' + LineEnding +
+    '  background: alpha(var(--danger), 0.40);' + LineEnding +
+    '  color: alpha(on(var(--danger)), 0.75);' + LineEnding +
+    '  border: 1px solid alpha(var(--danger), 0.40);' + LineEnding +
     '  shadow: 0 0 0 #00000000;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -3285,6 +3445,7 @@ begin
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:     #E95420;   /* Ubuntu orange — brand seed; runtime picker recolours from here */' + LineEnding +
+    '    --danger:     #C7162B;   /* Ubuntu/Yaru destructive red */' + LineEnding +
     '    --surface:    #FAFAFA;   /* window */' + LineEnding +
     '    --headerbar:  #F5F5F5;   /* Yaru headerbar */' + LineEnding +
     '    --title-ink:  #1D1D1D;   /* caption text */' + LineEnding +
@@ -3305,6 +3466,7 @@ begin
     '@mode dark {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:     #E95420;   /* Ubuntu orange — brand seed, unchanged in dark */' + LineEnding +
+    '    --danger:     #ED333B;   /* destructive red — lifted for dark contrast */' + LineEnding +
     '    --surface:    #1E1E1E;   /* window — Yaru dark neutral */' + LineEnding +
     '    --headerbar:  #2C2C2C;   /* dark headerbar */' + LineEnding +
     '    --title-ink:  #FFFFFF;   /* caption text */' + LineEnding +
@@ -3346,6 +3508,13 @@ begin
     'TyButton.primary:active   { background: darken(var(--accent), 11%); border-color: darken(var(--accent), 14%); shadow: 0 0 0 transparent; }' + LineEnding +
     'TyButton.primary:focus    { outline: 2px alpha(var(--accent), 0.50); outline-offset: 1px; }' + LineEnding +
     'TyButton.primary:disabled { background: alpha(var(--accent), 0.5); border-color: transparent; color: #FFFFFF; opacity: 0.8; shadow: 0 0 0 transparent; }' + LineEnding +
+    '' + LineEnding +
+    '/* Danger — destructive mirror of primary: solid Yaru red, white ink, normal weight. */' + LineEnding +
+    'TyButton.danger          { background: linear-gradient(90deg, lighten(var(--danger), 4%), var(--danger)); color: #FFFFFF; border: 1px solid darken(var(--danger), 6%); border-radius: 6px; padding: 5px 10px; font-weight: normal; shadow: 0 1px 1px #00000018; }' + LineEnding +
+    'TyButton.danger:hover    { background: darken(var(--danger), 5%); border-color: darken(var(--danger), 10%); }' + LineEnding +
+    'TyButton.danger:active   { background: darken(var(--danger), 11%); border-color: darken(var(--danger), 14%); shadow: 0 0 0 transparent; }' + LineEnding +
+    'TyButton.danger:focus    { outline: 2px alpha(var(--danger), 0.50); outline-offset: 1px; }' + LineEnding +
+    'TyButton.danger:disabled { background: alpha(var(--danger), 0.5); border-color: transparent; color: #FFFFFF; opacity: 0.8; shadow: 0 0 0 transparent; }' + LineEnding +
     '' + LineEnding +
     '/* Ghost — flat, orange ink, tint on interaction. */' + LineEnding +
     'TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6px; padding: 5px 10px; font-weight: normal; }' + LineEnding +
@@ -3397,6 +3566,7 @@ begin
     '@mode light {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:  #0078D7;   /* Windows 10 signature blue — brand seed */' + LineEnding +
+    '    --danger:  #E81123;   /* Windows 10 red — the caption close-button red */' + LineEnding +
     '    --surface: #F3F3F3;   /* window / app background (OS grey) */' + LineEnding +
     '    --field:   #FFFFFF;   /* editable well */' + LineEnding +
     '    --ink:     #000000;   /* primary text — Win10 uses black */' + LineEnding +
@@ -3440,6 +3610,7 @@ begin
     '@mode dark {' + LineEnding +
     '  :root {' + LineEnding +
     '    --accent:  #4CC2FF;   /* brightened Win10 blue for dark surfaces — brand seed */' + LineEnding +
+    '    --danger:  #E74856;   /* brightened Win10 red for dark surfaces */' + LineEnding +
     '    --surface: #202020;   /* window / app background */' + LineEnding +
     '    --field:   #333333;   /* editable well */' + LineEnding +
     '    --ink:     #FFFFFF;   /* primary text */' + LineEnding +
@@ -3509,6 +3680,13 @@ begin
     'TyButton.primary:focus    { outline: 1 var(--accent); outline-offset: 1px; }' + LineEnding +
     'TyButton.primary:disabled { background: var(--primary-disabled-bg); color: var(--primary-disabled-ink); border: 1px solid var(--primary-disabled-bg); }' + LineEnding +
     '' + LineEnding +
+    '/* Danger button: mirrors primary in the Win10 red — solid fill, white text, red border. Hover/press darken it. */' + LineEnding +
+    'TyButton.danger          { render-style: flat; background: var(--danger); color: on(var(--danger)); border: 1px solid var(--danger); border-radius: 0; padding: 6px; font-weight: normal; }' + LineEnding +
+    'TyButton.danger:hover    { background: darken(var(--danger), 8%);  border: 1px solid darken(var(--danger), 8%);  color: on(var(--danger)); }' + LineEnding +
+    'TyButton.danger:active   { background: darken(var(--danger), 16%); border: 1px solid darken(var(--danger), 16%); color: on(var(--danger)); }' + LineEnding +
+    'TyButton.danger:focus    { outline: 1 var(--danger); outline-offset: 1px; }' + LineEnding +
+    'TyButton.danger:disabled { background: var(--primary-disabled-bg); color: var(--primary-disabled-ink); border: 1px solid var(--primary-disabled-bg); }' + LineEnding +
+    '' + LineEnding +
     '/* Ghost button: no chrome at rest — accent-tinted text; pale accent wash on interaction. */' + LineEnding +
     'TyButton.ghost          { render-style: flat; background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 0; padding: 6px; font-weight: normal; }' + LineEnding +
     'TyButton.ghost:hover    { background: var(--accent-wash); color: var(--accent); border: 1px solid transparent; }' + LineEnding +
@@ -3564,6 +3742,9 @@ begin
     '    /* Brand accent (recoloured by the picker) */' + LineEnding +
     '    --accent:  #005FB8;' + LineEnding +
     '' + LineEnding +
+    '    /* Destructive action — the Windows critical / close-button red */' + LineEnding +
+    '    --danger:  #C42B1C;' + LineEnding +
+    '' + LineEnding +
     '    /* Mica-ish neutrals */' + LineEnding +
     '    --mica:    #F3F3F3;   /* window + title-bar surface */' + LineEnding +
     '    --field:   #FFFFFF;   /* text-field wells */' + LineEnding +
@@ -3601,6 +3782,9 @@ begin
     '  :root {' + LineEnding +
     '    /* Brand accent — brightened for dark-mode contrast (still recoloured by the picker) */' + LineEnding +
     '    --accent:  #60CDFF;' + LineEnding +
+    '' + LineEnding +
+    '    /* Destructive action — lifted critical red so it reads on the dark surface */' + LineEnding +
+    '    --danger:  #D13438;' + LineEnding +
     '' + LineEnding +
     '    /* Dark neutrals */' + LineEnding +
     '    --mica:    #202020;   /* window + title-bar surface */' + LineEnding +
@@ -3645,6 +3829,14 @@ begin
     '  --on-accent:       on(var(--accent));            /* readable ink on accent */' + LineEnding +
     '  --on-accent-dim:   alpha(var(--on-accent), 0.85);/* pressed accent ink */' + LineEnding +
     '' + LineEnding +
+    '  /* Danger states — same derivation as the accent, driven by the per-mode --danger */' + LineEnding +
+    '  --danger-hover:    lighten(var(--danger), 8%);' + LineEnding +
+    '  --danger-active:   darken(var(--danger), 8%);' + LineEnding +
+    '  --danger-border:   darken(var(--danger), 6%);' + LineEnding +
+    '  --danger-disabled: alpha(var(--danger), 0.40);' + LineEnding +
+    '  --on-danger:       on(var(--danger));            /* readable ink on danger */' + LineEnding +
+    '  --on-danger-dim:   alpha(var(--on-danger), 0.85);/* pressed danger ink */' + LineEnding +
+    '' + LineEnding +
     '  /* Secondary ink — derived from the per-mode --ink */' + LineEnding +
     '  --ink-dim: alpha(var(--ink), 0.60);' + LineEnding +
     '' + LineEnding +
@@ -3685,6 +3877,14 @@ begin
     'TyButton.primary:active   { background: var(--accent-active); color: var(--on-accent-dim); shadow: 0 0 0 #00000000; }' + LineEnding +
     'TyButton.primary:focus    { border-color: var(--accent-border); outline: 2px var(--accent); outline-offset: 1px; }' + LineEnding +
     'TyButton.primary:disabled { background: var(--accent-disabled); border-color: var(--accent-disabled); color: var(--on-accent); shadow: 0 0 0 #00000000; }' + LineEnding +
+    '' + LineEnding +
+    '/* Danger: solid critical-red fill — shaped exactly like .primary (same tight padding, same' + LineEnding +
+    '   normal weight), only the destructive colour replaces the accent. */' + LineEnding +
+    'TyButton.danger          { background: var(--danger); color: var(--on-danger); border-color: var(--danger-border); border-width: 1px; border-radius: var(--radius); padding: 6px 9px; font-weight: normal; shadow: 0 1 2 var(--shadow-col); }' + LineEnding +
+    'TyButton.danger:hover    { background: var(--danger-hover); }' + LineEnding +
+    'TyButton.danger:active   { background: var(--danger-active); color: var(--on-danger-dim); shadow: 0 0 0 #00000000; }' + LineEnding +
+    'TyButton.danger:focus    { border-color: var(--danger-border); outline: 2px var(--danger); outline-offset: 1px; }' + LineEnding +
+    'TyButton.danger:disabled { background: var(--danger-disabled); border-color: var(--danger-disabled); color: var(--on-danger); shadow: 0 0 0 #00000000; }' + LineEnding +
     '' + LineEnding +
     '/* Ghost / subtle: transparent + shadowless until hovered; a light Fluent fill appears. */' + LineEnding +
     'TyButton.ghost          { background: alpha(#000000, 0); color: var(--ink); border-radius: var(--radius); padding: 6px 9px; font-weight: normal; }' + LineEnding +
@@ -3757,6 +3957,8 @@ begin
     '    --field-border: #7B9EBD;    /* soft steel-blue field edge */' + LineEnding +
     '    --focus:        #E58B00;    /* orange focus edge */' + LineEnding +
     '    --btn-border:   #7A94B5;    /* soft blue-grey default-button edge (NOT navy) */' + LineEnding +
+    '    --danger:       #DC4E31;    /* the Luna close-button red — XP''s one destructive colour */' + LineEnding +
+    '    --on-danger:    on(var(--danger));' + LineEnding +
     '' + LineEnding +
     '    --title-ink:    #FFFFFF;' + LineEnding +
     '    /* Glossy RED close-button stops. */' + LineEnding +
@@ -3777,6 +3979,8 @@ begin
     '    --field-border: #7B9EBD;' + LineEnding +
     '    --focus:        #E58B00;' + LineEnding +
     '    --btn-border:   #7A94B5;' + LineEnding +
+    '    --danger:       #DC4E31;' + LineEnding +
+    '    --on-danger:    on(var(--danger));' + LineEnding +
     '' + LineEnding +
     '    --title-ink:    #FFFFFF;' + LineEnding +
     '    --close-top:    #F4AB92;' + LineEnding +
@@ -3852,6 +4056,21 @@ begin
     'TyButton.primary:active   { background: linear-gradient(90deg, darken(var(--accent), 8%) 0%, darken(var(--accent), 18%) 100%); }' + LineEnding +
     'TyButton.primary:focus    { outline: 2px var(--focus); outline-offset: 1px; }' + LineEnding +
     'TyButton.primary:disabled { opacity: 0.5; }' + LineEnding +
+    '' + LineEnding +
+    '/* Danger = the primary button cut from the glossy Luna close-button red instead of the blue. */' + LineEnding +
+    'TyButton.danger {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(var(--danger), 24%) 0%, var(--danger) 55%, darken(var(--danger), 12%) 100%);' + LineEnding +
+    '  color: var(--on-danger);' + LineEnding +
+    '  border-color: darken(var(--danger), 22%);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 5px 12px;' + LineEnding +
+    '  font-weight: normal;' + LineEnding +
+    '}' + LineEnding +
+    'TyButton.danger:hover    { background: linear-gradient(90deg, lighten(var(--danger), 34%) 0%, lighten(var(--danger), 8%) 100%); border-color: #E0A020; }' + LineEnding +
+    'TyButton.danger:active   { background: linear-gradient(90deg, darken(var(--danger), 8%) 0%, darken(var(--danger), 18%) 100%); }' + LineEnding +
+    'TyButton.danger:focus    { outline: 2px var(--focus); outline-offset: 1px; }' + LineEnding +
+    'TyButton.danger:disabled { opacity: 0.5; }' + LineEnding +
     '' + LineEnding +
     '/* Ghost: transparent with accent text; a soft blue wash on touch. */' + LineEnding +
     'TyButton.ghost {' + LineEnding +

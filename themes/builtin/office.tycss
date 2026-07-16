@@ -18,6 +18,7 @@
 @mode light {
   :root {
     --accent:        #2B579A;   /* Office blue — the runtime accent-picker recolours everything */
+    --danger:        #A4262C;   /* Office error red — fixed, never follows the accent-picker */
     --surface:       #F3F2F1;   /* Fluent neutral window; also default-button hover face */
     --field:         #FFFFFF;   /* white content + input wells + default button face */
     --pressed:       #EDEBE9;   /* pressed neutral: button :active + progress track */
@@ -32,6 +33,7 @@
 @mode dark {
   :root {
     --accent:        #2B579A;   /* same brand seed — the picker recolours through it */
+    --danger:        #D13438;   /* lighter Office error red — lifts off the dark canvas */
     --surface:       #252423;   /* Office-dark window; also default-button hover face */
     --field:         #292827;   /* raised dark input wells + default button face */
     --pressed:       #1B1A19;   /* deep content tone: button :active + progress track */
@@ -106,6 +108,26 @@ TyButton.primary:disabled {
   background: alpha(var(--accent), 0.40);
   color: alpha(on(var(--accent)), 0.75);
   border: 1px solid alpha(var(--accent), 0.40);
+  shadow: 0 0 0 #00000000;
+}
+
+/* Danger: the primary chip inked with Office's error red — same solid Fluent face,
+   semibold weight and hairline shadow, but fixed, so the accent-picker can't soften it. */
+TyButton.danger {
+  background: var(--danger);
+  color: on(var(--danger));
+  border: 1px solid var(--danger);
+  border-radius: 2px;
+  font-weight: 600;
+  padding: 5px 10px;
+  shadow: 0 1 2 #00000024;
+}
+TyButton.danger:hover  { background: darken(var(--danger), 8);  border: 1px solid darken(var(--danger), 8); }
+TyButton.danger:active { background: darken(var(--danger), 16); border: 1px solid darken(var(--danger), 16); shadow: 0 0 0 #00000000; }
+TyButton.danger:disabled {
+  background: alpha(var(--danger), 0.40);
+  color: alpha(on(var(--danger)), 0.75);
+  border: 1px solid alpha(var(--danger), 0.40);
   shadow: 0 0 0 #00000000;
 }
 

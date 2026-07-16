@@ -18,6 +18,7 @@
     --ink:               #232627;   /* primary text                            */
     --ink-disabled:      #A0A4A8;   /* muted / disabled text                   */
     --on-accent:         #FFFFFF;   /* ink on solid accent fills               */
+    --danger:            #DA4453;   /* Breeze negative / destructive red       */
     --field:             #FFFFFF;   /* white input well                        */
     --field-border:      #BCC0C4;   /* hairline field border                   */
     --field-hover-brd:   #9DA5AB;   /* field hover edge                        */
@@ -45,6 +46,7 @@
     --ink:               #EFF0F1;
     --ink-disabled:      #6E7377;
     --on-accent:         #FFFFFF;
+    --danger:            #DA4453;
     --field:             #1B1E20;
     --field-border:      #31363B;
     --field-hover-brd:   #454A4F;
@@ -92,6 +94,13 @@ TyButton.primary:hover    { background: lighten(var(--accent), 8); border-color:
 TyButton.primary:active   { background: darken(var(--accent), 10); border-color: darken(var(--accent), 10); color: var(--on-accent); }
 TyButton.primary:focus    { outline: 1 var(--accent); outline-offset: 2px; }
 TyButton.primary:disabled { background: alpha(var(--accent), 0.4); border-color: transparent; color: var(--on-accent); }
+
+/* Danger: solid Breeze-negative fill, white ink, same tight footprint as primary. */
+TyButton.danger          { render-style: flat; background: var(--danger); color: var(--on-accent); border: 1px solid var(--danger); border-radius: 3; padding: 5px 9px; font-weight: normal; }
+TyButton.danger:hover    { background: lighten(var(--danger), 8); border-color: lighten(var(--danger), 8); color: var(--on-accent); }
+TyButton.danger:active   { background: darken(var(--danger), 10); border-color: darken(var(--danger), 10); color: var(--on-accent); }
+TyButton.danger:focus    { outline: 1 var(--danger); outline-offset: 2px; }
+TyButton.danger:disabled { background: alpha(var(--danger), 0.4); border-color: transparent; color: var(--on-accent); }
 
 /* Ghost: borderless accent text; hover paints a translucent Breeze-blue wash. */
 TyButton.ghost          { render-style: flat; background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 3; padding: 5px 9px; font-weight: normal; }

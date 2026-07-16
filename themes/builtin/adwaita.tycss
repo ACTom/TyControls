@@ -10,6 +10,7 @@
 @mode light {
   :root {
     --accent:       #3584E4;   /* GNOME blue — brand/accent seed              */
+    --danger:       #E01B24;   /* GNOME red 3 — destructive action             */
     --window:       #FAFAFA;   /* window background                            */
     --header:       #EBEBEB;   /* headerbar / title bar (a touch darker)       */
     --field:        #FFFFFF;   /* text-entry wells                             */
@@ -33,6 +34,7 @@
 @mode dark {
   :root {
     --accent:       #3584E4;   /* same GNOME blue — brand/accent seed          */
+    --danger:       #C01C28;   /* GNOME red 4 — destructive action, dark       */
     --window:       #242424;   /* window background                            */
     --header:       #303030;   /* headerbar / title bar                        */
     --field:        #1E1E1E;   /* text-entry wells                             */
@@ -78,6 +80,13 @@ TyButton.primary:hover    { background: lighten(var(--accent), 6); border-color:
 TyButton.primary:active   { background: darken(var(--accent), 10); border-color: darken(var(--accent), 16); shadow: 0 0 0 transparent; }
 TyButton.primary:focus    { border-color: darken(var(--accent), 12); outline: 2 alpha(var(--accent), 0.5); outline-offset: 1; }
 TyButton.primary:disabled { background: alpha(var(--accent), 0.4); color: alpha(#FFFFFF, 0.85); border-color: transparent; shadow: 0 0 0 transparent; }
+
+/* Destructive-action = the same solid slab as suggested-action, driven by GNOME red instead. */
+TyButton.danger          { background: var(--danger); color: on(var(--danger)); border: 1px solid darken(var(--danger), 8); border-radius: 6; padding: 5px 9px; font-weight: normal; shadow: 0 1 1 var(--shadow); }
+TyButton.danger:hover    { background: lighten(var(--danger), 6); border-color: darken(var(--danger), 4); }
+TyButton.danger:active   { background: darken(var(--danger), 10); border-color: darken(var(--danger), 16); shadow: 0 0 0 transparent; }
+TyButton.danger:focus    { border-color: darken(var(--danger), 12); outline: 2 alpha(var(--danger), 0.5); outline-offset: 1; }
+TyButton.danger:disabled { background: alpha(var(--danger), 0.4); color: alpha(#FFFFFF, 0.85); border-color: transparent; shadow: 0 0 0 transparent; }
 
 /* Flat/ghost = borderless; a faint wash appears on interaction. */
 TyButton.ghost          { render-style: flat; background: transparent; color: var(--ink); border: 1px solid transparent; border-radius: 6; padding: 5px 9px; font-weight: normal; shadow: 0 0 0 transparent; }

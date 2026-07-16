@@ -13,6 +13,7 @@
 @mode light {
   :root {
     --accent:  #0078D7;   /* Windows 10 signature blue — brand seed */
+    --danger:  #E81123;   /* Windows 10 red — the caption close-button red */
     --surface: #F3F3F3;   /* window / app background (OS grey) */
     --field:   #FFFFFF;   /* editable well */
     --ink:     #000000;   /* primary text — Win10 uses black */
@@ -56,6 +57,7 @@
 @mode dark {
   :root {
     --accent:  #4CC2FF;   /* brightened Win10 blue for dark surfaces — brand seed */
+    --danger:  #E74856;   /* brightened Win10 red for dark surfaces */
     --surface: #202020;   /* window / app background */
     --field:   #333333;   /* editable well */
     --ink:     #FFFFFF;   /* primary text */
@@ -124,6 +126,13 @@ TyButton.primary:hover    { background: darken(var(--accent), 8%);  border: 1px 
 TyButton.primary:active   { background: darken(var(--accent), 16%); border: 1px solid darken(var(--accent), 16%); color: on(var(--accent)); }
 TyButton.primary:focus    { outline: 1 var(--accent); outline-offset: 1px; }
 TyButton.primary:disabled { background: var(--primary-disabled-bg); color: var(--primary-disabled-ink); border: 1px solid var(--primary-disabled-bg); }
+
+/* Danger button: mirrors primary in the Win10 red — solid fill, white text, red border. Hover/press darken it. */
+TyButton.danger          { render-style: flat; background: var(--danger); color: on(var(--danger)); border: 1px solid var(--danger); border-radius: 0; padding: 6px; font-weight: normal; }
+TyButton.danger:hover    { background: darken(var(--danger), 8%);  border: 1px solid darken(var(--danger), 8%);  color: on(var(--danger)); }
+TyButton.danger:active   { background: darken(var(--danger), 16%); border: 1px solid darken(var(--danger), 16%); color: on(var(--danger)); }
+TyButton.danger:focus    { outline: 1 var(--danger); outline-offset: 1px; }
+TyButton.danger:disabled { background: var(--primary-disabled-bg); color: var(--primary-disabled-ink); border: 1px solid var(--primary-disabled-bg); }
 
 /* Ghost button: no chrome at rest — accent-tinted text; pale accent wash on interaction. */
 TyButton.ghost          { render-style: flat; background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 0; padding: 6px; font-weight: normal; }

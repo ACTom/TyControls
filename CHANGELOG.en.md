@@ -18,6 +18,8 @@ Linux and macOS.
 
 ### Fixed
 
+- **Danger buttons finally look dangerous under every built-in theme** — of the 15 built-in themes only `showcase` defined `TyButton.danger`, so on the other 14 a `StyleClass='danger'` button silently fell back to the plain button look. Each theme now carries the danger colour of the design system it imitates (Bootstrap danger, Ant Design error, Material 3 error, Apple systemRed, GNOME/Yaru, KDE Breeze negative, the Microsoft reds of each era), with separate light and dark values.
+
 - **The unpainted white/transparent strip along the right and bottom edge of borderless resizable windows is gone** — such a window cannot paint its own outermost pixels; the content container now paints to the true edge. This is why the structural change above exists.
 - **File > New *TyControls Dialog* no longer produces two title bars**, and a dialog created from it no longer fails at startup with `EClassNotFound: Class "TTyPanel" not found`.
 

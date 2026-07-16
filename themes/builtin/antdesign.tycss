@@ -14,6 +14,7 @@
 @mode light {
   :root {
     --accent:         #1677FF;   /* brand blue — primary fill, focus ring, checkbox tick, progress fill */
+    --danger:         #FF4D4F;   /* Ant error red — danger-button fill                                  */
     --window:         #FFFFFF;   /* WHITE canvas (no cards in the demo)                                 */
     --surface:        #FFFFFF;   /* title bar, button face, field wells, checkbox                       */
     --ink:            #000000E0;  /* near-black 88% primary text                                        */
@@ -26,6 +27,7 @@
     --cap-active:     #00000017;  /* caption-button pressed overlay                                      */
     --shadow-soft:    #0000000A;  /* default-button drop shadow (0 1 0)                                  */
     --shadow-primary: #1677FF1A;  /* primary-button accent-tinted drop shadow (0 2 0)                    */
+    --shadow-danger:  #FF4D4F1A;  /* danger-button red-tinted drop shadow (0 2 0)                        */
   }
 }
 
@@ -33,6 +35,7 @@
 @mode dark {
   :root {
     --accent:         #1668DC;   /* brand blue, brightened a touch for dark-mode contrast */
+    --danger:         #DC4446;   /* Ant error red, deepened for dark-mode contrast         */
     --window:         #141414;   /* deep neutral canvas                                    */
     --surface:        #1F1F1F;   /* title bar, button face, field wells, checkbox         */
     --ink:            #FFFFFFD9;  /* light 85% primary text                                */
@@ -45,6 +48,7 @@
     --cap-active:     #FFFFFF1F;  /* caption-button pressed overlay                        */
     --shadow-soft:    #00000030;  /* default-button drop shadow (deeper on dark)           */
     --shadow-primary: #1668DC40;  /* primary-button accent-tinted glow                     */
+    --shadow-danger:  #DC444640;  /* danger-button red-tinted glow                         */
   }
 }
 
@@ -73,6 +77,13 @@ TyButton.primary:hover    { background: lighten(var(--accent), 12); border-color
 TyButton.primary:active   { background: darken(var(--accent), 12); border-color: darken(var(--accent), 12); color: on(var(--accent)); }
 TyButton.primary:focus    { outline: 2 alpha(var(--accent), 0.2); outline-offset: 1px; }
 TyButton.primary:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); shadow: 0 0 0 transparent; }
+
+/* Danger button: primary's twin driven by Ant's #FF4D4F error red — solid fill, white ink, red-tinted 0 2 0 shadow. */
+TyButton.danger          { background: var(--danger); color: on(var(--danger)); border: 1px solid var(--danger); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 2 0 var(--shadow-danger); }
+TyButton.danger:hover    { background: lighten(var(--danger), 12); border-color: lighten(var(--danger), 12); color: on(var(--danger)); }
+TyButton.danger:active   { background: darken(var(--danger), 12); border-color: darken(var(--danger), 12); color: on(var(--danger)); }
+TyButton.danger:focus    { outline: 2 alpha(var(--danger), 0.2); outline-offset: 1px; }
+TyButton.danger:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); shadow: 0 0 0 transparent; }
 
 /* Ghost = Ant's link/text button: transparent, accent text, a faint #1677FF14 wash on interaction. */
 TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6; padding: 4px 10px; font-weight: normal; }

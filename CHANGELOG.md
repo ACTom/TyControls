@@ -15,7 +15,11 @@
   **图形控件(`TTyLabel`、`TTyShape` 等)必须放在 `Surface` 里** —— 它们画在父控件身上,直接放在窗体上会被遮挡而不可见;你这么放时设计器会提示。
   对话框(`TTyDialog`)不受影响:它不可缩放、没有 `Surface`,控件照常直接放在对话框上。
 
+- **内置主题的"危险按钮"现在真的是危险色了** —— 15 个内置主题里此前只有 `showcase` 定义了 `TyButton.danger`,其余 14 个都会让 `StyleClass='danger'` 的按钮**静默回退**成普通按钮。现在每个主题都按自己所模仿的设计体系给出了危险色(Bootstrap danger、Ant Design error、Material 3 error、Apple systemRed、GNOME/Yaru、KDE Breeze negative、各代微软红等),明暗两种模式分别取色。
+
 ### 修复
+
+- **内置主题的"危险按钮"现在真的是危险色** —— 15 个内置主题里此前只有 `showcase` 定义了 `TyButton.danger`,其余 14 个会让 `StyleClass='danger'` 的按钮**静默回退**成普通按钮。现在每个主题都按自己模仿的设计体系取危险色(Bootstrap danger、Ant Design error、Material 3 error、Apple systemRed、GNOME/Yaru、KDE Breeze negative、各代微软红等),明暗模式分别配色。
 
 - **无边框可缩放窗口右/下边缘那条没画上的白/透明细边消失了** —— 这类窗口画不到自己最外圈的像素,现由内容容器画到真正的边缘。这正是上面那项结构变更的原因。
 - **File > New 的 *TyControls Dialog* 不再生成两条标题栏**;由它创建的对话框也不再在启动时报 `EClassNotFound: Class "TTyPanel" not found`。

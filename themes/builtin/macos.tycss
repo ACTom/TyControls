@@ -9,6 +9,7 @@
 @mode light {
   :root {
     --accent:               #007AFF;   /* macOS system blue — seeds every accent/primary surface */
+    --danger:               #FF3B30;   /* Apple systemRed — destructive actions */
     --surface:              #ECECEC;   /* window chrome */
     --field:                #FFFFFF;   /* editable wells */
     --border:               #C6C6C6;   /* hairline field / button border */
@@ -64,6 +65,7 @@
 @mode dark {
   :root {
     --accent:               #0A84FF;   /* system blue for dark mode */
+    --danger:               #FF453A;   /* systemRed for dark mode */
     --surface:              #323232;   /* window chrome */
     --field:                #1E1E1E;   /* editable wells */
     --border:               #48484A;   /* hairline field / button border */
@@ -137,6 +139,14 @@ TyButton.primary:hover  { background: linear-gradient(90deg, lighten(var(--accen
 TyButton.primary:active { background: linear-gradient(90deg, var(--accent), darken(var(--accent), 8%)); shadow: 0 1 1 var(--primary-shadow-active); }
 TyButton.primary:focus  { outline: 3 alpha(var(--accent), 0.35); outline-offset: 1; }
 TyButton.primary:disabled { background: mix(var(--accent), var(--primary-disabled-mix), 55%); color: var(--primary-disabled-ink); border-color: mix(var(--accent), var(--primary-disabled-mix), 40%); opacity: 0.6; shadow: 0 0 0 transparent; }
+
+/* Danger (a destructive macOS action button): systemRed gloss, white ink, NOT bold —
+   the primary material driven by --danger, so it shares primary's shadow/disabled recipe. */
+TyButton.danger         { background: linear-gradient(90deg, lighten(var(--danger), 8%), var(--danger)); color: on(var(--danger)); border: 1px solid darken(var(--danger), 8%); border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 1 2 var(--primary-shadow); }
+TyButton.danger:hover   { background: linear-gradient(90deg, lighten(var(--danger), 12%), lighten(var(--danger), 4%)); }
+TyButton.danger:active  { background: linear-gradient(90deg, var(--danger), darken(var(--danger), 8%)); shadow: 0 1 1 var(--primary-shadow-active); }
+TyButton.danger:focus   { border-color: darken(var(--danger), 8%); outline: 3 alpha(var(--danger), 0.35); outline-offset: 1; }
+TyButton.danger:disabled { background: mix(var(--danger), var(--primary-disabled-mix), 55%); color: var(--primary-disabled-ink); border-color: mix(var(--danger), var(--primary-disabled-mix), 40%); opacity: 0.6; shadow: 0 0 0 transparent; }
 
 /* Ghost: transparent accent-text button, faint accent wash on interaction. */
 TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6; padding: 4px 10px; font-weight: normal; shadow: 0 0 0 transparent; }

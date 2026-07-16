@@ -12,6 +12,7 @@
 @mode light {
   :root {
     --accent:            #0D6EFD;   /* Bootstrap primary blue (brand seed)        */
+    --danger:            #DC3545;   /* $danger — BS red-500                       */
     --window:            #FFFFFF;   /* body-bg — BS default is white              */
     --surface:           #FFFFFF;   /* title bar / cards / field wells            */
     --field-border:      #CED4DA;   /* gray-400 input border                      */
@@ -34,6 +35,7 @@
 @mode dark {
   :root {
     --accent:            #0D6EFD;   /* SAME brand seed — picker recolours through it */
+    --danger:            #DC3545;   /* SAME $danger — BS 5.3 dark keeps red-500   */
     --window:            #212529;   /* dark body-bg                               */
     --surface:           #2B3035;   /* field wells / slightly-elevated title bar  */
     --field-border:      #495057;   /* gray-700 input border                      */
@@ -139,6 +141,35 @@ TyButton.primary:disabled {
   background: var(--accent);
   border-color: var(--accent);
   color: on(var(--accent));
+  opacity: 0.65;
+}
+
+/* Danger = btn-danger: solid red-500, white ink */
+TyButton.danger {
+  background: var(--danger);
+  color: on(var(--danger));
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  render-style: flat;
+  font-weight: normal;
+  padding: 6px 10px;
+}
+TyButton.danger:hover {
+  background: darken(var(--danger), 8);
+  border-color: darken(var(--danger), 12);
+}
+TyButton.danger:active {
+  background: darken(var(--danger), 11);
+  border-color: darken(var(--danger), 15);
+}
+TyButton.danger:focus {
+  outline: 4px alpha(var(--danger), 0.5);
+  outline-offset: 0px;
+}
+TyButton.danger:disabled {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: on(var(--danger));
   opacity: 0.65;
 }
 

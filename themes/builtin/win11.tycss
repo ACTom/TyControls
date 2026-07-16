@@ -15,6 +15,9 @@
     /* Brand accent (recoloured by the picker) */
     --accent:  #005FB8;
 
+    /* Destructive action — the Windows critical / close-button red */
+    --danger:  #C42B1C;
+
     /* Mica-ish neutrals */
     --mica:    #F3F3F3;   /* window + title-bar surface */
     --field:   #FFFFFF;   /* text-field wells */
@@ -52,6 +55,9 @@
   :root {
     /* Brand accent — brightened for dark-mode contrast (still recoloured by the picker) */
     --accent:  #60CDFF;
+
+    /* Destructive action — lifted critical red so it reads on the dark surface */
+    --danger:  #D13438;
 
     /* Dark neutrals */
     --mica:    #202020;   /* window + title-bar surface */
@@ -96,6 +102,14 @@
   --on-accent:       on(var(--accent));            /* readable ink on accent */
   --on-accent-dim:   alpha(var(--on-accent), 0.85);/* pressed accent ink */
 
+  /* Danger states — same derivation as the accent, driven by the per-mode --danger */
+  --danger-hover:    lighten(var(--danger), 8%);
+  --danger-active:   darken(var(--danger), 8%);
+  --danger-border:   darken(var(--danger), 6%);
+  --danger-disabled: alpha(var(--danger), 0.40);
+  --on-danger:       on(var(--danger));            /* readable ink on danger */
+  --on-danger-dim:   alpha(var(--on-danger), 0.85);/* pressed danger ink */
+
   /* Secondary ink — derived from the per-mode --ink */
   --ink-dim: alpha(var(--ink), 0.60);
 
@@ -136,6 +150,14 @@ TyButton.primary:hover    { background: var(--accent-hover); }
 TyButton.primary:active   { background: var(--accent-active); color: var(--on-accent-dim); shadow: 0 0 0 #00000000; }
 TyButton.primary:focus    { border-color: var(--accent-border); outline: 2px var(--accent); outline-offset: 1px; }
 TyButton.primary:disabled { background: var(--accent-disabled); border-color: var(--accent-disabled); color: var(--on-accent); shadow: 0 0 0 #00000000; }
+
+/* Danger: solid critical-red fill — shaped exactly like .primary (same tight padding, same
+   normal weight), only the destructive colour replaces the accent. */
+TyButton.danger          { background: var(--danger); color: var(--on-danger); border-color: var(--danger-border); border-width: 1px; border-radius: var(--radius); padding: 6px 9px; font-weight: normal; shadow: 0 1 2 var(--shadow-col); }
+TyButton.danger:hover    { background: var(--danger-hover); }
+TyButton.danger:active   { background: var(--danger-active); color: var(--on-danger-dim); shadow: 0 0 0 #00000000; }
+TyButton.danger:focus    { border-color: var(--danger-border); outline: 2px var(--danger); outline-offset: 1px; }
+TyButton.danger:disabled { background: var(--danger-disabled); border-color: var(--danger-disabled); color: var(--on-danger); shadow: 0 0 0 #00000000; }
 
 /* Ghost / subtle: transparent + shadowless until hovered; a light Fluent fill appears. */
 TyButton.ghost          { background: alpha(#000000, 0); color: var(--ink); border-radius: var(--radius); padding: 6px 9px; font-weight: normal; }

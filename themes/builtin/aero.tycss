@@ -52,7 +52,10 @@
     --close-active:      #C23030;
     --close-ink:         #FFFFFF;
 
+    --danger:            #E04747;   /* destructive red — the Aero close-glass red */
+
     --primary-shadow:    #10467A33; /* deeper accent shadow under primary */
+    --danger-shadow:     #7A101033; /* deeper red shadow under danger */
   }
 }
 
@@ -96,7 +99,10 @@
     --close-active:      #C23030;
     --close-ink:         #FFFFFF;
 
+    --danger:            #E04747;
+
     --primary-shadow:    #10467A33;
+    --danger-shadow:     #7A101033;
   }
 }
 
@@ -164,6 +170,24 @@ TyButton.primary:active {
   shadow: 0 1 1 var(--primary-shadow);
 }
 TyButton.primary:disabled { opacity: 0.5; }
+
+/* Danger: the same wet-glass gloss as primary, driven by the destructive red instead of the accent. */
+TyButton.danger {
+  background: linear-gradient(90deg, lighten(var(--danger), 18%), var(--danger));
+  color: on(var(--danger));
+  border-color: darken(var(--danger), 10%);
+  shadow: 0 1 2 var(--danger-shadow);
+}
+TyButton.danger:hover {
+  background: linear-gradient(90deg, lighten(var(--danger), 26%), lighten(var(--danger), 6%));
+  border-color: darken(var(--danger), 6%);
+}
+TyButton.danger:active {
+  background: linear-gradient(90deg, darken(var(--danger), 4%), darken(var(--danger), 12%));
+  border-color: darken(var(--danger), 16%);
+  shadow: 0 1 1 var(--danger-shadow);
+}
+TyButton.danger:disabled { opacity: 0.5; }
 
 /* Ghost: transparent with accent text; fades into a faint glass panel on hover/press. */
 TyButton.ghost {

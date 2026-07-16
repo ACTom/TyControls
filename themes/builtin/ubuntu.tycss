@@ -9,6 +9,7 @@
 @mode light {
   :root {
     --accent:     #E95420;   /* Ubuntu orange — brand seed; runtime picker recolours from here */
+    --danger:     #C7162B;   /* Ubuntu/Yaru destructive red */
     --surface:    #FAFAFA;   /* window */
     --headerbar:  #F5F5F5;   /* Yaru headerbar */
     --title-ink:  #1D1D1D;   /* caption text */
@@ -29,6 +30,7 @@
 @mode dark {
   :root {
     --accent:     #E95420;   /* Ubuntu orange — brand seed, unchanged in dark */
+    --danger:     #ED333B;   /* destructive red — lifted for dark contrast */
     --surface:    #1E1E1E;   /* window — Yaru dark neutral */
     --headerbar:  #2C2C2C;   /* dark headerbar */
     --title-ink:  #FFFFFF;   /* caption text */
@@ -70,6 +72,13 @@ TyButton.primary:hover    { background: darken(var(--accent), 5%); border-color:
 TyButton.primary:active   { background: darken(var(--accent), 11%); border-color: darken(var(--accent), 14%); shadow: 0 0 0 transparent; }
 TyButton.primary:focus    { outline: 2px alpha(var(--accent), 0.50); outline-offset: 1px; }
 TyButton.primary:disabled { background: alpha(var(--accent), 0.5); border-color: transparent; color: #FFFFFF; opacity: 0.8; shadow: 0 0 0 transparent; }
+
+/* Danger — destructive mirror of primary: solid Yaru red, white ink, normal weight. */
+TyButton.danger          { background: linear-gradient(90deg, lighten(var(--danger), 4%), var(--danger)); color: #FFFFFF; border: 1px solid darken(var(--danger), 6%); border-radius: 6px; padding: 5px 10px; font-weight: normal; shadow: 0 1px 1px #00000018; }
+TyButton.danger:hover    { background: darken(var(--danger), 5%); border-color: darken(var(--danger), 10%); }
+TyButton.danger:active   { background: darken(var(--danger), 11%); border-color: darken(var(--danger), 14%); shadow: 0 0 0 transparent; }
+TyButton.danger:focus    { outline: 2px alpha(var(--danger), 0.50); outline-offset: 1px; }
+TyButton.danger:disabled { background: alpha(var(--danger), 0.5); border-color: transparent; color: #FFFFFF; opacity: 0.8; shadow: 0 0 0 transparent; }
 
 /* Ghost — flat, orange ink, tint on interaction. */
 TyButton.ghost          { background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 6px; padding: 5px 10px; font-weight: normal; }

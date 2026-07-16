@@ -40,6 +40,9 @@
     --accent-hover:  darken(var(--accent), 7%);    /* ~#115EA3 */
     --accent-active: darken(var(--accent), 15%);   /* ~#0E4775 */
     --on-accent:     on(var(--accent));            /* readable ink -> #FFFFFF */
+    --danger-hover:  darken(var(--danger), 7%);    /* ~#B6281A */
+    --danger-active: darken(var(--danger), 15%);   /* ~#A72518 */
+    --on-danger:     on(var(--danger));            /* readable ink -> #FFFFFF */
   }
 }
 
@@ -68,6 +71,9 @@
     --accent-hover:  lighten(var(--accent), 9%);   /* ~#62ABF5 */
     --accent-active: darken(var(--accent), 8%);    /* ~#2886DE */
     --on-accent:     on(var(--accent));            /* readable ink on accent */
+    --danger-hover:  lighten(var(--danger), 9%);   /* ~#D5464A */
+    --danger-active: darken(var(--danger), 8%);    /* ~#C03034 */
+    --on-danger:     on(var(--danger));            /* readable ink on danger */
   }
 }
 
@@ -122,6 +128,22 @@ TyButton.primary:hover    { background: var(--accent-hover);  border-color: var(
 TyButton.primary:active   { background: var(--accent-active); border-color: var(--accent-active); }
 TyButton.primary:focus    { outline: 2px var(--accent); outline-offset: 1px; }
 TyButton.primary:disabled { opacity: var(--disabled); }
+
+/* Danger: primary's shape driven by the Fluent red — solid fill, white ink,
+   semibold; the destructive twin of the primary button. */
+TyButton.danger {
+  background: var(--danger);
+  color: var(--on-danger);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  padding: 5px 10px;
+  font-weight: 600;
+  shadow: 0 1 1 var(--btn-shadow);
+}
+TyButton.danger:hover    { background: var(--danger-hover);  border-color: var(--danger-hover); }
+TyButton.danger:active   { background: var(--danger-active); border-color: var(--danger-active); }
+TyButton.danger:focus    { outline: 2px var(--danger); outline-offset: 1px; }
+TyButton.danger:disabled { opacity: var(--disabled); }
 
 /* Ghost (Fluent "subtle"): transparent, regular weight, faint hover wash. */
 TyButton.ghost {

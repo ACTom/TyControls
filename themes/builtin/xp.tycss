@@ -27,6 +27,8 @@
     --field-border: #7B9EBD;    /* soft steel-blue field edge */
     --focus:        #E58B00;    /* orange focus edge */
     --btn-border:   #7A94B5;    /* soft blue-grey default-button edge (NOT navy) */
+    --danger:       #DC4E31;    /* the Luna close-button red — XP's one destructive colour */
+    --on-danger:    on(var(--danger));
 
     --title-ink:    #FFFFFF;
     /* Glossy RED close-button stops. */
@@ -47,6 +49,8 @@
     --field-border: #7B9EBD;
     --focus:        #E58B00;
     --btn-border:   #7A94B5;
+    --danger:       #DC4E31;
+    --on-danger:    on(var(--danger));
 
     --title-ink:    #FFFFFF;
     --close-top:    #F4AB92;
@@ -122,6 +126,21 @@ TyButton.primary:hover    { background: linear-gradient(90deg, lighten(var(--acc
 TyButton.primary:active   { background: linear-gradient(90deg, darken(var(--accent), 8%) 0%, darken(var(--accent), 18%) 100%); }
 TyButton.primary:focus    { outline: 2px var(--focus); outline-offset: 1px; }
 TyButton.primary:disabled { opacity: 0.5; }
+
+/* Danger = the primary button cut from the glossy Luna close-button red instead of the blue. */
+TyButton.danger {
+  background: linear-gradient(90deg, lighten(var(--danger), 24%) 0%, var(--danger) 55%, darken(var(--danger), 12%) 100%);
+  color: var(--on-danger);
+  border-color: darken(var(--danger), 22%);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 5px 12px;
+  font-weight: normal;
+}
+TyButton.danger:hover    { background: linear-gradient(90deg, lighten(var(--danger), 34%) 0%, lighten(var(--danger), 8%) 100%); border-color: #E0A020; }
+TyButton.danger:active   { background: linear-gradient(90deg, darken(var(--danger), 8%) 0%, darken(var(--danger), 18%) 100%); }
+TyButton.danger:focus    { outline: 2px var(--focus); outline-offset: 1px; }
+TyButton.danger:disabled { opacity: 0.5; }
 
 /* Ghost: transparent with accent text; a soft blue wash on touch. */
 TyButton.ghost {
