@@ -3,7 +3,7 @@ unit test.formsurface;
 interface
 uses
   Classes, SysUtils, Controls, Forms, fpcunit, testregistry,
-  tyControls.Button, tyControls.FormSurface;
+  tyControls.Button, tyControls.Form, tyControls.FormSurface;
 type
   { Option 1 — the surface is an ordinary streamed content container. Controls are ITS children (so
     graphic/windowless controls like TTyLabel paint on its canvas and stay visible), and it round-trips
@@ -16,7 +16,7 @@ type
 implementation
 
 type
-  THostForm = class(TForm)   // a streamable root that owns the design tree
+  THostForm = class(TTyForm)   // a streamable root; must be a TTyForm — the surface's parent always is
   published
     Surface: TTyFormSurface;
   end;

@@ -29,12 +29,14 @@ type
   protected
     function GetStyleTypeKey: string; override;
     procedure Paint; override;
-    { DESIGN-TIME block, on the CHILD side: a surface belongs directly on a TTyForm and nowhere else.
-      Guarding here rather than in each container's ChildClassAllowed is what makes it airtight —
-      otherwise a surface can be pasted into the title bar, a group box, any container at all, since
-      only TTyForm and the surface itself would ever refuse it. Covers the nested-surface case too (a
-      surface is not a TTyForm). Gated on csDesigning and never mid-load: SetParent runs this at
-      runtime as well, and library users must stay free to parent in code. }
+    { CLASS INVARIANT, enforced on the CHILD side: a surface is a TTyForm's content host, so its parent
+      is ALWAYS a TTyForm. Guarding here rather than in each container's ChildClassAllowed is what
+      makes it airtight — only TTyForm and the surface itself would ever refuse it, so every OTHER
+      container (the title bar, a group box, any panel) happily accepted a pasted surface. Covers the
+      nested case too (a surface is not a TTyForm).
+      Deliberately UNGATED: an earlier csDesigning/csLoading gate never fired, because pasting IS
+      streaming — csLoading is set — and that is exactly the case to catch. Legitimate use always
+      parents to a TTyForm, so the invariant costs nothing at design time, load time or runtime. }
     procedure CheckNewParent(AParent: TWinControl); override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -77,8 +79,7 @@ end;
 procedure TTyFormSurface.CheckNewParent(AParent: TWinControl);
 begin
   inherited CheckNewParent(AParent);
-  if (csDesigning in ComponentState) and not (csLoading in ComponentState)
-     and (AParent <> nil) and not (AParent is TTyForm) then
+  if (AParent <> nil) and not (AParent is TTyForm) then
     raise EInvalidOperation.Create(rsTySurfaceWrongParent);
 end;
 
