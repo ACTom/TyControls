@@ -10,62 +10,69 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 300
     Top = 0
     Width = 420
-    Align = alTop
-    Caption = 'Labels  · TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 72
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 420
+      Align = alTop
+      Caption = 'Labels  · TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 72
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 154
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object LblPlain: TTyLabel
+      Left = 24
       Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+      Top = 56
+      Width = 360
+      Caption = '普通标签 TTyLabel'
     end
-    object ThemeCombo: TTyComboBox
-      Left = 154
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+    object LblLink: TTyLinkLabel
+      Left = 24
+      Height = 24
+      Top = 100
+      Width = 360
+      Caption = '超链接标签 TTyLinkLabel(点击打开主页)'
+      URL = 'https://github.com/ACTom/TyControls'
     end
-  end
-  object LblPlain: TTyLabel
-    Left = 24
-    Height = 24
-    Top = 56
-    Width = 360
-    Caption = '普通标签 TTyLabel'
-  end
-  object LblLink: TTyLinkLabel
-    Left = 24
-    Height = 24
-    Top = 100
-    Width = 360
-    Caption = '超链接标签 TTyLinkLabel(点击打开主页)'
-    URL = 'https://github.com/ACTom/TyControls'
-  end
-  object LblShadow: TTyShadowLabel
-    Left = 24
-    Height = 30
-    Top = 144
-    Width = 360
-    Caption = '投影标签 TTyShadowLabel'
-    ShadowOffsetX = 2
-    ShadowOffsetY = 2
-  end
-  object LblGlow: TTyGlowLabel
-    Left = 24
-    Height = 32
-    Top = 192
-    Width = 360
-    Caption = '发光标签 TTyGlowLabel'
-    GlowRadius = 5
+    object LblShadow: TTyShadowLabel
+      Left = 24
+      Height = 30
+      Top = 144
+      Width = 360
+      Caption = '投影标签 TTyShadowLabel'
+      ShadowOffsetX = 2
+      ShadowOffsetY = 2
+    end
+    object LblGlow: TTyGlowLabel
+      Left = 24
+      Height = 32
+      Top = 192
+      Width = 360
+      Caption = '发光标签 TTyGlowLabel'
+      GlowRadius = 5
+    end
   end
 end

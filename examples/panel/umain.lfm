@@ -10,97 +10,104 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 400
     Top = 0
     Width = 560
-    Align = alTop
-    Caption = 'TTyPanel  ·  TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 212
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 560
+      Align = alTop
+      Caption = 'TTyPanel  ·  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 212
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 294
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object OuterPanel: TTyPanel
+      Left = 16
+      Height = 190
+      Top = 50
+      Width = 340
+      Caption = '用户信息（Caption 左对齐）'
+      Alignment = taLeftJustify
+      object NameLabel: TTyLabel
+        Left = 12
+        Height = 24
+        Top = 40
+        Width = 64
+        Caption = '姓名：'
+      end
+      object NameEdit: TTyEdit
+        Left = 80
+        Height = 26
+        Top = 40
+        Width = 240
+      end
+      object GreetBtn: TTyButton
+        Left = 80
+        Height = 32
+        Top = 80
+        Width = 120
+        Caption = '打招呼'
+        StyleClass = 'primary'
+        OnClick = GreetClicked
+      end
+      object InnerPanel: TTyPanel
+        Left = 12
+        Height = 52
+        Top = 124
+        Width = 316
+        Caption = '嵌套子面板（居中）'
+        Alignment = taCenter
+      end
+    end
+    object RightPanel: TTyPanel
+      Left = 372
+      Height = 190
+      Top = 50
+      Width = 172
+      Caption = '说明'
+      object DescLabel: TTyLabel
+        Left = 12
+        Height = 140
+        Top = 40
+        Width = 148
+        Caption = '面板的背景、边框与圆角均来自主题 TyPanel 规则，无需手写颜色。'
+      end
+    end
+    object ResultLabel: TTyLabel
+      Left = 16
       Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+      Top = 252
+      Width = 528
+      Caption = '点击“打招呼”按钮试试…'
     end
-    object ThemeCombo: TTyComboBox
-      Left = 294
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+    object BottomPanel: TTyPanel
+      Left = 0
+      Height = 44
+      Top = 356
+      Width = 560
+      Align = alBottom
+      Caption = 'Align = alBottom'
     end
-  end
-  object OuterPanel: TTyPanel
-    Left = 16
-    Height = 190
-    Top = 50
-    Width = 340
-    Caption = '用户信息（Caption 左对齐）'
-    Alignment = taLeftJustify
-    object NameLabel: TTyLabel
-      Left = 12
-      Height = 24
-      Top = 40
-      Width = 64
-      Caption = '姓名：'
-    end
-    object NameEdit: TTyEdit
-      Left = 80
-      Height = 26
-      Top = 40
-      Width = 240
-    end
-    object GreetBtn: TTyButton
-      Left = 80
-      Height = 32
-      Top = 80
-      Width = 120
-      Caption = '打招呼'
-      StyleClass = 'primary'
-      OnClick = GreetClicked
-    end
-    object InnerPanel: TTyPanel
-      Left = 12
-      Height = 52
-      Top = 124
-      Width = 316
-      Caption = '嵌套子面板（居中）'
-      Alignment = taCenter
-    end
-  end
-  object RightPanel: TTyPanel
-    Left = 372
-    Height = 190
-    Top = 50
-    Width = 172
-    Caption = '说明'
-    object DescLabel: TTyLabel
-      Left = 12
-      Height = 140
-      Top = 40
-      Width = 148
-      Caption = '面板的背景、边框与圆角均来自主题 TyPanel 规则，无需手写颜色。'
-    end
-  end
-  object ResultLabel: TTyLabel
-    Left = 16
-    Height = 24
-    Top = 252
-    Width = 528
-    Caption = '点击“打招呼”按钮试试…'
-  end
-  object BottomPanel: TTyPanel
-    Left = 0
-    Height = 44
-    Top = 356
-    Width = 560
-    Align = alBottom
-    Caption = 'Align = alBottom'
   end
 end

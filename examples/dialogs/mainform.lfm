@@ -10,163 +10,171 @@ object DialogsMainForm: TDialogsMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = TyTitleBar1
-  object TyTitleBar1: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 32
+    Height = 520
     Top = 0
     Width = 640
     TabOrder = 0
-    Caption = 'TyControls Dialogs'
-    TitleAlignment = taCenter
-    Align = alTop
-    ButtonWidth = 46
-  end
-  object LblIntro: TTyLabel
-    Left = 16
-    Height = 20
-    Top = 44
-    Width = 608
-    Controller = TyController
-    Caption = 'Click a button to open the matching custom dialog. Results appear in the log below.'
-    Alignment = taLeftJustify
-  end
-  object Panel1: TTyPanel
-    Left = 16
-    Height = 176
-    Top = 72
-    Width = 608
-    TabOrder = 1
-    Controller = TyController
-    object BtnMessage: TTyButton
-      Left = 12
+    Align = alClient
+    object TyTitleBar1: TTyTitleBar
+      Left = 0
       Height = 32
-      Top = 12
-      Width = 140
+      Top = 0
+      Width = 640
       TabOrder = 0
-      OnClick = BtnMessageClick
-      Controller = TyController
-      Caption = 'Message'
+      Caption = 'TyControls Dialogs'
+      TitleAlignment = taCenter
+      Align = alTop
+      ButtonWidth = 46
     end
-    object BtnInput: TTyButton
-      Left = 160
-      Height = 32
-      Top = 12
-      Width = 140
+    object LblIntro: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 44
+      Width = 608
+      Controller = TyController
+      Caption = 'Click a button to open the matching custom dialog. Results appear in the log below.'
+      Alignment = taLeftJustify
+    end
+    object Panel1: TTyPanel
+      Left = 16
+      Height = 176
+      Top = 72
+      Width = 608
       TabOrder = 1
-      OnClick = BtnInputClick
       Controller = TyController
-      Caption = 'Input'
+      object BtnMessage: TTyButton
+        Left = 12
+        Height = 32
+        Top = 12
+        Width = 140
+        TabOrder = 0
+        OnClick = BtnMessageClick
+        Controller = TyController
+        Caption = 'Message'
+      end
+      object BtnInput: TTyButton
+        Left = 160
+        Height = 32
+        Top = 12
+        Width = 140
+        TabOrder = 1
+        OnClick = BtnInputClick
+        Controller = TyController
+        Caption = 'Input'
+      end
+      object BtnPassword: TTyButton
+        Left = 308
+        Height = 32
+        Top = 12
+        Width = 140
+        TabOrder = 2
+        OnClick = BtnPasswordClick
+        Controller = TyController
+        Caption = 'Password'
+      end
+      object BtnText: TTyButton
+        Left = 456
+        Height = 32
+        Top = 12
+        Width = 140
+        TabOrder = 3
+        OnClick = BtnTextClick
+        Controller = TyController
+        Caption = 'Text (multiline)'
+      end
+      object BtnSelectValue: TTyButton
+        Left = 12
+        Height = 32
+        Top = 56
+        Width = 140
+        TabOrder = 4
+        OnClick = BtnSelectValueClick
+        Controller = TyController
+        Caption = 'Select value'
+      end
+      object BtnSelectPath: TTyButton
+        Left = 160
+        Height = 32
+        Top = 56
+        Width = 140
+        TabOrder = 5
+        OnClick = BtnSelectPathClick
+        Controller = TyController
+        Caption = 'Select path'
+      end
+      object BtnColor: TTyButton
+        Left = 308
+        Height = 32
+        Top = 56
+        Width = 140
+        TabOrder = 6
+        OnClick = BtnColorClick
+        Controller = TyController
+        Caption = 'Color'
+      end
+      object BtnFont: TTyButton
+        Left = 456
+        Height = 32
+        Top = 56
+        Width = 140
+        TabOrder = 7
+        OnClick = BtnFontClick
+        Controller = TyController
+        Caption = 'Font'
+      end
+      object BtnFind: TTyButton
+        Left = 12
+        Height = 32
+        Top = 100
+        Width = 140
+        TabOrder = 8
+        OnClick = BtnFindClick
+        Controller = TyController
+        Caption = 'Find (modeless)'
+      end
+      object BtnReplace: TTyButton
+        Left = 160
+        Height = 32
+        Top = 100
+        Width = 140
+        TabOrder = 9
+        OnClick = BtnReplaceClick
+        Controller = TyController
+        Caption = 'Replace (modeless)'
+      end
+      object BtnProgress: TTyButton
+        Left = 308
+        Height = 32
+        Top = 100
+        Width = 140
+        TabOrder = 10
+        OnClick = BtnProgressClick
+        Controller = TyController
+        Caption = 'Progress'
+      end
+      object BtnAbout: TTyButton
+        Left = 456
+        Height = 32
+        Top = 100
+        Width = 140
+        TabOrder = 11
+        OnClick = BtnAboutClick
+        Controller = TyController
+        Caption = 'About'
+      end
     end
-    object BtnPassword: TTyButton
-      Left = 308
-      Height = 32
-      Top = 12
-      Width = 140
+    object Memo1: TTyMemo
+      Left = 16
+      Height = 248
+      Top = 256
+      Width = 608
       TabOrder = 2
-      OnClick = BtnPasswordClick
       Controller = TyController
-      Caption = 'Password'
+      ReadOnly = True
+      ScrollBars = ssAutoVertical
     end
-    object BtnText: TTyButton
-      Left = 456
-      Height = 32
-      Top = 12
-      Width = 140
-      TabOrder = 3
-      OnClick = BtnTextClick
-      Controller = TyController
-      Caption = 'Text (multiline)'
-    end
-    object BtnSelectValue: TTyButton
-      Left = 12
-      Height = 32
-      Top = 56
-      Width = 140
-      TabOrder = 4
-      OnClick = BtnSelectValueClick
-      Controller = TyController
-      Caption = 'Select value'
-    end
-    object BtnSelectPath: TTyButton
-      Left = 160
-      Height = 32
-      Top = 56
-      Width = 140
-      TabOrder = 5
-      OnClick = BtnSelectPathClick
-      Controller = TyController
-      Caption = 'Select path'
-    end
-    object BtnColor: TTyButton
-      Left = 308
-      Height = 32
-      Top = 56
-      Width = 140
-      TabOrder = 6
-      OnClick = BtnColorClick
-      Controller = TyController
-      Caption = 'Color'
-    end
-    object BtnFont: TTyButton
-      Left = 456
-      Height = 32
-      Top = 56
-      Width = 140
-      TabOrder = 7
-      OnClick = BtnFontClick
-      Controller = TyController
-      Caption = 'Font'
-    end
-    object BtnFind: TTyButton
-      Left = 12
-      Height = 32
-      Top = 100
-      Width = 140
-      TabOrder = 8
-      OnClick = BtnFindClick
-      Controller = TyController
-      Caption = 'Find (modeless)'
-    end
-    object BtnReplace: TTyButton
-      Left = 160
-      Height = 32
-      Top = 100
-      Width = 140
-      TabOrder = 9
-      OnClick = BtnReplaceClick
-      Controller = TyController
-      Caption = 'Replace (modeless)'
-    end
-    object BtnProgress: TTyButton
-      Left = 308
-      Height = 32
-      Top = 100
-      Width = 140
-      TabOrder = 10
-      OnClick = BtnProgressClick
-      Controller = TyController
-      Caption = 'Progress'
-    end
-    object BtnAbout: TTyButton
-      Left = 456
-      Height = 32
-      Top = 100
-      Width = 140
-      TabOrder = 11
-      OnClick = BtnAboutClick
-      Controller = TyController
-      Caption = 'About'
-    end
-  end
-  object Memo1: TTyMemo
-    Left = 16
-    Height = 248
-    Top = 256
-    Width = 608
-    TabOrder = 2
-    Controller = TyController
-    ReadOnly = True
-    ScrollBars = ssAutoVertical
   end
   object TyController: TTyStyleController
     Left = 560

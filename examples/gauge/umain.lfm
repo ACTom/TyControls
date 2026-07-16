@@ -10,206 +10,214 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 660
     Top = 0
     Width = 540
-    Align = alTop
-    Caption = 'Gauge  · TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 192
+    TabOrder = 0
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 540
+      Align = alTop
+      Caption = 'Gauge  · TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 192
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 274
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object LblArc: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 46
+      Width = 160
+      Caption = '弧形(gsArc):'
+    end
+    object Arc: TTyGauge
+      Left = 24
+      Height = 160
+      Top = 68
+      Width = 160
+      Style = gsArc
+      ValueFormat = '%.0f%%'
+      Value = 62
+    end
+    object LblRing: TTyLabel
+      Left = 210
+      Height = 20
+      Top = 46
+      Width = 160
+      Caption = '环形(gsRing):'
+    end
+    object Ring: TTyGauge
+      Left = 230
+      Height = 140
+      Top = 68
+      Width = 140
+      Style = gsRing
+      ValueFormat = '%.0f'
+      Thickness = 14
+      Value = 35
+    end
+    object LblCirc: TTyLabel
+      Left = 392
+      Height = 20
+      Top = 46
+      Width = 140
+      Caption = '环形进度:'
+    end
+    object Circ: TTyCircularProgress
+      Left = 400
+      Height = 110
+      Top = 72
+      Width = 110
+      Position = 68
+      Thickness = 12
+    end
+    object Spin: TTyActivityIndicator
+      Left = 430
+      Height = 40
+      Top = 196
+      Width = 40
+      Thickness = 5
+    end
+    object GearSpin: TTyGearActivityIndicator
+      Left = 480
+      Height = 40
+      Top = 196
+      Width = 40
+    end
+    object LblBars: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 244
+      Width = 200
+      Caption = '线性(gsLinearH / gsLinearV):'
+    end
+    object BarH: TTyGauge
+      Left = 24
       Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+      Top = 268
+      Width = 300
+      Style = gsLinearH
+      ShowValue = False
+      Thickness = 1
+      Value = 62
     end
-    object ThemeCombo: TTyComboBox
-      Left = 274
+    object LblBusy: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 306
+      Width = 320
+      Caption = '不确定态(TTyActivityBar):'
+    end
+    object Busy: TTyActivityBar
+      Left = 24
+      Height = 8
+      Top = 330
+      Width = 300
+    end
+    object UpDown: TTyUpDown
+      Left = 24
+      Height = 34
+      Top = 348
+      Width = 22
+      Min = 0
+      Max = 20
+      Position = 5
+      OnChange = UpDownChange
+    end
+    object UpDownLbl: TTyLabel
+      Left = 54
+      Height = 20
+      Top = 356
+      Width = 260
+      Caption = '微调(TTyUpDown) = 5'
+    end
+    object Meter: TTyMeter
+      Left = 348
+      Height = 140
+      Top = 232
+      Width = 180
+      Min = 0
+      Max = 220
+      Ticks = 12
+      Value = 88
+    end
+    object Level: TTyLevelMeter
+      Left = 24
       Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+      Top = 396
+      Width = 300
+      Min = 0
+      Max = 100
+      Segments = 20
+      PeakHold = True
+      Value = 62
     end
-  end
-  object LblArc: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 46
-    Width = 160
-    Caption = '弧形(gsArc):'
-  end
-  object Arc: TTyGauge
-    Left = 24
-    Height = 160
-    Top = 68
-    Width = 160
-    Style = gsArc
-    ValueFormat = '%.0f%%'
-    Value = 62
-  end
-  object LblRing: TTyLabel
-    Left = 210
-    Height = 20
-    Top = 46
-    Width = 160
-    Caption = '环形(gsRing):'
-  end
-  object Ring: TTyGauge
-    Left = 230
-    Height = 140
-    Top = 68
-    Width = 140
-    Style = gsRing
-    ValueFormat = '%.0f'
-    Thickness = 14
-    Value = 35
-  end
-  object LblCirc: TTyLabel
-    Left = 392
-    Height = 20
-    Top = 46
-    Width = 140
-    Caption = '环形进度:'
-  end
-  object Circ: TTyCircularProgress
-    Left = 400
-    Height = 110
-    Top = 72
-    Width = 110
-    Position = 68
-    Thickness = 12
-  end
-  object Spin: TTyActivityIndicator
-    Left = 430
-    Height = 40
-    Top = 196
-    Width = 40
-    Thickness = 5
-  end
-  object GearSpin: TTyGearActivityIndicator
-    Left = 480
-    Height = 40
-    Top = 196
-    Width = 40
-  end
-  object LblBars: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 244
-    Width = 200
-    Caption = '线性(gsLinearH / gsLinearV):'
-  end
-  object BarH: TTyGauge
-    Left = 24
-    Height = 24
-    Top = 268
-    Width = 300
-    Style = gsLinearH
-    ShowValue = False
-    Thickness = 1
-    Value = 62
-  end
-  object LblBusy: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 306
-    Width = 320
-    Caption = '不确定态(TTyActivityBar):'
-  end
-  object Busy: TTyActivityBar
-    Left = 24
-    Height = 8
-    Top = 330
-    Width = 300
-  end
-  object UpDown: TTyUpDown
-    Left = 24
-    Height = 34
-    Top = 348
-    Width = 22
-    Min = 0
-    Max = 20
-    Position = 5
-    OnChange = UpDownChange
-  end
-  object UpDownLbl: TTyLabel
-    Left = 54
-    Height = 20
-    Top = 356
-    Width = 260
-    Caption = '微调(TTyUpDown) = 5'
-  end
-  object Meter: TTyMeter
-    Left = 348
-    Height = 140
-    Top = 232
-    Width = 180
-    Min = 0
-    Max = 220
-    Ticks = 12
-    Value = 88
-  end
-  object Level: TTyLevelMeter
-    Left = 24
-    Height = 26
-    Top = 396
-    Width = 300
-    Min = 0
-    Max = 100
-    Segments = 20
-    PeakHold = True
-    Value = 62
-  end
-  object Dial: TTyDial
-    Left = 348
-    Height = 76
-    Top = 388
-    Width = 76
-    Min = 0
-    Max = 100
-    Value = 40
-  end
-  object Clock: TTyAnalogClock
-    Left = 436
-    Height = 90
-    Top = 388
-    Width = 90
-    Running = True
-  end
-  object Spark: TTySparkline
-    Left = 24
-    Height = 40
-    Top = 500
-    Width = 220
-  end
-  object Rating: TTyRating
-    Left = 24
-    Height = 28
-    Top = 552
-    Width = 160
-    AllowHalf = True
-    Value = 3.5
-  end
-  object Gear: TTyGearDial
-    Left = 260
-    Height = 84
-    Top = 500
-    Width = 84
-    Min = 0
-    Max = 100
-    Value = 55
-  end
-  object LblStatus: TTyLabel
-    Left = 24
-    Height = 20
-    Top = 596
-    Width = 460
-    Caption = '每 1.2s 随机改变数值(旋钮 / 齿轮可拖动 / 滚轮,星星可点),观察缓动动画。'
+    object Dial: TTyDial
+      Left = 348
+      Height = 76
+      Top = 388
+      Width = 76
+      Min = 0
+      Max = 100
+      Value = 40
+    end
+    object Clock: TTyAnalogClock
+      Left = 436
+      Height = 90
+      Top = 388
+      Width = 90
+      Running = True
+    end
+    object Spark: TTySparkline
+      Left = 24
+      Height = 40
+      Top = 500
+      Width = 220
+    end
+    object Rating: TTyRating
+      Left = 24
+      Height = 28
+      Top = 552
+      Width = 160
+      AllowHalf = True
+      Value = 3.5
+    end
+    object Gear: TTyGearDial
+      Left = 260
+      Height = 84
+      Top = 500
+      Width = 84
+      Min = 0
+      Max = 100
+      Value = 55
+    end
+    object LblStatus: TTyLabel
+      Left = 24
+      Height = 20
+      Top = 596
+      Width = 460
+      Caption = '每 1.2s 随机改变数值(旋钮 / 齿轮可拖动 / 滚轮,星星可点),观察缓动动画。'
+    end
   end
   object Timer: TTimer
     Interval = 1200

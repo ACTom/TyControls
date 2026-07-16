@@ -2,7 +2,7 @@ unit tyControls.Design;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Forms, Controls, StdCtrls, ExtCtrls, Graphics, LCLIntf,
+  Classes, SysUtils, Forms, Controls, Dialogs, Menus, StdCtrls, ExtCtrls, Graphics, LCLIntf, LCLType,
   PropEdits, ComponentEditors, ProjectIntf, FormEditingIntf, LazIDEIntf,
   LResources, tyControls.Types,
   tyControls.Base, tyControls.Controller, tyControls.StyleModel,
@@ -86,6 +86,15 @@ type
     procedure Edit; override;
   end;
 
+  { Read-only `Purpose` property on TTyFormSurface: the OI shows a one-line summary and the '...'
+    button explains WHY the surface exists and why it must not be deleted or re-laid-out. Together
+    with `About` it is the only property left visible on the surface (see Register). }
+  TTySurfacePurposeEditor = class(TStringPropertyEditor)
+  public
+    function GetAttributes: TPropertyAttributes; override;
+    procedure Edit; override;
+  end;
+
   { File > New entry that creates a unit whose form descends from TTyForm — a borderless
     form with a persistent chrome engine. The generated form comes WITH a top-aligned
     TTyTitleBar already associated (TitleBar = TyTitleBar1). FWithController=True (the
@@ -113,10 +122,12 @@ type
     function GetLocalizedDescription: string; override;
   end;
 
-  { File > New entry that creates a unit whose form descends from TTyDialog — a themed,
-    close-only, non-resizable modal dialog base. The generated form comes WITH a top-aligned
-    TTyTitleBar already associated and BorderIcons = [biSystemMenu] (close button only), so the
-    user can design custom dialog content + buttons and show it modally. }
+  { File > New entry that creates a unit whose form descends from TTyDialog — a themed, close-only,
+    non-resizable modal dialog base, with BorderIcons = [biSystemMenu] (close button only), ready for
+    the user to design content + buttons on and show modally.
+    The generated .lfm is BARE — no title bar, no content surface. TTyDialog builds its own title bar
+    and bottom button bar in CreateNew (emitting one here gave the dialog TWO stacked title bars), and
+    being non-resizable it has no WS_THICKFRAME edge band for a surface to cover. }
   TTyDialogFileDescriptor = class(TTyFormFileDescriptor)
   public
     constructor Create; override;
@@ -167,6 +178,18 @@ resourcestring
   rsDtPageShowNext = 'Show Next Page';
   rsDtPageShowPrev = 'Show Previous Page';
   rsDtDialogPreview = 'Preview';
+  rsDtSurfacePurposeTitle = 'Why this control exists';
+  rsDtSurfacePurposeText =
+    'TyFormSurface is the content host of a TTyForm — the panel every control on the form lives on.' +
+    LineEnding + LineEnding +
+    'A borderless, resizable window cannot paint its own outermost pixels: the compositor gives it a ' +
+    'backing surface smaller than the window, which leaves an unpainted band along the right and ' +
+    'bottom edges. A CHILD window has no such limit and paints edge to edge, so TTyForm renders its ' +
+    'themed background onto this surface instead of onto itself.' + LineEnding + LineEnding +
+    'Your controls must live on the surface. Graphic (windowless) controls such as TTyLabel paint ' +
+    'onto their parent, so one placed directly on the form is hidden behind the surface.' +
+    LineEnding + LineEnding +
+    'Keep exactly one surface per form, leave it filling the form, and do not delete it.';
 
 var
   // The themed main-form descriptor, reused by the TyControls Application project's
@@ -191,6 +214,16 @@ end;
 procedure TTyAboutEditor.Edit;
 begin
   ShowTyAboutDialog;
+end;
+
+function TTySurfacePurposeEditor.GetAttributes: TPropertyAttributes;
+begin
+  Result := [paReadOnly, paDialog];   // greyed value + '...' button that opens the explanation
+end;
+
+procedure TTySurfacePurposeEditor.Edit;
+begin
+  MessageDlg(rsDtSurfacePurposeTitle, rsDtSurfacePurposeText, mtInformation, [mbOK], 0);
 end;
 
 function TTyStyleClassPropertyEditor.GetAttributes: TPropertyAttributes;
@@ -346,7 +379,10 @@ var
 begin
   // Declare the pre-placed components as published fields so the generated class matches the
   // .lfm GetResourceSource emits (the IDE binds streamed components to these fields by name).
-  fields := '    TyTitleBar1: TTyTitleBar;' + LE;
+  // TTyFormSurface needs no extra unit: tyControls.Form re-exports it (see that unit) precisely so
+  // every designed form can carry this field with only `uses tyControls.Form`.
+  fields := '    Surface: TTyFormSurface;' + LE
+          + '    TyTitleBar1: TTyTitleBar;' + LE;
   if FWithController then
     fields := fields + '    TyStyleController1: TTyStyleController;' + LE;
   Result :=
@@ -383,18 +419,30 @@ begin
     + '  Caption = ''' + ResourceName + '''' + LE;
   if FWithController then
     s := s + '  Controller = TyStyleController1' + LE;
+  { The content host wraps ALL of the form's controls (title bar included): a borderless resizable
+    window cannot paint its outermost pixels, and graphic controls only render when hosted on it.
+    See TTyFormSurface.Purpose. }
   s := s
     + '  TitleBar = TyTitleBar1' + LE
-    + '  object TyTitleBar1: TTyTitleBar' + LE
+    + '  object Surface: TTyFormSurface' + LE
     + '    Left = 0' + LE
-    + '    Height = 32' + LE
+    + '    Height = 320' + LE
     + '    Top = 0' + LE
     + '    Width = 480' + LE
-    + '    Align = alTop' + LE
-    + '    Caption = ''' + ResourceName + '''' + LE;
+    + '    Align = alClient' + LE
+    + '    object TyTitleBar1: TTyTitleBar' + LE
+    + '      Left = 0' + LE
+    + '      Height = 32' + LE
+    + '      Top = 0' + LE
+    + '      Width = 480' + LE
+    + '      Align = alTop' + LE
+    + '      Caption = ''' + ResourceName + '''' + LE;
   if FWithController then
-    s := s + '    Controller = TyStyleController1' + LE;
-  s := s + '  end' + LE;
+    s := s + '      Controller = TyStyleController1' + LE;
+  s := s
+    + '    end' + LE
+    + '  end' + LE;
+  // The style controller is non-visual — it stays on the FORM, not inside the surface.
   if FWithController then
     s := s
       + '  object TyStyleController1: TTyStyleController' + LE
@@ -454,14 +502,11 @@ function TTyDialogFileDescriptor.GetInterfaceSource(const Filename, SourceName,
 const
   LE = LineEnding;
 begin
-  // NOTE: full override (base hard-codes TTyForm). Keep in sync with
-  // TTyFormFileDescriptor.GetInterfaceSource — only the ancestor class differs
-  // (class(TTyDialog) vs class(TTyForm)), and there is no controller field.
-  // The pre-placed title bar is the only published field.
+  { Full override (the base hard-codes TTyForm). No published fields: TTyDialog brings its own title
+    bar and button bar from CreateNew, and there is no surface (see GetResourceSource). }
   Result :=
      'type' + LE
     + '  T' + ResourceName + ' = class(TTyDialog)' + LE
-    + '    TyTitleBar1: TTyTitleBar;' + LE
     + '  private' + LE
     + LE
     + '  public' + LE
@@ -477,10 +522,12 @@ function TTyDialogFileDescriptor.GetResourceSource(const ResourceName: string): 
 const
   LE = LineEnding;
 begin
-  // NOTE: full override (base hard-codes TTyForm). Keep in sync with
-  // TTyFormFileDescriptor.GetResourceSource — only the ancestor class + the added
-  // BorderIcons = [biSystemMenu] line differ (and there is no controller object). The
-  // form-level `TitleBar =` is a forward ref the LFM reader resolves via fixups.
+  { Full override (the base hard-codes TTyForm). Unlike the FORM template this emits NO title bar and
+    NO content surface, because TTyDialog is not TTyForm:
+      - TTyDialog.CreateNew already BUILDS and associates its own title bar (and a bottom button bar).
+        Emitting one here produced a second, stacked title bar and hijacked the `TitleBar =` binding.
+      - A dialog is Resizable=False, so it has no WS_THICKFRAME and none of the unpaintable edge band
+        the surface exists to cover — controls sit directly on the dialog, as they always have. }
   Result :=
      'object ' + ResourceName + ': T' + ResourceName + LE
     + '  Left = 300' + LE
@@ -489,15 +536,6 @@ begin
     + '  Width = 480' + LE
     + '  BorderIcons = [biSystemMenu]' + LE
     + '  Caption = ''' + ResourceName + '''' + LE
-    + '  TitleBar = TyTitleBar1' + LE
-    + '  object TyTitleBar1: TTyTitleBar' + LE
-    + '    Left = 0' + LE
-    + '    Height = 32' + LE
-    + '    Top = 0' + LE
-    + '    Width = 480' + LE
-    + '    Align = alTop' + LE
-    + '    Caption = ''' + ResourceName + '''' + LE
-    + '  end' + LE
     + 'end' + LE;
 end;
 
@@ -683,6 +721,17 @@ begin
      TTyFindDialog, TTyReplaceDialog, TTyProgressDialog, TTyAboutDialog,
      TTyOpenDialog, TTySaveDialog, TTyOpenPictureDialog, TTySavePictureDialog,
      TTyOpenPreviewDialog, TTySavePreviewDialog]);
+  { The content host MUST be a registered component class, or deleting it is unrecoverable. The
+    designer records a delete by SERIALIZING the component to LFM text (TDesigner.AddUndoAction ->
+    CopySelectionToStream) and undoes it by PASTING that text back — so undo runs through the same
+    registry paste does. RegisterNoIcon, not RegisterComponents: registered (so undo works) but with
+    no palette icon, since the surface only ever comes from the form template.
+    Pasting a stray surface is NOT blocked: the designer's paste reaches its parent without routing
+    through the SetParent a guard could hook, so the guards we tried only ever caught the form itself
+    while every other container let one through — half a fence, so they were removed. Harmless in
+    practice: the surface is not on the palette, so a stray one only appears if you deliberately copy
+    it, and a form ignores any surface that is not its own. }
+  RegisterNoIcon([TTyFormSurface]);
   // StyleClass dropdown applies to ALL styleable controls: registering on the two
   // base classes covers every TyControls control through inheritance.
   RegisterPropertyEditor(TypeInfo(string), TTyGraphicControl, 'StyleClass',
@@ -699,6 +748,54 @@ begin
   // BorderStyle is locked to bsNone (TTyForm is a borderless custom-chrome window) —
   // hide it from the Object Inspector so it is neither shown nor editable.
   RegisterPropertyEditor(TypeInfo(TFormBorderStyle), TTyForm, 'BorderStyle', THiddenPropertyEditor);
+  { TTyFormSurface is a FIXED alClient content host, not something to configure — editing its Align,
+    bounds, Visible, Font, Controller… would only break it (the Controller belongs on the FORM, which
+    themes the whole window). So hide EVERY inherited property and leave just the two informational
+    ones. Mechanics: an empty PropertyName matches any property of that type on the class, and for
+    tkClass the match follows inheritance — so TypeInfo(TPersistent) alone covers Font / Constraints /
+    BorderSpacing / PopupMenu / Action / Controller / AnchorSide*. The two by-NAME registrations below
+    win over these blanket ones (a named match always beats an unnamed one, whatever the order). }
+  RegisterPropertyEditor(TypeInfo(string), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTranslateString), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Integer), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TPersistent), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TAlign), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TAnchors), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TCursor), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTabOrder), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(THelpType), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(THelpContext), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TNotifyEvent), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TMouseEvent), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TMouseMoveEvent), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TMouseWheelEvent), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TMouseWheelUpDownEvent), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TContextPopupEvent), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TKeyEvent), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TKeyPressEvent), TTyFormSurface, '', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TUTF8KeyPressEvent), TTyFormSurface, '', THiddenPropertyEditor);
+  { The blanket rules above lose to any BY-NAME registration the IDE (or we) already made for the
+    same property — a named match always beats an unnamed one. So hide those explicitly BY NAME too;
+    with PersistentClass = TTyFormSurface they beat the IDE's TControl/TComponent-level editors (a
+    more specific class always wins), whatever the registration order. }
+  RegisterPropertyEditor(TypeInfo(TBasicAction), TTyFormSurface, 'Action', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TAnchors), TTyFormSurface, 'Anchors', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TSizeConstraints), TTyFormSurface, 'Constraints', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyStyleController), TTyFormSurface, 'Controller', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TFont), TTyFormSurface, 'Font', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTranslateString), TTyFormSurface, 'Hint', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TComponentName), TTyFormSurface, 'Name', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TPopupMenu), TTyFormSurface, 'PopupMenu', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyFormSurface, 'StyleClass', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyFormSurface, 'StyleOverride', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTabOrder), TTyFormSurface, 'TabOrder', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(PtrInt), TTyFormSurface, 'Tag', THiddenPropertyEditor);
+  // …and re-expose ONLY these two (named beats the blanket hides above; same class + named beats
+  // the named hides too only because these are registered for the SAME class with the SAME
+  // specificity — so they must be the LAST word: About/Purpose are never in the hide list).
+  RegisterPropertyEditor(TypeInfo(string), TTyFormSurface, 'About', TTyAboutEditor);
+  RegisterPropertyEditor(TypeInfo(string), TTyFormSurface, 'Purpose', TTySurfacePurposeEditor);
   // Page management verbs (Add/Delete/Show Next/Prev) for the page control.
   RegisterComponentEditor(TTyPageControl, TTyPageControlEditor);
   // Double-click a dialog component in the designer to preview it (verb 0 = Preview),

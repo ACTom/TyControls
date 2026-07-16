@@ -23,6 +23,7 @@ type
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
     DarkSwitch: TTyToggleSwitch;
+    Surface: TTyFormSurface;
     ThemeCombo: TTyComboBox;
     GroupSize: TTyGroupBox;      // left-aligned title + radio buttons
     RadioA: TTyRadioButton;

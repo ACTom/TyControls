@@ -10,14 +10,18 @@ unit umain;
 interface
 
 uses
-  Classes, SysUtils, Types, Forms, Controls,
+  Classes, SysUtils, Types, Forms, Controls, StdCtrls,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.Button, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch;
 
 type
+
+  { TMainForm }
+
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
     DarkSwitch: TTyToggleSwitch;
+    Surface: TTyFormSurface;
     ThemeCombo: TTyComboBox;
     BtnDefault: TTyButton;
     BtnPrimary: TTyButton;

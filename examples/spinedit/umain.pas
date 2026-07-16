@@ -24,6 +24,7 @@ type
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
     DarkSwitch: TTyToggleSwitch;
+    Surface: TTyFormSurface;
     ThemeCombo: TTyComboBox;
     LblQty: TTyLabel;
     SpinQty: TTySpinEdit;      // 0..100 step 1

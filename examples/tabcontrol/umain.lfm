@@ -10,171 +10,178 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 420
     Top = 0
     Width = 560
-    Align = alTop
-    Caption = 'TTyPageControl  · TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 212
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
-    end
-    object ThemeCombo: TTyComboBox
-      Left = 294
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
-    end
-  end
-  object PageCtrl: TTyPageControl
-    Left = 16
-    Height = 296
-    Top = 48
-    Width = 528
-    TabHeight = 32
-    ActivePageIndex = 0
-    OnChange = PageChanged
-    object PgGeneral: TTyTabSheet
+    Align = alClient
+    object Bar: TTyTitleBar
       Left = 0
-      Height = 264
-      Top = 32
-      Width = 528
-      Caption = '常规'
-      object LblUser: TTyLabel
-        Left = 16
-        Height = 22
-        Top = 20
-        Width = 80
-        Caption = '用户名：'
+      Height = 34
+      Top = 0
+      Width = 560
+      Align = alTop
+      Caption = 'TTyPageControl  · TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 212
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
       end
-      object EdUser: TTyEdit
-        Left = 100
-        Height = 30
-        Top = 16
-        Width = 200
-        Text = 'admin'
-      end
-      object BtnOK1: TTyButton
-        Left = 16
-        Height = 30
-        Top = 60
-        Width = 90
-        Caption = '确定'
-        StyleClass = 'primary'
-      end
-      object BtnCancel1: TTyButton
-        Left = 116
-        Height = 30
-        Top = 60
-        Width = 90
-        Caption = '取消'
-      end
-    end
-    object PgAppearance: TTyTabSheet
-      Left = 0
-      Height = 264
-      Top = 32
-      Width = 528
-      Caption = '外观'
-      object LblAppearance: TTyLabel
-        Left = 16
-        Height = 22
-        Top = 20
-        Width = 460
-        Caption = '这里是「外观」页，可放置主题相关选项。'
-      end
-      object BtnLight: TTyButton
-        Left = 16
-        Height = 30
-        Top = 56
-        Width = 90
-        Caption = '浅色'
-      end
-      object BtnDark: TTyButton
-        Left = 116
-        Height = 30
-        Top = 56
-        Width = 90
-        Caption = '深色'
-      end
-    end
-    object PgAbout: TTyTabSheet
-      Left = 0
-      Height = 264
-      Top = 32
-      Width = 528
-      Caption = '关于'
-      object LblAboutTitle: TTyLabel
-        Left = 16
-        Height = 22
-        Top = 20
-        Width = 300
-        Caption = 'TyControls 页控件示例'
-      end
-      object LblAboutCopy: TTyLabel
-        Left = 16
-        Height = 22
-        Top = 48
-        Width = 300
-        Caption = '版权所有 © 2026 TyControls'
-      end
-      object BtnLicense: TTyButton
-        Left = 16
-        Height = 30
-        Top = 84
+      object ThemeCombo: TTyComboBox
+        Left = 294
+        Height = 26
+        Top = 4
         Width = 120
-        Caption = '查看许可证'
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
       end
     end
-  end
-  object BtnGeneral: TTyButton
-    Left = 16
-    Height = 30
-    Top = 356
-    Width = 84
-    Caption = '常规'
-    OnClick = GotoGeneral
-  end
-  object BtnAppearance: TTyButton
-    Left = 108
-    Height = 30
-    Top = 356
-    Width = 84
-    Caption = '外观'
-    OnClick = GotoAppearance
-  end
-  object BtnAbout: TTyButton
-    Left = 200
-    Height = 30
-    Top = 356
-    Width = 84
-    Caption = '关于'
-    OnClick = GotoAbout
-  end
-  object BtnAddPage: TTyButton
-    Left = 300
-    Height = 30
-    Top = 356
-    Width = 120
-    Caption = '＋ 新增页面'
-    StyleClass = 'primary'
-    OnClick = AddNewPage
-  end
-  object LblStatus: TTyLabel
-    Left = 16
-    Height = 20
-    Top = 394
-    Width = 528
-    Caption = '当前页：常规（索引 0，共 3 页）'
+    object PageCtrl: TTyPageControl
+      Left = 16
+      Height = 296
+      Top = 48
+      Width = 528
+      TabHeight = 32
+      ActivePageIndex = 0
+      OnChange = PageChanged
+      object PgGeneral: TTyTabSheet
+        Left = 0
+        Height = 264
+        Top = 32
+        Width = 528
+        Caption = '常规'
+        object LblUser: TTyLabel
+          Left = 16
+          Height = 22
+          Top = 20
+          Width = 80
+          Caption = '用户名：'
+        end
+        object EdUser: TTyEdit
+          Left = 100
+          Height = 30
+          Top = 16
+          Width = 200
+          Text = 'admin'
+        end
+        object BtnOK1: TTyButton
+          Left = 16
+          Height = 30
+          Top = 60
+          Width = 90
+          Caption = '确定'
+          StyleClass = 'primary'
+        end
+        object BtnCancel1: TTyButton
+          Left = 116
+          Height = 30
+          Top = 60
+          Width = 90
+          Caption = '取消'
+        end
+      end
+      object PgAppearance: TTyTabSheet
+        Left = 0
+        Height = 264
+        Top = 32
+        Width = 528
+        Caption = '外观'
+        object LblAppearance: TTyLabel
+          Left = 16
+          Height = 22
+          Top = 20
+          Width = 460
+          Caption = '这里是「外观」页，可放置主题相关选项。'
+        end
+        object BtnLight: TTyButton
+          Left = 16
+          Height = 30
+          Top = 56
+          Width = 90
+          Caption = '浅色'
+        end
+        object BtnDark: TTyButton
+          Left = 116
+          Height = 30
+          Top = 56
+          Width = 90
+          Caption = '深色'
+        end
+      end
+      object PgAbout: TTyTabSheet
+        Left = 0
+        Height = 264
+        Top = 32
+        Width = 528
+        Caption = '关于'
+        object LblAboutTitle: TTyLabel
+          Left = 16
+          Height = 22
+          Top = 20
+          Width = 300
+          Caption = 'TyControls 页控件示例'
+        end
+        object LblAboutCopy: TTyLabel
+          Left = 16
+          Height = 22
+          Top = 48
+          Width = 300
+          Caption = '版权所有 © 2026 TyControls'
+        end
+        object BtnLicense: TTyButton
+          Left = 16
+          Height = 30
+          Top = 84
+          Width = 120
+          Caption = '查看许可证'
+        end
+      end
+    end
+    object BtnGeneral: TTyButton
+      Left = 16
+      Height = 30
+      Top = 356
+      Width = 84
+      Caption = '常规'
+      OnClick = GotoGeneral
+    end
+    object BtnAppearance: TTyButton
+      Left = 108
+      Height = 30
+      Top = 356
+      Width = 84
+      Caption = '外观'
+      OnClick = GotoAppearance
+    end
+    object BtnAbout: TTyButton
+      Left = 200
+      Height = 30
+      Top = 356
+      Width = 84
+      Caption = '关于'
+      OnClick = GotoAbout
+    end
+    object BtnAddPage: TTyButton
+      Left = 300
+      Height = 30
+      Top = 356
+      Width = 120
+      Caption = '＋ 新增页面'
+      StyleClass = 'primary'
+      OnClick = AddNewPage
+    end
+    object LblStatus: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 394
+      Width = 528
+      Caption = '当前页：常规（索引 0，共 3 页）'
+    end
   end
 end

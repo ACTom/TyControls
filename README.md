@@ -19,7 +19,7 @@ TyButton:disabled { opacity: 0.5; }
 - **20+ 核心自绘控件** —— Button、Label、Edit、Memo、SpinEdit、CheckBox(三态)、RadioButton、Panel、GroupBox、ComboBox(可编辑 + 前缀自动补全)、ListBox、ScrollBar、ProgressBar、ToggleSwitch、TrackBar、PageControl(+TabSheet)、TabSet、Splitter、StatusBar、ToolBar、DateTimePicker、Calendar、TitleBar、CaptionButton
 - **扩展控件族(140+ 个类型,全部自绘 · 跨平台)** —— **仪表/图表**:Gauge / Meter / Dial / AnalogClock / Sparkline / Rating / CircularProgress / 活动指示器 + `TTyChart`(折线/柱/饼);**Ribbon 与导航**:Ribbon(页/组/应用菜单/QAT/Gallery/Backstage);**富输入与选择器**:数值/货币/掩码/URL/Combo/滑块/计算器编辑、颜色/字体/文件 combo、颜色/HS 拾取器、`TTyValueListEditor`(属性检视);**容器与布局**:Bevel/Divider/PaintPanel、RadioGroup/CheckGroup、ScrollBox/ExPanel、GridPanel/RelativePanel、ToolBarEx/ControlBar/CoolBar、HeaderControl、ListGroupPanel;**列表/树/shell**:`TTyListView`(报表/图标/平铺 + 虚拟)、`TTyShellTreeView`/`TTyShellListView`/`TTyShellComboBox`/`TTyFilterComboBox`(文件系统后备);**菜单/效果**:MenuEx/ImagesMenu、矢量图元(Shape/Star/Arrow)、`TTyImageView`(平移/缩放 + BGRA 滤镜)、`TTyHtmlLabel`(行内 HTML 子集)、`tyControls.Transitions`(滑入/淡入过渡)
 - **虚拟树 `TTyTreeView`** —— VirtualTreeView 级别的虚拟树:数据按需加载(可承载百万级节点)、多列 + 可拖拽表头(调宽 / 重排 / 排序)、复选框 + 三态 + 单选节点、多选(Ctrl/Shift)+ 整行选择、可变行高、增量输入查找、单元格自绘、**内联编辑**(F2 / 双击)、**节点拖放**(重排 / 改变父子关系)
-- **原生窗口 `TTyForm`** —— 无边框 + 自绘标题栏(可关联 `TTyTitleBar`):Windows 原生窗口缩放(`Resizable`)、最大化避让任务栏、系统圆角 + 原生投影(Windows 11 DWM / macOS,可经 CSS 关闭)
+- **原生窗口 `TTyForm`** —— 无边框 + 自绘标题栏(可关联 `TTyTitleBar`):Windows 原生窗口缩放(`Resizable`)、最大化避让任务栏、系统圆角 + 原生投影(Windows 11 DWM / macOS,可经 CSS 关闭)。窗体的控件承载在内容容器 **`TTyFormSurface`**(名为 `Surface`,铺满窗体)上 —— **所有控件都放在它里面**,新建窗体模板已自带,详见[窗体结构](#窗体结构)
 - **文本编辑能力** —— `TTyEdit` 单行(选区 / 剪贴板 / 水平滚动 / 词级导航)、`TTyMemo` 多行(2D 导航 / 跨行编辑 / 垂直滚动)、`TTySpinEdit` 数值微调;自绘编辑支持输入法(Qt6 / GTK2)
 - **键盘助记符** —— `&` 加速键,Alt 下划线显示 + Alt+字母激活,覆盖菜单与各控件
 - **原生控件协调 `TTyNativeStyler`** —— 让第三方 / LCL 原生控件跟随当前主题着色
@@ -49,6 +49,20 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 > 注意:工程 `.lpr` 的 `uses` 必须以 `Interfaces` 开头(LCL 控件库的通用要求)。
 
 完整步骤(安装包、第一个窗体、主题切换)见 **[docs/getting-started.md](docs/getting-started.md)**。
+
+## 窗体结构
+
+`TTyForm` 的控件承载在一个内容容器 **`TTyFormSurface`** 上 —— 每个窗体有且只有一个,名叫 `Surface`,铺满整个窗体。**把控件都放进它里面。**
+
+- **新建窗体不用管**:File > New 的 *TyControls Form / Application* 模板已经带好 `Surface`,标题栏也在里面;在设计器里拖控件本来就落进它。
+- **图形控件必须放进去**:`TTyLabel`、`TTyShape` 这类无窗口的图形控件是画在父控件身上的 —— 直接放在窗体上会被 `Surface` 挡住、**看不见**。你这么放时设计器会提示。
+- **非可视组件仍留在窗体上**:样式控制器、定时器、对话框组件、图像列表、菜单等不受影响。
+- **对话框(`TTyDialog`)没有 `Surface`**:它不可缩放,不需要。控件照常直接放在对话框上。
+
+它为什么存在:无边框可缩放窗口画不到自己最外圈的像素,右/下边会留下一条没画上的细边;而子窗口能画到真正的边缘,所以窗体的主题背景改由 `Surface` 来画。在设计器里选中它,`Purpose` 属性里有完整说明。
+
+**迁移现有窗体**:把原本直接放在窗体上的控件移进 `Surface` 即可(非可视组件不动)。参考 [examples/button/umain.lfm](examples/button/umain.lfm)。
+
 
 ## 文档
 

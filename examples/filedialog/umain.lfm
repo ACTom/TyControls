@@ -11,111 +11,119 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = TitleBar1
-  object TitleBar1: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 560
     Top = 0
     Width = 720
-    Align = alTop
-    Caption = '文件对话框  ·  TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 372
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+    TabOrder = 0
+    Align = alClient
+    object TitleBar1: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 720
+      Align = alTop
+      Caption = '文件对话框  ·  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 372
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 454
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
     end
-    object ThemeCombo: TTyComboBox
-      Left = 454
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+    object DivFile: TTyDivider
+      Left = 16
+      Height = 22
+      Top = 44
+      Width = 688
+      Caption = '普通文件对话框'
+      Alignment = taLeftJustify
     end
-  end
-  object DivFile: TTyDivider
-    Left = 16
-    Height = 22
-    Top = 44
-    Width = 688
-    Caption = '普通文件对话框'
-    Alignment = taLeftJustify
-  end
-  object BtnOpen: TTyButton
-    Left = 16
-    Height = 32
-    Top = 72
-    Width = 130
-    Caption = '打开(多选)'
-    OnClick = BtnOpenClick
-  end
-  object BtnSave: TTyButton
-    Left = 156
-    Height = 32
-    Top = 72
-    Width = 130
-    Caption = '保存'
-    OnClick = BtnSaveClick
-  end
-  object DivPic: TTyDivider
-    Left = 16
-    Height = 22
-    Top = 116
-    Width = 688
-    Caption = '图片对话框(右侧图片预览)'
-    Alignment = taLeftJustify
-  end
-  object BtnOpenPic: TTyButton
-    Left = 16
-    Height = 32
-    Top = 144
-    Width = 130
-    Caption = '打开图片'
-    OnClick = BtnOpenPicClick
-  end
-  object BtnSavePic: TTyButton
-    Left = 156
-    Height = 32
-    Top = 144
-    Width = 130
-    Caption = '保存图片'
-    OnClick = BtnSavePicClick
-  end
-  object DivPrev: TTyDivider
-    Left = 16
-    Height = 22
-    Top = 188
-    Width = 688
-    Caption = '预览对话框(图片 + 文本 + 自定义 OnPreview)'
-    Alignment = taLeftJustify
-  end
-  object BtnOpenPrev: TTyButton
-    Left = 16
-    Height = 32
-    Top = 216
-    Width = 130
-    Caption = '打开预览'
-    OnClick = BtnOpenPrevClick
-  end
-  object BtnSavePrev: TTyButton
-    Left = 156
-    Height = 32
-    Top = 216
-    Width = 130
-    Caption = '保存预览'
-    OnClick = BtnSavePrevClick
-  end
-  object ResultMemo: TTyMemo
-    Left = 16
-    Height = 280
-    Top = 260
-    Width = 688
-    Anchors = [akTop, akLeft, akRight, akBottom]
-    ReadOnly = True
-    ScrollBars = ssAutoBoth
+    object BtnOpen: TTyButton
+      Left = 16
+      Height = 32
+      Top = 72
+      Width = 130
+      Caption = '打开(多选)'
+      OnClick = BtnOpenClick
+    end
+    object BtnSave: TTyButton
+      Left = 156
+      Height = 32
+      Top = 72
+      Width = 130
+      Caption = '保存'
+      OnClick = BtnSaveClick
+    end
+    object DivPic: TTyDivider
+      Left = 16
+      Height = 22
+      Top = 116
+      Width = 688
+      Caption = '图片对话框(右侧图片预览)'
+      Alignment = taLeftJustify
+    end
+    object BtnOpenPic: TTyButton
+      Left = 16
+      Height = 32
+      Top = 144
+      Width = 130
+      Caption = '打开图片'
+      OnClick = BtnOpenPicClick
+    end
+    object BtnSavePic: TTyButton
+      Left = 156
+      Height = 32
+      Top = 144
+      Width = 130
+      Caption = '保存图片'
+      OnClick = BtnSavePicClick
+    end
+    object DivPrev: TTyDivider
+      Left = 16
+      Height = 22
+      Top = 188
+      Width = 688
+      Caption = '预览对话框(图片 + 文本 + 自定义 OnPreview)'
+      Alignment = taLeftJustify
+    end
+    object BtnOpenPrev: TTyButton
+      Left = 16
+      Height = 32
+      Top = 216
+      Width = 130
+      Caption = '打开预览'
+      OnClick = BtnOpenPrevClick
+    end
+    object BtnSavePrev: TTyButton
+      Left = 156
+      Height = 32
+      Top = 216
+      Width = 130
+      Caption = '保存预览'
+      OnClick = BtnSavePrevClick
+    end
+    object ResultMemo: TTyMemo
+      Left = 16
+      Height = 280
+      Top = 260
+      Width = 688
+      Anchors = [akTop, akLeft, akRight, akBottom]
+      ReadOnly = True
+      ScrollBars = ssAutoBoth
+    end
   end
 end

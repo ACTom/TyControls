@@ -25,7 +25,15 @@ type
     RadiusPx:  Integer;
     Shadow:    Boolean;
     Maximized: Boolean;
+    // COLORREF (0x00BBGGRR) for the Win11 DWM window border (DWMWA_BORDER_COLOR). Resolved from the
+    // theme: an explicit theme border (e.g. XP-Luna blue) shows that colour; otherwise the solid
+    // background colour so the hairline blends into the client; $FFFFFFFE (COLOR_NONE) when neither
+    // applies (image/gradient background). Theme-driven so the border is themeable, not hard-hidden.
+    BorderColorRGB: Cardinal;
   end;
+
+const
+  TyDwmColorNone = Cardinal($FFFFFFFE);   // DWMWA_COLOR_NONE sentinel (no visible border)
 
 const
   TyDefaultWindowRadiusPx = 8;   // corners ON by default; a theme sets border-radius: 0 to turn them off
@@ -57,6 +65,11 @@ implementation
 {$IFDEF LCLWin32}uses Windows;{$ENDIF}
 {$IFDEF LCLCOCOA}uses CocoaAll;{$ENDIF}
 
+function TyToColorRef(c: TTyColor): Cardinal;   // TTyColor $AARRGGBB -> COLORREF 0x00BBGGRR
+begin
+  Result := Cardinal(TyRedOf(c)) or (Cardinal(TyGreenOf(c)) shl 8) or (Cardinal(TyBlueOf(c)) shl 16);
+end;
+
 function TyResolveWindowEffect(const AStyle: TTyStyleSet; AMaximized: Boolean): TTyWindowEffect;
 begin
   if tpBorderRadius in AStyle.Present then Result.RadiusPx := AStyle.BorderRadius
@@ -64,6 +77,17 @@ begin
   if tpWindowShadow in AStyle.Present then Result.Shadow := AStyle.WindowShadow
   else Result.Shadow := True;                                // default-on
   Result.Maximized := AMaximized;
+  // DWM window-border colour, theme-driven (Win11 only; harmless elsewhere):
+  //  - explicit theme border (border-color + width>0) -> that colour (e.g. XP-Luna blue frame);
+  //  - else a SOLID themed background -> the background colour, so the 1px DWM border blends away
+  //    (COLOR_NONE was observed NOT to hide it on some machines; a matching colour is more reliable);
+  //  - else (image/gradient bg, no single colour) -> COLOR_NONE.
+  if (tpBorderColor in AStyle.Present) and (AStyle.BorderWidth > 0) then
+    Result.BorderColorRGB := TyToColorRef(AStyle.BorderColor)
+  else if (tpBackground in AStyle.Present) and (AStyle.Background.Kind = tfkSolid) then
+    Result.BorderColorRGB := TyToColorRef(AStyle.Background.Color)
+  else
+    Result.BorderColorRGB := TyDwmColorNone;
 end;
 
 function TyRadiusToCornerPref(ARadiusPx: Integer; AMaximized: Boolean): Integer;
@@ -111,19 +135,21 @@ begin
   begin
     pref := DWORD(TyRadiusToCornerPref(E.RadiusPx, E.Maximized));
     FnSetAttr(h, DWMWA_WINDOW_CORNER_PREFERENCE, @pref, SizeOf(pref));
-    // Pin the 1px DWM window border so it stops flashing white (deactivated) / gray (dragging)
-    // as focus moves to a popup/dialog and back. A resizable TTyForm carries WS_THICKFRAME, and
-    // Win11 draws a DWM border on such windows whose color tracks active/inactive; the form has
-    // its OWN custom chrome + rounded corners + shadow, so it needs no OS border for separation.
-    // COLOR_NONE removes the visible border entirely -> identical active/inactive.
-    // Win11 22000+ only; on Win10 DWMWA_BORDER_COLOR is unsupported -> the call errors harmlessly
-    // (no per-window border recolor there anyway). If a real machine shows no edge separation,
-    // the fallback is a fixed theme-matched COLORREF (0x00BBGGRR) instead of COLOR_NONE.
-    if (Win32MajorVersion >= 10) and (Win32BuildNumber >= Win11Build) then
-    begin
-      bcol := DWMWA_COLOR_NONE;
-      FnSetAttr(h, DWMWA_BORDER_COLOR, @bcol, SizeOf(bcol));
-    end;
+    // Pin the 1px DWM window border so it stops showing as a hairline edge (a faint light line in a
+    // dark theme) and stops flashing white (deactivated) / gray (dragging) as focus moves to a popup
+    // and back. A resizable TTyForm carries WS_THICKFRAME, and Win11 draws a DWM border on such
+    // windows whose color tracks active/inactive; the form has its OWN custom chrome + rounded corners
+    // + shadow, so it needs no OS border. COLOR_NONE removes the visible border entirely.
+    //
+    // Call it UNCONDITIONALLY (no Win32BuildNumber gate): an un-manifested exe misreports
+    // Win32BuildNumber as 9200 (Win8) EVEN ON Win11, so a `>= 22000` gate wrongly skips this on the
+    // very OS where the border shows — the exact reported hairline. DWMWA_BORDER_COLOR is ignored
+    // (errors harmlessly) on Win10 and older, so the unconditional call is safe there; and on real
+    // Win11 the OS honors it regardless of the misreported build number (same as the corner
+    // preference above, which is applied here and demonstrably works). If a real machine ever needs
+    // visible edge separation, the fallback is a theme-matched COLORREF (0x00BBGGRR) instead of NONE.
+    bcol := E.BorderColorRGB;   // theme-driven (see TyResolveWindowEffect); COLOR_NONE if unset
+    FnSetAttr(h, DWMWA_BORDER_COLOR, @bcol, SizeOf(bcol));
   end;
   if Assigned(FnExtend) then        // Vista+: native shadow via frame extension
   begin
@@ -132,31 +158,21 @@ begin
     FillChar(m, SizeOf(m), 0);
     if E.Shadow and comp and (not E.Maximized) then
     begin
-      // The DWM drop shadow comes from extending the frame into the client. HOW we extend
-      // it decides whether Win10 also draws a visible 1px window-border LINE at the edge:
+      // Canonical "borderless window WITH drop shadow": extend the frame a HAIRLINE — but ONLY on the
+      // TOP. Any single non-zero margin re-enables the full native DWM drop shadow (it wraps all four
+      // sides regardless of which edge is extended), so 1px on top is enough. We must NOT extend the
+      // left/right/bottom: on a resizable WS_THICKFRAME form the client's BeginPaint SYSRGN stays inset
+      // a hairline short of the client edge, so the form's opaque paint canNOT cover that outermost
+      // pixel row/column — and any glass we extend there shows through as a ~1px light band (invisible
+      // in light themes, a faint line in dark ones: the reported edge). The top is covered flush by the
+      // opaque title bar, so its 1px extension is always hidden. This pairs with the top-only
+      // WM_NCCALCSIZE in tyControls.Win32WS (left/right/bottom stay real OS frame).
       //
-      //  * Win11 22000+ : positive {1,1,1,1}. The border line is neutralised separately by
-      //    DWMWA_BORDER_COLOR = COLOR_NONE above (Win11-only attribute), so a plain 1px
-      //    extension is fine and keeps the corner/border behaviour that already works there.
-      //
-      //  * Win10 / Vista..8.1 : SHEET-OF-GLASS {-1,-1,-1,-1}. On Win10 a resizable TTyForm
-      //    carries WS_THICKFRAME (needed for native edge-resize), and WS_THICKFRAME +
-      //    a POSITIVE-margin DwmExtendFrameIntoClientArea makes DWM paint a 1px window
-      //    edge whose colour tracks activation (accent/gray active, WHITE when a dialog/
-      //    dropdown/menu steals focus). DWMWA_BORDER_COLOR can't recolour it (Win11-only),
-      //    and WS_POPUP would drop it but ALSO kills the shadow + minimize (per MS's own
-      //    guidance) — both are hard constraints here. Negative margins are documented by
-      //    DwmExtendFrameIntoClientArea as the "sheet of glass" effect: the client is a
-      //    single solid surface with NO window border, while the frame extension still
-      //    yields the drop shadow. TTyForm paints the whole client opaquely (themed
-      //    backdrop), so the glass surface never shows through — we get the shadow, keep
-      //    WS_THICKFRAME edge-resize, and lose the activation-coloured ring.
-      //    REAL-MACHINE CHECKPOINT (Win10 19044): confirm the white/gray ring is gone on
-      //    activation, and shadow + rounded fallback + resize still work.
-      if (Win32MajorVersion >= 10) and (Win32BuildNumber >= Win11Build) then
-      begin m.cxLeftWidth := 1; m.cxRightWidth := 1; m.cyTopHeight := 1; m.cyBottomHeight := 1; end
-      else
-      begin m.cxLeftWidth := -1; m.cxRightWidth := -1; m.cyTopHeight := -1; m.cyBottomHeight := -1; end;
+      // We also deliberately do NOT use the {-1,-1,-1,-1} "sheet of glass": -1 turns the ENTIRE window
+      // into glass that shows through wherever a pixel is alpha 0, an even worse version of the same
+      // edge band. On Win11 the 1px DWM border is additionally pinned to COLOR_NONE above; on Win10 a
+      // faint activation-tracked edge may remain (WM_NCACTIVATE suppresses its repaint).
+      m.cyTopHeight := 1;   // top-only; left/right/bottom stay 0 (see above)
     end;
     FnExtend(h, m);
   end;

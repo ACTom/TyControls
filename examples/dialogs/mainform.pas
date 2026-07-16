@@ -18,6 +18,7 @@ type
 
   TDialogsMainForm = class(TTyForm)
     TyController: TTyStyleController;
+    Surface: TTyFormSurface;
     TyTitleBar1: TTyTitleBar;
     Panel1: TTyPanel;
     LblIntro: TTyLabel;

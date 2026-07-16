@@ -10,78 +10,86 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 320
     Top = 0
     Width = 520
-    Align = alTop
-    Caption = 'TTyStatusBar  ·  TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 172
+    TabOrder = 0
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 520
+      Align = alTop
+      Caption = 'TTyStatusBar  ·  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 172
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 254
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object HintLbl: TTyLabel
+      Left = 24
       Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+      Top = 56
+      Width = 472
+      Caption = '底部状态栏:多面板 + 尺寸手柄。点击按钮更新面板文本。'
     end
-    object ThemeCombo: TTyComboBox
-      Left = 254
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+    object BtnUpdate: TTyButton
+      Left = 24
+      Height = 34
+      Top = 100
+      Width = 200
+      Caption = '更新状态面板'
+      StyleClass = 'primary'
+      OnClick = UpdatePanel
     end
-  end
-  object HintLbl: TTyLabel
-    Left = 24
-    Height = 24
-    Top = 56
-    Width = 472
-    Caption = '底部状态栏:多面板 + 尺寸手柄。点击按钮更新面板文本。'
-  end
-  object BtnUpdate: TTyButton
-    Left = 24
-    Height = 34
-    Top = 100
-    Width = 200
-    Caption = '更新状态面板'
-    StyleClass = 'primary'
-    OnClick = UpdatePanel
-  end
-  object BtnSimple: TTyButton
-    Left = 24
-    Height = 34
-    Top = 144
-    Width = 200
-    Caption = '切换 SimplePanel 模式'
-    OnClick = ToggleSimple
-  end
-  object StatusBar: TTyStatusBar
-    Left = 0
-    Height = 24
-    Top = 296
-    Width = 520
-    Align = alBottom
-    SizeGrip = True
-    Panels = <
-      item
-        Text = '就绪'
-        Width = 0
-        Alignment = taLeftJustify
-      end
-      item
-        Text = '点击:0'
-        Width = 110
-        Alignment = taCenter
-      end
-      item
-        Text = 'TyControls'
-        Width = 110
-        Alignment = taRightJustify
-      end>
+    object BtnSimple: TTyButton
+      Left = 24
+      Height = 34
+      Top = 144
+      Width = 200
+      Caption = '切换 SimplePanel 模式'
+      OnClick = ToggleSimple
+    end
+    object StatusBar: TTyStatusBar
+      Left = 0
+      Height = 24
+      Top = 296
+      Width = 520
+      Align = alBottom
+      SizeGrip = True
+      Panels = <
+        item
+          Text = '就绪'
+          Width = 0
+          Alignment = taLeftJustify
+        end
+        item
+          Text = '点击:0'
+          Width = 110
+          Alignment = taCenter
+        end
+        item
+          Text = 'TyControls'
+          Width = 110
+          Alignment = taRightJustify
+        end>
+    end
   end
 end

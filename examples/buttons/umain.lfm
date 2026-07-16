@@ -10,139 +10,147 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 360
     Top = 0
     Width = 480
-    Align = alTop
-    Caption = 'Buttons  · TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 132
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+    TabOrder = 0
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 480
+      Align = alTop
+      Caption = 'Buttons  · TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 132
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 214
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
     end
-    object ThemeCombo: TTyComboBox
-      Left = 214
-      Height = 26
-      Top = 4
+    object LblGlyph: TTyLabel
+      Left = 20
+      Height = 18
+      Top = 48
+      Width = 200
+      Caption = '图标命令按钮'
+    end
+    object BtnNew: TTyGlyphButton
+      Left = 20
+      Height = 34
+      Top = 68
       Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
+      Caption = '新建'
+      GlyphName = 'star'
+      IconFont = Icons
     end
-  end
-  object LblGlyph: TTyLabel
-    Left = 20
-    Height = 18
-    Top = 48
-    Width = 200
-    Caption = '图标命令按钮'
-  end
-  object BtnNew: TTyGlyphButton
-    Left = 20
-    Height = 34
-    Top = 68
-    Width = 120
-    Caption = '新建'
-    GlyphName = 'star'
-    IconFont = Icons
-  end
-  object BtnOpen: TTyGlyphContainerButton
-    Left = 152
-    Height = 64
-    Top = 68
-    Width = 80
-    Caption = '打开'
-    GlyphName = 'star'
-    IconFont = Icons
-  end
-  object LblGroup: TTyLabel
-    Left = 250
-    Height = 18
-    Top = 48
-    Width = 200
-    Caption = '分组切换(SpeedButton)'
-  end
-  object Speed1: TTySpeedButton
-    Left = 250
-    Height = 34
-    Top = 68
-    Width = 52
-    Caption = '左'
-    Down = True
-    StyleClass = 'ghost'
-    GroupIndex = 1
-  end
-  object Speed2: TTySpeedButton
-    Left = 306
-    Height = 34
-    Top = 68
-    Width = 52
-    Caption = '中'
-    StyleClass = 'ghost'
-    GroupIndex = 1
-  end
-  object Speed3: TTySpeedButton
-    Left = 362
-    Height = 34
-    Top = 68
-    Width = 52
-    Caption = '右'
-    StyleClass = 'ghost'
-    GroupIndex = 1
-  end
-  object LblDrop: TTyLabel
-    Left = 20
-    Height = 18
-    Top = 150
-    Width = 200
-    Caption = '下拉 / 菜单按钮'
-  end
-  object BtnSave: TTyDropDownButton
-    Left = 20
-    Height = 34
-    Top = 170
-    Width = 130
-    Caption = '保存'
-  end
-  object BtnMore: TTyMenuButton
-    Left = 162
-    Height = 34
-    Top = 170
-    Width = 110
-    Caption = '更多'
-  end
-  object LblColor: TTyLabel
-    Left = 20
-    Height = 18
-    Top = 232
-    Width = 200
-    Caption = '颜色按钮 / 分段条'
-  end
-  object BtnColor: TTyColorButton
-    Left = 20
-    Height = 34
-    Top = 252
-    Width = 150
-    ShowText = True
-  end
-  object Grp: TTyButtonGroup
-    Left = 190
-    Height = 34
-    Top = 252
-    Width = 210
-    Items.Strings = (
-      '日'
-      '周'
-      '月'
-    )
-    ItemIndex = 0
-    StyleClass = 'ghost'
+    object BtnOpen: TTyGlyphContainerButton
+      Left = 152
+      Height = 64
+      Top = 68
+      Width = 80
+      Caption = '打开'
+      GlyphName = 'star'
+      IconFont = Icons
+    end
+    object LblGroup: TTyLabel
+      Left = 250
+      Height = 18
+      Top = 48
+      Width = 200
+      Caption = '分组切换(SpeedButton)'
+    end
+    object Speed1: TTySpeedButton
+      Left = 250
+      Height = 34
+      Top = 68
+      Width = 52
+      Caption = '左'
+      Down = True
+      StyleClass = 'ghost'
+      GroupIndex = 1
+    end
+    object Speed2: TTySpeedButton
+      Left = 306
+      Height = 34
+      Top = 68
+      Width = 52
+      Caption = '中'
+      StyleClass = 'ghost'
+      GroupIndex = 1
+    end
+    object Speed3: TTySpeedButton
+      Left = 362
+      Height = 34
+      Top = 68
+      Width = 52
+      Caption = '右'
+      StyleClass = 'ghost'
+      GroupIndex = 1
+    end
+    object LblDrop: TTyLabel
+      Left = 20
+      Height = 18
+      Top = 150
+      Width = 200
+      Caption = '下拉 / 菜单按钮'
+    end
+    object BtnSave: TTyDropDownButton
+      Left = 20
+      Height = 34
+      Top = 170
+      Width = 130
+      Caption = '保存'
+    end
+    object BtnMore: TTyMenuButton
+      Left = 162
+      Height = 34
+      Top = 170
+      Width = 110
+      Caption = '更多'
+    end
+    object LblColor: TTyLabel
+      Left = 20
+      Height = 18
+      Top = 232
+      Width = 200
+      Caption = '颜色按钮 / 分段条'
+    end
+    object BtnColor: TTyColorButton
+      Left = 20
+      Height = 34
+      Top = 252
+      Width = 150
+      ShowText = True
+    end
+    object Grp: TTyButtonGroup
+      Left = 190
+      Height = 34
+      Top = 252
+      Width = 210
+      Items.Strings = (
+        '日'
+        '周'
+        '月'
+      )
+      ItemIndex = 0
+      StyleClass = 'ghost'
+    end
   end
   object Icons: TTyIconFont
     FontFamily = 'Segoe UI Symbol'

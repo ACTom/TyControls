@@ -46,6 +46,7 @@ type
 
   TMainForm = class(TTyForm)
     Bar: TTyTitleBar;
+    Surface: TTyFormSurface;
     DarkSwitch: TTyToggleSwitch;
     ThemeCombo: TTyComboBox;                   // title-bar built-in skin switcher
     AccentCombo: TTyComboBox;                  // Office-app accent presets (Word/Excel/PPT/…) + custom
@@ -941,7 +942,7 @@ begin
 
   // Status bar (bottom).
   FStatus := TTyStatusBar.Create(Self);
-  FStatus.Parent := Self;
+  FStatus.Parent := Surface;
   FStatus.Align := alBottom;
   FStatus.Panels.Add.Width := 320;
   FStatus.Panels.Add.Width := 140;
@@ -951,7 +952,7 @@ begin
   // now streams from the .lfm FIRST, give the ribbon an explicit Top so LCL stacks it
   // BELOW the bar rather than on top of it (see memory lcl-code-created-align-order).
   FRibbon := TTyRibbon.Create(Self);
-  FRibbon.Parent := Self;
+  FRibbon.Parent := Surface;
   FRibbon.Top := Bar.Height;
   FRibbon.Controller := TyDefaultController;   // register as a theme listener (live re-theme)
   FRibbon.Height := 140;   // room for 3 small-button rows above the group caption band
@@ -986,7 +987,7 @@ begin
 
   // The document tab area fills the middle (alClient).
   FDocPages := TTyPageControl.Create(Self);
-  FDocPages.Parent := Self;
+  FDocPages.Parent := Surface;
   FDocPages.Align := alClient;
   FDocPages.Controller := TyDefaultController;
   FDocPages.OnChange := @PageChanged;

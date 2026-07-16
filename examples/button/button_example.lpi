@@ -4,31 +4,84 @@
     <Version Value="12"/>
     <General>
       <Flags>
-        <MainUnitHasCreateFormStatements Value="True"/>
         <MainUnitHasTitleStatement Value="False"/>
       </Flags>
       <Title Value="TyControls Button Example"/>
       <Scaled Value="True"/>
       <UseXPManifest Value="True"/>
     </General>
-    <BuildModes Count="1">
-      <Item1 Name="Default" Default="True"/>
+    <BuildModes Active="Default">
+      <Item Name="Default" Default="True"/>
     </BuildModes>
-    <RequiredPackages Count="2">
-      <Item1><PackageName Value="LCL"/></Item1>
-      <Item2><PackageName Value="tycontrols"/></Item2>
+    <PublishOptions>
+      <Version Value="2"/>
+    </PublishOptions>
+    <RunParams>
+      <FormatVersion Value="2"/>
+    </RunParams>
+    <RequiredPackages>
+      <Item>
+        <PackageName Value="tycontrols_dt"/>
+      </Item>
+      <Item>
+        <PackageName Value="LCL"/>
+      </Item>
+      <Item>
+        <PackageName Value="tycontrols"/>
+      </Item>
     </RequiredPackages>
-    <Units Count="2">
-      <Unit0>
+    <Units>
+      <Unit>
         <Filename Value="button_example.lpr"/>
         <IsPartOfProject Value="True"/>
-      </Unit0>
-      <Unit1>
+        <UsageCount Value="25"/>
+      </Unit>
+      <Unit>
         <Filename Value="umain.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="umain"/>
-      </Unit1>
+        <ComponentName Value="MainForm"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <IsVisibleTab Value="True"/>
+        <TopLine Value="7"/>
+        <CursorPos X="26" Y="25"/>
+        <UsageCount Value="25"/>
+        <Loaded Value="True"/>
+        <LoadedDesigner Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="../../source/tyControls.FormSurface.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="25"/>
+        <CursorPos X="17" Y="36"/>
+        <UsageCount Value="10"/>
+      </Unit>
     </Units>
+    <JumpHistory HistoryIndex="5">
+      <Position>
+        <Filename Value="umain.pas"/>
+      </Position>
+      <Position>
+        <Filename Value="umain.pas"/>
+        <Caret Line="25" Column="26" TopLine="7"/>
+      </Position>
+      <Position>
+        <Filename Value="umain.pas"/>
+        <Caret Line="26" Column="26" TopLine="7"/>
+      </Position>
+      <Position>
+        <Filename Value="umain.pas"/>
+        <Caret Line="25" Column="26" TopLine="7"/>
+      </Position>
+      <Position>
+        <Filename Value="umain.pas"/>
+        <Caret Line="26" Column="26" TopLine="7"/>
+      </Position>
+      <Position>
+        <Filename Value="umain.pas"/>
+        <Caret Line="25" Column="26" TopLine="7"/>
+      </Position>
+    </JumpHistory>
   </ProjectOptions>
   <CompilerOptions>
     <Version Value="11"/>
@@ -36,10 +89,10 @@
       <OtherUnitFiles Value=".;../../source"/>
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
-    <SyntaxOptions>
-      <SyntaxMode Value="ObjFPC"/>
-    </SyntaxOptions>
     <Linking>
+      <Debugging>
+        <DebugInfoType Value="dsDwarf3"/>
+      </Debugging>
       <Options>
         <Win32>
           <GraphicApplication Value="True"/>

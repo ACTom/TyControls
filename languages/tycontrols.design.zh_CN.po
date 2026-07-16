@@ -77,3 +77,25 @@ msgstr "一个主题化的自绘模态对话框（TTyDialog）：无边框、仅
 #: tycontrols.design.rsdtdialogpreview
 msgid "Preview"
 msgstr "预览"
+
+#: tycontrols.design.rsdtsurfacepurposetext
+msgid ""
+"TyFormSurface is the content host of a TTyForm — the panel every control on the form lives on.\n"
+"\n"
+"A borderless, resizable window cannot paint its own outermost pixels: the compositor gives it a backing surface smaller than the window, which leaves an unpainted band along the right and bottom edges. A CHILD window has no such limit and paints edge to edge, so TTyForm renders its themed background onto this surface instead of onto itself.\n"
+"\n"
+"Your controls must live on the surface. Graphic (windowless) controls such as TTyLabel paint onto their parent, so one placed directly on the form is hidden behind the surface.\n"
+"\n"
+"Keep exactly one surface per form, leave it filling the form, and do not delete it."
+msgstr ""
+"TyFormSurface 是 TTyForm 的内容宿主 —— 窗体上所有控件都放在这个面板里。\n"
+"\n"
+"无边框且可缩放的窗口画不到自己最外圈的像素:合成器给它的后备绘制面比窗口本身小,于是右边和下边会留下一条画不到的空带。子窗口没有这个限制、能一直画到真正的边缘,所以 TTyForm 把主题背景画在这个 surface 上,而不是画在自己身上。\n"
+"\n"
+"你的控件必须放在 surface 里。像 TTyLabel 这类图形(无窗口)控件是画在父控件身上的,直接放在窗体上会被 surface 挡住、看不见。\n"
+"\n"
+"每个窗体只保留一个 surface,让它铺满窗体,不要删除它。"
+
+#: tycontrols.design.rsdtsurfacepurposetitle
+msgid "Why this control exists"
+msgstr "为什么需要这个控件"

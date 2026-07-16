@@ -8,12 +8,20 @@ unit tyControls.Form;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, ExtCtrls, LCLType, LMessages,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, Dialogs, ExtCtrls, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.Controller,
-  tyControls.Menu, tyControls.WindowEffects, tyControls.QtWS, tyControls.GtkWS;
+  tyControls.Menu, tyControls.WindowEffects, tyControls.QtWS, tyControls.GtkWS,
+  tyControls.FormSurface, tyControls.StrConsts;
 
 type
+  { Re-export the content-host class. The IDE adds a published `Surface: TTyFormSurface;` field to
+    every designed TTyForm (it hosts the controls), and a published field's class type must be
+    DIRECTLY visible — not merely reachable through this unit's own `uses`. Re-exporting it here means
+    a form unit only needs `tyControls.Form` (which every TTyForm descendant already uses); it never
+    has to add `tyControls.FormSurface` by hand (the IDE's field-sync does not add units). }
+  TTyFormSurface = tyControls.FormSurface.TTyFormSurface;
+
   TTyBorderHit = (bhNone, bhLeft, bhTop, bhRight, bhBottom,
                   bhTopLeft, bhTopRight, bhBottomLeft, bhBottomRight);
 
@@ -171,6 +179,7 @@ type
   TTyForm = class(TForm, ITyGlassHost, ITyThemedBackground)
   private
     FTitleBar: TTyTitleBar;
+    FSurface: TTyFormSurface;         // Phase 1: runtime child content-host (covers the WS_THICKFRAME dead band)
     FMenuBar: TTyMenuBar;             // the primary menu bar (shortcut dispatch / mac global bar)
     FResizable: Boolean;              // window edge-resize opt-out (default True); see SetResizable
     FController: TTyStyleController;   // set by ApplyChromeTheme; used by Paint
@@ -185,6 +194,10 @@ type
     FUnrolledHeight: Integer;         // full height saved while rolled up
     FSavedMinHeight: Integer;         // Constraints.MinHeight saved while rolled up
     procedure DoFollowTick(Sender: TObject);
+    { Deferred so the dialog runs AFTER the designer's delete finishes. Showing it straight from
+      Notification(opRemove) — i.e. inside a destruction notification — ran a modal loop in the middle
+      of the designer's own delete/undo bookkeeping. }
+    procedure DoWarnSurfaceDeleted(Data: PtrInt);
     procedure UpdateFollowWatch;      // (re)arm/disarm FFollowTimer per the controller's Follow policy
     // ITyGlassHost
     function GlassBackdrop: TBGRABitmap;
@@ -220,6 +233,10 @@ type
     FEngine: TTyChromeEngine;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Loaded; override;
+    { DESIGN-TIME hint (not a block): a control dropped straight onto the form — bypassing the content
+      Surface — is allowed, but a GRAPHIC (windowless) control there renders onto the form and is
+      occluded by the Surface, so we warn the user to move it into the Surface. Runtime unaffected. }
+    procedure InsertControl(AControl: TControl; Index: Integer); override;
     { Non-mac: the associated menu bar owns shortcut dispatch — forward the key to
       its TMainMenu before the inherited (Form.Menu / action-list) handling. On mac
       the global Form.Menu already does this, so the override just calls inherited. }
@@ -250,6 +267,13 @@ type
     destructor Destroy; override;
     procedure ApplyChromeTheme(AController: TTyStyleController);
     procedure ApplyWindowEffects;   // (re)apply OS rounded corners + native shadow from the TyForm style
+    { Render the themed `form` background into ACanvas over ARect. Public so TTyFormSurface can paint
+      the identical background onto its OWN (edge-reaching) canvas. Uses the form's controller (or the
+      built-in default). }
+    procedure RenderBackgroundTo(ACanvas: TCanvas; const ARect: TRect);
+    { Public trigger for RebuildBackdrop, so the surface can keep the glass snapshot current from its
+      own paint cycle (the form's own Paint no longer fires once the surface covers the client). }
+    procedure EnsureBackdrop;
     { Window-shade toggle: collapse the window to just its title bar (saving the full height),
       or restore it. No-op without an associated title bar. Also driven by caption double-click
       when CaptionAction = tcaRollUp. }
@@ -914,6 +938,11 @@ begin
     // release LCL's just-set mouse capture so it doesn't fight the WM's move grab (else after one
     // drag the capture leaks -> the whole window stays in move-mode). No per-move repositioning then
     // (FDragging stays False -> TitleBarMouseMove no-ops). Win32/Qt5 -> False -> fallback below.
+    // Qt6 -> startSystemMove, GTK2 -> begin_move_drag: both are NON-BLOCKING (the WM takes the drag
+    // asynchronously), so they can start on the press. Win32's caption move (WM_NCLBUTTONDOWN) is a
+    // BLOCKING modal loop that would swallow a double-click's second press -> it is deferred to
+    // TitleBarMouseMove and armed only past a small drag threshold (so plain click / double-click to
+    // maximize still work). Win32 therefore falls through here to the manual-drag setup below.
     if TyQtStartSystemMove(FForm) or TyGtkStartSystemMove(FForm) then
     begin
       SetCaptureControl(nil);
@@ -929,14 +958,34 @@ begin
 end;
 
 procedure TTyChromeEngine.TitleBarMouseMove(Shift: TShiftState; X, Y: Integer);
+{$IFDEF LCLWin32}
+const
+  DragThreshold = 4;   // px the pointer must travel before we hand off to the OS caption move
+{$ENDIF}
 begin
   { Don't drag-move a maximized window (a maximized window has no movable position; a
     post-maximize MouseMove with a still-armed drag would otherwise yank it back toward the
     press origin — the double-click-to-maximize "grew in place" bug). }
   if FDragging and (FForm <> nil) and not FMaximized then
   begin
+    {$IFDEF LCLWin32}
+    // Win32: once the pointer has actually moved (so a plain click / double-click never triggers it),
+    // hand the rest of the drag to the OS caption-move loop -> native Aero Snap + snap preview. That
+    // SendMessage blocks until button-up, so clear FDragging first (later moves no-op) and drop LCL's
+    // capture the OS loop bypassed. A sub-threshold jiggle keeps the window still (no manual move).
+    if (Abs(Mouse.CursorPos.X - FDragStart.X) > DragThreshold)
+       or (Abs(Mouse.CursorPos.Y - FDragStart.Y) > DragThreshold) then
+    begin
+      FDragging := False;
+      if TyWin32StartSystemMove(FForm) then
+        SetCaptureControl(nil);
+    end;
+    {$ELSE}
+    // Cocoa (+ Qt5/other fallbacks): reposition manually to the absolute target each move. Qt6/GTK2
+    // never reach here (they took the async system move on the press -> FDragging stayed False).
     FForm.Left := FDragFormStart.X + (Mouse.CursorPos.X - FDragStart.X);
     FForm.Top  := FDragFormStart.Y + (Mouse.CursorPos.Y - FDragStart.Y);
+    {$ENDIF}
   end;
 end;
 
@@ -1105,6 +1154,10 @@ begin
   BorderIcons := [biSystemMenu, biMinimize, biMaximize];
   FEngine := TTyChromeEngine.Create;
   FEngine.Form := Self;
+  // The content host (TTyFormSurface) is NOT created here — it is streamed from the .lfm as
+  // `object Surface: TTyFormSurface` with the controls nested under it, so graphic controls paint on
+  // its canvas (visible) and it covers the WS_THICKFRAME dead band. Loaded wires FSurface via
+  // FindComponent. Creating it here (a second, code-side instance) would collide with the streamed one.
 end;
 
 function TTyForm.GetAbout: string;
@@ -1126,6 +1179,8 @@ end;
 
 destructor TTyForm.Destroy;
 begin
+  // FSurface is owned by the form (streamed) — the inherited destructor frees it; just drop our ref.
+  FSurface := nil;
   FreeAndNil(FFollowTimer);   // disarm the OS-follow poll
   FreeAndNil(FSharpBackdrop);
   FreeAndNil(FGlassBackdrop);
@@ -1221,6 +1276,9 @@ end;
 procedure TTyForm.Loaded;
 begin
   inherited Loaded;
+  // Wire the streamed content host (the .lfm's `object Surface`, which already hosts every control as
+  // its child — graphic controls included). nil for a code-created form with no .lfm.
+  FSurface := TTyFormSurface(FindComponent('Surface'));
   // A title bar associated from the .lfm had its engine-arming deferred (see
   // SetTitleBar); now that streaming has finished, wire it to the live engine.
   ArmEngine;
@@ -1231,6 +1289,27 @@ begin
     ApplyChromeTheme(FController);
   ApplyWindowEffects;   // handle exists post-load -> apply corners + shadow
   SyncCaptionButtons;   // streamed BorderIcons + bar: sync after all components loaded
+end;
+
+procedure TTyForm.InsertControl(AControl: TControl; Index: Integer);
+begin
+  inherited InsertControl(AControl, Index);
+  // A control just became a DIRECT child of the form (bypassing the Surface). We do NOT block it —
+  // library users must be free to parent to the form in code — but at DESIGN time a GRAPHIC control
+  // there paints onto the form's canvas and is hidden behind the alClient Surface, so warn. Gated on
+  // csDesigning + not loading (don't nag while an existing .lfm streams) + FSurface present (a
+  // Surface-less form has no occlusion). The fired case is "form selected + double-click" — never a
+  // live drag (which lands in the Surface), so a modal hint here is safe.
+  if (csDesigning in ComponentState) and not (csLoading in ComponentState)
+     and (FSurface <> nil) and (AControl <> nil) and (AControl <> FSurface)
+     and (AControl is TGraphicControl) then
+    MessageDlg('TyControls',
+      Format(rsTyGraphicControlOnForm, [AControl.ClassName]), mtWarning, [mbOK], 0);
+end;
+
+procedure TTyForm.DoWarnSurfaceDeleted(Data: PtrInt);
+begin
+  MessageDlg('TyControls', rsTySurfaceDeleted, mtWarning, [mbOK], 0);
 end;
 
 procedure TTyForm.UpdateFollowWatch;
@@ -1300,6 +1379,20 @@ begin
     if Menu = FMenuBar.Menu then Menu := nil;
     {$ENDIF}
     FMenuBar := nil;
+  end
+  else if (Operation = opInsert) and (FSurface = nil) and (AComponent.Owner = Self)
+     and (AComponent is TTyFormSurface) then
+    FSurface := TTyFormSurface(AComponent)   // wire the content host (streamed or designer-added)
+  else if (Operation = opRemove) and (AComponent = FSurface) then
+  begin
+    FSurface := nil;   // dropped ref: the one-surface guard relaxes so undo can paste it back in
+    { Deleting the host takes every control it hosted with it, so say so — but NEVER from inside this
+      notification (a modal loop there breaks the designer's delete/undo bookkeeping). Queue it to run
+      once the delete has finished. Undo restores by PASTING, which fires opInsert, not opRemove, so
+      this cannot pop spuriously on Ctrl+Z. }
+    if (csDesigning in ComponentState) and not (csDestroying in ComponentState)
+       and not (csLoading in ComponentState) then
+      Application.QueueAsyncCall(@DoWarnSurfaceDeleted, 0);
   end
   else if (Operation = opRemove) and (AComponent = FController) then
     FController := nil;   // the bound controller was freed: drop the dangling ref
@@ -1560,53 +1653,34 @@ begin
   end;
 end;
 
-procedure TTyForm.Paint;
+procedure TTyForm.EnsureBackdrop;
+begin
+  RebuildBackdrop;
+end;
+
+procedure TTyForm.RenderBackgroundTo(ACanvas: TCanvas; const ARect: TRect);
 var
   bg: TTyStyleSet;
   P: TTyPainter;
 begin
-  // When the TyForm token sets a background IMAGE, paint it across the whole client
-  // (cover/stretch/center + optional blur). Otherwise fall back to the plain solid
-  // Color fill the widgetset does. App controls paint on top in their own windows.
-  // The SNAPSHOT every glass child samples is (re)built by RebuildBackdrop (shared with
-  // the theme-apply path); here we additionally blit the visible photo onto the real
-  // canvas for any exposed client gaps (non-tiled children / borders).
+  // Paint the themed `form` background (image / solid / gradient) OPAQUELY across ARect. Called BOTH
+  // by the form's own Paint and by TTyFormSurface.Paint (onto the surface's edge-reaching canvas, so
+  // the WS_THICKFRAME dead band is covered). The glass backdrop snapshot is kept current separately
+  // via EnsureBackdrop. App controls paint on top in their own windows.
   if FController <> nil then
   begin
     bg := FController.Model.ResolveStyle('TyForm', '', []);
-    if (tpBackground in bg.Present) and (bg.Background.Kind = tfkImage) then
+    if tpBackground in bg.Present then
     begin
-      RebuildBackdrop;   // keep the offscreen snapshot current (no-op if already so)
       P := TTyPainter.Create;
       try
-        P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-        P.FillBackground(ClientRect, bg.Background, 0);
-        P.EndPaint;   // blits the visible photo to the form DC (this IS a WM_PAINT)
-      finally
-        P.Free;
-      end;
-      Exit;
-    end
-    else if tpBackground in bg.Present then
-    begin
-      // Solid/gradient themed background: actively paint the WHOLE client OPAQUE
-      // instead of leaning on the widgetset's erase. Under WS_CLIPCHILDREN the erase
-      // leaves client gaps (partial child coverage / borders) unpainted; on Win10
-      // those alpha-0 pixels show the DWM sheet-of-glass (transparent, white when the
-      // window is inactive). This is the same themed colour the erase used, just
-      // guaranteed across every client pixel — it fixed dialogs whose content area
-      // was only partly covered by children. App controls still paint in their own
-      // windows on top.
-      RebuildBackdrop;
-      P := TTyPainter.Create;
-      try
-        P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-        P.FillBackground(ClientRect, bg.Background, 0);
-        // Themed window frame: a TyForm border-color/-width draws a frame around the client edge
-        // (e.g. the XP Luna blue window border). The title bar (alTop) covers the top run; the
-        // side + bottom runs show in the client margins.
-        if (tpBorderColor in bg.Present) and (bg.BorderWidth > 0) then
-          P.StrokeBorder(ClientRect, bg.BorderRadius, bg.BorderWidth, bg.BorderColor);
+        P.BeginPaint(ACanvas, ARect, Font.PixelsPerInch);
+        P.FillBackground(ARect, bg.Background, 0);
+        // Themed window frame (non-image themes; e.g. the XP Luna blue border). The title bar
+        // covers the top run; the side + bottom runs show in the client margins.
+        if (bg.Background.Kind <> tfkImage)
+           and (tpBorderColor in bg.Present) and (bg.BorderWidth > 0) then
+          P.StrokeBorder(ARect, bg.BorderRadius, bg.BorderWidth, bg.BorderColor);
         P.EndPaint;
       finally
         P.Free;
@@ -1614,8 +1688,19 @@ begin
       Exit;
     end;
   end;
-  RebuildBackdrop;   // unthemed (no controller / no bg token): drop any stale backdrop
-  inherited Paint;
+  // No controller / no bg token: opaque LCL Color fill (still covers the band with the fallback colour).
+  ACanvas.Brush.Style := bsSolid;
+  ACanvas.Brush.Color := Color;
+  ACanvas.FillRect(ARect);
+end;
+
+procedure TTyForm.Paint;
+begin
+  // Keep the glass snapshot current and paint the themed background on the form's own DC. Once
+  // TTyFormSurface is installed it covers the client and repaints this SAME background edge-to-edge
+  // (via RenderBackgroundTo) so the form's own Paint becomes a harmless fallback behind it.
+  EnsureBackdrop;
+  RenderBackgroundTo(Canvas, ClientRect);
 end;
 
 function TTyForm.ThemedBgColor(out AColor: TTyColor): Boolean;
@@ -1664,6 +1749,13 @@ begin
   { Propagate the controller to every chrome sub-component FIRST, so the whole
     window chrome themes from the SAME controller the app loaded its theme into
     (each styleable control resolves its theme via its Controller). }
+  { The content host renders THIS form's `form` background (its Paint delegates to
+    RenderBackgroundTo, which resolves via FController), so it must follow the same controller:
+    a styleable registers with its ActiveController, and an unset one would register against the
+    global default instead — then a theme change made straight on THIS controller (without going
+    through ApplyChromeTheme) would never notify the surface and the background would go stale. }
+  if FSurface <> nil then
+    FSurface.Controller := AController;
   if FTitleBar <> nil then
   begin
     FTitleBar.Controller := AController;
@@ -1694,6 +1786,8 @@ begin
   if not (csDesigning in ComponentState) then
     UpdateFollowWatch;
   ApplyWindowEffects;  // re-apply corners + shadow (theme may have changed border-radius/window-shadow)
+  ApplyResizeStrategy; // refresh the NC subclass's edge-band fill colour to the new theme background
+                       // (Win32 borderless-WS_THICKFRAME stripe fix); self-guards csDesigning/no-handle
   // Build the photo/glass snapshot NOW (offscreen, no paint needed) so it is ready BEFORE the
   // children repaint + re-sample it. A WS_CLIPCHILDREN form whose client is fully tiled by
   // windowed children gets an EMPTY update region from Invalidate -> no WM_PAINT -> Paint never

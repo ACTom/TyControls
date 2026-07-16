@@ -27,6 +27,7 @@ uses
 type
   TMainForm = class(TTyForm)
     Bar:         TTyTitleBar;
+    Surface:     TTyFormSurface;
     DarkSwitch: TTyToggleSwitch;
     ThemeCombo:  TTyComboBox;
     LblDate:     TTyLabel;

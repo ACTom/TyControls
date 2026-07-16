@@ -10,38 +10,45 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 620
     Top = 0
     Width = 900
-    Align = alTop
-    Caption = 'TTyRibbon  ·  TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 552
-      Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
-    end
-    object ThemeCombo: TTyComboBox
-      Left = 634
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
-    end
-    object AccentCombo: TTyComboBox
-      Left = 402
-      Height = 26
-      Top = 4
-      Width = 138
-      Anchors = [akTop, akRight]
-      OnChange = AccentComboChange
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 900
+      Align = alTop
+      Caption = 'TTyRibbon  ·  TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 552
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 634
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+      object AccentCombo: TTyComboBox
+        Left = 402
+        Height = 26
+        Top = 4
+        Width = 138
+        Anchors = [akTop, akRight]
+        OnChange = AccentComboChange
+      end
     end
   end
 end

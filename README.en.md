@@ -44,7 +44,9 @@ TyButton:disabled { opacity: 0.5; }
   (reorder / reparent).
 - **Native window `TTyForm`** — borderless + custom-drawn title bar (associable `TTyTitleBar`):
   native window resize on Windows (`Resizable`), maximize that respects the taskbar, OS rounded
-  corners + native drop shadow (Windows 11 DWM / macOS, opt-out via CSS).
+  corners + native drop shadow (Windows 11 DWM / macOS, opt-out via CSS). A form's controls live on
+  its content container, **`TTyFormSurface`** (named `Surface`, filling the form) — **put every
+  control inside it**; the New Form templates ship with it. See [Form structure](#form-structure).
 - **Text editing** — `TTyEdit` single-line (selection / clipboard / horizontal scroll / word-level
   navigation), `TTyMemo` multi-line (2D navigation / cross-line editing / vertical scroll),
   `TTySpinEdit` numeric spin; custom edits support IME (Qt6 / GTK2).
@@ -95,6 +97,20 @@ Btn.StyleClass := 'primary';   // matches TyButton.primary in the .tycss
 
 Full steps (install the package, first form, theme switching) are in
 **[docs/getting-started.md](docs/getting-started.md)**.
+
+## Form structure
+
+A `TTyForm`'s controls live on a content container, **`TTyFormSurface`** — exactly one per form, named `Surface`, filling the form. **Put every control inside it.**
+
+- **New forms need no effort**: the File > New *TyControls Form / Application* templates ship with the `Surface` (title bar included), and dropping controls in the designer lands them in it.
+- **Graphic controls must go inside**: windowless graphic controls such as `TTyLabel` and `TTyShape` paint onto their parent — one placed directly on the form is hidden behind the `Surface` and **will not be visible**. The designer warns you when you do this.
+- **Non-visual components stay on the form**: style controllers, timers, dialog components, image lists, menus are unaffected.
+- **Dialogs (`TTyDialog`) have no `Surface`**: they are not resizable and do not need one — controls sit directly on the dialog, as before.
+
+Why it exists: a borderless resizable window cannot paint its own outermost pixels, which left an unpainted strip along the right and bottom edges; a child window paints to the true edge, so the form's themed background is rendered by the `Surface`. Select it in the designer — its `Purpose` property explains the rest.
+
+**Migrating an existing form**: move the controls that sat directly on the form into the `Surface` (leave non-visual components where they are). See [examples/button/umain.lfm](examples/button/umain.lfm).
+
 
 ## Documentation
 

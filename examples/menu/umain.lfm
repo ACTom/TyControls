@@ -12,54 +12,62 @@ object MainForm: TMainForm
   TitleBar = Bar
   MenuBar = TyMenuBar1
   CaptionAction = tcaRollUp
-  object Bar: TTyTitleBar
+  object Surface: TTyFormSurface
     Left = 0
-    Height = 34
+    Height = 380
     Top = 0
     Width = 560
-    Align = alTop
-    Caption = '增强菜单 + 双击标题栏卷起  · TyControls'
-    TitleAlignment = taLeftJustify
-    object DarkSwitch: TTyToggleSwitch
-      Left = 212
+    TabOrder = 0
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 560
+      Align = alTop
+      Caption = '增强菜单 + 双击标题栏卷起  · TyControls'
+      TitleAlignment = taLeftJustify
+      object DarkSwitch: TTyToggleSwitch
+        Left = 212
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 294
+        Height = 26
+        Top = 4
+        Width = 120
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object TyMenuBar1: TTyMenuBar
+      Left = 0
+      Height = 30
+      Top = 34
+      Width = 560
+      Align = alTop
+      Menu = MainMenu1
+    end
+    object HintPanel: TTyPanel
+      Left = 16
+      Height = 200
+      Top = 80
+      Width = 528
+      Caption = '右键此面板 → 增强菜单(分节标题 + 图标列 + 勾选项)'
+      PopupMenu = Popup
+    end
+    object StatusLabel: TTyLabel
+      Left = 16
       Height = 24
-      Top = 5
-      Width = 74
-      Anchors = [akTop, akRight]
-      Caption = '暗色'
-      OnChange = DarkSwitchChange
+      Top = 296
+      Width = 528
+      Caption = '就绪：右键面板试增强菜单；双击标题栏可卷起窗口（再双击还原）'
     end
-    object ThemeCombo: TTyComboBox
-      Left = 294
-      Height = 26
-      Top = 4
-      Width = 120
-      Anchors = [akTop, akRight]
-      OnChange = ThemeComboChange
-    end
-  end
-  object TyMenuBar1: TTyMenuBar
-    Left = 0
-    Height = 30
-    Top = 34
-    Width = 560
-    Align = alTop
-    Menu = MainMenu1
-  end
-  object HintPanel: TTyPanel
-    Left = 16
-    Height = 200
-    Top = 80
-    Width = 528
-    Caption = '右键此面板 → 增强菜单(分节标题 + 图标列 + 勾选项)'
-    PopupMenu = Popup
-  end
-  object StatusLabel: TTyLabel
-    Left = 16
-    Height = 24
-    Top = 296
-    Width = 528
-    Caption = '就绪：右键面板试增强菜单；双击标题栏可卷起窗口（再双击还原）'
   end
   object MainMenu1: TMainMenu
     object MnuFile: TMenuItem
