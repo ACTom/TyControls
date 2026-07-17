@@ -640,6 +640,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Dialogs.FileDialog.pas"/>
         <UnitName Value="tyControls.Dialogs.FileDialog"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Card.pas"/>
+        <UnitName Value="tyControls.Card"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Tag.pas"/>
+        <UnitName Value="tyControls.Tag"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Badge.pas"/>
+        <UnitName Value="tyControls.Badge"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

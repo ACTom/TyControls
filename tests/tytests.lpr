@@ -130,7 +130,8 @@ uses
   test.htmllabel,
   test.shape,
   test.starshape,
-  test.arrow;
+  test.arrow,
+  test.card, test.tag, test.badge;
 
 type
   TTyTestRunner = class(TTestRunner)

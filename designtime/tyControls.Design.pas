@@ -47,6 +47,7 @@ uses
   tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar,
   tyControls.HeaderControl, tyControls.ListGroupPanel,
   tyControls.Shape, tyControls.StarShape, tyControls.Arrow,
+  tyControls.Card, tyControls.Tag, tyControls.Badge,
   tyControls.ListView, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.ShellComboBox;
 type
@@ -661,7 +662,8 @@ begin
      TTyDropDownButton, TTyMenuButton, TTyColorButton, TTyButtonGroup]);
   // Labels.
   RegisterComponents('TyControls Labels',
-    [TTyLabel, TTyHtmlLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel]);
+    [TTyLabel, TTyHtmlLabel, TTyLinkLabel, TTyShadowLabel, TTyGlowLabel,
+     TTyTag, TTyBadge]);
   // Text edits: single/multi-line, formatted, calculator, spin.
   RegisterComponents('TyControls Edits',
     [TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit,
@@ -694,7 +696,8 @@ begin
     [TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel, TTySizeBox,
      TTyScrollBox, TTyScrollPanel, TTyExPanel, TTyGridPanel, TTyRelativePanel,
      TTyToolGroupPanel, TTyListGroupPanel,
-     TTyPageControl, TTyTabSheet, TTyTabSet, TTyTitleBar]);
+     TTyPageControl, TTyTabSheet, TTyTabSet, TTyTitleBar,
+     TTyCard]);
   // Data views + shell/file views + date/time.
   RegisterComponents('TyControls Data Views',
     [TTyTreeView, TTyListView, TTyShellListView, TTyShellTreeView, TTyPreviewBox, TTyImageView,
