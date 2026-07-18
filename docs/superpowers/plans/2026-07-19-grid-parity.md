@@ -37,7 +37,7 @@
 | B1 | 三个正确性缺陷 | - [x] **完成** `2026-07-19` |
 | B2 | A1 几何契约(四向冻结 + 多行表头带 + 线宽) | - [x] **完成** `2026-07-19` |
 | B3 | A2 渲染管线逐格化 + hover;A3 属性存储统一 | - [x] **完成** `2026-07-19` |
-| B4 | H3 逐格外观钩子 + H4 斑马纹 + H14 网格线局部 | - [ ] |
+| B4 | H3 逐格外观钩子 + H4 斑马纹 + H14 网格线局部 | - [x] **完成** `2026-07-19` |
 | B5 | H5 单元格级鼠标事件 + H15 按钮单元格 + H13 AutoResize 接线 | - [ ] |
 | B6 | H6 换行 + H7 行高三件套 | - [ ] |
 | B7 | A4 选择模型重构 + H8 离散多选 | - [ ] |
@@ -238,18 +238,27 @@ TextRect,都是 BGRA 重活),而样式解析根本不是瓶颈。加了**跨帧�
 
 **Files:** `source/tyControls.Grid.pas`、`themes/light.tycss`、`tests/test.grid.pas`
 
-- [ ] `OnGetCellStyle(Sender; ACol, ARow; var ABackground: TTyFill; var ATextColor: TTyColor;
+- [x] `OnGetCellStyle(Sender; ACol, ARow; var ABackground: TTyFill; var ATextColor: TTyColor;
       var AFontName: string; var AFontSize, AFontWeight: Integer;
       var AHAlign: TAlignment; var AVAlign: TTextLayout)` —— 一个钩子覆盖颜色/字体/两轴对齐。
       失败测试:钩子把第 2 行涂红 → 该行像素变红,其余行不变。
-- [ ] **垂直对齐**:现在 `DrawText` 恒 `tlCenter`,钩子要能改成 `tlTop`/`tlBottom`。
+- [x] **垂直对齐**:现在 `DrawText` 恒 `tlCenter`,钩子要能改成 `tlTop`/`tlBottom`。
       失败测试:同一格改成 tlTop 后,墨的重心上移。
-- [ ] 斑马纹:`TyGridCell:alternate` token 补进 `light.tycss` + 重跑 `gen-defaulttheme.ps1`;
+- [x] 斑马纹:**改用自己的 typeKey `TyGridCellAlt`**,不是计划里写的 `TyGridCell:alternate`。
+      理由:加一个伪类要动共享的 `TTyState` 枚举与 CSS 解析器 `PseudoToState`,
+      会波及每一个控件;而库里网格的各部件(TyGridCheckBox / TyGridProgress /
+      TyGridGroupRow…)本来就各有各的键,这条更一致。
+      新增 `--surface-alt` token 补进 `light.tycss` + 重跑 `gen-defaulttheme.ps1`;
       按**显示行号**取(排序/过滤后条纹仍然是隔行,而不是跟着数据行跳)。
       失败测试:奇偶行底色不同,且排序后仍然隔行。
-- [ ] 网格线局部控制:`GridLines: Boolean` → `GridLineStyle: (glsNone, glsHorizontal, glsVertical, glsBoth)`
+- [x] 网格线局部控制:`GridLines: Boolean` → `GridLineStyle: (glsNone, glsHorizontal, glsVertical, glsBoth)`
       (**保留 `GridLines` 为兼容别名**,老代码不炸)。失败测试:只横线时竖线像素为 0。
-- [ ] 每项都变异验证;**B4 收工**。
+- [x] 每项都变异验证。**斑马纹那条第一次变异没被杀** —— 我挑的测试数据(倒序 e,d,c,b,a)
+      让"显示序奇偶"与"数据行奇偶"恰好一致,按数据行取奇偶的错误实现也能通过。
+      换成 c,a,b,f,d,e(升序后 0->1,1->2,2->0,3->4)才真正区分开。
+- [x] 另:钩子桩方法一开始写进了测试类的 `published` 段 —— fpcunit 把 published 段里的
+      **每个**方法都注册成测试,钩子被当测试跑(Sender=nil)直接 AV。挪到 public。
+- [x] **B4 收工**。
 
 ---
 

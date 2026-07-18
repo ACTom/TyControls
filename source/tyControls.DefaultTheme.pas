@@ -46,6 +46,8 @@ begin
     '  --surface-hover:            darken(--surface, 4%);' + LineEnding +
     '  --surface-active:           darken(--surface, 10%);' + LineEnding +
     '  --surface-chrome:           darken(--surface, 6%);' + LineEnding +
+    '  /* 斑马纹的隔行底色。比 chrome 淡得多 —— 它是让长表读起来更顺的辅助,不是分区。 */' + LineEnding +
+    '  --surface-alt:              darken(--surface, 3%);' + LineEnding +
     '  --surface-sunk:             darken(--surface, 8%);' + LineEnding +
     '  --surface-track:            darken(--surface, 10%);' + LineEnding +
     '  --surface-listitem-hover:   darken(--surface, 5%);' + LineEnding +
@@ -531,6 +533,9 @@ begin
     'TyGridCell { background: none; color: var(--on-surface); padding: 0px 6px; }' + LineEnding +
     'TyGridCell:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyGridCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    '/* 斑马纹。自己的 typeKey 而不是 TyGridCell:alternate:加伪类要动共享的状态枚举与' + LineEnding +
+    '   CSS 解析器,会波及每一个控件;而网格的各部件本来就各有各的键。 */' + LineEnding +
+    'TyGridCellAlt { background: var(--surface-alt); }' + LineEnding +
     '/* 冻结区(固定行列)与行头槽:比正文略重,读者一眼能分出"这块不滚动"。 */' + LineEnding +
     'TyGridFixed     { background: var(--surface-chrome); color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     'TyGridIndicator { background: var(--surface-chrome); color: var(--muted); border-color: var(--border); }' + LineEnding +

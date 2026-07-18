@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, DateUtils, Types, Graphics, Controls, Forms, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
+  tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
   tyControls.Painter, tyControls.ImageCollection,
   tyControls.Grid.Layout;
 
@@ -125,6 +125,21 @@ type
     procedure TestPerCellStyleResolutionKeepsDefaultFastPath;
     procedure TestInsertRowShiftsMergeSpansToo;
     procedure TestInsertRowShiftsMergeOfEmptyCell;
+    procedure TestCellStyleHookPaintsOnlyThatRow;
+    procedure TestCellStyleHookCanChangeVerticalAlignment;
+    procedure TestZebraStripingFollowsDisplayOrder;
+    procedure TestGridLineStyleCanDropOneAxis;
+  public
+    { 逐格外观钩子的桩。**必须放在 published 之外** —— fpcunit 会把 published 段里的
+      每个方法都当成测试用例注册,钩子被当测试跑起来(Sender=nil)直接 AV。 }
+    procedure HookPaintRow2Red(Sender: TObject; ACol, ARow: Integer;
+      var ABackground: TTyFill; var ATextColor: TTyColor;
+      var AFontName: string; var AFontSize, AFontWeight: Integer;
+      var AHAlign: TAlignment; var AVAlign: TTextLayout);
+    procedure HookAlignTop(Sender: TObject; ACol, ARow: Integer;
+      var ABackground: TTyFill; var ATextColor: TTyColor;
+      var AFontName: string; var AFontSize, AFontWeight: Integer;
+      var AHAlign: TAlignment; var AVAlign: TTextLayout);
   end;
 
 implementation
@@ -2912,6 +2927,319 @@ begin
   AssertTrue('空白合并块也应当下移到 (2,4)', G.CellSpan(2, 4, cs, rs));
   AssertEquals('跨列数保持', 2, cs);
   AssertTrue('原位置不该再是合并基准格', not G.CellSpan(2, 3, cs, rs));
+end;
+
+procedure TTyStringGridTest.HookPaintRow2Red(Sender: TObject; ACol, ARow: Integer;
+  var ABackground: TTyFill; var ATextColor: TTyColor;
+  var AFontName: string; var AFontSize, AFontWeight: Integer;
+  var AHAlign: TAlignment; var AVAlign: TTextLayout);
+begin
+  if ARow = 2 then
+  begin
+    ABackground.Kind := tfkSolid;
+    ABackground.Color := TyRGB(255, 0, 0);
+  end;
+end;
+
+procedure TTyStringGridTest.HookAlignTop(Sender: TObject; ACol, ARow: Integer;
+  var ABackground: TTyFill; var ATextColor: TTyColor;
+  var AFontName: string; var AFontSize, AFontWeight: Integer;
+  var AHAlign: TAlignment; var AVAlign: TTextLayout);
+begin
+  AVAlign := tlTop;
+end;
+
+{ 逐格外观钩子:宿主要能按数据决定某一格长什么样(负数标红、超期标黄……)。
+  断言"**只有**那一行变了" —— 只断言目标行变红的话,把整表涂红也能通过。 }
+procedure TTyStringGridTest.TestCellStyleHookPaintsOnlyThatRow;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+
+  function RedInRow(ARow: Integer): Integer;
+  var
+    Re: TBGRABitmap; r: TRect; x, y: Integer; px: TBGRAPixel;
+  begin
+    r := G.CellRect(0, ARow);
+    Result := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          if (x < 0) or (y < 0) or (x >= 400) or (y >= 300) then Continue;
+          px := Re.GetPixel(x, y);
+          if (px.red > 180) and (px.green < 100) and (px.blue < 100) then Inc(Result);
+        end;
+    finally
+      Re.Free;
+    end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.OnGetCellStyle := @HookPaintRow2Red;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    AssertTrue('钩子标红的那一行应当变红', RedInRow(2) > 50);
+    AssertEquals('上一行不该被波及', 0, RedInRow(1));
+    AssertEquals('下一行不该被波及', 0, RedInRow(3));
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 垂直对齐从前恒为 tlCenter,钩子要能改。用**墨的重心**判定,
+  比数某一行像素结实:字体度量在不同机器上会差几像素,重心不会。 }
+procedure TTyStringGridTest.TestCellStyleHookCanChangeVerticalAlignment;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+
+  function InkCentroidY: Double;
+  var
+    Re: TBGRABitmap; r: TRect; x, y, n: Integer; px: TBGRAPixel; acc: Int64;
+  begin
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    r := G.CellRect(0, 1);
+    acc := 0; n := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          if (x < 0) or (y < 0) or (x >= 400) or (y >= 300) then Continue;
+          px := Re.GetPixel(x, y);
+          if px.red + px.green + px.blue < 400 then    { 有墨 }
+          begin
+            Inc(acc, y - r.Top);
+            Inc(n);
+          end;
+        end;
+    finally
+      Re.Free;
+    end;
+    if n = 0 then Result := -1 else Result := acc / n;
+  end;
+
+var
+  centered, topped: Double;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.DefaultRowHeight := 40;          { 够高才看得出上/中的差别 }
+    G.Cells[0, 1] := 'Ay';
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    centered := InkCentroidY;
+    AssertTrue('前置条件:该格要有墨', centered >= 0);
+
+    G.OnGetCellStyle := @HookAlignTop;
+    topped := InkCentroidY;
+    AssertTrue('前置条件:改对齐后仍要有墨', topped >= 0);
+
+    AssertTrue(Format('tlTop 应当把墨的重心上移(居中 %.1f -> 顶对齐 %.1f)',
+      [centered, topped]), topped < centered - 2);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 斑马纹必须按**显示行号**取,不是数据行号 —— 否则排序/筛选之后条纹会跟着
+  数据行乱跳,看起来像随机涂色。 }
+procedure TTyStringGridTest.TestZebraStripingFollowsDisplayOrder;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+
+  function IsStriped(APos: Integer): Boolean;
+  var
+    Re: TBGRABitmap; r: TRect; x, y, n: Integer; px: TBGRAPixel;
+  begin
+    r := G.RowRectAt(APos);
+    n := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top + 2 to r.Bottom - 3 do
+        for x := 4 to 70 do
+        begin
+          if (y < 0) or (y >= 300) then Continue;
+          px := Re.GetPixel(x, y);
+          if (px.red < 100) and (px.green > 180) and (px.blue < 100) then Inc(n);
+        end;
+    finally
+      Re.Free;
+    end;
+    Result := n > 20;
+  end;
+
+  procedure Render;
+  begin
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridCellAlt { background: #00FF00; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.AlternateRows := True;
+    G.RowCount := 6;
+    { 这组值是**特意挑的**:升序后 显示序 -> 数据行 = 0->1, 1->2, 2->0, 3->4,
+      于是位置 0/1/3 的"显示序奇偶"与"数据行奇偶"**相反**。
+      用简单的倒序(e,d,c,b,a)会让两者恰好一致 —— 那样按数据行取奇偶的实现
+      也能通过,测试就是假绿的(变异验证抓到过一次)。 }
+    G.Cells[0, 0] := 'c'; G.Cells[0, 1] := 'a'; G.Cells[0, 2] := 'b';
+    G.Cells[0, 3] := 'f'; G.Cells[0, 4] := 'd'; G.Cells[0, 5] := 'e';
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Render;
+
+    AssertTrue('第 0 显示行不带条纹', not IsStriped(0));
+    AssertTrue('第 1 显示行带条纹', IsStriped(1));
+    AssertTrue('第 2 显示行不带条纹', not IsStriped(2));
+    AssertTrue('第 3 显示行带条纹', IsStriped(3));
+
+    { 排序把数据行整个打乱 —— 条纹必须仍然是"隔一行一条"。 }
+    G.SortByColumn(0, sdAscending);
+    Render;
+    AssertTrue('排序后第 0 显示行仍不带条纹', not IsStriped(0));
+    AssertTrue('排序后第 1 显示行仍带条纹', IsStriped(1));
+    AssertTrue('排序后第 2 显示行仍不带条纹', not IsStriped(2));
+    AssertTrue('排序后第 3 显示行仍带条纹', IsStriped(3));
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 只要横线不要竖线(报表常见)。从前只有一个 GridLines 开关,要么全有要么全无。 }
+procedure TTyStringGridTest.TestGridLineStyleCanDropOneAxis;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+
+  procedure Render;
+  begin
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+  end;
+
+  { 沿一条竖线数蓝色像素,**只在每行的正中取样** ——
+    横线是横跨整幅的,会在每一条竖线的 x 上留一个蓝点(可见 10 行就是 10 个);
+    在行边界附近取样的话,"只要横线"也会数出 10 个来。 }
+  function BlueOnColumnEdge: Integer;
+  var Re: TBGRABitmap; r: TRect; x, pos: Integer; px: TBGRAPixel;
+  begin
+    Result := 0;
+    x := G.ColLeft(1) - 1;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for pos := 0 to 9 do
+      begin
+        r := G.RowRectAt(pos);
+        px := Re.GetPixel(x, (r.Top + r.Bottom) div 2);
+        if (px.blue > 180) and (px.red < 100) then Inc(Result);
+      end;
+    finally
+      Re.Free;
+    end;
+  end;
+
+  { 同理:横线只在**列内部**取样,避开竖线所在的 x。第 0 列宽 80,取 4..70。 }
+  function BlueOnRowEdge: Integer;
+  var Re: TBGRABitmap; r: TRect; x: Integer; px: TBGRAPixel;
+  begin
+    Result := 0;
+    r := G.RowRectAt(1);
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for x := 4 to 70 do
+      begin
+        px := Re.GetPixel(x, r.Bottom - 1);
+        if (px.blue > 180) and (px.red < 100) then Inc(Result);
+      end;
+    finally
+      Re.Free;
+    end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridLine { background: #0000FF; }');
+    G := MakeStrGrid(FForm, Ctl);
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    G.GridLineStyle := glsBoth;
+    Render;
+    AssertTrue('两轴都画时应当有竖线', BlueOnColumnEdge >= 10);
+    AssertTrue('两轴都画时应当有横线', BlueOnRowEdge > 50);
+
+    G.GridLineStyle := glsHorizontal;
+    Render;
+    AssertEquals('只要横线时竖线像素必须为 0', 0, BlueOnColumnEdge);
+    AssertTrue('横线仍在', BlueOnRowEdge > 50);
+
+    G.GridLineStyle := glsVertical;
+    Render;
+    AssertTrue('竖线仍在', BlueOnColumnEdge >= 10);
+    AssertEquals('只要竖线时横线像素必须为 0', 0, BlueOnRowEdge);
+
+    { 老代码的 GridLines 布尔开关必须还能用。 }
+    G.GridLines := False;
+    AssertTrue('GridLines := False 等价于 glsNone', G.GridLineStyle = glsNone);
+    Render;
+    AssertEquals('关掉后没有竖线', 0, BlueOnColumnEdge);
+    AssertEquals('关掉后没有横线', 0, BlueOnRowEdge);
+    G.GridLines := True;
+    AssertTrue('GridLines := True 回到两轴都画', G.GridLineStyle = glsBoth);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
 end;
 
 initialization

@@ -28,6 +28,29 @@ uses
   tyControls.Grid.Layout;
 
 type
+  { 网格线要画哪几轴。只要横线的报表式表格很常见,从前只有一个全有/全无的开关。 }
+  TTyGridLineStyle = (glsNone, glsHorizontal, glsVertical, glsBoth);
+
+  { 逐格外观钩子:宿主按数据决定某一格长什么样(负数标红、超期标黄……)。
+    一个钩子覆盖底色/文字色/字体/两轴对齐 —— 分成七八个事件对宿主更难用。
+    ARow 是**数据行**,不是显示行:宿主关心的是"这条记录",排序筛选不该影响判断。 }
+  TTyGridGetCellStyleEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var ABackground: TTyFill; var ATextColor: TTyColor;
+    var AFontName: string; var AFontSize, AFontWeight: Integer;
+    var AHAlign: TAlignment; var AVAlign: TTextLayout) of object;
+
+  { 一格最终的外观。背景那趟与文字那趟都从这里取,**两趟不可能各算各的**。 }
+  TTyGridCellAppearance = record
+    HasBackground: Boolean;
+    Background:    TTyFill;
+    TextColor:     TTyColor;
+    FontName:      string;
+    FontSize:      Integer;
+    FontWeight:    Integer;
+    HAlign:        TAlignment;
+    VAlign:        TTextLayout;
+  end;
+
   { 一格的**附加属性**。稀疏:绝大多数格根本没有条目。
 
     这里把从前散在各处的逐格信息并到一起。分家的直接后果是增删行时容易漏搬其中一种
@@ -84,7 +107,11 @@ type
     FFixedRows:        Integer;
     FIndicatorWidth:   Integer;
     FShowIndicator:    Boolean;
-    FShowGridLines:    Boolean;
+    FGridLineStyle:    TTyGridLineStyle;
+    { 隔行底色。按**显示行号**取,不是数据行号 —— 否则排序筛选之后条纹会跟着
+      数据行乱跳,看起来像随机涂色。 }
+    FAlternateRows:    Boolean;
+    FOnGetCellStyle:   TTyGridGetCellStyleEvent;
     FGridLineWidth:    Integer;
     { 鼠标当前所在的格(-1 = 不在任何格上)。`TyGridCell:hover` 这条主题规则
       从前永远不会触发,就是因为没人记这个。 }
@@ -139,6 +166,9 @@ type
     procedure SetShowFooter(AValue: Boolean);
     procedure SetImages(AValue: TTyVirtualImageList);
     procedure SetGridLineWidth(AValue: Integer);
+    procedure SetGridLineStyle(AValue: TTyGridLineStyle);
+    procedure SetAlternateRows(AValue: Boolean);
+    function  GetGridLines: Boolean;
     procedure SetFooterHeight(AValue: Integer);
   protected
     function GetStyleTypeKey: string; override;
@@ -163,8 +193,15 @@ type
     procedure UpdateHoverCell(X, Y: Integer);
     { 把一格文字画出来,尽量走缓存。语义与 P.DrawText 一致(含省略号截断)。 }
     procedure DrawCellText(P: TTyPainter; const ARect: TRect; const AText: string;
-      const AStyle: TTyStyleSet; AColor: TTyColor; AHAlign: TAlignment);
+      const AFontName: string; AFontSize, AFontWeight: Integer; AColor: TTyColor;
+      AHAlign: TAlignment; AVAlign: TTextLayout);
     procedure ClearTextCache;
+    { 一格最终外观 = 主题 TyGridCell(按状态) → 斑马纹 → 逐格属性 → 宿主钩子。
+      ADisplayPos 只用于斑马纹;ARow 是数据行。 }
+    function CellAppearance(ACol, ARow, ADisplayPos: Integer;
+      const AFrame: TTyStyleSet): TTyGridCellAppearance; virtual;
+    procedure DoGetCellStyle(ACol, ARow: Integer;
+      var AAppearance: TTyGridCellAppearance); virtual;
     function GridLineWidthPx: Integer; virtual;
     procedure CMMouseLeave(var Msg: TLMessage); message CM_MOUSELEAVE;
     function FrozenWidthPx: Integer; virtual;
@@ -312,14 +349,25 @@ type
     { 最左侧的行头/行号槽。 }
     property ShowIndicator: Boolean read FShowIndicator write SetShowIndicator default False;
     property IndicatorWidth: Integer read FIndicatorWidth write SetIndicatorWidth default 30;
-    { 单元格之间的格线。颜色取 TyGridLine 的 background,主题没定义则退回本体的 border-color。 }
-    property GridLines: Boolean read FShowGridLines write SetShowGridLines default True;
+    { 单元格之间的格线。颜色取 TyGridLine 的 background,主题没定义则退回本体的 border-color。
+      **兼容别名** —— 真正的存储是 GridLineStyle。`stored False` 保证它不会被写进 .lfm
+      (两个属性都写进去会互相打架),但老 .lfm 里的 GridLines=False 照样读得进来。 }
+    property GridLines: Boolean read GetGridLines write SetShowGridLines
+      stored False default True;
+    { 格线画哪几轴。 }
+    property GridLineStyle: TTyGridLineStyle read FGridLineStyle write SetGridLineStyle
+      default glsBoth;
+    { 隔行底色(主题键 TyGridCellAlt)。 }
+    property AlternateRows: Boolean read FAlternateRows write SetAlternateRows default False;
     { 格线粗细,逻辑像素。**不占布局像素** —— 线画在单元格边界上、压住两侧各一半,
       列宽就是列宽,不会因为线变粗而挪位(与 LCL TCustomGrid / 常见商业网格一致)。
       粗线只会让单元格**内容**相应内缩,免得文字压在线底下。 }
     property GridLineWidth: Integer read FGridLineWidth write SetGridLineWidth default 1;
     { 列头图标(TTyColumn.ImageIndex)与 gcdImage 单元格共用的图像源。 }
     property Images: TTyVirtualImageList read FImages write SetImages;
+    { 逐格外观钩子。 }
+    property OnGetCellStyle: TTyGridGetCellStyleEvent
+      read FOnGetCellStyle write FOnGetCellStyle;
     { 底部汇总带。内容由派生类给(TTyStringGrid 按列聚合)。 }
     property ShowFooter: Boolean read FShowFooter write SetShowFooter default False;
     property FooterHeight: Integer read FFooterHeight write SetFooterHeight default 24;
@@ -870,7 +918,7 @@ begin
   FFixedRows := 0;
   FIndicatorWidth := 30;
   FShowIndicator := False;
-  FShowGridLines := True;
+  FGridLineStyle := glsBoth;
   FGridLineWidth := 1;
   FHoverCol := -1;
   FHoverRow := -1;
@@ -1032,8 +1080,9 @@ end;
 
 procedure TTyCustomGrid.SetShowGridLines(AValue: Boolean);
 begin
-  if FShowGridLines = AValue then Exit;
-  FShowGridLines := AValue;
+  { 布尔别名:开 = 两轴都画,关 = 都不画。 }
+  if AValue then SetGridLineStyle(glsBoth) else SetGridLineStyle(glsNone);
+  Exit;
   Invalidate;
 end;
 
@@ -1320,8 +1369,8 @@ begin
 end;
 
 procedure TTyCustomGrid.DrawCellText(P: TTyPainter; const ARect: TRect;
-  const AText: string; const AStyle: TTyStyleSet; AColor: TTyColor;
-  AHAlign: TAlignment);
+  const AText: string; const AFontName: string; AFontSize, AFontWeight: Integer;
+  AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout);
 var
   w, h, idx, sz, weight: Integer;
   key, fname, txt: string;
@@ -1333,15 +1382,15 @@ begin
   h := ARect.Bottom - ARect.Top;
   if (w <= 0) or (h <= 0) or (AText = '') then Exit;
 
-  fname := AStyle.FontName;
-  sz := ResolveFontSize(AStyle);
-  weight := AStyle.FontWeight;
+  fname := AFontName;
+  sz := AFontSize;
+  weight := AFontWeight;
 
   { 键 = 这块文字的**全部外观输入**。任何一项变了都是新条目,
     所以换主题/改列宽/切深色都不需要显式失效 —— 旧条目自然不再被命中。 }
   key := AText + #1 + fname + #1 + IntToStr(sz) + #1 + IntToStr(weight) + #1 +
          IntToStr(AColor) + #1 + IntToStr(w) + 'x' + IntToStr(h) + #1 +
-         IntToStr(Ord(AHAlign)) + #1 + IntToStr(P.PPI);
+         IntToStr(Ord(AHAlign)) + #1 + IntToStr(Ord(AVAlign)) + #1 + IntToStr(P.PPI);
 
   idx := FTextCache.IndexOf(key);
   if idx >= 0 then
@@ -1367,7 +1416,7 @@ begin
 
     st := Default(TTextStyle);
     st.Alignment := AHAlign;
-    st.Layout := tlCenter;
+    st.Layout := AVAlign;
     st.SingleLine := True;
     st.Clipping := True;
     bmp.TextRect(Rect(0, 0, w, h), 0, 0, txt, st, TyColorToBGRA(AColor));
@@ -1388,9 +1437,83 @@ begin
   P.Bitmap.PutImage(ARect.Left, ARect.Top, bmp, dmDrawWithTransparency);
 end;
 
+function TTyCustomGrid.GetGridLines: Boolean;
+begin
+  Result := FGridLineStyle <> glsNone;
+end;
+
+procedure TTyCustomGrid.SetGridLineStyle(AValue: TTyGridLineStyle);
+begin
+  if FGridLineStyle = AValue then Exit;
+  FGridLineStyle := AValue;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetAlternateRows(AValue: Boolean);
+begin
+  if FAlternateRows = AValue then Exit;
+  FAlternateRows := AValue;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.DoGetCellStyle(ACol, ARow: Integer;
+  var AAppearance: TTyGridCellAppearance);
+begin
+  if not Assigned(FOnGetCellStyle) then Exit;
+  FOnGetCellStyle(Self, ACol, ARow, AAppearance.Background, AAppearance.TextColor,
+    AAppearance.FontName, AAppearance.FontSize, AAppearance.FontWeight,
+    AAppearance.HAlign, AAppearance.VAlign);
+  { 钩子把底色从 none 改成实色 = 它要画背景。反过来也成立。 }
+  AAppearance.HasBackground := AAppearance.Background.Kind <> tfkNone;
+end;
+
+function TTyCustomGrid.CellAppearance(ACol, ARow, ADisplayPos: Integer;
+  const AFrame: TTyStyleSet): TTyGridCellAppearance;
+var
+  cS, altS: TTyStyleSet;
+  col: TTyColumn;
+begin
+  cS := ResolveCellStyle(ACol, ARow);
+
+  Result.HasBackground := (tpBackground in cS.Present)
+                          and (cS.Background.Kind <> tfkNone);
+  Result.Background := cS.Background;
+  if tpTextColor in cS.Present then Result.TextColor := cS.TextColor
+  else Result.TextColor := AFrame.TextColor;
+  Result.FontName := cS.FontName;
+  Result.FontSize := ResolveFontSize(cS);
+  Result.FontWeight := cS.FontWeight;
+  Result.VAlign := tlCenter;
+
+  Result.HAlign := taLeftJustify;
+  if (ACol >= 0) and (ACol < FHeader.Columns.Count) then
+  begin
+    col := TTyColumn(FHeader.Columns.Items[ACol]);
+    Result.HAlign := col.Alignment;
+  end;
+
+  { 斑马纹按**显示行号**取奇偶。用自己的 typeKey 而不是 `TyGridCell:alternate`:
+    加一个伪类要动共享的 TTyState 枚举与 CSS 解析器,会波及每一个控件;
+    而库里网格的各个部件(TyGridCheckBox / TyGridProgress / TyGridGroupRow…)
+    本来就各有各的键,这条更一致、也够得着外观主题层。 }
+  if FAlternateRows and Odd(ADisplayPos) then
+  begin
+    altS := ActiveController.Model.ResolveStyle('TyGridCellAlt', StyleClass, []);
+    if (tpBackground in altS.Present) and (altS.Background.Kind <> tfkNone) then
+    begin
+      Result.HasBackground := True;
+      Result.Background := altS.Background;
+    end;
+    if tpTextColor in altS.Present then Result.TextColor := altS.TextColor;
+  end;
+
+  { 宿主钩子最后说了算。 }
+  DoGetCellStyle(ACol, ARow, Result);
+end;
+
 function TTyCustomGrid.GridLineWidthPx: Integer;
 begin
-  if not FShowGridLines then Exit(0);
+  if FGridLineStyle = glsNone then Exit(0);
   Result := ScaleI(FGridLineWidth);
   if Result < 1 then Result := 1;
 end;
@@ -1636,7 +1759,7 @@ begin
   half := lw div 2;
 
   { 横线:每一可见行的下沿。只走 TyGridVisibleRows —— 百万行的表在这里也只画几十条。 }
-  if TyGridVisibleRows(M, first, last) then
+  if (FGridLineStyle in [glsHorizontal, glsBoth]) and TyGridVisibleRows(M, first, last) then
     for row := first to last do
     begin
       r := TyGridRowRect(row, M);
@@ -1646,6 +1769,7 @@ begin
 
   { 竖线:每一可见列的右缘。位置走 ColumnLeftPx(列轴唯一出处),
     绝不另算 —— 否则线会和单元格边界差一像素。 }
+  if not (FGridLineStyle in [glsVertical, glsBoth]) then Exit;
   for i := 0 to FHeader.Columns.Count - 1 do
   begin
     col := TTyColumn(FHeader.Columns.Items[i]);
@@ -1924,9 +2048,11 @@ procedure TTyCustomGrid.RenderCellBackgrounds(P: TTyPainter; const M: TTyGridMet
 var
   firstRow, lastRow, row, i, dataRow: Integer;
   col: TTyColumn;
-  cS: TTyStyleSet;
+  ap: TTyGridCellAppearance;
   vis: TRect;
+  AFrame: TTyStyleSet;
 begin
+  AFrame := CurrentStyle;
   { 只遍历可视窗口 —— 与 RenderCells 同一条虚拟化路径。 }
   if not TyGridVisibleRows(M, firstRow, lastRow) then Exit;
 
@@ -1937,15 +2063,14 @@ begin
       if not (coVisible in col.Options) then Continue;
 
       dataRow := DisplayToData(row);
-      cS := ResolveCellStyle(i, dataRow);
+      ap := CellAppearance(i, dataRow, row, AFrame);
       { `background: none` 是默认态 —— 一个像素都不画,整帧的开销就只有
         一次 ResolveStyle(缓存命中)加一次判断。 }
-      if not (tpBackground in cS.Present) then Continue;
-      if cS.Background.Kind = tfkNone then Continue;
+      if not ap.HasBackground then Continue;
 
       vis := CellVisibleRect(i, dataRow);
       if IsRectEmpty(vis) then Continue;
-      P.FillBackground(vis, cS.Background, 0);
+      P.FillBackground(vis, ap.Background, 0);
     end;
 end;
 
@@ -1987,7 +2112,7 @@ begin
     if FooterHeightPx > 0 then
       RenderFooter(P, M, Rect(0, M.ClientH, M.ClientW, M.ClientH + FooterHeightPx), S);
     RenderCells(P, M, S);
-    if FShowGridLines then
+    if FGridLineStyle <> glsNone then
       RenderGridLines(P, M, S);
   finally
     FMetricsCached := False;
@@ -2065,6 +2190,7 @@ var
   ink: TTyColor;
   txt: string;
   padL, padR: Integer;
+  ap: TTyGridCellAppearance;
 begin
   { 只遍历可视窗口 —— 一百万行的表在这里也只走几十行。这是虚拟化的全部实现:
     控件从不持有数据,也从不遍历全部行。 }
@@ -2099,6 +2225,7 @@ begin
 
       { 先让开格线(线压在边界上、两侧各一半),再上左右内边距。
         线宽 <= 1 时 TyGridCellContentRect 是恒等的,与从前逐像素一致。 }
+      ap := CellAppearance(colIdx, dataRow, row, AFrame);
       cell := TyGridCellContentRect(CellRect(colIdx, dataRow), M);
       textR := Rect(cell.Left + padL, cell.Top, cell.Right - padR, cell.Bottom);
       if textR.Right <= textR.Left then Continue;
@@ -2108,7 +2235,8 @@ begin
       oldClip := P.Bitmap.ClipRect;
       P.Bitmap.ClipRect := vis;
       try
-        DrawCellText(P, textR, txt, cellS, ink, col.Alignment);
+        DrawCellText(P, textR, txt, ap.FontName, ap.FontSize, ap.FontWeight,
+          ap.TextColor, ap.HAlign, ap.VAlign);
       finally
         P.Bitmap.ClipRect := oldClip;
       end;
