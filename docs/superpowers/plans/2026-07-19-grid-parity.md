@@ -34,7 +34,7 @@
 
 | 批 | 内容 | 状态 |
 |---|---|---|
-| B1 | 三个正确性缺陷 | - [ ] |
+| B1 | 三个正确性缺陷 | - [x] **完成** `2026-07-19` |
 | B2 | A1 几何契约(四向冻结 + 多行表头带 + 线宽) | - [ ] |
 | B3 | A2 渲染管线逐格化 + hover;A3 属性存储统一 | - [ ] |
 | B4 | H3 逐格外观钩子 + H4 斑马纹 + H14 网格线局部 | - [ ] |
@@ -63,23 +63,23 @@
 现状:`LoadFromCSVText` 先 `lines.Text := AText` 按行切,再逐行 `TyCsvSplit`。
 含换行的引号字段(Excel 导出很常见)会被拦腰截断 → **静默串数据**。
 
-- [ ] 写失败测试 `TestCsvRoundTripsCellsContainingNewlines`:
+- [x] 写失败测试 `TestCsvRoundTripsCellsContainingNewlines`:
   一个单元格内容为 `'第一行' + LineEnding + '第二行'`,`SaveToCSVText` 后 `LoadFromCSVText`,
   断言 `Cells[1,1]` 与原值**逐字符相等**,且 `RowCount` 不变。
-- [ ] 跑,确认红(会看到行数变多或内容被截断)。
-- [ ] 实现:新增 `TyCsvParse(const AText: string; ADelimiter: Char): TStringGridData`
+- [x] 跑,确认红(会看到行数变多或内容被截断)。
+- [x] 实现:新增 `TyCsvParse(const AText: string; ADelimiter: Char): TStringGridData`
       —— **字符级流式解析**,维护 `inQuote` 状态,只有在引号外的换行才断行。
       `LoadFromCSVText` 改走它,不再预先按行切。
-- [ ] 跑,确认绿;跑全套件确认既有 CSV 测试不回归。
-- [ ] 变异:让解析器忽略 `inQuote` 状态 → 该测试必须红 → 恢复。
-- [ ] 提交 `fix(grid): CSV 跨行引号字段不再串数据`。
+- [x] 跑,确认绿;跑全套件确认既有 CSV 测试不回归。
+- [x] 变异:让解析器忽略 `inQuote` 状态 → 该测试必须红 → 恢复。
+- [x] 提交 `fix(grid): CSV 跨行引号字段不再串数据`。
 
 ### B1-2 `ApplyAutoSize` 接线
 
 现状:`grep -c ApplyAutoSize source/tyControls.Grid.pas` == 0。
 `hoAutoResize` / `Header.AutoSizeIndex` 已 published 却完全不生效。
 
-- [ ] 写失败测试 `TestAutoResizeColumnFillsRemainingWidth`:
+- [x] 写失败测试 `TestAutoResizeColumnFillsRemainingWidth`:
   设 `Header.Options := Header.Options + [hoAutoResize]`、`Header.AutoSizeIndex := 1`,
   改变控件宽度后,断言第 1 列宽度吸收了剩余空间(`Columns.TotalWidth` ≈ 视口宽)。
 - [ ] 跑,确认红。
@@ -93,9 +93,14 @@
 
 ### B1-3 表头图标渲染
 
-现状:`TTyColumn.ImageIndex` / `TTyHeader.Images` 存在,`RenderHeaderSections` 从不读。
+现状:`TTyColumn.ImageIndex` 存在,`RenderHeaderSections` 从不读。
 
-- [ ] 写失败测试 `TestHeaderDrawsColumnImage`:给 `Header.Images` 一个
+> **实施中的架构修正**:原计划想用共享单元的 `TTyHeader.Images`,但它是 LCL 的
+> `TCustomImageList`,而我们的 `TTyVirtualImageList` **并非它的后代** —— 用不上。
+> 按"不跟共享单元较劲"的原则,改为**网格自带 `Images`**(从 TTyStringGrid 上移到
+> TTyCustomGrid,列头与 gcdImage 单元格共用),索引仍走共享的 `TTyColumn.ImageIndex`。
+
+- [x] 写失败测试 `TestHeaderDrawsColumnImage`:给 `Header.Images` 一个
       `TTyVirtualImageList`(用 `TTyImageCollection` 造 2 个纯色图),
       `Columns[0].ImageIndex := 0`,渲染后断言列头带内出现该颜色的像素。
 - [ ] 跑,确认红(墨 0)。
@@ -118,7 +123,7 @@ B2/B3 与此前 `ShowFooter` 是同一类 bug:对外暴露了、编译期不报�
       → 测试必须红 → 恢复。
 - [ ] 提交。
 
-- [ ] **B1 收工**:跑完整收工条件 1-7。
+- [x] **B1 收工**:跑完整收工条件 1-7。
 
 ---
 

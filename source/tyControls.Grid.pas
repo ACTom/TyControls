@@ -40,6 +40,11 @@ type
     FShowIndicator:    Boolean;
     FShowGridLines:    Boolean;
     FShowFooter:       Boolean;
+    { 列头图标与 gcdImage 单元格共用的图像源。
+      注意**不用**共享单元里的 TTyHeader.Images —— 那是 LCL 的 TCustomImageList,
+      而我们的 TTyVirtualImageList 并非它的后代;不跟共享单元较劲,网格自带一份。
+      索引仍走共享的 TTyColumn.ImageIndex。 }
+    FImages:           TTyVirtualImageList;
     FFooterHeight:     Integer;
     FScrollX:          Integer;
     FScrollY:          Integer;
@@ -63,6 +68,7 @@ type
     procedure SetShowIndicator(AValue: Boolean);
     procedure SetShowGridLines(AValue: Boolean);
     procedure SetShowFooter(AValue: Boolean);
+    procedure SetImages(AValue: TTyVirtualImageList);
     procedure SetFooterHeight(AValue: Integer);
   protected
     function GetStyleTypeKey: string; override;
@@ -218,6 +224,8 @@ type
     property IndicatorWidth: Integer read FIndicatorWidth write SetIndicatorWidth default 30;
     { 单元格之间的格线。颜色取 TyGridLine 的 background,主题没定义则退回本体的 border-color。 }
     property GridLines: Boolean read FShowGridLines write SetShowGridLines default True;
+    { 列头图标(TTyColumn.ImageIndex)与 gcdImage 单元格共用的图像源。 }
+    property Images: TTyVirtualImageList read FImages write SetImages;
     { 底部汇总带。内容由派生类给(TTyStringGrid 按列聚合)。 }
     property ShowFooter: Boolean read FShowFooter write SetShowFooter default False;
     property FooterHeight: Integer read FFooterHeight write SetFooterHeight default 24;
@@ -362,7 +370,6 @@ type
     FDateEditor: TTyDateTimePicker;
     FOnGetCellDisplay: TTyGridGetCellDisplayEvent;
     FDefaultCellDisplay: TTyGridCellDisplay;
-    FImages: TTyVirtualImageList;
     FOnGetRowHeight: TTyGridGetRowHeightEvent;
     FOnDrawCell: TTyGridDrawCellEvent;
     FOnGetCellHint: TTyGridGetCellHintEvent;
@@ -613,8 +620,6 @@ type
       read FDefaultCellDisplay write FDefaultCellDisplay default gcdText;
     property OnGetCellDisplay: TTyGridGetCellDisplayEvent
       read FOnGetCellDisplay write FOnGetCellDisplay;
-    { gcdImage 用的图像列表(单元格内容存图像索引)。 }
-    property Images: TTyVirtualImageList read FImages write FImages;
     { 逐行行高。接了它即启用可变行高;不接则全表等高(走整除快路径)。 }
     property OnGetRowHeight: TTyGridGetRowHeightEvent
       read FOnGetRowHeight write FOnGetRowHeight;
@@ -867,6 +872,14 @@ begin
   needV := False;
   needH := False;
 
+  { 自动列宽:让 AutoSizeIndex 那一列吸收剩余宽度。此前 ApplyAutoSize **零调用**
+    —— hoAutoResize / AutoSizeIndex 已 published 却完全不生效。
+    放在两趟收敛**之前**:列宽变了会影响横向内容量,进而影响横条是否出现。 }
+  if (hoAutoResize in FHeader.Options) and (FHeader.AutoSizeIndex >= 0)
+     and not FSyncingScroll then
+    FHeader.Columns.ApplyAutoSize(UnscaleI(ClientWidth - FrozenWidthPx),
+      FHeader.AutoSizeIndex);
+
   { 两趟收敛"互夺":一条轴出现滚动条会吃掉另一条轴的可用空间,可能反过来又逼出对方。 }
   for pass := 0 to 1 do
   begin
@@ -1008,6 +1021,13 @@ begin
   if FShowFooter = AValue then Exit;
   FShowFooter := AValue;
   UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetImages(AValue: TTyVirtualImageList);
+begin
+  if FImages = AValue then Exit;
+  FImages := AValue;
   Invalidate;
 end;
 
@@ -1381,8 +1401,9 @@ end;
 procedure TTyCustomGrid.RenderHeaderSections(P: TTyPainter; const M: TTyGridMetrics;
   AHeaderH: Integer);
 var
-  i, l, w, cx, cy, gs: Integer;
+  i, l, w, cx, cy, gs, imgIdx, imgSz, imgPad: Integer;
   col: TTyColumn;
+  bmp: TBGRABitmap;
   secS, hdrS: TTyStyleSet;
   ink: TTyColor;
   r, textR: TRect;
@@ -1418,8 +1439,9 @@ begin
     gs := 0;
     if (hoShowSortGlyphs in FHeader.Options) and (i = FHeader.SortColumn) then
       gs := ScaleI(12);
+    imgPad := 0;
 
-    textR := Rect(r.Left + ScaleI(6), r.Top, r.Right - ScaleI(4) - gs, r.Bottom);
+    textR := Rect(r.Left + ScaleI(6) + imgPad, r.Top, r.Right - ScaleI(4) - gs, r.Bottom);
     if (col.Text <> '') and (textR.Right > textR.Left) then
       P.DrawText(textR, col.Text, hdrS.FontName, ResolveFontSize(hdrS),
         hdrS.FontWeight, ink, col.CaptionAlignment, tlCenter, True);
@@ -1432,6 +1454,25 @@ begin
       TyDrawGlyph(P, ActiveController,
         Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
         tgChevronDown, ink, 1, 1);
+    end;
+
+    { 列头图标:画在标题左侧。此前 TTyColumn.ImageIndex 字段一直存在却**从不被读取**
+      —— 属性有效性的洞,和 ShowFooter/ApplyAutoSize 同一类。 }
+    imgIdx := col.ImageIndex;
+    if (FImages <> nil) and (imgIdx >= 0) then
+    begin
+      imgSz := ScaleI(16);
+      if imgSz > AHeaderH - ScaleI(4) then imgSz := AHeaderH - ScaleI(4);
+      if imgSz > 0 then
+      begin
+        bmp := FImages.CachedIndex(imgIdx, imgSz);
+        if bmp <> nil then
+        begin
+          P.Bitmap.PutImage(r.Left + ScaleI(4), (AHeaderH - imgSz) div 2, bmp,
+            dmDrawWithTransparency);
+          Inc(imgPad, imgSz + ScaleI(4));
+        end;
+      end;
     end;
 
     { 排序方向的小三角。 }
@@ -3386,43 +3427,120 @@ begin
   Result[n] := cur;
 end;
 
+
+{ 字符级流式 CSV 解析:整段文本一次扫完,只有**引号之外**的换行才断行。
+
+  这是为了修一个数据正确性缺陷:早先的做法是先 `TStringList.Text := AText` 按行切、
+  再对每行调 TyCsvSplit —— 引号内的换行(Excel 导出很常见)会被当成行分隔符,
+  于是行数凭空变多、单元格被拦腰截断,而且**不报任何错**。
+
+  返回:每行一个 TStringArray。 }
+type
+  TTyCsvRows = array of TStringArray;
+
+function TyCsvParse(const AText: string; ADelimiter: Char): TTyCsvRows;
+var
+  i, n, rowN, colN: Integer;
+  cur: string;
+  inQuote: Boolean;
+  row: TStringArray;
+
+  procedure PushField;
+  begin
+    SetLength(row, colN + 1);
+    row[colN] := cur;
+    Inc(colN);
+    cur := '';
+  end;
+
+  procedure PushRow;
+  begin
+    PushField;
+    SetLength(Result, rowN + 1);
+    Result[rowN] := row;
+    Inc(rowN);
+    SetLength(row, 0);
+    colN := 0;
+  end;
+
+begin
+  SetLength(Result, 0);
+  SetLength(row, 0);
+  rowN := 0;
+  colN := 0;
+  cur := '';
+  inQuote := False;
+  n := Length(AText);
+  i := 1;
+  while i <= n do
+  begin
+    if inQuote then
+    begin
+      if AText[i] = '"' then
+      begin
+        if (i < n) and (AText[i + 1] = '"') then
+        begin
+          cur := cur + '"';      { 翻倍的引号 = 一个字面引号 }
+          Inc(i);
+        end
+        else
+          inQuote := False;
+      end
+      else
+        cur := cur + AText[i];   { 引号内:换行也只是普通字符 }
+    end
+    else if AText[i] = '"' then
+      inQuote := True
+    else if AText[i] = ADelimiter then
+      PushField
+    else if AText[i] = #13 then
+    begin
+      PushRow;
+      if (i < n) and (AText[i + 1] = #10) then Inc(i);   { 吃掉 CRLF 的 LF }
+    end
+    else if AText[i] = #10 then
+      PushRow
+    else
+      cur := cur + AText[i];
+    Inc(i);
+  end;
+
+  { 收尾:文本末尾没有换行时,最后一行还没入账。
+    但要区分"真有最后一行"和"末尾就是个换行" —— 后者不该多出一个空行。 }
+  if (cur <> '') or (colN > 0) then PushRow;
+end;
+
 procedure TTyStringGrid.LoadFromCSVText(const AText: string; ADelimiter: Char);
 var
-  lines: TStringList;
-  parts: TStringArray;
+  rows: TTyCsvRows;
   i, j, dataRow: Integer;
 begin
   EndEdit(False);
-  lines := TStringList.Create;
-  try
-    lines.Text := AText;
-    if lines.Count = 0 then Exit;
+  { 字符级解析:引号内的换行不断行(见 TyCsvParse 的说明)。 }
+  rows := TyCsvParse(AText, ADelimiter);
+  if Length(rows) = 0 then Exit;
 
-    { 第一行当表头:按它建列(列数不足就补)。 }
-    parts := TyCsvSplit(lines[0], ADelimiter);
-    while Header.Columns.Count < Length(parts) do
-      Header.Columns.Add;
-    for j := 0 to High(parts) do
-      TTyColumn(Header.Columns.Items[j]).Text := parts[j];
+  { 第一行当表头:按它建列(列数不足就补)。 }
+  while Header.Columns.Count < Length(rows[0]) do
+    Header.Columns.Add;
+  for j := 0 to High(rows[0]) do
+    TTyColumn(Header.Columns.Items[j]).Text := rows[0][j];
 
-    ClearCells;
-    ClearFilters;
-    SortByColumn(-1, sdAscending);       { 导入后回到原始顺序 }
-    RowCount := lines.Count - 1;
+  ClearCells;
+  ClearFilters;
+  SortByColumn(-1, sdAscending);       { 导入后回到原始顺序 }
+  RowCount := Length(rows) - 1;
 
-    for i := 1 to lines.Count - 1 do
+  for i := 1 to High(rows) do
+  begin
+    dataRow := i - 1;
+    for j := 0 to High(rows[i]) do
     begin
-      dataRow := i - 1;
-      parts := TyCsvSplit(lines[i], ADelimiter);
-      for j := 0 to High(parts) do
-      begin
-        if j >= Header.Columns.Count then Break;
-        Cells[j, dataRow] := parts[j];
-      end;
+      if j >= Header.Columns.Count then Break;
+      Cells[j, dataRow] := rows[i][j];
     end;
-  finally
-    lines.Free;
   end;
+
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;

@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, DateUtils, Types, Graphics, Controls, Forms, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
-  tyControls.Painter,
+  tyControls.Painter, tyControls.ImageCollection,
   tyControls.Grid.Layout;
 
 type
@@ -27,6 +27,7 @@ type
     procedure TestRendersUnderTheDefaultThemeWithNoCustomCss;
     procedure TestHeaderIndicatorAndFixedPanesPaintTheirOwnTokens;
     procedure TestHeaderPaintsColumnCaptions;
+    procedure TestHeaderDrawsColumnImage;
   end;
 
   { 纯自绘网格:内容全部来自宿主事件。 }
@@ -117,6 +118,8 @@ type
     procedure TestReplaceAllSkipsReadOnlyColumns;
     procedure TestHtmlExportEscapesAndFollowsFilterOrder;
     procedure TestOnDrawCellCanTakeOverACell;
+    procedure TestCsvRoundTripsCellsContainingNewlines;
+    procedure TestAutoResizeColumnFillsRemainingWidth;
   end;
 
 implementation
@@ -619,6 +622,77 @@ begin
   end;
 end;
 
+{ TTyColumn.ImageIndex / TTyHeader.Images 字段一直存在,但 RenderHeaderSections
+  **从不读取** —— 又一处"属性存在却无效"。 }
+procedure TTyGridControlTest.TestHeaderDrawsColumnImage;
+var
+  Ctl: TTyStyleController;
+  G: TGridAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  coll: TTyImageCollection;
+  imgs: TTyVirtualImageList;
+  src: TBGRABitmap;
+  x, y, red: Integer;
+  px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  coll := TTyImageCollection.Create(nil);
+  imgs := TTyVirtualImageList.Create(nil);
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridHeader { background: #FFFFFF; color: #000000; }');
+
+    { 造一张纯红的图,放进图像集。 }
+    src := TBGRABitmap.Create(16, 16, BGRA(255, 0, 0, 255));
+    try
+      coll.AddBitmap('red', src);
+    finally
+      src.Free;
+    end;
+    imgs.Collection := coll;
+    { TTyVirtualImageList 靠 Names 暴露条目 —— 不设 Names 则 Count=0、什么都取不到。 }
+    imgs.Names.Add('red');
+
+    G := MakeGrid(FForm, [120, 120]);
+    G.Controller := Ctl;
+    G.GridLines := False;
+    G.Header.Height := 24;
+    G.Images := imgs;
+    TTyColumn(G.Header.Columns.Items[0]).Text := 'Col';
+    TTyColumn(G.Header.Columns.Items[0]).ImageIndex := 0;
+    G.DefaultRowHeight := 20;
+    G.RowCount := 2;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRenderTo(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      red := 0;
+      for y := 0 to 23 do
+        for x := 0 to 119 do
+        begin
+          px := Reread.GetPixel(x, y);
+          if (px.red > 180) and (px.green < 100) and (px.blue < 100) then Inc(red);
+        end;
+      AssertTrue(Format('列头应画出图标(红色像素 %d)', [red]), red > 20);
+    finally
+      Reread.Free;
+    end;
+  finally
+    imgs.Free;
+    coll.Free;
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
 procedure TTyDrawGridTest.SetUp;
 begin
   FForm := TForm.CreateNew(nil);
@@ -772,6 +846,7 @@ type
     function  ColLeft(ACol: Integer): Integer;
     function  Metrics: TTyGridMetrics;
     function  VisibleRows(out AFirst, ALast: Integer): Boolean;
+    procedure ForceUpdateScrollBars;
     function  RowRectAt(APos: Integer): TRect;
     function  GetScrollTop: Integer;
     procedure SetScrollTop(AValue: Integer);
@@ -781,6 +856,11 @@ type
 procedure TStrGridAccess.PressMouseWithoutRelease(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);      { 不 MouseUp —— 停在"按住"状态 }
+end;
+
+procedure TStrGridAccess.ForceUpdateScrollBars;
+begin
+  UpdateScrollBars;
 end;
 
 function TStrGridAccess.VisibleRows(out AFirst, ALast: Integer): Boolean;
@@ -2449,6 +2529,65 @@ begin
   finally
     Bmp.Free;
   end;
+end;
+
+{ CSV 里含换行的引号字段必须能原样往返。
+  此前 LoadFromCSVText 先按 TStringList.Text 切行、再逐行拆字段 ——
+  引号内的换行会被当成行分隔符,**Excel 导出的 CSV 会静默串数据**
+  (行数凭空变多、单元格被拦腰截断)。这是数据正确性缺陷,不是功能缺失。 }
+procedure TTyStringGridTest.TestCsvRoundTripsCellsContainingNewlines;
+var
+  G, G2: TStrGridAccess;
+  csv, multi: string;
+begin
+  multi := '第一行' + LineEnding + '第二行';
+
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 2;
+  TTyColumn(G.Header.Columns.Items[0]).Text := '名称';
+  TTyColumn(G.Header.Columns.Items[1]).Text := '备注';
+  G.Cells[0, 0] := 'A';  G.Cells[1, 0] := multi;
+  G.Cells[0, 1] := 'B';  G.Cells[1, 1] := '普通';
+
+  csv := G.SaveToCSVText(',');
+
+  G2 := MakeStrGrid(FForm, FCtl);
+  G2.LoadFromCSVText(csv, ',');
+
+  { 行数不能因为字段里的换行而膨胀。 }
+  AssertEquals('行数原样往返', 2, G2.RowCount);
+  { 内容必须逐字符相等,不能被截断。 }
+  AssertEquals('含换行的字段原样往返', multi, G2.Cells[1, 0]);
+  AssertEquals('同行的其它字段没串位', 'A', G2.Cells[0, 0]);
+  AssertEquals('下一行没被吃掉', 'B', G2.Cells[0, 1]);
+  AssertEquals('下一行的备注也对', '普通', G2.Cells[1, 1]);
+end;
+
+{ hoAutoResize + Header.AutoSizeIndex 此前**已 published 却完全不生效**
+  —— TTyColumns.ApplyAutoSize 在 Grid.pas 里零调用。
+  这类"设了没有任何可观测效果"的洞编译期不报错、运行期无声无息,和之前 ShowFooter 同一类。 }
+procedure TTyStringGridTest.TestAutoResizeColumnFillsRemainingWidth;
+var
+  G: TStrGridAccess;
+  before, after: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);      // 4 列 x 80 = 320 宽
+  G.SetBounds(0, 0, 500, 300);        // 视口 500,富余 180
+  G.RowCount := 3;
+
+  before := TTyColumn(G.Header.Columns.Items[1]).Width;
+
+  G.Header.AutoSizeIndex := 1;
+  G.Header.Options := G.Header.Options + [hoAutoResize];
+  G.ForceUpdateScrollBars;            { 触发一次布局 }
+
+  after := TTyColumn(G.Header.Columns.Items[1]).Width;
+  AssertTrue(Format('自动列吸收了剩余宽度(%d -> %d)', [before, after]), after > before);
+
+  { 总宽应当基本填满视口(允许几像素误差)。 }
+  AssertTrue(Format('列总宽填满视口(总宽 %d,视口 %d)',
+    [G.Header.Columns.TotalWidth, G.ClientWidth]),
+    Abs(G.Header.Columns.TotalWidth - G.ClientWidth) < 20);
 end;
 
 initialization
