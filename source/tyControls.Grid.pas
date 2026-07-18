@@ -612,8 +612,14 @@ type
     FColFilters: TStringList;     { 列索引 -> 过滤文本(包含匹配,不区分大小写) }
     FValFilters: TStringList;     { 列索引 -> 允许值集合(换行分隔);空 = 该列不按值过滤 }
     FOnFilterRow: TTyGridFilterRowEvent;
-    FSelAnchorCol: Integer;       { 选区锚点(数据行),与光标一起决定矩形选区 }
+    FSelAnchorCol: Integer;       { 选区锚点(数据行),与光标一起决定**活动**矩形选区 }
     FSelAnchorRow: Integer;
+    { 已提交的离散选区,**显示序空间**(Left/Right = 列,Top/Bottom = 显示行)。
+      单矩形选区是它为空时的退化情形 —— 所以老行为天然 0 回归。
+      用显示序而不是数据行:Ctrl+点出来的"这几行"在用户眼里就是屏幕上那几条,
+      排序之后跟着屏幕走才符合直觉。 }
+    FSelRects: array of TRect;
+    FOnSelectionChanged: TNotifyEvent;
     FSortCol: Integer;
     FSortDir: TTySortDirection;
     FSortKind: TTyGridSortKind;
@@ -638,6 +644,10 @@ type
     procedure SetCells(ACol, ARow: Integer; const AValue: string);
     procedure SetCol(AValue: Integer);
     procedure SetSelectionMode(AValue: TTyGridSelectionMode);
+    { 把当前的活动矩形固化进 FSelRects(Ctrl+点时用)。 }
+    procedure CommitActiveSelection;
+    function  ActiveSelectionRect: TRect;   { 显示序空间 }
+    procedure SelectionChanged;
     procedure SetRow(AValue: Integer);
   protected
     function  GetCellText(ACol, ARow: Integer): string; override;
@@ -724,6 +734,14 @@ type
     function IsCellSelected(ACol, ARow: Integer): Boolean;
     { 把选区锚点钉在当前光标处(单击时调用),之后 Shift+点/Shift+方向键即可拉出区域。 }
     procedure AnchorSelection;
+    { --- 选择 API(从前一个 public 的都没有) --- }
+    procedure SelectAll;
+    { 数据行坐标;越界自动钳制。 }
+    procedure SelectRange(ACol1, ARow1, ACol2, ARow2: Integer);
+    procedure SelectRows(ARow1, ARow2: Integer);
+    procedure ClearSelection;
+    { 活动选区(数据行坐标)。离散多选时只代表最后那一块。 }
+    function  Selection: TRect;
     { 选中的单元格总数(0 表示只有光标那一格)。 }
     function SelectedCellCount: Integer;
 
@@ -825,6 +843,8 @@ type
     { 选择粒度:单元格矩形 / 整行 / 整列。 }
     property SelectionMode: TTyGridSelectionMode
       read FSelectionMode write SetSelectionMode default gsmCell;
+    property OnSelectionChanged: TNotifyEvent
+      read FOnSelectionChanged write FOnSelectionChanged;
     property DefaultEditorKind: TTyGridEditorKind
       read FDefaultEditorKind write FDefaultEditorKind default gekText;
     property OnGetEditorKind: TTyGridGetEditorKindEvent
@@ -2803,9 +2823,20 @@ begin
 
     { 无头环境(无窗口句柄)下 SetFocus 会抛异常 —— 句柄没落地就别抢焦点。 }
     if HandleAllocated and CanFocus then SetFocus;
+
+    { Ctrl+点 = 把当前这块**固化**下来,再从新格开一块 —— 这就是离散多选。
+      Shift+点 = 从原锚点拉到这里;普通点 = 清掉离散区并把锚点收到当前格。
+
+      固化必须在 **MoveCursor 之前**:光标是活动矩形的另一个角,先挪光标的话
+      固化下来的是已经被拉长的那一块(Ctrl+点第 4 行会把 1..4 整段吞进去)。 }
+    if ssCtrl in Shift then
+      CommitActiveSelection
+    else if not (ssShift in Shift) then
+      SetLength(FSelRects, 0);
+
     MoveCursor(hit.Col, hit.Row);
-    { Shift+点 = 从原锚点拉到这里;普通点 = 把锚点收到当前格(取消区域)。 }
     if not (ssShift in Shift) then AnchorSelection;
+    SelectionChanged;
     { 勾选框:点在方块上就切换。命中用的是绘制同一个槽,所以点哪切哪。 }
     if (EditorKindFor(hit.Col, hit.Row) = gekCheckBox)
        and PtInRect(CheckBoxRect(hit.Col, hit.Row), Point(X, Y)) then
@@ -2814,6 +2845,7 @@ begin
     if Assigned(OnClickCell) then OnClickCell(Self, hit.Col, hit.Row);
   end;
 end;
+
 
 procedure TTyStringGrid.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
@@ -3280,6 +3312,22 @@ var
   txt: string;
 begin
   inherited MouseMove(Shift, X, Y);
+  if not Enabled then Exit;
+
+  { 按住左键在格上移动 = 拖选。只挪光标、**不动锚点**,
+    活动矩形因此从按下那一格一直拉到这里。
+    放在 hint 那段之前:拖选期间不该再弹提示。 }
+  if ssLeft in Shift then
+  begin
+    hit := CellAt(X, Y);
+    if (hit.Part = ghpCell) and ((hit.Col <> FCol) or (hit.Row <> FRow)) then
+    begin
+      MoveCursor(hit.Col, hit.Row);
+      SelectionChanged;
+    end;
+    Exit;
+  end;
+
   if not Assigned(FOnGetCellHint) then Exit;
 
   hit := CellAt(X, Y);
@@ -4702,23 +4750,131 @@ begin
 end;
 
 
+function TTyStringGrid.ActiveSelectionRect: TRect;
+begin
+  Result.Left   := Min(FSelAnchorCol, FCol);
+  Result.Right  := Max(FSelAnchorCol, FCol);
+  Result.Top    := Min(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+  Result.Bottom := Max(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+end;
+
+{ 一格在不在某个矩形里。整行/整列模式下另一轴不参与判定 —— 选中就是整条。 }
+function TyGridRectHolds(const R: TRect; ACol, ADisplayRow: Integer;
+  AMode: TTyGridSelectionMode): Boolean;
+begin
+  case AMode of
+    gsmRow:    Result := (ADisplayRow >= R.Top) and (ADisplayRow <= R.Bottom);
+    gsmColumn: Result := (ACol >= R.Left) and (ACol <= R.Right);
+  else         Result := (ACol >= R.Left) and (ACol <= R.Right)
+                     and (ADisplayRow >= R.Top) and (ADisplayRow <= R.Bottom);
+  end;
+end;
+
 function TTyStringGrid.IsCellSelected(ACol, ARow: Integer): Boolean;
 var
-  c1, c2, r1, r2, rp: Integer;
+  rp, i: Integer;
 begin
   Result := False;
   if (ACol < 0) or (ARow < 0) then Exit;
-
-  c1 := Min(FSelAnchorCol, FCol);  c2 := Max(FSelAnchorCol, FCol);
-  r1 := Min(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
-  r2 := Max(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
   rp := DataToDisplay(ARow);
+  if rp < 0 then Exit;               { 被筛掉的行不参与 }
 
-  { 整行/整列模式下,另一轴不参与判定 —— 选中就是整条。 }
-  case FSelectionMode of
-    gsmRow:    Result := (rp >= r1) and (rp <= r2);
-    gsmColumn: Result := (ACol >= c1) and (ACol <= c2);
-  else         Result := (ACol >= c1) and (ACol <= c2) and (rp >= r1) and (rp <= r2);
+  { 活动矩形 + 已提交的离散矩形。FSelRects 为空时就是从前的单矩形行为。 }
+  if TyGridRectHolds(ActiveSelectionRect, ACol, rp, FSelectionMode) then Exit(True);
+  for i := 0 to High(FSelRects) do
+    if TyGridRectHolds(FSelRects[i], ACol, rp, FSelectionMode) then Exit(True);
+end;
+
+procedure TTyStringGrid.CommitActiveSelection;
+var
+  n: Integer;
+begin
+  n := Length(FSelRects);
+  SetLength(FSelRects, n + 1);
+  FSelRects[n] := ActiveSelectionRect;
+end;
+
+procedure TTyStringGrid.SelectionChanged;
+begin
+  Invalidate;
+  if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
+end;
+
+procedure TTyStringGrid.SelectAll;
+begin
+  SetLength(FSelRects, 0);
+  if (Header.Columns.Count = 0) or (RowCount = 0) then Exit;
+  FSelAnchorCol := 0;
+  FSelAnchorRow := DisplayToData(0);
+  FCol := Header.Columns.Count - 1;
+  FRow := DisplayToData(DisplayRowCount - 1);
+  SelectionChanged;
+end;
+
+procedure TTyStringGrid.SelectRange(ACol1, ARow1, ACol2, ARow2: Integer);
+
+  function ClampCol(AValue: Integer): Integer;
+  begin
+    Result := AValue;
+    if Result < 0 then Result := 0;
+    if Result > Header.Columns.Count - 1 then Result := Header.Columns.Count - 1;
+  end;
+
+  function ClampRow(AValue: Integer): Integer;
+  begin
+    Result := AValue;
+    if Result < 0 then Result := 0;
+    if Result > RowCount - 1 then Result := RowCount - 1;
+  end;
+
+begin
+  if (Header.Columns.Count = 0) or (RowCount = 0) then Exit;
+  SetLength(FSelRects, 0);
+  FSelAnchorCol := ClampCol(ACol1);
+  FSelAnchorRow := ClampRow(ARow1);
+  FCol := ClampCol(ACol2);
+  FRow := ClampRow(ARow2);
+  SelectionChanged;
+end;
+
+procedure TTyStringGrid.SelectRows(ARow1, ARow2: Integer);
+begin
+  if Header.Columns.Count = 0 then Exit;
+  SelectRange(0, ARow1, Header.Columns.Count - 1, ARow2);
+end;
+
+procedure TTyStringGrid.ClearSelection;
+begin
+  SetLength(FSelRects, 0);
+  { 选区收缩成光标所在的那一格 —— 网格总有一个当前格,"什么都没选"不是它的状态。 }
+  AnchorSelection;
+  SelectionChanged;
+end;
+
+function TTyStringGrid.Selection: TRect;
+var
+  r: TRect;
+begin
+  r := ActiveSelectionRect;
+  { 对外一律用**数据行**坐标:显示序是内部表示,宿主拿到手要能直接索引 Cells。 }
+  Result.Left := r.Left;
+  Result.Right := r.Right;
+  Result.Top := DisplayToData(r.Top);
+  Result.Bottom := DisplayToData(r.Bottom);
+end;
+
+function TTyStringGrid.SelectedCellCount: Integer;
+var
+  pos, colIdx, dataRow: Integer;
+begin
+  { 逐格数而不是把矩形面积加起来 —— 离散矩形可能互相重叠,加面积会重复计数。 }
+  Result := 0;
+  for pos := 0 to DisplayRowCount - 1 do
+  begin
+    dataRow := DisplayToData(pos);
+    if dataRow < 0 then Continue;
+    for colIdx := 0 to Header.Columns.Count - 1 do
+      if IsCellSelected(colIdx, dataRow) then Inc(Result);
   end;
 end;
 
@@ -4728,15 +4884,6 @@ begin
   FSelAnchorRow := FRow;
 end;
 
-function TTyStringGrid.SelectedCellCount: Integer;
-var
-  c1, c2, r1, r2: Integer;
-begin
-  c1 := Min(FSelAnchorCol, FCol);  c2 := Max(FSelAnchorCol, FCol);
-  r1 := Min(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
-  r2 := Max(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
-  Result := (c2 - c1 + 1) * (r2 - r1 + 1);
-end;
 
 function TTyStringGrid.EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind;
 begin

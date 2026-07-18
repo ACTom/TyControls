@@ -40,7 +40,7 @@
 | B4 | H3 逐格外观钩子 + H4 斑马纹 + H14 网格线局部 | - [x] **完成** `2026-07-19` |
 | B5 | H5 单元格级鼠标事件 + H15 按钮单元格 + H13 AutoResize 接线 | - [x] **完成** `2026-07-19` |
 | B6 | H6 换行 + H7 行高三件套 | - [x] **完成** `2026-07-19` |
-| B7 | A4 选择模型重构 + H8 离散多选 | - [ ] |
+| B7 | A4 选择模型重构 + H8 离散多选 | - [x] **完成** `2026-07-19` |
 | B8 | A5 列模型(TTyGridColumn)+ H10 列级编辑器声明 | - [ ] |
 | B9 | A6 EditLink 扩展点 + H12 输入约束 + H9 键盘录入手感 | - [ ] |
 | B10 | H16 多级/合并表头 | - [ ] |
@@ -296,13 +296,17 @@ TextRect,都是 BGRA 重活),而样式解析根本不是瓶颈。加了**跨帧�
 
 ## B7 · 选择模型重构 + 离散多选
 
-- [ ] 选区从"单锚点矩形"升成 `array of TRect`(显示序空间)+ 活动区间。
+- [x] 选区从"单锚点矩形"升成 `array of TRect`(显示序空间)+ 活动区间。
       单矩形是退化情形,**现有行为必须 0 回归**。
-- [ ] public API:`SelectAll` / `SelectRange` / `SelectRows` / `ClearSelection` /
+- [x] public API:`SelectAll` / `SelectRange` / `SelectRows` / `ClearSelection` /
       `Selection` / `SelectedCellCount`(目前一个 public 选择方法都没有)。
-- [ ] `OnSelectionChanged`。
-- [ ] Ctrl+点 追加离散行;鼠标拖选(插在 `inherited MouseMove` 之后、hint 之前)。
-- [ ] 变异验证;**B7 收工**。
+- [x] `OnSelectionChanged`。
+- [x] Ctrl+点 追加离散行;鼠标拖选(插在 `inherited MouseMove` 之后、hint 之前)。
+- [x] 变异验证(Ctrl 不固化 / 判定不看离散区 / 普通点不清离散区 / 拖选不挪光标,四条各自杀掉对应测试)。
+- [x] 实现时踩到的真 bug:Ctrl+点的固化原本写在 `MoveCursor` **之后** ——
+      光标是活动矩形的另一个角,先挪光标再固化,固化下来的是**已经被拉长**的那一块
+      (Ctrl+点第 4 行会把 1..4 整段吞进去)。测试里"中间的行不该被连带选中"抓到了它。
+- [x] **B7 收工**。
 
 ---
 

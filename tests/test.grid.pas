@@ -137,8 +137,12 @@ type
     procedure TestExplicitRowHeightBeatsCallbackAndMovesGeometry;
     procedure TestDragRowDividerChangesRowHeight;
     procedure TestAutoFitRowGrowsToFitWrappedText;
+    procedure TestCtrlClickAddsDiscreteSelection;
+    procedure TestSelectionApiAndChangedEvent;
+    procedure TestDragAcrossCellsExtendsSelection;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
+    FSelChanges: Integer;
     FClickCol, FClickRow: Integer;
     FRightCol, FRightRow: Integer;
     FBtnCol, FBtnRow: Integer;
@@ -150,6 +154,7 @@ type
       var ACanClick: Boolean);
     procedure HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
+    procedure HookSelectionChanged(Sender: TObject);
     { 逐格外观钩子的桩。**必须放在 published 之外** —— fpcunit 会把 published 段里的
       每个方法都当成测试用例注册,钩子被当测试跑起来(Sender=nil)直接 AV。 }
     procedure HookPaintRow2Red(Sender: TObject; ACol, ARow: Integer;
@@ -889,6 +894,8 @@ type
     procedure ForceUpdateScrollBars;
     procedure HoverAt(X, Y: Integer);
     procedure RightClickAt(X, Y: Integer);
+    procedure CtrlClickAt(X, Y: Integer);
+    procedure DragFromTo(X1, Y1, X2, Y2: Integer);
     procedure DoubleClickAt(X, Y: Integer);
     function  ColWidth(ACol: Integer): Integer;
     { 完整一次点击(按下 + 松开)。注意 ClickAt **只发 MouseDown** ——
@@ -915,6 +922,19 @@ end;
 function TStrGridAccess.ColWidth(ACol: Integer): Integer;
 begin
   Result := ColumnWidthPx(ACol);
+end;
+
+procedure TStrGridAccess.CtrlClickAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [ssCtrl], X, Y);
+  MouseUp(mbLeft, [ssCtrl], X, Y);
+end;
+
+procedure TStrGridAccess.DragFromTo(X1, Y1, X2, Y2: Integer);
+begin
+  MouseDown(mbLeft, [], X1, Y1);
+  MouseMove([ssLeft], X2, Y2);
+  MouseUp(mbLeft, [], X2, Y2);
 end;
 
 procedure TStrGridAccess.RightClickAt(X, Y: Integer);
@@ -3576,6 +3596,108 @@ begin
   { 空行不该被撑高。 }
   G.AutoFitRow(2);
   AssertEquals('空行保持默认高', G.DefaultRowHeight, G.RowHeightOf(2));
+end;
+
+procedure TTyStringGridTest.HookSelectionChanged(Sender: TObject);
+begin
+  Inc(FSelChanges);
+end;
+
+{ 离散多选:单锚点矩形**在物理上就表达不了**"第 1 行和第 4 行",
+  这正是选择模型要从一个矩形升成一组矩形的原因。 }
+procedure TTyStringGridTest.TestCtrlClickAddsDiscreteSelection;
+var
+  G: TStrGridAccess;
+
+  procedure ClickCell(ACol, ARow: Integer; ACtrl: Boolean);
+  var r: TRect;
+  begin
+    r := G.CellRect(ACol, ARow);
+    if ACtrl then G.CtrlClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2)
+    else G.FullClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  end;
+
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+
+  ClickCell(0, 1, False);
+  AssertTrue('第 1 行被选中', G.IsCellSelected(0, 1));
+  AssertTrue('第 4 行还没选', not G.IsCellSelected(0, 4));
+
+  ClickCell(0, 4, True);           { Ctrl+点 追加 }
+  AssertTrue('Ctrl+点之后第 1 行仍然选中', G.IsCellSelected(0, 1));
+  AssertTrue('第 4 行也选中了', G.IsCellSelected(0, 4));
+  { 中间的行**不能**被连带选上 —— 那就成区间选择了,不是离散选择。 }
+  AssertTrue('中间的第 2 行不该被连带选中', not G.IsCellSelected(0, 2));
+  AssertTrue('中间的第 3 行不该被连带选中', not G.IsCellSelected(0, 3));
+
+  { 普通点一下要把离散区清干净。 }
+  ClickCell(0, 0, False);
+  AssertTrue('普通点之后只剩当前格', G.IsCellSelected(0, 0));
+  AssertTrue('离散区被清掉(第 1 行)', not G.IsCellSelected(0, 1));
+  AssertTrue('离散区被清掉(第 4 行)', not G.IsCellSelected(0, 4));
+end;
+
+{ 选择 API:从前一个 public 的选择方法都没有 —— 宿主只能靠鼠标键盘间接操作。 }
+procedure TTyStringGridTest.TestSelectionApiAndChangedEvent;
+var
+  G: TStrGridAccess;
+  sel: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);   { 4 列 }
+  G.RowCount := 6;
+  FSelChanges := 0;
+  G.OnSelectionChanged := @HookSelectionChanged;
+
+  G.SelectRange(1, 1, 2, 3);
+  AssertTrue('区间内被选中', G.IsCellSelected(1, 2));
+  AssertTrue('区间外的列没被选中', not G.IsCellSelected(3, 2));
+  AssertTrue('区间外的行没被选中', not G.IsCellSelected(1, 5));
+  AssertEquals('SelectedCellCount = 2 列 x 3 行', 6, G.SelectedCellCount);
+
+  sel := G.Selection;
+  AssertEquals('Selection 用数据行坐标(左)', 1, sel.Left);
+  AssertEquals('Selection 用数据行坐标(右)', 2, sel.Right);
+  AssertEquals('Selection 用数据行坐标(上)', 1, sel.Top);
+  AssertEquals('Selection 用数据行坐标(下)', 3, sel.Bottom);
+
+  G.SelectRows(0, 1);
+  AssertEquals('整行选择覆盖所有列', 4 * 2, G.SelectedCellCount);
+
+  G.SelectAll;
+  AssertEquals('全选', 4 * 6, G.SelectedCellCount);
+
+  G.ClearSelection;
+  AssertEquals('清空后只剩光标那一格', 1, G.SelectedCellCount);
+
+  { 越界要钳制而不是崩。 }
+  G.SelectRange(-5, -5, 99, 99);
+  AssertEquals('越界钳制成全选', 4 * 6, G.SelectedCellCount);
+
+  AssertTrue(Format('每次改动都该发 OnSelectionChanged(实际 %d 次)', [FSelChanges]),
+    FSelChanges >= 5);
+end;
+
+{ 按住左键拖过若干格 = 拉出一块区间选择。 }
+procedure TTyStringGridTest.TestDragAcrossCellsExtendsSelection;
+var
+  G: TStrGridAccess;
+  a, b: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+
+  a := G.CellRect(0, 1);
+  b := G.CellRect(2, 3);
+  G.DragFromTo((a.Left + a.Right) div 2, (a.Top + a.Bottom) div 2,
+               (b.Left + b.Right) div 2, (b.Top + b.Bottom) div 2);
+
+  AssertTrue('起点被选中', G.IsCellSelected(0, 1));
+  AssertTrue('中间被选中', G.IsCellSelected(1, 2));
+  AssertTrue('终点被选中', G.IsCellSelected(2, 3));
+  AssertTrue('框外没被选中', not G.IsCellSelected(3, 3));
+  AssertEquals('拖出来的是 3 列 x 3 行', 9, G.SelectedCellCount);
 end;
 
 initialization
