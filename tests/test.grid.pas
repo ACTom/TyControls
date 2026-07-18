@@ -133,6 +133,10 @@ type
     procedure TestCanClickCellVetoesTheWholeClick;
     procedure TestButtonCellClickFiresWithThatCell;
     procedure TestDoubleClickOnDividerAutoFitsColumn;
+    procedure TestWordWrapMakesLongTextUseMoreLines;
+    procedure TestExplicitRowHeightBeatsCallbackAndMovesGeometry;
+    procedure TestDragRowDividerChangesRowHeight;
+    procedure TestAutoFitRowGrowsToFitWrappedText;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FClickCol, FClickRow: Integer;
@@ -3415,6 +3419,163 @@ begin
 
   AssertTrue(Format('双击分隔线应当自适应列宽(%d -> %d)', [before, after]),
     after > before);
+end;
+
+{ 换行:同一段长文字,开了换行之后墨应当铺到更多行上(而不是被省略号截断成一行)。
+  用"有墨的扫描行数"判定 —— 比数像素总量结实:换行后总墨量差不多,但纵向铺开了。 }
+procedure TTyStringGridTest.TestWordWrapMakesLongTextUseMoreLines;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+
+  function InkedScanlines: Integer;
+  var
+    Re: TBGRABitmap; r: TRect; x, y: Integer; px: TBGRAPixel; hasInk: Boolean;
+  begin
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    r := G.CellRect(0, 0);
+    Result := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top to r.Bottom - 1 do
+      begin
+        if (y < 0) or (y >= 300) then Continue;
+        hasInk := False;
+        for x := r.Left to r.Right - 1 do
+        begin
+          if (x < 0) or (x >= 400) then Continue;
+          px := Re.GetPixel(x, y);
+          if px.red + px.green + px.blue < 400 then begin hasInk := True; Break; end;
+        end;
+        if hasInk then Inc(Result);
+      end;
+    finally
+      Re.Free;
+    end;
+  end;
+
+var
+  oneLine, wrapped: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.DefaultRowHeight := 60;        { 够高才装得下多行 }
+    G.Cells[0, 0] := 'aaa bbb ccc ddd eee fff ggg hhh';
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    oneLine := InkedScanlines;
+    G.WordWrap := True;
+    wrapped := InkedScanlines;
+
+    AssertTrue(Format('换行后墨应当铺到更多扫描行上(%d -> %d)', [oneLine, wrapped]),
+      wrapped > oneLine + 3);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 行高三件套的第一件:**可写**的 RowHeights。
+  从前只有 OnGetRowHeight 回调、网格自己不存 —— 拖拽和自动行高都无处落盘。
+  而且优先级要对:显式(用户的直接动作)压过回调(宿主的通用规则)。 }
+procedure TTyStringGridTest.TestExplicitRowHeightBeatsCallbackAndMovesGeometry;
+var
+  G: TStrGridAccess;
+  topBefore, topAfter: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  G.OnGetRowHeight := @HandleTallSecondRow;    { 回调:第 1 行 60 高 }
+
+  AssertEquals('回调生效', 60, G.RowHeightOf(1));
+
+  G.RowHeights[1] := 90;
+  AssertEquals('显式行高压过回调', 90, G.RowHeightOf(1));
+
+  { 光改存储不算数 —— 几何层必须跟着动,否则行还是老样子。 }
+  topBefore := G.RowRectAt(2).Top;
+  G.RowHeights[1] := 140;
+  topAfter := G.RowRectAt(2).Top;
+  AssertTrue(Format('后面的行应当跟着下移(%d -> %d)', [topBefore, topAfter]),
+    topAfter > topBefore);
+
+  { 清掉之后回落到回调。 }
+  G.RowHeights[1] := 0;
+  AssertEquals('清掉显式值后回落到回调', 60, G.RowHeightOf(1));
+
+  { **没有回调时**显式行高也必须驱动几何。
+    上面那段有回调在,回调本身就会逼出可变行高的前缀和路径 —— 于是
+    "几何层认不认显式行高"根本测不出来(变异验证抓到过一次)。 }
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  topBefore := G.RowRectAt(2).Top;
+  G.RowHeights[0] := 100;
+  topAfter := G.RowRectAt(2).Top;
+  AssertTrue(Format('没有回调时,显式行高也要驱动几何(%d -> %d)',
+    [topBefore, topAfter]), topAfter > topBefore);
+end;
+
+{ 在行头槽里拖行分隔线改行高 —— 与列分隔线在列头里拖对称。 }
+procedure TTyStringGridTest.TestDragRowDividerChangesRowHeight;
+var
+  G: TStrGridAccess;
+  r: TRect;
+  before: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  G.ShowIndicator := True;          { 分隔线只在行头槽里认 }
+  G.IndicatorWidth := 30;
+
+  before := G.RowHeightOf(0);
+  r := G.RowRectAt(0);
+  G.PressMouseWithoutRelease(8, r.Bottom);   { 落在行头槽内的分隔线上 }
+  G.MoveMouseTo(8, r.Bottom + 25);
+  G.ReleaseMouse(8, r.Bottom + 25);
+
+  AssertTrue(Format('拖分隔线应当把行拉高(%d -> %d)', [before, G.RowHeightOf(0)]),
+    G.RowHeightOf(0) > before);
+
+  { 不在行头槽里拖不该改行高(那儿是框选的手势)。 }
+  before := G.RowHeightOf(2);
+  r := G.RowRectAt(2);
+  G.PressMouseWithoutRelease(200, r.Bottom);
+  G.MoveMouseTo(200, r.Bottom + 25);
+  G.ReleaseMouse(200, r.Bottom + 25);
+  AssertEquals('单元格区域拖动不改行高', before, G.RowHeightOf(2));
+end;
+
+{ AutoFitRow:按换行后的实际高度把行调到刚好放得下。 }
+procedure TTyStringGridTest.TestAutoFitRowGrowsToFitWrappedText;
+var
+  G: TStrGridAccess;
+  before, after: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.WordWrap := True;
+  G.Cells[0, 1] := 'aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk lll';
+
+  before := G.RowHeightOf(1);
+  G.AutoFitRow(1);
+  after := G.RowHeightOf(1);
+  AssertTrue(Format('换行内容应当把行撑高(%d -> %d)', [before, after]),
+    after > before);
+
+  { 空行不该被撑高。 }
+  G.AutoFitRow(2);
+  AssertEquals('空行保持默认高', G.DefaultRowHeight, G.RowHeightOf(2));
 end;
 
 initialization

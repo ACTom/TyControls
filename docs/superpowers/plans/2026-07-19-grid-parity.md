@@ -39,7 +39,7 @@
 | B3 | A2 渲染管线逐格化 + hover;A3 属性存储统一 | - [x] **完成** `2026-07-19` |
 | B4 | H3 逐格外观钩子 + H4 斑马纹 + H14 网格线局部 | - [x] **完成** `2026-07-19` |
 | B5 | H5 单元格级鼠标事件 + H15 按钮单元格 + H13 AutoResize 接线 | - [x] **完成** `2026-07-19` |
-| B6 | H6 换行 + H7 行高三件套 | - [ ] |
+| B6 | H6 换行 + H7 行高三件套 | - [x] **完成** `2026-07-19` |
 | B7 | A4 选择模型重构 + H8 离散多选 | - [ ] |
 | B8 | A5 列模型(TTyGridColumn)+ H10 列级编辑器声明 | - [ ] |
 | B9 | A6 EditLink 扩展点 + H12 输入约束 + H9 键盘录入手感 | - [ ] |
@@ -279,12 +279,18 @@ TextRect,都是 BGRA 重活),而样式解析根本不是瓶颈。加了**跨帧�
 
 ## B6 · 单元格换行 + 行高三件套
 
-- [ ] `OnGetCellWordWrap` + 换行绘制(复用 `TTyPainter` 的换行能力,表头格同享)。
-- [ ] **可写** `RowHeights[row]` 稀疏存储(现在只有 `OnGetRowHeight` 回调,网格自己不存
+- [x] `OnGetCellWordWrap` + 换行绘制(复用 `TTyPainter` 的换行能力,表头格同享)。
+- [x] **可写** `RowHeights[row]` 稀疏存储(现在只有 `OnGetRowHeight` 回调,网格自己不存
       → 拖拽和自动行高都无处落盘)。`RowHeightOf` 改为:显式存储 > 回调 > 默认。
-- [ ] 拖行分隔线改行高(对称复用 `FResizeCol` 那套状态机 → `FResizeRow`)。
-- [ ] `AutoFitRow` / `AutoFitRows`:按换行后的实际高度。
-- [ ] 变异验证;**B6 收工**。
+- [x] 拖行分隔线改行高(对称复用 `FResizeCol` 那套状态机 → `FResizeRow`)。
+- [x] `AutoFitRow` / `AutoFitRows`:按换行后的实际高度。
+- [x] 变异验证。**两条第一次没被杀**:
+      ① 换行:我先变异 `st.SingleLine`,但 LCL 的排版实际看的是 `Wordbreak` ——
+         变异点选错了,不是测试弱。改变异 `st.Wordbreak` 才红。
+      ② 显式行高驱动几何:测试里同时挂了 `OnGetRowHeight`,而回调本身就会逼出
+         可变行高的前缀和路径 → "几何层认不认显式行高"根本测不出来。
+         补了一段"没有回调、只有显式行高"的断言才红。
+- [x] **B6 收工**。
 
 ---
 

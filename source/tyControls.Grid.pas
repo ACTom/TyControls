@@ -49,6 +49,9 @@ type
   TTyGridCanClickCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var ACanClick: Boolean) of object;
   TTyGridHeaderMouseEvent = procedure(Sender: TObject; ACol: Integer) of object;
+  { 这一格要不要换行显示。 }
+  TTyGridGetCellWordWrapEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var AWordWrap: Boolean) of object;
 
   { 逐格外观钩子:宿主按数据决定某一格长什么样(负数标红、超期标黄……)。
     一个钩子覆盖底色/文字色/字体/两轴对齐 —— 分成七八个事件对宿主更难用。
@@ -68,6 +71,7 @@ type
     FontWeight:    Integer;
     HAlign:        TAlignment;
     VAlign:        TTextLayout;
+    WordWrap:      Boolean;
   end;
 
   { 一格的**附加属性**。稀疏:绝大多数格根本没有条目。
@@ -136,6 +140,16 @@ type
     FOnRightClickCell: TTyGridCellMouseEvent;
     FOnCanClickCell:   TTyGridCanClickCellEvent;
     FOnCellButtonClick:TTyGridCellMouseEvent;
+    FOnGetCellWordWrap:TTyGridGetCellWordWrapEvent;
+    FWordWrap:         Boolean;
+    { 显式行高的稀疏存储:行号 -> 高度(逻辑像素)。
+      从前只有 OnGetRowHeight 回调,网格自己不存 —— 于是拖拽改行高、自动行高
+      都**无处落盘**。优先级:显式存储 > 回调 > DefaultRowHeight。 }
+    FRowHeights:       TStringList;
+    { 正在拖的行分隔线(-1 = 没在拖)。与列那套 FResizeCol 对称。 }
+    FResizeRow:        Integer;
+    FResizeStartY:     Integer;
+    FResizeStartH:     Integer;
     FOnHeaderClick:    TTyGridHeaderMouseEvent;
     FOnHeaderRightClick: TTyGridHeaderMouseEvent;
     { 正被按下的按钮格(-1 = 无)。三态里的 pressed 靠它。 }
@@ -197,6 +211,11 @@ type
     procedure SetGridLineWidth(AValue: Integer);
     procedure SetGridLineStyle(AValue: TTyGridLineStyle);
     procedure SetAlternateRows(AValue: Boolean);
+    procedure SetWordWrap(AValue: Boolean);
+    function  GetRowHeights(ARow: Integer): Integer;
+    procedure SetRowHeights(ARow, AValue: Integer);
+    { Y 落在哪一行的下边界附近(行头槽内才算)。不在分隔线上返回 -1。 }
+    function  RowDividerAtY(AX, AY: Integer): Integer;
     function  GetGridLines: Boolean;
     procedure SetFooterHeight(AValue: Integer);
   protected
@@ -223,8 +242,12 @@ type
     { 把一格文字画出来,尽量走缓存。语义与 P.DrawText 一致(含省略号截断)。 }
     procedure DrawCellText(P: TTyPainter; const ARect: TRect; const AText: string;
       const AFontName: string; AFontSize, AFontWeight: Integer; AColor: TTyColor;
-      AHAlign: TAlignment; AVAlign: TTextLayout);
+      AHAlign: TAlignment; AVAlign: TTextLayout; AWordWrap: Boolean = False);
     procedure ClearTextCache;
+    { 行高变了 → 行几何的缓存(前缀和)要失效。基类没有缓存;TTyStringGrid 改写。 }
+    procedure InvalidateRowMetrics; virtual;
+    { 有没有任何一行设过显式行高。 }
+    function  HasExplicitRowHeights: Boolean;
     { 一格最终外观 = 主题 TyGridCell(按状态) → 斑马纹 → 逐格属性 → 宿主钩子。
       ADisplayPos 只用于斑马纹;ARow 是数据行。 }
     function CellAppearance(ACol, ARow, ADisplayPos: Integer;
@@ -233,6 +256,8 @@ type
       var AAppearance: TTyGridCellAppearance); virtual;
     { 这一格能不能点。所有点击路径都必须先问它。 }
     function  CanClickCell(ACol, ARow: Integer): Boolean;
+    { 显式行高。设为 <= 0 表示"清掉,回到回调/默认值"。 }
+    property RowHeights[ARow: Integer]: Integer read GetRowHeights write SetRowHeights;
     { 按内容自适应列宽。基类没有数据、什么都不做;TTyStringGrid 改写。 }
     procedure AutoFitColumnWidth(ACol: Integer); virtual;
     procedure SetPressedButton(ACol, ARow: Integer);
@@ -399,6 +424,8 @@ type
       default glsBoth;
     { 隔行底色(主题键 TyGridCellAlt)。 }
     property AlternateRows: Boolean read FAlternateRows write SetAlternateRows default False;
+    { 单元格文字换行的默认值;OnGetCellWordWrap 可逐格覆盖。 }
+    property WordWrap: Boolean read FWordWrap write SetWordWrap default False;
     { 格线粗细,逻辑像素。**不占布局像素** —— 线画在单元格边界上、压住两侧各一半,
       列宽就是列宽,不会因为线变粗而挪位(与 LCL TCustomGrid / 常见商业网格一致)。
       粗线只会让单元格**内容**相应内缩,免得文字压在线底下。 }
@@ -414,6 +441,8 @@ type
     property OnRightClickCell: TTyGridCellMouseEvent read FOnRightClickCell write FOnRightClickCell;
     property OnCanClickCell: TTyGridCanClickCellEvent read FOnCanClickCell write FOnCanClickCell;
     property OnCellButtonClick: TTyGridCellMouseEvent read FOnCellButtonClick write FOnCellButtonClick;
+    property OnGetCellWordWrap: TTyGridGetCellWordWrapEvent
+      read FOnGetCellWordWrap write FOnGetCellWordWrap;
     property OnHeaderClick: TTyGridHeaderMouseEvent read FOnHeaderClick write FOnHeaderClick;
     property OnHeaderRightClick: TTyGridHeaderMouseEvent read FOnHeaderRightClick write FOnHeaderRightClick;
     { 底部汇总带。内容由派生类给(TTyStringGrid 按列聚合)。 }
@@ -631,6 +660,10 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     function  RowHeightOf(ARow: Integer): Integer; override;
     function  RowTops: TTyIntArray; override;
+    procedure InvalidateRowMetrics; override;
+    { 按内容(含换行)把一行/所有行的高度调到刚好放得下。 }
+    procedure AutoFitRow(ARow: Integer);
+    procedure AutoFitRows;
     procedure RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
       const AFrame: TTyStyleSet); virtual;
     procedure RenderProgressCell(P: TTyPainter; ACol, ARow: Integer;
@@ -831,6 +864,59 @@ var
 
 implementation
 
+{ 一段文字在给定宽度下会占几行 —— 与 BGRA 的 Wordbreak 断法保持一致:
+  在空格处断,单个"词"仍超宽时按字符硬断(CJK 没有空格,靠的就是这条)。
+
+  测量与绘制必须用**同一支已配置好的位图字体**(ABmp),否则算出来的行数
+  和画出来的对不上。 }
+function TyCountWrappedLines(ABmp: TBGRABitmap; const AText: string;
+  AMaxWidth: Integer): Integer;
+var
+  i, lineW, chW, n: Integer;
+  ch: string;
+  lastSpace, lineStart: Integer;
+  cur: string;
+begin
+  Result := 1;
+  if (AText = '') or (AMaxWidth <= 0) then Exit;
+  cur := '';
+  i := 1;
+  n := Length(AText);
+  lineW := 0;
+  lastSpace := 0;
+  lineStart := 1;
+  while i <= n do
+  begin
+    { 按 UTF-8 字符前进,别把多字节切开。 }
+    chW := 1;
+    if Byte(AText[i]) >= $C0 then
+    begin
+      if Byte(AText[i]) >= $F0 then chW := 4
+      else if Byte(AText[i]) >= $E0 then chW := 3
+      else chW := 2;
+    end;
+    ch := Copy(AText, i, chW);
+    if ch = ' ' then lastSpace := i;
+
+    Inc(lineW, ABmp.TextSize(ch).cx);
+    if lineW > AMaxWidth then
+    begin
+      Inc(Result);
+      if lastSpace > lineStart then
+      begin
+        i := lastSpace + 1;      { 回退到上一个空格处断行 }
+        lineStart := i;
+        lastSpace := 0;
+        lineW := 0;
+        Continue;
+      end;
+      lineStart := i;
+      lineW := ABmp.TextSize(ch).cx;
+    end;
+    Inc(i, chW);
+  end;
+end;
+
 { ---- TTyGridCellAttr / Store ---------------------------------------------- }
 
 constructor TTyGridCellAttr.Create;
@@ -969,6 +1055,10 @@ begin
   FHoverRow := -1;
   FPressedBtnCol := -1;
   FPressedBtnRow := -1;
+  FResizeRow := -1;
+  FRowHeights := TStringList.Create;
+  FRowHeights.Sorted := True;
+  FRowHeights.Duplicates := dupIgnore;
   FTextCache := TStringList.Create;
   FTextCache.Sorted := True;          { 排序 → IndexOf 走二分 }
   FTextCache.Duplicates := dupIgnore;
@@ -1004,6 +1094,7 @@ begin
   FHeader.OnChange := nil;
   FHeader.Free;
   FTextCache.Free;      { OwnsObjects → 顺带释放缓存的位图 }
+  FRowHeights.Free;
   inherited Destroy;
 end;
 
@@ -1417,7 +1508,8 @@ end;
 
 procedure TTyCustomGrid.DrawCellText(P: TTyPainter; const ARect: TRect;
   const AText: string; const AFontName: string; AFontSize, AFontWeight: Integer;
-  AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout);
+  AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout;
+  AWordWrap: Boolean);
 var
   w, h, idx, sz, weight: Integer;
   key, fname, txt: string;
@@ -1437,7 +1529,8 @@ begin
     所以换主题/改列宽/切深色都不需要显式失效 —— 旧条目自然不再被命中。 }
   key := AText + #1 + fname + #1 + IntToStr(sz) + #1 + IntToStr(weight) + #1 +
          IntToStr(AColor) + #1 + IntToStr(w) + 'x' + IntToStr(h) + #1 +
-         IntToStr(Ord(AHAlign)) + #1 + IntToStr(Ord(AVAlign)) + #1 + IntToStr(P.PPI);
+         IntToStr(Ord(AHAlign)) + #1 + IntToStr(Ord(AVAlign)) + #1 +
+         IntToStr(Ord(AWordWrap)) + #1 + IntToStr(P.PPI);
 
   idx := FTextCache.IndexOf(key);
   if idx >= 0 then
@@ -1451,20 +1544,25 @@ begin
     bmp := TBGRABitmap.Create(w, h);      { 全透明 }
     TyConfigureTextFont(bmp, fname, sz, weight, P.PPI);
 
-    { 省略号截断:与 TTyPainter.DrawText 用同一套规则,免得两条路径排出来的字不一样。 }
     txt := AText;
-    tsz := bmp.TextSize(txt);
-    while (Length(txt) > 1) and (tsz.cx > w) do
+    if not AWordWrap then
     begin
-      Delete(txt, Length(txt), 1);
-      tsz := bmp.TextSize(txt + '...');
+      { 省略号截断:与 TTyPainter.DrawText 用同一套规则,免得两条路径排出来的字不一样。
+        换行时**不截断** —— 放不下就往下一行走,这正是换行的意义。 }
+      tsz := bmp.TextSize(txt);
+      while (Length(txt) > 1) and (tsz.cx > w) do
+      begin
+        Delete(txt, Length(txt), 1);
+        tsz := bmp.TextSize(txt + '...');
+      end;
+      if txt <> AText then txt := txt + '...';
     end;
-    if txt <> AText then txt := txt + '...';
 
     st := Default(TTextStyle);
     st.Alignment := AHAlign;
     st.Layout := AVAlign;
-    st.SingleLine := True;
+    st.SingleLine := not AWordWrap;
+    st.Wordbreak := AWordWrap;
     st.Clipping := True;
     bmp.TextRect(Rect(0, 0, w, h), 0, 0, txt, st, TyColorToBGRA(AColor));
 
@@ -1558,6 +1656,77 @@ begin
     ink, taCenter, tlCenter);
 end;
 
+procedure TTyCustomGrid.InvalidateRowMetrics;
+begin
+  { 基类全等高,没有可失效的缓存。 }
+end;
+
+function TTyCustomGrid.HasExplicitRowHeights: Boolean;
+begin
+  Result := FRowHeights.Count > 0;
+end;
+
+procedure TTyCustomGrid.SetWordWrap(AValue: Boolean);
+begin
+  if FWordWrap = AValue then Exit;
+  FWordWrap := AValue;
+  ClearTextCache;
+  Invalidate;
+end;
+
+function TTyCustomGrid.GetRowHeights(ARow: Integer): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  i := FRowHeights.IndexOf(IntToStr(ARow));
+  if i >= 0 then Result := PtrInt(FRowHeights.Objects[i]);
+end;
+
+procedure TTyCustomGrid.SetRowHeights(ARow, AValue: Integer);
+var
+  i: Integer;
+  k: string;
+begin
+  if ARow < 0 then Exit;
+  k := IntToStr(ARow);
+  i := FRowHeights.IndexOf(k);
+  if AValue <= 0 then
+  begin
+    { <= 0 = 清掉这一条,回到回调/默认值。别存 0 —— 那会变成"行高 0"。 }
+    if i >= 0 then FRowHeights.Delete(i);
+  end
+  else if i >= 0 then
+    FRowHeights.Objects[i] := TObject(PtrInt(AValue))
+  else
+    FRowHeights.AddObject(k, TObject(PtrInt(AValue)));
+  InvalidateRowMetrics;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+function TTyCustomGrid.RowDividerAtY(AX, AY: Integer): Integer;
+var
+  M: TTyGridMetrics;
+  first, last, pos: Integer;
+  r: TRect;
+  tol: Integer;
+begin
+  Result := -1;
+  { 只在行头槽里认分隔线 —— 在单元格上认的话会和框选拖拽抢手势。 }
+  if not FShowIndicator then Exit;
+  if (AX < 0) or (AX >= ScaleI(FIndicatorWidth)) then Exit;
+
+  M := GridMetrics;
+  if not TyGridVisibleRows(M, first, last) then Exit;
+  tol := ScaleI(3);
+  for pos := first to last do
+  begin
+    r := TyGridRowRect(pos, M);
+    if Abs(AY - r.Bottom) <= tol then Exit(pos);
+  end;
+end;
+
 function TTyCustomGrid.GetGridLines: Boolean;
 begin
   Result := FGridLineStyle <> glsNone;
@@ -1605,6 +1774,9 @@ begin
   Result.FontSize := ResolveFontSize(cS);
   Result.FontWeight := cS.FontWeight;
   Result.VAlign := tlCenter;
+  Result.WordWrap := FWordWrap;
+  if Assigned(FOnGetCellWordWrap) then
+    FOnGetCellWordWrap(Self, ACol, ARow, Result.WordWrap);
 
   Result.HAlign := taLeftJustify;
   if (ACol >= 0) and (ACol < FHeader.Columns.Count) then
@@ -1942,7 +2114,22 @@ begin
 
   hdrH := 0;
   if hoVisible in FHeader.Options then hdrH := ScaleI(FHeader.Height);
-  if (hdrH <= 0) or (Y >= hdrH) then Exit;
+
+  { 行分隔线在**行头槽**里拖 —— 与列分隔线在列头里拖对称。
+    放在单元格上会和框选拖拽抢手势。 }
+  if Y >= hdrH then
+  begin
+    d := RowDividerAtY(X, Y);
+    if d >= 0 then
+    begin
+      FResizeRow := d;
+      FResizeStartY := Y;
+      FResizeStartH := RowHeightOf(DisplayToData(d));
+    end;
+    Exit;
+  end;
+
+  if hdrH <= 0 then Exit;
 
   { 分隔条优先于列体 —— 边缘那几像素上,用户的意图是改宽而不是排序。 }
   d := DividerAtX(X);
@@ -1984,6 +2171,13 @@ begin
 
   UpdateHoverCell(X, Y);
 
+  if FResizeRow >= 0 then
+  begin
+    delta := UnscaleI(Y - FResizeStartY);
+    RowHeights[DisplayToData(FResizeRow)] := FResizeStartH + delta;
+    Exit;
+  end;
+
   if FResizeCol >= 0 then
   begin
     delta := UnscaleI(X - FResizeStartX);
@@ -2014,6 +2208,7 @@ procedure TTyCustomGrid.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 begin
   FResizeCol := -1;
+  FResizeRow := -1;
   FDragCol := -1;
   inherited MouseUp(Button, Shift, X, Y);
 end;
@@ -2257,7 +2452,9 @@ end;
 
 function TTyCustomGrid.RowHeightOf(ARow: Integer): Integer;
 begin
-  Result := FDefaultRowHeight;
+  { 优先级:显式存储 > 默认。派生类再插进回调。 }
+  Result := GetRowHeights(ARow);
+  if Result <= 0 then Result := FDefaultRowHeight;
 end;
 
 function TTyCustomGrid.RowTops: TTyIntArray;
@@ -2365,7 +2562,7 @@ begin
       P.Bitmap.ClipRect := vis;
       try
         DrawCellText(P, textR, txt, ap.FontName, ap.FontSize, ap.FontWeight,
-          ap.TextColor, ap.HAlign, ap.VAlign);
+          ap.TextColor, ap.HAlign, ap.VAlign, ap.WordWrap);
       finally
         P.Bitmap.ClipRect := oldClip;
       end;
@@ -2981,18 +3178,30 @@ end;
 
 function TTyStringGrid.RowHeightOf(ARow: Integer): Integer;
 begin
+  { 优先级:**显式存储 > 回调 > 默认**。
+    显式的最高,是因为它来自用户的直接动作(拖分隔线 / AutoFitRow),
+    而回调是宿主给的通用规则 —— 直接动作压过通用规则。 }
+  Result := RowHeights[ARow];
+  if Result > 0 then Exit;
+
   Result := DefaultRowHeight;
   if Assigned(FOnGetRowHeight) then FOnGetRowHeight(Self, ARow, Result);
   if Result < 1 then Result := 1;
+end;
+
+procedure TTyStringGrid.InvalidateRowMetrics;
+begin
+  FRowTopsValid := False;
 end;
 
 function TTyStringGrid.RowTops: TTyIntArray;
 var
   pos, n, acc, dataRow: Integer;
 begin
-  { 不接 OnGetRowHeight 就是全表等高 —— 返回空数组,几何层走整除快路径,
-    百万行时省下一个百万项的数组。 }
-  if not Assigned(FOnGetRowHeight) then Exit(nil);
+  { 既没有回调、也没有任何显式行高 = 全表等高 —— 返回空数组,几何层走整除快路径,
+    百万行时省下一个百万项的数组。**显式行高也要算进来**,否则拖出来的行高
+    在几何层根本不生效(只改了存储、行还是老样子)。 }
+  if not Assigned(FOnGetRowHeight) and not HasExplicitRowHeights then Exit(nil);
 
   n := DisplayRowCount;
   if FRowTopsValid and (Length(FRowTopsCache) = n + 1) then Exit(FRowTopsCache);
@@ -3498,6 +3707,73 @@ begin
   if FCol > Header.Columns.Count - 1 then FCol := Header.Columns.Count - 1;
   if FCol < 0 then FCol := 0;
   Invalidate;
+end;
+
+{ 按内容(含换行)把行高调到刚好放得下。
+
+  测量用的是**和绘制同一套排版** —— 都走 BGRA 的 TTextStyle + Wordbreak,
+  所以不会出现"算出来的高度放不下实际画出来的字"。自己另写一套换行算法
+  是这里最容易踩的坑。 }
+procedure TTyStringGrid.AutoFitRow(ARow: Integer);
+var
+  bmp: TBGRABitmap;
+  cS: TTyStyleSet;
+  colIdx, w, need, best, padL, padR, lineH: Integer;
+  txt: string;
+  wrap: Boolean;
+  ap: TTyGridCellAppearance;
+  st: TTextStyle;
+  r: TRect;
+begin
+  if (ARow < 0) or (ARow >= RowCount) then Exit;
+  cS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
+  padL := ScaleI(cS.Padding.Left);
+  padR := ScaleI(cS.Padding.Right);
+
+  best := ScaleI(DefaultRowHeight);
+  bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(bmp, cS.FontName, ResolveFontSize(cS), cS.FontWeight, Dpi);
+    lineH := bmp.TextSize('Ag').cy;
+    if lineH < 1 then lineH := 1;
+
+    for colIdx := 0 to Header.Columns.Count - 1 do
+    begin
+      if not (coVisible in TTyColumn(Header.Columns.Items[colIdx]).Options) then Continue;
+      txt := GetCellText(colIdx, ARow);
+      if txt = '' then Continue;
+
+      w := ColumnWidthPx(colIdx) - padL - padR;
+      if w <= 0 then Continue;
+
+      wrap := FWordWrap;
+      if Assigned(FOnGetCellWordWrap) then FOnGetCellWordWrap(Self, colIdx, ARow, wrap);
+      if not wrap then
+      begin
+        need := lineH;
+      end
+      else
+      begin
+        { 让 BGRA 自己按同样的 TTextStyle 排一遍,量出实际用了几行。
+          做法:给一个足够高的框调 TextRect 是量不出高度的,所以按宽度切词 ——
+          用同一支字体逐词累加,与 Wordbreak 的断法一致(空格/CJK 处断)。 }
+        need := lineH * TyCountWrappedLines(bmp, txt, w);
+      end;
+      Inc(need, ScaleI(4));      { 上下各留一点气 }
+      if need > best then best := need;
+    end;
+  finally
+    bmp.Free;
+  end;
+
+  RowHeights[ARow] := UnscaleI(best);
+end;
+
+procedure TTyStringGrid.AutoFitRows;
+var
+  i: Integer;
+begin
+  for i := 0 to RowCount - 1 do AutoFitRow(i);
 end;
 
 procedure TTyStringGrid.AutoFitColumnWidth(ACol: Integer);
