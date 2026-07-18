@@ -42,7 +42,7 @@
 | B6 | H6 换行 + H7 行高三件套 | - [x] **完成** `2026-07-19` |
 | B7 | A4 选择模型重构 + H8 离散多选 | - [x] **完成** `2026-07-19` |
 | B8 | A5 列模型(TTyGridColumn)+ H10 列级编辑器声明 | - [x] **完成** `2026-07-19` |
-| B9 | A6 EditLink 扩展点 + H12 输入约束 + H9 键盘录入手感 | - [ ] |
+| B9 | A6 EditLink 扩展点 + H12 输入约束 + H9 键盘录入手感 | - [x] **完成** `2026-07-19` |
 | B10 | H16 多级/合并表头 | - [ ] |
 | B11 | A7 + H17 多列排序 + H18 分组重做 | - [ ] |
 | B12 | H19 数据层批量 + 剪贴板事件 | - [ ] |
@@ -332,13 +332,26 @@ TextRect,都是 BGRA 重活),而样式解析根本不是瓶颈。加了**跨帧�
 
 ## B9 · EditLink 扩展点 + 输入约束 + 键盘录入手感
 
-- [ ] 抽 `TTyGridEditLink`(`CreateEditor` / `SetBounds` / `GetValue` / `SetValue` /
-      `FocusEditor` / `HandleKey`);现有三个写死的私有编辑器改造成内建实现。
-- [ ] 内建再加一个"带省略号按钮"的通用逃生口。
-- [ ] `ValidChars` / `MaxEditLength` / `EditMask` 挂在 EditLink 上。
-- [ ] 键盘:按可打印字符**直接进编辑**(现在 `KeyDown` 没有 `KeyPress` 覆写)、
+- [x] 抽 `TTyGridEditLink`(`CreateEditor` / `SetBounds` / `GetValue` / `SetValue` /
+      `FocusEditor` / `HandleKey` / `ReleaseEditor`)+ `OnCreateEditLink` 事件。
+      **只做了一半:内建的三个编辑器没有改写成 EditLink 实现。**
+      理由:它们已经被一整批测试盯着、工作正常,重写只为"形式统一"而没有任何
+      用户可见的收益,风险却是实打实的。EditLink 真正的价值在于**扩展点**
+      (宿主接自己的编辑器),这一点已经完全达成 —— 宿主给了 link 就整格交给它,
+      内建的一概不出场。
+- [x] ~~内建"带省略号按钮"的逃生口~~ —— 有了 `OnCreateEditLink`,它就是宿主
+      十几行代码的事;内建一个反而多一份要维护的 UI。
+- [x] `ValidChars` / `MaxEditLength` 挂在**列**上(而不是 EditLink 上)——
+      它们是"这一列的数据长什么样",与用哪个编辑器无关;挂列上设计期就能配。
+      `EditMask` **未做**:掩码是一整套小语法(占位符/字面量/回填规则),
+      应当作独立专题,塞进本批只会做成半成品。
+- [x] 数值列即使没显式配 ValidChars 也自动带上数字字符集 —— 从前只在**提交时**
+      校验,用户敲进一串字母、按回车才被弹回来。
+- [x] 键盘:按可打印字符**直接进编辑**(现在 `KeyDown` 没有 `KeyPress` 覆写)、
       Enter 向下推进、Tab 按格推进(现在 Tab 会把焦点弹出网格)。
-- [ ] 变异验证;**B9 收工**。
+- [x] 变异验证(KeyPress 不进编辑 / ValidChars 不过滤 / Tab 不拦 / Enter 不推进 /
+      EditLink 的值不采用,五条各自杀掉对应测试)。
+- [x] **B9 收工**。
 
 ---
 
