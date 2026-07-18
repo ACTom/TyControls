@@ -18,17 +18,26 @@ uses
 type
   TTyIntArray = array of Integer;
 
-  { 有固定行/列时,视口被切成的四个窗格。
+  { 有冻结带时,视口被切成的九个窗格。
 
-      +----------+---------------------+
-      | gpCorner | gpTop   (固定行)    |
-      +----------+---------------------+
-      | gpLeft   | gpBody  (可滚动正文)|
-      | (固定列) |                     |
-      +----------+---------------------+
+      +-------------+-------------+-------------+
+      | gpTopLeft   | gpTop       | gpTopRight  |
+      +-------------+-------------+-------------+
+      | gpLeft      | gpBody      | gpRight     |
+      +-------------+-------------+-------------+
+      | gpBottomLeft| gpBottom    | gpBottomRight|
+      +-------------+-------------+-------------+
 
-    冻结带的宽/高(FrozenW/FrozenH)含行头槽与列头带,由控件从列模型算出后传入。 }
-  TTyGridPane = (gpCorner, gpTop, gpLeft, gpBody);
+    行向:上带含列头带 + 固定行;下带为底部冻结行。
+    列向:左带含行头槽 + 固定列;右带为右侧冻结列。
+    四条带的厚度由控件从列模型/行模型算出后传入(设备像素)。
+
+    枚举值的**排列顺序是契约的一部分**:按行主序 3x3,
+    TyGridPaneRect 直接用 Ord 拆成 (列,行) 下标,不写九分支 case。 }
+  TTyGridPane = (
+    gpTopLeft,    gpTop,    gpTopRight,
+    gpLeft,       gpBody,   gpRight,
+    gpBottomLeft, gpBottom, gpBottomRight);
 
   { 命中到的部位。 }
   TTyGridHitPart = (
@@ -49,15 +58,30 @@ type
   { 网格的几何输入。全部为设备像素(已按 PPI 缩放)。 }
   TTyGridMetrics = record
     ClientW, ClientH: Integer;   { 视口尺寸 }
-    FrozenW, FrozenH: Integer;   { 冻结带范围:行头槽+固定列 / 列头带+固定行 }
+
+    { 四向冻结带的厚度。
+      Left  = 行头槽 + 固定列; Top    = 列头带 + 固定行;
+      Right = 右侧冻结列;      Bottom = 底部冻结行。
+      任一方向的两条带之和会被钳制在视口内(见 TyGridPaneRect)。 }
+    FrozenLeft, FrozenRight, FrozenTop, FrozenBottom: Integer;
+
+    { 列头带:**每一级一个高度**,自上而下堆叠(多级/分组表头)。
+      空数组 = 无列头。合计恒 <= FrozenTop(其余部分是固定行)。
+      拆成数组而不是一个 HeaderH,是因为多级表头的每一级都要能独立取矩形;
+      合计值用 TyGridHeaderH 求。 }
+    HeaderBands:      TTyIntArray;
+
+    { 网格线宽(设备像素)。**不占用布局像素** —— 线画在单元格边界上、
+      压住相邻两格各一半,这与 LCL TCustomGrid / 常见商业网格的约定一致:
+      列宽就是列宽,不会因为线变粗而挪位。它影响的是
+      TyGridCellContentRect 的内缩量(免得文字压在粗线底下)与画线的笔宽。 }
+    GridLineWidth:    Integer;
+
     RowH:             Integer;   { 统一行高;RowTops 为空时用它 }
     RowCount:         Integer;
     { 冻结在顶部、**不随纵向滚动**的显示行数。这些行画在冻结带里(列头之下),
-      其余行才在正文窗格里滚动。FrozenH 已含它们的高度。 }
+      其余行才在正文窗格里滚动。FrozenTop 已含它们的高度。 }
     FixedRows:        Integer;
-    { 列头带高度(设备像素)。FrozenH = HeaderH + 固定行总高;拆开是因为
-      固定行的行矩形要从 HeaderH 起算,而不是从 FrozenH 起算。 }
-    HeaderH:          Integer;
     { 可变行高:长度 = RowCount+1 的**前缀和**(RowTops[i] = 第 i 行顶边的内容坐标,
       RowTops[RowCount] = 内容总高)。为空 = 全部用统一行高 RowH。
       用前缀和而不是逐行高度,是为了让"坐标 → 行"能二分查找而不是线性扫。 }
@@ -65,14 +89,26 @@ type
     ScrollX, ScrollY: Integer;   { 正文窗格的滚动偏移,>=0 }
   end;
 
-{ 四个窗格的矩形。它们必须精确铺满视口:互不重叠、无缝隙。
+{ 列头带的合计高度。固定行从这里起算,而不是从 FrozenTop 起算。 }
+function TyGridHeaderH(const M: TTyGridMetrics): Integer;
+
+{ 第 ALevel 级列头带的横带矩形(客户区坐标,跨满整幅宽度)。
+  级别越界返回空矩形。 }
+function TyGridHeaderBandRect(ALevel: Integer; const M: TTyGridMetrics): TRect;
+
+{ 九个窗格的矩形。它们必须精确铺满视口:互不重叠、无缝隙。
   冻结带若超出视口则被钳制,退化窗格返回空矩形(而非反向矩形)。 }
 function TyGridPaneRect(const M: TTyGridMetrics; APane: TTyGridPane): TRect;
 
 { 第 ARow 行的整行横带,**客户区坐标**、跨满整幅宽度(调用方再与窗格求交)。
-  正文行随 ScrollY 滚动并让开冻结带;因此 Top = FrozenH + ARow*RowH - ScrollY,
+  正文行随 ScrollY 滚动并让开冻结带;因此 Top = FrozenTop + ARow*RowH - ScrollY,
   越界的行会算出视口外的坐标 —— 这是正常的,可视性由 TyGridVisibleRows 判定。 }
 function TyGridRowRect(ARow: Integer; const M: TTyGridMetrics): TRect;
+
+{ 把单元格矩形内缩成**内容矩形**:让开边界上的网格线,免得文字压在粗线底下。
+  线画在边界上、两侧各占一半,所以每边内缩 GridLineWidth 的一半(向上取整)。
+  线宽 <= 1 时(最常见)内缩为 0,几何与从前逐像素一致。 }
+function TyGridCellContentRect(const ACell: TRect; const M: TTyGridMetrics): TRect;
 
 { 第 ARow 行在内容坐标里的顶边与高度(不含冻结带与滚动)。 }
 procedure TyGridRowExtent(ARow: Integer; const M: TTyGridMetrics;
@@ -97,23 +133,63 @@ function TyGridRowAt(AY: Integer; const M: TTyGridMetrics): Integer;
 
 implementation
 
+function TyGridHeaderH(const M: TTyGridMetrics): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to High(M.HeaderBands) do
+    if M.HeaderBands[i] > 0 then Inc(Result, M.HeaderBands[i]);
+end;
+
+function TyGridHeaderBandRect(ALevel: Integer; const M: TTyGridMetrics): TRect;
+var
+  i, y, h: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if (ALevel < 0) or (ALevel > High(M.HeaderBands)) then Exit;
+  y := 0;
+  for i := 0 to ALevel - 1 do
+    if M.HeaderBands[i] > 0 then Inc(y, M.HeaderBands[i]);
+  h := M.HeaderBands[ALevel];
+  if h < 0 then h := 0;
+  Result := Rect(0, y, M.ClientW, y + h);
+end;
+
 function TyGridPaneRect(const M: TTyGridMetrics; APane: TTyGridPane): TRect;
 var
-  cw, ch, fw, fh: Integer;
+  cw, ch, fl, fr, ft, fb, k: Integer;
+  xs, ys: array[0..3] of Integer;
 begin
-  { 先把视口与冻结带都钳制到合法区间:冻结带不可能大于视口(那样正文窗格会反向),
-    负尺寸一律按 0 处理。钳制之后四个窗格必然铺满 [0,cw]x[0,ch] 且互不重叠。 }
+  { 先把视口与四条冻结带都钳到合法区间:同一方向的两条带之和不可能超过视口
+    (那样正文窗格会反向),负厚度一律按 0 处理。钳制之后九个窗格必然铺满
+    [0,cw]x[0,ch] 且互不重叠 —— 这条由面积守恒的测试守着。 }
   cw := M.ClientW; if cw < 0 then cw := 0;
   ch := M.ClientH; if ch < 0 then ch := 0;
-  fw := M.FrozenW; if fw < 0 then fw := 0; if fw > cw then fw := cw;
-  fh := M.FrozenH; if fh < 0 then fh := 0; if fh > ch then fh := ch;
 
-  case APane of
-    gpCorner: Result := Rect(0,  0,  fw, fh);
-    gpTop:    Result := Rect(fw, 0,  cw, fh);
-    gpLeft:   Result := Rect(0,  fh, fw, ch);
-  else        Result := Rect(fw, fh, cw, ch);   { gpBody }
-  end;
+  fl := M.FrozenLeft;   if fl < 0 then fl := 0; if fl > cw then fl := cw;
+  fr := M.FrozenRight;  if fr < 0 then fr := 0; if fr > cw - fl then fr := cw - fl;
+  ft := M.FrozenTop;    if ft < 0 then ft := 0; if ft > ch then ft := ch;
+  fb := M.FrozenBottom; if fb < 0 then fb := 0; if fb > ch - ft then fb := ch - ft;
+
+  xs[0] := 0;  xs[1] := fl;  xs[2] := cw - fr;  xs[3] := cw;
+  ys[0] := 0;  ys[1] := ft;  ys[2] := ch - fb;  ys[3] := ch;
+
+  k := Ord(APane);
+  Result := Rect(xs[k mod 3], ys[k div 3], xs[k mod 3 + 1], ys[k div 3 + 1]);
+end;
+
+function TyGridCellContentRect(const ACell: TRect; const M: TTyGridMetrics): TRect;
+var
+  half: Integer;
+begin
+  Result := ACell;
+  if M.GridLineWidth <= 1 then Exit;    { 发丝线:不内缩,与从前逐像素一致 }
+  half := (M.GridLineWidth + 1) div 2;
+  InflateRect(Result, -half, -half);
+  { 单元格比线还窄时别返回反向矩形。 }
+  if Result.Right < Result.Left then Result.Right := Result.Left;
+  if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
 end;
 
 { 第 ARow 行在**内容坐标**里的顶边与高度(不含冻结带偏移与滚动)。 }
@@ -154,19 +230,19 @@ begin
 
   if (M.FixedRows > 0) and (ARow < M.FixedRows) then
   begin
-    { 固定行:钉在列头带之下、**不随滚动**。它们的位置从 HeaderH 起算。 }
-    y := M.HeaderH + top;
+    { 固定行:钉在列头带之下、**不随滚动**。它们的位置从列头合计高度起算。 }
+    y := TyGridHeaderH(M) + top;
     Result := Rect(0, y, M.ClientW, y + h);
     Exit;
   end;
 
-  { 正文行:让开整条冻结带并随滚动平移。注意要减掉固定行占的那段内容高度 ——
+  { 正文行:让开整条上冻结带并随滚动平移。注意要减掉固定行占的那段内容高度 ——
     否则第一条正文行会被推到固定行内容之后,与冻结带之间留出一个空洞。 }
   fixedTop := 0;
   fixedH := 0;
   if M.FixedRows > 0 then
     TyGridRowExtent(M.FixedRows, M, fixedTop, fixedH);
-  y := M.FrozenH + (top - fixedTop) - M.ScrollY;
+  y := M.FrozenTop + (top - fixedTop) - M.ScrollY;
   Result := Rect(0, y, M.ClientW, y + h);
 end;
 
@@ -264,17 +340,18 @@ end;
 function TyGridRowAt(AY: Integer; const M: TTyGridMetrics): Integer;
 var
   body: TRect;
-  cand, fixedTop, fixedH: Integer;
+  cand, fixedTop, fixedH, headerH: Integer;
 begin
   Result := -1;
 
   if M.RowCount <= 0 then Exit;
   if (M.RowH <= 0) and (Length(M.RowTops) <> M.RowCount + 1) then Exit;
 
-  { 固定行带(列头之下、冻结带之内)—— 它们也是真实的行,能点。 }
-  if (M.FixedRows > 0) and (AY >= M.HeaderH) and (AY < M.FrozenH) then
+  { 固定行带(列头之下、上冻结带之内)—— 它们也是真实的行,能点。 }
+  headerH := TyGridHeaderH(M);
+  if (M.FixedRows > 0) and (AY >= headerH) and (AY < M.FrozenTop) then
   begin
-    cand := TyGridRowAtContentY(AY - M.HeaderH, M);
+    cand := TyGridRowAtContentY(AY - headerH, M);
     if (cand >= 0) and (cand < M.FixedRows) then Result := cand;
     Exit;
   end;
@@ -290,7 +367,7 @@ begin
   fixedTop := 0;
   if M.FixedRows > 0 then
     TyGridRowExtent(M.FixedRows, M, fixedTop, fixedH);
-  cand := TyGridRowAtContentY(AY - M.FrozenH + M.ScrollY + fixedTop, M);
+  cand := TyGridRowAtContentY(AY - M.FrozenTop + M.ScrollY + fixedTop, M);
   if (cand < M.FixedRows) or (cand > M.RowCount - 1) then Exit;
   Result := cand;
 end;

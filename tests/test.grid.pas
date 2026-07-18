@@ -209,24 +209,24 @@ begin
   G := MakeGrid(FForm, [80, 60, 120, 90]);
 
   // 没有行头槽、没有固定列 —— 冻结带零宽。
-  AssertEquals('无固定列时冻结带零宽', 0, G.Metrics.FrozenW);
+  AssertEquals('无固定列时冻结带零宽', 0, G.Metrics.FrozenLeft);
 
   // 冻结前 2 列(80+60),仍无行头槽。
   G.FixedCols := 2;
-  AssertEquals('冻结带 = 前两列宽之和', 140, G.Metrics.FrozenW);
+  AssertEquals('冻结带 = 前两列宽之和', 140, G.Metrics.FrozenLeft);
 
   // 打开 30px 行头槽。
   G.ShowIndicator := True;
   G.IndicatorWidth := 30;
-  AssertEquals('冻结带 = 行头槽 + 前两列', 170, G.Metrics.FrozenW);
+  AssertEquals('冻结带 = 行头槽 + 前两列', 170, G.Metrics.FrozenLeft);
 
   // 行头槽关掉就不占位(仅设宽度不生效)。
   G.ShowIndicator := False;
-  AssertEquals('关掉行头槽后不占位', 140, G.Metrics.FrozenW);
+  AssertEquals('关掉行头槽后不占位', 140, G.Metrics.FrozenLeft);
 
   // 固定列数超过实际列数时按实际列数封顶,不能越界求和。
   G.FixedCols := 99;
-  AssertEquals('固定列数超出时按全部列封顶', 80 + 60 + 120 + 90, G.Metrics.FrozenW);
+  AssertEquals('固定列数超出时按全部列封顶', 80 + 60 + 120 + 90, G.Metrics.FrozenLeft);
 end;
 
 { 冻结带高 = 列头带(可见时)+ 固定行 * 行高。 }
@@ -240,14 +240,14 @@ begin
   G.RowCount := 50;
 
   // 列头可见(hoVisible 是默认),无固定行。
-  AssertEquals('冻结带高 = 列头高', 24, G.Metrics.FrozenH);
+  AssertEquals('冻结带高 = 列头高', 24, G.Metrics.FrozenTop);
 
   G.FixedRows := 2;
-  AssertEquals('冻结带高 = 列头 + 2 个固定行', 24 + 2 * 20, G.Metrics.FrozenH);
+  AssertEquals('冻结带高 = 列头 + 2 个固定行', 24 + 2 * 20, G.Metrics.FrozenTop);
 
   // 列头隐藏后不占位,固定行仍占位。
   G.Header.Options := G.Header.Options - [hoVisible];
-  AssertEquals('列头隐藏后只剩固定行', 2 * 20, G.Metrics.FrozenH);
+  AssertEquals('列头隐藏后只剩固定行', 2 * 20, G.Metrics.FrozenTop);
 end;
 
 { 冻结的意义就在这条:横向滚动时固定列必须钉住不动,正文列才平移。
@@ -2687,6 +2687,17 @@ begin
   after := RenderFingerprint(G);
   AssertTrue('ShowFilterButtons 应当改变列头渲染输出', before <> after);
   G.ShowFilterButtons := False;
+
+  { ---- GridLineWidth:线加粗必须看得见,且**不挪动列边界** ---- }
+  before := RenderFingerprint(G);
+  colBefore := G.ColLeft(2);
+  G.GridLineWidth := 5;
+  after := RenderFingerprint(G);
+  colAfter := G.ColLeft(2);
+  AssertTrue('GridLineWidth 应当改变渲染输出', before <> after);
+  AssertEquals('但线加粗**不能**挪动列边界(线压在边界上,不占布局像素)',
+    colBefore, colAfter);
+  G.GridLineWidth := 1;
 
   { ---- hoAutoResize + AutoSizeIndex:列宽被重排 ---- }
   wBefore := TTyColumn(G.Header.Columns.Items[1]).Width;

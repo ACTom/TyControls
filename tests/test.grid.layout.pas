@@ -2,7 +2,7 @@ unit test.grid.layout;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, fpcunit, testregistry,
+  Classes, SysUtils, Types, Math, fpcunit, testregistry,
   tyControls.Grid.Layout;
 
 type
@@ -25,6 +25,9 @@ type
     procedure TestVariableRowHeightsPlaceRowsByPrefixSums;
     procedure TestRowAtIsInverseUnderVariableRowHeights;
     procedure TestVisibleRangeUnderVariableRowHeights;
+    procedure TestNinePanesTileTheViewport;
+    procedure TestHeaderBandsStackAndSumToFrozenTop;
+    procedure TestGridLineWidthInsetsContentButNotBoundaries;
   end;
 
 implementation
@@ -35,8 +38,8 @@ begin
   Result := Default(TTyGridMetrics);
   Result.ClientW := AClientW;
   Result.ClientH := AClientH;
-  Result.FrozenW := AFrozenW;
-  Result.FrozenH := AFrozenH;
+  Result.FrozenLeft := AFrozenW;
+  Result.FrozenTop := AFrozenH;
   Result.RowH := ARowH;
   Result.RowCount := ARowCount;
   Result.ScrollX := AScrollX;
@@ -52,7 +55,7 @@ var
 begin
   // 400x300 视口,冻结带 120 宽 / 60 高(行头槽+固定列 / 列头带+固定行)。
   Mt := M(400, 300, 120, 60, 20, 50, 0, 0);
-  corner := TyGridPaneRect(Mt, gpCorner);
+  corner := TyGridPaneRect(Mt, gpTopLeft);
   top    := TyGridPaneRect(Mt, gpTop);
   left   := TyGridPaneRect(Mt, gpLeft);
   body   := TyGridPaneRect(Mt, gpBody);
@@ -95,7 +98,7 @@ var
 begin
   // 冻结带 500x400,视口只有 200x100 —— 冻结带整个盖过视口。
   Mt := M(200, 100, 500, 400, 20, 50, 0, 0);
-  corner := TyGridPaneRect(Mt, gpCorner);
+  corner := TyGridPaneRect(Mt, gpTopLeft);
   top    := TyGridPaneRect(Mt, gpTop);
   left   := TyGridPaneRect(Mt, gpLeft);
   body   := TyGridPaneRect(Mt, gpBody);
@@ -123,7 +126,7 @@ var
   corner, body: TRect;
 begin
   Mt := M(400, 300, 0, 0, 20, 50, 0, 0);
-  corner := TyGridPaneRect(Mt, gpCorner);
+  corner := TyGridPaneRect(Mt, gpTopLeft);
   body   := TyGridPaneRect(Mt, gpBody);
 
   AssertTrue('corner 退化为空', IsRectEmpty(corner));
@@ -316,6 +319,128 @@ begin
   AssertTrue('有可见行', TyGridVisibleRows(Mt, f, l));
   AssertEquals('首行 = 内容 y=15 所在行', 1, f);
 end;
+
+{ 四向冻结之后,窗格从 4 个变成 9 个 —— 铺满不变量必须跟着升级。
+  用**面积守恒**证:九块面积之和 = 视口面积,且两两不重叠。
+  这比逐边比对结实:任何一处钳制写歪都会让总面积对不上。 }
+procedure TTyGridLayoutTest.TestNinePanesTileTheViewport;
+var
+  Mt: TTyGridMetrics;
+  r: array[TTyGridPane] of TRect;
+  pane, other: TTyGridPane;
+  total, ix, iy: Integer;
+begin
+  Mt := M(400, 300, 0, 0, 20, 50, 0, 0);
+  Mt.FrozenLeft   := 120;
+  Mt.FrozenRight  := 70;
+  Mt.FrozenTop    := 60;
+  Mt.FrozenBottom := 40;
+
+  total := 0;
+  for pane := Low(TTyGridPane) to High(TTyGridPane) do
+  begin
+    r[pane] := TyGridPaneRect(Mt, pane);
+    AssertTrue('窗格不能反向', (r[pane].Right >= r[pane].Left) and
+                               (r[pane].Bottom >= r[pane].Top));
+    Inc(total, (r[pane].Right - r[pane].Left) * (r[pane].Bottom - r[pane].Top));
+  end;
+  AssertEquals('九块面积之和 = 视口面积', 400 * 300, total);
+
+  { 两两不重叠:相交矩形必须是空的。 }
+  for pane := Low(TTyGridPane) to High(TTyGridPane) do
+    for other := Succ(Low(TTyGridPane)) to High(TTyGridPane) do
+      if other > pane then
+      begin
+        ix := Min(r[pane].Right, r[other].Right) - Max(r[pane].Left, r[other].Left);
+        iy := Min(r[pane].Bottom, r[other].Bottom) - Max(r[pane].Top, r[other].Top);
+        AssertTrue(Format('窗格 %d 与 %d 重叠', [Ord(pane), Ord(other)]),
+          (ix <= 0) or (iy <= 0));
+      end;
+
+  { 右带与下带确实贴着视口的右/下缘。 }
+  AssertEquals('右带左缘 = 视口宽 - FrozenRight', 400 - 70, r[gpRight].Left);
+  AssertEquals('下带顶缘 = 视口高 - FrozenBottom', 300 - 40, r[gpBottom].Top);
+  AssertEquals('正文右缘让开右带', 400 - 70, r[gpBody].Right);
+  AssertEquals('正文下缘让开下带', 300 - 40, r[gpBody].Bottom);
+end;
+
+{ 多级表头:列头带从一个标量升级成"每级一条"的数组。
+  它们自上而下堆叠,合计 <= FrozenTop,固定行从合计处起算(而不是从 FrozenTop)。 }
+procedure TTyGridLayoutTest.TestHeaderBandsStackAndSumToFrozenTop;
+var
+  Mt: TTyGridMetrics;
+  b0, b1: TRect;
+  rowR: TRect;
+begin
+  Mt := M(400, 300, 0, 0, 20, 50, 0, 0);
+  Mt.HeaderBands := TTyIntArray.Create(24, 20);   { 两级:24 + 20 = 44 }
+  Mt.FixedRows := 2;
+  Mt.FrozenTop := 44 + 2 * 20;                    { 列头合计 + 2 个固定行 }
+
+  AssertEquals('列头合计高', 44, TyGridHeaderH(Mt));
+
+  b0 := TyGridHeaderBandRect(0, Mt);
+  b1 := TyGridHeaderBandRect(1, Mt);
+  AssertEquals('第 0 级顶', 0, b0.Top);
+  AssertEquals('第 0 级底', 24, b0.Bottom);
+  AssertEquals('第 1 级紧接第 0 级', 24, b1.Top);
+  AssertEquals('第 1 级底 = 合计', 44, b1.Bottom);
+  AssertEquals('越界级别给空矩形', 0, TyGridHeaderBandRect(2, Mt).Bottom);
+
+  { 固定行从列头合计处起算 —— 这正是把 HeaderH 与 FrozenTop 拆开的理由。 }
+  rowR := TyGridRowRect(0, Mt);
+  AssertEquals('第 0 个固定行贴在列头之下', 44, rowR.Top);
+  rowR := TyGridRowRect(1, Mt);
+  AssertEquals('第 1 个固定行再往下一行高', 64, rowR.Top);
+  { 第一条正文行让开整条上冻结带。 }
+  rowR := TyGridRowRect(2, Mt);
+  AssertEquals('第一条正文行贴在上冻结带之下', Mt.FrozenTop, rowR.Top);
+
+  { 命中必须跟着走:列头带里点不出行,固定行里点得出。 }
+  AssertEquals('列头带内不是行', -1, TyGridRowAt(10, Mt));
+  AssertEquals('列头之下第一像素是固定行 0', 0, TyGridRowAt(44, Mt));
+  AssertEquals('第二个固定行', 1, TyGridRowAt(64, Mt));
+end;
+
+{ 线宽的语义:**线不占布局像素**。
+  列宽就是列宽、行高就是行高,把线加粗不会把边界推走(与 LCL TCustomGrid /
+  常见商业网格一致);粗线只让**内容**内缩,免得文字压在线底下。
+
+  —— 这与最初计划里写的"线宽应当把第 1 列的左边界右移"相反。改这个决定的理由:
+  边界随线宽漂移会让 ColWidths 失去"所见即所得"的含义,而且每次调线宽都要重算
+  滚动范围与所有命中;业界(LCL/TMS)一致选了"线压在边界上"。 }
+procedure TTyGridLayoutTest.TestGridLineWidthInsetsContentButNotBoundaries;
+var
+  Mt: TTyGridMetrics;
+  cell, thin, fat: TRect;
+begin
+  Mt := M(400, 300, 0, 0, 20, 50, 0, 0);
+  cell := Rect(100, 40, 180, 60);
+
+  Mt.GridLineWidth := 1;
+  thin := TyGridCellContentRect(cell, Mt);
+  AssertEquals('发丝线不内缩(左)', 100, thin.Left);
+  AssertEquals('发丝线不内缩(右)', 180, thin.Right);
+
+  Mt.GridLineWidth := 5;
+  fat := TyGridCellContentRect(cell, Mt);
+  AssertTrue(Format('粗线让内容内缩(%d -> %d)', [thin.Left, fat.Left]),
+    fat.Left > thin.Left);
+  AssertTrue('粗线让内容右缘内缩', fat.Right < thin.Right);
+  AssertTrue('粗线让内容上缘内缩', fat.Top > thin.Top);
+
+  { 但**边界与行几何一动不动** —— 这才是这条测试真正守的东西。 }
+  AssertEquals('行 3 的顶边不因线宽改变', 3 * 20, TyGridRowRect(3, Mt).Top);
+  Mt.GridLineWidth := 1;
+  AssertEquals('线宽变回来行几何仍一致', 3 * 20, TyGridRowRect(3, Mt).Top);
+
+  { 单元格比线还窄时不能返回反向矩形。 }
+  Mt.GridLineWidth := 40;
+  fat := TyGridCellContentRect(Rect(10, 10, 20, 20), Mt);
+  AssertTrue('退化时不返回反向矩形',
+    (fat.Right >= fat.Left) and (fat.Bottom >= fat.Top));
+end;
+
 
 initialization
   RegisterTest(TTyGridLayoutTest);

@@ -39,6 +39,7 @@ type
     FIndicatorWidth:   Integer;
     FShowIndicator:    Boolean;
     FShowGridLines:    Boolean;
+    FGridLineWidth:    Integer;
     FShowFooter:       Boolean;
     { 列头图标与 gcdImage 单元格共用的图像源。
       注意**不用**共享单元里的 TTyHeader.Images —— 那是 LCL 的 TCustomImageList,
@@ -69,6 +70,7 @@ type
     procedure SetShowGridLines(AValue: Boolean);
     procedure SetShowFooter(AValue: Boolean);
     procedure SetImages(AValue: TTyVirtualImageList);
+    procedure SetGridLineWidth(AValue: Integer);
     procedure SetFooterHeight(AValue: Integer);
   protected
     function GetStyleTypeKey: string; override;
@@ -81,6 +83,8 @@ type
     function UnscaleI(AValue: Integer): Integer;
 
     { 冻结带宽度(设备像素)= 行头槽 + 各固定列宽之和。 }
+    { 网格线宽(设备像素)。关掉格线时为 0 —— 这样几何层无需再判 GridLines。 }
+    function GridLineWidthPx: Integer; virtual;
     function FrozenWidthPx: Integer; virtual;
     { 冻结带高度(设备像素)= 列头带 + 固定行 * 行高。 }
     function FrozenHeightPx: Integer; virtual;
@@ -224,6 +228,10 @@ type
     property IndicatorWidth: Integer read FIndicatorWidth write SetIndicatorWidth default 30;
     { 单元格之间的格线。颜色取 TyGridLine 的 background,主题没定义则退回本体的 border-color。 }
     property GridLines: Boolean read FShowGridLines write SetShowGridLines default True;
+    { 格线粗细,逻辑像素。**不占布局像素** —— 线画在单元格边界上、压住两侧各一半,
+      列宽就是列宽,不会因为线变粗而挪位(与 LCL TCustomGrid / 常见商业网格一致)。
+      粗线只会让单元格**内容**相应内缩,免得文字压在线底下。 }
+    property GridLineWidth: Integer read FGridLineWidth write SetGridLineWidth default 1;
     { 列头图标(TTyColumn.ImageIndex)与 gcdImage 单元格共用的图像源。 }
     property Images: TTyVirtualImageList read FImages write SetImages;
     { 底部汇总带。内容由派生类给(TTyStringGrid 按列聚合)。 }
@@ -654,6 +662,7 @@ begin
   FIndicatorWidth := 30;
   FShowIndicator := False;
   FShowGridLines := True;
+  FGridLineWidth := 1;
   FShowFooter := False;
   FFooterHeight := 24;
   FScrollX := 0;
@@ -1025,6 +1034,21 @@ begin
   Invalidate;
 end;
 
+function TTyCustomGrid.GridLineWidthPx: Integer;
+begin
+  if not FShowGridLines then Exit(0);
+  Result := ScaleI(FGridLineWidth);
+  if Result < 1 then Result := 1;
+end;
+
+procedure TTyCustomGrid.SetGridLineWidth(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FGridLineWidth = AValue then Exit;
+  FGridLineWidth := AValue;
+  Invalidate;
+end;
+
 procedure TTyCustomGrid.SetImages(AValue: TTyVirtualImageList);
 begin
   if FImages = AValue then Exit;
@@ -1244,19 +1268,26 @@ end;
 procedure TTyCustomGrid.RenderGridLines(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
-  first, last, row, i, x: Integer;
+  first, last, row, i, x, lw, half: Integer;
   r: TRect;
   line: TBGRAPixel;
   col: TTyColumn;
 begin
   line := GridLineColor(AFrame);
 
+  { 线压在边界上、两侧各占一半:lw=1 时就是从前那条 r.Bottom-1 的发丝线,
+    加粗时向两边长而不是把边界推走(列宽/行高不因线粗而改变)。 }
+  lw := M.GridLineWidth;
+  if lw < 1 then lw := 1;
+  half := lw div 2;
+
   { 横线:每一可见行的下沿。只走 TyGridVisibleRows —— 百万行的表在这里也只画几十条。 }
   if TyGridVisibleRows(M, first, last) then
     for row := first to last do
     begin
       r := TyGridRowRect(row, M);
-      P.Bitmap.DrawLine(0, r.Bottom - 1, M.ClientW, r.Bottom - 1, line, False);
+      P.Bitmap.FillRect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw,
+        line, dmSet);
     end;
 
   { 竖线:每一可见列的右缘。位置走 ColumnLeftPx(列轴唯一出处),
@@ -1267,7 +1298,8 @@ begin
     if not (coVisible in col.Options) then Continue;
     x := ColumnLeftPx(i) + ColumnWidthPx(i);
     if (x > 0) and (x <= M.ClientW) then
-      P.Bitmap.DrawLine(x - 1, M.FrozenH, x - 1, M.ClientH, line, False);
+      P.Bitmap.FillRect(x - 1 - half, M.FrozenTop, x - 1 - half + lw, M.ClientH,
+        line, dmSet);
   end;
 end;
 
@@ -1425,10 +1457,10 @@ begin
     w := ColumnWidthPx(i);
     if (w <= 0) or (l >= M.ClientW) or (l + w <= 0) then Continue;
     { 正文列滚到冻结带底下的那一截不该露出来 —— 与单元格同一条裁剪规则。 }
-    if (i >= FFixedCols) and (l < M.FrozenW) then
+    if (i >= FFixedCols) and (l < M.FrozenLeft) then
     begin
-      if l + w <= M.FrozenW then Continue;
-      l := M.FrozenW;
+      if l + w <= M.FrozenLeft then Continue;
+      l := M.FrozenLeft;
       w := ColumnLeftPx(i) + ColumnWidthPx(i) - l;
     end;
 
@@ -1515,8 +1547,8 @@ begin
     FillRegion(P, Rect(0, headerH, indW, M.ClientH), 'TyGridIndicator');
 
   { 固定列区:行头槽右侧到冻结带右缘。 }
-  if M.FrozenW > indW then
-    FillRegion(P, Rect(indW, headerH, M.FrozenW, M.ClientH), 'TyGridFixed');
+  if M.FrozenLeft > indW then
+    FillRegion(P, Rect(indW, headerH, M.FrozenLeft, M.ClientH), 'TyGridFixed');
 
   { 列头带:横跨整幅宽度,盖住左上角 —— 与 CellAt 里"列头优先"一致。 }
   if headerH > 0 then
@@ -1592,14 +1624,21 @@ begin
   Result := Default(TTyGridMetrics);
   Result.ClientW := ViewportW;
   Result.ClientH := ViewportH;
-  Result.FrozenW := FrozenWidthPx;
-  Result.FrozenH := FrozenHeightPx;
+  Result.FrozenLeft := FrozenWidthPx;
+  Result.FrozenTop  := FrozenHeightPx;
+  { 右/下冻结带的模型层还没建(B2 只先把几何契约拓宽),这里恒 0。 }
+  Result.FrozenRight  := 0;
+  Result.FrozenBottom := 0;
+  Result.GridLineWidth := GridLineWidthPx;
   Result.RowH := ScaleI(FDefaultRowHeight);
   Result.RowCount := DisplayRowCount;
   Result.RowTops := RowTops;
   Result.FixedRows := FFixedRows;
-  if hoVisible in FHeader.Options then Result.HeaderH := ScaleI(FHeader.Height)
-  else Result.HeaderH := 0;
+  { 列头带:目前恒为单级。B10 上多级表头时,这里改成逐级填。 }
+  if hoVisible in FHeader.Options then
+    Result.HeaderBands := TTyIntArray.Create(ScaleI(FHeader.Height))
+  else
+    SetLength(Result.HeaderBands, 0);
   Result.ScrollX := FScrollX;
   Result.ScrollY := FScrollY;
 end;
@@ -1665,7 +1704,9 @@ begin
       txt := GetCellText(colIdx, dataRow);
       if txt = '' then Continue;
 
-      cell := CellRect(colIdx, dataRow);
+      { 先让开格线(线压在边界上、两侧各一半),再上左右内边距。
+        线宽 <= 1 时 TyGridCellContentRect 是恒等的,与从前逐像素一致。 }
+      cell := TyGridCellContentRect(CellRect(colIdx, dataRow), M);
       textR := Rect(cell.Left + padL, cell.Top, cell.Right - padR, cell.Bottom);
       if textR.Right <= textR.Left then Continue;
 
@@ -2861,7 +2902,7 @@ var
   info: TTyGridGroupInfo;
 begin
   r := TyGridRowRect(APos, M);
-  if (r.Bottom <= M.FrozenH) or (r.Top >= M.ClientH) then Exit;
+  if (r.Bottom <= M.FrozenTop) or (r.Top >= M.ClientH) then Exit;
 
   info := GroupInfo(AGroupIndex);
   gS := ActiveController.Model.ResolveStyle('TyGridGroupRow', StyleClass, CurrentStates);
@@ -3000,11 +3041,11 @@ begin
     l := ColumnLeftPx(i);
     w := ColumnWidthPx(i);
     { 与单元格同一条裁剪规则:滚到冻结带底下的部分不露出来。 }
-    if (i >= FixedCols) and (l < M.FrozenW) then
+    if (i >= FixedCols) and (l < M.FrozenLeft) then
     begin
-      if l + w <= M.FrozenW then Continue;
-      w := l + w - M.FrozenW;
-      l := M.FrozenW;
+      if l + w <= M.FrozenLeft then Continue;
+      w := l + w - M.FrozenLeft;
+      l := M.FrozenLeft;
     end;
     if (l >= M.ClientW) or (l + w <= 0) then Continue;
     r := Rect(l + ScaleI(4), AFooterRect.Top, l + w - ScaleI(4), AFooterRect.Bottom);
