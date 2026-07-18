@@ -19,7 +19,7 @@ unit tyControls.Grid;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, contnrs, Clipbrd, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Math, contnrs, Clipbrd, Controls, Graphics, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns,
   tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox, tyControls.ColorMath,
@@ -40,6 +40,28 @@ type
     FShowIndicator:    Boolean;
     FShowGridLines:    Boolean;
     FGridLineWidth:    Integer;
+    { 鼠标当前所在的格(-1 = 不在任何格上)。`TyGridCell:hover` 这条主题规则
+      从前永远不会触发,就是因为没人记这个。 }
+    FHoverCol:         Integer;
+    FHoverRow:         Integer;
+    { 逐格样式解析的记忆化。**这是 A2 渲染管线逐格化能不掉速的全部原因**:
+      按状态组合缓存,绝大多数格状态相同(空集)于是整帧只解析一次;
+      只有 hover/选中/被钩子改过的那几格才多解析几次。 }
+    FCellStyleStates:  array of TTyStateSet;
+    FCellStyleCache:   array of TTyStyleSet;
+    { **跨帧**的单元格文本位图缓存。
+      实测(60 帧 x 20 列 x 约 40 行)里,单元格文字占了 94% 的渲染时间:
+      每格一次 TextSize(省略号测量,占 57%)+ 一次 TextRect。两者都是
+      BGRA 的重活(每次要配字体、走 LCL 字体引擎)。数据静止时同一格
+      每帧画的是**一模一样**的东西,所以按外观整体缓存成小位图直接 blit。
+      键含文字/字体/字号/字重/颜色/尺寸/对齐 —— 任何一项变了都是新条目,
+      因此换主题、改列宽、切深色都不需要显式失效。 }
+    FTextCache:        TStringList;   { Sorted;Objects 存 TBGRABitmap,自己拥有 }
+    { 一次绘制期间的 GridMetrics 记忆化。CellRect/CellVisibleRect/CellPane 都要它,
+      于是每格要重算三四次;而每次都得遍历列求冻结带宽、还要为 HeaderBands 分配数组。
+      一帧内网格状态不可能变,所以整帧只算一次 —— 实测这是文字之外最大的一块开销。 }
+    FMetricsCached:    Boolean;
+    FMetricsCache:     TTyGridMetrics;
     FShowFooter:       Boolean;
     { 列头图标与 gcdImage 单元格共用的图像源。
       注意**不用**共享单元里的 TTyHeader.Images —— 那是 LCL 的 TCustomImageList,
@@ -84,7 +106,21 @@ type
 
     { 冻结带宽度(设备像素)= 行头槽 + 各固定列宽之和。 }
     { 网格线宽(设备像素)。关掉格线时为 0 —— 这样几何层无需再判 GridLines。 }
+    { 某一格自己的状态。**刻意不掺入网格的 CurrentStates** —— 掺进去的话
+      鼠标一按下网格进 :active,满屏单元格会跟着集体变样(勾选框那次就是这么栽的)。 }
+    function CellStates(ACol, ARow: Integer): TTyStateSet; virtual;
+    { 逐格解析 TyGridCell,带记忆化。每帧开头调 ResetCellStyleCache。 }
+    function ResolveCellStyle(ACol, ARow: Integer): TTyStyleSet;
+    procedure ResetCellStyleCache;
+    { 鼠标所在格换了没有;换了就重绘(**换格才重绘** —— 每像素都重绘会把
+      大表拖垮,而且鼠标一动就满屏闪)。 }
+    procedure UpdateHoverCell(X, Y: Integer);
+    { 把一格文字画出来,尽量走缓存。语义与 P.DrawText 一致(含省略号截断)。 }
+    procedure DrawCellText(P: TTyPainter; const ARect: TRect; const AText: string;
+      const AStyle: TTyStyleSet; AColor: TTyColor; AHAlign: TAlignment);
+    procedure ClearTextCache;
     function GridLineWidthPx: Integer; virtual;
+    procedure CMMouseLeave(var Msg: TLMessage); message CM_MOUSELEAVE;
     function FrozenWidthPx: Integer; virtual;
     { 冻结带高度(设备像素)= 列头带 + 固定行 * 行高。 }
     function FrozenHeightPx: Integer; virtual;
@@ -133,6 +169,10 @@ type
     { 列头带 / 行头槽 / 固定列区的填充。绘制次序即遮挡次序,必须与 CellAt 的判定次序一致:
       列头横跨整幅并盖住左上角 → 行头槽 → 固定列。 }
     procedure RenderChrome(P: TTyPainter; const M: TTyGridMetrics); virtual;
+    { 逐格背景。与文字分成两趟:文字那趟在派生类里(基类不知道数据从哪来),
+      而背景只取决于格的**状态**,基类就能画完 —— hover/选中/斑马纹/逐格底色
+      因此对三层都自动生效。 }
+    procedure RenderCellBackgrounds(P: TTyPainter; const M: TTyGridMetrics); virtual;
 
     { 单元格内容。基类不画任何内容(它不知道数据从哪来)——由派生类改写。
       在 chrome 之后、格线之前调用。 }
@@ -663,6 +703,12 @@ begin
   FShowIndicator := False;
   FShowGridLines := True;
   FGridLineWidth := 1;
+  FHoverCol := -1;
+  FHoverRow := -1;
+  FTextCache := TStringList.Create;
+  FTextCache.Sorted := True;          { 排序 → IndexOf 走二分 }
+  FTextCache.Duplicates := dupIgnore;
+  FTextCache.OwnsObjects := True;
   FShowFooter := False;
   FFooterHeight := 24;
   FScrollX := 0;
@@ -693,6 +739,7 @@ begin
   { 先摘监听再释放:否则析构过程中列集合的变更会回调到半毁的控件上。 }
   FHeader.OnChange := nil;
   FHeader.Free;
+  FTextCache.Free;      { OwnsObjects → 顺带释放缓存的位图 }
   inherited Destroy;
 end;
 
@@ -1032,6 +1079,144 @@ begin
   FShowFooter := AValue;
   UpdateScrollBars;
   Invalidate;
+end;
+
+function TTyCustomGrid.CellStates(ACol, ARow: Integer): TTyStateSet;
+begin
+  Result := [];
+  if (ACol = FHoverCol) and (ARow = FHoverRow) then Include(Result, tysHover);
+end;
+
+procedure TTyCustomGrid.ResetCellStyleCache;
+begin
+  SetLength(FCellStyleStates, 0);
+  SetLength(FCellStyleCache, 0);
+end;
+
+function TTyCustomGrid.ResolveCellStyle(ACol, ARow: Integer): TTyStyleSet;
+var
+  st: TTyStateSet;
+  i, n: Integer;
+begin
+  st := CellStates(ACol, ARow);
+  { 线性找:状态组合的种类是个位数(空集/hover/选中/两者),
+    线性扫比建哈希快,也不产生分配。 }
+  for i := 0 to High(FCellStyleStates) do
+    if FCellStyleStates[i] = st then Exit(FCellStyleCache[i]);
+
+  Result := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, st);
+  n := Length(FCellStyleStates);
+  SetLength(FCellStyleStates, n + 1);
+  SetLength(FCellStyleCache, n + 1);
+  FCellStyleStates[n] := st;
+  FCellStyleCache[n] := Result;
+end;
+
+procedure TTyCustomGrid.UpdateHoverCell(X, Y: Integer);
+var
+  hit: TTyGridHit;
+  c, r: Integer;
+begin
+  hit := CellAt(X, Y);
+  if hit.Part = ghpCell then
+  begin
+    c := hit.Col;
+    r := hit.Row;
+  end
+  else
+  begin
+    c := -1;
+    r := -1;
+  end;
+  if (c = FHoverCol) and (r = FHoverRow) then Exit;   { 同一格:不重绘 }
+  FHoverCol := c;
+  FHoverRow := r;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.CMMouseLeave(var Msg: TLMessage);
+begin
+  inherited;
+  if (FHoverCol >= 0) or (FHoverRow >= 0) then
+  begin
+    FHoverCol := -1;
+    FHoverRow := -1;
+    Invalidate;
+  end;
+end;
+
+procedure TTyCustomGrid.ClearTextCache;
+begin
+  if FTextCache <> nil then FTextCache.Clear;
+end;
+
+procedure TTyCustomGrid.DrawCellText(P: TTyPainter; const ARect: TRect;
+  const AText: string; const AStyle: TTyStyleSet; AColor: TTyColor;
+  AHAlign: TAlignment);
+var
+  w, h, idx, sz, weight: Integer;
+  key, fname, txt: string;
+  bmp: TBGRABitmap;
+  st: TTextStyle;
+  tsz: TSize;
+begin
+  w := ARect.Right - ARect.Left;
+  h := ARect.Bottom - ARect.Top;
+  if (w <= 0) or (h <= 0) or (AText = '') then Exit;
+
+  fname := AStyle.FontName;
+  sz := ResolveFontSize(AStyle);
+  weight := AStyle.FontWeight;
+
+  { 键 = 这块文字的**全部外观输入**。任何一项变了都是新条目,
+    所以换主题/改列宽/切深色都不需要显式失效 —— 旧条目自然不再被命中。 }
+  key := AText + #1 + fname + #1 + IntToStr(sz) + #1 + IntToStr(weight) + #1 +
+         IntToStr(AColor) + #1 + IntToStr(w) + 'x' + IntToStr(h) + #1 +
+         IntToStr(Ord(AHAlign)) + #1 + IntToStr(P.PPI);
+
+  idx := FTextCache.IndexOf(key);
+  if idx >= 0 then
+    bmp := TBGRABitmap(FTextCache.Objects[idx])
+  else
+  begin
+    { 上限只是防失控(滚动久了键会一直增长);视口内的格数远小于它。
+      整表清空比 LRU 简单,代价是清空后那一帧要重画 —— 可以接受。 }
+    if FTextCache.Count > 8192 then FTextCache.Clear;
+
+    bmp := TBGRABitmap.Create(w, h);      { 全透明 }
+    TyConfigureTextFont(bmp, fname, sz, weight, P.PPI);
+
+    { 省略号截断:与 TTyPainter.DrawText 用同一套规则,免得两条路径排出来的字不一样。 }
+    txt := AText;
+    tsz := bmp.TextSize(txt);
+    while (Length(txt) > 1) and (tsz.cx > w) do
+    begin
+      Delete(txt, Length(txt), 1);
+      tsz := bmp.TextSize(txt + '...');
+    end;
+    if txt <> AText then txt := txt + '...';
+
+    st := Default(TTextStyle);
+    st.Alignment := AHAlign;
+    st.Layout := tlCenter;
+    st.SingleLine := True;
+    st.Clipping := True;
+    bmp.TextRect(Rect(0, 0, w, h), 0, 0, txt, st, TyColorToBGRA(AColor));
+
+    { 排序表 + dupIgnore:键重复时 AddObject **不会收下这个对象**,
+      直接走人就把位图漏了(上面刚 IndexOf 过,理论上碰不到;但漏内存的代价
+      是几百 MB,值得这三行)。 }
+    idx := FTextCache.AddObject(key, bmp);
+    if (idx < 0) or (FTextCache.Objects[idx] <> bmp) then
+    begin
+      bmp.Free;
+      if idx < 0 then Exit;
+      bmp := TBGRABitmap(FTextCache.Objects[idx]);
+    end;
+  end;
+
+  { PutImage 尊重 ClipRect —— 半掩的单元格照样被裁掉一截。 }
+  P.Bitmap.PutImage(ARect.Left, ARect.Top, bmp, dmDrawWithTransparency);
 end;
 
 function TTyCustomGrid.GridLineWidthPx: Integer;
@@ -1375,6 +1560,8 @@ var
 begin
   inherited MouseMove(Shift, X, Y);
 
+  UpdateHoverCell(X, Y);
+
   if FResizeCol >= 0 then
   begin
     delta := UnscaleI(X - FResizeStartX);
@@ -1564,6 +1751,35 @@ begin
   { 基类不画内容:它不知道数据从哪来。TTyDrawGrid / TTyStringGrid 改写。 }
 end;
 
+procedure TTyCustomGrid.RenderCellBackgrounds(P: TTyPainter; const M: TTyGridMetrics);
+var
+  firstRow, lastRow, row, i, dataRow: Integer;
+  col: TTyColumn;
+  cS: TTyStyleSet;
+  vis: TRect;
+begin
+  { 只遍历可视窗口 —— 与 RenderCells 同一条虚拟化路径。 }
+  if not TyGridVisibleRows(M, firstRow, lastRow) then Exit;
+
+  for row := firstRow to lastRow do
+    for i := 0 to FHeader.Columns.Count - 1 do
+    begin
+      col := TTyColumn(FHeader.Columns.Items[i]);
+      if not (coVisible in col.Options) then Continue;
+
+      dataRow := DisplayToData(row);
+      cS := ResolveCellStyle(i, dataRow);
+      { `background: none` 是默认态 —— 一个像素都不画,整帧的开销就只有
+        一次 ResolveStyle(缓存命中)加一次判断。 }
+      if not (tpBackground in cS.Present) then Continue;
+      if cS.Background.Kind = tfkNone then Continue;
+
+      vis := CellVisibleRect(i, dataRow);
+      if IsRectEmpty(vis) then Continue;
+      P.FillBackground(vis, cS.Background, 0);
+    end;
+end;
+
 procedure TTyCustomGrid.RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
   const AFooterRect: TRect; const AFrame: TTyStyleSet);
 begin
@@ -1591,14 +1807,21 @@ begin
 
     DrawFrame(P, R, S);
 
+    { 每帧清一次逐格样式的记忆化 —— 主题可能在两帧之间换掉了。 }
+    ResetCellStyleCache;
+    { 整帧只算一次几何(见 FMetricsCached 处的说明)。 }
     M := GridMetrics;
+    FMetricsCache := M;
+    FMetricsCached := True;
     RenderChrome(P, M);
+    RenderCellBackgrounds(P, M);
     if FooterHeightPx > 0 then
       RenderFooter(P, M, Rect(0, M.ClientH, M.ClientW, M.ClientH + FooterHeightPx), S);
     RenderCells(P, M, S);
     if FShowGridLines then
       RenderGridLines(P, M, S);
   finally
+    FMetricsCached := False;
     P.EndPaint;
     P.Free;
   end;
@@ -1621,6 +1844,7 @@ end;
 
 function TTyCustomGrid.GridMetrics: TTyGridMetrics;
 begin
+  if FMetricsCached then Exit(FMetricsCache);
   Result := Default(TTyGridMetrics);
   Result.ClientW := ViewportW;
   Result.ClientH := ViewportH;
@@ -1715,8 +1939,7 @@ begin
       oldClip := P.Bitmap.ClipRect;
       P.Bitmap.ClipRect := vis;
       try
-        P.DrawText(textR, txt, cellS.FontName, ResolveFontSize(cellS),
-          cellS.FontWeight, ink, col.Alignment, tlCenter, True);
+        DrawCellText(P, textR, txt, cellS, ink, col.Alignment);
       finally
         P.Bitmap.ClipRect := oldClip;
       end;

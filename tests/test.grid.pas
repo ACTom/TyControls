@@ -121,6 +121,8 @@ type
     procedure TestCsvRoundTripsCellsContainingNewlines;
     procedure TestAutoResizeColumnFillsRemainingWidth;
     procedure TestPublishedSurfaceHasObservableEffect;
+    procedure TestHoverHighlightsTheCellUnderTheMouse;
+    procedure TestPerCellStyleResolutionKeepsDefaultFastPath;
   end;
 
 implementation
@@ -848,6 +850,8 @@ type
     function  Metrics: TTyGridMetrics;
     function  VisibleRows(out AFirst, ALast: Integer): Boolean;
     procedure ForceUpdateScrollBars;
+    procedure HoverAt(X, Y: Integer);
+    procedure LeaveMouse;
     function  RowRectAt(APos: Integer): TRect;
     function  GetScrollTop: Integer;
     procedure SetScrollTop(AValue: Integer);
@@ -857,6 +861,16 @@ type
 procedure TStrGridAccess.PressMouseWithoutRelease(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);      { 不 MouseUp —— 停在"按住"状态 }
+end;
+
+procedure TStrGridAccess.HoverAt(X, Y: Integer);
+begin
+  MouseMove([], X, Y);       { 不按键 —— 纯悬停,别触发选区拖拽 }
+end;
+
+procedure TStrGridAccess.LeaveMouse;
+begin
+  Perform(CM_MOUSELEAVE, 0, 0);
 end;
 
 procedure TStrGridAccess.ForceUpdateScrollBars;
@@ -2707,6 +2721,149 @@ begin
   wAfter := TTyColumn(G.Header.Columns.Items[1]).Width;
   AssertTrue(Format('hoAutoResize 应当改变自动列的宽度(%d -> %d)',
     [wBefore, wAfter]), wAfter <> wBefore);
+end;
+
+{ `TyGridCell:hover` 这条规则在 light.tycss 里**早就写好了,却永远不会触发** ——
+  网格从来不记"鼠标在哪一格",单元格背景也压根没人画(背景全靠 RenderChrome 一次性铺)。
+  典型的"主题写了但控件够不着"。 }
+procedure TTyStringGridTest.TestHoverHighlightsTheCellUnderTheMouse;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+
+  function RedInCell(ACol, ARow: Integer): Integer;
+  var
+    Re: TBGRABitmap;
+    r: TRect;
+    x, y: Integer;
+    px: TBGRAPixel;
+  begin
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    r := G.CellRect(ACol, ARow);
+    Result := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          if (x < 0) or (y < 0) or (x >= 400) or (y >= 300) then Continue;
+          px := Re.GetPixel(x, y);
+          if (px.red > 180) and (px.green < 100) and (px.blue < 100) then Inc(Result);
+        end;
+    finally
+      Re.Free;
+    end;
+  end;
+
+var
+  r: TRect;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridCell:hover { background: #FF0000; }');
+
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    AssertEquals('没悬停时不该有高亮', 0, RedInCell(1, 2));
+
+    { 悬停到 (1,2) 的正中。 }
+    r := G.CellRect(1, 2);
+    G.HoverAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+    AssertTrue('鼠标下那一格应当高亮', RedInCell(1, 2) > 50);
+    AssertEquals('旁边那一格不该高亮', 0, RedInCell(0, 2));
+
+    { 移开后消失 —— 否则会留下一路"拖影"。 }
+    G.LeaveMouse;
+    AssertEquals('鼠标离开后高亮消失', 0, RedInCell(1, 2));
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ A2 把样式解析搬进了逐格循环、并给每格加了背景绘制 —— hover / 斑马纹 / 逐格底色
+  的前提。但逐格化最容易把大表拖垮,所以要有一条守卫。
+
+  **度量方式是相对的,不是绝对毫秒** —— 绝对阈值换台机器就误报。
+  同一张表画两遍:一遍单元格全空(= 渲染管线的固有开销:整幅位图、逐格几何、
+  逐格样式解析),一遍填满文字。断言**文字那部分的增量不超过固有开销本身**。
+
+  这条线是实测定出来的:变异掉缓存后文字增量是固有开销的 **28 倍**
+  (每格一次 TextSize 做省略号测量 + 一次 TextRect,都是 BGRA 的重活);
+  有缓存时约 1.1 倍。阈值取 4 倍:离健康值有 4 倍余量抗抖动,离病态值还差 7 倍。 }
+procedure TTyStringGridTest.TestPerCellStyleResolutionKeepsDefaultFastPath;
+const
+  FRAMES = 30;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+
+  function TimeFrames: QWord;
+  var f: Integer; t0: QWord;
+  begin
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 1000, 800), 96);   { 预热一帧,别把冷启动算进去 }
+    t0 := GetTickCount64;
+    for f := 1 to FRAMES do
+      G.DoRender(Bmp.Canvas, Rect(0, 0, 1000, 800), 96);
+    Result := GetTickCount64 - t0;
+  end;
+
+var
+  i, j: Integer;
+  c: TTyColumn;
+  bare, withText: QWord;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; padding: 0px 6px; }' +
+      'TyGridCell:hover { background: #EEEEEE; }');
+
+    G := TStrGridAccess.Create(FForm);
+    G.Parent := FForm;
+    G.Controller := Ctl;
+    G.Font.PixelsPerInch := 96;
+    G.SetBounds(0, 0, 1000, 800);
+    for i := 0 to 19 do
+    begin
+      c := G.Header.Columns.Add as TTyColumn;
+      c.Width := 60;
+    end;
+    G.DefaultRowHeight := 20;
+    G.RowCount := 1000;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(1000, 800);
+
+    { 一、空表:管线固有开销。 }
+    bare := TimeFrames;
+
+    { 二、填满可视窗口(每格内容都不同 —— 别让缓存靠"全表同一个字"作弊)。 }
+    for i := 0 to 49 do
+      for j := 0 to 19 do
+        G.Cells[j, i] := Format('%d-%d', [j, i]);
+    withText := TimeFrames;
+
+    AssertTrue(Format('空表 %d ms / 有字 %d ms —— 文字增量不该超过固有开销的 4 倍',
+      [bare, withText]),
+      (withText <= bare) or (withText - bare <= 4 * bare));
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
 end;
 
 initialization

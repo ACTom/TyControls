@@ -67,6 +67,9 @@ type
     procedure FillCornerGaps(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
     procedure EraseRect(const ARect: TRect);
     property Bitmap: TBGRABitmap read FBmp;
+    { 本次绘制的 PPI。调用方要自己往别的位图上排文字时(网格的单元格文本缓存)
+      必须用同一个 PPI 配字体,否则缓存出来的字号与直接画的不一致。 }
+    property PPI: Integer read FPPI;
   end;
 
 function TyColorToBGRA(c: TTyColor): TBGRAPixel;
