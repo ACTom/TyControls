@@ -28,11 +28,6 @@ uses
   tyControls.Grid.Layout;
 
 type
-  { 网格线要画哪几轴。只要横线的报表式表格很常见,从前只有一个全有/全无的开关。 }
-  TTyGridLineStyle = (glsNone, glsHorizontal, glsVertical, glsBoth);
-
-  { 一格显示成什么。放在这里(而不是 TTyStringGrid 那段)是因为基类要用它
-    判断按钮格的命中矩形。 }
   TTyGridCellDisplay = (
     gcdText,      { 默认:文字 }
     gcdProgress,  { 进度条,值取 0..100 }
@@ -40,6 +35,88 @@ type
     gcdImage,     { 图片:值是 Images 里的索引 }
     gcdButton     { 按钮:文字是按钮标题,点击走 OnCellButtonClick }
   );
+
+  { 编辑器种类与聚合方式 —— 放在 type 段最前面,因为列类要用它们。 }
+  TTyGridEditorKind = (
+    gekNone,      { 该格只读 }
+    gekText,      { 普通文本 }
+    gekNumeric,   { 只收数字(含负号与小数点) }
+    gekCheckBox,  { 勾选框:不弹编辑器,点一下就切换 }
+    gekPickList,  { 下拉选取:从 OnGetPickList 给的候选里选 }
+    gekDate,      { 日期:弹日期选择器 }
+    gekColor      { 颜色:弹取色对话框,值存 #RRGGBB }
+  );
+
+  { 单元格的**显示**方式(与编辑方式正交:一个格可以显示成进度条、编辑时仍是数值框)。 }
+  TTyGridGetCellDisplayEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var ADisplay: TTyGridCellDisplay) of object;
+
+  { 完全自绘一个单元格。置 AHandled:=True 即接管该格,控件不再画它的内容
+    (背景与选中底色仍由控件先铺好,所以宿主只需画自己那部分)。 }
+  TTyGridDrawCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    const ARect: TRect; APainter: TTyPainter; var AHandled: Boolean) of object;
+
+  { 单元格提示(悬停显示)。返回空串 = 该格无提示。 }
+  TTyGridGetCellHintEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var AHint: string) of object;
+
+  { 逐行行高(逻辑像素)。不接 = 全部用 DefaultRowHeight。 }
+  TTyGridGetRowHeightEvent = procedure(Sender: TObject; ARow: Integer;
+    var AHeight: Integer) of object;
+
+  { 排序比较方式。 }
+  TTyGridSortKind = (gskText, gskNumber);
+
+  { 选择粒度。gsmCell = 单元格矩形选区(默认);gsmRow = 整行;gsmColumn = 整列。 }
+  TTyGridSelectionMode = (gsmCell, gsmRow, gsmColumn);
+
+  { 列聚合方式(汇总带用)。一律只统计**通过过滤的行** —— 筛完总计要跟着变。 }
+  TTyGridAggregate = (gagNone, gagSum, gagAvg, gagMin, gagMax, gagCount);
+
+  { 网格线要画哪几轴。只要横线的报表式表格很常见,从前只有一个全有/全无的开关。 }
+  TTyGridLineStyle = (glsNone, glsHorizontal, glsVertical, glsBoth);
+
+  { 网格自己的列。
+
+    **不往共享的 TTyColumn 里塞网格专属字段** —— 它同时被 ListView / TreeView 用着,
+    多一个字段就多一份"这三个控件都得管"的负担。派生一个网格自己的列类,
+    网格的 TTyColumns 创建它;共享单元只多了一个"可以指定列类"的构造重载。
+
+    有了列级属性,设计期不接任何事件就能配出"这列数字、那列下拉、这列只读"。 }
+  TTyGridColumn = class(TTyColumn)
+  private
+    FEditorKind: TTyGridEditorKind;
+    FReadOnly:   Boolean;
+    FPickList:   TStrings;
+    FAggregate:  TTyGridAggregate;
+    FFormat:     string;
+    FUseEditorKind: Boolean;
+    procedure SetPickList(AValue: TStrings);
+    procedure SetEditorKind(AValue: TTyGridEditorKind);
+  public
+    constructor Create(ACollection: TCollection); override;
+    destructor Destroy; override;
+    procedure Assign(ASource: TPersistent); override;
+    { 有没有显式设过 EditorKind。没设过就让宿主事件/网格默认值说了算 ——
+      光看"等于 gekText"分不清"没设"和"显式设成文本"。 }
+    property UseEditorKind: Boolean read FUseEditorKind write FUseEditorKind;
+  published
+    { 这一列用什么编辑器。设过之后优先级高于 DefaultEditorKind,低于 OnGetEditorKind。 }
+    property EditorKind: TTyGridEditorKind read FEditorKind write SetEditorKind
+      default gekText;
+    { 整列只读。 }
+    property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
+    { gekPickList 的候选项(不接 OnGetPickList 时用这个)。 }
+    property PickList: TStrings read FPickList write SetPickList;
+    { 汇总带上这一列显示什么统计。 }
+    property Aggregate: TTyGridAggregate read FAggregate write FAggregate
+      default gagNone;
+    { 显示用的格式串(FormatFloat/FormatDateTime 语义,由派生网格解释)。 }
+    property Format: string read FFormat write FFormat;
+  end;
+
+  { 一格显示成什么。放在这里(而不是 TTyStringGrid 那段)是因为基类要用它
+    判断按钮格的命中矩形。 }
 
   { 单元格级鼠标事件。ACol/ARow 是**数据行**。 }
   TTyGridCellMouseEvent = procedure(Sender: TObject; ACol, ARow: Integer) of object;
@@ -256,6 +333,8 @@ type
       var AAppearance: TTyGridCellAppearance); virtual;
     { 这一格能不能点。所有点击路径都必须先问它。 }
     function  CanClickCell(ACol, ARow: Integer): Boolean;
+    { 网格自己的列类;列还没建时返回 nil。 }
+    function  GridColumn(ACol: Integer): TTyGridColumn;
     { 显式行高。设为 <= 0 表示"清掉,回到回调/默认值"。 }
     property RowHeights[ARow: Integer]: Integer read GetRowHeights write SetRowHeights;
     { 按内容自适应列宽。基类没有数据、什么都不做;TTyStringGrid 改写。 }
@@ -492,41 +571,6 @@ type
 
   { 单元格编辑器种类。AdvGrid 那一长串编辑器类型其实是"少量控件 x 修饰符"的笛卡尔积,
     这里先落地最常用的一档;浮层类(颜色/备忘/计算器…)将来统一由 TTyPopover 承载。 }
-  TTyGridEditorKind = (
-    gekNone,      { 该格只读 }
-    gekText,      { 普通文本 }
-    gekNumeric,   { 只收数字(含负号与小数点) }
-    gekCheckBox,  { 勾选框:不弹编辑器,点一下就切换 }
-    gekPickList,  { 下拉选取:从 OnGetPickList 给的候选里选 }
-    gekDate,      { 日期:弹日期选择器 }
-    gekColor      { 颜色:弹取色对话框,值存 #RRGGBB }
-  );
-
-  { 单元格的**显示**方式(与编辑方式正交:一个格可以显示成进度条、编辑时仍是数值框)。 }
-  TTyGridGetCellDisplayEvent = procedure(Sender: TObject; ACol, ARow: Integer;
-    var ADisplay: TTyGridCellDisplay) of object;
-
-  { 完全自绘一个单元格。置 AHandled:=True 即接管该格,控件不再画它的内容
-    (背景与选中底色仍由控件先铺好,所以宿主只需画自己那部分)。 }
-  TTyGridDrawCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
-    const ARect: TRect; APainter: TTyPainter; var AHandled: Boolean) of object;
-
-  { 单元格提示(悬停显示)。返回空串 = 该格无提示。 }
-  TTyGridGetCellHintEvent = procedure(Sender: TObject; ACol, ARow: Integer;
-    var AHint: string) of object;
-
-  { 逐行行高(逻辑像素)。不接 = 全部用 DefaultRowHeight。 }
-  TTyGridGetRowHeightEvent = procedure(Sender: TObject; ARow: Integer;
-    var AHeight: Integer) of object;
-
-  { 排序比较方式。 }
-  TTyGridSortKind = (gskText, gskNumber);
-
-  { 选择粒度。gsmCell = 单元格矩形选区(默认);gsmRow = 整行;gsmColumn = 整列。 }
-  TTyGridSelectionMode = (gsmCell, gsmRow, gsmColumn);
-
-  { 列聚合方式(汇总带用)。一律只统计**通过过滤的行** —— 筛完总计要跟着变。 }
-  TTyGridAggregate = (gagNone, gagSum, gagAvg, gagMin, gagMax, gagCount);
 
   { 分组行(合成行,不对应任何数据行)。 }
   TTyGridGroupInfo = record
@@ -937,6 +981,48 @@ begin
   end;
 end;
 
+{ ---- TTyGridColumn -------------------------------------------------------- }
+
+constructor TTyGridColumn.Create(ACollection: TCollection);
+begin
+  inherited Create(ACollection);
+  FEditorKind := gekText;
+  FAggregate := gagNone;
+  FPickList := TStringList.Create;
+end;
+
+destructor TTyGridColumn.Destroy;
+begin
+  FPickList.Free;
+  inherited Destroy;
+end;
+
+procedure TTyGridColumn.SetPickList(AValue: TStrings);
+begin
+  FPickList.Assign(AValue);
+end;
+
+procedure TTyGridColumn.SetEditorKind(AValue: TTyGridEditorKind);
+begin
+  FEditorKind := AValue;
+  { 一旦被写过就算"显式设过" —— 包括显式写成 gekText。 }
+  FUseEditorKind := True;
+end;
+
+procedure TTyGridColumn.Assign(ASource: TPersistent);
+begin
+  inherited Assign(ASource);
+  if ASource is TTyGridColumn then
+  begin
+    FEditorKind := TTyGridColumn(ASource).EditorKind;
+    FUseEditorKind := TTyGridColumn(ASource).UseEditorKind;
+    FReadOnly := TTyGridColumn(ASource).ReadOnly;
+    FPickList.Assign(TTyGridColumn(ASource).PickList);
+    FAggregate := TTyGridColumn(ASource).Aggregate;
+    FFormat := TTyGridColumn(ASource).Format;
+  end;
+end;
+
 { ---- TTyGridCellAttr / Store ---------------------------------------------- }
 
 constructor TTyGridCellAttr.Create;
@@ -1061,7 +1147,8 @@ end;
 constructor TTyCustomGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FHeader := TTyHeader.Create;
+  { 让表头造网格自己的列类。 }
+  FHeader := TTyHeader.Create(TTyGridColumn);
   FHeader.OnChange := @HeaderChanged;
   FRowCount := 0;
   FDefaultRowHeight := 22;
@@ -3999,10 +4086,13 @@ end;
 function TTyStringGrid.ColumnAggregate(ACol: Integer): TTyGridAggregate;
 var
   v: string;
+  c: TTyGridColumn;
 begin
+  { 运行期用 SetColumnAggregate 设过的优先(直接动作),否则看列属性(设计期配的)。 }
   v := FAggregates.Values[IntToStr(ACol)];
-  if v = '' then Result := gagNone
-  else Result := TTyGridAggregate(StrToIntDef(v, 0));
+  if v <> '' then Exit(TTyGridAggregate(StrToIntDef(v, 0)));
+  c := GridColumn(ACol);
+  if c <> nil then Result := c.Aggregate else Result := gagNone;
 end;
 
 function TTyStringGrid.AggregateValue(ACol: Integer): Double;
@@ -4885,9 +4975,32 @@ begin
 end;
 
 
-function TTyStringGrid.EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind;
+{ 取网格自己的列类。列可能还没建、或(理论上)不是网格列类,此时返回 nil。 }
+function TTyCustomGrid.GridColumn(ACol: Integer): TTyGridColumn;
 begin
+  Result := nil;
+  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
+  if FHeader.Columns.Items[ACol] is TTyGridColumn then
+    Result := TTyGridColumn(FHeader.Columns.Items[ACol]);
+end;
+
+function TTyStringGrid.EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind;
+var
+  c: TTyGridColumn;
+begin
+  { 优先级:**列属性 > OnGetEditorKind > DefaultEditorKind**。
+    列属性在下面(先取),事件在最后 —— 事件是逐格的、比列级更具体,所以它最终说了算;
+    而列级比网格级的默认值具体,所以压过 DefaultEditorKind。
+
+    "有没有显式设过"用 UseEditorKind 记,不能光看"等于 gekText" ——
+    那样分不清"没设"和"显式设成文本"。 }
   Result := FDefaultEditorKind;
+  c := GridColumn(ACol);
+  if (c <> nil) then
+  begin
+    if c.ReadOnly then Result := gekNone
+    else if c.UseEditorKind then Result := c.EditorKind;
+  end;
   if Assigned(FOnGetEditorKind) then FOnGetEditorKind(Self, ACol, ARow, Result);
 end;
 
@@ -4951,6 +5064,8 @@ begin
   begin
     FPickEditor.Controller := Self.Controller;
     FPickEditor.Items.Clear;
+    { 列级候选项打底,宿主事件可以再改 —— 不接事件也能在设计期把下拉配好。 }
+    if GridColumn(FCol) <> nil then FPickEditor.Items.Assign(GridColumn(FCol).PickList);
     if Assigned(FOnGetPickList) then FOnGetPickList(Self, FCol, FRow, FPickEditor.Items);
     FPickEditor.ItemIndex := FPickEditor.Items.IndexOf(Cells[FCol, FRow]);
     FPickEditor.BoundsRect := r;

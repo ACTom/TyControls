@@ -120,6 +120,11 @@ type
   public
     constructor Create; overload;
     constructor Create(AOwnerHeader: TTyHeader); overload;
+    { Lets an owner (the grid) supply its own TTyColumn descendant, so grid-only
+      column properties don't have to be pushed down into the shared TTyColumn
+      that ListView/TreeView also use. Nil = plain TTyColumn. }
+    constructor Create(AOwnerHeader: TTyHeader;
+      AItemClass: TCollectionItemClass); overload;
 
     { Look up the column at visual position APos (0-based). }
     function  ColumnByPosition(APos: Integer): TTyColumn;
@@ -184,7 +189,9 @@ type
     { Forwarded from FColumns.OnChange }
     procedure ColumnsChanged(Sender: TObject);
   public
-    constructor Create;
+    constructor Create; overload;
+    { See TTyColumns.Create(AOwnerHeader, AItemClass). }
+    constructor Create(AColumnClass: TCollectionItemClass); overload;
     destructor  Destroy; override;
     procedure Assign(ASource: TPersistent); override;
 
@@ -381,6 +388,16 @@ end;
 constructor TTyColumns.Create(AOwnerHeader: TTyHeader);
 begin
   Create;
+  FOwnerHeader := AOwnerHeader;
+end;
+
+constructor TTyColumns.Create(AOwnerHeader: TTyHeader;
+  AItemClass: TCollectionItemClass);
+begin
+  if AItemClass = nil then AItemClass := TTyColumn;
+  inherited Create(AItemClass);
+  SetLength(FPositionToIndex, 0);
+  FOnChange    := nil;
   FOwnerHeader := AOwnerHeader;
 end;
 
@@ -741,6 +758,11 @@ end;
 
 constructor TTyHeader.Create;
 begin
+  Create(nil);
+end;
+
+constructor TTyHeader.Create(AColumnClass: TCollectionItemClass);
+begin
   inherited Create;
   FHeight        := 22;
   FMainColumn    := 0;
@@ -750,7 +772,7 @@ begin
   FImages        := nil;
   FOptions       := [hoVisible, hoColumnResize, hoShowSortGlyphs,
                      hoHeaderClickAutoSort, hoDrag];
-  FColumns       := TTyColumns.Create(Self);
+  FColumns       := TTyColumns.Create(Self, AColumnClass);
   FColumns.OnChange := @ColumnsChanged;
 end;
 

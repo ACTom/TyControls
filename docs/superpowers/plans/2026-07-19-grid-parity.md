@@ -41,7 +41,7 @@
 | B5 | H5 单元格级鼠标事件 + H15 按钮单元格 + H13 AutoResize 接线 | - [x] **完成** `2026-07-19` |
 | B6 | H6 换行 + H7 行高三件套 | - [x] **完成** `2026-07-19` |
 | B7 | A4 选择模型重构 + H8 离散多选 | - [x] **完成** `2026-07-19` |
-| B8 | A5 列模型(TTyGridColumn)+ H10 列级编辑器声明 | - [ ] |
+| B8 | A5 列模型(TTyGridColumn)+ H10 列级编辑器声明 | - [x] **完成** `2026-07-19` |
 | B9 | A6 EditLink 扩展点 + H12 输入约束 + H9 键盘录入手感 | - [ ] |
 | B10 | H16 多级/合并表头 | - [ ] |
 | B11 | A7 + H17 多列排序 + H18 分组重做 | - [ ] |
@@ -314,13 +314,19 @@ TextRect,都是 BGRA 重活),而样式解析根本不是瓶颈。加了**跨帧�
 
 **架构决策**:不往共享的 `TTyColumn`(ListView/TreeView 也用)里塞网格专属字段。
 
-- [ ] 派生 `TTyGridColumn = class(TTyColumn)`,让网格的 `TTyColumns` 创建它
+- [x] 派生 `TTyGridColumn = class(TTyColumn)`,让网格的 `TTyColumns` 创建它
       (`TCollection` 支持指定 ItemClass;若 `TTyColumns` 未开放则在 Grid 侧覆写创建)。
-- [ ] 新增列级属性:`EditorKind` / `ReadOnly` / `PickList: TStrings` /
+- [x] 新增列级属性:`EditorKind` / `ReadOnly` / `PickList: TStrings` /
       `SortKind` / `Aggregate` / `Format`。
-- [ ] `EditorKindFor` 改为:列属性 > `OnGetEditorKind` 覆盖 > `DefaultEditorKind`。
-- [ ] 失败测试:设计期只配列属性(不接任何事件)即可得到"这列数字、那列下拉、这列只读"。
-- [ ] 变异验证;**B8 收工**。
+- [x] `EditorKindFor` 改为:列属性 > `OnGetEditorKind` 覆盖 > `DefaultEditorKind`。
+- [x] 失败测试:设计期只配列属性(不接任何事件)即可得到"这列数字、那列下拉、这列只读"。
+- [x] 变异验证(列属性不参与决策 / 列级 ReadOnly 无效 / UseEditorKind 不置位 /
+      列级 Aggregate 无效,四条各自杀掉对应测试)。
+- [x] 共享单元的改动是**纯增量**:`TTyColumns.Create(AOwnerHeader, AItemClass)` 与
+      `TTyHeader.Create(AColumnClass)` 两个重载,老调用点一行没动。
+- [x] `UseEditorKind` 这个"设过没有"的标志是必须的 —— 光看"等于 gekText"
+      分不清"没设"和"显式设成文本",测试里专门有一条守它。
+- [x] **B8 收工**。
 
 ---
 

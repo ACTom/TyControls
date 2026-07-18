@@ -140,6 +140,7 @@ type
     procedure TestCtrlClickAddsDiscreteSelection;
     procedure TestSelectionApiAndChangedEvent;
     procedure TestDragAcrossCellsExtendsSelection;
+    procedure TestColumnLevelPropertiesNeedNoEvents;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -3698,6 +3699,47 @@ begin
   AssertTrue('终点被选中', G.IsCellSelected(2, 3));
   AssertTrue('框外没被选中', not G.IsCellSelected(3, 3));
   AssertEquals('拖出来的是 3 列 x 3 行', 9, G.SelectedCellCount);
+end;
+
+{ 设计期只配**列属性**、不接任何事件,就该得到"这列下拉、那列只读、这列有统计"。
+  从前这些只能靠 OnGetEditorKind / OnGetPickList / SetColumnAggregate 三个事件
+  在代码里配 —— 设计期什么也做不了。 }
+procedure TTyStringGridTest.TestColumnLevelPropertiesNeedNoEvents;
+var
+  G: TStrGridAccess;
+  c1, c2: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[3, 0] := '10';
+  G.Cells[3, 1] := '20';
+
+  AssertTrue('列应当是网格自己的列类', G.Header.Columns.Items[0] is TTyGridColumn);
+  c1 := TTyGridColumn(G.Header.Columns.Items[1]);
+  c2 := TTyGridColumn(G.Header.Columns.Items[2]);
+
+  { 默认没设过 → 走网格的 DefaultEditorKind。 }
+  AssertTrue('没配过的列走网格默认',
+    G.EditorKindFor(0, 0) = G.DefaultEditorKind);
+
+  c1.EditorKind := gekPickList;
+  c1.PickList.Add('甲');
+  c1.PickList.Add('乙');
+  AssertTrue('列属性决定了编辑器种类', G.EditorKindFor(1, 0) = gekPickList);
+  AssertTrue('别的列不受影响', G.EditorKindFor(0, 0) = G.DefaultEditorKind);
+
+  c2.ReadOnly := True;
+  AssertTrue('只读列不给编辑器', G.EditorKindFor(2, 0) = gekNone);
+  AssertTrue('只读列进不了编辑', not G.BeginEdit(2, 0));
+
+  TTyGridColumn(G.Header.Columns.Items[3]).Aggregate := gagSum;
+  AssertTrue('列属性决定了汇总方式',
+    G.ColumnAggregate(3) = gagSum);
+  AssertEquals('汇总值算出来了', 30.0, G.AggregateValue(3), 0.001);
+
+  { 显式写成 gekText 也要算"设过" —— 否则分不清"没设"和"设成文本"。 }
+  c1.EditorKind := gekText;
+  AssertTrue('显式设回文本也生效', G.EditorKindFor(1, 0) = gekText);
 end;
 
 initialization
