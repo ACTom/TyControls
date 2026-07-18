@@ -125,6 +125,41 @@ begin
   finally
     Grid.Header.Columns.EndUpdate;
   end;
+  { --- 列级声明:设计期就能配好,不用接任何事件 --- }
+  { 数值列按数值排(不然 '100' 会排在 '9' 前面),并且只让敲数字。 }
+  TTyGridColumn(Grid.Header.Columns.Items[3]).SortKind := gskNumber;
+  TTyGridColumn(Grid.Header.Columns.Items[3]).ValidChars := '0123456789';
+  TTyGridColumn(Grid.Header.Columns.Items[4]).SortKind := gskNumber;
+  { 大区列做成下拉,候选项直接挂在列上。 }
+  TTyGridColumn(Grid.Header.Columns.Items[1]).EditorKind := gekPickList;
+  TTyGridColumn(Grid.Header.Columns.Items[1]).PickList.CommaText := '华东,华南,华北,西南';
+  { 订单号只读 —— 主键不该被改。 }
+  TTyGridColumn(Grid.Header.Columns.Items[0]).ReadOnly := True;
+
+  { --- 分组表头:横跨若干列的上层标题 --- }
+  with Grid.HeaderGroups.Add do
+  begin
+    Text := '订单信息';
+    FirstCol := 0;
+    LastCol := 2;
+  end;
+  with Grid.HeaderGroups.Add do
+  begin
+    Text := '金额与进度';
+    FirstCol := 3;
+    LastCol := 5;
+  end;
+  Grid.GroupHeaderHeight := 24;
+
+  { 斑马纹 + 换行 + 行高护栏。 }
+  Grid.AlternateRows := True;
+  Grid.WordWrap := True;
+  Grid.MinRowHeight := 18;
+  Grid.MaxRowHeight := 60;
+
+  { 列头筛选下拉 + 漏斗激活态。 }
+  Grid.ShowFilterButtons := True;
+
   { 冻结头两列:横向滚动时"订单号 / 大区"钉住不动。 }
   Grid.FixedCols := 2;
   { 打开点列头排序(升序 → 降序 → 取消)。 }
@@ -285,9 +320,13 @@ end;
 
 procedure TMainForm.UpdateStatus;
 begin
-  LblStatus.Caption := Format('当前单元格:(列 %d, 行 %d)  内容:%s   —— 共 %d 行 / 已存 %d 格',
+  { 选区聚合就是给状态栏这句话准备的。 }
+  LblStatus.Caption := Format(
+    '当前单元格:(列 %d, 行 %d)  内容:%s   —— 共 %d 行 / 显示 %d 行 / 已存 %d 格' +
+    '   |  已选 %d 格,合计 %.2f',
     [Grid.Col, Grid.Row, Grid.Cells[Grid.Col, Grid.Row], Grid.RowCount,
-     Grid.StoredCellCount]);
+     Grid.DisplayRowCount, Grid.StoredCellCount,
+     Grid.SelectedCellCount, Grid.SelectionSum]);
 end;
 
 procedure TMainForm.ThemeComboChange(Sender: TObject);

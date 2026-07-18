@@ -23,6 +23,59 @@ Linux and macOS.
   display is **orthogonal** to editing (a column can render as a progress bar and still edit as a number).
 - Example: [examples/grid](examples/grid/).
 
+- **Spreadsheet-grade keyboard feel**: typing a printable character starts editing
+  (and becomes the first character, like Excel), Enter moves down, Tab moves by cell
+  and wraps at the end of a row. Previously you had to press F2 or double-click first,
+  and Tab threw focus out of the grid entirely.
+- **Multi-column sorting**: Shift+click a header to add a secondary key, with rank
+  badges in the header. Sort kind is now **per column** (text / numeric / date), and
+  blanks can go first or last -- staying put when the direction flips.
+- **Typed filters**: contains / equals / starts with / ends with / greater / less...
+  Previously "contains" was the only option, so filtering a numeric column for >1000
+  was simply impossible. The funnel lights up on columns that are actively filtering.
+- **Grouped headers**: a band of titles spanning several columns. Sort and filter
+  buttons only appear on the leaf level, so clicking a group title no longer sorts
+  some column underneath it.
+- **Discrete multi-select** (Ctrl+click) and drag-select; selection aggregates
+  (`SelectionSum/Avg/Min/Max`) for the "12 selected, total 3400" status line.
+- **Per-cell appearance**: one `OnGetCellStyle` hook covering background, text colour,
+  font and both alignments; plus **persistent** `CellColors[c,r]`, per-cell borders
+  (four independent pens, for report block rules), zebra striping, and a visible
+  distinction between the focused cell and the selection.
+- **Word wrap and row heights**: wrapping cell text, drag-to-resize row dividers,
+  `AutoFitRow`, and global min/max guards.
+- **Column-level declarations**: editor kind, read-only, pick list, allowed characters,
+  max length -- **configurable at design time with no event handlers**. Per-cell
+  read-only is supported too.
+- **Host-supplied editors** via `OnCreateEditLink`, an escape hatch for editing needs
+  the grid cannot anticipate.
+- **Explicitly hidden rows**, distinct from filtering: a filter is a condition, hiding
+  is a fact, and clearing filters no longer un-hides them.
+- Bulk row/column operations (insert/remove many, move, swap) and a full event family
+  (cell-level mouse, column/row sizing during and after the drag, column move,
+  check boxes, clipboard).
+
+### Fixed -- data grid
+
+- **Paste no longer drops data silently**: pasting 100 rows into a 10-row grid used to
+  discard 90 of them without a word; the grid now grows to fit the clipboard block.
+- **CSV fields containing newlines no longer corrupt the data**: Excel exports such
+  fields routinely, and they used to be truncated with rows appearing out of nowhere.
+- **The sort triangle had never actually been displayed**: the sort state was never
+  synced to the header.
+- **Grouping silently discarded the user's sort column.**
+- **Merged regions did not follow inserted/deleted rows**: the content moved, the
+  merge box stayed behind.
+- **`hoAutoResize` and column header images never did anything**: the properties were
+  exposed but nothing at runtime ever read them.
+- Blank values flipped position with the sort direction (reversing the sort sent every
+  blank row to the top).
+
+### Performance -- data grid
+
+- Cell text drawing accounted for **94%** of frame render time; a cross-frame text
+  cache brought it down to roughly 1/20. Scrolling large grids is noticeably smoother.
+
 
 ### Added — 14 modern UI controls (the Ant Design gap)
 

@@ -9,6 +9,11 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+#: tycontrols.strconsts.rsgridgrouprow
+#, object-pascal-format
+msgid "%s  (%d)"
+msgstr "%s  (%d)"
+
 #: tycontrols.strconsts.rslintundefinedvar
 #, object-pascal-format
 msgid "undefined variable --%s"

@@ -162,6 +162,9 @@ type
     procedure TestSelectionAggregatesSkipNonNumericCells;
     procedure TestCheckBoxEventsFireAndCanBeVetoed;
     procedure TestSkipReadOnlyCellsDuringNavigation;
+    procedure TestTypedFilterOperators;
+    procedure TestFilterFunnelLightsUpOnlyForFilteredColumns;
+    procedure TestBlanksPositionAndCaseSensitiveSorting;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -4545,6 +4548,113 @@ begin
   { 反方向同理。 }
   G.PressKey(VK_LEFT);
   AssertEquals('反向也跳过', 0, G.Col);
+end;
+
+{ 过滤条件类型化:从前只有"包含"一种 —— 数值列想筛 >1000 完全做不到。 }
+procedure TTyStringGridTest.TestTypedFilterOperators;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  G.Cells[0, 0] := '100';  G.Cells[0, 1] := '900';
+  G.Cells[0, 2] := '1500'; G.Cells[0, 3] := '2000';
+  G.Cells[0, 4] := '不是数';
+
+  G.SetColumnFilterEx(0, gfoGreater, '1000');
+  AssertEquals('筛 >1000 剩两条', 2, G.FilteredRowCount);
+  AssertEquals('显示序也跟着', 2, G.DisplayRowCount);
+
+  G.SetColumnFilterEx(0, gfoLessEqual, '900');
+  AssertEquals('筛 <=900 剩两条', 2, G.FilteredRowCount);
+
+  { 非数值格在数值比较下一律不通过 —— 把 'abc' 当 0 会让"筛 >-1"
+    把整列文本都放进来,那不是用户要的。 }
+  G.SetColumnFilterEx(0, gfoGreater, '-1');
+  AssertEquals('筛 >-1 只放行真数值', 4, G.FilteredRowCount);
+
+  G.SetColumnFilterEx(0, gfoEquals, '900');
+  AssertEquals('等于', 1, G.FilteredRowCount);
+
+  G.SetColumnFilterEx(0, gfoStartsWith, '1');
+  AssertEquals('以 1 开头', 2, G.FilteredRowCount);
+
+  { 老的 SetColumnFilter 仍然是"包含"。 }
+  G.ClearFilters;
+  G.SetColumnFilter(0, '00');
+  AssertEquals('老接口仍是包含', 4, G.FilteredRowCount);
+end;
+
+{ 漏斗要在**正在过滤的那一列**点亮 —— 否则"为什么少了几行"会变成一次排查。 }
+procedure TTyStringGridTest.TestFilterFunnelLightsUpOnlyForFilteredColumns;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[1, 0] := 'abc';
+
+  AssertTrue('一开始没有列在过滤', not G.ColumnFilterActive(1));
+
+  G.SetColumnFilter(1, 'a');
+  AssertTrue('设了过滤的列点亮', G.ColumnFilterActive(1));
+  AssertTrue('别的列不点亮', not G.ColumnFilterActive(0));
+
+  G.ClearFilters;
+  AssertTrue('清掉之后灭掉', not G.ColumnFilterActive(1));
+end;
+
+{ 排序细则:空值位置**与升降序无关**;大小写敏感可开关。 }
+procedure TTyStringGridTest.TestBlanksPositionAndCaseSensitiveSorting;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[0, 0] := 'b';
+  G.Cells[0, 1] := '';       { 空 }
+  G.Cells[0, 2] := 'a';
+  G.Cells[0, 3] := 'c';
+
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('默认空值排最后(升序)', '', G.Cells[0, G.DisplayRow(3)]);
+  G.SortByColumn(0, sdDescending);
+  AssertEquals('**翻方向后空值仍然在最后**', '', G.Cells[0, G.DisplayRow(3)]);
+
+  G.BlanksPosition := gbpFirst;
+  G.SortByColumn(-1, sdAscending);
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('改成排最前(升序)', '', G.Cells[0, G.DisplayRow(0)]);
+  G.SortByColumn(0, sdDescending);
+  AssertEquals('翻方向后仍然在最前', '', G.Cells[0, G.DisplayRow(0)]);
+
+  { 大小写:从前写死 CompareText,想按 ASCII 序排根本做不到。 }
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 2;
+  G.Cells[0, 0] := 'b';
+  G.Cells[0, 1] := 'A';
+
+  G.SortIgnoreCase := True;
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('不区分大小写时 A 在前', 'A', G.Cells[0, G.DisplayRow(0)]);
+
+  G.SortIgnoreCase := False;
+  G.SortByColumn(-1, sdAscending);
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('区分大小写时按 ASCII:A(65) 仍在 b(98) 前', 'A',
+    G.Cells[0, G.DisplayRow(0)]);
+
+  { 用一对能区分开的值再验一次:'B'(66) < 'a'(97)。 }
+  G.Cells[0, 0] := 'a';
+  G.Cells[0, 1] := 'B';
+  G.SortByColumn(-1, sdAscending);
+  G.SortIgnoreCase := True;
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('不区分时 a 在 B 前', 'a', G.Cells[0, G.DisplayRow(0)]);
+  G.SortByColumn(-1, sdAscending);
+  G.SortIgnoreCase := False;
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('区分时 B 在 a 前', 'B', G.Cells[0, G.DisplayRow(0)]);
 end;
 
 initialization

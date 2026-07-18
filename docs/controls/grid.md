@@ -119,12 +119,21 @@ end;
 ```
 TyGrid                 整体表面 / 边框 / 字体
 TyGridCell             正文单元格(:hover / :selected)
+TyGridCellAlt          斑马纹的隔行底色(AlternateRows)
+TyGridActiveCell       焦点格(光标所在)—— 整行选中模式下靠它看出光标在哪一格
 TyGridFixed            冻结区(固定行列)
 TyGridIndicator        行头 / 行号槽
 TyGridHeader           列头带
 TyGridHeaderSection    列头分段
+TyGridHeaderGroup      分组表头带(横跨若干列的上层标题)
 TyGridLine             格线
 TyGridSelection        选区
+TyGridCheckBox         勾选框单元格
+TyGridProgress / TyGridProgressFill   进度条单元格
+TyGridRating           评分单元格
+TyGridButton           按钮单元格(:hover / :active)
+TyGridGroupRow         分组行
+TyGridSummaryRow       汇总带
 ```
 
 度量:`--grid-row-height` / `--grid-header-height` / `--grid-indicator-width` /
@@ -132,22 +141,99 @@ TyGridSelection        选区
 
 基层(`themes/light.tycss`)已给全套键,所以**新皮肤一条网格规则都不写也能正常显示**。
 
-## 当前边界
+## 能力一览
 
-已实现:四窗格几何(含冻结行列)、虚拟化渲染、二维光标与键鼠导航、内嵌滚动条、
-单元格编辑(文本 / 数值)。
+### 外观
+- 逐格外观钩子 `OnGetCellStyle`(底色 / 文字色 / 字体 / 两轴对齐,一个钩子全包)
+- 逐格**持久**外观 `CellColors[c,r]` / `CellTextColors[c,r]` / `SetRowColor`
+  —— 与钩子的区别是它落盘:用户手工涂黄的格,存下来还得是黄的
+- 逐格边框 `OnGetCellBorder`(四支笔各自可开可关)—— 报表的分区块粗线、小计行双线
+- 斑马纹 `AlternateRows`(按**显示行号**取奇偶,排序筛选后条纹仍然隔行)
+- 焦点格与选区区分(`TyGridActiveCell`)
+- 格线 `GridLineStyle`(none / 只横 / 只竖 / 全)+ `GridLineWidth`
+  —— 线**不占布局像素**,压在边界上,列宽不因线变粗而挪位
+- 表头自绘钩子 `OnGetHeaderStyle`;列头图标走 `TTyGridColumn.ImageIndex` + `Images`
 
-### 行序间接层(重要)
+### 表头
+- 分组表头 `HeaderGroups`(横跨若干相邻列的上层标题)+ `GroupHeaderHeight`
+- 排序/筛选按钮**只在叶子级** —— 点分组标题不会把下面某一列排序掉
+- 拖列宽 / 拖动重排 / 双击分隔线自适应列宽
+- 正在过滤的列漏斗**点亮**;多列排序时表头显示顺位徽标
 
-排序**只置换显示序**;`Cells[列,行]`、`Col`/`Row`、编辑都按**稳定的数据行**记账。
-所以排序之后光标仍然盯着同一条数据(只是显示位置变了),内容也绝不会串位。
-自定义排序时请记住:`OnCompareCells` 拿到的 `ARow1/ARow2` 是**数据行**。
+### 数据与交互
+- 多列排序:`SortByColumn` 单列、`AddSortColumn` 追加次级列(Shift+点列头)
+- 排序方式**跟着列走**(`TTyGridColumn.SortKind`:文本 / 数值 / 日期)
+- 排序细则:`BlanksPosition`(空值排前/后,**翻方向时位置不变**)、
+  `SortIgnoreCase`、`OnCanSort`(接服务端排序)
+- 过滤:条件类型化(包含 / 等于 / 开头是 / 结尾是 / > >= < <=)
+  `SetColumnFilterEx`;`ColumnIsFiltered` / `FilteredRowCount`
+- 分组:`GroupByColumn` + `ExpandAllGroups` / `CollapseAllGroups`,
+  分组行文本走可配的 `GroupRowFormat`
+- 行的显式隐藏 `HideRow` / `UnHideRow` / `NumHiddenRows`
+  —— 与过滤是**两回事**:过滤是条件,隐藏是事实,`ClearFilters` 不会把它放出来
+- 批量:`InsertRows` / `RemoveRows` / `InsertCols` / `RemoveCols` /
+  `MoveRow` / `SwapRows` / `MoveColumn`
+- 剪贴板:复制 / 剪切 / **智能粘贴**(按剪贴板块大小自动扩行扩列),
+  事件族 `OnClipboardCopy/Paste` / `OnBeforePasteCell` / `OnAfterPasteCell`
+- CSV 往返(引号内的换行不会串数据)
 
-**导出/复制一律走显示序**(所见即所得):被过滤掉的行不出现,排序后的次序被保留;
-而寻址仍是数据行 —— 两者由行序间接层桥接。
+### 选择
+- `SelectAll` / `SelectRange` / `SelectRows` / `ClearSelection` / `Selection` /
+  `SelectedCellCount` + `OnSelectionChanged`
+- 离散多选(Ctrl+点)、拖选、`SelectionMode`(格 / 行 / 列)
+- 选区聚合 `SelectionSum` / `Avg` / `Min` / `Max`(非数值格跳过)
 
-设计路线图上的功能已全部落地。**明确不做**见下。
-(下拉 / 日期 / 颜色等浮层类,将由 `TTyPopover` 承载)。
+### 编辑
+- 列级声明:`EditorKind` / `ReadOnly` / `PickList` / `Aggregate` / `Format` /
+  `ValidChars` / `MaxEditLength` —— **设计期配好列,不用接任何事件**
+- 逐格 `CellReadOnly[c,r]`
+- 键盘手感:直接敲字进编辑(这一笔即第一个字符)、Enter 向下、Tab 按格推进折行
+- 输入约束按键级过滤(非法字符**连编辑都不进**)
+- 宿主自带编辑器:`OnCreateEditLink` + `TTyGridEditLink`
+- 单元格类型:文本 / 数值 / 下拉 / 日期 / 颜色 / 勾选框 / 进度条 / 评分 / 图片 / 按钮
+- 换行 `WordWrap` + `OnGetCellWordWrap`;行高三件套(可写 `RowHeights[]`、
+  拖行分隔线、`AutoFitRow` / `AutoFitRows`)+ 全局上下限
 
-**明确不做**:XLS 原生读写、PDF 导出与打印子系统、RichEdit 单元格 —— 它们是文件格式库
-与输出子系统,不属于网格控件本体。
+### 事件
+单元格级鼠标(`OnClickCell` / `OnDblClickCell` / `OnRightClickCell` / `OnCanClickCell`)、
+表头(`OnHeaderClick` / `OnHeaderRightClick` / `OnColumnMove`)、
+尺寸(`OnColumnSizing` / `OnEndColumnSize` / `OnRowSizing` / `OnEndRowSize`)、
+内建控件(`OnCanToggleCheck` / `OnCheckBoxChange` / `OnCellButtonClick`)。
+
+## 两条不变量(改这个控件前先读)
+
+### 1. 命中 = 矩形的逆
+
+命中测试必须由矩形函数取逆得到(`CellAt` = `CellVisibleRect` + `PtInRect`),
+这样绘制几何与命中几何在机械上就不可能漂移。
+
+注意是 **`CellVisibleRect` 而不是 `CellRect`** —— 被冻结带盖住的那部分不该点得到。
+
+### 2. 行序间接层
+
+排序/过滤/分组**只置换显示序**;`Cells[列,行]`、`Col`/`Row`、编辑、选择
+都按**稳定的数据行**记账。所以排序之后光标仍然盯着同一条数据(只是显示位置变了),
+内容也绝不会串位。
+
+- `OnCompareCells` 拿到的 `ARow1/ARow2` 是**数据行**
+- **导出/复制一律走显示序**(所见即所得):被过滤掉的行不出现,排序后的次序被保留
+- 离散选区用显示序坐标(屏幕上那几条),但 `Selection` 对外一律翻回数据行坐标
+
+## 性能笔记
+
+- 虚拟化:只遍历可视窗口,百万行的表每帧也只画几十行
+- **跨帧文本位图缓存**:单元格文字曾占渲染时间的 94%
+  (每格一次 `TextSize` 做省略号测量 + 一次 `TextRect`,都是 BGRA 的重活)。
+  按外观整体缓存后降到约 1/20。键含文字/字体/字号/字重/颜色/尺寸/对齐/PPI ——
+  任何一项变了都是新条目,所以换主题、改列宽、切深色都不需要显式失效
+- 逐格样式解析按**状态组合**记忆化:绝大多数格状态相同,整帧只解析一两次
+- `GridMetrics` 整帧只算一次(`CellRect`/`CellVisibleRect`/`CellPane` 每格要问三四次)
+- 排序是**稳定归并排序**;单元格用哈希表寻址(早先线性查找 + 插入排序,1000 行就卡死)
+
+## 明确不做
+
+XLS 原生读写、PDF 导出与打印子系统、RichEdit / HTML 富文本单元格 ——
+它们是文件格式库与输出子系统,不属于网格控件本体。
+
+预置外观样式集(对标品在控件里硬编码几千行 case 上色)也不做:
+我们的等价物就是 `.tycss` + typeKey,照抄等于把皮肤职责搬回控件。

@@ -147,6 +147,21 @@ type
   { 网格线要画哪几轴。只要横线的报表式表格很常见,从前只有一个全有/全无的开关。 }
   TTyGridLineStyle = (glsNone, glsHorizontal, glsVertical, glsBoth);
 
+  { 空值排在最前还是最后。翻方向时**位置不变** —— 否则一翻向,空行就冒到最上面。 }
+  TTyGridBlanksPosition = (gbpLast, gbpFirst);
+
+  { 过滤条件的比较方式。从前只有"包含"一种 —— 数值列想筛 >1000 完全做不到。 }
+  TTyGridFilterOp = (
+    gfoContains,     { 默认:包含(不区分大小写) }
+    gfoEquals,
+    gfoNotEquals,
+    gfoStartsWith,
+    gfoEndsWith,
+    gfoGreater,      { 以下四个按**数值**比;非数值格一律不通过 }
+    gfoGreaterEqual,
+    gfoLess,
+    gfoLessEqual);
+
   { 一个排序键。多列排序 = 一串键,前面的相等才看后面的。 }
   TTyGridSortKey = record
     Col: Integer;
@@ -214,6 +229,9 @@ type
   TTyGridCanClickCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var ACanClick: Boolean) of object;
   TTyGridHeaderMouseEvent = procedure(Sender: TObject; ACol: Integer) of object;
+  { 能不能按这一列排。置 AAllow:=False 拦下 —— 接服务端排序时的必需品。 }
+  TTyGridCanSortEvent = procedure(Sender: TObject; ACol: Integer;
+    var AAllow: Boolean) of object;
   { 逐格边框。四支笔各自可开可关,宽度/颜色独立 —— 报表要画分区块粗线、小计行双线。 }
   TTyGridCellBorders = record
     Left, Top, Right, Bottom: Boolean;
@@ -540,6 +558,12 @@ type
 
     { 该列是否显示筛选按钮。基类不筛,恒 False。 }
     function ShowsFilterButton(ACol: Integer): Boolean; virtual;
+    { 这一列在不在过滤中 / 是第几顺位的排序键 / 一共几个排序键。
+      基类没有数据模型,一律答"没有";TTyStringGrid 改写。
+      放在基类是因为**表头渲染在基类**,而它需要这三个答案。 }
+    function ColumnFilterActive(ACol: Integer): Boolean; virtual;
+    function SortRankOf(ACol: Integer): Integer; virtual;
+    function SortColumnCountOf: Integer; virtual;
     { 列头上筛选按钮的槽(命中与绘制共用)。 }
     function HeaderFilterRect(ACol, AHeaderH: Integer): TRect;
 
@@ -862,6 +886,9 @@ type
     FSortCol: Integer;
     { 完整的排序键序列;FSortCol/FSortDir 是它的第 0 项(保留成兼容视图)。 }
     FSortKeys: TTyGridSortKeys;
+    FBlanksPosition: TTyGridBlanksPosition;
+    FSortIgnoreCase: Boolean;
+    FOnCanSort: TTyGridCanSortEvent;
     FUpdatingOrder: Integer;
     { 显式隐藏的行(数据行号)。 }
     FHiddenRows: TStringList;
@@ -883,6 +910,8 @@ type
     procedure MergeSortOrderByKeys(const AKeys: TTyGridSortKeys);
     function  CompareRowsByKeys(const AKeys: TTyGridSortKeys;
       ARow1, ARow2: Integer): Integer;
+    function  BlankVerdict(ACol, ARow1, ARow2: Integer;
+      out ACmp: Integer): Boolean;
     { 实际生效的排序键 = (分组列,如果有) + 用户的排序键。
       **分组不再改写 FSortCol** —— 从前 BuildGroups 直接把 FSortCol 赋成分组列,
       于是一分组就悄悄丢掉用户选的排序列。 }
@@ -969,6 +998,9 @@ type
     function DisplayRowCount: Integer; override;
     procedure SetShowFilterButtons(AValue: Boolean);
     function ShowsFilterButton(ACol: Integer): Boolean; override;
+    function ColumnFilterActive(ACol: Integer): Boolean; override;
+    function SortRankOf(ACol: Integer): Integer; override;
+    function SortColumnCountOf: Integer; override;
     procedure InvalidateGridOrder; override;
     { 合并区:基准格的矩形跨满整个区,被它覆盖的格没有自己的矩形。 }
     function CellRect(ACol, ARow: Integer): TRect; override;
@@ -1057,6 +1089,14 @@ type
 
     { 给某列设"包含"过滤(不区分大小写)。传空串即清掉该列的过滤。 }
     procedure SetColumnFilter(ACol: Integer; const AText: string);
+    { 带比较方式的过滤。SetColumnFilter 等价于 gfoContains。 }
+    procedure SetColumnFilterEx(ACol: Integer; AOp: TTyGridFilterOp;
+      const AText: string);
+    function  ColumnFilterOp(ACol: Integer): TTyGridFilterOp;
+    { 这一列现在有没有在过滤(漏斗要不要点亮)。 }
+    function  ColumnIsFiltered(ACol: Integer): Boolean;
+    { 过滤之后还剩多少行。 }
+    function  FilteredRowCount: Integer;
     function  ColumnFilter(ACol: Integer): string;
     { 按**值集合**过滤某列(列头下拉勾选用)。AValues=nil 或空即清掉。
       与文本包含过滤是 AND 关系。 }
@@ -1189,6 +1229,13 @@ type
     property OnCellEdited: TTyGridCellEditedEvent read FOnCellEdited write FOnCellEdited;
     { 排序比较方式:文本还是数值。数值列用 gskText 排会得到 '10' < '9' 这种结果。 }
     property SortKind: TTyGridSortKind read FSortKind write FSortKind default gskText;
+    { 空值排最前还是最后(翻方向时位置不变)。 }
+    property BlanksPosition: TTyGridBlanksPosition read FBlanksPosition
+      write FBlanksPosition default gbpLast;
+    { 文本比较区不区分大小写。从前写死 CompareText(恒不区分)。 }
+    property SortIgnoreCase: Boolean read FSortIgnoreCase write FSortIgnoreCase
+      default True;
+    property OnCanSort: TTyGridCanSortEvent read FOnCanSort write FOnCanSort;
     { 自定义比较;置 AResult 即接管该列的比较。 }
     property OnCompareCells: TTyGridCompareEvent read FOnCompareCells write FOnCompareCells;
     property OnFilterRow: TTyGridFilterRowEvent read FOnFilterRow write FOnFilterRow;
@@ -1243,6 +1290,62 @@ const
   { "这不是个日期"的哨兵。用一个不可能出现的 TDateTime 值,
     比再拿一个 Boolean 数组去记省事,也不会和真实日期撞上。 }
   NoDateSentinel = -1.0e18;
+
+{ 过滤表达式的存储格式是 '<op序号>|<文本>' —— 一条字符串装下两样东西,
+  沿用既有的 name=value 存储,不必再开一张表。 }
+function TyGridEncodeFilter(AOp: TTyGridFilterOp; const AText: string): string;
+begin
+  Result := IntToStr(Ord(AOp)) + '|' + AText;
+end;
+
+procedure TyGridDecodeFilter(const AEncoded: string; out AOp: TTyGridFilterOp;
+  out AText: string);
+var
+  bar: Integer;
+begin
+  AOp := gfoContains;
+  AText := AEncoded;
+  bar := Pos('|', AEncoded);
+  if bar <= 0 then Exit;              { 老格式(纯文本)= 包含 }
+  AOp := TTyGridFilterOp(StrToIntDef(Copy(AEncoded, 1, bar - 1), 0));
+  AText := Copy(AEncoded, bar + 1, MaxInt);
+end;
+
+{ 一个格值符不符合一条过滤表达式。 }
+function TyGridFilterMatches(const ACellText, AEncoded: string): Boolean;
+var
+  op: TTyGridFilterOp;
+  pat, a, b: string;
+  va, vb: Double;
+begin
+  TyGridDecodeFilter(AEncoded, op, pat);
+  if pat = '' then Exit(True);
+
+  a := UpperCase(ACellText);
+  b := UpperCase(pat);
+  case op of
+    gfoEquals:     Exit(a = b);
+    gfoNotEquals:  Exit(a <> b);
+    gfoStartsWith: Exit(Copy(a, 1, Length(b)) = b);
+    gfoEndsWith:   Exit((Length(a) >= Length(b)) and
+                        (Copy(a, Length(a) - Length(b) + 1, Length(b)) = b));
+    gfoGreater, gfoGreaterEqual, gfoLess, gfoLessEqual:
+      begin
+        { 数值比较:格里不是数就一律不通过 —— 把 'abc' 算作 0 会让
+          "筛 >-1"把整列文本都放进来,那不是用户要的。 }
+        va := StrToFloatDef(Trim(ACellText), NaN);
+        vb := StrToFloatDef(Trim(pat), NaN);
+        if IsNan(va) or IsNan(vb) then Exit(False);
+        case op of
+          gfoGreater:      Exit(va > vb);
+          gfoGreaterEqual: Exit(va >= vb);
+          gfoLess:         Exit(va < vb);
+        else               Exit(va <= vb);
+        end;
+      end;
+  end;
+  Result := Pos(b, a) > 0;            { gfoContains }
+end;
 
 { 一段文字在给定宽度下会占几行 —— 与 BGRA 的 Wordbreak 断法保持一致:
   在空格处断,单个"词"仍超宽时按字符硬断(CJK 没有空格,靠的就是这条)。
@@ -2848,6 +2951,21 @@ begin
   Result := False;
 end;
 
+function TTyCustomGrid.ColumnFilterActive(ACol: Integer): Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomGrid.SortRankOf(ACol: Integer): Integer;
+begin
+  Result := 0;
+end;
+
+function TTyCustomGrid.SortColumnCountOf: Integer;
+begin
+  Result := 0;
+end;
+
 function TTyCustomGrid.HeaderFilterRect(ACol, AHeaderH: Integer): TRect;
 var
   l, w, cx, cy, gs: Integer;
@@ -2871,12 +2989,12 @@ var
   i, l, w, cx, cy, gs, imgIdx, imgSz, imgPad, bandTop: Integer;
   hdrBg: TTyFill;
   hdrHasBg: Boolean;
-  hdrInk: TTyColor;
+  hdrInk, accentInk, funnelInk: TTyColor;
   hdrFontName: string;
   hdrFontSize, hdrFontWeight: Integer;
   col: TTyColumn;
   bmp: TBGRABitmap;
-  secS, hdrS: TTyStyleSet;
+  secS, hdrS, actHdrS: TTyStyleSet;
   ink: TTyColor;
   r, textR: TRect;
   line: TBGRAPixel;
@@ -2887,6 +3005,13 @@ begin
   else if tpTextColor in hdrS.Present then ink := hdrS.TextColor
   else ink := CurrentStyle.TextColor;
   line := TyColorToBGRA(hdrS.BorderColor);
+  { 激活态漏斗的颜色走主题(选中态的表头文字色);主题没给就退回普通墨色 ——
+    绝不自己发明一个颜色。 }
+  actHdrS := ActiveController.Model.ResolveStyle('TyGridHeaderSection',
+    StyleClass, [tysSelected]);
+  if tpTextColor in actHdrS.Present then accentInk := actHdrS.TextColor
+  else accentInk := ink;
+
   { 列头带**在分组带之下**。没有分组时 bandTop = 0,与从前逐像素一致。 }
   bandTop := GroupBandHeightPx;
 
@@ -2935,14 +3060,17 @@ begin
       P.DrawText(textR, col.Text, hdrFontName, hdrFontSize,
         hdrFontWeight, hdrInk, col.CaptionAlignment, tlCenter, True);
 
-    { 该列有筛选时,标题右侧留一个漏斗位(用向下箭头示意)。 }
+    { 该列有筛选时,标题右侧留一个漏斗位(用向下箭头示意)。
+      **正在过滤的列要点亮** —— 用户得一眼看出哪列在过滤中,
+      否则"为什么少了几行"会变成一次排查。 }
     if ShowsFilterButton(i) then
     begin
       cx := r.Right - ScaleI(10) - gs;
       cy := bandTop + AHeaderH div 2;
+      if ColumnFilterActive(i) then funnelInk := accentInk else funnelInk := ink;
       TyDrawGlyph(P, ActiveController,
         Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
-        tgChevronDown, ink, 1, 1);
+        tgChevronDown, funnelInk, 1, 1);
     end;
 
     { 列头图标:画在标题左侧。此前 TTyColumn.ImageIndex 字段一直存在却**从不被读取**
@@ -2962,6 +3090,17 @@ begin
           Inc(imgPad, imgSz + ScaleI(4));
         end;
       end;
+    end;
+
+    { 多列排序徽标:第几顺位。做完多列排序不配套它,
+      用户根本看不出"到底按哪几列排的、谁优先"。单列排序时不显示(没有歧义)。 }
+    if (hoShowSortGlyphs in FHeader.Options) and (SortColumnCountOf > 1)
+       and (SortRankOf(i) > 0) then
+    begin
+      textR := Rect(r.Right - ScaleI(24), r.Top, r.Right - ScaleI(14), r.Bottom);
+      if textR.Right > textR.Left then
+        P.DrawText(textR, IntToStr(SortRankOf(i)), hdrFontName,
+          hdrFontSize - 2, hdrFontWeight, hdrInk, taCenter, tlCenter, False);
     end;
 
     { 排序方向的小三角。 }
@@ -3357,6 +3496,8 @@ begin
   FSortCol := -1;
   FSortDir := sdAscending;
   FSortKind := gskText;
+  FBlanksPosition := gbpLast;
+  FSortIgnoreCase := True;
   { resourcestring 在 FPC 里不可赋值给常量表达式,但可以读 —— 这里当初值用。
     (与 TyFallbackFontName 同一套做法。) }
   FGroupRowFormat := rsGridGroupRow;
@@ -3834,7 +3975,7 @@ begin
     if flt = '' then Continue;
     colIdx := StrToIntDef(FColFilters.Names[i], -1);
     if colIdx < 0 then Continue;
-    if Pos(UpperCase(flt), UpperCase(GetCellText(colIdx, ARow))) = 0 then
+    if not TyGridFilterMatches(GetCellText(colIdx, ARow), flt) then
     begin
       Result := False;
       Exit;
@@ -3979,6 +4120,38 @@ begin
   Result := DisplayRowCount;
 end;
 
+procedure TTyStringGrid.SetColumnFilterEx(ACol: Integer; AOp: TTyGridFilterOp;
+  const AText: string);
+begin
+  SetColumnFilter(ACol, TyGridEncodeFilter(AOp, AText));
+end;
+
+function TTyStringGrid.ColumnFilterOp(ACol: Integer): TTyGridFilterOp;
+var
+  txt: string;
+begin
+  TyGridDecodeFilter(FColFilters.Values[IntToStr(ACol)], Result, txt);
+end;
+
+function TTyStringGrid.ColumnIsFiltered(ACol: Integer): Boolean;
+var
+  op: TTyGridFilterOp;
+  txt: string;
+begin
+  TyGridDecodeFilter(FColFilters.Values[IntToStr(ACol)], op, txt);
+  Result := txt <> '';
+  if not Result then Result := FValFilters.Values[IntToStr(ACol)] <> '';
+end;
+
+function TTyStringGrid.FilteredRowCount: Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to RowCount - 1 do
+    if RowPassesFilter(i) then Inc(Result);
+end;
+
 procedure TTyStringGrid.SetColumnFilter(ACol: Integer; const AText: string);
 var
   k: string;
@@ -4072,6 +4245,21 @@ begin
     Exit;
   end;
 
+  { 空值的位置**与升降序无关** —— 由 BlanksPosition 单独决定。
+    (若参与正常比较,一翻向空行就会整块冒到最上面。) }
+  if (a = '') or (b = '') then
+  begin
+    if (a = '') and (b = '') then Exit(0);
+    if FBlanksPosition = gbpLast then
+    begin
+      if a = '' then Exit(1) else Exit(-1);
+    end
+    else
+    begin
+      if a = '' then Exit(-1) else Exit(1);
+    end;
+  end;
+
   if kind = gskNumber then
   begin
     { 数值列必须按数值比 —— 按文本比会得到 '10' < '9'。
@@ -4086,19 +4274,81 @@ begin
     else Result := 0;
     Exit;
   end;
-  Result := CompareText(a, b);
+  { 从前写死 CompareText —— 恒不区分大小写,想按 ASCII 序排根本做不到。 }
+  if FSortIgnoreCase then Result := CompareText(a, b)
+  else Result := CompareStr(a, b);
 end;
 
 { 按一串键比:前面的相等才看后面的。单键是它的退化情形。 }
+{ 空值/非法数值的胜负**与升降序无关** —— 返回 True 表示这一对已经由位置规则定了,
+  调用方**不许再翻方向**。
+
+  这件事必须在这一层做:方向翻转发生在 CompareRows **之后**,
+  把规则写在 CompareRows 里的话,一翻向空行就整块冒到最上面。 }
+function TTyStringGrid.BlankVerdict(ACol, ARow1, ARow2: Integer;
+  out ACmp: Integer): Boolean;
+var
+  a, b: string;
+  kind: TTyGridSortKind;
+  blankA, blankB: Boolean;
+  va, vb: Double;
+begin
+  ACmp := 0;
+  a := GetCellText(ACol, ARow1);
+  b := GetCellText(ACol, ARow2);
+
+  kind := FSortKind;
+  if (GridColumn(ACol) <> nil) and (GridColumn(ACol).SortKind <> gskAuto) then
+    kind := GridColumn(ACol).SortKind;
+
+  blankA := Trim(a) = '';
+  blankB := Trim(b) = '';
+  { 数值/日期列里"解析不出来"与"空"同等对待 —— 都属于"没有可比的值"。 }
+  if kind = gskNumber then
+  begin
+    va := StrToFloatDef(Trim(a), NaN);
+    vb := StrToFloatDef(Trim(b), NaN);
+    blankA := blankA or IsNan(va);
+    blankB := blankB or IsNan(vb);
+  end
+  else if kind = gskDate then
+  begin
+    blankA := blankA or (StrToDateTimeDef(a, NoDateSentinel) = NoDateSentinel);
+    blankB := blankB or (StrToDateTimeDef(b, NoDateSentinel) = NoDateSentinel);
+  end;
+
+  Result := blankA or blankB;
+  if not Result then Exit;
+  if blankA and blankB then Exit;      { 都空 → 平手,交给下一个键 }
+
+  if FBlanksPosition = gbpLast then
+  begin
+    if blankA then ACmp := 1 else ACmp := -1;
+  end
+  else
+  begin
+    if blankA then ACmp := -1 else ACmp := 1;
+  end;
+end;
+
 function TTyStringGrid.CompareRowsByKeys(const AKeys: TTyGridSortKeys;
   ARow1, ARow2: Integer): Integer;
 var
-  i: Integer;
+  i, cmp: Integer;
 begin
   Result := 0;
   for i := 0 to High(AKeys) do
   begin
     if AKeys[i].Col < 0 then Continue;
+
+    { 空值先判,且**不翻方向**。 }
+
+    if BlankVerdict(AKeys[i].Col, ARow1, ARow2, cmp) then
+    begin
+      if cmp <> 0 then Exit(cmp);
+      Continue;                        { 都空 → 这一键分不出,看下一键 }
+    end;
+
     Result := CompareRows(AKeys[i].Col, ARow1, ARow2);
     if AKeys[i].Dir = sdDescending then Result := -Result;
     if Result <> 0 then Exit;
@@ -4604,6 +4854,25 @@ begin
   if FShowFilterButtons = AValue then Exit;
   FShowFilterButtons := AValue;
   Invalidate;      { 直写字段的话,运行期开关筛选按钮不会重绘 }
+end;
+
+function TTyStringGrid.ColumnFilterActive(ACol: Integer): Boolean;
+begin
+  Result := ColumnIsFiltered(ACol);
+end;
+
+function TTyStringGrid.SortRankOf(ACol: Integer): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to High(FSortKeys) do
+    if FSortKeys[i].Col = ACol then Exit(i + 1);   { 1-based:徽标上显示的就是它 }
+end;
+
+function TTyStringGrid.SortColumnCountOf: Integer;
+begin
+  Result := Length(FSortKeys);
 end;
 
 function TTyStringGrid.ShowsFilterButton(ACol: Integer): Boolean;
@@ -6005,8 +6274,17 @@ end;
 procedure TTyStringGrid.SortByColumn(ACol: Integer; ADirection: TTySortDirection);
 var
   i, j, cmp, tmp: Integer;
+  canSort: Boolean;
 begin
   EndEdit(True);        { 行要重排了 —— 先把编辑提交掉 }
+
+  { 宿主可以拦下某一列的排序(比如它要走服务端排序)。 }
+  if (ACol >= 0) and Assigned(FOnCanSort) then
+  begin
+    canSort := True;
+    FOnCanSort(Self, ACol, canSort);
+    if not canSort then Exit;
+  end;
 
   if (ACol < 0) or (ACol >= Header.Columns.Count) or (RowCount <= 0) then
   begin
