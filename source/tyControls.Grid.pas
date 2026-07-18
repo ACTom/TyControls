@@ -466,6 +466,7 @@ type
     function DisplayToData(APos: Integer): Integer; override;
     function DataToDisplay(ARow: Integer): Integer; override;
     function DisplayRowCount: Integer; override;
+    procedure SetShowFilterButtons(AValue: Boolean);
     function ShowsFilterButton(ACol: Integer): Boolean; override;
     procedure InvalidateGridOrder; override;
     { 合并区:基准格的矩形跨满整个区,被它覆盖的格没有自己的矩形。 }
@@ -630,7 +631,7 @@ type
       read FOnGetCellHint write FOnGetCellHint;
     { 列头上显示筛选按钮(点它弹出去重值的勾选下拉)。 }
     property ShowFilterButtons: Boolean
-      read FShowFilterButtons write FShowFilterButtons default False;
+      read FShowFilterButtons write SetShowFilterButtons default False;
   end;
 
 var
@@ -2518,6 +2519,13 @@ end;
 
 
 { ---- 列头筛选下拉 --------------------------------------------------------- }
+
+procedure TTyStringGrid.SetShowFilterButtons(AValue: Boolean);
+begin
+  if FShowFilterButtons = AValue then Exit;
+  FShowFilterButtons := AValue;
+  Invalidate;      { 直写字段的话,运行期开关筛选按钮不会重绘 }
+end;
 
 function TTyStringGrid.ShowsFilterButton(ACol: Integer): Boolean;
 begin

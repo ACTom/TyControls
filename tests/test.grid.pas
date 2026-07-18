@@ -120,6 +120,7 @@ type
     procedure TestOnDrawCellCanTakeOverACell;
     procedure TestCsvRoundTripsCellsContainingNewlines;
     procedure TestAutoResizeColumnFillsRemainingWidth;
+    procedure TestPublishedSurfaceHasObservableEffect;
   end;
 
 implementation
@@ -2588,6 +2589,113 @@ begin
   AssertTrue(Format('列总宽填满视口(总宽 %d,视口 %d)',
     [G.Header.Columns.TotalWidth, G.ClientWidth]),
     Abs(G.Header.Columns.TotalWidth - G.ClientWidth) < 20);
+end;
+
+{ 渲染指纹:把整张渲染结果折成一个 FNV-1a 哈希。
+  用它判定"改了某个开关之后画面到底变没变" —— 比数某种颜色的像素稳,
+  也不会因为主题换了个色就失效。 }
+function RenderFingerprint(G: TStrGridAccess): string;
+var
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  x, y: Integer;
+  h: QWord;
+  px: TBGRAPixel;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      h := QWord(14695981039346656037);
+      for y := 0 to Re.Height - 1 do
+        for x := 0 to Re.Width - 1 do
+        begin
+          px := Re.GetPixel(x, y);
+          h := (h xor QWord(px.red + (px.green shl 8) + (px.blue shl 16)))
+               * QWord(1099511628211);
+        end;
+      Result := IntToHex(h, 16);
+    finally
+      Re.Free;
+    end;
+  finally
+    Bmp.Free;
+  end;
+end;
+
+{ **通用守卫**:published 出去的开关必须产生**可观测效果**(像素或几何),
+  而不是只有属性读回来变了。
+
+  这一批修的三个洞是同一类:`ShowFooter` 早先只赋值不影响视口、
+  `ApplyAutoSize` 零调用、`TTyColumn.ImageIndex` 零读取 ——
+  编译期不报错、运行期无声无息,单测若只断言 `AssertTrue(G.ShowFooter)` 一样是绿的。
+  所以这里一律断言"渲染输出/几何度量变了",不看属性回读。 }
+procedure TTyStringGridTest.TestPublishedSurfaceHasObservableEffect;
+var
+  G: TStrGridAccess;
+  before, after: string;
+  vpBefore, vpAfter, colBefore, colAfter, wBefore, wAfter: Integer;
+  i: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.Header.Height := 22;
+  G.RowCount := 6;
+  for i := 0 to G.RowCount - 1 do
+  begin
+    G.Cells[0, i] := 'A' + IntToStr(i);
+    G.Cells[1, i] := 'B' + IntToStr(i);
+  end;
+
+  { ---- ShowFooter:同时改几何(视口变矮)与像素 ---- }
+  vpBefore := G.ViewportHeight;
+  before := RenderFingerprint(G);
+  G.ShowFooter := True;
+  vpAfter := G.ViewportHeight;
+  after := RenderFingerprint(G);
+  AssertTrue(Format('ShowFooter 应当从视口里扣掉汇总带高度(%d -> %d)',
+    [vpBefore, vpAfter]), vpAfter < vpBefore);
+  AssertTrue('ShowFooter 应当改变渲染输出', before <> after);
+  G.ShowFooter := False;
+
+  { ---- GridLines ---- }
+  before := RenderFingerprint(G);
+  G.GridLines := False;
+  after := RenderFingerprint(G);
+  AssertTrue('GridLines 应当改变渲染输出', before <> after);
+  G.GridLines := True;
+
+  { ---- ShowIndicator:行头槽把列 0 往右推,并画出来 ---- }
+  colBefore := G.ColLeft(0);
+  before := RenderFingerprint(G);
+  G.ShowIndicator := True;
+  colAfter := G.ColLeft(0);
+  after := RenderFingerprint(G);
+  AssertTrue(Format('ShowIndicator 应当把第 0 列右推(%d -> %d)',
+    [colBefore, colAfter]), colAfter > colBefore);
+  AssertTrue('ShowIndicator 应当改变渲染输出', before <> after);
+  G.ShowIndicator := False;
+
+  { ---- ShowFilterButtons:列头里多出下拉小三角 ---- }
+  before := RenderFingerprint(G);
+  G.ShowFilterButtons := True;
+  after := RenderFingerprint(G);
+  AssertTrue('ShowFilterButtons 应当改变列头渲染输出', before <> after);
+  G.ShowFilterButtons := False;
+
+  { ---- hoAutoResize + AutoSizeIndex:列宽被重排 ---- }
+  wBefore := TTyColumn(G.Header.Columns.Items[1]).Width;
+  G.Header.AutoSizeIndex := 1;
+  G.Header.Options := G.Header.Options + [hoAutoResize];
+  G.ForceUpdateScrollBars;
+  wAfter := TTyColumn(G.Header.Columns.Items[1]).Width;
+  AssertTrue(Format('hoAutoResize 应当改变自动列的宽度(%d -> %d)',
+    [wBefore, wAfter]), wAfter <> wBefore);
 end;
 
 initialization

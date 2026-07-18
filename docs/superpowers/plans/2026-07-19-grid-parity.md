@@ -82,14 +82,14 @@
 - [x] 写失败测试 `TestAutoResizeColumnFillsRemainingWidth`:
   设 `Header.Options := Header.Options + [hoAutoResize]`、`Header.AutoSizeIndex := 1`,
   改变控件宽度后,断言第 1 列宽度吸收了剩余空间(`Columns.TotalWidth` ≈ 视口宽)。
-- [ ] 跑,确认红。
-- [ ] 实现:在 `UpdateScrollBars` 里(视口宽已知处)调用
+- [x] 跑,确认红。
+- [x] 实现:在 `UpdateScrollBars` 里(视口宽已知处)调用
       `FHeader.Columns.ApplyAutoSize(UnscaleI(ViewportW - FrozenWidthPx), FHeader.AutoSizeIndex)`,
       仅当 `hoAutoResize in FHeader.Options`。注意避免与滚动条两趟收敛互相触发死循环
       —— 用 `FSyncingScroll` 同一把守卫。
-- [ ] 跑,确认绿。
-- [ ] 变异:去掉该调用 → 测试红 → 恢复。
-- [ ] 提交。
+- [x] 跑,确认绿。
+- [x] 变异:去掉该调用 → 测试红 → 恢复。
+- [x] 提交。
 
 ### B1-3 表头图标渲染
 
@@ -103,25 +103,27 @@
 - [x] 写失败测试 `TestHeaderDrawsColumnImage`:给 `Header.Images` 一个
       `TTyVirtualImageList`(用 `TTyImageCollection` 造 2 个纯色图),
       `Columns[0].ImageIndex := 0`,渲染后断言列头带内出现该颜色的像素。
-- [ ] 跑,确认红(墨 0)。
-- [ ] 实现:`RenderHeaderSections` 里在标题文字之前画图标,文字左缩进让位;
+- [x] 跑,确认红(墨 0)。
+- [x] 实现:`RenderHeaderSections` 里在标题文字之前画图标,文字左缩进让位;
       复用 `FImages.CachedIndex(idx, sz)` 的缓存路径(与单元格图片一致,不重复分配)。
-- [ ] 跑,确认绿。
-- [ ] 变异:注释掉画图标那几行 → 测试红 → 恢复。
-- [ ] 提交。
+- [x] 跑,确认绿。
+- [x] 变异:注释掉画图标那几行 → 测试红 → 恢复。
+- [x] 提交。
 
 ### B1-4 加一条"published 却无效"的通用守卫
 
 B2/B3 与此前 `ShowFooter` 是同一类 bug:对外暴露了、编译期不报错、运行期无声无息。
 
-- [ ] 在 `tests/test.grid.pas` 加 `TestPublishedSurfaceHasObservableEffect`:
+- [x] 在 `tests/test.grid.pas` 加 `TestPublishedSurfaceHasObservableEffect`:
       对一组"设了应当有可观测效果"的属性(`ShowFooter` / `GridLines` / `ShowIndicator` /
       `ShowFilterButtons` / `hoAutoResize`),分别设为非默认值,断言
       **渲染输出的像素或几何度量发生变化**(而不是仅仅属性读回来变了)。
-- [ ] 跑,确认全绿(此时 B1-2/B1-3 已修)。
-- [ ] 变异:把 `ShowFooter` 的 setter 改成只赋值不 `Invalidate`/不影响 `ViewportH`
-      → 测试必须红 → 恢复。
-- [ ] 提交。
+- [x] 跑,确认全绿(此时 B1-2/B1-3 已修)。
+- [x] 变异:让 `FooterHeightPx` 恒返回 0(等价于"设了没效果")
+      → 测试红(`ShowFooter 应当从视口里扣掉汇总带高度(300 -> 300)`)→ 恢复。
+- [x] **顺手修**:`ShowFilterButtons` 原本 `write FShowFilterButtons` 直写字段,
+      运行期开关它**不重绘** —— 同一类洞的轻症。改成带 `Invalidate` 的 setter。
+- [x] 提交。
 
 - [x] **B1 收工**:跑完整收工条件 1-7。
 
