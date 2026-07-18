@@ -38,7 +38,7 @@
 | B2 | A1 几何契约(四向冻结 + 多行表头带 + 线宽) | - [x] **完成** `2026-07-19` |
 | B3 | A2 渲染管线逐格化 + hover;A3 属性存储统一 | - [x] **完成** `2026-07-19` |
 | B4 | H3 逐格外观钩子 + H4 斑马纹 + H14 网格线局部 | - [x] **完成** `2026-07-19` |
-| B5 | H5 单元格级鼠标事件 + H15 按钮单元格 + H13 AutoResize 接线 | - [ ] |
+| B5 | H5 单元格级鼠标事件 + H15 按钮单元格 + H13 AutoResize 接线 | - [x] **完成** `2026-07-19` |
 | B6 | H6 换行 + H7 行高三件套 | - [ ] |
 | B7 | A4 选择模型重构 + H8 离散多选 | - [ ] |
 | B8 | A5 列模型(TTyGridColumn)+ H10 列级编辑器声明 | - [ ] |
@@ -264,13 +264,16 @@ TextRect,都是 BGRA 重活),而样式解析根本不是瓶颈。加了**跨帧�
 
 ## B5 · 单元格级鼠标事件 + 按钮单元格 + AutoResize 双击
 
-- [ ] `OnClickCell` / `OnDblClickCell` / `OnRightClickCell` / `OnCanClickCell`;
+- [x] `OnClickCell` / `OnDblClickCell` / `OnRightClickCell` / `OnCanClickCell`;
       放开 `MouseDown` 里 `if Button <> mbLeft then Exit` 的右键路径;
       表头右键 = 同一套命中的 fixed 分支(`OnHeaderClick` / `OnHeaderRightClick`)。
-- [ ] 按钮单元格 `gcdButton`:三态(normal/hover/pressed)走 `TyGridButton` token;
+- [x] 按钮单元格 `gcdButton`:三态(normal/hover/pressed)走 `TyGridButton` token;
       点击触发 `OnCellButtonClick`。
-- [ ] 双击列分隔线 → `AutoFitColumn`。
-- [ ] 变异验证;**B5 收工**。
+- [x] 双击列分隔线 → `AutoFitColumn`。
+- [x] 变异验证(右键不报告 / 否决不生效 / 按钮不触发 / 双击不自适应,四条各自杀掉对应测试)。
+- [x] 踩到的坑:测试辅助 `ClickAt` **只发 MouseDown 不发 MouseUp**,而按钮格按设计是
+      松开才算触发(按下后拖走应作废)—— 新增 `FullClickAt`。
+- [x] **B5 收工**。
 
 ---
 

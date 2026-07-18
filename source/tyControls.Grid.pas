@@ -31,6 +31,25 @@ type
   { 网格线要画哪几轴。只要横线的报表式表格很常见,从前只有一个全有/全无的开关。 }
   TTyGridLineStyle = (glsNone, glsHorizontal, glsVertical, glsBoth);
 
+  { 一格显示成什么。放在这里(而不是 TTyStringGrid 那段)是因为基类要用它
+    判断按钮格的命中矩形。 }
+  TTyGridCellDisplay = (
+    gcdText,      { 默认:文字 }
+    gcdProgress,  { 进度条,值取 0..100 }
+    gcdRating,    { 评分星,值取 0..5 }
+    gcdImage,     { 图片:值是 Images 里的索引 }
+    gcdButton     { 按钮:文字是按钮标题,点击走 OnCellButtonClick }
+  );
+
+  { 单元格级鼠标事件。ACol/ARow 是**数据行**。 }
+  TTyGridCellMouseEvent = procedure(Sender: TObject; ACol, ARow: Integer) of object;
+  { 否决一次点击。置 ACanClick:=False 会让**整次点击**作废 ——
+    光标不动、不进编辑、不切勾选、不触发 OnClickCell。
+    只挡住 OnClickCell 而让光标照样跑,是最容易写出来的半吊子实现。 }
+  TTyGridCanClickCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var ACanClick: Boolean) of object;
+  TTyGridHeaderMouseEvent = procedure(Sender: TObject; ACol: Integer) of object;
+
   { 逐格外观钩子:宿主按数据决定某一格长什么样(负数标红、超期标黄……)。
     一个钩子覆盖底色/文字色/字体/两轴对齐 —— 分成七八个事件对宿主更难用。
     ARow 是**数据行**,不是显示行:宿主关心的是"这条记录",排序筛选不该影响判断。 }
@@ -112,6 +131,16 @@ type
       数据行乱跳,看起来像随机涂色。 }
     FAlternateRows:    Boolean;
     FOnGetCellStyle:   TTyGridGetCellStyleEvent;
+    FOnClickCell:      TTyGridCellMouseEvent;
+    FOnDblClickCell:   TTyGridCellMouseEvent;
+    FOnRightClickCell: TTyGridCellMouseEvent;
+    FOnCanClickCell:   TTyGridCanClickCellEvent;
+    FOnCellButtonClick:TTyGridCellMouseEvent;
+    FOnHeaderClick:    TTyGridHeaderMouseEvent;
+    FOnHeaderRightClick: TTyGridHeaderMouseEvent;
+    { 正被按下的按钮格(-1 = 无)。三态里的 pressed 靠它。 }
+    FPressedBtnCol:    Integer;
+    FPressedBtnRow:    Integer;
     FGridLineWidth:    Integer;
     { 鼠标当前所在的格(-1 = 不在任何格上)。`TyGridCell:hover` 这条主题规则
       从前永远不会触发,就是因为没人记这个。 }
@@ -202,6 +231,17 @@ type
       const AFrame: TTyStyleSet): TTyGridCellAppearance; virtual;
     procedure DoGetCellStyle(ACol, ARow: Integer;
       var AAppearance: TTyGridCellAppearance); virtual;
+    { 这一格能不能点。所有点击路径都必须先问它。 }
+    function  CanClickCell(ACol, ARow: Integer): Boolean;
+    { 按内容自适应列宽。基类没有数据、什么都不做;TTyStringGrid 改写。 }
+    procedure AutoFitColumnWidth(ACol: Integer); virtual;
+    procedure SetPressedButton(ACol, ARow: Integer);
+    procedure GetPressedButton(out ACol, ARow: Integer);
+    { 按钮格的按钮矩形(单元格内缩 2 逻辑像素)。不是按钮格时返回空矩形。 }
+    function  CellButtonRect(ACol, ARow: Integer): TRect; virtual;
+    function  CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay; virtual;
+    procedure RenderButtonCell(P: TTyPainter; ACol, ARow: Integer;
+      const AText: string; const AFrame: TTyStyleSet); virtual;
     function GridLineWidthPx: Integer; virtual;
     procedure CMMouseLeave(var Msg: TLMessage); message CM_MOUSELEAVE;
     function FrozenWidthPx: Integer; virtual;
@@ -368,6 +408,14 @@ type
     { 逐格外观钩子。 }
     property OnGetCellStyle: TTyGridGetCellStyleEvent
       read FOnGetCellStyle write FOnGetCellStyle;
+    { 单元格级鼠标事件。 }
+    property OnClickCell: TTyGridCellMouseEvent read FOnClickCell write FOnClickCell;
+    property OnDblClickCell: TTyGridCellMouseEvent read FOnDblClickCell write FOnDblClickCell;
+    property OnRightClickCell: TTyGridCellMouseEvent read FOnRightClickCell write FOnRightClickCell;
+    property OnCanClickCell: TTyGridCanClickCellEvent read FOnCanClickCell write FOnCanClickCell;
+    property OnCellButtonClick: TTyGridCellMouseEvent read FOnCellButtonClick write FOnCellButtonClick;
+    property OnHeaderClick: TTyGridHeaderMouseEvent read FOnHeaderClick write FOnHeaderClick;
+    property OnHeaderRightClick: TTyGridHeaderMouseEvent read FOnHeaderRightClick write FOnHeaderRightClick;
     { 底部汇总带。内容由派生类给(TTyStringGrid 按列聚合)。 }
     property ShowFooter: Boolean read FShowFooter write SetShowFooter default False;
     property FooterHeight: Integer read FFooterHeight write SetFooterHeight default 24;
@@ -426,13 +474,6 @@ type
   );
 
   { 单元格的**显示**方式(与编辑方式正交:一个格可以显示成进度条、编辑时仍是数值框)。 }
-  TTyGridCellDisplay = (
-    gcdText,      { 默认:文字 }
-    gcdProgress,  { 进度条,值取 0..100 }
-    gcdRating,    { 评分星,值取 0..5 }
-    gcdImage      { 图片:值是 Images 里的索引 }
-  );
-
   TTyGridGetCellDisplayEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var ADisplay: TTyGridCellDisplay) of object;
 
@@ -574,6 +615,7 @@ type
     procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
       const AFrame: TTyStyleSet); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     { 把光标移到 (ACol,ARow),越界自动钳制;OnSelectCell 可否决。 }
     procedure MoveCursor(ACol, ARow: Integer); virtual;
@@ -582,6 +624,8 @@ type
     function EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind; virtual;
     { 勾选框语义:'1'/'true'/'是'/'y' 都算勾上。写回时统一成 '1'/''。 }
     function  CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay; virtual;
+    { 基类的问法(按钮矩形/命中要用),转给上面这个。 }
+    function  CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay; override;
     function  ShouldDrawCellText(ACol, ARow: Integer): Boolean; override;
     function  DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -629,6 +673,7 @@ type
     { 把某列宽度自动适配到内容(取表头与**已写入**单元格里最宽的那个)。
       只量已写过的格,所以百万行空表也不会扫全表。 }
     procedure AutoFitColumn(ACol: Integer);
+    procedure AutoFitColumnWidth(ACol: Integer); override;
 
     { 清空全部单元格内容(不动行列结构)。 }
     procedure ClearCells;
@@ -922,6 +967,8 @@ begin
   FGridLineWidth := 1;
   FHoverCol := -1;
   FHoverRow := -1;
+  FPressedBtnCol := -1;
+  FPressedBtnRow := -1;
   FTextCache := TStringList.Create;
   FTextCache.Sorted := True;          { 排序 → IndexOf 走二分 }
   FTextCache.Duplicates := dupIgnore;
@@ -1437,6 +1484,80 @@ begin
   P.Bitmap.PutImage(ARect.Left, ARect.Top, bmp, dmDrawWithTransparency);
 end;
 
+function TTyCustomGrid.CanClickCell(ACol, ARow: Integer): Boolean;
+begin
+  Result := True;
+  if Assigned(FOnCanClickCell) then FOnCanClickCell(Self, ACol, ARow, Result);
+end;
+
+procedure TTyCustomGrid.AutoFitColumnWidth(ACol: Integer);
+begin
+  { 基类不知道数据从哪来。 }
+end;
+
+procedure TTyCustomGrid.SetPressedButton(ACol, ARow: Integer);
+begin
+  FPressedBtnCol := ACol;
+  FPressedBtnRow := ARow;
+end;
+
+procedure TTyCustomGrid.GetPressedButton(out ACol, ARow: Integer);
+begin
+  ACol := FPressedBtnCol;
+  ARow := FPressedBtnRow;
+end;
+
+function TTyCustomGrid.CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay;
+begin
+  Result := gcdText;    { 基类不知道数据从哪来;TTyStringGrid 改写去问宿主 }
+end;
+
+function TTyCustomGrid.CellButtonRect(ACol, ARow: Integer): TRect;
+var
+  cell: TRect;
+  pad: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if CellDisplayOf(ACol, ARow) <> gcdButton then Exit;
+  cell := CellRect(ACol, ARow);
+  if IsRectEmpty(cell) then Exit;
+  pad := ScaleI(2);
+  Result := Rect(cell.Left + pad, cell.Top + pad,
+                 cell.Right - pad, cell.Bottom - pad);
+  if (Result.Right <= Result.Left) or (Result.Bottom <= Result.Top) then
+    Result := Rect(0, 0, 0, 0);
+end;
+
+procedure TTyCustomGrid.RenderButtonCell(P: TTyPainter; ACol, ARow: Integer;
+  const AText: string; const AFrame: TTyStyleSet);
+var
+  r, vis: TRect;
+  st: TTyStateSet;
+  bS: TTyStyleSet;
+  ink: TTyColor;
+begin
+  r := CellButtonRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+  vis := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(vis) then Exit;
+
+  { 状态**只由这个按钮自己**决定 —— 掺进网格的 CurrentStates,鼠标一按下
+    满屏按钮会集体变成按下态(勾选框那次就是这么栽的)。 }
+  st := [];
+  if (ACol = FPressedBtnCol) and (ARow = FPressedBtnRow) then Include(st, tysActive)
+  else if (ACol = FHoverCol) and (ARow = FHoverRow) then Include(st, tysHover);
+
+  bS := ActiveController.Model.ResolveStyle('TyGridButton', StyleClass, st);
+  if tpBackground in bS.Present then
+    P.FillBackground(r, bS.Background, TyEffectiveCorners(bS));
+  if TyBorderVisible(bS) then
+    P.StrokeBorder(r, TyEffectiveCorners(bS), bS.BorderWidth, bS.BorderColor);
+
+  if tpTextColor in bS.Present then ink := bS.TextColor else ink := AFrame.TextColor;
+  DrawCellText(P, r, AText, bS.FontName, ResolveFontSize(bS), bS.FontWeight,
+    ink, taCenter, tlCenter);
+end;
+
 function TTyCustomGrid.GetGridLines: Boolean;
 begin
   Result := FGridLineStyle <> glsNone;
@@ -1827,6 +1948,13 @@ begin
   d := DividerAtX(X);
   if d >= 0 then
   begin
+    { 双击分隔线 = 按内容自适应列宽,是表格的通用手势。
+      LCL 在第二次按下时把 ssDouble 塞进 Shift。 }
+    if ssDouble in Shift then
+    begin
+      AutoFitColumnWidth(d);
+      Exit;
+    end;
     FResizeCol := d;
     FResizeStartX := X;
     FResizeStartW := TTyColumn(FHeader.Columns.Items[d]).Width;
@@ -1838,6 +1966,7 @@ begin
   d := ColumnAtX(X);
   if d >= 0 then
   begin
+    if Assigned(FOnHeaderClick) then FOnHeaderClick(Self, d);
     col := TTyColumn(FHeader.Columns.Items[d]);
     if (hoDrag in FHeader.Options) and (coDraggable in col.Options) then
     begin
@@ -2415,6 +2544,24 @@ var
 begin
   inherited MouseDown(Button, Shift, X, Y);
   if not Enabled then Exit;
+
+  { 右键:只**报告**点在哪,不动光标、不进编辑 —— 与资源管理器一致,
+    右键是"问",不是"选"。从前整条右键路径被开头的 `Button <> mbLeft` 全挡掉了。 }
+  if Button = mbRight then
+  begin
+    hit := CellAt(X, Y);
+    if (hit.Part = ghpHeader) and (hit.Col >= 0) then
+    begin
+      if Assigned(OnHeaderRightClick) then OnHeaderRightClick(Self, hit.Col);
+    end
+    else if hit.Part = ghpCell then
+    begin
+      if not CanClickCell(hit.Col, hit.Row) then Exit;
+      if Assigned(OnRightClickCell) then OnRightClickCell(Self, hit.Col, hit.Row);
+    end;
+    Exit;
+  end;
+
   if Button <> mbLeft then Exit;
 
   { 命中走 CellAt —— 与绘制同源,所以点哪格就选哪格,不会错位。 }
@@ -2445,6 +2592,18 @@ begin
   end;
   if hit.Part = ghpCell then
   begin
+    { 否决要在**任何副作用之前** —— 只挡住 OnClickCell 而让光标照样跑,
+      对宿主来说等于没挡住。 }
+    if not CanClickCell(hit.Col, hit.Row) then Exit;
+
+    { 按钮格:点在按钮上就进按下态,松开时才算触发(与真按钮一致)。 }
+    if (CellDisplayFor(hit.Col, hit.Row) = gcdButton)
+       and PtInRect(CellButtonRect(hit.Col, hit.Row), Point(X, Y)) then
+    begin
+      SetPressedButton(hit.Col, hit.Row);
+      Invalidate;
+    end;
+
     { 无头环境(无窗口句柄)下 SetFocus 会抛异常 —— 句柄没落地就别抢焦点。 }
     if HandleAllocated and CanFocus then SetFocus;
     MoveCursor(hit.Col, hit.Row);
@@ -2454,7 +2613,29 @@ begin
     if (EditorKindFor(hit.Col, hit.Row) = gekCheckBox)
        and PtInRect(CheckBoxRect(hit.Col, hit.Row), Point(X, Y)) then
       ToggleCellChecked(hit.Col, hit.Row);
+
+    if Assigned(OnClickCell) then OnClickCell(Self, hit.Col, hit.Row);
   end;
+end;
+
+procedure TTyStringGrid.MouseUp(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+var
+  bc, br: Integer;
+  hit: TTyGridHit;
+begin
+  GetPressedButton(bc, br);
+  if (Button = mbLeft) and (bc >= 0) then
+  begin
+    SetPressedButton(-1, -1);
+    Invalidate;
+    { 只有"按下与松开落在同一个按钮上"才算一次点击 —— 按下后拖走再松开应当作废。 }
+    hit := CellAt(X, Y);
+    if (hit.Part = ghpCell) and (hit.Col = bc) and (hit.Row = br)
+       and PtInRect(CellButtonRect(bc, br), Point(X, Y)) then
+      if Assigned(OnCellButtonClick) then OnCellButtonClick(Self, bc, br);
+  end;
+  inherited MouseUp(Button, Shift, X, Y);
 end;
 
 procedure TTyStringGrid.KeyDown(var Key: Word; Shift: TShiftState);
@@ -2860,6 +3041,11 @@ begin
 end;
 
 { ---- 单元格图形 ----------------------------------------------------------- }
+
+function TTyStringGrid.CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay;
+begin
+  Result := CellDisplayFor(ACol, ARow);
+end;
 
 function TTyStringGrid.CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay;
 begin
@@ -3312,6 +3498,11 @@ begin
   if FCol > Header.Columns.Count - 1 then FCol := Header.Columns.Count - 1;
   if FCol < 0 then FCol := 0;
   Invalidate;
+end;
+
+procedure TTyStringGrid.AutoFitColumnWidth(ACol: Integer);
+begin
+  AutoFitColumn(ACol);
 end;
 
 procedure TTyStringGrid.AutoFitColumn(ACol: Integer);
@@ -4500,6 +4691,8 @@ begin
           gcdProgress: RenderProgressCell(P, colIdx, dataRow, AFrame);
           gcdRating:   RenderRatingCell(P, colIdx, dataRow, AFrame);
           gcdImage:    RenderImageCell(P, colIdx, dataRow, AFrame);
+          gcdButton:   RenderButtonCell(P, colIdx, dataRow,
+                         GetCellText(colIdx, dataRow), AFrame);
         end;
       end;
     end;

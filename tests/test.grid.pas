@@ -129,7 +129,23 @@ type
     procedure TestCellStyleHookCanChangeVerticalAlignment;
     procedure TestZebraStripingFollowsDisplayOrder;
     procedure TestGridLineStyleCanDropOneAxis;
+    procedure TestRightClickOnCellFiresEventWithThatCell;
+    procedure TestCanClickCellVetoesTheWholeClick;
+    procedure TestButtonCellClickFiresWithThatCell;
+    procedure TestDoubleClickOnDividerAutoFitsColumn;
   public
+    { 鼠标事件的桩(同样必须在 published 之外)。 }
+    FClickCol, FClickRow: Integer;
+    FRightCol, FRightRow: Integer;
+    FBtnCol, FBtnRow: Integer;
+    FVetoCol: Integer;
+    procedure HookClickCell(Sender: TObject; ACol, ARow: Integer);
+    procedure HookRightClickCell(Sender: TObject; ACol, ARow: Integer);
+    procedure HookCellButtonClick(Sender: TObject; ACol, ARow: Integer);
+    procedure HookCanClickCell(Sender: TObject; ACol, ARow: Integer;
+      var ACanClick: Boolean);
+    procedure HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
+      var ADisplay: TTyGridCellDisplay);
     { 逐格外观钩子的桩。**必须放在 published 之外** —— fpcunit 会把 published 段里的
       每个方法都当成测试用例注册,钩子被当测试跑起来(Sender=nil)直接 AV。 }
     procedure HookPaintRow2Red(Sender: TObject; ACol, ARow: Integer;
@@ -868,6 +884,12 @@ type
     function  VisibleRows(out AFirst, ALast: Integer): Boolean;
     procedure ForceUpdateScrollBars;
     procedure HoverAt(X, Y: Integer);
+    procedure RightClickAt(X, Y: Integer);
+    procedure DoubleClickAt(X, Y: Integer);
+    function  ColWidth(ACol: Integer): Integer;
+    { 完整一次点击(按下 + 松开)。注意 ClickAt **只发 MouseDown** ——
+      按钮单元格按设计是松开才算触发(按下后拖走应当作废),所以要用这个。 }
+    procedure FullClickAt(X, Y: Integer);
     procedure LeaveMouse;
     function  RowRectAt(APos: Integer): TRect;
     function  GetScrollTop: Integer;
@@ -878,6 +900,32 @@ type
 procedure TStrGridAccess.PressMouseWithoutRelease(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);      { 不 MouseUp —— 停在"按住"状态 }
+end;
+
+procedure TStrGridAccess.FullClickAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+function TStrGridAccess.ColWidth(ACol: Integer): Integer;
+begin
+  Result := ColumnWidthPx(ACol);
+end;
+
+procedure TStrGridAccess.RightClickAt(X, Y: Integer);
+begin
+  MouseDown(mbRight, [], X, Y);
+  MouseUp(mbRight, [], X, Y);
+end;
+
+procedure TStrGridAccess.DoubleClickAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+  MouseUp(mbLeft, [], X, Y);
+  { LCL 在第二次按下时把 ssDouble 塞进 Shift —— 双击就是这么识别的。 }
+  MouseDown(mbLeft, [ssDouble], X, Y);
+  MouseUp(mbLeft, [], X, Y);
 end;
 
 procedure TStrGridAccess.HoverAt(X, Y: Integer);
@@ -3240,6 +3288,133 @@ begin
     Bmp.Free;
     Ctl.Free;
   end;
+end;
+
+procedure TTyStringGridTest.HookClickCell(Sender: TObject; ACol, ARow: Integer);
+begin
+  FClickCol := ACol; FClickRow := ARow;
+end;
+
+procedure TTyStringGridTest.HookRightClickCell(Sender: TObject; ACol, ARow: Integer);
+begin
+  FRightCol := ACol; FRightRow := ARow;
+end;
+
+procedure TTyStringGridTest.HookCellButtonClick(Sender: TObject; ACol, ARow: Integer);
+begin
+  FBtnCol := ACol; FBtnRow := ARow;
+end;
+
+procedure TTyStringGridTest.HookCanClickCell(Sender: TObject; ACol, ARow: Integer;
+  var ACanClick: Boolean);
+begin
+  if ACol = FVetoCol then ACanClick := False;
+end;
+
+procedure TTyStringGridTest.HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
+  var ADisplay: TTyGridCellDisplay);
+begin
+  if ACol = 1 then ADisplay := gcdButton;
+end;
+
+{ 右键从前在 MouseDown 开头就被 `if Button <> mbLeft then Exit` 全挡掉了 ——
+  网格连"右键点在哪一格"都答不出来,右键菜单无从谈起。 }
+procedure TTyStringGridTest.TestRightClickOnCellFiresEventWithThatCell;
+var
+  G: TStrGridAccess;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  FRightCol := -9; FRightRow := -9;
+  G.OnRightClickCell := @HookRightClickCell;
+
+  r := G.CellRect(2, 3);
+  G.RightClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+
+  AssertEquals('右键报出的列', 2, FRightCol);
+  AssertEquals('右键报出的行', 3, FRightRow);
+
+  { 右键**不该**把光标搬走(和 Windows 资源管理器一致:右键只是问,不是选)。 }
+  AssertTrue('右键不移动光标', (G.Col <> 2) or (G.Row <> 3));
+end;
+
+{ OnCanClickCell 否决时,整次点击都不该发生 —— 光标不动、不进编辑、不触发 OnClickCell。
+  只挡住 OnClickCell 而让光标照样跑,是最容易写出来的半吊子实现。 }
+procedure TTyStringGridTest.TestCanClickCellVetoesTheWholeClick;
+var
+  G: TStrGridAccess;
+  r: TRect;
+  wasCol, wasRow: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  G.MoveCursor(0, 0);
+  wasCol := G.Col; wasRow := G.Row;
+
+  FVetoCol := 2;
+  FClickCol := -9; FClickRow := -9;
+  G.OnCanClickCell := @HookCanClickCell;
+  G.OnClickCell := @HookClickCell;
+
+  r := G.CellRect(2, 3);
+  G.ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+
+  AssertEquals('被否决的列不该触发 OnClickCell', -9, FClickCol);
+  AssertEquals('光标的列不该动', wasCol, G.Col);
+  AssertEquals('光标的行不该动', wasRow, G.Row);
+
+  { 没被否决的列照常工作 —— 否则"全挡住"也能让上面几条通过。 }
+  r := G.CellRect(1, 2);
+  G.ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('没被否决的列正常触发', 1, FClickCol);
+  AssertEquals('光标跟着走', 1, G.Col);
+end;
+
+{ 按钮单元格:点在按钮上要报出是哪一格。 }
+procedure TTyStringGridTest.TestButtonCellClickFiresWithThatCell;
+var
+  G: TStrGridAccess;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  G.Cells[1, 2] := '详情';
+  G.OnGetCellDisplay := @HookButtonInCol1;
+  FBtnCol := -9; FBtnRow := -9;
+  G.OnCellButtonClick := @HookCellButtonClick;
+
+  r := G.CellRect(1, 2);
+  G.FullClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('按钮报出的列', 1, FBtnCol);
+  AssertEquals('按钮报出的行', 2, FBtnRow);
+
+  { 不是按钮的格不该触发。 }
+  FBtnCol := -9;
+  r := G.CellRect(0, 2);
+  G.FullClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('普通格不触发按钮事件', -9, FBtnCol);
+end;
+
+{ 双击列分隔线 = 按内容自适应列宽,是表格的通用手势。 }
+procedure TTyStringGridTest.TestDoubleClickOnDividerAutoFitsColumn;
+var
+  G: TStrGridAccess;
+  before, after: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.Header.Height := 22;
+  G.RowCount := 3;
+  G.Cells[0, 0] := '一个相当长的单元格内容用来撑宽这一列';
+
+  before := TTyColumn(G.Header.Columns.Items[0]).Width;
+  { 第 0 列的右分隔线上双击。 }
+  G.DoubleClickAt(G.ColLeft(0) + G.ColWidth(0) - 1, 8);
+  after := TTyColumn(G.Header.Columns.Items[0]).Width;
+
+  AssertTrue(Format('双击分隔线应当自适应列宽(%d -> %d)', [before, after]),
+    after > before);
 end;
 
 initialization

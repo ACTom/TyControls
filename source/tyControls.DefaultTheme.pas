@@ -553,6 +553,10 @@ begin
     'TyGridProgress           { background: var(--surface-chrome); border-radius: var(--radius-sm); }' + LineEnding +
     'TyGridProgressFill       { background: var(--accent); }' + LineEnding +
     'TyGridRating             { color: var(--accent); }' + LineEnding +
+    '/* 按钮单元格。三态用自己的键 —— 借 TyButton 的键会让"改网格里的按钮"波及全库按钮。 */' + LineEnding +
+    'TyGridButton          { background: var(--surface-chrome); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }' + LineEnding +
+    'TyGridButton:hover    { background: var(--surface-hover); }' + LineEnding +
+    'TyGridButton:active   { background: var(--surface-active); }' + LineEnding +
     'TyGridSelection { background: var(--selection); border-color: var(--accent); }' + LineEnding +
     'TyTreeCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }' + LineEnding +
     'TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
