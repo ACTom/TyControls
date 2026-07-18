@@ -65,7 +65,8 @@ type
     var AHeight: Integer) of object;
 
   { 排序比较方式。 }
-  TTyGridSortKind = (gskText, gskNumber);
+  { 排序时怎么比。gskAuto 只在**列级**有意义 —— 表示"沿用网格的 SortKind"。 }
+  TTyGridSortKind = (gskText, gskNumber, gskDate, gskAuto);
 
   { 选择粒度。gsmCell = 单元格矩形选区(默认);gsmRow = 整行;gsmColumn = 整列。 }
   TTyGridSelectionMode = (gsmCell, gsmRow, gsmColumn);
@@ -146,6 +147,13 @@ type
   { 网格线要画哪几轴。只要横线的报表式表格很常见,从前只有一个全有/全无的开关。 }
   TTyGridLineStyle = (glsNone, glsHorizontal, glsVertical, glsBoth);
 
+  { 一个排序键。多列排序 = 一串键,前面的相等才看后面的。 }
+  TTyGridSortKey = record
+    Col: Integer;
+    Dir: TTySortDirection;
+  end;
+  TTyGridSortKeys = array of TTyGridSortKey;
+
   { 网格自己的列。
 
     **不往共享的 TTyColumn 里塞网格专属字段** —— 它同时被 ListView / TreeView 用着,
@@ -162,6 +170,7 @@ type
     FFormat:     string;
     FValidChars: string;
     FMaxEditLength: Integer;
+    FSortKind: TTyGridSortKind;
     FUseEditorKind: Boolean;
     procedure SetPickList(AValue: TStrings);
     procedure SetEditorKind(AValue: TTyGridEditorKind);
@@ -184,6 +193,9 @@ type
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
     { gekPickList 的候选项(不接 OnGetPickList 时用这个)。 }
     property PickList: TStrings read FPickList write SetPickList;
+    { 这一列按什么比。混合表里日期列按文本排会得到 '10/1' < '2/1' —— 排序方式
+      本来就该跟着列走,而不是全表一个开关。gskAuto = 沿用网格的 SortKind。 }
+    property SortKind: TTyGridSortKind read FSortKind write FSortKind default gskAuto;
     { 汇总带上这一列显示什么统计。 }
     property Aggregate: TTyGridAggregate read FAggregate write FAggregate
       default gagNone;
@@ -759,6 +771,9 @@ type
     FSelRects: array of TRect;
     FOnSelectionChanged: TNotifyEvent;
     FSortCol: Integer;
+    { 完整的排序键序列;FSortCol/FSortDir 是它的第 0 项(保留成兼容视图)。 }
+    FSortKeys: TTyGridSortKeys;
+    FGroupRowFormat: string;
     FSortDir: TTySortDirection;
     FSortKind: TTyGridSortKind;
     FOnCompareCells: TTyGridCompareEvent;
@@ -772,6 +787,13 @@ type
     procedure ResetOrder;
     function  CompareRows(ACol, ARow1, ARow2: Integer): Integer;
     procedure MergeSortOrder(ACol: Integer; ADirection: TTySortDirection);
+    procedure MergeSortOrderByKeys(const AKeys: TTyGridSortKeys);
+    function  CompareRowsByKeys(const AKeys: TTyGridSortKeys;
+      ARow1, ARow2: Integer): Integer;
+    { 实际生效的排序键 = (分组列,如果有) + 用户的排序键。
+      **分组不再改写 FSortCol** —— 从前 BuildGroups 直接把 FSortCol 赋成分组列,
+      于是一分组就悄悄丢掉用户选的排序列。 }
+    function  EffectiveSortKeys: TTyGridSortKeys;
     procedure DateEditorExit(Sender: TObject);
     procedure PickEditorChange(Sender: TObject);
     procedure PickEditorExit(Sender: TObject);
@@ -974,6 +996,19 @@ type
     { 点列头的默认行为:同列则反向,换列则升序;再点第三次取消排序。 }
     procedure ToggleSortColumn(ACol: Integer);
     property SortColumn: Integer read FSortCol;
+    { 追加一个次级排序列(Shift+点列头就是它);已在键里就翻转它的方向。 }
+    procedure AddSortColumn(ACol: Integer; ADirection: TTySortDirection);
+    procedure ClearSortColumns;
+    function  SortColumnCount: Integer;
+    function  SortColumnAt(AIndex: Integer): TTyGridSortKey;
+    { 某一列当前的排序方向;不是排序键时答升序。 }
+    function  SortDirectionOf(ACol: Integer): TTySortDirection;
+    { 分组行显示成什么。默认走 GroupRowFormat(初值取自 resourcestring,可翻译);
+      派生类可以整个改写。 }
+    function  GroupRowText(const AKey: string; ACount: Integer): string; virtual;
+    { 分组全展开 / 全折叠。 }
+    procedure ExpandAllGroups;
+    procedure CollapseAllGroups;
     property SortDirection: TTySortDirection read FSortDir;
 
     property Editing: Boolean read FEditing;
@@ -988,6 +1023,8 @@ type
     { 整表只读:任何编辑都开不起来。 }
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
     { 选择粒度:单元格矩形 / 整行 / 整列。 }
+    { 分组行的格式串:%s = 分组值,%d = 组内行数。 }
+    property GroupRowFormat: string read FGroupRowFormat write FGroupRowFormat;
     property SelectionMode: TTyGridSelectionMode
       read FSelectionMode write SetSelectionMode default gsmCell;
     property OnSelectionChanged: TNotifyEvent
@@ -1033,6 +1070,11 @@ var
   TyGridCheckedWord: string;
 
 implementation
+
+const
+  { "这不是个日期"的哨兵。用一个不可能出现的 TDateTime 值,
+    比再拿一个 Boolean 数组去记省事,也不会和真实日期撞上。 }
+  NoDateSentinel = -1.0e18;
 
 { 一段文字在给定宽度下会占几行 —— 与 BGRA 的 Wordbreak 断法保持一致:
   在空格处断,单个"词"仍超宽时按字符硬断(CJK 没有空格,靠的就是这条)。
@@ -1177,6 +1219,7 @@ begin
   inherited Create(ACollection);
   FEditorKind := gekText;
   FAggregate := gagNone;
+  FSortKind := gskAuto;
   FPickList := TStringList.Create;
 end;
 
@@ -1211,6 +1254,8 @@ begin
     FFormat := TTyGridColumn(ASource).Format;
     FValidChars := TTyGridColumn(ASource).ValidChars;
     FMaxEditLength := TTyGridColumn(ASource).MaxEditLength;
+    FSortKind := TTyGridColumn(ASource).SortKind;
+    FSortKind := TTyGridColumn(ASource).SortKind;
   end;
 end;
 
@@ -2999,6 +3044,9 @@ begin
   FSortCol := -1;
   FSortDir := sdAscending;
   FSortKind := gskText;
+  { resourcestring 在 FPC 里不可赋值给常量表达式,但可以读 —— 这里当初值用。
+    (与 TyFallbackFontName 同一套做法。) }
+  FGroupRowFormat := rsGridGroupRow;
   FGroupCol := -1;
   FFilterCol := -1;
   FShowFilterButtons := False;
@@ -3187,7 +3235,17 @@ begin
   if (hit.Part = ghpHeader) and (hit.Col >= 0)
      and (hoHeaderClickAutoSort in Header.Options) then
   begin
-    ToggleSortColumn(hit.Col);
+    { Shift+点 = **追加**次级排序列(先按 A 排、A 相同再按 B 排),
+      普通点 = 重置成单列排序。与文件管理器/Excel 一致。 }
+    if ssShift in Shift then
+    begin
+      if SortDirectionOf(hit.Col) = sdAscending then
+        AddSortColumn(hit.Col, sdDescending)
+      else
+        AddSortColumn(hit.Col, sdAscending);
+    end
+    else
+      ToggleSortColumn(hit.Col);
     Exit;
   end;
   if hit.Part = ghpCell then
@@ -3418,6 +3476,7 @@ end;
 procedure TTyStringGrid.RebuildOrder;
 var
   i, n: Integer;
+  keys: TTyGridSortKeys;
 begin
   SetLength(FOrder, RowCount);
   SetLength(FRank, RowCount);
@@ -3432,8 +3491,11 @@ begin
     end;
   SetLength(FOrder, n);
 
-  if FSortCol >= 0 then
-    MergeSortOrder(FSortCol, FSortDir);
+  { 一次排完:分组列(如果有)在前,用户的排序键在后。
+    从前是"先按 FSortCol 排一遍,BuildGroups 里再按分组列排一遍" ——
+    第二遍会把第一遍的结果整个盖掉,用户的排序列就这么没了。 }
+  keys := EffectiveSortKeys;
+  if Length(keys) > 0 then MergeSortOrderByKeys(keys);
 
   { 分组:在排好序的显示序上,按分组列的值切段并插入合成分组行。
     必须在排序**之后** —— 否则同组的行不相邻,切不出段。 }
@@ -3456,12 +3518,9 @@ begin
   SetLength(FGroups, 0);
   if Length(FOrder) = 0 then Exit;
 
-  { 分组列没排序过就先按它排一遍,否则同值的行不相邻。 }
-  if FSortCol <> FGroupCol then
-  begin
-    FSortCol := FGroupCol;
-    MergeSortOrder(FGroupCol, FSortDir);
-  end;
+  { 这里**不再排序**。分组列已经由 EnsureOrder 通过 EffectiveSortKeys 排在最前面了,
+    同值的行必然相邻。从前这里 `FSortCol := FGroupCol` 是个真 bug ——
+    它把用户选的排序列永久抹掉,而且是静默的。 }
 
   src := FOrder;
   SetLength(dst, 0);
@@ -3593,6 +3652,8 @@ function TTyStringGrid.CompareRows(ACol, ARow1, ARow2: Integer): Integer;
 var
   a, b: string;
   fa, fb: Double;
+  da, db: TDateTime;
+  kind: TTyGridSortKind;
 begin
   Result := 0;
   if Assigned(FOnCompareCells) then
@@ -3602,7 +3663,29 @@ begin
   end;
   a := GetCellText(ACol, ARow1);
   b := GetCellText(ACol, ARow2);
-  if FSortKind = gskNumber then
+
+  { 排序方式**跟着列走**;列没配(gskAuto)才回落到网格的 SortKind。
+    混合表里日期列按文本排会得到 '10/1' < '2/1' —— 这本来就该是列的属性,
+    而不是全表一个开关。 }
+  kind := FSortKind;
+  if (GridColumn(ACol) <> nil) and (GridColumn(ACol).SortKind <> gskAuto) then
+    kind := GridColumn(ACol).SortKind;
+
+  if kind = gskDate then
+  begin
+    { 空/非法排最后,且与升降序无关 —— 与数值那条一致。 }
+    da := StrToDateTimeDef(a, NoDateSentinel);
+    db := StrToDateTimeDef(b, NoDateSentinel);
+    if (da = NoDateSentinel) and (db = NoDateSentinel) then Result := 0
+    else if da = NoDateSentinel then Result := 1
+    else if db = NoDateSentinel then Result := -1
+    else if da < db then Result := -1
+    else if da > db then Result := 1
+    else Result := 0;
+    Exit;
+  end;
+
+  if kind = gskNumber then
   begin
     { 数值列必须按数值比 —— 按文本比会得到 '10' < '9'。
       空/非法值一律排在最后,且**与升降序无关**(否则一翻向,空行就冒到最上面)。 }
@@ -3619,14 +3702,40 @@ begin
   Result := CompareText(a, b);
 end;
 
+{ 按一串键比:前面的相等才看后面的。单键是它的退化情形。 }
+function TTyStringGrid.CompareRowsByKeys(const AKeys: TTyGridSortKeys;
+  ARow1, ARow2: Integer): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to High(AKeys) do
+  begin
+    if AKeys[i].Col < 0 then Continue;
+    Result := CompareRows(AKeys[i].Col, ARow1, ARow2);
+    if AKeys[i].Dir = sdDescending then Result := -Result;
+    if Result <> 0 then Exit;
+  end;
+end;
+
 procedure TTyStringGrid.MergeSortOrder(ACol: Integer; ADirection: TTySortDirection);
+var
+  keys: TTyGridSortKeys;
+begin
+  { 单键 = 多键的退化情形。留着这个入口是因为库里已有一堆调用点。 }
+  SetLength(keys, 1);
+  keys[0].Col := ACol;
+  keys[0].Dir := ADirection;
+  MergeSortOrderByKeys(keys);
+end;
+
+procedure TTyStringGrid.MergeSortOrderByKeys(const AKeys: TTyGridSortKeys);
 var
   buf: array of Integer;
 
   function Less(A, B: Integer): Integer;
   begin
-    Result := CompareRows(ACol, A, B);
-    if ADirection = sdDescending then Result := -Result;
+    Result := CompareRowsByKeys(AKeys, A, B);
   end;
 
   procedure MergeRun(lo, mid, hi: Integer);
@@ -4435,7 +4544,7 @@ begin
 
   tr := Rect(tg.Right + ScaleI(6), r.Top, M.ClientW - ScaleI(4), r.Bottom);
   if tr.Right > tr.Left then
-    P.DrawText(tr, Format('%s  (%d)', [info.Key, info.Count]),
+    P.DrawText(tr, GroupRowText(info.Key, info.Count),
       gS.FontName, ResolveFontSize(gS), gS.FontWeight, ink, taLeftJustify, tlCenter, True);
 end;
 
@@ -5174,6 +5283,7 @@ begin
   if (ACol < 0) or (ACol >= Header.Columns.Count) or (RowCount <= 0) then
   begin
     FSortCol := -1;
+    SetLength(FSortKeys, 0);
     { 表头也要跟着清 —— 排序小三角看的是 Header.SortColumn。 }
     Header.SortColumn := NoColumn;
     InvalidateOrder;
@@ -5182,6 +5292,10 @@ begin
     Exit;
   end;
 
+  { 单列排序 = 把键序列重置成只有这一条。想追加次级列请用 AddSortColumn。 }
+  SetLength(FSortKeys, 1);
+  FSortKeys[0].Col := ACol;
+  FSortKeys[0].Dir := ADirection;
   FSortCol := ACol;
   FSortDir := ADirection;
   { **同步给表头**。此前只写了 FSortCol,而 hoShowSortGlyphs 那个小三角看的是
@@ -5203,6 +5317,120 @@ begin
     用户看着第一屏点排序,期望看到"现在排最前的那些行",而不是被拖去追旧的第一条。
     (跟随只在光标**主动移动**时才该发生,见 MoveCursor。) }
   UpdateScrollBars;      { 行的显示位置全变了,滑块范围/位置要重算 }
+  Invalidate;
+end;
+
+function TTyStringGrid.EffectiveSortKeys: TTyGridSortKeys;
+var
+  i, n: Integer;
+begin
+  { 分组列必须排在**最前面** —— 同组的行不相邻就切不出段来。
+    但它只是"临时插在前面",绝不写回 FSortKeys:从前 BuildGroups 直接
+    `FSortCol := FGroupCol`,一分组就把用户选的排序列**永久**抹掉了。 }
+  SetLength(Result, 0);
+  if FGroupCol >= 0 then
+  begin
+    SetLength(Result, 1);
+    Result[0].Col := FGroupCol;
+    Result[0].Dir := FSortDir;
+  end;
+  for i := 0 to High(FSortKeys) do
+  begin
+    if FSortKeys[i].Col < 0 then Continue;
+    if (FGroupCol >= 0) and (FSortKeys[i].Col = FGroupCol) then Continue;
+    n := Length(Result);
+    SetLength(Result, n + 1);
+    Result[n] := FSortKeys[i];
+  end;
+end;
+
+procedure TTyStringGrid.AddSortColumn(ACol: Integer; ADirection: TTySortDirection);
+var
+  i, n: Integer;
+begin
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+  for i := 0 to High(FSortKeys) do
+    if FSortKeys[i].Col = ACol then
+    begin
+      { 已经是排序键了 —— 再点一次就翻方向,而不是加一条重复的键。 }
+      FSortKeys[i].Dir := ADirection;
+      if i = 0 then begin FSortCol := ACol; FSortDir := ADirection; end;
+      InvalidateOrder;
+      UpdateScrollBars;
+      Invalidate;
+      Exit;
+    end;
+  n := Length(FSortKeys);
+  SetLength(FSortKeys, n + 1);
+  FSortKeys[n].Col := ACol;
+  FSortKeys[n].Dir := ADirection;
+  if n = 0 then
+  begin
+    FSortCol := ACol;
+    FSortDir := ADirection;
+    Header.SortColumn := ACol;
+    Header.SortDirection := ADirection;
+  end;
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.ClearSortColumns;
+begin
+  SetLength(FSortKeys, 0);
+  FSortCol := -1;
+  Header.SortColumn := NoColumn;
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+function TTyStringGrid.SortColumnCount: Integer;
+begin
+  Result := Length(FSortKeys);
+end;
+
+function TTyStringGrid.SortColumnAt(AIndex: Integer): TTyGridSortKey;
+begin
+  Result.Col := -1;
+  Result.Dir := sdAscending;
+  if (AIndex >= 0) and (AIndex <= High(FSortKeys)) then Result := FSortKeys[AIndex];
+end;
+
+function TTyStringGrid.GroupRowText(const AKey: string; ACount: Integer): string;
+begin
+  Result := Format(FGroupRowFormat, [AKey, ACount]);
+end;
+
+function TTyStringGrid.SortDirectionOf(ACol: Integer): TTySortDirection;
+var
+  i: Integer;
+begin
+  Result := sdDescending;      { 没排过 → 下一次点给升序 }
+  for i := 0 to High(FSortKeys) do
+    if FSortKeys[i].Col = ACol then Exit(FSortKeys[i].Dir);
+end;
+
+procedure TTyStringGrid.ExpandAllGroups;
+begin
+  FCollapsed.Clear;
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.CollapseAllGroups;
+var
+  i: Integer;
+begin
+  { 先确保分组已经切好,再把每个组的**值**记进折叠表
+    (折叠按值记账,重排/筛选后组号会变、值不会)。 }
+  EnsureOrder;
+  for i := 0 to High(FGroups) do
+    if FCollapsed.IndexOf(FGroups[i].Key) < 0 then FCollapsed.Add(FGroups[i].Key);
+  InvalidateOrder;
+  UpdateScrollBars;
   Invalidate;
 end;
 

@@ -147,6 +147,10 @@ type
     procedure TestHostEditLinkTakesOverTheCell;
     procedure TestHeaderGroupBandStacksAboveColumnHeader;
     procedure TestHeaderGroupBandIsNotALeafHeaderForHitTesting;
+    procedure TestSecondarySortKeyBreaksTies;
+    procedure TestGroupingKeepsTheUserSortColumn;
+    procedure TestColumnSortKindBeatsGridSortKind;
+    procedure TestExpandCollapseAllGroups;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -4042,6 +4046,107 @@ begin
   AssertEquals('点分组标题不排序', -1, G.Header.SortColumn);
   G.ClickAt(40, 30);
   AssertEquals('点叶子列头才排序', 0, G.Header.SortColumn);
+end;
+
+{ 多列排序:第一列相等时才看第二列。 }
+procedure TTyStringGridTest.TestSecondarySortKeyBreaksTies;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  { 部门 / 姓名 —— 部门相同的两条要按姓名分先后。 }
+  G.Cells[0, 0] := '销售'; G.Cells[1, 0] := '张';
+  G.Cells[0, 1] := '技术'; G.Cells[1, 1] := '王';
+  G.Cells[0, 2] := '销售'; G.Cells[1, 2] := '李';
+  G.Cells[0, 3] := '技术'; G.Cells[1, 3] := '赵';
+
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('单列排序时只有一个键', 1, G.SortColumnCount);
+
+  G.AddSortColumn(1, sdAscending);
+  AssertEquals('追加后有两个键', 2, G.SortColumnCount);
+
+  { 技术组(王/赵)在前,组内按姓名升序;销售组(张/李)在后。
+    只有次级键真的生效,同部门的两条才会按姓名排。 }
+  AssertEquals('第 0 显示行的部门', '技术', G.Cells[0, G.DisplayRow(0)]);
+  AssertEquals('第 1 显示行的部门', '技术', G.Cells[0, G.DisplayRow(1)]);
+  AssertTrue('同部门内按次级键排序',
+    G.Cells[1, G.DisplayRow(0)] < G.Cells[1, G.DisplayRow(1)]);
+
+  { 再点一次同一列 = 翻方向,而不是加一条重复的键。 }
+  G.AddSortColumn(1, sdDescending);
+  AssertEquals('重复列不新增键', 2, G.SortColumnCount);
+  AssertTrue('次级键方向翻了',
+    G.Cells[1, G.DisplayRow(0)] > G.Cells[1, G.DisplayRow(1)]);
+end;
+
+{ **已知 bug**:BuildGroups 从前直接 `FSortCol := FGroupCol`,
+  一分组就把用户选的排序列永久抹掉,而且完全静默。 }
+procedure TTyStringGridTest.TestGroupingKeepsTheUserSortColumn;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[0, 0] := '销售'; G.Cells[1, 0] := '3';
+  G.Cells[0, 1] := '销售'; G.Cells[1, 1] := '1';
+  G.Cells[0, 2] := '技术'; G.Cells[1, 2] := '4';
+  G.Cells[0, 3] := '技术'; G.Cells[1, 3] := '2';
+
+  G.SortByColumn(1, sdAscending);       { 用户选了按第 1 列排 }
+  AssertEquals('排序列是 1', 1, G.SortColumn);
+
+  G.GroupByColumn(0);                    { 再按第 0 列分组 }
+  AssertEquals('分组之后排序列**不该被抹掉**', 1, G.SortColumn);
+  AssertEquals('排序键也还在', 1, G.SortColumnCount);
+  AssertEquals('排序键就是用户选的那列', 1, G.SortColumnAt(0).Col);
+end;
+
+{ 排序方式跟着列走:同一张表里日期列不该按文本排。 }
+procedure TTyStringGridTest.TestColumnSortKindBeatsGridSortKind;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.SortKind := gskText;                 { 网格级:文本 }
+  G.Cells[0, 0] := '10';
+  G.Cells[0, 1] := '9';
+  G.Cells[0, 2] := '100';
+
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('按文本排:10 在 9 前面', '10', G.Cells[0, G.DisplayRow(0)]);
+
+  TTyGridColumn(G.Header.Columns.Items[0]).SortKind := gskNumber;
+  G.SortByColumn(-1, sdAscending);
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('列级设成数值后:9 排最前', '9', G.Cells[0, G.DisplayRow(0)]);
+  AssertEquals('然后是 10', '10', G.Cells[0, G.DisplayRow(1)]);
+  AssertEquals('最后是 100', '100', G.Cells[0, G.DisplayRow(2)]);
+end;
+
+{ 全展开 / 全折叠。折叠按**分组值**记账,所以重排后仍然对得上。 }
+procedure TTyStringGridTest.TestExpandCollapseAllGroups;
+var
+  G: TStrGridAccess;
+  expanded, collapsed: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[0, 0] := '甲'; G.Cells[0, 1] := '甲';
+  G.Cells[0, 2] := '乙'; G.Cells[0, 3] := '乙';
+  G.GroupByColumn(0);
+
+  expanded := G.DisplayRowCount;         { 2 个组行 + 4 条数据 }
+  AssertEquals('展开时显示 6 行', 6, expanded);
+
+  G.CollapseAllGroups;
+  collapsed := G.DisplayRowCount;
+  AssertEquals('全折叠后只剩 2 个组行', 2, collapsed);
+
+  G.ExpandAllGroups;
+  AssertEquals('全展开后回到 6 行', expanded, G.DisplayRowCount);
 end;
 
 initialization

@@ -301,6 +301,11 @@ msgstr ""
 msgid "Count "
 msgstr ""
 
+#: tycontrols.strconsts.rsgridgrouprow
+#, object-pascal-format
+msgid "%s  (%d)"
+msgstr ""
+
 #: tycontrols.strconsts.rsgridmaxprefix
 msgid "Max "
 msgstr ""

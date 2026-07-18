@@ -10,6 +10,12 @@ interface
   docs/superpowers/specs/2026-06-25-i18n-design.md. Deep CSS-syntax errors keep an English
   msgid (their .po msgstr == msgid) per spec decision 5. }
 resourcestring
+  // --- Grid ---
+  // Group row caption: %s = the group value, %d = how many rows in it.
+  // Used to be hard-coded as '%s  (%d)' inside RenderGroupRow: untranslatable
+  // and unconfigurable.
+  rsGridGroupRow          = '%s  (%d)';
+
   // --- ThemeLint warnings (all translated) ---
   rsLintUndefinedVar      = 'undefined variable --%s';
   rsLintMissingAsset      = 'missing asset ''%s''';
