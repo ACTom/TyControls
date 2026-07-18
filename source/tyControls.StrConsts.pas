@@ -165,6 +165,19 @@ resourcestring
   // has, by definition, no app text to show.
   rsEmptyDescription = 'No data';
 
+  { --- TTyGrid ---------------------------------------------------------------
+    网格里唯一会显示给用户的文本:汇总带的聚合前缀、取色对话框标题,
+    以及"勾选框认哪些值为真"里的本地化写法(中文表里常见 '是')。 }
+  rsGridSumPrefix   = 'Sum ';
+  rsGridAvgPrefix   = 'Avg ';
+  rsGridMinPrefix   = 'Min ';
+  rsGridMaxPrefix   = 'Max ';
+  rsGridCountPrefix = 'Count ';
+  rsGridPickColor   = 'Select colour';
+  { 勾选框判真时额外认这个词(英文基线为空 = 只认 1/true/yes/y;
+    中文 .po 里译成 '是')。 }
+  rsGridCheckedWord = '';
+
   // --- Design-time hints (shown in the IDE designer) ---
   rsTyGraphicControlOnForm =
     'The graphic control "%s" was placed directly on the form.'#10 +

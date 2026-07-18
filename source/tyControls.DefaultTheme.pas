@@ -522,6 +522,33 @@ begin
     'TyTreeHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     'TyTreeHeaderSection:hover { background: var(--surface-hover); }' + LineEnding +
     'TyTreeHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
+    '' + LineEnding +
+    '/* --- 数据网格 TTyGrid ------------------------------------------------------' + LineEnding +
+    '   基层给全套键,新皮肤即使一条网格规则都不写也能正常显示(基层垫在每个主题之下)。' + LineEnding +
+    '   网格自成一套 typeKey,不借用树/列表的键 —— 借来的键在外观主题层够不着。 */' + LineEnding +
+    'TyGrid { background: var(--surface); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); font-size: var(--font-size-base); }' + LineEnding +
+    '/* 正文单元格。resting 透明,让网格表面透出来;选中/悬停才上色。 */' + LineEnding +
+    'TyGridCell { background: none; color: var(--on-surface); padding: 0px 6px; }' + LineEnding +
+    'TyGridCell:hover    { background: var(--surface-hover); }' + LineEnding +
+    'TyGridCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    '/* 冻结区(固定行列)与行头槽:比正文略重,读者一眼能分出"这块不滚动"。 */' + LineEnding +
+    'TyGridFixed     { background: var(--surface-chrome); color: var(--on-surface); border-color: var(--border); }' + LineEnding +
+    'TyGridIndicator { background: var(--surface-chrome); color: var(--muted); border-color: var(--border); }' + LineEnding +
+    '/* 列头带 —— 与树表头同族的观感,但用自己的键。 */' + LineEnding +
+    'TyGridHeader        { background: var(--surface-chrome); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }' + LineEnding +
+    'TyGridHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
+    'TyGridHeaderSection:hover    { background: var(--surface-hover); }' + LineEnding +
+    'TyGridHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
+    '/* 格线与选区。格线单独成键,皮肤想去掉格子只需把它设成透明。 */' + LineEnding +
+    'TyGridLine      { background: var(--border); }' + LineEnding +
+    '/* 单元格图形。各自成键,不借复选框/进度条的键 —— 借来的键在外观层够不着,' + LineEnding +
+    '   而且改它会波及那些控件。状态只由单元格自身决定,不掺网格的瞬时状态。 */' + LineEnding +
+    'TyGridCheckBox           { background: var(--input-bg); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); color: var(--on-surface); }' + LineEnding +
+    'TyGridCheckBox:selected  { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }' + LineEnding +
+    'TyGridProgress           { background: var(--surface-chrome); border-radius: var(--radius-sm); }' + LineEnding +
+    'TyGridProgressFill       { background: var(--accent); }' + LineEnding +
+    'TyGridRating             { color: var(--accent); }' + LineEnding +
+    'TyGridSelection { background: var(--selection); border-color: var(--accent); }' + LineEnding +
     'TyTreeCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }' + LineEnding +
     'TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
     'TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +

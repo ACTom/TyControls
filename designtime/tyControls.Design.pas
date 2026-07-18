@@ -47,7 +47,7 @@ uses
   tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar,
   tyControls.HeaderControl, tyControls.ListGroupPanel,
   tyControls.Shape, tyControls.StarShape, tyControls.Arrow,
-  tyControls.Card, tyControls.Tag, tyControls.Badge,
+  tyControls.Card, tyControls.Tag, tyControls.Badge, tyControls.Grid,
   tyControls.Alert, tyControls.Notification, tyControls.Empty, tyControls.Segmented,
   tyControls.Pagination, tyControls.Steps, tyControls.Breadcrumb,
   tyControls.Transfer, tyControls.TreeSelect, tyControls.Cascader, tyControls.Popover,
@@ -706,7 +706,8 @@ begin
   // Data views + shell/file views + date/time.
   RegisterComponents('TyControls Data Views',
     [TTyTreeView, TTyListView, TTyShellListView, TTyShellTreeView, TTyPreviewBox, TTyImageView,
-     TTyCalendar, TTyDateTimePicker]);
+     TTyCalendar, TTyDateTimePicker,
+     TTyDrawGrid, TTyStringGrid]);
   // Menus.
   RegisterComponents('TyControls Menus',
     [TTyMenuBar, TTyPopupMenu, TTyImagesMenu, TTyMenuEx]);

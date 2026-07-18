@@ -46,6 +46,14 @@ TyButton:disabled { opacity: 0.5; }
   `TTyPagination` (pager), `TTySteps` (wizard step bar, horizontal/vertical), `TTyBreadcrumb`
   (breadcrumb); **inputs**: `TTyTransfer` (dual-list transfer), `TTyTreeSelect` (tree dropdown),
   `TTyCascader` (cascading select); **empty state**: `TTyEmpty` (illustration + text + optional action).
+- **Data grid `TTyStringGrid`** (three layers: `TTyCustomGrid` / `TTyDrawGrid` / `TTyStringGrid`) —
+  frozen rows/columns (four panes), virtualised rendering (a million rows paints only the visible
+  window), sparse cell storage, 2-D cursor + rectangular multi-select, embedded scrollbars,
+  variable row heights, **editing** (text / numeric / checkbox / pick-list / date / colour, per
+  cell), **display** (text / progress bar / rating / image, orthogonal to editing), click-to-sort
+  (stable merge sort), column filtering (text + header distinct-value checklist), group rows with
+  collapse, cell merging, a summary footer (sum/avg/min/max/count over the *filtered* rows),
+  clipboard (Excel format) + CSV import/export, column resize and drag-reorder.
 - **Virtual tree `TTyTreeView`** — a VirtualTreeView-class virtual tree: data-on-demand (scales to
   millions of nodes), multi-column with a draggable header (resize / reorder / sort), checkboxes +
   tri-state + radio nodes, multi-select (Ctrl/Shift) + full-row, variable row height, incremental

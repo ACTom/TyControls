@@ -1,0 +1,3337 @@
+{ 自绘数据网格 —— 控件本体。
+
+  设计见 docs/design/2026-07-18-grid-control.md。类层次:
+      TTyCustomGrid   本单元:几何/窗格/滚动/选择/绘制管线/键鼠/主题(不含数据)
+        TTyDrawGrid   纯自绘:内容由 OnDrawCell / OnGetCellText 提供
+        TTyStringGrid 完整体:单元格存储 + 编辑 + 排序/过滤/分组/合并 + 剪贴板
+
+  刻意的分工:
+  * **列模型**整份复用 tyControls.Columns(TTyHeader/TTyColumns)—— 列宽约束、位置↔索引
+    映射、分隔条命中、自动适宽、弹性分配都已在那里实现且有无头测试。
+  * **纯几何**放在 tyControls.Grid.Layout(窗格切分、行矩形、虚拟化窗口、行轴命中),
+    本单元只负责把控件状态装配成 TTyGridMetrics 再调用它。
+
+  本控件为独立实现,不含任何第三方网格的代码。 }
+unit tyControls.Grid;
+
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+  Classes, SysUtils, Types, Math, contnrs, Clipbrd, Controls, Graphics, LCLType,
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns,
+  tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox, tyControls.ColorMath,
+  tyControls.Css.Values, tyControls.ImageCollection, tyControls.Dialogs.Color,
+  tyControls.StrConsts,
+  tyControls.Grid.Layout;
+
+type
+  { 网格基类:有几何、有外观,但不规定数据从哪来。 }
+  TTyCustomGrid = class(TTyCustomControl)
+  private
+    FHeader:           TTyHeader;
+    FRowCount:         Integer;
+    FDefaultRowHeight: Integer;
+    FFixedCols:        Integer;
+    FFixedRows:        Integer;
+    FIndicatorWidth:   Integer;
+    FShowIndicator:    Boolean;
+    FShowGridLines:    Boolean;
+    FShowFooter:       Boolean;
+    FFooterHeight:     Integer;
+    FScrollX:          Integer;
+    FScrollY:          Integer;
+    FDragCol:          Integer;   { 正在拖动的列索引;-1 = 没在拖 }
+    FDragStartX:       Integer;
+    FResizeCol:        Integer;   { 正在拖宽的列;-1 = 没在拖 }
+    FResizeStartX:     Integer;
+    FResizeStartW:     Integer;
+    FVScroll:          TTyScrollBar;
+    FHScroll:          TTyScrollBar;
+    FSyncingScroll:    Boolean;      { 防止程序改 Position 反弹回来 }
+    procedure VScrollChange(Sender: TObject);
+    procedure HScrollChange(Sender: TObject);
+    procedure HeaderChanged(Sender: TObject);
+    procedure SetHeader(AValue: TTyHeader);
+    procedure SetRowCount(AValue: Integer);
+    procedure SetDefaultRowHeight(AValue: Integer);
+    procedure SetFixedCols(AValue: Integer);
+    procedure SetFixedRows(AValue: Integer);
+    procedure SetIndicatorWidth(AValue: Integer);
+    procedure SetShowIndicator(AValue: Boolean);
+    procedure SetShowGridLines(AValue: Boolean);
+    procedure SetShowFooter(AValue: Boolean);
+    procedure SetFooterHeight(AValue: Integer);
+  protected
+    function GetStyleTypeKey: string; override;
+    { 行数变了 → 行序间接层失效。基类无序可失效,派生类改写。 }
+    procedure InvalidateGridOrder; virtual;
+
+    { 逻辑像素 → 设备像素。几何层收的全是设备像素。 }
+    function Dpi: Integer;
+    function ScaleI(AValue: Integer): Integer;
+    function UnscaleI(AValue: Integer): Integer;
+
+    { 冻结带宽度(设备像素)= 行头槽 + 各固定列宽之和。 }
+    function FrozenWidthPx: Integer; virtual;
+    { 冻结带高度(设备像素)= 列头带 + 固定行 * 行高。 }
+    function FrozenHeightPx: Integer; virtual;
+    { 页脚汇总带高度(设备像素)。它钉在视口底部、不参与滚动。 }
+    function FooterHeightPx: Integer; virtual;
+    { 逐行行高(逻辑像素)。基类恒为 DefaultRowHeight;派生类可按行覆盖。 }
+    function RowHeightOf(ARow: Integer): Integer; virtual;
+    { 行高前缀和(设备像素),喂给几何层。全等高时返回空数组 = 走统一行高快路径。 }
+    function RowTops: TTyIntArray; virtual;
+
+    { 把控件当前状态装配成纯几何层要的度量。所有几何都必须经由它,
+      不允许任何地方另算一套 —— 那正是绘制/命中漂移的源头。 }
+    function GridMetrics: TTyGridMetrics; virtual;
+
+    { 第 ACol 列左边界的客户区横坐标(设备像素)——**列轴几何的唯一出处**。
+      固定列钉在冻结带里不随横向滚动;正文列随 ScrollX 平移。
+      CellRect 与 ColumnAtX 都必须走它,否则绘制与命中会分叉。 }
+    function ColumnLeftPx(ACol: Integer): Integer; virtual;
+    function ColumnWidthPx(ACol: Integer): Integer;
+    { 横坐标落在哪一列 —— ColumnLeftPx 的逆;不在任何列上时答 -1。 }
+    function ColumnAtX(AX: Integer): Integer; virtual;
+
+    { 网格线颜色:优先取 TyGridLine 的 background,主题没定义时退回本体的 border-color
+      —— 让只写了 TyGrid 一条规则的皮肤也能画出可辨认的格子。 }
+    function GridLineColor(const AFrame: TTyStyleSet): TBGRAPixel;
+
+    { 用某个 typeKey 的 background 填一块区域;该键没定义背景就什么都不画
+      (于是那块区域透出网格表面本色 —— 这正是"皮肤没写就优雅退化"的做法)。 }
+    procedure FillRegion(P: TTyPainter; const ARect: TRect; const AKey: string);
+
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { 列头上 X 处的分隔条索引(拖它改列宽);没命中返回 -1。 }
+    function  DividerAtX(AX: Integer): Integer;
+
+    { 该列是否显示筛选按钮。基类不筛,恒 False。 }
+    function ShowsFilterButton(ACol: Integer): Boolean; virtual;
+    { 列头上筛选按钮的槽(命中与绘制共用)。 }
+    function HeaderFilterRect(ACol, AHeaderH: Integer): TRect;
+
+    { 列头里每一列的分段:底色、标题文字、排序字形。 }
+    procedure RenderHeaderSections(P: TTyPainter; const M: TTyGridMetrics;
+      AHeaderH: Integer); virtual;
+
+    { 列头带 / 行头槽 / 固定列区的填充。绘制次序即遮挡次序,必须与 CellAt 的判定次序一致:
+      列头横跨整幅并盖住左上角 → 行头槽 → 固定列。 }
+    procedure RenderChrome(P: TTyPainter; const M: TTyGridMetrics); virtual;
+
+    { 单元格内容。基类不画任何内容(它不知道数据从哪来)——由派生类改写。
+      在 chrome 之后、格线之前调用。 }
+    procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
+      const AFrame: TTyStyleSet); virtual;
+    { 底部汇总带。基类只铺底色,内容由派生类填。 }
+    procedure RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
+      const AFooterRect: TRect; const AFrame: TTyStyleSet); virtual;
+
+    { 分窗格绘制的总入口。无头可测:直接对着任意 canvas 画,不需要窗口句柄。 }
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer); virtual;
+    procedure RenderGridLines(P: TTyPainter; const M: TTyGridMetrics;
+      const AFrame: TTyStyleSet); virtual;
+    procedure Paint; override;
+
+    procedure SetScrollX(AValue: Integer);
+    procedure SetScrollY(AValue: Integer);
+    property ScrollX: Integer read FScrollX write SetScrollX;
+    property ScrollY: Integer read FScrollY write SetScrollY;
+
+    { 内容总尺寸与最大可滚距离(设备像素)。滚动量必须钳在 [0, Max],
+      否则能把内容滚出视口、留下一片空白还回不来。 }
+    function ContentHeightPx: Integer; virtual;
+    function ContentWidthPx: Integer; virtual;
+    function MaxScrollY: Integer;
+    function MaxScrollX: Integer;
+
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
+
+    { 视口 = 客户区扣掉可见滚动条占去的那条。所有几何都用它,而不是 ClientWidth/Height,
+      否则最后一行/列会钻到滚动条底下。 }
+    function ViewportW: Integer;
+    function ViewportH: Integer;
+    { 按内容与视口决定两条滚动条的可见性、范围与位置。 }
+    procedure UpdateScrollBars; virtual;
+    { 把当前滚动量推给滑块。**每一次程序性滚动都必须调它** —— 滚轮、键盘跟随、
+      ScrollIntoView 改的都只是 FScrollX/Y,不同步的话内容滚了滑块还停在原处。 }
+    procedure SyncScrollBars;
+    procedure Resize; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+
+    property VScrollBar: TTyScrollBar read FVScroll;
+    property HScrollBar: TTyScrollBar read FHScroll;
+
+    { **行序间接层** —— 全设计的中心不变量。
+      排序/过滤只置换"显示序",而选择、光标、编辑一律按**稳定的数据行**记账,
+      于是重排之后光标不会跑到别的数据上去。基类是恒等映射;TTyStringGrid 排序后覆写。
+
+      约定:所有对外 API(CellRect / CellAt / Col,Row / Cells)吃的都是**数据行**;
+      只有几何层(TyGridRowRect / TyGridVisibleRows)按显示序工作。 }
+    function DisplayToData(APos: Integer): Integer; virtual;
+    { 数据行 → 显示序。**被过滤掉的行返回 -1**(它没有显示位置)。 }
+    function DataToDisplay(ARow: Integer): Integer; virtual;
+    { 实际参与显示的行数。过滤后 < RowCount;几何层用的是它,不是 RowCount。 }
+    function DisplayRowCount: Integer; virtual;
+
+    { 单元格所属窗格。P0 只按列区分(固定列 → gpLeft,其余 → gpBody):
+      FixedRows 目前只在冻结带里**预留高度**,固定行自身的行寻址随 P1 的数据模型一起做。 }
+    function CellPane(ACol, ARow: Integer): TTyGridPane;
+
+    { 单元格的几何矩形,客户区坐标 —— **未裁剪**。派生类可覆写(合并区)。绘制时要先裁到所属窗格;
+      正文列横向滚到冻结带底下的那一段就在这里被裁掉。 }
+    function CellRect(ACol, ARow: Integer): TRect; virtual;
+
+    { 单元格**实际可见**的矩形 = CellRect ∩ 所属窗格。CellAt 正是它的逆:
+      被冻结带盖住的部分本来就点不到,所以不变量必须以可见矩形表述,而非几何矩形。 }
+    function CellVisibleRect(ACol, ARow: Integer): TRect;
+    { 落在合并区内的坐标归到基准格。基类无合并,原样返回。 }
+    procedure MapToBaseCell(var ACol, ARow: Integer); virtual;
+
+    { 点命中,客户区坐标 —— **CellVisibleRect 的逆**(见上:被冻结带盖住的部分点不到)。 }
+    function CellAt(AX, AY: Integer): TTyGridHit;
+
+    { 把某个单元格滚进可视区(最小移动量)。光标一旦走出视口就得靠它跟上,
+      否则按方向键会"把光标走丢"。 }
+    procedure ScrollIntoView(ACol, ARow: Integer);
+  published
+    { 列模型(含列集合、列头高度、排序列、自动适宽列)。 }
+    property Header: TTyHeader read FHeader write SetHeader;
+    { 数据行数(不含列头与固定行)。 }
+    property RowCount: Integer read FRowCount write SetRowCount default 0;
+    { 统一行高,逻辑像素(P0 不支持可变行高)。 }
+    property DefaultRowHeight: Integer read FDefaultRowHeight write SetDefaultRowHeight default 22;
+    { 冻结在左侧、不随横向滚动的列数。 }
+    property FixedCols: Integer read FFixedCols write SetFixedCols default 0;
+    { 冻结在顶部、不随纵向滚动的数据行数(列头带另计)。 }
+    property FixedRows: Integer read FFixedRows write SetFixedRows default 0;
+    { 最左侧的行头/行号槽。 }
+    property ShowIndicator: Boolean read FShowIndicator write SetShowIndicator default False;
+    property IndicatorWidth: Integer read FIndicatorWidth write SetIndicatorWidth default 30;
+    { 单元格之间的格线。颜色取 TyGridLine 的 background,主题没定义则退回本体的 border-color。 }
+    property GridLines: Boolean read FShowGridLines write SetShowGridLines default True;
+    { 底部汇总带。内容由派生类给(TTyStringGrid 按列聚合)。 }
+    property ShowFooter: Boolean read FShowFooter write SetShowFooter default False;
+    property FooterHeight: Integer read FFooterHeight write SetFooterHeight default 24;
+
+    { LCL 标准布局属性 —— 基类没有发布它们,必须在这里发布。
+      漏发布的后果只在**运行时流式化**才暴露(设计器里写了 Anchors,启动时报
+      "Unknown property: Anchors"),编译期完全看不出来。 }
+    property Align;
+    property Anchors;
+    property BorderSpacing;
+    property Constraints;
+    property Visible;
+    property PopupMenu;
+    property TabStop default True;
+    { 主题接线。 }
+    property StyleClass;
+    property Controller;
+  end;
+
+  { 单元格文本由宿主提供 —— 对齐 LCL TDrawGrid 的"内容不归控件管"的定位。 }
+  TTyGridGetCellTextEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var AText: string) of object;
+
+  { 纯自绘网格:自己不存任何数据,每个单元格的文本现问宿主要。
+    因为不存数据,它天然就是"虚拟"的 —— 一百万行也不占内存。 }
+  TTyDrawGrid = class(TTyCustomGrid)
+  private
+    FOnGetCellText: TTyGridGetCellTextEvent;
+  protected
+    { 取一个单元格要显示的文本。派生类可改写以接自己的存储。 }
+    function GetCellText(ACol, ARow: Integer): string; virtual;
+    { 该格要不要画文字。自己画图形的格返回 False。 }
+    function ShouldDrawCellText(ACol, ARow: Integer): Boolean; virtual;
+    procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
+      const AFrame: TTyStyleSet); override;
+  published
+    property OnGetCellText: TTyGridGetCellTextEvent
+      read FOnGetCellText write FOnGetCellText;
+  end;
+
+  TTyGridSelectCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var ACanSelect: Boolean) of object;
+
+  { 单元格编辑器种类。AdvGrid 那一长串编辑器类型其实是"少量控件 x 修饰符"的笛卡尔积,
+    这里先落地最常用的一档;浮层类(颜色/备忘/计算器…)将来统一由 TTyPopover 承载。 }
+  TTyGridEditorKind = (
+    gekNone,      { 该格只读 }
+    gekText,      { 普通文本 }
+    gekNumeric,   { 只收数字(含负号与小数点) }
+    gekCheckBox,  { 勾选框:不弹编辑器,点一下就切换 }
+    gekPickList,  { 下拉选取:从 OnGetPickList 给的候选里选 }
+    gekDate,      { 日期:弹日期选择器 }
+    gekColor      { 颜色:弹取色对话框,值存 #RRGGBB }
+  );
+
+  { 单元格的**显示**方式(与编辑方式正交:一个格可以显示成进度条、编辑时仍是数值框)。 }
+  TTyGridCellDisplay = (
+    gcdText,      { 默认:文字 }
+    gcdProgress,  { 进度条,值取 0..100 }
+    gcdRating,    { 评分星,值取 0..5 }
+    gcdImage      { 图片:值是 Images 里的索引 }
+  );
+
+  TTyGridGetCellDisplayEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var ADisplay: TTyGridCellDisplay) of object;
+
+  { 逐行行高(逻辑像素)。不接 = 全部用 DefaultRowHeight。 }
+  TTyGridGetRowHeightEvent = procedure(Sender: TObject; ARow: Integer;
+    var AHeight: Integer) of object;
+
+  { 排序比较方式。 }
+  TTyGridSortKind = (gskText, gskNumber);
+
+  { 列聚合方式(汇总带用)。一律只统计**通过过滤的行** —— 筛完总计要跟着变。 }
+  TTyGridAggregate = (gagNone, gagSum, gagAvg, gagMin, gagMax, gagCount);
+
+  { 分组行(合成行,不对应任何数据行)。 }
+  TTyGridGroupInfo = record
+    Key:      string;    { 分组值 }
+    Count:    Integer;   { 组内行数 }
+    Collapsed: Boolean;
+  end;
+
+  { 覆盖某列汇总文字的钩子(比如加货币符号、或做自定义统计)。 }
+  TTyGridGetFooterTextEvent = procedure(Sender: TObject; ACol: Integer;
+    var AText: string) of object;
+
+  TTyGridCompareEvent = procedure(Sender: TObject; ACol, ARow1, ARow2: Integer;
+    var AResult: Integer) of object;
+
+  { 逐行过滤钩子。AVisible 进来是"已通过列过滤"的结果,可再否决。 }
+  TTyGridFilterRowEvent = procedure(Sender: TObject; ARow: Integer;
+    var AVisible: Boolean) of object;
+
+  TTyGridGetEditorKindEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var AKind: TTyGridEditorKind) of object;
+  { gekPickList 的候选项。宿主往 AItems 里填。 }
+  TTyGridGetPickListEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    AItems: TStrings) of object;
+  TTyGridCellEditedEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    const AOldText, ANewText: string; var AAccept: Boolean) of object;
+
+  { 完整体:自带**稀疏**单元格存储 + 二维光标 + 键鼠导航。
+    稀疏的意思是只有写过的单元格才占内存 —— 100 万 x 100 的空表不花一分钱。 }
+  TTyStringGrid = class(TTyDrawGrid)
+  private
+    { 'col:row' -> 文本,只存写过的格。
+      **必须是哈希表**:早先用有序 TStringList + Values[] 查找,而 IndexOfName 是
+      **线性扫描** —— 排序时 O(n^2) 次比较里每次再套一次 O(n) 查找,1000 行直接卡死。 }
+    FCells: TFPStringHashTable;
+    FCol: Integer;                { 当前单元格(光标) }
+    FRow: Integer;
+    FOnSelectCell: TTyGridSelectCellEvent;
+    FEditor: TTyEdit;
+    FEditing: Boolean;
+    FEditCol: Integer;
+    FEditRow: Integer;
+    FEndingEdit: Boolean;         { 防重入:提交过程里又触发提交 }
+    FReadOnly: Boolean;
+    FDefaultEditorKind: TTyGridEditorKind;
+    FOnGetEditorKind: TTyGridGetEditorKindEvent;
+    FOnCellEdited: TTyGridCellEditedEvent;
+    FPickEditor: TTyComboBox;
+    FOnGetPickList: TTyGridGetPickListEvent;
+    FDateEditor: TTyDateTimePicker;
+    FOnGetCellDisplay: TTyGridGetCellDisplayEvent;
+    FDefaultCellDisplay: TTyGridCellDisplay;
+    FImages: TTyVirtualImageList;
+    FOnGetRowHeight: TTyGridGetRowHeightEvent;
+    FRowTopsCache: TTyIntArray;
+    FRowTopsValid: Boolean;
+    FAggregates: TStringList;      { 列索引 -> 聚合方式序号 }
+    FMerges: TFPStringHashTable;   { 'col:row' -> 'cs:rs',只存合并的基准格 }
+    FOnGetFooterText: TTyGridGetFooterTextEvent;
+    FGroupCol: Integer;                        { -1 = 不分组 }
+    FFilterPopup: TTyPopover;
+    FFilterList: TTyCheckListBox;
+    FFilterCol: Integer;
+    FShowFilterButtons: Boolean;
+    FGroups: array of TTyGridGroupInfo;
+    FCollapsed: TStringList;                   { 记住哪些组被折叠(按分组值) }
+    { 行序间接层。FOrder[显示序]=数据行(**只含通过过滤的行**);
+      FRank[数据行]=显示序,被过滤掉的行为 -1。两者互为逆。
+      惰性重建:改行数/改过滤/排序才失效,改单元格内容**不**失效
+      —— 否则编辑一格就当场重排,用户会看着行乱跳。 }
+    FOrder: array of Integer;
+    FRank: array of Integer;
+    FOrderValid: Boolean;
+    FColFilters: TStringList;     { 列索引 -> 过滤文本(包含匹配,不区分大小写) }
+    FValFilters: TStringList;     { 列索引 -> 允许值集合(换行分隔);空 = 该列不按值过滤 }
+    FOnFilterRow: TTyGridFilterRowEvent;
+    FSelAnchorCol: Integer;       { 选区锚点(数据行),与光标一起决定矩形选区 }
+    FSelAnchorRow: Integer;
+    FSortCol: Integer;
+    FSortDir: TTySortDirection;
+    FSortKind: TTyGridSortKind;
+    FOnCompareCells: TTyGridCompareEvent;
+    procedure FilterPopupClosed(Sender: TObject);
+    procedure InvalidateOrder;
+    procedure RebuildOrder;
+    procedure BuildGroups;
+    function  RowPassesFilter(ARow: Integer): Boolean;
+    procedure EnsureOrder;
+    procedure ResetOrder;
+    function  CompareRows(ACol, ARow1, ARow2: Integer): Integer;
+    procedure MergeSortOrder(ACol: Integer; ADirection: TTySortDirection);
+    procedure DateEditorExit(Sender: TObject);
+    procedure PickEditorChange(Sender: TObject);
+    procedure PickEditorExit(Sender: TObject);
+    procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure EditorExit(Sender: TObject);
+    function  CellKey(ACol, ARow: Integer): string;
+    function  GetCells(ACol, ARow: Integer): string;
+    procedure SetCells(ACol, ARow: Integer; const AValue: string);
+    procedure SetCol(AValue: Integer);
+    procedure SetRow(AValue: Integer);
+  protected
+    function  GetCellText(ACol, ARow: Integer): string; override;
+    procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
+      const AFrame: TTyStyleSet); override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { 把光标移到 (ACol,ARow),越界自动钳制;OnSelectCell 可否决。 }
+    procedure MoveCursor(ACol, ARow: Integer); virtual;
+    procedure DblClick; override;
+    { 该格该用哪种编辑器。默认取 DefaultEditorKind,OnGetEditorKind 可逐格覆盖。 }
+    function EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind; virtual;
+    { 勾选框语义:'1'/'true'/'是'/'y' 都算勾上。写回时统一成 '1'/''。 }
+    function  CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay; virtual;
+    function  ShouldDrawCellText(ACol, ARow: Integer): Boolean; override;
+    function  RowHeightOf(ARow: Integer): Integer; override;
+    function  RowTops: TTyIntArray; override;
+    procedure RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
+      const AFrame: TTyStyleSet); virtual;
+    procedure RenderProgressCell(P: TTyPainter; ACol, ARow: Integer;
+      const AFrame: TTyStyleSet); virtual;
+    procedure RenderRatingCell(P: TTyPainter; ACol, ARow: Integer;
+      const AFrame: TTyStyleSet); virtual;
+    function  CellChecked(ACol, ARow: Integer): Boolean;
+    procedure ToggleCellChecked(ACol, ARow: Integer);
+    { 弹取色对话框改这一格的颜色(值存 #RRGGBB)。 }
+    procedure ToggleCellColor(ACol, ARow: Integer);
+    { 勾选框的绘制槽(单元格内居中的小方块)。命中与绘制共用它。 }
+    function  CheckBoxRect(ACol, ARow: Integer): TRect;
+    procedure RenderCheckCell(P: TTyPainter; ACol, ARow: Integer;
+      const AFrame: TTyStyleSet); virtual;
+    procedure RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
+      const AFooterRect: TRect; const AFrame: TTyStyleSet); override;
+    procedure RenderGroupRow(P: TTyPainter; APos, AGroupIndex: Integer;
+      const M: TTyGridMetrics; const AFrame: TTyStyleSet); virtual;
+    { 分组行上的折叠三角槽。命中与绘制共用。 }
+    function  GroupToggleRect(APos: Integer): TRect;
+    function DisplayToData(APos: Integer): Integer; override;
+    function DataToDisplay(ARow: Integer): Integer; override;
+    function DisplayRowCount: Integer; override;
+    function ShowsFilterButton(ACol: Integer): Boolean; override;
+    procedure InvalidateGridOrder; override;
+    { 合并区:基准格的矩形跨满整个区,被它覆盖的格没有自己的矩形。 }
+    function CellRect(ACol, ARow: Integer): TRect; override;
+    procedure MapToBaseCell(var ACol, ARow: Integer); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    { 清空全部单元格内容(不动行列结构)。 }
+    procedure ClearCells;
+    { 写过的单元格个数 —— 稀疏性的可观测证据。 }
+    function StoredCellCount: Integer;
+
+    { 开始编辑当前(或指定)单元格。只读、或该格编辑器为 gekNone 时不开。 }
+    function BeginEdit: Boolean; overload;
+    function BeginEdit(ACol, ARow: Integer): Boolean; overload;
+    { 结束编辑。ACommit=True 写回存储(经 OnCellEdited 可否决)。 }
+    procedure EndEdit(ACommit: Boolean);
+    { 某个单元格是否在当前矩形选区内(锚点 ↔ 光标)。
+      纵向按**显示序**判定 —— 选区是屏幕上的一块矩形,不是数据行号的区间;
+      排序后行的相对位置变了,选区自然跟着屏幕走。 }
+    function IsCellSelected(ACol, ARow: Integer): Boolean;
+    { 把选区锚点钉在当前光标处(单击时调用),之后 Shift+点/Shift+方向键即可拉出区域。 }
+    procedure AnchorSelection;
+    { 选中的单元格总数(0 表示只有光标那一格)。 }
+    function SelectedCellCount: Integer;
+
+    { 该列出现过的**去重值**(按显示序的原始数据,不受本列自身过滤影响)——
+      列头筛选下拉就是拿它当候选。 }
+    procedure DistinctColumnValues(ACol: Integer; AItems: TStrings);
+    { 打开某列的列头筛选下拉。 }
+    procedure ShowColumnFilterDropDown(ACol: Integer);
+
+    { 给某列设"包含"过滤(不区分大小写)。传空串即清掉该列的过滤。 }
+    procedure SetColumnFilter(ACol: Integer; const AText: string);
+    function  ColumnFilter(ACol: Integer): string;
+    { 按**值集合**过滤某列(列头下拉勾选用)。AValues=nil 或空即清掉。
+      与文本包含过滤是 AND 关系。 }
+    procedure SetColumnValueFilter(ACol: Integer; AValues: TStrings);
+    procedure ColumnValueFilter(ACol: Integer; AOut: TStrings);
+    procedure ClearFilters;
+    { 通过过滤的行数(= 当前显示的行数)。 }
+    function  VisibleRowCount: Integer;
+
+    { --- 分组 ---
+      按某列分组:显示序里插入**合成的分组行**(它不对应任何数据行)。
+      FOrder 里 >=0 是数据行,<0 是分组行(编码为 -(组号+1))。 }
+    procedure GroupByColumn(ACol: Integer);
+    procedure UngroupRows;
+    property  GroupColumn: Integer read FGroupCol;
+    { 该显示位置是不是分组行;是则给出组号。 }
+    function  IsGroupRow(APos: Integer; out AGroupIndex: Integer): Boolean;
+    function  GroupInfo(AIndex: Integer): TTyGridGroupInfo;
+    function  GroupCount: Integer;
+    procedure ToggleGroup(AIndex: Integer);
+
+    { --- 汇总 ---
+      聚合只统计**通过过滤的行**,所以筛完总计会跟着变(这才是用户要的)。 }
+    procedure SetColumnAggregate(ACol: Integer; AKind: TTyGridAggregate);
+    function  ColumnAggregate(ACol: Integer): TTyGridAggregate;
+    { 某列的聚合结果。gagCount 返回可见行数;其余按数值统计,非数值格跳过。 }
+    function  AggregateValue(ACol: Integer): Double;
+    { 汇总带上该列显示的文字(已格式化;OnGetFooterText 可覆盖)。 }
+    function  FooterText(ACol: Integer): string;
+
+    { --- 单元格合并 ---
+      只记基准格的跨度;被覆盖的格没有自己的矩形,命中时归到基准格。 }
+    procedure MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
+    procedure UnmergeCells(ACol, ARow: Integer);
+    procedure ClearMerges;
+    { (ACol,ARow) 是不是某个合并区的**基准格**(左上角)。 }
+    function  IsBaseCell(ACol, ARow: Integer): Boolean;
+    { 取 (ACol,ARow) 所属合并区的基准格;不在任何合并区里就是它自己。 }
+    procedure BaseCellOf(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
+    function  CellSpan(ACol, ARow: Integer; out AColSpan, ARowSpan: Integer): Boolean;
+
+    { --- 剪贴板 / CSV ---
+      导出走**显示序**(所见即所得:过滤掉的行不出现,排序后的次序被保留);
+      而寻址仍是数据行 —— 两者由行序间接层桥接。 }
+    { 当前选区导出为制表符分隔文本(Excel 剪贴板即这种格式,可直接粘进去)。 }
+    function  SelectionAsText: string;
+    procedure CopySelectionToClipboard;
+    { 从制表符/换行分隔的文本粘贴到以当前光标为左上角的区域。 }
+    procedure PasteFromText(const AText: string);
+    procedure PasteFromClipboard;
+    { CSV。ADelimiter 默认逗号;含分隔符/引号/换行的字段自动加引号。 }
+    function  SaveToCSVText(ADelimiter: Char = ','): string;
+    procedure LoadFromCSVText(const AText: string; ADelimiter: Char = ',');
+    procedure SaveToCSVFile(const AFileName: string; ADelimiter: Char = ',');
+    procedure LoadFromCSVFile(const AFileName: string; ADelimiter: Char = ',');
+
+    { 按某列排序。ACol < 0 表示取消排序、回到原始数据顺序。 }
+    procedure SortByColumn(ACol: Integer; ADirection: TTySortDirection);
+    { 点列头的默认行为:同列则反向,换列则升序;再点第三次取消排序。 }
+    procedure ToggleSortColumn(ACol: Integer);
+    property SortColumn: Integer read FSortCol;
+    property SortDirection: TTySortDirection read FSortDir;
+
+    property Editing: Boolean read FEditing;
+    property Editor: TTyEdit read FEditor;
+    property PickEditor: TTyComboBox read FPickEditor;
+    property Cells[ACol, ARow: Integer]: string read GetCells write SetCells;
+  published
+    { 当前单元格。 }
+    property Col: Integer read FCol write SetCol default 0;
+    property Row: Integer read FRow write SetRow default 0;
+    property OnSelectCell: TTyGridSelectCellEvent read FOnSelectCell write FOnSelectCell;
+    { 整表只读:任何编辑都开不起来。 }
+    property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
+    property DefaultEditorKind: TTyGridEditorKind
+      read FDefaultEditorKind write FDefaultEditorKind default gekText;
+    property OnGetEditorKind: TTyGridGetEditorKindEvent
+      read FOnGetEditorKind write FOnGetEditorKind;
+    property OnCellEdited: TTyGridCellEditedEvent read FOnCellEdited write FOnCellEdited;
+    { 排序比较方式:文本还是数值。数值列用 gskText 排会得到 '10' < '9' 这种结果。 }
+    property SortKind: TTyGridSortKind read FSortKind write FSortKind default gskText;
+    { 自定义比较;置 AResult 即接管该列的比较。 }
+    property OnCompareCells: TTyGridCompareEvent read FOnCompareCells write FOnCompareCells;
+    property OnFilterRow: TTyGridFilterRowEvent read FOnFilterRow write FOnFilterRow;
+    property OnGetPickList: TTyGridGetPickListEvent read FOnGetPickList write FOnGetPickList;
+    property OnGetFooterText: TTyGridGetFooterTextEvent
+      read FOnGetFooterText write FOnGetFooterText;
+    { 单元格显示方式(与编辑方式正交)。 }
+    property DefaultCellDisplay: TTyGridCellDisplay
+      read FDefaultCellDisplay write FDefaultCellDisplay default gcdText;
+    property OnGetCellDisplay: TTyGridGetCellDisplayEvent
+      read FOnGetCellDisplay write FOnGetCellDisplay;
+    { gcdImage 用的图像列表(单元格内容存图像索引)。 }
+    property Images: TTyVirtualImageList read FImages write FImages;
+    { 逐行行高。接了它即启用可变行高;不接则全表等高(走整除快路径)。 }
+    property OnGetRowHeight: TTyGridGetRowHeightEvent
+      read FOnGetRowHeight write FOnGetRowHeight;
+    { 列头上显示筛选按钮(点它弹出去重值的勾选下拉)。 }
+    property ShowFilterButtons: Boolean
+      read FShowFilterButtons write FShowFilterButtons default False;
+  end;
+
+var
+  { 勾选框额外认作"真"的**本地化**词(中文表里常见 '是')。
+    默认从 resourcestring 播种,可在运行时改 —— 与本库 TyFallbackFontName 同一惯例。
+    通用真值 1/true/yes/y 永远认,不受它影响。 }
+  TyGridCheckedWord: string;
+
+implementation
+
+constructor TTyCustomGrid.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FHeader := TTyHeader.Create;
+  FHeader.OnChange := @HeaderChanged;
+  FRowCount := 0;
+  FDefaultRowHeight := 22;
+  FFixedCols := 0;
+  FFixedRows := 0;
+  FIndicatorWidth := 30;
+  FShowIndicator := False;
+  FShowGridLines := True;
+  FShowFooter := False;
+  FFooterHeight := 24;
+  FScrollX := 0;
+  FScrollY := 0;
+  FDragCol := -1;
+  FResizeCol := -1;
+
+  { 两条内嵌滚动条。csNoDesignVisible:内部子控件不该出现在设计器的对象树里。 }
+  FVScroll := TTyScrollBar.Create(Self);
+  FVScroll.Parent := Self;
+  FVScroll.Kind := sbVertical;
+  FVScroll.AnimationsEnabled := False;
+  FVScroll.OnChange := @VScrollChange;
+  FVScroll.ControlStyle := FVScroll.ControlStyle + [csNoDesignVisible];
+  FVScroll.Visible := False;
+
+  FHScroll := TTyScrollBar.Create(Self);
+  FHScroll.Parent := Self;
+  FHScroll.Kind := sbHorizontal;
+  FHScroll.AnimationsEnabled := False;
+  FHScroll.OnChange := @HScrollChange;
+  FHScroll.ControlStyle := FHScroll.ControlStyle + [csNoDesignVisible];
+  FHScroll.Visible := False;
+end;
+
+destructor TTyCustomGrid.Destroy;
+begin
+  { 先摘监听再释放:否则析构过程中列集合的变更会回调到半毁的控件上。 }
+  FHeader.OnChange := nil;
+  FHeader.Free;
+  inherited Destroy;
+end;
+
+function TTyCustomGrid.GetStyleTypeKey: string;
+begin
+  { 自己的 typeKey,绝不借用树/列表的键 —— 借来的键在外观主题层够不着,
+    而且改它会波及那些控件。 }
+  Result := 'TyGrid';
+end;
+
+function TTyCustomGrid.Dpi: Integer;
+begin
+  Result := Font.PixelsPerInch;
+  if Result <= 0 then Result := 96;
+end;
+
+function TTyCustomGrid.ScaleI(AValue: Integer): Integer;
+begin
+  Result := MulDiv(AValue, Dpi, 96);
+end;
+
+function TTyCustomGrid.UnscaleI(AValue: Integer): Integer;
+begin
+  Result := MulDiv(AValue, 96, Dpi);
+end;
+
+procedure TTyCustomGrid.HeaderChanged(Sender: TObject);
+begin
+  UpdateScrollBars;   { 列宽/列数变了,横向内容量随之变 }
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetHeader(AValue: TTyHeader);
+begin
+  FHeader.Assign(AValue);
+end;
+
+procedure TTyCustomGrid.SetRowCount(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FRowCount = AValue then Exit;
+  FRowCount := AValue;
+  InvalidateGridOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetDefaultRowHeight(AValue: Integer);
+begin
+  if AValue < 1 then AValue := 1;
+  if FDefaultRowHeight = AValue then Exit;
+  FDefaultRowHeight := AValue;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetFixedCols(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FFixedCols = AValue then Exit;
+  FFixedCols := AValue;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetFixedRows(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FFixedRows = AValue then Exit;
+  FFixedRows := AValue;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetIndicatorWidth(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FIndicatorWidth = AValue then Exit;
+  FIndicatorWidth := AValue;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetShowIndicator(AValue: Boolean);
+begin
+  if FShowIndicator = AValue then Exit;
+  FShowIndicator := AValue;
+  Invalidate;
+end;
+
+function TTyCustomGrid.FrozenWidthPx: Integer;
+var
+  n, i, logical: Integer;
+  c: TTyColumn;
+begin
+  logical := 0;
+  if FShowIndicator then Inc(logical, FIndicatorWidth);
+
+  { 固定列数可能被设得比实际列数还多(设计期先设 FixedCols 再加列很常见),
+    按实际列数封顶,别越界求和。 }
+  n := FFixedCols;
+  if n > FHeader.Columns.Count then n := FHeader.Columns.Count;
+  for i := 0 to n - 1 do
+  begin
+    c := TTyColumn(FHeader.Columns.Items[i]);
+    if coVisible in c.Options then
+      Inc(logical, c.Width);
+  end;
+
+  Result := ScaleI(logical);
+end;
+
+function TTyCustomGrid.FrozenHeightPx: Integer;
+var
+  logical: Integer;
+begin
+  logical := 0;
+  if hoVisible in FHeader.Options then Inc(logical, FHeader.Height);
+  Inc(logical, FFixedRows * FDefaultRowHeight);
+  Result := ScaleI(logical);
+end;
+
+procedure TTyCustomGrid.SetShowGridLines(AValue: Boolean);
+begin
+  if FShowGridLines = AValue then Exit;
+  FShowGridLines := AValue;
+  Invalidate;
+end;
+
+function TTyCustomGrid.ViewportW: Integer;
+begin
+  Result := ClientWidth;
+  if (FVScroll <> nil) and FVScroll.Visible then Dec(Result, FVScroll.Width);
+  if Result < 0 then Result := 0;
+end;
+
+function TTyCustomGrid.ViewportH: Integer;
+begin
+  Result := ClientHeight;
+  if (FHScroll <> nil) and FHScroll.Visible then Dec(Result, FHScroll.Height);
+  { 汇总带钉在底部、不滚动 —— 从视口里扣掉,否则最后一行会钻到它底下。 }
+  Dec(Result, FooterHeightPx);
+  if Result < 0 then Result := 0;
+end;
+
+procedure TTyCustomGrid.VScrollChange(Sender: TObject);
+begin
+  if FSyncingScroll then Exit;
+  FScrollY := FVScroll.Position;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.HScrollChange(Sender: TObject);
+begin
+  if FSyncingScroll then Exit;
+  FScrollX := FHScroll.Position;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.Resize;
+begin
+  inherited Resize;
+  UpdateScrollBars;
+end;
+
+procedure TTyCustomGrid.SyncScrollBars;
+begin
+  if (FVScroll = nil) or (FHScroll = nil) then Exit;
+  if FSyncingScroll then Exit;      { 正在由 UpdateScrollBars 推值,别自己撞自己 }
+  FSyncingScroll := True;
+  try
+    if FVScroll.Visible and not FVScroll.Dragging then FVScroll.Position := FScrollY;
+    if FHScroll.Visible and not FHScroll.Dragging then FHScroll.Position := FScrollX;
+  finally
+    FSyncingScroll := False;
+  end;
+end;
+
+procedure TTyCustomGrid.UpdateScrollBars;
+var
+  sb, vw, vh, pass, bodyH, bodyW, maxV, maxH: Integer;
+  needV, needH: Boolean;
+begin
+  if csDestroying in ComponentState then Exit;
+  if (FVScroll = nil) or (FHScroll = nil) then Exit;
+
+  sb := ScaleI(TyScrollbarSize);
+  needV := False;
+  needH := False;
+
+  { 两趟收敛"互夺":一条轴出现滚动条会吃掉另一条轴的可用空间,可能反过来又逼出对方。 }
+  for pass := 0 to 1 do
+  begin
+    vw := ClientWidth  - IfThen(needV, sb, 0);
+    vh := ClientHeight - IfThen(needH, sb, 0);
+    if vw < 0 then vw := 0;
+    if vh < 0 then vh := 0;
+    needV := ContentHeightPx > (vh - FrozenHeightPx);
+    needH := ContentWidthPx  > vw;
+  end;
+
+  vw := ClientWidth  - IfThen(needV, sb, 0);
+  vh := ClientHeight - IfThen(needH, sb, 0);
+  if vw < 0 then vw := 0;
+  if vh < 0 then vh := 0;
+
+  bodyH := vh - FrozenHeightPx; if bodyH < 0 then bodyH := 0;
+  bodyW := vw - FrozenWidthPx;  if bodyW < 0 then bodyW := 0;
+  maxV := ContentHeightPx - bodyH;                if maxV < 0 then maxV := 0;
+  maxH := (ContentWidthPx - FrozenWidthPx) - bodyW; if maxH < 0 then maxH := 0;
+
+  if FScrollY > maxV then FScrollY := maxV;
+  if FScrollX > maxH then FScrollX := maxH;
+
+  FSyncingScroll := True;
+  try
+    if needV then
+    begin
+      FVScroll.Controller := Self.Controller;
+      FVScroll.Width := sb;
+      if not FVScroll.Dragging then
+        FVScroll.SetBounds(ClientWidth - sb, 0, sb, vh);
+      FVScroll.Min := 0;
+      { Max = **最大位置**而非内容尺寸 —— 滑块按 PageSize/((Max-Min)+PageSize) 定大小,
+        喂内容尺寸会让滑块偏小、底部永远留一截、拖到底还会弹回。与列表/树同一约定。 }
+      FVScroll.Max := maxV;
+      FVScroll.PageSize := bodyH;
+      FVScroll.Position := FScrollY;
+    end;
+    FVScroll.Visible := needV;
+
+    if needH then
+    begin
+      FHScroll.Controller := Self.Controller;
+      FHScroll.Height := sb;
+      if not FHScroll.Dragging then
+        FHScroll.SetBounds(0, ClientHeight - sb, vw, sb);
+      FHScroll.Min := 0;
+      FHScroll.Max := maxH;
+      FHScroll.PageSize := bodyW;
+      FHScroll.Position := FScrollX;
+    end;
+    FHScroll.Visible := needH;
+  finally
+    FSyncingScroll := False;
+  end;
+end;
+
+function TTyCustomGrid.ContentHeightPx: Integer;
+begin
+  { 走几何层,这样可变行高时自然取前缀和末项,不必在这里再算一遍。 }
+  Result := TyGridContentHeight(GridMetrics);
+end;
+
+function TTyCustomGrid.ContentWidthPx: Integer;
+var
+  i, logical: Integer;
+  c: TTyColumn;
+begin
+  logical := 0;
+  if FShowIndicator then Inc(logical, FIndicatorWidth);
+  for i := 0 to FHeader.Columns.Count - 1 do
+  begin
+    c := TTyColumn(FHeader.Columns.Items[i]);
+    if coVisible in c.Options then Inc(logical, c.Width);
+  end;
+  Result := ScaleI(logical);
+end;
+
+function TTyCustomGrid.MaxScrollY: Integer;
+var
+  body: Integer;
+begin
+  body := ViewportH - FrozenHeightPx;
+  Result := ContentHeightPx - body;
+  if Result < 0 then Result := 0;
+end;
+
+function TTyCustomGrid.MaxScrollX: Integer;
+var
+  body: Integer;
+begin
+  { 正文区可用宽 = 客户区 - 冻结带;内容里同样要扣掉冻结部分(它不参与滚动)。 }
+  body := ViewportW - FrozenWidthPx;
+  Result := (ContentWidthPx - FrozenWidthPx) - body;
+  if Result < 0 then Result := 0;
+end;
+
+procedure TTyCustomGrid.ScrollIntoView(ACol, ARow: Integer);
+var
+  M: TTyGridMetrics;
+  body, r, cell: TRect;
+begin
+  M := GridMetrics;
+  body := TyGridPaneRect(M, gpBody);
+
+  { 纵向:用行矩形判断,最小移动量把它拉进正文区。 }
+  r := TyGridRowRect(DataToDisplay(ARow), M);
+  if r.Top < body.Top then
+    SetScrollY(FScrollY - (body.Top - r.Top))
+  else if r.Bottom > body.Bottom then
+    SetScrollY(FScrollY + (r.Bottom - body.Bottom));
+
+  { 横向:固定列本来就在冻结带里,不需要也不能滚。 }
+  if ACol >= FFixedCols then
+  begin
+    cell := CellRect(ACol, ARow);
+    if cell.Left < body.Left then
+      SetScrollX(FScrollX - (body.Left - cell.Left))
+    else if cell.Right > body.Right then
+      SetScrollX(FScrollX + (cell.Right - body.Right));
+  end;
+end;
+
+function TTyCustomGrid.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var
+  step: Integer;
+begin
+  { 一格滚轮走三行 —— 与列表/树保持一致的手感。 }
+  step := 3 * ScaleI(FDefaultRowHeight);
+  if WheelDelta > 0 then SetScrollY(FScrollY - step)
+  else SetScrollY(FScrollY + step);
+  Result := True;
+end;
+
+procedure TTyCustomGrid.SetShowFooter(AValue: Boolean);
+begin
+  if FShowFooter = AValue then Exit;
+  FShowFooter := AValue;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetFooterHeight(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FFooterHeight = AValue then Exit;
+  FFooterHeight := AValue;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+function TTyCustomGrid.FooterHeightPx: Integer;
+begin
+  if FShowFooter then Result := ScaleI(FFooterHeight) else Result := 0;
+end;
+
+procedure TTyCustomGrid.SetScrollX(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if AValue > MaxScrollX then AValue := MaxScrollX;
+  if FScrollX = AValue then Exit;
+  FScrollX := AValue;
+  SyncScrollBars;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetScrollY(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if AValue > MaxScrollY then AValue := MaxScrollY;
+  if FScrollY = AValue then Exit;
+  FScrollY := AValue;
+  SyncScrollBars;
+  Invalidate;
+end;
+
+function TTyCustomGrid.ColumnLeftPx(ACol: Integer): Integer;
+var
+  i, logical: Integer;
+  c: TTyColumn;
+begin
+  Result := 0;
+  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
+
+  { 行头槽之后,累加本列之前所有可见列的宽度。
+    这里刻意按索引顺序累加而不用 TTyColumn.Left —— Left 是按**显示位置**算的,
+    等 P7 接上拖动重排后两者会分叉;列冻结与否取决于索引,所以此处必须按索引。 }
+  logical := 0;
+  if FShowIndicator then Inc(logical, FIndicatorWidth);
+  for i := 0 to ACol - 1 do
+  begin
+    c := TTyColumn(FHeader.Columns.Items[i]);
+    if coVisible in c.Options then
+      Inc(logical, c.Width);
+  end;
+
+  Result := ScaleI(logical);
+
+  { 固定列钉在冻结带里不随横向滚动;正文列才平移 —— 这正是"冻结"的全部含义。 }
+  if ACol >= FFixedCols then
+    Dec(Result, FScrollX);
+end;
+
+function TTyCustomGrid.ColumnWidthPx(ACol: Integer): Integer;
+begin
+  Result := 0;
+  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
+  Result := ScaleI(TTyColumn(FHeader.Columns.Items[ACol]).Width);
+end;
+
+function TTyCustomGrid.ColumnAtX(AX: Integer): Integer;
+var
+  i, l, w: Integer;
+begin
+  Result := -1;
+  { 取逆:逐列用 ColumnLeftPx/ColumnWidthPx 判定,而不是另写一套累加。
+    列数通常只有几十,线性扫足够;要紧的是它与绘制用的是同一个出处。
+
+    倒序扫:固定列画在正文列**之上**(冻结带会盖住滚过来的正文列),
+    所以重叠处必须让固定列赢 —— 与绘制顺序保持一致。 }
+  for i := FHeader.Columns.Count - 1 downto 0 do
+  begin
+    if not (coVisible in TTyColumn(FHeader.Columns.Items[i]).Options) then Continue;
+    l := ColumnLeftPx(i);
+    w := ColumnWidthPx(i);
+    if (w > 0) and (AX >= l) and (AX < l + w) then
+    begin
+      if (i >= FFixedCols) and (AX < FrozenWidthPx) then Continue;  { 被冻结带盖住 }
+      Result := i;
+      Exit;
+    end;
+  end;
+end;
+
+function TTyCustomGrid.CellRect(ACol, ARow: Integer): TRect;
+var
+  rowR: TRect;
+  l, w: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
+  if (ARow < 0) or (ARow >= FRowCount) then Exit;
+
+  { 纵轴交给纯几何层(按**显示序**),横轴走列轴唯一出处 —— 两边都不另算。 }
+  rowR := TyGridRowRect(DataToDisplay(ARow), GridMetrics);
+  l := ColumnLeftPx(ACol);
+  w := ColumnWidthPx(ACol);
+  if w <= 0 then Exit;
+
+  Result := Rect(l, rowR.Top, l + w, rowR.Bottom);
+end;
+
+function TTyCustomGrid.DisplayToData(APos: Integer): Integer;
+begin
+  Result := APos;      { 未排序:显示序就是数据行 }
+end;
+
+function TTyCustomGrid.DataToDisplay(ARow: Integer): Integer;
+begin
+  Result := ARow;
+end;
+
+procedure TTyCustomGrid.InvalidateGridOrder;
+begin
+  { 基类没有间接层,什么都不用做。 }
+end;
+
+function TTyCustomGrid.DisplayRowCount: Integer;
+begin
+  Result := FRowCount;
+end;
+
+procedure TTyCustomGrid.MapToBaseCell(var ACol, ARow: Integer);
+begin
+  { 基类没有合并。 }
+end;
+
+function TTyCustomGrid.CellPane(ACol, ARow: Integer): TTyGridPane;
+begin
+  if ACol < FFixedCols then Result := gpLeft else Result := gpBody;
+end;
+
+function TTyCustomGrid.CellVisibleRect(ACol, ARow: Integer): TRect;
+var
+  cell, pane: TRect;
+begin
+  cell := CellRect(ACol, ARow);
+  if IsRectEmpty(cell) then
+  begin
+    Result := Rect(0, 0, 0, 0);
+    Exit;
+  end;
+  pane := TyGridPaneRect(GridMetrics, CellPane(ACol, ARow));
+  if not IntersectRect(Result, cell, pane) then
+    Result := Rect(0, 0, 0, 0);
+end;
+
+function TTyCustomGrid.CellAt(AX, AY: Integer): TTyGridHit;
+var
+  M: TTyGridMetrics;
+begin
+  Result.Part := ghpNowhere;
+  Result.Col := -1;
+  Result.Row := -1;
+
+  M := GridMetrics;
+  if (AX < 0) or (AY < 0) or (AX >= M.ClientW) or (AY >= M.ClientH) then Exit;
+
+  { 列头带优先:它横跨整幅宽度,盖在行头槽之上。 }
+  if (hoVisible in FHeader.Options) and (AY < ScaleI(FHeader.Height)) then
+  begin
+    Result.Part := ghpHeader;
+    Result.Col := ColumnAtX(AX);
+    Exit;
+  end;
+
+  { 行头槽:列头之下、冻结带最左那条。 }
+  if FShowIndicator and (AX < ScaleI(FIndicatorWidth)) then
+  begin
+    Result.Part := ghpIndicator;
+    Result.Row := TyGridRowAt(AY, M);
+    if Result.Row >= 0 then Result.Row := DisplayToData(Result.Row);
+    Exit;
+  end;
+
+  Result.Row := TyGridRowAt(AY, M);
+  if Result.Row < 0 then Exit;      { 末行之后的空白 }
+  Result.Row := DisplayToData(Result.Row);   { 对外一律给数据行 }
+  if Result.Row < 0 then                     { 分组行:不是单元格 }
+  begin
+    Result.Part := ghpNowhere;
+    Result.Col := -1;
+    Exit;
+  end;
+  Result.Col := ColumnAtX(AX);
+  if Result.Col < 0 then Exit;      { 末列之后的空白 }
+  MapToBaseCell(Result.Col, Result.Row);   { 合并区里点哪都算基准格 }
+  Result.Part := ghpCell;
+end;
+
+function TTyCustomGrid.GridLineColor(const AFrame: TTyStyleSet): TBGRAPixel;
+var
+  lineS: TTyStyleSet;
+begin
+  lineS := ActiveController.Model.ResolveStyle('TyGridLine', StyleClass, CurrentStates);
+  if tpBackground in lineS.Present then
+    Result := TyColorToBGRA(lineS.Background.Color)
+  else
+    Result := TyColorToBGRA(AFrame.BorderColor);
+end;
+
+procedure TTyCustomGrid.RenderGridLines(P: TTyPainter; const M: TTyGridMetrics;
+  const AFrame: TTyStyleSet);
+var
+  first, last, row, i, x: Integer;
+  r: TRect;
+  line: TBGRAPixel;
+  col: TTyColumn;
+begin
+  line := GridLineColor(AFrame);
+
+  { 横线:每一可见行的下沿。只走 TyGridVisibleRows —— 百万行的表在这里也只画几十条。 }
+  if TyGridVisibleRows(M, first, last) then
+    for row := first to last do
+    begin
+      r := TyGridRowRect(row, M);
+      P.Bitmap.DrawLine(0, r.Bottom - 1, M.ClientW, r.Bottom - 1, line, False);
+    end;
+
+  { 竖线:每一可见列的右缘。位置走 ColumnLeftPx(列轴唯一出处),
+    绝不另算 —— 否则线会和单元格边界差一像素。 }
+  for i := 0 to FHeader.Columns.Count - 1 do
+  begin
+    col := TTyColumn(FHeader.Columns.Items[i]);
+    if not (coVisible in col.Options) then Continue;
+    x := ColumnLeftPx(i) + ColumnWidthPx(i);
+    if (x > 0) and (x <= M.ClientW) then
+      P.Bitmap.DrawLine(x - 1, M.FrozenH, x - 1, M.ClientH, line, False);
+  end;
+end;
+
+procedure TTyCustomGrid.FillRegion(P: TTyPainter; const ARect: TRect; const AKey: string);
+var
+  S: TTyStyleSet;
+begin
+  if IsRectEmpty(ARect) then Exit;
+  S := ActiveController.Model.ResolveStyle(AKey, StyleClass, CurrentStates);
+  if not (tpBackground in S.Present) then Exit;   { 皮肤没写这块 → 透出表面本色 }
+  P.FillBackground(ARect, S.Background, 0);
+end;
+
+function TTyCustomGrid.DividerAtX(AX: Integer): Integer;
+var
+  i, edge, tol: Integer;
+begin
+  Result := -1;
+  if not (hoColumnResize in FHeader.Options) then Exit;
+  tol := ScaleI(4);
+  for i := 0 to FHeader.Columns.Count - 1 do
+  begin
+    if not (coVisible in TTyColumn(FHeader.Columns.Items[i]).Options) then Continue;
+    edge := ColumnLeftPx(i) + ColumnWidthPx(i);
+    if Abs(AX - edge) <= tol then
+    begin
+      Result := i;
+      Exit;
+    end;
+  end;
+end;
+
+procedure TTyCustomGrid.MouseDown(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+var
+  hdrH, d: Integer;
+  col: TTyColumn;
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  if Button <> mbLeft then Exit;
+
+  hdrH := 0;
+  if hoVisible in FHeader.Options then hdrH := ScaleI(FHeader.Height);
+  if (hdrH <= 0) or (Y >= hdrH) then Exit;
+
+  { 分隔条优先于列体 —— 边缘那几像素上,用户的意图是改宽而不是排序。 }
+  d := DividerAtX(X);
+  if d >= 0 then
+  begin
+    FResizeCol := d;
+    FResizeStartX := X;
+    FResizeStartW := TTyColumn(FHeader.Columns.Items[d]).Width;
+    Exit;
+  end;
+
+  { 否则记下"可能是拖动列"——真正的重排等 MouseMove 越过阈值才算数,
+    这样单纯点一下列头仍然是排序。 }
+  d := ColumnAtX(X);
+  if d >= 0 then
+  begin
+    col := TTyColumn(FHeader.Columns.Items[d]);
+    if (hoDrag in FHeader.Options) and (coDraggable in col.Options) then
+    begin
+      FDragCol := d;
+      FDragStartX := X;
+    end;
+  end;
+end;
+
+procedure TTyCustomGrid.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  target, delta: Integer;
+begin
+  inherited MouseMove(Shift, X, Y);
+
+  if FResizeCol >= 0 then
+  begin
+    delta := UnscaleI(X - FResizeStartX);
+    TTyColumn(FHeader.Columns.Items[FResizeCol]).Width := FResizeStartW + delta;
+    UpdateScrollBars;
+    Invalidate;
+    Exit;
+  end;
+
+  if FDragCol >= 0 then
+  begin
+    { 越过阈值才算拖动 —— 否则手抖一像素就把列挪了。 }
+    if Abs(X - FDragStartX) < ScaleI(8) then Exit;
+    target := ColumnAtX(X);
+    if (target >= 0) and (target <> FDragCol) then
+    begin
+      { 复用列模型现成的位置调整(coDraggable/AdjustPosition 早就建好了,
+        一直没人接线 —— 这里就是那根线)。 }
+      FHeader.Columns.AdjustPosition(TTyColumn(FHeader.Columns.Items[FDragCol]),
+        TTyColumn(FHeader.Columns.Items[target]).Position);
+      FDragStartX := X;
+      Invalidate;
+    end;
+  end;
+end;
+
+procedure TTyCustomGrid.MouseUp(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+begin
+  FResizeCol := -1;
+  FDragCol := -1;
+  inherited MouseUp(Button, Shift, X, Y);
+end;
+
+function TTyCustomGrid.ShowsFilterButton(ACol: Integer): Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomGrid.HeaderFilterRect(ACol, AHeaderH: Integer): TRect;
+var
+  l, w, cx, cy, gs: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if not ShowsFilterButton(ACol) then Exit;
+  l := ColumnLeftPx(ACol);
+  w := ColumnWidthPx(ACol);
+  if w <= 0 then Exit;
+  gs := 0;
+  if (hoShowSortGlyphs in FHeader.Options) and (ACol = FHeader.SortColumn) then
+    gs := ScaleI(12);
+  cx := l + w - ScaleI(10) - gs;
+  cy := AHeaderH div 2;
+  Result := Rect(cx - ScaleI(7), cy - ScaleI(7), cx + ScaleI(7), cy + ScaleI(7));
+end;
+
+procedure TTyCustomGrid.RenderHeaderSections(P: TTyPainter; const M: TTyGridMetrics;
+  AHeaderH: Integer);
+var
+  i, l, w, cx, cy, gs: Integer;
+  col: TTyColumn;
+  secS, hdrS: TTyStyleSet;
+  ink: TTyColor;
+  r, textR: TRect;
+  line: TBGRAPixel;
+begin
+  hdrS := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass, CurrentStates);
+  secS := ActiveController.Model.ResolveStyle('TyGridHeaderSection', StyleClass, CurrentStates);
+  if tpTextColor in secS.Present then ink := secS.TextColor
+  else if tpTextColor in hdrS.Present then ink := hdrS.TextColor
+  else ink := CurrentStyle.TextColor;
+  line := TyColorToBGRA(hdrS.BorderColor);
+
+  for i := 0 to FHeader.Columns.Count - 1 do
+  begin
+    col := TTyColumn(FHeader.Columns.Items[i]);
+    if not (coVisible in col.Options) then Continue;
+    l := ColumnLeftPx(i);
+    w := ColumnWidthPx(i);
+    if (w <= 0) or (l >= M.ClientW) or (l + w <= 0) then Continue;
+    { 正文列滚到冻结带底下的那一截不该露出来 —— 与单元格同一条裁剪规则。 }
+    if (i >= FFixedCols) and (l < M.FrozenW) then
+    begin
+      if l + w <= M.FrozenW then Continue;
+      l := M.FrozenW;
+      w := ColumnLeftPx(i) + ColumnWidthPx(i) - l;
+    end;
+
+    r := Rect(l, 0, l + w, AHeaderH);
+    if tpBackground in secS.Present then
+      P.FillBackground(r, secS.Background, 0);
+
+    { 排序列留出字形的位置,标题文字缩进一点。 }
+    gs := 0;
+    if (hoShowSortGlyphs in FHeader.Options) and (i = FHeader.SortColumn) then
+      gs := ScaleI(12);
+
+    textR := Rect(r.Left + ScaleI(6), r.Top, r.Right - ScaleI(4) - gs, r.Bottom);
+    if (col.Text <> '') and (textR.Right > textR.Left) then
+      P.DrawText(textR, col.Text, hdrS.FontName, ResolveFontSize(hdrS),
+        hdrS.FontWeight, ink, col.CaptionAlignment, tlCenter, True);
+
+    { 该列有筛选时,标题右侧留一个漏斗位(用向下箭头示意)。 }
+    if ShowsFilterButton(i) then
+    begin
+      cx := r.Right - ScaleI(10) - gs;
+      cy := AHeaderH div 2;
+      TyDrawGlyph(P, ActiveController,
+        Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
+        tgChevronDown, ink, 1, 1);
+    end;
+
+    { 排序方向的小三角。 }
+    if gs > 0 then
+    begin
+      cx := r.Right - ScaleI(10);
+      cy := AHeaderH div 2;
+      { 槽位式调用传 pad=1:DrawGlyph 默认每边内缩 4 逻辑像素,小槽里会只剩个糊点。 }
+      if FHeader.SortDirection = sdAscending then
+        TyDrawGlyph(P, ActiveController,
+          Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
+          tgArrowUp, ink, 1, 1)
+      else
+        TyDrawGlyph(P, ActiveController,
+          Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
+          tgArrowDown, ink, 1, 1);
+    end;
+
+    { 分段之间的竖分隔线。 }
+    if r.Right - 1 < M.ClientW then
+      P.Bitmap.DrawLine(r.Right - 1, 0, r.Right - 1, AHeaderH, line, False);
+  end;
+end;
+
+procedure TTyCustomGrid.RenderChrome(P: TTyPainter; const M: TTyGridMetrics);
+var
+  headerH, indW: Integer;
+begin
+  headerH := 0;
+  if hoVisible in FHeader.Options then headerH := ScaleI(FHeader.Height);
+  indW := 0;
+  if FShowIndicator then indW := ScaleI(FIndicatorWidth);
+
+  { 次序 = 遮挡次序,且必须与 CellAt 的判定次序一致,否则"看到的"和"点到的"会错位。
+    先画下层的行头槽与固定列,最后让列头带横跨整幅盖上去(含左上角)。 }
+
+  { 行头槽:列头之下、最左那条。 }
+  if indW > 0 then
+    FillRegion(P, Rect(0, headerH, indW, M.ClientH), 'TyGridIndicator');
+
+  { 固定列区:行头槽右侧到冻结带右缘。 }
+  if M.FrozenW > indW then
+    FillRegion(P, Rect(indW, headerH, M.FrozenW, M.ClientH), 'TyGridFixed');
+
+  { 列头带:横跨整幅宽度,盖住左上角 —— 与 CellAt 里"列头优先"一致。 }
+  if headerH > 0 then
+  begin
+    FillRegion(P, Rect(0, 0, M.ClientW, headerH), 'TyGridHeader');
+    RenderHeaderSections(P, M, headerH);
+  end;
+end;
+
+procedure TTyCustomGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
+  const AFrame: TTyStyleSet);
+begin
+  { 基类不画内容:它不知道数据从哪来。TTyDrawGrid / TTyStringGrid 改写。 }
+end;
+
+procedure TTyCustomGrid.RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
+  const AFooterRect: TRect; const AFrame: TTyStyleSet);
+begin
+  FillRegion(P, AFooterRect, 'TyGridSummaryRow');
+end;
+
+procedure TTyCustomGrid.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+var
+  P: TTyPainter;
+  S: TTyStyleSet;
+  R: TRect;
+  M: TTyGridMetrics;
+begin
+  P := TTyPainter.Create;
+  try
+    { painter 画进自己的 (W x H) 位图再整体 blit,所以这里必须用 (0,0) 原点的局部矩形。 }
+    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+    P.BeginPaint(ACanvas, ARect, APPI);
+
+    S := CurrentStyle;
+    { 主题没给 TyGrid 定义背景 → 一个像素都不画。降级成空白区域,
+      既不崩溃也不自己发明外观 —— 与库内其他控件一致。
+      (EndPaint 在 finally 里;此时位图全透明,alpha 混合不会碰到画布。) }
+    if not (tpBackground in S.Present) then Exit;
+
+    DrawFrame(P, R, S);
+
+    M := GridMetrics;
+    RenderChrome(P, M);
+    if FooterHeightPx > 0 then
+      RenderFooter(P, M, Rect(0, M.ClientH, M.ClientW, M.ClientH + FooterHeightPx), S);
+    RenderCells(P, M, S);
+    if FShowGridLines then
+      RenderGridLines(P, M, S);
+  finally
+    P.EndPaint;
+    P.Free;
+  end;
+end;
+
+procedure TTyCustomGrid.Paint;
+begin
+  RenderTo(Canvas, ClientRect, Dpi);
+end;
+
+function TTyCustomGrid.RowHeightOf(ARow: Integer): Integer;
+begin
+  Result := FDefaultRowHeight;
+end;
+
+function TTyCustomGrid.RowTops: TTyIntArray;
+begin
+  Result := nil;      { 基类全等高 —— 返回空数组让几何层走整除快路径 }
+end;
+
+function TTyCustomGrid.GridMetrics: TTyGridMetrics;
+begin
+  Result := Default(TTyGridMetrics);
+  Result.ClientW := ViewportW;
+  Result.ClientH := ViewportH;
+  Result.FrozenW := FrozenWidthPx;
+  Result.FrozenH := FrozenHeightPx;
+  Result.RowH := ScaleI(FDefaultRowHeight);
+  Result.RowCount := DisplayRowCount;
+  Result.RowTops := RowTops;
+  Result.ScrollX := FScrollX;
+  Result.ScrollY := FScrollY;
+end;
+
+{ ---- TTyDrawGrid ---------------------------------------------------------- }
+
+function TTyDrawGrid.GetCellText(ACol, ARow: Integer): string;
+begin
+  Result := '';
+  if Assigned(FOnGetCellText) then
+    FOnGetCellText(Self, ACol, ARow, Result);
+end;
+
+function TTyDrawGrid.ShouldDrawCellText(ACol, ARow: Integer): Boolean;
+begin
+  Result := True;
+end;
+
+procedure TTyDrawGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
+  const AFrame: TTyStyleSet);
+var
+  firstRow, lastRow, row, colIdx, dataRow: Integer;
+  cellS: TTyStyleSet;
+  col: TTyColumn;
+  cell, vis, textR, oldClip: TRect;
+  ink: TTyColor;
+  txt: string;
+  padL, padR: Integer;
+begin
+  { 只遍历可视窗口 —— 一百万行的表在这里也只走几十行。这是虚拟化的全部实现:
+    控件从不持有数据,也从不遍历全部行。 }
+  if not TyGridVisibleRows(M, firstRow, lastRow) then Exit;
+
+  cellS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, CurrentStates);
+  if tpTextColor in cellS.Present then ink := cellS.TextColor
+  else ink := AFrame.TextColor;
+  padL := ScaleI(cellS.Padding.Left);
+  padR := ScaleI(cellS.Padding.Right);
+
+  { firstRow/lastRow 是**显示序**;下面每一步都立刻翻成数据行再去取内容。 }
+  for row := firstRow to lastRow do
+    for colIdx := 0 to Header.Columns.Count - 1 do
+    begin
+      col := TTyColumn(Header.Columns.Items[colIdx]);
+      if not (coVisible in col.Options) then Continue;
+
+      { 可见矩形为空 = 完全被冻结带盖住或滚出视口 → 连问都不必问宿主。 }
+      dataRow := DisplayToData(row);
+      vis := CellVisibleRect(colIdx, dataRow);
+      if IsRectEmpty(vis) then Continue;
+
+      { 自己画图形的格(勾选框/进度条/评分)不该再叠一层文字。 }
+      if not ShouldDrawCellText(colIdx, dataRow) then Continue;
+
+      txt := GetCellText(colIdx, dataRow);
+      if txt = '' then Continue;
+
+      cell := CellRect(colIdx, dataRow);
+      textR := Rect(cell.Left + padL, cell.Top, cell.Right - padR, cell.Bottom);
+      if textR.Right <= textR.Left then Continue;
+
+      { 文字按**完整**单元格排版,再裁到可见部分 —— 半掩的单元格应当被裁掉一截,
+        而不是把文字挤进剩余空间里(挤压会让同一列的文字忽宽忽窄)。 }
+      oldClip := P.Bitmap.ClipRect;
+      P.Bitmap.ClipRect := vis;
+      try
+        P.DrawText(textR, txt, cellS.FontName, ResolveFontSize(cellS),
+          cellS.FontWeight, ink, col.Alignment, tlCenter, True);
+      finally
+        P.Bitmap.ClipRect := oldClip;
+      end;
+    end;
+end;
+
+{ ---- TTyStringGrid -------------------------------------------------------- }
+
+constructor TTyStringGrid.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FCells := TFPStringHashTable.Create;
+  FColFilters := TStringList.Create;
+  FValFilters := TStringList.Create;
+  FAggregates := TStringList.Create;
+  FCollapsed := TStringList.Create;
+  FMerges := TFPStringHashTable.Create;
+  FCol := 0;
+  FRow := 0;
+  TabStop := True;                      { 要接键盘 }
+  FReadOnly := False;
+  FDefaultEditorKind := gekText;
+  FSelAnchorCol := 0;
+  FSelAnchorRow := 0;
+  FSortCol := -1;
+  FSortDir := sdAscending;
+  FSortKind := gskText;
+  FGroupCol := -1;
+  FFilterCol := -1;
+  FShowFilterButtons := False;
+  FDefaultCellDisplay := gcdText;
+
+  { 一个复用的内联编辑器,盖在被编辑的单元格上。 }
+  FEditor := TTyEdit.Create(Self);
+  FEditor.Parent := Self;
+  FEditor.Visible := False;
+  FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
+  FEditor.OnKeyDown := @EditorKeyDown;
+  FEditor.OnExit := @EditorExit;
+
+  { 第二个复用编辑器:下拉选取。与文本编辑器同一套生命周期规则。 }
+  FPickEditor := TTyComboBox.Create(Self);
+  FPickEditor.Parent := Self;
+  FPickEditor.Visible := False;
+  FPickEditor.ControlStyle := FPickEditor.ControlStyle + [csNoDesignVisible];
+  FPickEditor.OnChange := @PickEditorChange;
+  FPickEditor.OnExit := @PickEditorExit;
+
+  { 第三个复用编辑器:日期选择器。 }
+  FDateEditor := TTyDateTimePicker.Create(Self);
+  FDateEditor.Parent := Self;
+  FDateEditor.Visible := False;
+  FDateEditor.ControlStyle := FDateEditor.ControlStyle + [csNoDesignVisible];
+  FDateEditor.OnExit := @DateEditorExit;
+end;
+
+destructor TTyStringGrid.Destroy;
+begin
+  FEditor.OnKeyDown := nil;     { 先摘回调,别在半毁对象上回调 }
+  FEditor.OnExit := nil;
+  FPickEditor.OnChange := nil;
+  FPickEditor.OnExit := nil;
+  FDateEditor.OnExit := nil;
+  FCells.Free;
+  FColFilters.Free;
+  FValFilters.Free;
+  FAggregates.Free;
+  FCollapsed.Free;
+  FMerges.Free;
+  inherited Destroy;
+end;
+
+function TTyStringGrid.CellKey(ACol, ARow: Integer): string;
+begin
+  Result := IntToStr(ACol) + ':' + IntToStr(ARow);
+end;
+
+function TTyStringGrid.GetCells(ACol, ARow: Integer): string;
+begin
+  Result := FCells.Items[CellKey(ACol, ARow)];   { 哈希查找,O(1) }
+end;
+
+procedure TTyStringGrid.SetCells(ACol, ARow: Integer; const AValue: string);
+var
+  k: string;
+begin
+  k := CellKey(ACol, ARow);
+  if AValue = '' then
+    FCells.Delete(k)                  { 写空串 = 删除条目,稀疏存储不为空值留位置 }
+  else
+    FCells.Items[k] := AValue;        { 已存在则覆写,不存在则新增 }
+  Invalidate;
+end;
+
+procedure TTyStringGrid.ClearCells;
+begin
+  FCells.Clear;
+  Invalidate;
+end;
+
+function TTyStringGrid.StoredCellCount: Integer;
+begin
+  Result := FCells.Count;
+end;
+
+function TTyStringGrid.GetCellText(ACol, ARow: Integer): string;
+begin
+  { 先给宿主事件机会(虚拟模式);没接事件就用自带存储。 }
+  Result := inherited GetCellText(ACol, ARow);
+  if Result = '' then
+    Result := GetCells(ACol, ARow);
+end;
+
+procedure TTyStringGrid.SetCol(AValue: Integer);
+begin
+  MoveCursor(AValue, FRow);
+end;
+
+procedure TTyStringGrid.SetRow(AValue: Integer);
+begin
+  MoveCursor(FCol, AValue);
+end;
+
+procedure TTyStringGrid.MoveCursor(ACol, ARow: Integer);
+var
+  canSel: Boolean;
+begin
+  { 钳制到合法范围 —— 越界的光标会让绘制与命中都失去参照。 }
+  if ACol < 0 then ACol := 0;
+  if ARow < 0 then ARow := 0;
+  if ACol > Header.Columns.Count - 1 then ACol := Header.Columns.Count - 1;
+  if ARow > RowCount - 1 then ARow := RowCount - 1;
+  if (ACol = FCol) and (ARow = FRow) then Exit;
+
+  { 光标要动了 —— 先把正在编辑的格提交掉,否则编辑框会悬在旧位置。 }
+  EndEdit(True);
+
+  canSel := True;
+  if Assigned(FOnSelectCell) then FOnSelectCell(Self, ACol, ARow, canSel);
+  if not canSel then Exit;
+
+  FCol := ACol;
+  FRow := ARow;
+  ScrollIntoView(FCol, FRow);   { 光标走到哪,视口跟到哪 }
+  Invalidate;
+end;
+
+procedure TTyStringGrid.MouseDown(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+var
+  hit: TTyGridHit;
+  gPos, gIdx: Integer;
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  if not Enabled then Exit;
+  if Button <> mbLeft then Exit;
+
+  { 命中走 CellAt —— 与绘制同源,所以点哪格就选哪格,不会错位。 }
+  { 分组行整行都可点(不只三角)—— 目标大、好点。 }
+  if FGroupCol >= 0 then
+  begin
+    gPos := TyGridRowAt(Y, GridMetrics);
+    if (gPos >= 0) and IsGroupRow(gPos, gIdx) then
+    begin
+      ToggleGroup(gIdx);
+      Exit;
+    end;
+  end;
+
+  hit := CellAt(X, Y);
+  if (hit.Part = ghpHeader) and (hit.Col >= 0)
+     and ShowsFilterButton(hit.Col)
+     and PtInRect(HeaderFilterRect(hit.Col, ScaleI(Header.Height)), Point(X, Y)) then
+  begin
+    ShowColumnFilterDropDown(hit.Col);
+    Exit;
+  end;
+  if (hit.Part = ghpHeader) and (hit.Col >= 0)
+     and (hoHeaderClickAutoSort in Header.Options) then
+  begin
+    ToggleSortColumn(hit.Col);
+    Exit;
+  end;
+  if hit.Part = ghpCell then
+  begin
+    { 无头环境(无窗口句柄)下 SetFocus 会抛异常 —— 句柄没落地就别抢焦点。 }
+    if HandleAllocated and CanFocus then SetFocus;
+    MoveCursor(hit.Col, hit.Row);
+    { Shift+点 = 从原锚点拉到这里;普通点 = 把锚点收到当前格(取消区域)。 }
+    if not (ssShift in Shift) then AnchorSelection;
+    { 勾选框:点在方块上就切换。命中用的是绘制同一个槽,所以点哪切哪。 }
+    if (EditorKindFor(hit.Col, hit.Row) = gekCheckBox)
+       and PtInRect(CheckBoxRect(hit.Col, hit.Row), Point(X, Y)) then
+      ToggleCellChecked(hit.Col, hit.Row);
+  end;
+end;
+
+procedure TTyStringGrid.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyDown(Key, Shift);
+  if not Enabled then Exit;
+
+  case Key of
+    VK_LEFT:  begin MoveCursor(FCol - 1, FRow); Key := 0; end;
+    VK_RIGHT: begin MoveCursor(FCol + 1, FRow); Key := 0; end;
+    VK_UP:    begin MoveCursor(FCol, FRow - 1); Key := 0; end;
+    VK_DOWN:  begin MoveCursor(FCol, FRow + 1); Key := 0; end;
+    VK_HOME:  begin MoveCursor(0, FRow); Key := 0; end;
+    VK_END:   begin MoveCursor(Header.Columns.Count - 1, FRow); Key := 0; end;
+    VK_PRIOR: begin MoveCursor(FCol, FRow - 10); Key := 0; end;
+    VK_NEXT:  begin MoveCursor(FCol, FRow + 10); Key := 0; end;
+    VK_F2:    begin BeginEdit; Key := 0; end;
+    VK_SPACE: if EditorKindFor(FCol, FRow) = gekCheckBox then
+              begin ToggleCellChecked(FCol, FRow); Key := 0; end;
+    Ord('C'): if ssCtrl in Shift then begin CopySelectionToClipboard; Key := 0; end;
+    Ord('V'): if ssCtrl in Shift then begin PasteFromClipboard; Key := 0; end;
+    Ord('A'): if ssCtrl in Shift then
+              begin      { 全选:锚点钉到左上,光标拉到右下(按显示序的首尾行) }
+                FSelAnchorCol := 0;
+                FSelAnchorRow := DisplayToData(0);
+                FCol := Header.Columns.Count - 1;
+                FRow := DisplayToData(DisplayRowCount - 1);
+                Invalidate;
+                Key := 0;
+              end;
+  end;
+  { 普通方向键把锚点收到新位置(选区退化成一格);按住 Shift 则保留锚点,拉出区域。 }
+  if (Key = 0) and not (ssShift in Shift) then AnchorSelection;
+end;
+
+
+
+{ ---- 行序间接层与排序 ---- }
+
+procedure TTyStringGrid.ResetOrder;
+begin
+  SetLength(FOrder, 0);
+  SetLength(FRank, 0);
+  FOrderValid := False;
+end;
+
+procedure TTyStringGrid.InvalidateOrder;
+begin
+  FOrderValid := False;
+  FRowTopsValid := False;    { 显示序变了 → 行高前缀和也失效 }
+end;
+
+procedure TTyStringGrid.InvalidateGridOrder;
+begin
+  InvalidateOrder;
+end;
+
+function TTyStringGrid.RowPassesFilter(ARow: Integer): Boolean;
+var
+  i, colIdx: Integer;
+  flt, vals: string;
+begin
+  Result := True;
+  { 列过滤:所有设了过滤的列都要匹配(AND 关系)。 }
+  for i := 0 to FColFilters.Count - 1 do
+  begin
+    flt := FColFilters.ValueFromIndex[i];
+    if flt = '' then Continue;
+    colIdx := StrToIntDef(FColFilters.Names[i], -1);
+    if colIdx < 0 then Continue;
+    if Pos(UpperCase(flt), UpperCase(GetCellText(colIdx, ARow))) = 0 then
+    begin
+      Result := False;
+      Exit;
+    end;
+  end;
+  { 值集合过滤(列头下拉勾的那些)—— 与文本过滤 AND。 }
+  for i := 0 to FValFilters.Count - 1 do
+  begin
+    colIdx := StrToIntDef(FValFilters.Names[i], -1);
+    if colIdx < 0 then Continue;
+    vals := FValFilters.ValueFromIndex[i];
+    if vals = '' then Continue;
+    if Pos('|^|' + GetCellText(colIdx, ARow) + '|^|', '|^|' + vals + '|^|') = 0 then
+    begin
+      Result := False;
+      Exit;
+    end;
+  end;
+
+  if Assigned(FOnFilterRow) then FOnFilterRow(Self, ARow, Result);
+end;
+
+procedure TTyStringGrid.RebuildOrder;
+var
+  i, n: Integer;
+begin
+  SetLength(FOrder, RowCount);
+  SetLength(FRank, RowCount);
+  for i := 0 to RowCount - 1 do FRank[i] := -1;   { 默认"不显示" }
+
+  n := 0;
+  for i := 0 to RowCount - 1 do
+    if RowPassesFilter(i) then
+    begin
+      FOrder[n] := i;
+      Inc(n);
+    end;
+  SetLength(FOrder, n);
+
+  if FSortCol >= 0 then
+    MergeSortOrder(FSortCol, FSortDir);
+
+  { 分组:在排好序的显示序上,按分组列的值切段并插入合成分组行。
+    必须在排序**之后** —— 否则同组的行不相邻,切不出段。 }
+  if FGroupCol >= 0 then
+    BuildGroups;
+
+  for i := 0 to High(FOrder) do
+    if FOrder[i] >= 0 then FRank[FOrder[i]] := i;
+
+  FOrderValid := True;
+end;
+
+procedure TTyStringGrid.BuildGroups;
+var
+  i, n, g: Integer;
+  key, prevKey: string;
+  src, dst: array of Integer;
+  collapsed: Boolean;
+begin
+  SetLength(FGroups, 0);
+  if Length(FOrder) = 0 then Exit;
+
+  { 分组列没排序过就先按它排一遍,否则同值的行不相邻。 }
+  if FSortCol <> FGroupCol then
+  begin
+    FSortCol := FGroupCol;
+    MergeSortOrder(FGroupCol, FSortDir);
+  end;
+
+  src := FOrder;
+  SetLength(dst, 0);
+  n := 0;
+  g := -1;
+  prevKey := #1'no-group'#1;      { 不可能与真实值相等 }
+
+  for i := 0 to High(src) do
+  begin
+    key := GetCellText(FGroupCol, src[i]);
+    if key <> prevKey then
+    begin
+      { 开新组:先插一行合成的分组行。 }
+      Inc(g);
+      SetLength(FGroups, g + 1);
+      FGroups[g].Key := key;
+      FGroups[g].Count := 0;
+      FGroups[g].Collapsed := FCollapsed.IndexOf(key) >= 0;
+      SetLength(dst, n + 1);
+      dst[n] := -(g + 1);         { 负数 = 分组行 }
+      Inc(n);
+      prevKey := key;
+    end;
+    Inc(FGroups[g].Count);
+    { 折叠的组只留分组行,组内行不进显示序。 }
+    if not FGroups[g].Collapsed then
+    begin
+      SetLength(dst, n + 1);
+      dst[n] := src[i];
+      Inc(n);
+    end;
+  end;
+
+  FOrder := dst;
+end;
+
+procedure TTyStringGrid.EnsureOrder;
+begin
+  if FOrderValid and (Length(FRank) = RowCount) then Exit;
+  RebuildOrder;
+end;
+
+function TTyStringGrid.DisplayToData(APos: Integer): Integer;
+begin
+  EnsureOrder;
+  if (APos >= 0) and (APos < Length(FOrder)) then
+    Result := FOrder[APos]
+  else
+    Result := -1;
+end;
+
+function TTyStringGrid.DataToDisplay(ARow: Integer): Integer;
+begin
+  EnsureOrder;
+  if (ARow >= 0) and (ARow < Length(FRank)) then
+    Result := FRank[ARow]      { 被过滤掉的行是 -1 }
+  else
+    Result := -1;
+end;
+
+function TTyStringGrid.DisplayRowCount: Integer;
+begin
+  EnsureOrder;
+  Result := Length(FOrder);
+end;
+
+function TTyStringGrid.VisibleRowCount: Integer;
+begin
+  Result := DisplayRowCount;
+end;
+
+procedure TTyStringGrid.SetColumnFilter(ACol: Integer; const AText: string);
+var
+  k: string;
+  i: Integer;
+begin
+  k := IntToStr(ACol);
+  i := FColFilters.IndexOfName(k);
+  if i >= 0 then FColFilters.Delete(i);
+  if AText <> '' then FColFilters.Add(k + '=' + AText);
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+function TTyStringGrid.ColumnFilter(ACol: Integer): string;
+begin
+  Result := FColFilters.Values[IntToStr(ACol)];
+end;
+
+procedure TTyStringGrid.SetColumnValueFilter(ACol: Integer; AValues: TStrings);
+var
+  k: string;
+  i: Integer;
+begin
+  k := IntToStr(ACol);
+  i := FValFilters.IndexOfName(k);
+  if i >= 0 then FValFilters.Delete(i);
+  if (AValues <> nil) and (AValues.Count > 0) then
+    { 值里可能带各种字符,用 |^| 当分隔(实际数据里不会出现)。 }
+    FValFilters.Add(k + '=' + StringReplace(Trim(AValues.Text), LineEnding, '|^|',
+      [rfReplaceAll]));
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.ColumnValueFilter(ACol: Integer; AOut: TStrings);
+var
+  v: string;
+begin
+  AOut.Clear;
+  v := FValFilters.Values[IntToStr(ACol)];
+  if v = '' then Exit;
+  AOut.Text := StringReplace(v, '|^|', LineEnding, [rfReplaceAll]);
+end;
+
+procedure TTyStringGrid.ClearFilters;
+begin
+  if (FColFilters.Count = 0) and (FValFilters.Count = 0) then Exit;
+  FColFilters.Clear;
+  FValFilters.Clear;
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+function TTyStringGrid.CompareRows(ACol, ARow1, ARow2: Integer): Integer;
+var
+  a, b: string;
+  fa, fb: Double;
+begin
+  Result := 0;
+  if Assigned(FOnCompareCells) then
+  begin
+    FOnCompareCells(Self, ACol, ARow1, ARow2, Result);
+    if Result <> 0 then Exit;
+  end;
+  a := GetCellText(ACol, ARow1);
+  b := GetCellText(ACol, ARow2);
+  if FSortKind = gskNumber then
+  begin
+    { 数值列必须按数值比 —— 按文本比会得到 '10' < '9'。
+      空/非法值一律排在最后,且**与升降序无关**(否则一翻向,空行就冒到最上面)。 }
+    fa := StrToFloatDef(a, NaN);
+    fb := StrToFloatDef(b, NaN);
+    if IsNan(fa) and IsNan(fb) then Result := 0
+    else if IsNan(fa) then Result := 1
+    else if IsNan(fb) then Result := -1
+    else if fa < fb then Result := -1
+    else if fa > fb then Result := 1
+    else Result := 0;
+    Exit;
+  end;
+  Result := CompareText(a, b);
+end;
+
+procedure TTyStringGrid.MergeSortOrder(ACol: Integer; ADirection: TTySortDirection);
+var
+  buf: array of Integer;
+
+  function Less(A, B: Integer): Integer;
+  begin
+    Result := CompareRows(ACol, A, B);
+    if ADirection = sdDescending then Result := -Result;
+  end;
+
+  procedure MergeRun(lo, mid, hi: Integer);
+  var i, j, k: Integer;
+  begin
+    for k := lo to hi do buf[k] := FOrder[k];
+    i := lo; j := mid + 1;
+    for k := lo to hi do
+    begin
+      if i > mid then          begin FOrder[k] := buf[j]; Inc(j); end
+      else if j > hi then      begin FOrder[k] := buf[i]; Inc(i); end
+      { <=0 取左边 —— 这一步就是"稳定"的全部来源:等值时左边(原序靠前)先出。 }
+      else if Less(buf[i], buf[j]) <= 0 then begin FOrder[k] := buf[i]; Inc(i); end
+      else                     begin FOrder[k] := buf[j]; Inc(j); end;
+    end;
+  end;
+
+  procedure SortRun(lo, hi: Integer);
+  var mid: Integer;
+  begin
+    if lo >= hi then Exit;
+    mid := lo + (hi - lo) div 2;
+    SortRun(lo, mid);
+    SortRun(mid + 1, hi);
+    if Less(FOrder[mid], FOrder[mid + 1]) <= 0 then Exit;   { 已有序,省一次归并 }
+    MergeRun(lo, mid, hi);
+  end;
+
+begin
+  if Length(FOrder) < 2 then Exit;
+  SetLength(buf, Length(FOrder));
+  SortRun(0, High(FOrder));
+end;
+
+
+
+
+
+function TTyStringGrid.RowHeightOf(ARow: Integer): Integer;
+begin
+  Result := DefaultRowHeight;
+  if Assigned(FOnGetRowHeight) then FOnGetRowHeight(Self, ARow, Result);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyStringGrid.RowTops: TTyIntArray;
+var
+  pos, n, acc, dataRow: Integer;
+begin
+  { 不接 OnGetRowHeight 就是全表等高 —— 返回空数组,几何层走整除快路径,
+    百万行时省下一个百万项的数组。 }
+  if not Assigned(FOnGetRowHeight) then Exit(nil);
+
+  n := DisplayRowCount;
+  if FRowTopsValid and (Length(FRowTopsCache) = n + 1) then Exit(FRowTopsCache);
+
+  SetLength(FRowTopsCache, n + 1);
+  acc := 0;
+  for pos := 0 to n - 1 do
+  begin
+    FRowTopsCache[pos] := acc;
+    dataRow := DisplayToData(pos);
+    { 分组行(dataRow < 0)按默认行高;它不是数据行,问宿主要行高没有意义。 }
+    if dataRow >= 0 then
+      Inc(acc, ScaleI(RowHeightOf(dataRow)))
+    else
+      Inc(acc, ScaleI(DefaultRowHeight));
+  end;
+  FRowTopsCache[n] := acc;
+  FRowTopsValid := True;
+  Result := FRowTopsCache;
+end;
+
+procedure TTyStringGrid.RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
+  const AFrame: TTyStyleSet);
+var
+  r: TRect;
+  idx, sz, cx, cy: Integer;
+  bmp: TBGRABitmap;
+begin
+  if FImages = nil then Exit;
+  r := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+  idx := StrToIntDef(Trim(GetCellText(ACol, ARow)), -1);
+  if (idx < 0) or (idx >= FImages.Count) then Exit;
+
+  sz := ScaleI(16);
+  if sz > (r.Bottom - r.Top) - 2 then sz := (r.Bottom - r.Top) - 2;
+  if sz > (r.Right - r.Left) - 2 then sz := (r.Right - r.Left) - 2;
+  if sz <= 0 then Exit;
+  cx := (r.Left + r.Right) div 2;
+  cy := (r.Top + r.Bottom) div 2;
+  { 从图像集的渲染缓存借位图 —— 不为每个图标单独分配与重采样(这是绘制热路径)。
+    位图归缓存所有,不能释放。 }
+  bmp := FImages.CachedIndex(idx, sz);
+  if bmp <> nil then
+    P.Bitmap.PutImage(cx - sz div 2, cy - sz div 2, bmp, dmDrawWithTransparency);
+end;
+
+{ ---- 单元格图形 ----------------------------------------------------------- }
+
+function TTyStringGrid.CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay;
+begin
+  Result := FDefaultCellDisplay;
+  if Assigned(FOnGetCellDisplay) then FOnGetCellDisplay(Self, ACol, ARow, Result);
+end;
+
+function TTyStringGrid.ShouldDrawCellText(ACol, ARow: Integer): Boolean;
+begin
+  Result := (EditorKindFor(ACol, ARow) <> gekCheckBox)
+        and (CellDisplayFor(ACol, ARow) = gcdText);
+end;
+
+procedure TTyStringGrid.RenderProgressCell(P: TTyPainter; ACol, ARow: Integer;
+  const AFrame: TTyStyleSet);
+var
+  r, bar, fill: TRect;
+  pct: Double;
+  trackS, fillS: TTyStyleSet;
+begin
+  r := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+  pct := StrToFloatDef(Trim(GetCellText(ACol, ARow)), NaN);
+  if IsNan(pct) then Exit;
+  if pct < 0 then pct := 0;
+  if pct > 100 then pct := 100;
+
+  bar := Rect(r.Left + ScaleI(4), r.Top + ScaleI(5),
+              r.Right - ScaleI(4), r.Bottom - ScaleI(5));
+  if bar.Right <= bar.Left then Exit;
+
+  { 网格自己的 token。此前误写成 'TyProgressBarFill'(真实的键叫 TyProgressFill),
+    于是填充**从来没画过** —— 进度条永远是空槽,改值也没动静。 }
+  trackS := ActiveController.Model.ResolveStyle('TyGridProgress', StyleClass, []);
+  fillS  := ActiveController.Model.ResolveStyle('TyGridProgressFill', StyleClass, []);
+  if tpBackground in trackS.Present then
+    P.FillBackground(bar, trackS.Background, TyEffectiveCorners(trackS));
+
+  fill := bar;
+  fill.Right := bar.Left + Round((bar.Right - bar.Left) * pct / 100);
+  if fill.Right > fill.Left then
+  begin
+    { 填充色取 TyProgressBarFill;主题没定义就不画填充(优雅退化,不自己发明颜色)。 }
+    if tpBackground in fillS.Present then
+      P.FillBackground(fill, fillS.Background, TyEffectiveCorners(trackS));
+  end;
+end;
+
+procedure TTyStringGrid.RenderRatingCell(P: TTyPainter; ACol, ARow: Integer;
+  const AFrame: TTyStyleSet);
+var
+  r, star: TRect;
+  n, i, box, cy, x0: Integer;
+  ink: TTyColor;
+  rS: TTyStyleSet;
+begin
+  r := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+  n := StrToIntDef(Trim(GetCellText(ACol, ARow)), -1);
+  if n < 0 then Exit;
+  if n > 5 then n := 5;
+
+  rS := ActiveController.Model.ResolveStyle('TyGridRating', StyleClass, []);
+  if tpTextColor in rS.Present then ink := rS.TextColor else ink := AFrame.TextColor;
+
+  box := ScaleI(12);
+  cy := (r.Top + r.Bottom) div 2;
+  x0 := r.Left + ScaleI(4);
+  for i := 0 to n - 1 do
+  begin
+    star := Rect(x0 + i * (box + ScaleI(2)), cy - box div 2,
+                 x0 + i * (box + ScaleI(2)) + box, cy - box div 2 + box);
+    if star.Right > r.Right then Break;
+    { 用勾形当"已评"标记 —— 库里没有星形字形,勾形在小槽里最清楚。 }
+    TyDrawGlyph(P, ActiveController, star, tgCheck, ink, 1, 1);
+  end;
+end;
+
+{ ---- 勾选框单元格 --------------------------------------------------------- }
+
+function TTyStringGrid.CellChecked(ACol, ARow: Integer): Boolean;
+var
+  v: string;
+begin
+  { 宽松识别:从 CSV/外部系统进来的真值写法五花八门,读的时候都认。 }
+  v := LowerCase(Trim(GetCellText(ACol, ARow)));
+  Result := (v = '1') or (v = 'true') or (v = 'yes') or (v = 'y');
+  { 再认一个本地化的真值写法(中文表里常见 '是')—— 空的本地化词不参与判定。 }
+  if (not Result) and (TyGridCheckedWord <> '') then
+    Result := v = LowerCase(TyGridCheckedWord);
+end;
+
+procedure TTyStringGrid.ToggleCellChecked(ACol, ARow: Integer);
+var
+  accept: Boolean;
+  oldTxt, newTxt: string;
+begin
+  if FReadOnly then Exit;
+  oldTxt := GetCellText(ACol, ARow);
+  { 写回统一成 '1'/'' —— 读的时候宽松,写的时候收敛。 }
+  if CellChecked(ACol, ARow) then newTxt := '' else newTxt := '1';
+  accept := True;
+  if Assigned(FOnCellEdited) then
+    FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
+  if accept then Cells[ACol, ARow] := newTxt;
+end;
+
+procedure TTyStringGrid.ToggleCellColor(ACol, ARow: Integer);
+var
+  c: TTyColor;
+  accept: Boolean;
+  oldTxt, newTxt: string;
+begin
+  if FReadOnly then Exit;
+  oldTxt := GetCellText(ACol, ARow);
+  if oldTxt <> '' then c := TyParseColor(oldTxt) else c := TyRGB(255, 255, 255);
+  if not TySelectColor(rsGridPickColor, c) then Exit;
+  newTxt := TyColorToHex(c, False);
+  accept := True;
+  if Assigned(FOnCellEdited) then
+    FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
+  if accept then Cells[ACol, ARow] := newTxt;
+end;
+
+function TTyStringGrid.CheckBoxRect(ACol, ARow: Integer): TRect;
+var
+  r: TRect;
+  box, cx, cy: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  r := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+  box := ScaleI(14);
+  if box > (r.Bottom - r.Top) - 2 then box := (r.Bottom - r.Top) - 2;
+  if box > (r.Right - r.Left) - 2 then box := (r.Right - r.Left) - 2;
+  if box <= 0 then Exit;
+  cx := (r.Left + r.Right) div 2;
+  cy := (r.Top + r.Bottom) div 2;
+  Result := Rect(cx - box div 2, cy - box div 2, cx - box div 2 + box, cy - box div 2 + box);
+end;
+
+procedure TTyStringGrid.RenderCheckCell(P: TTyPainter; ACol, ARow: Integer;
+  const AFrame: TTyStyleSet);
+var
+  box: TRect;
+  boxS: TTyStyleSet;
+  ink: TTyColor;
+begin
+  box := CheckBoxRect(ACol, ARow);
+  if IsRectEmpty(box) then Exit;
+
+  { 状态**只由该格自己勾没勾决定**,绝不掺入网格的 CurrentStates ——
+    否则鼠标一按下网格进入 :active,满屏未勾选的框会集体闪成实心再变回去。
+    （用自己的 typeKey,不借 TyCheckBox:借来的键在外观层够不着,改它还会波及复选框控件。） }
+  if CellChecked(ACol, ARow) then
+    boxS := ActiveController.Model.ResolveStyle('TyGridCheckBox', StyleClass, [tysSelected])
+  else
+    boxS := ActiveController.Model.ResolveStyle('TyGridCheckBox', StyleClass, []);
+
+  if tpBackground in boxS.Present then
+    P.FillBackground(box, boxS.Background, TyEffectiveCorners(boxS));
+  if TyBorderVisible(boxS) then
+    P.StrokeBorder(box, TyEffectiveCorners(boxS), boxS.BorderWidth, boxS.BorderColor);
+
+  if CellChecked(ACol, ARow) then
+  begin
+    if tpTextColor in boxS.Present then ink := boxS.TextColor
+    else ink := AFrame.TextColor;
+    { 槽位式调用传 pad=1:默认每边内缩 4 逻辑像素,14px 的槽会只剩个糊点。 }
+    TyDrawGlyph(P, ActiveController, box, tgCheck, ink, 1, 1);
+  end;
+end;
+
+
+
+
+{ ---- 列头筛选下拉 --------------------------------------------------------- }
+
+function TTyStringGrid.ShowsFilterButton(ACol: Integer): Boolean;
+begin
+  { 列头开了 hoColumnResize 之类无关;这里只看网格自己的开关。 }
+  Result := FShowFilterButtons and (ACol >= 0) and (ACol < Header.Columns.Count);
+end;
+
+procedure TTyStringGrid.DistinctColumnValues(ACol: Integer; AItems: TStrings);
+var
+  i: Integer;
+  seen: TStringList;
+  v: string;
+begin
+  AItems.Clear;
+  seen := TStringList.Create;
+  try
+    seen.Sorted := True;
+    seen.Duplicates := dupIgnore;
+    { 遍历**全部数据行**(不是显示序)—— 否则本列自己的过滤会把候选也筛没了,
+      用户就再也选不回来。 }
+    for i := 0 to RowCount - 1 do
+    begin
+      v := GetCellText(ACol, i);
+      if seen.IndexOf(v) < 0 then seen.Add(v);
+    end;
+    AItems.Assign(seen);
+  finally
+    seen.Free;
+  end;
+end;
+
+procedure TTyStringGrid.FilterPopupClosed(Sender: TObject);
+var
+  i, checkedCount: Integer;
+  picked: TStringList;
+begin
+  if FFilterCol < 0 then Exit;
+  picked := TStringList.Create;
+  try
+    checkedCount := 0;
+    for i := 0 to FFilterList.Items.Count - 1 do
+      if FFilterList.Checked[i] then
+      begin
+        Inc(checkedCount);
+        picked.Add(FFilterList.Items[i]);
+      end;
+
+    { 全选 = 不过滤(而不是"逐值 OR 一遍")—— 语义更干净,也省一次全表扫描。 }
+    if (checkedCount = 0) or (checkedCount = FFilterList.Items.Count) then
+      SetColumnValueFilter(FFilterCol, nil)
+    else
+      SetColumnValueFilter(FFilterCol, picked);
+  finally
+    picked.Free;
+  end;
+  FFilterCol := -1;
+end;
+
+procedure TTyStringGrid.ShowColumnFilterDropDown(ACol: Integer);
+var
+  i: Integer;
+  allowed: TStringList;
+  scr: TRect;
+  l, w: Integer;
+begin
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+
+  if FFilterPopup = nil then
+  begin
+    FFilterPopup := TTyPopover.Create(Self);
+    FFilterList := TTyCheckListBox.Create(FFilterPopup);
+    FFilterList.Width := 180;
+    FFilterList.Height := 220;
+    FFilterPopup.Content := FFilterList;
+    FFilterPopup.OnHide := @FilterPopupClosed;
+  end;
+  FFilterPopup.Controller := Self.Controller;
+  FFilterList.Controller := Self.Controller;
+
+  FFilterCol := ACol;
+  DistinctColumnValues(ACol, FFilterList.Items);
+
+  { 已生效的值过滤回填成勾选状态;没有过滤则全勾。 }
+  allowed := TStringList.Create;
+  try
+    ColumnValueFilter(ACol, allowed);
+    for i := 0 to FFilterList.Items.Count - 1 do
+      FFilterList.Checked[i] := (allowed.Count = 0)
+                                or (allowed.IndexOf(FFilterList.Items[i]) >= 0);
+  finally
+    allowed.Free;
+  end;
+
+  { 锚在该列列头上。 }
+  l := ColumnLeftPx(ACol);
+  w := ColumnWidthPx(ACol);
+  scr.TopLeft := ClientToScreen(Point(l, 0));
+  scr.BottomRight := ClientToScreen(Point(l + w, ScaleI(Header.Height)));
+  FFilterPopup.ShowAt(scr);
+end;
+
+{ ---- 分组 ----------------------------------------------------------------- }
+
+procedure TTyStringGrid.GroupByColumn(ACol: Integer);
+begin
+  EndEdit(True);
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then FGroupCol := -1
+  else FGroupCol := ACol;
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.UngroupRows;
+begin
+  GroupByColumn(-1);
+end;
+
+function TTyStringGrid.GroupCount: Integer;
+begin
+  EnsureOrder;
+  Result := Length(FGroups);
+end;
+
+function TTyStringGrid.GroupInfo(AIndex: Integer): TTyGridGroupInfo;
+begin
+  EnsureOrder;
+  if (AIndex >= 0) and (AIndex < Length(FGroups)) then
+    Result := FGroups[AIndex]
+  else
+  begin
+    Result.Key := '';
+    Result.Count := 0;
+    Result.Collapsed := False;
+  end;
+end;
+
+function TTyStringGrid.IsGroupRow(APos: Integer; out AGroupIndex: Integer): Boolean;
+begin
+  EnsureOrder;
+  AGroupIndex := -1;
+  Result := (APos >= 0) and (APos < Length(FOrder)) and (FOrder[APos] < 0);
+  if Result then AGroupIndex := -FOrder[APos] - 1;
+end;
+
+procedure TTyStringGrid.ToggleGroup(AIndex: Integer);
+var
+  key: string;
+  i: Integer;
+begin
+  if (AIndex < 0) or (AIndex >= Length(FGroups)) then Exit;
+  key := FGroups[AIndex].Key;
+  i := FCollapsed.IndexOf(key);
+  { 折叠状态按**分组值**记账,而不是按组号 —— 重排/筛选后组号会变,值不会。 }
+  if i >= 0 then FCollapsed.Delete(i) else FCollapsed.Add(key);
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+function TTyStringGrid.GroupToggleRect(APos: Integer): TRect;
+var
+  r: TRect;
+  box, cy: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  r := TyGridRowRect(APos, GridMetrics);
+  if r.Bottom <= r.Top then Exit;
+  box := ScaleI(12);
+  cy := (r.Top + r.Bottom) div 2;
+  Result := Rect(ScaleI(4), cy - box div 2, ScaleI(4) + box, cy - box div 2 + box);
+end;
+
+procedure TTyStringGrid.RenderGroupRow(P: TTyPainter; APos, AGroupIndex: Integer;
+  const M: TTyGridMetrics; const AFrame: TTyStyleSet);
+var
+  r, tr, tg: TRect;
+  gS: TTyStyleSet;
+  ink: TTyColor;
+  info: TTyGridGroupInfo;
+begin
+  r := TyGridRowRect(APos, M);
+  if (r.Bottom <= M.FrozenH) or (r.Top >= M.ClientH) then Exit;
+
+  info := GroupInfo(AGroupIndex);
+  gS := ActiveController.Model.ResolveStyle('TyGridGroupRow', StyleClass, CurrentStates);
+  if tpBackground in gS.Present then
+    P.FillBackground(r, gS.Background, 0);
+  if tpTextColor in gS.Present then ink := gS.TextColor else ink := AFrame.TextColor;
+
+  { 折叠三角:展开时朝下,折叠时朝右 —— 与树的约定一致。 }
+  tg := GroupToggleRect(APos);
+  if not IsRectEmpty(tg) then
+  begin
+    if info.Collapsed then
+      TyDrawGlyph(P, ActiveController, tg, tgChevronRight, ink, 1, 1)
+    else
+      TyDrawGlyph(P, ActiveController, tg, tgChevronDown, ink, 1, 1);
+  end;
+
+  tr := Rect(tg.Right + ScaleI(6), r.Top, M.ClientW - ScaleI(4), r.Bottom);
+  if tr.Right > tr.Left then
+    P.DrawText(tr, Format('%s  (%d)', [info.Key, info.Count]),
+      gS.FontName, ResolveFontSize(gS), gS.FontWeight, ink, taLeftJustify, tlCenter, True);
+end;
+
+{ ---- 汇总 ----------------------------------------------------------------- }
+
+procedure TTyStringGrid.SetColumnAggregate(ACol: Integer; AKind: TTyGridAggregate);
+var
+  k: string;
+  i: Integer;
+begin
+  k := IntToStr(ACol);
+  i := FAggregates.IndexOfName(k);
+  if i >= 0 then FAggregates.Delete(i);
+  if AKind <> gagNone then FAggregates.Add(k + '=' + IntToStr(Ord(AKind)));
+  Invalidate;
+end;
+
+function TTyStringGrid.ColumnAggregate(ACol: Integer): TTyGridAggregate;
+var
+  v: string;
+begin
+  v := FAggregates.Values[IntToStr(ACol)];
+  if v = '' then Result := gagNone
+  else Result := TTyGridAggregate(StrToIntDef(v, 0));
+end;
+
+function TTyStringGrid.AggregateValue(ACol: Integer): Double;
+var
+  pos, dataRow, n: Integer;
+  v, acc: Double;
+  kind: TTyGridAggregate;
+  txt: string;
+  started: Boolean;
+begin
+  Result := 0;
+  kind := ColumnAggregate(ACol);
+  if kind = gagNone then Exit;
+
+  { 只遍历**显示序** —— 被过滤掉的行不参与统计,筛完总计立刻跟着变。 }
+  if kind = gagCount then
+  begin
+    Result := DisplayRowCount;
+    Exit;
+  end;
+
+  acc := 0;
+  n := 0;
+  started := False;
+  for pos := 0 to DisplayRowCount - 1 do
+  begin
+    dataRow := DisplayToData(pos);
+    if dataRow < 0 then Continue;
+    txt := Trim(GetCellText(ACol, dataRow));
+    if txt = '' then Continue;
+    v := StrToFloatDef(txt, NaN);
+    if IsNan(v) then Continue;        { 非数值格直接跳过,不污染统计 }
+    Inc(n);
+    case kind of
+      gagSum, gagAvg: acc := acc + v;
+      gagMin: if (not started) or (v < acc) then acc := v;
+      gagMax: if (not started) or (v > acc) then acc := v;
+    end;
+    started := True;
+  end;
+
+  if n = 0 then Exit;
+  if kind = gagAvg then Result := acc / n else Result := acc;
+end;
+
+function TTyStringGrid.FooterText(ACol: Integer): string;
+var
+  kind: TTyGridAggregate;
+  prefix: string;
+begin
+  Result := '';
+  kind := ColumnAggregate(ACol);
+  if kind <> gagNone then
+  begin
+    case kind of
+      gagSum:   prefix := rsGridSumPrefix;
+      gagAvg:   prefix := rsGridAvgPrefix;
+      gagMin:   prefix := rsGridMinPrefix;
+      gagMax:   prefix := rsGridMaxPrefix;
+      gagCount: prefix := rsGridCountPrefix;
+    else        prefix := '';
+    end;
+    if kind = gagCount then
+      Result := prefix + IntToStr(Round(AggregateValue(ACol)))
+    else
+      Result := prefix + FormatFloat('0.##', AggregateValue(ACol));
+  end;
+  if Assigned(FOnGetFooterText) then FOnGetFooterText(Self, ACol, Result);
+end;
+
+procedure TTyStringGrid.RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
+  const AFooterRect: TRect; const AFrame: TTyStyleSet);
+var
+  i, l, w: Integer;
+  cRef: TTyColumn;
+  fS: TTyStyleSet;
+  ink: TTyColor;
+  txt: string;
+  r: TRect;
+begin
+  inherited RenderFooter(P, M, AFooterRect, AFrame);
+
+  fS := ActiveController.Model.ResolveStyle('TyGridSummaryRow', StyleClass, CurrentStates);
+  if tpTextColor in fS.Present then ink := fS.TextColor else ink := AFrame.TextColor;
+
+  for i := 0 to Header.Columns.Count - 1 do
+  begin
+    cRef := TTyColumn(Header.Columns.Items[i]);
+    if not (coVisible in cRef.Options) then Continue;
+    txt := FooterText(i);
+    if txt = '' then Continue;
+    l := ColumnLeftPx(i);
+    w := ColumnWidthPx(i);
+    { 与单元格同一条裁剪规则:滚到冻结带底下的部分不露出来。 }
+    if (i >= FixedCols) and (l < M.FrozenW) then
+    begin
+      if l + w <= M.FrozenW then Continue;
+      w := l + w - M.FrozenW;
+      l := M.FrozenW;
+    end;
+    if (l >= M.ClientW) or (l + w <= 0) then Continue;
+    r := Rect(l + ScaleI(4), AFooterRect.Top, l + w - ScaleI(4), AFooterRect.Bottom);
+    if r.Right > r.Left then
+      P.DrawText(r, txt, fS.FontName, ResolveFontSize(fS), fS.FontWeight,
+        ink, cRef.Alignment, tlCenter, True);
+  end;
+end;
+
+function TTyStringGrid.CellRect(ACol, ARow: Integer): TRect;
+var
+  cs, rs, bc, br, lastPos: Integer;
+  r2: TRect;
+begin
+  Result := inherited CellRect(ACol, ARow);
+  if IsRectEmpty(Result) then Exit;
+
+  if CellSpan(ACol, ARow, cs, rs) then
+  begin
+    { 基准格:向右吃 cs 列、向下吃 rs 行(按显示序)。 }
+    if cs > 1 then
+      Result.Right := ColumnLeftPx(Min(ACol + cs, Header.Columns.Count) - 1)
+                      + ColumnWidthPx(Min(ACol + cs, Header.Columns.Count) - 1);
+    if rs > 1 then
+    begin
+      lastPos := DataToDisplay(ARow) + rs - 1;
+      if lastPos > DisplayRowCount - 1 then lastPos := DisplayRowCount - 1;
+      r2 := TyGridRowRect(lastPos, GridMetrics);
+      Result.Bottom := r2.Bottom;
+    end;
+    Exit;
+  end;
+
+  { 被别人覆盖的格没有自己的矩形 —— 否则会在合并区里画出格线与文字。 }
+  BaseCellOf(ACol, ARow, bc, br);
+  if (bc <> ACol) or (br <> ARow) then
+    Result := Rect(0, 0, 0, 0);
+end;
+
+procedure TTyStringGrid.MapToBaseCell(var ACol, ARow: Integer);
+var
+  bc, br: Integer;
+begin
+  BaseCellOf(ACol, ARow, bc, br);
+  ACol := bc;
+  ARow := br;
+end;
+
+{ ---- 单元格合并 ----------------------------------------------------------- }
+
+procedure TTyStringGrid.MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
+begin
+  if (AColSpan <= 1) and (ARowSpan <= 1) then
+  begin
+    UnmergeCells(ACol, ARow);
+    Exit;
+  end;
+  if AColSpan < 1 then AColSpan := 1;
+  if ARowSpan < 1 then ARowSpan := 1;
+  FMerges.Items[CellKey(ACol, ARow)] := IntToStr(AColSpan) + ':' + IntToStr(ARowSpan);
+  Invalidate;
+end;
+
+procedure TTyStringGrid.UnmergeCells(ACol, ARow: Integer);
+begin
+  FMerges.Delete(CellKey(ACol, ARow));
+  Invalidate;
+end;
+
+procedure TTyStringGrid.ClearMerges;
+begin
+  FMerges.Clear;
+  Invalidate;
+end;
+
+function TTyStringGrid.CellSpan(ACol, ARow: Integer;
+  out AColSpan, ARowSpan: Integer): Boolean;
+var
+  v: string;
+  sep: Integer;
+begin
+  AColSpan := 1;
+  ARowSpan := 1;
+  v := FMerges.Items[CellKey(ACol, ARow)];
+  Result := v <> '';
+  if not Result then Exit;
+  sep := Pos(':', v);
+  AColSpan := StrToIntDef(Copy(v, 1, sep - 1), 1);
+  ARowSpan := StrToIntDef(Copy(v, sep + 1, MaxInt), 1);
+end;
+
+function TTyStringGrid.IsBaseCell(ACol, ARow: Integer): Boolean;
+var
+  cs, rs: Integer;
+begin
+  Result := CellSpan(ACol, ARow, cs, rs);
+end;
+
+procedure TTyStringGrid.BaseCellOf(ACol, ARow: Integer;
+  out ABaseCol, ABaseRow: Integer);
+var
+  c, r, cs, rs, pos, basePos: Integer;
+begin
+  ABaseCol := ACol;
+  ABaseRow := ARow;
+  if ACol < 0 then Exit;
+  pos := DataToDisplay(ARow);
+  if pos < 0 then Exit;
+
+  { 往左上找覆盖住本格的基准格。合并区通常很小,倒着扫几格就够。
+    纵向按**显示序**判定 —— 合并是屏幕上的一块矩形。 }
+  for c := ACol downto 0 do
+    for basePos := pos downto 0 do
+    begin
+      r := DisplayToData(basePos);
+      if r < 0 then Continue;
+      if not CellSpan(c, r, cs, rs) then Continue;
+      if (ACol < c + cs) and (pos < basePos + rs) then
+      begin
+        ABaseCol := c;
+        ABaseRow := r;
+        Exit;
+      end;
+    end;
+end;
+
+{ ---- 剪贴板 / CSV ---------------------------------------------------------- }
+
+function TTyStringGrid.SelectionAsText: string;
+var
+  c1, c2, r1, r2, pos, cIdx: Integer;
+  sb: TStringList;
+  line: string;
+begin
+  c1 := Min(FSelAnchorCol, FCol);  c2 := Max(FSelAnchorCol, FCol);
+  r1 := Min(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+  r2 := Max(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+
+  sb := TStringList.Create;
+  try
+    { 按**显示序**导出 —— 用户复制的是他看到的那块,不是底层行号区间。 }
+    for pos := r1 to r2 do
+    begin
+      line := '';
+      for cIdx := c1 to c2 do
+      begin
+        if cIdx > c1 then line := line + #9;
+        line := line + GetCellText(cIdx, DisplayToData(pos));
+      end;
+      sb.Add(line);
+    end;
+    Result := sb.Text;
+  finally
+    sb.Free;
+  end;
+end;
+
+procedure TTyStringGrid.CopySelectionToClipboard;
+begin
+  Clipboard.AsText := SelectionAsText;
+end;
+
+procedure TTyStringGrid.PasteFromText(const AText: string);
+var
+  lines: TStringList;
+  i, j, targetRow: Integer;
+  parts: TStringArray;
+begin
+  if AText = '' then Exit;
+  EndEdit(True);
+  lines := TStringList.Create;
+  try
+    lines.Text := AText;
+    for i := 0 to lines.Count - 1 do
+    begin
+      { 粘贴按**显示序**落位:从光标所在的显示行往下铺,
+        这样"看到哪就粘到哪",与复制端对称。 }
+      targetRow := DisplayToData(DataToDisplay(FRow) + i);
+      if targetRow < 0 then Break;            { 超出可见行就停 }
+      parts := lines[i].Split(#9);
+      for j := 0 to High(parts) do
+      begin
+        if FCol + j >= Header.Columns.Count then Break;
+        if EditorKindFor(FCol + j, targetRow) = gekNone then Continue;  { 只读列跳过 }
+        Cells[FCol + j, targetRow] := parts[j];
+      end;
+    end;
+  finally
+    lines.Free;
+  end;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.PasteFromClipboard;
+begin
+  if Clipboard.HasFormat(CF_TEXT) then PasteFromText(Clipboard.AsText);
+end;
+
+function TyCsvQuote(const AValue: string; ADelimiter: Char): string;
+begin
+  { 含分隔符、引号或换行的字段必须加引号,内部引号翻倍 —— 否则导出的 CSV 读不回来。 }
+  if (Pos(ADelimiter, AValue) > 0) or (Pos('"', AValue) > 0)
+     or (Pos(#13, AValue) > 0) or (Pos(#10, AValue) > 0) then
+    Result := '"' + StringReplace(AValue, '"', '""', [rfReplaceAll]) + '"'
+  else
+    Result := AValue;
+end;
+
+function TTyStringGrid.SaveToCSVText(ADelimiter: Char): string;
+var
+  sb: TStringList;
+  pos, cIdx: Integer;
+  line: string;
+begin
+  sb := TStringList.Create;
+  try
+    { 表头一行(列标题),然后按显示序导出可见行。 }
+    line := '';
+    for cIdx := 0 to Header.Columns.Count - 1 do
+    begin
+      if cIdx > 0 then line := line + ADelimiter;
+      line := line + TyCsvQuote(TTyColumn(Header.Columns.Items[cIdx]).Text, ADelimiter);
+    end;
+    sb.Add(line);
+
+    for pos := 0 to DisplayRowCount - 1 do
+    begin
+      line := '';
+      for cIdx := 0 to Header.Columns.Count - 1 do
+      begin
+        if cIdx > 0 then line := line + ADelimiter;
+        line := line + TyCsvQuote(GetCellText(cIdx, DisplayToData(pos)), ADelimiter);
+      end;
+      sb.Add(line);
+    end;
+    Result := sb.Text;
+  finally
+    sb.Free;
+  end;
+end;
+
+{ 拆一行 CSV,尊重引号(引号内的分隔符不算分隔)。 }
+function TyCsvSplit(const ALine: string; ADelimiter: Char): TStringArray;
+var
+  i, n: Integer;
+  cur: string;
+  inQuote: Boolean;
+begin
+  SetLength(Result, 0);
+  n := 0;
+  cur := '';
+  inQuote := False;
+  i := 1;
+  while i <= Length(ALine) do
+  begin
+    if inQuote then
+    begin
+      if ALine[i] = '"' then
+      begin
+        if (i < Length(ALine)) and (ALine[i + 1] = '"') then
+        begin
+          cur := cur + '"';   { 翻倍的引号 = 一个字面引号 }
+          Inc(i);
+        end
+        else
+          inQuote := False;
+      end
+      else
+        cur := cur + ALine[i];
+    end
+    else if ALine[i] = '"' then inQuote := True
+    else if ALine[i] = ADelimiter then
+    begin
+      SetLength(Result, n + 1); Result[n] := cur; Inc(n);
+      cur := '';
+    end
+    else
+      cur := cur + ALine[i];
+    Inc(i);
+  end;
+  SetLength(Result, n + 1);
+  Result[n] := cur;
+end;
+
+procedure TTyStringGrid.LoadFromCSVText(const AText: string; ADelimiter: Char);
+var
+  lines: TStringList;
+  parts: TStringArray;
+  i, j, dataRow: Integer;
+begin
+  EndEdit(False);
+  lines := TStringList.Create;
+  try
+    lines.Text := AText;
+    if lines.Count = 0 then Exit;
+
+    { 第一行当表头:按它建列(列数不足就补)。 }
+    parts := TyCsvSplit(lines[0], ADelimiter);
+    while Header.Columns.Count < Length(parts) do
+      Header.Columns.Add;
+    for j := 0 to High(parts) do
+      TTyColumn(Header.Columns.Items[j]).Text := parts[j];
+
+    ClearCells;
+    ClearFilters;
+    SortByColumn(-1, sdAscending);       { 导入后回到原始顺序 }
+    RowCount := lines.Count - 1;
+
+    for i := 1 to lines.Count - 1 do
+    begin
+      dataRow := i - 1;
+      parts := TyCsvSplit(lines[i], ADelimiter);
+      for j := 0 to High(parts) do
+      begin
+        if j >= Header.Columns.Count then Break;
+        Cells[j, dataRow] := parts[j];
+      end;
+    end;
+  finally
+    lines.Free;
+  end;
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.SaveToCSVFile(const AFileName: string; ADelimiter: Char);
+var
+  sl: TStringList;
+begin
+  sl := TStringList.Create;
+  try
+    sl.Text := SaveToCSVText(ADelimiter);
+    sl.SaveToFile(AFileName);
+  finally
+    sl.Free;
+  end;
+end;
+
+procedure TTyStringGrid.LoadFromCSVFile(const AFileName: string; ADelimiter: Char);
+var
+  sl: TStringList;
+begin
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(AFileName);
+    LoadFromCSVText(sl.Text, ADelimiter);
+  finally
+    sl.Free;
+  end;
+end;
+
+procedure TTyStringGrid.SortByColumn(ACol: Integer; ADirection: TTySortDirection);
+var
+  i, j, cmp, tmp: Integer;
+begin
+  EndEdit(True);        { 行要重排了 —— 先把编辑提交掉 }
+
+  if (ACol < 0) or (ACol >= Header.Columns.Count) or (RowCount <= 0) then
+  begin
+    FSortCol := -1;
+    InvalidateOrder;
+    UpdateScrollBars;
+    Invalidate;
+    Exit;
+  end;
+
+  FSortCol := ACol;
+  FSortDir := ADirection;
+  InvalidateOrder;
+  EnsureOrder;      { 重建里已按 FSortCol 排过 }
+  if False then
+  begin
+  { **稳定归并排序** O(n log n)。早先用插入排序 O(n^2),1000 行要几千万次比较,
+    再叠上当时线性的单元格查找就彻底卡死 —— 真实规模的测试把这条压出来了。
+    稳定 = 等值行保持原有相对次序,用户连点列头来回切方向时不会乱跳。 }
+  MergeSortOrder(ACol, ADirection);
+  end;
+
+  { 光标按**数据行**记账,所以它仍然盯着排序前那条数据 —— 但**视口原地不动**。
+    用户看着第一屏点排序,期望看到"现在排最前的那些行",而不是被拖去追旧的第一条。
+    (跟随只在光标**主动移动**时才该发生,见 MoveCursor。) }
+  UpdateScrollBars;      { 行的显示位置全变了,滑块范围/位置要重算 }
+  Invalidate;
+end;
+
+procedure TTyStringGrid.ToggleSortColumn(ACol: Integer);
+begin
+  if ACol <> FSortCol then
+    SortByColumn(ACol, sdAscending)
+  else if FSortDir = sdAscending then
+    SortByColumn(ACol, sdDescending)
+  else
+    SortByColumn(-1, sdAscending);   { 第三次点:回到原始顺序 }
+end;
+
+
+function TTyStringGrid.IsCellSelected(ACol, ARow: Integer): Boolean;
+var
+  c1, c2, r1, r2, rp: Integer;
+begin
+  Result := False;
+  if (ACol < 0) or (ARow < 0) then Exit;
+
+  c1 := Min(FSelAnchorCol, FCol);  c2 := Max(FSelAnchorCol, FCol);
+  r1 := Min(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+  r2 := Max(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+  rp := DataToDisplay(ARow);
+
+  Result := (ACol >= c1) and (ACol <= c2) and (rp >= r1) and (rp <= r2);
+end;
+
+procedure TTyStringGrid.AnchorSelection;
+begin
+  FSelAnchorCol := FCol;
+  FSelAnchorRow := FRow;
+end;
+
+function TTyStringGrid.SelectedCellCount: Integer;
+var
+  c1, c2, r1, r2: Integer;
+begin
+  c1 := Min(FSelAnchorCol, FCol);  c2 := Max(FSelAnchorCol, FCol);
+  r1 := Min(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+  r2 := Max(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+  Result := (c2 - c1 + 1) * (r2 - r1 + 1);
+end;
+
+function TTyStringGrid.EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind;
+begin
+  Result := FDefaultEditorKind;
+  if Assigned(FOnGetEditorKind) then FOnGetEditorKind(Self, ACol, ARow, Result);
+end;
+
+function TTyStringGrid.BeginEdit: Boolean;
+begin
+  Result := BeginEdit(FCol, FRow);
+end;
+
+function TTyStringGrid.BeginEdit(ACol, ARow: Integer): Boolean;
+var
+  r: TRect;
+begin
+  Result := False;
+  if FReadOnly or (not Enabled) then Exit;
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+  if (ARow < 0) or (ARow >= RowCount) then Exit;
+  if EditorKindFor(ACol, ARow) = gekNone then Exit;
+
+  { 先把光标移过去 —— 编辑的永远是当前格,避免"编辑一格、高亮另一格"。 }
+  if (ACol <> FCol) or (ARow <> FRow) then
+  begin
+    MoveCursor(ACol, ARow);
+    if (FCol <> ACol) or (FRow <> ARow) then Exit;   { 被 OnSelectCell 否决 }
+  end;
+
+  { 勾选框不弹编辑器 —— 点一下直接切换,这才是勾选框该有的手感。 }
+  if EditorKindFor(ACol, ARow) = gekCheckBox then
+  begin
+    ToggleCellChecked(FCol, FRow);
+    Result := True;
+    Exit;
+  end;
+
+  { 编辑器盖在**可见**矩形上:被冻结带盖住的部分本来就不该露出编辑框。 }
+  r := CellVisibleRect(FCol, FRow);
+  if IsRectEmpty(r) then Exit;
+
+  FEditCol := FCol;
+  FEditRow := FRow;
+  if EditorKindFor(FCol, FRow) = gekColor then
+  begin
+    { 颜色是模态对话框,不是驻留编辑器 —— 选完直接写回,不进编辑态。 }
+    ToggleCellColor(FCol, FRow);
+    Result := True;
+    Exit;
+  end;
+
+  if EditorKindFor(FCol, FRow) = gekDate then
+  begin
+    FDateEditor.Controller := Self.Controller;
+    FDateEditor.Date := StrToDateDef(Cells[FCol, FRow], SysUtils.Date);
+    FDateEditor.BoundsRect := r;
+    FDateEditor.Visible := True;
+    if HandleAllocated and FDateEditor.CanFocus then FDateEditor.SetFocus;
+    FEditing := True;
+    Result := True;
+    Exit;
+  end;
+
+  if EditorKindFor(FCol, FRow) = gekPickList then
+  begin
+    FPickEditor.Controller := Self.Controller;
+    FPickEditor.Items.Clear;
+    if Assigned(FOnGetPickList) then FOnGetPickList(Self, FCol, FRow, FPickEditor.Items);
+    FPickEditor.ItemIndex := FPickEditor.Items.IndexOf(Cells[FCol, FRow]);
+    FPickEditor.BoundsRect := r;
+    FPickEditor.Visible := True;
+    if HandleAllocated and FPickEditor.CanFocus then FPickEditor.SetFocus;
+    FEditing := True;
+    Result := True;
+    Exit;
+  end;
+
+  FEditor.Controller := Self.Controller;
+  { 数值列右对齐。按键级的数字过滤要等 ValueListEditor 的 TTyValueEdit 泛化出来后再接;
+    在那之前由 EndEdit 在**提交时**校验,非法值直接不写回。 }
+  if EditorKindFor(FCol, FRow) = gekNumeric then
+    FEditor.Alignment := taRightJustify
+  else
+    FEditor.Alignment := taLeftJustify;
+  FEditor.Text := Cells[FCol, FRow];
+  FEditor.BoundsRect := r;
+  FEditor.Visible := True;
+  if HandleAllocated and FEditor.CanFocus then FEditor.SetFocus;
+  FEditing := True;
+  Result := True;
+end;
+
+procedure TTyStringGrid.EndEdit(ACommit: Boolean);
+var
+  oldTxt, newTxt: string;
+  accept: Boolean;
+  usePick, useDate: Boolean;
+begin
+  usePick := False;
+  useDate := False;
+  if not FEditing then Exit;
+  if FEndingEdit then Exit;          { 重入守卫:提交里若又触发提交会写两次 }
+  FEndingEdit := True;
+  try
+    FEditing := False;
+    if FPickEditor.Visible then
+    begin
+      FPickEditor.Visible := False;
+      usePick := True;
+    end;
+    if FDateEditor.Visible then
+    begin
+      FDateEditor.Visible := False;
+      useDate := True;
+    end;
+    FEditor.Visible := False;
+    if ACommit then
+    begin
+      oldTxt := Cells[FEditCol, FEditRow];
+      if useDate then
+        newTxt := DateToStr(FDateEditor.Date)
+      else if usePick then
+      begin
+        if FPickEditor.ItemIndex >= 0 then
+          newTxt := FPickEditor.Items[FPickEditor.ItemIndex]
+        else
+          newTxt := oldTxt;
+      end
+      else
+        newTxt := FEditor.Text;
+      if newTxt <> oldTxt then
+      begin
+        accept := True;
+        { 数值列:非法值一律不写回(总比把 'abc' 存进金额列强)。 }
+        if (EditorKindFor(FEditCol, FEditRow) = gekNumeric)
+           and (newTxt <> '') and (StrToFloatDef(newTxt, MaxDouble) = MaxDouble) then
+          accept := False;
+        if Assigned(FOnCellEdited) then
+          FOnCellEdited(Self, FEditCol, FEditRow, oldTxt, newTxt, accept);
+        if accept then Cells[FEditCol, FEditRow] := newTxt;
+      end;
+    end;
+    Invalidate;
+  finally
+    FEndingEdit := False;
+  end;
+end;
+
+procedure TTyStringGrid.DateEditorExit(Sender: TObject);
+begin
+  EndEdit(True);
+end;
+
+procedure TTyStringGrid.PickEditorChange(Sender: TObject);
+begin
+  { 选中即提交 —— 下拉不像文本框那样需要按 Enter 确认。 }
+  if FEditing then EndEdit(True);
+end;
+
+procedure TTyStringGrid.PickEditorExit(Sender: TObject);
+begin
+  EndEdit(True);
+end;
+
+procedure TTyStringGrid.EditorKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  case Key of
+    VK_RETURN: begin EndEdit(True);  Key := 0; if CanFocus then SetFocus; end;
+    VK_ESCAPE: begin EndEdit(False); Key := 0; if CanFocus then SetFocus; end;
+  end;
+end;
+
+procedure TTyStringGrid.EditorExit(Sender: TObject);
+begin
+  { 焦点离开 = 提交。与库内其他内联编辑一致:凡是会让单元格移动/失焦的动作,先提交。 }
+  EndEdit(True);
+end;
+
+procedure TTyStringGrid.DblClick;
+begin
+  inherited DblClick;
+  BeginEdit;
+end;
+
+procedure TTyStringGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
+  const AFrame: TTyStyleSet);
+var
+  selS: TTyStyleSet;
+  vis: TRect;
+  firstRow, lastRow, pos, dataRow, colIdx, gIdx: Integer;
+begin
+  { 先铺整个选区的底色,再让基类把文字画上去 —— 次序反了字会被底色盖掉。
+    只遍历可视窗口内的行,所以选区再大也不影响绘制开销。 }
+  selS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass,
+    CurrentStates + [tysSelected]);
+  if tpBackground in selS.Present then
+    if TyGridVisibleRows(M, firstRow, lastRow) then
+      for pos := firstRow to lastRow do
+      begin
+        dataRow := DisplayToData(pos);
+        for colIdx := 0 to Header.Columns.Count - 1 do
+        begin
+          if not IsCellSelected(colIdx, dataRow) then Continue;
+          vis := CellVisibleRect(colIdx, dataRow);
+          if not IsRectEmpty(vis) then
+            P.FillBackground(vis, selS.Background, 0);
+        end;
+      end;
+  { 分组行:整行一条横带,画"值(计数)"和折叠三角。它不对应任何数据行,
+    所以必须在普通单元格之前处理掉,否则基类会拿 -1 去取内容。 }
+  if (FGroupCol >= 0) and TyGridVisibleRows(M, firstRow, lastRow) then
+    for pos := firstRow to lastRow do
+      if IsGroupRow(pos, gIdx) then
+        RenderGroupRow(P, pos, gIdx, M, AFrame);
+
+  { 勾选框列自己画方块 —— 基类只会画文字,而 '1'/'' 直接显示出来毫无意义。 }
+  if TyGridVisibleRows(M, firstRow, lastRow) then
+    for pos := firstRow to lastRow do
+    begin
+      dataRow := DisplayToData(pos);
+      if dataRow < 0 then Continue;
+      for colIdx := 0 to Header.Columns.Count - 1 do
+      begin
+        if EditorKindFor(colIdx, dataRow) = gekCheckBox then
+          RenderCheckCell(P, colIdx, dataRow, AFrame);
+        case CellDisplayFor(colIdx, dataRow) of
+          gcdProgress: RenderProgressCell(P, colIdx, dataRow, AFrame);
+          gcdRating:   RenderRatingCell(P, colIdx, dataRow, AFrame);
+          gcdImage:    RenderImageCell(P, colIdx, dataRow, AFrame);
+        end;
+      end;
+    end;
+  inherited RenderCells(P, M, AFrame);
+end;
+
+initialization
+  { 设计器与 .lfm 流式化按类名查类,必须登记。 }
+  RegisterClasses([TTyCustomGrid, TTyDrawGrid, TTyStringGrid]);
+  TyGridCheckedWord := rsGridCheckedWord;
+
+end.

@@ -9,6 +9,21 @@ Linux and macOS.
 
 ## [Unreleased]
 
+### Added — data grid `TTyStringGrid`
+
+- **Three layers**: `TTyCustomGrid` (geometry/painting/theming) → `TTyDrawGrid` (content supplied
+  by the host, virtual by construction) → `TTyStringGrid` (sparse storage + editing + organising).
+  Migrating from `TStringGrid` costs almost no learning.
+- **What you can see**: frozen rows/columns, a million rows without lag (only the visible window is
+  painted), a 2-D cursor with rectangular multi-select, variable row heights, click-to-sort,
+  per-column value filtering from the header, collapsible group rows, cell merging, a summary
+  footer (**over the filtered rows only**), `Ctrl+C/V` interop with Excel, CSV import/export,
+  column resize and drag-reorder.
+- **Cells can hold things**: checkbox, pick-list, date, colour, progress bar, rating, image —
+  display is **orthogonal** to editing (a column can render as a progress bar and still edit as a number).
+- Example: [examples/grid](examples/grid/).
+
+
 ### Added — 14 modern UI controls (the Ant Design gap)
 
 - **Cards & markers**: `TTyCard` (header + content + actions, as one themed surface; `hoverable` is just a `TyCard:hover` rule), `TTyTag` (closable pill; colour variants are `StyleClass`), `TTyBadge` (a **standalone** count/dot marker — point `Target` at any control and it glues itself to that control's corner and follows it; `TTyButton`'s built-in badge still works as before).

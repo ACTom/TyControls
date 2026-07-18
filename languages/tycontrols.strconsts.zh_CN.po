@@ -503,3 +503,31 @@ msgstr "99+"
 #: tycontrols.strconsts.rsemptydescription
 msgid "No data"
 msgstr "暂无数据"
+
+#: tycontrols.strconsts.rsgridsumprefix
+msgid "Sum "
+msgstr "合计 "
+
+#: tycontrols.strconsts.rsgridavgprefix
+msgid "Avg "
+msgstr "均值 "
+
+#: tycontrols.strconsts.rsgridminprefix
+msgid "Min "
+msgstr "最小 "
+
+#: tycontrols.strconsts.rsgridmaxprefix
+msgid "Max "
+msgstr "最大 "
+
+#: tycontrols.strconsts.rsgridcountprefix
+msgid "Count "
+msgstr "计数 "
+
+#: tycontrols.strconsts.rsgridpickcolor
+msgid "Select colour"
+msgstr "选择颜色"
+
+#: tycontrols.strconsts.rsgridcheckedword
+msgid ""
+msgstr "是"

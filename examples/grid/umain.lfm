@@ -1,0 +1,138 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 560
+  Top = 0
+  Width = 900
+  Caption = 'TTyStringGrid 示例'
+  ClientHeight = 560
+  ClientWidth = 900
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 560
+    Top = 0
+    Width = 900
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 900
+      Align = alTop
+      Caption = 'TTyStringGrid  · 自绘数据网格 · TyControls'
+      TitleAlignment = taLeftJustify
+      object BtnAccent: TTyButton
+        Left = 470
+        Height = 26
+        Top = 4
+        Width = 84
+        Anchors = [akTop, akRight]
+        Caption = '主题色'
+        OnClick = BtnAccentClick
+      end
+      object DarkSwitch: TTyToggleSwitch
+        Left = 562
+        Height = 24
+        Top = 5
+        Width = 74
+        Anchors = [akTop, akRight]
+        Caption = '暗色'
+        OnChange = DarkSwitchChange
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 642
+        Height = 26
+        Top = 4
+        Width = 108
+        Anchors = [akTop, akRight]
+        OnChange = ThemeComboChange
+      end
+    end
+    object ToolBar: TTyPanel
+      Left = 0
+      Height = 44
+      Top = 34
+      Width = 900
+      Align = alTop
+      object LblFilter: TTyLabel
+        Left = 14
+        Height = 18
+        Top = 13
+        Width = 60
+        Caption = '筛选产品:'
+      end
+      object EdFilter: TTyEdit
+        Left = 82
+        Height = 26
+        Top = 9
+        Width = 150
+        OnChange = EdFilterChange
+      end
+      object BtnGroup: TTyButton
+        Left = 248
+        Height = 26
+        Top = 9
+        Width = 104
+        Caption = '按大区分组'
+        OnClick = BtnGroupClick
+      end
+      object BtnCsv: TTyButton
+        Left = 362
+        Height = 26
+        Top = 9
+        Width = 96
+        Caption = '导出 CSV'
+        OnClick = BtnCsvClick
+      end
+      object BtnMillion: TTyButton
+        Left = 468
+        Height = 26
+        Top = 9
+        Width = 96
+        Caption = '一百万行'
+        OnClick = BtnMillionClick
+      end
+      object LblHint: TTyLabel
+        Left = 580
+        Height = 18
+        Top = 13
+        Width = 300
+        Anchors = [akTop, akLeft, akRight]
+        Caption = '列头 ▾ 可按值筛选 · 点列头排序 · F2/双击编辑 · Ctrl+C/V'
+      end
+    end
+    object Grid: TTyStringGrid
+      Left = 14
+      Height = 430
+      Top = 88
+      Width = 872
+      Anchors = [akTop, akLeft, akRight, akBottom]
+      TabStop = True
+      TabOrder = 0
+      DefaultRowHeight = 24
+      ShowIndicator = True
+      IndicatorWidth = 46
+      ShowFooter = True
+      FooterHeight = 26
+      ShowFilterButtons = True
+      OnSelectCell = GridSelectCell
+      OnGetEditorKind = GridGetEditorKind
+      OnCellEdited = GridCellEdited
+      OnCompareCells = GridCompareCells
+      OnGetPickList = GridGetPickList
+      OnGetCellDisplay = GridGetCellDisplay
+      OnGetRowHeight = GridGetRowHeight
+    end
+    object LblStatus: TTyLabel
+      Left = 14
+      Height = 18
+      Top = 528
+      Width = 872
+      Anchors = [akLeft, akRight, akBottom]
+      Caption = '就绪'
+    end
+  end
+end
