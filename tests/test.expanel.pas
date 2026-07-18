@@ -38,6 +38,7 @@ type
     procedure TestEventsFireOnlyOnChange;
     // client rect / header hit-test
     procedure TestAdjustClientRectInsetsBelowHeader;
+    procedure TestBodyClearsTheBorder;
     procedure TestHeaderClickToggles;
     procedure TestBodyClickDoesNotToggle;
     procedure TestDisabledHeaderClickIgnored;
@@ -53,6 +54,7 @@ type
     function StyleTypeKey: string;
     procedure ClickAt(X, Y: Integer);
     function ClientTopInset: Integer;
+    function AdjustedClient: TRect;
   end;
 
   TEventProbe = class
@@ -70,6 +72,12 @@ end;
 procedure TExPanelAccess.ClickAt(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);
+end;
+
+function TExPanelAccess.AdjustedClient: TRect;
+begin
+  Result := Rect(0, 0, Width, Height);
+  AdjustClientRect(Result);
 end;
 
 function TExPanelAccess.ClientTopInset: Integer;
@@ -387,6 +395,41 @@ begin
     AssertEquals('header inset scales with DPI', 52, Acc.ClientTopInset);
   finally
     Acc.Free;
+  end;
+end;
+
+{ The body must not sit ON the panel's own border: DrawFrame strokes the border INSIDE the
+  control's rect, so an un-inset alClient child starts at x=0, paints over the border line, and
+  reads as content spilling out of the panel. (Reported from a real run: "折叠面板,内容区超出
+  了边界".) The header band already covers the top edge, so only the other three are checked. }
+procedure TTyExPanelTest.TestBodyClearsTheBorder;
+var
+  Ctl: TTyStyleController;
+  Acc: TExPanelAccess;
+  r: TRect;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    // A 3px border, so an off-by-one cannot pass by accident.
+    Ctl.LoadThemeCss('TyPanel { background: #FFFFFF; color: #111111; '
+      + 'border-color: #808080; border-width: 3px; }');
+    Acc := TExPanelAccess.Create(FForm);
+    Acc.Parent := FForm;
+    Acc.Controller := Ctl;
+    Acc.Font.PixelsPerInch := 96;
+    try
+      Acc.SetBounds(0, 0, 200, 140);
+      Acc.HeaderHeight := 26;
+      r := Acc.AdjustedClient;
+      AssertEquals('left clears the border', 3, r.Left);
+      AssertEquals('right clears the border', 200 - 3, r.Right);
+      AssertEquals('bottom clears the border', 140 - 3, r.Bottom);
+      AssertEquals('top is still the header band (which covers the top border)', 26, r.Top);
+    finally
+      Acc.Free;
+    end;
+  finally
+    Ctl.Free;
   end;
 end;
 

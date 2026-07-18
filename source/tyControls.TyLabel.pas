@@ -25,9 +25,6 @@ type
       the given (already PPI-scaled) canvas font. Returns the lines. }
     procedure WrapText(const AText: string; AMaxWidthPx: Integer;
       ACanvas: TCanvas; ALines: TStrings);
-    { Measure the caption: width = widest line, height = line-count * line-height.
-      Honors WordWrap at AAvailWidthPx (only used when WordWrap=True; <=0 = no wrap). }
-    procedure MeasureCaption(APPI, AAvailWidthPx: Integer; out AWidthPx, AHeightPx: Integer);
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -48,6 +45,12 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { Measure the caption: width = widest line, height = line-count * line-height.
+      Honors WordWrap at AAvailWidthPx (only used when WordWrap=True; <=0 = no wrap).
+      PUBLIC because a host that sizes ITSELF around a label needs the text's real wrapped
+      size before it can decide its own bounds — the message dialog does exactly that, and
+      pinning a guessed box instead is how it used to cut every message past two lines. }
+    procedure MeasureCaption(APPI, AAvailWidthPx: Integer; out AWidthPx, AHeightPx: Integer);
   published
     property Caption;
     property Enabled;

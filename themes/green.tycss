@@ -468,3 +468,68 @@ TyTreeCheckBox { background: alpha(#FFFFFF, 0); color: var(--on-surface); border
 TyTreeCheckBox:active   { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
 TyTreeCheckBox:selected { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
 TyTreeCheckBox:disabled { color: var(--muted); }
+
+/* ── Card + Tag (Ant Design-gap batch 1) ───────────────────────────────── */
+/* green lacks several token aliases; concrete equivalents used below:
+   --input-border-width= 1px
+   --font-size-base    = 9px
+   --font-weight-bold  = 700
+   --disabled-opacity  = 0.5
+   --radius-sm         = 3px
+   --radius-round      = 12px (the pill radius TyBadge/TyToggleSwitch use; the
+                               painter clamps it to half-height => round ends)
+   --on-accent         = #FFFFFF                                             */
+
+/* The photo shows through nearly every container here (TyPanel/TyGroupBox are
+   fully transparent), but a card CARRIES body text — so it is the one container
+   that gets a heavy frosted pane: the same 16px glass as the inputs, tint pushed
+   to 0.72 so the picture can't compete with the content. Border stays on
+   alpha(--border): alpha(--surface) is #FFFFFF in light mode and would ring the
+   photo with a bright halo. padding matches TyPanel — the skin's containers all
+   breathe at 8px. */
+TyCard {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 8px;
+  glass-blur: 16px;
+  glass-tint: alpha(var(--surface), 0.72);
+}
+TyCard:hover    { border-color: darken(--border, 10%); }   /* = AntD 'hoverable' */
+TyCard:disabled { opacity: 0.5; }
+
+/* Flat glass skin: NO tinted title band (that is a classic/office move) — the
+   title sits straight on the card's frosted pane, with only a hairline under it.
+   padding deliberately unset: the title then falls back to the card's padding
+   and lines up with the body content. */
+TyCardHeader {
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  font-size: 9px;
+  font-weight: 700;
+}
+TyCardActions { border-color: alpha(var(--border), 0.6); border-width: 1px; }   /* separator only, no band */
+
+/* The pill is a graphic control painted straight onto the photo, so a neutral tag
+   cannot be a 12% overlay (--overlay-hover) — it would dissolve into the picture.
+   It gets the skin's standard chrome instead: translucent surface at the card's
+   0.72 (pill and card read as one material) + the alpha(--border) hairline. */
+TyTag {
+  background: alpha(var(--surface), 0.72);
+  color: var(--on-surface);
+  border-color: alpha(var(--border), 0.6);
+  border-width: 1px;
+  border-radius: 12px;
+  padding: 0px 8px;
+  font-size: 9px;
+}
+TyTag.accent { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }   /* solid seed fills, like TyButton.primary/.danger */
+TyTag.danger { background: var(--danger); color: #FFFFFF; border-color: var(--danger); }
+TyTag:disabled { opacity: 0.5; }
+
+/* No :hover on the pill — a tag is a marker, not a button; only the x lights up. */
+TyTagClose       { color: var(--muted); }
+TyTagClose:hover { background: var(--overlay-hover); color: var(--on-surface); border-radius: 3px; }

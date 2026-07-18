@@ -137,3 +137,64 @@ TyRadioButton:disabled  { background: var(--field-disabled); color: var(--ink-di
 /* Progress: a thin groove with a solid Breeze-blue fill. */
 TyProgressBar   { render-style: flat; background: var(--groove); color: var(--ink); border: 1px solid var(--groove-border); border-radius: 3; }
 TyProgressFill  { background: var(--accent); border-radius: 2; }
+
+/* ---- Card + Tag + Badge ---- */
+
+/* Card: the Plasma page recipe — a view between a tinted header toolbar and a tinted
+   footer button box. The face is var(--field) because in Breeze an input well and a
+   content view are ONE colour role (white on light, #1B1E20 on dark), so the card sits
+   in the window exactly the way a Dolphin view does: one #BCC0C4 hairline, the 3px
+   corner every surface here gets, and the buttons' whisper-soft lift — which the dark
+   palette already zeroes, because Breeze-dark casts nothing. :hover lights the frame
+   Breeze-blue, the same answer a button or a field gives, so 'hoverable' costs no new
+   idea. Disabled greys the surface explicitly: Breeze dims by colour, never by fade. */
+TyCard          { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--field-border); border-radius: 3; padding: 9px; shadow: 0 1 2 var(--btn-shadow); }
+TyCard:hover    { border-color: var(--accent); }
+TyCard:disabled { background: var(--field-disabled); color: var(--ink-disabled); border-color: var(--border-disabled); shadow: 0 0 0 #00000000; }
+
+/* Header + actions: tinted bands — the window grey laid over the view and cut off by the
+   same hairline. That is literally how a System Settings page is built, and it is what
+   separates Breeze from the other flat skins, which leave the bands transparent. Bold is
+   reserved for a heading; buttons and badges keep this skin's normal weight. Padding is
+   left unset on purpose, so the title sits on the card's own 9px gutter, level with the
+   body. */
+TyCardHeader  { background: var(--surface); color: var(--ink); border: 1px solid var(--field-border); font-weight: bold; }
+TyCardActions { background: var(--surface); border: 1px solid var(--field-border); }
+
+/* Tag: a Kirigami chip, i.e. a miniature Breeze button — near-white face, hairline, 3px
+   corners, NOT a round pill: nothing in this language is round-ended, so the base layer's
+   pill idiom stops at the badge. The 8px gutter sits between the button's 9px and the
+   field's 6px, which is where a chip belongs. Hover lights the edge blue like every other
+   Breeze control; the two variants fill solid and brighten on hover exactly as
+   .primary/.danger do — including their white ink, since --on-accent is this file's ink
+   for any solid fill. */
+TyTag                { render-style: flat; background: var(--btn-face); color: var(--ink); border: 1px solid var(--btn-border); border-radius: 3; padding: 0px 8px; }
+TyTag:hover          { border-color: var(--accent); }
+TyTag.accent         { background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); }
+TyTag.accent:hover   { background: lighten(var(--accent), 8); border-color: lighten(var(--accent), 8); color: var(--on-accent); }
+TyTag.danger         { background: var(--danger); color: var(--on-accent); border: 1px solid var(--danger); }
+TyTag.danger:hover   { background: lighten(var(--danger), 8); border-color: lighten(var(--danger), 8); color: var(--on-accent); }
+TyTag:disabled       { background: var(--field-disabled); color: var(--ink-disabled); border-color: var(--border-disabled); }
+
+/* Tag close 'x': muted at rest (--ink-disabled is this file's secondary ink), and its
+   hover chip is the ghost button's translucent Breeze-blue wash on the checkbox's 2px
+   corner — Breeze answers hover with blue, never with red; only the window's own close
+   button earns the red. On a solid accent/danger pill a grey x would sink into the fill,
+   so there the ink is the white the pill already uses and the chip is a white wash.
+   :disabled has to come back to grey EXPLICITLY: TyTag:disabled greys the pill away from
+   its variant fill, but the variant's white ink is set on the x's own key and states
+   resolve after variants, so without this rule a disabled accent/danger tag would keep a
+   white x on the near-white disabled pill — an x that is simply not there. */
+TyTagClose              { color: var(--ink-disabled); }
+TyTagClose:hover        { background: alpha(var(--accent), 0.12); color: var(--accent); border-radius: 2; }
+TyTagClose.accent       { color: var(--on-accent); }
+TyTagClose.accent:hover { background: alpha(var(--on-accent), 0.20); color: var(--on-accent); border-radius: 2; }
+TyTagClose.danger       { color: var(--on-accent); }
+TyTagClose.danger:hover { background: alpha(var(--on-accent), 0.20); color: var(--on-accent); border-radius: 2; }
+TyTagClose:disabled     { color: var(--ink-disabled); }
+
+/* Badge: Breeze blue, white numerals, round. The inherited base pill already has the
+   right shape — Plasma's counters (task manager, Kickoff) really are circular even though
+   the rest of this language stops at 3px — but its numerals are bold, and nothing here is
+   bold except a heading. The tight 0/4 padding is the same air the whole skin runs on. */
+TyBadge { background: var(--accent); color: var(--on-accent); border-radius: var(--radius-round); font-weight: normal; padding: 0px 4px; }

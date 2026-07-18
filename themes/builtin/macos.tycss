@@ -20,7 +20,7 @@
     --titlebar-ink:         #000000;
     --caption-ink:          #5B5B5D;
     --caption-ink-hover:    #1D1D1F;
-    --overlay:              #000000;   /* caption hover/press wash base */
+    --overlay:              #000000;   /* hover/press wash base (caption glyphs, tag chips) */
 
     /* default button */
     --btn-face-top:         #FFFFFF;
@@ -58,6 +58,9 @@
     /* progress */
     --track:                #D9D9D9;
     --track-border:         #C6C6C6;
+
+    /* card */
+    --card-face:            #FFFFFF;   /* a card is a sheet ON the window, not a sunken well */
   }
 }
 
@@ -76,7 +79,7 @@
     --titlebar-ink:         #F5F5F7;
     --caption-ink:          #AEAEB2;
     --caption-ink-hover:    #F5F5F7;
-    --overlay:              #FFFFFF;   /* caption hover/press wash base */
+    --overlay:              #FFFFFF;   /* hover/press wash base (caption glyphs, tag chips) */
 
     /* default button */
     --btn-face-top:         #5A5A5C;
@@ -114,6 +117,9 @@
     /* progress */
     --track:                #3A3A3C;
     --track-border:         #48484A;
+
+    /* card */
+    --card-face:            #3A3A3C;   /* lifts above the chrome; --field (#1E1E1E) would sink */
   }
 }
 
@@ -184,3 +190,42 @@ TyRadioButton:disabled { background: var(--check-disabled-bg); color: var(--chec
 /* Progress: soft grey track, flat accent fill, both fully rounded. */
 TyProgressBar   { background: var(--track); color: var(--ink); border: 1px solid var(--track-border); border-radius: 100; }
 TyProgressFill  { background: var(--accent); border-radius: 100; }
+
+/* --- card + tag + badge (Ant Design-gap batch 1) ------------------------- */
+
+/* Card: an Aqua box — a plain sheet on the window chrome, hairline, the shared 6px corner
+   and the same soft shadow the buttons cast (a card is only a bigger member of the family). */
+TyCard          { background: var(--card-face); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 12px; shadow: 0 1 3 var(--btn-shadow); }
+TyCard:hover    { border-color: var(--field-hover-border); shadow: 0 2 6 var(--btn-shadow); }
+TyCard:disabled { opacity: 0.55; }
+
+/* Title / actions bands: hairline rules, never a tinted strip — a tinted caption band is a
+   Win9x/Office move; a Mac box separates with a rule and names itself with a bold title.
+   No font-size: like every control here the title takes the inherited size. */
+TyCardHeader  { color: var(--ink); border: 1px solid var(--border); font-weight: bold; }
+TyCardActions { border: 1px solid var(--border); }
+
+/* Tag: a Mail-style address token — flat fill, hairline, fully round ends (the 100 radius is
+   clamped to half height, same as the progress bar). Neutral fill is the caption's wash base
+   at caption strength, so it flips with the mode; the hairline is what makes it an object on
+   the grey chrome, exactly as it does for the fields. */
+TyTag          { background: alpha(var(--overlay), 0.08); color: var(--ink); border: 1px solid var(--border); border-radius: 100; padding: 0px 8px; }
+/* Variants: flat accent / systemRed with the darkened rim the primary button and the checked
+   box wear. No gloss — the gloss is this skin's button material and a tag is a label. */
+TyTag.accent   { background: var(--accent); color: on(var(--accent)); border-color: darken(var(--accent), 8%); }
+TyTag.danger   { background: var(--danger); color: on(var(--danger)); border-color: darken(var(--danger), 8%); }
+TyTag:disabled { opacity: 0.55; }
+
+/* The x: same species as a caption-button glyph — a muted mark that takes a wash chip under
+   the pointer, round rather than the caption's 4px square because it sits inside a capsule.
+   The variants re-ink it: a grey glyph would be unreadable on the accent / systemRed fills.
+   Hover only lays the chip down, so each variant keeps its own ink. */
+TyTagClose        { color: alpha(var(--ink), 0.5); }
+TyTagClose.accent { color: on(var(--accent)); }
+TyTagClose.danger { color: on(var(--danger)); }
+TyTagClose:hover  { background: alpha(var(--overlay), 0.12); border-radius: 100; }
+
+/* Badge: the Dock's count bubble — systemRed, white, bold, round. NOT --accent: on a Mac a
+   number riding a control means unread / attention, and that colour is systemRed; the blue
+   is the brand seed the user re-picks at runtime, which would say something else entirely. */
+TyBadge { background: var(--danger); color: on(var(--danger)); border-radius: 100; font-weight: bold; padding: 0px 4px; }

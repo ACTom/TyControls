@@ -37,6 +37,15 @@ TyButton:disabled { opacity: 0.5; }
   (file-system-backed); **menus/effects**: MenuEx/ImagesMenu, vector primitives (Shape/Star/Arrow),
   `TTyImageView` (pan/zoom + BGRA filters), `TTyHtmlLabel` (inline HTML subset), `tyControls.Transitions`
   (slide/fade appearance animations).
+- **Ant Design gap controls (14, all custom-drawn · usable under all 20 themes · each documented)** —
+  **cards & markers**: `TTyCard` (title/content/actions card, `hoverable` via one `TyCard:hover` rule),
+  `TTyTag` (closable tag pill, variants via `StyleClass`), `TTyBadge` (**standalone** count/dot badge
+  that pins to any control via `Target`); **feedback**: `TTyAlert` (**inline** alert bar —
+  info/success/warning/error), `TTyNotification` (corner auto-dismiss toast), `TTyPopover` (a bubble
+  overlay that **hosts controls**); **navigation & flow**: `TTySegmented` (segmented control),
+  `TTyPagination` (pager), `TTySteps` (wizard step bar, horizontal/vertical), `TTyBreadcrumb`
+  (breadcrumb); **inputs**: `TTyTransfer` (dual-list transfer), `TTyTreeSelect` (tree dropdown),
+  `TTyCascader` (cascading select); **empty state**: `TTyEmpty` (illustration + text + optional action).
 - **Virtual tree `TTyTreeView`** — a VirtualTreeView-class virtual tree: data-on-demand (scales to
   millions of nodes), multi-column with a draggable header (resize / reorder / sort), checkboxes +
   tri-state + radio nodes, multi-select (Ctrl/Shift) + full-row, variable row height, incremental
@@ -134,6 +143,7 @@ in code), plus a combined gallery and a dedicated TreeView showcase:
 | Example | What it shows |
 |---|---|
 | [examples/treeview](examples/treeview/) | **TTyTreeView showcase**: million-node virtual tree / multi-column + sort / checkboxes + tri-state + radio / multi-select + full-row / inline editing / node drag-drop |
+| [examples/antdesign](examples/antdesign/) | **TyControls Pro**: an Ant Design Pro-style admin shell (sider + 6 pages), defaulting to the antdesign skin, with runtime skin switching |
 | [examples/demo](examples/demo/) | Combined gallery: all controls + multi-theme switch + custom window frame + runtime language switch |
 | [examples/dialogs](examples/dialogs/) | **All 11 custom-drawn dialogs**: message / input / password / text / select-value / select-path / colour / font / find / replace / progress (modal and modeless) |
 | [examples/edit](examples/edit/) | Text input, selection, clipboard, word-level navigation, mouse positioning |

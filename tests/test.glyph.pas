@@ -230,6 +230,11 @@ begin
   AssertEquals('chevron-down', '--glyph-chevron-down', TyGlyphKindToken(tgChevronDown));
   AssertEquals('check',        '--glyph-check',        TyGlyphKindToken(tgCheck));
   AssertEquals('close',        '--glyph-close',        TyGlyphKindToken(tgClose));
+  // Status marks (TTyAlert / TTyNotification) are icon-font-overridable like every other kind.
+  AssertEquals('info',         '--glyph-info',         TyGlyphKindToken(tgInfo));
+  AssertEquals('success',      '--glyph-success',      TyGlyphKindToken(tgSuccess));
+  AssertEquals('warning',      '--glyph-warning',      TyGlyphKindToken(tgWarning));
+  AssertEquals('error',        '--glyph-error',        TyGlyphKindToken(tgError));
 end;
 
 function TGlyphTest.SpinUpArrowInk(const AThemeCss: string): Integer;

@@ -130,7 +130,11 @@ uses
   test.htmllabel,
   test.shape,
   test.starshape,
-  test.arrow;
+  test.arrow,
+  test.card, test.tag, test.badge,
+  test.alert, test.notification, test.empty, test.segmented,
+  test.pagination, test.steps, test.breadcrumb, test.transfer,
+  test.treeselect, test.cascader, test.popover;
 
 type
   TTyTestRunner = class(TTestRunner)

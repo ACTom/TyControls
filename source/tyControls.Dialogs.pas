@@ -629,8 +629,22 @@ begin Result := ADlg.ButtonCount; end;
 function TyDialogButton(ADlg: TTyDialog; AIndex: Integer): TTyButton;
 begin Result := ADlg.Buttons[AIndex]; end;
 
+{ Text metrics for the message body. The label sits right of the icon column, wraps, and the
+  dialog is sized to the MEASURED text — never to a fixed box. It used to be pinned to 260x40
+  (i.e. exactly two lines), so a third line, or one long unbroken run, was simply cut off. }
+const
+  cMsgIconCol  = 56;    // x of the text column: the icon lives to its left
+  cMsgIconH    = 56;    // the icon column's own height — the content is never shorter
+  cMsgTextMinW = 260;   // a short message keeps the familiar narrow dialog
+  cMsgTextMaxW = 520;   // ...a long one widens to here BEFORE growing tall, so a paragraph
+                        // does not become a 40-line ribbon
+  cMsgTextMaxH = 420;   // and then stops growing: past this the dialog would outgrow a small
+                        // screen. (Wrapped text cannot scroll here; see the note below.)
+
 function TyBuildMessageDialog(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; const ATitle: string): TTyDialog;
-var lbl: TTyLabel; ordered: TMsgDlgBtnArray; i: Integer; def: TMsgDlgBtn;
+var
+  lbl: TTyLabel; ordered: TMsgDlgBtnArray; i: Integer; def: TMsgDlgBtn;
+  ppi, textW, textH, mw, mh, contentH: Integer;
 begin
   Result := TTyDialog.CreateNew(Application);
   // Explicit title wins; otherwise the human-readable type caption (i18n in Task 6).
@@ -641,7 +655,24 @@ begin
   lbl.Parent := Result;
   lbl.Caption := AMsg;
   lbl.WordWrap := True;
-  lbl.SetBounds(56, Result.TitleHeight + 12, 260, 40);   // right of the icon column
+  // Measure at the narrow width first; widen only if that would make it tall. MeasureCaption
+  // honours WordWrap at the width we hand it, so this is the text's REAL wrapped size.
+  ppi := Result.Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  // Wrap at the WIDEST column we allow, and see how wide the text actually turned out: mw is
+  // the widest resulting line. That one measure gives the natural column for any message —
+  // no px threshold, which would mean different things at 96 and 144 dpi.
+  lbl.MeasureCaption(ppi, cMsgTextMaxW, mw, mh);
+  textW := mw;
+  if textW < cMsgTextMinW then textW := cMsgTextMinW;   // a one-liner keeps the familiar dialog
+  if textW > cMsgTextMaxW then textW := cMsgTextMaxW;
+  // Re-measure AT the chosen column: the wrap points move with the width, so the height is
+  // not proportional and cannot be derived from the first measure.
+  lbl.MeasureCaption(ppi, textW, mw, mh);
+  textH := mh;
+  if textH > cMsgTextMaxH then textH := cMsgTextMaxH;
+  if textH < 1 then textH := 1;
+  lbl.SetBounds(cMsgIconCol, Result.TitleHeight + 12, textW, textH);
   def := ordered[0];
   // Esc / title-bar X both dismiss the message dialog to mrCancel (FCancelResult stays
   // the CreateNew default); ACancel is left for custom TTyDialog subclasses to use.
@@ -650,7 +681,11 @@ begin
       ordered[i] = def, False);
   // store the message-icon symbol + semantic colour so Paint can draw it
   Result.SetMessageIcon(TyMsgTypeSymbol(ADlgType), ADlgType);
-  Result.AutoSizeToContent(320, 56);
+  // Size the dialog to the text, not the other way round. The content is at least the icon
+  // column tall; AutoSizeToContent already widens for the button bar when that is wider.
+  contentH := textH;
+  if contentH < cMsgIconH then contentH := cMsgIconH;
+  Result.AutoSizeToContent(cMsgIconCol + textW + 4, contentH);
 end;
 
 // Show a built dialog modally and free it (leak-safe). Shared by the globals + the component.

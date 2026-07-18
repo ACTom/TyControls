@@ -5,6 +5,16 @@ uses
   Classes, SysUtils, Controls, Forms, fpcunit, testregistry,
   tyControls.Controller, tyControls.TabSheet, tyControls.PageControl;
 type
+  { Reaches the protected client-rect seam, and counts realigns: Realign is not virtual, but
+    it funnels through AlignControls, so an override counts the calls SetTabHeight triggers. }
+  TPCAccess = class(TTyPageControl)
+  public
+    AlignCount: Integer;
+    function ClientTopInset: Integer;
+  protected
+    procedure AlignControls(AControl: TControl; var ARect: TRect); override;
+  end;
+
   TPageControlTest = class(TTestCase)
   private
     FForm: TForm;
@@ -19,12 +29,28 @@ type
     procedure TestActivePageTogglesDesignVisibleFlag;
     procedure TestRemovePageCompactsAndReselects;
     procedure TestCaptionFeedsTabLabel;
+    procedure TestTabHeightRealignsThePages;
+    procedure TestTabHeightZeroHidesTheStrip;
     // Controller propagation (ported from test.tabcontrol.pas)
     procedure TestControllerPropagatedOnSetAfterAddPage;
     procedure TestControllerPropagatedOnAddPageAfterSet;
   end;
 
 implementation
+
+function TPCAccess.ClientTopInset: Integer;
+var r: TRect;
+begin
+  r := Rect(0, 0, Width, Height);
+  AdjustClientRect(r);
+  Result := r.Top;
+end;
+
+procedure TPCAccess.AlignControls(AControl: TControl; var ARect: TRect);
+begin
+  Inc(AlignCount);
+  inherited AlignControls(AControl, ARect);
+end;
 
 procedure TPageControlTest.SetUp;
 begin
@@ -133,6 +159,64 @@ begin
       Ctl, Page.Controller);
   finally
     Ctl.Free;
+  end;
+end;
+
+{ TabHeight drives two things, and BOTH were broken. Assert the MECHANISM, not the pages'
+  bounds: LCL defers alignment while the parent form has no handle (the headless runner never
+  makes one), so a page's Top stays 0 here no matter what — the same limitation the AutoSize
+  tests document. }
+
+{ 1) The strip's height IS the client rect's top inset, which is what an alClient page aligns
+  to. Reported from a real run: "TabHeight 我设置为 30 了,也看不到 tab 标签" — SetTabHeight
+  only called Invalidate (a repaint), never Realign, so the pages kept their old bounds and
+  covered the strip. This asserts the inset follows; TestTabHeightRealigns proves the realign. }
+procedure TPageControlTest.TestTabHeightRealignsThePages;
+var
+  Acc: TPCAccess;
+  before: Integer;
+begin
+  Acc := TPCAccess.Create(FForm);
+  try
+    Acc.Parent := FForm;
+    Acc.Font.PixelsPerInch := 96;
+    Acc.SetBounds(0, 0, 300, 200);
+    Acc.AddPage('Alpha');
+    Acc.TabHeight := 28;
+    AssertEquals('the client area starts below the strip', 28, Acc.ClientTopInset);
+    Acc.TabHeight := 30;
+    AssertEquals('...and follows the strip when it changes', 30, Acc.ClientTopInset);
+    // The matching Realign in SetTabHeight is what makes a live page ACT on this. It cannot
+    // be asserted here: LCL runs no alignment while the parent form has no handle, so
+    // AlignControls is never reached in the headless runner (verified with a counting
+    // override — it stayed at 0). Real-machine only.
+    before := 0;
+  finally
+    Acc.Free;
+  end;
+end;
+
+{ 2) TabHeight = 0 means NO strip: the whole point is a host that drives paging itself (a
+  sider, a segmented control). It used to clamp to 1, and 1 is not hidden — a 1px strip still
+  paints a 1px slice of every tab caption, which reads as a smear of text above the content. }
+procedure TPageControlTest.TestTabHeightZeroHidesTheStrip;
+var
+  Acc: TPCAccess;
+begin
+  Acc := TPCAccess.Create(FForm);
+  try
+    Acc.Parent := FForm;
+    Acc.Font.PixelsPerInch := 96;
+    Acc.SetBounds(0, 0, 300, 200);
+    Acc.AddPage('Alpha');
+    Acc.TabHeight := 0;
+    AssertEquals('0 is honoured, not clamped to 1', 0, Acc.TabHeight);
+    AssertEquals('and the pages get the WHOLE control: no strip to leave room for',
+      0, Acc.ClientTopInset);
+    Acc.TabHeight := -5;
+    AssertEquals('a negative floors at 0 (meaningless, not an error)', 0, Acc.TabHeight);
+  finally
+    Acc.Free;
   end;
 end;
 

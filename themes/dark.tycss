@@ -490,3 +490,47 @@ TyTreeCheckBox { background: var(--input-bg); color: var(--on-surface); border-c
 TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyTreeCheckBox:disabled { color: var(--muted); }
+
+/* ── Card + Tag (Ant Design-gap batch 1) ───────────────────────────────── */
+
+/* One themed surface for the whole card; the header/actions strips are bands drawn
+   on it, so they carry only their separator (border-*) and the title's ink. A flat,
+   modern card: hairline border, no header band — the separator alone splits it.
+   暗色下 --form-bg 就是 surface 本身(不 darken),卡片再用 surface 就只剩边框可辨;
+   改用 --input-bg 让卡片「抬起」于窗口背景,与 TitleBar / MenuView 同一套做法。 */
+TyCard {
+  background: var(--input-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+TyCard:hover { border-color: var(--border-hover); }
+TyCard:disabled { opacity: var(--disabled-opacity); }
+/* No background => a transparent title band over the card's own surface. */
+TyCardHeader {
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+TyCardActions { border-color: var(--border); border-width: var(--input-border-width); }
+
+/* Neutral tag = 暗色下的白色薄雾 (--overlay-hover),对应亮色的 on-surface 薄雾;变体是
+   StyleClass,而这两个正好落在调色板已有的 seed 上(success/warning 标签得先加新
+   seed 色 + 它的 on() 配对)。 */
+TyTag {
+  background: var(--overlay-hover);
+  color: var(--on-surface);
+  border-radius: var(--radius-round);
+  font-size: var(--font-size-base);
+  padding: 0px 8px;
+}
+TyTag.accent { background: var(--accent); color: var(--on-accent); }
+TyTag.danger { background: var(--danger); color: var(--on-danger); }
+TyTag:disabled { opacity: var(--disabled-opacity); }
+
+TyTagClose       { color: var(--muted); }
+TyTagClose:hover { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius-sm); }

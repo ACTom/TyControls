@@ -116,6 +116,7 @@
   /* Geometry — Fluent soft rounding; progress is a full pill */
   --radius:      5px;
   --radius-sm:   4px;
+  --radius-lg:   8px;    /* a LAYER (card / flyout) rounds softer than the controls on it */
   --radius-pill: 100px;
 }
 
@@ -196,3 +197,49 @@ TyRadioButton:disabled { background: var(--check-disabled-bg); color: var(--chec
 /* Progress: a rounded PILL track with a rounded accent fill (Win 11 rounded bar). */
 TyProgressBar  { background: var(--track); border-width: 0; border-radius: var(--radius-pill); }
 TyProgressFill { background: var(--accent); border-radius: var(--radius-pill); }
+
+/* ── Card + Tag (Ant Design-gap batch 1) ─────────────────────────────────── */
+
+/* Card: a Fluent LAYER — the button's card face and near-invisible hairline, the same faint
+   2px shadow, but the softer layer corner and a roomier inset (a card holds content, a button
+   holds a word). The header / actions strips are BANDS on this one surface: Win 11 never tints
+   them, so each carries nothing but its hairline separator. */
+TyCard          { background: var(--card); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius-lg); padding: 12px; shadow: 0 1 2 var(--shadow-col); }
+/* Hover firms the hairline only, no face change: the pointer crosses a container constantly,
+   and a card that repaints its whole surface on every pass is the noise Win 11 avoids. */
+TyCard:hover    { border-color: var(--border-hover); }
+TyCard:disabled { background: var(--disabled-bg); color: var(--disabled-ink); border-color: var(--disabled-border); shadow: 0 0 0 #00000000; }
+
+/* Title band: no fill (the card face reads straight through) + the hairline rule beneath it.
+   Weight 600 is Fluent's "Body Strong" — a semibold title, never the heavy bold of the classic
+   skins. No padding of its own, so the title lines up with the body. */
+TyCardHeader  { color: var(--ink); border-color: var(--border); border-width: 1px; font-weight: 600; }
+TyCardActions { border-color: var(--border); border-width: 1px; }
+
+/* Tag: a Fluent chip. The neutral fill is the TRANSLUCENT overlay rather than a solid tone, so
+   one pill reads on the Mica backdrop and on a card face alike; under it the usual hairline,
+   and the progress bar's pill radius — Win 11 chips are pill-ended. No shadow: a chip is inline
+   furniture, not a lifted layer. */
+TyTag          { background: var(--active-fill); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius-pill); padding: 0px 8px; font-weight: normal; }
+/* The two colour variants are the solid InfoBadge material — accent / critical fill with the
+   darkened border the solid buttons carry. Shaped exactly like the neutral pill; only the
+   colour differs. */
+TyTag.accent   { background: var(--accent); color: var(--on-accent); border-color: var(--accent-border); }
+TyTag.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger-border); }
+/* Applied after the variants, so a disabled accent / danger tag greys out with the rest. */
+TyTag:disabled { background: var(--disabled-bg); color: var(--disabled-ink); border-color: var(--disabled-border); }
+
+/* The close x mirrors the caption buttons: nothing at rest, a soft overlay chip under the
+   pointer. Its ink is deliberately UNSET so the x takes the pill's own ink and stays readable
+   on the solid accent / danger fills too. The chip uses the press overlay, not the hover one:
+   at a 14px slot this skin's resting hover fill is too faint to read as an affordance. */
+TyTagClose       { background: alpha(#FFFFFF, 0); border-radius: var(--radius-sm); }
+TyTagClose:hover { background: var(--active-fill); }
+
+/* Badge: the Fluent InfoBadge — a solid accent pill in the button's corner at the full pill
+   radius, so a single digit lands on a true circle. Normal weight like every other glyph here
+   (Win 11's badge digits are caption text, not bold), which is where this skin parts with the
+   bold base pill. No font-size, like every other rule in this skin: a control with no theme
+   font-size already falls back to --font-size-base on its own, so stating it here would only
+   cost the badge an explicitly-set Font.Size (which outranks the token, but not a rule). */
+TyBadge { background: var(--accent); color: var(--on-accent); border-radius: var(--radius-pill); font-weight: normal; padding: 0px 4px; }

@@ -495,3 +495,11 @@ msgstr ""
 "请按 Ctrl+Z 撤销。\n"
 "\n"
 "如果撤销没能恢复,请不要保存、直接关闭这个窗体再重新打开 —— Surface 不在组件面板上,拖不回来。"
+
+#: tycontrols.strconsts.rsbadgeoverflow
+msgid "99+"
+msgstr "99+"
+
+#: tycontrols.strconsts.rsemptydescription
+msgid "No data"
+msgstr "暂无数据"

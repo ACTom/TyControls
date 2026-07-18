@@ -442,6 +442,51 @@ TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); bo
 TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyTreeCheckBox:disabled { color: var(--muted); }
 
+/* ── Card + Tag (Ant Design-gap batch 1) ───────────────────────────────── */
+
+/* One themed surface for the whole card; the header/actions strips are bands drawn
+   on it, so they carry only their separator (border-*) and the title's ink. A flat,
+   modern card: hairline border, no header band — the separator alone splits it.
+   The card fill can't be a plain var(--surface): light's --form-bg is a DARKENED
+   surface (so a --surface card lifts off it), but dark's --form-bg IS --surface raw,
+   which would leave the card invisible but for its hairline. --card-bg carries that
+   per-@mode split (light=--surface, dark=--input-bg), same as --menu-popup-bg. */
+TyCard {
+  background: var(--card-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+TyCard:hover { border-color: var(--border-hover); }
+TyCard:disabled { opacity: var(--disabled-opacity); }
+/* No background => a transparent title band over the card's own surface. */
+TyCardHeader {
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+TyCardActions { border-color: var(--border); border-width: var(--input-border-width); }
+
+/* 中性 tag: 一层淡 overlay 洗色 (light 用 on-surface 加深、dark 用白色提亮,由 @mode 决定)。
+   变体是 StyleClass,且只有这两个落在既有 seed 上 (success/warning 得先加 seed + on() 配对)。 */
+TyTag {
+  background: var(--overlay-hover);
+  color: var(--on-surface);
+  border-radius: var(--radius-round);
+  font-size: var(--font-size-base);
+  padding: 0px 8px;
+}
+TyTag.accent { background: var(--accent); color: var(--on-accent); }
+TyTag.danger { background: var(--danger); color: var(--on-danger); }
+TyTag:disabled { opacity: var(--disabled-opacity); }
+
+TyTagClose       { color: var(--muted); }
+TyTagClose:hover { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius-sm); }
+
 /* ── @mode conditional token blocks (D7) ──────────────────────────────── */
 
 @mode light {
@@ -493,6 +538,9 @@ TyTreeCheckBox:disabled { color: var(--muted); }
     --transparent-fill: alpha(#FFFFFF, 0);
     /* Menu popup surface: light = the white surface (matches light.tycss). */
     --menu-popup-bg: var(--surface);
+    /* Card surface: light = the white surface, which lifts off the darkened
+       --form-bg behind it (matches light.tycss). */
+    --card-bg: var(--surface);
   }
 }
 
@@ -552,5 +600,9 @@ TyTreeCheckBox:disabled { color: var(--muted); }
     --transparent-fill: alpha(#000000, 0);
     /* Menu popup surface: dark = the raised input bg (matches dark.tycss). */
     --menu-popup-bg: var(--input-bg);
+    /* Card surface: dark --form-bg is --surface raw, so a --surface card would
+       vanish into the backdrop; the card lifts on --input-bg (matches dark.tycss,
+       and the TitleBar / MenuView approach). */
+    --card-bg: var(--input-bg);
   }
 }

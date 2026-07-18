@@ -150,6 +150,21 @@ resourcestring
     'If undo does not restore it, close this form WITHOUT saving and reopen it — the Surface is not ' +
     'on the component palette, so it cannot be dropped back.';
 
+  // --- Badge ---
+  // What a count past 99 collapses to, shared by TTyButton's built-in badge and the
+  // standalone TTyBadge (the only user-visible TEXT the runtime controls draw by
+  // themselves). Translatable because the '+' overflow marker is not universal — a
+  // locale may want its own affix — but most translations will simply repeat the msgid.
+  rsBadgeOverflow = '99+';
+
+  // --- Empty (placeholder) ---
+  // TTyEmpty's default message, drawn whenever its Description is left blank. Translatable
+  // for the obvious reason: it is a sentence addressed to the user, in their language.
+  // The runtime controls draw almost NO text of their own (they draw what the app gives
+  // them) — this and rsBadgeOverflow above are the only exceptions, because an empty state
+  // has, by definition, no app text to show.
+  rsEmptyDescription = 'No data';
+
   // --- Design-time hints (shown in the IDE designer) ---
   rsTyGraphicControlOnForm =
     'The graphic control "%s" was placed directly on the form.'#10 +

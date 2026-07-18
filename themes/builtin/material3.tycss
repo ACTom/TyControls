@@ -17,6 +17,7 @@
     --primary:    var(--accent); /* visible primary; light == the seed           */
     --on-primary: #FFFFFF;   /* ink on filled primary / checked check-mark        */
     --surface:    #FAFAFA;   /* window + top app bar: near-white surface          */
+    --card:       #F7F2FA;   /* card container: M3 surface-container-low          */
     --field:      #FFFFFF;   /* outlined text-field / checkbox well               */
     --outline:    #79747E;   /* M3 outline: field / checkbox / radio stroke       */
     --tonal:      #E8DEF8;   /* secondary-container: tonal (default) button fill   */
@@ -36,6 +37,7 @@
     --primary:    #D0BCFF;   /* M3 primary, brightened for dark contrast          */
     --on-primary: #381E72;   /* dark ink on the light-purple filled primary       */
     --surface:    #141218;   /* window + top app bar: darkest tonal surface       */
+    --card:       #1D1B20;   /* card container: M3 surface-container-low (dark)   */
     --field:      #1D1B20;   /* outlined text-field / checkbox well               */
     --outline:    #938F99;   /* M3 outline (dark)                                 */
     --tonal:      #4A4458;   /* secondary-container (dark) tonal button fill       */
@@ -123,3 +125,63 @@ TyRadioButton:disabled { background: alpha(var(--ink), 0.04); color: alpha(var(-
 /* Linear progress: surface-variant track, solid primary fill, both fully pill-rounded. */
 TyProgressBar   { background: var(--track);   border-radius: 100px; }
 TyProgressFill  { background: var(--primary); border-radius: 100px; }
+
+/* --- card + tag + badge -------------------------------------------------- */
+
+/* M3 "elevated card": the card is its OWN tonal surface, never an outlined box.
+   Elevation here is TONE first, shadow second — over the dark palette's #141218 a
+   shadow is all but invisible, so a card left at the window colour would vanish;
+   surface-container-low is what lifts it, and it reads in both modes. 12px = M3's
+   medium shape. 16px is the spec's card inset: the header's compact-padding thesis
+   is a BUTTON rule (it keeps short CJK captions from truncating), and a card holds
+   content, not a caption. Hover only lifts level 1 -> level 2, reusing the very
+   shadow pair the buttons already use. */
+TyCard          { background: var(--card); color: var(--ink); border-width: 0; border-radius: 12px; padding: 16px; shadow: 0 1 2 #0000001F; }
+TyCard:hover    { shadow: 0 2 4 #00000029; }
+TyCard:disabled { background: alpha(var(--ink), 0.04); color: alpha(var(--ink), 0.38); shadow: 0 0 0 #00000000; }
+
+/* No separator hairline and no tinted band on either strip: M3 divides a card by
+   whitespace and type weight, never by rules — and this skin gets its structure from
+   elevation, not from borders. The header's padding stays unset on purpose so the
+   title inherits the card's 16px and lines up with the body; the title is M3
+   "title-medium" = the same 500 weight the filled buttons carry, not bold. */
+TyCardHeader    { color: var(--ink); border-width: 0; font-weight: 500; }
+TyCardActions   { border-width: 0; }
+
+/* Chips ARE the M3 tag, and they are the one M3 component that is not a pill: 8px
+   (small shape) corners, a 1px outline round a transparent container, on-surface
+   label — an M3 assist/filter chip at rest, hover lit by the usual 8% state layer.
+   Horizontal air follows this file's compact discipline (the buttons' 10px); vertical
+   is 0 because the type sets the height. Disabled neutralises the chip to M3's
+   on-surface washes — 12% container, 38% label, 12% outline — which is also what
+   the filled variants below fall back to. */
+TyTag           { background: transparent; color: var(--ink); border: 1px solid var(--outline); border-radius: 8px; padding: 0px 10px; }
+TyTag:hover     { background: alpha(var(--ink), 0.08); }
+TyTag:disabled  { background: alpha(var(--ink), 0.12); color: alpha(var(--ink), 0.38); border-color: alpha(var(--ink), 0.12); }
+
+/* The variants are the two roles the palette actually seeds. Both are FILLED chips —
+   M3 drops a chip's outline the moment it takes a container — lightened by the same
+   white state layer the filled buttons use, so a tag and a button of the same role
+   never disagree. */
+TyTag.accent       { background: var(--primary); color: var(--on-primary); border-width: 0; }
+TyTag.accent:hover { background: mix(var(--primary), #FFFFFF, 8%); }
+TyTag.danger       { background: var(--danger); color: var(--on-danger); border-width: 0; }
+TyTag.danger:hover { background: mix(var(--danger), #FFFFFF, 8%); }
+
+/* The x is M3's trailing "remove" icon: on-surface-variant ink on the outlined chip,
+   and the container's own ink on the filled ones (TyTagClose resolves with the tag's
+   StyleClass, so the variants can say so). :hover is the circular state layer M3 puts
+   under every icon target; it deliberately sets no colour, so a filled chip's x keeps
+   its contrast while the pointer is on it. */
+TyTagClose          { color: var(--ink-muted); }
+TyTagClose:hover    { background: alpha(var(--ink), 0.12); border-radius: 100px; }
+TyTagClose:disabled { color: alpha(var(--ink), 0.38); }
+TyTagClose.accent   { color: var(--on-primary); }
+TyTagClose.danger   { color: var(--on-danger); }
+
+/* An M3 badge is an ERROR-role component, not an accent one — Material's own badge
+   defaults to the error container with on-error ink, so the inherited accent pill is
+   simply the wrong role here (and this key also drives TyButton's built-in badge, which
+   is exactly where M3 puts red badges anyway). Fully round, 4px of horizontal air,
+   label is M3 "label-small" = 500; the dot and inset keep the built-in metrics. */
+TyBadge         { background: var(--danger); color: var(--on-danger); border-radius: 100px; font-weight: 500; padding: 0px 4px; }

@@ -23,6 +23,10 @@
     --border:         #D9D9D9;   /* hair-line borders & field edges                                     */
     --disabled-fill:  #F5F5F5;   /* disabled surface fill                                                */
     --track:          #F5F5F5;   /* progress trough                                                      */
+    --tag-fill:       #FAFAFA;   /* neutral tag chip fill — Ant's #FAFAFA                                */
+    --tag-accent-ink: var(--accent);  /* preset-tag ink: Ant's LIGHT preset ink is the seed itself       */
+    --tag-danger-ink: var(--danger);  /* ditto for the error preset                                      */
+    --listgroup-accent-ink: var(--accent);  /* sider open-group + selected-item ink: the seed reads on a light tint */
     --cap-hover:      #0000000F;  /* caption-button hover overlay                                        */
     --cap-active:     #00000017;  /* caption-button pressed overlay                                      */
     --shadow-soft:    #0000000A;  /* default-button drop shadow (0 1 0)                                  */
@@ -44,6 +48,10 @@
     --border:         #424242;   /* subtle borders & field edges                          */
     --disabled-fill:  #262626;   /* disabled surface fill                                  */
     --track:          #303030;   /* progress trough                                        */
+    --tag-fill:       #FFFFFF0A;  /* neutral tag chip fill — a 4% white wash               */
+    --tag-accent-ink: lighten(var(--accent), 30);  /* Ant LIGHTENS preset ink on dark:     */
+    --tag-danger-ink: lighten(var(--danger), 20);  /* the seed alone is too dark to read   */
+    --listgroup-accent-ink: lighten(var(--accent), 30);  /* dark: lighten like the tag ink — raw seed on the dark pill is only ~2.9:1 */
     --cap-hover:      #FFFFFF14;  /* caption-button hover overlay                           */
     --cap-active:     #FFFFFF1F;  /* caption-button pressed overlay                        */
     --shadow-soft:    #00000030;  /* default-button drop shadow (deeper on dark)           */
@@ -116,3 +124,92 @@ TyRadioButton:disabled { background: var(--disabled-fill); color: var(--ink-disa
 /* Progress: a #F5F5F5 pill trough with a solid #1677FF pill fill (Ant's rounded bar). */
 TyProgressBar  { background: var(--track); border-radius: 100; }
 TyProgressFill { background: var(--accent); border-radius: 100; }
+
+/* --- Card + Tag + Badge -------------------------------------------------- */
+
+/* Card: Ant's canonical card — a white surface, a #D9D9D9 hairline, 6px radius and NO shadow at rest (a
+   bordered AntD card is flat; the hairline is the whole frame). 'hoverable' is the only lift: the border stays
+   put and a soft shadow blooms under it — the base layer's TyCard:hover would recolour the border with ITS own
+   --border-hover, so pin border-color here. Body padding is 12px, not Ant's 24px: that 24 is sized for a 14px
+   font and this skin runs the compact 9px base. The 36/44 fallback band heights already match Ant's small-card
+   proportions, so no --card-header-height / --card-actions-height override. */
+TyCard          { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 12px; }
+TyCard:hover    { border-color: var(--border); shadow: 0 2 8 var(--shadow-soft); }
+TyCard:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); }
+
+/* Header + actions are BANDS drawn on the card's own surface, not frames — so border-color/border-width here is
+   the separator hairline, not a box. Ant's card head is transparent over the card, so neither band takes a
+   background. The title is the one piece of bold in this flat skin (Ant's head is fontWeightStrong); no padding
+   on the band, so the title falls back to the card's own 12px and lines up with the body. */
+TyCardHeader  { color: var(--ink); border-color: var(--border); border-width: 1px; font-weight: bold; }
+TyCardActions { border-color: var(--border); border-width: 1px; }
+
+/* Tag: an Ant tag is a small 2px-radius CHIP, not a round pill — the base layer's --radius-round would give it
+   round ends, so the radius is pinned here. Neutral = Ant's #FAFAFA fill behind the same #D9D9D9 hairline every
+   field in this skin wears; disabled greys the fill + ink like every other disabled rule in this file. */
+TyTag          { background: var(--tag-fill); color: var(--ink); border: 1px solid var(--border); border-radius: 2; padding: 0px 8px; }
+TyTag:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); }
+
+/* The variants are Ant's PRESET tags, and Ant's presets are tints, not solid fills: a ~10% wash of the seed, a
+   ~35% wash of it for the border, and a seed-toned ink (#E6F4FF / #91CAFF / #1677FF for blue). Driving the FILL
+   and the BORDER off alpha(seed) lets one rule serve both modes — the wash composites over #FFFFFF in light and
+   over #1F1F1F in dark, landing on Ant's own dark tints — and keeps them tracking the runtime accent-picker.
+   The INK cannot ride that trick: this skin's dark --accent (#1668DC) is DARKER than its light one (#1677FF)
+   — it is Ant's dark colorPrimary, sized to carry WHITE button text — so the raw seed on a dark tint is a dark
+   ink on a dark wash (~2.9:1 at the 9px base). Ant lightens its dark preset ink for exactly this reason, so the
+   ink comes from --tag-*-ink, which is the seed in light and a lightened seed in dark (still picker-tracked).
+   Only these two: a success/warning tag would need new seed colours, which is a palette decision, not a tag one. */
+TyTag.accent { background: alpha(var(--accent), 0.10); color: var(--tag-accent-ink); border-color: alpha(var(--accent), 0.35); }
+TyTag.danger { background: alpha(var(--danger), 0.10); color: var(--tag-danger-ink); border-color: alpha(var(--danger), 0.35); }
+
+/* The x: Ant gives it no hover chip at all — it just strengthens from a 65% ink to full — so the base layer's
+   --overlay-hover chip is cleared rather than restyled. On a preset tag the x carries the tag's own tinted ink,
+   so the variants restate it (the chip is cleared per-rule, as the buttons here restate too). Each pair is the
+   SAME gesture: rest at 65% of its ink, hover at full. The neutral pair spells that with the palette's own
+   --muted/--ink (--muted IS #…A6 = 65% of --ink); the variants spell it with alpha(--tag-*-ink, 0.65) -> the
+   ink itself. Strengthening must NOT be darken() here: in dark mode 'stronger' is LIGHTER, and darkening a
+   dark-mode preset ink walks it INTO its own tint. Going to full --tag-*-ink is right in both modes. */
+TyTagClose              { color: var(--muted); }
+TyTagClose:hover        { background: transparent; color: var(--ink); }
+TyTagClose.accent       { color: alpha(var(--tag-accent-ink), 0.65); }
+TyTagClose.accent:hover { background: transparent; color: var(--tag-accent-ink); }
+TyTagClose.danger       { color: alpha(var(--tag-danger-ink), 0.65); }
+TyTagClose.danger:hover { background: transparent; color: var(--tag-danger-ink); }
+
+/* Badge: Ant's count badge is RED, not brand-blue — it rides on colorError and only <Badge status> reaches for
+   the palette — so the inherited accent pill is wrong here and this one takes --danger. Round-ended through the
+   same 100 the progress pill uses, and normal weight: the card title is the only bold in this skin, and a 9px
+   badge digit is exactly as legible as the 9px label on a primary button. (Ant's white 1px separator ring has
+   no equivalent: shadow is offsetX/offsetY/blur/color, with no spread.) */
+TyBadge { background: var(--danger); color: on(var(--danger)); border-radius: 100; font-weight: normal; padding: 0px 4px; }
+
+/* --- Sider (ListGroupPanel) — Ant Design Pro's navigation rail ------------ */
+
+/* Ant's sider is airy and flat. The GROUP row carries NO background (the panel surface shows
+   through — none of the old grey band): just muted secondary ink and a right chevron, and when the
+   group is OPEN its ink lifts to the brand blue. A SELECTED child is Ant v5's #E6F4FF pill — a ~10%
+   wash of the seed with brand-blue ink — written as alpha(--accent) so it composites to #E6F4FF over
+   the white light surface and to Ant's own dark selected tint over #1F1F1F, and tracks the runtime
+   accent-picker (the exact TyTag.accent idiom above). Hover is a whisper 6% seed wash. The ink on
+   both accent cues comes from --listgroup-accent-ink (seed in light, lightened seed in dark) for the
+   same reason the tags lighten theirs — this skin's dark --accent is a dark blue that reads at only
+   ~2.9:1 on its own tint. Rows stay normal weight (the card title is this skin's only bold). The base
+   layer's --on-surface / --surface-hover / --selection / --radius are RESTATED here in this skin's own
+   vars, so the sider flips with the dark @mode instead of resolving against the base palette. */
+/* padding is RESTATED, not inherited: any rule for a typeKey suppresses the whole base layer for
+   it (UserHasTypeKey), so leaving padding off the base rule here made it 0 — the sider rows sat
+   flush against the panel border. 14px inline is Ant's sider breathing room. */
+TyListGroupHeader          { color: var(--muted); font-weight: normal; padding: 0px 14px; }
+TyListGroupHeader:hover    { color: var(--ink); }
+TyListGroupHeader:selected { color: var(--listgroup-accent-ink); }   /* the group is OPEN */
+TyListGroupItem          { color: var(--ink); border-radius: 6; padding: 0px 14px; }
+TyListGroupItem:hover    { background: alpha(var(--accent), 0.06); }
+TyListGroupItem:active   { background: alpha(var(--accent), 0.10); color: var(--listgroup-accent-ink); }   /* selected: Ant's #E6F4FF pill */
+
+/* Airy Ant-Pro rhythm: 36px group bands and 40px item rows (the metric token wins over the control's
+   26/24 property fallback). Identical in both modes, so one top-level :root — as bootstrap/classic
+   declare their mode-invariant metrics; only the colour palette flips per @mode. */
+:root {
+  --listgroup-header-height: 36;
+  --listgroup-item-height:   40;
+}

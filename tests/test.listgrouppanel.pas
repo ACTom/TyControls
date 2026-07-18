@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, fpcunit, testregistry,
   tyControls.Types, tyControls.Controller,
-  tyControls.Base, tyControls.ListGroupPanel;
+  tyControls.Base, tyControls.ListGroupPanel,
+  BGRABitmap, BGRABitmapTypes;
 type
   { Pure layout/hit-test functions — the headless-tested core (no window handle). }
   TTyListGroupMathTest = class(TTestCase)
@@ -43,6 +44,10 @@ type
     procedure TestCollapseClampsScrollOffset;
     procedure TestClearResets;
     procedure TestRenderDoesNotCrash;
+    procedure TestHeaderUsesItsOwnKeyNotTheTreeHeader;
+    procedure TestSelectedItemIsAnInsetRoundedPill;
+    procedure TestItemIndentTokenPushesChildContentRight;
+    procedure TestHitTestMatchesPaintUnderSkinHeight;
   end;
 
 implementation
@@ -515,6 +520,189 @@ begin
     AssertTrue('render produced a bitmap', (Bmp.Width = 200) and (Bmp.Height = 160));
   finally
     Bmp.Free;
+  end;
+end;
+
+{ The group header must resolve TyListGroupHeader, NOT the shared TyTreeHeaderSection — that
+  sharing is what made the sider un-restyleable (the key is also TreeView/ListView's column
+  header). Prove it by giving ONLY TyListGroupHeader a distinctive fill and checking the header
+  band takes it while TyTreeHeaderSection is left at something else. }
+procedure TTyListGroupPanelTest.TestHeaderUsesItsOwnKeyNotTheTreeHeader;
+var
+  Ctl: TTyStyleController;
+  P: TPanelAccess;
+  Bmp: TBitmap;
+  RR: TBGRABitmap;
+  found: Boolean;
+  x, y: Integer;
+  px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    // TyTreeHeaderSection is RED here; the sider's own key is GREEN. A green header band proves
+    // the control reads its own key, not the tree's. (Open the group so the header is selected.)
+    Ctl.LoadThemeCss(
+      'TyPanel { background: #FFFFFF; }'
+      + 'TyTreeHeaderSection { background: #FF0000; }'
+      + 'TyListGroupHeader { background: #10B981; color: #FFFFFF; }'
+      + 'TyListGroupHeader:selected { background: #10B981; color: #FFFFFF; }');
+    P := TPanelAccess.Create(FForm);
+    P.Parent := FForm; P.Controller := Ctl; P.Font.PixelsPerInch := 96;
+    P.SetBounds(0, 0, 200, 200);
+    P.AddGroup('Group');
+    Bmp.PixelFormat := pf32bit; Bmp.SetSize(200, 200);
+    Bmp.Canvas.Brush.Color := clWhite; Bmp.Canvas.FillRect(0, 0, 200, 200);
+    P.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 200), 96);
+    RR := TBGRABitmap.Create(Bmp);
+    try
+      found := False;
+      for y := 2 to 24 do
+        for x := 4 to 196 do
+        begin
+          px := RR.GetPixel(x, y);
+          if (px.green > 120) and (px.green > px.red + 30) and (px.green > px.blue + 30) then
+            found := True;
+        end;
+      AssertTrue('the header band takes TyListGroupHeader (green), not TyTreeHeaderSection (red)',
+        found);
+      AssertFalse('and there is no red -> the tree key is NOT what it drew',
+        RR.GetPixel(100, 12).red > 200);
+    finally RR.Free; end;
+  finally Bmp.Free; Ctl.Free; end;
+end;
+
+{ A selected item is a SOFT INSET pill, not a full-bleed bar. Prove the fill does NOT reach the
+  row's left/right edges: the pill is inset by --listgroup-item-inset. }
+procedure TTyListGroupPanelTest.TestSelectedItemIsAnInsetRoundedPill;
+var
+  Ctl: TTyStyleController;
+  P: TPanelAccess;
+  Bmp: TBitmap;
+  RR: TBGRABitmap;
+  itemMidY, x: Integer;
+  edgeFilled, midFilled: Boolean;
+  px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      ':root { --listgroup-item-inset: 8px; --listgroup-header-height: 26; --listgroup-item-height: 24; }'
+      + 'TyPanel { background: #FFFFFF; }'
+      + 'TyListGroupItem { color: #111111; }'
+      + 'TyListGroupItem:active { background: #10B981; color: #FFFFFF; }');
+    P := TPanelAccess.Create(FForm);
+    P.Parent := FForm; P.Controller := Ctl; P.Font.PixelsPerInch := 96;
+    P.SetBounds(0, 0, 200, 200);
+    P.AddGroup('G'); P.AddItem(0, 'Item'); P.Expanded[0] := True;
+    P.SelectItem(0, 0);
+    Bmp.PixelFormat := pf32bit; Bmp.SetSize(200, 200);
+    Bmp.Canvas.Brush.Color := clWhite; Bmp.Canvas.FillRect(0, 0, 200, 200);
+    P.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 200), 96);
+    RR := TBGRABitmap.Create(Bmp);
+    try
+      // The item row is the second band (header 26 + a bit). Scan its middle row.
+      itemMidY := 26 + 12;
+      // A pixel deep in the row (x=100) should be green (the pill); a pixel at the very left
+      // edge (x=1, inside the frame border but left of the 8px inset) should NOT be.
+      midFilled := False; edgeFilled := False;
+      px := RR.GetPixel(100, itemMidY);
+      midFilled := (px.green > 120) and (px.green > px.red + 30);
+      px := RR.GetPixel(2, itemMidY);
+      edgeFilled := (px.green > 120) and (px.green > px.red + 30);
+      AssertTrue('the selected pill is filled in the middle', midFilled);
+      AssertFalse('...but inset from the row edge (a pill, not a full-bleed bar)', edgeFilled);
+    finally RR.Free; end;
+  finally Bmp.Free; Ctl.Free; end;
+end;
+
+{ The child hierarchy indent is theme-driven (--listgroup-item-indent). Guard that a bigger
+  indent actually pushes the item's caption ink further right — the user reported children
+  were not indented enough, and this is the token that fixes it. Compares two indents with the
+  SAME text/font, so it isolates the indent from absolute glyph metrics. }
+function LeftmostInkX(RR: TBGRABitmap; y0, y1: Integer): Integer;
+var x, y: Integer; px: TBGRAPixel;
+begin
+  Result := RR.Width;   // none
+  for y := y0 to y1 do
+    for x := 0 to RR.Width - 1 do
+    begin
+      px := RR.GetPixel(x, y);
+      // dark ink on the white panel (caption is #111111 here)
+      if (px.red < 100) and (px.green < 100) and (px.blue < 100) then
+      begin
+        if x < Result then Result := x;
+        Break;
+      end;
+    end;
+end;
+
+procedure TTyListGroupPanelTest.TestItemIndentTokenPushesChildContentRight;
+
+  function ItemInkLeft(AIndent: Integer): Integer;
+  var Ctl: TTyStyleController; P: TPanelAccess; Bmp: TBitmap; RR: TBGRABitmap;
+  begin
+    Ctl := TTyStyleController.Create(nil);
+    Bmp := TBitmap.Create;
+    try
+      Ctl.LoadThemeCss(Format(
+        ':root { --listgroup-item-indent: %d; --listgroup-header-height: 26; --listgroup-item-height: 24; }'
+        + 'TyPanel { background: #FFFFFF; }'
+        + 'TyListGroupItem { color: #111111; font-size: 12px; }', [AIndent]));
+      P := TPanelAccess.Create(FForm);
+      P.Parent := FForm; P.Controller := Ctl; P.Font.PixelsPerInch := 96;
+      P.SetBounds(0, 0, 200, 200);
+      P.AddGroup('G'); P.AddItem(0, 'Item'); P.Expanded[0] := True;
+      Bmp.PixelFormat := pf32bit; Bmp.SetSize(200, 200);
+      Bmp.Canvas.Brush.Color := clWhite; Bmp.Canvas.FillRect(0, 0, 200, 200);
+      P.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 200), 96);
+      RR := TBGRABitmap.Create(Bmp);
+      try
+        Result := LeftmostInkX(RR, 28, 48);   // the item band (below the 26px header)
+      finally RR.Free; end;
+    finally Bmp.Free; Ctl.Free; end;
+  end;
+
+var small, big: Integer;
+begin
+  small := ItemInkLeft(4);
+  big := ItemInkLeft(40);
+  AssertTrue('both drew the caption', (small < 200) and (big < 200));
+  AssertTrue(Format('a bigger indent pushes the child caption right (indent 4 -> x%d, 40 -> x%d)',
+    [small, big]), big > small + 20);
+end;
+
+{ Hit-testing MUST use the same band heights as the paint. Under a skin that retunes
+  --listgroup-item-height, the paint lays 40px rows while hit-testing used to keep the 24px
+  property default, so a click landed on a DIFFERENT row than the one drawn — and the error grew
+  one row per row downward (user: "鼠标越往下偏差越大"). Click the CENTRE of the row as PAINTED
+  and assert that exact item responds. }
+procedure TTyListGroupPanelTest.TestHitTestMatchesPaintUnderSkinHeight;
+var
+  Ctl: TTyStyleController;
+  P: TPanelAccess;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  try
+    // A skin whose rows are much taller than the control's 26/24 property defaults.
+    Ctl.LoadThemeCss(':root { --listgroup-header-height: 36; --listgroup-item-height: 40; }'
+      + 'TyPanel { background: #FFFFFF; border-width: 0px; }');
+    P := TPanelAccess.Create(FForm);
+    P.Parent := FForm; P.Controller := Ctl; P.Font.PixelsPerInch := 96;
+    P.SetBounds(0, 0, 200, 400);
+    P.AddGroup('G');
+    P.AddItem(0, 'a'); P.AddItem(0, 'b'); P.AddItem(0, 'c'); P.AddItem(0, 'd');
+    P.Expanded[0] := True;
+    // PAINT: header 0..36; item i at 36 + i*40 .. +40. item[2] centre = 36 + 2*40 + 20 = 136.
+    P.DoMouseDown(40, 136);
+    AssertEquals('the clicked row IS item 2 (not a lower row from a 24px mis-map)',
+      2, P.SelectedItem);
+    // ...and the deepest item, where the old accumulation was worst.
+    P.DoMouseDown(40, 36 + 3*40 + 20);   // item[3] centre = 176
+    AssertEquals('the deepest row still lands right', 3, P.SelectedItem);
+  finally
+    P.Free; Ctl.Free;
   end;
 end;
 

@@ -8,14 +8,32 @@
 
 ## [未发布]
 
+### 新增 — 14 个现代 UI 控件(对标 Ant Design 的缺口)
+
+- **卡片与标记**:`TTyCard`(标题 + 内容 + 操作三段式卡片;`hoverable` 只需一条 `TyCard:hover` 规则)、`TTyTag`(标签胶囊,可关闭,颜色变体走 `StyleClass`)、`TTyBadge`(**独立**数字/圆点角标 —— 把 `Target` 指向任意控件即可吸附到它的角上,并随其移动缩放;`TTyButton` 自带的角标照旧可用)。
+- **反馈**:`TTyAlert`(**内联**警告条 —— 此前所有提示都是模态弹窗,页面里常驻一条提示的语义完全没有;info / success / warning / error 四型,可关闭)、`TTyNotification`(角落浮出、自动消失的 toast;悬停暂停倒计时)、`TTyPopover`(**能放控件**的气泡浮层 —— `TTyHint` / `TTyBalloonHint` 只能显示文本)。
+- **导航与流程**:`TTySegmented`(分段控制器,可聚焦 + 左右键切换)、`TTyPagination`(分页器,`1 2 3 … 195`;不依赖表格,配任意列表)、`TTySteps`(向导步骤条,横竖两向)、`TTyBreadcrumb`(面包屑)。
+- **录入**:`TTyTransfer`(双列表穿梭框)、`TTyTreeSelect`(树形下拉)、`TTyCascader`(级联选择:省/市/区)。
+- **空状态**:`TTyEmpty`(插画 + 文案 + 可选操作 —— 列表/树/表格的标配,此前只能手拼 Label)。
+
+以上全部进组件面板(带 HiDPI 图标),**20 个主题下都能正常显示**,并各有一份 API 文档。
+
+### 新增 — 主题
+
+- **调色板多了两个语义色 `--success` / `--warning`**(各带 `on()` 配对),供警告条与 toast 的 success/warning 型使用。既有主题无需改动即可继承。
+- **角标的角内缩与最小尺寸现在可调**(`--badge-inset` / `--badge-min-size`)。默认值不变,所以现有界面**一个像素都不会动**。
+
+### 新增 — 示例
+
+- **[examples/antdesign](examples/antdesign/) —— "TyControls Pro"**:仿 Ant Design Pro 的后台系统(侧边导航 + 6 个页面),默认 antdesign 皮肤,可运行时换肤与切换明暗。
+
+
 ### 变更 — 窗体结构(现有窗体需迁移)
 
 - **`TTyForm` 的控件现在承载在内容容器 `TTyFormSurface` 上** —— 每个窗体一个,名为 `Surface`,铺满窗体,**所有控件都放在它里面**。File > New 的 *TyControls Form / Application* 模板已自带,新建窗体无需额外操作;设计器里拖控件本来就落进它。
   **现有窗体需要迁移**:把原本直接放在窗体上的控件移进 `Surface`(样式控制器、定时器、对话框组件等非可视组件不动)。
   **图形控件(`TTyLabel`、`TTyShape` 等)必须放在 `Surface` 里** —— 它们画在父控件身上,直接放在窗体上会被遮挡而不可见;你这么放时设计器会提示。
   对话框(`TTyDialog`)不受影响:它不可缩放、没有 `Surface`,控件照常直接放在对话框上。
-
-- **内置主题的"危险按钮"现在真的是危险色了** —— 15 个内置主题里此前只有 `showcase` 定义了 `TyButton.danger`,其余 14 个都会让 `StyleClass='danger'` 的按钮**静默回退**成普通按钮。现在每个主题都按自己所模仿的设计体系给出了危险色(Bootstrap danger、Ant Design error、Material 3 error、Apple systemRed、GNOME/Yaru、KDE Breeze negative、各代微软红等),明暗两种模式分别取色。
 
 ### 修复
 

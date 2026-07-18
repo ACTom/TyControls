@@ -9,6 +9,26 @@ Linux and macOS.
 
 ## [Unreleased]
 
+### Added — 14 modern UI controls (the Ant Design gap)
+
+- **Cards & markers**: `TTyCard` (header + content + actions, as one themed surface; `hoverable` is just a `TyCard:hover` rule), `TTyTag` (closable pill; colour variants are `StyleClass`), `TTyBadge` (a **standalone** count/dot marker — point `Target` at any control and it glues itself to that control's corner and follows it; `TTyButton`'s built-in badge still works as before).
+- **Feedback**: `TTyAlert` (an **inline** alert bar — until now every notice was a modal dialog, so "a bar that sits in the page and says something" had no equivalent at all; info / success / warning / error, closable), `TTyNotification` (a corner toast that auto-dismisses and pauses on hover), `TTyPopover` (a bubble that can **hold controls** — `TTyHint` / `TTyBalloonHint` can only show text).
+- **Navigation & flow**: `TTySegmented` (focusable, arrow-key driven), `TTyPagination` (`1 2 3 … 195`; needs no grid — it drives any list), `TTySteps` (wizard steps, horizontal or vertical), `TTyBreadcrumb`.
+- **Data entry**: `TTyTransfer` (two-list shuttle), `TTyTreeSelect` (a tree in a dropdown), `TTyCascader` (province/city/district).
+- **Empty state**: `TTyEmpty` (picture + message + optional action — standard furniture for an empty list/tree/table, previously hand-assembled from Labels).
+
+All of them are on the component palette (with HiDPI icons), render correctly under **all 20 themes**, and ship an API reference each.
+
+### Added — theming
+
+- **Two semantic seed colours, `--success` and `--warning`** (each with its `on()` pairing), for the success/warning kinds of the alert bar and the toast. Existing themes inherit them with no change.
+- **The badge's corner inset and minimum size are now tunable** (`--badge-inset` / `--badge-min-size`). The defaults are unchanged, so no existing UI moves by a pixel.
+
+### Added — examples
+
+- **[examples/antdesign](examples/antdesign/) — "TyControls Pro"**: an Ant Design Pro-style admin shell (sider + 6 pages), defaulting to the antdesign skin, with runtime skin and light/dark switching.
+
+
 ### Changed — form structure (existing forms need migrating)
 
 - **A `TTyForm`'s controls now live on a content container, `TTyFormSurface`** — one per form, named `Surface`, filling the form, with **every control inside it**. The File > New *TyControls Form / Application* templates ship with it, so new forms need no extra work, and dropping controls in the designer lands them in it.

@@ -117,6 +117,21 @@ const
   TyTitleBarPad      = 8;    // TitleBar caption + content-zone left margin
   TyTitleButtonWidth = 46;   // TitleBar caption-button (min/max/close) width
 
+  // Badge metrics, shared by TTyButton's built-in badge and the standalone TTyBadge so
+  // the two cannot drift apart. They live HERE, below both, because tyControls.Badge
+  // uses tyControls.Button (for TTyBadgePosition) and so cannot lend it a constant back.
+  // Each is only the FALLBACK for the theme metric token named beside it: resolve via
+  // ActiveController.Metric(TyBadgeInsetVar, TyBadgeInset), then scale.
+  TyBadgeInset   = 2;   // inset from the host rect's corner
+  TyBadgeMinSize = 8;   // degenerate-measure floor: stay visible
+  TyBadgeDotSize = 8;   // TTyBadge dot diameter (no counterpart in TTyButton)
+
+  // The metric tokens those fallbacks back. Named constants rather than literals so a
+  // typo cannot silently strand one call site on the default.
+  TyBadgeInsetVar   = '--badge-inset';
+  TyBadgeMinSizeVar = '--badge-min-size';
+  TyBadgeDotSizeVar = '--badge-dot-size';
+
 function TyRGB(R, G, B: Byte): TTyColor;
 function TyRGBA(R, G, B, A: Byte): TTyColor;
 function TyAlphaOf(c: TTyColor): Byte;

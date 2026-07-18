@@ -492,3 +492,76 @@ TyTreeCheckBox { background: var(--input-bg); color: var(--on-surface); border-c
 TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyTreeCheckBox:disabled { color: var(--muted); }
+
+/* ── Card + Tag (Ant Design-gap batch 1) ───────────────────────────────── */
+
+/* One themed surface for the whole card; the header/actions strips are bands drawn
+   on it, not frames of their own. Gradients in this skin belong to pressable faces
+   (TyButton) and chrome bands (TyTitleBar) — a card BODY is a backdrop for child
+   controls, so it stays flat like TyPanel/TyTabSheet. The card's drama is the accent
+   header band + a heavier lift than a panel's (1/3 panel -> 2/4 card -> 3/6 hover). */
+TyCard {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 10px;
+  shadow: 0px 2px 4px #0000002E;
+}
+/* AntD's 'hoverable' is just this rule — no property needed. */
+TyCard:hover    { border-color: var(--input-border-hover); shadow: 0px 3px 6px #0000003D; }
+TyCard:disabled { opacity: var(--disabled-opacity); }
+/* The showcase genuinely WANTS a tinted title band (proving the band mechanism is the
+   skin's whole job), so it reuses TyTitleBar's accent gradient and type scale: a card
+   reads as a little window. The separator is the accent's own dark edge — the lavender
+   --border would vanish against the band. */
+TyCardHeader {
+  background: linear-gradient(90deg, lighten(--accent, 8%), var(--accent));
+  color: var(--on-accent);
+  border-color: var(--accent-active);
+  border-width: 1px;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-bold);
+}
+/* Actions ride the chrome tint (as TyToolBar/TyStatusBar do) — readable against the
+   flat body — fenced off by a --border hairline above. */
+TyCardActions { background: var(--surface-chrome); border-color: var(--border); border-width: 1px; }
+
+/* A tag is a pressable chip, so it takes TyButton's raised-face treatment (sheen +
+   border); TyBadge stays flat because it is a marker you cannot press. The neutral
+   pill starts BELOW the surface (darken 4->12%) or its top stop would melt into the
+   card it sits on. --radius-round clamps to half-height => truly round ends. */
+TyTag {
+  background: linear-gradient(90deg, darken(--surface, 4%), darken(--surface, 12%));
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: 1px;
+  border-radius: var(--radius-round);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  padding: 0px 8px;
+}
+TyTag:hover    { border-color: var(--input-border-hover); }
+TyTag:disabled { opacity: var(--disabled-opacity); }
+/* Variants are StyleClasses, mirroring TyButton.primary/.danger. Only these two: the
+   seed palette has no success/warning colour to pair an on() with. */
+TyTag.accent { background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent)); color: var(--on-accent); border-color: var(--accent); }
+TyTag.danger { background: linear-gradient(90deg, lighten(--danger, 10%), var(--danger)); color: var(--on-danger); border-color: var(--danger); }
+/* TyTag:hover overwrites border-color for EVERY variant (the resolver applies ':state'
+   before '.variant:state'), and --input-border-hover is lighten(--accent) — which is the
+   right lift for the neutral and accent pills, but paints a VIOLET rim on the pink danger
+   one, its only hover feedback. Restate it in the danger hue: --danger-hover is exactly
+   lighten(--danger, 10%), the same +10% relationship --input-border-hover has to --accent. */
+TyTag.danger:hover { border-color: var(--danger-hover); }
+
+/* The x mirrors TyTabClose — same --overlay-hover chip, same radius, since the two x's
+   are meant to look alike. It resolves WITH the tag's StyleClass, so the filled variants
+   must re-state their ink: --muted is on-surface ink and goes muddy on a purple or pink
+   pill. The .variant:state rules land after the base :hover, so they win. */
+TyTagClose        { color: var(--muted); }
+TyTagClose.accent { color: var(--on-accent); }
+TyTagClose.danger { color: var(--on-danger); }
+TyTagClose:hover        { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius); }
+TyTagClose.accent:hover { color: var(--on-accent); }
+TyTagClose.danger:hover { color: var(--on-danger); }

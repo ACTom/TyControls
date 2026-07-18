@@ -15,7 +15,7 @@ implementation
 const
   // Must stay in sync with RegisterComponents in designtime/tyControls.Design.pas and the
   // $classes list in scripts/gen-icons.ps1 (which enforces RegisterComponents <-> $classes).
-  CClasses: array[0..143] of string = (
+  CClasses: array[0..157] of string = (
     'TTyButton',
     'TTyGlyphButton','TTyGlyphContainerButton','TTySpeedButton','TTyDropDownButton','TTyMenuButton','TTyColorButton','TTyButtonGroup',
     'TTyRibbon','TTyRibbonPage','TTyRibbonGroup','TTyRibbonAppMenu','TTyRibbonQuickAccess','TTyRibbonGallery','TTyRibbonBackstage',
@@ -46,7 +46,13 @@ const
     'TTyFilterComboBox','TTyShellComboBox',
     'TTyOpenDialog','TTySaveDialog','TTyOpenPictureDialog','TTySavePictureDialog',
     'TTyPreviewBox','TTyOpenPreviewDialog','TTySavePreviewDialog',
-    'TTyImageView','TTyChart','TTyHtmlLabel');
+    'TTyImageView','TTyChart','TTyHtmlLabel',
+    // Ant Design-gap batch 1
+    'TTyCard','TTyTag','TTyBadge',
+    // Ant Design-gap batch 1 (second group) + batches 2 & 3
+    'TTyAlert','TTyNotification','TTyEmpty','TTySegmented',
+    'TTyPagination','TTySteps','TTyBreadcrumb',
+    'TTyTransfer','TTyTreeSelect','TTyCascader','TTyPopover');
 
 procedure TPaletteIconTest.TestAllResourcesPresentAndPng;
 const

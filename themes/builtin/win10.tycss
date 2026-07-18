@@ -167,3 +167,46 @@ TyRadioButton:disabled { background: var(--surface); color: var(--ink-dim); bord
 /* Progress: #E6E6E6 flat track, hairline border, solid accent fill, square. */
 TyProgressBar  { render-style: flat; background: var(--progress-track); border: 1px solid var(--field-border); border-radius: 0; }
 TyProgressFill { background: var(--accent); border-radius: 0; }
+
+/* ---- Card + Tag + Badge ---- */
+
+/* Card: a solid content sheet (white in light, #333 in dark) lifted off the grey
+   window by a single hairline — the same fill + 1px border + zero radius recipe as
+   every other surface here, and no shadow: Win10 content sits IN the plane, it never
+   floats above it. :hover is the Win10 tile/button affordance — the border lights up
+   in the accent. Disabled follows the file's usual recipe (flat surface, dim ink,
+   pale border) rather than a blanket fade. */
+TyCard          { background: var(--field); color: var(--ink); border: 1px solid var(--button-border); border-radius: 0; padding: 12px; }
+TyCard:hover    { border: 1px solid var(--accent); }
+TyCard:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid var(--disabled-border); }
+
+/* Header + actions bands: NO tinted band — Win10 is flat, so the title is set off by
+   nothing but a hairline. That hairline is the CARD's own --button-border, i.e. the very
+   border it sits inside — NOT the title bar's divider: --titlebar-border is toned against
+   --titlebar-bg, and on the card's --field fill it all but disappears in dark mode
+   (#3A3A3A on #333333). Bold is reserved for headings in this skin (buttons and badges
+   stay normal weight). Padding is left unset on purpose, so the title lines up with the
+   body on the card's own gutter. */
+TyCardHeader  { color: var(--ink); border: 1px solid var(--button-border); font-weight: bold; }
+TyCardActions { border: 1px solid var(--button-border); }
+
+/* Tag: a flat SQUARE chip, not a round pill — Win10 has no round-ended anything, so the
+   base layer's --radius-round is overridden to 0. The default chip is the button face and
+   its hairline, i.e. the same quiet chrome the default button wears; the two variants fill
+   solid in the accent-picker blue / the Win10 red, with on() picking their ink. */
+TyTag          { background: var(--button-face); color: var(--ink); border: 1px solid var(--button-border); border-radius: 0; padding: 0px 8px; }
+TyTag.accent   { background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); }
+TyTag.danger   { background: var(--danger); color: on(var(--danger)); border: 1px solid var(--danger); }
+TyTag:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid var(--disabled-border); }
+
+/* Tag close 'x': dim ink at rest, and on hover it takes the Win10 caption-close treatment —
+   a square red chip with white-on-red ink, because that is what an 'x' does in this OS.
+   Here it goes through var(--danger) so it brightens with the dark palette; only the real
+   caption button hard-codes #E81123, since the OS close red never follows the accent picker. */
+TyTagClose       { color: var(--ink-dim); }
+TyTagClose:hover { background: var(--danger); color: on(var(--danger)); border-radius: 0; }
+
+/* Badge: a solid accent counter with SQUARE corners. The inherited base badge is a round
+   modern pill; Win10's badges (taskbar counters, live-tile markers) are hard-edged blocks
+   like everything else in this language, and their numerals are not bold. */
+TyBadge { background: var(--accent); color: on(var(--accent)); border-radius: 0; font-weight: normal; padding: 0px 4px; }

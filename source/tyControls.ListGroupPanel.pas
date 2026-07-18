@@ -4,14 +4,33 @@ unit tyControls.ListGroupPanel;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  BGRACanvas2D,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ExPanel;
+  BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ImageCollection;
 
 const
   // Logical (96ppi) defaults. Header band matches the ExPanel caption band; item rows
   // match the ListBox row height so the two families read as one visual system.
   TyListGroupDefaultHeaderHeight = 26;
   TyListGroupDefaultItemHeight   = 24;
+  // Chevron / icon / selected-pill metrics (logical px). Each is the fallback for the theme
+  // metric token named below; a skin retunes the whole sider through them.
+  TyListGroupDefaultChevronSize  = 14;   // >= ~12, or TyDrawGlyph's 4px/side inset smudges it
+  TyListGroupDefaultIconSize     = 16;   // per-row icon slot
+  TyListGroupDefaultIconGap      = 6;    // gap between the icon and the caption
+  TyListGroupDefaultItemInset    = 6;    // the selected pill's inset from the row's edges
+  TyListGroupDefaultItemIndent   = 16;   // child content's hierarchy step past the group header
+
+  // Theme metric token names. Named constants (not string literals) so a typo cannot strand a
+  // call site on the default. Heights: the token WINS when a theme sets it, else the published
+  // HeaderHeight/ItemHeight property is the fallback — so a skin owns the sider's rhythm
+  // ('40px airy' is a skin decision) while a single instance can still override.
+  TyListGroupHeaderHeightVar = '--listgroup-header-height';
+  TyListGroupItemHeightVar   = '--listgroup-item-height';
+  TyListGroupChevronSizeVar  = '--listgroup-chevron-size';
+  TyListGroupIconSizeVar     = '--listgroup-icon-size';
+  TyListGroupIconGapVar      = '--listgroup-icon-gap';
+  TyListGroupItemInsetVar    = '--listgroup-item-inset';
+  TyListGroupItemIndentVar   = '--listgroup-item-indent';
 
 type
   { The kind of thing a layout entry describes: a group header band, or one item row. }
@@ -74,6 +93,7 @@ type
   TTyListGroupData = record
     Caption: string;
     Expanded: Boolean;
+    ImageIndex: Integer;   // -1 = no icon on the group header
     Items: array of TTyListGroupItem;
   end;
 
@@ -93,16 +113,24 @@ type
     pure geometry functions (no embedded child scrollbar). Content shorter than the client
     pins the offset to 0.
 
-    THEMING (reuses existing typeKeys — NO new .tycss):
+    THEMING (its OWN typeKeys, so a theme can restyle the sider without touching the tree/list
+    column headers — the old design borrowed TyTreeHeaderSection/TyListItem, which are shared
+    with TreeView/ListView, and made this look literally unreachable):
       * the frame (background + border) is 'TyPanel' (GetStyleTypeKey);
-      * each header band is painted with the 'TyTreeHeaderSection' style (it carries
-        :hover / :selected states) with the 'TyTreeHeader' text colour;
-      * each item row is painted with the 'TyListItem' style (:hover / :active).
-    All colours are theme-driven. }
+      * each group header is 'TyListGroupHeader' — :hover, and :selected = the group is OPEN.
+        It fills ONLY if the theme sets a background (a modern sider leaves it unfilled), draws
+        a right-aligned chevron in its TextColor, and an optional group icon;
+      * each item row is 'TyListGroupItem' (:hover / :active=selected). :active is drawn as a
+        SOFT INSET ROUNDED pill (the control insets + rounds; the colour/radius are the style's),
+        not a full-bleed bar. Rows carry an optional icon from Images.
+    Sizes are theme metrics (--listgroup-header-height / -item-height / -chevron-size /
+    -icon-size / -icon-gap / -item-inset), each falling back to a named constant / the published
+    HeaderHeight/ItemHeight. All colours and sizes are theme-driven. }
 
   TTyListGroupPanel = class(TTyCustomControl)
   private
     FGroups: array of TTyListGroupData;
+    FImages: TTyVirtualImageList;   // per-row icon source (nil = no icons)
     FHeaderHeight: Integer;
     FItemHeight: Integer;
     FSelGroup: Integer;     // -1 = none
@@ -115,8 +143,16 @@ type
     FOnItemClick: TTyListGroupItemEvent;
     procedure SetHeaderHeight(AValue: Integer);
     procedure SetItemHeight(AValue: Integer);
+    procedure SetImages(AValue: TTyVirtualImageList);
     function ScaledHeaderHeight: Integer;
     function ScaledItemHeight: Integer;
+    { Effective band heights in DEVICE px at APPI: the theme metric token when set, else the
+      published property. The token WINS so airiness is a skin decision (see the const notes). }
+    function EffHeaderHPx(APPI: Integer): Integer;
+    function EffItemHPx(APPI: Integer): Integer;
+    { Draw the AImages icon AIndex, sized to fit, left-aligned at AX, vertically centred in
+      [ATop, ATop+ARowH); returns the x just past it (AX unchanged if nothing drawn). }
+    function DrawRowIcon(P: TTyPainter; AX, ATop, ARowH, AIndex: Integer): Integer;
     { Build the pure shapes array from the live group model. }
     function BuildShapes: TTyListGroupShapes;
     { The device-space layout (content coords, no scroll applied), for the current client width. }
@@ -132,6 +168,7 @@ type
     procedure SetGroupCaption(AGroup: Integer; const AValue: string);
   protected
     function GetStyleTypeKey: string; override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -144,7 +181,7 @@ type
     destructor Destroy; override;
 
     { Model mutation. }
-    function AddGroup(const ACaption: string): Integer;
+    function AddGroup(const ACaption: string; AImageIndex: Integer = -1): Integer;
     function AddItem(AGroupIndex: Integer; const ACaption: string; AImageIndex: Integer = -1): Integer;
     procedure Clear;
     function GroupCount: Integer;
@@ -172,6 +209,9 @@ type
       default TyListGroupDefaultHeaderHeight;
     property ItemHeight: Integer read FItemHeight write SetItemHeight
       default TyListGroupDefaultItemHeight;
+    { Icon source for the group headers and item rows (addressed by ImageIndex). nil = text
+      only. Same facility TTyComboBoxEx uses. }
+    property Images: TTyVirtualImageList read FImages write SetImages;
     property OnGroupToggle: TTyListGroupToggleEvent read FOnGroupToggle write FOnGroupToggle;
     property OnItemClick: TTyListGroupItemEvent read FOnItemClick write FOnItemClick;
     property Align;
@@ -279,16 +319,20 @@ begin
   Result := 'TyPanel';
 end;
 
+{ ONE source of truth for the band heights. Hit-testing / scrolling (via BuildLayout) and the
+  paint (RenderTo) MUST agree, or the mouse lands on a different row than the one drawn — and the
+  error accumulates one row at a time downward. Both now read the theme metric (EffHeaderHPx /
+  EffItemHPx); these just evaluate it at the control's own PPI, the PPI mouse coords are in.
+  (The earlier bug: paint used the token, these still used FHeaderHeight/FItemHeight, so under a
+  skin that sets --listgroup-item-height the two diverged.) }
 function TTyListGroupPanel.ScaledHeaderHeight: Integer;
 begin
-  Result := MulDiv(FHeaderHeight, Font.PixelsPerInch, 96);
-  if Result < 1 then Result := 1;
+  Result := EffHeaderHPx(Font.PixelsPerInch);
 end;
 
 function TTyListGroupPanel.ScaledItemHeight: Integer;
 begin
-  Result := MulDiv(FItemHeight, Font.PixelsPerInch, 96);
-  if Result < 1 then Result := 1;
+  Result := EffItemHPx(Font.PixelsPerInch);
 end;
 
 function TTyListGroupPanel.BuildShapes: TTyListGroupShapes;
@@ -348,15 +392,58 @@ begin
   Invalidate;
 end;
 
-function TTyListGroupPanel.AddGroup(const ACaption: string): Integer;
+function TTyListGroupPanel.AddGroup(const ACaption: string; AImageIndex: Integer): Integer;
 begin
   Result := Length(FGroups);
   SetLength(FGroups, Result + 1);
   FGroups[Result].Caption := ACaption;
   FGroups[Result].Expanded := False;
+  FGroups[Result].ImageIndex := AImageIndex;
   SetLength(FGroups[Result].Items, 0);
   ClampScroll;
   Invalidate;
+end;
+
+procedure TTyListGroupPanel.SetImages(AValue: TTyVirtualImageList);
+begin
+  if FImages = AValue then Exit;
+  if FImages <> nil then FImages.RemoveFreeNotification(Self);
+  FImages := AValue;
+  if FImages <> nil then FImages.FreeNotification(Self);
+  Invalidate;
+end;
+
+procedure TTyListGroupPanel.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FImages) then FImages := nil;
+end;
+
+function TTyListGroupPanel.EffHeaderHPx(APPI: Integer): Integer;
+begin
+  Result := MulDiv(ActiveController.Metric(TyListGroupHeaderHeightVar, FHeaderHeight), APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyListGroupPanel.EffItemHPx(APPI: Integer): Integer;
+begin
+  Result := MulDiv(ActiveController.Metric(TyListGroupItemHeightVar, FItemHeight), APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyListGroupPanel.DrawRowIcon(P: TTyPainter; AX, ATop, ARowH, AIndex: Integer): Integer;
+var
+  sz: Integer;
+  bmp: TBGRABitmap;
+begin
+  Result := AX;
+  if (FImages = nil) or (AIndex < 0) or (AIndex >= FImages.Count) then Exit;
+  sz := P.Scale(ActiveController.Metric(TyListGroupIconSizeVar, TyListGroupDefaultIconSize));
+  if sz < 1 then sz := 1;
+  bmp := FImages.CachedIndex(AIndex, sz);   // borrowed; do NOT free
+  if bmp <> nil then
+    P.Bitmap.PutImage(AX, ATop + (ARowH - bmp.Height) div 2, bmp, dmDrawWithTransparency);
+  Result := AX + sz + P.Scale(ActiveController.Metric(TyListGroupIconGapVar, TyListGroupDefaultIconGap));
 end;
 
 function TTyListGroupPanel.AddItem(AGroupIndex: Integer; const ACaption: string;
@@ -583,12 +670,11 @@ procedure TTyListGroupPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI:
 var
   P: TTyPainter;
   BoxStyle, HdrStyle, ItemStyle: TTyStyleSet;
-  R, partR, textR, chevRect: TRect;
+  R, partR, textR, chevRect, pillR: TRect;
   parts: TTyListGroupParts;
-  i, hdrH, chevZone: Integer;
+  i, hdrHPx, itemHPx, chevSize, insetPx, contentL: Integer;
   states: TTyStateSet;
-  tri: TTyTriangle;
-  ctx: TBGRACanvas2D;
+  kind: TTyGlyphKind;
   savedClip: TRect;
   cap: string;
   selected, hovered: Boolean;
@@ -600,13 +686,15 @@ begin
     BoxStyle := CurrentStyle;
     DrawFrame(P, R, BoxStyle);
 
-    hdrH := MulDiv(FHeaderHeight, APPI, 96);
-    if hdrH < 1 then hdrH := 1;
+    hdrHPx := EffHeaderHPx(APPI);
+    itemHPx := EffItemHPx(APPI);
+    chevSize := P.Scale(ActiveController.Metric(TyListGroupChevronSizeVar, TyListGroupDefaultChevronSize));
+    insetPx := P.Scale(ActiveController.Metric(TyListGroupItemInsetVar, TyListGroupDefaultItemInset));
+    if insetPx < 0 then insetPx := 0;
 
     // Recompute the layout in DEVICE space using APPI (RenderTo may be called with a test
     // PPI that differs from Font.PixelsPerInch), so paint geometry == the pure layout.
-    parts := TyListGroupLayout(BuildShapes, hdrH,
-      MulDiv(FItemHeight, APPI, 96), R.Right - R.Left);
+    parts := TyListGroupLayout(BuildShapes, hdrHPx, itemHPx, R.Right - R.Left);
 
     // Clip everything to the frame interior so scrolled content never paints over the border.
     savedClip := P.Bitmap.ClipRect;
@@ -633,29 +721,35 @@ begin
         if GroupExpanded(parts[i].GroupIndex) then Include(states, tysSelected)
         else if hovered then Include(states, tysHover)
         else Include(states, tysNormal);
-        HdrStyle := ActiveController.Model.ResolveStyle('TyTreeHeaderSection', '', states);
+        // Its OWN key, not the tree column header's: TyTreeHeaderSection is shared with
+        // TreeView/ListView, so borrowing it made the sider un-restyleable. tysSelected = the
+        // group is OPEN (a skin tints the open group accent through it).
+        HdrStyle := ActiveController.Model.ResolveStyle('TyListGroupHeader', StyleClass, states);
 
+        // Fill ONLY when the theme gives a background: a modern sider leaves the group row
+        // unfilled (no grey band), so the absence of a bg must mean "no band", not a default.
         if tpBackground in HdrStyle.Present then
-          P.FillBackground(partR, HdrStyle.Background, 0);
+          P.FillBackground(partR, HdrStyle.Background, TyEffectiveCorners(HdrStyle));
 
-        // Chevron (down when expanded, right when collapsed), reusing the ExPanel geometry.
-        tri := TyExPanelChevronPoints(partR, GroupExpanded(parts[i].GroupIndex));
-        ctx := P.Bitmap.Canvas2D;
-        ctx.beginPath;
-        ctx.moveTo(tri[0].X + 0.5, tri[0].Y + 0.5);
-        ctx.lineTo(tri[1].X + 0.5, tri[1].Y + 0.5);
-        ctx.lineTo(tri[2].X + 0.5, tri[2].Y + 0.5);
-        ctx.closePath;
-        ctx.fillStyle(TyColorToBGRA(HdrStyle.TextColor));
-        ctx.fill;
+        // Chevron on the RIGHT (Ant's placement), in a themed square slot. Down = expanded,
+        // right = collapsed. Pad 1: chevRect is a slot already sized from a token, so the token
+        // IS the mark's size — TyDrawGlyph's default 4px/side would leave an unreadable smudge.
+        chevRect := Rect(partR.Right - P.Scale(HdrStyle.Padding.Right) - chevSize,
+          partR.Top + (partR.Bottom - partR.Top - chevSize) div 2,
+          partR.Right - P.Scale(HdrStyle.Padding.Right),
+          partR.Top + (partR.Bottom - partR.Top - chevSize) div 2 + chevSize);
+        if GroupExpanded(parts[i].GroupIndex) then kind := tgChevronDown else kind := tgChevronRight;
+        TyDrawGlyph(P, ActiveController, chevRect, kind, HdrStyle.TextColor, 1, 1);
 
-        // Caption to the right of the chevron gutter.
+        // Optional group icon on the left, then the caption between icon and chevron.
+        contentL := partR.Left + P.Scale(HdrStyle.Padding.Left);
+        contentL := DrawRowIcon(P, contentL, partR.Top, partR.Bottom - partR.Top,
+          FGroups[parts[i].GroupIndex].ImageIndex);
         cap := GetGroupCaption(parts[i].GroupIndex);
         if cap <> '' then
         begin
-          chevZone := partR.Bottom - partR.Top;   // gutter == band height (chevron centre)
-          textR := Rect(partR.Left + chevZone, partR.Top,
-            partR.Right - P.Scale(HdrStyle.Padding.Right), partR.Bottom);
+          textR := Rect(contentL, partR.Top, chevRect.Left - P.Scale(HdrStyle.Padding.Left),
+            partR.Bottom);
           P.DrawText(textR, cap, HdrStyle.FontName, ResolveFontSize(HdrStyle),
             HdrStyle.FontWeight, HdrStyle.TextColor, taLeftJustify, tlCenter, True);
         end;
@@ -670,15 +764,29 @@ begin
         if selected then Include(states, tysActive)
         else if hovered then Include(states, tysHover)
         else Include(states, tysNormal);
-        ItemStyle := ActiveController.Model.ResolveStyle('TyListItem', '', states);
+        // Its OWN key (was TyListItem, shared with every list): so a selected item can be a
+        // soft INSET ROUNDED pill instead of a full-bleed saturated bar.
+        ItemStyle := ActiveController.Model.ResolveStyle('TyListGroupItem', StyleClass, states);
 
+        // The pill: inset from the row's four edges (so it floats, not a full-width bar) and
+        // rounded by the style's own border-radius. Inset/radius are theme-driven — that is the
+        // single biggest difference from the old hard bar.
+        pillR := Rect(partR.Left + insetPx, partR.Top + insetPx div 2,
+          partR.Right - insetPx, partR.Bottom - insetPx div 2);
         if tpBackground in ItemStyle.Present then
-          P.FillBackground(partR, ItemStyle.Background, 0);
+          P.FillBackground(pillR, ItemStyle.Background, TyEffectiveCorners(ItemStyle));
 
+        // Content inside the pill: the caption's own padding + a HIERARCHY INDENT (a child sits
+        // clearly deeper than its group header), then the optional icon, then the caption. The
+        // indent is its own token — NOT the pill inset — so the step is tunable independently of
+        // how far the pill floats off the edges.
+        contentL := pillR.Left + P.Scale(ItemStyle.Padding.Left)
+          + P.Scale(ActiveController.Metric(TyListGroupItemIndentVar, TyListGroupDefaultItemIndent));
+        contentL := DrawRowIcon(P, contentL, partR.Top, partR.Bottom - partR.Top,
+          ItemImageIndex(parts[i].GroupIndex, parts[i].ItemIndex));
         cap := ItemCaption(parts[i].GroupIndex, parts[i].ItemIndex);
-        // Indent items one header-height in, so they sit under the header caption.
-        textR := Rect(partR.Left + hdrH + P.Scale(ItemStyle.Padding.Left), partR.Top,
-          partR.Right - P.Scale(ItemStyle.Padding.Right), partR.Bottom);
+        textR := Rect(contentL, partR.Top, pillR.Right - P.Scale(ItemStyle.Padding.Right),
+          partR.Bottom);
         P.DrawText(textR, cap, ItemStyle.FontName, ResolveFontSize(ItemStyle),
           ItemStyle.FontWeight, ItemStyle.TextColor, taLeftJustify, tlCenter, True);
       end;

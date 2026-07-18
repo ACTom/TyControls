@@ -322,9 +322,14 @@ begin
   inherited SetController(AValue);
 end;
 
-{ Shared tab-header-band height: TabHeight logical px → device px at APPI. }
+{ Shared tab-header-band height: TabHeight logical px → device px at APPI.
+  TabHeight = 0 means NO strip and must survive the scale: the old `if Result < 1 then 1`
+  floor made "hidden" impossible — it turned 0 into a 1px band that still painted a 1px
+  slice of every tab caption. A NON-zero TabHeight still floors at 1px, so a tiny-but-
+  present strip cannot round away to nothing at a low DPI. }
 function TTyCustomTabStrip.TabHPx(APPI: Integer): Integer;
 begin
+  if FTabHeight <= 0 then Exit(0);
   Result := MulDiv(FTabHeight, APPI, 96);
   if Result < 1 then Result := 1;
 end;
@@ -700,9 +705,17 @@ end;
 
 procedure TTyCustomTabStrip.SetTabHeight(AValue: Integer);
 begin
+  // 0 is legal and means NO header strip: the pages fill the whole control and the host
+  // drives paging itself (a sider, a segmented control). It used to clamp to 1, which is
+  // not "hidden" — a 1px strip still paints a 1px slice of every tab caption, which reads
+  // as a smear of text above the content.
+  if AValue < 0 then AValue := 0;
   if FTabHeight = AValue then Exit;
   FTabHeight := AValue;
-  if FTabHeight < 1 then FTabHeight := 1;
+  // The strip's height IS the client rect's top inset (see AdjustClientRect), so the pages
+  // must be RE-ALIGNED, not merely repainted: Invalidate alone left every alClient page at
+  // its old bounds, covering the new strip (set TabHeight := 30 and no tab was visible).
+  Realign;
   Invalidate;
 end;
 
@@ -711,7 +724,7 @@ var
   P: TTyPainter;
   BoxStyle, TabStyle, ArrowStyle, CloseS, InactiveS, ActiveS: TTyStyleSet;
   R: TRect;
-  W, H, TabH, I: Integer;
+  W, H, TabH, I, ContentTop: Integer;
   HdrRect, CloseRect, TextRect, BandRect, SavedClip: TRect;
   TabStates: TTyStateSet;
   CloseHi: TTyFill;
@@ -740,11 +753,21 @@ begin
     { Fill the content area with the form's photo (image theme) or the opaque parent bg
       (solid) FIRST, so a transparent content surface (e.g. green's ribbon body) shows the
       photo instead of a white hole; DrawFrame's own (possibly transparent) fill goes on top. }
-    if not FillSharpBackdrop(P, Rect(0, TabH - MulDiv(1, APPI, 96), W, H)) then
-      TyFillParentBg(Self, P, Rect(0, TabH - MulDiv(1, APPI, 96), W, H), BoxStyle);
-    { Draw content area frame below header strip.
-      Overlap by 1px so the active tab can visually merge with the content panel. }
-    DrawFrame(P, Rect(0, TabH - MulDiv(1, APPI, 96), W, H), BoxStyle);
+    { The content frame overlaps the strip by 1px so the active tab merges into it — but with
+      NO strip (TabHeight = 0) that would pull the frame's top border off the control. }
+    ContentTop := TabH - MulDiv(1, APPI, 96);
+    if ContentTop < 0 then ContentTop := 0;
+    if not FillSharpBackdrop(P, Rect(0, ContentTop, W, H)) then
+      TyFillParentBg(Self, P, Rect(0, ContentTop, W, H), BoxStyle);
+    DrawFrame(P, Rect(0, ContentTop, W, H), BoxStyle);
+
+    { TabHeight = 0: no strip at all — skip every header. The pages already fill the control
+      (AdjustClientRect adds nothing), so there is nothing to draw and nothing to clip. }
+    if TabH <= 0 then
+    begin
+      P.EndPaint;
+      Exit;
+    end;
 
     { Draw each tab header }
     RebuildLayout(APPI);
