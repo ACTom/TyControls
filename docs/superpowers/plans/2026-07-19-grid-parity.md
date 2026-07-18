@@ -36,7 +36,7 @@
 |---|---|---|
 | B1 | 三个正确性缺陷 | - [x] **完成** `2026-07-19` |
 | B2 | A1 几何契约(四向冻结 + 多行表头带 + 线宽) | - [x] **完成** `2026-07-19` |
-| B3 | A2 渲染管线逐格化 + hover;A3 属性存储统一 | - [ ] |
+| B3 | A2 渲染管线逐格化 + hover;A3 属性存储统一 | - [x] **完成** `2026-07-19` |
 | B4 | H3 逐格外观钩子 + H4 斑马纹 + H14 网格线局部 | - [ ] |
 | B5 | H5 单元格级鼠标事件 + H15 按钮单元格 + H13 AutoResize 接线 | - [ ] |
 | B6 | H6 换行 + H7 行高三件套 | - [ ] |
@@ -189,37 +189,48 @@ end;
 
 `light.tycss` 里 `TyGridCell:hover` / `TyGridHeaderSection:hover` **已经写好但永不触发**。
 
-- [ ] 写失败测试 `TestHoverHighlightsTheCellUnderTheMouse`:
+- [x] 写失败测试 `TestHoverHighlightsTheCellUnderTheMouse`:
       探针主题给 `TyGridCell:hover { background: #FF0000; }`,
       `MouseMove` 到某格后渲染,断言该格出现红;移开后消失。
-- [ ] 跑,确认红。
-- [ ] 实现:`FHoverCol/FHoverRow` + `MouseMove` 里换格才 `Invalidate`(否则每像素重绘);
+- [x] 跑,确认红。
+- [x] 实现:`FHoverCol/FHoverRow` + `MouseMove` 里换格才 `Invalidate`(否则每像素重绘);
       `MouseLeave` 清空。
-- [ ] 跑绿。
-- [ ] 变异:不把 `tysHover` 传进解析 → 红 → 恢复。
+- [x] 跑绿。
+- [x] 变异:不把 `tysHover` 传进解析 → 红 → 恢复。
 
 ### B3-2 逐格样式解析(带快路径)
 
-- [ ] 写失败测试 `TestPerCellStyleResolutionKeepsDefaultFastPath`:
-      1000 行 × 4 列全默认样式时渲染耗时 < 2 秒(证明没退化成逐格全量解析)。
-- [ ] 把 `ResolveStyle` 移进逐格循环,但**默认样式解析一次并缓存**,
+- [x] 写失败测试 `TestPerCellStyleResolutionKeepsDefaultFastPath`。
+      **绝对毫秒阈值换台机器就误报**,改成相对度量:同一张表画两遍(空表 vs 填满文字),
+      断言文字增量不超过管线固有开销的 4 倍。变异掉缓存后是 28 倍,健康时 1.1 倍。
+
+**这条守卫顺带挖出了一个大得多的问题**(不在原计划里,已就地解决):
+逐项实验显示单元格文字占了 94% 的渲染时间(每格一次 TextSize 做省略号测量 + 一次
+TextRect,都是 BGRA 重活),而样式解析根本不是瓶颈。加了**跨帧文本位图缓存**
+(键含文字/字体/字号/字重/颜色/尺寸/对齐/PPI),44.3s → 8.6s。剩下的是 painter
+每帧整幅位图的固有开销,与网格无关,不在本批范围。
+- [x] 同时把 GridMetrics 做成整帧记忆化(CellRect/CellVisibleRect/CellPane 每格要算三四次)。
+- [x] 把 `ResolveStyle` 移进逐格循环,但**默认样式解析一次并缓存**,
       只有被钩子改过的格才重解析。
-- [ ] 跑绿 + 跑既有渲染测试确认 0 回归。
+- [x] 跑绿 + 跑既有渲染测试确认 0 回归。
 
 ### B3-3 单元格属性统一存储
 
 现状:`FCells`(文本)与 `FMerges`(合并)分家,**且 `ShiftCells` 只搬 `FCells`
 —— 增删行不搬合并信息,已经是 bug**。
 
-- [ ] 写失败测试 `TestInsertRowShiftsMergeSpansToo`:
+- [x] 写失败测试 `TestInsertRowShiftsMergeSpansToo`:
       在 (1,1) 合并 2×2,`InsertRow(0)` 后断言合并区跟着下移到 (1,2)。
-- [ ] 跑,确认红(现有实现不搬)。
-- [ ] 实现 `TTyGridCellAttrStore`:与 `FCells` 同键空间的稀疏存储,
+- [x] 跑,确认红(现有实现不搬)。
+- [x] 实现 `TTyGridCellAttrStore`:与 `FCells` 同键空间的稀疏存储,
       字段含 `ColSpan/RowSpan`(合并)、`Color/Font/Alignment`(留给 B4)、`ReadOnly`(留给 B14)。
       `FMerges` 迁移进来;`ShiftCells` 改为同时搬文本与属性。
-- [ ] 跑绿。
-- [ ] 变异:让 `ShiftCells` 只搬文本 → 红 → 恢复。
-- [ ] **B3 收工**:收工条件 1-7。
+- [x] 跑绿。
+- [x] 变异:让 `ShiftCells` 只搬文本 → 红 → 恢复。
+- [x] 第二处变异(去掉"文本键 ∪ 属性键"的并集)**没被杀** → 说明"只合并、不写文字"
+      的空白合并块没测到 → 补 `TestInsertRowShiftsMergeOfEmptyCell` → 变异这才红。
+      (跑绿不等于守住,这批第二次证明了这句话。)
+- [x] **B3 收工**:收工条件 1-7。
 
 ---
 

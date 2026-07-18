@@ -123,6 +123,8 @@ type
     procedure TestPublishedSurfaceHasObservableEffect;
     procedure TestHoverHighlightsTheCellUnderTheMouse;
     procedure TestPerCellStyleResolutionKeepsDefaultFastPath;
+    procedure TestInsertRowShiftsMergeSpansToo;
+    procedure TestInsertRowShiftsMergeOfEmptyCell;
   end;
 
 implementation
@@ -2864,6 +2866,52 @@ begin
     Bmp.Free;
     Ctl.Free;
   end;
+end;
+
+{ 增删行只搬了**文字**,没搬合并区 —— 于是在合并区上方插一行,
+  合并区就留在原地、跟内容脱节了(内容跟着走,合并框没走)。
+  单元格的"每格附加属性"分散在 FCells / FMerges 两处存储,是这个 bug 的根因;
+  A3 把它们并进同一个稀疏存储,搬家时一趟搬完。 }
+procedure TTyStringGridTest.TestInsertRowShiftsMergeSpansToo;
+var
+  G: TStrGridAccess;
+  cs, rs: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  G.Cells[1, 1] := '合并块';
+  G.MergeCells(1, 1, 2, 2);
+
+  AssertTrue('前置条件:(1,1) 是合并基准格', G.CellSpan(1, 1, cs, rs));
+
+  G.InsertRow(0);
+
+  { 内容跟着下移了 —— 合并区必须跟着一起下移。 }
+  AssertEquals('内容下移到了第 2 行', '合并块', G.Cells[1, 2]);
+  AssertTrue('合并区也应当下移到 (1,2)', G.CellSpan(1, 2, cs, rs));
+  AssertEquals('跨列数保持', 2, cs);
+  AssertEquals('跨行数保持', 2, rs);
+  AssertTrue('原位置不该再是合并基准格', not G.CellSpan(1, 1, cs, rs));
+end;
+
+{ 只合并、**不写文字**的格(空白合并块很常见)也必须跟着搬。
+  它不在文本键表里,所以搬家时要遍历"有文字"与"有属性"两套键的并集 ——
+  只看文本键的话这类格会被原地落下。 }
+procedure TTyStringGridTest.TestInsertRowShiftsMergeOfEmptyCell;
+var
+  G: TStrGridAccess;
+  cs, rs: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  G.MergeCells(2, 3, 2, 1);        { 一个空白合并块 }
+  AssertEquals('前置条件:该格没有文字', '', G.Cells[2, 3]);
+
+  G.InsertRow(0);
+
+  AssertTrue('空白合并块也应当下移到 (2,4)', G.CellSpan(2, 4, cs, rs));
+  AssertEquals('跨列数保持', 2, cs);
+  AssertTrue('原位置不该再是合并基准格', not G.CellSpan(2, 3, cs, rs));
 end;
 
 initialization

@@ -28,6 +28,52 @@ uses
   tyControls.Grid.Layout;
 
 type
+  { 一格的**附加属性**。稀疏:绝大多数格根本没有条目。
+
+    这里把从前散在各处的逐格信息并到一起。分家的直接后果是增删行时容易漏搬其中一种
+    —— `ShiftCells` 就只搬了文字、没搬合并区,在合并块上方插一行会让内容跟着走、
+    合并框留在原地。并进同一份存储后,搬家是一趟走完的事。
+
+    Background/TextColor/Alignment/FontStyle/ReadOnly 是给后面几批留的槽位,
+    现在先只有合并跨度在用。 }
+  TTyGridCellAttr = class
+  public
+    ColSpan, RowSpan: Integer;      { 1,1 = 未合并 }
+    HasBackground:    Boolean;
+    Background:       TTyColor;
+    HasTextColor:     Boolean;
+    TextColor:        TTyColor;
+    HasAlignment:     Boolean;
+    Alignment:        TAlignment;
+    HasFontStyle:     Boolean;
+    FontStyle:        TFontStyles;
+    ReadOnly:         Boolean;
+    constructor Create;
+    { 全是默认值 = 这条可以丢掉,别让稀疏存储攒垃圾。 }
+    function IsDefault: Boolean;
+    procedure Assign(ASrc: TTyGridCellAttr);
+  end;
+
+  { 逐格属性的稀疏存储,键空间与单元格文本一致('col:row')。 }
+  TTyGridCellAttrStore = class
+  private
+    FItems: TStringList;      { Sorted + OwnsObjects → 二分查找、自动释放 }
+  public
+    constructor Create;
+    destructor Destroy; override;
+    { 没有条目时返回 nil —— **查询不要凭空建条目**,否则遍历一遍表就把稀疏性毁了。 }
+    function  Find(const AKey: string): TTyGridCellAttr;
+    function  Ensure(const AKey: string): TTyGridCellAttr;
+    procedure Remove(const AKey: string);
+    { 条目退化成全默认值时把它丢掉。 }
+    procedure DropIfDefault(const AKey: string);
+    procedure Clear;
+    procedure MoveEntry(const AFrom, ATo: string);
+    function  IsEmpty: Boolean;
+    function  Count: Integer;
+    procedure SnapshotKeys(ADest: TStrings);
+  end;
+
   { 网格基类:有几何、有外观,但不规定数据从哪来。 }
   TTyCustomGrid = class(TTyCustomControl)
   private
@@ -426,7 +472,9 @@ type
     FRowTopsCache: TTyIntArray;
     FRowTopsValid: Boolean;
     FAggregates: TStringList;      { 列索引 -> 聚合方式序号 }
-    FMerges: TFPStringHashTable;   { 'col:row' -> 'cs:rs',只存合并的基准格 }
+    { 逐格附加属性(合并跨度、以及留给后面几批的底色/字体/只读)。
+      与 FCells 同一套键。**合并信息从前是自己一张表**,增删行时漏搬,已并进来。 }
+    FAttrs: TTyGridCellAttrStore;
     FOnGetFooterText: TTyGridGetFooterTextEvent;
     FGroupCol: Integer;                        { -1 = 不分组 }
     FFilterPopup: TTyPopover;
@@ -689,6 +737,127 @@ var
   TyGridCheckedWord: string;
 
 implementation
+
+{ ---- TTyGridCellAttr / Store ---------------------------------------------- }
+
+constructor TTyGridCellAttr.Create;
+begin
+  inherited Create;
+  ColSpan := 1;
+  RowSpan := 1;
+  Alignment := taLeftJustify;
+end;
+
+function TTyGridCellAttr.IsDefault: Boolean;
+begin
+  Result := (ColSpan = 1) and (RowSpan = 1)
+    and not HasBackground and not HasTextColor
+    and not HasAlignment and not HasFontStyle
+    and not ReadOnly;
+end;
+
+procedure TTyGridCellAttr.Assign(ASrc: TTyGridCellAttr);
+begin
+  if ASrc = nil then Exit;
+  ColSpan := ASrc.ColSpan;           RowSpan := ASrc.RowSpan;
+  HasBackground := ASrc.HasBackground; Background := ASrc.Background;
+  HasTextColor := ASrc.HasTextColor;   TextColor := ASrc.TextColor;
+  HasAlignment := ASrc.HasAlignment;   Alignment := ASrc.Alignment;
+  HasFontStyle := ASrc.HasFontStyle;   FontStyle := ASrc.FontStyle;
+  ReadOnly := ASrc.ReadOnly;
+end;
+
+constructor TTyGridCellAttrStore.Create;
+begin
+  inherited Create;
+  FItems := TStringList.Create;
+  FItems.Sorted := True;
+  FItems.Duplicates := dupIgnore;
+  FItems.OwnsObjects := True;
+end;
+
+destructor TTyGridCellAttrStore.Destroy;
+begin
+  FItems.Free;
+  inherited Destroy;
+end;
+
+function TTyGridCellAttrStore.Find(const AKey: string): TTyGridCellAttr;
+var
+  i: Integer;
+begin
+  i := FItems.IndexOf(AKey);
+  if i < 0 then Result := nil else Result := TTyGridCellAttr(FItems.Objects[i]);
+end;
+
+function TTyGridCellAttrStore.Ensure(const AKey: string): TTyGridCellAttr;
+var
+  i: Integer;
+begin
+  Result := Find(AKey);
+  if Result <> nil then Exit;
+  Result := TTyGridCellAttr.Create;
+  i := FItems.AddObject(AKey, Result);
+  { dupIgnore 时重复键不会收下对象 —— 不管的话就是内存泄漏(文本缓存那里踩过)。 }
+  if (i < 0) or (FItems.Objects[i] <> Result) then
+  begin
+    Result.Free;
+    if i < 0 then Exit(nil);
+    Result := TTyGridCellAttr(FItems.Objects[i]);
+  end;
+end;
+
+procedure TTyGridCellAttrStore.Remove(const AKey: string);
+var
+  i: Integer;
+begin
+  i := FItems.IndexOf(AKey);
+  if i >= 0 then FItems.Delete(i);     { OwnsObjects → 顺带释放 }
+end;
+
+procedure TTyGridCellAttrStore.DropIfDefault(const AKey: string);
+var
+  a: TTyGridCellAttr;
+begin
+  a := Find(AKey);
+  if (a <> nil) and a.IsDefault then Remove(AKey);
+end;
+
+procedure TTyGridCellAttrStore.Clear;
+begin
+  FItems.Clear;
+end;
+
+procedure TTyGridCellAttrStore.MoveEntry(const AFrom, ATo: string);
+var
+  src, dst: TTyGridCellAttr;
+begin
+  src := Find(AFrom);
+  if src = nil then
+  begin
+    Remove(ATo);      { 源没有属性 → 目标也不该留着旧的 }
+    Exit;
+  end;
+  dst := Ensure(ATo);
+  if dst = nil then Exit;
+  dst.Assign(src);
+  Remove(AFrom);
+end;
+
+function TTyGridCellAttrStore.IsEmpty: Boolean;
+begin
+  Result := FItems.Count = 0;
+end;
+
+function TTyGridCellAttrStore.Count: Integer;
+begin
+  Result := FItems.Count;
+end;
+
+procedure TTyGridCellAttrStore.SnapshotKeys(ADest: TStrings);
+begin
+  ADest.Assign(FItems);
+end;
 
 constructor TTyCustomGrid.Create(AOwner: TComponent);
 begin
@@ -1959,7 +2128,7 @@ begin
   FValFilters := TStringList.Create;
   FAggregates := TStringList.Create;
   FCollapsed := TStringList.Create;
-  FMerges := TFPStringHashTable.Create;
+  FAttrs := TTyGridCellAttrStore.Create;
   FCol := 0;
   FRow := 0;
   TabStop := True;                      { 要接键盘 }
@@ -2015,7 +2184,7 @@ begin
   FValFilters.Free;
   FAggregates.Free;
   FCollapsed.Free;
-  FMerges.Free;
+  FAttrs.Free;
   inherited Destroy;
 end;
 
@@ -2896,7 +3065,7 @@ end;
 
 procedure TTyStringGrid.ShiftCells(AFromIndex, ADelta: Integer; ARows: Boolean);
 var
-  snapshot: TStringList;
+  snapshot, attrKeys: TStringList;
   i, c, r, sep: Integer;
   k, v: string;
 
@@ -2906,13 +3075,34 @@ var
     ov := Cells[AOldC, AOldR];
     Cells[AOldC, AOldR] := '';
     Cells[ANewC, ANewR] := ov;
+    { 属性(合并跨度等)必须**跟着文字一起搬** —— 从前只搬文字,
+      于是在合并块上方插一行,内容跟着走了、合并框留在原地。 }
+    FAttrs.MoveEntry(CellKey(AOldC, AOldR), CellKey(ANewC, ANewR));
+  end;
+
+  procedure DropCell(AC, AR: Integer);
+  begin
+    Cells[AC, AR] := '';
+    FAttrs.Remove(CellKey(AC, AR));
   end;
 
 begin
-  { 稀疏存储:只搬**写过的**格。先快照键表再改,避免边遍历边改。 }
+  { 稀疏存储:只搬**写过的**格。先快照键表再改,避免边遍历边改。
+    键取"有文字的格"与"有属性的格"的**并集** —— 只有合并、没有文字的格也得搬。 }
   snapshot := TStringList.Create;
   try
     snapshot.Assign(FCellKeys);
+    snapshot.Sorted := False;
+    attrKeys := TStringList.Create;
+    try
+      FAttrs.SnapshotKeys(attrKeys);
+      for i := 0 to attrKeys.Count - 1 do
+        if snapshot.IndexOf(attrKeys[i]) < 0 then snapshot.Add(attrKeys[i]);
+    finally
+      attrKeys.Free;
+    end;
+    { 增序搬时要求键按位置有序,这里重排一次(增删行的频次远低于渲染,不心疼)。 }
+    snapshot.Sort;
     { 增(ADelta>0)时从大到小搬,否则会覆盖尚未搬走的格;删时从小到大。 }
     if ADelta > 0 then
       for i := snapshot.Count - 1 downto 0 do
@@ -2937,12 +3127,12 @@ begin
         r := StrToIntDef(Copy(k, sep + 1, MaxInt), 0);
         if ARows then
         begin
-          if r = AFromIndex then Cells[c, r] := ''        { 被删那行的内容 }
+          if r = AFromIndex then DropCell(c, r)          { 被删那行的内容与属性 }
           else if r > AFromIndex then MoveKey(c, r, c, r + ADelta);
         end
         else
         begin
-          if c = AFromIndex then Cells[c, r] := ''
+          if c = AFromIndex then DropCell(c, r)
           else if c > AFromIndex then MoveKey(c, r, c + ADelta, r);
         end;
       end;
@@ -3328,36 +3518,64 @@ begin
   end;
   if AColSpan < 1 then AColSpan := 1;
   if ARowSpan < 1 then ARowSpan := 1;
-  FMerges.Items[CellKey(ACol, ARow)] := IntToStr(AColSpan) + ':' + IntToStr(ARowSpan);
+  with FAttrs.Ensure(CellKey(ACol, ARow)) do
+  begin
+    ColSpan := AColSpan;
+    RowSpan := ARowSpan;
+  end;
   Invalidate;
 end;
 
 procedure TTyStringGrid.UnmergeCells(ACol, ARow: Integer);
+var
+  k: string;
+  a: TTyGridCellAttr;
 begin
-  FMerges.Delete(CellKey(ACol, ARow));
+  k := CellKey(ACol, ARow);
+  a := FAttrs.Find(k);
+  if a = nil then Exit;
+  a.ColSpan := 1;
+  a.RowSpan := 1;
+  FAttrs.DropIfDefault(k);      { 只剩默认值就别占着位置 }
   Invalidate;
 end;
 
 procedure TTyStringGrid.ClearMerges;
+var
+  keys: TStringList;
+  i: Integer;
+  a: TTyGridCellAttr;
 begin
-  FMerges.Clear;
+  { 只清合并,不能把同一条目上的别的属性(底色/只读)一起清掉。 }
+  keys := TStringList.Create;
+  try
+    FAttrs.SnapshotKeys(keys);
+    for i := 0 to keys.Count - 1 do
+    begin
+      a := FAttrs.Find(keys[i]);
+      if a = nil then Continue;
+      a.ColSpan := 1;
+      a.RowSpan := 1;
+      FAttrs.DropIfDefault(keys[i]);
+    end;
+  finally
+    keys.Free;
+  end;
   Invalidate;
 end;
 
 function TTyStringGrid.CellSpan(ACol, ARow: Integer;
   out AColSpan, ARowSpan: Integer): Boolean;
 var
-  v: string;
-  sep: Integer;
+  a: TTyGridCellAttr;
 begin
   AColSpan := 1;
   ARowSpan := 1;
-  v := FMerges.Items[CellKey(ACol, ARow)];
-  Result := v <> '';
-  if not Result then Exit;
-  sep := Pos(':', v);
-  AColSpan := StrToIntDef(Copy(v, 1, sep - 1), 1);
-  ARowSpan := StrToIntDef(Copy(v, sep + 1, MaxInt), 1);
+  a := FAttrs.Find(CellKey(ACol, ARow));
+  if a = nil then Exit(False);
+  AColSpan := a.ColSpan;
+  ARowSpan := a.RowSpan;
+  Result := (AColSpan > 1) or (ARowSpan > 1);
 end;
 
 function TTyStringGrid.IsBaseCell(ACol, ARow: Integer): Boolean;
