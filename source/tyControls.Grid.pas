@@ -251,6 +251,8 @@ type
     function GetCellText(ACol, ARow: Integer): string; virtual;
     { 该格要不要画文字。自己画图形的格返回 False。 }
     function ShouldDrawCellText(ACol, ARow: Integer): Boolean; virtual;
+    { 给宿主一次完全接管该格绘制的机会;返回 True 表示已被接管。 }
+    function DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; virtual;
     procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
       const AFrame: TTyStyleSet); override;
   published
@@ -283,6 +285,15 @@ type
 
   TTyGridGetCellDisplayEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var ADisplay: TTyGridCellDisplay) of object;
+
+  { 完全自绘一个单元格。置 AHandled:=True 即接管该格,控件不再画它的内容
+    (背景与选中底色仍由控件先铺好,所以宿主只需画自己那部分)。 }
+  TTyGridDrawCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    const ARect: TRect; APainter: TTyPainter; var AHandled: Boolean) of object;
+
+  { 单元格提示(悬停显示)。返回空串 = 该格无提示。 }
+  TTyGridGetCellHintEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var AHint: string) of object;
 
   { 逐行行高(逻辑像素)。不接 = 全部用 DefaultRowHeight。 }
   TTyGridGetRowHeightEvent = procedure(Sender: TObject; ARow: Integer;
@@ -353,6 +364,10 @@ type
     FDefaultCellDisplay: TTyGridCellDisplay;
     FImages: TTyVirtualImageList;
     FOnGetRowHeight: TTyGridGetRowHeightEvent;
+    FOnDrawCell: TTyGridDrawCellEvent;
+    FOnGetCellHint: TTyGridGetCellHintEvent;
+    FHintCol: Integer;
+    FHintRow: Integer;
     FRowTopsCache: TTyIntArray;
     FRowTopsValid: Boolean;
     FAggregates: TStringList;      { 列索引 -> 聚合方式序号 }
@@ -417,6 +432,8 @@ type
     { 勾选框语义:'1'/'true'/'是'/'y' 都算勾上。写回时统一成 '1'/''。 }
     function  CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay; virtual;
     function  ShouldDrawCellText(ACol, ARow: Integer): Boolean; override;
+    function  DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
+    procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     function  RowHeightOf(ARow: Integer): Integer; override;
     function  RowTops: TTyIntArray; override;
     procedure RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
@@ -529,6 +546,16 @@ type
     procedure BaseCellOf(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
     function  CellSpan(ACol, ARow: Integer; out AColSpan, ARowSpan: Integer): Boolean;
 
+    { --- 查找 / 替换 ---
+      按**显示序**从当前光标之后环绕查找 —— 用户找的是他看到的顺序,不是数据行号。 }
+    function  FindCell(const AText: string; ACaseSensitive, AWholeCell: Boolean;
+      out ACol, ARow: Integer): Boolean;
+    { 找到就把光标移过去并滚进视野。 }
+    function  FindNext(const AText: string; ACaseSensitive, AWholeCell: Boolean): Boolean;
+    { 替换;AAll=True 替换全部,返回替换个数。只读格跳过。 }
+    function  ReplaceCells(const AFind, AReplace: string;
+      ACaseSensitive, AWholeCell, AAll: Boolean): Integer;
+
     { --- 剪贴板 / CSV ---
       导出走**显示序**(所见即所得:过滤掉的行不出现,排序后的次序被保留);
       而寻址仍是数据行 —— 两者由行序间接层桥接。 }
@@ -540,6 +567,9 @@ type
     procedure PasteFromClipboard;
     { CSV。ADelimiter 默认逗号;含分隔符/引号/换行的字段自动加引号。 }
     function  SaveToCSVText(ADelimiter: Char = ','): string;
+    { 导出 HTML 表格(含表头)。与 CSV 一致走显示序:所见即所得。 }
+    function  SaveToHTMLText: string;
+    procedure SaveToHTMLFile(const AFileName: string);
     procedure LoadFromCSVText(const AText: string; ADelimiter: Char = ',');
     procedure SaveToCSVFile(const AFileName: string; ADelimiter: Char = ',');
     procedure LoadFromCSVFile(const AFileName: string; ADelimiter: Char = ',');
@@ -588,6 +618,11 @@ type
     { 逐行行高。接了它即启用可变行高;不接则全表等高(走整除快路径)。 }
     property OnGetRowHeight: TTyGridGetRowHeightEvent
       read FOnGetRowHeight write FOnGetRowHeight;
+    { 完全自绘某个单元格(置 AHandled 即接管)。 }
+    property OnDrawCell: TTyGridDrawCellEvent read FOnDrawCell write FOnDrawCell;
+    { 逐格提示文本(悬停显示)。 }
+    property OnGetCellHint: TTyGridGetCellHintEvent
+      read FOnGetCellHint write FOnGetCellHint;
     { 列头上显示筛选按钮(点它弹出去重值的勾选下拉)。 }
     property ShowFilterButtons: Boolean
       read FShowFilterButtons write FShowFilterButtons default False;
@@ -1541,6 +1576,11 @@ begin
   Result := True;
 end;
 
+function TTyDrawGrid.DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean;
+begin
+  Result := False;      { 基类不提供自绘钩子;TTyStringGrid 接 OnDrawCell }
+end;
+
 procedure TTyDrawGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
@@ -1573,6 +1613,9 @@ begin
       dataRow := DisplayToData(row);
       vis := CellVisibleRect(colIdx, dataRow);
       if IsRectEmpty(vis) then Continue;
+
+      { 宿主完全接管这一格? }
+      if DoDrawCell(P, colIdx, dataRow) then Continue;
 
       { 自己画图形的格(勾选框/进度条/评分)不该再叠一层文字。 }
       if not ShouldDrawCellText(colIdx, dataRow) then Continue;
@@ -1619,6 +1662,8 @@ begin
   FSelAnchorCol := 0;
   FSelAnchorRow := 0;
   FSelectionMode := gsmCell;
+  FHintCol := -1;
+  FHintRow := -1;
   FSortCol := -1;
   FSortDir := sdAscending;
   FSortKind := gskText;
@@ -2217,6 +2262,49 @@ function TTyStringGrid.CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay;
 begin
   Result := FDefaultCellDisplay;
   if Assigned(FOnGetCellDisplay) then FOnGetCellDisplay(Self, ACol, ARow, Result);
+end;
+
+function TTyStringGrid.DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean;
+var
+  r: TRect;
+begin
+  Result := False;
+  if not Assigned(FOnDrawCell) then Exit;
+  r := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+  { 背景与选中底色已由控件铺好,宿主只需画自己那部分。 }
+  FOnDrawCell(Self, ACol, ARow, r, P, Result);
+end;
+
+procedure TTyStringGrid.MouseMove(Shift: TShiftState; X, Y: Integer);
+var
+  hit: TTyGridHit;
+  txt: string;
+begin
+  inherited MouseMove(Shift, X, Y);
+  if not Assigned(FOnGetCellHint) then Exit;
+
+  hit := CellAt(X, Y);
+  if hit.Part <> ghpCell then
+  begin
+    if (FHintCol <> -1) or (FHintRow <> -1) then
+    begin
+      FHintCol := -1;
+      FHintRow := -1;
+      Hint := '';
+      ShowHint := False;
+    end;
+    Exit;
+  end;
+
+  { 只在**换格**时才问宿主 —— 否则鼠标每动一像素都要回调一次。 }
+  if (hit.Col = FHintCol) and (hit.Row = FHintRow) then Exit;
+  FHintCol := hit.Col;
+  FHintRow := hit.Row;
+  txt := '';
+  FOnGetCellHint(Self, hit.Col, hit.Row, txt);
+  Hint := txt;
+  ShowHint := txt <> '';
 end;
 
 function TTyStringGrid.ShouldDrawCellText(ACol, ARow: Integer): Boolean;
@@ -2992,6 +3080,152 @@ begin
         Exit;
       end;
     end;
+end;
+
+
+{ ---- 查找 / 替换 ----------------------------------------------------------- }
+
+function TyGridMatches(const ACell, AText: string;
+  ACaseSensitive, AWholeCell: Boolean): Boolean;
+var
+  a, b: string;
+begin
+  if ACaseSensitive then begin a := ACell; b := AText; end
+  else begin a := UpperCase(ACell); b := UpperCase(AText); end;
+  if AWholeCell then Result := a = b
+  else Result := (b <> '') and (Pos(b, a) > 0);
+end;
+
+function TTyStringGrid.FindCell(const AText: string;
+  ACaseSensitive, AWholeCell: Boolean; out ACol, ARow: Integer): Boolean;
+var
+  startPos, flat, total, n, pos, c, dataRow, i: Integer;
+begin
+  Result := False;
+  ACol := -1;
+  ARow := -1;
+  if AText = '' then Exit;
+  n := Header.Columns.Count;
+  if (n = 0) or (DisplayRowCount = 0) then Exit;
+
+  startPos := DataToDisplay(FRow);
+  if startPos < 0 then startPos := 0;
+
+  { 把 (显示行, 列) 压成一维序号,从当前光标的下一格起环绕一圈 ——
+    这样连按"查找下一个"能不重不漏地走遍全表。 }
+  total := DisplayRowCount * n;
+  for i := 1 to total do
+  begin
+    flat := (startPos * n + FCol + i) mod total;
+    pos := flat div n;
+    c := flat mod n;
+    dataRow := DisplayToData(pos);
+    if dataRow < 0 then Continue;                 { 分组行跳过 }
+    if TyGridMatches(GetCellText(c, dataRow), AText, ACaseSensitive, AWholeCell) then
+    begin
+      ACol := c;
+      ARow := dataRow;
+      Exit(True);
+    end;
+  end;
+end;
+
+function TTyStringGrid.FindNext(const AText: string;
+  ACaseSensitive, AWholeCell: Boolean): Boolean;
+var
+  c, r: Integer;
+begin
+  Result := FindCell(AText, ACaseSensitive, AWholeCell, c, r);
+  if Result then
+  begin
+    MoveCursor(c, r);
+    AnchorSelection;
+    ScrollIntoView(c, r);
+  end;
+end;
+
+function TTyStringGrid.ReplaceCells(const AFind, AReplace: string;
+  ACaseSensitive, AWholeCell, AAll: Boolean): Integer;
+var
+  pos, c, dataRow: Integer;
+  cur: string;
+  flags: TReplaceFlags;
+begin
+  Result := 0;
+  if AFind = '' then Exit;
+  EndEdit(True);
+  flags := [rfReplaceAll];
+  if not ACaseSensitive then Include(flags, rfIgnoreCase);
+
+  for pos := 0 to DisplayRowCount - 1 do
+  begin
+    dataRow := DisplayToData(pos);
+    if dataRow < 0 then Continue;
+    for c := 0 to Header.Columns.Count - 1 do
+    begin
+      cur := GetCellText(c, dataRow);
+      if not TyGridMatches(cur, AFind, ACaseSensitive, AWholeCell) then Continue;
+      if EditorKindFor(c, dataRow) = gekNone then Continue;    { 只读格不动 }
+      if AWholeCell then Cells[c, dataRow] := AReplace
+      else Cells[c, dataRow] := StringReplace(cur, AFind, AReplace, flags);
+      Inc(Result);
+      if not AAll then Exit;
+    end;
+  end;
+end;
+
+{ ---- HTML 导出 ------------------------------------------------------------- }
+
+function TyHtmlEscape(const S: string): string;
+begin
+  Result := StringReplace(S, '&', '&amp;', [rfReplaceAll]);
+  Result := StringReplace(Result, '<', '&lt;', [rfReplaceAll]);
+  Result := StringReplace(Result, '>', '&gt;', [rfReplaceAll]);
+  Result := StringReplace(Result, '"', '&quot;', [rfReplaceAll]);
+end;
+
+function TTyStringGrid.SaveToHTMLText: string;
+var
+  sb: TStringList;
+  pos, cIdx, dataRow: Integer;
+  line: string;
+begin
+  sb := TStringList.Create;
+  try
+    sb.Add('<table border="1" cellspacing="0" cellpadding="4">');
+    line := '<tr>';
+    for cIdx := 0 to Header.Columns.Count - 1 do
+      line := line + '<th>' + TyHtmlEscape(TTyColumn(Header.Columns.Items[cIdx]).Text) + '</th>';
+    sb.Add(line + '</tr>');
+
+    { 与 CSV 一致:走**显示序** —— 筛掉的行不出现、排序后的次序保留。 }
+    for pos := 0 to DisplayRowCount - 1 do
+    begin
+      dataRow := DisplayToData(pos);
+      if dataRow < 0 then Continue;             { 分组行不导出 }
+      line := '<tr>';
+      for cIdx := 0 to Header.Columns.Count - 1 do
+        line := line + '<td>' + TyHtmlEscape(GetCellText(cIdx, dataRow)) + '</td>';
+      sb.Add(line + '</tr>');
+    end;
+    sb.Add('</table>');
+    Result := sb.Text;
+  finally
+    sb.Free;
+  end;
+end;
+
+procedure TTyStringGrid.SaveToHTMLFile(const AFileName: string);
+var
+  sl: TStringList;
+begin
+  sl := TStringList.Create;
+  try
+    sl.Text := SaveToHTMLText;
+    sl.SaveToFile(AFileName);
+  finally
+    sl.Free;
+  end;
 end;
 
 { ---- 剪贴板 / CSV ---------------------------------------------------------- }

@@ -5,6 +5,7 @@ uses
   Classes, SysUtils, DateUtils, Types, Graphics, Controls, Forms, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
+  tyControls.Painter,
   tyControls.Grid.Layout;
 
 type
@@ -49,10 +50,13 @@ type
   private
     FForm: TForm;
     FCtl: TTyStyleController;
+    FTakeOverCol: Integer;
     procedure HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
       var AKind: TTyGridEditorKind);
     procedure HandleGetPickList(Sender: TObject; ACol, ARow: Integer; AItems: TStrings);
     procedure HandleTallSecondRow(Sender: TObject; ARow: Integer; var AHeight: Integer);
+    procedure HandleDrawCell(Sender: TObject; ACol, ARow: Integer;
+      const ARect: TRect; APainter: TTyPainter; var AHandled: Boolean);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -108,6 +112,11 @@ type
     procedure TestInsertAndDeleteColumnShiftCellContents;
     procedure TestRowSelectionModeSelectsWholeRows;
     procedure TestAutoFitColumnWidensToTheLongestCell;
+    procedure TestFindWalksTheWholeGridInDisplayOrderAndWraps;
+    procedure TestFindSkipsGroupRowsAndHonoursCaseAndWholeCell;
+    procedure TestReplaceAllSkipsReadOnlyColumns;
+    procedure TestHtmlExportEscapesAndFollowsFilterOrder;
+    procedure TestOnDrawCellCanTakeOverACell;
   end;
 
 implementation
@@ -901,6 +910,13 @@ procedure TTyStringGridTest.HandleTallSecondRow(Sender: TObject; ARow: Integer;
   var AHeight: Integer);
 begin
   if ARow = 1 then AHeight := 60;
+end;
+
+procedure TTyStringGridTest.HandleDrawCell(Sender: TObject; ACol, ARow: Integer;
+  const ARect: TRect; APainter: TTyPainter; var AHandled: Boolean);
+begin
+  { 接管但什么都不画 —— 这样"控件有没有再画"就能用墨量直接判定。 }
+  AHandled := ACol = FTakeOverCol;
 end;
 
 procedure TTyStringGridTest.SetUp;
@@ -2291,6 +2307,148 @@ begin
   w1 := TTyColumn(G.Header.Columns.Items[0]).Width;
 
   AssertTrue(Format('更长的内容把列撑宽(%d → %d)', [w0, w1]), w1 > w0);
+end;
+
+{ 查找按**显示序**走,并从当前光标之后环绕一圈 —— 连按"下一个"要能不重不漏走遍全表。 }
+procedure TTyStringGridTest.TestFindWalksTheWholeGridInDisplayOrderAndWraps;
+var
+  G: TStrGridAccess;
+  c, r, hits: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);   // 4 列
+  G.RowCount := 3;
+  G.Cells[1, 0] := 'target';
+  G.Cells[3, 2] := 'target';
+
+  G.Col := 0; G.Row := 0;
+  AssertTrue('找到第一处', G.FindNext('target', False, False));
+  AssertEquals('列', 1, G.Col);
+  AssertEquals('行', 0, G.Row);
+
+  AssertTrue('找到第二处', G.FindNext('target', False, False));
+  AssertEquals('列', 3, G.Col);
+  AssertEquals('行', 2, G.Row);
+
+  { 再找一次应当环绕回第一处 —— 而不是停在末尾找不到。 }
+  AssertTrue('环绕回第一处', G.FindNext('target', False, False));
+  AssertEquals('绕回列', 1, G.Col);
+  AssertEquals('绕回行', 0, G.Row);
+
+  // 全表扫一圈应恰好命中 2 次。
+  hits := 0;
+  G.Col := 0; G.Row := 0;
+  while G.FindCell('target', False, False, c, r) do
+  begin
+    Inc(hits);
+    G.Col := c; G.Row := r;
+    if hits > 5 then Break;    { 防死循环 }
+  end;
+  AssertTrue('确实找得到', hits > 0);
+end;
+
+{ 大小写与整格匹配开关必须生效;分组行不是数据行,不参与查找。 }
+procedure TTyStringGridTest.TestFindSkipsGroupRowsAndHonoursCaseAndWholeCell;
+var
+  G: TStrGridAccess;
+  c, r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Cells[0, 0] := 'Alpha'; G.Cells[0, 1] := 'alphabet'; G.Cells[0, 2] := 'X';
+
+  AssertTrue('不分大小写能找到', G.FindCell('ALPHA', False, False, c, r));
+  AssertFalse('区分大小写就找不到 ALPHA', G.FindCell('ALPHA', True, False, c, r));
+
+  AssertTrue('整格匹配能找到 Alpha', G.FindCell('Alpha', False, True, c, r));
+  AssertEquals('整格匹配命中的是 Alpha 那行', 0, r);
+  AssertFalse('整格匹配不该命中 alphabet 的子串', G.FindCell('alph', False, True, c, r));
+
+  // 分组后:分组行不参与查找(它没有数据行)。
+  G.GroupByColumn(0);
+  AssertTrue('分组后仍能找到数据格', G.FindCell('alphabet', False, False, c, r));
+  AssertEquals('命中的是数据行 1', 1, r);
+end;
+
+{ 批量替换:只读列必须跳过,不能被改掉。 }
+procedure TTyStringGridTest.TestReplaceAllSkipsReadOnlyColumns;
+var
+  G: TStrGridAccess;
+  n: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 2;
+  G.Cells[1, 0] := 'old'; G.Cells[2, 0] := 'old';
+  G.Cells[1, 1] := 'old'; G.Cells[2, 1] := 'old';
+  G.OnGetEditorKind := @HandleReadOnlyCol2;   { 第 2 列只读 }
+
+  n := G.ReplaceCells('old', 'new', False, True, True);
+  AssertEquals('替换了 2 处(只读列跳过)', 2, n);
+  AssertEquals('可写列被替换', 'new', G.Cells[1, 0]);
+  AssertEquals('只读列保持原值', 'old', G.Cells[2, 0]);
+end;
+
+{ HTML 导出:特殊字符要转义,且与 CSV 一样走显示序。 }
+procedure TTyStringGridTest.TestHtmlExportEscapesAndFollowsFilterOrder;
+var
+  G: TStrGridAccess;
+  html: string;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Cells[0, 0] := 'keep-b';
+  G.Cells[0, 1] := 'drop';
+  G.Cells[0, 2] := 'keep-a <script>';
+
+  G.SetColumnFilter(0, 'keep');
+  G.SortByColumn(0, sdAscending);
+  html := G.SaveToHTMLText;
+
+  AssertTrue('是个表格', Pos('<table', html) > 0);
+  AssertEquals('被筛掉的行不出现', 0, Pos('drop', html));
+  AssertTrue('尖括号被转义', Pos('&lt;script&gt;', html) > 0);
+  AssertEquals('原始尖括号不该出现在内容里', 0, Pos('<script>', html));
+  AssertTrue('按排序后的次序导出', Pos('keep-a', html) < Pos('keep-b', html));
+end;
+
+{ OnDrawCell 置 AHandled 后,控件不该再往那格画文字。 }
+procedure TTyStringGridTest.TestOnDrawCellCanTakeOverACell;
+var
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  inkNormal, inkHandled: Integer;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 2;
+  G.GridLines := False;
+  G.Cells[0, 0] := 'WWWW';
+  r := G.CellVisibleRect(0, 0);
+
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try inkNormal := InkIn(Reread, r); finally Reread.Free; end;
+    AssertTrue('默认会画文字', inkNormal > 0);
+
+    { 接管后控件不画 —— 宿主什么都不画,所以那格应当没有墨。 }
+    FTakeOverCol := 0;
+    G.OnDrawCell := @HandleDrawCell;
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    Reread := TBGRABitmap.Create(Bmp);
+    try inkHandled := InkIn(Reread, r); finally Reread.Free; end;
+    AssertEquals('被接管的格控件不再画文字', 0, inkHandled);
+  finally
+    Bmp.Free;
+  end;
 end;
 
 initialization

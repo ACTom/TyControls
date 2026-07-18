@@ -47,6 +47,8 @@ end;
 | `ReadOnly` | 整表只读,任何编辑都开不起来 |
 | `SortColumn` / `SortDirection` | 当前排序列与方向(只读;用 `SortByColumn` / `ToggleSortColumn` 改) |
 | `ShowFooter` / `FooterHeight` | 底部汇总带 |
+| `FixedRows` 现已真正实现 | 前 N 个显示行钉在列头之下、不随滚动、可点击 |
+| `SelectionMode` | `gsmCell`(默认)/ `gsmRow` / `gsmColumn` |
 | `Images` | `gcdImage` 用的图像集(`TTyVirtualImageList`) |
 | `OnGetRowHeight` | 逐行行高。**接了它才启用可变行高**;不接则全表等高,几何层走整除快路径(百万行时省下一个百万项的前缀和数组) |
 | `SortKind` | `gskText` 还是 `gskNumber`。数值列用文本排会得到 `'10' < '9'` |
@@ -86,6 +88,8 @@ end;
 | `OnCompareCells` | 自定义排序比较;置 `AResult` 即接管该列 |
 | `OnGetPickList` | `gekPickList` 的候选项 |
 | `OnFilterRow` | 逐行过滤;在列过滤的结果上再否决 |
+| `OnDrawCell` | **完全接管**某格绘制(置 `AHandled`);背景与选中底色已由控件铺好 |
+| `OnGetCellHint` | 逐格提示文本(悬停显示);只在换格时回调 |
 
 ## 交互
 
@@ -100,6 +104,10 @@ end;
 - **列宽/列序**:拖列头右边缘改宽;拖列头本体换位(需 `hoDrag` + `coDraggable`,位移超阈值才生效)
 - **分组**:`GroupByColumn(列)` 在显示序里插入**合成分组行**(带成员计数),点分组行折叠/展开。折叠状态按**分组值**记账,重排后不会张冠李戴
 - **合并**:`MergeCells(列, 行, 跨列, 跨行)`;基准格跨满整区,被覆盖格无矩形,点区内任意处都归基准格
+- **行列增删**:`InsertRow` / `DeleteRow` / `InsertColumn` / `DeleteColumn`,内容随之整体搬移
+- **自动适宽**:`AutoFitColumn(列)` 取表头与**已写入**单元格里最宽的;只量写过的格,百万行空表也不扫全表
+- **查找/替换**:`FindNext` / `ReplaceCells`,按**显示序**从光标之后**环绕**查找;替换跳过只读列
+- **HTML 导出**:`SaveToHTMLText/File`,特殊字符转义,同样走显示序
 - **CSV**:`SaveToCSVText/File`、`LoadFromCSVText/File`。含分隔符/引号/换行的字段自动加引号
 - **编辑**:`F2` 或双击进入;`Enter` 提交、`Esc` 丢弃;**光标一动就先自动提交**
 - 光标走出视口时视口自动跟随(最小移动量)
