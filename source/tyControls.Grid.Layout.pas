@@ -52,6 +52,12 @@ type
     FrozenW, FrozenH: Integer;   { 冻结带范围:行头槽+固定列 / 列头带+固定行 }
     RowH:             Integer;   { 统一行高;RowTops 为空时用它 }
     RowCount:         Integer;
+    { 冻结在顶部、**不随纵向滚动**的显示行数。这些行画在冻结带里(列头之下),
+      其余行才在正文窗格里滚动。FrozenH 已含它们的高度。 }
+    FixedRows:        Integer;
+    { 列头带高度(设备像素)。FrozenH = HeaderH + 固定行总高;拆开是因为
+      固定行的行矩形要从 HeaderH 起算,而不是从 FrozenH 起算。 }
+    HeaderH:          Integer;
     { 可变行高:长度 = RowCount+1 的**前缀和**(RowTops[i] = 第 i 行顶边的内容坐标,
       RowTops[RowCount] = 内容总高)。为空 = 全部用统一行高 RowH。
       用前缀和而不是逐行高度,是为了让"坐标 → 行"能二分查找而不是线性扫。 }
@@ -142,10 +148,25 @@ end;
 
 function TyGridRowRect(ARow: Integer; const M: TTyGridMetrics): TRect;
 var
-  top, h, y: Integer;
+  top, h, y, fixedTop, fixedH: Integer;
 begin
   TyGridRowExtent(ARow, M, top, h);
-  y := M.FrozenH + top - M.ScrollY;
+
+  if (M.FixedRows > 0) and (ARow < M.FixedRows) then
+  begin
+    { 固定行:钉在列头带之下、**不随滚动**。它们的位置从 HeaderH 起算。 }
+    y := M.HeaderH + top;
+    Result := Rect(0, y, M.ClientW, y + h);
+    Exit;
+  end;
+
+  { 正文行:让开整条冻结带并随滚动平移。注意要减掉固定行占的那段内容高度 ——
+    否则第一条正文行会被推到固定行内容之后,与冻结带之间留出一个空洞。 }
+  fixedTop := 0;
+  fixedH := 0;
+  if M.FixedRows > 0 then
+    TyGridRowExtent(M.FixedRows, M, fixedTop, fixedH);
+  y := M.FrozenH + (top - fixedTop) - M.ScrollY;
   Result := Rect(0, y, M.ClientW, y + h);
 end;
 
@@ -188,7 +209,7 @@ function TyGridVisibleRows(const M: TTyGridMetrics;
   out AFirst, ALast: Integer): Boolean;
 var
   body: TRect;
-  h, avail: Integer;
+  h, avail, fixedTop, fixedH: Integer;
 begin
   AFirst := -1;
   ALast := -1;
@@ -204,19 +225,25 @@ begin
   avail := body.Bottom - body.Top;
   if avail <= 0 then Exit;   { 冻结带吃满视口:正文零高 }
 
-  { 首行 / 末行都在**内容坐标**上定位:可变行高时走二分,统一行高时退化成整除。 }
+  { 固定行恒可见且不滚动,不参与这个窗口 —— 从它们之后开始算。 }
+  fixedTop := 0;
+  if M.FixedRows > 0 then
+    TyGridRowExtent(M.FixedRows, M, fixedTop, fixedH);
+
   if Length(M.RowTops) = M.RowCount + 1 then
   begin
-    AFirst := TyGridRowAtContentY(M.ScrollY, M);
-    if AFirst < 0 then AFirst := 0;
-    ALast := TyGridRowAtContentY(M.ScrollY + avail - 1, M);
+    AFirst := TyGridRowAtContentY(M.ScrollY + fixedTop, M);
+    if AFirst < 0 then AFirst := M.FixedRows;
+    ALast := TyGridRowAtContentY(M.ScrollY + fixedTop + avail - 1, M);
     if ALast < 0 then ALast := M.RowCount - 1;   { 滚过尾部:钳到末行 }
   end
   else
   begin
-    if M.ScrollY > 0 then AFirst := M.ScrollY div h else AFirst := 0;
-    ALast := (M.ScrollY + avail - 1) div h;
+    if M.ScrollY > 0 then AFirst := (M.ScrollY + fixedTop) div h
+    else AFirst := M.FixedRows;
+    ALast := (M.ScrollY + fixedTop + avail - 1) div h;
   end;
+  if AFirst < M.FixedRows then AFirst := M.FixedRows;
 
   if AFirst > M.RowCount - 1 then   { 整个滚过了尾部 }
   begin
@@ -237,22 +264,34 @@ end;
 function TyGridRowAt(AY: Integer; const M: TTyGridMetrics): Integer;
 var
   body: TRect;
-  cand: Integer;
+  cand, fixedTop, fixedH: Integer;
 begin
   Result := -1;
 
-  { 只有正文窗格里才有行:冻结带(列头/固定行)与窗格外一律不是行。 }
-  body := TyGridPaneRect(M, gpBody);
-  if (AY < body.Top) or (AY >= body.Bottom) then Exit;
   if M.RowCount <= 0 then Exit;
   if (M.RowH <= 0) and (Length(M.RowTops) <> M.RowCount + 1) then Exit;
+
+  { 固定行带(列头之下、冻结带之内)—— 它们也是真实的行,能点。 }
+  if (M.FixedRows > 0) and (AY >= M.HeaderH) and (AY < M.FrozenH) then
+  begin
+    cand := TyGridRowAtContentY(AY - M.HeaderH, M);
+    if (cand >= 0) and (cand < M.FixedRows) then Result := cand;
+    Exit;
+  end;
+
+  { 正文窗格。列头带与其余冻结区不是行。 }
+  body := TyGridPaneRect(M, gpBody);
+  if (AY < body.Top) or (AY >= body.Bottom) then Exit;
 
   { 换算到**内容坐标**再定位:可变行高走前缀和二分,统一行高退化成整除。
     两条路径都与 TyGridRowRect 用同一份数据推出,因此恒为它的逆 ——
     曾经在这里加过一步"用矩形回验候选",变异测试证明它是无法被区分的冗余代码,已删。
     守住不变量的是那两条逐像素反查测试(统一行高一条、可变行高一条),与实现写法无关。 }
-  cand := TyGridRowAtContentY(AY - M.FrozenH + M.ScrollY, M);
-  if (cand < 0) or (cand > M.RowCount - 1) then Exit;
+  fixedTop := 0;
+  if M.FixedRows > 0 then
+    TyGridRowExtent(M.FixedRows, M, fixedTop, fixedH);
+  cand := TyGridRowAtContentY(AY - M.FrozenH + M.ScrollY + fixedTop, M);
+  if (cand < M.FixedRows) or (cand > M.RowCount - 1) then Exit;
   Result := cand;
 end;
 

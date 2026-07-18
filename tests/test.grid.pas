@@ -102,6 +102,12 @@ type
     procedure TestHeaderDragReordersColumnsPastAThreshold;
     procedure TestVariableRowHeightsShiftLaterRowsAndHitTest;
     procedure TestUniformGridAllocatesNoRowTopsArray;
+    procedure TestFixedRowsStayPutWhileBodyRowsScroll;
+    procedure TestFixedRowsAreClickableAndBodyStartsAfterThem;
+    procedure TestInsertAndDeleteRowShiftCellContents;
+    procedure TestInsertAndDeleteColumnShiftCellContents;
+    procedure TestRowSelectionModeSelectsWholeRows;
+    procedure TestAutoFitColumnWidensToTheLongestCell;
   end;
 
 implementation
@@ -756,6 +762,7 @@ type
     procedure ReleaseMouse(X, Y: Integer);
     function  ColLeft(ACol: Integer): Integer;
     function  Metrics: TTyGridMetrics;
+    function  VisibleRows(out AFirst, ALast: Integer): Boolean;
     function  RowRectAt(APos: Integer): TRect;
     function  GetScrollTop: Integer;
     procedure SetScrollTop(AValue: Integer);
@@ -765,6 +772,11 @@ type
 procedure TStrGridAccess.PressMouseWithoutRelease(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);      { 不 MouseUp —— 停在"按住"状态 }
+end;
+
+function TStrGridAccess.VisibleRows(out AFirst, ALast: Integer): Boolean;
+begin
+  Result := TyGridVisibleRows(GridMetrics, AFirst, ALast);
 end;
 
 function TStrGridAccess.Metrics: TTyGridMetrics;
@@ -2125,6 +2137,160 @@ begin
   G.OnGetRowHeight := @HandleTallSecondRow;
   G.RowCount := 5;
   AssertEquals('接了事件才建前缀和', 6, Length(G.Metrics.RowTops));
+end;
+
+{ 固定行钉在列头之下、**不随滚动**;正文行才滚。
+  此前 FixedRows 只在冻结带里预留高度、什么都不画 —— 设了等于凭空多出一片空白。 }
+procedure TTyStringGridTest.TestFixedRowsStayPutWhileBodyRowsScroll;
+var
+  G: TStrGridAccess;
+  fixed0Before, fixed0After: TRect;
+  body0Before, body0After: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 100;
+  G.DefaultRowHeight := 20;
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.Header.Height := 24;
+  G.FixedRows := 2;
+
+  fixed0Before := G.CellRect(0, 0);
+  body0Before  := G.CellRect(0, 2);      // 第一条正文行
+
+  AssertEquals('固定行 0 紧贴列头下沿', 24, fixed0Before.Top);
+  AssertEquals('固定行 1 在其后', 44, G.CellRect(0, 1).Top);
+  { 正文首行紧接冻结带(24 列头 + 2×20 固定行 = 64)—— 中间不能留空洞。 }
+  AssertEquals('正文首行紧接冻结带', 64, body0Before.Top);
+
+  G.ScrollTop := 200;
+  fixed0After := G.CellRect(0, 0);
+  body0After  := G.CellRect(0, 2);
+
+  AssertEquals('固定行纹丝不动', fixed0Before.Top, fixed0After.Top);
+  AssertTrue('正文行随滚动上移', body0After.Top < body0Before.Top);
+end;
+
+{ 固定行也是真实的行:点得到,而且正文可视窗口必须从固定行**之后**开始 ——
+  否则前两行会被画两遍(一次在冻结带、一次在正文)。 }
+procedure TTyStringGridTest.TestFixedRowsAreClickableAndBodyStartsAfterThem;
+var
+  G: TStrGridAccess;
+  r: TRect;
+  hit: TTyGridHit;
+  f, l: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 100;
+  G.DefaultRowHeight := 20;
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.Header.Height := 24;
+  G.FixedRows := 2;
+
+  r := G.CellRect(0, 1);
+  hit := G.CellAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('点固定行命中它自己', 1, hit.Row);
+  AssertEquals('且是单元格', Ord(ghpCell), Ord(hit.Part));
+
+  AssertTrue('有可见行', G.VisibleRows(f, l));
+  AssertEquals('正文窗口自固定行之后起', 2, f);
+
+  // 滚动后仍然如此(固定行不该混进滚动窗口)。
+  G.ScrollTop := 300;
+  AssertTrue('滚动后仍有可见行', G.VisibleRows(f, l));
+  AssertTrue('正文窗口首行不早于固定行数', f >= 2);
+end;
+
+{ 插入/删除行:内容随之整体搬移(稀疏存储只搬写过的格)。 }
+procedure TTyStringGridTest.TestInsertAndDeleteRowShiftCellContents;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Cells[0, 0] := 'A'; G.Cells[0, 1] := 'B'; G.Cells[0, 2] := 'C';
+
+  G.InsertRow(1);
+  AssertEquals('行数 +1', 4, G.RowCount);
+  AssertEquals('插入点之前不动', 'A', G.Cells[0, 0]);
+  AssertEquals('插入点是空行', '', G.Cells[0, 1]);
+  AssertEquals('原 B 被推到第 2 行', 'B', G.Cells[0, 2]);
+  AssertEquals('原 C 被推到第 3 行', 'C', G.Cells[0, 3]);
+  AssertEquals('稀疏条目仍是 3 个(空行不占位)', 3, G.StoredCellCount);
+
+  G.DeleteRow(1);
+  AssertEquals('行数 -1', 3, G.RowCount);
+  AssertEquals('删除后回到原样', 'B', G.Cells[0, 1]);
+  AssertEquals('C 也回位', 'C', G.Cells[0, 2]);
+
+  // 删掉有内容的那行,其内容应消失而不是残留。
+  G.DeleteRow(0);
+  AssertEquals('A 被删掉', 'B', G.Cells[0, 0]);
+  AssertEquals('条目减少', 2, G.StoredCellCount);
+end;
+
+{ 插入/删除列同理,并且列集合本身也要跟着增删。 }
+procedure TTyStringGridTest.TestInsertAndDeleteColumnShiftCellContents;
+var
+  G: TStrGridAccess;
+  n: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);   // 4 列
+  G.RowCount := 2;
+  n := G.Header.Columns.Count;
+  G.Cells[0, 0] := 'c0'; G.Cells[1, 0] := 'c1'; G.Cells[2, 0] := 'c2';
+
+  G.InsertColumn(1);
+  AssertEquals('列数 +1', n + 1, G.Header.Columns.Count);
+  AssertEquals('第 0 列不动', 'c0', G.Cells[0, 0]);
+  AssertEquals('插入点为空', '', G.Cells[1, 0]);
+  AssertEquals('原 c1 右移', 'c1', G.Cells[2, 0]);
+
+  G.DeleteColumn(1);
+  AssertEquals('列数还原', n, G.Header.Columns.Count);
+  AssertEquals('内容还原', 'c1', G.Cells[1, 0]);
+end;
+
+{ 整行选择模式:列不参与判定,选中就是整条行。 }
+procedure TTyStringGridTest.TestRowSelectionModeSelectsWholeRows;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);   // 4 列 x 10 行
+  G.RowCount := 10;
+  G.Col := 1; G.Row := 2;
+  G.AnchorSelection;
+
+  AssertFalse('单元格模式下别的列不选中', G.IsCellSelected(3, 2));
+
+  G.SelectionMode := gsmRow;
+  AssertTrue('整行模式:同一行的任意列都选中', G.IsCellSelected(0, 2));
+  AssertTrue('包括最后一列', G.IsCellSelected(3, 2));
+  AssertFalse('别的行仍不选中', G.IsCellSelected(0, 3));
+
+  // Shift+下 拉两行:两整行都选中。
+  G.PressKeyShift(VK_DOWN);
+  AssertTrue('第 2 行仍在选区', G.IsCellSelected(3, 2));
+  AssertTrue('第 3 行也进选区', G.IsCellSelected(3, 3));
+end;
+
+{ 自动适宽:列宽跟着最长的内容走,且只量写过的格(不扫全表)。 }
+procedure TTyStringGridTest.TestAutoFitColumnWidensToTheLongestCell;
+var
+  G: TStrGridAccess;
+  w0, w1: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 1000000;           // 百万行,但只写 2 格
+  G.Cells[0, 0] := 'ab';
+  G.Cells[0, 500] := 'ab';
+  G.AutoFitColumn(0);
+  w0 := TTyColumn(G.Header.Columns.Items[0]).Width;
+
+  G.Cells[0, 900000] := 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  G.AutoFitColumn(0);
+  w1 := TTyColumn(G.Header.Columns.Items[0]).Width;
+
+  AssertTrue(Format('更长的内容把列撑宽(%d → %d)', [w0, w1]), w1 > w0);
 end;
 
 initialization

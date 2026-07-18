@@ -291,6 +291,9 @@ type
   { 排序比较方式。 }
   TTyGridSortKind = (gskText, gskNumber);
 
+  { 选择粒度。gsmCell = 单元格矩形选区(默认);gsmRow = 整行;gsmColumn = 整列。 }
+  TTyGridSelectionMode = (gsmCell, gsmRow, gsmColumn);
+
   { 列聚合方式(汇总带用)。一律只统计**通过过滤的行** —— 筛完总计要跟着变。 }
   TTyGridAggregate = (gagNone, gagSum, gagAvg, gagMin, gagMax, gagCount);
 
@@ -328,6 +331,9 @@ type
       **必须是哈希表**:早先用有序 TStringList + Values[] 查找,而 IndexOfName 是
       **线性扫描** —— 排序时 O(n^2) 次比较里每次再套一次 O(n) 查找,1000 行直接卡死。 }
     FCells: TFPStringHashTable;
+    { 与 FCells 同步的键表。哈希表本身不提供好用的键枚举(Iterate 要全局回调),
+      而行列增删与自动适宽都需要遍历"写过的格" —— 单独维护一份键更简单也更快。 }
+    FCellKeys: TStringList;
     FCol: Integer;                { 当前单元格(光标) }
     FRow: Integer;
     FOnSelectCell: TTyGridSelectCellEvent;
@@ -357,6 +363,7 @@ type
     FFilterList: TTyCheckListBox;
     FFilterCol: Integer;
     FShowFilterButtons: Boolean;
+    FSelectionMode: TTyGridSelectionMode;
     FGroups: array of TTyGridGroupInfo;
     FCollapsed: TStringList;                   { 记住哪些组被折叠(按分组值) }
     { 行序间接层。FOrder[显示序]=数据行(**只含通过过滤的行**);
@@ -375,6 +382,7 @@ type
     FSortDir: TTySortDirection;
     FSortKind: TTyGridSortKind;
     FOnCompareCells: TTyGridCompareEvent;
+    procedure ShiftCells(AFromIndex, ADelta: Integer; ARows: Boolean);
     procedure FilterPopupClosed(Sender: TObject);
     procedure InvalidateOrder;
     procedure RebuildOrder;
@@ -393,6 +401,7 @@ type
     function  GetCells(ACol, ARow: Integer): string;
     procedure SetCells(ACol, ARow: Integer; const AValue: string);
     procedure SetCol(AValue: Integer);
+    procedure SetSelectionMode(AValue: TTyGridSelectionMode);
     procedure SetRow(AValue: Integer);
   protected
     function  GetCellText(ACol, ARow: Integer): string; override;
@@ -441,6 +450,17 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { --- 行列增删 ---
+      按**数据行**下标操作;内容随之整体搬移(稀疏存储只搬写过的格)。 }
+    procedure InsertRow(ARow: Integer);
+    procedure DeleteRow(ARow: Integer);
+    procedure InsertColumn(ACol: Integer);
+    procedure DeleteColumn(ACol: Integer);
+
+    { 把某列宽度自动适配到内容(取表头与**已写入**单元格里最宽的那个)。
+      只量已写过的格,所以百万行空表也不会扫全表。 }
+    procedure AutoFitColumn(ACol: Integer);
+
     { 清空全部单元格内容(不动行列结构)。 }
     procedure ClearCells;
     { 写过的单元格个数 —— 稀疏性的可观测证据。 }
@@ -542,6 +562,9 @@ type
     property OnSelectCell: TTyGridSelectCellEvent read FOnSelectCell write FOnSelectCell;
     { 整表只读:任何编辑都开不起来。 }
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
+    { 选择粒度:单元格矩形 / 整行 / 整列。 }
+    property SelectionMode: TTyGridSelectionMode
+      read FSelectionMode write SetSelectionMode default gsmCell;
     property DefaultEditorKind: TTyGridEditorKind
       read FDefaultEditorKind write FDefaultEditorKind default gekText;
     property OnGetEditorKind: TTyGridGetEditorKindEvent
@@ -731,12 +754,14 @@ end;
 
 function TTyCustomGrid.FrozenHeightPx: Integer;
 var
-  logical: Integer;
+  i, px: Integer;
 begin
-  logical := 0;
-  if hoVisible in FHeader.Options then Inc(logical, FHeader.Height);
-  Inc(logical, FFixedRows * FDefaultRowHeight);
-  Result := ScaleI(logical);
+  px := 0;
+  if hoVisible in FHeader.Options then Inc(px, ScaleI(FHeader.Height));
+  { 逐行累加真实高度(而非 行数×默认行高)—— 可变行高时固定行也可能各不相同。 }
+  for i := 0 to FFixedRows - 1 do
+    Inc(px, ScaleI(RowHeightOf(i)));
+  Result := px;
 end;
 
 procedure TTyCustomGrid.SetShowGridLines(AValue: Boolean);
@@ -1495,6 +1520,9 @@ begin
   Result.RowH := ScaleI(FDefaultRowHeight);
   Result.RowCount := DisplayRowCount;
   Result.RowTops := RowTops;
+  Result.FixedRows := FFixedRows;
+  if hoVisible in FHeader.Options then Result.HeaderH := ScaleI(FHeader.Height)
+  else Result.HeaderH := 0;
   Result.ScrollX := FScrollX;
   Result.ScrollY := FScrollY;
 end;
@@ -1575,6 +1603,9 @@ constructor TTyStringGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FCells := TFPStringHashTable.Create;
+  FCellKeys := TStringList.Create;
+  FCellKeys.Sorted := True;
+  FCellKeys.Duplicates := dupIgnore;
   FColFilters := TStringList.Create;
   FValFilters := TStringList.Create;
   FAggregates := TStringList.Create;
@@ -1587,6 +1618,7 @@ begin
   FDefaultEditorKind := gekText;
   FSelAnchorCol := 0;
   FSelAnchorRow := 0;
+  FSelectionMode := gsmCell;
   FSortCol := -1;
   FSortDir := sdAscending;
   FSortKind := gskText;
@@ -1627,6 +1659,7 @@ begin
   FPickEditor.OnExit := nil;
   FDateEditor.OnExit := nil;
   FCells.Free;
+  FCellKeys.Free;
   FColFilters.Free;
   FValFilters.Free;
   FAggregates.Free;
@@ -1648,18 +1681,27 @@ end;
 procedure TTyStringGrid.SetCells(ACol, ARow: Integer; const AValue: string);
 var
   k: string;
+  i: Integer;
 begin
   k := CellKey(ACol, ARow);
   if AValue = '' then
-    FCells.Delete(k)                  { 写空串 = 删除条目,稀疏存储不为空值留位置 }
+  begin
+    FCells.Delete(k);                 { 写空串 = 删除条目,稀疏存储不为空值留位置 }
+    i := FCellKeys.IndexOf(k);
+    if i >= 0 then FCellKeys.Delete(i);
+  end
   else
+  begin
     FCells.Items[k] := AValue;        { 已存在则覆写,不存在则新增 }
+    FCellKeys.Add(k);                 { 有序表 + dupIgnore,重复添加自动忽略 }
+  end;
   Invalidate;
 end;
 
 procedure TTyStringGrid.ClearCells;
 begin
   FCells.Clear;
+  FCellKeys.Clear;
   Invalidate;
 end;
 
@@ -1674,6 +1716,13 @@ begin
   Result := inherited GetCellText(ACol, ARow);
   if Result = '' then
     Result := GetCells(ACol, ARow);
+end;
+
+procedure TTyStringGrid.SetSelectionMode(AValue: TTyGridSelectionMode);
+begin
+  if FSelectionMode = AValue then Exit;
+  FSelectionMode := AValue;
+  Invalidate;
 end;
 
 procedure TTyStringGrid.SetCol(AValue: Integer);
@@ -2441,6 +2490,159 @@ begin
   FFilterPopup.ShowAt(scr);
 end;
 
+
+{ ---- 行列增删 ------------------------------------------------------------- }
+
+procedure TTyStringGrid.ShiftCells(AFromIndex, ADelta: Integer; ARows: Boolean);
+var
+  snapshot: TStringList;
+  i, c, r, sep: Integer;
+  k, v: string;
+
+  procedure MoveKey(AOldC, AOldR, ANewC, ANewR: Integer);
+  var ov: string;
+  begin
+    ov := Cells[AOldC, AOldR];
+    Cells[AOldC, AOldR] := '';
+    Cells[ANewC, ANewR] := ov;
+  end;
+
+begin
+  { 稀疏存储:只搬**写过的**格。先快照键表再改,避免边遍历边改。 }
+  snapshot := TStringList.Create;
+  try
+    snapshot.Assign(FCellKeys);
+    { 增(ADelta>0)时从大到小搬,否则会覆盖尚未搬走的格;删时从小到大。 }
+    if ADelta > 0 then
+      for i := snapshot.Count - 1 downto 0 do
+      begin
+        k := snapshot[i];
+        sep := Pos(':', k);
+        c := StrToIntDef(Copy(k, 1, sep - 1), 0);
+        r := StrToIntDef(Copy(k, sep + 1, MaxInt), 0);
+        if ARows then
+        begin
+          if r >= AFromIndex then MoveKey(c, r, c, r + ADelta);
+        end
+        else
+          if c >= AFromIndex then MoveKey(c, r, c + ADelta, r);
+      end
+    else
+      for i := 0 to snapshot.Count - 1 do
+      begin
+        k := snapshot[i];
+        sep := Pos(':', k);
+        c := StrToIntDef(Copy(k, 1, sep - 1), 0);
+        r := StrToIntDef(Copy(k, sep + 1, MaxInt), 0);
+        if ARows then
+        begin
+          if r = AFromIndex then Cells[c, r] := ''        { 被删那行的内容 }
+          else if r > AFromIndex then MoveKey(c, r, c, r + ADelta);
+        end
+        else
+        begin
+          if c = AFromIndex then Cells[c, r] := ''
+          else if c > AFromIndex then MoveKey(c, r, c + ADelta, r);
+        end;
+      end;
+  finally
+    snapshot.Free;
+  end;
+end;
+
+procedure TTyStringGrid.InsertRow(ARow: Integer);
+begin
+  if (ARow < 0) or (ARow > RowCount) then Exit;
+  EndEdit(True);
+  ShiftCells(ARow, 1, True);
+  RowCount := RowCount + 1;
+  InvalidateOrder;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.DeleteRow(ARow: Integer);
+begin
+  if (ARow < 0) or (ARow >= RowCount) then Exit;
+  EndEdit(False);
+  ShiftCells(ARow, -1, True);
+  RowCount := RowCount - 1;
+  if FRow > RowCount - 1 then FRow := RowCount - 1;
+  if FRow < 0 then FRow := 0;
+  InvalidateOrder;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.InsertColumn(ACol: Integer);
+var
+  c: TTyColumn;
+begin
+  if (ACol < 0) or (ACol > Header.Columns.Count) then Exit;
+  EndEdit(True);
+  ShiftCells(ACol, 1, False);
+  c := Header.Columns.Add as TTyColumn;
+  c.Index := ACol;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.DeleteColumn(ACol: Integer);
+begin
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+  EndEdit(False);
+  ShiftCells(ACol, -1, False);
+  Header.Columns.Delete(ACol);
+  if FCol > Header.Columns.Count - 1 then FCol := Header.Columns.Count - 1;
+  if FCol < 0 then FCol := 0;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.AutoFitColumn(ACol: Integer);
+var
+  bmp: TBGRABitmap;
+  cSty, hSty: TTyStyleSet;
+
+  function TextW(const AText: string; const AStyle: TTyStyleSet): Integer;
+  begin
+    if AText = '' then Exit(0);
+    TyConfigureTextFont(bmp, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, Dpi);
+    Result := bmp.TextSize(AText).cx;
+  end;
+
+var
+  widest, w, i, sep, c, r: Integer;
+  k: string;
+begin
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+  { 1x1 的临时位图只用来量文字 —— 不需要画布,也不需要窗口句柄。 }
+  bmp := TBGRABitmap.Create(1, 1);
+  try
+    cSty := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
+    hSty := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass, []);
+
+    widest := TextW(TTyColumn(Header.Columns.Items[ACol]).Text, hSty);
+
+    { 只量**写过的**格 —— 稀疏存储让百万行空表也只走几条记录,不必扫全表。 }
+    for i := 0 to FCellKeys.Count - 1 do
+    begin
+      k := FCellKeys[i];
+      sep := Pos(':', k);
+      c := StrToIntDef(Copy(k, 1, sep - 1), -1);
+      if c <> ACol then Continue;
+      r := StrToIntDef(Copy(k, sep + 1, MaxInt), -1);
+      w := TextW(GetCellText(ACol, r), cSty);
+      if w > widest then widest := w;
+    end;
+  finally
+    bmp.Free;
+  end;
+
+  { 加上左右内边距与一点余量,再换回逻辑像素。 }
+  widest := widest + ScaleI(cSty.Padding.Left + cSty.Padding.Right) + ScaleI(8);
+  TTyColumn(Header.Columns.Items[ACol]).Width := UnscaleI(widest);
+  UpdateScrollBars;
+  Invalidate;
+end;
+
 { ---- 分组 ----------------------------------------------------------------- }
 
 procedure TTyStringGrid.GroupByColumn(ACol: Integer);
@@ -3075,7 +3277,12 @@ begin
   r2 := Max(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
   rp := DataToDisplay(ARow);
 
-  Result := (ACol >= c1) and (ACol <= c2) and (rp >= r1) and (rp <= r2);
+  { 整行/整列模式下,另一轴不参与判定 —— 选中就是整条。 }
+  case FSelectionMode of
+    gsmRow:    Result := (rp >= r1) and (rp <= r2);
+    gsmColumn: Result := (ACol >= c1) and (ACol <= c2);
+  else         Result := (ACol >= c1) and (ACol <= c2) and (rp >= r1) and (rp <= r2);
+  end;
 end;
 
 procedure TTyStringGrid.AnchorSelection;
