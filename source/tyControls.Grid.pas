@@ -24,6 +24,7 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns,
   tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox, tyControls.ColorMath,
   tyControls.Css.Values, tyControls.ImageCollection, tyControls.Dialogs.Color,
+  tyControls.StrConsts,
   tyControls.Grid.Layout;
 
 type
@@ -568,6 +569,12 @@ type
     property ShowFilterButtons: Boolean
       read FShowFilterButtons write FShowFilterButtons default False;
   end;
+
+var
+  { 勾选框额外认作"真"的**本地化**词(中文表里常见 '是')。
+    默认从 resourcestring 播种,可在运行时改 —— 与本库 TyFallbackFontName 同一惯例。
+    通用真值 1/true/yes/y 永远认,不受它影响。 }
+  TyGridCheckedWord: string;
 
 implementation
 
@@ -2242,7 +2249,10 @@ var
 begin
   { 宽松识别:从 CSV/外部系统进来的真值写法五花八门,读的时候都认。 }
   v := LowerCase(Trim(GetCellText(ACol, ARow)));
-  Result := (v = '1') or (v = 'true') or (v = 'yes') or (v = 'y') or (v = '是');
+  Result := (v = '1') or (v = 'true') or (v = 'yes') or (v = 'y');
+  { 再认一个本地化的真值写法(中文表里常见 '是')—— 空的本地化词不参与判定。 }
+  if (not Result) and (TyGridCheckedWord <> '') then
+    Result := v = LowerCase(TyGridCheckedWord);
 end;
 
 procedure TTyStringGrid.ToggleCellChecked(ACol, ARow: Integer);
@@ -2269,7 +2279,7 @@ begin
   if FReadOnly then Exit;
   oldTxt := GetCellText(ACol, ARow);
   if oldTxt <> '' then c := TyParseColor(oldTxt) else c := TyRGB(255, 255, 255);
-  if not TySelectColor('选择颜色', c) then Exit;
+  if not TySelectColor(rsGridPickColor, c) then Exit;
   newTxt := TyColorToHex(c, False);
   accept := True;
   if Assigned(FOnCellEdited) then
@@ -2603,20 +2613,26 @@ begin
 end;
 
 function TTyStringGrid.FooterText(ACol: Integer): string;
-const
-  cLabels: array[TTyGridAggregate] of string =
-    ('', '合计 ', '均值 ', '最小 ', '最大 ', '计数 ');
 var
   kind: TTyGridAggregate;
+  prefix: string;
 begin
   Result := '';
   kind := ColumnAggregate(ACol);
   if kind <> gagNone then
   begin
+    case kind of
+      gagSum:   prefix := rsGridSumPrefix;
+      gagAvg:   prefix := rsGridAvgPrefix;
+      gagMin:   prefix := rsGridMinPrefix;
+      gagMax:   prefix := rsGridMaxPrefix;
+      gagCount: prefix := rsGridCountPrefix;
+    else        prefix := '';
+    end;
     if kind = gagCount then
-      Result := cLabels[kind] + IntToStr(Round(AggregateValue(ACol)))
+      Result := prefix + IntToStr(Round(AggregateValue(ACol)))
     else
-      Result := cLabels[kind] + FormatFloat('0.##', AggregateValue(ACol));
+      Result := prefix + FormatFloat('0.##', AggregateValue(ACol));
   end;
   if Assigned(FOnGetFooterText) then FOnGetFooterText(Self, ACol, Result);
 end;
@@ -3316,5 +3332,6 @@ end;
 initialization
   { 设计器与 .lfm 流式化按类名查类,必须登记。 }
   RegisterClasses([TTyCustomGrid, TTyDrawGrid, TTyStringGrid]);
+  TyGridCheckedWord := rsGridCheckedWord;
 
 end.

@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, DateUtils, Types, Graphics, Controls, Forms, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox, tyControls.Grid.Layout;
+  tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
+  tyControls.Grid.Layout;
 
 type
   TTyGridControlTest = class(TTestCase)
@@ -1605,7 +1606,9 @@ begin
   AssertFalse('且没有进入编辑态', G.Editing);
 end;
 
-{ 读的时候宽松(外部系统真值写法五花八门),写回时收敛成 '1'/''。 }
+{ 读的时候宽松(外部系统真值写法五花八门),写回时收敛成 '1'/''。
+  注意 '是' 这类**本地化**真值由 TyGridCheckedWord 驱动(从 resourcestring 播种,英文基线为空),
+  所以这里显式设置它来模拟中文语境 —— 不能假设运行时加载了哪个 .po。 }
 procedure TTyStringGridTest.TestCheckBoxReadsLooseTruthyValuesButWritesCanonical;
 var
   G: TStrGridAccess;
@@ -1613,12 +1616,19 @@ begin
   G := MakeStrGrid(FForm, FCtl);
   G.RowCount := 6;
   G.DefaultEditorKind := gekCheckBox;
+  TyGridCheckedWord := '是';        { 模拟中文语境;英文基线下该词为空 }
   G.Cells[0, 0] := 'true';  G.Cells[0, 1] := 'YES';  G.Cells[0, 2] := '是';
   G.Cells[0, 3] := '1';     G.Cells[0, 4] := '0';    G.Cells[0, 5] := '';
 
   AssertTrue('true 算勾上', G.CellChecked(0, 0));
   AssertTrue('YES 算勾上(不分大小写)', G.CellChecked(0, 1));
-  AssertTrue('是 算勾上', G.CellChecked(0, 2));
+  AssertTrue('本地化真值词算勾上', G.CellChecked(0, 2));
+
+  { 清掉本地化词后,它就不该再算真 —— 证明这条判定确实由 resourcestring 驱动。 }
+  TyGridCheckedWord := '';
+  AssertFalse('本地化词为空时不再认它', G.CellChecked(0, 2));
+  AssertTrue('通用真值不受影响', G.CellChecked(0, 0));
+  TyGridCheckedWord := '是';
   AssertTrue('1 算勾上', G.CellChecked(0, 3));
   AssertFalse('0 不算', G.CellChecked(0, 4));
   AssertFalse('空 不算', G.CellChecked(0, 5));

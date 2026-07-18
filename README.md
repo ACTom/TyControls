@@ -19,6 +19,7 @@ TyButton:disabled { opacity: 0.5; }
 - **20+ 核心自绘控件** —— Button、Label、Edit、Memo、SpinEdit、CheckBox(三态)、RadioButton、Panel、GroupBox、ComboBox(可编辑 + 前缀自动补全)、ListBox、ScrollBar、ProgressBar、ToggleSwitch、TrackBar、PageControl(+TabSheet)、TabSet、Splitter、StatusBar、ToolBar、DateTimePicker、Calendar、TitleBar、CaptionButton
 - **扩展控件族(140+ 个类型,全部自绘 · 跨平台)** —— **仪表/图表**:Gauge / Meter / Dial / AnalogClock / Sparkline / Rating / CircularProgress / 活动指示器 + `TTyChart`(折线/柱/饼);**Ribbon 与导航**:Ribbon(页/组/应用菜单/QAT/Gallery/Backstage);**富输入与选择器**:数值/货币/掩码/URL/Combo/滑块/计算器编辑、颜色/字体/文件 combo、颜色/HS 拾取器、`TTyValueListEditor`(属性检视);**容器与布局**:Bevel/Divider/PaintPanel、RadioGroup/CheckGroup、ScrollBox/ExPanel、GridPanel/RelativePanel、ToolBarEx/ControlBar/CoolBar、HeaderControl、ListGroupPanel;**列表/树/shell**:`TTyListView`(报表/图标/平铺 + 虚拟)、`TTyShellTreeView`/`TTyShellListView`/`TTyShellComboBox`/`TTyFilterComboBox`(文件系统后备);**菜单/效果**:MenuEx/ImagesMenu、矢量图元(Shape/Star/Arrow)、`TTyImageView`(平移/缩放 + BGRA 滤镜)、`TTyHtmlLabel`(行内 HTML 子集)、`tyControls.Transitions`(滑入/淡入过渡)
 - **Ant Design 补齐控件族(14 个 · 全部自绘 · 20 主题可用 · 各有 API 文档)** —— **卡片与标记**:`TTyCard`(标题/内容/操作三段式,`hoverable` 只需一条 `TyCard:hover`)、`TTyTag`(可关闭标签胶囊,变体走 `StyleClass`)、`TTyBadge`(**独立**数字/圆点角标,`Target` 吸附任意控件);**反馈**:`TTyAlert`(**内联**警告条 info/success/warning/error)、`TTyNotification`(角落浮出、自动消失的 toast)、`TTyPopover`(**能放控件**的气泡浮层);**导航与流程**:`TTySegmented`(分段控制器)、`TTyPagination`(分页器)、`TTySteps`(向导步骤条,横竖两向)、`TTyBreadcrumb`(面包屑);**录入**:`TTyTransfer`(双列表穿梭框)、`TTyTreeSelect`(树形下拉)、`TTyCascader`(级联选择);**空状态**:`TTyEmpty`(插画 + 文案 + 可选操作)
+- **数据网格 `TTyStringGrid`(三层:`TTyCustomGrid` / `TTyDrawGrid` / `TTyStringGrid`)** —— 冻结行列(四窗格)· 虚拟化(百万行只画可视窗口)· 稀疏单元格存储 · 二维光标 + 区域多选 · 内嵌滚动条 · 可变行高 · **编辑**(文本/数值/勾选框/下拉/日期/颜色,逐格指定)· **显示**(文字/进度条/评分/图片,与编辑正交)· 点列头排序(稳定归并)· 列筛选(文本 + 列头去重值勾选)· 分组折叠 · 单元格合并 · 汇总带(合计/均值/最小/最大/计数,只统计筛选后可见行)· 剪贴板(Excel 格式)+ CSV 导入导出 · 列拖宽与拖动重排
 - **虚拟树 `TTyTreeView`** —— VirtualTreeView 级别的虚拟树:数据按需加载(可承载百万级节点)、多列 + 可拖拽表头(调宽 / 重排 / 排序)、复选框 + 三态 + 单选节点、多选(Ctrl/Shift)+ 整行选择、可变行高、增量输入查找、单元格自绘、**内联编辑**(F2 / 双击)、**节点拖放**(重排 / 改变父子关系)
 - **原生窗口 `TTyForm`** —— 无边框 + 自绘标题栏(可关联 `TTyTitleBar`):Windows 原生窗口缩放(`Resizable`)、最大化避让任务栏、系统圆角 + 原生投影(Windows 11 DWM / macOS,可经 CSS 关闭)。窗体的控件承载在内容容器 **`TTyFormSurface`**(名为 `Surface`,铺满窗体)上 —— **所有控件都放在它里面**,新建窗体模板已自带,详见[窗体结构](#窗体结构)
 - **文本编辑能力** —— `TTyEdit` 单行(选区 / 剪贴板 / 水平滚动 / 词级导航)、`TTyMemo` 多行(2D 导航 / 跨行编辑 / 垂直滚动)、`TTySpinEdit` 数值微调;自绘编辑支持输入法(Qt6 / GTK2)
@@ -84,6 +85,7 @@ Btn.StyleClass := 'primary';   // 对应 .tycss 中的 TyButton.primary
 | 示例 | 演示内容 |
 |---|---|
 | [examples/antdesign](examples/antdesign/) | **TyControls Pro**:仿 Ant Design Pro 的后台系统(侧边导航 + 6 个页面),默认 antdesign 皮肤,可运行时换肤 |
+| [examples/grid](examples/grid/) | **TTyStringGrid**:冻结列 / 百万行 / 排序 / 列头筛选 / 分组折叠 / 汇总带 / 单元格编辑与图形 / CSV 导出 |
 | [examples/treeview](examples/treeview/) | **TTyTreeView showcase**:百万级虚拟树 / 多列 + 排序 / 复选 + 三态 + 单选 / 多选 + 整行 / 内联编辑 / 节点拖放 |
 | [examples/demo](examples/demo/) | 综合 gallery:全部控件 + 多主题切换 + 自绘窗框 + 运行时切换语言 |
 | [examples/dialogs](examples/dialogs/) | **全部 11 个自绘对话框**:消息 / 输入 / 密码 / 文本 / 选值 / 选路径 / 颜色 / 字体 / 查找 / 替换 / 进度(含模态与无模态) |

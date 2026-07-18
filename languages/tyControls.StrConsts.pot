@@ -293,6 +293,30 @@ msgstr ""
 msgid "Up"
 msgstr ""
 
+#: tycontrols.strconsts.rsgridavgprefix
+msgid "Avg "
+msgstr ""
+
+#: tycontrols.strconsts.rsgridcountprefix
+msgid "Count "
+msgstr ""
+
+#: tycontrols.strconsts.rsgridmaxprefix
+msgid "Max "
+msgstr ""
+
+#: tycontrols.strconsts.rsgridminprefix
+msgid "Min "
+msgstr ""
+
+#: tycontrols.strconsts.rsgridpickcolor
+msgid "Select colour"
+msgstr ""
+
+#: tycontrols.strconsts.rsgridsumprefix
+msgid "Sum "
+msgstr ""
+
 #: tycontrols.strconsts.rslintemptyimportpath
 msgid "empty @import path"
 msgstr ""
