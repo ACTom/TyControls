@@ -236,6 +236,15 @@ type
   TTyGridColumnMoveEvent = procedure(Sender: TObject; AFromCol, AToCol: Integer;
     var AAllow: Boolean) of object;
 
+  { 内置控件单元格的交互事件。勾选框一勾就该能触发宿主逻辑,
+    而不是逼宿主去 OnCellEdited 里认字符串。 }
+  TTyGridCanToggleEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var AAllow: Boolean) of object;
+  TTyGridCheckChangeEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    AChecked: Boolean) of object;
+  TTyGridRatingChangeEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    AValue: Integer) of object;
+
   { 复制/粘贴前后的钩子。置 AAllow:=False 可整体拦下。 }
   TTyGridClipboardEvent = procedure(Sender: TObject; var AText: string;
     var AAllow: Boolean) of object;
@@ -349,6 +358,9 @@ type
     FOnRightClickCell: TTyGridCellMouseEvent;
     FOnCanClickCell:   TTyGridCanClickCellEvent;
     FOnCellButtonClick:TTyGridCellMouseEvent;
+    FOnCanToggleCheck: TTyGridCanToggleEvent;
+    FOnCheckBoxChange: TTyGridCheckChangeEvent;
+    FOnRatingChange:   TTyGridRatingChangeEvent;
     FOnGetCellWordWrap:TTyGridGetCellWordWrapEvent;
     FWordWrap:         Boolean;
     { 显式行高的稀疏存储:行号 -> 高度(逻辑像素)。
@@ -686,6 +698,13 @@ type
     property OnRightClickCell: TTyGridCellMouseEvent read FOnRightClickCell write FOnRightClickCell;
     property OnCanClickCell: TTyGridCanClickCellEvent read FOnCanClickCell write FOnCanClickCell;
     property OnCellButtonClick: TTyGridCellMouseEvent read FOnCellButtonClick write FOnCellButtonClick;
+    { 勾选框:能否决、也能在切换后收到通知。 }
+    property OnCanToggleCheck: TTyGridCanToggleEvent
+      read FOnCanToggleCheck write FOnCanToggleCheck;
+    property OnCheckBoxChange: TTyGridCheckChangeEvent
+      read FOnCheckBoxChange write FOnCheckBoxChange;
+    property OnRatingChange: TTyGridRatingChangeEvent
+      read FOnRatingChange write FOnRatingChange;
     property OnGetCellWordWrap: TTyGridGetCellWordWrapEvent
       read FOnGetCellWordWrap write FOnGetCellWordWrap;
     property OnHeaderClick: TTyGridHeaderMouseEvent read FOnHeaderClick write FOnHeaderClick;
@@ -844,6 +863,9 @@ type
     { 完整的排序键序列;FSortCol/FSortDir 是它的第 0 项(保留成兼容视图)。 }
     FSortKeys: TTyGridSortKeys;
     FUpdatingOrder: Integer;
+    { 显式隐藏的行(数据行号)。 }
+    FHiddenRows: TStringList;
+    FSkipReadOnly: Boolean;
     FGroupRowFormat: string;
     FSortDir: TTySortDirection;
     FSortKind: TTyGridSortKind;
@@ -1003,11 +1025,29 @@ type
     { 数据行坐标;越界自动钳制。 }
     procedure SelectRange(ACol1, ARow1, ACol2, ARow2: Integer);
     procedure SelectRows(ARow1, ARow2: Integer);
+    { --- 行的显式隐藏 ---
+      与"用过滤间接隐藏"不是一回事:过滤是条件,隐藏是**事实**;
+      ClearFilters 会把过滤抹掉,却不该把用户手工隐藏的行放出来。 }
+    procedure HideRow(ARow: Integer);
+    procedure UnHideRow(ARow: Integer);
+    function  IsHiddenRow(ARow: Integer): Boolean;
+    function  NumHiddenRows: Integer;
+    procedure UnHideAllRows;
     procedure ClearSelection;
     { 活动选区(数据行坐标)。离散多选时只代表最后那一块。 }
     function  Selection: TRect;
     { 选中的单元格总数(0 表示只有光标那一格)。 }
     function SelectedCellCount: Integer;
+    { 选区聚合 —— 状态栏那句"已选 12 项,合计 3400"。
+      只统计**数值可解析**的格,非数值格直接跳过(与列聚合同一条规则)。 }
+    function SelectionSum: Double;
+    function SelectionAvg: Double;
+    function SelectionMin: Double;
+    function SelectionMax: Double;
+  private
+    procedure ForEachSelectedNumber(out ACount: Integer;
+      out ASum, AMin, AMax: Double);
+  public
 
     { 该列出现过的**去重值**(按显示序的原始数据,不受本列自身过滤影响)——
       列头筛选下拉就是拿它当候选。 }
@@ -1115,6 +1155,11 @@ type
       派生类可以整个改写。 }
     function  GroupRowText(const AKey: string; ACount: Integer): string; virtual;
     { 分组全展开 / 全折叠。 }
+    { 导航时跳过不可编辑的格。默认关 —— 打开后方向键/Tab 会掠过只读列,
+      录入长表时手指不用一直"撞墙"。 }
+    property SkipReadOnlyCells: Boolean read FSkipReadOnly write FSkipReadOnly
+      default False;
+    function  NextEditableCol(AFrom, AStep, ARow: Integer): Integer;
     procedure ExpandAllGroups;
     procedure CollapseAllGroups;
     property SortDirection: TTySortDirection read FSortDir;
@@ -3296,6 +3341,9 @@ begin
   FAggregates := TStringList.Create;
   FCollapsed := TStringList.Create;
   FAttrs := TTyGridCellAttrStore.Create;
+  FHiddenRows := TStringList.Create;
+  FHiddenRows.Sorted := True;
+  FHiddenRows.Duplicates := dupIgnore;
   FCol := 0;
   FRow := 0;
   TabStop := True;                      { 要接键盘 }
@@ -3356,6 +3404,7 @@ begin
   FAggregates.Free;
   FCollapsed.Free;
   FAttrs.Free;
+  FHiddenRows.Free;
   inherited Destroy;
 end;
 
@@ -3426,6 +3475,21 @@ begin
   MoveCursor(FCol, AValue);
 end;
 
+{ 从 AFrom 起沿 AStep 方向找第一个可编辑的列;找不到就原样返回。 }
+function TTyStringGrid.NextEditableCol(AFrom, AStep, ARow: Integer): Integer;
+var
+  c: Integer;
+begin
+  Result := AFrom;
+  if AStep = 0 then Exit;
+  c := AFrom;
+  while (c >= 0) and (c < Header.Columns.Count) do
+  begin
+    if EditorKindFor(c, ARow) <> gekNone then Exit(c);
+    Inc(c, AStep);
+  end;
+end;
+
 procedure TTyStringGrid.MoveCursor(ACol, ARow: Integer);
 var
   canSel: Boolean;
@@ -3436,6 +3500,12 @@ begin
   if ACol > Header.Columns.Count - 1 then ACol := Header.Columns.Count - 1;
   if ARow > RowCount - 1 then ARow := RowCount - 1;
   if (ACol = FCol) and (ARow = FRow) then Exit;
+
+  { 跳过不可编辑的格:沿**本次移动的方向**继续找,而不是原地不动 ——
+    原地不动的话方向键会像撞墙,用户以为网格卡了。
+    找不到就落回原来的目标(总得有个当前格)。 }
+  if FSkipReadOnly and (ARow = FRow) and (ACol <> FCol) then
+    ACol := NextEditableCol(ACol, Sign(ACol - FCol), ARow);
 
   { 光标要动了 —— 先把正在编辑的格提交掉,否则编辑框会悬在旧位置。 }
   EndEdit(True);
@@ -3710,6 +3780,47 @@ begin
   InvalidateOrder;
 end;
 
+procedure TTyStringGrid.HideRow(ARow: Integer);
+begin
+  if (ARow < 0) or (ARow >= RowCount) then Exit;
+  if FHiddenRows.IndexOf(IntToStr(ARow)) >= 0 then Exit;
+  FHiddenRows.Add(IntToStr(ARow));
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.UnHideRow(ARow: Integer);
+var
+  i: Integer;
+begin
+  i := FHiddenRows.IndexOf(IntToStr(ARow));
+  if i < 0 then Exit;
+  FHiddenRows.Delete(i);
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+function TTyStringGrid.IsHiddenRow(ARow: Integer): Boolean;
+begin
+  Result := FHiddenRows.IndexOf(IntToStr(ARow)) >= 0;
+end;
+
+function TTyStringGrid.NumHiddenRows: Integer;
+begin
+  Result := FHiddenRows.Count;
+end;
+
+procedure TTyStringGrid.UnHideAllRows;
+begin
+  if FHiddenRows.Count = 0 then Exit;
+  FHiddenRows.Clear;
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
 function TTyStringGrid.RowPassesFilter(ARow: Integer): Boolean;
 var
   i, colIdx: Integer;
@@ -3744,6 +3855,9 @@ begin
   end;
 
   if Assigned(FOnFilterRow) then FOnFilterRow(Self, ARow, Result);
+  { 显式隐藏压过一切 —— 它是用户的直接动作,不是条件。
+    放在最后,连 OnFilterRow 说"要"也盖不过去。 }
+  if Result and IsHiddenRow(ARow) then Result := False;
 end;
 
 procedure TTyStringGrid.RebuildOrder;
@@ -4393,13 +4507,25 @@ var
   oldTxt, newTxt: string;
 begin
   if FReadOnly then Exit;
+
+  { 宿主可以否决这一次切换("已锁定的行不许改")。 }
+  accept := True;
+  if Assigned(FOnCanToggleCheck) then FOnCanToggleCheck(Self, ACol, ARow, accept);
+  if not accept then Exit;
+
   oldTxt := GetCellText(ACol, ARow);
   { 写回统一成 '1'/'' —— 读的时候宽松,写的时候收敛。 }
   if CellChecked(ACol, ARow) then newTxt := '' else newTxt := '1';
   accept := True;
   if Assigned(FOnCellEdited) then
     FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
-  if accept then Cells[ACol, ARow] := newTxt;
+  if accept then
+  begin
+    Cells[ACol, ARow] := newTxt;
+    { 切换成功了才通知 —— 让宿主不用自己再判一次有没有真的变。 }
+    if Assigned(FOnCheckBoxChange) then
+      FOnCheckBoxChange(Self, ACol, ARow, newTxt <> '');
+  end;
 end;
 
 procedure TTyStringGrid.ToggleCellColor(ACol, ARow: Integer);
@@ -6158,6 +6284,71 @@ begin
   Result.Right := r.Right;
   Result.Top := DisplayToData(r.Top);
   Result.Bottom := DisplayToData(r.Bottom);
+end;
+
+{ 选区聚合的公共骨架:走一遍选区,把能解析成数值的格喂给累加器。
+  四个入口共用它,免得四份几乎一样的遍历各自跑偏。 }
+procedure TTyStringGrid.ForEachSelectedNumber(out ACount: Integer;
+  out ASum, AMin, AMax: Double);
+var
+  pos, colIdx, dataRow: Integer;
+  v: Double;
+  txt: string;
+begin
+  ACount := 0;
+  ASum := 0;
+  AMin := 0;
+  AMax := 0;
+  for pos := 0 to DisplayRowCount - 1 do
+  begin
+    dataRow := DisplayToData(pos);
+    if dataRow < 0 then Continue;
+    for colIdx := 0 to Header.Columns.Count - 1 do
+    begin
+      if not IsCellSelected(colIdx, dataRow) then Continue;
+      txt := Trim(GetCellText(colIdx, dataRow));
+      if txt = '' then Continue;
+      v := StrToFloatDef(txt, NaN);
+      if IsNan(v) then Continue;      { 非数值格跳过,不污染统计 }
+      if ACount = 0 then
+      begin
+        AMin := v;
+        AMax := v;
+      end
+      else
+      begin
+        if v < AMin then AMin := v;
+        if v > AMax then AMax := v;
+      end;
+      ASum := ASum + v;
+      Inc(ACount);
+    end;
+  end;
+end;
+
+function TTyStringGrid.SelectionSum: Double;
+var n: Integer; mn, mx: Double;
+begin
+  ForEachSelectedNumber(n, Result, mn, mx);
+end;
+
+function TTyStringGrid.SelectionAvg: Double;
+var n: Integer; sum, mn, mx: Double;
+begin
+  ForEachSelectedNumber(n, sum, mn, mx);
+  if n = 0 then Result := 0 else Result := sum / n;
+end;
+
+function TTyStringGrid.SelectionMin: Double;
+var n: Integer; sum, mx: Double;
+begin
+  ForEachSelectedNumber(n, sum, Result, mx);
+end;
+
+function TTyStringGrid.SelectionMax: Double;
+var n: Integer; sum, mn: Double;
+begin
+  ForEachSelectedNumber(n, sum, mn, Result);
 end;
 
 function TTyStringGrid.SelectedCellCount: Integer;

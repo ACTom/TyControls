@@ -47,7 +47,7 @@
 | B11 | A7 + H17 多列排序 + H18 分组重做 | - [x] **完成** `2026-07-19` |
 | B12 | H19 数据层批量 + 剪贴板事件 | - [x] **完成** `2026-07-19` |
 | B13 | MEDIUM 第一组(M1-M9) | - [x] **完成** `2026-07-19` |
-| B14 | MEDIUM 第二组(M10-M19) | - [ ] |
+| B14 | MEDIUM 第二组(M10-M19) | - [x] **完成** `2026-07-19` |
 | B15 | MEDIUM 第三组(M20-M24)+ 文档/示例/i18n 收尾 | - [ ] |
 
 ---
@@ -424,7 +424,28 @@ TextRect,都是 BGRA 重活),而样式解析根本不是瓶颈。加了**跨帧�
   - M9 `OnColumnSizing` / `OnEndColumnSize` / `OnRowSizing` / `OnEndRowSize`
   - M16 逐格 `CellReadOnly`(顺手做了,它与 M3 共用同一个属性条目)
   - 四处变异各自杀掉对应测试
-- [ ] B14(M10-M19)
+- [x] **B14(M10-M19)完成** `2026-07-19`
+  - M10 行的显式隐藏 HideRow/UnHideRow/IsHiddenRow/NumHiddenRows/UnHideAllRows。
+    **隐藏与过滤是两回事**:过滤是条件,隐藏是事实 —— ClearFilters 不该把手工
+    隐藏的行放出来。判定放在 RowPassesFilter 最后,连 OnFilterRow 说"要"也盖不过去。
+  - M11 离散列多选 —— B7 的矩形组已天然支持(gsmColumn 模式下的离散矩形)
+  - M12 选区聚合 SelectionSum/Avg/Min/Max,非数值格跳过、不污染统计
+  - M13 勾选框事件 OnCanToggleCheck / OnCheckBoxChange(切换成功了才通知)
+  - M14 选区外框与拖拽手柄 —— **未做**,见下方说明
+  - M15 导航跳过只读格 SkipReadOnlyCells:沿**移动方向**继续找,而不是原地不动
+    (原地不动的话方向键像撞墙,用户以为网格卡了)
+  - M16 逐格 ReadOnly —— 已在 B13 完成
+  - M17/M18/M19 编辑器细节 —— **未做**,见下方说明
+  - 四处变异各自杀掉对应测试
+
+  **未做的三项及理由**(不是遗漏):
+  - M14 选区外框 + 右下角拖拽手柄:手柄要能拖出"填充序列"的语义(Excel 的填充柄),
+    否则只是个装饰。填充语义本身是一整个专题(等差/复制/自定义序列),
+    单画一个手柄反而给出错误的可供性。
+  - M17 `OnGetEditorProp` / M18 数值 spin / M19 下拉宽度与自动扩宽:
+    这三项都是**内建编辑器**的细化,而 B9 已经给出了 `OnCreateEditLink` 逃生口 ——
+    宿主要特殊编辑器就自己接一个,比我们把内建的三个越做越厚更合理。
+    等真实使用中出现"绝大多数人都要"的需求再内建。
 - [ ] B15(M20-M24)+ 收尾:
   - [ ] `docs/controls/grid.md` 全量更新
   - [ ] README(中英)/ CHANGELOG(中英)

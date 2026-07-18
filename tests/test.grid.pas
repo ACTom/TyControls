@@ -158,11 +158,17 @@ type
     procedure TestPerCellReadOnlyBlocksEditing;
     procedure TestRowHeightLimitsClampAtTheStore;
     procedure TestColumnSizeEventsFireOnDragAndRelease;
+    procedure TestHiddenRowsSurviveClearFilters;
+    procedure TestSelectionAggregatesSkipNonNumericCells;
+    procedure TestCheckBoxEventsFireAndCanBeVetoed;
+    procedure TestSkipReadOnlyCellsDuringNavigation;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
     FProbeLink: TTyGridEditLink;
     FSizingCalls, FEndSizeCalls, FLastEndSize: Integer;
+    FCheckChanges: Integer;
+    FVetoToggle: Boolean;
     FClickCol, FClickRow: Integer;
     FRightCol, FRightRow: Integer;
     FBtnCol, FBtnRow: Integer;
@@ -175,6 +181,10 @@ type
     procedure HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
     procedure HookSelectionChanged(Sender: TObject);
+    procedure HookCanToggle(Sender: TObject; ACol, ARow: Integer;
+      var AAllow: Boolean);
+    procedure HookCheckChange(Sender: TObject; ACol, ARow: Integer;
+      AChecked: Boolean);
     procedure HookColumnSizing(Sender: TObject; AIndex: Integer;
       var ANewSize: Integer; var AAllow: Boolean);
     procedure HookEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
@@ -4425,6 +4435,116 @@ begin
   G.ReleaseMouse(x + 30, 8);
   AssertEquals('松手发一次 EndSize', 1, FEndSizeCalls);
   AssertEquals('EndSize 带上最终宽度', G.ColWidth(0), G.ScaleFrom(FLastEndSize));
+end;
+
+procedure TTyStringGridTest.HookCanToggle(Sender: TObject; ACol, ARow: Integer;
+  var AAllow: Boolean);
+begin
+  if FVetoToggle then AAllow := False;
+end;
+
+procedure TTyStringGridTest.HookCheckChange(Sender: TObject; ACol, ARow: Integer;
+  AChecked: Boolean);
+begin
+  Inc(FCheckChanges);
+end;
+
+{ 隐藏行与过滤是**两回事**:过滤是条件,隐藏是事实。
+  从前只能借过滤间接隐藏 —— 语义不对,ClearFilters 会把它一起抹掉。 }
+procedure TTyStringGridTest.TestHiddenRowsSurviveClearFilters;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+
+  AssertEquals('一开始全都显示', 5, G.DisplayRowCount);
+  AssertEquals('没有隐藏行', 0, G.NumHiddenRows);
+
+  G.HideRow(2);
+  AssertEquals('隐藏一行后少一条', 4, G.DisplayRowCount);
+  AssertTrue('查得出是隐藏的', G.IsHiddenRow(2));
+  AssertEquals('计数对', 1, G.NumHiddenRows);
+
+  { **关键**:清过滤不该把手工隐藏的行放出来。 }
+  G.ClearFilters;
+  AssertEquals('ClearFilters 之后仍然隐藏着', 4, G.DisplayRowCount);
+  AssertTrue('仍然是隐藏的', G.IsHiddenRow(2));
+
+  G.UnHideRow(2);
+  AssertEquals('取消隐藏后回来了', 5, G.DisplayRowCount);
+
+  G.HideRow(0); G.HideRow(1);
+  G.UnHideAllRows;
+  AssertEquals('全部取消隐藏', 5, G.DisplayRowCount);
+end;
+
+{ 选区聚合:状态栏那句"已选 12 项,合计 3400"。非数值格跳过、不污染统计。 }
+procedure TTyStringGridTest.TestSelectionAggregatesSkipNonNumericCells;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[0, 0] := '10';   G.Cells[0, 1] := '20';
+  G.Cells[0, 2] := '不是数'; G.Cells[0, 3] := '30';
+
+  G.SelectRange(0, 0, 0, 3);
+  AssertEquals('合计跳过非数值格', 60.0, G.SelectionSum, 0.001);
+  AssertEquals('平均按**能解析的个数**算', 20.0, G.SelectionAvg, 0.001);
+  AssertEquals('最小值', 10.0, G.SelectionMin, 0.001);
+  AssertEquals('最大值', 30.0, G.SelectionMax, 0.001);
+
+  { 选区缩小,统计跟着变。 }
+  G.SelectRange(0, 0, 0, 1);
+  AssertEquals('缩小选区后合计变了', 30.0, G.SelectionSum, 0.001);
+end;
+
+{ 勾选框事件:能否决、切换成功了才通知。 }
+procedure TTyStringGridTest.TestCheckBoxEventsFireAndCanBeVetoed;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  FCheckChanges := 0;
+  FVetoToggle := False;
+  G.OnCanToggleCheck := @HookCanToggle;
+  G.OnCheckBoxChange := @HookCheckChange;
+
+  G.ToggleCellChecked(0, 1);
+  AssertEquals('切换成功发一次通知', 1, FCheckChanges);
+  AssertEquals('内容写成了 1', '1', G.Cells[0, 1]);
+
+  FVetoToggle := True;
+  G.ToggleCellChecked(0, 1);
+  AssertEquals('被否决时不发通知', 1, FCheckChanges);
+  AssertEquals('被否决时内容不变', '1', G.Cells[0, 1]);
+end;
+
+{ 导航跳过只读格:方向键掠过只读列,而不是原地撞墙。 }
+procedure TTyStringGridTest.TestSkipReadOnlyCellsDuringNavigation;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);   { 4 列 }
+  G.RowCount := 4;
+  TTyGridColumn(G.Header.Columns.Items[1]).ReadOnly := True;
+  TTyGridColumn(G.Header.Columns.Items[2]).ReadOnly := True;
+  G.MoveCursor(0, 0);
+
+  { 没开时逐列走,会停在只读列上。 }
+  G.PressKey(VK_RIGHT);
+  AssertEquals('没开跳过时停在只读列', 1, G.Col);
+
+  G.MoveCursor(0, 0);
+  G.SkipReadOnlyCells := True;
+  G.PressKey(VK_RIGHT);
+  AssertEquals('开了之后跳过两个只读列', 3, G.Col);
+
+  { 反方向同理。 }
+  G.PressKey(VK_LEFT);
+  AssertEquals('反向也跳过', 0, G.Col);
 end;
 
 initialization
