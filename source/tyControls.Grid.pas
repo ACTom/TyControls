@@ -214,6 +214,28 @@ type
   TTyGridCanClickCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var ACanClick: Boolean) of object;
   TTyGridHeaderMouseEvent = procedure(Sender: TObject; ACol: Integer) of object;
+  { 逐格边框。四支笔各自可开可关,宽度/颜色独立 —— 报表要画分区块粗线、小计行双线。 }
+  TTyGridCellBorders = record
+    Left, Top, Right, Bottom: Boolean;
+    Width: Integer;
+    Color: TTyColor;
+  end;
+  TTyGridGetCellBorderEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var ABorders: TTyGridCellBorders) of object;
+
+  { 表头格自绘钩子:必填列表头标红、当前排序列高亮。 }
+  TTyGridGetHeaderStyleEvent = procedure(Sender: TObject; ACol: Integer;
+    var ABackground: TTyFill; var ATextColor: TTyColor;
+    var AFontName: string; var AFontSize, AFontWeight: Integer) of object;
+
+  { 列宽 / 行高的交互事件。ASizing 阶段可以改 ANewSize 或否决。 }
+  TTyGridSizingEvent = procedure(Sender: TObject; AIndex: Integer;
+    var ANewSize: Integer; var AAllow: Boolean) of object;
+  TTyGridSizedEvent = procedure(Sender: TObject; AIndex, ANewSize: Integer) of object;
+  { 列被拖动重排。 }
+  TTyGridColumnMoveEvent = procedure(Sender: TObject; AFromCol, AToCol: Integer;
+    var AAllow: Boolean) of object;
+
   { 复制/粘贴前后的钩子。置 AAllow:=False 可整体拦下。 }
   TTyGridClipboardEvent = procedure(Sender: TObject; var AText: string;
     var AAllow: Boolean) of object;
@@ -310,6 +332,18 @@ type
       数据行乱跳,看起来像随机涂色。 }
     FAlternateRows:    Boolean;
     FOnGetCellStyle:   TTyGridGetCellStyleEvent;
+    FOnGetCellBorder:  TTyGridGetCellBorderEvent;
+    FOnGetHeaderStyle: TTyGridGetHeaderStyleEvent;
+    FOnColumnSizing:   TTyGridSizingEvent;
+    FOnEndColumnSize:  TTyGridSizedEvent;
+    FOnRowSizing:      TTyGridSizingEvent;
+    FOnEndRowSize:     TTyGridSizedEvent;
+    FOnColumnMove:     TTyGridColumnMoveEvent;
+    { 全局上下限 —— 自动行高/自适应列宽的护栏,否则一条超长文本能把行撑爆。 }
+    FMinRowHeight:     Integer;
+    FMaxRowHeight:     Integer;
+    FMinColWidth:      Integer;
+    FMaxColWidth:      Integer;
     FOnClickCell:      TTyGridCellMouseEvent;
     FOnDblClickCell:   TTyGridCellMouseEvent;
     FOnRightClickCell: TTyGridCellMouseEvent;
@@ -432,8 +466,14 @@ type
       const AFrame: TTyStyleSet): TTyGridCellAppearance; virtual;
     procedure DoGetCellStyle(ACol, ARow: Integer;
       var AAppearance: TTyGridCellAppearance); virtual;
+    { 逐格边框:宿主没接钩子时四支笔全关,一个像素都不多画。 }
+    procedure RenderCellBorders(P: TTyPainter; const M: TTyGridMetrics); virtual;
     { 这一格能不能点。所有点击路径都必须先问它。 }
     function  CanClickCell(ACol, ARow: Integer): Boolean;
+    { 这一格是不是"焦点格"(光标所在)。基类没有光标概念,恒 False。 }
+    function  IsActiveCell(ACol, ARow: Integer): Boolean; virtual;
+    { 逐格属性查询。基类没有属性存储,恒 nil;TTyStringGrid 改写。 }
+    function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; virtual;
     { 网格自己的列类;列还没建时返回 nil。 }
     function  GridColumn(ACol: Integer): TTyGridColumn;
     { 显式行高。设为 <= 0 表示"清掉,回到回调/默认值"。 }
@@ -623,6 +663,23 @@ type
     { 逐格外观钩子。 }
     property OnGetCellStyle: TTyGridGetCellStyleEvent
       read FOnGetCellStyle write FOnGetCellStyle;
+    { 逐格边框(四支笔)。 }
+    property OnGetCellBorder: TTyGridGetCellBorderEvent
+      read FOnGetCellBorder write FOnGetCellBorder;
+    { 表头格自绘。 }
+    property OnGetHeaderStyle: TTyGridGetHeaderStyleEvent
+      read FOnGetHeaderStyle write FOnGetHeaderStyle;
+    { 列宽/行高的交互事件 —— 有了它们,列宽偏好能保存恢复,不用轮询。 }
+    property OnColumnSizing: TTyGridSizingEvent read FOnColumnSizing write FOnColumnSizing;
+    property OnEndColumnSize: TTyGridSizedEvent read FOnEndColumnSize write FOnEndColumnSize;
+    property OnRowSizing: TTyGridSizingEvent read FOnRowSizing write FOnRowSizing;
+    property OnEndRowSize: TTyGridSizedEvent read FOnEndRowSize write FOnEndRowSize;
+    property OnColumnMove: TTyGridColumnMoveEvent read FOnColumnMove write FOnColumnMove;
+    { 行高/列宽的全局上下限(逻辑像素)。0 = 不限。 }
+    property MinRowHeight: Integer read FMinRowHeight write FMinRowHeight default 0;
+    property MaxRowHeight: Integer read FMaxRowHeight write FMaxRowHeight default 0;
+    property MinColWidth: Integer read FMinColWidth write FMinColWidth default 0;
+    property MaxColWidth: Integer read FMaxColWidth write FMaxColWidth default 0;
     { 单元格级鼠标事件。 }
     property OnClickCell: TTyGridCellMouseEvent read FOnClickCell write FOnClickCell;
     property OnDblClickCell: TTyGridCellMouseEvent read FOnDblClickCell write FOnDblClickCell;
@@ -818,6 +875,12 @@ type
     procedure SetCells(ACol, ARow: Integer; const AValue: string);
     procedure SetCol(AValue: Integer);
     procedure SetSelectionMode(AValue: TTyGridSelectionMode);
+    function  GetCellColor(ACol, ARow: Integer): TTyColor;
+    procedure SetCellColor(ACol, ARow: Integer; AValue: TTyColor);
+    function  GetCellTextColor(ACol, ARow: Integer): TTyColor;
+    procedure SetCellTextColor(ACol, ARow: Integer; AValue: TTyColor);
+    function  GetCellReadOnly(ACol, ARow: Integer): Boolean;
+    procedure SetCellReadOnly(ACol, ARow: Integer; AValue: Boolean);
     { 把当前的活动矩形固化进 FSelRects(Ctrl+点时用)。 }
     procedure CommitActiveSelection;
     function  ActiveSelectionRect: TRect;   { 显示序空间 }
@@ -848,6 +911,8 @@ type
     function  CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay; virtual;
     { 基类的问法(按钮矩形/命中要用),转给上面这个。 }
     function  CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay; override;
+    function  IsActiveCell(ACol, ARow: Integer): Boolean; override;
+    function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; override;
     function  ShouldDrawCellText(ACol, ARow: Integer): Boolean; override;
     function  DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -982,6 +1047,19 @@ type
     { 汇总带上该列显示的文字(已格式化;OnGetFooterText 可覆盖)。 }
     function  FooterText(ACol: Integer): string;
 
+    { --- 逐格持久外观 ---
+      与钩子的区别:钩子是"每次画都问一遍"的规则,这里是**落盘**的事实 ——
+      用户手工把某几格涂黄,关掉再打开还得是黄的。设成 clNone 即清除。 }
+    property CellColors[ACol, ARow: Integer]: TTyColor
+      read GetCellColor write SetCellColor;
+    property CellTextColors[ACol, ARow: Integer]: TTyColor
+      read GetCellTextColor write SetCellTextColor;
+    { 整行底色 —— 内部就是把该行每一格都设一遍(行数远少于格数,不心疼)。 }
+    procedure SetRowColor(ARow: Integer; AColor: TTyColor);
+    { 逐格只读。比"整列只读"更细,用于"已审核的这几行不可改"。 }
+    property CellReadOnly[ACol, ARow: Integer]: Boolean
+      read GetCellReadOnly write SetCellReadOnly;
+
     { --- 单元格合并 ---
       只记基准格的跨度;被覆盖的格没有自己的矩形,命中时归到基准格。 }
     procedure MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
@@ -1113,6 +1191,10 @@ var
 implementation
 
 const
+  { "没设颜色"的哨兵:alpha = 0 的颜色在本库里恒不可见,拿来当"无"最省事,
+    不必再多一个平行的 Boolean。 }
+  TyColorNone: TTyColor = 0;
+
   { "这不是个日期"的哨兵。用一个不可能出现的 TDateTime 值,
     比再拿一个 Boolean 数组去记省事,也不会和真实日期撞上。 }
   NoDateSentinel = -1.0e18;
@@ -1977,6 +2059,16 @@ begin
   Result := False;      { 默认什么都不吃,网格照常处理导航键 }
 end;
 
+function TTyCustomGrid.IsActiveCell(ACol, ARow: Integer): Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomGrid.FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr;
+begin
+  Result := nil;
+end;
+
 function TTyCustomGrid.CanClickCell(ACol, ARow: Integer): Boolean;
 begin
   Result := True;
@@ -2084,6 +2176,13 @@ var
   k: string;
 begin
   if ARow < 0 then Exit;
+  { 上下限在**存储入口**钳一次,而不是在每个调用方各钳一次 ——
+    拖拽、AutoFitRow、宿主直接赋值走的都是这里。 }
+  if AValue > 0 then
+  begin
+    if (FMinRowHeight > 0) and (AValue < FMinRowHeight) then AValue := FMinRowHeight;
+    if (FMaxRowHeight > 0) and (AValue > FMaxRowHeight) then AValue := FMaxRowHeight;
+  end;
   k := IntToStr(ARow);
   i := FRowHeights.IndexOf(k);
   if AValue <= 0 then
@@ -2182,8 +2281,9 @@ end;
 function TTyCustomGrid.CellAppearance(ACol, ARow, ADisplayPos: Integer;
   const AFrame: TTyStyleSet): TTyGridCellAppearance;
 var
-  cS, altS: TTyStyleSet;
+  cS, altS, actS: TTyStyleSet;
   col: TTyColumn;
+  attr: TTyGridCellAttr;
 begin
   cS := ResolveCellStyle(ACol, ARow);
 
@@ -2207,6 +2307,23 @@ begin
     Result.HAlign := col.Alignment;
   end;
 
+  { 逐格**持久**外观(Colors[c,r] / TextColors[c,r] / RowColor[r] 落在属性存储里)。
+    优先级:主题 → 斑马纹 → 行色 → 逐格色 → 宿主钩子。
+    越靠后越具体,所以越晚覆盖。 }
+  attr := FAttrs2Find(ACol, ARow);
+  if attr <> nil then
+  begin
+    if attr.HasBackground then
+    begin
+      Result.HasBackground := True;
+      Result.Background := Default(TTyFill);
+      Result.Background.Kind := tfkSolid;
+      Result.Background.Color := attr.Background;
+    end;
+    if attr.HasTextColor then Result.TextColor := attr.TextColor;
+    if attr.HasAlignment then Result.HAlign := attr.Alignment;
+  end;
+
   { 斑马纹按**显示行号**取奇偶。用自己的 typeKey 而不是 `TyGridCell:alternate`:
     加一个伪类要动共享的 TTyState 枚举与 CSS 解析器,会波及每一个控件;
     而库里网格的各个部件(TyGridCheckBox / TyGridProgress / TyGridGroupRow…)
@@ -2220,6 +2337,19 @@ begin
       Result.Background := altS.Background;
     end;
     if tpTextColor in altS.Present then Result.TextColor := altS.TextColor;
+  end;
+
+  { **焦点格**要和选区区分开:gsmRow 模式下整行都是选中底色,不区分的话
+    根本看不出光标在哪一格。用自己的 typeKey,主题没定义就什么都不做。 }
+  if IsActiveCell(ACol, ARow) then
+  begin
+    actS := ActiveController.Model.ResolveStyle('TyGridActiveCell', StyleClass, []);
+    if (tpBackground in actS.Present) and (actS.Background.Kind <> tfkNone) then
+    begin
+      Result.HasBackground := True;
+      Result.Background := actS.Background;
+    end;
+    if tpTextColor in actS.Present then Result.TextColor := actS.TextColor;
   end;
 
   { 宿主钩子最后说了算。 }
@@ -2592,7 +2722,8 @@ end;
 
 procedure TTyCustomGrid.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
-  target, delta: Integer;
+  target, delta, newSize: Integer;
+  allow: Boolean;
 begin
   inherited MouseMove(Shift, X, Y);
 
@@ -2601,16 +2732,30 @@ begin
   if FResizeRow >= 0 then
   begin
     delta := UnscaleI(Y - FResizeStartY);
-    RowHeights[DisplayToData(FResizeRow)] := FResizeStartH + delta;
+    newSize := FResizeStartH + delta;
+    allow := True;
+    if Assigned(FOnRowSizing) then
+      FOnRowSizing(Self, DisplayToData(FResizeRow), newSize, allow);
+    { 上下限的钳制在 SetRowHeights 里统一做 —— 这里不重复。 }
+    if allow then RowHeights[DisplayToData(FResizeRow)] := newSize;
     Exit;
   end;
 
   if FResizeCol >= 0 then
   begin
     delta := UnscaleI(X - FResizeStartX);
-    TTyColumn(FHeader.Columns.Items[FResizeCol]).Width := FResizeStartW + delta;
-    UpdateScrollBars;
-    Invalidate;
+    newSize := FResizeStartW + delta;
+    { 上下限 + 宿主否决,都在**赋值之前** —— 赋完再回退会闪一下。 }
+    if (FMinColWidth > 0) and (newSize < FMinColWidth) then newSize := FMinColWidth;
+    if (FMaxColWidth > 0) and (newSize > FMaxColWidth) then newSize := FMaxColWidth;
+    allow := True;
+    if Assigned(FOnColumnSizing) then FOnColumnSizing(Self, FResizeCol, newSize, allow);
+    if allow then
+    begin
+      TTyColumn(FHeader.Columns.Items[FResizeCol]).Width := newSize;
+      UpdateScrollBars;
+      Invalidate;
+    end;
     Exit;
   end;
 
@@ -2623,10 +2768,15 @@ begin
     begin
       { 复用列模型现成的位置调整(coDraggable/AdjustPosition 早就建好了,
         一直没人接线 —— 这里就是那根线)。 }
-      FHeader.Columns.AdjustPosition(TTyColumn(FHeader.Columns.Items[FDragCol]),
-        TTyColumn(FHeader.Columns.Items[target]).Position);
-      FDragStartX := X;
-      Invalidate;
+      allow := True;
+      if Assigned(FOnColumnMove) then FOnColumnMove(Self, FDragCol, target, allow);
+      if allow then
+      begin
+        FHeader.Columns.AdjustPosition(TTyColumn(FHeader.Columns.Items[FDragCol]),
+          TTyColumn(FHeader.Columns.Items[target]).Position);
+        FDragStartX := X;
+        Invalidate;
+      end;
     end;
   end;
 end;
@@ -2634,6 +2784,14 @@ end;
 procedure TTyCustomGrid.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 begin
+  { 拖完了才发"结束"事件 —— 宿主拿它保存列宽偏好,拖动过程中发是噪音。 }
+  if (FResizeCol >= 0) and Assigned(FOnEndColumnSize) then
+    FOnEndColumnSize(Self, FResizeCol,
+      TTyColumn(FHeader.Columns.Items[FResizeCol]).Width);
+  if (FResizeRow >= 0) and Assigned(FOnEndRowSize) then
+    FOnEndRowSize(Self, DisplayToData(FResizeRow),
+      RowHeightOf(DisplayToData(FResizeRow)));
+
   FResizeCol := -1;
   FResizeRow := -1;
   FDragCol := -1;
@@ -2666,6 +2824,11 @@ procedure TTyCustomGrid.RenderHeaderSections(P: TTyPainter; const M: TTyGridMetr
   AHeaderH: Integer);
 var
   i, l, w, cx, cy, gs, imgIdx, imgSz, imgPad, bandTop: Integer;
+  hdrBg: TTyFill;
+  hdrHasBg: Boolean;
+  hdrInk: TTyColor;
+  hdrFontName: string;
+  hdrFontSize, hdrFontWeight: Integer;
   col: TTyColumn;
   bmp: TBGRABitmap;
   secS, hdrS: TTyStyleSet;
@@ -2698,8 +2861,23 @@ begin
     end;
 
     r := Rect(l, bandTop, l + w, bandTop + AHeaderH);
-    if tpBackground in secS.Present then
-      P.FillBackground(r, secS.Background, 0);
+
+    { 表头格自绘钩子:必填列标红、当前排序列高亮。
+      从主题解析出来的值打底,宿主想改哪个改哪个。 }
+    hdrBg := secS.Background;
+    hdrHasBg := tpBackground in secS.Present;
+    hdrInk := ink;
+    hdrFontName := hdrS.FontName;
+    hdrFontSize := ResolveFontSize(hdrS);
+    hdrFontWeight := hdrS.FontWeight;
+    if Assigned(FOnGetHeaderStyle) then
+    begin
+      FOnGetHeaderStyle(Self, i, hdrBg, hdrInk, hdrFontName, hdrFontSize, hdrFontWeight);
+      hdrHasBg := hdrBg.Kind <> tfkNone;
+    end;
+
+    if hdrHasBg then
+      P.FillBackground(r, hdrBg, 0);
 
     { 排序列留出字形的位置,标题文字缩进一点。 }
     gs := 0;
@@ -2709,8 +2887,8 @@ begin
 
     textR := Rect(r.Left + ScaleI(6) + imgPad, r.Top, r.Right - ScaleI(4) - gs, r.Bottom);
     if (col.Text <> '') and (textR.Right > textR.Left) then
-      P.DrawText(textR, col.Text, hdrS.FontName, ResolveFontSize(hdrS),
-        hdrS.FontWeight, ink, col.CaptionAlignment, tlCenter, True);
+      P.DrawText(textR, col.Text, hdrFontName, hdrFontSize,
+        hdrFontWeight, hdrInk, col.CaptionAlignment, tlCenter, True);
 
     { 该列有筛选时,标题右侧留一个漏斗位(用向下箭头示意)。 }
     if ShowsFilterButton(i) then
@@ -2851,6 +3029,50 @@ begin
   P.Bitmap.DrawLine(0, h - 1, M.ClientW, h - 1, line, False);
 end;
 
+procedure TTyCustomGrid.RenderCellBorders(P: TTyPainter; const M: TTyGridMetrics);
+var
+  firstRow, lastRow, row, i, dataRow, w: Integer;
+  col: TTyColumn;
+  b: TTyGridCellBorders;
+  cell: TRect;
+  px: TBGRAPixel;
+begin
+  { 没人接钩子 = 没有逐格边框。整个遍历都省掉。 }
+  if not Assigned(FOnGetCellBorder) then Exit;
+  if not TyGridVisibleRows(M, firstRow, lastRow) then Exit;
+
+  for row := firstRow to lastRow do
+    for i := 0 to FHeader.Columns.Count - 1 do
+    begin
+      col := TTyColumn(FHeader.Columns.Items[i]);
+      if not (coVisible in col.Options) then Continue;
+      dataRow := DisplayToData(row);
+
+      b := Default(TTyGridCellBorders);
+      b.Width := 1;
+      b.Color := CurrentStyle.BorderColor;
+      FOnGetCellBorder(Self, i, dataRow, b);
+      if not (b.Left or b.Top or b.Right or b.Bottom) then Continue;
+
+      cell := CellVisibleRect(i, dataRow);
+      if IsRectEmpty(cell) then Continue;
+      w := ScaleI(b.Width);
+      if w < 1 then w := 1;
+      px := TyColorToBGRA(b.Color);
+
+      { 边框画在单元格**内侧** —— 与 StrokeBorder 同一条约定,
+        免得相邻两格的边框互相盖住半个像素。 }
+      if b.Top then
+        P.Bitmap.FillRect(cell.Left, cell.Top, cell.Right, cell.Top + w, px, dmSet);
+      if b.Bottom then
+        P.Bitmap.FillRect(cell.Left, cell.Bottom - w, cell.Right, cell.Bottom, px, dmSet);
+      if b.Left then
+        P.Bitmap.FillRect(cell.Left, cell.Top, cell.Left + w, cell.Bottom, px, dmSet);
+      if b.Right then
+        P.Bitmap.FillRect(cell.Right - w, cell.Top, cell.Right, cell.Bottom, px, dmSet);
+    end;
+end;
+
 procedure TTyCustomGrid.RenderCellBackgrounds(P: TTyPainter; const M: TTyGridMetrics);
 var
   firstRow, lastRow, row, i, dataRow: Integer;
@@ -2919,6 +3141,8 @@ begin
     if FooterHeightPx > 0 then
       RenderFooter(P, M, Rect(0, M.ClientH, M.ClientW, M.ClientH + FooterHeightPx), S);
     RenderCells(P, M, S);
+    { 逐格边框压在格线之上、文字之上 —— 它表达的是"分区",应当最显眼。 }
+    RenderCellBorders(P, M);
     if FGridLineStyle <> glsNone then
       RenderGridLines(P, M, S);
   finally
@@ -3901,6 +4125,116 @@ end;
 function TTyStringGrid.CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay;
 begin
   Result := CellDisplayFor(ACol, ARow);
+end;
+
+function TTyStringGrid.IsActiveCell(ACol, ARow: Integer): Boolean;
+begin
+  Result := (ACol = FCol) and (ARow = FRow);
+end;
+
+function TTyStringGrid.FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr;
+begin
+  Result := FAttrs.Find(CellKey(ACol, ARow));
+end;
+
+function TTyStringGrid.GetCellColor(ACol, ARow: Integer): TTyColor;
+var a: TTyGridCellAttr;
+begin
+  Result := TyColorNone;
+  a := FAttrs.Find(CellKey(ACol, ARow));
+  if (a <> nil) and a.HasBackground then Result := a.Background;
+end;
+
+procedure TTyStringGrid.SetCellColor(ACol, ARow: Integer; AValue: TTyColor);
+var
+  k: string;
+  a: TTyGridCellAttr;
+begin
+  k := CellKey(ACol, ARow);
+  if AValue = TyColorNone then
+  begin
+    a := FAttrs.Find(k);
+    if a = nil then Exit;
+    a.HasBackground := False;
+    FAttrs.DropIfDefault(k);
+  end
+  else
+  begin
+    a := FAttrs.Ensure(k);
+    if a = nil then Exit;
+    a.HasBackground := True;
+    a.Background := AValue;
+  end;
+  Invalidate;
+end;
+
+function TTyStringGrid.GetCellTextColor(ACol, ARow: Integer): TTyColor;
+var a: TTyGridCellAttr;
+begin
+  Result := TyColorNone;
+  a := FAttrs.Find(CellKey(ACol, ARow));
+  if (a <> nil) and a.HasTextColor then Result := a.TextColor;
+end;
+
+procedure TTyStringGrid.SetCellTextColor(ACol, ARow: Integer; AValue: TTyColor);
+var
+  k: string;
+  a: TTyGridCellAttr;
+begin
+  k := CellKey(ACol, ARow);
+  if AValue = TyColorNone then
+  begin
+    a := FAttrs.Find(k);
+    if a = nil then Exit;
+    a.HasTextColor := False;
+    FAttrs.DropIfDefault(k);
+  end
+  else
+  begin
+    a := FAttrs.Ensure(k);
+    if a = nil then Exit;
+    a.HasTextColor := True;
+    a.TextColor := AValue;
+  end;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.SetRowColor(ARow: Integer; AColor: TTyColor);
+var
+  j: Integer;
+begin
+  if (ARow < 0) or (ARow >= RowCount) then Exit;
+  for j := 0 to Header.Columns.Count - 1 do
+    CellColors[j, ARow] := AColor;
+end;
+
+function TTyStringGrid.GetCellReadOnly(ACol, ARow: Integer): Boolean;
+var a: TTyGridCellAttr;
+begin
+  Result := False;
+  a := FAttrs.Find(CellKey(ACol, ARow));
+  if a <> nil then Result := a.ReadOnly;
+end;
+
+procedure TTyStringGrid.SetCellReadOnly(ACol, ARow: Integer; AValue: Boolean);
+var
+  k: string;
+  a: TTyGridCellAttr;
+begin
+  k := CellKey(ACol, ARow);
+  if not AValue then
+  begin
+    a := FAttrs.Find(k);
+    if a = nil then Exit;
+    a.ReadOnly := False;
+    FAttrs.DropIfDefault(k);
+  end
+  else
+  begin
+    a := FAttrs.Ensure(k);
+    if a = nil then Exit;
+    a.ReadOnly := True;
+  end;
 end;
 
 function TTyStringGrid.CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay;
@@ -5867,6 +6201,9 @@ begin
 
     "有没有显式设过"用 UseEditorKind 记,不能光看"等于 gekText" ——
     那样分不清"没设"和"显式设成文本"。 }
+  { 逐格只读优先于一切 —— 它是最具体的那一层("这一格不能改")。 }
+  if GetCellReadOnly(ACol, ARow) then Exit(gekNone);
+
   Result := FDefaultEditorKind;
   c := GridColumn(ACol);
   if (c <> nil) then

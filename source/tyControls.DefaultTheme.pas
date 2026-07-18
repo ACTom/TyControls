@@ -533,6 +533,8 @@ begin
     'TyGridCell { background: none; color: var(--on-surface); padding: 0px 6px; }' + LineEnding +
     'TyGridCell:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyGridCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    '/* 焦点格(光标所在)。整行选中模式下,不区分就看不出光标在哪一格。 */' + LineEnding +
+    'TyGridActiveCell { background: var(--surface-active); color: var(--on-surface); }' + LineEnding +
     '/* 斑马纹。自己的 typeKey 而不是 TyGridCell:alternate:加伪类要动共享的状态枚举与' + LineEnding +
     '   CSS 解析器,会波及每一个控件;而网格的各部件本来就各有各的键。 */' + LineEnding +
     'TyGridCellAlt { background: var(--surface-alt); }' + LineEnding +

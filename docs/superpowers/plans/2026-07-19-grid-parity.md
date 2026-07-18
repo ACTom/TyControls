@@ -46,7 +46,7 @@
 | B10 | H16 多级/合并表头 | - [x] **完成** `2026-07-19` |
 | B11 | A7 + H17 多列排序 + H18 分组重做 | - [x] **完成** `2026-07-19` |
 | B12 | H19 数据层批量 + 剪贴板事件 | - [x] **完成** `2026-07-19` |
-| B13 | MEDIUM 第一组(M1-M9) | - [ ] |
+| B13 | MEDIUM 第一组(M1-M9) | - [x] **完成** `2026-07-19` |
 | B14 | MEDIUM 第二组(M10-M19) | - [ ] |
 | B15 | MEDIUM 第三组(M20-M24)+ 文档/示例/i18n 收尾 | - [ ] |
 
@@ -412,7 +412,18 @@ TextRect,都是 BGRA 重活),而样式解析根本不是瓶颈。加了**跨帧�
 按对差结果的依赖顺序推进,每批 8-10 项,批内同样遵守收工条件。
 明细见附录;每完成一项在附录里勾选。
 
-- [ ] B13(M1-M9)
+- [x] **B13(M1-M9)完成** `2026-07-19`
+  - M1 逐格边框(四支笔)`OnGetCellBorder`;没人接钩子时整个遍历都省掉
+  - M2 焦点格外观 `TyGridActiveCell` token —— 整行选中模式下终于看得出光标在哪一格
+  - M3 逐格**持久**外观 `CellColors` / `CellTextColors` / `SetRowColor`(落在 B3 建的属性存储里)
+  - M4 表头自绘钩子 `OnGetHeaderStyle`
+  - M5 表头图标 —— **已在 B1-3 完成**
+  - M6 列拖动重排事件 `OnColumnMove`(MoveRow/SwapRows 已在 B12 完成)
+  - M7 智能粘贴 —— **已在 B12 完成**
+  - M8 行高/列宽上下限;钳制放在**存储入口**,拖拽/AutoFitRow/直接赋值走同一道关
+  - M9 `OnColumnSizing` / `OnEndColumnSize` / `OnRowSizing` / `OnEndRowSize`
+  - M16 逐格 `CellReadOnly`(顺手做了,它与 M3 共用同一个属性条目)
+  - 四处变异各自杀掉对应测试
 - [ ] B14(M10-M19)
 - [ ] B15(M20-M24)+ 收尾:
   - [ ] `docs/controls/grid.md` 全量更新

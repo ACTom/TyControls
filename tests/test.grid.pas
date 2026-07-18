@@ -154,10 +154,15 @@ type
     procedure TestSmartPasteGrowsInsteadOfDroppingRows;
     procedure TestPasteCellHooksCanRewriteAndSkip;
     procedure TestBatchRowOpsAndMoveSwap;
+    procedure TestPersistentCellColorsAndRowColor;
+    procedure TestPerCellReadOnlyBlocksEditing;
+    procedure TestRowHeightLimitsClampAtTheStore;
+    procedure TestColumnSizeEventsFireOnDragAndRelease;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
     FProbeLink: TTyGridEditLink;
+    FSizingCalls, FEndSizeCalls, FLastEndSize: Integer;
     FClickCol, FClickRow: Integer;
     FRightCol, FRightRow: Integer;
     FBtnCol, FBtnRow: Integer;
@@ -170,6 +175,9 @@ type
     procedure HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
     procedure HookSelectionChanged(Sender: TObject);
+    procedure HookColumnSizing(Sender: TObject; AIndex: Integer;
+      var ANewSize: Integer; var AAllow: Boolean);
+    procedure HookEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
     procedure HookUpperCasePaste(Sender: TObject; ACol, ARow: Integer;
       var ANewText: string; var AAllow: Boolean);
     procedure HookCreateEditLink(Sender: TObject; ACol, ARow: Integer;
@@ -922,6 +930,7 @@ type
     procedure DragFromTo(X1, Y1, X2, Y2: Integer);
     procedure DoubleClickAt(X, Y: Integer);
     function  ColWidth(ACol: Integer): Integer;
+    function  ScaleFrom(ALogical: Integer): Integer;
     { 完整一次点击(按下 + 松开)。注意 ClickAt **只发 MouseDown** ——
       按钮单元格按设计是松开才算触发(按下后拖走应当作废),所以要用这个。 }
     procedure FullClickAt(X, Y: Integer);
@@ -941,6 +950,11 @@ procedure TStrGridAccess.FullClickAt(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);
   MouseUp(mbLeft, [], X, Y);
+end;
+
+function TStrGridAccess.ScaleFrom(ALogical: Integer): Integer;
+begin
+  Result := ScaleI(ALogical);
 end;
 
 function TStrGridAccess.ColWidth(ACol: Integer): Integer;
@@ -4261,6 +4275,156 @@ begin
   AssertEquals('原来第 1 行前移', 'B', G.Cells[0, 0]);
   AssertEquals('原来第 2 行前移', 'C', G.Cells[0, 1]);
   AssertEquals('第 3 行没动', 'D', G.Cells[0, 3]);
+end;
+
+procedure TTyStringGridTest.HookColumnSizing(Sender: TObject; AIndex: Integer;
+  var ANewSize: Integer; var AAllow: Boolean);
+begin
+  Inc(FSizingCalls);
+end;
+
+procedure TTyStringGridTest.HookEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
+begin
+  Inc(FEndSizeCalls);
+  FLastEndSize := ANewSize;
+end;
+
+{ 逐格**持久**底色:与钩子的区别是它落盘 —— 用户手工涂黄的格,存下来还得是黄的。 }
+procedure TTyStringGridTest.TestPersistentCellColorsAndRowColor;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+
+  function RedInCell(ACol, ARow: Integer): Integer;
+  var Re: TBGRABitmap; r: TRect; x, y: Integer; px: TBGRAPixel;
+  begin
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    r := G.CellRect(ACol, ARow);
+    Result := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          if (x < 0) or (y < 0) or (x >= 400) or (y >= 300) then Continue;
+          px := Re.GetPixel(x, y);
+          if (px.red > 180) and (px.green < 100) and (px.blue < 100) then Inc(Result);
+        end;
+    finally
+      Re.Free;
+    end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.RowCount := 5;
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    AssertEquals('一开始没有底色', 0, RedInCell(1, 2));
+
+    G.CellColors[1, 2] := TyRGB(255, 0, 0);
+    AssertTrue('设过的格画出了底色', RedInCell(1, 2) > 50);
+    AssertEquals('旁边的格不受影响', 0, RedInCell(0, 2));
+    AssertEquals('读回来是设进去的值', TyRGB(255, 0, 0), G.CellColors[1, 2]);
+
+    { 整行底色。 }
+    G.SetRowColor(3, TyRGB(255, 0, 0));
+    AssertTrue('整行第 0 列有底色', RedInCell(0, 3) > 50);
+    AssertTrue('整行第 3 列有底色', RedInCell(3, 3) > 50);
+
+    { 清除。 }
+    G.CellColors[1, 2] := 0;
+    AssertEquals('清掉之后没有底色', 0, RedInCell(1, 2));
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 逐格只读:比"整列只读"更细 —— "已审核的这几行不可改"不该逼宿主自己维护集合。 }
+procedure TTyStringGridTest.TestPerCellReadOnlyBlocksEditing;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+
+  AssertTrue('默认可编辑', G.BeginEdit(1, 1));
+  G.EndEdit(False);
+
+  G.CellReadOnly[1, 1] := True;
+  AssertTrue('设了逐格只读之后进不了编辑', not G.BeginEdit(1, 1));
+  AssertTrue('同列的别的行不受影响', G.BeginEdit(1, 2));
+  G.EndEdit(False);
+
+  G.CellReadOnly[1, 1] := False;
+  AssertTrue('取消后又能编辑了', G.BeginEdit(1, 1));
+  G.EndEdit(False);
+end;
+
+{ 行高上下限是自动行高的护栏 —— 一条超长文本能把行撑到几千像素。
+  钳制放在**存储入口**,所以拖拽、AutoFitRow、直接赋值走的都是同一道关。 }
+procedure TTyStringGridTest.TestRowHeightLimitsClampAtTheStore;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.MinRowHeight := 15;
+  G.MaxRowHeight := 40;
+
+  G.RowHeights[0] := 5;
+  AssertEquals('低于下限被抬到下限', 15, G.RowHeightOf(0));
+
+  G.RowHeights[1] := 500;
+  AssertEquals('高于上限被压到上限', 40, G.RowHeightOf(1));
+
+  G.RowHeights[2] := 30;
+  AssertEquals('区间内原样保留', 30, G.RowHeightOf(2));
+
+  { AutoFitRow 也得受管 —— 它是最容易撑爆行高的那条路径。 }
+  G.WordWrap := True;
+  G.Cells[0, 3] := StringOfChar('x', 400);
+  G.AutoFitRow(3);
+  AssertTrue(Format('自动行高也受上限约束(实际 %d)', [G.RowHeightOf(3)]),
+    G.RowHeightOf(3) <= 40);
+end;
+
+{ 列宽事件:拖动过程中 Sizing,松手才 EndSize(宿主拿它保存偏好)。 }
+procedure TTyStringGridTest.TestColumnSizeEventsFireOnDragAndRelease;
+var
+  G: TStrGridAccess;
+  x: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.Header.Height := 22;
+  G.RowCount := 3;
+  FSizingCalls := 0;
+  FEndSizeCalls := 0;
+  G.OnColumnSizing := @HookColumnSizing;
+  G.OnEndColumnSize := @HookEndColumnSize;
+
+  x := G.ColLeft(0) + G.ColWidth(0) - 1;
+  G.PressMouseWithoutRelease(x, 8);
+  G.MoveMouseTo(x + 30, 8);
+  AssertTrue('拖动过程中发 Sizing', FSizingCalls > 0);
+  AssertEquals('还没松手不该发 EndSize', 0, FEndSizeCalls);
+
+  G.ReleaseMouse(x + 30, 8);
+  AssertEquals('松手发一次 EndSize', 1, FEndSizeCalls);
+  AssertEquals('EndSize 带上最终宽度', G.ColWidth(0), G.ScaleFrom(FLastEndSize));
 end;
 
 initialization
