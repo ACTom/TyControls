@@ -271,3 +271,89 @@ TyProgressFill {
   background: linear-gradient(90deg, lighten(var(--accent), 15%), var(--accent));
   border-radius: 3px;
 }
+
+/* ---- Card + Tag (Ant Design-gap batch 1) ---- */
+
+/* Card: an Aero content pane — a white glass sheet lifted off the steel window wash, thin cool
+   blue border, the same 3px corners as every other frame here, soft neutral shadow. Hovering
+   lifts it the way a glass button lifts: focus-blue rim and a little more shadow. */
+TyCard {
+  background: linear-gradient(90deg, var(--glass), var(--form-1));
+  color: var(--ink);
+  border-color: var(--field-border);
+  border-width: 1px;
+  border-radius: 3px;
+  padding: 12px;
+  shadow: 0 1 3 var(--btn-shadow);
+}
+TyCard:hover    { border-color: var(--field-focus); shadow: 0 2 5 var(--btn-shadow); }
+TyCard:disabled { opacity: 0.5; }
+
+/* Header band: the card gets its own little Aero caption — the window title bar's glass sheen, so
+   the band reads as chrome on the white sheet (the form wash would sink into the card's own
+   gradient and vanish). Title ink is a darkened accent: Win7 headings are blue, not black, and
+   darkening keeps them legible on the pale glass while still following the accent picker. Weight
+   stays normal — nothing in Aero shouts. The separator is the field blue faded right down: a
+   hairline, not a second frame inside the card. */
+TyCardHeader {
+  background: linear-gradient(90deg, var(--titlebar-1), var(--titlebar-2));
+  color: darken(var(--accent), 15%);
+  border-color: alpha(var(--field-border), 0.55);
+  border-width: 1px;
+  font-weight: normal;
+}
+
+/* Actions band: the window's own steel wash rather than the caption glass — the footer is a
+   command strip, not a second title; the same faded hairline sits above it. */
+TyCardActions {
+  background: linear-gradient(90deg, var(--form-1), var(--form-2));
+  border-color: alpha(var(--field-border), 0.55);
+  border-width: 1px;
+}
+
+/* Tag: a mini glass chiclet — the button's 3-stop wet gloss and cool steel border at the skin's
+   3px corners. Round-ended pills belong to a flatter era; Aero's shape language is the chiclet. */
+TyTag {
+  background: linear-gradient(90deg, var(--btn-1), var(--btn-2), var(--btn-3));
+  color: var(--ink);
+  border-color: var(--btn-border);
+  border-width: 1px;
+  border-radius: 3px;
+  padding: 0px 8px;
+}
+/* Variants: the glossy accent / red glass of the primary and danger buttons, shrunk to tag size. */
+TyTag.accent {
+  background: linear-gradient(90deg, lighten(var(--accent), 18%), var(--accent));
+  color: on(var(--accent));
+  border-color: darken(var(--accent), 10%);
+}
+TyTag.danger {
+  background: linear-gradient(90deg, lighten(var(--danger), 18%), var(--danger));
+  color: on(var(--danger));
+  border-color: darken(var(--danger), 10%);
+}
+TyTag:disabled { opacity: 0.5; }
+
+/* The x: faded slate ink on the glass chiclet, the pill's own on-colour on a coloured one (dark
+   slate on accent glass would be unreadable). Hover sinks a thin slate wash under the glyph —
+   the skin's own "pressed = darker" gesture, shrunk to chip size. The caption button's white
+   glass lift can't come along: it needs the steel titlebar under it, and the tag's own gloss is
+   already white at the top, which swallows it. A wash that only DARKENS is the one chip that
+   reads on all three bodies, and it leaves each variant's ink above it intact — so the x is
+   never restyled per-variant under hover. No red glow here: that belongs to the window's close
+   button, not to a tag. */
+TyTagClose        { color: alpha(var(--ink), 0.7); }
+TyTagClose.accent { color: on(var(--accent)); }
+TyTagClose.danger { color: on(var(--danger)); }
+TyTagClose:hover  { background: alpha(var(--ink), 0.15); border-radius: 2px; }
+
+/* Badge: the one genuinely round thing in the skin — Aero's glossy orb, accent glass with a bright
+   top sheen (an oversized radius clamps to half-height). Bold is the exception the skin allows
+   itself: the count is tiny and sits on saturated glass. */
+TyBadge {
+  background: linear-gradient(90deg, lighten(var(--accent), 18%), var(--accent));
+  color: on(var(--accent));
+  border-radius: 999px;
+  font-weight: bold;
+  padding: 0px 4px;
+}

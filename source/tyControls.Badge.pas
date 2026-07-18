@@ -19,7 +19,7 @@ unit tyControls.Badge;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.StrConsts,
   tyControls.Button;   // TTyBadgePosition — the SAME corner enum the built-in badge uses
 
 type
@@ -30,18 +30,17 @@ type
     tyControls.Button — a unit naming bpTopRight in code also uses that unit. }
   TTyBadgePosition = tyControls.Button.TTyBadgePosition;
 
+{ The badge metrics (TyBadgeInset / TyBadgeMinSize / TyBadgeDotSize) and their metric
+  tokens live in tyControls.Types, which both badges can see — this unit uses
+  tyControls.Button, so it could not lend IT a constant back. They are re-exported here
+  so `uses tyControls.Badge` still reaches them.
+  All three are theme-tunable (--badge-inset / --badge-min-size / --badge-dot-size) and
+  BOTH badges resolve them the same way, so a skin retunes the pair together and they
+  cannot drift apart — the very risk that kept the first two hard-coded. }
 const
-  { Logical-px (96-PPI baseline) badge metrics; every call site scales them by PPI.
-    TyBadgeInset and TyBadgeMinSize are NOT theme tokens ON PURPOSE: they are the
-    literals TTyButton.DrawBadge uses, and the two badges must stay pixel-identical —
-    tokenising them HERE alone would let an attached TTyBadge drift away from a
-    button's built-in one (the button would not read the token). If they are ever
-    tokenised, both call sites must move together.
-    The dot has no counterpart in TTyButton, so its diameter IS theme-tunable, via the
-    --badge-dot-size metric token (this constant is only its fallback). }
-  TyBadgeInset   = 2;   // inset from the host rect's corner (mirrors DrawBadge)
-  TyBadgeMinSize = 8;   // degenerate-measure floor: stay visible (mirrors DrawBadge)
-  TyBadgeDotSize = 8;   // Dot diameter fallback when --badge-dot-size is unset
+  TyBadgeInset   = tyControls.Types.TyBadgeInset;
+  TyBadgeMinSize = tyControls.Types.TyBadgeMinSize;
+  TyBadgeDotSize = tyControls.Types.TyBadgeDotSize;
 
 { --- Pure rules / geometry (headless-testable; no control, no handle) ---------- }
 
@@ -97,6 +96,10 @@ type
     { Dot diameter in LOGICAL px: the --badge-dot-size theme metric, TyBadgeDotSize
       when the theme leaves it unset. }
     function DotSizeLogical: Integer;
+    { Corner inset / degenerate-measure floor in LOGICAL px, from --badge-inset and
+      --badge-min-size (TyBadgeInset / TyBadgeMinSize when the theme leaves them unset). }
+    function InsetLogical: Integer;
+    function MinSizeLogical: Integer;
     procedure HookTarget;
     procedure UnhookTarget;
     procedure TargetBoundsChanged(Sender: TObject);
@@ -168,7 +171,7 @@ implementation
 function TyBadgeText(AValue: Integer; ADot: Boolean): string;
 begin
   if ADot then Exit('');                    // a dot carries no number
-  if AValue > 99 then Result := '99+' else Result := IntToStr(AValue);
+  if AValue > 99 then Result := rsBadgeOverflow else Result := IntToStr(AValue);
 end;
 
 function TyBadgeVisible(AValue: Integer; AShowZero: Boolean): Boolean;
@@ -246,7 +249,21 @@ end;
 function TTyBadge.DotSizeLogical: Integer;
 begin
   // v3/C metric token: a skin can retune the dot without a width/height vocabulary.
-  Result := ActiveController.Metric('--badge-dot-size', TyBadgeDotSize);
+  Result := ActiveController.Metric(TyBadgeDotSizeVar, TyBadgeDotSize);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyBadge.InsetLogical: Integer;
+begin
+  // Resolved exactly as TTyButton.DrawBadge resolves it, so an attached badge keeps
+  // landing on the pixels the button's built-in badge would have used.
+  Result := ActiveController.Metric(TyBadgeInsetVar, TyBadgeInset);
+  if Result < 0 then Result := 0;
+end;
+
+function TTyBadge.MinSizeLogical: Integer;
+begin
+  Result := ActiveController.Metric(TyBadgeMinSizeVar, TyBadgeMinSize);
   if Result < 1 then Result := 1;
 end;
 
@@ -391,7 +408,7 @@ begin
     if ppi <= 0 then ppi := 96;
     sz := MeasureBadge(ppi);
     if AnchorHost(host) then
-      pt := TyBadgeCornerPos(host, sz.cx, sz.cy, MulDiv(TyBadgeInset, ppi, 96), FPosition)
+      pt := TyBadgeCornerPos(host, sz.cx, sz.cy, MulDiv(InsetLogical, ppi, 96), FPosition)
     else
       pt := Point(Left, Top);   // standalone: the user owns the position
     if (pt.X <> Left) or (pt.Y <> Top) or (sz.cx <> Width) or (sz.cy <> Height) then
@@ -455,7 +472,7 @@ begin
     szH := P.MeasureText('0', S.FontName, fs, S.FontWeight);
     szW := P.MeasureText(DisplayText, S.FontName, fs, S.FontWeight);
     Result := TyBadgeSize(szW.cx, szH.cy, P.Scale(S.Padding.Left), P.Scale(S.Padding.Top),
-      P.Scale(TyBadgeMinSize), FDot, P.Scale(DotSizeLogical));
+      P.Scale(MinSizeLogical), FDot, P.Scale(DotSizeLogical));
     P.EndPaint;   // nil canvas -> no blit, just frees the measure bitmap
   finally
     P.Free;

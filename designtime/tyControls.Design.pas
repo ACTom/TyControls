@@ -48,6 +48,9 @@ uses
   tyControls.HeaderControl, tyControls.ListGroupPanel,
   tyControls.Shape, tyControls.StarShape, tyControls.Arrow,
   tyControls.Card, tyControls.Tag, tyControls.Badge,
+  tyControls.Alert, tyControls.Notification, tyControls.Empty, tyControls.Segmented,
+  tyControls.Pagination, tyControls.Steps, tyControls.Breadcrumb,
+  tyControls.Transfer, tyControls.TreeSelect, tyControls.Cascader, tyControls.Popover,
   tyControls.ListView, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.ShellComboBox;
 type
@@ -671,12 +674,13 @@ begin
      TTyMemo, TTySpinEdit, TTyUpDown]);
   // Checks / radios / switches + their groups.
   RegisterComponents('TyControls Choices',
-    [TTyCheckBox, TTyRadioButton, TTyToggleSwitch, TTyRadioGroup, TTyCheckGroup]);
+    [TTyCheckBox, TTyRadioButton, TTyToggleSwitch, TTyRadioGroup, TTyCheckGroup, TTySegmented]);
   // Combo boxes & list boxes.
   RegisterComponents('TyControls Lists',
     [TTyComboBox, TTyMRUComboBox, TTyComboBoxEx, TTyOfficeComboBox, TTyAdvancedComboBox,
      TTyCheckComboBox,
-     TTyListBox, TTyCheckListBox, TTyOfficeListBox, TTyAdvancedListBox, TTyValueListEditor]);
+     TTyListBox, TTyCheckListBox, TTyOfficeListBox, TTyAdvancedListBox, TTyValueListEditor,
+     TTyTransfer, TTyTreeSelect, TTyCascader]);
   // Rich pickers: colour / font / filter / shell selectors.
   RegisterComponents('TyControls Pickers',
     [TTyColorBox, TTyColorComboBox, TTyColorListBox, TTyColorGrid, TTyLColorPicker,
@@ -690,14 +694,15 @@ begin
   // Bars: sliders / progress / scroll / status / tool bars + header.
   RegisterComponents('TyControls Bars',
     [TTyTrackBar, TTyProgressBar, TTyScrollBar, TTyStatusBar,
-     TTyToolBar, TTyToolSeparator, TTyToolBarEx, TTyControlBar, TTyCoolBar, TTyHeaderControl]);
+     TTyToolBar, TTyToolSeparator, TTyToolBarEx, TTyControlBar, TTyCoolBar,
+     TTyAlert, TTyPagination, TTySteps, TTyBreadcrumb, TTyHeaderControl]);
   // Containers & layout.
   RegisterComponents('TyControls Containers',
     [TTyPanel, TTyGroupBox, TTyBevel, TTyDivider, TTySplitter, TTyPaintPanel, TTySizeBox,
      TTyScrollBox, TTyScrollPanel, TTyExPanel, TTyGridPanel, TTyRelativePanel,
      TTyToolGroupPanel, TTyListGroupPanel,
      TTyPageControl, TTyTabSheet, TTyTabSet, TTyTitleBar,
-     TTyCard]);
+     TTyCard, TTyEmpty]);
   // Data views + shell/file views + date/time.
   RegisterComponents('TyControls Data Views',
     [TTyTreeView, TTyListView, TTyShellListView, TTyShellTreeView, TTyPreviewBox, TTyImageView,
@@ -712,7 +717,7 @@ begin
   // Icon-font, images, hints.
   RegisterComponents('TyControls Images',
     [TTyIconFont, TTyCharImage, TTyGlyphImageList, TTyImage,
-     TTyImageCollection, TTyVirtualImageList, TTyHint, TTyBalloonHint]);
+     TTyImageCollection, TTyVirtualImageList, TTyHint, TTyBalloonHint, TTyPopover]);
   // Decorative vector shapes + charts.
   RegisterComponents('TyControls Shapes & Charts',
     [TTyShape, TTyStarShape, TTyArrow, TTyChart]);
@@ -723,7 +728,7 @@ begin
      TTyColorDialog, TTyFontDialog,
      TTyFindDialog, TTyReplaceDialog, TTyProgressDialog, TTyAboutDialog,
      TTyOpenDialog, TTySaveDialog, TTyOpenPictureDialog, TTySavePictureDialog,
-     TTyOpenPreviewDialog, TTySavePreviewDialog]);
+     TTyOpenPreviewDialog, TTySavePreviewDialog, TTyNotification]);
   { The content host MUST be a registered component class, or deleting it is unrecoverable. The
     designer records a delete by SERIALIZING the component to LFM text (TDesigner.AddUndoAction ->
     CopySelectionToStream) and undoes it by PASTING that text back — so undo runs through the same

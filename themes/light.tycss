@@ -1,8 +1,13 @@
 /* TyControls — Light theme */
 :root {
-  /* ── SEED ── 5 colors + 1 metric */
+  /* ── SEED ── 7 colors + 1 metric */
   --accent: #3B82F6; --surface: #FFFFFF; --on-surface: #1F2937;
   --border: #D1D5DB; --danger: #EF4444; --radius: 6px;
+  /* The two STATUS seeds (added for TTyAlert/TTyNotification, 2026-07-17). They are seeds, not
+     derivations: no hue-shift of --accent or --danger produces a credible green/amber, and a
+     control must never invent a colour. There is deliberately no --info seed — in this vocabulary
+     (as in Ant's) "info" IS the brand colour, so --info aliases --accent below. */
+  --success: #22C55E; --warning: #F59E0B;
 
   /* ── MAP: directional darken/lighten the body inlines ── */
   --surface-hover:            darken(--surface, 4%);
@@ -37,6 +42,10 @@
   /* on-* declared here but WIRED only in the §3 bug-fix commit */
   --on-accent:        on(var(--accent));      /* light -> #FFFFFF (== current literal) */
   --on-danger:        on(var(--danger));      /* light -> #FFFFFF */
+  --on-success:       on(var(--success));     /* the status seeds get the same on() pairing */
+  --on-warning:       on(var(--warning));     /* amber is light -> on() picks a DARK ink here */
+  --info:             var(--accent);          /* "info" is the brand colour, not a seed of its own */
+  --on-info:          var(--on-accent);
 
   /* ── COMPONENT: scalars ── */
   --input-border-width: 1px;
@@ -484,3 +493,252 @@ TyTreeCheckBox { background: var(--input-bg); color: var(--on-surface); border-c
 TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyTreeCheckBox:disabled { color: var(--muted); }
+
+/* ── Card + Tag (Ant Design-gap batch 1) ───────────────────────────────── */
+
+/* One themed surface for the whole card; the header/actions strips are bands drawn
+   on it, so they carry only their separator (border-*) and the title's ink. A flat,
+   modern card: hairline border, no header band — the separator alone splits it. */
+TyCard {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+TyCard:hover { border-color: var(--border-hover); }
+TyCard:disabled { opacity: var(--disabled-opacity); }
+/* No background => a transparent title band over the card's own surface. */
+TyCardHeader {
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+TyCardActions { border-color: var(--border); border-width: var(--input-border-width); }
+
+/* Neutral tag = a faint on-surface wash; the variants are StyleClasses, and these two
+   land on seeds the palette already has (a 'success'/'warning' tag would need a new
+   seed colour + its on() pairing first). */
+TyTag {
+  background: var(--overlay-hover);
+  color: var(--on-surface);
+  border-radius: var(--radius-round);
+  font-size: var(--font-size-base);
+  padding: 0px 8px;
+}
+TyTag.accent { background: var(--accent); color: var(--on-accent); }
+TyTag.danger { background: var(--danger); color: var(--on-danger); }
+TyTag:disabled { opacity: var(--disabled-opacity); }
+
+TyTagClose       { color: var(--muted); }
+TyTagClose:hover { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius-sm); }
+
+/* ── Alert + Notification + Empty + Segmented (Ant Design-gap batch 1) ──── */
+
+/* The inline alert bar. The four variant names are a HARD contract: TTyAlert.AlertType maps
+   onto them and draws their icons. A Bootstrap-style tinted banner (pale wash, mid-tint border,
+   deep semantic ink) rather than AntD's coloured-icon/neutral-text look — the icon shares the
+   bar's `color`, so one ink has to serve both. error rides the EXISTING --danger seed; info is
+   --accent (info IS the brand colour here); only success/warning needed new seeds. */
+TyAlert {
+  background: var(--surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  color: var(--on-surface);
+  font-size: var(--font-size-base);
+  padding: 8px 12px;
+}
+TyAlert.info    { background: alpha(var(--accent), 0.10);  border-color: alpha(var(--accent), 0.35);  color: var(--accent); }
+TyAlert.success { background: alpha(var(--success), 0.10); border-color: alpha(var(--success), 0.35); color: var(--success); }
+TyAlert.warning { background: alpha(var(--warning), 0.10); border-color: alpha(var(--warning), 0.35); color: var(--warning); }
+TyAlert.error   { background: alpha(var(--danger), 0.10);  border-color: alpha(var(--danger), 0.35);  color: var(--danger); }
+TyAlert:disabled { opacity: var(--disabled-opacity); }
+
+TyAlertClose       { color: var(--muted); }
+TyAlertClose:hover { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius-sm); }
+
+/* The corner toast. Shaped like TyCard (its nearest kin: a titled surface) so the two agree.
+   The variant's `color` is the MARK's ink; the card's own `color` inks title + message. */
+TyNotification {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: var(--font-size-base);
+}
+TyNotification:hover   { border-color: var(--border-hover); }
+TyNotification.info    { color: var(--accent); }
+TyNotification.success { color: var(--success); }
+TyNotification.warning { color: var(--warning); }
+TyNotification.error   { color: var(--danger); }
+
+TyNotificationClose       { color: var(--muted); }
+TyNotificationClose:hover { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius-sm); }
+
+/* The empty-state placeholder: transparent, because it lies ON the empty list's own surface. */
+TyEmpty {
+  background: alpha(#FFFFFF, 0);
+  color: var(--muted);
+  font-size: var(--font-size-base);
+  padding: 16px;
+}
+TyEmpty:disabled { opacity: var(--disabled-opacity); }
+/* The picture gets its own ink: it must sit far lighter than the message, and one rule
+   cannot carry two inks. */
+TyEmptyImage { color: var(--border); }
+
+/* The segmented control: a groove holding a lifted thumb. The item radius is deliberately
+   SMALLER than the track's, which is what reads as "chip sitting in a slot". */
+TySegmented {
+  background: var(--overlay-hover);
+  color: var(--on-surface);
+  border-radius: var(--radius);
+  font-size: var(--font-size-base);
+}
+TySegmented:focus    { outline: 2px var(--focus-ring); }
+TySegmented:disabled { opacity: var(--disabled-opacity); }
+
+TySegmentedItem          { color: var(--muted); border-radius: var(--radius-sm);
+                           padding: 4px 10px; font-size: var(--font-size-base); }
+TySegmentedItem:hover    { background: var(--overlay-hover); color: var(--on-surface); }
+TySegmentedItem:selected { background: var(--surface); color: var(--on-surface); }
+TySegmentedItem:disabled { color: var(--muted); }
+
+/* ── Pagination + Steps + Breadcrumb + Transfer + TreeSelect + Cascader + Popover ─────── */
+/* (Ant Design-gap batches 2 & 3. Each control paints NOTHING without its surface key, so
+   these live here in the base: every theme inherits them and can then restyle any of them.) */
+
+/* Pagination: a transparent strip of cells — the page numbers are the chrome, not a bar. */
+TyPagination         { background: alpha(#FFFFFF, 0); color: var(--on-surface); font-size: var(--font-size-base); }
+TyPagination:disabled { opacity: var(--disabled-opacity); }
+TyPaginationItem          { background: alpha(#FFFFFF, 0); color: var(--on-surface);
+                            border-color: var(--border); border-width: var(--input-border-width);
+                            border-radius: var(--radius-sm); font-size: var(--font-size-base); padding: 0px 6px; }
+TyPaginationItem:hover    { border-color: var(--accent); color: var(--accent); }
+TyPaginationItem:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+TyPaginationItem:disabled { color: var(--muted); border-color: var(--border); }
+
+/* Steps: markers on a rail. The done/current/waiting reading is carried by the item states. */
+TySteps         { background: alpha(#FFFFFF, 0); color: var(--on-surface); font-size: var(--font-size-base); }
+TySteps:disabled { opacity: var(--disabled-opacity); }
+/* The step's status IS its state (TyStepStates): done => :normal, current => :selected,
+   waiting => :disabled. So the RESTING rule is the DONE look — an accent ring with an accent
+   check — not a neutral one. Getting that backwards (a muted resting rule) makes done and
+   waiting identical but for the glyph, which is the whole information the rail exists to carry. */
+TyStepsItem          { background: var(--surface); color: var(--accent);
+                       border-color: var(--accent); border-width: var(--input-border-width);
+                       border-radius: var(--radius-round); font-size: var(--font-size-base); }
+TyStepsItem:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+TyStepsItem:hover    { border-color: var(--accent-hover); }
+TyStepsItem:disabled { background: var(--surface-track); color: var(--muted); border-color: var(--border); }
+/* The connector is a plain filled line: it reads ONLY `background` and draws no text, so it
+   deliberately declares no `color` — a colour here would be dead, and (since it would have to
+   match the fill to be right) the lint would flag the pair as low-contrast text.
+   It takes the states of the step it LEADS TO, so these three rules are what make the trail
+   light up exactly as far as you have walked. */
+TyStepsConnector          { background: var(--accent); }   /* into a done step: already walked */
+TyStepsConnector:selected { background: var(--accent); }   /* into the current step */
+TyStepsConnector:disabled { background: var(--border); }   /* not walked yet */
+
+/* Breadcrumb: a transparent trail; the mark takes the BAR's ink (it has no key of its own). */
+TyBreadcrumb         { background: alpha(#FFFFFF, 0); color: var(--muted); font-size: var(--font-size-base); padding: 2px 4px; }
+TyBreadcrumb:disabled { opacity: var(--disabled-opacity); }
+TyBreadcrumbItem          { color: var(--accent); font-size: var(--font-size-base); padding: 0px 4px; }
+TyBreadcrumbItem:hover    { color: var(--accent-hover); }
+/* The last crumb IS the current location: not a link, so it reads as plain ink. */
+TyBreadcrumbItem:selected { color: var(--on-surface); }
+TyBreadcrumbItem:disabled { color: var(--muted); }
+
+/* Transfer: a frame around two list panes and the move rail. The panes/arrows reuse
+   TyListBox / TyButton, which every theme already dresses. */
+TyTransfer {
+  background: alpha(#FFFFFF, 0);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  font-size: var(--font-size-base);
+  padding: 0px;
+}
+TyTransfer:disabled { opacity: var(--disabled-opacity); }
+TyTransferTitle { background: var(--surface-chrome); color: var(--on-surface);
+                  border-color: var(--border); border-width: var(--input-border-width);
+                  font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: 0px 8px; }
+
+/* TTyTreeSelect deliberately has NO key of its own: GetStyleTypeKey returns 'TyComboBox',
+   because it IS a combo field — one every theme already dresses, with no key a skin could
+   forget. Its popup is a real TyTreeView and is themed by that key. So there is nothing to
+   declare here; a `TyTreeSelect { … }` rule would be dead CSS that never resolves. Same
+   reasoning as TTyTransfer's move arrows keeping TTyButton's key. */
+
+/* Cascader: the field + its multi-column panel. */
+TyCascader {
+  background: var(--input-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 4px;
+  font-size: var(--font-size-base);
+}
+TyCascader:hover    { border-color: var(--input-border-hover); }
+TyCascader:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyCascader:disabled { opacity: var(--disabled-opacity); }
+TyCascaderPanel { background: var(--surface); color: var(--on-surface);
+                  border-color: var(--border); border-width: var(--input-border-width);
+                  border-radius: var(--radius); }
+TyCascaderItem          { background: alpha(#FFFFFF, 0); color: var(--on-surface);
+                          font-size: var(--font-size-base); padding: 0px 8px; }
+TyCascaderItem:hover    { background: var(--surface-listitem-hover); }
+TyCascaderItem:selected { background: var(--accent); color: var(--on-accent); }
+TyCascaderItem:disabled { color: var(--muted); }
+
+/* Popover: a floating surface that HOSTS controls (that is the gap it fills — Hint/BalloonHint
+   can only carry text). The arrow is cut from this same surface, so it needs no key. */
+TyPopover {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 8px;
+  font-size: var(--font-size-base);
+}
+TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-base);
+                 font-weight: var(--font-weight-bold); }
+
+/* Chart: the chart's own chrome resolves TyPanel and its series ride a fixed code palette,
+   so the hover tooltip is the ONE key it owns. It reads exactly like TyHint because that is
+   what it is — a hint — only painted inside the chart instead of in an OS window. The chart
+   paints NO box without this key (no background = nothing to draw on), so it lives here in
+   the base for every theme to inherit and then restyle. A skin wanting the box to float can
+   add `shadow:` — the control honours it; the base layer stays flat like the rest of light. */
+TyChartTooltip {
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+  font-size: var(--font-size-base);
+}
+
+/* ── ListGroupPanel (navigation accordion; own keys, not the tree column header's) ────── */
+/* A modern sider: group rows carry NO fill (just muted ink + a right chevron; the OPEN group
+   turns accent), and a selected item is a SOFT, INSET, ROUNDED pill — never the old full-bleed
+   saturated bar. TTyListGroupPanel insets and rounds the pill in code; the colour/radius here.
+   These are their OWN keys so a theme can restyle the sider without touching TreeView/ListView
+   column headers, which is what TyTreeHeaderSection (the borrowed key) would have wrecked. */
+TyListGroupHeader          { color: var(--muted); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: 0px 14px; }
+TyListGroupHeader:hover    { color: var(--on-surface); }
+TyListGroupHeader:selected { color: var(--accent); }   /* the group is OPEN */
+TyListGroupItem          { color: var(--on-surface); border-radius: var(--radius); font-size: var(--font-size-base); padding: 0px 14px; }
+TyListGroupItem:hover    { background: var(--surface-hover); }
+TyListGroupItem:active   { background: var(--selection); color: var(--accent); }   /* selected: soft accent pill */
+TyListGroupItem:disabled { color: var(--muted); }

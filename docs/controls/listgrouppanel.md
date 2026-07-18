@@ -18,26 +18,41 @@
 | 项目 | 值 |
 |------|-----|
 | 单元 | `tyControls.ListGroupPanel` |
-| typeKey | `TyPanel`（**复用**，用于控件外框：背景+边框+圆角） |
+| 外框 typeKey | `TyPanel`（**复用**：背景+边框+圆角，同 `TTyExPanel`） |
+| 分组标题 typeKey | `TyListGroupHeader`（自己的键） |
+| 条目行 typeKey | `TyListGroupItem`（自己的键） |
 | 基类 | `TTyCustomControl`（→ `TCustomControl`，windowed，可获取焦点/鼠标捕获） |
 | 默认尺寸 | 200 × 260（逻辑像素） |
-| 默认标题栏高度 | 26 逻辑像素（常量 `TyListGroupDefaultHeaderHeight`） |
-| 默认条目行高 | 24 逻辑像素（常量 `TyListGroupDefaultItemHeight`） |
+| 默认标题栏高度 | 26 逻辑像素（常量 `TyListGroupDefaultHeaderHeight`；被 `--listgroup-header-height` 覆盖） |
+| 默认条目行高 | 24 逻辑像素（常量 `TyListGroupDefaultItemHeight`；被 `--listgroup-item-height` 覆盖） |
 
 ```pascal
 uses tyControls.ListGroupPanel;
 ```
 
-**主题复用（不新增 `.tycss`）**：
+**它有自己的 typeKey**：早期版本借了 `TyTreeHeaderSection` / `TyListItem`——但这两个键**同时被 `TTyTreeView` / `TTyListView` 的列头/行用着**，导致想给侧边导航换装就会毁掉数据控件的列头,侧边栏的观感**主题根本够不着**。现在拆成自己的键：
 
-| 视觉元素 | 复用的 typeKey | 用到的状态 |
-|----------|----------------|-----------|
+| 视觉元素 | typeKey | 用到的状态 |
+|----------|---------|-----------|
 | 控件外框（背景/边框/圆角） | `TyPanel` | — |
-| 分组标题栏底色 | `TyTreeHeaderSection` | `:hover`（悬停）/ `:selected`（该分组已展开） |
-| 分组标题文字/箭头颜色 | `TyTreeHeaderSection` 的 `TextColor` | — |
-| 条目行 | `TyListItem` | `:hover`（悬停）/ `:active`（选中） |
+| 分组标题（**仅当设了 `background` 才填底**；右侧 chevron 取其 `TextColor`；可选左侧图标） | `TyListGroupHeader` | `:hover` / `:selected`（该分组**已展开**） |
+| 条目行（选中态画成**内缩圆角药丸**，非满宽色条；可选左侧图标） | `TyListGroupItem` | `:hover` / `:active`（**选中**） / `:disabled` |
 
-所有颜色均由主题解析得到，控件代码中**无硬编码颜色**。
+**关键设计**：分组标题**不设 `background` = 无底色带**(现代侧边栏的样子,不是默认灰带);选中条目的**内缩量与圆角由主题驱动**——控件负责内缩+抠圆角,`--listgroup-item-inset` 定内缩、`border-radius` 定圆角、`background` 定色。所有颜色/尺寸均主题驱动,控件代码中**无硬编码**。
+
+**图标**:`AddGroup(caption, AImageIndex)` / `AddItem(gi, caption, AImageIndex)` 带图标索引,`Images: TTyVirtualImageList` 供图(同 `TTyComboBoxEx`)。索引 < 0 或未设 `Images` = 纯文字。
+
+**尺寸令牌**(均可选,未设走兜底常量/已发布属性):`--listgroup-header-height`、`--listgroup-item-height`、`--listgroup-chevron-size`(14)、`--listgroup-icon-size`(16)、`--listgroup-icon-gap`(6)、`--listgroup-item-inset`(4)。高度令牌**优先于**已发布的 `HeaderHeight`/`ItemHeight`——"行距留白"是皮肤的决定,单实例仍可覆盖。
+
+```css
+/* base(light.tycss)给的中性外观,每个主题继承: */
+TyListGroupHeader          { color: var(--muted); font-weight: var(--font-weight-bold); padding: 0px 10px; }
+TyListGroupHeader:hover    { color: var(--on-surface); }
+TyListGroupHeader:selected { color: var(--accent); }   /* 分组已展开 */
+TyListGroupItem          { color: var(--on-surface); border-radius: var(--radius); padding: 0px 8px; }
+TyListGroupItem:hover    { background: var(--surface-hover); }
+TyListGroupItem:active   { background: var(--selection); color: var(--accent); }   /* 选中:淡强调色药丸 */
+```
 
 ---
 
@@ -71,8 +86,9 @@ uses tyControls.ListGroupPanel;
 
 | 成员 | 默认 | 说明 |
 |------|------|------|
-| `HeaderHeight: Integer` | 26 | 标题栏逻辑高度 |
-| `ItemHeight: Integer` | 24 | 条目行逻辑高度 |
+| `HeaderHeight: Integer` | 26 | 标题栏逻辑高度（`--listgroup-header-height` 优先） |
+| `ItemHeight: Integer` | 24 | 条目行逻辑高度（`--listgroup-item-height` 优先） |
+| `Images: TTyVirtualImageList` | `nil` | 分组/条目图标源（按 `ImageIndex` 取；`nil` = 纯文字） |
 | `OnGroupToggle: TTyListGroupToggleEvent` | — | `procedure(Sender; AGroupIndex)`，分组展开状态真变化时触发 |
 | `OnItemClick: TTyListGroupItemEvent` | — | `procedure(Sender; AGroupIndex, AItemIndex)`，选中条目真变化时触发 |
 | `Align` / `Anchors` / `StyleClass` / `Controller` / `TabStop` | — | 继承自基类的常规属性 |

@@ -33,6 +33,7 @@
     --ghost-hover:     #00000008;  /* subtle / caption hover wash */
     --pressed:         #EBEBEB;    /* subtle / caption pressed wash */
     --track:           #E6E6E6;    /* progress track */
+    --chip:            #F5F5F5;    /* tag / chip fill (Fluent neutralBackground3) */
     --danger:          #C42B1C;    /* close-button red */
     --btn-shadow:      #0000000F;  /* whisper of elevation */
 
@@ -64,6 +65,7 @@
     --ghost-hover:     #FFFFFF14;  /* subtle / caption hover wash */
     --pressed:         #454545;    /* subtle / caption pressed wash */
     --track:           #4D4D4D;    /* progress track */
+    --chip:            #383838;    /* tag / chip fill (Fluent neutralBackground3) */
     --danger:          #D13438;    /* dark close-button red */
     --btn-shadow:      #00000040;  /* whisper of elevation */
 
@@ -221,4 +223,68 @@ TyProgressBar:disabled { opacity: var(--disabled); }
 TyProgressFill {
   background: var(--accent);
   border-radius: var(--radius-pill);
+}
+
+/* ── Card + Tag ──────────────────────────────────────────────────────────
+   Surfaces, not decoration. The card is Fluent's OUTLINE card: one flat
+   sheet held by a neutral hairline — white-on-white in light, #292929 on
+   #292929 in dark, where the stroke is the only thing telling them apart,
+   so the hairline is structural here, not trim. Tags are Fluent 2 rounded
+   RECTS (shape="rounded", 4px), never pills; only the badge is circular. */
+
+TyCard {
+  background: var(--form);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  shadow: 0 1 2 var(--btn-shadow);
+}
+/* 'hoverable' = the neutral wash a default button takes (neutralBackground1Hover). */
+TyCard:hover    { background: var(--btn-hover); border-color: var(--btn-hover-bord); }
+TyCard:disabled { opacity: var(--disabled); }
+
+/* Title band: never tinted — Fluent divides with a neutralStroke hairline, so the
+   band is the card's own sheet plus a rule under it. Semibold like the primary
+   button (600, not bold); no padding of its own, so the title lines up with the
+   body on the card's 12px inset. */
+TyCardHeader {
+  color: var(--ink);
+  border-color: var(--border);
+  border-width: 1px;
+  font-weight: 600;
+}
+/* Actions rail: the same hairline, this time above the strip. */
+TyCardActions { border-color: var(--border); border-width: 1px; }
+
+/* Pill: Fluent's filled tag — neutral chip fill, no stroke, 4px rounded rect. */
+TyTag {
+  background: var(--chip);
+  color: var(--ink);
+  border-radius: var(--radius);
+  padding: 0px 8px;
+}
+/* Brand/danger tags TINT their own hue and ink in it: Fluent's brand tag is
+   brandBackground2, not a solid block. Same 0.12 wash the ghost button's
+   :selected already uses — and it keeps the x readable, which a solid fill
+   under a neutral x would not. */
+TyTag.accent   { background: alpha(var(--accent), 0.12); color: var(--accent); }
+TyTag.danger   { background: alpha(var(--danger), 0.12); color: var(--danger); }
+TyTag:disabled { opacity: var(--disabled); }
+
+/* The x stays neutral on every variant (Fluent never brands its dismiss); its
+   hover chip takes the PRESSED wash, because the faint --ghost-hover would
+   vanish against the tag's own fill. */
+TyTagClose       { color: var(--muted); }
+TyTagClose:hover { background: var(--pressed); color: var(--ink); border-radius: var(--radius); }
+
+/* Badge: Fluent's Badge IS circular, so the inherited round pill is right in
+   shape — but it must ride THIS file's --radius-pill and the Fluent semibold
+   rather than the base's --radius-round/bold, and seed from --accent so the
+   runtime accent-picker recolours it in either mode. */
+TyBadge {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: var(--radius-pill);
+  font-weight: 600;
 }

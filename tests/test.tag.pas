@@ -45,6 +45,7 @@ type
     procedure TestCloseRectFollowsThemePadding;
     procedure TestCloseSizeMetricRetunesSlot;
     procedure TestClickCloseFiresOnCloseAndHides;
+    procedure TestCloseWorksUnderActiveStatePadding;
     procedure TestCloseVetoKeepsTagVisible;
     procedure TestClickCloseDoesNotFireOnClick;
     procedure TestClickBodyFiresOnClickNotOnClose;
@@ -672,6 +673,29 @@ begin
   finally
     T.Free;
     Bmp.Free;
+  end;
+end;
+
+{ Adversarial-review finding (CONFIRMED): MouseDown ran `inherited` (setting FPressed) BEFORE the
+  close hit-test, so PtOnClose resolved TyTag:active — whose padding moved the close rect off the
+  painted (resting) x. A press on the visible x then read as a pill press. Hit-test must be
+  resting. }
+procedure TTyTagControlTest.TestCloseWorksUnderActiveStatePadding;
+var
+  T: TTagAccess;
+  R: TRect;
+begin
+  FCtl.LoadThemeCss('TyTag { background: #EEEEEE; color: #111111; padding: 0px 8px; }'
+    + 'TyTag:active { background: #EEEEEE; padding: 0px 24px; }');
+  T := TTagAccess.Create(FForm);
+  try
+    T.Parent := FForm; T.Controller := FCtl; T.Font.PixelsPerInch := 96;
+    T.Closable := True; T.SetBounds(0, 0, 100, 22); T.OnClose := @HandleClose;
+    R := T.TyTagCloseRect;   // resting (painted) slot
+    T.PressReleaseAt((R.Left + R.Right) div 2, (R.Top + R.Bottom) div 2);
+    AssertEquals('a press on the visible x closes, despite :active padding', 1, FClosed);
+  finally
+    T.Free;
   end;
 end;
 

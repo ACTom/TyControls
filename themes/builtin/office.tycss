@@ -199,3 +199,97 @@ TyProgressFill {
   background: var(--accent);
   border-radius: 2px;
 }
+
+/* ── Card + Tag + Badge (Ant Design-gap batch 1) ─────────────────────────── */
+/* Metric tokens (--card-header-height, --tag-close-size, --badge-*) stay at their
+   fallbacks on purpose: this skin's thesis is that nativeness comes from colour,
+   border and radius — never from size. */
+
+/* Card: a white content sheet lifted off the neutral window — Fluent's depth-4
+   hairline shadow, the thin neutral line, the same 2px radius as every other surface
+   here. Body inset keeps the command-bar's 10px rhythm rather than a roomy web-card
+   pad. 'hoverable' lifts the way a clickable Fluent card does: the hairline firms up
+   to field strength and the shadow deepens — never a colour change. */
+TyCard {
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 10px;
+  shadow: 0 1 2 #00000024;
+}
+TyCard:hover { border: 1px solid var(--line-field); shadow: 0 2 4 #00000024; }
+TyCard:disabled {
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  shadow: 0 0 0 #00000000;
+}
+
+/* Card header: Office genuinely does tint its title bands (task-pane and dialog
+   headers), so the strip recedes to the neutral window tone exactly the way
+   TyButton:hover does, with a hairline rule under it. Semibold, never larger —
+   Fluent's title weight on the base font. Padding is left unset so the title lines
+   up with the card's own body inset. */
+TyCardHeader {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font-weight: 600;
+}
+/* The strips resolve with the CARD's states, so a disabled card would otherwise keep a
+   full-strength semibold title over its greyed-out body. Setting a colour above opts out
+   of the "no header colour -> the card's own ink" fallback, so the muted ink is spelled
+   out here — the same grey-out every other disabled rule in this file performs. */
+TyCardHeader:disabled { color: var(--muted); }
+
+/* Card actions: the header's mirror — Office's dialog command strip is the same
+   tinted band, fenced off by the same hairline, under the content. */
+TyCardActions {
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+/* Tag: a Fluent chip, NOT a pill — the 2px radius is this skin's whole point, so tags
+   read as tiny bordered command-bar chips. The neutral face recedes to the window tone
+   and leans on the hairline to stay legible on the white card. */
+TyTag {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 0px 8px;
+}
+/* Variants: the solid faces of the primary / danger buttons, minus the shadow — a tag
+   is a label, not something you can press. accent follows the runtime accent-picker;
+   danger stays fixed on Office's error red. */
+TyTag.accent { background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); }
+TyTag.danger { background: var(--danger); color: on(var(--danger)); border: 1px solid var(--danger); }
+/* Greys out rather than fades: this palette carries no opacity token, and every other
+   disabled control here recolours to the muted trio. The state layer resolves after the
+   variant, so an accent / danger tag greys out through this one rule too. */
+TyTag:disabled { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+
+/* Tag close: Fluent's dismiss inherits the pill's own ink, so no colour is set here —
+   that is what keeps the x legible on the neutral, accent AND danger faces alike.
+   Hover is the ghost button's faint neutral wash, squared off to the same 2px. */
+TyTagClose       { border-radius: 2px; }
+TyTagClose:hover { background: var(--hover-overlay); }
+
+/* Badge: the counter badge is the one genuinely round thing in Fluent, so the inherited
+   pill SHAPE is right for this era — its vocabulary is not. Ink resolves through
+   on(var(--accent)), so rebranding to Excel-green or PowerPoint-orange re-inks the
+   digits too; the weight is Fluent's semibold, not bold. Size is left alone — nativeness
+   never comes from size here, so the badge keeps the base font.
+   The radius deliberately over-shoots: unlike the radio's fixed indicator, a badge is
+   sized from the MEASURED glyph height, so a literal (8px) would only read round at one
+   font size and turn into a rounded rect at any other. Over-shooting lets the painter
+   clamp to half the shorter side — round at every size, the way every round badge in
+   the pack does it. */
+TyBadge {
+  background: var(--accent);
+  color: on(var(--accent));
+  border-radius: 100px;
+  font-weight: 600;
+  padding: 0px 4px;
+}

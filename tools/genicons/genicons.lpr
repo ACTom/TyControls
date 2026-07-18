@@ -789,8 +789,39 @@ type
   TGlyphProc = procedure(b: TBGRABitmap);
   TGlyph = record Name: string; Draw: TGlyphProc; end;
 
+{ TTyCard: the card surface with its title band separated off by a hairline — an accent
+  title stub above the rule, body text below. (No dots: that is TTyTitleBar's glyph.) }
+procedure GCard(b: TBGRABitmap); begin RRect(b,3,3,21,21,2.5,Ink); Line(b,3,9,21,9,Ink); Line(b,6,6,13,6,Acc,2); Line(b,6,13,18,13,Ink,1.5); Line(b,6,16.5,15,16.5,Ink,1.5); end;
+{ TTyTag: the control itself — a round-ended pill holding an accent caption and a close x }
+procedure GTag(b: TBGRABitmap); begin RRect(b,2,8,22,16,4,Ink); Line(b,5.5,12,13,12,Acc,2); Line(b,16,10.5,19,13.5,Ink,1.5); Line(b,19,10.5,16,13.5,Ink,1.5); end;
+{ TTyBadge: the marker's whole point — an accent count bubble stuck on a host's corner }
+procedure GBadge(b: TBGRABitmap); begin RRect(b,3,7,17,21,2,Ink); FillCirc(b,17.5,7.5,4.5,Acc); end;
+
+{ TTyAlert: the inline bar — a status dot on the left, the message beside it }
+procedure GAlert(b: TBGRABitmap); begin RRect(b,2,7,22,17,2,Ink); FillCirc(b,6.5,12,2.2,Acc); Line(b,11,10.5,18.5,10.5,Ink,1.4); Line(b,11,13.8,16,13.8,Ink,1.4); end;
+{ TTyNotification: a toast card floating in a screen's corner — the corner IS the concept }
+procedure GNotification(b: TBGRABitmap); begin RRect(b,2,3,22,21,1.5,Faint); FillRRect(b,12,5.5,20,12,1.5,Acc); Line(b,4.5,17,10,17,Faint,1.3); Line(b,4.5,19.5,8,19.5,Faint,1.3); end;
+{ TTyEmpty: an open, empty carton — the universal "nothing here" }
+procedure GEmpty(b: TBGRABitmap); begin PolyL(b,[PointF(4,12),PointF(12,7.5),PointF(20,12)],Ink); RRect(b,4,12,20,19.5,1,Ink); Line(b,9,15.5,15,15.5,Acc,1.6); end;
+{ TTySegmented: one track, the first segment lifted — a thumb in a groove }
+procedure GSegmented(b: TBGRABitmap); begin RRect(b,2,8,22,16,2,Ink); FillRRect(b,3,9,9.2,15,1.4,Acc); Line(b,15.4,8.6,15.4,15.4,Ink,1.2); end;
+{ TTyPagination: a row of page cells, the current one filled }
+procedure GPagination(b: TBGRABitmap); begin FillRRect(b,2,9,7,15,1.2,Acc); RRect(b,8.4,9,13.4,15,1.2,Ink); RRect(b,14.8,9,19.8,15,1.2,Ink); FillCirc(b,21.6,14.4,0.7,Ink); end;
+{ TTySteps: markers on a rail — the first done (filled), the rest waiting }
+procedure GSteps(b: TBGRABitmap); begin FillCirc(b,4,12,2.4,Acc); Line(b,6.4,12,9.6,12,Ink,1.4); Circ(b,12,12,2.4,Ink); Line(b,14.4,12,17.6,12,Ink,1.4); Circ(b,20,12,2.4,Ink); end;
+{ TTyBreadcrumb: crumbs separated by chevrons; the last is the current location }
+procedure GBreadcrumb(b: TBGRABitmap); begin Line(b,2,12,6,12,Acc,2); PolyL(b,[PointF(8,9.6),PointF(10.4,12),PointF(8,14.4)],Ink,1.3); Line(b,12.4,12,16.4,12,Ink,2); PolyL(b,[PointF(18.4,9.6),PointF(20.8,12),PointF(18.4,14.4)],Ink,1.3); end;
+{ TTyTransfer: two panes and the move rail between them }
+procedure GTransfer(b: TBGRABitmap); begin RRect(b,2,5,9,19,1.5,Ink); RRect(b,15,5,22,19,1.5,Ink); Line(b,10.2,10,13.4,10,Acc,1.3); PolyL(b,[PointF(12.2,8.8),PointF(13.6,10),PointF(12.2,11.2)],Acc,1.3); Line(b,13.8,14,10.6,14,Ink,1.3); PolyL(b,[PointF(11.8,12.8),PointF(10.4,14),PointF(11.8,15.2)],Ink,1.3); end;
+{ TTyTreeSelect: a combo field dropping a tree }
+procedure GTreeSelect(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[PointF(15.4,5.6),PointF(17.4,7.6),PointF(19.4,5.6)],Ink,1.3); Line(b,6,13,6,20,Faint,1.2); Line(b,6,15,10,15,Faint,1.2); Line(b,6,19,10,19,Faint,1.2); FillRRect(b,11.5,13.8,18,16.2,0.8,Acc); Line(b,11.5,19,17,19,Ink,1.3); end;
+{ TTyCascader: a field dropping two linked columns — picking left reveals right }
+procedure GCascader(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[PointF(15.4,5.6),PointF(17.4,7.6),PointF(19.4,5.6)],Ink,1.3); RRect(b,3,12.5,11.5,21,1.2,Ink); FillRRect(b,3.9,13.4,10.6,15.8,0.8,Acc); RRect(b,12.5,12.5,21,21,1.2,Ink); Line(b,13.6,15,19.9,15,Faint,1.2); end;
+{ TTyPopover: a bubble with a pointer that HOLDS controls — that is the whole gap it fills }
+procedure GPopover(b: TBGRABitmap); begin RRect(b,2,4,22,17,2,Ink); PolyL(b,[PointF(9,17),PointF(11.5,20.5),PointF(14,17)],Ink); FillRRect(b,5,7.5,10.5,13.5,1,Acc); Line(b,12.5,9,19,9,Ink,1.3); Line(b,12.5,12,17.5,12,Ink,1.3); end;
+
 const
-  Glyphs: array[0..143] of TGlyph = (
+  Glyphs: array[0..157] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -934,7 +965,21 @@ const
     (Name:'TTySavePreviewDialog'; Draw:@GSavePreviewDialog),
     (Name:'TTyImageView';         Draw:@GImageView),
     (Name:'TTyChart';             Draw:@GChart),
-    (Name:'TTyHtmlLabel';         Draw:@GHtmlLabel)
+    (Name:'TTyHtmlLabel';         Draw:@GHtmlLabel),
+    (Name:'TTyCard';              Draw:@GCard),
+    (Name:'TTyTag';               Draw:@GTag),
+    (Name:'TTyBadge';             Draw:@GBadge),
+    (Name:'TTyAlert';             Draw:@GAlert),
+    (Name:'TTyNotification';      Draw:@GNotification),
+    (Name:'TTyEmpty';             Draw:@GEmpty),
+    (Name:'TTySegmented';         Draw:@GSegmented),
+    (Name:'TTyPagination';        Draw:@GPagination),
+    (Name:'TTySteps';             Draw:@GSteps),
+    (Name:'TTyBreadcrumb';        Draw:@GBreadcrumb),
+    (Name:'TTyTransfer';          Draw:@GTransfer),
+    (Name:'TTyTreeSelect';        Draw:@GTreeSelect),
+    (Name:'TTyCascader';          Draw:@GCascader),
+    (Name:'TTyPopover';           Draw:@GPopover)
   );
 
 const

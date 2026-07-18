@@ -25,6 +25,12 @@ type
     milliseconds via a lazy timer (the ExPanel pattern); drag-pan is immediate. }
   TTyImageView = class(TTyCustomControl)
   private
+    { The assigned picture, KEPT. FSource is the decoded BGRA the viewer actually draws, but
+      a published property must be READABLE: the Lazarus Object Inspector reads every
+      published property when a form is opened, so a write-only one ('Cannot read property
+      "Picture"') makes the IDE refuse the form outright — while runtime streaming never
+      noticed, because it only ever WRITES the properties a .lfm names. Mirrors TTyImage. }
+    FPicture:    TPicture;
     FSource:     TBGRABitmap;    // owned; original decoded image (never filtered)
     FProcessed:  TBGRABitmap;    // owned; filter output (rebuilt when FProcDirty); drawn
     FProcDirty:  Boolean;
@@ -52,6 +58,7 @@ type
     FTintAmount: Integer;        // 0..100, 0 = off
     FOnZoomChange: TNotifyEvent;
     procedure SetPicture(AValue: TPicture);
+    procedure PictureChanged(Sender: TObject);
     procedure SetAutoFit(AValue: Boolean);
     procedure SetZoomMin(AValue: Double);
     procedure SetZoomMax(AValue: Double);
@@ -93,7 +100,7 @@ type
     procedure ZoomAt(AFactor: Double; AX, AY: Integer);  // zoom about (AX,AY), animated
     property  Zoom: Double read FZoom;              // read-only; current (maybe animating) scale
   published
-    property Picture: TPicture write SetPicture;    // assign -> BGRA source (write-only)
+    property Picture: TPicture read FPicture write SetPicture;   // assign -> decoded to FSource
     property AutoFit: Boolean read FAutoFit write SetAutoFit default True;
     property ZoomMin: Double read FZoomMin write SetZoomMin;
     property ZoomMax: Double read FZoomMax write SetZoomMax;
@@ -284,6 +291,8 @@ begin
   FAnimMs := 180;
   FTintColor := clNone;
   FProcDirty := True;
+  FPicture := TPicture.Create;
+  FPicture.OnChange := @PictureChanged;
   FAnim := TyAnimatorInit(FAnimMs, teEaseOutCubic);
   FAnim.SetTargetImmediate(1);   // settled (not mid-animation)
   SetBounds(0, 0, 320, 240);
@@ -292,6 +301,8 @@ end;
 destructor TTyImageView.Destroy;
 begin
   FreeAndNil(FTimer);   // free the timer first so its callback can't fire mid-teardown
+  FPicture.OnChange := nil;   // ...and detach the hook before it can fire mid-teardown
+  FreeAndNil(FPicture);
   FreeAndNil(FSource);
   FreeAndNil(FProcessed);
   inherited Destroy;
@@ -382,16 +393,23 @@ begin
 end;
 
 procedure TTyImageView.SetPicture(AValue: TPicture);
+begin
+  FPicture.Assign(AValue);   // triggers OnChange -> PictureChanged, which re-decodes
+end;
+
+{ The picture changed — either assigned wholesale or edited in place through the property
+  (the designer does the latter). Re-decode FSource from it. }
+procedure TTyImageView.PictureChanged(Sender: TObject);
 var
   tmp: TBitmap;
 begin
   FreeAndNil(FSource);
-  if (AValue <> nil) and (AValue.Graphic <> nil) and not AValue.Graphic.Empty then
+  if (FPicture.Graphic <> nil) and not FPicture.Graphic.Empty then
   begin
     // BGRABitmap 3.2.2 has no Create(TGraphic); bridge through a TBitmap (mirrors TTyImage).
     tmp := TBitmap.Create;
     try
-      tmp.Assign(AValue.Graphic);
+      tmp.Assign(FPicture.Graphic);
       FSource := TBGRABitmap.Create(tmp);
     finally
       tmp.Free;

@@ -331,11 +331,18 @@ begin
 end;
 
 procedure TTyTag.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  closeHit: Boolean;
 begin
   if not Enabled then Exit;
+  // Hit-test the close x on the RESTING geometry, BEFORE inherited MouseDown sets FPressed:
+  // FPressed makes CurrentStyle resolve TyTag:active, whose padding can move the close rect off
+  // the painted (resting) x, so a press squarely on the visible x reads as a pill press — the
+  // opposite of closing.
+  closeHit := (Button = mbLeft) and FClosable and PtOnClose(X, Y);
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
-  FClosePressed := FClosable and PtOnClose(X, Y);
+  FClosePressed := closeHit;
   if FClosePressed then
   begin
     // The gesture belongs to the x, not the pill: undo the base's press state so the

@@ -468,6 +468,51 @@ begin
     'TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
     'TyTreeCheckBox:disabled { color: var(--muted); }' + LineEnding +
     '' + LineEnding +
+    '/* ── Card + Tag (Ant Design-gap batch 1) ───────────────────────────────── */' + LineEnding +
+    '' + LineEnding +
+    '/* One themed surface for the whole card; the header/actions strips are bands drawn' + LineEnding +
+    '   on it, so they carry only their separator (border-*) and the title''s ink. A flat,' + LineEnding +
+    '   modern card: hairline border, no header band — the separator alone splits it.' + LineEnding +
+    '   The card fill can''t be a plain var(--surface): light''s --form-bg is a DARKENED' + LineEnding +
+    '   surface (so a --surface card lifts off it), but dark''s --form-bg IS --surface raw,' + LineEnding +
+    '   which would leave the card invisible but for its hairline. --card-bg carries that' + LineEnding +
+    '   per-@mode split (light=--surface, dark=--input-bg), same as --menu-popup-bg. */' + LineEnding +
+    'TyCard {' + LineEnding +
+    '  background: var(--card-bg);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 12px;' + LineEnding +
+    '}' + LineEnding +
+    'TyCard:hover { border-color: var(--border-hover); }' + LineEnding +
+    'TyCard:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* No background => a transparent title band over the card''s own surface. */' + LineEnding +
+    'TyCardHeader {' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-bold);' + LineEnding +
+    '}' + LineEnding +
+    'TyCardActions { border-color: var(--border); border-width: var(--input-border-width); }' + LineEnding +
+    '' + LineEnding +
+    '/* 中性 tag: 一层淡 overlay 洗色 (light 用 on-surface 加深、dark 用白色提亮,由 @mode 决定)。' + LineEnding +
+    '   变体是 StyleClass,且只有这两个落在既有 seed 上 (success/warning 得先加 seed + on() 配对)。 */' + LineEnding +
+    'TyTag {' + LineEnding +
+    '  background: var(--overlay-hover);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-radius: var(--radius-round);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  padding: 0px 8px;' + LineEnding +
+    '}' + LineEnding +
+    'TyTag.accent { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    'TyTag.danger { background: var(--danger); color: var(--on-danger); }' + LineEnding +
+    'TyTag:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '' + LineEnding +
+    'TyTagClose       { color: var(--muted); }' + LineEnding +
+    'TyTagClose:hover { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius-sm); }' + LineEnding +
+    '' + LineEnding +
     '/* ── @mode conditional token blocks (D7) ──────────────────────────────── */' + LineEnding +
     '' + LineEnding +
     '@mode light {' + LineEnding +
@@ -519,6 +564,9 @@ begin
     '    --transparent-fill: alpha(#FFFFFF, 0);' + LineEnding +
     '    /* Menu popup surface: light = the white surface (matches light.tycss). */' + LineEnding +
     '    --menu-popup-bg: var(--surface);' + LineEnding +
+    '    /* Card surface: light = the white surface, which lifts off the darkened' + LineEnding +
+    '       --form-bg behind it (matches light.tycss). */' + LineEnding +
+    '    --card-bg: var(--surface);' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -578,6 +626,10 @@ begin
     '    --transparent-fill: alpha(#000000, 0);' + LineEnding +
     '    /* Menu popup surface: dark = the raised input bg (matches dark.tycss). */' + LineEnding +
     '    --menu-popup-bg: var(--input-bg);' + LineEnding +
+    '    /* Card surface: dark --form-bg is --surface raw, so a --surface card would' + LineEnding +
+    '       vanish into the backdrop; the card lifts on --input-bg (matches dark.tycss,' + LineEnding +
+    '       and the TitleBar / MenuView approach). */' + LineEnding +
+    '    --card-bg: var(--input-bg);' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding;
 end;
@@ -982,6 +1034,53 @@ begin
     'TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
     'TyTreeCheckBox:disabled { color: var(--muted); }' + LineEnding +
     '' + LineEnding +
+    '/* ── Card + Tag (Ant Design-gap batch 1) ───────────────────────────────── */' + LineEnding +
+    '' + LineEnding +
+    '/* One themed surface for the whole card; the header/actions strips are bands drawn' + LineEnding +
+    '   on it, so they carry only their separator (border-*) and the title''s ink. Neutral' + LineEnding +
+    '   like the rest of this skin: hairline border, no header band, no tinting — the OS' + LineEnding +
+    '   accent has no business colouring a plain content surface.' + LineEnding +
+    '   The card fill can''t be a plain var(--surface): light''s --form-bg is an elevated' + LineEnding +
+    '   surface (so a --surface card lifts off it), but dark''s --form-bg IS --surface raw,' + LineEnding +
+    '   which would leave the card invisible but for its hairline. --card-bg carries that' + LineEnding +
+    '   per-@mode split (light=--surface, dark=--input-bg), same as auto.tycss. */' + LineEnding +
+    'TyCard {' + LineEnding +
+    '  background: var(--card-bg);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 12px;' + LineEnding +
+    '}' + LineEnding +
+    'TyCard:hover { border-color: var(--border-hover); }' + LineEnding +
+    'TyCard:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* No background => a transparent title band over the card''s own surface. */' + LineEnding +
+    'TyCardHeader {' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: var(--input-border-width);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-bold);' + LineEnding +
+    '}' + LineEnding +
+    'TyCardActions { border-color: var(--border); border-width: var(--input-border-width); }' + LineEnding +
+    '' + LineEnding +
+    '/* Neutral tag = a faint on-surface wash, so it stays legible whatever the OS accent' + LineEnding +
+    '   is. The variants are StyleClasses on seeds this palette already has; .accent tracks' + LineEnding +
+    '   the OS accent and takes its ink from on(), so any accent stays readable. */' + LineEnding +
+    'TyTag {' + LineEnding +
+    '  background: var(--overlay-hover);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-radius: var(--radius-round);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  padding: 0px 8px;' + LineEnding +
+    '}' + LineEnding +
+    'TyTag.accent { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    'TyTag.danger { background: var(--danger); color: var(--on-danger); }' + LineEnding +
+    'TyTag:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '' + LineEnding +
+    'TyTagClose       { color: var(--muted); }' + LineEnding +
+    'TyTagClose:hover { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius-sm); }' + LineEnding +
+    '' + LineEnding +
     '/* ── @mode conditional token blocks (D7) ──────────────────────────────────────' + LineEnding +
     '   The accent SEED is `system-accent` (StyleModel swaps it for the OS accent at' + LineEnding +
     '   merge time). --ty-mode = `system-mode` so elevate()/on() pick the OS scheme.' + LineEnding +
@@ -1035,6 +1134,9 @@ begin
     '  --font-size-base: 9px; --font-size-title: 9px;' + LineEnding +
     '  --font-weight-normal: 400; --font-weight-bold: 700;' + LineEnding +
     '  --transparent-fill: alpha(#FFFFFF, 0);' + LineEnding +
+    '  /* Card surface: light = the plain surface, which lifts off the elevated' + LineEnding +
+    '     --form-bg behind it (matches light.tycss). */' + LineEnding +
+    '  --card-bg: var(--surface);' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -1084,6 +1186,10 @@ begin
     '  --font-size-base: 9px; --font-size-title: 9px;' + LineEnding +
     '  --font-weight-normal: 400; --font-weight-bold: 700;' + LineEnding +
     '  --transparent-fill: alpha(#000000, 0);' + LineEnding +
+    '  /* Card surface: dark --form-bg is --surface raw, so a --surface card would' + LineEnding +
+    '     vanish into the backdrop; the card lifts on --input-bg (matches dark.tycss,' + LineEnding +
+    '     and the TitleBar / input-surface approach). */' + LineEnding +
+    '  --card-bg: var(--input-bg);' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding;
 end;
@@ -1106,6 +1212,7 @@ begin
     '    --danger:       #E01B24;   /* GNOME red 3 — destructive action             */' + LineEnding +
     '    --window:       #FAFAFA;   /* window background                            */' + LineEnding +
     '    --header:       #EBEBEB;   /* headerbar / title bar (a touch darker)       */' + LineEnding +
+    '    --card:         #FFFFFF;   /* card surface — white, above the window       */' + LineEnding +
     '    --field:        #FFFFFF;   /* text-entry wells                             */' + LineEnding +
     '    --ink:          #2E3436;   /* primary dark text                            */' + LineEnding +
     '    --muted:        #9A9996;   /* disabled / secondary ink                     */' + LineEnding +
@@ -1130,6 +1237,7 @@ begin
     '    --danger:       #C01C28;   /* GNOME red 4 — destructive action, dark       */' + LineEnding +
     '    --window:       #242424;   /* window background                            */' + LineEnding +
     '    --header:       #303030;   /* headerbar / title bar                        */' + LineEnding +
+    '    --card:         #303030;   /* card surface — a step above the window       */' + LineEnding +
     '    --field:        #1E1E1E;   /* text-entry wells                             */' + LineEnding +
     '    --ink:          #FFFFFF;   /* primary light text                           */' + LineEnding +
     '    --muted:        #8A8A8A;   /* disabled / secondary ink                     */' + LineEnding +
@@ -1214,7 +1322,46 @@ begin
     '/* --- progress ------------------------------------------------------------ */' + LineEnding +
     '/* Slim, fully-rounded trough with a solid accent fill. */' + LineEnding +
     'TyProgressBar     { background: var(--track); border: none; border-radius: 100; }' + LineEnding +
-    'TyProgressFill    { background: var(--accent); border-radius: 100; }' + LineEnding;
+    'TyProgressFill    { background: var(--accent); border-radius: 100; }' + LineEnding +
+    '' + LineEnding +
+    '/* --- cards --------------------------------------------------------------- */' + LineEnding +
+    '/* libadwaita''s .card is ONE elevated surface: white on the light window, a step lighter' + LineEnding +
+    '   than the window in dark. GNOME rounds a card harder than a button (12 vs 6) but keeps' + LineEnding +
+    '   the same hairline edge and the same gentle lift; boxed-list padding breathes sideways' + LineEnding +
+    '   (12) more than up/down (10). */' + LineEnding +
+    'TyCard            { background: var(--card); color: var(--ink); border: 1px solid var(--border); border-radius: 12; padding: 10px 12px; shadow: 0 1 2 var(--shadow); }' + LineEnding +
+    'TyCard:hover      { border-color: darken(var(--border), 8); shadow: 0 1 3 var(--shadow); }' + LineEnding +
+    'TyCard:disabled   { color: var(--muted); border-color: lighten(var(--border), 3); shadow: 0 0 0 transparent; }' + LineEnding +
+    '' + LineEnding +
+    '/* Header and actions are bands on that one surface — GNOME tints neither, a hairline' + LineEnding +
+    '   separator is the whole treatment. The header takes no padding of its own, so the title' + LineEnding +
+    '   lines up with the body; it IS bold (the normal-weight rule above is about buttons, and' + LineEnding +
+    '   a card title is a GNOME heading). */' + LineEnding +
+    'TyCardHeader          { color: var(--ink); border: 1px solid var(--border); font-weight: bold; }' + LineEnding +
+    'TyCardHeader:disabled { color: var(--muted); }' + LineEnding +
+    'TyCardActions         { border: 1px solid var(--border); }' + LineEnding +
+    '' + LineEnding +
+    '/* --- tags ---------------------------------------------------------------- */' + LineEnding +
+    '/* GNOME''s pill: the button''s flat face (a tag is a label, so it takes the face without' + LineEnding +
+    '   the button''s shading), a hairline edge, fully-round ends. It does NOT light up on' + LineEnding +
+    '   hover — a status pill isn''t a button, only its x reacts. The two variants are the same' + LineEnding +
+    '   solid slabs as the suggested- and destructive-action buttons, dimmed the same way. */' + LineEnding +
+    'TyTag                 { background: var(--btn-face2); color: var(--ink); border: 1px solid var(--btn-border); border-radius: 100; padding: 0px 9px; }' + LineEnding +
+    'TyTag.accent          { background: var(--accent); color: on(var(--accent)); border-color: darken(var(--accent), 8); }' + LineEnding +
+    'TyTag.danger          { background: var(--danger); color: on(var(--danger)); border-color: darken(var(--danger), 8); }' + LineEnding +
+    'TyTag:disabled        { color: var(--muted); border-color: lighten(var(--btn-border), 2); }' + LineEnding +
+    'TyTag.accent:disabled { background: alpha(var(--accent), 0.4); color: alpha(#FFFFFF, 0.85); border-color: transparent; }' + LineEnding +
+    'TyTag.danger:disabled { background: alpha(var(--danger), 0.4); color: alpha(#FFFFFF, 0.85); border-color: transparent; }' + LineEnding +
+    '' + LineEnding +
+    '/* The x has no resting rule on purpose: it borrows the pill''s own ink, which is already' + LineEnding +
+    '   the right one on all three faces. Hover gives it GNOME''s round flat-button wash. */' + LineEnding +
+    'TyTagClose:hover  { background: var(--ghost-hover); border-radius: 100; }' + LineEnding +
+    '' + LineEnding +
+    '/* --- badge --------------------------------------------------------------- */' + LineEnding +
+    '/* The suggested-action button''s little sibling: same solid accent slab, same auto-contrast' + LineEnding +
+    '   ink, same NORMAL weight (GNOME never bolds an accent — the inherited pill''s bold is not' + LineEnding +
+    '   this desktop). Fully round, and no edge or lift: a badge is a marker, not a control. */' + LineEnding +
+    'TyBadge           { background: var(--accent); color: on(var(--accent)); border-radius: 100; font-weight: normal; padding: 0px 4px; }' + LineEnding;
 end;
 
 function SkinCss_aero: string;
@@ -1492,6 +1639,92 @@ begin
     'TyProgressFill {' + LineEnding +
     '  background: linear-gradient(90deg, lighten(var(--accent), 15%), var(--accent));' + LineEnding +
     '  border-radius: 3px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* ---- Card + Tag (Ant Design-gap batch 1) ---- */' + LineEnding +
+    '' + LineEnding +
+    '/* Card: an Aero content pane — a white glass sheet lifted off the steel window wash, thin cool' + LineEnding +
+    '   blue border, the same 3px corners as every other frame here, soft neutral shadow. Hovering' + LineEnding +
+    '   lifts it the way a glass button lifts: focus-blue rim and a little more shadow. */' + LineEnding +
+    'TyCard {' + LineEnding +
+    '  background: linear-gradient(90deg, var(--glass), var(--form-1));' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border-color: var(--field-border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  border-radius: 3px;' + LineEnding +
+    '  padding: 12px;' + LineEnding +
+    '  shadow: 0 1 3 var(--btn-shadow);' + LineEnding +
+    '}' + LineEnding +
+    'TyCard:hover    { border-color: var(--field-focus); shadow: 0 2 5 var(--btn-shadow); }' + LineEnding +
+    'TyCard:disabled { opacity: 0.5; }' + LineEnding +
+    '' + LineEnding +
+    '/* Header band: the card gets its own little Aero caption — the window title bar''s glass sheen, so' + LineEnding +
+    '   the band reads as chrome on the white sheet (the form wash would sink into the card''s own' + LineEnding +
+    '   gradient and vanish). Title ink is a darkened accent: Win7 headings are blue, not black, and' + LineEnding +
+    '   darkening keeps them legible on the pale glass while still following the accent picker. Weight' + LineEnding +
+    '   stays normal — nothing in Aero shouts. The separator is the field blue faded right down: a' + LineEnding +
+    '   hairline, not a second frame inside the card. */' + LineEnding +
+    'TyCardHeader {' + LineEnding +
+    '  background: linear-gradient(90deg, var(--titlebar-1), var(--titlebar-2));' + LineEnding +
+    '  color: darken(var(--accent), 15%);' + LineEnding +
+    '  border-color: alpha(var(--field-border), 0.55);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  font-weight: normal;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Actions band: the window''s own steel wash rather than the caption glass — the footer is a' + LineEnding +
+    '   command strip, not a second title; the same faded hairline sits above it. */' + LineEnding +
+    'TyCardActions {' + LineEnding +
+    '  background: linear-gradient(90deg, var(--form-1), var(--form-2));' + LineEnding +
+    '  border-color: alpha(var(--field-border), 0.55);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Tag: a mini glass chiclet — the button''s 3-stop wet gloss and cool steel border at the skin''s' + LineEnding +
+    '   3px corners. Round-ended pills belong to a flatter era; Aero''s shape language is the chiclet. */' + LineEnding +
+    'TyTag {' + LineEnding +
+    '  background: linear-gradient(90deg, var(--btn-1), var(--btn-2), var(--btn-3));' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border-color: var(--btn-border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  border-radius: 3px;' + LineEnding +
+    '  padding: 0px 8px;' + LineEnding +
+    '}' + LineEnding +
+    '/* Variants: the glossy accent / red glass of the primary and danger buttons, shrunk to tag size. */' + LineEnding +
+    'TyTag.accent {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(var(--accent), 18%), var(--accent));' + LineEnding +
+    '  color: on(var(--accent));' + LineEnding +
+    '  border-color: darken(var(--accent), 10%);' + LineEnding +
+    '}' + LineEnding +
+    'TyTag.danger {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(var(--danger), 18%), var(--danger));' + LineEnding +
+    '  color: on(var(--danger));' + LineEnding +
+    '  border-color: darken(var(--danger), 10%);' + LineEnding +
+    '}' + LineEnding +
+    'TyTag:disabled { opacity: 0.5; }' + LineEnding +
+    '' + LineEnding +
+    '/* The x: faded slate ink on the glass chiclet, the pill''s own on-colour on a coloured one (dark' + LineEnding +
+    '   slate on accent glass would be unreadable). Hover sinks a thin slate wash under the glyph —' + LineEnding +
+    '   the skin''s own "pressed = darker" gesture, shrunk to chip size. The caption button''s white' + LineEnding +
+    '   glass lift can''t come along: it needs the steel titlebar under it, and the tag''s own gloss is' + LineEnding +
+    '   already white at the top, which swallows it. A wash that only DARKENS is the one chip that' + LineEnding +
+    '   reads on all three bodies, and it leaves each variant''s ink above it intact — so the x is' + LineEnding +
+    '   never restyled per-variant under hover. No red glow here: that belongs to the window''s close' + LineEnding +
+    '   button, not to a tag. */' + LineEnding +
+    'TyTagClose        { color: alpha(var(--ink), 0.7); }' + LineEnding +
+    'TyTagClose.accent { color: on(var(--accent)); }' + LineEnding +
+    'TyTagClose.danger { color: on(var(--danger)); }' + LineEnding +
+    'TyTagClose:hover  { background: alpha(var(--ink), 0.15); border-radius: 2px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Badge: the one genuinely round thing in the skin — Aero''s glossy orb, accent glass with a bright' + LineEnding +
+    '   top sheen (an oversized radius clamps to half-height). Bold is the exception the skin allows' + LineEnding +
+    '   itself: the count is tiny and sits on saturated glass. */' + LineEnding +
+    'TyBadge {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(var(--accent), 18%), var(--accent));' + LineEnding +
+    '  color: on(var(--accent));' + LineEnding +
+    '  border-radius: 999px;' + LineEnding +
+    '  font-weight: bold;' + LineEnding +
+    '  padding: 0px 4px;' + LineEnding +
     '}' + LineEnding;
 end;
 
@@ -1523,6 +1756,10 @@ begin
     '    --border:         #D9D9D9;   /* hair-line borders & field edges                                     */' + LineEnding +
     '    --disabled-fill:  #F5F5F5;   /* disabled surface fill                                                */' + LineEnding +
     '    --track:          #F5F5F5;   /* progress trough                                                      */' + LineEnding +
+    '    --tag-fill:       #FAFAFA;   /* neutral tag chip fill — Ant''s #FAFAFA                                */' + LineEnding +
+    '    --tag-accent-ink: var(--accent);  /* preset-tag ink: Ant''s LIGHT preset ink is the seed itself       */' + LineEnding +
+    '    --tag-danger-ink: var(--danger);  /* ditto for the error preset                                      */' + LineEnding +
+    '    --listgroup-accent-ink: var(--accent);  /* sider open-group + selected-item ink: the seed reads on a light tint */' + LineEnding +
     '    --cap-hover:      #0000000F;  /* caption-button hover overlay                                        */' + LineEnding +
     '    --cap-active:     #00000017;  /* caption-button pressed overlay                                      */' + LineEnding +
     '    --shadow-soft:    #0000000A;  /* default-button drop shadow (0 1 0)                                  */' + LineEnding +
@@ -1544,6 +1781,10 @@ begin
     '    --border:         #424242;   /* subtle borders & field edges                          */' + LineEnding +
     '    --disabled-fill:  #262626;   /* disabled surface fill                                  */' + LineEnding +
     '    --track:          #303030;   /* progress trough                                        */' + LineEnding +
+    '    --tag-fill:       #FFFFFF0A;  /* neutral tag chip fill — a 4% white wash               */' + LineEnding +
+    '    --tag-accent-ink: lighten(var(--accent), 30);  /* Ant LIGHTENS preset ink on dark:     */' + LineEnding +
+    '    --tag-danger-ink: lighten(var(--danger), 20);  /* the seed alone is too dark to read   */' + LineEnding +
+    '    --listgroup-accent-ink: lighten(var(--accent), 30);  /* dark: lighten like the tag ink — raw seed on the dark pill is only ~2.9:1 */' + LineEnding +
     '    --cap-hover:      #FFFFFF14;  /* caption-button hover overlay                           */' + LineEnding +
     '    --cap-active:     #FFFFFF1F;  /* caption-button pressed overlay                        */' + LineEnding +
     '    --shadow-soft:    #00000030;  /* default-button drop shadow (deeper on dark)           */' + LineEnding +
@@ -1615,7 +1856,96 @@ begin
     '' + LineEnding +
     '/* Progress: a #F5F5F5 pill trough with a solid #1677FF pill fill (Ant''s rounded bar). */' + LineEnding +
     'TyProgressBar  { background: var(--track); border-radius: 100; }' + LineEnding +
-    'TyProgressFill { background: var(--accent); border-radius: 100; }' + LineEnding;
+    'TyProgressFill { background: var(--accent); border-radius: 100; }' + LineEnding +
+    '' + LineEnding +
+    '/* --- Card + Tag + Badge -------------------------------------------------- */' + LineEnding +
+    '' + LineEnding +
+    '/* Card: Ant''s canonical card — a white surface, a #D9D9D9 hairline, 6px radius and NO shadow at rest (a' + LineEnding +
+    '   bordered AntD card is flat; the hairline is the whole frame). ''hoverable'' is the only lift: the border stays' + LineEnding +
+    '   put and a soft shadow blooms under it — the base layer''s TyCard:hover would recolour the border with ITS own' + LineEnding +
+    '   --border-hover, so pin border-color here. Body padding is 12px, not Ant''s 24px: that 24 is sized for a 14px' + LineEnding +
+    '   font and this skin runs the compact 9px base. The 36/44 fallback band heights already match Ant''s small-card' + LineEnding +
+    '   proportions, so no --card-header-height / --card-actions-height override. */' + LineEnding +
+    'TyCard          { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 12px; }' + LineEnding +
+    'TyCard:hover    { border-color: var(--border); shadow: 0 2 8 var(--shadow-soft); }' + LineEnding +
+    'TyCard:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); }' + LineEnding +
+    '' + LineEnding +
+    '/* Header + actions are BANDS drawn on the card''s own surface, not frames — so border-color/border-width here is' + LineEnding +
+    '   the separator hairline, not a box. Ant''s card head is transparent over the card, so neither band takes a' + LineEnding +
+    '   background. The title is the one piece of bold in this flat skin (Ant''s head is fontWeightStrong); no padding' + LineEnding +
+    '   on the band, so the title falls back to the card''s own 12px and lines up with the body. */' + LineEnding +
+    'TyCardHeader  { color: var(--ink); border-color: var(--border); border-width: 1px; font-weight: bold; }' + LineEnding +
+    'TyCardActions { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Tag: an Ant tag is a small 2px-radius CHIP, not a round pill — the base layer''s --radius-round would give it' + LineEnding +
+    '   round ends, so the radius is pinned here. Neutral = Ant''s #FAFAFA fill behind the same #D9D9D9 hairline every' + LineEnding +
+    '   field in this skin wears; disabled greys the fill + ink like every other disabled rule in this file. */' + LineEnding +
+    'TyTag          { background: var(--tag-fill); color: var(--ink); border: 1px solid var(--border); border-radius: 2; padding: 0px 8px; }' + LineEnding +
+    'TyTag:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); }' + LineEnding +
+    '' + LineEnding +
+    '/* The variants are Ant''s PRESET tags, and Ant''s presets are tints, not solid fills: a ~10% wash of the seed, a' + LineEnding +
+    '   ~35% wash of it for the border, and a seed-toned ink (#E6F4FF / #91CAFF / #1677FF for blue). Driving the FILL' + LineEnding +
+    '   and the BORDER off alpha(seed) lets one rule serve both modes — the wash composites over #FFFFFF in light and' + LineEnding +
+    '   over #1F1F1F in dark, landing on Ant''s own dark tints — and keeps them tracking the runtime accent-picker.' + LineEnding +
+    '   The INK cannot ride that trick: this skin''s dark --accent (#1668DC) is DARKER than its light one (#1677FF)' + LineEnding +
+    '   — it is Ant''s dark colorPrimary, sized to carry WHITE button text — so the raw seed on a dark tint is a dark' + LineEnding +
+    '   ink on a dark wash (~2.9:1 at the 9px base). Ant lightens its dark preset ink for exactly this reason, so the' + LineEnding +
+    '   ink comes from --tag-*-ink, which is the seed in light and a lightened seed in dark (still picker-tracked).' + LineEnding +
+    '   Only these two: a success/warning tag would need new seed colours, which is a palette decision, not a tag one. */' + LineEnding +
+    'TyTag.accent { background: alpha(var(--accent), 0.10); color: var(--tag-accent-ink); border-color: alpha(var(--accent), 0.35); }' + LineEnding +
+    'TyTag.danger { background: alpha(var(--danger), 0.10); color: var(--tag-danger-ink); border-color: alpha(var(--danger), 0.35); }' + LineEnding +
+    '' + LineEnding +
+    '/* The x: Ant gives it no hover chip at all — it just strengthens from a 65% ink to full — so the base layer''s' + LineEnding +
+    '   --overlay-hover chip is cleared rather than restyled. On a preset tag the x carries the tag''s own tinted ink,' + LineEnding +
+    '   so the variants restate it (the chip is cleared per-rule, as the buttons here restate too). Each pair is the' + LineEnding +
+    '   SAME gesture: rest at 65% of its ink, hover at full. The neutral pair spells that with the palette''s own' + LineEnding +
+    '   --muted/--ink (--muted IS #…A6 = 65% of --ink); the variants spell it with alpha(--tag-*-ink, 0.65) -> the' + LineEnding +
+    '   ink itself. Strengthening must NOT be darken() here: in dark mode ''stronger'' is LIGHTER, and darkening a' + LineEnding +
+    '   dark-mode preset ink walks it INTO its own tint. Going to full --tag-*-ink is right in both modes. */' + LineEnding +
+    'TyTagClose              { color: var(--muted); }' + LineEnding +
+    'TyTagClose:hover        { background: transparent; color: var(--ink); }' + LineEnding +
+    'TyTagClose.accent       { color: alpha(var(--tag-accent-ink), 0.65); }' + LineEnding +
+    'TyTagClose.accent:hover { background: transparent; color: var(--tag-accent-ink); }' + LineEnding +
+    'TyTagClose.danger       { color: alpha(var(--tag-danger-ink), 0.65); }' + LineEnding +
+    'TyTagClose.danger:hover { background: transparent; color: var(--tag-danger-ink); }' + LineEnding +
+    '' + LineEnding +
+    '/* Badge: Ant''s count badge is RED, not brand-blue — it rides on colorError and only <Badge status> reaches for' + LineEnding +
+    '   the palette — so the inherited accent pill is wrong here and this one takes --danger. Round-ended through the' + LineEnding +
+    '   same 100 the progress pill uses, and normal weight: the card title is the only bold in this skin, and a 9px' + LineEnding +
+    '   badge digit is exactly as legible as the 9px label on a primary button. (Ant''s white 1px separator ring has' + LineEnding +
+    '   no equivalent: shadow is offsetX/offsetY/blur/color, with no spread.) */' + LineEnding +
+    'TyBadge { background: var(--danger); color: on(var(--danger)); border-radius: 100; font-weight: normal; padding: 0px 4px; }' + LineEnding +
+    '' + LineEnding +
+    '/* --- Sider (ListGroupPanel) — Ant Design Pro''s navigation rail ------------ */' + LineEnding +
+    '' + LineEnding +
+    '/* Ant''s sider is airy and flat. The GROUP row carries NO background (the panel surface shows' + LineEnding +
+    '   through — none of the old grey band): just muted secondary ink and a right chevron, and when the' + LineEnding +
+    '   group is OPEN its ink lifts to the brand blue. A SELECTED child is Ant v5''s #E6F4FF pill — a ~10%' + LineEnding +
+    '   wash of the seed with brand-blue ink — written as alpha(--accent) so it composites to #E6F4FF over' + LineEnding +
+    '   the white light surface and to Ant''s own dark selected tint over #1F1F1F, and tracks the runtime' + LineEnding +
+    '   accent-picker (the exact TyTag.accent idiom above). Hover is a whisper 6% seed wash. The ink on' + LineEnding +
+    '   both accent cues comes from --listgroup-accent-ink (seed in light, lightened seed in dark) for the' + LineEnding +
+    '   same reason the tags lighten theirs — this skin''s dark --accent is a dark blue that reads at only' + LineEnding +
+    '   ~2.9:1 on its own tint. Rows stay normal weight (the card title is this skin''s only bold). The base' + LineEnding +
+    '   layer''s --on-surface / --surface-hover / --selection / --radius are RESTATED here in this skin''s own' + LineEnding +
+    '   vars, so the sider flips with the dark @mode instead of resolving against the base palette. */' + LineEnding +
+    '/* padding is RESTATED, not inherited: any rule for a typeKey suppresses the whole base layer for' + LineEnding +
+    '   it (UserHasTypeKey), so leaving padding off the base rule here made it 0 — the sider rows sat' + LineEnding +
+    '   flush against the panel border. 14px inline is Ant''s sider breathing room. */' + LineEnding +
+    'TyListGroupHeader          { color: var(--muted); font-weight: normal; padding: 0px 14px; }' + LineEnding +
+    'TyListGroupHeader:hover    { color: var(--ink); }' + LineEnding +
+    'TyListGroupHeader:selected { color: var(--listgroup-accent-ink); }   /* the group is OPEN */' + LineEnding +
+    'TyListGroupItem          { color: var(--ink); border-radius: 6; padding: 0px 14px; }' + LineEnding +
+    'TyListGroupItem:hover    { background: alpha(var(--accent), 0.06); }' + LineEnding +
+    'TyListGroupItem:active   { background: alpha(var(--accent), 0.10); color: var(--listgroup-accent-ink); }   /* selected: Ant''s #E6F4FF pill */' + LineEnding +
+    '' + LineEnding +
+    '/* Airy Ant-Pro rhythm: 36px group bands and 40px item rows (the metric token wins over the control''s' + LineEnding +
+    '   26/24 property fallback). Identical in both modes, so one top-level :root — as bootstrap/classic' + LineEnding +
+    '   declare their mode-invariant metrics; only the colour palette flips per @mode. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --listgroup-header-height: 36;' + LineEnding +
+    '  --listgroup-item-height:   40;' + LineEnding +
+    '}' + LineEnding;
 end;
 
 function SkinCss_bootstrap: string;
@@ -1935,6 +2265,98 @@ begin
     '  background: var(--accent);' + LineEnding +
     '  border-radius: 6px;' + LineEnding +
     '  render-style: flat;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* ---- Cards, tags & badges ----------------------------------------------- */' + LineEnding +
+    '/* Mode-invariant metrics. BS gives .card-header and .card-footer the SAME box' + LineEnding +
+    '   (.5rem padding above and below a 1.5rem line), so the 36/44 fallback split' + LineEnding +
+    '   isn''t Bootstrap — both bands are 40. Geometry never flips per @mode. */' + LineEnding +
+    ':root {' + LineEnding +
+    '  --card-header-height:   40;   /* .card-header: .5rem*2 + a 1.5rem line */' + LineEnding +
+    '  --card-actions-height:  40;   /* .card-footer: BS caps it identically  */' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* .card: one flat well, a single 1px gray hairline, .375rem corners and 1rem of' + LineEnding +
+    '   inset (.card-body). No shadow — BS ships .card flat and leaves the lift to the' + LineEnding +
+    '   .shadow utilities, so a skin-wide shadow would be someone else''s Bootstrap. */' + LineEnding +
+    'TyCard {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border: 1px solid var(--border);' + LineEnding +
+    '  border-radius: 6px;' + LineEnding +
+    '  render-style: flat;' + LineEnding +
+    '  padding: 16px;' + LineEnding +
+    '}' + LineEnding +
+    '/* BS has no .card:hover of its own, so ''hoverable'' borrows btn-light''s border' + LineEnding +
+    '   darkening rather than inventing a lift BS never uses. */' + LineEnding +
+    'TyCard:hover {' + LineEnding +
+    '  border-color: var(--btn-hover-border);' + LineEnding +
+    '}' + LineEnding +
+    'TyCard:disabled {' + LineEnding +
+    '  opacity: 0.65;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* .card-header: the cap tint is BS 5.3''s rgba(body-color, .03) — a wash of the' + LineEnding +
+    '   INK, so it darkens the white body and lightens the dark one from this one rule.' + LineEnding +
+    '   Weight normal: .card-header carries no font-weight in BS (the band is made by' + LineEnding +
+    '   tint + hairline, not by heavy type), and this skin is weight-normal throughout.' + LineEnding +
+    '   No padding — falling back to the card''s 1rem is what lines the title up with the' + LineEnding +
+    '   body, exactly as BS''s matching .card-header / .card-body padding does. */' + LineEnding +
+    'TyCardHeader {' + LineEnding +
+    '  background: alpha(var(--ink), 0.03);' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border-color: var(--border);   /* the border-bottom hairline */' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  font-weight: normal;' + LineEnding +
+    '}' + LineEnding +
+    '/* .card-footer: same cap tint, hairline on the other side. */' + LineEnding +
+    'TyCardActions {' + LineEnding +
+    '  background: alpha(var(--ink), 0.03);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Tags are .badge: borderless solid chips at the same .375rem radius as every' + LineEnding +
+    '   other surface here — .rounded-pill is opt-in in BS, so nothing goes round.' + LineEnding +
+    '   Neutral = .bg-light/.text-dark, on the gray-200 wash rather than gray-100 so the' + LineEnding +
+    '   chip still reads against a white card. */' + LineEnding +
+    'TyTag {' + LineEnding +
+    '  background: var(--subtle);' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border-radius: 6px;' + LineEnding +
+    '  render-style: flat;' + LineEnding +
+    '  padding: 0px 8px;' + LineEnding +
+    '}' + LineEnding +
+    'TyTag.accent { background: var(--accent); color: on(var(--accent)); }   /* .text-bg-primary */' + LineEnding +
+    'TyTag.danger { background: var(--danger); color: on(var(--danger)); }   /* .text-bg-danger  */' + LineEnding +
+    '/* No :hover — a BS .badge is a static chip; only its x lights up. */' + LineEnding +
+    'TyTag:disabled {' + LineEnding +
+    '  opacity: 0.65;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* The x is .btn-close: a muted glyph, same ink as the caption buttons''. BS ships' + LineEnding +
+    '   .btn-close-white precisely because a dark x dies on a solid chip — same problem' + LineEnding +
+    '   here, so the variants re-ink it through on(). */' + LineEnding +
+    'TyTagClose        { color: var(--muted); }' + LineEnding +
+    'TyTagClose.accent { color: on(var(--accent)); }' + LineEnding +
+    'TyTagClose.danger { color: on(var(--danger)); }' + LineEnding +
+    '/* Hover chip: an ink wash, not an opaque fill — one value has to darken the grey' + LineEnding +
+    '   chip and the blue/red ones alike, and it flips with --ink in dark mode (where' + LineEnding +
+    '   this skin''s hovers lighten). 4px = the caption-button chip''s corner. */' + LineEnding +
+    'TyTagClose:hover  { background: alpha(var(--ink), 0.15); border-radius: 4px; }' + LineEnding +
+    '' + LineEnding +
+    '/* .badge: a small rounded RECT at .375rem, NOT a pill — .rounded-pill is opt-in in' + LineEnding +
+    '   BS, so the inherited round accent pill is wrong here. Solid primary + bold IS' + LineEnding +
+    '   .text-bg-primary, the one place this weight-normal skin wants 700; the accent' + LineEnding +
+    '   picker recolours it along with every other primary surface. Side padding a touch' + LineEnding +
+    '   over the base''s: BS''s .badge is airier across (.65em) than down (.35em), and with' + LineEnding +
+    '   the vertical pinned at 0 that ratio has to come from the sides alone. */' + LineEnding +
+    'TyBadge {' + LineEnding +
+    '  background: var(--accent);' + LineEnding +
+    '  color: on(var(--accent));' + LineEnding +
+    '  border-radius: 6px;' + LineEnding +
+    '  font-weight: bold;' + LineEnding +
+    '  padding: 0px 5px;' + LineEnding +
     '}' + LineEnding;
 end;
 
@@ -2079,7 +2501,68 @@ begin
     '' + LineEnding +
     '/* Progress: a thin groove with a solid Breeze-blue fill. */' + LineEnding +
     'TyProgressBar   { render-style: flat; background: var(--groove); color: var(--ink); border: 1px solid var(--groove-border); border-radius: 3; }' + LineEnding +
-    'TyProgressFill  { background: var(--accent); border-radius: 2; }' + LineEnding;
+    'TyProgressFill  { background: var(--accent); border-radius: 2; }' + LineEnding +
+    '' + LineEnding +
+    '/* ---- Card + Tag + Badge ---- */' + LineEnding +
+    '' + LineEnding +
+    '/* Card: the Plasma page recipe — a view between a tinted header toolbar and a tinted' + LineEnding +
+    '   footer button box. The face is var(--field) because in Breeze an input well and a' + LineEnding +
+    '   content view are ONE colour role (white on light, #1B1E20 on dark), so the card sits' + LineEnding +
+    '   in the window exactly the way a Dolphin view does: one #BCC0C4 hairline, the 3px' + LineEnding +
+    '   corner every surface here gets, and the buttons'' whisper-soft lift — which the dark' + LineEnding +
+    '   palette already zeroes, because Breeze-dark casts nothing. :hover lights the frame' + LineEnding +
+    '   Breeze-blue, the same answer a button or a field gives, so ''hoverable'' costs no new' + LineEnding +
+    '   idea. Disabled greys the surface explicitly: Breeze dims by colour, never by fade. */' + LineEnding +
+    'TyCard          { render-style: flat; background: var(--field); color: var(--ink); border: 1px solid var(--field-border); border-radius: 3; padding: 9px; shadow: 0 1 2 var(--btn-shadow); }' + LineEnding +
+    'TyCard:hover    { border-color: var(--accent); }' + LineEnding +
+    'TyCard:disabled { background: var(--field-disabled); color: var(--ink-disabled); border-color: var(--border-disabled); shadow: 0 0 0 #00000000; }' + LineEnding +
+    '' + LineEnding +
+    '/* Header + actions: tinted bands — the window grey laid over the view and cut off by the' + LineEnding +
+    '   same hairline. That is literally how a System Settings page is built, and it is what' + LineEnding +
+    '   separates Breeze from the other flat skins, which leave the bands transparent. Bold is' + LineEnding +
+    '   reserved for a heading; buttons and badges keep this skin''s normal weight. Padding is' + LineEnding +
+    '   left unset on purpose, so the title sits on the card''s own 9px gutter, level with the' + LineEnding +
+    '   body. */' + LineEnding +
+    'TyCardHeader  { background: var(--surface); color: var(--ink); border: 1px solid var(--field-border); font-weight: bold; }' + LineEnding +
+    'TyCardActions { background: var(--surface); border: 1px solid var(--field-border); }' + LineEnding +
+    '' + LineEnding +
+    '/* Tag: a Kirigami chip, i.e. a miniature Breeze button — near-white face, hairline, 3px' + LineEnding +
+    '   corners, NOT a round pill: nothing in this language is round-ended, so the base layer''s' + LineEnding +
+    '   pill idiom stops at the badge. The 8px gutter sits between the button''s 9px and the' + LineEnding +
+    '   field''s 6px, which is where a chip belongs. Hover lights the edge blue like every other' + LineEnding +
+    '   Breeze control; the two variants fill solid and brighten on hover exactly as' + LineEnding +
+    '   .primary/.danger do — including their white ink, since --on-accent is this file''s ink' + LineEnding +
+    '   for any solid fill. */' + LineEnding +
+    'TyTag                { render-style: flat; background: var(--btn-face); color: var(--ink); border: 1px solid var(--btn-border); border-radius: 3; padding: 0px 8px; }' + LineEnding +
+    'TyTag:hover          { border-color: var(--accent); }' + LineEnding +
+    'TyTag.accent         { background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); }' + LineEnding +
+    'TyTag.accent:hover   { background: lighten(var(--accent), 8); border-color: lighten(var(--accent), 8); color: var(--on-accent); }' + LineEnding +
+    'TyTag.danger         { background: var(--danger); color: var(--on-accent); border: 1px solid var(--danger); }' + LineEnding +
+    'TyTag.danger:hover   { background: lighten(var(--danger), 8); border-color: lighten(var(--danger), 8); color: var(--on-accent); }' + LineEnding +
+    'TyTag:disabled       { background: var(--field-disabled); color: var(--ink-disabled); border-color: var(--border-disabled); }' + LineEnding +
+    '' + LineEnding +
+    '/* Tag close ''x'': muted at rest (--ink-disabled is this file''s secondary ink), and its' + LineEnding +
+    '   hover chip is the ghost button''s translucent Breeze-blue wash on the checkbox''s 2px' + LineEnding +
+    '   corner — Breeze answers hover with blue, never with red; only the window''s own close' + LineEnding +
+    '   button earns the red. On a solid accent/danger pill a grey x would sink into the fill,' + LineEnding +
+    '   so there the ink is the white the pill already uses and the chip is a white wash.' + LineEnding +
+    '   :disabled has to come back to grey EXPLICITLY: TyTag:disabled greys the pill away from' + LineEnding +
+    '   its variant fill, but the variant''s white ink is set on the x''s own key and states' + LineEnding +
+    '   resolve after variants, so without this rule a disabled accent/danger tag would keep a' + LineEnding +
+    '   white x on the near-white disabled pill — an x that is simply not there. */' + LineEnding +
+    'TyTagClose              { color: var(--ink-disabled); }' + LineEnding +
+    'TyTagClose:hover        { background: alpha(var(--accent), 0.12); color: var(--accent); border-radius: 2; }' + LineEnding +
+    'TyTagClose.accent       { color: var(--on-accent); }' + LineEnding +
+    'TyTagClose.accent:hover { background: alpha(var(--on-accent), 0.20); color: var(--on-accent); border-radius: 2; }' + LineEnding +
+    'TyTagClose.danger       { color: var(--on-accent); }' + LineEnding +
+    'TyTagClose.danger:hover { background: alpha(var(--on-accent), 0.20); color: var(--on-accent); border-radius: 2; }' + LineEnding +
+    'TyTagClose:disabled     { color: var(--ink-disabled); }' + LineEnding +
+    '' + LineEnding +
+    '/* Badge: Breeze blue, white numerals, round. The inherited base pill already has the' + LineEnding +
+    '   right shape — Plasma''s counters (task manager, Kickoff) really are circular even though' + LineEnding +
+    '   the rest of this language stops at 3px — but its numerals are bold, and nothing here is' + LineEnding +
+    '   bold except a heading. The tight 0/4 padding is the same air the whole skin runs on. */' + LineEnding +
+    'TyBadge { background: var(--accent); color: var(--on-accent); border-radius: var(--radius-round); font-weight: normal; padding: 0px 4px; }' + LineEnding;
 end;
 
 function SkinCss_classic: string;
@@ -2092,12 +2575,15 @@ begin
     '' + LineEnding +
     '/* Mode-invariant metrics. Win9x caption buttons were small squares in the top-right, so the' + LineEnding +
     '   classic skin shrinks the title-bar buttons from the 46px default via the --caption-button-width' + LineEnding +
-    '   theme metric (device px are DPI-scaled from this logical value). */' + LineEnding +
+    '   theme metric (device px are DPI-scaled from this logical value). A card''s title band is a' + LineEnding +
+    '   caption band in this idiom (see TyCardHeader), so it is caption-short too — not the tall' + LineEnding +
+    '   36px band a modern skin wants. */' + LineEnding +
     ':root {' + LineEnding +
     '  --caption-button-width:    25;   /* small squarish caption buttons */' + LineEnding +
     '  --caption-button-margin:    3;   /* horizontal gap: buttons ↔ right edge / caption */' + LineEnding +
     '  --caption-button-margin-y:  6;   /* vertical gap: buttons ↔ title-bar top & bottom */' + LineEnding +
     '  --caption-button-gap:       4;   /* gap between adjacent buttons */' + LineEnding +
+    '  --card-header-height:      24;   /* the card''s caption band, sized like a Win9x caption */' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* --accent is the brand seed; the runtime accent-picker recolours the skin through it. */' + LineEnding +
@@ -2111,6 +2597,7 @@ begin
     '    --face-hover:   #C8C8C8;   /* lightly lit face on hover */' + LineEnding +
     '    --ink:          #000000;   /* primary text */' + LineEnding +
     '    --ink-disabled: #808080;   /* greyed text */' + LineEnding +
+    '    --ink-inverse:  #FFFFFF;   /* ink on a FILLED accent/maroon chip — badge, tag variants */' + LineEnding +
     '    --danger:       #800000;   /* destructive ink — the system-palette dark red (maroon) */' + LineEnding +
     '    --field:        #FFFFFF;   /* white input well */' + LineEnding +
     '    --border:       #808080;   /* stroked indicator / edge grey */' + LineEnding +
@@ -2126,6 +2613,7 @@ begin
     '    --face-hover:   #C8C8C8;' + LineEnding +
     '    --ink:          #000000;' + LineEnding +
     '    --ink-disabled: #808080;' + LineEnding +
+    '    --ink-inverse:  #FFFFFF;' + LineEnding +
     '    --danger:       #800000;' + LineEnding +
     '    --field:        #FFFFFF;' + LineEnding +
     '    --border:       #808080;' + LineEnding +
@@ -2173,7 +2661,58 @@ begin
     '' + LineEnding +
     '/* Progress: a sunken grey track with a solid blue fill. */' + LineEnding +
     'TyProgressBar   { render-style: inset3d; background: var(--face); }' + LineEnding +
-    'TyProgressFill  { background: var(--accent); border-radius: 0; }' + LineEnding;
+    'TyProgressFill  { background: var(--accent); border-radius: 0; }' + LineEnding +
+    '' + LineEnding +
+    '/* Cards, tags and badges have no Win9x ancestor at all. Rather than import the modern' + LineEnding +
+    '   round-pill look wholesale, each is rebuilt from parts this era DID have: the raised panel,' + LineEnding +
+    '   the stroked box and the caption bar. Square corners throughout — nothing here is round. */' + LineEnding +
+    '' + LineEnding +
+    '/* Card: a raised grey panel — the "grouped box" of this era — so the whole surface takes the' + LineEnding +
+    '   same outset bevel as a button. Hover lights the face like every other 3D control here, and' + LineEnding +
+    '   disabled greys the ink rather than fading the panel, exactly as TyButton:disabled does.' + LineEnding +
+    '   Unlike the buttons above, the card SPELLS OUT the bevel border instead of letting' + LineEnding +
+    '   ''render-style'' imply it: the card insets its header/actions bands by the declared border' + LineEnding +
+    '   width, and an implied border is invisible to that measurement — the caption band would then' + LineEnding +
+    '   paint over the panel''s own raised edge and flatten the top of the card. The values restate' + LineEnding +
+    '   exactly what bevel3d derives (2px outset, edges shaded from the face), so the frame is' + LineEnding +
+    '   unchanged; :hover restates them against the lit face for the same reason. */' + LineEnding +
+    'TyCard          { render-style: bevel3d; background: var(--face); color: var(--ink); border: 2px outset var(--face); padding: 8px; }' + LineEnding +
+    'TyCard:hover    { render-style: bevel3d; background: var(--face-hover); color: var(--ink); border: 2px outset var(--face-hover); }' + LineEnding +
+    'TyCard:disabled { render-style: bevel3d; background: var(--face); color: var(--ink-disabled); }' + LineEnding +
+    '/* Title band: a titled panel of this era announced itself with a CAPTION, so the header wears' + LineEnding +
+    '   the title bar''s own gradient and caption ink — the card reads as a little window pane.' + LineEnding +
+    '   The grey line under it is the shadow half of the classic etched divider. */' + LineEnding +
+    'TyCardHeader    { background: linear-gradient(0deg, var(--accent), var(--title-mid), var(--title-light)); color: var(--title-ink); border: 1px solid var(--border); font-weight: bold; }' + LineEnding +
+    '/* Actions rail: no band of its own — the strip IS the panel face, like a dialog''s button row;' + LineEnding +
+    '   only the etched divider above it separates the two. */' + LineEnding +
+    'TyCardActions   { border: 1px solid var(--border); }' + LineEnding +
+    '' + LineEnding +
+    '/* Tags: a tag isn''t pressable, so it takes the stroked box the check-box indicator uses rather' + LineEnding +
+    '   than a bevel — a small white boxed label with square ends (a round-ended pill is two decades' + LineEnding +
+    '   out of period here). The variants swap only the fill and its ink; every tag keeps the same' + LineEnding +
+    '   grey outline, so a row of them reads as one family. */' + LineEnding +
+    'TyTag               { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 0; padding: 0px 6px; }' + LineEnding +
+    'TyTag.accent        { background: var(--accent); color: var(--ink-inverse); }' + LineEnding +
+    'TyTag.danger        { background: var(--danger); color: var(--ink-inverse); }' + LineEnding +
+    '/* Disabled drops the variant fill back to the grey face and greys the ink — how this era said' + LineEnding +
+    '   "inert"; the skin never fades a control out with opacity. State rules are applied AFTER the' + LineEnding +
+    '   .accent/.danger rules above, so this one line neutralises every variant. */' + LineEnding +
+    'TyTag:disabled      { background: var(--face); color: var(--ink-disabled); }' + LineEnding +
+    '/* The x: full-strength ink (this era had no half-toned affordances), restated per variant' + LineEnding +
+    '   because a black x would sink into a filled tag. Hovering it lights a square grey chip — the' + LineEnding +
+    '   same "hot" face the caption buttons give — and the x on that chip is black again. */' + LineEnding +
+    'TyTagClose          { color: var(--ink); }' + LineEnding +
+    'TyTagClose.accent   { color: var(--ink-inverse); }' + LineEnding +
+    'TyTagClose.danger   { color: var(--ink-inverse); }' + LineEnding +
+    'TyTagClose:hover    { background: var(--face-hover); color: var(--ink); border-radius: 0; }' + LineEnding +
+    'TyTagClose:disabled { color: var(--ink-disabled); }' + LineEnding +
+    '' + LineEnding +
+    '/* Badge: a hard little counter box with square corners — the round accent pill it would' + LineEnding +
+    '   otherwise inherit is a 2010s notification bubble that simply didn''t exist here. White-on-blue' + LineEnding +
+    '   was this era''s one "look at me" pairing (it IS the selection highlight), so the badge borrows' + LineEnding +
+    '   it: accent fill, inverse ink, bold, and no bevel — at this size a 3D edge would eat the' + LineEnding +
+    '   digits. The default --badge-* metrics already give a tight box, so the skin leaves them. */' + LineEnding +
+    'TyBadge         { background: var(--accent); color: var(--ink-inverse); border-radius: 0; font-weight: bold; padding: 0px 4px; }' + LineEnding;
 end;
 
 function SkinCss_fluent: string;
@@ -2214,6 +2753,7 @@ begin
     '    --ghost-hover:     #00000008;  /* subtle / caption hover wash */' + LineEnding +
     '    --pressed:         #EBEBEB;    /* subtle / caption pressed wash */' + LineEnding +
     '    --track:           #E6E6E6;    /* progress track */' + LineEnding +
+    '    --chip:            #F5F5F5;    /* tag / chip fill (Fluent neutralBackground3) */' + LineEnding +
     '    --danger:          #C42B1C;    /* close-button red */' + LineEnding +
     '    --btn-shadow:      #0000000F;  /* whisper of elevation */' + LineEnding +
     '' + LineEnding +
@@ -2245,6 +2785,7 @@ begin
     '    --ghost-hover:     #FFFFFF14;  /* subtle / caption hover wash */' + LineEnding +
     '    --pressed:         #454545;    /* subtle / caption pressed wash */' + LineEnding +
     '    --track:           #4D4D4D;    /* progress track */' + LineEnding +
+    '    --chip:            #383838;    /* tag / chip fill (Fluent neutralBackground3) */' + LineEnding +
     '    --danger:          #D13438;    /* dark close-button red */' + LineEnding +
     '    --btn-shadow:      #00000040;  /* whisper of elevation */' + LineEnding +
     '' + LineEnding +
@@ -2402,6 +2943,70 @@ begin
     'TyProgressFill {' + LineEnding +
     '  background: var(--accent);' + LineEnding +
     '  border-radius: var(--radius-pill);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* ── Card + Tag ──────────────────────────────────────────────────────────' + LineEnding +
+    '   Surfaces, not decoration. The card is Fluent''s OUTLINE card: one flat' + LineEnding +
+    '   sheet held by a neutral hairline — white-on-white in light, #292929 on' + LineEnding +
+    '   #292929 in dark, where the stroke is the only thing telling them apart,' + LineEnding +
+    '   so the hairline is structural here, not trim. Tags are Fluent 2 rounded' + LineEnding +
+    '   RECTS (shape="rounded", 4px), never pills; only the badge is circular. */' + LineEnding +
+    '' + LineEnding +
+    'TyCard {' + LineEnding +
+    '  background: var(--form);' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border: 1px solid var(--border);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 12px;' + LineEnding +
+    '  shadow: 0 1 2 var(--btn-shadow);' + LineEnding +
+    '}' + LineEnding +
+    '/* ''hoverable'' = the neutral wash a default button takes (neutralBackground1Hover). */' + LineEnding +
+    'TyCard:hover    { background: var(--btn-hover); border-color: var(--btn-hover-bord); }' + LineEnding +
+    'TyCard:disabled { opacity: var(--disabled); }' + LineEnding +
+    '' + LineEnding +
+    '/* Title band: never tinted — Fluent divides with a neutralStroke hairline, so the' + LineEnding +
+    '   band is the card''s own sheet plus a rule under it. Semibold like the primary' + LineEnding +
+    '   button (600, not bold); no padding of its own, so the title lines up with the' + LineEnding +
+    '   body on the card''s 12px inset. */' + LineEnding +
+    'TyCardHeader {' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  font-weight: 600;' + LineEnding +
+    '}' + LineEnding +
+    '/* Actions rail: the same hairline, this time above the strip. */' + LineEnding +
+    'TyCardActions { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Pill: Fluent''s filled tag — neutral chip fill, no stroke, 4px rounded rect. */' + LineEnding +
+    'TyTag {' + LineEnding +
+    '  background: var(--chip);' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 0px 8px;' + LineEnding +
+    '}' + LineEnding +
+    '/* Brand/danger tags TINT their own hue and ink in it: Fluent''s brand tag is' + LineEnding +
+    '   brandBackground2, not a solid block. Same 0.12 wash the ghost button''s' + LineEnding +
+    '   :selected already uses — and it keeps the x readable, which a solid fill' + LineEnding +
+    '   under a neutral x would not. */' + LineEnding +
+    'TyTag.accent   { background: alpha(var(--accent), 0.12); color: var(--accent); }' + LineEnding +
+    'TyTag.danger   { background: alpha(var(--danger), 0.12); color: var(--danger); }' + LineEnding +
+    'TyTag:disabled { opacity: var(--disabled); }' + LineEnding +
+    '' + LineEnding +
+    '/* The x stays neutral on every variant (Fluent never brands its dismiss); its' + LineEnding +
+    '   hover chip takes the PRESSED wash, because the faint --ghost-hover would' + LineEnding +
+    '   vanish against the tag''s own fill. */' + LineEnding +
+    'TyTagClose       { color: var(--muted); }' + LineEnding +
+    'TyTagClose:hover { background: var(--pressed); color: var(--ink); border-radius: var(--radius); }' + LineEnding +
+    '' + LineEnding +
+    '/* Badge: Fluent''s Badge IS circular, so the inherited round pill is right in' + LineEnding +
+    '   shape — but it must ride THIS file''s --radius-pill and the Fluent semibold' + LineEnding +
+    '   rather than the base''s --radius-round/bold, and seed from --accent so the' + LineEnding +
+    '   runtime accent-picker recolours it in either mode. */' + LineEnding +
+    'TyBadge {' + LineEnding +
+    '  background: var(--accent);' + LineEnding +
+    '  color: var(--on-accent);' + LineEnding +
+    '  border-radius: var(--radius-pill);' + LineEnding +
+    '  font-weight: 600;' + LineEnding +
     '}' + LineEnding;
 end;
 
@@ -2430,7 +3035,7 @@ begin
     '    --titlebar-ink:         #000000;' + LineEnding +
     '    --caption-ink:          #5B5B5D;' + LineEnding +
     '    --caption-ink-hover:    #1D1D1F;' + LineEnding +
-    '    --overlay:              #000000;   /* caption hover/press wash base */' + LineEnding +
+    '    --overlay:              #000000;   /* hover/press wash base (caption glyphs, tag chips) */' + LineEnding +
     '' + LineEnding +
     '    /* default button */' + LineEnding +
     '    --btn-face-top:         #FFFFFF;' + LineEnding +
@@ -2468,6 +3073,9 @@ begin
     '    /* progress */' + LineEnding +
     '    --track:                #D9D9D9;' + LineEnding +
     '    --track-border:         #C6C6C6;' + LineEnding +
+    '' + LineEnding +
+    '    /* card */' + LineEnding +
+    '    --card-face:            #FFFFFF;   /* a card is a sheet ON the window, not a sunken well */' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -2486,7 +3094,7 @@ begin
     '    --titlebar-ink:         #F5F5F7;' + LineEnding +
     '    --caption-ink:          #AEAEB2;' + LineEnding +
     '    --caption-ink-hover:    #F5F5F7;' + LineEnding +
-    '    --overlay:              #FFFFFF;   /* caption hover/press wash base */' + LineEnding +
+    '    --overlay:              #FFFFFF;   /* hover/press wash base (caption glyphs, tag chips) */' + LineEnding +
     '' + LineEnding +
     '    /* default button */' + LineEnding +
     '    --btn-face-top:         #5A5A5C;' + LineEnding +
@@ -2524,6 +3132,9 @@ begin
     '    /* progress */' + LineEnding +
     '    --track:                #3A3A3C;' + LineEnding +
     '    --track-border:         #48484A;' + LineEnding +
+    '' + LineEnding +
+    '    /* card */' + LineEnding +
+    '    --card-face:            #3A3A3C;   /* lifts above the chrome; --field (#1E1E1E) would sink */' + LineEnding +
     '  }' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -2593,7 +3204,46 @@ begin
     '' + LineEnding +
     '/* Progress: soft grey track, flat accent fill, both fully rounded. */' + LineEnding +
     'TyProgressBar   { background: var(--track); color: var(--ink); border: 1px solid var(--track-border); border-radius: 100; }' + LineEnding +
-    'TyProgressFill  { background: var(--accent); border-radius: 100; }' + LineEnding;
+    'TyProgressFill  { background: var(--accent); border-radius: 100; }' + LineEnding +
+    '' + LineEnding +
+    '/* --- card + tag + badge (Ant Design-gap batch 1) ------------------------- */' + LineEnding +
+    '' + LineEnding +
+    '/* Card: an Aqua box — a plain sheet on the window chrome, hairline, the shared 6px corner' + LineEnding +
+    '   and the same soft shadow the buttons cast (a card is only a bigger member of the family). */' + LineEnding +
+    'TyCard          { background: var(--card-face); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 12px; shadow: 0 1 3 var(--btn-shadow); }' + LineEnding +
+    'TyCard:hover    { border-color: var(--field-hover-border); shadow: 0 2 6 var(--btn-shadow); }' + LineEnding +
+    'TyCard:disabled { opacity: 0.55; }' + LineEnding +
+    '' + LineEnding +
+    '/* Title / actions bands: hairline rules, never a tinted strip — a tinted caption band is a' + LineEnding +
+    '   Win9x/Office move; a Mac box separates with a rule and names itself with a bold title.' + LineEnding +
+    '   No font-size: like every control here the title takes the inherited size. */' + LineEnding +
+    'TyCardHeader  { color: var(--ink); border: 1px solid var(--border); font-weight: bold; }' + LineEnding +
+    'TyCardActions { border: 1px solid var(--border); }' + LineEnding +
+    '' + LineEnding +
+    '/* Tag: a Mail-style address token — flat fill, hairline, fully round ends (the 100 radius is' + LineEnding +
+    '   clamped to half height, same as the progress bar). Neutral fill is the caption''s wash base' + LineEnding +
+    '   at caption strength, so it flips with the mode; the hairline is what makes it an object on' + LineEnding +
+    '   the grey chrome, exactly as it does for the fields. */' + LineEnding +
+    'TyTag          { background: alpha(var(--overlay), 0.08); color: var(--ink); border: 1px solid var(--border); border-radius: 100; padding: 0px 8px; }' + LineEnding +
+    '/* Variants: flat accent / systemRed with the darkened rim the primary button and the checked' + LineEnding +
+    '   box wear. No gloss — the gloss is this skin''s button material and a tag is a label. */' + LineEnding +
+    'TyTag.accent   { background: var(--accent); color: on(var(--accent)); border-color: darken(var(--accent), 8%); }' + LineEnding +
+    'TyTag.danger   { background: var(--danger); color: on(var(--danger)); border-color: darken(var(--danger), 8%); }' + LineEnding +
+    'TyTag:disabled { opacity: 0.55; }' + LineEnding +
+    '' + LineEnding +
+    '/* The x: same species as a caption-button glyph — a muted mark that takes a wash chip under' + LineEnding +
+    '   the pointer, round rather than the caption''s 4px square because it sits inside a capsule.' + LineEnding +
+    '   The variants re-ink it: a grey glyph would be unreadable on the accent / systemRed fills.' + LineEnding +
+    '   Hover only lays the chip down, so each variant keeps its own ink. */' + LineEnding +
+    'TyTagClose        { color: alpha(var(--ink), 0.5); }' + LineEnding +
+    'TyTagClose.accent { color: on(var(--accent)); }' + LineEnding +
+    'TyTagClose.danger { color: on(var(--danger)); }' + LineEnding +
+    'TyTagClose:hover  { background: alpha(var(--overlay), 0.12); border-radius: 100; }' + LineEnding +
+    '' + LineEnding +
+    '/* Badge: the Dock''s count bubble — systemRed, white, bold, round. NOT --accent: on a Mac a' + LineEnding +
+    '   number riding a control means unread / attention, and that colour is systemRed; the blue' + LineEnding +
+    '   is the brand seed the user re-picks at runtime, which would say something else entirely. */' + LineEnding +
+    'TyBadge { background: var(--danger); color: on(var(--danger)); border-radius: 100; font-weight: bold; padding: 0px 4px; }' + LineEnding;
 end;
 
 function SkinCss_material3: string;
@@ -2618,6 +3268,7 @@ begin
     '    --primary:    var(--accent); /* visible primary; light == the seed           */' + LineEnding +
     '    --on-primary: #FFFFFF;   /* ink on filled primary / checked check-mark        */' + LineEnding +
     '    --surface:    #FAFAFA;   /* window + top app bar: near-white surface          */' + LineEnding +
+    '    --card:       #F7F2FA;   /* card container: M3 surface-container-low          */' + LineEnding +
     '    --field:      #FFFFFF;   /* outlined text-field / checkbox well               */' + LineEnding +
     '    --outline:    #79747E;   /* M3 outline: field / checkbox / radio stroke       */' + LineEnding +
     '    --tonal:      #E8DEF8;   /* secondary-container: tonal (default) button fill   */' + LineEnding +
@@ -2637,6 +3288,7 @@ begin
     '    --primary:    #D0BCFF;   /* M3 primary, brightened for dark contrast          */' + LineEnding +
     '    --on-primary: #381E72;   /* dark ink on the light-purple filled primary       */' + LineEnding +
     '    --surface:    #141218;   /* window + top app bar: darkest tonal surface       */' + LineEnding +
+    '    --card:       #1D1B20;   /* card container: M3 surface-container-low (dark)   */' + LineEnding +
     '    --field:      #1D1B20;   /* outlined text-field / checkbox well               */' + LineEnding +
     '    --outline:    #938F99;   /* M3 outline (dark)                                 */' + LineEnding +
     '    --tonal:      #4A4458;   /* secondary-container (dark) tonal button fill       */' + LineEnding +
@@ -2723,7 +3375,67 @@ begin
     '' + LineEnding +
     '/* Linear progress: surface-variant track, solid primary fill, both fully pill-rounded. */' + LineEnding +
     'TyProgressBar   { background: var(--track);   border-radius: 100px; }' + LineEnding +
-    'TyProgressFill  { background: var(--primary); border-radius: 100px; }' + LineEnding;
+    'TyProgressFill  { background: var(--primary); border-radius: 100px; }' + LineEnding +
+    '' + LineEnding +
+    '/* --- card + tag + badge -------------------------------------------------- */' + LineEnding +
+    '' + LineEnding +
+    '/* M3 "elevated card": the card is its OWN tonal surface, never an outlined box.' + LineEnding +
+    '   Elevation here is TONE first, shadow second — over the dark palette''s #141218 a' + LineEnding +
+    '   shadow is all but invisible, so a card left at the window colour would vanish;' + LineEnding +
+    '   surface-container-low is what lifts it, and it reads in both modes. 12px = M3''s' + LineEnding +
+    '   medium shape. 16px is the spec''s card inset: the header''s compact-padding thesis' + LineEnding +
+    '   is a BUTTON rule (it keeps short CJK captions from truncating), and a card holds' + LineEnding +
+    '   content, not a caption. Hover only lifts level 1 -> level 2, reusing the very' + LineEnding +
+    '   shadow pair the buttons already use. */' + LineEnding +
+    'TyCard          { background: var(--card); color: var(--ink); border-width: 0; border-radius: 12px; padding: 16px; shadow: 0 1 2 #0000001F; }' + LineEnding +
+    'TyCard:hover    { shadow: 0 2 4 #00000029; }' + LineEnding +
+    'TyCard:disabled { background: alpha(var(--ink), 0.04); color: alpha(var(--ink), 0.38); shadow: 0 0 0 #00000000; }' + LineEnding +
+    '' + LineEnding +
+    '/* No separator hairline and no tinted band on either strip: M3 divides a card by' + LineEnding +
+    '   whitespace and type weight, never by rules — and this skin gets its structure from' + LineEnding +
+    '   elevation, not from borders. The header''s padding stays unset on purpose so the' + LineEnding +
+    '   title inherits the card''s 16px and lines up with the body; the title is M3' + LineEnding +
+    '   "title-medium" = the same 500 weight the filled buttons carry, not bold. */' + LineEnding +
+    'TyCardHeader    { color: var(--ink); border-width: 0; font-weight: 500; }' + LineEnding +
+    'TyCardActions   { border-width: 0; }' + LineEnding +
+    '' + LineEnding +
+    '/* Chips ARE the M3 tag, and they are the one M3 component that is not a pill: 8px' + LineEnding +
+    '   (small shape) corners, a 1px outline round a transparent container, on-surface' + LineEnding +
+    '   label — an M3 assist/filter chip at rest, hover lit by the usual 8% state layer.' + LineEnding +
+    '   Horizontal air follows this file''s compact discipline (the buttons'' 10px); vertical' + LineEnding +
+    '   is 0 because the type sets the height. Disabled neutralises the chip to M3''s' + LineEnding +
+    '   on-surface washes — 12% container, 38% label, 12% outline — which is also what' + LineEnding +
+    '   the filled variants below fall back to. */' + LineEnding +
+    'TyTag           { background: transparent; color: var(--ink); border: 1px solid var(--outline); border-radius: 8px; padding: 0px 10px; }' + LineEnding +
+    'TyTag:hover     { background: alpha(var(--ink), 0.08); }' + LineEnding +
+    'TyTag:disabled  { background: alpha(var(--ink), 0.12); color: alpha(var(--ink), 0.38); border-color: alpha(var(--ink), 0.12); }' + LineEnding +
+    '' + LineEnding +
+    '/* The variants are the two roles the palette actually seeds. Both are FILLED chips —' + LineEnding +
+    '   M3 drops a chip''s outline the moment it takes a container — lightened by the same' + LineEnding +
+    '   white state layer the filled buttons use, so a tag and a button of the same role' + LineEnding +
+    '   never disagree. */' + LineEnding +
+    'TyTag.accent       { background: var(--primary); color: var(--on-primary); border-width: 0; }' + LineEnding +
+    'TyTag.accent:hover { background: mix(var(--primary), #FFFFFF, 8%); }' + LineEnding +
+    'TyTag.danger       { background: var(--danger); color: var(--on-danger); border-width: 0; }' + LineEnding +
+    'TyTag.danger:hover { background: mix(var(--danger), #FFFFFF, 8%); }' + LineEnding +
+    '' + LineEnding +
+    '/* The x is M3''s trailing "remove" icon: on-surface-variant ink on the outlined chip,' + LineEnding +
+    '   and the container''s own ink on the filled ones (TyTagClose resolves with the tag''s' + LineEnding +
+    '   StyleClass, so the variants can say so). :hover is the circular state layer M3 puts' + LineEnding +
+    '   under every icon target; it deliberately sets no colour, so a filled chip''s x keeps' + LineEnding +
+    '   its contrast while the pointer is on it. */' + LineEnding +
+    'TyTagClose          { color: var(--ink-muted); }' + LineEnding +
+    'TyTagClose:hover    { background: alpha(var(--ink), 0.12); border-radius: 100px; }' + LineEnding +
+    'TyTagClose:disabled { color: alpha(var(--ink), 0.38); }' + LineEnding +
+    'TyTagClose.accent   { color: var(--on-primary); }' + LineEnding +
+    'TyTagClose.danger   { color: var(--on-danger); }' + LineEnding +
+    '' + LineEnding +
+    '/* An M3 badge is an ERROR-role component, not an accent one — Material''s own badge' + LineEnding +
+    '   defaults to the error container with on-error ink, so the inherited accent pill is' + LineEnding +
+    '   simply the wrong role here (and this key also drives TyButton''s built-in badge, which' + LineEnding +
+    '   is exactly where M3 puts red badges anyway). Fully round, 4px of horizontal air,' + LineEnding +
+    '   label is M3 "label-small" = 500; the dot and inset keep the built-in metrics. */' + LineEnding +
+    'TyBadge         { background: var(--danger); color: var(--on-danger); border-radius: 100px; font-weight: 500; padding: 0px 4px; }' + LineEnding;
 end;
 
 function SkinCss_office: string;
@@ -2929,6 +3641,100 @@ begin
     'TyProgressFill {' + LineEnding +
     '  background: var(--accent);' + LineEnding +
     '  border-radius: 2px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* ── Card + Tag + Badge (Ant Design-gap batch 1) ─────────────────────────── */' + LineEnding +
+    '/* Metric tokens (--card-header-height, --tag-close-size, --badge-*) stay at their' + LineEnding +
+    '   fallbacks on purpose: this skin''s thesis is that nativeness comes from colour,' + LineEnding +
+    '   border and radius — never from size. */' + LineEnding +
+    '' + LineEnding +
+    '/* Card: a white content sheet lifted off the neutral window — Fluent''s depth-4' + LineEnding +
+    '   hairline shadow, the thin neutral line, the same 2px radius as every other surface' + LineEnding +
+    '   here. Body inset keeps the command-bar''s 10px rhythm rather than a roomy web-card' + LineEnding +
+    '   pad. ''hoverable'' lifts the way a clickable Fluent card does: the hairline firms up' + LineEnding +
+    '   to field strength and the shadow deepens — never a colour change. */' + LineEnding +
+    'TyCard {' + LineEnding +
+    '  background: var(--field);' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border: 1px solid var(--line);' + LineEnding +
+    '  border-radius: 2px;' + LineEnding +
+    '  padding: 10px;' + LineEnding +
+    '  shadow: 0 1 2 #00000024;' + LineEnding +
+    '}' + LineEnding +
+    'TyCard:hover { border: 1px solid var(--line-field); shadow: 0 2 4 #00000024; }' + LineEnding +
+    'TyCard:disabled {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--muted);' + LineEnding +
+    '  border: 1px solid var(--line);' + LineEnding +
+    '  shadow: 0 0 0 #00000000;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Card header: Office genuinely does tint its title bands (task-pane and dialog' + LineEnding +
+    '   headers), so the strip recedes to the neutral window tone exactly the way' + LineEnding +
+    '   TyButton:hover does, with a hairline rule under it. Semibold, never larger —' + LineEnding +
+    '   Fluent''s title weight on the base font. Padding is left unset so the title lines' + LineEnding +
+    '   up with the card''s own body inset. */' + LineEnding +
+    'TyCardHeader {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border: 1px solid var(--line);' + LineEnding +
+    '  font-weight: 600;' + LineEnding +
+    '}' + LineEnding +
+    '/* The strips resolve with the CARD''s states, so a disabled card would otherwise keep a' + LineEnding +
+    '   full-strength semibold title over its greyed-out body. Setting a colour above opts out' + LineEnding +
+    '   of the "no header colour -> the card''s own ink" fallback, so the muted ink is spelled' + LineEnding +
+    '   out here — the same grey-out every other disabled rule in this file performs. */' + LineEnding +
+    'TyCardHeader:disabled { color: var(--muted); }' + LineEnding +
+    '' + LineEnding +
+    '/* Card actions: the header''s mirror — Office''s dialog command strip is the same' + LineEnding +
+    '   tinted band, fenced off by the same hairline, under the content. */' + LineEnding +
+    'TyCardActions {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  border: 1px solid var(--line);' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Tag: a Fluent chip, NOT a pill — the 2px radius is this skin''s whole point, so tags' + LineEnding +
+    '   read as tiny bordered command-bar chips. The neutral face recedes to the window tone' + LineEnding +
+    '   and leans on the hairline to stay legible on the white card. */' + LineEnding +
+    'TyTag {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--ink);' + LineEnding +
+    '  border: 1px solid var(--line);' + LineEnding +
+    '  border-radius: 2px;' + LineEnding +
+    '  padding: 0px 8px;' + LineEnding +
+    '}' + LineEnding +
+    '/* Variants: the solid faces of the primary / danger buttons, minus the shadow — a tag' + LineEnding +
+    '   is a label, not something you can press. accent follows the runtime accent-picker;' + LineEnding +
+    '   danger stays fixed on Office''s error red. */' + LineEnding +
+    'TyTag.accent { background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); }' + LineEnding +
+    'TyTag.danger { background: var(--danger); color: on(var(--danger)); border: 1px solid var(--danger); }' + LineEnding +
+    '/* Greys out rather than fades: this palette carries no opacity token, and every other' + LineEnding +
+    '   disabled control here recolours to the muted trio. The state layer resolves after the' + LineEnding +
+    '   variant, so an accent / danger tag greys out through this one rule too. */' + LineEnding +
+    'TyTag:disabled { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }' + LineEnding +
+    '' + LineEnding +
+    '/* Tag close: Fluent''s dismiss inherits the pill''s own ink, so no colour is set here —' + LineEnding +
+    '   that is what keeps the x legible on the neutral, accent AND danger faces alike.' + LineEnding +
+    '   Hover is the ghost button''s faint neutral wash, squared off to the same 2px. */' + LineEnding +
+    'TyTagClose       { border-radius: 2px; }' + LineEnding +
+    'TyTagClose:hover { background: var(--hover-overlay); }' + LineEnding +
+    '' + LineEnding +
+    '/* Badge: the counter badge is the one genuinely round thing in Fluent, so the inherited' + LineEnding +
+    '   pill SHAPE is right for this era — its vocabulary is not. Ink resolves through' + LineEnding +
+    '   on(var(--accent)), so rebranding to Excel-green or PowerPoint-orange re-inks the' + LineEnding +
+    '   digits too; the weight is Fluent''s semibold, not bold. Size is left alone — nativeness' + LineEnding +
+    '   never comes from size here, so the badge keeps the base font.' + LineEnding +
+    '   The radius deliberately over-shoots: unlike the radio''s fixed indicator, a badge is' + LineEnding +
+    '   sized from the MEASURED glyph height, so a literal (8px) would only read round at one' + LineEnding +
+    '   font size and turn into a rounded rect at any other. Over-shooting lets the painter' + LineEnding +
+    '   clamp to half the shorter side — round at every size, the way every round badge in' + LineEnding +
+    '   the pack does it. */' + LineEnding +
+    'TyBadge {' + LineEnding +
+    '  background: var(--accent);' + LineEnding +
+    '  color: on(var(--accent));' + LineEnding +
+    '  border-radius: 100px;' + LineEnding +
+    '  font-weight: 600;' + LineEnding +
+    '  padding: 0px 4px;' + LineEnding +
     '}' + LineEnding;
 end;
 
@@ -3428,7 +4234,80 @@ begin
     'TyTreeCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }' + LineEnding +
     'TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
     'TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
-    'TyTreeCheckBox:disabled { color: var(--muted); }' + LineEnding;
+    'TyTreeCheckBox:disabled { color: var(--muted); }' + LineEnding +
+    '' + LineEnding +
+    '/* ── Card + Tag (Ant Design-gap batch 1) ───────────────────────────────── */' + LineEnding +
+    '' + LineEnding +
+    '/* One themed surface for the whole card; the header/actions strips are bands drawn' + LineEnding +
+    '   on it, not frames of their own. Gradients in this skin belong to pressable faces' + LineEnding +
+    '   (TyButton) and chrome bands (TyTitleBar) — a card BODY is a backdrop for child' + LineEnding +
+    '   controls, so it stays flat like TyPanel/TyTabSheet. The card''s drama is the accent' + LineEnding +
+    '   header band + a heavier lift than a panel''s (1/3 panel -> 2/4 card -> 3/6 hover). */' + LineEnding +
+    'TyCard {' + LineEnding +
+    '  background: var(--surface);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 10px;' + LineEnding +
+    '  shadow: 0px 2px 4px #0000002E;' + LineEnding +
+    '}' + LineEnding +
+    '/* AntD''s ''hoverable'' is just this rule — no property needed. */' + LineEnding +
+    'TyCard:hover    { border-color: var(--input-border-hover); shadow: 0px 3px 6px #0000003D; }' + LineEnding +
+    'TyCard:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* The showcase genuinely WANTS a tinted title band (proving the band mechanism is the' + LineEnding +
+    '   skin''s whole job), so it reuses TyTitleBar''s accent gradient and type scale: a card' + LineEnding +
+    '   reads as a little window. The separator is the accent''s own dark edge — the lavender' + LineEnding +
+    '   --border would vanish against the band. */' + LineEnding +
+    'TyCardHeader {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(--accent, 8%), var(--accent));' + LineEnding +
+    '  color: var(--on-accent);' + LineEnding +
+    '  border-color: var(--accent-active);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  font-size: var(--font-size-title);' + LineEnding +
+    '  font-weight: var(--font-weight-bold);' + LineEnding +
+    '}' + LineEnding +
+    '/* Actions ride the chrome tint (as TyToolBar/TyStatusBar do) — readable against the' + LineEnding +
+    '   flat body — fenced off by a --border hairline above. */' + LineEnding +
+    'TyCardActions { background: var(--surface-chrome); border-color: var(--border); border-width: 1px; }' + LineEnding +
+    '' + LineEnding +
+    '/* A tag is a pressable chip, so it takes TyButton''s raised-face treatment (sheen +' + LineEnding +
+    '   border); TyBadge stays flat because it is a marker you cannot press. The neutral' + LineEnding +
+    '   pill starts BELOW the surface (darken 4->12%) or its top stop would melt into the' + LineEnding +
+    '   card it sits on. --radius-round clamps to half-height => truly round ends. */' + LineEnding +
+    'TyTag {' + LineEnding +
+    '  background: linear-gradient(90deg, darken(--surface, 4%), darken(--surface, 12%));' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  border-radius: var(--radius-round);' + LineEnding +
+    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-weight: var(--font-weight-bold);' + LineEnding +
+    '  padding: 0px 8px;' + LineEnding +
+    '}' + LineEnding +
+    'TyTag:hover    { border-color: var(--input-border-hover); }' + LineEnding +
+    'TyTag:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '/* Variants are StyleClasses, mirroring TyButton.primary/.danger. Only these two: the' + LineEnding +
+    '   seed palette has no success/warning colour to pair an on() with. */' + LineEnding +
+    'TyTag.accent { background: linear-gradient(90deg, lighten(--accent, 10%), var(--accent)); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
+    'TyTag.danger { background: linear-gradient(90deg, lighten(--danger, 10%), var(--danger)); color: var(--on-danger); border-color: var(--danger); }' + LineEnding +
+    '/* TyTag:hover overwrites border-color for EVERY variant (the resolver applies '':state''' + LineEnding +
+    '   before ''.variant:state''), and --input-border-hover is lighten(--accent) — which is the' + LineEnding +
+    '   right lift for the neutral and accent pills, but paints a VIOLET rim on the pink danger' + LineEnding +
+    '   one, its only hover feedback. Restate it in the danger hue: --danger-hover is exactly' + LineEnding +
+    '   lighten(--danger, 10%), the same +10% relationship --input-border-hover has to --accent. */' + LineEnding +
+    'TyTag.danger:hover { border-color: var(--danger-hover); }' + LineEnding +
+    '' + LineEnding +
+    '/* The x mirrors TyTabClose — same --overlay-hover chip, same radius, since the two x''s' + LineEnding +
+    '   are meant to look alike. It resolves WITH the tag''s StyleClass, so the filled variants' + LineEnding +
+    '   must re-state their ink: --muted is on-surface ink and goes muddy on a purple or pink' + LineEnding +
+    '   pill. The .variant:state rules land after the base :hover, so they win. */' + LineEnding +
+    'TyTagClose        { color: var(--muted); }' + LineEnding +
+    'TyTagClose.accent { color: var(--on-accent); }' + LineEnding +
+    'TyTagClose.danger { color: var(--on-danger); }' + LineEnding +
+    'TyTagClose:hover        { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius); }' + LineEnding +
+    'TyTagClose.accent:hover { color: var(--on-accent); }' + LineEnding +
+    'TyTagClose.danger:hover { color: var(--on-danger); }' + LineEnding;
 end;
 
 function SkinCss_ubuntu: string;
@@ -3447,6 +4326,7 @@ begin
     '    --accent:     #E95420;   /* Ubuntu orange — brand seed; runtime picker recolours from here */' + LineEnding +
     '    --danger:     #C7162B;   /* Ubuntu/Yaru destructive red */' + LineEnding +
     '    --surface:    #FAFAFA;   /* window */' + LineEnding +
+    '    --card-face:  #FFFFFF;   /* raised card sheet over the window */' + LineEnding +
     '    --headerbar:  #F5F5F5;   /* Yaru headerbar */' + LineEnding +
     '    --title-ink:  #1D1D1D;   /* caption text */' + LineEnding +
     '    --field:      #FFFFFF;   /* input wells */' + LineEnding +
@@ -3468,6 +4348,7 @@ begin
     '    --accent:     #E95420;   /* Ubuntu orange — brand seed, unchanged in dark */' + LineEnding +
     '    --danger:     #ED333B;   /* destructive red — lifted for dark contrast */' + LineEnding +
     '    --surface:    #1E1E1E;   /* window — Yaru dark neutral */' + LineEnding +
+    '    --card-face:  #2C2C2C;   /* raised card sheet — lifted off the window */' + LineEnding +
     '    --headerbar:  #2C2C2C;   /* dark headerbar */' + LineEnding +
     '    --title-ink:  #FFFFFF;   /* caption text */' + LineEnding +
     '    --field:      #2C2C2C;   /* input wells */' + LineEnding +
@@ -3545,7 +4426,41 @@ begin
     '' + LineEnding +
     '/* Progress — flat pill track, solid orange fill. */' + LineEnding +
     'TyProgressBar  { background: var(--track); border: none; border-radius: 100px; }' + LineEnding +
-    'TyProgressFill { background: var(--accent); border-radius: 100px; }' + LineEnding;
+    'TyProgressFill { background: var(--accent); border-radius: 100px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Card — the Yaru sheet: a raised face lifted off the window, thin grey hairline,' + LineEnding +
+    '   6px radius, a faint shadow like the buttons''. Header and actions are bands on' + LineEnding +
+    '   that one sheet, and Yaru cards are FLAT — no tinted title strip (a --headerbar' + LineEnding +
+    '   band would also vanish against the dark card face, which is the same charcoal).' + LineEnding +
+    '   So both bands are just a separator hairline; the title carries bold ink. */' + LineEnding +
+    'TyCard          { background: var(--card-face); color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 12px; shadow: 0 1px 2px #00000014; }' + LineEnding +
+    'TyCard:hover    { border-color: darken(var(--border), 6%); shadow: 0 2px 6px #0000001F; }' + LineEnding +
+    'TyCard:disabled { opacity: 0.6; }' + LineEnding +
+    'TyCardHeader    { color: var(--ink); border-color: var(--border); border-width: 1px; font-weight: bold; }' + LineEnding +
+    'TyCardActions   { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Tag — a flat GTK chip: neutral ink-tint pill, round ends, no border (Yaru chips' + LineEnding +
+    '   are fills, not frames). The tint mirrors the caption button''s hover wash, so it' + LineEnding +
+    '   reads right on both the light and the dark card face. accent/danger fill solid in' + LineEnding +
+    '   the brand orange / the Yaru red and let on() pick the ink, exactly as the checkbox' + LineEnding +
+    '   and the caption buttons above already do on the accent: on() reads the orange as a' + LineEnding +
+    '   dark seed and hands back the white Yaru wants, and it stays right when the runtime' + LineEnding +
+    '   picker recolours --accent out from under a pinned literal. */' + LineEnding +
+    'TyTag          { background: alpha(var(--ink), 0.10); color: var(--ink); border-radius: 100px; padding: 0px 8px; }' + LineEnding +
+    'TyTag.accent   { background: var(--accent); color: on(var(--accent)); }' + LineEnding +
+    'TyTag.danger   { background: var(--danger); color: on(var(--danger)); }' + LineEnding +
+    'TyTag:disabled { opacity: 0.6; }' + LineEnding +
+    '' + LineEnding +
+    '/* Close ''x'' — dim secondary ink that darkens into a circular hover chip, the way' + LineEnding +
+    '   GTK''s .circular close buttons behave inside a pill. */' + LineEnding +
+    'TyTagClose       { color: var(--muted); }' + LineEnding +
+    'TyTagClose:hover { background: alpha(var(--ink), 0.10); color: var(--ink); border-radius: 100px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Badge — GNOME Shell''s counter pill: a solid accent counter with bold ink. The base' + LineEnding +
+    '   badge already sits on the accent, but it rounds to the base''s 12px; Shell''s counters' + LineEnding +
+    '   are true pills, so restate the shape here (a skin that names a typeKey owns it whole)' + LineEnding +
+    '   and keep the ink on the seed via on(). */' + LineEnding +
+    'TyBadge { background: var(--accent); color: on(var(--accent)); border-radius: 100px; font-weight: bold; padding: 0px 4px; }' + LineEnding;
 end;
 
 function SkinCss_win10: string;
@@ -3719,7 +4634,50 @@ begin
     '' + LineEnding +
     '/* Progress: #E6E6E6 flat track, hairline border, solid accent fill, square. */' + LineEnding +
     'TyProgressBar  { render-style: flat; background: var(--progress-track); border: 1px solid var(--field-border); border-radius: 0; }' + LineEnding +
-    'TyProgressFill { background: var(--accent); border-radius: 0; }' + LineEnding;
+    'TyProgressFill { background: var(--accent); border-radius: 0; }' + LineEnding +
+    '' + LineEnding +
+    '/* ---- Card + Tag + Badge ---- */' + LineEnding +
+    '' + LineEnding +
+    '/* Card: a solid content sheet (white in light, #333 in dark) lifted off the grey' + LineEnding +
+    '   window by a single hairline — the same fill + 1px border + zero radius recipe as' + LineEnding +
+    '   every other surface here, and no shadow: Win10 content sits IN the plane, it never' + LineEnding +
+    '   floats above it. :hover is the Win10 tile/button affordance — the border lights up' + LineEnding +
+    '   in the accent. Disabled follows the file''s usual recipe (flat surface, dim ink,' + LineEnding +
+    '   pale border) rather than a blanket fade. */' + LineEnding +
+    'TyCard          { background: var(--field); color: var(--ink); border: 1px solid var(--button-border); border-radius: 0; padding: 12px; }' + LineEnding +
+    'TyCard:hover    { border: 1px solid var(--accent); }' + LineEnding +
+    'TyCard:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid var(--disabled-border); }' + LineEnding +
+    '' + LineEnding +
+    '/* Header + actions bands: NO tinted band — Win10 is flat, so the title is set off by' + LineEnding +
+    '   nothing but a hairline. That hairline is the CARD''s own --button-border, i.e. the very' + LineEnding +
+    '   border it sits inside — NOT the title bar''s divider: --titlebar-border is toned against' + LineEnding +
+    '   --titlebar-bg, and on the card''s --field fill it all but disappears in dark mode' + LineEnding +
+    '   (#3A3A3A on #333333). Bold is reserved for headings in this skin (buttons and badges' + LineEnding +
+    '   stay normal weight). Padding is left unset on purpose, so the title lines up with the' + LineEnding +
+    '   body on the card''s own gutter. */' + LineEnding +
+    'TyCardHeader  { color: var(--ink); border: 1px solid var(--button-border); font-weight: bold; }' + LineEnding +
+    'TyCardActions { border: 1px solid var(--button-border); }' + LineEnding +
+    '' + LineEnding +
+    '/* Tag: a flat SQUARE chip, not a round pill — Win10 has no round-ended anything, so the' + LineEnding +
+    '   base layer''s --radius-round is overridden to 0. The default chip is the button face and' + LineEnding +
+    '   its hairline, i.e. the same quiet chrome the default button wears; the two variants fill' + LineEnding +
+    '   solid in the accent-picker blue / the Win10 red, with on() picking their ink. */' + LineEnding +
+    'TyTag          { background: var(--button-face); color: var(--ink); border: 1px solid var(--button-border); border-radius: 0; padding: 0px 8px; }' + LineEnding +
+    'TyTag.accent   { background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); }' + LineEnding +
+    'TyTag.danger   { background: var(--danger); color: on(var(--danger)); border: 1px solid var(--danger); }' + LineEnding +
+    'TyTag:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid var(--disabled-border); }' + LineEnding +
+    '' + LineEnding +
+    '/* Tag close ''x'': dim ink at rest, and on hover it takes the Win10 caption-close treatment —' + LineEnding +
+    '   a square red chip with white-on-red ink, because that is what an ''x'' does in this OS.' + LineEnding +
+    '   Here it goes through var(--danger) so it brightens with the dark palette; only the real' + LineEnding +
+    '   caption button hard-codes #E81123, since the OS close red never follows the accent picker. */' + LineEnding +
+    'TyTagClose       { color: var(--ink-dim); }' + LineEnding +
+    'TyTagClose:hover { background: var(--danger); color: on(var(--danger)); border-radius: 0; }' + LineEnding +
+    '' + LineEnding +
+    '/* Badge: a solid accent counter with SQUARE corners. The inherited base badge is a round' + LineEnding +
+    '   modern pill; Win10''s badges (taskbar counters, live-tile markers) are hard-edged blocks' + LineEnding +
+    '   like everything else in this language, and their numerals are not bold. */' + LineEnding +
+    'TyBadge { background: var(--accent); color: on(var(--accent)); border-radius: 0; font-weight: normal; padding: 0px 4px; }' + LineEnding;
 end;
 
 function SkinCss_win11: string;
@@ -3843,6 +4801,7 @@ begin
     '  /* Geometry — Fluent soft rounding; progress is a full pill */' + LineEnding +
     '  --radius:      5px;' + LineEnding +
     '  --radius-sm:   4px;' + LineEnding +
+    '  --radius-lg:   8px;    /* a LAYER (card / flyout) rounds softer than the controls on it */' + LineEnding +
     '  --radius-pill: 100px;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -3922,7 +4881,53 @@ begin
     '' + LineEnding +
     '/* Progress: a rounded PILL track with a rounded accent fill (Win 11 rounded bar). */' + LineEnding +
     'TyProgressBar  { background: var(--track); border-width: 0; border-radius: var(--radius-pill); }' + LineEnding +
-    'TyProgressFill { background: var(--accent); border-radius: var(--radius-pill); }' + LineEnding;
+    'TyProgressFill { background: var(--accent); border-radius: var(--radius-pill); }' + LineEnding +
+    '' + LineEnding +
+    '/* ── Card + Tag (Ant Design-gap batch 1) ─────────────────────────────────── */' + LineEnding +
+    '' + LineEnding +
+    '/* Card: a Fluent LAYER — the button''s card face and near-invisible hairline, the same faint' + LineEnding +
+    '   2px shadow, but the softer layer corner and a roomier inset (a card holds content, a button' + LineEnding +
+    '   holds a word). The header / actions strips are BANDS on this one surface: Win 11 never tints' + LineEnding +
+    '   them, so each carries nothing but its hairline separator. */' + LineEnding +
+    'TyCard          { background: var(--card); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius-lg); padding: 12px; shadow: 0 1 2 var(--shadow-col); }' + LineEnding +
+    '/* Hover firms the hairline only, no face change: the pointer crosses a container constantly,' + LineEnding +
+    '   and a card that repaints its whole surface on every pass is the noise Win 11 avoids. */' + LineEnding +
+    'TyCard:hover    { border-color: var(--border-hover); }' + LineEnding +
+    'TyCard:disabled { background: var(--disabled-bg); color: var(--disabled-ink); border-color: var(--disabled-border); shadow: 0 0 0 #00000000; }' + LineEnding +
+    '' + LineEnding +
+    '/* Title band: no fill (the card face reads straight through) + the hairline rule beneath it.' + LineEnding +
+    '   Weight 600 is Fluent''s "Body Strong" — a semibold title, never the heavy bold of the classic' + LineEnding +
+    '   skins. No padding of its own, so the title lines up with the body. */' + LineEnding +
+    'TyCardHeader  { color: var(--ink); border-color: var(--border); border-width: 1px; font-weight: 600; }' + LineEnding +
+    'TyCardActions { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Tag: a Fluent chip. The neutral fill is the TRANSLUCENT overlay rather than a solid tone, so' + LineEnding +
+    '   one pill reads on the Mica backdrop and on a card face alike; under it the usual hairline,' + LineEnding +
+    '   and the progress bar''s pill radius — Win 11 chips are pill-ended. No shadow: a chip is inline' + LineEnding +
+    '   furniture, not a lifted layer. */' + LineEnding +
+    'TyTag          { background: var(--active-fill); color: var(--ink); border-color: var(--border); border-width: 1px; border-radius: var(--radius-pill); padding: 0px 8px; font-weight: normal; }' + LineEnding +
+    '/* The two colour variants are the solid InfoBadge material — accent / critical fill with the' + LineEnding +
+    '   darkened border the solid buttons carry. Shaped exactly like the neutral pill; only the' + LineEnding +
+    '   colour differs. */' + LineEnding +
+    'TyTag.accent   { background: var(--accent); color: var(--on-accent); border-color: var(--accent-border); }' + LineEnding +
+    'TyTag.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger-border); }' + LineEnding +
+    '/* Applied after the variants, so a disabled accent / danger tag greys out with the rest. */' + LineEnding +
+    'TyTag:disabled { background: var(--disabled-bg); color: var(--disabled-ink); border-color: var(--disabled-border); }' + LineEnding +
+    '' + LineEnding +
+    '/* The close x mirrors the caption buttons: nothing at rest, a soft overlay chip under the' + LineEnding +
+    '   pointer. Its ink is deliberately UNSET so the x takes the pill''s own ink and stays readable' + LineEnding +
+    '   on the solid accent / danger fills too. The chip uses the press overlay, not the hover one:' + LineEnding +
+    '   at a 14px slot this skin''s resting hover fill is too faint to read as an affordance. */' + LineEnding +
+    'TyTagClose       { background: alpha(#FFFFFF, 0); border-radius: var(--radius-sm); }' + LineEnding +
+    'TyTagClose:hover { background: var(--active-fill); }' + LineEnding +
+    '' + LineEnding +
+    '/* Badge: the Fluent InfoBadge — a solid accent pill in the button''s corner at the full pill' + LineEnding +
+    '   radius, so a single digit lands on a true circle. Normal weight like every other glyph here' + LineEnding +
+    '   (Win 11''s badge digits are caption text, not bold), which is where this skin parts with the' + LineEnding +
+    '   bold base pill. No font-size, like every other rule in this skin: a control with no theme' + LineEnding +
+    '   font-size already falls back to --font-size-base on its own, so stating it here would only' + LineEnding +
+    '   cost the badge an explicitly-set Font.Size (which outranks the token, but not a rule). */' + LineEnding +
+    'TyBadge { background: var(--accent); color: var(--on-accent); border-radius: var(--radius-pill); font-weight: normal; padding: 0px 4px; }' + LineEnding;
 end;
 
 function SkinCss_xp: string;
@@ -4154,6 +5159,80 @@ begin
     'TyProgressFill {' + LineEnding +
     '  background: linear-gradient(90deg, #9BE06B 0%, #6BBF3A 55%, #4E9E27 100%);' + LineEnding +
     '  border-radius: 2px;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Card: the XP Explorer "task pane" — a white panel lifted off the Luna beige, steel-blue edged and' + LineEnding +
+    '   rounded-ish, with a pale-blue title band. A flat hairline card would be wrong here: in Luna a' + LineEnding +
+    '   panel ALWAYS announces itself with a blue header, so the band is the point, not decoration. */' + LineEnding +
+    'TyCard {' + LineEnding +
+    '  background: var(--field);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--field-border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 10px;' + LineEnding +
+    '}' + LineEnding +
+    '/* Hoverable = the same orange "Luna glow" the buttons light up with. */' + LineEnding +
+    'TyCard:hover    { border-color: var(--focus); }' + LineEnding +
+    'TyCard:disabled { opacity: 0.5; }' + LineEnding +
+    '' + LineEnding +
+    '/* Title band: pale Luna blue fading a shade deeper, bold dark-blue ink, steel hairline beneath.' + LineEnding +
+    '   Accent-derived, so the runtime picker recolours it along with the rest of the blue chrome.' + LineEnding +
+    '   Padding left unset on purpose — the title then lines up with the body text. */' + LineEnding +
+    'TyCardHeader {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(var(--accent), 88%) 0%, lighten(var(--accent), 72%) 100%);' + LineEnding +
+    '  color: darken(var(--accent), 30%);' + LineEnding +
+    '  border-color: var(--field-border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  font-weight: bold;' + LineEnding +
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Actions strip: the XP wizard button band — the Luna beige under a steel hairline, so the buttons' + LineEnding +
+    '   sit on chrome instead of floating on the white body. */' + LineEnding +
+    'TyCardActions { background: var(--surface); border-color: var(--field-border); border-width: 1px; }' + LineEnding +
+    '' + LineEnding +
+    '/* Tag: a miniature XP chip, NOT a modern round-ended pill — the raised silver gradient, blue-grey' + LineEnding +
+    '   edge and 3px corners of the buttons, cut from the beige so it reads on the white card body and on' + LineEnding +
+    '   the beige form alike. */' + LineEnding +
+    'TyTag {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(var(--surface), 70%) 0%, lighten(var(--surface), 40%) 48%, var(--surface) 100%);' + LineEnding +
+    '  color: var(--on-surface);' + LineEnding +
+    '  border-color: var(--btn-border);' + LineEnding +
+    '  border-width: 1px;' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 0px 8px;' + LineEnding +
+    '}' + LineEnding +
+    '/* The two variants = the glossy primary / close-red buttons, shrunk to chip size. */' + LineEnding +
+    'TyTag.accent {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(var(--accent), 24%) 0%, var(--accent) 55%, darken(var(--accent), 12%) 100%);' + LineEnding +
+    '  color: var(--on-accent);' + LineEnding +
+    '  border-color: darken(var(--accent), 22%);' + LineEnding +
+    '}' + LineEnding +
+    'TyTag.danger {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(var(--danger), 24%) 0%, var(--danger) 55%, darken(var(--danger), 12%) 100%);' + LineEnding +
+    '  color: var(--on-danger);' + LineEnding +
+    '  border-color: darken(var(--danger), 22%);' + LineEnding +
+    '}' + LineEnding +
+    'TyTag:disabled { opacity: 0.5; }' + LineEnding +
+    '' + LineEnding +
+    '/* Close ''x'': no chip at rest, just ink that follows the chip it sits on (one muted grey would go' + LineEnding +
+    '   muddy on the glossy blue and red variants — the x resolves with the tag''s StyleClass, so it can' + LineEnding +
+    '   track them). Hover lights a miniature Luna close button: the glossy red with a white glyph,' + LineEnding +
+    '   the caption bar''s gesture at tag scale. */' + LineEnding +
+    'TyTagClose        { color: var(--on-surface); border-radius: var(--radius); }' + LineEnding +
+    'TyTagClose.accent { color: var(--on-accent); }' + LineEnding +
+    'TyTagClose.danger { color: var(--on-danger); }' + LineEnding +
+    'TyTagClose:hover  { background: linear-gradient(90deg, var(--close-top) 0%, var(--close-mid) 46%, var(--close-bot) 100%); color: var(--on-danger); }' + LineEnding +
+    '' + LineEnding +
+    '/* Badge: a miniature caption button — the glossy blue rounded square with its white glyph — rather' + LineEnding +
+    '   than the base layer''s flat round pill, which is a decade too modern for Luna. A hair more side' + LineEnding +
+    '   padding than the base''s 4px, because XP chrome is chunky and the gloss needs room to read. */' + LineEnding +
+    'TyBadge {' + LineEnding +
+    '  background: linear-gradient(90deg, lighten(var(--accent), 34%) 0%, lighten(var(--accent), 4%) 46%, darken(var(--accent), 10%) 100%);' + LineEnding +
+    '  color: var(--on-accent);' + LineEnding +
+    '  border-radius: var(--radius);' + LineEnding +
+    '  padding: 0px 5px;' + LineEnding +
+    '  font-weight: bold;' + LineEnding +
     '}' + LineEnding;
 end;
 

@@ -13,7 +13,11 @@ uses
 type
   TTyGlyphKind = (tgClose, tgMinimize, tgMaximize, tgRestore, tgCheck, tgCheckIndeterminate,
     tgRadioDot, tgChevronDown, tgChevronRight, tgArrowUp, tgArrowDown, tgArrowLeft, tgArrowRight,
-    tgDialogLauncher);
+    tgDialogLauncher,
+    // Semantic status marks (TTyAlert / TTyNotification). Drawn in ONE ink like every glyph
+    // here, so they are outlines (ring + mark), not AntD's filled discs — a filled disc needs
+    // two colours and would not tint with the caller's single AColor.
+    tgInfo, tgSuccess, tgWarning, tgError);
 
   TTyPainter = class
   private
@@ -623,6 +627,34 @@ begin
         FBmp.DrawLineAntialias(l, t, r, b, px, th, True);
         FBmp.DrawPolyLineAntialias([PointF(r - w * 0.5, b), PointF(r, b),
           PointF(r, b - h * 0.5)], px, th);
+      end;
+    { Status marks. All four sit on the SAME m-based circle/triangle so a row of alerts lines up
+      optically whatever the type. Closed outlines are drawn as poly-LINES with the first point
+      repeated (the painter has no closed-polygon stroke). }
+    tgInfo:
+      begin
+        FBmp.EllipseAntialias(cx, cy, m * 0.5, m * 0.5, px, th);
+        FBmp.FillEllipseAntialias(cx, cy - m * 0.26, th * 0.6, th * 0.6, px);   // the tittle
+        FBmp.DrawLineAntialias(cx, cy - m * 0.06, cx, cy + m * 0.27, px, th, True);
+      end;
+    tgSuccess:
+      begin
+        FBmp.EllipseAntialias(cx, cy, m * 0.5, m * 0.5, px, th);
+        FBmp.DrawPolyLineAntialias([PointF(cx - m * 0.23, cy + m * 0.02),
+          PointF(cx - m * 0.06, cy + m * 0.19), PointF(cx + m * 0.24, cy - m * 0.19)], px, th);
+      end;
+    tgWarning:
+      begin
+        // A triangle, not a ring — the one shape that reads as "warning" at 16px without colour.
+        FBmp.DrawPolyLineAntialias([PointF(cx, t), PointF(r, b), PointF(l, b), PointF(cx, t)], px, th);
+        FBmp.DrawLineAntialias(cx, t + h * 0.34, cx, t + h * 0.66, px, th, True);
+        FBmp.FillEllipseAntialias(cx, t + h * 0.82, th * 0.6, th * 0.6, px);
+      end;
+    tgError:
+      begin
+        FBmp.EllipseAntialias(cx, cy, m * 0.5, m * 0.5, px, th);
+        FBmp.DrawLineAntialias(cx - m * 0.19, cy - m * 0.19, cx + m * 0.19, cy + m * 0.19, px, th, True);
+        FBmp.DrawLineAntialias(cx + m * 0.19, cy - m * 0.19, cx - m * 0.19, cy + m * 0.19, px, th, True);
       end;
   end;
 end;

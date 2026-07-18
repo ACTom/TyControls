@@ -313,3 +313,95 @@ TyProgressFill {
   border-radius: 6px;
   render-style: flat;
 }
+
+/* ---- Cards, tags & badges ----------------------------------------------- */
+/* Mode-invariant metrics. BS gives .card-header and .card-footer the SAME box
+   (.5rem padding above and below a 1.5rem line), so the 36/44 fallback split
+   isn't Bootstrap — both bands are 40. Geometry never flips per @mode. */
+:root {
+  --card-header-height:   40;   /* .card-header: .5rem*2 + a 1.5rem line */
+  --card-actions-height:  40;   /* .card-footer: BS caps it identically  */
+}
+
+/* .card: one flat well, a single 1px gray hairline, .375rem corners and 1rem of
+   inset (.card-body). No shadow — BS ships .card flat and leaves the lift to the
+   .shadow utilities, so a skin-wide shadow would be someone else's Bootstrap. */
+TyCard {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  render-style: flat;
+  padding: 16px;
+}
+/* BS has no .card:hover of its own, so 'hoverable' borrows btn-light's border
+   darkening rather than inventing a lift BS never uses. */
+TyCard:hover {
+  border-color: var(--btn-hover-border);
+}
+TyCard:disabled {
+  opacity: 0.65;
+}
+
+/* .card-header: the cap tint is BS 5.3's rgba(body-color, .03) — a wash of the
+   INK, so it darkens the white body and lightens the dark one from this one rule.
+   Weight normal: .card-header carries no font-weight in BS (the band is made by
+   tint + hairline, not by heavy type), and this skin is weight-normal throughout.
+   No padding — falling back to the card's 1rem is what lines the title up with the
+   body, exactly as BS's matching .card-header / .card-body padding does. */
+TyCardHeader {
+  background: alpha(var(--ink), 0.03);
+  color: var(--ink);
+  border-color: var(--border);   /* the border-bottom hairline */
+  border-width: 1px;
+  font-weight: normal;
+}
+/* .card-footer: same cap tint, hairline on the other side. */
+TyCardActions {
+  background: alpha(var(--ink), 0.03);
+  border-color: var(--border);
+  border-width: 1px;
+}
+
+/* Tags are .badge: borderless solid chips at the same .375rem radius as every
+   other surface here — .rounded-pill is opt-in in BS, so nothing goes round.
+   Neutral = .bg-light/.text-dark, on the gray-200 wash rather than gray-100 so the
+   chip still reads against a white card. */
+TyTag {
+  background: var(--subtle);
+  color: var(--ink);
+  border-radius: 6px;
+  render-style: flat;
+  padding: 0px 8px;
+}
+TyTag.accent { background: var(--accent); color: on(var(--accent)); }   /* .text-bg-primary */
+TyTag.danger { background: var(--danger); color: on(var(--danger)); }   /* .text-bg-danger  */
+/* No :hover — a BS .badge is a static chip; only its x lights up. */
+TyTag:disabled {
+  opacity: 0.65;
+}
+
+/* The x is .btn-close: a muted glyph, same ink as the caption buttons'. BS ships
+   .btn-close-white precisely because a dark x dies on a solid chip — same problem
+   here, so the variants re-ink it through on(). */
+TyTagClose        { color: var(--muted); }
+TyTagClose.accent { color: on(var(--accent)); }
+TyTagClose.danger { color: on(var(--danger)); }
+/* Hover chip: an ink wash, not an opaque fill — one value has to darken the grey
+   chip and the blue/red ones alike, and it flips with --ink in dark mode (where
+   this skin's hovers lighten). 4px = the caption-button chip's corner. */
+TyTagClose:hover  { background: alpha(var(--ink), 0.15); border-radius: 4px; }
+
+/* .badge: a small rounded RECT at .375rem, NOT a pill — .rounded-pill is opt-in in
+   BS, so the inherited round accent pill is wrong here. Solid primary + bold IS
+   .text-bg-primary, the one place this weight-normal skin wants 700; the accent
+   picker recolours it along with every other primary surface. Side padding a touch
+   over the base's: BS's .badge is airier across (.65em) than down (.35em), and with
+   the vertical pinned at 0 that ratio has to come from the sides alone. */
+TyBadge {
+  background: var(--accent);
+  color: on(var(--accent));
+  border-radius: 6px;
+  font-weight: bold;
+  padding: 0px 5px;
+}

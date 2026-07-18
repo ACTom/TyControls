@@ -15,7 +15,7 @@ unit test.imageview;
 interface
 
 uses
-  Classes, SysUtils, Types, fpcunit, testregistry,
+  Classes, SysUtils, Types, TypInfo, fpcunit, testregistry,
   Graphics, BGRABitmap, BGRABitmapTypes,
   tyControls.Animation, tyControls.ImageView;
 
@@ -47,7 +47,8 @@ type
     procedure TestFilterAllOffMatchesSourceNonDestructive;
     // --- animation: TTyAnimator interpolation ---
     procedure TestAnimatorInterpolationHalfwayThenComplete;
-  end;
+      procedure TestPublishedPictureIsReadable;
+end;
 
 implementation
 
@@ -339,6 +340,33 @@ begin
   AssertEquals('eased lands on 1.0', 1.0, a.Eased, 1e-6);
   v := TyLerpF(FromV, ToV, a.Eased);
   AssertEquals('lerp value == to at completion', ToV, v, 1e-4);
+end;
+
+{ Every PUBLISHED property must be readable: the Lazarus Object Inspector reads them all when
+  a form is opened, so a write-only one makes the IDE refuse the form with
+  'Cannot read property "Picture"' — which is exactly what happened the first time a
+  TTyImageView was dropped on a designed form. Runtime streaming never caught it: it only
+  ever WRITES the properties a .lfm actually names. This reads it the way the IDE does — via
+  RTTI — so the guard fails for the same reason the IDE did. }
+procedure TTyImageViewTest.TestPublishedPictureIsReadable;
+var
+  v: TTyImageView;
+  pi: PPropInfo;
+  got: TObject;
+begin
+  v := TTyImageView.Create(nil);
+  try
+    pi := GetPropInfo(v, 'Picture');
+    AssertTrue('Picture is published', pi <> nil);
+    AssertTrue('...and has a GETTER (a published property the IDE cannot read breaks the form)',
+      pi^.GetProc <> nil);
+    got := GetObjectProp(v, 'Picture');
+    AssertTrue('reading it through RTTI yields the picture', got is TPicture);
+    // And it still does its job: assigning decodes into the viewer's own source.
+    AssertTrue('and the getter returns the very picture the setter feeds', got = GetObjectProp(v, 'Picture'));
+  finally
+    v.Free;
+  end;
 end;
 
 initialization

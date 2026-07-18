@@ -11,6 +11,7 @@
     --accent:     #E95420;   /* Ubuntu orange — brand seed; runtime picker recolours from here */
     --danger:     #C7162B;   /* Ubuntu/Yaru destructive red */
     --surface:    #FAFAFA;   /* window */
+    --card-face:  #FFFFFF;   /* raised card sheet over the window */
     --headerbar:  #F5F5F5;   /* Yaru headerbar */
     --title-ink:  #1D1D1D;   /* caption text */
     --field:      #FFFFFF;   /* input wells */
@@ -32,6 +33,7 @@
     --accent:     #E95420;   /* Ubuntu orange — brand seed, unchanged in dark */
     --danger:     #ED333B;   /* destructive red — lifted for dark contrast */
     --surface:    #1E1E1E;   /* window — Yaru dark neutral */
+    --card-face:  #2C2C2C;   /* raised card sheet — lifted off the window */
     --headerbar:  #2C2C2C;   /* dark headerbar */
     --title-ink:  #FFFFFF;   /* caption text */
     --field:      #2C2C2C;   /* input wells */
@@ -110,3 +112,37 @@ TyRadioButton:focus    { outline: 2px alpha(var(--accent), 0.35); outline-offset
 /* Progress — flat pill track, solid orange fill. */
 TyProgressBar  { background: var(--track); border: none; border-radius: 100px; }
 TyProgressFill { background: var(--accent); border-radius: 100px; }
+
+/* Card — the Yaru sheet: a raised face lifted off the window, thin grey hairline,
+   6px radius, a faint shadow like the buttons'. Header and actions are bands on
+   that one sheet, and Yaru cards are FLAT — no tinted title strip (a --headerbar
+   band would also vanish against the dark card face, which is the same charcoal).
+   So both bands are just a separator hairline; the title carries bold ink. */
+TyCard          { background: var(--card-face); color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 12px; shadow: 0 1px 2px #00000014; }
+TyCard:hover    { border-color: darken(var(--border), 6%); shadow: 0 2px 6px #0000001F; }
+TyCard:disabled { opacity: 0.6; }
+TyCardHeader    { color: var(--ink); border-color: var(--border); border-width: 1px; font-weight: bold; }
+TyCardActions   { border-color: var(--border); border-width: 1px; }
+
+/* Tag — a flat GTK chip: neutral ink-tint pill, round ends, no border (Yaru chips
+   are fills, not frames). The tint mirrors the caption button's hover wash, so it
+   reads right on both the light and the dark card face. accent/danger fill solid in
+   the brand orange / the Yaru red and let on() pick the ink, exactly as the checkbox
+   and the caption buttons above already do on the accent: on() reads the orange as a
+   dark seed and hands back the white Yaru wants, and it stays right when the runtime
+   picker recolours --accent out from under a pinned literal. */
+TyTag          { background: alpha(var(--ink), 0.10); color: var(--ink); border-radius: 100px; padding: 0px 8px; }
+TyTag.accent   { background: var(--accent); color: on(var(--accent)); }
+TyTag.danger   { background: var(--danger); color: on(var(--danger)); }
+TyTag:disabled { opacity: 0.6; }
+
+/* Close 'x' — dim secondary ink that darkens into a circular hover chip, the way
+   GTK's .circular close buttons behave inside a pill. */
+TyTagClose       { color: var(--muted); }
+TyTagClose:hover { background: alpha(var(--ink), 0.10); color: var(--ink); border-radius: 100px; }
+
+/* Badge — GNOME Shell's counter pill: a solid accent counter with bold ink. The base
+   badge already sits on the accent, but it rounds to the base's 12px; Shell's counters
+   are true pills, so restate the shape here (a skin that names a typeKey owns it whole)
+   and keep the ink on the seed via on(). */
+TyBadge { background: var(--accent); color: on(var(--accent)); border-radius: 100px; font-weight: bold; padding: 0px 4px; }

@@ -45,6 +45,7 @@ type
     procedure TestTitleAlignmentMovesTitleInk;
     procedure TestActionsStripTintPaintedAtBottom;
     procedure TestTitleVisibleWhenThemeOmitsHeaderKey;
+    procedure TestBorderlessCardKeepsFullBandRadius;
   end;
 
 implementation
@@ -725,6 +726,63 @@ begin
         end;
       AssertTrue('title ink is drawn even with no TyCardHeader rule (not invisible)',
         ink > 20);
+    finally
+      Reread.Free;
+    end;
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyCardTest.TestBorderlessCardKeepsFullBandRadius;
+{ Adversarial-review finding (CONFIRMED): the header band's outer corner radii were shrunk by
+  the RAW border-width token, even when the border was present-but-not-drawn (a width with no
+  colour). With no stroke the band fills flush to the card edge, so its corner must keep the
+  card's FULL radius; shrinking it under-rounds, and the header tint spills past where the
+  card's own rounded corner curves away. Here: radius 12, border-width 4, but NO border colour
+  -> the border is not drawn (bw=0), so the header corner must stay radius 12, not 12-4=8.
+
+  Sample the top-left corner at (3,3): it lies OUTSIDE a radius-12 arc but INSIDE a radius-8
+  one. Full radius -> the corner is unpainted (white pre-fill shows). Under-rounded -> the
+  blue header tint reaches (3,3). The red channel separates them cleanly (white 255 vs blue 59). }
+var
+  Ctl: TTyStyleController;
+  Acc: TCardAccess;
+  Bmp: TBitmap;
+  Reread: TBGRABitmap;
+  corner: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyCard { background: #FFFFFF; color: #000000; border-radius: 12px; ' +
+      '  border-width: 4px; padding: 8px; font-size: 12px; }' +
+      'TyCardHeader { background: #3B82F6; color: #000000; font-size: 12px; }');
+    Acc := TCardAccess.Create(FForm);
+    Acc.Parent := FForm;
+    Acc.Controller := Ctl;
+    Acc.ShowHeader := True;
+    Acc.SetBounds(0, 0, 240, 160);
+    Acc.Font.PixelsPerInch := 96;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(240, 160);
+    Acc.DoRenderTo(Bmp.Canvas, Rect(0, 0, 240, 160), 96);
+
+    Reread := TBGRABitmap.Create(Bmp);
+    try
+      // (3,3) lies OUTSIDE a radius-12 arc but INSIDE a radius-8 one. Full radius (the fix) ->
+      // the header tint stops short of the corner, so (3,3) is NOT blue. Under-rounded (the
+      // bug) -> the blue tint reaches (3,3). Test "is it the header blue", not "is it white":
+      // the unpainted corner is a transparent (alpha-0) region GDI leaves black, so a
+      // white-vs-black check would be unreliable, but "not blue" holds either way.
+      corner := Reread.GetPixel(3, 3);
+      AssertFalse(Format('border-less card keeps its full corner radius: the header tint must '
+        + 'not spill into the corner (RGB at (3,3)=%d,%d,%d)',
+        [corner.red, corner.green, corner.blue]),
+        (corner.blue > 120) and (corner.blue > corner.red + 40));
     finally
       Reread.Free;
     end;

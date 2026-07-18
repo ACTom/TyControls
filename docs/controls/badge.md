@@ -16,7 +16,7 @@ TTyBadge 是**独立的数字 / 圆点角标**控件,继承自 `TTyGraphicContro
 |------|-----|
 | 单元 | `tyControls.Badge` |
 | `GetStyleTypeKey` 返回值 | `'TyBadge'`(**与 TTyButton 内置角标同一个 key**:一条主题规则同时驱动两者,不会走样)|
-| 新增 token | `--badge-dot-size`(圆点直径,logical px;未设置时回退到 `TyBadgeDotSize` = 8)|
+| 新增 token | `--badge-dot-size`(圆点直径,回退 `TyBadgeDotSize` = 8)、`--badge-inset`(角内缩,回退 `TyBadgeInset` = 2)、`--badge-min-size`(高度下限,回退 `TyBadgeMinSize` = 8);均为 logical px |
 
 角点枚举 `TTyBadgePosition`(`bpTopLeft` / `bpTopRight` / `bpBottomLeft` / `bpBottomRight`)**别名自** `tyControls.Button` 的同名类型——不是复制:两者必须对"角"含义完全一致,别名不会漂移,也不会像同包内第二个同名枚举那样造成歧义。枚举**值**仍在 `tyControls.Button`,代码里写 `bpTopRight` 需一并 uses 该单元。
 
@@ -64,7 +64,13 @@ TyBadge {
   padding: 0px 4px;                    /* 横向呼吸;高度靠字高 */
 }
 
-:root { --badge-dot-size: 8px; }       /* 圆点直径(可选,未设置则用内置 8) */
+/* 三个尺寸 token 都是可选的;未设置就用内置回退值。TTyButton 的内置角标读的是同样的
+   token,所以皮肤调一次,两颗角标一起变。 */
+:root {
+  --badge-dot-size: 8px;               /* 圆点直径 */
+  --badge-inset:    2px;               /* 距宿主角的内缩 */
+  --badge-min-size: 8px;               /* 高度下限(量崩了也保持可见) */
+}
 ```
 
 **渲染:** 高度 = 参考字形 `'0'` 的高 + 2×纵向 padding(下限 8 logical px,量崩了也保持可见),宽度 = 实际文本宽 + 2×横向 padding,且**不窄于自身高度**(单个数字落成近似圆形)。圆角默认取半高(胶囊),主题设了更小的 `border-radius` 则按 `TyClampRadius` 夹紧后尊重之。圆点即 1:1 宽高的同一形状 = 正圆。数字用 `ASmallCrisp` 绘制(Linux/macOS 上超采样,Windows 行为不变),文本裁剪矩形额外放宽 1px 防止 Qt6 下小号粗体被削边——以上每一条都与 `TTyButton.DrawBadge` 逐行对齐。
@@ -113,4 +119,4 @@ Tag.Value := 12;
 - **跨 Parent 的目标:** 角标必须与目标处在同一坐标空间才可能贴上去,所以赋 `Target` 会**改变角标的 Parent**(设计期即可见)。无窗口目标若此刻还没有 Parent(代码创建顺序问题),吸附会推迟到目标获得 Parent / 下一次 bounds 变化,`.lfm` 流式加载则统一在 `Loaded` 里完成。
 - **不吸附 = 不移动:** `Target = nil` 时 `Position` 无效,`Left` / `Top` 完全由用户(或 `Anchors`)决定。
 - **纯逻辑可测:** 文本规则 `TyBadgeText`、显示规则 `TyBadgeVisible`、尺寸 `TyBadgeSize`、角点 `TyBadgeCornerPos` 均为纯函数并已单元测试;`TestMatchesButtonBadgeGeometry` 进一步用像素包围盒守护"与内置角标长得一样"。
-- **主题驱动:** 颜色 / 圆角 / 字号 / padding / 圆点直径全部取自 `TyBadge` 与 `--badge-dot-size`,控件代码里不硬编码。唯二的例外是**角内缩 2px** 与**高度下限 8px** 两个常量(`TyBadgeInset` / `TyBadgeMinSize`):它们是 `TTyButton.DrawBadge` 里的字面量,**故意不 token 化**——只在这边 token 化会让挂载的 TTyBadge 与按钮内置角标错位。将来要 token 化,必须两处同时改。
+- **主题驱动:** 颜色 / 圆角 / 字号 / padding / 圆点直径 / 角内缩 / 高度下限全部取自 `TyBadge` 规则与 `--badge-dot-size` / `--badge-inset` / `--badge-min-size`,控件代码里不硬编码。角内缩与高度下限曾是两边的字面量、**故意不 token 化**(只在这边 token 化会让挂载的 TTyBadge 与按钮内置角标错位);现在**两处一起**读同样的 token —— `TTyBadge` 与 `TTyButton.DrawBadge` 都走 `ActiveController.Metric(...)`,所以皮肤调一次两颗一起动,不会走样(`TestInsetTokenMovesBothBadgesTogether` 用像素守护这一点)。三个回退常量与 token 名都放在 `tyControls.Types`(本单元 uses `tyControls.Button`,反过来借不到常量),并在本单元 re-export。

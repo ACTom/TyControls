@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, Forms, fpcunit, testregistry,
   tyControls.Types, tyControls.Dialogs, tyControls.Button, tyControls.Panel,
-  tyControls.Edit, tyControls.Memo, tyControls.ListBox;
+  tyControls.Edit, tyControls.Memo, tyControls.ListBox,
+  tyControls.TyLabel;   // the message body is a TTyLabel — the tests read its measured height
 type
   TDialogButtonBarTest = class(TTestCase)
   published
@@ -28,6 +29,9 @@ type
     procedure TestBuildConfirmationHasYesNo;
     procedure TestBuildInformationHasOK;
     procedure TestConfirmationDismissIsMrCancel;
+    procedure TestLongMessageGrowsTheDialog;
+    procedure TestWideMessageWidensBeforeGrowingTall;
+    procedure TestShortMessageStaysNarrow;
   end;
 
   TDialogBaseTest = class(TTestCase)
@@ -436,6 +440,75 @@ begin
   // Must not raise on a nil form (the helper's guard).
   TyForwardDialogEvents(nil, @HandleShow, @HandleClose, @HandleCanClose);
   AssertTrue('nil form tolerated', True);
+end;
+
+{ The message body used to be pinned to a 260x40 box — exactly two lines — so a third line, or
+  one long unbroken run, was silently cut off. These three guard that the dialog is sized to the
+  text's MEASURED wrapped size instead. }
+
+function MsgBodyLabel(ADlg: TTyDialog): TTyLabel;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to ADlg.ComponentCount - 1 do
+    if ADlg.Components[i] is TTyLabel then Exit(TTyLabel(ADlg.Components[i]));
+end;
+
+procedure TMessageBuildTest.TestLongMessageGrowsTheDialog;
+var
+  dShort, dLong: TTyDialog;
+begin
+  dShort := TyBuildMessageDialog('Saved.', mtInformation, [mbOK]);
+  try
+    dLong := TyBuildMessageDialog(
+      'The operation could not be completed because the destination folder is read-only, the '
+      + 'source file is still open in another application, and the volume has less free space '
+      + 'than the copy requires. Close the other application, free some space, then retry. If '
+      + 'the problem persists, check the folder permissions and try a different destination.',
+      mtError, [mbOK]);
+    try
+      // The body must GROW with the text. It was pinned to 40px — exactly two lines — so
+      // everything past line two was silently cut. Asserted on the BODY, not the dialog:
+      // the dialog only gets taller once the text outgrows the icon column beside it, which
+      // depends on the runtime font size.
+      AssertTrue(Format('the body grows with the text (short %d, long %d)',
+        [MsgBodyLabel(dShort).Height, MsgBodyLabel(dLong).Height]),
+        MsgBodyLabel(dLong).Height > MsgBodyLabel(dShort).Height);
+      AssertTrue('and the dialog is tall enough to contain it',
+        dLong.ClientHeight >= MsgBodyLabel(dLong).Height);
+    finally
+      dLong.Free;
+    end;
+  finally
+    dShort.Free;
+  end;
+end;
+
+procedure TMessageBuildTest.TestWideMessageWidensBeforeGrowingTall;
+var dShort, dLong: TTyDialog; wShort: Integer;
+begin
+  dShort := TyBuildMessageDialog('Saved.', mtInformation, [mbOK]);
+  try wShort := dShort.ClientWidth; finally dShort.Free; end;
+  dLong := TyBuildMessageDialog(
+    'The operation could not be completed because the destination folder is read-only and the '
+    + 'source file is still open in another application. Close it, then retry.',
+    mtError, [mbOK]);
+  try
+    // A paragraph must not become a ribbon 40 lines long: the text column widens first.
+    AssertTrue(Format('a long message widens the dialog (short %d, long %d)',
+      [wShort, dLong.ClientWidth]), dLong.ClientWidth > wShort);
+  finally dLong.Free; end;
+end;
+
+procedure TMessageBuildTest.TestShortMessageStaysNarrow;
+var d: TTyDialog;
+begin
+  // Sizing to the text must not stretch a one-liner across the screen.
+  d := TyBuildMessageDialog('Saved.', mtInformation, [mbOK]);
+  try
+    AssertTrue(Format('a one-liner stays narrow (%d)', [d.ClientWidth]), d.ClientWidth < 420);
+    AssertTrue('and short', d.ClientHeight < 220);
+  finally d.Free; end;
 end;
 
 initialization

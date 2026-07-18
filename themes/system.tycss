@@ -395,6 +395,53 @@ TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); bo
 TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyTreeCheckBox:disabled { color: var(--muted); }
 
+/* ── Card + Tag (Ant Design-gap batch 1) ───────────────────────────────── */
+
+/* One themed surface for the whole card; the header/actions strips are bands drawn
+   on it, so they carry only their separator (border-*) and the title's ink. Neutral
+   like the rest of this skin: hairline border, no header band, no tinting — the OS
+   accent has no business colouring a plain content surface.
+   The card fill can't be a plain var(--surface): light's --form-bg is an elevated
+   surface (so a --surface card lifts off it), but dark's --form-bg IS --surface raw,
+   which would leave the card invisible but for its hairline. --card-bg carries that
+   per-@mode split (light=--surface, dark=--input-bg), same as auto.tycss. */
+TyCard {
+  background: var(--card-bg);
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+TyCard:hover { border-color: var(--border-hover); }
+TyCard:disabled { opacity: var(--disabled-opacity); }
+/* No background => a transparent title band over the card's own surface. */
+TyCardHeader {
+  color: var(--on-surface);
+  border-color: var(--border);
+  border-width: var(--input-border-width);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+TyCardActions { border-color: var(--border); border-width: var(--input-border-width); }
+
+/* Neutral tag = a faint on-surface wash, so it stays legible whatever the OS accent
+   is. The variants are StyleClasses on seeds this palette already has; .accent tracks
+   the OS accent and takes its ink from on(), so any accent stays readable. */
+TyTag {
+  background: var(--overlay-hover);
+  color: var(--on-surface);
+  border-radius: var(--radius-round);
+  font-size: var(--font-size-base);
+  padding: 0px 8px;
+}
+TyTag.accent { background: var(--accent); color: var(--on-accent); }
+TyTag.danger { background: var(--danger); color: var(--on-danger); }
+TyTag:disabled { opacity: var(--disabled-opacity); }
+
+TyTagClose       { color: var(--muted); }
+TyTagClose:hover { background: var(--overlay-hover); color: var(--on-surface); border-radius: var(--radius-sm); }
+
 /* ── @mode conditional token blocks (D7) ──────────────────────────────────────
    The accent SEED is `system-accent` (StyleModel swaps it for the OS accent at
    merge time). --ty-mode = `system-mode` so elevate()/on() pick the OS scheme.
@@ -448,6 +495,9 @@ TyTreeCheckBox:disabled { color: var(--muted); }
   --font-size-base: 9px; --font-size-title: 9px;
   --font-weight-normal: 400; --font-weight-bold: 700;
   --transparent-fill: alpha(#FFFFFF, 0);
+  /* Card surface: light = the plain surface, which lifts off the elevated
+     --form-bg behind it (matches light.tycss). */
+  --card-bg: var(--surface);
   }
 }
 
@@ -497,5 +547,9 @@ TyTreeCheckBox:disabled { color: var(--muted); }
   --font-size-base: 9px; --font-size-title: 9px;
   --font-weight-normal: 400; --font-weight-bold: 700;
   --transparent-fill: alpha(#000000, 0);
+  /* Card surface: dark --form-bg is --surface raw, so a --surface card would
+     vanish into the backdrop; the card lifts on --input-bg (matches dark.tycss,
+     and the TitleBar / input-surface approach). */
+  --card-bg: var(--input-bg);
   }
 }

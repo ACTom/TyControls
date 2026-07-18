@@ -3,7 +3,8 @@ unit tyControls.Button;
 interface
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LMessages, ExtCtrls,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation, tyControls.Accel;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation, tyControls.Accel,
+  tyControls.StrConsts;
 type
   // Which corner the numeric badge sits in (inset within the button's client rect).
   TTyBadgePosition = (bpTopLeft, bpTopRight, bpBottomLeft, bpBottomRight);
@@ -280,7 +281,7 @@ begin
   Result := False;
   AText := '';
   if not FShowBadge then Exit;
-  if FBadgeValue > 99 then AText := '99+' else AText := IntToStr(FBadgeValue);
+  if FBadgeValue > 99 then AText := rsBadgeOverflow else AText := IntToStr(FBadgeValue);
   vis := True;   // default: show (including '0'); the event may override
   if Assigned(FOnBadgeDisplay) then FOnBadgeDisplay(Self, FBadgeValue, AText, vis);
   Result := vis and (AText <> '');
@@ -290,7 +291,7 @@ procedure TTyButton.DrawBadge(P: TTyPainter; const AFullRect: TRect);
 var
   S: TTyStyleSet;
   txt: string;
-  fs, fw, padX, padY, tw, bh, bw, inset, x, y, half, themedR, rLogical: Integer;
+  fs, fw, padX, padY, tw, bh, bw, inset, minSize, x, y, half, themedR, rLogical: Integer;
   szH, szW: TSize;
   badgeRect: TRect;
 begin
@@ -304,12 +305,18 @@ begin
   szW := P.MeasureText(txt, S.FontName, fs, fw);
   padX := P.Scale(S.Padding.Left);
   padY := P.Scale(S.Padding.Top);
+  // Both metrics are theme tokens (TTyBadge resolves the SAME two the same way, so the
+  // built-in and standalone badges retune together and cannot drift).
+  minSize := ActiveController.Metric(TyBadgeMinSizeVar, TyBadgeMinSize);
+  if minSize < 1 then minSize := 1;
   bh := szH.cy + 2 * padY;
-  if bh < P.Scale(8) then bh := P.Scale(8);    // degenerate-measure floor: stay visible
+  if bh < P.Scale(minSize) then bh := P.Scale(minSize);  // degenerate-measure floor: stay visible
   tw := szW.cx;
   bw := tw + 2 * padX;
   if bw < bh then bw := bh;                     // single glyph -> near-circle
-  inset := P.Scale(2);
+  inset := ActiveController.Metric(TyBadgeInsetVar, TyBadgeInset);
+  if inset < 0 then inset := 0;
+  inset := P.Scale(inset);
   case FBadgePosition of
     bpTopLeft:     begin x := AFullRect.Left  + inset;       y := AFullRect.Top    + inset;       end;
     bpTopRight:    begin x := AFullRect.Right - inset - bw;  y := AFullRect.Top    + inset;       end;

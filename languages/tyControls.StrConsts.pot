@@ -1,6 +1,10 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=UTF-8"
 
+#: tycontrols.strconsts.rsbadgeoverflow
+msgid "99+"
+msgstr ""
+
 #: tycontrols.strconsts.rscsscannotevaluatecolor
 #, object-pascal-format
 msgid "Cannot evaluate color: %s"
@@ -225,6 +229,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsdlgwholeword
 msgid "Whole word"
+msgstr ""
+
+#: tycontrols.strconsts.rsemptydescription
+msgid "No data"
 msgstr ""
 
 #: tycontrols.strconsts.rsfdallfilesfilter

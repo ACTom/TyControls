@@ -39,7 +39,13 @@ $classes = @(
   'TTyOpenDialog','TTySaveDialog','TTyOpenPictureDialog','TTySavePictureDialog',
   'TTyPreviewBox','TTyOpenPreviewDialog','TTySavePreviewDialog',
   # Phase 9 image viewer + chart + html label
-  'TTyImageView','TTyChart','TTyHtmlLabel'
+  'TTyImageView','TTyChart','TTyHtmlLabel',
+  # Ant Design-gap batch 1
+  'TTyCard','TTyTag','TTyBadge',
+  # Ant Design-gap batch 1 (second group) + batches 2 & 3
+  'TTyAlert','TTyNotification','TTyEmpty','TTySegmented',
+  'TTyPagination','TTySteps','TTyBreadcrumb',
+  'TTyTransfer','TTyTreeSelect','TTyCascader','TTyPopover'
 )
 
 # Drift guard: the icon set MUST match the components registered in Design.pas. Parse EVERY

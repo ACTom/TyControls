@@ -5,12 +5,15 @@
 
 /* Mode-invariant metrics. Win9x caption buttons were small squares in the top-right, so the
    classic skin shrinks the title-bar buttons from the 46px default via the --caption-button-width
-   theme metric (device px are DPI-scaled from this logical value). */
+   theme metric (device px are DPI-scaled from this logical value). A card's title band is a
+   caption band in this idiom (see TyCardHeader), so it is caption-short too — not the tall
+   36px band a modern skin wants. */
 :root {
   --caption-button-width:    25;   /* small squarish caption buttons */
   --caption-button-margin:    3;   /* horizontal gap: buttons ↔ right edge / caption */
   --caption-button-margin-y:  6;   /* vertical gap: buttons ↔ title-bar top & bottom */
   --caption-button-gap:       4;   /* gap between adjacent buttons */
+  --card-header-height:      24;   /* the card's caption band, sized like a Win9x caption */
 }
 
 /* --accent is the brand seed; the runtime accent-picker recolours the skin through it. */
@@ -24,6 +27,7 @@
     --face-hover:   #C8C8C8;   /* lightly lit face on hover */
     --ink:          #000000;   /* primary text */
     --ink-disabled: #808080;   /* greyed text */
+    --ink-inverse:  #FFFFFF;   /* ink on a FILLED accent/maroon chip — badge, tag variants */
     --danger:       #800000;   /* destructive ink — the system-palette dark red (maroon) */
     --field:        #FFFFFF;   /* white input well */
     --border:       #808080;   /* stroked indicator / edge grey */
@@ -39,6 +43,7 @@
     --face-hover:   #C8C8C8;
     --ink:          #000000;
     --ink-disabled: #808080;
+    --ink-inverse:  #FFFFFF;
     --danger:       #800000;
     --field:        #FFFFFF;
     --border:       #808080;
@@ -87,3 +92,54 @@ TyCheckBox:active { background: var(--field); color: var(--ink); border: 1px sol
 /* Progress: a sunken grey track with a solid blue fill. */
 TyProgressBar   { render-style: inset3d; background: var(--face); }
 TyProgressFill  { background: var(--accent); border-radius: 0; }
+
+/* Cards, tags and badges have no Win9x ancestor at all. Rather than import the modern
+   round-pill look wholesale, each is rebuilt from parts this era DID have: the raised panel,
+   the stroked box and the caption bar. Square corners throughout — nothing here is round. */
+
+/* Card: a raised grey panel — the "grouped box" of this era — so the whole surface takes the
+   same outset bevel as a button. Hover lights the face like every other 3D control here, and
+   disabled greys the ink rather than fading the panel, exactly as TyButton:disabled does.
+   Unlike the buttons above, the card SPELLS OUT the bevel border instead of letting
+   'render-style' imply it: the card insets its header/actions bands by the declared border
+   width, and an implied border is invisible to that measurement — the caption band would then
+   paint over the panel's own raised edge and flatten the top of the card. The values restate
+   exactly what bevel3d derives (2px outset, edges shaded from the face), so the frame is
+   unchanged; :hover restates them against the lit face for the same reason. */
+TyCard          { render-style: bevel3d; background: var(--face); color: var(--ink); border: 2px outset var(--face); padding: 8px; }
+TyCard:hover    { render-style: bevel3d; background: var(--face-hover); color: var(--ink); border: 2px outset var(--face-hover); }
+TyCard:disabled { render-style: bevel3d; background: var(--face); color: var(--ink-disabled); }
+/* Title band: a titled panel of this era announced itself with a CAPTION, so the header wears
+   the title bar's own gradient and caption ink — the card reads as a little window pane.
+   The grey line under it is the shadow half of the classic etched divider. */
+TyCardHeader    { background: linear-gradient(0deg, var(--accent), var(--title-mid), var(--title-light)); color: var(--title-ink); border: 1px solid var(--border); font-weight: bold; }
+/* Actions rail: no band of its own — the strip IS the panel face, like a dialog's button row;
+   only the etched divider above it separates the two. */
+TyCardActions   { border: 1px solid var(--border); }
+
+/* Tags: a tag isn't pressable, so it takes the stroked box the check-box indicator uses rather
+   than a bevel — a small white boxed label with square ends (a round-ended pill is two decades
+   out of period here). The variants swap only the fill and its ink; every tag keeps the same
+   grey outline, so a row of them reads as one family. */
+TyTag               { background: var(--field); color: var(--ink); border: 1px solid var(--border); border-radius: 0; padding: 0px 6px; }
+TyTag.accent        { background: var(--accent); color: var(--ink-inverse); }
+TyTag.danger        { background: var(--danger); color: var(--ink-inverse); }
+/* Disabled drops the variant fill back to the grey face and greys the ink — how this era said
+   "inert"; the skin never fades a control out with opacity. State rules are applied AFTER the
+   .accent/.danger rules above, so this one line neutralises every variant. */
+TyTag:disabled      { background: var(--face); color: var(--ink-disabled); }
+/* The x: full-strength ink (this era had no half-toned affordances), restated per variant
+   because a black x would sink into a filled tag. Hovering it lights a square grey chip — the
+   same "hot" face the caption buttons give — and the x on that chip is black again. */
+TyTagClose          { color: var(--ink); }
+TyTagClose.accent   { color: var(--ink-inverse); }
+TyTagClose.danger   { color: var(--ink-inverse); }
+TyTagClose:hover    { background: var(--face-hover); color: var(--ink); border-radius: 0; }
+TyTagClose:disabled { color: var(--ink-disabled); }
+
+/* Badge: a hard little counter box with square corners — the round accent pill it would
+   otherwise inherit is a 2010s notification bubble that simply didn't exist here. White-on-blue
+   was this era's one "look at me" pairing (it IS the selection highlight), so the badge borrows
+   it: accent fill, inverse ink, bold, and no bevel — at this size a 3D edge would eat the
+   digits. The default --badge-* metrics already give a tight box, so the skin leaves them. */
+TyBadge         { background: var(--accent); color: var(--ink-inverse); border-radius: 0; font-weight: bold; padding: 0px 4px; }

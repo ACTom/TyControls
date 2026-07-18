@@ -225,3 +225,77 @@ TyProgressFill {
   background: linear-gradient(90deg, #9BE06B 0%, #6BBF3A 55%, #4E9E27 100%);
   border-radius: 2px;
 }
+
+/* Card: the XP Explorer "task pane" — a white panel lifted off the Luna beige, steel-blue edged and
+   rounded-ish, with a pale-blue title band. A flat hairline card would be wrong here: in Luna a
+   panel ALWAYS announces itself with a blue header, so the band is the point, not decoration. */
+TyCard {
+  background: var(--field);
+  color: var(--on-surface);
+  border-color: var(--field-border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 10px;
+}
+/* Hoverable = the same orange "Luna glow" the buttons light up with. */
+TyCard:hover    { border-color: var(--focus); }
+TyCard:disabled { opacity: 0.5; }
+
+/* Title band: pale Luna blue fading a shade deeper, bold dark-blue ink, steel hairline beneath.
+   Accent-derived, so the runtime picker recolours it along with the rest of the blue chrome.
+   Padding left unset on purpose — the title then lines up with the body text. */
+TyCardHeader {
+  background: linear-gradient(90deg, lighten(var(--accent), 88%) 0%, lighten(var(--accent), 72%) 100%);
+  color: darken(var(--accent), 30%);
+  border-color: var(--field-border);
+  border-width: 1px;
+  font-weight: bold;
+}
+
+/* Actions strip: the XP wizard button band — the Luna beige under a steel hairline, so the buttons
+   sit on chrome instead of floating on the white body. */
+TyCardActions { background: var(--surface); border-color: var(--field-border); border-width: 1px; }
+
+/* Tag: a miniature XP chip, NOT a modern round-ended pill — the raised silver gradient, blue-grey
+   edge and 3px corners of the buttons, cut from the beige so it reads on the white card body and on
+   the beige form alike. */
+TyTag {
+  background: linear-gradient(90deg, lighten(var(--surface), 70%) 0%, lighten(var(--surface), 40%) 48%, var(--surface) 100%);
+  color: var(--on-surface);
+  border-color: var(--btn-border);
+  border-width: 1px;
+  border-radius: var(--radius);
+  padding: 0px 8px;
+}
+/* The two variants = the glossy primary / close-red buttons, shrunk to chip size. */
+TyTag.accent {
+  background: linear-gradient(90deg, lighten(var(--accent), 24%) 0%, var(--accent) 55%, darken(var(--accent), 12%) 100%);
+  color: var(--on-accent);
+  border-color: darken(var(--accent), 22%);
+}
+TyTag.danger {
+  background: linear-gradient(90deg, lighten(var(--danger), 24%) 0%, var(--danger) 55%, darken(var(--danger), 12%) 100%);
+  color: var(--on-danger);
+  border-color: darken(var(--danger), 22%);
+}
+TyTag:disabled { opacity: 0.5; }
+
+/* Close 'x': no chip at rest, just ink that follows the chip it sits on (one muted grey would go
+   muddy on the glossy blue and red variants — the x resolves with the tag's StyleClass, so it can
+   track them). Hover lights a miniature Luna close button: the glossy red with a white glyph,
+   the caption bar's gesture at tag scale. */
+TyTagClose        { color: var(--on-surface); border-radius: var(--radius); }
+TyTagClose.accent { color: var(--on-accent); }
+TyTagClose.danger { color: var(--on-danger); }
+TyTagClose:hover  { background: linear-gradient(90deg, var(--close-top) 0%, var(--close-mid) 46%, var(--close-bot) 100%); color: var(--on-danger); }
+
+/* Badge: a miniature caption button — the glossy blue rounded square with its white glyph — rather
+   than the base layer's flat round pill, which is a decade too modern for Luna. A hair more side
+   padding than the base's 4px, because XP chrome is chunky and the gloss needs room to read. */
+TyBadge {
+  background: linear-gradient(90deg, lighten(var(--accent), 34%) 0%, lighten(var(--accent), 4%) 46%, darken(var(--accent), 10%) 100%);
+  color: var(--on-accent);
+  border-radius: var(--radius);
+  padding: 0px 5px;
+  font-weight: bold;
+}

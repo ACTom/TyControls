@@ -26,6 +26,7 @@ type
   published
     procedure TestNamesCountAndContents;
     procedure TestAllBuiltinsLoad;
+    procedure TestAllBuiltinsDrawGapControls;
     procedure TestDraculaPalette;
     procedure TestNordPalette;
   end;
@@ -151,6 +152,57 @@ begin
       m.SetMode('dark');
       s := m.ResolveStyle('TyButton', '', []);
       AssertTrue(n[i] + ' dark has bg', tpBackground in s.Present);
+    finally m.Free; end;
+  end;
+end;
+
+{ A control whose typeKey no theme defines renders NOTHING: every one of these bails out of its paint
+  when the resolved style has no background (as TTyButton.DrawBadge does). That is not a loud
+  failure, it is an invisible control — which is exactly how TyCard/TyTag shipped unnoticed with ZERO
+  coverage across all 20 themes. This guard is the missing alarm: every compiled-in theme must leave
+  every one of the 14 Ant Design-gap controls drawable in BOTH modes.
+  Only the SURFACE key of each control is required. The secondary keys (TyCardHeader/TyCardActions/
+  TyTagClose/TyAlertClose/TyPaginationItem/TyStepsConnector/TyCascaderItem/...) are documented as
+  optional and degrade gracefully (no background => no band/chip; no colour => the parent's ink), so
+  demanding a background of them would enforce a look the contract deliberately leaves to the skin.
+  NOTE it can only fail when the BASE layer and the skin BOTH lack the key — the compiled-in base
+  (generated from themes/light.tycss) backs every theme, so asserting "each skin defines X" through
+  ResolveStyle would be fake-green. What this really guards is the original bug: a key defined
+  nowhere at all. }
+procedure TBuiltinThemesTest.TestAllBuiltinsDrawGapControls;
+const
+  // Only the SURFACE keys of each control — the ones whose absence means "paints nothing".
+  cKeys: array[0..12] of string = (
+    'TyCard', 'TyTag', 'TyBadge',                                    // batch 1, first group
+    'TyAlert', 'TyNotification', 'TyEmpty', 'TySegmented',           // batch 1, second group
+    'TyPagination', 'TySteps', 'TyBreadcrumb',                       // batch 2
+    'TyTransfer', 'TyCascader', 'TyPopover');                        // batch 3
+    // NOT TTyTreeSelect: it has no key of its own by design — GetStyleTypeKey returns
+    // 'TyComboBox' (it IS a combo field), so demanding a 'TyTreeSelect' background here
+    // would only force every theme to carry a rule nothing ever resolves.
+
+  procedure CheckMode(m: TTyStyleModel; const AName, AMode: string);
+  var k: Integer; s: TTyStyleSet;
+  begin
+    m.SetMode(AMode);
+    for k := 0 to High(cKeys) do
+    begin
+      s := m.ResolveStyle(cKeys[k], '', []);
+      AssertTrue(Format('%s (%s): %s has no background -> the control would paint nothing',
+        [AName, AMode, cKeys[k]]), tpBackground in s.Present);
+    end;
+  end;
+
+var n: TStringArray; i: Integer; m: TTyStyleModel;
+begin
+  n := TyBuiltinThemeNames;
+  for i := 0 to High(n) do
+  begin
+    m := TTyStyleModel.Create;
+    try
+      m.LoadFromCss(TyBuiltinThemeCss(n[i]));
+      CheckMode(m, n[i], 'light');
+      CheckMode(m, n[i], 'dark');
     finally m.Free; end;
   end;
 end;

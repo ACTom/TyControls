@@ -234,11 +234,18 @@ procedure TyFillParentBg(AControl: TControl; APainter: TTyPainter; const ARect: 
   theme asked for it); only an unset/malformed token falls back to the vector. The second
   overload derives the token from the kind (--glyph-<kind>) — the 1-line form for the many
   P.DrawGlyph(rect, kind, ...) call sites. }
+{ APadLogical is forwarded to TTyPainter.DrawGlyph and defaults to ITS default (4 logical px
+  PER SIDE). That default suits a glyph drawn inside a control's whole rect (a caption button),
+  where the pad IS the air around the mark. It is wrong for a caller that already measured a
+  DEDICATED slot from a size token: 4+4 (+1 for the inclusive right edge) eats 9 logical px, so
+  a 12px slot leaves a 3px mark — an unreadable smudge, not an arrow. Such callers pass a small
+  pad so the slot's token size means the MARK's size. ~12px is otherwise the practical floor. }
 procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
   const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
-  AColor: TTyColor; AThickness: Integer); overload;
+  AColor: TTyColor; AThickness: Integer; APadLogical: Integer = 4); overload;
 procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
-  const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer); overload;
+  const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer;
+  APadLogical: Integer = 4); overload;
 { v3/C5. Try to draw a theme glyph override into ARect; True = drawn (icon path), False =
   unset/malformed so the CALLER draws its own default (used where the default isn't a plain
   vector kind, e.g. the drop chevron). And the canonical token for a vector kind. }
@@ -591,6 +598,10 @@ begin
     tgArrowDown:          Result := '--glyph-arrow-down';
     tgArrowLeft:          Result := '--glyph-arrow-left';
     tgArrowRight:         Result := '--glyph-arrow-right';
+    tgInfo:               Result := '--glyph-info';
+    tgSuccess:            Result := '--glyph-success';
+    tgWarning:            Result := '--glyph-warning';
+    tgError:              Result := '--glyph-error';
   else
     Result := '';
   end;
@@ -598,17 +609,21 @@ end;
 
 procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
   const ARect: TRect; const ATokenName: string; AVectorKind: TTyGlyphKind;
-  AColor: TTyColor; AThickness: Integer);
+  AColor: TTyColor; AThickness: Integer; APadLogical: Integer = 4);
 begin
+  // The icon-font override fills ARect itself — a font glyph has its own side bearings, so the
+  // vector's pad does not apply to it.
   if not TyTryDrawGlyphOverride(APainter, AController, ARect, ATokenName, AColor) then
-    APainter.DrawGlyph(ARect, AVectorKind, AColor, AThickness);
+    APainter.DrawGlyph(ARect, AVectorKind, AColor, AThickness, APadLogical);
 end;
 
 procedure TyDrawGlyph(APainter: TTyPainter; AController: TTyStyleController;
-  const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer);
+  const ARect: TRect; AVectorKind: TTyGlyphKind; AColor: TTyColor; AThickness: Integer;
+  APadLogical: Integer = 4);
 { v3/C5. Convenience: the override token is derived from the kind (--glyph-<kind>). }
 begin
-  TyDrawGlyph(APainter, AController, ARect, TyGlyphKindToken(AVectorKind), AVectorKind, AColor, AThickness);
+  TyDrawGlyph(APainter, AController, ARect, TyGlyphKindToken(AVectorKind), AVectorKind, AColor,
+    AThickness, APadLogical);
 end;
 
 { v3/D. Expand a render-style FAMILY preset into concrete border/radius defaults — only for

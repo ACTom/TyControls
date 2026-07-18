@@ -652,6 +652,50 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.Badge.pas"/>
         <UnitName Value="tyControls.Badge"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.Alert.pas"/>
+        <UnitName Value="tyControls.Alert"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Notification.pas"/>
+        <UnitName Value="tyControls.Notification"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Empty.pas"/>
+        <UnitName Value="tyControls.Empty"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Segmented.pas"/>
+        <UnitName Value="tyControls.Segmented"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Pagination.pas"/>
+        <UnitName Value="tyControls.Pagination"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Steps.pas"/>
+        <UnitName Value="tyControls.Steps"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Breadcrumb.pas"/>
+        <UnitName Value="tyControls.Breadcrumb"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Transfer.pas"/>
+        <UnitName Value="tyControls.Transfer"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.TreeSelect.pas"/>
+        <UnitName Value="tyControls.TreeSelect"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Cascader.pas"/>
+        <UnitName Value="tyControls.Cascader"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Popover.pas"/>
+        <UnitName Value="tyControls.Popover"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

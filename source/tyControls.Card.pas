@@ -267,7 +267,7 @@ var
   lay: TTyCardLayout;
   corners: TTyCorners;
   states: TTyStateSet;
-  bw, sepT: Integer;
+  bw, bwLogical, sepT: Integer;
   hpad: TRect;
 
   { Fill a strip band with its own themed tint (when the theme set one) and stroke its
@@ -292,18 +292,20 @@ var
 
     if tpBackground in AStyle.Present then
     begin
-      // Only the OUTER corners follow the card; the edge facing the body stays square.
-      // The radii shrink by the border width because the band sits inside the stroke.
+      // Only the OUTER corners follow the card; the edge facing the body stays square. The
+      // radii shrink by the border width (in LOGICAL px, matching corners' unit) because the
+      // band sits inside the stroke — but by bwLogical, which is 0 when the border isn't
+      // drawn, so a border-less card keeps its full radius instead of under-rounding.
       bandCorners := Default(TTyCorners);
       if ATop then
       begin
-        bandCorners.TL := corners.TL - S.BorderWidth;
-        bandCorners.TR := corners.TR - S.BorderWidth;
+        bandCorners.TL := corners.TL - bwLogical;
+        bandCorners.TR := corners.TR - bwLogical;
       end
       else
       begin
-        bandCorners.BR := corners.BR - S.BorderWidth;
-        bandCorners.BL := corners.BL - S.BorderWidth;
+        bandCorners.BR := corners.BR - bwLogical;
+        bandCorners.BL := corners.BL - bwLogical;
       end;
       if bandCorners.TL < 0 then bandCorners.TL := 0;
       if bandCorners.TR < 0 then bandCorners.TR := 0;
@@ -342,7 +344,21 @@ begin
     DrawFrame(P, R, S);
 
     corners := TyEffectiveCorners(S);
-    if TyBorderVisible(S) then bw := P.Scale(S.BorderWidth) else bw := 0;
+    // The band is inset by the border ONLY when the border is actually stroked. bw is the
+    // inset in DEVICE px (for the fill rect); bwLogical is the SAME inset in LOGICAL px, for
+    // shrinking the band's corner radii (FillBackground scales corners itself). When the
+    // border is present-but-not-drawn, both are 0 — the band fills flush and keeps the card's
+    // full corner radius instead of under-rounding by a border that never appears.
+    if TyBorderVisible(S) then
+    begin
+      bw := P.Scale(S.BorderWidth);
+      bwLogical := S.BorderWidth;
+    end
+    else
+    begin
+      bw := 0;
+      bwLogical := 0;
+    end;
     lay := LayoutAtPPI(R, APPI);
     // The strips share the card's states, so a disabled/hovered card carries its
     // header and rail with it (':disabled { opacity }' on all three, for instance).

@@ -21,6 +21,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyCheckBox](checkbox.md) | 复选框，支持三态（`State` / `AllowGrayed`） |
 | [TTyRadioButton](radiobutton.md) | 单选按钮（同容器互斥） |
 | [TTyToggleSwitch](toggleswitch.md) | 开关（ON/OFF 滑块） |
+| [TTySegmented](segmented.md) | 分段控制器(一排互斥选项,可聚焦 + 左右键切换) |
 
 ## 命令与分组按钮
 
@@ -94,12 +95,16 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyShellTreeView](shelltreeview.md) | 文件系统后备的目录树（TTyTreeView 适配器）：只显示文件夹、懒加载展开、路径定位 |
 | [TTyFilterComboBox](filtercombobox.md) | 过滤预设下拉（TTyComboBox 适配器）：解析 LCL 过滤串，选中段即生效掩码 |
 | [TTyShellComboBox](shellcombobox.md) | 查找范围下拉（TTyComboBox 适配器）：当前目录面包屑 + 盘符，点行跳转 |
+| [TTyTransfer](transfer.md) | 双列表穿梭框(源/目标两栏 + 移动键;经典桌面控件) |
+| [TTyTreeSelect](treeselect.md) | 树形下拉(字段 + 弹出真 `TTyTreeView`) |
+| [TTyCascader](cascader.md) | 级联选择(省/市/区;选中左列展开右列) |
 
 ## 容器与布局
 
 | 控件 | 说明 |
 |------|------|
 | [TTyPanel](panel.md) | 通用容器面板 |
+| [TTyCard](card.md) | 卡片容器（标题条 + 内容 + 操作条,一整块主题化表面） |
 | [TTyGroupBox](groupbox.md) | 带标题的分组框 |
 | [TTyPageControl](pagecontrol.md) | 多页签容器（含 `TTyTabSheet`） |
 | [TTyTabSet](tabset.md) | 纯标签条（非页容器） |
@@ -125,7 +130,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyListGroupPanel](listgrouppanel.md) | Outlook 式分组可展开列表（手风琴,`AddGroup`/`AddItem`） |
 | [TTyPreviewBox](previewbox.md) | 可复用预览控件（图片走 TTyImage / 文本走只读 TTyMemo / 占位 / 交出位图·文本自定义） |
 | [TTyImageView](imageview.md) | 图片查看器：平移/缩放（平滑动画）+ 非破坏性 BGRA 滤镜（灰度/模糊/锐化/反相/着色） |
-| [TTyChart](chart.md) | 折线/柱/饼图：设计期系列、自动量程 + nice 刻度、网格、图例、标题（BGRA Canvas2D） |
+| [TTyChart](chart.md) | 折线/柱/饼/环形图：设计期系列、自动量程 + nice 刻度、网格、图例、标题、悬停数值 tooltip（BGRA Canvas2D） |
 | [Transitions](transitions.md) | 过渡动画工具（非控件）：滑入（跨平台）/ 淡入（Win）出现动画,基于动画内核 |
 | [TTyHtmlLabel](htmllabel.md) | 迷你 HTML 标签：行内子集（粗/斜/下/删、字体色·字号、链接、`<br>`）+ 自动换行 |
 
@@ -184,6 +189,25 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 |------|------|
 | [TTyHint](hint.md) | 主题化气泡提示（替换原生 LCL tooltip，全应用生效） |
 | [TTyBalloonHint](balloonhint.md) | 带指针的气泡标注（标题 + 正文 + 可选图标） |
+| [TTyPopover](popover.md) | **能放控件**的气泡浮层(Hint/BalloonHint 只能放文本 —— 这是功能性缺口) |
+| [TTyAlert](alert.md) | **内联**警告条(info / success / warning / error 四型,可关闭) |
+| [TTyNotification](notification.md) | 角落浮出、自动消失的 toast(四型 + 四角 + 悬停暂停) |
+
+## 标记与徽标
+
+| 控件 | 说明 |
+|------|------|
+| [TTyTag](tag.md) | 标签 / 胶囊（颜色变体走 `StyleClass`,可选关闭 `x`） |
+| [TTyBadge](badge.md) | 独立数字 / 圆点角标（`Target` 吸附到任意控件的角上） |
+| [TTyEmpty](empty.md) | 空状态占位(插画 + 文案 + 可选操作;列表 / 树 / 表格标配) |
+
+## 导航与流程
+
+| 控件 | 说明 |
+|------|------|
+| [TTyPagination](pagination.md) | 分页器(上一页/下一页 + 页码 + `…` 省略;不依赖 Grid,配任意列表) |
+| [TTySteps](steps.md) | 向导步骤条(已完成 / 当前 / 待办由 `StepIndex` 派生,横竖两向) |
+| [TTyBreadcrumb](breadcrumb.md) | 面包屑(末项即当前位置、不是链接;溢出省略) |
 
 ## 图标与图像
 

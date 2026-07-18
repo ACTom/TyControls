@@ -183,11 +183,29 @@ begin
 end;
 
 procedure TTyExPanel.AdjustClientRect(var ARect: TRect);
+var
+  S: TTyStyleSet;
+  bw: Integer;
 begin
   inherited AdjustClientRect(ARect);
   // The body (where child controls live) starts below the header band.
   Inc(ARect.Top, ScaledHeaderHeight);
+  // ...and clears the BORDER on the other three sides. DrawFrame strokes the border INSIDE
+  // the control's rect, so without this an alClient child starts at x=0 — directly on top of
+  // the border line, which reads as the content spilling out of the panel. (The header band
+  // already covers the top edge.) Only the border, deliberately not the themed padding: this
+  // is TTyPanel's client rect, and insetting it further would silently re-lay-out every
+  // existing ExPanel's children.
+  S := CurrentStyle;
+  if TyBorderVisible(S) then bw := MulDiv(S.BorderWidth, Font.PixelsPerInch, 96) else bw := 0;
+  if bw > 0 then
+  begin
+    Inc(ARect.Left, bw);
+    Dec(ARect.Right, bw);
+    Dec(ARect.Bottom, bw);
+  end;
   if ARect.Top > ARect.Bottom then ARect.Top := ARect.Bottom;
+  if ARect.Left > ARect.Right then ARect.Left := ARect.Right;
 end;
 
 procedure TTyExPanel.EnsureTimer;
