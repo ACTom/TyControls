@@ -544,6 +544,8 @@ begin
     'TyGridHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     'TyGridHeaderSection:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyGridHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
+    '/* 分组表头带(横跨若干列的上层标题)。自己的键 —— 与叶子列头分开配才有意义。 */' + LineEnding +
+    'TyGridHeaderGroup { background: var(--surface-active); color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     '/* 格线与选区。格线单独成键,皮肤想去掉格子只需把它设成透明。 */' + LineEnding +
     'TyGridLine      { background: var(--border); }' + LineEnding +
     '/* 单元格图形。各自成键,不借复选框/进度条的键 —— 借来的键在外观层够不着,' + LineEnding +

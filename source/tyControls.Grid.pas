@@ -99,6 +99,50 @@ type
   TTyGridCreateEditLinkEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var ALink: TTyGridEditLink) of object;
 
+  { 一条**表头分组**:横跨若干相邻列的上层标题。
+
+    模型刻意做成"平铺一层组"而不是任意深的树:真实报表里两级(分组 + 列)覆盖了
+    绝大多数场景,而任意深的树会把命中、拖列、排序按钮归属全部复杂化一个量级。
+    需要三级时把组再套一层即可(Level 属性留着),但默认只画两级。
+
+    FirstCol/LastCol 是**列索引**区间(闭区间)。列被拖动重排后组会跟着断开 ——
+    这是对的:组的含义是"这几列属于同一类",顺序变了就不再是同一类。 }
+  TTyGridHeaderGroup = class(TCollectionItem)
+  private
+    FText:      string;
+    FFirstCol:  Integer;
+    FLastCol:   Integer;
+    FLevel:     Integer;
+    FAlignment: TAlignment;
+    procedure Changed;
+    procedure SetText(const AValue: string);
+    procedure SetFirstCol(AValue: Integer);
+    procedure SetLastCol(AValue: Integer);
+  public
+    constructor Create(ACollection: TCollection); override;
+    procedure Assign(ASource: TPersistent); override;
+  published
+    property Text: string read FText write SetText;
+    property FirstCol: Integer read FFirstCol write SetFirstCol default 0;
+    property LastCol: Integer read FLastCol write SetLastCol default 0;
+    { 第几级(0 = 最上面那条带)。目前只画 0 级。 }
+    property Level: Integer read FLevel write FLevel default 0;
+    property Alignment: TAlignment read FAlignment write FAlignment default taCenter;
+  end;
+
+  TTyGridHeaderGroups = class(TCollection)
+  private
+    FOnChange: TNotifyEvent;
+  protected
+    procedure Update(AItem: TCollectionItem); override;
+  public
+    constructor Create;
+    function Add: TTyGridHeaderGroup;
+    { 覆盖 ACol 的那条组(没有就返回 nil)。 }
+    function GroupAt(ALevel, ACol: Integer): TTyGridHeaderGroup;
+    property OnChange: TNotifyEvent read FOnChange write FOnChange;
+  end;
+
   { 网格线要画哪几轴。只要横线的报表式表格很常见,从前只有一个全有/全无的开关。 }
   TTyGridLineStyle = (glsNone, glsHorizontal, glsVertical, glsBoth);
 
@@ -240,6 +284,9 @@ type
     FIndicatorWidth:   Integer;
     FShowIndicator:    Boolean;
     FGridLineStyle:    TTyGridLineStyle;
+    { 分组表头。空 = 只有一条列头带,与从前完全一致。 }
+    FHeaderGroups:     TTyGridHeaderGroups;
+    FGroupHeaderHeight:Integer;
     { 隔行底色。按**显示行号**取,不是数据行号 —— 否则排序筛选之后条纹会跟着
       数据行乱跳,看起来像随机涂色。 }
     FAlternateRows:    Boolean;
@@ -319,6 +366,9 @@ type
     procedure SetImages(AValue: TTyVirtualImageList);
     procedure SetGridLineWidth(AValue: Integer);
     procedure SetGridLineStyle(AValue: TTyGridLineStyle);
+    procedure HeaderGroupsChanged(Sender: TObject);
+    procedure SetHeaderGroups(AValue: TTyGridHeaderGroups);
+    procedure SetGroupHeaderHeight(AValue: Integer);
     procedure SetAlternateRows(AValue: Boolean);
     procedure SetWordWrap(AValue: Boolean);
     function  GetRowHeights(ARow: Integer): Integer;
@@ -378,6 +428,7 @@ type
     function  CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay; virtual;
     procedure RenderButtonCell(P: TTyPainter; ACol, ARow: Integer;
       const AText: string; const AFrame: TTyStyleSet); virtual;
+    function GroupBandHeightPx: Integer; virtual;
     function GridLineWidthPx: Integer; virtual;
     procedure CMMouseLeave(var Msg: TLMessage); message CM_MOUSELEAVE;
     function FrozenWidthPx: Integer; virtual;
@@ -432,6 +483,8 @@ type
       而背景只取决于格的**状态**,基类就能画完 —— hover/选中/斑马纹/逐格底色
       因此对三层都自动生效。 }
     procedure RenderCellBackgrounds(P: TTyPainter; const M: TTyGridMetrics); virtual;
+    { 分组表头带。没有分组时什么都不画。 }
+    procedure RenderHeaderGroups(P: TTyPainter; const M: TTyGridMetrics); virtual;
 
     { 单元格内容。基类不画任何内容(它不知道数据从哪来)——由派生类改写。
       在 chrome 之后、格线之前调用。 }
@@ -530,6 +583,11 @@ type
       (两个属性都写进去会互相打架),但老 .lfm 里的 GridLines=False 照样读得进来。 }
     property GridLines: Boolean read GetGridLines write SetShowGridLines
       stored False default True;
+    { 分组表头:横跨若干相邻列的上层标题。空集合 = 只有一条列头带(默认)。 }
+    property HeaderGroups: TTyGridHeaderGroups read FHeaderGroups write SetHeaderGroups;
+    { 分组带的高度(逻辑像素)。 }
+    property GroupHeaderHeight: Integer read FGroupHeaderHeight
+      write SetGroupHeaderHeight default 22;
     { 格线画哪几轴。 }
     property GridLineStyle: TTyGridLineStyle read FGridLineStyle write SetGridLineStyle
       default glsBoth;
@@ -1029,6 +1087,89 @@ begin
   end;
 end;
 
+{ ---- 表头分组 ------------------------------------------------------------- }
+
+constructor TTyGridHeaderGroup.Create(ACollection: TCollection);
+begin
+  inherited Create(ACollection);
+  FAlignment := taCenter;
+end;
+
+procedure TTyGridHeaderGroup.Changed;
+begin
+  if (Collection <> nil) and (Collection is TTyGridHeaderGroups) then
+    if Assigned(TTyGridHeaderGroups(Collection).OnChange) then
+      TTyGridHeaderGroups(Collection).OnChange(Collection);
+end;
+
+procedure TTyGridHeaderGroup.SetText(const AValue: string);
+begin
+  if FText = AValue then Exit;
+  FText := AValue;
+  Changed;
+end;
+
+procedure TTyGridHeaderGroup.SetFirstCol(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FFirstCol = AValue then Exit;
+  FFirstCol := AValue;
+  Changed;
+end;
+
+procedure TTyGridHeaderGroup.SetLastCol(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FLastCol = AValue then Exit;
+  FLastCol := AValue;
+  Changed;
+end;
+
+procedure TTyGridHeaderGroup.Assign(ASource: TPersistent);
+begin
+  if ASource is TTyGridHeaderGroup then
+  begin
+    FText := TTyGridHeaderGroup(ASource).Text;
+    FFirstCol := TTyGridHeaderGroup(ASource).FirstCol;
+    FLastCol := TTyGridHeaderGroup(ASource).LastCol;
+    FLevel := TTyGridHeaderGroup(ASource).Level;
+    FAlignment := TTyGridHeaderGroup(ASource).Alignment;
+    Changed;
+  end
+  else
+    inherited Assign(ASource);
+end;
+
+constructor TTyGridHeaderGroups.Create;
+begin
+  inherited Create(TTyGridHeaderGroup);
+end;
+
+function TTyGridHeaderGroups.Add: TTyGridHeaderGroup;
+begin
+  Result := TTyGridHeaderGroup(inherited Add);
+end;
+
+procedure TTyGridHeaderGroups.Update(AItem: TCollectionItem);
+begin
+  inherited Update(AItem);
+  if Assigned(FOnChange) then FOnChange(Self);
+end;
+
+function TTyGridHeaderGroups.GroupAt(ALevel, ACol: Integer): TTyGridHeaderGroup;
+var
+  i: Integer;
+  g: TTyGridHeaderGroup;
+begin
+  Result := nil;
+  for i := 0 to Count - 1 do
+  begin
+    g := TTyGridHeaderGroup(Items[i]);
+    if (g.Level = ALevel) and (ACol >= g.FirstCol) and (ACol <= g.LastCol) then
+      Exit(g);
+  end;
+end;
+
 { ---- TTyGridColumn -------------------------------------------------------- }
 
 constructor TTyGridColumn.Create(ACollection: TCollection);
@@ -1207,6 +1348,9 @@ begin
   FIndicatorWidth := 30;
   FShowIndicator := False;
   FGridLineStyle := glsBoth;
+  FHeaderGroups := TTyGridHeaderGroups.Create;
+  FHeaderGroups.OnChange := @HeaderGroupsChanged;
+  FGroupHeaderHeight := 22;
   FGridLineWidth := 1;
   FHoverCol := -1;
   FHoverRow := -1;
@@ -1252,6 +1396,7 @@ begin
   FHeader.Free;
   FTextCache.Free;      { OwnsObjects → 顺带释放缓存的位图 }
   FRowHeights.Free;
+  FHeaderGroups.Free;
   inherited Destroy;
 end;
 
@@ -1367,6 +1512,8 @@ var
 begin
   px := 0;
   if hoVisible in FHeader.Options then Inc(px, ScaleI(FHeader.Height));
+  { 分组带也在上冻结带里 —— 漏了它固定行和正文都会往上顶,压住分组标题。 }
+  Inc(px, GroupBandHeightPx);
   { 逐行累加真实高度(而非 行数×默认行高)—— 可变行高时固定行也可能各不相同。 }
   for i := 0 to FFixedRows - 1 do
     Inc(px, ScaleI(RowHeightOf(i)));
@@ -1889,6 +2036,33 @@ begin
   end;
 end;
 
+procedure TTyCustomGrid.HeaderGroupsChanged(Sender: TObject);
+begin
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetHeaderGroups(AValue: TTyGridHeaderGroups);
+begin
+  FHeaderGroups.Assign(AValue);
+end;
+
+procedure TTyCustomGrid.SetGroupHeaderHeight(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FGroupHeaderHeight = AValue then Exit;
+  FGroupHeaderHeight := AValue;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+{ 分组带的高度(设备像素)。没有分组时为 0 —— 于是几何完全退回单级表头。 }
+function TTyCustomGrid.GroupBandHeightPx: Integer;
+begin
+  if (FHeaderGroups.Count = 0) or not (hoVisible in FHeader.Options) then Exit(0);
+  Result := ScaleI(FGroupHeaderHeight);
+end;
+
 function TTyCustomGrid.GetGridLines: Boolean;
 begin
   Result := FGridLineStyle <> glsNone;
@@ -2155,8 +2329,12 @@ begin
   if (AX < 0) or (AY < 0) or (AX >= M.ClientW) or (AY >= M.ClientH) then Exit;
 
   { 列头带优先:它横跨整幅宽度,盖在行头槽之上。 }
-  if (hoVisible in FHeader.Options) and (AY < ScaleI(FHeader.Height)) then
+  { 表头整体(分组带 + 列头带)。**排序/筛选按钮只在叶子级**,所以落在分组带里
+    不返回列头命中 —— 否则点一下分组标题会把下面某一列排序掉。 }
+  if (hoVisible in FHeader.Options)
+     and (AY < ScaleI(FHeader.Height) + GroupBandHeightPx) then
   begin
+    if AY < GroupBandHeightPx then Exit;   { 分组带:不是叶子列头 }
     Result.Part := ghpHeader;
     Result.Col := ColumnAtX(AX);
     Exit;
@@ -2275,7 +2453,8 @@ begin
   if Button <> mbLeft then Exit;
 
   hdrH := 0;
-  if hoVisible in FHeader.Options then hdrH := ScaleI(FHeader.Height);
+  if hoVisible in FHeader.Options then
+    hdrH := ScaleI(FHeader.Height) + GroupBandHeightPx;
 
   { 行分隔线在**行头槽**里拖 —— 与列分隔线在列头里拖对称。
     放在单元格上会和框选拖拽抢手势。 }
@@ -2400,7 +2579,7 @@ end;
 procedure TTyCustomGrid.RenderHeaderSections(P: TTyPainter; const M: TTyGridMetrics;
   AHeaderH: Integer);
 var
-  i, l, w, cx, cy, gs, imgIdx, imgSz, imgPad: Integer;
+  i, l, w, cx, cy, gs, imgIdx, imgSz, imgPad, bandTop: Integer;
   col: TTyColumn;
   bmp: TBGRABitmap;
   secS, hdrS: TTyStyleSet;
@@ -2414,6 +2593,8 @@ begin
   else if tpTextColor in hdrS.Present then ink := hdrS.TextColor
   else ink := CurrentStyle.TextColor;
   line := TyColorToBGRA(hdrS.BorderColor);
+  { 列头带**在分组带之下**。没有分组时 bandTop = 0,与从前逐像素一致。 }
+  bandTop := GroupBandHeightPx;
 
   for i := 0 to FHeader.Columns.Count - 1 do
   begin
@@ -2430,7 +2611,7 @@ begin
       w := ColumnLeftPx(i) + ColumnWidthPx(i) - l;
     end;
 
-    r := Rect(l, 0, l + w, AHeaderH);
+    r := Rect(l, bandTop, l + w, bandTop + AHeaderH);
     if tpBackground in secS.Present then
       P.FillBackground(r, secS.Background, 0);
 
@@ -2449,7 +2630,7 @@ begin
     if ShowsFilterButton(i) then
     begin
       cx := r.Right - ScaleI(10) - gs;
-      cy := AHeaderH div 2;
+      cy := bandTop + AHeaderH div 2;
       TyDrawGlyph(P, ActiveController,
         Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
         tgChevronDown, ink, 1, 1);
@@ -2467,7 +2648,7 @@ begin
         bmp := FImages.CachedIndex(imgIdx, imgSz);
         if bmp <> nil then
         begin
-          P.Bitmap.PutImage(r.Left + ScaleI(4), (AHeaderH - imgSz) div 2, bmp,
+          P.Bitmap.PutImage(r.Left + ScaleI(4), bandTop + (AHeaderH - imgSz) div 2, bmp,
             dmDrawWithTransparency);
           Inc(imgPad, imgSz + ScaleI(4));
         end;
@@ -2478,7 +2659,7 @@ begin
     if gs > 0 then
     begin
       cx := r.Right - ScaleI(10);
-      cy := AHeaderH div 2;
+      cy := bandTop + AHeaderH div 2;
       { 槽位式调用传 pad=1:DrawGlyph 默认每边内缩 4 逻辑像素,小槽里会只剩个糊点。 }
       if FHeader.SortDirection = sdAscending then
         TyDrawGlyph(P, ActiveController,
@@ -2492,7 +2673,8 @@ begin
 
     { 分段之间的竖分隔线。 }
     if r.Right - 1 < M.ClientW then
-      P.Bitmap.DrawLine(r.Right - 1, 0, r.Right - 1, AHeaderH, line, False);
+      P.Bitmap.DrawLine(r.Right - 1, bandTop, r.Right - 1, bandTop + AHeaderH,
+        line, False);
   end;
 end;
 
@@ -2501,7 +2683,8 @@ var
   headerH, indW: Integer;
 begin
   headerH := 0;
-  if hoVisible in FHeader.Options then headerH := ScaleI(FHeader.Height);
+  if hoVisible in FHeader.Options then
+    headerH := ScaleI(FHeader.Height) + GroupBandHeightPx;
   indW := 0;
   if FShowIndicator then indW := ScaleI(FIndicatorWidth);
 
@@ -2520,7 +2703,9 @@ begin
   if headerH > 0 then
   begin
     FillRegion(P, Rect(0, 0, M.ClientW, headerH), 'TyGridHeader');
-    RenderHeaderSections(P, M, headerH);
+    { 分组带先画(在上),列头带画在它下面。 }
+    RenderHeaderGroups(P, M);
+    RenderHeaderSections(P, M, ScaleI(FHeader.Height));
   end;
 end;
 
@@ -2528,6 +2713,56 @@ procedure TTyCustomGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 begin
   { 基类不画内容:它不知道数据从哪来。TTyDrawGrid / TTyStringGrid 改写。 }
+end;
+
+procedure TTyCustomGrid.RenderHeaderGroups(P: TTyPainter; const M: TTyGridMetrics);
+var
+  i, l, r0, h: Integer;
+  g: TTyGridHeaderGroup;
+  secS, hdrS: TTyStyleSet;
+  ink: TTyColor;
+  rc: TRect;
+  line: TBGRAPixel;
+begin
+  h := GroupBandHeightPx;
+  if h <= 0 then Exit;
+
+  hdrS := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass, CurrentStates);
+  secS := ActiveController.Model.ResolveStyle('TyGridHeaderGroup', StyleClass, CurrentStates);
+  if tpTextColor in secS.Present then ink := secS.TextColor
+  else if tpTextColor in hdrS.Present then ink := hdrS.TextColor
+  else ink := CurrentStyle.TextColor;
+  line := TyColorToBGRA(hdrS.BorderColor);
+
+  for i := 0 to FHeaderGroups.Count - 1 do
+  begin
+    g := TTyGridHeaderGroup(FHeaderGroups.Items[i]);
+    if g.Level <> 0 then Continue;
+    if (g.FirstCol < 0) or (g.FirstCol >= FHeader.Columns.Count) then Continue;
+
+    { 跨列 = 从首列左缘到末列右缘。列宽/拖动重排都自动跟着走,
+      因为两端都取自 ColumnLeftPx —— 列轴的唯一出处。 }
+    l := ColumnLeftPx(g.FirstCol);
+    if g.LastCol < FHeader.Columns.Count then
+      r0 := ColumnLeftPx(g.LastCol) + ColumnWidthPx(g.LastCol)
+    else
+      r0 := ColumnLeftPx(FHeader.Columns.Count - 1)
+            + ColumnWidthPx(FHeader.Columns.Count - 1);
+    if r0 <= l then Continue;
+
+    rc := Rect(l, 0, r0, h);
+    if tpBackground in secS.Present then
+      P.FillBackground(rc, secS.Background, 0);
+    if g.Text <> '' then
+      P.DrawText(Rect(rc.Left + ScaleI(4), rc.Top, rc.Right - ScaleI(4), rc.Bottom),
+        g.Text, hdrS.FontName, ResolveFontSize(hdrS), hdrS.FontWeight, ink,
+        g.Alignment, tlCenter, True);
+    if rc.Right - 1 < M.ClientW then
+      P.Bitmap.DrawLine(rc.Right - 1, 0, rc.Right - 1, h, line, False);
+  end;
+
+  { 分组带与列头带之间的横分隔线。 }
+  P.Bitmap.DrawLine(0, h - 1, M.ClientW, h - 1, line, False);
 end;
 
 procedure TTyCustomGrid.RenderCellBackgrounds(P: TTyPainter; const M: TTyGridMetrics);
@@ -2640,9 +2875,15 @@ begin
   Result.RowCount := DisplayRowCount;
   Result.RowTops := RowTops;
   Result.FixedRows := FFixedRows;
-  { 列头带:目前恒为单级。B10 上多级表头时,这里改成逐级填。 }
+  { 列头带。有分组时是两条(分组带在上、列头带在下),否则一条。
+    B2 把 HeaderH 拆成 HeaderBands 数组,就是为了这里。 }
   if hoVisible in FHeader.Options then
-    Result.HeaderBands := TTyIntArray.Create(ScaleI(FHeader.Height))
+  begin
+    if GroupBandHeightPx > 0 then
+      Result.HeaderBands := TTyIntArray.Create(GroupBandHeightPx, ScaleI(FHeader.Height))
+    else
+      Result.HeaderBands := TTyIntArray.Create(ScaleI(FHeader.Height));
+  end
   else
     SetLength(Result.HeaderBands, 0);
   Result.ScrollX := FScrollX;
@@ -4933,6 +5174,8 @@ begin
   if (ACol < 0) or (ACol >= Header.Columns.Count) or (RowCount <= 0) then
   begin
     FSortCol := -1;
+    { 表头也要跟着清 —— 排序小三角看的是 Header.SortColumn。 }
+    Header.SortColumn := NoColumn;
     InvalidateOrder;
     UpdateScrollBars;
     Invalidate;
@@ -4941,6 +5184,11 @@ begin
 
   FSortCol := ACol;
   FSortDir := ADirection;
+  { **同步给表头**。此前只写了 FSortCol,而 hoShowSortGlyphs 那个小三角看的是
+    Header.SortColumn —— 于是三角永远停在 NoColumn、一次都没画出来过。
+    又一个"属性存在却没人写"的洞。 }
+  Header.SortColumn := ACol;
+  Header.SortDirection := ADirection;
   InvalidateOrder;
   EnsureOrder;      { 重建里已按 FSortCol 排过 }
   if False then

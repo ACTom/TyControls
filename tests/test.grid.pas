@@ -145,6 +145,8 @@ type
     procedure TestValidCharsBlocksIllegalKeys;
     procedure TestEnterAdvancesDownAndTabAdvancesByCell;
     procedure TestHostEditLinkTakesOverTheCell;
+    procedure TestHeaderGroupBandStacksAboveColumnHeader;
+    procedure TestHeaderGroupBandIsNotALeafHeaderForHitTesting;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -906,6 +908,7 @@ type
     procedure TypeChar(AChar: Char);
     function  EditorText: string;
     function  IsEditing: Boolean;
+    function  HitAt(X, Y: Integer): TTyGridHit;
     function  EditorVisible: Boolean;
     procedure DragFromTo(X1, Y1, X2, Y2: Integer);
     procedure DoubleClickAt(X, Y: Integer);
@@ -946,6 +949,11 @@ end;
 function TStrGridAccess.EditorText: string;
 begin
   Result := InlineEditor.Text;
+end;
+
+function TStrGridAccess.HitAt(X, Y: Integer): TTyGridHit;
+begin
+  Result := CellAt(X, Y);
 end;
 
 function TStrGridAccess.IsEditing: Boolean;
@@ -3928,6 +3936,112 @@ begin
   finally
     FProbeLink.Free;
   end;
+end;
+
+{ 分组表头:上层标题带堆在列头带之上,整条表头因此变高,正文跟着下移。
+  B2 把 HeaderH 拆成 HeaderBands 数组,就是为了这一批。 }
+procedure TTyStringGridTest.TestHeaderGroupBandStacksAboveColumnHeader;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  g1: TTyGridHeaderGroup;
+  rowTopBefore, rowTopAfter, green: Integer;
+  Re: TBGRABitmap;
+  x, y: Integer;
+  px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridHeader { background: #FFFFFF; color: #000000; }' +
+      'TyGridHeaderGroup { background: #00FF00; color: #000000; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.Header.Options := G.Header.Options + [hoVisible];
+    G.Header.Height := 22;
+    G.GridLines := False;
+    G.RowCount := 4;
+
+    rowTopBefore := G.RowRectAt(0).Top;
+    AssertEquals('没有分组时正文从列头下面开始', 22, rowTopBefore);
+
+    g1 := G.HeaderGroups.Add;
+    g1.Text := '销售';
+    g1.FirstCol := 0;
+    g1.LastCol := 1;
+    G.GroupHeaderHeight := 20;
+
+    rowTopAfter := G.RowRectAt(0).Top;
+    AssertEquals('分组带把正文往下顶了一整条', 20 + 22, rowTopAfter);
+
+    { 分组带确实画出来了,而且只覆盖前两列(第 0 列宽 80,共 4 列 x 80)。 }
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    green := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := 2 to 17 do
+        for x := 2 to 155 do
+        begin
+          px := Re.GetPixel(x, y);
+          if (px.green > 180) and (px.red < 100) then Inc(green);
+        end;
+      AssertTrue(Format('分组带应当画在前两列上方(绿像素 %d)', [green]), green > 500);
+
+      green := 0;
+      for y := 2 to 17 do
+        for x := 200 to 300 do
+        begin
+          px := Re.GetPixel(x, y);
+          if (px.green > 180) and (px.red < 100) then Inc(green);
+        end;
+      AssertEquals('没被分组覆盖的列上方不该有分组底色', 0, green);
+    finally
+      Re.Free;
+    end;
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 排序/筛选按钮**只在叶子级**:点分组标题不该把下面某一列排序掉。 }
+procedure TTyStringGridTest.TestHeaderGroupBandIsNotALeafHeaderForHitTesting;
+var
+  G: TStrGridAccess;
+  g1: TTyGridHeaderGroup;
+  hit: TTyGridHit;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.Header.Height := 22;
+  G.RowCount := 4;
+  g1 := G.HeaderGroups.Add;
+  g1.Text := '销售';
+  g1.FirstCol := 0;
+  g1.LastCol := 1;
+  G.GroupHeaderHeight := 20;
+
+  hit := G.HitAt(40, 8);          { 分组带里 }
+  AssertTrue('分组带不算叶子列头', hit.Part <> ghpHeader);
+
+  hit := G.HitAt(40, 30);         { 列头带里(20..42) }
+  AssertTrue('列头带仍然算列头', hit.Part = ghpHeader);
+  AssertEquals('列头带报出正确的列', 0, hit.Col);
+
+  { 点分组标题不该触发排序。 }
+  G.Header.Options := G.Header.Options + [hoHeaderClickAutoSort];
+  G.ClickAt(40, 8);
+  AssertEquals('点分组标题不排序', -1, G.Header.SortColumn);
+  G.ClickAt(40, 30);
+  AssertEquals('点叶子列头才排序', 0, G.Header.SortColumn);
 end;
 
 initialization
