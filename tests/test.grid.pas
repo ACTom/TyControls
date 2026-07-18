@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, DateUtils, Types, Graphics, Controls, Forms, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
-  tyControls.Painter, tyControls.ImageCollection,
+  tyControls.Painter, tyControls.ImageCollection, tyControls.Edit,
   tyControls.Grid.Layout;
 
 type
@@ -141,9 +141,14 @@ type
     procedure TestSelectionApiAndChangedEvent;
     procedure TestDragAcrossCellsExtendsSelection;
     procedure TestColumnLevelPropertiesNeedNoEvents;
+    procedure TestTypingAPrintableCharStartsEditing;
+    procedure TestValidCharsBlocksIllegalKeys;
+    procedure TestEnterAdvancesDownAndTabAdvancesByCell;
+    procedure TestHostEditLinkTakesOverTheCell;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
+    FProbeLink: TTyGridEditLink;
     FClickCol, FClickRow: Integer;
     FRightCol, FRightRow: Integer;
     FBtnCol, FBtnRow: Integer;
@@ -156,6 +161,8 @@ type
     procedure HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
     procedure HookSelectionChanged(Sender: TObject);
+    procedure HookCreateEditLink(Sender: TObject; ACol, ARow: Integer;
+      var ALink: TTyGridEditLink);
     { 逐格外观钩子的桩。**必须放在 published 之外** —— fpcunit 会把 published 段里的
       每个方法都当成测试用例注册,钩子被当测试跑起来(Sender=nil)直接 AV。 }
     procedure HookPaintRow2Red(Sender: TObject; ACol, ARow: Integer;
@@ -896,6 +903,10 @@ type
     procedure HoverAt(X, Y: Integer);
     procedure RightClickAt(X, Y: Integer);
     procedure CtrlClickAt(X, Y: Integer);
+    procedure TypeChar(AChar: Char);
+    function  EditorText: string;
+    function  IsEditing: Boolean;
+    function  EditorVisible: Boolean;
     procedure DragFromTo(X1, Y1, X2, Y2: Integer);
     procedure DoubleClickAt(X, Y: Integer);
     function  ColWidth(ACol: Integer): Integer;
@@ -923,6 +934,28 @@ end;
 function TStrGridAccess.ColWidth(ACol: Integer): Integer;
 begin
   Result := ColumnWidthPx(ACol);
+end;
+
+procedure TStrGridAccess.TypeChar(AChar: Char);
+var c: Char;
+begin
+  c := AChar;
+  KeyPress(c);
+end;
+
+function TStrGridAccess.EditorText: string;
+begin
+  Result := InlineEditor.Text;
+end;
+
+function TStrGridAccess.IsEditing: Boolean;
+begin
+  Result := Editing;
+end;
+
+function TStrGridAccess.EditorVisible: Boolean;
+begin
+  Result := InlineEditor.Visible;
 end;
 
 procedure TStrGridAccess.CtrlClickAt(X, Y: Integer);
@@ -3740,6 +3773,161 @@ begin
   { 显式写成 gekText 也要算"设过" —— 否则分不清"没设"和"设成文本"。 }
   c1.EditorKind := gekText;
   AssertTrue('显式设回文本也生效', G.EditorKindFor(1, 0) = gekText);
+end;
+
+{ 一个最小的宿主 EditLink:用一个普通 TTyEdit 当编辑器。
+  存在的意义是证明**扩展点通了** —— 网格答不上来的编辑器,宿主能自己接上去。 }
+type
+  TProbeEditLink = class(TTyGridEditLink)
+  private
+    FCtl: TTyEdit;
+  public
+    FCreatedCol, FCreatedRow: Integer;
+    function  CreateEditor(AParent: TWinControl; ACol, ARow: Integer): TWinControl; override;
+    procedure SetBounds(const ARect: TRect); override;
+    function  GetValue: string; override;
+    procedure SetValue(const AValue: string); override;
+    procedure FocusEditor; override;
+    procedure ReleaseEditor; override;
+  end;
+
+function TProbeEditLink.CreateEditor(AParent: TWinControl; ACol, ARow: Integer): TWinControl;
+begin
+  FCreatedCol := ACol;
+  FCreatedRow := ARow;
+  FCtl := TTyEdit.Create(AParent);
+  FCtl.Parent := AParent;
+  Result := FCtl;
+end;
+
+procedure TProbeEditLink.SetBounds(const ARect: TRect);
+begin
+  FCtl.BoundsRect := ARect;
+end;
+
+function TProbeEditLink.GetValue: string;
+begin
+  Result := FCtl.Text;
+end;
+
+procedure TProbeEditLink.SetValue(const AValue: string);
+begin
+  FCtl.Text := AValue;
+end;
+
+procedure TProbeEditLink.FocusEditor;
+begin
+  { 无头环境没有句柄 —— 抢焦点会抛异常。 }
+end;
+
+procedure TProbeEditLink.ReleaseEditor;
+begin
+  FreeAndNil(FCtl);
+end;
+
+procedure TTyStringGridTest.HookCreateEditLink(Sender: TObject; ACol, ARow: Integer;
+  var ALink: TTyGridEditLink);
+begin
+  { 只接管第 2 列 —— 这样才能顺带断言"别的列还是内建编辑器"。 }
+  if ACol = 2 then ALink := FProbeLink;
+end;
+
+{ 直接敲字就进编辑,并且这一笔就是新内容的第一个字符(与 Excel 一致)。
+  从前只有 KeyDown、没有 KeyPress 覆写 —— 必须先按 F2 或双击才能输入。 }
+procedure TTyStringGridTest.TestTypingAPrintableCharStartsEditing;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[0, 0] := '旧值';
+  G.MoveCursor(0, 0);
+
+  AssertTrue('一开始不在编辑态', not G.IsEditing);
+  G.TypeChar('X');
+  AssertTrue('敲字之后进入编辑态', G.IsEditing);
+  AssertEquals('这一笔覆盖原值、成为第一个字符', 'X', G.EditorText);
+end;
+
+{ ValidChars:非法字符**连编辑都不进** —— "敲进去了又被弹回来"比"根本敲不进去"更困惑。 }
+procedure TTyStringGridTest.TestValidCharsBlocksIllegalKeys;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  TTyGridColumn(G.Header.Columns.Items[1]).ValidChars := '0123456789';
+  G.MoveCursor(1, 0);
+
+  G.TypeChar('a');
+  AssertTrue('非法字符不该进编辑', not G.IsEditing);
+
+  G.TypeChar('7');
+  AssertTrue('合法字符正常进编辑', G.IsEditing);
+  AssertEquals('第一个字符是敲的那个', '7', G.EditorText);
+
+  { 没配 ValidChars 的列不受影响。 }
+  G.EndEdit(False);
+  G.MoveCursor(0, 0);
+  G.TypeChar('a');
+  AssertTrue('没配约束的列什么都能敲', G.IsEditing);
+end;
+
+{ Enter 向下推进、Tab 按格推进(到行尾折行)。
+  Tab 不拦的话会把焦点整个弹出网格。 }
+procedure TTyStringGridTest.TestEnterAdvancesDownAndTabAdvancesByCell;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);   { 4 列 }
+  G.RowCount := 4;
+  G.MoveCursor(0, 0);
+
+  G.PressKey(VK_RETURN);
+  AssertEquals('Enter 向下走一行', 1, G.Row);
+  AssertEquals('Enter 不换列', 0, G.Col);
+
+  G.PressKey(VK_TAB);
+  AssertEquals('Tab 向右走一格', 1, G.Col);
+
+  G.MoveCursor(3, 1);
+  G.PressKey(VK_TAB);
+  AssertEquals('行尾 Tab 折到下一行行首(列)', 0, G.Col);
+  AssertEquals('行尾 Tab 折到下一行行首(行)', 2, G.Row);
+
+  G.PressKeyShift(VK_TAB);
+  AssertEquals('Shift+Tab 折回上一行行尾(列)', 3, G.Col);
+  AssertEquals('Shift+Tab 折回上一行行尾(行)', 1, G.Row);
+end;
+
+{ 宿主 EditLink 接管整格:内建编辑器一概不出场,提交时取 EditLink 的值。 }
+procedure TTyStringGridTest.TestHostEditLinkTakesOverTheCell;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[2, 1] := '原值';
+  FProbeLink := TProbeEditLink.Create;
+  try
+    G.OnCreateEditLink := @HookCreateEditLink;
+
+    AssertTrue('第 2 列进入编辑', G.BeginEdit(2, 1));
+    AssertEquals('EditLink 收到的列', 2, TProbeEditLink(FProbeLink).FCreatedCol);
+    AssertEquals('EditLink 收到的行', 1, TProbeEditLink(FProbeLink).FCreatedRow);
+    AssertTrue('内建文本编辑器不该出场', not G.EditorVisible);
+
+    TProbeEditLink(FProbeLink).SetValue('新值');
+    G.EndEdit(True);
+    AssertEquals('提交时取的是 EditLink 的值', '新值', G.Cells[2, 1]);
+
+    { 没被接管的列仍然走内建编辑器。 }
+    AssertTrue('第 0 列进入编辑', G.BeginEdit(0, 1));
+    AssertTrue('内建文本编辑器出场了', G.EditorVisible);
+    G.EndEdit(False);
+  finally
+    FProbeLink.Free;
+  end;
 end;
 
 initialization

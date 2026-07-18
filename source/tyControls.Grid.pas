@@ -73,6 +73,32 @@ type
   { 列聚合方式(汇总带用)。一律只统计**通过过滤的行** —— 筛完总计要跟着变。 }
   TTyGridAggregate = (gagNone, gagSum, gagAvg, gagMin, gagMax, gagCount);
 
+  { 宿主自带编辑器的扩展点。
+
+    内建的三种编辑器(文本 / 下拉 / 日期)与两个模态动作(颜色 / 勾选)继续走
+    网格自己那条路 —— **刻意不把它们改写成 EditLink**:它们已经被一整批测试盯着,
+    重写只为"形式统一"而没有用户可见的收益,风险却是实打实的。
+    EditLink 是给"网格答不上来的编辑器"准备的逃生口(自定义控件、第三方控件)。
+
+    生命周期:BeginEdit 时 CreateEditor → SetBounds → SetValue → FocusEditor;
+    EndEdit(True) 时 GetValue 写回;控件由 EditLink 自己负责释放。 }
+  TTyGridEditLink = class
+  public
+    { 造一个编辑控件并挂到 AParent 上。返回 nil = 放弃编辑。 }
+    function  CreateEditor(AParent: TWinControl; ACol, ARow: Integer): TWinControl; virtual; abstract;
+    procedure SetBounds(const ARect: TRect); virtual; abstract;
+    function  GetValue: string; virtual; abstract;
+    procedure SetValue(const AValue: string); virtual; abstract;
+    procedure FocusEditor; virtual; abstract;
+    { 返回 True = 这个键被编辑器吃掉了,网格不再处理。 }
+    function  HandleKey(var AKey: Word; AShift: TShiftState): Boolean; virtual;
+    procedure ReleaseEditor; virtual; abstract;
+  end;
+
+  { 宿主给某一格提供 EditLink。留 nil = 用内建编辑器。 }
+  TTyGridCreateEditLinkEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var ALink: TTyGridEditLink) of object;
+
   { 网格线要画哪几轴。只要横线的报表式表格很常见,从前只有一个全有/全无的开关。 }
   TTyGridLineStyle = (glsNone, glsHorizontal, glsVertical, glsBoth);
 
@@ -90,6 +116,8 @@ type
     FPickList:   TStrings;
     FAggregate:  TTyGridAggregate;
     FFormat:     string;
+    FValidChars: string;
+    FMaxEditLength: Integer;
     FUseEditorKind: Boolean;
     procedure SetPickList(AValue: TStrings);
     procedure SetEditorKind(AValue: TTyGridEditorKind);
@@ -101,6 +129,10 @@ type
       光看"等于 gekText"分不清"没设"和"显式设成文本"。 }
     property UseEditorKind: Boolean read FUseEditorKind write FUseEditorKind;
   published
+    { 只允许输入这些字符(空 = 不限)。按键级过滤,非法键直接不进编辑框。 }
+    property ValidChars: string read FValidChars write FValidChars;
+    { 编辑框最多输入几个字符(0 = 不限)。 }
+    property MaxEditLength: Integer read FMaxEditLength write FMaxEditLength default 0;
     { 这一列用什么编辑器。设过之后优先级高于 DefaultEditorKind,低于 OnGetEditorKind。 }
     property EditorKind: TTyGridEditorKind read FEditorKind write SetEditorKind
       default gekText;
@@ -623,6 +655,10 @@ type
     FOnCellEdited: TTyGridCellEditedEvent;
     FPickEditor: TTyComboBox;
     FOnGetPickList: TTyGridGetPickListEvent;
+    FOnCreateEditLink: TTyGridCreateEditLinkEvent;
+    { 当前正在用的宿主 EditLink(nil = 走内建编辑器)。 }
+    FEditLink: TTyGridEditLink;
+    FEditLinkCtl: TWinControl;
     FDateEditor: TTyDateTimePicker;
     FOnGetCellDisplay: TTyGridGetCellDisplayEvent;
     FDefaultCellDisplay: TTyGridCellDisplay;
@@ -700,6 +736,15 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { 直接敲可打印字符就进编辑并把这个字符当作第一笔 —— 表格录入的基本手感。
+      从前只有 KeyDown、没有 KeyPress 覆写,必须先按 F2 或双击才能输入。 }
+    procedure KeyPress(var Key: Char); override;
+    { 这一格允许输入哪些字符(空 = 不限)。取自列级 ValidChars。 }
+    function  ValidCharsFor(ACol, ARow: Integer): string; virtual;
+    function  MaxEditLengthFor(ACol, ARow: Integer): Integer; virtual;
+    { 内建的行内文本编辑器。protected 暴露给派生类与测试 —— 用来断言
+      "宿主 EditLink 接管时内建编辑器不出场"。 }
+    property InlineEditor: TTyEdit read FEditor;
     { 把光标移到 (ACol,ARow),越界自动钳制;OnSelectCell 可否决。 }
     procedure MoveCursor(ACol, ARow: Integer); virtual;
     procedure DblClick; override;
@@ -900,6 +945,9 @@ type
     property OnCompareCells: TTyGridCompareEvent read FOnCompareCells write FOnCompareCells;
     property OnFilterRow: TTyGridFilterRowEvent read FOnFilterRow write FOnFilterRow;
     property OnGetPickList: TTyGridGetPickListEvent read FOnGetPickList write FOnGetPickList;
+    { 宿主自带编辑器的扩展点。留 nil 就走内建编辑器。 }
+    property OnCreateEditLink: TTyGridCreateEditLinkEvent
+      read FOnCreateEditLink write FOnCreateEditLink;
     property OnGetFooterText: TTyGridGetFooterTextEvent
       read FOnGetFooterText write FOnGetFooterText;
     { 单元格显示方式(与编辑方式正交)。 }
@@ -1020,6 +1068,8 @@ begin
     FPickList.Assign(TTyGridColumn(ASource).PickList);
     FAggregate := TTyGridColumn(ASource).Aggregate;
     FFormat := TTyGridColumn(ASource).Format;
+    FValidChars := TTyGridColumn(ASource).ValidChars;
+    FMaxEditLength := TTyGridColumn(ASource).MaxEditLength;
   end;
 end;
 
@@ -1687,6 +1737,11 @@ begin
 
   { PutImage 尊重 ClipRect —— 半掩的单元格照样被裁掉一截。 }
   P.Bitmap.PutImage(ARect.Left, ARect.Top, bmp, dmDrawWithTransparency);
+end;
+
+function TTyGridEditLink.HandleKey(var AKey: Word; AShift: TShiftState): Boolean;
+begin
+  Result := False;      { 默认什么都不吃,网格照常处理导航键 }
 end;
 
 function TTyCustomGrid.CanClickCell(ACol, ARow: Integer): Boolean;
@@ -2954,6 +3009,57 @@ begin
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
+function TTyStringGrid.ValidCharsFor(ACol, ARow: Integer): string;
+var
+  c: TTyGridColumn;
+begin
+  Result := '';
+  c := GridColumn(ACol);
+  if c <> nil then Result := c.ValidChars;
+  { 数值列即使没显式配 ValidChars,也不该让人敲进字母。 }
+  if (Result = '') and (EditorKindFor(ACol, ARow) = gekNumeric) then
+    Result := '0123456789+-.,eE';
+end;
+
+function TTyStringGrid.MaxEditLengthFor(ACol, ARow: Integer): Integer;
+var
+  c: TTyGridColumn;
+begin
+  Result := 0;
+  c := GridColumn(ACol);
+  if c <> nil then Result := c.MaxEditLength;
+end;
+
+procedure TTyStringGrid.KeyPress(var Key: Char);
+var
+  vc: string;
+begin
+  inherited KeyPress(Key);
+  if not Enabled then Exit;
+  if FEditing then Exit;              { 编辑器自己收键 }
+  if Key < #32 then Exit;             { 控制字符不算录入 }
+  if EditorKindFor(FCol, FRow) in [gekNone, gekCheckBox] then Exit;
+
+  { 按键级过滤:非法字符连编辑都不进,而不是等提交时再退回 ——
+    "敲进去了又被弹回来"比"根本敲不进去"更让人困惑。 }
+  vc := ValidCharsFor(FCol, FRow);
+  if (vc <> '') and (Pos(Key, vc) = 0) then
+  begin
+    Key := #0;
+    Exit;
+  end;
+
+  if not BeginEdit then Exit;
+  { 这一笔就是新内容的第一个字符 —— 覆盖原值,与 Excel 一致。 }
+  if FEditor.Visible then
+  begin
+    FEditor.Text := Key;
+    FEditor.MaxLength := MaxEditLengthFor(FCol, FRow);
+    FEditor.SelStart := 1;
+  end;
+  Key := #0;
+end;
+
 procedure TTyStringGrid.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   inherited KeyDown(Key, Shift);
@@ -2969,6 +3075,29 @@ begin
     VK_PRIOR: begin MoveCursor(FCol, FRow - 10); Key := 0; end;
     VK_NEXT:  begin MoveCursor(FCol, FRow + 10); Key := 0; end;
     VK_F2:    begin BeginEdit; Key := 0; end;
+    { Enter = 提交并**向下推进一格**。表格录入是一列一列往下敲的,
+      停在原地会让用户每敲一格都得再按一次方向键。 }
+    VK_RETURN: begin
+                 if FEditing then EndEdit(True);
+                 MoveCursor(FCol, FRow + 1);
+                 Key := 0;
+               end;
+    { Tab = 按**格**推进,到行尾折到下一行行首。
+      不拦的话 Tab 会把焦点整个弹出网格 —— 表格里这是最让人措手不及的一下。 }
+    VK_TAB:   begin
+                if FEditing then EndEdit(True);
+                if ssShift in Shift then
+                begin
+                  if FCol > 0 then MoveCursor(FCol - 1, FRow)
+                  else if FRow > 0 then MoveCursor(Header.Columns.Count - 1, FRow - 1);
+                end
+                else
+                begin
+                  if FCol < Header.Columns.Count - 1 then MoveCursor(FCol + 1, FRow)
+                  else if FRow < RowCount - 1 then MoveCursor(0, FRow + 1);
+                end;
+                Key := 0;
+              end;
     VK_SPACE: if EditorKindFor(FCol, FRow) = gekCheckBox then
               begin ToggleCellChecked(FCol, FRow); Key := 0; end;
     Ord('C'): if ssCtrl in Shift then begin CopySelectionToClipboard; Key := 0; end;
@@ -5040,6 +5169,25 @@ begin
 
   FEditCol := FCol;
   FEditRow := FRow;
+
+  { 先问宿主要不要用自己的编辑器。给了就整格交给它,内建那几种一概不出场。 }
+  FEditLink := nil;
+  if Assigned(FOnCreateEditLink) then FOnCreateEditLink(Self, FCol, FRow, FEditLink);
+  if FEditLink <> nil then
+  begin
+    FEditLinkCtl := FEditLink.CreateEditor(Self, FCol, FRow);
+    if FEditLinkCtl = nil then
+    begin
+      FEditLink := nil;      { 宿主临时改主意 —— 当作没编辑 }
+      Exit;
+    end;
+    FEditLink.SetBounds(r);
+    FEditLink.SetValue(Cells[FCol, FRow]);
+    FEditLink.FocusEditor;
+    FEditing := True;
+    Result := True;
+    Exit;
+  end;
   if EditorKindFor(FCol, FRow) = gekColor then
   begin
     { 颜色是模态对话框,不是驻留编辑器 —— 选完直接写回,不进编辑态。 }
@@ -5084,6 +5232,7 @@ begin
   else
     FEditor.Alignment := taLeftJustify;
   FEditor.Text := Cells[FCol, FRow];
+  FEditor.MaxLength := MaxEditLengthFor(FCol, FRow);
   FEditor.BoundsRect := r;
   FEditor.Visible := True;
   if HandleAllocated and FEditor.CanFocus then FEditor.SetFocus;
@@ -5095,15 +5244,28 @@ procedure TTyStringGrid.EndEdit(ACommit: Boolean);
 var
   oldTxt, newTxt: string;
   accept: Boolean;
-  usePick, useDate: Boolean;
+  usePick, useDate, useLink: Boolean;
+  linkTxt: string;
 begin
   usePick := False;
   useDate := False;
+  useLink := False;
+  linkTxt := '';
   if not FEditing then Exit;
   if FEndingEdit then Exit;          { 重入守卫:提交里若又触发提交会写两次 }
   FEndingEdit := True;
   try
     FEditing := False;
+
+    { 宿主 EditLink:先把值取出来再释放控件 —— 反了就取到已销毁控件上了。 }
+    if FEditLink <> nil then
+    begin
+      useLink := True;
+      linkTxt := FEditLink.GetValue;
+      FEditLink.ReleaseEditor;
+      FEditLink := nil;
+      FEditLinkCtl := nil;
+    end;
     if FPickEditor.Visible then
     begin
       FPickEditor.Visible := False;
@@ -5118,7 +5280,9 @@ begin
     if ACommit then
     begin
       oldTxt := Cells[FEditCol, FEditRow];
-      if useDate then
+      if useLink then
+        newTxt := linkTxt
+      else if useDate then
         newTxt := DateToStr(FDateEditor.Date)
       else if usePick then
       begin
