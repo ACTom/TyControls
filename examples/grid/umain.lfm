@@ -124,6 +124,7 @@ object MainForm: TMainForm
       OnCompareCells = GridCompareCells
       OnGetPickList = GridGetPickList
       OnGetCellDisplay = GridGetCellDisplay
+      OnGetRowHeight = GridGetRowHeight
     end
     object LblStatus: TTyLabel
       Left = 14

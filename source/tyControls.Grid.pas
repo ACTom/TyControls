@@ -22,7 +22,8 @@ uses
   Classes, SysUtils, Types, Math, contnrs, Clipbrd, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns,
-  tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox,
+  tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox, tyControls.ColorMath,
+  tyControls.Css.Values, tyControls.ImageCollection, tyControls.Dialogs.Color,
   tyControls.Grid.Layout;
 
 type
@@ -78,6 +79,10 @@ type
     function FrozenHeightPx: Integer; virtual;
     { 页脚汇总带高度(设备像素)。它钉在视口底部、不参与滚动。 }
     function FooterHeightPx: Integer; virtual;
+    { 逐行行高(逻辑像素)。基类恒为 DefaultRowHeight;派生类可按行覆盖。 }
+    function RowHeightOf(ARow: Integer): Integer; virtual;
+    { 行高前缀和(设备像素),喂给几何层。全等高时返回空数组 = 走统一行高快路径。 }
+    function RowTops: TTyIntArray; virtual;
 
     { 把控件当前状态装配成纯几何层要的度量。所有几何都必须经由它,
       不允许任何地方另算一套 —— 那正是绘制/命中漂移的源头。 }
@@ -263,18 +268,24 @@ type
     gekNumeric,   { 只收数字(含负号与小数点) }
     gekCheckBox,  { 勾选框:不弹编辑器,点一下就切换 }
     gekPickList,  { 下拉选取:从 OnGetPickList 给的候选里选 }
-    gekDate       { 日期:弹日期选择器 }
+    gekDate,      { 日期:弹日期选择器 }
+    gekColor      { 颜色:弹取色对话框,值存 #RRGGBB }
   );
 
   { 单元格的**显示**方式(与编辑方式正交:一个格可以显示成进度条、编辑时仍是数值框)。 }
   TTyGridCellDisplay = (
     gcdText,      { 默认:文字 }
     gcdProgress,  { 进度条,值取 0..100 }
-    gcdRating     { 评分星,值取 0..5 }
+    gcdRating,    { 评分星,值取 0..5 }
+    gcdImage      { 图片:值是 Images 里的索引 }
   );
 
   TTyGridGetCellDisplayEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var ADisplay: TTyGridCellDisplay) of object;
+
+  { 逐行行高(逻辑像素)。不接 = 全部用 DefaultRowHeight。 }
+  TTyGridGetRowHeightEvent = procedure(Sender: TObject; ARow: Integer;
+    var AHeight: Integer) of object;
 
   { 排序比较方式。 }
   TTyGridSortKind = (gskText, gskNumber);
@@ -333,6 +344,10 @@ type
     FDateEditor: TTyDateTimePicker;
     FOnGetCellDisplay: TTyGridGetCellDisplayEvent;
     FDefaultCellDisplay: TTyGridCellDisplay;
+    FImages: TTyVirtualImageList;
+    FOnGetRowHeight: TTyGridGetRowHeightEvent;
+    FRowTopsCache: TTyIntArray;
+    FRowTopsValid: Boolean;
     FAggregates: TStringList;      { 列索引 -> 聚合方式序号 }
     FMerges: TFPStringHashTable;   { 'col:row' -> 'cs:rs',只存合并的基准格 }
     FOnGetFooterText: TTyGridGetFooterTextEvent;
@@ -392,12 +407,18 @@ type
     { 勾选框语义:'1'/'true'/'是'/'y' 都算勾上。写回时统一成 '1'/''。 }
     function  CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay; virtual;
     function  ShouldDrawCellText(ACol, ARow: Integer): Boolean; override;
+    function  RowHeightOf(ARow: Integer): Integer; override;
+    function  RowTops: TTyIntArray; override;
+    procedure RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
+      const AFrame: TTyStyleSet); virtual;
     procedure RenderProgressCell(P: TTyPainter; ACol, ARow: Integer;
       const AFrame: TTyStyleSet); virtual;
     procedure RenderRatingCell(P: TTyPainter; ACol, ARow: Integer;
       const AFrame: TTyStyleSet); virtual;
     function  CellChecked(ACol, ARow: Integer): Boolean;
     procedure ToggleCellChecked(ACol, ARow: Integer);
+    { 弹取色对话框改这一格的颜色(值存 #RRGGBB)。 }
+    procedure ToggleCellColor(ACol, ARow: Integer);
     { 勾选框的绘制槽(单元格内居中的小方块)。命中与绘制共用它。 }
     function  CheckBoxRect(ACol, ARow: Integer): TRect;
     procedure RenderCheckCell(P: TTyPainter; ACol, ARow: Integer;
@@ -538,6 +559,11 @@ type
       read FDefaultCellDisplay write FDefaultCellDisplay default gcdText;
     property OnGetCellDisplay: TTyGridGetCellDisplayEvent
       read FOnGetCellDisplay write FOnGetCellDisplay;
+    { gcdImage 用的图像列表(单元格内容存图像索引)。 }
+    property Images: TTyVirtualImageList read FImages write FImages;
+    { 逐行行高。接了它即启用可变行高;不接则全表等高(走整除快路径)。 }
+    property OnGetRowHeight: TTyGridGetRowHeightEvent
+      read FOnGetRowHeight write FOnGetRowHeight;
     { 列头上显示筛选按钮(点它弹出去重值的勾选下拉)。 }
     property ShowFilterButtons: Boolean
       read FShowFilterButtons write FShowFilterButtons default False;
@@ -834,7 +860,8 @@ end;
 
 function TTyCustomGrid.ContentHeightPx: Integer;
 begin
-  Result := DisplayRowCount * ScaleI(FDefaultRowHeight);
+  { 走几何层,这样可变行高时自然取前缀和末项,不必在这里再算一遍。 }
+  Result := TyGridContentHeight(GridMetrics);
 end;
 
 function TTyCustomGrid.ContentWidthPx: Integer;
@@ -1441,6 +1468,16 @@ begin
   RenderTo(Canvas, ClientRect, Dpi);
 end;
 
+function TTyCustomGrid.RowHeightOf(ARow: Integer): Integer;
+begin
+  Result := FDefaultRowHeight;
+end;
+
+function TTyCustomGrid.RowTops: TTyIntArray;
+begin
+  Result := nil;      { 基类全等高 —— 返回空数组让几何层走整除快路径 }
+end;
+
 function TTyCustomGrid.GridMetrics: TTyGridMetrics;
 begin
   Result := Default(TTyGridMetrics);
@@ -1450,6 +1487,7 @@ begin
   Result.FrozenH := FrozenHeightPx;
   Result.RowH := ScaleI(FDefaultRowHeight);
   Result.RowCount := DisplayRowCount;
+  Result.RowTops := RowTops;
   Result.ScrollX := FScrollX;
   Result.ScrollY := FScrollY;
 end;
@@ -1762,6 +1800,7 @@ end;
 procedure TTyStringGrid.InvalidateOrder;
 begin
   FOrderValid := False;
+  FRowTopsValid := False;    { 显示序变了 → 行高前缀和也失效 }
 end;
 
 procedure TTyStringGrid.InvalidateGridOrder;
@@ -2054,6 +2093,68 @@ end;
 
 
 
+
+function TTyStringGrid.RowHeightOf(ARow: Integer): Integer;
+begin
+  Result := DefaultRowHeight;
+  if Assigned(FOnGetRowHeight) then FOnGetRowHeight(Self, ARow, Result);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyStringGrid.RowTops: TTyIntArray;
+var
+  pos, n, acc, dataRow: Integer;
+begin
+  { 不接 OnGetRowHeight 就是全表等高 —— 返回空数组,几何层走整除快路径,
+    百万行时省下一个百万项的数组。 }
+  if not Assigned(FOnGetRowHeight) then Exit(nil);
+
+  n := DisplayRowCount;
+  if FRowTopsValid and (Length(FRowTopsCache) = n + 1) then Exit(FRowTopsCache);
+
+  SetLength(FRowTopsCache, n + 1);
+  acc := 0;
+  for pos := 0 to n - 1 do
+  begin
+    FRowTopsCache[pos] := acc;
+    dataRow := DisplayToData(pos);
+    { 分组行(dataRow < 0)按默认行高;它不是数据行,问宿主要行高没有意义。 }
+    if dataRow >= 0 then
+      Inc(acc, ScaleI(RowHeightOf(dataRow)))
+    else
+      Inc(acc, ScaleI(DefaultRowHeight));
+  end;
+  FRowTopsCache[n] := acc;
+  FRowTopsValid := True;
+  Result := FRowTopsCache;
+end;
+
+procedure TTyStringGrid.RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
+  const AFrame: TTyStyleSet);
+var
+  r: TRect;
+  idx, sz, cx, cy: Integer;
+  bmp: TBGRABitmap;
+begin
+  if FImages = nil then Exit;
+  r := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+  idx := StrToIntDef(Trim(GetCellText(ACol, ARow)), -1);
+  if (idx < 0) or (idx >= FImages.Count) then Exit;
+
+  sz := ScaleI(16);
+  if sz > (r.Bottom - r.Top) - 2 then sz := (r.Bottom - r.Top) - 2;
+  if sz > (r.Right - r.Left) - 2 then sz := (r.Right - r.Left) - 2;
+  if sz <= 0 then Exit;
+  cx := (r.Left + r.Right) div 2;
+  cy := (r.Top + r.Bottom) div 2;
+  { 从图像集的渲染缓存借位图 —— 不为每个图标单独分配与重采样(这是绘制热路径)。
+    位图归缓存所有,不能释放。 }
+  bmp := FImages.CachedIndex(idx, sz);
+  if bmp <> nil then
+    P.Bitmap.PutImage(cx - sz div 2, cy - sz div 2, bmp, dmDrawWithTransparency);
+end;
+
 { ---- 单元格图形 ----------------------------------------------------------- }
 
 function TTyStringGrid.CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay;
@@ -2153,6 +2254,23 @@ begin
   oldTxt := GetCellText(ACol, ARow);
   { 写回统一成 '1'/'' —— 读的时候宽松,写的时候收敛。 }
   if CellChecked(ACol, ARow) then newTxt := '' else newTxt := '1';
+  accept := True;
+  if Assigned(FOnCellEdited) then
+    FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
+  if accept then Cells[ACol, ARow] := newTxt;
+end;
+
+procedure TTyStringGrid.ToggleCellColor(ACol, ARow: Integer);
+var
+  c: TTyColor;
+  accept: Boolean;
+  oldTxt, newTxt: string;
+begin
+  if FReadOnly then Exit;
+  oldTxt := GetCellText(ACol, ARow);
+  if oldTxt <> '' then c := TyParseColor(oldTxt) else c := TyRGB(255, 255, 255);
+  if not TySelectColor('选择颜色', c) then Exit;
+  newTxt := TyColorToHex(c, False);
   accept := True;
   if Assigned(FOnCellEdited) then
     FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
@@ -3002,6 +3120,14 @@ begin
 
   FEditCol := FCol;
   FEditRow := FRow;
+  if EditorKindFor(FCol, FRow) = gekColor then
+  begin
+    { 颜色是模态对话框,不是驻留编辑器 —— 选完直接写回,不进编辑态。 }
+    ToggleCellColor(FCol, FRow);
+    Result := True;
+    Exit;
+  end;
+
   if EditorKindFor(FCol, FRow) = gekDate then
   begin
     FDateEditor.Controller := Self.Controller;
@@ -3180,6 +3306,7 @@ begin
         case CellDisplayFor(colIdx, dataRow) of
           gcdProgress: RenderProgressCell(P, colIdx, dataRow, AFrame);
           gcdRating:   RenderRatingCell(P, colIdx, dataRow, AFrame);
+          gcdImage:    RenderImageCell(P, colIdx, dataRow, AFrame);
         end;
       end;
     end;

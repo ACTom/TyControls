@@ -51,6 +51,7 @@ type
     procedure HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
       var AKind: TTyGridEditorKind);
     procedure HandleGetPickList(Sender: TObject; ACol, ARow: Integer; AItems: TStrings);
+    procedure HandleTallSecondRow(Sender: TObject; ARow: Integer; var AHeight: Integer);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -98,6 +99,8 @@ type
     procedure TestValueFilterKeepsOnlyCheckedValues;
     procedure TestHeaderDividerDragResizesTheColumn;
     procedure TestHeaderDragReordersColumnsPastAThreshold;
+    procedure TestVariableRowHeightsShiftLaterRowsAndHitTest;
+    procedure TestUniformGridAllocatesNoRowTopsArray;
   end;
 
 implementation
@@ -751,6 +754,7 @@ type
     procedure MoveMouseTo(X, Y: Integer);
     procedure ReleaseMouse(X, Y: Integer);
     function  ColLeft(ACol: Integer): Integer;
+    function  Metrics: TTyGridMetrics;
     function  RowRectAt(APos: Integer): TRect;
     function  GetScrollTop: Integer;
     procedure SetScrollTop(AValue: Integer);
@@ -760,6 +764,11 @@ type
 procedure TStrGridAccess.PressMouseWithoutRelease(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);      { 不 MouseUp —— 停在"按住"状态 }
+end;
+
+function TStrGridAccess.Metrics: TTyGridMetrics;
+begin
+  Result := GridMetrics;
 end;
 
 function TStrGridAccess.ColLeft(ACol: Integer): Integer;
@@ -873,6 +882,12 @@ procedure TTyStringGridTest.HandleGetPickList(Sender: TObject; ACol, ARow: Integ
   AItems: TStrings);
 begin
   AItems.Add('甲'); AItems.Add('乙'); AItems.Add('丙');
+end;
+
+procedure TTyStringGridTest.HandleTallSecondRow(Sender: TObject; ARow: Integer;
+  var AHeight: Integer);
+begin
+  if ARow = 1 then AHeight := 60;
 end;
 
 procedure TTyStringGridTest.SetUp;
@@ -2055,6 +2070,51 @@ begin
   G.MoveMouseTo(G.ColLeft(1) + 20, 10);
   G.ReleaseMouse(G.ColLeft(1) + 20, 10);
   AssertTrue('拖过阈值后位置变了', c0.Position <> p0);
+end;
+
+{ 逐行行高:接了 OnGetRowHeight 就启用可变行高 —— 前面行变高,后面的行整体下移,
+  且点击命中必须跟着走(几何与命中同源)。 }
+procedure TTyStringGridTest.TestVariableRowHeightsShiftLaterRowsAndHitTest;
+var
+  G: TStrGridAccess;
+  r0, r1, r2: TRect;
+  hit: TTyGridHit;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  G.DefaultRowHeight := 20;
+  G.OnGetRowHeight := @HandleTallSecondRow;   { 第 1 行 60px,其余 20px }
+
+  r0 := G.CellRect(0, 0);
+  r1 := G.CellRect(0, 1);
+  r2 := G.CellRect(0, 2);
+
+  AssertEquals('第 0 行仍是 20 高', 20, r0.Bottom - r0.Top);
+  AssertEquals('第 1 行 60 高', 60, r1.Bottom - r1.Top);
+  AssertEquals('第 1 行紧接第 0 行', r0.Bottom, r1.Top);
+  AssertEquals('第 2 行被顶到 60 之后', r1.Bottom, r2.Top);
+  AssertEquals('第 2 行恢复 20 高', 20, r2.Bottom - r2.Top);
+
+  { 命中必须跟着走:点在加高那行的中部,应命中第 1 行而不是按等高算出的第 2/3 行。 }
+  hit := G.CellAt(10, (r1.Top + r1.Bottom) div 2);
+  AssertEquals('命中加高的那一行', 1, hit.Row);
+
+  hit := G.CellAt(10, (r2.Top + r2.Bottom) div 2);
+  AssertEquals('命中其后一行', 2, hit.Row);
+end;
+
+{ 不接 OnGetRowHeight 时不该分配前缀和数组 —— 百万行时那是个百万项的数组。 }
+procedure TTyStringGridTest.TestUniformGridAllocatesNoRowTopsArray;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 1000000;
+  AssertEquals('全等高时前缀和为空(走整除快路径)', 0, Length(G.Metrics.RowTops));
+
+  G.OnGetRowHeight := @HandleTallSecondRow;
+  G.RowCount := 5;
+  AssertEquals('接了事件才建前缀和', 6, Length(G.Metrics.RowTops));
 end;
 
 initialization

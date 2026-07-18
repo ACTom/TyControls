@@ -16,6 +16,8 @@ uses
   Types;
 
 type
+  TTyIntArray = array of Integer;
+
   { 有固定行/列时,视口被切成的四个窗格。
 
       +----------+---------------------+
@@ -48,8 +50,12 @@ type
   TTyGridMetrics = record
     ClientW, ClientH: Integer;   { 视口尺寸 }
     FrozenW, FrozenH: Integer;   { 冻结带范围:行头槽+固定列 / 列头带+固定行 }
-    RowH:             Integer;   { 统一行高(P0 阶段不支持可变行高) }
+    RowH:             Integer;   { 统一行高;RowTops 为空时用它 }
     RowCount:         Integer;
+    { 可变行高:长度 = RowCount+1 的**前缀和**(RowTops[i] = 第 i 行顶边的内容坐标,
+      RowTops[RowCount] = 内容总高)。为空 = 全部用统一行高 RowH。
+      用前缀和而不是逐行高度,是为了让"坐标 → 行"能二分查找而不是线性扫。 }
+    RowTops:          TTyIntArray;
     ScrollX, ScrollY: Integer;   { 正文窗格的滚动偏移,>=0 }
   end;
 
@@ -61,6 +67,13 @@ function TyGridPaneRect(const M: TTyGridMetrics; APane: TTyGridPane): TRect;
   正文行随 ScrollY 滚动并让开冻结带;因此 Top = FrozenH + ARow*RowH - ScrollY,
   越界的行会算出视口外的坐标 —— 这是正常的,可视性由 TyGridVisibleRows 判定。 }
 function TyGridRowRect(ARow: Integer; const M: TTyGridMetrics): TRect;
+
+{ 第 ARow 行在内容坐标里的顶边与高度(不含冻结带与滚动)。 }
+procedure TyGridRowExtent(ARow: Integer; const M: TTyGridMetrics;
+  out ATop, AHeight: Integer);
+
+{ 内容总高。可变行高时取前缀和末项,否则 RowCount*RowH。 }
+function TyGridContentHeight(const M: TTyGridMetrics): Integer;
 
 { 与正文窗格相交的行区间(闭区间,含只露出一部分的首尾行)—— 虚拟化的核心:
   百万行的表每帧也只绘制这几十行。无行可见时返回 False(AFirst/ALast 置 -1)。 }
@@ -97,13 +110,78 @@ begin
   end;
 end;
 
+{ 第 ARow 行在**内容坐标**里的顶边与高度(不含冻结带偏移与滚动)。 }
+procedure TyGridRowExtent(ARow: Integer; const M: TTyGridMetrics;
+  out ATop, AHeight: Integer);
+var
+  h: Integer;
+begin
+  if Length(M.RowTops) = M.RowCount + 1 then
+  begin
+    { 可变行高:直接查前缀和。越界时钳到两端,避免算出荒唐坐标。 }
+    if ARow < 0 then
+    begin
+      ATop := M.RowTops[0];
+      AHeight := 0;
+      Exit;
+    end;
+    if ARow >= M.RowCount then
+    begin
+      ATop := M.RowTops[M.RowCount];
+      AHeight := 0;
+      Exit;
+    end;
+    ATop := M.RowTops[ARow];
+    AHeight := M.RowTops[ARow + 1] - ATop;
+    Exit;
+  end;
+  h := M.RowH; if h < 0 then h := 0;
+  ATop := ARow * h;
+  AHeight := h;
+end;
+
 function TyGridRowRect(ARow: Integer; const M: TTyGridMetrics): TRect;
 var
-  y, h: Integer;
+  top, h, y: Integer;
 begin
-  h := M.RowH; if h < 0 then h := 0;
-  y := M.FrozenH + ARow * h - M.ScrollY;
+  TyGridRowExtent(ARow, M, top, h);
+  y := M.FrozenH + top - M.ScrollY;
   Result := Rect(0, y, M.ClientW, y + h);
+end;
+
+function TyGridContentHeight(const M: TTyGridMetrics): Integer;
+begin
+  if Length(M.RowTops) = M.RowCount + 1 then
+    Result := M.RowTops[M.RowCount]
+  else
+  begin
+    Result := M.RowH;
+    if Result < 0 then Result := 0;
+    Result := Result * M.RowCount;
+  end;
+end;
+
+{ 内容坐标 AY 落在哪一行 —— 前缀和上二分。越界返回钳制后的端点行。 }
+function TyGridRowAtContentY(AContentY: Integer; const M: TTyGridMetrics): Integer;
+var
+  lo, hi, mid: Integer;
+begin
+  if Length(M.RowTops) <> M.RowCount + 1 then
+  begin
+    if M.RowH <= 0 then Exit(-1);
+    Exit(AContentY div M.RowH);
+  end;
+  if M.RowCount <= 0 then Exit(-1);
+  if AContentY < M.RowTops[0] then Exit(-1);
+  if AContentY >= M.RowTops[M.RowCount] then Exit(-1);
+  lo := 0;
+  hi := M.RowCount - 1;
+  while lo < hi do
+  begin
+    mid := (lo + hi + 1) div 2;
+    if M.RowTops[mid] <= AContentY then lo := mid else hi := mid - 1;
+  end;
+  Result := lo;
 end;
 
 function TyGridVisibleRows(const M: TTyGridMetrics;
@@ -117,7 +195,8 @@ begin
   Result := False;
 
   h := M.RowH;
-  if (h <= 0) or (M.RowCount <= 0) then Exit;
+  if M.RowCount <= 0 then Exit;
+  if (h <= 0) and (Length(M.RowTops) <> M.RowCount + 1) then Exit;
 
   { 用窗格函数取正文区,而不是自己再算一遍 —— 可见性判定与窗格切分必须同源,
     否则两处的钳制规则一旦分叉,滚动到边缘就会出现少画/多画一行。 }
@@ -125,11 +204,19 @@ begin
   avail := body.Bottom - body.Top;
   if avail <= 0 then Exit;   { 冻结带吃满视口:正文零高 }
 
-  { 首行 = 被滚掉的整行数;负偏移按 0 处理。 }
-  if M.ScrollY > 0 then AFirst := M.ScrollY div h else AFirst := 0;
-
-  { 末行 = 最后一个顶边仍落在正文区内的行(故 -1 再整除,含只露一点的那行)。 }
-  ALast := (M.ScrollY + avail - 1) div h;
+  { 首行 / 末行都在**内容坐标**上定位:可变行高时走二分,统一行高时退化成整除。 }
+  if Length(M.RowTops) = M.RowCount + 1 then
+  begin
+    AFirst := TyGridRowAtContentY(M.ScrollY, M);
+    if AFirst < 0 then AFirst := 0;
+    ALast := TyGridRowAtContentY(M.ScrollY + avail - 1, M);
+    if ALast < 0 then ALast := M.RowCount - 1;   { 滚过尾部:钳到末行 }
+  end
+  else
+  begin
+    if M.ScrollY > 0 then AFirst := M.ScrollY div h else AFirst := 0;
+    ALast := (M.ScrollY + avail - 1) div h;
+  end;
 
   if AFirst > M.RowCount - 1 then   { 整个滚过了尾部 }
   begin
@@ -157,15 +244,14 @@ begin
   { 只有正文窗格里才有行:冻结带(列头/固定行)与窗格外一律不是行。 }
   body := TyGridPaneRect(M, gpBody);
   if (AY < body.Top) or (AY >= body.Bottom) then Exit;
-  if (M.RowH <= 0) or (M.RowCount <= 0) then Exit;
+  if M.RowCount <= 0 then Exit;
+  if (M.RowH <= 0) and (Length(M.RowTops) <> M.RowCount + 1) then Exit;
 
-  { 统一行高下,本式与 TyGridRowRect 用的是同一个公式(FrozenH + row*RowH - ScrollY),
-    因此两者恒等 —— 不需要再回头验证一遍(验证过也确认是冗余代码,没有测试能区分)。
-
-    守住"命中 = 矩形取逆"的是 TestRowAtIsTheExactInverseOfRowRect:它逐像素扫过每一
-    可见行、要求反查回同一行,与实现无关。**等 P1 引入可变行高**,本式将不再与矩形恒等,
-    那条测试会立刻转红 —— 届时必须改成按行高表搜索并用 TyGridRowRect 校验命中。 }
-  cand := (AY - M.FrozenH + M.ScrollY) div M.RowH;
+  { 换算到**内容坐标**再定位:可变行高走前缀和二分,统一行高退化成整除。
+    两条路径都与 TyGridRowRect 用同一份数据推出,因此恒为它的逆 ——
+    曾经在这里加过一步"用矩形回验候选",变异测试证明它是无法被区分的冗余代码,已删。
+    守住不变量的是那两条逐像素反查测试(统一行高一条、可变行高一条),与实现写法无关。 }
+  cand := TyGridRowAtContentY(AY - M.FrozenH + M.ScrollY, M);
   if (cand < 0) or (cand > M.RowCount - 1) then Exit;
   Result := cand;
 end;

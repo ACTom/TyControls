@@ -6,6 +6,8 @@ uses
   tyControls.Grid.Layout;
 
 type
+  TTyIntArr = array of Integer;
+
   { 纯几何测试:不建控件、不要句柄、不要主题 —— 全是纯函数。 }
   TTyGridLayoutTest = class(TTestCase)
   private
@@ -20,6 +22,9 @@ type
     procedure TestVisibleRowsClampToRowCountAndEmptyGrid;
     procedure TestRowAtIsTheExactInverseOfRowRect;
     procedure TestRowAtRejectsFrozenBandAndBeyondLastRow;
+    procedure TestVariableRowHeightsPlaceRowsByPrefixSums;
+    procedure TestRowAtIsInverseUnderVariableRowHeights;
+    procedure TestVisibleRangeUnderVariableRowHeights;
   end;
 
 implementation
@@ -240,6 +245,76 @@ begin
   AssertEquals('末行之后是空白,不是行', -1, TyGridRowAt(60 + 3 * 20, Mt));
   AssertEquals('视口底部空白也不是行', -1, TyGridRowAt(299, Mt));
   AssertEquals('视口之外不是行', -1, TyGridRowAt(5000, Mt));
+end;
+
+{ 可变行高:行位置来自前缀和,而不是 行号*行高。 }
+procedure TTyGridLayoutTest.TestVariableRowHeightsPlaceRowsByPrefixSums;
+var
+  Mt: TTyGridMetrics;
+  r: TRect;
+begin
+  // 4 行,高度依次 10 / 40 / 20 / 30 → 前缀和 0,10,50,70,100
+  Mt := M(400, 300, 0, 60, 20, 4, 0, 0);
+  Mt.RowTops := TTyIntArr.Create(0, 10, 50, 70, 100);
+
+  r := TyGridRowRect(0, Mt);
+  AssertEquals('第 0 行顶 = 冻结带', 60, r.Top);
+  AssertEquals('第 0 行高 10', 10, r.Bottom - r.Top);
+
+  r := TyGridRowRect(1, Mt);
+  AssertEquals('第 1 行顶 = 冻结带+10', 70, r.Top);
+  AssertEquals('第 1 行高 40', 40, r.Bottom - r.Top);
+
+  r := TyGridRowRect(3, Mt);
+  AssertEquals('第 3 行顶 = 冻结带+70', 130, r.Top);
+  AssertEquals('第 3 行高 30', 30, r.Bottom - r.Top);
+
+  AssertEquals('内容总高 = 前缀和末项', 100, TyGridContentHeight(Mt));
+
+  // 统一行高路径不受影响。
+  Mt.RowTops := nil;
+  AssertEquals('无前缀和时退回统一行高', 4 * 20, TyGridContentHeight(Mt));
+end;
+
+{ 可变行高下,"命中 = 矩形取逆"这条不变量必须照样成立 ——
+  此前统一行高时两条路径天然恒等,现在不再恒等,靠实现里那步校验兜住。 }
+procedure TTyGridLayoutTest.TestRowAtIsInverseUnderVariableRowHeights;
+var
+  Mt: TTyGridMetrics;
+  f, l, row, y: Integer;
+  r: TRect;
+begin
+  Mt := M(400, 300, 0, 60, 20, 4, 0, 25);          // 带滚动零头
+  Mt.RowTops := TTyIntArr.Create(0, 10, 50, 70, 100);
+
+  AssertTrue('有可见行', TyGridVisibleRows(Mt, f, l));
+  for row := f to l do
+  begin
+    r := TyGridRowRect(row, Mt);
+    for y := r.Top to r.Bottom - 1 do
+      if (y >= TyGridPaneRect(Mt, gpBody).Top) and (y < TyGridPaneRect(Mt, gpBody).Bottom) then
+        AssertEquals(Format('y=%d 必须反查回第 %d 行', [y, row]), row, TyGridRowAt(y, Mt));
+  end;
+end;
+
+{ 可变行高下的可视窗口:靠前缀和二分定位首尾行,含只露一部分的。 }
+procedure TTyGridLayoutTest.TestVisibleRangeUnderVariableRowHeights;
+var
+  Mt: TTyGridMetrics;
+  f, l: Integer;
+begin
+  // 正文区 60..300 = 240px;行高 10/40/20/30 合计 100 → 全部装得下
+  Mt := M(400, 300, 0, 60, 20, 4, 0, 0);
+  Mt.RowTops := TTyIntArr.Create(0, 10, 50, 70, 100);
+  AssertTrue('有可见行', TyGridVisibleRows(Mt, f, l));
+  AssertEquals('首行 0', 0, f);
+  AssertEquals('末行钳到 RowCount-1', 3, l);
+
+  // 视口只有 30px:滚动 15 时应从第 1 行(内容 10..50)起
+  Mt := M(400, 90, 0, 60, 20, 4, 0, 15);
+  Mt.RowTops := TTyIntArr.Create(0, 10, 50, 70, 100);
+  AssertTrue('有可见行', TyGridVisibleRows(Mt, f, l));
+  AssertEquals('首行 = 内容 y=15 所在行', 1, f);
 end;
 
 initialization

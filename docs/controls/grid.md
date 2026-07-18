@@ -47,6 +47,8 @@ end;
 | `ReadOnly` | 整表只读,任何编辑都开不起来 |
 | `SortColumn` / `SortDirection` | 当前排序列与方向(只读;用 `SortByColumn` / `ToggleSortColumn` 改) |
 | `ShowFooter` / `FooterHeight` | 底部汇总带 |
+| `Images` | `gcdImage` 用的图像集(`TTyVirtualImageList`) |
+| `OnGetRowHeight` | 逐行行高。**接了它才启用可变行高**;不接则全表等高,几何层走整除快路径(百万行时省下一个百万项的前缀和数组) |
 | `SortKind` | `gskText` 还是 `gskNumber`。数值列用文本排会得到 `'10' < '9'` |
 | `DefaultEditorKind` | 默认编辑器种类,见下表 |
 
@@ -60,6 +62,7 @@ end;
 | `gekCheckBox` | **不弹编辑器** —— 点方块 / 空格 / F2 直接切换。读值宽松(`1`/`true`/`yes`/`是` 都算勾上),写回统一成 `1`/空串 |
 | `gekPickList` | 下拉选取,候选来自 `OnGetPickList`;**选中即提交** |
 | `gekDate` | 弹日期选择器 |
+| `gekColor` | 弹取色对话框,值存 `#RRGGBB` |
 
 ### 单元格显示方式
 
@@ -69,7 +72,8 @@ end;
 |---|---|
 | `gcdText` | 默认:文字 |
 | `gcdProgress` | 进度条,值取 0..100(借 `TyProgressBar` 的 token) |
-| `gcdRating` | 评分标记,值取 0..5(借 `TyRating` 的 token) |
+| `gcdRating` | 评分标记,值取 0..5 |
+| `gcdImage` | 图片,值是 `Images` 里的索引 |
 
 ## 主要事件
 
@@ -134,7 +138,7 @@ TyGridSelection        选区
 **导出/复制一律走显示序**(所见即所得):被过滤掉的行不出现,排序后的次序被保留;
 而寻址仍是数据行 —— 两者由行序间接层桥接。
 
-尚未实现:图片单元格、颜色选择编辑器、可变行高。**明确不做**见下。
+设计路线图上的功能已全部落地。**明确不做**见下。
 (下拉 / 日期 / 颜色等浮层类,将由 `TTyPopover` 承载)。
 
 **明确不做**:XLS 原生读写、PDF 导出与打印子系统、RichEdit 单元格 —— 它们是文件格式库

@@ -57,6 +57,7 @@ type
     procedure BtnGroupClick(Sender: TObject);
     procedure GridGetCellDisplay(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
+    procedure GridGetRowHeight(Sender: TObject; ARow: Integer; var AHeight: Integer);
   private
     procedure BuildColumns;
     procedure FillSampleRows;
@@ -75,6 +76,8 @@ const
     ('华东', '华北', '华南', '西南', '东北', '西北');
   cProducts: array[0..4] of string =
     ('云主机', '对象存储', '数据库', 'CDN', '负载均衡');
+  cMarkColors: array[0..3] of string =
+    ('#3B82F6', '#22C55E', '#F59E0B', '#EF4444');
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
@@ -118,6 +121,7 @@ begin
     AddCol('已结算',   70, taCenter);
     AddCol('完成度',  120, taLeftJustify);
     AddCol('评分',     90, taLeftJustify);
+    AddCol('标记色',   80, taCenter);
   finally
     Grid.Header.Columns.EndUpdate;
   end;
@@ -150,6 +154,7 @@ begin
     if r mod 3 = 0 then Grid.Cells[6, r] := '1';    { 勾选列:三行勾一行 }
     Grid.Cells[7, r] := IntToStr((r * 13) mod 101);  { 完成度 0..100 → 进度条 }
     Grid.Cells[8, r] := IntToStr(1 + r mod 5);       { 评分 1..5 → 星标 }
+    Grid.Cells[9, r] := cMarkColors[r mod Length(cMarkColors)];   { 颜色编辑器 }
   end;
 end;
 
@@ -195,8 +200,17 @@ begin
     1:    AKind := gekPickList;   { 大区:从固定候选里选 }
     3, 4, 7, 8: AKind := gekNumeric;   { 数量 / 金额 / 完成度 / 评分 }
     6:    AKind := gekCheckBox;   { 已结算:点一下就切换 }
+    9:    AKind := gekColor;      { 标记色:弹取色对话框 }
   else    AKind := gekText;
   end;
+end;
+
+{ 可变行高演示:每第 5 行加高一倍。接了这个事件才启用可变行高;
+  不接则全表等高、几何层走整除快路径(百万行时省下一个百万项的前缀和数组)。 }
+procedure TMainForm.GridGetRowHeight(Sender: TObject; ARow: Integer;
+  var AHeight: Integer);
+begin
+  if (ARow > 0) and (ARow mod 5 = 0) then AHeight := 48;
 end;
 
 { 按「大区」分组 / 取消分组。分组行可点击折叠。 }
