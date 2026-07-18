@@ -645,6 +645,14 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Card"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.Grid.Layout.pas"/>
+        <UnitName Value="tyControls.Grid.Layout"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Grid.pas"/>
+        <UnitName Value="tyControls.Grid"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Tag.pas"/>
         <UnitName Value="tyControls.Tag"/>
       </Item>

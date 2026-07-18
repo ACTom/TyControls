@@ -132,6 +132,7 @@ uses
   test.starshape,
   test.arrow,
   test.card, test.tag, test.badge,
+  test.grid.layout, test.grid, test.grid.streaming,
   test.alert, test.notification, test.empty, test.segmented,
   test.pagination, test.steps, test.breadcrumb, test.transfer,
   test.treeselect, test.cascader, test.popover;
