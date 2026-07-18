@@ -214,6 +214,13 @@ type
   TTyGridCanClickCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var ACanClick: Boolean) of object;
   TTyGridHeaderMouseEvent = procedure(Sender: TObject; ACol: Integer) of object;
+  { 复制/粘贴前后的钩子。置 AAllow:=False 可整体拦下。 }
+  TTyGridClipboardEvent = procedure(Sender: TObject; var AText: string;
+    var AAllow: Boolean) of object;
+  { 逐格粘贴。ANewText 可改写,AAllow:=False 跳过这一格。 }
+  TTyGridPasteCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var ANewText: string; var AAllow: Boolean) of object;
+
   { 这一格要不要换行显示。 }
   TTyGridGetCellWordWrapEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var AWordWrap: Boolean) of object;
@@ -726,6 +733,12 @@ type
     FPickEditor: TTyComboBox;
     FOnGetPickList: TTyGridGetPickListEvent;
     FOnCreateEditLink: TTyGridCreateEditLinkEvent;
+    FOnClipboardCopy:  TTyGridClipboardEvent;
+    FOnClipboardPaste: TTyGridClipboardEvent;
+    FOnBeforePasteCell: TTyGridPasteCellEvent;
+    FOnAfterPasteCell:  TTyGridCellMouseEvent;
+    { 粘贴超出网格时自动扩行/扩列。默认开 —— 静默丢数据比多几行空行糟糕得多。 }
+    FAutoGrowOnPaste:  Boolean;
     { 当前正在用的宿主 EditLink(nil = 走内建编辑器)。 }
     FEditLink: TTyGridEditLink;
     FEditLinkCtl: TWinControl;
@@ -773,6 +786,7 @@ type
     FSortCol: Integer;
     { 完整的排序键序列;FSortCol/FSortDir 是它的第 0 项(保留成兼容视图)。 }
     FSortKeys: TTyGridSortKeys;
+    FUpdatingOrder: Integer;
     FGroupRowFormat: string;
     FSortDir: TTySortDirection;
     FSortKind: TTyGridSortKind;
@@ -881,6 +895,22 @@ type
     procedure DeleteRow(ARow: Integer);
     procedure InsertColumn(ACol: Integer);
     procedure DeleteColumn(ACol: Integer);
+    { 复数版。一次搬完再重排一次显示序,比循环调单数版快得多
+      —— 后者每插一行都要重建一遍 FOrder。 }
+    { 批量期间挂起显示序重建 —— 否则每插一行都要重建一遍 FOrder。
+      成对使用,可嵌套。 }
+    procedure BeginUpdateOrder;
+    procedure EndUpdateOrder;
+    procedure InsertRows(ARow, ACount: Integer);
+    procedure RemoveRows(ARow, ACount: Integer);
+    procedure InsertCols(ACol, ACount: Integer);
+    procedure RemoveCols(ACol, ACount: Integer);
+    { 按**数据行**搬动。显示序会在下一次重建时自然跟上。 }
+    procedure MoveRow(AFrom, ATo: Integer);
+    procedure SwapRows(ARow1, ARow2: Integer);
+    procedure MoveColumn(AFrom, ATo: Integer);
+    { 剪切 = 复制 + 清空(只读格不清)。 }
+    procedure CutToClipboard;
 
     { 把某列宽度自动适配到内容(取表头与**已写入**单元格里最宽的那个)。
       只量已写过的格,所以百万行空表也不会扫全表。 }
@@ -1043,6 +1073,17 @@ type
     { 宿主自带编辑器的扩展点。留 nil 就走内建编辑器。 }
     property OnCreateEditLink: TTyGridCreateEditLinkEvent
       read FOnCreateEditLink write FOnCreateEditLink;
+    { 粘贴块超出网格时自动扩行/扩列。 }
+    property AutoGrowOnPaste: Boolean read FAutoGrowOnPaste write FAutoGrowOnPaste
+      default True;
+    property OnClipboardCopy: TTyGridClipboardEvent
+      read FOnClipboardCopy write FOnClipboardCopy;
+    property OnClipboardPaste: TTyGridClipboardEvent
+      read FOnClipboardPaste write FOnClipboardPaste;
+    property OnBeforePasteCell: TTyGridPasteCellEvent
+      read FOnBeforePasteCell write FOnBeforePasteCell;
+    property OnAfterPasteCell: TTyGridCellMouseEvent
+      read FOnAfterPasteCell write FOnAfterPasteCell;
     property OnGetFooterText: TTyGridGetFooterTextEvent
       read FOnGetFooterText write FOnGetFooterText;
     { 单元格显示方式(与编辑方式正交)。 }
@@ -3047,6 +3088,7 @@ begin
   { resourcestring 在 FPC 里不可赋值给常量表达式,但可以读 —— 这里当初值用。
     (与 TyFallbackFontName 同一套做法。) }
   FGroupRowFormat := rsGridGroupRow;
+  FAutoGrowOnPaste := True;
   FGroupCol := -1;
   FFilterCol := -1;
   FShowFilterButtons := False;
@@ -3428,6 +3470,13 @@ end;
 
 procedure TTyStringGrid.InvalidateOrder;
 begin
+  { 批量期间不重建 —— EndUpdateOrder 里统一来一次。 }
+  if FUpdatingOrder > 0 then
+  begin
+    FOrderValid := False;
+    FRowTopsValid := False;
+    Exit;
+  end;
   FOrderValid := False;
   FRowTopsValid := False;    { 显示序变了 → 行高前缀和也失效 }
 end;
@@ -4278,6 +4327,174 @@ begin
   end;
 end;
 
+procedure TTyStringGrid.BeginUpdateOrder;
+begin
+  Inc(FUpdatingOrder);
+end;
+
+procedure TTyStringGrid.EndUpdateOrder;
+begin
+  if FUpdatingOrder > 0 then Dec(FUpdatingOrder);
+  if FUpdatingOrder = 0 then
+  begin
+    InvalidateOrder;
+    UpdateScrollBars;
+    Invalidate;
+  end;
+end;
+
+procedure TTyStringGrid.InsertRows(ARow, ACount: Integer);
+var
+  i: Integer;
+begin
+  if ACount <= 0 then Exit;
+  if (ARow < 0) or (ARow > RowCount) then Exit;
+  EndEdit(True);
+  BeginUpdateOrder;
+  try
+    { 从后往前搬 ACount 次,等价于一次搬 ACount ——
+      ShiftCells 本身已经处理了方向,这里只是省掉每次的重排。 }
+    for i := 1 to ACount do ShiftCells(ARow, 1, True);
+    RowCount := RowCount + ACount;
+  finally
+    EndUpdateOrder;
+  end;
+end;
+
+procedure TTyStringGrid.RemoveRows(ARow, ACount: Integer);
+var
+  i: Integer;
+begin
+  if ACount <= 0 then Exit;
+  if (ARow < 0) or (ARow >= RowCount) then Exit;
+  if ARow + ACount > RowCount then ACount := RowCount - ARow;
+  EndEdit(True);
+  BeginUpdateOrder;
+  try
+    for i := 1 to ACount do ShiftCells(ARow, -1, True);
+    RowCount := RowCount - ACount;
+  finally
+    EndUpdateOrder;
+  end;
+end;
+
+procedure TTyStringGrid.InsertCols(ACol, ACount: Integer);
+var
+  i: Integer;
+begin
+  if ACount <= 0 then Exit;
+  BeginUpdateOrder;
+  try
+    for i := 1 to ACount do InsertColumn(ACol);
+  finally
+    EndUpdateOrder;
+  end;
+end;
+
+procedure TTyStringGrid.RemoveCols(ACol, ACount: Integer);
+var
+  i: Integer;
+begin
+  if ACount <= 0 then Exit;
+  BeginUpdateOrder;
+  try
+    for i := 1 to ACount do
+    begin
+      if ACol >= Header.Columns.Count then Break;
+      DeleteColumn(ACol);
+    end;
+  finally
+    EndUpdateOrder;
+  end;
+end;
+
+procedure TTyStringGrid.SwapRows(ARow1, ARow2: Integer);
+var
+  j: Integer;
+  tmp: string;
+  a1, a2: TTyGridCellAttr;
+  k1, k2: string;
+begin
+  if ARow1 = ARow2 then Exit;
+  if (ARow1 < 0) or (ARow1 >= RowCount) then Exit;
+  if (ARow2 < 0) or (ARow2 >= RowCount) then Exit;
+  EndEdit(True);
+  BeginUpdateOrder;
+  try
+    for j := 0 to Header.Columns.Count - 1 do
+    begin
+      tmp := Cells[j, ARow1];
+      Cells[j, ARow1] := Cells[j, ARow2];
+      Cells[j, ARow2] := tmp;
+      { 属性也要跟着换 —— 只换文字的话合并区/底色会留在原地。 }
+      k1 := CellKey(j, ARow1);
+      k2 := CellKey(j, ARow2);
+      a1 := FAttrs.Find(k1);
+      a2 := FAttrs.Find(k2);
+      if (a1 <> nil) or (a2 <> nil) then
+      begin
+        FAttrs.MoveEntry(k1, CellKey(j, -1));       { 借一个不可能的行号当中转 }
+        FAttrs.MoveEntry(k2, k1);
+        FAttrs.MoveEntry(CellKey(j, -1), k2);
+      end;
+    end;
+    { 行高是行的属性,不是格的 —— 单独换。 }
+    j := RowHeights[ARow1];
+    RowHeights[ARow1] := RowHeights[ARow2];
+    RowHeights[ARow2] := j;
+  finally
+    EndUpdateOrder;
+  end;
+end;
+
+procedure TTyStringGrid.MoveRow(AFrom, ATo: Integer);
+var
+  i: Integer;
+begin
+  if AFrom = ATo then Exit;
+  if (AFrom < 0) or (AFrom >= RowCount) then Exit;
+  if (ATo < 0) or (ATo >= RowCount) then Exit;
+  { 用相邻交换走过去:比"抽出来再插回去"少一套搬迁逻辑,
+    行数级别的移动次数完全够用。 }
+  BeginUpdateOrder;
+  try
+    if ATo > AFrom then
+      for i := AFrom to ATo - 1 do SwapRows(i, i + 1)
+    else
+      for i := AFrom downto ATo + 1 do SwapRows(i, i - 1);
+  finally
+    EndUpdateOrder;
+  end;
+end;
+
+procedure TTyStringGrid.MoveColumn(AFrom, ATo: Integer);
+begin
+  if (AFrom < 0) or (AFrom >= Header.Columns.Count) then Exit;
+  if (ATo < 0) or (ATo >= Header.Columns.Count) then Exit;
+  { 列的顺序交给列模型自己管(AdjustPosition 早就建好了),
+    单元格内容按**索引**存,所以不用搬。 }
+  Header.Columns.AdjustPosition(TTyColumn(Header.Columns.Items[AFrom]),
+    TTyColumn(Header.Columns.Items[ATo]).Position);
+  Invalidate;
+end;
+
+procedure TTyStringGrid.CutToClipboard;
+var
+  pos, dataRow, colIdx: Integer;
+begin
+  CopySelectionToClipboard;
+  for pos := 0 to DisplayRowCount - 1 do
+  begin
+    dataRow := DisplayToData(pos);
+    if dataRow < 0 then Continue;
+    for colIdx := 0 to Header.Columns.Count - 1 do
+      if IsCellSelected(colIdx, dataRow)
+         and (EditorKindFor(colIdx, dataRow) <> gekNone) then    { 只读格不清 }
+        Cells[colIdx, dataRow] := '';
+  end;
+  Invalidate;
+end;
+
 procedure TTyStringGrid.InsertRow(ARow: Integer);
 begin
   if (ARow < 0) or (ARow > RowCount) then Exit;
@@ -5003,37 +5220,88 @@ begin
 end;
 
 procedure TTyStringGrid.CopySelectionToClipboard;
+var
+  txt: string;
+  allow: Boolean;
 begin
-  Clipboard.AsText := SelectionAsText;
+  txt := SelectionAsText;
+  allow := True;
+  if Assigned(FOnClipboardCopy) then FOnClipboardCopy(Self, txt, allow);
+  if not allow then Exit;
+  Clipboard.AsText := txt;
 end;
 
 procedure TTyStringGrid.PasteFromText(const AText: string);
 var
   lines: TStringList;
-  i, j, targetRow: Integer;
+  i, j, targetRow, startPos, needRows, needCols, maxCols: Integer;
   parts: TStringArray;
+  txt, cellTxt: string;
+  allow: Boolean;
 begin
   if AText = '' then Exit;
   EndEdit(True);
+
+  txt := AText;
+  allow := True;
+  if Assigned(FOnClipboardPaste) then FOnClipboardPaste(Self, txt, allow);
+  if not allow then Exit;
+
   lines := TStringList.Create;
+  BeginUpdateOrder;
   try
-    lines.Text := AText;
+    lines.Text := txt;
+    { 末尾那个空行是 TStringList.Text 的产物,不是真的一行。 }
+    while (lines.Count > 0) and (lines[lines.Count - 1] = '') do
+      lines.Delete(lines.Count - 1);
+    if lines.Count = 0 then Exit;
+
+    startPos := DataToDisplay(FRow);
+
+    { **智能粘贴**:块比网格大就把网格撑大。
+      从前这里是 `if targetRow < 0 then Break` —— 粘 100 行进 10 行的网格,
+      **静默丢掉 90 行**。丢数据是最不该静默的一类失败。 }
+    if FAutoGrowOnPaste then
+    begin
+      needRows := startPos + lines.Count - DisplayRowCount;
+      if needRows > 0 then RowCount := RowCount + needRows;
+
+      maxCols := 0;
+      for i := 0 to lines.Count - 1 do
+      begin
+        j := Length(lines[i].Split(#9));
+        if j > maxCols then maxCols := j;
+      end;
+      needCols := FCol + maxCols - Header.Columns.Count;
+      if needCols > 0 then InsertCols(Header.Columns.Count, needCols);
+    end;
+
     for i := 0 to lines.Count - 1 do
     begin
       { 粘贴按**显示序**落位:从光标所在的显示行往下铺,
         这样"看到哪就粘到哪",与复制端对称。 }
-      targetRow := DisplayToData(DataToDisplay(FRow) + i);
-      if targetRow < 0 then Break;            { 超出可见行就停 }
+      targetRow := DisplayToData(startPos + i);
+      if targetRow < 0 then Continue;     { 撑不动(比如分组行)就跳过这一行,不是整体放弃 }
       parts := lines[i].Split(#9);
       for j := 0 to High(parts) do
       begin
         if FCol + j >= Header.Columns.Count then Break;
         if EditorKindFor(FCol + j, targetRow) = gekNone then Continue;  { 只读列跳过 }
-        Cells[FCol + j, targetRow] := parts[j];
+
+        cellTxt := parts[j];
+        allow := True;
+        if Assigned(FOnBeforePasteCell) then
+          FOnBeforePasteCell(Self, FCol + j, targetRow, cellTxt, allow);
+        if not allow then Continue;
+
+        Cells[FCol + j, targetRow] := cellTxt;
+        if Assigned(FOnAfterPasteCell) then
+          FOnAfterPasteCell(Self, FCol + j, targetRow);
       end;
     end;
   finally
     lines.Free;
+    EndUpdateOrder;
   end;
   Invalidate;
 end;

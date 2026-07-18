@@ -45,7 +45,7 @@
 | B9 | A6 EditLink 扩展点 + H12 输入约束 + H9 键盘录入手感 | - [x] **完成** `2026-07-19` |
 | B10 | H16 多级/合并表头 | - [x] **完成** `2026-07-19` |
 | B11 | A7 + H17 多列排序 + H18 分组重做 | - [x] **完成** `2026-07-19` |
-| B12 | H19 数据层批量 + 剪贴板事件 | - [ ] |
+| B12 | H19 数据层批量 + 剪贴板事件 | - [x] **完成** `2026-07-19` |
 | B13 | MEDIUM 第一组(M1-M9) | - [ ] |
 | B14 | MEDIUM 第二组(M10-M19) | - [ ] |
 | B15 | MEDIUM 第三组(M20-M24)+ 文档/示例/i18n 收尾 | - [ ] |
@@ -393,11 +393,17 @@ TextRect,都是 BGRA 重活),而样式解析根本不是瓶颈。加了**跨帧�
 
 ## B12 · 数据层批量 + 剪贴板事件
 
-- [ ] `InsertRows/RemoveRows/InsertCols/RemoveCols`(复数版)、`MoveRow/MoveColumn/SwapRows`。
-- [ ] **智能粘贴**:按剪贴板块大小自动扩行扩列。现在 `targetRow<0` 直接 `Break`,
+- [x] `InsertRows/RemoveRows/InsertCols/RemoveCols`(复数版)、`MoveRow/MoveColumn/SwapRows`。
+- [x] **智能粘贴**:按剪贴板块大小自动扩行扩列。现在 `targetRow<0` 直接 `Break`,
       粘 100 行进 10 行的网格**静默丢 90 行**。
-- [ ] `CutToClipboard`;剪贴板事件族(`OnClipboardCopy/Paste/BeforePasteCell/AfterPasteCell`)。
-- [ ] 变异验证;**B12 收工**。
+- [x] `CutToClipboard`;剪贴板事件族(`OnClipboardCopy/Paste/BeforePasteCell/AfterPasteCell`)。
+- [x] 变异验证(回到静默丢行 / 不扩列 / 逐格否决不生效 / SwapRows 不换行高 /
+      不换逐格属性,五条各自杀掉对应测试)。
+- [x] SwapRows 那两条**第一次没被杀** —— 测试只换了文字,没设行高也没合并。
+      补上之后才红。与 B3 修的 ShiftCells 是同一类疏漏:换行/搬行时容易只想到文字。
+- [x] 批量操作统一走 `BeginUpdateOrder/EndUpdateOrder`(可嵌套),
+      否则每插一行都要重建一遍 FOrder。
+- [x] **B12 收工**。
 
 ---
 

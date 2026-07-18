@@ -151,6 +151,9 @@ type
     procedure TestGroupingKeepsTheUserSortColumn;
     procedure TestColumnSortKindBeatsGridSortKind;
     procedure TestExpandCollapseAllGroups;
+    procedure TestSmartPasteGrowsInsteadOfDroppingRows;
+    procedure TestPasteCellHooksCanRewriteAndSkip;
+    procedure TestBatchRowOpsAndMoveSwap;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -167,6 +170,8 @@ type
     procedure HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
     procedure HookSelectionChanged(Sender: TObject);
+    procedure HookUpperCasePaste(Sender: TObject; ACol, ARow: Integer;
+      var ANewText: string; var AAllow: Boolean);
     procedure HookCreateEditLink(Sender: TObject; ACol, ARow: Integer;
       var ALink: TTyGridEditLink);
     { 逐格外观钩子的桩。**必须放在 published 之外** —— fpcunit 会把 published 段里的
@@ -4147,6 +4152,115 @@ begin
 
   G.ExpandAllGroups;
   AssertEquals('全展开后回到 6 行', expanded, G.DisplayRowCount);
+end;
+
+procedure TTyStringGridTest.HookUpperCasePaste(Sender: TObject; ACol, ARow: Integer;
+  var ANewText: string; var AAllow: Boolean);
+begin
+  if ACol = 1 then AAllow := False           { 第 1 列整列跳过 }
+  else ANewText := UpperCase(ANewText);      { 其余列转大写 }
+end;
+
+{ **静默丢数据**是最不该出现的一类失败:从前 `if targetRow < 0 then Break`,
+  粘 100 行进 10 行的网格会悄悄丢掉 90 行,一句提示都没有。 }
+procedure TTyStringGridTest.TestSmartPasteGrowsInsteadOfDroppingRows;
+var
+  G: TStrGridAccess;
+  i: Integer;
+  txt: string;
+begin
+  G := MakeStrGrid(FForm, FCtl);   { 4 列 }
+  G.RowCount := 3;
+  G.MoveCursor(0, 0);
+
+  txt := '';
+  for i := 0 to 9 do
+    txt := txt + Format('r%d-a'#9'r%d-b', [i, i]) + LineEnding;
+  G.PasteFromText(txt);
+
+  AssertTrue(Format('行数应当被撑到装得下(实际 %d)', [G.RowCount]), G.RowCount >= 10);
+  AssertEquals('第 0 行粘对了', 'r0-a', G.Cells[0, 0]);
+  AssertEquals('**最后一行没被丢掉**', 'r9-a', G.Cells[0, 9]);
+  AssertEquals('第二列也粘对了', 'r9-b', G.Cells[1, 9]);
+
+  { 列也要能撑。 }
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 2;
+  G.MoveCursor(0, 0);
+  G.PasteFromText('a'#9'b'#9'c'#9'd'#9'e'#9'f' + LineEnding);
+  AssertTrue(Format('列数应当被撑到装得下(实际 %d)', [G.Header.Columns.Count]),
+    G.Header.Columns.Count >= 6);
+  AssertEquals('第 5 列粘对了', 'f', G.Cells[5, 0]);
+
+  { 关掉自动扩张时保持老行为(不扩、也不崩)。 }
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 2;
+  G.AutoGrowOnPaste := False;
+  G.MoveCursor(0, 0);
+  G.PasteFromText('x' + LineEnding + 'y' + LineEnding + 'z' + LineEnding);
+  AssertEquals('关掉后不扩行', 2, G.RowCount);
+end;
+
+{ 逐格粘贴钩子:能改写、也能跳过。 }
+procedure TTyStringGridTest.TestPasteCellHooksCanRewriteAndSkip;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Cells[1, 0] := '原值';
+  G.MoveCursor(0, 0);
+  G.OnBeforePasteCell := @HookUpperCasePaste;
+
+  G.PasteFromText('abc'#9'def' + LineEnding);
+
+  AssertEquals('钩子把内容改写了', 'ABC', G.Cells[0, 0]);
+  AssertEquals('被否决的列保持原样', '原值', G.Cells[1, 0]);
+end;
+
+{ 批量增删 + 移动 / 交换。 }
+procedure TTyStringGridTest.TestBatchRowOpsAndMoveSwap;
+var
+  G: TStrGridAccess;
+  cs, rs: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[0, 0] := 'A'; G.Cells[0, 1] := 'B';
+  G.Cells[0, 2] := 'C'; G.Cells[0, 3] := 'D';
+
+  G.InsertRows(1, 3);
+  AssertEquals('一次插 3 行', 7, G.RowCount);
+  AssertEquals('原第 1 行被推到第 4 行', 'B', G.Cells[0, 4]);
+  AssertEquals('插进来的是空行', '', G.Cells[0, 1]);
+
+  G.RemoveRows(1, 3);
+  AssertEquals('一次删 3 行', 4, G.RowCount);
+  AssertEquals('删完之后回到原样', 'B', G.Cells[0, 1]);
+
+  { 交换要连**行高**与**逐格属性**一起换 —— 只换文字的话,合并框和行高
+    会留在原地,与内容脱节(与 B3 修的 ShiftCells 同一类)。 }
+  G.RowHeights[0] := 55;
+  G.MergeCells(1, 0, 2, 1);
+
+  G.SwapRows(0, 3);
+  AssertEquals('交换后第 0 行', 'D', G.Cells[0, 0]);
+  AssertEquals('交换后第 3 行', 'A', G.Cells[0, 3]);
+  AssertEquals('行高跟着换了', 55, G.RowHeightOf(3));
+  AssertEquals('原位置回到默认行高', G.DefaultRowHeight, G.RowHeightOf(0));
+  AssertTrue('合并区也跟着换了', G.CellSpan(1, 3, cs, rs));
+  AssertTrue('原位置不再是合并基准格', not G.CellSpan(1, 0, cs, rs));
+
+  { 换回来,继续下面的移动测试。 }
+  G.RowHeights[3] := 0;
+  G.UnmergeCells(1, 3);
+
+  G.SwapRows(0, 3);            { 换回来 }
+  G.MoveRow(0, 2);
+  AssertEquals('搬到第 2 位', 'A', G.Cells[0, 2]);
+  AssertEquals('原来第 1 行前移', 'B', G.Cells[0, 0]);
+  AssertEquals('原来第 2 行前移', 'C', G.Cells[0, 1]);
+  AssertEquals('第 3 行没动', 'D', G.Cells[0, 3]);
 end;
 
 initialization
