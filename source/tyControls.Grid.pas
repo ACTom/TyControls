@@ -483,6 +483,10 @@ type
     { 鼠标所在格换了没有;换了就重绘(**换格才重绘** —— 每像素都重绘会把
       大表拖垮,而且鼠标一动就满屏闪)。 }
     procedure UpdateHoverCell(X, Y: Integer);
+    { 指针形状跟着"这里能不能拖"走。**必须与命中判定同源** ——
+      指针承诺了能拖就得真能拖,否则用户会对着一个假暗示较劲。
+      (ListView / TreeView 早就这么做了,网格一直漏着。) }
+    procedure UpdateHoverCursor(X, Y: Integer);
     { 把一格文字画出来,尽量走缓存。语义与 P.DrawText 一致(含省略号截断)。 }
     procedure DrawCellText(P: TTyPainter; const ARect: TRect; const AText: string;
       const AFontName: string; AFontSize, AFontWeight: Integer; AColor: TTyColor;
@@ -2112,6 +2116,28 @@ begin
   FCellStyleCache[n] := Result;
 end;
 
+procedure TTyCustomGrid.UpdateHoverCursor(X, Y: Integer);
+var
+  want: TCursor;
+  hdrH: Integer;
+begin
+  want := crDefault;
+
+  hdrH := 0;
+  if hoVisible in FHeader.Options then
+    hdrH := ScaleI(FHeader.Height) + GroupBandHeightPx;
+
+  { 列分隔线:只在列头带里认(与 MouseDown 同一条判定)。 }
+  if (hoColumnResize in FHeader.Options) and (hdrH > 0) and (Y < hdrH)
+     and (Y >= GroupBandHeightPx) and (DividerAtX(X) >= 0) then
+    want := crHSplit
+  { 行分隔线:只在行头槽里认(同样与 MouseDown 同源)。 }
+  else if (Y >= hdrH) and (RowDividerAtY(X, Y) >= 0) then
+    want := crVSplit;
+
+  if Cursor <> want then Cursor := want;
+end;
+
 procedure TTyCustomGrid.UpdateHoverCell(X, Y: Integer);
 var
   hit: TTyGridHit;
@@ -2929,6 +2955,8 @@ begin
   inherited MouseMove(Shift, X, Y);
 
   UpdateHoverCell(X, Y);
+  { 正在拖的时候别改指针 —— 手上已经在拖了,形状应当保持。 }
+  if (FResizeCol < 0) and (FResizeRow < 0) then UpdateHoverCursor(X, Y);
 
   if FResizeRow >= 0 then
   begin

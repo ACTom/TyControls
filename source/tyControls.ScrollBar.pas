@@ -19,6 +19,8 @@ type
     FAnimEnabled: Boolean;
     { 上一次缓动滴答的时刻(0 = 还没开始)。用来算真实经过时间。 }
     FLastTickMs: QWord;
+    { 本次位置变化要不要立刻刷自己(只在拖动中置位)。 }
+    FNeedImmediateRepaint: Boolean;
     FPosAnim: TTyAnimator;      // 0..1 traversal driving FAnimFrom -> FAnimTo
     FAnimFrom, FAnimTo: Single; // displayed-thumb-position endpoints (Min..Max units)
     FTimer: TTimer;            // lazy; only created when actually animating
@@ -356,6 +358,7 @@ begin
     FAnimFrom := Clamped;
     FAnimTo := Clamped;
     FPosAnim.SetTargetImmediate(1);
+    FNeedImmediateRepaint := True;
   end
   else if FAnimEnabled and HandleAllocated then
   begin
@@ -379,6 +382,21 @@ begin
   end;
   FPosition := Clamped;
   Invalidate;
+
+  { 拖动中**立刻把自己重画掉**,不要排队等下一轮消息循环。
+
+    滑块是独立的窗口化控件,本来有自己的 WM_PAINT;但 WM_PAINT 优先级最低,
+    宿主(大网格一帧要几十毫秒)一忙,滑块的重绘就被挤到后面 —— 表现就是
+    "内容在动、滑块慢半拍"。自己这块表面很小(实测整屏 blit 才 0.8ms,
+    滑块只有它的百分之一),同步刷一次完全不心疼。
+
+    只在拖动时这么做:程序性变化走正常的排队重绘,不必抢。 }
+  if FNeedImmediateRepaint then
+  begin
+    FNeedImmediateRepaint := False;
+    if HandleAllocated then Update;
+  end;
+
   if Assigned(FOnChange) then
     FOnChange(Self);
 end;

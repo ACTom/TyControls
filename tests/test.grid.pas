@@ -169,6 +169,7 @@ type
     procedure TestCtrlAGoesThroughSelectAll;
     procedure TestGridLinesDoNotCrossMergedCells;
     procedure TestColorCellPaintsASwatchNotTheHexText;
+    procedure TestResizeCursorsFollowTheDividers;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -4960,6 +4961,47 @@ begin
     Ctl.Free;
   end;
 end;
+
+{ 鼠标移到可拖的分隔线上,指针要变形 —— 否则用户根本不知道那里能拖。
+  ListView 与 TreeView 早就这么做了(crHSplit),网格是漏的。
+
+  指针形状必须与**实际能不能拖**严格一致:承诺了能拖就得真能拖,
+  反过来也一样。所以这条测试拿命中判定当参照物,不另立标准。 }
+procedure TTyStringGridTest.TestResizeCursorsFollowTheDividers;
+var
+  G: TStrGridAccess;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.Header.Height := 22;
+  G.RowCount := 5;
+  G.ShowIndicator := True;
+  G.IndicatorWidth := 30;
+
+  { 列头上的普通位置:默认指针。 }
+  G.HoverAt(40, 8);
+  AssertEquals('列头空白处是默认指针', crDefault, G.Cursor);
+
+  { 列分隔线上:左右调宽。 }
+  G.HoverAt(G.ColLeft(0) + G.ColWidth(0) - 1, 8);
+  AssertEquals('列分隔线上应当是横向调整指针', crHSplit, G.Cursor);
+
+  { 移开之后要**恢复** —— 否则指针会一直卡在调整形状上。 }
+  G.HoverAt(40, 8);
+  AssertEquals('移开分隔线后恢复默认指针', crDefault, G.Cursor);
+
+  { 行头槽里的行分隔线上:上下调高。 }
+  r := G.RowRectAt(1);
+  G.HoverAt(8, r.Bottom);
+  AssertEquals('行分隔线上应当是纵向调整指针', crVSplit, G.Cursor);
+
+  { 同一条行分隔线,但在**单元格区域**里 —— 那儿拖不动行高,
+    所以也不该给出"能拖"的暗示。 }
+  G.HoverAt(200, r.Bottom);
+  AssertEquals('单元格区域不给调整指针', crDefault, G.Cursor);
+end;
+
 
 initialization
   RegisterTest(TTyGridControlTest);
