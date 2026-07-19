@@ -185,6 +185,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestSelectionDoesNotEraseAnExplicitCellColor;
+    procedure TestZebraDoesNotOverrideAnExplicitCellColor;
     procedure TestInsertRowIsCorrectAcrossTenthRowBoundary;
     procedure TestDeleteRowIsCorrectAcrossTenthRowBoundary;
     procedure TestInsertColumnIsCorrectAcrossTenthColumnBoundary;
@@ -5950,6 +5952,142 @@ begin
   AssertEquals('显式行高应跟着那行数据走到第 11 行', 44, G.RowHeights[11]);
   AssertTrue('隐藏标记应跟着那行数据走到第 12 行', G.IsHiddenRow(12));
   AssertTrue('原来的第 11 行不该还是隐藏的', not G.IsHiddenRow(11));
+end;
+
+{ 用户显式给某格上的色,**被选中时也必须还看得见**。
+
+  从前选区底色是不透明的 accent,直接铺在逐格色之上,把它整块抹掉。
+  而光标恰恰总落在刚上色的那一格上 —— 于是"点了上色什么都没变",
+  挪开光标才冒出来一格。用户报的"有时一格、有时一格都没有"就是这个。
+
+  断言用**通道关系**而不是具体像素值:半透明的蓝色选区盖在红格上,
+  红通道仍应压过蓝通道。这条断言只有"颜色确实透出来了"才成立,
+  抹掉的话整格是 accent 蓝(蓝压红),必红。 }
+procedure TTyStringGridTest.TestSelectionDoesNotEraseAnExplicitCellColor;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+
+  procedure AvgOfCell(ACol, ARow: Integer; out ar, ag, ab: Integer);
+  var
+    Re: TBGRABitmap; r: TRect; x, y, n: Integer; px: TBGRAPixel;
+  begin
+    r := G.CellRect(ACol, ARow);
+    ar := 0; ag := 0; ab := 0; n := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top + 3 to r.Bottom - 4 do
+        for x := r.Left + 3 to r.Right - 4 do
+        begin
+          if (x < 0) or (y < 0) or (x >= 400) or (y >= 300) then Continue;
+          px := Re.GetPixel(x, y);
+          Inc(ar, px.red); Inc(ag, px.green); Inc(ab, px.blue); Inc(n);
+        end;
+    finally
+      Re.Free;
+    end;
+    if n = 0 then n := 1;
+    ar := ar div n; ag := ag div n; ab := ab div n;
+  end;
+
+var
+  mr, mg, mb, pr, pg, pb: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    { 刻意**不**定义 TyGridCellMarked —— 它该由 base 层(light.tycss)垫进来。
+      这样这条测试顺带守住"新 typeKey 补进了 light.tycss",而不只是守代码。 }
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridCell:selected { background: #3B82F6; color: #FFFFFF; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.RowCount := 4;
+
+    { (1,1) 上成红色,(0,1) 不上色 —— 两格都在选区里,做差分。 }
+    G.CellColors[1, 1] := TyRGB(255, 0, 0);
+    G.SelectRange(0, 1, 1, 1);
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    AvgOfCell(1, 1, mr, mg, mb);   { 上了色 + 被选中 }
+    AvgOfCell(0, 1, pr, pg, pb);   { 只是被选中 }
+
+    AssertTrue(Format('选中时上的色仍要透出来(红 %d 应压过蓝 %d)', [mr, mb]),
+      mr > mb);
+    AssertTrue(Format('上了色的格必须与只被选中的格看起来不同(%d,%d,%d vs %d,%d,%d)',
+      [mr, mg, mb, pr, pg, pb]), Abs(mr - pr) > 30);
+    AssertTrue(Format('没上色的格仍是正常选区色(蓝 %d 应压过红 %d)', [pb, pr]),
+      pb > pr);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 斑马纹是**主题装饰**,逐格色是**用户的明确指定** —— 装饰不许盖过指定。
+
+  代码里这两块的先后顺序本来是反的:逐格色先写、斑马纹后写,于是在奇数行
+  上的色被斑马纹整块盖掉。函数自己的注释写的优先级("主题 → 斑马纹 → 行色 →
+  逐格色")才是对的 —— 注释和代码互相矛盾,注释是对的那一方。 }
+procedure TTyStringGridTest.TestZebraDoesNotOverrideAnExplicitCellColor;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  r: TRect;
+  x, y, red: Integer;
+  px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridCellAlt { background: #DDDDDD; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.RowCount := 6;
+    G.AlternateRows := True;
+    G.MoveCursor(0, 0);            { 光标别停在被测格上 }
+
+    { 显示行 3 是奇数行 —— 斑马纹会铺灰底的那一种。 }
+    G.CellColors[1, 3] := TyRGB(255, 0, 0);
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    r := G.CellRect(1, 3);
+    red := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top + 3 to r.Bottom - 4 do
+        for x := r.Left + 3 to r.Right - 4 do
+        begin
+          if (x < 0) or (y < 0) or (x >= 400) or (y >= 300) then Continue;
+          px := Re.GetPixel(x, y);
+          if (px.red > 180) and (px.green < 100) and (px.blue < 100) then Inc(red);
+        end;
+    finally
+      Re.Free;
+    end;
+    AssertTrue(Format('斑马纹行上的逐格色不该被盖掉(红像素 %d)', [red]), red > 50);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
 end;
 
 initialization

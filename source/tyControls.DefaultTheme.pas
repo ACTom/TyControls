@@ -537,6 +537,9 @@ begin
     'TyGridCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     '/* 焦点格(光标所在)。整行选中模式下,不区分就看不出光标在哪一格。 */' + LineEnding +
     'TyGridActiveCell { background: var(--surface-active); color: var(--on-surface); }' + LineEnding +
+    '/* 选区盖在"用户显式指定了底色"的格上时用这一层(逐格色/行色/条件着色)。' + LineEnding +
+    '   不透明的选区色会把用户自己标的颜色整块抹掉,而光标总落在刚上色的那一格上。 */' + LineEnding +
+    'TyGridCellMarked { background: alpha(--accent, 0.42); }' + LineEnding +
     '/* 斑马纹。自己的 typeKey 而不是 TyGridCell:alternate:加伪类要动共享的状态枚举与' + LineEnding +
     '   CSS 解析器,会波及每一个控件;而网格的各部件本来就各有各的键。 */' + LineEnding +
     'TyGridCellAlt { background: var(--surface-alt); }' + LineEnding +

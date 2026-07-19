@@ -317,6 +317,10 @@ type
   TTyGridCellAppearance = record
     HasBackground: Boolean;
     Background:    TTyFill;
+    { 底色是不是**用户显式指定的**(逐格色/行色/宿主钩子),而不是主题装饰
+      (斑马纹、焦点格、选区)。装饰层不许把它抹掉 —— 用户标的颜色是这一格
+      最具体的一句话,盖掉它等于把信息弄丢了。 }
+    HasExplicitBackground: Boolean;
     { 文字色是不是主题明确给的。没给就退回控件本体的前景色 ——
       这个判断从前每格重做一次,现在随基础外观一起缓存。 }
     HasTextColor:  Boolean;
@@ -2795,13 +2799,23 @@ end;
 
 procedure TTyCustomGrid.DoGetCellStyle(ACol, ARow: Integer;
   var AAppearance: TTyGridCellAppearance);
+var
+  before: TTyFill;
 begin
   if not Assigned(FOnGetCellStyle) then Exit;
+  before := AAppearance.Background;
   FOnGetCellStyle(Self, ACol, ARow, AAppearance.Background, AAppearance.TextColor,
     AAppearance.FontName, AAppearance.FontSize, AAppearance.FontWeight,
     AAppearance.HAlign, AAppearance.VAlign);
   { 钩子把底色从 none 改成实色 = 它要画背景。反过来也成立。 }
   AAppearance.HasBackground := AAppearance.Background.Kind <> tfkNone;
+  { 钩子**动过**底色才算"用户显式指定"(条件着色是宿主对这一格的明确判断,
+    和逐格色一样不该被选区抹掉)。没动过就别抢:斑马纹铺的底色不是显式指定,
+    比较前后值才分得清 —— 只看 HasBackground 会把斑马纹一并算进去。 }
+  if AAppearance.HasBackground
+    and ((before.Kind <> AAppearance.Background.Kind)
+         or (before.Color <> AAppearance.Background.Color)) then
+    AAppearance.HasExplicitBackground := True;
 end;
 
 function TTyCustomGrid.CellAppearance(ACol, ARow, ADisplayPos: Integer;
@@ -2828,23 +2842,6 @@ begin
     Result.HAlign := col.Alignment;
   end;
 
-  { 逐格**持久**外观(Colors[c,r] / TextColors[c,r] / RowColor[r] 落在属性存储里)。
-    优先级:主题 → 斑马纹 → 行色 → 逐格色 → 宿主钩子。
-    越靠后越具体,所以越晚覆盖。 }
-  attr := FAttrs2Find(ACol, ARow);
-  if attr <> nil then
-  begin
-    if attr.HasBackground then
-    begin
-      Result.HasBackground := True;
-      Result.Background := Default(TTyFill);
-      Result.Background.Kind := tfkSolid;
-      Result.Background.Color := attr.Background;
-    end;
-    if attr.HasTextColor then Result.TextColor := attr.TextColor;
-    if attr.HasAlignment then Result.HAlign := attr.Alignment;
-  end;
-
   { 斑马纹按**显示行号**取奇偶。用自己的 typeKey 而不是 `TyGridCell:alternate`:
     加一个伪类要动共享的 TTyState 枚举与 CSS 解析器,会波及每一个控件;
     而库里网格的各个部件(TyGridCheckBox / TyGridProgress / TyGridGroupRow…)
@@ -2860,12 +2857,34 @@ begin
     if tpTextColor in altS.Present then Result.TextColor := altS.TextColor;
   end;
 
+  { 逐格**持久**外观(Colors[c,r] / TextColors[c,r] / RowColor[r] 落在属性存储里)。
+    优先级:主题 → 斑马纹 → 行色 → 逐格色 → 宿主钩子。
+    越靠后越具体,所以越晚覆盖。 }
+  attr := FAttrs2Find(ACol, ARow);
+  if attr <> nil then
+  begin
+    if attr.HasBackground then
+    begin
+      Result.HasBackground := True;
+      Result.Background := Default(TTyFill);
+      Result.Background.Kind := tfkSolid;
+      Result.Background.Color := attr.Background;
+      Result.HasExplicitBackground := True;
+    end;
+    if attr.HasTextColor then Result.TextColor := attr.TextColor;
+    if attr.HasAlignment then Result.HAlign := attr.Alignment;
+  end;
+
   { **焦点格**要和选区区分开:gsmRow 模式下整行都是选中底色,不区分的话
     根本看不出光标在哪一格。用自己的 typeKey,主题没定义就什么都不做。 }
   if IsActiveCell(ACol, ARow) then
   begin
     actS := ActiveController.Model.ResolveStyle('TyGridActiveCell', StyleClass, []);
-    if (tpBackground in actS.Present) and (actS.Background.Kind <> tfkNone) then
+    { 用户给这格指定了底色时**不铺焦点底色** —— 否则光标停在哪一格,
+      哪一格的颜色就看不见了(而光标恰恰总停在刚被上色的那一格上)。
+      焦点仍靠文字色与选区层区分得出来。 }
+    if (not Result.HasExplicitBackground)
+      and (tpBackground in actS.Present) and (actS.Background.Kind <> tfkNone) then
     begin
       Result.HasBackground := True;
       Result.Background := actS.Background;
@@ -2873,7 +2892,7 @@ begin
     if tpTextColor in actS.Present then Result.TextColor := actS.TextColor;
   end;
 
-  { 宿主钩子最后说了算。 }
+  { 宿主钩子最后说了算(它自己判断动没动过底色,见 DoGetCellStyle)。 }
   DoGetCellStyle(ACol, ARow, Result);
 end;
 
@@ -7965,7 +7984,7 @@ end;
 procedure TTyStringGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
-  selS: TTyStyleSet;
+  selS, markS: TTyStyleSet;
   vis: TRect;
   firstRow, lastRow, pos, dataRow, colIdx, gIdx: Integer;
 begin
@@ -7979,6 +7998,10 @@ begin
     满屏未勾选的框集体变样。单元格的外观只该由格自己的状态决定。) }
   selS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass,
     [tysSelected]);
+  { 盖在"用户显式指定了底色"的格上时改用半透明层。选区底色是不透明的 accent,
+    直接铺上去会把用户自己标的颜色**整块抹掉** —— 而光标总是落在刚上色的那一格上,
+    于是"上了色却什么都没变"。半透明层让两者都读得出来。 }
+  markS := ActiveController.Model.ResolveStyle('TyGridCellMarked', StyleClass, []);
   if tpBackground in selS.Present then
     if TyGridVisibleRows(M, firstRow, lastRow) then
       for pos := firstRow to lastRow do
@@ -7988,7 +8011,11 @@ begin
         begin
           if not IsCellSelected(colIdx, dataRow) then Continue;
           vis := CellVisibleRect(colIdx, dataRow);
-          if not IsRectEmpty(vis) then
+          if IsRectEmpty(vis) then Continue;
+          if CellAppearance(colIdx, dataRow, pos, AFrame).HasExplicitBackground
+            and (tpBackground in markS.Present) then
+            P.FillBackground(vis, markS.Background, 0)
+          else
             P.FillBackground(vis, selS.Background, 0);
         end;
       end;
