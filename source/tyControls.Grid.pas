@@ -288,6 +288,9 @@ type
   TTyGridCellAppearance = record
     HasBackground: Boolean;
     Background:    TTyFill;
+    { 文字色是不是主题明确给的。没给就退回控件本体的前景色 ——
+      这个判断从前每格重做一次,现在随基础外观一起缓存。 }
+    HasTextColor:  Boolean;
     TextColor:     TTyColor;
     FontName:      string;
     FontSize:      Integer;
@@ -406,6 +409,12 @@ type
       只有 hover/选中/被钩子改过的那几格才多解析几次。 }
     FCellStyleStates:  array of TTyStateSet;
     FCellStyleCache:   array of TTyStyleSet;
+    { 与 FCellStyleCache 一一对应的**基础外观**(底色/文字色/字体名/字号/字重)。
+
+      单独缓存字号的理由:`ResolveFontSize` 在样式没写 font-size 时会去查
+      `--font-size-base` 这个主题变量 —— **按字符串名查表**。它只取决于已经
+      记忆化的样式,却被放在逐格路径上,实测每格 32 微秒、占整帧一半。 }
+    FCellBaseCache:    array of TTyGridCellAppearance;
     { **跨帧**的单元格文本位图缓存。
       实测(60 帧 x 20 列 x 约 40 行)里,单元格文字占了 94% 的渲染时间:
       每格一次 TextSize(省略号测量,占 57%)+ 一次 TextRect。两者都是
@@ -419,6 +428,15 @@ type
       一帧内网格状态不可能变,所以整帧只算一次 —— 实测这是文字之外最大的一块开销。 }
     FMetricsCached:    Boolean;
     FMetricsCache:     TTyGridMetrics;
+    { 列的**未加滚动**左缘与宽度(设备像素),按列索引。
+      从前 ColumnLeftPx 每次都要从头累加一遍可见列宽,而它在每格要被调好几次
+      (CellRect / CellVisibleRect / 格线 / 表头)—— 于是每帧是 O(格数 x 列数)
+      次带虚方法的 Items[] 访问。横向滚动**不影响**这份缓存(滚动量在读取时才减),
+      所以滚动不必重建它。 }
+    FColBasePx:        array of Integer;
+    FColWidthPx:       array of Integer;
+    FColCacheValid:    Boolean;
+    FColCachePPI:      Integer;
     FShowFooter:       Boolean;
     { 列头图标与 gcdImage 单元格共用的图像源。
       注意**不用**共享单元里的 TTyHeader.Images —— 那是 LCL 的 TCustomImageList,
@@ -479,6 +497,8 @@ type
     function CellStates(ACol, ARow: Integer): TTyStateSet; virtual;
     { 逐格解析 TyGridCell,带记忆化。每帧开头调 ResetCellStyleCache。 }
     function ResolveCellStyle(ACol, ARow: Integer): TTyStyleSet;
+    { 该格状态组合在缓存里的槽位(顺带把基础外观算好)。 }
+    function CellStyleSlot(ACol, ARow: Integer): Integer;
     procedure ResetCellStyleCache;
     { 鼠标所在格换了没有;换了就重绘(**换格才重绘** —— 每像素都重绘会把
       大表拖垮,而且鼠标一动就满屏闪)。 }
@@ -527,6 +547,9 @@ type
     procedure RenderButtonCell(P: TTyPainter; ACol, ARow: Integer;
       const AText: string; const AFrame: TTyStyleSet); virtual;
     function GroupBandHeightPx: Integer; virtual;
+    { 重建列几何缓存。列增删/改宽、行头槽变化、PPI 变化都要让它失效。 }
+    procedure BuildColumnCache;
+    procedure InvalidateColumnCache;
     function GridLineWidthPx: Integer; virtual;
     procedure CMMouseLeave(var Msg: TLMessage); message CM_MOUSELEAVE;
     function FrozenWidthPx: Integer; virtual;
@@ -908,6 +931,8 @@ type
     FHiddenRows: TStringList;
     { 当前有多少个合并区。只为了让格线绘制能 O(1) 地判断"要不要走逐段慢路径"。 }
     FMergeCount: Integer;
+    FMaxColSpan: Integer;
+    FMaxRowSpan: Integer;
     FSkipReadOnly: Boolean;
     FGroupRowFormat: string;
     FSortDir: TTySortDirection;
@@ -1763,6 +1788,7 @@ end;
 
 procedure TTyCustomGrid.HeaderChanged(Sender: TObject);
 begin
+  InvalidateColumnCache;   { 列宽/列数/可见性变了 → 列几何缓存作废 }
   UpdateScrollBars;   { 列宽/列数变了,横向内容量随之变 }
   Invalidate;
 end;
@@ -1812,6 +1838,7 @@ begin
   if AValue < 0 then AValue := 0;
   if FIndicatorWidth = AValue then Exit;
   FIndicatorWidth := AValue;
+  InvalidateColumnCache;   { 行头槽宽度进了每列的基准左缘 }
   Invalidate;
 end;
 
@@ -1819,6 +1846,7 @@ procedure TTyCustomGrid.SetShowIndicator(AValue: Boolean);
 begin
   if FShowIndicator = AValue then Exit;
   FShowIndicator := AValue;
+  InvalidateColumnCache;
   Invalidate;
 end;
 
@@ -2095,25 +2123,54 @@ procedure TTyCustomGrid.ResetCellStyleCache;
 begin
   SetLength(FCellStyleStates, 0);
   SetLength(FCellStyleCache, 0);
+  SetLength(FCellBaseCache, 0);
 end;
 
-function TTyCustomGrid.ResolveCellStyle(ACol, ARow: Integer): TTyStyleSet;
+function TTyCustomGrid.CellStyleSlot(ACol, ARow: Integer): Integer;
 var
   st: TTyStateSet;
-  i, n: Integer;
+  n: Integer;
+  i: Integer;
+  sty: TTyStyleSet;
 begin
   st := CellStates(ACol, ARow);
   { 线性找:状态组合的种类是个位数(空集/hover/选中/两者),
     线性扫比建哈希快,也不产生分配。 }
   for i := 0 to High(FCellStyleStates) do
-    if FCellStyleStates[i] = st then Exit(FCellStyleCache[i]);
+    if FCellStyleStates[i] = st then Exit(i);
 
-  Result := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, st);
+  sty := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, st);
   n := Length(FCellStyleStates);
   SetLength(FCellStyleStates, n + 1);
   SetLength(FCellStyleCache, n + 1);
+  SetLength(FCellBaseCache, n + 1);
   FCellStyleStates[n] := st;
-  FCellStyleCache[n] := Result;
+  FCellStyleCache[n] := sty;
+
+  { **每个状态组合只算一次**:字号解析(可能要查主题变量)就在这里落地。 }
+  FCellBaseCache[n] := Default(TTyGridCellAppearance);
+  FCellBaseCache[n].HasBackground :=
+    (tpBackground in sty.Present) and (sty.Background.Kind <> tfkNone);
+  FCellBaseCache[n].Background := sty.Background;
+  FCellBaseCache[n].HasTextColor := tpTextColor in sty.Present;
+  FCellBaseCache[n].TextColor := sty.TextColor;
+  FCellBaseCache[n].FontName := sty.FontName;
+  FCellBaseCache[n].FontSize := ResolveFontSize(sty);
+  FCellBaseCache[n].FontWeight := sty.FontWeight;
+  Result := n;
+end;
+
+function TTyCustomGrid.ResolveCellStyle(ACol, ARow: Integer): TTyStyleSet;
+var
+  slot: Integer;
+begin
+  { **必须先把槽位算出来再索引数组。**
+    写成 FCellStyleCache[CellStyleSlot(...)] 是有坑的:编译器可以先取数组的
+    基址、再调用那个函数,而函数内部的 SetLength 会重新分配数组 ——
+    先取到的基址就成了悬垂指针。表现是随机的内存损坏(我这次看到的是
+    后续测试大面积"创建 win32 控件失败"),而不是干脆的越界报错。 }
+  slot := CellStyleSlot(ACol, ARow);
+  Result := FCellStyleCache[slot];
 end;
 
 procedure TTyCustomGrid.UpdateHoverCursor(X, Y: Integer);
@@ -2479,20 +2536,15 @@ end;
 function TTyCustomGrid.CellAppearance(ACol, ARow, ADisplayPos: Integer;
   const AFrame: TTyStyleSet): TTyGridCellAppearance;
 var
-  cS, altS, actS: TTyStyleSet;
+  altS, actS: TTyStyleSet;
   col: TTyColumn;
   attr: TTyGridCellAttr;
+  slot: Integer;
 begin
-  cS := ResolveCellStyle(ACol, ARow);
-
-  Result.HasBackground := (tpBackground in cS.Present)
-                          and (cS.Background.Kind <> tfkNone);
-  Result.Background := cS.Background;
-  if tpTextColor in cS.Present then Result.TextColor := cS.TextColor
-  else Result.TextColor := AFrame.TextColor;
-  Result.FontName := cS.FontName;
-  Result.FontSize := ResolveFontSize(cS);
-  Result.FontWeight := cS.FontWeight;
+  { 基础外观按状态组合记忆化 —— 逐格路径上不再做样式解析,也不再查主题变量。 }
+  slot := CellStyleSlot(ACol, ARow);   { 先算槽位,再索引 —— 见 ResolveCellStyle 的说明 }
+  Result := FCellBaseCache[slot];
+  if not Result.HasTextColor then Result.TextColor := AFrame.TextColor;
   Result.VAlign := tlCenter;
   Result.WordWrap := FWordWrap;
   if Assigned(FOnGetCellWordWrap) then
@@ -2610,29 +2662,45 @@ begin
   Invalidate;
 end;
 
-function TTyCustomGrid.ColumnLeftPx(ACol: Integer): Integer;
+procedure TTyCustomGrid.InvalidateColumnCache;
+begin
+  FColCacheValid := False;
+end;
+
+procedure TTyCustomGrid.BuildColumnCache;
 var
-  i, logical: Integer;
+  i, n, logical: Integer;
   c: TTyColumn;
 begin
-  Result := 0;
-  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
+  n := FHeader.Columns.Count;
+  SetLength(FColBasePx, n);
+  SetLength(FColWidthPx, n);
 
   { 行头槽之后,累加本列之前所有可见列的宽度。
     这里刻意按索引顺序累加而不用 TTyColumn.Left —— Left 是按**显示位置**算的,
-    等 P7 接上拖动重排后两者会分叉;列冻结与否取决于索引,所以此处必须按索引。 }
+    拖动重排之后两者会分叉;列冻结与否取决于索引,所以此处必须按索引。 }
   logical := 0;
   if FShowIndicator then Inc(logical, FIndicatorWidth);
-  for i := 0 to ACol - 1 do
+  for i := 0 to n - 1 do
   begin
     c := TTyColumn(FHeader.Columns.Items[i]);
-    if coVisible in c.Options then
-      Inc(logical, c.Width);
+    FColBasePx[i] := ScaleI(logical);
+    FColWidthPx[i] := ScaleI(c.Width);
+    if coVisible in c.Options then Inc(logical, c.Width);
   end;
+  FColCacheValid := True;
+end;
 
-  Result := ScaleI(logical);
+function TTyCustomGrid.ColumnLeftPx(ACol: Integer): Integer;
+begin
+  Result := 0;
+  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
+  if not FColCacheValid then BuildColumnCache;
+  if ACol >= Length(FColBasePx) then Exit;
 
-  { 固定列钉在冻结带里不随横向滚动;正文列才平移 —— 这正是"冻结"的全部含义。 }
+  Result := FColBasePx[ACol];
+  { 固定列钉在冻结带里不随横向滚动;正文列才平移 —— 这正是"冻结"的全部含义。
+    滚动量在**读取时**才减,所以横向滚动不必让缓存失效。 }
   if ACol >= FFixedCols then
     Dec(Result, FScrollX);
 end;
@@ -2641,7 +2709,9 @@ function TTyCustomGrid.ColumnWidthPx(ACol: Integer): Integer;
 begin
   Result := 0;
   if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
-  Result := ScaleI(TTyColumn(FHeader.Columns.Items[ACol]).Width);
+  if not FColCacheValid then BuildColumnCache;
+  if ACol >= Length(FColWidthPx) then Exit;
+  Result := FColWidthPx[ACol];
 end;
 
 function TTyCustomGrid.ColumnAtX(AX: Integer): Integer;
@@ -3410,6 +3480,12 @@ begin
 
     { 每帧清一次逐格样式的记忆化 —— 主题可能在两帧之间换掉了。 }
     ResetCellStyleCache;
+    { 列几何缓存按设备像素存,PPI 变了(换屏/缩放)必须重建。 }
+    if FColCachePPI <> APPI then
+    begin
+      FColCachePPI := APPI;
+      InvalidateColumnCache;
+    end;
     { 整帧只算一次几何(见 FMetricsCached 处的说明)。 }
     M := GridMetrics;
     FMetricsCache := M;
@@ -4634,6 +4710,8 @@ end;
 
 function TTyStringGrid.FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr;
 begin
+  { 同上:逐格属性是稀疏的例外,常态不该为它建字符串。 }
+  if FAttrs.IsEmpty then Exit(nil);
   Result := FAttrs.Find(CellKey(ACol, ARow));
 end;
 
@@ -4712,6 +4790,9 @@ function TTyStringGrid.GetCellReadOnly(ACol, ARow: Integer): Boolean;
 var a: TTyGridCellAttr;
 begin
   Result := False;
+  { 没有任何逐格属性时直接走人 —— 连 CellKey 那个临时字符串都别建。
+    这条在渲染路径上每格都要走(EditorKindFor → ShouldDrawCellText)。 }
+  if FAttrs.IsEmpty then Exit;
   a := FAttrs.Find(CellKey(ACol, ARow));
   if a <> nil then Result := a.ReadOnly;
 end;
@@ -5836,6 +5917,11 @@ begin
     if (ColSpan <= 1) and (RowSpan <= 1) then Inc(FMergeCount);
     ColSpan := AColSpan;
     RowSpan := ARowSpan;
+    { 记住最大跨度 —— BaseCellOf 只需回扫这么远。合并区通常只有 2x2,
+      而不收敛的话每格都要扫到 (0,0)。只增不减:拆合并时不缩小,
+      顶多让回扫多走几格,不会算错。 }
+    if AColSpan > FMaxColSpan then FMaxColSpan := AColSpan;
+    if ARowSpan > FMaxRowSpan then FMaxRowSpan := ARowSpan;
   end;
   Invalidate;
 end;
@@ -5887,6 +5973,9 @@ var
 begin
   AColSpan := 1;
   ARowSpan := 1;
+  { 全表一个合并都没有时直接走人 —— 连 CellKey 那个临时字符串都别建。
+    这条查询在渲染路径上每格要走好几次。 }
+  if FMergeCount = 0 then Exit(False);
   a := FAttrs.Find(CellKey(ACol, ARow));
   if a = nil then Exit(False);
   AColSpan := a.ColSpan;
@@ -5904,18 +5993,28 @@ end;
 procedure TTyStringGrid.BaseCellOf(ACol, ARow: Integer;
   out ABaseCol, ABaseRow: Integer);
 var
-  c, r, cs, rs, pos, basePos: Integer;
+  c, r, cs, rs, pos, basePos, minC, minP: Integer;
 begin
   ABaseCol := ACol;
   ABaseRow := ARow;
   if ACol < 0 then Exit;
+  { **没有任何合并时立刻走人。**
+
+    下面那个双重循环是 O(列 x 显示行) 的,每次迭代还要建一个 CellKey 字符串、
+    查一次排序表 —— 而 CellRect 每格都会调到这里。于是"一个合并都没有"的普通表
+    也要为合并功能付 O(格数 x 列数 x 行数) 的代价:实测这一条就占了整帧的一半。
+    合并本来就是稀疏的例外,不该让常态替它买单。 }
+  if FMergeCount = 0 then Exit;
   pos := DataToDisplay(ARow);
   if pos < 0 then Exit;
 
-  { 往左上找覆盖住本格的基准格。合并区通常很小,倒着扫几格就够。
+  { 往左上找覆盖住本格的基准格。**只回扫到最大跨度那么远** ——
+    再远的格不可能覆盖到这里。不收敛的话每格都要扫到 (0,0),整体成 O(n^2)。
     纵向按**显示序**判定 —— 合并是屏幕上的一块矩形。 }
-  for c := ACol downto 0 do
-    for basePos := pos downto 0 do
+  minC := ACol - FMaxColSpan + 1;   if minC < 0 then minC := 0;
+  minP := pos - FMaxRowSpan + 1;    if minP < 0 then minP := 0;
+  for c := ACol downto minC do
+    for basePos := pos downto minP do
     begin
       r := DisplayToData(basePos);
       if r < 0 then Continue;
