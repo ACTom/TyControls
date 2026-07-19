@@ -188,6 +188,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestFillHandleGeometryMatchesWhatIsDrawn;
+    procedure TestFillCopiesRepeatsAndExtrapolates;
     procedure TestProgrammaticCursorMoveDoesNotStretchSelection;
     procedure TestBulkFillStaysLinear;
     procedure TestBeginUpdateCollapsesRepaints;
@@ -6883,6 +6885,122 @@ begin
   { 四、不按 Shift 的方向键则是移动,不是扩选。 }
   G.PressKey(VK_DOWN);
   AssertEquals('不按 Shift 的方向键只移动光标', 1, G.SelectedCellCount);
+end;
+
+{ 填充柄的**命中矩形必须就是画出来的那个方块**(不变量 ①:命中 = 绘制的逆)。
+  柄画在选区右下角;选区变了,柄跟着走。 }
+procedure TTyStringGridTest.TestFillHandleGeometryMatchesWhatIsDrawn;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  h, cell: TRect;
+  x, y, ink: Integer;
+  px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridCell:selected { background: #3B82F6; color: #FFFFFF; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.RowCount := 8;
+    G.SelectRange(0, 1, 1, 3);
+
+    h := G.FillHandleRect;
+    AssertTrue('有选区时柄不该是空的', not IsRectEmpty(h));
+
+    { 柄贴在选区右下角那一格的右下角。 }
+    cell := G.CellRect(1, 3);
+    AssertTrue(Format('柄在选区右下角(柄 %d,%d 格 %d,%d)',
+      [h.Right, h.Bottom, cell.Right, cell.Bottom]),
+      (Abs(h.Right - cell.Right) <= 3) and (Abs(h.Bottom - cell.Bottom) <= 3));
+
+    { 画出来:柄那一小块里必须有非选区色的墨(它是自己的颜色)。 }
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    ink := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := h.Top to h.Bottom - 1 do
+        for x := h.Left to h.Right - 1 do
+        begin
+          if (y < 0) or (y >= 300) or (x < 0) or (x >= 400) then Continue;
+          px := Re.GetPixel(x, y);
+          { 选区底色是 #3B82F6;柄要与它明显不同。 }
+          if Abs(px.red - 59) + Abs(px.green - 130) + Abs(px.blue - 246) > 90 then
+            Inc(ink);
+        end;
+    finally
+      Re.Free;
+    end;
+    AssertTrue(Format('柄要真的画出来(与选区底色不同的像素 %d)', [ink]), ink > 20);
+
+    { 没有选区时(选区退化成一格)柄仍在 —— Excel 也是这样。 }
+    G.MoveCursor(0, 0);
+    AssertTrue('单格时柄也在', not IsRectEmpty(G.FillHandleRect));
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 填充的三种语义:单格复制、等差外推、其余按源区循环重复。 }
+procedure TTyStringGridTest.TestFillCopiesRepeatsAndExtrapolates;
+var
+  G: TStrGridAccess;
+  r: Integer;
+  h, cell: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 12;
+
+  { 一、单格 = 复制。 }
+  G.Cells[0, 0] := '甲';
+  G.SelectRange(0, 0, 0, 0);
+  G.FillFromSelectionTo(0, 3);
+  for r := 0 to 3 do
+    AssertEquals(Format('单格填充是复制(第 %d 行)', [r]), '甲', G.Cells[0, r]);
+
+  { 二、等差数列 = 外推。 }
+  G.Cells[1, 0] := '10';
+  G.Cells[1, 1] := '20';
+  G.SelectRange(1, 0, 1, 1);
+  G.FillFromSelectionTo(1, 4);
+  AssertEquals('外推 30', '30', G.Cells[1, 2]);
+  AssertEquals('外推 40', '40', G.Cells[1, 3]);
+  AssertEquals('外推 50', '50', G.Cells[1, 4]);
+
+  { 三、非等差 = 按源区循环重复。 }
+  G.Cells[2, 0] := 'a';
+  G.Cells[2, 1] := 'b';
+  G.Cells[2, 2] := 'c';
+  G.SelectRange(2, 0, 2, 2);
+  G.FillFromSelectionTo(2, 6);
+  AssertEquals('重复 a', 'a', G.Cells[2, 3]);
+  AssertEquals('重复 b', 'b', G.Cells[2, 4]);
+  AssertEquals('重复 c', 'c', G.Cells[2, 5]);
+  AssertEquals('重复 a', 'a', G.Cells[2, 6]);
+
+  { 四、填充完选区要覆盖到新范围 —— 与 Excel 一致。 }
+  AssertTrue('填充后选区扩到目标行', G.SelectedCellCount >= 7);
+
+  { 五、**鼠标真的拖得动**:按在柄上 → 拖到目标格 → 松开。
+    只测 API 的话,柄有没有接到鼠标事件仍然无人知晓("published 却无效"那一类)。 }
+  G.Cells[3, 0] := '5';
+  G.SelectRange(3, 0, 3, 0);
+  h := G.FillHandleRect;
+  cell := G.CellRect(3, 4);
+  G.DragFromTo((h.Left + h.Right) div 2, (h.Top + h.Bottom) div 2,
+               (cell.Left + cell.Right) div 2, (cell.Top + cell.Bottom) div 2);
+  AssertEquals('拖柄之后第 4 行被填上', '5', G.Cells[3, 4]);
 end;
 
 initialization

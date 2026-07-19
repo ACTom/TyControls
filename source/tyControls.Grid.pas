@@ -300,6 +300,11 @@ type
     而不是逼宿主去 OnCellEdited 里认字符串。 }
   TTyGridCanToggleEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var AAllow: Boolean) of object;
+  { 拖填充柄产生的一次填充。宿主可以接管(自定义序列、跨列规则等):
+    置 AHandled := True 之后控件就不再动数据了。 }
+  TTyGridFillEvent = procedure(Sender: TObject; const ASource, ATarget: TRect;
+    var AHandled: Boolean) of object;
+
   { 省略号按钮被点。宿主在这里弹自己的对话框,把结果写进 ANewText;
     置 AAccept:=False 表示用户取消了。 }
   TTyGridEllipsisEvent = procedure(Sender: TObject; ACol, ARow: Integer;
@@ -1068,6 +1073,10 @@ type
     { Shift 扩选期间置位:此时 MoveCursor **不**重锚,选区才拉得长。
       默认(不置位)是重锚 —— 见 MoveCursor 里的说明。 }
     FExtendingSelection: Boolean;
+    { 正在拖填充柄;FFillToRow/Col 是当前拖到的格。 }
+    FFillDragging: Boolean;
+    FFillToCol, FFillToRow: Integer;
+    FOnFillCells: TTyGridFillEvent;
     FShowFilterButtons: Boolean;
     FShowGroupSubtotals: Boolean;
     FSelectionMode: TTyGridSelectionMode;
@@ -1115,6 +1124,9 @@ type
     function MaxRowSpanHint: Integer; override;
     { 这段数据行此刻是不是正连续升序地显示着。 }
     function RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
+    function SelectionBoundsRect: TRect;
+    function ArithmeticStep(ACol, AFrom, ATo: Integer;
+      out AFirst, AStep: Integer): Boolean;
   private
     FSkipReadOnly: Boolean;
     FGroupRowFormat: string;
@@ -1235,6 +1247,8 @@ type
     procedure AccumulateCell(ACol, ADataRow: Integer; AKind: TTyGridAggregate;
       var AAcc: Double; var ACount: Integer; var AStarted: Boolean);
     function  AggregatePrefix(AKind: TTyGridAggregate): string;
+    procedure RenderSelectionFrame(P: TTyPainter; const M: TTyGridMetrics;
+      const AFrame: TTyStyleSet); virtual;
     procedure RenderGroupRow(P: TTyPainter; APos, AGroupIndex: Integer;
       const M: TTyGridMetrics; const AFrame: TTyStyleSet); virtual;
     { 分组行上的折叠三角槽。命中与绘制共用。 }
@@ -1411,6 +1425,12 @@ type
       数据行坐标,两个数据行下标之差在任何空间里都不是"几行"。
       这个陷阱已经真实咬过一次(排过序的表上合并,吞掉几十行)。 }
     function  MergeSelection: Boolean;
+    { 填充柄的矩形(客户区坐标)。没有可填充的选区时返回空矩形。
+      **命中与绘制同源** —— 绘制也用它,所以点得到的就是看得见的那一块。 }
+    function  FillHandleRect: TRect;
+    { 把当前选区的内容填充到 (ACol, ARow) 为止。
+      语义:源区单格 = 复制;源区构成等差数列 = 外推;其余 = 按源区循环重复。 }
+    procedure FillFromSelectionTo(ACol, ARow: Integer);
     procedure MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
     procedure UnmergeCells(ACol, ARow: Integer);
     procedure ClearMerges;
@@ -1545,6 +1565,8 @@ type
       与页脚汇总用的是同一份配置,不必再配一遍。 }
     property ShowGroupSubtotals: Boolean
       read FShowGroupSubtotals write SetShowGroupSubtotals default True;
+    { 拖填充柄产生的一次填充;置 AHandled 可接管(自定义序列)。 }
+    property OnFillCells: TTyGridFillEvent read FOnFillCells write FOnFillCells;
   end;
 
 var
@@ -4608,6 +4630,16 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
   if not Enabled then Exit;
 
+  { 填充柄优先于一切:它压在选区右下角那一格上,不先判它就会被当成
+    "在那一格上按下"而重置选区。 }
+  if (Button = mbLeft) and PtInRect(FillHandleRect, Point(X, Y)) then
+  begin
+    FFillDragging := True;
+    FFillToCol := FCol;
+    FFillToRow := FRow;
+    Exit;
+  end;
+
   { 右键:只**报告**点在哪,不动光标、不进编辑 —— 与资源管理器一致,
     右键是"问",不是"选"。从前整条右键路径被开头的 `Button <> mbLeft` 全挡掉了。 }
   if Button = mbRight then
@@ -4726,6 +4758,14 @@ var
   bc, br: Integer;
   hit: TTyGridHit;
 begin
+  { 松开才真正填 —— 拖的过程里只记目标。 }
+  if FFillDragging then
+  begin
+    FFillDragging := False;
+    FillFromSelectionTo(FFillToCol, FFillToRow);
+    Exit;
+  end;
+
   GetPressedButton(bc, br);
   if (Button = mbLeft) and (bc >= 0) then
   begin
@@ -5695,6 +5735,20 @@ var
 begin
   inherited MouseMove(Shift, X, Y);
   if not Enabled then Exit;
+
+  { 正在拖填充柄:只记目标行,松开才真正填 ——
+    拖过程中就写数据的话,往回拖一格就再也退不回来了。 }
+  if FFillDragging then
+  begin
+    hit := CellAt(X, Y);
+    if hit.Part = ghpCell then
+    begin
+      FFillToCol := hit.Col;
+      FFillToRow := hit.Row;
+      Invalidate;
+    end;
+    Exit;
+  end;
 
   { 按住左键在格上移动 = 拖选,这是**扩选**手势:只挪光标、不动锚点,
     活动矩形因此从按下那一格一直拉到这里。
@@ -7283,6 +7337,125 @@ begin
   Result := True;
 end;
 
+{ 选区在客户区里的外接矩形(显示序 → 像素)。 }
+function TTyStringGrid.SelectionBoundsRect: TRect;
+var
+  r: TRect;
+  tl, br: TRect;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if Header.Columns.Count = 0 then Exit;
+  r := ActiveSelectionRect;                 { 显示序空间 }
+  tl := CellRect(r.Left, DisplayToData(r.Top));
+  br := CellRect(r.Right, DisplayToData(r.Bottom));
+  if IsRectEmpty(tl) or IsRectEmpty(br) then Exit;
+  Result := Rect(tl.Left, tl.Top, br.Right, br.Bottom);
+end;
+
+function TTyStringGrid.FillHandleRect: TRect;
+var
+  b: TRect;
+  sz: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  b := SelectionBoundsRect;
+  if IsRectEmpty(b) then Exit;
+  sz := ScaleI(6);
+  { 贴在选区右下角、略微外探一点 —— 与 Excel 的手感一致,也更好点中。 }
+  Result := Rect(b.Right - sz, b.Bottom - sz, b.Right + 1, b.Bottom + 1);
+end;
+
+{ 源区里某一列是不是等差数列;是则给出首项与公差。
+  只认整数:'10','20' 这种。浮点的等差在表格里少见,而误判的代价是把
+  用户的数据算错 —— 宁可退回"循环重复"。 }
+function TTyStringGrid.ArithmeticStep(ACol, AFrom, ATo: Integer;
+  out AFirst, AStep: Integer): Boolean;
+var
+  r, v, prev, d: Integer;
+  started: Boolean;
+begin
+  Result := False;
+  AFirst := 0;
+  AStep := 0;
+  if ATo <= AFrom then Exit;                 { 单格不算数列 }
+  started := False;
+  prev := 0;
+  d := 0;
+  for r := AFrom to ATo do
+  begin
+    if not TryStrToInt(Trim(GetCellText(ACol, r)), v) then Exit;
+    if r = AFrom then AFirst := v
+    else
+    begin
+      if not started then
+      begin
+        d := v - prev;
+        started := True;
+      end
+      else if v - prev <> d then Exit;       { 不是等差 }
+    end;
+    prev := v;
+  end;
+  if not started then Exit;
+  AStep := d;
+  Result := True;
+end;
+
+procedure TTyStringGrid.FillFromSelectionTo(ACol, ARow: Integer);
+var
+  src: TRect;
+  tgt: TRect;
+  handled: Boolean;
+  c, r, n, srcH, idx, first, step: Integer;
+begin
+  src := Selection;                          { 数据行坐标 }
+  if (src.Right < src.Left) or (src.Bottom < src.Top) then Exit;
+  if ARow < 0 then ARow := 0;
+  if ARow > RowCount - 1 then ARow := RowCount - 1;
+
+  { 只支持**纵向**填充 —— 横向拖柄在表格里远没那么常用,而做一半的
+    可供性比没有更糟。柄拖到源区之内(往回缩)也不做。 }
+  if ARow <= src.Bottom then Exit;
+  tgt := Rect(src.Left, src.Bottom + 1, src.Right, ARow);
+
+  handled := False;
+  if Assigned(FOnFillCells) then FOnFillCells(Self, src, tgt, handled);
+  if handled then Exit;
+
+  srcH := src.Bottom - src.Top + 1;
+  BeginUpdate;
+  try
+    for c := src.Left to src.Right do
+    begin
+      if ArithmeticStep(c, src.Top, src.Bottom, first, step) then
+      begin
+        { 等差:接着往下推。 }
+        n := 1;
+        for r := tgt.Top to tgt.Bottom do
+        begin
+          Cells[c, r] := IntToStr(first + (srcH - 1 + n) * step);
+          Inc(n);
+        end;
+      end
+      else
+      begin
+        { 其余:按源区循环重复(单格时退化成复制)。 }
+        idx := 0;
+        for r := tgt.Top to tgt.Bottom do
+        begin
+          Cells[c, r] := GetCellText(c, src.Top + (idx mod srcH));
+          Inc(idx);
+        end;
+      end;
+    end;
+  finally
+    EndUpdate;
+  end;
+
+  { 与 Excel 一致:填完之后选区覆盖到新范围。 }
+  SelectRange(src.Left, src.Top, src.Right, tgt.Bottom);
+end;
+
 function TTyStringGrid.MergeSelection: Boolean;
 var
   r: TRect;
@@ -8727,6 +8900,59 @@ begin
   if FLastDownHit.Part = ghpCell then BeginEdit;
 end;
 
+procedure TTyStringGrid.RenderSelectionFrame(P: TTyPainter;
+  const M: TTyGridMetrics; const AFrame: TTyStyleSet);
+var
+  b, h, oldClip, clipR, r: TRect;
+  fS: TTyStyleSet;
+  lw: Integer;
+  solid: TTyFill;
+begin
+  b := SelectionBoundsRect;
+  if IsRectEmpty(b) then Exit;
+  r := ActiveSelectionRect;
+
+  fS := ActiveController.Model.ResolveStyle('TyGridSelectionFrame', StyleClass, []);
+  if not (tpBorderColor in fS.Present) then Exit;   { 主题没定义就不画 }
+
+  { 裁到选区**所属的那个窗格**,而不是笼统裁到正文窗格。
+    光标停在固定行上时,柄会探进正文窗格一个像素 —— 而正文窗格是会被
+    滚动平移的,那一个像素于是跟着跑,脏区快路径与整幅重画就对不上了。
+    (与行号、横格线同一类问题:chrome 必须跟着它所属的窗格走。) }
+  oldClip := P.Bitmap.ClipRect;
+  if not IntersectRect(clipR, oldClip,
+       TyGridPaneRect(M, CellPane(r.Right, DisplayToData(r.Bottom)))) then Exit;
+  P.Bitmap.ClipRect := clipR;
+  try
+    lw := fS.BorderWidth;
+    if lw < 1 then lw := 1;
+    P.StrokeBorder(b, 0, lw, fS.BorderColor);
+
+    { 填充柄。用同一个 FillHandleRect —— 命中走的也是它,所以
+      "看得见的那一块"和"点得到的那一块"不可能分叉。 }
+    h := FillHandleRect;
+    if not IsRectEmpty(h) then
+    begin
+      if (tpBackground in fS.Present) and (fS.Background.Kind <> tfkNone) then
+        P.FillBackground(h, fS.Background, 0)
+      else
+      begin
+        solid := Default(TTyFill);
+        solid.Kind := tfkSolid;
+        solid.Color := fS.BorderColor;
+        P.FillBackground(h, solid, 0);
+      end;
+      { 柄要描一圈对比色。不描的话它和选区底色同色 —— 画了等于没画
+        (token 里 background 与 border-color 通常都是 accent)。
+        对比色走 token 的 color:,不硬编码。 }
+      if tpTextColor in fS.Present then
+        P.StrokeBorder(h, 0, 1, fS.TextColor);
+    end;
+  finally
+    P.Bitmap.ClipRect := oldClip;
+  end;
+end;
+
 procedure TTyStringGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
@@ -8768,6 +8994,10 @@ begin
             P.FillBackground(vis, selS.Background, 0);
         end;
       end;
+  { 选区外框 + 填充柄。画在选区底色之上、单元格文字之前 ——
+    外框是"这块是选中的"的边界线索,底色只给面。 }
+  RenderSelectionFrame(P, M, AFrame);
+
   { 分组行:整行一条横带,画"值(计数)"和折叠三角。它不对应任何数据行,
     所以必须在普通单元格之前处理掉,否则基类会拿 -1 去取内容。 }
   if (FGroupCol >= 0) and TyGridDrawSlots(M, firstRow, lastRow) then
