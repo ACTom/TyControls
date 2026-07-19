@@ -15,6 +15,8 @@
   --surface-chrome:           darken(--surface, 6%);
   /* 斑马纹的隔行底色。比 chrome 淡得多 —— 它是让长表读起来更顺的辅助,不是分区。 */
   --surface-alt:              darken(--surface, 3%);
+  /* 评分星的金色。评分是少数几个有约定俗成颜色的元素,但仍走 token —— 皮肤能改。 */
+  --rating-star:              #F59E0B;
   --surface-sunk:             darken(--surface, 8%);
   --surface-track:            darken(--surface, 10%);
   --surface-listitem-hover:   darken(--surface, 5%);
@@ -523,7 +525,8 @@ TyGridCheckBox           { background: var(--input-bg); border-color: var(--bord
 TyGridCheckBox:selected  { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 TyGridProgress           { background: var(--surface-chrome); border-radius: var(--radius-sm); }
 TyGridProgressFill       { background: var(--accent); }
-TyGridRating             { color: var(--accent); }
+TyGridRating             { color: var(--rating-star); }
+TyGridRatingEmpty        { color: var(--border); }
 /* 按钮单元格。三态用自己的键 —— 借 TyButton 的键会让"改网格里的按钮"波及全库按钮。 */
 TyGridButton          { background: var(--surface-chrome); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }
 TyGridButton:hover    { background: var(--surface-hover); }

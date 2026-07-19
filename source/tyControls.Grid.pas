@@ -19,11 +19,12 @@ unit tyControls.Grid;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, contnrs, Clipbrd, Controls, Graphics, LCLType, LMessages,
+  Classes, SysUtils, Types, Math, contnrs, Clipbrd, Controls, Graphics, LCLType, LMessages, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns,
   tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox, tyControls.ColorMath,
   tyControls.SpinEdit, tyControls.TrackBar, tyControls.Memo, tyControls.MaskEdit,
+  tyControls.CalcEdit,
   tyControls.Css.Values, tyControls.ImageCollection, tyControls.Dialogs.Color,
   tyControls.StrConsts,
   tyControls.Grid.Layout;
@@ -53,7 +54,10 @@ type
     gekSlider,    { 滑动条:TTyTrackBar,范围同上 }
     gekRating,    { 星级:**点哪颗星就是几分**,不弹编辑器(与勾选框同一种手感) }
     gekMemo,      { 多行文本:TTyMemo }
-    gekMask       { 掩码:TTyMaskEdit,掩码取列的 EditMask }
+    gekMask,      { 掩码:TTyMaskEdit,掩码取列的 EditMask }
+    gekTime,      { 时间:TTyDateTimePicker 的 dtkTime }
+    gekPassword,  { 密码:TTyEdit 的 PasswordChar }
+    gekCalculator { 带计算器的数值:TTyCalcEdit }
   );
 
   { 单元格的**显示**方式(与编辑方式正交:一个格可以显示成进度条、编辑时仍是数值框)。 }
@@ -198,6 +202,7 @@ type
     FMinValue: Integer;
     FMaxValue: Integer;
     FEditMask: string;
+    FCharCase: TEditCharCase;
     FUseEditorKind: Boolean;
     procedure SetPickList(AValue: TStrings);
     procedure SetEditorKind(AValue: TTyGridEditorKind);
@@ -214,6 +219,8 @@ type
     property MaxValue: Integer read FMaxValue write FMaxValue default 100;
     { gekMask 的掩码 —— 交给 TTyMaskEdit 解释,不自造一套掩码语法。 }
     property EditMask: string read FEditMask write FEditMask;
+    { 输入时强制大小写(对标 AdvGrid 的 edUpperCase / edLowerCase)。 }
+    property CharCase: TEditCharCase read FCharCase write FCharCase default ecNormal;
     { 只允许输入这些字符(空 = 不限)。按键级过滤,非法键直接不进编辑框。 }
     property ValidChars: string read FValidChars write FValidChars;
     { 编辑框最多输入几个字符(0 = 不限)。 }
@@ -900,6 +907,7 @@ type
     FSliderEditor: TTyTrackBar;
     FMemoEditor:   TTyMemo;
     FMaskEditor:   TTyMaskEdit;
+    FCalcEditor:   TTyCalcEdit;
     FEditLinkCtl: TWinControl;
     FDateEditor: TTyDateTimePicker;
     FOnGetCellDisplay: TTyGridGetCellDisplayEvent;
@@ -1015,6 +1023,7 @@ type
     function  EditorMinFor(ACol: Integer): Integer; virtual;
     function  EditorMaxFor(ACol: Integer): Integer; virtual;
     function  EditMaskFor(ACol: Integer): string; virtual;
+    function  CharCaseFor(ACol: Integer): TEditCharCase; virtual;
     function  ValidCharsFor(ACol, ARow: Integer): string; virtual;
     function  MaxEditLengthFor(ACol, ARow: Integer): Integer; virtual;
     { 内建的行内文本编辑器。protected 暴露给派生类与测试 —— 用来断言
@@ -1024,6 +1033,8 @@ type
     property SliderEditor: TTyTrackBar read FSliderEditor;
     property MemoEditor: TTyMemo read FMemoEditor;
     property MaskEditor: TTyMaskEdit read FMaskEditor;
+    property CalcEditor: TTyCalcEdit read FCalcEditor;
+    property DateEditor: TTyDateTimePicker read FDateEditor;
     { 星级格里第 AStar 颗星(1-based)的矩形。绘制与命中共用它。 }
     function RatingStarRect(ACol, ARow, AStar: Integer): TRect;
     procedure SetRatingByPoint(ACol, ARow, X, Y: Integer); override;
@@ -1613,6 +1624,7 @@ begin
     FMinValue := TTyGridColumn(ASource).MinValue;
     FMaxValue := TTyGridColumn(ASource).MaxValue;
     FEditMask := TTyGridColumn(ASource).EditMask;
+    FCharCase := TTyGridColumn(ASource).CharCase;
   end;
 end;
 
@@ -3750,6 +3762,12 @@ begin
   FMemoEditor.ControlStyle := FMemoEditor.ControlStyle + [csNoDesignVisible];
   FMemoEditor.OnExit := @EditorExit;
 
+  FCalcEditor := TTyCalcEdit.Create(Self);
+  FCalcEditor.Parent := Self;
+  FCalcEditor.Visible := False;
+  FCalcEditor.ControlStyle := FCalcEditor.ControlStyle + [csNoDesignVisible];
+  FCalcEditor.OnExit := @EditorExit;
+
   FMaskEditor := TTyMaskEdit.Create(Self);
   FMaskEditor.Parent := Self;
   FMaskEditor.Visible := False;
@@ -4051,6 +4069,14 @@ begin
   Result := '';
   c := GridColumn(ACol);
   if c <> nil then Result := c.EditMask;
+end;
+
+function TTyStringGrid.CharCaseFor(ACol: Integer): TEditCharCase;
+var c: TTyGridColumn;
+begin
+  Result := ecNormal;
+  c := GridColumn(ACol);
+  if c <> nil then Result := c.CharCase;
 end;
 
 function TTyStringGrid.ValidCharsFor(ACol, ARow: Integer): string;
@@ -5073,27 +5099,33 @@ procedure TTyStringGrid.RenderRatingCell(P: TTyPainter; ACol, ARow: Integer;
 var
   r, star: TRect;
   n, i, box, cy, x0: Integer;
-  ink: TTyColor;
-  rS: TTyStyleSet;
+  ink, emptyInk: TTyColor;
+  rS, eS: TTyStyleSet;
 begin
   r := CellVisibleRect(ACol, ARow);
   if IsRectEmpty(r) then Exit;
-  n := StrToIntDef(Trim(GetCellText(ACol, ARow)), -1);
-  if n < 0 then Exit;
+  { 空内容 / 非数值 → 0 分,仍然画 5 颗空星(那是可点的位置)。 }
+  n := StrToIntDef(Trim(GetCellText(ACol, ARow)), 0);
+  if n < 0 then n := 0;
   if n > TyGridRatingMax then n := TyGridRatingMax;
 
   rS := ActiveController.Model.ResolveStyle('TyGridRating', StyleClass, []);
   if tpTextColor in rS.Present then ink := rS.TextColor else ink := AFrame.TextColor;
+  { 未评的那几颗用另一个键,主题里配成淡色 —— 只有把空星也画出来,
+    用户才看得出"这里还能点到第 5 颗"。从前只画已评的 n 颗,
+    等于把可点的位置藏起来了。 }
+  eS := ActiveController.Model.ResolveStyle('TyGridRatingEmpty', StyleClass, []);
+  if tpTextColor in eS.Present then emptyInk := eS.TextColor else emptyInk := ink;
 
   box := ScaleI(12);
   cy := (r.Top + r.Bottom) div 2;
   x0 := r.Left + ScaleI(4);
-  for i := 0 to n - 1 do
+  for i := 0 to TyGridRatingMax - 1 do
   begin
     star := RatingStarRect(ACol, ARow, i + 1);
     if IsRectEmpty(star) then Break;
-    { 用勾形当"已评"标记 —— 库里没有星形字形,勾形在小槽里最清楚。 }
-    TyDrawGlyph(P, ActiveController, star, tgCheck, ink, 1, 1);
+    { 实心 = 已评,空心 = 可点但未评。星形与评分控件共用 TTyPainter.StarPath。 }
+    P.DrawStar(star, IfThen(i < n, ink, emptyInk), i < n);
   end;
 end;
 
@@ -7227,6 +7259,33 @@ begin
     Exit;
   end;
 
+  { --- 时间:与日期共用同一个选择器,只是把 Kind 切成 dtkTime --- }
+  if EditorKindFor(FCol, FRow) = gekTime then
+  begin
+    FDateEditor.Controller := Self.Controller;
+    FDateEditor.Kind := dtkTime;
+    FDateEditor.DateTime := StrToTimeDef(Cells[FCol, FRow], SysUtils.Time);
+    FDateEditor.BoundsRect := r;
+    FDateEditor.Visible := True;
+    if HandleAllocated and FDateEditor.CanFocus then FDateEditor.SetFocus;
+    FEditing := True;
+    Result := True;
+    Exit;
+  end;
+
+  { --- 带计算器的数值 --- }
+  if EditorKindFor(FCol, FRow) = gekCalculator then
+  begin
+    FCalcEditor.Controller := Self.Controller;
+    FCalcEditor.Text := Cells[FCol, FRow];
+    FCalcEditor.BoundsRect := r;
+    FCalcEditor.Visible := True;
+    if HandleAllocated and FCalcEditor.CanFocus then FCalcEditor.SetFocus;
+    FEditing := True;
+    Result := True;
+    Exit;
+  end;
+
   { --- 掩码 --- }
   if EditorKindFor(FCol, FRow) = gekMask then
   begin
@@ -7242,6 +7301,11 @@ begin
   end;
 
   FEditor.Controller := Self.Controller;
+  { 密码列遮字;其余列不遮(每次都要显式设回去,否则上一格的遮罩会留下来)。 }
+  if EditorKindFor(FCol, FRow) = gekPassword then FEditor.PasswordChar := '*'
+  else FEditor.PasswordChar := '';
+  { 大小写强制来自列(对标 edUpperCase / edLowerCase)。 }
+  FEditor.CharCase := CharCaseFor(FCol);
   { 数值列右对齐。按键级的数字过滤要等 ValueListEditor 的 TTyValueEdit 泛化出来后再接;
     在那之前由 EndEdit 在**提交时**校验,非法值直接不写回。 }
   if EditorKindFor(FCol, FRow) = gekNumeric then
@@ -7261,7 +7325,7 @@ procedure TTyStringGrid.EndEdit(ACommit: Boolean);
 var
   oldTxt, newTxt: string;
   accept: Boolean;
-  usePick, useDate, useLink, useSpin, useSlider, useMemo, useMask: Boolean;
+  usePick, useDate, useLink, useSpin, useSlider, useMemo, useMask, useCalc: Boolean;
   linkTxt: string;
 begin
   usePick := False;
@@ -7270,6 +7334,7 @@ begin
   useSlider := False;
   useMemo := False;
   useMask := False;
+  useCalc := False;
   useLink := False;
   linkTxt := '';
   if not FEditing then Exit;
@@ -7312,6 +7377,11 @@ begin
       FMaskEditor.Visible := False;
       useMask := True;
     end;
+    if FCalcEditor.Visible then
+    begin
+      FCalcEditor.Visible := False;
+      useCalc := True;
+    end;
     if FDateEditor.Visible then
     begin
       FDateEditor.Visible := False;
@@ -7331,6 +7401,8 @@ begin
         newTxt := FMemoEditor.Text
       else if useMask then
         newTxt := FMaskEditor.Text
+      else if useCalc then
+        newTxt := FCalcEditor.Text
       else if useDate then
         newTxt := DateToStr(FDateEditor.Date)
       else if usePick then

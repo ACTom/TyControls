@@ -5,8 +5,8 @@ unit tyControls.Painter;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, LCLType, BGRABitmap, BGRABitmapTypes,
-  BGRAGradientScanner,
+  Classes, SysUtils, Types, Math, Graphics, LCLType, BGRABitmap, BGRABitmapTypes,
+  BGRAGradientScanner, BGRACanvas2D,
   FPReadJPEG, FPReadPNG, FPReadBMP,  // register FPImage readers so url() jpg/png/bmp load
   tyControls.Types;
 
@@ -67,6 +67,13 @@ type
     procedure FillCornerGaps(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
     procedure EraseRect(const ARect: TRect);
     property Bitmap: TBGRABitmap read FBmp;
+    { 五角星:10 个内外交替的顶点,第一个顶点在正上方。只描路径、不填不描边 ——
+      填法交给调用方(整颗填 / 只描边 / 裁一半做半星)。
+      **抽出来是为了让评分控件与网格的星级单元格用同一份几何** ——
+      两边各画一套的话,同一个值在两处会长得不一样。 }
+    procedure StarPath(ACx, ACy, AOuter, AInner: Double);
+    { 在 ARect 内画一颗星:AFilled 为真则实心填 AColor,否则只用 AColor 描边。 }
+    procedure DrawStar(const ARect: TRect; AColor: TTyColor; AFilled: Boolean);
     { 本次绘制的 PPI。调用方要自己往别的位图上排文字时(网格的单元格文本缓存)
       必须用同一个 PPI 配字体,否则缓存出来的字号与直接画的不一致。 }
     property PPI: Integer read FPPI;
@@ -425,6 +432,56 @@ begin
       FBmp.PutImage(ox, oy, shadow, dmDrawWithTransparency);
   finally
     shadow.Free;
+  end;
+end;
+
+procedure TTyPainter.StarPath(ACx, ACy, AOuter, AInner: Double);
+var
+  ctx: TBGRACanvas2D;
+  k: Integer;
+  ang, rr: Double;
+begin
+  if FBmp = nil then Exit;
+  ctx := FBmp.Canvas2D;
+  ctx.beginPath;
+  for k := 0 to 9 do
+  begin
+    if (k mod 2) = 0 then rr := AOuter else rr := AInner;
+    { 从正上方(-90 度)起,每个顶点转 36 度,顺时针。 }
+    ang := DegToRad(-90 + k * 36);
+    if k = 0 then
+      ctx.moveTo(ACx + rr * Cos(ang), ACy + rr * Sin(ang))
+    else
+      ctx.lineTo(ACx + rr * Cos(ang), ACy + rr * Sin(ang));
+  end;
+  ctx.closePath;
+end;
+
+procedure TTyPainter.DrawStar(const ARect: TRect; AColor: TTyColor; AFilled: Boolean);
+var
+  ctx: TBGRACanvas2D;
+  cx, cy, outer: Double;
+begin
+  if FBmp = nil then Exit;
+  outer := Math.Min(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top) / 2;
+  if outer < 2 then Exit;
+  cx := (ARect.Left + ARect.Right) / 2;
+  cy := (ARect.Top + ARect.Bottom) / 2;
+
+  ctx := FBmp.Canvas2D;
+  ctx.lineJoin := 'round';
+  { 内半径取外半径的一半 —— 与评分控件同一比例。 }
+  StarPath(cx, cy, outer, outer * 0.5);
+  if AFilled then
+  begin
+    ctx.fillStyle(TyColorToBGRA(AColor));
+    ctx.fill;
+  end
+  else
+  begin
+    ctx.lineWidth := Math.Max(1, Scale(1));
+    ctx.strokeStyle(TyColorToBGRA(AColor));
+    ctx.stroke;
   end;
 end;
 

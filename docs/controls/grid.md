@@ -187,10 +187,14 @@ TyGridSummaryRow       汇总带
 - 列级声明:`EditorKind` / `ReadOnly` / `PickList` / `Aggregate` / `Format` /
   `ValidChars` / `MaxEditLength` / `MinValue` / `MaxValue` / `EditMask`
   —— **设计期配好列,不用接任何事件**
-- 内建编辑器:文本 / 数值 / **微调**(`gekSpin`)/ **滑动条**(`gekSlider`)/
-  下拉 / 日历 / 取色 / 勾选框 / **星级**(`gekRating`,点第几颗就是几分,不弹编辑器)/
-  **多行**(`gekMemo`)/ **掩码**(`gekMask`,掩码交给 `TTyMaskEdit` 解释)
-  —— 这些都是把库里**现成的控件**接进来,不是另造一套
+- 内建编辑器(`TTyGridEditorKind`):文本 / 数值 / **微调** / **滑动条** / 下拉 /
+  日历 / **时间** / 取色 / 勾选框 / **星级**(点第几颗就是几分,不弹编辑器)/
+  **多行** / **掩码** / **密码** / **带计算器的数值**
+  —— 全是把库里**现成的控件**接进来(`TTySpinEdit` / `TTyTrackBar` / `TTyMemo` /
+  `TTyMaskEdit` / `TTyCalcEdit` / `TTyDateTimePicker`),不另造一套。
+  另有列级 `CharCase`(输入强制大小写)。
+- 走 `OnCreateEditLink` 的:省略号按钮弹任意对话框、子表格、图片选择器 ——
+  这些的"编辑器"本体是宿主的业务 UI,内建反而限制人
 - 逐格 `CellReadOnly[c,r]`
 - 键盘手感:直接敲字进编辑(这一笔即第一个字符)、Enter 向下、Tab 按格推进折行
 - 输入约束按键级过滤(非法字符**连编辑都不进**)

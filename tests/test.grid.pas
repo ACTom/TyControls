@@ -5,7 +5,8 @@ uses
   Classes, SysUtils, DateUtils, Types, Graphics, Controls, Forms, LCLType, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
-  tyControls.Painter, tyControls.ImageCollection, tyControls.Edit,
+  tyControls.Painter, tyControls.ImageCollection, tyControls.Edit, StdCtrls,
+  tyControls.DateTimePicker, tyControls.CalcEdit,
   tyControls.Grid.Layout;
 
 type
@@ -175,6 +176,8 @@ type
     procedure TestSliderEditorRoundTrips;
     procedure TestMaskEditorUsesColumnMask;
     procedure TestRatingCellSetsValueByClickingAStar;
+    procedure TestRatingCellPaintsFilledAndEmptyStars;
+    procedure TestPasswordTimeCalculatorAndCharCaseEditors;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -194,6 +197,8 @@ type
     procedure HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
     procedure HookColorInCol1(Sender: TObject; ACol, ARow: Integer;
+      var ADisplay: TTyGridCellDisplay);
+    procedure HookRatingInCol1(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
     procedure HookSelectionChanged(Sender: TObject);
     procedure HookCanToggle(Sender: TObject; ACol, ARow: Integer;
@@ -955,6 +960,9 @@ type
     function  IsEditing: Boolean;
     function  HitAt(X, Y: Integer): TTyGridHit;
     function  EditorVisible: Boolean;
+    function  InlineEditorPasswordChar: string;
+    function  InlineEditorCharCase: TEditCharCase;
+    function  DateEditorKind: TTyDateTimeKind;
     function  SpinValue: Integer;
     procedure SetSpinValue(AValue: Integer);
     function  SliderValue: Integer;
@@ -1022,6 +1030,13 @@ function TStrGridAccess.EditorVisible: Boolean;
 begin
   Result := InlineEditor.Visible;
 end;
+
+function TStrGridAccess.InlineEditorPasswordChar: string;
+begin Result := InlineEditor.PasswordChar; end;
+function TStrGridAccess.InlineEditorCharCase: TEditCharCase;
+begin Result := InlineEditor.CharCase; end;
+function TStrGridAccess.DateEditorKind: TTyDateTimeKind;
+begin Result := DateEditor.Kind; end;
 
 function TStrGridAccess.SpinValue: Integer;
 begin Result := SpinEditor.Value; end;
@@ -4940,6 +4955,12 @@ begin
   if ACol = 1 then ADisplay := gcdColor;
 end;
 
+procedure TTyStringGridTest.HookRatingInCol1(Sender: TObject; ACol, ARow: Integer;
+  var ADisplay: TTyGridCellDisplay);
+begin
+  if ACol = 1 then ADisplay := gcdRating;
+end;
+
 { 颜色列该画**色块**,不是把 '#3B82F6' 这串十六进制原样显示出来。
 
   从前 gekColor 只是个**编辑器**(点开弹取色对话框),显示侧没有对应的种类 ——
@@ -5212,6 +5233,130 @@ begin
 
   { 星级格不该弹出驻留编辑器。 }
   AssertTrue('星级不弹编辑器', not G.EditorVisible);
+end;
+
+{ 星级要画**实心金星 + 空心星**:
+  - 实心 = 已评的那几颗
+  - 空心 = 还没评但**可以点**的位置 —— 不画出来的话用户根本看不出还能点到第 5 颗
+  从前只画已评的 n 颗、而且用的是勾形。 }
+procedure TTyStringGridTest.TestRatingCellPaintsFilledAndEmptyStars;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  star: TRect;
+  gold, grey: Integer;
+
+  procedure CountIn(const R: TRect; out AGold, AGrey: Integer);
+  var
+    x, y: Integer;      { 嵌套过程要用**自己的**计数器,不能借外层的 }
+    px: TBGRAPixel;
+  begin
+    AGold := 0; AGrey := 0;
+    for y := R.Top to R.Bottom - 1 do
+      for x := R.Left to R.Right - 1 do
+      begin
+        if (x < 0) or (y < 0) or (x >= 400) or (y >= 300) then Continue;
+        px := Re.GetPixel(x, y);
+        { 金:红高绿中蓝低。灰:三色接近且偏暗。 }
+        if (px.red > 200) and (px.green > 130) and (px.green < 210) and (px.blue < 90) then
+          Inc(AGold);
+        if (Abs(px.red - px.green) < 30) and (Abs(px.green - px.blue) < 30)
+           and (px.red > 120) and (px.red < 220) then Inc(AGrey);
+      end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridRating { color: #F59E0B; }' +
+      'TyGridRatingEmpty { color: #B0B0B0; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.DefaultRowHeight := 26;
+    G.RowCount := 4;
+    G.Cells[1, 1] := '2';
+    G.OnGetCellDisplay := @HookRatingInCol1;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      { 第 1 颗:已评 → 金色实心。 }
+      star := G.StarRectOf(1, 1, 1);
+      AssertTrue('前置条件:第 1 颗星有矩形', not IsRectEmpty(star));
+      CountIn(star, gold, grey);
+      AssertTrue(Format('已评的星应当是金色实心(金 %d)', [gold]), gold > 30);
+
+      { 第 5 颗:未评 → 只有描边,**不能是金色**。 }
+      star := G.StarRectOf(1, 1, 5);
+      AssertTrue('前置条件:第 5 颗星也要有矩形(可点的位置)', not IsRectEmpty(star));
+      CountIn(star, gold, grey);
+      AssertEquals('未评的星不该是金色', 0, gold);
+      AssertTrue(Format('未评的星要画出轮廓(灰 %d)', [grey]), grey > 5);
+    finally
+      Re.Free;
+    end;
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 对标 AdvGrid 编辑器全集补的最后几种。它们同样是把库里现成的控件接进来。 }
+procedure TTyStringGridTest.TestPasswordTimeCalculatorAndCharCaseEditors;
+var
+  G: TStrGridAccess;
+  c: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+
+  { 密码列:编辑时遮字。 }
+  c := TTyGridColumn(G.Header.Columns.Items[0]);
+  c.EditorKind := gekPassword;
+  G.Cells[0, 1] := 'secret';
+  AssertTrue('进入密码编辑', G.BeginEdit(0, 1));
+  AssertTrue('密码列要遮字', G.InlineEditorPasswordChar <> '');
+  G.EndEdit(False);
+
+  { 普通列必须把遮罩**显式清掉** —— 否则上一格的遮罩会留在共用的编辑器上。 }
+  c := TTyGridColumn(G.Header.Columns.Items[1]);
+  c.EditorKind := gekText;
+  AssertTrue('进入普通编辑', G.BeginEdit(1, 1));
+  AssertEquals('普通列不该残留上一格的遮罩', '', G.InlineEditorPasswordChar);
+  G.EndEdit(False);
+
+  { 列级大小写。 }
+  c.CharCase := ecUpperCase;
+  AssertTrue('再次进入', G.BeginEdit(1, 1));
+  AssertTrue('大小写强制来自列', G.InlineEditorCharCase = ecUpperCase);
+  G.EndEdit(False);
+
+  { 计算器列:值往返。 }
+  c := TTyGridColumn(G.Header.Columns.Items[2]);
+  c.EditorKind := gekCalculator;
+  G.Cells[2, 1] := '12.5';
+  AssertTrue('进入计算器编辑', G.BeginEdit(2, 1));
+  AssertTrue('计算器编辑器出场', G.CalcEditor.Visible);
+  G.EndEdit(False);
+
+  { 时间列:与日期共用选择器,但 Kind 要切成 dtkTime。 }
+  c := TTyGridColumn(G.Header.Columns.Items[3]);
+  c.EditorKind := gekTime;
+  G.Cells[3, 1] := '13:45';
+  AssertTrue('进入时间编辑', G.BeginEdit(3, 1));
+  AssertTrue('选择器切到时间模式', G.DateEditorKind = dtkTime);
+  G.EndEdit(False);
 end;
 
 initialization
