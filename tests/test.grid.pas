@@ -56,6 +56,10 @@ type
     FTakeOverCol: Integer;
     { OnDblClickCell 的记账(它从前一处都没被触发过)。 }
     FDblCount, FDblCol, FDblRow: Integer;
+    FRowMoveCount: Integer;
+    FRowMoveAllow: Boolean;
+    procedure HandleRowMove(Sender: TObject; AFrom, ATo: Integer;
+      var AAllow: Boolean);
     procedure HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
     procedure HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
       var AKind: TTyGridEditorKind);
@@ -188,6 +192,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestRowDragReordersFromTheIndicatorGutter;
+    procedure TestRowDragRefusedWhenDisplayOrderIsNotDataOrder;
     procedure TestFillHandleGeometryMatchesWhatIsDrawn;
     procedure TestFillCopiesRepeatsAndExtrapolates;
     procedure TestProgrammaticCursorMoveDoesNotStretchSelection;
@@ -1319,6 +1325,13 @@ procedure TTyStringGridTest.HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Inte
   var AKind: TTyGridEditorKind);
 begin
   if ACol = 2 then AKind := gekNone else AKind := gekText;
+end;
+
+procedure TTyStringGridTest.HandleRowMove(Sender: TObject; AFrom, ATo: Integer;
+  var AAllow: Boolean);
+begin
+  Inc(FRowMoveCount);
+  AAllow := FRowMoveAllow;
 end;
 
 procedure TTyStringGridTest.HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
@@ -7001,6 +7014,79 @@ begin
   G.DragFromTo((h.Left + h.Right) div 2, (h.Top + h.Bottom) div 2,
                (cell.Left + cell.Right) div 2, (cell.Top + cell.Bottom) div 2);
   AssertEquals('拖柄之后第 4 行被填上', '5', G.Cells[3, 4]);
+end;
+
+{ 在**行头槽**里按下并拖动 = 拖行(与列头拖列对称)。
+  单元格上不能抢这个手势 —— 那里是框选。 }
+procedure TTyStringGridTest.TestRowDragReordersFromTheIndicatorGutter;
+var
+  G: TStrGridAccess;
+  r1, r3: TRect;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 8;
+  G.ShowIndicator := True;
+  G.IndicatorWidth := 40;
+  for r := 0 to 7 do
+    G.Cells[0, r] := 'R' + IntToStr(r);
+
+  r1 := G.RowRectAt(1);
+  r3 := G.RowRectAt(3);
+
+  { 一、阈值以内不该动 —— 否则手抖一像素就把行挪了。
+    起点取在行下边缘往上 6 像素:这样 7 像素的位移**已经跨进下一行**,
+    却仍在 8 像素的阈值以内 —— 只有真的判了阈值才会不动。
+    (两次修正才打准:先是从行中间挪 2 像素,落点还在同一行;
+     再是贴着边缘起手,却落进了分隔线的 3 像素判定区,被当成改行高。) }
+  G.DragFromTo(10, r1.Bottom - 6, 10, r1.Bottom + 1);
+  AssertEquals('阈值以内不该移动', 'R1', G.Cells[0, 1]);
+
+  { 二、拖过阈值:第 1 行落到第 3 行的位置。 }
+  G.DragFromTo(10, (r1.Top + r1.Bottom) div 2, 10, (r3.Top + r3.Bottom) div 2);
+  AssertEquals('R1 被拖到第 3 行', 'R1', G.Cells[0, 3]);
+  AssertEquals('R2 上移', 'R2', G.Cells[0, 1]);
+  AssertEquals('R3 上移', 'R3', G.Cells[0, 2]);
+
+  { 三、在**单元格**上拖不该移动行(那是框选)。 }
+  G.DragFromTo(60, (r1.Top + r1.Bottom) div 2, 60, (r3.Top + r3.Bottom) div 2);
+  AssertEquals('单元格上拖动不移动行', 'R2', G.Cells[0, 1]);
+
+  { 四、钩子能否决。 }
+  FRowMoveAllow := False;
+  FRowMoveCount := 0;
+  G.OnRowMove := @HandleRowMove;
+  G.DragFromTo(10, (r1.Top + r1.Bottom) div 2, 10, (r3.Top + r3.Bottom) div 2);
+  AssertTrue('钩子被调用', FRowMoveCount > 0);
+  AssertEquals('否决之后行没动', 'R2', G.Cells[0, 1]);
+end;
+
+{ 排过序/分过组的表上**不许**拖行:显示序不是数据序,把行拖到某个屏幕位置
+  没有意义 —— 松手之后排序会立刻把它放回去。
+  (与 MergeSelection 拒绝非数据连续的选区是同一条道理:宁可什么都不做,
+   也不要做一件用户看不懂的事。) }
+procedure TTyStringGridTest.TestRowDragRefusedWhenDisplayOrderIsNotDataOrder;
+var
+  G: TStrGridAccess;
+  r1, r3: TRect;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 8;
+  G.ShowIndicator := True;
+  G.IndicatorWidth := 40;
+  for r := 0 to 7 do
+    G.Cells[0, r] := Format('%.2d', [7 - r]);
+  G.SortByColumn(0, sdAscending);
+
+  r1 := G.RowRectAt(1);
+  r3 := G.RowRectAt(3);
+  G.DragFromTo(10, (r1.Top + r1.Bottom) div 2, 10, (r3.Top + r3.Bottom) div 2);
+
+  { 数据一格都不该动。 }
+  for r := 0 to 7 do
+    AssertEquals(Format('排序状态下拖行不该改数据(第 %d 行)', [r]),
+      Format('%.2d', [7 - r]), G.Cells[0, r]);
 end;
 
 initialization

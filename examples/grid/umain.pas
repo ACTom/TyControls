@@ -1076,7 +1076,10 @@ begin
   Status('已删除当前行');
 end;
 
-{ 上移/下移会把底色、行高、合并跨度一起搬走,不是只换文字。 }
+{ 上移/下移会把底色、行高、合并跨度一起搬走,不是只换文字。
+  也可以**直接在行头槽里拖行**(与列头拖列对称)——
+  但排过序/分过组/藏过行时拖不动:那时显示序不是数据序,
+  把行拖到某个屏幕位置没有意义,松手排序就会把它放回去。 }
 procedure TMainForm.BtnRowUpClick(Sender: TObject);
 begin
   if GridData.Row <= 0 then Exit;

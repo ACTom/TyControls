@@ -297,6 +297,11 @@ type
     而不是逼宿主去 OnCellEdited 里认字符串。 }
   TTyGridCanToggleEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var AAllow: Boolean) of object;
+  { 用鼠标把某一行拖到别处之前问一句。置 AAllow := False 可否决。
+    AFrom / ATo 都是**数据行**。 }
+  TTyGridRowMoveEvent = procedure(Sender: TObject; AFrom, ATo: Integer;
+    var AAllow: Boolean) of object;
+
   { 拖填充柄产生的一次填充。宿主可以接管(自定义序列、跨列规则等):
     置 AHandled := True 之后控件就不再动数据了。 }
   TTyGridFillEvent = procedure(Sender: TObject; const ASource, ATarget: TRect;
@@ -530,6 +535,11 @@ type
     FScrollY:          Integer;
     FDragCol:          Integer;   { 正在拖动的列索引;-1 = 没在拖 }
     FDragStartX:       Integer;
+    { 行拖动。与列拖动对称:在**行头槽**里按下并越过阈值才算数。
+      放在行头槽而不是单元格上 —— 单元格上是框选,不能抢那个手势。 }
+    FDragRow:          Integer;   { 正在拖动的**数据行**;-1 = 没在拖 }
+    FDragStartY:       Integer;
+    FOnRowMove:        TTyGridRowMoveEvent;
     FResizeCol:        Integer;   { 正在拖宽的列;-1 = 没在拖 }
     FResizeStartX:     Integer;
     FResizeStartW:     Integer;
@@ -622,6 +632,14 @@ type
       放 protected —— 测试经访问子类够得着,而它们不该成为对外支持的 API。 }
     property RealInvalidateCount: Integer read FRealInvalidates;
     property SurfaceFresh: Boolean read FSurfaceFresh;
+    { 把数据行 AFrom 移到 ATo。基类不持有单元格,什么都不做;
+      TTyStringGrid 覆盖成真正的 MoveRow(它会把底色/行高/合并跨度一起搬)。 }
+    procedure DoRowDragMove(AFrom, ATo: Integer); virtual;
+    { 显示序此刻是不是就是数据序(没排序、没分组、没筛选、没隐藏行)。
+      不是的话**不允许拖行** —— 把行拖到某个屏幕位置在排过序的表上没有意义:
+      松手之后排序会立刻把它放回去,用户只会觉得"拖了没反应"。
+      与 MergeSelection 拒绝非数据连续的选区是同一条道理。 }
+    function DisplayOrderIsDataOrder: Boolean; virtual;
     function MaxRowSpanHint: Integer; virtual;
     { 行高变了 → 行几何的缓存(前缀和)要失效。基类没有缓存;TTyStringGrid 改写。 }
     procedure InvalidateRowMetrics; virtual;
@@ -891,6 +909,8 @@ type
     property OnRowSizing: TTyGridSizingEvent read FOnRowSizing write FOnRowSizing;
     property OnEndRowSize: TTyGridSizedEvent read FOnEndRowSize write FOnEndRowSize;
     property OnColumnMove: TTyGridColumnMoveEvent read FOnColumnMove write FOnColumnMove;
+    { 行被鼠标从行头槽拖动重排之前问一句;置 AAllow := False 可否决。 }
+    property OnRowMove: TTyGridRowMoveEvent read FOnRowMove write FOnRowMove;
     { 行高/列宽的全局上下限(逻辑像素)。0 = 不限。 }
     property MinRowHeight: Integer read FMinRowHeight write FMinRowHeight default 0;
     property MaxRowHeight: Integer read FMaxRowHeight write FMaxRowHeight default 0;
@@ -1124,6 +1144,8 @@ type
     function MaxRowSpanHint: Integer; override;
     { 这段数据行此刻是不是正连续升序地显示着。 }
     function RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
+    procedure DoRowDragMove(AFrom, ATo: Integer); override;
+    function DisplayOrderIsDataOrder: Boolean; override;
     function SelectionBoundsRect: TRect;
     function ArithmeticStep(ACol, AFrom, ATo: Integer;
       out AFirst, AStep: Integer): Boolean;
@@ -1988,6 +2010,7 @@ begin
   FScrollX := 0;
   FScrollY := 0;
   FDragCol := -1;
+  FDragRow := -1;
   FResizeCol := -1;
 
   { 两条内嵌滚动条。csNoDesignVisible:内部子控件不该出现在设计器的对象树里。 }
@@ -2596,6 +2619,16 @@ end;
 function TTyCustomGrid.MaxRowSpanHint: Integer;
 begin
   Result := 1;
+end;
+
+procedure TTyCustomGrid.DoRowDragMove(AFrom, ATo: Integer);
+begin
+  { 基类不持有数据,拖不动任何东西。 }
+end;
+
+function TTyCustomGrid.DisplayOrderIsDataOrder: Boolean;
+begin
+  Result := True;   { 基类没有行序间接层 }
 end;
 
 procedure TTyCustomGrid.ShiftSurfaceRows(ATop, ABottom, ADy: Integer);
@@ -3588,6 +3621,20 @@ begin
       FResizeRow := d;
       FResizeStartY := Y;
       FResizeStartH := RowHeightOf(DisplayToData(d));
+      Exit;
+    end;
+
+    { 行头槽里按下(且不在分隔线上)= 准备拖行。
+      分隔线优先:边缘那几像素上用户的意图是改行高,不是搬行。 }
+    if (Button = mbLeft) and FShowIndicator and (X < ScaleI(FIndicatorWidth))
+       and DisplayOrderIsDataOrder then
+    begin
+      d := TyGridRowAt(Y, GridMetrics);
+      if d >= 0 then
+      begin
+        FDragRow := DisplayToData(d);
+        FDragStartY := Y;
+      end;
     end;
     Exit;
   end;
@@ -3667,6 +3714,27 @@ begin
     Exit;
   end;
 
+  if FDragRow >= 0 then
+  begin
+    { 越过阈值才算拖动 —— 否则手抖一像素就把行挪了。 }
+    if Abs(Y - FDragStartY) < ScaleI(8) then Exit;
+    target := TyGridRowAt(Y, GridMetrics);
+    if target >= 0 then target := DisplayToData(target);
+    if (target >= 0) and (target <> FDragRow) then
+    begin
+      allow := True;
+      if Assigned(FOnRowMove) then FOnRowMove(Self, FDragRow, target, allow);
+      if allow then
+      begin
+        DoRowDragMove(FDragRow, target);
+        FDragRow := target;
+        FDragStartY := Y;
+        Invalidate;
+      end;
+    end;
+    Exit;
+  end;
+
   if FDragCol >= 0 then
   begin
     { 越过阈值才算拖动 —— 否则手抖一像素就把列挪了。 }
@@ -3703,6 +3771,7 @@ begin
   FResizeCol := -1;
   FResizeRow := -1;
   FDragCol := -1;
+  FDragRow := -1;
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
@@ -7323,6 +7392,19 @@ begin
 end;
 
 { ---- 单元格合并 ----------------------------------------------------------- }
+
+procedure TTyStringGrid.DoRowDragMove(AFrom, ATo: Integer);
+begin
+  MoveRow(AFrom, ATo);
+end;
+
+{ 有排序键、有分组、有过滤、有隐藏行 —— 任何一样都会让显示序偏离数据序。 }
+function TTyStringGrid.DisplayOrderIsDataOrder: Boolean;
+begin
+  Result := (SortColumn < 0) and (FGroupCol < 0)
+            and (FColFilters.Count = 0) and (FValFilters.Count = 0)
+            and (FHiddenRows.Count = 0);
+end;
 
 function TTyStringGrid.RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
 var
