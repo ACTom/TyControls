@@ -303,6 +303,23 @@ type
     而不是逼宿主去 OnCellEdited 里认字符串。 }
   TTyGridCanToggleEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var AAllow: Boolean) of object;
+  { --- 撤销栈 ---
+    一条记录只记**逆操作需要的最小信息**:哪一格、改之前是什么。
+    结构性操作(增删行)也落到这里 —— 它们搬单元格时走的就是 Cells[],
+    于是自动被记下来;额外再记一条行数即可。 }
+  TTyGridUndoKind = (gukCell, gukRowCount);
+
+  TTyGridUndoEntry = record
+    Kind:     TTyGridUndoKind;
+    Col, Row: Integer;
+    OldText:  string;
+    OldCount: Integer;
+  end;
+
+  { 一次可撤销的操作 = 一串条目。批量操作(粘贴、填充、删行)天然是一条,
+    因为它们本来就被 BeginUpdate/EndUpdate 包着。 }
+  TTyGridUndoStep = array of TTyGridUndoEntry;
+
   { 编辑器**显示之前**交给宿主微调一下(改字体、限长、加自定义提示…)。
     拿到的是真正要用的那个控件。比"要么用内建、要么自己写一整个 EditLink"细一档。 }
   TTyGridEditorPropEvent = procedure(Sender: TObject; ACol, ARow: Integer;
@@ -555,6 +572,16 @@ type
       设大于 0 之后,窄列上的编辑器会自己向右加宽到这个宽度 —— 加宽的是**编辑器**,
       列宽一点没变。加宽不会越过网格右缘。 }
     FMinEditorWidth:   Integer;
+    { --- 撤销/重做 ---
+      记录点收口在 SetCells 与 SetRowCount 两处:所有改数据的路径最终都经过它们
+      (增删行搬格子、粘贴、填充、编辑提交都一样),所以不必去每个功能里各记一遍
+      —— 那正是本控件反复漏东西的方式。 }
+    FUndoStack, FRedoStack: array of TTyGridUndoStep;
+    FUndoOpen:      TTyGridUndoStep;   { 正在攒的这一条 }
+    FUndoDepth:     Integer;           { >0 = 在事务里 }
+    FUndoBusy:      Boolean;           { 正在撤销/重做 —— 此时不再记录,否则自噬 }
+    FUndoLimit:     Integer;
+    FUndoOverflow:  Boolean;           { 这一条大到记不下,整条作废 }
     FOnGetEditorProp:  TTyGridEditorPropEvent;
     FResizeCol:        Integer;   { 正在拖宽的列;-1 = 没在拖 }
     FResizeStartX:     Integer;
@@ -650,6 +677,13 @@ type
     property SurfaceFresh: Boolean read FSurfaceFresh;
     { 把数据行 AFrom 移到 ATo。基类不持有单元格,什么都不做;
       TTyStringGrid 覆盖成真正的 MoveRow(它会把底色/行高/合并跨度一起搬)。 }
+    { 撤销事务的开合。批量更新与撤销事务是**同一对边界** ——
+      凡是值得"一次重画"的批量操作,也正是值得"一次撤销"的操作。
+      栈住在 TTyStringGrid(基类不持有单元格),所以这里是空钩子。 }
+    { 记一笔"行数原来是多少"。栈住在 TTyStringGrid,基类是空钩子。 }
+    procedure RecordRowCountUndo(AOldCount: Integer); virtual;
+    procedure OpenUndoGroup; virtual;
+    procedure CloseUndoGroup; virtual;
     procedure DoRowDragMove(AFrom, ATo: Integer); virtual;
     { 显示序此刻是不是就是数据序(没排序、没分组、没筛选、没隐藏行)。
       不是的话**不允许拖行** —— 把行拖到某个屏幕位置在排过序的表上没有意义:
@@ -1168,6 +1202,9 @@ type
     function RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
     function WidenEditorRect(ACol, ARow: Integer; const ARect: TRect): TRect;
     function DoBeginEdit(ACol, ARow: Integer): Boolean;
+    procedure RecordRowCountUndo(AOldCount: Integer); override;
+    procedure OpenUndoGroup; override;
+    procedure CloseUndoGroup; override;
     procedure DoRowDragMove(AFrom, ATo: Integer); override;
     function DisplayOrderIsDataOrder: Boolean; override;
     function SelectionBoundsRect: TRect;
@@ -1303,6 +1340,12 @@ type
     function DataToDisplay(ARow: Integer): Integer; override;
     function DisplayRowCount: Integer; override;
     procedure SetShowGroupSubtotals(AValue: Boolean);
+    procedure SetUndoLimit(AValue: Integer);
+    { 记一笔。不在事务里时自成一条(单格编辑就是这种)。 }
+    procedure RecordUndo(const AEntry: TTyGridUndoEntry);
+    procedure PushUndoStep(const AStep: TTyGridUndoStep);
+    { 把一条记录逆着放回去,并返回它的"反记录"(供重做用)。 }
+    function  ApplyUndoStep(const AStep: TTyGridUndoStep): TTyGridUndoStep;
     procedure SetShowFilterButtons(AValue: Boolean);
     function ShowsFilterButton(ACol: Integer): Boolean; override;
     function HasMergedCells: Boolean; override;
@@ -1477,6 +1520,15 @@ type
     { 把当前选区的内容填充到 (ACol, ARow) 为止。
       语义:源区单格 = 复制;源区构成等差数列 = 外推;其余 = 按源区循环重复。 }
     procedure FillFromSelectionTo(ACol, ARow: Integer);
+    { --- 撤销 / 重做 ---
+      一次批量操作(粘贴、填充、删行)算**一条**,因为它们都在 BeginUpdate 里跑。 }
+    procedure Undo;
+    procedure Redo;
+    function  CanUndo: Boolean;
+    function  CanRedo: Boolean;
+    procedure ClearUndo;
+    { 栈里现有多少条(给宿主的状态栏/按钮可用性用)。 }
+    function  UndoCount: Integer;
     { 当前正在用的编辑器控件(没在编辑时为 nil)。 }
     function  EditorControl: TControl;
     procedure MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
@@ -1613,6 +1665,8 @@ type
       与页脚汇总用的是同一份配置,不必再配一遍。 }
     property ShowGroupSubtotals: Boolean
       read FShowGroupSubtotals write SetShowGroupSubtotals default True;
+    { 撤销栈最多留多少条;超出丢最老的。0 = 不记录(彻底关掉撤销)。 }
+    property UndoLimit: Integer read FUndoLimit write SetUndoLimit default 100;
     { 拖填充柄产生的一次填充;置 AHandled 可接管(自定义序列)。 }
     property OnFillCells: TTyGridFillEvent read FOnFillCells write FOnFillCells;
   end;
@@ -2012,6 +2066,7 @@ begin
   FFixedCols := 0;
   FFixedRows := 0;
   FFixedRowsBottom := 0;
+  FUndoLimit := 100;
   FFixedColsRight := 0;
   FIndicatorWidth := 30;
   FShowIndicator := False;
@@ -2109,6 +2164,9 @@ procedure TTyCustomGrid.SetRowCount(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FRowCount = AValue then Exit;
+  { 行数变化也是可撤销的一步 —— 删行时单元格的搬移会自己被记下来(它们走 Cells[]),
+    但行数不走那条路,得单独记一笔,否则撤销完剩一张缺了一行的表。 }
+  RecordRowCountUndo(FRowCount);
   FRowCount := AValue;
   InvalidateGridOrder;
   UpdateScrollBars;
@@ -2629,12 +2687,14 @@ end;
 procedure TTyCustomGrid.BeginUpdate;
 begin
   Inc(FUpdateCount);
+  OpenUndoGroup;
 end;
 
 procedure TTyCustomGrid.EndUpdate;
 begin
   if FUpdateCount = 0 then Exit;
   Dec(FUpdateCount);
+  CloseUndoGroup;
   if FUpdateCount > 0 then Exit;
   if not FPendingInvalidate then Exit;
   FPendingInvalidate := False;
@@ -2651,6 +2711,18 @@ end;
 procedure TTyCustomGrid.DoRowDragMove(AFrom, ATo: Integer);
 begin
   { 基类不持有数据,拖不动任何东西。 }
+end;
+
+procedure TTyCustomGrid.RecordRowCountUndo(AOldCount: Integer);
+begin
+end;
+
+procedure TTyCustomGrid.OpenUndoGroup;
+begin
+end;
+
+procedure TTyCustomGrid.CloseUndoGroup;
+begin
 end;
 
 function TTyCustomGrid.DisplayOrderIsDataOrder: Boolean;
@@ -4581,11 +4653,175 @@ begin
   Result := FCells.Items[CellKey(ACol, ARow)];   { 哈希查找,O(1) }
 end;
 
+procedure TTyStringGrid.SetUndoLimit(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FUndoLimit = AValue then Exit;
+  FUndoLimit := AValue;
+  if FUndoLimit = 0 then ClearUndo;
+end;
+
+function TTyStringGrid.UndoCount: Integer;
+begin
+  Result := Length(FUndoStack);
+end;
+
+function TTyStringGrid.CanUndo: Boolean;
+begin
+  Result := Length(FUndoStack) > 0;
+end;
+
+function TTyStringGrid.CanRedo: Boolean;
+begin
+  Result := Length(FRedoStack) > 0;
+end;
+
+procedure TTyStringGrid.ClearUndo;
+begin
+  SetLength(FUndoStack, 0);
+  SetLength(FRedoStack, 0);
+  SetLength(FUndoOpen, 0);
+  FUndoOverflow := False;
+end;
+
+procedure TTyStringGrid.PushUndoStep(const AStep: TTyGridUndoStep);
+var
+  i, n: Integer;
+begin
+  if Length(AStep) = 0 then Exit;
+  n := Length(FUndoStack);
+  SetLength(FUndoStack, n + 1);
+  FUndoStack[n] := AStep;
+  { 超过上限丢**最老**的那条 —— 丢最新的等于用户刚做的操作撤不了,更违反直觉。 }
+  if (FUndoLimit > 0) and (Length(FUndoStack) > FUndoLimit) then
+  begin
+    for i := 0 to Length(FUndoStack) - 2 do
+      FUndoStack[i] := FUndoStack[i + 1];
+    SetLength(FUndoStack, Length(FUndoStack) - 1);
+  end;
+end;
+
+procedure TTyStringGrid.RecordUndo(const AEntry: TTyGridUndoEntry);
+var
+  n: Integer;
+  step: TTyGridUndoStep;
+begin
+  if FUndoBusy or (FUndoLimit = 0) then Exit;
+
+  { 一条记录攒得过大(比如往十万行里灌数据)—— 与其留一条**残缺**的记录,
+    不如整条作废并清空栈:半条撤销记录还原出来的是一张四不像的表,
+    比"这一步撤销不了"危险得多。 }
+  if FUndoDepth > 0 then
+  begin
+    if FUndoOverflow then Exit;
+    if Length(FUndoOpen) >= 200000 then
+    begin
+      FUndoOverflow := True;
+      SetLength(FUndoOpen, 0);
+      ClearUndo;
+      Exit;
+    end;
+    n := Length(FUndoOpen);
+    SetLength(FUndoOpen, n + 1);
+    FUndoOpen[n] := AEntry;
+    Exit;
+  end;
+
+  { 不在事务里:自成一条(单格编辑走的就是这条路)。 }
+  SetLength(step, 1);
+  step[0] := AEntry;
+  PushUndoStep(step);
+  SetLength(FRedoStack, 0);     { 新操作让重做链作废 —— 与所有编辑器一致 }
+end;
+
+{ 逆着放回去。返回的是"反记录":把当前值记下来,于是重做就是再逆一次。
+  条目要**倒着**走 —— 同一格被改过多次时,最早那次才是真正的原值。 }
+function TTyStringGrid.ApplyUndoStep(const AStep: TTyGridUndoStep): TTyGridUndoStep;
+var
+  i, n: Integer;
+  e: TTyGridUndoEntry;
+begin
+  SetLength(Result, Length(AStep));
+  n := 0;
+  for i := Length(AStep) - 1 downto 0 do
+  begin
+    e := AStep[i];
+    case e.Kind of
+      gukCell:
+        begin
+          Result[n].Kind := gukCell;
+          Result[n].Col := e.Col;
+          Result[n].Row := e.Row;
+          Result[n].OldText := GetCells(e.Col, e.Row);
+          Cells[e.Col, e.Row] := e.OldText;
+        end;
+      gukRowCount:
+        begin
+          Result[n].Kind := gukRowCount;
+          Result[n].OldCount := RowCount;
+          RowCount := e.OldCount;
+        end;
+    end;
+    Inc(n);
+  end;
+  { 反记录也要倒着存,这样重做时再倒一次就回到原顺序。 }
+end;
+
+procedure TTyStringGrid.Undo;
+var
+  n: Integer;
+  inv: TTyGridUndoStep;
+begin
+  if not CanUndo then Exit;
+  FUndoBusy := True;
+  BeginUpdate;
+  try
+    n := Length(FUndoStack) - 1;
+    inv := ApplyUndoStep(FUndoStack[n]);
+    SetLength(FUndoStack, n);
+    n := Length(FRedoStack);
+    SetLength(FRedoStack, n + 1);
+    FRedoStack[n] := inv;
+  finally
+    EndUpdate;
+    FUndoBusy := False;
+  end;
+end;
+
+procedure TTyStringGrid.Redo;
+var
+  n: Integer;
+  inv: TTyGridUndoStep;
+begin
+  if not CanRedo then Exit;
+  FUndoBusy := True;
+  BeginUpdate;
+  try
+    n := Length(FRedoStack) - 1;
+    inv := ApplyUndoStep(FRedoStack[n]);
+    SetLength(FRedoStack, n);
+    PushUndoStep(inv);
+  finally
+    EndUpdate;
+    FUndoBusy := False;
+  end;
+end;
+
 procedure TTyStringGrid.SetCells(ACol, ARow: Integer; const AValue: string);
 var
   k: string;
+  e: TTyGridUndoEntry;
 begin
   k := CellKey(ACol, ARow);
+  if not FUndoBusy then
+  begin
+    e.Kind := gukCell;
+    e.Col := ACol;
+    e.Row := ARow;
+    e.OldText := GetCells(ACol, ARow);
+    e.OldCount := 0;
+    if e.OldText <> AValue then RecordUndo(e);
+  end;
   if AValue = '' then
   begin
     FCells.Delete(k)                  { 写空串 = 删除条目,稀疏存储不为空值留位置 }
@@ -5015,6 +5251,8 @@ begin
               begin ToggleCellChecked(FCol, FRow); Key := 0; end;
     Ord('C'): if ssCtrl in Shift then begin CopySelectionToClipboard; Key := 0; end;
     Ord('V'): if ssCtrl in Shift then begin PasteFromClipboard; Key := 0; end;
+    Ord('Z'): if ssCtrl in Shift then begin Undo; Key := 0; end;
+    Ord('Y'): if ssCtrl in Shift then begin Redo; Key := 0; end;
     Ord('A'): if ssCtrl in Shift then
               begin
                 { **走 SelectAll,不要在这里内联抄一遍。**
@@ -6800,6 +7038,11 @@ var
   a1, a2: TTyGridCellAttr;
   k1, k2: string;
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if ARow1 = ARow2 then Exit;
   if (ARow1 < 0) or (ARow1 >= RowCount) then Exit;
   if (ARow2 < 0) or (ARow2 >= RowCount) then Exit;
@@ -6830,12 +7073,20 @@ begin
   finally
     EndUpdateOrder;
   end;
+  finally
+    EndUpdate;
+  end;
 end;
 
 procedure TTyStringGrid.MoveRow(AFrom, ATo: Integer);
 var
   i: Integer;
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if AFrom = ATo then Exit;
   if (AFrom < 0) or (AFrom >= RowCount) then Exit;
   if (ATo < 0) or (ATo >= RowCount) then Exit;
@@ -6849,6 +7100,9 @@ begin
       for i := AFrom downto ATo + 1 do SwapRows(i, i - 1);
   finally
     EndUpdateOrder;
+  end;
+  finally
+    EndUpdate;
   end;
 end;
 
@@ -6882,16 +7136,29 @@ end;
 
 procedure TTyStringGrid.InsertRow(ARow: Integer);
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if (ARow < 0) or (ARow > RowCount) then Exit;
   EndEdit(True);
   ShiftCells(ARow, 1, True);
   RowCount := RowCount + 1;
   InvalidateOrder;
   Invalidate;
+  finally
+    EndUpdate;
+  end;
 end;
 
 procedure TTyStringGrid.DeleteRow(ARow: Integer);
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if (ARow < 0) or (ARow >= RowCount) then Exit;
   EndEdit(False);
   ShiftCells(ARow, -1, True);
@@ -6900,22 +7167,38 @@ begin
   if FRow < 0 then FRow := 0;
   InvalidateOrder;
   Invalidate;
+  finally
+    EndUpdate;
+  end;
 end;
 
 procedure TTyStringGrid.InsertColumn(ACol: Integer);
 var
   c: TTyColumn;
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if (ACol < 0) or (ACol > Header.Columns.Count) then Exit;
   EndEdit(True);
   ShiftCells(ACol, 1, False);
   c := Header.Columns.Add as TTyColumn;
   c.Index := ACol;
   Invalidate;
+  finally
+    EndUpdate;
+  end;
 end;
 
 procedure TTyStringGrid.DeleteColumn(ACol: Integer);
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
   EndEdit(False);
   ShiftCells(ACol, -1, False);
@@ -6923,6 +7206,9 @@ begin
   if FCol > Header.Columns.Count - 1 then FCol := Header.Columns.Count - 1;
   if FCol < 0 then FCol := 0;
   Invalidate;
+  finally
+    EndUpdate;
+  end;
 end;
 
 { 按内容(含换行)把行高调到刚好放得下。
@@ -7419,6 +7705,45 @@ begin
 end;
 
 { ---- 单元格合并 ----------------------------------------------------------- }
+
+procedure TTyStringGrid.RecordRowCountUndo(AOldCount: Integer);
+var
+  e: TTyGridUndoEntry;
+begin
+  if FUndoBusy then Exit;
+  e.Kind := gukRowCount;
+  e.Col := -1;
+  e.Row := -1;
+  e.OldText := '';
+  e.OldCount := AOldCount;
+  RecordUndo(e);
+end;
+
+procedure TTyStringGrid.OpenUndoGroup;
+begin
+  if FUndoBusy or (FUndoLimit = 0) then Exit;
+  Inc(FUndoDepth);
+  if FUndoDepth = 1 then
+  begin
+    SetLength(FUndoOpen, 0);
+    FUndoOverflow := False;
+  end;
+end;
+
+procedure TTyStringGrid.CloseUndoGroup;
+begin
+  if FUndoBusy or (FUndoLimit = 0) then Exit;
+  if FUndoDepth = 0 then Exit;
+  Dec(FUndoDepth);
+  if FUndoDepth > 0 then Exit;          { 嵌套内层不结算 }
+  if not FUndoOverflow then
+  begin
+    PushUndoStep(FUndoOpen);
+    if Length(FUndoOpen) > 0 then SetLength(FRedoStack, 0);
+  end;
+  SetLength(FUndoOpen, 0);
+  FUndoOverflow := False;
+end;
 
 procedure TTyStringGrid.DoRowDragMove(AFrom, ATo: Integer);
 begin

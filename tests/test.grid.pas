@@ -196,6 +196,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestUndoRedoRestoresCellsAndRowCount;
+    procedure TestBulkOperationIsOneUndoStepAndLimitDropsOldest;
     procedure TestNarrowColumnEditorWidensAndDropDownWidthApplies;
     procedure TestOnGetEditorPropFiresBeforeTheEditorShows;
     procedure TestRowDragReordersFromTheIndicatorGutter;
@@ -1039,6 +1041,8 @@ type
     function  EditorBoundsForTest: TRect;
     function  ScaleForTest(AValue: Integer): Integer;
     function  BeginEditAt(ACol, ARow: Integer): Boolean;
+    function  UndoCountForTest: Integer;
+    procedure PressKeyCtrl(AKey: Word);
     function  ColAtForTest(AX: Integer): Integer;
     procedure BaseCellOfForTest(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
     procedure InvalidateSurfaceForTest;
@@ -1238,6 +1242,16 @@ end;
 function TStrGridAccess.ScaleForTest(AValue: Integer): Integer;
 begin
   Result := ScaleI(AValue);
+end;
+
+procedure TStrGridAccess.PressKeyCtrl(AKey: Word);
+begin
+  KeyDown(AKey, [ssCtrl]);
+end;
+
+function TStrGridAccess.UndoCountForTest: Integer;
+begin
+  Result := UndoCount;
 end;
 
 function TStrGridAccess.BeginEditAt(ACol, ARow: Integer): Boolean;
@@ -7194,6 +7208,85 @@ begin
   { 钩子拿到的必须**就是**正在用的那个控件(而不是某个碰巧存在的编辑器)。 }
   AssertTrue('钩子拿到的就是当前编辑器', FEditorPropCtl = G.EditorControl);
   G.EndEdit(False);
+end;
+
+{ 撤销/重做:**逐格**回到原状,不是只看行数。
+  结构性操作(删行)必须连行数一起还原,否则"撤销"完剩一张缺了一行的表。 }
+procedure TTyStringGridTest.TestUndoRedoRestoresCellsAndRowCount;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+    G.Cells[0, r] := 'R' + IntToStr(r);
+  G.ClearUndo;                     { 建表本身不算用户操作 }
+  AssertTrue('清空后没得撤销', not G.CanUndo);
+
+  { 一、改一格。 }
+  G.Cells[0, 2] := '改过了';
+  AssertTrue('改过之后可以撤销', G.CanUndo);
+  G.Undo;
+  AssertEquals('撤销还原单元格', 'R2', G.Cells[0, 2]);
+  AssertTrue('撤销之后可以重做', G.CanRedo);
+  G.Redo;
+  AssertEquals('重做再改回去', '改过了', G.Cells[0, 2]);
+  G.Undo;
+
+  { 二、删行:内容与行数都要回来。 }
+  G.DeleteRow(1);
+  AssertEquals('删掉一行', 5, G.RowCount);
+  AssertEquals('后面的行上移', 'R2', G.Cells[0, 1]);
+  G.Undo;
+  AssertEquals('撤销还原行数', 6, G.RowCount);
+  for r := 0 to 5 do
+    AssertEquals(Format('撤销后第 %d 行逐格还原', [r]),
+      'R' + IntToStr(r), G.Cells[0, r]);
+
+  { 三、撤销期间不能再往栈里压新记录 —— 否则会自噬,永远撤销不完。 }
+  AssertTrue('撤销到底之后就没得撤了', not G.CanUndo);
+
+  { 四、Ctrl+Z / Ctrl+Y 走键盘 —— 只测 API 的话,键没接上也无人知晓。 }
+  G.Cells[0, 3] := '键盘改的';
+  G.PressKeyCtrl(Ord('Z'));
+  AssertEquals('Ctrl+Z 还原', 'R3', G.Cells[0, 3]);
+  G.PressKeyCtrl(Ord('Y'));
+  AssertEquals('Ctrl+Y 重做', '键盘改的', G.Cells[0, 3]);
+end;
+
+{ 一次批量操作 = **一条**撤销记录(填充、粘贴都在 BeginUpdate 里跑);
+  栈满之后丢最老的那条。 }
+procedure TTyStringGridTest.TestBulkOperationIsOneUndoStepAndLimitDropsOldest;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 12;
+  G.Cells[0, 0] := '5';
+  G.ClearUndo;
+
+  { 拖填充柄铺 5 行 —— 整批只该是一条撤销记录。 }
+  G.SelectRange(0, 0, 0, 0);
+  G.FillFromSelectionTo(0, 5);
+  AssertEquals('填充后第 5 行有值', '5', G.Cells[0, 5]);
+  AssertEquals('整批只压了一条记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  for r := 1 to 5 do
+    AssertEquals(Format('一次撤销把整批都还原(第 %d 行)', [r]), '', G.Cells[0, r]);
+
+  { 栈上限:超出之后最老的被丢弃。 }
+  G.ClearUndo;
+  G.UndoLimit := 3;
+  for r := 0 to 5 do
+    G.Cells[1, 0] := 'v' + IntToStr(r);
+  AssertEquals('栈不超过上限', 3, G.UndoCountForTest);
+  { 只剩最近 3 条,所以最多撤销回 v2。 }
+  G.Undo; G.Undo; G.Undo;
+  AssertEquals('撤销到栈底为止', 'v2', G.Cells[1, 0]);
+  AssertTrue('栈空了', not G.CanUndo);
 end;
 
 initialization
