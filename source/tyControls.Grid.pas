@@ -506,8 +506,11 @@ type
     function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; virtual;
     { 网格自己的列类;列还没建时返回 nil。 }
     function  GridColumn(ACol: Integer): TTyGridColumn;
-    { 显式行高。设为 <= 0 表示"清掉,回到回调/默认值"。 }
+  public
+    { 显式行高。设为 <= 0 表示"清掉,回到回调/默认值"。
+      **public**:宿主按行设高度是正常用法(示例里"恢复行高"就靠它)。 }
     property RowHeights[ARow: Integer]: Integer read GetRowHeights write SetRowHeights;
+  protected
     { 按内容自适应列宽。基类没有数据、什么都不做;TTyStringGrid 改写。 }
     procedure AutoFitColumnWidth(ACol: Integer); virtual;
     procedure SetPressedButton(ACol, ARow: Integer);
@@ -960,8 +963,6 @@ type
     { 内建的行内文本编辑器。protected 暴露给派生类与测试 —— 用来断言
       "宿主 EditLink 接管时内建编辑器不出场"。 }
     property InlineEditor: TTyEdit read FEditor;
-    { 把光标移到 (ACol,ARow),越界自动钳制;OnSelectCell 可否决。 }
-    procedure MoveCursor(ACol, ARow: Integer); virtual;
     procedure DblClick; override;
     { 该格该用哪种编辑器。默认取 DefaultEditorKind,OnGetEditorKind 可逐格覆盖。 }
     function EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind; virtual;
@@ -977,9 +978,6 @@ type
     function  RowHeightOf(ARow: Integer): Integer; override;
     function  RowTops: TTyIntArray; override;
     procedure InvalidateRowMetrics; override;
-    { 按内容(含换行)把一行/所有行的高度调到刚好放得下。 }
-    procedure AutoFitRow(ARow: Integer);
-    procedure AutoFitRows;
     procedure RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
       const AFrame: TTyStyleSet); virtual;
     procedure RenderProgressCell(P: TTyPainter; ACol, ARow: Integer;
@@ -1061,6 +1059,13 @@ type
     function IsCellSelected(ACol, ARow: Integer): Boolean;
     { 把选区锚点钉在当前光标处(单击时调用),之后 Shift+点/Shift+方向键即可拉出区域。 }
     procedure AnchorSelection;
+    { 把光标移到 (ACol,ARow),越界自动钳制;OnSelectCell 可否决。
+      **public**:用代码定位光标(跳转到某条记录)是最常见的宿主动作之一。 }
+    procedure MoveCursor(ACol, ARow: Integer); virtual;
+    { 按内容(含换行)把一行/所有行的高度调到刚好放得下。 }
+    procedure AutoFitRow(ARow: Integer);
+    procedure AutoFitRows;
+
     { --- 选择 API(从前一个 public 的都没有) --- }
     procedure SelectAll;
     { 数据行坐标;越界自动钳制。 }
