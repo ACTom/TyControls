@@ -54,6 +54,9 @@ type
     FForm: TForm;
     FCtl: TTyStyleController;
     FTakeOverCol: Integer;
+    { OnDblClickCell 的记账(它从前一处都没被触发过)。 }
+    FDblCount, FDblCol, FDblRow: Integer;
+    procedure HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
     procedure HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
       var AKind: TTyGridEditorKind);
     procedure HandleGetPickList(Sender: TObject; ACol, ARow: Integer; AItems: TStrings);
@@ -185,6 +188,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestDoubleClickOutsideCellsDoesNotStartEditing;
+    procedure TestOnDblClickCellFiresForCellsOnly;
     procedure TestSelectionDoesNotEraseAnExplicitCellColor;
     procedure TestZebraDoesNotOverrideAnExplicitCellColor;
     procedure TestInsertRowIsCorrectAcrossTenthRowBoundary;
@@ -989,6 +994,10 @@ type
     function  EllipsisRectOf(ACol, ARow: Integer): TRect;
     procedure DragFromTo(X1, Y1, X2, Y2: Integer);
     procedure DoubleClickAt(X, Y: Integer);
+    { 完整的 LCL 双击:第二次按下带 ssDouble,**并且**发一次 DblClick。
+      DoubleClickAt 只发鼠标消息 —— 而"双击进编辑"挂在 DblClick 上,
+      不补这一下就永远测不到它。 }
+    procedure FullDoubleClickAt(X, Y: Integer);
     function  ColWidth(ACol: Integer): Integer;
     function  ScaleFrom(ALogical: Integer): Integer;
     { 完整一次点击(按下 + 松开)。注意 ClickAt **只发 MouseDown** ——
@@ -1098,6 +1107,12 @@ procedure TStrGridAccess.RightClickAt(X, Y: Integer);
 begin
   MouseDown(mbRight, [], X, Y);
   MouseUp(mbRight, [], X, Y);
+end;
+
+procedure TStrGridAccess.FullDoubleClickAt(X, Y: Integer);
+begin
+  DoubleClickAt(X, Y);
+  DblClick;
 end;
 
 procedure TStrGridAccess.DoubleClickAt(X, Y: Integer);
@@ -1259,6 +1274,13 @@ procedure TTyStringGridTest.HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Inte
   var AKind: TTyGridEditorKind);
 begin
   if ACol = 2 then AKind := gekNone else AKind := gekText;
+end;
+
+procedure TTyStringGridTest.HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
+begin
+  Inc(FDblCount);
+  FDblCol := ACol;
+  FDblRow := ARow;
 end;
 
 procedure TTyStringGridTest.HandleGetPickList(Sender: TObject; ACol, ARow: Integer;
@@ -6088,6 +6110,74 @@ begin
     Bmp.Free;
     Ctl.Free;
   end;
+end;
+
+{ 双击**不是单元格的地方**不许进编辑。
+
+  从前 DblClick 无条件 BeginEdit,从不看双击落在哪里 —— 于是在行号槽、列头、
+  末行以下的空白处双击,当前光标格都会莫名进入编辑。用户在行号槽上双击时
+  撞见的就是这个:手根本没碰那一格。
+
+  命中判定本来就分好了 ghpCell / ghpIndicator / ghpHeader / ghpNowhere,
+  DblClick 只是从来没用它。 }
+procedure TTyStringGridTest.TestDoubleClickOutsideCellsDoesNotStartEditing;
+var
+  G: TStrGridAccess;
+  cellX, cellY: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  G.ShowIndicator := True;
+  G.IndicatorWidth := 40;
+  G.MoveCursor(1, 2);
+
+  { 先证明双击**格子**确实会进编辑 —— 否则下面几条"没进编辑"毫无意义
+    (一个永远不进编辑的实现也能让它们全绿)。 }
+  cellX := G.ColLeft(1) + 10;
+  cellY := (G.CellRect(1, 2).Top + G.CellRect(1, 2).Bottom) div 2;
+  G.FullDoubleClickAt(cellX, cellY);
+  AssertTrue('双击单元格要进编辑', G.Editing);
+  G.EndEdit(False);
+
+  { 行号槽:双击这里手没碰任何一格。 }
+  G.FullDoubleClickAt(8, cellY);
+  AssertTrue('双击行号槽不该让光标格进编辑', not G.Editing);
+
+  { 列头带。MakeStrGrid 默认把列头关掉了,这里要显式打开 ——
+    不打开的话 Y=4 落在第 0 行,那是**真的**单元格,断言会测错东西。 }
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.FullDoubleClickAt(G.ColLeft(1) + 10, 4);
+  AssertTrue('双击列头不该进编辑', not G.Editing);
+  G.Header.Options := G.Header.Options - [hoVisible];
+
+  { 末行以下的空白。 }
+  G.FullDoubleClickAt(cellX, G.CellRect(1, 5).Bottom + 20);
+  AssertTrue('双击末行以下的空白不该进编辑', not G.Editing);
+end;
+
+{ OnDblClickCell 从前是**声明了、published 了、却一处都没触发过**的死事件。
+  (本控件的高发 bug 类:属性/事件暴露了,运行期没有任何代码读它。) }
+procedure TTyStringGridTest.TestOnDblClickCellFiresForCellsOnly;
+var
+  G: TStrGridAccess;
+  cellY: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  G.ShowIndicator := True;
+  G.IndicatorWidth := 40;
+  G.OnDblClickCell := @HandleDblClickCell;
+  FDblCount := 0;
+
+  cellY := (G.CellRect(1, 2).Top + G.CellRect(1, 2).Bottom) div 2;
+  G.FullDoubleClickAt(G.ColLeft(1) + 10, cellY);
+  AssertEquals('双击单元格要触发 OnDblClickCell', 1, FDblCount);
+  AssertEquals('列号要对', 1, FDblCol);
+  AssertEquals('行号要对', 2, FDblRow);
+  G.EndEdit(False);
+
+  G.FullDoubleClickAt(8, cellY);
+  AssertEquals('双击行号槽不该触发 OnDblClickCell', 1, FDblCount);
 end;
 
 initialization

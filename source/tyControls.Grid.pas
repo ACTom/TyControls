@@ -487,6 +487,10 @@ type
     { 走过快路径的帧数。脏区重绘从画面上完全看不出来 —— 它要是被
       静默关掉,只会变慢。给测试一个能直接观测"这一帧到底走没走快路径"的口子。 }
     FFastScrollFrames: Integer;
+    { 上一次鼠标按下命中的是哪儿。DblClick 拿不到坐标(LCL 的签名里没有),
+      而"双击落在哪"决定了它该做什么 —— 双击总是紧跟在一次按下之后,
+      所以在按下时记账是**准确**的,比在 DblClick 里回读光标位置可靠。 }
+    FLastDownHit: TTyGridHit;
     FShowFooter:       Boolean;
     { 列头图标与 gcdImage 单元格共用的图像源。
       注意**不用**共享单元里的 TTyHeader.Images —— 那是 LCL 的 TCustomImageList,
@@ -633,6 +637,7 @@ type
     procedure InvalidateColumnCache;
     function GridLineWidthPx: Integer; virtual;
     procedure Invalidate; override;
+    procedure DblClick; override;
     procedure CMMouseLeave(var Msg: TLMessage); message CM_MOUSELEAVE;
     function FrozenWidthPx: Integer; virtual;
     { 冻结带高度(设备像素)= 列头带 + 固定行 * 行高。 }
@@ -2366,6 +2371,15 @@ end;
 { **默认作废**:任何 Invalidate 都让持久表面失效。
   只有 ScrollVerticallyBy 会在调完 Invalidate 之后把它重新点亮 ——
   这个方向的默认值让"忘了失效"变成不可能,代价只是某些本可复用的帧退回整幅重画。 }
+{ 双击。**先看落在哪** —— 从前 TTyStringGrid.DblClick 无条件进编辑,
+  于是在行号槽/列头/末行以下空白处双击,光标格都会莫名开始编辑。 }
+procedure TTyCustomGrid.DblClick;
+begin
+  inherited DblClick;
+  if (FLastDownHit.Part = ghpCell) and Assigned(FOnDblClickCell) then
+    FOnDblClickCell(Self, FLastDownHit.Col, FLastDownHit.Row);
+end;
+
 procedure TTyCustomGrid.Invalidate;
 begin
   FSurfaceFresh := False;
@@ -3274,6 +3288,9 @@ var
   col: TTyColumn;
 begin
   inherited MouseDown(Button, Shift, X, Y);
+  { 无条件记账 —— 要在所有提前 Exit 之前,否则分隔条/右键那几条路径上
+    留下的是上一次的陈旧命中。 }
+  FLastDownHit := CellAt(X, Y);
   if Button <> mbLeft then Exit;
 
   hdrH := 0;
@@ -7980,7 +7997,9 @@ end;
 procedure TTyStringGrid.DblClick;
 begin
   inherited DblClick;
-  BeginEdit;
+  { 只有双击**单元格**才进编辑。行号槽、列头、末行以下的空白都不是格子 ——
+    在那些地方双击时用户的手根本没碰当前光标格。 }
+  if FLastDownHit.Part = ghpCell then BeginEdit;
 end;
 
 procedure TTyStringGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
