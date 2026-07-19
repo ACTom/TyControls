@@ -931,6 +931,9 @@ type
     Key:      string;    { 分组值 }
     Count:    Integer;   { 组内行数 }
     Collapsed: Boolean;
+    { 组内的**数据行**。分组小计要按它统计 —— 不能按显示序算:
+      组一折叠,成员行就不在显示序里了,小计会变成 0。 }
+    Rows:     array of Integer;
   end;
 
   { 覆盖某列汇总文字的钩子(比如加货币符号、或做自定义统计)。 }
@@ -1025,6 +1028,7 @@ type
     FFilterChecked:   TStringList;
     FFilterAccepted:  Boolean;    { 点了确定才提交;取消/点空白处丢弃 }
     FShowFilterButtons: Boolean;
+    FShowGroupSubtotals: Boolean;
     FSelectionMode: TTyGridSelectionMode;
     FGroups: array of TTyGridGroupInfo;
     FCollapsed: TStringList;                   { 记住哪些组被折叠(按分组值) }
@@ -1185,6 +1189,9 @@ type
       const AFrame: TTyStyleSet); virtual;
     procedure RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
       const AFooterRect: TRect; const AFrame: TTyStyleSet); override;
+    procedure AccumulateCell(ACol, ADataRow: Integer; AKind: TTyGridAggregate;
+      var AAcc: Double; var ACount: Integer; var AStarted: Boolean);
+    function  AggregatePrefix(AKind: TTyGridAggregate): string;
     procedure RenderGroupRow(P: TTyPainter; APos, AGroupIndex: Integer;
       const M: TTyGridMetrics; const AFrame: TTyStyleSet); virtual;
     { 分组行上的折叠三角槽。命中与绘制共用。 }
@@ -1192,6 +1199,7 @@ type
     function DisplayToData(APos: Integer): Integer; override;
     function DataToDisplay(ARow: Integer): Integer; override;
     function DisplayRowCount: Integer; override;
+    procedure SetShowGroupSubtotals(AValue: Boolean);
     procedure SetShowFilterButtons(AValue: Boolean);
     function ShowsFilterButton(ACol: Integer): Boolean; override;
     function HasMergedCells: Boolean; override;
@@ -1331,6 +1339,10 @@ type
     function  ColumnAggregate(ACol: Integer): TTyGridAggregate;
     { 某列的聚合结果。gagCount 返回可见行数;其余按数值统计,非数值格跳过。 }
     function  AggregateValue(ACol: Integer): Double;
+    { 某一组内、某一列的小计(按组的成员数据行算,折叠着也算得出来)。 }
+    function  GroupAggregateValue(AGroupIndex, ACol: Integer): Double;
+    { 分组行上该列显示的小计文字(与页脚同一套前缀与格式)。 }
+    function  GroupFooterText(AGroupIndex, ACol: Integer): string;
     { 汇总带上该列显示的文字(已格式化;OnGetFooterText 可覆盖)。 }
     function  FooterText(ACol: Integer): string;
 
@@ -1486,6 +1498,10 @@ type
     { 列头上显示筛选按钮(点它弹出去重值的勾选下拉)。 }
     property ShowFilterButtons: Boolean
       read FShowFilterButtons write SetShowFilterButtons default False;
+    { 分组行上按列显示小计。哪些列有小计,由 SetColumnAggregate 决定 ——
+      与页脚汇总用的是同一份配置,不必再配一遍。 }
+    property ShowGroupSubtotals: Boolean
+      read FShowGroupSubtotals write SetShowGroupSubtotals default True;
   end;
 
 var
@@ -4126,6 +4142,7 @@ begin
   FGroupCol := -1;
   FFilterCol := -1;
   FShowFilterButtons := False;
+  FShowGroupSubtotals := True;
   FFilterAllValues := TStringList.Create;
   FFilterChecked := TStringList.Create;
   FFilterChecked.Sorted := True;
@@ -4797,6 +4814,8 @@ begin
       prevKey := key;
     end;
     Inc(FGroups[g].Count);
+    SetLength(FGroups[g].Rows, FGroups[g].Count);
+    FGroups[g].Rows[FGroups[g].Count - 1] := src[i];
     { 折叠的组只留分组行,组内行不进显示序。 }
     if not FGroups[g].Collapsed then
     begin
@@ -5754,6 +5773,13 @@ end;
 
 { ---- 列头筛选下拉 --------------------------------------------------------- }
 
+procedure TTyStringGrid.SetShowGroupSubtotals(AValue: Boolean);
+begin
+  if FShowGroupSubtotals = AValue then Exit;
+  FShowGroupSubtotals := AValue;
+  Invalidate;
+end;
+
 procedure TTyStringGrid.SetShowFilterButtons(AValue: Boolean);
 begin
   if FShowFilterButtons = AValue then Exit;
@@ -6679,6 +6705,10 @@ var
   gS: TTyStyleSet;
   ink: TTyColor;
   info: TTyGridGroupInfo;
+  i, l, w, keyRight: Integer;
+  cRef: TTyColumn;
+  txt: string;
+  sub: TRect;
 begin
   r := TyGridRowRect(APos, M);
   if (r.Bottom <= M.FrozenTop) or (r.Top >= M.ClientH) then Exit;
@@ -6699,7 +6729,35 @@ begin
       TyDrawGlyph(P, ActiveController, tg, tgChevronDown, ink, 1, 1);
   end;
 
-  tr := Rect(tg.Right + ScaleI(6), r.Top, M.ClientW - ScaleI(4), r.Bottom);
+  { 分组小计:哪些列配了汇总方式,就在分组行的那几列上画出本组的小计。
+    复用页脚那套列定位与冻结带裁剪 —— 同一个数在两处该长得一样、也该
+    对齐在同一列下面。 }
+  keyRight := M.ClientW - ScaleI(4);
+  if FShowGroupSubtotals then
+    for i := 0 to Header.Columns.Count - 1 do
+    begin
+      cRef := TTyColumn(Header.Columns.Items[i]);
+      if not (coVisible in cRef.Options) then Continue;
+      txt := GroupFooterText(AGroupIndex, i);
+      if txt = '' then Continue;
+      l := ColumnLeftPx(i);
+      w := ColumnWidthPx(i);
+      if (i >= FixedCols) and (l < M.FrozenLeft) then
+      begin
+        if l + w <= M.FrozenLeft then Continue;
+        w := l + w - M.FrozenLeft;
+        l := M.FrozenLeft;
+      end;
+      if (l >= M.ClientW) or (l + w <= 0) then Continue;
+      { 组标题不能压到小计上 —— 让它在最左边那个小计列之前收住。 }
+      if l - ScaleI(6) < keyRight then keyRight := l - ScaleI(6);
+      sub := Rect(l + ScaleI(4), r.Top, l + w - ScaleI(4), r.Bottom);
+      if sub.Right > sub.Left then
+        P.DrawText(sub, txt, gS.FontName, ResolveFontSize(gS), gS.FontWeight,
+          ink, taRightJustify, tlCenter, True);
+    end;
+
+  tr := Rect(tg.Right + ScaleI(6), r.Top, keyRight, r.Bottom);
   if tr.Right > tr.Left then
     P.DrawText(tr, GroupRowText(info.Key, info.Count),
       gS.FontName, ResolveFontSize(gS), gS.FontWeight, ink, taLeftJustify, tlCenter, True);
@@ -6731,6 +6789,80 @@ begin
   if c <> nil then Result := c.Aggregate else Result := gagNone;
 end;
 
+{ 把一行并进累加器。整表汇总与分组小计共用它 —— 否则"非数值格跳过"
+  这类规则会在两处各写一遍,迟早走样。 }
+procedure TTyStringGrid.AccumulateCell(ACol, ADataRow: Integer;
+  AKind: TTyGridAggregate; var AAcc: Double; var ACount: Integer;
+  var AStarted: Boolean);
+var
+  v: Double;
+  txt: string;
+begin
+  if ADataRow < 0 then Exit;
+  txt := Trim(GetCellText(ACol, ADataRow));
+  if txt = '' then Exit;
+  v := StrToFloatDef(txt, NaN);
+  if IsNan(v) then Exit;            { 非数值格直接跳过,不污染统计 }
+  Inc(ACount);
+  case AKind of
+    gagSum, gagAvg: AAcc := AAcc + v;
+    gagMin: if (not AStarted) or (v < AAcc) then AAcc := v;
+    gagMax: if (not AStarted) or (v > AAcc) then AAcc := v;
+  end;
+  AStarted := True;
+end;
+
+{ 某一组内、某一列的小计。按组的**成员数据行**统计,所以折叠着也算得出来。 }
+function TTyStringGrid.GroupAggregateValue(AGroupIndex, ACol: Integer): Double;
+var
+  i, n: Integer;
+  acc: Double;
+  kind: TTyGridAggregate;
+  started: Boolean;
+begin
+  Result := 0;
+  if (AGroupIndex < 0) or (AGroupIndex > High(FGroups)) then Exit;
+  kind := ColumnAggregate(ACol);
+  if kind = gagNone then Exit;
+  if kind = gagCount then Exit(FGroups[AGroupIndex].Count);
+
+  acc := 0;
+  n := 0;
+  started := False;
+  for i := 0 to High(FGroups[AGroupIndex].Rows) do
+    AccumulateCell(ACol, FGroups[AGroupIndex].Rows[i], kind, acc, n, started);
+  if n = 0 then Exit;
+  if kind = gagAvg then Result := acc / n else Result := acc;
+end;
+
+{ 分组行上某列显示的小计文字。与页脚同一套前缀与格式 —— 同一个数在两处
+  长得不一样是最没道理的不一致。 }
+function TTyStringGrid.GroupFooterText(AGroupIndex, ACol: Integer): string;
+var
+  kind: TTyGridAggregate;
+begin
+  Result := '';
+  kind := ColumnAggregate(ACol);
+  if kind = gagNone then Exit;
+  if kind = gagCount then
+    Result := AggregatePrefix(kind) + IntToStr(Round(GroupAggregateValue(AGroupIndex, ACol)))
+  else
+    Result := AggregatePrefix(kind)
+              + FormatFloat('0.##', GroupAggregateValue(AGroupIndex, ACol));
+end;
+
+function TTyStringGrid.AggregatePrefix(AKind: TTyGridAggregate): string;
+begin
+  case AKind of
+    gagSum:   Result := rsGridSumPrefix;
+    gagAvg:   Result := rsGridAvgPrefix;
+    gagMin:   Result := rsGridMinPrefix;
+    gagMax:   Result := rsGridMaxPrefix;
+    gagCount: Result := rsGridCountPrefix;
+  else        Result := '';
+  end;
+end;
+
 function TTyStringGrid.AggregateValue(ACol: Integer): Double;
 var
   pos, dataRow, n: Integer;
@@ -6757,16 +6889,7 @@ begin
   begin
     dataRow := DisplayToData(pos);
     if dataRow < 0 then Continue;
-    txt := Trim(GetCellText(ACol, dataRow));
-    if txt = '' then Continue;
-    v := StrToFloatDef(txt, NaN);
-    if IsNan(v) then Continue;        { 非数值格直接跳过,不污染统计 }
-    Inc(n);
-    case kind of
-      gagSum, gagAvg: acc := acc + v;
-      gagMin: if (not started) or (v < acc) then acc := v;
-      gagMax: if (not started) or (v > acc) then acc := v;
-    end;
+    AccumulateCell(ACol, dataRow, kind, acc, n, started);
     started := True;
   end;
 
@@ -6783,14 +6906,7 @@ begin
   kind := ColumnAggregate(ACol);
   if kind <> gagNone then
   begin
-    case kind of
-      gagSum:   prefix := rsGridSumPrefix;
-      gagAvg:   prefix := rsGridAvgPrefix;
-      gagMin:   prefix := rsGridMinPrefix;
-      gagMax:   prefix := rsGridMaxPrefix;
-      gagCount: prefix := rsGridCountPrefix;
-    else        prefix := '';
-    end;
+    prefix := AggregatePrefix(kind);
     if kind = gagCount then
       Result := prefix + IntToStr(Round(AggregateValue(ACol)))
     else

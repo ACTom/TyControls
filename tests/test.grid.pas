@@ -188,6 +188,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestGroupSubtotalsComputeAndActuallyRender;
+    procedure TestGroupSubtotalSurvivesCollapse;
     procedure TestFilterValueCountsMatchRowTallies;
     procedure TestValueFilterCanSelectBlanksOnly;
     procedure TestMergeSelectionOnSortedGridDoesNotSwallowExtraRows;
@@ -6340,6 +6342,129 @@ begin
   finally
     vals.Free;
   end;
+end;
+
+{ 分组小计:按地区分组之后,每组要能给出"本组金额合计"。
+
+  这一条同时守两件事 —— 算得对,**而且真的画在分组行上**。只断言
+  GroupAggregateValue 的话,一个从来不画的实现照样全绿(本控件反复出现的
+  "published 却无效");只断言画了的话,数值错了看不出来。 }
+procedure TTyStringGridTest.TestGroupSubtotalsComputeAndActuallyRender;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  r: TRect;
+  x, y, pos, gi, inkOn, inkOff: Integer;
+  px: TBGRAPixel;
+
+  { 第一条分组行在第 1 列范围内的墨量。 }
+  function InkInGroupRowCol1: Integer;
+  var
+    xx, yy, p2, g2: Integer;
+    rr: TRect;
+    pp: TBGRAPixel;
+    bmp2: TBGRABitmap;
+  begin
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    Result := 0;
+    rr := Rect(0, 0, 0, 0);
+    for p2 := 0 to G.DisplayRowCount - 1 do
+      if G.IsGroupRow(p2, g2) then
+      begin
+        rr := G.RowRectAt(p2);
+        Break;
+      end;
+    if IsRectEmpty(rr) then Exit;
+    bmp2 := TBGRABitmap.Create(Bmp);
+    try
+      for yy := rr.Top to rr.Bottom - 1 do
+        for xx := G.ColLeft(1) to G.ColLeft(1) + G.ColWidth(1) - 1 do
+        begin
+          if (yy < 0) or (yy >= 300) or (xx < 0) or (xx >= 400) then Continue;
+          pp := bmp2.GetPixel(xx, yy);
+          if pp.red + pp.green + pp.blue < 400 then Inc(Result);
+        end;
+    finally
+      bmp2.Free;
+    end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridGroupRow { background: #FFFFFF; color: #000000; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.RowCount := 6;
+    { 地区 A 三行 10/20/30,地区 B 三行 1/2/3。 }
+    for pos := 0 to 5 do
+      if pos < 3 then
+      begin
+        G.Cells[0, pos] := 'A';
+        G.Cells[1, pos] := IntToStr((pos + 1) * 10);
+      end
+      else
+      begin
+        G.Cells[0, pos] := 'B';
+        G.Cells[1, pos] := IntToStr(pos - 2);
+      end;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    G.SetColumnAggregate(1, gagSum);
+    G.GroupByColumn(0);
+
+    AssertEquals('分组数', 2, G.GroupCount);
+    { 组的顺序按分组值排,A 在前。 }
+    AssertEquals('A 组小计 = 60', 60.0, G.GroupAggregateValue(0, 1), 0.001);
+    AssertEquals('B 组小计 = 6', 6.0, G.GroupAggregateValue(1, 1), 0.001);
+
+    inkOn := InkInGroupRowCol1;
+    G.ShowGroupSubtotals := False;
+    inkOff := InkInGroupRowCol1;
+    AssertTrue(Format('小计要真的画在分组行的那一列上(开 %d / 关 %d)',
+      [inkOn, inkOff]), inkOn > inkOff + 5);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 折叠之后小计还得算得出来 —— 所以统计必须按组的**成员数据行**走,
+  不能按显示序:组一折叠,成员行就不在显示序里了,小计会变成 0。 }
+procedure TTyStringGridTest.TestGroupSubtotalSurvivesCollapse;
+var
+  G: TStrGridAccess;
+  pos: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for pos := 0 to 5 do
+    if pos < 3 then
+    begin
+      G.Cells[0, pos] := 'A';
+      G.Cells[1, pos] := IntToStr((pos + 1) * 10);
+    end
+    else
+    begin
+      G.Cells[0, pos] := 'B';
+      G.Cells[1, pos] := IntToStr(pos - 2);
+    end;
+  G.SetColumnAggregate(1, gagSum);
+  G.GroupByColumn(0);
+  AssertEquals('展开时 A 组 = 60', 60.0, G.GroupAggregateValue(0, 1), 0.001);
+
+  G.ToggleGroup(0);
+  AssertEquals('折叠后 A 组仍是 60', 60.0, G.GroupAggregateValue(0, 1), 0.001);
 end;
 
 initialization

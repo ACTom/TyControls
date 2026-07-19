@@ -378,11 +378,14 @@ TextRect,都是 BGRA 重活),而样式解析根本不是瓶颈。加了**跨帧�
 - [x] 排序方式**降到列级**(混合表里日期列不再按文本排)。
 - [x] `BuildGroups` **不再劫持 `FSortCol`**(现在一分组就悄悄丢掉用户选的排序列 —— 已知 bug)。
 - [x] 分组内排序 + `ExpandAll` / `CollapseAll`。
-- [ ] **分组汇总行:未做**(这一条当初被错误地打了勾)。`RenderGroupRow` 只画
+- [x] **分组汇总行:已补**(2026-07-19,合并前补做;此前被错误地打过勾)。`RenderGroupRow` 只画
       "键 (计数)";按行范围求值的原语 `ColumnSum(ACol, AFrom, ATo)` 根本不存在,
       而审计里它正是本条的前置。**这是业务用户最先撞上的缺口** ——
       "按地区分组"之后紧接着就是"每组金额小计"。
-      (整表汇总带 `SetColumnAggregate` 是有的,机制已有八成。)
+      修法:组记住自己的成员**数据行**(折叠着也算得出来),
+      `GroupAggregateValue` / `GroupFooterText` 与页脚共用累加器与前缀格式,
+      分组行按列画、复用页脚那套冻结带裁剪。开关 `ShowGroupSubtotals`(默认开),
+      哪些列有小计沿用 `SetColumnAggregate`,不必再配一遍。
 - [x] 分组行文本 `'%s  (%d)'` 现**硬编码**在 `RenderGroupRow` 里
       → 抽成 `resourcestring` + 可配格式,并补 `.pot` / zh_CN `.po`。
 - [x] 变异验证(只用第一个键 / 分组重新劫持 FSortCol / 列级 SortKind 无效 /
