@@ -1536,6 +1536,18 @@ type
     { 把当前选区的内容填充到 (ACol, ARow) 为止。
       语义:源区单格 = 复制;源区构成等差数列 = 外推;其余 = 按源区循环重复。 }
     procedure FillFromSelectionTo(ACol, ARow: Integer);
+    { --- 版式持久化 ---
+      把"用户把表调成什么样"存成一个字符串:列宽、列序、可见性、排序键、冻结数。
+      存到哪由宿主决定(注册表 / ini / 数据库都行)—— 控件不该替宿主选存储介质。
+
+      **不包含行高**:行高可以有 RowCount 那么多条,把一百万行的表存成一个字符串
+      不是"版式",那是数据。行高更贴近数据而不是版式,宿主要存自己存。
+
+      读回来是**全有或全无**:版本认不出、或串坏了,直接返回 False 且**一点不改**
+      现状 —— 半套版式(列宽还原了、列序没还原)比完全不还原更难排查。 }
+    function  SaveLayoutToString: string;
+    function  LoadLayoutFromString(const AText: string): Boolean;
+
     { --- 撤销 / 重做 ---
       一次批量操作(粘贴、填充、删行)算**一条**,因为它们都在 BeginUpdate 里跑。 }
     procedure Undo;
@@ -7917,6 +7929,180 @@ begin
 
   { 与 Excel 一致:填完之后选区覆盖到新范围。 }
   SelectRange(src.Left, src.Top, src.Right, tgt.Bottom);
+end;
+
+const
+  { 版式串的头。版本号独立于控件版本 —— 只有**格式**变了才动它。 }
+  TyGridLayoutTag = 'TYGRIDLAYOUT/1';
+
+function TTyStringGrid.SaveLayoutToString: string;
+var
+  i: Integer;
+  c: TTyColumn;          { 别叫 col —— 与网格的 Col 属性撞名 }
+  cols, sorts: string;
+begin
+  cols := '';
+  for i := 0 to Header.Columns.Count - 1 do
+  begin
+    c := TTyColumn(Header.Columns.Items[i]);
+    if cols <> '' then cols := cols + ',';
+    cols := cols + Format('%d:%d:%d',
+      [c.Width, Ord(coVisible in c.Options), c.Position]);
+  end;
+
+  sorts := '';
+  for i := 0 to High(FSortKeys) do
+  begin
+    if sorts <> '' then sorts := sorts + ',';
+    sorts := sorts + Format('%d:%d', [FSortKeys[i].Col, Ord(FSortKeys[i].Dir)]);
+  end;
+
+  Result := Format('%s|cols=%s|sort=%s|frozen=%d,%d,%d,%d',
+    [TyGridLayoutTag, cols, sorts,
+     FFixedCols, EffectiveFixedColsRight, FFixedRows, FFixedRowsBottom]);
+end;
+
+function TTyStringGrid.LoadLayoutFromString(const AText: string): Boolean;
+var
+  parts, one, fields: TStringList;
+  i, n: Integer;
+  colsTxt, sortTxt, frozenTxt: string;
+  w, vis, pos: Integer;
+  { 先全解析到这里,全部合法了再往控件上写 —— 半套版式比不还原更难查。 }
+  newW, newVis, newPos: array of Integer;
+  newSortCol, newSortDir: array of Integer;
+  fl, fr, ft, fb: Integer;
+
+  function Field(const ASrc, AName: string): string;
+  var j: Integer;
+  begin
+    Result := '';
+    for j := 0 to parts.Count - 1 do
+      if Copy(parts[j], 1, Length(AName) + 1) = AName + '=' then
+        Exit(Copy(parts[j], Length(AName) + 2, MaxInt));
+  end;
+
+  function ParseIntStrict(const ATxt: string; out AValue: Integer): Boolean;
+  begin
+    Result := TryStrToInt(Trim(ATxt), AValue);
+  end;
+
+begin
+  Result := False;
+  if AText = '' then Exit;
+
+  parts := TStringList.Create;
+  one := TStringList.Create;
+  fields := TStringList.Create;
+  try
+    parts.Delimiter := '|';
+    parts.StrictDelimiter := True;
+    parts.DelimitedText := AText;
+    if parts.Count = 0 then Exit;
+    { 版本对不上就**什么都不做** —— 猜着读一个不认识的格式只会读出垃圾。 }
+    if parts[0] <> TyGridLayoutTag then Exit;
+
+    colsTxt := Field(AText, 'cols');
+    sortTxt := Field(AText, 'sort');
+    frozenTxt := Field(AText, 'frozen');
+
+    { --- 列 --- }
+    one.Delimiter := ',';
+    one.StrictDelimiter := True;
+    one.DelimitedText := colsTxt;
+    if one.Count <> Header.Columns.Count then Exit;   { 列数对不上,整串作废 }
+    SetLength(newW, one.Count);
+    SetLength(newVis, one.Count);
+    SetLength(newPos, one.Count);
+    for i := 0 to one.Count - 1 do
+    begin
+      fields.Delimiter := ':';
+      fields.StrictDelimiter := True;
+      fields.DelimitedText := one[i];
+      if fields.Count <> 3 then Exit;
+      if not ParseIntStrict(fields[0], w) then Exit;
+      if not ParseIntStrict(fields[1], vis) then Exit;
+      if not ParseIntStrict(fields[2], pos) then Exit;
+      if w < 0 then Exit;
+      newW[i] := w;
+      newVis[i] := vis;
+      newPos[i] := pos;
+    end;
+
+    { --- 排序键 --- }
+    SetLength(newSortCol, 0);
+    SetLength(newSortDir, 0);
+    if Trim(sortTxt) <> '' then
+    begin
+      one.DelimitedText := sortTxt;
+      SetLength(newSortCol, one.Count);
+      SetLength(newSortDir, one.Count);
+      for i := 0 to one.Count - 1 do
+      begin
+        fields.DelimitedText := one[i];
+        if fields.Count <> 2 then Exit;
+        if not ParseIntStrict(fields[0], w) then Exit;
+        if not ParseIntStrict(fields[1], vis) then Exit;
+        if (w < 0) or (w >= Header.Columns.Count) then Exit;
+        newSortCol[i] := w;
+        newSortDir[i] := vis;
+      end;
+    end;
+
+    { --- 冻结数 --- }
+    one.DelimitedText := frozenTxt;
+    if one.Count <> 4 then Exit;
+    if not ParseIntStrict(one[0], fl) then Exit;
+    if not ParseIntStrict(one[1], fr) then Exit;
+    if not ParseIntStrict(one[2], ft) then Exit;
+    if not ParseIntStrict(one[3], fb) then Exit;
+    if (fl < 0) or (fr < 0) or (ft < 0) or (fb < 0) then Exit;
+
+    { --- 全部合法,现在才动控件 --- }
+    BeginUpdate;
+    try
+      for i := 0 to High(newW) do
+      begin
+        TTyColumn(Header.Columns.Items[i]).Width := newW[i];
+        if newVis[i] <> 0 then ShowColumn(i) else HideColumn(i);
+        TTyColumn(Header.Columns.Items[i]).Position := newPos[i];
+      end;
+      FixedCols := fl;
+      FixedColsRight := fr;
+      FixedRows := ft;
+      FixedRowsBottom := fb;
+
+      SetLength(FSortKeys, Length(newSortCol));
+      for i := 0 to High(newSortCol) do
+      begin
+        FSortKeys[i].Col := newSortCol[i];
+        FSortKeys[i].Dir := TTySortDirection(newSortDir[i]);
+      end;
+      if Length(FSortKeys) > 0 then
+      begin
+        FSortCol := FSortKeys[0].Col;
+        FSortDir := FSortKeys[0].Dir;
+        Header.SortColumn := FSortCol;
+        Header.SortDirection := FSortDir;
+      end
+      else
+      begin
+        FSortCol := -1;
+        Header.SortColumn := NoColumn;
+      end;
+      InvalidateOrder;
+      InvalidateColumnCache;
+    finally
+      EndUpdate;
+    end;
+    UpdateScrollBars;
+    Invalidate;
+    Result := True;
+  finally
+    fields.Free;
+    one.Free;
+    parts.Free;
+  end;
 end;
 
 function TTyStringGrid.MergeSelection: Boolean;

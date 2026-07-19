@@ -198,6 +198,7 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestLayoutRoundTripsAndSurvivesGarbage;
     procedure TestPhysicalSortMovesDataAndUnlocksMergeAndDrag;
     procedure TestPhysicalSortRefusedWhenFilteredOrVirtual;
     procedure TestUndoRedoRestoresCellsAndRowCount;
@@ -7375,6 +7376,85 @@ begin
   G.SortMode := gsmData;
   G.SortByColumn(0, sdAscending);
   AssertEquals('虚拟源上排序不该凭空造出存储格', 0, G.StoredCellCount);
+end;
+
+{ 版式存下来、读回去,逐项一致;残缺/乱码的字符串不能崩、也不能改坏现状。 }
+procedure TTyStringGridTest.TestLayoutRoundTripsAndSurvivesGarbage;
+var
+  G: TStrGridAccess;
+  layout: string;
+  i: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+
+  { 改一通:列宽、可见性、排序、冻结数。 }
+  TTyColumn(G.Header.Columns.Items[0]).Width := 133;
+  TTyColumn(G.Header.Columns.Items[2]).Width := 55;
+  G.HideColumn(1);
+  G.FixedCols := 1;
+  G.FixedRowsBottom := 2;
+  G.SortByColumn(2, sdDescending);
+
+  layout := G.SaveLayoutToString;
+  AssertTrue('存出来不是空串', layout <> '');
+
+  { 全改回去,再读回来。 }
+  TTyColumn(G.Header.Columns.Items[0]).Width := 80;
+  TTyColumn(G.Header.Columns.Items[2]).Width := 80;
+  G.ShowColumn(1);
+  G.FixedCols := 0;
+  G.FixedRowsBottom := 0;
+  G.SortByColumn(-1, sdAscending);
+
+  AssertTrue('读回来要成功', G.LoadLayoutFromString(layout));
+  AssertEquals('列宽还原(0)', 133, TTyColumn(G.Header.Columns.Items[0]).Width);
+  AssertEquals('列宽还原(2)', 55, TTyColumn(G.Header.Columns.Items[2]).Width);
+  AssertTrue('隐藏还原', G.IsHiddenColumn(1));
+  AssertEquals('左冻结还原', 1, G.FixedCols);
+  AssertEquals('底部冻结还原', 2, G.FixedRowsBottom);
+  AssertEquals('排序列还原', 2, G.SortColumn);
+  AssertTrue('排序方向还原', G.SortDirection = sdDescending);
+
+  { --- 坏输入:每一条都必须"拒绝 + 现状一点不动" ---
+    关键是每次都断言**版式没被改坏**,而不只是"控件还活着"。
+    第一版就只断言了活着,于是三个变异(不校验版本 / 解析不严格 / 不校验列数)
+    全都活了下来 —— 因为那些坏串恰好都先被**别的**检查挡掉了。
+    所以每条坏串都构造成:除了要测的那一项,其余全部合法。 }
+
+  { 版本认不出。列数、字段全都合法,只有版本号不对。 }
+  AssertTrue('认不出的版本要拒绝', not G.LoadLayoutFromString(
+    'TYGRIDLAYOUT/999|cols=9:1:0,9:1:1,9:1:2,9:1:3|sort=|frozen=0,0,0,0'));
+  AssertEquals('版本不对时列宽不许被动', 133,
+    TTyColumn(G.Header.Columns.Items[0]).Width);
+
+  { 字段不是数字。版本对、列数对,只有宽度是乱码。 }
+  AssertTrue('非数字字段要拒绝', not G.LoadLayoutFromString(
+    'TYGRIDLAYOUT/1|cols=abc:1:0,9:1:1,9:1:2,9:1:3|sort=|frozen=0,0,0,0'));
+  AssertEquals('乱码字段时列宽不许被动', 133,
+    TTyColumn(G.Header.Columns.Items[0]).Width);
+
+  { 列数对不上(存的是 2 列,表有 4 列)。 }
+  AssertTrue('列数对不上要拒绝', not G.LoadLayoutFromString(
+    'TYGRIDLAYOUT/1|cols=9:1:0,9:1:1|sort=|frozen=0,0,0,0'));
+  AssertEquals('列数不符时列宽不许被动', 133,
+    TTyColumn(G.Header.Columns.Items[0]).Width);
+
+  { 任意截断:不许崩,也不许把版式改成半吊子。 }
+  for i := 1 to Length(layout) - 1 do
+  begin
+    G.LoadLayoutFromString(Copy(layout, 1, i));
+    AssertEquals(Format('截断到 %d 字符时列宽不许被动', [i]), 133,
+      TTyColumn(G.Header.Columns.Items[0]).Width);
+  end;
+  G.LoadLayoutFromString('');
+  G.LoadLayoutFromString('完全不是这玩意儿');
+  AssertEquals('乱码之后列宽仍然是原样', 133,
+    TTyColumn(G.Header.Columns.Items[0]).Width);
+
+  { 再读一次好串仍然成功 —— 证明前面那些坏串没把内部状态搅坏。 }
+  AssertTrue('坏串之后仍能正常 round-trip', G.LoadLayoutFromString(layout));
+  AssertEquals('列宽仍然对', 133, TTyColumn(G.Header.Columns.Items[0]).Width);
 end;
 
 initialization
