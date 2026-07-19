@@ -52,6 +52,7 @@ end;
 | `ShowRowNumbers` | 在行头槽里画行号(按**显示序**,排序后屏幕第一行仍是 1)。需要 `ShowIndicator` 也打开 |
 | `ShowGroupSubtotals` | 分组行上按列显示小计(默认开)。哪些列有小计由 `SetColumnAggregate` 决定 —— 与汇总带同一份配置 |
 | `ShowFilterButtons` | 列头上显示筛选漏斗,点开是带搜索框与逐值计数的下拉 |
+| `MinEditorWidth` | 编辑器的最小宽度(逻辑像素)。0 = 完全跟着格走。设大于 0 后,窄列上的编辑器会向右加宽到这个宽度 —— 加宽的是**编辑器**,列宽一点没动,也不会越过网格右缘 |
 | `SelectionMode` | `gsmCell`(默认)/ `gsmRow` / `gsmColumn` |
 | `Images` | `gcdImage` 用的图像集(`TTyVirtualImageList`) |
 | `OnGetRowHeight` | 逐行行高。**接了它才启用可变行高**;不接则全表等高,几何层走整除快路径(百万行时省下一个百万项的前缀和数组) |
@@ -127,6 +128,9 @@ end;
 - **分组**:`GroupByColumn(列)` 在显示序里插入**合成分组行**(带成员计数),点分组行折叠/展开。折叠状态按**分组值**记账,重排后不会张冠李戴。
   分组行上还按列显示**小计**(`ShowGroupSubtotals`,默认开;`GroupAggregateValue` / `GroupFooterText` 取值)——
   统计按组的**成员数据行**走而不是显示序,所以折叠着也算得出来
+- **编辑器微调**:列上的 `DropDownWidth` 单独放宽 `gekPickList` 的下拉(0 = 跟列宽);
+  `OnGetEditorProp` 在编辑器建好之后、交回调用方之前触发,拿到的是真正那个控件 ——
+  想改字体/限长/宽度都来得及,不必为了一点微调去写整个 `OnCreateEditLink`
 - **行拖动**:在**行头槽**里按下并拖过阈值即可重排行(与列头拖列对称;
   单元格上是框选,不抢那个手势;行高分隔线优先)。`OnRowMove` 可否决。
   排过序/分过组/藏过行时**拖不动** —— 显示序不是数据序时,把行拖到某个屏幕位置

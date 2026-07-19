@@ -85,10 +85,15 @@
 
 ## P5 编辑器细节(M17 / M19)
 
-- [ ] 窄列编辑时编辑器**自动加宽**到能看清内容(不改列宽,只是编辑器浮出来)。
-- [ ] 下拉宽度可配(`TTyGridColumn.DropDownWidth`,0 = 跟列宽)。
-- [ ] `OnGetEditorProp(Sender; ACol, ARow; AEditor: TControl)` —— 开编辑器前
-      让宿主微调(比现在"要么用内建、要么自己写 EditLink"细一档)。
+- [x] 窄列编辑时编辑器**自动加宽**(`MinEditorWidth`,0 = 老行为)。不改列宽、不越右缘。
+- [x] 下拉宽度可配(`TTyGridColumn.DropDownWidth`,0 = 跟列宽)。
+- [x] `OnGetEditorProp` —— 拿到真正那个编辑器控件。
+- [x] **偏离**:事件时机是"编辑器建好之后、交回调用方之前",不是"显示之前"。
+      内建编辑器有十来种分支,各自 SetBounds/Visible/SetFocus 然后 Exit;
+      逐个插事件正是本控件反复漏东西的方式。包一层 `DoBeginEdit` 统一发一次,
+      收口一处、不可能漏 —— 代价是晚一步,而属性微调在这一步照样生效。
+- [x] `MinEditorWidth` 默认 0(= 老行为)。默认改成非 0 会静悄悄改变每个既有工程的
+      编辑手感,不值得。示例里显式打开做演示。
 
 ---
 

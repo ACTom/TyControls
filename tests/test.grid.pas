@@ -57,7 +57,11 @@ type
     { OnDblClickCell 的记账(它从前一处都没被触发过)。 }
     FDblCount, FDblCol, FDblRow: Integer;
     FRowMoveCount: Integer;
+    FEditorPropCount, FEditorPropCol, FEditorPropRow: Integer;
+    FEditorPropCtl: TControl;
     FRowMoveAllow: Boolean;
+    procedure HandleGetEditorProp(Sender: TObject; ACol, ARow: Integer;
+      AEditor: TControl);
     procedure HandleRowMove(Sender: TObject; AFrom, ATo: Integer;
       var AAllow: Boolean);
     procedure HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
@@ -192,6 +196,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestNarrowColumnEditorWidensAndDropDownWidthApplies;
+    procedure TestOnGetEditorPropFiresBeforeTheEditorShows;
     procedure TestRowDragReordersFromTheIndicatorGutter;
     procedure TestRowDragRefusedWhenDisplayOrderIsNotDataOrder;
     procedure TestFillHandleGeometryMatchesWhatIsDrawn;
@@ -1030,6 +1036,9 @@ type
     procedure SetScrollLeftForTest(AValue: Integer);
     procedure ScrollByForTest(ADy: Integer);
     function  RowAtForTest(AY: Integer): Integer;
+    function  EditorBoundsForTest: TRect;
+    function  ScaleForTest(AValue: Integer): Integer;
+    function  BeginEditAt(ACol, ARow: Integer): Boolean;
     function  ColAtForTest(AX: Integer): Integer;
     procedure BaseCellOfForTest(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
     procedure InvalidateSurfaceForTest;
@@ -1220,6 +1229,22 @@ begin
   Result := ColumnAtX(AX);
 end;
 
+function TStrGridAccess.EditorBoundsForTest: TRect;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if EditorControl <> nil then Result := EditorControl.BoundsRect;
+end;
+
+function TStrGridAccess.ScaleForTest(AValue: Integer): Integer;
+begin
+  Result := ScaleI(AValue);
+end;
+
+function TStrGridAccess.BeginEditAt(ACol, ARow: Integer): Boolean;
+begin
+  Result := BeginEdit(ACol, ARow);
+end;
+
 function TStrGridAccess.RowAtForTest(AY: Integer): Integer;
 begin
   Result := TyGridRowAt(AY, GridMetrics);
@@ -1325,6 +1350,15 @@ procedure TTyStringGridTest.HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Inte
   var AKind: TTyGridEditorKind);
 begin
   if ACol = 2 then AKind := gekNone else AKind := gekText;
+end;
+
+procedure TTyStringGridTest.HandleGetEditorProp(Sender: TObject;
+  ACol, ARow: Integer; AEditor: TControl);
+begin
+  Inc(FEditorPropCount);
+  FEditorPropCol := ACol;
+  FEditorPropRow := ARow;
+  FEditorPropCtl := AEditor;
 end;
 
 procedure TTyStringGridTest.HandleRowMove(Sender: TObject; AFrom, ATo: Integer;
@@ -7087,6 +7121,79 @@ begin
   for r := 0 to 7 do
     AssertEquals(Format('排序状态下拖行不该改数据(第 %d 行)', [r]),
       Format('%.2d', [7 - r]), G.Cells[0, r]);
+end;
+
+{ 窄列上编辑时,编辑器要能**自己加宽**到看得清 —— 60 像素的列里编辑一个长值,
+  否则只能看见自己输入内容的一小截。加宽的是编辑器,不是列宽。 }
+procedure TTyStringGridTest.TestNarrowColumnEditorWidensAndDropDownWidthApplies;
+var
+  G: TStrGridAccess;
+  cell: TRect;
+  c: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  TTyColumn(G.Header.Columns.Items[0]).Width := 50;
+  G.Cells[0, 1] := '一个相当长的值需要看清楚';
+
+  { 默认(MinEditorWidth = 0)= 跟着格走,老行为一字不变。 }
+  G.MinEditorWidth := 0;
+  G.BeginEditAt(0, 1);
+  cell := G.CellRect(0, 1);
+  AssertEquals('默认跟着格宽', cell.Right - cell.Left, G.EditorBoundsForTest.Width);
+  G.EndEdit(False);
+
+  { 打开之后:至少这么宽,但不能越过网格右缘。 }
+  G.MinEditorWidth := 160;
+  G.BeginEditAt(0, 1);
+  AssertTrue(Format('窄列上编辑器要加宽(实得 %d)', [G.EditorBoundsForTest.Width]),
+    G.EditorBoundsForTest.Width >= G.ScaleForTest(160));
+  AssertTrue('加宽不能越过网格右缘',
+    G.EditorBoundsForTest.Right <= G.ClientWidth);
+  G.EndEdit(False);
+
+  { 宽列不该被"加宽"缩窄 —— 取的是较大者。 }
+  TTyColumn(G.Header.Columns.Items[1]).Width := 300;
+  G.BeginEditAt(1, 1);
+  cell := G.CellRect(1, 1);
+  AssertEquals('宽列保持原宽', cell.Right - cell.Left, G.EditorBoundsForTest.Width);
+  G.EndEdit(False);
+
+  { 下拉宽度可以单独配。放在**最左边**那个窄列上测 ——
+    靠右的列会被网格右缘钳住,那样测的就不是 DropDownWidth 而是钳制逻辑了。 }
+  G.MinEditorWidth := 0;
+  c := TTyGridColumn(G.Header.Columns.Items[0]);
+  c.EditorKind := gekPickList;
+  c.PickList.CommaText := '甲,乙,丙';
+  c.DropDownWidth := 200;
+  G.BeginEditAt(0, 1);
+  AssertTrue(Format('下拉按 DropDownWidth 走(实得 %d)',
+    [G.EditorBoundsForTest.Width]),
+    G.EditorBoundsForTest.Width >= G.ScaleForTest(200));
+  G.EndEdit(False);
+end;
+
+{ `OnGetEditorProp` 在编辑器建好之后、把控制权交回调用方之前触发,
+  拿到的是真正那个控件 —— 比"要么用内建、要么自己写一整个 EditLink"细一档。
+  收口在 BeginEdit 的外层包装里:内建编辑器有十来种分支,逐个插事件迟早漏一种。 }
+procedure TTyStringGridTest.TestOnGetEditorPropFiresBeforeTheEditorShows;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  FEditorPropCount := 0;
+  FEditorPropCtl := nil;
+  G.OnGetEditorProp := @HandleGetEditorProp;
+
+  G.BeginEditAt(1, 2);
+  AssertEquals('钩子被调用一次', 1, FEditorPropCount);
+  AssertTrue('拿到的是真正的编辑器控件', FEditorPropCtl <> nil);
+  AssertEquals('列号对', 1, FEditorPropCol);
+  AssertEquals('行号对', 2, FEditorPropRow);
+  { 钩子拿到的必须**就是**正在用的那个控件(而不是某个碰巧存在的编辑器)。 }
+  AssertTrue('钩子拿到的就是当前编辑器', FEditorPropCtl = G.EditorControl);
+  G.EndEdit(False);
 end;
 
 initialization

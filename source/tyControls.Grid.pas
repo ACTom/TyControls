@@ -220,6 +220,7 @@ type
     FMaxValue: Integer;
     FEditMask: string;
     FCharCase: TEditCharCase;
+    FDropDownWidth: Integer;
     FUseEditorKind: Boolean;
     procedure SetPickList(AValue: TStrings);
     procedure SetEditorKind(AValue: TTyGridEditorKind);
@@ -236,6 +237,11 @@ type
     property MaxValue: Integer read FMaxValue write FMaxValue default 100;
     { gekMask 的掩码 —— 交给 TTyMaskEdit 解释,不自造一套掩码语法。 }
     property EditMask: string read FEditMask write FEditMask;
+    { gekPickList 下拉的宽度(逻辑像素)。0 = 跟列宽走。
+      窄列上的下拉按列宽显示会把候选项截成一小截,这时单独放宽它就够了 ——
+      不必为了看清候选去改列宽。 }
+    property DropDownWidth: Integer read FDropDownWidth write FDropDownWidth
+      default 0;
     { 输入时强制大小写(对标 AdvGrid 的 edUpperCase / edLowerCase)。 }
     property CharCase: TEditCharCase read FCharCase write FCharCase default ecNormal;
     { 只允许输入这些字符(空 = 不限)。按键级过滤,非法键直接不进编辑框。 }
@@ -297,6 +303,11 @@ type
     而不是逼宿主去 OnCellEdited 里认字符串。 }
   TTyGridCanToggleEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var AAllow: Boolean) of object;
+  { 编辑器**显示之前**交给宿主微调一下(改字体、限长、加自定义提示…)。
+    拿到的是真正要用的那个控件。比"要么用内建、要么自己写一整个 EditLink"细一档。 }
+  TTyGridEditorPropEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    AEditor: TControl) of object;
+
   { 用鼠标把某一行拖到别处之前问一句。置 AAllow := False 可否决。
     AFrom / ATo 都是**数据行**。 }
   TTyGridRowMoveEvent = procedure(Sender: TObject; AFrom, ATo: Integer;
@@ -540,6 +551,11 @@ type
     FDragRow:          Integer;   { 正在拖动的**数据行**;-1 = 没在拖 }
     FDragStartY:       Integer;
     FOnRowMove:        TTyGridRowMoveEvent;
+    { 编辑器的最小宽度(逻辑像素)。0 = 完全跟着格走(老行为)。
+      设大于 0 之后,窄列上的编辑器会自己向右加宽到这个宽度 —— 加宽的是**编辑器**,
+      列宽一点没变。加宽不会越过网格右缘。 }
+    FMinEditorWidth:   Integer;
+    FOnGetEditorProp:  TTyGridEditorPropEvent;
     FResizeCol:        Integer;   { 正在拖宽的列;-1 = 没在拖 }
     FResizeStartX:     Integer;
     FResizeStartW:     Integer;
@@ -911,6 +927,12 @@ type
     property OnColumnMove: TTyGridColumnMoveEvent read FOnColumnMove write FOnColumnMove;
     { 行被鼠标从行头槽拖动重排之前问一句;置 AAllow := False 可否决。 }
     property OnRowMove: TTyGridRowMoveEvent read FOnRowMove write FOnRowMove;
+    { 编辑器显示之前交给宿主微调。 }
+    property OnGetEditorProp: TTyGridEditorPropEvent
+      read FOnGetEditorProp write FOnGetEditorProp;
+    { 编辑器最小宽度(逻辑像素);0 = 跟着格走。 }
+    property MinEditorWidth: Integer read FMinEditorWidth write FMinEditorWidth
+      default 0;
     { 行高/列宽的全局上下限(逻辑像素)。0 = 不限。 }
     property MinRowHeight: Integer read FMinRowHeight write FMinRowHeight default 0;
     property MaxRowHeight: Integer read FMaxRowHeight write FMaxRowHeight default 0;
@@ -1144,6 +1166,8 @@ type
     function MaxRowSpanHint: Integer; override;
     { 这段数据行此刻是不是正连续升序地显示着。 }
     function RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
+    function WidenEditorRect(ACol, ARow: Integer; const ARect: TRect): TRect;
+    function DoBeginEdit(ACol, ARow: Integer): Boolean;
     procedure DoRowDragMove(AFrom, ATo: Integer); override;
     function DisplayOrderIsDataOrder: Boolean; override;
     function SelectionBoundsRect: TRect;
@@ -1453,6 +1477,8 @@ type
     { 把当前选区的内容填充到 (ACol, ARow) 为止。
       语义:源区单格 = 复制;源区构成等差数列 = 外推;其余 = 按源区循环重复。 }
     procedure FillFromSelectionTo(ACol, ARow: Integer);
+    { 当前正在用的编辑器控件(没在编辑时为 nil)。 }
+    function  EditorControl: TControl;
     procedure MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
     procedure UnmergeCells(ACol, ARow: Integer);
     procedure ClearMerges;
@@ -1850,6 +1876,7 @@ begin
     FMaxValue := TTyGridColumn(ASource).MaxValue;
     FEditMask := TTyGridColumn(ASource).EditMask;
     FCharCase := TTyGridColumn(ASource).CharCase;
+    FDropDownWidth := TTyGridColumn(ASource).DropDownWidth;
   end;
 end;
 
@@ -8628,7 +8655,67 @@ begin
   Result := BeginEdit(FCol, FRow);
 end;
 
+{ 窄列上把编辑器向右加宽,好让人看清自己在输入什么。
+  加宽的是编辑器,列宽一点没动;也绝不越过网格右缘(越出去的部分点不到、也画不出)。
+  下拉另算:列上配了 DropDownWidth 就按它走。 }
+function TTyStringGrid.WidenEditorRect(ACol, ARow: Integer;
+  const ARect: TRect): TRect;
+var
+  want, limit: Integer;
+  gcol: TTyGridColumn;   { 别叫 col —— 与网格的 Col 属性撞名 }
+begin
+  Result := ARect;
+  want := FMinEditorWidth;
+
+  if (ACol >= 0) and (ACol < Header.Columns.Count)
+     and (Header.Columns.Items[ACol] is TTyGridColumn) then
+  begin
+    gcol := TTyGridColumn(Header.Columns.Items[ACol]);
+    if (EditorKindFor(ACol, ARow) = gekPickList) and (gcol.DropDownWidth > 0) then
+      want := gcol.DropDownWidth;
+  end;
+
+  if want <= 0 then Exit;
+  want := ScaleI(want);
+  if Result.Right - Result.Left >= want then Exit;   { 本来就够宽 }
+
+  limit := ViewportW;
+  Result.Right := Result.Left + want;
+  if Result.Right > limit then Result.Right := limit;
+end;
+
+{ 当前正在用的编辑器控件。宿主给的 EditLink 优先,其次看内建那几个谁在显示。
+  单独一个函数而不是十几处各记一个字段 —— 记账点越多越容易漏。 }
+function TTyStringGrid.EditorControl: TControl;
+begin
+  Result := nil;
+  if not FEditing then Exit;
+  if FEditLinkCtl <> nil then Exit(FEditLinkCtl);
+  if FEditor.Visible then Exit(FEditor);
+  if FPickEditor.Visible then Exit(FPickEditor);
+  if FDateEditor.Visible then Exit(FDateEditor);
+  if FSpinEditor.Visible then Exit(FSpinEditor);
+  if FSliderEditor.Visible then Exit(FSliderEditor);
+  if FMemoEditor.Visible then Exit(FMemoEditor);
+  if FMaskEditor.Visible then Exit(FMaskEditor);
+  if FCalcEditor.Visible then Exit(FCalcEditor);
+end;
+
+{ 包一层:内建编辑器有十来种分支,每种都自己 SetBounds/Visible/SetFocus 然后 Exit。
+  与其去十几个分支里各插一次事件(那正是本控件反复漏掉东西的方式),
+  不如在这里统一发一次 —— 收口一处,不可能漏。
+
+  **时机**:编辑器已经建好、摆好、拿到焦点,但还没把控制权交回调用方。
+  宿主在这里改属性(字体、限长、宽度)都来得及生效;想在"显示之前"插手的话
+  已经晚一步 —— 换来的是这十几种编辑器不可能有一种忘了通知。 }
 function TTyStringGrid.BeginEdit(ACol, ARow: Integer): Boolean;
+begin
+  Result := DoBeginEdit(ACol, ARow);
+  if Result and Assigned(FOnGetEditorProp) and (EditorControl <> nil) then
+    FOnGetEditorProp(Self, FEditCol, FEditRow, EditorControl);
+end;
+
+function TTyStringGrid.DoBeginEdit(ACol, ARow: Integer): Boolean;
 var
   r: TRect;
 begin
@@ -8664,6 +8751,7 @@ begin
   { 编辑器盖在**可见**矩形上:被冻结带盖住的部分本来就不该露出编辑框。 }
   r := CellVisibleRect(FCol, FRow);
   if IsRectEmpty(r) then Exit;
+  r := WidenEditorRect(FCol, FRow, r);
 
   FEditCol := FCol;
   FEditRow := FRow;

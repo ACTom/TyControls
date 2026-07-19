@@ -918,6 +918,11 @@ begin
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cETA]);
   c.EditorKind := gekTime;
 
+  { 窄列上编辑器自己加宽到看得清 —— 加宽的是编辑器,列宽一点没动。 }
+  GridEdit.MinEditorWidth := 160;
+  { 大区的下拉单独放宽:列只有 70 宽,候选项按列宽显示会被截成一小截。 }
+  TTyGridColumn(GridEdit.Header.Columns.Items[cRegion]).DropDownWidth := 160;
+
   { 口令:输入时打点。 }
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cPin]);
   c.EditorKind := gekPassword;
