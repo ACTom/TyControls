@@ -189,6 +189,7 @@ type
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
     procedure TestFixedRowsRenderTheirContent;
+    procedure TestBottomFixedRowsPinRenderAndHitTest;
     procedure TestGroupSubtotalsComputeAndActuallyRender;
     procedure TestGroupSubtotalSurvivesCollapse;
     procedure TestFilterValueCountsMatchRowTallies;
@@ -1015,6 +1016,7 @@ type
     function  GetScrollTop: Integer;
     procedure SetScrollTop(AValue: Integer);
     procedure ScrollByForTest(ADy: Integer);
+    function  RowAtForTest(AY: Integer): Integer;
     procedure BaseCellOfForTest(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
     procedure InvalidateSurfaceForTest;
     property ScrollTop: Integer read GetScrollTop write SetScrollTop;
@@ -1196,6 +1198,11 @@ procedure TStrGridAccess.BaseCellOfForTest(ACol, ARow: Integer;
   out ABaseCol, ABaseRow: Integer);
 begin
   BaseCellOf(ACol, ARow, ABaseCol, ABaseRow);
+end;
+
+function TStrGridAccess.RowAtForTest(AY: Integer): Integer;
+begin
+  Result := TyGridRowAt(AY, GridMetrics);
 end;
 
 procedure TStrGridAccess.ScrollByForTest(ADy: Integer);
@@ -5718,6 +5725,10 @@ begin
     G.AlternateRows := True;
     G.FixedCols := 1;
     G.FixedRows := 1;
+    { **底部冻结行也要在这张表里** —— 脏区快路径平移的是正文带,平移带的下沿
+      必须停在正文窗格下沿而不是视口下沿,否则底部冻结带会跟着一起跑。
+      不放一行在这儿的话,那条规则就没人守(变异测试发现的覆盖空洞)。 }
+    G.FixedRowsBottom := 1;
     G.DefaultRowHeight := 22;
     G.RowCount := 100;
     for i := 0 to 99 do
@@ -6538,6 +6549,77 @@ begin
       Re.Free;
     end;
     AssertTrue(Format('固定行的逐格底色也要画(红 %d)', [ink]), ink > 50);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 底部冻结行:钉在视口下沿、不随滚动,内容要画出来,点得到,且**命中是绘制的逆**。
+
+  三条一起断言:只测"画出来了"的话,点不到它等于摆设;只测命中的话,
+  一条空白带也能通过。 }
+procedure TTyStringGridTest.TestBottomFixedRowsPinRenderAndHitTest;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  x, y, ink, r0, r1: Integer;
+  px: TBGRAPixel;
+  rc: TRect;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridFixed { background: #FFFFFF; color: #000000; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.RowCount := 60;
+    G.Cells[0, 59] := 'TOTALROW';
+    G.CellColors[1, 59] := TyRGB(255, 0, 0);
+    G.FixedRowsBottom := 1;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    { 先滚到中间 —— 底部冻结行必须**仍然**在视口下沿。 }
+    G.ScrollByForTest(200);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    rc := G.CellRect(0, 59);
+    AssertTrue(Format('滚动后底部冻结行仍钉在下沿(底边 %d,视口 %d)',
+      [rc.Bottom, G.ClientHeight]), Abs(rc.Bottom - G.ClientHeight) <= 2);
+
+    { 内容画出来了(逐格底色这条独立路径)。 }
+    rc := G.CellRect(1, 59);
+    ink := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := rc.Top to rc.Bottom - 1 do
+        for x := rc.Left to rc.Right - 1 do
+        begin
+          if (y < 0) or (y >= 300) or (x < 0) or (x >= 400) then Continue;
+          px := Re.GetPixel(x, y);
+          if (px.red > 180) and (px.green < 100) and (px.blue < 100) then Inc(ink);
+        end;
+    finally
+      Re.Free;
+    end;
+    AssertTrue(Format('底部冻结行的内容要画出来(红 %d)', [ink]), ink > 50);
+
+    { 命中 = 绘制的逆:在它的矩形里点一下,拿到的必须是第 59 行。 }
+    rc := G.CellRect(0, 59);
+    r0 := G.RowAtForTest((rc.Top + rc.Bottom) div 2);
+    AssertEquals('点在底部冻结行上要命中它', 59, r0);
+    { 它上面一像素不该也算作它。 }
+    r1 := G.RowAtForTest(rc.Top - 1);
+    AssertTrue(Format('上一像素不该还是它(得到 %d)', [r1]), r1 <> 59);
   finally
     Bmp.Free;
     Ctl.Free;

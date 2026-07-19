@@ -82,6 +82,9 @@ type
     { 冻结在顶部、**不随纵向滚动**的显示行数。这些行画在冻结带里(列头之下),
       其余行才在正文窗格里滚动。FrozenTop 已含它们的高度。 }
     FixedRows:        Integer;
+    { 冻结在**底部**、不随纵向滚动的显示行数(钉在正文窗格之下)。
+      FrozenBottom 已含它们的高度。与 FixedRows 对称。 }
+    FixedRowsBottom:  Integer;
     { 可变行高:长度 = RowCount+1 的**前缀和**(RowTops[i] = 第 i 行顶边的内容坐标,
       RowTops[RowCount] = 内容总高)。为空 = 全部用统一行高 RowH。
       用前缀和而不是逐行高度,是为了让"坐标 → 行"能二分查找而不是线性扫。 }
@@ -150,9 +153,25 @@ function TyGridVisibleRows(const M: TTyGridMetrics;
   不变量:**本函数必须恒为 TyGridRowRect 的逆**。一旦绘制与命中各算各的,就会在边界像素上
   分叉(本库在 Segmented/Alert/Tag/Pagination 上反复栽过这个跟头)。守住它的是逐像素反查的
   测试,而非某种特定写法 —— 见实现里的说明。 }
+function TyGridFixedBottom(const M: TTyGridMetrics): Integer;
 function TyGridRowAt(AY: Integer; const M: TTyGridMetrics): Integer;
 
 implementation
+
+{ 实际生效的底部固定行数。顶部固定行优先 —— 两者相加超过总行数时,
+  底部让步,免得同一行既被钉在上面又被钉在下面。 }
+function TyGridFixedBottom(const M: TTyGridMetrics): Integer;
+var
+  top: Integer;
+begin
+  Result := M.FixedRowsBottom;
+  if Result < 0 then Result := 0;
+  top := M.FixedRows;
+  if top < 0 then top := 0;
+  if top > M.RowCount then top := M.RowCount;
+  if Result > M.RowCount - top then Result := M.RowCount - top;
+  if Result < 0 then Result := 0;
+end;
 
 function TyGridHeaderH(const M: TTyGridMetrics): Integer;
 var
@@ -246,6 +265,7 @@ end;
 function TyGridRowRect(ARow: Integer; const M: TTyGridMetrics): TRect;
 var
   top, h, y, fixedTop, fixedH: Integer;
+  nBot, i, botTop, botH: Integer;
 begin
   TyGridRowExtent(ARow, M, top, h);
 
@@ -253,6 +273,20 @@ begin
   begin
     { 固定行:钉在列头带之下、**不随滚动**。它们的位置从列头合计高度起算。 }
     y := TyGridHeaderH(M) + top;
+    Result := Rect(0, y, M.ClientW, y + h);
+    Exit;
+  end;
+
+  { 底部固定行:钉在视口下沿那条带里,自下而上排。 }
+  nBot := TyGridFixedBottom(M);
+  if (nBot > 0) and (ARow >= M.RowCount - nBot) then
+  begin
+    y := M.ClientH;
+    for i := M.RowCount - 1 downto ARow do
+    begin
+      TyGridRowExtent(i, M, botTop, botH);
+      Dec(y, botH);
+    end;
     Result := Rect(0, y, M.ClientW, y + h);
     Exit;
   end;
@@ -304,14 +338,25 @@ end;
 
 function TyGridRowAtSlot(ASlot: Integer; const M: TTyGridMetrics): Integer;
 var
-  bf, bl, nFixed: Integer;
+  bf, bl, nFixed, nBot, nBody: Integer;
 begin
   nFixed := M.FixedRows;
   if nFixed < 0 then nFixed := 0;
   if nFixed > M.RowCount then nFixed := M.RowCount;
   if ASlot < 0 then Exit(-1);
   if ASlot < nFixed then Exit(ASlot);
-  if not TyGridVisibleRows(M, bf, bl) then Exit(-1);
+
+  nBot := TyGridFixedBottom(M);
+  if TyGridVisibleRows(M, bf, bl) then nBody := bl - bf + 1 else nBody := 0;
+
+  { 尾段:底部固定行。 }
+  if ASlot >= nFixed + nBody then
+  begin
+    Result := M.RowCount - nBot + (ASlot - nFixed - nBody);
+    if (Result < 0) or (Result > M.RowCount - 1) then Result := -1;
+    Exit;
+  end;
+
   Result := bf + (ASlot - nFixed);
   if Result > bl then Result := -1;
 end;
@@ -329,6 +374,7 @@ begin
     ALast := nFixed + (bl - bf)
   else
     ALast := nFixed - 1;
+  Inc(ALast, TyGridFixedBottom(M));
   Result := ALast >= AFirst;
   if not Result then
   begin
@@ -384,6 +430,18 @@ begin
     Exit;
   end;
   if ALast > M.RowCount - 1 then ALast := M.RowCount - 1;
+  { 底部固定行不在滚动窗口里 —— 它们由槽位的尾段负责。 }
+  if TyGridFixedBottom(M) > 0 then
+  begin
+    if ALast > M.RowCount - 1 - TyGridFixedBottom(M) then
+      ALast := M.RowCount - 1 - TyGridFixedBottom(M);
+    if ALast < AFirst then
+    begin
+      AFirst := -1;
+      ALast := -1;
+      Exit(False);
+    end;
+  end;
 
   { 脏区重绘:再把窗口夹到指定的横带里。 }
   if M.ClipBottom > M.ClipTop then
@@ -408,6 +466,7 @@ function TyGridRowAt(AY: Integer; const M: TTyGridMetrics): Integer;
 var
   body: TRect;
   cand, fixedTop, fixedH, headerH: Integer;
+  nBot, i, y, botTop, botH: Integer;
 begin
   Result := -1;
 
@@ -423,6 +482,21 @@ begin
     Exit;
   end;
 
+  { 底部固定行带 —— 与顶部对称,也是真实的行,能点。
+    自下而上一行行地量,与 TyGridRowRect 那边同一套算法(它是这里的逆)。 }
+  nBot := TyGridFixedBottom(M);
+  if (nBot > 0) and (AY >= M.ClientH - M.FrozenBottom) and (AY < M.ClientH) then
+  begin
+    y := M.ClientH;
+    for i := M.RowCount - 1 downto M.RowCount - nBot do
+    begin
+      TyGridRowExtent(i, M, botTop, botH);
+      Dec(y, botH);
+      if AY >= y then Exit(i);
+    end;
+    Exit;
+  end;
+
   { 正文窗格。列头带与其余冻结区不是行。 }
   body := TyGridPaneRect(M, gpBody);
   if (AY < body.Top) or (AY >= body.Bottom) then Exit;
@@ -435,7 +509,7 @@ begin
   if M.FixedRows > 0 then
     TyGridRowExtent(M.FixedRows, M, fixedTop, fixedH);
   cand := TyGridRowAtContentY(AY - M.FrozenTop + M.ScrollY + fixedTop, M);
-  if (cand < M.FixedRows) or (cand > M.RowCount - 1) then Exit;
+  if (cand < M.FixedRows) or (cand > M.RowCount - 1 - nBot) then Exit;
   Result := cand;
 end;
 

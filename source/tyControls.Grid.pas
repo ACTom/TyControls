@@ -402,6 +402,7 @@ type
     FDefaultRowHeight: Integer;
     FFixedCols:        Integer;
     FFixedRows:        Integer;
+    FFixedRowsBottom:  Integer;
     FIndicatorWidth:   Integer;
     FShowIndicator:    Boolean;
     FGridLineStyle:    TTyGridLineStyle;
@@ -531,6 +532,9 @@ type
     procedure SetDefaultRowHeight(AValue: Integer);
     procedure SetFixedCols(AValue: Integer);
     procedure SetFixedRows(AValue: Integer);
+    procedure SetFixedRowsBottom(AValue: Integer);
+    { 底部冻结带的像素高度(末尾 FixedRowsBottom 个显示行的高度和)。 }
+    function  FrozenBottomPx: Integer;
     procedure SetIndicatorWidth(AValue: Integer);
     procedure SetShowIndicator(AValue: Boolean);
     procedure SetShowGridLines(AValue: Boolean);
@@ -809,6 +813,11 @@ type
     property FixedCols: Integer read FFixedCols write SetFixedCols default 0;
     { 冻结在顶部、不随纵向滚动的数据行数(列头带另计)。 }
     property FixedRows: Integer read FFixedRows write SetFixedRows default 0;
+    { 钉在底部、不随纵向滚动的显示行数(与 FixedRows 对称)。
+      常见用途是把一条"合计行"钉在视口下沿 —— 若只是要整表汇总,
+      现成的汇总带(ShowFooter + SetColumnAggregate)更省事。 }
+    property FixedRowsBottom: Integer read FFixedRowsBottom write SetFixedRowsBottom
+      default 0;
     { 最左侧的行头/行号槽。 }
     property ShowIndicator: Boolean read FShowIndicator write SetShowIndicator default False;
     { 在行头槽里画行号(按显示序)。需要 ShowIndicator 也打开。 }
@@ -1898,6 +1907,7 @@ begin
   FDefaultRowHeight := 22;
   FFixedCols := 0;
   FFixedRows := 0;
+  FFixedRowsBottom := 0;
   FIndicatorWidth := 30;
   FShowIndicator := False;
   FGridLineStyle := glsBoth;
@@ -2013,6 +2023,28 @@ begin
   if AValue < 0 then AValue := 0;
   if FFixedCols = AValue then Exit;
   FFixedCols := AValue;
+  Invalidate;
+end;
+
+function TTyCustomGrid.FrozenBottomPx: Integer;
+var
+  i, n: Integer;
+begin
+  Result := 0;
+  n := FFixedRowsBottom;
+  if n <= 0 then Exit;
+  if n > DisplayRowCount - FFixedRows then n := DisplayRowCount - FFixedRows;
+  if n <= 0 then Exit;
+  for i := DisplayRowCount - n to DisplayRowCount - 1 do
+    Inc(Result, ScaleI(RowHeightOf(i)));
+end;
+
+procedure TTyCustomGrid.SetFixedRowsBottom(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FFixedRowsBottom = AValue then Exit;
+  FFixedRowsBottom := AValue;
+  UpdateScrollBars;
   Invalidate;
 end;
 
@@ -2844,7 +2876,7 @@ var
     (和当初 col↔Col、cellS↔Cells 同一类坑。) }
   indS: TTyStyleSet;
   ink: TTyColor;
-  oldClip: TRect;
+  oldClip, numClip, band: TRect;
 begin
   if not FShowRowNumbers then Exit;
   if AIndicatorW <= 0 then Exit;
@@ -2863,14 +2895,29 @@ begin
     底下的那一行,它的行号会画到固定行的槽位上去 —— 单元格内容靠
     CellVisibleRect 与窗格求交挡住了,行号这条路径当初漏了这一步。 }
   oldClip := P.Bitmap.ClipRect;
-  P.Bitmap.ClipRect := Rect(0, M.FrozenTop, AIndicatorW, M.ClientH);
+  { **与外层裁剪求交**,不是覆盖 —— 外层可能是脏区重绘限定的那条横带,
+    覆盖掉它就会在带外重画一遍,同一段文字叠两次、抗锯齿变深。
+    (与单元格文字那处同一个坑;底部冻结行让它露了头。) }
   try
   for slot := first to last do
   begin
     pos := TyGridRowAtSlot(slot, M);
     if pos < 0 then Continue;
     r := TyGridRowRect(pos, M);
-    if r.Bottom <= M.FrozenTop then Continue;
+
+    { 裁到这一行**所属的那个窗格**,而不是一把大裁剪。
+      一把大裁剪会让正文行的行号漏进冻结带:滚到上冻结带底下的行会把号码
+      画到固定行的槽位上,滚到下冻结带底下的行会画到底部固定行的槽位上。
+      (单元格内容靠 CellVisibleRect 与窗格求交挡住了;行号这条路径当初漏了。) }
+    if pos < FFixedRows then
+      band := Rect(0, AHeaderH, AIndicatorW, M.FrozenTop)
+    else if (M.FrozenBottom > 0) and (pos >= DisplayRowCount - FixedRowsBottom) then
+      band := Rect(0, M.ClientH - M.FrozenBottom, AIndicatorW, M.ClientH)
+    else
+      band := Rect(0, M.FrozenTop, AIndicatorW, M.ClientH - M.FrozenBottom);
+    if not IntersectRect(numClip, oldClip, band) then Continue;
+    P.Bitmap.ClipRect := numClip;
+
     DrawCellText(P, Rect(0, r.Top, AIndicatorW - ScaleI(4), r.Bottom),
       IntToStr(pos + 1), indS.FontName, ResolveFontSize(indS), indS.FontWeight,
       ink, taRightJustify, tlCenter);
@@ -3185,6 +3232,11 @@ begin
     if ACol < FFixedCols then Result := gpTopLeft else Result := gpTop;
     Exit;
   end;
+  if (FFixedRowsBottom > 0) and (ARow >= DisplayRowCount - FFixedRowsBottom) then
+  begin
+    if ACol < FFixedCols then Result := gpBottomLeft else Result := gpBottom;
+    Exit;
+  end;
   if ACol < FFixedCols then Result := gpLeft else Result := gpBody;
 end;
 
@@ -3264,6 +3316,7 @@ end;
 procedure TTyCustomGrid.RenderGridLines(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
+  oldLineClip, lineClip, rowBand: TRect;
   slot: Integer;   { 绘制槽位 }
   first, last, row, i, x, lw, half: Integer;
   r: TRect;
@@ -3285,12 +3338,23 @@ begin
   merged := HasMergedCells;
 
   { 横线:每一可见行的下沿。只走 TyGridVisibleRows —— 百万行的表在这里也只画几十条。 }
+  oldLineClip := P.Bitmap.ClipRect;
   if (FGridLineStyle in [glsHorizontal, glsBoth]) and TyGridDrawSlots(M, first, last) then
     for slot := first to last do
     begin
       row := TyGridRowAtSlot(slot, M);
       if row < 0 then Continue;
       r := TyGridRowRect(row, M);
+      { 横线也要裁到这一行所属的窗格 —— 否则滚到冻结带底下的行会把线画进
+        冻结带里(单元格内容靠 CellVisibleRect 挡住了,线这条路径没有)。 }
+      if row < FFixedRows then
+        rowBand := Rect(0, TyGridHeaderH(M), M.ClientW, M.FrozenTop)
+      else if (M.FrozenBottom > 0) and (row >= DisplayRowCount - FixedRowsBottom) then
+        rowBand := Rect(0, M.ClientH - M.FrozenBottom, M.ClientW, M.ClientH)
+      else
+        rowBand := Rect(0, M.FrozenTop, M.ClientW, M.ClientH - M.FrozenBottom);
+      if not IntersectRect(lineClip, oldLineClip, rowBand) then Continue;
+      P.Bitmap.ClipRect := lineClip;
       if not merged then
         P.Bitmap.FillRect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw,
           line, dmSet)
@@ -3306,6 +3370,7 @@ begin
             x + ColumnWidthPx(i), r.Bottom - 1 - half + lw, line, dmSet);
         end;
     end;
+  P.Bitmap.ClipRect := oldLineClip;
 
   { 竖线:每一可见列的右缘。位置走 ColumnLeftPx(列轴唯一出处),
     绝不另算 —— 否则线会和单元格边界差一像素。 }
@@ -3938,13 +4003,17 @@ begin
         ② 几何里的 ClipTop/ClipBottom 把逐行循环夹到那条带 → 真正省掉 CPU。
       正因为代码路径没有分叉,结果才能与整幅重画逐像素相同(有测试守着)。 }
     bodyTop := M.FrozenTop;
-    canFast := (fastDy <> 0) and (M.ClientH - bodyTop > Abs(fastDy));
+    canFast := (fastDy <> 0)
+               and (M.ClientH - M.FrozenBottom - bodyTop > Abs(fastDy));
     if canFast then
     begin
       Inc(FFastScrollFrames);
-      ShiftSurfaceRows(bodyTop, M.ClientH, fastDy);
+      { 平移带的下沿是**正文窗格**的下沿,不是视口下沿 ——
+        底部冻结带不随滚动,搬了它就会跟着一起跑。 }
+      ShiftSurfaceRows(bodyTop, M.ClientH - M.FrozenBottom, fastDy);
       if fastDy > 0 then
-        band := Rect(0, M.ClientH - fastDy, M.ClientW, M.ClientH)
+        band := Rect(0, M.ClientH - M.FrozenBottom - fastDy, M.ClientW,
+                     M.ClientH - M.FrozenBottom)
       else
         band := Rect(0, bodyTop, M.ClientW, bodyTop - fastDy);
 
@@ -3973,7 +4042,8 @@ begin
         end;
       end;
       if band.Top < bodyTop then band.Top := bodyTop;
-      if band.Bottom > M.ClientH then band.Bottom := M.ClientH;
+      if band.Bottom > M.ClientH - M.FrozenBottom then
+        band.Bottom := M.ClientH - M.FrozenBottom;
       M.ClipTop := band.Top;
       M.ClipBottom := band.Bottom;
       FMetricsCache := M;
@@ -4032,12 +4102,13 @@ begin
   Result.FrozenTop  := FrozenHeightPx;
   { 右/下冻结带的模型层还没建(B2 只先把几何契约拓宽),这里恒 0。 }
   Result.FrozenRight  := 0;
-  Result.FrozenBottom := 0;
+  Result.FrozenBottom := FrozenBottomPx;
   Result.GridLineWidth := GridLineWidthPx;
   Result.RowH := ScaleI(FDefaultRowHeight);
   Result.RowCount := DisplayRowCount;
   Result.RowTops := RowTops;
   Result.FixedRows := FFixedRows;
+  Result.FixedRowsBottom := FFixedRowsBottom;
   { 列头带。有分组时是两条(分组带在上、列头带在下),否则一条。
     B2 把 HeaderH 拆成 HeaderBands 数组,就是为了这里。 }
   if hoVisible in FHeader.Options then
