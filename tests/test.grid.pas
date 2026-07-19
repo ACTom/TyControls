@@ -190,6 +190,7 @@ type
     procedure TestScrollBarDragUsesFastPath;
     procedure TestFixedRowsRenderTheirContent;
     procedure TestBottomFixedRowsPinRenderAndHitTest;
+    procedure TestRightFixedColsPinRenderAndHitTest;
     procedure TestGroupSubtotalsComputeAndActuallyRender;
     procedure TestGroupSubtotalSurvivesCollapse;
     procedure TestFilterValueCountsMatchRowTallies;
@@ -1015,8 +1016,10 @@ type
     function  RowRectAt(APos: Integer): TRect;
     function  GetScrollTop: Integer;
     procedure SetScrollTop(AValue: Integer);
+    procedure SetScrollLeftForTest(AValue: Integer);
     procedure ScrollByForTest(ADy: Integer);
     function  RowAtForTest(AY: Integer): Integer;
+    function  ColAtForTest(AX: Integer): Integer;
     procedure BaseCellOfForTest(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
     procedure InvalidateSurfaceForTest;
     property ScrollTop: Integer read GetScrollTop write SetScrollTop;
@@ -1200,6 +1203,11 @@ begin
   BaseCellOf(ACol, ARow, ABaseCol, ABaseRow);
 end;
 
+function TStrGridAccess.ColAtForTest(AX: Integer): Integer;
+begin
+  Result := ColumnAtX(AX);
+end;
+
 function TStrGridAccess.RowAtForTest(AY: Integer): Integer;
 begin
   Result := TyGridRowAt(AY, GridMetrics);
@@ -1213,6 +1221,11 @@ end;
 procedure TStrGridAccess.InvalidateSurfaceForTest;
 begin
   InvalidateSurface;
+end;
+
+procedure TStrGridAccess.SetScrollLeftForTest(AValue: Integer);
+begin
+  ScrollX := AValue;
 end;
 
 procedure TStrGridAccess.SetScrollTop(AValue: Integer);
@@ -6620,6 +6633,78 @@ begin
     { 它上面一像素不该也算作它。 }
     r1 := G.RowAtForTest(rc.Top - 1);
     AssertTrue(Format('上一像素不该还是它(得到 %d)', [r1]), r1 <> 59);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 右侧冻结列:钉在视口右沿、不随横向滚动,内容画得出来,而且**命中是绘制的逆**。 }
+procedure TTyStringGridTest.TestRightFixedColsPinRenderAndHitTest;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  x, y, ink, i: Integer;
+  px: TBGRAPixel;
+  rc: TRect;
+  c: TTyColumn;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridFixed { background: #FFFFFF; color: #000000; }');
+    G := TStrGridAccess.Create(FForm);
+    G.Parent := FForm;
+    G.Controller := Ctl;
+    G.Font.PixelsPerInch := 96;
+    G.SetBounds(0, 0, 400, 300);
+    for i := 0 to 9 do
+    begin
+      c := G.Header.Columns.Add as TTyColumn;
+      c.Width := 90;                 { 10 x 90 = 900 > 400,必然要横向滚动 }
+    end;
+    G.GridLines := False;
+    G.DefaultRowHeight := 22;
+    G.RowCount := 5;
+    G.CellColors[9, 1] := TyRGB(255, 0, 0);
+    G.FixedColsRight := 1;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    { 横向滚到中间 —— 最后一列必须**仍然**贴着右沿。 }
+    G.SetScrollLeftForTest(300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    rc := G.CellRect(9, 1);
+    AssertTrue(Format('横滚后右冻结列仍贴右沿(右边 %d,视口 %d)',
+      [rc.Right, G.ClientWidth]), Abs(rc.Right - G.ClientWidth) <= 2);
+
+    ink := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := rc.Top to rc.Bottom - 1 do
+        for x := rc.Left to rc.Right - 1 do
+        begin
+          if (y < 0) or (y >= 300) or (x < 0) or (x >= 400) then Continue;
+          px := Re.GetPixel(x, y);
+          if (px.red > 180) and (px.green < 100) and (px.blue < 100) then Inc(ink);
+        end;
+    finally
+      Re.Free;
+    end;
+    AssertTrue(Format('右冻结列的内容要画出来(红 %d)', [ink]), ink > 50);
+
+    { 命中:点在它的矩形里要拿到第 9 列,而不是滚到它底下的那个正文列。 }
+    AssertEquals('点在右冻结列上要命中它', 9,
+      G.ColAtForTest((rc.Left + rc.Right) div 2));
   finally
     Bmp.Free;
     Ctl.Free;

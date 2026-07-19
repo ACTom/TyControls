@@ -403,6 +403,7 @@ type
     FFixedCols:        Integer;
     FFixedRows:        Integer;
     FFixedRowsBottom:  Integer;
+    FFixedColsRight:   Integer;
     FIndicatorWidth:   Integer;
     FShowIndicator:    Boolean;
     FGridLineStyle:    TTyGridLineStyle;
@@ -533,6 +534,11 @@ type
     procedure SetFixedCols(AValue: Integer);
     procedure SetFixedRows(AValue: Integer);
     procedure SetFixedRowsBottom(AValue: Integer);
+    procedure SetFixedColsRight(AValue: Integer);
+    { 右侧冻结带的像素宽度(末尾 FixedColsRight 个**可见**列的宽度和)。 }
+    function  FrozenRightPx: Integer;
+    { 实际生效的右冻结列数(不与左固定列重叠)。 }
+    function  EffectiveFixedColsRight: Integer;
     { 底部冻结带的像素高度(末尾 FixedRowsBottom 个显示行的高度和)。 }
     function  FrozenBottomPx: Integer;
     procedure SetIndicatorWidth(AValue: Integer);
@@ -817,6 +823,9 @@ type
       常见用途是把一条"合计行"钉在视口下沿 —— 若只是要整表汇总,
       现成的汇总带(ShowFooter + SetColumnAggregate)更省事。 }
     property FixedRowsBottom: Integer read FFixedRowsBottom write SetFixedRowsBottom
+      default 0;
+    { 钉在右侧、不随横向滚动的列数(与 FixedCols 对称)。 }
+    property FixedColsRight: Integer read FFixedColsRight write SetFixedColsRight
       default 0;
     { 最左侧的行头/行号槽。 }
     property ShowIndicator: Boolean read FShowIndicator write SetShowIndicator default False;
@@ -1908,6 +1917,7 @@ begin
   FFixedCols := 0;
   FFixedRows := 0;
   FFixedRowsBottom := 0;
+  FFixedColsRight := 0;
   FIndicatorWidth := 30;
   FShowIndicator := False;
   FGridLineStyle := glsBoth;
@@ -2037,6 +2047,38 @@ begin
   if n <= 0 then Exit;
   for i := DisplayRowCount - n to DisplayRowCount - 1 do
     Inc(Result, ScaleI(RowHeightOf(i)));
+end;
+
+function TTyCustomGrid.EffectiveFixedColsRight: Integer;
+begin
+  Result := FFixedColsRight;
+  if Result < 0 then Result := 0;
+  { 左固定列优先 —— 同一列不能既钉左又钉右。 }
+  if Result > FHeader.Columns.Count - FFixedCols then
+    Result := FHeader.Columns.Count - FFixedCols;
+  if Result < 0 then Result := 0;
+end;
+
+function TTyCustomGrid.FrozenRightPx: Integer;
+var
+  i, n: Integer;
+begin
+  Result := 0;
+  n := EffectiveFixedColsRight;
+  if n <= 0 then Exit;
+  if not FColCacheValid then BuildColumnCache;
+  for i := FHeader.Columns.Count - n to FHeader.Columns.Count - 1 do
+    if i < Length(FColWidthPx) then Inc(Result, FColWidthPx[i]);
+end;
+
+procedure TTyCustomGrid.SetFixedColsRight(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FFixedColsRight = AValue then Exit;
+  FFixedColsRight := AValue;
+  InvalidateColumnCache;
+  UpdateScrollBars;
+  Invalidate;
 end;
 
 procedure TTyCustomGrid.SetFixedRowsBottom(AValue: Integer);
@@ -3133,11 +3175,23 @@ begin
 end;
 
 function TTyCustomGrid.ColumnLeftPx(ACol: Integer): Integer;
+var
+  i, n: Integer;
 begin
   Result := 0;
   if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
   if not FColCacheValid then BuildColumnCache;
   if ACol >= Length(FColBasePx) then Exit;
+
+  { 右侧冻结列:钉在视口右沿,自右往左排。与左固定列对称。 }
+  n := EffectiveFixedColsRight;
+  if (n > 0) and (ACol >= FHeader.Columns.Count - n) then
+  begin
+    Result := ClientWidth;
+    for i := FHeader.Columns.Count - 1 downto ACol do
+      if i < Length(FColWidthPx) then Dec(Result, FColWidthPx[i]);
+    Exit;
+  end;
 
   Result := FColBasePx[ACol];
   { 固定列钉在冻结带里不随横向滚动;正文列才平移 —— 这正是"冻结"的全部含义。
@@ -3172,7 +3226,10 @@ begin
     w := ColumnWidthPx(i);
     if (w > 0) and (AX >= l) and (AX < l + w) then
     begin
-      if (i >= FFixedCols) and (AX < FrozenWidthPx) then Continue;  { 被冻结带盖住 }
+      if (i >= FFixedCols) and (AX < FrozenWidthPx) then Continue;  { 被左冻结带盖住 }
+      { 右冻结带**不需要**对称的守卫:这里是倒序扫,而右冻结列就是最后那几列,
+        落在右带里的点必然先命中它们。加过一条,变异测试证明它无法被区分
+        (删掉没有任何测试变红)—— 够不着的代码不留。 }
       Result := i;
       Exit;
     end;
@@ -3234,7 +3291,15 @@ begin
   end;
   if (FFixedRowsBottom > 0) and (ARow >= DisplayRowCount - FFixedRowsBottom) then
   begin
-    if ACol < FFixedCols then Result := gpBottomLeft else Result := gpBottom;
+    if ACol < FFixedCols then Result := gpBottomLeft
+    else if ACol >= FHeader.Columns.Count - EffectiveFixedColsRight then
+      Result := gpBottomRight
+    else Result := gpBottom;
+    Exit;
+  end;
+  if ACol >= FHeader.Columns.Count - EffectiveFixedColsRight then
+  begin
+    Result := gpRight;
     Exit;
   end;
   if ACol < FFixedCols then Result := gpLeft else Result := gpBody;
@@ -4101,8 +4166,8 @@ begin
   Result.FrozenLeft := FrozenWidthPx;
   Result.FrozenTop  := FrozenHeightPx;
   { 右/下冻结带的模型层还没建(B2 只先把几何契约拓宽),这里恒 0。 }
-  Result.FrozenRight  := 0;
   Result.FrozenBottom := FrozenBottomPx;
+  Result.FrozenRight := FrozenRightPx;
   Result.GridLineWidth := GridLineWidthPx;
   Result.RowH := ScaleI(FDefaultRowHeight);
   Result.RowCount := DisplayRowCount;
