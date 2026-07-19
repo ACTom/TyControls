@@ -181,12 +181,15 @@ type
     procedure TestHiddenColumnTakesNoSpaceAndIsNotPainted;
     procedure TestNavigationSkipsHiddenColumns;
     procedure TestRowNumbersFollowDisplayOrder;
+    procedure TestEllipsisButtonHandsControlToHost;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
     FProbeLink: TTyGridEditLink;
     FSizingCalls, FEndSizeCalls, FLastEndSize: Integer;
     FCheckChanges: Integer;
+    FEllipsisCalls: Integer;
+    FEllipsisCancel: Boolean;
     FVetoToggle: Boolean;
     FClickCol, FClickRow: Integer;
     FRightCol, FRightRow: Integer;
@@ -203,6 +206,8 @@ type
       var ADisplay: TTyGridCellDisplay);
     procedure HookRatingInCol1(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
+    procedure HookEllipsis(Sender: TObject; ACol, ARow: Integer;
+      var ANewText: string; var AAccept: Boolean);
     procedure HookSelectionChanged(Sender: TObject);
     procedure HookCanToggle(Sender: TObject; ACol, ARow: Integer;
       var AAllow: Boolean);
@@ -972,6 +977,7 @@ type
     procedure SetSliderValue(AValue: Integer);
     function  MaskOf: string;
     function  StarRectOf(ACol, ARow, AStar: Integer): TRect;
+    function  EllipsisRectOf(ACol, ARow: Integer): TRect;
     procedure DragFromTo(X1, Y1, X2, Y2: Integer);
     procedure DoubleClickAt(X, Y: Integer);
     function  ColWidth(ACol: Integer): Integer;
@@ -1053,6 +1059,8 @@ function TStrGridAccess.MaskOf: string;
 begin Result := MaskEditor.Mask; end;
 function TStrGridAccess.StarRectOf(ACol, ARow, AStar: Integer): TRect;
 begin Result := RatingStarRect(ACol, ARow, AStar); end;
+function TStrGridAccess.EllipsisRectOf(ACol, ARow: Integer): TRect;
+begin Result := EllipsisRect(ACol, ARow); end;
 
 function TStrGridAccess.PressKeyCtrl(AKey: Word): Boolean;
 var k: Word;
@@ -4964,6 +4972,14 @@ begin
   if ACol = 1 then ADisplay := gcdRating;
 end;
 
+procedure TTyStringGridTest.HookEllipsis(Sender: TObject; ACol, ARow: Integer;
+  var ANewText: string; var AAccept: Boolean);
+begin
+  Inc(FEllipsisCalls);
+  AAccept := not FEllipsisCancel;
+  ANewText := '宿主给的值';
+end;
+
 { 颜色列该画**色块**,不是把 '#3B82F6' 这串十六进制原样显示出来。
 
   从前 gekColor 只是个**编辑器**(点开弹取色对话框),显示侧没有对应的种类 ——
@@ -5517,6 +5533,45 @@ begin
     Bmp.Free;
     Ctl.Free;
   end;
+end;
+
+{ 省略号按钮:点它就把控制权交给宿主(弹什么对话框是宿主的事),
+  但值写回照常走 OnCellEdited —— 换了个"值从哪来",不该绕过已有的校验。
+  对标 AdvGrid 的 edEditBtn。 }
+procedure TTyStringGridTest.TestEllipsisButtonHandsControlToHost;
+var
+  G: TStrGridAccess;
+  c: TTyGridColumn;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  c := TTyGridColumn(G.Header.Columns.Items[1]);
+  c.EditorKind := gekEllipsis;
+  G.Cells[1, 1] := '原值';
+  FEllipsisCalls := 0;
+  FEllipsisCancel := False;
+  G.OnEllipsisClick := @HookEllipsis;
+
+  r := G.EllipsisRectOf(1, 1);
+  AssertTrue('省略号按钮要有矩形', not IsRectEmpty(r));
+
+  { 点按钮 → 宿主接管 → 写回。 }
+  G.FullClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('宿主被调用了一次', 1, FEllipsisCalls);
+  AssertEquals('宿主给的值写回了', '宿主给的值', G.Cells[1, 1]);
+
+  { 宿主取消 → 不写回。 }
+  G.Cells[1, 1] := '原值2';
+  FEllipsisCancel := True;
+  G.FullClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('取消时不写回', '原值2', G.Cells[1, 1]);
+
+  { 点格的**其它地方**不该触发按钮 —— 那儿仍是普通行内编辑。 }
+  FEllipsisCalls := 0;
+  FEllipsisCancel := False;
+  G.FullClickAt(G.CellRect(1, 1).Left + 4, (r.Top + r.Bottom) div 2);
+  AssertEquals('点格的其它地方不触发按钮', 0, FEllipsisCalls);
 end;
 
 initialization

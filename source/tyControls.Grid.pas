@@ -57,7 +57,10 @@ type
     gekMask,      { 掩码:TTyMaskEdit,掩码取列的 EditMask }
     gekTime,      { 时间:TTyDateTimePicker 的 dtkTime }
     gekPassword,  { 密码:TTyEdit 的 PasswordChar }
-    gekCalculator { 带计算器的数值:TTyCalcEdit }
+    gekCalculator,{ 带计算器的数值:TTyCalcEdit }
+    gekEllipsis   { 文本 + 格右缘一个"…"按钮:点按钮走 OnEllipsisClick,
+                    宿主爱弹什么对话框弹什么。对标 AdvGrid 的 edEditBtn ——
+                    它那一族里最常用的一个。文字本身照常可以行内编辑。 }
   );
 
   { 单元格的**显示**方式(与编辑方式正交:一个格可以显示成进度条、编辑时仍是数值框)。 }
@@ -282,6 +285,10 @@ type
     而不是逼宿主去 OnCellEdited 里认字符串。 }
   TTyGridCanToggleEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var AAllow: Boolean) of object;
+  { 省略号按钮被点。宿主在这里弹自己的对话框,把结果写进 ANewText;
+    置 AAccept:=False 表示用户取消了。 }
+  TTyGridEllipsisEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var ANewText: string; var AAccept: Boolean) of object;
   TTyGridCheckChangeEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     AChecked: Boolean) of object;
   TTyGridRatingChangeEvent = procedure(Sender: TObject; ACol, ARow: Integer;
@@ -409,6 +416,7 @@ type
     FOnCanToggleCheck: TTyGridCanToggleEvent;
     FOnCheckBoxChange: TTyGridCheckChangeEvent;
     FOnRatingChange:   TTyGridRatingChangeEvent;
+    FOnEllipsisClick:  TTyGridEllipsisEvent;
     FOnGetCellWordWrap:TTyGridGetCellWordWrapEvent;
     FWordWrap:         Boolean;
     { 显式行高的稀疏存储:行号 -> 高度(逻辑像素)。
@@ -813,6 +821,9 @@ type
       read FOnCheckBoxChange write FOnCheckBoxChange;
     property OnRatingChange: TTyGridRatingChangeEvent
       read FOnRatingChange write FOnRatingChange;
+    { gekEllipsis 的"…"按钮被点。 }
+    property OnEllipsisClick: TTyGridEllipsisEvent
+      read FOnEllipsisClick write FOnEllipsisClick;
     property OnGetCellWordWrap: TTyGridGetCellWordWrapEvent
       read FOnGetCellWordWrap write FOnGetCellWordWrap;
     property OnHeaderClick: TTyGridHeaderMouseEvent read FOnHeaderClick write FOnHeaderClick;
@@ -1061,6 +1072,8 @@ type
     { 星级格里第 AStar 颗星(1-based)的矩形。绘制与命中共用它。 }
     function RatingStarRect(ACol, ARow, AStar: Integer): TRect;
     procedure SetRatingByPoint(ACol, ARow, X, Y: Integer); override;
+    { 触发省略号按钮:问宿主要新值,接受就写回(照常走 OnCellEdited)。 }
+    procedure InvokeEllipsis(ACol, ARow: Integer); virtual;
     procedure DblClick; override;
     { 该格该用哪种编辑器。默认取 DefaultEditorKind,OnGetEditorKind 可逐格覆盖。 }
     function EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind; virtual;
@@ -1090,6 +1103,10 @@ type
     procedure ToggleCellColor(ACol, ARow: Integer);
     { 勾选框的绘制槽(单元格内居中的小方块)。命中与绘制共用它。 }
     function  CheckBoxRect(ACol, ARow: Integer): TRect;
+    { 省略号按钮的矩形(贴格右缘)。不是省略号格时返回空矩形;与绘制同源。 }
+    function  EllipsisRect(ACol, ARow: Integer): TRect;
+    procedure RenderEllipsisCell(P: TTyPainter; ACol, ARow: Integer;
+      const AFrame: TTyStyleSet); virtual;
     procedure RenderCheckCell(P: TTyPainter; ACol, ARow: Integer;
       const AFrame: TTyStyleSet); virtual;
     procedure RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
@@ -4159,6 +4176,15 @@ begin
     if EditorKindFor(hit.Col, hit.Row) = gekRating then
       SetRatingByPoint(hit.Col, hit.Row, X, Y);
 
+    { 省略号按钮:点它就把控制权交给宿主(弹什么对话框是宿主的事)。
+      点格的其它地方仍然是普通行内编辑。 }
+    if (EditorKindFor(hit.Col, hit.Row) = gekEllipsis)
+       and PtInRect(EllipsisRect(hit.Col, hit.Row), Point(X, Y)) then
+    begin
+      InvokeEllipsis(hit.Col, hit.Row);
+      Exit;
+    end;
+
     if Assigned(OnClickCell) then OnClickCell(Self, hit.Col, hit.Row);
   end;
 end;
@@ -5186,6 +5212,28 @@ end;
 
 { 第 AStar 颗星(1-based)的矩形。**绘制与命中共用它** ——
   两边各算一套的话,"点第 3 颗给出第 2 颗"这种错早晚会出现。 }
+procedure TTyStringGrid.InvokeEllipsis(ACol, ARow: Integer);
+var
+  oldTxt, newTxt: string;
+  accept: Boolean;
+begin
+  if not Assigned(FOnEllipsisClick) then Exit;
+  if FReadOnly then Exit;
+  EndEdit(True);
+  oldTxt := GetCellText(ACol, ARow);
+  newTxt := oldTxt;
+  accept := True;
+  FOnEllipsisClick(Self, ACol, ARow, newTxt, accept);
+  if not accept then Exit;
+  if newTxt = oldTxt then Exit;
+  { 写回照常走 OnCellEdited —— 省略号只是换了个"值从哪来",
+    不该绕过宿主已有的校验。 }
+  accept := True;
+  if Assigned(FOnCellEdited) then
+    FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
+  if accept then Cells[ACol, ARow] := newTxt;
+end;
+
 procedure TTyStringGrid.SetRatingByPoint(ACol, ARow, X, Y: Integer);
 var
   i: Integer;
@@ -5321,6 +5369,52 @@ begin
   if Assigned(FOnCellEdited) then
     FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
   if accept then Cells[ACol, ARow] := newTxt;
+end;
+
+{ 省略号按钮:贴在格的右缘,方形。与绘制同源 —— 画在哪就点在哪。 }
+function TTyStringGrid.EllipsisRect(ACol, ARow: Integer): TRect;
+var
+  r: TRect;
+  box: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if EditorKindFor(ACol, ARow) <> gekEllipsis then Exit;
+  r := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+  box := (r.Bottom - r.Top) - ScaleI(4);
+  if box > ScaleI(18) then box := ScaleI(18);
+  if box <= 0 then Exit;
+  if box > (r.Right - r.Left) - ScaleI(2) then Exit;
+  Result := Rect(r.Right - box - ScaleI(2), (r.Top + r.Bottom - box) div 2,
+                 r.Right - ScaleI(2), (r.Top + r.Bottom - box) div 2 + box);
+end;
+
+{ 画省略号按钮。样式走 TyGridButton(与按钮单元格同一个键 —— 它们在视觉上
+  本来就该是同一种东西),点在上面的态由 FPressedBtn 记。 }
+procedure TTyStringGrid.RenderEllipsisCell(P: TTyPainter; ACol, ARow: Integer;
+  const AFrame: TTyStyleSet);
+var
+  r: TRect;
+  st: TTyStateSet;
+  bS: TTyStyleSet;
+  ink: TTyColor;
+  bc, br: Integer;
+begin
+  r := EllipsisRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+
+  st := [];
+  GetPressedButton(bc, br);
+  if (ACol = bc) and (ARow = br) then Include(st, tysActive);
+
+  bS := ActiveController.Model.ResolveStyle('TyGridButton', StyleClass, st);
+  if tpBackground in bS.Present then
+    P.FillBackground(r, bS.Background, TyEffectiveCorners(bS));
+  if TyBorderVisible(bS) then
+    P.StrokeBorder(r, TyEffectiveCorners(bS), bS.BorderWidth, bS.BorderColor);
+  if tpTextColor in bS.Present then ink := bS.TextColor else ink := AFrame.TextColor;
+  DrawCellText(P, r, '...', bS.FontName, ResolveFontSize(bS), bS.FontWeight,
+    ink, taCenter, tlCenter);
 end;
 
 function TTyStringGrid.CheckBoxRect(ACol, ARow: Integer): TRect;
@@ -7652,6 +7746,9 @@ begin
       begin
         if EditorKindFor(colIdx, dataRow) = gekCheckBox then
           RenderCheckCell(P, colIdx, dataRow, AFrame);
+        { 省略号按钮画在文字**之上**(它贴着右缘,文字该为它让位由列宽决定)。 }
+        if EditorKindFor(colIdx, dataRow) = gekEllipsis then
+          RenderEllipsisCell(P, colIdx, dataRow, AFrame);
         case CellDisplayFor(colIdx, dataRow) of
           gcdProgress: RenderProgressCell(P, colIdx, dataRow, AFrame);
           gcdRating:   RenderRatingCell(P, colIdx, dataRow, AFrame);
