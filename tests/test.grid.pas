@@ -188,6 +188,7 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestFixedRowsRenderTheirContent;
     procedure TestGroupSubtotalsComputeAndActuallyRender;
     procedure TestGroupSubtotalSurvivesCollapse;
     procedure TestFilterValueCountsMatchRowTallies;
@@ -6465,6 +6466,82 @@ begin
 
   G.ToggleGroup(0);
   AssertEquals('折叠后 A 组仍是 60', 60.0, G.GroupAggregateValue(0, 1), 0.001);
+end;
+
+{ 固定行必须**把内容画出来**,而不只是占住一条高度。
+
+  从前 `TyGridVisibleRows` 把固定行排除在窗口之外,而全文件没有第二个循环
+  去画它们 —— 于是 FixedRows 那一条带是空白的。 }
+procedure TTyStringGridTest.TestFixedRowsRenderTheirContent;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  x, y, ink: Integer;
+  px: TBGRAPixel;
+  r: TRect;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridFixed { background: #FFFFFF; color: #000000; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.RowCount := 8;
+    G.Cells[0, 0] := 'FIXEDROW';
+    G.FixedRows := 1;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    r := G.CellRect(0, 0);
+    ink := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          if (y < 0) or (y >= 300) or (x < 0) or (x >= 400) then Continue;
+          px := Re.GetPixel(x, y);
+          if px.red + px.green + px.blue < 400 then Inc(ink);
+        end;
+    finally
+      Re.Free;
+    end;
+    AssertTrue(Format('固定行里的文字要画出来(墨 %d)', [ink]), ink > 10);
+
+    { 逐格底色那条循环也得覆盖到固定行 —— 十个逐行循环各自漏过一次,
+      所以这里再挑一条独立的路径验一遍。 }
+    G.CellColors[1, 0] := TyRGB(255, 0, 0);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    r := G.CellRect(1, 0);
+    ink := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          if (y < 0) or (y >= 300) or (x < 0) or (x >= 400) then Continue;
+          px := Re.GetPixel(x, y);
+          if (px.red > 180) and (px.green < 100) and (px.blue < 100) then Inc(ink);
+        end;
+    finally
+      Re.Free;
+    end;
+    AssertTrue(Format('固定行的逐格底色也要画(红 %d)', [ink]), ink > 50);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
 end;
 
 initialization

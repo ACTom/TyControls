@@ -126,6 +126,20 @@ function TyGridContentHeight(const M: TTyGridMetrics): Integer;
 
 { 与正文窗格相交的行区间(闭区间,含只露出一部分的首尾行)—— 虚拟化的核心:
   百万行的表每帧也只绘制这几十行。无行可见时返回 False(AFirst/ALast 置 -1)。 }
+{ --- 逐行绘制的槽位 ---
+  槽位 0..FixedRows-1 是**顶部固定行**,其后接正文窗口里的行。
+  所有逐行**绘制**循环都遍历槽位,再用 TyGridRowAtSlot 换成显示行号。
+
+  为什么不直接扩 TyGridVisibleRows:它返回的是"正文窗口的行区间",被寻址/
+  滚动/命中多处依赖,也被多条测试直接断言;把固定行塞进那个区间会连带改掉
+  不该改的语义。绘制这一路单独走槽位,两边互不干扰。
+
+  收口在一处的意义:"固定行也要画"只写一遍。从前它是在每个循环里各自
+  (没)处理的 —— 十个循环全漏了,固定行占了高度、一个字都不画。 }
+function TyGridDrawSlots(const M: TTyGridMetrics;
+  out AFirst, ALast: Integer): Boolean;
+function TyGridRowAtSlot(ASlot: Integer; const M: TTyGridMetrics): Integer;
+
 function TyGridVisibleRows(const M: TTyGridMetrics;
   out AFirst, ALast: Integer): Boolean;
 
@@ -286,6 +300,41 @@ begin
     if M.RowTops[mid] <= AContentY then lo := mid else hi := mid - 1;
   end;
   Result := lo;
+end;
+
+function TyGridRowAtSlot(ASlot: Integer; const M: TTyGridMetrics): Integer;
+var
+  bf, bl, nFixed: Integer;
+begin
+  nFixed := M.FixedRows;
+  if nFixed < 0 then nFixed := 0;
+  if nFixed > M.RowCount then nFixed := M.RowCount;
+  if ASlot < 0 then Exit(-1);
+  if ASlot < nFixed then Exit(ASlot);
+  if not TyGridVisibleRows(M, bf, bl) then Exit(-1);
+  Result := bf + (ASlot - nFixed);
+  if Result > bl then Result := -1;
+end;
+
+function TyGridDrawSlots(const M: TTyGridMetrics;
+  out AFirst, ALast: Integer): Boolean;
+var
+  bf, bl, nFixed: Integer;
+begin
+  nFixed := M.FixedRows;
+  if nFixed < 0 then nFixed := 0;
+  if nFixed > M.RowCount then nFixed := M.RowCount;
+  AFirst := 0;
+  if TyGridVisibleRows(M, bf, bl) then
+    ALast := nFixed + (bl - bf)
+  else
+    ALast := nFixed - 1;
+  Result := ALast >= AFirst;
+  if not Result then
+  begin
+    AFirst := -1;
+    ALast := -1;
+  end;
 end;
 
 function TyGridVisibleRows(const M: TTyGridMetrics;

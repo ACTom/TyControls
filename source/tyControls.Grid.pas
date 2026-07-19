@@ -2757,6 +2757,7 @@ end;
 
 function TTyCustomGrid.RowDividerAtY(AX, AY: Integer): Integer;
 var
+  slot: Integer;   { 绘制槽位 }
   M: TTyGridMetrics;
   first, last, pos: Integer;
   r: TRect;
@@ -2768,10 +2769,13 @@ begin
   if (AX < 0) or (AX >= ScaleI(FIndicatorWidth)) then Exit;
 
   M := GridMetrics;
-  if not TyGridVisibleRows(M, first, last) then Exit;
+  { 走绘制槽位:顶部固定行 + 正文窗口(固定行不在正文窗口里)。 }
+  if not TyGridDrawSlots(M, first, last) then Exit;
   tol := ScaleI(3);
-  for pos := first to last do
+  for slot := first to last do
   begin
+    pos := TyGridRowAtSlot(slot, M);
+    if pos < 0 then Continue;
     r := TyGridRowRect(pos, M);
     if Abs(AY - r.Bottom) <= tol then Exit(pos);
   end;
@@ -2833,6 +2837,7 @@ end;
 procedure TTyCustomGrid.RenderRowNumbers(P: TTyPainter; const M: TTyGridMetrics;
   AHeaderH, AIndicatorW: Integer);
 var
+  slot: Integer;   { 绘制槽位 }
   first, last, pos: Integer;
   r: TRect;
   { 别取名 iS —— Pascal 大小写不敏感,它就是保留字 is。
@@ -2843,7 +2848,8 @@ var
 begin
   if not FShowRowNumbers then Exit;
   if AIndicatorW <= 0 then Exit;
-  if not TyGridVisibleRows(M, first, last) then Exit;
+  { 走绘制槽位:顶部固定行 + 正文窗口(固定行不在正文窗口里)。 }
+  if not TyGridDrawSlots(M, first, last) then Exit;
 
   { 复用行头槽自己的 typeKey 取墨色与字体 —— 不硬编码任何视觉值,
     也不借别的控件的键。 }
@@ -2859,8 +2865,10 @@ begin
   oldClip := P.Bitmap.ClipRect;
   P.Bitmap.ClipRect := Rect(0, M.FrozenTop, AIndicatorW, M.ClientH);
   try
-  for pos := first to last do
+  for slot := first to last do
   begin
+    pos := TyGridRowAtSlot(slot, M);
+    if pos < 0 then Continue;
     r := TyGridRowRect(pos, M);
     if r.Bottom <= M.FrozenTop then Continue;
     DrawCellText(P, Rect(0, r.Top, AIndicatorW - ScaleI(4), r.Bottom),
@@ -3169,6 +3177,14 @@ end;
 
 function TTyCustomGrid.CellPane(ACol, ARow: Integer): TTyGridPane;
 begin
+  { 行也要分窗格,不只是列。固定行的矩形钉在上冻结带里,而正文窗格从冻结带
+    **之下**才开始 —— 把它们一律算作正文窗格的话,可见矩形恒为空,
+    于是固定行连一个像素都画不出来(占着高度的空白带就是这么来的)。 }
+  if ARow < FFixedRows then
+  begin
+    if ACol < FFixedCols then Result := gpTopLeft else Result := gpTop;
+    Exit;
+  end;
   if ACol < FFixedCols then Result := gpLeft else Result := gpBody;
 end;
 
@@ -3248,6 +3264,7 @@ end;
 procedure TTyCustomGrid.RenderGridLines(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
+  slot: Integer;   { 绘制槽位 }
   first, last, row, i, x, lw, half: Integer;
   r: TRect;
   line: TBGRAPixel;
@@ -3268,9 +3285,11 @@ begin
   merged := HasMergedCells;
 
   { 横线:每一可见行的下沿。只走 TyGridVisibleRows —— 百万行的表在这里也只画几十条。 }
-  if (FGridLineStyle in [glsHorizontal, glsBoth]) and TyGridVisibleRows(M, first, last) then
-    for row := first to last do
+  if (FGridLineStyle in [glsHorizontal, glsBoth]) and TyGridDrawSlots(M, first, last) then
+    for slot := first to last do
     begin
+      row := TyGridRowAtSlot(slot, M);
+      if row < 0 then Continue;
       r := TyGridRowRect(row, M);
       if not merged then
         P.Bitmap.FillRect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw,
@@ -3302,9 +3321,11 @@ begin
         line, dmSet)
     else
       { 逐行分段:本列与右邻列在这一行上属于同一个合并区时,跳过这一段。 }
-      if TyGridVisibleRows(M, first, last) then
-        for row := first to last do
+      if TyGridDrawSlots(M, first, last) then
+        for slot := first to last do
         begin
+          row := TyGridRowAtSlot(slot, M);
+          if row < 0 then Continue;
           if SameMergedCell(i, DisplayToData(row), i + 1, DisplayToData(row)) then Continue;
           r := TyGridRowRect(row, M);
           P.Bitmap.FillRect(x - 1 - half, r.Top, x - 1 - half + lw, r.Bottom,
@@ -3771,6 +3792,7 @@ end;
 
 procedure TTyCustomGrid.RenderCellBorders(P: TTyPainter; const M: TTyGridMetrics);
 var
+  slot: Integer;   { 绘制槽位 }
   firstRow, lastRow, row, i, dataRow, w: Integer;
   col: TTyColumn;
   b: TTyGridCellBorders;
@@ -3779,9 +3801,13 @@ var
 begin
   { 没人接钩子 = 没有逐格边框。整个遍历都省掉。 }
   if not Assigned(FOnGetCellBorder) then Exit;
-  if not TyGridVisibleRows(M, firstRow, lastRow) then Exit;
+  { 走绘制槽位:顶部固定行 + 正文窗口(固定行不在正文窗口里)。 }
+  if not TyGridDrawSlots(M, firstRow, lastRow) then Exit;
 
-  for row := firstRow to lastRow do
+  for slot := firstRow to lastRow do
+  begin
+    row := TyGridRowAtSlot(slot, M);
+    if row < 0 then Continue;
     for i := 0 to FHeader.Columns.Count - 1 do
     begin
       col := TTyColumn(FHeader.Columns.Items[i]);
@@ -3811,10 +3837,12 @@ begin
       if b.Right then
         P.Bitmap.FillRect(cell.Right - w, cell.Top, cell.Right, cell.Bottom, px, dmSet);
     end;
+  end;
 end;
 
 procedure TTyCustomGrid.RenderCellBackgrounds(P: TTyPainter; const M: TTyGridMetrics);
 var
+  slot: Integer;   { 绘制槽位 }
   firstRow, lastRow, row, i, dataRow: Integer;
   col: TTyColumn;
   ap: TTyGridCellAppearance;
@@ -3823,9 +3851,13 @@ var
 begin
   AFrame := CurrentStyle;
   { 只遍历可视窗口 —— 与 RenderCells 同一条虚拟化路径。 }
-  if not TyGridVisibleRows(M, firstRow, lastRow) then Exit;
+  { 走绘制槽位:顶部固定行 + 正文窗口(固定行不在正文窗口里)。 }
+  if not TyGridDrawSlots(M, firstRow, lastRow) then Exit;
 
-  for row := firstRow to lastRow do
+  for slot := firstRow to lastRow do
+  begin
+    row := TyGridRowAtSlot(slot, M);
+    if row < 0 then Continue;
     for i := 0 to FHeader.Columns.Count - 1 do
     begin
       col := TTyColumn(FHeader.Columns.Items[i]);
@@ -3841,6 +3873,7 @@ begin
       if IsRectEmpty(vis) then Continue;
       P.FillBackground(vis, ap.Background, 0);
     end;
+  end;
 end;
 
 procedure TTyCustomGrid.RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
@@ -4043,6 +4076,8 @@ procedure TTyDrawGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
   firstRow, lastRow, row, colIdx, dataRow: Integer;
+  slot, firstSlot, lastSlot: Integer;   { 绘制槽位 }
+  clipR: TRect;
   cellS: TTyStyleSet;
   col: TTyColumn;
   cell, vis, textR, oldClip: TRect;
@@ -4053,7 +4088,9 @@ var
 begin
   { 只遍历可视窗口 —— 一百万行的表在这里也只走几十行。这是虚拟化的全部实现:
     控件从不持有数据,也从不遍历全部行。 }
-  if not TyGridVisibleRows(M, firstRow, lastRow) then Exit;
+  { 遍历**绘制槽位**:顶部固定行 + 正文窗口。固定行不在正文窗口里,
+    只走 TyGridVisibleRows 的话它们一个字都不会画(从前正是如此)。 }
+  if not TyGridDrawSlots(M, firstSlot, lastSlot) then Exit;
 
   { 同上:内边距也别跟着网格自身的状态变,否则鼠标进出会让文字左右挪一下。 }
   cellS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
@@ -4062,8 +4099,11 @@ begin
   padL := ScaleI(cellS.Padding.Left);
   padR := ScaleI(cellS.Padding.Right);
 
-  { firstRow/lastRow 是**显示序**;下面每一步都立刻翻成数据行再去取内容。 }
-  for row := firstRow to lastRow do
+  { row 是**显示序**;下面每一步都立刻翻成数据行再去取内容。 }
+  for slot := firstSlot to lastSlot do
+  begin
+    row := TyGridRowAtSlot(slot, M);
+    if row < 0 then Continue;
     for colIdx := 0 to Header.Columns.Count - 1 do
     begin
       col := TTyColumn(Header.Columns.Items[colIdx]);
@@ -4093,7 +4133,16 @@ begin
       { 文字按**完整**单元格排版,再裁到可见部分 —— 半掩的单元格应当被裁掉一截,
         而不是把文字挤进剩余空间里(挤压会让同一列的文字忽宽忽窄)。 }
       oldClip := P.Bitmap.ClipRect;
-      P.Bitmap.ClipRect := vis;
+      { **与外层裁剪求交**,不是覆盖它。外层可能是脏区重绘限定的那条横带;
+        直接覆盖的话这一格会画到带外去 —— 那里上一帧的像素还在,
+        同一段文字叠画两次,抗锯齿边缘变深,于是"快路径与整幅重画逐像素相同"
+        这条守卫就红了。(固定行从前根本不画,所以这个坑一直没露头。) }
+      if not IntersectRect(clipR, oldClip, vis) then
+      begin
+        P.Bitmap.ClipRect := oldClip;
+        Continue;
+      end;
+      P.Bitmap.ClipRect := clipR;
       try
         DrawCellText(P, textR, txt, ap.FontName, ap.FontSize, ap.FontWeight,
           ap.TextColor, ap.HAlign, ap.VAlign, ap.WordWrap);
@@ -4101,6 +4150,7 @@ begin
         P.Bitmap.ClipRect := oldClip;
       end;
     end;
+  end;
 end;
 
 { ---- TTyStringGrid -------------------------------------------------------- }
@@ -8453,6 +8503,7 @@ end;
 procedure TTyStringGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
+  slot: Integer;   { 绘制槽位 }
   selS, markS: TTyStyleSet;
   vis: TRect;
   firstRow, lastRow, pos, dataRow, colIdx, gIdx: Integer;
@@ -8472,9 +8523,11 @@ begin
     于是"上了色却什么都没变"。半透明层让两者都读得出来。 }
   markS := ActiveController.Model.ResolveStyle('TyGridCellMarked', StyleClass, []);
   if tpBackground in selS.Present then
-    if TyGridVisibleRows(M, firstRow, lastRow) then
-      for pos := firstRow to lastRow do
+    if TyGridDrawSlots(M, firstRow, lastRow) then
+      for slot := firstRow to lastRow do
       begin
+        pos := TyGridRowAtSlot(slot, M);
+        if pos < 0 then Continue;
         dataRow := DisplayToData(pos);
         for colIdx := 0 to Header.Columns.Count - 1 do
         begin
@@ -8490,15 +8543,20 @@ begin
       end;
   { 分组行:整行一条横带,画"值(计数)"和折叠三角。它不对应任何数据行,
     所以必须在普通单元格之前处理掉,否则基类会拿 -1 去取内容。 }
-  if (FGroupCol >= 0) and TyGridVisibleRows(M, firstRow, lastRow) then
-    for pos := firstRow to lastRow do
-      if IsGroupRow(pos, gIdx) then
+  if (FGroupCol >= 0) and TyGridDrawSlots(M, firstRow, lastRow) then
+    for slot := firstRow to lastRow do
+    begin
+      pos := TyGridRowAtSlot(slot, M);
+      if (pos >= 0) and IsGroupRow(pos, gIdx) then
         RenderGroupRow(P, pos, gIdx, M, AFrame);
+    end;
 
   { 勾选框列自己画方块 —— 基类只会画文字,而 '1'/'' 直接显示出来毫无意义。 }
-  if TyGridVisibleRows(M, firstRow, lastRow) then
-    for pos := firstRow to lastRow do
+  if TyGridDrawSlots(M, firstRow, lastRow) then
+    for slot := firstRow to lastRow do
     begin
+      pos := TyGridRowAtSlot(slot, M);
+      if pos < 0 then Continue;
       dataRow := DisplayToData(pos);
       if dataRow < 0 then Continue;
       for colIdx := 0 to Header.Columns.Count - 1 do
