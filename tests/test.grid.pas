@@ -185,6 +185,10 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestInsertRowIsCorrectAcrossTenthRowBoundary;
+    procedure TestDeleteRowIsCorrectAcrossTenthRowBoundary;
+    procedure TestInsertColumnIsCorrectAcrossTenthColumnBoundary;
+    procedure TestRowSideTablesFollowTheDataOnInsert;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -5839,6 +5843,113 @@ begin
     Bmp.Free;
     Ctl.Free;
   end;
+end;
+
+{ 增删行必须跨过**位数边界**仍然正确。
+
+  这一条是补一个已经把整套增删测试变成假绿的漏洞:原来的插入/删除测试全用
+  RowCount 3 / 6,行号只有一位数,于是**从没跨过 9 -> 10**。
+  单元格键是 IntToStr(c)+':'+IntToStr(r) 这样的**无填充**十进制文本,
+  按字典序排 "9" 排在 "10" 后面 —— 而搬移循环要的是数值序。
+  结果:插入时第 9 行先搬进还没腾空的第 10 行,把第 10 行的数据**直接销毁**,
+  第 10 行随后腾空变成一条空行。用户看到的"别的地方还多出一行"就是它。
+
+  所以这几条测试的关键不是"插入对不对",而是**行数必须超过 10**。 }
+procedure TTyStringGridTest.TestInsertRowIsCorrectAcrossTenthRowBoundary;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 12;
+  for r := 0 to 11 do
+    G.Cells[0, r] := 'R' + IntToStr(r);
+  AssertEquals('前置条件:12 个已写入的格', 12, G.StoredCellCount);
+
+  G.InsertRow(0);
+
+  AssertEquals('行数 +1', 13, G.RowCount);
+  AssertEquals('插入点应为空行', '', G.Cells[0, 0]);
+  AssertEquals('R8 下移到第 9 行', 'R8', G.Cells[0, 9]);
+  { 下面三条今天全错 —— 位数边界就在这里。 }
+  AssertEquals('R9 下移到第 10 行', 'R9', G.Cells[0, 10]);
+  AssertEquals('R10 下移到第 11 行', 'R10', G.Cells[0, 11]);
+  AssertEquals('R11 下移到第 12 行', 'R11', G.Cells[0, 12]);
+  { 这条比逐格断言更能守住"数据不灭":一格都不许丢。 }
+  AssertEquals('插入不该销毁任何一格', 12, G.StoredCellCount);
+end;
+
+procedure TTyStringGridTest.TestDeleteRowIsCorrectAcrossTenthRowBoundary;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 12;
+  for r := 0 to 11 do
+    G.Cells[0, r] := 'R' + IntToStr(r);
+
+  G.DeleteRow(0);
+
+  AssertEquals('行数 -1', 11, G.RowCount);
+  AssertEquals('R1 上移到第 0 行', 'R1', G.Cells[0, 0]);
+  AssertEquals('R9 上移到第 8 行', 'R9', G.Cells[0, 8]);
+  AssertEquals('R10 上移到第 9 行', 'R10', G.Cells[0, 9]);
+  AssertEquals('R11 上移到第 10 行', 'R11', G.Cells[0, 10]);
+  AssertEquals('删除只该销毁一格', 11, G.StoredCellCount);
+end;
+
+{ 列方向是同一个 ShiftCells,同一个缺陷 —— 超过 10 列就会出现。 }
+procedure TTyStringGridTest.TestInsertColumnIsCorrectAcrossTenthColumnBoundary;
+var
+  G: TStrGridAccess;
+  c: Integer;
+  col: TTyColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  while G.Header.Columns.Count < 12 do
+  begin
+    col := G.Header.Columns.Add as TTyColumn;
+    col.Width := 40;
+  end;
+  G.RowCount := 2;
+  for c := 0 to 11 do
+    G.Cells[c, 0] := 'C' + IntToStr(c);
+
+  G.InsertColumn(0);
+
+  AssertEquals('C8 右移到第 9 列', 'C8', G.Cells[9, 0]);
+  AssertEquals('C9 右移到第 10 列', 'C9', G.Cells[10, 0]);
+  AssertEquals('C10 右移到第 11 列', 'C10', G.Cells[11, 0]);
+  AssertEquals('C11 右移到第 12 列', 'C11', G.Cells[12, 0]);
+  AssertEquals('插入列不该销毁任何一格', 12, G.StoredCellCount);
+end;
+
+{ 按行号存的旁挂表(显式行高、隐藏行)也必须跟着数据走。
+
+  它们键的是**行下标**,而 ShiftCells 只搬文字与格属性 —— 于是插一行之后,
+  行高粘在原来的下标上,落到了另一行数据头上;隐藏标记同理:原来藏着的行冒出来,
+  另一行凭空消失。用户会把它读成"又多/少了一行"。 }
+procedure TTyStringGridTest.TestRowSideTablesFollowTheDataOnInsert;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 12;
+  for r := 0 to 11 do
+    G.Cells[0, r] := 'R' + IntToStr(r);
+
+  G.RowHeights[10] := 44;
+  G.HideRow(11);
+  AssertEquals('前置条件:第 10 行有显式行高', 44, G.RowHeights[10]);
+  AssertTrue('前置条件:第 11 行是隐藏的', G.IsHiddenRow(11));
+
+  G.InsertRow(0);
+
+  AssertEquals('显式行高应跟着那行数据走到第 11 行', 44, G.RowHeights[11]);
+  AssertTrue('隐藏标记应跟着那行数据走到第 12 行', G.IsHiddenRow(12));
+  AssertTrue('原来的第 11 行不该还是隐藏的', not G.IsHiddenRow(11));
 end;
 
 initialization

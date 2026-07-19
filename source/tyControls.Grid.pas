@@ -520,6 +520,8 @@ type
     procedure SetGroupHeaderHeight(AValue: Integer);
     procedure SetAlternateRows(AValue: Boolean);
     procedure SetShowRowNumbers(AValue: Boolean);
+    { 把"以行下标为键"的旁挂表整体平移(行高、隐藏行)。 }
+    procedure ShiftRowKeyedTable(AList: TStringList; AFromIndex, ADelta: Integer);
     { 把行号画进行头槽。ShowRowNumbers 关着时整段跳过。 }
     procedure RenderRowNumbers(P: TTyPainter; const M: TTyGridMetrics;
       AHeaderH, AIndicatorW: Integer); virtual;
@@ -5790,10 +5792,13 @@ end;
 { ---- 行列增删 ------------------------------------------------------------- }
 
 procedure TTyStringGrid.ShiftCells(AFromIndex, ADelta: Integer; ARows: Boolean);
+type
+  TCellPos = record C, R: Integer; end;
 var
-  snapshot, attrKeys: TStringList;
-  i, c, r, sep: Integer;
-  k, v: string;
+  attrKeys, merged: TStringList;
+  order: array of TCellPos;
+  n, i, c, r, sep: Integer;
+  k: string;
 
   procedure MoveKey(AOldC, AOldR, ANewC, ANewR: Integer);
   var ov: string;
@@ -5812,58 +5817,140 @@ var
     FAttrs.Remove(CellKey(AC, AR));
   end;
 
+  { 取被搬那条轴上的下标(排序键)。 }
+  function AxisOf(const AP: TCellPos): Integer;
+  begin
+    if ARows then Result := AP.R else Result := AP.C;
+  end;
+
+  { 按被搬轴的下标**数值升序**排。
+    从前这里是 TStringList.Sort —— 字典序。而键是 IntToStr 拼出来的无填充十进制,
+    于是 "9" 排在 "10" 之后:增序搬时第 9 行会先搬进还没腾空的第 10 行,
+    把第 10 行的数据**直接销毁**,第 10 行随后腾空成一条空行。
+    行数 <= 10 的表看不出来 —— 整套增删测试当初就是这么假绿的。 }
+  procedure SortByAxis(ALo, AHi: Integer);
+  var lo, hi, pivot: Integer; t: TCellPos;
+  begin
+    if ALo >= AHi then Exit;
+    lo := ALo; hi := AHi;
+    pivot := AxisOf(order[(ALo + AHi) div 2]);
+    repeat
+      while AxisOf(order[lo]) < pivot do Inc(lo);
+      while AxisOf(order[hi]) > pivot do Dec(hi);
+      if lo <= hi then
+      begin
+        t := order[lo]; order[lo] := order[hi]; order[hi] := t;
+        Inc(lo); Dec(hi);
+      end;
+    until lo > hi;
+    SortByAxis(ALo, hi);
+    SortByAxis(lo, AHi);
+  end;
+
 begin
   { 稀疏存储:只搬**写过的**格。先快照键表再改,避免边遍历边改。
     键取"有文字的格"与"有属性的格"的**并集** —— 只有合并、没有文字的格也得搬。 }
-  snapshot := TStringList.Create;
+  attrKeys := TStringList.Create;
   try
-    snapshot.Assign(FCellKeys);
-    snapshot.Sorted := False;
-    attrKeys := TStringList.Create;
+    attrKeys.Sorted := False;
+    attrKeys.Assign(FCellKeys);
+    attrKeys.Sorted := True;      { 只为去重,**不**作为搬移顺序 }
+    attrKeys.Duplicates := dupIgnore;
+    merged := TStringList.Create;
     try
-      FAttrs.SnapshotKeys(attrKeys);
-      for i := 0 to attrKeys.Count - 1 do
-        if snapshot.IndexOf(attrKeys[i]) < 0 then snapshot.Add(attrKeys[i]);
+      FAttrs.SnapshotKeys(merged);
+      for i := 0 to merged.Count - 1 do
+        attrKeys.Add(merged[i]);
     finally
-      attrKeys.Free;
+      merged.Free;
     end;
-    { 增序搬时要求键按位置有序,这里重排一次(增删行的频次远低于渲染,不心疼)。 }
-    snapshot.Sort;
-    { 增(ADelta>0)时从大到小搬,否则会覆盖尚未搬走的格;删时从小到大。 }
-    if ADelta > 0 then
-      for i := snapshot.Count - 1 downto 0 do
-      begin
-        k := snapshot[i];
-        sep := Pos(':', k);
-        c := StrToIntDef(Copy(k, 1, sep - 1), 0);
-        r := StrToIntDef(Copy(k, sep + 1, MaxInt), 0);
-        if ARows then
-        begin
-          if r >= AFromIndex then MoveKey(c, r, c, r + ADelta);
-        end
-        else
-          if c >= AFromIndex then MoveKey(c, r, c + ADelta, r);
-      end
-    else
-      for i := 0 to snapshot.Count - 1 do
-      begin
-        k := snapshot[i];
-        sep := Pos(':', k);
-        c := StrToIntDef(Copy(k, 1, sep - 1), 0);
-        r := StrToIntDef(Copy(k, sep + 1, MaxInt), 0);
-        if ARows then
-        begin
-          if r = AFromIndex then DropCell(c, r)          { 被删那行的内容与属性 }
-          else if r > AFromIndex then MoveKey(c, r, c, r + ADelta);
-        end
-        else
-        begin
-          if c = AFromIndex then DropCell(c, r)
-          else if c > AFromIndex then MoveKey(c, r, c + ADelta, r);
-        end;
-      end;
+
+    n := attrKeys.Count;
+    SetLength(order, n);
+    for i := 0 to n - 1 do
+    begin
+      k := attrKeys[i];
+      sep := Pos(':', k);
+      order[i].C := StrToIntDef(Copy(k, 1, sep - 1), 0);
+      order[i].R := StrToIntDef(Copy(k, sep + 1, MaxInt), 0);
+    end;
   finally
-    snapshot.Free;
+    attrKeys.Free;
+  end;
+
+  if n > 1 then SortByAxis(0, n - 1);
+
+  { 增(ADelta>0)时从大到小搬,否则会覆盖尚未搬走的格;删时从小到大。 }
+  if ADelta > 0 then
+    for i := n - 1 downto 0 do
+    begin
+      c := order[i].C; r := order[i].R;
+      if ARows then
+      begin
+        if r >= AFromIndex then MoveKey(c, r, c, r + ADelta);
+      end
+      else
+        if c >= AFromIndex then MoveKey(c, r, c + ADelta, r);
+    end
+  else
+    for i := 0 to n - 1 do
+    begin
+      c := order[i].C; r := order[i].R;
+      if ARows then
+      begin
+        if r = AFromIndex then DropCell(c, r)          { 被删那行的内容与属性 }
+        else if r > AFromIndex then MoveKey(c, r, c, r + ADelta);
+      end
+      else
+      begin
+        if c = AFromIndex then DropCell(c, r)
+        else if c > AFromIndex then MoveKey(c, r, c + ADelta, r);
+      end;
+    end;
+
+  { 按下标存的**旁挂表**也得跟着数据走 —— 它们键的是行下标,而上面只搬了
+    文字与格属性。不搬的话:行高粘在原下标上、落到另一行数据头上;
+    隐藏标记同理,原来藏着的行冒出来、另一行凭空消失 —— 用户会读成"又多/少一行"。 }
+  if ARows then
+  begin
+    ShiftRowKeyedTable(FRowHeights, AFromIndex, ADelta);
+    ShiftRowKeyedTable(FHiddenRows, AFromIndex, ADelta);
+    InvalidateOrder;
+  end;
+end;
+
+{ 把"以行下标为键"的旁挂表整体平移。ADelta < 0 时,正落在 AFromIndex 上的那条被丢弃。
+  就地改键会撞上重复键,所以整表重建。 }
+procedure TTyCustomGrid.ShiftRowKeyedTable(AList: TStringList;
+  AFromIndex, ADelta: Integer);
+var
+  i, r: Integer;
+  rebuilt: TStringList;
+  wasSorted: Boolean;
+begin
+  if (AList = nil) or (AList.Count = 0) or (ADelta = 0) then Exit;
+  rebuilt := TStringList.Create;
+  try
+    for i := 0 to AList.Count - 1 do
+    begin
+      r := StrToIntDef(AList[i], -1);
+      if r < 0 then Continue;
+      if r >= AFromIndex then
+      begin
+        if (ADelta < 0) and (r = AFromIndex) then Continue;   { 被删的那一行 }
+        Inc(r, ADelta);
+        if r < 0 then Continue;
+      end;
+      rebuilt.AddObject(IntToStr(r), AList.Objects[i]);
+    end;
+    wasSorted := AList.Sorted;
+    AList.Sorted := False;
+    AList.Clear;
+    for i := 0 to rebuilt.Count - 1 do
+      AList.AddObject(rebuilt[i], rebuilt.Objects[i]);
+    AList.Sorted := wasSorted;
+  finally
+    rebuilt.Free;
   end;
 end;
 
