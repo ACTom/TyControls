@@ -765,6 +765,158 @@ object MainForm: TMainForm
           OnSelectionChanged = AnyGridSelectionChanged
         end
       end
+      object PgEvents: TTyTabSheet
+        Caption = '事件与钩子'
+        object LblEvHint: TTyLabel
+          Left = 8
+          Height = 34
+          Top = 4
+          Width = 1150
+          Caption = '每个开关对应一个钩子 —— 勾上再去操作,状态栏会说出它介入了什么 · 「禁止点第 3 行」那条会让整行点不动(光标都不移),这是 OnCanClickCell 的克制之处'
+        end
+        object TbEv1: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 38
+          Width = 1172
+          Align = alTop
+          object ChkEvHint: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 120
+            Caption = '悬停出提示'
+            OnChange = ChkEvChange
+          end
+          object ChkEvLockRow: TTyCheckBox
+            Left = 134
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '禁止点第 3 行'
+            OnChange = ChkEvChange
+          end
+          object ChkEvRightClick: TTyCheckBox
+            Left = 272
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '右键报告位置'
+            Checked = True
+            OnChange = ChkEvChange
+          end
+          object ChkEvHeader: TTyCheckBox
+            Left = 410
+            Height = 22
+            Top = 8
+            Width = 144
+            Caption = '表头点击/右键'
+            Checked = True
+            OnChange = ChkEvChange
+          end
+          object ChkEvSize: TTyCheckBox
+            Left = 560
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '列宽/行高事件'
+            Checked = True
+            OnChange = ChkEvChange
+          end
+          object ChkEvColMove: TTyCheckBox
+            Left = 722
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '钉住第 0 列'
+            OnChange = ChkEvChange
+          end
+        end
+        object TbEv2: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 78
+          Width = 1172
+          Align = alTop
+          object ChkEvCheck: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '勾选框事件/否决'
+            Checked = True
+            OnChange = ChkEvChange
+          end
+          object ChkEvClip: TTyCheckBox
+            Left = 170
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '剪贴板钩子'
+            OnChange = ChkEvChange
+          end
+          object BtnEvFind: TTyButton
+            Left = 338
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '查找下一个'
+            OnClick = BtnEvFindClick
+          end
+          object EdEvFind: TTyEdit
+            Left = 440
+            Height = 26
+            Top = 6
+            Width = 120
+            Text = '云主机'
+          end
+          object BtnEvReplace: TTyButton
+            Left = 570
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '全部替换为'
+            OnClick = BtnEvReplaceClick
+          end
+          object EdEvRepl: TTyEdit
+            Left = 684
+            Height = 26
+            Top = 6
+            Width = 120
+            Text = '云服务器'
+          end
+          object BtnEvImportCsv: TTyButton
+            Left = 816
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '导入 CSV'
+            OnClick = BtnEvImportCsvClick
+          end
+          object LblEvTip: TTyLabel
+            Left = 934
+            Height = 20
+            Top = 10
+            Width = 230
+            Caption = '拖行高要在左侧行号槽里拖'
+          end
+        end
+        object GridEvents: TTyStringGrid
+          Left = 0
+          Height = 530
+          Top = 0
+          Width = 1172
+          Align = alClient
+          DefaultRowHeight = 24
+          ShowIndicator = True
+          IndicatorWidth = 56
+          MinColWidth = 50
+          MaxColWidth = 260
+          MinRowHeight = 20
+          MaxRowHeight = 70
+          OnSelectionChanged = AnyGridSelectionChanged
+        end
+      end
     end
   end
 end

@@ -17,6 +17,8 @@ type
     FDragGrabOffset: Integer;
     FDragStartTop: Integer;
     FAnimEnabled: Boolean;
+    { 上一次缓动滴答的时刻(0 = 还没开始)。用来算真实经过时间。 }
+    FLastTickMs: QWord;
     FPosAnim: TTyAnimator;      // 0..1 traversal driving FAnimFrom -> FAnimTo
     FAnimFrom, FAnimTo: Single; // displayed-thumb-position endpoints (Min..Max units)
     FTimer: TTimer;            // lazy; only created when actually animating
@@ -59,7 +61,16 @@ type
     // state. Runtime always routes through SetPosition (which snaps headless);
     // this is the test seam so the animation is reachable without a window.
     procedure SetPositionAnimating(AValue: Integer);
+    { 一拍推进多少毫秒(真实经过时间)。测试用受控时钟覆写它。 }
+    function TickElapsedMs: Integer; virtual;
+    procedure HandleTimerTick;
   public
+    { 设定位置并**立刻落位**,绝不缓动。
+
+      给"镜像"用:宿主(网格/列表/树)自己滚完之后,把结果同步给滑块。
+      内容已经动了,滑块再缓动追上去就是不跟手 —— 用户看到的是内容在动、
+      滑块慢半拍。缓动只在"用户点滑道让它跳过去"那种场景才有意义。 }
+    procedure SetPositionSnapped(AValue: Integer);
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetStyleTypeKey: string; override;
@@ -210,12 +221,48 @@ begin
   end;
 end;
 
-procedure TTyScrollBar.HandleTimer(Sender: TObject);
+{ 这一拍该推进多少毫秒 = 距上一拍的**真实**经过时间。
+  抽成可覆写的,是为了让测试能喂一个受控时钟 —— 否则"按真实时间推进"
+  这条只能靠肉眼在真机上看,而这正是当初写成名义间隔也没人发现的原因。 }
+function TTyScrollBar.TickElapsedMs: Integer;
+var
+  nowMs: QWord;
 begin
-  if AdvanceAnimation(FTimer.Interval) then
+  nowMs := GetTickCount64;
+  if FLastTickMs = 0 then
+    Result := 16
+  else
+    Result := Integer(nowMs - FLastTickMs);
+  FLastTickMs := nowMs;
+  if Result < 1 then Result := 1;
+end;
+
+procedure TTyScrollBar.HandleTimerTick;
+begin
+  HandleTimer(nil);
+end;
+
+procedure TTyScrollBar.HandleTimer(Sender: TObject);
+var
+  elapsed: Integer;
+begin
+  { 按**真实经过的时间**推进,不能按定时器的名义间隔累加。
+
+    界面忙的时候(例如大网格重绘一帧要上百毫秒)定时器会被饿死:
+    按名义 16ms 一步的话,120ms 的缓动要七八次滴答才走完,而每次滴答实际隔了
+    上百毫秒 —— 缓动被拉成将近一秒,看起来就是"滑块慢一拍才跟上"。
+    按真实时间推进时,一次迟到的滴答会把该走的进度一次补齐。 }
+  elapsed := TickElapsedMs;
+  if AdvanceAnimation(elapsed) then
     Invalidate;
   if not FPosAnim.Running then
-    FTimer.Enabled := False;
+  begin
+    { 定时器是**惰性创建**的(SetPositionAnimating 这个测试缝就不建它),
+      所以这里必须判空 —— 从前是直接 FTimer.Enabled,靠"只有定时器自己会调
+      HandleTimer"这个隐含前提撑着。 }
+    if FTimer <> nil then FTimer.Enabled := False;
+    FLastTickMs := 0;
+  end;
 end;
 
 function TTyScrollBar.AdvanceAnimation(AMs: Integer): Boolean;
@@ -244,6 +291,31 @@ begin
   FPosAnim.Target := 1;
   FPosition := Clamped;
   Invalidate;
+end;
+
+procedure TTyScrollBar.SetPositionSnapped(AValue: Integer);
+var
+  Clamped: Integer;
+begin
+  Clamped := AValue;
+  if Clamped < FMin then Clamped := FMin;
+  if Clamped > FMax then Clamped := FMax;
+
+  { 无条件停掉可能正在跑的缓动 —— 哪怕位置没变也要停,
+    否则上一次的缓动会继续把滑块拖向一个**过时**的目标。 }
+  FAnimFrom := Clamped;
+  FAnimTo := Clamped;
+  FPosAnim.SetTargetImmediate(1);
+  if FTimer <> nil then FTimer.Enabled := False;
+
+  if FPosition = Clamped then
+  begin
+    Invalidate;
+    Exit;
+  end;
+  FPosition := Clamped;
+  Invalidate;
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyScrollBar.SetKind(const AValue: TTyScrollBarKind);
@@ -294,6 +366,7 @@ begin
     FPosAnim.Progress := 0;
     FPosAnim.Target := 1;
     EnsureTimer;
+    FLastTickMs := 0;          { 重新起算,别把上一段动画的时刻带进来 }
     FTimer.Enabled := True;
   end
   else

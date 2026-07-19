@@ -33,7 +33,9 @@ type
     gcdProgress,  { 进度条,值取 0..100 }
     gcdRating,    { 评分星,值取 0..5 }
     gcdImage,     { 图片:值是 Images 里的索引 }
-    gcdButton     { 按钮:文字是按钮标题,点击走 OnCellButtonClick }
+    gcdButton,    { 按钮:文字是按钮标题,点击走 OnCellButtonClick }
+    gcdColor      { 色块:值是 '#RRGGBB'。与 gekColor 编辑器配对 ——
+                    从前只有编辑侧、没有显示侧,那一列看起来就是一串脏数据 }
   );
 
   { 编辑器种类与聚合方式 —— 放在 type 段最前面,因为列类要用它们。 }
@@ -978,6 +980,8 @@ type
     function  RowHeightOf(ARow: Integer): Integer; override;
     function  RowTops: TTyIntArray; override;
     procedure InvalidateRowMetrics; override;
+    procedure RenderColorCell(P: TTyPainter; ACol, ARow: Integer;
+      const AFrame: TTyStyleSet); virtual;
     procedure RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
       const AFrame: TTyStyleSet); virtual;
     procedure RenderProgressCell(P: TTyPainter; ACol, ARow: Integer;
@@ -1900,8 +1904,12 @@ begin
   if FSyncingScroll then Exit;      { 正在由 UpdateScrollBars 推值,别自己撞自己 }
   FSyncingScroll := True;
   try
-    if FVScroll.Visible and not FVScroll.Dragging then FVScroll.Position := FScrollY;
-    if FHScroll.Visible and not FHScroll.Dragging then FHScroll.Position := FScrollX;
+    { **落位,不缓动** —— 这里是"网格已经滚过去了,把结果同步给滑块"。
+      走普通的 Position 赋值会触发缓动,滑块要慢半拍才追上内容。 }
+    if FVScroll.Visible and not FVScroll.Dragging then
+      FVScroll.SetPositionSnapped(FScrollY);
+    if FHScroll.Visible and not FHScroll.Dragging then
+      FHScroll.SetPositionSnapped(FScrollX);
   finally
     FSyncingScroll := False;
   end;
@@ -1964,7 +1972,9 @@ begin
         喂内容尺寸会让滑块偏小、底部永远留一截、拖到底还会弹回。与列表/树同一约定。 }
       FVScroll.Max := maxV;
       FVScroll.PageSize := bodyH;
-      FVScroll.Position := FScrollY;
+      { 同样是镜像:落位。而且要避开用户正在拖的那一刻 —— 原先这里没判 Dragging,
+        重算滚动范围时会把滑块从用户手里抢走。 }
+      if not FVScroll.Dragging then FVScroll.SetPositionSnapped(FScrollY);
     end;
     FVScroll.Visible := needV;
 
@@ -1977,7 +1987,7 @@ begin
       FHScroll.Min := 0;
       FHScroll.Max := maxH;
       FHScroll.PageSize := bodyW;
-      FHScroll.Position := FScrollX;
+      if not FHScroll.Dragging then FHScroll.SetPositionSnapped(FScrollX);
     end;
     FHScroll.Visible := needH;
   finally
@@ -4524,6 +4534,38 @@ begin
   Result := FRowTopsCache;
 end;
 
+{ 色块:把 '#RRGGBB' 画成一小块颜色,而不是把那串字显示出来。
+  解析不出颜色时什么都不画(留空格),不要退回去显示原文 ——
+  那样一列里会混着色块和乱码,比统一留空更难看懂。 }
+procedure TTyStringGrid.RenderColorCell(P: TTyPainter; ACol, ARow: Integer;
+  const AFrame: TTyStyleSet);
+var
+  r, sw: TRect;
+  c: TTyColor;
+  txt: string;
+  pad: Integer;
+  fill: TTyFill;
+begin
+  r := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+  txt := Trim(GetCellText(ACol, ARow));
+  if txt = '' then Exit;
+
+  { 走与 gekColor 编辑器同一个解析器 —— 显示侧和编辑侧对"什么算颜色"必须同口径。 }
+  c := TyParseColor(txt);
+
+  pad := ScaleI(4);
+  sw := Rect(r.Left + pad, r.Top + pad, r.Right - pad, r.Bottom - pad);
+  if (sw.Right <= sw.Left) or (sw.Bottom <= sw.Top) then Exit;
+
+  fill := Default(TTyFill);
+  fill.Kind := tfkSolid;
+  fill.Color := c;
+  P.FillBackground(sw, fill, ScaleI(2));
+  { 描一圈边,免得浅色块在浅色底上看不见边界。 }
+  P.StrokeBorder(sw, ScaleI(2), 1, AFrame.BorderColor);
+end;
+
 procedure TTyStringGrid.RenderImageCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
@@ -7033,6 +7075,7 @@ begin
           gcdImage:    RenderImageCell(P, colIdx, dataRow, AFrame);
           gcdButton:   RenderButtonCell(P, colIdx, dataRow,
                          GetCellText(colIdx, dataRow), AFrame);
+          gcdColor:    RenderColorCell(P, colIdx, dataRow, AFrame);
         end;
       end;
     end;

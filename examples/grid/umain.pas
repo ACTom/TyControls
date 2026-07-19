@@ -13,6 +13,8 @@ unit umain;
                         导航跳过只读格、宿主自定义编辑器(EditLink)
     5. 选择·数据·剪贴板 —— 选择模式、离散多选、选区聚合、行的隐藏、批量行操作、
                         合并单元格、剪贴板与智能粘贴、CSV / HTML 导出
+    6. 事件与钩子   —— 每个开关对应一个钩子:悬停提示、点击否决、右键、表头点击/右键、
+                        列宽行高事件、列换位否决、勾选框事件、剪贴板钩子、查找替换、CSV 导入
 
   窗口、标题栏、分页与各页控件全部在 umain.lfm 里设计;本文件只放数据与事件。 }
 
@@ -98,6 +100,15 @@ type
       BtnExportCsv, BtnExportHtml: TTyButton;
     ChkAutoGrow: TTyCheckBox;
 
+    PgEvents: TTyTabSheet;
+    LblEvHint, LblEvTip: TTyLabel;
+    TbEv1, TbEv2: TTyPanel;
+    GridEvents: TTyStringGrid;
+    ChkEvHint, ChkEvLockRow, ChkEvRightClick, ChkEvHeader, ChkEvSize,
+      ChkEvColMove, ChkEvCheck, ChkEvClip: TTyCheckBox;
+    BtnEvFind, BtnEvReplace, BtnEvImportCsv: TTyButton;
+    EdEvFind, EdEvRepl: TTyEdit;
+
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
     procedure DarkSwitchChange(Sender: TObject);
@@ -173,8 +184,38 @@ type
     procedure BtnExportCsvClick(Sender: TObject);
     procedure BtnExportHtmlClick(Sender: TObject);
     procedure ChkDataChange(Sender: TObject);
+
+    { 页 6 }
+    procedure ChkEvChange(Sender: TObject);
+    procedure BtnEvFindClick(Sender: TObject);
+    procedure BtnEvReplaceClick(Sender: TObject);
+    procedure BtnEvImportCsvClick(Sender: TObject);
+    procedure EvGetCellHint(Sender: TObject; ACol, ARow: Integer; var AHint: string);
+    procedure EvCanClickCell(Sender: TObject; ACol, ARow: Integer;
+      var ACanClick: Boolean);
+    procedure EvRightClickCell(Sender: TObject; ACol, ARow: Integer);
+    procedure EvHeaderClick(Sender: TObject; ACol: Integer);
+    procedure EvHeaderRightClick(Sender: TObject; ACol: Integer);
+    procedure EvColumnSizing(Sender: TObject; AIndex: Integer;
+      var ANewSize: Integer; var AAllow: Boolean);
+    procedure EvEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
+    procedure EvRowSizing(Sender: TObject; AIndex: Integer;
+      var ANewSize: Integer; var AAllow: Boolean);
+    procedure EvEndRowSize(Sender: TObject; AIndex, ANewSize: Integer);
+    procedure EvColumnMove(Sender: TObject; AFromCol, AToCol: Integer;
+      var AAllow: Boolean);
+    procedure EvCanToggleCheck(Sender: TObject; ACol, ARow: Integer;
+      var AAllow: Boolean);
+    procedure EvCheckBoxChange(Sender: TObject; ACol, ARow: Integer;
+      AChecked: Boolean);
+    procedure EvClipboardCopy(Sender: TObject; var AText: string;
+      var AAllow: Boolean);
+    procedure EvBeforePasteCell(Sender: TObject; ACol, ARow: Integer;
+      var ANewText: string; var AAllow: Boolean);
+    procedure EvAfterPasteCell(Sender: TObject; ACol, ARow: Integer);
   private
     FNoteLink: TNoteEditLink;
+    FSizingCount, FPasteCount: Integer;
     procedure BuildOrderColumns(AGrid: TTyStringGrid; AWithNote: Boolean);
     procedure FillOrders(AGrid: TTyStringGrid; ACount: Integer; AWithNote: Boolean);
     procedure SetupBasic;
@@ -182,6 +223,7 @@ type
     procedure SetupSort;
     procedure SetupEdit;
     procedure SetupData;
+    procedure SetupEvents;
     function  ActiveGrid: TTyStringGrid;
     procedure Status(const AText: string);
     procedure ShowSelectionInfo;
@@ -336,6 +378,7 @@ begin
   SetupSort;
   SetupEdit;
   SetupData;
+  SetupEvents;
 
   Status('每一页演示一组特性 —— 从左到右依次看下来即可');
 end;
@@ -347,6 +390,7 @@ begin
     2: Result := GridSort;
     3: Result := GridEdit;
     4: Result := GridData;
+    5: Result := GridEvents;
   else Result := GridBasic;
   end;
 end;
@@ -737,6 +781,7 @@ procedure TMainForm.EditGetCellDisplay(Sender: TObject; ACol, ARow: Integer;
   var ADisplay: TTyGridCellDisplay);
 begin
   if ACol = cRate then ADisplay := gcdRating
+  else if ACol = cMark then ADisplay := gcdColor    { 画色块,不是把 '#RRGGBB' 显示出来 }
   else if ACol = cNote then ADisplay := gcdButton
   else ADisplay := gcdText;
 end;
@@ -909,6 +954,248 @@ begin
   fn := ExtractFilePath(ParamStr(0)) + 'grid-export.html';
   GridData.SaveToHTMLFile(fn);
   Status('已导出 HTML 到 ' + fn);
+end;
+
+
+{ ============ 页 6:事件与钩子 ============ }
+
+procedure TMainForm.SetupEvents;
+begin
+  BuildOrderColumns(GridEvents, False);
+  FillOrders(GridEvents, 60, False);
+  { 让「标记色」列画成色块。 }
+  GridEvents.OnGetCellDisplay := @EditGetCellDisplay;
+  { 拖列换位要开这两个开关(列级的 coDraggable 默认就有)。 }
+  GridEvents.Header.Options := GridEvents.Header.Options + [hoDrag];
+  ChkEvChange(nil);
+end;
+
+{ 每个开关按需挂/摘对应的钩子。没挂时控件走的是完全没有该钩子的那条路径 ——
+  这正是"开/关对比"能说明问题的原因。 }
+procedure TMainForm.ChkEvChange(Sender: TObject);
+begin
+  if ChkEvHint.Checked then GridEvents.OnGetCellHint := @EvGetCellHint
+  else GridEvents.OnGetCellHint := nil;
+
+  if ChkEvLockRow.Checked then GridEvents.OnCanClickCell := @EvCanClickCell
+  else GridEvents.OnCanClickCell := nil;
+
+  if ChkEvRightClick.Checked then GridEvents.OnRightClickCell := @EvRightClickCell
+  else GridEvents.OnRightClickCell := nil;
+
+  if ChkEvHeader.Checked then
+  begin
+    GridEvents.OnHeaderClick := @EvHeaderClick;
+    GridEvents.OnHeaderRightClick := @EvHeaderRightClick;
+  end
+  else
+  begin
+    GridEvents.OnHeaderClick := nil;
+    GridEvents.OnHeaderRightClick := nil;
+  end;
+
+  if ChkEvSize.Checked then
+  begin
+    GridEvents.OnColumnSizing := @EvColumnSizing;
+    GridEvents.OnEndColumnSize := @EvEndColumnSize;
+    GridEvents.OnRowSizing := @EvRowSizing;
+    GridEvents.OnEndRowSize := @EvEndRowSize;
+  end
+  else
+  begin
+    GridEvents.OnColumnSizing := nil;
+    GridEvents.OnEndColumnSize := nil;
+    GridEvents.OnRowSizing := nil;
+    GridEvents.OnEndRowSize := nil;
+  end;
+
+  if ChkEvColMove.Checked then GridEvents.OnColumnMove := @EvColumnMove
+  else GridEvents.OnColumnMove := nil;
+
+  if ChkEvCheck.Checked then
+  begin
+    GridEvents.OnCanToggleCheck := @EvCanToggleCheck;
+    GridEvents.OnCheckBoxChange := @EvCheckBoxChange;
+  end
+  else
+  begin
+    GridEvents.OnCanToggleCheck := nil;
+    GridEvents.OnCheckBoxChange := nil;
+  end;
+
+  if ChkEvClip.Checked then
+  begin
+    GridEvents.OnClipboardCopy := @EvClipboardCopy;
+    GridEvents.OnBeforePasteCell := @EvBeforePasteCell;
+    GridEvents.OnAfterPasteCell := @EvAfterPasteCell;
+  end
+  else
+  begin
+    GridEvents.OnClipboardCopy := nil;
+    GridEvents.OnBeforePasteCell := nil;
+    GridEvents.OnAfterPasteCell := nil;
+  end;
+end;
+
+{ 悬停提示:控件只在**换格**时才回调,所以气泡内容跟着格变而不卡顿。 }
+procedure TMainForm.EvGetCellHint(Sender: TObject; ACol, ARow: Integer;
+  var AHint: string);
+begin
+  case ACol of
+    cAmount: AHint := Format('金额 %s(含税)', [GridEvents.Cells[cAmount, ARow]]);
+    cDate:   if GridEvents.Cells[cDate, ARow] = '' then AHint := '这一单还没排期'
+             else AHint := '交货日期:' + GridEvents.Cells[cDate, ARow];
+  else       AHint := '';      { 空串 = 这一列不弹提示 }
+  end;
+end;
+
+{ 点击否决:被否决的格**光标都不会移过去** —— 不只是不发 OnClickCell。
+  左键右键两条路径都过这个钩子。 }
+procedure TMainForm.EvCanClickCell(Sender: TObject; ACol, ARow: Integer;
+  var ACanClick: Boolean);
+begin
+  if ARow = 2 then ACanClick := False;
+end;
+
+{ 右键只"问"不"选":不动光标、不进编辑(与资源管理器一致)。
+  先左键选中某格,再右键别处 —— 选中框不会跑。 }
+procedure TMainForm.EvRightClickCell(Sender: TObject; ACol, ARow: Integer);
+begin
+  Status(Format('右键点在 (列 %d, 行 %d) —— 注意左边的选中框没有跟着跑',
+    [ACol, ARow]));
+end;
+
+procedure TMainForm.EvHeaderClick(Sender: TObject; ACol: Integer);
+begin
+  Status(Format('表头点击:列 %d —— 事件先发,内建的排序照常进行(宿主搭车,不夺走默认行为)',
+    [ACol]));
+end;
+
+procedure TMainForm.EvHeaderRightClick(Sender: TObject; ACol: Integer);
+begin
+  { 表头右键的典型用途:自适应列宽 / 隐藏列 / 清除排序。这里演示自适应。 }
+  GridEvents.AutoFitColumn(ACol);
+  Status(Format('表头右键:列 %d 已按内容自适应宽度', [ACol]));
+end;
+
+{ 拖动过程中每一帧都发 Sizing(可改写尺寸、也可否决),松手才发一次 EndSize。
+  这里把宽度吸附到 20 的倍数 —— 拖起来能感到一格一格跳。 }
+procedure TMainForm.EvColumnSizing(Sender: TObject; AIndex: Integer;
+  var ANewSize: Integer; var AAllow: Boolean);
+begin
+  Inc(FSizingCount);
+  ANewSize := (ANewSize div 20) * 20;
+end;
+
+procedure TMainForm.EvEndColumnSize(Sender: TObject; AIndex, ANewSize: Integer);
+begin
+  Status(Format('列 %d 宽度定为 %d —— 拖动中发了 %d 次 Sizing,松手只发这 1 次 EndSize'
+    + '(宿主拿它保存列宽偏好)', [AIndex, ANewSize, FSizingCount]));
+  FSizingCount := 0;
+end;
+
+procedure TMainForm.EvRowSizing(Sender: TObject; AIndex: Integer;
+  var ANewSize: Integer; var AAllow: Boolean);
+begin
+  Inc(FSizingCount);
+end;
+
+procedure TMainForm.EvEndRowSize(Sender: TObject; AIndex, ANewSize: Integer);
+begin
+  { AIndex 是**数据行** —— 排序/筛选之后它仍然指向同一条记录。 }
+  Status(Format('数据行 %d 高度定为 %d(拖行高要在左侧行号槽里拖)',
+    [AIndex, ANewSize]));
+  FSizingCount := 0;
+end;
+
+{ 钉住第 0 列:序号列永远排第一。 }
+procedure TMainForm.EvColumnMove(Sender: TObject; AFromCol, AToCol: Integer;
+  var AAllow: Boolean);
+begin
+  if (AFromCol = 0) or (AToCol = 0) then
+  begin
+    AAllow := False;
+    Status('第 0 列被钉住了 —— 拖不动它,也没法把别的列拖到它前面');
+  end
+  else
+    Status(Format('列换位:%d → %d', [AFromCol, AToCol]));
+end;
+
+{ 勾选框否决:点得中、光标会移过去,但勾不上 —— 与 OnCanClickCell 挡住整格不同。 }
+procedure TMainForm.EvCanToggleCheck(Sender: TObject; ACol, ARow: Integer;
+  var AAllow: Boolean);
+begin
+  if ARow mod 5 = 0 then
+  begin
+    AAllow := False;
+    Status(Format('第 %d 行已锁定,勾不动(但光标是能移过去的)', [ARow]));
+  end;
+end;
+
+{ 只在**真的切换成功之后**才发 —— 宿主不用自己再判一次有没有变。 }
+procedure TMainForm.EvCheckBoxChange(Sender: TObject; ACol, ARow: Integer;
+  AChecked: Boolean);
+begin
+  if AChecked then Status(Format('第 %d 行已勾选', [ARow]))
+  else Status(Format('第 %d 行已取消勾选', [ARow]));
+end;
+
+{ 复制前改写将要进剪贴板的文本。 }
+procedure TMainForm.EvClipboardCopy(Sender: TObject; var AText: string;
+  var AAllow: Boolean);
+begin
+  AText := '// 来自 TTyStringGrid' + LineEnding + AText;
+  Status('复制的内容已被钩子加上一行注释 —— 粘到记事本里看看');
+end;
+
+{ 逐格校验:数量列只收数字,非法的格直接跳过(不是整块放弃)。 }
+procedure TMainForm.EvBeforePasteCell(Sender: TObject; ACol, ARow: Integer;
+  var ANewText: string; var AAllow: Boolean);
+var
+  dummy: Double;
+begin
+  if ACol = cQty then
+    AAllow := TryStrToFloat(Trim(ANewText), dummy);
+end;
+
+{ 逐格落地后:把被改过的格染色,粘完一眼看出动了哪些。 }
+procedure TMainForm.EvAfterPasteCell(Sender: TObject; ACol, ARow: Integer);
+begin
+  Inc(FPasteCount);
+  GridEvents.CellColors[ACol, ARow] := TyRGB(254, 240, 138);
+  Status(Format('本次粘贴写入 %d 格(被改的格已染色)', [FPasteCount]));
+end;
+
+{ 从光标下一格起环绕查找,自动把命中处滚进视野;连按能不重不漏走遍全表。 }
+procedure TMainForm.BtnEvFindClick(Sender: TObject);
+begin
+  if GridEvents.FindNext(EdEvFind.Text, False, False) then
+    Status(Format('找到 —— 光标已跳到 (列 %d, 行 %d) 并滚进视野',
+      [GridEvents.Col, GridEvents.Row]))
+  else
+    Status('没有更多匹配');
+end;
+
+procedure TMainForm.BtnEvReplaceClick(Sender: TObject);
+var
+  n: Integer;
+begin
+  n := GridEvents.ReplaceCells(EdEvFind.Text, EdEvRepl.Text, True, False, False);
+  Status(Format('已替换 %d 处(只读格会被自动跳过)', [n]));
+end;
+
+{ 导入:第一行当表头自动建列、清空旧数据、并复位筛选与排序。
+  这里故意用一段**带引号内换行**的 CSV —— 那是 Excel 导出的常见形态。 }
+procedure TMainForm.BtnEvImportCsvClick(Sender: TObject);
+const
+  cSample =
+    '编号,客户,备注' + LineEnding +
+    '1,阿里,"第一行' + LineEnding + '第二行"' + LineEnding +
+    '2,腾讯,"含,逗号的备注"' + LineEnding +
+    '3,字节,普通备注';
+begin
+  GridEvents.LoadFromCSVText(cSample, ',');
+  Status('已导入 —— 注意第 1 行的备注里**含换行**却没有把行数撑乱,逗号也没把字段切开');
 end;
 
 { ============ 换肤 ============ }

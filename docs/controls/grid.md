@@ -191,6 +191,9 @@ TyGridSummaryRow       汇总带
 - 输入约束按键级过滤(非法字符**连编辑都不进**)
 - 宿主自带编辑器:`OnCreateEditLink` + `TTyGridEditLink`
 - 单元格类型:文本 / 数值 / 下拉 / 日期 / 颜色 / 勾选框 / 进度条 / 评分 / 图片 / 按钮
+  —— **显示**方式(`TTyGridCellDisplay`)与**编辑**方式(`TTyGridEditorKind`)正交:
+  一列可以显示成进度条、双击仍按数值编辑;`gcdColor` 把 `#RRGGBB` 画成色块
+  (从前只有 `gekColor` 编辑器、没有显示侧,那一列看起来就是一串没格式化的脏数据)
 - 换行 `WordWrap` + `OnGetCellWordWrap`;行高三件套(可写 `RowHeights[]`、
   拖行分隔线、`AutoFitRow` / `AutoFitRows`)+ 全局上下限
 

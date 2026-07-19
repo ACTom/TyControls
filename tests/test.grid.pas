@@ -168,6 +168,7 @@ type
     procedure TestBlanksPositionAndCaseSensitiveSorting;
     procedure TestCtrlAGoesThroughSelectAll;
     procedure TestGridLinesDoNotCrossMergedCells;
+    procedure TestColorCellPaintsASwatchNotTheHexText;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -185,6 +186,8 @@ type
     procedure HookCanClickCell(Sender: TObject; ACol, ARow: Integer;
       var ACanClick: Boolean);
     procedure HookButtonInCol1(Sender: TObject; ACol, ARow: Integer;
+      var ADisplay: TTyGridCellDisplay);
+    procedure HookColorInCol1(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
     procedure HookSelectionChanged(Sender: TObject);
     procedure HookCanToggle(Sender: TObject; ACol, ARow: Integer;
@@ -4889,6 +4892,70 @@ begin
   finally
     imgs.Free;
     coll.Free;
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+procedure TTyStringGridTest.HookColorInCol1(Sender: TObject; ACol, ARow: Integer;
+  var ADisplay: TTyGridCellDisplay);
+begin
+  if ACol = 1 then ADisplay := gcdColor;
+end;
+
+{ 颜色列该画**色块**,不是把 '#3B82F6' 这串十六进制原样显示出来。
+
+  从前 gekColor 只是个**编辑器**(点开弹取色对话框),显示侧没有对应的种类 ——
+  于是那一列看起来就像一列没格式化的脏数据。 }
+procedure TTyStringGridTest.TestColorCellPaintsASwatchNotTheHexText;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  r: TRect;
+  x, y, green, ink: Integer;
+  px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.RowCount := 4;
+    G.Cells[1, 1] := '#00FF00';
+    G.OnGetCellDisplay := @HookColorInCol1;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    r := G.CellRect(1, 1);
+    green := 0;
+    ink := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top to r.Bottom - 1 do
+        for x := r.Left to r.Right - 1 do
+        begin
+          if (x < 0) or (y < 0) or (x >= 400) or (y >= 300) then Continue;
+          px := Re.GetPixel(x, y);
+          if (px.green > 180) and (px.red < 100) and (px.blue < 100) then Inc(green);
+          { 黑色的墨 = 文字。色块方案里这一格不该有文字。 }
+          if (px.red < 90) and (px.green < 90) and (px.blue < 90) then Inc(ink);
+        end;
+    finally
+      Re.Free;
+    end;
+
+    AssertTrue(Format('颜色列应当画出色块(绿像素 %d)', [green]), green > 40);
+    AssertEquals('颜色列不该再把十六进制串画成文字', 0, ink);
+  finally
     Bmp.Free;
     Ctl.Free;
   end;
