@@ -47,7 +47,11 @@ end;
 | `ReadOnly` | 整表只读,任何编辑都开不起来 |
 | `SortColumn` / `SortDirection` | 当前排序列与方向(只读;用 `SortByColumn` / `ToggleSortColumn` 改) |
 | `ShowFooter` / `FooterHeight` | 底部汇总带 |
-| `FixedRows` 现已真正实现 | 前 N 个显示行钉在列头之下、不随滚动、可点击 |
+| `FixedRowsBottom` | 冻结在**底部**的显示行数(与 `FixedRows` 对称)。常见用途是把合计行钉在视口下沿 |
+| `FixedColsRight` | 冻结在**右侧**的列数(与 `FixedCols` 对称) |
+| `ShowRowNumbers` | 在行头槽里画行号(按**显示序**,排序后屏幕第一行仍是 1)。需要 `ShowIndicator` 也打开 |
+| `ShowGroupSubtotals` | 分组行上按列显示小计(默认开)。哪些列有小计由 `SetColumnAggregate` 决定 —— 与汇总带同一份配置 |
+| `ShowFilterButtons` | 列头上显示筛选漏斗,点开是带搜索框与逐值计数的下拉 |
 | `SelectionMode` | `gsmCell`(默认)/ `gsmRow` / `gsmColumn` |
 | `Images` | `gcdImage` 用的图像集(`TTyVirtualImageList`) |
 | `OnGetRowHeight` | 逐行行高。**接了它才启用可变行高**;不接则全表等高,几何层走整除快路径(百万行时省下一个百万项的前缀和数组) |
@@ -65,6 +69,15 @@ end;
 | `gekPickList` | 下拉选取,候选来自 `OnGetPickList`;**选中即提交** |
 | `gekDate` | 弹日期选择器 |
 | `gekColor` | 弹取色对话框,值存 `#RRGGBB` |
+| `gekSpin` | 数值微调(带上下按钮),范围取列的 `MinValue` / `MaxValue` |
+| `gekSlider` | 滑动条,范围同上。编辑时自带数值读数,拖到哪儿一眼看得见 |
+| `gekRating` | **不弹编辑器** —— 点第几颗星就是几分(与勾选框同一种手感) |
+| `gekMemo` | 多行文本,编辑器向下撑开 |
+| `gekMask` | 掩码输入,掩码取列的 `EditMask`(交给 `TTyMaskEdit` 解释) |
+| `gekTime` | 只选时间 |
+| `gekPassword` | 输入时打点 |
+| `gekCalculator` | 带计算器的数值输入 |
+| `gekEllipsis` | 文本 + 右缘一个 `…` 按钮;点它走 `OnEllipsisClick`,宿主爱弹什么对话框弹什么。这是"自定义编辑"的一等公民入口 |
 
 ### 单元格显示方式
 
@@ -76,6 +89,8 @@ end;
 | `gcdProgress` | 进度条,值取 0..100(借 `TyProgressBar` 的 token) |
 | `gcdRating` | 评分标记,值取 0..5 |
 | `gcdImage` | 图片,值是 `Images` 里的索引 |
+| `gcdButton` | 画成按钮,点击走 `OnCellButtonClick` |
+| `gcdColor` | 画成色块(值是 `#RRGGBB`)。不这么做的话那一列看起来就是一堆脏数据 |
 
 ## 主要事件
 
@@ -100,9 +115,22 @@ end;
 - **过滤**:`SetColumnFilter(列, 文本)` 做包含匹配(不区分大小写);`OnFilterRow` 可逐行否决
 - **剪贴板**:`Ctrl+C` / `Ctrl+V` / `Ctrl+A`。制表符分隔 = Excel 剪贴板格式,可直接互粘
 - **汇总**:`SetColumnAggregate(列, gagSum/gagAvg/gagMin/gagMax/gagCount)`;**只统计筛选后可见的行**,非数值格跳过
-- **列头筛选**:`ShowFilterButtons := True` 后列头出现 ▾,点开是该列**去重值的勾选列表**;候选取自全部数据行(不受本列自身筛选影响,否则选不回来)
+- **列头筛选**:`ShowFilterButtons := True` 后列头出现 ▾,点开是 Excel 式的下拉:
+  搜索框 + 逐值行数 + `(全选)` + `(空白)` + 确定/取消。候选与计数都取自**全部数据行**
+  (不受本列自身筛选影响,否则勾掉一个值它的计数变 0、就再也判断不出该不该勾回来)。
+  勾选状态按**值**记而不是按列表下标 —— 搜索框会 narrow 列表,按下标记账会把勾打到别的值上。
+  取数用 `DistinctColumnValueCounts`
+- **填充柄**:选区右下角的小方块,往下拖把选区的值铺开 ——
+  单格复制、整数等差外推、其余按源区循环重复;`OnFillCells` 可接管做自定义序列。
+  只做纵向:横向拖柄少见得多,而半成品的可供性比没有更糟
 - **列宽/列序**:拖列头右边缘改宽;拖列头本体换位(需 `hoDrag` + `coDraggable`,位移超阈值才生效)
-- **分组**:`GroupByColumn(列)` 在显示序里插入**合成分组行**(带成员计数),点分组行折叠/展开。折叠状态按**分组值**记账,重排后不会张冠李戴
+- **分组**:`GroupByColumn(列)` 在显示序里插入**合成分组行**(带成员计数),点分组行折叠/展开。折叠状态按**分组值**记账,重排后不会张冠李戴。
+  分组行上还按列显示**小计**(`ShowGroupSubtotals`,默认开;`GroupAggregateValue` / `GroupFooterText` 取值)——
+  统计按组的**成员数据行**走而不是显示序,所以折叠着也算得出来
+- **合并**:`MergeSelection` 由网格自己从选区算跨度。宿主**别**自己算 ——
+  选区矩形活在显示序空间,而 `Selection` 给的是数据行坐标,两者之差不是"几行"
+  (排过序的表上这么算会吞掉几十行,真实发生过)。
+  合并块记的是一段**数据行**,只在这段行连续升序显示时成立;排序打散它时它自动失效,排回来又恢复
 - **合并**:`MergeCells(列, 行, 跨列, 跨行)`;基准格跨满整区,被覆盖格无矩形,点区内任意处都归基准格
 - **行列增删**:`InsertRow` / `DeleteRow` / `InsertColumn` / `DeleteColumn`,内容随之整体搬移
 - **自动适宽**:`AutoFitColumn(列)` 取表头与**已写入**单元格里最宽的;只量写过的格,百万行空表也不扫全表
@@ -127,7 +155,8 @@ TyGridHeader           列头带
 TyGridHeaderSection    列头分段
 TyGridHeaderGroup      分组表头带(横跨若干列的上层标题)
 TyGridLine             格线
-TyGridSelection        选区
+TyGridCellMarked       选区盖在"用户显式指定了底色"的格上时用的半透明层
+TyGridSelectionFrame   选区外框 + 填充柄(color: 是柄的描边色)
 TyGridCheckBox         勾选框单元格
 TyGridProgress / TyGridProgressFill   进度条单元格
 TyGridRating           评分单元格
@@ -244,6 +273,11 @@ TyGridSummaryRow       汇总带
 - 逐格样式解析按**状态组合**记忆化:绝大多数格状态相同,整帧只解析一两次
 - `GridMetrics` 整帧只算一次(`CellRect`/`CellVisibleRect`/`CellPane` 每格要问三四次)
 - 排序是**稳定归并排序**;单元格用哈希表寻址(早先线性查找 + 插入排序,1000 行就卡死)
+- **滚动走脏区重绘**:正文像素整体平移复用,只重画滚进来的那一条带(37ms/帧 → 5.7ms/帧)。
+  正确性靠**默认作废**:`Invalidate` 一律熄灭表面新鲜度,纯滚动是唯一例外
+- **批量写数据一定要用 `BeginUpdate` / `EndUpdate`**(可嵌套)。
+  `Cells[c,r] := ...` 每写一格就往 LCL 送一次失效;灌 10 万行 x 9 列 = 90 万次,界面看起来就是死的。
+  加锁后整批只重画一次。这是本控件**最容易踩、也最容易漏掉**的性能点
 
 ## 明确不做
 

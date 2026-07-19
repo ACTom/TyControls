@@ -213,7 +213,6 @@ type
     FReadOnly:   Boolean;
     FPickList:   TStrings;
     FAggregate:  TTyGridAggregate;
-    FFormat:     string;
     FValidChars: string;
     FMaxEditLength: Integer;
     FSortKind: TTyGridSortKind;
@@ -256,8 +255,6 @@ type
     { 汇总带上这一列显示什么统计。 }
     property Aggregate: TTyGridAggregate read FAggregate write FAggregate
       default gagNone;
-    { 显示用的格式串(FormatFloat/FormatDateTime 语义,由派生网格解释)。 }
-    property Format: string read FFormat write FFormat;
   end;
 
   { 一格显示成什么。放在这里(而不是 TTyStringGrid 那段)是因为基类要用它
@@ -620,6 +617,11 @@ type
     procedure ShiftSurfaceRows(ATop, ABottom, ADy: Integer);
     { 单元格最多跨几行。基类不认识合并,给 1;TTyStringGrid 覆盖成真实跨度。
       脏区重绘用它来决定接缝处要多让出几行。 }
+    { 两个**只给测试用**的探针:批量更新与脏区重绘从画面上都看不出效果,
+      失效只表现为变慢或留下陈旧像素,必须有能直接观测的口子。
+      放 protected —— 测试经访问子类够得着,而它们不该成为对外支持的 API。 }
+    property RealInvalidateCount: Integer read FRealInvalidates;
+    property SurfaceFresh: Boolean read FSurfaceFresh;
     function MaxRowSpanHint: Integer; virtual;
     { 行高变了 → 行几何的缓存(前缀和)要失效。基类没有缓存;TTyStringGrid 改写。 }
     procedure InvalidateRowMetrics; virtual;
@@ -821,8 +823,6 @@ type
       任何要连续写很多格/很多行的宿主都该用它。 }
     procedure BeginUpdate;
     procedure EndUpdate;
-    property RealInvalidateCount: Integer read FRealInvalidates;
-    property SurfaceFresh: Boolean read FSurfaceFresh;
     function CellAt(AX, AY: Integer): TTyGridHit;
 
     { 把某个单元格滚进可视区(最小移动量)。光标一旦走出视口就得靠它跟上,
@@ -1821,7 +1821,6 @@ begin
     FReadOnly := TTyGridColumn(ASource).ReadOnly;
     FPickList.Assign(TTyGridColumn(ASource).PickList);
     FAggregate := TTyGridColumn(ASource).Aggregate;
-    FFormat := TTyGridColumn(ASource).Format;
     FValidChars := TTyGridColumn(ASource).ValidChars;
     FMaxEditLength := TTyGridColumn(ASource).MaxEditLength;
     FSortKind := TTyGridColumn(ASource).SortKind;
