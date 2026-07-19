@@ -220,6 +220,8 @@ type
     FNoteLink: TNoteEditLink;
     FSizingCount, FPasteCount: Integer;
     function  ColorSelectedCells(AColor: TTyColor): Integer;
+    procedure VirtualCellText(Sender: TObject; ACol, ARow: Integer;
+      var AText: string);
     procedure BuildOrderColumns(AGrid: TTyStringGrid; AWithNote: Boolean;
       AWithEditorCols: Boolean = False);
     procedure FillOrders(AGrid: TTyStringGrid; ACount: Integer; AWithNote: Boolean;
@@ -467,28 +469,60 @@ end;
 
 procedure TMainForm.BtnRows1WClick(Sender: TObject);
 begin
+  GridBasic.OnGetCellText := nil;   { 摘掉虚拟数据源 }
   FillOrders(GridBasic, 10000, False);
   Status('1 万行 —— 只绘制可视窗口内的几十行,滚动一下试试');
 end;
 
 procedure TMainForm.BtnRows10WClick(Sender: TObject);
 begin
+  GridBasic.OnGetCellText := nil;   { 摘掉虚拟数据源 }
   FillOrders(GridBasic, 100000, False);
-  Status('10 万行 —— 已写满内容,注意状态栏的"已存格数"');
+  Status('10 万行 —— 这次是**真写满**了 90 万格,对比上面那个百万行看"已存格数"');
 end;
 
-{ 一百万行:**只把 RowCount 拉大,不写任何单元格**。
-  存储是稀疏的、绘制只走可视窗口,所以既不吃内存也不卡。 }
+{ 一百万行:**一格都不写**,内容由 OnGetCellText 按需生成。
+
+  这才是虚拟化的正题:表里有数据、"已存格数"仍是 0、滚动照样瞬时。
+  从前这里是 ClearCells + 拉大 RowCount —— 技术上没错(确实证明了稀疏存储),
+  但用户看到的是一张**空表**,只会读成"表格被清空了"。
+  空白证明不了任何东西,能滚的百万行数据才能。 }
+procedure TMainForm.VirtualCellText(Sender: TObject; ACol, ARow: Integer;
+  var AText: string);
+var
+  qty: Integer;
+begin
+  qty := 1 + (ARow * 7) mod 40;
+  case ACol of
+    cOrderNo: AText := Format('SO-2026%06d', [ARow + 1]);
+    cRegion:  AText := cRegions[ARow mod Length(cRegions)];
+    cProduct: AText := cProducts[ARow mod Length(cProducts)];
+    cQty:     AText := IntToStr(qty);
+    cAmount:  AText := Format('%.2f', [qty * 128.5]);
+    cDate:    AText := FormatDateTime('yyyy-mm-dd',
+                EncodeDate(2026, 1 + ARow mod 12, 1 + ARow mod 28));
+    cDone:    if ARow mod 3 = 0 then AText := '1' else AText := '';
+    cRate:    AText := IntToStr(1 + ARow mod 5);
+    cMark:    AText := cMarkColors[ARow mod Length(cMarkColors)];
+  else
+    AText := '';
+  end;
+end;
+
 procedure TMainForm.BtnRows100WClick(Sender: TObject);
 begin
   GridBasic.ClearCells;
+  { 挂上虚拟数据源。GetCellText 先问事件,事件给空串才回落到自带存储 ——
+    所以挂着它的时候不要再往里写格子(下面几个按钮会先摘掉它)。 }
+  GridBasic.OnGetCellText := @VirtualCellText;
   GridBasic.RowCount := 1000000;
   GridBasic.MoveCursor(0, 0);
-  Status('100 万行,一格没写 —— 看"已存格数"仍是 0,这就是稀疏存储');
+  Status('100 万行 —— 内容由回调按需生成,"已存格数"仍是 0:这就是虚拟化 + 稀疏存储');
 end;
 
 procedure TMainForm.BtnRowsResetClick(Sender: TObject);
 begin
+  GridBasic.OnGetCellText := nil;   { 摘掉虚拟数据源,回到自带存储 }
   GridBasic.ClearCells;
   FillOrders(GridBasic, 200, False);
   GridBasic.MoveCursor(0, 0);
@@ -498,6 +532,7 @@ end;
 { 跳转:MoveCursor 之后显式 ScrollIntoView。横向滚动会**跳过冻结列**。 }
 procedure TMainForm.BtnGotoClick(Sender: TObject);
 begin
+  GridBasic.OnGetCellText := nil;   { 摘掉虚拟数据源 }
   if GridBasic.RowCount < 5001 then FillOrders(GridBasic, 10000, False);
   GridBasic.MoveCursor(2, 5000);
   GridBasic.ScrollIntoView(2, 5000);
