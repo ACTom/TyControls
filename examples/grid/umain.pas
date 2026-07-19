@@ -976,18 +976,16 @@ begin
 end;
 
 procedure TMainForm.BtnMergeClick(Sender: TObject);
-var
-  sel: TRect;
 begin
-  sel := GridData.Selection;
-  if (sel.Right <= sel.Left) and (sel.Bottom <= sel.Top) then
-  begin
-    Status('先拖选一块区域(至少 2x2)再点合并');
-    Exit;
-  end;
-  GridData.MergeCells(sel.Left, sel.Top,
-    sel.Right - sel.Left + 1, sel.Bottom - sel.Top + 1);
-  Status('已合并 —— 注意合并区**内部没有格线穿过**,外沿仍然有');
+  { 跨度由网格自己从选区算 —— 宿主**别**自己算。
+    选区矩形活在显示序空间,而 Selection 对外给的是数据行坐标,
+    两个数据行下标之差在任何空间里都不是"几行"(排过序的表上这么算,
+    会吞掉几十行)。 }
+  if GridData.MergeSelection then
+    Status('已合并 —— 注意合并区**内部没有格线穿过**,外沿仍然有')
+  else
+    Status('没合并:要么没拖选出一块区域,'
+      + '要么这几行在数据里并不相邻(排过序/藏过行)—— 那样合成一块,换个排序就散了');
 end;
 
 procedure TMainForm.BtnUnmergeClick(Sender: TObject);

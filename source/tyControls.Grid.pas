@@ -1034,6 +1034,8 @@ type
     FMaxRowSpan: Integer;
   protected
     function MaxRowSpanHint: Integer; override;
+    { 这段数据行此刻是不是正连续升序地显示着。 }
+    function RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
   private
     FSkipReadOnly: Boolean;
     FGroupRowFormat: string;
@@ -1311,6 +1313,13 @@ type
 
     { --- 单元格合并 ---
       只记基准格的跨度;被覆盖的格没有自己的矩形,命中时归到基准格。 }
+    { 把**当前选区**合并成一块。返回 False = 没合(选区不足一块,
+      或者它在数据行上不连续 —— 见实现里的说明)。
+
+      宿主**不要**自己算跨度:选区矩形活在显示序空间,而 Selection 对外给的是
+      数据行坐标,两个数据行下标之差在任何空间里都不是"几行"。
+      这个陷阱已经真实咬过一次(排过序的表上合并,吞掉几十行)。 }
+    function  MergeSelection: Boolean;
     procedure MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
     procedure UnmergeCells(ACol, ARow: Integer);
     procedure ClearMerges;
@@ -6601,6 +6610,44 @@ end;
 
 { ---- 单元格合并 ----------------------------------------------------------- }
 
+function TTyStringGrid.RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
+var
+  i, p0: Integer;
+begin
+  Result := False;
+  p0 := DataToDisplay(ABaseRow);
+  if p0 < 0 then Exit;
+  for i := 1 to ACount - 1 do
+    if DataToDisplay(ABaseRow + i) <> p0 + i then Exit;
+  Result := True;
+end;
+
+function TTyStringGrid.MergeSelection: Boolean;
+var
+  r: TRect;
+  i, baseRow, prev, dr: Integer;   { 别叫 top —— 与 TRect.Top 撞名 }
+begin
+  Result := False;
+  r := ActiveSelectionRect;            { 显示序空间 }
+  if (r.Right <= r.Left) and (r.Bottom <= r.Top) then Exit;
+
+  { 屏幕上连着的一段,必须同时是**数据行上连续升序的一段**。
+    排过序/筛过之后,屏幕上挨着的几行在数据里可能天各一方 —— 把它们合成一块
+    没有意义:换个排序块就散了。这种时候宁可什么都不做,也不要吞掉别的行。 }
+  baseRow := DisplayToData(r.Top);
+  if baseRow < 0 then Exit;
+  prev := baseRow;
+  for i := r.Top + 1 to r.Bottom do
+  begin
+    dr := DisplayToData(i);
+    if dr <> prev + 1 then Exit;
+    prev := dr;
+  end;
+
+  MergeCells(r.Left, baseRow, r.Right - r.Left + 1, r.Bottom - r.Top + 1);
+  Result := True;
+end;
+
 procedure TTyStringGrid.MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
 begin
   if (AColSpan <= 1) and (ARowSpan <= 1) then
@@ -6610,6 +6657,16 @@ begin
   end;
   if AColSpan < 1 then AColSpan := 1;
   if ARowSpan < 1 then ARowSpan := 1;
+  { 越界的跨度直接钳住 —— 让"单位算错了"的调用方拿到一个不吞别人的结果,
+    而不是把下面几十行悄悄卷进来。 }
+  if ARow + ARowSpan > RowCount then ARowSpan := RowCount - ARow;
+  if ACol + AColSpan > FHeader.Columns.Count then
+    AColSpan := FHeader.Columns.Count - ACol;
+  if (AColSpan <= 1) and (ARowSpan <= 1) then
+  begin
+    UnmergeCells(ACol, ARow);
+    Exit;
+  end;
   with FAttrs.Ensure(CellKey(ACol, ARow)) do
   begin
     if (ColSpan <= 1) and (RowSpan <= 1) then Inc(FMergeCount);
@@ -6684,6 +6741,13 @@ begin
   if a = nil then Exit(False);
   AColSpan := a.ColSpan;
   ARowSpan := a.RowSpan;
+  { 合并块记的是一段**数据行**。只有这段数据行此刻正连续升序地显示着,它才成立
+    —— 排序/筛选/隐藏行会把它们打散,那时若还照着"从基准格往下数 rs 个
+    **显示行**"去画(CellRect / BaseCellOf 就是这么消费它的),盖住的已经是
+    另外几行了:合并块会"糊"到别处去。
+    失效不等于销毁:排回去它自己就回来了。 }
+  if (ARowSpan > 1) and (not RowsDisplayedConsecutively(ARow, ARowSpan)) then
+    ARowSpan := 1;
   Result := (AColSpan > 1) or (ARowSpan > 1);
 end;
 

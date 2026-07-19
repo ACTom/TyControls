@@ -188,6 +188,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestMergeSelectionOnSortedGridDoesNotSwallowExtraRows;
+    procedure TestMergeStopsApplyingWhenSortBreaksItUpAndReturnsWhenSortedBack;
     procedure TestDoubleClickOutsideCellsDoesNotStartEditing;
     procedure TestOnDblClickCellFiresForCellsOnly;
     procedure TestSelectionDoesNotEraseAnExplicitCellColor;
@@ -1008,6 +1010,7 @@ type
     function  GetScrollTop: Integer;
     procedure SetScrollTop(AValue: Integer);
     procedure ScrollByForTest(ADy: Integer);
+    procedure BaseCellOfForTest(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
     procedure InvalidateSurfaceForTest;
     property ScrollTop: Integer read GetScrollTop write SetScrollTop;
   end;
@@ -1182,6 +1185,12 @@ end;
 function TStrGridAccess.GetScrollTop: Integer;
 begin
   Result := ScrollY;
+end;
+
+procedure TStrGridAccess.BaseCellOfForTest(ACol, ARow: Integer;
+  out ABaseCol, ABaseRow: Integer);
+begin
+  BaseCellOf(ACol, ARow, ABaseCol, ABaseRow);
 end;
 
 procedure TStrGridAccess.ScrollByForTest(ADy: Integer);
@@ -6178,6 +6187,86 @@ begin
 
   G.FullDoubleClickAt(8, cellY);
   AssertEquals('双击行号槽不该触发 OnDblClickCell', 1, FDblCount);
+end;
+
+{ **排序过的表上合并,绝不能吞掉没选中的行。**
+
+  用户报的症状:同一列里选了不到 10 个格,结果几十个格被合并了 —— 而转述的人
+  复现不出来。复现不出来是对的:干净表上显示序==数据序,怎么算都对。
+  前置条件是**表被排过序**(而"点列头自动排序"是默认开着的,一次随手点击就够了)。
+
+  机制:选区矩形活在**显示序**空间,而 Selection 只把两个端点翻译成数据行 ——
+  两个数据行下标之差,在任何一个空间里都不再是"几行"。8 个显示行的选区,
+  端点数据行可能差几十,而 RowSpan 的消费方(CellRect / BaseCellOf)
+  一律按"从基准格往下数这么多**显示行**"来吞。
+
+  这条测试断言的是**覆盖范围**,不是 RowSpan 的数值 —— 数值对不对无所谓,
+  没选中的行有没有被吞掉才是用户看得见的事。 }
+procedure TTyStringGridTest.TestMergeSelectionOnSortedGridDoesNotSwallowExtraRows;
+var
+  G: TStrGridAccess;
+  r: Integer;
+  covered: Integer;
+  bc, br: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 40;
+  { 让排序把显示序彻底打乱:数据行 0..39,按倒序的文本排。 }
+  for r := 0 to 39 do
+    G.Cells[0, r] := Format('%.2d', [39 - r]);
+  G.SortByColumn(0, sdAscending);
+
+  { 屏幕上连着的 4 行。 }
+  G.SelectRange(0, G.DisplayToData(2), 0, G.DisplayToData(5));
+
+  { 拒绝比吞错更好:屏幕上挨着的这几行在数据里天各一方,合成一块没有意义 ——
+    换个排序它就散了。 }
+  AssertTrue('排过序、数据行不连续时应当拒绝合并', not G.MergeSelection);
+
+  { 数一数:全表有多少格被某个合并块盖住(自己是基准格的不算)。
+    只选了 4 个格,被盖住的最多就是其中 3 个。 }
+  covered := 0;
+  for r := 0 to 39 do
+  begin
+    G.BaseCellOfForTest(0, r, bc, br);
+    if br <> r then Inc(covered);
+  end;
+  AssertTrue(Format('被吞掉的行数不该超过选中的(实际盖住 %d 行)', [covered]),
+    covered <= 3);
+end;
+
+{ 合并块记的是一段**数据行**。排序把这段数据行打散之后,块必须**停止生效** ——
+  否则它会照着"从基准格往下数 N 个显示行"继续画,盖住的是另外几行了。
+  排回去它要能回来:失效不等于销毁。 }
+procedure TTyStringGridTest.TestMergeStopsApplyingWhenSortBreaksItUpAndReturnsWhenSortedBack;
+var
+  G: TStrGridAccess;
+  r, bc, br: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 12;
+  for r := 0 to 11 do
+    G.Cells[0, r] := Format('%.2d', [r]);
+
+  { 干净表上合并数据行 2..4。 }
+  G.MergeCells(0, 2, 1, 3);
+  G.BaseCellOfForTest(0, 3, bc, br);
+  AssertEquals('前置条件:第 3 行被第 2 行的合并块盖住', 2, br);
+
+  { 把块中间的一行藏起来 —— 数据行 2,4 在屏幕上仍然挨着,但它们已经不是
+    "连续升序的 2,3,4"了。基准格仍在上方,所以向上回扫**够得着**它:
+    不加守卫的话,这个块会照旧往下吞 3 个显示行,把从没被合并过的第 5 行卷进来。
+    (用降序排是测不出来的:那会把基准格排到成员行下面,回扫根本够不着。) }
+  G.HideRow(3);
+  G.BaseCellOfForTest(0, 5, bc, br);
+  AssertEquals('打散后不许把没合并过的行吞进来', 5, br);
+  G.BaseCellOfForTest(0, 4, bc, br);
+  AssertEquals('打散后合并块整个失效', 4, br);
+
+  { 行放回来,块要回来 —— 失效不等于销毁。 }
+  G.UnHideRow(3);
+  G.BaseCellOfForTest(0, 3, bc, br);
+  AssertEquals('恢复顺序后合并块要回来', 2, br);
 end;
 
 initialization
