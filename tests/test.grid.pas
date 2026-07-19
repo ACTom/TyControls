@@ -178,6 +178,9 @@ type
     procedure TestRatingCellSetsValueByClickingAStar;
     procedure TestRatingCellPaintsFilledAndEmptyStars;
     procedure TestPasswordTimeCalculatorAndCharCaseEditors;
+    procedure TestHiddenColumnTakesNoSpaceAndIsNotPainted;
+    procedure TestNavigationSkipsHiddenColumns;
+    procedure TestRowNumbersFollowDisplayOrder;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -5357,6 +5360,163 @@ begin
   AssertTrue('进入时间编辑', G.BeginEdit(3, 1));
   AssertTrue('选择器切到时间模式', G.DateEditorKind = dtkTime);
   G.EndEdit(False);
+end;
+
+{ 隐藏列必须**真的不占位、也不被画**。
+
+  从前 coVisible 只是半成品:ColumnWidthPx 对隐藏列照样返回整宽,
+  于是 CellRect 给出一个非空矩形 —— 而且正好压在**下一个可见列**的位置上。
+  TTyStringGrid.RenderCells 里三个循环又没有 coVisible 守卫,
+  于是选区底色、勾选框/进度条/评分/色块会画到邻列头上。 }
+procedure TTyStringGridTest.TestHiddenColumnTakesNoSpaceAndIsNotPainted;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  x, y, red: Integer;
+  px: TBGRAPixel;
+  leftBefore: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }');
+    G := MakeStrGrid(FForm, Ctl);   { 4 列 x 80 }
+    G.GridLines := False;
+    G.RowCount := 4;
+
+    leftBefore := G.ColLeft(2);
+
+    { 给第 1 列(将被隐藏)涂成醒目的红 —— 隐藏之后它一个像素都不该出现。 }
+    G.CellColors[1, 1] := TyRGB(255, 0, 0);
+    G.HideColumn(1);
+
+    AssertTrue('查得出是隐藏的', G.IsHiddenColumn(1));
+    AssertEquals('隐藏列不占宽度', 0, G.ColWidth(1));
+    AssertTrue('隐藏列没有自己的矩形', IsRectEmpty(G.CellRect(1, 1)));
+    AssertTrue(Format('后面的列要左移补位(%d -> %d)', [leftBefore, G.ColLeft(2)]),
+      G.ColLeft(2) < leftBefore);
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    red := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := 0 to 200 do
+        for x := 0 to 399 do
+        begin
+          px := Re.GetPixel(x, y);
+          if (px.red > 180) and (px.green < 100) and (px.blue < 100) then Inc(red);
+        end;
+    finally
+      Re.Free;
+    end;
+    AssertEquals('隐藏列的内容一个像素都不该画出来', 0, red);
+
+    G.ShowColumn(1);
+    AssertTrue('取消隐藏后又有宽度了', G.ColWidth(1) > 0);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 光标不能停在隐藏列上 —— 停上去的话编辑器会在一个看不见的地方打开。 }
+procedure TTyStringGridTest.TestNavigationSkipsHiddenColumns;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);   { 4 列 }
+  G.RowCount := 4;
+  G.HideColumn(1);
+  G.HideColumn(2);
+  G.MoveCursor(0, 0);
+
+  G.PressKey(VK_RIGHT);
+  AssertEquals('方向键跳过两个隐藏列', 3, G.Col);
+
+  G.PressKey(VK_LEFT);
+  AssertEquals('反向也跳过', 0, G.Col);
+
+  { Tab 同理。 }
+  G.PressKey(VK_TAB);
+  AssertEquals('Tab 也跳过隐藏列', 3, G.Col);
+
+  { End 要落在**最后一个可见列**上,不能落在隐藏列上。 }
+  G.MoveCursor(0, 0);
+  G.PressKey(VK_END);
+  AssertTrue('End 落在可见列上', not G.IsHiddenColumn(G.Col));
+
+  { 直接把光标设到隐藏列上也要被纠正。 }
+  G.MoveCursor(1, 0);
+  AssertTrue('光标不该停在隐藏列上', not G.IsHiddenColumn(G.Col));
+end;
+
+{ 行号槽要真的画出行号 —— 从前它是一条纯空白条,而文档写的是"行号槽"。
+  行号按**显示序**给:排序之后屏幕第一行仍然是 1。 }
+procedure TTyStringGridTest.TestRowNumbersFollowDisplayOrder;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+
+  { 行号槽里某一显示行的墨量。 }
+  function InkInIndicator(APos: Integer): Integer;
+  var
+    Re: TBGRABitmap; r: TRect; x, y: Integer; px: TBGRAPixel;
+  begin
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    r := G.RowRectAt(APos);
+    Result := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top to r.Bottom - 1 do
+        for x := 0 to 39 do
+        begin
+          if (y < 0) or (y >= 300) then Continue;
+          px := Re.GetPixel(x, y);
+          if px.red + px.green + px.blue < 400 then Inc(Result);
+        end;
+    finally
+      Re.Free;
+    end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridIndicator { background: #FFFFFF; color: #000000; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.ShowIndicator := True;
+    G.IndicatorWidth := 40;
+    G.RowCount := 5;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    AssertEquals('默认不显示行号', 0, InkInIndicator(1));
+
+    G.ShowRowNumbers := True;
+    AssertTrue(Format('打开后行号槽里要有字(墨 %d)', [InkInIndicator(1)]),
+      InkInIndicator(1) > 3);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
 end;
 
 initialization

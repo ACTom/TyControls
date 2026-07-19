@@ -149,6 +149,7 @@ TyGridSummaryRow       汇总带
   —— 与钩子的区别是它落盘:用户手工涂黄的格,存下来还得是黄的
 - 逐格边框 `OnGetCellBorder`(四支笔各自可开可关)—— 报表的分区块粗线、小计行双线
 - 斑马纹 `AlternateRows`(按**显示行号**取奇偶,排序筛选后条纹仍然隔行)
+- 行号 `ShowRowNumbers`(画在行头槽里,按**显示序** —— 排序后屏幕第一行仍是 1)
 - 焦点格与选区区分(`TyGridActiveCell`)
 - 格线 `GridLineStyle`(none / 只横 / 只竖 / 全)+ `GridLineWidth`
   —— 线**不占布局像素**,压在边界上,列宽不因线变粗而挪位
@@ -169,6 +170,8 @@ TyGridSummaryRow       汇总带
   `SetColumnFilterEx`;`ColumnIsFiltered` / `FilteredRowCount`
 - 分组:`GroupByColumn` + `ExpandAllGroups` / `CollapseAllGroups`,
   分组行文本走可配的 `GroupRowFormat`
+- **列**的显式隐藏 `HideColumn` / `ShowColumn` / `IsHiddenColumn`
+  —— 隐藏列不占宽度、不被绘制、光标也不会停上去
 - 行的显式隐藏 `HideRow` / `UnHideRow` / `NumHiddenRows`
   —— 与过滤是**两回事**:过滤是条件,隐藏是事实,`ClearFilters` 不会把它放出来
 - 批量:`InsertRows` / `RemoveRows` / `InsertCols` / `RemoveCols` /

@@ -385,6 +385,9 @@ type
     { 隔行底色。按**显示行号**取,不是数据行号 —— 否则排序筛选之后条纹会跟着
       数据行乱跳,看起来像随机涂色。 }
     FAlternateRows:    Boolean;
+    { 行头槽里显示行号(按**显示序**,排序后屏幕第一行仍是 1)。
+      从前那条槽只铺了个底、一个数字都不画,而文档管它叫"行号槽"。 }
+    FShowRowNumbers:   Boolean;
     FOnGetCellStyle:   TTyGridGetCellStyleEvent;
     FOnGetCellBorder:  TTyGridGetCellBorderEvent;
     FOnGetHeaderStyle: TTyGridGetHeaderStyleEvent;
@@ -495,6 +498,10 @@ type
     procedure SetHeaderGroups(AValue: TTyGridHeaderGroups);
     procedure SetGroupHeaderHeight(AValue: Integer);
     procedure SetAlternateRows(AValue: Boolean);
+    procedure SetShowRowNumbers(AValue: Boolean);
+    { 把行号画进行头槽。ShowRowNumbers 关着时整段跳过。 }
+    procedure RenderRowNumbers(P: TTyPainter; const M: TTyGridMetrics;
+      AHeaderH, AIndicatorW: Integer); virtual;
     procedure SetWordWrap(AValue: Boolean);
     function  GetRowHeights(ARow: Integer): Integer;
     procedure SetRowHeights(ARow, AValue: Integer);
@@ -554,6 +561,19 @@ type
     function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; virtual;
     { 网格自己的列类;列还没建时返回 nil。 }
     function  GridColumn(ACol: Integer): TTyGridColumn;
+  public
+    { --- 列的显式隐藏 ---
+      底层就是 TTyColumn.Options 里的 coVisible;这三个方法只是免得宿主
+      自己去记集合运算。隐藏列不占宽度、不被绘制、光标也不会停上去。 }
+    procedure HideColumn(ACol: Integer);
+    procedure ShowColumn(ACol: Integer);
+    function  IsHiddenColumn(ACol: Integer): Boolean;
+    { 从 AFrom 起沿 AStep 找第一个**可见**列;找不到就原样返回。 }
+    function  NextVisibleCol(AFrom, AStep: Integer): Integer;
+    { 第一个 / 最后一个可见列。 }
+    function  FirstVisibleCol: Integer;
+    function  LastVisibleCol: Integer;
+
   public
     { 显式行高。设为 <= 0 表示"清掉,回到回调/默认值"。
       **public**:宿主按行设高度是正常用法(示例里"恢复行高"就靠它)。 }
@@ -733,6 +753,9 @@ type
     property FixedRows: Integer read FFixedRows write SetFixedRows default 0;
     { 最左侧的行头/行号槽。 }
     property ShowIndicator: Boolean read FShowIndicator write SetShowIndicator default False;
+    { 在行头槽里画行号(按显示序)。需要 ShowIndicator 也打开。 }
+    property ShowRowNumbers: Boolean read FShowRowNumbers write SetShowRowNumbers
+      default False;
     property IndicatorWidth: Integer read FIndicatorWidth write SetIndicatorWidth default 30;
     { 单元格之间的格线。颜色取 TyGridLine 的 background,主题没定义则退回本体的 border-color。
       **兼容别名** —— 真正的存储是 GridLineStyle。`stored False` 保证它不会被写进 .lfm
@@ -2472,6 +2495,55 @@ begin
   Invalidate;
 end;
 
+procedure TTyCustomGrid.HideColumn(ACol: Integer);
+var c: TTyColumn;
+begin
+  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
+  c := TTyColumn(FHeader.Columns.Items[ACol]);
+  if not (coVisible in c.Options) then Exit;
+  c.Options := c.Options - [coVisible];
+end;
+
+procedure TTyCustomGrid.ShowColumn(ACol: Integer);
+var c: TTyColumn;
+begin
+  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
+  c := TTyColumn(FHeader.Columns.Items[ACol]);
+  if coVisible in c.Options then Exit;
+  c.Options := c.Options + [coVisible];
+end;
+
+function TTyCustomGrid.IsHiddenColumn(ACol: Integer): Boolean;
+begin
+  Result := False;
+  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
+  Result := not (coVisible in TTyColumn(FHeader.Columns.Items[ACol]).Options);
+end;
+
+function TTyCustomGrid.NextVisibleCol(AFrom, AStep: Integer): Integer;
+var
+  c: Integer;
+begin
+  Result := AFrom;
+  if AStep = 0 then Exit;
+  c := AFrom;
+  while (c >= 0) and (c < FHeader.Columns.Count) do
+  begin
+    if not IsHiddenColumn(c) then Exit(c);
+    Inc(c, AStep);
+  end;
+end;
+
+function TTyCustomGrid.FirstVisibleCol: Integer;
+begin
+  Result := NextVisibleCol(0, 1);
+end;
+
+function TTyCustomGrid.LastVisibleCol: Integer;
+begin
+  Result := NextVisibleCol(FHeader.Columns.Count - 1, -1);
+end;
+
 function TTyCustomGrid.GetRowHeights(ARow: Integer): Integer;
 var
   i: Integer;
@@ -2576,6 +2648,45 @@ begin
   if FAlternateRows = AValue then Exit;
   FAlternateRows := AValue;
   Invalidate;
+end;
+
+procedure TTyCustomGrid.SetShowRowNumbers(AValue: Boolean);
+begin
+  if FShowRowNumbers = AValue then Exit;
+  FShowRowNumbers := AValue;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.RenderRowNumbers(P: TTyPainter; const M: TTyGridMetrics;
+  AHeaderH, AIndicatorW: Integer);
+var
+  first, last, pos: Integer;
+  r: TRect;
+  { 别取名 iS —— Pascal 大小写不敏感,它就是保留字 is。
+    (和当初 col↔Col、cellS↔Cells 同一类坑。) }
+  indS: TTyStyleSet;
+  ink: TTyColor;
+begin
+  if not FShowRowNumbers then Exit;
+  if AIndicatorW <= 0 then Exit;
+  if not TyGridVisibleRows(M, first, last) then Exit;
+
+  { 复用行头槽自己的 typeKey 取墨色与字体 —— 不硬编码任何视觉值,
+    也不借别的控件的键。 }
+  indS := ActiveController.Model.ResolveStyle('TyGridIndicator', StyleClass, []);
+  if tpTextColor in indS.Present then ink := indS.TextColor
+  else ink := CurrentStyle.TextColor;
+
+  { 行号按**显示序**给:排序/筛选之后,屏幕第一行仍然是 1。
+    (给数据行号的话,排一次序行号就乱跳,那不是行号该有的样子。) }
+  for pos := first to last do
+  begin
+    r := TyGridRowRect(pos, M);
+    if r.Bottom <= AHeaderH then Continue;
+    DrawCellText(P, Rect(0, r.Top, AIndicatorW - ScaleI(4), r.Bottom),
+      IntToStr(pos + 1), indS.FontName, ResolveFontSize(indS), indS.FontWeight,
+      ink, taRightJustify, tlCenter);
+  end;
 end;
 
 procedure TTyCustomGrid.DoGetCellStyle(ACol, ARow: Integer;
@@ -2741,8 +2852,18 @@ begin
   begin
     c := TTyColumn(FHeader.Columns.Items[i]);
     FColBasePx[i] := ScaleI(logical);
-    FColWidthPx[i] := ScaleI(c.Width);
-    if coVisible in c.Options then Inc(logical, c.Width);
+    { **隐藏列宽度记 0**。这是整条隐藏链路的收口点:
+      CellRect 本来就有 `w <= 0 then Exit` 的空矩形出口,于是渲染那几个
+      没有 coVisible 守卫的循环(选区底色、勾选框/进度条/评分/色块)
+      会自动变对 —— 不必去每个循环里补守卫,那样迟早漏一个。
+      从前这里记的是整宽,于是隐藏列拿到一个**压在下一个可见列位置上**的矩形。 }
+    if coVisible in c.Options then
+    begin
+      FColWidthPx[i] := ScaleI(c.Width);
+      Inc(logical, c.Width);
+    end
+    else
+      FColWidthPx[i] := 0;
   end;
   FColCacheValid := True;
 end;
@@ -3361,7 +3482,10 @@ begin
 
   { 行头槽:列头之下、最左那条。 }
   if indW > 0 then
+  begin
     FillRegion(P, Rect(0, headerH, indW, M.ClientH), 'TyGridIndicator');
+    RenderRowNumbers(P, M, headerH, indW);
+  end;
 
   { 固定列区:行头槽右侧到冻结带右缘。 }
   if M.FrozenLeft > indW then
@@ -3902,6 +4026,17 @@ begin
   if ARow > RowCount - 1 then ARow := RowCount - 1;
   if (ACol = FCol) and (ARow = FRow) then Exit;
 
+  { **隐藏列上不能停光标** —— 停上去的话编辑器会在一个看不见的地方打开。
+    沿本次移动的方向找下一个可见列;方向不明(直接赋值)时先往右找、再往左找。 }
+  if IsHiddenColumn(ACol) then
+  begin
+    if ACol <> FCol then
+      ACol := NextVisibleCol(ACol, Sign(ACol - FCol))
+    else
+      ACol := NextVisibleCol(ACol, 1);
+    if IsHiddenColumn(ACol) then ACol := NextVisibleCol(ACol, -1);
+  end;
+
   { 跳过不可编辑的格:沿**本次移动的方向**继续找,而不是原地不动 ——
     原地不动的话方向键会像撞墙,用户以为网格卡了。
     找不到就落回原来的目标(总得有个当前格)。 }
@@ -4144,8 +4279,8 @@ begin
     VK_RIGHT: begin MoveCursor(FCol + 1, FRow); Key := 0; end;
     VK_UP:    begin MoveCursor(FCol, FRow - 1); Key := 0; end;
     VK_DOWN:  begin MoveCursor(FCol, FRow + 1); Key := 0; end;
-    VK_HOME:  begin MoveCursor(0, FRow); Key := 0; end;
-    VK_END:   begin MoveCursor(Header.Columns.Count - 1, FRow); Key := 0; end;
+    VK_HOME:  begin MoveCursor(FirstVisibleCol, FRow); Key := 0; end;
+    VK_END:   begin MoveCursor(LastVisibleCol, FRow); Key := 0; end;
     VK_PRIOR: begin MoveCursor(FCol, FRow - 10); Key := 0; end;
     VK_NEXT:  begin MoveCursor(FCol, FRow + 10); Key := 0; end;
     VK_F2:    begin BeginEdit; Key := 0; end;
@@ -4160,15 +4295,16 @@ begin
       不拦的话 Tab 会把焦点整个弹出网格 —— 表格里这是最让人措手不及的一下。 }
     VK_TAB:   begin
                 if FEditing then EndEdit(True);
+                { 折行时也要落在**可见**列上,别折到一个隐藏列里去。 }
                 if ssShift in Shift then
                 begin
-                  if FCol > 0 then MoveCursor(FCol - 1, FRow)
-                  else if FRow > 0 then MoveCursor(Header.Columns.Count - 1, FRow - 1);
+                  if FCol > FirstVisibleCol then MoveCursor(FCol - 1, FRow)
+                  else if FRow > 0 then MoveCursor(LastVisibleCol, FRow - 1);
                 end
                 else
                 begin
-                  if FCol < Header.Columns.Count - 1 then MoveCursor(FCol + 1, FRow)
-                  else if FRow < RowCount - 1 then MoveCursor(0, FRow + 1);
+                  if FCol < LastVisibleCol then MoveCursor(FCol + 1, FRow)
+                  else if FRow < RowCount - 1 then MoveCursor(FirstVisibleCol, FRow + 1);
                 end;
                 Key := 0;
               end;
