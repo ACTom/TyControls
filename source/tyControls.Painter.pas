@@ -25,6 +25,7 @@ type
     FCanvas: TCanvas;
     FRect: TRect;
     FPPI: Integer;
+    FOwnsBmp: Boolean;
     procedure GradientEndpoints(const ARect: TRect; AAngleDeg: Single; out P1, P2: TPointF);
     procedure BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);
     {$IF defined(LINUX) or defined(DARWIN)}
@@ -35,6 +36,10 @@ type
     Opacity: Single;
     OpacityBase: TTyColor;   // when Opacity<1, dim TOWARD this opaque colour (0 = old alpha-reduce)
     procedure BeginPaint(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { 画到**调用方提供**的位图上,EndPaint 只 blit 不释放,也不预先清空。
+      给需要跨帧复用表面的调用方用(网格的滚动脏区重绘)。 }
+    procedure BeginPaintOn(ACanvas: TCanvas; const ARect: TRect; APPI: Integer;
+      ABmp: TBGRABitmap);
     procedure EndPaint;
     function Scale(ALogical: Integer): Integer;
     function Unscale(ADevice: Integer): Integer;
@@ -157,7 +162,21 @@ begin
   Opacity := 1.0;
   OpacityBase := 0;   // 0 alpha = "not set" -> EndPaint uses the old alpha-reduce path
   FBmp := TBGRABitmap.Create(ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+  FOwnsBmp := True;
   FBmp.Fill(BGRAPixelTransparent);
+end;
+
+procedure TTyPainter.BeginPaintOn(ACanvas: TCanvas; const ARect: TRect;
+  APPI: Integer; ABmp: TBGRABitmap);
+begin
+  FCanvas := ACanvas;
+  FRect := ARect;
+  if APPI <= 0 then FPPI := 96 else FPPI := APPI;
+  Opacity := 1.0;
+  OpacityBase := 0;
+  FBmp := ABmp;
+  { **不清空** —— 上一帧的像素正是要复用的东西;清哪一块由调用方决定。 }
+  FOwnsBmp := False;
 end;
 
 procedure TTyPainter.EndPaint;
@@ -188,14 +207,14 @@ begin
         end;
         FBmp.ApplyGlobalOpacity(Round(Opacity * 255));
         FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False);
-        FreeAndNil(FBmp);
+        if FOwnsBmp then FreeAndNil(FBmp) else FBmp := nil;
         Exit;
       end;
       if Opacity < 1.0 then
         FBmp.ApplyGlobalOpacity(Round(Opacity * 255));
       FBmp.Draw(FCanvas, FRect.Left, FRect.Top, False);
     end;
-    FreeAndNil(FBmp);
+    if FOwnsBmp then FreeAndNil(FBmp) else FBmp := nil;
   end;
 end;
 

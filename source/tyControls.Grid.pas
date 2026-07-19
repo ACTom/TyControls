@@ -470,6 +470,19 @@ type
     FColWidthPx:       array of Integer;
     FColCacheValid:    Boolean;
     FColCachePPI:      Integer;
+    { --- 脏区重绘 ---
+      上一帧的完整表面。滚动时正文那一大块像素是可以整体平移复用的,
+      只有露出来的那一条带需要重画。
+
+      安全性靠**默认作废**保证:Invalidate 一律把表面作废,只有滚动那一条
+      路径在调完 Invalidate 之后重新点亮它。于是任何我没想到的失效点
+      (改数据、换主题、hover、选区……)都天然走整幅重画,不会留下陈旧像素。 }
+    FSurface:          TBGRABitmap;
+    FSurfaceFresh:     Boolean;
+    FSurfacePendingDy: Integer;
+    { 走过快路径的帧数。脏区重绘从画面上完全看不出来 —— 它要是被
+      静默关掉,只会变慢。给测试一个能直接观测"这一帧到底走没走快路径"的口子。 }
+    FFastScrollFrames: Integer;
     FShowFooter:       Boolean;
     { 列头图标与 gcdImage 单元格共用的图像源。
       注意**不用**共享单元里的 TTyHeader.Images —— 那是 LCL 的 TCustomImageList,
@@ -549,6 +562,16 @@ type
       const AFontName: string; AFontSize, AFontWeight: Integer; AColor: TTyColor;
       AHAlign: TAlignment; AVAlign: TTextLayout; AWordWrap: Boolean = False);
     procedure ClearTextCache;
+    { 作废持久表面(下一帧整幅重画)。 }
+    procedure InvalidateSurface;
+    property FastScrollFrames: Integer read FFastScrollFrames;
+    { 纵向滚动 ADy 像素,并让下一帧走快路径。 }
+    procedure ScrollVerticallyBy(ADy: Integer);
+    { 把表面上 [ATop, ABottom) 这一段整体上移/下移 ADy 像素(逐扫描行 Move)。 }
+    procedure ShiftSurfaceRows(ATop, ABottom, ADy: Integer);
+    { 单元格最多跨几行。基类不认识合并,给 1;TTyStringGrid 覆盖成真实跨度。
+      脏区重绘用它来决定接缝处要多让出几行。 }
+    function MaxRowSpanHint: Integer; virtual;
     { 行高变了 → 行几何的缓存(前缀和)要失效。基类没有缓存;TTyStringGrid 改写。 }
     procedure InvalidateRowMetrics; virtual;
     { 有没有任何一行设过显式行高。 }
@@ -603,6 +626,7 @@ type
     procedure BuildColumnCache;
     procedure InvalidateColumnCache;
     function GridLineWidthPx: Integer; virtual;
+    procedure Invalidate; override;
     procedure CMMouseLeave(var Msg: TLMessage); message CM_MOUSELEAVE;
     function FrozenWidthPx: Integer; virtual;
     { 冻结带高度(设备像素)= 列头带 + 固定行 * 行高。 }
@@ -997,6 +1021,9 @@ type
     FMergeCount: Integer;
     FMaxColSpan: Integer;
     FMaxRowSpan: Integer;
+  protected
+    function MaxRowSpanHint: Integer; override;
+  private
     FSkipReadOnly: Boolean;
     FGroupRowFormat: string;
     FSortDir: TTySortDirection;
@@ -1849,6 +1876,7 @@ begin
   FHeader.OnChange := nil;
   FHeader.Free;
   FTextCache.Free;      { OwnsObjects → 顺带释放缓存的位图 }
+  FSurface.Free;
   FRowHeights.Free;
   FHeaderGroups.Free;
   inherited Destroy;
@@ -2004,8 +2032,7 @@ end;
 procedure TTyCustomGrid.VScrollChange(Sender: TObject);
 begin
   if FSyncingScroll then Exit;
-  FScrollY := FVScroll.Position;
-  Invalidate;
+  ScrollY := FVScroll.Position;   { 走收口点,拿到脏区重绘 }
 end;
 
 procedure TTyCustomGrid.HScrollChange(Sender: TObject);
@@ -2322,6 +2349,54 @@ end;
 procedure TTyCustomGrid.ClearTextCache;
 begin
   if FTextCache <> nil then FTextCache.Clear;
+end;
+
+procedure TTyCustomGrid.InvalidateSurface;
+begin
+  FSurfaceFresh := False;
+  FSurfacePendingDy := 0;
+end;
+
+{ **默认作废**:任何 Invalidate 都让持久表面失效。
+  只有 ScrollVerticallyBy 会在调完 Invalidate 之后把它重新点亮 ——
+  这个方向的默认值让"忘了失效"变成不可能,代价只是某些本可复用的帧退回整幅重画。 }
+procedure TTyCustomGrid.Invalidate;
+begin
+  FSurfaceFresh := False;
+  FSurfacePendingDy := 0;
+  inherited Invalidate;
+end;
+
+{ 逐扫描行 memmove。比"整幅拷到临时位图再拷回来"省一半带宽,也不必额外分配。
+  方向要选对:上移时从上往下搬,下移时从下往上搬 —— 反了会自己覆盖自己。 }
+function TTyCustomGrid.MaxRowSpanHint: Integer;
+begin
+  Result := 1;
+end;
+
+procedure TTyCustomGrid.ShiftSurfaceRows(ATop, ABottom, ADy: Integer);
+var
+  y, n: Integer;
+begin
+  if (FSurface = nil) or (ADy = 0) then Exit;
+  if ATop < 0 then ATop := 0;
+  if ABottom > FSurface.Height then ABottom := FSurface.Height;
+  if ABottom - ATop <= Abs(ADy) then Exit;      { 没有可复用的部分 }
+  n := FSurface.Width * SizeOf(TBGRAPixel);
+
+  if ADy > 0 then
+    for y := ATop to ABottom - 1 - ADy do
+      Move(FSurface.ScanLine[y + ADy]^, FSurface.ScanLine[y]^, n)
+  else
+    for y := ABottom - 1 downto ATop - ADy do
+      Move(FSurface.ScanLine[y + ADy]^, FSurface.ScanLine[y]^, n);
+
+  FSurface.InvalidateBitmap;
+end;
+
+procedure TTyCustomGrid.ScrollVerticallyBy(ADy: Integer);
+begin
+  ScrollY := FScrollY + ADy;
 end;
 
 procedure TTyCustomGrid.DrawCellText(P: TTyPainter; const ARect: TRect;
@@ -2683,6 +2758,7 @@ var
     (和当初 col↔Col、cellS↔Cells 同一类坑。) }
   indS: TTyStyleSet;
   ink: TTyColor;
+  oldClip: TRect;
 begin
   if not FShowRowNumbers then Exit;
   if AIndicatorW <= 0 then Exit;
@@ -2696,13 +2772,22 @@ begin
 
   { 行号按**显示序**给:排序/筛选之后,屏幕第一行仍然是 1。
     (给数据行号的话,排一次序行号就乱跳,那不是行号该有的样子。) }
+  { **必须裁到正文窗格**。只跳过表头是不够的:滚到冻结带(表头 + 固定行)
+    底下的那一行,它的行号会画到固定行的槽位上去 —— 单元格内容靠
+    CellVisibleRect 与窗格求交挡住了,行号这条路径当初漏了这一步。 }
+  oldClip := P.Bitmap.ClipRect;
+  P.Bitmap.ClipRect := Rect(0, M.FrozenTop, AIndicatorW, M.ClientH);
+  try
   for pos := first to last do
   begin
     r := TyGridRowRect(pos, M);
-    if r.Bottom <= AHeaderH then Continue;
+    if r.Bottom <= M.FrozenTop then Continue;
     DrawCellText(P, Rect(0, r.Top, AIndicatorW - ScaleI(4), r.Bottom),
       IntToStr(pos + 1), indS.FontName, ResolveFontSize(indS), indS.FontWeight,
       ink, taRightJustify, tlCenter);
+  end;
+  finally
+    P.Bitmap.ClipRect := oldClip;
   end;
 end;
 
@@ -2836,14 +2921,25 @@ begin
   Invalidate;
 end;
 
+{ **所有纵向滚动的唯一入口** —— 滚动条、滚轮、键盘导航、EnsureVisible 都落到这里。
+  从前 VScrollChange 直接写 FScrollY,于是脏区重绘那条路在实机上一次都不会触发:
+  画面完全正确,只是白做了。 }
 procedure TTyCustomGrid.SetScrollY(AValue: Integer);
+var
+  dy: Integer;
 begin
   if AValue < 0 then AValue := 0;
   if AValue > MaxScrollY then AValue := MaxScrollY;
   if FScrollY = AValue then Exit;
+  dy := AValue - FScrollY;
   FScrollY := AValue;
   SyncScrollBars;
-  Invalidate;
+
+  { 纯滚动是**唯一**不作废表面的改动:上一帧的像素只是位置变了。
+    所以这里刻意绕过 Invalidate 覆盖(它会把新鲜度熄掉),只累加位移量。
+    累加而不是赋值 —— 一帧里可能滚不止一次。 }
+  Inc(FSurfacePendingDy, dy);
+  inherited Invalidate;
 end;
 
 procedure TTyCustomGrid.InvalidateColumnCache;
@@ -3658,22 +3754,37 @@ procedure TTyCustomGrid.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Int
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  R: TRect;
+  R, band, oldClip: TRect;
   M: TTyGridMetrics;
+  fastDy, bodyTop, seamPos: Integer;
+  seamR: TRect;
+  canFast: Boolean;
 begin
+  { 持久表面:滚动时正文那一大块像素可以整体平移复用。尺寸变了就重建。 }
+  R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+  if (FSurface = nil) or (FSurface.Width <> R.Right) or (FSurface.Height <> R.Bottom) then
+  begin
+    FreeAndNil(FSurface);
+    FSurface := TBGRABitmap.Create(R.Right, R.Bottom);
+    FSurfaceFresh := False;
+  end;
+
+  { 取走本帧的快路径许可,并立刻熄灭它 —— 本帧画完了才重新点亮。
+    这样中途 Exit(比如主题没给背景)不会留下一个"新鲜"却没画的表面。 }
+  fastDy := 0;
+  if FSurfaceFresh then fastDy := FSurfacePendingDy;
+  FSurfaceFresh := False;
+  FSurfacePendingDy := 0;
+
   P := TTyPainter.Create;
   try
-    { painter 画进自己的 (W x H) 位图再整体 blit,所以这里必须用 (0,0) 原点的局部矩形。 }
-    R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    P.BeginPaint(ACanvas, ARect, APPI);
+    P.BeginPaintOn(ACanvas, ARect, APPI, FSurface);
 
     S := CurrentStyle;
     { 主题没给 TyGrid 定义背景 → 一个像素都不画。降级成空白区域,
       既不崩溃也不自己发明外观 —— 与库内其他控件一致。
       (EndPaint 在 finally 里;此时位图全透明,alpha 混合不会碰到画布。) }
     if not (tpBackground in S.Present) then Exit;
-
-    DrawFrame(P, R, S);
 
     { 每帧清一次逐格样式的记忆化 —— 主题可能在两帧之间换掉了。 }
     ResetCellStyleCache;
@@ -3687,6 +3798,62 @@ begin
     M := GridMetrics;
     FMetricsCache := M;
     FMetricsCached := True;
+
+    { --- 滚动快路径 ---
+      正文带整体平移,只有露出来的那一条需要重画。
+      重画走的是**与整幅重画完全相同的那串调用**,只是:
+        ① 位图裁剪到那条带 → 带外一个像素都不会被碰;
+        ② 几何里的 ClipTop/ClipBottom 把逐行循环夹到那条带 → 真正省掉 CPU。
+      正因为代码路径没有分叉,结果才能与整幅重画逐像素相同(有测试守着)。 }
+    bodyTop := M.FrozenTop;
+    canFast := (fastDy <> 0) and (M.ClientH - bodyTop > Abs(fastDy));
+    if canFast then
+    begin
+      Inc(FFastScrollFrames);
+      ShiftSurfaceRows(bodyTop, M.ClientH, fastDy);
+      if fastDy > 0 then
+        band := Rect(0, M.ClientH - fastDy, M.ClientW, M.ClientH)
+      else
+        band := Rect(0, bodyTop, M.ClientW, bodyTop - fastDy);
+
+      { **接缝那一行必须一起重画,不能只复用它。**
+        上一帧里,骑在正文窗格边缘上的那一行是被**裁着**画的 —— 只画了露在
+        窗格里的那一截。平移之后它整体进入了窗格,复用过来就少了半行文字。
+        所以把带的内边沿往外吸附到行边界;跨行合并的格同理,再多让出
+        MaxRowSpanHint 行,否则骑在接缝上的合并块也会缺一块。 }
+      if fastDy > 0 then seamPos := TyGridRowAt(band.Top, M)
+      else seamPos := TyGridRowAt(band.Bottom - 1, M);
+      if seamPos >= 0 then
+      begin
+        if fastDy > 0 then
+        begin
+          seamPos := seamPos - MaxRowSpanHint;
+          if seamPos < 0 then seamPos := 0;
+          seamR := TyGridRowRect(seamPos, M);
+          if seamR.Top < band.Top then band.Top := seamR.Top;
+        end
+        else
+        begin
+          seamPos := seamPos + MaxRowSpanHint;
+          if seamPos >= DisplayRowCount then seamPos := DisplayRowCount - 1;
+          seamR := TyGridRowRect(seamPos, M);
+          if seamR.Bottom > band.Bottom then band.Bottom := seamR.Bottom;
+        end;
+      end;
+      if band.Top < bodyTop then band.Top := bodyTop;
+      if band.Bottom > M.ClientH then band.Bottom := M.ClientH;
+      M.ClipTop := band.Top;
+      M.ClipBottom := band.Bottom;
+      FMetricsCache := M;
+      oldClip := P.Bitmap.ClipRect;
+      P.Bitmap.ClipRect := band;
+    end
+    else
+      FSurface.Fill(BGRAPixelTransparent);
+
+    if not canFast then DrawFrame(P, R, S)
+    else FillRegion(P, band, GetStyleTypeKey);   { 露出的带先铺回本体底色 }
+
     RenderChrome(P, M);
     RenderCellBackgrounds(P, M);
     if FooterHeightPx > 0 then
@@ -3696,6 +3863,9 @@ begin
     RenderCellBorders(P, M);
     if FGridLineStyle <> glsNone then
       RenderGridLines(P, M, S);
+
+    if canFast then P.Bitmap.ClipRect := oldClip;
+    FSurfaceFresh := True;
   finally
     FMetricsCached := False;
     P.EndPaint;
@@ -6369,6 +6539,12 @@ begin
     keys.Free;
   end;
   Invalidate;
+end;
+
+function TTyStringGrid.MaxRowSpanHint: Integer;
+begin
+  Result := FMaxRowSpan;
+  if Result < 1 then Result := 1;
 end;
 
 function TTyStringGrid.CellSpan(ACol, ARow: Integer;

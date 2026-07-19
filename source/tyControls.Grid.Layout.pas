@@ -87,6 +87,13 @@ type
       用前缀和而不是逐行高度,是为了让"坐标 → 行"能二分查找而不是线性扫。 }
     RowTops:          TTyIntArray;
     ScrollX, ScrollY: Integer;   { 正文窗格的滚动偏移,>=0 }
+
+    { 只重画某一条横带时,把可见行窗口再夹到这条带里(客户区坐标)。
+      ClipBottom <= ClipTop 表示不设限(整个正文窗格)。
+
+      收口在 TyGridVisibleRows 一处:所有逐行循环都走它,于是**全部**自动跟着变窄
+      —— 不必去每个循环里再加一个"只画这几行"的判断,那样迟早漏一个。 }
+    ClipTop, ClipBottom: Integer;
   end;
 
 { 列头带的合计高度。固定行从这里起算,而不是从 FrozenTop 起算。 }
@@ -285,7 +292,7 @@ function TyGridVisibleRows(const M: TTyGridMetrics;
   out AFirst, ALast: Integer): Boolean;
 var
   body: TRect;
-  h, avail, fixedTop, fixedH: Integer;
+  h, avail, fixedTop, fixedH, clipFirst, clipLast: Integer;
 begin
   AFirst := -1;
   ALast := -1;
@@ -328,6 +335,17 @@ begin
     Exit;
   end;
   if ALast > M.RowCount - 1 then ALast := M.RowCount - 1;
+
+  { 脏区重绘:再把窗口夹到指定的横带里。 }
+  if M.ClipBottom > M.ClipTop then
+  begin
+    clipFirst := TyGridRowAt(M.ClipTop, M);
+    if clipFirst < 0 then clipFirst := AFirst;
+    clipLast := TyGridRowAt(M.ClipBottom - 1, M);
+    if clipLast < 0 then clipLast := ALast;
+    if clipFirst > AFirst then AFirst := clipFirst;
+    if clipLast < ALast then ALast := clipLast;
+  end;
 
   Result := ALast >= AFirst;
   if not Result then

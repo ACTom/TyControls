@@ -182,6 +182,9 @@ type
     procedure TestNavigationSkipsHiddenColumns;
     procedure TestRowNumbersFollowDisplayOrder;
     procedure TestEllipsisButtonHandsControlToHost;
+    procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
+    procedure TestScrollFastPathIsCheaperThanFullRepaint;
+    procedure TestScrollBarDragUsesFastPath;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -989,6 +992,8 @@ type
     function  RowRectAt(APos: Integer): TRect;
     function  GetScrollTop: Integer;
     procedure SetScrollTop(AValue: Integer);
+    procedure ScrollByForTest(ADy: Integer);
+    procedure InvalidateSurfaceForTest;
     property ScrollTop: Integer read GetScrollTop write SetScrollTop;
   end;
 
@@ -1156,6 +1161,16 @@ end;
 function TStrGridAccess.GetScrollTop: Integer;
 begin
   Result := ScrollY;
+end;
+
+procedure TStrGridAccess.ScrollByForTest(ADy: Integer);
+begin
+  ScrollVerticallyBy(ADy);
+end;
+
+procedure TStrGridAccess.InvalidateSurfaceForTest;
+begin
+  InvalidateSurface;
 end;
 
 procedure TStrGridAccess.SetScrollTop(AValue: Integer);
@@ -5572,6 +5587,258 @@ begin
   FEllipsisCancel := False;
   G.FullClickAt(G.CellRect(1, 1).Left + 4, (r.Top + r.Bottom) div 2);
   AssertEquals('点格的其它地方不触发按钮', 0, FEllipsisCalls);
+end;
+
+{ **脏区重绘的总守卫**:滚动走的快路径,画出来必须与"从头整幅重画"逐像素相同。
+
+  这条测试是这项优化能不能存在的前提 —— 复用上一帧的像素一旦有任何一处
+  没被正确失效,就会留下陈旧像素;而陈旧像素是那种"偶尔看到一下、
+  截图又复现不了"的 bug,靠肉眼根本守不住。 }
+procedure TTyStringGridTest.TestScrollFastPathIsPixelIdenticalToFullRepaint;
+const
+  W = 420; H = 300;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  fast, full: TBitmap;
+  i, j: Integer;
+  c: TTyColumn;
+
+  procedure RenderInto(ABmp: TBitmap);
+  begin
+    ABmp.Canvas.Brush.Color := clWhite;
+    ABmp.Canvas.FillRect(Rect(0, 0, W, H));
+    G.DoRender(ABmp.Canvas, Rect(0, 0, W, H), 96);
+  end;
+
+  function DiffPixels(A, B: TBitmap): Integer;
+  var
+    ra, rb: TBGRABitmap;
+    x, y, dminx, dminy, dmaxx, dmaxy: Integer;
+    pa, pb: TBGRAPixel;
+  begin
+    Result := 0;
+    dminx := 9999; dminy := 9999; dmaxx := -1; dmaxy := -1;
+    ra := TBGRABitmap.Create(A);
+    rb := TBGRABitmap.Create(B);
+    try
+      for y := 0 to H - 1 do
+        for x := 0 to W - 1 do
+        begin
+          pa := ra.GetPixel(x, y);
+          pb := rb.GetPixel(x, y);
+          if (pa.red <> pb.red) or (pa.green <> pb.green) or (pa.blue <> pb.blue) then
+          begin
+            Inc(Result);
+            if x < dminx then dminx := x;
+            if x > dmaxx then dmaxx := x;
+            if y < dminy then dminy := y;
+            if y > dmaxy then dmaxy := y;
+          end;
+        end;
+    finally
+      ra.Free;
+      rb.Free;
+    end;
+    if Result > 0 then
+      WriteLn('[DIFFBOX x ', dminx, '..', dmaxx, '  y ', dminy, '..', dmaxy,
+              '  n=', Result, ']');
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  fast := TBitmap.Create;
+  full := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridCellAlt { background: #F0F0F0; }' +
+      'TyGridHeader { background: #EEEEEE; color: #000000; }' +
+      'TyGridIndicator { background: #EEEEEE; color: #000000; }' +
+      'TyGridLine { background: #C0C0C0; }');
+    G := TStrGridAccess.Create(FForm);
+    G.Parent := FForm;
+    G.Controller := Ctl;
+    G.Font.PixelsPerInch := 96;
+    G.SetBounds(0, 0, W, H);
+    for i := 0 to 3 do
+    begin
+      c := G.Header.Columns.Add as TTyColumn;
+      c.Width := 90;
+    end;
+    { 故意把容易出错的元素都放进来:表头、行头槽、斑马纹、格线、固定行列。 }
+    G.Header.Options := G.Header.Options + [hoVisible];
+    G.Header.Height := 22;
+    G.ShowIndicator := True;
+    G.IndicatorWidth := 36;
+    G.ShowRowNumbers := True;
+    G.AlternateRows := True;
+    G.FixedCols := 1;
+    G.FixedRows := 1;
+    G.DefaultRowHeight := 22;
+    G.RowCount := 100;
+    for i := 0 to 99 do
+      for j := 0 to 3 do
+        G.Cells[j, i] := Format('%d-%d', [j, i]);
+
+    fast.PixelFormat := pf32bit;  fast.SetSize(W, H);
+    full.PixelFormat := pf32bit;  full.SetSize(W, H);
+
+    { 一、先画一帧建立可复用的表面,再滚动 —— 这一帧走快路径。 }
+    G.SetScrollTop(0);
+    RenderInto(fast);
+    G.ScrollByForTest(60);
+    RenderInto(fast);
+
+    { 二、同一个滚动位置,强制从头整幅重画。 }
+    G.InvalidateSurfaceForTest;
+    RenderInto(full);
+
+    AssertEquals('滚动快路径必须与整幅重画逐像素相同', 0, DiffPixels(fast, full));
+
+    { 三、反向滚动同样要对(向上滚暴露的是顶部那条带)。 }
+    G.ScrollByForTest(-25);
+    RenderInto(fast);
+    G.InvalidateSurfaceForTest;
+    RenderInto(full);
+    AssertEquals('向上滚也必须逐像素相同', 0, DiffPixels(fast, full));
+
+    { 四、滚动量超过一屏时应当退回整幅重画,结果同样要对。 }
+    G.ScrollByForTest(900);
+    RenderInto(fast);
+    G.InvalidateSurfaceForTest;
+    RenderInto(full);
+    AssertEquals('大跨度滚动也必须逐像素相同', 0, DiffPixels(fast, full));
+  finally
+    full.Free;
+    fast.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 脏区重绘要真的**省下**东西。
+
+  这一条守的是那种最难发现的退化:哪天有人在滚动路径上多调一次 Invalidate,
+  快路径就被静默地关掉了 —— 画面完全正确,只是又慢回去了。像素等价那条测试
+  照样绿,只有这条会红。
+
+  度量是相对的:同样是滚一格,一次让它走快路径,一次强行作废表面走整幅重画。 }
+procedure TTyStringGridTest.TestScrollFastPathIsCheaperThanFullRepaint;
+const
+  FRAMES = 60;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  i, j: Integer;
+  c: TTyColumn;
+  fast, full: QWord;
+
+  function TimeScroll(AFullRepaint: Boolean): QWord;
+  var f: Integer; t0: QWord;
+  begin
+    G.ScrollByForTest(8);
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 1000, 800), 96);   { 预热 }
+    t0 := GetTickCount64;
+    for f := 1 to FRAMES do
+    begin
+      G.ScrollByForTest(8);
+      if AFullRepaint then G.InvalidateSurfaceForTest;
+      G.DoRender(Bmp.Canvas, Rect(0, 0, 1000, 800), 96);
+    end;
+    Result := GetTickCount64 - t0;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; padding: 0px 6px; }');
+    G := TStrGridAccess.Create(FForm);
+    G.Parent := FForm;
+    G.Controller := Ctl;
+    G.Font.PixelsPerInch := 96;
+    G.SetBounds(0, 0, 1000, 800);
+    for i := 0 to 19 do
+    begin
+      c := G.Header.Columns.Add as TTyColumn;
+      c.Width := 60;
+    end;
+    G.DefaultRowHeight := 20;
+    G.RowCount := 1000;
+    for i := 0 to 19 do
+      for j := 1 to 60 do
+        G.Cells[i, j] := Format('R%dC%d', [j, i]);
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(1000, 800);
+
+    full := TimeScroll(True);
+    fast := TimeScroll(False);
+    { 实测:整幅 37ms/帧,快路径 5.7ms/帧,约 6.4 倍。
+      阈值取 2 倍 —— 离健康值有 3 倍余量抗机器抖动,离"快路径被关掉"(1 倍)
+      还差一倍,不至于两头都误报。 }
+    AssertTrue(Format('滚动该走脏区重绘(整幅 %dms / 快路径 %dms,至少要快一倍)',
+      [full, fast]), fast * 2 < full);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 脏区重绘必须在**真实的滚动路径**上生效,不只是在测试用的那个入口上。
+
+  这一条是补上一个已经犯过的错:VScrollChange(拖滚动条时走的那条)从前
+  直接写 FScrollY 再 Invalidate,绕开了收口点 —— 于是快路径写了、测了、
+  也"通过"了,实机上却一次都不会触发。画面全对,白做。 }
+procedure TTyStringGridTest.TestScrollBarDragUsesFastPath;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  i: Integer;
+  c: TTyColumn;
+  before: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }');
+    G := TStrGridAccess.Create(FForm);
+    G.Parent := FForm;
+    G.Controller := Ctl;
+    G.Font.PixelsPerInch := 96;
+    G.SetBounds(0, 0, 400, 300);
+    for i := 0 to 3 do
+    begin
+      c := G.Header.Columns.Add as TTyColumn;
+      c.Width := 80;
+    end;
+    G.DefaultRowHeight := 22;
+    G.RowCount := 500;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);   { 先有"上一帧" }
+
+    before := G.FastScrollFrames;
+
+    { 拖滚动条 —— 走的是滚动条自己的 OnChange,不是测试专用入口。 }
+    AssertTrue('要有纵向滚动条', G.VScrollBar <> nil);
+    G.VScrollBar.Position := G.VScrollBar.Position + 40;
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+
+    AssertTrue('拖滚动条也要走脏区重绘,而不是整幅重画',
+      G.FastScrollFrames > before);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
 end;
 
 initialization
