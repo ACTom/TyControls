@@ -561,6 +561,11 @@ type
     { 这一列在不在过滤中 / 是第几顺位的排序键 / 一共几个排序键。
       基类没有数据模型,一律答"没有";TTyStringGrid 改写。
       放在基类是因为**表头渲染在基类**,而它需要这三个答案。 }
+    { 全表有没有任何合并区。没有就让格线走"整条画完"的快路径 ——
+      逐段画要多出 列数 x 行数 次 FillRect,不能让没用合并的表白白付这个钱。 }
+    function HasMergedCells: Boolean; virtual;
+    { 两个格是不是属于**同一个**合并区。是的话它们之间的那条边界不该画线。 }
+    function SameMergedCell(ACol1, ARow1, ACol2, ARow2: Integer): Boolean; virtual;
     function ColumnFilterActive(ACol: Integer): Boolean; virtual;
     function SortRankOf(ACol: Integer): Integer; virtual;
     function SortColumnCountOf: Integer; virtual;
@@ -892,6 +897,8 @@ type
     FUpdatingOrder: Integer;
     { 显式隐藏的行(数据行号)。 }
     FHiddenRows: TStringList;
+    { 当前有多少个合并区。只为了让格线绘制能 O(1) 地判断"要不要走逐段慢路径"。 }
+    FMergeCount: Integer;
     FSkipReadOnly: Boolean;
     FGroupRowFormat: string;
     FSortDir: TTySortDirection;
@@ -998,6 +1005,8 @@ type
     function DisplayRowCount: Integer; override;
     procedure SetShowFilterButtons(AValue: Boolean);
     function ShowsFilterButton(ACol: Integer): Boolean; override;
+    function HasMergedCells: Boolean; override;
+    function SameMergedCell(ACol1, ARow1, ACol2, ARow2: Integer): Boolean; override;
     function ColumnFilterActive(ACol: Integer): Boolean; override;
     function SortRankOf(ACol: Integer): Integer; override;
     function SortColumnCountOf: Integer; override;
@@ -2746,6 +2755,7 @@ var
   r: TRect;
   line: TBGRAPixel;
   col: TTyColumn;
+  merged: Boolean;
 begin
   line := GridLineColor(AFrame);
 
@@ -2755,13 +2765,30 @@ begin
   if lw < 1 then lw := 1;
   half := lw div 2;
 
+  { 有没有合并区决定走哪条路:没有就整条画完(绝大多数表),
+    有才逐列/逐行分段、跳过合并区内部的边界。
+    分段要多出 列数 x 行数 次 FillRect,不能让没用合并的表白白付这个钱。 }
+  merged := HasMergedCells;
+
   { 横线:每一可见行的下沿。只走 TyGridVisibleRows —— 百万行的表在这里也只画几十条。 }
   if (FGridLineStyle in [glsHorizontal, glsBoth]) and TyGridVisibleRows(M, first, last) then
     for row := first to last do
     begin
       r := TyGridRowRect(row, M);
-      P.Bitmap.FillRect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw,
-        line, dmSet);
+      if not merged then
+        P.Bitmap.FillRect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw,
+          line, dmSet)
+      else
+        { 逐列分段:本行与下一行在这一列上属于同一个合并区时,跳过这一段。 }
+        for i := 0 to FHeader.Columns.Count - 1 do
+        begin
+          col := TTyColumn(FHeader.Columns.Items[i]);
+          if not (coVisible in col.Options) then Continue;
+          if SameMergedCell(i, DisplayToData(row), i, DisplayToData(row + 1)) then Continue;
+          x := ColumnLeftPx(i);
+          P.Bitmap.FillRect(x, r.Bottom - 1 - half,
+            x + ColumnWidthPx(i), r.Bottom - 1 - half + lw, line, dmSet);
+        end;
     end;
 
   { 竖线:每一可见列的右缘。位置走 ColumnLeftPx(列轴唯一出处),
@@ -2772,9 +2799,20 @@ begin
     col := TTyColumn(FHeader.Columns.Items[i]);
     if not (coVisible in col.Options) then Continue;
     x := ColumnLeftPx(i) + ColumnWidthPx(i);
-    if (x > 0) and (x <= M.ClientW) then
+    if (x <= 0) or (x > M.ClientW) then Continue;
+    if not merged then
       P.Bitmap.FillRect(x - 1 - half, M.FrozenTop, x - 1 - half + lw, M.ClientH,
-        line, dmSet);
+        line, dmSet)
+    else
+      { 逐行分段:本列与右邻列在这一行上属于同一个合并区时,跳过这一段。 }
+      if TyGridVisibleRows(M, first, last) then
+        for row := first to last do
+        begin
+          if SameMergedCell(i, DisplayToData(row), i + 1, DisplayToData(row)) then Continue;
+          r := TyGridRowRect(row, M);
+          P.Bitmap.FillRect(x - 1 - half, r.Top, x - 1 - half + lw, r.Bottom,
+            line, dmSet);
+        end;
   end;
 end;
 
@@ -2951,6 +2989,16 @@ begin
   Result := False;
 end;
 
+function TTyCustomGrid.HasMergedCells: Boolean;
+begin
+  Result := False;      { 基类没有合并概念 }
+end;
+
+function TTyCustomGrid.SameMergedCell(ACol1, ARow1, ACol2, ARow2: Integer): Boolean;
+begin
+  Result := False;
+end;
+
 function TTyCustomGrid.ColumnFilterActive(ACol: Integer): Boolean;
 begin
   Result := False;
@@ -3055,6 +3103,28 @@ begin
       gs := ScaleI(12);
     imgPad := 0;
 
+    { 列头图标必须**先画、先累加 imgPad**,下面算 textR 时标题才让得出位。
+      原先这一段在 textR 之后,于是 imgPad 恒为 0、标题不缩进,
+      图标直接压在标题左端的字上。
+      (当初那条测试只数"表头带里有没有红像素",图标画在字**上面**照样满足 ——
+      测试对"压字"是瞎的。现在改成同时看标题墨的左右两端。) }
+    imgIdx := col.ImageIndex;
+    if (FImages <> nil) and (imgIdx >= 0) then
+    begin
+      imgSz := ScaleI(16);
+      if imgSz > AHeaderH - ScaleI(4) then imgSz := AHeaderH - ScaleI(4);
+      if imgSz > 0 then
+      begin
+        bmp := FImages.CachedIndex(imgIdx, imgSz);
+        if bmp <> nil then
+        begin
+          P.Bitmap.PutImage(r.Left + ScaleI(4), bandTop + (AHeaderH - imgSz) div 2, bmp,
+            dmDrawWithTransparency);
+          Inc(imgPad, imgSz + ScaleI(4));
+        end;
+      end;
+    end;
+
     textR := Rect(r.Left + ScaleI(6) + imgPad, r.Top, r.Right - ScaleI(4) - gs, r.Bottom);
     if (col.Text <> '') and (textR.Right > textR.Left) then
       P.DrawText(textR, col.Text, hdrFontName, hdrFontSize,
@@ -3071,25 +3141,6 @@ begin
       TyDrawGlyph(P, ActiveController,
         Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
         tgChevronDown, funnelInk, 1, 1);
-    end;
-
-    { 列头图标:画在标题左侧。此前 TTyColumn.ImageIndex 字段一直存在却**从不被读取**
-      —— 属性有效性的洞,和 ShowFooter/ApplyAutoSize 同一类。 }
-    imgIdx := col.ImageIndex;
-    if (FImages <> nil) and (imgIdx >= 0) then
-    begin
-      imgSz := ScaleI(16);
-      if imgSz > AHeaderH - ScaleI(4) then imgSz := AHeaderH - ScaleI(4);
-      if imgSz > 0 then
-      begin
-        bmp := FImages.CachedIndex(imgIdx, imgSz);
-        if bmp <> nil then
-        begin
-          P.Bitmap.PutImage(r.Left + ScaleI(4), bandTop + (AHeaderH - imgSz) div 2, bmp,
-            dmDrawWithTransparency);
-          Inc(imgPad, imgSz + ScaleI(4));
-        end;
-      end;
     end;
 
     { 多列排序徽标:第几顺位。做完多列排序不配套它,
@@ -3837,7 +3888,11 @@ begin
 end;
 
 procedure TTyStringGrid.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  navKey: Word;
 begin
+  { Key 会在下面被置 0(表示已消费),所以想知道"按的是哪个键"必须先存一份。 }
+  navKey := Key;
   inherited KeyDown(Key, Shift);
   if not Enabled then Exit;
 
@@ -3879,17 +3934,23 @@ begin
     Ord('C'): if ssCtrl in Shift then begin CopySelectionToClipboard; Key := 0; end;
     Ord('V'): if ssCtrl in Shift then begin PasteFromClipboard; Key := 0; end;
     Ord('A'): if ssCtrl in Shift then
-              begin      { 全选:锚点钉到左上,光标拉到右下(按显示序的首尾行) }
-                FSelAnchorCol := 0;
-                FSelAnchorRow := DisplayToData(0);
-                FCol := Header.Columns.Count - 1;
-                FRow := DisplayToData(DisplayRowCount - 1);
-                Invalidate;
+              begin
+                { **走 SelectAll,不要在这里内联抄一遍。**
+                  从前这里是抄的,于是漏了两件事:不清离散选区(Ctrl+点出来的块
+                  会残留)、不发 OnSelectionChanged。同一个动作两条不等价的实现,
+                  是最难查的一类不一致。 }
+                SelectAll;
                 Key := 0;
               end;
   end;
-  { 普通方向键把锚点收到新位置(选区退化成一格);按住 Shift 则保留锚点,拉出区域。 }
-  if (Key = 0) and not (ssShift in Shift) then AnchorSelection;
+  { 普通**导航键**把锚点收到新位置(选区退化成一格);按住 Shift 则保留锚点,拉出区域。
+
+    只对导航键做这件事。从前是"只要这一键被消费掉就收锚点",于是 Ctrl+A
+    刚把选区拉满、立刻又被这句收回成一格 —— 全选表面上完全没反应。
+    Ctrl+C/V 同理不该动选区。 }
+  if (Key = 0) and not (ssShift in Shift) and (navKey in [VK_LEFT, VK_RIGHT,
+     VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT]) then
+    AnchorSelection;
 end;
 
 
@@ -4856,6 +4917,25 @@ begin
   Invalidate;      { 直写字段的话,运行期开关筛选按钮不会重绘 }
 end;
 
+function TTyStringGrid.HasMergedCells: Boolean;
+begin
+  Result := FMergeCount > 0;
+end;
+
+function TTyStringGrid.SameMergedCell(ACol1, ARow1, ACol2, ARow2: Integer): Boolean;
+var
+  b1c, b1r, b2c, b2r, cs, rs: Integer;
+begin
+  Result := False;
+  if FMergeCount = 0 then Exit;
+  BaseCellOf(ACol1, ARow1, b1c, b1r);
+  BaseCellOf(ACol2, ARow2, b2c, b2r);
+  if (b1c <> b2c) or (b1r <> b2r) then Exit;
+  { 归到同一个基准格还不够 —— 那个基准格得**真的**是合并的
+    (不然两个格各自归到自己身上、坐标相同时会误判)。 }
+  Result := CellSpan(b1c, b1r, cs, rs);
+end;
+
 function TTyStringGrid.ColumnFilterActive(ACol: Integer): Boolean;
 begin
   Result := ColumnIsFiltered(ACol);
@@ -5678,6 +5758,7 @@ begin
   if ARowSpan < 1 then ARowSpan := 1;
   with FAttrs.Ensure(CellKey(ACol, ARow)) do
   begin
+    if (ColSpan <= 1) and (RowSpan <= 1) then Inc(FMergeCount);
     ColSpan := AColSpan;
     RowSpan := ARowSpan;
   end;
@@ -5692,6 +5773,7 @@ begin
   k := CellKey(ACol, ARow);
   a := FAttrs.Find(k);
   if a = nil then Exit;
+  if (a.ColSpan > 1) or (a.RowSpan > 1) then Dec(FMergeCount);
   a.ColSpan := 1;
   a.RowSpan := 1;
   FAttrs.DropIfDefault(k);      { 只剩默认值就别占着位置 }
@@ -5716,6 +5798,7 @@ begin
       a.RowSpan := 1;
       FAttrs.DropIfDefault(keys[i]);
     end;
+    FMergeCount := 0;
   finally
     keys.Free;
   end;

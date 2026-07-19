@@ -28,6 +28,7 @@ type
     procedure TestHeaderIndicatorAndFixedPanesPaintTheirOwnTokens;
     procedure TestHeaderPaintsColumnCaptions;
     procedure TestHeaderDrawsColumnImage;
+    procedure TestHeaderCaptionIndentsForColumnImage;
   end;
 
   { 纯自绘网格:内容全部来自宿主事件。 }
@@ -165,6 +166,8 @@ type
     procedure TestTypedFilterOperators;
     procedure TestFilterFunnelLightsUpOnlyForFilteredColumns;
     procedure TestBlanksPositionAndCaseSensitiveSorting;
+    procedure TestCtrlAGoesThroughSelectAll;
+    procedure TestGridLinesDoNotCrossMergedCells;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -935,6 +938,7 @@ type
     procedure HoverAt(X, Y: Integer);
     procedure RightClickAt(X, Y: Integer);
     procedure CtrlClickAt(X, Y: Integer);
+    function  PressKeyCtrl(AKey: Word): Boolean;
     procedure TypeChar(AChar: Char);
     function  EditorText: string;
     function  IsEditing: Boolean;
@@ -1000,6 +1004,14 @@ end;
 function TStrGridAccess.EditorVisible: Boolean;
 begin
   Result := InlineEditor.Visible;
+end;
+
+function TStrGridAccess.PressKeyCtrl(AKey: Word): Boolean;
+var k: Word;
+begin
+  k := AKey;
+  KeyDown(k, [ssCtrl]);
+  Result := k = 0;
 end;
 
 procedure TStrGridAccess.CtrlClickAt(X, Y: Integer);
@@ -4655,6 +4667,231 @@ begin
   G.SortIgnoreCase := False;
   G.SortByColumn(0, sdAscending);
   AssertEquals('区分时 B 在 a 前', 'B', G.Cells[0, G.DisplayRow(0)]);
+end;
+
+{ Ctrl+A 与 SelectAll 必须是**同一条路径**。
+  从前 Ctrl+A 把 SelectAll 的逻辑内联抄了一遍,于是漏了两件事:
+  不清离散选区(Ctrl+点出来的块会残留)、不发 OnSelectionChanged。
+  "同一个动作两条不等价的实现"是最难查的一类不一致。 }
+procedure TTyStringGridTest.TestCtrlAGoesThroughSelectAll;
+var
+  G: TStrGridAccess;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);      { 4 列 }
+  G.RowCount := 5;
+  FSelChanges := 0;
+  G.OnSelectionChanged := @HookSelectionChanged;
+
+  { 先用 Ctrl+点造出离散选区。 }
+  r := G.CellRect(0, 1);
+  G.FullClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  r := G.CellRect(2, 3);
+  G.CtrlClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertTrue('前置条件:离散选区已建立', G.IsCellSelected(0, 1) and G.IsCellSelected(2, 3));
+
+  FSelChanges := 0;
+  G.PressKeyCtrl(Ord('A'));
+
+  AssertEquals('Ctrl+A 之后是全选', 4 * 5, G.SelectedCellCount);
+  AssertTrue('Ctrl+A 必须发 OnSelectionChanged', FSelChanges > 0);
+
+  { 关键:全选之后再缩回一格,离散区不能"复活"。
+    这正是内联版漏掉 SetLength(FSelRects,0) 会暴露的地方。 }
+  G.ClearSelection;
+  AssertEquals('收回后只剩光标那一格', 1, G.SelectedCellCount);
+end;
+
+{ 合并区内部不该有格线穿过 —— 合并的意思就是"这几格是一格"。
+  从前 RenderGridLines 完全不看合并,横竖线照穿。 }
+procedure TTyStringGridTest.TestGridLinesDoNotCrossMergedCells;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  a, d: TRect;
+  x, y, blue: Integer;
+  px: TBGRAPixel;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridLine { background: #0000FF; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.RowCount := 5;
+    G.GridLineStyle := glsBoth;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    { 先确认没合并时内部确实有线(否则这条测试可能恒真)。 }
+    a := G.CellRect(1, 1);
+    d := G.CellRect(2, 2);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    blue := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := a.Top + 1 to d.Bottom - 2 do
+        for x := a.Left + 1 to d.Right - 2 do
+        begin
+          px := Re.GetPixel(x, y);
+          if (px.blue > 180) and (px.red < 100) then Inc(blue);
+        end;
+    finally
+      Re.Free;
+    end;
+    AssertTrue(Format('前置条件:没合并时这块区域内部有格线(蓝 %d)', [blue]), blue > 20);
+
+    { 合并 2x2 之后,同一块区域内部不该再有线。 }
+    G.MergeCells(1, 1, 2, 2);
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    blue := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := a.Top + 1 to d.Bottom - 2 do
+        for x := a.Left + 1 to d.Right - 2 do
+        begin
+          px := Re.GetPixel(x, y);
+          if (px.blue > 180) and (px.red < 100) then Inc(blue);
+        end;
+    finally
+      Re.Free;
+    end;
+    AssertEquals('合并区内部不该有格线穿过', 0, blue);
+
+    { 但合并区的**外沿**仍要有线 —— 不能把线整条抹掉。 }
+    blue := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for x := a.Left to d.Right - 1 do
+      begin
+        px := Re.GetPixel(x, d.Bottom - 1);
+        if (px.blue > 180) and (px.red < 100) then Inc(blue);
+      end;
+    finally
+      Re.Free;
+    end;
+    AssertTrue(Format('合并区下沿仍要有线(蓝 %d)', [blue]), blue > 20);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 图标画出来了还不够 —— 标题必须**为它让位**。
+  原先的 TestHeaderDrawsColumnImage 只断言"表头带里出现了红像素",
+  而图标画在文字**上面**照样能满足它:那条测试对"压字"是瞎的。
+  这里改用"标题墨的最左位置"判定。 }
+procedure TTyGridControlTest.TestHeaderCaptionIndentsForColumnImage;
+var
+  Ctl: TTyStyleController;
+  G: TGridAccess;
+  Bmp: TBitmap;
+  coll: TTyImageCollection;
+  imgs: TTyVirtualImageList;
+  src: TBGRABitmap;
+
+  { 列头带里标题墨(黑色;图标是纯红,不会混进来)的最左 / 最右位置。
+
+    **必须同时看两端**:图标画在标题上会把左边的字盖成红色,
+    于是"最左黑像素"照样右移 —— 只看左端分不清"让位"和"被盖住"。
+    真正让位时整串字右移,右端也跟着右移;被盖住时右端纹丝不动。 }
+  procedure CaptionInk(out ALeft, ARight: Integer);
+  var
+    Re: TBGRABitmap;
+    x, y: Integer;
+    px: TBGRAPixel;
+    hit: Boolean;
+  begin
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRenderTo(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    ALeft := -1;
+    ARight := -1;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for x := 0 to 119 do
+      begin
+        hit := False;
+        for y := 0 to 23 do
+        begin
+          px := Re.GetPixel(x, y);
+          if (px.red < 100) and (px.green < 100) and (px.blue < 100) then
+          begin
+            hit := True;
+            Break;
+          end;
+        end;
+        if hit then
+        begin
+          if ALeft < 0 then ALeft := x;
+          ARight := x;
+        end;
+      end;
+    finally
+      Re.Free;
+    end;
+  end;
+
+var
+  noIconL, noIconR, withIconL, withIconR: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  coll := TTyImageCollection.Create(nil);
+  imgs := TTyVirtualImageList.Create(nil);
+  try
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridHeader { background: #FFFFFF; color: #000000; }');
+
+    src := TBGRABitmap.Create(16, 16, BGRA(255, 0, 0, 255));
+    try
+      coll.AddBitmap('red', src);
+    finally
+      src.Free;
+    end;
+    imgs.Names.Add('red');
+    imgs.Collection := coll;
+
+    G := MakeGrid(FForm, [120, 120]);
+    G.Controller := Ctl;
+    G.GridLines := False;
+    G.Header.Height := 24;
+    G.Images := imgs;
+    TTyColumn(G.Header.Columns.Items[0]).Text := 'MMMM';
+    G.DefaultRowHeight := 20;
+    G.RowCount := 2;
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    CaptionInk(noIconL, noIconR);
+    AssertTrue('前置条件:没有图标时标题要有墨', noIconL >= 0);
+
+    TTyColumn(G.Header.Columns.Items[0]).ImageIndex := 0;
+    CaptionInk(withIconL, withIconR);
+    AssertTrue('前置条件:有图标时标题仍要有墨', withIconL >= 0);
+
+    AssertTrue(Format('标题左端应当为图标让位(%d -> %d)', [noIconL, withIconL]),
+      withIconL > noIconL + 8);
+    { 判别性的那一条:被盖住时右端不动,真让位时右端跟着右移。 }
+    AssertTrue(Format('标题**右端**也必须右移,否则说明只是被图标盖住了(%d -> %d)',
+      [noIconR, withIconR]), withIconR > noIconR + 8);
+  finally
+    imgs.Free;
+    coll.Free;
+    Bmp.Free;
+    Ctl.Free;
+  end;
 end;
 
 initialization
