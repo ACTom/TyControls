@@ -188,6 +188,7 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestBulkFillStaysLinear;
     procedure TestFixedRowsRenderTheirContent;
     procedure TestBottomFixedRowsPinRenderAndHitTest;
     procedure TestRightFixedColsPinRenderAndHitTest;
@@ -6709,6 +6710,63 @@ begin
     Bmp.Free;
     Ctl.Free;
   end;
+end;
+
+{ 填表必须是**线性**的,不能随已写入的格数变慢。
+
+  这条守的是一次真实的卡死:示例里点「10 万行」直接假死。根因是稀疏存储旁边
+  挂了一份**有序的**键表,每写一格 Add 一次 —— 有序 TStringList 的插入要
+  memmove 半个表,于是整体 O(n²)。九十万次插入,等于卡死。
+
+  **度量是相对的**:同样大小的三批,后面的批次不能比第一批慢太多。
+  绝对毫秒换台机器就误报;"越填越慢"这个**形状**才是缺陷本身。
+  修好前逐批递增(281 / 500 / 704 ms …),修好后持平(16 / 15 / 16 ms)。
+  阈值取 3 倍:健康值约 1 倍,退化到第 9 批时约 6 倍以上。
+  (第一版只比第 1、3 批、阈值 4 倍 —— 变异测试证明它抓不住退化,已改。) }
+procedure TTyStringGridTest.TestBulkFillStaysLinear;
+const
+  BLOCK   = 2500;
+  LASTBLK = 8;      { 计时的是第 9 批 }
+var
+  G: TStrGridAccess;
+  i, j: Integer;
+  c: TTyColumn;
+  t0, firstMs, thirdMs: QWord;
+begin
+  G := TStrGridAccess.Create(FForm);
+  G.Parent := FForm;
+  G.Controller := FCtl;
+  G.Font.PixelsPerInch := 96;
+  G.SetBounds(0, 0, 900, 600);
+  for i := 0 to 8 do
+  begin
+    c := G.Header.Columns.Add as TTyColumn;
+    c.Width := 90;
+  end;
+  G.RowCount := 100000;
+
+  t0 := GetTickCount64;
+  for i := 0 to BLOCK - 1 do
+    for j := 0 to 8 do
+      G.Cells[j, i] := 'x';
+  firstMs := GetTickCount64 - t0;
+
+  { 中间几批只填不计时 —— 跨度拉得越开,线性与二次的差别越明显。
+    只比第 1 批和第 3 批时,退化后的比值才 2.5,和健康值的距离不够安全。 }
+  for i := BLOCK to LASTBLK * BLOCK - 1 do
+    for j := 0 to 8 do
+      G.Cells[j, i] := 'x';
+
+  t0 := GetTickCount64;
+  for i := LASTBLK * BLOCK to (LASTBLK + 1) * BLOCK - 1 do
+    for j := 0 to 8 do
+      G.Cells[j, i] := 'x';
+  thirdMs := GetTickCount64 - t0;
+
+  { 计时精度下限:太快时两边都可能落在 0/15ms,别拿噪声做判据。 }
+  if firstMs < 8 then firstMs := 8;
+  AssertTrue(Format('填表不该越填越慢(第 1 批 %d ms,第 9 批 %d ms)',
+    [firstMs, thirdMs]), thirdMs <= firstMs * 3);
 end;
 
 initialization

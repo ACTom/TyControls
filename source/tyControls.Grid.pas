@@ -983,7 +983,12 @@ type
     FCells: TFPStringHashTable;
     { 与 FCells 同步的键表。哈希表本身不提供好用的键枚举(Iterate 要全局回调),
       而行列增删与自动适宽都需要遍历"写过的格" —— 单独维护一份键更简单也更快。 }
-    FCellKeys: TStringList;
+    { 枚举"写过的格"的键时用的临时目标(SnapshotCellKeys 的接收方)。
+      从前这里挂着一份**有序的** FCellKeys 平行表,每写一格 Add 一次:
+      有序 TStringList 的插入要 memmove 半个表,于是填表整体是 O(n²) ——
+      10 万行填到一半就像卡死。稀疏存储本身(FCells 哈希表)就知道写过哪些格,
+      那份平行表是多余的。 }
+    FKeySink: TStrings;
     FCol: Integer;                { 当前单元格(光标) }
     FRow: Integer;
     FOnSelectCell: TTyGridSelectCellEvent;
@@ -1098,6 +1103,8 @@ type
     FSortDir: TTySortDirection;
     FSortKind: TTyGridSortKind;
     FOnCompareCells: TTyGridCompareEvent;
+    procedure CollectKey(Item: string; const Key: string; var AContinue: Boolean);
+    procedure SnapshotCellKeys(ADest: TStrings);
     procedure ShiftCells(AFromIndex, ADelta: Integer; ARows: Boolean);
     procedure FilterPopupClosed(Sender: TObject);
     procedure InvalidateOrder;
@@ -4295,9 +4302,6 @@ constructor TTyStringGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FCells := TFPStringHashTable.Create;
-  FCellKeys := TStringList.Create;
-  FCellKeys.Sorted := True;
-  FCellKeys.Duplicates := dupIgnore;
   FColFilters := TStringList.Create;
   FValFilters := TStringList.Create;
   FAggregates := TStringList.Create;
@@ -4400,7 +4404,6 @@ begin
   FPickEditor.OnExit := nil;
   FDateEditor.OnExit := nil;
   FCells.Free;
-  FCellKeys.Free;
   FColFilters.Free;
   FValFilters.Free;
   FAggregates.Free;
@@ -4423,28 +4426,40 @@ end;
 procedure TTyStringGrid.SetCells(ACol, ARow: Integer; const AValue: string);
 var
   k: string;
-  i: Integer;
 begin
   k := CellKey(ACol, ARow);
   if AValue = '' then
   begin
-    FCells.Delete(k);                 { 写空串 = 删除条目,稀疏存储不为空值留位置 }
-    i := FCellKeys.IndexOf(k);
-    if i >= 0 then FCellKeys.Delete(i);
+    FCells.Delete(k)                  { 写空串 = 删除条目,稀疏存储不为空值留位置 }
   end
   else
-  begin
     FCells.Items[k] := AValue;        { 已存在则覆写,不存在则新增 }
-    FCellKeys.Add(k);                 { 有序表 + dupIgnore,重复添加自动忽略 }
-  end;
   Invalidate;
 end;
 
 procedure TTyStringGrid.ClearCells;
 begin
   FCells.Clear;
-  FCellKeys.Clear;
   Invalidate;
+end;
+
+{ 把"写过的格"的键快照到 ADest。顺序不定 —— 两个调用方都不关心顺序
+  (ShiftCells 自己按数值重排,AutoFitColumnWidth 只是扫一遍)。 }
+procedure TTyStringGrid.CollectKey(Item: string; const Key: string;
+  var AContinue: Boolean);
+begin
+  if FKeySink <> nil then FKeySink.Add(Key);
+  AContinue := True;
+end;
+
+procedure TTyStringGrid.SnapshotCellKeys(ADest: TStrings);
+begin
+  FKeySink := ADest;
+  try
+    FCells.Iterate(@CollectKey);
+  finally
+    FKeySink := nil;
+  end;
 end;
 
 function TTyStringGrid.StoredCellCount: Integer;
@@ -6378,7 +6393,7 @@ begin
   attrKeys := TStringList.Create;
   try
     attrKeys.Sorted := False;
-    attrKeys.Assign(FCellKeys);
+    SnapshotCellKeys(attrKeys);
     attrKeys.Sorted := True;      { 只为去重,**不**作为搬移顺序 }
     attrKeys.Duplicates := dupIgnore;
     merged := TStringList.Create;
@@ -6780,6 +6795,7 @@ var
 var
   widest, w, i, sep, c, r: Integer;
   k: string;
+  keys: TStringList;
 begin
   if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
   { 1x1 的临时位图只用来量文字 —— 不需要画布,也不需要窗口句柄。 }
@@ -6791,15 +6807,21 @@ begin
     widest := TextW(TTyColumn(Header.Columns.Items[ACol]).Text, hSty);
 
     { 只量**写过的**格 —— 稀疏存储让百万行空表也只走几条记录,不必扫全表。 }
-    for i := 0 to FCellKeys.Count - 1 do
-    begin
-      k := FCellKeys[i];
-      sep := Pos(':', k);
-      c := StrToIntDef(Copy(k, 1, sep - 1), -1);
-      if c <> ACol then Continue;
-      r := StrToIntDef(Copy(k, sep + 1, MaxInt), -1);
-      w := TextW(GetCellText(ACol, r), cSty);
-      if w > widest then widest := w;
+    keys := TStringList.Create;
+    try
+      SnapshotCellKeys(keys);
+      for i := 0 to keys.Count - 1 do
+      begin
+        k := keys[i];
+        sep := Pos(':', k);
+        c := StrToIntDef(Copy(k, 1, sep - 1), -1);
+        if c <> ACol then Continue;
+        r := StrToIntDef(Copy(k, sep + 1, MaxInt), -1);
+        w := TextW(GetCellText(ACol, r), cSty);
+        if w > widest then widest := w;
+      end;
+    finally
+      keys.Free;
     end;
   finally
     bmp.Free;
