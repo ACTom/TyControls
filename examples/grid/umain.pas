@@ -349,6 +349,10 @@ var
   r, qty: Integer;
   amount: Double;
 begin
+  { 批量灌数据必须锁住重画 —— 不锁的话每写一格就往 LCL 送一次失效,
+    10 万行 x 9 列 = 90 万次,界面看起来就是死的。 }
+  AGrid.BeginUpdate;
+  try
   AGrid.RowCount := ACount;
   for r := 0 to ACount - 1 do
   begin
@@ -377,6 +381,9 @@ begin
       AGrid.Cells[cETA,      r] := Format('%.2d:%.2d', [8 + r mod 10, (r * 7) mod 60]);
       AGrid.Cells[cPin,      r] := 'pw' + IntToStr(1000 + r);
     end;
+  end;
+  finally
+    AGrid.EndUpdate;
   end;
 end;
 

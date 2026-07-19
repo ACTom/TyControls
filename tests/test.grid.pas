@@ -189,6 +189,7 @@ type
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
     procedure TestBulkFillStaysLinear;
+    procedure TestBeginUpdateCollapsesRepaints;
     procedure TestFixedRowsRenderTheirContent;
     procedure TestBottomFixedRowsPinRenderAndHitTest;
     procedure TestRightFixedColsPinRenderAndHitTest;
@@ -1023,6 +1024,7 @@ type
     function  ColAtForTest(AX: Integer): Integer;
     procedure BaseCellOfForTest(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
     procedure InvalidateSurfaceForTest;
+    function  SurfaceFreshForTest: Boolean;
     property ScrollTop: Integer read GetScrollTop write SetScrollTop;
   end;
 
@@ -1217,6 +1219,11 @@ end;
 procedure TStrGridAccess.ScrollByForTest(ADy: Integer);
 begin
   ScrollVerticallyBy(ADy);
+end;
+
+function TStrGridAccess.SurfaceFreshForTest: Boolean;
+begin
+  Result := SurfaceFresh;
 end;
 
 procedure TStrGridAccess.InvalidateSurfaceForTest;
@@ -6767,6 +6774,69 @@ begin
   if firstMs < 8 then firstMs := 8;
   AssertTrue(Format('填表不该越填越慢(第 1 批 %d ms,第 9 批 %d ms)',
     [firstMs, thirdMs]), thirdMs <= firstMs * 3);
+end;
+
+{ 批量灌数据时,送到 LCL 的重画必须**只有一次**。
+
+  每写一格 Invalidate 一次这件事,在 headless 测试里几乎免费(没有窗口句柄),
+  所以它躲过了"填表要线性"那条守卫 —— 真实窗口上 90 万次失效调用让界面像死了一样。
+  这里断言的是**真正送出去的重画次数**,而不是耗时:耗时在无句柄环境下量不出来。 }
+procedure TTyStringGridTest.TestBeginUpdateCollapsesRepaints;
+var
+  G: TStrGridAccess;
+  i, j, before: Integer;
+  bmp: TBitmap;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 500;
+
+  { 一、不加锁:每写一格至少一次重画。 }
+  before := G.RealInvalidateCount;
+  for i := 0 to 99 do
+    for j := 0 to 3 do
+      G.Cells[j, i] := 'x';
+  AssertTrue(Format('不加锁时重画次数应当随写入次数增长(%d 次)',
+    [G.RealInvalidateCount - before]),
+    G.RealInvalidateCount - before >= 400);
+
+  { 二、加锁:整批只重画一次。 }
+  before := G.RealInvalidateCount;
+  G.BeginUpdate;
+  try
+    for i := 100 to 199 do
+      for j := 0 to 3 do
+        G.Cells[j, i] := 'y';
+  finally
+    G.EndUpdate;
+  end;
+  AssertEquals('加锁后整批只重画一次', 1, G.RealInvalidateCount - before);
+
+  { 三、锁住期间**不能**留下"表面还新鲜"的错觉 —— 否则解锁后那一次重画会走
+    脏区快路径,复用上一帧的陈旧像素。
+    先真画一帧把表面点亮 —— 否则它本来就不新鲜,这条断言两种实现都能过(假绿)。 }
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(400, 300);
+    G.DoRender(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    AssertTrue('前置条件:画过一帧之后表面是新鲜的', G.SurfaceFreshForTest);
+    G.BeginUpdate;
+    G.Cells[0, 0] := 'z';
+    AssertTrue('锁住期间表面也必须失效', not G.SurfaceFreshForTest);
+    G.EndUpdate;
+  finally
+    bmp.Free;
+  end;
+
+  { 四、可嵌套:内层结束不该提前解锁。 }
+  before := G.RealInvalidateCount;
+  G.BeginUpdate;
+  G.BeginUpdate;
+  G.Cells[1, 1] := 'w';
+  G.EndUpdate;
+  AssertEquals('内层 EndUpdate 不该触发重画', 0, G.RealInvalidateCount - before);
+  G.EndUpdate;
+  AssertEquals('外层 EndUpdate 才重画', 1, G.RealInvalidateCount - before);
 end;
 
 initialization

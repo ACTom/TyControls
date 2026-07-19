@@ -501,6 +501,15 @@ type
     FSurface:          TBGRABitmap;
     FSurfaceFresh:     Boolean;
     FSurfacePendingDy: Integer;
+    { 批量更新锁。宿主往表里灌数据时,每写一格都 Invalidate 一次:
+      没有窗口句柄时几乎免费(headless 测试量不到它),真实窗口上却是一次
+      失效调用 —— 灌 90 万格就是 90 万次,界面像死了一样。
+      锁住期间只记一笔"欠一次重画",解锁时补上。 }
+    FUpdateCount: Integer;
+    FPendingInvalidate: Boolean;
+    { 真正送到 LCL 的重画次数。批量更新从画面上看不出效果,
+      只表现为快慢 —— 给测试一个能直接观测的口子。 }
+    FRealInvalidates: Integer;
     { 走过快路径的帧数。脏区重绘从画面上完全看不出来 —— 它要是被
       静默关掉,只会变慢。给测试一个能直接观测"这一帧到底走没走快路径"的口子。 }
     FFastScrollFrames: Integer;
@@ -803,6 +812,12 @@ type
     procedure MapToBaseCell(var ACol, ARow: Integer); virtual;
 
     { 点命中,客户区坐标 —— **CellVisibleRect 的逆**(见上:被冻结带盖住的部分点不到)。 }
+    { 批量改数据时把重画锁住,结束后只重画一次。可嵌套。
+      任何要连续写很多格/很多行的宿主都该用它。 }
+    procedure BeginUpdate;
+    procedure EndUpdate;
+    property RealInvalidateCount: Integer read FRealInvalidates;
+    property SurfaceFresh: Boolean read FSurfaceFresh;
     function CellAt(AX, AY: Integer): TTyGridHit;
 
     { 把某个单元格滚进可视区(最小移动量)。光标一旦走出视口就得靠它跟上,
@@ -2524,9 +2539,32 @@ end;
 
 procedure TTyCustomGrid.Invalidate;
 begin
+  { 表面新鲜度**照常**熄灭 —— 即使被锁住也不能留下"还新鲜"的错觉,
+    否则解锁后那一次重画会走脏区快路径,复用上一帧的陈旧像素。 }
   FSurfaceFresh := False;
   FSurfacePendingDy := 0;
+  if FUpdateCount > 0 then
+  begin
+    FPendingInvalidate := True;
+    Exit;
+  end;
+  Inc(FRealInvalidates);
   inherited Invalidate;
+end;
+
+procedure TTyCustomGrid.BeginUpdate;
+begin
+  Inc(FUpdateCount);
+end;
+
+procedure TTyCustomGrid.EndUpdate;
+begin
+  if FUpdateCount = 0 then Exit;
+  Dec(FUpdateCount);
+  if FUpdateCount > 0 then Exit;
+  if not FPendingInvalidate then Exit;
+  FPendingInvalidate := False;
+  Invalidate;
 end;
 
 { 逐扫描行 memmove。比"整幅拷到临时位图再拷回来"省一半带宽,也不必额外分配。
