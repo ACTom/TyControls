@@ -170,6 +170,11 @@ type
     procedure TestGridLinesDoNotCrossMergedCells;
     procedure TestColorCellPaintsASwatchNotTheHexText;
     procedure TestResizeCursorsFollowTheDividers;
+    procedure TestSelectionColourIgnoresGridHoverState;
+    procedure TestSpinEditorRoundTripsAndClampsToColumnRange;
+    procedure TestSliderEditorRoundTrips;
+    procedure TestMaskEditorUsesColumnMask;
+    procedure TestRatingCellSetsValueByClickingAStar;
   public
     { 鼠标事件的桩(同样必须在 published 之外)。 }
     FSelChanges: Integer;
@@ -940,6 +945,8 @@ type
     function  VisibleRows(out AFirst, ALast: Integer): Boolean;
     procedure ForceUpdateScrollBars;
     procedure HoverAt(X, Y: Integer);
+    procedure EnterControl;
+    procedure LeaveControl;
     procedure RightClickAt(X, Y: Integer);
     procedure CtrlClickAt(X, Y: Integer);
     function  PressKeyCtrl(AKey: Word): Boolean;
@@ -948,6 +955,12 @@ type
     function  IsEditing: Boolean;
     function  HitAt(X, Y: Integer): TTyGridHit;
     function  EditorVisible: Boolean;
+    function  SpinValue: Integer;
+    procedure SetSpinValue(AValue: Integer);
+    function  SliderValue: Integer;
+    procedure SetSliderValue(AValue: Integer);
+    function  MaskOf: string;
+    function  StarRectOf(ACol, ARow, AStar: Integer): TRect;
     procedure DragFromTo(X1, Y1, X2, Y2: Integer);
     procedure DoubleClickAt(X, Y: Integer);
     function  ColWidth(ACol: Integer): Integer;
@@ -1010,6 +1023,19 @@ begin
   Result := InlineEditor.Visible;
 end;
 
+function TStrGridAccess.SpinValue: Integer;
+begin Result := SpinEditor.Value; end;
+procedure TStrGridAccess.SetSpinValue(AValue: Integer);
+begin SpinEditor.Value := AValue; end;
+function TStrGridAccess.SliderValue: Integer;
+begin Result := SliderEditor.Position; end;
+procedure TStrGridAccess.SetSliderValue(AValue: Integer);
+begin SliderEditor.Position := AValue; end;
+function TStrGridAccess.MaskOf: string;
+begin Result := MaskEditor.Mask; end;
+function TStrGridAccess.StarRectOf(ACol, ARow, AStar: Integer): TRect;
+begin Result := RatingStarRect(ACol, ARow, AStar); end;
+
 function TStrGridAccess.PressKeyCtrl(AKey: Word): Boolean;
 var k: Word;
 begin
@@ -1044,6 +1070,16 @@ begin
   { LCL 在第二次按下时把 ssDouble 塞进 Shift —— 双击就是这么识别的。 }
   MouseDown(mbLeft, [ssDouble], X, Y);
   MouseUp(mbLeft, [], X, Y);
+end;
+
+procedure TStrGridAccess.EnterControl;
+begin
+  MouseEnter;      { 让控件自身进入 :hover }
+end;
+
+procedure TStrGridAccess.LeaveControl;
+begin
+  MouseLeave;
 end;
 
 procedure TStrGridAccess.HoverAt(X, Y: Integer);
@@ -5002,6 +5038,181 @@ begin
   AssertEquals('单元格区域不给调整指针', crDefault, G.Cursor);
 end;
 
+
+{ 选区底色**不能**跟着网格自身的 hover 状态变。
+
+  症状:鼠标从网格上移开的一瞬间,选中的格会"闪一下" ——
+  因为选区底色是用 `CurrentStates + [tysSelected]` 解析的,而 CurrentStates 里
+  含控件自身的 tysHover。鼠标进出网格 → 状态集变 → 选区颜色重解析成另一个值。
+
+  这和当初勾选框闪烁是**同一个 bug**(那次是鼠标按下让整个网格进 :active,
+  满屏未勾选的框集体变样),只是选区这处漏掉了。
+  单元格的外观只该由**格自己的状态**决定。 }
+procedure TTyStringGridTest.TestSelectionColourIgnoresGridHoverState;
+var
+  Ctl: TTyStyleController;
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+
+  function SelectionPixels(out ARed, AGreen: Integer): Integer;
+  var
+    Re: TBGRABitmap; r: TRect; x, y: Integer; px: TBGRAPixel;
+  begin
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 400, 300));
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    r := G.CellRect(1, 1);
+    ARed := 0; AGreen := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      for y := r.Top + 2 to r.Bottom - 3 do
+        for x := r.Left + 2 to r.Right - 3 do
+        begin
+          if (x < 0) or (y < 0) or (x >= 400) or (y >= 300) then Continue;
+          px := Re.GetPixel(x, y);
+          if (px.red > 180) and (px.green < 100) then Inc(ARed);
+          if (px.green > 180) and (px.red < 100) then Inc(AGreen);
+        end;
+    finally
+      Re.Free;
+    end;
+    Result := ARed + AGreen;
+  end;
+
+var
+  redOut, greenOut, redIn, greenIn: Integer;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    { 选中 = 红,hover = 绿。两者一旦混在一起,颜色会从红变绿 —— 一眼可辨。 }
+    Ctl.LoadThemeCss(
+      'TyGrid { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyGridCell { background: none; color: #000000; }' +
+      'TyGridCell:hover { background: #00FF00; }' +
+      'TyGridCell:selected { background: #FF0000; }');
+    G := MakeStrGrid(FForm, Ctl);
+    G.GridLines := False;
+    G.RowCount := 5;
+    G.SelectRange(1, 1, 1, 1);
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+
+    { 鼠标不在网格上。 }
+    G.LeaveControl;
+    SelectionPixels(redOut, greenOut);
+    AssertTrue(Format('鼠标在外时选区是选中色(红 %d)', [redOut]), redOut > 50);
+
+    { 鼠标移进网格(但不在这一格上)—— 选区颜色**必须一模一样**。 }
+    G.EnterControl;
+    SelectionPixels(redIn, greenIn);
+    AssertEquals('鼠标进出网格不该改变选区底色(红)', redOut, redIn);
+    AssertEquals('选区不该被网格自身的 hover 染绿', 0, greenIn);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
+{ 数值微调编辑器:值往返 + 受列级上下限约束。
+  库里本来就有 TTySpinEdit,接上去就是了。 }
+procedure TTyStringGridTest.TestSpinEditorRoundTripsAndClampsToColumnRange;
+var
+  G: TStrGridAccess;
+  c: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  c := TTyGridColumn(G.Header.Columns.Items[1]);
+  c.EditorKind := gekSpin;
+  c.MinValue := 0;
+  c.MaxValue := 10;
+  G.Cells[1, 1] := '3';
+
+  AssertTrue('进入微调编辑', G.BeginEdit(1, 1));
+  AssertEquals('初值从单元格读入', 3, G.SpinValue);
+  AssertEquals('上下限来自列', 10, G.SpinEditor.MaxValue);
+
+  G.SetSpinValue(7);
+  G.EndEdit(True);
+  AssertEquals('提交后写回单元格', '7', G.Cells[1, 1]);
+
+  { 超出上限的值要被钳住 —— 上下限是列的约定,不该靠用户自觉。 }
+  AssertTrue('再次进入', G.BeginEdit(1, 1));
+  G.SetSpinValue(999);
+  G.EndEdit(True);
+  AssertEquals('超上限被钳到列的上限', '10', G.Cells[1, 1]);
+end;
+
+{ 滑动条编辑器:拖出来的值直接落到单元格。 }
+procedure TTyStringGridTest.TestSliderEditorRoundTrips;
+var
+  G: TStrGridAccess;
+  c: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  c := TTyGridColumn(G.Header.Columns.Items[2]);
+  c.EditorKind := gekSlider;
+  c.MinValue := 0;
+  c.MaxValue := 100;
+  G.Cells[2, 2] := '40';
+
+  AssertTrue('进入滑动条编辑', G.BeginEdit(2, 2));
+  AssertEquals('初值从单元格读入', 40, G.SliderValue);
+  G.SetSliderValue(85);
+  G.EndEdit(True);
+  AssertEquals('提交后写回单元格', '85', G.Cells[2, 2]);
+end;
+
+{ 掩码编辑器:掩码挂在列上 —— 这正是 B9 当初推掉的 EditMask,
+  库里本来就有 TTyMaskEdit,不必自己再造一套掩码语法。 }
+procedure TTyStringGridTest.TestMaskEditorUsesColumnMask;
+var
+  G: TStrGridAccess;
+  c: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  c := TTyGridColumn(G.Header.Columns.Items[0]);
+  c.EditorKind := gekMask;
+  c.EditMask := '000-0000';
+  G.Cells[0, 1] := '021-1234';
+
+  AssertTrue('进入掩码编辑', G.BeginEdit(0, 1));
+  AssertEquals('掩码取自列', '000-0000', G.MaskOf);
+  G.EndEdit(False);
+end;
+
+{ 星级:**点哪颗星就是几分**,不弹编辑器(与勾选框同一种手感)。
+  从前 gcdRating 只是显示方式,改分要靠数值编辑器输入数字 —— 很别扭。 }
+procedure TTyStringGridTest.TestRatingCellSetsValueByClickingAStar;
+var
+  G: TStrGridAccess;
+  c: TTyGridColumn;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  c := TTyGridColumn(G.Header.Columns.Items[3]);
+  c.EditorKind := gekRating;
+  G.Cells[3, 1] := '2';
+
+  { 点第 4 颗星(1-based)→ 值变成 4。 }
+  r := G.StarRectOf(3, 1, 4);
+  AssertTrue('前置条件:星的矩形要有效', not IsRectEmpty(r));
+  G.FullClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('点第 4 颗星 = 4 分', '4', G.Cells[3, 1]);
+
+  { 点第 1 颗 → 1 分。 }
+  r := G.StarRectOf(3, 1, 1);
+  G.FullClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('点第 1 颗星 = 1 分', '1', G.Cells[3, 1]);
+
+  { 星级格不该弹出驻留编辑器。 }
+  AssertTrue('星级不弹编辑器', not G.EditorVisible);
+end;
 
 initialization
   RegisterTest(TTyGridControlTest);

@@ -23,6 +23,7 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns,
   tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox, tyControls.ColorMath,
+  tyControls.SpinEdit, tyControls.TrackBar, tyControls.Memo, tyControls.MaskEdit,
   tyControls.Css.Values, tyControls.ImageCollection, tyControls.Dialogs.Color,
   tyControls.StrConsts,
   tyControls.Grid.Layout;
@@ -46,7 +47,13 @@ type
     gekCheckBox,  { 勾选框:不弹编辑器,点一下就切换 }
     gekPickList,  { 下拉选取:从 OnGetPickList 给的候选里选 }
     gekDate,      { 日期:弹日期选择器 }
-    gekColor      { 颜色:弹取色对话框,值存 #RRGGBB }
+    gekColor,     { 颜色:弹取色对话框,值存 #RRGGBB }
+    { 以下几种都是把库里**现成的控件**接进来当编辑器,不是另造一套。 }
+    gekSpin,      { 数值微调:TTySpinEdit,范围取列的 MinValue/MaxValue }
+    gekSlider,    { 滑动条:TTyTrackBar,范围同上 }
+    gekRating,    { 星级:**点哪颗星就是几分**,不弹编辑器(与勾选框同一种手感) }
+    gekMemo,      { 多行文本:TTyMemo }
+    gekMask       { 掩码:TTyMaskEdit,掩码取列的 EditMask }
   );
 
   { 单元格的**显示**方式(与编辑方式正交:一个格可以显示成进度条、编辑时仍是数值框)。 }
@@ -188,6 +195,9 @@ type
     FValidChars: string;
     FMaxEditLength: Integer;
     FSortKind: TTyGridSortKind;
+    FMinValue: Integer;
+    FMaxValue: Integer;
+    FEditMask: string;
     FUseEditorKind: Boolean;
     procedure SetPickList(AValue: TStrings);
     procedure SetEditorKind(AValue: TTyGridEditorKind);
@@ -199,6 +209,11 @@ type
       光看"等于 gekText"分不清"没设"和"显式设成文本"。 }
     property UseEditorKind: Boolean read FUseEditorKind write FUseEditorKind;
   published
+    { gekSpin / gekSlider 的取值范围。 }
+    property MinValue: Integer read FMinValue write FMinValue default 0;
+    property MaxValue: Integer read FMaxValue write FMaxValue default 100;
+    { gekMask 的掩码 —— 交给 TTyMaskEdit 解释,不自造一套掩码语法。 }
+    property EditMask: string read FEditMask write FEditMask;
     { 只允许输入这些字符(空 = 不限)。按键级过滤,非法键直接不进编辑框。 }
     property ValidChars: string read FValidChars write FValidChars;
     { 编辑框最多输入几个字符(0 = 不限)。 }
@@ -539,6 +554,8 @@ type
   protected
     { 按内容自适应列宽。基类没有数据、什么都不做;TTyStringGrid 改写。 }
     procedure AutoFitColumnWidth(ACol: Integer); virtual;
+    { 把点在星级格上的坐标翻成分值并写回。 }
+    procedure SetRatingByPoint(ACol, ARow, X, Y: Integer); virtual;
     procedure SetPressedButton(ACol, ARow: Integer);
     procedure GetPressedButton(out ACol, ARow: Integer);
     { 按钮格的按钮矩形(单元格内缩 2 逻辑像素)。不是按钮格时返回空矩形。 }
@@ -878,6 +895,11 @@ type
     FAutoGrowOnPaste:  Boolean;
     { 当前正在用的宿主 EditLink(nil = 走内建编辑器)。 }
     FEditLink: TTyGridEditLink;
+    { 内建编辑器。都是库里现成的控件,网格只负责摆位置、灌值、取值。 }
+    FSpinEditor:   TTySpinEdit;
+    FSliderEditor: TTyTrackBar;
+    FMemoEditor:   TTyMemo;
+    FMaskEditor:   TTyMaskEdit;
     FEditLinkCtl: TWinControl;
     FDateEditor: TTyDateTimePicker;
     FOnGetCellDisplay: TTyGridGetCellDisplayEvent;
@@ -989,11 +1011,22 @@ type
       从前只有 KeyDown、没有 KeyPress 覆写,必须先按 F2 或双击才能输入。 }
     procedure KeyPress(var Key: Char); override;
     { 这一格允许输入哪些字符(空 = 不限)。取自列级 ValidChars。 }
+    { gekSpin / gekSlider 的范围与 gekMask 的掩码,取自列;列没配就用默认。 }
+    function  EditorMinFor(ACol: Integer): Integer; virtual;
+    function  EditorMaxFor(ACol: Integer): Integer; virtual;
+    function  EditMaskFor(ACol: Integer): string; virtual;
     function  ValidCharsFor(ACol, ARow: Integer): string; virtual;
     function  MaxEditLengthFor(ACol, ARow: Integer): Integer; virtual;
     { 内建的行内文本编辑器。protected 暴露给派生类与测试 —— 用来断言
       "宿主 EditLink 接管时内建编辑器不出场"。 }
     property InlineEditor: TTyEdit read FEditor;
+    property SpinEditor: TTySpinEdit read FSpinEditor;
+    property SliderEditor: TTyTrackBar read FSliderEditor;
+    property MemoEditor: TTyMemo read FMemoEditor;
+    property MaskEditor: TTyMaskEdit read FMaskEditor;
+    { 星级格里第 AStar 颗星(1-based)的矩形。绘制与命中共用它。 }
+    function RatingStarRect(ACol, ARow, AStar: Integer): TRect;
+    procedure SetRatingByPoint(ACol, ARow, X, Y: Integer); override;
     procedure DblClick; override;
     { 该格该用哪种编辑器。默认取 DefaultEditorKind,OnGetEditorKind 可逐格覆盖。 }
     function EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind; virtual;
@@ -1337,6 +1370,8 @@ const
   { "这不是个日期"的哨兵。用一个不可能出现的 TDateTime 值,
     比再拿一个 Boolean 数组去记省事,也不会和真实日期撞上。 }
   NoDateSentinel = -1.0e18;
+  { 星级的满分。绘制与命中都用它,别各写一个 5。 }
+  TyGridRatingMax = 5;
 
 { 过滤表达式的存储格式是 '<op序号>|<文本>' —— 一条字符串装下两样东西,
   沿用既有的 name=value 存储,不必再开一张表。 }
@@ -1538,6 +1573,8 @@ begin
   FEditorKind := gekText;
   FAggregate := gagNone;
   FSortKind := gskAuto;
+  FMinValue := 0;
+  FMaxValue := 100;
   FPickList := TStringList.Create;
 end;
 
@@ -1573,7 +1610,9 @@ begin
     FValidChars := TTyGridColumn(ASource).ValidChars;
     FMaxEditLength := TTyGridColumn(ASource).MaxEditLength;
     FSortKind := TTyGridColumn(ASource).SortKind;
-    FSortKind := TTyGridColumn(ASource).SortKind;
+    FMinValue := TTyGridColumn(ASource).MinValue;
+    FMaxValue := TTyGridColumn(ASource).MaxValue;
+    FEditMask := TTyGridColumn(ASource).EditMask;
   end;
 end;
 
@@ -2333,6 +2372,11 @@ end;
 procedure TTyCustomGrid.AutoFitColumnWidth(ACol: Integer);
 begin
   { 基类不知道数据从哪来。 }
+end;
+
+procedure TTyCustomGrid.SetRatingByPoint(ACol, ARow, X, Y: Integer);
+begin
+  { 基类没有数据存储;TTyStringGrid 改写。 }
 end;
 
 procedure TTyCustomGrid.SetPressedButton(ACol, ARow: Integer);
@@ -3589,7 +3633,8 @@ begin
     控件从不持有数据,也从不遍历全部行。 }
   if not TyGridVisibleRows(M, firstRow, lastRow) then Exit;
 
-  cellS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, CurrentStates);
+  { 同上:内边距也别跟着网格自身的状态变,否则鼠标进出会让文字左右挪一下。 }
+  cellS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
   if tpTextColor in cellS.Present then ink := cellS.TextColor
   else ink := AFrame.TextColor;
   padL := ScaleI(cellS.Padding.Left);
@@ -3684,6 +3729,33 @@ begin
   FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
   FEditor.OnKeyDown := @EditorKeyDown;
   FEditor.OnExit := @EditorExit;
+
+  { 以下几个都是把库里**现成的控件**接进来当编辑器 —— 网格只负责摆位置、
+    灌值、取值,不重造轮子。生命周期规则与文本编辑器一致。 }
+  FSpinEditor := TTySpinEdit.Create(Self);
+  FSpinEditor.Parent := Self;
+  FSpinEditor.Visible := False;
+  FSpinEditor.ControlStyle := FSpinEditor.ControlStyle + [csNoDesignVisible];
+  FSpinEditor.OnExit := @EditorExit;
+
+  FSliderEditor := TTyTrackBar.Create(Self);
+  FSliderEditor.Parent := Self;
+  FSliderEditor.Visible := False;
+  FSliderEditor.ControlStyle := FSliderEditor.ControlStyle + [csNoDesignVisible];
+  FSliderEditor.OnExit := @EditorExit;
+
+  FMemoEditor := TTyMemo.Create(Self);
+  FMemoEditor.Parent := Self;
+  FMemoEditor.Visible := False;
+  FMemoEditor.ControlStyle := FMemoEditor.ControlStyle + [csNoDesignVisible];
+  FMemoEditor.OnExit := @EditorExit;
+
+  FMaskEditor := TTyMaskEdit.Create(Self);
+  FMaskEditor.Parent := Self;
+  FMaskEditor.Visible := False;
+  FMaskEditor.ControlStyle := FMaskEditor.ControlStyle + [csNoDesignVisible];
+  FMaskEditor.OnKeyDown := @EditorKeyDown;
+  FMaskEditor.OnExit := @EditorExit;
 
   { 第二个复用编辑器:下拉选取。与文本编辑器同一套生命周期规则。 }
   FPickEditor := TTyComboBox.Create(Self);
@@ -3930,6 +4002,10 @@ begin
        and PtInRect(CheckBoxRect(hit.Col, hit.Row), Point(X, Y)) then
       ToggleCellChecked(hit.Col, hit.Row);
 
+    { 星级:点第几颗星就是几分。命中同样走绘制那套矩形。 }
+    if EditorKindFor(hit.Col, hit.Row) = gekRating then
+      SetRatingByPoint(hit.Col, hit.Row, X, Y);
+
     if Assigned(OnClickCell) then OnClickCell(Self, hit.Col, hit.Row);
   end;
 end;
@@ -3953,6 +4029,28 @@ begin
       if Assigned(OnCellButtonClick) then OnCellButtonClick(Self, bc, br);
   end;
   inherited MouseUp(Button, Shift, X, Y);
+end;
+
+function TTyStringGrid.EditorMinFor(ACol: Integer): Integer;
+var c: TTyGridColumn;
+begin
+  c := GridColumn(ACol);
+  if c <> nil then Result := c.MinValue else Result := 0;
+end;
+
+function TTyStringGrid.EditorMaxFor(ACol: Integer): Integer;
+var c: TTyGridColumn;
+begin
+  c := GridColumn(ACol);
+  if c <> nil then Result := c.MaxValue else Result := 100;
+end;
+
+function TTyStringGrid.EditMaskFor(ACol: Integer): string;
+var c: TTyGridColumn;
+begin
+  Result := '';
+  c := GridColumn(ACol);
+  if c <> nil then Result := c.EditMask;
 end;
 
 function TTyStringGrid.ValidCharsFor(ACol, ARow: Integer): string;
@@ -4924,6 +5022,52 @@ begin
   end;
 end;
 
+{ 第 AStar 颗星(1-based)的矩形。**绘制与命中共用它** ——
+  两边各算一套的话,"点第 3 颗给出第 2 颗"这种错早晚会出现。 }
+procedure TTyStringGrid.SetRatingByPoint(ACol, ARow, X, Y: Integer);
+var
+  i: Integer;
+  oldTxt, newTxt: string;
+  accept: Boolean;
+begin
+  if FReadOnly then Exit;
+  for i := 1 to TyGridRatingMax do
+    if PtInRect(RatingStarRect(ACol, ARow, i), Point(X, Y)) then
+    begin
+      oldTxt := GetCellText(ACol, ARow);
+      newTxt := IntToStr(i);
+      if newTxt = oldTxt then Exit;
+      accept := True;
+      if Assigned(FOnCellEdited) then
+        FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
+      if accept then
+      begin
+        Cells[ACol, ARow] := newTxt;
+        if Assigned(FOnRatingChange) then FOnRatingChange(Self, ACol, ARow, i);
+      end;
+      Exit;
+    end;
+end;
+
+function TTyStringGrid.RatingStarRect(ACol, ARow, AStar: Integer): TRect;
+var
+  r: TRect;
+  box, cy, x0, i: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if (AStar < 1) or (AStar > TyGridRatingMax) then Exit;
+  r := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+
+  box := ScaleI(12);
+  cy := (r.Top + r.Bottom) div 2;
+  x0 := r.Left + ScaleI(4);
+  i := AStar - 1;
+  Result := Rect(x0 + i * (box + ScaleI(2)), cy - box div 2,
+                 x0 + i * (box + ScaleI(2)) + box, cy - box div 2 + box);
+  if Result.Right > r.Right then Result := Rect(0, 0, 0, 0);
+end;
+
 procedure TTyStringGrid.RenderRatingCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
@@ -4936,7 +5080,7 @@ begin
   if IsRectEmpty(r) then Exit;
   n := StrToIntDef(Trim(GetCellText(ACol, ARow)), -1);
   if n < 0 then Exit;
-  if n > 5 then n := 5;
+  if n > TyGridRatingMax then n := TyGridRatingMax;
 
   rS := ActiveController.Model.ResolveStyle('TyGridRating', StyleClass, []);
   if tpTextColor in rS.Present then ink := rS.TextColor else ink := AFrame.TextColor;
@@ -4946,9 +5090,8 @@ begin
   x0 := r.Left + ScaleI(4);
   for i := 0 to n - 1 do
   begin
-    star := Rect(x0 + i * (box + ScaleI(2)), cy - box div 2,
-                 x0 + i * (box + ScaleI(2)) + box, cy - box div 2 + box);
-    if star.Right > r.Right then Break;
+    star := RatingStarRect(ACol, ARow, i + 1);
+    if IsRectEmpty(star) then Break;
     { 用勾形当"已评"标记 —— 库里没有星形字形,勾形在小槽里最清楚。 }
     TyDrawGlyph(P, ActiveController, star, tgCheck, ink, 1, 1);
   end;
@@ -6970,6 +7113,14 @@ begin
     Exit;
   end;
 
+  { 星级同理:值直接由"点了第几颗星"决定,弹个数值框让人输数字太别扭。
+    真正的赋值在 MouseDown 里(它才知道点在哪颗星上);这里只是不拦着。 }
+  if EditorKindFor(ACol, ARow) = gekRating then
+  begin
+    Result := True;
+    Exit;
+  end;
+
   { 编辑器盖在**可见**矩形上:被冻结带盖住的部分本来就不该露出编辑框。 }
   r := CellVisibleRect(FCol, FRow);
   if IsRectEmpty(r) then Exit;
@@ -7031,6 +7182,65 @@ begin
     Exit;
   end;
 
+  { --- 数值微调 --- }
+  if EditorKindFor(FCol, FRow) = gekSpin then
+  begin
+    FSpinEditor.Controller := Self.Controller;
+    FSpinEditor.MinValue := EditorMinFor(FCol);
+    FSpinEditor.MaxValue := EditorMaxFor(FCol);
+    FSpinEditor.Value := StrToIntDef(Trim(Cells[FCol, FRow]), FSpinEditor.MinValue);
+    FSpinEditor.BoundsRect := r;
+    FSpinEditor.Visible := True;
+    if HandleAllocated and FSpinEditor.CanFocus then FSpinEditor.SetFocus;
+    FEditing := True;
+    Result := True;
+    Exit;
+  end;
+
+  { --- 滑动条 --- }
+  if EditorKindFor(FCol, FRow) = gekSlider then
+  begin
+    FSliderEditor.Controller := Self.Controller;
+    FSliderEditor.Min := EditorMinFor(FCol);
+    FSliderEditor.Max := EditorMaxFor(FCol);
+    FSliderEditor.Position := StrToIntDef(Trim(Cells[FCol, FRow]), FSliderEditor.Min);
+    FSliderEditor.BoundsRect := r;
+    FSliderEditor.Visible := True;
+    if HandleAllocated and FSliderEditor.CanFocus then FSliderEditor.SetFocus;
+    FEditing := True;
+    Result := True;
+    Exit;
+  end;
+
+  { --- 多行文本 --- }
+  if EditorKindFor(FCol, FRow) = gekMemo then
+  begin
+    FMemoEditor.Controller := Self.Controller;
+    FMemoEditor.Text := Cells[FCol, FRow];
+    { 多行编辑器往下撑开一些,否则一行高的格里根本看不出是多行。 }
+    FMemoEditor.BoundsRect := Rect(r.Left, r.Top, r.Right,
+      Max(r.Bottom, r.Top + ScaleI(72)));
+    FMemoEditor.Visible := True;
+    if HandleAllocated and FMemoEditor.CanFocus then FMemoEditor.SetFocus;
+    FEditing := True;
+    Result := True;
+    Exit;
+  end;
+
+  { --- 掩码 --- }
+  if EditorKindFor(FCol, FRow) = gekMask then
+  begin
+    FMaskEditor.Controller := Self.Controller;
+    FMaskEditor.Mask := EditMaskFor(FCol);
+    FMaskEditor.Text := Cells[FCol, FRow];
+    FMaskEditor.BoundsRect := r;
+    FMaskEditor.Visible := True;
+    if HandleAllocated and FMaskEditor.CanFocus then FMaskEditor.SetFocus;
+    FEditing := True;
+    Result := True;
+    Exit;
+  end;
+
   FEditor.Controller := Self.Controller;
   { 数值列右对齐。按键级的数字过滤要等 ValueListEditor 的 TTyValueEdit 泛化出来后再接;
     在那之前由 EndEdit 在**提交时**校验,非法值直接不写回。 }
@@ -7051,11 +7261,15 @@ procedure TTyStringGrid.EndEdit(ACommit: Boolean);
 var
   oldTxt, newTxt: string;
   accept: Boolean;
-  usePick, useDate, useLink: Boolean;
+  usePick, useDate, useLink, useSpin, useSlider, useMemo, useMask: Boolean;
   linkTxt: string;
 begin
   usePick := False;
   useDate := False;
+  useSpin := False;
+  useSlider := False;
+  useMemo := False;
+  useMask := False;
   useLink := False;
   linkTxt := '';
   if not FEditing then Exit;
@@ -7078,6 +7292,26 @@ begin
       FPickEditor.Visible := False;
       usePick := True;
     end;
+    if FSpinEditor.Visible then
+    begin
+      FSpinEditor.Visible := False;
+      useSpin := True;
+    end;
+    if FSliderEditor.Visible then
+    begin
+      FSliderEditor.Visible := False;
+      useSlider := True;
+    end;
+    if FMemoEditor.Visible then
+    begin
+      FMemoEditor.Visible := False;
+      useMemo := True;
+    end;
+    if FMaskEditor.Visible then
+    begin
+      FMaskEditor.Visible := False;
+      useMask := True;
+    end;
     if FDateEditor.Visible then
     begin
       FDateEditor.Visible := False;
@@ -7089,6 +7323,14 @@ begin
       oldTxt := Cells[FEditCol, FEditRow];
       if useLink then
         newTxt := linkTxt
+      else if useSpin then
+        newTxt := IntToStr(FSpinEditor.Value)
+      else if useSlider then
+        newTxt := IntToStr(FSliderEditor.Position)
+      else if useMemo then
+        newTxt := FMemoEditor.Text
+      else if useMask then
+        newTxt := FMaskEditor.Text
       else if useDate then
         newTxt := DateToStr(FDateEditor.Date)
       else if usePick then
@@ -7164,8 +7406,14 @@ var
 begin
   { 先铺整个选区的底色,再让基类把文字画上去 —— 次序反了字会被底色盖掉。
     只遍历可视窗口内的行,所以选区再大也不影响绘制开销。 }
+  { 选区底色**只由"这一格被选中"决定**,绝不掺入网格自身的 CurrentStates。
+
+    掺进去的后果是肉眼可见的:鼠标从网格上移开的一瞬间,控件的 tysHover 退出
+    状态集,选区底色被重新解析成另一个值 —— 选中的格"闪一下"。
+    (与当初勾选框闪烁同一个 bug:那次是鼠标按下让整个网格进 :active,
+    满屏未勾选的框集体变样。单元格的外观只该由格自己的状态决定。) }
   selS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass,
-    CurrentStates + [tysSelected]);
+    [tysSelected]);
   if tpBackground in selS.Present then
     if TyGridVisibleRows(M, firstRow, lastRow) then
       for pos := firstRow to lastRow do

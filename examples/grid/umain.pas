@@ -755,9 +755,9 @@ begin
   c.PickList.CommaText := '华东,华北,华南,西南,东北,西北';
 
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cQty]);
-  c.EditorKind := gekNumeric;
-  c.ValidChars := '0123456789';             { 按键级过滤:字母根本敲不进去 }
-  c.MaxEditLength := 4;
+  c.EditorKind := gekSpin;                  { 数值微调:带上下按钮 }
+  c.MinValue := 0;
+  c.MaxValue := 200;
 
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cAmount]);
   c.EditorKind := gekNumeric;
@@ -770,6 +770,27 @@ begin
 
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cMark]);
   c.EditorKind := gekColor;                 { 弹取色对话框 }
+
+  { 评分:**点第几颗星就是几分**,不弹编辑器(与勾选框同一种手感)。 }
+  c := TTyGridColumn(GridEdit.Header.Columns.Items[cRate]);
+  c.EditorKind := gekRating;
+
+  { 订单号改成掩码编辑 —— 掩码挂在列上,交给 TTyMaskEdit 解释。
+    (它同时还是只读的演示对象,所以这里先放开只读。) }
+  c := TTyGridColumn(GridEdit.Header.Columns.Items[cOrderNo]);
+  c.ReadOnly := False;
+  c.EditorKind := gekMask;
+  c.EditMask := 'CC-99999999';
+
+  { 金额用滑动条演示区间输入。 }
+  c := TTyGridColumn(GridEdit.Header.Columns.Items[cAmount]);
+  c.EditorKind := gekSlider;
+  c.MinValue := 0;
+  c.MaxValue := 5000;
+
+  { 备注多行编辑。 }
+  c := TTyGridColumn(GridEdit.Header.Columns.Items[cNote]);
+  c.EditorKind := gekMemo;
 
   { 「评分」显示成星标、「备注」当按钮列用 —— 显示方式与编辑方式是正交的。 }
   GridEdit.OnGetCellDisplay := @EditGetCellDisplay;
