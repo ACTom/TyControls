@@ -7745,6 +7745,8 @@ begin
   if EditorKindFor(FCol, FRow) = gekSlider then
   begin
     FSliderEditor.Controller := Self.Controller;
+    { 格子里的滑块必须显示数值 —— 只有一个滑块的话,拖到哪儿了根本读不出来。 }
+    FSliderEditor.ShowValue := True;
     FSliderEditor.Min := EditorMinFor(FCol);
     FSliderEditor.Max := EditorMaxFor(FCol);
     FSliderEditor.Position := StrToIntDef(Trim(Cells[FCol, FRow]), FSliderEditor.Min);
