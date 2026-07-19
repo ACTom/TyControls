@@ -1060,8 +1060,14 @@ type
     Count:    Integer;   { 组内行数 }
     Collapsed: Boolean;
     { 组内的**数据行**。分组小计要按它统计 —— 不能按显示序算:
-      组一折叠,成员行就不在显示序里了,小计会变成 0。 }
+      组一折叠,成员行就不在显示序里了,小计会变成 0。
+      多级分组时,一行会同时算进它**所有祖先**组里,于是每一级的小计各自成立。 }
     Rows:     array of Integer;
+    { 第几级(0 = 最外层)。分组行按它缩进。 }
+    Level:    Integer;
+    { 从最外层到本级的键拼起来。折叠状态按**路径**记账 ——
+      按单个键记的话,不同地区下的同名城市会被一起折叠。 }
+    Path:     string;
   end;
 
   { 覆盖某列汇总文字的钩子(比如加货币符号、或做自定义统计)。 }
@@ -1144,7 +1150,10 @@ type
       与 FCells 同一套键。**合并信息从前是自己一张表**,增删行时漏搬,已并进来。 }
     FAttrs: TTyGridCellAttrStore;
     FOnGetFooterText: TTyGridGetFooterTextEvent;
-    FGroupCol: Integer;                        { -1 = 不分组 }
+    { 分组列,从外到内。空 = 不分组。
+      单列分组是它只有一项的退化情形,所以老的 GroupByColumn / GroupColumn
+      原样还能用 —— 不必让既有代码跟着改。 }
+    FGroupCols: array of Integer;
     FFilterPopup: TTyPopover;
     FFilterList: TTyGridFilterList;
     FFilterCol: Integer;
@@ -1239,6 +1248,9 @@ type
     procedure InvalidateOrder;
     procedure RebuildOrder;
     procedure BuildGroups;
+    function  AnyAncestorCollapsed(const AOpen: array of Integer;
+      ALevel: Integer): Boolean;
+    function  GetGroupCol: Integer;
     function  RowPassesFilter(ARow: Integer): Boolean;
     procedure EnsureOrder;
     procedure ResetOrder;
@@ -1488,7 +1500,12 @@ type
       FOrder 里 >=0 是数据行,<0 是分组行(编码为 -(组号+1))。 }
     procedure GroupByColumn(ACol: Integer);
     procedure UngroupRows;
-    property  GroupColumn: Integer read FGroupCol;
+    { 第一级分组列(没分组时 -1)。多级请用 GroupByColumns / GroupColumns。 }
+    property  GroupColumn: Integer read GetGroupCol;
+    { 全部分组列,从外到内。 }
+    function  GroupColumns: TTyIntArray;
+    { 按多列分组(从外到内)。传空数组等于取消分组。 }
+    procedure GroupByColumns(const ACols: array of Integer);
     { 该显示位置是不是分组行;是则给出组号。 }
     function  IsGroupRow(APos: Integer; out AGroupIndex: Integer): Boolean;
     function  GroupInfo(AIndex: Integer): TTyGridGroupInfo;
@@ -4590,7 +4607,7 @@ begin
     (与 TyFallbackFontName 同一套做法。) }
   FGroupRowFormat := rsGridGroupRow;
   FAutoGrowOnPaste := True;
-  FGroupCol := -1;
+  SetLength(FGroupCols, 0);
   FFilterCol := -1;
   FShowFilterButtons := False;
   FShowGroupSubtotals := True;
@@ -5023,7 +5040,7 @@ begin
 
   { 命中走 CellAt —— 与绘制同源,所以点哪格就选哪格,不会错位。 }
   { 分组行整行都可点(不只三角)—— 目标大、好点。 }
-  if FGroupCol >= 0 then
+  if GetGroupCol >= 0 then
   begin
     gPos := TyGridRowAt(Y, GridMetrics);
     if (gPos >= 0) and IsGroupRow(gPos, gIdx) then
@@ -5436,7 +5453,7 @@ begin
 
   { 分组:在排好序的显示序上,按分组列的值切段并插入合成分组行。
     必须在排序**之后** —— 否则同组的行不相邻,切不出段。 }
-  if FGroupCol >= 0 then
+  if GetGroupCol >= 0 then
     BuildGroups;
 
   { 顺手记下"显示序是不是恒等"。合并、拖行都要问这件事,
@@ -5457,13 +5474,39 @@ end;
 
 procedure TTyStringGrid.BuildGroups;
 var
-  i, n, g: Integer;
-  key, prevKey: string;
+  i, lvl, n, depth: Integer;
   src, dst: array of Integer;
-  collapsed: Boolean;
+  { 当前这一串祖先组的下标(每级一个),以及它们的键。 }
+  openIdx: array of Integer;
+  prevKey: array of string;
+  key, path: string;
+  same, anyCollapsed: Boolean;
+
+  procedure OpenGroup(ALevel: Integer; const AKey, APath: string);
+  var g: Integer;
+  begin
+    g := Length(FGroups);
+    SetLength(FGroups, g + 1);
+    FGroups[g].Key := AKey;
+    FGroups[g].Count := 0;
+    FGroups[g].Level := ALevel;
+    FGroups[g].Path := APath;
+    FGroups[g].Collapsed := FCollapsed.IndexOf(APath) >= 0;
+    SetLength(FGroups[g].Rows, 0);
+    openIdx[ALevel] := g;
+    { 分组行进显示序 —— 但只有在**所有祖先都展开**时才看得见。 }
+    if not AnyAncestorCollapsed(openIdx, ALevel) then
+    begin
+      SetLength(dst, n + 1);
+      dst[n] := -(g + 1);
+      Inc(n);
+    end;
+  end;
+
 begin
   SetLength(FGroups, 0);
-  if Length(FOrder) = 0 then Exit;
+  depth := Length(FGroupCols);
+  if (Length(FOrder) = 0) or (depth = 0) then Exit;
 
   { 这里**不再排序**。分组列已经由 EnsureOrder 通过 EffectiveSortKeys 排在最前面了,
     同值的行必然相邻。从前这里 `FSortCol := FGroupCol` 是个真 bug ——
@@ -5471,31 +5514,45 @@ begin
 
   src := FOrder;
   SetLength(dst, 0);
+  SetLength(openIdx, depth);
+  SetLength(prevKey, depth);
+  for lvl := 0 to depth - 1 do
+  begin
+    openIdx[lvl] := -1;
+    prevKey[lvl] := #1'no-group'#1;   { 不可能与真实值相等 }
+  end;
   n := 0;
-  g := -1;
-  prevKey := #1'no-group'#1;      { 不可能与真实值相等 }
 
   for i := 0 to High(src) do
   begin
-    key := GetCellText(FGroupCol, src[i]);
-    if key <> prevKey then
+    { 从最外层往里比:第一处不同的那一级起,后面每一级都要开新组。
+      (只比本级的话,"华东/上海"换成"华北/上海"时上海那一级不会重开。) }
+    same := True;
+    path := '';
+    for lvl := 0 to depth - 1 do
     begin
-      { 开新组:先插一行合成的分组行。 }
-      Inc(g);
-      SetLength(FGroups, g + 1);
-      FGroups[g].Key := key;
-      FGroups[g].Count := 0;
-      FGroups[g].Collapsed := FCollapsed.IndexOf(key) >= 0;
-      SetLength(dst, n + 1);
-      dst[n] := -(g + 1);         { 负数 = 分组行 }
-      Inc(n);
-      prevKey := key;
+      key := GetCellText(FGroupCols[lvl], src[i]);
+      if path = '' then path := key else path := path + #1 + key;
+      if same and (key <> prevKey[lvl]) then same := False;
+      if not same then
+      begin
+        OpenGroup(lvl, key, path);
+        prevKey[lvl] := key;
+      end;
     end;
-    Inc(FGroups[g].Count);
-    SetLength(FGroups[g].Rows, FGroups[g].Count);
-    FGroups[g].Rows[FGroups[g].Count - 1] := src[i];
-    { 折叠的组只留分组行,组内行不进显示序。 }
-    if not FGroups[g].Collapsed then
+
+    { 这一行算进**所有**祖先组 —— 于是每一级的小计各自成立。 }
+    anyCollapsed := False;
+    for lvl := 0 to depth - 1 do
+    begin
+      Inc(FGroups[openIdx[lvl]].Count);
+      SetLength(FGroups[openIdx[lvl]].Rows, FGroups[openIdx[lvl]].Count);
+      FGroups[openIdx[lvl]].Rows[FGroups[openIdx[lvl]].Count - 1] := src[i];
+      if FGroups[openIdx[lvl]].Collapsed then anyCollapsed := True;
+    end;
+
+    { 任何一级折叠着,这一行就不进显示序。 }
+    if not anyCollapsed then
     begin
       SetLength(dst, n + 1);
       dst[n] := src[i];
@@ -5504,6 +5561,16 @@ begin
   end;
 
   FOrder := dst;
+end;
+
+{ 这一级的**祖先**里有没有折叠着的(不含自己)。折叠的组下面连子分组行都不该露出来。 }
+function TTyStringGrid.AnyAncestorCollapsed(const AOpen: array of Integer;
+  ALevel: Integer): Boolean;
+var lvl: Integer;
+begin
+  Result := False;
+  for lvl := 0 to ALevel - 1 do
+    if (AOpen[lvl] >= 0) and FGroups[AOpen[lvl]].Collapsed then Exit(True);
 end;
 
 procedure TTyStringGrid.EnsureOrder;
@@ -7384,11 +7451,9 @@ end;
 procedure TTyStringGrid.GroupByColumn(ACol: Integer);
 begin
   EndEdit(True);
-  if (ACol < 0) or (ACol >= Header.Columns.Count) then FGroupCol := -1
-  else FGroupCol := ACol;
-  InvalidateOrder;
-  UpdateScrollBars;
-  Invalidate;
+  { 单列分组就是多列的退化情形 —— 只留一条路径,免得两套实现日后走样。 }
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then GroupByColumns([])
+  else GroupByColumns([ACol]);
 end;
 
 procedure TTyStringGrid.UngroupRows;
@@ -7429,9 +7494,10 @@ var
   i: Integer;
 begin
   if (AIndex < 0) or (AIndex >= Length(FGroups)) then Exit;
-  key := FGroups[AIndex].Key;
+  { 折叠状态按**层级路径**记账,而不是按组号(重排/筛选后组号会变),
+    也不是按单个键 —— 按单个键的话,"华东/上海"和"华北/上海"会被一起折叠。 }
+  key := FGroups[AIndex].Path;
   i := FCollapsed.IndexOf(key);
-  { 折叠状态按**分组值**记账,而不是按组号 —— 重排/筛选后组号会变,值不会。 }
   if i >= 0 then FCollapsed.Delete(i) else FCollapsed.Add(key);
   InvalidateOrder;
   UpdateScrollBars;
@@ -7441,14 +7507,19 @@ end;
 function TTyStringGrid.GroupToggleRect(APos: Integer): TRect;
 var
   r: TRect;
-  box, cy: Integer;
+  box, cy, ind, gi: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
   r := TyGridRowRect(APos, GridMetrics);
   if r.Bottom <= r.Top then Exit;
   box := ScaleI(12);
   cy := (r.Top + r.Bottom) div 2;
-  Result := Rect(ScaleI(4), cy - box div 2, ScaleI(4) + box, cy - box div 2 + box);
+  { 按层级缩进 —— 多级分组时不缩进的话,两级分组行长得一模一样,
+    根本看不出谁包着谁。命中走的也是这个矩形,所以点得到的就是看得见的那一个。 }
+  ind := ScaleI(4);
+  if IsGroupRow(APos, gi) and (gi >= 0) and (gi <= High(FGroups)) then
+    Inc(ind, FGroups[gi].Level * ScaleI(14));
+  Result := Rect(ind, cy - box div 2, ind + box, cy - box div 2 + box);
 end;
 
 procedure TTyStringGrid.RenderGroupRow(P: TTyPainter; APos, AGroupIndex: Integer;
@@ -7797,7 +7868,7 @@ end;
 function TTyStringGrid.DisplayOrderIsDataOrder: Boolean;
 begin
   EnsureOrder;
-  Result := FOrderIsIdentity and (FGroupCol < 0);
+  Result := FOrderIsIdentity and (Length(FGroupCols) = 0);
 end;
 
 function TTyStringGrid.RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
@@ -8103,6 +8174,37 @@ begin
     one.Free;
     parts.Free;
   end;
+end;
+
+function TTyStringGrid.GetGroupCol: Integer;
+begin
+  if Length(FGroupCols) = 0 then Result := -1 else Result := FGroupCols[0];
+end;
+
+function TTyStringGrid.GroupColumns: TTyIntArray;
+var i: Integer;
+begin
+  SetLength(Result, Length(FGroupCols));
+  for i := 0 to High(FGroupCols) do Result[i] := FGroupCols[i];
+end;
+
+procedure TTyStringGrid.GroupByColumns(const ACols: array of Integer);
+var
+  i, n: Integer;
+begin
+  SetLength(FGroupCols, 0);
+  n := 0;
+  for i := 0 to High(ACols) do
+    if (ACols[i] >= 0) and (ACols[i] < Header.Columns.Count) then
+    begin
+      SetLength(FGroupCols, n + 1);
+      FGroupCols[n] := ACols[i];
+      Inc(n);
+    end;
+  FCollapsed.Clear;        { 层级变了,旧的折叠路径不再有意义 }
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
 end;
 
 function TTyStringGrid.MergeSelection: Boolean;
@@ -8786,7 +8888,7 @@ begin
             { 有筛选就不行:被筛掉的行也在数据里,一起搬会把它们搬乱。 }
             and (FColFilters.Count = 0) and (FValFilters.Count = 0)
             and (FHiddenRows.Count = 0)
-            and (FGroupCol < 0)
+            and (Length(FGroupCols) = 0)
             { 数据由回调提供时控件根本不持有它,没什么可搬的。 }
             { 数据由回调提供时控件根本不持有它,物理搬只会搬存储的那一半、
               让两边错位。**这一条目前测不出来**:排序的比较读的是存储而不是
@@ -8939,16 +9041,16 @@ begin
     但它只是"临时插在前面",绝不写回 FSortKeys:从前 BuildGroups 直接
     `FSortCol := FGroupCol`,一分组就把用户选的排序列**永久**抹掉了。 }
   SetLength(Result, 0);
-  if FGroupCol >= 0 then
+  if GetGroupCol >= 0 then
   begin
     SetLength(Result, 1);
-    Result[0].Col := FGroupCol;
+    Result[0].Col := GetGroupCol;
     Result[0].Dir := FSortDir;
   end;
   for i := 0 to High(FSortKeys) do
   begin
     if FSortKeys[i].Col < 0 then Continue;
-    if (FGroupCol >= 0) and (FSortKeys[i].Col = FGroupCol) then Continue;
+    if (GetGroupCol >= 0) and (FSortKeys[i].Col = GetGroupCol) then Continue;
     n := Length(Result);
     SetLength(Result, n + 1);
     Result[n] := FSortKeys[i];
@@ -9039,7 +9141,7 @@ begin
     (折叠按值记账,重排/筛选后组号会变、值不会)。 }
   EnsureOrder;
   for i := 0 to High(FGroups) do
-    if FCollapsed.IndexOf(FGroups[i].Key) < 0 then FCollapsed.Add(FGroups[i].Key);
+    if FCollapsed.IndexOf(FGroups[i].Path) < 0 then FCollapsed.Add(FGroups[i].Path);
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
@@ -9807,7 +9909,7 @@ begin
 
   { 分组行:整行一条横带,画"值(计数)"和折叠三角。它不对应任何数据行,
     所以必须在普通单元格之前处理掉,否则基类会拿 -1 去取内容。 }
-  if (FGroupCol >= 0) and TyGridDrawSlots(M, firstRow, lastRow) then
+  if (GetGroupCol >= 0) and TyGridDrawSlots(M, firstRow, lastRow) then
     for slot := firstRow to lastRow do
     begin
       pos := TyGridRowAtSlot(slot, M);

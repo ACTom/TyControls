@@ -198,6 +198,7 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
     procedure TestLayoutRoundTripsAndSurvivesGarbage;
     procedure TestPhysicalSortMovesDataAndUnlocksMergeAndDrag;
     procedure TestPhysicalSortRefusedWhenFilteredOrVirtual;
@@ -1045,6 +1046,7 @@ type
     function  RowAtForTest(AY: Integer): Integer;
     function  EditorBoundsForTest: TRect;
     function  ScaleForTest(AValue: Integer): Integer;
+    function  GroupToggleRectForTest(APos: Integer): TRect;
     function  BeginEditAt(ACol, ARow: Integer): Boolean;
     function  UndoCountForTest: Integer;
     procedure PressKeyCtrl(AKey: Word);
@@ -1242,6 +1244,11 @@ function TStrGridAccess.EditorBoundsForTest: TRect;
 begin
   Result := Rect(0, 0, 0, 0);
   if EditorControl <> nil then Result := EditorControl.BoundsRect;
+end;
+
+function TStrGridAccess.GroupToggleRectForTest(APos: Integer): TRect;
+begin
+  Result := GroupToggleRect(APos);
 end;
 
 function TStrGridAccess.ScaleForTest(AValue: Integer): Integer;
@@ -7455,6 +7462,94 @@ begin
   { 再读一次好串仍然成功 —— 证明前面那些坏串没把内部状态搅坏。 }
   AssertTrue('坏串之后仍能正常 round-trip', G.LoadLayoutFromString(layout));
   AssertEquals('列宽仍然对', 133, TTyColumn(G.Header.Columns.Items[0]).Width);
+end;
+
+{ 多级分组:地区 → 城市。分组行带层级,小计按层级各算各的,
+  折叠状态按**层级路径**记 —— 按单个值记的话,不同地区下的同名城市会一起折叠。 }
+procedure TTyStringGridTest.TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
+var
+  G: TStrGridAccess;
+  i, gi, lvl0, lvl1: Integer;
+  info: TTyGridGroupInfo;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  { **故意让"北京"同时出现在两个地区下** —— 这是多级分组唯一真正难的地方:
+    ① 外层变了而内层同名时,必须开一个**新的**子组(只比本级会漏掉);
+    ② 折叠必须按**路径**记,按单个键记的话两个北京会一起折。
+    第一版的数据里四个城市各不相同,这两条守卫怎么改都测不出来。 }
+  G.Cells[0, 0] := '华东'; G.Cells[1, 0] := '上海'; G.Cells[2, 0] := '10';
+  G.Cells[0, 1] := '华东'; G.Cells[1, 1] := '上海'; G.Cells[2, 1] := '20';
+  G.Cells[0, 2] := '华东'; G.Cells[1, 2] := '北京'; G.Cells[2, 2] := '30';
+  G.Cells[0, 3] := '华北'; G.Cells[1, 3] := '北京'; G.Cells[2, 3] := '40';
+  G.Cells[0, 4] := '华北'; G.Cells[1, 4] := '北京'; G.Cells[2, 4] := '50';
+  G.Cells[0, 5] := '华北'; G.Cells[1, 5] := '天津'; G.Cells[2, 5] := '60';
+  G.SetColumnAggregate(2, gagSum);
+
+  G.GroupByColumns([0, 1]);
+
+  { 两级各有几组:地区 2 组、城市 4 组。 }
+  lvl0 := 0; lvl1 := 0;
+  for i := 0 to G.GroupCount - 1 do
+  begin
+    info := G.GroupInfo(i);
+    if info.Level = 0 then Inc(lvl0)
+    else if info.Level = 1 then Inc(lvl1);
+  end;
+  AssertEquals('第一级 2 组', 2, lvl0);
+  { 上海 / 华东-北京 / 华北-北京 / 天津 = 4 组。
+    两个"北京"必须是**两组**,合成一组就说明没看祖先。 }
+  AssertEquals('第二级 4 组(两个北京算两组)', 4, lvl1);
+
+  { 小计按层级各算各的:华东合计 60,华东/上海合计 30。 }
+  for i := 0 to G.GroupCount - 1 do
+  begin
+    info := G.GroupInfo(i);
+    if (info.Level = 0) and (info.Key = '华东') then
+      AssertEquals('华东整个地区合计 60', 60.0, G.GroupAggregateValue(i, 2), 0.001);
+    if (info.Level = 1) and (info.Key = '上海') then
+      AssertEquals('华东/上海合计 30', 30.0, G.GroupAggregateValue(i, 2), 0.001);
+  end;
+
+  { 折叠按**路径**记:折叠"华北/北京"之后,"华东/北京"必须还是展开的。 }
+  gi := -1;
+  for i := 0 to G.GroupCount - 1 do
+    if (G.GroupInfo(i).Level = 1) and (G.GroupInfo(i).Path = '华北'#1'北京') then
+      gi := i;
+  AssertTrue('找得到 华北/北京 这一组', gi >= 0);
+  G.ToggleGroup(gi);
+  { 两条都要断言:点的那个**确实折了**,别的同名组**确实没折**。
+    只断言后半条的话,"折叠彻底失效"这种改坏法照样能过 —— 变异测试证明过了。 }
+  lvl0 := 0;
+  for i := 0 to G.GroupCount - 1 do
+  begin
+    if G.GroupInfo(i).Path = '华北'#1'北京' then
+    begin
+      AssertTrue('点过的那一组确实折起来了', G.GroupInfo(i).Collapsed);
+      Inc(lvl0);
+    end;
+    if G.GroupInfo(i).Path = '华东'#1'北京' then
+    begin
+      AssertTrue('折叠 华北/北京 不该把 华东/北京 一起折起来',
+        not G.GroupInfo(i).Collapsed);
+      Inc(lvl0);
+    end;
+  end;
+  AssertEquals('两个北京组都还在', 2, lvl0);
+
+  { 分组行按层级缩进 —— 不缩进的话两级分组行长得一模一样,看不出谁包着谁。
+    命中与绘制走同一个矩形,所以这条也顺带守住了"点得到的就是看得见的那一个"。 }
+  for i := 0 to G.DisplayRowCount - 1 do
+    if G.IsGroupRow(i, gi) and (G.GroupInfo(gi).Level = 1) then
+    begin
+      AssertTrue('第二级分组行要比第一级更靠右',
+        G.GroupToggleRectForTest(i).Left > G.ScaleForTest(4));
+      Break;
+    end;
+
+  { 折叠上一级会把整棵子树都收起来。 }
+  G.UngroupRows;
+  AssertEquals('取消分组后显示序回到纯数据行', 6, G.DisplayRowCount);
 end;
 
 initialization
