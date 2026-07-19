@@ -62,6 +62,8 @@ type
     FRowMoveAllow: Boolean;
     procedure HandleGetEditorProp(Sender: TObject; ACol, ARow: Integer;
       AEditor: TControl);
+    procedure HandleVirtualText(Sender: TObject; ACol, ARow: Integer;
+      var AText: string);
     procedure HandleRowMove(Sender: TObject; AFrom, ATo: Integer;
       var AAllow: Boolean);
     procedure HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
@@ -196,6 +198,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestPhysicalSortMovesDataAndUnlocksMergeAndDrag;
+    procedure TestPhysicalSortRefusedWhenFilteredOrVirtual;
     procedure TestUndoRedoRestoresCellsAndRowCount;
     procedure TestBulkOperationIsOneUndoStepAndLimitDropsOldest;
     procedure TestNarrowColumnEditorWidensAndDropDownWidthApplies;
@@ -1364,6 +1368,12 @@ procedure TTyStringGridTest.HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Inte
   var AKind: TTyGridEditorKind);
 begin
   if ACol = 2 then AKind := gekNone else AKind := gekText;
+end;
+
+procedure TTyStringGridTest.HandleVirtualText(Sender: TObject;
+  ACol, ARow: Integer; var AText: string);
+begin
+  AText := Format('%.2d', [100 - ARow]);
 end;
 
 procedure TTyStringGridTest.HandleGetEditorProp(Sender: TObject;
@@ -7287,6 +7297,84 @@ begin
   G.Undo; G.Undo; G.Undo;
   AssertEquals('撤销到栈底为止', 'v2', G.Cells[1, 0]);
   AssertTrue('栈空了', not G.CanUndo);
+end;
+
+{ 物理排序模式:排序**真的把数据换位置**(像 Excel),排完之后
+  显示序 == 数据序,于是那几条"排序时拒绝"自动失效。 }
+procedure TTyStringGridTest.TestPhysicalSortMovesDataAndUnlocksMergeAndDrag;
+var
+  G: TStrGridAccess;
+  r, bc, br: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+  begin
+    G.Cells[0, r] := Format('%.2d', [5 - r]);      { 05 04 03 02 01 00 }
+    G.Cells[1, r] := 'tag' + IntToStr(r);
+  end;
+  G.RowHeights[0] := 44;                            { 行高要跟着数据走 }
+  G.SortMode := gsmData;
+  G.ClearUndo;
+
+  G.SortByColumn(0, sdAscending);
+
+  { 一、数据**真的**换了位置 —— 直接看数据行,不是看显示序。 }
+  for r := 0 to 5 do
+    AssertEquals(Format('第 %d 个数据行就是排好序的值', [r]),
+      Format('%.2d', [r]), G.Cells[0, r]);
+  AssertEquals('同一行的其他列跟着搬', 'tag5', G.Cells[1, 0]);
+  AssertEquals('行高跟着那一行数据走', 44, G.RowHeights[5]);
+
+  { 二、显示序此刻就是数据序。 }
+  for r := 0 to 5 do
+    AssertEquals(Format('显示序恒等(%d)', [r]), r, G.DisplayToData(r));
+
+  { 三、于是合并不再被拒 —— 这正是当初要解决的问题。 }
+  G.SelectRange(0, 1, 0, 3);
+  AssertTrue('物理排序后合并不再被拒绝', G.MergeSelection);
+  G.BaseCellOfForTest(0, 2, bc, br);
+  AssertEquals('合并块成立', 1, br);
+
+  { 四、一次撤销把整次排序退回去(这就是为什么物理排序必须排在撤销之后)。 }
+  G.UnmergeCells(0, 1);
+  G.ClearUndo;
+  G.SortByColumn(0, sdDescending);
+  AssertEquals('降序排过了', '05', G.Cells[0, 0]);
+  G.Undo;
+  AssertEquals('一次撤销退回排序前', '00', G.Cells[0, 0]);
+end;
+
+{ 有筛选、或数据由回调提供(虚拟源)时**不能**物理排序:
+  前者会把被筛掉的行一起搬(那是数据损坏),后者控件根本不持有数据。
+  这两种情况自动退回显示序排序。 }
+procedure TTyStringGridTest.TestPhysicalSortRefusedWhenFilteredOrVirtual;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  { 一、有筛选。 }
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+    G.Cells[0, r] := Format('%.2d', [5 - r]);
+  G.SortMode := gsmData;
+  G.SetColumnFilter(0, '0');
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('有筛选时数据一格没动', '05', G.Cells[0, 0]);
+  AssertTrue('但显示序仍然排好了', G.DisplayToData(0) <> 0);
+
+  { 二、虚拟数据源这一半**当前测不出来**,这里只留一条不会假绿的弱断言。
+    原因:排序的比较读的是存储而不是 GetCellText,所以虚拟表根本排不出
+    非恒等的序,物理搬也就搬了个寂寞 —— 变异掉那条守卫,任何断言都不会变红。
+    与其写一条"看起来在守、其实守不住"的测试,不如把这件事写清楚。
+    真正的缺口(排序不认虚拟数据源)已记在计划文件里。 }
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  G.OnGetCellText := @HandleVirtualText;
+  G.SortMode := gsmData;
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('虚拟源上排序不该凭空造出存储格', 0, G.StoredCellCount);
 end;
 
 initialization

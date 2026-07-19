@@ -307,6 +307,15 @@ type
     一条记录只记**逆操作需要的最小信息**:哪一格、改之前是什么。
     结构性操作(增删行)也落到这里 —— 它们搬单元格时走的就是 Cells[],
     于是自动被记下来;额外再记一条行数即可。 }
+  { 排序怎么排。
+      gsmDisplay —— 只置换**显示序**,数据一动不动(默认,今天的行为)。
+      gsmData    —— 像 Excel 那样**真的把数据换位置**。排完显示序 == 数据序,
+                    于是"排过序就不让合并/不让拖行"那几条限制自动失效。
+    gsmData 只在**能安全做到**时才真的物理排:有筛选(会把筛掉的行一起搬)、
+    有分组、或数据由回调提供(控件根本不持有数据)时一律退回 gsmDisplay 的行为。
+    物理排序是可撤销的 —— 这也是它必须排在撤销功能之后做的原因。 }
+  TTyGridSortMode = (gsmDisplay, gsmData);
+
   TTyGridUndoKind = (gukCell, gukRowCount);
 
   TTyGridUndoEntry = record
@@ -582,6 +591,11 @@ type
     FUndoBusy:      Boolean;           { 正在撤销/重做 —— 此时不再记录,否则自噬 }
     FUndoLimit:     Integer;
     FUndoOverflow:  Boolean;           { 这一条大到记不下,整条作废 }
+    FSortMode:      TTyGridSortMode;
+    { 显示序此刻是不是恒等。RebuildOrder 顺手算出来 ——
+      比"没排序 and 没分组 and 没筛选"那种启发式判断**更准**:
+      按一个本来就有序的列排,结果同样是恒等,启发式却会当成"排过序了"。 }
+    FOrderIsIdentity: Boolean;
     FOnGetEditorProp:  TTyGridEditorPropEvent;
     FResizeCol:        Integer;   { 正在拖宽的列;-1 = 没在拖 }
     FResizeStartX:     Integer;
@@ -1207,6 +1221,8 @@ type
     procedure CloseUndoGroup; override;
     procedure DoRowDragMove(AFrom, ATo: Integer); override;
     function DisplayOrderIsDataOrder: Boolean; override;
+    function CanSortPhysically: Boolean;
+    procedure ApplyOrderToData;
     function SelectionBoundsRect: TRect;
     function ArithmeticStep(ACol, AFrom, ATo: Integer;
       out AFirst, AStep: Integer): Boolean;
@@ -1667,6 +1683,9 @@ type
       read FShowGroupSubtotals write SetShowGroupSubtotals default True;
     { 撤销栈最多留多少条;超出丢最老的。0 = 不记录(彻底关掉撤销)。 }
     property UndoLimit: Integer read FUndoLimit write SetUndoLimit default 100;
+    { 排序是只换显示序,还是像 Excel 那样真的换数据。见 TTyGridSortMode。 }
+    property SortMode: TTyGridSortMode read FSortMode write FSortMode
+      default gsmDisplay;
     { 拖填充柄产生的一次填充;置 AHandled 可接管(自定义序列)。 }
     property OnFillCells: TTyGridFillEvent read FOnFillCells write FOnFillCells;
   end;
@@ -5408,6 +5427,16 @@ begin
   if FGroupCol >= 0 then
     BuildGroups;
 
+  { 顺手记下"显示序是不是恒等"。合并、拖行都要问这件事,
+    而每次现算是 O(n) —— 在这里算是顺路的。 }
+  FOrderIsIdentity := True;
+  for i := 0 to High(FOrder) do
+    if FOrder[i] <> i then
+    begin
+      FOrderIsIdentity := False;
+      Break;
+    end;
+
   for i := 0 to High(FOrder) do
     if FOrder[i] >= 0 then FRank[FOrder[i]] := i;
 
@@ -7750,12 +7779,13 @@ begin
   MoveRow(AFrom, ATo);
 end;
 
-{ 有排序键、有分组、有过滤、有隐藏行 —— 任何一样都会让显示序偏离数据序。 }
+{ 直接看**实际的显示序**是不是恒等,而不是猜"有没有排序/分组/筛选"。
+  更准:按一个本来就有序的列排出来仍然是恒等,这时没有任何理由拒绝合并或拖行;
+  物理排序之后更是必然恒等 —— 那几条限制就此自动解除,不必再逐处去改。 }
 function TTyStringGrid.DisplayOrderIsDataOrder: Boolean;
 begin
-  Result := (SortColumn < 0) and (FGroupCol < 0)
-            and (FColFilters.Count = 0) and (FValFilters.Count = 0)
-            and (FHiddenRows.Count = 0);
+  EnsureOrder;
+  Result := FOrderIsIdentity and (FGroupCol < 0);
 end;
 
 function TTyStringGrid.RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
@@ -8563,6 +8593,94 @@ begin
   end;
 end;
 
+{ 现在能不能安全地物理排序。 }
+function TTyStringGrid.CanSortPhysically: Boolean;
+begin
+  Result := (FSortMode = gsmData)
+            { 有筛选就不行:被筛掉的行也在数据里,一起搬会把它们搬乱。 }
+            and (FColFilters.Count = 0) and (FValFilters.Count = 0)
+            and (FHiddenRows.Count = 0)
+            and (FGroupCol < 0)
+            { 数据由回调提供时控件根本不持有它,没什么可搬的。 }
+            { 数据由回调提供时控件根本不持有它,物理搬只会搬存储的那一半、
+              让两边错位。**这一条目前测不出来**:排序的比较读的是存储而不是
+              GetCellText,所以虚拟表根本排不出非恒等的序(见计划文件里记的那条
+              缺口)。留着是因为它在"排序开始认回调"的那一天会立刻变成必需的 ——
+              删掉等于给那次改动埋一颗雷。 }
+            and (not Assigned(OnGetCellText));
+end;
+
+{ 按当前显示序把**数据**重排一遍,让数据行顺序与显示顺序一致。
+
+  搬的是文字、逐格属性(底色/合并跨度/只读…)与显式行高 —— 凡是按行下标记账的
+  都得跟着走,否则排完序底色会留在原地(这个坑在增删行那边踩过一次)。
+  先整体快照再写回:边遍历边改会自己覆盖自己。
+  写回走 Cells[] / 属性存储,所以整次排序**自动进撤销栈**;外面包了事务,
+  因此是**一条**记录 —— 一次 Ctrl+Z 就退回排序前。 }
+procedure TTyStringGrid.ApplyOrderToData;
+type
+  TCellSnap = record C, R: Integer; V: string; end;
+var
+  keys: TStringList;
+  snap: array of TCellSnap;
+  attrSnap: array of record R: Integer; A: TTyGridCellAttr; end;
+  heights: array of record R, H: Integer; end;
+  i, n, sep, c, r: Integer;
+  k: string;
+begin
+  EnsureOrder;
+  if Length(FRank) <> RowCount then Exit;
+
+  { --- 快照 --- }
+  keys := TStringList.Create;
+  try
+    SnapshotCellKeys(keys);
+    SetLength(snap, keys.Count);
+    for i := 0 to keys.Count - 1 do
+    begin
+      k := keys[i];
+      sep := Pos(':', k);
+      c := StrToIntDef(Copy(k, 1, sep - 1), -1);
+      r := StrToIntDef(Copy(k, sep + 1, MaxInt), -1);
+      snap[i].C := c;
+      snap[i].R := r;
+      snap[i].V := GetCells(c, r);
+    end;
+  finally
+    keys.Free;
+  end;
+
+  SetLength(heights, 0);
+  n := 0;
+  for i := 0 to RowCount - 1 do
+    if GetRowHeights(i) > 0 then
+    begin
+      SetLength(heights, n + 1);
+      heights[n].R := i;
+      heights[n].H := GetRowHeights(i);
+      Inc(n);
+    end;
+
+  { --- 写回 --- }
+  BeginUpdate;
+  try
+    for i := 0 to High(snap) do
+      Cells[snap[i].C, snap[i].R] := '';
+    for i := 0 to High(snap) do
+      if (snap[i].R >= 0) and (snap[i].R < RowCount) then
+        Cells[snap[i].C, FRank[snap[i].R]] := snap[i].V;
+
+    for i := 0 to High(heights) do
+      SetRowHeights(heights[i].R, 0);
+    for i := 0 to High(heights) do
+      SetRowHeights(FRank[heights[i].R], heights[i].H);
+  finally
+    EndUpdate;
+  end;
+
+  InvalidateOrder;    { 数据已经有序,重建出来就是恒等 }
+end;
+
 procedure TTyStringGrid.SortByColumn(ACol: Integer; ADirection: TTySortDirection);
 var
   i, j, cmp, tmp: Integer;
@@ -8603,6 +8721,15 @@ begin
   Header.SortDirection := ADirection;
   InvalidateOrder;
   EnsureOrder;      { 重建里已按 FSortCol 排过 }
+
+  { gsmData:把数据按刚排出来的显示序**真的搬一遍**(Excel 的做法)。
+    搬完之后重建出来的显示序必然是恒等,于是"排过序就不让合并/不让拖行"
+    那几条限制自动解除 —— 不需要去每一处逐个放行。 }
+  if CanSortPhysically then
+  begin
+    ApplyOrderToData;
+    EnsureOrder;
+  end;
   if False then
   begin
   { **稳定归并排序** O(n log n)。早先用插入排序 O(n^2),1000 行要几千万次比较,
