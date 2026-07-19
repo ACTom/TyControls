@@ -15,6 +15,12 @@ resourcestring
   // Used to be hard-coded as '%s  (%d)' inside RenderGroupRow: untranslatable
   // and unconfigurable.
   rsGridGroupRow          = '%s  (%d)';
+  { 列头筛选下拉(Excel 式:搜索 + 逐值计数 + 确定/取消)。 }
+  rsGridFilterSearchHint  = 'Search';
+  rsGridFilterSelectAll   = '(Select all)';
+  rsGridFilterBlank       = '(Blanks)';
+  rsGridFilterOk          = 'OK';
+  rsGridFilterCancel      = 'Cancel';
 
   // --- ThemeLint warnings (all translated) ---
   rsLintUndefinedVar      = 'undefined variable --%s';

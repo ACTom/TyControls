@@ -188,6 +188,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestFilterValueCountsMatchRowTallies;
+    procedure TestValueFilterCanSelectBlanksOnly;
     procedure TestMergeSelectionOnSortedGridDoesNotSwallowExtraRows;
     procedure TestMergeStopsApplyingWhenSortBreaksItUpAndReturnsWhenSortedBack;
     procedure TestDoubleClickOutsideCellsDoesNotStartEditing;
@@ -6267,6 +6269,77 @@ begin
   G.UnHideRow(3);
   G.BaseCellOfForTest(0, 3, bc, br);
   AssertEquals('恢复顺序后合并块要回来', 2, br);
+end;
+
+{ 下拉里每个值后面要显示"有多少行是这个值"(Excel 那样)。
+  计数按**全部数据行**算,不受本列自己的过滤影响 —— 否则勾掉一个值之后
+  它的计数变成 0,用户再也判断不出该不该勾回来。 }
+procedure TTyStringGridTest.TestFilterValueCountsMatchRowTallies;
+var
+  G: TStrGridAccess;
+  vals: TStringList;
+  r, i: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    if r < 6 then G.Cells[0, r] := '甲' else G.Cells[0, r] := '乙';
+
+  vals := TStringList.Create;
+  try
+    G.DistinctColumnValueCounts(0, vals);
+    AssertEquals('两个不同的值', 2, vals.Count);
+    for i := 0 to vals.Count - 1 do
+      if vals[i] = '甲' then
+        AssertEquals('甲 有 6 行', 6, PtrInt(vals.Objects[i]))
+      else
+        AssertEquals('乙 有 4 行', 4, PtrInt(vals.Objects[i]));
+
+    { 本列已经在过滤时,计数不该跟着缩水。 }
+    vals.Clear;
+    vals.Add('甲');
+    G.SetColumnValueFilter(0, vals);
+    vals.Clear;
+    G.DistinctColumnValueCounts(0, vals);
+    AssertEquals('过滤后候选仍是 2 个', 2, vals.Count);
+    for i := 0 to vals.Count - 1 do
+      if vals[i] = '乙' then
+        AssertEquals('被筛掉的值,计数仍要是 4', 4, PtrInt(vals.Objects[i]));
+  finally
+    vals.Free;
+  end;
+end;
+
+{ 「(空白)」是下拉里一个能勾的选项,所以"只勾空白"必须是一个**真的过滤**。
+
+  从前值集合编码成 Trim(AValues.Text):只勾空白时它 Trim 完是空串,
+  而下游把空串当成"这列没有过滤" —— 勾了等于没勾,还悄悄把别的过滤也清了。 }
+procedure TTyStringGridTest.TestValueFilterCanSelectBlanksOnly;
+var
+  G: TStrGridAccess;
+  vals: TStringList;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  { 3 行留空,其余有值。 }
+  for r := 0 to 9 do
+    if r mod 3 <> 0 then G.Cells[0, r] := 'x' + IntToStr(r);
+
+  vals := TStringList.Create;
+  try
+    vals.Add('');                       { 只勾「(空白)」 }
+    G.SetColumnValueFilter(0, vals);
+    AssertEquals('只该剩下空白的那几行', 4, G.VisibleRowCount);
+
+    { 回读也要还原成"一个空值",而不是空集合。 }
+    vals.Clear;
+    G.ColumnValueFilter(0, vals);
+    AssertEquals('回读到一个条目', 1, vals.Count);
+    AssertEquals('那个条目是空串', '', vals[0]);
+  finally
+    vals.Free;
+  end;
 end;
 
 initialization

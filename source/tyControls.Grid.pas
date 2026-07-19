@@ -24,12 +24,27 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns,
   tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox, tyControls.ColorMath,
   tyControls.SpinEdit, tyControls.TrackBar, tyControls.Memo, tyControls.MaskEdit,
-  tyControls.CalcEdit,
+  tyControls.CalcEdit, tyControls.Panel, tyControls.Button, tyControls.CheckBox,
   tyControls.Css.Values, tyControls.ImageCollection, tyControls.Dialogs.Color,
   tyControls.StrConsts,
   tyControls.Grid.Layout;
 
 type
+  { 列头筛选下拉里的值列表:每个值右侧显示"有多少行是这个值"。
+
+    计数不能存进 Items.Objects —— 那里放的是勾选状态(TTyCheckListBox 就是这么
+    存的,好让状态跟着 Sorted/Delete 一起走)。所以另存一份平行数组,
+    与 Items 一起整体重建(搜索框每改一次就重建一次,不存在漂移窗口)。 }
+  TTyGridFilterList = class(TTyCheckListBox)
+  private
+    FCounts: array of Integer;
+  protected
+    procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
+      const AStyle: TTyStyleSet); override;
+  public
+    procedure SetCounts(const ACounts: array of Integer);
+  end;
+
   TTyGridCellDisplay = (
     gcdText,      { 默认:文字 }
     gcdProgress,  { 进度条,值取 0..100 }
@@ -995,8 +1010,20 @@ type
     FOnGetFooterText: TTyGridGetFooterTextEvent;
     FGroupCol: Integer;                        { -1 = 不分组 }
     FFilterPopup: TTyPopover;
-    FFilterList: TTyCheckListBox;
+    FFilterList: TTyGridFilterList;
     FFilterCol: Integer;
+    { --- Excel 式筛选下拉的部件 --- }
+    FFilterPanel:  TTyPanel;      { Popover.Content 只收**一个**控件,得有个容器 }
+    FFilterSearch: TTyEdit;
+    FFilterSelAll: TTyCheckBox;
+    FFilterOk, FFilterCancel: TTyButton;
+    { 全部候选值(Objects 里放该值的行数),与当前勾选集合。
+
+      **勾选状态必须按"值"记,不能按列表下标记** —— 搜索框一narrow,
+      下标就全变了;按下标记账的话,搜完再勾会勾到别的值上。 }
+    FFilterAllValues: TStringList;
+    FFilterChecked:   TStringList;
+    FFilterAccepted:  Boolean;    { 点了确定才提交;取消/点空白处丢弃 }
     FShowFilterButtons: Boolean;
     FSelectionMode: TTyGridSelectionMode;
     FGroups: array of TTyGridGroupInfo;
@@ -1033,6 +1060,13 @@ type
     FMaxColSpan: Integer;
     FMaxRowSpan: Integer;
   protected
+    procedure FilterSearchChanged(Sender: TObject);
+    procedure FilterItemChecked(Sender: TObject);
+    procedure FilterSelectAllClick(Sender: TObject);
+    procedure FilterOkClick(Sender: TObject);
+    procedure FilterCancelClick(Sender: TObject);
+    procedure RebuildFilterList;
+    procedure SyncFilterSelectAll;
     function MaxRowSpanHint: Integer; override;
     { 这段数据行此刻是不是正连续升序地显示着。 }
     function RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
@@ -1272,6 +1306,8 @@ type
     { 按**值集合**过滤某列(列头下拉勾选用)。AValues=nil 或空即清掉。
       与文本包含过滤是 AND 关系。 }
     procedure SetColumnValueFilter(ACol: Integer; AValues: TStrings);
+    { 候选值 + 每个值的行数(计数放在 AItems.Objects 里)。 }
+    procedure DistinctColumnValueCounts(ACol: Integer; AItems: TStrings);
     procedure ColumnValueFilter(ACol: Integer; AOut: TStrings);
     procedure ClearFilters;
     { 通过过滤的行数(= 当前显示的行数)。 }
@@ -4090,6 +4126,10 @@ begin
   FGroupCol := -1;
   FFilterCol := -1;
   FShowFilterButtons := False;
+  FFilterAllValues := TStringList.Create;
+  FFilterChecked := TStringList.Create;
+  FFilterChecked.Sorted := True;
+  FFilterChecked.Duplicates := dupIgnore;
   FDefaultCellDisplay := gcdText;
 
   { 一个复用的内联编辑器,盖在被编辑的单元格上。 }
@@ -4671,7 +4711,8 @@ begin
     if colIdx < 0 then Continue;
     vals := FValFilters.ValueFromIndex[i];
     if vals = '' then Continue;
-    if Pos('|^|' + GetCellText(colIdx, ARow) + '|^|', '|^|' + vals + '|^|') = 0 then
+    { vals 两头本来就带分隔符,这里不用再补。 }
+    if Pos('|^|' + GetCellText(colIdx, ARow) + '|^|', vals) = 0 then
     begin
       Result := False;
       Exit;
@@ -4856,16 +4897,25 @@ end;
 
 procedure TTyStringGrid.SetColumnValueFilter(ACol: Integer; AValues: TStrings);
 var
-  k: string;
+  k, joined: string;
   i: Integer;
 begin
   k := IntToStr(ACol);
   i := FValFilters.IndexOfName(k);
   if i >= 0 then FValFilters.Delete(i);
   if (AValues <> nil) and (AValues.Count > 0) then
-    { 值里可能带各种字符,用 |^| 当分隔(实际数据里不会出现)。 }
-    FValFilters.Add(k + '=' + StringReplace(Trim(AValues.Text), LineEnding, '|^|',
-      [rfReplaceAll]));
+  begin
+    { 值里可能带各种字符,用 |^| 当分隔(实际数据里不会出现)。
+
+      **两头也带上分隔符**,而不是 Trim(AValues.Text) 那样只在中间放。
+      因为"只勾了空白值"是一个合法的过滤(下拉里就有「(空白)」这一项),
+      而它 Trim 完是空串,会被下游当成"这列没有过滤" —— 于是勾了等于没勾。
+      两头都带的话,只勾空白得到的是 '|^||^|',非空,语义就保住了。 }
+    joined := '|^|';
+    for i := 0 to AValues.Count - 1 do
+      joined := joined + AValues.Strings[i] + '|^|';
+    FValFilters.Add(k + '=' + joined);
+  end;
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
@@ -4874,11 +4924,27 @@ end;
 procedure TTyStringGrid.ColumnValueFilter(ACol: Integer; AOut: TStrings);
 var
   v: string;
+  i: Integer;
+  parts: TStringList;
 begin
   AOut.Clear;
   v := FValFilters.Values[IntToStr(ACol)];
   if v = '' then Exit;
-  AOut.Text := StringReplace(v, '|^|', LineEnding, [rfReplaceAll]);
+  { 按分隔符切开,丢掉**首尾**那两个片段 —— 它们是两头哨兵造出来的空串。
+    不能用"掐掉两头再整体替换":那样"只有一个空值"会塌成空串,读回来变成
+    零个条目,而正确答案是一个空条目。
+      '|^|a|^|b|^|' -> ['', 'a', 'b', '']  -> ['a','b']
+      '|^||^|'      -> ['', '', '']        -> ['']      }
+  parts := TStringList.Create;
+  try
+    parts.Text := StringReplace(v, '|^|', LineEnding, [rfReplaceAll]);
+    { TStringList.Text 会吃掉末尾那个空行,所以只丢首片段、末片段按需补。 }
+    if parts.Count > 0 then parts.Delete(0);
+    for i := 0 to parts.Count - 1 do AOut.Add(parts[i]);
+    if (parts.Count = 0) and (v <> '') then AOut.Add('');
+  finally
+    parts.Free;
+  end;
 end;
 
 procedure TTyStringGrid.ClearFilters;
@@ -5739,6 +5805,35 @@ begin
   Result := FShowFilterButtons and (ACol >= 0) and (ACol < Header.Columns.Count);
 end;
 
+{ 候选值 + 每个值有多少行(计数放在 AItems.Objects 里)。
+
+  和候选值一样按**全部数据行**算,不受本列自己的过滤影响 —— 否则勾掉一个值
+  之后它的计数就变成 0,用户再也判断不出该不该勾回来。 }
+procedure TTyStringGrid.DistinctColumnValueCounts(ACol: Integer; AItems: TStrings);
+var
+  i, idx: Integer;
+  v: string;
+  tally: TStringList;
+begin
+  AItems.Clear;
+  tally := TStringList.Create;
+  try
+    tally.Sorted := True;
+    tally.Duplicates := dupIgnore;
+    for i := 0 to RowCount - 1 do
+    begin
+      v := GetCellText(ACol, i);
+      idx := tally.IndexOf(v);
+      if idx < 0 then tally.AddObject(v, TObject(PtrInt(1)))
+      else tally.Objects[idx] := TObject(PtrInt(tally.Objects[idx]) + 1);
+    end;
+    for i := 0 to tally.Count - 1 do
+      AItems.AddObject(tally[i], tally.Objects[i]);
+  finally
+    tally.Free;
+  end;
+end;
+
 procedure TTyStringGrid.DistinctColumnValues(ACol: Integer; AItems: TStrings);
 var
   i: Integer;
@@ -5763,67 +5858,210 @@ begin
   end;
 end;
 
+{ 关掉下拉时提交。**只有点了"确定"才算数** —— 取消、点空白处一律丢弃。
+  从前是"一关就提交";加了取消按钮之后再那样,取消也会生效。 }
 procedure TTyStringGrid.FilterPopupClosed(Sender: TObject);
 var
-  i, checkedCount: Integer;
-  picked: TStringList;
+  wasCol: Integer;                { 别叫 col/fcol —— 与 Col / FCol 撞名 }
 begin
-  if FFilterCol < 0 then Exit;
-  picked := TStringList.Create;
-  try
-    checkedCount := 0;
-    for i := 0 to FFilterList.Items.Count - 1 do
-      if FFilterList.Checked[i] then
-      begin
-        Inc(checkedCount);
-        picked.Add(FFilterList.Items[i]);
-      end;
+  wasCol := FFilterCol;
+  FFilterCol := -1;               { 先清 —— 免得下面的失效链再绕回来 }
+  if wasCol < 0 then Exit;
+  if not FFilterAccepted then Exit;
 
-    { 全选 = 不过滤(而不是"逐值 OR 一遍")—— 语义更干净,也省一次全表扫描。 }
-    if (checkedCount = 0) or (checkedCount = FFilterList.Items.Count) then
-      SetColumnValueFilter(FFilterCol, nil)
+  { 全勾 = 不过滤(而不是"逐值 OR 一遍")—— 语义更干净,也省一次全表扫描。
+    注意比的是**全部候选值**,不是列表里当前显示的那几条:搜索把列表 narrow
+    之后,"列表里都勾着"完全不等于"没有过滤"。 }
+  if (FFilterChecked.Count = 0)
+     or (FFilterChecked.Count = FFilterAllValues.Count) then
+    SetColumnValueFilter(wasCol, nil)
+  else
+    SetColumnValueFilter(wasCol, FFilterChecked);
+end;
+
+{ 搜索框只 narrow 列表,不动勾选集合 —— 勾选是按**值**记的,
+  所以"搜出来、勾上、清空搜索"之后,之前勾的还在。 }
+procedure TTyStringGrid.FilterSearchChanged(Sender: TObject);
+begin
+  RebuildFilterList;
+end;
+
+procedure TTyStringGrid.FilterItemChecked(Sender: TObject);
+var
+  i, idx: Integer;
+  v: string;
+begin
+  for i := 0 to FFilterList.Items.Count - 1 do
+  begin
+    v := FFilterList.Items.Strings[i];
+    if v = rsGridFilterBlank then v := '';
+    idx := FFilterChecked.IndexOf(v);
+    if FFilterList.Checked[i] then
+    begin
+      if idx < 0 then FFilterChecked.Add(v);
+    end
     else
-      SetColumnValueFilter(FFilterCol, picked);
-  finally
-    picked.Free;
+      if idx >= 0 then FFilterChecked.Delete(idx);
   end;
-  FFilterCol := -1;
+  SyncFilterSelectAll;
+end;
+
+{ 「全选」作用于**当前列表里看得见的那些**(Excel 就是这样:搜出来一批,一键全勾)。
+  看不见的值维持原状。 }
+procedure TTyStringGrid.FilterSelectAllClick(Sender: TObject);
+var
+  i: Integer;
+begin
+  for i := 0 to FFilterList.Items.Count - 1 do
+    FFilterList.Checked[i] := FFilterSelAll.Checked;
+  FilterItemChecked(nil);
+end;
+
+procedure TTyStringGrid.FilterOkClick(Sender: TObject);
+begin
+  FFilterAccepted := True;
+  FFilterPopup.Hide;
+end;
+
+procedure TTyStringGrid.FilterCancelClick(Sender: TObject);
+begin
+  FFilterAccepted := False;
+  FFilterPopup.Hide;
+end;
+
+procedure TTyStringGrid.SyncFilterSelectAll;
+var
+  i, onCount: Integer;
+begin
+  onCount := 0;
+  for i := 0 to FFilterList.Items.Count - 1 do
+    if FFilterList.Checked[i] then Inc(onCount);
+  FFilterSelAll.Checked := (FFilterList.Items.Count > 0)
+                           and (onCount = FFilterList.Items.Count);
+end;
+
+{ 按搜索词重建列表。勾选状态从**值集合**回填,而不是从旧的列表下标 ——
+  narrow 之后下标全变了,按下标回填会把勾打到别的值上。 }
+procedure TTyStringGrid.RebuildFilterList;
+var
+  i, n: Integer;
+  q, v, disp: string;
+  counts: array of Integer;
+begin
+  q := LowerCase(Trim(FFilterSearch.Text));
+  FFilterList.Items.BeginUpdate;
+  try
+    FFilterList.Items.Clear;
+    SetLength(counts, FFilterAllValues.Count);
+    n := 0;
+    for i := 0 to FFilterAllValues.Count - 1 do
+    begin
+      v := FFilterAllValues.Strings[i];
+      if (q <> '') and (Pos(q, LowerCase(v)) = 0) then Continue;
+      { 空白值也得能选 —— 它是一个真实的取值,不是"没有值"。 }
+      if v = '' then disp := rsGridFilterBlank else disp := v;
+      FFilterList.Items.AddObject(disp,
+        TObject(PtrInt(Ord(FFilterChecked.IndexOf(v) >= 0))));
+      counts[n] := PtrInt(FFilterAllValues.Objects[i]);
+      Inc(n);
+    end;
+    SetLength(counts, n);
+    FFilterList.SetCounts(counts);
+  finally
+    FFilterList.Items.EndUpdate;
+  end;
+  SyncFilterSelectAll;
+  FFilterList.Invalidate;
 end;
 
 procedure TTyStringGrid.ShowColumnFilterDropDown(ACol: Integer);
 var
-  i: Integer;
+  i, pad, y, bh, sw: Integer;
   allowed: TStringList;
   scr: TRect;
   l, w: Integer;
 begin
   if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+  { 下拉开着时点了**别的列**的漏斗:先把上一列结束掉。否则 FFilterCol 会先被
+    改成新列,旧列的勾选随后写到新列头上。 }
+  if (FFilterCol >= 0) and (FFilterPopup <> nil) and FFilterPopup.Showing then
+  begin
+    FFilterAccepted := False;
+    FFilterPopup.Hide;
+  end;
 
   if FFilterPopup = nil then
   begin
     FFilterPopup := TTyPopover.Create(Self);
-    FFilterList := TTyCheckListBox.Create(FFilterPopup);
-    FFilterList.Width := 180;
-    FFilterList.Height := 220;
-    FFilterPopup.Content := FFilterList;
+    { Popover.Content 只收**一个**控件,而且不按子控件自动定尺寸 ——
+      所以自己摆一个固定尺寸的面板。 }
+    FFilterPanel := TTyPanel.Create(FFilterPopup);
+    FFilterPanel.Width := 232;
+    FFilterPanel.Height := 306;
+
+    FFilterSearch := TTyEdit.Create(FFilterPanel);
+    FFilterSearch.Parent := FFilterPanel;
+    FFilterSearch.TextHint := rsGridFilterSearchHint;
+    FFilterSearch.OnChange := @FilterSearchChanged;
+
+    FFilterSelAll := TTyCheckBox.Create(FFilterPanel);
+    FFilterSelAll.Parent := FFilterPanel;
+    FFilterSelAll.Caption := rsGridFilterSelectAll;
+    FFilterSelAll.OnClick := @FilterSelectAllClick;
+
+    FFilterList := TTyGridFilterList.Create(FFilterPanel);
+    FFilterList.Parent := FFilterPanel;
+    FFilterList.OnClickCheck := @FilterItemChecked;
+
+    FFilterOk := TTyButton.Create(FFilterPanel);
+    FFilterOk.Parent := FFilterPanel;
+    FFilterOk.Caption := rsGridFilterOk;
+    FFilterOk.OnClick := @FilterOkClick;
+
+    FFilterCancel := TTyButton.Create(FFilterPanel);
+    FFilterCancel.Parent := FFilterPanel;
+    FFilterCancel.Caption := rsGridFilterCancel;
+    FFilterCancel.OnClick := @FilterCancelClick;
+
+    pad := 8;
+    sw := FFilterPanel.Width - 2 * pad;
+    bh := 26;
+    y := pad;
+    FFilterSearch.SetBounds(pad, y, sw, bh);   Inc(y, bh + 6);
+    FFilterSelAll.SetBounds(pad, y, sw, 20);   Inc(y, 24);
+    FFilterList.SetBounds(pad, y, sw, 200);    Inc(y, 208);
+    FFilterOk.SetBounds(FFilterPanel.Width - pad - 2 * 68 - 6, y, 68, bh);
+    FFilterCancel.SetBounds(FFilterPanel.Width - pad - 68, y, 68, bh);
+
+    FFilterPopup.Content := FFilterPanel;
     FFilterPopup.OnHide := @FilterPopupClosed;
   end;
   FFilterPopup.Controller := Self.Controller;
+  FFilterPanel.Controller := Self.Controller;
+  FFilterSearch.Controller := Self.Controller;
+  FFilterSelAll.Controller := Self.Controller;
   FFilterList.Controller := Self.Controller;
+  FFilterOk.Controller := Self.Controller;
+  FFilterCancel.Controller := Self.Controller;
 
   FFilterCol := ACol;
-  DistinctColumnValues(ACol, FFilterList.Items);
+  FFilterAccepted := False;
+  FFilterSearch.Text := '';
+  DistinctColumnValueCounts(ACol, FFilterAllValues);
 
-  { 已生效的值过滤回填成勾选状态;没有过滤则全勾。 }
+  { 已生效的值过滤回填成勾选;没有过滤则全勾。 }
+  FFilterChecked.Clear;
   allowed := TStringList.Create;
   try
     ColumnValueFilter(ACol, allowed);
-    for i := 0 to FFilterList.Items.Count - 1 do
-      FFilterList.Checked[i] := (allowed.Count = 0)
-                                or (allowed.IndexOf(FFilterList.Items[i]) >= 0);
+    for i := 0 to FFilterAllValues.Count - 1 do
+      if (allowed.Count = 0)
+         or (allowed.IndexOf(FFilterAllValues.Strings[i]) >= 0) then
+        FFilterChecked.Add(FFilterAllValues.Strings[i]);
   finally
     allowed.Free;
   end;
+  RebuildFilterList;
 
   { 锚在该列列头上。 }
   l := ColumnLeftPx(ACol);
@@ -5833,6 +6071,36 @@ begin
   FFilterPopup.ShowAt(scr);
 end;
 
+procedure TTyGridFilterList.SetCounts(const ACounts: array of Integer);
+var i: Integer;
+begin
+  SetLength(FCounts, Length(ACounts));
+  for i := 0 to High(ACounts) do FCounts[i] := ACounts[i];
+end;
+
+procedure TTyGridFilterList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
+  AIndex: Integer; const AStyle: TTyStyleSet);
+var
+  cw: Integer;
+  txt: string;
+begin
+  if (AIndex < 0) or (AIndex > High(FCounts)) then
+  begin
+    inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
+    Exit;
+  end;
+  txt := IntToStr(FCounts[AIndex]);
+  cw := P.MeasureText(txt, AStyle.FontName, ResolveFontSize(AStyle),
+    AStyle.FontWeight).cx + P.Scale(10);
+  { 把行矩形右缘收窄再交给基类 —— 值文字(带省略号)自己就让出了计数那一条,
+    勾选框在左缘不受影响。省得把基类那套勾选框绘制抄一遍。 }
+  inherited PaintItemContent(P, Rect(ARowRect.Left, ARowRect.Top,
+    ARowRect.Right - cw, ARowRect.Bottom), AIndex, AStyle);
+  P.DrawText(Rect(ARowRect.Right - cw, ARowRect.Top,
+    ARowRect.Right - P.Scale(4), ARowRect.Bottom),
+    txt, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
+    AStyle.TextColor, taRightJustify, tlCenter, False);
+end;
 
 { ---- 行列增删 ------------------------------------------------------------- }
 
