@@ -15,6 +15,12 @@ type
     FLineSize, FPageSize: Integer;
     FOnChange: TNotifyEvent;
     FThumbHover: Boolean;
+    FShowValue: Boolean;
+    { 数值读数占掉的那一条(横向在右、纵向在下)的像素宽/高。
+      要量文字才知道,而量文字需要一个 painter —— 所以在 RenderTo 里算好缓存下来,
+      几何与命中都读这个缓存值。首帧之前它是 0(还没画过的控件也拖不动)。 }
+    FValueAreaPx: Integer;
+
     FAnimEnabled: Boolean;
     FPosAnim: TTyAnimator;      // 0..1 traversal driving FAnimFrom -> FAnimTo
     FAnimFrom, FAnimTo: Single; // displayed-thumb-position endpoints (Min..Max units)
@@ -26,6 +32,8 @@ type
     procedure SetFrequency(const AValue: Integer);
     procedure SetLineSize(const AValue: Integer);
     procedure SetPageSize(const AValue: Integer);
+    procedure SetShowValue(const AValue: Boolean);
+    function  ValueText: string;
     function ThumbWAtPPI(APPI: Integer): Integer;
     function MainLen: Integer;
     function Inverted: Boolean;
@@ -72,6 +80,9 @@ type
     property Frequency: Integer read FFrequency write SetFrequency default 0;
     property LineSize: Integer read FLineSize write SetLineSize default 1;
     property PageSize: Integer read FPageSize write SetPageSize default 10;
+    { 在滑轨旁显示当前值(横向在右、纵向在下)。默认关 —— 打开会占掉一条空间,
+      不该悄悄改变已有界面的排版。 }
+    property ShowValue: Boolean read FShowValue write SetShowValue default False;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property Align;
     property Anchors;
@@ -161,6 +172,23 @@ function TTyTrackBar.MainLen: Integer;
 begin
   if FOrientation = toVertical then Result := ClientHeight
   else Result := ClientWidth;
+  { 读数占掉的那一条不属于滑轨。收口在这里,ThumbRect 与 DragTo 都走它,
+    于是"画在哪"和"点了算多少"不会各算各的。 }
+  Dec(Result, FValueAreaPx);
+  if Result < 1 then Result := 1;
+end;
+
+procedure TTyTrackBar.SetShowValue(const AValue: Boolean);
+begin
+  if FShowValue = AValue then Exit;
+  FShowValue := AValue;
+  if not FShowValue then FValueAreaPx := 0;
+  Invalidate;
+end;
+
+function TTyTrackBar.ValueText: string;
+begin
+  Result := IntToStr(FPosition);
 end;
 
 function TTyTrackBar.Inverted: Boolean;
@@ -458,6 +486,7 @@ var
   TW, MLen, Off: Integer;
   TickFill: TTyFill;
   TickLen, TickW, V, TickOff, C: Integer;
+  vs, vw: TSize;
 begin
   P := TTyPainter.Create;
   try
@@ -471,10 +500,26 @@ begin
     // which equals the legacy formula exactly (pixel regression).
     TW := MulDiv(12, APPI, 96);
     if TW < 1 then TW := 1;
-    if FOrientation = toVertical then
-      MLen := R.Bottom - R.Top
+    { 读数条:先量出它要多宽(按 Min/Max 里更宽的那个算,免得拖动时滑轨长度
+      跟着位数变来变去、滑块自己抖),再把滑轨缩短同样多。 }
+    if FShowValue then
+    begin
+      vs := P.MeasureText(IntToStr(FMin), S.FontName, ResolveFontSize(S), S.FontWeight);
+      vw := P.MeasureText(IntToStr(FMax), S.FontName, ResolveFontSize(S), S.FontWeight);
+      if vs.cx > vw.cx then vw := vs;
+      if FOrientation = toVertical then
+        FValueAreaPx := vw.cy + MulDiv(4, APPI, 96)
+      else
+        FValueAreaPx := vw.cx + MulDiv(8, APPI, 96);
+    end
     else
-      MLen := R.Right - R.Left;
+      FValueAreaPx := 0;
+
+    if FOrientation = toVertical then
+      MLen := (R.Bottom - R.Top) - FValueAreaPx
+    else
+      MLen := (R.Right - R.Left) - FValueAreaPx;
+    if MLen < 1 then MLen := 1;
     // The PAINTED thumb uses the displayed (possibly mid-animation) position; at
     // rest DisplayPos == FPosition so headless renders are pixel-identical. The
     // hover hit-test (ThumbRect), DragTo, hit math and keyboard keep using
@@ -521,6 +566,19 @@ begin
             R.Left + C + TickW, R.Bottom), TickFill, 0);
         Inc(V, FFrequency);
       end;
+    end;
+
+    { 读数。画在滑轨让出来的那一条里,颜色/字体全走本体样式,不硬编码。 }
+    if FShowValue and (FValueAreaPx > 0) then
+    begin
+      if FOrientation = toVertical then
+        P.DrawText(Rect(R.Left, R.Bottom - FValueAreaPx, R.Right, R.Bottom),
+          ValueText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
+          taCenter, tlCenter, False)
+      else
+        P.DrawText(Rect(R.Right - FValueAreaPx, R.Top, R.Right, R.Bottom),
+          ValueText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
+          taRightJustify, tlCenter, False);
     end;
 
     P.EndPaint;

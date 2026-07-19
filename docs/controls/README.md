@@ -91,7 +91,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyListBox](listbox.md) | 列表框：键盘导航、内嵌自动滚动条 |
 | [TTyTreeView](treeview.md) | 虚拟树（VirtualTreeView 级）：百万节点、多列 + 排序、复选 + 三态 + 单选、多选 + 整行、内联编辑、节点拖放、逐单元格自绘 |
 | [TTyListView](listview.md) | 平铺项视图（TreeView 的非层级兄弟）：报表 / 列表 / 大图标 / 小图标 / 平铺五种模式、列 + 排序、多选 + 框选、虚拟模式（十万行零对象） |
-| [TTyStringGrid](grid.md) | 自绘数据网格(TTyCustomGrid / TTyDrawGrid / TTyStringGrid 三层):冻结行列、虚拟化渲染(百万行)、二维光标 + 键鼠导航、内嵌滚动条、单元格编辑 |
+| [TTyStringGrid](grid.md) | 自绘数据网格(TTyCustomGrid / TTyDrawGrid / TTyStringGrid 三层):冻结行列、虚拟化渲染(百万行)、多列排序 / 类型化过滤 / 分组、分组表头、离散多选与选区聚合、逐格外观与边框、换行与行高三件套、列级编辑声明 + EditLink 扩展点、智能粘贴 |
 | [TTyShellListView](shelllistview.md) | 文件系统后备的项视图（TTyListView 适配器）：显示目录内容、四列、排序、F2 重命名、按类型分组 |
 | [TTyShellTreeView](shelltreeview.md) | 文件系统后备的目录树（TTyTreeView 适配器）：只显示文件夹、懒加载展开、路径定位 |
 | [TTyFilterComboBox](filtercombobox.md) | 过滤预设下拉（TTyComboBox 适配器）：解析 LCL 过滤串，选中段即生效掩码 |

@@ -10,6 +10,18 @@ interface
   docs/superpowers/specs/2026-06-25-i18n-design.md. Deep CSS-syntax errors keep an English
   msgid (their .po msgstr == msgid) per spec decision 5. }
 resourcestring
+  // --- Grid ---
+  // Group row caption: %s = the group value, %d = how many rows in it.
+  // Used to be hard-coded as '%s  (%d)' inside RenderGroupRow: untranslatable
+  // and unconfigurable.
+  rsGridGroupRow          = '%s  (%d)';
+  { 列头筛选下拉(Excel 式:搜索 + 逐值计数 + 确定/取消)。 }
+  rsGridFilterSearchHint  = 'Search';
+  rsGridFilterSelectAll   = '(Select all)';
+  rsGridFilterBlank       = '(Blanks)';
+  rsGridFilterOk          = 'OK';
+  rsGridFilterCancel      = 'Cancel';
+
   // --- ThemeLint warnings (all translated) ---
   rsLintUndefinedVar      = 'undefined variable --%s';
   rsLintMissingAsset      = 'missing asset ''%s''';

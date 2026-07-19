@@ -46,6 +46,10 @@ begin
     '  --surface-hover:            darken(--surface, 4%);' + LineEnding +
     '  --surface-active:           darken(--surface, 10%);' + LineEnding +
     '  --surface-chrome:           darken(--surface, 6%);' + LineEnding +
+    '  /* 斑马纹的隔行底色。比 chrome 淡得多 —— 它是让长表读起来更顺的辅助,不是分区。 */' + LineEnding +
+    '  --surface-alt:              darken(--surface, 3%);' + LineEnding +
+    '  /* 评分星的金色。评分是少数几个有约定俗成颜色的元素,但仍走 token —— 皮肤能改。 */' + LineEnding +
+    '  --rating-star:              #F59E0B;' + LineEnding +
     '  --surface-sunk:             darken(--surface, 8%);' + LineEnding +
     '  --surface-track:            darken(--surface, 10%);' + LineEnding +
     '  --surface-listitem-hover:   darken(--surface, 5%);' + LineEnding +
@@ -531,6 +535,18 @@ begin
     'TyGridCell { background: none; color: var(--on-surface); padding: 0px 6px; }' + LineEnding +
     'TyGridCell:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyGridCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    '/* 焦点格(光标所在)。整行选中模式下,不区分就看不出光标在哪一格。 */' + LineEnding +
+    'TyGridActiveCell { background: var(--surface-active); color: var(--on-surface); }' + LineEnding +
+    '/* 选区盖在"用户显式指定了底色"的格上时用这一层(逐格色/行色/条件着色)。' + LineEnding +
+    '   不透明的选区色会把用户自己标的颜色整块抹掉,而光标总落在刚上色的那一格上。 */' + LineEnding +
+    'TyGridCellMarked { background: alpha(--accent, 0.42); }' + LineEnding +
+    '/* 选区外框 + 填充柄。外框给"这块是选中的"一条边界线索(底色只给面);' + LineEnding +
+    '   柄画在右下角,拖它把选区的值往下铺。' + LineEnding +
+    '   color 是**柄的描边色** —— 柄与选区底色同为 accent,不描边就等于没画。 */' + LineEnding +
+    'TyGridSelectionFrame { border-color: var(--accent); border-width: 1px; background: var(--accent); color: var(--surface); }' + LineEnding +
+    '/* 斑马纹。自己的 typeKey 而不是 TyGridCell:alternate:加伪类要动共享的状态枚举与' + LineEnding +
+    '   CSS 解析器,会波及每一个控件;而网格的各部件本来就各有各的键。 */' + LineEnding +
+    'TyGridCellAlt { background: var(--surface-alt); }' + LineEnding +
     '/* 冻结区(固定行列)与行头槽:比正文略重,读者一眼能分出"这块不滚动"。 */' + LineEnding +
     'TyGridFixed     { background: var(--surface-chrome); color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     'TyGridIndicator { background: var(--surface-chrome); color: var(--muted); border-color: var(--border); }' + LineEnding +
@@ -539,6 +555,8 @@ begin
     'TyGridHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     'TyGridHeaderSection:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyGridHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
+    '/* 分组表头带(横跨若干列的上层标题)。自己的键 —— 与叶子列头分开配才有意义。 */' + LineEnding +
+    'TyGridHeaderGroup { background: var(--surface-active); color: var(--on-surface); border-color: var(--border); }' + LineEnding +
     '/* 格线与选区。格线单独成键,皮肤想去掉格子只需把它设成透明。 */' + LineEnding +
     'TyGridLine      { background: var(--border); }' + LineEnding +
     '/* 单元格图形。各自成键,不借复选框/进度条的键 —— 借来的键在外观层够不着,' + LineEnding +
@@ -547,7 +565,12 @@ begin
     'TyGridCheckBox:selected  { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyGridProgress           { background: var(--surface-chrome); border-radius: var(--radius-sm); }' + LineEnding +
     'TyGridProgressFill       { background: var(--accent); }' + LineEnding +
-    'TyGridRating             { color: var(--accent); }' + LineEnding +
+    'TyGridRating             { color: var(--rating-star); }' + LineEnding +
+    'TyGridRatingEmpty        { color: var(--border); }' + LineEnding +
+    '/* 按钮单元格。三态用自己的键 —— 借 TyButton 的键会让"改网格里的按钮"波及全库按钮。 */' + LineEnding +
+    'TyGridButton          { background: var(--surface-chrome); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }' + LineEnding +
+    'TyGridButton:hover    { background: var(--surface-hover); }' + LineEnding +
+    'TyGridButton:active   { background: var(--surface-active); }' + LineEnding +
     'TyGridSelection { background: var(--selection); border-color: var(--accent); }' + LineEnding +
     'TyTreeCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }' + LineEnding +
     'TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +

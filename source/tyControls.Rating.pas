@@ -208,24 +208,11 @@ var
   cellW, size, radiusOuter, radiusInner, cx, cy, fillTo: Double;
   i, bw: Integer;
 
-  { Trace a 5-point star (10 alternating outer/inner vertices) centred at
-    (ACx,ACy) with the given outer/inner radii; first outer point at the top.
-    Leaves the path closed but does not stroke/fill — the caller decides. }
+  { 星形路径已抽到 TTyPainter.StarPath —— 网格的星级单元格用的是同一份几何,
+    两边各画一套的话同一个值在两处会长得不一样。 }
   procedure StarPath(ACx, ACy, AOuter, AInner: Double);
-  var k: Integer; ang, rr: Double;
   begin
-    ctx.beginPath;
-    for k := 0 to 9 do
-    begin
-      if (k mod 2) = 0 then rr := AOuter else rr := AInner;
-      // Start at the top (-90 deg) and step 36 deg per vertex, clockwise.
-      ang := DegToRad(-90 + k * 36);
-      if k = 0 then
-        ctx.moveTo(ACx + rr * Cos(ang), ACy + rr * Sin(ang))
-      else
-        ctx.lineTo(ACx + rr * Cos(ang), ACy + rr * Sin(ang));
-    end;
-    ctx.closePath;
+    P.StarPath(ACx, ACy, AOuter, AInner);
   end;
 
 begin

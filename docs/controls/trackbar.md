@@ -35,6 +35,7 @@ uses tyControls.TrackBar;
 | `Frequency` | `Integer` | `0` | 刻度线（tick marks）间隔，单位为值（value-units）。`0`（默认）= **不绘制刻度**；`>0` 时每隔 `Frequency` 个值单位绘制一条刻度线。负值被夹为 0。 |
 | `LineSize` | `Integer` | `1` | 方向键单步步进量（每次 ±`LineSize`）。最小为 1（赋值 <1 被夹为 1）。 |
 | `PageSize` | `Integer` | `10` | `PageUp`/`PageDown` 翻页步进量（每次 ±`PageSize`）。最小为 1（赋值 <1 被夹为 1）。 |
+| `ShowValue` | 在滑轨旁显示当前值(横向在右、纵向在下)。默认关 —— 打开会占掉一条空间,滑轨相应变短(几何与命中都跟着变) |
 | `OnChange` | `TNotifyEvent` | `nil` | `Position` 真实变化时触发（含拖动、点击定位、方向键/翻页键步进、直接赋值）。 |
 | `TabStop` | `Boolean` | `True` | 是否参与 Tab 键导航（构造时自动置为 `True`）。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |

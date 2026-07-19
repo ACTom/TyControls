@@ -49,10 +49,13 @@ TyButton:disabled { opacity: 0.5; }
 - **Data grid `TTyStringGrid`** (three layers: `TTyCustomGrid` / `TTyDrawGrid` / `TTyStringGrid`) —
   frozen rows/columns (four panes), virtualised rendering (a million rows paints only the visible
   window), sparse cell storage, 2-D cursor + rectangular multi-select, embedded scrollbars,
-  variable row heights, **editing** (text / numeric / checkbox / pick-list / date / colour, per
-  cell), **display** (text / progress bar / rating / image, orthogonal to editing), click-to-sort
-  (stable merge sort), column filtering (text + header distinct-value checklist), group rows with
-  collapse, cell merging, a summary footer (sum/avg/min/max/count over the *filtered* rows),
+  variable row heights, **editing** (16 built-in editors: text / numeric / spin / slider / checkbox /
+  pick-list / date / time / colour / rating / memo / mask / password / calculator / ellipsis button,
+  per cell), **display** (text / progress bar / rating / image / button / colour swatch, orthogonal
+  to editing), click-to-sort (stable merge sort), an **Excel-style column filter** (search box,
+  per-value counts, a (Blanks) entry), group rows with collapse and **per-group subtotals**, cell
+  merging, a summary footer (sum/avg/min/max/count over the *filtered* rows), **selection outline
+  and fill handle** (copy / extrapolate / repeat), a row-number gutter, hidden columns,
   clipboard (Excel format) + CSV import/export, column resize and drag-reorder.
 - **Virtual tree `TTyTreeView`** — a VirtualTreeView-class virtual tree: data-on-demand (scales to
   millions of nodes), multi-column with a draggable header (resize / reorder / sort), checkboxes +
@@ -150,6 +153,7 @@ in code), plus a combined gallery and a dedicated TreeView showcase:
 
 | Example | What it shows |
 |---|---|
+| [examples/grid](examples/grid/) | **TTyStringGrid** (6 tabs): frozen rows/columns / a million rows from a virtual data source / sort, filter, group / 16 editor kinds / selection and clipboard / event hooks |
 | [examples/treeview](examples/treeview/) | **TTyTreeView showcase**: million-node virtual tree / multi-column + sort / checkboxes + tri-state + radio / multi-select + full-row / inline editing / node drag-drop |
 | [examples/antdesign](examples/antdesign/) | **TyControls Pro**: an Ant Design Pro-style admin shell (sider + 6 pages), defaulting to the antdesign skin, with runtime skin switching |
 | [examples/demo](examples/demo/) | Combined gallery: all controls + multi-theme switch + custom window frame + runtime language switch |

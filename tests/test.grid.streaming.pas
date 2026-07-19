@@ -37,6 +37,7 @@ var
   cls: TPersistentClass;
   bad: TStringList;
   fn: string;
+  dot: Integer;
 begin
   fn := RepoRoot + 'examples' + PathDelim + 'grid' + PathDelim + 'umain.lfm';
   AssertTrue('示例 .lfm 存在:' + fn, FileExists(fn));
@@ -77,6 +78,13 @@ begin
       if propName = '' then Continue;
       { 集合/列表续行等非属性行:属性名必须是合法标识符 }
       if not (propName[1] in ['A'..'Z', 'a'..'z', '_']) then Continue;
+
+      { 带点的子属性(`Items.Strings`、`Font.Height`)是合法 LFM 写法:
+        点号后面归子对象自己的流式化管,这里只校验**第一段**在宿主上存在。
+        整串丢给 GetPropInfo 会把所有子属性都误判成"不存在"。 }
+      dot := Pos('.', propName);
+      if dot > 0 then propName := Copy(propName, 1, dot - 1);
+      if propName = '' then Continue;
 
       if GetPropInfo(cls, propName) = nil then
         bad.Add(Format('%s.%s (第 %d 行)', [cls.ClassName, propName, i + 1]));

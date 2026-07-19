@@ -1,138 +1,922 @@
 object MainForm: TMainForm
-  Left = 0
-  Height = 560
-  Top = 0
-  Width = 900
+  Left = 300
+  Height = 760
+  Top = 140
+  Width = 1180
   Caption = 'TTyStringGrid 示例'
-  ClientHeight = 560
-  ClientWidth = 900
-  Position = poScreenCenter
-  LCLVersion = '4.4.0.0'
-  OnCreate = FormCreate
+  ClientHeight = 760
+  ClientWidth = 1180
   TitleBar = Bar
+  OnCreate = FormCreate
+  LCLVersion = '3.4.0.0'
   object Surface: TTyFormSurface
     Left = 0
-    Height = 560
+    Height = 760
     Top = 0
-    Width = 900
+    Width = 1180
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 900
+      Width = 1180
       Align = alTop
       Caption = 'TTyStringGrid  · 自绘数据网格 · TyControls'
-      TitleAlignment = taLeftJustify
       object BtnAccent: TTyButton
-        Left = 470
+        Left = 710
         Height = 26
         Top = 4
-        Width = 84
-        Anchors = [akTop, akRight]
+        Width = 70
         Caption = '主题色'
         OnClick = BtnAccentClick
       end
       object DarkSwitch: TTyToggleSwitch
-        Left = 562
-        Height = 24
-        Top = 5
-        Width = 74
-        Anchors = [akTop, akRight]
+        Left = 788
+        Height = 22
+        Top = 6
+        Width = 88
         Caption = '暗色'
         OnChange = DarkSwitchChange
       end
       object ThemeCombo: TTyComboBox
-        Left = 642
-        Height = 26
-        Top = 4
-        Width = 108
-        Anchors = [akTop, akRight]
+        Left = 884
+        Height = 24
+        Top = 5
+        Width = 150
         OnChange = ThemeComboChange
       end
     end
-    object ToolBar: TTyPanel
-      Left = 0
-      Height = 44
-      Top = 34
-      Width = 900
-      Align = alTop
-      object LblFilter: TTyLabel
-        Left = 14
-        Height = 18
-        Top = 13
-        Width = 60
-        Caption = '筛选产品:'
-      end
-      object EdFilter: TTyEdit
-        Left = 82
-        Height = 26
-        Top = 9
-        Width = 150
-        OnChange = EdFilterChange
-      end
-      object BtnGroup: TTyButton
-        Left = 248
-        Height = 26
-        Top = 9
-        Width = 104
-        Caption = '按大区分组'
-        OnClick = BtnGroupClick
-      end
-      object BtnCsv: TTyButton
-        Left = 362
-        Height = 26
-        Top = 9
-        Width = 96
-        Caption = '导出 CSV'
-        OnClick = BtnCsvClick
-      end
-      object BtnMillion: TTyButton
-        Left = 468
-        Height = 26
-        Top = 9
-        Width = 96
-        Caption = '一百万行'
-        OnClick = BtnMillionClick
-      end
-      object LblHint: TTyLabel
-        Left = 580
-        Height = 18
-        Top = 13
-        Width = 300
-        Anchors = [akTop, akLeft, akRight]
-        Caption = '列头 ▾ 可按值筛选 · 点列头排序 · F2/双击编辑 · Ctrl+C/V'
-      end
-    end
-    object Grid: TTyStringGrid
-      Left = 14
-      Height = 430
-      Top = 88
-      Width = 872
-      Anchors = [akTop, akLeft, akRight, akBottom]
-      TabStop = True
-      TabOrder = 0
-      DefaultRowHeight = 24
-      ShowIndicator = True
-      IndicatorWidth = 46
-      ShowFooter = True
-      FooterHeight = 26
-      ShowFilterButtons = True
-      OnSelectCell = GridSelectCell
-      OnGetEditorKind = GridGetEditorKind
-      OnCellEdited = GridCellEdited
-      OnCompareCells = GridCompareCells
-      OnGetPickList = GridGetPickList
-      OnGetCellDisplay = GridGetCellDisplay
-      OnGetRowHeight = GridGetRowHeight
-    end
     object LblStatus: TTyLabel
-      Left = 14
-      Height = 18
-      Top = 528
-      Width = 872
-      Anchors = [akLeft, akRight, akBottom]
+      Left = 8
+      Height = 20
+      Top = 734
+      Width = 1164
       Caption = '就绪'
+      Align = alBottom
+    end
+    object Pages: TTyPageControl
+      Left = 0
+      Height = 700
+      Top = 34
+      Width = 1180
+      Align = alClient
+      ActivePageIndex = 0
+      object PgBasic: TTyTabSheet
+        Caption = '基础与虚拟化'
+        object LblBasicHint: TTyLabel
+          Left = 8
+          Height = 34
+          Top = 4
+          Width = 1150
+          Caption = '鼠标划过单元格看 hover 高亮 · 拖底部横向滚动条,左侧两列钉住不动(冻结列) · 方向键/Home/End/PageUp/PageDown 导航 · 状态栏显示稀疏存储的实际条目数'
+        end
+        object TbBasic: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 38
+          Width = 1172
+          Align = alTop
+          object BtnRows1W: TTyButton
+            Left = 8
+            Height = 26
+            Top = 6
+            Width = 84
+            Caption = '1 万行'
+            OnClick = BtnRows1WClick
+          end
+          object BtnRows10W: TTyButton
+            Left = 98
+            Height = 26
+            Top = 6
+            Width = 84
+            Caption = '10 万行'
+            OnClick = BtnRows10WClick
+          end
+          object BtnRows100W: TTyButton
+            Left = 188
+            Height = 26
+            Top = 6
+            Width = 84
+            Caption = '100 万行'
+            OnClick = BtnRows100WClick
+          end
+          object BtnRowsReset: TTyButton
+            Left = 278
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '恢复 200 行'
+            OnClick = BtnRowsResetClick
+          end
+          object BtnGoto: TTyButton
+            Left = 384
+            Height = 26
+            Top = 6
+            Width = 110
+            Caption = '跳到 (2, 5000)'
+            OnClick = BtnGotoClick
+          end
+          object ChkFrozenCols: TTyCheckBox
+            Left = 510
+            Height = 22
+            Top = 8
+            Width = 96
+            Caption = '冻结 2 列'
+            Checked = True
+            OnChange = ChkBasicChange
+          end
+          object ChkFixedRow: TTyCheckBox
+            Left = 612
+            Height = 22
+            Top = 8
+            Width = 96
+            Caption = '固定 1 行'
+            OnChange = ChkBasicChange
+          end
+          object ChkIndicator: TTyCheckBox
+            Left = 714
+            Height = 22
+            Top = 8
+            Width = 84
+            Caption = '行号槽'
+            Checked = True
+            OnChange = ChkBasicChange
+          end
+          object ChkFooter: TTyCheckBox
+            Left = 802
+            Height = 22
+            Top = 8
+            Width = 84
+            Caption = '汇总带'
+            Checked = True
+            OnChange = ChkBasicChange
+          end
+        end
+        object GridBasic: TTyStringGrid
+          Left = 0
+          Height = 570
+          Top = 0
+          Width = 1172
+          Align = alClient
+          DefaultRowHeight = 24
+          ShowIndicator = True
+          IndicatorWidth = 56
+          ShowFooter = True
+          FooterHeight = 26
+          FixedCols = 2
+          OnSelectionChanged = AnyGridSelectionChanged
+        end
+      end
+      object PgLook: TTyTabSheet
+        Caption = '外观'
+        object LblLookHint: TTyLabel
+          Left = 8
+          Height = 34
+          Top = 4
+          Width = 1150
+          Caption = '「条件着色」把负数金额标红、超期行标黄(OnGetCellStyle,按数据行判断,排序后仍跟着记录走) · 「逐格边框」给小计行加粗上边线 · 加粗格线时列宽**不变**,只是内容内缩'
+        end
+        object TbLook1: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 38
+          Width = 1172
+          Align = alTop
+          object ChkZebra: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 84
+            Caption = '斑马纹'
+            Checked = True
+            OnChange = ChkLookChange
+          end
+          object LblLines: TTyLabel
+            Left = 100
+            Height = 20
+            Top = 10
+            Width = 48
+            Caption = '格线:'
+          end
+          object CbLines: TTyComboBox
+            Left = 146
+            Height = 26
+            Top = 6
+            Width = 96
+            Items.Strings = (
+              '无'
+              '只横线'
+              '只竖线'
+              '横竖都有'
+            )
+            ItemIndex = 3
+            OnChange = CbLinesChange
+          end
+          object LblLineW: TTyLabel
+            Left = 252
+            Height = 20
+            Top = 10
+            Width = 48
+            Caption = '线宽:'
+          end
+          object SpLineWidth: TTySpinEdit
+            Left = 298
+            Height = 26
+            Top = 6
+            Width = 62
+            MinValue = 1
+            MaxValue = 6
+            Value = 1
+            OnChange = SpLineWidthChange
+          end
+          object ChkCondColor: TTyCheckBox
+            Left = 372
+            Height = 22
+            Top = 8
+            Width = 108
+            Caption = '条件着色'
+            OnChange = ChkLookChange
+          end
+          object ChkCellBorder: TTyCheckBox
+            Left = 486
+            Height = 22
+            Top = 8
+            Width = 108
+            Caption = '逐格边框'
+            OnChange = ChkLookChange
+          end
+          object ChkHdrHilite: TTyCheckBox
+            Left = 600
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '排序列表头高亮'
+            OnChange = ChkLookChange
+          end
+          object ChkHdrIcons: TTyCheckBox
+            Left = 738
+            Height = 22
+            Top = 8
+            Width = 108
+            Caption = '列头图标'
+            OnChange = ChkLookChange
+          end
+        end
+        object TbLook2: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 78
+          Width = 1172
+          Align = alTop
+          object BtnCellColor: TTyButton
+            Left = 8
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '本格上色'
+            OnClick = BtnCellColorClick
+          end
+          object BtnCellUncolor: TTyButton
+            Left = 122
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '清除本格色'
+            OnClick = BtnCellUncolorClick
+          end
+          object BtnRowColor: TTyButton
+            Left = 236
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '整行标色'
+            OnClick = BtnRowColorClick
+          end
+          object ChkWordWrap: TTyCheckBox
+            Left = 356
+            Height = 22
+            Top = 8
+            Width = 84
+            Caption = '换行'
+            OnChange = ChkLookChange
+          end
+          object BtnAutoFitRows: TTyButton
+            Left = 446
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '自动行高'
+            OnClick = BtnAutoFitRowsClick
+          end
+          object BtnResetRows: TTyButton
+            Left = 560
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '恢复行高'
+            OnClick = BtnResetRowsClick
+          end
+          object LblLookTip: TTyLabel
+            Left = 680
+            Height = 20
+            Top = 10
+            Width = 460
+            Caption = '「备注」列内容很长 —— 先勾换行,再点自动行高'
+          end
+        end
+        object GridLook: TTyStringGrid
+          Left = 0
+          Height = 530
+          Top = 0
+          Width = 1172
+          Align = alClient
+          DefaultRowHeight = 24
+          ShowIndicator = True
+          IndicatorWidth = 56
+          AlternateRows = True
+          MinRowHeight = 20
+          MaxRowHeight = 90
+          OnSelectionChanged = AnyGridSelectionChanged
+        end
+      end
+      object PgSort: TTyTabSheet
+        Caption = '排序 · 筛选 · 分组'
+        object LblSortHint: TTyLabel
+          Left = 8
+          Height = 34
+          Top = 4
+          Width = 1150
+          Caption = '点列头排序(升→降→取消) · **Shift+点**列头追加次级排序列,表头出现 1/2/3 顺位徽标 · 「数量」「金额」按数值排、「日期」按日期排(列级 SortKind) · 正在过滤的列漏斗会点亮'
+        end
+        object TbSort1: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 38
+          Width = 1172
+          Align = alTop
+          object BtnSortQty: TTyButton
+            Left = 8
+            Height = 26
+            Top = 6
+            Width = 110
+            Caption = '数量 ↑'
+            OnClick = BtnSortQtyClick
+          end
+          object BtnSortQtyD: TTyButton
+            Left = 124
+            Height = 26
+            Top = 6
+            Width = 110
+            Caption = '数量 ↓'
+            OnClick = BtnSortQtyDClick
+          end
+          object BtnSortAdd: TTyButton
+            Left = 240
+            Height = 26
+            Top = 6
+            Width = 132
+            Caption = '追加:大区'
+            OnClick = BtnSortAddClick
+          end
+          object BtnSortClear: TTyButton
+            Left = 378
+            Height = 26
+            Top = 6
+            Width = 110
+            Caption = '取消排序'
+            OnClick = BtnSortClearClick
+          end
+          object ChkBlanksFirst: TTyCheckBox
+            Left = 500
+            Height = 22
+            Top = 8
+            Width = 120
+            Caption = '空值排最前'
+            OnChange = ChkSortChange
+          end
+          object ChkCaseSens: TTyCheckBox
+            Left = 626
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '排序区分大小写'
+            OnChange = ChkSortChange
+          end
+        end
+        object TbSort2: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 78
+          Width = 1172
+          Align = alTop
+          object LblFilterCol: TTyLabel
+            Left = 8
+            Height = 20
+            Top = 10
+            Width = 48
+            Caption = '筛选:'
+          end
+          object CbFilterCol: TTyComboBox
+            Left = 56
+            Height = 26
+            Top = 6
+            Width = 110
+            Items.Strings = (
+              '订单号'
+              '大区'
+              '产品'
+              '数量'
+              '金额'
+              '日期'
+            )
+            ItemIndex = 3
+            OnChange = CbFilterChange
+          end
+          object CbFilterOp: TTyComboBox
+            Left = 174
+            Height = 26
+            Top = 6
+            Width = 110
+            Items.Strings = (
+              '包含'
+              '等于'
+              '不等于'
+              '开头是'
+              '结尾是'
+              '大于'
+              '大于等于'
+              '小于'
+              '小于等于'
+            )
+            ItemIndex = 5
+            OnChange = CbFilterChange
+          end
+          object EdFilterVal: TTyEdit
+            Left = 292
+            Height = 26
+            Top = 6
+            Width = 130
+            Text = '20'
+            OnChange = CbFilterChange
+          end
+          object BtnFilterClear: TTyButton
+            Left = 430
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '清除筛选'
+            OnClick = BtnFilterClearClick
+          end
+          object BtnGroup: TTyButton
+            Left = 540
+            Height = 26
+            Top = 6
+            Width = 120
+            Caption = '按大区分组'
+            OnClick = BtnGroupClick
+          end
+          object BtnExpandAll: TTyButton
+            Left = 666
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '全部展开'
+            OnClick = BtnExpandAllClick
+          end
+          object BtnCollapseAll: TTyButton
+            Left = 768
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '全部折叠'
+            OnClick = BtnCollapseAllClick
+          end
+        end
+        object GridSort: TTyStringGrid
+          Left = 0
+          Height = 530
+          Top = 0
+          Width = 1172
+          Align = alClient
+          DefaultRowHeight = 24
+          ShowIndicator = True
+          IndicatorWidth = 56
+          ShowFilterButtons = True
+          ShowFooter = True
+          FooterHeight = 26
+          OnSelectionChanged = AnyGridSelectionChanged
+        end
+      end
+      object PgEdit: TTyTabSheet
+        Caption = '编辑与单元格类型'
+        object LblEditHint: TTyLabel
+          Left = 8
+          Height = 34
+          Top = 4
+          Width = 1150
+          Caption = '**直接敲字**就进编辑(这一笔即第一个字符) · Enter 向下 · Tab 按格推进并折行 · F2 也行 · 「数量」微调 · 「金额」滑动条 · 「订单号」掩码 · 「大区」下拉 · 「日期」日历 · 「评分」点星 · 「备注」多行 —— 全在**列上**声明,没接事件'
+        end
+        object TbEdit: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 38
+          Width = 1172
+          Align = alTop
+          object ChkSkipRO: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '导航跳过只读格'
+            OnChange = ChkEditChange
+          end
+          object BtnCellRO: TTyButton
+            Left = 150
+            Height = 26
+            Top = 6
+            Width = 120
+            Caption = '本格设只读'
+            OnClick = BtnCellROClick
+          end
+          object BtnCellRW: TTyButton
+            Left = 276
+            Height = 26
+            Top = 6
+            Width = 120
+            Caption = '本格可编辑'
+            OnClick = BtnCellRWClick
+          end
+          object ChkEditLink: TTyCheckBox
+            Left = 408
+            Height = 22
+            Top = 8
+            Width = 168
+            Caption = '备注列用自定义编辑器'
+            OnChange = ChkEditChange
+          end
+          object LblEditTip: TTyLabel
+            Left = 590
+            Height = 20
+            Top = 10
+            Width = 550
+            Caption = '「完成度」进度条 · 「评分」星标 · 「已结算」勾选框 · 「标记色」点开取色 · 「操作」按钮'
+          end
+        end
+        object GridEdit: TTyStringGrid
+          Left = 0
+          Height = 570
+          Top = 0
+          Width = 1172
+          Align = alClient
+          DefaultRowHeight = 26
+          ShowIndicator = True
+          IndicatorWidth = 56
+          OnSelectionChanged = AnyGridSelectionChanged
+        end
+      end
+      object PgData: TTyTabSheet
+        Caption = '选择 · 数据 · 剪贴板'
+        object LblDataHint: TTyLabel
+          Left = 8
+          Height = 34
+          Top = 4
+          Width = 1150
+          Caption = '拖动可框选 · **Ctrl+点**追加不相邻的块(离散多选) · Ctrl+A 全选 · 状态栏实时显示选中格数与合计 · Ctrl+C/V 与 Excel 互粘,粘贴时不够的行列会自动补上'
+        end
+        object TbData1: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 38
+          Width = 1172
+          Align = alTop
+          object LblSelMode: TTyLabel
+            Left = 8
+            Height = 20
+            Top = 10
+            Width = 62
+            Caption = '选择:'
+          end
+          object CbSelMode: TTyComboBox
+            Left = 70
+            Height = 26
+            Top = 6
+            Width = 110
+            Items.Strings = (
+              '单元格'
+              '整行'
+              '整列'
+            )
+            ItemIndex = 0
+            OnChange = CbSelModeChange
+          end
+          object BtnSelAll: TTyButton
+            Left = 188
+            Height = 26
+            Top = 6
+            Width = 84
+            Caption = '全选'
+            OnClick = BtnSelAllClick
+          end
+          object BtnSelNone: TTyButton
+            Left = 278
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '清除选择'
+            OnClick = BtnSelNoneClick
+          end
+          object BtnMerge: TTyButton
+            Left = 384
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '合并选区'
+            OnClick = BtnMergeClick
+          end
+          object BtnUnmerge: TTyButton
+            Left = 498
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '取消合并'
+            OnClick = BtnUnmergeClick
+          end
+          object BtnCopy: TTyButton
+            Left = 618
+            Height = 26
+            Top = 6
+            Width = 84
+            Caption = '复制'
+            OnClick = BtnCopyClick
+          end
+          object BtnCut: TTyButton
+            Left = 708
+            Height = 26
+            Top = 6
+            Width = 84
+            Caption = '剪切'
+            OnClick = BtnCutClick
+          end
+          object BtnPaste: TTyButton
+            Left = 798
+            Height = 26
+            Top = 6
+            Width = 84
+            Caption = '粘贴'
+            OnClick = BtnPasteClick
+          end
+          object ChkAutoGrow: TTyCheckBox
+            Left = 894
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '粘贴时自动扩表'
+            Checked = True
+            OnChange = ChkDataChange
+          end
+        end
+        object TbData2: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 78
+          Width = 1172
+          Align = alTop
+          object BtnInsRow: TTyButton
+            Left = 8
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '插入行'
+            OnClick = BtnInsRowClick
+          end
+          object BtnDelRow: TTyButton
+            Left = 110
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '删除行'
+            OnClick = BtnDelRowClick
+          end
+          object BtnRowUp: TTyButton
+            Left = 212
+            Height = 26
+            Top = 6
+            Width = 84
+            Caption = '上移'
+            OnClick = BtnRowUpClick
+          end
+          object BtnRowDown: TTyButton
+            Left = 302
+            Height = 26
+            Top = 6
+            Width = 84
+            Caption = '下移'
+            OnClick = BtnRowDownClick
+          end
+          object BtnHideRow: TTyButton
+            Left = 400
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '隐藏本行'
+            OnClick = BtnHideRowClick
+          end
+          object BtnUnhideAll: TTyButton
+            Left = 514
+            Height = 26
+            Top = 6
+            Width = 120
+            Caption = '全部取消隐藏'
+            OnClick = BtnUnhideAllClick
+          end
+          object BtnExportCsv: TTyButton
+            Left = 646
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '导出 CSV'
+            OnClick = BtnExportCsvClick
+          end
+          object BtnExportHtml: TTyButton
+            Left = 760
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '导出 HTML'
+            OnClick = BtnExportHtmlClick
+          end
+          object LblDataTip: TTyLabel
+            Left = 884
+            Height = 20
+            Top = 10
+            Width = 280
+            Caption = '上移/下移会把底色和行高一起搬走'
+          end
+        end
+        object GridData: TTyStringGrid
+          Left = 0
+          Height = 530
+          Top = 0
+          Width = 1172
+          Align = alClient
+          DefaultRowHeight = 24
+          ShowIndicator = True
+          IndicatorWidth = 56
+          OnSelectionChanged = AnyGridSelectionChanged
+        end
+      end
+      object PgEvents: TTyTabSheet
+        Caption = '事件与钩子'
+        object LblEvHint: TTyLabel
+          Left = 8
+          Height = 34
+          Top = 4
+          Width = 1150
+          Caption = '每个开关对应一个钩子 —— 勾上再去操作,状态栏会说出它介入了什么 · 「禁止点第 3 行」那条会让整行点不动(光标都不移),这是 OnCanClickCell 的克制之处'
+        end
+        object TbEv1: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 38
+          Width = 1172
+          Align = alTop
+          object ChkEvHint: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 120
+            Caption = '悬停出提示'
+            OnChange = ChkEvChange
+          end
+          object ChkEvLockRow: TTyCheckBox
+            Left = 134
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '禁止点第 3 行'
+            OnChange = ChkEvChange
+          end
+          object ChkEvRightClick: TTyCheckBox
+            Left = 272
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '右键报告位置'
+            Checked = True
+            OnChange = ChkEvChange
+          end
+          object ChkEvHeader: TTyCheckBox
+            Left = 410
+            Height = 22
+            Top = 8
+            Width = 144
+            Caption = '表头点击/右键'
+            Checked = True
+            OnChange = ChkEvChange
+          end
+          object ChkEvSize: TTyCheckBox
+            Left = 560
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '列宽/行高事件'
+            Checked = True
+            OnChange = ChkEvChange
+          end
+          object ChkEvColMove: TTyCheckBox
+            Left = 722
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '钉住第 0 列'
+            OnChange = ChkEvChange
+          end
+        end
+        object TbEv2: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 78
+          Width = 1172
+          Align = alTop
+          object ChkEvCheck: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '勾选框事件/否决'
+            Checked = True
+            OnChange = ChkEvChange
+          end
+          object ChkEvClip: TTyCheckBox
+            Left = 170
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '剪贴板钩子'
+            OnChange = ChkEvChange
+          end
+          object BtnEvFind: TTyButton
+            Left = 338
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '查找下一个'
+            OnClick = BtnEvFindClick
+          end
+          object EdEvFind: TTyEdit
+            Left = 440
+            Height = 26
+            Top = 6
+            Width = 120
+            Text = '云主机'
+          end
+          object BtnEvReplace: TTyButton
+            Left = 570
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '全部替换为'
+            OnClick = BtnEvReplaceClick
+          end
+          object EdEvRepl: TTyEdit
+            Left = 684
+            Height = 26
+            Top = 6
+            Width = 120
+            Text = '云服务器'
+          end
+          object BtnEvImportCsv: TTyButton
+            Left = 816
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '导入 CSV'
+            OnClick = BtnEvImportCsvClick
+          end
+          object LblEvTip: TTyLabel
+            Left = 934
+            Height = 20
+            Top = 10
+            Width = 230
+            Caption = '拖行高要在左侧行号槽里拖'
+          end
+        end
+        object GridEvents: TTyStringGrid
+          Left = 0
+          Height = 530
+          Top = 0
+          Width = 1172
+          Align = alClient
+          DefaultRowHeight = 24
+          ShowIndicator = True
+          IndicatorWidth = 56
+          MinColWidth = 50
+          MaxColWidth = 260
+          MinRowHeight = 20
+          MaxRowHeight = 70
+          OnSelectionChanged = AnyGridSelectionChanged
+        end
+      end
     end
   end
 end

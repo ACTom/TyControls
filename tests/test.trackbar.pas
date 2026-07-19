@@ -47,6 +47,7 @@ type
     procedure TearDown; override;
   published
     procedure TestTypeKey;
+    procedure TestShowValueDrawsTheNumberAndShortensTheTrack;
     procedure TestDragToMinAtZero;
     procedure TestDragToMaxPastEnd;
     procedure TestDragToMid;
@@ -813,6 +814,86 @@ begin
     T.Free;
   end;
 end;
+
+{ 打开 ShowValue 要真的画出数字,而且**滑轨要跟着让位**。
+
+  让位这半条才是关键:读数占掉的那一条如果只在绘制里扣、几何里没扣,
+  滑块就会画在一个地方、点在另一个地方 —— 拖到底了值却不是 Max。
+  所以这里同时断言"画出来了"和"命中算得对"。
+
+  背景:网格里 gekSlider 编辑器只有一根光秃秃的滑轨,拖到哪儿了读不出来。 }
+procedure TTyTrackBarControlTest.TestShowValueDrawsTheNumberAndShortensTheTrack;
+var
+  Ctl: TTyStyleController;
+  Bar: TTyTrackBarProbe;
+  Bmp: TBitmap;
+  Re: TBGRABitmap;
+  inkRight, inkRightOff: Integer;
+  px: TBGRAPixel;
+  thumbOn, thumbOff: TRect;
+
+  function InkInRightBand: Integer;
+  var
+    x, y: Integer;            { 嵌套过程不能用外层的循环变量 }
+  begin
+    Bmp.Canvas.Brush.Color := clWhite;
+    Bmp.Canvas.FillRect(Rect(0, 0, 200, 40));
+    Bar.RenderTo(Bmp.Canvas, Rect(0, 0, 200, 40), 96);
+    Result := 0;
+    Re := TBGRABitmap.Create(Bmp);
+    try
+      { 只数最右侧那一小条 —— 读数就画在那里。 }
+      for y := 0 to 39 do
+        for x := 170 to 199 do
+        begin
+          px := Re.GetPixel(x, y);
+          if px.red + px.green + px.blue < 330 then Inc(Result);
+        end;
+    finally
+      Re.Free;
+    end;
+  end;
+
+begin
+  Ctl := TTyStyleController.Create(nil);
+  Bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyTrackBar { background: #FFFFFF; color: #000000; border-width: 0px; }' +
+      'TyTrackThumb { background: #808080; }');
+    Bar := TTyTrackBarProbe.Create(FForm);
+    Bar.Parent := FForm;
+    Bar.Controller := Ctl;
+    Bar.Font.PixelsPerInch := 96;
+    Bar.SetBounds(0, 0, 200, 40);
+    Bar.Min := 0;
+    Bar.Max := 100;
+    Bar.Position := 100;          { 拖到底 —— 滑块该贴在**滑轨**右端,不是控件右端 }
+
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(200, 40);
+
+    inkRightOff := InkInRightBand;
+    thumbOff := Bar.ThumbRect;
+
+    Bar.ShowValue := True;
+    inkRight := InkInRightBand;
+    thumbOn := Bar.ThumbRect;
+
+    AssertTrue(Format('打开后右侧要出现数字(墨 %d -> %d)', [inkRightOff, inkRight]),
+      inkRight > inkRightOff + 10);
+    { 几何也得扣掉那一条,否则画的位置和点的位置对不上。 }
+    AssertTrue(Format('滑轨要为读数让位(滑块右缘 %d -> %d)',
+      [thumbOff.Right, thumbOn.Right]), thumbOn.Right < thumbOff.Right);
+
+    Bar.ShowValue := False;
+    AssertEquals('关掉后几何要复原', thumbOff.Right, Bar.ThumbRect.Right);
+  finally
+    Bmp.Free;
+    Ctl.Free;
+  end;
+end;
+
 
 initialization
   RegisterTest(TTyTrackBarGeometryTest);

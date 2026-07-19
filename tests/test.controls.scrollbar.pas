@@ -29,6 +29,8 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
+    procedure TestSnappedPositionKillsAPendingEase;
+    procedure TestEaseAdvancesByRealElapsedTime;
     procedure TestDragMovesPosition;
     procedure TestDragFiresOnChange;
     procedure TestDragClampsAtMax;
@@ -120,7 +122,43 @@ type
     function DisplayPos: Single;
     function AdvanceAnimation(AMs: Integer): Boolean;
     procedure SetPositionAnimating(AValue: Integer);
+    procedure SetPositionSnapped(AValue: Integer);
   end;
+
+  { 用受控时钟驱动缓动 —— 真机上定时器被饿死时每拍的真实间隔远大于名义间隔,
+    这个桩就是用来把那种情况复现出来的。 }
+  TFakeClockScroll = class(TTyScrollBar)
+  private
+    FFakeMs: Integer;
+  protected
+    function TickElapsedMs: Integer; override;
+  public
+    procedure Tick(AMs: Integer);
+    function DisplayPos: Single;
+    procedure SetPositionAnimating(AValue: Integer);
+  end;
+{ 喂受控时钟的滚动条:让"缓动按真实时间推进"这条能在无头环境下被验证。 }
+function TFakeClockScroll.TickElapsedMs: Integer;
+begin
+  Result := FFakeMs;
+end;
+
+procedure TFakeClockScroll.Tick(AMs: Integer);
+begin
+  FFakeMs := AMs;
+  HandleTimerTick;
+end;
+
+function TFakeClockScroll.DisplayPos: Single;
+begin
+  Result := inherited DisplayPos;
+end;
+
+procedure TFakeClockScroll.SetPositionAnimating(AValue: Integer);
+begin
+  inherited SetPositionAnimating(AValue);
+end;
+
 function TScrollAccess.CallMouseWheel(WheelDelta: Integer): Boolean;
 begin
   Result := DoMouseWheel([], WheelDelta, Point(0, 0));
@@ -165,6 +203,11 @@ function TScrollAccess.DisplayPos: Single;
 begin
   Result := inherited DisplayPos;
 end;
+procedure TScrollAccess.SetPositionSnapped(AValue: Integer);
+begin
+  inherited SetPositionSnapped(AValue);
+end;
+
 function TScrollAccess.AdvanceAnimation(AMs: Integer): Boolean;
 begin
   Result := inherited AdvanceAnimation(AMs);
@@ -1055,6 +1098,74 @@ begin
     Format('huge-range drag to bottom: Position must not be 0 (old overflow), got %d',
            [NewPos]),
     NewPos > 0);
+end;
+
+{ 镜像式赋值(宿主滚完之后把位置同步给滑块)**必须直接落位**。
+
+  内容已经滚过去了,滑块再缓动追上去就是"不跟手" —— 用户看到的是
+  表格内容在动、滑块慢半拍。缓动只在"用户点滑道让它跳过去"那种场景才有意义。 }
+procedure TTyScrollBarDragTest.TestSnappedPositionKillsAPendingEase;
+var
+  sb: TScrollAccess;
+begin
+  sb := TScrollAccess.Create(nil);
+  try
+    sb.Min := 0;
+    sb.Max := 100;
+    sb.Position := 0;
+
+    { 先武装一次缓动(这个测试缝绕过"有没有窗口句柄"的判断)。 }
+    sb.SetPositionAnimating(100);
+    AssertTrue('前置条件:缓动已武装,显示位置还没到终点',
+      sb.DisplayPos < 100);
+
+    { 镜像式赋值:显示位置必须**立刻**就是新值,不能还在半路。 }
+    sb.SetPositionSnapped(40);
+    AssertEquals('逻辑位置', 40, sb.Position);
+    AssertEquals('显示位置必须立刻落位,不能还在缓动', 40.0, sb.DisplayPos, 0.01);
+  finally
+    sb.Free;
+  end;
+end;
+
+{ 缓动必须按**真实经过的时间**推进,不能按"定时器名义间隔"累加。
+
+  界面忙的时候(比如网格重绘一帧要 100ms)定时器会被饿死:名义 16ms 一步的话,
+  120ms 的缓动要 7-8 次滴答才走完,而每次滴答实际隔了 100ms —— 于是缓动
+  被拉成将近 1 秒。按真实时间推进时,一次迟到的滴答会把该走的进度一次补齐。 }
+procedure TTyScrollBarDragTest.TestEaseAdvancesByRealElapsedTime;
+var
+  sb: TScrollAccess;
+  fake: TFakeClockScroll;
+begin
+  sb := TScrollAccess.Create(nil);
+  try
+    sb.Min := 0;
+    sb.Max := 100;
+    sb.Position := 0;
+    sb.SetPositionAnimating(100);
+
+    { 这里**必须走 HandleTimer**,而不是直接调 AdvanceAnimation ——
+      "按真实时间推进"这个决定就在 HandleTimer 里,绕过它测的是另一回事
+      (第一版测试正是这么写的,变异掉 HandleTimer 也照样绿)。 }
+  finally
+    sb.Free;
+  end;
+
+  fake := TFakeClockScroll.Create(nil);
+  try
+    fake.Min := 0;
+    fake.Max := 100;
+    fake.Position := 0;
+    fake.SetPositionAnimating(100);
+    AssertTrue('前置条件:缓动已武装', fake.DisplayPos < 100);
+
+    { 一拍迟到 1000ms(界面卡住的情形)→ 应当一次把缓动补齐,而不是只走 16ms。 }
+    fake.Tick(1000);
+    AssertEquals('迟到的一拍应当把缓动一次补齐', 100.0, fake.DisplayPos, 0.01);
+  finally
+    fake.Free;
+  end;
 end;
 
 initialization
