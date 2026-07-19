@@ -29,7 +29,8 @@ uses
   tyControls.ToggleSwitch, tyControls.Button, tyControls.Edit, tyControls.Panel,
   tyControls.CheckBox, tyControls.SpinEdit, tyControls.PageControl,
   tyControls.TabSheet, tyControls.Painter,
-  tyControls.Types, tyControls.ColorMath, tyControls.Dialogs.Color;
+  tyControls.Types, tyControls.ColorMath, tyControls.Dialogs, tyControls.Dialogs.Color,
+  tyControls.IconFont, tyControls.ImageCollection, BGRABitmap;
 
 type
   { 宿主自带编辑器的最小实现:用一个多行 TTyMemo 编辑「备注」。
@@ -163,6 +164,8 @@ type
     procedure EditGetCellDisplay(Sender: TObject; ACol, ARow: Integer;
       var ADisplay: TTyGridCellDisplay);
     procedure EditCellButtonClick(Sender: TObject; ACol, ARow: Integer);
+    procedure EditEllipsisClick(Sender: TObject; ACol, ARow: Integer;
+      var AText: string; var AAccept: Boolean);
     procedure EditCreateEditLink(Sender: TObject; ACol, ARow: Integer;
       var ALink: TTyGridEditLink);
 
@@ -216,8 +219,11 @@ type
   private
     FNoteLink: TNoteEditLink;
     FSizingCount, FPasteCount: Integer;
-    procedure BuildOrderColumns(AGrid: TTyStringGrid; AWithNote: Boolean);
-    procedure FillOrders(AGrid: TTyStringGrid; ACount: Integer; AWithNote: Boolean);
+    function  ColorSelectedCells(AColor: TTyColor): Integer;
+    procedure BuildOrderColumns(AGrid: TTyStringGrid; AWithNote: Boolean;
+      AWithEditorCols: Boolean = False);
+    procedure FillOrders(AGrid: TTyStringGrid; ACount: Integer; AWithNote: Boolean;
+      AWithEditorCols: Boolean = False);
     procedure SetupBasic;
     procedure SetupLook;
     procedure SetupSort;
@@ -255,6 +261,9 @@ const
   { 列索引 —— 用常量而不是散落的魔数,否则加一列就要满文件找 3、4、7。 }
   cOrderNo = 0; cRegion = 1; cProduct = 2; cQty = 3; cAmount = 4;
   cDate = 5;    cDone = 6;   cRate = 7;    cMark = 8; cNote = 9;
+  { 只有「编辑与单元格类型」那一页才建的额外列 —— 每一列专门演示一种内建编辑器,
+    否则 16 种编辑器里有好几种在示例里根本露不了面。 }
+  cDiscount = 10; cProgress = 11; cETA = 12; cPin = 13;
 
 { ============ 宿主自定义编辑器 ============ }
 
@@ -296,7 +305,8 @@ end;
 
 { ============ 公共:建列与灌数据 ============ }
 
-procedure TMainForm.BuildOrderColumns(AGrid: TTyStringGrid; AWithNote: Boolean);
+procedure TMainForm.BuildOrderColumns(AGrid: TTyStringGrid; AWithNote: Boolean;
+  AWithEditorCols: Boolean);
 
   function AddCol(const ACaption: string; AWidth: Integer;
     AAlign: TAlignment): TTyGridColumn;
@@ -321,13 +331,20 @@ begin
     AddCol('评分',    86, taLeftJustify);
     AddCol('标记色',  76, taCenter);
     if AWithNote then AddCol('备注', 300, taLeftJustify);
+    if AWithEditorCols then
+    begin
+      AddCol('折扣%', 70, taRightJustify).SortKind := gskNumber;
+      AddCol('进度%', 96, taLeftJustify).SortKind := gskNumber;
+      AddCol('交期',   80, taCenter);
+      AddCol('口令',   90, taLeftJustify);
+    end;
   finally
     AGrid.Header.Columns.EndUpdate;
   end;
 end;
 
 procedure TMainForm.FillOrders(AGrid: TTyStringGrid; ACount: Integer;
-  AWithNote: Boolean);
+  AWithNote: Boolean; AWithEditorCols: Boolean);
 var
   r, qty: Integer;
   amount: Double;
@@ -353,6 +370,13 @@ begin
     AGrid.Cells[cRate, r] := IntToStr(1 + r mod 5);
     AGrid.Cells[cMark, r] := cMarkColors[r mod Length(cMarkColors)];
     if AWithNote then AGrid.Cells[cNote, r] := cNotes[r mod Length(cNotes)];
+    if AWithEditorCols then
+    begin
+      AGrid.Cells[cDiscount, r] := IntToStr(r mod 30);
+      AGrid.Cells[cProgress, r] := IntToStr((r * 13) mod 101);
+      AGrid.Cells[cETA,      r] := Format('%.2d:%.2d', [8 + r mod 10, (r * 7) mod 60]);
+      AGrid.Cells[cPin,      r] := 'pw' + IntToStr(1000 + r);
+    end;
   end;
 end;
 
@@ -479,17 +503,48 @@ begin
   else GridBasic.FixedCols := 0;
   if ChkFixedRow.Checked then GridBasic.FixedRows := 1
   else GridBasic.FixedRows := 0;
+  { 「行号槽」= 那条槽 + 槽里的数字。两件事在控件上是分开的两个属性:
+    ShowIndicator 只铺出那条槽,不打开 ShowRowNumbers 的话它是一条空白带。 }
   GridBasic.ShowIndicator := ChkIndicator.Checked;
+  GridBasic.ShowRowNumbers := ChkIndicator.Checked;
   GridBasic.ShowFooter := ChkFooter.Checked;
 end;
 
 { ============ 页 2:外观 ============ }
 
 procedure TMainForm.SetupLook;
+var
+  icf: TTyIconFont;
+  coll: TTyImageCollection;
+  imgs: TTyVirtualImageList;
+  b: TBGRABitmap;
 begin
   BuildOrderColumns(GridLook, True);
   FillOrders(GridLook, 60, True);
   GridLook.OnGetCellWordWrap := @LookGetCellWordWrap;
+
+  { 列头图标要有**图标来源**才画得出来 —— 列上的 ImageIndex 只是"用第几个",
+    网格的 Images 为 nil 时它是天然无效的(勾了没反应就是这么来的)。
+    这里从图标字体渲一个符号进图像集合,再挂成虚拟图像列表。 }
+  icf := TTyIconFont.Create(Self);
+  icf.FontFamily := 'Segoe UI Symbol';
+  coll := TTyImageCollection.Create(Self);
+  imgs := TTyVirtualImageList.Create(Self);
+  imgs.Collection := coll;
+  icf.MapGlyph('money', $00A5);                 { ¥ }
+  b := icf.RenderGlyph('money', 32, TyRGB(180, 83, 9));
+  try
+    coll.AddBitmap('money', b);
+  finally
+    b.Free;
+  end;
+  imgs.Names.Add('money');
+  GridLook.Images := imgs;
+
+  { 行号槽只铺底不画号 —— 得显式打开。两件事是分开的:
+    ShowIndicator 是那条槽,ShowRowNumbers 才是槽里的数字。 }
+  GridLook.ShowIndicator := True;
+  GridLook.ShowRowNumbers := True;
 end;
 
 procedure TMainForm.ChkLookChange(Sender: TObject);
@@ -532,23 +587,40 @@ begin
   GridLook.GridLineWidth := SpLineWidth.Value;
 end;
 
+{ 对**整个选区**生效 —— 选了多格却只染一格,是把用户的选择丢掉了。
+  遍历走显示序、寻址用数据行:排序/筛选之后颜色仍跟着那一行数据走。 }
+function TMainForm.ColorSelectedCells(AColor: TTyColor): Integer;
+var
+  pos, dataRow, colIdx: Integer;
+begin
+  Result := 0;
+  for pos := 0 to GridLook.DisplayRowCount - 1 do
+  begin
+    dataRow := GridLook.DisplayToData(pos);
+    if dataRow < 0 then Continue;            { 分组行,不是数据行 }
+    for colIdx := 0 to GridLook.Header.Columns.Count - 1 do
+      if GridLook.IsCellSelected(colIdx, dataRow) then
+      begin
+        GridLook.CellColors[colIdx, dataRow] := AColor;
+        Inc(Result);
+      end;
+  end;
+  GridLook.Invalidate;
+end;
+
 procedure TMainForm.BtnCellColorClick(Sender: TObject);
 var
   c: TTyColor;
 begin
   c := TyRGB(255, 236, 179);
-  if TySelectColor('给这一格选个底色', c) then
-  begin
-    GridLook.CellColors[GridLook.Col, GridLook.Row] := c;
-    Status(Format('(列 %d, 行 %d) 已上色 —— 这是**落盘**的颜色,排序后跟着数据行走',
-      [GridLook.Col, GridLook.Row]));
-  end;
+  if TySelectColor('给选中的格选个底色', c) then
+    Status(Format('%d 格已上色 —— 这是**落盘**的颜色,排序后跟着数据行走',
+      [ColorSelectedCells(c)]));
 end;
 
 procedure TMainForm.BtnCellUncolorClick(Sender: TObject);
 begin
-  GridLook.CellColors[GridLook.Col, GridLook.Row] := 0;
-  Status('已清除本格底色');
+  Status(Format('已清除 %d 格的底色', [ColorSelectedCells(0)]));
 end;
 
 procedure TMainForm.BtnRowColorClick(Sender: TObject);
@@ -743,8 +815,8 @@ procedure TMainForm.SetupEdit;
 var
   c: TTyGridColumn;
 begin
-  BuildOrderColumns(GridEdit, True);
-  FillOrders(GridEdit, 40, True);
+  BuildOrderColumns(GridEdit, True, True);
+  FillOrders(GridEdit, 40, True, True);
 
   { ---- 全部在**列上**声明,一个事件都没接 ---- }
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cOrderNo]);
@@ -758,9 +830,6 @@ begin
   c.EditorKind := gekSpin;                  { 数值微调:带上下按钮 }
   c.MinValue := 0;
   c.MaxValue := 200;
-
-  c := TTyGridColumn(GridEdit.Header.Columns.Items[cAmount]);
-  c.EditorKind := gekNumeric;
 
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cDate]);
   c.EditorKind := gekDate;                  { 日期选择器 }
@@ -782,11 +851,34 @@ begin
   c.EditorKind := gekMask;
   c.EditMask := 'CC-99999999';
 
-  { 金额用滑动条演示区间输入。 }
+  { 金额:带计算器的数值 —— 金额本来就常要现算一下。
+    (从前这里写的是滑动条,而且同一列的 EditorKind 被赋了两遍、前一句是死代码:
+     金额是 '%.2f' 文本,滑动条按整数解析,拖出来永远是 0。) }
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cAmount]);
+  c.EditorKind := gekCalculator;
+
+  { 产品:省略号按钮 —— 点右边的 … 弹自己的对话框,这是"自定义编辑"的入口。 }
+  c := TTyGridColumn(GridEdit.Header.Columns.Items[cProduct]);
+  c.EditorKind := gekEllipsis;
+
+  { 折扣:朴素数值输入。 }
+  c := TTyGridColumn(GridEdit.Header.Columns.Items[cDiscount]);
+  c.EditorKind := gekNumeric;
+
+  { 进度:滑动条 —— 整数、有明确区间,滑块本来就该用在这种列上。
+    编辑时滑块自带数值读数,拖到哪儿一眼看得见。 }
+  c := TTyGridColumn(GridEdit.Header.Columns.Items[cProgress]);
   c.EditorKind := gekSlider;
   c.MinValue := 0;
-  c.MaxValue := 5000;
+  c.MaxValue := 100;
+
+  { 交期:只选时间。 }
+  c := TTyGridColumn(GridEdit.Header.Columns.Items[cETA]);
+  c.EditorKind := gekTime;
+
+  { 口令:输入时打点。 }
+  c := TTyGridColumn(GridEdit.Header.Columns.Items[cPin]);
+  c.EditorKind := gekPassword;
 
   { 备注多行编辑。 }
   c := TTyGridColumn(GridEdit.Header.Columns.Items[cNote]);
@@ -795,6 +887,9 @@ begin
   { 「评分」显示成星标、「备注」当按钮列用 —— 显示方式与编辑方式是正交的。 }
   GridEdit.OnGetCellDisplay := @EditGetCellDisplay;
   GridEdit.OnCellButtonClick := @EditCellButtonClick;
+  { 省略号按钮:格子右缘那个 … 。挂上它,宿主爱弹什么对话框弹什么 ——
+    这是"网格答不上来的编辑需求"的一等公民入口(比自写 EditLink 轻得多)。 }
+  GridEdit.OnEllipsisClick := @EditEllipsisClick;
 end;
 
 { 「评分」画星标,「备注」那一列改画成按钮(标题就是格内容)。 }
@@ -805,6 +900,18 @@ begin
   else if ACol = cMark then ADisplay := gcdColor    { 画色块,不是把 '#RRGGBB' 显示出来 }
   else if ACol = cNote then ADisplay := gcdButton
   else ADisplay := gcdText;
+end;
+
+{ 省略号按钮被点。改不改、改成什么,全由宿主说了算。 }
+procedure TMainForm.EditEllipsisClick(Sender: TObject; ACol, ARow: Integer;
+  var AText: string; var AAccept: Boolean);
+var
+  v: string;
+begin
+  v := AText;
+  AAccept := TyInputQuery('选择产品',
+    Format('第 %d 行的产品(可用:%s)', [ARow + 1, string.Join('/', cProducts)]), v);
+  if AAccept then AText := v;
 end;
 
 procedure TMainForm.EditCellButtonClick(Sender: TObject; ACol, ARow: Integer);
