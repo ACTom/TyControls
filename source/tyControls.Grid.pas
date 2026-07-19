@@ -1065,6 +1065,9 @@ type
     FFilterAllValues: TStringList;
     FFilterChecked:   TStringList;
     FFilterAccepted:  Boolean;    { 点了确定才提交;取消/点空白处丢弃 }
+    { Shift 扩选期间置位:此时 MoveCursor **不**重锚,选区才拉得长。
+      默认(不置位)是重锚 —— 见 MoveCursor 里的说明。 }
+    FExtendingSelection: Boolean;
     FShowFilterButtons: Boolean;
     FShowGroupSubtotals: Boolean;
     FSelectionMode: TTyGridSelectionMode;
@@ -4582,6 +4585,16 @@ begin
 
   FCol := ACol;
   FRow := ARow;
+
+  { **光标一动,选区锚点就跟着走** —— 除非正在 Shift 扩选。
+
+    从前重锚这件事散落在 MouseDown / KeyDown / FindAndSelect / ClearSelection
+    四个调用点上各写一遍,MoveCursor 自己不管。于是任何**没走这四条路**的移动
+    (上移/下移、跳转、直接赋 Row/Col)都留下一个陈旧锚点,选区从旧位置一路
+    拉到新位置 —— 用户看到的是"上移一下,莫名多选了一格"。
+    收口在这里之后,漏掉是不可能的:要拉长必须显式声明在扩选。 }
+  if not FExtendingSelection then AnchorSelection;
+
   ScrollIntoView(FCol, FRow);   { 光标走到哪,视口跟到哪 }
   Invalidate;
 end;
@@ -4677,8 +4690,12 @@ begin
     else if not (ssShift in Shift) then
       SetLength(FSelRects, 0);
 
-    MoveCursor(hit.Col, hit.Row);
-    if not (ssShift in Shift) then AnchorSelection;
+    FExtendingSelection := ssShift in Shift;
+    try
+      MoveCursor(hit.Col, hit.Row);
+    finally
+      FExtendingSelection := False;
+    end;
     SelectionChanged;
     { 勾选框:点在方块上就切换。命中用的是绘制同一个槽,所以点哪切哪。 }
     if (EditorKindFor(hit.Col, hit.Row) = gekCheckBox)
@@ -4804,6 +4821,11 @@ begin
   Key := #0;
 end;
 
+{ 按住 Shift 的导航键是**扩选**:锚点不动,选区从锚点拉到新光标。
+  其余情况一律由 MoveCursor 自己重锚(选区退化成一格)——
+  从前这里在末尾补一句 AnchorSelection,而它只覆盖导航键这一小撮;
+  程序化移动光标压根走不到这儿,锚点就陈旧了。收口到 MoveCursor 之后,
+  这里只需要声明"这一次是扩选"。 }
 procedure TTyStringGrid.KeyDown(var Key: Word; Shift: TShiftState);
 var
   navKey: Word;
@@ -4812,6 +4834,13 @@ begin
   navKey := Key;
   inherited KeyDown(Key, Shift);
   if not Enabled then Exit;
+
+  { 只有**导航键 + Shift** 才算扩选。Ctrl+A / Ctrl+C / Ctrl+V 都不该动锚点
+    (Ctrl+A 尤其:从前末尾那句无差别的 AnchorSelection 会把刚拉满的选区
+     立刻收回成一格,全选看上去完全没反应)。 }
+  FExtendingSelection := (ssShift in Shift) and (navKey in [VK_LEFT, VK_RIGHT,
+    VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT]);
+  try
 
   case Key of
     VK_LEFT:  begin MoveCursor(FCol - 1, FRow); Key := 0; end;
@@ -4861,14 +4890,10 @@ begin
                 Key := 0;
               end;
   end;
-  { 普通**导航键**把锚点收到新位置(选区退化成一格);按住 Shift 则保留锚点,拉出区域。
 
-    只对导航键做这件事。从前是"只要这一键被消费掉就收锚点",于是 Ctrl+A
-    刚把选区拉满、立刻又被这句收回成一格 —— 全选表面上完全没反应。
-    Ctrl+C/V 同理不该动选区。 }
-  if (Key = 0) and not (ssShift in Shift) and (navKey in [VK_LEFT, VK_RIGHT,
-     VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT]) then
-    AnchorSelection;
+  finally
+    FExtendingSelection := False;
+  end;
 end;
 
 
@@ -5671,15 +5696,21 @@ begin
   inherited MouseMove(Shift, X, Y);
   if not Enabled then Exit;
 
-  { 按住左键在格上移动 = 拖选。只挪光标、**不动锚点**,
+  { 按住左键在格上移动 = 拖选,这是**扩选**手势:只挪光标、不动锚点,
     活动矩形因此从按下那一格一直拉到这里。
+    (MoveCursor 默认会重锚 —— 见它那里的说明 —— 所以这里要显式声明在扩选。)
     放在 hint 那段之前:拖选期间不该再弹提示。 }
   if ssLeft in Shift then
   begin
     hit := CellAt(X, Y);
     if (hit.Part = ghpCell) and ((hit.Col <> FCol) or (hit.Row <> FRow)) then
     begin
-      MoveCursor(hit.Col, hit.Row);
+      FExtendingSelection := True;
+      try
+        MoveCursor(hit.Col, hit.Row);
+      finally
+        FExtendingSelection := False;
+      end;
       SelectionChanged;
     end;
     Exit;

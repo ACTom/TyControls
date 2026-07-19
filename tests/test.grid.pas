@@ -188,6 +188,7 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestProgrammaticCursorMoveDoesNotStretchSelection;
     procedure TestBulkFillStaysLinear;
     procedure TestBeginUpdateCollapsesRepaints;
     procedure TestFixedRowsRenderTheirContent;
@@ -1939,16 +1940,19 @@ begin
   G.Cells[0, 1] := 'a1'; G.Cells[1, 1] := 'a2';
   G.Cells[0, 2] := 'b1'; G.Cells[1, 2] := 'b2';
 
-  G.Col := 0; G.Row := 0; G.AnchorSelection;
-  G.Col := 1; G.Row := 2;               // 选中 2 列 x 3 行
+  { 用选区 API 建选区,而不是"赋 Col/Row 让它自己拉长" ——
+    程序化移动光标现在会重锚(否则上移/下移一下就莫名多选一格),
+    那条路已经不再是建选区的方式了。 }
+  G.SelectRange(0, 0, 1, 2);            // 选中 2 列 x 3 行
   txt := G.SelectionAsText;
   AssertTrue('含制表符分隔', Pos('c1' + #9 + 'c2', txt) > 0);
   AssertTrue('含第三行', Pos('b1' + #9 + 'b2', txt) > 0);
 
   // 排序后再导出 —— 顺序必须跟着显示走,而不是数据行号。
   G.SortByColumn(0, sdAscending);       // a1, b1, c1
-  G.Col := 0; G.Row := 1; G.AnchorSelection;   // 数据行 1 = a1,现在显示在第 0 位
-  G.Col := 1; G.Row := 0;                      // 数据行 0 = c1,显示在第 2 位
+  { 同上:走选区 API。数据行 1 = a1(排序后显示在第 0 位),
+    数据行 0 = c1(显示在第 2 位)—— 选区按**数据行**给,导出按**显示序**出。 }
+  G.SelectRange(0, 1, 1, 0);
   txt := G.SelectionAsText;
   AssertTrue('导出以 a1 开头(显示序首行)', Pos('a1', txt) < Pos('c1', txt));
 end;
@@ -6837,6 +6841,48 @@ begin
   AssertEquals('内层 EndUpdate 不该触发重画', 0, G.RealInvalidateCount - before);
   G.EndUpdate;
   AssertEquals('外层 EndUpdate 才重画', 1, G.RealInvalidateCount - before);
+end;
+
+{ 程序化移动光标**不该把选区拉长**。
+
+  用户报的现象:点「上移」之后,原来选中的那一格和被换上来的那一行的对应格
+  一起变成选中。原因是选区矩形 = 锚点..光标,而重锚这件事散落在
+  MouseDown / KeyDown / FindAndSelect / ClearSelection 四个调用点上各写一遍 ——
+  MoveCursor 自己不管。于是任何**没走这四条路**的移动(上移/下移、跳转、
+  直接赋 Row/Col)都会留下一个陈旧锚点,选区就从旧位置一路拉到新位置。
+
+  同时守住 Shift 扩选:那才是**应该**拉长的唯一情形,别把它一起修没了。 }
+procedure TTyStringGridTest.TestProgrammaticCursorMoveDoesNotStretchSelection;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+
+  { 一、单点选中一格,然后程序化移动光标 —— 仍应只有一格被选中。 }
+  G.MoveCursor(1, 2);
+  G.ClearSelection;
+  AssertEquals('前置条件:只选中一格', 1, G.SelectedCellCount);
+
+  G.MoveCursor(1, 3);
+  AssertEquals('程序化移动光标后仍只选中一格', 1, G.SelectedCellCount);
+
+  { 二、Row / Col 属性赋值走的是同一条路。 }
+  G.Row := 6;
+  AssertEquals('赋 Row 之后仍只选中一格', 1, G.SelectedCellCount);
+  G.Col := 3;
+  AssertEquals('赋 Col 之后仍只选中一格', 1, G.SelectedCellCount);
+
+  { 三、Shift 扩选必须**照样**能拉长 —— 这才是选区该变大的唯一情形。 }
+  G.MoveCursor(1, 2);
+  G.ClearSelection;
+  G.PressKeyShift(VK_DOWN);
+  G.PressKeyShift(VK_DOWN);
+  AssertEquals('Shift+方向键仍要扩选', 3, G.SelectedCellCount);
+
+  { 四、不按 Shift 的方向键则是移动,不是扩选。 }
+  G.PressKey(VK_DOWN);
+  AssertEquals('不按 Shift 的方向键只移动光标', 1, G.SelectedCellCount);
 end;
 
 initialization
