@@ -1173,6 +1173,10 @@ type
       默认(不置位)是重锚 —— 见 MoveCursor 里的说明。 }
     FExtendingSelection: Boolean;
     { 正在拖填充柄;FFillToRow/Col 是当前拖到的格。 }
+    { 这次编辑**实际打开**的是哪一种编辑器。
+      关编辑时按它分派 —— 不能从"哪个控件可见"反推:日期与时间共用一个控件,
+      可见性根本区分不出它们(时间格因此被当日期提交,写坏了数据)。 }
+    FEditKind: TTyGridEditorKind;
     FFillDragging: Boolean;
     FFillToCol, FFillToRow: Integer;
     FOnFillCells: TTyGridFillEvent;
@@ -1251,6 +1255,7 @@ type
     function  AnyAncestorCollapsed(const AOpen: array of Integer;
       ALevel: Integer): Boolean;
     function  GetGroupCol: Integer;
+    function  IsGroupColumn(ACol: Integer): Boolean;
     function  RowPassesFilter(ARow: Integer): Boolean;
     procedure EnsureOrder;
     procedure ResetOrder;
@@ -8176,6 +8181,16 @@ begin
   end;
 end;
 
+{ 这一列是不是某一级的分组列。去重要按"属于分组列集合"判,
+  而不是"等于最外层那个" —— 后者正是上一版漏掉内层的原因。 }
+function TTyStringGrid.IsGroupColumn(ACol: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(FGroupCols) do
+    if FGroupCols[i] = ACol then Exit(True);
+end;
+
 function TTyStringGrid.GetGroupCol: Integer;
 begin
   if Length(FGroupCols) = 0 then Result := -1 else Result := FGroupCols[0];
@@ -9041,16 +9056,20 @@ begin
     但它只是"临时插在前面",绝不写回 FSortKeys:从前 BuildGroups 直接
     `FSortCol := FGroupCol`,一分组就把用户选的排序列**永久**抹掉了。 }
   SetLength(Result, 0);
-  if GetGroupCol >= 0 then
+  { **每一个**分组列都要按序排在最前面,不能只排最外层。
+    BuildGroups 完全靠相邻性切段(见它自己的注释),只排第一列的话第二级的键
+    不连续 —— 同一个子组标题会在列表里反复出现,还各带一份错的计数与小计。
+    (上一版只 prepend 了 FGroupCols[0];测试数据恰好本来就聚簇,于是全绿。) }
+  SetLength(Result, Length(FGroupCols));
+  for i := 0 to High(FGroupCols) do
   begin
-    SetLength(Result, 1);
-    Result[0].Col := GetGroupCol;
-    Result[0].Dir := FSortDir;
+    Result[i].Col := FGroupCols[i];
+    Result[i].Dir := FSortDir;
   end;
   for i := 0 to High(FSortKeys) do
   begin
     if FSortKeys[i].Col < 0 then Continue;
-    if (GetGroupCol >= 0) and (FSortKeys[i].Col = GetGroupCol) then Continue;
+    if IsGroupColumn(FSortKeys[i].Col) then Continue;
     n := Length(Result);
     SetLength(Result, n + 1);
     Result[n] := FSortKeys[i];
@@ -9495,6 +9514,7 @@ begin
 
   FEditCol := FCol;
   FEditRow := FRow;
+  FEditKind := EditorKindFor(FCol, FRow);
 
   { 先问宿主要不要用自己的编辑器。给了就整格交给它,内建那几种一概不出场。 }
   FEditLink := nil;
@@ -9525,6 +9545,10 @@ begin
   if EditorKindFor(FCol, FRow) = gekDate then
   begin
     FDateEditor.Controller := Self.Controller;
+    { 共享控件:每次都要显式设回去,否则编辑过一次时间格之后,
+      日期列会永远弹出时间选择器(dtkDate 从前全文件一次都没被赋过)。
+      与 PasswordChar 那处是同一条教训。 }
+    FDateEditor.Kind := dtkDate;
     FDateEditor.Date := StrToDateDef(Cells[FCol, FRow], SysUtils.Date);
     FDateEditor.BoundsRect := r;
     FDateEditor.Visible := True;
@@ -9663,10 +9687,11 @@ procedure TTyStringGrid.EndEdit(ACommit: Boolean);
 var
   oldTxt, newTxt: string;
   accept: Boolean;
-  usePick, useDate, useLink, useSpin, useSlider, useMemo, useMask, useCalc: Boolean;
+  usePick, useDate, useTime, useLink, useSpin, useSlider, useMemo, useMask, useCalc: Boolean;
   linkTxt: string;
 begin
   usePick := False;
+  useTime := False;
   useDate := False;
   useSpin := False;
   useSlider := False;
@@ -9723,7 +9748,10 @@ begin
     if FDateEditor.Visible then
     begin
       FDateEditor.Visible := False;
-      useDate := True;
+      { 日期与时间**共用同一个控件**,所以可见性分不出是哪一种 ——
+        必须看开编辑时记下的种类。从前一律当日期提交,于是时间格被写成
+        DateToStr(只有小数部分的 TDateTime) = 1899-12-30,用户输入的时间直接丢失。 }
+      if FEditKind = gekTime then useTime := True else useDate := True;
     end;
     FEditor.Visible := False;
     if ACommit then
@@ -9741,6 +9769,11 @@ begin
         newTxt := FMaskEditor.Text
       else if useCalc then
         newTxt := FCalcEditor.Text
+      else if useTime then
+        { 用 hh:nn 而不是 TimeToStr —— 后者会补出秒,把用户原样的 '13:45'
+          改写成 '13:45:00'。用户没改值就不该重写它(EndEdit 只比文本,
+          格式一变就会当成"改过了"而落盘)。 }
+        newTxt := FormatDateTime('hh:nn', FDateEditor.DateTime)
       else if useDate then
         newTxt := DateToStr(FDateEditor.Date)
       else if usePick then

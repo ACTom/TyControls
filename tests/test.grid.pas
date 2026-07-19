@@ -198,6 +198,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestMultiLevelGroupingOnUnclusteredData;
+    procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
     procedure TestLayoutRoundTripsAndSurvivesGarbage;
     procedure TestPhysicalSortMovesDataAndUnlocksMergeAndDrag;
@@ -7550,6 +7552,64 @@ begin
   { 折叠上一级会把整棵子树都收起来。 }
   G.UngroupRows;
   AssertEquals('取消分组后显示序回到纯数据行', 6, G.DisplayRowCount);
+end;
+
+{ 多级分组必须按**所有**分组列排序,否则第二级的键不连续,同一个子组标题会
+  反复出现。上一版只 prepend 了第一个分组列 —— 而测试数据恰好本来就是聚簇的,
+  所以全绿。这条测试的关键是**数据故意打乱**。 }
+procedure TTyStringGridTest.TestMultiLevelGroupingOnUnclusteredData;
+var
+  G: TStrGridAccess;
+  i, lvl1: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  { 同一个 (地区,城市) 组合被拆散在表的两头 —— 真实数据就长这样。 }
+  G.Cells[0, 0] := '华东'; G.Cells[1, 0] := '上海';
+  G.Cells[0, 1] := '华东'; G.Cells[1, 1] := '杭州';
+  G.Cells[0, 2] := '华东'; G.Cells[1, 2] := '上海';
+  G.Cells[0, 3] := '华北'; G.Cells[1, 3] := '北京';
+  G.Cells[0, 4] := '华北'; G.Cells[1, 4] := '天津';
+  G.Cells[0, 5] := '华北'; G.Cells[1, 5] := '北京';
+
+  G.GroupByColumns([0, 1]);
+
+  { 两个地区 x 两个城市 = 4 个二级组。若只按第一级排序,上海/杭州/上海 不相邻,
+    会切出 5 个甚至更多。 }
+  lvl1 := 0;
+  for i := 0 to G.GroupCount - 1 do
+    if G.GroupInfo(i).Level = 1 then Inc(lvl1);
+  AssertEquals('打乱的数据也必须切出 4 个二级组', 4, lvl1);
+end;
+
+{ 时间编辑器提交的必须是**时间**。
+  开编辑按种类分派、关编辑却按控件可见性分派,而日期与时间**共用一个控件** ——
+  于是时间格提交时走了日期分支,写进去的是 DateToStr(小数部分) = 1899-12-30。 }
+procedure TTyStringGridTest.TestTimeEditorCommitsATimeNotADate;
+var
+  G: TStrGridAccess;
+  c: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  c := TTyGridColumn(G.Header.Columns.Items[0]);
+  c.EditorKind := gekTime;
+  G.Cells[0, 1] := '13:45';
+
+  G.BeginEditAt(0, 1);
+  G.EndEdit(True);                     { 原样提交,不改值 }
+  AssertEquals('时间格提交之后不该变成日期', '13:45', G.Cells[0, 1]);
+
+  { 编辑过时间格之后,日期列必须还是日期选择器 —— 共享控件不能留着上一格的模式。 }
+  c := TTyGridColumn(G.Header.Columns.Items[1]);
+  c.EditorKind := gekDate;
+  { 用**本地**日期格式写入 —— 日期编辑器按本地格式解析与回写,
+    这里要测的是"没被上一次的时间模式带偏",不是本地化解析,别把两件事混在一起。 }
+  G.Cells[1, 1] := DateToStr(EncodeDate(2026, 3, 4));
+  G.BeginEditAt(1, 1);
+  G.EndEdit(True);
+  AssertEquals('日期格不该被上一次的时间模式带偏',
+    DateToStr(EncodeDate(2026, 3, 4)), G.Cells[1, 1]);
 end;
 
 initialization
