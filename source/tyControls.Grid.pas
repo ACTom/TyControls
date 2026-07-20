@@ -1462,6 +1462,13 @@ type
       为两张表建一套注册框架,读起来比它替掉的重复更难。
       增删行是另一类(行数会变),收口在 ShiftRowKeyedTable —— 加表时那里也要加。 }
     procedure PermuteRowState(const AMap: array of Integer);
+    { 上一个的**增删版**:行数会变,所以不是置换而是平移。
+      从 AFromIndex 起整体挪 ADelta;ADelta < 0 时正落在 AFromIndex 上的那条丢弃。
+
+      为什么不直接用 `ShiftRowKeyedTable` 重建两张表:那样绕过了
+      `SetRowHeights` / `SetRowHidden` 两个记录点 —— 撤销一次增/删行之后,
+      文字回来了而行高和隐藏标记**永久错位一格**,被删那一条更是无处可还。 }
+    procedure ShiftRowStateWithUndo(AFromIndex, ADelta: Integer);
     { 汇总缓存整体失效。三处汇过来:数据改(SetCells)、显示序变(InvalidateOrder,
       筛选/隐藏/分组/行数都归它)、换聚合口径(SetColumnAggregate)。 }
     procedure InvalidateAggregates;
@@ -4992,6 +4999,69 @@ begin
   end;
 end;
 
+procedure TTyStringGrid.ShiftRowStateWithUndo(AFromIndex, ADelta: Integer);
+var
+  heights: array of record R, H: Integer; end;
+  hidden: array of Integer;
+  i, n, dst, hi: Integer;
+
+  { 平移后的新下标;-1 = 这一条随着被删的行一起没了。 }
+  function Shifted(ARow: Integer): Integer;
+  begin
+    Result := ARow;
+    if ARow < AFromIndex then Exit;
+    if (ADelta < 0) and (ARow = AFromIndex) then Exit(-1);
+    Inc(Result, ADelta);
+    if Result < 0 then Result := -1;
+  end;
+
+begin
+  if ADelta = 0 then Exit;
+
+  { 先全部快照再动手 —— 边搬边写会覆盖尚未搬走的条目。
+    上界取**旧的** RowCount 那一段:ShiftCells 跑在 RowCount 改变之前。 }
+  hi := RowCount;
+  if ADelta < 0 then Inc(hi, -ADelta);      { 删除时旧表可能还有更靠后的条目 }
+
+  SetLength(heights, 0);
+  n := 0;
+  for i := 0 to hi do
+    if GetRowHeights(i) > 0 then
+    begin
+      SetLength(heights, n + 1);
+      heights[n].R := i;
+      heights[n].H := GetRowHeights(i);
+      Inc(n);
+    end;
+
+  SetLength(hidden, 0);
+  n := 0;
+  for i := 0 to hi do
+    if IsHiddenRow(i) then
+    begin
+      SetLength(hidden, n + 1);
+      hidden[n] := i;
+      Inc(n);
+    end;
+
+  { 清掉再按新位置写回 —— 两趟都走记录点。 }
+  for i := 0 to High(heights) do
+    SetRowHeights(heights[i].R, 0);
+  for i := 0 to High(heights) do
+  begin
+    dst := Shifted(heights[i].R);
+    if dst >= 0 then SetRowHeights(dst, heights[i].H);
+  end;
+
+  for i := 0 to High(hidden) do
+    SetRowHidden(hidden[i], False);
+  for i := 0 to High(hidden) do
+  begin
+    dst := Shifted(hidden[i]);
+    if dst >= 0 then SetRowHidden(dst, True);
+  end;
+end;
+
 function TTyStringGrid.SnapshotAttr(const AKey: string): TTyGridAttrSnapshot;
 var
   a: TTyGridCellAttr;
@@ -5059,7 +5129,10 @@ var
   e: TTyGridUndoEntry;
   k: string;
 begin
-  if (ARow < 0) or (ARow >= RowCount) then Exit;
+  { 只挡负数。**不挡上界** —— 增删行时这里会短暂地写到"即将存在"的那一行
+    (ShiftCells 跑在 RowCount 改变之前),按当时的 RowCount 挡掉的话
+    标记就丢了。公开入口 HideRow 自己有边界检查。 }
+  if ARow < 0 then Exit;
   k := IntToStr(ARow);
   i := FHiddenRows.IndexOf(k);
   if (i >= 0) = AHidden then Exit;      { 已经是这个状态 —— 不是一次改动 }
@@ -5792,6 +5865,7 @@ end;
 
 procedure TTyStringGrid.HideRow(ARow: Integer);
 begin
+  if (ARow < 0) or (ARow >= RowCount) then Exit;   { 公开入口的边界 }
   SetRowHidden(ARow, True);      { 记录点在那儿 }
   InvalidateOrder;
   UpdateScrollBars;
@@ -7476,8 +7550,7 @@ begin
     隐藏标记同理,原来藏着的行冒出来、另一行凭空消失 —— 用户会读成"又多/少一行"。 }
   if ARows then
   begin
-    ShiftRowKeyedTable(FRowHeights, AFromIndex, ADelta);
-    ShiftRowKeyedTable(FHiddenRows, AFromIndex, ADelta);
+    ShiftRowStateWithUndo(AFromIndex, ADelta);
     InvalidateOrder;
   end
   else

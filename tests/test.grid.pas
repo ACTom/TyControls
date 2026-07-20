@@ -218,6 +218,7 @@ type
     procedure TestColouringASelectionIsOneUndoStep;
     procedure TestAutoFitRowsIsOneUndoStep;
     procedure TestColumnKeyedTablesFollowInsertAndDelete;
+    procedure TestUndoingRowInsertRestoresHeightsAndHiddenFlags;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8406,6 +8407,45 @@ begin
     否则表会按一个已经不存在的列筛,结果是一行都不剩。 }
   G.DeleteColumn(3);
   AssertEquals('被筛选的列删掉之后,筛选也要跟着没', 10, G.DisplayRowCount);
+end;
+
+{ 增删行走的是 `ShiftRowKeyedTable`,它直接重建两张表 —— 绕过了
+  `SetRowHeights` / `SetRowHidden` 那两个记录点。于是撤销一次增/删行:
+  文字和行数都对了,**行高和隐藏标记却永久错位一格**;
+  而正落在删除位置上的那一条直接丢掉,再也回不来。
+
+  纯置换那两条路(SwapRows / ApplyOrderToData)本轮已经收口进 PermuteRowState 了,
+  增删这条路是它的另一半,当时没做。 }
+procedure TTyStringGridTest.TestUndoingRowInsertRestoresHeightsAndHiddenFlags;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  G.Cells[0, 5] := 'tall';
+  G.RowHeights[5] := 60;
+  G.HideRow(7);
+  G.ClearUndo;
+
+  G.InsertRow(0);
+  AssertEquals('前置:行高跟着数据下移了一行', 60, G.RowHeights[6]);
+  AssertTrue('前置:隐藏标记也下移了', G.IsHiddenRow(8));
+
+  G.Undo;
+  AssertEquals('撤销之后文字回原位', 'tall', G.Cells[0, 5]);
+  AssertEquals('行高也要回原位', 60, G.RowHeights[5]);
+  AssertEquals('原来那一行不该还留着行高', 0, G.RowHeights[6]);
+  AssertTrue('隐藏标记也要回原位', G.IsHiddenRow(7));
+  AssertFalse('移过去那一行不该还藏着', G.IsHiddenRow(8));
+
+  { 删掉**承载行高/隐藏标记的那一行本身**,撤销要把它们一起还回来 ——
+    这一条从前是直接丢弃、无处可还的。 }
+  G.ClearUndo;
+  G.DeleteRow(5);
+  AssertEquals('前置:删掉了', 0, G.RowHeights[5]);
+  G.Undo;
+  AssertEquals('删掉的那一行的行高也得还回来', 60, G.RowHeights[5]);
+  AssertEquals('文字当然也要还回来', 'tall', G.Cells[0, 5]);
 end;
 
 initialization
