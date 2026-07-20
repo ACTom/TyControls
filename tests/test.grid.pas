@@ -205,6 +205,7 @@ type
     procedure TestFilteringOutTheAnchorDoesNotGrowTheSelection;
     procedure TestUndoRestoresCellAttributesAndRowHeights;
     procedure TestUndoRestoresCellColorAndMerge;
+    procedure TestSwappingRowsCarriesTheHiddenFlag;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -7890,6 +7891,36 @@ begin
   AssertEquals('前置:底色被清掉了', 0, G.CellColors[1, 1]);
   G.Undo;
   AssertEquals('清底色也要能撤销', TyRGB(0, 0, 255), G.CellColors[1, 1]);
+end;
+
+{ B2:三条行置换路径各搬了不同的子集。`SwapRows` 搬了文字、属性、行高,
+  唯独漏了**隐藏标记** —— 标记留在旧下标上,于是换过去的那一行凭空消失,
+  藏着的那一行冒出来。用户读到的是"表里又多/少了一行"。
+
+  可观测断言:走一遍显示序,看**谁被显示出来**,不看标记本身。 }
+procedure TTyStringGridTest.TestSwappingRowsCarriesTheHiddenFlag;
+var
+  G: TStrGridAccess;
+  r, pos: Integer;
+  shown: string;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+    G.Cells[0, r] := Chr(Ord('A') + r);      { A B C D E F }
+
+  G.HideRow(2);                              { 藏起 'C' }
+  AssertEquals('前置:少了一行', 5, G.DisplayRowCount);
+
+  G.SwapRows(1, 2);                          { 'C' 换到下标 1,'B' 换到下标 2 }
+  AssertEquals('前置:文字换了位置', 'C', G.Cells[0, 1]);
+
+  shown := '';
+  for pos := 0 to G.DisplayRowCount - 1 do
+    shown := shown + G.Cells[0, G.DisplayRow(pos)];
+
+  AssertEquals('藏起来的那一行换了位置也还该藏着,别的一个都不能少',
+    'ABDEF', shown);
 end;
 
 initialization

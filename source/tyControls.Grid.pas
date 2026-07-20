@@ -1435,6 +1435,18 @@ type
     procedure SetUndoLimit(AValue: Integer);
     { 记一笔。不在事务里时自成一条(单格编辑就是这种)。 }
     procedure RecordUndo(const AEntry: TTyGridUndoEntry);
+    { **所有按行下标记账的旁挂状态**在纯置换时的收口。AMap[旧行] = 新行,
+      AMap[i] < 0 表示那一行没了(条目丢弃)。
+
+      为什么要收口:两条纯置换路径(SwapRows / ApplyOrderToData)此前各搬各的,
+      各漏了不同的东西 —— 交换漏了隐藏标记(藏着的行换个位置就冒出来),
+      物理排序漏过格属性(A3)。**新增一种按行记账的存储时,改这里一处。**
+
+      没做成"登记表 + 回调"的原因:这类存储只有两张,而它们的写回路径本就不同 ——
+      行高必须走 SetRowHeights(撤销的记录点在那儿),隐藏标记直接进表。
+      为两张表建一套注册框架,读起来比它替掉的重复更难。
+      增删行是另一类(行数会变),收口在 ShiftRowKeyedTable —— 加表时那里也要加。 }
+    procedure PermuteRowState(const AMap: array of Integer);
     { 属性存储的记录点。挂在 TTyGridCellAttrStore.OnChanging 上 ——
       于是改底色/文字色/只读/合并跨度、以及三条行置换路径搬属性,
       **一律**自动进撤销栈,不必每个功能各写一段(那正是本控件反复漏东西的方式)。 }
@@ -4891,6 +4903,56 @@ begin
   end;
 end;
 
+procedure TTyStringGrid.PermuteRowState(const AMap: array of Integer);
+var
+  heights: array of record R, H: Integer; end;
+  hidden: array of Integer;
+  i, n, dst: Integer;
+begin
+  { 先把两张表都快照下来再动手 —— 边搬边写会覆盖尚未搬走的条目
+    (与 ShiftCells 里那条"增时从大到小搬"是同一个道理)。 }
+  SetLength(heights, 0);
+  n := 0;
+  for i := 0 to High(AMap) do
+    if GetRowHeights(i) > 0 then
+    begin
+      SetLength(heights, n + 1);
+      heights[n].R := i;
+      heights[n].H := GetRowHeights(i);
+      Inc(n);
+    end;
+
+  SetLength(hidden, 0);
+  n := 0;
+  for i := 0 to High(AMap) do
+    if IsHiddenRow(i) then
+    begin
+      SetLength(hidden, n + 1);
+      hidden[n] := i;
+      Inc(n);
+    end;
+
+  { 行高走 SetRowHeights,不直接改表 —— 撤销的记录点在那儿。 }
+  for i := 0 to High(heights) do
+    SetRowHeights(heights[i].R, 0);
+  for i := 0 to High(heights) do
+  begin
+    dst := AMap[heights[i].R];
+    if dst >= 0 then SetRowHeights(dst, heights[i].H);
+  end;
+
+  if Length(hidden) > 0 then
+  begin
+    FHiddenRows.Clear;
+    for i := 0 to High(hidden) do
+    begin
+      dst := AMap[hidden[i]];
+      if dst >= 0 then FHiddenRows.Add(IntToStr(dst));
+    end;
+    InvalidateOrder;      { 显示序变了 }
+  end;
+end;
+
 function TTyStringGrid.SnapshotAttr(const AKey: string): TTyGridAttrSnapshot;
 var
   a: TTyGridCellAttr;
@@ -7395,6 +7457,7 @@ var
   tmp: string;
   a1, a2: TTyGridCellAttr;
   k1, k2: string;
+  map: array of Integer;
 begin
   { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
     用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
@@ -7424,10 +7487,14 @@ begin
         FAttrs.MoveEntry(CellKey(j, -1), k2);
       end;
     end;
-    { 行高是行的属性,不是格的 —— 单独换。 }
-    j := RowHeights[ARow1];
-    RowHeights[ARow1] := RowHeights[ARow2];
-    RowHeights[ARow2] := j;
+    { 行高、隐藏标记这些**按行**记账的东西不是格属性,上面那个循环够不着它们。
+      走统一的置换收口 —— 从前这里只手搬了行高,隐藏标记留在旧下标上,
+      于是换过去的那一行凭空消失、藏着的那一行冒了出来。 }
+    SetLength(map, RowCount);
+    for j := 0 to RowCount - 1 do map[j] := j;
+    map[ARow1] := ARow2;
+    map[ARow2] := ARow1;
+    PermuteRowState(map);
   finally
     EndUpdateOrder;
   end;
@@ -9181,8 +9248,7 @@ var
     先删后写会指向已释放的内存。 }
   attrSnap: array of record C, R: Integer; A: TTyGridCellAttr; end;
   attrKeys: TStringList;
-  heights: array of record R, H: Integer; end;
-  i, n, sep, c, r: Integer;
+  i, sep, c, r: Integer;
   k: string;
 begin
   EnsureOrder;
@@ -9225,17 +9291,6 @@ begin
     attrKeys.Free;
   end;
 
-  SetLength(heights, 0);
-  n := 0;
-  for i := 0 to RowCount - 1 do
-    if GetRowHeights(i) > 0 then
-    begin
-      SetLength(heights, n + 1);
-      heights[n].R := i;
-      heights[n].H := GetRowHeights(i);
-      Inc(n);
-    end;
-
   { --- 写回 --- }
   BeginUpdate;
   try
@@ -9245,10 +9300,8 @@ begin
       if (snap[i].R >= 0) and (snap[i].R < RowCount) then
         Cells[snap[i].C, FRank[snap[i].R]] := snap[i].V;
 
-    for i := 0 to High(heights) do
-      SetRowHeights(heights[i].R, 0);
-    for i := 0 to High(heights) do
-      SetRowHeights(FRank[heights[i].R], heights[i].H);
+    { 行高、隐藏标记等按行记账的旁挂状态 —— FRank 本身就是"旧行 → 新行"的映射。 }
+    PermuteRowState(FRank);
 
     { 格属性:先全清再按新位置写回。分两遍 —— 边删边写会覆盖还没搬走的条目
       (与 ShiftCells 那边同一条道理)。 }
