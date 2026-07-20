@@ -515,8 +515,16 @@ object MainForm: TMainForm
             Caption = '按大区 + 产品分组'
             OnClick = BtnGroup2Click
           end
-          object ChkPhysicalSort: TTyCheckBox
+          object ChkFilterRow: TTyCheckBox
             Left = 1026
+            Height = 22
+            Top = 8
+            Width = 96
+            Caption = '筛选行'
+            OnChange = ChkFilterRowChange
+          end
+          object ChkPhysicalSort: TTyCheckBox
+            Left = 1126
             Height = 22
             Top = 8
             Width = 140

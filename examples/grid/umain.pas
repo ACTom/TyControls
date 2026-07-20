@@ -81,7 +81,7 @@ type
     GridSort: TTyStringGrid;
     BtnSortQty, BtnSortQtyD, BtnSortAdd, BtnSortClear, BtnFilterClear,
       BtnGroup, BtnExpandAll, BtnCollapseAll, BtnGroup2: TTyButton;
-    ChkPhysicalSort: TTyCheckBox;
+    ChkPhysicalSort, ChkFilterRow: TTyCheckBox;
     ChkBlanksFirst, ChkCaseSens: TTyCheckBox;
     CbFilterCol, CbFilterOp: TTyComboBox;
     EdFilterVal: TTyEdit;
@@ -159,6 +159,7 @@ type
     procedure BtnGroupClick(Sender: TObject);
     procedure BtnGroup2Click(Sender: TObject);
     procedure ChkPhysicalSortChange(Sender: TObject);
+    procedure ChkFilterRowChange(Sender: TObject);
     procedure BtnSaveLayoutClick(Sender: TObject);
     procedure BtnLoadLayoutClick(Sender: TObject);
     procedure HandleRowMoveVeto(Sender: TObject; AFrom, ATo: Integer;
@@ -934,6 +935,19 @@ begin
     TTyEdit(AEditor).Font.Color := clRed;
     Status(Format('OnGetEditorProp:把 (%d, %d) 的编辑器染红了', [ACol, ARow]));
   end;
+end;
+
+{ 内嵌筛选行:列头下面一条带,每列一个输入位。
+  语法走 TyGridParseFilterExpr —— `>1000`、`<=5`、`<>华东`、`300..600`,
+  `;` 分隔的多个条件之间是 OR。输入即筛(防抖),回车立刻生效,Esc 放弃。 }
+procedure TMainForm.ChkFilterRowChange(Sender: TObject);
+begin
+  GridSort.ShowFilterRow := ChkFilterRow.Checked;
+  if ChkFilterRow.Checked then
+    Status('筛选行开了 —— 在「数量」列打 >20,或在「大区」列打 华东;华北 试试' +
+      '(; 是或,a..b 是区间)')
+  else
+    Status('筛选行关了');
 end;
 
 procedure TMainForm.BtnExpandAllClick(Sender: TObject);
