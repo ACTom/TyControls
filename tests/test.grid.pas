@@ -80,6 +80,12 @@ type
       var ABorders: TTyGridCellBorders);
     procedure HookRowSizingRecordMin(Sender: TObject; AIndex: Integer;
       var ANewSize: Integer; var AAllow: Boolean);
+    { 虚拟数据源:第 r 行给一个**单字符**的值,倒序。
+      刻意不用数字 —— `HandleVirtualText` 那个给的是 100..91,
+      字典序下 '100' < '91',按文本排时行 0 本来就该排第一,
+      拿它当"排序没生效"的证据会得出完全相反的结论。 }
+    procedure HandleVirtualLetter(Sender: TObject; ACol, ARow: Integer;
+      var AText: string);
     procedure HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
       var AKind: TTyGridEditorKind);
     procedure HandleGetPickList(Sender: TObject; ACol, ARow: Integer; AItems: TStrings);
@@ -241,6 +247,7 @@ type
     procedure TestShrinkingRowCountDropsOutOfRangeRowState;
     procedure TestGroupRowHasNoRowResizeGesture;
     procedure TestInsertingInsideAMergedBlockGrowsTheSpan;
+    procedure TestSortingWorksOnAVirtualDataSource;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -1445,6 +1452,12 @@ procedure TTyStringGridTest.HandleVirtualText(Sender: TObject;
   ACol, ARow: Integer; var AText: string);
 begin
   AText := Format('%.2d', [100 - ARow]);
+end;
+
+procedure TTyStringGridTest.HandleVirtualLetter(Sender: TObject;
+  ACol, ARow: Integer; var AText: string);
+begin
+  AText := Chr(Ord('A') + (9 - ARow));      { 行 0 = 'J' … 行 9 = 'A' }
 end;
 
 procedure TTyStringGridTest.HandleGetEditorProp(Sender: TObject;
@@ -8823,6 +8836,41 @@ begin
   { 块外的第一行不该被吸进来。 }
   G.BaseCellOfForTest(0, 6, bc, br);
   AssertEquals('块外的行仍在块外', 6, br);
+end;
+
+{ P3.5 的笔记里记着一个"相邻缺口":排序的比较读的是存储而不是 `GetCellText`,
+  所以挂了 `OnGetCellText` 的表点列头**看起来毫无反应**;还说因此
+  `CanSortPhysically` 里"虚拟源不物理排"那条守卫无法被测试区分。
+
+  实测下来那条笔记已经不成立了 —— `CompareRows` 走的就是 `GetCellText`,
+  而它先问虚拟源、再回落存储。这条测试把现状钉住:
+  ① 虚拟源真的排得动;② 正因为排得动,那条"虚拟源不物理排"的守卫
+  现在**有**分辨力了(排完之后存储必须仍然是空的)。 }
+procedure TTyStringGridTest.TestSortingWorksOnAVirtualDataSource;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  G.OnGetCellText := @HandleVirtualLetter;  { 行 0 = 'J' … 行 9 = 'A' }
+
+  AssertEquals('前置:虚拟源给的是倒序', 'J', G.GetCellText(0, 0));
+  AssertEquals('前置:最后一行最小', 'A', G.GetCellText(0, 9));
+
+  G.SortByColumn(0, sdAscending);
+
+  { 升序之后,显示位置 0 应该是**值最小**的那一行 —— 也就是数据行 9。 }
+  AssertEquals('虚拟数据源必须排得动(显示位置 0 换成了数据行 9)',
+    9, G.DisplayRow(0));
+  AssertEquals('显示位置 9 是数据行 0', 0, G.DisplayRow(9));
+
+  { 物理排序对虚拟源必须**拒绝**:控件根本不持有数据,搬存储只会搬出一堆空格。
+    正因为上面证明了"排得动",这条守卫才有分辨力 —— 排序生效了,
+    但存储必须一个字都没被写进去。 }
+  G.SortMode := gsmData;
+  G.SortByColumn(0, sdDescending);
+  AssertEquals('存储里不该被写进任何东西', '', G.Cells[0, 0]);
+  AssertEquals('降序也排得动(显示位置 0 回到数据行 0)', 0, G.DisplayRow(0));
 end;
 
 initialization
