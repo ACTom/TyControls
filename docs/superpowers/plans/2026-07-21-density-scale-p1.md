@@ -67,7 +67,7 @@ golden 的每一行都含 `pad=左,上,右,下`,所以 padding 迁移只要有�
 - Modify: `source/tyControls.StyleModel.pas` — `ParsePadding` 内的 `parts.DelimitedText := ...` 一行
 - Test: `tests/test.StyleModel.pas`
 
-- [ ] **Step 1:写失败测试**
+- [x] **Step 1:写失败测试**
 
 在 `tests/test.StyleModel.pas` 的 `type` 段末尾(`TTestStylePhase0` 之后)加:
 
@@ -146,7 +146,7 @@ end;
   RegisterTest(TTestDensityTokens);
 ```
 
-- [ ] **Step 2:跑,确认它红**
+- [x] **Step 2:跑,确认它红**
 
 ```bash
 lazbuild -B tests/tytests.lpi && ./tests/tytests.exe --suite=TTestDensityTokens --format=plain
@@ -155,7 +155,7 @@ lazbuild -B tests/tytests.lpi && ./tests/tytests.exe --suite=TTestDensityTokens 
 预期:`TestMultiValuePaddingToken` 失败,报 `"上" expected: <5> but was: <某个错数>`。
 另外两条应当已经绿(它们守的是不许回归)。
 
-- [ ] **Step 3:加 `TyExpandVars`**
+- [x] **Step 3:加 `TyExpandVars`**
 
 在 `source/tyControls.Css.Values.pas` 的 `interface` 段,`TyEvalLength` 声明旁加:
 
@@ -206,7 +206,7 @@ begin
 end;
 ```
 
-- [ ] **Step 4:让 `ParsePadding` 先展开再切分**
+- [x] **Step 4:让 `ParsePadding` 先展开再切分**
 
 在 `source/tyControls.StyleModel.pas` 的 `ParsePadding` 里,把:
 
@@ -222,7 +222,7 @@ end;
     parts.DelimitedText := Trim(TyExpandVars(ARaw, Vars));
 ```
 
-- [ ] **Step 5:跑,确认全绿**
+- [x] **Step 5:跑,确认全绿**
 
 ```bash
 lazbuild -B tests/tytests.lpi && ./tests/tytests.exe --all --format=plain | grep -E "Number of (run|err|fail)"
@@ -231,7 +231,7 @@ git diff --stat tests/golden/
 
 预期:`Number of failures: 0`;`git diff --stat tests/golden/` **无输出**。
 
-- [ ] **Step 6:变异验证**
+- [x] **Step 6:变异验证**
 
 把 Step 4 改回 `parts.DelimitedText := Trim(ARaw);`,重跑:
 
@@ -241,7 +241,7 @@ lazbuild -B tests/tytests.lpi && ./tests/tytests.exe --suite=TTestDensityTokens 
 
 预期:`TestMultiValuePaddingToken` 红。**确认红之后把改动改回来**,重新跑一遍确认绿。
 
-- [ ] **Step 7:提交**
+- [x] **Step 7:提交**
 
 ```bash
 git add source/tyControls.Css.Values.pas source/tyControls.StyleModel.pas tests/test.StyleModel.pas
@@ -274,7 +274,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `themes/light.tycss`(`:root` 段)
 - Regenerate: `source/tyControls.DefaultTheme.pas`、`source/tyControls.BuiltinThemeData.pas`
 
-- [ ] **Step 1:加令牌**
+- [x] **Step 1:加令牌**
 
 在 `themes/light.tycss` 的 `:root` 段里,`--font-size-base` 那一行之后加:
 
@@ -320,7 +320,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
   --icon-size:      16px;
 ```
 
-- [ ] **Step 2:重跑两个生成器**
+- [x] **Step 2:重跑两个生成器**
 
 ```powershell
 .\gen-defaulttheme.ps1
@@ -329,7 +329,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 预期:两条 `Regenerated ...` 输出。
 
-- [ ] **Step 3:跑,确认全绿且 golden 不变**
+- [x] **Step 3:跑,确认全绿且 golden 不变**
 
 ```bash
 lazbuild -B tests/tytests.lpi && ./tests/tytests.exe --all --format=plain | grep -E "Number of (run|err|fail)"
@@ -338,7 +338,7 @@ git diff --stat tests/golden/
 
 预期:`Number of failures: 0`;golden **无输出**(只加了令牌,没人引用)。
 
-- [ ] **Step 4:提交**
+- [x] **Step 4:提交**
 
 ```bash
 git add themes/light.tycss source/tyControls.DefaultTheme.pas source/tyControls.BuiltinThemeData.pas
@@ -370,7 +370,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `themes/light.tycss`(41 条规则)
 - Regenerate: 两个生成器产物
 
-- [ ] **Step 1:按下表逐条替换**
+- [x] **Step 1:按下表逐条替换**
 
 每条规则里的 `padding: <字面量>` 换成 `padding: var(<令牌>)`:
 
@@ -403,7 +403,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 `--pad-cell` / `--pad-chip` / `--pad-badge` / `--pad-breadcrumb*`;③ 其余。
 一次全改再发现 golden 红,定位成本高得多。
 
-- [ ] **Step 2:每批之后重生成 + 验证**
+- [x] **Step 2:每批之后重生成 + 验证**
 
 ```powershell
 .\gen-defaulttheme.ps1
@@ -419,7 +419,7 @@ git diff --stat tests/golden/
 若 golden 有输出:说明某条令牌的值抄错了。`tests/golden/*.actual` 会写在旁边,
 `diff tests/golden/light.golden.txt tests/golden/light.golden.actual` 直接指出是哪个 typeKey 的 `pad=`。
 
-- [ ] **Step 3:确认没有漏网**
+- [x] **Step 3:确认没有漏网**
 
 ```bash
 grep -cE "padding: *[0-9]" themes/light.tycss
@@ -427,7 +427,7 @@ grep -cE "padding: *[0-9]" themes/light.tycss
 
 预期:`0`(所有 padding 都走令牌了)。
 
-- [ ] **Step 4:提交**
+- [x] **Step 4:提交**
 
 ```bash
 git add themes/light.tycss source/tyControls.DefaultTheme.pas source/tyControls.BuiltinThemeData.pas
@@ -458,7 +458,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `themes/light.tycss`
 - Regenerate: 两个生成器产物
 
-- [ ] **Step 1:给标题性控件加 font-size 声明**
+- [x] **Step 1:给标题性控件加 font-size 声明**
 
 给下列规则各加一条 `font-size: var(--font-size-title);`:
 
@@ -470,7 +470,7 @@ TyCardHeader  TyPopoverTitle  TyCalendarTitle  TyTransferTitle
 `TyGridHeader` / `TyTreeHeader` / `TyListGroupHeader` 已显式声明 `--font-size-base`,
 **保持不动** —— 表格列头是密集数据的一部分,不是标题层级。
 
-- [ ] **Step 2:重生成并验证**
+- [x] **Step 2:重生成并验证**
 
 ```powershell
 .\gen-defaulttheme.ps1
@@ -491,7 +491,7 @@ git diff tests/golden/
   回退重来。确认无误后把新 golden 一起提交,并在提交信息里写明哪几个 typeKey 变了、
   从多少变成 9。
 
-- [ ] **Step 3:提交**
+- [x] **Step 3:提交**
 
 ```bash
 git add themes/light.tycss source/tyControls.DefaultTheme.pas source/tyControls.BuiltinThemeData.pas tests/golden/
@@ -522,6 +522,30 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 第 3 期的迁移**不碰**两类常量,理由见设计文档:形状比例(`TyArrowDefHeadRatio`、
 `TyChartDonutHolePercent`)与物理/交互下限(`TyChartHitRadius`、`TyBadgeMinSize`、
 227 处 1~4px 的发丝线与内缩)。
+
+## 执行记录(2026-07-21 完成,分支 `feat/density-scale`)
+
+三处与计划不同,都是执行中发现的:
+
+1. **Task 1 修的是 3 处不是 1 处。** `padding` 之外,`ApplyShadow` 与
+   `ApplyBorderRadius` 是同一份"先切分再求值"的代码形状。按"碰到一个就
+   grep 全部"的纪律一起修,三处各自独立变异验证有效。
+   另外失败方式比计划写的更糟也更好查:不是"静默算错",是 `EConvertError`
+   抛出 `LoadFromCss`,**整份样式表加载失败**。
+
+2. **中途插入了一次 golden 扩容(提交 `0e747ac`)。** 做到 Task 3 时发现
+   `GGRID` 停在 `TyTreeCheckBox` —— 107 个 typeKey 里 **54 个从来没有像素守卫**
+   (整个 Grid、整批 AntD 控件)。"golden 没变"当时对其中 19 条迁移毫无证明力。
+   按正确顺序处理:先把迁移 stash 起来、在未迁移的树上扩 golden 并提升基线
+   (纯增量,0 行旧值被改),再放回迁移验证。
+
+3. **Task 4 是三边同步,不是单边。** `auto.tycss` 必须在 light 模式下与
+   `light.tycss`、dark 模式下与 `dark.tycss` 逐字节相同。改了 light 之后
+   `TestAutoLightEqualsLight` 红,同步 auto 之后 `TestAutoDarkEqualsDark` 红,
+   两次都是这个不变量抓住的。三份文件都要改。
+
+**结果**:3923 测试 / 0 失败(12 个错误是既有的无头环境 win32 限制);
+41 条 padding 全部走令牌;golden 覆盖从 53 涨到 107 个 typeKey。
 
 ## 自审
 
