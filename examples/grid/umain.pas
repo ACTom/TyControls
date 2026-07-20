@@ -62,6 +62,7 @@ type
     GridBasic: TTyStringGrid;
     BtnRows1W, BtnRows10W, BtnRows100W, BtnRowsReset, BtnGoto: TTyButton;
     ChkFrozenCols, ChkFixedRow, ChkIndicator, ChkFooter: TTyCheckBox;
+    BtnSaveLayout, BtnLoadLayout: TTyButton;
 
     PgLook: TTyTabSheet;
     LblLookHint, LblLines, LblLineW, LblLookTip: TTyLabel;
@@ -79,7 +80,8 @@ type
     TbSort1, TbSort2: TTyPanel;
     GridSort: TTyStringGrid;
     BtnSortQty, BtnSortQtyD, BtnSortAdd, BtnSortClear, BtnFilterClear,
-      BtnGroup, BtnExpandAll, BtnCollapseAll: TTyButton;
+      BtnGroup, BtnExpandAll, BtnCollapseAll, BtnGroup2: TTyButton;
+    ChkPhysicalSort: TTyCheckBox;
     ChkBlanksFirst, ChkCaseSens: TTyCheckBox;
     CbFilterCol, CbFilterOp: TTyComboBox;
     EdFilterVal: TTyEdit;
@@ -106,7 +108,8 @@ type
     TbEv1, TbEv2: TTyPanel;
     GridEvents: TTyStringGrid;
     ChkEvHint, ChkEvLockRow, ChkEvRightClick, ChkEvHeader, ChkEvSize,
-      ChkEvColMove, ChkEvCheck, ChkEvClip: TTyCheckBox;
+      ChkEvColMove, ChkEvCheck, ChkEvClip,
+      ChkEvRowMove, ChkEvEditorProp: TTyCheckBox;
     BtnEvFind, BtnEvReplace, BtnEvImportCsv: TTyButton;
     EdEvFind, EdEvRepl: TTyEdit;
 
@@ -154,6 +157,14 @@ type
     procedure CbFilterChange(Sender: TObject);
     procedure BtnFilterClearClick(Sender: TObject);
     procedure BtnGroupClick(Sender: TObject);
+    procedure BtnGroup2Click(Sender: TObject);
+    procedure ChkPhysicalSortChange(Sender: TObject);
+    procedure BtnSaveLayoutClick(Sender: TObject);
+    procedure BtnLoadLayoutClick(Sender: TObject);
+    procedure HandleRowMoveVeto(Sender: TObject; AFrom, ATo: Integer;
+      var AAllow: Boolean);
+    procedure HandleEditorProp(Sender: TObject; ACol, ARow: Integer;
+      AEditor: TControl);
     procedure BtnExpandAllClick(Sender: TObject);
     procedure BtnCollapseAllClick(Sender: TObject);
 
@@ -221,6 +232,9 @@ type
   private
     FNoteLink: TNoteEditLink;
     FSizingCount, FPasteCount: Integer;
+    { 「记住版式」存下来的那一串 —— 真实工程里进注册表或配置文件。
+      **必须放 private**:表单类的字段区默认是 published,而字符串不能 published。 }
+    FSavedLayout: string;
     function  ColorSelectedCells(AColor: TTyColor): Integer;
     procedure VirtualCellText(Sender: TObject; ACol, ARow: Integer;
       var AText: string);
@@ -839,6 +853,89 @@ begin
   end;
 end;
 
+{ 多级分组:先按大区、再按城市。关键在于**同名子组出现在不同父组下**时
+  互不影响 —— 折叠状态按层级路径记,不是按值记。 }
+procedure TMainForm.BtnGroup2Click(Sender: TObject);
+begin
+  if Length(GridSort.GroupColumns) > 1 then
+  begin
+    GridSort.UngroupRows;
+    BtnGroup2.Caption := '按大区 + 产品分组';
+    Status('已取消分组');
+  end
+  else
+  begin
+    GridSort.GroupByColumns([cRegion, cProduct]);
+    BtnGroup2.Caption := '取消多级分组';
+    Status('两级分组 —— 小计按层级各算各的;折叠状态按**路径**记,' +
+      '所以不同大区下的同名产品互不影响');
+  end;
+end;
+
+{ 物理排序:点列头时真的把数据换位置(像 Excel)。排完显示序就等于数据序,
+  于是"排过序就不许合并 / 不许拖行"那几条限制自动解除。
+  有筛选/分组/虚拟源时控件会自动退回普通排序 —— 那时搬数据会损坏数据。 }
+procedure TMainForm.ChkPhysicalSortChange(Sender: TObject);
+begin
+  if ChkPhysicalSort.Checked then
+  begin
+    GridSort.SortMode := gsmData;
+    Status('排序会真的搬数据(可撤销)—— 排完之后合并和拖行不再被拒绝;' +
+      '一挂上筛选或分组会自动退回普通排序');
+  end
+  else
+  begin
+    GridSort.SortMode := gsmDisplay;
+    Status('排序只换显示顺序,数据不动(默认)');
+  end;
+end;
+
+{ 版式持久化:列宽 / 列序 / 可见性 / 排序键 / 冻结数存成一个字符串。
+  存哪儿由宿主决定 —— 这里就放个字段,真实工程里进注册表或配置文件。
+  **不含行高与筛选**:行高更贴近数据(百万行的表存成一个字符串不是"版式"),
+  筛选是"我此刻想看什么"而不是"我把表调成什么样"。 }
+procedure TMainForm.BtnSaveLayoutClick(Sender: TObject);
+begin
+  FSavedLayout := GridBasic.SaveLayoutToString;
+  Status('版式已记下 —— 现在随便拖列宽、换列序、改冻结数,再点「还原版式」');
+end;
+
+procedure TMainForm.BtnLoadLayoutClick(Sender: TObject);
+begin
+  if FSavedLayout = '' then
+  begin
+    Status('还没记过版式 —— 先点「记住版式」');
+    Exit;
+  end;
+  { 读回来是**全有或全无**:整串先校验完才动控件。
+    半套版式(列宽还原了、列序没还原)比完全不还原更难排查。 }
+  if GridBasic.LoadLayoutFromString(FSavedLayout) then
+    Status('版式已还原(列宽 / 列序 / 可见性 / 排序键 / 冻结数)')
+  else
+    Status('这串版式不认识 —— 什么都没动');
+end;
+
+{ 拖行之前问一句。返回 False 就否决这一次移动。 }
+procedure TMainForm.HandleRowMoveVeto(Sender: TObject; AFrom, ATo: Integer;
+  var AAllow: Boolean);
+begin
+  AAllow := ATo > 0;
+  if not AAllow then
+    Status(Format('OnRowMove 否决了:不许把第 %d 行拖到首行', [AFrom]));
+end;
+
+{ 编辑器建好之后、交回调用方之前触发,拿到的是**真正那个控件**。
+  想改字体 / 限长 / 颜色都来得及,不必为了一点微调去写整个 OnCreateEditLink。 }
+procedure TMainForm.HandleEditorProp(Sender: TObject; ACol, ARow: Integer;
+  AEditor: TControl);
+begin
+  if AEditor is TTyEdit then
+  begin
+    TTyEdit(AEditor).Font.Color := clRed;
+    Status(Format('OnGetEditorProp:把 (%d, %d) 的编辑器染红了', [ACol, ARow]));
+  end;
+end;
+
 procedure TMainForm.BtnExpandAllClick(Sender: TObject);
 begin
   GridSort.ExpandAllGroups;
@@ -1183,6 +1280,14 @@ begin
 
   if ChkEvRightClick.Checked then GridEvents.OnRightClickCell := @EvRightClickCell
   else GridEvents.OnRightClickCell := nil;
+
+  { 拖行的否决钩子 —— 在行号槽里往上拖到首行会被挡住。 }
+  if ChkEvRowMove.Checked then GridEvents.OnRowMove := @HandleRowMoveVeto
+  else GridEvents.OnRowMove := nil;
+
+  { 编辑器微调钩子 —— 双击进编辑,字会是红的。 }
+  if ChkEvEditorProp.Checked then GridEvents.OnGetEditorProp := @HandleEditorProp
+  else GridEvents.OnGetEditorProp := nil;
 
   if ChkEvHeader.Checked then
   begin

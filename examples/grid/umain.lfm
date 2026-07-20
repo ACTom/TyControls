@@ -151,6 +151,22 @@ object MainForm: TMainForm
             Checked = True
             OnChange = ChkBasicChange
           end
+          object BtnSaveLayout: TTyButton
+            Left = 896
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '记住版式'
+            OnClick = BtnSaveLayoutClick
+          end
+          object BtnLoadLayout: TTyButton
+            Left = 1010
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '还原版式'
+            OnClick = BtnLoadLayoutClick
+          end
         end
         object GridBasic: TTyStringGrid
           Left = 0
@@ -490,6 +506,22 @@ object MainForm: TMainForm
             Width = 96
             Caption = '全部折叠'
             OnClick = BtnCollapseAllClick
+          end
+          object BtnGroup2: TTyButton
+            Left = 874
+            Height = 26
+            Top = 6
+            Width = 144
+            Caption = '按大区 + 产品分组'
+            OnClick = BtnGroup2Click
+          end
+          object ChkPhysicalSort: TTyCheckBox
+            Left = 1026
+            Height = 22
+            Top = 8
+            Width = 140
+            Caption = '排序真的搬数据'
+            OnChange = ChkPhysicalSortChange
           end
         end
         object GridSort: TTyStringGrid
@@ -909,12 +941,21 @@ object MainForm: TMainForm
             Caption = '导入 CSV'
             OnClick = BtnEvImportCsvClick
           end
-          object LblEvTip: TTyLabel
+          object ChkEvRowMove: TTyCheckBox
             Left = 934
-            Height = 20
-            Top = 10
-            Width = 230
-            Caption = '拖行高要在左侧行号槽里拖'
+            Height = 22
+            Top = 8
+            Width = 118
+            Caption = '禁止拖到首行'
+            OnChange = ChkEvChange
+          end
+          object ChkEvEditorProp: TTyCheckBox
+            Left = 1058
+            Height = 22
+            Top = 8
+            Width = 108
+            Caption = '编辑器变红'
+            OnChange = ChkEvChange
           end
         end
         object GridEvents: TTyStringGrid
