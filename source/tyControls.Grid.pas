@@ -1469,6 +1469,17 @@ type
       `SetRowHeights` / `SetRowHidden` 两个记录点 —— 撤销一次增/删行之后,
       文字回来了而行高和隐藏标记**永久错位一格**,被删那一条更是无处可还。 }
     procedure ShiftRowStateWithUndo(AFromIndex, ADelta: Integer);
+    { 增删列之后把撤销栈整个丢掉。
+
+      **列结构本身进不了撤销栈**:记录点是 SetCells 与 SetRowCount,
+      而列的增删改的是 Header.Columns —— 两个口子都够不着。于是格子内容
+      被记下了、承载它们的那一列没有,撤销会把内容还原到一张列数不同的表上,
+      得到一个从未存在过的状态。
+
+      与其还原出一张四不像的表,不如明说这一步撤不了 ——
+      与"超大记录整条作废"是同一条原则。
+      (让列结构真正可撤销是独立的一件事,记在 grid-remaining 计划里。) }
+    procedure DropUndoForColumnChange;
     { 汇总缓存整体失效。三处汇过来:数据改(SetCells)、显示序变(InvalidateOrder,
       筛选/隐藏/分组/行数都归它)、换聚合口径(SetColumnAggregate)。 }
     procedure InvalidateAggregates;
@@ -4999,6 +5010,14 @@ begin
   end;
 end;
 
+procedure TTyStringGrid.DropUndoForColumnChange;
+begin
+  { 撤销进行中不能自毁栈 —— Undo 里换列(宿主在 OnXxx 里做的)不该
+    把正在还原的那条记录连根拔掉。 }
+  if FUndoBusy then Exit;
+  ClearUndo;
+end;
+
 procedure TTyStringGrid.ShiftRowStateWithUndo(AFromIndex, ADelta: Integer);
 var
   heights: array of record R, H: Integer; end;
@@ -5891,9 +5910,24 @@ begin
 end;
 
 procedure TTyStringGrid.UnHideAllRows;
+var
+  i: Integer;
+  rows: array of Integer;
 begin
   if FHiddenRows.Count = 0 then Exit;
-  FHiddenRows.Clear;
+  { 逐行走记录点,而不是把表 Clear 掉 —— 直接清表的话这一步撤销不了
+    (栈里那些 HideRow 的记录还原的是"本来就没藏"的行,按下去毫无动静)。
+    整批算一条。 }
+  SetLength(rows, FHiddenRows.Count);
+  for i := 0 to FHiddenRows.Count - 1 do
+    rows[i] := StrToIntDef(FHiddenRows[i], -1);
+  BeginUpdate;
+  try
+    for i := 0 to High(rows) do
+      if rows[i] >= 0 then SetRowHidden(rows[i], False);
+  finally
+    EndUpdate;
+  end;
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
@@ -6635,8 +6669,14 @@ var
   j: Integer;
 begin
   if (ARow < 0) or (ARow >= RowCount) then Exit;
-  for j := 0 to Header.Columns.Count - 1 do
-    CellColors[j, ARow] := AColor;
+  { 整行上色 = 一条撤销记录(与 SetSelectionColor 同一条规矩)。 }
+  BeginUpdate;
+  try
+    for j := 0 to Header.Columns.Count - 1 do
+      CellColors[j, ARow] := AColor;
+  finally
+    EndUpdate;
+  end;
 end;
 
 function TTyStringGrid.GetCellReadOnly(ACol, ARow: Integer): Boolean;
@@ -7692,11 +7732,15 @@ var
   i: Integer;
 begin
   if ACount <= 0 then Exit;
+  { **两层都要** —— 与 InsertRows 一模一样的道理:BeginUpdateOrder 压重排,
+    BeginUpdate 才开撤销事务。行那边本轮修过了,列这边是它逐字的孪生兄弟。 }
+  BeginUpdate;
   BeginUpdateOrder;
   try
     for i := 1 to ACount do InsertColumn(ACol);
   finally
     EndUpdateOrder;
+    EndUpdate;
   end;
 end;
 
@@ -7705,6 +7749,7 @@ var
   i: Integer;
 begin
   if ACount <= 0 then Exit;
+  BeginUpdate;                { 见 InsertCols:撤销事务与重排是两层 }
   BeginUpdateOrder;
   try
     for i := 1 to ACount do
@@ -7714,6 +7759,7 @@ begin
     end;
   finally
     EndUpdateOrder;
+    EndUpdate;
   end;
 end;
 
@@ -7887,6 +7933,7 @@ begin
   finally
     EndUpdate;
   end;
+  DropUndoForColumnChange;
 end;
 
 procedure TTyStringGrid.DeleteColumn(ACol: Integer);
@@ -7906,6 +7953,7 @@ begin
   finally
     EndUpdate;
   end;
+  DropUndoForColumnChange;
 end;
 
 { 按内容(含换行)把行高调到刚好放得下。
@@ -9104,20 +9152,29 @@ begin
   flags := [rfReplaceAll];
   if not ACaseSensitive then Include(flags, rfIgnoreCase);
 
-  for pos := 0 to DisplayRowCount - 1 do
-  begin
-    dataRow := DisplayToData(pos);
-    if dataRow < 0 then Continue;
-    for c := 0 to Header.Columns.Count - 1 do
+  { 全部替换 = **一条**撤销记录。逐格记的话,替换 30 处要按 30 次 Ctrl+Z,
+    而且每一条都会清一次重做链;记录数还会把 UndoLimit(默认 100)撑爆,
+    把用户之前的操作从栈底挤掉。
+    单个替换(AAll = False)一格就结束,包不包都是一条 —— 一起包了更省事。 }
+  BeginUpdate;
+  try
+    for pos := 0 to DisplayRowCount - 1 do
     begin
-      cur := GetCellText(c, dataRow);
-      if not TyGridMatches(cur, AFind, ACaseSensitive, AWholeCell) then Continue;
-      if EditorKindFor(c, dataRow) = gekNone then Continue;    { 只读格不动 }
-      if AWholeCell then Cells[c, dataRow] := AReplace
-      else Cells[c, dataRow] := StringReplace(cur, AFind, AReplace, flags);
-      Inc(Result);
-      if not AAll then Exit;
+      dataRow := DisplayToData(pos);
+      if dataRow < 0 then Continue;
+      for c := 0 to Header.Columns.Count - 1 do
+      begin
+        cur := GetCellText(c, dataRow);
+        if not TyGridMatches(cur, AFind, ACaseSensitive, AWholeCell) then Continue;
+        if EditorKindFor(c, dataRow) = gekNone then Continue;    { 只读格不动 }
+        if AWholeCell then Cells[c, dataRow] := AReplace
+        else Cells[c, dataRow] := StringReplace(cur, AFind, AReplace, flags);
+        Inc(Result);
+        if not AAll then Exit;
+      end;
     end;
+  finally
+    EndUpdate;
   end;
 end;
 

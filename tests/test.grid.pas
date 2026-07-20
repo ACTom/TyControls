@@ -219,6 +219,7 @@ type
     procedure TestAutoFitRowsIsOneUndoStep;
     procedure TestColumnKeyedTablesFollowInsertAndDelete;
     procedure TestUndoingRowInsertRestoresHeightsAndHiddenFlags;
+    procedure TestRemainingBulkOpsAreOneUndoStepEach;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8446,6 +8447,79 @@ begin
   G.Undo;
   AssertEquals('删掉的那一行的行高也得还回来', 60, G.RowHeights[5]);
   AssertEquals('文字当然也要还回来', 'tall', G.Cells[0, 5]);
+end;
+
+{ 「一次批量操作 = 一条撤销记录」这条规则的**剩余实例**,一次扫完:
+  全部替换、批量增删列、整行上色、全部取消隐藏。
+  前面已经修过粘贴/剪切/批量增删行/清空/导入 CSV/涂选区/全表自适应 ——
+  每次都是"又找到一处",所以这次把同族的一起断言,而不是等用户逐个撞上。
+
+  批量增删**列**尤其说明问题:行那边(InsertRows/RemoveRows)本轮修过了,
+  列那边是它逐字的孪生兄弟,当时没顺手看一眼。 }
+procedure TTyStringGridTest.TestRemainingBulkOpsAreOneUndoStepEach;
+var
+  G: TStrGridAccess;
+  r, n0: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);          { 4 列 x 10 行 }
+
+  { --- 全部替换 --- }
+  for r := 0 to 9 do
+    G.Cells[0, r] := 'aaa';
+  G.ClearUndo;
+  AssertEquals('前置:替换了 10 处', 10,
+    G.ReplaceCells('aaa', 'bbb', False, False, True));
+  AssertEquals('全部替换 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销,第一格回来', 'aaa', G.Cells[0, 0]);
+  AssertEquals('最后一格也回来', 'aaa', G.Cells[0, 9]);
+  AssertFalse('栈里不该还剩别的', G.CanUndo);
+
+  { --- 整行上色 --- }
+  G.ClearUndo;
+  G.SetRowColor(2, TyRGB(0, 200, 0));
+  AssertEquals('前置:整行都上了色', TyRGB(0, 200, 0), G.CellColors[3, 2]);
+  AssertEquals('整行上色 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销,整行都退回去', 0, G.CellColors[0, 2]);
+  AssertEquals('最后一列也退回去', 0, G.CellColors[3, 2]);
+
+  { --- 批量插列 / 删列 ---
+    **列结构本身进不了撤销栈**:记录点是 SetCells 与 SetRowCount,列的增删
+    改的是 Header.Columns,两个口子都够不着。于是格子内容被记下了、
+    而承载它们的那一列没有 —— 撤销会把内容还原到一张列数不同的表上,
+    得到一个从未存在过的状态。
+
+    与其还原出一张四不像的表,不如**明说这一步撤不了**(与超大记录整条作废
+    同一条原则)。所以增删列**清空撤销栈**。
+    列结构的可撤销是独立的一件事,见 grid-remaining 计划里的待办。 }
+  n0 := G.Header.Columns.Count;
+  G.Cells[0, 0] := 'anchor';
+  G.ClearUndo;
+  G.Cells[0, 1] := 'x';
+  AssertTrue('前置:栈里有东西', G.CanUndo);
+
+  G.InsertCols(1, 3);
+  AssertEquals('前置:插了 3 列', n0 + 3, G.Header.Columns.Count);
+  AssertFalse('插列之后撤销栈必须是空的 —— 而不是留下还原不出来的半条',
+    G.CanUndo);
+
+  G.Cells[0, 2] := 'y';
+  AssertTrue('前置:栈里又有东西了', G.CanUndo);
+  G.RemoveCols(1, 2);
+  AssertEquals('前置:删了 2 列', n0 + 1, G.Header.Columns.Count);
+  AssertFalse('删列之后同理', G.CanUndo);
+
+  { --- 全部取消隐藏 --- }
+  G.HideRow(3);
+  G.HideRow(6);
+  G.ClearUndo;
+  AssertEquals('前置:藏了两行', 8, G.DisplayRowCount);
+  G.UnHideAllRows;
+  AssertEquals('前置:都放出来了', 10, G.DisplayRowCount);
+  AssertEquals('全部取消隐藏 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销,两行都藏回去', 8, G.DisplayRowCount);
 end;
 
 initialization
