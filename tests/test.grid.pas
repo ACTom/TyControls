@@ -73,6 +73,11 @@ type
     FScrollHintCount, FScrollHintRow: Integer;
     FLinkCount, FLinkCol, FLinkRow: Integer;
     FColCalcCount: Integer;
+    FFormatCount: Integer;
+    procedure HandleGetFormat(Sender: TObject; ACol, ARow: Integer;
+      var AText: string);
+    procedure HandleGetFilterValues(Sender: TObject; ACol: Integer;
+      AItems: TStrings; var AHandled: Boolean);
     procedure HandleColumnCalc(Sender: TObject; ACol: Integer;
       var AValue: Double; var AHandled: Boolean);
     procedure HandleLinkClick(Sender: TObject; ACol, ARow: Integer);
@@ -304,6 +309,12 @@ type
     procedure TestCalcFooter;
     procedure TestColumnCalcHook;
     procedure TestCellFontStyles;
+    procedure TestGetFormatHook;
+    procedure TestPickListArrowWhenNotEditing;
+    procedure TestFilterValuesHook;
+    procedure TestHeaderAutoHeight;
+    procedure TestHeaderWordWrap;
+    procedure TestMultiLevelHeaderGroups;
     procedure TestValidCharsAppliesInsideTheEditor;
     procedure TestTreeColumnIndentsAndCollapses;
     procedure TestDeletingAColumnIsUndoable;
@@ -1168,6 +1179,8 @@ type
     procedure BaseCellOfForTest(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
     procedure InvalidateSurfaceForTest;
     procedure UpdateScrollBarsForTest;
+    function  HeaderHeightPxForTest: Integer;
+    function  GroupBandHeightPxForTest: Integer;
     { 选区"活不活跃"在无头测试里恒为 False(控件拿不到真焦点),
       所以给它一个可覆写的座:控件问 SelectionIsActive,测试子类答。 }
     procedure SetGridFocusedForTest(AValue: Boolean);
@@ -1733,6 +1746,16 @@ end;
 procedure TStrGridAccess.UpdateScrollBarsForTest;
 begin
   UpdateScrollBars;
+end;
+
+function TStrGridAccess.HeaderHeightPxForTest: Integer;
+begin
+  Result := HeaderHeightPx;
+end;
+
+function TStrGridAccess.GroupBandHeightPxForTest: Integer;
+begin
+  Result := GroupBandHeightPx;
 end;
 
 procedure TStrGridAccess.SetGridFocusedForTest(AValue: Boolean);
@@ -10476,6 +10499,226 @@ begin
   { 走属性存储 → 可撤销、跟着行走。 }
   G.InsertRow(0);
   AssertTrue('跟着行走', fsBold in G.CellFontStyles[1, 2]);
+end;
+
+procedure TTyStringGridTest.HandleGetFormat(Sender: TObject; ACol, ARow: Integer;
+  var AText: string);
+begin
+  Inc(FFormatCount);
+  if AText <> '' then AText := '[' + AText + ']';
+end;
+
+procedure TTyStringGridTest.HandleGetFilterValues(Sender: TObject; ACol: Integer;
+  AItems: TStrings; var AHandled: Boolean);
+begin
+  AItems.Clear;
+  AItems.Add('server-A');
+  AItems.Add('server-B');
+  AHandled := True;
+end;
+
+{ T21:逐格格式化。不必为了格式化去接管整格绘制。
+  关键分寸:只改**显示**,不改数据、不改编辑器里的值、不改导出。 }
+procedure TTyStringGridTest.TestGetFormatHook;
+var
+  G: TStrGridAccess;
+  plain, formatted: TBGRABitmap;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Cells[1, 1] := '1234';
+  r := G.CellRect(1, 1);
+
+  plain := G.RenderToBitmap;
+  try
+    FFormatCount := 0;
+    G.OnGetFormat := @HandleGetFormat;
+    formatted := G.RenderToBitmap;
+    try
+      AssertTrue('钩子被问过', FFormatCount > 0);
+      AssertTrue('画出来的东西变了', G.DiffPixels(plain, formatted, r) > 0);
+    finally
+      formatted.Free;
+    end;
+  finally
+    plain.Free;
+  end;
+
+  { **数据没被改**:格式化是显示层的事。 }
+  AssertEquals('单元格值不变', '1234', G.Cells[1, 1]);
+  { 编辑时给的是原值 —— 否则用户一进编辑就看到一串方括号,一提交就套两层。 }
+  AssertTrue('进得去编辑态', G.BeginEditAt(1, 1));
+  AssertEquals('编辑器里是原值', '1234', G.InlineEditor.Text);
+  G.EndEdit(False);
+  { 导出的也是原值。 }
+  AssertTrue('导出的是原值', Pos('1234', G.SaveToCSVText(',')) > 0);
+  AssertEquals('导出里没有格式化的痕迹', 0, Pos('[1234]', G.SaveToCSVText(',')));
+end;
+
+{ T22:gekPickList 列在**非编辑态**也画一个下拉箭头 ——
+  否则用户看不出哪一格有候选项。(P5 只做了 M19 的前两项,这是第三项。) }
+procedure TTyStringGridTest.TestPickListArrowWhenNotEditing;
+var
+  G: TStrGridAccess;
+  plainCol, pickCol: TBGRABitmap;
+  r: TRect;
+  c: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Cells[1, 1] := 'x';
+  r := G.CellRect(1, 1);
+
+  plainCol := G.RenderToBitmap;
+  try
+    c := G.Header.Columns.Items[1] as TTyGridColumn;
+    c.EditorKind := gekPickList;
+    pickCol := G.RenderToBitmap;
+    try
+      { 箭头贴着右缘 —— 只看整格会把"文字挪了个位置"也算成箭头。 }
+      AssertTrue('右缘冒出下拉箭头',
+        G.DiffPixels(plainCol, pickCol,
+          Rect(r.Right - G.ScaleForTest(14), r.Top, r.Right, r.Bottom)) > 0);
+    finally
+      pickCol.Free;
+    end;
+  finally
+    plainCol.Free;
+  end;
+end;
+
+{ T23:宿主接管筛选下拉的候选值(虚拟表 / 只列服务端已知取值)。
+  B15 逐项交代了 M20 的其他子项、还说明了哪两个不做,唯独这个一次没提。 }
+procedure TTyStringGridTest.TestFilterValuesHook;
+var
+  G: TStrGridAccess;
+  items: TStringList;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Cells[0, 0] := 'local-1';
+  G.Cells[0, 1] := 'local-2';
+
+  items := TStringList.Create;
+  try
+    G.DistinctColumnValues(0, items);
+    AssertTrue('没挂钩子时用表里的值', items.IndexOf('local-1') >= 0);
+
+    G.OnGetFilterValues := @HandleGetFilterValues;
+    G.DistinctColumnValues(0, items);
+    AssertEquals('接管后用宿主给的', 2, items.Count);
+    AssertTrue('是宿主那两个', items.IndexOf('server-A') >= 0);
+    AssertEquals('表里的值不再出现', -1, items.IndexOf('local-1'));
+  finally
+    items.Free;
+  end;
+end;
+
+{ T24:表头高度自适应。M5 原文是"表头图标接线 + **表头高度自适应**",
+  复述时后半句丢了。 }
+procedure TTyStringGridTest.TestHeaderAutoHeight;
+var
+  G: TStrGridAccess;
+  shortH, tallH: Integer;
+  c: TTyColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.HeaderWordWrap := True;
+  G.HeaderAutoHeight := True;
+
+  c := G.Header.Columns.Items[0] as TTyColumn;
+  c.Text := 'A';
+  shortH := G.HeaderHeightPxForTest;
+
+  { 一个换到三行的长标题应当把整条列头带撑高。 }
+  c.Text := '很长很长的一个列标题需要换很多行才放得下';
+  tallH := G.HeaderHeightPxForTest;
+  AssertTrue('长标题把列头撑高了', tallH > shortH);
+
+  { 关掉之后回到固定高度 —— 开关要真的是开关。 }
+  G.HeaderAutoHeight := False;
+  AssertEquals('关掉后回到固定高度', G.ScaleForTest(G.Header.Height),
+    G.HeaderHeightPxForTest);
+end;
+
+{ T25:表头文字换行。B6 勾了"换行绘制(**表头格同享**)",
+  实际表头走的 P.DrawText 那个方法没有 wordwrap。 }
+procedure TTyStringGridTest.TestHeaderWordWrap;
+var
+  G: TStrGridAccess;
+  noWrap, wrapped: TBGRABitmap;
+  band: TRect;
+  c: TTyColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.Header.Height := 40;                 { 两行放得下 }
+  c := G.Header.Columns.Items[0] as TTyColumn;
+  c.Text := '一个放不进一行的长列标题';
+
+  band := Rect(0, 0, G.ColWidth(0), G.ScaleForTest(40));
+  G.HeaderWordWrap := False;
+  noWrap := G.RenderToBitmap;
+  try
+    G.HeaderWordWrap := True;
+    wrapped := G.RenderToBitmap;
+    try
+      AssertTrue('换行之后画面变了', G.DiffPixels(noWrap, wrapped, band) > 0);
+      { 换行的实质是**占了第二行** —— 只看"变了"分不出"改了截断方式"。
+        下半条带里必须多出墨来。 }
+      AssertTrue('下半条带里多出了字',
+        G.InkInRect(Rect(0, G.ScaleForTest(22), G.ColWidth(0),
+                         G.ScaleForTest(40))) > 0);
+    finally
+      wrapped.Free;
+    end;
+  finally
+    noWrap.Free;
+  end;
+end;
+
+{ T26:多级表头。Level 是 published,但渲染循环里一句
+  `if g.Level <> 0 then Continue` 把非零级整个跳过 —— 设了等于没设。 }
+procedure TTyStringGridTest.TestMultiLevelHeaderGroups;
+var
+  G: TStrGridAccess;
+  oneLevel, twoLevel: TBGRABitmap;
+  h1, h2: Integer;
+  grp: TTyGridHeaderGroup;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Header.Options := G.Header.Options + [hoVisible];
+
+  grp := G.HeaderGroups.Add;
+  grp.Text := '一级';
+  grp.FirstCol := 0; grp.LastCol := 3; grp.Level := 0;
+  h1 := G.GroupBandHeightPxForTest;
+  oneLevel := G.RenderToBitmap;
+  try
+    grp := G.HeaderGroups.Add;
+    grp.Text := '二级';
+    grp.FirstCol := 0; grp.LastCol := 1; grp.Level := 1;
+
+    { 多一级 → 分组带要更高。不然第二级没有地方画。 }
+    h2 := G.GroupBandHeightPxForTest;
+    AssertTrue('多一级把分组带撑高了', h2 > h1);
+
+    twoLevel := G.RenderToBitmap;
+    try
+      { 第二级要**真的画出来**(在第一级下面那一段里)。 }
+      AssertTrue('第二级画出来了',
+        G.DiffPixels(oneLevel, twoLevel, Rect(0, h1, G.Width, h2)) > 0);
+    finally
+      twoLevel.Free;
+    end;
+  finally
+    oneLevel.Free;
+  end;
 end;
 
 initialization

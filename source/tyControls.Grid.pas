@@ -497,6 +497,14 @@ type
   TTyGridColumnCalcEvent = procedure(Sender: TObject; ACol: Integer;
     var AValue: Double; var AHandled: Boolean) of object;
 
+  { 逐格显示格式化(T21)。只改**显示** —— 数据、编辑器里的值、导出
+    一律用原值,否则一进编辑就看到格式化后的串,一提交就套两层。 }
+  TTyGridGetFormatEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var AText: string) of object;
+  { 宿主接管筛选下拉的候选值(虚拟表 / 只列服务端已知取值)。 }
+  TTyGridGetFilterValuesEvent = procedure(Sender: TObject; ACol: Integer;
+    AItems: TStrings; var AHandled: Boolean) of object;
+
   { 超链接单元格被点(T12)。 }
   TTyGridCellLinkEvent = procedure(Sender: TObject; ACol, ARow: Integer) of object;
 
@@ -766,11 +774,15 @@ type
     FBackgroundBitmap: TBGRABitmap;
     FBackgroundMode:   TTyGridBackgroundMode;
     FBackgroundScope:  TTyGridBackgroundScope;
+    FHeaderWordWrap:   Boolean;
+    FHeaderAutoHeight: Boolean;
     FShowFocusCell:    Boolean;
     FHideSelectionWhenInactive: Boolean;
     FVScroll:          TTyScrollBar;
     FHScroll:          TTyScrollBar;
     FSyncingScroll:    Boolean;      { 防止程序改 Position 反弹回来 }
+    procedure SetHeaderWordWrap(AValue: Boolean);
+    procedure SetHeaderAutoHeight(AValue: Boolean);
     procedure SetShowFocusCell(AValue: Boolean);
     procedure SetHideSelectionWhenInactive(AValue: Boolean);
     procedure SetVertScrollBarMode(AValue: TTyGridScrollBarMode);
@@ -945,6 +957,11 @@ type
     function  CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay; virtual;
     procedure RenderButtonCell(P: TTyPainter; ACol, ARow: Integer;
       const AText: string; const AFrame: TTyStyleSet); virtual;
+    { 列头带的高度(设备像素)。**唯一出处** —— 从前 HeaderHeightPx
+      在 13 处内联,自适应高度这种"要在每处都成立"的规则没处加。
+      (与列轴收口到 ColumnLeftPx、行带收口到 TyGridRowBandRect 同一条纪律。) }
+    function HeaderHeightPx: Integer; virtual;
+    function GroupLevelCount: Integer;
     function GroupBandHeightPx: Integer; virtual;
     { 内嵌筛选行那条带的高度(设备像素);关着时 0。 }
     function FilterRowHeightPx: Integer; virtual;
@@ -1114,6 +1131,12 @@ type
       read FBackgroundMode write SetBackgroundMode default gbmStretch;
     property BackgroundScope: TTyGridBackgroundScope
       read FBackgroundScope write SetBackgroundScope default gbsWholeGrid;
+    { 列头标题换行显示。 }
+    property HeaderWordWrap: Boolean
+      read FHeaderWordWrap write SetHeaderWordWrap default False;
+    { 列头带高度按最高的那个标题自适应(Header.Height 当作下限)。 }
+    property HeaderAutoHeight: Boolean
+      read FHeaderAutoHeight write SetHeaderAutoHeight default False;
     { 焦点格要不要画外框。gsmRow 模式下整行都是选中底色,不画外框就
       看不出光标在哪一格 —— 所以默认开着。 }
     property ShowFocusCell: Boolean
@@ -1303,6 +1326,10 @@ type
   protected
     { 取一个单元格要显示的文本。派生类可改写以接自己的存储。 }
     function GetCellText(ACol, ARow: Integer): string; virtual;
+    { **画出来的**那串文字。与 GetCellText(原始值)分开:格式化只作用于显示,
+      编辑器/导出/排序一律走原始值。绘制路径只能走这个。
+      基类没有格式化钩子,原样返回;TTyStringGrid 改写去问 OnGetFormat。 }
+    function DisplayCellText(ACol, ARow: Integer): string; virtual;
     { 该格要不要画文字。自己画图形的格返回 False。 }
     function ShouldDrawCellText(ACol, ARow: Integer): Boolean; virtual;
     { 给宿主一次完全接管该格绘制的机会;返回 True 表示已被接管。 }
@@ -1401,6 +1428,8 @@ type
     FOnScrollHint:   TTyGridScrollHintEvent;
     FOnCellLinkClick: TTyGridCellLinkEvent;
     FOnColumnCalc:    TTyGridColumnCalcEvent;
+    FOnGetFormat:     TTyGridGetFormatEvent;
+    FOnGetFilterValues: TTyGridGetFilterValuesEvent;
     FAllowGrayed:    Boolean;
     { 全表有没有批注。渲染与悬停路径都要问一次"这格有批注吗",
       没有批注的表不该为此每格建一个临时键(与 FAttrs.IsEmpty 同一条理由)。 }
@@ -1651,6 +1680,10 @@ type
     function  IsActiveCell(ACol, ARow: Integer): Boolean; override;
     function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; override;
     function  ShouldDrawCellText(ACol, ARow: Integer): Boolean; override;
+    { **画出来的**那串文字。与 GetCellText(原始值)分开:
+      格式化只作用于显示,编辑器/导出/排序一律走原始值。
+      绘制路径**只能**走这个,否则"哪些地方算显示"会散成一堆判断。 }
+    function  DisplayCellText(ACol, ARow: Integer): string; override;
     function  CellAppearance(ACol, ARow, ADisplayPos: Integer;
       const AFrame: TTyStyleSet): TTyGridCellAppearance; override;
     function  HoverIsHyperlink(X, Y: Integer): Boolean; override;
@@ -1696,6 +1729,8 @@ type
     procedure RenderHyperlinkCell(P: TTyPainter; ACol, ARow: Integer;
       const AFrame: TTyStyleSet);
     procedure RenderCommentMark(P: TTyPainter; ACol, ARow: Integer;
+      const AFrame: TTyStyleSet);
+    procedure RenderPickListArrow(P: TTyPainter; ACol, ARow: Integer;
       const AFrame: TTyStyleSet);
     { 弹取色对话框改这一格的颜色(值存 #RRGGBB)。 }
     procedure ToggleCellColor(ACol, ARow: Integer);
@@ -2165,6 +2200,10 @@ type
       read FOnCellLinkClick write FOnCellLinkClick;
     property OnColumnCalc: TTyGridColumnCalcEvent
       read FOnColumnCalc write FOnColumnCalc;
+    property OnGetFormat: TTyGridGetFormatEvent
+      read FOnGetFormat write FOnGetFormat;
+    property OnGetFilterValues: TTyGridGetFilterValuesEvent
+      read FOnGetFilterValues write FOnGetFilterValues;
     { 勾选框单元格允许第三态(灰显)。关着时切换只在两态间走 ——
       灰显不能凭空冒出来。 }
     property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
@@ -3027,7 +3066,7 @@ var
   i, px: Integer;
 begin
   px := 0;
-  if hoVisible in FHeader.Options then Inc(px, ScaleI(FHeader.Height));
+  if hoVisible in FHeader.Options then Inc(px, HeaderHeightPx);
   { 分组带也在上冻结带里 —— 漏了它固定行和正文都会往上顶,压住分组标题。 }
   Inc(px, GroupBandHeightPx);
   { 内嵌筛选行同理:它钉在列头之下、不随滚动。 }
@@ -3104,6 +3143,24 @@ end;
 function TTyCustomGrid.SelectionIsActive: Boolean;
 begin
   Result := Focused;
+end;
+
+procedure TTyCustomGrid.SetHeaderWordWrap(AValue: Boolean);
+begin
+  if FHeaderWordWrap = AValue then Exit;
+  FHeaderWordWrap := AValue;
+  InvalidateSurface;
+  Realign;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetHeaderAutoHeight(AValue: Boolean);
+begin
+  if FHeaderAutoHeight = AValue then Exit;
+  FHeaderAutoHeight := AValue;
+  InvalidateSurface;
+  UpdateScrollBars;
+  Invalidate;
 end;
 
 procedure TTyCustomGrid.SetShowFocusCell(AValue: Boolean);
@@ -3440,7 +3497,7 @@ begin
 
   hdrH := 0;
   if hoVisible in FHeader.Options then
-    hdrH := ScaleI(FHeader.Height) + GroupBandHeightPx;
+    hdrH := HeaderHeightPx + GroupBandHeightPx;
 
   { 列分隔线:只在列头带里认(与 MouseDown 同一条判定)。 }
   if (hoColumnResize in FHeader.Options) and (hdrH > 0) and (Y < hdrH)
@@ -3921,10 +3978,72 @@ begin
 end;
 
 { 分组带的高度(设备像素)。没有分组时为 0 —— 于是几何完全退回单级表头。 }
+function TTyCustomGrid.HeaderHeightPx: Integer;
+var
+  i, need, w, lines: Integer;
+  hdrS: TTyStyleSet;
+  col: TTyColumn;
+  sz: TSize;
+  bmp: TBGRABitmap;
+begin
+  Result := ScaleI(FHeader.Height);
+  if not FHeaderAutoHeight then Exit;
+  if not (hoVisible in FHeader.Options) then Exit;
+  if FHeader.Columns.Count = 0 then Exit;
+
+  { 量最高的那个标题。Header.Height 当**下限** —— 自适应只往上撑,
+    不会把一条正常高度的列头压扁。 }
+  hdrS := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass, []);
+  bmp := TBGRABitmap.Create(1, 1);
+  try
+    TyConfigureTextFont(bmp, hdrS.FontName, ResolveFontSize(hdrS),
+      hdrS.FontWeight, Dpi);
+    for i := 0 to FHeader.Columns.Count - 1 do
+    begin
+      col := TTyColumn(FHeader.Columns.Items[i]);
+      if not (coVisible in col.Options) then Continue;
+      if col.Text = '' then Continue;
+      sz := bmp.TextSize(col.Text);
+      if sz.cy <= 0 then Continue;
+      lines := 1;
+      if FHeaderWordWrap then
+      begin
+        w := ColumnWidthPx(i) - ScaleI(10);
+        if w <= 0 then Continue;
+        { 行数按"整条文字宽 / 可用宽"上取整估。真正的断行由绘制层做,
+          这里只需要一个**随标题变长而变高**的下界;估多了会留白,
+          估少了才会截断,所以宁可向上取整。 }
+        lines := (sz.cx + w - 1) div w;
+        if lines < 1 then lines := 1;
+      end;
+      need := sz.cy * lines + ScaleI(8);
+      if need > Result then Result := need;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ 分组带一共多少级(用到的最大 Level + 1)。0 = 没有分组。 }
+function TTyCustomGrid.GroupLevelCount: Integer;
+var
+  i, lv: Integer;
+begin
+  Result := 0;
+  for i := 0 to FHeaderGroups.Count - 1 do
+  begin
+    lv := TTyGridHeaderGroup(FHeaderGroups.Items[i]).Level;
+    if lv < 0 then Continue;
+    if lv + 1 > Result then Result := lv + 1;
+  end;
+end;
+
 function TTyCustomGrid.GroupBandHeightPx: Integer;
 begin
   if (FHeaderGroups.Count = 0) or not (hoVisible in FHeader.Options) then Exit(0);
-  Result := ScaleI(FGroupHeaderHeight);
+  { 每一级占一条 —— 从前这里只乘 1,于是 Level>0 的组没有地方画,
+    渲染循环索性把它们整个跳过:Level 是 published 却设了等于没设。 }
+  Result := ScaleI(FGroupHeaderHeight) * GroupLevelCount;
 end;
 
 function TTyCustomGrid.FilterRowHeightPx: Integer;
@@ -3932,7 +4051,7 @@ begin
   { 跟着列头一起藏 —— 没有列头的时候一条孤零零的筛选行没有依托。 }
   if (not FShowFilterRow) or not (hoVisible in FHeader.Options) then Exit(0);
   if FFilterRowHeight > 0 then Result := ScaleI(FFilterRowHeight)
-  else Result := ScaleI(FHeader.Height);      { 0 = 跟列头同高 }
+  else Result := HeaderHeightPx;      { 0 = 跟列头同高 }
 end;
 
 procedure TTyCustomGrid.SetShowFilterRow(AValue: Boolean);
@@ -4413,8 +4532,8 @@ begin
   { 内嵌筛选行:紧贴在列头之下、还在冻结带里。**先于**单元格判定,
     否则它下面那条判断会把它当成正文的第一行。 }
   if (FilterRowHeightPx > 0)
-     and (AY >= ScaleI(FHeader.Height) + GroupBandHeightPx)
-     and (AY < ScaleI(FHeader.Height) + GroupBandHeightPx + FilterRowHeightPx) then
+     and (AY >= HeaderHeightPx + GroupBandHeightPx)
+     and (AY < HeaderHeightPx + GroupBandHeightPx + FilterRowHeightPx) then
   begin
     Result.Part := ghpFilterRow;
     Result.Col := ColumnAtX(AX);
@@ -4422,7 +4541,7 @@ begin
   end;
 
   if (hoVisible in FHeader.Options)
-     and (AY < ScaleI(FHeader.Height) + GroupBandHeightPx) then
+     and (AY < HeaderHeightPx + GroupBandHeightPx) then
   begin
     if AY < GroupBandHeightPx then Exit;   { 分组带:不是叶子列头 }
     Result.Part := ghpHeader;
@@ -4595,7 +4714,7 @@ begin
 
   hdrH := 0;
   if hoVisible in FHeader.Options then
-    hdrH := ScaleI(FHeader.Height) + GroupBandHeightPx;
+    hdrH := HeaderHeightPx + GroupBandHeightPx;
 
   { 行分隔线在**行头槽**里拖 —— 与列分隔线在列头里拖对称。
     放在单元格上会和框选拖拽抢手势。 }
@@ -4907,8 +5026,17 @@ begin
 
     textR := Rect(r.Left + ScaleI(6) + imgPad, r.Top, r.Right - ScaleI(4) - gs, r.Bottom);
     if (col.Text <> '') and (textR.Right > textR.Left) then
-      P.DrawText(textR, col.Text, hdrFontName, hdrFontSize,
-        hdrFontWeight, hdrInk, col.CaptionAlignment, tlCenter, True);
+      { 换行时不省略号截断 —— 两者一起开的话第二行永远画不出来。
+        (B6 勾了"换行绘制(表头格同享)",但表头走的 P.DrawText
+         没有 wordwrap 参数,于是那半句一直没落地。) }
+      if FHeaderWordWrap then
+        { 走网格自己的 DrawCellText —— 它已经支持换行且带文字缓存,
+          在画笔上另造一个 wrapped 变体是重复第二条实现。 }
+        DrawCellText(P, textR, col.Text, hdrFontName, hdrFontSize,
+          hdrFontWeight, hdrInk, col.CaptionAlignment, tlCenter, True)
+      else
+        P.DrawText(textR, col.Text, hdrFontName, hdrFontSize,
+          hdrFontWeight, hdrInk, col.CaptionAlignment, tlCenter, True);
 
     { 该列有筛选时,标题右侧留一个漏斗位(用向下箭头示意)。
       **正在过滤的列要点亮** —— 用户得一眼看出哪列在过滤中,
@@ -5022,7 +5150,7 @@ var
 begin
   headerH := 0;
   if hoVisible in FHeader.Options then
-    headerH := ScaleI(FHeader.Height) + GroupBandHeightPx;
+    headerH := HeaderHeightPx + GroupBandHeightPx;
   { 行头槽与固定列区要从**整条表头区之下**开始 —— 筛选行也在表头这一侧,
     不减掉它的话行头槽会从筛选行底下钻上来。 }
   bandH := headerH + FilterRowHeightPx;
@@ -5049,7 +5177,7 @@ begin
     FillRegion(P, Rect(0, 0, M.ClientW, headerH), 'TyGridHeader');
     { 分组带先画(在上),列头带画在它下面。 }
     RenderHeaderGroups(P, M);
-    RenderHeaderSections(P, M, ScaleI(FHeader.Height));
+    RenderHeaderSections(P, M, HeaderHeightPx);
   end;
 
   { 内嵌筛选行:紧贴列头之下,同样横跨整幅宽度。 }
@@ -5186,7 +5314,7 @@ end;
 
 procedure TTyCustomGrid.RenderHeaderGroups(P: TTyPainter; const M: TTyGridMetrics);
 var
-  i, l, r0, h: Integer;
+  i, l, r0, h, lvlH: Integer;
   g: TTyGridHeaderGroup;
   secS, hdrS: TTyStyleSet;
   ink: TTyColor;
@@ -5203,10 +5331,13 @@ begin
   else ink := CurrentStyle.TextColor;
   line := TyColorToBGRA(hdrS.BorderColor);
 
+  lvlH := ScaleI(FGroupHeaderHeight);
   for i := 0 to FHeaderGroups.Count - 1 do
   begin
     g := TTyGridHeaderGroup(FHeaderGroups.Items[i]);
-    if g.Level <> 0 then Continue;
+    { 每一级画在自己那一条里(0 级最上)。从前这里是
+      `if g.Level <> 0 then Continue` —— 非零级直接被丢掉。 }
+    if (g.Level < 0) or (g.Level >= GroupLevelCount) then Continue;
     if (g.FirstCol < 0) or (g.FirstCol >= FHeader.Columns.Count) then Continue;
 
     { 跨列 = 从首列左缘到末列右缘。列宽/拖动重排都自动跟着走,
@@ -5219,7 +5350,7 @@ begin
             + ColumnWidthPx(FHeader.Columns.Count - 1);
     if r0 <= l then Continue;
 
-    rc := Rect(l, 0, r0, h);
+    rc := Rect(l, g.Level * lvlH, r0, (g.Level + 1) * lvlH);
     if tpBackground in secS.Present then
       P.FillBackground(rc, secS.Background, 0);
     if g.Text <> '' then
@@ -5227,7 +5358,10 @@ begin
         g.Text, hdrS.FontName, ResolveFontSize(hdrS), hdrS.FontWeight, ink,
         g.Alignment, tlCenter, True);
     if rc.Right - 1 < M.ClientW then
-      P.Bitmap.DrawLine(rc.Right - 1, 0, rc.Right - 1, h, line, False);
+      P.Bitmap.DrawLine(rc.Right - 1, rc.Top, rc.Right - 1, rc.Bottom, line, False);
+    { 级与级之间也要有分隔,否则两级看起来是一整块。 }
+    if rc.Bottom < h then
+      P.Bitmap.DrawLine(rc.Left, rc.Bottom - 1, rc.Right, rc.Bottom - 1, line, False);
   end;
 
   { 分组带与列头带之间的横分隔线。 }
@@ -5547,13 +5681,13 @@ begin
       都不随滚动。HeaderBands 是数组正是为了这个 —— 加一条带就是多一项。 }
     if (GroupBandHeightPx > 0) and (FilterRowHeightPx > 0) then
       Result.HeaderBands := TTyIntArray.Create(
-        GroupBandHeightPx, ScaleI(FHeader.Height), FilterRowHeightPx)
+        GroupBandHeightPx, HeaderHeightPx, FilterRowHeightPx)
     else if GroupBandHeightPx > 0 then
-      Result.HeaderBands := TTyIntArray.Create(GroupBandHeightPx, ScaleI(FHeader.Height))
+      Result.HeaderBands := TTyIntArray.Create(GroupBandHeightPx, HeaderHeightPx)
     else if FilterRowHeightPx > 0 then
-      Result.HeaderBands := TTyIntArray.Create(ScaleI(FHeader.Height), FilterRowHeightPx)
+      Result.HeaderBands := TTyIntArray.Create(HeaderHeightPx, FilterRowHeightPx)
     else
-      Result.HeaderBands := TTyIntArray.Create(ScaleI(FHeader.Height));
+      Result.HeaderBands := TTyIntArray.Create(HeaderHeightPx);
   end
   else
     SetLength(Result.HeaderBands, 0);
@@ -5568,6 +5702,11 @@ begin
   Result := '';
   if Assigned(FOnGetCellText) then
     FOnGetCellText(Self, ACol, ARow, Result);
+end;
+
+function TTyDrawGrid.DisplayCellText(ACol, ARow: Integer): string;
+begin
+  Result := GetCellText(ACol, ARow);
 end;
 
 function TTyDrawGrid.ShouldDrawCellText(ACol, ARow: Integer): Boolean;
@@ -5628,7 +5767,7 @@ begin
       { 自己画图形的格(勾选框/进度条/评分)不该再叠一层文字。 }
       if not ShouldDrawCellText(colIdx, dataRow) then Continue;
 
-      txt := GetCellText(colIdx, dataRow);
+      txt := DisplayCellText(colIdx, dataRow);
       if txt = '' then Continue;
 
       { 先让开格线(线压在边界上、两侧各一半),再上左右内边距。
@@ -7995,6 +8134,26 @@ begin
   end;
 end;
 
+procedure TTyStringGrid.RenderPickListArrow(P: TTyPainter; ACol, ARow: Integer;
+  const AFrame: TTyStyleSet);
+var
+  r, tg: TRect;
+  sz: Integer;
+begin
+  { 正在编辑这一格时不画 —— 编辑器自己带箭头,两个叠着难看。 }
+  if FEditing and (ACol = FEditCol) and (ARow = FEditRow) then Exit;
+  r := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+
+  sz := ScaleI(8);
+  if sz > (r.Bottom - r.Top) then sz := r.Bottom - r.Top;
+  if (sz <= 0) or (r.Right - r.Left < sz + ScaleI(4)) then Exit;
+  tg := Rect(r.Right - sz - ScaleI(3), (r.Top + r.Bottom - sz) div 2,
+             r.Right - ScaleI(3), (r.Top + r.Bottom + sz) div 2);
+  { pad=1:小槽里 DrawGlyph 默认每边内缩 4 逻辑像素会只剩个糊点。 }
+  TyDrawGlyph(P, ActiveController, tg, tgChevronDown, AFrame.TextColor, 1, 1);
+end;
+
 procedure TTyStringGrid.RenderColorCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
@@ -8315,6 +8474,12 @@ begin
   st := ActiveController.Model.ResolveStyle('TyGridHyperlink', StyleClass, []);
   if tpTextColor in st.Present then Result := st.TextColor
   else Result := AFallback;
+end;
+
+function TTyStringGrid.DisplayCellText(ACol, ARow: Integer): string;
+begin
+  Result := GetCellText(ACol, ARow);
+  if Assigned(FOnGetFormat) then FOnGetFormat(Self, ACol, ARow, Result);
 end;
 
 function TTyStringGrid.ShouldDrawCellText(ACol, ARow: Integer): Boolean;
@@ -8858,8 +9023,18 @@ var
   i: Integer;
   seen: TStringList;
   v: string;
+  handled: Boolean;
 begin
   AItems.Clear;
+  { 宿主接管?百万行的虚拟表遍历全表取候选是走不通的,
+    而且服务端往往知道一份权威的取值集合。 }
+  if Assigned(FOnGetFilterValues) then
+  begin
+    handled := False;
+    FOnGetFilterValues(Self, ACol, AItems, handled);
+    if handled then Exit;
+    AItems.Clear;     { 没接管就当没动过 —— 宿主可能已经往里塞了东西 }
+  end;
   seen := TStringList.Create;
   try
     seen.Sorted := True;
@@ -12521,6 +12696,10 @@ begin
         { 省略号按钮画在文字**之上**(它贴着右缘,文字该为它让位由列宽决定)。 }
         if EditorKindFor(colIdx, dataRow) = gekEllipsis then
           RenderEllipsisCell(P, colIdx, dataRow, AFrame);
+        { 候选列在**非编辑态**也要露一个箭头 —— 否则用户看不出哪一格有候选项
+          (M19 的第三项;P5 只做了 MinEditorWidth / DropDownWidth 两项)。 }
+        if EditorKindFor(colIdx, dataRow) = gekPickList then
+          RenderPickListArrow(P, colIdx, dataRow, AFrame);
         case CellDisplayFor(colIdx, dataRow) of
           gcdProgress: RenderProgressCell(P, colIdx, dataRow, AFrame);
           gcdRating:   RenderRatingCell(P, colIdx, dataRow, AFrame);
