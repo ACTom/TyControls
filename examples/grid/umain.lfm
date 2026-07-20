@@ -817,9 +817,47 @@ object MainForm: TMainForm
             Caption = 'Ctrl+Z / Ctrl+Y'
           end
         end
+        object TbData3: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 118
+          Width = 1172
+          Align = alTop
+          object BtnInsCol: TTyButton
+            Left = 8
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '插入一列'
+            OnClick = BtnInsColClick
+          end
+          object BtnDelCol: TTyButton
+            Left = 122
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '删除本列'
+            OnClick = BtnDelColClick
+          end
+          object BtnMoveCol: TTyButton
+            Left = 236
+            Height = 26
+            Top = 6
+            Width = 132
+            Caption = '本列与右邻换位'
+            OnClick = BtnMoveColClick
+          end
+          object LblColTip: TTyLabel
+            Left = 384
+            Height = 20
+            Top = 10
+            Width = 640
+            Caption = '列的增删与换位现在也能撤销 —— 连宽度、标题、编辑器种类、只读、那一列上的筛选一起回来'
+          end
+        end
         object GridData: TTyStringGrid
           Left = 0
-          Height = 530
+          Height = 490
           Top = 0
           Width = 1172
           Align = alClient

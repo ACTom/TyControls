@@ -95,12 +95,14 @@ type
 
     PgData: TTyTabSheet;
     LblDataHint, LblSelMode, LblDataTip: TTyLabel;
-    TbData1, TbData2: TTyPanel;
+    TbData1, TbData2, TbData3: TTyPanel;
+    LblColTip: TTyLabel;
     GridData: TTyStringGrid;
     CbSelMode: TTyComboBox;
     BtnSelAll, BtnSelNone, BtnMerge, BtnUnmerge, BtnCopy, BtnCut, BtnPaste,
       BtnInsRow, BtnDelRow, BtnRowUp, BtnRowDown, BtnHideRow, BtnUnhideAll,
-      BtnExportCsv, BtnExportHtml, BtnUndo, BtnRedo: TTyButton;
+      BtnExportCsv, BtnExportHtml, BtnUndo, BtnRedo,
+      BtnInsCol, BtnDelCol, BtnMoveCol: TTyButton;
     ChkAutoGrow: TTyCheckBox;
 
     PgEvents: TTyTabSheet;
@@ -203,6 +205,9 @@ type
     procedure BtnUnhideAllClick(Sender: TObject);
     procedure BtnExportCsvClick(Sender: TObject);
     procedure BtnExportHtmlClick(Sender: TObject);
+    procedure BtnInsColClick(Sender: TObject);
+    procedure BtnDelColClick(Sender: TObject);
+    procedure BtnMoveColClick(Sender: TObject);
     procedure BtnUndoClick(Sender: TObject);
     procedure BtnRedoClick(Sender: TObject);
     procedure ChkDataChange(Sender: TObject);
@@ -1265,6 +1270,41 @@ end;
 { 撤销覆盖的不只是格里的字。给某行涂个底色、拖高它、再上移一格,
   然后按这里(或 Ctrl+Z)—— 底色、行高、合并跨度都跟着回原位。
   它们各自有记录点,不是靠"整行交换"记一笔。 }
+{ 列的增删与换位 —— 这三个现在都进撤销栈(P3.6)。
+  删一列之后按 Ctrl+Z,回来的不只是那些格子:宽度、标题、对齐、编辑器种类、
+  只读、下拉候选、以及那一列上的筛选,全都跟着回来。 }
+procedure TMainForm.BtnInsColClick(Sender: TObject);
+begin
+  GridData.InsertColumn(GridData.Col);
+  Status(Format('在第 %d 列前插了一列 —— Ctrl+Z 可以撤销', [GridData.Col]));
+end;
+
+procedure TMainForm.BtnDelColClick(Sender: TObject);
+var
+  c: TTyColumn;
+begin
+  if GridData.Header.Columns.Count <= 1 then
+  begin
+    Status('只剩一列了,不删');
+    Exit;
+  end;
+  c := TTyColumn(GridData.Header.Columns.Items[GridData.Col]);
+  Status(Format('删掉了「%s」(宽 %d)—— 按 Ctrl+Z,它连同宽度/标题/' +
+    '编辑器种类/筛选一起回来', [c.Text, c.Width]));
+  GridData.DeleteColumn(GridData.Col);
+end;
+
+procedure TMainForm.BtnMoveColClick(Sender: TObject);
+begin
+  if GridData.Col >= GridData.Header.Columns.Count - 1 then
+  begin
+    Status('已经是最后一列了');
+    Exit;
+  end;
+  GridData.MoveColumn(GridData.Col, GridData.Col + 1);
+  Status('本列与右邻换了位置 —— 换位也能撤销');
+end;
+
 procedure TMainForm.BtnUndoClick(Sender: TObject);
 begin
   if not GridData.CanUndo then
