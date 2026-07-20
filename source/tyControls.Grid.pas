@@ -1921,11 +1921,25 @@ type
     procedure PasteFromText(const AText: string);
     procedure PasteFromClipboard;
     { CSV。ADelimiter 默认逗号;含分隔符/引号/换行的字段自动加引号。 }
-    function  SaveToCSVText(ADelimiter: Char = ','): string;
+    { CSV 导出。范围参数(T2)缺省 = 全表 —— 加参数不能改变既有调用的行为。
+      越界一律钳到表内。范围走**显示序**,与不带范围时一致。 }
+    function  SaveToCSVText(ADelimiter: Char = ',';
+      AFromRow: Integer = -1; ARowCount: Integer = -1;
+      AFromCol: Integer = -1; AColCount: Integer = -1): string;
     { 导出 HTML 表格(含表头)。与 CSV 一致走显示序:所见即所得。 }
     function  SaveToHTMLText: string;
     procedure SaveToHTMLFile(const AFileName: string);
-    procedure LoadFromCSVText(const AText: string; ADelimiter: Char = ',');
+    { JSON 导出(T4)。每行一个对象,键取列标题;标题为空时退回 `colN`。
+      **只做导出不做导入**:导入要面对任意 JSON 结构(嵌套、类型、数组),
+      那是文件格式库的范畴 —— 与当初 SKIP 掉 XLS 是同一条理由。
+      宿主要导入自己解析成二维文本再喂给 LoadFromCSVText。 }
+    function  SaveToJSONText: string;
+    { CSV 导入。默认是**替换式**(先清空)—— 那是既有行为,不能改。
+      AAppend=True 时接在现有数据后面;AMaxRows 限制读多少条(-1 = 不限);
+      AIgnoreRows 跳过表头之后的前几条(说明行)。 }
+    procedure LoadFromCSVText(const AText: string; ADelimiter: Char = ',';
+      AAppend: Boolean = False; AMaxRows: Integer = -1;
+      AIgnoreRows: Integer = 0);
     procedure SaveToCSVFile(const AFileName: string; ADelimiter: Char = ',');
     procedure LoadFromCSVFile(const AFileName: string; ADelimiter: Char = ',');
     { 流式读写(T1)。内部走的就是上面那套 CSV 文本 —— 只多一层流封装,
@@ -10384,33 +10398,108 @@ begin
   if Clipboard.HasFormat(CF_TEXT) then PasteFromText(Clipboard.AsText);
 end;
 
-function TTyStringGrid.SaveToCSVText(ADelimiter: Char): string;
+{ 一个 JSON 字符串字面量的转义。 }
+function TyJsonQuote(const AValue: string): string;
+var
+  i: Integer;
+  ch: Char;
+begin
+  Result := '"';
+  for i := 1 to Length(AValue) do
+  begin
+    ch := AValue[i];
+    case ch of
+      '"':  Result := Result + '\"';
+      '\': Result := Result + '\\';
+      #8:   Result := Result + '\b';
+      #9:   Result := Result + '\t';
+      #10:  Result := Result + '\n';
+      #12:  Result := Result + '\f';
+      #13:  Result := Result + '\r';
+    else
+      { 其余控制字符走 \u 转义;可见字符(含 UTF-8 多字节)原样输出。 }
+      if ch < #32 then Result := Result + Format('\u%.4x', [Ord(ch)])
+      else Result := Result + ch;
+    end;
+  end;
+  Result := Result + '"';
+end;
+
+function TTyStringGrid.SaveToJSONText: string;
 var
   sb: TStringList;
   pos, cIdx, dataRow: Integer;
+  line, key: string;
+begin
+  sb := TStringList.Create;
+  try
+    for pos := 0 to DisplayRowCount - 1 do
+    begin
+      dataRow := DisplayToData(pos);
+      if dataRow < 0 then Continue;      { 分组行不是数据 —— 与 CSV/HTML 同规矩 }
+      line := '  {';
+      for cIdx := 0 to Header.Columns.Count - 1 do
+      begin
+        if cIdx > 0 then line := line + ', ';
+        { 键取列标题;空标题退回 colN,否则会导出一个没有键的对象。
+          标题重复时也会重复 —— JSON 允许,而"猜哪个是用户要的"更糟。 }
+        key := TTyColumn(Header.Columns.Items[cIdx]).Text;
+        if Trim(key) = '' then key := 'col' + IntToStr(cIdx);
+        line := line + TyJsonQuote(key) + ': ' +
+                TyJsonQuote(GetCellText(cIdx, dataRow));
+      end;
+      line := line + '}';
+      if pos < DisplayRowCount - 1 then line := line + ',';
+      sb.Add(line);
+    end;
+
+    if sb.Count = 0 then Exit('[]');
+    Result := '[' + LineEnding + sb.Text + ']';
+  finally
+    sb.Free;
+  end;
+end;
+
+function TTyStringGrid.SaveToCSVText(ADelimiter: Char;
+  AFromRow, ARowCount, AFromCol, AColCount: Integer): string;
+var
+  sb: TStringList;
+  pos, cIdx, dataRow, lastPos, lastCol: Integer;
   line: string;
 begin
+  { 范围钳制。-1 = 全表 —— 缺省调用与从前逐字节一致。 }
+  if AFromCol < 0 then AFromCol := 0;
+  if AFromCol > Header.Columns.Count - 1 then AFromCol := Header.Columns.Count - 1;
+  if AColCount < 0 then lastCol := Header.Columns.Count - 1
+  else lastCol := AFromCol + AColCount - 1;
+  if lastCol > Header.Columns.Count - 1 then lastCol := Header.Columns.Count - 1;
+
+  if AFromRow < 0 then AFromRow := 0;
+  if ARowCount < 0 then lastPos := DisplayRowCount - 1
+  else lastPos := AFromRow + ARowCount - 1;
+  if lastPos > DisplayRowCount - 1 then lastPos := DisplayRowCount - 1;
+
   sb := TStringList.Create;
   try
     { 表头一行(列标题),然后按显示序导出可见行。 }
     line := '';
-    for cIdx := 0 to Header.Columns.Count - 1 do
+    for cIdx := AFromCol to lastCol do
     begin
-      if cIdx > 0 then line := line + ADelimiter;
+      if cIdx > AFromCol then line := line + ADelimiter;
       line := line + TyCsvQuote(TTyColumn(Header.Columns.Items[cIdx]).Text, ADelimiter);
     end;
     sb.Add(line);
 
-    for pos := 0 to DisplayRowCount - 1 do
+    for pos := AFromRow to lastPos do
     begin
       dataRow := DisplayToData(pos);
       { 分组行不导出 —— 与 HTML 导出同一条规矩。不跳的话每个组标题都变成
         一条全空的记录(`,,,`),导回来或用 Excel 打开就是凭空多出的空行。 }
       if dataRow < 0 then Continue;
       line := '';
-      for cIdx := 0 to Header.Columns.Count - 1 do
+      for cIdx := AFromCol to lastCol do
       begin
-        if cIdx > 0 then line := line + ADelimiter;
+        if cIdx > AFromCol then line := line + ADelimiter;
         line := line + TyCsvQuote(GetCellText(cIdx, dataRow), ADelimiter);
       end;
       sb.Add(line);
@@ -10424,39 +10513,55 @@ end;
 
 
 
-procedure TTyStringGrid.LoadFromCSVText(const AText: string; ADelimiter: Char);
+procedure TTyStringGrid.LoadFromCSVText(const AText: string; ADelimiter: Char;
+  AAppend: Boolean; AMaxRows, AIgnoreRows: Integer);
 var
   rows: TTyCsvRows;
-  i, j, dataRow: Integer;
+  i, j, dataRow, first, taken, base: Integer;
 begin
   EndEdit(False);
   { 字符级解析:引号内的换行不断行(见 TyCsvParse 的说明)。 }
   rows := TyCsvParse(AText, ADelimiter);
   if Length(rows) = 0 then Exit;
 
-  { 第一行当表头:按它建列(列数不足就补)。 }
+  { 第一行当表头:按它建列(列数不足就补)。
+    追加模式下不动列标题 —— 追加的是数据,不是重新定义这张表。 }
   while Header.Columns.Count < Length(rows[0]) do
     Header.Columns.Add;
-  for j := 0 to High(rows[0]) do
-    TTyColumn(Header.Columns.Items[j]).Text := rows[0][j];
+  if not AAppend then
+    for j := 0 to High(rows[0]) do
+      TTyColumn(Header.Columns.Items[j]).Text := rows[0][j];
+
+  { 数据从第 1 行起(第 0 行是表头),再跳过 AIgnoreRows 条说明行。 }
+  first := 1 + AIgnoreRows;
+  if first < 1 then first := 1;
+  taken := Length(rows) - first;
+  if taken < 0 then taken := 0;
+  if (AMaxRows >= 0) and (taken > AMaxRows) then taken := AMaxRows;
 
   { 清空 + 改行数 + 逐格重填 = **一条**撤销记录。
     不包事务的话撤销一次只退回半张表 —— 那比"撤不回来"更难排查。
     (排序与筛选的重置不进撤销栈:那是"我此刻想怎么看",不是数据。) }
   BeginUpdate;
   try
-    ClearCells;
-    ClearFilters;
-    SortByColumn(-1, sdAscending);       { 导入后回到原始顺序 }
-    RowCount := Length(rows) - 1;
-
-    for i := 1 to High(rows) do
+    if AAppend then
+      base := RowCount                   { 接在现有数据后面 }
+    else
     begin
-      dataRow := i - 1;
-      for j := 0 to High(rows[i]) do
+      ClearCells;
+      ClearFilters;
+      SortByColumn(-1, sdAscending);     { 导入后回到原始顺序 }
+      base := 0;
+    end;
+    RowCount := base + taken;
+
+    for i := 0 to taken - 1 do
+    begin
+      dataRow := base + i;
+      for j := 0 to High(rows[first + i]) do
       begin
         if j >= Header.Columns.Count then Break;
-        Cells[j, dataRow] := rows[i][j];
+        Cells[j, dataRow] := rows[first + i][j];
       end;
     end;
   finally

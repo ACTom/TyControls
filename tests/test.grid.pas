@@ -260,6 +260,9 @@ type
     procedure TestClickingFilterRowOpensAnEditorThatFilters;
     procedure TestStreamRoundTrip;
     procedure TestClearRangeIsUndoable;
+    procedure TestRangeLimitedExport;
+    procedure TestAppendingCsvImport;
+    procedure TestJsonExport;
     procedure TestValidCharsAppliesInsideTheEditor;
     procedure TestTreeColumnIndentsAndCollapses;
     procedure TestDeletingAColumnIsUndoable;
@@ -9514,6 +9517,105 @@ begin
   { 越界要钳到表内,不能崩。 }
   G.ClearRows(4, 99);
   AssertEquals('越界钳住之后末行确实清了', '', G.Cells[0, 5]);
+end;
+
+{ T2:限定区域导出。默认仍是全表 —— 加参数不能改变既有调用的行为。 }
+procedure TTyStringGridTest.TestRangeLimitedExport;
+var
+  G: TStrGridAccess;
+  r, c: Integer;
+  sl: TStringList;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  for r := 0 to 4 do
+    for c := 0 to 3 do
+      G.Cells[c, r] := Format('%d%d', [c, r]);
+
+  sl := TStringList.Create;
+  try
+    { 全表(不传范围)—— 表头 + 5 行。 }
+    sl.Text := G.SaveToCSVText(',');
+    while (sl.Count > 0) and (sl[sl.Count - 1] = '') do sl.Delete(sl.Count - 1);
+    AssertEquals('不传范围仍是全表', 6, sl.Count);
+
+    { 2 行 x 2 列的区域。 }
+    sl.Text := G.SaveToCSVText(',', 1, 2, 1, 2);
+    while (sl.Count > 0) and (sl[sl.Count - 1] = '') do sl.Delete(sl.Count - 1);
+    AssertEquals('表头 + 2 行', 3, sl.Count);
+    AssertEquals('内容是那 2x2 区域', '11,21', sl[1]);
+    AssertEquals('第二行', '12,22', sl[2]);
+
+    { 越界要钳到表内,不能崩。 }
+    sl.Text := G.SaveToCSVText(',', 3, 99, 2, 99);
+    while (sl.Count > 0) and (sl[sl.Count - 1] = '') do sl.Delete(sl.Count - 1);
+    AssertEquals('越界钳住:表头 + 剩下的 2 行', 3, sl.Count);
+  finally
+    sl.Free;
+  end;
+end;
+
+{ T3:追加式导入 + MaxRows / IgnoreRows。
+  现有的 LoadFromCSVText 是**替换式**(先清空),那是默认行为,不能改。 }
+procedure TTyStringGridTest.TestAppendingCsvImport;
+var
+  G: TStrGridAccess;
+  csv: string;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 2;
+  G.Cells[0, 0] := 'keep0';
+  G.Cells[0, 1] := 'keep1';
+
+  csv := 'h1,h2' + LineEnding + 'a,1' + LineEnding + 'b,2' + LineEnding + 'c,3';
+
+  { 追加:既有数据不动,新行接在后面。 }
+  G.LoadFromCSVText(csv, ',', True);
+  AssertEquals('既有的两行还在', 'keep0', G.Cells[0, 0]);
+  AssertEquals('既有的两行还在', 'keep1', G.Cells[0, 1]);
+  AssertEquals('追加了 3 行', 5, G.RowCount);
+  AssertEquals('第一条新数据接在第 2 行', 'a', G.Cells[0, 2]);
+  AssertEquals('最后一条', 'c', G.Cells[0, 4]);
+
+  { MaxRows:只读前 2 条数据。 }
+  G.LoadFromCSVText(csv, ',', False, 2);
+  AssertEquals('MaxRows=2 时正好 2 行', 2, G.RowCount);
+  AssertEquals('读的是前两条', 'a', G.Cells[0, 0]);
+  AssertEquals('读的是前两条', 'b', G.Cells[0, 1]);
+
+  { IgnoreRows:跳过表头之后的头 1 条(说明行)。 }
+  G.LoadFromCSVText(csv, ',', False, -1, 1);
+  AssertEquals('跳过 1 条之后剩 2 行', 2, G.RowCount);
+  AssertEquals('从第二条数据开始', 'b', G.Cells[0, 0]);
+end;
+
+{ T4:JSON 导出。每行一个对象,键取列标题。 }
+procedure TTyStringGridTest.TestJsonExport;
+var
+  G: TStrGridAccess;
+  js: string;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 2;
+  TTyColumn(G.Header.Columns.Items[0]).Text := 'name';
+  TTyColumn(G.Header.Columns.Items[1]).Text := 'qty';
+  TTyColumn(G.Header.Columns.Items[2]).Text := '';        { 空标题 → 退回 col2 }
+  G.Cells[0, 0] := 'a';  G.Cells[1, 0] := '1';
+  G.Cells[0, 1] := 'has "quote" and \ slash';
+
+  js := G.SaveToJSONText;
+  AssertTrue('是个数组', Copy(Trim(js), 1, 1) = '[');
+  AssertTrue('键取列标题', Pos('"name"', js) > 0);
+  AssertTrue('空标题退回 colN', Pos('"col2"', js) > 0);
+  { 转义后应当是 \"quote\" —— 查未转义的 "quote" 是查不出区别的
+    (原样输出也含它)。查带反斜杠的那一版才有分辨力。 }
+  AssertTrue('引号要转义', Pos('\"quote\"', js) > 0);
+  AssertTrue('反斜杠要转义(一个变两个)', Pos('\\', js) > 0);
+
+  { 空表导出 []。 }
+  G.ClearCells;
+  G.RowCount := 0;
+  AssertEquals('空表导出空数组', '[]', Trim(G.SaveToJSONText));
 end;
 
 initialization
