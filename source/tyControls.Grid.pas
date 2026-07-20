@@ -2700,12 +2700,18 @@ procedure TTyCustomGrid.ScrollIntoView(ACol, ARow: Integer);
 var
   M: TTyGridMetrics;
   body, r, cell: TRect;
+  pos: Integer;
 begin
+  { 被筛掉/藏起来的行**没有可滚到的位置**。不挡的话 -1 会被几何层钳到内容顶端,
+    于是视口"跳回表格最上面",而用户根本没要求滚动。 }
+  pos := DataToDisplay(ARow);
+  if pos < 0 then Exit;
+
   M := GridMetrics;
   body := TyGridPaneRect(M, gpBody);
 
   { 纵向:用行矩形判断,最小移动量把它拉进正文区。 }
-  r := TyGridRowRect(DataToDisplay(ARow), M);
+  r := TyGridRowRect(pos, M);
   if r.Top < body.Top then
     SetScrollY(FScrollY - (body.Top - r.Top))
   else if r.Bottom > body.Bottom then
@@ -4390,6 +4396,10 @@ begin
       col := TTyColumn(FHeader.Columns.Items[i]);
       if not (coVisible in col.Options) then Continue;
       dataRow := DisplayToData(row);
+      { 分组行不是数据行(它的"数据行号"是负数),它有自己的渲染路径。
+        不挡的话宿主的钩子每帧都会收到 ARow = -1, -2 …,
+        而按行号索引自己的数据正是这个钩子最正常的用法 —— 于是在**绘制里**崩。 }
+      if dataRow < 0 then Continue;
 
       b := Default(TTyGridCellBorders);
       b.Width := 1;
@@ -4441,6 +4451,7 @@ begin
       if not (coVisible in col.Options) then Continue;
 
       dataRow := DisplayToData(row);
+      if dataRow < 0 then Continue;     { 分组行:见 RenderCellBorders 里的说明 }
       ap := CellAppearance(i, dataRow, row, AFrame);
       { `background: none` 是默认态 —— 一个像素都不画,整帧的开销就只有
         一次 ResolveStyle(缓存命中)加一次判断。 }

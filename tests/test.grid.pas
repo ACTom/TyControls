@@ -54,6 +54,8 @@ type
     FForm: TForm;
     FCtl: TTyStyleController;
     FTakeOverCol: Integer;
+    { 逐格钩子收到过的**最小**行号 —— 用来证明宿主永远见不到负的数据行。 }
+    FMinHookRow: Integer;
     { OnDblClickCell 的记账(它从前一处都没被触发过)。 }
     FDblCount, FDblCol, FDblRow: Integer;
     FRowMoveCount: Integer;
@@ -67,6 +69,15 @@ type
     procedure HandleRowMove(Sender: TObject; AFrom, ATo: Integer;
       var AAllow: Boolean);
     procedure HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
+    { 逐格钩子的探针 —— 只记下收到过的最小行号。
+      **必须放在 private**:published 区里的方法会被 FPCUnit 当成测试用例
+      直接调用(Sender = nil),于是它自己先崩一次。 }
+    procedure HookGetCellStyleRecordMin(Sender: TObject; ACol, ARow: Integer;
+      var ABackground: TTyFill; var ATextColor: TTyColor;
+      var AFontName: string; var AFontSize, AFontWeight: Integer;
+      var AHAlign: TAlignment; var AVAlign: TTextLayout);
+    procedure HookGetCellBorderRecordMin(Sender: TObject; ACol, ARow: Integer;
+      var ABorders: TTyGridCellBorders);
     procedure HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
       var AKind: TTyGridEditorKind);
     procedure HandleGetPickList(Sender: TObject; ACol, ARow: Integer; AItems: TStrings);
@@ -223,6 +234,8 @@ type
     procedure TestSelectAllSkipsGroupRows;
     procedure TestCopiedRangeMatchesTheHighlightedRange;
     procedure TestCsvExportSkipsGroupRowsLikeHtmlDoes;
+    procedure TestHostHooksNeverSeeANegativeRow;
+    procedure TestScrollIntoViewIgnoresAnInvisibleRow;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8629,6 +8642,85 @@ begin
   finally
     sl.Free;
   end;
+end;
+
+procedure TTyStringGridTest.HookGetCellStyleRecordMin(Sender: TObject;
+  ACol, ARow: Integer; var ABackground: TTyFill; var ATextColor: TTyColor;
+  var AFontName: string; var AFontSize, AFontWeight: Integer;
+  var AHAlign: TAlignment; var AVAlign: TTextLayout);
+begin
+  if ARow < FMinHookRow then FMinHookRow := ARow;
+end;
+
+procedure TTyStringGridTest.HookGetCellBorderRecordMin(Sender: TObject;
+  ACol, ARow: Integer; var ABorders: TTyGridCellBorders);
+begin
+  if ARow < FMinHookRow then FMinHookRow := ARow;
+  ABorders.Left := True;      { 让边框那条路径真的走下去 }
+end;
+
+{ 两条逐格渲染循环把 `DisplayToData(row)` 直接喂给宿主钩子。分组行的
+  数据行号是**负数**,于是 `OnGetCellStyle` / `OnGetCellBorder` 每帧都会收到
+  ARow = -1, -2 ...。宿主按行号索引自己的数据(这是这两个钩子最normal的用法)
+  就会越界崩溃或读到垃圾 —— 而且是在**绘制**里崩,极难查。
+
+  分组行有自己的渲染路径(RenderGroupRow),逐格这条本来就不该管它。 }
+procedure TTyStringGridTest.TestHostHooksNeverSeeANegativeRow;
+var
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+  begin
+    G.Cells[0, r] := IntToStr(r);
+    G.Cells[1, r] := 'g' + IntToStr(r mod 2);
+  end;
+  G.GroupByColumn(1);
+  AssertTrue('前置:确实有分组行', G.DisplayRow(0) < 0);
+
+  G.OnGetCellStyle := @HookGetCellStyleRecordMin;
+  G.OnGetCellBorder := @HookGetCellBorderRecordMin;
+
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    FMinHookRow := MaxInt;
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+  finally
+    Bmp.Free;
+  end;
+
+  AssertTrue('钩子至少要被调用过(否则这条测试什么都没测)',
+    FMinHookRow <> MaxInt);
+  AssertTrue(Format('宿主钩子不该收到负的数据行(收到过 %d)', [FMinHookRow]),
+    FMinHookRow >= 0);
+end;
+
+{ `ScrollIntoView` 把 `DataToDisplay(ARow)` 喂给行矩形。被筛掉的行返回 -1,
+  几何层把它钳到内容顶端 —— 于是视口"跳回表格最上面",而用户根本没要求滚动。 }
+procedure TTyStringGridTest.TestScrollIntoViewIgnoresAnInvisibleRow;
+var
+  G: TStrGridAccess;
+  r, before: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 100;
+  for r := 0 to 99 do
+    G.Cells[0, r] := 'keep';
+  G.Cells[0, 50] := 'drop';
+  G.SetColumnFilter(0, 'keep');          { 第 50 行没有显示位置了 }
+
+  G.ScrollByForTest(300);
+  before := G.GetScrollTop;
+  AssertTrue('前置:确实滚下去了', before > 0);
+
+  G.ScrollIntoView(0, 50);               { 滚到一个看不见的行 }
+  AssertEquals('看不见的行没有可滚到的位置 —— 不该把视口拽回顶部',
+    before, G.GetScrollTop);
 end;
 
 initialization
