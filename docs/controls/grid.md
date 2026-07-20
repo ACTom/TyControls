@@ -255,6 +255,25 @@ TyGridSummaryRow       汇总带
   寻址(排序筛选之后颜色才跟着数据走),而且整批必须算**一次**操作,
   否则撤销是一格一格退的。这两个函数把这些都包好了
 
+### 内嵌筛选行
+- `ShowFilterRow` 打开列头下面那条带,每列一个输入位;`FilterRowHeight`(0 = 跟列头同高)
+- 表达式:`>100` `>=100` `<5` `<=5` `<>x` `=x` · `a..b` 闭区间 · 其余是包含(不区分大小写)
+  · `;` 分隔的多个条件之间是 **OR**(列与列之间仍是 AND)
+- 半截输入(`>`、`..`、`10..`)一律**不过滤** —— 用户正打到一半时不该把整列筛没
+- 输入即筛(防抖),回车立刻生效,Esc 放弃这次修改;`SetFilterText` / `FilterText` 供代码使用
+- 它是**自己一条带,不是数据行** —— 行数、寻址、导出都不把它算进去
+- 筛选位用的是**独立于单元格编辑器**的那个控件:两者的提交去向完全不同,
+  让一个控件服务两种语义正是本控件出过事的地方
+
+### 树形单元格
+- `TreeColumn` 指定哪一列画成树(-1 = 不画),`TreeIndent` 定每级缩进
+- **控件不持有树**:层级与"有没有孩子"由 `OnGetNodeLevel` / `OnGetHasChildren` 回答
+  —— 与虚拟数据源同一条道理,百万行的树不必先在控件里建起来
+- 折叠 = 把子行从**显示序**里去掉(复用行序间接层,不另建一套)
+- `ToggleNode` / `NodeCollapsed` / `ExpandAllNodes` / `CollapseAllNodes`
+- 几何是公开的(`TreeContentLeft` / `TreeToggleRect`)—— 宿主要自绘或自己做命中时,
+  拿到的必须是控件正在用的那一份;命中与绘制共用同一个矩形
+
 ### 编辑
 - 列级声明:`EditorKind` / `ReadOnly` / `PickList` / `Aggregate` / `Format` /
   `ValidChars` / `MaxEditLength` / `MinValue` / `MaxValue` / `EditMask`
