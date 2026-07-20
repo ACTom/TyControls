@@ -111,7 +111,7 @@ TyButton {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 6px;
+  padding: var(--pad-button);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
 }
@@ -133,7 +133,7 @@ TyButton.ghost {
   border-color: alpha(var(--border), 0);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 6px;
+  padding: var(--pad-button);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
 }
@@ -157,7 +157,7 @@ TyEdit {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: var(--pad-control);
   font-size: var(--font-size-base);
 }
 TyEdit:hover    { border-color: var(--input-border-hover); }
@@ -170,7 +170,7 @@ TyCheckBox {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius-sm);
-  padding: 4px;
+  padding: var(--pad-control);
 }
 TyCheckBox:hover    { border-color: var(--accent); }
 TyCheckBox:active   { background: var(--accent); color: var(--on-accent); }
@@ -183,7 +183,7 @@ TyRadioButton {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius-pill);
-  padding: 4px;
+  padding: var(--pad-control);
 }
 TyRadioButton:hover    { border-color: var(--accent); }
 TyRadioButton:active   { background: var(--accent); color: var(--on-accent); }
@@ -196,7 +196,7 @@ TyPanel {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 8px;
+  padding: var(--pad-container);
 }
 
 TyComboBox {
@@ -205,7 +205,7 @@ TyComboBox {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: var(--pad-control);
   font-size: var(--font-size-base);
 }
 TyComboBox:hover    { border-color: var(--input-border-hover); }
@@ -249,7 +249,7 @@ TyListBox {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 2px;
+  padding: var(--pad-tight);
 }
 TyListBox:hover   { border-color: var(--input-border-hover); }
 TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
@@ -259,7 +259,7 @@ TyListItem {
   background: alpha(#000000, 0);
   color: var(--on-surface);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: var(--pad-control);
 }
 TyListItem:hover  { background: var(--surface-listitem-hover); }
 TyListItem:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }
@@ -298,7 +298,7 @@ TyHint {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius-sm);
-  padding: 5px 9px;
+  padding: var(--pad-tooltip);
   font-size: var(--font-size-base);
 }
 
@@ -333,7 +333,7 @@ TyToggleSwitch:disabled { opacity: var(--disabled-opacity); }
 TyTrackBar {
   background: var(--surface-track);
   border-radius: var(--radius-sm);
-  padding: 0px;
+  padding: var(--pad-none);
 }
 TyTrackBar:focus    { outline: 2px var(--focus-ring); }
 TyTrackBar:disabled { opacity: var(--disabled-opacity); }
@@ -346,7 +346,7 @@ TyTrackThumb:hover  { background: var(--accent-hover); }
 TyTrackThumb:active { background: var(--accent-active); }
 
 TyGroupBox {
-  padding: 4px 12px;
+  padding: var(--pad-groupbox);
   background: alpha(#FFFFFF, 0);
   color: var(--on-surface);
   border-color: var(--border);
@@ -387,7 +387,7 @@ TyTabSheet {
 TyTab {
   background: var(--surface-tab-rest);
   color: var(--on-surface);
-  padding: 4px;
+  padding: var(--pad-control);
   border-radius: var(--radius) var(--radius) 0 0;
 }
 TyTab:hover  { background: var(--surface-tab-hover); }
@@ -401,7 +401,7 @@ TySpinEdit {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: var(--pad-control);
   font-size: var(--font-size-base);
 }
 TySpinEdit:hover    { border-color: var(--input-border-hover); }
@@ -414,7 +414,7 @@ TyMemo {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: var(--pad-control);
   font-size: var(--font-size-base);
 }
 TyMemo:hover    { border-color: var(--input-border-hover); }
@@ -437,7 +437,7 @@ TyBadge {
   border-radius: var(--radius-round);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-bold);
-  padding: 0px 4px;
+  padding: var(--pad-badge);
 }
 
 /* ── Menu system ───────────────────────────────────────────────────────── */
@@ -448,7 +448,7 @@ TyMenuBar {
   color: var(--on-surface);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
-  padding: 2px;
+  padding: var(--pad-tight);
 }
 
 /* The dropdown/context popup surface (TTyMenuView, the rendered popup body).
@@ -459,7 +459,7 @@ TyMenuView {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: var(--pad-control);
 }
 TyMenuPopup {
   background: var(--surface);
@@ -467,7 +467,7 @@ TyMenuPopup {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: var(--pad-control);
 }
 
 /* A single menu row / bar cell. The base border-color is the separator-line ink. */
@@ -476,7 +476,7 @@ TyMenuItem {
   color: var(--on-surface);
   border-color: var(--border);
   border-radius: var(--radius-sm);
-  padding: 4px;
+  padding: var(--pad-control);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
 }
@@ -511,7 +511,7 @@ TyToolBar {
 
 /* ── Calendar + DateTimePicker ─────────────────────────────────────────── */
 
-TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 6px; font-size: var(--font-size-base); }
+TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-button); font-size: var(--font-size-base); }
 TyCalendarTitle { color: var(--on-surface); font-weight: var(--font-weight-bold); }
 TyCalendarTitle:hover { color: var(--accent); }
 TyCalendarWeekday { color: var(--muted); font-size: var(--font-size-base); }
@@ -519,7 +519,7 @@ TyCalendarCell { background: none; color: var(--on-surface); border-radius: var(
 TyCalendarCell:hover { background: var(--surface-hover); }
 TyCalendarCell:selected { background: var(--accent); color: var(--on-accent); }
 TyCalendarCell:disabled { color: var(--muted); }
-TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 4px 6px; font-size: var(--font-size-base); }
+TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-datetime); font-size: var(--font-size-base); }
 TyDateTimePicker:hover { border-color: var(--input-border-hover); }
 TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }
@@ -528,7 +528,7 @@ TyDateTimeButton:hover { background: var(--surface-hover); color: var(--accent);
 
 /* ── TreeView ──────────────────────────────────────────────────────────── */
 
-TyTreeView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 2px; font-size: var(--font-size-base); }
+TyTreeView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-tight); font-size: var(--font-size-base); }
 TyTreeNode { background: none; color: var(--on-surface); }
 TyTreeNode:hover { background: var(--surface-hover); }
 TyTreeNode:selected { background: var(--accent); color: var(--on-accent); }
@@ -543,7 +543,7 @@ TyTreeHeaderSection:selected { background: var(--surface-active); }
    网格自成一套 typeKey,不借用树/列表的键 —— 借来的键在外观主题层够不着。 */
 TyGrid { background: var(--surface); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); font-size: var(--font-size-base); }
 /* 正文单元格。resting 透明,让网格表面透出来;选中/悬停才上色。 */
-TyGridCell { background: none; color: var(--on-surface); padding: 0px 6px; }
+TyGridCell { background: none; color: var(--on-surface); padding: var(--pad-cell); }
 TyGridCell:hover    { background: var(--surface-hover); }
 TyGridCell:selected { background: var(--accent); color: var(--on-accent); }
 /* 失焦时的选区(HideSelectionWhenInactive)。给它**自己的键**,不写成
@@ -608,7 +608,7 @@ TyCard {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: var(--pad-card);
 }
 TyCard:hover { border-color: var(--border-hover); }
 TyCard:disabled { opacity: var(--disabled-opacity); }
@@ -630,7 +630,7 @@ TyTag {
   color: var(--on-surface);
   border-radius: var(--radius-round);
   font-size: var(--font-size-base);
-  padding: 0px 8px;
+  padding: var(--pad-chip);
 }
 TyTag.accent { background: var(--accent); color: var(--on-accent); }
 TyTag.danger { background: var(--danger); color: var(--on-danger); }
@@ -653,7 +653,7 @@ TyAlert {
   border-radius: var(--radius);
   color: var(--on-surface);
   font-size: var(--font-size-base);
-  padding: 8px 12px;
+  padding: var(--pad-alert);
 }
 TyAlert.info    { background: alpha(var(--accent), 0.10);  border-color: alpha(var(--accent), 0.35);  color: var(--accent); }
 TyAlert.success { background: alpha(var(--success), 0.10); border-color: alpha(var(--success), 0.35); color: var(--success); }
@@ -672,7 +672,7 @@ TyNotification {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 12px 14px;
+  padding: var(--pad-notification);
   font-size: var(--font-size-base);
 }
 TyNotification:hover   { border-color: var(--border-hover); }
@@ -689,7 +689,7 @@ TyEmpty {
   background: alpha(#FFFFFF, 0);
   color: var(--muted);
   font-size: var(--font-size-base);
-  padding: 16px;
+  padding: var(--pad-empty);
 }
 TyEmpty:disabled { opacity: var(--disabled-opacity); }
 /* The picture gets its own ink: it must sit far lighter than the message, and one rule
@@ -708,7 +708,7 @@ TySegmented:focus    { outline: 2px var(--focus-ring); }
 TySegmented:disabled { opacity: var(--disabled-opacity); }
 
 TySegmentedItem          { color: var(--muted); border-radius: var(--radius-sm);
-                           padding: 4px 10px; font-size: var(--font-size-base); }
+                           padding: var(--pad-segmented); font-size: var(--font-size-base); }
 TySegmentedItem:hover    { background: var(--overlay-hover); color: var(--on-surface); }
 TySegmentedItem:selected { background: var(--surface); color: var(--on-surface); }
 TySegmentedItem:disabled { color: var(--muted); }
@@ -722,7 +722,7 @@ TyPagination         { background: alpha(#FFFFFF, 0); color: var(--on-surface); 
 TyPagination:disabled { opacity: var(--disabled-opacity); }
 TyPaginationItem          { background: alpha(#FFFFFF, 0); color: var(--on-surface);
                             border-color: var(--border); border-width: var(--input-border-width);
-                            border-radius: var(--radius-sm); font-size: var(--font-size-base); padding: 0px 6px; }
+                            border-radius: var(--radius-sm); font-size: var(--font-size-base); padding: var(--pad-cell); }
 TyPaginationItem:hover    { border-color: var(--accent); color: var(--accent); }
 TyPaginationItem:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 TyPaginationItem:disabled { color: var(--muted); border-color: var(--border); }
@@ -750,9 +750,9 @@ TyStepsConnector:selected { background: var(--accent); }   /* into the current s
 TyStepsConnector:disabled { background: var(--border); }   /* not walked yet */
 
 /* Breadcrumb: a transparent trail; the mark takes the BAR's ink (it has no key of its own). */
-TyBreadcrumb         { background: alpha(#FFFFFF, 0); color: var(--muted); font-size: var(--font-size-base); padding: 2px 4px; }
+TyBreadcrumb         { background: alpha(#FFFFFF, 0); color: var(--muted); font-size: var(--font-size-base); padding: var(--pad-breadcrumb); }
 TyBreadcrumb:disabled { opacity: var(--disabled-opacity); }
-TyBreadcrumbItem          { color: var(--accent); font-size: var(--font-size-base); padding: 0px 4px; }
+TyBreadcrumbItem          { color: var(--accent); font-size: var(--font-size-base); padding: var(--pad-breadcrumb-item); }
 TyBreadcrumbItem:hover    { color: var(--accent-hover); }
 /* The last crumb IS the current location: not a link, so it reads as plain ink. */
 TyBreadcrumbItem:selected { color: var(--on-surface); }
@@ -767,12 +767,12 @@ TyTransfer {
   border-width: var(--input-border-width);
   border-radius: var(--radius);
   font-size: var(--font-size-base);
-  padding: 0px;
+  padding: var(--pad-none);
 }
 TyTransfer:disabled { opacity: var(--disabled-opacity); }
 TyTransferTitle { background: var(--surface-chrome); color: var(--on-surface);
                   border-color: var(--border); border-width: var(--input-border-width);
-                  font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: 0px 8px; }
+                  font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: var(--pad-chip); }
 
 /* TTyTreeSelect deliberately has NO key of its own: GetStyleTypeKey returns 'TyComboBox',
    because it IS a combo field — one every theme already dresses, with no key a skin could
@@ -787,7 +787,7 @@ TyCascader {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: var(--pad-control);
   font-size: var(--font-size-base);
 }
 TyCascader:hover    { border-color: var(--input-border-hover); }
@@ -797,7 +797,7 @@ TyCascaderPanel { background: var(--surface); color: var(--on-surface);
                   border-color: var(--border); border-width: var(--input-border-width);
                   border-radius: var(--radius); }
 TyCascaderItem          { background: alpha(#FFFFFF, 0); color: var(--on-surface);
-                          font-size: var(--font-size-base); padding: 0px 8px; }
+                          font-size: var(--font-size-base); padding: var(--pad-chip); }
 TyCascaderItem:hover    { background: var(--surface-listitem-hover); }
 TyCascaderItem:selected { background: var(--accent); color: var(--on-accent); }
 TyCascaderItem:disabled { color: var(--muted); }
@@ -810,7 +810,7 @@ TyPopover {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 8px;
+  padding: var(--pad-container);
   font-size: var(--font-size-base);
 }
 TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-base);
@@ -828,7 +828,7 @@ TyChartTooltip {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius-sm);
-  padding: 5px 9px;
+  padding: var(--pad-tooltip);
   font-size: var(--font-size-base);
 }
 
@@ -838,10 +838,10 @@ TyChartTooltip {
    saturated bar. TTyListGroupPanel insets and rounds the pill in code; the colour/radius here.
    These are their OWN keys so a theme can restyle the sider without touching TreeView/ListView
    column headers, which is what TyTreeHeaderSection (the borrowed key) would have wrecked. */
-TyListGroupHeader          { color: var(--muted); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: 0px 14px; }
+TyListGroupHeader          { color: var(--muted); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: var(--pad-group-header); }
 TyListGroupHeader:hover    { color: var(--on-surface); }
 TyListGroupHeader:selected { color: var(--accent); }   /* the group is OPEN */
-TyListGroupItem          { color: var(--on-surface); border-radius: var(--radius); font-size: var(--font-size-base); padding: 0px 14px; }
+TyListGroupItem          { color: var(--on-surface); border-radius: var(--radius); font-size: var(--font-size-base); padding: var(--pad-group-header); }
 TyListGroupItem:hover    { background: var(--surface-hover); }
 TyListGroupItem:active   { background: var(--selection); color: var(--accent); }   /* selected: soft accent pill */
 TyListGroupItem:disabled { color: var(--muted); }

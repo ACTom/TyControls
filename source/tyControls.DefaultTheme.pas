@@ -144,7 +144,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 6px;' + LineEnding +
+    '  padding: var(--pad-button);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-normal);' + LineEnding +
     '}' + LineEnding +
@@ -166,7 +166,7 @@ begin
     '  border-color: alpha(var(--border), 0);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 6px;' + LineEnding +
+    '  padding: var(--pad-button);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-normal);' + LineEnding +
     '}' + LineEnding +
@@ -190,7 +190,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TyEdit:hover    { border-color: var(--input-border-hover); }' + LineEnding +
@@ -203,7 +203,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius-sm);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '}' + LineEnding +
     'TyCheckBox:hover    { border-color: var(--accent); }' + LineEnding +
     'TyCheckBox:active   { background: var(--accent); color: var(--on-accent); }' + LineEnding +
@@ -216,7 +216,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius-pill);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '}' + LineEnding +
     'TyRadioButton:hover    { border-color: var(--accent); }' + LineEnding +
     'TyRadioButton:active   { background: var(--accent); color: var(--on-accent); }' + LineEnding +
@@ -229,7 +229,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 8px;' + LineEnding +
+    '  padding: var(--pad-container);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
@@ -238,7 +238,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TyComboBox:hover    { border-color: var(--input-border-hover); }' + LineEnding +
@@ -282,7 +282,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 2px;' + LineEnding +
+    '  padding: var(--pad-tight);' + LineEnding +
     '}' + LineEnding +
     'TyListBox:hover   { border-color: var(--input-border-hover); }' + LineEnding +
     'TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
@@ -292,7 +292,7 @@ begin
     '  background: alpha(#000000, 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '}' + LineEnding +
     'TyListItem:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
     'TyListItem:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }' + LineEnding +
@@ -331,7 +331,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius-sm);' + LineEnding +
-    '  padding: 5px 9px;' + LineEnding +
+    '  padding: var(--pad-tooltip);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -366,7 +366,7 @@ begin
     'TyTrackBar {' + LineEnding +
     '  background: var(--surface-track);' + LineEnding +
     '  border-radius: var(--radius-sm);' + LineEnding +
-    '  padding: 0px;' + LineEnding +
+    '  padding: var(--pad-none);' + LineEnding +
     '}' + LineEnding +
     'TyTrackBar:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyTrackBar:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
@@ -379,7 +379,7 @@ begin
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
     '' + LineEnding +
     'TyGroupBox {' + LineEnding +
-    '  padding: 4px 12px;' + LineEnding +
+    '  padding: var(--pad-groupbox);' + LineEnding +
     '  background: alpha(#FFFFFF, 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
@@ -420,7 +420,7 @@ begin
     'TyTab {' + LineEnding +
     '  background: var(--surface-tab-rest);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '  border-radius: var(--radius) var(--radius) 0 0;' + LineEnding +
     '}' + LineEnding +
     'TyTab:hover  { background: var(--surface-tab-hover); }' + LineEnding +
@@ -434,7 +434,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TySpinEdit:hover    { border-color: var(--input-border-hover); }' + LineEnding +
@@ -447,7 +447,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TyMemo:hover    { border-color: var(--input-border-hover); }' + LineEnding +
@@ -470,7 +470,7 @@ begin
     '  border-radius: var(--radius-round);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-bold);' + LineEnding +
-    '  padding: 0px 4px;' + LineEnding +
+    '  padding: var(--pad-badge);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* ── Menu system ───────────────────────────────────────────────────────── */' + LineEnding +
@@ -481,7 +481,7 @@ begin
     '  color: var(--on-surface);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-normal);' + LineEnding +
-    '  padding: 2px;' + LineEnding +
+    '  padding: var(--pad-tight);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* The dropdown/context popup surface (TTyMenuView, the rendered popup body).' + LineEnding +
@@ -492,7 +492,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '}' + LineEnding +
     'TyMenuPopup {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
@@ -500,7 +500,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* A single menu row / bar cell. The base border-color is the separator-line ink. */' + LineEnding +
@@ -509,7 +509,7 @@ begin
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
     '  border-radius: var(--radius-sm);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-normal);' + LineEnding +
     '}' + LineEnding +
@@ -544,7 +544,7 @@ begin
     '' + LineEnding +
     '/* ── Calendar + DateTimePicker ─────────────────────────────────────────── */' + LineEnding +
     '' + LineEnding +
-    'TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 6px; font-size: var(--font-size-base); }' + LineEnding +
+    'TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-button); font-size: var(--font-size-base); }' + LineEnding +
     'TyCalendarTitle { color: var(--on-surface); font-weight: var(--font-weight-bold); }' + LineEnding +
     'TyCalendarTitle:hover { color: var(--accent); }' + LineEnding +
     'TyCalendarWeekday { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
@@ -552,7 +552,7 @@ begin
     'TyCalendarCell:hover { background: var(--surface-hover); }' + LineEnding +
     'TyCalendarCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyCalendarCell:disabled { color: var(--muted); }' + LineEnding +
-    'TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 4px 6px; font-size: var(--font-size-base); }' + LineEnding +
+    'TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-datetime); font-size: var(--font-size-base); }' + LineEnding +
     'TyDateTimePicker:hover { border-color: var(--input-border-hover); }' + LineEnding +
     'TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
@@ -561,7 +561,7 @@ begin
     '' + LineEnding +
     '/* ── TreeView ──────────────────────────────────────────────────────────── */' + LineEnding +
     '' + LineEnding +
-    'TyTreeView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 2px; font-size: var(--font-size-base); }' + LineEnding +
+    'TyTreeView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-tight); font-size: var(--font-size-base); }' + LineEnding +
     'TyTreeNode { background: none; color: var(--on-surface); }' + LineEnding +
     'TyTreeNode:hover { background: var(--surface-hover); }' + LineEnding +
     'TyTreeNode:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
@@ -576,7 +576,7 @@ begin
     '   网格自成一套 typeKey,不借用树/列表的键 —— 借来的键在外观主题层够不着。 */' + LineEnding +
     'TyGrid { background: var(--surface); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); font-size: var(--font-size-base); }' + LineEnding +
     '/* 正文单元格。resting 透明,让网格表面透出来;选中/悬停才上色。 */' + LineEnding +
-    'TyGridCell { background: none; color: var(--on-surface); padding: 0px 6px; }' + LineEnding +
+    'TyGridCell { background: none; color: var(--on-surface); padding: var(--pad-cell); }' + LineEnding +
     'TyGridCell:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyGridCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     '/* 失焦时的选区(HideSelectionWhenInactive)。给它**自己的键**,不写成' + LineEnding +
@@ -641,7 +641,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 12px;' + LineEnding +
+    '  padding: var(--pad-card);' + LineEnding +
     '}' + LineEnding +
     'TyCard:hover { border-color: var(--border-hover); }' + LineEnding +
     'TyCard:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
@@ -663,7 +663,7 @@ begin
     '  color: var(--on-surface);' + LineEnding +
     '  border-radius: var(--radius-round);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
-    '  padding: 0px 8px;' + LineEnding +
+    '  padding: var(--pad-chip);' + LineEnding +
     '}' + LineEnding +
     'TyTag.accent { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyTag.danger { background: var(--danger); color: var(--on-danger); }' + LineEnding +
@@ -686,7 +686,7 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
-    '  padding: 8px 12px;' + LineEnding +
+    '  padding: var(--pad-alert);' + LineEnding +
     '}' + LineEnding +
     'TyAlert.info    { background: alpha(var(--accent), 0.10);  border-color: alpha(var(--accent), 0.35);  color: var(--accent); }' + LineEnding +
     'TyAlert.success { background: alpha(var(--success), 0.10); border-color: alpha(var(--success), 0.35); color: var(--success); }' + LineEnding +
@@ -705,7 +705,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 12px 14px;' + LineEnding +
+    '  padding: var(--pad-notification);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TyNotification:hover   { border-color: var(--border-hover); }' + LineEnding +
@@ -722,7 +722,7 @@ begin
     '  background: alpha(#FFFFFF, 0);' + LineEnding +
     '  color: var(--muted);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
-    '  padding: 16px;' + LineEnding +
+    '  padding: var(--pad-empty);' + LineEnding +
     '}' + LineEnding +
     'TyEmpty:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '/* The picture gets its own ink: it must sit far lighter than the message, and one rule' + LineEnding +
@@ -741,7 +741,7 @@ begin
     'TySegmented:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TySegmentedItem          { color: var(--muted); border-radius: var(--radius-sm);' + LineEnding +
-    '                           padding: 4px 10px; font-size: var(--font-size-base); }' + LineEnding +
+    '                           padding: var(--pad-segmented); font-size: var(--font-size-base); }' + LineEnding +
     'TySegmentedItem:hover    { background: var(--overlay-hover); color: var(--on-surface); }' + LineEnding +
     'TySegmentedItem:selected { background: var(--surface); color: var(--on-surface); }' + LineEnding +
     'TySegmentedItem:disabled { color: var(--muted); }' + LineEnding +
@@ -755,7 +755,7 @@ begin
     'TyPagination:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     'TyPaginationItem          { background: alpha(#FFFFFF, 0); color: var(--on-surface);' + LineEnding +
     '                            border-color: var(--border); border-width: var(--input-border-width);' + LineEnding +
-    '                            border-radius: var(--radius-sm); font-size: var(--font-size-base); padding: 0px 6px; }' + LineEnding +
+    '                            border-radius: var(--radius-sm); font-size: var(--font-size-base); padding: var(--pad-cell); }' + LineEnding +
     'TyPaginationItem:hover    { border-color: var(--accent); color: var(--accent); }' + LineEnding +
     'TyPaginationItem:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
     'TyPaginationItem:disabled { color: var(--muted); border-color: var(--border); }' + LineEnding +
@@ -783,9 +783,9 @@ begin
     'TyStepsConnector:disabled { background: var(--border); }   /* not walked yet */' + LineEnding +
     '' + LineEnding +
     '/* Breadcrumb: a transparent trail; the mark takes the BAR''s ink (it has no key of its own). */' + LineEnding +
-    'TyBreadcrumb         { background: alpha(#FFFFFF, 0); color: var(--muted); font-size: var(--font-size-base); padding: 2px 4px; }' + LineEnding +
+    'TyBreadcrumb         { background: alpha(#FFFFFF, 0); color: var(--muted); font-size: var(--font-size-base); padding: var(--pad-breadcrumb); }' + LineEnding +
     'TyBreadcrumb:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
-    'TyBreadcrumbItem          { color: var(--accent); font-size: var(--font-size-base); padding: 0px 4px; }' + LineEnding +
+    'TyBreadcrumbItem          { color: var(--accent); font-size: var(--font-size-base); padding: var(--pad-breadcrumb-item); }' + LineEnding +
     'TyBreadcrumbItem:hover    { color: var(--accent-hover); }' + LineEnding +
     '/* The last crumb IS the current location: not a link, so it reads as plain ink. */' + LineEnding +
     'TyBreadcrumbItem:selected { color: var(--on-surface); }' + LineEnding +
@@ -800,12 +800,12 @@ begin
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
-    '  padding: 0px;' + LineEnding +
+    '  padding: var(--pad-none);' + LineEnding +
     '}' + LineEnding +
     'TyTransfer:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     'TyTransferTitle { background: var(--surface-chrome); color: var(--on-surface);' + LineEnding +
     '                  border-color: var(--border); border-width: var(--input-border-width);' + LineEnding +
-    '                  font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: 0px 8px; }' + LineEnding +
+    '                  font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: var(--pad-chip); }' + LineEnding +
     '' + LineEnding +
     '/* TTyTreeSelect deliberately has NO key of its own: GetStyleTypeKey returns ''TyComboBox'',' + LineEnding +
     '   because it IS a combo field — one every theme already dresses, with no key a skin could' + LineEnding +
@@ -820,7 +820,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-control);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TyCascader:hover    { border-color: var(--input-border-hover); }' + LineEnding +
@@ -830,7 +830,7 @@ begin
     '                  border-color: var(--border); border-width: var(--input-border-width);' + LineEnding +
     '                  border-radius: var(--radius); }' + LineEnding +
     'TyCascaderItem          { background: alpha(#FFFFFF, 0); color: var(--on-surface);' + LineEnding +
-    '                          font-size: var(--font-size-base); padding: 0px 8px; }' + LineEnding +
+    '                          font-size: var(--font-size-base); padding: var(--pad-chip); }' + LineEnding +
     'TyCascaderItem:hover    { background: var(--surface-listitem-hover); }' + LineEnding +
     'TyCascaderItem:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyCascaderItem:disabled { color: var(--muted); }' + LineEnding +
@@ -843,7 +843,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 8px;' + LineEnding +
+    '  padding: var(--pad-container);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-base);' + LineEnding +
@@ -861,7 +861,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius-sm);' + LineEnding +
-    '  padding: 5px 9px;' + LineEnding +
+    '  padding: var(--pad-tooltip);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
@@ -871,10 +871,10 @@ begin
     '   saturated bar. TTyListGroupPanel insets and rounds the pill in code; the colour/radius here.' + LineEnding +
     '   These are their OWN keys so a theme can restyle the sider without touching TreeView/ListView' + LineEnding +
     '   column headers, which is what TyTreeHeaderSection (the borrowed key) would have wrecked. */' + LineEnding +
-    'TyListGroupHeader          { color: var(--muted); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: 0px 14px; }' + LineEnding +
+    'TyListGroupHeader          { color: var(--muted); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: var(--pad-group-header); }' + LineEnding +
     'TyListGroupHeader:hover    { color: var(--on-surface); }' + LineEnding +
     'TyListGroupHeader:selected { color: var(--accent); }   /* the group is OPEN */' + LineEnding +
-    'TyListGroupItem          { color: var(--on-surface); border-radius: var(--radius); font-size: var(--font-size-base); padding: 0px 14px; }' + LineEnding +
+    'TyListGroupItem          { color: var(--on-surface); border-radius: var(--radius); font-size: var(--font-size-base); padding: var(--pad-group-header); }' + LineEnding +
     'TyListGroupItem:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyListGroupItem:active   { background: var(--selection); color: var(--accent); }   /* selected: soft accent pill */' + LineEnding +
     'TyListGroupItem:disabled { color: var(--muted); }' + LineEnding;
