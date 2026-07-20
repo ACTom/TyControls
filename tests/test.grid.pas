@@ -198,6 +198,8 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestPhysicalSortCarriesCellAttributes;
+    procedure TestTopRightCornerCellIsVisibleWithBothFreezes;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -7610,6 +7612,65 @@ begin
   G.EndEdit(True);
   AssertEquals('日期格不该被上一次的时间模式带偏',
     DateToStr(EncodeDate(2026, 3, 4)), G.Cells[1, 1]);
+end;
+
+{ A3:物理排序必须把**格属性**(底色/合并跨度/只读)一起搬走。
+  只搬文字的话,底色会留在原地装饰到不相干的数据上;而且文字进了撤销栈、
+  属性没进 —— Ctrl+Z 之后得到一个从未存在过的状态。 }
+procedure TTyStringGridTest.TestPhysicalSortCarriesCellAttributes;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  for r := 0 to 4 do
+    G.Cells[0, r] := Format('%.2d', [4 - r]);   { 04 03 02 01 00 }
+  { 给"值 = 04"那一行(现在是第 0 行)标个显眼的底色。 }
+  G.CellColors[0, 0] := TyRGB(255, 0, 0);
+  G.SortMode := gsmData;
+
+  G.SortByColumn(0, sdAscending);
+
+  { '04' 排完之后在最后一行 —— 底色必须跟着它走。 }
+  AssertEquals('前置:04 排到了最后', '04', G.Cells[0, 4]);
+  AssertEquals('底色要跟着那一行数据走', TyRGB(255, 0, 0), G.CellColors[0, 4]);
+  AssertEquals('原来那一行不该还留着底色', 0, G.CellColors[0, 0]);
+end;
+
+{ A5:同时开顶部固定行与右侧冻结列时,**右上角**那一格必须画得出来。
+  顶部带原先只做两路分割(左/中),右上角被判成 gpTop,
+  与不含右冻结列的顶部带求交后成了空矩形 —— 那一格凭空消失。 }
+procedure TTyStringGridTest.TestTopRightCornerCellIsVisibleWithBothFreezes;
+var
+  G: TStrGridAccess;
+  i: Integer;
+  c: TTyColumn;
+  vis: TRect;
+begin
+  G := TStrGridAccess.Create(FForm);
+  G.Parent := FForm;
+  G.Controller := FCtl;
+  G.Font.PixelsPerInch := 96;
+  G.SetBounds(0, 0, 400, 300);
+  for i := 0 to 9 do
+  begin
+    c := G.Header.Columns.Add as TTyColumn;
+    c.Width := 90;
+  end;
+  G.DefaultRowHeight := 22;
+  G.RowCount := 20;
+  G.FixedRows := 1;
+  G.FixedColsRight := 1;
+  G.Cells[9, 0] := '右上角';
+
+  vis := G.CellVisibleRect(9, 0);
+  AssertTrue('右上角那一格不该是空矩形', not IsRectEmpty(vis));
+  { 与**它自己的**矩形比,而不是与 ClientWidth 比 ——
+    纵向滚动条占掉了十几像素,视口右沿并不等于控件右沿。
+    窗格裁剪正确时,完全可见的冻结格的可见矩形应当就是它的矩形。 }
+  AssertEquals('右上角那一格不该被裁掉一截',
+    G.CellRect(9, 0).Right, vis.Right);
 end;
 
 initialization

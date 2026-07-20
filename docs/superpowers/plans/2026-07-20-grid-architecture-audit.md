@@ -11,6 +11,11 @@
 
 ## A. 已确认的 bug(复核未被推翻)—— 先修这些
 
+> **进度**:A2 · A4 · A3 · A5 已修(2026-07-20)。
+> 剩 **A1**(CellPane 空间混用)· **A6**(选区矩形对 -1 不设防)· **A7**(SwapRows 只记录了文字)。
+> 修 A5 时**顺带挖出第 8 个 bug**:右冻结列锚在 `ClientWidth` 而窗格锚在 `ViewportW`,
+> 整条右冻结带右移一个滚动条宽、最右一列被裁 —— 已一并修掉。
+
 ### A1【高】`CellPane` 用**显示序**的判据去判**数据行**参数
 `source/tyControls.Grid.pas:3531-3552`
 ```pascal
@@ -40,7 +45,7 @@ Integer 而不报错;记录 + 运算符重载要穿透上万行的行下标算�
 **命名纪律(`ARow`=数据 / `APos`=显示,文件里已有约八成遵守)+ 少数几个转换收口点
 才是这里的天花板。**
 
-### A2【高】多级分组只按**第一个**分组列排序 —— 我昨天刚交付的 P6 是坏的
+### A2【高】✅ 已修 · 多级分组只按**第一个**分组列排序 —— 我昨天刚交付的 P6 是坏的
 `source/tyControls.Grid.pas:9044-9049` `EffectiveSortKeys` 只 prepend `GetGroupCol`
 (= `FGroupCols[0]`),而 `BuildGroups:5534` 按**每一级**切段,且完全依赖相邻性
 (它自己的注释 5455 就写着"必须在排序之后 —— 否则同组的行不相邻,切不出段")。
@@ -53,7 +58,7 @@ Integer 而不报错;记录 + 运算符重载要穿透上万行的行下标算�
 FGroupCols"而不是"是否等于 FGroupCols[0]"。把 `GetGroupCol` 改名 `OutermostGroupCol`
 (它读起来像"那个分组列",实际是"最外层那个",正是这次迁移漏掉的原因)。
 
-### A3【高】`ApplyOrderToData` 根本没搬**格属性**,而注释说搬了
+### A3【高】✅ 已修 · `ApplyOrderToData` 根本没搬**格属性**,而注释说搬了
 `source/tyControls.Grid.pas:8914` 声明了 `attrSnap`,**全文件仅此一处** —— 从未填充、
 从未写回。注释 8908-8910 却明确承诺"底色/合并跨度/只读…都跟着走"。
 
@@ -67,7 +72,7 @@ Ctrl+Z 之后得到一个从未存在过的状态。
 "经哨兵键三步换"的写法,或先按值快照。
 **守卫**:给某行设一个显眼的 CellColor,gsmData 排序,断言颜色跟着文字走。
 
-### A4【高】`gekTime` 编辑提交的是 `DateToStr` → 写进单元格的是 "1899-12-30"
+### A4【高】✅ 已修 · `gekTime` 编辑提交的是 `DateToStr` → 写进单元格的是 "1899-12-30"
 `source/tyControls.Grid.pas:9745`。开编辑按**种类**分派(9601-9612 设 `Kind := dtkTime`),
 关编辑按**控件可见性**分派(9722-9726 只看 `FDateEditor.Visible`)——
 而 `FDateEditor` **一个控件服务两种种类**,可见性无法区分它们。
@@ -85,7 +90,7 @@ Ctrl+Z 之后得到一个从未存在过的状态。
 Alignment / CharCase)。
 **低风险的临时修法**:9744 处按 `FDateEditor.Kind` 分支,9527 处补 `Kind := dtkDate`。
 
-### A5【中】`CellPane` 的顶部带只做**两路**分割,底部带做了**三路**
+### A5【中】✅ 已修 · `CellPane` 的顶部带只做**两路**分割,底部带做了**三路**
 `3536-3540` vs `3541-3547`。`gpTopRight` 在整个仓库**没有任何生产者**。
 **代价**:同时开启 `FixedRows` 与 `FixedColsRight` 时,右上角那块被判成 gpTop,
 与顶部带(不含右冻结列)求交 → 右上角的格子被裁没。

@@ -3441,7 +3441,10 @@ begin
   n := EffectiveFixedColsRight;
   if (n > 0) and (ACol >= FHeader.Columns.Count - n) then
   begin
-    Result := ClientWidth;
+    { 锚在**视口**右沿,不是控件右沿 —— 纵向滚动条占掉的那十几像素不属于视口。
+      用 ClientWidth 的话整条右冻结带右移一个滚动条宽,最右那一列被裁掉一截
+      (窗格矩形走的是 M.ClientW = ViewportW,两边必须同源)。 }
+    Result := ViewportW;
     for i := FHeader.Columns.Count - 1 downto ACol do
       if i < Length(FColWidthPx) then Dec(Result, FColWidthPx[i]);
     Exit;
@@ -3540,7 +3543,13 @@ begin
     于是固定行连一个像素都画不出来(占着高度的空白带就是这么来的)。 }
   if ARow < FFixedRows then
   begin
-    if ACol < FFixedCols then Result := gpTopLeft else Result := gpTop;
+    { 三路,与底部带对称。原先只分左/中,于是同时开右冻结列时,
+      右上角那一格被判成 gpTop,与**不含**右冻结列的顶部带求交后成了空矩形 ——
+      那一格凭空消失。`gpTopRight` 在枚举里躺着,一直没有生产者。 }
+    if ACol < FFixedCols then Result := gpTopLeft
+    else if ACol >= FHeader.Columns.Count - EffectiveFixedColsRight then
+      Result := gpTopRight
+    else Result := gpTop;
     Exit;
   end;
   if (FFixedRowsBottom > 0) and (ARow >= DisplayRowCount - FFixedRowsBottom) then
@@ -8926,7 +8935,10 @@ type
 var
   keys: TStringList;
   snap: array of TCellSnap;
-  attrSnap: array of record R: Integer; A: TTyGridCellAttr; end;
+  { 格属性按值快照。**不能存 TTyGridCellAttr 引用** —— 那是 FAttrs 持有的对象,
+    先删后写会指向已释放的内存。 }
+  attrSnap: array of record C, R: Integer; A: TTyGridCellAttr; end;
+  attrKeys: TStringList;
   heights: array of record R, H: Integer; end;
   i, n, sep, c, r: Integer;
   k: string;
@@ -8953,6 +8965,24 @@ begin
     keys.Free;
   end;
 
+  { 属性快照:先把每条按值拷出来(FAttrs.Find 给的是它自己持有的对象)。 }
+  attrKeys := TStringList.Create;
+  try
+    FAttrs.SnapshotKeys(attrKeys);
+    SetLength(attrSnap, attrKeys.Count);
+    for i := 0 to attrKeys.Count - 1 do
+    begin
+      k := attrKeys[i];
+      sep := Pos(':', k);
+      attrSnap[i].C := StrToIntDef(Copy(k, 1, sep - 1), -1);
+      attrSnap[i].R := StrToIntDef(Copy(k, sep + 1, MaxInt), -1);
+      attrSnap[i].A := TTyGridCellAttr.Create;
+      attrSnap[i].A.Assign(FAttrs.Find(k));
+    end;
+  finally
+    attrKeys.Free;
+  end;
+
   SetLength(heights, 0);
   n := 0;
   for i := 0 to RowCount - 1 do
@@ -8977,7 +9007,18 @@ begin
       SetRowHeights(heights[i].R, 0);
     for i := 0 to High(heights) do
       SetRowHeights(FRank[heights[i].R], heights[i].H);
+
+    { 格属性:先全清再按新位置写回。分两遍 —— 边删边写会覆盖还没搬走的条目
+      (与 ShiftCells 那边同一条道理)。 }
+    for i := 0 to High(attrSnap) do
+      if (attrSnap[i].R >= 0) and (attrSnap[i].R < RowCount) then
+        FAttrs.Remove(CellKey(attrSnap[i].C, attrSnap[i].R));
+    for i := 0 to High(attrSnap) do
+      if (attrSnap[i].R >= 0) and (attrSnap[i].R < RowCount) then
+        FAttrs.Ensure(CellKey(attrSnap[i].C, FRank[attrSnap[i].R]))
+          .Assign(attrSnap[i].A);
   finally
+    for i := 0 to High(attrSnap) do attrSnap[i].A.Free;
     EndUpdate;
   end;
 
