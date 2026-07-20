@@ -250,6 +250,10 @@ TyGridSummaryRow       汇总带
   `SelectedCellCount` + `OnSelectionChanged`
 - 离散多选(Ctrl+点)、拖选、`SelectionMode`(格 / 行 / 列)
 - 选区聚合 `SelectionSum` / `Avg` / `Min` / `Max`(非数值格跳过)
+- 给整个选区上色:`SetSelectionColor` / `SetSelectionTextColor`(传 0 = 清除,
+  返回改了几格)。**别自己写循环** —— 遍历选区要走显示序、跳过分组行、按数据行
+  寻址(排序筛选之后颜色才跟着数据走),而且整批必须算**一次**操作,
+  否则撤销是一格一格退的。这两个函数把这些都包好了
 
 ### 编辑
 - 列级声明:`EditorKind` / `ReadOnly` / `PickList` / `Aggregate` / `Format` /

@@ -56,7 +56,12 @@ TyButton:disabled { opacity: 0.5; }
   per-value counts, a (Blanks) entry), group rows with collapse and **per-group subtotals**, cell
   merging, a summary footer (sum/avg/min/max/count over the *filtered* rows), **selection outline
   and fill handle** (copy / extrapolate / repeat), a row-number gutter, hidden columns,
-  clipboard (Excel format) + CSV import/export, column resize and drag-reorder.
+  clipboard (Excel format) + CSV import/export, column resize and drag-reorder,
+  **row dragging**, **undo/redo** (Ctrl+Z/Y -- fill colours, row heights and merge spans
+  revert with the text, and one bulk operation is one press), **physical sorting**
+  (`gsmData` moves the data the way Excel does, undoably), **multi-level grouping**
+  (indented, subtotals per level, collapse keyed by path), and **layout persistence**
+  (widths / order / visibility / sort keys / freeze counts, loaded all-or-nothing).
 - **Virtual tree `TTyTreeView`** — a VirtualTreeView-class virtual tree: data-on-demand (scales to
   millions of nodes), multi-column with a draggable header (resize / reorder / sort), checkboxes +
   tri-state + radio nodes, multi-select (Ctrl/Shift) + full-row, variable row height, incremental
@@ -153,7 +158,7 @@ in code), plus a combined gallery and a dedicated TreeView showcase:
 
 | Example | What it shows |
 |---|---|
-| [examples/grid](examples/grid/) | **TTyStringGrid** (6 tabs): frozen rows/columns / a million rows from a virtual data source / sort, filter, group / 16 editor kinds / selection and clipboard / event hooks |
+| [examples/grid](examples/grid/) | **TTyStringGrid** (6 tabs): frozen rows/columns / a million rows from a virtual data source / sort, filter, group / 16 editor kinds / selection, clipboard and undo / event hooks |
 | [examples/treeview](examples/treeview/) | **TTyTreeView showcase**: million-node virtual tree / multi-column + sort / checkboxes + tri-state + radio / multi-select + full-row / inline editing / node drag-drop |
 | [examples/antdesign](examples/antdesign/) | **TyControls Pro**: an Ant Design Pro-style admin shell (sider + 6 pages), defaulting to the antdesign skin, with runtime skin switching |
 | [examples/demo](examples/demo/) | Combined gallery: all controls + multi-theme switch + custom window frame + runtime language switch |

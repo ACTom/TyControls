@@ -54,6 +54,44 @@ Linux and macOS.
 - Bulk row/column operations (insert/remove many, move, swap) and a full event family
   (cell-level mouse, column/row sizing during and after the drag, column move,
   check boxes, clipboard).
+- **Undo / redo** (Ctrl+Z / Ctrl+Y): more than the text comes back -- fill colour,
+  text colour, read-only, merge spans, row heights, a whole-table clear and a CSV
+  import all revert together. **One bulk operation is one press**: pasting a block,
+  cutting a block, inserting or removing several rows, colouring a selection,
+  auto-fitting every row, clearing all merges. `UndoLimit` defaults to 100 (0 turns
+  it off). An oversized record is discarded whole and the stack cleared -- half a
+  record restores a table that never existed, which is worse than "this one cannot
+  be undone".
+- **Sorting can actually move the data**: with `SortMode := gsmData`, clicking a
+  header physically permutes the rows the way Excel does (text, per-cell
+  attributes, row heights, hidden flags and merge spans all travel together). Display
+  order then equals data order, so the "no merging / no row dragging once sorted"
+  restrictions lift by themselves. It falls back to the previous behaviour as soon as
+  a filter, a grouping or a virtual data source is in play (moving filtered-out rows
+  along would corrupt data). Physical sorting **is undoable**.
+- **Multi-level grouping**: `GroupByColumns([province, city])` indents by level;
+  subtotals are computed per level (a row counts towards all its ancestors); the
+  collapsed state is keyed by **path**, so "Springfield" under two different states
+  collapses independently. Single-column grouping is the degenerate case of the same
+  implementation.
+- **Dragging rows with the mouse**: press in the indicator gutter and drag past the
+  threshold to reorder (symmetric with dragging column headers). `OnRowMove` can veto;
+  the row-height divider wins the gesture; dragging is refused while sorted, grouped
+  or with hidden rows -- when display order is not data order, dropping a row at a
+  screen position means nothing, since the sort puts it straight back.
+- **Layout persistence**: `SaveLayoutToString` / `LoadLayoutFromString` carry column
+  widths, order, visibility, sort keys and freeze counts; where to keep the string is
+  the host's choice. Loading is **all or nothing** -- the whole string is validated
+  before anything is touched, because half a restored layout is harder to diagnose
+  than none.
+- **Editor details**: the editor widens itself on narrow columns (`MinEditorWidth`,
+  without changing the column or crossing the right edge), drop-down width is
+  configurable per column (`TTyGridColumn.DropDownWidth`), and `OnGetEditorProp` hands
+  the host the actual editor control for a quick font or length tweak -- no need to
+  write a whole `OnCreateEditLink` for that.
+- **Colouring a selection**: `SetSelectionColor` / `SetSelectionTextColor` apply to the
+  whole selection as a single operation (hosts previously had to write the loop
+  themselves, and undo then came off one cell at a time).
 
 ### Fixed -- data grid
 
