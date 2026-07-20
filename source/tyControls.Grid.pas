@@ -1563,9 +1563,22 @@ type
     function SelectionAvg: Double;
     function SelectionMin: Double;
     function SelectionMax: Double;
+
+    { 给**整个选区**设底色 / 文字色。传 0(TyColorNone)= 清除。返回改了几格。
+
+      为什么要有这一对而不是让宿主自己写循环:遍历选区这件事有讲究 ——
+      要走显示序、要跳过分组行、寻址要用数据行(排序筛选之后颜色才跟着数据走)。
+      只读那半边早就收口在 `ForEachSelectedNumber` 了(四个聚合入口共用,
+      注释写着"免得四份几乎一样的遍历各自跑偏"),写这半边却一直空着,
+      于是每个宿主各写一遍 —— 而**没有人会记得包事务**,结果就是
+      涂了一片、撤销时一格一格退。这一对内部走 BeginUpdate,一次涂色一次撤销。 }
+    function SetSelectionColor(AColor: TTyColor): Integer;
+    function SetSelectionTextColor(AColor: TTyColor): Integer;
   private
     procedure ForEachSelectedNumber(out ACount: Integer;
       out ASum, AMin, AMax: Double);
+    { 写侧的选区遍历骨架。ATextColor = False 时设底色,True 时设文字色。 }
+    function  ApplySelectionColor(AColor: TTyColor; ATextColor: Boolean): Integer;
   public
 
     { 该列出现过的**去重值**(按显示序的原始数据,不受本列自身过滤影响)——
@@ -9726,6 +9739,45 @@ begin
       Inc(ACount);
     end;
   end;
+end;
+
+function TTyStringGrid.ApplySelectionColor(AColor: TTyColor;
+  ATextColor: Boolean): Integer;
+var
+  pos, colIdx, dataRow: Integer;
+begin
+  Result := 0;
+  { 整片 = **一条**撤销记录。逐格记的话,涂 20 格要按 20 次 Ctrl+Z ——
+    与粘贴/剪切/批量增删行/ClearMerges 同一族。 }
+  BeginUpdate;
+  try
+    { 遍历走显示序、寻址用数据行 —— 排序/筛选之后颜色仍跟着那一行数据走。
+      分组行不是数据行,跳过。(与 ForEachSelectedNumber 同一套规矩。) }
+    for pos := 0 to DisplayRowCount - 1 do
+    begin
+      dataRow := DisplayToData(pos);
+      if dataRow < 0 then Continue;
+      for colIdx := 0 to Header.Columns.Count - 1 do
+      begin
+        if not IsCellSelected(colIdx, dataRow) then Continue;
+        if ATextColor then SetCellTextColor(colIdx, dataRow, AColor)
+        else SetCellColor(colIdx, dataRow, AColor);
+        Inc(Result);
+      end;
+    end;
+  finally
+    EndUpdate;
+  end;
+end;
+
+function TTyStringGrid.SetSelectionColor(AColor: TTyColor): Integer;
+begin
+  Result := ApplySelectionColor(AColor, False);
+end;
+
+function TTyStringGrid.SetSelectionTextColor(AColor: TTyColor): Integer;
+begin
+  Result := ApplySelectionColor(AColor, True);
 end;
 
 function TTyStringGrid.SelectionSum: Double;

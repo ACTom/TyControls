@@ -632,24 +632,15 @@ begin
 end;
 
 { 对**整个选区**生效 —— 选了多格却只染一格,是把用户的选择丢掉了。
-  遍历走显示序、寻址用数据行:排序/筛选之后颜色仍跟着那一行数据走。 }
+
+  这里从前是自己写的双重循环。它遍历得没错(走显示序、寻址用数据行,
+  所以排序筛选之后颜色跟着数据走),但**漏了事务** ——
+  涂一片之后按 Ctrl+Z 是一格一格退的。
+  遍历选区这件事本来就该由控件收口(只读那半边早就收口了),
+  现在写这半边也有了:`SetSelectionColor` 内部包事务,一次涂色一次撤销。 }
 function TMainForm.ColorSelectedCells(AColor: TTyColor): Integer;
-var
-  pos, dataRow, colIdx: Integer;
 begin
-  Result := 0;
-  for pos := 0 to GridLook.DisplayRowCount - 1 do
-  begin
-    dataRow := GridLook.DisplayToData(pos);
-    if dataRow < 0 then Continue;            { 分组行,不是数据行 }
-    for colIdx := 0 to GridLook.Header.Columns.Count - 1 do
-      if GridLook.IsCellSelected(colIdx, dataRow) then
-      begin
-        GridLook.CellColors[colIdx, dataRow] := AColor;
-        Inc(Result);
-      end;
-  end;
-  GridLook.Invalidate;
+  Result := GridLook.SetSelectionColor(AColor);
 end;
 
 procedure TMainForm.BtnCellColorClick(Sender: TObject);

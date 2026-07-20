@@ -215,6 +215,7 @@ type
     procedure TestOversizedUndoRecordIsDiscardedNotTruncated;
     procedure TestPasteWithAFilteredOutCursorRowKeepsEveryLine;
     procedure TestUndoingARowSwapRestoresTheHiddenFlag;
+    procedure TestColouringASelectionIsOneUndoStep;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8293,6 +8294,52 @@ begin
   for pos := 0 to G.DisplayRowCount - 1 do
     shown := shown + G.Cells[0, G.DisplayRow(pos)];
   AssertEquals('撤销之后,藏着的还得是原来那一行', 'ABDEF', shown);
+end;
+
+{ 选中一片格子涂个底色,按一次 Ctrl+Z 应该整片退回去 —— 而不是一格一格退。
+
+  遍历选区的骨架(`ForEachSelectedNumber`)一直只有**只读**那一半:
+  四个聚合入口共用它,而写侧什么都没有。于是"给选区涂色"只能由宿主自己写循环,
+  而循环里没人记得包事务 —— 示例就是这么写的,用户一撤销就露馅。
+  与粘贴/剪切/批量增删行/ClearMerges 是同一族。 }
+procedure TTyStringGridTest.TestColouringASelectionIsOneUndoStep;
+var
+  G: TStrGridAccess;
+  red: TTyColor;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  red := TyRGB(255, 0, 0);
+
+  { 拉一个 2x3 的选区(2 列 x 3 行)。 }
+  G.Col := 1; G.Row := 1;
+  G.AnchorSelection;
+  G.PressKeyShift(VK_RIGHT);
+  G.PressKeyShift(VK_DOWN);
+  G.PressKeyShift(VK_DOWN);
+  AssertEquals('前置:选中 6 格', 6, G.SelectedCellCount);
+  G.ClearUndo;
+
+  AssertEquals('涂色返回涂了几格', 6, G.SetSelectionColor(red));
+  AssertEquals('前置:左上角涂上了', red, G.CellColors[1, 1]);
+  AssertEquals('前置:右下角涂上了', red, G.CellColors[2, 3]);
+  AssertEquals('涂一片 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertEquals('按一次撤销,左上角就退回去', 0, G.CellColors[1, 1]);
+  AssertEquals('同一次撤销,右下角也退回去', 0, G.CellColors[2, 3]);
+  AssertEquals('中间的也一样', 0, G.CellColors[1, 2]);
+  AssertFalse('而且栈里不该还剩别的', G.CanUndo);
+
+  G.Redo;
+  AssertEquals('重做也是一次到位', red, G.CellColors[2, 3]);
+
+  { 清掉底色走同一条路(传 0 = 清除)。 }
+  G.ClearUndo;
+  AssertEquals('清色也返回格数', 6, G.SetSelectionColor(0));
+  AssertEquals('前置:清掉了', 0, G.CellColors[1, 1]);
+  AssertEquals('清一片也是一条记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('撤销把整片颜色还回来', red, G.CellColors[1, 1]);
 end;
 
 initialization
