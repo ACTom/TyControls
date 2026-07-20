@@ -258,6 +258,8 @@ type
     procedure TestFilterRowIsABandNotADataRow;
     procedure TestFilterRowFiltersAndClears;
     procedure TestClickingFilterRowOpensAnEditorThatFilters;
+    procedure TestStreamRoundTrip;
+    procedure TestClearRangeIsUndoable;
     procedure TestValidCharsAppliesInsideTheEditor;
     procedure TestTreeColumnIndentsAndCollapses;
     procedure TestDeletingAColumnIsUndoable;
@@ -9418,6 +9420,100 @@ begin
   G.TypeCharInEditor('a');
   AssertEquals('非法字符在编辑器里也必须被挡住', '5', G.EditorText);
   G.EndEdit(False);
+end;
+
+{ T1:流式读写。内部就是 CSV 那一套,只多一层流封装 ——
+  刻意**不新造第二套序列化**,否则两套的转义规则迟早走样。 }
+procedure TTyStringGridTest.TestStreamRoundTrip;
+var
+  G, G2: TStrGridAccess;
+  ms: TMemoryStream;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  TTyColumn(G.Header.Columns.Items[0]).Text := 'A';
+  TTyColumn(G.Header.Columns.Items[1]).Text := 'B';
+  for r := 0 to 3 do
+  begin
+    G.Cells[0, r] := 'v' + IntToStr(r);
+    G.Cells[1, r] := IntToStr(r * 10);
+  end;
+  { 特意放一个含分隔符与换行的字段 —— 转义走不通的话这一格会把整张表撕开。 }
+  G.Cells[0, 2] := 'has,comma' + LineEnding + 'and newline';
+
+  ms := TMemoryStream.Create;
+  G2 := MakeStrGrid(FForm, FCtl);
+  try
+    G.SaveToStream(ms);
+    AssertTrue('写出去了', ms.Size > 0);
+    ms.Position := 0;
+    G2.LoadFromStream(ms);
+
+    AssertEquals('行数一致', 4, G2.RowCount);
+    AssertEquals('第一格', 'v0', G2.Cells[0, 0]);
+    AssertEquals('数值列', '30', G2.Cells[1, 3]);
+    AssertEquals('含逗号与换行的那一格要原样回来',
+      'has,comma' + LineEnding + 'and newline', G2.Cells[0, 2]);
+    AssertEquals('列标题也回来了', 'A',
+      TTyColumn(G2.Header.Columns.Items[0]).Text);
+  finally
+    ms.Free;
+  end;
+
+  { 空表也要能走一遍,不能崩。 }
+  ms := TMemoryStream.Create;
+  try
+    G2.ClearCells;
+    G2.RowCount := 0;
+    G2.SaveToStream(ms);
+    ms.Position := 0;
+    G2.LoadFromStream(ms);
+    AssertEquals('空表往返之后还是空的', 0, G2.RowCount);
+  finally
+    ms.Free;
+  end;
+end;
+
+{ T5:分区域清空。此前只有无参的 ClearCells(整表)——
+  想清掉几行几列只能自己逐格写空串,而那样撤销是一格一格退的。 }
+procedure TTyStringGridTest.TestClearRangeIsUndoable;
+var
+  G: TStrGridAccess;
+  r, c: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+    for c := 0 to 3 do
+      G.Cells[c, r] := Format('%d-%d', [c, r]);
+  G.ClearUndo;
+
+  G.ClearRows(1, 2);                       { 清掉第 1、2 行 }
+  AssertEquals('清掉的行空了', '', G.Cells[0, 1]);
+  AssertEquals('同一行的别的列也空了', '', G.Cells[3, 2]);
+  AssertEquals('范围外的行没动', '0-0', G.Cells[0, 0]);
+  AssertEquals('范围外的行没动', '0-3', G.Cells[0, 3]);
+  AssertEquals('清一片 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertEquals('一次撤销全回来', '0-1', G.Cells[0, 1]);
+  AssertEquals('一次撤销全回来', '3-2', G.Cells[3, 2]);
+
+  { 列方向同理。 }
+  G.ClearUndo;
+  G.ClearCols(1, 2);
+  AssertEquals('清掉的列空了', '', G.Cells[1, 0]);
+  AssertEquals('同一列的别的行也空了', '', G.Cells[2, 5]);
+  AssertEquals('范围外的列没动', '0-0', G.Cells[0, 0]);
+  AssertEquals('范围外的列没动', '3-0', G.Cells[3, 0]);
+  AssertEquals('清一片列 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('列也一次撤销全回来', '1-0', G.Cells[1, 0]);
+
+  { 越界要钳到表内,不能崩。 }
+  G.ClearRows(4, 99);
+  AssertEquals('越界钳住之后末行确实清了', '', G.Cells[0, 5]);
 end;
 
 initialization

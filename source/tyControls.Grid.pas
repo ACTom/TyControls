@@ -1692,6 +1692,12 @@ type
 
     { 清空全部单元格内容(不动行列结构)。 }
     procedure ClearCells;
+    { 只清一段行 / 一段列(T5)。此前只有整表的 ClearCells,
+      想清一片只能宿主逐格写空串 —— 而那样撤销是一格一格退的。
+      走 SetCells 收口点 → 自动可撤销;整批算**一条**记录。
+      范围越界一律钳到表内,不抛异常(与列宽/跨度的钳制同一条纪律)。 }
+    procedure ClearRows(AFrom, ACount: Integer);
+    procedure ClearCols(AFrom, ACount: Integer);
     { 写过的单元格个数 —— 稀疏性的可观测证据。 }
     function StoredCellCount: Integer;
 
@@ -1922,6 +1928,12 @@ type
     procedure LoadFromCSVText(const AText: string; ADelimiter: Char = ',');
     procedure SaveToCSVFile(const AFileName: string; ADelimiter: Char = ',');
     procedure LoadFromCSVFile(const AFileName: string; ADelimiter: Char = ',');
+    { 流式读写(T1)。内部走的就是上面那套 CSV 文本 —— 只多一层流封装,
+      **刻意不新造第二套序列化**:两套转义规则迟早走样,而含逗号/换行/引号
+      的字段正是最容易走样的地方。
+      编码固定 UTF-8 无 BOM,显式声明,别让宿主猜。 }
+    procedure SaveToStream(AStream: TStream; ADelimiter: Char = ',');
+    procedure LoadFromStream(AStream: TStream; ADelimiter: Char = ',');
 
     { 按某列排序。ACol < 0 表示取消排序、回到原始数据顺序。 }
     procedure SortByColumn(ACol: Integer; ADirection: TTySortDirection);
@@ -6105,6 +6117,45 @@ begin
     行置换、撤销全都自动失效 —— 与撤销的记录点是同一处口子。 }
   InvalidateAggregates;
   Invalidate;
+end;
+
+procedure TTyStringGrid.ClearRows(AFrom, ACount: Integer);
+var
+  r, c: Integer;
+begin
+  if ACount <= 0 then Exit;
+  if AFrom < 0 then AFrom := 0;
+  if AFrom >= RowCount then Exit;
+  if AFrom + ACount > RowCount then ACount := RowCount - AFrom;
+
+  BeginUpdate;                { 整批一条撤销记录 }
+  try
+    for r := AFrom to AFrom + ACount - 1 do
+      for c := 0 to Header.Columns.Count - 1 do
+        Cells[c, r] := '';
+  finally
+    EndUpdate;
+  end;
+end;
+
+procedure TTyStringGrid.ClearCols(AFrom, ACount: Integer);
+var
+  r, c: Integer;
+begin
+  if ACount <= 0 then Exit;
+  if AFrom < 0 then AFrom := 0;
+  if AFrom >= Header.Columns.Count then Exit;
+  if AFrom + ACount > Header.Columns.Count then
+    ACount := Header.Columns.Count - AFrom;
+
+  BeginUpdate;
+  try
+    for c := AFrom to AFrom + ACount - 1 do
+      for r := 0 to RowCount - 1 do
+        Cells[c, r] := '';
+  finally
+    EndUpdate;
+  end;
 end;
 
 procedure TTyStringGrid.ClearCells;
@@ -10415,6 +10466,36 @@ begin
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
+end;
+
+procedure TTyStringGrid.SaveToStream(AStream: TStream; ADelimiter: Char);
+var
+  txt: UTF8String;
+begin
+  if AStream = nil then Exit;
+  txt := UTF8String(SaveToCSVText(ADelimiter));
+  if Length(txt) > 0 then
+    AStream.WriteBuffer(txt[1], Length(txt));
+end;
+
+procedure TTyStringGrid.LoadFromStream(AStream: TStream; ADelimiter: Char);
+var
+  txt: UTF8String;
+  n: Int64;
+begin
+  if AStream = nil then Exit;
+  n := AStream.Size - AStream.Position;
+  if n <= 0 then
+  begin
+    { 空流 = 空表。别把它当成"什么都不做" —— 那样调用方分不清
+      "读了一张空表"和"根本没读"。 }
+    ClearCells;
+    RowCount := 0;
+    Exit;
+  end;
+  SetLength(txt, n);
+  AStream.ReadBuffer(txt[1], n);
+  LoadFromCSVText(string(txt), ADelimiter);
 end;
 
 procedure TTyStringGrid.SaveToCSVFile(const AFileName: string; ADelimiter: Char);
