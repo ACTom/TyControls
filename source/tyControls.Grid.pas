@@ -671,6 +671,13 @@ type
     procedure SetShowRowNumbers(AValue: Boolean);
     { 把"以行下标为键"的旁挂表整体平移(行高、隐藏行)。 }
     procedure ShiftRowKeyedTable(AList: TStringList; AFromIndex, ADelta: Integer);
+    { 上一个的**列轴对偶**:把"列下标 = 值"的 Name=Value 表整体平移。
+      ADelta < 0 时,正落在 AFromIndex 上的那条丢弃(那一列没了)。
+
+      为什么要单独一个:行那边的键是整条字符串(或带 Objects),
+      这边是 Name=Value 的 Name —— 存法不同,但规则是同一条。
+      **新增一张按列记账的旁挂表时,这里和 ShiftCells 的列分支都要加。** }
+    procedure ShiftColKeyedTable(AList: TStringList; AFromIndex, ADelta: Integer);
     { 把行号画进行头槽。ShowRowNumbers 关着时整段跳过。 }
     procedure RenderRowNumbers(P: TTyPainter; const M: TTyGridMetrics;
       AHeaderH, AIndicatorW: Integer); virtual;
@@ -7472,6 +7479,17 @@ begin
     ShiftRowKeyedTable(FRowHeights, AFromIndex, ADelta);
     ShiftRowKeyedTable(FHiddenRows, AFromIndex, ADelta);
     InvalidateOrder;
+  end
+  else
+  begin
+    { **列轴同理** —— 这三张表键的是列下标,上面只搬了格子。
+      不搬的话:筛选留在旧列号上,取出来的文字是空 → 每一行都不匹配 →
+      **整张表变空**,而漏斗图标已经跟着列走了,用户在界面上找不到地方去清它。
+      (做 B2 的行置换收口时只想了行,漏了这一半。) }
+    ShiftColKeyedTable(FColFilters, AFromIndex, ADelta);
+    ShiftColKeyedTable(FValFilters, AFromIndex, ADelta);
+    ShiftColKeyedTable(FAggregates, AFromIndex, ADelta);
+    InvalidateOrder;          { 筛选变了 → 显示序与汇总都要重算 }
   end;
 end;
 
@@ -7505,6 +7523,35 @@ begin
     for i := 0 to rebuilt.Count - 1 do
       AList.AddObject(rebuilt[i], rebuilt.Objects[i]);
     AList.Sorted := wasSorted;
+  finally
+    rebuilt.Free;
+  end;
+end;
+
+procedure TTyCustomGrid.ShiftColKeyedTable(AList: TStringList;
+  AFromIndex, ADelta: Integer);
+var
+  i, c: Integer;
+  rebuilt: TStringList;
+  v: string;
+begin
+  if (AList = nil) or (AList.Count = 0) or (ADelta = 0) then Exit;
+  rebuilt := TStringList.Create;
+  try
+    for i := 0 to AList.Count - 1 do
+    begin
+      c := StrToIntDef(AList.Names[i], -1);
+      if c < 0 then Continue;
+      v := AList.ValueFromIndex[i];
+      if c >= AFromIndex then
+      begin
+        if (ADelta < 0) and (c = AFromIndex) then Continue;   { 被删的那一列 }
+        Inc(c, ADelta);
+        if c < 0 then Continue;
+      end;
+      rebuilt.Add(IntToStr(c) + '=' + v);
+    end;
+    AList.Assign(rebuilt);
   finally
     rebuilt.Free;
   end;

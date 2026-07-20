@@ -217,6 +217,7 @@ type
     procedure TestUndoingARowSwapRestoresTheHiddenFlag;
     procedure TestColouringASelectionIsOneUndoStep;
     procedure TestAutoFitRowsIsOneUndoStep;
+    procedure TestColumnKeyedTablesFollowInsertAndDelete;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8363,6 +8364,48 @@ begin
 
   G.Undo;
   AssertFalse('按一次撤销就全退回去,栈里不该还剩别的', G.CanUndo);
+end;
+
+{ B2 的**列轴对偶** —— 做 B2 时只想了按行记账的旁挂表,漏了按列记账的那三张:
+  `FColFilters` / `FValFilters` / `FAggregates` 全都是"列下标 = 值",
+  而增删列只搬了格子和格属性,这三张表原地不动。
+
+  代价比行那边更狠:筛选留在旧列号上 → 那一列的文字取出来是空 →
+  **每一行都不匹配 → 整张表变空**,而漏斗图标已经跟着列走了,
+  用户在界面上找不到任何地方去清掉它。 }
+procedure TTyStringGridTest.TestColumnKeyedTablesFollowInsertAndDelete;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);          { 4 列 x 10 行 }
+  for r := 0 to 9 do
+  begin
+    G.Cells[3, r] := 'keep';
+    G.Cells[2, r] := IntToStr(r + 1);     { 合计 55 }
+  end;
+  G.Cells[3, 4] := 'drop';
+
+  G.SetColumnFilter(3, 'keep');
+  G.SetColumnAggregate(2, gagSum);
+  AssertEquals('前置:筛掉一行', 9, G.DisplayRowCount);
+  AssertEquals('前置:合计在第 2 列', 'Sum 50', G.FooterText(2));
+
+  { 在左边插一列 —— 筛选与合计都该跟着各自那一列右移。 }
+  G.InsertColumn(0);
+  AssertEquals('插列之后筛选要跟着那一列走', 9, G.DisplayRowCount);
+  AssertEquals('合计也跟着那一列走', 'Sum 50', G.FooterText(3));
+  AssertEquals('原来那一列不该还挂着合计', '', G.FooterText(2));
+
+  { 删掉左边那一列 —— 都该回到原位。 }
+  G.DeleteColumn(0);
+  AssertEquals('删列之后筛选还在正确的列上', 9, G.DisplayRowCount);
+  AssertEquals('合计回到第 2 列', 'Sum 50', G.FooterText(2));
+
+  { 删掉**被筛选的那一列本身** —— 它的筛选必须一起丢掉,
+    否则表会按一个已经不存在的列筛,结果是一行都不剩。 }
+  G.DeleteColumn(3);
+  AssertEquals('被筛选的列删掉之后,筛选也要跟着没', 10, G.DisplayRowCount);
 end;
 
 initialization
