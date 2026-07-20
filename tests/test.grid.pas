@@ -200,6 +200,8 @@ type
     procedure TestScrollBarDragUsesFastPath;
     procedure TestPhysicalSortCarriesCellAttributes;
     procedure TestTopRightCornerCellIsVisibleWithBothFreezes;
+    procedure TestFixedRowsAndSortTogetherKeepCellsInTheirPane;
+    procedure TestFrozenBandThicknessFollowsDisplayedRows;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -7671,6 +7673,97 @@ begin
     窗格裁剪正确时,完全可见的冻结格的可见矩形应当就是它的矩形。 }
   AssertEquals('右上角那一格不该被裁掉一截',
     G.CellRect(9, 0).Right, vis.Right);
+end;
+
+{ A1:固定行与排序**叠加**时,每一格都必须落在它显示位置所属的那个窗格里。
+
+  `CellPane` 的两个判据(`< FixedRows` / `>= DisplayRowCount - FixedRowsBottom`)
+  是**显示序**语义,而调用方喂的是**数据行**。两者一致时(没排序)看不出来;
+  一排序就错位:数据下标 < FixedRows 的格子一律被判成 gpTop,与冻结带求交后
+  成了空矩形 —— 它们滚到哪儿都不画,行**静默变空白**;反过来真正显示在冻结带里
+  的行被判成 gpBody,同样被裁没。
+
+  现有测试分别测固定行、分别测排序,从不叠加 —— 所以一直是绿的。 }
+procedure TTyStringGridTest.TestFixedRowsAndSortTogetherKeepCellsInTheirPane;
+var
+  G: TStrGridAccess;
+  r, pos: Integer;
+  vis, geo: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    G.Cells[0, r] := Format('%.2d', [r]);      { 00 .. 09 }
+  G.FixedRows := 2;
+
+  { 降序 —— 显示位置 0/1(冻结带)现在装的是**数据行 9/8**,
+    而数据行 0/1 被推到了正文窗格的最下面。 }
+  G.SortByColumn(0, sdDescending);
+  AssertEquals('前置:降序后显示位置 0 是数据行 9', 9, G.DisplayRow(0));
+  AssertEquals('前置:降序后显示位置 9 是数据行 0', 0, G.DisplayRow(9));
+
+  { 10 行 × 20px = 200px,视口 300px 且没有横向滚动 ——
+    每一格都完整可见,于是可见矩形应当**恰好等于**它的几何矩形。
+    有一格被判错窗格,求交就会把它整个吃掉(空矩形)。 }
+  for r := 0 to 9 do
+  begin
+    pos := G.DisplayRow(r);      { 只为报错信息好读 }
+    vis := G.CellVisibleRect(0, r);
+    geo := G.CellRect(0, r);
+    AssertFalse(Format('数据行 %d(值 %s)的可见矩形不该是空的', [r, G.Cells[0, r]]),
+      IsRectEmpty(vis));
+    AssertEquals(Format('数据行 %d 的可见矩形顶边(显示位置解出 %d)', [r, pos]),
+      geo.Top, vis.Top);
+    AssertEquals(Format('数据行 %d 的可见矩形底边', [r]), geo.Bottom, vis.Bottom);
+  end;
+end;
+
+{ 同族:冻结带的**厚度**也是把显示位置喂给按数据行查表的 `RowHeightOf`。
+  可变行高 + 排序时,取的是**另外几行**的高度 —— 冻结带与正文于是错开一截:
+  正文首行要么压住固定行、要么与它之间裂开一条缝。
+
+  断言"显示位置 1 的底边 == 显示位置 2 的顶边"——
+  纯几何、可观测,且不依赖厚度的具体数值。 }
+procedure TTyStringGridTest.TestFrozenBandThicknessFollowsDisplayedRows;
+var
+  G, G2: TStrGridAccess;
+  r: Integer;
+  vis: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    G.Cells[0, r] := Format('%.2d', [r]);
+  { 让**排完序后落在冻结带里**的那两行高得与众不同。 }
+  G.RowHeights[9] := 50;
+  G.RowHeights[8] := 40;
+  G.FixedRows := 2;
+
+  G.SortByColumn(0, sdDescending);
+  AssertEquals('前置:冻结带第一行是数据行 9', 9, G.DisplayRow(0));
+
+  AssertEquals('冻结带厚度必须按**显示在带子里的那两行**算 —— 正文首行要接在它下面',
+    G.CellRect(0, G.DisplayRow(1)).Bottom,
+    G.CellRect(0, G.DisplayRow(2)).Top);
+
+  { 底部带同理,而且它的症状更直接:带子算薄了,gpBottom 窗格就够不着
+    最上面那行的上半截,那一截被裁掉。 }
+  G2 := MakeStrGrid(FForm, FCtl);
+  G2.RowCount := 10;
+  for r := 0 to 9 do
+    G2.Cells[0, r] := Format('%.2d', [r]);
+  { 降序后显示在**底部两格**里的是数据行 1 和 0。 }
+  G2.RowHeights[1] := 50;
+  G2.RowHeights[0] := 40;
+  G2.FixedRowsBottom := 2;
+
+  G2.SortByColumn(0, sdDescending);
+  AssertEquals('前置:底部带第一行是数据行 1', 1, G2.DisplayRow(8));
+
+  vis := G2.CellVisibleRect(0, 1);
+  AssertFalse('底部冻结行的可见矩形不该是空的', IsRectEmpty(vis));
+  AssertEquals('底部冻结带算薄了会把最上面那行裁掉一截',
+    G2.CellRect(0, 1).Top, vis.Top);
 end;
 
 initialization

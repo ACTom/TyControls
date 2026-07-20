@@ -767,8 +767,13 @@ type
     function FrozenHeightPx: Integer; virtual;
     { 页脚汇总带高度(设备像素)。它钉在视口底部、不参与滚动。 }
     function FooterHeightPx: Integer; virtual;
-    { 逐行行高(逻辑像素)。基类恒为 DefaultRowHeight;派生类可按行覆盖。 }
+    { 逐行行高(逻辑像素)。基类恒为 DefaultRowHeight;派生类可按行覆盖。
+      **吃数据行** —— 显式行高与 OnGetRowHeight 都按数据行记账。 }
     function RowHeightOf(ARow: Integer): Integer; virtual;
+    { 同上,但吃**显示位置**。冻结带的厚度是按"显示在带子里的那几行"算的,
+      直接把显示位置喂给 RowHeightOf 就会取到另外几行的高度(排序后必然错)。
+      分组行没有数据行,按默认行高 —— 与 RowTops 同一条规则。 }
+    function RowHeightOfDisplay(APos: Integer): Integer;
     { 行高前缀和(设备像素),喂给几何层。全等高时返回空数组 = 走统一行高快路径。 }
     function RowTops: TTyIntArray; virtual;
 
@@ -886,9 +891,12 @@ type
     { 实际参与显示的行数。过滤后 < RowCount;几何层用的是它,不是 RowCount。 }
     function DisplayRowCount: Integer; virtual;
 
-    { 单元格所属窗格。P0 只按列区分(固定列 → gpLeft,其余 → gpBody):
-      FixedRows 目前只在冻结带里**预留高度**,固定行自身的行寻址随 P1 的数据模型一起做。 }
-    function CellPane(ACol, ARow: Integer): TTyGridPane;
+    { 单元格所属窗格。**吃的是显示位置 APos,不是数据行** —— 这里的两个判据
+      (`< FixedRows` / `>= DisplayRowCount - FixedRowsBottom`)本来就只在显示序里
+      成立;从前喂数据行,没排序时两者相等所以看不出来,一排序就把格子判进错的窗格,
+      求交后成空矩形、行静默变空白。空间写进签名,别再靠约定。
+      被筛掉的行(APos < 0)没有显示位置,只按列分窗格。 }
+    function CellPane(ACol, APos: Integer): TTyGridPane;
 
     { 单元格的几何矩形,客户区坐标 —— **未裁剪**。派生类可覆写(合并区)。绘制时要先裁到所属窗格;
       正文列横向滚到冻结带底下的那一段就在这里被裁掉。 }
@@ -2252,8 +2260,9 @@ begin
   if n <= 0 then Exit;
   if n > DisplayRowCount - FFixedRows then n := DisplayRowCount - FFixedRows;
   if n <= 0 then Exit;
+  { i 是**显示位置** —— 带子里装的是哪几行数据由显示序说了算。 }
   for i := DisplayRowCount - n to DisplayRowCount - 1 do
-    Inc(Result, ScaleI(RowHeightOf(i)));
+    Inc(Result, ScaleI(RowHeightOfDisplay(i)));
 end;
 
 function TTyCustomGrid.EffectiveFixedColsRight: Integer;
@@ -2352,9 +2361,10 @@ begin
   if hoVisible in FHeader.Options then Inc(px, ScaleI(FHeader.Height));
   { 分组带也在上冻结带里 —— 漏了它固定行和正文都会往上顶,压住分组标题。 }
   Inc(px, GroupBandHeightPx);
-  { 逐行累加真实高度(而非 行数×默认行高)—— 可变行高时固定行也可能各不相同。 }
+  { 逐行累加真实高度(而非 行数×默认行高)—— 可变行高时固定行也可能各不相同。
+    i 是**显示位置**:冻结带里钉的是显示序最前的那几行,不是数据行 0..n。 }
   for i := 0 to FFixedRows - 1 do
-    Inc(px, ScaleI(RowHeightOf(i)));
+    Inc(px, ScaleI(RowHeightOfDisplay(i)));
   Result := px;
 end;
 
@@ -3536,12 +3546,15 @@ begin
   { 基类没有合并。 }
 end;
 
-function TTyCustomGrid.CellPane(ACol, ARow: Integer): TTyGridPane;
+function TTyCustomGrid.CellPane(ACol, APos: Integer): TTyGridPane;
 begin
   { 行也要分窗格,不只是列。固定行的矩形钉在上冻结带里,而正文窗格从冻结带
     **之下**才开始 —— 把它们一律算作正文窗格的话,可见矩形恒为空,
-    于是固定行连一个像素都画不出来(占着高度的空白带就是这么来的)。 }
-  if ARow < FFixedRows then
+    于是固定行连一个像素都画不出来(占着高度的空白带就是这么来的)。
+
+    APos 是**显示位置**。被筛掉的行没有显示位置(-1),不该被 `-1 < FixedRows`
+    误判进顶部冻结带 —— 只按列分。 }
+  if (APos >= 0) and (APos < FFixedRows) then
   begin
     { 三路,与底部带对称。原先只分左/中,于是同时开右冻结列时,
       右上角那一格被判成 gpTop,与**不含**右冻结列的顶部带求交后成了空矩形 ——
@@ -3552,7 +3565,8 @@ begin
     else Result := gpTop;
     Exit;
   end;
-  if (FFixedRowsBottom > 0) and (ARow >= DisplayRowCount - FFixedRowsBottom) then
+  if (FFixedRowsBottom > 0) and (APos >= 0)
+     and (APos >= DisplayRowCount - FFixedRowsBottom) then
   begin
     if ACol < FFixedCols then Result := gpBottomLeft
     else if ACol >= FHeader.Columns.Count - EffectiveFixedColsRight then
@@ -3578,7 +3592,8 @@ begin
     Result := Rect(0, 0, 0, 0);
     Exit;
   end;
-  pane := TyGridPaneRect(GridMetrics, CellPane(ACol, ARow));
+  { 数据行 → 显示位置的转换**只在这里做一次**。CellPane 收显示位置。 }
+  pane := TyGridPaneRect(GridMetrics, CellPane(ACol, DataToDisplay(ARow)));
   if not IntersectRect(Result, cell, pane) then
     Result := Rect(0, 0, 0, 0);
 end;
@@ -4449,6 +4464,15 @@ begin
   { 优先级:显式存储 > 默认。派生类再插进回调。 }
   Result := GetRowHeights(ARow);
   if Result <= 0 then Result := FDefaultRowHeight;
+end;
+
+function TTyCustomGrid.RowHeightOfDisplay(APos: Integer): Integer;
+var
+  d: Integer;
+begin
+  d := DisplayToData(APos);
+  if d < 0 then Result := FDefaultRowHeight    { 分组行 / 越界 }
+  else Result := RowHeightOf(d);
 end;
 
 function TTyCustomGrid.RowTops: TTyIntArray;
@@ -9904,7 +9928,7 @@ begin
     (与行号、横格线同一类问题:chrome 必须跟着它所属的窗格走。) }
   oldClip := P.Bitmap.ClipRect;
   if not IntersectRect(clipR, oldClip,
-       TyGridPaneRect(M, CellPane(r.Right, DisplayToData(r.Bottom)))) then Exit;
+       TyGridPaneRect(M, CellPane(r.Right, r.Bottom))) then Exit;
   P.Bitmap.ClipRect := clipR;
   try
     lw := fS.BorderWidth;
