@@ -1,7 +1,7 @@
 # 密度尺度:经典 / 现代 两档
 
 日期:2026-07-21
-状态:设计已确认,待写实施计划
+状态:设计已确认;第一期实施计划见 `plans/2026-07-21-density-scale-p1.md`
 
 ## 一句话
 
@@ -78,21 +78,35 @@ property Density: TTyDensity read FDensity write SetDensity;  // 默认 tdClassi
 **不做逐控件密度**,只有 Controller 级。一个窗口里一半经典一半现代不是
 真实诉求。
 
-### 新增 API
+### 按名字取尺寸令牌的 API:**已经存在**
+
+> 更正(2026-07-21,写实施计划时发现):本节原先写的是"这是整件事真正缺的
+> 基础设施",**那是错的**。
 
 ```pascal
-{ TTyStyleModel }
-function TokenPx(const AName: string; ADefault: Integer): Integer;
+{ TTyStyleModel }      function ResolveMetric(const AName: string; ADefault: Integer): Integer;
+{ TTyStyleController } function Metric(const AName: string; ADefault: Integer): Integer;
 ```
 
-`TTyStyleSet` 只有固定字段(Background / Padding / FontSize / BorderRadius…),
-`TyCardHeaderHeight = 36` 这类值今天**没有办法**放进主题 —— 控件问不出来。
-这是整件事真正缺的基础设施。
+两者都是 **public**,theme-v3 C 期就建好了,语义正是"从合并后的令牌里取一个
+长度,取不到或解析不了就返回回退值"。全仓库只用过**一次**
+(`--font-size-base` 取字体回退值)。所以第 3 期的迁移今天就没有前置:
 
-**第二个参数是迁移安全的关键**:主题没给这个 token 时原样返回硬编码值。
-于是每一处迁移**按构造就是行为不变的**,在 `density-modern.tycss` 出现之前
-逐像素相同。与本轮 `HeaderHeightPx` 收口同一条纪律:先建等价收口点、
-验证全绿、再加行为。
+```pascal
+// 迁移前
+h := Scale(TyCardHeaderHeight);
+// 迁移后 —— 主题没给这个令牌时原样返回 36
+h := Scale(ActiveController.Metric('--card-header-height', TyCardHeaderHeight));
+```
+
+**回退参数是迁移安全的关键**:密度包出现之前,每一处都返回原来那个常量,
+逐像素相同。与本轮 `HeaderHeightPx` 收口同一条纪律 —— 先建等价收口点、
+验证全绿、再往里加行为。
+
+这条更正本身是个信号:这个仓库反复出现**能力建好了但没接线** ——
+`--font-size-title` 只被引用一次、`TTyGridHeaderGroup.Level` published 却被
+渲染循环整个跳过、`HasFontStyle` 有存储槽却没有属性、`Metric` 建好之后用了一次。
+排查"缺什么"之前先查"是不是已经有了、只是没接",能省掉一次重复实现。
 
 ## token 词汇表
 
@@ -226,16 +240,17 @@ property DropDownWidth:   Integer ... default 0;   { 0 = 跟列宽走 }
 
 | 期 | 内容 | 可验证的产出 |
 |---|---|---|
-| 0 | 验证 `padding` 接不接受 `var()` | 一个测试红→绿 |
-| 1 | token 词汇表 + `TokenPx` API + 经典值 | 3 份 golden 逐字节不变 |
+| 0 | 修 `padding` 的 `var()` 展开顺序(多值令牌今天静默算错) | 一个测试红→绿 |
+| 1 | token 词汇表(经典值)。API 不用建,`Metric` 已存在 | 3 份 golden 逐字节不变 |
 | 2 | CSS 侧:41 条 padding 改走语义 token | 同上 |
 | 3 | Pascal 侧:约 100 处 + 66 个常量,分批迁 | 每批 golden 不变 |
 | 4 | `density-modern.tycss` + `Controller.Density` | 现代 golden;**真机看** |
 | 5 | 45 个示例加开关 + `density` 示例 | 真机看 |
 
-**第 0 期是地基**:`border-radius: var(--radius)` 现在是通的,但 padding 要
-解析 1~4 个值,是另一条解析路径。如果它不认 `var()`,41 条规则全部改不动,
-整个方案要重想。一个测试的事,别等铺完 token 才发现。
+**第 0 期是地基,而且已经查实是坏的**:`ParsePadding` 先按空格切分、再逐段
+求值,于是 `padding: var(--pad-tooltip)`(值为 `5px 9px`)会被当成单个长度 ——
+展开成 `5px 9px`、末尾 `px` 被剥掉变成 `5px 9`、`ParsePctOrNum` 给出错数。
+**不报错,只是错。** 19 个角色令牌里有 12 个是多值的,所以这是硬前置。
 
 不确定性全部集中在**第 4 期** —— 现代那套比例到底调没调对,只有真机上
 看了才知道。第 1~3 期是纯机械的、有逐字节 golden 守着的铺路。
