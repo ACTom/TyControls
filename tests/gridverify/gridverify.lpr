@@ -217,11 +217,25 @@ var
 
 type
   THookHost = class
+    procedure NodeLevel(Sender: TObject; ARow: Integer; var ALevel: Integer);
+    procedure HasChildren(Sender: TObject; ARow: Integer; var AHas: Boolean);
     procedure GetCellStyle(Sender: TObject; ACol, ARow: Integer;
       var ABackground: TTyFill; var ATextColor: TTyColor;
       var AFontName: string; var AFontSize, AFontWeight: Integer;
       var AHAlign: TAlignment; var AVAlign: TTextLayout);
   end;
+
+procedure THookHost.NodeLevel(Sender: TObject; ARow: Integer;
+  var ALevel: Integer);
+begin
+  if (ARow mod 3) = 0 then ALevel := 0 else ALevel := 1;
+end;
+
+procedure THookHost.HasChildren(Sender: TObject; ARow: Integer;
+  var AHas: Boolean);
+begin
+  AHas := (ARow mod 3) = 0;
+end;
 
 procedure THookHost.GetCellStyle(Sender: TObject; ACol, ARow: Integer;
   var ABackground: TTyFill; var ATextColor: TTyColor;
@@ -330,6 +344,56 @@ begin
   Shot('6b-sort-undone');
 end;
 
+{ P4 内嵌筛选行 + P8 树形列 —— 这一轮新做的两个,看它们真的画出来了。 }
+var
+  TreeHost: THookHost;
+
+procedure Case_FilterRowAndTree;
+var
+  before: Integer;
+  tri: TRect;
+begin
+  Say('[8] 内嵌筛选行');
+  Reset(12);
+  Grid.ShowFilterRow := True;
+  Application.ProcessMessages;
+  Check('筛选行占出了一条带', Grid.CellRect(0, 0).Top > 0,
+    Format('首行顶边 %d', [Grid.CellRect(0, 0).Top]));
+  Grid.SetFilterText(0, '>=05');
+  Application.ProcessMessages;
+  Check('表达式筛出了 7 行(05..11)', Grid.DisplayRowCount = 7,
+    Format('实际 %d', [Grid.DisplayRowCount]));
+  Shot('8-filter-row');
+  Grid.SetFilterText(0, '');
+  Grid.ShowFilterRow := False;
+
+  Say('');
+  Say('[9] 树形列');
+  Reset(12);
+  Grid.OnGetNodeLevel := @TreeHost.NodeLevel;
+  Grid.OnGetHasChildren := @TreeHost.HasChildren;
+  Grid.TreeColumn := 0;
+  Application.ProcessMessages;
+
+  Check('子节点比根缩进',
+    Grid.TreeContentLeft(0, 1) > Grid.TreeContentLeft(0, 0));
+  tri := Grid.TreeToggleRect(0);
+  Check('有孩子的行有三角', not IsRectEmpty(tri));
+  Check('没孩子的行没有三角', IsRectEmpty(Grid.TreeToggleRect(1)));
+  Shot('9a-tree-expanded');
+
+  before := Grid.DisplayRowCount;
+  Grid.ToggleNode(0);
+  Application.ProcessMessages;
+  Check('折叠之后少了两行', Grid.DisplayRowCount = before - 2,
+    Format('%d -> %d', [before, Grid.DisplayRowCount]));
+  Shot('9b-tree-collapsed');
+
+  Grid.TreeColumn := -1;
+  Grid.OnGetNodeLevel := nil;
+  Grid.OnGetHasChildren := nil;
+end;
+
 { 两级分组:同名子组出现在不同父组下,必须各折各的。 }
 procedure Case_MultiLevelGrouping;
 var
@@ -360,6 +424,7 @@ begin
 
   Application.Initialize;
   Host := THookHost.Create;
+  TreeHost := Host;
 
   Form := TForm.Create(nil);
   Form.SetBounds(-3000, 100, 1000, 560);    { 挪到屏幕外,别打扰正在用电脑的人 }
@@ -389,6 +454,7 @@ begin
     Case_ColourSelectionUndo;    Say('');
     Case_PhysicalSortUndo;       Say('');
     Case_MultiLevelGrouping;     Say('');
+    Case_FilterRowAndTree;       Say('');
   except
     on E: Exception do
     begin

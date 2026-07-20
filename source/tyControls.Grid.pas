@@ -979,18 +979,9 @@ type
     { 某列筛选位里要显示的文字。基类恒空。 }
     function  FilterRowText(ACol: Integer): string; virtual;
 
-    { --- 树形单元格 ---
-      层级由宿主给;控件只负责缩进、三角的几何、以及把折叠翻译成显示序。 }
-    function  NodeLevelOf(ARow: Integer): Integer;
-    function  NodeHasChildren(ARow: Integer): Boolean;
     { 这一行折起来没有。基类没有折叠状态,恒 False;TTyStringGrid 改写。
       绘制在 TTyDrawGrid 这一层,而状态在派生类 —— 靠它把两边接起来。 }
     function  NodeCollapsedOf(ARow: Integer): Boolean; virtual;
-    { 这一格的内容左边界(树形列上要为缩进和三角让位)。 }
-    function  TreeContentLeft(ACol, ARow: Integer): Integer;
-    { 展开/折叠三角的矩形。**命中与绘制共用它** —— 分成两份迟早对不上
-      (本库在填充柄、分组三角上都是这么守的)。没孩子时返回空矩形。 }
-    function  TreeToggleRect(ARow: Integer): TRect;
     procedure SetTreeColumn(AValue: Integer);
     procedure SetTreeIndent(AValue: Integer);
 
@@ -1066,6 +1057,18 @@ type
     { 单元格**实际可见**的矩形 = CellRect ∩ 所属窗格。CellAt 正是它的逆:
       被冻结带盖住的部分本来就点不到,所以不变量必须以可见矩形表述,而非几何矩形。 }
     function CellVisibleRect(ACol, ARow: Integer): TRect;
+
+    { --- 树形单元格的几何与查询 ---
+      层级由宿主给(OnGetNodeLevel);控件只负责缩进、三角的几何、
+      以及把折叠翻译成显示序。**public**:宿主要自绘树形列、或者自己做命中,
+      拿到的必须是控件正在用的那一份几何。 }
+    function  NodeLevelOf(ARow: Integer): Integer;
+    function  NodeHasChildren(ARow: Integer): Boolean;
+    { 这一格的内容左边界(树形列上要为缩进和三角让位)。 }
+    function  TreeContentLeft(ACol, ARow: Integer): Integer;
+    { 展开/折叠三角的矩形。**命中与绘制共用它** —— 分成两份迟早对不上
+      (本库在填充柄、分组三角上都是这么守的)。没孩子时返回空矩形。 }
+    function  TreeToggleRect(ARow: Integer): TRect;
     { 落在合并区内的坐标归到基准格。基类无合并,原样返回。 }
     procedure MapToBaseCell(var ACol, ARow: Integer); virtual;
 

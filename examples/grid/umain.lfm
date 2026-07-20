@@ -418,6 +418,14 @@ object MainForm: TMainForm
             Caption = '排序区分大小写'
             OnChange = ChkSortChange
           end
+          object ChkPhysicalSort: TTyCheckBox
+            Left = 980
+            Height = 22
+            Top = 8
+            Width = 130
+            Caption = '排序真的搬数据'
+            OnChange = ChkPhysicalSortChange
+          end
         end
         object TbSort2: TTyPanel
           Left = 0
@@ -487,49 +495,49 @@ object MainForm: TMainForm
             Left = 540
             Height = 26
             Top = 6
-            Width = 120
+            Width = 104
             Caption = '按大区分组'
             OnClick = BtnGroupClick
           end
           object BtnExpandAll: TTyButton
-            Left = 666
+            Left = 650
             Height = 26
             Top = 6
-            Width = 96
+            Width = 72
             Caption = '全部展开'
             OnClick = BtnExpandAllClick
           end
           object BtnCollapseAll: TTyButton
-            Left = 768
+            Left = 726
             Height = 26
             Top = 6
-            Width = 96
+            Width = 72
             Caption = '全部折叠'
             OnClick = BtnCollapseAllClick
           end
           object BtnGroup2: TTyButton
-            Left = 874
+            Left = 804
             Height = 26
             Top = 6
-            Width = 144
+            Width = 138
             Caption = '按大区 + 产品分组'
             OnClick = BtnGroup2Click
           end
           object ChkFilterRow: TTyCheckBox
-            Left = 1026
+            Left = 948
             Height = 22
             Top = 8
-            Width = 96
+            Width = 84
             Caption = '筛选行'
             OnChange = ChkFilterRowChange
           end
-          object ChkPhysicalSort: TTyCheckBox
-            Left = 1126
+          object ChkTree: TTyCheckBox
+            Left = 1036
             Height = 22
             Top = 8
-            Width = 140
-            Caption = '排序真的搬数据'
-            OnChange = ChkPhysicalSortChange
+            Width = 76
+            Caption = '树形列'
+            OnChange = ChkTreeChange
           end
         end
         object GridSort: TTyStringGrid

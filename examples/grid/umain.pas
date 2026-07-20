@@ -81,7 +81,7 @@ type
     GridSort: TTyStringGrid;
     BtnSortQty, BtnSortQtyD, BtnSortAdd, BtnSortClear, BtnFilterClear,
       BtnGroup, BtnExpandAll, BtnCollapseAll, BtnGroup2: TTyButton;
-    ChkPhysicalSort, ChkFilterRow: TTyCheckBox;
+    ChkPhysicalSort, ChkFilterRow, ChkTree: TTyCheckBox;
     ChkBlanksFirst, ChkCaseSens: TTyCheckBox;
     CbFilterCol, CbFilterOp: TTyComboBox;
     EdFilterVal: TTyEdit;
@@ -160,6 +160,11 @@ type
     procedure BtnGroup2Click(Sender: TObject);
     procedure ChkPhysicalSortChange(Sender: TObject);
     procedure ChkFilterRowChange(Sender: TObject);
+    procedure ChkTreeChange(Sender: TObject);
+    procedure TreeNodeLevel(Sender: TObject; ARow: Integer;
+      var ALevel: Integer);
+    procedure TreeHasChildren(Sender: TObject; ARow: Integer;
+      var AHas: Boolean);
     procedure BtnSaveLayoutClick(Sender: TObject);
     procedure BtnLoadLayoutClick(Sender: TObject);
     procedure HandleRowMoveVeto(Sender: TObject; AFrom, ATo: Integer;
@@ -948,6 +953,39 @@ begin
       '(; 是或,a..b 是区间)')
   else
     Status('筛选行关了');
+end;
+
+{ 树形单元格:**控件不持有树** —— 层级和"有没有孩子"由这两个回调回答。
+  这里按大区分层:每个大区的第一条当父节点,同大区的其余条目当它的孩子。 }
+procedure TMainForm.TreeNodeLevel(Sender: TObject; ARow: Integer;
+  var ALevel: Integer);
+begin
+  if (ARow mod 4) = 0 then ALevel := 0 else ALevel := 1;
+end;
+
+procedure TMainForm.TreeHasChildren(Sender: TObject; ARow: Integer;
+  var AHas: Boolean);
+begin
+  AHas := (ARow mod 4) = 0;
+end;
+
+procedure TMainForm.ChkTreeChange(Sender: TObject);
+begin
+  if ChkTree.Checked then
+  begin
+    GridSort.OnGetNodeLevel := @TreeNodeLevel;
+    GridSort.OnGetHasChildren := @TreeHasChildren;
+    GridSort.TreeColumn := cOrderNo;
+    Status('树形列开了 —— 点第一列的三角折叠/展开;' +
+      '层级由宿主给,控件不持有树');
+  end
+  else
+  begin
+    GridSort.TreeColumn := -1;
+    GridSort.OnGetNodeLevel := nil;
+    GridSort.OnGetHasChildren := nil;
+    Status('树形列关了');
+  end;
 end;
 
 procedure TMainForm.BtnExpandAllClick(Sender: TObject);
