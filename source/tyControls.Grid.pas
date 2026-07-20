@@ -55,6 +55,8 @@ type
     gcdRating,    { 评分星,值取 0..5 }
     gcdImage,     { 图片:值是 Images 里的索引 }
     gcdButton,    { 按钮:文字是按钮标题,点击走 OnCellButtonClick }
+    gcdHyperlink, { 超链接:带下划线的强调色,悬停手型,点击走 OnCellLinkClick。
+                    视觉全走 TyGridHyperlink 这个 typeKey —— 不硬编码蓝色。 }
     gcdColor      { 色块:值是 '#RRGGBB'。与 gekColor 编辑器配对 ——
                     从前只有编辑侧、没有显示侧,那一列看起来就是一串脏数据 }
   );
@@ -230,8 +232,11 @@ type
     FCharCase: TEditCharCase;
     FDropDownWidth: Integer;
     FUseEditorKind: Boolean;
+    FCellDisplay: TTyGridCellDisplay;
+    FUseCellDisplay: Boolean;
     procedure SetPickList(AValue: TStrings);
     procedure SetEditorKind(AValue: TTyGridEditorKind);
+    procedure SetCellDisplay(AValue: TTyGridCellDisplay);
   public
     constructor Create(ACollection: TCollection); override;
     destructor Destroy; override;
@@ -256,6 +261,13 @@ type
     property ValidChars: string read FValidChars write FValidChars;
     { 编辑框最多输入几个字符(0 = 不限)。 }
     property MaxEditLength: Integer read FMaxEditLength write FMaxEditLength default 0;
+    { 这一列的单元格怎么显示。设过之后压过 DefaultCellDisplay,低于逐格与事件。
+      "有没有显式设过"用 UseCellDisplay 记 —— 光看"等于 gcdText"分不清
+      "没设"和"显式设成文本"(与 UseEditorKind 一模一样的教训)。 }
+    property CellDisplay: TTyGridCellDisplay
+      read FCellDisplay write SetCellDisplay default gcdText;
+    property UseCellDisplay: Boolean
+      read FUseCellDisplay write FUseCellDisplay default False;
     { 这一列用什么编辑器。设过之后优先级高于 DefaultEditorKind,低于 OnGetEditorKind。 }
     property EditorKind: TTyGridEditorKind read FEditorKind write SetEditorKind
       default gekText;
@@ -345,6 +357,9 @@ type
     HasFontStyle:     Boolean;
     FontStyle:        TFontStyles;
     ReadOnly:         Boolean;
+    HasCellDisplay:   Boolean;
+    CellDisplay:      TTyGridCellDisplay;
+    Comment:          string;
   end;
 
   { 一整列的**值快照**。撤销栈是值语义的(见 TTyGridAttrSnapshot 的说明),
@@ -469,6 +484,9 @@ type
   TTyGridScrollHintEvent = procedure(Sender: TObject; ARow: Integer;
     var AHint: string) of object;
 
+  { 超链接单元格被点(T12)。 }
+  TTyGridCellLinkEvent = procedure(Sender: TObject; ACol, ARow: Integer) of object;
+
   { 这一格要不要换行显示。 }
   TTyGridGetCellWordWrapEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var AWordWrap: Boolean) of object;
@@ -521,6 +539,11 @@ type
     HasFontStyle:     Boolean;
     FontStyle:        TFontStyles;
     ReadOnly:         Boolean;
+    { 逐格的显示类型(T14)与批注(T13)。放在这里而不是各自开一张表:
+      属性存储已经会跟着行置换搬家、会进撤销快照,新开一张表这两件事都得重做。 }
+    HasCellDisplay:   Boolean;
+    CellDisplay:      TTyGridCellDisplay;
+    Comment:          string;
     constructor Create;
     { 全是默认值 = 这条可以丢掉,别让稀疏存储攒垃圾。 }
     function IsDefault: Boolean;
@@ -808,6 +831,7 @@ type
     { 指针形状跟着"这里能不能拖"走。**必须与命中判定同源** ——
       指针承诺了能拖就得真能拖,否则用户会对着一个假暗示较劲。
       (ListView / TreeView 早就这么做了,网格一直漏着。) }
+    function  HoverIsHyperlink(X, Y: Integer): Boolean; virtual;
     procedure UpdateHoverCursor(X, Y: Integer);
     { 把一格文字画出来,尽量走缓存。语义与 P.DrawText 一致(含省略号截断)。 }
     procedure DrawCellText(P: TTyPainter; const ARect: TRect; const AText: string;
@@ -1324,6 +1348,11 @@ type
     FOnReturn:       TTyGridCellKeyEvent;
     FOnCtrlReturn:   TTyGridCellKeyEvent;
     FOnScrollHint:   TTyGridScrollHintEvent;
+    FOnCellLinkClick: TTyGridCellLinkEvent;
+    FAllowGrayed:    Boolean;
+    { 全表有没有批注。渲染与悬停路径都要问一次"这格有批注吗",
+      没有批注的表不该为此每格建一个临时键(与 FAttrs.IsEmpty 同一条理由)。 }
+    FHasComments:    Boolean;
     FPickEditor: TTyComboBox;
     FOnGetPickList: TTyGridGetPickListEvent;
     FOnCreateEditLink: TTyGridCreateEditLinkEvent;
@@ -1570,6 +1599,9 @@ type
     function  IsActiveCell(ACol, ARow: Integer): Boolean; override;
     function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; override;
     function  ShouldDrawCellText(ACol, ARow: Integer): Boolean; override;
+    function  CellAppearance(ACol, ARow, ADisplayPos: Integer;
+      const AFrame: TTyStyleSet): TTyGridCellAppearance; override;
+    function  HoverIsHyperlink(X, Y: Integer): Boolean; override;
     function  DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     function  RowHeightOf(ARow: Integer): Integer; override;
@@ -1584,7 +1616,29 @@ type
     procedure RenderRatingCell(P: TTyPainter; ACol, ARow: Integer;
       const AFrame: TTyStyleSet); virtual;
     function  CellChecked(ACol, ARow: Integer): Boolean;
+    { 三态读值(T11)。语义**复用 TTyCheckBox** 的 TCheckBoxState,
+      不在网格里另定义一套。 }
+    function  CellCheckState(ACol, ARow: Integer): TCheckBoxState;
     procedure ToggleCellChecked(ACol, ARow: Integer);
+    { 逐格批注(T13)。存进逐格属性存储 → 自动可撤销、自动跟着行置换走。 }
+    function  GetCellComment(ACol, ARow: Integer): string;
+    procedure SetCellComment(ACol, ARow: Integer; const AValue: string);
+    property  CellComment[ACol, ARow: Integer]: string
+      read GetCellComment write SetCellComment;
+    { 逐格显示类型(T14)。同上,存属性存储。 }
+    function  GetCellDisplay(ACol, ARow: Integer): TTyGridCellDisplay;
+    procedure SetCellDisplay(ACol, ARow: Integer; AValue: TTyGridCellDisplay);
+    property  CellDisplays[ACol, ARow: Integer]: TTyGridCellDisplay
+      read GetCellDisplay write SetCellDisplay;
+    { 批注标记的矩形(格子右上角的小三角)。没有批注时是空矩形。 }
+    function  CommentMarkRect(ACol, ARow: Integer): TRect;
+    function  HyperlinkTextColor(const AFallback: TTyColor): TTyColor;
+    { 超链接单元格的下划线 + 批注标记。文字本身仍走通用的文字层
+      (链接色由 CellAppearance 从 TyGridHyperlink 取)。 }
+    procedure RenderHyperlinkCell(P: TTyPainter; ACol, ARow: Integer;
+      const AFrame: TTyStyleSet);
+    procedure RenderCommentMark(P: TTyPainter; ACol, ARow: Integer;
+      const AFrame: TTyStyleSet);
     { 弹取色对话框改这一格的颜色(值存 #RRGGBB)。 }
     procedure ToggleCellColor(ACol, ARow: Integer);
     { 勾选框的绘制槽(单元格内居中的小方块)。命中与绘制共用它。 }
@@ -2045,6 +2099,11 @@ type
     property OnCtrlReturn: TTyGridCellKeyEvent read FOnCtrlReturn write FOnCtrlReturn;
     property OnScrollHint: TTyGridScrollHintEvent
       read FOnScrollHint write FOnScrollHint;
+    property OnCellLinkClick: TTyGridCellLinkEvent
+      read FOnCellLinkClick write FOnCellLinkClick;
+    { 勾选框单元格允许第三态(灰显)。关着时切换只在两态间走 ——
+      灰显不能凭空冒出来。 }
+    property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
     { 排序比较方式:文本还是数值。数值列用 gskText 排会得到 '10' < '9' 这种结果。 }
     property SortKind: TTyGridSortKind read FSortKind write FSortKind default gskText;
     { 空值排最前还是最后(翻方向时位置不变)。 }
@@ -2133,6 +2192,10 @@ const
   TyFilterOrSep = #1;
   { gfoBetween 的两个边界之间的分隔。 }
   TyFilterRangeSep = #2;
+  { 批注标记的边长(逻辑像素)。视觉尺寸本该走主题,但主题里没有
+    "标记大小"这一层 token;这里退而求其次用一个具名常量,
+    至少不是散落在绘制代码里的裸数字。颜色仍然走 token。 }
+  TyGridCommentMarkSize = 7;
 
 { 把一条过滤表达式编码成过滤条件。语法刻意小,见 grid.md:
     >100  >=100  <5  <=5  <>x  =x   前缀比较
@@ -2475,6 +2538,12 @@ begin
   FUseEditorKind := True;
 end;
 
+procedure TTyGridColumn.SetCellDisplay(AValue: TTyGridCellDisplay);
+begin
+  FCellDisplay := AValue;
+  FUseCellDisplay := True;    { 见 SetEditorKind:写过就算设过 }
+end;
+
 procedure TTyGridColumn.Assign(ASource: TPersistent);
 begin
   inherited Assign(ASource);
@@ -2493,6 +2562,8 @@ begin
     FEditMask := TTyGridColumn(ASource).EditMask;
     FCharCase := TTyGridColumn(ASource).CharCase;
     FDropDownWidth := TTyGridColumn(ASource).DropDownWidth;
+    FCellDisplay := TTyGridColumn(ASource).CellDisplay;
+    FUseCellDisplay := TTyGridColumn(ASource).UseCellDisplay;
   end;
 end;
 
@@ -2511,7 +2582,8 @@ begin
   Result := (ColSpan = 1) and (RowSpan = 1)
     and not HasBackground and not HasTextColor
     and not HasAlignment and not HasFontStyle
-    and not ReadOnly;
+    and not ReadOnly
+    and not HasCellDisplay and (Comment = '');
 end;
 
 procedure TTyGridCellAttr.Assign(ASrc: TTyGridCellAttr);
@@ -2523,6 +2595,8 @@ begin
   HasAlignment := ASrc.HasAlignment;   Alignment := ASrc.Alignment;
   HasFontStyle := ASrc.HasFontStyle;   FontStyle := ASrc.FontStyle;
   ReadOnly := ASrc.ReadOnly;
+  HasCellDisplay := ASrc.HasCellDisplay; CellDisplay := ASrc.CellDisplay;
+  Comment := ASrc.Comment;
 end;
 
 constructor TTyGridCellAttrStore.Create;
@@ -3193,6 +3267,12 @@ begin
   Result := FCellStyleCache[slot];
 end;
 
+{ 基类不知道显示类型;TTyStringGrid 改写去问 CellDisplayFor。 }
+function TTyCustomGrid.HoverIsHyperlink(X, Y: Integer): Boolean;
+begin
+  Result := False;
+end;
+
 procedure TTyCustomGrid.UpdateHoverCursor(X, Y: Integer);
 var
   want: TCursor;
@@ -3210,7 +3290,11 @@ begin
     want := crHSplit
   { 行分隔线:只在行头槽里认(同样与 MouseDown 同源)。 }
   else if (Y >= hdrH) and (RowDividerAtY(X, Y) >= 0) then
-    want := crVSplit;
+    want := crVSplit
+  { 链接格:手型。放在分隔线之后 —— 骑在分隔线上时该优先给调整光标,
+    那是个更"贵"的操作(点错了列宽就变了)。 }
+  else if HoverIsHyperlink(X, Y) then
+    want := crHandPoint;
 
   if Cursor <> want then Cursor := want;
 end;
@@ -5875,6 +5959,9 @@ begin
   Result.HasFontStyle := a.HasFontStyle;
   Result.FontStyle := a.FontStyle;
   Result.ReadOnly := a.ReadOnly;
+  Result.HasCellDisplay := a.HasCellDisplay;
+  Result.CellDisplay := a.CellDisplay;
+  Result.Comment := a.Comment;
 end;
 
 procedure TTyStringGrid.RestoreAttr(const AKey: string;
@@ -5904,6 +5991,9 @@ begin
     a.HasFontStyle := ASnap.HasFontStyle;
     a.FontStyle := ASnap.FontStyle;
     a.ReadOnly := ASnap.ReadOnly;
+    a.HasCellDisplay := ASnap.HasCellDisplay;
+    a.CellDisplay := ASnap.CellDisplay;
+    a.Comment := ASnap.Comment;
     { 跨度提示只增不减 —— 恢复出一个更大的跨度时得让回扫够得着它,
       否则 BaseCellOf 扫不到基准格,合并区就散了。 }
     if ASnap.ColSpan > FMaxColSpan then FMaxColSpan := ASnap.ColSpan;
@@ -6480,6 +6570,12 @@ begin
     { 否决要在**任何副作用之前** —— 只挡住 OnClickCell 而让光标照样跑,
       对宿主来说等于没挡住。 }
     if not CanClickCell(hit.Col, hit.Row) then Exit;
+
+    { 链接:点一下发事件,然后**照常往下走** —— 链接格也是格子,
+      点了该选中、该拿到焦点。Exit 掉的话点链接会让选区停在别处。 }
+    if (CellDisplayFor(hit.Col, hit.Row) = gcdHyperlink)
+       and Assigned(FOnCellLinkClick) then
+      FOnCellLinkClick(Self, hit.Col, hit.Row);
 
     { 按钮格:点在按钮上就进按下态,松开时才算触发(与真按钮一致)。 }
     if (CellDisplayFor(hit.Col, hit.Row) = gcdButton)
@@ -7594,6 +7690,74 @@ end;
 { 色块:把 '#RRGGBB' 画成一小块颜色,而不是把那串字显示出来。
   解析不出颜色时什么都不画(留空格),不要退回去显示原文 ——
   那样一列里会混着色块和乱码,比统一留空更难看懂。 }
+{ 一块纯色填充。本单元里"画一根线/一个色块"要的都是这个,
+  从前每处各自 Default(TTyFill) + 两行赋值 —— 抄三遍就该收成函数。 }
+function TySolidFill(AColor: TTyColor): TTyFill;
+begin
+  Result := Default(TTyFill);
+  Result.Kind := tfkSolid;
+  Result.Color := AColor;
+end;
+
+procedure TTyStringGrid.RenderHyperlinkCell(P: TTyPainter; ACol, ARow: Integer;
+  const AFrame: TTyStyleSet);
+var
+  r, line: TRect;
+  ap: TTyGridCellAppearance;
+  txt: string;
+  tw: TSize;
+  pos: Integer;
+begin
+  r := CellVisibleRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+  txt := GetCellText(ACol, ARow);
+  if Trim(txt) = '' then Exit;
+
+  pos := DataToDisplay(ARow);
+  if pos < 0 then Exit;              { 被筛掉/折起来的行没有显示位置 }
+  ap := CellAppearance(ACol, ARow, pos, AFrame);
+  tw := P.MeasureText(txt, ap.FontName, ap.FontSize, ap.FontWeight);
+  if tw.cx <= 0 then Exit;
+
+  { 下划线画在文字底下一点点,宽度按**量出来的文字宽**,不是整个格宽 ——
+    整格宽的下划线看起来像一条分隔线,不像链接。 }
+  line := Rect(r.Left + ScaleI(4), 0, r.Left + ScaleI(4) + tw.cx, 0);
+  if line.Right > r.Right then line.Right := r.Right;
+  line.Top := (r.Top + r.Bottom) div 2 + tw.cy div 2;
+  line.Bottom := line.Top + ScaleI(1);
+  if (line.Right <= line.Left) or (line.Bottom > r.Bottom) then Exit;
+  P.FillBackground(line, TySolidFill(ap.TextColor), 0);
+end;
+
+procedure TTyStringGrid.RenderCommentMark(P: TTyPainter; ACol, ARow: Integer;
+  const AFrame: TTyStyleSet);
+var
+  mark, vis: TRect;
+  st: TTyStyleSet;
+  ink: TTyColor;
+  i: Integer;
+  bar: TRect;
+begin
+  mark := CommentMarkRect(ACol, ARow);
+  if IsRectEmpty(mark) then Exit;
+  { 标记也得受可见矩形约束 —— 否则冻结带边上会画到别人身上。 }
+  vis := CellVisibleRect(ACol, ARow);
+  if not IntersectRect(mark, mark, vis) then Exit;
+
+  st := ActiveController.Model.ResolveStyle('TyGridCommentMark', StyleClass, []);
+  if tpTextColor in st.Present then ink := st.TextColor
+  else ink := AFrame.TextColor;
+
+  { 右上角的小三角:一行比一行短的横杠堆出来。
+    (画布没有多边形填充原语,用横杠堆是本库里画三角的既有做法。) }
+  for i := 0 to (mark.Bottom - mark.Top) - 1 do
+  begin
+    bar := Rect(mark.Left + i, mark.Top + i, mark.Right, mark.Top + i + 1);
+    if bar.Right <= bar.Left then Break;
+    P.FillBackground(bar, TySolidFill(ink), 0);
+  end;
+end;
+
 procedure TTyStringGrid.RenderColorCell(P: TTyPainter; ACol, ARow: Integer;
   const AFrame: TTyStyleSet);
 var
@@ -7788,9 +7952,22 @@ begin
 end;
 
 function TTyStringGrid.CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay;
+var
+  c: TTyGridColumn;
+  a: TTyGridCellAttr;
 begin
+  { 优先级:**逐格 > 事件 > 列 > 网格默认** —— 与 EditorKindFor 同一条链,
+    越具体的越晚被覆盖。逐格排在事件之上:显式为某一格设过的东西
+    不该被一个逐格回调无差别地抹掉。 }
   Result := FDefaultCellDisplay;
+  c := GridColumn(ACol);
+  if (c <> nil) and c.UseCellDisplay then Result := c.CellDisplay;
   if Assigned(FOnGetCellDisplay) then FOnGetCellDisplay(Self, ACol, ARow, Result);
+  if not FAttrs.IsEmpty then          { 见 GetCellReadOnly:空存储别建临时键 }
+  begin
+    a := FAttrs.Find(CellKey(ACol, ARow));
+    if (a <> nil) and a.HasCellDisplay then Result := a.CellDisplay;
+  end;
 end;
 
 function TTyStringGrid.DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean;
@@ -7847,7 +8024,9 @@ begin
     Exit;
   end;
 
-  if not Assigned(FOnGetCellHint) then Exit;
+  { 批注也要出提示,所以**不能**因为没挂 OnGetCellHint 就走人 ——
+    那样批注在没挂钩子的表上永远显示不出来(存了却看不见 = 等于没存)。 }
+  if (not Assigned(FOnGetCellHint)) and (not FHasComments) then Exit;
 
   hit := CellAt(X, Y);
   if hit.Part <> ghpCell then
@@ -7866,16 +8045,47 @@ begin
   if (hit.Col = FHintCol) and (hit.Row = FHintRow) then Exit;
   FHintCol := hit.Col;
   FHintRow := hit.Row;
-  txt := '';
-  FOnGetCellHint(Self, hit.Col, hit.Row, txt);
+  { 批注先给,宿主钩子后压 —— 宿主是更具体的那一层(与别处的优先级同向)。 }
+  txt := GetCellComment(hit.Col, hit.Row);
+  if Assigned(FOnGetCellHint) then FOnGetCellHint(Self, hit.Col, hit.Row, txt);
   Hint := txt;
   ShowHint := txt <> '';
 end;
 
+{ 链接格的文字色从 TyGridHyperlink 取 —— 不硬编码蓝色。
+  主题没定义这个键时退回强调色的常规解析(base 层会垫底,见主题回退机制)。 }
+{ 链接格换文字色。放在 CellAppearance 而不是绘制处:那样连宿主的
+  OnGetCellStyle 都还能再压过它 —— 优先级链就一条,不另开分支。 }
+function TTyStringGrid.CellAppearance(ACol, ARow, ADisplayPos: Integer;
+  const AFrame: TTyStyleSet): TTyGridCellAppearance;
+begin
+  Result := inherited CellAppearance(ACol, ARow, ADisplayPos, AFrame);
+  if CellDisplayFor(ACol, ARow) = gcdHyperlink then
+    Result.TextColor := HyperlinkTextColor(Result.TextColor);
+end;
+
+function TTyStringGrid.HoverIsHyperlink(X, Y: Integer): Boolean;
+var hit: TTyGridHit;
+begin
+  hit := CellAt(X, Y);
+  Result := (hit.Part = ghpCell) and (hit.Col >= 0) and (hit.Row >= 0)
+        and (CellDisplayFor(hit.Col, hit.Row) = gcdHyperlink);
+end;
+
+function TTyStringGrid.HyperlinkTextColor(const AFallback: TTyColor): TTyColor;
+var st: TTyStyleSet;
+begin
+  st := ActiveController.Model.ResolveStyle('TyGridHyperlink', StyleClass, []);
+  if tpTextColor in st.Present then Result := st.TextColor
+  else Result := AFallback;
+end;
+
 function TTyStringGrid.ShouldDrawCellText(ACol, ARow: Integer): Boolean;
 begin
+  { 链接格的文字仍走通用文字层(只有颜色和下划线是它自己的),
+    所以它和 gcdText 一样要画字 —— 漏掉它就是一格空白。 }
   Result := (EditorKindFor(ACol, ARow) <> gekCheckBox)
-        and (CellDisplayFor(ACol, ARow) = gcdText);
+        and (CellDisplayFor(ACol, ARow) in [gcdText, gcdHyperlink]);
 end;
 
 procedure TTyStringGrid.RenderProgressCell(P: TTyPainter; ACol, ARow: Integer;
@@ -8030,6 +8240,18 @@ begin
     Result := v = LowerCase(TyGridCheckedWord);
 end;
 
+function TTyStringGrid.CellCheckState(ACol, ARow: Integer): TCheckBoxState;
+var
+  v: string;
+begin
+  { 读值宽松(与 CellChecked 同一条纪律:进来的写法五花八门,都认)。
+    灰显认 '2' / 'grayed' / 'null' —— 三态最常见的三种外部表示。 }
+  v := LowerCase(Trim(GetCellText(ACol, ARow)));
+  if (v = '2') or (v = 'grayed') or (v = 'null') then Exit(cbGrayed);
+  if CellChecked(ACol, ARow) then Exit(cbChecked);
+  Result := cbUnchecked;
+end;
+
 procedure TTyStringGrid.ToggleCellChecked(ACol, ARow: Integer);
 var
   accept: Boolean;
@@ -8043,8 +8265,17 @@ begin
   if not accept then Exit;
 
   oldTxt := GetCellText(ACol, ARow);
-  { 写回统一成 '1'/'' —— 读的时候宽松,写的时候收敛。 }
-  if CellChecked(ACol, ARow) then newTxt := '' else newTxt := '1';
+  { 写回统一成 '1'/'2'/'' —— 读的时候宽松,写的时候收敛。
+    循环顺序**照抄 TTyCheckBox.Click**(空→勾→灰→空),不另定义一套:
+    同一个视觉部件在两处走不同的顺序是最容易被当成 bug 的那种不一致。 }
+  if FAllowGrayed then
+    case CellCheckState(ACol, ARow) of
+      cbUnchecked: newTxt := '1';
+      cbChecked:   newTxt := '2';
+      else         newTxt := '';
+    end
+  else
+    if CellChecked(ACol, ARow) then newTxt := '' else newTxt := '1';
   accept := True;
   if Assigned(FOnCellEdited) then
     FOnCellEdited(Self, ACol, ARow, oldTxt, newTxt, accept);
@@ -8120,6 +8351,81 @@ begin
     ink, taCenter, tlCenter);
 end;
 
+function TTyStringGrid.GetCellComment(ACol, ARow: Integer): string;
+var a: TTyGridCellAttr;
+begin
+  Result := '';
+  if FAttrs.IsEmpty then Exit;      { 见 GetCellReadOnly }
+  a := FAttrs.Find(CellKey(ACol, ARow));
+  if a <> nil then Result := a.Comment;
+end;
+
+procedure TTyStringGrid.SetCellComment(ACol, ARow: Integer; const AValue: string);
+var
+  k: string;
+  a: TTyGridCellAttr;
+begin
+  if GetCellComment(ACol, ARow) = AValue then Exit;
+  k := CellKey(ACol, ARow);
+  if AValue = '' then
+  begin
+    a := FAttrs.Mutate(k);          { Mutate 先发 Changing → 撤销记得住 }
+    if a = nil then Exit;
+    a.Comment := '';
+    FAttrs.DropIfDefault(k);
+  end
+  else
+  begin
+    a := FAttrs.Ensure(k);
+    if a = nil then Exit;
+    a.Comment := AValue;
+    FHasComments := True;   { 只增不减:删光批注后多问几次而已,不会画错 }
+  end;
+  Invalidate;
+end;
+
+function TTyStringGrid.GetCellDisplay(ACol, ARow: Integer): TTyGridCellDisplay;
+var a: TTyGridCellAttr;
+begin
+  Result := gcdText;
+  if FAttrs.IsEmpty then Exit;
+  a := FAttrs.Find(CellKey(ACol, ARow));
+  if (a <> nil) and a.HasCellDisplay then Result := a.CellDisplay;
+end;
+
+procedure TTyStringGrid.SetCellDisplay(ACol, ARow: Integer;
+  AValue: TTyGridCellDisplay);
+var
+  k: string;
+  a: TTyGridCellAttr;
+begin
+  k := CellKey(ACol, ARow);
+  a := FAttrs.Ensure(k);
+  if a = nil then Exit;
+  a.HasCellDisplay := True;
+  a.CellDisplay := AValue;
+  Invalidate;
+end;
+
+{ 批注标记:格子右上角一个小三角。尺寸走主题(标记也是视觉),
+  没有批注就返回空矩形 —— 调用方靠"空不空"判断要不要画。 }
+function TTyStringGrid.CommentMarkRect(ACol, ARow: Integer): TRect;
+var
+  r: TRect;
+  sz: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if not FHasComments then Exit;      { 无批注的表:渲染路径每格都走这里 }
+  if GetCellComment(ACol, ARow) = '' then Exit;
+  r := CellRect(ACol, ARow);
+  if IsRectEmpty(r) then Exit;
+  sz := ScaleI(TyGridCommentMarkSize);
+  if sz > (r.Bottom - r.Top) then sz := r.Bottom - r.Top;
+  if sz > (r.Right - r.Left) then sz := r.Right - r.Left;
+  if sz <= 0 then Exit;
+  Result := Rect(r.Right - sz, r.Top, r.Right, r.Top + sz);
+end;
+
 function TTyStringGrid.CheckBoxRect(ACol, ARow: Integer): TRect;
 var
   r: TRect;
@@ -8143,6 +8449,7 @@ var
   box: TRect;
   boxS: TTyStyleSet;
   ink: TTyColor;
+  dash: TRect;
 begin
   box := CheckBoxRect(ACol, ARow);
   if IsRectEmpty(box) then Exit;
@@ -8160,12 +8467,24 @@ begin
   if TyBorderVisible(boxS) then
     P.StrokeBorder(box, TyEffectiveCorners(boxS), boxS.BorderWidth, boxS.BorderColor);
 
-  if CellChecked(ACol, ARow) then
+  if CellCheckState(ACol, ARow) <> cbUnchecked then
   begin
     if tpTextColor in boxS.Present then ink := boxS.TextColor
     else ink := AFrame.TextColor;
-    { 槽位式调用传 pad=1:默认每边内缩 4 逻辑像素,14px 的槽会只剩个糊点。 }
-    TyDrawGlyph(P, ActiveController, box, tgCheck, ink, 1, 1);
+    { 灰显画一根横杠(与 TTyCheckBox 的三态一个样子),勾上才画对勾 ——
+      两个态如果画得一样,用户根本分不出来。 }
+    if CellCheckState(ACol, ARow) = cbGrayed then
+    begin
+      dash := box;
+      InflateRect(dash, -(box.Right - box.Left) div 4, 0);
+      dash.Top := (box.Top + box.Bottom) div 2 - ScaleI(1);
+      dash.Bottom := dash.Top + ScaleI(2);
+      if dash.Bottom > dash.Top then
+        P.FillBackground(dash, TySolidFill(ink), 0);
+    end
+    else
+      { 槽位式调用传 pad=1:默认每边内缩 4 逻辑像素,14px 的槽会只剩个糊点。 }
+      TyDrawGlyph(P, ActiveController, box, tgCheck, ink, 1, 1);
   end;
 end;
 
@@ -11917,7 +12236,11 @@ begin
           gcdButton:   RenderButtonCell(P, colIdx, dataRow,
                          GetCellText(colIdx, dataRow), AFrame);
           gcdColor:    RenderColorCell(P, colIdx, dataRow, AFrame);
+          gcdHyperlink: RenderHyperlinkCell(P, colIdx, dataRow, AFrame);
         end;
+        { 批注标记与显示类型正交 —— 任何一种格子都可能带批注,
+          所以它在 case **之外**画。 }
+        RenderCommentMark(P, colIdx, dataRow, AFrame);
       end;
     end;
   inherited RenderCells(P, M, AFrame);

@@ -566,6 +566,8 @@ begin
     '   而且改它会波及那些控件。状态只由单元格自身决定,不掺网格的瞬时状态。 */' + LineEnding +
     'TyGridCheckBox           { background: var(--input-bg); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); color: var(--on-surface); }' + LineEnding +
     'TyGridCheckBox:selected  { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }' + LineEnding +
+    'TyGridHyperlink          { color: var(--accent); }' + LineEnding +
+    'TyGridCommentMark        { color: var(--warning); }' + LineEnding +
     'TyGridProgress           { background: var(--surface-chrome); border-radius: var(--radius-sm); }' + LineEnding +
     'TyGridProgressFill       { background: var(--accent); }' + LineEnding +
     'TyGridRating             { color: var(--rating-star); }' + LineEnding +

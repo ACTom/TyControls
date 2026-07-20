@@ -71,6 +71,8 @@ type
     FCanInsertRow, FCanDeleteRow: Integer;
     FReturnCount, FCtrlReturnCount, FReturnRow: Integer;
     FScrollHintCount, FScrollHintRow: Integer;
+    FLinkCount, FLinkCol, FLinkRow: Integer;
+    procedure HandleLinkClick(Sender: TObject; ACol, ARow: Integer);
     procedure HandleCanEditCell(Sender: TObject; ACol, ARow: Integer;
       var AAllow: Boolean);
     procedure HandleEditChange(Sender: TObject; ACol, ARow: Integer;
@@ -289,6 +291,10 @@ type
     procedure TestInsertDeleteRowVeto;
     procedure TestReturnHooks;
     procedure TestScrollHint;
+    procedure TestTriStateCheckBox;
+    procedure TestHyperlinkCell;
+    procedure TestCellComment;
+    procedure TestColumnAndCellDisplay;
     procedure TestValidCharsAppliesInsideTheEditor;
     procedure TestTreeColumnIndentsAndCollapses;
     procedure TestDeletingAColumnIsUndoable;
@@ -1155,6 +1161,7 @@ type
     function  SurfaceFreshForTest: Boolean;
     function  FilterRowHeightForTest: Integer;
     function  EditorKindForTest(ACol, ARow: Integer): TTyGridEditorKind;
+    function  CellDisplayForTest(ACol, ARow: Integer): TTyGridCellDisplay;
     function  ScrollHintForTest(ATopRow: Integer): string;
     procedure PressKeyInEditor(AKey: Word; AShift: TShiftState);
     function  TreeContentLeftForTest(ARow: Integer): Integer;
@@ -1162,6 +1169,17 @@ type
     { 把网格画一遍,数某个矩形里的墨 / 找某一行第一个墨像素的横坐标。
       "算出来的缩进"和"画出来的缩进"是两件事,这两个是用来断言后者的。 }
     function  InkInRect(const R: TRect): Integer;
+    { 把当前这一帧整幅画出来交给调用方(调用方负责 Free)。
+      InkInRect 只数**暗**像素 —— 浅色的东西(琥珀色标记)它看不见,
+      于是"画没画出来"这种断言用它会假绿。要问"变了没有"就用
+      前后两帧的差异像素数,那个对颜色不挑食。 }
+    function  RenderToBitmap: TBGRABitmap;
+    function  DiffPixels(A, B: TBGRABitmap; const R: TRect): Integer;
+    { A、B 两帧在 R 里**最长的一段连续横向差异**。
+      分辨"实心横线"和"一串字形":下划线是一整条长段,字形只有零星几像素。
+      光数差异像素总数分不出这两者(变异证明过:把下划线那一笔删掉,
+      只靠颜色差异,"链接和普通文字不一样"照样绿)。 }
+    function  MaxDiffRun(A, B: TBGRABitmap; const R: TRect): Integer;
     function  InkColumnOfFirstGlyph(ARow: Integer): Integer;
     function  FilterEditorVisible: Boolean;
     function  FilterEditorBounds: TRect;
@@ -1202,6 +1220,62 @@ begin
   if Assigned(InlineEditor.OnKeyPress) then
     InlineEditor.OnKeyPress(InlineEditor, ch);
   if ch <> #0 then InlineEditor.Text := InlineEditor.Text + ch;
+end;
+
+function TStrGridAccess.RenderToBitmap: TBGRABitmap;
+var bmp: TBitmap;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(Width, Height);
+    bmp.Canvas.Brush.Color := clWhite;
+    bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+    DoRender(bmp.Canvas, Rect(0, 0, Width, Height), 96);
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function TStrGridAccess.DiffPixels(A, B: TBGRABitmap; const R: TRect): Integer;
+var x, y: Integer; pa, pb: TBGRAPixel;
+begin
+  Result := 0;
+  if (A = nil) or (B = nil) then Exit;
+  for y := R.Top to R.Bottom - 1 do
+    for x := R.Left to R.Right - 1 do
+    begin
+      if (y < 0) or (y >= A.Height) or (x < 0) or (x >= A.Width) then Continue;
+      if (y >= B.Height) or (x >= B.Width) then Continue;
+      pa := A.GetPixel(x, y); pb := B.GetPixel(x, y);
+      if (pa.red <> pb.red) or (pa.green <> pb.green) or (pa.blue <> pb.blue) then
+        Inc(Result);
+    end;
+end;
+
+function TStrGridAccess.MaxDiffRun(A, B: TBGRABitmap; const R: TRect): Integer;
+var x, y, run: Integer; pa, pb: TBGRAPixel;
+begin
+  Result := 0;
+  if (A = nil) or (B = nil) then Exit;
+  for y := R.Top to R.Bottom - 1 do
+  begin
+    if (y < 0) or (y >= A.Height) or (y >= B.Height) then Continue;
+    run := 0;
+    for x := R.Left to R.Right - 1 do
+    begin
+      if (x < 0) or (x >= A.Width) or (x >= B.Width) then Continue;
+      pa := A.GetPixel(x, y); pb := B.GetPixel(x, y);
+      if (pa.red <> pb.red) or (pa.green <> pb.green) or (pa.blue <> pb.blue) then
+      begin
+        Inc(run);
+        if run > Result then Result := run;
+      end
+      else
+        run := 0;
+    end;
+  end;
 end;
 
 function TStrGridAccess.InkInRect(const R: TRect): Integer;
@@ -1618,6 +1692,11 @@ end;
 function TStrGridAccess.EditorKindForTest(ACol, ARow: Integer): TTyGridEditorKind;
 begin
   Result := EditorKindFor(ACol, ARow);
+end;
+
+function TStrGridAccess.CellDisplayForTest(ACol, ARow: Integer): TTyGridCellDisplay;
+begin
+  Result := CellDisplayFor(ACol, ARow);
 end;
 
 function TStrGridAccess.ScrollHintForTest(ATopRow: Integer): string;
@@ -9864,6 +9943,226 @@ begin
   { 没挂钩子时不编一句出来 —— 空串表示"不显示提示"。 }
   G.OnScrollHint := nil;
   AssertEquals('没挂钩子就没提示', '', G.ScrollHintForTest(50));
+end;
+
+procedure TTyStringGridTest.HandleLinkClick(Sender: TObject; ACol, ARow: Integer);
+begin
+  Inc(FLinkCount); FLinkCol := ACol; FLinkRow := ARow;
+end;
+
+{ T11:勾选框第三态。语义**复用 TTyCheckBox**(cbUnchecked→cbChecked→cbGrayed),
+  不在网格里另定义一套循环顺序。 }
+procedure TTyStringGridTest.TestTriStateCheckBox;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.DefaultEditorKind := gekCheckBox;
+
+  { 读值宽松:外部系统写什么的都有。 }
+  G.Cells[0, 0] := '';       AssertTrue('空 = 未勾', G.CellCheckState(0, 0) = cbUnchecked);
+  G.Cells[0, 1] := 'yes';    AssertTrue('yes = 勾上', G.CellCheckState(0, 1) = cbChecked);
+  G.Cells[0, 2] := '2';      AssertTrue('2 = 灰显', G.CellCheckState(0, 2) = cbGrayed);
+  G.Cells[0, 3] := 'grayed'; AssertTrue('grayed = 灰显', G.CellCheckState(0, 3) = cbGrayed);
+
+  { AllowGrayed 关着时,切换只在两态之间走 —— 灰显不能凭空冒出来。 }
+  G.AllowGrayed := False;
+  G.Cells[1, 0] := '';
+  G.ToggleCellChecked(1, 0);
+  AssertTrue('两态:空→勾', G.CellCheckState(1, 0) = cbChecked);
+  G.ToggleCellChecked(1, 0);
+  AssertTrue('两态:勾→空(不经过灰显)', G.CellCheckState(1, 0) = cbUnchecked);
+
+  { 打开之后走三态循环。 }
+  G.AllowGrayed := True;
+  G.ToggleCellChecked(1, 0);
+  AssertTrue('三态:空→勾', G.CellCheckState(1, 0) = cbChecked);
+  G.ToggleCellChecked(1, 0);
+  AssertTrue('三态:勾→灰', G.CellCheckState(1, 0) = cbGrayed);
+  G.ToggleCellChecked(1, 0);
+  AssertTrue('三态:灰→空', G.CellCheckState(1, 0) = cbUnchecked);
+
+  { 写回是收敛的三个值,不是原样保留用户输入。 }
+  G.ToggleCellChecked(1, 0); G.ToggleCellChecked(1, 0);
+  AssertEquals('灰显写回 2', '2', G.Cells[1, 0]);
+
+  { 灰显要**画得出来** —— 三态如果画得和未勾一样,用户根本分不出。 }
+  AssertTrue('灰显格有墨',
+    G.InkInRect(G.CheckBoxRect(1, 0)) > 0);
+end;
+
+{ T12:超链接单元格。视觉走 token(TyGridHyperlink),不硬编码蓝色。 }
+procedure TTyStringGridTest.TestHyperlinkCell;
+var
+  G: TStrGridAccess;
+  r: TRect;
+  asLink, asText, empty: TBGRABitmap;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.DefaultCellDisplay := gcdHyperlink;
+  G.Cells[1, 1] := 'open me';
+  G.OnCellLinkClick := @HandleLinkClick;
+  FLinkCount := 0;
+
+  { 链接格要**画出文字**(不是被显示类型吃掉),而且要和普通文字**长得不一样**
+    (自己的颜色 + 下划线)。两条都用差异像素量 —— 链接色是亮蓝(#3B82F6),
+    数暗像素的 InkInRect 看不见它,拿它断言会假绿。 }
+  r := G.CellRect(1, 1);
+  asLink := G.RenderToBitmap;
+  try
+    G.Cells[1, 1] := '';
+    empty := G.RenderToBitmap;
+    try
+      AssertTrue('链接文字画出来了', G.DiffPixels(asLink, empty, r) > 0);
+    finally
+      empty.Free;
+    end;
+    G.Cells[1, 1] := 'open me';
+    G.DefaultCellDisplay := gcdText;
+    asText := G.RenderToBitmap;
+    try
+      AssertTrue('链接和普通文字长得不一样', G.DiffPixels(asLink, asText, r) > 0);
+
+      { 而且要**多一条下划线** —— 只换个颜色不算链接。
+        用"最长连续横向段"来分辨:下划线是一整条,字形只有零星几像素。
+        (只断言"不一样"是不够的:颜色差异就足以让它绿,
+         把画下划线那一笔删掉照样过 —— 变异验过。) }
+      G.Cells[1, 1] := '';
+      empty := G.RenderToBitmap;
+      try
+        AssertTrue('链接比普通文字多一条实心横线',
+          G.MaxDiffRun(asLink, empty, r) > G.MaxDiffRun(asText, empty, r));
+      finally
+        empty.Free;
+      end;
+      G.Cells[1, 1] := 'open me';
+    finally
+      asText.Free;
+    end;
+    G.DefaultCellDisplay := gcdHyperlink;
+  finally
+    asLink.Free;
+  end;
+
+  { 点一下发事件。 }
+  G.FullClickAt(r.Left + 4, r.Top + (r.Bottom - r.Top) div 2);
+  AssertEquals('点链接发事件', 1, FLinkCount);
+  AssertEquals('带上列', 1, FLinkCol);
+  AssertEquals('带上行', 1, FLinkRow);
+
+  { 非链接格点了不发。 }
+  G.DefaultCellDisplay := gcdText;
+  r := G.CellRect(1, 2);
+  G.FullClickAt(r.Left + 4, r.Top + 2);
+  AssertEquals('普通格不发链接事件', 1, FLinkCount);
+
+  { 悬停在链接上是手型光标。 }
+  G.DefaultCellDisplay := gcdHyperlink;
+  r := G.CellRect(1, 1);
+  G.HoverAt(r.Left + 4, r.Top + (r.Bottom - r.Top) div 2);
+  AssertTrue('链接上是手型', G.Cursor = crHandPoint);
+  G.DefaultCellDisplay := gcdText;
+  G.HoverAt(r.Left + 4, r.Top + (r.Bottom - r.Top) div 2);
+  AssertTrue('普通格不是手型', G.Cursor <> crHandPoint);
+end;
+
+{ T13:逐格批注。存进逐格属性存储 → 自动可撤销、自动跟着行置换走。 }
+procedure TTyStringGridTest.TestCellComment;
+var
+  G: TStrGridAccess;
+  r: TRect;
+  before, after: TBGRABitmap;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[1, 1] := 'x';
+
+  r := G.CellRect(1, 1);
+  before := G.RenderToBitmap;
+  try
+    G.CellComment[1, 1] := '这里有话说';
+    AssertEquals('存得住', '这里有话说', G.CellComment[1, 1]);
+
+    { 右上角要多出一个标记 —— 看不见的批注等于没有。
+      用差异像素而不是"墨":标记是琥珀色的,数暗像素看不见它。 }
+    after := G.RenderToBitmap;
+    try
+      AssertTrue('右上角冒出标记',
+        G.DiffPixels(before, after,
+          Rect(r.Right - 10, r.Top, r.Right, r.Top + 10)) > 0);
+      { 只该在右上角变 —— 整格重画一遍不算"画了个标记"。 }
+      AssertEquals('格子左半边没动', 0,
+        G.DiffPixels(before, after,
+          Rect(r.Left, r.Top, r.Left + 10, r.Bottom)));
+    finally
+      after.Free;
+    end;
+  finally
+    before.Free;
+  end;
+
+  { 跟着行走:插一行之后批注要跟到新位置去。
+    (这是"存进属性存储"换来的 —— 自己拿个 TStringList 存就得手工搬。) }
+  G.InsertRow(0);
+  AssertEquals('批注跟着行走了', '这里有话说', G.CellComment[1, 2]);
+  AssertEquals('原位置空了', '', G.CellComment[1, 1]);
+
+  { 可撤销。 }
+  G.Undo;
+  AssertEquals('撤销后回到原位', '这里有话说', G.CellComment[1, 1]);
+
+  { 悬停时给出提示文字。 }
+  r := G.CellRect(1, 1);
+  G.HoverAt(r.Left + 4, r.Top + 4);
+  AssertEquals('悬停显示批注', '这里有话说', G.Hint);
+end;
+
+{ T14:列级 CellDisplay + 逐格持久化的显示类型。
+  优先级与编辑器那套一致:逐格 > 事件 > 列 > 网格默认。 }
+procedure TTyStringGridTest.TestColumnAndCellDisplay;
+var
+  G: TStrGridAccess;
+  c: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.DefaultCellDisplay := gcdText;
+
+  c := G.Header.Columns.Items[1] as TTyGridColumn;
+  AssertTrue('没设过时用网格默认',
+    G.CellDisplayForTest(1, 0) = gcdText);
+
+  c.CellDisplay := gcdProgress;
+  c.UseCellDisplay := True;
+  AssertTrue('列级压过网格默认',
+    G.CellDisplayForTest(1, 0) = gcdProgress);
+  AssertTrue('别的列不受影响',
+    G.CellDisplayForTest(0, 0) = gcdText);
+
+  { "有没有显式设过"用 UseCellDisplay 记 —— 光看"等于 gcdText"
+    分不清"没设"和"显式设成文本"(与 UseEditorKind 同一条教训)。 }
+  c.CellDisplay := gcdText;
+  AssertTrue('显式设成文本也压得住列外的默认',
+    G.CellDisplayForTest(1, 0) = gcdText);
+  G.DefaultCellDisplay := gcdProgress;
+  AssertTrue('显式的文本压过改掉的网格默认',
+    G.CellDisplayForTest(1, 0) = gcdText);
+  G.DefaultCellDisplay := gcdText;
+
+  { 逐格最具体,压过列级。 }
+  c.CellDisplay := gcdProgress;
+  G.CellDisplays[1, 2] := gcdRating;
+  AssertTrue('逐格压过列级',
+    G.CellDisplayForTest(1, 2) = gcdRating);
+  AssertTrue('同列别的行仍是列级',
+    G.CellDisplayForTest(1, 0) = gcdProgress);
+
+  { 逐格的存进属性存储 → 跟着行置换走。 }
+  G.InsertRow(0);
+  AssertTrue('逐格显示类型跟着行走',
+    G.CellDisplayForTest(1, 3) = gcdRating);
 end;
 
 initialization

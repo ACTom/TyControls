@@ -533,6 +533,8 @@ TyGridLine      { background: var(--border); }
    而且改它会波及那些控件。状态只由单元格自身决定,不掺网格的瞬时状态。 */
 TyGridCheckBox           { background: var(--input-bg); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); color: var(--on-surface); }
 TyGridCheckBox:selected  { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+TyGridHyperlink          { color: var(--accent); }
+TyGridCommentMark        { color: var(--warning); }
 TyGridProgress           { background: var(--surface-chrome); border-radius: var(--radius-sm); }
 TyGridProgressFill       { background: var(--accent); }
 TyGridRating             { color: var(--rating-star); }
