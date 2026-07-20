@@ -5068,9 +5068,14 @@ begin
     if FUndoOverflow then Exit;
     if Length(FUndoOpen) >= 200000 then
     begin
-      FUndoOverflow := True;
+      { **别调 ClearUndo** —— 它顺手把 FUndoOverflow 清成 False,于是这条
+        "本条作废"的标志自己把自己抹掉:后面的条目继续往 FUndoOpen 里攒,
+        CloseUndoGroup 时 `if not FUndoOverflow` 成立,**正好把那半条残缺记录
+        推进了栈**,设计要防的事照样发生。清栈的三行在这里内联。 }
       SetLength(FUndoOpen, 0);
-      ClearUndo;
+      SetLength(FUndoStack, 0);
+      SetLength(FRedoStack, 0);
+      FUndoOverflow := True;      { 必须在清栈**之后**置位 }
       Exit;
     end;
     n := Length(FUndoOpen);

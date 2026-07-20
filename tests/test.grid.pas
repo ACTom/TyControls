@@ -212,6 +212,7 @@ type
     procedure TestNoOpAttributeWriteLeavesTheUndoStackAlone;
     procedure TestMergeCountSurvivesRowRemovalAndUndo;
     procedure TestClearMergesIsOneUndoStep;
+    procedure TestOversizedUndoRecordIsDiscardedNotTruncated;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8202,6 +8203,38 @@ begin
   G.Undo;
   AssertTrue('按一次撤销,三处合并都回来', G.HasMergedCells);
   AssertFalse('而且栈里不该还剩别的', G.CanUndo);
+end;
+
+{ 一条撤销记录攒得过大时,设计是"**整条作废并清空栈**" ——
+  注释写得很清楚:半条撤销记录还原出来是一张四不像的表,
+  比"这一步撤销不了"危险得多。
+
+  但溢出那条路走的是 `ClearUndo`,而 `ClearUndo` 顺手把 `FUndoOverflow` 清成了
+  False —— 于是作废标志自己把自己抹掉,后面的条目继续往里攒,
+  收尾时**正好把那半条残缺记录推进了栈**。设计要防的事照样发生了。
+
+  断言站在用户那一侧:超限之后**撤不了**(而不是撤出一张四不像的表)。 }
+procedure TTyStringGridTest.TestOversizedUndoRecordIsDiscardedNotTruncated;
+var
+  G: TStrGridAccess;
+  i, n: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  n := 200005;                     { 略高于 200000 那道阈值 }
+  G.RowCount := n;
+  G.Cells[0, 0] := 'before';
+  G.ClearUndo;
+
+  { 一整个事务里灌进超过阈值的改动。 }
+  G.BeginUpdate;
+  try
+    for i := 1 to n - 1 do
+      G.Cells[0, i] := 'x';
+  finally
+    G.EndUpdate;
+  end;
+
+  AssertFalse('超限的那条记录必须整条作废 —— 栈里不该留半条', G.CanUndo);
 end;
 
 initialization
