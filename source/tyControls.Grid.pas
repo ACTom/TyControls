@@ -49,6 +49,14 @@ type
     procedure SetCounts(const ACounts: array of Integer);
   end;
 
+  { 滚动条三态。"隐藏"只管**显示**,不管能不能滚 ——
+    把"不显示"做成"不能滚"是这类开关最常见的错。 }
+  TTyGridScrollBarMode = (gsbAuto, gsbAlways, gsbNever);
+
+  { 背景图怎么铺 / 铺到哪。 }
+  TTyGridBackgroundMode  = (gbmTile, gbmStretch, gbmCenter);
+  TTyGridBackgroundScope = (gbsWholeGrid, gbsBodyOnly);
+
   TTyGridCellDisplay = (
     gcdText,      { 默认:文字 }
     gcdProgress,  { 进度条,值取 0..100 }
@@ -484,6 +492,11 @@ type
   TTyGridScrollHintEvent = procedure(Sender: TObject; ARow: Integer;
     var AHint: string) of object;
 
+  { 宿主接管某列的汇总值(中位数、加权平均、来自服务端的数……)。
+    置 AHandled := True 之后控件就不再自己算了。 }
+  TTyGridColumnCalcEvent = procedure(Sender: TObject; ACol: Integer;
+    var AValue: Double; var AHandled: Boolean) of object;
+
   { 超链接单元格被点(T12)。 }
   TTyGridCellLinkEvent = procedure(Sender: TObject; ACol, ARow: Integer) of object;
 
@@ -748,9 +761,23 @@ type
     FResizeCol:        Integer;   { 正在拖宽的列;-1 = 没在拖 }
     FResizeStartX:     Integer;
     FResizeStartW:     Integer;
+    FVertScrollBarMode: TTyGridScrollBarMode;
+    FHorzScrollBarMode: TTyGridScrollBarMode;
+    FBackgroundBitmap: TBGRABitmap;
+    FBackgroundMode:   TTyGridBackgroundMode;
+    FBackgroundScope:  TTyGridBackgroundScope;
+    FShowFocusCell:    Boolean;
+    FHideSelectionWhenInactive: Boolean;
     FVScroll:          TTyScrollBar;
     FHScroll:          TTyScrollBar;
     FSyncingScroll:    Boolean;      { 防止程序改 Position 反弹回来 }
+    procedure SetShowFocusCell(AValue: Boolean);
+    procedure SetHideSelectionWhenInactive(AValue: Boolean);
+    procedure SetVertScrollBarMode(AValue: TTyGridScrollBarMode);
+    procedure SetHorzScrollBarMode(AValue: TTyGridScrollBarMode);
+    procedure SetBackgroundBitmap(AValue: TBGRABitmap);
+    procedure SetBackgroundMode(AValue: TTyGridBackgroundMode);
+    procedure SetBackgroundScope(AValue: TTyGridBackgroundScope);
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
     procedure HeaderChanged(Sender: TObject);
@@ -884,6 +911,7 @@ type
     function  CanClickCell(ACol, ARow: Integer): Boolean;
     { 这一格是不是"焦点格"(光标所在)。基类没有光标概念,恒 False。 }
     function  IsActiveCell(ACol, ARow: Integer): Boolean; virtual;
+    function  SelectionIsActive: Boolean; virtual;
     { 逐格属性查询。基类没有属性存储,恒 nil;TTyStringGrid 改写。 }
     function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; virtual;
     { 网格自己的列类;列还没建时返回 nil。 }
@@ -1007,6 +1035,8 @@ type
 
     { 列头带 / 行头槽 / 固定列区的填充。绘制次序即遮挡次序,必须与 CellAt 的判定次序一致:
       列头横跨整幅并盖住左上角 → 行头槽 → 固定列。 }
+    procedure RenderBackgroundBitmap(P: TTyPainter; const M: TTyGridMetrics;
+      const R: TRect); virtual;
     procedure RenderChrome(P: TTyPainter; const M: TTyGridMetrics); virtual;
     { 逐格背景。与文字分成两趟:文字那趟在派生类里(基类不知道数据从哪来),
       而背景只取决于格的**状态**,基类就能画完 —— hover/选中/斑马纹/逐格底色
@@ -1071,6 +1101,27 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
 
+    { 滚动条三态,横纵各一。gsbNever 只是不显示 —— 键盘/滚轮照样能滚到底。 }
+    property VertScrollBarMode: TTyGridScrollBarMode
+      read FVertScrollBarMode write SetVertScrollBarMode default gsbAuto;
+    property HorzScrollBarMode: TTyGridScrollBarMode
+      read FHorzScrollBarMode write SetHorzScrollBarMode default gsbAuto;
+    { 整表背景图。控件**不持有**这张位图的所有权 —— 宿主给什么用什么,
+      宿主负责释放(与 Images 同一约定,免得两边都以为对方会 Free)。 }
+    property BackgroundBitmap: TBGRABitmap
+      read FBackgroundBitmap write SetBackgroundBitmap;
+    property BackgroundMode: TTyGridBackgroundMode
+      read FBackgroundMode write SetBackgroundMode default gbmStretch;
+    property BackgroundScope: TTyGridBackgroundScope
+      read FBackgroundScope write SetBackgroundScope default gbsWholeGrid;
+    { 焦点格要不要画外框。gsmRow 模式下整行都是选中底色,不画外框就
+      看不出光标在哪一格 —— 所以默认开着。 }
+    property ShowFocusCell: Boolean
+      read FShowFocusCell write SetShowFocusCell default True;
+    { 控件失去焦点时选区要不要变淡。 }
+    property HideSelectionWhenInactive: Boolean
+      read FHideSelectionWhenInactive write SetHideSelectionWhenInactive
+      default False;
     property VScrollBar: TTyScrollBar read FVScroll;
     property HScrollBar: TTyScrollBar read FHScroll;
 
@@ -1349,6 +1400,7 @@ type
     FOnCtrlReturn:   TTyGridCellKeyEvent;
     FOnScrollHint:   TTyGridScrollHintEvent;
     FOnCellLinkClick: TTyGridCellLinkEvent;
+    FOnColumnCalc:    TTyGridColumnCalcEvent;
     FAllowGrayed:    Boolean;
     { 全表有没有批注。渲染与悬停路径都要问一次"这格有批注吗",
       没有批注的表不该为此每格建一个临时键(与 FAttrs.IsEmpty 同一条理由)。 }
@@ -1626,6 +1678,12 @@ type
     property  CellComment[ACol, ARow: Integer]: string
       read GetCellComment write SetCellComment;
     { 逐格显示类型(T14)。同上,存属性存储。 }
+    { 逐格字体样式(T20)。存储槽(HasFontStyle / FontStyle)早就在属性
+      存储和撤销快照里了 —— 缺的只是公开属性和"在 CellAppearance 里读它"。 }
+    function  GetCellFontStyles(ACol, ARow: Integer): TFontStyles;
+    procedure SetCellFontStyles(ACol, ARow: Integer; AValue: TFontStyles);
+    property  CellFontStyles[ACol, ARow: Integer]: TFontStyles
+      read GetCellFontStyles write SetCellFontStyles;
     function  GetCellDisplay(ACol, ARow: Integer): TTyGridCellDisplay;
     procedure SetCellDisplay(ACol, ARow: Integer; AValue: TTyGridCellDisplay);
     property  CellDisplays[ACol, ARow: Integer]: TTyGridCellDisplay
@@ -1716,6 +1774,10 @@ type
     { 汇总缓存整体失效。三处汇过来:数据改(SetCells)、显示序变(InvalidateOrder,
       筛选/隐藏/分组/行数都归它)、换聚合口径(SetColumnAggregate)。 }
     procedure InvalidateAggregates;
+    { 强制重算**某一列**的汇总。宿主改了外部数据源时需要一个明确的入口 ——
+      InvalidateAggregates 是整表失效,拿来做这件事太钝。
+      ACol < 0 = 整表(等价于 InvalidateAggregates)。 }
+    procedure CalcFooter(ACol: Integer);
     { 属性存储的记录点。挂在 TTyGridCellAttrStore.OnChanging 上 ——
       于是改底色/文字色/只读/合并跨度、以及三条行置换路径搬属性,
       **一律**自动进撤销栈,不必每个功能各写一段(那正是本控件反复漏东西的方式)。 }
@@ -2101,6 +2163,8 @@ type
       read FOnScrollHint write FOnScrollHint;
     property OnCellLinkClick: TTyGridCellLinkEvent
       read FOnCellLinkClick write FOnCellLinkClick;
+    property OnColumnCalc: TTyGridColumnCalcEvent
+      read FOnColumnCalc write FOnColumnCalc;
     { 勾选框单元格允许第三态(灰显)。关着时切换只在两态间走 ——
       灰显不能凭空冒出来。 }
     property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
@@ -3035,6 +3099,71 @@ begin
   end;
 end;
 
+{ 选区"活跃"= 控件有焦点。抽成一个可覆写的方法而不是直接读 Focused:
+  无头测试里控件永远拿不到真焦点,不留这个座就没法测。 }
+function TTyCustomGrid.SelectionIsActive: Boolean;
+begin
+  Result := Focused;
+end;
+
+procedure TTyCustomGrid.SetShowFocusCell(AValue: Boolean);
+begin
+  if FShowFocusCell = AValue then Exit;
+  FShowFocusCell := AValue;
+  ResetCellStyleCache;      { 外观缓存里有焦点格那一格 }
+  InvalidateSurface;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetHideSelectionWhenInactive(AValue: Boolean);
+begin
+  if FHideSelectionWhenInactive = AValue then Exit;
+  FHideSelectionWhenInactive := AValue;
+  ResetCellStyleCache;
+  InvalidateSurface;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetVertScrollBarMode(AValue: TTyGridScrollBarMode);
+begin
+  if FVertScrollBarMode = AValue then Exit;
+  FVertScrollBarMode := AValue;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetHorzScrollBarMode(AValue: TTyGridScrollBarMode);
+begin
+  if FHorzScrollBarMode = AValue then Exit;
+  FHorzScrollBarMode := AValue;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetBackgroundBitmap(AValue: TBGRABitmap);
+begin
+  if FBackgroundBitmap = AValue then Exit;
+  FBackgroundBitmap := AValue;
+  InvalidateSurface;      { 背景变了,持久表面上那一帧作废 }
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetBackgroundMode(AValue: TTyGridBackgroundMode);
+begin
+  if FBackgroundMode = AValue then Exit;
+  FBackgroundMode := AValue;
+  InvalidateSurface;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetBackgroundScope(AValue: TTyGridBackgroundScope);
+begin
+  if FBackgroundScope = AValue then Exit;
+  FBackgroundScope := AValue;
+  InvalidateSurface;
+  Invalidate;
+end;
+
 procedure TTyCustomGrid.UpdateScrollBars;
 var
   sb, vw, vh, pass, bodyH, bodyW, maxV, maxH: Integer;
@@ -3096,7 +3225,23 @@ begin
         重算滚动范围时会把滑块从用户手里抢走。 }
       if not FVScroll.Dragging then FVScroll.SetPositionSnapped(FScrollY);
     end;
-    FVScroll.Visible := needV;
+    { 三态在**最后**落到 Visible 上 —— 上面那两趟"互夺"收敛仍按真实需要算,
+      否则常显模式下的空间预留会算错。 }
+    case FVertScrollBarMode of
+      gsbAlways: FVScroll.Visible := True;
+      gsbNever:  FVScroll.Visible := False;
+      else       FVScroll.Visible := needV;
+    end;
+    { 常显时即便内容装得下也要摆好位置,否则它出现在 (0,0) 上。 }
+    if FVScroll.Visible and (not needV) and (not FVScroll.Dragging) then
+    begin
+      FVScroll.Controller := Self.Controller;
+      FVScroll.Width := sb;
+      FVScroll.SetBounds(ClientWidth - sb, 0, sb, vh);
+      FVScroll.Min := 0;
+      FVScroll.Max := maxV;
+      FVScroll.PageSize := bodyH;
+    end;
 
     if needH then
     begin
@@ -3109,7 +3254,20 @@ begin
       FHScroll.PageSize := bodyW;
       if not FHScroll.Dragging then FHScroll.SetPositionSnapped(FScrollX);
     end;
-    FHScroll.Visible := needH;
+    case FHorzScrollBarMode of
+      gsbAlways: FHScroll.Visible := True;
+      gsbNever:  FHScroll.Visible := False;
+      else       FHScroll.Visible := needH;
+    end;
+    if FHScroll.Visible and (not needH) and (not FHScroll.Dragging) then
+    begin
+      FHScroll.Controller := Self.Controller;
+      FHScroll.Height := sb;
+      FHScroll.SetBounds(0, ClientHeight - sb, vw, sb);
+      FHScroll.Min := 0;
+      FHScroll.Max := maxH;
+      FHScroll.PageSize := bodyW;
+    end;
   finally
     FSyncingScroll := False;
   end;
@@ -3944,11 +4102,16 @@ begin
     end;
     if attr.HasTextColor then Result.TextColor := attr.TextColor;
     if attr.HasAlignment then Result.HAlign := attr.Alignment;
+    { 逐格字体样式:粗体走字重(本库的文字层按字重画,没有独立的 bold 开关),
+      斜体/下划线本库的文字层暂不支持 —— 存得住、但只有粗体画得出来。
+      这一条写在这里而不是悄悄丢掉:存了却不画是最容易的假完成。 }
+    if attr.HasFontStyle and (fsBold in attr.FontStyle) then
+      Result.FontWeight := 700;
   end;
 
   { **焦点格**要和选区区分开:gsmRow 模式下整行都是选中底色,不区分的话
     根本看不出光标在哪一格。用自己的 typeKey,主题没定义就什么都不做。 }
-  if IsActiveCell(ACol, ARow) then
+  if FShowFocusCell and IsActiveCell(ACol, ARow) then
   begin
     actS := ActiveController.Model.ResolveStyle('TyGridActiveCell', StyleClass, []);
     { 用户给这格指定了底色时**不铺焦点底色** —— 否则光标停在哪一格,
@@ -4794,6 +4957,65 @@ begin
   end;
 end;
 
+{ 整表背景图。范围只影响**铺到哪个矩形**,不影响铺法 ——
+  两件事分开,免得 3 种铺法 x 2 种范围写成 6 个分支。 }
+procedure TTyCustomGrid.RenderBackgroundBitmap(P: TTyPainter;
+  const M: TTyGridMetrics; const R: TRect);
+var
+  area, dst, oldClip: TRect;
+  x, y, bw, bh: Integer;
+begin
+  if FBackgroundBitmap = nil then Exit;
+  bw := FBackgroundBitmap.Width;
+  bh := FBackgroundBitmap.Height;
+  if (bw <= 0) or (bh <= 0) then Exit;
+
+  area := R;
+  if FBackgroundScope = gbsBodyOnly then
+  begin
+    { 正文窗格 = 除去列头/分组带/筛选行(上)与底部冻结带(下)。
+      左边的行号槽/冻结列不减 —— 那些仍是"正文"的一部分。 }
+    area.Top := M.FrozenTop;
+    area.Bottom := M.ClientH - M.FrozenBottom;
+  end;
+  if (area.Right <= area.Left) or (area.Bottom <= area.Top) then Exit;
+
+  oldClip := P.Bitmap.ClipRect;
+  { 与外层裁剪**求交**,不覆盖 —— 快路径下外层夹着那条露出来的带。 }
+  if not IntersectRect(dst, oldClip, area) then Exit;
+  P.Bitmap.ClipRect := dst;
+  try
+    case FBackgroundMode of
+      gbmStretch:
+        P.Bitmap.StretchPutImage(area, FBackgroundBitmap, dmDrawWithTransparency);
+      gbmCenter:
+        begin
+          dst := Rect(0, 0, bw, bh);
+          OffsetRect(dst, (area.Left + area.Right - bw) div 2,
+                          (area.Top + area.Bottom - bh) div 2);
+          P.Bitmap.PutImage(dst.Left, dst.Top, FBackgroundBitmap,
+            dmDrawWithTransparency);
+        end;
+      else
+        begin
+          y := area.Top;
+          while y < area.Bottom do
+          begin
+            x := area.Left;
+            while x < area.Right do
+            begin
+              P.Bitmap.PutImage(x, y, FBackgroundBitmap, dmDrawWithTransparency);
+              Inc(x, bw);
+            end;
+            Inc(y, bh);
+          end;
+        end;
+    end;
+  finally
+    P.Bitmap.ClipRect := oldClip;
+  end;
+end;
+
 procedure TTyCustomGrid.RenderChrome(P: TTyPainter; const M: TTyGridMetrics);
 var
   headerH, indW, bandH: Integer;
@@ -5217,6 +5439,9 @@ begin
 
     if not canFast then DrawFrame(P, R, S)
     else FillRegion(P, band, GetStyleTypeKey);   { 露出的带先铺回本体底色 }
+
+    { 背景图铺在本体底色**之上**、任何内容之下。 }
+    RenderBackgroundBitmap(P, M, R);
 
     RenderChrome(P, M);
     RenderCellBackgrounds(P, M);
@@ -6842,6 +7067,18 @@ begin
   FOrderValid := False;
 end;
 
+procedure TTyStringGrid.CalcFooter(ACol: Integer);
+begin
+  if ACol < 0 then
+  begin
+    InvalidateAggregates;
+    Exit;
+  end;
+  { 只掀掉这一列的有效位。数组长度不对(还没建过缓存)就什么都不用做。 }
+  if (ACol <= High(FAggValid)) then FAggValid[ACol] := False;
+  Invalidate;
+end;
+
 procedure TTyStringGrid.InvalidateAggregates;
 begin
   { 长度归零 = 全部失效。下次用到时按当时的列数重建 ——
@@ -8384,6 +8621,42 @@ begin
   Invalidate;
 end;
 
+function TTyStringGrid.GetCellFontStyles(ACol, ARow: Integer): TFontStyles;
+var a: TTyGridCellAttr;
+begin
+  Result := [];
+  if FAttrs.IsEmpty then Exit;
+  a := FAttrs.Find(CellKey(ACol, ARow));
+  if (a <> nil) and a.HasFontStyle then Result := a.FontStyle;
+end;
+
+procedure TTyStringGrid.SetCellFontStyles(ACol, ARow: Integer; AValue: TFontStyles);
+var
+  k: string;
+  a: TTyGridCellAttr;
+begin
+  if GetCellFontStyles(ACol, ARow) = AValue then Exit;
+  k := CellKey(ACol, ARow);
+  if AValue = [] then
+  begin
+    a := FAttrs.Mutate(k);          { Mutate 先发 Changing → 撤销记得住 }
+    if a = nil then Exit;
+    a.HasFontStyle := False;
+    a.FontStyle := [];
+    FAttrs.DropIfDefault(k);
+  end
+  else
+  begin
+    a := FAttrs.Ensure(k);
+    if a = nil then Exit;
+    a.HasFontStyle := True;
+    a.FontStyle := AValue;
+  end;
+  ResetCellStyleCache;
+  InvalidateSurface;
+  Invalidate;
+end;
+
 function TTyStringGrid.GetCellDisplay(ACol, ARow: Integer): TTyGridCellDisplay;
 var a: TTyGridCellAttr;
 begin
@@ -9780,9 +10053,21 @@ var
   v, acc: Double;
   kind: TTyGridAggregate;
   txt: string;
-  started, cacheable: Boolean;
+  started, cacheable, handled: Boolean;
 begin
   Result := 0;
+
+  { 宿主接管这一列?接管了就**直接返回**,连 gagNone 的判断都不做 ——
+    宿主可能想给一个根本没配聚合口径的列显示合计。
+    而且**不进缓存**:值由宿主随时给,控件收不到"外部数据变了"的通知,
+    缓存住就是把一个陈旧的数钉在页脚上(与虚拟数据源同一条理由)。 }
+  if Assigned(FOnColumnCalc) then
+  begin
+    handled := False;
+    FOnColumnCalc(Self, ACol, Result, handled);
+    if handled then Exit;
+  end;
+
   kind := ColumnAggregate(ACol);
   if kind = gagNone then Exit;
 
@@ -12175,8 +12460,15 @@ begin
     状态集,选区底色被重新解析成另一个值 —— 选中的格"闪一下"。
     (与当初勾选框闪烁同一个 bug:那次是鼠标按下让整个网格进 :active,
     满屏未勾选的框集体变样。单元格的外观只该由格自己的状态决定。) }
-  selS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass,
-    [tysSelected]);
+  { 失焦时换一个 typeKey 解析选区底色 —— 控件不自己去调淡一个颜色
+    (那就成了硬编码的视觉值)。用独立的键而不是 :selected:disabled:
+    .tycss 每个选择器只认一个 :state。 }
+  if FHideSelectionWhenInactive and (not SelectionIsActive) then
+    selS := ActiveController.Model.ResolveStyle('TyGridCellSelectedInactive',
+      StyleClass, [])
+  else
+    selS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass,
+      [tysSelected]);
   { 盖在"用户显式指定了底色"的格上时改用半透明层。选区底色是不透明的 accent,
     直接铺上去会把用户自己标的颜色**整块抹掉** —— 而光标总是落在刚上色的那一格上,
     于是"上了色却什么都没变"。半透明层让两者都读得出来。 }

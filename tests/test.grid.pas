@@ -72,6 +72,9 @@ type
     FReturnCount, FCtrlReturnCount, FReturnRow: Integer;
     FScrollHintCount, FScrollHintRow: Integer;
     FLinkCount, FLinkCol, FLinkRow: Integer;
+    FColCalcCount: Integer;
+    procedure HandleColumnCalc(Sender: TObject; ACol: Integer;
+      var AValue: Double; var AHandled: Boolean);
     procedure HandleLinkClick(Sender: TObject; ACol, ARow: Integer);
     procedure HandleCanEditCell(Sender: TObject; ACol, ARow: Integer;
       var AAllow: Boolean);
@@ -295,6 +298,12 @@ type
     procedure TestHyperlinkCell;
     procedure TestCellComment;
     procedure TestColumnAndCellDisplay;
+    procedure TestScrollBarModes;
+    procedure TestBackgroundImage;
+    procedure TestSelectionDisplayOptions;
+    procedure TestCalcFooter;
+    procedure TestColumnCalcHook;
+    procedure TestCellFontStyles;
     procedure TestValidCharsAppliesInsideTheEditor;
     procedure TestTreeColumnIndentsAndCollapses;
     procedure TestDeletingAColumnIsUndoable;
@@ -1158,6 +1167,11 @@ type
     function  ColAtForTest(AX: Integer): Integer;
     procedure BaseCellOfForTest(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
     procedure InvalidateSurfaceForTest;
+    procedure UpdateScrollBarsForTest;
+    { 选区"活不活跃"在无头测试里恒为 False(控件拿不到真焦点),
+      所以给它一个可覆写的座:控件问 SelectionIsActive,测试子类答。 }
+    procedure SetGridFocusedForTest(AValue: Boolean);
+    function  SelectionIsActive: Boolean; override;
     function  SurfaceFreshForTest: Boolean;
     function  FilterRowHeightForTest: Integer;
     function  EditorKindForTest(ACol, ARow: Integer): TTyGridEditorKind;
@@ -1186,6 +1200,8 @@ type
     procedure SetFilterEditorText(const AText: string);
     procedure PressKeyInFilterEditor(AKey: Word);
     property ScrollTop: Integer read GetScrollTop write SetScrollTop;
+  private
+    FTestFocused: Boolean;
   end;
 
   { 数"汇总扫了多少格"。页脚每帧都要问一次聚合,而聚合遍历的是全部显示行 ——
@@ -1712,6 +1728,52 @@ begin
   k := AKey;
   if Assigned(InlineEditor.OnKeyDown) then
     InlineEditor.OnKeyDown(InlineEditor, k, AShift);
+end;
+
+procedure TStrGridAccess.UpdateScrollBarsForTest;
+begin
+  UpdateScrollBars;
+end;
+
+procedure TStrGridAccess.SetGridFocusedForTest(AValue: Boolean);
+begin
+  FTestFocused := AValue;
+  Invalidate;
+end;
+
+function TStrGridAccess.SelectionIsActive: Boolean;
+begin
+  Result := FTestFocused;
+end;
+
+{ 一张看得出来的探针图:纯色底 + 一条对角线。纯色底保证"画了没有"一定看得见,
+  对角线保证"拉伸/平铺"这种模式差异也看得出来。 }
+function MakeProbeBitmap(AW, AH: Integer): TBGRABitmap;
+var i: Integer;
+begin
+  Result := TBGRABitmap.Create(AW, AH, BGRA(200, 40, 40, 255));
+  for i := 0 to AW - 1 do
+    if i < AH then Result.SetPixel(i, i, BGRA(20, 20, 200, 255));
+end;
+
+function MakeCountingGrid(AForm: TForm; ACtl: TTyStyleController): TCountingGrid;
+var
+  i: Integer;
+  c: TTyColumn;
+begin
+  Result := TCountingGrid.Create(AForm);
+  Result.Parent := AForm;
+  Result.Controller := ACtl;
+  Result.Font.PixelsPerInch := 96;
+  Result.SetBounds(0, 0, 400, 300);
+  for i := 0 to 3 do
+  begin
+    c := Result.Header.Columns.Add as TTyColumn;
+    c.Width := 80;
+  end;
+  Result.Header.Options := Result.Header.Options - [hoVisible];
+  Result.DefaultRowHeight := 20;
+  Result.RowCount := 10;
 end;
 
 function MakeStrGrid(AForm: TForm; ACtl: TTyStyleController): TStrGridAccess;
@@ -10163,6 +10225,257 @@ begin
   G.InsertRow(0);
   AssertTrue('逐格显示类型跟着行走',
     G.CellDisplayForTest(1, 3) = gcdRating);
+end;
+
+procedure TTyStringGridTest.HandleColumnCalc(Sender: TObject; ACol: Integer;
+  var AValue: Double; var AHandled: Boolean);
+begin
+  Inc(FColCalcCount);
+  AValue := 42;
+  AHandled := True;
+end;
+
+{ T15:滚动条三态(常显 / 按需 / 隐藏),横纵各一。 }
+procedure TTyStringGridTest.TestScrollBarModes;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 2;             { 内容装得下 —— 按需模式下不该出现 }
+
+  G.VertScrollBarMode := gsbAuto;
+  G.UpdateScrollBarsForTest;
+  AssertFalse('按需:装得下就不出现', G.VScrollBar.Visible);
+
+  G.VertScrollBarMode := gsbAlways;
+  G.UpdateScrollBarsForTest;
+  AssertTrue('常显:装得下也出现', G.VScrollBar.Visible);
+
+  G.RowCount := 500;           { 装不下了 }
+  G.VertScrollBarMode := gsbNever;
+  G.UpdateScrollBarsForTest;
+  AssertFalse('隐藏:装不下也不出现', G.VScrollBar.Visible);
+
+  { 隐藏了滚动条**不等于**不能滚 —— 键盘/滚轮仍要能走到底。
+    (把"不显示"做成"不能滚"是这类开关最常见的错。) }
+  G.ScrollTop := 100000;
+  AssertTrue('隐藏时仍能滚动', G.ScrollTop > 0);
+
+  { 横向同理,且两轴互不影响。 }
+  G.HorzScrollBarMode := gsbAlways;
+  G.UpdateScrollBarsForTest;
+  AssertTrue('横条常显', G.HScrollBar.Visible);
+  AssertFalse('纵条仍隐藏', G.VScrollBar.Visible);
+end;
+
+{ T16:整表背景图。走主题 token 的 background(它已支持图片),
+  控件这边只管**范围**(整表 / 仅正文窗格)。 }
+procedure TTyStringGridTest.TestBackgroundImage;
+var
+  G: TStrGridAccess;
+  noBg, whole, bodyOnly: TBGRABitmap;
+  hdr: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.FixedCols := 1;
+
+  noBg := G.RenderToBitmap;
+  try
+    G.BackgroundBitmap := MakeProbeBitmap(16, 16);
+    G.BackgroundMode := gbmStretch;
+    G.BackgroundScope := gbsWholeGrid;
+    whole := G.RenderToBitmap;
+    try
+      AssertTrue('整表范围:画面变了',
+        G.DiffPixels(noBg, whole, Rect(0, 0, G.Width, G.Height)) > 0);
+    finally
+      whole.Free;
+    end;
+
+    { 范围决定图片被**适配到哪个矩形**,不是"能不能盖住列头" ——
+      列头带每帧都被 chrome 不透明地重画一遍,底下铺什么都看不见,
+      所以"盖到列头"这条断言对任何实现都恒为假,零分辨力。
+      真正可观测的差别是:两种范围下 stretch 的目标矩形不同,
+      于是**正文里的像素也不一样**。 }
+    hdr := Rect(0, 0, G.Width, G.ScaleForTest(G.Header.Height));
+    G.BackgroundScope := gbsBodyOnly;
+    bodyOnly := G.RenderToBitmap;
+    try
+      AssertEquals('两种范围都碰不到列头(chrome 盖着)', 0,
+        G.DiffPixels(noBg, bodyOnly, hdr));
+      AssertTrue('仅正文范围仍然画了正文',
+        G.DiffPixels(noBg, bodyOnly,
+          Rect(0, hdr.Bottom, G.Width, G.Height)) > 0);
+    finally
+      bodyOnly.Free;
+    end;
+
+    { 换回整表范围,和仅正文范围逐像素比:适配矩形不同 → 正文也不同。
+      这一条才是"范围真的生效了"的守卫。 }
+    G.BackgroundScope := gbsWholeGrid;
+    whole := G.RenderToBitmap;
+    try
+      G.BackgroundScope := gbsBodyOnly;
+      bodyOnly := G.RenderToBitmap;
+      try
+        AssertTrue('两种范围画出来不一样',
+          G.DiffPixels(whole, bodyOnly,
+            Rect(0, hdr.Bottom, G.Width, G.Height)) > 0);
+      finally
+        bodyOnly.Free;
+      end;
+    finally
+      whole.Free;
+    end;
+  finally
+    noBg.Free;
+  end;
+end;
+
+{ T17:选区显示细则(现在写死)。 }
+procedure TTyStringGridTest.TestSelectionDisplayOptions;
+var
+  G: TStrGridAccess;
+  onBmp, offBmp, activeBmp, inactiveBmp: TBGRABitmap;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.MoveCursor(1, 1);
+  r := G.CellRect(1, 1);
+
+  G.ShowFocusCell := True;
+  onBmp := G.RenderToBitmap;
+  try
+    G.ShowFocusCell := False;
+    offBmp := G.RenderToBitmap;
+    try
+      AssertTrue('关掉焦点格外框后画面变了',
+        G.DiffPixels(onBmp, offBmp, r) > 0);
+    finally
+      offBmp.Free;
+    end;
+  finally
+    onBmp.Free;
+  end;
+
+  { 非活动时选区变灰:开关关掉就不该变。 }
+  G.ShowFocusCell := True;
+  G.HideSelectionWhenInactive := True;
+  G.SetGridFocusedForTest(True);
+  activeBmp := G.RenderToBitmap;
+  try
+    G.SetGridFocusedForTest(False);
+    inactiveBmp := G.RenderToBitmap;
+    try
+      AssertTrue('失焦时选区变样', G.DiffPixels(activeBmp, inactiveBmp, r) > 0);
+    finally
+      inactiveBmp.Free;
+    end;
+
+    G.HideSelectionWhenInactive := False;
+    G.SetGridFocusedForTest(False);
+    inactiveBmp := G.RenderToBitmap;
+    try
+      AssertEquals('关掉之后失焦不变样', 0,
+        G.DiffPixels(activeBmp, inactiveBmp, r));
+    finally
+      inactiveBmp.Free;
+    end;
+  finally
+    activeBmp.Free;
+  end;
+end;
+
+{ T18:强制重算某一列的汇总。
+  必须能观测到**重新扫描**本身 —— 只看结果对不对分辨不出"缓存还在但恰好一样"。 }
+procedure TTyStringGridTest.TestCalcFooter;
+var
+  G: TCountingGrid;
+  before: Integer;
+begin
+  G := MakeCountingGrid(FForm, FCtl);
+  G.RowCount := 20;
+  G.SetColumnAggregate(0, gagAvg);
+  G.AggregateValue(0);          { 建缓存 }
+
+  G.ScanCount := 0;
+  G.AggregateValue(0);
+  AssertEquals('缓存命中时不扫描', 0, G.ScanCount);
+
+  G.CalcFooter(0);
+  G.ScanCount := 0;
+  G.AggregateValue(0);
+  AssertTrue('强制重算之后会重新扫描', G.ScanCount > 0);
+
+  { 只失效那一列 —— 整表失效的话这个入口就没有存在意义。 }
+  G.SetColumnAggregate(1, gagAvg);
+  G.AggregateValue(1);
+  G.CalcFooter(0);
+  G.ScanCount := 0;
+  G.AggregateValue(1);
+  AssertEquals('别的列的缓存没被牵连', 0, G.ScanCount);
+end;
+
+{ T19:宿主接管某列的汇总值。接管后**不进缓存** ——
+  与虚拟数据源不缓存同一条理由:控件收不到"外部数据变了"的通知。 }
+procedure TTyStringGridTest.TestColumnCalcHook;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  G.SetColumnAggregate(0, gagSum);
+  G.Cells[0, 0] := '1';
+  G.Cells[0, 1] := '2';
+
+  FColCalcCount := 0;
+  G.OnColumnCalc := @HandleColumnCalc;
+  AssertEquals('用宿主给的值', 42.0, G.AggregateValue(0), 0.001);
+  AssertEquals('钩子被问过', 1, FColCalcCount);
+
+  { 再问一次要**再回调一次** —— 缓存住宿主的值就等于把陈旧数钉在页脚上。 }
+  G.AggregateValue(0);
+  AssertEquals('接管的值不进缓存', 2, FColCalcCount);
+end;
+
+{ T20:逐格字体样式。存储槽(HasFontStyle / FontStyle)早就在了,
+  缺的是公开属性 + 在 CellAppearance 里读它。 }
+procedure TTyStringGridTest.TestCellFontStyles;
+var
+  G: TStrGridAccess;
+  plain, bold: TBGRABitmap;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Cells[1, 1] := 'sample';
+  r := G.CellRect(1, 1);
+
+  plain := G.RenderToBitmap;
+  try
+    G.CellFontStyles[1, 1] := [fsBold];
+    AssertTrue('存得住', fsBold in G.CellFontStyles[1, 1]);
+
+    { 关键:要**真的画粗**。只存不画是这条最容易的假完成。 }
+    bold := G.RenderToBitmap;
+    try
+      AssertTrue('粗体真的画出来了', G.DiffPixels(plain, bold, r) > 0);
+      { 别的格不受影响。 }
+      AssertEquals('同列别的行没变', 0,
+        G.DiffPixels(plain, bold, G.CellRect(1, 2)));
+    finally
+      bold.Free;
+    end;
+  finally
+    plain.Free;
+  end;
+
+  { 走属性存储 → 可撤销、跟着行走。 }
+  G.InsertRow(0);
+  AssertTrue('跟着行走', fsBold in G.CellFontStyles[1, 2]);
 end;
 
 initialization

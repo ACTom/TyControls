@@ -535,6 +535,10 @@ begin
     'TyGridCell { background: none; color: var(--on-surface); padding: 0px 6px; }' + LineEnding +
     'TyGridCell:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyGridCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    '/* 失焦时的选区(HideSelectionWhenInactive)。给它**自己的键**,不写成' + LineEnding +
+    '   TyGridCell:selected:disabled —— 语法每个选择器只认一个 :state,' + LineEnding +
+    '   链式伪状态解析不了(而且借别的键会让外观层够不着,见 TyGridActiveCell)。 */' + LineEnding +
+    'TyGridCellSelectedInactive { background: alpha(var(--accent), 0.35); color: var(--on-surface); }' + LineEnding +
     '/* 焦点格(光标所在)。整行选中模式下,不区分就看不出光标在哪一格。 */' + LineEnding +
     'TyGridActiveCell { background: var(--surface-active); color: var(--on-surface); }' + LineEnding +
     '/* 选区盖在"用户显式指定了底色"的格上时用这一层(逐格色/行色/条件着色)。' + LineEnding +
