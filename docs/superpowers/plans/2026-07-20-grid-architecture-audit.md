@@ -11,12 +11,13 @@
 
 ## A. 已确认的 bug(复核未被推翻)—— 先修这些
 
-> **进度**:A2 · A4 · A3 · A5 已修(2026-07-20)。
-> 剩 **A1**(CellPane 空间混用)· **A6**(选区矩形对 -1 不设防)· **A7**(SwapRows 只记录了文字)。
+> **进度**:A 组**全部修完**(2026-07-20)。A2 · A4 · A3 · A5 先修;
+> A1 · A6 · A7 在本轮修完,每条都先红后绿 + 变异验证 + 单独提交。
 > 修 A5 时**顺带挖出第 8 个 bug**:右冻结列锚在 `ClientWidth` 而窗格锚在 `ViewportW`,
 > 整条右冻结带右移一个滚动条宽、最右一列被裁 —— 已一并修掉。
+> 修 B2 时**又挖出第 9 个**:`SwapRows` 不搬隐藏标记 —— 藏着的行换个位置就冒出来。
 
-### A1【高】`CellPane` 用**显示序**的判据去判**数据行**参数
+### A1【高】✅ 已修 · `CellPane` 用**显示序**的判据去判**数据行**参数
 `source/tyControls.Grid.pas:3531-3552`
 ```pascal
 if ARow < FFixedRows then ...
@@ -33,11 +34,12 @@ gpTop**,与冻结带求交后变成空矩形 —— 它们滚到哪儿都不画,
 (数据行查表),可变行高时冻结带厚度取的是**另外几行**的高度。
 对照 `RowTops:5962` 是对的(先 `DisplayToData` 再 `RowHeightOf`)。
 
-**修法**:把空间写进签名而不是靠约定 —— `CellPane(ACol, APos)` 收显示位置,
-`CellVisibleRect` 做唯一一次转换;加 `RowHeightOfDisplay(APos)` 给冻结带厚度用。
-只有 2 个调用点(3567、9833)。
-**守卫**:`FixedRows=2` + 降序排,断言每个数据行的 `CellVisibleRect` 落在正确窗格。
-现有测试测不到 —— 它们**分别**测固定行和排序,从不叠加。
+**已修**(`c5ed5e4`):空间写进了签名 —— `CellPane(ACol, APos)` 收显示位置,
+`CellVisibleRect` 做唯一一次转换;`RowHeightOfDisplay(APos)` 供冻结带厚度用。
+守卫:`TestFixedRowsAndSortTogetherKeepCellsInTheirPane`(FixedRows=2 + 降序,
+逐个数据行断言可见矩形非空且等于几何矩形)、
+`TestFrozenBandThicknessFollowsDisplayedRows`(可变行高 + 排序,上下两条带各一条)。
+三处修改点逐一变异,均变红。
 
 **关于类型级修法的判断**:不值得。FPC 的 `type TDataRow = type Integer` 仍能自由赋给
 Integer 而不报错;记录 + 运算符重载要穿透上万行的行下标算术(`ARow + i`、
@@ -95,23 +97,33 @@ Alignment / CharCase)。
 **代价**:同时开启 `FixedRows` 与 `FixedColsRight` 时,右上角那块被判成 gpTop,
 与顶部带(不含右冻结列)求交 → 右上角的格子被裁没。
 
-### A6【中】`ActiveSelectionRect` 在锚点行被筛掉时退化
-`9161-9167`:`DataToDisplay` 对被筛掉/隐藏的行返回 -1,而这里直接参与 Min/Max。
+### A6【中】✅ 已修 · `ActiveSelectionRect` 在锚点行被筛掉时退化
+`DataToDisplay` 对被筛掉/隐藏的行返回 -1,而这里直接参与 Min/Max。
 **代价**:选中若干行后再筛掉其中一行,活动选区矩形从 -1 起算,选中范围突然扩到表头。
+**已修**(`598efc5`):锚点没有显示位置时退化成"只有光标那一行"。
+守卫:`TestFilteringOutTheAnchorDoesNotGrowTheSelection`。
 
-### A7【中】`SwapRows` 搬了三种状态,只有一种进了撤销栈
-`7142-7187`:文字走 `Cells[]`(被记录),`FAttrs.MoveEntry` 与 `RowHeights` 交换**没被记录**。
-`TTyCustomGrid.SetRowHeights:3052` 完全不记账。
+### A7【中】✅ 已修 · `SwapRows` 搬了三种状态,只有一种进了撤销栈
+文字走 `Cells[]`(被记录),`FAttrs.MoveEntry` 与 `RowHeights` 交换**没被记录**。
 **代价**:拖行/上移下移之后 Ctrl+Z,文字回来了、底色和行高没回来。
-**注意**:复核指出"补一条 gukRowSwap"的修法是**错的** —— 同一条记录里已经有逐格的
-gukCell 条目,会**双重施加**。要么在 SwapRows 期间抑制 SetCells 记录,要么给属性
-单独的记录点。
+**没有**按"补一条 gukRowSwap"来修(复核指出那会与逐格 gukCell 条目双重施加)。
+**已修**(`5d714db`):给两个存储各自一个记录点,与 SetCells/SetRowCount 同一种做法 ——
+`TTyGridCellAttrStore.OnChanging`(建/改/删任一条之前发通知,按值快照)
++ `SetRowHeights` 改 virtual 并记录钳制后的旧值。
+`Find` 从此是只读视图,要改字段得走新的 `Mutate`。
+**顺带**:合并/取消合并也可撤销了 —— P3 当初明确留下的偏离一并补上,
+`RestoreAttr` 会对账 `FMergeCount` 与跨度提示。
+守卫:`TestUndoRestoresCellAttributesAndRowHeights`(交换 → Undo → Redo,
+行高用几何断言)、`TestUndoRestoresCellColorAndMerge`(新建路径与**清除**路径各一条)。
+三个记录点逐一变异,均变红。
 
 ---
 
 ## B. 结构性问题(重构的正题)
 
-### B1 规则被逐处重述,而不是收口
+> **进度**:B1 · B2 · B3 已做完(2026-07-20)。B4 待评估 —— 见文末。
+
+### B1 ✅ 已做 · 规则被逐处重述,而不是收口
 已确认的实例:
 - **裁到所属窗格**:单元格文字 / 行号 / 横格线 / 选区外框 —— 四处,每处都是漏了才发现。
 - **移动光标要重锚选区**:曾写在 4 个调用点,已收口进 `MoveCursor`(这次做对了)。
@@ -122,16 +134,39 @@ gukCell 条目,会**双重施加**。要么在 SwapRows 期间抑制 SetCells �
 **方向**:凡是"必须在 N 处都做对"的规则,都要有一个**过不去的收口点**。
 绘制侧建议引入 `DrawInPane(APane; ...)` 之类的包装,让"裁剪"不可能被跳过。
 
-### B2 行下标为键的旁挂表没有登记处
+**已做**(`d663277`):带的几何只剩一处出处 `TyGridRowBandRect`(几何层);
+绘制走 `DrawInRowBand`(跨列的 chrome)/ `DrawInPane`(有列归属的 chrome),
+两者都收**嵌套过程**当绘制动作 —— 不交给它们就根本画不出来,"忘了裁剪"在结构上不再可能。
+行为零变化(3859/0/12);把任一个包装里的求交去掉,逐像素一致性测试立刻变红。
+(为此给单元加了 `{$modeswitch nestedprocvars}`。)
+
+### B2 ✅ 已做 · 行下标为键的旁挂表没有登记处
 `FRowHeights`、`FHiddenRows` 是纯行下标键;`FCells`/`FAttrs` 是二维格键。
 三条置换路径(`ShiftCells` 增删行 / `SwapRows` / `ApplyOrderToData`)**各覆盖了不同的子集**
 —— A3、A7 都是这个的具体表现。
 **方向**:一个"所有按行记账的存储"的登记表 + 一个统一的 `PermuteRows(const AMap)`,
 三条路径都走它。新增一张旁挂表时只需登记,不必再去改三个地方。
 
-### B3 十亿行的说法在写入侧偏薄
-- 页脚汇总**每帧**遍历全部显示行(`RenderFooter:7761 → AggregateValue:7690`)。
+**已做**(`604521b`),但**没做成登记表**:两条**纯置换**路径(`SwapRows` /
+`ApplyOrderToData`)收口进 `PermuteRowState(AMap)`;增删行是另一类(行数会变),
+仍收口在 `ShiftRowKeyedTable`。这类存储只有两张,而它们的写回路径本就不同
+(行高必须走 `SetRowHeights` —— 撤销的记录点在那儿),为两张表建注册框架
+读起来比它替掉的重复更难。新增第三张表时改这两处。
+**顺带挖出并修掉第 9 个 bug**:`SwapRows` 不搬隐藏标记 ——
+标记留在旧下标上,换过去的那一行凭空消失、藏着的那一行冒出来。
+守卫:`TestSwappingRowsCarriesTheHiddenFlag`(走一遍显示序看**谁被显示出来**,
+不看标记本身)。
+
+### B3 ✅ 已做 · 十亿行的说法在写入侧偏薄
+- 页脚汇总**每帧**遍历全部显示行(`RenderFooter → AggregateValue`)。
   百万行时每帧 O(n) —— 需要按"过滤/数据变更"失效的缓存。
+  **已做**(`a4eb201`):逐列缓存,失效挂在三个**既有**收口点上 ——
+  `SetCells`(数据)/ `InvalidateOrder`(筛选、隐藏、分组、行数增删都汇到这儿)/
+  `SetColumnAggregate`(口径)。挂了 `OnGetCellText` 的表**不缓存**:
+  宿主随时改值而控件收不到通知,缓存住就是把一个陈旧的合计钉在页脚上 ——
+  慢比错好。`AccumulateCell` 改 virtual,测试靠它数"一帧扫了多少格"
+  (只断言结果对不对,分辨不出"每帧重算"和"用了缓存")。
+  三个失效点逐一变异,均变红。
 - `DistinctColumnValues/Counts` 每次开筛选下拉扫全表(设计如此,但百万行会卡)。
 - `FOrder`/`FRank` 是两个 RowCount 长的 Integer 数组(百万行 8MB,可接受)。
 
