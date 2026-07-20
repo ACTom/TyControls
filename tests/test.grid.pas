@@ -258,6 +258,7 @@ type
     procedure TestFilterRowIsABandNotADataRow;
     procedure TestFilterRowFiltersAndClears;
     procedure TestClickingFilterRowOpensAnEditorThatFilters;
+    procedure TestValidCharsAppliesInsideTheEditor;
     procedure TestTreeColumnIndentsAndCollapses;
     procedure TestDeletingAColumnIsUndoable;
     procedure TestInsertingAndMovingColumnsAreUndoable;
@@ -1077,6 +1078,7 @@ type
     procedure CtrlClickAt(X, Y: Integer);
     function  PressKeyCtrl(AKey: Word): Boolean;
     procedure TypeChar(AChar: Char);
+    procedure TypeCharInEditor(AChar: Char);
     function  EditorText: string;
     function  IsEditing: Boolean;
     function  HitAt(X, Y: Integer): TTyGridHit;
@@ -1149,6 +1151,22 @@ procedure TCountingGrid.AccumulateCell(ACol, ADataRow: Integer;
 begin
   Inc(ScanCount);
   inherited AccumulateCell(ACol, ADataRow, AKind, AAcc, ACount, AStarted);
+end;
+
+{ 往**已经打开的编辑器**里敲一个字符 —— 走编辑器自己的 KeyPress。
+  与 TypeChar 的区别正是这条测试要抓的:那个走网格的 KeyPress(只管开编辑
+  的第一个字符),这个走编辑器的。 }
+procedure TStrGridAccess.TypeCharInEditor(AChar: Char);
+var
+  ch: Char;
+begin
+  ch := AChar;
+  { 走编辑器**挂着的那个** OnKeyPress,不是直接调网格的方法 ——
+    直接调的话,"过滤器有没有真的挂到编辑器上"这根连线就没被测到
+    (变异证明过:把挂载那一行去掉,测试照样绿)。 }
+  if Assigned(InlineEditor.OnKeyPress) then
+    InlineEditor.OnKeyPress(InlineEditor, ch);
+  if ch <> #0 then InlineEditor.Text := InlineEditor.Text + ch;
 end;
 
 function TStrGridAccess.InkInRect(const R: TRect): Integer;
@@ -9361,6 +9379,45 @@ begin
     G.TreeContentLeftForTest(1));
   AssertEquals('画出来的也回到同一起点',
     G.InkColumnOfFirstGlyph(0), G.InkColumnOfFirstGlyph(1));
+end;
+
+{ `ValidChars` 只在网格自己的 `KeyPress` 里生效,而那里第一句就是
+  `if FEditing then Exit` —— 也就是说它**只管进编辑的第一个字符**:
+  直接敲字开编辑时挡得住,F2 或双击进去之后随便打什么都进得去。
+
+  而代码注释与文档承诺的是"非法字符连编辑都不进,而不是等提交时再退回"。
+  承诺比实现宽,是这个项目明确要防的那一类。 }
+procedure TTyStringGridTest.TestValidCharsAppliesInsideTheEditor;
+var
+  G: TStrGridAccess;
+  c: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  c := TTyGridColumn(G.Header.Columns.Items[0]);
+  c.EditorKind := gekText;
+  c.UseEditorKind := True;
+  c.ValidChars := '0123456789';
+
+  { --- 直接敲字进编辑:这一路本来就是好的 --- }
+  G.MoveCursor(0, 0);
+  G.TypeChar('7');
+  AssertTrue('前置:合法字符开得了编辑', G.IsEditing);
+  AssertEquals('前置:第一个字符进去了', '7', G.EditorText);
+  G.EndEdit(False);
+
+  G.MoveCursor(0, 1);
+  G.TypeChar('x');
+  AssertFalse('非法字符连编辑都开不起来', G.IsEditing);
+
+  { --- F2 进编辑之后 —— 这一路从前完全不设防 --- }
+  G.MoveCursor(0, 2);
+  AssertTrue('前置:F2 开得了编辑', G.BeginEditAt(0, 2));
+  G.TypeCharInEditor('5');
+  AssertEquals('合法字符照常进得去', '5', G.EditorText);
+  G.TypeCharInEditor('a');
+  AssertEquals('非法字符在编辑器里也必须被挡住', '5', G.EditorText);
+  G.EndEdit(False);
 end;
 
 initialization

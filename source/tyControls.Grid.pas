@@ -1465,6 +1465,7 @@ type
     procedure PickEditorChange(Sender: TObject);
     procedure PickEditorExit(Sender: TObject);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+
     procedure FilterEditorChange(Sender: TObject);
     procedure FilterEditorExit(Sender: TObject);
     procedure FilterDebounceTick(Sender: TObject);
@@ -1511,6 +1512,11 @@ type
     { protected 暴露给测试 —— 回车/Esc 的分派是筛选行唯一的键盘契约。 }
     procedure FilterEditorKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
+    { 编辑器里的按键级过滤。**必须挂在编辑器上** —— 网格自己的 KeyPress
+      开头就 `if FEditing then Exit`,所以它只管得到开编辑的第一个字符;
+      F2/双击进来之后的每一次敲击都到不了那里。
+      protected:测试要从编辑器这一侧敲键。 }
+    procedure EditorKeyPress(Sender: TObject; var Key: Char);
     property SpinEditor: TTySpinEdit read FSpinEditor;
     property SliderEditor: TTyTrackBar read FSliderEditor;
     property MemoEditor: TTyMemo read FMemoEditor;
@@ -5345,6 +5351,7 @@ begin
   FEditor.Visible := False;
   FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
   FEditor.OnKeyDown := @EditorKeyDown;
+  FEditor.OnKeyPress := @EditorKeyPress;
   FEditor.OnExit := @EditorExit;
 
   { 筛选行的编辑器。独立于上面那个 —— 见字段处的说明。
@@ -11458,6 +11465,16 @@ begin
     VK_RETURN: begin EndEdit(True);  Key := 0; if CanFocus then SetFocus; end;
     VK_ESCAPE: begin EndEdit(False); Key := 0; if CanFocus then SetFocus; end;
   end;
+end;
+
+procedure TTyStringGrid.EditorKeyPress(Sender: TObject; var Key: Char);
+var
+  vc: string;
+begin
+  if Key < #32 then Exit;             { 控制字符(退格/回车)不算录入 }
+  if not FEditing then Exit;
+  vc := ValidCharsFor(FEditCol, FEditRow);
+  if (vc <> '') and (Pos(Key, vc) = 0) then Key := #0;   { 吃掉这一击 }
 end;
 
 procedure TTyStringGrid.EditorExit(Sender: TObject);
