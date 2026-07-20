@@ -194,7 +194,11 @@ type
     gfoGreater,      { 以下四个按**数值**比;非数值格一律不通过 }
     gfoGreaterEqual,
     gfoLess,
-    gfoLessEqual);
+    gfoLessEqual,
+    { 闭区间(两端都算),按数值比。值里用 TyFilterRangeSep 分隔两个边界。
+      为什么是一个独立的比较方式而不是拆成两条 >=/<= :同列多条件之间是 **OR**,
+      拆开就变成 OR 了,区间的语义正好相反。 }
+    gfoBetween);
 
   { 一个排序键。多列排序 = 一串键,前面的相等才看后面的。 }
   TTyGridSortKey = record
@@ -1878,6 +1882,29 @@ var
     通用真值 1/true/yes/y 永远认,不受它影响。 }
   TyGridCheckedWord: string;
 
+const
+  { 同列多条件之间的分隔(编码里用,不是用户打的那个分号)。
+    用控制字符是因为它不可能出现在用户输入的过滤文本里。 }
+  TyFilterOrSep = #1;
+  { gfoBetween 的两个边界之间的分隔。 }
+  TyFilterRangeSep = #2;
+
+{ 把一条过滤表达式编码成过滤条件。语法刻意小,见 grid.md:
+    >100  >=100  <5  <=5  <>x  =x   前缀比较
+    a..b                            闭区间(两端都算)
+    其余                            包含(默认,不区分大小写)
+    ;                               同列多条件,之间是 **OR**
+  只有运算符没有值(`>`、`..`、`10..`)一律当**不过滤** ——
+  用户正打到一半时不该把整列筛没。 }
+function TyGridParseFilterExpr(const AExpr: string): string;
+
+{ 一个格值符不符合一条(可能含多个 OR 子条件的)过滤条件。 }
+function TyGridFilterMatches(const ACellText, AEncoded: string): Boolean;
+
+function TyGridEncodeFilter(AOp: TTyGridFilterOp; const AText: string): string;
+procedure TyGridDecodeFilter(const AEncoded: string; out AOp: TTyGridFilterOp;
+  out AText: string);
+
 implementation
 
 const
@@ -1912,11 +1939,13 @@ begin
 end;
 
 { 一个格值符不符合一条过滤表达式。 }
-function TyGridFilterMatches(const ACellText, AEncoded: string): Boolean;
+{ 单条子条件的求值(不含 OR)。 }
+function TyGridFilterMatchesOne(const ACellText, AEncoded: string): Boolean;
 var
   op: TTyGridFilterOp;
-  pat, a, b: string;
-  va, vb: Double;
+  pat, a, b, lo, hi: string;
+  va, vb, vlo, vhi: Double;
+  sep: Integer;
 begin
   TyGridDecodeFilter(AEncoded, op, pat);
   if pat = '' then Exit(True);
@@ -1929,13 +1958,32 @@ begin
     gfoStartsWith: Exit(Copy(a, 1, Length(b)) = b);
     gfoEndsWith:   Exit((Length(a) >= Length(b)) and
                         (Copy(a, Length(a) - Length(b) + 1, Length(b)) = b));
+    gfoBetween:
+      begin
+        sep := Pos(TyFilterRangeSep, pat);
+        if sep <= 0 then Exit(True);          { 残缺区间 = 不过滤 }
+        lo := Copy(pat, 1, sep - 1);
+        hi := Copy(pat, sep + 1, MaxInt);
+        vlo := StrToFloatDef(Trim(lo), NaN);
+        vhi := StrToFloatDef(Trim(hi), NaN);
+        if IsNan(vlo) or IsNan(vhi) then Exit(True);
+        va := StrToFloatDef(Trim(ACellText), NaN);
+        if IsNan(va) then Exit(False);        { 非数值格进不了数值区间 }
+        { 边界写反了就当写对了 —— 用户打 "20..10" 的意思显然还是那一段。 }
+        if vlo > vhi then
+        begin
+          vb := vlo; vlo := vhi; vhi := vb;
+        end;
+        Exit((va >= vlo) and (va <= vhi));    { 闭区间,两端都算 }
+      end;
     gfoGreater, gfoGreaterEqual, gfoLess, gfoLessEqual:
       begin
         { 数值比较:格里不是数就一律不通过 —— 把 'abc' 算作 0 会让
           "筛 >-1"把整列文本都放进来,那不是用户要的。 }
         va := StrToFloatDef(Trim(ACellText), NaN);
         vb := StrToFloatDef(Trim(pat), NaN);
-        if IsNan(va) or IsNan(vb) then Exit(False);
+        if IsNan(vb) then Exit(True);         { 只有运算符没有值 = 不过滤 }
+        if IsNan(va) then Exit(False);
         case op of
           gfoGreater:      Exit(va > vb);
           gfoGreaterEqual: Exit(va >= vb);
@@ -1945,6 +1993,74 @@ begin
       end;
   end;
   Result := Pos(b, a) > 0;            { gfoContains }
+end;
+
+function TyGridFilterMatches(const ACellText, AEncoded: string): Boolean;
+var
+  parts: TStringArray;
+  i: Integer;
+begin
+  if AEncoded = '' then Exit(True);
+  { 多个子条件之间是 **OR** —— 任意一条成立就放行。
+    (列与列之间仍是 AND,那在 RowPassesFilter 里。) }
+  if Pos(TyFilterOrSep, AEncoded) <= 0 then
+    Exit(TyGridFilterMatchesOne(ACellText, AEncoded));
+  parts := AEncoded.Split(TyFilterOrSep);
+  Result := False;
+  for i := 0 to High(parts) do
+    if TyGridFilterMatchesOne(ACellText, parts[i]) then Exit(True);
+end;
+
+function TyGridParseFilterExpr(const AExpr: string): string;
+
+  { 一个子条件(不含分号)。 }
+  function One(const ASrc: string): string;
+  var
+    s, lo, hi: string;
+    dots: Integer;
+  begin
+    s := Trim(ASrc);
+    if s = '' then Exit('');
+
+    { 区间要先认 —— 否则 "10..20" 会被当成包含 "10..20" 的文本。 }
+    dots := Pos('..', s);
+    if dots > 0 then
+    begin
+      lo := Trim(Copy(s, 1, dots - 1));
+      hi := Trim(Copy(s, dots + 2, MaxInt));
+      { 半个区间(缺一端)当不过滤 —— 用户正打到一半。 }
+      if (lo = '') or (hi = '') then Exit('');
+      Exit(TyGridEncodeFilter(gfoBetween, lo + TyFilterRangeSep + hi));
+    end;
+
+    { 前缀比较。两字符的要先判,否则 ">=" 会被 ">" 抢走。 }
+    if Copy(s, 1, 2) = '>=' then Exit(TyGridEncodeFilter(gfoGreaterEqual, Trim(Copy(s, 3, MaxInt))));
+    if Copy(s, 1, 2) = '<=' then Exit(TyGridEncodeFilter(gfoLessEqual, Trim(Copy(s, 3, MaxInt))));
+    if Copy(s, 1, 2) = '<>' then Exit(TyGridEncodeFilter(gfoNotEquals, Trim(Copy(s, 3, MaxInt))));
+    if Copy(s, 1, 1) = '>'  then Exit(TyGridEncodeFilter(gfoGreater, Trim(Copy(s, 2, MaxInt))));
+    if Copy(s, 1, 1) = '<'  then Exit(TyGridEncodeFilter(gfoLess, Trim(Copy(s, 2, MaxInt))));
+    if Copy(s, 1, 1) = '='  then Exit(TyGridEncodeFilter(gfoEquals, Trim(Copy(s, 2, MaxInt))));
+
+    Result := TyGridEncodeFilter(gfoContains, s);
+  end;
+
+var
+  parts: TStringArray;
+  i: Integer;
+  one1: string;
+begin
+  Result := '';
+  if Trim(AExpr) = '' then Exit;
+  parts := AExpr.Split(';');
+  for i := 0 to High(parts) do
+  begin
+    one1 := One(parts[i]);
+    { 空子条件(比如 "华东;")直接丢掉,别让它变成一条"匹配一切"的 OR 分支
+      —— 那会让整个表达式失效。 }
+    if one1 = '' then Continue;
+    if Result <> '' then Result := Result + TyFilterOrSep;
+    Result := Result + one1;
+  end;
 end;
 
 { 一段文字在给定宽度下会占几行 —— 与 BGRA 的 Wordbreak 断法保持一致:

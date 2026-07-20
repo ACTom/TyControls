@@ -248,6 +248,7 @@ type
     procedure TestGroupRowHasNoRowResizeGesture;
     procedure TestInsertingInsideAMergedBlockGrowsTheSpan;
     procedure TestSortingWorksOnAVirtualDataSource;
+    procedure TestFilterExpressionSyntax;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8871,6 +8872,75 @@ begin
   G.SortByColumn(0, sdDescending);
   AssertEquals('存储里不该被写进任何东西', '', G.Cells[0, 0]);
   AssertEquals('降序也排得动(显示位置 0 回到数据行 0)', 0, G.DisplayRow(0));
+end;
+
+{ P4 的地基:一条**输入框里打的**过滤表达式怎么变成过滤条件。
+
+  语法(与计划一致,刻意小):
+    >100  >=100  <5  <=5  <>x  =x     前缀比较
+    a..b                              闭区间
+    其余                              包含(默认,不区分大小写)
+    ;                                 同列多条件,之间是 **OR**
+
+  为什么不自造第二套匹配逻辑:比较方式(`TTyGridFilterOp`)和求值
+  (`TyGridFilterMatches`)都已经在了,这里只负责**把字符串翻译成它们**。 }
+procedure TTyStringGridTest.TestFilterExpressionSyntax;
+
+  procedure Hit(const AExpr, ACell: string; AWant: Boolean);
+  begin
+    AssertEquals(Format('「%s」对「%s」', [AExpr, ACell]), AWant,
+      TyGridFilterMatches(ACell, TyGridParseFilterExpr(AExpr)));
+  end;
+
+begin
+  { --- 数值比较 --- }
+  Hit('>100', '150', True);
+  Hit('>100', '100', False);
+  Hit('>=100', '100', True);
+  { 这一条是给「>= 必须先于 > 解析」用的:抢错了值会变成 "=100"(非数字),
+    按"只有运算符没有值就不过滤"返回 True —— 上面那条 100/True 照样通过,
+    分辨不出来。99 才能。 }
+  Hit('>=100', '99', False);
+  Hit('<5', '3', True);
+  Hit('<5', '5', False);
+  Hit('<=5', '5', True);
+  Hit('<=5', '6', False);                 { 同理:给「<= 先于 <」用 }
+  { 非数值格在数值比较下一律不通过 —— 把 'abc' 当 0 会让「筛 >-1」把整列文本放进来。 }
+  Hit('>100', 'abc', False);
+
+  { --- 等于 / 不等于 --- }
+  Hit('=华东', '华东', True);
+  Hit('=华东', '华东区', False);
+  Hit('<>华东', '华北', True);
+  Hit('<>华东', '华东', False);
+
+  { --- 区间(闭区间,两端都算) --- }
+  Hit('10..20', '10', True);
+  Hit('10..20', '20', True);
+  Hit('10..20', '15', True);
+  Hit('10..20', '9', False);
+  Hit('10..20', '21', False);
+  Hit('10..20', 'abc', False);
+
+  { --- 默认:包含,不区分大小写 --- }
+  Hit('云主机', '云主机 A', True);
+  Hit('abc', 'xxABCxx', True);
+  Hit('abc', 'xyz', False);
+
+  { --- 同列多条件:; 之间是 OR --- }
+  Hit('华东;华北', '华东', True);
+  Hit('华东;华北', '华北', True);
+  Hit('华东;华北', '华南', False);
+  Hit('>100;<5', '150', True);
+  Hit('>100;<5', '3', True);
+  Hit('>100;<5', '50', False);
+
+  { --- 边角 --- }
+  Hit('', 'anything', True);              { 空表达式 = 不过滤 }
+  Hit('  >100  ', '150', True);           { 两头的空格不算数 }
+  Hit('>', '150', True);                  { 只有运算符没有值 = 不过滤,别把整列筛没 }
+  Hit('..', 'abc', True);                 { 残缺区间同理 }
+  Hit('10..', '15', True);                { 半个区间也不该把人挡在外面 }
 end;
 
 initialization
