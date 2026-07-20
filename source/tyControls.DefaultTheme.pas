@@ -545,7 +545,7 @@ begin
     '/* ── Calendar + DateTimePicker ─────────────────────────────────────────── */' + LineEnding +
     '' + LineEnding +
     'TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-button); font-size: var(--font-size-base); }' + LineEnding +
-    'TyCalendarTitle { color: var(--on-surface); font-weight: var(--font-weight-bold); }' + LineEnding +
+    'TyCalendarTitle { color: var(--on-surface); font-weight: var(--font-weight-bold); font-size: var(--font-size-title); }' + LineEnding +
     'TyCalendarTitle:hover { color: var(--accent); }' + LineEnding +
     'TyCalendarWeekday { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
     'TyCalendarCell { background: none; color: var(--on-surface); border-radius: var(--radius-sm); }' + LineEnding +
@@ -650,7 +650,7 @@ begin
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
-    '  font-size: var(--font-size-base);' + LineEnding +
+    '  font-size: var(--font-size-title);' + LineEnding +
     '  font-weight: var(--font-weight-bold);' + LineEnding +
     '}' + LineEnding +
     'TyCardActions { border-color: var(--border); border-width: var(--input-border-width); }' + LineEnding +
@@ -805,7 +805,7 @@ begin
     'TyTransfer:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     'TyTransferTitle { background: var(--surface-chrome); color: var(--on-surface);' + LineEnding +
     '                  border-color: var(--border); border-width: var(--input-border-width);' + LineEnding +
-    '                  font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: var(--pad-chip); }' + LineEnding +
+    '                  font-size: var(--font-size-title); font-weight: var(--font-weight-bold); padding: var(--pad-chip); }' + LineEnding +
     '' + LineEnding +
     '/* TTyTreeSelect deliberately has NO key of its own: GetStyleTypeKey returns ''TyComboBox'',' + LineEnding +
     '   because it IS a combo field — one every theme already dresses, with no key a skin could' + LineEnding +
@@ -846,7 +846,7 @@ begin
     '  padding: var(--pad-container);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
-    'TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-base);' + LineEnding +
+    'TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-title);' + LineEnding +
     '                 font-weight: var(--font-weight-bold); }' + LineEnding +
     '' + LineEnding +
     '/* Chart: the chart''s own chrome resolves TyPanel and its series ride a fixed code palette,' + LineEnding +

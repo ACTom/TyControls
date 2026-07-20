@@ -512,7 +512,7 @@ TyToolBar {
 /* ── Calendar + DateTimePicker ─────────────────────────────────────────── */
 
 TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-button); font-size: var(--font-size-base); }
-TyCalendarTitle { color: var(--on-surface); font-weight: var(--font-weight-bold); }
+TyCalendarTitle { color: var(--on-surface); font-weight: var(--font-weight-bold); font-size: var(--font-size-title); }
 TyCalendarTitle:hover { color: var(--accent); }
 TyCalendarWeekday { color: var(--muted); font-size: var(--font-size-base); }
 TyCalendarCell { background: none; color: var(--on-surface); border-radius: var(--radius-sm); }
@@ -617,7 +617,7 @@ TyCardHeader {
   color: var(--on-surface);
   border-color: var(--border);
   border-width: var(--input-border-width);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-title);
   font-weight: var(--font-weight-bold);
 }
 TyCardActions { border-color: var(--border); border-width: var(--input-border-width); }
@@ -772,7 +772,7 @@ TyTransfer {
 TyTransfer:disabled { opacity: var(--disabled-opacity); }
 TyTransferTitle { background: var(--surface-chrome); color: var(--on-surface);
                   border-color: var(--border); border-width: var(--input-border-width);
-                  font-size: var(--font-size-base); font-weight: var(--font-weight-bold); padding: var(--pad-chip); }
+                  font-size: var(--font-size-title); font-weight: var(--font-weight-bold); padding: var(--pad-chip); }
 
 /* TTyTreeSelect deliberately has NO key of its own: GetStyleTypeKey returns 'TyComboBox',
    because it IS a combo field — one every theme already dresses, with no key a skin could
@@ -813,7 +813,7 @@ TyPopover {
   padding: var(--pad-container);
   font-size: var(--font-size-base);
 }
-TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-base);
+TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-title);
                  font-weight: var(--font-weight-bold); }
 
 /* Chart: the chart's own chrome resolves TyPanel and its series ride a fixed code palette,

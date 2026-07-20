@@ -438,7 +438,7 @@ begin
     '/* ── Calendar + DateTimePicker ─────────────────────────────────────────── */' + LineEnding +
     '' + LineEnding +
     'TyCalendar { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 6px; font-size: var(--font-size-base); }' + LineEnding +
-    'TyCalendarTitle { color: var(--on-surface); font-weight: var(--font-weight-bold); }' + LineEnding +
+    'TyCalendarTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: var(--font-weight-bold); }' + LineEnding +
     'TyCalendarTitle:hover { color: var(--accent); }' + LineEnding +
     'TyCalendarWeekday { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
     'TyCalendarCell { background: none; color: var(--on-surface); border-radius: var(--radius-sm); }' + LineEnding +
