@@ -450,6 +450,25 @@ type
   TTyGridPasteCellEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var ANewText: string; var AAllow: Boolean) of object;
 
+  { --- B 组:编辑与否决钩子(T6-T10)--- }
+
+  { 这一格能不能编辑。置 AAllow := False 拦下。
+    刻意**不复用** OnGetEditorKind 返回 gekNone:那样连显示也一起改掉了
+    (勾选框会退化成文本)。"不能改"和"没有编辑器"是两件事。 }
+  TTyGridCanEditEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    var AAllow: Boolean) of object;
+  { 编辑器内容每变一次发一次(不是提交时)。宿主用它做即时校验/联动。 }
+  TTyGridEditChangeEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    const AText: string) of object;
+  { 插入 / 删除某一行之前问一句。置 AAllow := False 可否决。 }
+  TTyGridCanRowEvent = procedure(Sender: TObject; ARow: Integer;
+    var AAllow: Boolean) of object;
+  { 非编辑态的回车 / Ctrl+回车。常见诉求:回车 = 打开明细。 }
+  TTyGridCellKeyEvent = procedure(Sender: TObject; ACol, ARow: Integer) of object;
+  { 拖纵向滚动条时的提示文字。返回空串 = 不显示提示。 }
+  TTyGridScrollHintEvent = procedure(Sender: TObject; ARow: Integer;
+    var AHint: string) of object;
+
   { 这一格要不要换行显示。 }
   TTyGridGetCellWordWrapEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var AWordWrap: Boolean) of object;
@@ -1298,6 +1317,13 @@ type
     FDefaultEditorKind: TTyGridEditorKind;
     FOnGetEditorKind: TTyGridGetEditorKindEvent;
     FOnCellEdited: TTyGridCellEditedEvent;
+    FOnCanEditCell:  TTyGridCanEditEvent;
+    FOnEditChange:   TTyGridEditChangeEvent;
+    FOnCanInsertRow: TTyGridCanRowEvent;
+    FOnCanDeleteRow: TTyGridCanRowEvent;
+    FOnReturn:       TTyGridCellKeyEvent;
+    FOnCtrlReturn:   TTyGridCellKeyEvent;
+    FOnScrollHint:   TTyGridScrollHintEvent;
     FPickEditor: TTyComboBox;
     FOnGetPickList: TTyGridGetPickListEvent;
     FOnCreateEditLink: TTyGridCreateEditLinkEvent;
@@ -1531,6 +1557,12 @@ type
     procedure DblClick; override;
     { 该格该用哪种编辑器。默认取 DefaultEditorKind,OnGetEditorKind 可逐格覆盖。 }
     function EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind; virtual;
+    { 这一格能不能编辑(T6)。与 EditorKindFor 分开:那个管**长什么样**,
+      这个管**能不能动**。 }
+    function CanEditCell(ACol, ARow: Integer): Boolean; virtual;
+    { 拖纵向滚动条时的提示文字(T10)。没挂钩子返回空串。 }
+    function ScrollHintFor(ATopRow: Integer): string; virtual;
+    procedure EditorTextChanged(Sender: TObject);
     { 勾选框语义:'1'/'true'/'是'/'y' 都算勾上。写回时统一成 '1'/''。 }
     function  CellDisplayFor(ACol, ARow: Integer): TTyGridCellDisplay; virtual;
     { 基类的问法(按钮矩形/命中要用),转给上面这个。 }
@@ -1664,6 +1696,10 @@ type
     destructor Destroy; override;
     { --- 行列增删 ---
       按**数据行**下标操作;内容随之整体搬移(稀疏存储只搬写过的格)。 }
+    { 插入 / 删除某一行的否决闸(T8)。复数版的 InsertRows / DeleteRows
+      也走它们 —— 逐行问,任何一行被否决就整批不做。 }
+    function  CanInsertRow(ARow: Integer): Boolean; virtual;
+    function  CanDeleteRow(ARow: Integer): Boolean; virtual;
     procedure InsertRow(ARow: Integer);
     procedure DeleteRow(ARow: Integer);
     procedure InsertColumn(ACol: Integer);
@@ -1997,6 +2033,18 @@ type
     property OnGetEditorKind: TTyGridGetEditorKindEvent
       read FOnGetEditorKind write FOnGetEditorKind;
     property OnCellEdited: TTyGridCellEditedEvent read FOnCellEdited write FOnCellEdited;
+    property OnCanEditCell: TTyGridCanEditEvent
+      read FOnCanEditCell write FOnCanEditCell;
+    property OnEditChange: TTyGridEditChangeEvent
+      read FOnEditChange write FOnEditChange;
+    property OnCanInsertRow: TTyGridCanRowEvent
+      read FOnCanInsertRow write FOnCanInsertRow;
+    property OnCanDeleteRow: TTyGridCanRowEvent
+      read FOnCanDeleteRow write FOnCanDeleteRow;
+    property OnReturn: TTyGridCellKeyEvent read FOnReturn write FOnReturn;
+    property OnCtrlReturn: TTyGridCellKeyEvent read FOnCtrlReturn write FOnCtrlReturn;
+    property OnScrollHint: TTyGridScrollHintEvent
+      read FOnScrollHint write FOnScrollHint;
     { 排序比较方式:文本还是数值。数值列用 gskText 排会得到 '10' < '9' 这种结果。 }
     property SortKind: TTyGridSortKind read FSortKind write FSortKind default gskText;
     { 空值排最前还是最后(翻方向时位置不变)。 }
@@ -5377,6 +5425,7 @@ begin
   FEditor.Visible := False;
   FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
   FEditor.OnKeyDown := @EditorKeyDown;
+  FEditor.OnChange := @EditorTextChanged;
   FEditor.OnKeyPress := @EditorKeyPress;
   FEditor.OnExit := @EditorExit;
 
@@ -5448,6 +5497,7 @@ end;
 destructor TTyStringGrid.Destroy;
 begin
   FEditor.OnKeyDown := nil;     { 先摘回调,别在半毁对象上回调 }
+  FEditor.OnChange := nil;
   FEditor.OnExit := nil;
   FPickEditor.OnChange := nil;
   FPickEditor.OnExit := nil;
@@ -6625,6 +6675,23 @@ begin
     { Enter = 提交并**向下推进一格**。表格录入是一列一列往下敲的,
       停在原地会让用户每敲一格都得再按一次方向键。 }
     VK_RETURN: begin
+                 { **非编辑态**才把回车交给宿主。编辑态的回车仍旧是
+                   "提交并下移" —— 那条手感不能被这个钩子改掉。 }
+                 if not FEditing then
+                 begin
+                   if (ssCtrl in Shift) and Assigned(FOnCtrlReturn) then
+                   begin
+                     FOnCtrlReturn(Self, FCol, FRow);
+                     Key := 0;
+                     Exit;
+                   end;
+                   if (not (ssCtrl in Shift)) and Assigned(FOnReturn) then
+                   begin
+                     FOnReturn(Self, FCol, FRow);
+                     Key := 0;
+                     Exit;
+                   end;
+                 end;
                  if FEditing then EndEdit(True);
                  MoveCursor(FCol, FRow + 1);
                  Key := 0;
@@ -8721,6 +8788,9 @@ var
 begin
   if ACount <= 0 then Exit;
   if (ARow < 0) or (ARow > RowCount) then Exit;
+  { 逐行问,任何一行被否决就整批不做 —— 插一半比一行不插更难收拾。 }
+  for i := 0 to ACount - 1 do
+    if not CanInsertRow(ARow + i) then Exit;
   EndEdit(True);
   { **两层都要**:BeginUpdateOrder 压重排,BeginUpdate 才开撤销事务。
     单数的 InsertRow 早就这么做了,复数这个漏了 —— 插 3 行压了 25 条记录。 }
@@ -8744,6 +8814,8 @@ begin
   if ACount <= 0 then Exit;
   if (ARow < 0) or (ARow >= RowCount) then Exit;
   if ARow + ACount > RowCount then ACount := RowCount - ARow;
+  for i := 0 to ACount - 1 do
+    if not CanDeleteRow(ARow + i) then Exit;   { 见 InsertRows:整批否决 }
   EndEdit(True);
   BeginUpdate;                { 见 InsertRows:撤销事务与重排是两层 }
   BeginUpdateOrder;
@@ -8907,14 +8979,27 @@ begin
   Invalidate;
 end;
 
+function TTyStringGrid.CanInsertRow(ARow: Integer): Boolean;
+begin
+  Result := True;
+  if Assigned(FOnCanInsertRow) then FOnCanInsertRow(Self, ARow, Result);
+end;
+
+function TTyStringGrid.CanDeleteRow(ARow: Integer): Boolean;
+begin
+  Result := True;
+  if Assigned(FOnCanDeleteRow) then FOnCanDeleteRow(Self, ARow, Result);
+end;
+
 procedure TTyStringGrid.InsertRow(ARow: Integer);
 begin
   { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
     用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
     本来就该是同一个。 }
+  if (ARow < 0) or (ARow > RowCount) then Exit;
+  if not CanInsertRow(ARow) then Exit;   { 否决要在开事务**之前**,别留个空事务 }
   BeginUpdate;
   try
-  if (ARow < 0) or (ARow > RowCount) then Exit;
   EndEdit(True);
   ShiftCells(ARow, 1, True);
   RowCount := RowCount + 1;
@@ -8930,9 +9015,10 @@ begin
   { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
     用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
     本来就该是同一个。 }
+  if (ARow < 0) or (ARow >= RowCount) then Exit;
+  if not CanDeleteRow(ARow) then Exit;
   BeginUpdate;
   try
-  if (ARow < 0) or (ARow >= RowCount) then Exit;
   EndEdit(False);
   ShiftCells(ARow, -1, True);
   RowCount := RowCount - 1;
@@ -11211,6 +11297,27 @@ begin
     Result := TTyGridColumn(FHeader.Columns.Items[ACol]);
 end;
 
+function TTyStringGrid.CanEditCell(ACol, ARow: Integer): Boolean;
+begin
+  { 先看有没有编辑器 —— 连编辑器都没有就不必打扰宿主。 }
+  Result := EditorKindFor(ACol, ARow) <> gekNone;
+  if Result and Assigned(FOnCanEditCell) then
+    FOnCanEditCell(Self, ACol, ARow, Result);
+end;
+
+function TTyStringGrid.ScrollHintFor(ATopRow: Integer): string;
+begin
+  { 不挂钩子就不编一句出来 —— 控件并不知道哪一列对用户有意义。 }
+  Result := '';
+  if Assigned(FOnScrollHint) then FOnScrollHint(Self, ATopRow, Result);
+end;
+
+procedure TTyStringGrid.EditorTextChanged(Sender: TObject);
+begin
+  if FEditing and Assigned(FOnEditChange) then
+    FOnEditChange(Self, FEditCol, FEditRow, FEditor.Text);
+end;
+
 function TTyStringGrid.EditorKindFor(ACol, ARow: Integer): TTyGridEditorKind;
 var
   c: TTyGridColumn;
@@ -11307,7 +11414,9 @@ begin
   if FReadOnly or (not Enabled) then Exit;
   if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
   if (ARow < 0) or (ARow >= RowCount) then Exit;
-  if EditorKindFor(ACol, ARow) = gekNone then Exit;
+  { 这里问 CanEditCell(不是 EditorKindFor):宿主可能只想禁用编辑、
+    不想改变这一格的显示样子。 }
+  if not CanEditCell(ACol, ARow) then Exit;
 
   { 先把光标移过去 —— 编辑的永远是当前格,避免"编辑一格、高亮另一格"。 }
   if (ACol <> FCol) or (ARow <> FRow) then
@@ -11648,8 +11757,12 @@ procedure TTyStringGrid.EditorKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
   case Key of
-    VK_RETURN: begin EndEdit(True);  Key := 0; if CanFocus then SetFocus; end;
-    VK_ESCAPE: begin EndEdit(False); Key := 0; if CanFocus then SetFocus; end;
+    { HandleAllocated 这道守卫别省:句柄没落地时 SetFocus 会抛异常。
+      本文件其余十来处 SetFocus 都带着它,只有这两处漏了。 }
+    VK_RETURN: begin EndEdit(True);  Key := 0;
+                 if HandleAllocated and CanFocus then SetFocus; end;
+    VK_ESCAPE: begin EndEdit(False); Key := 0;
+                 if HandleAllocated and CanFocus then SetFocus; end;
   end;
 end;
 

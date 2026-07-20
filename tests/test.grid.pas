@@ -62,6 +62,27 @@ type
     FEditorPropCount, FEditorPropCol, FEditorPropRow: Integer;
     FEditorPropCtl: TControl;
     FRowMoveAllow: Boolean;
+    { --- B 组(T6-T10)的记账 --- }
+    FCanEditAllow: Boolean;
+    FCanEditCount, FCanEditCol, FCanEditRow: Integer;
+    FEditChangeCount: Integer;
+    FEditChangeLast: string;
+    FCanInsertAllow, FCanDeleteAllow: Boolean;
+    FCanInsertRow, FCanDeleteRow: Integer;
+    FReturnCount, FCtrlReturnCount, FReturnRow: Integer;
+    FScrollHintCount, FScrollHintRow: Integer;
+    procedure HandleCanEditCell(Sender: TObject; ACol, ARow: Integer;
+      var AAllow: Boolean);
+    procedure HandleEditChange(Sender: TObject; ACol, ARow: Integer;
+      const AText: string);
+    procedure HandleCanInsertRow(Sender: TObject; ARow: Integer;
+      var AAllow: Boolean);
+    procedure HandleCanDeleteRow(Sender: TObject; ARow: Integer;
+      var AAllow: Boolean);
+    procedure HandleReturn(Sender: TObject; ACol, ARow: Integer);
+    procedure HandleCtrlReturn(Sender: TObject; ACol, ARow: Integer);
+    procedure HandleScrollHint(Sender: TObject; ARow: Integer;
+      var AHint: string);
     procedure HandleGetEditorProp(Sender: TObject; ACol, ARow: Integer;
       AEditor: TControl);
     procedure HandleVirtualText(Sender: TObject; ACol, ARow: Integer;
@@ -263,6 +284,11 @@ type
     procedure TestRangeLimitedExport;
     procedure TestAppendingCsvImport;
     procedure TestJsonExport;
+    procedure TestCanEditCellVeto;
+    procedure TestEditChangeFires;
+    procedure TestInsertDeleteRowVeto;
+    procedure TestReturnHooks;
+    procedure TestScrollHint;
     procedure TestValidCharsAppliesInsideTheEditor;
     procedure TestTreeColumnIndentsAndCollapses;
     procedure TestDeletingAColumnIsUndoable;
@@ -1062,6 +1088,7 @@ type
   public
     procedure ClickAt(X, Y: Integer);
     function  PressKey(AKey: Word): Boolean;
+    procedure PressKey(AKey: Word; AShift: TShiftState);
     procedure DoRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function ViewportWidth: Integer;
     function ViewportHeight: Integer;
@@ -1127,6 +1154,9 @@ type
     procedure InvalidateSurfaceForTest;
     function  SurfaceFreshForTest: Boolean;
     function  FilterRowHeightForTest: Integer;
+    function  EditorKindForTest(ACol, ARow: Integer): TTyGridEditorKind;
+    function  ScrollHintForTest(ATopRow: Integer): string;
+    procedure PressKeyInEditor(AKey: Word; AShift: TShiftState);
     function  TreeContentLeftForTest(ARow: Integer): Integer;
     function  TreeToggleRectForTest(ARow: Integer): TRect;
     { 把网格画一遍,数某个矩形里的墨 / 找某一行第一个墨像素的横坐标。
@@ -1576,6 +1606,33 @@ begin
   k := AKey;
   KeyDown(k, []);
   Result := k = 0;      { 被消费掉 = 控件处理了它 }
+end;
+
+procedure TStrGridAccess.PressKey(AKey: Word; AShift: TShiftState);
+var k: Word;
+begin
+  k := AKey;
+  KeyDown(k, AShift);
+end;
+
+function TStrGridAccess.EditorKindForTest(ACol, ARow: Integer): TTyGridEditorKind;
+begin
+  Result := EditorKindFor(ACol, ARow);
+end;
+
+function TStrGridAccess.ScrollHintForTest(ATopRow: Integer): string;
+begin
+  Result := ScrollHintFor(ATopRow);
+end;
+
+{ 走编辑器**挂着的那个** OnKeyDown,不是直接调网格的方法 ——
+  直接调就绕开了"编辑器有没有真的接上"这根连线(和 TypeCharInEditor 同一条教训)。 }
+procedure TStrGridAccess.PressKeyInEditor(AKey: Word; AShift: TShiftState);
+var k: Word;
+begin
+  k := AKey;
+  if Assigned(InlineEditor.OnKeyDown) then
+    InlineEditor.OnKeyDown(InlineEditor, k, AShift);
 end;
 
 function MakeStrGrid(AForm: TForm; ACtl: TTyStyleController): TStrGridAccess;
@@ -9616,6 +9673,197 @@ begin
   G.ClearCells;
   G.RowCount := 0;
   AssertEquals('空表导出空数组', '[]', Trim(G.SaveToJSONText));
+end;
+
+{ --- B 组(T6-T10)的探针 --- }
+
+procedure TTyStringGridTest.HandleCanEditCell(Sender: TObject; ACol, ARow: Integer;
+  var AAllow: Boolean);
+begin
+  Inc(FCanEditCount); FCanEditCol := ACol; FCanEditRow := ARow;
+  AAllow := FCanEditAllow;
+end;
+
+procedure TTyStringGridTest.HandleEditChange(Sender: TObject; ACol, ARow: Integer;
+  const AText: string);
+begin
+  Inc(FEditChangeCount); FEditChangeLast := AText;
+end;
+
+procedure TTyStringGridTest.HandleCanInsertRow(Sender: TObject; ARow: Integer;
+  var AAllow: Boolean);
+begin
+  FCanInsertRow := ARow; AAllow := FCanInsertAllow;
+end;
+
+procedure TTyStringGridTest.HandleCanDeleteRow(Sender: TObject; ARow: Integer;
+  var AAllow: Boolean);
+begin
+  FCanDeleteRow := ARow; AAllow := FCanDeleteAllow;
+end;
+
+procedure TTyStringGridTest.HandleReturn(Sender: TObject; ACol, ARow: Integer);
+begin
+  Inc(FReturnCount); FReturnRow := ARow;
+end;
+
+procedure TTyStringGridTest.HandleCtrlReturn(Sender: TObject; ACol, ARow: Integer);
+begin
+  Inc(FCtrlReturnCount);
+end;
+
+procedure TTyStringGridTest.HandleScrollHint(Sender: TObject; ARow: Integer;
+  var AHint: string);
+begin
+  Inc(FScrollHintCount); FScrollHintRow := ARow;
+  AHint := 'row ' + IntToStr(ARow);
+end;
+
+{ T6:OnCanEditCell 是一道**独立于** EditorKindFor 的否决闸。
+  区别关键:被它拦下的格子仍然按原来的类型**显示**(勾选框还是勾选框),
+  只是不能改 —— 把它做成"返回 gekNone"就把显示也一起改掉了。 }
+procedure TTyStringGridTest.TestCanEditCellVeto;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Cells[1, 1] := 'orig';
+  FCanEditAllow := False;
+  FCanEditCount := 0;
+  G.OnCanEditCell := @HandleCanEditCell;
+
+  AssertFalse('否决时进不去编辑态', G.BeginEditAt(1, 1));
+  AssertTrue('钩子被问过', FCanEditCount > 0);
+  AssertEquals('问的是那一格(列)', 1, FCanEditCol);
+  AssertEquals('问的是那一格(行)', 1, FCanEditRow);
+
+  { 被拦下的格子**显示不变** —— 这是它区别于 gekNone 的地方。 }
+  G.DefaultEditorKind := gekCheckBox;
+  AssertTrue('被否决的格子仍按勾选框显示',
+    G.EditorKindForTest(1, 1) = gekCheckBox);
+  G.DefaultEditorKind := gekText;
+
+  FCanEditAllow := True;
+  AssertTrue('放行时进得去', G.BeginEditAt(1, 1));
+  G.EndEdit(False);
+end;
+
+{ T7:编辑器内容每变一次发一次(不是提交时才发)。 }
+procedure TTyStringGridTest.TestEditChangeFires;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 3;
+  G.Cells[1, 1] := 'a';
+  FEditChangeCount := 0;
+  FEditChangeLast := '';
+  G.OnEditChange := @HandleEditChange;
+  AssertTrue('进得去编辑态', G.BeginEditAt(1, 1));
+
+  G.InlineEditor.Text := 'ab';
+  AssertTrue('改一次发一次', FEditChangeCount > 0);
+  AssertEquals('带上当前文本', 'ab', FEditChangeLast);
+
+  { 关键:提交**之前**就发过了 —— 否则就只是 OnCellEdited 的重复。 }
+  AssertEquals('提交前单元格还是旧值', 'a', G.Cells[1, 1]);
+  G.EndEdit(False);
+end;
+
+{ T8:插入/删除行的否决(gap 清单 M25)。 }
+procedure TTyStringGridTest.TestInsertDeleteRowVeto;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[0, 0] := 'r0';
+  G.Cells[0, 1] := 'r1';
+  G.OnCanInsertRow := @HandleCanInsertRow;
+  G.OnCanDeleteRow := @HandleCanDeleteRow;
+
+  FCanInsertAllow := False;
+  FCanInsertRow := -99;
+  G.InsertRow(1);
+  AssertEquals('否决后行数不变', 4, G.RowCount);
+  AssertEquals('问的是插在哪', 1, FCanInsertRow);
+  AssertEquals('数据没被搬动', 'r1', G.Cells[0, 1]);
+
+  FCanDeleteAllow := False;
+  G.DeleteRow(0);
+  AssertEquals('否决后行数不变', 4, G.RowCount);
+  AssertEquals('数据没被搬动', 'r0', G.Cells[0, 0]);
+
+  FCanInsertAllow := True;
+  G.InsertRow(1);
+  AssertEquals('放行后插进去了', 5, G.RowCount);
+  FCanDeleteAllow := True;
+  G.DeleteRow(1);
+  AssertEquals('放行后删掉了', 4, G.RowCount);
+  AssertEquals('删的是插进来的空行', 'r1', G.Cells[0, 1]);
+
+  { 复数版也要问 —— 一批里任何一行被否决就整批不做。
+    "插一半" 比 "一行不插" 更难收拾。 }
+  FCanInsertAllow := False;
+  G.InsertRows(1, 3);
+  AssertEquals('复数插入也被否决', 4, G.RowCount);
+  FCanDeleteAllow := False;
+  G.RemoveRows(0, 2);
+  AssertEquals('复数删除也被否决', 4, G.RowCount);
+  AssertEquals('数据没被搬动', 'r0', G.Cells[0, 0]);
+end;
+
+{ T9:非编辑态的回车 / Ctrl+回车交给宿主。
+  必须是**非编辑态** —— 编辑态的回车仍旧提交并下移,那条行为不能被这个钩子改掉。 }
+procedure TTyStringGridTest.TestReturnHooks;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[0, 2] := 'x';
+  G.OnReturn := @HandleReturn;
+  G.OnCtrlReturn := @HandleCtrlReturn;
+  G.MoveCursor(0, 2);
+
+  FReturnCount := 0; FCtrlReturnCount := 0; FReturnRow := -1;
+  G.PressKey(VK_RETURN, []);
+  AssertEquals('非编辑态回车发 OnReturn', 1, FReturnCount);
+  AssertEquals('带上当前行', 2, FReturnRow);
+  AssertEquals('没发成 Ctrl 版', 0, FCtrlReturnCount);
+
+  G.PressKey(VK_RETURN, [ssCtrl]);
+  AssertEquals('Ctrl+回车发 OnCtrlReturn', 1, FCtrlReturnCount);
+  AssertEquals('没重复发普通版', 1, FReturnCount);
+
+  { 编辑态的回车仍是"提交并下移",不发钩子。 }
+  AssertTrue('进得去编辑态', G.BeginEditAt(0, 2));
+  G.InlineEditor.Text := 'y';
+  G.PressKeyInEditor(VK_RETURN, []);
+  AssertEquals('编辑态回车不发 OnReturn', 1, FReturnCount);
+  AssertEquals('编辑态回车照旧提交', 'y', G.Cells[0, 2]);
+end;
+
+{ T10:拖纵向滚动条时问宿主要一句提示文字。 }
+procedure TTyStringGridTest.TestScrollHint;
+var
+  G: TStrGridAccess;
+  hint: string;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 200;
+  G.OnScrollHint := @HandleScrollHint;
+  FScrollHintCount := 0; FScrollHintRow := -1;
+
+  hint := G.ScrollHintForTest(120);
+  AssertEquals('钩子被问过一次', 1, FScrollHintCount);
+  AssertEquals('问的是滚到哪一行', 120, FScrollHintRow);
+  AssertEquals('用的是宿主给的文字', 'row 120', hint);
+
+  { 没挂钩子时不编一句出来 —— 空串表示"不显示提示"。 }
+  G.OnScrollHint := nil;
+  AssertEquals('没挂钩子就没提示', '', G.ScrollHintForTest(50));
 end;
 
 initialization
