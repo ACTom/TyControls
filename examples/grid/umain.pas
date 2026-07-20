@@ -679,9 +679,16 @@ procedure TMainForm.BtnResetRowsClick(Sender: TObject);
 var
   i: Integer;
 begin
-  { 赋 <= 0 表示"清掉显式行高、回到默认",不是"行高为 0"。 }
-  for i := 0 to GridLook.RowCount - 1 do
-    GridLook.RowHeights[i] := 0;
+  { 赋 <= 0 表示"清掉显式行高、回到默认",不是"行高为 0"。
+    包进 BeginUpdate/EndUpdate —— 行高是可撤销的,一次"恢复"就该是一次
+    Ctrl+Z 退回去,而不是一行一行退。宿主写批量循环时都要记得这一层。 }
+  GridLook.BeginUpdate;
+  try
+    for i := 0 to GridLook.RowCount - 1 do
+      GridLook.RowHeights[i] := 0;
+  finally
+    GridLook.EndUpdate;
+  end;
   Status('行高已恢复默认');
 end;
 

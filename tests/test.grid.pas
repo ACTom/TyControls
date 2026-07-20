@@ -216,6 +216,7 @@ type
     procedure TestPasteWithAFilteredOutCursorRowKeepsEveryLine;
     procedure TestUndoingARowSwapRestoresTheHiddenFlag;
     procedure TestColouringASelectionIsOneUndoStep;
+    procedure TestAutoFitRowsIsOneUndoStep;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8340,6 +8341,28 @@ begin
   AssertEquals('清一片也是一条记录', 1, G.UndoCountForTest);
   G.Undo;
   AssertEquals('撤销把整片颜色还回来', red, G.CellColors[1, 1]);
+end;
+
+{ `AutoFitRows` 逐行调 `AutoFitRow`,而行高本轮起有了记录点 ——
+  于是"全表自适应行高"一次压 RowCount 条记录。同一族的又一个。
+  (逐行的 `AutoFitRow` 本身是一次操作、一条记录,那是对的。) }
+procedure TTyStringGridTest.TestAutoFitRowsIsOneUndoStep;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 8;
+  for r := 0 to 7 do
+    G.Cells[0, r] := 'a line of text that will need wrapping ' + IntToStr(r);
+  G.WordWrap := True;
+  G.ClearUndo;
+
+  G.AutoFitRows;
+  AssertEquals('全表自适应 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertFalse('按一次撤销就全退回去,栈里不该还剩别的', G.CanUndo);
 end;
 
 initialization

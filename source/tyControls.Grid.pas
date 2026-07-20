@@ -7852,7 +7852,14 @@ procedure TTyStringGrid.AutoFitRows;
 var
   i: Integer;
 begin
-  for i := 0 to RowCount - 1 do AutoFitRow(i);
+  { 全表一次自适应 = **一条**撤销记录。行高有记录点,逐行调的话
+    十万行的表就是十万条 —— 与涂色/粘贴/批量增删行同一族。 }
+  BeginUpdate;
+  try
+    for i := 0 to RowCount - 1 do AutoFitRow(i);
+  finally
+    EndUpdate;
+  end;
 end;
 
 procedure TTyStringGrid.AutoFitColumnWidth(ACol: Integer);
