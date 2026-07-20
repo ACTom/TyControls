@@ -7996,8 +7996,10 @@ begin
   G.Undo;                                      { 撤销掉 '80' 那一格 }
   AssertEquals('撤销之后合计也要跟着回去', 'Sum 920', G.FooterText(0));
 
-  G.SetColumnAggregate(0, gagCount);
-  AssertEquals('换了聚合口径也要重算', 'Count 41', G.FooterText(0));
+  { 换口径必须换成一个**也走缓存**的口径才有分辨力 ——
+    gagCount 是 O(1)、压根不进缓存,拿它当断言等于什么都没测。 }
+  G.SetColumnAggregate(0, gagAvg);
+  AssertEquals('换了聚合口径也要重算', 'Avg 23', G.FooterText(0));
 end;
 
 initialization
