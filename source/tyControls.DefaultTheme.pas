@@ -557,6 +557,9 @@ begin
     'TyGridHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
     '/* 分组表头带(横跨若干列的上层标题)。自己的键 —— 与叶子列头分开配才有意义。 */' + LineEnding +
     'TyGridHeaderGroup { background: var(--surface-active); color: var(--on-surface); border-color: var(--border); }' + LineEnding +
+    '/* 内嵌筛选行。它是"能打字的地方",所以底色跟表面走、边框跟输入框走 ——' + LineEnding +
+    '   与列头带(chrome 色)刻意区分开,否则用户看不出它可以输入。 */' + LineEnding +
+    'TyGridFilterRow { background: var(--surface); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); font-size: var(--font-size-base); }' + LineEnding +
     '/* 格线与选区。格线单独成键,皮肤想去掉格子只需把它设成透明。 */' + LineEnding +
     'TyGridLine      { background: var(--border); }' + LineEnding +
     '/* 单元格图形。各自成键,不借复选框/进度条的键 —— 借来的键在外观层够不着,' + LineEnding +

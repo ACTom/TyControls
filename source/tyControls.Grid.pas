@@ -23,6 +23,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, contnrs, Clipbrd, Controls, Graphics, LCLType, LMessages, StdCtrls,
+  ExtCtrls,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Columns,
   tyControls.ScrollBar, tyControls.Edit, tyControls.ComboBox, tyControls.DateTimePicker, tyControls.Popover, tyControls.CheckListBox, tyControls.ColorMath,
@@ -496,6 +497,10 @@ type
     { 分组表头。空 = 只有一条列头带,与从前完全一致。 }
     FHeaderGroups:     TTyGridHeaderGroups;
     FGroupHeaderHeight:Integer;
+    { 内嵌筛选行:列头下面一条带,每列一个输入位。它**不是数据行** ——
+      占的是表头那一侧的高度,与分组带同族。 }
+    FShowFilterRow:    Boolean;
+    FFilterRowHeight:  Integer;   { 0 = 跟列头同高 }
     { 隔行底色。按**显示行号**取,不是数据行号 —— 否则排序筛选之后条纹会跟着
       数据行乱跳,看起来像随机涂色。 }
     FAlternateRows:    Boolean;
@@ -811,6 +816,10 @@ type
     procedure RenderButtonCell(P: TTyPainter; ACol, ARow: Integer;
       const AText: string; const AFrame: TTyStyleSet); virtual;
     function GroupBandHeightPx: Integer; virtual;
+    { 内嵌筛选行那条带的高度(设备像素);关着时 0。 }
+    function FilterRowHeightPx: Integer; virtual;
+    procedure SetShowFilterRow(AValue: Boolean);
+    procedure SetFilterRowHeight(AValue: Integer);
     { 重建列几何缓存。列增删/改宽、行头槽变化、PPI 变化都要让它失效。 }
     procedure BuildColumnCache;
     procedure InvalidateColumnCache;
@@ -903,6 +912,13 @@ type
     procedure RenderCellBackgrounds(P: TTyPainter; const M: TTyGridMetrics); virtual;
     { 分组表头带。没有分组时什么都不画。 }
     procedure RenderHeaderGroups(P: TTyPainter; const M: TTyGridMetrics); virtual;
+    { 内嵌筛选行:每列一个输入位,显示该列当前的过滤表达式。
+      ATop = 它的顶边(列头带之下)。基类不知道过滤条件是什么,
+      文字由 FilterRowText 提供 —— TTyStringGrid 改写它。 }
+    procedure RenderFilterRow(P: TTyPainter; const M: TTyGridMetrics;
+      ATop: Integer); virtual;
+    { 某列筛选位里要显示的文字。基类恒空。 }
+    function  FilterRowText(ACol: Integer): string; virtual;
 
     { 单元格内容。基类不画任何内容(它不知道数据从哪来)——由派生类改写。
       在 chrome 之后、格线之前调用。 }
@@ -1189,6 +1205,15 @@ type
     FOnSelectCell: TTyGridSelectCellEvent;
     FEditor: TTyEdit;
     FEditing: Boolean;
+    { 筛选行的编辑器 —— 与单元格编辑器**分开**。
+      A4 的教训:让一个控件服务两种语义(那次是日期/时间共用一个选择器),
+      开的时候按种类分派、关的时候按可见性分派,迟早对不上。
+      这里两种编辑的提交去向完全不同(一个写单元格,一个改过滤条件),
+      分开两个控件是最便宜的隔离。 }
+    FFilterEditor: TTyEdit;
+    FFilterEditCol: Integer;
+    { 输入即筛要防抖:百万行的表每敲一个键就重建一次显示序会卡死。 }
+    FFilterTimer: TTimer;
     FEditCol: Integer;
     FEditRow: Integer;
     FEndingEdit: Boolean;         { 防重入:提交过程里又触发提交 }
@@ -1275,6 +1300,9 @@ type
     FOrder: array of Integer;
     FRank: array of Integer;
     FOrderValid: Boolean;
+    { 用户在筛选行里**打的原文**(列索引 -> 表达式)。与 FColFilters 分开存:
+      那边是编码后的条件,回显给用户看的必须是他自己打的那一串。 }
+    FFilterText: TStringList;
     FColFilters: TStringList;     { 列索引 -> 过滤文本(包含匹配,不区分大小写) }
     FValFilters: TStringList;     { 列索引 -> 允许值集合(换行分隔);空 = 该列不按值过滤 }
     FOnFilterRow: TTyGridFilterRowEvent;
@@ -1357,6 +1385,9 @@ type
     procedure PickEditorChange(Sender: TObject);
     procedure PickEditorExit(Sender: TObject);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure FilterEditorChange(Sender: TObject);
+    procedure FilterEditorExit(Sender: TObject);
+    procedure FilterDebounceTick(Sender: TObject);
     procedure EditorExit(Sender: TObject);
     function  CellKey(ACol, ARow: Integer): string;
     function  GetCells(ACol, ARow: Integer): string;
@@ -1395,6 +1426,11 @@ type
     { 内建的行内文本编辑器。protected 暴露给派生类与测试 —— 用来断言
       "宿主 EditLink 接管时内建编辑器不出场"。 }
     property InlineEditor: TTyEdit read FEditor;
+    { 筛选行的编辑器。与上面那个是**两个**控件 —— 见字段处的说明。 }
+    property FilterEditor: TTyEdit read FFilterEditor;
+    { protected 暴露给测试 —— 回车/Esc 的分派是筛选行唯一的键盘契约。 }
+    procedure FilterEditorKeyDown(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
     property SpinEditor: TTySpinEdit read FSpinEditor;
     property SliderEditor: TTyTrackBar read FSliderEditor;
     property MemoEditor: TTyMemo read FMemoEditor;
@@ -1632,6 +1668,19 @@ type
     procedure ShowColumnFilterDropDown(ACol: Integer);
 
     { 给某列设"包含"过滤(不区分大小写)。传空串即清掉该列的过滤。 }
+    { --- 内嵌筛选行 ---
+      在筛选行里打的**表达式**(`>100`、`a..b`、`x;y`……见 TyGridParseFilterExpr)。
+      设进去就立刻按它筛;传空串清掉这一列。
+      与 SetColumnFilter 的区别:那个吃的是已经定好比较方式的单条条件,
+      这个吃的是用户打的一串,自己解析。 }
+    { 在某列的筛选位里开编辑器(点筛选行就走它)。 }
+    procedure BeginFilterEdit(ACol: Integer);
+    { 收掉筛选行编辑器;AApply=True 时把当前输入立刻生效。 }
+    procedure EndFilterEdit(AApply: Boolean);
+    procedure SetFilterText(ACol: Integer; const AExpr: string);
+    { 那一列筛选行里显示的原文(用户打的那一串,不是编码后的条件)。 }
+    function  FilterText(ACol: Integer): string;
+    function  FilterRowText(ACol: Integer): string; override;
     procedure SetColumnFilter(ACol: Integer; const AText: string);
     { 带比较方式的过滤。SetColumnFilter 等价于 gfoContains。 }
     procedure SetColumnFilterEx(ACol: Integer; AOp: TTyGridFilterOp;
@@ -1863,6 +1912,14 @@ type
     { 列头上显示筛选按钮(点它弹出去重值的勾选下拉)。 }
     property ShowFilterButtons: Boolean
       read FShowFilterButtons write SetShowFilterButtons default False;
+    { 列头下面一条**内嵌筛选行**:每列一个输入位,打进去就按那一列筛。
+      支持 `>100` `<=5` `<>x` `a..b`,`;` 分隔的多个条件之间是 OR。
+      它是自己一条带,不是数据行 —— 行数、寻址、导出都不受影响。 }
+    property ShowFilterRow: Boolean
+      read FShowFilterRow write SetShowFilterRow default False;
+    { 筛选行的高度(逻辑像素)。0 = 跟列头同高。 }
+    property FilterRowHeight: Integer
+      read FFilterRowHeight write SetFilterRowHeight default 0;
     { 分组行上按列显示小计。哪些列有小计,由 SetColumnAggregate 决定 ——
       与页脚汇总用的是同一份配置,不必再配一遍。 }
     property ShowGroupSubtotals: Boolean
@@ -2647,6 +2704,8 @@ begin
   if hoVisible in FHeader.Options then Inc(px, ScaleI(FHeader.Height));
   { 分组带也在上冻结带里 —— 漏了它固定行和正文都会往上顶,压住分组标题。 }
   Inc(px, GroupBandHeightPx);
+  { 内嵌筛选行同理:它钉在列头之下、不随滚动。 }
+  Inc(px, FilterRowHeightPx);
   { 逐行累加真实高度(而非 行数×默认行高)—— 可变行高时固定行也可能各不相同。
     i 是**显示位置**:冻结带里钉的是显示序最前的那几行,不是数据行 0..n。 }
   for i := 0 to FFixedRows - 1 do
@@ -3438,6 +3497,34 @@ begin
   Result := ScaleI(FGroupHeaderHeight);
 end;
 
+function TTyCustomGrid.FilterRowHeightPx: Integer;
+begin
+  { 跟着列头一起藏 —— 没有列头的时候一条孤零零的筛选行没有依托。 }
+  if (not FShowFilterRow) or not (hoVisible in FHeader.Options) then Exit(0);
+  if FFilterRowHeight > 0 then Result := ScaleI(FFilterRowHeight)
+  else Result := ScaleI(FHeader.Height);      { 0 = 跟列头同高 }
+end;
+
+procedure TTyCustomGrid.SetShowFilterRow(AValue: Boolean);
+begin
+  if FShowFilterRow = AValue then Exit;
+  FShowFilterRow := AValue;
+  UpdateScrollBars;      { 冻结带厚度变了 → 可滚范围跟着变 }
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetFilterRowHeight(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FFilterRowHeight = AValue then Exit;
+  FFilterRowHeight := AValue;
+  if FShowFilterRow then
+  begin
+    UpdateScrollBars;
+    Invalidate;
+  end;
+end;
+
 function TTyCustomGrid.GetGridLines: Boolean;
 begin
   Result := FGridLineStyle <> glsNone;
@@ -3888,6 +3975,17 @@ begin
   { 列头带优先:它横跨整幅宽度,盖在行头槽之上。 }
   { 表头整体(分组带 + 列头带)。**排序/筛选按钮只在叶子级**,所以落在分组带里
     不返回列头命中 —— 否则点一下分组标题会把下面某一列排序掉。 }
+  { 内嵌筛选行:紧贴在列头之下、还在冻结带里。**先于**单元格判定,
+    否则它下面那条判断会把它当成正文的第一行。 }
+  if (FilterRowHeightPx > 0)
+     and (AY >= ScaleI(FHeader.Height) + GroupBandHeightPx)
+     and (AY < ScaleI(FHeader.Height) + GroupBandHeightPx + FilterRowHeightPx) then
+  begin
+    Result.Part := ghpFilterRow;
+    Result.Col := ColumnAtX(AX);
+    Exit;
+  end;
+
   if (hoVisible in FHeader.Options)
      and (AY < ScaleI(FHeader.Height) + GroupBandHeightPx) then
   begin
@@ -4426,11 +4524,14 @@ end;
 
 procedure TTyCustomGrid.RenderChrome(P: TTyPainter; const M: TTyGridMetrics);
 var
-  headerH, indW: Integer;
+  headerH, indW, bandH: Integer;
 begin
   headerH := 0;
   if hoVisible in FHeader.Options then
     headerH := ScaleI(FHeader.Height) + GroupBandHeightPx;
+  { 行头槽与固定列区要从**整条表头区之下**开始 —— 筛选行也在表头这一侧,
+    不减掉它的话行头槽会从筛选行底下钻上来。 }
+  bandH := headerH + FilterRowHeightPx;
   indW := 0;
   if FShowIndicator then indW := ScaleI(FIndicatorWidth);
 
@@ -4440,13 +4541,13 @@ begin
   { 行头槽:列头之下、最左那条。 }
   if indW > 0 then
   begin
-    FillRegion(P, Rect(0, headerH, indW, M.ClientH), 'TyGridIndicator');
-    RenderRowNumbers(P, M, headerH, indW);
+    FillRegion(P, Rect(0, bandH, indW, M.ClientH), 'TyGridIndicator');
+    RenderRowNumbers(P, M, bandH, indW);
   end;
 
   { 固定列区:行头槽右侧到冻结带右缘。 }
   if M.FrozenLeft > indW then
-    FillRegion(P, Rect(indW, headerH, M.FrozenLeft, M.ClientH), 'TyGridFixed');
+    FillRegion(P, Rect(indW, bandH, M.FrozenLeft, M.ClientH), 'TyGridFixed');
 
   { 列头带:横跨整幅宽度,盖住左上角 —— 与 CellAt 里"列头优先"一致。 }
   if headerH > 0 then
@@ -4456,12 +4557,67 @@ begin
     RenderHeaderGroups(P, M);
     RenderHeaderSections(P, M, ScaleI(FHeader.Height));
   end;
+
+  { 内嵌筛选行:紧贴列头之下,同样横跨整幅宽度。 }
+  if FilterRowHeightPx > 0 then
+    RenderFilterRow(P, M, headerH);
 end;
 
 procedure TTyCustomGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 begin
   { 基类不画内容:它不知道数据从哪来。TTyDrawGrid / TTyStringGrid 改写。 }
+end;
+
+function TTyCustomGrid.FilterRowText(ACol: Integer): string;
+begin
+  Result := '';      { 基类没有过滤模型 }
+end;
+
+procedure TTyCustomGrid.RenderFilterRow(P: TTyPainter; const M: TTyGridMetrics;
+  ATop: Integer);
+var
+  fs: TTyStyleSet;
+  i, l, w, h: Integer;
+  col: TTyColumn;
+  r, inner: TRect;
+  txt: string;
+  ink: TTyColor;
+begin
+  h := FilterRowHeightPx;
+  if h <= 0 then Exit;
+
+  fs := ActiveController.Model.ResolveStyle('TyGridFilterRow', StyleClass, []);
+
+  { 整条带先铺底 —— 与列头带一样横跨整幅宽度(含行头槽上方那一块)。 }
+  r := Rect(0, ATop, M.ClientW, ATop + h);
+  if (tpBackground in fs.Present) and (fs.Background.Kind <> tfkNone) then
+    P.FillBackground(r, fs.Background, 0);
+
+  if tpTextColor in fs.Present then ink := fs.TextColor
+  else ink := CurrentStyle.TextColor;
+
+  for i := 0 to FHeader.Columns.Count - 1 do
+  begin
+    col := TTyColumn(FHeader.Columns.Items[i]);
+    if not (coVisible in col.Options) then Continue;
+    l := ColumnLeftPx(i);
+    w := ColumnWidthPx(i);
+    if w <= 0 then Continue;
+    if (l >= M.ClientW) or (l + w <= 0) then Continue;
+
+    { 每列一个输入位。内缩一点,让它看起来是个可以打字的框而不是一格表头。 }
+    inner := Rect(l + 2, ATop + 2, l + w - 2, ATop + h - 2);
+    if inner.Right <= inner.Left then Continue;
+    if tpBorderColor in fs.Present then
+      P.StrokeBorder(inner, 0, 1, fs.BorderColor);
+
+    txt := FilterRowText(i);
+    if txt = '' then Continue;
+    DrawCellText(P, Rect(inner.Left + 4, inner.Top, inner.Right - 4, inner.Bottom),
+      txt, fs.FontName, ResolveFontSize(fs), fs.FontWeight,
+      ink, taLeftJustify, tlCenter);
+  end;
 end;
 
 procedure TTyCustomGrid.RenderHeaderGroups(P: TTyPainter; const M: TTyGridMetrics);
@@ -4820,8 +4976,15 @@ begin
     B2 把 HeaderH 拆成 HeaderBands 数组,就是为了这里。 }
   if hoVisible in FHeader.Options then
   begin
-    if GroupBandHeightPx > 0 then
+    { 自上而下堆:分组带 → 列头带 → 筛选行。三者都在上冻结带里,
+      都不随滚动。HeaderBands 是数组正是为了这个 —— 加一条带就是多一项。 }
+    if (GroupBandHeightPx > 0) and (FilterRowHeightPx > 0) then
+      Result.HeaderBands := TTyIntArray.Create(
+        GroupBandHeightPx, ScaleI(FHeader.Height), FilterRowHeightPx)
+    else if GroupBandHeightPx > 0 then
       Result.HeaderBands := TTyIntArray.Create(GroupBandHeightPx, ScaleI(FHeader.Height))
+    else if FilterRowHeightPx > 0 then
+      Result.HeaderBands := TTyIntArray.Create(ScaleI(FHeader.Height), FilterRowHeightPx)
     else
       Result.HeaderBands := TTyIntArray.Create(ScaleI(FHeader.Height));
   end
@@ -4937,6 +5100,7 @@ constructor TTyStringGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FCells := TFPStringHashTable.Create;
+  FFilterText := TStringList.Create;
   FColFilters := TStringList.Create;
   FValFilters := TStringList.Create;
   FAggregates := TStringList.Create;
@@ -4983,6 +5147,22 @@ begin
   FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
   FEditor.OnKeyDown := @EditorKeyDown;
   FEditor.OnExit := @EditorExit;
+
+  { 筛选行的编辑器。独立于上面那个 —— 见字段处的说明。
+    csNoDesignVisible:内部子控件不能泄漏进 IDE 设计器(v2.1.1 踩过)。 }
+  FFilterEditCol := -1;
+  FFilterEditor := TTyEdit.Create(Self);
+  FFilterEditor.Parent := Self;
+  FFilterEditor.Visible := False;
+  FFilterEditor.ControlStyle := FFilterEditor.ControlStyle + [csNoDesignVisible];
+  FFilterEditor.OnChange := @FilterEditorChange;
+  FFilterEditor.OnKeyDown := @FilterEditorKeyDown;
+  FFilterEditor.OnExit := @FilterEditorExit;
+
+  FFilterTimer := TTimer.Create(Self);
+  FFilterTimer.Enabled := False;
+  FFilterTimer.Interval := 300;      { 防抖:停手约三百毫秒才真的去筛 }
+  FFilterTimer.OnTimer := @FilterDebounceTick;
 
   { 以下几个都是把库里**现成的控件**接进来当编辑器 —— 网格只负责摆位置、
     灌值、取值,不重造轮子。生命周期规则与文本编辑器一致。 }
@@ -5041,6 +5221,7 @@ begin
   FPickEditor.OnExit := nil;
   FDateEditor.OnExit := nil;
   FCells.Free;
+  FFilterText.Free;
   FColFilters.Free;
   FValFilters.Free;
   FAggregates.Free;
@@ -5790,6 +5971,12 @@ begin
   end;
 
   hit := CellAt(X, Y);
+  { 点筛选行 = 在那一列的筛选位里开编辑器。 }
+  if (hit.Part = ghpFilterRow) and (hit.Col >= 0) then
+  begin
+    BeginFilterEdit(hit.Col);
+    Exit;
+  end;
   if (hit.Part = ghpHeader) and (hit.Col >= 0)
      and ShowsFilterButton(hit.Col)
      and PtInRect(HeaderFilterRect(hit.Col, ScaleI(Header.Height)), Point(X, Y)) then
@@ -6414,6 +6601,114 @@ begin
   Invalidate;
 end;
 
+procedure TTyStringGrid.BeginFilterEdit(ACol: Integer);
+var
+  l, w, bandTop, h: Integer;
+begin
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+  if FilterRowHeightPx <= 0 then Exit;
+
+  { 换列时先把上一列的输入落地,别让它随着控件移动而丢掉。 }
+  if FEditing then EndEdit(True);
+  if FFilterEditCol >= 0 then EndFilterEdit(True);
+
+  bandTop := ScaleI(Header.Height) + GroupBandHeightPx;
+  h := FilterRowHeightPx;
+  l := ColumnLeftPx(ACol);
+  w := ColumnWidthPx(ACol);
+  if w <= 0 then Exit;
+
+  FFilterEditCol := ACol;
+  FFilterEditor.SetBounds(l + 2, bandTop + 2, w - 4, h - 4);
+  { 先摆好位置再灌值 —— 灌值会触发 OnChange,而它要用到 FFilterEditCol。 }
+  FFilterEditor.Text := FilterText(ACol);
+  FFilterEditor.Visible := True;
+  FFilterEditor.BringToFront;
+  if HandleAllocated and FFilterEditor.CanFocus then FFilterEditor.SetFocus;
+end;
+
+procedure TTyStringGrid.EndFilterEdit(AApply: Boolean);
+var
+  which: Integer;
+begin
+  if FFilterEditCol < 0 then Exit;
+  FFilterTimer.Enabled := False;
+  which := FFilterEditCol;
+  FFilterEditCol := -1;              { 先清,免得 OnExit 递归回来 }
+  FFilterEditor.Visible := False;
+  if AApply then SetFilterText(which, FFilterEditor.Text);
+  Invalidate;
+end;
+
+procedure TTyStringGrid.FilterEditorChange(Sender: TObject);
+begin
+  if FFilterEditCol < 0 then Exit;
+  { 输入即筛,但要防抖 —— 每敲一个键就重建一次显示序,百万行的表会卡死。
+    重启计时器:手停下来才真的去筛。 }
+  FFilterTimer.Enabled := False;
+  FFilterTimer.Enabled := True;
+end;
+
+procedure TTyStringGrid.FilterDebounceTick(Sender: TObject);
+begin
+  FFilterTimer.Enabled := False;
+  if FFilterEditCol < 0 then Exit;
+  SetFilterText(FFilterEditCol, FFilterEditor.Text);
+end;
+
+procedure TTyStringGrid.FilterEditorKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  case Key of
+    VK_RETURN:
+      begin
+        { 立刻生效并收工 —— 不等防抖。 }
+        EndFilterEdit(True);
+        Key := 0;
+        if HandleAllocated and CanFocus then SetFocus;
+      end;
+    VK_ESCAPE:
+      begin
+        { 放弃这一次的输入,回到打开编辑器之前的那条过滤条件。 }
+        EndFilterEdit(False);
+        Key := 0;
+        if HandleAllocated and CanFocus then SetFocus;
+      end;
+  end;
+end;
+
+procedure TTyStringGrid.FilterEditorExit(Sender: TObject);
+begin
+  EndFilterEdit(True);      { 焦点离开 = 提交,与单元格编辑器一致 }
+end;
+
+procedure TTyStringGrid.SetFilterText(ACol: Integer; const AExpr: string);
+var
+  k: string;
+  i: Integer;
+begin
+  if ACol < 0 then Exit;
+  k := IntToStr(ACol);
+
+  { 原文与条件分开存:回显给用户的必须是他打的那一串,
+    而求值用的是解析后的编码。 }
+  i := FFilterText.IndexOfName(k);
+  if i >= 0 then FFilterText.Delete(i);
+  if Trim(AExpr) <> '' then FFilterText.Add(k + '=' + AExpr);
+
+  SetColumnFilter(ACol, TyGridParseFilterExpr(AExpr));
+end;
+
+function TTyStringGrid.FilterText(ACol: Integer): string;
+begin
+  Result := FFilterText.Values[IntToStr(ACol)];
+end;
+
+function TTyStringGrid.FilterRowText(ACol: Integer): string;
+begin
+  Result := FilterText(ACol);      { 显示用户打的原文,不是编码后的条件 }
+end;
+
 function TTyStringGrid.ColumnFilter(ACol: Integer): string;
 begin
   Result := FColFilters.Values[IntToStr(ACol)];
@@ -6473,9 +6768,11 @@ end;
 
 procedure TTyStringGrid.ClearFilters;
 begin
-  if (FColFilters.Count = 0) and (FValFilters.Count = 0) then Exit;
+  if (FColFilters.Count = 0) and (FValFilters.Count = 0)
+     and (FFilterText.Count = 0) then Exit;
   FColFilters.Clear;
   FValFilters.Clear;
+  FFilterText.Clear;      { 筛选行里的原文也要跟着清,否则框里还留着字 }
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
@@ -7814,6 +8111,7 @@ begin
       不搬的话:筛选留在旧列号上,取出来的文字是空 → 每一行都不匹配 →
       **整张表变空**,而漏斗图标已经跟着列走了,用户在界面上找不到地方去清它。
       (做 B2 的行置换收口时只想了行,漏了这一半。) }
+    ShiftColKeyedTable(FFilterText, AFromIndex, ADelta);
     ShiftColKeyedTable(FColFilters, AFromIndex, ADelta);
     ShiftColKeyedTable(FValFilters, AFromIndex, ADelta);
     ShiftColKeyedTable(FAggregates, AFromIndex, ADelta);

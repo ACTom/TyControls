@@ -249,6 +249,9 @@ type
     procedure TestInsertingInsideAMergedBlockGrowsTheSpan;
     procedure TestSortingWorksOnAVirtualDataSource;
     procedure TestFilterExpressionSyntax;
+    procedure TestFilterRowIsABandNotADataRow;
+    procedure TestFilterRowFiltersAndClears;
+    procedure TestClickingFilterRowOpensAnEditorThatFilters;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -1107,6 +1110,11 @@ type
     procedure BaseCellOfForTest(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
     procedure InvalidateSurfaceForTest;
     function  SurfaceFreshForTest: Boolean;
+    function  FilterRowHeightForTest: Integer;
+    function  FilterEditorVisible: Boolean;
+    function  FilterEditorBounds: TRect;
+    procedure SetFilterEditorText(const AText: string);
+    procedure PressKeyInFilterEditor(AKey: Word);
     property ScrollTop: Integer read GetScrollTop write SetScrollTop;
   end;
 
@@ -1126,6 +1134,34 @@ procedure TCountingGrid.AccumulateCell(ACol, ADataRow: Integer;
 begin
   Inc(ScanCount);
   inherited AccumulateCell(ACol, ADataRow, AKind, AAcc, ACount, AStarted);
+end;
+
+function TStrGridAccess.FilterRowHeightForTest: Integer;
+begin
+  Result := FilterRowHeightPx;
+end;
+
+function TStrGridAccess.FilterEditorVisible: Boolean;
+begin
+  Result := FilterEditor.Visible;
+end;
+
+function TStrGridAccess.FilterEditorBounds: TRect;
+begin
+  Result := FilterEditor.BoundsRect;
+end;
+
+procedure TStrGridAccess.SetFilterEditorText(const AText: string);
+begin
+  FilterEditor.Text := AText;      { 触发 OnChange,与打字等价 }
+end;
+
+procedure TStrGridAccess.PressKeyInFilterEditor(AKey: Word);
+var
+  k: Word;
+begin
+  k := AKey;
+  FilterEditorKeyDown(FilterEditor, k, []);
 end;
 
 procedure TStrGridAccess.PressMouseWithoutRelease(X, Y: Integer);
@@ -8941,6 +8977,118 @@ begin
   Hit('>', '150', True);                  { 只有运算符没有值 = 不过滤,别把整列筛没 }
   Hit('..', 'abc', True);                 { 残缺区间同理 }
   Hit('10..', '15', True);                { 半个区间也不该把人挡在外面 }
+end;
+
+{ P4 的第二半:筛选行是**自己一条带**,不是数据行。
+  这是它最容易搞砸的地方 —— 一旦被当成数据行,命中、寻址、导出、行数
+  全都会把它算进去(而它没有对应的数据)。 }
+procedure TTyStringGridTest.TestFilterRowIsABandNotADataRow;
+var
+  G: TStrGridAccess;
+  r, topBefore, topAfter, bandH: Integer;
+  hit: TTyGridHit;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    G.Cells[0, r] := IntToStr(r);
+  topBefore := G.CellRect(0, 0).Top;
+
+  G.ShowFilterRow := True;
+  topAfter := G.CellRect(0, 0).Top;
+  bandH := topAfter - topBefore;
+
+  AssertTrue(Format('筛选行要占出一条带来(多了 %d px)', [bandH]), bandH > 0);
+  AssertEquals('行数不受影响', 10, G.RowCount);
+  AssertEquals('显示行数也不受影响', 10, G.DisplayRowCount);
+
+  { 落在筛选行里的点**不是**单元格。 }
+  hit := G.HitAt(20, topBefore + bandH div 2);
+  AssertTrue('筛选行里的点不能算成单元格',
+    hit.Part <> ghpCell);
+  AssertEquals('它应当被认成筛选行', Ord(ghpFilterRow), Ord(hit.Part));
+
+  { 第一行数据仍然点得到,只是往下挪了。 }
+  hit := G.HitAt(20, topAfter + 4);
+  AssertEquals('筛选行下面第一格仍是数据格', Ord(ghpCell), Ord(hit.Part));
+  AssertEquals('而且是数据行 0', 0, hit.Row);
+
+  { 关掉之后一切复原。 }
+  G.ShowFilterRow := False;
+  AssertEquals('关掉后第一行回到原位', topBefore, G.CellRect(0, 0).Top);
+end;
+
+{ 在筛选行里打字 = 按那一列筛。走的是刚做好的表达式语法。 }
+procedure TTyStringGridTest.TestFilterRowFiltersAndClears;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    G.Cells[0, r] := IntToStr((r + 1) * 100);      { 100..1000 }
+  G.ShowFilterRow := True;
+
+  G.SetFilterText(0, '>500');
+  AssertEquals('筛出 > 500 的 5 行', 5, G.DisplayRowCount);
+  AssertEquals('筛选行里显示的还是用户打的原文', '>500', G.FilterText(0));
+
+  G.SetFilterText(0, '200;900');
+  AssertEquals('同列两个条件走 OR', 2, G.DisplayRowCount);
+
+  G.SetFilterText(0, '300..600');
+  AssertEquals('区间筛出 300/400/500/600 四行', 4, G.DisplayRowCount);
+
+  G.SetFilterText(0, '');
+  AssertEquals('清空恢复全部', 10, G.DisplayRowCount);
+  AssertEquals('原文也清了', '', G.FilterText(0));
+end;
+
+{ 走真实的鼠标与键盘:点筛选行 → 开出编辑器 → 打字 → 回车生效。
+  只测 SetFilterText 的话,"点得到吗、编辑器开在对的位置吗、回车会不会提交"
+  这三件事一件都没被守住 —— 而它们正是用户唯一接触得到的部分。 }
+procedure TTyStringGridTest.TestClickingFilterRowOpensAnEditorThatFilters;
+var
+  G: TStrGridAccess;
+  r, bandTop, bandH: Integer;
+  eb: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Header.Options := G.Header.Options + [hoVisible];
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    G.Cells[1, r] := IntToStr((r + 1) * 100);      { 第 1 列:100..1000 }
+  G.ShowFilterRow := True;
+
+  bandTop := G.ScaleForTest(G.Header.Height);
+  bandH := G.FilterRowHeightForTest;
+  AssertTrue('前置:筛选行有高度', bandH > 0);
+
+  { 点第 1 列的筛选位。 }
+  G.ClickAt(G.ColLeft(1) + 10, bandTop + bandH div 2);
+  AssertTrue('点了就该开出筛选编辑器', G.FilterEditorVisible);
+
+  eb := G.FilterEditorBounds;
+  AssertTrue(Format('编辑器要落在第 1 列上(左 %d,列左 %d)',
+    [eb.Left, G.ColLeft(1)]), Abs(eb.Left - G.ColLeft(1)) <= 4);
+  AssertTrue('编辑器要落在筛选行那条带里',
+    (eb.Top >= bandTop) and (eb.Bottom <= bandTop + bandH + 1));
+
+  { 打进去再回车 —— 回车是"立刻生效",不等防抖。 }
+  G.SetFilterEditorText('>500');
+  G.PressKeyInFilterEditor(VK_RETURN);
+  AssertFalse('回车之后编辑器收起来', G.FilterEditorVisible);
+  AssertEquals('筛出 > 500 的 5 行', 5, G.DisplayRowCount);
+  AssertEquals('框里的原文留着,下次点开还是它', '>500', G.FilterText(1));
+
+  { Esc 要放弃这一次的修改,而不是把上一条也清掉。 }
+  G.ClickAt(G.ColLeft(1) + 10, bandTop + bandH div 2);
+  G.SetFilterEditorText('>900');
+  G.PressKeyInFilterEditor(VK_ESCAPE);
+  AssertEquals('Esc 之后仍是上一条过滤', 5, G.DisplayRowCount);
+  AssertEquals('原文也没被改掉', '>500', G.FilterText(1));
 end;
 
 initialization

@@ -46,7 +46,10 @@ type
     ghpHeader,       { 列头带 }
     ghpIndicator,    { 行头/行号槽 }
     ghpColDivider,   { 列分隔条(拖宽) }
-    ghpRowDivider    { 行分隔条(拖高) }
+    ghpRowDivider,   { 行分隔条(拖高) }
+    { 列头下面那条**内嵌筛选行**。它是自己一条带,不是数据行 ——
+      命中、寻址、导出、行数都不能把它算进去。 }
+    ghpFilterRow
   );
 
   TTyGridHit = record
