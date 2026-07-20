@@ -403,7 +403,7 @@ begin
 end;
 
 const
-  GGRID: array[0..57] of string = (
+  GGRID: array[0..111] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
@@ -420,7 +420,24 @@ const
     'TyDateTimePicker|', 'TyDateTimeButton|',
     'TyTreeView|', 'TyTreeNode|',
     'TyTreeHeader|', 'TyTreeHeaderSection|',
-    'TyTreeCheckBox|');
+    'TyTreeCheckBox|',
+    { 下面这批一直在册外 —— GGRID 停在 TyTreeCheckBox,于是 AntD 那批控件、
+      整个 Grid、Card/Popover/Steps 全都没有任何像素守卫。补齐到与
+      light.tycss 的 typeKey 一一对应。 }
+    'TyAlert|', 'TyAlertClose|', 'TyBadge|', 'TyBreadcrumb|',
+    'TyBreadcrumbItem|', 'TyCard|', 'TyCardActions|', 'TyCardHeader|',
+    'TyCascader|', 'TyCascaderItem|', 'TyCascaderPanel|', 'TyChartTooltip|',
+    'TyEmpty|', 'TyEmptyImage|', 'TyGrid|', 'TyGridActiveCell|',
+    'TyGridButton|', 'TyGridCell|', 'TyGridCellAlt|', 'TyGridCellMarked|',
+    'TyGridCellSelectedInactive|', 'TyGridCheckBox|', 'TyGridCommentMark|', 'TyGridFilterRow|',
+    'TyGridFixed|', 'TyGridHeader|', 'TyGridHeaderGroup|', 'TyGridHeaderSection|',
+    'TyGridHyperlink|', 'TyGridIndicator|', 'TyGridLine|', 'TyGridProgress|',
+    'TyGridProgressFill|', 'TyGridRating|', 'TyGridRatingEmpty|', 'TyGridSelection|',
+    'TyGridSelectionFrame|', 'TyListGroupHeader|', 'TyListGroupItem|', 'TyNotification|',
+    'TyNotificationClose|', 'TyPagination|', 'TyPaginationItem|', 'TyPopover|',
+    'TyPopoverTitle|', 'TySegmented|', 'TySegmentedItem|', 'TySteps|',
+    'TyStepsConnector|', 'TyStepsItem|', 'TyTag|', 'TyTagClose|',
+    'TyTransfer|', 'TyTransferTitle|');
 
 function TTestThemeGolden.ThemePath(const AName: string): string;
 begin
