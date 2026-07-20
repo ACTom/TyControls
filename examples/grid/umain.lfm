@@ -1012,13 +1012,671 @@ object MainForm: TMainForm
             OnChange = ChkEvChange
           end
         end
+        object TbEv3: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 118
+          Width = 1172
+          Align = alTop
+          object ChkEvReturn: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 144
+            Caption = '回车打开明细'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvScrollHint: TTyCheckBox
+            Left = 158
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '拖滚动条提示'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvCanEdit: TTyCheckBox
+            Left = 296
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '禁改第 2 行(仍显示)'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvEditChange: TTyCheckBox
+            Left = 458
+            Height = 22
+            Top = 8
+            Width = 144
+            Caption = '边打字边校验'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvCellEdited: TTyCheckBox
+            Left = 608
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '否决空值提交'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvRowVeto: TTyCheckBox
+            Left = 770
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '禁止增删行'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvSelectCell: TTyCheckBox
+            Left = 932
+            Height = 22
+            Top = 8
+            Width = 144
+            Caption = '光标不进第 0 列'
+            OnChange = ChkEv3Change
+          end
+        end
+        object TbEv4: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 158
+          Width = 1172
+          Align = alTop
+          object ChkEvClick: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '单击/双击报告'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvRating: TTyCheckBox
+            Left = 170
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '评分变化事件'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvCanSort: TTyCheckBox
+            Left = 308
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '大区列不许排序'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvCompare: TTyCheckBox
+            Left = 470
+            Height = 22
+            Top = 8
+            Width = 168
+            Caption = '大区按业务序排'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvFilterRow: TTyCheckBox
+            Left = 644
+            Height = 22
+            Top = 8
+            Width = 144
+            Caption = '只留负数金额'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvFilterVals: TTyCheckBox
+            Left = 794
+            Height = 22
+            Top = 8
+            Width = 168
+            Caption = '筛选候选值接管'
+            OnChange = ChkEv3Change
+          end
+          object ChkEvPickList: TTyCheckBox
+            Left = 968
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '动态候选项'
+            OnChange = ChkEv3Change
+          end
+        end
         object GridEvents: TTyStringGrid
           Left = 0
-          Height = 530
+          Height = 450
           Top = 0
           Width = 1172
           Align = alClient
           DefaultRowHeight = 24
+          ShowIndicator = True
+          IndicatorWidth = 56
+          MinColWidth = 50
+          MaxColWidth = 260
+          MinRowHeight = 20
+          MaxRowHeight = 70
+          OnSelectionChanged = AnyGridSelectionChanged
+        end
+      end
+      object PgView: TTyTabSheet
+        Caption = '呈现与表头'
+        object LblViewHint: TTyLabel
+          Left = 8
+          Height = 34
+          Top = 4
+          Width = 1150
+          Caption = '滚动条「隐藏」只是不显示 —— 滚轮和方向键照样走得到底 · 「失焦时选区变淡」要点到别的控件上才看得出来 · 先点「换成长列标题」,再勾表头换行与自适应 · 分组带每多一级就长高一条'
+        end
+        object TbView1: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 38
+          Width = 1172
+          Align = alTop
+          object LblVScroll: TTyLabel
+            Left = 8
+            Height = 20
+            Top = 9
+            Width = 60
+            Caption = '纵滚条:'
+          end
+          object CbVScroll: TTyComboBox
+            Left = 72
+            Height = 26
+            Top = 6
+            Width = 100
+            Items.Strings = (
+              '按需'
+              '常显'
+              '隐藏'
+            )
+            ItemIndex = 0
+            OnChange = CbScrollChange
+          end
+          object LblHScroll: TTyLabel
+            Left = 182
+            Height = 20
+            Top = 9
+            Width = 60
+            Caption = '横滚条:'
+          end
+          object CbHScroll: TTyComboBox
+            Left = 246
+            Height = 26
+            Top = 6
+            Width = 100
+            Items.Strings = (
+              '按需'
+              '常显'
+              '隐藏'
+            )
+            ItemIndex = 0
+            OnChange = CbScrollChange
+          end
+          object ChkBackImage: TTyCheckBox
+            Left = 356
+            Height = 22
+            Top = 8
+            Width = 120
+            Caption = '背景图'
+            OnChange = ChkViewChange
+          end
+          object CbBackMode: TTyComboBox
+            Left = 482
+            Height = 26
+            Top = 6
+            Width = 100
+            Items.Strings = (
+              '平铺'
+              '拉伸'
+              '居中'
+            )
+            ItemIndex = 1
+            OnChange = CbBackChange
+          end
+          object CbBackScope: TTyComboBox
+            Left = 588
+            Height = 26
+            Top = 6
+            Width = 132
+            Items.Strings = (
+              '整表'
+              '仅正文窗格'
+            )
+            ItemIndex = 0
+            OnChange = CbBackChange
+          end
+          object ChkFocusCell: TTyCheckBox
+            Left = 730
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '焦点格外框'
+            Checked = True
+            OnChange = ChkViewChange
+          end
+          object ChkDimInactive: TTyCheckBox
+            Left = 868
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '失焦时选区变淡'
+            OnChange = ChkViewChange
+          end
+        end
+        object TbView2: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 78
+          Width = 1172
+          Align = alTop
+          object ChkHdrWrap: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 120
+            Caption = '表头换行'
+            OnChange = ChkViewChange
+          end
+          object ChkHdrAuto: TTyCheckBox
+            Left = 134
+            Height = 22
+            Top = 8
+            Width = 144
+            Caption = '表头高度自适应'
+            OnChange = ChkViewChange
+          end
+          object ChkHdrGroups: TTyCheckBox
+            Left = 284
+            Height = 22
+            Top = 8
+            Width = 120
+            Caption = '表头分组'
+            OnChange = ChkViewChange
+          end
+          object ChkHdrGroups2: TTyCheckBox
+            Left = 410
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '再加一级分组'
+            OnChange = ChkViewChange
+          end
+          object ChkFixBottom: TTyCheckBox
+            Left = 548
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '底部固定 1 行'
+            OnChange = ChkViewChange
+          end
+          object ChkFixRight: TTyCheckBox
+            Left = 686
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '右侧冻结 1 列'
+            OnChange = ChkViewChange
+          end
+          object BtnLongCaption: TTyButton
+            Left = 824
+            Height = 26
+            Top = 6
+            Width = 132
+            Caption = '换成长列标题'
+            OnClick = BtnLongCaptionClick
+          end
+        end
+        object GridView: TTyStringGrid
+          Left = 0
+          Height = 490
+          Top = 0
+          Width = 1172
+          Align = alClient
+          DefaultRowHeight = 26
+          ShowIndicator = True
+          IndicatorWidth = 56
+          MinColWidth = 50
+          MaxColWidth = 260
+          MinRowHeight = 20
+          MaxRowHeight = 70
+          OnSelectionChanged = AnyGridSelectionChanged
+        end
+      end
+      object PgIo: TTyTabSheet
+        Caption = '数据进出'
+        object LblIoHint: TTyLabel
+          Left = 8
+          Height = 34
+          Top = 4
+          Width = 1150
+          Caption = '导出**只导可见行**:排序、筛选、折叠之后导出的就是屏幕上那些 · 「只导出选区」用的是同一个方法的行列范围参数 · 「追加导入」不动列标题,只往后接数据 · 宿主接管的页脚值不进缓存 —— 外部数据变了控件收不到通知'
+        end
+        object TbIo1: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 38
+          Width = 1172
+          Align = alTop
+          object BtnIoJson: TTyButton
+            Left = 8
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '导出 JSON'
+            OnClick = BtnIoJsonClick
+          end
+          object BtnIoHtml: TTyButton
+            Left = 122
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '导出 HTML'
+            OnClick = BtnIoHtmlClick
+          end
+          object BtnIoCsvSel: TTyButton
+            Left = 236
+            Height = 26
+            Top = 6
+            Width = 132
+            Caption = '只导出选区 CSV'
+            OnClick = BtnIoCsvSelClick
+          end
+          object BtnIoStream: TTyButton
+            Left = 374
+            Height = 26
+            Top = 6
+            Width = 132
+            Caption = '流往返一圈'
+            OnClick = BtnIoStreamClick
+          end
+          object BtnIoSelText: TTyButton
+            Left = 512
+            Height = 26
+            Top = 6
+            Width = 120
+            Caption = '选区文本'
+            OnClick = BtnIoSelTextClick
+          end
+          object BtnIoPasteText: TTyButton
+            Left = 638
+            Height = 26
+            Top = 6
+            Width = 132
+            Caption = '粘一块文本进来'
+            OnClick = BtnIoPasteTextClick
+          end
+          object BtnIoClearRows: TTyButton
+            Left = 776
+            Height = 26
+            Top = 6
+            Width = 120
+            Caption = '清空选中行'
+            OnClick = BtnIoClearRowsClick
+          end
+          object BtnIoClearCols: TTyButton
+            Left = 902
+            Height = 26
+            Top = 6
+            Width = 120
+            Caption = '清空本列'
+            OnClick = BtnIoClearColsClick
+          end
+        end
+        object TbIo2: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 78
+          Width = 1172
+          Align = alTop
+          object ChkIoAppend: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 108
+            Caption = '追加导入'
+            OnChange = ChkIoChange
+          end
+          object LblIoMax: TTyLabel
+            Left = 122
+            Height = 20
+            Top = 9
+            Width = 72
+            Caption = '最多读:'
+          end
+          object SpIoMax: TTySpinEdit
+            Left = 196
+            Height = 26
+            Top = 6
+            Width = 76
+            MinValue = 0
+            MaxValue = 999
+            Value = 0
+          end
+          object LblIoSkip: TTyLabel
+            Left = 280
+            Height = 20
+            Top = 9
+            Width = 84
+            Caption = '跳过前几行:'
+          end
+          object SpIoSkip: TTySpinEdit
+            Left = 368
+            Height = 26
+            Top = 6
+            Width = 76
+            MinValue = 0
+            MaxValue = 99
+            Value = 0
+          end
+          object BtnIoImport: TTyButton
+            Left = 452
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '导入 CSV'
+            OnClick = BtnIoImportClick
+          end
+          object ChkIoFooterHook: TTyCheckBox
+            Left = 570
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '页脚文案钩子'
+            OnChange = ChkIoChange
+          end
+          object ChkIoColCalc: TTyCheckBox
+            Left = 732
+            Height = 22
+            Top = 8
+            Width = 168
+            Caption = '金额列改算中位数'
+            OnChange = ChkIoChange
+          end
+          object BtnIoRecalc: TTyButton
+            Left = 908
+            Height = 26
+            Top = 6
+            Width = 120
+            Caption = '强制重算'
+            OnClick = BtnIoRecalcClick
+          end
+        end
+        object GridIo: TTyStringGrid
+          Left = 0
+          Height = 490
+          Top = 0
+          Width = 1172
+          Align = alClient
+          DefaultRowHeight = 26
+          ShowIndicator = True
+          IndicatorWidth = 56
+          ShowFooter = True
+          FooterHeight = 26
+          MinColWidth = 50
+          MaxColWidth = 260
+          MinRowHeight = 20
+          MaxRowHeight = 70
+          OnSelectionChanged = AnyGridSelectionChanged
+        end
+      end
+      object PgCells: TTyTabSheet
+        Caption = '单元格能力'
+        object LblCellsHint: TTyLabel
+          Left = 8
+          Height = 34
+          Top = 4
+          Width = 1150
+          Caption = '这一页的东西**都挂在格子或列上**,不接绘制事件 · 批注在格子右上角留一个小三角,鼠标停上去才显示 · 「金额加货币符号」只改显示:双击进编辑看到的、导出的都还是原值 · 三态勾选框的循环是 空→勾→灰,与 TTyCheckBox 一致'
+        end
+        object TbCells1: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 38
+          Width = 1172
+          Align = alTop
+          object ChkTriState: TTyCheckBox
+            Left = 8
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '勾选框三态'
+            OnChange = ChkCellsChange
+          end
+          object BtnComment: TTyButton
+            Left = 146
+            Height = 26
+            Top = 6
+            Width = 108
+            Caption = '加批注'
+            OnClick = BtnCommentClick
+          end
+          object BtnCommentClear: TTyButton
+            Left = 260
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '清批注'
+            OnClick = BtnCommentClearClick
+          end
+          object BtnBold: TTyButton
+            Left = 362
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '本格加粗'
+            OnClick = BtnBoldClick
+          end
+          object BtnBoldClear: TTyButton
+            Left = 464
+            Height = 26
+            Top = 6
+            Width = 96
+            Caption = '取消加粗'
+            OnClick = BtnBoldClearClick
+          end
+          object ChkFormat: TTyCheckBox
+            Left = 568
+            Height = 22
+            Top = 8
+            Width = 144
+            Caption = '金额加货币符号'
+            OnChange = ChkCellsChange
+          end
+          object ChkLinkCol: TTyCheckBox
+            Left = 718
+            Height = 22
+            Top = 8
+            Width = 132
+            Caption = '订单号变链接'
+            OnChange = ChkCellsChange
+          end
+        end
+        object TbCells2: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 78
+          Width = 1172
+          Align = alTop
+          object LblCellDisp: TTyLabel
+            Left = 8
+            Height = 20
+            Top = 9
+            Width = 76
+            Caption = '本格显示:'
+          end
+          object CbCellDisp: TTyComboBox
+            Left = 88
+            Height = 26
+            Top = 6
+            Width = 120
+            Items.Strings = (
+              '文字'
+              '进度条'
+              '评分'
+              '超链接'
+              '色块'
+            )
+            ItemIndex = 0
+            OnChange = CbCellDispChange
+          end
+          object ChkColProgress: TTyCheckBox
+            Left = 218
+            Height = 22
+            Top = 8
+            Width = 168
+            Caption = '列级声明:进度列'
+            OnChange = ChkCellsChange
+          end
+          object LblCase: TTyLabel
+            Left = 394
+            Height = 20
+            Top = 9
+            Width = 72
+            Caption = '订单号:'
+          end
+          object CbCase: TTyComboBox
+            Left = 470
+            Height = 26
+            Top = 6
+            Width = 110
+            Items.Strings = (
+              '原样'
+              '大写'
+              '小写'
+            )
+            ItemIndex = 0
+            OnChange = CbCaseChange
+          end
+          object ChkDigitsOnly: TTyCheckBox
+            Left = 590
+            Height = 22
+            Top = 8
+            Width = 156
+            Caption = '数量列只收数字'
+            OnChange = ChkCellsChange
+          end
+          object LblMaxLen: TTyLabel
+            Left = 754
+            Height = 20
+            Top = 9
+            Width = 84
+            Caption = '备注上限:'
+          end
+          object SpMaxLen: TTySpinEdit
+            Left = 842
+            Height = 26
+            Top = 6
+            Width = 80
+            MinValue = 0
+            MaxValue = 200
+            Value = 0
+            OnChange = SpMaxLenChange
+          end
+        end
+        object GridCells: TTyStringGrid
+          Left = 0
+          Height = 490
+          Top = 0
+          Width = 1172
+          Align = alClient
+          DefaultRowHeight = 26
           ShowIndicator = True
           IndicatorWidth = 56
           MinColWidth = 50

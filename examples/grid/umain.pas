@@ -14,7 +14,15 @@ unit umain;
     5. 选择·数据·剪贴板 —— 选择模式、离散多选、选区聚合、行的隐藏、批量行操作、
                         合并单元格、剪贴板与智能粘贴、CSV / HTML 导出
     6. 事件与钩子   —— 每个开关对应一个钩子:悬停提示、点击否决、右键、表头点击/右键、
-                        列宽行高事件、列换位否决、勾选框事件、剪贴板钩子、查找替换、CSV 导入
+                        列宽行高事件、列换位否决、勾选框事件、剪贴板钩子、查找替换、CSV 导入、
+                        回车/滚动提示、编辑否决与逐键校验、增删行否决、光标否决、
+                        单击双击、评分、排序否决与自定义比较、逐行过滤、候选值接管
+    7. 单元格能力   —— 三态勾选框、批注(角标+悬停)、逐格字体样式、逐格与列级显示类型、
+                        超链接列、显示格式化、大小写/合法字符/长度上限
+    8. 呈现与表头   —— 滚动条三态、背景图与铺法/范围、焦点格外框、失焦选区变淡、
+                        表头换行与高度自适应、多级表头分组、底部固定行/右侧冻结列
+    9. 数据进出     —— JSON/HTML/CSV 导出(含只导选区)、流往返、追加导入与行数限制、
+                        区域清空、选区文本与文本粘贴、页脚文案钩子与汇总接管、强制重算
 
   窗口、标题栏、分页与各页控件全部在 umain.lfm 里设计;本文件只放数据与事件。 }
 
@@ -30,7 +38,7 @@ uses
   tyControls.CheckBox, tyControls.SpinEdit, tyControls.PageControl,
   tyControls.TabSheet, tyControls.Painter,
   tyControls.Types, tyControls.ColorMath, tyControls.Dialogs, tyControls.Dialogs.Color,
-  tyControls.IconFont, tyControls.ImageCollection, BGRABitmap;
+  tyControls.IconFont, tyControls.ImageCollection, BGRABitmap, BGRABitmapTypes, StdCtrls;
 
 type
   { 宿主自带编辑器的最小实现:用一个多行 TTyMemo 编辑「备注」。
@@ -111,9 +119,43 @@ type
     GridEvents: TTyStringGrid;
     ChkEvHint, ChkEvLockRow, ChkEvRightClick, ChkEvHeader, ChkEvSize,
       ChkEvColMove, ChkEvCheck, ChkEvClip,
-      ChkEvRowMove, ChkEvEditorProp: TTyCheckBox;
+      ChkEvRowMove, ChkEvEditorProp,
+      ChkEvReturn, ChkEvScrollHint, ChkEvCanEdit, ChkEvEditChange,
+      ChkEvCellEdited, ChkEvRowVeto, ChkEvSelectCell,
+      ChkEvClick, ChkEvRating, ChkEvCanSort, ChkEvCompare,
+      ChkEvFilterRow, ChkEvFilterVals, ChkEvPickList: TTyCheckBox;
+    TbEv3, TbEv4: TTyPanel;
     BtnEvFind, BtnEvReplace, BtnEvImportCsv: TTyButton;
     EdEvFind, EdEvRepl: TTyEdit;
+
+    PgCells: TTyTabSheet;
+    LblCellsHint, LblCellDisp, LblCase, LblMaxLen: TTyLabel;
+    TbCells1, TbCells2: TTyPanel;
+    GridCells: TTyStringGrid;
+    ChkTriState, ChkFormat, ChkLinkCol, ChkColProgress,
+      ChkDigitsOnly: TTyCheckBox;
+    BtnComment, BtnCommentClear, BtnBold, BtnBoldClear: TTyButton;
+    CbCellDisp, CbCase: TTyComboBox;
+    SpMaxLen: TTySpinEdit;
+
+    PgView: TTyTabSheet;
+    LblViewHint, LblVScroll, LblHScroll: TTyLabel;
+    TbView1, TbView2: TTyPanel;
+    GridView: TTyStringGrid;
+    CbVScroll, CbHScroll, CbBackMode, CbBackScope: TTyComboBox;
+    ChkBackImage, ChkFocusCell, ChkDimInactive, ChkHdrWrap, ChkHdrAuto,
+      ChkHdrGroups, ChkHdrGroups2, ChkFixBottom, ChkFixRight: TTyCheckBox;
+    BtnLongCaption: TTyButton;
+
+    PgIo: TTyTabSheet;
+    LblIoHint, LblIoMax, LblIoSkip: TTyLabel;
+    TbIo1, TbIo2: TTyPanel;
+    GridIo: TTyStringGrid;
+    BtnIoJson, BtnIoHtml, BtnIoCsvSel, BtnIoStream, BtnIoSelText,
+      BtnIoPasteText, BtnIoClearRows, BtnIoClearCols, BtnIoImport,
+      BtnIoRecalc: TTyButton;
+    ChkIoAppend, ChkIoFooterHook, ChkIoColCalc: TTyCheckBox;
+    SpIoMax, SpIoSkip: TTySpinEdit;
 
     procedure FormCreate(Sender: TObject);
     procedure ThemeComboChange(Sender: TObject);
@@ -217,6 +259,72 @@ type
     procedure BtnEvFindClick(Sender: TObject);
     procedure BtnEvReplaceClick(Sender: TObject);
     procedure BtnEvImportCsvClick(Sender: TObject);
+
+    { 页 6 补齐的钩子 }
+    procedure ChkEv3Change(Sender: TObject);
+    procedure EvReturn(Sender: TObject; ACol, ARow: Integer);
+    procedure EvCtrlReturn(Sender: TObject; ACol, ARow: Integer);
+    procedure EvScrollHint(Sender: TObject; ARow: Integer; var AHint: string);
+    procedure EvCanEdit(Sender: TObject; ACol, ARow: Integer;
+      var AAllow: Boolean);
+    procedure EvEditChange(Sender: TObject; ACol, ARow: Integer;
+      const AText: string);
+    procedure EvCellEdited(Sender: TObject; ACol, ARow: Integer;
+      const AOldText, ANewText: string; var AAccept: Boolean);
+    procedure EvCanInsertRow(Sender: TObject; ARow: Integer;
+      var AAllow: Boolean);
+    procedure EvCanDeleteRow(Sender: TObject; ARow: Integer;
+      var AAllow: Boolean);
+    procedure EvSelectCell(Sender: TObject; ACol, ARow: Integer;
+      var ACanSelect: Boolean);
+    procedure EvClickCell(Sender: TObject; ACol, ARow: Integer);
+    procedure EvDblClickCell(Sender: TObject; ACol, ARow: Integer);
+    procedure EvRatingChange(Sender: TObject; ACol, ARow: Integer;
+      AValue: Integer);
+    procedure EvCanSort(Sender: TObject; ACol: Integer; var AAllow: Boolean);
+    procedure EvCompareCells(Sender: TObject; ACol, ARow1, ARow2: Integer;
+      var AResult: Integer);
+    procedure EvFilterRow(Sender: TObject; ARow: Integer; var AVisible: Boolean);
+    procedure EvGetFilterValues(Sender: TObject; ACol: Integer;
+      AItems: TStrings; var AHandled: Boolean);
+    procedure EvGetPickList(Sender: TObject; ACol, ARow: Integer;
+      AItems: TStrings);
+
+    { 页 9 }
+    procedure ChkIoChange(Sender: TObject);
+    procedure BtnIoJsonClick(Sender: TObject);
+    procedure BtnIoHtmlClick(Sender: TObject);
+    procedure BtnIoCsvSelClick(Sender: TObject);
+    procedure BtnIoStreamClick(Sender: TObject);
+    procedure BtnIoSelTextClick(Sender: TObject);
+    procedure BtnIoPasteTextClick(Sender: TObject);
+    procedure BtnIoClearRowsClick(Sender: TObject);
+    procedure BtnIoClearColsClick(Sender: TObject);
+    procedure BtnIoImportClick(Sender: TObject);
+    procedure BtnIoRecalcClick(Sender: TObject);
+    procedure IoGetFooterText(Sender: TObject; ACol: Integer;
+      var AText: string);
+    procedure IoColumnCalc(Sender: TObject; ACol: Integer;
+      var AValue: Double; var AHandled: Boolean);
+
+    { 页 8 }
+    procedure ChkViewChange(Sender: TObject);
+    procedure CbScrollChange(Sender: TObject);
+    procedure CbBackChange(Sender: TObject);
+    procedure BtnLongCaptionClick(Sender: TObject);
+
+    { 页 7 }
+    procedure ChkCellsChange(Sender: TObject);
+    procedure BtnCommentClick(Sender: TObject);
+    procedure BtnCommentClearClick(Sender: TObject);
+    procedure BtnBoldClick(Sender: TObject);
+    procedure BtnBoldClearClick(Sender: TObject);
+    procedure CbCellDispChange(Sender: TObject);
+    procedure CbCaseChange(Sender: TObject);
+    procedure SpMaxLenChange(Sender: TObject);
+    procedure CellsGetFormat(Sender: TObject; ACol, ARow: Integer;
+      var AText: string);
+    procedure CellsLinkClick(Sender: TObject; ACol, ARow: Integer);
     procedure EvGetCellHint(Sender: TObject; ACol, ARow: Integer; var AHint: string);
     procedure EvCanClickCell(Sender: TObject; ACol, ARow: Integer;
       var ACanClick: Boolean);
@@ -242,6 +350,9 @@ type
     procedure EvAfterPasteCell(Sender: TObject; ACol, ARow: Integer);
   private
     FNoteLink: TNoteEditLink;
+    { 背景图由**宿主**持有并释放 —— 控件只借用(与 Images 同一约定,
+      免得两边都以为对方会 Free)。 }
+    FBackBmp: TBGRABitmap;
     FSizingCount, FPasteCount: Integer;
     { 「记住版式」存下来的那一串 —— 真实工程里进注册表或配置文件。
       **必须放 private**:表单类的字段区默认是 published,而字符串不能 published。 }
@@ -259,6 +370,12 @@ type
     procedure SetupEdit;
     procedure SetupData;
     procedure SetupEvents;
+    procedure SetupCells;
+    procedure SetupView;
+    procedure SetupIo;
+    procedure ApplyHeaderGroups;
+    function  MakeWatermark: TBGRABitmap;
+    function  HeaderGroupLevels: Integer;
     function  ActiveGrid: TTyStringGrid;
     procedure Status(const AText: string);
     procedure ShowSelectionInfo;
@@ -432,6 +549,7 @@ begin
   ApplyChromeTheme(TyDefaultController);
 
   FNoteLink := TNoteEditLink.Create;
+  FBackBmp := nil;
 
   SetupBasic;
   SetupLook;
@@ -439,6 +557,9 @@ begin
   SetupEdit;
   SetupData;
   SetupEvents;
+  SetupCells;
+  SetupView;
+  SetupIo;
 
   Status('每一页演示一组特性 —— 从左到右依次看下来即可');
 end;
@@ -451,6 +572,9 @@ begin
     3: Result := GridEdit;
     4: Result := GridData;
     5: Result := GridEvents;
+    6: Result := GridCells;
+    7: Result := GridView;
+    8: Result := GridIo;
   else Result := GridBasic;
   end;
 end;
@@ -1632,6 +1756,697 @@ begin
   if DarkSwitch.Checked then TyDefaultController.Mode := 'dark'
   else TyDefaultController.Mode := 'light';
   ApplyChromeTheme(TyDefaultController);
+end;
+
+{ ============ 页 7:单元格能力 ============
+
+  这一页的共同点:**都挂在格子或列上**,一个绘制事件都不接。
+  批注、逐格字体样式、逐格显示类型三样都存进逐格属性存储 ——
+  于是它们自动可撤销、自动跟着排序/插行走,宿主什么都不用管。 }
+
+procedure TMainForm.SetupCells;
+var
+  c: TTyGridColumn;
+begin
+  BuildOrderColumns(GridCells, True, False);
+  FillOrders(GridCells, 30, True, False);
+
+  { 勾选框列 —— 三态开关就作用在它上面。 }
+  c := TTyGridColumn(GridCells.Header.Columns.Items[cDone]);
+  c.EditorKind := gekCheckBox;
+
+  { 候选列:**非编辑态也会画一个下拉箭头** —— 不点进去也看得出这格有候选项。 }
+  c := TTyGridColumn(GridCells.Header.Columns.Items[cRegion]);
+  c.EditorKind := gekPickList;
+  c.PickList.CommaText := '华东,华北,华南,西南,东北,西北';
+
+  GridCells.OnCellLinkClick := @CellsLinkClick;
+
+  { 开局先放一条批注和一处加粗,免得用户对着一张干净的表猜"该点哪儿"。 }
+  GridCells.CellComment[cNote, 2] := '这条是样例批注 —— 鼠标停在右上角小三角上就会显示';
+  GridCells.CellFontStyles[cProduct, 2] := [fsBold];
+
+  Status('页 7:批注/加粗/显示类型都存在逐格属性里 —— 排序、插行之后它们仍跟着原来那条记录');
+end;
+
+procedure TMainForm.ChkCellsChange(Sender: TObject);
+var
+  c: TTyGridColumn;
+begin
+  { 三态:关着时切换只在两态间走,灰显不会凭空冒出来。 }
+  GridCells.AllowGrayed := ChkTriState.Checked;
+
+  { 格式化只改**显示** —— 编辑器里、导出里都还是原值。 }
+  if ChkFormat.Checked then GridCells.OnGetFormat := @CellsGetFormat
+  else GridCells.OnGetFormat := nil;
+
+  { 超链接:整列的显示类型走**列属性**,不是逐格、也不是事件。 }
+  c := TTyGridColumn(GridCells.Header.Columns.Items[cOrderNo]);
+  if ChkLinkCol.Checked then c.CellDisplay := gcdHyperlink
+  else c.CellDisplay := gcdText;
+
+  c := TTyGridColumn(GridCells.Header.Columns.Items[cQty]);
+  if ChkColProgress.Checked then c.CellDisplay := gcdProgress
+  else c.CellDisplay := gcdText;
+
+  { 数量列只收数字:非法按键根本到不了编辑器。 }
+  c := TTyGridColumn(GridCells.Header.Columns.Items[cQty]);
+  if ChkDigitsOnly.Checked then c.ValidChars := '0123456789'
+  else c.ValidChars := '';
+
+  GridCells.Invalidate;
+  Status('三态=' + BoolToStr(ChkTriState.Checked, '开', '关')
+    + ' · 格式化=' + BoolToStr(ChkFormat.Checked, '开', '关')
+    + ' · 链接列=' + BoolToStr(ChkLinkCol.Checked, '开', '关'));
+end;
+
+procedure TMainForm.BtnCommentClick(Sender: TObject);
+var
+  txt: string;
+begin
+  txt := '在 ' + FormatDateTime('hh:nn:ss', Now) + ' 加的批注';
+  GridCells.CellComment[GridCells.Col, GridCells.Row] := txt;
+  Status(Format('(%d, %d) 加了批注 —— 右上角多出一个小三角,悬停显示;Ctrl+Z 可撤销',
+    [GridCells.Col, GridCells.Row]));
+end;
+
+procedure TMainForm.BtnCommentClearClick(Sender: TObject);
+begin
+  GridCells.CellComment[GridCells.Col, GridCells.Row] := '';
+  Status('批注已清 —— 小三角随之消失');
+end;
+
+procedure TMainForm.BtnBoldClick(Sender: TObject);
+begin
+  GridCells.CellFontStyles[GridCells.Col, GridCells.Row] := [fsBold];
+  Status(Format('(%d, %d) 加粗 —— 逐格字体样式,同样进撤销栈',
+    [GridCells.Col, GridCells.Row]));
+end;
+
+procedure TMainForm.BtnBoldClearClick(Sender: TObject);
+begin
+  GridCells.CellFontStyles[GridCells.Col, GridCells.Row] := [];
+  Status('已取消加粗');
+end;
+
+{ 逐格显示类型:比列级更具体,压过列级。 }
+procedure TMainForm.CbCellDispChange(Sender: TObject);
+const
+  kinds: array[0..4] of TTyGridCellDisplay =
+    (gcdText, gcdProgress, gcdRating, gcdHyperlink, gcdColor);
+begin
+  if CbCellDisp.ItemIndex < 0 then Exit;
+  GridCells.CellDisplays[GridCells.Col, GridCells.Row] :=
+    kinds[CbCellDisp.ItemIndex];
+  Status(Format('(%d, %d) 的显示类型改了 —— 逐格比列级更具体,压过列级声明',
+    [GridCells.Col, GridCells.Row]));
+end;
+
+procedure TMainForm.CbCaseChange(Sender: TObject);
+const
+  cases: array[0..2] of TEditCharCase = (ecNormal, ecUpperCase, ecLowerCase);
+var
+  c: TTyGridColumn;
+begin
+  if CbCase.ItemIndex < 0 then Exit;
+  c := TTyGridColumn(GridCells.Header.Columns.Items[cOrderNo]);
+  c.CharCase := cases[CbCase.ItemIndex];
+  Status('订单号列的大小写规则改了 —— 双击进编辑输入就看得出来');
+end;
+
+procedure TMainForm.SpMaxLenChange(Sender: TObject);
+var
+  c: TTyGridColumn;
+begin
+  c := TTyGridColumn(GridCells.Header.Columns.Items[cNote]);
+  c.MaxEditLength := SpMaxLen.Value;
+  if SpMaxLen.Value = 0 then Status('备注列不限长度')
+  else Status(Format('备注列最多输入 %d 个字符', [SpMaxLen.Value]));
+end;
+
+{ 只作用于显示。**别在这里改数据** —— 编辑器、导出、排序拿到的都必须是原值。 }
+procedure TMainForm.CellsGetFormat(Sender: TObject; ACol, ARow: Integer;
+  var AText: string);
+var
+  v: Double;
+begin
+  if ACol <> cAmount then Exit;
+  if TryStrToFloat(AText, v) then AText := Format('¥ %.2f', [v]);
+end;
+
+procedure TMainForm.CellsLinkClick(Sender: TObject; ACol, ARow: Integer);
+begin
+  Status(Format('点了链接:%s(第 %d 行)—— 真实应用里这里会打开明细',
+    [GridCells.Cells[ACol, ARow], ARow]));
+end;
+
+{ ============ 页 8:呈现与表头 ============ }
+
+procedure TMainForm.SetupView;
+begin
+  BuildOrderColumns(GridView, True, False);
+  FillOrders(GridView, 40, True, False);
+  GridView.Header.Options := GridView.Header.Options + [hoVisible];
+  Status('页 8:滚动条三态、背景图、焦点/选区显示、表头换行与分组');
+end;
+
+{ 分组带按勾选重建。**每次重建而不是增量改** —— 组是"哪几列属于同一类"的声明,
+  列数/开关一变就该整体重算,增量维护只会攒出对不上的状态。 }
+procedure TMainForm.ApplyHeaderGroups;
+var
+  g: TTyGridHeaderGroup;
+begin
+  GridView.HeaderGroups.Clear;
+  if not ChkHdrGroups.Checked then
+  begin
+    GridView.Invalidate;
+    Exit;
+  end;
+
+  g := GridView.HeaderGroups.Add;
+  g.Text := '订单信息';
+  g.FirstCol := cOrderNo; g.LastCol := cProduct; g.Level := 0;
+
+  g := GridView.HeaderGroups.Add;
+  g.Text := '金额与进度';
+  g.FirstCol := cQty; g.LastCol := cRate; g.Level := 0;
+
+  { 第二级:Level=1 画在 0 级下面那一条里。分组带会自动长高一条。 }
+  if ChkHdrGroups2.Checked then
+  begin
+    g := GridView.HeaderGroups.Add;
+    g.Text := '主键与归属';
+    g.FirstCol := cOrderNo; g.LastCol := cRegion; g.Level := 1;
+
+    g := GridView.HeaderGroups.Add;
+    g.Text := '数量/金额';
+    g.FirstCol := cQty; g.LastCol := cAmount; g.Level := 1;
+  end;
+  GridView.Invalidate;
+end;
+
+procedure TMainForm.ChkViewChange(Sender: TObject);
+begin
+  { 背景图:宿主建、宿主释放。 }
+  if ChkBackImage.Checked then
+  begin
+    if FBackBmp = nil then FBackBmp := MakeWatermark;
+    GridView.BackgroundBitmap := FBackBmp;
+  end
+  else
+    GridView.BackgroundBitmap := nil;
+
+  GridView.ShowFocusCell := ChkFocusCell.Checked;
+  GridView.HideSelectionWhenInactive := ChkDimInactive.Checked;
+  GridView.HeaderWordWrap := ChkHdrWrap.Checked;
+  GridView.HeaderAutoHeight := ChkHdrAuto.Checked;
+
+  if ChkFixBottom.Checked then GridView.FixedRowsBottom := 1
+  else GridView.FixedRowsBottom := 0;
+  if ChkFixRight.Checked then GridView.FixedColsRight := 1
+  else GridView.FixedColsRight := 0;
+
+  ApplyHeaderGroups;
+  Status('表头换行=' + BoolToStr(ChkHdrWrap.Checked, '开', '关')
+    + ' · 自适应高度=' + BoolToStr(ChkHdrAuto.Checked, '开', '关')
+    { 级数由**宿主自己**算 —— 分组是宿主建的,它本来就知道有几级;
+      为了一句状态文案去扩控件的公开面是本末倒置。 }
+    + ' · 分组级数=' + IntToStr(HeaderGroupLevels));
+end;
+
+procedure TMainForm.CbScrollChange(Sender: TObject);
+const
+  modes: array[0..2] of TTyGridScrollBarMode = (gsbAuto, gsbAlways, gsbNever);
+begin
+  if CbVScroll.ItemIndex >= 0 then
+    GridView.VertScrollBarMode := modes[CbVScroll.ItemIndex];
+  if CbHScroll.ItemIndex >= 0 then
+    GridView.HorzScrollBarMode := modes[CbHScroll.ItemIndex];
+  Status('滚动条「隐藏」只是不显示 —— 滚轮、方向键、PageDown 照样走得到底');
+end;
+
+procedure TMainForm.CbBackChange(Sender: TObject);
+const
+  bmodes: array[0..2] of TTyGridBackgroundMode = (gbmTile, gbmStretch, gbmCenter);
+  scopes: array[0..1] of TTyGridBackgroundScope = (gbsWholeGrid, gbsBodyOnly);
+begin
+  if CbBackMode.ItemIndex >= 0 then
+    GridView.BackgroundMode := bmodes[CbBackMode.ItemIndex];
+  if CbBackScope.ItemIndex >= 0 then
+    GridView.BackgroundScope := scopes[CbBackScope.ItemIndex];
+  Status('范围决定图被**适配到哪个矩形** —— 列头带每帧都被重画,底下铺什么都看不见');
+end;
+
+procedure TMainForm.BtnLongCaptionClick(Sender: TObject);
+var
+  c: TTyColumn;
+begin
+  c := TTyColumn(GridView.Header.Columns.Items[cNote]);
+  if Pos('换行', c.Text) > 0 then c.Text := '备注'
+  else c.Text := '这是一个很长的列标题 用来演示换行与自适应高度';
+  GridView.Invalidate;
+  Status('再勾「表头换行」和「表头高度自适应」看效果');
+end;
+
+function TMainForm.HeaderGroupLevels: Integer;
+var
+  i, lv: Integer;
+begin
+  Result := 0;
+  for i := 0 to GridView.HeaderGroups.Count - 1 do
+  begin
+    lv := TTyGridHeaderGroup(GridView.HeaderGroups.Items[i]).Level;
+    if lv + 1 > Result then Result := lv + 1;
+  end;
+end;
+
+{ 一张淡淡的水印图。用代码生成而不是带一个图片文件:
+  例子要能直接跑起来,不该依赖外部资源。 }
+function TMainForm.MakeWatermark: TBGRABitmap;
+var
+  i: Integer;
+begin
+  Result := TBGRABitmap.Create(120, 120, BGRA(0, 0, 0, 0));
+  for i := 0 to 119 do
+  begin
+    Result.SetPixel(i, i, BGRA(120, 160, 220, 40));
+    Result.SetPixel(119 - i, i, BGRA(120, 160, 220, 40));
+  end;
+end;
+
+{ ============ 页 9:数据进出 ============
+
+  统一的分寸:导出走**显示序**(排序/筛选/折叠之后导出的就是屏幕上那些),
+  导入默认是替换式,追加是显式选项。 }
+
+procedure TMainForm.SetupIo;
+begin
+  BuildOrderColumns(GridIo, True, False);
+  FillOrders(GridIo, 25, True, False);
+  GridIo.SetColumnAggregate(cQty, gagSum);
+  GridIo.SetColumnAggregate(cAmount, gagSum);
+  Status('页 9:导出/导入/流往返/页脚接管');
+end;
+
+procedure TMainForm.ChkIoChange(Sender: TObject);
+begin
+  if ChkIoFooterHook.Checked then GridIo.OnGetFooterText := @IoGetFooterText
+  else GridIo.OnGetFooterText := nil;
+
+  if ChkIoColCalc.Checked then GridIo.OnColumnCalc := @IoColumnCalc
+  else GridIo.OnColumnCalc := nil;
+
+  GridIo.Invalidate;
+  Status('页脚钩子=' + BoolToStr(ChkIoFooterHook.Checked, '开', '关')
+    + ' · 金额列接管=' + BoolToStr(ChkIoColCalc.Checked, '开', '关'));
+end;
+
+procedure TMainForm.BtnIoJsonClick(Sender: TObject);
+var
+  js: string;
+begin
+  js := GridIo.SaveToJSONText;
+  TyShowMessage('JSON 导出(前 800 字):' + LineEnding + LineEnding + Copy(js, 1, 800));
+  Status(Format('导出了 %d 字节 JSON —— 键取列标题,只导可见行', [Length(js)]));
+end;
+
+procedure TMainForm.BtnIoHtmlClick(Sender: TObject);
+var
+  h: string;
+begin
+  h := GridIo.SaveToHTMLText;
+  TyShowMessage('HTML 导出(前 800 字):' + LineEnding + LineEnding + Copy(h, 1, 800));
+  Status(Format('导出了 %d 字节 HTML', [Length(h)]));
+end;
+
+{ 同一个方法,加上行列范围参数就是"只导选区"。 }
+procedure TMainForm.BtnIoCsvSelClick(Sender: TObject);
+var
+  sel: TRect;
+  csv: string;
+begin
+  sel := GridIo.Selection;
+  csv := GridIo.SaveToCSVText(',', sel.Top, sel.Bottom - sel.Top + 1,
+                                   sel.Left, sel.Right - sel.Left + 1);
+  TyShowMessage('选区 CSV:' + LineEnding + LineEnding + Copy(csv, 1, 800));
+  Status(Format('导出了选区 %d 行 x %d 列',
+    [sel.Bottom - sel.Top + 1, sel.Right - sel.Left + 1]));
+end;
+
+{ 存进内存流再读回来 —— 证明流接口两头对得上。 }
+procedure TMainForm.BtnIoStreamClick(Sender: TObject);
+var
+  st: TMemoryStream;
+  before: Integer;
+begin
+  before := GridIo.RowCount;
+  st := TMemoryStream.Create;
+  try
+    GridIo.SaveToStream(st);
+    st.Position := 0;
+    GridIo.LoadFromStream(st);
+    Status(Format('流往返一圈:%d 行 → %d 字节 → %d 行',
+      [before, st.Size, GridIo.RowCount]));
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TMainForm.BtnIoSelTextClick(Sender: TObject);
+begin
+  TyShowMessage('选区文本(制表符分隔,没碰剪贴板):' + LineEnding + LineEnding
+    + Copy(GridIo.SelectionAsText, 1, 800));
+end;
+
+{ 不经过剪贴板直接粘一块进来 —— 这样粘贴钩子在没有外部剪贴板的环境也演示得了。 }
+procedure TMainForm.BtnIoPasteTextClick(Sender: TObject);
+const
+  blk = 'AAA'#9'华东'#9'甲产品'#13#10'BBB'#9'华北'#9'乙产品';
+begin
+  GridIo.PasteFromText(blk);
+  Status('从一段硬编码文本粘进来了 2 行 —— 走的是与剪贴板同一条路径');
+end;
+
+procedure TMainForm.BtnIoClearRowsClick(Sender: TObject);
+var
+  sel: TRect;
+begin
+  sel := GridIo.Selection;
+  GridIo.ClearRows(sel.Top, sel.Bottom - sel.Top + 1);
+  Status(Format('清空了 %d 行的内容 —— 整批算**一条**撤销记录,按一次 Ctrl+Z 就回来',
+    [sel.Bottom - sel.Top + 1]));
+end;
+
+procedure TMainForm.BtnIoClearColsClick(Sender: TObject);
+begin
+  GridIo.ClearCols(GridIo.Col, 1);
+  Status(Format('清空了第 %d 列 —— 同样是一条撤销记录', [GridIo.Col]));
+end;
+
+{ 追加 / 最多读几行 / 跳过前几行,三个参数一起演示。 }
+procedure TMainForm.BtnIoImportClick(Sender: TObject);
+const
+  csv = '订单号,大区,产品,数量,金额' + LineEnding
+      + '# 这一行是说明,不是数据' + LineEnding
+      + 'IMP-001,华东,甲产品,10,1285.00' + LineEnding
+      + 'IMP-002,华北,乙产品,20,2570.00' + LineEnding
+      + 'IMP-003,华南,丙产品,30,3855.00' + LineEnding
+      + 'IMP-004,西南,丁产品,40,5140.00';
+var
+  before, maxRows: Integer;
+begin
+  before := GridIo.RowCount;
+  maxRows := SpIoMax.Value;
+  if maxRows = 0 then maxRows := -1;      { 0 = 不限 }
+  GridIo.LoadFromCSVText(csv, ',', ChkIoAppend.Checked, maxRows, SpIoSkip.Value);
+  Status(Format('导入:%d 行 → %d 行(%s,最多 %s 行,跳过 %d 行说明)',
+    [before, GridIo.RowCount,
+     BoolToStr(ChkIoAppend.Checked, '追加', '替换'),
+     BoolToStr(maxRows < 0, '不限', IntToStr(maxRows)), SpIoSkip.Value]));
+end;
+
+procedure TMainForm.BtnIoRecalcClick(Sender: TObject);
+begin
+  GridIo.CalcFooter(cAmount);
+  GridIo.Invalidate;
+  Status('只让金额那一列重算 —— 整表失效(InvalidateAggregates)对这件事太钝');
+end;
+
+procedure TMainForm.IoGetFooterText(Sender: TObject; ACol: Integer;
+  var AText: string);
+begin
+  if (ACol = cAmount) and (AText <> '') then AText := '合计 ¥' + AText;
+end;
+
+{ 宿主接管这一列的汇总。**不进缓存** —— 外部数据变了控件收不到通知,
+  缓存住就等于把一个陈旧的数钉在页脚上。 }
+procedure TMainForm.IoColumnCalc(Sender: TObject; ACol: Integer;
+  var AValue: Double; var AHandled: Boolean);
+var
+  vals: array of Double;
+  pos, dataRow, n: Integer;
+  v: Double;
+  i, j: Integer;
+  t: Double;
+begin
+  if ACol <> cAmount then Exit;
+  SetLength(vals, 0);
+  n := 0;
+  for pos := 0 to GridIo.DisplayRowCount - 1 do
+  begin
+    dataRow := GridIo.DisplayToData(pos);
+    if dataRow < 0 then Continue;
+    if TryStrToFloat(GridIo.Cells[ACol, dataRow], v) then
+    begin
+      SetLength(vals, n + 1);
+      vals[n] := v;
+      Inc(n);
+    end;
+  end;
+  if n = 0 then Exit;
+  for i := 0 to n - 2 do
+    for j := 0 to n - 2 - i do
+      if vals[j] > vals[j + 1] then
+      begin
+        t := vals[j]; vals[j] := vals[j + 1]; vals[j + 1] := t;
+      end;
+  if n mod 2 = 1 then AValue := vals[n div 2]
+  else AValue := (vals[n div 2 - 1] + vals[n div 2]) / 2;
+  AHandled := True;
+end;
+
+{ ============ 页 6 补齐的钩子 ============
+
+  与本页原有的开关同一个约定:**每个开关对应一个钩子**,勾上再去操作,
+  状态栏会说出它介入了什么。 }
+
+procedure TMainForm.ChkEv3Change(Sender: TObject);
+var
+  c: TTyGridColumn;
+begin
+  if ChkEvReturn.Checked then
+  begin
+    GridEvents.OnReturn := @EvReturn;
+    GridEvents.OnCtrlReturn := @EvCtrlReturn;
+  end
+  else
+  begin
+    GridEvents.OnReturn := nil;
+    GridEvents.OnCtrlReturn := nil;
+  end;
+
+  if ChkEvScrollHint.Checked then GridEvents.OnScrollHint := @EvScrollHint
+  else GridEvents.OnScrollHint := nil;
+
+  if ChkEvCanEdit.Checked then GridEvents.OnCanEditCell := @EvCanEdit
+  else GridEvents.OnCanEditCell := nil;
+
+  if ChkEvEditChange.Checked then GridEvents.OnEditChange := @EvEditChange
+  else GridEvents.OnEditChange := nil;
+
+  if ChkEvCellEdited.Checked then GridEvents.OnCellEdited := @EvCellEdited
+  else GridEvents.OnCellEdited := nil;
+
+  if ChkEvRowVeto.Checked then
+  begin
+    GridEvents.OnCanInsertRow := @EvCanInsertRow;
+    GridEvents.OnCanDeleteRow := @EvCanDeleteRow;
+  end
+  else
+  begin
+    GridEvents.OnCanInsertRow := nil;
+    GridEvents.OnCanDeleteRow := nil;
+  end;
+
+  if ChkEvSelectCell.Checked then GridEvents.OnSelectCell := @EvSelectCell
+  else GridEvents.OnSelectCell := nil;
+
+  if ChkEvClick.Checked then
+  begin
+    GridEvents.OnClickCell := @EvClickCell;
+    GridEvents.OnDblClickCell := @EvDblClickCell;
+  end
+  else
+  begin
+    GridEvents.OnClickCell := nil;
+    GridEvents.OnDblClickCell := nil;
+  end;
+
+  if ChkEvRating.Checked then GridEvents.OnRatingChange := @EvRatingChange
+  else GridEvents.OnRatingChange := nil;
+
+  if ChkEvCanSort.Checked then GridEvents.OnCanSort := @EvCanSort
+  else GridEvents.OnCanSort := nil;
+
+  if ChkEvCompare.Checked then GridEvents.OnCompareCells := @EvCompareCells
+  else GridEvents.OnCompareCells := nil;
+
+  if ChkEvFilterRow.Checked then GridEvents.OnFilterRow := @EvFilterRow
+  else GridEvents.OnFilterRow := nil;
+
+  if ChkEvFilterVals.Checked then
+    GridEvents.OnGetFilterValues := @EvGetFilterValues
+  else GridEvents.OnGetFilterValues := nil;
+
+  { 动态候选项:挂上事件之后,列上那份静态 PickList 就不再说了算。 }
+  c := TTyGridColumn(GridEvents.Header.Columns.Items[cRegion]);
+  c.EditorKind := gekPickList;
+  if ChkEvPickList.Checked then GridEvents.OnGetPickList := @EvGetPickList
+  else GridEvents.OnGetPickList := nil;
+
+  GridEvents.Invalidate;
+  Status('钩子开关已应用 —— 去操作网格,这一行会说出钩子介入了什么');
+end;
+
+procedure TMainForm.EvReturn(Sender: TObject; ACol, ARow: Integer);
+begin
+  Status(Format('回车:打开第 %d 行的明细(编辑态的回车仍是"提交并下移",没被改掉)',
+    [ARow]));
+end;
+
+procedure TMainForm.EvCtrlReturn(Sender: TObject; ACol, ARow: Integer);
+begin
+  Status(Format('Ctrl+回车:第 %d 行 —— 另一个动作,与普通回车分开', [ARow]));
+end;
+
+procedure TMainForm.EvScrollHint(Sender: TObject; ARow: Integer;
+  var AHint: string);
+begin
+  AHint := Format('第 %d 行 / 共 %d 行', [ARow + 1, GridEvents.RowCount]);
+end;
+
+{ 与"只读"的区别:被拦下的格子**照样按原来的样子显示**(勾选框还是勾选框),
+  只是改不动。做成 gekNone 会把显示也一起改掉。 }
+procedure TMainForm.EvCanEdit(Sender: TObject; ACol, ARow: Integer;
+  var AAllow: Boolean);
+begin
+  if ARow = 2 then
+  begin
+    AAllow := False;
+    Status('第 2 行禁改 —— 注意它的勾选框仍然画成勾选框,只是点不动');
+  end;
+end;
+
+procedure TMainForm.EvEditChange(Sender: TObject; ACol, ARow: Integer;
+  const AText: string);
+begin
+  Status(Format('正在输入 (%d, %d):「%s」—— 每敲一下就发一次,不是提交时',
+    [ACol, ARow, AText]));
+end;
+
+procedure TMainForm.EvCellEdited(Sender: TObject; ACol, ARow: Integer;
+  const AOldText, ANewText: string; var AAccept: Boolean);
+begin
+  if Trim(ANewText) = '' then
+  begin
+    AAccept := False;
+    Status(Format('(%d, %d) 不许清空 —— 提交被否决,格子还是「%s」',
+      [ACol, ARow, AOldText]));
+  end
+  else
+    Status(Format('(%d, %d):「%s」→「%s」', [ACol, ARow, AOldText, ANewText]));
+end;
+
+procedure TMainForm.EvCanInsertRow(Sender: TObject; ARow: Integer;
+  var AAllow: Boolean);
+begin
+  AAllow := False;
+  Status('插入被否决 —— 一行都没插进去(复数版里任何一行被否决就整批不做)');
+end;
+
+procedure TMainForm.EvCanDeleteRow(Sender: TObject; ARow: Integer;
+  var AAllow: Boolean);
+begin
+  AAllow := False;
+  Status('删除被否决');
+end;
+
+procedure TMainForm.EvSelectCell(Sender: TObject; ACol, ARow: Integer;
+  var ACanSelect: Boolean);
+begin
+  if ACol = 0 then
+  begin
+    ACanSelect := False;
+    Status('光标进不了第 0 列 —— 方向键会直接跳过它');
+  end;
+end;
+
+procedure TMainForm.EvClickCell(Sender: TObject; ACol, ARow: Integer);
+begin
+  Status(Format('单击 (%d, %d)', [ACol, ARow]));
+end;
+
+procedure TMainForm.EvDblClickCell(Sender: TObject; ACol, ARow: Integer);
+begin
+  Status(Format('双击 (%d, %d) —— 真实应用里这里通常是"打开明细"', [ACol, ARow]));
+end;
+
+procedure TMainForm.EvRatingChange(Sender: TObject; ACol, ARow: Integer;
+  AValue: Integer);
+begin
+  Status(Format('评分改成 %d 星(第 %d 行)—— 点第几颗星就是几分,不弹编辑器',
+    [AValue, ARow]));
+end;
+
+{ 接服务端排序时的必需品:拦下本地排序,自己去请求。 }
+procedure TMainForm.EvCanSort(Sender: TObject; ACol: Integer;
+  var AAllow: Boolean);
+begin
+  if ACol = cRegion then
+  begin
+    AAllow := False;
+    Status('大区列不许本地排序 —— 真实场景里这里会转成一次服务端请求');
+  end;
+end;
+
+{ 按业务顺序排,而不是按字面。 }
+procedure TMainForm.EvCompareCells(Sender: TObject; ACol, ARow1, ARow2: Integer;
+  var AResult: Integer);
+const
+  order: array[0..5] of string = ('华东', '华北', '华南', '西南', '东北', '西北');
+
+  function Rank(const AText: string): Integer;
+  var i: Integer;
+  begin
+    for i := 0 to High(order) do
+      if order[i] = AText then Exit(i);
+    Result := High(order) + 1;
+  end;
+
+begin
+  if ACol <> cRegion then Exit;
+  AResult := Rank(GridEvents.Cells[ACol, ARow1])
+           - Rank(GridEvents.Cells[ACol, ARow2]);
+end;
+
+procedure TMainForm.EvFilterRow(Sender: TObject; ARow: Integer;
+  var AVisible: Boolean);
+var
+  v: Double;
+begin
+  AVisible := TryStrToFloat(GridEvents.Cells[cAmount, ARow], v) and (v < 0);
+end;
+
+{ 虚拟表/服务端场景:候选值不该靠遍历全表得来。 }
+procedure TMainForm.EvGetFilterValues(Sender: TObject; ACol: Integer;
+  AItems: TStrings; var AHandled: Boolean);
+begin
+  if ACol <> cRegion then Exit;
+  AItems.Clear;
+  AItems.Add('华东');
+  AItems.Add('华北');
+  AItems.Add('(服务端还有更多)');
+  AHandled := True;
+end;
+
+procedure TMainForm.EvGetPickList(Sender: TObject; ACol, ARow: Integer;
+  AItems: TStrings);
+begin
+  if ACol <> cRegion then Exit;
+  AItems.Clear;
+  { 逐格给不同的候选 —— 静态 PickList 做不到这件事。 }
+  if ARow mod 2 = 0 then AItems.CommaText := '华东,华北,华南'
+  else AItems.CommaText := '西南,东北,西北';
 end;
 
 end.
