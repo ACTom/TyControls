@@ -7416,6 +7416,9 @@ begin
   if ACount <= 0 then Exit;
   if (ARow < 0) or (ARow > RowCount) then Exit;
   EndEdit(True);
+  { **两层都要**:BeginUpdateOrder 压重排,BeginUpdate 才开撤销事务。
+    单数的 InsertRow 早就这么做了,复数这个漏了 —— 插 3 行压了 25 条记录。 }
+  BeginUpdate;
   BeginUpdateOrder;
   try
     { 从后往前搬 ACount 次,等价于一次搬 ACount ——
@@ -7424,6 +7427,7 @@ begin
     RowCount := RowCount + ACount;
   finally
     EndUpdateOrder;
+    EndUpdate;
   end;
 end;
 
@@ -7435,12 +7439,14 @@ begin
   if (ARow < 0) or (ARow >= RowCount) then Exit;
   if ARow + ACount > RowCount then ACount := RowCount - ARow;
   EndEdit(True);
+  BeginUpdate;                { 见 InsertRows:撤销事务与重排是两层 }
   BeginUpdateOrder;
   try
     for i := 1 to ACount do ShiftCells(ARow, -1, True);
     RowCount := RowCount - ACount;
   finally
     EndUpdateOrder;
+    EndUpdate;
   end;
 end;
 
@@ -7570,14 +7576,20 @@ var
   pos, dataRow, colIdx: Integer;
 begin
   CopySelectionToClipboard;
-  for pos := 0 to DisplayRowCount - 1 do
-  begin
-    dataRow := DisplayToData(pos);
-    if dataRow < 0 then Continue;
-    for colIdx := 0 to Header.Columns.Count - 1 do
-      if IsCellSelected(colIdx, dataRow)
-         and (EditorKindFor(colIdx, dataRow) <> gekNone) then    { 只读格不清 }
-        Cells[colIdx, dataRow] := '';
+  { 剪掉一片 = **一条**撤销记录。逐格记的话,剪 20 格要按 20 次 Ctrl+Z。 }
+  BeginUpdate;
+  try
+    for pos := 0 to DisplayRowCount - 1 do
+    begin
+      dataRow := DisplayToData(pos);
+      if dataRow < 0 then Continue;
+      for colIdx := 0 to Header.Columns.Count - 1 do
+        if IsCellSelected(colIdx, dataRow)
+           and (EditorKindFor(colIdx, dataRow) <> gekNone) then    { 只读格不清 }
+          Cells[colIdx, dataRow] := '';
+    end;
+  finally
+    EndUpdate;
   end;
   Invalidate;
 end;
@@ -8971,6 +8983,10 @@ begin
   if not allow then Exit;
 
   lines := TStringList.Create;
+  { **两层都要**:BeginUpdateOrder 压的是重排,BeginUpdate 开的才是撤销事务。
+    只开前者的话,粘 4 格就压 4 条撤销记录 —— 用户得按 4 次 Ctrl+Z 才退得回去,
+    而头文件里一直写着"一次批量操作算一条"。 }
+  BeginUpdate;
   BeginUpdateOrder;
   try
     lines.Text := txt;
@@ -9025,6 +9041,7 @@ begin
   finally
     lines.Free;
     EndUpdateOrder;
+    EndUpdate;
   end;
   Invalidate;
 end;

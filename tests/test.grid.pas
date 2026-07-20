@@ -207,6 +207,7 @@ type
     procedure TestUndoRestoresCellColorAndMerge;
     procedure TestSwappingRowsCarriesTheHiddenFlag;
     procedure TestFooterAggregateIsCachedAndInvalidated;
+    procedure TestPasteAndCutAreOneUndoStepEach;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8000,6 +8001,71 @@ begin
     gagCount 是 O(1)、压根不进缓存,拿它当断言等于什么都没测。 }
   G.SetColumnAggregate(0, gagAvg);
   AssertEquals('换了聚合口径也要重算', 'Avg 23', G.FooterText(0));
+end;
+
+{ 头文件里写着"一次批量操作(粘贴、填充、删行)算**一条**,因为它们都在
+  BeginUpdate 里跑"。粘贴其实跑在 `BeginUpdateOrder` 里 —— 那个只压重排,
+  跟撤销事务(BeginUpdate → OpenUndoGroup)是两回事。于是粘 4 格压 4 条记录,
+  用户得按 4 次 Ctrl+Z 才退得回去;剪切干脆一点批量都没有。
+
+  断言站在用户那一侧:**按一次撤销,整块都得回来**。 }
+procedure TTyStringGridTest.TestPasteAndCutAreOneUndoStepEach;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Cells[0, 0] := 'a0'; G.Cells[1, 0] := 'b0';
+  G.Cells[0, 1] := 'a1'; G.Cells[1, 1] := 'b1';
+
+  { --- 粘贴 --- }
+  G.MoveCursor(0, 0);
+  G.ClearUndo;
+  G.PasteFromText('X' + #9 + 'Y' + LineEnding + 'Z' + #9 + 'W');
+  AssertEquals('前置:粘贴生效了', 'X', G.Cells[0, 0]);
+  AssertEquals('前置:整块都粘上了', 'W', G.Cells[1, 1]);
+  AssertEquals('一次粘贴 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertEquals('按一次撤销,左上角就得回来', 'a0', G.Cells[0, 0]);
+  AssertEquals('同一次撤销,右下角也得回来', 'b1', G.Cells[1, 1]);
+  AssertEquals('中间两格同理', 'b0', G.Cells[1, 0]);
+  AssertEquals('中间两格同理', 'a1', G.Cells[0, 1]);
+
+  { --- 剪切 --- }
+  G.MoveCursor(0, 0);
+  G.AnchorSelection;
+  G.PressKeyShift(VK_RIGHT);
+  G.PressKeyShift(VK_DOWN);
+  G.ClearUndo;
+  G.CutToClipboard;
+  AssertEquals('前置:剪切清空了左上角', '', G.Cells[0, 0]);
+  AssertEquals('前置:剪切清空了右下角', '', G.Cells[1, 1]);
+  AssertEquals('一次剪切 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertEquals('按一次撤销,剪掉的整块都得回来', 'a0', G.Cells[0, 0]);
+  AssertEquals('剪掉的整块都得回来', 'b1', G.Cells[1, 1]);
+
+  { --- 批量增删行 ---
+    单数的 InsertRow/DeleteRow 早就包了事务,**复数**那两个没有 ——
+    同一条规则逐处重述,又漏了一处。 }
+  G.ClearUndo;
+  G.InsertRows(0, 3);
+  AssertEquals('前置:插了 3 行', 13, G.RowCount);
+  AssertEquals('前置:原来的第 0 行被顶到第 3 行', 'a0', G.Cells[0, 3]);
+  AssertEquals('插 3 行 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销就回到 10 行', 10, G.RowCount);
+  AssertEquals('内容也回原位', 'a0', G.Cells[0, 0]);
+
+  G.ClearUndo;
+  G.RemoveRows(0, 2);
+  AssertEquals('前置:删了 2 行', 8, G.RowCount);
+  AssertEquals('删 2 行 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销就把两行都还回来', 10, G.RowCount);
+  AssertEquals('删掉的内容也回来了', 'a0', G.Cells[0, 0]);
+  AssertEquals('第二行的内容也回来了', 'a1', G.Cells[0, 1]);
 end;
 
 initialization
