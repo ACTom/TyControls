@@ -208,6 +208,7 @@ type
     procedure TestSwappingRowsCarriesTheHiddenFlag;
     procedure TestFooterAggregateIsCachedAndInvalidated;
     procedure TestPasteAndCutAreOneUndoStepEach;
+    procedure TestClearAndCsvImportAreUndoable;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8066,6 +8067,47 @@ begin
   AssertEquals('按一次撤销就把两行都还回来', 10, G.RowCount);
   AssertEquals('删掉的内容也回来了', 'a0', G.Cells[0, 0]);
   AssertEquals('第二行的内容也回来了', 'a1', G.Cells[0, 1]);
+end;
+
+{ `ClearCells` 直接 `FCells.Clear`,绕过了 `SetCells` 那个记录点 ——
+  于是它自己不可撤销,连带**导入 CSV**整件事也撤不回来(导入的第一步就是清空)。
+  这是"绕过收口点"的代价:收口点保证的只是**经过它的**改动。
+
+  顺带:它也没让汇总缓存失效 —— 清空一张表之后页脚还挂着旧的合计。 }
+procedure TTyStringGridTest.TestClearAndCsvImportAreUndoable;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Cells[0, 0] := '11';
+  G.Cells[1, 0] := 'keep';
+  G.Cells[0, 1] := '22';
+  G.SetColumnAggregate(0, gagSum);
+  AssertEquals('前置:合计对', 'Sum 33', G.FooterText(0));
+
+  G.ClearUndo;
+  G.ClearCells;
+  AssertEquals('前置:清空了', '', G.Cells[0, 0]);
+  AssertEquals('清空之后页脚不能还挂着旧合计', 'Sum 0', G.FooterText(0));
+  AssertEquals('清空 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertEquals('清空可以撤销', '11', G.Cells[0, 0]);
+  AssertEquals('每一格都回来', 'keep', G.Cells[1, 0]);
+  AssertEquals('每一格都回来', '22', G.Cells[0, 1]);
+  AssertEquals('合计也跟着回来', 'Sum 33', G.FooterText(0));
+
+  { 导入 CSV = 清空 + 重填。整件事必须是**一条**记录,
+    否则撤销一次只退回半张表 —— 比不能撤销更难排查。 }
+  G.ClearUndo;
+  { 第一行是**表头**,不是数据 —— 后面两行才是。 }
+  G.LoadFromCSVText('h1,h2' + LineEnding + '7,8' + LineEnding + '9,10', ',');
+  AssertEquals('前置:导入生效', '7', G.Cells[0, 0]);
+  AssertEquals('导入 CSV = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertEquals('导入 CSV 可以撤销', '11', G.Cells[0, 0]);
+  AssertEquals('被导入覆盖掉的格也回来', 'keep', G.Cells[1, 0]);
 end;
 
 initialization

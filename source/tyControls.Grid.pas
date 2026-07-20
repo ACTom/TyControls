@@ -5201,8 +5201,51 @@ begin
 end;
 
 procedure TTyStringGrid.ClearCells;
+var
+  keys: TStringList;
+  i, sep, c, r: Integer;
+  e: TTyGridUndoEntry;
 begin
-  FCells.Clear;
+  { 从前这里直接 `FCells.Clear` —— 绕过 SetCells 那个记录点,于是清空不可撤销,
+    连带**导入 CSV**整件事也撤不回来(导入的第一步就是清空)。
+    收口点保证的只是**经过它的**改动:绕过去就什么都不剩。
+
+    做法是"先逐条记原值,再整表清掉",而不是逐格走 Cells[] ——
+    记下的东西一模一样,但省掉了逐格拆字典的开销。
+    条数超上限时 RecordUndo 自己会整条作废并清栈(既有的溢出保护)。 }
+  if (not FUndoBusy) and (FUndoLimit <> 0) then
+  begin
+    BeginUpdate;                { 整个清空 = 一条记录 }
+    try
+      keys := TStringList.Create;
+      try
+        SnapshotCellKeys(keys);
+        for i := 0 to keys.Count - 1 do
+        begin
+          sep := Pos(':', keys[i]);
+          c := StrToIntDef(Copy(keys[i], 1, sep - 1), -1);
+          r := StrToIntDef(Copy(keys[i], sep + 1, MaxInt), -1);
+          if (c < 0) or (r < 0) then Continue;
+          e := Default(TTyGridUndoEntry);
+          e.Kind := gukCell;
+          e.Col := c;
+          e.Row := r;
+          e.OldText := GetCells(c, r);
+          RecordUndo(e);
+        end;
+      finally
+        keys.Free;
+      end;
+      FCells.Clear;
+    finally
+      EndUpdate;
+    end;
+  end
+  else
+    FCells.Clear;
+
+  { 数据没了 → 汇总也得重算。SetCells 上挂的那处失效同样够不着这里。 }
+  InvalidateAggregates;
   Invalidate;
 end;
 
@@ -9236,19 +9279,27 @@ begin
   for j := 0 to High(rows[0]) do
     TTyColumn(Header.Columns.Items[j]).Text := rows[0][j];
 
-  ClearCells;
-  ClearFilters;
-  SortByColumn(-1, sdAscending);       { 导入后回到原始顺序 }
-  RowCount := Length(rows) - 1;
+  { 清空 + 改行数 + 逐格重填 = **一条**撤销记录。
+    不包事务的话撤销一次只退回半张表 —— 那比"撤不回来"更难排查。
+    (排序与筛选的重置不进撤销栈:那是"我此刻想怎么看",不是数据。) }
+  BeginUpdate;
+  try
+    ClearCells;
+    ClearFilters;
+    SortByColumn(-1, sdAscending);       { 导入后回到原始顺序 }
+    RowCount := Length(rows) - 1;
 
-  for i := 1 to High(rows) do
-  begin
-    dataRow := i - 1;
-    for j := 0 to High(rows[i]) do
+    for i := 1 to High(rows) do
     begin
-      if j >= Header.Columns.Count then Break;
-      Cells[j, dataRow] := rows[i][j];
+      dataRow := i - 1;
+      for j := 0 to High(rows[i]) do
+      begin
+        if j >= Header.Columns.Count then Break;
+        Cells[j, dataRow] := rows[i][j];
+      end;
     end;
+  finally
+    EndUpdate;
   end;
 
   InvalidateOrder;
