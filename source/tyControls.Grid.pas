@@ -670,6 +670,13 @@ type
     procedure SetAlternateRows(AValue: Boolean);
     procedure SetShowRowNumbers(AValue: Boolean);
     { 把"以行下标为键"的旁挂表整体平移(行高、隐藏行)。 }
+    { 行数缩小时,把落在新行数之外的**按行记账的状态**清掉。走各自的记录点,
+      所以这一步跟着 RowCount 一起可撤销。
+
+      不清的话:换一个更小的数据集再换回大的,行高与隐藏标记会**复活**到
+      不相干的行上,而用户没有任何操作产生过它们。
+      基类只知道行高;隐藏标记在 TTyStringGrid,由它覆写补上。 }
+    procedure TrimRowStateTo(ANewCount: Integer); virtual;
     procedure ShiftRowKeyedTable(AList: TStringList; AFromIndex, ADelta: Integer);
     { 上一个的**列轴对偶**:把"列下标 = 值"的 Name=Value 表整体平移。
       ADelta < 0 时,正落在 AFromIndex 上的那条丢弃(那一列没了)。
@@ -1489,6 +1496,8 @@ type
     { 隐藏标记的记录点。`PermuteRowState` 搬四样东西,前三样都有记录点、
       这一样从前没有 —— 拖完行按 Ctrl+Z,文字回来了而藏着的还是换过去那一行。
       HideRow / UnHideRow / 行置换全部经由它。 }
+    { 基类只清行高;隐藏标记在这里,补上。 }
+    procedure TrimRowStateTo(ANewCount: Integer); override;
     procedure SetRowHidden(ARow: Integer; AHidden: Boolean);
     procedure HandleAttrChanging(const AKey: string);
     function  SnapshotAttr(const AKey: string): TTyGridAttrSnapshot;
@@ -2375,8 +2384,15 @@ begin
   if FRowCount = AValue then Exit;
   { 行数变化也是可撤销的一步 —— 删行时单元格的搬移会自己被记下来(它们走 Cells[]),
     但行数不走那条路,得单独记一笔,否则撤销完剩一张缺了一行的表。 }
-  RecordRowCountUndo(FRowCount);
-  FRowCount := AValue;
+  BeginUpdate;      { 行数 + 越界状态的清理算**一条** }
+  try
+    RecordRowCountUndo(FRowCount);
+    { 缩小时先把越界的按行状态清掉(在 FRowCount 变小**之前**,那时它们还在范围内)。 }
+    if AValue < FRowCount then TrimRowStateTo(AValue);
+    FRowCount := AValue;
+  finally
+    EndUpdate;
+  end;
   InvalidateGridOrder;
   UpdateScrollBars;
   Invalidate;
@@ -3931,7 +3947,10 @@ begin
   if Y >= hdrH then
   begin
     d := RowDividerAtY(X, Y);
-    if d >= 0 then
+    { 分组行没有"行高"可拖(它的数据行号是负的,写回去会被存储挡掉)。
+      不在这里挡住的话:手势看着是启动了(指针变了、能拖),实际一动不动,
+      而 `OnRowSizing` 每次鼠标移动都会被喂一个**负行号**。 }
+    if (d >= 0) and (DisplayToData(d) >= 0) then
     begin
       FResizeRow := d;
       FResizeStartY := Y;
@@ -5151,6 +5170,27 @@ begin
   if nowMerged and not wasMerged then Inc(FMergeCount)
   else if wasMerged and not nowMerged then Dec(FMergeCount);
   if FMergeCount < 0 then FMergeCount := 0;
+end;
+
+procedure TTyStringGrid.TrimRowStateTo(ANewCount: Integer);
+var
+  i, r: Integer;
+  doomed: array of Integer;
+begin
+  inherited TrimRowStateTo(ANewCount);    { 行高 }
+
+  SetLength(doomed, 0);
+  for i := 0 to FHiddenRows.Count - 1 do
+  begin
+    r := StrToIntDef(FHiddenRows[i], -1);
+    if r >= ANewCount then
+    begin
+      SetLength(doomed, Length(doomed) + 1);
+      doomed[High(doomed)] := r;
+    end;
+  end;
+  for i := 0 to High(doomed) do
+    SetRowHidden(doomed[i], False);       { 走记录点 → 可撤销 }
 end;
 
 procedure TTyStringGrid.SetRowHidden(ARow: Integer; AHidden: Boolean);
@@ -7619,6 +7659,26 @@ end;
 
 { 把"以行下标为键"的旁挂表整体平移。ADelta < 0 时,正落在 AFromIndex 上的那条被丢弃。
   就地改键会撞上重复键,所以整表重建。 }
+procedure TTyCustomGrid.TrimRowStateTo(ANewCount: Integer);
+var
+  i, r: Integer;
+  doomed: array of Integer;
+begin
+  { 先收集再删 —— 边遍历边删会跳过条目。 }
+  SetLength(doomed, 0);
+  for i := 0 to FRowHeights.Count - 1 do
+  begin
+    r := StrToIntDef(FRowHeights[i], -1);
+    if r >= ANewCount then
+    begin
+      SetLength(doomed, Length(doomed) + 1);
+      doomed[High(doomed)] := r;
+    end;
+  end;
+  for i := 0 to High(doomed) do
+    SetRowHeights(doomed[i], 0);        { 走记录点 → 可撤销 }
+end;
+
 procedure TTyCustomGrid.ShiftRowKeyedTable(AList: TStringList;
   AFromIndex, ADelta: Integer);
 var

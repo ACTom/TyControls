@@ -78,6 +78,8 @@ type
       var AHAlign: TAlignment; var AVAlign: TTextLayout);
     procedure HookGetCellBorderRecordMin(Sender: TObject; ACol, ARow: Integer;
       var ABorders: TTyGridCellBorders);
+    procedure HookRowSizingRecordMin(Sender: TObject; AIndex: Integer;
+      var ANewSize: Integer; var AAllow: Boolean);
     procedure HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
       var AKind: TTyGridEditorKind);
     procedure HandleGetPickList(Sender: TObject; ACol, ARow: Integer; AItems: TStrings);
@@ -236,6 +238,8 @@ type
     procedure TestCsvExportSkipsGroupRowsLikeHtmlDoes;
     procedure TestHostHooksNeverSeeANegativeRow;
     procedure TestScrollIntoViewIgnoresAnInvisibleRow;
+    procedure TestShrinkingRowCountDropsOutOfRangeRowState;
+    procedure TestGroupRowHasNoRowResizeGesture;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8659,6 +8663,12 @@ begin
   ABorders.Left := True;      { 让边框那条路径真的走下去 }
 end;
 
+procedure TTyStringGridTest.HookRowSizingRecordMin(Sender: TObject;
+  AIndex: Integer; var ANewSize: Integer; var AAllow: Boolean);
+begin
+  if AIndex < FMinHookRow then FMinHookRow := AIndex;
+end;
+
 { 两条逐格渲染循环把 `DisplayToData(row)` 直接喂给宿主钩子。分组行的
   数据行号是**负数**,于是 `OnGetCellStyle` / `OnGetCellBorder` 每帧都会收到
   ARow = -1, -2 ...。宿主按行号索引自己的数据(这是这两个钩子最normal的用法)
@@ -8721,6 +8731,66 @@ begin
   G.ScrollIntoView(0, 50);               { 滚到一个看不见的行 }
   AssertEquals('看不见的行没有可滚到的位置 —— 不该把视口拽回顶部',
     before, G.GetScrollTop);
+end;
+
+{ 行数缩小时,落在新行数之外的行高与隐藏标记留在表里 ——
+  再换一个大数据集回来,它们**复活**到不相干的行上,而用户没做过任何产生它们的操作。
+  换查询条件重新载入(先小后大)是很常见的用法。 }
+procedure TTyStringGridTest.TestShrinkingRowCountDropsOutOfRangeRowState;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  G.RowHeights[7] := 60;
+  G.HideRow(8);
+  AssertEquals('前置:设了行高', 60, G.RowHeights[7]);
+  AssertTrue('前置:藏了一行', G.IsHiddenRow(8));
+
+  G.RowCount := 3;              { 换一个更小的数据集 }
+  G.RowCount := 10;             { 再换回大的 }
+
+  AssertEquals('缩过再放大,行高不该复活', 0, G.RowHeights[7]);
+  AssertFalse('隐藏标记也不该复活', G.IsHiddenRow(8));
+  AssertEquals('而且行数是对的', 10, G.DisplayRowCount);
+end;
+
+{ 分组行没有"行高"可拖:它的数据行号是负的,写回去会被存储挡掉。
+  不在手势启动处挡住的话,拖起来一动不动,而 `OnRowSizing` 每次鼠标移动
+  都会收到一个负行号。 }
+procedure TTyStringGridTest.TestGroupRowHasNoRowResizeGesture;
+var
+  G: TStrGridAccess;
+  r: Integer;
+  rc: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.ShowIndicator := True;
+  G.RowCount := 6;
+  for r := 0 to 5 do
+  begin
+    G.Cells[0, r] := IntToStr(r);
+    G.Cells[1, r] := 'g' + IntToStr(r mod 2);
+  end;
+  G.GroupByColumn(1);
+  AssertTrue('前置:显示位置 0 是分组行', G.DisplayRow(0) < 0);
+
+  FMinHookRow := MaxInt;
+  G.OnRowSizing := @HookRowSizingRecordMin;
+
+  { 在分组行的**下沿**(行头槽里)按下 —— 那正是行高分隔线的位置。 }
+  rc := G.RowRectAt(0);
+  G.PressMouseWithoutRelease(4, rc.Bottom - 1);
+  G.MoveMouseTo(4, rc.Bottom + 40);        { 往下拖 40px }
+  G.ReleaseMouse(4, rc.Bottom + 40);
+
+  { 断言必须落在**宿主看得到的东西**上。"高度没变"是零分辨力的:
+    负行号写回存储本来就会被挡掉,所以挡不挡手势,高度都不变。
+    真正的差别是 `OnRowSizing` 有没有被喂一个负行号。 }
+  AssertTrue(Format('OnRowSizing 不该收到负行号(收到过 %d)', [FMinHookRow]),
+    FMinHookRow >= 0);
+  AssertEquals('分组行拖不出行高来', rc.Bottom - rc.Top,
+    G.RowRectAt(0).Bottom - G.RowRectAt(0).Top);
 end;
 
 initialization
