@@ -15,6 +15,9 @@
 unit tyControls.Grid;
 
 {$mode objfpc}{$H+}
+{ 嵌套过程可以当值传 —— DrawInRowBand 靠它把"绘制动作"收进一个统一的裁剪入口,
+  而绘制动作要读绘制循环里的局部变量。 }
+{$modeswitch nestedprocvars}
 
 interface
 
@@ -27,7 +30,7 @@ uses
   tyControls.CalcEdit, tyControls.Panel, tyControls.Button, tyControls.CheckBox,
   tyControls.Css.Values, tyControls.ImageCollection, tyControls.Dialogs.Color,
   tyControls.StrConsts,
-  tyControls.Grid.Layout;
+  tyControls.Grid.Layout, tyControls.Grid.Csv;
 
 type
   { 列头筛选下拉里的值列表:每个值右侧显示"有多少行是这个值"。
@@ -220,6 +223,7 @@ type
     FMaxValue: Integer;
     FEditMask: string;
     FCharCase: TEditCharCase;
+    FDropDownWidth: Integer;
     FUseEditorKind: Boolean;
     procedure SetPickList(AValue: TStrings);
     procedure SetEditorKind(AValue: TTyGridEditorKind);
@@ -236,6 +240,11 @@ type
     property MaxValue: Integer read FMaxValue write FMaxValue default 100;
     { gekMask 的掩码 —— 交给 TTyMaskEdit 解释,不自造一套掩码语法。 }
     property EditMask: string read FEditMask write FEditMask;
+    { gekPickList 下拉的宽度(逻辑像素)。0 = 跟列宽走。
+      窄列上的下拉按列宽显示会把候选项截成一小截,这时单独放宽它就够了 ——
+      不必为了看清候选去改列宽。 }
+    property DropDownWidth: Integer read FDropDownWidth write FDropDownWidth
+      default 0;
     { 输入时强制大小写(对标 AdvGrid 的 edUpperCase / edLowerCase)。 }
     property CharCase: TEditCharCase read FCharCase write FCharCase default ecNormal;
     { 只允许输入这些字符(空 = 不限)。按键级过滤,非法键直接不进编辑框。 }
@@ -297,6 +306,70 @@ type
     而不是逼宿主去 OnCellEdited 里认字符串。 }
   TTyGridCanToggleEvent = procedure(Sender: TObject; ACol, ARow: Integer;
     var AAllow: Boolean) of object;
+  { --- 撤销栈 ---
+    一条记录只记**逆操作需要的最小信息**:哪一格、改之前是什么。
+    结构性操作(增删行)也落到这里 —— 它们搬单元格时走的就是 Cells[],
+    于是自动被记下来;额外再记一条行数即可。 }
+  { 排序怎么排。
+      gsmDisplay —— 只置换**显示序**,数据一动不动(默认,今天的行为)。
+      gsmData    —— 像 Excel 那样**真的把数据换位置**。排完显示序 == 数据序,
+                    于是"排过序就不让合并/不让拖行"那几条限制自动失效。
+    gsmData 只在**能安全做到**时才真的物理排:有筛选(会把筛掉的行一起搬)、
+    有分组、或数据由回调提供(控件根本不持有数据)时一律退回 gsmDisplay 的行为。
+    物理排序是可撤销的 —— 这也是它必须排在撤销功能之后做的原因。 }
+  TTyGridSortMode = (gsmDisplay, gsmData);
+
+  TTyGridUndoKind = (gukCell, gukRowCount, gukCellAttr, gukRowHeight,
+                     gukRowHidden);
+
+  { 逐格属性的**值快照**。撤销栈不能存 TTyGridCellAttr 的引用 ——
+    那个对象会被后来的 MoveEntry 就地改写、被 Remove 释放。 }
+  TTyGridAttrSnapshot = record
+    Present:          Boolean;      { False = 当时这一格根本没有属性条目 }
+    ColSpan, RowSpan: Integer;
+    HasBackground:    Boolean;
+    Background:       TTyColor;
+    HasTextColor:     Boolean;
+    TextColor:        TTyColor;
+    HasAlignment:     Boolean;
+    Alignment:        TAlignment;
+    HasFontStyle:     Boolean;
+    FontStyle:        TFontStyles;
+    ReadOnly:         Boolean;
+  end;
+
+  TTyGridUndoEntry = record
+    Kind:      TTyGridUndoKind;
+    Col, Row:  Integer;
+    OldText:   string;
+    OldCount:  Integer;
+    OldHeight: Integer;
+    OldHidden: Boolean;
+    AttrKey:   string;
+    Attr:      TTyGridAttrSnapshot;
+  end;
+
+  { 属性存储"某一条即将被改动"的通知 —— 撤销记录点挂在它上面。 }
+  TTyGridAttrChangingEvent = procedure(const AKey: string) of object;
+
+  { 交给 DrawInRowBand 的绘制动作。用**嵌套过程**类型是因为它要读绘制循环里的
+    局部变量(当前行、当前矩形),而这些东西没必要为了传参再抽一个记录出来。 }
+  TTyGridBandDraw = procedure is nested;
+
+  { 一次可撤销的操作 = 一串条目。批量操作(粘贴、填充、删行)天然是一条,
+    因为它们本来就被 BeginUpdate/EndUpdate 包着。 }
+  TTyGridUndoStep = array of TTyGridUndoEntry;
+
+  { 编辑器**显示之前**交给宿主微调一下(改字体、限长、加自定义提示…)。
+    拿到的是真正要用的那个控件。比"要么用内建、要么自己写一整个 EditLink"细一档。 }
+  TTyGridEditorPropEvent = procedure(Sender: TObject; ACol, ARow: Integer;
+    AEditor: TControl) of object;
+
+  { 用鼠标把某一行拖到别处之前问一句。置 AAllow := False 可否决。
+    AFrom / ATo 都是**数据行**。 }
+  TTyGridRowMoveEvent = procedure(Sender: TObject; AFrom, ATo: Integer;
+    var AAllow: Boolean) of object;
+
   { 拖填充柄产生的一次填充。宿主可以接管(自定义序列、跨列规则等):
     置 AHandled := True 之后控件就不再动数据了。 }
   TTyGridFillEvent = procedure(Sender: TObject; const ASource, ATarget: TRect;
@@ -380,12 +453,19 @@ type
   TTyGridCellAttrStore = class
   private
     FItems: TStringList;      { Sorted + OwnsObjects → 二分查找、自动释放 }
+    FOnChanging: TTyGridAttrChangingEvent;
+    procedure Changing(const AKey: string);
   public
     constructor Create;
     destructor Destroy; override;
-    { 没有条目时返回 nil —— **查询不要凭空建条目**,否则遍历一遍表就把稀疏性毁了。 }
+    { 没有条目时返回 nil —— **查询不要凭空建条目**,否则遍历一遍表就把稀疏性毁了。
+      Find 拿到的对象**只读**:要改字段就得走 Mutate/Ensure,那两个会先发
+      Changing 通知(撤销记录点挂在那里)。绕过它们就地改 = 那次改动撤销不了。 }
     function  Find(const AKey: string): TTyGridCellAttr;
+    { 已有条目 → 通知一次并交出对象;没有则 nil。"我要改这条现成的"。 }
+    function  Mutate(const AKey: string): TTyGridCellAttr;
     function  Ensure(const AKey: string): TTyGridCellAttr;
+    property OnChanging: TTyGridAttrChangingEvent read FOnChanging write FOnChanging;
     procedure Remove(const AKey: string);
     { 条目退化成全默认值时把它丢掉。 }
     procedure DropIfDefault(const AKey: string);
@@ -530,6 +610,31 @@ type
     FScrollY:          Integer;
     FDragCol:          Integer;   { 正在拖动的列索引;-1 = 没在拖 }
     FDragStartX:       Integer;
+    { 行拖动。与列拖动对称:在**行头槽**里按下并越过阈值才算数。
+      放在行头槽而不是单元格上 —— 单元格上是框选,不能抢那个手势。 }
+    FDragRow:          Integer;   { 正在拖动的**数据行**;-1 = 没在拖 }
+    FDragStartY:       Integer;
+    FOnRowMove:        TTyGridRowMoveEvent;
+    { 编辑器的最小宽度(逻辑像素)。0 = 完全跟着格走(老行为)。
+      设大于 0 之后,窄列上的编辑器会自己向右加宽到这个宽度 —— 加宽的是**编辑器**,
+      列宽一点没变。加宽不会越过网格右缘。 }
+    FMinEditorWidth:   Integer;
+    { --- 撤销/重做 ---
+      记录点收口在 SetCells 与 SetRowCount 两处:所有改数据的路径最终都经过它们
+      (增删行搬格子、粘贴、填充、编辑提交都一样),所以不必去每个功能里各记一遍
+      —— 那正是本控件反复漏东西的方式。 }
+    FUndoStack, FRedoStack: array of TTyGridUndoStep;
+    FUndoOpen:      TTyGridUndoStep;   { 正在攒的这一条 }
+    FUndoDepth:     Integer;           { >0 = 在事务里 }
+    FUndoBusy:      Boolean;           { 正在撤销/重做 —— 此时不再记录,否则自噬 }
+    FUndoLimit:     Integer;
+    FUndoOverflow:  Boolean;           { 这一条大到记不下,整条作废 }
+    FSortMode:      TTyGridSortMode;
+    { 显示序此刻是不是恒等。RebuildOrder 顺手算出来 ——
+      比"没排序 and 没分组 and 没筛选"那种启发式判断**更准**:
+      按一个本来就有序的列排,结果同样是恒等,启发式却会当成"排过序了"。 }
+    FOrderIsIdentity: Boolean;
+    FOnGetEditorProp:  TTyGridEditorPropEvent;
     FResizeCol:        Integer;   { 正在拖宽的列;-1 = 没在拖 }
     FResizeStartX:     Integer;
     FResizeStartW:     Integer;
@@ -565,13 +670,27 @@ type
     procedure SetAlternateRows(AValue: Boolean);
     procedure SetShowRowNumbers(AValue: Boolean);
     { 把"以行下标为键"的旁挂表整体平移(行高、隐藏行)。 }
+    { 行数缩小时,把落在新行数之外的**按行记账的状态**清掉。走各自的记录点,
+      所以这一步跟着 RowCount 一起可撤销。
+
+      不清的话:换一个更小的数据集再换回大的,行高与隐藏标记会**复活**到
+      不相干的行上,而用户没有任何操作产生过它们。
+      基类只知道行高;隐藏标记在 TTyStringGrid,由它覆写补上。 }
+    procedure TrimRowStateTo(ANewCount: Integer); virtual;
     procedure ShiftRowKeyedTable(AList: TStringList; AFromIndex, ADelta: Integer);
+    { 上一个的**列轴对偶**:把"列下标 = 值"的 Name=Value 表整体平移。
+      ADelta < 0 时,正落在 AFromIndex 上的那条丢弃(那一列没了)。
+
+      为什么要单独一个:行那边的键是整条字符串(或带 Objects),
+      这边是 Name=Value 的 Name —— 存法不同,但规则是同一条。
+      **新增一张按列记账的旁挂表时,这里和 ShiftCells 的列分支都要加。** }
+    procedure ShiftColKeyedTable(AList: TStringList; AFromIndex, ADelta: Integer);
     { 把行号画进行头槽。ShowRowNumbers 关着时整段跳过。 }
     procedure RenderRowNumbers(P: TTyPainter; const M: TTyGridMetrics;
       AHeaderH, AIndicatorW: Integer); virtual;
     procedure SetWordWrap(AValue: Boolean);
     function  GetRowHeights(ARow: Integer): Integer;
-    procedure SetRowHeights(ARow, AValue: Integer);
+    procedure SetRowHeights(ARow, AValue: Integer); virtual;
     { Y 落在哪一行的下边界附近(行头槽内才算)。不在分隔线上返回 -1。 }
     function  RowDividerAtY(AX, AY: Integer): Integer;
     function  GetGridLines: Boolean;
@@ -622,6 +741,21 @@ type
       放 protected —— 测试经访问子类够得着,而它们不该成为对外支持的 API。 }
     property RealInvalidateCount: Integer read FRealInvalidates;
     property SurfaceFresh: Boolean read FSurfaceFresh;
+    { 把数据行 AFrom 移到 ATo。基类不持有单元格,什么都不做;
+      TTyStringGrid 覆盖成真正的 MoveRow(它会把底色/行高/合并跨度一起搬)。 }
+    { 撤销事务的开合。批量更新与撤销事务是**同一对边界** ——
+      凡是值得"一次重画"的批量操作,也正是值得"一次撤销"的操作。
+      栈住在 TTyStringGrid(基类不持有单元格),所以这里是空钩子。 }
+    { 记一笔"行数原来是多少"。栈住在 TTyStringGrid,基类是空钩子。 }
+    procedure RecordRowCountUndo(AOldCount: Integer); virtual;
+    procedure OpenUndoGroup; virtual;
+    procedure CloseUndoGroup; virtual;
+    procedure DoRowDragMove(AFrom, ATo: Integer); virtual;
+    { 显示序此刻是不是就是数据序(没排序、没分组、没筛选、没隐藏行)。
+      不是的话**不允许拖行** —— 把行拖到某个屏幕位置在排过序的表上没有意义:
+      松手之后排序会立刻把它放回去,用户只会觉得"拖了没反应"。
+      与 MergeSelection 拒绝非数据连续的选区是同一条道理。 }
+    function DisplayOrderIsDataOrder: Boolean; virtual;
     function MaxRowSpanHint: Integer; virtual;
     { 行高变了 → 行几何的缓存(前缀和)要失效。基类没有缓存;TTyStringGrid 改写。 }
     procedure InvalidateRowMetrics; virtual;
@@ -685,14 +819,34 @@ type
     function FrozenHeightPx: Integer; virtual;
     { 页脚汇总带高度(设备像素)。它钉在视口底部、不参与滚动。 }
     function FooterHeightPx: Integer; virtual;
-    { 逐行行高(逻辑像素)。基类恒为 DefaultRowHeight;派生类可按行覆盖。 }
+    { 逐行行高(逻辑像素)。基类恒为 DefaultRowHeight;派生类可按行覆盖。
+      **吃数据行** —— 显式行高与 OnGetRowHeight 都按数据行记账。 }
     function RowHeightOf(ARow: Integer): Integer; virtual;
+    { 同上,但吃**显示位置**。冻结带的厚度是按"显示在带子里的那几行"算的,
+      直接把显示位置喂给 RowHeightOf 就会取到另外几行的高度(排序后必然错)。
+      分组行没有数据行,按默认行高 —— 与 RowTops 同一条规则。 }
+    function RowHeightOfDisplay(APos: Integer): Integer;
     { 行高前缀和(设备像素),喂给几何层。全等高时返回空数组 = 走统一行高快路径。 }
     function RowTops: TTyIntArray; virtual;
 
     { 把控件当前状态装配成纯几何层要的度量。所有几何都必须经由它,
       不允许任何地方另算一套 —— 那正是绘制/命中漂移的源头。 }
     function GridMetrics: TTyGridMetrics; virtual;
+
+    { **在第 APos 行所属的那条横向带里**画点什么。裁剪与外层求交(脏区重画
+      限定的那条带),完全不相交时**根本不调用** ADraw。
+
+      为什么要包一层而不是"记得先设 ClipRect":这条规则此前在四处各写一遍
+      (行号 / 横格线 / 选区外框 / 填充柄),每一处都是漏了才发现的。
+      把绘制动作交进来之后,"忘了裁剪"这件事在结构上不再可能发生 ——
+      不经过这里就压根画不出来。 }
+    procedure DrawInRowBand(P: TTyPainter; APos: Integer;
+      const M: TTyGridMetrics; ADraw: TTyGridBandDraw);
+    { 同上,但裁到某个**九宫格窗格**(行轴 + 列轴都管)。跨满整幅宽度的 chrome
+      走 DrawInRowBand,而有列归属的(选区外框、填充柄)走这个 ——
+      用行带的话,冻结列那一侧就漏掉了。 }
+    procedure DrawInPane(P: TTyPainter; APane: TTyGridPane;
+      const M: TTyGridMetrics; ADraw: TTyGridBandDraw);
 
     { 第 ACol 列左边界的客户区横坐标(设备像素)——**列轴几何的唯一出处**。
       固定列钉在冻结带里不随横向滚动;正文列随 ScrollX 平移。
@@ -804,9 +958,12 @@ type
     { 实际参与显示的行数。过滤后 < RowCount;几何层用的是它,不是 RowCount。 }
     function DisplayRowCount: Integer; virtual;
 
-    { 单元格所属窗格。P0 只按列区分(固定列 → gpLeft,其余 → gpBody):
-      FixedRows 目前只在冻结带里**预留高度**,固定行自身的行寻址随 P1 的数据模型一起做。 }
-    function CellPane(ACol, ARow: Integer): TTyGridPane;
+    { 单元格所属窗格。**吃的是显示位置 APos,不是数据行** —— 这里的两个判据
+      (`< FixedRows` / `>= DisplayRowCount - FixedRowsBottom`)本来就只在显示序里
+      成立;从前喂数据行,没排序时两者相等所以看不出来,一排序就把格子判进错的窗格,
+      求交后成空矩形、行静默变空白。空间写进签名,别再靠约定。
+      被筛掉的行(APos < 0)没有显示位置,只按列分窗格。 }
+    function CellPane(ACol, APos: Integer): TTyGridPane;
 
     { 单元格的几何矩形,客户区坐标 —— **未裁剪**。派生类可覆写(合并区)。绘制时要先裁到所属窗格;
       正文列横向滚到冻结带底下的那一段就在这里被裁掉。 }
@@ -891,6 +1048,14 @@ type
     property OnRowSizing: TTyGridSizingEvent read FOnRowSizing write FOnRowSizing;
     property OnEndRowSize: TTyGridSizedEvent read FOnEndRowSize write FOnEndRowSize;
     property OnColumnMove: TTyGridColumnMoveEvent read FOnColumnMove write FOnColumnMove;
+    { 行被鼠标从行头槽拖动重排之前问一句;置 AAllow := False 可否决。 }
+    property OnRowMove: TTyGridRowMoveEvent read FOnRowMove write FOnRowMove;
+    { 编辑器显示之前交给宿主微调。 }
+    property OnGetEditorProp: TTyGridEditorPropEvent
+      read FOnGetEditorProp write FOnGetEditorProp;
+    { 编辑器最小宽度(逻辑像素);0 = 跟着格走。 }
+    property MinEditorWidth: Integer read FMinEditorWidth write FMinEditorWidth
+      default 0;
     { 行高/列宽的全局上下限(逻辑像素)。0 = 不限。 }
     property MinRowHeight: Integer read FMinRowHeight write FMinRowHeight default 0;
     property MaxRowHeight: Integer read FMaxRowHeight write FMaxRowHeight default 0;
@@ -970,8 +1135,14 @@ type
     Count:    Integer;   { 组内行数 }
     Collapsed: Boolean;
     { 组内的**数据行**。分组小计要按它统计 —— 不能按显示序算:
-      组一折叠,成员行就不在显示序里了,小计会变成 0。 }
+      组一折叠,成员行就不在显示序里了,小计会变成 0。
+      多级分组时,一行会同时算进它**所有祖先**组里,于是每一级的小计各自成立。 }
     Rows:     array of Integer;
+    { 第几级(0 = 最外层)。分组行按它缩进。 }
+    Level:    Integer;
+    { 从最外层到本级的键拼起来。折叠状态按**路径**记账 ——
+      按单个键记的话,不同地区下的同名城市会被一起折叠。 }
+    Path:     string;
   end;
 
   { 覆盖某列汇总文字的钩子(比如加货币符号、或做自定义统计)。 }
@@ -1050,11 +1221,18 @@ type
     FRowTopsCache: TTyIntArray;
     FRowTopsValid: Boolean;
     FAggregates: TStringList;      { 列索引 -> 聚合方式序号 }
+    { 逐列的汇总缓存。页脚每帧都要问一次,而算一次要遍历全部显示行。
+      长度 <> 列数 = 整体失效(见 InvalidateAggregates)。 }
+    FAggCache: array of Double;
+    FAggValid: array of Boolean;
     { 逐格附加属性(合并跨度、以及留给后面几批的底色/字体/只读)。
       与 FCells 同一套键。**合并信息从前是自己一张表**,增删行时漏搬,已并进来。 }
     FAttrs: TTyGridCellAttrStore;
     FOnGetFooterText: TTyGridGetFooterTextEvent;
-    FGroupCol: Integer;                        { -1 = 不分组 }
+    { 分组列,从外到内。空 = 不分组。
+      单列分组是它只有一项的退化情形,所以老的 GroupByColumn / GroupColumn
+      原样还能用 —— 不必让既有代码跟着改。 }
+    FGroupCols: array of Integer;
     FFilterPopup: TTyPopover;
     FFilterList: TTyGridFilterList;
     FFilterCol: Integer;
@@ -1074,6 +1252,10 @@ type
       默认(不置位)是重锚 —— 见 MoveCursor 里的说明。 }
     FExtendingSelection: Boolean;
     { 正在拖填充柄;FFillToRow/Col 是当前拖到的格。 }
+    { 这次编辑**实际打开**的是哪一种编辑器。
+      关编辑时按它分派 —— 不能从"哪个控件可见"反推:日期与时间共用一个控件,
+      可见性根本区分不出它们(时间格因此被当日期提交,写坏了数据)。 }
+    FEditKind: TTyGridEditorKind;
     FFillDragging: Boolean;
     FFillToCol, FFillToRow: Integer;
     FOnFillCells: TTyGridFillEvent;
@@ -1124,6 +1306,15 @@ type
     function MaxRowSpanHint: Integer; override;
     { 这段数据行此刻是不是正连续升序地显示着。 }
     function RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
+    function WidenEditorRect(ACol, ARow: Integer; const ARect: TRect): TRect;
+    function DoBeginEdit(ACol, ARow: Integer): Boolean;
+    procedure RecordRowCountUndo(AOldCount: Integer); override;
+    procedure OpenUndoGroup; override;
+    procedure CloseUndoGroup; override;
+    procedure DoRowDragMove(AFrom, ATo: Integer); override;
+    function DisplayOrderIsDataOrder: Boolean; override;
+    function CanSortPhysically: Boolean;
+    procedure ApplyOrderToData;
     function SelectionBoundsRect: TRect;
     function ArithmeticStep(ACol, AFrom, ATo: Integer;
       out AFirst, AStep: Integer): Boolean;
@@ -1140,6 +1331,10 @@ type
     procedure InvalidateOrder;
     procedure RebuildOrder;
     procedure BuildGroups;
+    function  AnyAncestorCollapsed(const AOpen: array of Integer;
+      ALevel: Integer): Boolean;
+    function  GetGroupCol: Integer;
+    function  IsGroupColumn(ACol: Integer): Boolean;
     function  RowPassesFilter(ARow: Integer): Boolean;
     procedure EnsureOrder;
     procedure ResetOrder;
@@ -1244,8 +1439,10 @@ type
       const AFrame: TTyStyleSet); virtual;
     procedure RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
       const AFooterRect: TRect; const AFrame: TTyStyleSet); override;
+    { 把一格喂进累加器。virtual:派生类可以换聚合口径,
+      测试也靠它数"一帧扫了多少格"(汇总缓存的守卫)。 }
     procedure AccumulateCell(ACol, ADataRow: Integer; AKind: TTyGridAggregate;
-      var AAcc: Double; var ACount: Integer; var AStarted: Boolean);
+      var AAcc: Double; var ACount: Integer; var AStarted: Boolean); virtual;
     function  AggregatePrefix(AKind: TTyGridAggregate): string;
     procedure RenderSelectionFrame(P: TTyPainter; const M: TTyGridMetrics;
       const AFrame: TTyStyleSet); virtual;
@@ -1257,6 +1454,66 @@ type
     function DataToDisplay(ARow: Integer): Integer; override;
     function DisplayRowCount: Integer; override;
     procedure SetShowGroupSubtotals(AValue: Boolean);
+    procedure SetUndoLimit(AValue: Integer);
+    { 记一笔。不在事务里时自成一条(单格编辑就是这种)。 }
+    procedure RecordUndo(const AEntry: TTyGridUndoEntry);
+    { **所有按行下标记账的旁挂状态**在纯置换时的收口。AMap[旧行] = 新行,
+      AMap[i] < 0 表示那一行没了(条目丢弃)。
+
+      为什么要收口:两条纯置换路径(SwapRows / ApplyOrderToData)此前各搬各的,
+      各漏了不同的东西 —— 交换漏了隐藏标记(藏着的行换个位置就冒出来),
+      物理排序漏过格属性(A3)。**新增一种按行记账的存储时,改这里一处。**
+
+      没做成"登记表 + 回调"的原因:这类存储只有两张,而它们的写回路径本就不同 ——
+      行高必须走 SetRowHeights(撤销的记录点在那儿),隐藏标记直接进表。
+      为两张表建一套注册框架,读起来比它替掉的重复更难。
+      增删行是另一类(行数会变),收口在 ShiftRowKeyedTable —— 加表时那里也要加。 }
+    procedure PermuteRowState(const AMap: array of Integer);
+    { 上一个的**增删版**:行数会变,所以不是置换而是平移。
+      从 AFromIndex 起整体挪 ADelta;ADelta < 0 时正落在 AFromIndex 上的那条丢弃。
+
+      为什么不直接用 `ShiftRowKeyedTable` 重建两张表:那样绕过了
+      `SetRowHeights` / `SetRowHidden` 两个记录点 —— 撤销一次增/删行之后,
+      文字回来了而行高和隐藏标记**永久错位一格**,被删那一条更是无处可还。 }
+    procedure ShiftRowStateWithUndo(AFromIndex, ADelta: Integer);
+    { 增删行**穿过**某个合并块时,把它的行跨度跟着改掉。
+
+      搬迁本身早就对了(基准格与属性一起走),漏的是跨度:在块内部插一行,
+      块还是原来那么高 —— 插进来的空行被吞进块里,块尾那一行反被挤出块外。
+      删除是反过来:块该缩小,却把块外的一行吸进来。 }
+    procedure GrowMergesSpanningRow(AFromIndex, ADelta: Integer);
+    { 增删列之后把撤销栈整个丢掉。
+
+      **列结构本身进不了撤销栈**:记录点是 SetCells 与 SetRowCount,
+      而列的增删改的是 Header.Columns —— 两个口子都够不着。于是格子内容
+      被记下了、承载它们的那一列没有,撤销会把内容还原到一张列数不同的表上,
+      得到一个从未存在过的状态。
+
+      与其还原出一张四不像的表,不如明说这一步撤不了 ——
+      与"超大记录整条作废"是同一条原则。
+      (让列结构真正可撤销是独立的一件事,记在 grid-remaining 计划里。) }
+    procedure DropUndoForColumnChange;
+    { 汇总缓存整体失效。三处汇过来:数据改(SetCells)、显示序变(InvalidateOrder,
+      筛选/隐藏/分组/行数都归它)、换聚合口径(SetColumnAggregate)。 }
+    procedure InvalidateAggregates;
+    { 属性存储的记录点。挂在 TTyGridCellAttrStore.OnChanging 上 ——
+      于是改底色/文字色/只读/合并跨度、以及三条行置换路径搬属性,
+      **一律**自动进撤销栈,不必每个功能各写一段(那正是本控件反复漏东西的方式)。 }
+    { 隐藏标记的记录点。`PermuteRowState` 搬四样东西,前三样都有记录点、
+      这一样从前没有 —— 拖完行按 Ctrl+Z,文字回来了而藏着的还是换过去那一行。
+      HideRow / UnHideRow / 行置换全部经由它。 }
+    { 基类只清行高;隐藏标记在这里,补上。 }
+    procedure TrimRowStateTo(ANewCount: Integer); override;
+    procedure SetRowHidden(ARow: Integer; AHidden: Boolean);
+    procedure HandleAttrChanging(const AKey: string);
+    function  SnapshotAttr(const AKey: string): TTyGridAttrSnapshot;
+    procedure RestoreAttr(const AKey: string; const ASnap: TTyGridAttrSnapshot);
+    { 行高的记录点。行高是**行**的属性,不经过 Cells[],所以 SetCells 那个
+      收口点够不着它 —— 拖完行 Ctrl+Z 只回来文字就是这么来的。 }
+    procedure SetRowHeights(ARow, AValue: Integer); override;
+    procedure PushUndoStep(const AStep: TTyGridUndoStep);
+    { 把一条记录逆着放回去,并返回它的"反记录"(供重做用)。 }
+    function  ApplyUndoStep(const AStep: TTyGridUndoStep): TTyGridUndoStep;
     procedure SetShowFilterButtons(AValue: Boolean);
     function ShowsFilterButton(ACol: Integer): Boolean; override;
     function HasMergedCells: Boolean; override;
@@ -1346,9 +1603,22 @@ type
     function SelectionAvg: Double;
     function SelectionMin: Double;
     function SelectionMax: Double;
+
+    { 给**整个选区**设底色 / 文字色。传 0(TyColorNone)= 清除。返回改了几格。
+
+      为什么要有这一对而不是让宿主自己写循环:遍历选区这件事有讲究 ——
+      要走显示序、要跳过分组行、寻址要用数据行(排序筛选之后颜色才跟着数据走)。
+      只读那半边早就收口在 `ForEachSelectedNumber` 了(四个聚合入口共用,
+      注释写着"免得四份几乎一样的遍历各自跑偏"),写这半边却一直空着,
+      于是每个宿主各写一遍 —— 而**没有人会记得包事务**,结果就是
+      涂了一片、撤销时一格一格退。这一对内部走 BeginUpdate,一次涂色一次撤销。 }
+    function SetSelectionColor(AColor: TTyColor): Integer;
+    function SetSelectionTextColor(AColor: TTyColor): Integer;
   private
     procedure ForEachSelectedNumber(out ACount: Integer;
       out ASum, AMin, AMax: Double);
+    { 写侧的选区遍历骨架。ATextColor = False 时设底色,True 时设文字色。 }
+    function  ApplySelectionColor(AColor: TTyColor; ATextColor: Boolean): Integer;
   public
 
     { 该列出现过的**去重值**(按显示序的原始数据,不受本列自身过滤影响)——
@@ -1383,7 +1653,12 @@ type
       FOrder 里 >=0 是数据行,<0 是分组行(编码为 -(组号+1))。 }
     procedure GroupByColumn(ACol: Integer);
     procedure UngroupRows;
-    property  GroupColumn: Integer read FGroupCol;
+    { 第一级分组列(没分组时 -1)。多级请用 GroupByColumns / GroupColumns。 }
+    property  GroupColumn: Integer read GetGroupCol;
+    { 全部分组列,从外到内。 }
+    function  GroupColumns: TTyIntArray;
+    { 按多列分组(从外到内)。传空数组等于取消分组。 }
+    procedure GroupByColumns(const ACols: array of Integer);
     { 该显示位置是不是分组行;是则给出组号。 }
     function  IsGroupRow(APos: Integer; out AGroupIndex: Integer): Boolean;
     function  GroupInfo(AIndex: Integer): TTyGridGroupInfo;
@@ -1431,6 +1706,29 @@ type
     { 把当前选区的内容填充到 (ACol, ARow) 为止。
       语义:源区单格 = 复制;源区构成等差数列 = 外推;其余 = 按源区循环重复。 }
     procedure FillFromSelectionTo(ACol, ARow: Integer);
+    { --- 版式持久化 ---
+      把"用户把表调成什么样"存成一个字符串:列宽、列序、可见性、排序键、冻结数。
+      存到哪由宿主决定(注册表 / ini / 数据库都行)—— 控件不该替宿主选存储介质。
+
+      **不包含行高**:行高可以有 RowCount 那么多条,把一百万行的表存成一个字符串
+      不是"版式",那是数据。行高更贴近数据而不是版式,宿主要存自己存。
+
+      读回来是**全有或全无**:版本认不出、或串坏了,直接返回 False 且**一点不改**
+      现状 —— 半套版式(列宽还原了、列序没还原)比完全不还原更难排查。 }
+    function  SaveLayoutToString: string;
+    function  LoadLayoutFromString(const AText: string): Boolean;
+
+    { --- 撤销 / 重做 ---
+      一次批量操作(粘贴、填充、删行)算**一条**,因为它们都在 BeginUpdate 里跑。 }
+    procedure Undo;
+    procedure Redo;
+    function  CanUndo: Boolean;
+    function  CanRedo: Boolean;
+    procedure ClearUndo;
+    { 栈里现有多少条(给宿主的状态栏/按钮可用性用)。 }
+    function  UndoCount: Integer;
+    { 当前正在用的编辑器控件(没在编辑时为 nil)。 }
+    function  EditorControl: TControl;
     procedure MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
     procedure UnmergeCells(ACol, ARow: Integer);
     procedure ClearMerges;
@@ -1565,6 +1863,11 @@ type
       与页脚汇总用的是同一份配置,不必再配一遍。 }
     property ShowGroupSubtotals: Boolean
       read FShowGroupSubtotals write SetShowGroupSubtotals default True;
+    { 撤销栈最多留多少条;超出丢最老的。0 = 不记录(彻底关掉撤销)。 }
+    property UndoLimit: Integer read FUndoLimit write SetUndoLimit default 100;
+    { 排序是只换显示序,还是像 Excel 那样真的换数据。见 TTyGridSortMode。 }
+    property SortMode: TTyGridSortMode read FSortMode write FSortMode
+      default gsmDisplay;
     { 拖填充柄产生的一次填充;置 AHandled 可接管(自定义序列)。 }
     property OnFillCells: TTyGridFillEvent read FOnFillCells write FOnFillCells;
   end;
@@ -1828,6 +2131,7 @@ begin
     FMaxValue := TTyGridColumn(ASource).MaxValue;
     FEditMask := TTyGridColumn(ASource).EditMask;
     FCharCase := TTyGridColumn(ASource).CharCase;
+    FDropDownWidth := TTyGridColumn(ASource).DropDownWidth;
   end;
 end;
 
@@ -1883,10 +2187,24 @@ begin
   if i < 0 then Result := nil else Result := TTyGridCellAttr(FItems.Objects[i]);
 end;
 
+procedure TTyGridCellAttrStore.Changing(const AKey: string);
+begin
+  if Assigned(FOnChanging) then FOnChanging(AKey);
+end;
+
+function TTyGridCellAttrStore.Mutate(const AKey: string): TTyGridCellAttr;
+begin
+  Result := Find(AKey);
+  if Result <> nil then Changing(AKey);
+end;
+
 function TTyGridCellAttrStore.Ensure(const AKey: string): TTyGridCellAttr;
 var
   i: Integer;
 begin
+  { 已存在也要通知 —— 调用方接着就要改它的字段。
+    不存在时同样通知:"原本没有这一条"本身就是要恢复的状态。 }
+  Changing(AKey);
   Result := Find(AKey);
   if Result <> nil then Exit;
   Result := TTyGridCellAttr.Create;
@@ -1905,15 +2223,24 @@ var
   i: Integer;
 begin
   i := FItems.IndexOf(AKey);
+  if i < 0 then Exit;                  { 没这一条 —— 没有状态变化,别记 }
+  Changing(AKey);
+  i := FItems.IndexOf(AKey);           { 通知之后重新定位,别拿着可能过期的下标删 }
   if i >= 0 then FItems.Delete(i);     { OwnsObjects → 顺带释放 }
 end;
 
 procedure TTyGridCellAttrStore.DropIfDefault(const AKey: string);
 var
   a: TTyGridCellAttr;
+  i: Integer;
 begin
   a := Find(AKey);
-  if (a <> nil) and a.IsDefault then Remove(AKey);
+  if (a = nil) or (not a.IsDefault) then Exit;
+  { 只是把退化成全默认值的条目回收掉 —— 语义上"全默认值"和"没有这一条"
+    是同一个状态,所以**不**发 Changing:调用方在动字段之前已经发过一次了。
+    再发一次会把一次操作拆成两条撤销记录,用户按一次 Ctrl+Z 只退回一半。 }
+  i := FItems.IndexOf(AKey);
+  if i >= 0 then FItems.Delete(i);
 end;
 
 procedure TTyGridCellAttrStore.Clear;
@@ -1963,6 +2290,7 @@ begin
   FFixedCols := 0;
   FFixedRows := 0;
   FFixedRowsBottom := 0;
+  FUndoLimit := 100;
   FFixedColsRight := 0;
   FIndicatorWidth := 30;
   FShowIndicator := False;
@@ -1988,6 +2316,7 @@ begin
   FScrollX := 0;
   FScrollY := 0;
   FDragCol := -1;
+  FDragRow := -1;
   FResizeCol := -1;
 
   { 两条内嵌滚动条。csNoDesignVisible:内部子控件不该出现在设计器的对象树里。 }
@@ -2059,7 +2388,17 @@ procedure TTyCustomGrid.SetRowCount(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
   if FRowCount = AValue then Exit;
-  FRowCount := AValue;
+  { 行数变化也是可撤销的一步 —— 删行时单元格的搬移会自己被记下来(它们走 Cells[]),
+    但行数不走那条路,得单独记一笔,否则撤销完剩一张缺了一行的表。 }
+  BeginUpdate;      { 行数 + 越界状态的清理算**一条** }
+  try
+    RecordRowCountUndo(FRowCount);
+    { 缩小时先把越界的按行状态清掉(在 FRowCount 变小**之前**,那时它们还在范围内)。 }
+    if AValue < FRowCount then TrimRowStateTo(AValue);
+    FRowCount := AValue;
+  finally
+    EndUpdate;
+  end;
   InvalidateGridOrder;
   UpdateScrollBars;
   Invalidate;
@@ -2091,8 +2430,9 @@ begin
   if n <= 0 then Exit;
   if n > DisplayRowCount - FFixedRows then n := DisplayRowCount - FFixedRows;
   if n <= 0 then Exit;
+  { i 是**显示位置** —— 带子里装的是哪几行数据由显示序说了算。 }
   for i := DisplayRowCount - n to DisplayRowCount - 1 do
-    Inc(Result, ScaleI(RowHeightOf(i)));
+    Inc(Result, ScaleI(RowHeightOfDisplay(i)));
 end;
 
 function TTyCustomGrid.EffectiveFixedColsRight: Integer;
@@ -2191,9 +2531,10 @@ begin
   if hoVisible in FHeader.Options then Inc(px, ScaleI(FHeader.Height));
   { 分组带也在上冻结带里 —— 漏了它固定行和正文都会往上顶,压住分组标题。 }
   Inc(px, GroupBandHeightPx);
-  { 逐行累加真实高度(而非 行数×默认行高)—— 可变行高时固定行也可能各不相同。 }
+  { 逐行累加真实高度(而非 行数×默认行高)—— 可变行高时固定行也可能各不相同。
+    i 是**显示位置**:冻结带里钉的是显示序最前的那几行,不是数据行 0..n。 }
   for i := 0 to FFixedRows - 1 do
-    Inc(px, ScaleI(RowHeightOf(i)));
+    Inc(px, ScaleI(RowHeightOfDisplay(i)));
   Result := px;
 end;
 
@@ -2381,12 +2722,18 @@ procedure TTyCustomGrid.ScrollIntoView(ACol, ARow: Integer);
 var
   M: TTyGridMetrics;
   body, r, cell: TRect;
+  pos: Integer;
 begin
+  { 被筛掉/藏起来的行**没有可滚到的位置**。不挡的话 -1 会被几何层钳到内容顶端,
+    于是视口"跳回表格最上面",而用户根本没要求滚动。 }
+  pos := DataToDisplay(ARow);
+  if pos < 0 then Exit;
+
   M := GridMetrics;
   body := TyGridPaneRect(M, gpBody);
 
   { 纵向:用行矩形判断,最小移动量把它拉进正文区。 }
-  r := TyGridRowRect(DataToDisplay(ARow), M);
+  r := TyGridRowRect(pos, M);
   if r.Top < body.Top then
     SetScrollY(FScrollY - (body.Top - r.Top))
   else if r.Bottom > body.Bottom then
@@ -2579,12 +2926,14 @@ end;
 procedure TTyCustomGrid.BeginUpdate;
 begin
   Inc(FUpdateCount);
+  OpenUndoGroup;
 end;
 
 procedure TTyCustomGrid.EndUpdate;
 begin
   if FUpdateCount = 0 then Exit;
   Dec(FUpdateCount);
+  CloseUndoGroup;
   if FUpdateCount > 0 then Exit;
   if not FPendingInvalidate then Exit;
   FPendingInvalidate := False;
@@ -2596,6 +2945,28 @@ end;
 function TTyCustomGrid.MaxRowSpanHint: Integer;
 begin
   Result := 1;
+end;
+
+procedure TTyCustomGrid.DoRowDragMove(AFrom, ATo: Integer);
+begin
+  { 基类不持有数据,拖不动任何东西。 }
+end;
+
+procedure TTyCustomGrid.RecordRowCountUndo(AOldCount: Integer);
+begin
+end;
+
+procedure TTyCustomGrid.OpenUndoGroup;
+begin
+end;
+
+procedure TTyCustomGrid.CloseUndoGroup;
+begin
+end;
+
+function TTyCustomGrid.DisplayOrderIsDataOrder: Boolean;
+begin
+  Result := True;   { 基类没有行序间接层 }
 end;
 
 procedure TTyCustomGrid.ShiftSurfaceRows(ATop, ABottom, ADy: Integer);
@@ -2987,7 +3358,15 @@ var
     (和当初 col↔Col、cellS↔Cells 同一类坑。) }
   indS: TTyStyleSet;
   ink: TTyColor;
-  oldClip, numClip, band: TRect;
+
+  { 交给 DrawInRowBand 执行 —— 裁剪由它负责,这里只管画。 }
+  procedure DrawOneNumber;
+  begin
+    DrawCellText(P, Rect(0, r.Top, AIndicatorW - ScaleI(4), r.Bottom),
+      IntToStr(pos + 1), indS.FontName, ResolveFontSize(indS), indS.FontWeight,
+      ink, taRightJustify, tlCenter);
+  end;
+
 begin
   if not FShowRowNumbers then Exit;
   if AIndicatorW <= 0 then Exit;
@@ -3002,39 +3381,15 @@ begin
 
   { 行号按**显示序**给:排序/筛选之后,屏幕第一行仍然是 1。
     (给数据行号的话,排一次序行号就乱跳,那不是行号该有的样子。) }
-  { **必须裁到正文窗格**。只跳过表头是不够的:滚到冻结带(表头 + 固定行)
-    底下的那一行,它的行号会画到固定行的槽位上去 —— 单元格内容靠
-    CellVisibleRect 与窗格求交挡住了,行号这条路径当初漏了这一步。 }
-  oldClip := P.Bitmap.ClipRect;
-  { **与外层裁剪求交**,不是覆盖 —— 外层可能是脏区重绘限定的那条横带,
-    覆盖掉它就会在带外重画一遍,同一段文字叠两次、抗锯齿变深。
-    (与单元格文字那处同一个坑;底部冻结行让它露了头。) }
-  try
   for slot := first to last do
   begin
     pos := TyGridRowAtSlot(slot, M);
     if pos < 0 then Continue;
     r := TyGridRowRect(pos, M);
-
-    { 裁到这一行**所属的那个窗格**,而不是一把大裁剪。
-      一把大裁剪会让正文行的行号漏进冻结带:滚到上冻结带底下的行会把号码
-      画到固定行的槽位上,滚到下冻结带底下的行会画到底部固定行的槽位上。
-      (单元格内容靠 CellVisibleRect 与窗格求交挡住了;行号这条路径当初漏了。) }
-    if pos < FFixedRows then
-      band := Rect(0, AHeaderH, AIndicatorW, M.FrozenTop)
-    else if (M.FrozenBottom > 0) and (pos >= DisplayRowCount - FixedRowsBottom) then
-      band := Rect(0, M.ClientH - M.FrozenBottom, AIndicatorW, M.ClientH)
-    else
-      band := Rect(0, M.FrozenTop, AIndicatorW, M.ClientH - M.FrozenBottom);
-    if not IntersectRect(numClip, oldClip, band) then Continue;
-    P.Bitmap.ClipRect := numClip;
-
-    DrawCellText(P, Rect(0, r.Top, AIndicatorW - ScaleI(4), r.Bottom),
-      IntToStr(pos + 1), indS.FontName, ResolveFontSize(indS), indS.FontWeight,
-      ink, taRightJustify, tlCenter);
-  end;
-  finally
-    P.Bitmap.ClipRect := oldClip;
+    { 裁到这一行**所属的那条带**。一把大裁剪会让正文行的行号漏进冻结带:
+      滚到上冻结带底下的行会把号码画到固定行的槽位上,滚到下冻结带底下的
+      画到底部固定行的槽位上。 }
+    DrawInRowBand(P, pos, M, @DrawOneNumber);
   end;
 end;
 
@@ -3256,7 +3611,10 @@ begin
   n := EffectiveFixedColsRight;
   if (n > 0) and (ACol >= FHeader.Columns.Count - n) then
   begin
-    Result := ClientWidth;
+    { 锚在**视口**右沿,不是控件右沿 —— 纵向滚动条占掉的那十几像素不属于视口。
+      用 ClientWidth 的话整条右冻结带右移一个滚动条宽,最右那一列被裁掉一截
+      (窗格矩形走的是 M.ClientW = ViewportW,两边必须同源)。 }
+    Result := ViewportW;
     for i := FHeader.Columns.Count - 1 downto ACol do
       if i < Length(FColWidthPx) then Dec(Result, FColWidthPx[i]);
     Exit;
@@ -3348,17 +3706,27 @@ begin
   { 基类没有合并。 }
 end;
 
-function TTyCustomGrid.CellPane(ACol, ARow: Integer): TTyGridPane;
+function TTyCustomGrid.CellPane(ACol, APos: Integer): TTyGridPane;
 begin
   { 行也要分窗格,不只是列。固定行的矩形钉在上冻结带里,而正文窗格从冻结带
     **之下**才开始 —— 把它们一律算作正文窗格的话,可见矩形恒为空,
-    于是固定行连一个像素都画不出来(占着高度的空白带就是这么来的)。 }
-  if ARow < FFixedRows then
+    于是固定行连一个像素都画不出来(占着高度的空白带就是这么来的)。
+
+    APos 是**显示位置**。被筛掉的行没有显示位置(-1),不该被 `-1 < FixedRows`
+    误判进顶部冻结带 —— 只按列分。 }
+  if (APos >= 0) and (APos < FFixedRows) then
   begin
-    if ACol < FFixedCols then Result := gpTopLeft else Result := gpTop;
+    { 三路,与底部带对称。原先只分左/中,于是同时开右冻结列时,
+      右上角那一格被判成 gpTop,与**不含**右冻结列的顶部带求交后成了空矩形 ——
+      那一格凭空消失。`gpTopRight` 在枚举里躺着,一直没有生产者。 }
+    if ACol < FFixedCols then Result := gpTopLeft
+    else if ACol >= FHeader.Columns.Count - EffectiveFixedColsRight then
+      Result := gpTopRight
+    else Result := gpTop;
     Exit;
   end;
-  if (FFixedRowsBottom > 0) and (ARow >= DisplayRowCount - FFixedRowsBottom) then
+  if (FFixedRowsBottom > 0) and (APos >= 0)
+     and (APos >= DisplayRowCount - FFixedRowsBottom) then
   begin
     if ACol < FFixedCols then Result := gpBottomLeft
     else if ACol >= FHeader.Columns.Count - EffectiveFixedColsRight then
@@ -3384,7 +3752,8 @@ begin
     Result := Rect(0, 0, 0, 0);
     Exit;
   end;
-  pane := TyGridPaneRect(GridMetrics, CellPane(ACol, ARow));
+  { 数据行 → 显示位置的转换**只在这里做一次**。CellPane 收显示位置。 }
+  pane := TyGridPaneRect(GridMetrics, CellPane(ACol, DataToDisplay(ARow)));
   if not IntersectRect(Result, cell, pane) then
     Result := Rect(0, 0, 0, 0);
 end;
@@ -3450,13 +3819,37 @@ end;
 procedure TTyCustomGrid.RenderGridLines(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
-  oldLineClip, lineClip, rowBand: TRect;
   slot: Integer;   { 绘制槽位 }
   first, last, row, i, x, lw, half: Integer;
   r: TRect;
   line: TBGRAPixel;
   col: TTyColumn;
   merged: Boolean;
+
+  { 一条横线。交给 DrawInRowBand 执行 —— 裁剪由它负责。 }
+  procedure DrawOneRowLine;
+  var
+    j, cx: Integer;
+    c: TTyColumn;
+  begin
+    if not merged then
+    begin
+      P.Bitmap.FillRect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw,
+        line, dmSet);
+      Exit;
+    end;
+    { 逐列分段:本行与下一行在这一列上属于同一个合并区时,跳过这一段。 }
+    for j := 0 to FHeader.Columns.Count - 1 do
+    begin
+      c := TTyColumn(FHeader.Columns.Items[j]);
+      if not (coVisible in c.Options) then Continue;
+      if SameMergedCell(j, DisplayToData(row), j, DisplayToData(row + 1)) then Continue;
+      cx := ColumnLeftPx(j);
+      P.Bitmap.FillRect(cx, r.Bottom - 1 - half,
+        cx + ColumnWidthPx(j), r.Bottom - 1 - half + lw, line, dmSet);
+    end;
+  end;
+
 begin
   line := GridLineColor(AFrame);
 
@@ -3471,40 +3864,17 @@ begin
     分段要多出 列数 x 行数 次 FillRect,不能让没用合并的表白白付这个钱。 }
   merged := HasMergedCells;
 
-  { 横线:每一可见行的下沿。只走 TyGridVisibleRows —— 百万行的表在这里也只画几十条。 }
-  oldLineClip := P.Bitmap.ClipRect;
+  { 横线:每一可见行的下沿。只走绘制槽位 —— 百万行的表在这里也只画几十条。
+    每条线都裁到它那一行所属的带,否则滚到冻结带底下的行会把线画进冻结带里
+    (单元格内容靠 CellVisibleRect 挡住了,线这条路径没有)。 }
   if (FGridLineStyle in [glsHorizontal, glsBoth]) and TyGridDrawSlots(M, first, last) then
     for slot := first to last do
     begin
       row := TyGridRowAtSlot(slot, M);
       if row < 0 then Continue;
       r := TyGridRowRect(row, M);
-      { 横线也要裁到这一行所属的窗格 —— 否则滚到冻结带底下的行会把线画进
-        冻结带里(单元格内容靠 CellVisibleRect 挡住了,线这条路径没有)。 }
-      if row < FFixedRows then
-        rowBand := Rect(0, TyGridHeaderH(M), M.ClientW, M.FrozenTop)
-      else if (M.FrozenBottom > 0) and (row >= DisplayRowCount - FixedRowsBottom) then
-        rowBand := Rect(0, M.ClientH - M.FrozenBottom, M.ClientW, M.ClientH)
-      else
-        rowBand := Rect(0, M.FrozenTop, M.ClientW, M.ClientH - M.FrozenBottom);
-      if not IntersectRect(lineClip, oldLineClip, rowBand) then Continue;
-      P.Bitmap.ClipRect := lineClip;
-      if not merged then
-        P.Bitmap.FillRect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw,
-          line, dmSet)
-      else
-        { 逐列分段:本行与下一行在这一列上属于同一个合并区时,跳过这一段。 }
-        for i := 0 to FHeader.Columns.Count - 1 do
-        begin
-          col := TTyColumn(FHeader.Columns.Items[i]);
-          if not (coVisible in col.Options) then Continue;
-          if SameMergedCell(i, DisplayToData(row), i, DisplayToData(row + 1)) then Continue;
-          x := ColumnLeftPx(i);
-          P.Bitmap.FillRect(x, r.Bottom - 1 - half,
-            x + ColumnWidthPx(i), r.Bottom - 1 - half + lw, line, dmSet);
-        end;
+      DrawInRowBand(P, row, M, @DrawOneRowLine);
     end;
-  P.Bitmap.ClipRect := oldLineClip;
 
   { 竖线:每一可见列的右缘。位置走 ColumnLeftPx(列轴唯一出处),
     绝不另算 —— 否则线会和单元格边界差一像素。 }
@@ -3583,11 +3953,28 @@ begin
   if Y >= hdrH then
   begin
     d := RowDividerAtY(X, Y);
-    if d >= 0 then
+    { 分组行没有"行高"可拖(它的数据行号是负的,写回去会被存储挡掉)。
+      不在这里挡住的话:手势看着是启动了(指针变了、能拖),实际一动不动,
+      而 `OnRowSizing` 每次鼠标移动都会被喂一个**负行号**。 }
+    if (d >= 0) and (DisplayToData(d) >= 0) then
     begin
       FResizeRow := d;
       FResizeStartY := Y;
       FResizeStartH := RowHeightOf(DisplayToData(d));
+      Exit;
+    end;
+
+    { 行头槽里按下(且不在分隔线上)= 准备拖行。
+      分隔线优先:边缘那几像素上用户的意图是改行高,不是搬行。 }
+    if (Button = mbLeft) and FShowIndicator and (X < ScaleI(FIndicatorWidth))
+       and DisplayOrderIsDataOrder then
+    begin
+      d := TyGridRowAt(Y, GridMetrics);
+      if d >= 0 then
+      begin
+        FDragRow := DisplayToData(d);
+        FDragStartY := Y;
+      end;
     end;
     Exit;
   end;
@@ -3667,6 +4054,27 @@ begin
     Exit;
   end;
 
+  if FDragRow >= 0 then
+  begin
+    { 越过阈值才算拖动 —— 否则手抖一像素就把行挪了。 }
+    if Abs(Y - FDragStartY) < ScaleI(8) then Exit;
+    target := TyGridRowAt(Y, GridMetrics);
+    if target >= 0 then target := DisplayToData(target);
+    if (target >= 0) and (target <> FDragRow) then
+    begin
+      allow := True;
+      if Assigned(FOnRowMove) then FOnRowMove(Self, FDragRow, target, allow);
+      if allow then
+      begin
+        DoRowDragMove(FDragRow, target);
+        FDragRow := target;
+        FDragStartY := Y;
+        Invalidate;
+      end;
+    end;
+    Exit;
+  end;
+
   if FDragCol >= 0 then
   begin
     { 越过阈值才算拖动 —— 否则手抖一像素就把列挪了。 }
@@ -3703,6 +4111,7 @@ begin
   FResizeCol := -1;
   FResizeRow := -1;
   FDragCol := -1;
+  FDragRow := -1;
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
@@ -4012,6 +4421,10 @@ begin
       col := TTyColumn(FHeader.Columns.Items[i]);
       if not (coVisible in col.Options) then Continue;
       dataRow := DisplayToData(row);
+      { 分组行不是数据行(它的"数据行号"是负数),它有自己的渲染路径。
+        不挡的话宿主的钩子每帧都会收到 ARow = -1, -2 …,
+        而按行号索引自己的数据正是这个钩子最正常的用法 —— 于是在**绘制里**崩。 }
+      if dataRow < 0 then Continue;
 
       b := Default(TTyGridCellBorders);
       b.Width := 1;
@@ -4063,6 +4476,7 @@ begin
       if not (coVisible in col.Options) then Continue;
 
       dataRow := DisplayToData(row);
+      if dataRow < 0 then Continue;     { 分组行:见 RenderCellBorders 里的说明 }
       ap := CellAppearance(i, dataRow, row, AFrame);
       { `background: none` 是默认态 —— 一个像素都不画,整帧的开销就只有
         一次 ResolveStyle(缓存命中)加一次判断。 }
@@ -4221,6 +4635,49 @@ begin
   if Result <= 0 then Result := FDefaultRowHeight;
 end;
 
+procedure TTyCustomGrid.DrawInRowBand(P: TTyPainter; APos: Integer;
+  const M: TTyGridMetrics; ADraw: TTyGridBandDraw);
+var
+  oldClip, clip: TRect;
+begin
+  if not Assigned(ADraw) then Exit;
+  oldClip := P.Bitmap.ClipRect;
+  { **求交**而不是覆盖 —— 外层可能是脏区重画限定的那条横带,覆盖掉它就会
+    在带外重画一遍:同一段文字叠两次、抗锯齿变深。 }
+  if not IntersectRect(clip, oldClip, TyGridRowBandRect(APos, M)) then Exit;
+  P.Bitmap.ClipRect := clip;
+  try
+    ADraw();
+  finally
+    P.Bitmap.ClipRect := oldClip;
+  end;
+end;
+
+procedure TTyCustomGrid.DrawInPane(P: TTyPainter; APane: TTyGridPane;
+  const M: TTyGridMetrics; ADraw: TTyGridBandDraw);
+var
+  oldClip, clip: TRect;
+begin
+  if not Assigned(ADraw) then Exit;
+  oldClip := P.Bitmap.ClipRect;
+  if not IntersectRect(clip, oldClip, TyGridPaneRect(M, APane)) then Exit;
+  P.Bitmap.ClipRect := clip;
+  try
+    ADraw();
+  finally
+    P.Bitmap.ClipRect := oldClip;
+  end;
+end;
+
+function TTyCustomGrid.RowHeightOfDisplay(APos: Integer): Integer;
+var
+  d: Integer;
+begin
+  d := DisplayToData(APos);
+  if d < 0 then Result := FDefaultRowHeight    { 分组行 / 越界 }
+  else Result := RowHeightOf(d);
+end;
+
 function TTyCustomGrid.RowTops: TTyIntArray;
 begin
   Result := nil;      { 基类全等高 —— 返回空数组让几何层走整除快路径 }
@@ -4369,6 +4826,8 @@ begin
   FAggregates := TStringList.Create;
   FCollapsed := TStringList.Create;
   FAttrs := TTyGridCellAttrStore.Create;
+  { 撤销的记录点。挂在存储上而不是挂在每个功能上 —— 收口一处、漏不掉。 }
+  FAttrs.OnChanging := @HandleAttrChanging;
   FHiddenRows := TStringList.Create;
   FHiddenRows.Sorted := True;
   FHiddenRows.Duplicates := dupIgnore;
@@ -4391,7 +4850,7 @@ begin
     (与 TyFallbackFontName 同一套做法。) }
   FGroupRowFormat := rsGridGroupRow;
   FAutoGrowOnPaste := True;
-  FGroupCol := -1;
+  SetLength(FGroupCols, 0);
   FFilterCol := -1;
   FShowFilterButtons := False;
   FShowGroupSubtotals := True;
@@ -4485,23 +4944,567 @@ begin
   Result := FCells.Items[CellKey(ACol, ARow)];   { 哈希查找,O(1) }
 end;
 
+procedure TTyStringGrid.SetUndoLimit(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FUndoLimit = AValue then Exit;
+  FUndoLimit := AValue;
+  if FUndoLimit = 0 then ClearUndo;
+end;
+
+function TTyStringGrid.UndoCount: Integer;
+begin
+  Result := Length(FUndoStack);
+end;
+
+function TTyStringGrid.CanUndo: Boolean;
+begin
+  Result := Length(FUndoStack) > 0;
+end;
+
+function TTyStringGrid.CanRedo: Boolean;
+begin
+  Result := Length(FRedoStack) > 0;
+end;
+
+procedure TTyStringGrid.ClearUndo;
+begin
+  SetLength(FUndoStack, 0);
+  SetLength(FRedoStack, 0);
+  SetLength(FUndoOpen, 0);
+  FUndoOverflow := False;
+end;
+
+procedure TTyStringGrid.PushUndoStep(const AStep: TTyGridUndoStep);
+var
+  i, n: Integer;
+begin
+  if Length(AStep) = 0 then Exit;
+  n := Length(FUndoStack);
+  SetLength(FUndoStack, n + 1);
+  FUndoStack[n] := AStep;
+  { 超过上限丢**最老**的那条 —— 丢最新的等于用户刚做的操作撤不了,更违反直觉。 }
+  if (FUndoLimit > 0) and (Length(FUndoStack) > FUndoLimit) then
+  begin
+    for i := 0 to Length(FUndoStack) - 2 do
+      FUndoStack[i] := FUndoStack[i + 1];
+    SetLength(FUndoStack, Length(FUndoStack) - 1);
+  end;
+end;
+
+procedure TTyStringGrid.PermuteRowState(const AMap: array of Integer);
+var
+  heights: array of record R, H: Integer; end;
+  hidden: array of Integer;
+  i, n, dst: Integer;
+begin
+  { 先把两张表都快照下来再动手 —— 边搬边写会覆盖尚未搬走的条目
+    (与 ShiftCells 里那条"增时从大到小搬"是同一个道理)。 }
+  SetLength(heights, 0);
+  n := 0;
+  for i := 0 to High(AMap) do
+    if GetRowHeights(i) > 0 then
+    begin
+      SetLength(heights, n + 1);
+      heights[n].R := i;
+      heights[n].H := GetRowHeights(i);
+      Inc(n);
+    end;
+
+  SetLength(hidden, 0);
+  n := 0;
+  for i := 0 to High(AMap) do
+    if IsHiddenRow(i) then
+    begin
+      SetLength(hidden, n + 1);
+      hidden[n] := i;
+      Inc(n);
+    end;
+
+  { 行高走 SetRowHeights,不直接改表 —— 撤销的记录点在那儿。 }
+  for i := 0 to High(heights) do
+    SetRowHeights(heights[i].R, 0);
+  for i := 0 to High(heights) do
+  begin
+    dst := AMap[heights[i].R];
+    if dst >= 0 then SetRowHeights(dst, heights[i].H);
+  end;
+
+  if Length(hidden) > 0 then
+  begin
+    { 走 SetRowHidden 而不是直接改表 —— 记录点在那儿。
+      直接 Clear 再 Add 的话,拖完行按 Ctrl+Z 文字回来了、
+      藏着的还是换过去那一行(A7 的同一个缺陷换个位置)。 }
+    for i := 0 to High(hidden) do
+      SetRowHidden(hidden[i], False);
+    for i := 0 to High(hidden) do
+    begin
+      dst := AMap[hidden[i]];
+      if dst >= 0 then SetRowHidden(dst, True);
+    end;
+    InvalidateOrder;      { 显示序变了 }
+  end;
+end;
+
+procedure TTyStringGrid.DropUndoForColumnChange;
+begin
+  { 撤销进行中不能自毁栈 —— Undo 里换列(宿主在 OnXxx 里做的)不该
+    把正在还原的那条记录连根拔掉。 }
+  if FUndoBusy then Exit;
+  ClearUndo;
+end;
+
+procedure TTyStringGrid.GrowMergesSpanningRow(AFromIndex, ADelta: Integer);
+var
+  keys: TStringList;
+  i, sep, r: Integer;
+  a: TTyGridCellAttr;
+begin
+  if (ADelta = 0) or FAttrs.IsEmpty then Exit;
+  keys := TStringList.Create;
+  try
+    FAttrs.SnapshotKeys(keys);
+    for i := 0 to keys.Count - 1 do
+    begin
+      a := FAttrs.Find(keys[i]);
+      if (a = nil) or (a.RowSpan <= 1) then Continue;
+
+      sep := Pos(':', keys[i]);
+      r := StrToIntDef(Copy(keys[i], sep + 1, MaxInt), -1);
+      if r < 0 then Continue;
+
+      { 这里读到的 r 已经是**搬迁之后**的基准行:插入点在基准行之前时
+        基准格自己被搬走了,块整体平移、跨度不变;只有插入点落在
+        基准行**之后、块尾之内**时,块才被穿过。 }
+      if AFromIndex <= r then Continue;
+      if AFromIndex > r + a.RowSpan - 1 then Continue;
+
+      a := FAttrs.Mutate(keys[i]);        { 走记录点 }
+      Inc(a.RowSpan, ADelta);
+      if a.RowSpan < 1 then a.RowSpan := 1;
+      if a.RowSpan > FMaxRowSpan then FMaxRowSpan := a.RowSpan;
+      if (a.ColSpan <= 1) and (a.RowSpan <= 1) then
+      begin
+        Dec(FMergeCount);                 { 缩没了就不再是合并区 }
+        if FMergeCount < 0 then FMergeCount := 0;
+      end;
+      FAttrs.DropIfDefault(keys[i]);
+    end;
+  finally
+    keys.Free;
+  end;
+end;
+
+procedure TTyStringGrid.ShiftRowStateWithUndo(AFromIndex, ADelta: Integer);
+var
+  heights: array of record R, H: Integer; end;
+  hidden: array of Integer;
+  i, n, dst, hi: Integer;
+
+  { 平移后的新下标;-1 = 这一条随着被删的行一起没了。 }
+  function Shifted(ARow: Integer): Integer;
+  begin
+    Result := ARow;
+    if ARow < AFromIndex then Exit;
+    if (ADelta < 0) and (ARow = AFromIndex) then Exit(-1);
+    Inc(Result, ADelta);
+    if Result < 0 then Result := -1;
+  end;
+
+begin
+  if ADelta = 0 then Exit;
+
+  { 先全部快照再动手 —— 边搬边写会覆盖尚未搬走的条目。
+    上界取**旧的** RowCount 那一段:ShiftCells 跑在 RowCount 改变之前。 }
+  hi := RowCount;
+  if ADelta < 0 then Inc(hi, -ADelta);      { 删除时旧表可能还有更靠后的条目 }
+
+  SetLength(heights, 0);
+  n := 0;
+  for i := 0 to hi do
+    if GetRowHeights(i) > 0 then
+    begin
+      SetLength(heights, n + 1);
+      heights[n].R := i;
+      heights[n].H := GetRowHeights(i);
+      Inc(n);
+    end;
+
+  SetLength(hidden, 0);
+  n := 0;
+  for i := 0 to hi do
+    if IsHiddenRow(i) then
+    begin
+      SetLength(hidden, n + 1);
+      hidden[n] := i;
+      Inc(n);
+    end;
+
+  { 清掉再按新位置写回 —— 两趟都走记录点。 }
+  for i := 0 to High(heights) do
+    SetRowHeights(heights[i].R, 0);
+  for i := 0 to High(heights) do
+  begin
+    dst := Shifted(heights[i].R);
+    if dst >= 0 then SetRowHeights(dst, heights[i].H);
+  end;
+
+  for i := 0 to High(hidden) do
+    SetRowHidden(hidden[i], False);
+  for i := 0 to High(hidden) do
+  begin
+    dst := Shifted(hidden[i]);
+    if dst >= 0 then SetRowHidden(dst, True);
+  end;
+end;
+
+function TTyStringGrid.SnapshotAttr(const AKey: string): TTyGridAttrSnapshot;
+var
+  a: TTyGridCellAttr;
+begin
+  Result := Default(TTyGridAttrSnapshot);
+  a := FAttrs.Find(AKey);
+  if a = nil then Exit;              { Present 留 False = "当时没有这一条" }
+  Result.Present := True;
+  Result.ColSpan := a.ColSpan;
+  Result.RowSpan := a.RowSpan;
+  Result.HasBackground := a.HasBackground;
+  Result.Background := a.Background;
+  Result.HasTextColor := a.HasTextColor;
+  Result.TextColor := a.TextColor;
+  Result.HasAlignment := a.HasAlignment;
+  Result.Alignment := a.Alignment;
+  Result.HasFontStyle := a.HasFontStyle;
+  Result.FontStyle := a.FontStyle;
+  Result.ReadOnly := a.ReadOnly;
+end;
+
+procedure TTyStringGrid.RestoreAttr(const AKey: string;
+  const ASnap: TTyGridAttrSnapshot);
+var
+  a: TTyGridCellAttr;
+  wasMerged, nowMerged: Boolean;
+begin
+  a := FAttrs.Find(AKey);
+  wasMerged := (a <> nil) and ((a.ColSpan > 1) or (a.RowSpan > 1));
+  nowMerged := ASnap.Present and ((ASnap.ColSpan > 1) or (ASnap.RowSpan > 1));
+
+  if not ASnap.Present then
+    FAttrs.Remove(AKey)
+  else
+  begin
+    a := FAttrs.Ensure(AKey);
+    if a = nil then Exit;
+    a.ColSpan := ASnap.ColSpan;
+    a.RowSpan := ASnap.RowSpan;
+    a.HasBackground := ASnap.HasBackground;
+    a.Background := ASnap.Background;
+    a.HasTextColor := ASnap.HasTextColor;
+    a.TextColor := ASnap.TextColor;
+    a.HasAlignment := ASnap.HasAlignment;
+    a.Alignment := ASnap.Alignment;
+    a.HasFontStyle := ASnap.HasFontStyle;
+    a.FontStyle := ASnap.FontStyle;
+    a.ReadOnly := ASnap.ReadOnly;
+    { 跨度提示只增不减 —— 恢复出一个更大的跨度时得让回扫够得着它,
+      否则 BaseCellOf 扫不到基准格,合并区就散了。 }
+    if ASnap.ColSpan > FMaxColSpan then FMaxColSpan := ASnap.ColSpan;
+    if ASnap.RowSpan > FMaxRowSpan then FMaxRowSpan := ASnap.RowSpan;
+  end;
+
+  { 合并计数是旁挂的汇总,不在属性对象里 —— 恢复属性时得跟着对账,
+    否则 HasMergedCells 会与实际的跨度对不上。 }
+  if nowMerged and not wasMerged then Inc(FMergeCount)
+  else if wasMerged and not nowMerged then Dec(FMergeCount);
+  if FMergeCount < 0 then FMergeCount := 0;
+end;
+
+procedure TTyStringGrid.TrimRowStateTo(ANewCount: Integer);
+var
+  i, r: Integer;
+  doomed: array of Integer;
+begin
+  inherited TrimRowStateTo(ANewCount);    { 行高 }
+
+  SetLength(doomed, 0);
+  for i := 0 to FHiddenRows.Count - 1 do
+  begin
+    r := StrToIntDef(FHiddenRows[i], -1);
+    if r >= ANewCount then
+    begin
+      SetLength(doomed, Length(doomed) + 1);
+      doomed[High(doomed)] := r;
+    end;
+  end;
+  for i := 0 to High(doomed) do
+    SetRowHidden(doomed[i], False);       { 走记录点 → 可撤销 }
+end;
+
+procedure TTyStringGrid.SetRowHidden(ARow: Integer; AHidden: Boolean);
+var
+  i: Integer;
+  e: TTyGridUndoEntry;
+  k: string;
+begin
+  { 只挡负数。**不挡上界** —— 增删行时这里会短暂地写到"即将存在"的那一行
+    (ShiftCells 跑在 RowCount 改变之前),按当时的 RowCount 挡掉的话
+    标记就丢了。公开入口 HideRow 自己有边界检查。 }
+  if ARow < 0 then Exit;
+  k := IntToStr(ARow);
+  i := FHiddenRows.IndexOf(k);
+  if (i >= 0) = AHidden then Exit;      { 已经是这个状态 —— 不是一次改动 }
+
+  if (not FUndoBusy) and (FUndoLimit <> 0) then
+  begin
+    e := Default(TTyGridUndoEntry);
+    e.Kind := gukRowHidden;
+    e.Row := ARow;
+    e.OldHidden := i >= 0;
+    RecordUndo(e);
+  end;
+
+  if AHidden then FHiddenRows.Add(k) else FHiddenRows.Delete(i);
+  { 藏/放一行就改变了参与显示的行集合 —— 显示序、行高前缀和、汇总统统失效。
+    **放在这里**而不是放在调用方:撤销走的是 ApplyUndoStep,它够不着
+    HideRow/UnHideRow 里那一句。(批量期间只置标志,EndUpdateOrder 统一重建。) }
+  InvalidateOrder;
+end;
+
+procedure TTyStringGrid.HandleAttrChanging(const AKey: string);
+var
+  e: TTyGridUndoEntry;
+begin
+  if FUndoBusy or (FUndoLimit = 0) then Exit;
+  e := Default(TTyGridUndoEntry);
+  e.Kind := gukCellAttr;
+  e.AttrKey := AKey;
+  e.Attr := SnapshotAttr(AKey);
+  RecordUndo(e);
+end;
+
+procedure TTyStringGrid.SetRowHeights(ARow, AValue: Integer);
+var
+  old: Integer;
+  e: TTyGridUndoEntry;
+begin
+  old := GetRowHeights(ARow);
+  inherited SetRowHeights(ARow, AValue);
+  if FUndoBusy or (FUndoLimit = 0) then Exit;
+  { 拿**钳制之后**的实际值比 —— 撞上 MinRowHeight/MaxRowHeight 时
+    什么都没变,别往栈里塞一条按下去没反应的记录。 }
+  if GetRowHeights(ARow) = old then Exit;
+  e := Default(TTyGridUndoEntry);
+  e.Kind := gukRowHeight;
+  e.Row := ARow;
+  e.OldHeight := old;
+  RecordUndo(e);
+end;
+
+procedure TTyStringGrid.RecordUndo(const AEntry: TTyGridUndoEntry);
+var
+  n: Integer;
+  step: TTyGridUndoStep;
+begin
+  if FUndoBusy or (FUndoLimit = 0) then Exit;
+
+  { 一条记录攒得过大(比如往十万行里灌数据)—— 与其留一条**残缺**的记录,
+    不如整条作废并清空栈:半条撤销记录还原出来的是一张四不像的表,
+    比"这一步撤销不了"危险得多。 }
+  if FUndoDepth > 0 then
+  begin
+    if FUndoOverflow then Exit;
+    if Length(FUndoOpen) >= 200000 then
+    begin
+      { **别调 ClearUndo** —— 它顺手把 FUndoOverflow 清成 False,于是这条
+        "本条作废"的标志自己把自己抹掉:后面的条目继续往 FUndoOpen 里攒,
+        CloseUndoGroup 时 `if not FUndoOverflow` 成立,**正好把那半条残缺记录
+        推进了栈**,设计要防的事照样发生。清栈的三行在这里内联。 }
+      SetLength(FUndoOpen, 0);
+      SetLength(FUndoStack, 0);
+      SetLength(FRedoStack, 0);
+      FUndoOverflow := True;      { 必须在清栈**之后**置位 }
+      Exit;
+    end;
+    n := Length(FUndoOpen);
+    SetLength(FUndoOpen, n + 1);
+    FUndoOpen[n] := AEntry;
+    Exit;
+  end;
+
+  { 不在事务里:自成一条(单格编辑走的就是这条路)。 }
+  SetLength(step, 1);
+  step[0] := AEntry;
+  PushUndoStep(step);
+  SetLength(FRedoStack, 0);     { 新操作让重做链作废 —— 与所有编辑器一致 }
+end;
+
+{ 逆着放回去。返回的是"反记录":把当前值记下来,于是重做就是再逆一次。
+  条目要**倒着**走 —— 同一格被改过多次时,最早那次才是真正的原值。 }
+function TTyStringGrid.ApplyUndoStep(const AStep: TTyGridUndoStep): TTyGridUndoStep;
+var
+  i, n: Integer;
+  e: TTyGridUndoEntry;
+begin
+  SetLength(Result, Length(AStep));
+  n := 0;
+  for i := Length(AStep) - 1 downto 0 do
+  begin
+    e := AStep[i];
+    case e.Kind of
+      gukCell:
+        begin
+          Result[n].Kind := gukCell;
+          Result[n].Col := e.Col;
+          Result[n].Row := e.Row;
+          Result[n].OldText := GetCells(e.Col, e.Row);
+          Cells[e.Col, e.Row] := e.OldText;
+        end;
+      gukRowCount:
+        begin
+          Result[n].Kind := gukRowCount;
+          Result[n].OldCount := RowCount;
+          RowCount := e.OldCount;
+        end;
+      gukCellAttr:
+        begin
+          Result[n].Kind := gukCellAttr;
+          Result[n].AttrKey := e.AttrKey;
+          Result[n].Attr := SnapshotAttr(e.AttrKey);
+          RestoreAttr(e.AttrKey, e.Attr);
+        end;
+      gukRowHeight:
+        begin
+          Result[n].Kind := gukRowHeight;
+          Result[n].Row := e.Row;
+          Result[n].OldHeight := GetRowHeights(e.Row);
+          SetRowHeights(e.Row, e.OldHeight);
+        end;
+      gukRowHidden:
+        begin
+          Result[n].Kind := gukRowHidden;
+          Result[n].Row := e.Row;
+          Result[n].OldHidden := IsHiddenRow(e.Row);
+          SetRowHidden(e.Row, e.OldHidden);
+        end;
+    end;
+    Inc(n);
+  end;
+  { 反记录也要倒着存,这样重做时再倒一次就回到原顺序。 }
+end;
+
+procedure TTyStringGrid.Undo;
+var
+  n: Integer;
+  inv: TTyGridUndoStep;
+begin
+  if not CanUndo then Exit;
+  FUndoBusy := True;
+  BeginUpdate;
+  try
+    n := Length(FUndoStack) - 1;
+    inv := ApplyUndoStep(FUndoStack[n]);
+    SetLength(FUndoStack, n);
+    n := Length(FRedoStack);
+    SetLength(FRedoStack, n + 1);
+    FRedoStack[n] := inv;
+  finally
+    EndUpdate;
+    FUndoBusy := False;
+  end;
+end;
+
+procedure TTyStringGrid.Redo;
+var
+  n: Integer;
+  inv: TTyGridUndoStep;
+begin
+  if not CanRedo then Exit;
+  FUndoBusy := True;
+  BeginUpdate;
+  try
+    n := Length(FRedoStack) - 1;
+    inv := ApplyUndoStep(FRedoStack[n]);
+    SetLength(FRedoStack, n);
+    PushUndoStep(inv);
+  finally
+    EndUpdate;
+    FUndoBusy := False;
+  end;
+end;
+
 procedure TTyStringGrid.SetCells(ACol, ARow: Integer; const AValue: string);
 var
   k: string;
+  e: TTyGridUndoEntry;
 begin
   k := CellKey(ACol, ARow);
+  if not FUndoBusy then
+  begin
+    e.Kind := gukCell;
+    e.Col := ACol;
+    e.Row := ARow;
+    e.OldText := GetCells(ACol, ARow);
+    e.OldCount := 0;
+    if e.OldText <> AValue then RecordUndo(e);
+  end;
   if AValue = '' then
   begin
     FCells.Delete(k)                  { 写空串 = 删除条目,稀疏存储不为空值留位置 }
   end
   else
     FCells.Items[k] := AValue;        { 已存在则覆写,不存在则新增 }
+  { 数据变了 → 汇总要重算。挂在这个收口点上,于是编辑、粘贴、填充、
+    行置换、撤销全都自动失效 —— 与撤销的记录点是同一处口子。 }
+  InvalidateAggregates;
   Invalidate;
 end;
 
 procedure TTyStringGrid.ClearCells;
+var
+  keys: TStringList;
+  i, sep, c, r: Integer;
+  e: TTyGridUndoEntry;
 begin
-  FCells.Clear;
+  { 从前这里直接 `FCells.Clear` —— 绕过 SetCells 那个记录点,于是清空不可撤销,
+    连带**导入 CSV**整件事也撤不回来(导入的第一步就是清空)。
+    收口点保证的只是**经过它的**改动:绕过去就什么都不剩。
+
+    做法是"先逐条记原值,再整表清掉",而不是逐格走 Cells[] ——
+    记下的东西一模一样,但省掉了逐格拆字典的开销。
+    条数超上限时 RecordUndo 自己会整条作废并清栈(既有的溢出保护)。 }
+  if (not FUndoBusy) and (FUndoLimit <> 0) then
+  begin
+    BeginUpdate;                { 整个清空 = 一条记录 }
+    try
+      keys := TStringList.Create;
+      try
+        SnapshotCellKeys(keys);
+        for i := 0 to keys.Count - 1 do
+        begin
+          sep := Pos(':', keys[i]);
+          c := StrToIntDef(Copy(keys[i], 1, sep - 1), -1);
+          r := StrToIntDef(Copy(keys[i], sep + 1, MaxInt), -1);
+          if (c < 0) or (r < 0) then Continue;
+          e := Default(TTyGridUndoEntry);
+          e.Kind := gukCell;
+          e.Col := c;
+          e.Row := r;
+          e.OldText := GetCells(c, r);
+          RecordUndo(e);
+        end;
+      finally
+        keys.Free;
+      end;
+      FCells.Clear;
+    finally
+      EndUpdate;
+    end;
+  end
+  else
+    FCells.Clear;
+
+  { 数据没了 → 汇总也得重算。SetCells 上挂的那处失效同样够不着这里。 }
+  InvalidateAggregates;
   Invalidate;
 end;
 
@@ -4660,7 +5663,7 @@ begin
 
   { 命中走 CellAt —— 与绘制同源,所以点哪格就选哪格,不会错位。 }
   { 分组行整行都可点(不只三角)—— 目标大、好点。 }
-  if FGroupCol >= 0 then
+  if GetGroupCol >= 0 then
   begin
     gPos := TyGridRowAt(Y, GridMetrics);
     if (gPos >= 0) and IsGroupRow(gPos, gIdx) then
@@ -4919,6 +5922,8 @@ begin
               begin ToggleCellChecked(FCol, FRow); Key := 0; end;
     Ord('C'): if ssCtrl in Shift then begin CopySelectionToClipboard; Key := 0; end;
     Ord('V'): if ssCtrl in Shift then begin PasteFromClipboard; Key := 0; end;
+    Ord('Z'): if ssCtrl in Shift then begin Undo; Key := 0; end;
+    Ord('Y'): if ssCtrl in Shift then begin Redo; Key := 0; end;
     Ord('A'): if ssCtrl in Shift then
               begin
                 { **走 SelectAll,不要在这里内联抄一遍。**
@@ -4946,8 +5951,19 @@ begin
   FOrderValid := False;
 end;
 
+procedure TTyStringGrid.InvalidateAggregates;
+begin
+  { 长度归零 = 全部失效。下次用到时按当时的列数重建 ——
+    列增删之后也就不必单独再失效一次。 }
+  SetLength(FAggValid, 0);
+  SetLength(FAggCache, 0);
+end;
+
 procedure TTyStringGrid.InvalidateOrder;
 begin
+  { 显示序变了 → 参与统计的行集合就变了。筛选、隐藏行、分组、行数增删
+    最终都汇到这里,所以汇总的失效也挂在这一处。 }
+  InvalidateAggregates;
   { 批量期间不重建 —— EndUpdateOrder 里统一来一次。 }
   if FUpdatingOrder > 0 then
   begin
@@ -4966,21 +5982,16 @@ end;
 
 procedure TTyStringGrid.HideRow(ARow: Integer);
 begin
-  if (ARow < 0) or (ARow >= RowCount) then Exit;
-  if FHiddenRows.IndexOf(IntToStr(ARow)) >= 0 then Exit;
-  FHiddenRows.Add(IntToStr(ARow));
+  if (ARow < 0) or (ARow >= RowCount) then Exit;   { 公开入口的边界 }
+  SetRowHidden(ARow, True);      { 记录点在那儿 }
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
 end;
 
 procedure TTyStringGrid.UnHideRow(ARow: Integer);
-var
-  i: Integer;
 begin
-  i := FHiddenRows.IndexOf(IntToStr(ARow));
-  if i < 0 then Exit;
-  FHiddenRows.Delete(i);
+  SetRowHidden(ARow, False);
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
@@ -4997,9 +6008,24 @@ begin
 end;
 
 procedure TTyStringGrid.UnHideAllRows;
+var
+  i: Integer;
+  rows: array of Integer;
 begin
   if FHiddenRows.Count = 0 then Exit;
-  FHiddenRows.Clear;
+  { 逐行走记录点,而不是把表 Clear 掉 —— 直接清表的话这一步撤销不了
+    (栈里那些 HideRow 的记录还原的是"本来就没藏"的行,按下去毫无动静)。
+    整批算一条。 }
+  SetLength(rows, FHiddenRows.Count);
+  for i := 0 to FHiddenRows.Count - 1 do
+    rows[i] := StrToIntDef(FHiddenRows[i], -1);
+  BeginUpdate;
+  try
+    for i := 0 to High(rows) do
+      if rows[i] >= 0 then SetRowHidden(rows[i], False);
+  finally
+    EndUpdate;
+  end;
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
@@ -5071,8 +6097,18 @@ begin
 
   { 分组:在排好序的显示序上,按分组列的值切段并插入合成分组行。
     必须在排序**之后** —— 否则同组的行不相邻,切不出段。 }
-  if FGroupCol >= 0 then
+  if GetGroupCol >= 0 then
     BuildGroups;
+
+  { 顺手记下"显示序是不是恒等"。合并、拖行都要问这件事,
+    而每次现算是 O(n) —— 在这里算是顺路的。 }
+  FOrderIsIdentity := True;
+  for i := 0 to High(FOrder) do
+    if FOrder[i] <> i then
+    begin
+      FOrderIsIdentity := False;
+      Break;
+    end;
 
   for i := 0 to High(FOrder) do
     if FOrder[i] >= 0 then FRank[FOrder[i]] := i;
@@ -5082,13 +6118,39 @@ end;
 
 procedure TTyStringGrid.BuildGroups;
 var
-  i, n, g: Integer;
-  key, prevKey: string;
+  i, lvl, n, depth: Integer;
   src, dst: array of Integer;
-  collapsed: Boolean;
+  { 当前这一串祖先组的下标(每级一个),以及它们的键。 }
+  openIdx: array of Integer;
+  prevKey: array of string;
+  key, path: string;
+  same, anyCollapsed: Boolean;
+
+  procedure OpenGroup(ALevel: Integer; const AKey, APath: string);
+  var g: Integer;
+  begin
+    g := Length(FGroups);
+    SetLength(FGroups, g + 1);
+    FGroups[g].Key := AKey;
+    FGroups[g].Count := 0;
+    FGroups[g].Level := ALevel;
+    FGroups[g].Path := APath;
+    FGroups[g].Collapsed := FCollapsed.IndexOf(APath) >= 0;
+    SetLength(FGroups[g].Rows, 0);
+    openIdx[ALevel] := g;
+    { 分组行进显示序 —— 但只有在**所有祖先都展开**时才看得见。 }
+    if not AnyAncestorCollapsed(openIdx, ALevel) then
+    begin
+      SetLength(dst, n + 1);
+      dst[n] := -(g + 1);
+      Inc(n);
+    end;
+  end;
+
 begin
   SetLength(FGroups, 0);
-  if Length(FOrder) = 0 then Exit;
+  depth := Length(FGroupCols);
+  if (Length(FOrder) = 0) or (depth = 0) then Exit;
 
   { 这里**不再排序**。分组列已经由 EnsureOrder 通过 EffectiveSortKeys 排在最前面了,
     同值的行必然相邻。从前这里 `FSortCol := FGroupCol` 是个真 bug ——
@@ -5096,31 +6158,45 @@ begin
 
   src := FOrder;
   SetLength(dst, 0);
+  SetLength(openIdx, depth);
+  SetLength(prevKey, depth);
+  for lvl := 0 to depth - 1 do
+  begin
+    openIdx[lvl] := -1;
+    prevKey[lvl] := #1'no-group'#1;   { 不可能与真实值相等 }
+  end;
   n := 0;
-  g := -1;
-  prevKey := #1'no-group'#1;      { 不可能与真实值相等 }
 
   for i := 0 to High(src) do
   begin
-    key := GetCellText(FGroupCol, src[i]);
-    if key <> prevKey then
+    { 从最外层往里比:第一处不同的那一级起,后面每一级都要开新组。
+      (只比本级的话,"华东/上海"换成"华北/上海"时上海那一级不会重开。) }
+    same := True;
+    path := '';
+    for lvl := 0 to depth - 1 do
     begin
-      { 开新组:先插一行合成的分组行。 }
-      Inc(g);
-      SetLength(FGroups, g + 1);
-      FGroups[g].Key := key;
-      FGroups[g].Count := 0;
-      FGroups[g].Collapsed := FCollapsed.IndexOf(key) >= 0;
-      SetLength(dst, n + 1);
-      dst[n] := -(g + 1);         { 负数 = 分组行 }
-      Inc(n);
-      prevKey := key;
+      key := GetCellText(FGroupCols[lvl], src[i]);
+      if path = '' then path := key else path := path + #1 + key;
+      if same and (key <> prevKey[lvl]) then same := False;
+      if not same then
+      begin
+        OpenGroup(lvl, key, path);
+        prevKey[lvl] := key;
+      end;
     end;
-    Inc(FGroups[g].Count);
-    SetLength(FGroups[g].Rows, FGroups[g].Count);
-    FGroups[g].Rows[FGroups[g].Count - 1] := src[i];
-    { 折叠的组只留分组行,组内行不进显示序。 }
-    if not FGroups[g].Collapsed then
+
+    { 这一行算进**所有**祖先组 —— 于是每一级的小计各自成立。 }
+    anyCollapsed := False;
+    for lvl := 0 to depth - 1 do
+    begin
+      Inc(FGroups[openIdx[lvl]].Count);
+      SetLength(FGroups[openIdx[lvl]].Rows, FGroups[openIdx[lvl]].Count);
+      FGroups[openIdx[lvl]].Rows[FGroups[openIdx[lvl]].Count - 1] := src[i];
+      if FGroups[openIdx[lvl]].Collapsed then anyCollapsed := True;
+    end;
+
+    { 任何一级折叠着,这一行就不进显示序。 }
+    if not anyCollapsed then
     begin
       SetLength(dst, n + 1);
       dst[n] := src[i];
@@ -5129,6 +6205,16 @@ begin
   end;
 
   FOrder := dst;
+end;
+
+{ 这一级的**祖先**里有没有折叠着的(不含自己)。折叠的组下面连子分组行都不该露出来。 }
+function TTyStringGrid.AnyAncestorCollapsed(const AOpen: array of Integer;
+  ALevel: Integer): Boolean;
+var lvl: Integer;
+begin
+  Result := False;
+  for lvl := 0 to ALevel - 1 do
+    if (AOpen[lvl] >= 0) and FGroups[AOpen[lvl]].Collapsed then Exit(True);
 end;
 
 procedure TTyStringGrid.EnsureOrder;
@@ -5623,12 +6709,18 @@ begin
   if AValue = TyColorNone then
   begin
     a := FAttrs.Find(k);
-    if a = nil then Exit;
+    if (a = nil) or (not a.HasBackground) then Exit;   { 本来就没有 —— 不是一次改动 }
+    a := FAttrs.Mutate(k);
     a.HasBackground := False;
     FAttrs.DropIfDefault(k);
   end
   else
   begin
+    { **设成它已经是的那个值 = 不是一次改动。**
+      Ensure 会发"即将改动"通知,而记录点在那儿 —— 不先挡一下的话
+      同色再设一次也压一条空记录:Ctrl+Z 按下去没反应,
+      更糟的是那条空记录把重做链清掉了。`SetCells` 一直有这道保护。 }
+    if GetCellColor(ACol, ARow) = AValue then Exit;
     a := FAttrs.Ensure(k);
     if a = nil then Exit;
     a.HasBackground := True;
@@ -5654,12 +6746,14 @@ begin
   if AValue = TyColorNone then
   begin
     a := FAttrs.Find(k);
-    if a = nil then Exit;
+    if (a = nil) or (not a.HasTextColor) then Exit;
+    a := FAttrs.Mutate(k);
     a.HasTextColor := False;
     FAttrs.DropIfDefault(k);
   end
   else
   begin
+    if GetCellTextColor(ACol, ARow) = AValue then Exit;   { 见 SetCellColor }
     a := FAttrs.Ensure(k);
     if a = nil then Exit;
     a.HasTextColor := True;
@@ -5673,8 +6767,14 @@ var
   j: Integer;
 begin
   if (ARow < 0) or (ARow >= RowCount) then Exit;
-  for j := 0 to Header.Columns.Count - 1 do
-    CellColors[j, ARow] := AColor;
+  { 整行上色 = 一条撤销记录(与 SetSelectionColor 同一条规矩)。 }
+  BeginUpdate;
+  try
+    for j := 0 to Header.Columns.Count - 1 do
+      CellColors[j, ARow] := AColor;
+  finally
+    EndUpdate;
+  end;
 end;
 
 function TTyStringGrid.GetCellReadOnly(ACol, ARow: Integer): Boolean;
@@ -5697,12 +6797,14 @@ begin
   if not AValue then
   begin
     a := FAttrs.Find(k);
-    if a = nil then Exit;
+    if (a = nil) or (not a.ReadOnly) then Exit;
+    a := FAttrs.Mutate(k);
     a.ReadOnly := False;
     FAttrs.DropIfDefault(k);
   end
   else
   begin
+    if GetCellReadOnly(ACol, ARow) then Exit;             { 见 SetCellColor }
     a := FAttrs.Ensure(k);
     if a = nil then Exit;
     a.ReadOnly := True;
@@ -6474,8 +7576,19 @@ var
   end;
 
   procedure DropCell(AC, AR: Integer);
+  var
+    a: TTyGridCellAttr;
   begin
     Cells[AC, AR] := '';
+    { 合并计数是旁挂的汇总,不在属性对象里 —— 丢掉一个合并基准格必须跟着减。
+      不减的话 `HasMergedCells` 会一直答"有合并区"而实际一个都没有,
+      于是格线绘制永远走那条慢的逐列分段路径,取消合并也清不掉这个状态。 }
+    a := FAttrs.Find(CellKey(AC, AR));
+    if (a <> nil) and ((a.ColSpan > 1) or (a.RowSpan > 1)) then
+    begin
+      Dec(FMergeCount);
+      if FMergeCount < 0 then FMergeCount := 0;
+    end;
     FAttrs.Remove(CellKey(AC, AR));
   end;
 
@@ -6575,14 +7688,45 @@ begin
     隐藏标记同理,原来藏着的行冒出来、另一行凭空消失 —— 用户会读成"又多/少一行"。 }
   if ARows then
   begin
-    ShiftRowKeyedTable(FRowHeights, AFromIndex, ADelta);
-    ShiftRowKeyedTable(FHiddenRows, AFromIndex, ADelta);
+    ShiftRowStateWithUndo(AFromIndex, ADelta);
+    GrowMergesSpanningRow(AFromIndex, ADelta);
     InvalidateOrder;
+  end
+  else
+  begin
+    { **列轴同理** —— 这三张表键的是列下标,上面只搬了格子。
+      不搬的话:筛选留在旧列号上,取出来的文字是空 → 每一行都不匹配 →
+      **整张表变空**,而漏斗图标已经跟着列走了,用户在界面上找不到地方去清它。
+      (做 B2 的行置换收口时只想了行,漏了这一半。) }
+    ShiftColKeyedTable(FColFilters, AFromIndex, ADelta);
+    ShiftColKeyedTable(FValFilters, AFromIndex, ADelta);
+    ShiftColKeyedTable(FAggregates, AFromIndex, ADelta);
+    InvalidateOrder;          { 筛选变了 → 显示序与汇总都要重算 }
   end;
 end;
 
 { 把"以行下标为键"的旁挂表整体平移。ADelta < 0 时,正落在 AFromIndex 上的那条被丢弃。
   就地改键会撞上重复键,所以整表重建。 }
+procedure TTyCustomGrid.TrimRowStateTo(ANewCount: Integer);
+var
+  i, r: Integer;
+  doomed: array of Integer;
+begin
+  { 先收集再删 —— 边遍历边删会跳过条目。 }
+  SetLength(doomed, 0);
+  for i := 0 to FRowHeights.Count - 1 do
+  begin
+    r := StrToIntDef(FRowHeights[i], -1);
+    if r >= ANewCount then
+    begin
+      SetLength(doomed, Length(doomed) + 1);
+      doomed[High(doomed)] := r;
+    end;
+  end;
+  for i := 0 to High(doomed) do
+    SetRowHeights(doomed[i], 0);        { 走记录点 → 可撤销 }
+end;
+
 procedure TTyCustomGrid.ShiftRowKeyedTable(AList: TStringList;
   AFromIndex, ADelta: Integer);
 var
@@ -6616,6 +7760,35 @@ begin
   end;
 end;
 
+procedure TTyCustomGrid.ShiftColKeyedTable(AList: TStringList;
+  AFromIndex, ADelta: Integer);
+var
+  i, c: Integer;
+  rebuilt: TStringList;
+  v: string;
+begin
+  if (AList = nil) or (AList.Count = 0) or (ADelta = 0) then Exit;
+  rebuilt := TStringList.Create;
+  try
+    for i := 0 to AList.Count - 1 do
+    begin
+      c := StrToIntDef(AList.Names[i], -1);
+      if c < 0 then Continue;
+      v := AList.ValueFromIndex[i];
+      if c >= AFromIndex then
+      begin
+        if (ADelta < 0) and (c = AFromIndex) then Continue;   { 被删的那一列 }
+        Inc(c, ADelta);
+        if c < 0 then Continue;
+      end;
+      rebuilt.Add(IntToStr(c) + '=' + v);
+    end;
+    AList.Assign(rebuilt);
+  finally
+    rebuilt.Free;
+  end;
+end;
+
 procedure TTyStringGrid.BeginUpdateOrder;
 begin
   Inc(FUpdatingOrder);
@@ -6639,6 +7812,9 @@ begin
   if ACount <= 0 then Exit;
   if (ARow < 0) or (ARow > RowCount) then Exit;
   EndEdit(True);
+  { **两层都要**:BeginUpdateOrder 压重排,BeginUpdate 才开撤销事务。
+    单数的 InsertRow 早就这么做了,复数这个漏了 —— 插 3 行压了 25 条记录。 }
+  BeginUpdate;
   BeginUpdateOrder;
   try
     { 从后往前搬 ACount 次,等价于一次搬 ACount ——
@@ -6647,6 +7823,7 @@ begin
     RowCount := RowCount + ACount;
   finally
     EndUpdateOrder;
+    EndUpdate;
   end;
 end;
 
@@ -6658,12 +7835,14 @@ begin
   if (ARow < 0) or (ARow >= RowCount) then Exit;
   if ARow + ACount > RowCount then ACount := RowCount - ARow;
   EndEdit(True);
+  BeginUpdate;                { 见 InsertRows:撤销事务与重排是两层 }
   BeginUpdateOrder;
   try
     for i := 1 to ACount do ShiftCells(ARow, -1, True);
     RowCount := RowCount - ACount;
   finally
     EndUpdateOrder;
+    EndUpdate;
   end;
 end;
 
@@ -6672,11 +7851,15 @@ var
   i: Integer;
 begin
   if ACount <= 0 then Exit;
+  { **两层都要** —— 与 InsertRows 一模一样的道理:BeginUpdateOrder 压重排,
+    BeginUpdate 才开撤销事务。行那边本轮修过了,列这边是它逐字的孪生兄弟。 }
+  BeginUpdate;
   BeginUpdateOrder;
   try
     for i := 1 to ACount do InsertColumn(ACol);
   finally
     EndUpdateOrder;
+    EndUpdate;
   end;
 end;
 
@@ -6685,6 +7868,7 @@ var
   i: Integer;
 begin
   if ACount <= 0 then Exit;
+  BeginUpdate;                { 见 InsertCols:撤销事务与重排是两层 }
   BeginUpdateOrder;
   try
     for i := 1 to ACount do
@@ -6694,6 +7878,7 @@ begin
     end;
   finally
     EndUpdateOrder;
+    EndUpdate;
   end;
 end;
 
@@ -6703,7 +7888,13 @@ var
   tmp: string;
   a1, a2: TTyGridCellAttr;
   k1, k2: string;
+  map: array of Integer;
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if ARow1 = ARow2 then Exit;
   if (ARow1 < 0) or (ARow1 >= RowCount) then Exit;
   if (ARow2 < 0) or (ARow2 >= RowCount) then Exit;
@@ -6727,12 +7918,19 @@ begin
         FAttrs.MoveEntry(CellKey(j, -1), k2);
       end;
     end;
-    { 行高是行的属性,不是格的 —— 单独换。 }
-    j := RowHeights[ARow1];
-    RowHeights[ARow1] := RowHeights[ARow2];
-    RowHeights[ARow2] := j;
+    { 行高、隐藏标记这些**按行**记账的东西不是格属性,上面那个循环够不着它们。
+      走统一的置换收口 —— 从前这里只手搬了行高,隐藏标记留在旧下标上,
+      于是换过去的那一行凭空消失、藏着的那一行冒了出来。 }
+    SetLength(map, RowCount);
+    for j := 0 to RowCount - 1 do map[j] := j;
+    map[ARow1] := ARow2;
+    map[ARow2] := ARow1;
+    PermuteRowState(map);
   finally
     EndUpdateOrder;
+  end;
+  finally
+    EndUpdate;
   end;
 end;
 
@@ -6740,6 +7938,11 @@ procedure TTyStringGrid.MoveRow(AFrom, ATo: Integer);
 var
   i: Integer;
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if AFrom = ATo then Exit;
   if (AFrom < 0) or (AFrom >= RowCount) then Exit;
   if (ATo < 0) or (ATo >= RowCount) then Exit;
@@ -6753,6 +7956,9 @@ begin
       for i := AFrom downto ATo + 1 do SwapRows(i, i - 1);
   finally
     EndUpdateOrder;
+  end;
+  finally
+    EndUpdate;
   end;
 end;
 
@@ -6772,30 +7978,49 @@ var
   pos, dataRow, colIdx: Integer;
 begin
   CopySelectionToClipboard;
-  for pos := 0 to DisplayRowCount - 1 do
-  begin
-    dataRow := DisplayToData(pos);
-    if dataRow < 0 then Continue;
-    for colIdx := 0 to Header.Columns.Count - 1 do
-      if IsCellSelected(colIdx, dataRow)
-         and (EditorKindFor(colIdx, dataRow) <> gekNone) then    { 只读格不清 }
-        Cells[colIdx, dataRow] := '';
+  { 剪掉一片 = **一条**撤销记录。逐格记的话,剪 20 格要按 20 次 Ctrl+Z。 }
+  BeginUpdate;
+  try
+    for pos := 0 to DisplayRowCount - 1 do
+    begin
+      dataRow := DisplayToData(pos);
+      if dataRow < 0 then Continue;
+      for colIdx := 0 to Header.Columns.Count - 1 do
+        if IsCellSelected(colIdx, dataRow)
+           and (EditorKindFor(colIdx, dataRow) <> gekNone) then    { 只读格不清 }
+          Cells[colIdx, dataRow] := '';
+    end;
+  finally
+    EndUpdate;
   end;
   Invalidate;
 end;
 
 procedure TTyStringGrid.InsertRow(ARow: Integer);
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if (ARow < 0) or (ARow > RowCount) then Exit;
   EndEdit(True);
   ShiftCells(ARow, 1, True);
   RowCount := RowCount + 1;
   InvalidateOrder;
   Invalidate;
+  finally
+    EndUpdate;
+  end;
 end;
 
 procedure TTyStringGrid.DeleteRow(ARow: Integer);
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if (ARow < 0) or (ARow >= RowCount) then Exit;
   EndEdit(False);
   ShiftCells(ARow, -1, True);
@@ -6804,22 +8029,39 @@ begin
   if FRow < 0 then FRow := 0;
   InvalidateOrder;
   Invalidate;
+  finally
+    EndUpdate;
+  end;
 end;
 
 procedure TTyStringGrid.InsertColumn(ACol: Integer);
 var
   c: TTyColumn;
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if (ACol < 0) or (ACol > Header.Columns.Count) then Exit;
   EndEdit(True);
   ShiftCells(ACol, 1, False);
   c := Header.Columns.Add as TTyColumn;
   c.Index := ACol;
   Invalidate;
+  finally
+    EndUpdate;
+  end;
+  DropUndoForColumnChange;
 end;
 
 procedure TTyStringGrid.DeleteColumn(ACol: Integer);
 begin
+  { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
+    用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
+    本来就该是同一个。 }
+  BeginUpdate;
+  try
   if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
   EndEdit(False);
   ShiftCells(ACol, -1, False);
@@ -6827,6 +8069,10 @@ begin
   if FCol > Header.Columns.Count - 1 then FCol := Header.Columns.Count - 1;
   if FCol < 0 then FCol := 0;
   Invalidate;
+  finally
+    EndUpdate;
+  end;
+  DropUndoForColumnChange;
 end;
 
 { 按内容(含换行)把行高调到刚好放得下。
@@ -6893,7 +8139,14 @@ procedure TTyStringGrid.AutoFitRows;
 var
   i: Integer;
 begin
-  for i := 0 to RowCount - 1 do AutoFitRow(i);
+  { 全表一次自适应 = **一条**撤销记录。行高有记录点,逐行调的话
+    十万行的表就是十万条 —— 与涂色/粘贴/批量增删行同一族。 }
+  BeginUpdate;
+  try
+    for i := 0 to RowCount - 1 do AutoFitRow(i);
+  finally
+    EndUpdate;
+  end;
 end;
 
 procedure TTyStringGrid.AutoFitColumnWidth(ACol: Integer);
@@ -6961,11 +8214,9 @@ end;
 procedure TTyStringGrid.GroupByColumn(ACol: Integer);
 begin
   EndEdit(True);
-  if (ACol < 0) or (ACol >= Header.Columns.Count) then FGroupCol := -1
-  else FGroupCol := ACol;
-  InvalidateOrder;
-  UpdateScrollBars;
-  Invalidate;
+  { 单列分组就是多列的退化情形 —— 只留一条路径,免得两套实现日后走样。 }
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then GroupByColumns([])
+  else GroupByColumns([ACol]);
 end;
 
 procedure TTyStringGrid.UngroupRows;
@@ -7006,9 +8257,10 @@ var
   i: Integer;
 begin
   if (AIndex < 0) or (AIndex >= Length(FGroups)) then Exit;
-  key := FGroups[AIndex].Key;
+  { 折叠状态按**层级路径**记账,而不是按组号(重排/筛选后组号会变),
+    也不是按单个键 —— 按单个键的话,"华东/上海"和"华北/上海"会被一起折叠。 }
+  key := FGroups[AIndex].Path;
   i := FCollapsed.IndexOf(key);
-  { 折叠状态按**分组值**记账,而不是按组号 —— 重排/筛选后组号会变,值不会。 }
   if i >= 0 then FCollapsed.Delete(i) else FCollapsed.Add(key);
   InvalidateOrder;
   UpdateScrollBars;
@@ -7018,14 +8270,19 @@ end;
 function TTyStringGrid.GroupToggleRect(APos: Integer): TRect;
 var
   r: TRect;
-  box, cy: Integer;
+  box, cy, ind, gi: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
   r := TyGridRowRect(APos, GridMetrics);
   if r.Bottom <= r.Top then Exit;
   box := ScaleI(12);
   cy := (r.Top + r.Bottom) div 2;
-  Result := Rect(ScaleI(4), cy - box div 2, ScaleI(4) + box, cy - box div 2 + box);
+  { 按层级缩进 —— 多级分组时不缩进的话,两级分组行长得一模一样,
+    根本看不出谁包着谁。命中走的也是这个矩形,所以点得到的就是看得见的那一个。 }
+  ind := ScaleI(4);
+  if IsGroupRow(APos, gi) and (gi >= 0) and (gi <= High(FGroups)) then
+    Inc(ind, FGroups[gi].Level * ScaleI(14));
+  Result := Rect(ind, cy - box div 2, ind + box, cy - box div 2 + box);
 end;
 
 procedure TTyStringGrid.RenderGroupRow(P: TTyPainter; APos, AGroupIndex: Integer;
@@ -7104,6 +8361,7 @@ begin
   i := FAggregates.IndexOfName(k);
   if i >= 0 then FAggregates.Delete(i);
   if AKind <> gagNone then FAggregates.Add(k + '=' + IntToStr(Ord(AKind)));
+  InvalidateAggregates;      { 换了口径,缓存里那个数已经不是要的那个了 }
   Invalidate;
 end;
 
@@ -7199,7 +8457,7 @@ var
   v, acc: Double;
   kind: TTyGridAggregate;
   txt: string;
-  started: Boolean;
+  started, cacheable: Boolean;
 begin
   Result := 0;
   kind := ColumnAggregate(ACol);
@@ -7208,8 +8466,28 @@ begin
   { 只遍历**显示序** —— 被过滤掉的行不参与统计,筛完总计立刻跟着变。 }
   if kind = gagCount then
   begin
-    Result := DisplayRowCount;
+    Result := DisplayRowCount;      { O(1),不必缓存 }
     Exit;
+  end;
+
+  { 页脚**每帧**都要问一次,而下面那一趟遍历的是全部显示行 ——
+    百万行的表滚动时就是每帧一次 O(n)。缓存按列存,失效收口在
+    InvalidateAggregates(数据改 / 显示序变 / 换聚合口径三处汇过去)。
+
+    挂了 OnGetCellText 的表**不缓存**:值由宿主随时给,控件收不到"变了"的
+    通知,缓存住就等于把一个陈旧的合计钉在页脚上 —— 那比慢糟得多。
+    (与 CanSortPhysically 拒绝虚拟源同一条道理。) }
+  cacheable := (ACol >= 0) and (not Assigned(FOnGetCellText));
+  if cacheable then
+  begin
+    if Length(FAggValid) <> Header.Columns.Count then
+    begin
+      SetLength(FAggValid, Header.Columns.Count);
+      SetLength(FAggCache, Header.Columns.Count);
+      for n := 0 to High(FAggValid) do FAggValid[n] := False;
+    end;
+    if (ACol <= High(FAggValid)) and FAggValid[ACol] then
+      Exit(FAggCache[ACol]);
   end;
 
   acc := 0;
@@ -7223,8 +8501,15 @@ begin
     started := True;
   end;
 
-  if n = 0 then Exit;
-  if kind = gagAvg then Result := acc / n else Result := acc;
+  { n = 0(整列一格数值都没有)也要记进缓存,否则空列每帧照样白扫一遍全表。 }
+  if n > 0 then
+    if kind = gagAvg then Result := acc / n else Result := acc;
+
+  if cacheable and (ACol <= High(FAggValid)) then
+  begin
+    FAggCache[ACol] := Result;
+    FAggValid[ACol] := True;
+  end;
 end;
 
 function TTyStringGrid.FooterText(ACol: Integer): string;
@@ -7323,6 +8608,59 @@ begin
 end;
 
 { ---- 单元格合并 ----------------------------------------------------------- }
+
+procedure TTyStringGrid.RecordRowCountUndo(AOldCount: Integer);
+var
+  e: TTyGridUndoEntry;
+begin
+  if FUndoBusy then Exit;
+  e.Kind := gukRowCount;
+  e.Col := -1;
+  e.Row := -1;
+  e.OldText := '';
+  e.OldCount := AOldCount;
+  RecordUndo(e);
+end;
+
+procedure TTyStringGrid.OpenUndoGroup;
+begin
+  if FUndoBusy or (FUndoLimit = 0) then Exit;
+  Inc(FUndoDepth);
+  if FUndoDepth = 1 then
+  begin
+    SetLength(FUndoOpen, 0);
+    FUndoOverflow := False;
+  end;
+end;
+
+procedure TTyStringGrid.CloseUndoGroup;
+begin
+  if FUndoBusy or (FUndoLimit = 0) then Exit;
+  if FUndoDepth = 0 then Exit;
+  Dec(FUndoDepth);
+  if FUndoDepth > 0 then Exit;          { 嵌套内层不结算 }
+  if not FUndoOverflow then
+  begin
+    PushUndoStep(FUndoOpen);
+    if Length(FUndoOpen) > 0 then SetLength(FRedoStack, 0);
+  end;
+  SetLength(FUndoOpen, 0);
+  FUndoOverflow := False;
+end;
+
+procedure TTyStringGrid.DoRowDragMove(AFrom, ATo: Integer);
+begin
+  MoveRow(AFrom, ATo);
+end;
+
+{ 直接看**实际的显示序**是不是恒等,而不是猜"有没有排序/分组/筛选"。
+  更准:按一个本来就有序的列排出来仍然是恒等,这时没有任何理由拒绝合并或拖行;
+  物理排序之后更是必然恒等 —— 那几条限制就此自动解除,不必再逐处去改。 }
+function TTyStringGrid.DisplayOrderIsDataOrder: Boolean;
+begin
+  EnsureOrder;
+  Result := FOrderIsIdentity and (Length(FGroupCols) = 0);
+end;
 
 function TTyStringGrid.RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
 var
@@ -7455,6 +8793,221 @@ begin
   SelectRange(src.Left, src.Top, src.Right, tgt.Bottom);
 end;
 
+const
+  { 版式串的头。版本号独立于控件版本 —— 只有**格式**变了才动它。 }
+  TyGridLayoutTag = 'TYGRIDLAYOUT/1';
+
+function TTyStringGrid.SaveLayoutToString: string;
+var
+  i: Integer;
+  c: TTyColumn;          { 别叫 col —— 与网格的 Col 属性撞名 }
+  cols, sorts: string;
+begin
+  cols := '';
+  for i := 0 to Header.Columns.Count - 1 do
+  begin
+    c := TTyColumn(Header.Columns.Items[i]);
+    if cols <> '' then cols := cols + ',';
+    cols := cols + Format('%d:%d:%d',
+      [c.Width, Ord(coVisible in c.Options), c.Position]);
+  end;
+
+  sorts := '';
+  for i := 0 to High(FSortKeys) do
+  begin
+    if sorts <> '' then sorts := sorts + ',';
+    sorts := sorts + Format('%d:%d', [FSortKeys[i].Col, Ord(FSortKeys[i].Dir)]);
+  end;
+
+  Result := Format('%s|cols=%s|sort=%s|frozen=%d,%d,%d,%d',
+    [TyGridLayoutTag, cols, sorts,
+     FFixedCols, EffectiveFixedColsRight, FFixedRows, FFixedRowsBottom]);
+end;
+
+function TTyStringGrid.LoadLayoutFromString(const AText: string): Boolean;
+var
+  parts, one, fields: TStringList;
+  i, n: Integer;
+  colsTxt, sortTxt, frozenTxt: string;
+  w, vis, pos: Integer;
+  { 先全解析到这里,全部合法了再往控件上写 —— 半套版式比不还原更难查。 }
+  newW, newVis, newPos: array of Integer;
+  newSortCol, newSortDir: array of Integer;
+  fl, fr, ft, fb: Integer;
+
+  function Field(const ASrc, AName: string): string;
+  var j: Integer;
+  begin
+    Result := '';
+    for j := 0 to parts.Count - 1 do
+      if Copy(parts[j], 1, Length(AName) + 1) = AName + '=' then
+        Exit(Copy(parts[j], Length(AName) + 2, MaxInt));
+  end;
+
+  function ParseIntStrict(const ATxt: string; out AValue: Integer): Boolean;
+  begin
+    Result := TryStrToInt(Trim(ATxt), AValue);
+  end;
+
+begin
+  Result := False;
+  if AText = '' then Exit;
+
+  parts := TStringList.Create;
+  one := TStringList.Create;
+  fields := TStringList.Create;
+  try
+    parts.Delimiter := '|';
+    parts.StrictDelimiter := True;
+    parts.DelimitedText := AText;
+    if parts.Count = 0 then Exit;
+    { 版本对不上就**什么都不做** —— 猜着读一个不认识的格式只会读出垃圾。 }
+    if parts[0] <> TyGridLayoutTag then Exit;
+
+    colsTxt := Field(AText, 'cols');
+    sortTxt := Field(AText, 'sort');
+    frozenTxt := Field(AText, 'frozen');
+
+    { --- 列 --- }
+    one.Delimiter := ',';
+    one.StrictDelimiter := True;
+    one.DelimitedText := colsTxt;
+    if one.Count <> Header.Columns.Count then Exit;   { 列数对不上,整串作废 }
+    SetLength(newW, one.Count);
+    SetLength(newVis, one.Count);
+    SetLength(newPos, one.Count);
+    for i := 0 to one.Count - 1 do
+    begin
+      fields.Delimiter := ':';
+      fields.StrictDelimiter := True;
+      fields.DelimitedText := one[i];
+      if fields.Count <> 3 then Exit;
+      if not ParseIntStrict(fields[0], w) then Exit;
+      if not ParseIntStrict(fields[1], vis) then Exit;
+      if not ParseIntStrict(fields[2], pos) then Exit;
+      if w < 0 then Exit;
+      newW[i] := w;
+      newVis[i] := vis;
+      newPos[i] := pos;
+    end;
+
+    { --- 排序键 --- }
+    SetLength(newSortCol, 0);
+    SetLength(newSortDir, 0);
+    if Trim(sortTxt) <> '' then
+    begin
+      one.DelimitedText := sortTxt;
+      SetLength(newSortCol, one.Count);
+      SetLength(newSortDir, one.Count);
+      for i := 0 to one.Count - 1 do
+      begin
+        fields.DelimitedText := one[i];
+        if fields.Count <> 2 then Exit;
+        if not ParseIntStrict(fields[0], w) then Exit;
+        if not ParseIntStrict(fields[1], vis) then Exit;
+        if (w < 0) or (w >= Header.Columns.Count) then Exit;
+        newSortCol[i] := w;
+        newSortDir[i] := vis;
+      end;
+    end;
+
+    { --- 冻结数 --- }
+    one.DelimitedText := frozenTxt;
+    if one.Count <> 4 then Exit;
+    if not ParseIntStrict(one[0], fl) then Exit;
+    if not ParseIntStrict(one[1], fr) then Exit;
+    if not ParseIntStrict(one[2], ft) then Exit;
+    if not ParseIntStrict(one[3], fb) then Exit;
+    if (fl < 0) or (fr < 0) or (ft < 0) or (fb < 0) then Exit;
+
+    { --- 全部合法,现在才动控件 --- }
+    BeginUpdate;
+    try
+      for i := 0 to High(newW) do
+      begin
+        TTyColumn(Header.Columns.Items[i]).Width := newW[i];
+        if newVis[i] <> 0 then ShowColumn(i) else HideColumn(i);
+        TTyColumn(Header.Columns.Items[i]).Position := newPos[i];
+      end;
+      FixedCols := fl;
+      FixedColsRight := fr;
+      FixedRows := ft;
+      FixedRowsBottom := fb;
+
+      SetLength(FSortKeys, Length(newSortCol));
+      for i := 0 to High(newSortCol) do
+      begin
+        FSortKeys[i].Col := newSortCol[i];
+        FSortKeys[i].Dir := TTySortDirection(newSortDir[i]);
+      end;
+      if Length(FSortKeys) > 0 then
+      begin
+        FSortCol := FSortKeys[0].Col;
+        FSortDir := FSortKeys[0].Dir;
+        Header.SortColumn := FSortCol;
+        Header.SortDirection := FSortDir;
+      end
+      else
+      begin
+        FSortCol := -1;
+        Header.SortColumn := NoColumn;
+      end;
+      InvalidateOrder;
+      InvalidateColumnCache;
+    finally
+      EndUpdate;
+    end;
+    UpdateScrollBars;
+    Invalidate;
+    Result := True;
+  finally
+    fields.Free;
+    one.Free;
+    parts.Free;
+  end;
+end;
+
+{ 这一列是不是某一级的分组列。去重要按"属于分组列集合"判,
+  而不是"等于最外层那个" —— 后者正是上一版漏掉内层的原因。 }
+function TTyStringGrid.IsGroupColumn(ACol: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(FGroupCols) do
+    if FGroupCols[i] = ACol then Exit(True);
+end;
+
+function TTyStringGrid.GetGroupCol: Integer;
+begin
+  if Length(FGroupCols) = 0 then Result := -1 else Result := FGroupCols[0];
+end;
+
+function TTyStringGrid.GroupColumns: TTyIntArray;
+var i: Integer;
+begin
+  SetLength(Result, Length(FGroupCols));
+  for i := 0 to High(FGroupCols) do Result[i] := FGroupCols[i];
+end;
+
+procedure TTyStringGrid.GroupByColumns(const ACols: array of Integer);
+var
+  i, n: Integer;
+begin
+  SetLength(FGroupCols, 0);
+  n := 0;
+  for i := 0 to High(ACols) do
+    if (ACols[i] >= 0) and (ACols[i] < Header.Columns.Count) then
+    begin
+      SetLength(FGroupCols, n + 1);
+      FGroupCols[n] := ACols[i];
+      Inc(n);
+    end;
+  FCollapsed.Clear;        { 层级变了,旧的折叠路径不再有意义 }
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
 function TTyStringGrid.MergeSelection: Boolean;
 var
   r: TRect;
@@ -7482,6 +9035,8 @@ begin
 end;
 
 procedure TTyStringGrid.MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
+var
+  cs, rs: Integer;
 begin
   if (AColSpan <= 1) and (ARowSpan <= 1) then
   begin
@@ -7500,6 +9055,8 @@ begin
     UnmergeCells(ACol, ARow);
     Exit;
   end;
+  { 合并成它已经是的那个跨度 = 不是一次改动(见 SetCellColor 里那段说明)。 }
+  if CellSpan(ACol, ARow, cs, rs) and (cs = AColSpan) and (rs = ARowSpan) then Exit;
   with FAttrs.Ensure(CellKey(ACol, ARow)) do
   begin
     if (ColSpan <= 1) and (RowSpan <= 1) then Inc(FMergeCount);
@@ -7522,7 +9079,9 @@ begin
   k := CellKey(ACol, ARow);
   a := FAttrs.Find(k);
   if a = nil then Exit;
-  if (a.ColSpan > 1) or (a.RowSpan > 1) then Dec(FMergeCount);
+  if (a.ColSpan <= 1) and (a.RowSpan <= 1) then Exit;   { 本来就没合并 }
+  a := FAttrs.Mutate(k);
+  Dec(FMergeCount);
   a.ColSpan := 1;
   a.RowSpan := 1;
   FAttrs.DropIfDefault(k);      { 只剩默认值就别占着位置 }
@@ -7536,6 +9095,9 @@ var
   a: TTyGridCellAttr;
 begin
   { 只清合并,不能把同一条目上的别的属性(底色/只读)一起清掉。 }
+  { 一次清掉所有合并 = **一条**撤销记录。逐格记的话,清 20 处合并
+    要按 20 次 Ctrl+Z —— 与粘贴/剪切/批量增删行同一族。 }
+  BeginUpdate;
   keys := TStringList.Create;
   try
     FAttrs.SnapshotKeys(keys);
@@ -7543,6 +9105,10 @@ begin
     begin
       a := FAttrs.Find(keys[i]);
       if a = nil then Continue;
+      { 本来就没合并的条目跳过 —— 否则每一条都发一次"即将改动",
+        撤销栈里攒一堆什么都没变的条目(Ctrl+Z 一次看不出动静)。 }
+      if (a.ColSpan <= 1) and (a.RowSpan <= 1) then Continue;
+      a := FAttrs.Mutate(keys[i]);
       a.ColSpan := 1;
       a.RowSpan := 1;
       FAttrs.DropIfDefault(keys[i]);
@@ -7550,6 +9116,7 @@ begin
     FMergeCount := 0;
   finally
     keys.Free;
+    EndUpdate;
   end;
   Invalidate;
 end;
@@ -7704,32 +9271,32 @@ begin
   flags := [rfReplaceAll];
   if not ACaseSensitive then Include(flags, rfIgnoreCase);
 
-  for pos := 0 to DisplayRowCount - 1 do
-  begin
-    dataRow := DisplayToData(pos);
-    if dataRow < 0 then Continue;
-    for c := 0 to Header.Columns.Count - 1 do
+  { 全部替换 = **一条**撤销记录。逐格记的话,替换 30 处要按 30 次 Ctrl+Z,
+    而且每一条都会清一次重做链;记录数还会把 UndoLimit(默认 100)撑爆,
+    把用户之前的操作从栈底挤掉。
+    单个替换(AAll = False)一格就结束,包不包都是一条 —— 一起包了更省事。 }
+  BeginUpdate;
+  try
+    for pos := 0 to DisplayRowCount - 1 do
     begin
-      cur := GetCellText(c, dataRow);
-      if not TyGridMatches(cur, AFind, ACaseSensitive, AWholeCell) then Continue;
-      if EditorKindFor(c, dataRow) = gekNone then Continue;    { 只读格不动 }
-      if AWholeCell then Cells[c, dataRow] := AReplace
-      else Cells[c, dataRow] := StringReplace(cur, AFind, AReplace, flags);
-      Inc(Result);
-      if not AAll then Exit;
+      dataRow := DisplayToData(pos);
+      if dataRow < 0 then Continue;
+      for c := 0 to Header.Columns.Count - 1 do
+      begin
+        cur := GetCellText(c, dataRow);
+        if not TyGridMatches(cur, AFind, ACaseSensitive, AWholeCell) then Continue;
+        if EditorKindFor(c, dataRow) = gekNone then Continue;    { 只读格不动 }
+        if AWholeCell then Cells[c, dataRow] := AReplace
+        else Cells[c, dataRow] := StringReplace(cur, AFind, AReplace, flags);
+        Inc(Result);
+        if not AAll then Exit;
+      end;
     end;
+  finally
+    EndUpdate;
   end;
 end;
 
-{ ---- HTML 导出 ------------------------------------------------------------- }
-
-function TyHtmlEscape(const S: string): string;
-begin
-  Result := StringReplace(S, '&', '&amp;', [rfReplaceAll]);
-  Result := StringReplace(Result, '<', '&lt;', [rfReplaceAll]);
-  Result := StringReplace(Result, '>', '&gt;', [rfReplaceAll]);
-  Result := StringReplace(Result, '"', '&quot;', [rfReplaceAll]);
-end;
 
 function TTyStringGrid.SaveToHTMLText: string;
 var
@@ -7779,24 +9346,30 @@ end;
 
 function TTyStringGrid.SelectionAsText: string;
 var
-  c1, c2, r1, r2, pos, cIdx: Integer;
+  sel: TRect;
+  pos, cIdx, dataRow: Integer;
   sb: TStringList;
   line: string;
 begin
-  c1 := Min(FSelAnchorCol, FCol);  c2 := Max(FSelAnchorCol, FCol);
-  r1 := Min(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
-  r2 := Max(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+  { **用** ActiveSelectionRect,不自己再算一遍 Min/Max ——
+    从前这里有第二份同样的算式,而"锚点被筛掉时返回 -1"那个坑只在那一份里修了:
+    屏幕上高亮的是一行(绘制走 IsCellSelected → ActiveSelectionRect),
+    剪贴板里却是从表顶一路到光标的所有行,还多一行空的。
+    粘回去会覆盖用户从没选过的行。 }
+  sel := ActiveSelectionRect;         { 显示序空间,-1 已在那里处理过 }
 
   sb := TStringList.Create;
   try
     { 按**显示序**导出 —— 用户复制的是他看到的那块,不是底层行号区间。 }
-    for pos := r1 to r2 do
+    for pos := sel.Top to sel.Bottom do
     begin
+      dataRow := DisplayToData(pos);
+      if dataRow < 0 then Continue;   { 分组行不是数据,别导成一行空格子 }
       line := '';
-      for cIdx := c1 to c2 do
+      for cIdx := sel.Left to sel.Right do
       begin
-        if cIdx > c1 then line := line + #9;
-        line := line + GetCellText(cIdx, DisplayToData(pos));
+        if cIdx > sel.Left then line := line + #9;
+        line := line + GetCellText(cIdx, dataRow);
       end;
       sb.Add(line);
     end;
@@ -7835,6 +9408,10 @@ begin
   if not allow then Exit;
 
   lines := TStringList.Create;
+  { **两层都要**:BeginUpdateOrder 压的是重排,BeginUpdate 开的才是撤销事务。
+    只开前者的话,粘 4 格就压 4 条撤销记录 —— 用户得按 4 次 Ctrl+Z 才退得回去,
+    而头文件里一直写着"一次批量操作算一条"。 }
+  BeginUpdate;
   BeginUpdateOrder;
   try
     lines.Text := txt;
@@ -7844,6 +9421,10 @@ begin
     if lines.Count = 0 then Exit;
 
     startPos := DataToDisplay(FRow);
+    { 光标那一行被筛掉/藏起来时它没有显示位置(-1)。不挡一下的话:
+      第一行 `DisplayToData(-1)` = -1 被 Continue **静默丢掉**,其余每行往上错一位。
+      退回显示位置 0 —— 与选区那处(SelectionAsText 的 startPos)同一个答案。 }
+    if startPos < 0 then startPos := 0;
 
     { **智能粘贴**:块比网格大就把网格撑大。
       从前这里是 `if targetRow < 0 then Break` —— 粘 100 行进 10 行的网格,
@@ -7889,6 +9470,7 @@ begin
   finally
     lines.Free;
     EndUpdateOrder;
+    EndUpdate;
   end;
   Invalidate;
 end;
@@ -7898,20 +9480,10 @@ begin
   if Clipboard.HasFormat(CF_TEXT) then PasteFromText(Clipboard.AsText);
 end;
 
-function TyCsvQuote(const AValue: string; ADelimiter: Char): string;
-begin
-  { 含分隔符、引号或换行的字段必须加引号,内部引号翻倍 —— 否则导出的 CSV 读不回来。 }
-  if (Pos(ADelimiter, AValue) > 0) or (Pos('"', AValue) > 0)
-     or (Pos(#13, AValue) > 0) or (Pos(#10, AValue) > 0) then
-    Result := '"' + StringReplace(AValue, '"', '""', [rfReplaceAll]) + '"'
-  else
-    Result := AValue;
-end;
-
 function TTyStringGrid.SaveToCSVText(ADelimiter: Char): string;
 var
   sb: TStringList;
-  pos, cIdx: Integer;
+  pos, cIdx, dataRow: Integer;
   line: string;
 begin
   sb := TStringList.Create;
@@ -7927,11 +9499,15 @@ begin
 
     for pos := 0 to DisplayRowCount - 1 do
     begin
+      dataRow := DisplayToData(pos);
+      { 分组行不导出 —— 与 HTML 导出同一条规矩。不跳的话每个组标题都变成
+        一条全空的记录(`,,,`),导回来或用 Excel 打开就是凭空多出的空行。 }
+      if dataRow < 0 then Continue;
       line := '';
       for cIdx := 0 to Header.Columns.Count - 1 do
       begin
         if cIdx > 0 then line := line + ADelimiter;
-        line := line + TyCsvQuote(GetCellText(cIdx, DisplayToData(pos)), ADelimiter);
+        line := line + TyCsvQuote(GetCellText(cIdx, dataRow), ADelimiter);
       end;
       sb.Add(line);
     end;
@@ -7941,131 +9517,8 @@ begin
   end;
 end;
 
-{ 拆一行 CSV,尊重引号(引号内的分隔符不算分隔)。 }
-function TyCsvSplit(const ALine: string; ADelimiter: Char): TStringArray;
-var
-  i, n: Integer;
-  cur: string;
-  inQuote: Boolean;
-begin
-  SetLength(Result, 0);
-  n := 0;
-  cur := '';
-  inQuote := False;
-  i := 1;
-  while i <= Length(ALine) do
-  begin
-    if inQuote then
-    begin
-      if ALine[i] = '"' then
-      begin
-        if (i < Length(ALine)) and (ALine[i + 1] = '"') then
-        begin
-          cur := cur + '"';   { 翻倍的引号 = 一个字面引号 }
-          Inc(i);
-        end
-        else
-          inQuote := False;
-      end
-      else
-        cur := cur + ALine[i];
-    end
-    else if ALine[i] = '"' then inQuote := True
-    else if ALine[i] = ADelimiter then
-    begin
-      SetLength(Result, n + 1); Result[n] := cur; Inc(n);
-      cur := '';
-    end
-    else
-      cur := cur + ALine[i];
-    Inc(i);
-  end;
-  SetLength(Result, n + 1);
-  Result[n] := cur;
-end;
 
 
-{ 字符级流式 CSV 解析:整段文本一次扫完,只有**引号之外**的换行才断行。
-
-  这是为了修一个数据正确性缺陷:早先的做法是先 `TStringList.Text := AText` 按行切、
-  再对每行调 TyCsvSplit —— 引号内的换行(Excel 导出很常见)会被当成行分隔符,
-  于是行数凭空变多、单元格被拦腰截断,而且**不报任何错**。
-
-  返回:每行一个 TStringArray。 }
-type
-  TTyCsvRows = array of TStringArray;
-
-function TyCsvParse(const AText: string; ADelimiter: Char): TTyCsvRows;
-var
-  i, n, rowN, colN: Integer;
-  cur: string;
-  inQuote: Boolean;
-  row: TStringArray;
-
-  procedure PushField;
-  begin
-    SetLength(row, colN + 1);
-    row[colN] := cur;
-    Inc(colN);
-    cur := '';
-  end;
-
-  procedure PushRow;
-  begin
-    PushField;
-    SetLength(Result, rowN + 1);
-    Result[rowN] := row;
-    Inc(rowN);
-    SetLength(row, 0);
-    colN := 0;
-  end;
-
-begin
-  SetLength(Result, 0);
-  SetLength(row, 0);
-  rowN := 0;
-  colN := 0;
-  cur := '';
-  inQuote := False;
-  n := Length(AText);
-  i := 1;
-  while i <= n do
-  begin
-    if inQuote then
-    begin
-      if AText[i] = '"' then
-      begin
-        if (i < n) and (AText[i + 1] = '"') then
-        begin
-          cur := cur + '"';      { 翻倍的引号 = 一个字面引号 }
-          Inc(i);
-        end
-        else
-          inQuote := False;
-      end
-      else
-        cur := cur + AText[i];   { 引号内:换行也只是普通字符 }
-    end
-    else if AText[i] = '"' then
-      inQuote := True
-    else if AText[i] = ADelimiter then
-      PushField
-    else if AText[i] = #13 then
-    begin
-      PushRow;
-      if (i < n) and (AText[i + 1] = #10) then Inc(i);   { 吃掉 CRLF 的 LF }
-    end
-    else if AText[i] = #10 then
-      PushRow
-    else
-      cur := cur + AText[i];
-    Inc(i);
-  end;
-
-  { 收尾:文本末尾没有换行时,最后一行还没入账。
-    但要区分"真有最后一行"和"末尾就是个换行" —— 后者不该多出一个空行。 }
-  if (cur <> '') or (colN > 0) then PushRow;
-end;
 
 procedure TTyStringGrid.LoadFromCSVText(const AText: string; ADelimiter: Char);
 var
@@ -8083,19 +9536,27 @@ begin
   for j := 0 to High(rows[0]) do
     TTyColumn(Header.Columns.Items[j]).Text := rows[0][j];
 
-  ClearCells;
-  ClearFilters;
-  SortByColumn(-1, sdAscending);       { 导入后回到原始顺序 }
-  RowCount := Length(rows) - 1;
+  { 清空 + 改行数 + 逐格重填 = **一条**撤销记录。
+    不包事务的话撤销一次只退回半张表 —— 那比"撤不回来"更难排查。
+    (排序与筛选的重置不进撤销栈:那是"我此刻想怎么看",不是数据。) }
+  BeginUpdate;
+  try
+    ClearCells;
+    ClearFilters;
+    SortByColumn(-1, sdAscending);       { 导入后回到原始顺序 }
+    RowCount := Length(rows) - 1;
 
-  for i := 1 to High(rows) do
-  begin
-    dataRow := i - 1;
-    for j := 0 to High(rows[i]) do
+    for i := 1 to High(rows) do
     begin
-      if j >= Header.Columns.Count then Break;
-      Cells[j, dataRow] := rows[i][j];
+      dataRow := i - 1;
+      for j := 0 to High(rows[i]) do
+      begin
+        if j >= Header.Columns.Count then Break;
+        Cells[j, dataRow] := rows[i][j];
+      end;
     end;
+  finally
+    EndUpdate;
   end;
 
   InvalidateOrder;
@@ -8127,6 +9588,112 @@ begin
   finally
     sl.Free;
   end;
+end;
+
+{ 现在能不能安全地物理排序。 }
+function TTyStringGrid.CanSortPhysically: Boolean;
+begin
+  Result := (FSortMode = gsmData)
+            { 有筛选就不行:被筛掉的行也在数据里,一起搬会把它们搬乱。 }
+            and (FColFilters.Count = 0) and (FValFilters.Count = 0)
+            and (FHiddenRows.Count = 0)
+            and (Length(FGroupCols) = 0)
+            { 数据由回调提供时控件根本不持有它,没什么可搬的。 }
+            { 数据由回调提供时控件根本不持有它,物理搬只会搬存储的那一半、
+              让两边错位。**这一条目前测不出来**:排序的比较读的是存储而不是
+              GetCellText,所以虚拟表根本排不出非恒等的序(见计划文件里记的那条
+              缺口)。留着是因为它在"排序开始认回调"的那一天会立刻变成必需的 ——
+              删掉等于给那次改动埋一颗雷。 }
+            and (not Assigned(OnGetCellText));
+end;
+
+{ 按当前显示序把**数据**重排一遍,让数据行顺序与显示顺序一致。
+
+  搬的是文字、逐格属性(底色/合并跨度/只读…)与显式行高 —— 凡是按行下标记账的
+  都得跟着走,否则排完序底色会留在原地(这个坑在增删行那边踩过一次)。
+  先整体快照再写回:边遍历边改会自己覆盖自己。
+  写回走 Cells[] / 属性存储,所以整次排序**自动进撤销栈**;外面包了事务,
+  因此是**一条**记录 —— 一次 Ctrl+Z 就退回排序前。 }
+procedure TTyStringGrid.ApplyOrderToData;
+type
+  TCellSnap = record C, R: Integer; V: string; end;
+var
+  keys: TStringList;
+  snap: array of TCellSnap;
+  { 格属性按值快照。**不能存 TTyGridCellAttr 引用** —— 那是 FAttrs 持有的对象,
+    先删后写会指向已释放的内存。 }
+  attrSnap: array of record C, R: Integer; A: TTyGridCellAttr; end;
+  attrKeys: TStringList;
+  i, sep, c, r: Integer;
+  k: string;
+begin
+  EnsureOrder;
+  if Length(FRank) <> RowCount then Exit;
+
+  { --- 快照 --- }
+  keys := TStringList.Create;
+  try
+    SnapshotCellKeys(keys);
+    SetLength(snap, keys.Count);
+    for i := 0 to keys.Count - 1 do
+    begin
+      k := keys[i];
+      sep := Pos(':', k);
+      c := StrToIntDef(Copy(k, 1, sep - 1), -1);
+      r := StrToIntDef(Copy(k, sep + 1, MaxInt), -1);
+      snap[i].C := c;
+      snap[i].R := r;
+      snap[i].V := GetCells(c, r);
+    end;
+  finally
+    keys.Free;
+  end;
+
+  { 属性快照:先把每条按值拷出来(FAttrs.Find 给的是它自己持有的对象)。 }
+  attrKeys := TStringList.Create;
+  try
+    FAttrs.SnapshotKeys(attrKeys);
+    SetLength(attrSnap, attrKeys.Count);
+    for i := 0 to attrKeys.Count - 1 do
+    begin
+      k := attrKeys[i];
+      sep := Pos(':', k);
+      attrSnap[i].C := StrToIntDef(Copy(k, 1, sep - 1), -1);
+      attrSnap[i].R := StrToIntDef(Copy(k, sep + 1, MaxInt), -1);
+      attrSnap[i].A := TTyGridCellAttr.Create;
+      attrSnap[i].A.Assign(FAttrs.Find(k));
+    end;
+  finally
+    attrKeys.Free;
+  end;
+
+  { --- 写回 --- }
+  BeginUpdate;
+  try
+    for i := 0 to High(snap) do
+      Cells[snap[i].C, snap[i].R] := '';
+    for i := 0 to High(snap) do
+      if (snap[i].R >= 0) and (snap[i].R < RowCount) then
+        Cells[snap[i].C, FRank[snap[i].R]] := snap[i].V;
+
+    { 行高、隐藏标记等按行记账的旁挂状态 —— FRank 本身就是"旧行 → 新行"的映射。 }
+    PermuteRowState(FRank);
+
+    { 格属性:先全清再按新位置写回。分两遍 —— 边删边写会覆盖还没搬走的条目
+      (与 ShiftCells 那边同一条道理)。 }
+    for i := 0 to High(attrSnap) do
+      if (attrSnap[i].R >= 0) and (attrSnap[i].R < RowCount) then
+        FAttrs.Remove(CellKey(attrSnap[i].C, attrSnap[i].R));
+    for i := 0 to High(attrSnap) do
+      if (attrSnap[i].R >= 0) and (attrSnap[i].R < RowCount) then
+        FAttrs.Ensure(CellKey(attrSnap[i].C, FRank[attrSnap[i].R]))
+          .Assign(attrSnap[i].A);
+  finally
+    for i := 0 to High(attrSnap) do attrSnap[i].A.Free;
+    EndUpdate;
+  end;
+
+  InvalidateOrder;    { 数据已经有序,重建出来就是恒等 }
 end;
 
 procedure TTyStringGrid.SortByColumn(ACol: Integer; ADirection: TTySortDirection);
@@ -8169,6 +9736,15 @@ begin
   Header.SortDirection := ADirection;
   InvalidateOrder;
   EnsureOrder;      { 重建里已按 FSortCol 排过 }
+
+  { gsmData:把数据按刚排出来的显示序**真的搬一遍**(Excel 的做法)。
+    搬完之后重建出来的显示序必然是恒等,于是"排过序就不让合并/不让拖行"
+    那几条限制自动解除 —— 不需要去每一处逐个放行。 }
+  if CanSortPhysically then
+  begin
+    ApplyOrderToData;
+    EnsureOrder;
+  end;
   if False then
   begin
   { **稳定归并排序** O(n log n)。早先用插入排序 O(n^2),1000 行要几千万次比较,
@@ -8192,16 +9768,20 @@ begin
     但它只是"临时插在前面",绝不写回 FSortKeys:从前 BuildGroups 直接
     `FSortCol := FGroupCol`,一分组就把用户选的排序列**永久**抹掉了。 }
   SetLength(Result, 0);
-  if FGroupCol >= 0 then
+  { **每一个**分组列都要按序排在最前面,不能只排最外层。
+    BuildGroups 完全靠相邻性切段(见它自己的注释),只排第一列的话第二级的键
+    不连续 —— 同一个子组标题会在列表里反复出现,还各带一份错的计数与小计。
+    (上一版只 prepend 了 FGroupCols[0];测试数据恰好本来就聚簇,于是全绿。) }
+  SetLength(Result, Length(FGroupCols));
+  for i := 0 to High(FGroupCols) do
   begin
-    SetLength(Result, 1);
-    Result[0].Col := FGroupCol;
-    Result[0].Dir := FSortDir;
+    Result[i].Col := FGroupCols[i];
+    Result[i].Dir := FSortDir;
   end;
   for i := 0 to High(FSortKeys) do
   begin
     if FSortKeys[i].Col < 0 then Continue;
-    if (FGroupCol >= 0) and (FSortKeys[i].Col = FGroupCol) then Continue;
+    if IsGroupColumn(FSortKeys[i].Col) then Continue;
     n := Length(Result);
     SetLength(Result, n + 1);
     Result[n] := FSortKeys[i];
@@ -8292,7 +9872,7 @@ begin
     (折叠按值记账,重排/筛选后组号会变、值不会)。 }
   EnsureOrder;
   for i := 0 to High(FGroups) do
-    if FCollapsed.IndexOf(FGroups[i].Key) < 0 then FCollapsed.Add(FGroups[i].Key);
+    if FCollapsed.IndexOf(FGroups[i].Path) < 0 then FCollapsed.Add(FGroups[i].Path);
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
@@ -8310,11 +9890,23 @@ end;
 
 
 function TTyStringGrid.ActiveSelectionRect: TRect;
+var
+  a, c: Integer;
 begin
+  a := DataToDisplay(FSelAnchorRow);
+  c := DataToDisplay(FRow);
+  { 被筛掉的行没有显示位置(-1)。把 -1 直接喂给 Min 的话选区就从 -1 起算,
+    一路吃到显示位置 0 —— 筛掉锚点之后,选中范围反而**扩到表头**那边去了。
+    锚点没了就退化成"只有光标那一行"。
+    两端都没了则两个都还是 -1,行区间 [-1,-1] 里不可能有真实的显示位置
+    (调用方喂的 rp 恒 >= 0)—— 那种情况本来就该什么都不选中,不必另开一路。 }
+  if a < 0 then a := c;
+  if c < 0 then c := a;
+
   Result.Left   := Min(FSelAnchorCol, FCol);
   Result.Right  := Max(FSelAnchorCol, FCol);
-  Result.Top    := Min(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
-  Result.Bottom := Max(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+  Result.Top    := Min(a, c);
+  Result.Bottom := Max(a, c);
 end;
 
 { 一格在不在某个矩形里。整行/整列模式下另一轴不参与判定 —— 选中就是整条。 }
@@ -8360,13 +9952,36 @@ begin
 end;
 
 procedure TTyStringGrid.SelectAll;
+var
+  pos, d, firstData, lastData: Integer;
 begin
   SetLength(FSelRects, 0);
   if (Header.Columns.Count = 0) or (RowCount = 0) then Exit;
+
+  { 显示序的两端**未必是数据行**:有分组时首行必是组标题,最后一组折叠着的话
+    末行也是。组行的 DisplayToData 是负数,直接拿它当锚点的话
+    `ActiveSelectionRect` 会把整个选区塌成光标那一格 —— Ctrl+A 只选中一行,
+    接着的 Ctrl+C / 删除 / 涂色全都只作用于那一行。
+    所以从两头各找**第一个真数据行**。 }
+  firstData := -1;
+  for pos := 0 to DisplayRowCount - 1 do
+  begin
+    d := DisplayToData(pos);
+    if d >= 0 then begin firstData := d; Break; end;
+  end;
+  if firstData < 0 then Exit;        { 一行数据都没露出来(全折叠) }
+
+  lastData := firstData;
+  for pos := DisplayRowCount - 1 downto 0 do
+  begin
+    d := DisplayToData(pos);
+    if d >= 0 then begin lastData := d; Break; end;
+  end;
+
   FSelAnchorCol := 0;
-  FSelAnchorRow := DisplayToData(0);
+  FSelAnchorRow := firstData;
   FCol := Header.Columns.Count - 1;
-  FRow := DisplayToData(DisplayRowCount - 1);
+  FRow := lastData;
   SelectionChanged;
 end;
 
@@ -8462,6 +10077,45 @@ begin
   end;
 end;
 
+function TTyStringGrid.ApplySelectionColor(AColor: TTyColor;
+  ATextColor: Boolean): Integer;
+var
+  pos, colIdx, dataRow: Integer;
+begin
+  Result := 0;
+  { 整片 = **一条**撤销记录。逐格记的话,涂 20 格要按 20 次 Ctrl+Z ——
+    与粘贴/剪切/批量增删行/ClearMerges 同一族。 }
+  BeginUpdate;
+  try
+    { 遍历走显示序、寻址用数据行 —— 排序/筛选之后颜色仍跟着那一行数据走。
+      分组行不是数据行,跳过。(与 ForEachSelectedNumber 同一套规矩。) }
+    for pos := 0 to DisplayRowCount - 1 do
+    begin
+      dataRow := DisplayToData(pos);
+      if dataRow < 0 then Continue;
+      for colIdx := 0 to Header.Columns.Count - 1 do
+      begin
+        if not IsCellSelected(colIdx, dataRow) then Continue;
+        if ATextColor then SetCellTextColor(colIdx, dataRow, AColor)
+        else SetCellColor(colIdx, dataRow, AColor);
+        Inc(Result);
+      end;
+    end;
+  finally
+    EndUpdate;
+  end;
+end;
+
+function TTyStringGrid.SetSelectionColor(AColor: TTyColor): Integer;
+begin
+  Result := ApplySelectionColor(AColor, False);
+end;
+
+function TTyStringGrid.SetSelectionTextColor(AColor: TTyColor): Integer;
+begin
+  Result := ApplySelectionColor(AColor, True);
+end;
+
 function TTyStringGrid.SelectionSum: Double;
 var n: Integer; mn, mx: Double;
 begin
@@ -8546,7 +10200,67 @@ begin
   Result := BeginEdit(FCol, FRow);
 end;
 
+{ 窄列上把编辑器向右加宽,好让人看清自己在输入什么。
+  加宽的是编辑器,列宽一点没动;也绝不越过网格右缘(越出去的部分点不到、也画不出)。
+  下拉另算:列上配了 DropDownWidth 就按它走。 }
+function TTyStringGrid.WidenEditorRect(ACol, ARow: Integer;
+  const ARect: TRect): TRect;
+var
+  want, limit: Integer;
+  gcol: TTyGridColumn;   { 别叫 col —— 与网格的 Col 属性撞名 }
+begin
+  Result := ARect;
+  want := FMinEditorWidth;
+
+  if (ACol >= 0) and (ACol < Header.Columns.Count)
+     and (Header.Columns.Items[ACol] is TTyGridColumn) then
+  begin
+    gcol := TTyGridColumn(Header.Columns.Items[ACol]);
+    if (EditorKindFor(ACol, ARow) = gekPickList) and (gcol.DropDownWidth > 0) then
+      want := gcol.DropDownWidth;
+  end;
+
+  if want <= 0 then Exit;
+  want := ScaleI(want);
+  if Result.Right - Result.Left >= want then Exit;   { 本来就够宽 }
+
+  limit := ViewportW;
+  Result.Right := Result.Left + want;
+  if Result.Right > limit then Result.Right := limit;
+end;
+
+{ 当前正在用的编辑器控件。宿主给的 EditLink 优先,其次看内建那几个谁在显示。
+  单独一个函数而不是十几处各记一个字段 —— 记账点越多越容易漏。 }
+function TTyStringGrid.EditorControl: TControl;
+begin
+  Result := nil;
+  if not FEditing then Exit;
+  if FEditLinkCtl <> nil then Exit(FEditLinkCtl);
+  if FEditor.Visible then Exit(FEditor);
+  if FPickEditor.Visible then Exit(FPickEditor);
+  if FDateEditor.Visible then Exit(FDateEditor);
+  if FSpinEditor.Visible then Exit(FSpinEditor);
+  if FSliderEditor.Visible then Exit(FSliderEditor);
+  if FMemoEditor.Visible then Exit(FMemoEditor);
+  if FMaskEditor.Visible then Exit(FMaskEditor);
+  if FCalcEditor.Visible then Exit(FCalcEditor);
+end;
+
+{ 包一层:内建编辑器有十来种分支,每种都自己 SetBounds/Visible/SetFocus 然后 Exit。
+  与其去十几个分支里各插一次事件(那正是本控件反复漏掉东西的方式),
+  不如在这里统一发一次 —— 收口一处,不可能漏。
+
+  **时机**:编辑器已经建好、摆好、拿到焦点,但还没把控制权交回调用方。
+  宿主在这里改属性(字体、限长、宽度)都来得及生效;想在"显示之前"插手的话
+  已经晚一步 —— 换来的是这十几种编辑器不可能有一种忘了通知。 }
 function TTyStringGrid.BeginEdit(ACol, ARow: Integer): Boolean;
+begin
+  Result := DoBeginEdit(ACol, ARow);
+  if Result and Assigned(FOnGetEditorProp) and (EditorControl <> nil) then
+    FOnGetEditorProp(Self, FEditCol, FEditRow, EditorControl);
+end;
+
+function TTyStringGrid.DoBeginEdit(ACol, ARow: Integer): Boolean;
 var
   r: TRect;
 begin
@@ -8582,9 +10296,11 @@ begin
   { 编辑器盖在**可见**矩形上:被冻结带盖住的部分本来就不该露出编辑框。 }
   r := CellVisibleRect(FCol, FRow);
   if IsRectEmpty(r) then Exit;
+  r := WidenEditorRect(FCol, FRow, r);
 
   FEditCol := FCol;
   FEditRow := FRow;
+  FEditKind := EditorKindFor(FCol, FRow);
 
   { 先问宿主要不要用自己的编辑器。给了就整格交给它,内建那几种一概不出场。 }
   FEditLink := nil;
@@ -8615,6 +10331,10 @@ begin
   if EditorKindFor(FCol, FRow) = gekDate then
   begin
     FDateEditor.Controller := Self.Controller;
+    { 共享控件:每次都要显式设回去,否则编辑过一次时间格之后,
+      日期列会永远弹出时间选择器(dtkDate 从前全文件一次都没被赋过)。
+      与 PasswordChar 那处是同一条教训。 }
+    FDateEditor.Kind := dtkDate;
     FDateEditor.Date := StrToDateDef(Cells[FCol, FRow], SysUtils.Date);
     FDateEditor.BoundsRect := r;
     FDateEditor.Visible := True;
@@ -8753,10 +10473,11 @@ procedure TTyStringGrid.EndEdit(ACommit: Boolean);
 var
   oldTxt, newTxt: string;
   accept: Boolean;
-  usePick, useDate, useLink, useSpin, useSlider, useMemo, useMask, useCalc: Boolean;
+  usePick, useDate, useTime, useLink, useSpin, useSlider, useMemo, useMask, useCalc: Boolean;
   linkTxt: string;
 begin
   usePick := False;
+  useTime := False;
   useDate := False;
   useSpin := False;
   useSlider := False;
@@ -8813,7 +10534,10 @@ begin
     if FDateEditor.Visible then
     begin
       FDateEditor.Visible := False;
-      useDate := True;
+      { 日期与时间**共用同一个控件**,所以可见性分不出是哪一种 ——
+        必须看开编辑时记下的种类。从前一律当日期提交,于是时间格被写成
+        DateToStr(只有小数部分的 TDateTime) = 1899-12-30,用户输入的时间直接丢失。 }
+      if FEditKind = gekTime then useTime := True else useDate := True;
     end;
     FEditor.Visible := False;
     if ACommit then
@@ -8831,6 +10555,11 @@ begin
         newTxt := FMaskEditor.Text
       else if useCalc then
         newTxt := FCalcEditor.Text
+      else if useTime then
+        { 用 hh:nn 而不是 TimeToStr —— 后者会补出秒,把用户原样的 '13:45'
+          改写成 '13:45:00'。用户没改值就不该重写它(EndEdit 只比文本,
+          格式一变就会当成"改过了"而落盘)。 }
+        newTxt := FormatDateTime('hh:nn', FDateEditor.DateTime)
       else if useDate then
         newTxt := DateToStr(FDateEditor.Date)
       else if usePick then
@@ -8902,10 +10631,39 @@ end;
 procedure TTyStringGrid.RenderSelectionFrame(P: TTyPainter;
   const M: TTyGridMetrics; const AFrame: TTyStyleSet);
 var
-  b, h, oldClip, clipR, r: TRect;
+  b, r: TRect;
   fS: TTyStyleSet;
-  lw: Integer;
-  solid: TTyFill;
+
+  procedure DrawFrameAndHandle;
+  var
+    h: TRect;
+    lw: Integer;
+    solid: TTyFill;
+  begin
+    lw := fS.BorderWidth;
+    if lw < 1 then lw := 1;
+    P.StrokeBorder(b, 0, lw, fS.BorderColor);
+
+    { 填充柄。用同一个 FillHandleRect —— 命中走的也是它,所以
+      "看得见的那一块"和"点得到的那一块"不可能分叉。 }
+    h := FillHandleRect;
+    if IsRectEmpty(h) then Exit;
+    if (tpBackground in fS.Present) and (fS.Background.Kind <> tfkNone) then
+      P.FillBackground(h, fS.Background, 0)
+    else
+    begin
+      solid := Default(TTyFill);
+      solid.Kind := tfkSolid;
+      solid.Color := fS.BorderColor;
+      P.FillBackground(h, solid, 0);
+    end;
+    { 柄要描一圈对比色。不描的话它和选区底色同色 —— 画了等于没画
+      (token 里 background 与 border-color 通常都是 accent)。
+      对比色走 token 的 color:,不硬编码。 }
+    if tpTextColor in fS.Present then
+      P.StrokeBorder(h, 0, 1, fS.TextColor);
+  end;
+
 begin
   b := SelectionBoundsRect;
   if IsRectEmpty(b) then Exit;
@@ -8916,40 +10674,8 @@ begin
 
   { 裁到选区**所属的那个窗格**,而不是笼统裁到正文窗格。
     光标停在固定行上时,柄会探进正文窗格一个像素 —— 而正文窗格是会被
-    滚动平移的,那一个像素于是跟着跑,脏区快路径与整幅重画就对不上了。
-    (与行号、横格线同一类问题:chrome 必须跟着它所属的窗格走。) }
-  oldClip := P.Bitmap.ClipRect;
-  if not IntersectRect(clipR, oldClip,
-       TyGridPaneRect(M, CellPane(r.Right, DisplayToData(r.Bottom)))) then Exit;
-  P.Bitmap.ClipRect := clipR;
-  try
-    lw := fS.BorderWidth;
-    if lw < 1 then lw := 1;
-    P.StrokeBorder(b, 0, lw, fS.BorderColor);
-
-    { 填充柄。用同一个 FillHandleRect —— 命中走的也是它,所以
-      "看得见的那一块"和"点得到的那一块"不可能分叉。 }
-    h := FillHandleRect;
-    if not IsRectEmpty(h) then
-    begin
-      if (tpBackground in fS.Present) and (fS.Background.Kind <> tfkNone) then
-        P.FillBackground(h, fS.Background, 0)
-      else
-      begin
-        solid := Default(TTyFill);
-        solid.Kind := tfkSolid;
-        solid.Color := fS.BorderColor;
-        P.FillBackground(h, solid, 0);
-      end;
-      { 柄要描一圈对比色。不描的话它和选区底色同色 —— 画了等于没画
-        (token 里 background 与 border-color 通常都是 accent)。
-        对比色走 token 的 color:,不硬编码。 }
-      if tpTextColor in fS.Present then
-        P.StrokeBorder(h, 0, 1, fS.TextColor);
-    end;
-  finally
-    P.Bitmap.ClipRect := oldClip;
-  end;
+    滚动平移的,那一个像素于是跟着跑,脏区快路径与整幅重画就对不上了。 }
+  DrawInPane(P, CellPane(r.Right, r.Bottom), M, @DrawFrameAndHandle);
 end;
 
 procedure TTyStringGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
@@ -8999,7 +10725,7 @@ begin
 
   { 分组行:整行一条横带,画"值(计数)"和折叠三角。它不对应任何数据行,
     所以必须在普通单元格之前处理掉,否则基类会拿 -1 去取内容。 }
-  if (FGroupCol >= 0) and TyGridDrawSlots(M, firstRow, lastRow) then
+  if (GetGroupCol >= 0) and TyGridDrawSlots(M, firstRow, lastRow) then
     for slot := firstRow to lastRow do
     begin
       pos := TyGridRowAtSlot(slot, M);

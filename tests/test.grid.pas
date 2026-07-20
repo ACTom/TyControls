@@ -54,9 +54,38 @@ type
     FForm: TForm;
     FCtl: TTyStyleController;
     FTakeOverCol: Integer;
+    { 逐格钩子收到过的**最小**行号 —— 用来证明宿主永远见不到负的数据行。 }
+    FMinHookRow: Integer;
     { OnDblClickCell 的记账(它从前一处都没被触发过)。 }
     FDblCount, FDblCol, FDblRow: Integer;
+    FRowMoveCount: Integer;
+    FEditorPropCount, FEditorPropCol, FEditorPropRow: Integer;
+    FEditorPropCtl: TControl;
+    FRowMoveAllow: Boolean;
+    procedure HandleGetEditorProp(Sender: TObject; ACol, ARow: Integer;
+      AEditor: TControl);
+    procedure HandleVirtualText(Sender: TObject; ACol, ARow: Integer;
+      var AText: string);
+    procedure HandleRowMove(Sender: TObject; AFrom, ATo: Integer;
+      var AAllow: Boolean);
     procedure HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
+    { 逐格钩子的探针 —— 只记下收到过的最小行号。
+      **必须放在 private**:published 区里的方法会被 FPCUnit 当成测试用例
+      直接调用(Sender = nil),于是它自己先崩一次。 }
+    procedure HookGetCellStyleRecordMin(Sender: TObject; ACol, ARow: Integer;
+      var ABackground: TTyFill; var ATextColor: TTyColor;
+      var AFontName: string; var AFontSize, AFontWeight: Integer;
+      var AHAlign: TAlignment; var AVAlign: TTextLayout);
+    procedure HookGetCellBorderRecordMin(Sender: TObject; ACol, ARow: Integer;
+      var ABorders: TTyGridCellBorders);
+    procedure HookRowSizingRecordMin(Sender: TObject; AIndex: Integer;
+      var ANewSize: Integer; var AAllow: Boolean);
+    { 虚拟数据源:第 r 行给一个**单字符**的值,倒序。
+      刻意不用数字 —— `HandleVirtualText` 那个给的是 100..91,
+      字典序下 '100' < '91',按文本排时行 0 本来就该排第一,
+      拿它当"排序没生效"的证据会得出完全相反的结论。 }
+    procedure HandleVirtualLetter(Sender: TObject; ACol, ARow: Integer;
+      var AText: string);
     procedure HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Integer;
       var AKind: TTyGridEditorKind);
     procedure HandleGetPickList(Sender: TObject; ACol, ARow: Integer; AItems: TStrings);
@@ -188,6 +217,49 @@ type
     procedure TestScrollFastPathIsPixelIdenticalToFullRepaint;
     procedure TestScrollFastPathIsCheaperThanFullRepaint;
     procedure TestScrollBarDragUsesFastPath;
+    procedure TestPhysicalSortCarriesCellAttributes;
+    procedure TestTopRightCornerCellIsVisibleWithBothFreezes;
+    procedure TestFixedRowsAndSortTogetherKeepCellsInTheirPane;
+    procedure TestFrozenBandThicknessFollowsDisplayedRows;
+    procedure TestFilteringOutTheAnchorDoesNotGrowTheSelection;
+    procedure TestUndoRestoresCellAttributesAndRowHeights;
+    procedure TestUndoRestoresCellColorAndMerge;
+    procedure TestSwappingRowsCarriesTheHiddenFlag;
+    procedure TestFooterAggregateIsCachedAndInvalidated;
+    procedure TestPasteAndCutAreOneUndoStepEach;
+    procedure TestClearAndCsvImportAreUndoable;
+    procedure TestNoOpAttributeWriteLeavesTheUndoStackAlone;
+    procedure TestMergeCountSurvivesRowRemovalAndUndo;
+    procedure TestClearMergesIsOneUndoStep;
+    procedure TestOversizedUndoRecordIsDiscardedNotTruncated;
+    procedure TestPasteWithAFilteredOutCursorRowKeepsEveryLine;
+    procedure TestUndoingARowSwapRestoresTheHiddenFlag;
+    procedure TestColouringASelectionIsOneUndoStep;
+    procedure TestAutoFitRowsIsOneUndoStep;
+    procedure TestColumnKeyedTablesFollowInsertAndDelete;
+    procedure TestUndoingRowInsertRestoresHeightsAndHiddenFlags;
+    procedure TestRemainingBulkOpsAreOneUndoStepEach;
+    procedure TestSelectAllSkipsGroupRows;
+    procedure TestCopiedRangeMatchesTheHighlightedRange;
+    procedure TestCsvExportSkipsGroupRowsLikeHtmlDoes;
+    procedure TestHostHooksNeverSeeANegativeRow;
+    procedure TestScrollIntoViewIgnoresAnInvisibleRow;
+    procedure TestShrinkingRowCountDropsOutOfRangeRowState;
+    procedure TestGroupRowHasNoRowResizeGesture;
+    procedure TestInsertingInsideAMergedBlockGrowsTheSpan;
+    procedure TestSortingWorksOnAVirtualDataSource;
+    procedure TestMultiLevelGroupingOnUnclusteredData;
+    procedure TestTimeEditorCommitsATimeNotADate;
+    procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
+    procedure TestLayoutRoundTripsAndSurvivesGarbage;
+    procedure TestPhysicalSortMovesDataAndUnlocksMergeAndDrag;
+    procedure TestPhysicalSortRefusedWhenFilteredOrVirtual;
+    procedure TestUndoRedoRestoresCellsAndRowCount;
+    procedure TestBulkOperationIsOneUndoStepAndLimitDropsOldest;
+    procedure TestNarrowColumnEditorWidensAndDropDownWidthApplies;
+    procedure TestOnGetEditorPropFiresBeforeTheEditorShows;
+    procedure TestRowDragReordersFromTheIndicatorGutter;
+    procedure TestRowDragRefusedWhenDisplayOrderIsNotDataOrder;
     procedure TestFillHandleGeometryMatchesWhatIsDrawn;
     procedure TestFillCopiesRepeatsAndExtrapolates;
     procedure TestProgrammaticCursorMoveDoesNotStretchSelection;
@@ -1024,12 +1096,36 @@ type
     procedure SetScrollLeftForTest(AValue: Integer);
     procedure ScrollByForTest(ADy: Integer);
     function  RowAtForTest(AY: Integer): Integer;
+    function  EditorBoundsForTest: TRect;
+    function  ScaleForTest(AValue: Integer): Integer;
+    function  GroupToggleRectForTest(APos: Integer): TRect;
+    function  BeginEditAt(ACol, ARow: Integer): Boolean;
+    function  UndoCountForTest: Integer;
+    procedure PressKeyCtrl(AKey: Word);
     function  ColAtForTest(AX: Integer): Integer;
     procedure BaseCellOfForTest(ACol, ARow: Integer; out ABaseCol, ABaseRow: Integer);
     procedure InvalidateSurfaceForTest;
     function  SurfaceFreshForTest: Boolean;
     property ScrollTop: Integer read GetScrollTop write SetScrollTop;
   end;
+
+  { 数"汇总扫了多少格"。页脚每帧都要问一次聚合,而聚合遍历的是全部显示行 ——
+    百万行时每帧一次 O(n)。守卫要能看见**扫描本身**,光看结果对不对
+    分辨不出"每帧重算"和"用了缓存"。 }
+  TCountingGrid = class(TStrGridAccess)
+  public
+    ScanCount: Integer;
+    procedure AccumulateCell(ACol, ADataRow: Integer; AKind: TTyGridAggregate;
+      var AAcc: Double; var ACount: Integer; var AStarted: Boolean); override;
+  end;
+
+procedure TCountingGrid.AccumulateCell(ACol, ADataRow: Integer;
+  AKind: TTyGridAggregate; var AAcc: Double; var ACount: Integer;
+  var AStarted: Boolean);
+begin
+  Inc(ScanCount);
+  inherited AccumulateCell(ACol, ADataRow, AKind, AAcc, ACount, AStarted);
+end;
 
 procedure TStrGridAccess.PressMouseWithoutRelease(X, Y: Integer);
 begin
@@ -1214,6 +1310,37 @@ begin
   Result := ColumnAtX(AX);
 end;
 
+function TStrGridAccess.EditorBoundsForTest: TRect;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if EditorControl <> nil then Result := EditorControl.BoundsRect;
+end;
+
+function TStrGridAccess.GroupToggleRectForTest(APos: Integer): TRect;
+begin
+  Result := GroupToggleRect(APos);
+end;
+
+function TStrGridAccess.ScaleForTest(AValue: Integer): Integer;
+begin
+  Result := ScaleI(AValue);
+end;
+
+procedure TStrGridAccess.PressKeyCtrl(AKey: Word);
+begin
+  KeyDown(AKey, [ssCtrl]);
+end;
+
+function TStrGridAccess.UndoCountForTest: Integer;
+begin
+  Result := UndoCount;
+end;
+
+function TStrGridAccess.BeginEditAt(ACol, ARow: Integer): Boolean;
+begin
+  Result := BeginEdit(ACol, ARow);
+end;
+
 function TStrGridAccess.RowAtForTest(AY: Integer): Integer;
 begin
   Result := TyGridRowAt(AY, GridMetrics);
@@ -1319,6 +1446,34 @@ procedure TTyStringGridTest.HandleReadOnlyCol2(Sender: TObject; ACol, ARow: Inte
   var AKind: TTyGridEditorKind);
 begin
   if ACol = 2 then AKind := gekNone else AKind := gekText;
+end;
+
+procedure TTyStringGridTest.HandleVirtualText(Sender: TObject;
+  ACol, ARow: Integer; var AText: string);
+begin
+  AText := Format('%.2d', [100 - ARow]);
+end;
+
+procedure TTyStringGridTest.HandleVirtualLetter(Sender: TObject;
+  ACol, ARow: Integer; var AText: string);
+begin
+  AText := Chr(Ord('A') + (9 - ARow));      { 行 0 = 'J' … 行 9 = 'A' }
+end;
+
+procedure TTyStringGridTest.HandleGetEditorProp(Sender: TObject;
+  ACol, ARow: Integer; AEditor: TControl);
+begin
+  Inc(FEditorPropCount);
+  FEditorPropCol := ACol;
+  FEditorPropRow := ARow;
+  FEditorPropCtl := AEditor;
+end;
+
+procedure TTyStringGridTest.HandleRowMove(Sender: TObject; AFrom, ATo: Integer;
+  var AAllow: Boolean);
+begin
+  Inc(FRowMoveCount);
+  AAllow := FRowMoveAllow;
 end;
 
 procedure TTyStringGridTest.HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
@@ -4182,7 +4337,7 @@ begin
     rowTopAfter := G.RowRectAt(0).Top;
     AssertEquals('分组带把正文往下顶了一整条', 20 + 22, rowTopAfter);
 
-    { 分组带确实画出来了,而且只覆盖前两列(第 0 列宽 80,共 4 列 x 80)。 }
+    { 分组带确实画出来了,而且只覆盖前两列(第 0 列宽 80,Count 4 列 x 80)。 }
     Bmp.PixelFormat := pf32bit;
     Bmp.SetSize(400, 300);
     Bmp.Canvas.Brush.Color := clWhite;
@@ -7001,6 +7156,1721 @@ begin
   G.DragFromTo((h.Left + h.Right) div 2, (h.Top + h.Bottom) div 2,
                (cell.Left + cell.Right) div 2, (cell.Top + cell.Bottom) div 2);
   AssertEquals('拖柄之后第 4 行被填上', '5', G.Cells[3, 4]);
+end;
+
+{ 在**行头槽**里按下并拖动 = 拖行(与列头拖列对称)。
+  单元格上不能抢这个手势 —— 那里是框选。 }
+procedure TTyStringGridTest.TestRowDragReordersFromTheIndicatorGutter;
+var
+  G: TStrGridAccess;
+  r1, r3: TRect;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 8;
+  G.ShowIndicator := True;
+  G.IndicatorWidth := 40;
+  for r := 0 to 7 do
+    G.Cells[0, r] := 'R' + IntToStr(r);
+
+  r1 := G.RowRectAt(1);
+  r3 := G.RowRectAt(3);
+
+  { 一、阈值以内不该动 —— 否则手抖一像素就把行挪了。
+    起点取在行下边缘往上 6 像素:这样 7 像素的位移**已经跨进下一行**,
+    却仍在 8 像素的阈值以内 —— 只有真的判了阈值才会不动。
+    (两次修正才打准:先是从行中间挪 2 像素,落点还在同一行;
+     再是贴着边缘起手,却落进了分隔线的 3 像素判定区,被当成改行高。) }
+  G.DragFromTo(10, r1.Bottom - 6, 10, r1.Bottom + 1);
+  AssertEquals('阈值以内不该移动', 'R1', G.Cells[0, 1]);
+
+  { 二、拖过阈值:第 1 行落到第 3 行的位置。 }
+  G.DragFromTo(10, (r1.Top + r1.Bottom) div 2, 10, (r3.Top + r3.Bottom) div 2);
+  AssertEquals('R1 被拖到第 3 行', 'R1', G.Cells[0, 3]);
+  AssertEquals('R2 上移', 'R2', G.Cells[0, 1]);
+  AssertEquals('R3 上移', 'R3', G.Cells[0, 2]);
+
+  { 三、在**单元格**上拖不该移动行(那是框选)。 }
+  G.DragFromTo(60, (r1.Top + r1.Bottom) div 2, 60, (r3.Top + r3.Bottom) div 2);
+  AssertEquals('单元格上拖动不移动行', 'R2', G.Cells[0, 1]);
+
+  { 四、钩子能否决。 }
+  FRowMoveAllow := False;
+  FRowMoveCount := 0;
+  G.OnRowMove := @HandleRowMove;
+  G.DragFromTo(10, (r1.Top + r1.Bottom) div 2, 10, (r3.Top + r3.Bottom) div 2);
+  AssertTrue('钩子被调用', FRowMoveCount > 0);
+  AssertEquals('否决之后行没动', 'R2', G.Cells[0, 1]);
+end;
+
+{ 排过序/分过组的表上**不许**拖行:显示序不是数据序,把行拖到某个屏幕位置
+  没有意义 —— 松手之后排序会立刻把它放回去。
+  (与 MergeSelection 拒绝非数据连续的选区是同一条道理:宁可什么都不做,
+   也不要做一件用户看不懂的事。) }
+procedure TTyStringGridTest.TestRowDragRefusedWhenDisplayOrderIsNotDataOrder;
+var
+  G: TStrGridAccess;
+  r1, r3: TRect;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 8;
+  G.ShowIndicator := True;
+  G.IndicatorWidth := 40;
+  for r := 0 to 7 do
+    G.Cells[0, r] := Format('%.2d', [7 - r]);
+  G.SortByColumn(0, sdAscending);
+
+  r1 := G.RowRectAt(1);
+  r3 := G.RowRectAt(3);
+  G.DragFromTo(10, (r1.Top + r1.Bottom) div 2, 10, (r3.Top + r3.Bottom) div 2);
+
+  { 数据一格都不该动。 }
+  for r := 0 to 7 do
+    AssertEquals(Format('排序状态下拖行不该改数据(第 %d 行)', [r]),
+      Format('%.2d', [7 - r]), G.Cells[0, r]);
+end;
+
+{ 窄列上编辑时,编辑器要能**自己加宽**到看得清 —— 60 像素的列里编辑一个长值,
+  否则只能看见自己输入内容的一小截。加宽的是编辑器,不是列宽。 }
+procedure TTyStringGridTest.TestNarrowColumnEditorWidensAndDropDownWidthApplies;
+var
+  G: TStrGridAccess;
+  cell: TRect;
+  c: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  TTyColumn(G.Header.Columns.Items[0]).Width := 50;
+  G.Cells[0, 1] := '一个相当长的值需要看清楚';
+
+  { 默认(MinEditorWidth = 0)= 跟着格走,老行为一字不变。 }
+  G.MinEditorWidth := 0;
+  G.BeginEditAt(0, 1);
+  cell := G.CellRect(0, 1);
+  AssertEquals('默认跟着格宽', cell.Right - cell.Left, G.EditorBoundsForTest.Width);
+  G.EndEdit(False);
+
+  { 打开之后:至少这么宽,但不能越过网格右缘。 }
+  G.MinEditorWidth := 160;
+  G.BeginEditAt(0, 1);
+  AssertTrue(Format('窄列上编辑器要加宽(实得 %d)', [G.EditorBoundsForTest.Width]),
+    G.EditorBoundsForTest.Width >= G.ScaleForTest(160));
+  AssertTrue('加宽不能越过网格右缘',
+    G.EditorBoundsForTest.Right <= G.ClientWidth);
+  G.EndEdit(False);
+
+  { 宽列不该被"加宽"缩窄 —— 取的是较大者。 }
+  TTyColumn(G.Header.Columns.Items[1]).Width := 300;
+  G.BeginEditAt(1, 1);
+  cell := G.CellRect(1, 1);
+  AssertEquals('宽列保持原宽', cell.Right - cell.Left, G.EditorBoundsForTest.Width);
+  G.EndEdit(False);
+
+  { 下拉宽度可以单独配。放在**最左边**那个窄列上测 ——
+    靠右的列会被网格右缘钳住,那样测的就不是 DropDownWidth 而是钳制逻辑了。 }
+  G.MinEditorWidth := 0;
+  c := TTyGridColumn(G.Header.Columns.Items[0]);
+  c.EditorKind := gekPickList;
+  c.PickList.CommaText := '甲,乙,丙';
+  c.DropDownWidth := 200;
+  G.BeginEditAt(0, 1);
+  AssertTrue(Format('下拉按 DropDownWidth 走(实得 %d)',
+    [G.EditorBoundsForTest.Width]),
+    G.EditorBoundsForTest.Width >= G.ScaleForTest(200));
+  G.EndEdit(False);
+end;
+
+{ `OnGetEditorProp` 在编辑器建好之后、把控制权交回调用方之前触发,
+  拿到的是真正那个控件 —— 比"要么用内建、要么自己写一整个 EditLink"细一档。
+  收口在 BeginEdit 的外层包装里:内建编辑器有十来种分支,逐个插事件迟早漏一种。 }
+procedure TTyStringGridTest.TestOnGetEditorPropFiresBeforeTheEditorShows;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  FEditorPropCount := 0;
+  FEditorPropCtl := nil;
+  G.OnGetEditorProp := @HandleGetEditorProp;
+
+  G.BeginEditAt(1, 2);
+  AssertEquals('钩子被调用一次', 1, FEditorPropCount);
+  AssertTrue('拿到的是真正的编辑器控件', FEditorPropCtl <> nil);
+  AssertEquals('列号对', 1, FEditorPropCol);
+  AssertEquals('行号对', 2, FEditorPropRow);
+  { 钩子拿到的必须**就是**正在用的那个控件(而不是某个碰巧存在的编辑器)。 }
+  AssertTrue('钩子拿到的就是当前编辑器', FEditorPropCtl = G.EditorControl);
+  G.EndEdit(False);
+end;
+
+{ 撤销/重做:**逐格**回到原状,不是只看行数。
+  结构性操作(删行)必须连行数一起还原,否则"撤销"完剩一张缺了一行的表。 }
+procedure TTyStringGridTest.TestUndoRedoRestoresCellsAndRowCount;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+    G.Cells[0, r] := 'R' + IntToStr(r);
+  G.ClearUndo;                     { 建表本身不算用户操作 }
+  AssertTrue('清空后没得撤销', not G.CanUndo);
+
+  { 一、改一格。 }
+  G.Cells[0, 2] := '改过了';
+  AssertTrue('改过之后可以撤销', G.CanUndo);
+  G.Undo;
+  AssertEquals('撤销还原单元格', 'R2', G.Cells[0, 2]);
+  AssertTrue('撤销之后可以重做', G.CanRedo);
+  G.Redo;
+  AssertEquals('重做再改回去', '改过了', G.Cells[0, 2]);
+  G.Undo;
+
+  { 二、删行:内容与行数都要回来。 }
+  G.DeleteRow(1);
+  AssertEquals('删掉一行', 5, G.RowCount);
+  AssertEquals('后面的行上移', 'R2', G.Cells[0, 1]);
+  G.Undo;
+  AssertEquals('撤销还原行数', 6, G.RowCount);
+  for r := 0 to 5 do
+    AssertEquals(Format('撤销后第 %d 行逐格还原', [r]),
+      'R' + IntToStr(r), G.Cells[0, r]);
+
+  { 三、撤销期间不能再往栈里压新记录 —— 否则会自噬,永远撤销不完。 }
+  AssertTrue('撤销到底之后就没得撤了', not G.CanUndo);
+
+  { 四、Ctrl+Z / Ctrl+Y 走键盘 —— 只测 API 的话,键没接上也无人知晓。 }
+  G.Cells[0, 3] := '键盘改的';
+  G.PressKeyCtrl(Ord('Z'));
+  AssertEquals('Ctrl+Z 还原', 'R3', G.Cells[0, 3]);
+  G.PressKeyCtrl(Ord('Y'));
+  AssertEquals('Ctrl+Y 重做', '键盘改的', G.Cells[0, 3]);
+end;
+
+{ 一次批量操作 = **一条**撤销记录(填充、粘贴都在 BeginUpdate 里跑);
+  栈满之后丢最老的那条。 }
+procedure TTyStringGridTest.TestBulkOperationIsOneUndoStepAndLimitDropsOldest;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 12;
+  G.Cells[0, 0] := '5';
+  G.ClearUndo;
+
+  { 拖填充柄铺 5 行 —— 整批只该是一条撤销记录。 }
+  G.SelectRange(0, 0, 0, 0);
+  G.FillFromSelectionTo(0, 5);
+  AssertEquals('填充后第 5 行有值', '5', G.Cells[0, 5]);
+  AssertEquals('整批只压了一条记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  for r := 1 to 5 do
+    AssertEquals(Format('一次撤销把整批都还原(第 %d 行)', [r]), '', G.Cells[0, r]);
+
+  { 栈上限:超出之后最老的被丢弃。 }
+  G.ClearUndo;
+  G.UndoLimit := 3;
+  for r := 0 to 5 do
+    G.Cells[1, 0] := 'v' + IntToStr(r);
+  AssertEquals('栈不超过上限', 3, G.UndoCountForTest);
+  { 只剩最近 3 条,所以最多撤销回 v2。 }
+  G.Undo; G.Undo; G.Undo;
+  AssertEquals('撤销到栈底为止', 'v2', G.Cells[1, 0]);
+  AssertTrue('栈空了', not G.CanUndo);
+end;
+
+{ 物理排序模式:排序**真的把数据换位置**(像 Excel),排完之后
+  显示序 == 数据序,于是那几条"排序时拒绝"自动失效。 }
+procedure TTyStringGridTest.TestPhysicalSortMovesDataAndUnlocksMergeAndDrag;
+var
+  G: TStrGridAccess;
+  r, bc, br: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+  begin
+    G.Cells[0, r] := Format('%.2d', [5 - r]);      { 05 04 03 02 01 00 }
+    G.Cells[1, r] := 'tag' + IntToStr(r);
+  end;
+  G.RowHeights[0] := 44;                            { 行高要跟着数据走 }
+  G.SortMode := gsmData;
+  G.ClearUndo;
+
+  G.SortByColumn(0, sdAscending);
+
+  { 一、数据**真的**换了位置 —— 直接看数据行,不是看显示序。 }
+  for r := 0 to 5 do
+    AssertEquals(Format('第 %d 个数据行就是排好序的值', [r]),
+      Format('%.2d', [r]), G.Cells[0, r]);
+  AssertEquals('同一行的其他列跟着搬', 'tag5', G.Cells[1, 0]);
+  AssertEquals('行高跟着那一行数据走', 44, G.RowHeights[5]);
+
+  { 二、显示序此刻就是数据序。 }
+  for r := 0 to 5 do
+    AssertEquals(Format('显示序恒等(%d)', [r]), r, G.DisplayToData(r));
+
+  { 三、于是合并不再被拒 —— 这正是当初要解决的问题。 }
+  G.SelectRange(0, 1, 0, 3);
+  AssertTrue('物理排序后合并不再被拒绝', G.MergeSelection);
+  G.BaseCellOfForTest(0, 2, bc, br);
+  AssertEquals('合并块成立', 1, br);
+
+  { 四、一次撤销把整次排序退回去(这就是为什么物理排序必须排在撤销之后)。 }
+  G.UnmergeCells(0, 1);
+  G.ClearUndo;
+  G.SortByColumn(0, sdDescending);
+  AssertEquals('降序排过了', '05', G.Cells[0, 0]);
+  G.Undo;
+  AssertEquals('一次撤销退回排序前', '00', G.Cells[0, 0]);
+end;
+
+{ 有筛选、或数据由回调提供(虚拟源)时**不能**物理排序:
+  前者会把被筛掉的行一起搬(那是数据损坏),后者控件根本不持有数据。
+  这两种情况自动退回显示序排序。 }
+procedure TTyStringGridTest.TestPhysicalSortRefusedWhenFilteredOrVirtual;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  { 一、有筛选。 }
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+    G.Cells[0, r] := Format('%.2d', [5 - r]);
+  G.SortMode := gsmData;
+  G.SetColumnFilter(0, '0');
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('有筛选时数据一格没动', '05', G.Cells[0, 0]);
+  AssertTrue('但显示序仍然排好了', G.DisplayToData(0) <> 0);
+
+  { 二、虚拟数据源这一半**当前测不出来**,这里只留一条不会假绿的弱断言。
+    原因:排序的比较读的是存储而不是 GetCellText,所以虚拟表根本排不出
+    非恒等的序,物理搬也就搬了个寂寞 —— 变异掉那条守卫,任何断言都不会变红。
+    与其写一条"看起来在守、其实守不住"的测试,不如把这件事写清楚。
+    真正的缺口(排序不认虚拟数据源)已记在计划文件里。 }
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  G.OnGetCellText := @HandleVirtualText;
+  G.SortMode := gsmData;
+  G.SortByColumn(0, sdAscending);
+  AssertEquals('虚拟源上排序不该凭空造出存储格', 0, G.StoredCellCount);
+end;
+
+{ 版式存下来、读回去,逐项一致;残缺/乱码的字符串不能崩、也不能改坏现状。 }
+procedure TTyStringGridTest.TestLayoutRoundTripsAndSurvivesGarbage;
+var
+  G: TStrGridAccess;
+  layout: string;
+  i: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+
+  { 改一通:列宽、可见性、排序、冻结数。 }
+  TTyColumn(G.Header.Columns.Items[0]).Width := 133;
+  TTyColumn(G.Header.Columns.Items[2]).Width := 55;
+  G.HideColumn(1);
+  G.FixedCols := 1;
+  G.FixedRowsBottom := 2;
+  G.SortByColumn(2, sdDescending);
+
+  layout := G.SaveLayoutToString;
+  AssertTrue('存出来不是空串', layout <> '');
+
+  { 全改回去,再读回来。 }
+  TTyColumn(G.Header.Columns.Items[0]).Width := 80;
+  TTyColumn(G.Header.Columns.Items[2]).Width := 80;
+  G.ShowColumn(1);
+  G.FixedCols := 0;
+  G.FixedRowsBottom := 0;
+  G.SortByColumn(-1, sdAscending);
+
+  AssertTrue('读回来要成功', G.LoadLayoutFromString(layout));
+  AssertEquals('列宽还原(0)', 133, TTyColumn(G.Header.Columns.Items[0]).Width);
+  AssertEquals('列宽还原(2)', 55, TTyColumn(G.Header.Columns.Items[2]).Width);
+  AssertTrue('隐藏还原', G.IsHiddenColumn(1));
+  AssertEquals('左冻结还原', 1, G.FixedCols);
+  AssertEquals('底部冻结还原', 2, G.FixedRowsBottom);
+  AssertEquals('排序列还原', 2, G.SortColumn);
+  AssertTrue('排序方向还原', G.SortDirection = sdDescending);
+
+  { --- 坏输入:每一条都必须"拒绝 + 现状一点不动" ---
+    关键是每次都断言**版式没被改坏**,而不只是"控件还活着"。
+    第一版就只断言了活着,于是三个变异(不校验版本 / 解析不严格 / 不校验列数)
+    全都活了下来 —— 因为那些坏串恰好都先被**别的**检查挡掉了。
+    所以每条坏串都构造成:除了要测的那一项,其余全部合法。 }
+
+  { 版本认不出。列数、字段全都合法,只有版本号不对。 }
+  AssertTrue('认不出的版本要拒绝', not G.LoadLayoutFromString(
+    'TYGRIDLAYOUT/999|cols=9:1:0,9:1:1,9:1:2,9:1:3|sort=|frozen=0,0,0,0'));
+  AssertEquals('版本不对时列宽不许被动', 133,
+    TTyColumn(G.Header.Columns.Items[0]).Width);
+
+  { 字段不是数字。版本对、列数对,只有宽度是乱码。 }
+  AssertTrue('非数字字段要拒绝', not G.LoadLayoutFromString(
+    'TYGRIDLAYOUT/1|cols=abc:1:0,9:1:1,9:1:2,9:1:3|sort=|frozen=0,0,0,0'));
+  AssertEquals('乱码字段时列宽不许被动', 133,
+    TTyColumn(G.Header.Columns.Items[0]).Width);
+
+  { 列数对不上(存的是 2 列,表有 4 列)。 }
+  AssertTrue('列数对不上要拒绝', not G.LoadLayoutFromString(
+    'TYGRIDLAYOUT/1|cols=9:1:0,9:1:1|sort=|frozen=0,0,0,0'));
+  AssertEquals('列数不符时列宽不许被动', 133,
+    TTyColumn(G.Header.Columns.Items[0]).Width);
+
+  { 任意截断:不许崩,也不许把版式改成半吊子。 }
+  for i := 1 to Length(layout) - 1 do
+  begin
+    G.LoadLayoutFromString(Copy(layout, 1, i));
+    AssertEquals(Format('截断到 %d 字符时列宽不许被动', [i]), 133,
+      TTyColumn(G.Header.Columns.Items[0]).Width);
+  end;
+  G.LoadLayoutFromString('');
+  G.LoadLayoutFromString('完全不是这玩意儿');
+  AssertEquals('乱码之后列宽仍然是原样', 133,
+    TTyColumn(G.Header.Columns.Items[0]).Width);
+
+  { 再读一次好串仍然成功 —— 证明前面那些坏串没把内部状态搅坏。 }
+  AssertTrue('坏串之后仍能正常 round-trip', G.LoadLayoutFromString(layout));
+  AssertEquals('列宽仍然对', 133, TTyColumn(G.Header.Columns.Items[0]).Width);
+end;
+
+{ 多级分组:地区 → 城市。分组行带层级,小计按层级各算各的,
+  折叠状态按**层级路径**记 —— 按单个值记的话,不同地区下的同名城市会一起折叠。 }
+procedure TTyStringGridTest.TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
+var
+  G: TStrGridAccess;
+  i, gi, lvl0, lvl1: Integer;
+  info: TTyGridGroupInfo;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  { **故意让"北京"同时出现在两个地区下** —— 这是多级分组唯一真正难的地方:
+    ① 外层变了而内层同名时,必须开一个**新的**子组(只比本级会漏掉);
+    ② 折叠必须按**路径**记,按单个键记的话两个北京会一起折。
+    第一版的数据里四个城市各不相同,这两条守卫怎么改都测不出来。 }
+  G.Cells[0, 0] := '华东'; G.Cells[1, 0] := '上海'; G.Cells[2, 0] := '10';
+  G.Cells[0, 1] := '华东'; G.Cells[1, 1] := '上海'; G.Cells[2, 1] := '20';
+  G.Cells[0, 2] := '华东'; G.Cells[1, 2] := '北京'; G.Cells[2, 2] := '30';
+  G.Cells[0, 3] := '华北'; G.Cells[1, 3] := '北京'; G.Cells[2, 3] := '40';
+  G.Cells[0, 4] := '华北'; G.Cells[1, 4] := '北京'; G.Cells[2, 4] := '50';
+  G.Cells[0, 5] := '华北'; G.Cells[1, 5] := '天津'; G.Cells[2, 5] := '60';
+  G.SetColumnAggregate(2, gagSum);
+
+  G.GroupByColumns([0, 1]);
+
+  { 两级各有几组:地区 2 组、城市 4 组。 }
+  lvl0 := 0; lvl1 := 0;
+  for i := 0 to G.GroupCount - 1 do
+  begin
+    info := G.GroupInfo(i);
+    if info.Level = 0 then Inc(lvl0)
+    else if info.Level = 1 then Inc(lvl1);
+  end;
+  AssertEquals('第一级 2 组', 2, lvl0);
+  { 上海 / 华东-北京 / 华北-北京 / 天津 = 4 组。
+    两个"北京"必须是**两组**,合成一组就说明没看祖先。 }
+  AssertEquals('第二级 4 组(两个北京算两组)', 4, lvl1);
+
+  { 小计按层级各算各的:华东合计 60,华东/上海合计 30。 }
+  for i := 0 to G.GroupCount - 1 do
+  begin
+    info := G.GroupInfo(i);
+    if (info.Level = 0) and (info.Key = '华东') then
+      AssertEquals('华东整个地区合计 60', 60.0, G.GroupAggregateValue(i, 2), 0.001);
+    if (info.Level = 1) and (info.Key = '上海') then
+      AssertEquals('华东/上海合计 30', 30.0, G.GroupAggregateValue(i, 2), 0.001);
+  end;
+
+  { 折叠按**路径**记:折叠"华北/北京"之后,"华东/北京"必须还是展开的。 }
+  gi := -1;
+  for i := 0 to G.GroupCount - 1 do
+    if (G.GroupInfo(i).Level = 1) and (G.GroupInfo(i).Path = '华北'#1'北京') then
+      gi := i;
+  AssertTrue('找得到 华北/北京 这一组', gi >= 0);
+  G.ToggleGroup(gi);
+  { 两条都要断言:点的那个**确实折了**,别的同名组**确实没折**。
+    只断言后半条的话,"折叠彻底失效"这种改坏法照样能过 —— 变异测试证明过了。 }
+  lvl0 := 0;
+  for i := 0 to G.GroupCount - 1 do
+  begin
+    if G.GroupInfo(i).Path = '华北'#1'北京' then
+    begin
+      AssertTrue('点过的那一组确实折起来了', G.GroupInfo(i).Collapsed);
+      Inc(lvl0);
+    end;
+    if G.GroupInfo(i).Path = '华东'#1'北京' then
+    begin
+      AssertTrue('折叠 华北/北京 不该把 华东/北京 一起折起来',
+        not G.GroupInfo(i).Collapsed);
+      Inc(lvl0);
+    end;
+  end;
+  AssertEquals('两个北京组都还在', 2, lvl0);
+
+  { 分组行按层级缩进 —— 不缩进的话两级分组行长得一模一样,看不出谁包着谁。
+    命中与绘制走同一个矩形,所以这条也顺带守住了"点得到的就是看得见的那一个"。 }
+  for i := 0 to G.DisplayRowCount - 1 do
+    if G.IsGroupRow(i, gi) and (G.GroupInfo(gi).Level = 1) then
+    begin
+      AssertTrue('第二级分组行要比第一级更靠右',
+        G.GroupToggleRectForTest(i).Left > G.ScaleForTest(4));
+      Break;
+    end;
+
+  { 折叠上一级会把整棵子树都收起来。 }
+  G.UngroupRows;
+  AssertEquals('取消分组后显示序回到纯数据行', 6, G.DisplayRowCount);
+end;
+
+{ 多级分组必须按**所有**分组列排序,否则第二级的键不连续,同一个子组标题会
+  反复出现。上一版只 prepend 了第一个分组列 —— 而测试数据恰好本来就是聚簇的,
+  所以全绿。这条测试的关键是**数据故意打乱**。 }
+procedure TTyStringGridTest.TestMultiLevelGroupingOnUnclusteredData;
+var
+  G: TStrGridAccess;
+  i, lvl1: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  { 同一个 (地区,城市) 组合被拆散在表的两头 —— 真实数据就长这样。 }
+  G.Cells[0, 0] := '华东'; G.Cells[1, 0] := '上海';
+  G.Cells[0, 1] := '华东'; G.Cells[1, 1] := '杭州';
+  G.Cells[0, 2] := '华东'; G.Cells[1, 2] := '上海';
+  G.Cells[0, 3] := '华北'; G.Cells[1, 3] := '北京';
+  G.Cells[0, 4] := '华北'; G.Cells[1, 4] := '天津';
+  G.Cells[0, 5] := '华北'; G.Cells[1, 5] := '北京';
+
+  G.GroupByColumns([0, 1]);
+
+  { 两个地区 x 两个城市 = 4 个二级组。若只按第一级排序,上海/杭州/上海 不相邻,
+    会切出 5 个甚至更多。 }
+  lvl1 := 0;
+  for i := 0 to G.GroupCount - 1 do
+    if G.GroupInfo(i).Level = 1 then Inc(lvl1);
+  AssertEquals('打乱的数据也必须切出 4 个二级组', 4, lvl1);
+end;
+
+{ 时间编辑器提交的必须是**时间**。
+  开编辑按种类分派、关编辑却按控件可见性分派,而日期与时间**共用一个控件** ——
+  于是时间格提交时走了日期分支,写进去的是 DateToStr(小数部分) = 1899-12-30。 }
+procedure TTyStringGridTest.TestTimeEditorCommitsATimeNotADate;
+var
+  G: TStrGridAccess;
+  c: TTyGridColumn;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  c := TTyGridColumn(G.Header.Columns.Items[0]);
+  c.EditorKind := gekTime;
+  G.Cells[0, 1] := '13:45';
+
+  G.BeginEditAt(0, 1);
+  G.EndEdit(True);                     { 原样提交,不改值 }
+  AssertEquals('时间格提交之后不该变成日期', '13:45', G.Cells[0, 1]);
+
+  { 编辑过时间格之后,日期列必须还是日期选择器 —— 共享控件不能留着上一格的模式。 }
+  c := TTyGridColumn(G.Header.Columns.Items[1]);
+  c.EditorKind := gekDate;
+  { 用**本地**日期格式写入 —— 日期编辑器按本地格式解析与回写,
+    这里要测的是"没被上一次的时间模式带偏",不是本地化解析,别把两件事混在一起。 }
+  G.Cells[1, 1] := DateToStr(EncodeDate(2026, 3, 4));
+  G.BeginEditAt(1, 1);
+  G.EndEdit(True);
+  AssertEquals('日期格不该被上一次的时间模式带偏',
+    DateToStr(EncodeDate(2026, 3, 4)), G.Cells[1, 1]);
+end;
+
+{ A3:物理排序必须把**格属性**(底色/合并跨度/只读)一起搬走。
+  只搬文字的话,底色会留在原地装饰到不相干的数据上;而且文字进了撤销栈、
+  属性没进 —— Ctrl+Z 之后得到一个从未存在过的状态。 }
+procedure TTyStringGridTest.TestPhysicalSortCarriesCellAttributes;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  for r := 0 to 4 do
+    G.Cells[0, r] := Format('%.2d', [4 - r]);   { 04 03 02 01 00 }
+  { 给"值 = 04"那一行(现在是第 0 行)标个显眼的底色。 }
+  G.CellColors[0, 0] := TyRGB(255, 0, 0);
+  G.SortMode := gsmData;
+
+  G.SortByColumn(0, sdAscending);
+
+  { '04' 排完之后在最后一行 —— 底色必须跟着它走。 }
+  AssertEquals('前置:04 排到了最后', '04', G.Cells[0, 4]);
+  AssertEquals('底色要跟着那一行数据走', TyRGB(255, 0, 0), G.CellColors[0, 4]);
+  AssertEquals('原来那一行不该还留着底色', 0, G.CellColors[0, 0]);
+end;
+
+{ A5:同时开顶部固定行与右侧冻结列时,**右上角**那一格必须画得出来。
+  顶部带原先只做两路分割(左/中),右上角被判成 gpTop,
+  与不含右冻结列的顶部带求交后成了空矩形 —— 那一格凭空消失。 }
+procedure TTyStringGridTest.TestTopRightCornerCellIsVisibleWithBothFreezes;
+var
+  G: TStrGridAccess;
+  i: Integer;
+  c: TTyColumn;
+  vis: TRect;
+begin
+  G := TStrGridAccess.Create(FForm);
+  G.Parent := FForm;
+  G.Controller := FCtl;
+  G.Font.PixelsPerInch := 96;
+  G.SetBounds(0, 0, 400, 300);
+  for i := 0 to 9 do
+  begin
+    c := G.Header.Columns.Add as TTyColumn;
+    c.Width := 90;
+  end;
+  G.DefaultRowHeight := 22;
+  G.RowCount := 20;
+  G.FixedRows := 1;
+  G.FixedColsRight := 1;
+  G.Cells[9, 0] := '右上角';
+
+  vis := G.CellVisibleRect(9, 0);
+  AssertTrue('右上角那一格不该是空矩形', not IsRectEmpty(vis));
+  { 与**它自己的**矩形比,而不是与 ClientWidth 比 ——
+    纵向滚动条占掉了十几像素,视口右沿并不等于控件右沿。
+    窗格裁剪正确时,完全可见的冻结格的可见矩形应当就是它的矩形。 }
+  AssertEquals('右上角那一格不该被裁掉一截',
+    G.CellRect(9, 0).Right, vis.Right);
+end;
+
+{ A1:固定行与排序**叠加**时,每一格都必须落在它显示位置所属的那个窗格里。
+
+  `CellPane` 的两个判据(`< FixedRows` / `>= DisplayRowCount - FixedRowsBottom`)
+  是**显示序**语义,而调用方喂的是**数据行**。两者一致时(没排序)看不出来;
+  一排序就错位:数据下标 < FixedRows 的格子一律被判成 gpTop,与冻结带求交后
+  成了空矩形 —— 它们滚到哪儿都不画,行**静默变空白**;反过来真正显示在冻结带里
+  的行被判成 gpBody,同样被裁没。
+
+  现有测试分别测固定行、分别测排序,从不叠加 —— 所以一直是绿的。 }
+procedure TTyStringGridTest.TestFixedRowsAndSortTogetherKeepCellsInTheirPane;
+var
+  G: TStrGridAccess;
+  r, pos: Integer;
+  vis, geo: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    G.Cells[0, r] := Format('%.2d', [r]);      { 00 .. 09 }
+  G.FixedRows := 2;
+
+  { 降序 —— 显示位置 0/1(冻结带)现在装的是**数据行 9/8**,
+    而数据行 0/1 被推到了正文窗格的最下面。 }
+  G.SortByColumn(0, sdDescending);
+  AssertEquals('前置:降序后显示位置 0 是数据行 9', 9, G.DisplayRow(0));
+  AssertEquals('前置:降序后显示位置 9 是数据行 0', 0, G.DisplayRow(9));
+
+  { 10 行 × 20px = 200px,视口 300px 且没有横向滚动 ——
+    每一格都完整可见,于是可见矩形应当**恰好等于**它的几何矩形。
+    有一格被判错窗格,求交就会把它整个吃掉(空矩形)。 }
+  for r := 0 to 9 do
+  begin
+    pos := G.DisplayRow(r);      { 只为报错信息好读 }
+    vis := G.CellVisibleRect(0, r);
+    geo := G.CellRect(0, r);
+    AssertFalse(Format('数据行 %d(值 %s)的可见矩形不该是空的', [r, G.Cells[0, r]]),
+      IsRectEmpty(vis));
+    AssertEquals(Format('数据行 %d 的可见矩形顶边(显示位置解出 %d)', [r, pos]),
+      geo.Top, vis.Top);
+    AssertEquals(Format('数据行 %d 的可见矩形底边', [r]), geo.Bottom, vis.Bottom);
+  end;
+end;
+
+{ 同族:冻结带的**厚度**也是把显示位置喂给按数据行查表的 `RowHeightOf`。
+  可变行高 + 排序时,取的是**另外几行**的高度 —— 冻结带与正文于是错开一截:
+  正文首行要么压住固定行、要么与它之间裂开一条缝。
+
+  断言"显示位置 1 的底边 == 显示位置 2 的顶边"——
+  纯几何、可观测,且不依赖厚度的具体数值。 }
+procedure TTyStringGridTest.TestFrozenBandThicknessFollowsDisplayedRows;
+var
+  G, G2: TStrGridAccess;
+  r: Integer;
+  vis: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    G.Cells[0, r] := Format('%.2d', [r]);
+  { 让**排完序后落在冻结带里**的那两行高得与众不同。 }
+  G.RowHeights[9] := 50;
+  G.RowHeights[8] := 40;
+  G.FixedRows := 2;
+
+  G.SortByColumn(0, sdDescending);
+  AssertEquals('前置:冻结带第一行是数据行 9', 9, G.DisplayRow(0));
+
+  AssertEquals('冻结带厚度必须按**显示在带子里的那两行**算 —— 正文首行要接在它下面',
+    G.CellRect(0, G.DisplayRow(1)).Bottom,
+    G.CellRect(0, G.DisplayRow(2)).Top);
+
+  { 底部带同理,而且它的症状更直接:带子算薄了,gpBottom 窗格就够不着
+    最上面那行的上半截,那一截被裁掉。 }
+  G2 := MakeStrGrid(FForm, FCtl);
+  G2.RowCount := 10;
+  for r := 0 to 9 do
+    G2.Cells[0, r] := Format('%.2d', [r]);
+  { 降序后显示在**底部两格**里的是数据行 1 和 0。 }
+  G2.RowHeights[1] := 50;
+  G2.RowHeights[0] := 40;
+  G2.FixedRowsBottom := 2;
+
+  G2.SortByColumn(0, sdDescending);
+  AssertEquals('前置:底部带第一行是数据行 1', 1, G2.DisplayRow(8));
+
+  vis := G2.CellVisibleRect(0, 1);
+  AssertFalse('底部冻结行的可见矩形不该是空的', IsRectEmpty(vis));
+  AssertEquals('底部冻结带算薄了会把最上面那行裁掉一截',
+    G2.CellRect(0, 1).Top, vis.Top);
+end;
+
+{ A6:锚点行被筛掉之后,活动选区不能反而**变大**。
+
+  `ActiveSelectionRect` 把 `DataToDisplay` 的返回值直接喂给 Min/Max,而被筛掉的行
+  返回 -1 —— 于是选区从 -1 起算,一路吃到显示位置 0,把表格最上面那些
+  从来没被选过的行全括进来。 }
+procedure TTyStringGridTest.TestFilteringOutTheAnchorDoesNotGrowTheSelection;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);            { 4 列 x 10 行 }
+  for r := 0 to 9 do
+    G.Cells[0, r] := 'keep';
+  G.Cells[0, 2] := 'drop';                  { 待会儿把这一行筛掉 }
+
+  { 锚点落在数据行 2,光标拉到数据行 4。 }
+  G.Col := 0; G.Row := 2;
+  G.AnchorSelection;
+  G.PressKeyShift(VK_DOWN);
+  G.PressKeyShift(VK_DOWN);
+  AssertEquals('前置:光标在数据行 4', 4, G.Row);
+  AssertTrue('前置:数据行 3 在选区里', G.IsCellSelected(0, 3));
+  AssertFalse('前置:数据行 0 不在选区里', G.IsCellSelected(0, 0));
+
+  { 把**锚点那一行**筛掉 —— 它从此没有显示位置。 }
+  G.SetColumnFilter(0, 'keep');
+  AssertEquals('前置:筛掉一行', 9, G.DisplayRowCount);
+
+  AssertFalse('筛掉锚点后,表头那边的行不该突然被选中', G.IsCellSelected(0, 0));
+  AssertFalse('数据行 1 同样从来没被选过', G.IsCellSelected(0, 1));
+  AssertTrue('光标那一行仍然选中', G.IsCellSelected(0, 4));
+end;
+
+{ A7:`SwapRows` 搬了三种状态(文字 / 逐格属性 / 行高),而只有文字经过
+  `SetCells` 这个记录点 —— 拖完行按 Ctrl+Z,文字回来了、底色和行高留在新位置,
+  得到一个从未存在过的状态。
+
+  修法不是"补一条 gukRowSwap":同一条记录里已经有逐格的 gukCell 条目,
+  再叠一条整行交换会**双重施加**。要给属性存储和行高各自一个记录点。 }
+procedure TTyStringGridTest.TestUndoRestoresCellAttributesAndRowHeights;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Cells[0, 1] := 'A';
+  G.Cells[0, 2] := 'B';
+  G.CellColors[0, 1] := TyRGB(255, 0, 0);
+  G.RowHeights[1] := 44;
+  G.ClearUndo;
+
+  G.SwapRows(1, 2);
+  AssertEquals('前置:文字换了位置', 'A', G.Cells[0, 2]);
+  AssertEquals('前置:底色跟着那一行走', TyRGB(255, 0, 0), G.CellColors[0, 2]);
+  AssertEquals('前置:行高跟着那一行走', 44, G.RowHeights[2]);
+
+  G.Undo;
+  AssertEquals('文字回到原位', 'A', G.Cells[0, 1]);
+  AssertEquals('底色也要回到原位', TyRGB(255, 0, 0), G.CellColors[0, 1]);
+  AssertEquals('换过去的那一行不该还留着底色', 0, G.CellColors[0, 2]);
+  { 行高用**几何**断言 —— 存储回读不了了不算数,要真的把行画成那么高。 }
+  AssertEquals('行高撤销后必须真的改回几何', 44,
+    G.CellRect(0, 1).Bottom - G.CellRect(0, 1).Top);
+  AssertEquals('换过去的那一行回到默认行高', 20,
+    G.CellRect(0, 2).Bottom - G.CellRect(0, 2).Top);
+
+  G.Redo;
+  AssertEquals('重做:文字再换回去', 'A', G.Cells[0, 2]);
+  AssertEquals('重做:底色跟着走', TyRGB(255, 0, 0), G.CellColors[0, 2]);
+  AssertEquals('重做:行高跟着走', 44,
+    G.CellRect(0, 2).Bottom - G.CellRect(0, 2).Top);
+end;
+
+{ 记录点收口在属性存储上,于是**所有**改属性的路径一并可撤销 ——
+  连 P3 当初明确留下的偏离("合并/取消合并不进撤销栈")也一起补上了。 }
+procedure TTyStringGridTest.TestUndoRestoresCellColorAndMerge;
+var
+  G: TStrGridAccess;
+  w1: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.ClearUndo;
+
+  G.CellColors[1, 1] := TyRGB(0, 0, 255);
+  AssertTrue('前置:设底色之后有得撤销', G.CanUndo);
+  G.Undo;
+  AssertEquals('设底色可以撤销', 0, G.CellColors[1, 1]);
+  G.Redo;
+  AssertEquals('重做把底色放回去', TyRGB(0, 0, 255), G.CellColors[1, 1]);
+
+  { 合并用**几何**断言:基准格的矩形该横跨两列。 }
+  w1 := G.CellRect(0, 3).Right - G.CellRect(0, 3).Left;
+  G.MergeCells(0, 3, 2, 2);
+  AssertEquals('前置:合并后基准格横跨两列', w1 * 2,
+    G.CellRect(0, 3).Right - G.CellRect(0, 3).Left);
+
+  G.Undo;
+  AssertEquals('撤销合并之后基准格缩回一列宽', w1,
+    G.CellRect(0, 3).Right - G.CellRect(0, 3).Left);
+  AssertFalse('撤销之后表里不该还有合并区', G.HasMergedCells);
+
+  G.Redo;
+  AssertEquals('重做把合并放回去', w1 * 2,
+    G.CellRect(0, 3).Right - G.CellRect(0, 3).Left);
+  AssertTrue('重做之后合并计数也要回来', G.HasMergedCells);
+
+  { **清除**路径走的是另一条代码路:"改一条已有的属性",而不是"新建一条"。
+    上面那两段全是新建,单靠它们守不住清除路径。 }
+  G.ClearUndo;
+  G.UnmergeCells(0, 3);
+  AssertEquals('前置:取消了合并', w1,
+    G.CellRect(0, 3).Right - G.CellRect(0, 3).Left);
+  G.Undo;
+  AssertEquals('取消合并也要能撤销', w1 * 2,
+    G.CellRect(0, 3).Right - G.CellRect(0, 3).Left);
+  AssertTrue('撤销之后合并计数要回来', G.HasMergedCells);
+
+  G.ClearUndo;
+  G.CellColors[1, 1] := 0;                  { 0 = 清掉底色 }
+  AssertEquals('前置:底色被清掉了', 0, G.CellColors[1, 1]);
+  G.Undo;
+  AssertEquals('清底色也要能撤销', TyRGB(0, 0, 255), G.CellColors[1, 1]);
+end;
+
+{ B2:三条行置换路径各搬了不同的子集。`SwapRows` 搬了文字、属性、行高,
+  唯独漏了**隐藏标记** —— 标记留在旧下标上,于是换过去的那一行凭空消失,
+  藏着的那一行冒出来。用户读到的是"表里又多/少了一行"。
+
+  可观测断言:走一遍显示序,看**谁被显示出来**,不看标记本身。 }
+procedure TTyStringGridTest.TestSwappingRowsCarriesTheHiddenFlag;
+var
+  G: TStrGridAccess;
+  r, pos: Integer;
+  shown: string;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+    G.Cells[0, r] := Chr(Ord('A') + r);      { A B C D E F }
+
+  G.HideRow(2);                              { 藏起 'C' }
+  AssertEquals('前置:少了一行', 5, G.DisplayRowCount);
+
+  G.SwapRows(1, 2);                          { 'C' 换到下标 1,'B' 换到下标 2 }
+  AssertEquals('前置:文字换了位置', 'C', G.Cells[0, 1]);
+
+  shown := '';
+  for pos := 0 to G.DisplayRowCount - 1 do
+    shown := shown + G.Cells[0, G.DisplayRow(pos)];
+
+  AssertEquals('藏起来的那一行换了位置也还该藏着,别的一个都不能少',
+    'ABDEF', shown);
+end;
+
+{ B3:页脚汇总此前**每帧**遍历全部显示行(RenderFooter → AggregateValue)。
+  百万行时滚动就是每帧一次 O(n) 扫描。
+
+  两面都要断言:缓存住了(重复问不再扫),以及**该失效的时候真的失效了**
+  —— 陈旧的合计比慢的合计糟得多,用户会照着一个错数做决定。 }
+procedure TTyStringGridTest.TestFooterAggregateIsCachedAndInvalidated;
+var
+  G: TCountingGrid;
+  i: Integer;
+  c: TTyColumn;
+begin
+  G := TCountingGrid.Create(FForm);
+  G.Parent := FForm;
+  G.Controller := FCtl;
+  G.Font.PixelsPerInch := 96;
+  G.SetBounds(0, 0, 400, 300);
+  for i := 0 to 3 do
+  begin
+    c := G.Header.Columns.Add as TTyColumn;
+    c.Width := 80;
+  end;
+  G.Header.Options := G.Header.Options - [hoVisible];
+  G.DefaultRowHeight := 20;
+  G.RowCount := 40;
+  for i := 0 to 39 do
+    G.Cells[0, i] := IntToStr(i + 1);          { 1..40,合计 820 }
+  G.SetColumnAggregate(0, gagSum);
+
+  AssertEquals('前置:合计对', 'Sum 820', G.FooterText(0));
+  G.ScanCount := 0;
+  AssertEquals('再问一次结果不变', 'Sum 820', G.FooterText(0));
+  AssertEquals('第二次不该再扫一遍全表', 0, G.ScanCount);
+
+  { --- 以下每一条都是"必须失效"的时机 --- }
+
+  G.Cells[0, 0] := '101';                      { 改一格:820 - 1 + 101 }
+  AssertEquals('改了格值,合计必须跟着变', 'Sum 920', G.FooterText(0));
+
+  G.RowCount := 41;
+  G.Cells[0, 40] := '80';
+  AssertEquals('加了一行,合计必须跟着变', 'Sum 1000', G.FooterText(0));
+
+  G.HideRow(40);
+  AssertEquals('藏起一行,合计必须跟着变', 'Sum 920', G.FooterText(0));
+  G.UnHideRow(40);
+
+  G.SetColumnFilter(0, '101');                 { 只剩那一行 }
+  AssertEquals('筛选之后只统计留下的行', 'Sum 101', G.FooterText(0));
+  G.SetColumnFilter(0, '');
+  AssertEquals('清掉筛选恢复', 'Sum 1000', G.FooterText(0));
+
+  G.Undo;                                      { 撤销掉 '80' 那一格 }
+  AssertEquals('撤销之后合计也要跟着回去', 'Sum 920', G.FooterText(0));
+
+  { 换口径必须换成一个**也走缓存**的口径才有分辨力 ——
+    gagCount 是 O(1)、压根不进缓存,拿它当断言等于什么都没测。 }
+  G.SetColumnAggregate(0, gagAvg);
+  AssertEquals('换了聚合口径也要重算', 'Avg 23', G.FooterText(0));
+end;
+
+{ 头文件里写着"一次批量操作(粘贴、填充、删行)算**一条**,因为它们都在
+  BeginUpdate 里跑"。粘贴其实跑在 `BeginUpdateOrder` 里 —— 那个只压重排,
+  跟撤销事务(BeginUpdate → OpenUndoGroup)是两回事。于是粘 4 格压 4 条记录,
+  用户得按 4 次 Ctrl+Z 才退得回去;剪切干脆一点批量都没有。
+
+  断言站在用户那一侧:**按一次撤销,整块都得回来**。 }
+procedure TTyStringGridTest.TestPasteAndCutAreOneUndoStepEach;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Cells[0, 0] := 'a0'; G.Cells[1, 0] := 'b0';
+  G.Cells[0, 1] := 'a1'; G.Cells[1, 1] := 'b1';
+
+  { --- 粘贴 --- }
+  G.MoveCursor(0, 0);
+  G.ClearUndo;
+  G.PasteFromText('X' + #9 + 'Y' + LineEnding + 'Z' + #9 + 'W');
+  AssertEquals('前置:粘贴生效了', 'X', G.Cells[0, 0]);
+  AssertEquals('前置:整块都粘上了', 'W', G.Cells[1, 1]);
+  AssertEquals('一次粘贴 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertEquals('按一次撤销,左上角就得回来', 'a0', G.Cells[0, 0]);
+  AssertEquals('同一次撤销,右下角也得回来', 'b1', G.Cells[1, 1]);
+  AssertEquals('中间两格同理', 'b0', G.Cells[1, 0]);
+  AssertEquals('中间两格同理', 'a1', G.Cells[0, 1]);
+
+  { --- 剪切 --- }
+  G.MoveCursor(0, 0);
+  G.AnchorSelection;
+  G.PressKeyShift(VK_RIGHT);
+  G.PressKeyShift(VK_DOWN);
+  G.ClearUndo;
+  G.CutToClipboard;
+  AssertEquals('前置:剪切清空了左上角', '', G.Cells[0, 0]);
+  AssertEquals('前置:剪切清空了右下角', '', G.Cells[1, 1]);
+  AssertEquals('一次剪切 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertEquals('按一次撤销,剪掉的整块都得回来', 'a0', G.Cells[0, 0]);
+  AssertEquals('剪掉的整块都得回来', 'b1', G.Cells[1, 1]);
+
+  { --- 批量增删行 ---
+    单数的 InsertRow/DeleteRow 早就包了事务,**复数**那两个没有 ——
+    同一条规则逐处重述,又漏了一处。 }
+  G.ClearUndo;
+  G.InsertRows(0, 3);
+  AssertEquals('前置:插了 3 行', 13, G.RowCount);
+  AssertEquals('前置:原来的第 0 行被顶到第 3 行', 'a0', G.Cells[0, 3]);
+  AssertEquals('插 3 行 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销就回到 10 行', 10, G.RowCount);
+  AssertEquals('内容也回原位', 'a0', G.Cells[0, 0]);
+
+  G.ClearUndo;
+  G.RemoveRows(0, 2);
+  AssertEquals('前置:删了 2 行', 8, G.RowCount);
+  AssertEquals('删 2 行 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销就把两行都还回来', 10, G.RowCount);
+  AssertEquals('删掉的内容也回来了', 'a0', G.Cells[0, 0]);
+  AssertEquals('第二行的内容也回来了', 'a1', G.Cells[0, 1]);
+end;
+
+{ `ClearCells` 直接 `FCells.Clear`,绕过了 `SetCells` 那个记录点 ——
+  于是它自己不可撤销,连带**导入 CSV**整件事也撤不回来(导入的第一步就是清空)。
+  这是"绕过收口点"的代价:收口点保证的只是**经过它的**改动。
+
+  顺带:它也没让汇总缓存失效 —— 清空一张表之后页脚还挂着旧的合计。 }
+procedure TTyStringGridTest.TestClearAndCsvImportAreUndoable;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Cells[0, 0] := '11';
+  G.Cells[1, 0] := 'keep';
+  G.Cells[0, 1] := '22';
+  G.SetColumnAggregate(0, gagSum);
+  AssertEquals('前置:合计对', 'Sum 33', G.FooterText(0));
+
+  G.ClearUndo;
+  G.ClearCells;
+  AssertEquals('前置:清空了', '', G.Cells[0, 0]);
+  AssertEquals('清空之后页脚不能还挂着旧合计', 'Sum 0', G.FooterText(0));
+  AssertEquals('清空 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertEquals('清空可以撤销', '11', G.Cells[0, 0]);
+  AssertEquals('每一格都回来', 'keep', G.Cells[1, 0]);
+  AssertEquals('每一格都回来', '22', G.Cells[0, 1]);
+  AssertEquals('合计也跟着回来', 'Sum 33', G.FooterText(0));
+
+  { 导入 CSV = 清空 + 重填。整件事必须是**一条**记录,
+    否则撤销一次只退回半张表 —— 比不能撤销更难排查。 }
+  G.ClearUndo;
+  { 第一行是**表头**,不是数据 —— 后面两行才是。 }
+  G.LoadFromCSVText('h1,h2' + LineEnding + '7,8' + LineEnding + '9,10', ',');
+  AssertEquals('前置:导入生效', '7', G.Cells[0, 0]);
+  AssertEquals('导入 CSV = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertEquals('导入 CSV 可以撤销', '11', G.Cells[0, 0]);
+  AssertEquals('被导入覆盖掉的格也回来', 'keep', G.Cells[1, 0]);
+end;
+
+{ 把记录点挂在属性存储的"即将改动"通知上,代价是它**分不清"要改"和"改成一样的"**。
+  `SetCells` 早有这道保护(`if e.OldText <> AValue`),属性这边一开始没跟上:
+  于是把红色再设一次红色也压一条空记录 —— 按 Ctrl+Z 一次没反应,
+  更阴的是这条空记录**把重做链清掉了**(刚撤销的那一步再也重做不回来)。
+
+  这是本轮引入的回归,对抗审查抓到的。 }
+procedure TTyStringGridTest.TestNoOpAttributeWriteLeavesTheUndoStackAlone;
+var
+  G: TStrGridAccess;
+  w1: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+
+  G.CellColors[0, 0] := TyRGB(255, 0, 0);
+  G.ClearUndo;
+  G.CellColors[0, 0] := TyRGB(255, 0, 0);        { 同一个颜色 }
+  AssertEquals('设成同一个颜色不该压撤销记录', 0, G.UndoCountForTest);
+
+  G.CellTextColors[1, 1] := TyRGB(0, 128, 0);
+  G.ClearUndo;
+  G.CellTextColors[1, 1] := TyRGB(0, 128, 0);
+  AssertEquals('文字色同理', 0, G.UndoCountForTest);
+
+  G.CellReadOnly[2, 2] := True;
+  G.ClearUndo;
+  G.CellReadOnly[2, 2] := True;
+  AssertEquals('只读同理', 0, G.UndoCountForTest);
+
+  w1 := G.CellRect(0, 4).Right - G.CellRect(0, 4).Left;
+  G.MergeCells(0, 4, 2, 2);
+  G.ClearUndo;
+  G.MergeCells(0, 4, 2, 2);                      { 同样的跨度 }
+  AssertEquals('合并成同样的跨度同理', 0, G.UndoCountForTest);
+  AssertEquals('而且跨度本身没变', w1 * 2,
+    G.CellRect(0, 4).Right - G.CellRect(0, 4).Left);
+
+  { 空记录最阴的一面:它把**重做链**清掉了。 }
+  G.CellColors[3, 3] := TyRGB(0, 0, 255);
+  G.Undo;
+  AssertEquals('前置:撤销掉了', 0, G.CellColors[3, 3]);
+  AssertTrue('前置:有得重做', G.CanRedo);
+  G.CellColors[0, 0] := TyRGB(255, 0, 0);        { 无变化的写入 }
+  AssertTrue('无变化的写入不该把重做链清掉', G.CanRedo);
+  G.Redo;
+  AssertEquals('重做要能真的把它做回来',
+    TyRGB(0, 0, 255), G.CellColors[3, 3]);
+end;
+
+{ `FMergeCount` 是旁挂的汇总,不在属性对象里。删行时属性条目被 ShiftCells 直接
+  丢掉,计数没跟着减 —— 于是表里"还有合并区"而实际一个都没有。
+  本轮给 RestoreAttr 加了对账,但那只管撤销那条路;删除这条路仍然漏。 }
+procedure TTyStringGridTest.TestMergeCountSurvivesRowRemovalAndUndo;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.MergeCells(0, 1, 2, 2);
+  AssertTrue('前置:合并了', G.HasMergedCells);
+
+  G.RemoveRows(1, 2);                    { 把合并区那两行整个删掉 }
+  AssertFalse('合并区被删掉之后,表里就不该还"有合并区"了',
+    G.HasMergedCells);
+
+  G.Undo;
+  AssertTrue('撤销之后合并区回来了', G.HasMergedCells);
+  G.UnmergeCells(0, 1);
+  AssertFalse('取消掉唯一那个合并之后,计数必须归零',
+    G.HasMergedCells);
+end;
+
+{ `ClearMerges` 一次清掉所有合并,却每个格子压一条记录 ——
+  与粘贴/剪切/批量增删行是同一族缺陷(规则被逐处重述而不是收口)。 }
+procedure TTyStringGridTest.TestClearMergesIsOneUndoStep;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.MergeCells(0, 0, 2, 1);
+  G.MergeCells(0, 2, 2, 1);
+  G.MergeCells(0, 4, 2, 1);
+  G.ClearUndo;
+
+  G.ClearMerges;
+  AssertFalse('前置:合并都清掉了', G.HasMergedCells);
+  AssertEquals('清掉三处合并 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertTrue('按一次撤销,三处合并都回来', G.HasMergedCells);
+  AssertFalse('而且栈里不该还剩别的', G.CanUndo);
+end;
+
+{ 一条撤销记录攒得过大时,设计是"**整条作废并清空栈**" ——
+  注释写得很清楚:半条撤销记录还原出来是一张四不像的表,
+  比"这一步撤销不了"危险得多。
+
+  但溢出那条路走的是 `ClearUndo`,而 `ClearUndo` 顺手把 `FUndoOverflow` 清成了
+  False —— 于是作废标志自己把自己抹掉,后面的条目继续往里攒,
+  收尾时**正好把那半条残缺记录推进了栈**。设计要防的事照样发生了。
+
+  断言站在用户那一侧:超限之后**撤不了**(而不是撤出一张四不像的表)。 }
+procedure TTyStringGridTest.TestOversizedUndoRecordIsDiscardedNotTruncated;
+var
+  G: TStrGridAccess;
+  i, n: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  n := 200005;                     { 略高于 200000 那道阈值 }
+  G.RowCount := n;
+  G.Cells[0, 0] := 'before';
+  G.ClearUndo;
+
+  { 一整个事务里灌进超过阈值的改动。 }
+  G.BeginUpdate;
+  try
+    for i := 1 to n - 1 do
+      G.Cells[0, i] := 'x';
+  finally
+    G.EndUpdate;
+  end;
+
+  AssertFalse('超限的那条记录必须整条作废 —— 栈里不该留半条', G.CanUndo);
+end;
+
+{ 与 A6 同一族:`DataToDisplay` 对被筛掉的行答 -1,而粘贴拿它当起始显示位置
+  直接用了。光标停在一个被筛掉的行上时:
+    · 第一行 `DisplayToData(-1)` = -1 → 被 `Continue` **静默丢掉**;
+    · 其余每行都往上错一位,从表**最顶上**开始铺,而不是光标附近。
+  丢数据 + 落错位置,都不报错。(选区那处早有 `if startPos < 0 then startPos := 0`,
+  粘贴这条路径漏了 —— 又一次"规则没收口"。) }
+procedure TTyStringGridTest.TestPasteWithAFilteredOutCursorRowKeepsEveryLine;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  for r := 0 to 9 do
+    G.Cells[0, r] := 'keep';
+  G.Cells[0, 3] := 'drop';
+
+  G.Col := 0;
+  G.Row := 3;
+  G.SetColumnFilter(0, 'keep');           { 光标那一行被筛掉了 }
+  AssertEquals('前置:少了一行', 9, G.DisplayRowCount);
+
+  G.PasteFromText('A' + LineEnding + 'B');
+
+  AssertEquals('第一行不能被静默丢掉', 'A', G.Cells[0, 0]);
+  AssertEquals('第二行接在它下面', 'B', G.Cells[0, 1]);
+end;
+
+{ `PermuteRowState` 搬四样东西(文字、格属性、行高、隐藏标记),
+  前三样都有记录点,隐藏标记没有 —— 于是拖完行按 Ctrl+Z,
+  文字和底色回来了、**藏着的还是换过去那一行**。
+  这正是 A7 那个缺陷,换了个位置又出现一次。 }
+procedure TTyStringGridTest.TestUndoingARowSwapRestoresTheHiddenFlag;
+var
+  G: TStrGridAccess;
+  r, pos: Integer;
+  shown: string;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+    G.Cells[0, r] := Chr(Ord('A') + r);      { A B C D E F }
+  G.HideRow(2);                              { 藏起 'C' }
+  G.ClearUndo;
+
+  G.SwapRows(1, 2);
+  AssertEquals('前置:换过去了', 'C', G.Cells[0, 1]);
+
+  G.Undo;
+  AssertEquals('前置:文字换回来了', 'B', G.Cells[0, 1]);
+
+  shown := '';
+  for pos := 0 to G.DisplayRowCount - 1 do
+    shown := shown + G.Cells[0, G.DisplayRow(pos)];
+  AssertEquals('撤销之后,藏着的还得是原来那一行', 'ABDEF', shown);
+end;
+
+{ 选中一片格子涂个底色,按一次 Ctrl+Z 应该整片退回去 —— 而不是一格一格退。
+
+  遍历选区的骨架(`ForEachSelectedNumber`)一直只有**只读**那一半:
+  四个聚合入口共用它,而写侧什么都没有。于是"给选区涂色"只能由宿主自己写循环,
+  而循环里没人记得包事务 —— 示例就是这么写的,用户一撤销就露馅。
+  与粘贴/剪切/批量增删行/ClearMerges 是同一族。 }
+procedure TTyStringGridTest.TestColouringASelectionIsOneUndoStep;
+var
+  G: TStrGridAccess;
+  red: TTyColor;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  red := TyRGB(255, 0, 0);
+
+  { 拉一个 2x3 的选区(2 列 x 3 行)。 }
+  G.Col := 1; G.Row := 1;
+  G.AnchorSelection;
+  G.PressKeyShift(VK_RIGHT);
+  G.PressKeyShift(VK_DOWN);
+  G.PressKeyShift(VK_DOWN);
+  AssertEquals('前置:选中 6 格', 6, G.SelectedCellCount);
+  G.ClearUndo;
+
+  AssertEquals('涂色返回涂了几格', 6, G.SetSelectionColor(red));
+  AssertEquals('前置:左上角涂上了', red, G.CellColors[1, 1]);
+  AssertEquals('前置:右下角涂上了', red, G.CellColors[2, 3]);
+  AssertEquals('涂一片 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertEquals('按一次撤销,左上角就退回去', 0, G.CellColors[1, 1]);
+  AssertEquals('同一次撤销,右下角也退回去', 0, G.CellColors[2, 3]);
+  AssertEquals('中间的也一样', 0, G.CellColors[1, 2]);
+  AssertFalse('而且栈里不该还剩别的', G.CanUndo);
+
+  G.Redo;
+  AssertEquals('重做也是一次到位', red, G.CellColors[2, 3]);
+
+  { 清掉底色走同一条路(传 0 = 清除)。 }
+  G.ClearUndo;
+  AssertEquals('清色也返回格数', 6, G.SetSelectionColor(0));
+  AssertEquals('前置:清掉了', 0, G.CellColors[1, 1]);
+  AssertEquals('清一片也是一条记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('撤销把整片颜色还回来', red, G.CellColors[1, 1]);
+end;
+
+{ `AutoFitRows` 逐行调 `AutoFitRow`,而行高本轮起有了记录点 ——
+  于是"全表自适应行高"一次压 RowCount 条记录。同一族的又一个。
+  (逐行的 `AutoFitRow` 本身是一次操作、一条记录,那是对的。) }
+procedure TTyStringGridTest.TestAutoFitRowsIsOneUndoStep;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 8;
+  for r := 0 to 7 do
+    G.Cells[0, r] := 'a line of text that will need wrapping ' + IntToStr(r);
+  G.WordWrap := True;
+  G.ClearUndo;
+
+  G.AutoFitRows;
+  AssertEquals('全表自适应 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertFalse('按一次撤销就全退回去,栈里不该还剩别的', G.CanUndo);
+end;
+
+{ B2 的**列轴对偶** —— 做 B2 时只想了按行记账的旁挂表,漏了按列记账的那三张:
+  `FColFilters` / `FValFilters` / `FAggregates` 全都是"列下标 = 值",
+  而增删列只搬了格子和格属性,这三张表原地不动。
+
+  代价比行那边更狠:筛选留在旧列号上 → 那一列的文字取出来是空 →
+  **每一行都不匹配 → 整张表变空**,而漏斗图标已经跟着列走了,
+  用户在界面上找不到任何地方去清掉它。 }
+procedure TTyStringGridTest.TestColumnKeyedTablesFollowInsertAndDelete;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);          { 4 列 x 10 行 }
+  for r := 0 to 9 do
+  begin
+    G.Cells[3, r] := 'keep';
+    G.Cells[2, r] := IntToStr(r + 1);     { 合计 55 }
+  end;
+  G.Cells[3, 4] := 'drop';
+
+  G.SetColumnFilter(3, 'keep');
+  G.SetColumnAggregate(2, gagSum);
+  AssertEquals('前置:筛掉一行', 9, G.DisplayRowCount);
+  AssertEquals('前置:合计在第 2 列', 'Sum 50', G.FooterText(2));
+
+  { 在左边插一列 —— 筛选与合计都该跟着各自那一列右移。 }
+  G.InsertColumn(0);
+  AssertEquals('插列之后筛选要跟着那一列走', 9, G.DisplayRowCount);
+  AssertEquals('合计也跟着那一列走', 'Sum 50', G.FooterText(3));
+  AssertEquals('原来那一列不该还挂着合计', '', G.FooterText(2));
+
+  { 删掉左边那一列 —— 都该回到原位。 }
+  G.DeleteColumn(0);
+  AssertEquals('删列之后筛选还在正确的列上', 9, G.DisplayRowCount);
+  AssertEquals('合计回到第 2 列', 'Sum 50', G.FooterText(2));
+
+  { 删掉**被筛选的那一列本身** —— 它的筛选必须一起丢掉,
+    否则表会按一个已经不存在的列筛,结果是一行都不剩。 }
+  G.DeleteColumn(3);
+  AssertEquals('被筛选的列删掉之后,筛选也要跟着没', 10, G.DisplayRowCount);
+end;
+
+{ 增删行走的是 `ShiftRowKeyedTable`,它直接重建两张表 —— 绕过了
+  `SetRowHeights` / `SetRowHidden` 那两个记录点。于是撤销一次增/删行:
+  文字和行数都对了,**行高和隐藏标记却永久错位一格**;
+  而正落在删除位置上的那一条直接丢掉,再也回不来。
+
+  纯置换那两条路(SwapRows / ApplyOrderToData)本轮已经收口进 PermuteRowState 了,
+  增删这条路是它的另一半,当时没做。 }
+procedure TTyStringGridTest.TestUndoingRowInsertRestoresHeightsAndHiddenFlags;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  G.Cells[0, 5] := 'tall';
+  G.RowHeights[5] := 60;
+  G.HideRow(7);
+  G.ClearUndo;
+
+  G.InsertRow(0);
+  AssertEquals('前置:行高跟着数据下移了一行', 60, G.RowHeights[6]);
+  AssertTrue('前置:隐藏标记也下移了', G.IsHiddenRow(8));
+
+  G.Undo;
+  AssertEquals('撤销之后文字回原位', 'tall', G.Cells[0, 5]);
+  AssertEquals('行高也要回原位', 60, G.RowHeights[5]);
+  AssertEquals('原来那一行不该还留着行高', 0, G.RowHeights[6]);
+  AssertTrue('隐藏标记也要回原位', G.IsHiddenRow(7));
+  AssertFalse('移过去那一行不该还藏着', G.IsHiddenRow(8));
+
+  { 删掉**承载行高/隐藏标记的那一行本身**,撤销要把它们一起还回来 ——
+    这一条从前是直接丢弃、无处可还的。 }
+  G.ClearUndo;
+  G.DeleteRow(5);
+  AssertEquals('前置:删掉了', 0, G.RowHeights[5]);
+  G.Undo;
+  AssertEquals('删掉的那一行的行高也得还回来', 60, G.RowHeights[5]);
+  AssertEquals('文字当然也要还回来', 'tall', G.Cells[0, 5]);
+end;
+
+{ 「一次批量操作 = 一条撤销记录」这条规则的**剩余实例**,一次扫完:
+  全部替换、批量增删列、整行上色、全部取消隐藏。
+  前面已经修过粘贴/剪切/批量增删行/清空/导入 CSV/涂选区/全表自适应 ——
+  每次都是"又找到一处",所以这次把同族的一起断言,而不是等用户逐个撞上。
+
+  批量增删**列**尤其说明问题:行那边(InsertRows/RemoveRows)本轮修过了,
+  列那边是它逐字的孪生兄弟,当时没顺手看一眼。 }
+procedure TTyStringGridTest.TestRemainingBulkOpsAreOneUndoStepEach;
+var
+  G: TStrGridAccess;
+  r, n0: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);          { 4 列 x 10 行 }
+
+  { --- 全部替换 --- }
+  for r := 0 to 9 do
+    G.Cells[0, r] := 'aaa';
+  G.ClearUndo;
+  AssertEquals('前置:替换了 10 处', 10,
+    G.ReplaceCells('aaa', 'bbb', False, False, True));
+  AssertEquals('全部替换 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销,第一格回来', 'aaa', G.Cells[0, 0]);
+  AssertEquals('最后一格也回来', 'aaa', G.Cells[0, 9]);
+  AssertFalse('栈里不该还剩别的', G.CanUndo);
+
+  { --- 整行上色 --- }
+  G.ClearUndo;
+  G.SetRowColor(2, TyRGB(0, 200, 0));
+  AssertEquals('前置:整行都上了色', TyRGB(0, 200, 0), G.CellColors[3, 2]);
+  AssertEquals('整行上色 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销,整行都退回去', 0, G.CellColors[0, 2]);
+  AssertEquals('最后一列也退回去', 0, G.CellColors[3, 2]);
+
+  { --- 批量插列 / 删列 ---
+    **列结构本身进不了撤销栈**:记录点是 SetCells 与 SetRowCount,列的增删
+    改的是 Header.Columns,两个口子都够不着。于是格子内容被记下了、
+    而承载它们的那一列没有 —— 撤销会把内容还原到一张列数不同的表上,
+    得到一个从未存在过的状态。
+
+    与其还原出一张四不像的表,不如**明说这一步撤不了**(与超大记录整条作废
+    同一条原则)。所以增删列**清空撤销栈**。
+    列结构的可撤销是独立的一件事,见 grid-remaining 计划里的待办。 }
+  n0 := G.Header.Columns.Count;
+  G.Cells[0, 0] := 'anchor';
+  G.ClearUndo;
+  G.Cells[0, 1] := 'x';
+  AssertTrue('前置:栈里有东西', G.CanUndo);
+
+  G.InsertCols(1, 3);
+  AssertEquals('前置:插了 3 列', n0 + 3, G.Header.Columns.Count);
+  AssertFalse('插列之后撤销栈必须是空的 —— 而不是留下还原不出来的半条',
+    G.CanUndo);
+
+  G.Cells[0, 2] := 'y';
+  AssertTrue('前置:栈里又有东西了', G.CanUndo);
+  G.RemoveCols(1, 2);
+  AssertEquals('前置:删了 2 列', n0 + 1, G.Header.Columns.Count);
+  AssertFalse('删列之后同理', G.CanUndo);
+
+  { --- 全部取消隐藏 --- }
+  G.HideRow(3);
+  G.HideRow(6);
+  G.ClearUndo;
+  AssertEquals('前置:藏了两行', 8, G.DisplayRowCount);
+  G.UnHideAllRows;
+  AssertEquals('前置:都放出来了', 10, G.DisplayRowCount);
+  AssertEquals('全部取消隐藏 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销,两行都藏回去', 8, G.DisplayRowCount);
+end;
+
+{ `SelectAll` 拿显示序的两端当锚点和光标 —— 但**两端未必是数据行**:
+  有分组时首行必是组标题,而组行在 FOrder 里存成负数。
+  于是锚点被设成一个负的数据行,`ActiveSelectionRect` 里本轮新加的
+  "-1 就退回光标位置"把整个选区塌成一格 —— **Ctrl+A 只选中一行**,
+  接着的 Ctrl+C / 删除 / 涂色全都只作用于那一行。 }
+procedure TTyStringGridTest.TestSelectAllSkipsGroupRows;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+  begin
+    G.Cells[0, r] := IntToStr(r);
+    G.Cells[1, r] := 'g' + IntToStr(r mod 2);    { 两个组 }
+  end;
+  G.GroupByColumn(1);
+  AssertTrue('前置:分组行确实排在最前', G.DisplayRow(0) < 0);
+
+  G.SelectAll;
+  AssertEquals('Ctrl+A 要选中全部 6 行 x 4 列', 24, G.SelectedCellCount);
+  AssertTrue('第一行数据在选区里', G.IsCellSelected(0, 0));
+  AssertTrue('最后一行数据也在选区里', G.IsCellSelected(3, 5));
+end;
+
+{ 复制走的是 `SelectionAsText`,它自己又算了一遍 `Min/Max(DataToDisplay(...))`
+  —— 与 `ActiveSelectionRect` 里刚修掉的是同一段代码,只是当时没发现有第二份。
+  锚点被筛掉时它从 -1 起算:**屏幕上只高亮光标那一行,剪贴板里却是
+  从表顶一路到光标的所有行**,还多一行空的。粘回去会覆盖用户从没选过的行。
+
+  修法不是再补一个 `if < 0`,而是让它**用**已经修好的那一个。 }
+procedure TTyStringGridTest.TestCopiedRangeMatchesTheHighlightedRange;
+var
+  G: TStrGridAccess;
+  r, shownRows, pos, cIdx: Integer;
+  txt: string;
+  sl: TStringList;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  for r := 0 to 9 do
+    G.Cells[0, r] := 'keep';
+  G.Cells[0, 3] := 'drop';
+
+  G.Col := 0;
+  G.Row := 3;
+  G.AnchorSelection;
+  G.PressKeyShift(VK_DOWN);            { 锚点 3,光标 4 }
+  G.SetColumnFilter(0, 'keep');        { 把锚点那一行筛掉 }
+
+  { 屏幕上到底高亮了几行 —— 以 IsCellSelected 为准(绘制用的就是它)。 }
+  shownRows := 0;
+  for pos := 0 to G.DisplayRowCount - 1 do
+  begin
+    cIdx := G.DisplayRow(pos);
+    if (cIdx >= 0) and G.IsCellSelected(0, cIdx) then Inc(shownRows);
+  end;
+
+  txt := G.SelectionAsText;
+  sl := TStringList.Create;
+  try
+    sl.Text := txt;
+    while (sl.Count > 0) and (sl[sl.Count - 1] = '') do
+      sl.Delete(sl.Count - 1);
+    AssertEquals('复制出来的行数必须与屏幕上高亮的行数一致',
+      shownRows, sl.Count);
+    AssertEquals('而且复制的就是光标那一行', 'keep', sl[0]);
+  finally
+    sl.Free;
+  end;
+end;
+
+{ HTML 导出跳过分组行(`if dataRow < 0 then Continue`),CSV 导出没跳 ——
+  同一件事的两份实现,只对了一份。开着分组导 CSV,每个组标题都变成一条
+  全空的记录(`,,,`);再导回来或用 Excel 打开就是一堆凭空多出来的空行。 }
+procedure TTyStringGridTest.TestCsvExportSkipsGroupRowsLikeHtmlDoes;
+var
+  G: TStrGridAccess;
+  r, i, blanks: Integer;
+  sl: TStringList;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+  begin
+    G.Cells[0, r] := IntToStr(r);
+    G.Cells[1, r] := 'g' + IntToStr(r mod 2);
+  end;
+  G.GroupByColumn(1);
+  AssertTrue('前置:确实有分组行', G.DisplayRow(0) < 0);
+
+  sl := TStringList.Create;
+  try
+    sl.Text := G.SaveToCSVText(',');
+    while (sl.Count > 0) and (sl[sl.Count - 1] = '') do
+      sl.Delete(sl.Count - 1);
+    blanks := 0;
+    for i := 1 to sl.Count - 1 do                { 第 0 行是表头 }
+      if StringReplace(sl[i], ',', '', [rfReplaceAll]) = '' then Inc(blanks);
+    AssertEquals('分组行不该导成空记录', 0, blanks);
+    AssertEquals('导出的应当就是 表头 + 6 行数据', 7, sl.Count);
+  finally
+    sl.Free;
+  end;
+end;
+
+procedure TTyStringGridTest.HookGetCellStyleRecordMin(Sender: TObject;
+  ACol, ARow: Integer; var ABackground: TTyFill; var ATextColor: TTyColor;
+  var AFontName: string; var AFontSize, AFontWeight: Integer;
+  var AHAlign: TAlignment; var AVAlign: TTextLayout);
+begin
+  if ARow < FMinHookRow then FMinHookRow := ARow;
+end;
+
+procedure TTyStringGridTest.HookGetCellBorderRecordMin(Sender: TObject;
+  ACol, ARow: Integer; var ABorders: TTyGridCellBorders);
+begin
+  if ARow < FMinHookRow then FMinHookRow := ARow;
+  ABorders.Left := True;      { 让边框那条路径真的走下去 }
+end;
+
+procedure TTyStringGridTest.HookRowSizingRecordMin(Sender: TObject;
+  AIndex: Integer; var ANewSize: Integer; var AAllow: Boolean);
+begin
+  if AIndex < FMinHookRow then FMinHookRow := AIndex;
+end;
+
+{ 两条逐格渲染循环把 `DisplayToData(row)` 直接喂给宿主钩子。分组行的
+  数据行号是**负数**,于是 `OnGetCellStyle` / `OnGetCellBorder` 每帧都会收到
+  ARow = -1, -2 ...。宿主按行号索引自己的数据(这是这两个钩子最normal的用法)
+  就会越界崩溃或读到垃圾 —— 而且是在**绘制**里崩,极难查。
+
+  分组行有自己的渲染路径(RenderGroupRow),逐格这条本来就不该管它。 }
+procedure TTyStringGridTest.TestHostHooksNeverSeeANegativeRow;
+var
+  G: TStrGridAccess;
+  Bmp: TBitmap;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+  begin
+    G.Cells[0, r] := IntToStr(r);
+    G.Cells[1, r] := 'g' + IntToStr(r mod 2);
+  end;
+  G.GroupByColumn(1);
+  AssertTrue('前置:确实有分组行', G.DisplayRow(0) < 0);
+
+  G.OnGetCellStyle := @HookGetCellStyleRecordMin;
+  G.OnGetCellBorder := @HookGetCellBorderRecordMin;
+
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(400, 300);
+    FMinHookRow := MaxInt;
+    G.DoRender(Bmp.Canvas, Rect(0, 0, 400, 300), 96);
+  finally
+    Bmp.Free;
+  end;
+
+  AssertTrue('钩子至少要被调用过(否则这条测试什么都没测)',
+    FMinHookRow <> MaxInt);
+  AssertTrue(Format('宿主钩子不该收到负的数据行(收到过 %d)', [FMinHookRow]),
+    FMinHookRow >= 0);
+end;
+
+{ `ScrollIntoView` 把 `DataToDisplay(ARow)` 喂给行矩形。被筛掉的行返回 -1,
+  几何层把它钳到内容顶端 —— 于是视口"跳回表格最上面",而用户根本没要求滚动。 }
+procedure TTyStringGridTest.TestScrollIntoViewIgnoresAnInvisibleRow;
+var
+  G: TStrGridAccess;
+  r, before: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 100;
+  for r := 0 to 99 do
+    G.Cells[0, r] := 'keep';
+  G.Cells[0, 50] := 'drop';
+  G.SetColumnFilter(0, 'keep');          { 第 50 行没有显示位置了 }
+
+  G.ScrollByForTest(300);
+  before := G.GetScrollTop;
+  AssertTrue('前置:确实滚下去了', before > 0);
+
+  G.ScrollIntoView(0, 50);               { 滚到一个看不见的行 }
+  AssertEquals('看不见的行没有可滚到的位置 —— 不该把视口拽回顶部',
+    before, G.GetScrollTop);
+end;
+
+{ 行数缩小时,落在新行数之外的行高与隐藏标记留在表里 ——
+  再换一个大数据集回来,它们**复活**到不相干的行上,而用户没做过任何产生它们的操作。
+  换查询条件重新载入(先小后大)是很常见的用法。 }
+procedure TTyStringGridTest.TestShrinkingRowCountDropsOutOfRangeRowState;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  G.RowHeights[7] := 60;
+  G.HideRow(8);
+  AssertEquals('前置:设了行高', 60, G.RowHeights[7]);
+  AssertTrue('前置:藏了一行', G.IsHiddenRow(8));
+
+  G.RowCount := 3;              { 换一个更小的数据集 }
+  G.RowCount := 10;             { 再换回大的 }
+
+  AssertEquals('缩过再放大,行高不该复活', 0, G.RowHeights[7]);
+  AssertFalse('隐藏标记也不该复活', G.IsHiddenRow(8));
+  AssertEquals('而且行数是对的', 10, G.DisplayRowCount);
+end;
+
+{ 分组行没有"行高"可拖:它的数据行号是负的,写回去会被存储挡掉。
+  不在手势启动处挡住的话,拖起来一动不动,而 `OnRowSizing` 每次鼠标移动
+  都会收到一个负行号。 }
+procedure TTyStringGridTest.TestGroupRowHasNoRowResizeGesture;
+var
+  G: TStrGridAccess;
+  r: Integer;
+  rc: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.ShowIndicator := True;
+  G.RowCount := 6;
+  for r := 0 to 5 do
+  begin
+    G.Cells[0, r] := IntToStr(r);
+    G.Cells[1, r] := 'g' + IntToStr(r mod 2);
+  end;
+  G.GroupByColumn(1);
+  AssertTrue('前置:显示位置 0 是分组行', G.DisplayRow(0) < 0);
+
+  FMinHookRow := MaxInt;
+  G.OnRowSizing := @HookRowSizingRecordMin;
+
+  { 在分组行的**下沿**(行头槽里)按下 —— 那正是行高分隔线的位置。 }
+  rc := G.RowRectAt(0);
+  G.PressMouseWithoutRelease(4, rc.Bottom - 1);
+  G.MoveMouseTo(4, rc.Bottom + 40);        { 往下拖 40px }
+  G.ReleaseMouse(4, rc.Bottom + 40);
+
+  { 断言必须落在**宿主看得到的东西**上。"高度没变"是零分辨力的:
+    负行号写回存储本来就会被挡掉,所以挡不挡手势,高度都不变。
+    真正的差别是 `OnRowSizing` 有没有被喂一个负行号。 }
+  AssertTrue(Format('OnRowSizing 不该收到负行号(收到过 %d)', [FMinHookRow]),
+    FMinHookRow >= 0);
+  AssertEquals('分组行拖不出行高来', rc.Bottom - rc.Top,
+    G.RowRectAt(0).Bottom - G.RowRectAt(0).Top);
+end;
+
+{ 在合并块**内部**插一行,跨度没跟着变大 —— 插进去的空行被吞进块里,
+  块尾那一行反被挤出块外。删除同理(块该缩小,却把块外的一行吸进来)。
+
+  搬迁本身是对的(基准格与属性一起走);漏的是"跨度也要跟着改"。 }
+procedure TTyStringGridTest.TestInsertingInsideAMergedBlockGrowsTheSpan;
+var
+  G: TStrGridAccess;
+  r, bc, br: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    G.Cells[1, r] := 'r' + IntToStr(r);
+  G.Cells[0, 0] := 'block';
+  G.MergeCells(0, 0, 1, 5);              { 列 0 的行 0..4 是一块 }
+  G.BaseCellOfForTest(0, 4, bc, br);
+  AssertEquals('前置:行 4 属于这一块', 0, br);
+
+  G.InsertRow(2);                        { 在块**内部**插一行 }
+
+  { 块原本盖住 5 行数据;插进来一行之后它该盖住 6 行 ——
+    也就是原来的末行(现在的行 5)仍然属于这一块。 }
+  G.BaseCellOfForTest(0, 5, bc, br);
+  AssertEquals('块尾那一行不该被挤出块外', 0, br);
+  AssertEquals('而且基准格还是同一个', 0, bc);
+
+  { 块外的第一行不该被吸进来。 }
+  G.BaseCellOfForTest(0, 6, bc, br);
+  AssertEquals('块外的行仍在块外', 6, br);
+end;
+
+{ P3.5 的笔记里记着一个"相邻缺口":排序的比较读的是存储而不是 `GetCellText`,
+  所以挂了 `OnGetCellText` 的表点列头**看起来毫无反应**;还说因此
+  `CanSortPhysically` 里"虚拟源不物理排"那条守卫无法被测试区分。
+
+  实测下来那条笔记已经不成立了 —— `CompareRows` 走的就是 `GetCellText`,
+  而它先问虚拟源、再回落存储。这条测试把现状钉住:
+  ① 虚拟源真的排得动;② 正因为排得动,那条"虚拟源不物理排"的守卫
+  现在**有**分辨力了(排完之后存储必须仍然是空的)。 }
+procedure TTyStringGridTest.TestSortingWorksOnAVirtualDataSource;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  G.OnGetCellText := @HandleVirtualLetter;  { 行 0 = 'J' … 行 9 = 'A' }
+
+  AssertEquals('前置:虚拟源给的是倒序', 'J', G.GetCellText(0, 0));
+  AssertEquals('前置:最后一行最小', 'A', G.GetCellText(0, 9));
+
+  G.SortByColumn(0, sdAscending);
+
+  { 升序之后,显示位置 0 应该是**值最小**的那一行 —— 也就是数据行 9。 }
+  AssertEquals('虚拟数据源必须排得动(显示位置 0 换成了数据行 9)',
+    9, G.DisplayRow(0));
+  AssertEquals('显示位置 9 是数据行 0', 0, G.DisplayRow(9));
+
+  { 物理排序对虚拟源必须**拒绝**:控件根本不持有数据,搬存储只会搬出一堆空格。
+    正因为上面证明了"排得动",这条守卫才有分辨力 —— 排序生效了,
+    但存储必须一个字都没被写进去。 }
+  G.SortMode := gsmData;
+  G.SortByColumn(0, sdDescending);
+  AssertEquals('存储里不该被写进任何东西', '', G.Cells[0, 0]);
+  AssertEquals('降序也排得动(显示位置 0 回到数据行 0)', 0, G.DisplayRow(0));
 end;
 
 initialization
