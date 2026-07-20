@@ -240,6 +240,7 @@ type
     procedure TestScrollIntoViewIgnoresAnInvisibleRow;
     procedure TestShrinkingRowCountDropsOutOfRangeRowState;
     procedure TestGroupRowHasNoRowResizeGesture;
+    procedure TestInsertingInsideAMergedBlockGrowsTheSpan;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8791,6 +8792,37 @@ begin
     FMinHookRow >= 0);
   AssertEquals('分组行拖不出行高来', rc.Bottom - rc.Top,
     G.RowRectAt(0).Bottom - G.RowRectAt(0).Top);
+end;
+
+{ 在合并块**内部**插一行,跨度没跟着变大 —— 插进去的空行被吞进块里,
+  块尾那一行反被挤出块外。删除同理(块该缩小,却把块外的一行吸进来)。
+
+  搬迁本身是对的(基准格与属性一起走);漏的是"跨度也要跟着改"。 }
+procedure TTyStringGridTest.TestInsertingInsideAMergedBlockGrowsTheSpan;
+var
+  G: TStrGridAccess;
+  r, bc, br: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 10;
+  for r := 0 to 9 do
+    G.Cells[1, r] := 'r' + IntToStr(r);
+  G.Cells[0, 0] := 'block';
+  G.MergeCells(0, 0, 1, 5);              { 列 0 的行 0..4 是一块 }
+  G.BaseCellOfForTest(0, 4, bc, br);
+  AssertEquals('前置:行 4 属于这一块', 0, br);
+
+  G.InsertRow(2);                        { 在块**内部**插一行 }
+
+  { 块原本盖住 5 行数据;插进来一行之后它该盖住 6 行 ——
+    也就是原来的末行(现在的行 5)仍然属于这一块。 }
+  G.BaseCellOfForTest(0, 5, bc, br);
+  AssertEquals('块尾那一行不该被挤出块外', 0, br);
+  AssertEquals('而且基准格还是同一个', 0, bc);
+
+  { 块外的第一行不该被吸进来。 }
+  G.BaseCellOfForTest(0, 6, bc, br);
+  AssertEquals('块外的行仍在块外', 6, br);
 end;
 
 initialization

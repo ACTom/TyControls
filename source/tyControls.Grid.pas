@@ -1476,6 +1476,12 @@ type
       `SetRowHeights` / `SetRowHidden` 两个记录点 —— 撤销一次增/删行之后,
       文字回来了而行高和隐藏标记**永久错位一格**,被删那一条更是无处可还。 }
     procedure ShiftRowStateWithUndo(AFromIndex, ADelta: Integer);
+    { 增删行**穿过**某个合并块时,把它的行跨度跟着改掉。
+
+      搬迁本身早就对了(基准格与属性一起走),漏的是跨度:在块内部插一行,
+      块还是原来那么高 —— 插进来的空行被吞进块里,块尾那一行反被挤出块外。
+      删除是反过来:块该缩小,却把块外的一行吸进来。 }
+    procedure GrowMergesSpanningRow(AFromIndex, ADelta: Integer);
     { 增删列之后把撤销栈整个丢掉。
 
       **列结构本身进不了撤销栈**:记录点是 SetCells 与 SetRowCount,
@@ -5048,6 +5054,47 @@ begin
   ClearUndo;
 end;
 
+procedure TTyStringGrid.GrowMergesSpanningRow(AFromIndex, ADelta: Integer);
+var
+  keys: TStringList;
+  i, sep, r: Integer;
+  a: TTyGridCellAttr;
+begin
+  if (ADelta = 0) or FAttrs.IsEmpty then Exit;
+  keys := TStringList.Create;
+  try
+    FAttrs.SnapshotKeys(keys);
+    for i := 0 to keys.Count - 1 do
+    begin
+      a := FAttrs.Find(keys[i]);
+      if (a = nil) or (a.RowSpan <= 1) then Continue;
+
+      sep := Pos(':', keys[i]);
+      r := StrToIntDef(Copy(keys[i], sep + 1, MaxInt), -1);
+      if r < 0 then Continue;
+
+      { 这里读到的 r 已经是**搬迁之后**的基准行:插入点在基准行之前时
+        基准格自己被搬走了,块整体平移、跨度不变;只有插入点落在
+        基准行**之后、块尾之内**时,块才被穿过。 }
+      if AFromIndex <= r then Continue;
+      if AFromIndex > r + a.RowSpan - 1 then Continue;
+
+      a := FAttrs.Mutate(keys[i]);        { 走记录点 }
+      Inc(a.RowSpan, ADelta);
+      if a.RowSpan < 1 then a.RowSpan := 1;
+      if a.RowSpan > FMaxRowSpan then FMaxRowSpan := a.RowSpan;
+      if (a.ColSpan <= 1) and (a.RowSpan <= 1) then
+      begin
+        Dec(FMergeCount);                 { 缩没了就不再是合并区 }
+        if FMergeCount < 0 then FMergeCount := 0;
+      end;
+      FAttrs.DropIfDefault(keys[i]);
+    end;
+  finally
+    keys.Free;
+  end;
+end;
+
 procedure TTyStringGrid.ShiftRowStateWithUndo(AFromIndex, ADelta: Integer);
 var
   heights: array of record R, H: Integer; end;
@@ -7642,6 +7689,7 @@ begin
   if ARows then
   begin
     ShiftRowStateWithUndo(AFromIndex, ADelta);
+    GrowMergesSpanningRow(AFromIndex, ADelta);
     InvalidateOrder;
   end
   else
