@@ -171,6 +171,23 @@ type
     procedure TestOutlineOffsetParsed;
   end;
 
+  { 密度尺度第一期:多值令牌必须能用在 padding 上。
+    这条守的是**展开与切分的顺序** —— 先切分再展开的话,
+    `padding: var(--pad-tooltip)` 会静默算出一个错数(不报错,只是错)。 }
+  TTestDensityTokens = class(TTestCase)
+  private
+    FModel: TTyStyleModel;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestMultiValuePaddingToken;
+    procedure TestSingleValuePaddingTokenStillWorks;
+    procedure TestLiteralPaddingUnchanged;
+    procedure TestMultiValueRadiusToken;
+    procedure TestMultiValueShadowToken;
+  end;
+
 implementation
 
 procedure TTestStyleMerge.TestMergeUnionPresent;
@@ -1257,7 +1274,82 @@ begin
   AssertEquals('light bg after reload = new value', TTyColor($FF112233), st.Background.Color);
 end;
 
+const
+  CSS_DENSITY =
+    ':root { --pad-tooltip: 5px 9px; --pad-control: 4px;' +
+    '        --radius-top: 4px 4px 0px 0px;' +
+    '        --shadow-md: 0px 2px 8px #000000; }' + LineEnding +
+    'TyHint   { padding: var(--pad-tooltip); }' + LineEnding +
+    'TyEdit   { padding: var(--pad-control); }' + LineEnding +
+    'TyButton { padding: 6px; }' + LineEnding +
+    'TyCard   { border-radius: var(--radius-top); }' + LineEnding +
+    'TyPanel  { shadow: var(--shadow-md); }';
+
+procedure TTestDensityTokens.SetUp;
+begin
+  FModel := TTyStyleModel.Create;
+  FModel.LoadFromCss(CSS_DENSITY);
+end;
+
+procedure TTestDensityTokens.TearDown;
+begin
+  FModel.Free;
+end;
+
+{ '5px 9px' = 上下 5、左右 9(CSS 的「纵向 横向」约定)。 }
+procedure TTestDensityTokens.TestMultiValuePaddingToken;
+var s: TTyStyleSet;
+begin
+  s := FModel.ResolveStyle('TyHint', '', []);
+  AssertTrue('padding 存在', tpPadding in s.Present);
+  AssertEquals('上', 5, s.Padding.Top);
+  AssertEquals('下', 5, s.Padding.Bottom);
+  AssertEquals('左', 9, s.Padding.Left);
+  AssertEquals('右', 9, s.Padding.Right);
+end;
+
+procedure TTestDensityTokens.TestSingleValuePaddingTokenStillWorks;
+var s: TTyStyleSet;
+begin
+  s := FModel.ResolveStyle('TyEdit', '', []);
+  AssertEquals('上', 4, s.Padding.Top);
+  AssertEquals('左', 4, s.Padding.Left);
+end;
+
+{ 现存的 41 条规则全是字面量。这条守的是「修了展开顺序之后它们一点没变」——
+  也就是第 2 期迁移之前,经典 golden 不会因为这个修改而漂移。 }
+procedure TTestDensityTokens.TestLiteralPaddingUnchanged;
+var s: TTyStyleSet;
+begin
+  s := FModel.ResolveStyle('TyButton', '', []);
+  AssertEquals('上', 6, s.Padding.Top);
+  AssertEquals('左', 6, s.Padding.Left);
+end;
+
+{ padding 不是孤例 —— border-radius 与 box-shadow 是同一份"先切分再求值"的
+  代码形状。只修 padding 的话,现代密度想用一个"上圆下方"的圆角令牌时
+  会再撞一次同样的墙。 }
+procedure TTestDensityTokens.TestMultiValueRadiusToken;
+var s: TTyStyleSet;
+begin
+  s := FModel.ResolveStyle('TyCard', '', []);
+  AssertEquals('左上', 4, s.Radius.TL);
+  AssertEquals('右上', 4, s.Radius.TR);
+  AssertEquals('右下', 0, s.Radius.BR);
+  AssertEquals('左下', 0, s.Radius.BL);
+end;
+
+procedure TTestDensityTokens.TestMultiValueShadowToken;
+var s: TTyStyleSet;
+begin
+  s := FModel.ResolveStyle('TyPanel', '', []);
+  AssertEquals('X 偏移', 0, s.ShadowOffset.X);
+  AssertEquals('Y 偏移', 2, s.ShadowOffset.Y);
+  AssertEquals('模糊', 8, s.ShadowBlur);
+end;
+
 initialization
+  RegisterTest(TTestDensityTokens);
   RegisterTest(TTestStyleMerge);
   RegisterTest(TTestStyleMode);
   RegisterTest(TTestStylePhase0);

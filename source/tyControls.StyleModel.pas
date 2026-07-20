@@ -234,7 +234,11 @@ begin
   try
     parts.Delimiter := ' ';
     parts.StrictDelimiter := True;
-    parts.DelimitedText := Trim(ARaw);
+    { **先展开 var() 再按空格切分。** 顺序反了的话,值含空格的令牌
+      (--pad-tooltip: 5px 9px)会被当成单个长度求值,'5px 9' 解析不出
+      浮点数 —— 抛出去之后整份样式表加载失败。
+      padding / box-shadow / border-radius 三处同一形状,一起修。 }
+    parts.DelimitedText := Trim(TyExpandVars(ARaw, Vars));
     // drop empties produced by multiple spaces
     for i := parts.Count - 1 downto 0 do
       if Trim(parts[i]) = '' then parts.Delete(i);
@@ -485,7 +489,11 @@ begin
   try
     parts.Delimiter := ' ';
     parts.StrictDelimiter := False;
-    parts.DelimitedText := Trim(ARaw);
+    { **先展开 var() 再按空格切分。** 顺序反了的话,值含空格的令牌
+      (--pad-tooltip: 5px 9px)会被当成单个长度求值,'5px 9' 解析不出
+      浮点数 —— 抛出去之后整份样式表加载失败。
+      padding / box-shadow / border-radius 三处同一形状,一起修。 }
+    parts.DelimitedText := Trim(TyExpandVars(ARaw, Vars));
     for i := parts.Count - 1 downto 0 do
       if Trim(parts[i]) = '' then parts.Delete(i);
     if parts.Count <> 4 then
@@ -584,7 +592,11 @@ begin
   try
     parts.Delimiter := ' ';
     parts.StrictDelimiter := True;
-    parts.DelimitedText := Trim(ARaw);
+    { **先展开 var() 再按空格切分。** 顺序反了的话,值含空格的令牌
+      (--pad-tooltip: 5px 9px)会被当成单个长度求值,'5px 9' 解析不出
+      浮点数 —— 抛出去之后整份样式表加载失败。
+      padding / box-shadow / border-radius 三处同一形状,一起修。 }
+    parts.DelimitedText := Trim(TyExpandVars(ARaw, Vars));
     for i := parts.Count - 1 downto 0 do
       if Trim(parts[i]) = '' then parts.Delete(i);
     case parts.Count of

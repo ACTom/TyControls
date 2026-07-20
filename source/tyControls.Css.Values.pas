@@ -16,6 +16,11 @@ function TyOn(bg, inkOnLight, inkOnDark: TTyColor): TTyColor; overload;       //
 
 function TyEvalColor(const Expr: string; Vars: TStrings): TTyColor;  // resolves var()/funcs
 function TyEvalLength(const Expr: string; Vars: TStrings): Integer;  // '6px'->6, var() ok
+{ 把 Expr 里所有 var(...) 就地展开成它们的值,返回展开后的字符串。
+  多值属性(padding)必须**先展开再切分** —— 反过来的话
+  `padding: var(--pad-tooltip)`(值 '5px 9px')会被当成一个长度求值,
+  '5px 9' 解析不出浮点数,整份样式表加载失败。 }
+function TyExpandVars(const Expr: string; Vars: TStrings): string;
 function TyEvalFloat(const Expr: string; Vars: TStrings): Single;    // '0.5'
 // Exported so tyControls.StyleModel can split gradient/function arg lists with
 // nested parens (e.g. 'lighten(--accent, 16%)') without mis-splitting commas.
@@ -307,6 +312,41 @@ begin
   if (Length(E) >= 2) and (E[1] = '-') and (E[2] = '-') then
     Exit(TyEvalColor(Vars.Values[Copy(E, 3, MaxInt)], Vars));
   raise Exception.CreateFmt(rsCssCannotEvaluateColor, [Expr]);
+end;
+
+function TyExpandVars(const Expr: string; Vars: TStrings): string;
+var
+  lo, ref, val: string;
+  i, j, depth, guard: Integer;
+begin
+  Result := Expr;
+  { 护栏:令牌互相引用成环时不至于转死。32 层远超任何真实主题的嵌套。 }
+  guard := 0;
+  while guard < 32 do
+  begin
+    Inc(guard);
+    lo := LowerCase(Result);
+    i := Pos('var(', lo);
+    if i = 0 then Exit;
+    { 从 'var(' 的左括号起按深度找配对的右括号 —— var() 可以嵌套
+      (var(--a, var(--b))),只找第一个 ')' 会截断。 }
+    depth := 0;
+    j := i + 3;
+    while j <= Length(Result) do
+    begin
+      if Result[j] = '(' then Inc(depth)
+      else if Result[j] = ')' then
+      begin
+        Dec(depth);
+        if depth = 0 then Break;
+      end;
+      Inc(j);
+    end;
+    if j > Length(Result) then Exit;   { 括号不配对:原样返回,别把输入吃掉 }
+    ref := Copy(Result, i, j - i + 1);
+    val := Trim(ResolveVarRef(ref, Vars));
+    Result := Copy(Result, 1, i - 1) + val + Copy(Result, j + 1, MaxInt);
+  end;
 end;
 
 function TyEvalLength(const Expr: string; Vars: TStrings): Integer;
