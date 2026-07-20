@@ -1205,6 +1205,10 @@ type
     FRowTopsCache: TTyIntArray;
     FRowTopsValid: Boolean;
     FAggregates: TStringList;      { 列索引 -> 聚合方式序号 }
+    { 逐列的汇总缓存。页脚每帧都要问一次,而算一次要遍历全部显示行。
+      长度 <> 列数 = 整体失效(见 InvalidateAggregates)。 }
+    FAggCache: array of Double;
+    FAggValid: array of Boolean;
     { 逐格附加属性(合并跨度、以及留给后面几批的底色/字体/只读)。
       与 FCells 同一套键。**合并信息从前是自己一张表**,增删行时漏搬,已并进来。 }
     FAttrs: TTyGridCellAttrStore;
@@ -1419,8 +1423,10 @@ type
       const AFrame: TTyStyleSet); virtual;
     procedure RenderFooter(P: TTyPainter; const M: TTyGridMetrics;
       const AFooterRect: TRect; const AFrame: TTyStyleSet); override;
+    { 把一格喂进累加器。virtual:派生类可以换聚合口径,
+      测试也靠它数"一帧扫了多少格"(汇总缓存的守卫)。 }
     procedure AccumulateCell(ACol, ADataRow: Integer; AKind: TTyGridAggregate;
-      var AAcc: Double; var ACount: Integer; var AStarted: Boolean);
+      var AAcc: Double; var ACount: Integer; var AStarted: Boolean); virtual;
     function  AggregatePrefix(AKind: TTyGridAggregate): string;
     procedure RenderSelectionFrame(P: TTyPainter; const M: TTyGridMetrics;
       const AFrame: TTyStyleSet); virtual;
@@ -1447,6 +1453,9 @@ type
       为两张表建一套注册框架,读起来比它替掉的重复更难。
       增删行是另一类(行数会变),收口在 ShiftRowKeyedTable —— 加表时那里也要加。 }
     procedure PermuteRowState(const AMap: array of Integer);
+    { 汇总缓存整体失效。三处汇过来:数据改(SetCells)、显示序变(InvalidateOrder,
+      筛选/隐藏/分组/行数都归它)、换聚合口径(SetColumnAggregate)。 }
+    procedure InvalidateAggregates;
     { 属性存储的记录点。挂在 TTyGridCellAttrStore.OnChanging 上 ——
       于是改底色/文字色/只读/合并跨度、以及三条行置换路径搬属性,
       **一律**自动进撤销栈,不必每个功能各写一段(那正是本控件反复漏东西的方式)。 }
@@ -5185,6 +5194,9 @@ begin
   end
   else
     FCells.Items[k] := AValue;        { 已存在则覆写,不存在则新增 }
+  { 数据变了 → 汇总要重算。挂在这个收口点上,于是编辑、粘贴、填充、
+    行置换、撤销全都自动失效 —— 与撤销的记录点是同一处口子。 }
+  InvalidateAggregates;
   Invalidate;
 end;
 
@@ -5637,8 +5649,19 @@ begin
   FOrderValid := False;
 end;
 
+procedure TTyStringGrid.InvalidateAggregates;
+begin
+  { 长度归零 = 全部失效。下次用到时按当时的列数重建 ——
+    列增删之后也就不必单独再失效一次。 }
+  SetLength(FAggValid, 0);
+  SetLength(FAggCache, 0);
+end;
+
 procedure TTyStringGrid.InvalidateOrder;
 begin
+  { 显示序变了 → 参与统计的行集合就变了。筛选、隐藏行、分组、行数增删
+    最终都汇到这里,所以汇总的失效也挂在这一处。 }
+  InvalidateAggregates;
   { 批量期间不重建 —— EndUpdateOrder 里统一来一次。 }
   if FUpdatingOrder > 0 then
   begin
@@ -7915,6 +7938,7 @@ begin
   i := FAggregates.IndexOfName(k);
   if i >= 0 then FAggregates.Delete(i);
   if AKind <> gagNone then FAggregates.Add(k + '=' + IntToStr(Ord(AKind)));
+  InvalidateAggregates;      { 换了口径,缓存里那个数已经不是要的那个了 }
   Invalidate;
 end;
 
@@ -8010,7 +8034,7 @@ var
   v, acc: Double;
   kind: TTyGridAggregate;
   txt: string;
-  started: Boolean;
+  started, cacheable: Boolean;
 begin
   Result := 0;
   kind := ColumnAggregate(ACol);
@@ -8019,8 +8043,28 @@ begin
   { 只遍历**显示序** —— 被过滤掉的行不参与统计,筛完总计立刻跟着变。 }
   if kind = gagCount then
   begin
-    Result := DisplayRowCount;
+    Result := DisplayRowCount;      { O(1),不必缓存 }
     Exit;
+  end;
+
+  { 页脚**每帧**都要问一次,而下面那一趟遍历的是全部显示行 ——
+    百万行的表滚动时就是每帧一次 O(n)。缓存按列存,失效收口在
+    InvalidateAggregates(数据改 / 显示序变 / 换聚合口径三处汇过去)。
+
+    挂了 OnGetCellText 的表**不缓存**:值由宿主随时给,控件收不到"变了"的
+    通知,缓存住就等于把一个陈旧的合计钉在页脚上 —— 那比慢糟得多。
+    (与 CanSortPhysically 拒绝虚拟源同一条道理。) }
+  cacheable := (ACol >= 0) and (not Assigned(FOnGetCellText));
+  if cacheable then
+  begin
+    if Length(FAggValid) <> Header.Columns.Count then
+    begin
+      SetLength(FAggValid, Header.Columns.Count);
+      SetLength(FAggCache, Header.Columns.Count);
+      for n := 0 to High(FAggValid) do FAggValid[n] := False;
+    end;
+    if (ACol <= High(FAggValid)) and FAggValid[ACol] then
+      Exit(FAggCache[ACol]);
   end;
 
   acc := 0;
@@ -8034,8 +8078,15 @@ begin
     started := True;
   end;
 
-  if n = 0 then Exit;
-  if kind = gagAvg then Result := acc / n else Result := acc;
+  { n = 0(整列一格数值都没有)也要记进缓存,否则空列每帧照样白扫一遍全表。 }
+  if n > 0 then
+    if kind = gagAvg then Result := acc / n else Result := acc;
+
+  if cacheable and (ACol <= High(FAggValid)) then
+  begin
+    FAggCache[ACol] := Result;
+    FAggValid[ACol] := True;
+  end;
 end;
 
 function TTyStringGrid.FooterText(ACol: Integer): string;

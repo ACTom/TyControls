@@ -206,6 +206,7 @@ type
     procedure TestUndoRestoresCellAttributesAndRowHeights;
     procedure TestUndoRestoresCellColorAndMerge;
     procedure TestSwappingRowsCarriesTheHiddenFlag;
+    procedure TestFooterAggregateIsCachedAndInvalidated;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -1066,6 +1067,24 @@ type
     function  SurfaceFreshForTest: Boolean;
     property ScrollTop: Integer read GetScrollTop write SetScrollTop;
   end;
+
+  { 数"汇总扫了多少格"。页脚每帧都要问一次聚合,而聚合遍历的是全部显示行 ——
+    百万行时每帧一次 O(n)。守卫要能看见**扫描本身**,光看结果对不对
+    分辨不出"每帧重算"和"用了缓存"。 }
+  TCountingGrid = class(TStrGridAccess)
+  public
+    ScanCount: Integer;
+    procedure AccumulateCell(ACol, ADataRow: Integer; AKind: TTyGridAggregate;
+      var AAcc: Double; var ACount: Integer; var AStarted: Boolean); override;
+  end;
+
+procedure TCountingGrid.AccumulateCell(ACol, ADataRow: Integer;
+  AKind: TTyGridAggregate; var AAcc: Double; var ACount: Integer;
+  var AStarted: Boolean);
+begin
+  Inc(ScanCount);
+  inherited AccumulateCell(ACol, ADataRow, AKind, AAcc, ACount, AStarted);
+end;
 
 procedure TStrGridAccess.PressMouseWithoutRelease(X, Y: Integer);
 begin
@@ -4271,7 +4290,7 @@ begin
     rowTopAfter := G.RowRectAt(0).Top;
     AssertEquals('分组带把正文往下顶了一整条', 20 + 22, rowTopAfter);
 
-    { 分组带确实画出来了,而且只覆盖前两列(第 0 列宽 80,共 4 列 x 80)。 }
+    { 分组带确实画出来了,而且只覆盖前两列(第 0 列宽 80,Count 4 列 x 80)。 }
     Bmp.PixelFormat := pf32bit;
     Bmp.SetSize(400, 300);
     Bmp.Canvas.Brush.Color := clWhite;
@@ -7921,6 +7940,64 @@ begin
 
   AssertEquals('藏起来的那一行换了位置也还该藏着,别的一个都不能少',
     'ABDEF', shown);
+end;
+
+{ B3:页脚汇总此前**每帧**遍历全部显示行(RenderFooter → AggregateValue)。
+  百万行时滚动就是每帧一次 O(n) 扫描。
+
+  两面都要断言:缓存住了(重复问不再扫),以及**该失效的时候真的失效了**
+  —— 陈旧的合计比慢的合计糟得多,用户会照着一个错数做决定。 }
+procedure TTyStringGridTest.TestFooterAggregateIsCachedAndInvalidated;
+var
+  G: TCountingGrid;
+  i: Integer;
+  c: TTyColumn;
+begin
+  G := TCountingGrid.Create(FForm);
+  G.Parent := FForm;
+  G.Controller := FCtl;
+  G.Font.PixelsPerInch := 96;
+  G.SetBounds(0, 0, 400, 300);
+  for i := 0 to 3 do
+  begin
+    c := G.Header.Columns.Add as TTyColumn;
+    c.Width := 80;
+  end;
+  G.Header.Options := G.Header.Options - [hoVisible];
+  G.DefaultRowHeight := 20;
+  G.RowCount := 40;
+  for i := 0 to 39 do
+    G.Cells[0, i] := IntToStr(i + 1);          { 1..40,合计 820 }
+  G.SetColumnAggregate(0, gagSum);
+
+  AssertEquals('前置:合计对', 'Sum 820', G.FooterText(0));
+  G.ScanCount := 0;
+  AssertEquals('再问一次结果不变', 'Sum 820', G.FooterText(0));
+  AssertEquals('第二次不该再扫一遍全表', 0, G.ScanCount);
+
+  { --- 以下每一条都是"必须失效"的时机 --- }
+
+  G.Cells[0, 0] := '101';                      { 改一格:820 - 1 + 101 }
+  AssertEquals('改了格值,合计必须跟着变', 'Sum 920', G.FooterText(0));
+
+  G.RowCount := 41;
+  G.Cells[0, 40] := '80';
+  AssertEquals('加了一行,合计必须跟着变', 'Sum 1000', G.FooterText(0));
+
+  G.HideRow(40);
+  AssertEquals('藏起一行,合计必须跟着变', 'Sum 920', G.FooterText(0));
+  G.UnHideRow(40);
+
+  G.SetColumnFilter(0, '101');                 { 只剩那一行 }
+  AssertEquals('筛选之后只统计留下的行', 'Sum 101', G.FooterText(0));
+  G.SetColumnFilter(0, '');
+  AssertEquals('清掉筛选恢复', 'Sum 1000', G.FooterText(0));
+
+  G.Undo;                                      { 撤销掉 '80' 那一格 }
+  AssertEquals('撤销之后合计也要跟着回去', 'Sum 920', G.FooterText(0));
+
+  G.SetColumnAggregate(0, gagCount);
+  AssertEquals('换了聚合口径也要重算', 'Count 41', G.FooterText(0));
 end;
 
 initialization
