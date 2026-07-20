@@ -9243,11 +9243,23 @@ end;
 
 
 function TTyStringGrid.ActiveSelectionRect: TRect;
+var
+  a, c: Integer;
 begin
+  a := DataToDisplay(FSelAnchorRow);
+  c := DataToDisplay(FRow);
+  { 被筛掉的行没有显示位置(-1)。把 -1 直接喂给 Min 的话选区就从 -1 起算,
+    一路吃到显示位置 0 —— 筛掉锚点之后,选中范围反而**扩到表头**那边去了。
+    锚点没了就退化成"只有光标那一行"。
+    两端都没了则两个都还是 -1,行区间 [-1,-1] 里不可能有真实的显示位置
+    (调用方喂的 rp 恒 >= 0)—— 那种情况本来就该什么都不选中,不必另开一路。 }
+  if a < 0 then a := c;
+  if c < 0 then c := a;
+
   Result.Left   := Min(FSelAnchorCol, FCol);
   Result.Right  := Max(FSelAnchorCol, FCol);
-  Result.Top    := Min(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
-  Result.Bottom := Max(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+  Result.Top    := Min(a, c);
+  Result.Bottom := Max(a, c);
 end;
 
 { 一格在不在某个矩形里。整行/整列模式下另一轴不参与判定 —— 选中就是整条。 }

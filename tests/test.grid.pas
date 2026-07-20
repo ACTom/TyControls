@@ -202,6 +202,7 @@ type
     procedure TestTopRightCornerCellIsVisibleWithBothFreezes;
     procedure TestFixedRowsAndSortTogetherKeepCellsInTheirPane;
     procedure TestFrozenBandThicknessFollowsDisplayedRows;
+    procedure TestFilteringOutTheAnchorDoesNotGrowTheSelection;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -7764,6 +7765,39 @@ begin
   AssertFalse('底部冻结行的可见矩形不该是空的', IsRectEmpty(vis));
   AssertEquals('底部冻结带算薄了会把最上面那行裁掉一截',
     G2.CellRect(0, 1).Top, vis.Top);
+end;
+
+{ A6:锚点行被筛掉之后,活动选区不能反而**变大**。
+
+  `ActiveSelectionRect` 把 `DataToDisplay` 的返回值直接喂给 Min/Max,而被筛掉的行
+  返回 -1 —— 于是选区从 -1 起算,一路吃到显示位置 0,把表格最上面那些
+  从来没被选过的行全括进来。 }
+procedure TTyStringGridTest.TestFilteringOutTheAnchorDoesNotGrowTheSelection;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);            { 4 列 x 10 行 }
+  for r := 0 to 9 do
+    G.Cells[0, r] := 'keep';
+  G.Cells[0, 2] := 'drop';                  { 待会儿把这一行筛掉 }
+
+  { 锚点落在数据行 2,光标拉到数据行 4。 }
+  G.Col := 0; G.Row := 2;
+  G.AnchorSelection;
+  G.PressKeyShift(VK_DOWN);
+  G.PressKeyShift(VK_DOWN);
+  AssertEquals('前置:光标在数据行 4', 4, G.Row);
+  AssertTrue('前置:数据行 3 在选区里', G.IsCellSelected(0, 3));
+  AssertFalse('前置:数据行 0 不在选区里', G.IsCellSelected(0, 0));
+
+  { 把**锚点那一行**筛掉 —— 它从此没有显示位置。 }
+  G.SetColumnFilter(0, 'keep');
+  AssertEquals('前置:筛掉一行', 9, G.DisplayRowCount);
+
+  AssertFalse('筛掉锚点后,表头那边的行不该突然被选中', G.IsCellSelected(0, 0));
+  AssertFalse('数据行 1 同样从来没被选过', G.IsCellSelected(0, 1));
+  AssertTrue('光标那一行仍然选中', G.IsCellSelected(0, 4));
 end;
 
 initialization
