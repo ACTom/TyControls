@@ -115,6 +115,17 @@ function TyGridPaneRect(const M: TTyGridMetrics; APane: TTyGridPane): TRect;
   越界的行会算出视口外的坐标 —— 这是正常的,可视性由 TyGridVisibleRows 判定。 }
 function TyGridRowRect(ARow: Integer; const M: TTyGridMetrics): TRect;
 
+{ 第 ARow 行(**显示序**)所属的那条**横向带**:上冻结带 / 正文 / 下冻结带,
+  跨满整幅宽度、客户区坐标。
+
+  "跨列的 chrome 必须裁到它所属的那条带"是本控件反复漏掉的一条规则 ——
+  行号、横格线、选区外框各漏过一次,症状每次都一样:滚到冻结带底下的那一行,
+  把自己的装饰画到了固定行的槽位上。规则只写在这里一处,
+  调用方一律走 TTyCustomGrid.DrawInRowBand,不自己算带。
+
+  与 TyGridPaneRect 的差别:顶部带**不含列头带**(列头是另画的,不属于任何行)。 }
+function TyGridRowBandRect(ARow: Integer; const M: TTyGridMetrics): TRect;
+
 { 把单元格矩形内缩成**内容矩形**:让开边界上的网格线,免得文字压在粗线底下。
   线画在边界上、两侧各占一半,所以每边内缩 GridLineWidth 的一半(向上取整)。
   线宽 <= 1 时(最常见)内缩为 0,几何与从前逐像素一致。 }
@@ -299,6 +310,23 @@ begin
     TyGridRowExtent(M.FixedRows, M, fixedTop, fixedH);
   y := M.FrozenTop + (top - fixedTop) - M.ScrollY;
   Result := Rect(0, y, M.ClientW, y + h);
+end;
+
+function TyGridRowBandRect(ARow: Integer; const M: TTyGridMetrics): TRect;
+var
+  nBot: Integer;
+begin
+  { 顶部固定行:列头之下、上冻结带之内。 }
+  if (M.FixedRows > 0) and (ARow >= 0) and (ARow < M.FixedRows) then
+    Exit(Rect(0, TyGridHeaderH(M), M.ClientW, M.FrozenTop));
+
+  { 底部固定行:视口下沿那条带。 }
+  nBot := TyGridFixedBottom(M);
+  if (nBot > 0) and (ARow >= M.RowCount - nBot) then
+    Exit(Rect(0, M.ClientH - M.FrozenBottom, M.ClientW, M.ClientH));
+
+  { 正文:两条冻结带之间。 }
+  Result := Rect(0, M.FrozenTop, M.ClientW, M.ClientH - M.FrozenBottom);
 end;
 
 function TyGridContentHeight(const M: TTyGridMetrics): Integer;

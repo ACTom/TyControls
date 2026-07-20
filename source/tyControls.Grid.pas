@@ -15,6 +15,9 @@
 unit tyControls.Grid;
 
 {$mode objfpc}{$H+}
+{ 嵌套过程可以当值传 —— DrawInRowBand 靠它把"绘制动作"收进一个统一的裁剪入口,
+  而绘制动作要读绘制循环里的局部变量。 }
+{$modeswitch nestedprocvars}
 
 interface
 
@@ -346,6 +349,10 @@ type
 
   { 属性存储"某一条即将被改动"的通知 —— 撤销记录点挂在它上面。 }
   TTyGridAttrChangingEvent = procedure(const AKey: string) of object;
+
+  { 交给 DrawInRowBand 的绘制动作。用**嵌套过程**类型是因为它要读绘制循环里的
+    局部变量(当前行、当前矩形),而这些东西没必要为了传参再抽一个记录出来。 }
+  TTyGridBandDraw = procedure is nested;
 
   { 一次可撤销的操作 = 一串条目。批量操作(粘贴、填充、删行)天然是一条,
     因为它们本来就被 BeginUpdate/EndUpdate 包着。 }
@@ -809,6 +816,21 @@ type
     { 把控件当前状态装配成纯几何层要的度量。所有几何都必须经由它,
       不允许任何地方另算一套 —— 那正是绘制/命中漂移的源头。 }
     function GridMetrics: TTyGridMetrics; virtual;
+
+    { **在第 APos 行所属的那条横向带里**画点什么。裁剪与外层求交(脏区重画
+      限定的那条带),完全不相交时**根本不调用** ADraw。
+
+      为什么要包一层而不是"记得先设 ClipRect":这条规则此前在四处各写一遍
+      (行号 / 横格线 / 选区外框 / 填充柄),每一处都是漏了才发现的。
+      把绘制动作交进来之后,"忘了裁剪"这件事在结构上不再可能发生 ——
+      不经过这里就压根画不出来。 }
+    procedure DrawInRowBand(P: TTyPainter; APos: Integer;
+      const M: TTyGridMetrics; ADraw: TTyGridBandDraw);
+    { 同上,但裁到某个**九宫格窗格**(行轴 + 列轴都管)。跨满整幅宽度的 chrome
+      走 DrawInRowBand,而有列归属的(选区外框、填充柄)走这个 ——
+      用行带的话,冻结列那一侧就漏掉了。 }
+    procedure DrawInPane(P: TTyPainter; APane: TTyGridPane;
+      const M: TTyGridMetrics; ADraw: TTyGridBandDraw);
 
     { 第 ACol 列左边界的客户区横坐标(设备像素)——**列轴几何的唯一出处**。
       固定列钉在冻结带里不随横向滚动;正文列随 ScrollX 平移。
@@ -3243,7 +3265,15 @@ var
     (和当初 col↔Col、cellS↔Cells 同一类坑。) }
   indS: TTyStyleSet;
   ink: TTyColor;
-  oldClip, numClip, band: TRect;
+
+  { 交给 DrawInRowBand 执行 —— 裁剪由它负责,这里只管画。 }
+  procedure DrawOneNumber;
+  begin
+    DrawCellText(P, Rect(0, r.Top, AIndicatorW - ScaleI(4), r.Bottom),
+      IntToStr(pos + 1), indS.FontName, ResolveFontSize(indS), indS.FontWeight,
+      ink, taRightJustify, tlCenter);
+  end;
+
 begin
   if not FShowRowNumbers then Exit;
   if AIndicatorW <= 0 then Exit;
@@ -3258,39 +3288,15 @@ begin
 
   { 行号按**显示序**给:排序/筛选之后,屏幕第一行仍然是 1。
     (给数据行号的话,排一次序行号就乱跳,那不是行号该有的样子。) }
-  { **必须裁到正文窗格**。只跳过表头是不够的:滚到冻结带(表头 + 固定行)
-    底下的那一行,它的行号会画到固定行的槽位上去 —— 单元格内容靠
-    CellVisibleRect 与窗格求交挡住了,行号这条路径当初漏了这一步。 }
-  oldClip := P.Bitmap.ClipRect;
-  { **与外层裁剪求交**,不是覆盖 —— 外层可能是脏区重绘限定的那条横带,
-    覆盖掉它就会在带外重画一遍,同一段文字叠两次、抗锯齿变深。
-    (与单元格文字那处同一个坑;底部冻结行让它露了头。) }
-  try
   for slot := first to last do
   begin
     pos := TyGridRowAtSlot(slot, M);
     if pos < 0 then Continue;
     r := TyGridRowRect(pos, M);
-
-    { 裁到这一行**所属的那个窗格**,而不是一把大裁剪。
-      一把大裁剪会让正文行的行号漏进冻结带:滚到上冻结带底下的行会把号码
-      画到固定行的槽位上,滚到下冻结带底下的行会画到底部固定行的槽位上。
-      (单元格内容靠 CellVisibleRect 与窗格求交挡住了;行号这条路径当初漏了。) }
-    if pos < FFixedRows then
-      band := Rect(0, AHeaderH, AIndicatorW, M.FrozenTop)
-    else if (M.FrozenBottom > 0) and (pos >= DisplayRowCount - FixedRowsBottom) then
-      band := Rect(0, M.ClientH - M.FrozenBottom, AIndicatorW, M.ClientH)
-    else
-      band := Rect(0, M.FrozenTop, AIndicatorW, M.ClientH - M.FrozenBottom);
-    if not IntersectRect(numClip, oldClip, band) then Continue;
-    P.Bitmap.ClipRect := numClip;
-
-    DrawCellText(P, Rect(0, r.Top, AIndicatorW - ScaleI(4), r.Bottom),
-      IntToStr(pos + 1), indS.FontName, ResolveFontSize(indS), indS.FontWeight,
-      ink, taRightJustify, tlCenter);
-  end;
-  finally
-    P.Bitmap.ClipRect := oldClip;
+    { 裁到这一行**所属的那条带**。一把大裁剪会让正文行的行号漏进冻结带:
+      滚到上冻结带底下的行会把号码画到固定行的槽位上,滚到下冻结带底下的
+      画到底部固定行的槽位上。 }
+    DrawInRowBand(P, pos, M, @DrawOneNumber);
   end;
 end;
 
@@ -3720,13 +3726,37 @@ end;
 procedure TTyCustomGrid.RenderGridLines(P: TTyPainter; const M: TTyGridMetrics;
   const AFrame: TTyStyleSet);
 var
-  oldLineClip, lineClip, rowBand: TRect;
   slot: Integer;   { 绘制槽位 }
   first, last, row, i, x, lw, half: Integer;
   r: TRect;
   line: TBGRAPixel;
   col: TTyColumn;
   merged: Boolean;
+
+  { 一条横线。交给 DrawInRowBand 执行 —— 裁剪由它负责。 }
+  procedure DrawOneRowLine;
+  var
+    j, cx: Integer;
+    c: TTyColumn;
+  begin
+    if not merged then
+    begin
+      P.Bitmap.FillRect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw,
+        line, dmSet);
+      Exit;
+    end;
+    { 逐列分段:本行与下一行在这一列上属于同一个合并区时,跳过这一段。 }
+    for j := 0 to FHeader.Columns.Count - 1 do
+    begin
+      c := TTyColumn(FHeader.Columns.Items[j]);
+      if not (coVisible in c.Options) then Continue;
+      if SameMergedCell(j, DisplayToData(row), j, DisplayToData(row + 1)) then Continue;
+      cx := ColumnLeftPx(j);
+      P.Bitmap.FillRect(cx, r.Bottom - 1 - half,
+        cx + ColumnWidthPx(j), r.Bottom - 1 - half + lw, line, dmSet);
+    end;
+  end;
+
 begin
   line := GridLineColor(AFrame);
 
@@ -3741,40 +3771,17 @@ begin
     分段要多出 列数 x 行数 次 FillRect,不能让没用合并的表白白付这个钱。 }
   merged := HasMergedCells;
 
-  { 横线:每一可见行的下沿。只走 TyGridVisibleRows —— 百万行的表在这里也只画几十条。 }
-  oldLineClip := P.Bitmap.ClipRect;
+  { 横线:每一可见行的下沿。只走绘制槽位 —— 百万行的表在这里也只画几十条。
+    每条线都裁到它那一行所属的带,否则滚到冻结带底下的行会把线画进冻结带里
+    (单元格内容靠 CellVisibleRect 挡住了,线这条路径没有)。 }
   if (FGridLineStyle in [glsHorizontal, glsBoth]) and TyGridDrawSlots(M, first, last) then
     for slot := first to last do
     begin
       row := TyGridRowAtSlot(slot, M);
       if row < 0 then Continue;
       r := TyGridRowRect(row, M);
-      { 横线也要裁到这一行所属的窗格 —— 否则滚到冻结带底下的行会把线画进
-        冻结带里(单元格内容靠 CellVisibleRect 挡住了,线这条路径没有)。 }
-      if row < FFixedRows then
-        rowBand := Rect(0, TyGridHeaderH(M), M.ClientW, M.FrozenTop)
-      else if (M.FrozenBottom > 0) and (row >= DisplayRowCount - FixedRowsBottom) then
-        rowBand := Rect(0, M.ClientH - M.FrozenBottom, M.ClientW, M.ClientH)
-      else
-        rowBand := Rect(0, M.FrozenTop, M.ClientW, M.ClientH - M.FrozenBottom);
-      if not IntersectRect(lineClip, oldLineClip, rowBand) then Continue;
-      P.Bitmap.ClipRect := lineClip;
-      if not merged then
-        P.Bitmap.FillRect(0, r.Bottom - 1 - half, M.ClientW, r.Bottom - 1 - half + lw,
-          line, dmSet)
-      else
-        { 逐列分段:本行与下一行在这一列上属于同一个合并区时,跳过这一段。 }
-        for i := 0 to FHeader.Columns.Count - 1 do
-        begin
-          col := TTyColumn(FHeader.Columns.Items[i]);
-          if not (coVisible in col.Options) then Continue;
-          if SameMergedCell(i, DisplayToData(row), i, DisplayToData(row + 1)) then Continue;
-          x := ColumnLeftPx(i);
-          P.Bitmap.FillRect(x, r.Bottom - 1 - half,
-            x + ColumnWidthPx(i), r.Bottom - 1 - half + lw, line, dmSet);
-        end;
+      DrawInRowBand(P, row, M, @DrawOneRowLine);
     end;
-  P.Bitmap.ClipRect := oldLineClip;
 
   { 竖线:每一可见列的右缘。位置走 ColumnLeftPx(列轴唯一出处),
     绝不另算 —— 否则线会和单元格边界差一像素。 }
@@ -4525,6 +4532,40 @@ begin
   { 优先级:显式存储 > 默认。派生类再插进回调。 }
   Result := GetRowHeights(ARow);
   if Result <= 0 then Result := FDefaultRowHeight;
+end;
+
+procedure TTyCustomGrid.DrawInRowBand(P: TTyPainter; APos: Integer;
+  const M: TTyGridMetrics; ADraw: TTyGridBandDraw);
+var
+  oldClip, clip: TRect;
+begin
+  if not Assigned(ADraw) then Exit;
+  oldClip := P.Bitmap.ClipRect;
+  { **求交**而不是覆盖 —— 外层可能是脏区重画限定的那条横带,覆盖掉它就会
+    在带外重画一遍:同一段文字叠两次、抗锯齿变深。 }
+  if not IntersectRect(clip, oldClip, TyGridRowBandRect(APos, M)) then Exit;
+  P.Bitmap.ClipRect := clip;
+  try
+    ADraw();
+  finally
+    P.Bitmap.ClipRect := oldClip;
+  end;
+end;
+
+procedure TTyCustomGrid.DrawInPane(P: TTyPainter; APane: TTyGridPane;
+  const M: TTyGridMetrics; ADraw: TTyGridBandDraw);
+var
+  oldClip, clip: TRect;
+begin
+  if not Assigned(ADraw) then Exit;
+  oldClip := P.Bitmap.ClipRect;
+  if not IntersectRect(clip, oldClip, TyGridPaneRect(M, APane)) then Exit;
+  P.Bitmap.ClipRect := clip;
+  try
+    ADraw();
+  finally
+    P.Bitmap.ClipRect := oldClip;
+  end;
 end;
 
 function TTyCustomGrid.RowHeightOfDisplay(APos: Integer): Integer;
@@ -10099,10 +10140,39 @@ end;
 procedure TTyStringGrid.RenderSelectionFrame(P: TTyPainter;
   const M: TTyGridMetrics; const AFrame: TTyStyleSet);
 var
-  b, h, oldClip, clipR, r: TRect;
+  b, r: TRect;
   fS: TTyStyleSet;
-  lw: Integer;
-  solid: TTyFill;
+
+  procedure DrawFrameAndHandle;
+  var
+    h: TRect;
+    lw: Integer;
+    solid: TTyFill;
+  begin
+    lw := fS.BorderWidth;
+    if lw < 1 then lw := 1;
+    P.StrokeBorder(b, 0, lw, fS.BorderColor);
+
+    { 填充柄。用同一个 FillHandleRect —— 命中走的也是它,所以
+      "看得见的那一块"和"点得到的那一块"不可能分叉。 }
+    h := FillHandleRect;
+    if IsRectEmpty(h) then Exit;
+    if (tpBackground in fS.Present) and (fS.Background.Kind <> tfkNone) then
+      P.FillBackground(h, fS.Background, 0)
+    else
+    begin
+      solid := Default(TTyFill);
+      solid.Kind := tfkSolid;
+      solid.Color := fS.BorderColor;
+      P.FillBackground(h, solid, 0);
+    end;
+    { 柄要描一圈对比色。不描的话它和选区底色同色 —— 画了等于没画
+      (token 里 background 与 border-color 通常都是 accent)。
+      对比色走 token 的 color:,不硬编码。 }
+    if tpTextColor in fS.Present then
+      P.StrokeBorder(h, 0, 1, fS.TextColor);
+  end;
+
 begin
   b := SelectionBoundsRect;
   if IsRectEmpty(b) then Exit;
@@ -10113,40 +10183,8 @@ begin
 
   { 裁到选区**所属的那个窗格**,而不是笼统裁到正文窗格。
     光标停在固定行上时,柄会探进正文窗格一个像素 —— 而正文窗格是会被
-    滚动平移的,那一个像素于是跟着跑,脏区快路径与整幅重画就对不上了。
-    (与行号、横格线同一类问题:chrome 必须跟着它所属的窗格走。) }
-  oldClip := P.Bitmap.ClipRect;
-  if not IntersectRect(clipR, oldClip,
-       TyGridPaneRect(M, CellPane(r.Right, r.Bottom))) then Exit;
-  P.Bitmap.ClipRect := clipR;
-  try
-    lw := fS.BorderWidth;
-    if lw < 1 then lw := 1;
-    P.StrokeBorder(b, 0, lw, fS.BorderColor);
-
-    { 填充柄。用同一个 FillHandleRect —— 命中走的也是它,所以
-      "看得见的那一块"和"点得到的那一块"不可能分叉。 }
-    h := FillHandleRect;
-    if not IsRectEmpty(h) then
-    begin
-      if (tpBackground in fS.Present) and (fS.Background.Kind <> tfkNone) then
-        P.FillBackground(h, fS.Background, 0)
-      else
-      begin
-        solid := Default(TTyFill);
-        solid.Kind := tfkSolid;
-        solid.Color := fS.BorderColor;
-        P.FillBackground(h, solid, 0);
-      end;
-      { 柄要描一圈对比色。不描的话它和选区底色同色 —— 画了等于没画
-        (token 里 background 与 border-color 通常都是 accent)。
-        对比色走 token 的 color:,不硬编码。 }
-      if tpTextColor in fS.Present then
-        P.StrokeBorder(h, 0, 1, fS.TextColor);
-    end;
-  finally
-    P.Bitmap.ClipRect := oldClip;
-  end;
+    滚动平移的,那一个像素于是跟着跑,脏区快路径与整幅重画就对不上了。 }
+  DrawInPane(P, CellPane(r.Right, r.Bottom), M, @DrawFrameAndHandle);
 end;
 
 procedure TTyStringGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
