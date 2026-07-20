@@ -209,6 +209,9 @@ type
     procedure TestFooterAggregateIsCachedAndInvalidated;
     procedure TestPasteAndCutAreOneUndoStepEach;
     procedure TestClearAndCsvImportAreUndoable;
+    procedure TestNoOpAttributeWriteLeavesTheUndoStackAlone;
+    procedure TestMergeCountSurvivesRowRemovalAndUndo;
+    procedure TestClearMergesIsOneUndoStep;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8108,6 +8111,97 @@ begin
   G.Undo;
   AssertEquals('导入 CSV 可以撤销', '11', G.Cells[0, 0]);
   AssertEquals('被导入覆盖掉的格也回来', 'keep', G.Cells[1, 0]);
+end;
+
+{ 把记录点挂在属性存储的"即将改动"通知上,代价是它**分不清"要改"和"改成一样的"**。
+  `SetCells` 早有这道保护(`if e.OldText <> AValue`),属性这边一开始没跟上:
+  于是把红色再设一次红色也压一条空记录 —— 按 Ctrl+Z 一次没反应,
+  更阴的是这条空记录**把重做链清掉了**(刚撤销的那一步再也重做不回来)。
+
+  这是本轮引入的回归,对抗审查抓到的。 }
+procedure TTyStringGridTest.TestNoOpAttributeWriteLeavesTheUndoStackAlone;
+var
+  G: TStrGridAccess;
+  w1: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+
+  G.CellColors[0, 0] := TyRGB(255, 0, 0);
+  G.ClearUndo;
+  G.CellColors[0, 0] := TyRGB(255, 0, 0);        { 同一个颜色 }
+  AssertEquals('设成同一个颜色不该压撤销记录', 0, G.UndoCountForTest);
+
+  G.CellTextColors[1, 1] := TyRGB(0, 128, 0);
+  G.ClearUndo;
+  G.CellTextColors[1, 1] := TyRGB(0, 128, 0);
+  AssertEquals('文字色同理', 0, G.UndoCountForTest);
+
+  G.CellReadOnly[2, 2] := True;
+  G.ClearUndo;
+  G.CellReadOnly[2, 2] := True;
+  AssertEquals('只读同理', 0, G.UndoCountForTest);
+
+  w1 := G.CellRect(0, 4).Right - G.CellRect(0, 4).Left;
+  G.MergeCells(0, 4, 2, 2);
+  G.ClearUndo;
+  G.MergeCells(0, 4, 2, 2);                      { 同样的跨度 }
+  AssertEquals('合并成同样的跨度同理', 0, G.UndoCountForTest);
+  AssertEquals('而且跨度本身没变', w1 * 2,
+    G.CellRect(0, 4).Right - G.CellRect(0, 4).Left);
+
+  { 空记录最阴的一面:它把**重做链**清掉了。 }
+  G.CellColors[3, 3] := TyRGB(0, 0, 255);
+  G.Undo;
+  AssertEquals('前置:撤销掉了', 0, G.CellColors[3, 3]);
+  AssertTrue('前置:有得重做', G.CanRedo);
+  G.CellColors[0, 0] := TyRGB(255, 0, 0);        { 无变化的写入 }
+  AssertTrue('无变化的写入不该把重做链清掉', G.CanRedo);
+  G.Redo;
+  AssertEquals('重做要能真的把它做回来',
+    TyRGB(0, 0, 255), G.CellColors[3, 3]);
+end;
+
+{ `FMergeCount` 是旁挂的汇总,不在属性对象里。删行时属性条目被 ShiftCells 直接
+  丢掉,计数没跟着减 —— 于是表里"还有合并区"而实际一个都没有。
+  本轮给 RestoreAttr 加了对账,但那只管撤销那条路;删除这条路仍然漏。 }
+procedure TTyStringGridTest.TestMergeCountSurvivesRowRemovalAndUndo;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.MergeCells(0, 1, 2, 2);
+  AssertTrue('前置:合并了', G.HasMergedCells);
+
+  G.RemoveRows(1, 2);                    { 把合并区那两行整个删掉 }
+  AssertFalse('合并区被删掉之后,表里就不该还"有合并区"了',
+    G.HasMergedCells);
+
+  G.Undo;
+  AssertTrue('撤销之后合并区回来了', G.HasMergedCells);
+  G.UnmergeCells(0, 1);
+  AssertFalse('取消掉唯一那个合并之后,计数必须归零',
+    G.HasMergedCells);
+end;
+
+{ `ClearMerges` 一次清掉所有合并,却每个格子压一条记录 ——
+  与粘贴/剪切/批量增删行是同一族缺陷(规则被逐处重述而不是收口)。 }
+procedure TTyStringGridTest.TestClearMergesIsOneUndoStep;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.MergeCells(0, 0, 2, 1);
+  G.MergeCells(0, 2, 2, 1);
+  G.MergeCells(0, 4, 2, 1);
+  G.ClearUndo;
+
+  G.ClearMerges;
+  AssertFalse('前置:合并都清掉了', G.HasMergedCells);
+  AssertEquals('清掉三处合并 = 一条撤销记录', 1, G.UndoCountForTest);
+
+  G.Undo;
+  AssertTrue('按一次撤销,三处合并都回来', G.HasMergedCells);
+  AssertFalse('而且栈里不该还剩别的', G.CanUndo);
 end;
 
 initialization

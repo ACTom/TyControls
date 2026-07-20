@@ -6447,6 +6447,11 @@ begin
   end
   else
   begin
+    { **设成它已经是的那个值 = 不是一次改动。**
+      Ensure 会发"即将改动"通知,而记录点在那儿 —— 不先挡一下的话
+      同色再设一次也压一条空记录:Ctrl+Z 按下去没反应,
+      更糟的是那条空记录把重做链清掉了。`SetCells` 一直有这道保护。 }
+    if GetCellColor(ACol, ARow) = AValue then Exit;
     a := FAttrs.Ensure(k);
     if a = nil then Exit;
     a.HasBackground := True;
@@ -6479,6 +6484,7 @@ begin
   end
   else
   begin
+    if GetCellTextColor(ACol, ARow) = AValue then Exit;   { 见 SetCellColor }
     a := FAttrs.Ensure(k);
     if a = nil then Exit;
     a.HasTextColor := True;
@@ -6523,6 +6529,7 @@ begin
   end
   else
   begin
+    if GetCellReadOnly(ACol, ARow) then Exit;             { 见 SetCellColor }
     a := FAttrs.Ensure(k);
     if a = nil then Exit;
     a.ReadOnly := True;
@@ -7294,8 +7301,19 @@ var
   end;
 
   procedure DropCell(AC, AR: Integer);
+  var
+    a: TTyGridCellAttr;
   begin
     Cells[AC, AR] := '';
+    { 合并计数是旁挂的汇总,不在属性对象里 —— 丢掉一个合并基准格必须跟着减。
+      不减的话 `HasMergedCells` 会一直答"有合并区"而实际一个都没有,
+      于是格线绘制永远走那条慢的逐列分段路径,取消合并也清不掉这个状态。 }
+    a := FAttrs.Find(CellKey(AC, AR));
+    if (a <> nil) and ((a.ColSpan > 1) or (a.RowSpan > 1)) then
+    begin
+      Dec(FMergeCount);
+      if FMergeCount < 0 then FMergeCount := 0;
+    end;
     FAttrs.Remove(CellKey(AC, AR));
   end;
 
@@ -8667,6 +8685,8 @@ begin
 end;
 
 procedure TTyStringGrid.MergeCells(ACol, ARow, AColSpan, ARowSpan: Integer);
+var
+  cs, rs: Integer;
 begin
   if (AColSpan <= 1) and (ARowSpan <= 1) then
   begin
@@ -8685,6 +8705,8 @@ begin
     UnmergeCells(ACol, ARow);
     Exit;
   end;
+  { 合并成它已经是的那个跨度 = 不是一次改动(见 SetCellColor 里那段说明)。 }
+  if CellSpan(ACol, ARow, cs, rs) and (cs = AColSpan) and (rs = ARowSpan) then Exit;
   with FAttrs.Ensure(CellKey(ACol, ARow)) do
   begin
     if (ColSpan <= 1) and (RowSpan <= 1) then Inc(FMergeCount);
@@ -8723,6 +8745,9 @@ var
   a: TTyGridCellAttr;
 begin
   { 只清合并,不能把同一条目上的别的属性(底色/只读)一起清掉。 }
+  { 一次清掉所有合并 = **一条**撤销记录。逐格记的话,清 20 处合并
+    要按 20 次 Ctrl+Z —— 与粘贴/剪切/批量增删行同一族。 }
+  BeginUpdate;
   keys := TStringList.Create;
   try
     FAttrs.SnapshotKeys(keys);
@@ -8741,6 +8766,7 @@ begin
     FMergeCount := 0;
   finally
     keys.Free;
+    EndUpdate;
   end;
   Invalidate;
 end;
