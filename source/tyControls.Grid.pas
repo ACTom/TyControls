@@ -9227,24 +9227,30 @@ end;
 
 function TTyStringGrid.SelectionAsText: string;
 var
-  c1, c2, r1, r2, pos, cIdx: Integer;
+  sel: TRect;
+  pos, cIdx, dataRow: Integer;
   sb: TStringList;
   line: string;
 begin
-  c1 := Min(FSelAnchorCol, FCol);  c2 := Max(FSelAnchorCol, FCol);
-  r1 := Min(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
-  r2 := Max(DataToDisplay(FSelAnchorRow), DataToDisplay(FRow));
+  { **用** ActiveSelectionRect,不自己再算一遍 Min/Max ——
+    从前这里有第二份同样的算式,而"锚点被筛掉时返回 -1"那个坑只在那一份里修了:
+    屏幕上高亮的是一行(绘制走 IsCellSelected → ActiveSelectionRect),
+    剪贴板里却是从表顶一路到光标的所有行,还多一行空的。
+    粘回去会覆盖用户从没选过的行。 }
+  sel := ActiveSelectionRect;         { 显示序空间,-1 已在那里处理过 }
 
   sb := TStringList.Create;
   try
     { 按**显示序**导出 —— 用户复制的是他看到的那块,不是底层行号区间。 }
-    for pos := r1 to r2 do
+    for pos := sel.Top to sel.Bottom do
     begin
+      dataRow := DisplayToData(pos);
+      if dataRow < 0 then Continue;   { 分组行不是数据,别导成一行空格子 }
       line := '';
-      for cIdx := c1 to c2 do
+      for cIdx := sel.Left to sel.Right do
       begin
-        if cIdx > c1 then line := line + #9;
-        line := line + GetCellText(cIdx, DisplayToData(pos));
+        if cIdx > sel.Left then line := line + #9;
+        line := line + GetCellText(cIdx, dataRow);
       end;
       sb.Add(line);
     end;
@@ -9358,7 +9364,7 @@ end;
 function TTyStringGrid.SaveToCSVText(ADelimiter: Char): string;
 var
   sb: TStringList;
-  pos, cIdx: Integer;
+  pos, cIdx, dataRow: Integer;
   line: string;
 begin
   sb := TStringList.Create;
@@ -9374,11 +9380,15 @@ begin
 
     for pos := 0 to DisplayRowCount - 1 do
     begin
+      dataRow := DisplayToData(pos);
+      { 分组行不导出 —— 与 HTML 导出同一条规矩。不跳的话每个组标题都变成
+        一条全空的记录(`,,,`),导回来或用 Excel 打开就是凭空多出的空行。 }
+      if dataRow < 0 then Continue;
       line := '';
       for cIdx := 0 to Header.Columns.Count - 1 do
       begin
         if cIdx > 0 then line := line + ADelimiter;
-        line := line + TyCsvQuote(GetCellText(cIdx, DisplayToData(pos)), ADelimiter);
+        line := line + TyCsvQuote(GetCellText(cIdx, dataRow), ADelimiter);
       end;
       sb.Add(line);
     end;
@@ -9823,13 +9833,36 @@ begin
 end;
 
 procedure TTyStringGrid.SelectAll;
+var
+  pos, d, firstData, lastData: Integer;
 begin
   SetLength(FSelRects, 0);
   if (Header.Columns.Count = 0) or (RowCount = 0) then Exit;
+
+  { 显示序的两端**未必是数据行**:有分组时首行必是组标题,最后一组折叠着的话
+    末行也是。组行的 DisplayToData 是负数,直接拿它当锚点的话
+    `ActiveSelectionRect` 会把整个选区塌成光标那一格 —— Ctrl+A 只选中一行,
+    接着的 Ctrl+C / 删除 / 涂色全都只作用于那一行。
+    所以从两头各找**第一个真数据行**。 }
+  firstData := -1;
+  for pos := 0 to DisplayRowCount - 1 do
+  begin
+    d := DisplayToData(pos);
+    if d >= 0 then begin firstData := d; Break; end;
+  end;
+  if firstData < 0 then Exit;        { 一行数据都没露出来(全折叠) }
+
+  lastData := firstData;
+  for pos := DisplayRowCount - 1 downto 0 do
+  begin
+    d := DisplayToData(pos);
+    if d >= 0 then begin lastData := d; Break; end;
+  end;
+
   FSelAnchorCol := 0;
-  FSelAnchorRow := DisplayToData(0);
+  FSelAnchorRow := firstData;
   FCol := Header.Columns.Count - 1;
-  FRow := DisplayToData(DisplayRowCount - 1);
+  FRow := lastData;
   SelectionChanged;
 end;
 

@@ -220,6 +220,9 @@ type
     procedure TestColumnKeyedTablesFollowInsertAndDelete;
     procedure TestUndoingRowInsertRestoresHeightsAndHiddenFlags;
     procedure TestRemainingBulkOpsAreOneUndoStepEach;
+    procedure TestSelectAllSkipsGroupRows;
+    procedure TestCopiedRangeMatchesTheHighlightedRange;
+    procedure TestCsvExportSkipsGroupRowsLikeHtmlDoes;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8520,6 +8523,112 @@ begin
   AssertEquals('全部取消隐藏 = 一条撤销记录', 1, G.UndoCountForTest);
   G.Undo;
   AssertEquals('按一次撤销,两行都藏回去', 8, G.DisplayRowCount);
+end;
+
+{ `SelectAll` 拿显示序的两端当锚点和光标 —— 但**两端未必是数据行**:
+  有分组时首行必是组标题,而组行在 FOrder 里存成负数。
+  于是锚点被设成一个负的数据行,`ActiveSelectionRect` 里本轮新加的
+  "-1 就退回光标位置"把整个选区塌成一格 —— **Ctrl+A 只选中一行**,
+  接着的 Ctrl+C / 删除 / 涂色全都只作用于那一行。 }
+procedure TTyStringGridTest.TestSelectAllSkipsGroupRows;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+  begin
+    G.Cells[0, r] := IntToStr(r);
+    G.Cells[1, r] := 'g' + IntToStr(r mod 2);    { 两个组 }
+  end;
+  G.GroupByColumn(1);
+  AssertTrue('前置:分组行确实排在最前', G.DisplayRow(0) < 0);
+
+  G.SelectAll;
+  AssertEquals('Ctrl+A 要选中全部 6 行 x 4 列', 24, G.SelectedCellCount);
+  AssertTrue('第一行数据在选区里', G.IsCellSelected(0, 0));
+  AssertTrue('最后一行数据也在选区里', G.IsCellSelected(3, 5));
+end;
+
+{ 复制走的是 `SelectionAsText`,它自己又算了一遍 `Min/Max(DataToDisplay(...))`
+  —— 与 `ActiveSelectionRect` 里刚修掉的是同一段代码,只是当时没发现有第二份。
+  锚点被筛掉时它从 -1 起算:**屏幕上只高亮光标那一行,剪贴板里却是
+  从表顶一路到光标的所有行**,还多一行空的。粘回去会覆盖用户从没选过的行。
+
+  修法不是再补一个 `if < 0`,而是让它**用**已经修好的那一个。 }
+procedure TTyStringGridTest.TestCopiedRangeMatchesTheHighlightedRange;
+var
+  G: TStrGridAccess;
+  r, shownRows, pos, cIdx: Integer;
+  txt: string;
+  sl: TStringList;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  for r := 0 to 9 do
+    G.Cells[0, r] := 'keep';
+  G.Cells[0, 3] := 'drop';
+
+  G.Col := 0;
+  G.Row := 3;
+  G.AnchorSelection;
+  G.PressKeyShift(VK_DOWN);            { 锚点 3,光标 4 }
+  G.SetColumnFilter(0, 'keep');        { 把锚点那一行筛掉 }
+
+  { 屏幕上到底高亮了几行 —— 以 IsCellSelected 为准(绘制用的就是它)。 }
+  shownRows := 0;
+  for pos := 0 to G.DisplayRowCount - 1 do
+  begin
+    cIdx := G.DisplayRow(pos);
+    if (cIdx >= 0) and G.IsCellSelected(0, cIdx) then Inc(shownRows);
+  end;
+
+  txt := G.SelectionAsText;
+  sl := TStringList.Create;
+  try
+    sl.Text := txt;
+    while (sl.Count > 0) and (sl[sl.Count - 1] = '') do
+      sl.Delete(sl.Count - 1);
+    AssertEquals('复制出来的行数必须与屏幕上高亮的行数一致',
+      shownRows, sl.Count);
+    AssertEquals('而且复制的就是光标那一行', 'keep', sl[0]);
+  finally
+    sl.Free;
+  end;
+end;
+
+{ HTML 导出跳过分组行(`if dataRow < 0 then Continue`),CSV 导出没跳 ——
+  同一件事的两份实现,只对了一份。开着分组导 CSV,每个组标题都变成一条
+  全空的记录(`,,,`);再导回来或用 Excel 打开就是一堆凭空多出来的空行。 }
+procedure TTyStringGridTest.TestCsvExportSkipsGroupRowsLikeHtmlDoes;
+var
+  G: TStrGridAccess;
+  r, i, blanks: Integer;
+  sl: TStringList;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+  begin
+    G.Cells[0, r] := IntToStr(r);
+    G.Cells[1, r] := 'g' + IntToStr(r mod 2);
+  end;
+  G.GroupByColumn(1);
+  AssertTrue('前置:确实有分组行', G.DisplayRow(0) < 0);
+
+  sl := TStringList.Create;
+  try
+    sl.Text := G.SaveToCSVText(',');
+    while (sl.Count > 0) and (sl[sl.Count - 1] = '') do
+      sl.Delete(sl.Count - 1);
+    blanks := 0;
+    for i := 1 to sl.Count - 1 do                { 第 0 行是表头 }
+      if StringReplace(sl[i], ',', '', [rfReplaceAll]) = '' then Inc(blanks);
+    AssertEquals('分组行不该导成空记录', 0, blanks);
+    AssertEquals('导出的应当就是 表头 + 6 行数据', 7, sl.Count);
+  finally
+    sl.Free;
+  end;
 end;
 
 initialization
