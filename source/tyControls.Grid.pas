@@ -316,14 +316,36 @@ type
     物理排序是可撤销的 —— 这也是它必须排在撤销功能之后做的原因。 }
   TTyGridSortMode = (gsmDisplay, gsmData);
 
-  TTyGridUndoKind = (gukCell, gukRowCount);
+  TTyGridUndoKind = (gukCell, gukRowCount, gukCellAttr, gukRowHeight);
+
+  { 逐格属性的**值快照**。撤销栈不能存 TTyGridCellAttr 的引用 ——
+    那个对象会被后来的 MoveEntry 就地改写、被 Remove 释放。 }
+  TTyGridAttrSnapshot = record
+    Present:          Boolean;      { False = 当时这一格根本没有属性条目 }
+    ColSpan, RowSpan: Integer;
+    HasBackground:    Boolean;
+    Background:       TTyColor;
+    HasTextColor:     Boolean;
+    TextColor:        TTyColor;
+    HasAlignment:     Boolean;
+    Alignment:        TAlignment;
+    HasFontStyle:     Boolean;
+    FontStyle:        TFontStyles;
+    ReadOnly:         Boolean;
+  end;
 
   TTyGridUndoEntry = record
-    Kind:     TTyGridUndoKind;
-    Col, Row: Integer;
-    OldText:  string;
-    OldCount: Integer;
+    Kind:      TTyGridUndoKind;
+    Col, Row:  Integer;
+    OldText:   string;
+    OldCount:  Integer;
+    OldHeight: Integer;
+    AttrKey:   string;
+    Attr:      TTyGridAttrSnapshot;
   end;
+
+  { 属性存储"某一条即将被改动"的通知 —— 撤销记录点挂在它上面。 }
+  TTyGridAttrChangingEvent = procedure(const AKey: string) of object;
 
   { 一次可撤销的操作 = 一串条目。批量操作(粘贴、填充、删行)天然是一条,
     因为它们本来就被 BeginUpdate/EndUpdate 包着。 }
@@ -422,12 +444,19 @@ type
   TTyGridCellAttrStore = class
   private
     FItems: TStringList;      { Sorted + OwnsObjects → 二分查找、自动释放 }
+    FOnChanging: TTyGridAttrChangingEvent;
+    procedure Changing(const AKey: string);
   public
     constructor Create;
     destructor Destroy; override;
-    { 没有条目时返回 nil —— **查询不要凭空建条目**,否则遍历一遍表就把稀疏性毁了。 }
+    { 没有条目时返回 nil —— **查询不要凭空建条目**,否则遍历一遍表就把稀疏性毁了。
+      Find 拿到的对象**只读**:要改字段就得走 Mutate/Ensure,那两个会先发
+      Changing 通知(撤销记录点挂在那里)。绕过它们就地改 = 那次改动撤销不了。 }
     function  Find(const AKey: string): TTyGridCellAttr;
+    { 已有条目 → 通知一次并交出对象;没有则 nil。"我要改这条现成的"。 }
+    function  Mutate(const AKey: string): TTyGridCellAttr;
     function  Ensure(const AKey: string): TTyGridCellAttr;
+    property OnChanging: TTyGridAttrChangingEvent read FOnChanging write FOnChanging;
     procedure Remove(const AKey: string);
     { 条目退化成全默认值时把它丢掉。 }
     procedure DropIfDefault(const AKey: string);
@@ -638,7 +667,7 @@ type
       AHeaderH, AIndicatorW: Integer); virtual;
     procedure SetWordWrap(AValue: Boolean);
     function  GetRowHeights(ARow: Integer): Integer;
-    procedure SetRowHeights(ARow, AValue: Integer);
+    procedure SetRowHeights(ARow, AValue: Integer); virtual;
     { Y 落在哪一行的下边界附近(行头槽内才算)。不在分隔线上返回 -1。 }
     function  RowDividerAtY(AX, AY: Integer): Integer;
     function  GetGridLines: Boolean;
@@ -1384,6 +1413,15 @@ type
     procedure SetUndoLimit(AValue: Integer);
     { 记一笔。不在事务里时自成一条(单格编辑就是这种)。 }
     procedure RecordUndo(const AEntry: TTyGridUndoEntry);
+    { 属性存储的记录点。挂在 TTyGridCellAttrStore.OnChanging 上 ——
+      于是改底色/文字色/只读/合并跨度、以及三条行置换路径搬属性,
+      **一律**自动进撤销栈,不必每个功能各写一段(那正是本控件反复漏东西的方式)。 }
+    procedure HandleAttrChanging(const AKey: string);
+    function  SnapshotAttr(const AKey: string): TTyGridAttrSnapshot;
+    procedure RestoreAttr(const AKey: string; const ASnap: TTyGridAttrSnapshot);
+    { 行高的记录点。行高是**行**的属性,不经过 Cells[],所以 SetCells 那个
+      收口点够不着它 —— 拖完行 Ctrl+Z 只回来文字就是这么来的。 }
+    procedure SetRowHeights(ARow, AValue: Integer); override;
     procedure PushUndoStep(const AStep: TTyGridUndoStep);
     { 把一条记录逆着放回去,并返回它的"反记录"(供重做用)。 }
     function  ApplyUndoStep(const AStep: TTyGridUndoStep): TTyGridUndoStep;
@@ -2047,10 +2085,24 @@ begin
   if i < 0 then Result := nil else Result := TTyGridCellAttr(FItems.Objects[i]);
 end;
 
+procedure TTyGridCellAttrStore.Changing(const AKey: string);
+begin
+  if Assigned(FOnChanging) then FOnChanging(AKey);
+end;
+
+function TTyGridCellAttrStore.Mutate(const AKey: string): TTyGridCellAttr;
+begin
+  Result := Find(AKey);
+  if Result <> nil then Changing(AKey);
+end;
+
 function TTyGridCellAttrStore.Ensure(const AKey: string): TTyGridCellAttr;
 var
   i: Integer;
 begin
+  { 已存在也要通知 —— 调用方接着就要改它的字段。
+    不存在时同样通知:"原本没有这一条"本身就是要恢复的状态。 }
+  Changing(AKey);
   Result := Find(AKey);
   if Result <> nil then Exit;
   Result := TTyGridCellAttr.Create;
@@ -2069,15 +2121,24 @@ var
   i: Integer;
 begin
   i := FItems.IndexOf(AKey);
+  if i < 0 then Exit;                  { 没这一条 —— 没有状态变化,别记 }
+  Changing(AKey);
+  i := FItems.IndexOf(AKey);           { 通知之后重新定位,别拿着可能过期的下标删 }
   if i >= 0 then FItems.Delete(i);     { OwnsObjects → 顺带释放 }
 end;
 
 procedure TTyGridCellAttrStore.DropIfDefault(const AKey: string);
 var
   a: TTyGridCellAttr;
+  i: Integer;
 begin
   a := Find(AKey);
-  if (a <> nil) and a.IsDefault then Remove(AKey);
+  if (a = nil) or (not a.IsDefault) then Exit;
+  { 只是把退化成全默认值的条目回收掉 —— 语义上"全默认值"和"没有这一条"
+    是同一个状态,所以**不**发 Changing:调用方在动字段之前已经发过一次了。
+    再发一次会把一次操作拆成两条撤销记录,用户按一次 Ctrl+Z 只退回一半。 }
+  i := FItems.IndexOf(AKey);
+  if i >= 0 then FItems.Delete(i);
 end;
 
 procedure TTyGridCellAttrStore.Clear;
@@ -4623,6 +4684,8 @@ begin
   FAggregates := TStringList.Create;
   FCollapsed := TStringList.Create;
   FAttrs := TTyGridCellAttrStore.Create;
+  { 撤销的记录点。挂在存储上而不是挂在每个功能上 —— 收口一处、漏不掉。 }
+  FAttrs.OnChanging := @HandleAttrChanging;
   FHiddenRows := TStringList.Create;
   FHiddenRows.Sorted := True;
   FHiddenRows.Duplicates := dupIgnore;
@@ -4787,6 +4850,97 @@ begin
   end;
 end;
 
+function TTyStringGrid.SnapshotAttr(const AKey: string): TTyGridAttrSnapshot;
+var
+  a: TTyGridCellAttr;
+begin
+  Result := Default(TTyGridAttrSnapshot);
+  a := FAttrs.Find(AKey);
+  if a = nil then Exit;              { Present 留 False = "当时没有这一条" }
+  Result.Present := True;
+  Result.ColSpan := a.ColSpan;
+  Result.RowSpan := a.RowSpan;
+  Result.HasBackground := a.HasBackground;
+  Result.Background := a.Background;
+  Result.HasTextColor := a.HasTextColor;
+  Result.TextColor := a.TextColor;
+  Result.HasAlignment := a.HasAlignment;
+  Result.Alignment := a.Alignment;
+  Result.HasFontStyle := a.HasFontStyle;
+  Result.FontStyle := a.FontStyle;
+  Result.ReadOnly := a.ReadOnly;
+end;
+
+procedure TTyStringGrid.RestoreAttr(const AKey: string;
+  const ASnap: TTyGridAttrSnapshot);
+var
+  a: TTyGridCellAttr;
+  wasMerged, nowMerged: Boolean;
+begin
+  a := FAttrs.Find(AKey);
+  wasMerged := (a <> nil) and ((a.ColSpan > 1) or (a.RowSpan > 1));
+  nowMerged := ASnap.Present and ((ASnap.ColSpan > 1) or (ASnap.RowSpan > 1));
+
+  if not ASnap.Present then
+    FAttrs.Remove(AKey)
+  else
+  begin
+    a := FAttrs.Ensure(AKey);
+    if a = nil then Exit;
+    a.ColSpan := ASnap.ColSpan;
+    a.RowSpan := ASnap.RowSpan;
+    a.HasBackground := ASnap.HasBackground;
+    a.Background := ASnap.Background;
+    a.HasTextColor := ASnap.HasTextColor;
+    a.TextColor := ASnap.TextColor;
+    a.HasAlignment := ASnap.HasAlignment;
+    a.Alignment := ASnap.Alignment;
+    a.HasFontStyle := ASnap.HasFontStyle;
+    a.FontStyle := ASnap.FontStyle;
+    a.ReadOnly := ASnap.ReadOnly;
+    { 跨度提示只增不减 —— 恢复出一个更大的跨度时得让回扫够得着它,
+      否则 BaseCellOf 扫不到基准格,合并区就散了。 }
+    if ASnap.ColSpan > FMaxColSpan then FMaxColSpan := ASnap.ColSpan;
+    if ASnap.RowSpan > FMaxRowSpan then FMaxRowSpan := ASnap.RowSpan;
+  end;
+
+  { 合并计数是旁挂的汇总,不在属性对象里 —— 恢复属性时得跟着对账,
+    否则 HasMergedCells 会与实际的跨度对不上。 }
+  if nowMerged and not wasMerged then Inc(FMergeCount)
+  else if wasMerged and not nowMerged then Dec(FMergeCount);
+  if FMergeCount < 0 then FMergeCount := 0;
+end;
+
+procedure TTyStringGrid.HandleAttrChanging(const AKey: string);
+var
+  e: TTyGridUndoEntry;
+begin
+  if FUndoBusy or (FUndoLimit = 0) then Exit;
+  e := Default(TTyGridUndoEntry);
+  e.Kind := gukCellAttr;
+  e.AttrKey := AKey;
+  e.Attr := SnapshotAttr(AKey);
+  RecordUndo(e);
+end;
+
+procedure TTyStringGrid.SetRowHeights(ARow, AValue: Integer);
+var
+  old: Integer;
+  e: TTyGridUndoEntry;
+begin
+  old := GetRowHeights(ARow);
+  inherited SetRowHeights(ARow, AValue);
+  if FUndoBusy or (FUndoLimit = 0) then Exit;
+  { 拿**钳制之后**的实际值比 —— 撞上 MinRowHeight/MaxRowHeight 时
+    什么都没变,别往栈里塞一条按下去没反应的记录。 }
+  if GetRowHeights(ARow) = old then Exit;
+  e := Default(TTyGridUndoEntry);
+  e.Kind := gukRowHeight;
+  e.Row := ARow;
+  e.OldHeight := old;
+  RecordUndo(e);
+end;
+
 procedure TTyStringGrid.RecordUndo(const AEntry: TTyGridUndoEntry);
 var
   n: Integer;
@@ -4846,6 +5000,20 @@ begin
           Result[n].Kind := gukRowCount;
           Result[n].OldCount := RowCount;
           RowCount := e.OldCount;
+        end;
+      gukCellAttr:
+        begin
+          Result[n].Kind := gukCellAttr;
+          Result[n].AttrKey := e.AttrKey;
+          Result[n].Attr := SnapshotAttr(e.AttrKey);
+          RestoreAttr(e.AttrKey, e.Attr);
+        end;
+      gukRowHeight:
+        begin
+          Result[n].Kind := gukRowHeight;
+          Result[n].Row := e.Row;
+          Result[n].OldHeight := GetRowHeights(e.Row);
+          SetRowHeights(e.Row, e.OldHeight);
         end;
     end;
     Inc(n);
@@ -6103,7 +6271,8 @@ begin
   if AValue = TyColorNone then
   begin
     a := FAttrs.Find(k);
-    if a = nil then Exit;
+    if (a = nil) or (not a.HasBackground) then Exit;   { 本来就没有 —— 不是一次改动 }
+    a := FAttrs.Mutate(k);
     a.HasBackground := False;
     FAttrs.DropIfDefault(k);
   end
@@ -6134,7 +6303,8 @@ begin
   if AValue = TyColorNone then
   begin
     a := FAttrs.Find(k);
-    if a = nil then Exit;
+    if (a = nil) or (not a.HasTextColor) then Exit;
+    a := FAttrs.Mutate(k);
     a.HasTextColor := False;
     FAttrs.DropIfDefault(k);
   end
@@ -6177,7 +6347,8 @@ begin
   if not AValue then
   begin
     a := FAttrs.Find(k);
-    if a = nil then Exit;
+    if (a = nil) or (not a.ReadOnly) then Exit;
+    a := FAttrs.Mutate(k);
     a.ReadOnly := False;
     FAttrs.DropIfDefault(k);
   end
@@ -8322,7 +8493,9 @@ begin
   k := CellKey(ACol, ARow);
   a := FAttrs.Find(k);
   if a = nil then Exit;
-  if (a.ColSpan > 1) or (a.RowSpan > 1) then Dec(FMergeCount);
+  if (a.ColSpan <= 1) and (a.RowSpan <= 1) then Exit;   { 本来就没合并 }
+  a := FAttrs.Mutate(k);
+  Dec(FMergeCount);
   a.ColSpan := 1;
   a.RowSpan := 1;
   FAttrs.DropIfDefault(k);      { 只剩默认值就别占着位置 }
@@ -8343,6 +8516,10 @@ begin
     begin
       a := FAttrs.Find(keys[i]);
       if a = nil then Continue;
+      { 本来就没合并的条目跳过 —— 否则每一条都发一次"即将改动",
+        撤销栈里攒一堆什么都没变的条目(Ctrl+Z 一次看不出动静)。 }
+      if (a.ColSpan <= 1) and (a.RowSpan <= 1) then Continue;
+      a := FAttrs.Mutate(keys[i]);
       a.ColSpan := 1;
       a.RowSpan := 1;
       FAttrs.DropIfDefault(keys[i]);

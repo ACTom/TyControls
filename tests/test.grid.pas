@@ -203,6 +203,8 @@ type
     procedure TestFixedRowsAndSortTogetherKeepCellsInTheirPane;
     procedure TestFrozenBandThicknessFollowsDisplayedRows;
     procedure TestFilteringOutTheAnchorDoesNotGrowTheSelection;
+    procedure TestUndoRestoresCellAttributesAndRowHeights;
+    procedure TestUndoRestoresCellColorAndMerge;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -7798,6 +7800,96 @@ begin
   AssertFalse('筛掉锚点后,表头那边的行不该突然被选中', G.IsCellSelected(0, 0));
   AssertFalse('数据行 1 同样从来没被选过', G.IsCellSelected(0, 1));
   AssertTrue('光标那一行仍然选中', G.IsCellSelected(0, 4));
+end;
+
+{ A7:`SwapRows` 搬了三种状态(文字 / 逐格属性 / 行高),而只有文字经过
+  `SetCells` 这个记录点 —— 拖完行按 Ctrl+Z,文字回来了、底色和行高留在新位置,
+  得到一个从未存在过的状态。
+
+  修法不是"补一条 gukRowSwap":同一条记录里已经有逐格的 gukCell 条目,
+  再叠一条整行交换会**双重施加**。要给属性存储和行高各自一个记录点。 }
+procedure TTyStringGridTest.TestUndoRestoresCellAttributesAndRowHeights;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.Cells[0, 1] := 'A';
+  G.Cells[0, 2] := 'B';
+  G.CellColors[0, 1] := TyRGB(255, 0, 0);
+  G.RowHeights[1] := 44;
+  G.ClearUndo;
+
+  G.SwapRows(1, 2);
+  AssertEquals('前置:文字换了位置', 'A', G.Cells[0, 2]);
+  AssertEquals('前置:底色跟着那一行走', TyRGB(255, 0, 0), G.CellColors[0, 2]);
+  AssertEquals('前置:行高跟着那一行走', 44, G.RowHeights[2]);
+
+  G.Undo;
+  AssertEquals('文字回到原位', 'A', G.Cells[0, 1]);
+  AssertEquals('底色也要回到原位', TyRGB(255, 0, 0), G.CellColors[0, 1]);
+  AssertEquals('换过去的那一行不该还留着底色', 0, G.CellColors[0, 2]);
+  { 行高用**几何**断言 —— 存储回读不了了不算数,要真的把行画成那么高。 }
+  AssertEquals('行高撤销后必须真的改回几何', 44,
+    G.CellRect(0, 1).Bottom - G.CellRect(0, 1).Top);
+  AssertEquals('换过去的那一行回到默认行高', 20,
+    G.CellRect(0, 2).Bottom - G.CellRect(0, 2).Top);
+
+  G.Redo;
+  AssertEquals('重做:文字再换回去', 'A', G.Cells[0, 2]);
+  AssertEquals('重做:底色跟着走', TyRGB(255, 0, 0), G.CellColors[0, 2]);
+  AssertEquals('重做:行高跟着走', 44,
+    G.CellRect(0, 2).Bottom - G.CellRect(0, 2).Top);
+end;
+
+{ 记录点收口在属性存储上,于是**所有**改属性的路径一并可撤销 ——
+  连 P3 当初明确留下的偏离("合并/取消合并不进撤销栈")也一起补上了。 }
+procedure TTyStringGridTest.TestUndoRestoresCellColorAndMerge;
+var
+  G: TStrGridAccess;
+  w1: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.ClearUndo;
+
+  G.CellColors[1, 1] := TyRGB(0, 0, 255);
+  AssertTrue('前置:设底色之后有得撤销', G.CanUndo);
+  G.Undo;
+  AssertEquals('设底色可以撤销', 0, G.CellColors[1, 1]);
+  G.Redo;
+  AssertEquals('重做把底色放回去', TyRGB(0, 0, 255), G.CellColors[1, 1]);
+
+  { 合并用**几何**断言:基准格的矩形该横跨两列。 }
+  w1 := G.CellRect(0, 3).Right - G.CellRect(0, 3).Left;
+  G.MergeCells(0, 3, 2, 2);
+  AssertEquals('前置:合并后基准格横跨两列', w1 * 2,
+    G.CellRect(0, 3).Right - G.CellRect(0, 3).Left);
+
+  G.Undo;
+  AssertEquals('撤销合并之后基准格缩回一列宽', w1,
+    G.CellRect(0, 3).Right - G.CellRect(0, 3).Left);
+  AssertFalse('撤销之后表里不该还有合并区', G.HasMergedCells);
+
+  G.Redo;
+  AssertEquals('重做把合并放回去', w1 * 2,
+    G.CellRect(0, 3).Right - G.CellRect(0, 3).Left);
+  AssertTrue('重做之后合并计数也要回来', G.HasMergedCells);
+
+  { **清除**路径走的是另一条代码路:"改一条已有的属性",而不是"新建一条"。
+    上面那两段全是新建,单靠它们守不住清除路径。 }
+  G.ClearUndo;
+  G.UnmergeCells(0, 3);
+  AssertEquals('前置:取消了合并', w1,
+    G.CellRect(0, 3).Right - G.CellRect(0, 3).Left);
+  G.Undo;
+  AssertEquals('取消合并也要能撤销', w1 * 2,
+    G.CellRect(0, 3).Right - G.CellRect(0, 3).Left);
+  AssertTrue('撤销之后合并计数要回来', G.HasMergedCells);
+
+  G.ClearUndo;
+  G.CellColors[1, 1] := 0;                  { 0 = 清掉底色 }
+  AssertEquals('前置:底色被清掉了', 0, G.CellColors[1, 1]);
+  G.Undo;
+  AssertEquals('清底色也要能撤销', TyRGB(0, 0, 255), G.CellColors[1, 1]);
 end;
 
 initialization
