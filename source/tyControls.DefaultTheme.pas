@@ -88,6 +88,50 @@ begin
     '  --input-border-width: 1px;' + LineEnding +
     '  --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;' + LineEnding +
     '  --font-size-base: 9px; --font-size-title: 9px;' + LineEnding +
+    '' + LineEnding +
+    '  /* ── 尺寸令牌(密度尺度第一期)───────────────────────────────────────' + LineEnding +
+    '     经典密度 = 今天的实际值,一个都不动。现代密度由 density-modern.tycss' + LineEnding +
+    '     覆盖这些名字 —— 它只碰令牌,不碰规则、也不碰颜色,所以对 15 个皮肤' + LineEnding +
+    '     一视同仁。' + LineEnding +
+    '' + LineEnding +
+    '     这里**刻意没有** --space-* 数字尺度:经典侧有 5px 9px / 4px 10px /' + LineEnding +
+    '     0px 14px 这些历史随手值,强推 4 的倍数会让经典漂移 1px,而' + LineEnding +
+    '     「经典逐字节不变」正是整轮迁移的守卫。尺度只在现代侧存在。 */' + LineEnding +
+    '' + LineEnding +
+    '  /* 字号。经典三档全是 9px —— 这种扁平本身就是 Win32 时代的特征,' + LineEnding +
+    '     字号层级是 Web 时代才有的东西。 */' + LineEnding +
+    '  --font-size-sm: 9px;' + LineEnding +
+    '' + LineEnding +
+    '  /* 内边距:按**角色**命名,不按尺度命名(见上)。41 条规则归并成 19 个角色。' + LineEnding +
+    '     值全部取自今天各规则的字面量。 */' + LineEnding +
+    '  --pad-none:            0px;' + LineEnding +
+    '  --pad-tight:           2px;' + LineEnding +
+    '  --pad-control:         4px;' + LineEnding +
+    '  --pad-tooltip:         5px 9px;' + LineEnding +
+    '  --pad-button:          6px;' + LineEnding +
+    '  --pad-container:       8px;' + LineEnding +
+    '  --pad-card:            12px;' + LineEnding +
+    '  --pad-empty:           16px;' + LineEnding +
+    '  --pad-cell:            0px 6px;' + LineEnding +
+    '  --pad-chip:            0px 8px;' + LineEnding +
+    '  --pad-badge:           0px 4px;' + LineEnding +
+    '  --pad-breadcrumb:      2px 4px;' + LineEnding +
+    '  --pad-breadcrumb-item: 0px 4px;' + LineEnding +
+    '  --pad-groupbox:        4px 12px;' + LineEnding +
+    '  --pad-datetime:        4px 6px;' + LineEnding +
+    '  --pad-segmented:       4px 10px;' + LineEnding +
+    '  --pad-alert:           8px 12px;' + LineEnding +
+    '  --pad-notification:    12px 14px;' + LineEnding +
+    '  --pad-group-header:    0px 14px;' + LineEnding +
+    '' + LineEnding +
+    '  /* 控件高与图标槽。值取自各控件今天的 published default:' + LineEnding +
+    '     DefaultRowHeight=22、Header.Height=22、ItemHeight=24、TyDlgEditH=30、' + LineEnding +
+    '     TyCheckBoxBox/TyAlertIconSize=16。第 3 期把 Pascal 侧的常量迁过来时用。 */' + LineEnding +
+    '  --control-height: 30px;' + LineEnding +
+    '  --row-height:     22px;' + LineEnding +
+    '  --header-height:  22px;' + LineEnding +
+    '  --item-height:    24px;' + LineEnding +
+    '  --icon-size:      16px;' + LineEnding +
     '  --font-weight-normal: 400; --font-weight-bold: 700;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +

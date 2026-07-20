@@ -55,6 +55,50 @@
   --input-border-width: 1px;
   --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;
   --font-size-base: 9px; --font-size-title: 9px;
+
+  /* ── 尺寸令牌(密度尺度第一期)───────────────────────────────────────
+     经典密度 = 今天的实际值,一个都不动。现代密度由 density-modern.tycss
+     覆盖这些名字 —— 它只碰令牌,不碰规则、也不碰颜色,所以对 15 个皮肤
+     一视同仁。
+
+     这里**刻意没有** --space-* 数字尺度:经典侧有 5px 9px / 4px 10px /
+     0px 14px 这些历史随手值,强推 4 的倍数会让经典漂移 1px,而
+     「经典逐字节不变」正是整轮迁移的守卫。尺度只在现代侧存在。 */
+
+  /* 字号。经典三档全是 9px —— 这种扁平本身就是 Win32 时代的特征,
+     字号层级是 Web 时代才有的东西。 */
+  --font-size-sm: 9px;
+
+  /* 内边距:按**角色**命名,不按尺度命名(见上)。41 条规则归并成 19 个角色。
+     值全部取自今天各规则的字面量。 */
+  --pad-none:            0px;
+  --pad-tight:           2px;
+  --pad-control:         4px;
+  --pad-tooltip:         5px 9px;
+  --pad-button:          6px;
+  --pad-container:       8px;
+  --pad-card:            12px;
+  --pad-empty:           16px;
+  --pad-cell:            0px 6px;
+  --pad-chip:            0px 8px;
+  --pad-badge:           0px 4px;
+  --pad-breadcrumb:      2px 4px;
+  --pad-breadcrumb-item: 0px 4px;
+  --pad-groupbox:        4px 12px;
+  --pad-datetime:        4px 6px;
+  --pad-segmented:       4px 10px;
+  --pad-alert:           8px 12px;
+  --pad-notification:    12px 14px;
+  --pad-group-header:    0px 14px;
+
+  /* 控件高与图标槽。值取自各控件今天的 published default:
+     DefaultRowHeight=22、Header.Height=22、ItemHeight=24、TyDlgEditH=30、
+     TyCheckBoxBox/TyAlertIconSize=16。第 3 期把 Pascal 侧的常量迁过来时用。 */
+  --control-height: 30px;
+  --row-height:     22px;
+  --header-height:  22px;
+  --item-height:    24px;
+  --icon-size:      16px;
   --font-weight-normal: 400; --font-weight-bold: 700;
 }
 
