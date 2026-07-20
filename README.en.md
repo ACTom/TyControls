@@ -61,7 +61,10 @@ TyButton:disabled { opacity: 0.5; }
   revert with the text, and one bulk operation is one press), **physical sorting**
   (`gsmData` moves the data the way Excel does, undoably), **multi-level grouping**
   (indented, subtotals per level, collapse keyed by path), and **layout persistence**
-  (widths / order / visibility / sort keys / freeze counts, loaded all-or-nothing).
+  (widths / order / visibility / sort keys / freeze counts, loaded all-or-nothing),
+  an **inline filter row** (one input per column; `>1000`, `a..b`, `;` for or),
+  **tree cells** (hierarchy supplied by the host -- the control holds no tree),
+  and undoable column add/remove/reorder.
 - **Virtual tree `TTyTreeView`** — a VirtualTreeView-class virtual tree: data-on-demand (scales to
   millions of nodes), multi-column with a draggable header (resize / reorder / sort), checkboxes +
   tri-state + radio nodes, multi-select (Ctrl/Shift) + full-row, variable row height, incremental

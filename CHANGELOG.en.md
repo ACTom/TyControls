@@ -92,6 +92,19 @@ Linux and macOS.
 - **Colouring a selection**: `SetSelectionColor` / `SetSelectionTextColor` apply to the
   whole selection as a single operation (hosts previously had to write the loop
   themselves, and undo then came off one cell at a time).
+- **Inline filter row**: a band under the headers with one input per column; type
+  and that column filters. Understands `>1000`, `<=5`, `<>east`, `300..600`, and
+  `;` between several conditions means **or**. It filters as you type (once you
+  stop), Enter applies at once, Escape abandons the edit. It is a band, not a data
+  row -- row counts, addressing and export are unaffected.
+- **Tree cells**: one column can show hierarchy (indent + a chevron), and
+  collapsing folds the children away. **The host supplies the parent/child
+  relation** (`OnGetNodeLevel` / `OnGetHasChildren`) -- the control holds no tree,
+  so a million-node tree needs no up-front construction inside it.
+- **Adding, removing and reordering columns are undoable now**, and the column
+  comes back whole: width, title, alignment, editor kind, read-only, pick list,
+  and the filter that was on it. Column structure previously could not enter the
+  undo stack at all, so any column change simply cleared it.
 
 ### Fixed -- data grid
 
