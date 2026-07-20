@@ -252,6 +252,8 @@ type
     procedure TestFilterRowIsABandNotADataRow;
     procedure TestFilterRowFiltersAndClears;
     procedure TestClickingFilterRowOpensAnEditorThatFilters;
+    procedure TestDeletingAColumnIsUndoable;
+    procedure TestInsertingAndMovingColumnsAreUndoable;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8556,30 +8558,24 @@ begin
   AssertEquals('最后一列也退回去', 0, G.CellColors[3, 2]);
 
   { --- 批量插列 / 删列 ---
-    **列结构本身进不了撤销栈**:记录点是 SetCells 与 SetRowCount,列的增删
-    改的是 Header.Columns,两个口子都够不着。于是格子内容被记下了、
-    而承载它们的那一列没有 —— 撤销会把内容还原到一张列数不同的表上,
-    得到一个从未存在过的状态。
-
-    与其还原出一张四不像的表,不如**明说这一步撤不了**(与超大记录整条作废
-    同一条原则)。所以增删列**清空撤销栈**。
-    列结构的可撤销是独立的一件事,见 grid-remaining 计划里的待办。 }
+    列结构现在自己有记录点(P3.6),所以这里与批量增删**行**是同一条契约:
+    一次调用 = 一条撤销记录。
+    (从前列结构进不了撤销栈,只能靠"增删列就清空撤销栈"兜底;
+    那条兜底连同它的断言一起退休了。) }
   n0 := G.Header.Columns.Count;
-  G.Cells[0, 0] := 'anchor';
   G.ClearUndo;
-  G.Cells[0, 1] := 'x';
-  AssertTrue('前置:栈里有东西', G.CanUndo);
-
   G.InsertCols(1, 3);
   AssertEquals('前置:插了 3 列', n0 + 3, G.Header.Columns.Count);
-  AssertFalse('插列之后撤销栈必须是空的 —— 而不是留下还原不出来的半条',
-    G.CanUndo);
+  AssertEquals('插 3 列 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销就回到原来的列数', n0, G.Header.Columns.Count);
 
-  G.Cells[0, 2] := 'y';
-  AssertTrue('前置:栈里又有东西了', G.CanUndo);
+  G.ClearUndo;
   G.RemoveCols(1, 2);
-  AssertEquals('前置:删了 2 列', n0 + 1, G.Header.Columns.Count);
-  AssertFalse('删列之后同理', G.CanUndo);
+  AssertEquals('前置:删了 2 列', n0 - 2, G.Header.Columns.Count);
+  AssertEquals('删 2 列 = 一条撤销记录', 1, G.UndoCountForTest);
+  G.Undo;
+  AssertEquals('按一次撤销就把列还回来', n0, G.Header.Columns.Count);
 
   { --- 全部取消隐藏 --- }
   G.HideRow(3);
@@ -9089,6 +9085,101 @@ begin
   G.PressKeyInFilterEditor(VK_ESCAPE);
   AssertEquals('Esc 之后仍是上一条过滤', 5, G.DisplayRowCount);
   AssertEquals('原文也没被改掉', '>500', G.FilterText(1));
+end;
+
+{ P3.6:删一列要撤得回来 —— 连**那一列的全部身份**一起。
+
+  从前列的结构进不了撤销栈(记录点是 SetCells / SetRowCount,而列改的是
+  Header.Columns),所以增删列只能清空撤销栈兜底。
+  现在它自己有记录点,兜底的 DropUndoForColumnChange 就该退休了。
+
+  断言里特意挑了几个**互相独立**的属性:宽度是几何、标题是文本、
+  编辑器种类是行为、只读是策略、筛选是那一列的旁挂状态。
+  只测宽度的话,漏掉其余任何一项都发现不了。 }
+procedure TTyStringGridTest.TestDeletingAColumnIsUndoable;
+var
+  G: TStrGridAccess;
+  c: TTyGridColumn;
+  r, n0: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  n0 := G.Header.Columns.Count;
+
+  { 把第 1 列打扮得与众不同 —— 每一样都得跟着回来。 }
+  c := TTyGridColumn(G.Header.Columns.Items[1]);
+  c.Width := 137;
+  c.Text := '被删的那一列';
+  c.EditorKind := gekPickList;
+  c.UseEditorKind := True;
+  c.ReadOnly := True;
+  c.Alignment := taRightJustify;
+  for r := 0 to 5 do
+    G.Cells[1, r] := 'v' + IntToStr(r);
+  G.SetFilterText(1, '>0');
+  G.ClearUndo;
+
+  G.DeleteColumn(1);
+  AssertEquals('前置:少了一列', n0 - 1, G.Header.Columns.Count);
+
+  G.Undo;
+  AssertEquals('列数回来了', n0, G.Header.Columns.Count);
+  c := TTyGridColumn(G.Header.Columns.Items[1]);
+  AssertEquals('宽度回来了', 137, c.Width);
+  AssertEquals('标题回来了', '被删的那一列', c.Text);
+  AssertEquals('编辑器种类回来了', Ord(gekPickList), Ord(c.EditorKind));
+  AssertTrue('只读回来了', c.ReadOnly);
+  AssertEquals('对齐回来了', Ord(taRightJustify), Ord(c.Alignment));
+  AssertEquals('格子内容也回来了', 'v3', G.Cells[1, 3]);
+  AssertEquals('那一列的筛选也回来了', '>0', G.FilterText(1));
+
+  { 右边那一列没被牵连。 }
+  AssertEquals('右邻列还在原位', n0, G.Header.Columns.Count);
+
+  G.Redo;
+  AssertEquals('重做把它再删掉', n0 - 1, G.Header.Columns.Count);
+end;
+
+{ 插列与换位同理 —— 它们和删列是同一个记录点的三种用法。 }
+procedure TTyStringGridTest.TestInsertingAndMovingColumnsAreUndoable;
+var
+  G: TStrGridAccess;
+  n0: Integer;
+  p0, p1: Cardinal;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  n0 := G.Header.Columns.Count;
+  TTyColumn(G.Header.Columns.Items[0]).Text := 'A';
+  TTyColumn(G.Header.Columns.Items[1]).Text := 'B';
+  G.Cells[0, 0] := 'a0';
+  G.Cells[1, 0] := 'b0';
+  G.ClearUndo;
+
+  { --- 插列 --- }
+  G.InsertColumn(1);
+  AssertEquals('前置:多了一列', n0 + 1, G.Header.Columns.Count);
+  AssertEquals('前置:B 被推到第 2 列', 'B',
+    TTyColumn(G.Header.Columns.Items[2]).Text);
+  G.Undo;
+  AssertEquals('撤销后列数回来', n0, G.Header.Columns.Count);
+  AssertEquals('B 回到第 1 列', 'B', TTyColumn(G.Header.Columns.Items[1]).Text);
+  AssertEquals('格子内容也回原位', 'b0', G.Cells[1, 0]);
+
+  { --- 换位 --- }
+  G.ClearUndo;
+  { MoveColumn 改的是**显示位置 Position**,不是 Items 的下标 ——
+    单元格内容按索引存,所以换位不搬数据。断言要看 Position。 }
+  p0 := TTyColumn(G.Header.Columns.Items[0]).Position;
+  p1 := TTyColumn(G.Header.Columns.Items[1]).Position;
+  G.MoveColumn(0, 1);
+  AssertEquals('前置:第 0 列挪到了原第 1 列的位置', p1,
+    TTyColumn(G.Header.Columns.Items[0]).Position);
+  G.Undo;
+  AssertEquals('撤销把它挪回去', p0,
+    TTyColumn(G.Header.Columns.Items[0]).Position);
+  AssertEquals('另一列也回去了', p1,
+    TTyColumn(G.Header.Columns.Items[1]).Position);
 end;
 
 initialization

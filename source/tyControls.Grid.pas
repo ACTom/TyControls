@@ -325,7 +325,11 @@ type
   TTyGridSortMode = (gsmDisplay, gsmData);
 
   TTyGridUndoKind = (gukCell, gukRowCount, gukCellAttr, gukRowHeight,
-                     gukRowHidden);
+                     gukRowHidden,
+                     { 列结构。删列记 gukColDelete(带整列的快照,撤销 = 插回去),
+                       插列记 gukColInsert(只需下标,撤销 = 删掉),
+                       换位记 gukColMove。三者互为对方的反记录,所以重做也成立。 }
+                     gukColDelete, gukColInsert, gukColMove);
 
   { 逐格属性的**值快照**。撤销栈不能存 TTyGridCellAttr 的引用 ——
     那个对象会被后来的 MoveEntry 就地改写、被 Remove 释放。 }
@@ -343,6 +347,45 @@ type
     ReadOnly:         Boolean;
   end;
 
+  { 一整列的**值快照**。撤销栈是值语义的(见 TTyGridAttrSnapshot 的说明),
+    所以列也按值存,而不是往栈里塞一个 TTyGridColumn 引用 ——
+    那会把对象所有权引进一个纯值的栈,而栈会被裁剪、会被清空。
+
+    新增列属性时**这里要跟着加**,否则删了列再撤销,那个属性会悄悄回到默认值。
+    (与 SaveLayoutToString 是同一类约定,但那边只需要"版式"三项,这边要的是
+    列的全部身份 —— 两者刻意不共用,免得一边的需求改动牵连另一边。) }
+  TTyGridColumnSnapshot = record
+    Index:            Integer;      { 原来在第几列 }
+    Width:            Integer;
+    MinWidth:         Integer;
+    MaxWidth:         Integer;
+    Position:         Cardinal;
+    Alignment:        TAlignment;
+    CaptionAlignment: TAlignment;
+    Text:             string;
+    ImageIndex:       Integer;
+    Options:          TTyColumnOptions;
+    Tag:              NativeInt;
+    { --- TTyGridColumn 自己的 --- }
+    EditorKind:       TTyGridEditorKind;
+    UseEditorKind:    Boolean;
+    ReadOnly:         Boolean;
+    PickList:         string;       { 换行分隔 }
+    Aggregate:        TTyGridAggregate;
+    ValidChars:       string;
+    MaxEditLength:    Integer;
+    SortKind:         TTyGridSortKind;
+    MinValue:         Integer;
+    MaxValue:         Integer;
+    EditMask:         string;
+    CharCase:         TEditCharCase;
+    DropDownWidth:    Integer;
+    { --- 那一列上的旁挂状态(按列记账的三张表) --- }
+    FilterExpr:       string;
+    ColFilter:        string;
+    ValFilter:        string;
+  end;
+
   TTyGridUndoEntry = record
     Kind:      TTyGridUndoKind;
     Col, Row:  Integer;
@@ -352,6 +395,9 @@ type
     OldHidden: Boolean;
     AttrKey:   string;
     Attr:      TTyGridAttrSnapshot;
+    { 列结构:gukColDelete 用 Col(插回哪儿)+ ColSnap(整列的身份);
+      gukColInsert 只用 Col;gukColMove 用 Col(从)与 OldCount(到)。 }
+    ColSnap:   TTyGridColumnSnapshot;
   end;
 
   { 属性存储"某一条即将被改动"的通知 —— 撤销记录点挂在它上面。 }
@@ -1532,7 +1578,15 @@ type
       与其还原出一张四不像的表,不如明说这一步撤不了 ——
       与"超大记录整条作废"是同一条原则。
       (让列结构真正可撤销是独立的一件事,记在 grid-remaining 计划里。) }
-    procedure DropUndoForColumnChange;
+    { 把一列的全部身份取成值快照 / 按快照把一列还原成那个样子。 }
+    function  SnapshotColumn(ACol: Integer): TTyGridColumnSnapshot;
+    procedure ApplyColumnSnapshot(ACol: Integer;
+      const ASnap: TTyGridColumnSnapshot);
+    { 记一笔列结构的改动。三种用法见 TTyGridUndoKind 的说明。 }
+    procedure RecordColumnUndo(AKind: TTyGridUndoKind; ACol: Integer;
+      ATo: Integer; const ASnap: TTyGridColumnSnapshot); overload;
+    procedure RecordColumnUndo(AKind: TTyGridUndoKind; ACol: Integer;
+      ATo: Integer = -1); overload;
     { 汇总缓存整体失效。三处汇过来:数据改(SetCells)、显示序变(InvalidateOrder,
       筛选/隐藏/分组/行数都归它)、换聚合口径(SetColumnAggregate)。 }
     procedure InvalidateAggregates;
@@ -5343,12 +5397,130 @@ begin
   end;
 end;
 
-procedure TTyStringGrid.DropUndoForColumnChange;
+function TTyStringGrid.SnapshotColumn(ACol: Integer): TTyGridColumnSnapshot;
+var
+  c: TTyGridColumn;
+  b: TTyColumn;
+  k: string;
 begin
-  { 撤销进行中不能自毁栈 —— Undo 里换列(宿主在 OnXxx 里做的)不该
-    把正在还原的那条记录连根拔掉。 }
-  if FUndoBusy then Exit;
-  ClearUndo;
+  Result := Default(TTyGridColumnSnapshot);
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+  b := TTyColumn(Header.Columns.Items[ACol]);
+
+  Result.Index := ACol;
+  Result.Width := b.Width;
+  Result.MinWidth := b.MinWidth;
+  Result.MaxWidth := b.MaxWidth;
+  Result.Position := b.Position;
+  Result.Alignment := b.Alignment;
+  Result.CaptionAlignment := b.CaptionAlignment;
+  Result.Text := b.Text;
+  Result.ImageIndex := b.ImageIndex;
+  Result.Options := b.Options;
+  Result.Tag := b.Tag;
+
+  if b is TTyGridColumn then
+  begin
+    c := TTyGridColumn(b);
+    Result.EditorKind := c.EditorKind;
+    Result.UseEditorKind := c.UseEditorKind;
+    Result.ReadOnly := c.ReadOnly;
+    if c.PickList <> nil then Result.PickList := c.PickList.Text;
+    Result.Aggregate := c.Aggregate;
+    Result.ValidChars := c.ValidChars;
+    Result.MaxEditLength := c.MaxEditLength;
+    Result.SortKind := c.SortKind;
+    Result.MinValue := c.MinValue;
+    Result.MaxValue := c.MaxValue;
+    Result.EditMask := c.EditMask;
+    Result.CharCase := c.CharCase;
+    Result.DropDownWidth := c.DropDownWidth;
+  end;
+
+  { 那一列上的旁挂状态也是它身份的一部分 —— 列回来了而筛选没回来,
+    等于回到一个从未存在过的状态。 }
+  k := IntToStr(ACol);
+  Result.FilterExpr := FFilterText.Values[k];
+  Result.ColFilter := FColFilters.Values[k];
+  Result.ValFilter := FValFilters.Values[k];
+end;
+
+procedure TTyStringGrid.ApplyColumnSnapshot(ACol: Integer;
+  const ASnap: TTyGridColumnSnapshot);
+var
+  c: TTyGridColumn;
+  b: TTyColumn;
+  k: string;
+
+  procedure PutKeyed(AList: TStringList; const AValue: string);
+  var
+    i: Integer;
+  begin
+    i := AList.IndexOfName(k);
+    if i >= 0 then AList.Delete(i);
+    if AValue <> '' then AList.Add(k + '=' + AValue);
+  end;
+
+begin
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+  b := TTyColumn(Header.Columns.Items[ACol]);
+
+  b.Width := ASnap.Width;
+  b.MinWidth := ASnap.MinWidth;
+  b.MaxWidth := ASnap.MaxWidth;
+  b.Alignment := ASnap.Alignment;
+  b.CaptionAlignment := ASnap.CaptionAlignment;
+  b.Text := ASnap.Text;
+  b.ImageIndex := ASnap.ImageIndex;
+  b.Options := ASnap.Options;
+  b.Tag := ASnap.Tag;
+
+  if b is TTyGridColumn then
+  begin
+    c := TTyGridColumn(b);
+    c.EditorKind := ASnap.EditorKind;
+    c.UseEditorKind := ASnap.UseEditorKind;
+    c.ReadOnly := ASnap.ReadOnly;
+    if c.PickList <> nil then c.PickList.Text := ASnap.PickList;
+    c.Aggregate := ASnap.Aggregate;
+    c.ValidChars := ASnap.ValidChars;
+    c.MaxEditLength := ASnap.MaxEditLength;
+    c.SortKind := ASnap.SortKind;
+    c.MinValue := ASnap.MinValue;
+    c.MaxValue := ASnap.MaxValue;
+    c.EditMask := ASnap.EditMask;
+    c.CharCase := ASnap.CharCase;
+    c.DropDownWidth := ASnap.DropDownWidth;
+  end;
+
+  k := IntToStr(ACol);
+  PutKeyed(FFilterText, ASnap.FilterExpr);
+  PutKeyed(FColFilters, ASnap.ColFilter);
+  PutKeyed(FValFilters, ASnap.ValFilter);
+  InvalidateOrder;
+end;
+
+procedure TTyStringGrid.RecordColumnUndo(AKind: TTyGridUndoKind; ACol: Integer;
+  ATo: Integer);
+var
+  empty: TTyGridColumnSnapshot;
+begin
+  empty := Default(TTyGridColumnSnapshot);
+  RecordColumnUndo(AKind, ACol, ATo, empty);
+end;
+
+procedure TTyStringGrid.RecordColumnUndo(AKind: TTyGridUndoKind; ACol: Integer;
+  ATo: Integer; const ASnap: TTyGridColumnSnapshot);
+var
+  e: TTyGridUndoEntry;
+begin
+  if FUndoBusy or (FUndoLimit = 0) then Exit;
+  e := Default(TTyGridUndoEntry);
+  e.Kind := AKind;
+  e.Col := ACol;
+  e.OldCount := ATo;                    { gukColMove 用它当"到哪儿" }
+  e.ColSnap := ASnap;
+  RecordUndo(e);
 end;
 
 procedure TTyStringGrid.GrowMergesSpanningRow(AFromIndex, ADelta: Integer);
@@ -5682,6 +5854,32 @@ begin
           Result[n].Row := e.Row;
           Result[n].OldHidden := IsHiddenRow(e.Row);
           SetRowHidden(e.Row, e.OldHidden);
+        end;
+      { --- 列结构。三种互为对方的反记录,所以重做自然成立。 --- }
+      gukColDelete:
+        begin
+          { 撤销"删列" = 把它插回去并还原它的全部身份。
+            反记录是"插列",于是重做会把它再删掉。 }
+          Result[n].Kind := gukColInsert;
+          Result[n].Col := e.Col;
+          InsertColumn(e.Col);
+          ApplyColumnSnapshot(e.Col, e.ColSnap);
+        end;
+      gukColInsert:
+        begin
+          { 撤销"插列" = 删掉它。反记录带上它此刻的样子,重做才插得回来。 }
+          Result[n].Kind := gukColDelete;
+          Result[n].Col := e.Col;
+          Result[n].ColSnap := SnapshotColumn(e.Col);
+          DeleteColumn(e.Col);
+        end;
+      gukColMove:
+        begin
+          { 撤销"换位" = 反着换回来。 }
+          Result[n].Kind := gukColMove;
+          Result[n].Col := e.OldCount;
+          Result[n].OldCount := e.Col;
+          MoveColumn(e.OldCount, e.Col);
         end;
     end;
     Inc(n);
@@ -8384,6 +8582,7 @@ begin
     单元格内容按**索引**存,所以不用搬。 }
   Header.Columns.AdjustPosition(TTyColumn(Header.Columns.Items[AFrom]),
     TTyColumn(Header.Columns.Items[ATo]).Position);
+  RecordColumnUndo(gukColMove, AFrom, ATo);
   Invalidate;
 end;
 
@@ -8462,14 +8661,18 @@ begin
   ShiftCells(ACol, 1, False);
   c := Header.Columns.Add as TTyColumn;
   c.Index := ACol;
+  { **在格子搬移之后**记 —— 撤销是倒序应用的,这一条要最先跑
+    (先把列去掉,后面的 gukCell 条目才有正确的落点)。 }
+  RecordColumnUndo(gukColInsert, ACol);
   Invalidate;
   finally
     EndUpdate;
   end;
-  DropUndoForColumnChange;
 end;
 
 procedure TTyStringGrid.DeleteColumn(ACol: Integer);
+var
+  snap: TTyGridColumnSnapshot;
 begin
   { 整个操作算**一条**撤销记录:它内部搬很多格子,逐格记的话
     用户得按几十次 Ctrl+Z 才退得回来。批量重画的边界与撤销事务的边界
@@ -8478,15 +8681,18 @@ begin
   try
   if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
   EndEdit(False);
+  { 快照要在**删之前**取(那时列还在),条目要在**删之后**入栈
+    (撤销倒序应用,列得先回来,后面的 gukCell 才有地方放)。 }
+  snap := SnapshotColumn(ACol);
   ShiftCells(ACol, -1, False);
   Header.Columns.Delete(ACol);
   if FCol > Header.Columns.Count - 1 then FCol := Header.Columns.Count - 1;
   if FCol < 0 then FCol := 0;
+  RecordColumnUndo(gukColDelete, ACol, -1, snap);
   Invalidate;
   finally
     EndUpdate;
   end;
-  DropUndoForColumnChange;
 end;
 
 { 按内容(含换行)把行高调到刚好放得下。
