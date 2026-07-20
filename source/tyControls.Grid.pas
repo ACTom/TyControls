@@ -421,6 +421,14 @@ type
   TTyGridRowMoveEvent = procedure(Sender: TObject; AFrom, ATo: Integer;
     var AAllow: Boolean) of object;
 
+  { --- 树形单元格(P8)---
+    **控件不持有树**:层级与"有没有孩子"都由宿主回答,与虚拟数据源同一条道理。
+    这样百万行的树也不需要控件先把整棵树建起来。 }
+  TTyGridNodeLevelEvent = procedure(Sender: TObject; ARow: Integer;
+    var ALevel: Integer) of object;
+  TTyGridHasChildrenEvent = procedure(Sender: TObject; ARow: Integer;
+    var AHas: Boolean) of object;
+
   { 拖填充柄产生的一次填充。宿主可以接管(自定义序列、跨列规则等):
     置 AHandled := True 之后控件就不再动数据了。 }
   TTyGridFillEvent = procedure(Sender: TObject; const ASource, ATarget: TRect;
@@ -547,6 +555,11 @@ type
       占的是表头那一侧的高度,与分组带同族。 }
     FShowFilterRow:    Boolean;
     FFilterRowHeight:  Integer;   { 0 = 跟列头同高 }
+    { 树形列:哪一列画成树(-1 = 不画)。缩进与三角只出现在这一列。 }
+    FTreeColumn:       Integer;
+    FTreeIndent:       Integer;   { 每一级缩进多少逻辑像素 }
+    FOnGetNodeLevel:   TTyGridNodeLevelEvent;
+    FOnGetHasChildren: TTyGridHasChildrenEvent;
     { 隔行底色。按**显示行号**取,不是数据行号 —— 否则排序筛选之后条纹会跟着
       数据行乱跳,看起来像随机涂色。 }
     FAlternateRows:    Boolean;
@@ -966,6 +979,21 @@ type
     { 某列筛选位里要显示的文字。基类恒空。 }
     function  FilterRowText(ACol: Integer): string; virtual;
 
+    { --- 树形单元格 ---
+      层级由宿主给;控件只负责缩进、三角的几何、以及把折叠翻译成显示序。 }
+    function  NodeLevelOf(ARow: Integer): Integer;
+    function  NodeHasChildren(ARow: Integer): Boolean;
+    { 这一行折起来没有。基类没有折叠状态,恒 False;TTyStringGrid 改写。
+      绘制在 TTyDrawGrid 这一层,而状态在派生类 —— 靠它把两边接起来。 }
+    function  NodeCollapsedOf(ARow: Integer): Boolean; virtual;
+    { 这一格的内容左边界(树形列上要为缩进和三角让位)。 }
+    function  TreeContentLeft(ACol, ARow: Integer): Integer;
+    { 展开/折叠三角的矩形。**命中与绘制共用它** —— 分成两份迟早对不上
+      (本库在填充柄、分组三角上都是这么守的)。没孩子时返回空矩形。 }
+    function  TreeToggleRect(ARow: Integer): TRect;
+    procedure SetTreeColumn(AValue: Integer);
+    procedure SetTreeIndent(AValue: Integer);
+
     { 单元格内容。基类不画任何内容(它不知道数据从哪来)——由派生类改写。
       在 chrome 之后、格线之前调用。 }
     procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
@@ -1348,6 +1376,9 @@ type
     FOrderValid: Boolean;
     { 用户在筛选行里**打的原文**(列索引 -> 表达式)。与 FColFilters 分开存:
       那边是编码后的条件,回显给用户看的必须是他自己打的那一串。 }
+    { 树形:折叠了哪些**数据行**(存行号)。与分组的折叠分开 ——
+      那边按层级路径记,这边按行,两者可以同时开着。 }
+    FTreeCollapsed: TStringList;
     FFilterText: TStringList;
     FColFilters: TStringList;     { 列索引 -> 过滤文本(包含匹配,不区分大小写) }
     FValFilters: TStringList;     { 列索引 -> 允许值集合(换行分隔);空 = 该列不按值过滤 }
@@ -1722,12 +1753,22 @@ type
     procedure ShowColumnFilterDropDown(ACol: Integer);
 
     { 给某列设"包含"过滤(不区分大小写)。传空串即清掉该列的过滤。 }
+    { --- 树形单元格 ---
+      折叠/展开某一行(它必须是有孩子的那种)。折叠 = 它的子孙从显示序里消失。 }
+    procedure ToggleNode(ARow: Integer);
+    function  NodeCollapsed(ARow: Integer): Boolean;
+    function  NodeCollapsedOf(ARow: Integer): Boolean; override;
+    procedure ExpandAllNodes;
+    procedure CollapseAllNodes;
+
     { --- 内嵌筛选行 ---
       在筛选行里打的**表达式**(`>100`、`a..b`、`x;y`……见 TyGridParseFilterExpr)。
       设进去就立刻按它筛;传空串清掉这一列。
       与 SetColumnFilter 的区别:那个吃的是已经定好比较方式的单条条件,
       这个吃的是用户打的一串,自己解析。 }
     { 在某列的筛选位里开编辑器(点筛选行就走它)。 }
+    { 这一行是不是被某个**祖先**折叠了(它自己折没折不影响它显不显示)。 }
+    function  RowCollapsedByTree(ARow: Integer): Boolean;
     procedure BeginFilterEdit(ACol: Integer);
     { 收掉筛选行编辑器;AApply=True 时把当前输入立刻生效。 }
     procedure EndFilterEdit(AApply: Boolean);
@@ -1966,6 +2007,16 @@ type
     { 列头上显示筛选按钮(点它弹出去重值的勾选下拉)。 }
     property ShowFilterButtons: Boolean
       read FShowFilterButtons write SetShowFilterButtons default False;
+    { 哪一列画成树:缩进 + 展开三角。-1 = 不画(默认)。
+      层级与"有没有孩子"由 OnGetNodeLevel / OnGetHasChildren 回答 ——
+      **控件不持有树**,所以百万行的树也不必先在控件里建起来。 }
+    property TreeColumn: Integer read FTreeColumn write SetTreeColumn default -1;
+    { 每一级缩进多少(逻辑像素)。三角画在它自己那一级的缩进槽里。 }
+    property TreeIndent: Integer read FTreeIndent write SetTreeIndent default 16;
+    property OnGetNodeLevel: TTyGridNodeLevelEvent
+      read FOnGetNodeLevel write FOnGetNodeLevel;
+    property OnGetHasChildren: TTyGridHasChildrenEvent
+      read FOnGetHasChildren write FOnGetHasChildren;
     { 列头下面一条**内嵌筛选行**:每列一个输入位,打进去就按那一列筛。
       支持 `>100` `<=5` `<>x` `a..b`,`;` 分隔的多个条件之间是 OR。
       它是自己一条带,不是数据行 —— 行数、寻址、导出都不受影响。 }
@@ -4628,6 +4679,76 @@ begin
   Result := '';      { 基类没有过滤模型 }
 end;
 
+function TTyCustomGrid.NodeLevelOf(ARow: Integer): Integer;
+begin
+  Result := 0;
+  if (FTreeColumn < 0) or (ARow < 0) then Exit;
+  if Assigned(FOnGetNodeLevel) then FOnGetNodeLevel(Self, ARow, Result);
+  if Result < 0 then Result := 0;
+end;
+
+function TTyCustomGrid.NodeHasChildren(ARow: Integer): Boolean;
+begin
+  Result := False;
+  if (FTreeColumn < 0) or (ARow < 0) then Exit;
+  if Assigned(FOnGetHasChildren) then FOnGetHasChildren(Self, ARow, Result);
+end;
+
+function TTyCustomGrid.NodeCollapsedOf(ARow: Integer): Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCustomGrid.TreeContentLeft(ACol, ARow: Integer): Integer;
+begin
+  Result := 0;
+  if (FTreeColumn < 0) or (ACol <> FTreeColumn) then Exit;
+  { 每一级缩进一格,再给三角留出一格宽 —— 有没有孩子都留,
+    否则同级的兄弟会因为"有没有孩子"而左右错开。 }
+  Result := (NodeLevelOf(ARow) + 1) * ScaleI(FTreeIndent);
+end;
+
+function TTyCustomGrid.TreeToggleRect(ARow: Integer): TRect;
+var
+  cell: TRect;
+  ind, sz, cx, cy: Integer;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if FTreeColumn < 0 then Exit;
+  if not NodeHasChildren(ARow) then Exit;      { 没孩子就没有三角可点 }
+
+  cell := CellVisibleRect(FTreeColumn, ARow);
+  if IsRectEmpty(cell) then Exit;
+
+  ind := ScaleI(FTreeIndent);
+  sz := ind;
+  if sz > cell.Bottom - cell.Top then sz := cell.Bottom - cell.Top;
+  { 三角落在**它这一级的缩进槽**里 —— 也就是内容左边界往左那一格。 }
+  cx := cell.Left + NodeLevelOf(ARow) * ind;
+  cy := cell.Top + ((cell.Bottom - cell.Top) - sz) div 2;
+  Result := Rect(cx, cy, cx + sz, cy + sz);
+  if Result.Right > cell.Right then Result.Right := cell.Right;
+  if Result.Right <= Result.Left then Result := Rect(0, 0, 0, 0);
+end;
+
+procedure TTyCustomGrid.SetTreeColumn(AValue: Integer);
+begin
+  if AValue < -1 then AValue := -1;
+  if FTreeColumn = AValue then Exit;
+  FTreeColumn := AValue;
+  InvalidateGridOrder;      { 折叠会改变显示序 }
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyCustomGrid.SetTreeIndent(AValue: Integer);
+begin
+  if AValue < 1 then AValue := 1;
+  if FTreeIndent = AValue then Exit;
+  FTreeIndent := AValue;
+  Invalidate;
+end;
+
 procedure TTyCustomGrid.RenderFilterRow(P: TTyPainter; const M: TTyGridMetrics;
   ATop: Integer);
 var
@@ -5075,7 +5196,7 @@ var
   clipR: TRect;
   cellS: TTyStyleSet;
   col: TTyColumn;
-  cell, vis, textR, oldClip: TRect;
+  cell, vis, textR, oldClip, treeTg: TRect;
   ink: TTyColor;
   txt: string;
   padL, padR: Integer;
@@ -5123,6 +5244,24 @@ begin
       ap := CellAppearance(colIdx, dataRow, row, AFrame);
       cell := TyGridCellContentRect(CellRect(colIdx, dataRow), M);
       textR := Rect(cell.Left + padL, cell.Top, cell.Right - padR, cell.Bottom);
+      { 树形列:文字为缩进和三角让位。缩进只推左边界,不改右边界 ——
+        深层节点的文字该被截断就截断,不该反过来把列撑宽。 }
+      if (FTreeColumn >= 0) and (colIdx = FTreeColumn) then
+      begin
+        Inc(textR.Left, TreeContentLeft(colIdx, dataRow));
+        treeTg := TreeToggleRect(dataRow);
+        if not IsRectEmpty(treeTg) then
+        begin
+          { 展开时朝下、折叠时朝右 —— 与分组行的三角同一个约定。
+            pad=1:小槽里 DrawGlyph 默认每边内缩 4 逻辑像素会只剩个糊点。 }
+          if NodeCollapsedOf(dataRow) then
+            TyDrawGlyph(P, ActiveController, treeTg, tgChevronRight,
+              ap.TextColor, 1, 1)
+          else
+            TyDrawGlyph(P, ActiveController, treeTg, tgChevronDown,
+              ap.TextColor, 1, 1);
+        end;
+      end;
       if textR.Right <= textR.Left then Continue;
 
       { 文字按**完整**单元格排版,再裁到可见部分 —— 半掩的单元格应当被裁掉一截,
@@ -5154,6 +5293,7 @@ constructor TTyStringGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FCells := TFPStringHashTable.Create;
+  FTreeCollapsed := TStringList.Create;
   FFilterText := TStringList.Create;
   FColFilters := TStringList.Create;
   FValFilters := TStringList.Create;
@@ -5192,6 +5332,8 @@ begin
   FFilterChecked := TStringList.Create;
   FFilterChecked.Sorted := True;
   FFilterChecked.Duplicates := dupIgnore;
+  FTreeColumn := -1;        { 默认不画树 }
+  FTreeIndent := 16;
   FDefaultCellDisplay := gcdText;
 
   { 一个复用的内联编辑器,盖在被编辑的单元格上。 }
@@ -5275,6 +5417,7 @@ begin
   FPickEditor.OnExit := nil;
   FDateEditor.OnExit := nil;
   FCells.Free;
+  FTreeCollapsed.Free;
   FFilterText.Free;
   FColFilters.Free;
   FValFilters.Free;
@@ -6169,6 +6312,15 @@ begin
   end;
 
   hit := CellAt(X, Y);
+  { 树形三角优先于单元格 —— 它压在树形列那一格的左侧,
+    不先判就会被当成"在那一格上按下"而只是移动光标。
+    命中用的就是绘制用的那个矩形(TreeToggleRect),两者不可能分叉。 }
+  if (Button = mbLeft) and (TreeColumn >= 0) and (hit.Part = ghpCell)
+     and PtInRect(TreeToggleRect(hit.Row), Point(X, Y)) then
+  begin
+    ToggleNode(hit.Row);
+    Exit;
+  end;
   { 点筛选行 = 在那一列的筛选位里开编辑器。 }
   if (hit.Part = ghpFilterRow) and (hit.Col >= 0) then
   begin
@@ -6583,7 +6735,9 @@ begin
 
   n := 0;
   for i := 0 to RowCount - 1 do
-    if RowPassesFilter(i) then
+    { 折叠只是**多一条准入判断** —— 复用现成的行序间接层,
+      不给树另建一套显示序。 }
+    if RowPassesFilter(i) and not RowCollapsedByTree(i) then
     begin
       FOrder[n] := i;
       Inc(n);
@@ -6794,6 +6948,75 @@ begin
   i := FColFilters.IndexOfName(k);
   if i >= 0 then FColFilters.Delete(i);
   if AText <> '' then FColFilters.Add(k + '=' + AText);
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+function TTyStringGrid.RowCollapsedByTree(ARow: Integer): Boolean;
+var
+  i, lv, mine: Integer;
+begin
+  Result := False;
+  if (TreeColumn < 0) or (FTreeCollapsed.Count = 0) or (ARow <= 0) then Exit;
+
+  mine := NodeLevelOf(ARow);
+  if mine <= 0 then Exit;              { 根节点没有祖先,永远显示 }
+
+  { 往上找最近的**每一级**祖先:上一个层级更浅的行就是父,再往上是祖父……
+    只要链条上有任何一个是折叠的,这一行就不显示。
+    (逐行往上扫,不建树 —— 与"控件不持有树"是同一个决定。) }
+  for i := ARow - 1 downto 0 do
+  begin
+    lv := NodeLevelOf(i);
+    if lv >= mine then Continue;       { 同级或更深:不是祖先 }
+    if FTreeCollapsed.IndexOf(IntToStr(i)) >= 0 then Exit(True);
+    mine := lv;                        { 继续找更浅的那一级 }
+    if mine = 0 then Exit;             { 到根了 }
+  end;
+end;
+
+function TTyStringGrid.NodeCollapsed(ARow: Integer): Boolean;
+begin
+  Result := FTreeCollapsed.IndexOf(IntToStr(ARow)) >= 0;
+end;
+
+function TTyStringGrid.NodeCollapsedOf(ARow: Integer): Boolean;
+begin
+  Result := NodeCollapsed(ARow);
+end;
+
+procedure TTyStringGrid.ToggleNode(ARow: Integer);
+var
+  i: Integer;
+begin
+  if (TreeColumn < 0) or (ARow < 0) or (ARow >= RowCount) then Exit;
+  if not NodeHasChildren(ARow) then Exit;     { 没孩子的行没有折叠状态 }
+  i := FTreeCollapsed.IndexOf(IntToStr(ARow));
+  if i >= 0 then FTreeCollapsed.Delete(i)
+  else FTreeCollapsed.Add(IntToStr(ARow));
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.ExpandAllNodes;
+begin
+  if FTreeCollapsed.Count = 0 then Exit;
+  FTreeCollapsed.Clear;
+  InvalidateOrder;
+  UpdateScrollBars;
+  Invalidate;
+end;
+
+procedure TTyStringGrid.CollapseAllNodes;
+var
+  i: Integer;
+begin
+  if TreeColumn < 0 then Exit;
+  FTreeCollapsed.Clear;
+  for i := 0 to RowCount - 1 do
+    if NodeHasChildren(i) then FTreeCollapsed.Add(IntToStr(i));
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;

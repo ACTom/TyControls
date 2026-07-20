@@ -69,6 +69,12 @@ type
     procedure HandleRowMove(Sender: TObject; AFrom, ATo: Integer;
       var AAllow: Boolean);
     procedure HandleDblClickCell(Sender: TObject; ACol, ARow: Integer);
+    { P8 的树:层级由**宿主**给,控件不持有树。
+      这份数据是 0/1/1/0/1/1 —— 两个根,各带两个孩子。 }
+    procedure HandleNodeLevel(Sender: TObject; ARow: Integer;
+      var ALevel: Integer);
+    procedure HandleHasChildren(Sender: TObject; ARow: Integer;
+      var AHas: Boolean);
     { 逐格钩子的探针 —— 只记下收到过的最小行号。
       **必须放在 private**:published 区里的方法会被 FPCUnit 当成测试用例
       直接调用(Sender = nil),于是它自己先崩一次。 }
@@ -252,6 +258,7 @@ type
     procedure TestFilterRowIsABandNotADataRow;
     procedure TestFilterRowFiltersAndClears;
     procedure TestClickingFilterRowOpensAnEditorThatFilters;
+    procedure TestTreeColumnIndentsAndCollapses;
     procedure TestDeletingAColumnIsUndoable;
     procedure TestInsertingAndMovingColumnsAreUndoable;
     procedure TestMultiLevelGroupingOnUnclusteredData;
@@ -1113,6 +1120,12 @@ type
     procedure InvalidateSurfaceForTest;
     function  SurfaceFreshForTest: Boolean;
     function  FilterRowHeightForTest: Integer;
+    function  TreeContentLeftForTest(ARow: Integer): Integer;
+    function  TreeToggleRectForTest(ARow: Integer): TRect;
+    { 把网格画一遍,数某个矩形里的墨 / 找某一行第一个墨像素的横坐标。
+      "算出来的缩进"和"画出来的缩进"是两件事,这两个是用来断言后者的。 }
+    function  InkInRect(const R: TRect): Integer;
+    function  InkColumnOfFirstGlyph(ARow: Integer): Integer;
     function  FilterEditorVisible: Boolean;
     function  FilterEditorBounds: TRect;
     procedure SetFilterEditorText(const AText: string);
@@ -1136,6 +1149,87 @@ procedure TCountingGrid.AccumulateCell(ACol, ADataRow: Integer;
 begin
   Inc(ScanCount);
   inherited AccumulateCell(ACol, ADataRow, AKind, AAcc, ACount, AStarted);
+end;
+
+function TStrGridAccess.InkInRect(const R: TRect): Integer;
+var
+  bmp: TBitmap;
+  x, y: Integer;
+  px: TBGRAPixel;
+  re: TBGRABitmap;
+begin
+  Result := 0;
+  if IsRectEmpty(R) then Exit;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(Width, Height);
+    bmp.Canvas.Brush.Color := clWhite;
+    bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+    DoRender(bmp.Canvas, Rect(0, 0, Width, Height), 96);
+    re := TBGRABitmap.Create(bmp);
+    try
+      for y := R.Top to R.Bottom - 1 do
+        for x := R.Left to R.Right - 1 do
+        begin
+          if (y < 0) or (y >= re.Height) or (x < 0) or (x >= re.Width) then Continue;
+          px := re.GetPixel(x, y);
+          if px.red + px.green + px.blue < 400 then Inc(Result);
+        end;
+    finally
+      re.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+function TStrGridAccess.InkColumnOfFirstGlyph(ARow: Integer): Integer;
+var
+  bmp: TBitmap;
+  x, y: Integer;
+  px: TBGRAPixel;
+  re: TBGRABitmap;
+  cell: TRect;
+begin
+  Result := -1;
+  cell := CellVisibleRect(0, ARow);
+  if IsRectEmpty(cell) then Exit;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(Width, Height);
+    bmp.Canvas.Brush.Color := clWhite;
+    bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+    DoRender(bmp.Canvas, Rect(0, 0, Width, Height), 96);
+    re := TBGRABitmap.Create(bmp);
+    try
+      { 从左往右扫,第一列出现墨的位置就是这一行内容的起点。
+        三角也是墨 —— 所以这个数同时反映了缩进与三角,正是我们要的
+        "看起来更靠右"。 }
+      for x := cell.Left to cell.Right - 1 do
+        for y := cell.Top to cell.Bottom - 1 do
+        begin
+          if (y < 0) or (y >= re.Height) or (x < 0) or (x >= re.Width) then Continue;
+          px := re.GetPixel(x, y);
+          if px.red + px.green + px.blue < 400 then Exit(x);
+        end;
+    finally
+      re.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+function TStrGridAccess.TreeContentLeftForTest(ARow: Integer): Integer;
+begin
+  Result := TreeContentLeft(TreeColumn, ARow);
+end;
+
+function TStrGridAccess.TreeToggleRectForTest(ARow: Integer): TRect;
+begin
+  Result := TreeToggleRect(ARow);
 end;
 
 function TStrGridAccess.FilterRowHeightForTest: Integer;
@@ -9180,6 +9274,93 @@ begin
     TTyColumn(G.Header.Columns.Items[0]).Position);
   AssertEquals('另一列也回去了', p1,
     TTyColumn(G.Header.Columns.Items[1]).Position);
+end;
+
+procedure TTyStringGridTest.HandleNodeLevel(Sender: TObject; ARow: Integer;
+  var ALevel: Integer);
+begin
+  { 0,1,1, 0,1,1 —— 两个根节点,各带两个孩子。 }
+  if (ARow mod 3) = 0 then ALevel := 0 else ALevel := 1;
+end;
+
+procedure TTyStringGridTest.HandleHasChildren(Sender: TObject; ARow: Integer;
+  var AHas: Boolean);
+begin
+  AHas := (ARow mod 3) = 0;
+end;
+
+{ P8:某一列显示层级。**控件不持有树** —— 层级与"有没有孩子"由宿主回答,
+  折叠就是把子行从显示序里去掉(复用现成的行序间接层,不另建一套)。
+
+  三件事要一起成立,少一件这个特性就是残的:
+    · 缩进(看得出层级)
+    · 三角的命中矩形 == 绘制矩形(点得到看得见的那个)
+    · 折叠真的把子行从显示序里拿掉(而不只是画个箭头) }
+procedure TTyStringGridTest.TestTreeColumnIndentsAndCollapses;
+var
+  G: TStrGridAccess;
+  r, x0, x1, inkUpExpanded, inkUpCollapsed: Integer;
+  tri: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+    G.Cells[0, r] := 'n' + IntToStr(r);
+  G.OnGetNodeLevel := @HandleNodeLevel;
+  G.OnGetHasChildren := @HandleHasChildren;
+  G.TreeColumn := 0;
+
+  { --- 缩进 --- }
+  x0 := G.TreeContentLeftForTest(0);      { 根 }
+  x1 := G.TreeContentLeftForTest(1);      { 子 }
+  AssertTrue(Format('子节点要比根缩进(根 %d,子 %d)', [x0, x1]), x1 > x0);
+  AssertEquals('同级的缩进一样', x1, G.TreeContentLeftForTest(2));
+  AssertEquals('下一个根回到根的缩进', x0, G.TreeContentLeftForTest(3));
+
+  { --- 三角只出现在有孩子的行上 --- }
+  tri := G.TreeToggleRectForTest(0);
+  AssertFalse('有孩子的行要有三角', IsRectEmpty(tri));
+  AssertTrue('没孩子的行不该有三角',
+    IsRectEmpty(G.TreeToggleRectForTest(1)));
+
+  { 三角的**朝向**也要跟着状态变 —— 只断言"有墨"的话,
+    把"折叠画朝右"改成"一律画朝下"照样通过(变异证明过)。
+    数上半格的墨:∨ 与 > 的墨在上半格的分布不同,这是"朝向变了"的最小证据。 }
+  inkUpExpanded := G.InkInRect(Rect(tri.Left, tri.Top, tri.Right,
+    tri.Top + (tri.Bottom - tri.Top) div 2));
+
+  { --- 折叠:子行从显示序里消失 --- }
+  AssertEquals('前置:6 行全显示', 6, G.DisplayRowCount);
+  G.ClickAt(tri.Left + (tri.Right - tri.Left) div 2,
+            tri.Top + (tri.Bottom - tri.Top) div 2);
+  AssertEquals('折叠第一个根 —— 它的两个孩子不显示了', 4, G.DisplayRowCount);
+  inkUpCollapsed := G.InkInRect(Rect(tri.Left, tri.Top, tri.Right,
+    tri.Top + (tri.Bottom - tri.Top) div 2));
+  AssertTrue(Format('三角要换朝向(展开时上半墨 %d,折叠时 %d)',
+    [inkUpExpanded, inkUpCollapsed]), inkUpExpanded <> inkUpCollapsed);
+  AssertEquals('根本身还在', 0, G.DisplayRow(0));
+  AssertEquals('紧跟着的是下一个根', 3, G.DisplayRow(1));
+
+  { 再点一次展开。 }
+  G.ClickAt(tri.Left + (tri.Right - tri.Left) div 2,
+            tri.Top + (tri.Bottom - tri.Top) div 2);
+  AssertEquals('展开回来', 6, G.DisplayRowCount);
+
+  { --- 真的画出来了吗 ---
+    几何算对不等于画出来了。子行的文字必须**真的**往右挪,三角那一格必须有墨。 }
+  x0 := G.InkColumnOfFirstGlyph(0);      { 根行文字的起点 }
+  x1 := G.InkColumnOfFirstGlyph(1);      { 子行文字的起点 }
+  AssertTrue(Format('子行的文字要真的画得更靠右(根 %d,子 %d)', [x0, x1]),
+    x1 > x0);
+  AssertTrue('三角那一格要有墨',
+    G.InkInRect(G.TreeToggleRectForTest(0)) > 2);
+
+  { --- 关掉树形:一切复原 --- }
+  G.TreeColumn := -1;
+  AssertEquals('关掉之后没有缩进', G.TreeContentLeftForTest(0),
+    G.TreeContentLeftForTest(1));
+  AssertEquals('画出来的也回到同一起点',
+    G.InkColumnOfFirstGlyph(0), G.InkColumnOfFirstGlyph(1));
 end;
 
 initialization
