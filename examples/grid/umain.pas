@@ -98,7 +98,7 @@ type
     CbSelMode: TTyComboBox;
     BtnSelAll, BtnSelNone, BtnMerge, BtnUnmerge, BtnCopy, BtnCut, BtnPaste,
       BtnInsRow, BtnDelRow, BtnRowUp, BtnRowDown, BtnHideRow, BtnUnhideAll,
-      BtnExportCsv, BtnExportHtml: TTyButton;
+      BtnExportCsv, BtnExportHtml, BtnUndo, BtnRedo: TTyButton;
     ChkAutoGrow: TTyCheckBox;
 
     PgEvents: TTyTabSheet;
@@ -186,6 +186,8 @@ type
     procedure BtnUnhideAllClick(Sender: TObject);
     procedure BtnExportCsvClick(Sender: TObject);
     procedure BtnExportHtmlClick(Sender: TObject);
+    procedure BtnUndoClick(Sender: TObject);
+    procedure BtnRedoClick(Sender: TObject);
     procedure ChkDataChange(Sender: TObject);
 
     { 页 6 }
@@ -1111,6 +1113,31 @@ procedure TMainForm.BtnUnhideAllClick(Sender: TObject);
 begin
   GridData.UnHideAllRows;
   Status('已全部取消隐藏');
+end;
+
+{ 撤销覆盖的不只是格里的字。给某行涂个底色、拖高它、再上移一格,
+  然后按这里(或 Ctrl+Z)—— 底色、行高、合并跨度都跟着回原位。
+  它们各自有记录点,不是靠"整行交换"记一笔。 }
+procedure TMainForm.BtnUndoClick(Sender: TObject);
+begin
+  if not GridData.CanUndo then
+  begin
+    Status('没有可撤销的操作了');
+    Exit;
+  end;
+  GridData.Undo;
+  Status('已撤销 —— 底色、行高、合并跨度会跟着一起回来');
+end;
+
+procedure TMainForm.BtnRedoClick(Sender: TObject);
+begin
+  if not GridData.CanRedo then
+  begin
+    Status('没有可重做的操作了');
+    Exit;
+  end;
+  GridData.Redo;
+  Status('已重做');
 end;
 
 procedure TMainForm.BtnExportCsvClick(Sender: TObject);

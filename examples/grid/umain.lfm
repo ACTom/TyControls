@@ -68,7 +68,7 @@ object MainForm: TMainForm
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '鼠标划过单元格看 hover 高亮 · 拖底部横向滚动条,左侧两列钉住不动(冻结列) · 方向键/Home/End/PageUp/PageDown 导航 · 状态栏显示稀疏存储的实际条目数'
+          Caption = '鼠标划过单元格看 hover 高亮 · 拖底部横向滚动条,左侧两列钉住不动(冻结列) · 方向键/Home/End/PageUp/PageDown 导航 · 勾上「固定 1 行」再点列头排序:冻结带里换成排在最前的那一行,内容照画不空白'
         end
         object TbBasic: TTyPanel
           Left = 0
@@ -581,7 +581,7 @@ object MainForm: TMainForm
           Height = 34
           Top = 4
           Width = 1150
-          Caption = '拖动可框选 · **Ctrl+点**追加不相邻的块(离散多选) · Ctrl+A 全选 · 状态栏实时显示选中格数与合计 · Ctrl+C/V 与 Excel 互粘,粘贴时不够的行列会自动补上'
+          Caption = '拖动可框选 · **Ctrl+点**追加不相邻的块(离散多选) · Ctrl+A 全选 · Ctrl+C/V 与 Excel 互粘,粘贴时不够的行列会自动补上 · 撤销覆盖的不只是文字:上移/下移之后按 Ctrl+Z,底色、行高、合并跨度都跟着回来'
         end
         object TbData1: TTyPanel
           Left = 0
@@ -745,12 +745,28 @@ object MainForm: TMainForm
             Caption = '导出 HTML'
             OnClick = BtnExportHtmlClick
           end
-          object LblDataTip: TTyLabel
+          object BtnUndo: TTyButton
             Left = 884
+            Height = 26
+            Top = 6
+            Width = 92
+            Caption = '撤销'
+            OnClick = BtnUndoClick
+          end
+          object BtnRedo: TTyButton
+            Left = 982
+            Height = 26
+            Top = 6
+            Width = 92
+            Caption = '重做'
+            OnClick = BtnRedoClick
+          end
+          object LblDataTip: TTyLabel
+            Left = 1082
             Height = 20
             Top = 10
-            Width = 280
-            Caption = '上移/下移会把底色和行高一起搬走'
+            Width = 86
+            Caption = 'Ctrl+Z / Ctrl+Y'
           end
         end
         object GridData: TTyStringGrid
