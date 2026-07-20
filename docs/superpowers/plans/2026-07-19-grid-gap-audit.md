@@ -173,6 +173,16 @@ Grid.pas **没有 KeyPress/UTF8KeyPress override**,`KeyDown` 里**没有 VK_RETU
 
 *(medium 尾部一并纳入、不再单列的小项:批注单元格角标 + 悬停批注、超链接单元格、三态勾选框、整列一次性配置单元格类型、逐格持久化设置内容类型、JSON 导出、流式 Load/SaveToStream、限定区域导出、追加式 CSV 导入 + MaxRows/IgnoreRows、HTML 导出可配置化(至少特殊字符转义)、分区域清空 ClearRows/ClearCols、插删行否决事件、滚动条策略开关 ScrollBarAlways、背景位图与作用范围、选区显示细则开关、键盘扩展事件 OnReturn/OnCtrlReturn、提示扩展 OnScrollHint、`OnEditChange` 逐击键回调、`OnCanEditCell` 独立钩子、列脚 `CalcFooter(ACol)` 显式重算与自定义聚合值事件 `OnColumnCalc` —— 这些都是 small,建议作为"顺手批次"塞进各自 HIGH 条目的同一个 PR,不单独排期。)*
 
+> **⚠ 2026-07-20 更正:上面这段括号里的约 20 项,一条都没做,而且整批从后续
+> 所有计划里消失了。** 它们只活在这段斜体文字里,从未变成能被勾的行 ——
+> 而验收时问的是"计划里还有没有未勾选项",于是查不出来。
+>
+> 已誊成正式清单:[2026-07-20-grid-tail-batch.md](2026-07-20-grid-tail-batch.md)
+> (T1-T20,外加 6 条同样"被复述时丢掉半句"的 T21-T26)。
+>
+> **判据**:凡是写在括号、脚注、正文段落里的待办,必须誊成带 `- [ ]` 的行。
+> **不能被勾的东西不会被做。**
+
 ---
 
 ## LOW(17,建议全部延后到 HIGH+MEDIUM 收尾)
