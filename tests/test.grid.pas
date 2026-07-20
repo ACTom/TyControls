@@ -213,6 +213,8 @@ type
     procedure TestMergeCountSurvivesRowRemovalAndUndo;
     procedure TestClearMergesIsOneUndoStep;
     procedure TestOversizedUndoRecordIsDiscardedNotTruncated;
+    procedure TestPasteWithAFilteredOutCursorRowKeepsEveryLine;
+    procedure TestUndoingARowSwapRestoresTheHiddenFlag;
     procedure TestMultiLevelGroupingOnUnclusteredData;
     procedure TestTimeEditorCommitsATimeNotADate;
     procedure TestMultiLevelGroupingNestsAndSubtotalsPerLevel;
@@ -8235,6 +8237,62 @@ begin
   end;
 
   AssertFalse('超限的那条记录必须整条作废 —— 栈里不该留半条', G.CanUndo);
+end;
+
+{ 与 A6 同一族:`DataToDisplay` 对被筛掉的行答 -1,而粘贴拿它当起始显示位置
+  直接用了。光标停在一个被筛掉的行上时:
+    · 第一行 `DisplayToData(-1)` = -1 → 被 `Continue` **静默丢掉**;
+    · 其余每行都往上错一位,从表**最顶上**开始铺,而不是光标附近。
+  丢数据 + 落错位置,都不报错。(选区那处早有 `if startPos < 0 then startPos := 0`,
+  粘贴这条路径漏了 —— 又一次"规则没收口"。) }
+procedure TTyStringGridTest.TestPasteWithAFilteredOutCursorRowKeepsEveryLine;
+var
+  G: TStrGridAccess;
+  r: Integer;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  for r := 0 to 9 do
+    G.Cells[0, r] := 'keep';
+  G.Cells[0, 3] := 'drop';
+
+  G.Col := 0;
+  G.Row := 3;
+  G.SetColumnFilter(0, 'keep');           { 光标那一行被筛掉了 }
+  AssertEquals('前置:少了一行', 9, G.DisplayRowCount);
+
+  G.PasteFromText('A' + LineEnding + 'B');
+
+  AssertEquals('第一行不能被静默丢掉', 'A', G.Cells[0, 0]);
+  AssertEquals('第二行接在它下面', 'B', G.Cells[0, 1]);
+end;
+
+{ `PermuteRowState` 搬四样东西(文字、格属性、行高、隐藏标记),
+  前三样都有记录点,隐藏标记没有 —— 于是拖完行按 Ctrl+Z,
+  文字和底色回来了、**藏着的还是换过去那一行**。
+  这正是 A7 那个缺陷,换了个位置又出现一次。 }
+procedure TTyStringGridTest.TestUndoingARowSwapRestoresTheHiddenFlag;
+var
+  G: TStrGridAccess;
+  r, pos: Integer;
+  shown: string;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 6;
+  for r := 0 to 5 do
+    G.Cells[0, r] := Chr(Ord('A') + r);      { A B C D E F }
+  G.HideRow(2);                              { 藏起 'C' }
+  G.ClearUndo;
+
+  G.SwapRows(1, 2);
+  AssertEquals('前置:换过去了', 'C', G.Cells[0, 1]);
+
+  G.Undo;
+  AssertEquals('前置:文字换回来了', 'B', G.Cells[0, 1]);
+
+  shown := '';
+  for pos := 0 to G.DisplayRowCount - 1 do
+    shown := shown + G.Cells[0, G.DisplayRow(pos)];
+  AssertEquals('撤销之后,藏着的还得是原来那一行', 'ABDEF', shown);
 end;
 
 initialization

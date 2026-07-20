@@ -319,7 +319,8 @@ type
     物理排序是可撤销的 —— 这也是它必须排在撤销功能之后做的原因。 }
   TTyGridSortMode = (gsmDisplay, gsmData);
 
-  TTyGridUndoKind = (gukCell, gukRowCount, gukCellAttr, gukRowHeight);
+  TTyGridUndoKind = (gukCell, gukRowCount, gukCellAttr, gukRowHeight,
+                     gukRowHidden);
 
   { 逐格属性的**值快照**。撤销栈不能存 TTyGridCellAttr 的引用 ——
     那个对象会被后来的 MoveEntry 就地改写、被 Remove 释放。 }
@@ -343,6 +344,7 @@ type
     OldText:   string;
     OldCount:  Integer;
     OldHeight: Integer;
+    OldHidden: Boolean;
     AttrKey:   string;
     Attr:      TTyGridAttrSnapshot;
   end;
@@ -1459,6 +1461,10 @@ type
     { 属性存储的记录点。挂在 TTyGridCellAttrStore.OnChanging 上 ——
       于是改底色/文字色/只读/合并跨度、以及三条行置换路径搬属性,
       **一律**自动进撤销栈,不必每个功能各写一段(那正是本控件反复漏东西的方式)。 }
+    { 隐藏标记的记录点。`PermuteRowState` 搬四样东西,前三样都有记录点、
+      这一样从前没有 —— 拖完行按 Ctrl+Z,文字回来了而藏着的还是换过去那一行。
+      HideRow / UnHideRow / 行置换全部经由它。 }
+    procedure SetRowHidden(ARow: Integer; AHidden: Boolean);
     procedure HandleAttrChanging(const AKey: string);
     function  SnapshotAttr(const AKey: string): TTyGridAttrSnapshot;
     procedure RestoreAttr(const AKey: string; const ASnap: TTyGridAttrSnapshot);
@@ -4952,11 +4958,15 @@ begin
 
   if Length(hidden) > 0 then
   begin
-    FHiddenRows.Clear;
+    { 走 SetRowHidden 而不是直接改表 —— 记录点在那儿。
+      直接 Clear 再 Add 的话,拖完行按 Ctrl+Z 文字回来了、
+      藏着的还是换过去那一行(A7 的同一个缺陷换个位置)。 }
+    for i := 0 to High(hidden) do
+      SetRowHidden(hidden[i], False);
     for i := 0 to High(hidden) do
     begin
       dst := AMap[hidden[i]];
-      if dst >= 0 then FHiddenRows.Add(IntToStr(dst));
+      if dst >= 0 then SetRowHidden(dst, True);
     end;
     InvalidateOrder;      { 显示序变了 }
   end;
@@ -5021,6 +5031,33 @@ begin
   if nowMerged and not wasMerged then Inc(FMergeCount)
   else if wasMerged and not nowMerged then Dec(FMergeCount);
   if FMergeCount < 0 then FMergeCount := 0;
+end;
+
+procedure TTyStringGrid.SetRowHidden(ARow: Integer; AHidden: Boolean);
+var
+  i: Integer;
+  e: TTyGridUndoEntry;
+  k: string;
+begin
+  if (ARow < 0) or (ARow >= RowCount) then Exit;
+  k := IntToStr(ARow);
+  i := FHiddenRows.IndexOf(k);
+  if (i >= 0) = AHidden then Exit;      { 已经是这个状态 —— 不是一次改动 }
+
+  if (not FUndoBusy) and (FUndoLimit <> 0) then
+  begin
+    e := Default(TTyGridUndoEntry);
+    e.Kind := gukRowHidden;
+    e.Row := ARow;
+    e.OldHidden := i >= 0;
+    RecordUndo(e);
+  end;
+
+  if AHidden then FHiddenRows.Add(k) else FHiddenRows.Delete(i);
+  { 藏/放一行就改变了参与显示的行集合 —— 显示序、行高前缀和、汇总统统失效。
+    **放在这里**而不是放在调用方:撤销走的是 ApplyUndoStep,它够不着
+    HideRow/UnHideRow 里那一句。(批量期间只置标志,EndUpdateOrder 统一重建。) }
+  InvalidateOrder;
 end;
 
 procedure TTyStringGrid.HandleAttrChanging(const AKey: string);
@@ -5131,6 +5168,13 @@ begin
           Result[n].Row := e.Row;
           Result[n].OldHeight := GetRowHeights(e.Row);
           SetRowHeights(e.Row, e.OldHeight);
+        end;
+      gukRowHidden:
+        begin
+          Result[n].Kind := gukRowHidden;
+          Result[n].Row := e.Row;
+          Result[n].OldHidden := IsHiddenRow(e.Row);
+          SetRowHidden(e.Row, e.OldHidden);
         end;
     end;
     Inc(n);
@@ -5728,21 +5772,15 @@ end;
 
 procedure TTyStringGrid.HideRow(ARow: Integer);
 begin
-  if (ARow < 0) or (ARow >= RowCount) then Exit;
-  if FHiddenRows.IndexOf(IntToStr(ARow)) >= 0 then Exit;
-  FHiddenRows.Add(IntToStr(ARow));
+  SetRowHidden(ARow, True);      { 记录点在那儿 }
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
 end;
 
 procedure TTyStringGrid.UnHideRow(ARow: Integer);
-var
-  i: Integer;
 begin
-  i := FHiddenRows.IndexOf(IntToStr(ARow));
-  if i < 0 then Exit;
-  FHiddenRows.Delete(i);
+  SetRowHidden(ARow, False);
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
@@ -9061,6 +9099,10 @@ begin
     if lines.Count = 0 then Exit;
 
     startPos := DataToDisplay(FRow);
+    { 光标那一行被筛掉/藏起来时它没有显示位置(-1)。不挡一下的话:
+      第一行 `DisplayToData(-1)` = -1 被 Continue **静默丢掉**,其余每行往上错一位。
+      退回显示位置 0 —— 与选区那处(SelectionAsText 的 startPos)同一个答案。 }
+    if startPos < 0 then startPos := 0;
 
     { **智能粘贴**:块比网格大就把网格撑大。
       从前这里是 `if targetRow < 0 then Break` —— 粘 100 行进 10 行的网格,
