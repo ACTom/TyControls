@@ -315,6 +315,7 @@ type
     procedure TestHeaderAutoHeight;
     procedure TestHeaderWordWrap;
     procedure TestMultiLevelHeaderGroups;
+    procedure TestNewApiIsReachableByHost;
     procedure TestValidCharsAppliesInsideTheEditor;
     procedure TestTreeColumnIndentsAndCollapses;
     procedure TestDeletingAColumnIsUndoable;
@@ -10719,6 +10720,53 @@ begin
   finally
     oneLevel.Free;
   end;
+end;
+
+{ 这一批新做的能力必须是**宿主够得着**的。
+
+  这条守卫存在的理由:本批里 CellComment / CellFontStyles / CellDisplays /
+  CellCheckState / ToggleCellChecked / CalcFooter 一度全在 protected 段 ——
+  它们被插在已有的 CellChecked 旁边,而那一段恰好是 protected。
+  别的测试全绿,因为测试走的是 TStrGridAccess(子类,看得见 protected)。
+  宿主拿到的是 TTyStringGrid,一行都调不了。
+
+  所以这里**刻意声明成裸 TTyStringGrid**:成员要是掉回 protected,
+  这个文件就编译不过。 }
+procedure TTyStringGridTest.TestNewApiIsReachableByHost;
+var
+  G: TTyStringGrid;          { 就是要裸类型 —— 别改成 TStrGridAccess }
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+
+  G.CellComment[1, 1] := 'note';
+  AssertEquals('批注', 'note', G.CellComment[1, 1]);
+
+  G.CellFontStyles[1, 1] := [fsBold];
+  AssertTrue('字体样式', fsBold in G.CellFontStyles[1, 1]);
+
+  G.CellDisplays[1, 1] := gcdHyperlink;
+  AssertTrue('显示类型', G.CellDisplays[1, 1] = gcdHyperlink);
+
+  G.AllowGrayed := True;
+  G.Cells[2, 1] := '';
+  G.ToggleCellChecked(2, 1);
+  AssertTrue('勾选切换', G.CellCheckState(2, 1) = cbChecked);
+  AssertTrue('勾选读值', G.CellChecked(2, 1));
+
+  G.SetColumnAggregate(0, gagSum);
+  G.CalcFooter(0);           { 编得过就说明够得着 }
+
+  { 顺带把本批其余的公开面也走一遍,同样是"宿主够不够得着"。 }
+  G.VertScrollBarMode := gsbAlways;
+  G.HorzScrollBarMode := gsbNever;
+  G.BackgroundMode := gbmTile;
+  G.BackgroundScope := gbsBodyOnly;
+  G.ShowFocusCell := False;
+  G.HideSelectionWhenInactive := True;
+  G.HeaderWordWrap := True;
+  G.HeaderAutoHeight := True;
+  AssertTrue('本批的开关宿主都设得了', G.HeaderAutoHeight);
 end;
 
 initialization

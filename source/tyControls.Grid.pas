@@ -1700,29 +1700,6 @@ type
       const AFrame: TTyStyleSet); virtual;
     procedure RenderRatingCell(P: TTyPainter; ACol, ARow: Integer;
       const AFrame: TTyStyleSet); virtual;
-    function  CellChecked(ACol, ARow: Integer): Boolean;
-    { 三态读值(T11)。语义**复用 TTyCheckBox** 的 TCheckBoxState,
-      不在网格里另定义一套。 }
-    function  CellCheckState(ACol, ARow: Integer): TCheckBoxState;
-    procedure ToggleCellChecked(ACol, ARow: Integer);
-    { 逐格批注(T13)。存进逐格属性存储 → 自动可撤销、自动跟着行置换走。 }
-    function  GetCellComment(ACol, ARow: Integer): string;
-    procedure SetCellComment(ACol, ARow: Integer; const AValue: string);
-    property  CellComment[ACol, ARow: Integer]: string
-      read GetCellComment write SetCellComment;
-    { 逐格显示类型(T14)。同上,存属性存储。 }
-    { 逐格字体样式(T20)。存储槽(HasFontStyle / FontStyle)早就在属性
-      存储和撤销快照里了 —— 缺的只是公开属性和"在 CellAppearance 里读它"。 }
-    function  GetCellFontStyles(ACol, ARow: Integer): TFontStyles;
-    procedure SetCellFontStyles(ACol, ARow: Integer; AValue: TFontStyles);
-    property  CellFontStyles[ACol, ARow: Integer]: TFontStyles
-      read GetCellFontStyles write SetCellFontStyles;
-    function  GetCellDisplay(ACol, ARow: Integer): TTyGridCellDisplay;
-    procedure SetCellDisplay(ACol, ARow: Integer; AValue: TTyGridCellDisplay);
-    property  CellDisplays[ACol, ARow: Integer]: TTyGridCellDisplay
-      read GetCellDisplay write SetCellDisplay;
-    { 批注标记的矩形(格子右上角的小三角)。没有批注时是空矩形。 }
-    function  CommentMarkRect(ACol, ARow: Integer): TRect;
     function  HyperlinkTextColor(const AFallback: TTyColor): TTyColor;
     { 超链接单元格的下划线 + 批注标记。文字本身仍走通用的文字层
       (链接色由 CellAppearance 从 TyGridHyperlink 取)。 }
@@ -1809,10 +1786,6 @@ type
     { 汇总缓存整体失效。三处汇过来:数据改(SetCells)、显示序变(InvalidateOrder,
       筛选/隐藏/分组/行数都归它)、换聚合口径(SetColumnAggregate)。 }
     procedure InvalidateAggregates;
-    { 强制重算**某一列**的汇总。宿主改了外部数据源时需要一个明确的入口 ——
-      InvalidateAggregates 是整表失效,拿来做这件事太钝。
-      ACol < 0 = 整表(等价于 InvalidateAggregates)。 }
-    procedure CalcFooter(ACol: Integer);
     { 属性存储的记录点。挂在 TTyGridCellAttrStore.OnChanging 上 ——
       于是改底色/文字色/只读/合并跨度、以及三条行置换路径搬属性,
       **一律**自动进撤销栈,不必每个功能各写一段(那正是本控件反复漏东西的方式)。 }
@@ -1883,6 +1856,37 @@ type
       想清一片只能宿主逐格写空串 —— 而那样撤销是一格一格退的。
       走 SetCells 收口点 → 自动可撤销;整批算**一条**记录。
       范围越界一律钳到表内,不抛异常(与列宽/跨度的钳制同一条纪律)。 }
+    { --- 逐格能力与汇总重算:**必须在 public**,这些是给宿主用的。
+      它们一度被插在 protected 段的 CellChecked 旁边,于是测试(走子类)
+      全绿而宿主一行都调不到。TestNewApiIsReachableByHost 用裸
+      TTyStringGrid 变量守着这条。 }
+    function  CellChecked(ACol, ARow: Integer): Boolean;
+    { 三态读值(T11)。语义**复用 TTyCheckBox** 的 TCheckBoxState,
+      不在网格里另定义一套。 }
+    function  CellCheckState(ACol, ARow: Integer): TCheckBoxState;
+    procedure ToggleCellChecked(ACol, ARow: Integer);
+    { 逐格批注(T13)。存进逐格属性存储 → 自动可撤销、自动跟着行置换走。 }
+    function  GetCellComment(ACol, ARow: Integer): string;
+    procedure SetCellComment(ACol, ARow: Integer; const AValue: string);
+    property  CellComment[ACol, ARow: Integer]: string
+      read GetCellComment write SetCellComment;
+    { 逐格显示类型(T14)。同上,存属性存储。 }
+    { 逐格字体样式(T20)。存储槽(HasFontStyle / FontStyle)早就在属性
+      存储和撤销快照里了 —— 缺的只是公开属性和"在 CellAppearance 里读它"。 }
+    function  GetCellFontStyles(ACol, ARow: Integer): TFontStyles;
+    procedure SetCellFontStyles(ACol, ARow: Integer; AValue: TFontStyles);
+    property  CellFontStyles[ACol, ARow: Integer]: TFontStyles
+      read GetCellFontStyles write SetCellFontStyles;
+    function  GetCellDisplay(ACol, ARow: Integer): TTyGridCellDisplay;
+    procedure SetCellDisplay(ACol, ARow: Integer; AValue: TTyGridCellDisplay);
+    property  CellDisplays[ACol, ARow: Integer]: TTyGridCellDisplay
+      read GetCellDisplay write SetCellDisplay;
+    { 批注标记的矩形(格子右上角的小三角)。没有批注时是空矩形。 }
+    function  CommentMarkRect(ACol, ARow: Integer): TRect;
+    { 强制重算**某一列**的汇总。宿主改了外部数据源时需要一个明确的入口 ——
+      InvalidateAggregates 是整表失效,拿来做这件事太钝。
+      ACol < 0 = 整表(等价于 InvalidateAggregates)。 }
+    procedure CalcFooter(ACol: Integer);
     procedure ClearRows(AFrom, ACount: Integer);
     procedure ClearCols(AFrom, ACount: Integer);
     { 写过的单元格个数 —— 稀疏性的可观测证据。 }
