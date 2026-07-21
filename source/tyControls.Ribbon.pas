@@ -1230,7 +1230,7 @@ begin
   inherited AdjustClientRect(ARect);
   if not FShowCaption then Exit;   // caption-less group: content fills the full height
   // Reserve the bottom caption band so hosted command controls sit above the title.
-  Dec(ARect.Bottom, MulDiv(TyRibbonCaptionBand, Font.PixelsPerInch, 96));
+  Dec(ARect.Bottom, MulDiv(ActiveController.Metric('--ribbon-caption-band-height', TyRibbonCaptionBand), Font.PixelsPerInch, 96));
   // Guard a group shorter than the caption band: never invert the rect.
   if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
 end;
@@ -1249,7 +1249,7 @@ begin
     S := CurrentStyle;
     W := ARect.Right - ARect.Left;
     H := ARect.Bottom - ARect.Top;
-    bandPx := MulDiv(TyRibbonCaptionBand, APPI, 96);
+    bandPx := MulDiv(ActiveController.Metric('--ribbon-caption-band-height', TyRibbonCaptionBand), APPI, 96);
 
     // Fill the OPAQUE parent (ribbon page) surface first, so the group's transparent bg
     // shows the page — not the Win10 DWM glass (which blurs the caption + washes it white
@@ -1303,7 +1303,7 @@ var
   bandPx: Integer;
 begin
   if (not FShowDialogLauncher) or (not FShowCaption) then Exit(Rect(0, 0, 0, 0));
-  bandPx := MulDiv(TyRibbonCaptionBand, Font.PixelsPerInch, 96);
+  bandPx := MulDiv(ActiveController.Metric('--ribbon-caption-band-height', TyRibbonCaptionBand), Font.PixelsPerInch, 96);
   Result := Rect(ClientWidth - bandPx, ClientHeight - bandPx, ClientWidth, ClientHeight);
 end;
 

@@ -354,7 +354,7 @@ var
   captionRect, arrowRect: TRect;
   ctx: TBGRACanvas2D;
 begin
-  arrowW := APainter.Scale(TyDefaultDropArrowWidth);
+  arrowW := APainter.Scale(ActiveController.Metric('--drop-arrow-width', TyDefaultDropArrowWidth));
   if arrowW >= (AContentRect.Right - AContentRect.Left) then
     arrowW := (AContentRect.Right - AContentRect.Left) div 2;
   if arrowW < 0 then arrowW := 0;

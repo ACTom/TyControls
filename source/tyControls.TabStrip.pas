@@ -390,11 +390,11 @@ begin
   SetLength(FCloseRects, GetTabCount);
 
   TabH      := TabHPx(APPI);
-  Pad       := MulDiv(TyTabPad, APPI, 96);
-  MinW      := MulDiv(TyTabMinWidth, APPI, 96);
-  CloseSize := MulDiv(TyTabCloseSize, APPI, 96);
-  Gap       := MulDiv(TyTabGap,  APPI, 96);
-  Margin    := MulDiv(TyTabMargin,  APPI, 96);
+  Pad       := MulDiv(ActiveController.Metric('--tab-padding', TyTabPad), APPI, 96);
+  MinW      := MulDiv(ActiveController.Metric('--tab-min-width', TyTabMinWidth), APPI, 96);
+  CloseSize := MulDiv(ActiveController.Metric('--tab-close-size', TyTabCloseSize), APPI, 96);
+  Gap       := MulDiv(ActiveController.Metric('--tab-gap', TyTabGap),  APPI, 96);
+  Margin    := MulDiv(ActiveController.Metric('--tab-margin', TyTabMargin),  APPI, 96);
   CloseSlot := CloseSize + Gap;
 
   TabStyle := ActiveController.Model.ResolveStyle('TyTab', '', [tysNormal]);
@@ -431,11 +431,11 @@ begin
     overflows the visible control width and, if so, reserve a left/right arrow
     affordance band (two Scale(16) arrows) at the far ends of the header band. }
   VisibleWidth := Width;
-  AffordanceW  := MulDiv(TyTabArrowBand, APPI, 96) * 2;
+  AffordanceW  := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), APPI, 96) * 2;
   FShowScrollAffordance := X > VisibleWidth;
   if FShowScrollAffordance then
   begin
-    ArrowW := MulDiv(TyTabArrowBand, APPI, 96);
+    ArrowW := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), APPI, 96);
     FScrollLeftRect  := Rect(0, 0, ArrowW, TabH);
     FScrollRightRect := Rect(VisibleWidth - ArrowW, 0, VisibleWidth, TabH);
   end
@@ -501,7 +501,7 @@ begin
   else
     StripW := FHeaderRects[High(FHeaderRects)].Right;
   VisibleWidth := Width;
-  AffordanceW  := MulDiv(TyTabArrowBand, Font.PixelsPerInch, 96) * 2;
+  AffordanceW  := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), Font.PixelsPerInch, 96) * 2;
   Result := StripW - (VisibleWidth - AffordanceW);
   if Result < 0 then Result := 0;
 end;
@@ -568,7 +568,7 @@ begin
 
   if FShowScrollAffordance then
   begin
-    ArrowW   := MulDiv(TyTabArrowBand, Font.PixelsPerInch, 96);
+    ArrowW   := MulDiv(ActiveController.Metric('--tab-arrow-band', TyTabArrowBand), Font.PixelsPerInch, 96);
     { Tabs render inset by ArrowW (HeaderShiftPx), so content-x 0 maps to the band's
       left edge. Measure "into view" in content-minus-scroll space, where the visible
       band is [0, Width - 2*ArrowW] with BOTH arrow bands reserved. }

@@ -73,19 +73,20 @@ type
 
   Returns an empty rect for a degenerate request (ACount <= 0, AColumns <= 0, AIndex out of
   range, or a zero-area client). }
-function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: Integer): TRect;
+function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: Integer; ARowH: Integer = 0): TRect;
 
 implementation
 
 const
   TyRadioRowH = 22;   // logical row height per radio child (matches the radio default)
 
-function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: Integer): TRect;
+function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: Integer; ARowH: Integer = 0): TRect;
 var
   rows, col, row, cw, l, r, gridH, top, cy: Integer;
-  clientW, clientH: Integer;
+  clientW, clientH, rowH: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
+  if ARowH > 0 then rowH := ARowH else rowH := TyRadioRowH;
   if (ACount <= 0) or (AColumns <= 0) then Exit;
   if (AIndex < 0) or (AIndex >= ACount) then Exit;
   clientW := AClient.Right - AClient.Left;
@@ -111,14 +112,15 @@ begin
   // Vertically center the grid of `rows` fixed-height rows within the client height so a
   // short list sits centered rather than jammed against the caption band. When the grid
   // is taller than the client (many rows in a small box), pin to the top (top := 0).
-  gridH := rows * TyRadioRowH;
+  { ARowH>0 = 控件把 --row-height 解析成的行高,单一来源;0(测试)沿用常量。 }
+  gridH := rows * rowH;
   if gridH < clientH then
     top := (clientH - gridH) div 2
   else
     top := 0;
-  cy := AClient.Top + top + row * TyRadioRowH;
+  cy := AClient.Top + top + row * rowH;
 
-  Result := Rect(l, cy, r, cy + TyRadioRowH);
+  Result := Rect(l, cy, r, cy + rowH);
 end;
 
 { TTyRadioGroup }
@@ -250,7 +252,8 @@ begin
   for i := 0 to n - 1 do
   begin
     if FButtons[i] = nil then Continue;
-    cell := TyRadioGroupCellRect(client, n, FColumns, i);
+    cell := TyRadioGroupCellRect(client, n, FColumns, i,
+      ActiveController.Metric('--row-height', TyRadioRowH));
     FButtons[i].SetBounds(cell.Left, cell.Top, cell.Right - cell.Left, cell.Bottom - cell.Top);
   end;
 end;

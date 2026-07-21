@@ -526,7 +526,7 @@ end;
 
 function TTyComboBox.ButtonWidthLogical: Integer;
 begin
-  Result := TyFieldButtonWidth;
+  Result := ActiveController.Metric('--field-button-width', TyFieldButtonWidth);
 end;
 
 procedure TTyComboBox.SelectItem(AIndex: Integer);

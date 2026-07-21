@@ -579,7 +579,7 @@ begin
   itemH := ItemRowHeight(APPI);
   for i := 0 to High(FRows) do
     if FRows[i].Kind = mrkSeparator then
-      Inc(Result, MulDiv(TyMenuSeparatorHeight, APPI, 96))
+      Inc(Result, MulDiv(ActiveController.Metric('--menu-separator-height', TyMenuSeparatorHeight), APPI, 96))
     else
       Inc(Result, itemH);
 end;
@@ -597,9 +597,9 @@ begin
   RowStyle := ActiveController.Model.ResolveStyle('TyMenuItem', '', []);
   effSize := ResolveFontSize(RowStyle);
   padLR := MulDiv(RowStyle.Padding.Left, APPI, 96) + MulDiv(RowStyle.Padding.Right, APPI, 96);
-  leftSlot := MulDiv(TyMenuCheckSlot, APPI, 96);
-  rightSlot := MulDiv(TyMenuArrowSlot, APPI, 96);
-  gap := MulDiv(TyMenuShortcutGap, APPI, 96);
+  leftSlot := MulDiv(ActiveController.Metric('--menu-check-slot', TyMenuCheckSlot), APPI, 96);
+  rightSlot := MulDiv(ActiveController.Metric('--menu-arrow-slot', TyMenuArrowSlot), APPI, 96);
+  gap := MulDiv(ActiveController.Metric('--menu-shortcut-gap', TyMenuShortcutGap), APPI, 96);
 
   Bmp := TBGRABitmap.Create(1, 1);
   try
@@ -635,7 +635,7 @@ begin
   begin
     if (i < 0) or (i > High(FRows)) then Break;
     if FRows[i].Kind = mrkSeparator then
-      Inc(Result, MulDiv(TyMenuSeparatorHeight, APPI, 96))
+      Inc(Result, MulDiv(ActiveController.Metric('--menu-separator-height', TyMenuSeparatorHeight), APPI, 96))
     else
       Inc(Result, itemH);
   end;
@@ -647,7 +647,7 @@ var
 begin
   Result := -1;
   itemH := ItemRowHeight(APPI);
-  sepH := MulDiv(TyMenuSeparatorHeight, APPI, 96);
+  sepH := MulDiv(ActiveController.Metric('--menu-separator-height', TyMenuSeparatorHeight), APPI, 96);
   for i := 0 to High(FRows) do
   begin
     rowT := RowTop(i, APPI);
@@ -862,9 +862,9 @@ begin
     end;
 
     itemH := ItemRowHeight(APPI);
-    sepH := MulDiv(TyMenuSeparatorHeight, APPI, 96);
-    leftSlot := P.Scale(TyMenuCheckSlot);
-    rightSlot := P.Scale(TyMenuArrowSlot);
+    sepH := MulDiv(ActiveController.Metric('--menu-separator-height', TyMenuSeparatorHeight), APPI, 96);
+    leftSlot := P.Scale(ActiveController.Metric('--menu-check-slot', TyMenuCheckSlot));
+    rightSlot := P.Scale(ActiveController.Metric('--menu-arrow-slot', TyMenuArrowSlot));
 
     for i := 0 to High(FRows) do
     begin

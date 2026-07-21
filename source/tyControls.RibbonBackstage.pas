@@ -190,7 +190,7 @@ begin
   FItemIndex := -1;
   FDefaultItemIndex := -1;
   FHoverIndex := TyBackstageNoRow;
-  FSidebarWidth := TyBackstageSidebarW;
+  FSidebarWidth := ActiveController.Metric('--backstage-sidebar-width', TyBackstageSidebarW);
   TabStop := True;
   Visible := False;
 end;
@@ -360,8 +360,8 @@ begin
     W := ARect.Right - ARect.Left;
     H := ARect.Bottom - ARect.Top;
     sbW := P.Scale(FSidebarWidth);
-    backH := P.Scale(TyBackstageBackH);
-    rowH := P.Scale(TyBackstageRowH);
+    backH := P.Scale(ActiveController.Metric('--backstage-back-height', TyBackstageBackH));
+    rowH := P.Scale(ActiveController.Metric('--backstage-row-height', TyBackstageRowH));
 
     // Content surface (right of the sidebar) via the TyRibbon token.
     ContentS := CurrentStyle;
@@ -428,7 +428,7 @@ begin
       glyphName := EntryGlyph(k);
       if glyphName <> '' then
       begin
-        gsz := P.Scale(TyBackstageIconSize);
+        gsz := P.Scale(ActiveController.Metric('--backstage-icon-size', TyBackstageIconSize));
         if FImages <> nil then
         begin
           glyph := FImages.GetBitmap(glyphName, gsz);
@@ -440,14 +440,14 @@ begin
           glyph := nil;
         if glyph <> nil then
         try
-          P.Bitmap.PutImage(P.Scale(TyBackstageIconX),
+          P.Bitmap.PutImage(P.Scale(ActiveController.Metric('--backstage-icon-x', TyBackstageIconX)),
             rr.Top + (rowH - glyph.Height) div 2, glyph, dmDrawWithTransparency);
         finally
           glyph.Free;
         end;
       end;
 
-      cy := rr.Left + P.Scale(TyBackstageTextInset);
+      cy := rr.Left + P.Scale(ActiveController.Metric('--backstage-text-inset', TyBackstageTextInset));
       P.DrawText(Rect(cy, rr.Top, rr.Right - P.Scale(8), rr.Bottom),
         EntryCaption(k), SideS.FontName, fs, SideS.FontWeight, SideS.TextColor,
         taLeftJustify, tlCenter, True);
@@ -479,8 +479,8 @@ begin
   if Button <> mbLeft then Exit;
   sbW := MulDiv(FSidebarWidth, Font.PixelsPerInch, 96);
   if X >= sbW then Exit;   // clicks in the content area do nothing here
-  backH := MulDiv(TyBackstageBackH, Font.PixelsPerInch, 96);
-  rowH := MulDiv(TyBackstageRowH, Font.PixelsPerInch, 96);
+  backH := MulDiv(ActiveController.Metric('--backstage-back-height', TyBackstageBackH), Font.PixelsPerInch, 96);
+  rowH := MulDiv(ActiveController.Metric('--backstage-row-height', TyBackstageRowH), Font.PixelsPerInch, 96);
   r := TyBackstageIndexAt(Y, ClientHeight, backH, rowH, FCommands.Count, FBottomCommands.Count);
   if r = TyBackstageBackRow then
     Close
@@ -497,8 +497,8 @@ begin
   r := TyBackstageNoRow;
   if X < sbW then
   begin
-    backH := MulDiv(TyBackstageBackH, Font.PixelsPerInch, 96);
-    rowH := MulDiv(TyBackstageRowH, Font.PixelsPerInch, 96);
+    backH := MulDiv(ActiveController.Metric('--backstage-back-height', TyBackstageBackH), Font.PixelsPerInch, 96);
+    rowH := MulDiv(ActiveController.Metric('--backstage-row-height', TyBackstageRowH), Font.PixelsPerInch, 96);
     r := TyBackstageIndexAt(Y, ClientHeight, backH, rowH, FCommands.Count, FBottomCommands.Count);
     if (r < 0) or EntryIsSeparator(r) then r := TyBackstageNoRow;   // back band / sep / none
   end;

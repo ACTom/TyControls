@@ -775,7 +775,7 @@ end;
 
 function TTyTitleBar.LeftInsetPx: Integer;
 begin
-  Result := MulDiv(TyTitleBarPad, Font.PixelsPerInch, 96);
+  Result := MulDiv(ActiveController.Metric('--titlebar-padding', TyTitleBarPad), Font.PixelsPerInch, 96);
 end;
 
 procedure TTyTitleBar.LayoutButtons;
@@ -826,7 +826,7 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
-    TextRect := Rect(R.Left + P.Scale(TyTitleBarPad), R.Top,
+    TextRect := Rect(R.Left + P.Scale(ActiveController.Metric('--titlebar-padding', TyTitleBarPad)), R.Top,
                      R.Left + W - RightInset, R.Top + H);
     P.DrawText(TextRect, FCaption, S.FontName, ResolveFontSize(S), S.FontWeight,
       S.TextColor, FTitleAlignment, tlCenter, True);

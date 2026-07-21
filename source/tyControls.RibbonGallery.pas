@@ -251,8 +251,8 @@ begin
     cnt := FGallery.FItems.Count;
     cols := FGallery.FVisibleColumns;
     if cols < 1 then cols := 1;
-    cellW := MulDiv(TyGalleryCellW, APPI, 96);
-    cellH := MulDiv(TyGalleryGridCellH, APPI, 96);
+    cellW := MulDiv(ActiveController.Metric('--gallery-cell-width', TyGalleryCellW), APPI, 96);
+    cellH := MulDiv(ActiveController.Metric('--gallery-grid-cell-height', TyGalleryGridCellH), APPI, 96);
 
     // Hard-clip the cell fills to the interior, past the box chrome, so a selected cell's
     // accent fill can't bleed through the semi-transparent border (see TTyRibbonGallery.RenderTo).
@@ -304,8 +304,8 @@ begin
   if (Button <> mbLeft) or (FGallery = nil) then Exit;
   cols := FGallery.FVisibleColumns;
   if cols < 1 then cols := 1;
-  cellW := MulDiv(TyGalleryCellW, Font.PixelsPerInch, 96);
-  cellH := MulDiv(TyGalleryGridCellH, Font.PixelsPerInch, 96);
+  cellW := MulDiv(ActiveController.Metric('--gallery-cell-width', TyGalleryCellW), Font.PixelsPerInch, 96);
+  cellH := MulDiv(ActiveController.Metric('--gallery-grid-cell-height', TyGalleryGridCellH), Font.PixelsPerInch, 96);
   idx := TyGalleryCellAt(X, Y, cols, cellW, cellH, FGallery.FItems.Count);
   if idx >= 0 then
   begin
@@ -322,8 +322,8 @@ begin
   if FGallery = nil then Exit;
   cols := FGallery.FVisibleColumns;
   if cols < 1 then cols := 1;
-  cellW := MulDiv(TyGalleryCellW, Font.PixelsPerInch, 96);
-  cellH := MulDiv(TyGalleryGridCellH, Font.PixelsPerInch, 96);
+  cellW := MulDiv(ActiveController.Metric('--gallery-cell-width', TyGalleryCellW), Font.PixelsPerInch, 96);
+  cellH := MulDiv(ActiveController.Metric('--gallery-grid-cell-height', TyGalleryGridCellH), Font.PixelsPerInch, 96);
   idx := TyGalleryCellAt(X, Y, cols, cellW, cellH, FGallery.FItems.Count);
   if idx <> FHoverIndex then
   begin
@@ -467,13 +467,13 @@ end;
 
 function TTyRibbonGallery.CellWidth: Integer;
 begin
-  Result := MulDiv(TyGalleryCellW, Font.PixelsPerInch, 96);
+  Result := MulDiv(ActiveController.Metric('--gallery-cell-width', TyGalleryCellW), Font.PixelsPerInch, 96);
   if Result < 1 then Result := 1;
 end;
 
 function TTyRibbonGallery.ArrowWidth: Integer;
 begin
-  Result := MulDiv(TyGalleryArrowW, Font.PixelsPerInch, 96);
+  Result := MulDiv(ActiveController.Metric('--gallery-arrow-width', TyGalleryArrowW), Font.PixelsPerInch, 96);
   if Result < 1 then Result := 1;
 end;
 
@@ -527,7 +527,7 @@ begin
   if tpBackground in cellStyle.Present then
     APainter.FillBackground(ACellRect, cellStyle.Background, ACorners);
 
-  pad := APainter.Scale(TyGalleryGlyphPad);
+  pad := APainter.Scale(ActiveController.Metric('--gallery-glyph-pad', TyGalleryGlyphPad));
   textLeft := ACellRect.Left + APainter.Scale(cellStyle.Padding.Left);
 
   // Optional glyph thumbnail (left of the caption). Gated on a real handle so it
@@ -576,8 +576,8 @@ begin
     BoxStyle := CurrentStyle;
     DrawFrame(P, R, BoxStyle);
 
-    cellW := MulDiv(TyGalleryCellW, APPI, 96);
-    arrowW := MulDiv(TyGalleryArrowW, APPI, 96);
+    cellW := MulDiv(ActiveController.Metric('--gallery-cell-width', TyGalleryCellW), APPI, 96);
+    arrowW := MulDiv(ActiveController.Metric('--gallery-arrow-width', TyGalleryArrowW), APPI, 96);
     rowRight := R.Right;
 
     // Inset the cell fills PAST the box chrome (border + focus ring) and HARD-CLIP them there,
@@ -722,8 +722,8 @@ begin
   cols := FVisibleColumns;
   if cols < 1 then cols := 1;
   rows := (FItems.Count + cols - 1) div cols;
-  contentW := cols * MulDiv(TyGalleryCellW, Font.PixelsPerInch, 96);
-  contentH := rows * MulDiv(TyGalleryGridCellH, Font.PixelsPerInch, 96);
+  contentW := cols * MulDiv(ActiveController.Metric('--gallery-cell-width', TyGalleryCellW), Font.PixelsPerInch, 96);
+  contentH := rows * MulDiv(ActiveController.Metric('--gallery-grid-cell-height', TyGalleryGridCellH), Font.PixelsPerInch, 96);
 
   FPopup.Popup(Self, contentW, contentH);
 end;

@@ -246,7 +246,7 @@ begin
   FHotIndex := -1;
   FResizeIndex := -1;
   Width := 300;
-  Height := TyHeaderDefaultHeight;
+  Height := ActiveController.Metric('--header-control-height', TyHeaderDefaultHeight);
   TabStop := False;
 end;
 

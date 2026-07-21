@@ -109,8 +109,8 @@ begin
   FSpacing := 2;
   // Default alNone: a title-bar strip is positioned by the app, not docked.
   Align := alNone;
-  Width := TyQatDefaultWidth;
-  Height := TyQatDefaultHeight;
+  Width := ActiveController.Metric('--qat-width', TyQatDefaultWidth);
+  Height := ActiveController.Metric('--qat-height', TyQatDefaultHeight);
 end;
 
 function TTyRibbonQuickAccess.GetStyleTypeKey: string;

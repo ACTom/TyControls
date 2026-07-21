@@ -139,7 +139,7 @@ end;
 
 function TTyScrollBox.ScrollbarThick: Integer;
 begin
-  Result := MulDiv(TyScrollbarSize, Font.PixelsPerInch, 96);
+  Result := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), Font.PixelsPerInch, 96);
   if Result < 1 then Result := 1;
 end;
 

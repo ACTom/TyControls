@@ -325,7 +325,7 @@ begin
     Exit;
   end;
 
-  gapPx := APainter.Scale(TyGlyphButtonGap);
+  gapPx := APainter.Scale(ActiveController.Metric('--glyph-button-gap', TyGlyphButtonGap));
   TyGlyphButtonSplit(AContentRect, glyphPx, gapPx, FGlyphLayout, glyphRect, captionRect);
 
   // Glyph color: sentinel -> the theme's TextColor (matches the caption); else override.

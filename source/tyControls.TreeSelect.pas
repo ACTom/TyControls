@@ -683,7 +683,7 @@ begin
   Result := TyTreeSelectFieldLayout(AWidth, AHeight,
     MulDiv(S.Padding.Left, APPI, 96), MulDiv(S.Padding.Top, APPI, 96),
     MulDiv(S.Padding.Right, APPI, 96), MulDiv(S.Padding.Bottom, APPI, 96),
-    MulDiv(TyFieldButtonWidth, APPI, 96));
+    MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), APPI, 96));
 end;
 
 procedure TTyTreeSelect.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

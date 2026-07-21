@@ -1520,7 +1520,7 @@ begin
     CR.Top    + MulDiv(S.Padding.Top,    PPI, 96),
     CR.Right  - MulDiv(S.Padding.Right,  PPI, 96),
     CR.Bottom - MulDiv(S.Padding.Bottom, PPI, 96));
-  SBThick := MulDiv(TyScrollbarSize, PPI, 96);
+  SBThick := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), PPI, 96);
   if (FVScroll <> nil) and FVScroll.Visible then
     Dec(Result.Right,  SBThick);
   if (FHScroll <> nil) and FHScroll.Visible then
@@ -1555,7 +1555,7 @@ var
   wantVScroll, wantHScroll: Boolean;
 begin
   PPI     := Font.PixelsPerInch;
-  SBThick := MulDiv(TyScrollbarSize, PPI, 96);
+  SBThick := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), PPI, 96);
 
   { Vertical model: logical units, so they agree with the logical node heights
     stored in ContentHeight / FOffsetY / FRangeY.
@@ -3273,7 +3273,7 @@ begin
     DrawFrame(P, Rect(0, 0, W, H), S);
 
     { Content rect: frame interior minus padding and visible scrollbar(s). }
-    SBThick := MulDiv(TyScrollbarSize, APPI, 96);
+    SBThick := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), APPI, 96);
     CR := Rect(
       P.Scale(S.Padding.Left),
       P.Scale(S.Padding.Top),

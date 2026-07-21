@@ -157,7 +157,7 @@ begin
   inherited Create(AOwner);
   // TTyPanel already adds csAcceptsControls (real container) and sets a default size.
   FCollapsed := False;
-  FHeaderHeight := TyExPanelDefaultHeaderHeight;
+  FHeaderHeight := ActiveController.Metric('--expander-header-height', TyExPanelDefaultHeaderHeight);
   FAnimationDuration := 160;
   // A taller default than the base panel so there is a visible body under the header.
   Width := 200;

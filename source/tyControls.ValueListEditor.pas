@@ -450,7 +450,7 @@ end;
 function TTyValueListEditor.ContentRightDp: Integer;
 begin
   Result := ClientWidth - Dp(CurrentStyle.Padding.Right);
-  if Length(FFlatRow) > VisibleRows then Dec(Result, Dp(TyScrollbarSize));
+  if Length(FFlatRow) > VisibleRows then Dec(Result, Dp(ActiveController.Metric('--scrollbar-size', TyScrollbarSize)));
 end;
 
 function TTyValueListEditor.SplitXDp: Integer;

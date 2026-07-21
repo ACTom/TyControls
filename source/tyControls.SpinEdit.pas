@@ -79,27 +79,31 @@ type
     property OnClick;
   end;
 
-function TySpinUpButtonRect(const ALocal: TRect; APPI: Integer): TRect;
-function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+function TySpinUpButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
+function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 
 implementation
 
-function TySpinUpButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+function TySpinUpButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 var
   BtnW, X0, HalfY: Integer;
 begin
-  BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
+  { ABtnWDev>0 = 调用方已把密度令牌解析成设备像素宽,单一来源;
+    0(测试等无控件上下文的调用)沿用常量。 }
+  if ABtnWDev > 0 then BtnW := ABtnWDev
+  else BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
   if BtnW < 1 then BtnW := 1;
   X0 := ALocal.Right - BtnW;
   HalfY := ALocal.Top + (ALocal.Bottom - ALocal.Top) div 2;
   Result := Rect(X0, ALocal.Top, ALocal.Right, HalfY);
 end;
 
-function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 var
   BtnW, X0, HalfY: Integer;
 begin
-  BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
+  if ABtnWDev > 0 then BtnW := ABtnWDev
+  else BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
   if BtnW < 1 then BtnW := 1;
   X0 := ALocal.Right - BtnW;
   HalfY := ALocal.Top + (ALocal.Bottom - ALocal.Top) div 2;
@@ -270,7 +274,7 @@ begin
   EffSize := ResolveFontSize(S);
   StartX := MulDiv(S.Padding.Left, APPI, 96);
   RightPad := MulDiv(S.Padding.Right, APPI, 96);
-  BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
+  BtnW := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), APPI, 96);
   ViewWidth := ClientWidth - BtnW - StartX - RightPad;
   if ViewWidth <= 0 then Exit;
   TextWidth := 0;
@@ -376,9 +380,11 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
-    UpR := TySpinUpButtonRect(R, APPI);
-    DownR := TySpinDownButtonRect(R, APPI);
-    BtnW := P.Scale(TyFieldButtonWidth);
+    BtnW := P.Scale(ActiveController.Metric('--field-button-width', TyFieldButtonWidth));
+    { 按钮宽单一来源:上下键矩形与文字区让位用的是同一个 BtnW —— 否则
+      现代密度下绘制位置和可点区域会错位。 }
+    UpR := TySpinUpButtonRect(R, APPI, BtnW);
+    DownR := TySpinDownButtonRect(R, APPI, BtnW);
     TextR := Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
     EffSize := ResolveFontSize(S);   // same size feeds DrawText and CaretPixelX (caret alignment)
@@ -474,9 +480,13 @@ begin
     // ReadOnly locks the value: the +/- buttons don't step (focus still allowed).
     if not FReadOnly then
     begin
-      if PtInRect(TySpinUpButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
+      if PtInRect(TySpinUpButtonRect(ClientRect, Font.PixelsPerInch,
+           MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth),
+             Font.PixelsPerInch, 96)), Point(X, Y)) then
         Value := FValue + FIncrement
-      else if PtInRect(TySpinDownButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
+      else if PtInRect(TySpinDownButtonRect(ClientRect, Font.PixelsPerInch,
+           MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth),
+             Font.PixelsPerInch, 96)), Point(X, Y)) then
         Value := FValue - FIncrement;
     end;
     try

@@ -305,11 +305,11 @@ type
   end;
 
 { Button rect for the right-side button area (dtkDate = chevron, dtkTime = up/down) }
-function TyDateTimeButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+function TyDateTimeButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 { For dtkTime: top half of the button = up arrow }
-function TyDateTimeUpButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+function TyDateTimeUpButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 { For dtkTime: bottom half = down arrow }
-function TyDateTimeDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+function TyDateTimeDownButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 
 implementation
 
@@ -651,29 +651,29 @@ end;
 
 { ── Button geometry helpers ──────────────────────────────────────────────── }
 
-function TyDateTimeButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+function TyDateTimeButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 var BtnW, X0: Integer;
 begin
-  BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
+  if ABtnWDev > 0 then BtnW := ABtnWDev else BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
   if BtnW < 1 then BtnW := 1;
   X0 := ALocal.Right - BtnW;
   Result := Rect(X0, ALocal.Top, ALocal.Right, ALocal.Bottom);
 end;
 
-function TyDateTimeUpButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+function TyDateTimeUpButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 var BtnW, X0, HalfY: Integer;
 begin
-  BtnW  := MulDiv(TyFieldButtonWidth, APPI, 96);
+  if ABtnWDev > 0 then BtnW := ABtnWDev else BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
   if BtnW < 1 then BtnW := 1;
   X0    := ALocal.Right - BtnW;
   HalfY := ALocal.Top + (ALocal.Bottom - ALocal.Top) div 2;
   Result := Rect(X0, ALocal.Top, ALocal.Right, HalfY);
 end;
 
-function TyDateTimeDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
+function TyDateTimeDownButtonRect(const ALocal: TRect; APPI: Integer; ABtnWDev: Integer = 0): TRect;
 var BtnW, X0, HalfY: Integer;
 begin
-  BtnW  := MulDiv(TyFieldButtonWidth, APPI, 96);
+  if ABtnWDev > 0 then BtnW := ABtnWDev else BtnW := MulDiv(TyFieldButtonWidth, APPI, 96);
   if BtnW < 1 then BtnW := 1;
   X0    := ALocal.Right - BtnW;
   HalfY := ALocal.Top + (ALocal.Bottom - ALocal.Top) div 2;
@@ -1149,7 +1149,7 @@ begin
     S := CurrentStyle;
     DrawFrame(P, R, S);
 
-    BtnW  := P.Scale(TyFieldButtonWidth);
+    BtnW  := P.Scale(ActiveController.Metric('--field-button-width', TyFieldButtonWidth));
     EffSize := ResolveFontSize(S);
 
     { Base text content rect: left padding to right minus button column }
@@ -1221,15 +1221,15 @@ begin
       TextColor, taLeftJustify, tlCenter, False);
 
     { 3. Right-side button area }
-    BtnR := TyDateTimeButtonRect(R, APPI);
+    BtnR := TyDateTimeButtonRect(R, APPI, BtnW);
     if FKind = dtkDate then
     begin
       P.DrawGlyph(BtnR, tgChevronDown, S.TextColor, 2);
     end
     else
     begin
-      UpR := TyDateTimeUpButtonRect(R, APPI);
-      DnR := TyDateTimeDownButtonRect(R, APPI);
+      UpR := TyDateTimeUpButtonRect(R, APPI, BtnW);
+      DnR := TyDateTimeDownButtonRect(R, APPI, BtnW);
       P.DrawGlyph(UpR,  tgArrowUp,   S.TextColor, 2);
       P.DrawGlyph(DnR,  tgArrowDown, S.TextColor, 2);
     end;
@@ -1423,7 +1423,7 @@ begin
       TextR := Rect(
         PaddingL,
         MulDiv(S.Padding.Top, Font.PixelsPerInch, 96),
-        ClientRect.Right - MulDiv(TyFieldButtonWidth, Font.PixelsPerInch, 96),
+        ClientRect.Right - MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), Font.PixelsPerInch, 96),
         ClientRect.Bottom - MulDiv(S.Padding.Bottom, Font.PixelsPerInch, 96));
       CbBoxR := CheckBoxRect(TextR, Font.PixelsPerInch);
       { Expand hit area slightly (easy to miss tiny box) }
@@ -1444,7 +1444,9 @@ begin
     end;
 
     { ── Button area click ───────────────────────────────────────────────── }
-    if PtInRect(TyDateTimeButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
+    if PtInRect(TyDateTimeButtonRect(ClientRect, Font.PixelsPerInch,
+         MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth),
+           Font.PixelsPerInch, 96)), Point(X, Y)) then
     begin
       if FKind = dtkDate then
       begin
@@ -1455,7 +1457,9 @@ begin
       end
       else if (FKind = dtkTime) and not FReadOnly and not IsInert then
       begin
-        if PtInRect(TyDateTimeUpButtonRect(ClientRect, Font.PixelsPerInch), Point(X, Y)) then
+        if PtInRect(TyDateTimeUpButtonRect(ClientRect, Font.PixelsPerInch,
+             MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth),
+               Font.PixelsPerInch, 96)), Point(X, Y)) then
           StepActiveSeg(+1)
         else
           StepActiveSeg(-1);

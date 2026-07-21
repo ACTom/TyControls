@@ -3233,7 +3233,7 @@ begin
   if csDestroying in ComponentState then Exit;
   if (FVScroll = nil) or (FHScroll = nil) then Exit;
 
-  sb := ScaleI(TyScrollbarSize);
+  sb := ScaleI(ActiveController.Metric('--scrollbar-size', TyScrollbarSize));
   needV := False;
   needH := False;
 
@@ -8861,7 +8861,7 @@ begin
   if GetCellComment(ACol, ARow) = '' then Exit;
   r := CellRect(ACol, ARow);
   if IsRectEmpty(r) then Exit;
-  sz := ScaleI(TyGridCommentMarkSize);
+  sz := ScaleI(ActiveController.Metric('--grid-comment-mark-size', TyGridCommentMarkSize));
   if sz > (r.Bottom - r.Top) then sz := r.Bottom - r.Top;
   if sz > (r.Right - r.Left) then sz := r.Right - r.Left;
   if sz <= 0 then Exit;

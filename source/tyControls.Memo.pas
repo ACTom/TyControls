@@ -1605,7 +1605,7 @@ end;
 function TTyMemo.HScrollBarHeight: Integer;
 begin
   if (FHScrollBar <> nil) and FHScrollBar.Visible then
-    Result := MulDiv(TyScrollbarSize, Font.PixelsPerInch, 96)
+    Result := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), Font.PixelsPerInch, 96)
   else
     Result := 0;
 end;
@@ -1617,7 +1617,7 @@ var
 begin
   PPI := Font.PixelsPerInch;
   LH := LineHeight(PPI); if LH < 1 then LH := 1;
-  SBW := MulDiv(TyScrollbarSize, PPI, 96);   // both bars' thickness
+  SBW := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), PPI, 96);   // both bars' thickness
   Total := TotalVisualRows(PPI);
 
   // ---- 1) Decide + apply the VERTICAL bar FIRST, from the full height (its overflow is row-count
@@ -2137,7 +2137,7 @@ begin
   S := CurrentStyle;
   SBWidth := 0;
   if (FScrollBar <> nil) and FScrollBar.Visible then
-    SBWidth := MulDiv(TyScrollbarSize, APPI, 96);
+    SBWidth := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), APPI, 96);
   // Use Width (not ClientWidth) to match VisibleRows' headless-safe convention:
   // for this borderless control Width = ClientWidth at runtime, but ClientWidth
   // can lag SetBounds in headless tests without a native handle.
@@ -2720,10 +2720,10 @@ begin
     // Subtract scrollbar width when visible (mirrors TTyListBox.RenderTo).
     SBWidth := 0;
     if (FScrollBar <> nil) and FScrollBar.Visible then
-      SBWidth := MulDiv(TyScrollbarSize, APPI, 96);
+      SBWidth := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), APPI, 96);
     // Keep text/caret above the horizontal scrollbar strip when it's showing.
     if (FHScrollBar <> nil) and FHScrollBar.Visible then
-      ContentRect.Bottom := ContentRect.Bottom - MulDiv(TyScrollbarSize, APPI, 96);
+      ContentRect.Bottom := ContentRect.Bottom - MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), APPI, 96);
 
     LH := LineHeight(APPI);
     ContentTop := ContentRect.Top;

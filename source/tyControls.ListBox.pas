@@ -522,7 +522,7 @@ begin
       FScrollBar.ControlStyle := FScrollBar.ControlStyle + [csNoDesignVisible];   // internal: never a designable child
     end;
     // Update DPI-dependent width and controller every call so DPI changes take effect
-    FScrollBar.Width := MulDiv(TyScrollbarSize, Font.PixelsPerInch, 96);
+    FScrollBar.Width := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), Font.PixelsPerInch, 96);
     FScrollBar.Controller := Self.Controller;
     MaxPos := FItems.Count - VR;
     if MaxPos < 0 then MaxPos := 0;
@@ -748,7 +748,7 @@ begin
     // Subtract scrollbar width when visible
     SBWidth := 0;
     if (FScrollBar <> nil) and FScrollBar.Visible then
-      SBWidth := MulDiv(TyScrollbarSize, APPI, 96);
+      SBWidth := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), APPI, 96);
 
     SH := MulDiv(FItemHeight, APPI, 96);
     if SH < 1 then SH := 1;

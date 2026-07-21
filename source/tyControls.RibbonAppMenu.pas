@@ -118,8 +118,8 @@ begin
   StyleClass := 'primary';
   Caption := 'File';
   // Wide + short like Office's File tab (logical px; LCL scales at paint time).
-  Width := TyRibbonAppMenuDefaultWidth;
-  Height := TyRibbonAppMenuDefaultHeight;
+  Width := ActiveController.Metric('--ribbon-appmenu-width', TyRibbonAppMenuDefaultWidth);
+  Height := ActiveController.Metric('--ribbon-appmenu-height', TyRibbonAppMenuDefaultHeight);
 end;
 
 destructor TTyRibbonAppMenu.Destroy;
