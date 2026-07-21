@@ -9,7 +9,8 @@ uses
   Classes, SysUtils, Types, Graphics, BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.CheckBox,
-  tyControls.GroupBox, tyControls.ListView, tyControls.Grid, tyControls.BuiltinThemes;
+  tyControls.GroupBox, tyControls.ListView, tyControls.Grid, tyControls.ExPanel,
+  tyControls.BuiltinThemes;
 type
   TCheckBoxProbe = class(TTyCheckBox)   // expose the protected RenderTo for headless sampling
   public
@@ -48,6 +49,7 @@ type
     procedure TestDensityTogglesBackToClassic;
     procedure TestListViewRowHeightFollowsDensity;
     procedure TestGridRowHeightFollowsDensity;
+    procedure TestExPanelHeaderHeightFollowsDensity;
   end;
 
 implementation
@@ -296,6 +298,34 @@ begin
     AssertEquals('显式 DefaultRowHeight 钉住,不跟密度', 20, g.DefaultRowHeight);
   finally
     g.Free;
+    c.Free;
+  end;
+end;
+
+{ TTyExPanel.HeaderHeight had the same constructor-cached gap: it read
+  --expander-header-height once at construction (classic 26), so a modern-density
+  panel kept a 26px header and cramped its title. Now the getter resolves it live. }
+procedure TMetricTest.TestExPanelHeaderHeightFollowsDensity;
+var
+  c: TTyStyleController;
+  p: TTyExPanel;
+  classicH, modernH: Integer;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  p := TTyExPanel.Create(nil);
+  try
+    c.ThemeName := 'default';
+    p.Controller := c;
+    c.Density := tdClassic;
+    classicH := p.HeaderHeight;
+    c.Density := tdModern;
+    modernH := p.HeaderHeight;
+    AssertTrue('未设 HeaderHeight 时,现代 header 应高于经典', modernH > classicH + 4);
+    p.HeaderHeight := 22;
+    AssertEquals('显式 HeaderHeight 钉住,不跟密度', 22, p.HeaderHeight);
+  finally
+    p.Free;
     c.Free;
   end;
 end;

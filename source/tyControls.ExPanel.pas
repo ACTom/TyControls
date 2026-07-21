@@ -37,6 +37,7 @@ type
   private
     FCollapsed: Boolean;
     FHeaderHeight: Integer;
+    FHeaderHeightExplicit: Boolean;   { True once set; False = follow --expander-header-height (density) }
     FExpandedHeight: Integer;      // remembered full height while collapsed
     FAnimationDuration: Integer;   // ms; a real timer drives frames at runtime
     FAnimator: TTyAnimator;        // 0..1 traversal driving FAnimFromH -> FAnimToH
@@ -46,6 +47,7 @@ type
     FOnCollapse: TNotifyEvent;
     FHeaderHover: Boolean;
     procedure SetCollapsed(AValue: Boolean);
+    function GetHeaderHeight: Integer;
     procedure SetHeaderHeight(AValue: Integer);
     function ScaledHeaderHeight: Integer;
     procedure EnsureTimer;
@@ -72,8 +74,10 @@ type
     property ExpandedHeight: Integer read FExpandedHeight write FExpandedHeight;
   published
     property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
-    property HeaderHeight: Integer read FHeaderHeight write SetHeaderHeight
-      default TyExPanelDefaultHeaderHeight;
+    { Left unset it follows --expander-header-height (26 classic / 36 modern), so the
+      header band grows with density; set it and that value wins and is streamed. }
+    property HeaderHeight: Integer read GetHeaderHeight write SetHeaderHeight
+      stored FHeaderHeightExplicit;
     { Collapse/expand animation duration in milliseconds (0 = snap instantly). A
       real timer drives the frames at runtime; headless the height snaps. }
     property AnimationDuration: Integer read FAnimationDuration write FAnimationDuration
@@ -157,7 +161,8 @@ begin
   inherited Create(AOwner);
   // TTyPanel already adds csAcceptsControls (real container) and sets a default size.
   FCollapsed := False;
-  FHeaderHeight := ActiveController.Metric('--expander-header-height', TyExPanelDefaultHeaderHeight);
+  FHeaderHeight := TyExPanelDefaultHeaderHeight;   { fallback; unused while not explicit }
+  FHeaderHeightExplicit := False;                  { follow --expander-header-height (density) }
   FAnimationDuration := 160;
   // A taller default than the base panel so there is a visible body under the header.
   Width := 200;
@@ -176,9 +181,20 @@ begin
   inherited Destroy;
 end;
 
+{ Effective header height: an explicit set wins; otherwise follow the theme's
+  --expander-header-height (density pack raises it for modern). Resolved live so a
+  density toggle re-heights the header on the next layout. }
+function TTyExPanel.GetHeaderHeight: Integer;
+begin
+  if FHeaderHeightExplicit then
+    Result := FHeaderHeight
+  else
+    Result := ActiveController.Metric('--expander-header-height', TyExPanelDefaultHeaderHeight);
+end;
+
 function TTyExPanel.ScaledHeaderHeight: Integer;
 begin
-  Result := MulDiv(FHeaderHeight, Font.PixelsPerInch, 96);
+  Result := MulDiv(GetHeaderHeight, Font.PixelsPerInch, 96);
   if Result < 1 then Result := 1;
 end;
 
@@ -287,6 +303,7 @@ end;
 procedure TTyExPanel.SetHeaderHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
+  FHeaderHeightExplicit := True;   { host pinned it, even at the fallback value }
   if FHeaderHeight = AValue then Exit;
   FHeaderHeight := AValue;
   // Collapsed height equals the header height, so keep it in step while collapsed
@@ -353,7 +370,7 @@ begin
     // the one themed surface, so the header is just the top band of it.
     DrawFrame(P, R, S);
 
-    hdrH := MulDiv(FHeaderHeight, APPI, 96);
+    hdrH := MulDiv(GetHeaderHeight, APPI, 96);
     if hdrH < 1 then hdrH := 1;
     hdr := TyExPanelHeaderRect(R, hdrH);
 
