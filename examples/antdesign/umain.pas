@@ -1056,8 +1056,6 @@ var
   accent, canvasCol, ink: TBGRAPixel;
   bmp: TBGRABitmap;
   grad: TBGRAGradientScanner;
-  tmp: TBitmap;
-  pic: TPicture;
   horizon: Integer;
 begin
   { 主题解析:accent = primary 按钮的底色(这就是"这套皮肤的强调色"),
@@ -1117,20 +1115,10 @@ begin
     bmp.FillEllipseAntialias(ImgW * 0.74, horizon + 34, 20, 4, Fade(accent, 90));
     bmp.FillEllipseAntialias(ImgW * 0.30, horizon + 52, 54, 4, Fade(canvasCol, 70));
 
-    { BGRA -> TBitmap -> TPicture:这张插画按主题色(accent/ink/canvas)运行时生成,
-      不是静态资源,所以在这里赋值而非写进 .lfm(SetPicture 会转回 BGRA 做源图)。 }
-    tmp := bmp.MakeBitmapCopy(clWhite);
-    try
-      pic := TPicture.Create;
-      try
-        pic.Bitmap.Assign(tmp);
-        ImgView.Picture := pic;
-      finally
-        pic.Free;
-      end;
-    finally
-      tmp.Free;
-    end;
+    { 这张插画按主题色(accent/ink/canvas)运行时生成,不是静态资源。直接把 BGRA 交给
+      视图:早先经 TPicture(MakeBitmapCopy)往返,不透明图会被丢成全黑 —— 那才是"图片"
+      一直是黑框的真因,不是路径找不到文件。AssignBitmap 走 LoadFromFile 同一条 FSource 路。 }
+    ImgView.AssignBitmap(bmp);
   finally
     bmp.Free;
   end;

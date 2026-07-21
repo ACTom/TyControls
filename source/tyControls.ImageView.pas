@@ -92,6 +92,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure LoadFromFile(const APath: string);   // BGRA decode; on failure clears (no crash)
+    procedure AssignBitmap(ABitmap: TBGRABitmap);   // display a runtime-drawn BGRA directly (no lossy TPicture round-trip)
     procedure Clear;
     procedure ZoomToFit;                            // AutoFit:=True; animate to contain-fit
     procedure ZoomToActual;                         // 100%; animate; AutoFit:=False
@@ -439,6 +440,23 @@ begin
   end;
   FreeAndNil(FSource);
   FSource := bmp;
+  FProcDirty := True;
+  if FAutoFit then
+    ZoomToFit
+  else
+    Invalidate;
+end;
+
+{ Display a bitmap generated at runtime. Bridging a TBGRABitmap out through
+  TPicture/TBitmap (MakeBitmapCopy) can drop an opaque generated image to
+  all-black, so a host that DREW its own content hands the BGRA here instead --
+  same FSource path LoadFromFile uses, which is known to render. The view keeps
+  a private copy; ownership of ABitmap stays with the caller. }
+procedure TTyImageView.AssignBitmap(ABitmap: TBGRABitmap);
+begin
+  FreeAndNil(FSource);
+  if (ABitmap <> nil) and (ABitmap.Width > 0) and (ABitmap.Height > 0) then
+    FSource := ABitmap.Duplicate(True) as TBGRABitmap;
   FProcDirty := True;
   if FAutoFit then
     ZoomToFit

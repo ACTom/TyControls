@@ -20,6 +20,11 @@ uses
   tyControls.Animation, tyControls.ImageView;
 
 type
+  TImageViewAccess = class(TTyImageView)
+  public
+    procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+  end;
+
   TTyImageViewTest = class(TTestCase)
   private
     // Unproject a device point back to an image pixel through the SAME DestRect
@@ -48,9 +53,15 @@ type
     // --- animation: TTyAnimator interpolation ---
     procedure TestAnimatorInterpolationHalfwayThenComplete;
       procedure TestPublishedPictureIsReadable;
+    procedure TestAssignBitmapRendersOpaquePixels;
 end;
 
 implementation
+
+procedure TImageViewAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+begin
+  inherited RenderTo(ACanvas, ARect, APPI);
+end;
 
 function TTyImageViewTest.UnprojX(const ADst: TRect; ADeviceX: Integer; AZoom: Double): Double;
 begin
@@ -365,6 +376,54 @@ begin
     // And it still does its job: assigning decodes into the viewer's own source.
     AssertTrue('and the getter returns the very picture the setter feeds', got = GetObjectProp(v, 'Picture'));
   finally
+    v.Free;
+  end;
+end;
+
+{ A runtime-drawn opaque bitmap must actually paint. Bridging a TBGRABitmap out
+  through TPicture/MakeBitmapCopy dropped an opaque image to all-black (the
+  antdesign example's "图片" tile rendered a black rectangle); AssignBitmap feeds
+  FSource directly, same path LoadFromFile uses. Render a solid-red 16x16 into a
+  same-size view and assert red pixels reach the canvas -- black/blank fails. }
+procedure TTyImageViewTest.TestAssignBitmapRendersOpaquePixels;
+var
+  v: TImageViewAccess;
+  src, reread: TBGRABitmap;
+  bmp: TBitmap;
+  px: TBGRAPixel;
+  x, y: Integer;
+  redSeen: Boolean;
+begin
+  v := TImageViewAccess.Create(nil);
+  src := TBGRABitmap.Create(16, 16, BGRA(220, 30, 30, 255));  // opaque red
+  bmp := TBitmap.Create;
+  try
+    v.AutoFit := True;
+    v.SetBounds(0, 0, 16, 16);      // fit-zoom of 16x16 into 16x16 = 1.0 (no stretch/anim gap)
+    v.AssignBitmap(src);
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(16, 16);
+    bmp.Canvas.Brush.Color := clWhite;
+    bmp.Canvas.FillRect(0, 0, 16, 16);
+    v.RenderTo(bmp.Canvas, Rect(0, 0, 16, 16), 96);
+    reread := TBGRABitmap.Create(bmp);
+    try
+      redSeen := False;
+      for y := 0 to 15 do
+        for x := 0 to 15 do
+        begin
+          px := reread.GetPixel(x, y);
+          if (px.red > 150) and (px.green < 90) and (px.blue < 90) then
+            redSeen := True;
+        end;
+      AssertTrue('AssignBitmap paints the opaque bitmap (red reaches canvas, not black/blank)',
+        redSeen);
+    finally
+      reread.Free;
+    end;
+  finally
+    src.Free;
+    bmp.Free;
     v.Free;
   end;
 end;
