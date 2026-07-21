@@ -402,7 +402,6 @@ object MainForm: TMainForm
               Top = 2
               Width = 16
               Target = BtnSelCount
-              ShowZero = True
               Position = bpTopRight
             end
           end
@@ -615,7 +614,7 @@ object MainForm: TMainForm
               Left = 104
               Height = 28
               Top = 438
-              Width = 120
+              Width = 152
               TabOrder = 9
               ShowText = True
               DialogCaption = '选择标记颜色'
@@ -843,7 +842,7 @@ object MainForm: TMainForm
             Left = 409
             Height = 270
             Top = 12
-            Width = 644
+            Width = 384
             TabOrder = 1
             Title = '进度与忙碌'
             object LblProgress: TTyLabel
@@ -870,16 +869,16 @@ object MainForm: TMainForm
               Caption = '+10%'
             end
             object Spinner: TTyActivityIndicator
-              Left = 560
+              Left = 290
               Height = 56
               Top = 76
               Width = 56
             end
             object LblSpinner: TTyLabel
               Left = 12
-              Height = 60
+              Height = 84
               Top = 162
-              Width = 620
+              Width = 360
               Caption = 'TTyActivityIndicator 表示"忙但没有确定进度";TTyProgressBar 表示确定进度。'
               Layout = tlTop
               WordWrap = True
@@ -942,7 +941,7 @@ object MainForm: TMainForm
             Left = 494
             Height = 340
             Top = 294
-            Width = 559
+            Width = 299
             TabOrder = 3
             Title = '浮出反馈'
             object BtnToast: TTyButton
@@ -975,9 +974,9 @@ object MainForm: TMainForm
             end
             object LblFloatNote: TTyLabel
               Left = 12
-              Height = 84
+              Height = 150
               Top = 142
-              Width = 535
+              Width = 275
               Caption = 'TTyNotification 是角落 toast:不打断、会自己消失(Duration=0 的那条留到你关它,两条会在同一角落堆叠)。TTyPopover 是能装控件的浮层 —— 里面那两个按钮是真控件。'
               Layout = tlTop
               WordWrap = True
@@ -1334,7 +1333,7 @@ object MainForm: TMainForm
           end
           object ExpData: TTyExPanel
             Left = 12
-            Height = 200
+            Height = 132
             Top = 364
             Width = 781
             TabOrder = 3
