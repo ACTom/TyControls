@@ -1864,7 +1864,7 @@ begin
     '   --border-hover, so pin border-color here. Body padding is 12px, not Ant''s 24px: that 24 is sized for a 14px' + LineEnding +
     '   font and this skin runs the compact 9px base. The 36/44 fallback band heights already match Ant''s small-card' + LineEnding +
     '   proportions, so no --card-header-height / --card-actions-height override. */' + LineEnding +
-    'TyCard          { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 6; padding: 12px; }' + LineEnding +
+    'TyCard          { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--pad-card); }' + LineEnding +
     'TyCard:hover    { border-color: var(--border); shadow: 0 2 8 var(--shadow-soft); }' + LineEnding +
     'TyCard:disabled { background: var(--disabled-fill); color: var(--ink-disabled); border-color: var(--border); }' + LineEnding +
     '' + LineEnding +

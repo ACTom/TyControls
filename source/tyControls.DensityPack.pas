@@ -70,6 +70,7 @@ begin
     '  --expander-header-height: 36px;' + LineEnding +
     '  --field-button-width: 25px;' + LineEnding +
     '  --font-size-base: 14px;' + LineEnding +
+    '  --font-size-title: 16px;' + LineEnding +
     '  --font-size-sm: 12px;' + LineEnding +
     '  --gallery-arrow-width: 25px;' + LineEnding +
     '  --gallery-cell-width: 78px;' + LineEnding +
