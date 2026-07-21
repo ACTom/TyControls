@@ -132,6 +132,116 @@ begin
     '  --header-height:  22px;' + LineEnding +
     '  --item-height:    24px;' + LineEnding +
     '  --icon-size:      16px;' + LineEnding +
+    '' + LineEnding +
+    '  /* -- size tokens: control geometry (density phase 3) --' + LineEnding +
+    '     classic value == each control''s Pascal constant today; the modern' + LineEnding +
+    '     density pack overrides these names. Runtime geometry is not in the' + LineEnding +
+    '     golden, so the guard is value==constant + full suite green. */' + LineEnding +
+    '  --alert-close-gap: 8px;' + LineEnding +
+    '  --alert-close-size: 14px;' + LineEnding +
+    '  --alert-icon-gap: 8px;' + LineEnding +
+    '  --alert-icon-size: 16px;' + LineEnding +
+    '  --alert-text-gap: 2px;' + LineEnding +
+    '  --backstage-back-height: 48px;' + LineEnding +
+    '  --backstage-icon-size: 18px;' + LineEnding +
+    '  --backstage-icon-x: 14px;' + LineEnding +
+    '  --backstage-row-height: 42px;' + LineEnding +
+    '  --backstage-sidebar-width: 190px;' + LineEnding +
+    '  --backstage-text-inset: 40px;' + LineEnding +
+    '  --badge-dot-size: 8px;' + LineEnding +
+    '  --badge-inset: 2px;' + LineEnding +
+    '  --breadcrumb-separator-gap: 2px;' + LineEnding +
+    '  --breadcrumb-separator-size: 14px;' + LineEnding +
+    '  --caption-button-width: 46px;' + LineEnding +
+    '  --card-actions-height: 44px;' + LineEnding +
+    '  --card-header-height: 36px;' + LineEnding +
+    '  --cascader-column-width: 120px;' + LineEnding +
+    '  --cascader-expand-gap: 4px;' + LineEnding +
+    '  --cascader-expand-size: 12px;' + LineEnding +
+    '  --cascader-row-height: 24px;' + LineEnding +
+    '  --chart-tooltip-gap: 10px;' + LineEnding +
+    '  --chart-tooltip-swatch: 8px;' + LineEnding +
+    '  --chart-tooltip-swatch-gap: 5px;' + LineEnding +
+    '  --checkbox-gap: 6px;' + LineEnding +
+    '  --checkbox-size: 16px;' + LineEnding +
+    '  --dialog-edit-width: 320px;' + LineEnding +
+    '  --dialog-padding: 16px;' + LineEnding +
+    '  --drop-arrow-width: 18px;' + LineEnding +
+    '  --empty-action-height: 32px;' + LineEnding +
+    '  --empty-gap: 8px;' + LineEnding +
+    '  --empty-image-size: 48px;' + LineEnding +
+    '  --expander-header-height: 26px;' + LineEnding +
+    '  --field-button-width: 18px;' + LineEnding +
+    '  --gallery-arrow-width: 18px;' + LineEnding +
+    '  --gallery-cell-width: 56px;' + LineEnding +
+    '  --gallery-glyph-pad: 4px;' + LineEnding +
+    '  --gallery-grid-cell-height: 44px;' + LineEnding +
+    '  --glyph-button-gap: 6px;' + LineEnding +
+    '  --grid-comment-mark-size: 7px;' + LineEnding +
+    '  --header-control-height: 26px;' + LineEnding +
+    '  --header-section-width: 100px;' + LineEnding +
+    '  --listgroup-chevron-size: 14px;' + LineEnding +
+    '  --listgroup-header-height: 26px;' + LineEnding +
+    '  --listgroup-icon-gap: 6px;' + LineEnding +
+    '  --listgroup-icon-size: 16px;' + LineEnding +
+    '  --listgroup-item-height: 24px;' + LineEnding +
+    '  --listgroup-item-indent: 16px;' + LineEnding +
+    '  --listgroup-item-inset: 6px;' + LineEnding +
+    '  --listview-cell-padding: 3px;' + LineEnding +
+    '  --listview-check-size: 14px;' + LineEnding +
+    '  --listview-group-header-height: 22px;' + LineEnding +
+    '  --listview-hgap: 10px;' + LineEnding +
+    '  --listview-icon-label-width: 88px;' + LineEnding +
+    '  --listview-label-height: 16px;' + LineEnding +
+    '  --listview-large-icon-size: 48px;' + LineEnding +
+    '  --listview-small-icon-size: 16px;' + LineEnding +
+    '  --listview-small-label-width: 150px;' + LineEnding +
+    '  --listview-text-margin: 4px;' + LineEnding +
+    '  --listview-tile-label-width: 150px;' + LineEnding +
+    '  --listview-vgap: 8px;' + LineEnding +
+    '  --menu-arrow-slot: 16px;' + LineEnding +
+    '  --menu-check-slot: 18px;' + LineEnding +
+    '  --menu-separator-height: 7px;' + LineEnding +
+    '  --menu-shortcut-gap: 24px;' + LineEnding +
+    '  --notification-close-size: 14px;' + LineEnding +
+    '  --notification-gap: 8px;' + LineEnding +
+    '  --notification-icon-size: 24px;' + LineEnding +
+    '  --notification-margin: 16px;' + LineEnding +
+    '  --notification-stack-gap: 8px;' + LineEnding +
+    '  --notification-width: 340px;' + LineEnding +
+    '  --pagination-gap: 4px;' + LineEnding +
+    '  --pagination-glyph-size: 12px;' + LineEnding +
+    '  --popover-arrow-size: 8px;' + LineEnding +
+    '  --popover-offset: 4px;' + LineEnding +
+    '  --popover-title-gap: 6px;' + LineEnding +
+    '  --qat-height: 26px;' + LineEnding +
+    '  --qat-width: 120px;' + LineEnding +
+    '  --ribbon-appmenu-height: 26px;' + LineEnding +
+    '  --ribbon-appmenu-width: 64px;' + LineEnding +
+    '  --ribbon-caption-band-height: 18px;' + LineEnding +
+    '  --scrollbar-size: 12px;' + LineEnding +
+    '  --segmented-pad: 2px;' + LineEnding +
+    '  --steps-connector-gap: 8px;' + LineEnding +
+    '  --steps-connector-length: 32px;' + LineEnding +
+    '  --steps-gap: 8px;' + LineEnding +
+    '  --steps-marker-size: 24px;' + LineEnding +
+    '  --tab-arrow-band: 16px;' + LineEnding +
+    '  --tab-close-size: 14px;' + LineEnding +
+    '  --tab-gap: 6px;' + LineEnding +
+    '  --tab-margin: 6px;' + LineEnding +
+    '  --tab-min-width: 48px;' + LineEnding +
+    '  --tab-padding: 12px;' + LineEnding +
+    '  --tag-close-size: 14px;' + LineEnding +
+    '  --tag-gap: 4px;' + LineEnding +
+    '  --titlebar-padding: 8px;' + LineEnding +
+    '  --transfer-arrow-margin: 3px;' + LineEnding +
+    '  --transfer-arrow-size: 12px;' + LineEnding +
+    '  --transfer-button-gap: 6px;' + LineEnding +
+    '  --transfer-button-height: 26px;' + LineEnding +
+    '  --transfer-button-width: 32px;' + LineEnding +
+    '  --transfer-rail-width: 56px;' + LineEnding +
+    '  --transfer-title-height: 26px;' + LineEnding +
+    '  --treeselect-drop-height: 220px;' + LineEnding +
     '  --font-weight-normal: 400; --font-weight-bold: 700;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +

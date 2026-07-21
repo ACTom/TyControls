@@ -439,6 +439,119 @@ const
     'TyStepsConnector|', 'TyStepsItem|', 'TyTag|', 'TyTagClose|',
     'TyTransfer|', 'TyTransferTitle|');
 
+  GMETRICS: array[0..110] of string = (
+    '--alert-close-gap',
+    '--alert-close-size',
+    '--alert-icon-gap',
+    '--alert-icon-size',
+    '--alert-text-gap',
+    '--backstage-back-height',
+    '--backstage-icon-size',
+    '--backstage-icon-x',
+    '--backstage-row-height',
+    '--backstage-sidebar-width',
+    '--backstage-text-inset',
+    '--badge-dot-size',
+    '--badge-inset',
+    '--breadcrumb-separator-gap',
+    '--breadcrumb-separator-size',
+    '--caption-button-width',
+    '--card-actions-height',
+    '--card-header-height',
+    '--cascader-column-width',
+    '--cascader-expand-gap',
+    '--cascader-expand-size',
+    '--cascader-row-height',
+    '--chart-tooltip-gap',
+    '--chart-tooltip-swatch',
+    '--chart-tooltip-swatch-gap',
+    '--checkbox-gap',
+    '--checkbox-size',
+    '--control-height',
+    '--dialog-edit-width',
+    '--dialog-padding',
+    '--drop-arrow-width',
+    '--empty-action-height',
+    '--empty-gap',
+    '--empty-image-size',
+    '--expander-header-height',
+    '--field-button-width',
+    '--font-size-sm',
+    '--gallery-arrow-width',
+    '--gallery-cell-width',
+    '--gallery-glyph-pad',
+    '--gallery-grid-cell-height',
+    '--glyph-button-gap',
+    '--grid-comment-mark-size',
+    '--header-control-height',
+    '--header-height',
+    '--header-section-width',
+    '--icon-size',
+    '--item-height',
+    '--listgroup-chevron-size',
+    '--listgroup-header-height',
+    '--listgroup-icon-gap',
+    '--listgroup-icon-size',
+    '--listgroup-item-height',
+    '--listgroup-item-indent',
+    '--listgroup-item-inset',
+    '--listview-cell-padding',
+    '--listview-check-size',
+    '--listview-group-header-height',
+    '--listview-hgap',
+    '--listview-icon-label-width',
+    '--listview-label-height',
+    '--listview-large-icon-size',
+    '--listview-small-icon-size',
+    '--listview-small-label-width',
+    '--listview-text-margin',
+    '--listview-tile-label-width',
+    '--listview-vgap',
+    '--menu-arrow-slot',
+    '--menu-check-slot',
+    '--menu-separator-height',
+    '--menu-shortcut-gap',
+    '--notification-close-size',
+    '--notification-gap',
+    '--notification-icon-size',
+    '--notification-margin',
+    '--notification-stack-gap',
+    '--notification-width',
+    '--pagination-gap',
+    '--pagination-glyph-size',
+    '--popover-arrow-size',
+    '--popover-offset',
+    '--popover-title-gap',
+    '--qat-height',
+    '--qat-width',
+    '--ribbon-appmenu-height',
+    '--ribbon-appmenu-width',
+    '--ribbon-caption-band-height',
+    '--row-height',
+    '--scrollbar-size',
+    '--segmented-pad',
+    '--steps-connector-gap',
+    '--steps-connector-length',
+    '--steps-gap',
+    '--steps-marker-size',
+    '--tab-arrow-band',
+    '--tab-close-size',
+    '--tab-gap',
+    '--tab-margin',
+    '--tab-min-width',
+    '--tab-padding',
+    '--tag-close-size',
+    '--tag-gap',
+    '--titlebar-padding',
+    '--transfer-arrow-margin',
+    '--transfer-arrow-size',
+    '--transfer-button-gap',
+    '--transfer-button-height',
+    '--transfer-button-width',
+    '--transfer-rail-width',
+    '--transfer-title-height',
+    '--treeselect-drop-height');
+
 function TTestThemeGolden.ThemePath(const AName: string): string;
 begin
   Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes' + PathDelim + AName;
@@ -474,6 +587,12 @@ begin
         sl.Add(key + '|' + variant + '|' + IntToStr(si) + ' => ' +
           GDumpStyle(model.ResolveStyle(key, variant, STATES[si])));
     end;
+    { 尺寸令牌(密度第三期):运行期几何原先在 golden 之外,令牌抄错或漏定义
+      只会静默回退、无守卫。把每个令牌的解析值也 dump 进来,-1 = 未定义。 }
+    for i := 0 to High(GMETRICS) do
+      sl.Add('metric ' + GMETRICS[i] + ' => ' +
+        IntToStr(model.ResolveMetric(GMETRICS[i], -1)));
+    Result := sl.Text;
     Result := sl.Text;
   finally
     sl.Free;
@@ -504,6 +623,12 @@ begin
         sl.Add(key + '|' + variant + '|' + IntToStr(si) + ' => ' +
           GDumpStyle(model.ResolveStyle(key, variant, STATES[si])));
     end;
+    { 尺寸令牌(密度第三期):运行期几何原先在 golden 之外,令牌抄错或漏定义
+      只会静默回退、无守卫。把每个令牌的解析值也 dump 进来,-1 = 未定义。 }
+    for i := 0 to High(GMETRICS) do
+      sl.Add('metric ' + GMETRICS[i] + ' => ' +
+        IntToStr(model.ResolveMetric(GMETRICS[i], -1)));
+    Result := sl.Text;
     Result := sl.Text;
   finally
     sl.Free;
