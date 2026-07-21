@@ -1746,7 +1746,7 @@ begin
     '  :root {' + LineEnding +
     '    --accent:         #1677FF;   /* brand blue — primary fill, focus ring, checkbox tick, progress fill */' + LineEnding +
     '    --danger:         #FF4D4F;   /* Ant error red — danger-button fill                                  */' + LineEnding +
-    '    --window:         #FFFFFF;   /* WHITE canvas (no cards in the demo)                                 */' + LineEnding +
+    '    --window:         #F0F2F5;   /* AntD layout gray — white cards float on it (the demo IS cards)       */' + LineEnding +
     '    --surface:        #FFFFFF;   /* title bar, button face, field wells, checkbox                       */' + LineEnding +
     '    --ink:            #000000E0;  /* near-black 88% primary text                                        */' + LineEnding +
     '    --muted:          #000000A6;  /* caption-button ink                                                 */' + LineEnding +

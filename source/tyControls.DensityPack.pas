@@ -115,7 +115,7 @@ begin
     '  --pad-breadcrumb-item: 2px 8px;' + LineEnding +
     '  --pad-breadcrumb: 4px 8px;' + LineEnding +
     '  --pad-button: 10px;' + LineEnding +
-    '  --pad-card: 20px;' + LineEnding +
+    '  --pad-card: 24px;' + LineEnding +
     '  --pad-cell: 4px 12px;' + LineEnding +
     '  --pad-chip: 4px 12px;' + LineEnding +
     '  --pad-container: 16px;' + LineEnding +
