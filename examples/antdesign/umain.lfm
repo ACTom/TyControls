@@ -97,8 +97,8 @@ object MainForm: TMainForm
         Align = alTop
         object Crumb: TTyBreadcrumb
           Left = 22
-          Height = 28
-          Top = 14
+          Height = 36
+          Top = 10
           Width = 640
           Items.Strings = (
             '首页'
@@ -1168,7 +1168,7 @@ object MainForm: TMainForm
           end
           object NavCrumb: TTyBreadcrumb
             Left = 12
-            Height = 24
+            Height = 34
             Top = 424
             Width = 560
             Items.Strings = (
