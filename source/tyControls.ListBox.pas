@@ -3,7 +3,7 @@ unit tyControls.ListBox;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.ScrollBar;
 type
   TTyListBox = class(TTyCustomControl)
@@ -11,6 +11,7 @@ type
     FItems: TStringList;
     FItemIndex: Integer;
     FItemHeight: Integer;
+    FItemHeightExplicit: Boolean;   { True once set; False = follow --item-height (density) }
     FTopIndex: Integer;
     FOnChange: TNotifyEvent;
     FHoverRow: Integer;       // -1 = none; set in MouseMove, cleared in MouseLeave
@@ -33,6 +34,7 @@ type
       Sorted is on, an insert can reorder indices, so re-pin the selection. }
     procedure ItemsChanged(Sender: TObject);
     procedure SetItemIndex(const AValue: Integer);
+    function GetItemHeight: Integer;
     procedure SetItemHeight(const AValue: Integer);
     function ScaledItemHeight: Integer;
     function MaxTopIndex: Integer;
@@ -102,7 +104,8 @@ type
       previously-selected item(s) stay selected, tracked by their text and
       re-pinned to their new indices after each reorder. }
     property Sorted: Boolean read FSorted write SetSorted default False;
-    property ItemHeight: Integer read FItemHeight write SetItemHeight default 24;
+    { Unset it follows --item-height (24 classic / 38 modern); set it pins and is streamed. }
+    property ItemHeight: Integer read GetItemHeight write SetItemHeight stored FItemHeightExplicit;
     property TopIndex: Integer read FTopIndex write SetTopIndex default 0;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     property TabStop default True;
@@ -127,7 +130,8 @@ begin
   FSorted := False;
   FSuppressItemsChanged := False;
   FItemIndex := -1;
-  FItemHeight := 24;
+  FItemHeight := 24;              { fallback; unused while FItemHeightExplicit=False }
+  FItemHeightExplicit := False;   { follow --item-height (density-aware) until set }
   FTopIndex := 0;
   FHoverRow := -1;
   FScrollBar := nil;
@@ -282,8 +286,20 @@ begin
   SelectItem(AValue);
 end;
 
+{ Effective row height: an explicit ItemHeight wins; otherwise follow --item-height,
+  which the density pack raises for modern. Resolved live so a density toggle re-heights
+  the rows on the next layout. }
+function TTyListBox.GetItemHeight: Integer;
+begin
+  if FItemHeightExplicit then
+    Result := FItemHeight
+  else
+    Result := ActiveController.Metric('--item-height', 24);
+end;
+
 procedure TTyListBox.SetItemHeight(const AValue: Integer);
 begin
+  FItemHeightExplicit := True;   { host pinned it, even at the fallback value }
   if FItemHeight = AValue then Exit;
   FItemHeight := AValue;
   if FItemHeight < 1 then FItemHeight := 1;
@@ -321,7 +337,7 @@ end;
 
 function TTyListBox.ScaledItemHeight: Integer;
 begin
-  Result := MulDiv(FItemHeight, Font.PixelsPerInch, 96);
+  Result := MulDiv(GetItemHeight, Font.PixelsPerInch, 96);
   if Result < 1 then Result := 1;
 end;
 
