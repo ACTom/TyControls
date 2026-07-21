@@ -31,6 +31,7 @@ type
     procedure TestAutoSizeFitsCaption;
     procedure TestAutoSizeRefiresOnRuntimeCaption;
     procedure TestWordWrapWraps;
+    procedure TestWordWrapCJK;
     procedure TestWordWrapLayoutBottom;
     procedure TestFocusControlOnClick;
     procedure TestTransparentDefault;
@@ -250,6 +251,34 @@ procedure TLabelTest.TestWordWrapWraps;
 begin
   AssertEquals('no-wrap single ink band', 1, InkBands(False));
   AssertTrue('word-wrap produces >1 ink band', InkBands(True) >= 2);
+end;
+
+{ Pure-CJK text carries no spaces, so a space-only word-wrap treats the whole
+  run as one unbreakable word and it overflows a narrow label -- exactly what
+  clipped the Chinese card descriptions at modern density. WordWrap must break
+  between CJK characters. Measured headlessly via the public MeasureCaption:
+  at a width well under the single-line extent the wrapped block must be taller
+  (more than one line) and each line must stay within the constraint. }
+procedure TLabelTest.TestWordWrapCJK;
+var
+  L: TTyLabel;
+  w1, h1, wN, hN, cap: Integer;
+begin
+  L := TTyLabel.Create(nil);
+  try
+    L.Font.PixelsPerInch := 96;
+    L.WordWrap := True;
+    L.Caption := '积压任务徽标挂在按钮上不是按钮内置的';  // 18 CJK glyphs, no spaces
+    L.MeasureCaption(96, 0, w1, h1);          // unconstrained -> single line
+    AssertTrue('CJK single-line width measured', w1 > 0);
+    cap := w1 div 3;                          // ~6 glyphs wide
+    L.MeasureCaption(96, cap, wN, hN);        // constrained -> must wrap
+    AssertTrue('CJK wraps: constrained block spans multiple lines', hN > h1 + 4);
+    AssertTrue('CJK wraps: each line bounded by the width constraint',
+      wN <= cap + (w1 div 18) + 4);           // + one glyph slack
+  finally
+    L.Free;
+  end;
 end;
 
 { Under WordWrap the whole wrapped block must be positioned per Layout. In a tall
