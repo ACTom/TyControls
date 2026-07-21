@@ -1,11 +1,11 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 388
+  Height = 430
   Top = 0
-  Width = 470
+  Width = 640
   Caption = '主题系统 示例'
-  ClientHeight = 388
-  ClientWidth = 470
+  ClientHeight = 430
+  ClientWidth = 640
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
@@ -20,15 +20,15 @@ object MainForm: TMainForm
       Left = 0
       Height = 34
       Top = 0
-      Width = 470
+      Width = 640
       Align = alTop
       Caption = '主题系统  · TyControls'
       TitleAlignment = taLeftJustify
       object ThemeCombo: TTyComboBox
-        Left = 202
-        Height = 26
-        Top = 4
-        Width = 120
+        Left = 316
+        Height = 30
+        Top = 3
+        Width = 150
         Anchors = [akTop, akRight]
         OnChange = ThemeComboChange
       end
@@ -86,10 +86,10 @@ object MainForm: TMainForm
       OnClick = SwitchClassic
     end
     object BtnModern: TTyButton
-      Left = 432
+      Left = 448
       Height = 34
       Top = 96
-      Width = 128
+      Width = 150
       Caption = '现代密度 Web'
       OnClick = SwitchModern
     end
