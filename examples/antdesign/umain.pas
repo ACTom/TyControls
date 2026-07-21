@@ -730,16 +730,16 @@ var
   c: TTyColumn;
 begin
   c := LvOrders.Header.Columns.Add as TTyColumn;
-  c.Text := '编号';   c.Width := 110;
+  c.Text := '编号';   c.Width := 108;
   c := LvOrders.Header.Columns.Add as TTyColumn;
-  c.Text := '标题';   c.Width := 300;
+  c.Text := '标题';   c.Width := 260;
   c := LvOrders.Header.Columns.Add as TTyColumn;
-  c.Text := '负责人'; c.Width := 100;
+  c.Text := '负责人'; c.Width := 96;
   c := LvOrders.Header.Columns.Add as TTyColumn;
   { 注意:状态列只能是文字 —— TTyTag 是窗口化控件,放不进自绘 ListView 的单元格(架构使然,非待办) }
-  c.Text := '状态';   c.Width := 100;
+  c.Text := '状态';   c.Width := 96;
   c := LvOrders.Header.Columns.Add as TTyColumn;
-  c.Text := '更新时间'; c.Width := 150;
+  c.Text := '更新时间'; c.Width := 195;
 
   AddRow('TY-2041', '卡片容器 TTyCard 落地',        '张三', '已发布', '2026-07-16 10:12');
   AddRow('TY-2042', '标签 TTyTag 落地',             '李四', '已发布', '2026-07-16 11:03');
