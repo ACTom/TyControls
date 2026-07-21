@@ -10,7 +10,8 @@ uses
   fpcunit, testregistry,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.CheckBox,
   tyControls.GroupBox, tyControls.ListView, tyControls.Grid, tyControls.ExPanel,
-  tyControls.Edit, tyControls.Button, tyControls.BuiltinThemes;
+  tyControls.Edit, tyControls.Button, tyControls.TreeView, tyControls.ToolBar,
+  tyControls.BuiltinThemes;
 type
   TCheckBoxProbe = class(TTyCheckBox)   // expose the protected RenderTo for headless sampling
   public
@@ -51,6 +52,7 @@ type
     procedure TestGridRowHeightFollowsDensity;
     procedure TestExPanelHeaderHeightFollowsDensity;
     procedure TestControlDefaultHeightFollowsDensity;
+    procedure TestFieldHeightControlsFollowDensity;
   end;
 
 implementation
@@ -359,6 +361,36 @@ begin
   finally
     eModern.Free; eClassic.Free; bModern.Free;
     TyDefaultController.Density := savedDensity;
+  end;
+end;
+
+{ Field-based row/strip heights (stored sentinel) must ride density too, and must NOT
+  drift classic. TreeView node height was the trap: reading --item-height directly returned
+  the token's classic 24 instead of the control's own 18 -- TyDensityMetric restores 18
+  classic while modern still grows. Guards both TreeView and ToolBar. }
+procedure TMetricTest.TestFieldHeightControlsFollowDensity;
+var
+  c: TTyStyleController;
+  tv: TTyTreeView;
+  tb: TTyToolBar;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  tv := TTyTreeView.Create(nil);
+  tb := TTyToolBar.Create(nil);
+  try
+    c.ThemeName := 'default';
+    tv.Controller := c; tb.Controller := c;
+
+    c.Density := tdClassic;
+    AssertEquals('经典 TreeView 节点高保持自身 18,不被 --item-height(24) 顶掉', 18, tv.DefaultNodeHeight);
+    AssertEquals('经典 ToolBar 按钮高保持自身 24,不被 --control-height(30) 顶掉', 24, tb.ButtonHeight);
+
+    c.Density := tdModern;
+    AssertTrue('现代 TreeView 节点高明显变大', tv.DefaultNodeHeight > 30);
+    AssertTrue('现代 ToolBar 按钮高明显变大', tb.ButtonHeight > 30);
+  finally
+    tv.Free; tb.Free; c.Free;
   end;
 end;
 
