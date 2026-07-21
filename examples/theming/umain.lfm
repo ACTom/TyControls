@@ -76,6 +76,23 @@ object MainForm: TMainForm
       Enabled = False
       OnClick = ResetAccentClick
     end
+    object BtnClassic: TTyButton
+      Left = 296
+      Height = 34
+      Top = 96
+      Width = 128
+      Caption = '经典密度'
+      StyleClass = 'primary'
+      OnClick = SwitchClassic
+    end
+    object BtnModern: TTyButton
+      Left = 432
+      Height = 34
+      Top = 96
+      Width = 128
+      Caption = '现代密度 Web'
+      OnClick = SwitchModern
+    end
     object LblStatus: TTyLabel
       Left = 16
       Height = 20

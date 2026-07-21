@@ -28,6 +28,7 @@ type
     ThemeCombo: TTyComboBox;
     BtnLight: TTyButton;
     BtnDark: TTyButton;
+    BtnClassic, BtnModern: TTyButton;
     BtnGreen: TTyButton;
     BtnAccent: TTyButton;
     BtnAccentReset: TTyButton;
@@ -43,6 +44,8 @@ type
     procedure ThemeComboChange(Sender: TObject);
     procedure SwitchLight(Sender: TObject);
     procedure SwitchDark(Sender: TObject);
+    procedure SwitchClassic(Sender: TObject);
+    procedure SwitchModern(Sender: TObject);
     procedure SwitchGreen(Sender: TObject);
     procedure PickAccent(Sender: TObject);
     procedure ResetAccentClick(Sender: TObject);
@@ -145,6 +148,20 @@ begin
   TyDefaultController.Mode := 'dark';
   ApplyChromeTheme(TyDefaultController);
   LblStatus.Caption := '模式：深色';
+end;
+
+{ 密度轴与配色/皮肤正交:切它不动主题、不动明暗,只改整套尺度 ——
+  字号、行高、内边距、圆角、控件高一起走。经典 = Win32 尺度,现代 = Web 尺度。 }
+procedure TMainForm.SwitchClassic(Sender: TObject);
+begin
+  TyDefaultController.Density := tdClassic;
+  LblStatus.Caption := '密度:经典(Win32 尺度)';
+end;
+
+procedure TMainForm.SwitchModern(Sender: TObject);
+begin
+  TyDefaultController.Density := tdModern;
+  LblStatus.Caption := '密度:现代(Web 尺度)—— 与当前皮肤叠加,只改疏密不改观感';
 end;
 
 procedure TMainForm.SwitchGreen(Sender: TObject);
