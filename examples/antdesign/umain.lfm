@@ -327,53 +327,18 @@ object MainForm: TMainForm
           Width = 1065
           TabOrder = 1
           Caption = '列表 / 表格'
-          object LvOrders: TTyListView
-            Left = 12
-            Height = 560
-            Top = 12
-            Width = 781
-            TabOrder = 0
-            Items = <>
-            Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]
-            GridLines = True
-            HotTrack = True
-            MultiSelect = True
-            Groups = <>
-            OnSelectItem = ListSelectItem
-            Anchors = [akTop, akLeft, akRight]
-          end
-          object EmptyOrders: TTyEmpty
-            Left = 12
-            Height = 560
-            Top = 12
-            Width = 781
-            TabOrder = 1
-            Description = '暂无工单 —— 换一个筛选条件,或者新建一张'
-            ShowAction = True
-            Anchors = [akTop, akLeft, akRight]
-            object BtnEmptyNew: TTyButton
-              Left = 330
-              Height = 30
-              Top = 300
-              Width = 120
-              TabOrder = 0
-              OnClick = EmptyNewClick
-              StyleClass = 'primary'
-              Caption = '新建工单'
-            end
-          end
           object TagFilterAll: TTyTag
             Left = 12
-            Height = 22
-            Top = 586
+            Height = 24
+            Top = 13
             Width = 72
             StyleClass = 'accent'
             Caption = '全部'
           end
           object TagFilterPub: TTyTag
             Left = 92
-            Height = 22
-            Top = 586
+            Height = 24
+            Top = 13
             Width = 112
             Caption = '已发布'
             Closable = True
@@ -381,21 +346,22 @@ object MainForm: TMainForm
           end
           object TagFilterDraft: TTyTag
             Left = 212
-            Height = 22
-            Top = 586
+            Height = 24
+            Top = 13
             Width = 100
             Caption = '草稿'
             Closable = True
             OnClose = TagClosed
           end
           object BtnSelCount: TTyButton
-            Left = 324
+            Left = 799
             Height = 30
-            Top = 582
+            Top = 10
             Width = 132
-            TabOrder = 2
+            TabOrder = 1
             StyleClass = 'ghost'
             Caption = '已选记录'
+            Anchors = [akTop, akRight]
             object BadgeSel: TTyBadge
               Left = 112
               Height = 16
@@ -406,39 +372,72 @@ object MainForm: TMainForm
             end
           end
           object BtnToggleEmpty: TTyButton
-            Left = 468
+            Left = 943
             Height = 30
-            Top = 582
+            Top = 10
             Width = 110
-            TabOrder = 3
+            TabOrder = 2
             OnClick = ToggleEmptyClick
             StyleClass = 'ghost'
             Caption = '切换空态'
+            Anchors = [akTop, akRight]
+          end
+          object GridOrders: TTyStringGrid
+            Left = 12
+            Height = 598
+            Top = 58
+            Width = 1041
+            TabOrder = 0
+            SelectionMode = gsmRow
+            OnSelectionChanged = GridSelectionChanged
+            Anchors = [akTop, akLeft, akRight]
+          end
+          object EmptyOrders: TTyEmpty
+            Left = 12
+            Height = 598
+            Top = 58
+            Width = 1041
+            TabOrder = 3
+            Description = '暂无工单 —— 换一个筛选条件,或者新建一张'
+            ShowAction = True
+            Anchors = [akTop, akLeft, akRight]
+            object BtnEmptyNew: TTyButton
+              Left = 460
+              Height = 30
+              Top = 300
+              Width = 120
+              TabOrder = 0
+              OnClick = EmptyNewClick
+              StyleClass = 'primary'
+              Caption = '新建工单'
+            end
+          end
+          object LblPageInfo: TTyLabel
+            Left = 12
+            Height = 22
+            Top = 672
+            Width = 300
+            Caption = '第 1 / 195 页 · 共 3900 条'
           end
           object PagOrders: TTyPagination
-            Left = 12
+            Left = 493
             Height = 34
-            Top = 624
+            Top = 666
             Width = 560
             TabOrder = 4
             PageCount = 195
             OnChange = PageChange
-          end
-          object LblPageInfo: TTyLabel
-            Left = 584
-            Height = 22
-            Top = 630
-            Width = 300
-            Caption = '第 1 / 195 页 · 共 3900 条'
+            Anchors = [akTop, akRight]
           end
           object LblListNote: TTyLabel
             Left = 12
-            Height = 60
-            Top = 666
-            Width = 781
-            Caption = '状态列现在是文字;TTyTag 用作筛选胶囊(点 x 可移除),选中行数走 TTyBadge。分页器只报告页码,列表由 OnChange 里的宿主自己重填 —— 它不拥有数据。'
+            Height = 40
+            Top = 712
+            Width = 1041
+            Caption = '真·数据表用 TTyStringGrid:上方 TTyTag 筛选、中间表格、下方 TTyPagination —— Web 三段式。状态列按语义上色,选中整行走 TTyBadge。'
             Layout = tlTop
             WordWrap = True
+            Anchors = [akTop, akLeft, akRight]
           end
         end
         object PgForm: TTyTabSheet

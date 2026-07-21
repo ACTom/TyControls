@@ -33,7 +33,7 @@ uses
   tyControls.PageControl, tyControls.TabSheet, tyControls.TabSet,
   tyControls.Card, tyControls.Tag, tyControls.Badge,
   tyControls.Sparkline, tyControls.Chart, tyControls.CircularProgress,
-  tyControls.Meter, tyControls.ListView, tyControls.Columns,
+  tyControls.Meter, tyControls.ListView, tyControls.Columns, tyControls.Grid,
   tyControls.Edit, tyControls.NumericEdit, tyControls.DateTimePicker,
   tyControls.TrackBar, tyControls.Rating, tyControls.CheckBox,
   tyControls.RadioGroup, tyControls.ProgressBar, tyControls.ActivityIndicator,
@@ -116,7 +116,7 @@ type
     LblDashNote: TTyLabel;
     { 列表 / 表格 }
     PgList: TTyTabSheet;
-    LvOrders: TTyListView;
+    GridOrders: TTyStringGrid;
     TagFilterAll: TTyTag;
     TagFilterPub: TTyTag;
     TagFilterDraft: TTyTag;
@@ -242,7 +242,11 @@ type
     { 各页 }
     procedure DataTreeGetText(Sender: TTyTreeView; Node: PTyTreeNode; var AText: string);
     procedure TagClosed(Sender: TObject; var AllowClose: Boolean);
-    procedure ListSelectItem(Sender: TObject; AIndex: Integer);
+    procedure GridSelectionChanged(Sender: TObject);
+    procedure OrdersGetCellStyle(Sender: TObject; ACol, ARow: Integer;
+      var ABackground: TTyFill; var ATextColor: TTyColor;
+      var AFontName: string; var AFontSize, AFontWeight: Integer;
+      var AHAlign: TAlignment; var AVAlign: TTextLayout);
     procedure ToggleEmptyClick(Sender: TObject);
     procedure EmptyNewClick(Sender: TObject);
     procedure PageChange(Sender: TObject);
@@ -714,67 +718,99 @@ end;
 
 procedure TMainForm.BuildList;
 
-  procedure AddRow(const ANo, ATitle, AOwner, AState, AWhen: string);
+  function AddCol(const ACaption: string; AWidth: Integer;
+    AAlign: TAlignment): TTyGridColumn;
   begin
-    with LvOrders.Items.Add do
-    begin
-      Caption := ANo;
-      SubItems.Add(ATitle);
-      SubItems.Add(AOwner);
-      SubItems.Add(AState);
-      SubItems.Add(AWhen);
-    end;
+    Result := GridOrders.Header.Columns.Add as TTyGridColumn;
+    Result.Text := ACaption;
+    Result.Width := AWidth;
+    Result.Alignment := AAlign;
   end;
 
-var
-  c: TTyColumn;
-begin
-  c := LvOrders.Header.Columns.Add as TTyColumn;
-  c.Text := '编号';   c.Width := 108;
-  c := LvOrders.Header.Columns.Add as TTyColumn;
-  c.Text := '标题';   c.Width := 260;
-  c := LvOrders.Header.Columns.Add as TTyColumn;
-  c.Text := '负责人'; c.Width := 96;
-  c := LvOrders.Header.Columns.Add as TTyColumn;
-  { 注意:状态列只能是文字 —— TTyTag 是窗口化控件,放不进自绘 ListView 的单元格(架构使然,非待办) }
-  c.Text := '状态';   c.Width := 96;
-  c := LvOrders.Header.Columns.Add as TTyColumn;
-  c.Text := '更新时间'; c.Width := 195;
+  procedure Row(ARow: Integer; const ANo, ATitle, AOwner, AState, AWhen: string);
+  begin
+    GridOrders.Cells[0, ARow] := ANo;
+    GridOrders.Cells[1, ARow] := ATitle;
+    GridOrders.Cells[2, ARow] := AOwner;
+    GridOrders.Cells[3, ARow] := AState;
+    GridOrders.Cells[4, ARow] := AWhen;
+  end;
 
-  AddRow('TY-2041', '卡片容器 TTyCard 落地',        '张三', '已发布', '2026-07-16 10:12');
-  AddRow('TY-2042', '标签 TTyTag 落地',             '李四', '已发布', '2026-07-16 11:03');
-  AddRow('TY-2043', '徽标 TTyBadge 独立成控件',     '王五', '已发布', '2026-07-16 15:47');
-  AddRow('TY-2044', '内联警告条 TTyAlert',          '张三', '草稿',   '2026-07-17 09:20');
-  AddRow('TY-2045', '角落 toast TTyNotification',   '赵六', '草稿',   '2026-07-17 09:22');
-  AddRow('TY-2046', '空态 TTyEmpty',                '李四', '草稿',   '2026-07-17 09:25');
-  AddRow('TY-2047', '分段控制器 TTySegmented',      '王五', '草稿',   '2026-07-17 09:31');
-  AddRow('TY-2048', '分页器 TTyPagination',         '赵六', '待排期', '2026-07-17 09:40');
-  AddRow('TY-2049', '步骤条 TTySteps',              '张三', '待排期', '2026-07-17 09:41');
-  AddRow('TY-2050', '面包屑 TTyBreadcrumb',         '李四', '待排期', '2026-07-17 09:42');
-  AddRow('TY-2051', '穿梭框 TTyTransfer',           '王五', '待排期', '2026-07-17 09:50');
-  AddRow('TY-2052', '树形下拉 TTyTreeSelect',       '赵六', '待排期', '2026-07-17 09:51');
-  AddRow('TY-2053', '级联选择 TTyCascader',         '张三', '待排期', '2026-07-17 09:52');
-  AddRow('TY-2054', '浮层 TTyPopover',              '李四', '待排期', '2026-07-17 09:53');
+begin
+  GridOrders.Header.Columns.BeginUpdate;
+  try
+    AddCol('编号',     140, taLeftJustify);
+    AddCol('标题',     400, taLeftJustify);
+    AddCol('负责人',   120, taLeftJustify);
+    AddCol('状态',     130, taLeftJustify);
+    AddCol('更新时间', 230, taLeftJustify);
+  finally
+    GridOrders.Header.Columns.EndUpdate;
+  end;
+  { 状态列按语义上色 —— 数据是文字,颜色是呈现,走单元格样式回调。 }
+  GridOrders.OnGetCellStyle := @OrdersGetCellStyle;
+
+  GridOrders.BeginUpdate;
+  try
+    GridOrders.RowCount := 14;
+    Row( 0, 'TY-2041', '卡片容器 TTyCard 落地',        '张三', '已发布', '2026-07-16 10:12');
+    Row( 1, 'TY-2042', '标签 TTyTag 落地',             '李四', '已发布', '2026-07-16 11:03');
+    Row( 2, 'TY-2043', '徽标 TTyBadge 独立成控件',     '王五', '已发布', '2026-07-16 15:47');
+    Row( 3, 'TY-2044', '内联警告条 TTyAlert',          '张三', '草稿',   '2026-07-17 09:20');
+    Row( 4, 'TY-2045', '角落 toast TTyNotification',   '赵六', '草稿',   '2026-07-17 09:22');
+    Row( 5, 'TY-2046', '空态 TTyEmpty',                '李四', '草稿',   '2026-07-17 09:25');
+    Row( 6, 'TY-2047', '分段控制器 TTySegmented',      '王五', '草稿',   '2026-07-17 09:31');
+    Row( 7, 'TY-2048', '分页器 TTyPagination',         '赵六', '待排期', '2026-07-17 09:40');
+    Row( 8, 'TY-2049', '步骤条 TTySteps',              '张三', '待排期', '2026-07-17 09:41');
+    Row( 9, 'TY-2050', '面包屑 TTyBreadcrumb',         '李四', '待排期', '2026-07-17 09:42');
+    Row(10, 'TY-2051', '穿梭框 TTyTransfer',           '王五', '待排期', '2026-07-17 09:50');
+    Row(11, 'TY-2052', '树形下拉 TTyTreeSelect',       '赵六', '待排期', '2026-07-17 09:51');
+    Row(12, 'TY-2053', '级联选择 TTyCascader',         '张三', '待排期', '2026-07-17 09:52');
+    Row(13, 'TY-2054', '浮层 TTyPopover',              '李四', '待排期', '2026-07-17 09:53');
+  finally
+    GridOrders.EndUpdate;
+  end;
+  GridSelectionChanged(nil);
 end;
 
-procedure TMainForm.ListSelectItem(Sender: TObject; AIndex: Integer);
+{ 状态列的语义色 —— 数据里存的是"已发布/草稿/待排期"文字,这里只决定它画成什么颜色。
+  换成真·数据表 TTyStringGrid 后能逐格着色(以前没有 Grid 控件才用 TTyListView 顶着)。 }
+procedure TMainForm.OrdersGetCellStyle(Sender: TObject; ACol, ARow: Integer;
+  var ABackground: TTyFill; var ATextColor: TTyColor;
+  var AFontName: string; var AFontSize, AFontWeight: Integer;
+  var AHAlign: TAlignment; var AVAlign: TTextLayout);
+var
+  s: string;
 begin
-  // A TTyBadge attached to an ordinary button — the count is just data we own.
-  BadgeSel.Value := LvOrders.SelCount;
+  if ACol <> 3 then Exit;             { 只染状态列 }
+  if ARow = GridOrders.Row then Exit; { 选中行用整行的选中态文字色,别被语义色盖成低对比 }
+  s := GridOrders.Cells[3, ARow];
+  if s = '已发布' then ATextColor := TyRGB(22, 163, 74)       { 绿 }
+  else if s = '草稿' then ATextColor := TyRGB(217, 119, 6)    { 橙 }
+  else if s = '待排期' then ATextColor := TyRGB(37, 99, 235); { 蓝 }
+end;
+
+{ 整行选中(gsmRow):徽标显示当前选中的是第几行。选中态走 TTyBadge,数据仍归宿主。 }
+procedure TMainForm.GridSelectionChanged(Sender: TObject);
+begin
+  if (GridOrders.Row >= 0) and (GridOrders.Row < GridOrders.RowCount) then
+    BadgeSel.Value := GridOrders.Row + 1
+  else
+    BadgeSel.Value := 0;
 end;
 
 { The empty state is not a MODE the list has — it is a second control on the same rect, and
   exactly one of the two is up (docs/controls/empty.md's own rule). }
 procedure TMainForm.ShowEmptyState(AEmpty: Boolean);
 begin
-  LvOrders.Visible := not AEmpty;
+  GridOrders.Visible := not AEmpty;
   EmptyOrders.Visible := AEmpty;
   if AEmpty then PlaceEmptyAction;
 end;
 
 procedure TMainForm.ToggleEmptyClick(Sender: TObject);
 begin
-  ShowEmptyState(LvOrders.Visible);
+  ShowEmptyState(GridOrders.Visible);
 end;
 
 procedure TMainForm.EmptyNewClick(Sender: TObject);
