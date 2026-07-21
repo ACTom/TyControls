@@ -449,7 +449,7 @@ object MainForm: TMainForm
           Caption = '表单 / 录入'
           object CardForm: TTyCard
             Left = 12
-            Height = 616
+            Height = 690
             Top = 12
             Width = 400
             TabOrder = 0
@@ -458,7 +458,7 @@ object MainForm: TMainForm
             object LblName: TTyLabel
               Left = 12
               Height = 22
-              Top = 68
+              Top = 74
               Width = 84
               Caption = '标题'
             end
@@ -466,7 +466,7 @@ object MainForm: TMainForm
               Cursor = crIBeam
               Left = 104
               Height = 28
-              Top = 66
+              Top = 72
               Width = 240
               TabOrder = 0
               TabStop = True
@@ -475,7 +475,7 @@ object MainForm: TMainForm
             object LblAmount: TTyLabel
               Left = 12
               Height = 22
-              Top = 104
+              Top = 126
               Width = 84
               Caption = '金额'
             end
@@ -483,7 +483,7 @@ object MainForm: TMainForm
               Cursor = crIBeam
               Left = 104
               Height = 28
-              Top = 102
+              Top = 124
               Width = 240
               TabOrder = 1
               TabStop = True
@@ -493,14 +493,14 @@ object MainForm: TMainForm
             object LblKind: TTyLabel
               Left = 12
               Height = 22
-              Top = 140
+              Top = 178
               Width = 84
               Caption = '类型'
             end
             object CbKind: TTyComboBox
               Left = 104
               Height = 28
-              Top = 138
+              Top = 176
               Width = 240
               TabOrder = 2
               Items.Strings = (
@@ -515,7 +515,7 @@ object MainForm: TMainForm
             object LblDue: TTyLabel
               Left = 12
               Height = 22
-              Top = 176
+              Top = 230
               Width = 84
               Caption = '截止日期'
             end
@@ -523,7 +523,7 @@ object MainForm: TMainForm
               Cursor = crArrow
               Left = 104
               Height = 28
-              Top = 174
+              Top = 228
               Width = 240
               TabOrder = 3
               DateTime = 46220.9360946528
@@ -532,14 +532,14 @@ object MainForm: TMainForm
             object LblUrgent: TTyLabel
               Left = 12
               Height = 22
-              Top = 212
+              Top = 283
               Width = 84
               Caption = '加急'
             end
             object SwUrgent: TTyToggleSwitch
               Left = 104
               Height = 24
-              Top = 211
+              Top = 281
               Width = 90
               TabOrder = 4
               TabStop = True
@@ -548,14 +548,14 @@ object MainForm: TMainForm
             object LblWeight: TTyLabel
               Left = 12
               Height = 22
-              Top = 248
+              Top = 334
               Width = 84
               Caption = '权重'
             end
             object TrkWeight: TTyTrackBar
               Left = 104
               Height = 28
-              Top = 246
+              Top = 332
               Width = 240
               TabOrder = 5
               Position = 60
@@ -563,14 +563,14 @@ object MainForm: TMainForm
             object LblScore: TTyLabel
               Left = 12
               Height = 22
-              Top = 284
+              Top = 386
               Width = 84
               Caption = '满意度'
             end
             object RateScore: TTyRating
               Left = 104
               Height = 26
-              Top = 282
+              Top = 384
               Width = 150
               TabOrder = 6
               Value = 4
@@ -579,7 +579,7 @@ object MainForm: TMainForm
             object ChkNotify: TTyCheckBox
               Left = 104
               Height = 24
-              Top = 316
+              Top = 436
               Width = 180
               TabOrder = 7
               TabStop = True
@@ -590,7 +590,7 @@ object MainForm: TMainForm
             object RgChannel: TTyRadioGroup
               Left = 12
               Height = 80
-              Top = 348
+              Top = 484
               Width = 340
               TabOrder = 8
               Caption = '通知渠道'
@@ -605,14 +605,14 @@ object MainForm: TMainForm
             object LblColor: TTyLabel
               Left = 12
               Height = 22
-              Top = 440
+              Top = 590
               Width = 84
               Caption = '标记颜色'
             end
             object BtnColor: TTyColorButton
               Left = 104
               Height = 28
-              Top = 438
+              Top = 588
               Width = 152
               TabOrder = 9
               ShowText = True
@@ -621,7 +621,7 @@ object MainForm: TMainForm
             object BtnSubmit: TTyButton
               Left = 12
               Height = 30
-              Top = 499
+              Top = 640
               Width = 88
               TabOrder = 10
               OnClick = SubmitClick
@@ -631,7 +631,7 @@ object MainForm: TMainForm
             object BtnReset: TTyButton
               Left = 108
               Height = 30
-              Top = 499
+              Top = 640
               Width = 88
               TabOrder = 11
               OnClick = ResetClick
@@ -640,7 +640,7 @@ object MainForm: TMainForm
           end
           object CardFormTodo: TTyCard
             Left = 424
-            Height = 616
+            Height = 690
             Top = 12
             Width = 369
             TabOrder = 1
@@ -648,14 +648,14 @@ object MainForm: TMainForm
             object LblDept: TTyLabel
               Left = 12
               Height = 22
-              Top = 68
+              Top = 72
               Width = 200
               Caption = '归属部门(树形下拉)'
             end
             object TsDept: TTyTreeSelect
               Left = 12
               Height = 28
-              Top = 90
+              Top = 100
               Width = 345
               TabOrder = 0
               TextHint = '请选择归属部门'
@@ -664,14 +664,14 @@ object MainForm: TMainForm
             object LblRegion: TTyLabel
               Left = 12
               Height = 22
-              Top = 126
+              Top = 152
               Width = 200
               Caption = '所在地区(级联选择)'
             end
             object CasRegion: TTyCascader
               Left = 12
               Height = 28
-              Top = 148
+              Top = 180
               Width = 345
               TabOrder = 1
               Nodes = <              
@@ -741,14 +741,14 @@ object MainForm: TMainForm
             object LblMembers: TTyLabel
               Left = 12
               Height = 22
-              Top = 184
+              Top = 232
               Width = 200
               Caption = '通知人(穿梭框)'
             end
             object TrfMembers: TTyTransfer
               Left = 12
               Height = 230
-              Top = 206
+              Top = 260
               Width = 345
               TabOrder = 2
               Items.Strings = (
@@ -769,7 +769,7 @@ object MainForm: TMainForm
             object LblAdvPick: TTyLabel
               Left = 12
               Height = 54
-              Top = 444
+              Top = 514
               Width = 345
               Caption = '当前选择会显示在这里。'
               Layout = tlTop
@@ -778,7 +778,7 @@ object MainForm: TMainForm
             object LblFormTodoNote: TTyLabel
               Left = 12
               Height = 96
-              Top = 504
+              Top = 574
               Width = 345
               Caption = '树形下拉的层级建在代码里(虚拟树的节点是指针,.lfm 存不下);级联的选项树是 .lfm 里的嵌套集合。'
               Layout = tlTop
@@ -1111,14 +1111,14 @@ object MainForm: TMainForm
           object LblSegTitle: TTyLabel
             Left = 12
             Height = 20
-            Top = 240
+            Top = 256
             Width = 660
             Caption = '分段控制器(TTySegmented)—— 切一个值,不是切一页'
           end
           object SegRange: TTySegmented
             Left = 12
             Height = 32
-            Top = 262
+            Top = 284
             Width = 240
             TabOrder = 4
             Items.Strings = (
@@ -1132,21 +1132,21 @@ object MainForm: TMainForm
           object LblSegValue: TTyLabel
             Left = 264
             Height = 32
-            Top = 262
+            Top = 284
             Width = 400
             Caption = '今日成交 1,330 笔 · 环比 +4.2%'
           end
           object LblStepsTitle: TTyLabel
             Left = 12
             Height = 20
-            Top = 306
+            Top = 344
             Width = 660
             Caption = '步骤条(TTySteps)—— Clickable 打开了,可以点/方向键走'
           end
           object StepsFlow: TTySteps
             Left = 12
             Height = 64
-            Top = 328
+            Top = 372
             Width = 560
             TabOrder = 5
             Items.Strings = (
@@ -1161,14 +1161,14 @@ object MainForm: TMainForm
           object LblCrumbTitle: TTyLabel
             Left = 12
             Height = 20
-            Top = 402
+            Top = 464
             Width = 660
             Caption = '面包屑(TTyBreadcrumb)—— 与顶部条同款'
           end
           object NavCrumb: TTyBreadcrumb
             Left = 12
             Height = 34
-            Top = 424
+            Top = 492
             Width = 560
             Items.Strings = (
               '首页'
@@ -1180,7 +1180,7 @@ object MainForm: TMainForm
           object LblNavNote: TTyLabel
             Left = 12
             Height = 120
-            Top = 460
+            Top = 554
             Width = 1020
             Caption = 'TTyPageControl 就是这块内容区本身 —— 页签条已隐藏(TabHeight=0),由左侧 Sider 的选中项切页。TTyTabSet 语义不同:它是纯页签条,不承载页面 —— 上面那块内容面板是宿主自己按 TabIndex 换的。面包屑的最后一节是"你在哪",不是链接,点不动。'
             Layout = tlTop
@@ -1332,17 +1332,17 @@ object MainForm: TMainForm
           end
           object ExpData: TTyExPanel
             Left = 12
-            Height = 132
+            Height = 128
             Top = 364
             Width = 781
             TabOrder = 3
             Caption = '折叠面板(≈ Ant Design 的 Collapse)'
             Anchors = [akTop, akLeft, akRight]
             object LblExpBody: TTyLabel
-              Left = 12
-              Height = 148
-              Top = 38
-              Width = 757
+              Left = 16
+              Height = 60
+              Top = 54
+              Width = 749
               Caption = 'TTyExPanel 承担 Collapse 的语义:点标题条展开 / 收起,内容区托管子控件。Ant Design 里的 Collapse 我们不新做控件。'
               Anchors = [akTop, akLeft, akRight]
               Layout = tlTop
