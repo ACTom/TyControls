@@ -329,7 +329,7 @@ object MainForm: TMainForm
           Caption = '列表 / 表格'
           object LvOrders: TTyListView
             Left = 12
-            Height = 360
+            Height = 560
             Top = 12
             Width = 781
             TabOrder = 0
@@ -344,7 +344,7 @@ object MainForm: TMainForm
           end
           object EmptyOrders: TTyEmpty
             Left = 12
-            Height = 360
+            Height = 560
             Top = 12
             Width = 781
             TabOrder = 1
@@ -365,7 +365,7 @@ object MainForm: TMainForm
           object TagFilterAll: TTyTag
             Left = 12
             Height = 22
-            Top = 386
+            Top = 586
             Width = 72
             StyleClass = 'accent'
             Caption = '全部'
@@ -373,7 +373,7 @@ object MainForm: TMainForm
           object TagFilterPub: TTyTag
             Left = 92
             Height = 22
-            Top = 386
+            Top = 586
             Width = 112
             Caption = '已发布'
             Closable = True
@@ -382,7 +382,7 @@ object MainForm: TMainForm
           object TagFilterDraft: TTyTag
             Left = 212
             Height = 22
-            Top = 386
+            Top = 586
             Width = 100
             Caption = '草稿'
             Closable = True
@@ -391,7 +391,7 @@ object MainForm: TMainForm
           object BtnSelCount: TTyButton
             Left = 324
             Height = 30
-            Top = 382
+            Top = 582
             Width = 132
             TabOrder = 2
             StyleClass = 'ghost'
@@ -408,7 +408,7 @@ object MainForm: TMainForm
           object BtnToggleEmpty: TTyButton
             Left = 468
             Height = 30
-            Top = 382
+            Top = 582
             Width = 110
             TabOrder = 3
             OnClick = ToggleEmptyClick
@@ -418,7 +418,7 @@ object MainForm: TMainForm
           object PagOrders: TTyPagination
             Left = 12
             Height = 34
-            Top = 424
+            Top = 624
             Width = 560
             TabOrder = 4
             PageCount = 195
@@ -427,14 +427,14 @@ object MainForm: TMainForm
           object LblPageInfo: TTyLabel
             Left = 584
             Height = 22
-            Top = 430
+            Top = 630
             Width = 300
             Caption = '第 1 / 195 页 · 共 3900 条'
           end
           object LblListNote: TTyLabel
             Left = 12
             Height = 60
-            Top = 466
+            Top = 666
             Width = 781
             Caption = '状态列现在是文字;TTyTag 用作筛选胶囊(点 x 可移除),选中行数走 TTyBadge。分页器只报告页码,列表由 OnChange 里的宿主自己重填 —— 它不拥有数据。'
             Layout = tlTop
