@@ -371,7 +371,7 @@ begin
     c.ThemeName := 'default';
     c.Density := tdModern;
     AssertEquals('现代 checkbox 20', 20, c.Metric('--checkbox-size', 99));
-    AssertEquals('现代 row-height 32', 32, c.Metric('--row-height', 99));
+    AssertEquals('现代 row-height 40', 40, c.Metric('--row-height', 99));
     AssertEquals('现代 font-size-base 14', 14, c.Metric('--font-size-base', 99));
   finally
     c.Free;

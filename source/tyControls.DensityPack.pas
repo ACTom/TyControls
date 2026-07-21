@@ -25,9 +25,9 @@ function TyDensityModernCss: string;
 begin
   Result :=
     ':root {' + LineEnding +
-    '  --row-height: 32px;' + LineEnding +
+    '  --row-height: 40px;' + LineEnding +
     '  --header-height: 36px;' + LineEnding +
-    '  --item-height: 32px;' + LineEnding +
+    '  --item-height: 38px;' + LineEnding +
     '  --icon-size: 20px;' + LineEnding +
     '  --radius: 8px;' + LineEnding +
     '  --radius-pill: 12px;' + LineEnding +
