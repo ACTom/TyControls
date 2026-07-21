@@ -9,7 +9,7 @@ uses
   Classes, SysUtils, Types, Graphics, BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.CheckBox,
-  tyControls.GroupBox, tyControls.ListView, tyControls.BuiltinThemes;
+  tyControls.GroupBox, tyControls.ListView, tyControls.Grid, tyControls.BuiltinThemes;
 type
   TCheckBoxProbe = class(TTyCheckBox)   // expose the protected RenderTo for headless sampling
   public
@@ -47,6 +47,7 @@ type
     procedure TestDensitySurvivesThemeSwitch;
     procedure TestDensityTogglesBackToClassic;
     procedure TestListViewRowHeightFollowsDensity;
+    procedure TestGridRowHeightFollowsDensity;
   end;
 
 implementation
@@ -267,6 +268,34 @@ begin
     AssertTrue('显式 RowHeight 在现代密度下仍被钉住(不跟随)', explicitH < modernH);
   finally
     lv.Free;
+    c.Free;
+  end;
+end;
+
+{ Same density gap, same fix on TTyStringGrid: DefaultRowHeight was a hardcoded 22.
+  The getter now returns the live --row-height when unset (so a modern grid gets roomy
+  rows) and the pinned value when set. }
+procedure TMetricTest.TestGridRowHeightFollowsDensity;
+var
+  c: TTyStyleController;
+  g: TTyStringGrid;
+  classicH, modernH: Integer;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  g := TTyStringGrid.Create(nil);
+  try
+    c.ThemeName := 'default';
+    g.Controller := c;
+    c.Density := tdClassic;
+    classicH := g.DefaultRowHeight;
+    c.Density := tdModern;
+    modernH := g.DefaultRowHeight;
+    AssertTrue('未设 DefaultRowHeight 时,现代应高于经典', modernH > classicH + 4);
+    g.DefaultRowHeight := 20;
+    AssertEquals('显式 DefaultRowHeight 钉住,不跟密度', 20, g.DefaultRowHeight);
+  finally
+    g.Free;
     c.Free;
   end;
 end;

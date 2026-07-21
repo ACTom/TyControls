@@ -604,6 +604,7 @@ type
     FHeader:           TTyHeader;
     FRowCount:         Integer;
     FDefaultRowHeight: Integer;
+    FDefaultRowHeightExplicit: Boolean;   { True once set; False = follow --row-height (density) }
     FFixedCols:        Integer;
     FFixedRows:        Integer;
     FFixedRowsBottom:  Integer;
@@ -795,6 +796,7 @@ type
     procedure HeaderChanged(Sender: TObject);
     procedure SetHeader(AValue: TTyHeader);
     procedure SetRowCount(AValue: Integer);
+    function  GetDefaultRowHeight: Integer;
     procedure SetDefaultRowHeight(AValue: Integer);
     procedure SetFixedCols(AValue: Integer);
     procedure SetFixedRows(AValue: Integer);
@@ -1205,7 +1207,9 @@ type
     { 数据行数(不含列头与固定行)。 }
     property RowCount: Integer read FRowCount write SetRowCount default 0;
     { 统一行高,逻辑像素(P0 不支持可变行高)。 }
-    property DefaultRowHeight: Integer read FDefaultRowHeight write SetDefaultRowHeight default 22;
+    { Left unset it follows the theme's --row-height (22 classic / 32 modern); set it and that
+      value wins and is streamed (a dense report grid can still pin its own). See TTyListView. }
+    property DefaultRowHeight: Integer read GetDefaultRowHeight write SetDefaultRowHeight stored FDefaultRowHeightExplicit;
     { 冻结在左侧、不随横向滚动的列数。 }
     property FixedCols: Integer read FFixedCols write SetFixedCols default 0;
     { 冻结在顶部、不随纵向滚动的数据行数(列头带另计)。 }
@@ -2828,7 +2832,8 @@ begin
   FHeader := TTyHeader.Create(TTyGridColumn);
   FHeader.OnChange := @HeaderChanged;
   FRowCount := 0;
-  FDefaultRowHeight := 22;
+  FDefaultRowHeight := 22;              { fallback; unused while FDefaultRowHeightExplicit=False }
+  FDefaultRowHeightExplicit := False;   { follow --row-height (density-aware) until set }
   FFixedCols := 0;
   FFixedRows := 0;
   FFixedRowsBottom := 0;
@@ -2946,9 +2951,21 @@ begin
   Invalidate;
 end;
 
+{ Effective default row height: an explicit set wins; otherwise follow the theme's
+  --row-height token (density pack raises it for modern). Resolved live so toggling
+  Controller.Density re-heights every row on the next layout. }
+function TTyCustomGrid.GetDefaultRowHeight: Integer;
+begin
+  if FDefaultRowHeightExplicit then
+    Result := FDefaultRowHeight
+  else
+    Result := ActiveController.Metric('--row-height', 22);
+end;
+
 procedure TTyCustomGrid.SetDefaultRowHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
+  FDefaultRowHeightExplicit := True;   { the host meant to pin it, even at the fallback value }
   if FDefaultRowHeight = AValue then Exit;
   FDefaultRowHeight := AValue;
   UpdateScrollBars;
@@ -3412,7 +3429,7 @@ var
   step: Integer;
 begin
   { 一格滚轮走三行 —— 与列表/树保持一致的手感。 }
-  step := 3 * ScaleI(FDefaultRowHeight);
+  step := 3 * ScaleI(GetDefaultRowHeight);
   if WheelDelta > 0 then SetScrollY(FScrollY - step)
   else SetScrollY(FScrollY + step);
   Result := True;
@@ -5609,7 +5626,7 @@ function TTyCustomGrid.RowHeightOf(ARow: Integer): Integer;
 begin
   { 优先级:显式存储 > 默认。派生类再插进回调。 }
   Result := GetRowHeights(ARow);
-  if Result <= 0 then Result := FDefaultRowHeight;
+  if Result <= 0 then Result := GetDefaultRowHeight;
 end;
 
 procedure TTyCustomGrid.DrawInRowBand(P: TTyPainter; APos: Integer;
@@ -5651,7 +5668,7 @@ var
   d: Integer;
 begin
   d := DisplayToData(APos);
-  if d < 0 then Result := FDefaultRowHeight    { 分组行 / 越界 }
+  if d < 0 then Result := GetDefaultRowHeight    { 分组行 / 越界 }
   else Result := RowHeightOf(d);
 end;
 
@@ -5672,7 +5689,7 @@ begin
   Result.FrozenBottom := FrozenBottomPx;
   Result.FrozenRight := FrozenRightPx;
   Result.GridLineWidth := GridLineWidthPx;
-  Result.RowH := ScaleI(FDefaultRowHeight);
+  Result.RowH := ScaleI(GetDefaultRowHeight);
   Result.RowCount := DisplayRowCount;
   Result.RowTops := RowTops;
   Result.FixedRows := FFixedRows;
