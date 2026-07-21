@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 700
+  Height = 760
   Top = 0
   Width = 1120
   Caption = 'TyControls Pro'
-  ClientHeight = 700
+  ClientHeight = 760
   ClientWidth = 1120
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -63,19 +63,19 @@ object MainForm: TMainForm
     end
     object Sider: TTyListGroupPanel
       Left = 0
-      Height = 666
+      Height = 726
       Top = 34
       Width = 216
       TabOrder = 1
-      HeaderHeight = 32
-      ItemHeight = 30
+      HeaderHeight = 44
+      ItemHeight = 40
       OnItemClick = SiderItemClick
       Align = alLeft
     end
     object SiderSplit: TTySplitter
       Cursor = crHSplit
       Left = 216
-      Height = 666
+      Height = 726
       Top = 34
       Width = 5
       TabOrder = 2
@@ -83,7 +83,7 @@ object MainForm: TMainForm
     end
     object Content: TTyPanel
       Left = 221
-      Height = 666
+      Height = 726
       Top = 34
       Width = 899
       TabOrder = 3
@@ -110,7 +110,7 @@ object MainForm: TMainForm
       end
       object PageHost: TTyPageControl
         Left = 0
-        Height = 610
+        Height = 670
         Top = 56
         Width = 899
         TabOrder = 1
@@ -127,31 +127,31 @@ object MainForm: TMainForm
           Caption = '仪表盘'
           object CardVisits: TTyCard
             Left = 20
-            Height = 150
-            Top = 12
-            Width = 182
+            Height = 196
+            Top = 16
+            Width = 186
             TabOrder = 0
             Title = '今日访问'
             object SparkVisits: TTySparkline
-              Left = 12
-              Height = 90
-              Top = 48
+              Left = 14
+              Height = 112
+              Top = 64
               Width = 162
               MaxValue = 100
               Align = alClient
             end
           end
           object CardOrders: TTyCard
-            Left = 222
-            Height = 150
-            Top = 12
-            Width = 182
+            Left = 224
+            Height = 196
+            Top = 16
+            Width = 186
             TabOrder = 1
             Title = '订单量'
             object SparkOrders: TTySparkline
-              Left = 12
-              Height = 90
-              Top = 48
+              Left = 14
+              Height = 112
+              Top = 64
               Width = 162
               Style = ssBar
               MaxValue = 100
@@ -159,16 +159,16 @@ object MainForm: TMainForm
             end
           end
           object CardCpu: TTyCard
-            Left = 424
-            Height = 150
-            Top = 12
-            Width = 182
+            Left = 428
+            Height = 196
+            Top = 16
+            Width = 186
             TabOrder = 2
             Title = 'CPU 占用'
             object CircCpu: TTyCircularProgress
-              Left = 12
-              Height = 90
-              Top = 48
+              Left = 14
+              Height = 112
+              Top = 64
               Width = 162
               Position = 68
               Thickness = 8
@@ -177,17 +177,17 @@ object MainForm: TMainForm
             end
           end
           object CardHealth: TTyCard
-            Left = 626
-            Height = 150
-            Top = 12
-            Width = 182
+            Left = 632
+            Height = 196
+            Top = 16
+            Width = 186
             TabOrder = 3
             Title = '服务健康度'
             Anchors = [akTop, akRight]
             object MeterHealth: TTyMeter
-              Left = 12
-              Height = 90
-              Top = 48
+              Left = 14
+              Height = 112
+              Top = 64
               Width = 162
               Max = 100
               Value = 86
@@ -197,16 +197,16 @@ object MainForm: TMainForm
           end
           object CardChart: TTyCard
             Left = 20
-            Height = 300
-            Top = 174
-            Width = 512
+            Height = 384
+            Top = 228
+            Width = 462
             TabOrder = 4
             Title = '近半年成交额 / 退款'
             object ChartSales: TTyChart
-              Left = 12
-              Height = 240
-              Top = 48
-              Width = 466
+              Left = 14
+              Height = 306
+              Top = 64
+              Width = 432
               ChartType = ctBar
               Series = <              
                 item
@@ -229,51 +229,52 @@ object MainForm: TMainForm
             end
           end
           object CardStatus: TTyCard
-            Left = 552
-            Height = 300
-            Top = 174
-            Width = 332
+            Left = 500
+            Height = 384
+            Top = 228
+            Width = 318
             TabOrder = 5
             Title = '系统状态'
             ShowActions = True
             Anchors = [akTop, akRight]
             object TagOnline: TTyTag
-              Left = 14
-              Height = 22
-              Top = 48
-              Width = 100
+              Left = 16
+              Height = 26
+              Top = 64
+              Width = 88
               StyleClass = 'accent'
               Caption = '运行中'
             end
             object TagBeta: TTyTag
               Left = 110
-              Height = 22
-              Top = 48
-              Width = 80
+              Height = 26
+              Top = 64
+              Width = 82
               Caption = 'Beta'
               Closable = True
               OnClose = TagClosed
             end
             object TagRisk: TTyTag
-              Left = 196
-              Height = 22
-              Top = 48
-              Width = 96
+              Left = 198
+              Height = 26
+              Top = 64
+              Width = 88
               StyleClass = 'danger'
               Caption = '待处理'
             end
             object LblQueue: TTyLabel
-              Left = 12
-              Height = 20
-              Top = 84
-              Width = 306
+              Left = 16
+              Height = 44
+              Top = 104
+              Width = 288
+              WordWrap = True
               Caption = '积压任务(徽标挂在按钮上,不是按钮内置的)'
             end
             object BtnQueue: TTyButton
-              Left = 12
-              Height = 30
-              Top = 112
-              Width = 110
+              Left = 16
+              Height = 36
+              Top = 156
+              Width = 128
               TabOrder = 0
               OnClick = QueueClick
               StyleClass = 'ghost'
@@ -289,19 +290,20 @@ object MainForm: TMainForm
               end
             end
             object LblStatusNote: TTyLabel
-              Left = 12
-              Height = 44
-              Top = 156
-              Width = 306
+              Left = 16
+              Height = 72
+              Top = 206
+              Width = 288
+              WordWrap = True
               Caption = 'TTyCard / TTyTag / TTyBadge 是批 1 新落地的控件,这一页就是它们的验收面。'
               Layout = tlTop
               WordWrap = True
             end
             object BtnStatusDetail: TTyButton
-              Left = 12
-              Height = 30
-              Top = 262
-              Width = 96
+              Left = 16
+              Height = 36
+              Top = 326
+              Width = 112
               TabOrder = 1
               OnClick = StatusDetailClick
               StyleClass = 'primary'
@@ -310,9 +312,10 @@ object MainForm: TMainForm
           end
           object LblDashNote: TTyLabel
             Left = 20
-            Height = 20
-            Top = 486
-            Width = 788
+            Height = 24
+            Top = 628
+            Width = 800
+            WordWrap = True
             Caption = '仪表盘:卡片承载区块 · 迷你趋势图 · 环形进度 · 仪表盘刻度 · 柱状图 —— 全部走主题令牌,换肤即变。'
             Anchors = [akTop, akLeft, akRight]
           end
