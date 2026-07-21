@@ -30,7 +30,7 @@ object MainForm: TMainForm
       ButtonWidth = 46
       object DarkSwitch: TTyToggleSwitch
         Left = 740
-        Height = 26
+        Height = 28
         Top = 5
         Width = 96
         TabOrder = 3
@@ -41,7 +41,7 @@ object MainForm: TMainForm
       end
       object ThemeCombo: TTyComboBox
         Left = 846
-        Height = 30
+        Height = 38
         Top = 3
         Width = 150
         TabOrder = 4
@@ -51,7 +51,7 @@ object MainForm: TMainForm
       end
       object BtnUser: TTyMenuButton
         Left = 604
-        Height = 32
+        Height = 38
         Top = 2
         Width = 118
         TabOrder = 2
@@ -239,7 +239,7 @@ object MainForm: TMainForm
             Anchors = [akTop, akRight]
             object TagOnline: TTyTag
               Left = 16
-              Height = 26
+              Height = 30
               Top = 64
               Width = 88
               StyleClass = 'accent'
@@ -247,7 +247,7 @@ object MainForm: TMainForm
             end
             object TagBeta: TTyTag
               Left = 110
-              Height = 26
+              Height = 30
               Top = 64
               Width = 82
               Caption = 'Beta'
@@ -256,7 +256,7 @@ object MainForm: TMainForm
             end
             object TagRisk: TTyTag
               Left = 198
-              Height = 26
+              Height = 30
               Top = 64
               Width = 88
               StyleClass = 'danger'
@@ -272,7 +272,7 @@ object MainForm: TMainForm
             end
             object BtnQueue: TTyButton
               Left = 16
-              Height = 36
+              Height = 38
               Top = 172
               Width = 128
               TabOrder = 0
@@ -301,7 +301,7 @@ object MainForm: TMainForm
             end
             object BtnStatusDetail: TTyButton
               Left = 16
-              Height = 36
+              Height = 38
               Top = 326
               Width = 112
               TabOrder = 1
@@ -329,7 +329,7 @@ object MainForm: TMainForm
           Caption = '列表 / 表格'
           object TagFilterAll: TTyTag
             Left = 12
-            Height = 24
+            Height = 30
             Top = 13
             Width = 72
             StyleClass = 'accent'
@@ -337,7 +337,7 @@ object MainForm: TMainForm
           end
           object TagFilterPub: TTyTag
             Left = 92
-            Height = 24
+            Height = 30
             Top = 13
             Width = 112
             Caption = '已发布'
@@ -346,7 +346,7 @@ object MainForm: TMainForm
           end
           object TagFilterDraft: TTyTag
             Left = 212
-            Height = 24
+            Height = 30
             Top = 13
             Width = 100
             Caption = '草稿'
@@ -355,7 +355,7 @@ object MainForm: TMainForm
           end
           object BtnSelCount: TTyButton
             Left = 799
-            Height = 30
+            Height = 38
             Top = 10
             Width = 132
             TabOrder = 1
@@ -373,7 +373,7 @@ object MainForm: TMainForm
           end
           object BtnToggleEmpty: TTyButton
             Left = 943
-            Height = 30
+            Height = 38
             Top = 10
             Width = 110
             TabOrder = 2
@@ -403,7 +403,7 @@ object MainForm: TMainForm
             Anchors = [akTop, akLeft, akRight]
             object BtnEmptyNew: TTyButton
               Left = 460
-              Height = 30
+              Height = 38
               Top = 300
               Width = 120
               TabOrder = 0
@@ -421,7 +421,7 @@ object MainForm: TMainForm
           end
           object PagOrders: TTyPagination
             Left = 493
-            Height = 34
+            Height = 40
             Top = 666
             Width = 560
             TabOrder = 4
@@ -465,7 +465,7 @@ object MainForm: TMainForm
             object EdName: TTyEdit
               Cursor = crIBeam
               Left = 104
-              Height = 28
+              Height = 38
               Top = 72
               Width = 240
               TabOrder = 0
@@ -482,7 +482,7 @@ object MainForm: TMainForm
             object EdAmount: TTyNumericEdit
               Cursor = crIBeam
               Left = 104
-              Height = 28
+              Height = 38
               Top = 124
               Width = 240
               TabOrder = 1
@@ -499,7 +499,7 @@ object MainForm: TMainForm
             end
             object CbKind: TTyComboBox
               Left = 104
-              Height = 28
+              Height = 38
               Top = 176
               Width = 240
               TabOrder = 2
@@ -522,7 +522,7 @@ object MainForm: TMainForm
             object DtDue: TTyDateTimePicker
               Cursor = crArrow
               Left = 104
-              Height = 28
+              Height = 38
               Top = 228
               Width = 240
               TabOrder = 3
@@ -538,7 +538,7 @@ object MainForm: TMainForm
             end
             object SwUrgent: TTyToggleSwitch
               Left = 104
-              Height = 24
+              Height = 28
               Top = 281
               Width = 90
               TabOrder = 4
@@ -554,7 +554,7 @@ object MainForm: TMainForm
             end
             object TrkWeight: TTyTrackBar
               Left = 104
-              Height = 28
+              Height = 32
               Top = 332
               Width = 240
               TabOrder = 5
@@ -569,7 +569,7 @@ object MainForm: TMainForm
             end
             object RateScore: TTyRating
               Left = 104
-              Height = 26
+              Height = 32
               Top = 384
               Width = 150
               TabOrder = 6
@@ -578,7 +578,7 @@ object MainForm: TMainForm
             end
             object ChkNotify: TTyCheckBox
               Left = 104
-              Height = 24
+              Height = 26
               Top = 436
               Width = 180
               TabOrder = 7
@@ -611,7 +611,7 @@ object MainForm: TMainForm
             end
             object BtnColor: TTyColorButton
               Left = 104
-              Height = 28
+              Height = 38
               Top = 588
               Width = 152
               TabOrder = 9
@@ -620,7 +620,7 @@ object MainForm: TMainForm
             end
             object BtnSubmit: TTyButton
               Left = 12
-              Height = 30
+              Height = 40
               Top = 640
               Width = 88
               TabOrder = 10
@@ -630,7 +630,7 @@ object MainForm: TMainForm
             end
             object BtnReset: TTyButton
               Left = 108
-              Height = 30
+              Height = 40
               Top = 640
               Width = 88
               TabOrder = 11
@@ -654,7 +654,7 @@ object MainForm: TMainForm
             end
             object TsDept: TTyTreeSelect
               Left = 12
-              Height = 28
+              Height = 38
               Top = 100
               Width = 345
               TabOrder = 0
@@ -670,7 +670,7 @@ object MainForm: TMainForm
             end
             object CasRegion: TTyCascader
               Left = 12
-              Height = 28
+              Height = 38
               Top = 180
               Width = 345
               TabOrder = 1
@@ -802,7 +802,7 @@ object MainForm: TMainForm
             Title = '模态反馈(现有)'
             object BtnMsg: TTyButton
               Left = 12
-              Height = 30
+              Height = 38
               Top = 68
               Width = 110
               TabOrder = 0
@@ -811,7 +811,7 @@ object MainForm: TMainForm
             end
             object BtnConfirm: TTyButton
               Left = 130
-              Height = 30
+              Height = 38
               Top = 68
               Width = 110
               TabOrder = 1
@@ -820,7 +820,7 @@ object MainForm: TMainForm
             end
             object BtnInput: TTyButton
               Left = 248
-              Height = 30
+              Height = 38
               Top = 68
               Width = 110
               TabOrder = 2
@@ -860,7 +860,7 @@ object MainForm: TMainForm
             end
             object BtnStep: TTyButton
               Left = 12
-              Height = 28
+              Height = 38
               Top = 122
               Width = 88
               TabOrder = 0
@@ -945,7 +945,7 @@ object MainForm: TMainForm
             Title = '浮出反馈'
             object BtnToast: TTyButton
               Left = 12
-              Height = 30
+              Height = 38
               Top = 64
               Width = 125
               TabOrder = 0
@@ -954,7 +954,7 @@ object MainForm: TMainForm
             end
             object BtnToastErr: TTyButton
               Left = 148
-              Height = 30
+              Height = 38
               Top = 64
               Width = 150
               TabOrder = 1
@@ -963,7 +963,7 @@ object MainForm: TMainForm
             end
             object BtnPopover: TTyButton
               Left = 12
-              Height = 30
+              Height = 38
               Top = 102
               Width = 125
               TabOrder = 2
@@ -997,7 +997,7 @@ object MainForm: TMainForm
               end
               object BtnPopOk: TTyButton
                 Left = 10
-                Height = 28
+                Height = 38
                 Top = 56
                 Width = 90
                 TabOrder = 0
@@ -1007,7 +1007,7 @@ object MainForm: TMainForm
               end
               object BtnPopCancel: TTyButton
                 Left = 110
-                Height = 28
+                Height = 38
                 Top = 56
                 Width = 90
                 TabOrder = 1
@@ -1045,7 +1045,7 @@ object MainForm: TMainForm
             Indent = 8
             object BtnNavNew: TTyButton
               Left = 8
-              Height = 28
+              Height = 38
               Top = 8
               Width = 72
               TabOrder = 0
@@ -1054,7 +1054,7 @@ object MainForm: TMainForm
             end
             object BtnNavOpen: TTyButton
               Left = 84
-              Height = 28
+              Height = 38
               Top = 8
               Width = 72
               TabOrder = 1
@@ -1070,7 +1070,7 @@ object MainForm: TMainForm
             end
             object BtnNavSave: TTyButton
               Left = 172
-              Height = 28
+              Height = 38
               Top = 8
               Width = 72
               TabOrder = 3
@@ -1080,7 +1080,7 @@ object MainForm: TMainForm
           end
           object TabsDemo: TTyTabSet
             Left = 12
-            Height = 32
+            Height = 40
             Top = 88
             Width = 460
             TabOrder = 2
@@ -1117,7 +1117,7 @@ object MainForm: TMainForm
           end
           object SegRange: TTySegmented
             Left = 12
-            Height = 32
+            Height = 42
             Top = 284
             Width = 240
             TabOrder = 4
@@ -1223,7 +1223,7 @@ object MainForm: TMainForm
             Title = '标签与徽标'
             object TagPublished: TTyTag
               Left = 12
-              Height = 22
+              Height = 30
               Top = 64
               Width = 76
               StyleClass = 'accent'
@@ -1231,14 +1231,14 @@ object MainForm: TMainForm
             end
             object TagDraft: TTyTag
               Left = 96
-              Height = 22
+              Height = 30
               Top = 64
               Width = 68
               Caption = '草稿'
             end
             object TagBroken: TTyTag
               Left = 172
-              Height = 22
+              Height = 30
               Top = 64
               Width = 68
               StyleClass = 'danger'
@@ -1246,7 +1246,7 @@ object MainForm: TMainForm
             end
             object TagRegion: TTyTag
               Left = 12
-              Height = 22
+              Height = 30
               Top = 96
               Width = 110
               Caption = '华东区'
@@ -1255,7 +1255,7 @@ object MainForm: TMainForm
             end
             object TagOwner: TTyTag
               Left = 130
-              Height = 22
+              Height = 30
               Top = 96
               Width = 106
               Caption = '我负责'
@@ -1286,7 +1286,7 @@ object MainForm: TMainForm
             end
             object BtnInbox: TTyButton
               Left = 12
-              Height = 30
+              Height = 38
               Top = 192
               Width = 110
               TabOrder = 0
