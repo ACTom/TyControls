@@ -816,7 +816,7 @@ object MainForm: TMainForm
               Width = 110
               TabOrder = 1
               OnClick = ConfirmClick
-              Caption = '确认对话框'
+              Caption = '确认对话'
             end
             object BtnInput: TTyButton
               Left = 248
@@ -825,7 +825,7 @@ object MainForm: TMainForm
               Width = 110
               TabOrder = 2
               OnClick = InputClick
-              Caption = '输入对话框'
+              Caption = '输入对话'
             end
             object LblFeedback: TTyLabel
               Left = 12
