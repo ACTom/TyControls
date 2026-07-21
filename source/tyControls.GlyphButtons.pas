@@ -30,7 +30,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Button, tyControls.IconFont,
+  tyControls.Types, tyControls.Painter, tyControls.Button, tyControls.Controller, tyControls.IconFont,
   tyControls.ImageCollection;
 
 const
@@ -366,7 +366,7 @@ begin
   inherited Create(AOwner);
   FGlyphLayout := glLeft;
   Width := 96;
-  Height := 30;
+  Height := TyDensityHeight(ActiveController, 30);
 end;
 
 { TTyGlyphContainerButton }
@@ -379,7 +379,7 @@ begin
   // with a caption below (auto-fit would otherwise shrink to leave caption room).
   FGlyphSize := 24;
   Width := 72;
-  Height := 64;
+  Height := TyDensityHeight(ActiveController, 64);
 end;
 
 { TTySpeedButton }
@@ -392,7 +392,7 @@ begin
   FAllowAllUp := False;
   // A compact, roughly square toolbar footprint by default.
   Width := 32;
-  Height := 32;
+  Height := TyDensityHeight(ActiveController, 32);
 end;
 
 procedure TTySpeedButton.SetGroupIndex(AValue: Integer);

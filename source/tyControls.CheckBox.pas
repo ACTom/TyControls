@@ -80,7 +80,7 @@ begin
   TyAccelRegister(Self);
   TabStop := True;
   Width := 130;
-  Height := 22;
+  Height := TyDensityHeight(ActiveController, 22);
 end;
 
 destructor TTyCheckBox.Destroy;
@@ -234,7 +234,7 @@ begin
   TyAccelRegister(Self);
   TabStop := True;
   Width := 130;
-  Height := 22;
+  Height := TyDensityHeight(ActiveController, 22);
 end;
 
 destructor TTyRadioButton.Destroy;

@@ -3,7 +3,7 @@ unit tyControls.TrackBar;
 interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, ExtCtrls,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation;
 type
   TTyTrackOrientation = (toHorizontal, toVertical);
 
@@ -146,7 +146,7 @@ begin
   FAnimFrom := FPosition;
   FAnimTo := FPosition;
   Width := 160;
-  Height := 24;
+  Height := TyDensityHeight(ActiveController, 24);
 end;
 
 destructor TTyTrackBar.Destroy;

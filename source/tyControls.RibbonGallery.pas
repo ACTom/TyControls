@@ -28,7 +28,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.Popup, tyControls.IconFont;
 
 type
@@ -360,7 +360,7 @@ begin
   FGrid := nil;     // created on first DropDown
   TabStop := True;
   Width := 200;
-  Height := 40;
+  Height := TyDensityHeight(ActiveController, 40);
 end;
 
 destructor TTyRibbonGallery.Destroy;

@@ -566,7 +566,7 @@ begin
   // A drop size that holds a fully-elided run at the default knobs without dropping a cell:
   // prev + 1 + ... + 97 + 98 + 99 + ... + 195 + next = 9 cells of the 32px floor, 8 gaps of 4.
   Width := 320;
-  Height := 32;
+  Height := TyDensityHeight(ActiveController, 32);
 end;
 
 function TTyPagination.GetStyleTypeKey: string;

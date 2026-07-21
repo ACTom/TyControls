@@ -3,7 +3,7 @@ unit tyControls.UpDown;
 interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, ExtCtrls,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.StyleModel;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.StyleModel;
 
 type
   TTyUpDownOrientation = (udoVertical, udoHorizontal);
@@ -131,7 +131,7 @@ begin
   FHot := 0;
   FHeldDir := 0;
   Width := 20;
-  Height := 34;
+  Height := TyDensityHeight(ActiveController, 34);
 end;
 
 destructor TTyUpDown.Destroy;

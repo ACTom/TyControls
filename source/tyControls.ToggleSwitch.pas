@@ -3,7 +3,7 @@ unit tyControls.ToggleSwitch;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation;
 
 { Pure knob-X geometry (device pixels). Progress is clamped to [0,1]:
     OffX = AMarginDev (knob at left margin)
@@ -91,8 +91,8 @@ begin
   FKnobAnim.Target := 0;
   FKnobAnim.DurationMs := 120;
   FKnobAnim.Easing := teEaseOutCubic;
-  Width := 44;
-  Height := 24;
+  Height := TyDensityHeight(ActiveController, 24);   { classic 24 / modern --control-height }
+  Width := MulDiv(Height, 44, 24);                   { keep the 44:24 pill aspect at any density }
 end;
 
 destructor TTyToggleSwitch.Destroy;

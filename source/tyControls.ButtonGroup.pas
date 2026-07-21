@@ -3,7 +3,7 @@ unit tyControls.ButtonGroup;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Accel;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel;
 type
   { TTyButtonGroup — a horizontal SEGMENTED button bar: N adjacent cells, each a
     caption, laid out edge-to-edge. Single-select (radio, like a segmented control:
@@ -128,7 +128,7 @@ begin
   FItemIndex := -1;
   FHoverSeg := -1;
   Width := 240;
-  Height := 30;
+  Height := TyDensityHeight(ActiveController, 30);
 end;
 
 destructor TTyButtonGroup.Destroy;

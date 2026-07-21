@@ -3,7 +3,7 @@ unit tyControls.Divider;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 
 type
   { The geometry of a labelled divider, in DEVICE pixels relative to the content
@@ -136,7 +136,7 @@ begin
   FCaption := '';
   FAlignment := taLeftJustify;
   Width := 150;
-  Height := 24;
+  Height := TyDensityHeight(ActiveController, 24);
 end;
 
 function TTyDivider.GetStyleTypeKey: string;

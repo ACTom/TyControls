@@ -3,7 +3,7 @@ unit tyControls.ProgressBar;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, ExtCtrls,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation;
 type
   TTyProgressOrientation = (tpoHorizontal, tpoVertical);   // v3/C4: fill along X or (bottom-up) Y
 
@@ -122,7 +122,7 @@ begin
   FAnimFrom := FPosition;
   FAnimTo := FPosition;
   Width := 200;
-  Height := 20;
+  Height := TyDensityHeight(ActiveController, 20);
 end;
 
 destructor TTyProgressBar.Destroy;

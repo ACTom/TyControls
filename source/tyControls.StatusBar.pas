@@ -3,7 +3,7 @@ unit tyControls.StatusBar;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 type
   TTyStatusPanel = class(TCollectionItem)
   private
@@ -140,7 +140,7 @@ begin
   FSizeGrip := True;
   Align := alBottom;
   Width := 200;
-  Height := 22;
+  Height := TyDensityHeight(ActiveController, 22);
 end;
 destructor TTyStatusBar.Destroy;
 begin

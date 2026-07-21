@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType,
   BGRABitmapTypes, BGRACanvas2D,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.StyleModel,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.StyleModel,
   tyControls.Gauge;
 
 { Map a horizontal position AX (client px) inside a strip of AWidth px holding
@@ -92,7 +92,7 @@ begin
   FReadOnly := False;
   FHoverValue := -1;
   Width := 120;
-  Height := 24;
+  Height := TyDensityHeight(ActiveController, 24);
 end;
 
 function TTyRating.GetStyleTypeKey: string;

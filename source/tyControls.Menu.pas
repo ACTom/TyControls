@@ -1387,7 +1387,7 @@ begin
   FPopup := nil;
   FPendingTop := -1;
   TyAccelRegister(Self);   // shared Alt-state: repaint the bar when Alt is pressed/released
-  Height := 28;
+  Height := TyDensityHeight(ActiveController, 28);
 end;
 
 destructor TTyMenuBar.Destroy;

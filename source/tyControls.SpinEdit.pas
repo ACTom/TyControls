@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8,
   ExtCtrls,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation;
 type
   TTySpinEdit = class(TTyCustomControl)
   private
@@ -125,7 +125,7 @@ begin
   FAlignment := taLeftJustify;
   FMaxLength := 0;
   Width := 120;
-  Height := 28;
+  Height := TyDensityHeight(ActiveController, 28);
   FCaretVisible := True;       // solid caret until a real timer toggles it
   FBlinkTimer := nil;          // lazy: created only when HandleAllocated
   FBlinkElapsedMs := 0;
