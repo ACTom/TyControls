@@ -1,11 +1,11 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 660
+  Height = 700
   Top = 0
-  Width = 1023
+  Width = 1120
   Caption = 'TyControls Pro'
-  ClientHeight = 660
-  ClientWidth = 1023
+  ClientHeight = 700
+  ClientWidth = 1120
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
@@ -23,16 +23,16 @@ object MainForm: TMainForm
       Left = 0
       Height = 34
       Top = 0
-      Width = 1023
+      Width = 1120
       TabOrder = 0
       Caption = 'TyControls Pro  ·  Ant Design Pro 布局'
       Align = alTop
       ButtonWidth = 46
       object DarkSwitch: TTyToggleSwitch
-        Left = 651
-        Height = 24
+        Left = 740
+        Height = 26
         Top = 5
-        Width = 74
+        Width = 96
         TabOrder = 3
         TabStop = True
         Caption = '暗色'
@@ -40,20 +40,20 @@ object MainForm: TMainForm
         Anchors = [akTop, akRight]
       end
       object ThemeCombo: TTyComboBox
-        Left = 735
-        Height = 26
-        Top = 4
-        Width = 130
+        Left = 846
+        Height = 30
+        Top = 3
+        Width = 150
         TabOrder = 4
         ItemIndex = -1
         OnChange = ThemeComboChange
         Anchors = [akTop, akRight]
       end
       object BtnUser: TTyMenuButton
-        Left = 533
-        Height = 28
-        Top = 3
-        Width = 104
+        Left = 604
+        Height = 32
+        Top = 2
+        Width = 118
         TabOrder = 2
         Caption = '管理员'
         StyleClass = 'ghost'
@@ -63,9 +63,9 @@ object MainForm: TMainForm
     end
     object Sider: TTyListGroupPanel
       Left = 0
-      Height = 626
+      Height = 666
       Top = 34
-      Width = 190
+      Width = 216
       TabOrder = 1
       HeaderHeight = 32
       ItemHeight = 30
@@ -74,32 +74,32 @@ object MainForm: TMainForm
     end
     object SiderSplit: TTySplitter
       Cursor = crHSplit
-      Left = 190
-      Height = 626
+      Left = 216
+      Height = 666
       Top = 34
       Width = 5
       TabOrder = 2
       MinSize = 80
     end
     object Content: TTyPanel
-      Left = 195
-      Height = 626
+      Left = 221
+      Height = 666
       Top = 34
-      Width = 828
+      Width = 899
       TabOrder = 3
       Align = alClient
       object TopBar: TTyPanel
         Left = 0
-        Height = 44
+        Height = 56
         Top = 0
-        Width = 828
+        Width = 899
         TabOrder = 0
         Align = alTop
         object Crumb: TTyBreadcrumb
-          Left = 20
-          Height = 22
-          Top = 11
-          Width = 520
+          Left = 22
+          Height = 28
+          Top = 14
+          Width = 640
           Items.Strings = (
             '首页'
             '工作台'
@@ -110,9 +110,9 @@ object MainForm: TMainForm
       end
       object PageHost: TTyPageControl
         Left = 0
-        Height = 582
-        Top = 44
-        Width = 828
+        Height = 610
+        Top = 56
+        Width = 899
         TabOrder = 1
         TabStop = False
         TabHeight = 0
@@ -199,7 +199,7 @@ object MainForm: TMainForm
             Left = 20
             Height = 300
             Top = 174
-            Width = 490
+            Width = 512
             TabOrder = 4
             Title = '近半年成交额 / 退款'
             object ChartSales: TTyChart
@@ -229,36 +229,36 @@ object MainForm: TMainForm
             end
           end
           object CardStatus: TTyCard
-            Left = 530
+            Left = 552
             Height = 300
             Top = 174
-            Width = 278
+            Width = 332
             TabOrder = 5
             Title = '系统状态'
             ShowActions = True
             Anchors = [akTop, akRight]
             object TagOnline: TTyTag
-              Left = 12
+              Left = 14
               Height = 22
               Top = 48
-              Width = 72
+              Width = 100
               StyleClass = 'accent'
               Caption = '运行中'
             end
             object TagBeta: TTyTag
-              Left = 92
+              Left = 110
               Height = 22
               Top = 48
-              Width = 76
+              Width = 80
               Caption = 'Beta'
               Closable = True
               OnClose = TagClosed
             end
             object TagRisk: TTyTag
-              Left = 176
+              Left = 196
               Height = 22
               Top = 48
-              Width = 76
+              Width = 96
               StyleClass = 'danger'
               Caption = '待处理'
             end
@@ -266,7 +266,7 @@ object MainForm: TMainForm
               Left = 12
               Height = 20
               Top = 84
-              Width = 240
+              Width = 306
               Caption = '积压任务(徽标挂在按钮上,不是按钮内置的)'
             end
             object BtnQueue: TTyButton
@@ -292,7 +292,7 @@ object MainForm: TMainForm
               Left = 12
               Height = 44
               Top = 156
-              Width = 250
+              Width = 306
               Caption = 'TTyCard / TTyTag / TTyBadge 是批 1 新落地的控件,这一页就是它们的验收面。'
               Layout = tlTop
               WordWrap = True

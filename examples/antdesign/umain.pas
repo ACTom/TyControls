@@ -350,6 +350,9 @@ begin
     ThemeCombo.Items.Add(names[i]);
   ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('antdesign');
   TyDefaultController.ThemeName := 'antdesign';
+  { 这个示例默认跑**现代密度**(Web 尺度)—— 它是密度轴的视觉验收面。
+    密度与皮肤正交:antdesign 皮肤 + 现代密度 = AntD 的观感 + Web 的疏密。 }
+  TyDefaultController.Density := tdModern;
   ApplyChromeTheme(TyDefaultController);   // theme the window chrome + background
 
   // 标题栏用户菜单走同一套主题(全局默认控制器) —— 弹出体的背景/边框/高亮从主题解析。
