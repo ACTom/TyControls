@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LazUTF8, Clipbrd,
   ExtCtrls, StdCtrls,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.UndoStack,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.UndoStack,
   tyControls.Animation, tyControls.QtWS, tyControls.GtkWS;
 type
   TTyIntArray = array of Integer;
@@ -198,7 +198,7 @@ begin
   TabStop := True;
   Cursor := crIBeam;
   Width := 140;
-  Height := 28;
+  Height := TyDensityHeight(ActiveController, 28);
   FText := '';
   FCaret := 0;
   FSelAnchor := 0;

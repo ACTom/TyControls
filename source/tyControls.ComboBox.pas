@@ -198,7 +198,7 @@ begin
   FPopupList := nil;
   TabStop := True;
   Width := 145;
-  Height := 26;
+  Height := TyDensityHeight(ActiveController, 26);
   { Editable-mode scaffolding. The editor stays hidden until Style := csDropDown. }
   FStyle := csDropDownList;
   FVisibleItems := TStringList.Create;

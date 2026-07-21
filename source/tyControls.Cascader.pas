@@ -1684,7 +1684,7 @@ begin
   TabStop := True;
   // The same drop size as TTyComboBox: the two fields are meant to sit in one column.
   Width := 145;
-  Height := 26;
+  Height := TyDensityHeight(ActiveController, 26);
 end;
 
 destructor TTyCascader.Destroy;

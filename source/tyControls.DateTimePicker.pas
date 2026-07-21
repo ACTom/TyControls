@@ -71,7 +71,7 @@ uses
   Classes, SysUtils, Types, DateUtils,
   Controls, Graphics, LCLType, LCLIntf,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation,
   tyControls.Popup, tyControls.Calendar;
 
 type
@@ -702,7 +702,7 @@ begin
   FCalendar      := nil;
   FCloseUpTick   := 0;
   Width  := 130;
-  Height := 24;
+  Height := TyDensityHeight(ActiveController, 24);
   RebuildSegments;
 end;
 

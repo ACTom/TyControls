@@ -153,6 +153,14 @@ const
 
 function TyDefaultController: TTyStyleController;
 
+{ Density-aware default height for an interactive control, read once in its constructor.
+  Classic returns the control's own classic default verbatim (byte-identical -- the token is
+  NOT consulted, so mixed classic defaults stay put); modern returns --control-height, the
+  density pack's roomier value (38), so an Edit/Button/ComboBox dropped under modern density
+  comes up tall enough for the larger font instead of a classic-sized box. AController may be
+  nil (falls back to the default controller). }
+function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): Integer;
+
 implementation
 
 var
@@ -564,6 +572,18 @@ begin
   if GDefaultController = nil then
     GDefaultController := TTyStyleController.Create(nil);
   Result := GDefaultController;
+end;
+
+function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): Integer;
+var
+  c: TTyStyleController;
+begin
+  c := AController;
+  if c = nil then c := TyDefaultController;
+  if c.Density = tdModern then
+    Result := c.Metric('--control-height', AClassicH)
+  else
+    Result := AClassicH;   { classic: keep this control's own default, byte-identical }
 end;
 
 finalization

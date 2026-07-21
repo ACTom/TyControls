@@ -394,7 +394,7 @@ begin
   TabStop := True;
   // The combo's drop size: a TreeSelect must sit in a row of combos without a seam.
   Width := 145;
-  Height := 26;
+  Height := TyDensityHeight(ActiveController, 26);
   { The tree exists from the start — the app populates it in FormCreate, long before (and
     perhaps without ever) a drop. Owned by Self, so the component chain frees it; it is only
     PARENTED into the popup form, which never owns it (TTyDropdownPopup.SetContent). }

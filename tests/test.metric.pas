@@ -10,7 +10,7 @@ uses
   fpcunit, testregistry,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.CheckBox,
   tyControls.GroupBox, tyControls.ListView, tyControls.Grid, tyControls.ExPanel,
-  tyControls.BuiltinThemes;
+  tyControls.Edit, tyControls.Button, tyControls.BuiltinThemes;
 type
   TCheckBoxProbe = class(TTyCheckBox)   // expose the protected RenderTo for headless sampling
   public
@@ -50,6 +50,7 @@ type
     procedure TestListViewRowHeightFollowsDensity;
     procedure TestGridRowHeightFollowsDensity;
     procedure TestExPanelHeaderHeightFollowsDensity;
+    procedure TestControlDefaultHeightFollowsDensity;
   end;
 
 implementation
@@ -327,6 +328,37 @@ begin
   finally
     p.Free;
     c.Free;
+  end;
+end;
+
+{ The real fix for "modern looks like enlarged classic": interactive controls read
+  --control-height in their constructor via TyDensityHeight, so one built under modern
+  density comes up tall (38) instead of classic-sized, while classic keeps each control's
+  own default byte-for-byte. Constructor-time behaviour keys off TyDefaultController (a
+  fresh control has no Controller yet), so this toggles the global and restores it. }
+procedure TMetricTest.TestControlDefaultHeightFollowsDensity;
+var
+  savedDensity: TTyDensity;
+  eModern, eClassic: TTyEdit;
+  bModern: TTyButton;
+begin
+  TyRegisterBuiltinThemes;
+  TyDefaultController.ThemeName := 'default';
+  savedDensity := TyDefaultController.Density;
+  eModern := nil; eClassic := nil; bModern := nil;
+  try
+    TyDefaultController.Density := tdModern;
+    eModern := TTyEdit.Create(nil);
+    bModern := TTyButton.Create(nil);
+    AssertTrue('现代密度下构造的 Edit 应明显高于经典 28', eModern.Height > 34);
+    AssertTrue('现代密度下构造的 Button 应明显高于经典 30', bModern.Height > 34);
+
+    TyDefaultController.Density := tdClassic;
+    eClassic := TTyEdit.Create(nil);
+    AssertEquals('经典密度下 Edit 保持自身默认 28,不漂移', 28, eClassic.Height);
+  finally
+    eModern.Free; eClassic.Free; bModern.Free;
+    TyDefaultController.Density := savedDensity;
   end;
 end;
 

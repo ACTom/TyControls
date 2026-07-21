@@ -3,7 +3,7 @@ unit tyControls.Button;
 interface
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LMessages, ExtCtrls,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Animation, tyControls.Accel,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation, tyControls.Accel,
   tyControls.StrConsts;
 type
   // Which corner the numeric badge sits in (inset within the button's client rect).
@@ -143,7 +143,7 @@ begin
   FBgAnim.DurationMs := 120;
   FBgAnim.Easing := teEaseOutCubic;
   Width := 88;
-  Height := 30;
+  Height := TyDensityHeight(ActiveController, 30);
 end;
 
 destructor TTyButton.Destroy;
