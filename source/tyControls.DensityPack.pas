@@ -85,7 +85,7 @@ begin
     '  --listgroup-header-height: 40px;' + LineEnding +
     '  --listgroup-icon-gap: 8px;' + LineEnding +
     '  --listgroup-icon-size: 20px;' + LineEnding +
-    '  --listgroup-item-height: 42px;' + LineEnding +
+    '  --listgroup-item-height: 44px;' + LineEnding +
     '  --listgroup-item-indent: 22px;' + LineEnding +
     '  --listgroup-item-inset: 4px;' + LineEnding +
     '  --listview-cell-padding: 4px;' + LineEnding +
