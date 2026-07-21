@@ -558,7 +558,6 @@ begin
     '  /* ── COMPONENT: scalars ── */' + LineEnding +
     '  --input-border-width: 1px;' + LineEnding +
     '  --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;' + LineEnding +
-    '  --font-size-base: 9px; --font-size-title: 9px;' + LineEnding +
     '  --font-weight-normal: 400; --font-weight-bold: 700;' + LineEnding +
     '    /* P3 dual-mode: per-mode transparent fill (light=white/dark=black, alpha 0) */' + LineEnding +
     '    --transparent-fill: alpha(#FFFFFF, 0);' + LineEnding +
@@ -620,7 +619,6 @@ begin
     '  /* ── COMPONENT: scalars ── */' + LineEnding +
     '  --input-border-width: 1px;' + LineEnding +
     '  --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;' + LineEnding +
-    '  --font-size-base: 9px; --font-size-title: 9px;' + LineEnding +
     '  --font-weight-normal: 400; --font-weight-bold: 700;' + LineEnding +
     '    /* P3 dual-mode: per-mode transparent fill (light=white/dark=black, alpha 0) */' + LineEnding +
     '    --transparent-fill: alpha(#000000, 0);' + LineEnding +

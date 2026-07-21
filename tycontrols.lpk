@@ -61,6 +61,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.Controller"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.DensityPack.pas"/>
+        <UnitName Value="tyControls.DensityPack"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.Base.pas"/>
         <UnitName Value="tyControls.Base"/>
       </Item>

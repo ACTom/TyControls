@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Controls, Forms, ExtCtrls,
   LazMethodList,
   tyControls.Types, tyControls.StyleModel, tyControls.Painter,
-  tyControls.ThemeRegistry, tyControls.SystemTheme;
+  tyControls.ThemeRegistry, tyControls.SystemTheme, tyControls.DensityPack;
 
 type
   { P4 (D8 / §3.7). Theme follow policy. tfManual = the app drives Mode/ThemeName
@@ -13,6 +13,10 @@ type
     tracks the OS light/dark scheme + accent: it pulls the detected scheme into Mode and
     re-resolves the accent on RefreshFromSystem / live OS-change notifications. }
   TTyThemeFollow = (tfManual, tfFollowSystem);
+
+  { 密度轴,与配色/皮肤正交。tdClassic = 什么都不叠(现值即经典);
+    tdModern = 在当前主题之上追加现代密度包(只覆盖几何令牌)。 }
+  TTyDensity = (tdClassic, tdModern);
 
 var
   // When True (default), the first TTyStyleController created in a GUI context
@@ -39,6 +43,13 @@ type
     FLastMode: string;           // last system-followed mode ('light'/'dark'/''); poll change-anchor
     FLastAccent: string;         // last system-followed accent literal; poll change-anchor
     FChangeListeners: TMethodList;
+    FDensity: TTyDensity;
+    procedure SetDensity(AValue: TTyDensity);
+    { 把当前主题重新装一遍(REPLACE layer-1),然后按密度决定叠不叠包。
+      换主题/换密度都走它 —— 密度包是追加层,换主题的 REPLACE 会冲掉它,
+      不重叠的话「先开现代、再换皮肤」会悄悄退回经典(两边同步的老坑)。 }
+    procedure ReloadThemeLayer;
+    procedure ApplyDensityPack;   // 若 tdModern,追加现代包(在 layer-1 已装好之后)
     procedure SetThemeFile(const AValue: string);
     procedure SetThemeName(const AValue: string);
     function GetMode: string;
@@ -126,6 +137,7 @@ type
       while this is tfFollowSystem. A later explicit Mode/ThemeName set still wins (manual
       override), and remains until the next RefreshFromSystem. }
     property Follow: TTyThemeFollow read FFollow write SetFollow default tfManual;
+    property Density: TTyDensity read FDensity write SetDensity default tdClassic;
     { E23 (DX) hot-reload. False (default). When True AND ThemeFile is set, the controller
       watches that file's content (last-modified stamp + size) and, on change, reloads the
       theme and repaints registered controls. The watch is driven at runtime by a lazily
@@ -212,6 +224,7 @@ begin
     // Compile-in built-in theme (registered as an inline CSS source): REPLACE layer-1
     // from the string + bump ThemeVersion. No file -> no hot-reload watch.
     FModel.LoadFromCss(css);
+    ApplyDensityPack;
     Changed;
   end
   else if TyResolveTheme(AValue, src) and (src <> '') and FileExists(src) then
@@ -219,6 +232,7 @@ begin
     // §3.8 switch = REPLACE layer-1 (LoadFromFile uses AReplace=True and bumps
     // ThemeVersion). Never additive: switching themes must not stack residual rules.
     FModel.LoadFromFile(src);
+    ApplyDensityPack;
     Changed;
   end;
 end;
@@ -233,6 +247,42 @@ begin
   if FModel.Mode = AValue then Exit;
   FModel.SetMode(AValue);
   Changed;
+end;
+
+procedure TTyStyleController.ApplyDensityPack;
+begin
+  { 现代包只在 layer-1 已装好之后追加。经典什么都不做 —— 经典 = 不叠。 }
+  if FDensity = tdModern then
+    FModel.LoadFromCssAdditive(TyDensityModernCss);
+end;
+
+procedure TTyStyleController.ReloadThemeLayer;
+var
+  src, css: string;
+begin
+  { 重装 layer-1(REPLACE),再按密度叠包。用于切换密度:追加层没法「卸下」,
+    只能把底层重装一遍、再决定叠不叠。 }
+  if FThemeFile <> '' then
+  begin
+    if FileExists(FThemeFile) then FModel.LoadFromFile(FThemeFile);
+  end
+  else if FThemeName <> '' then
+  begin
+    if TyResolveThemeCss(FThemeName, css) then FModel.LoadFromCss(css)
+    else if TyResolveTheme(FThemeName, src) and (src <> '') and FileExists(src) then
+      FModel.LoadFromFile(src);
+  end;
+  ApplyDensityPack;
+  Changed;
+end;
+
+procedure TTyStyleController.SetDensity(AValue: TTyDensity);
+begin
+  if FDensity = AValue then Exit;
+  FDensity := AValue;
+  { 换密度 = 把当前主题重装一遍再按新密度叠。tdModern 追加包,
+    tdClassic 靠重装把包冲掉(追加层无法单独卸载)。 }
+  ReloadThemeLayer;
 end;
 
 procedure TTyStyleController.SetFollow(const AValue: TTyThemeFollow);

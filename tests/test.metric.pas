@@ -9,7 +9,7 @@ uses
   Classes, SysUtils, Types, Graphics, BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.CheckBox,
-  tyControls.GroupBox;
+  tyControls.GroupBox, tyControls.BuiltinThemes;
 type
   TCheckBoxProbe = class(TTyCheckBox)   // expose the protected RenderTo for headless sampling
   public
@@ -34,6 +34,11 @@ type
     procedure TestControllerMetricPassthrough;
     procedure TestCheckBoxBoxSizeFollowsMetric;
     procedure TestGroupBoxCaptionBandFollowsMetric;
+    { 密度尺度第四期 }
+    procedure TestDensityClassicIsDefault;
+    procedure TestDensityModernEnlargesTokens;
+    procedure TestDensitySurvivesThemeSwitch;
+    procedure TestDensityTogglesBackToClassic;
   end;
 
 implementation
@@ -199,6 +204,77 @@ begin
     AssertTrue('metric grows the caption band (30 vs 16)', topBig > topDef);
   finally
     gbBig.Free; gbDef.Free; ctrlBig.Free; ctrlDef.Free;
+  end;
+end;
+
+{ 密度默认是经典:什么都不叠,令牌 = 现值。 }
+procedure TMetricTest.TestDensityClassicIsDefault;
+var c: TTyStyleController;
+begin
+  c := TTyStyleController.Create(nil);
+  try
+    TyRegisterBuiltinThemes;
+    c.ThemeName := 'default';
+    AssertTrue('默认是经典', c.Density = tdClassic);
+    AssertEquals('经典 checkbox 16', 16, c.Metric('--checkbox-size', 99));
+    AssertEquals('经典 row-height 22', 22, c.Metric('--row-height', 99));
+  finally
+    c.Free;
+  end;
+end;
+
+{ 开现代:几何令牌变大(证明密度包叠上去、被读到)。 }
+procedure TMetricTest.TestDensityModernEnlargesTokens;
+var c: TTyStyleController;
+begin
+  c := TTyStyleController.Create(nil);
+  try
+    TyRegisterBuiltinThemes;
+    c.ThemeName := 'default';
+    c.Density := tdModern;
+    AssertEquals('现代 checkbox 20', 20, c.Metric('--checkbox-size', 99));
+    AssertEquals('现代 row-height 32', 32, c.Metric('--row-height', 99));
+    AssertEquals('现代 font-size-base 14', 14, c.Metric('--font-size-base', 99));
+  finally
+    c.Free;
+  end;
+end;
+
+{ **换主题冲掉密度包**那个坑:先开现代、再换皮肤,现代令牌必须还在。
+  SetThemeName 走 LoadFromCss(REPLACE),会把追加的密度包冲掉 ——
+  不在换主题后重叠的话,这里就退回经典。 }
+procedure TMetricTest.TestDensitySurvivesThemeSwitch;
+var c: TTyStyleController;
+begin
+  c := TTyStyleController.Create(nil);
+  try
+    TyRegisterBuiltinThemes;
+    c.ThemeName := 'default';
+    c.Density := tdModern;
+    AssertEquals('换主题前是现代', 20, c.Metric('--checkbox-size', 99));
+    c.ThemeName := 'office';       { 换个皮肤 }
+    AssertEquals('换主题后仍是现代(密度包被重叠)', 20, c.Metric('--checkbox-size', 99));
+    c.ThemeName := 'default';
+    AssertEquals('再换回来仍是现代', 20, c.Metric('--checkbox-size', 99));
+  finally
+    c.Free;
+  end;
+end;
+
+{ 切回经典:追加层没法卸载,靠重装底层冲掉 —— 令牌要回到经典值。 }
+procedure TMetricTest.TestDensityTogglesBackToClassic;
+var c: TTyStyleController;
+begin
+  c := TTyStyleController.Create(nil);
+  try
+    TyRegisterBuiltinThemes;
+    c.ThemeName := 'default';
+    c.Density := tdModern;
+    AssertEquals('现代 20', 20, c.Metric('--checkbox-size', 99));
+    c.Density := tdClassic;
+    AssertEquals('切回经典 16', 16, c.Metric('--checkbox-size', 99));
+  finally
+    c.Free;
   end;
 end;
 

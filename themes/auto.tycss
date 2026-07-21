@@ -532,7 +532,6 @@ TyTagClose:hover { background: var(--overlay-hover); color: var(--on-surface); b
   /* ── COMPONENT: scalars ── */
   --input-border-width: 1px;
   --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;
-  --font-size-base: 9px; --font-size-title: 9px;
   --font-weight-normal: 400; --font-weight-bold: 700;
     /* P3 dual-mode: per-mode transparent fill (light=white/dark=black, alpha 0) */
     --transparent-fill: alpha(#FFFFFF, 0);
@@ -594,7 +593,6 @@ TyTagClose:hover { background: var(--overlay-hover); color: var(--on-surface); b
   /* ── COMPONENT: scalars ── */
   --input-border-width: 1px;
   --radius-sm: 3px; --radius-pill: 8px; --radius-round: 12px; --radius-scroll: 4px;
-  --font-size-base: 9px; --font-size-title: 9px;
   --font-weight-normal: 400; --font-weight-bold: 700;
     /* P3 dual-mode: per-mode transparent fill (light=white/dark=black, alpha 0) */
     --transparent-fill: alpha(#000000, 0);
