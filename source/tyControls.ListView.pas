@@ -187,7 +187,9 @@ type
     FOwnerData:  Boolean;
     { view }
     FViewStyle:         TTyListViewStyle;
-    FRowHeight:         Integer;   { logical px; report row height }
+    FRowHeight:         Integer;   { logical px; explicit override (see FRowHeightExplicit) }
+    FRowHeightExplicit: Boolean;   { True once a host/.lfm sets RowHeight; False = follow the
+                                     theme's --row-height token (density-aware: 22 classic / 32 modern) }
     FHeader:            TTyHeader;
     FShowColumnHeaders: Boolean;
     FGridLines:         Boolean;
@@ -279,6 +281,7 @@ type
     procedure SetOwnerData(AValue: Boolean);
     procedure SetItemCount(AValue: Integer);
     procedure SetViewStyle(AValue: TTyListViewStyle);
+    function  GetRowHeight: Integer;
     procedure SetRowHeight(AValue: Integer);
     procedure SetShowColumnHeaders(AValue: Boolean);
     procedure SetGridLines(AValue: Boolean);
@@ -488,9 +491,12 @@ type
     property ItemIndex: Integer read GetItemIndex write SetItemIndex;
   published
     property ViewStyle: TTyListViewStyle read FViewStyle write SetViewStyle default lvsReport;
-    { Report row height in logical px, DPI-scaled at paint time. A file dialog wants
-      denser rows than a general list, and there is no theme token for it. }
-    property RowHeight: Integer read FRowHeight write SetRowHeight default TyLvRowHeight;
+    { Report row height in logical px, DPI-scaled at paint time. Left unset it follows the
+      theme's --row-height token, so a list gets denser rows at classic density (22) and
+      roomier ones at modern density (32) automatically. Set it explicitly (a file dialog
+      wants its own density) and that value wins and is streamed; the getter then returns
+      what you set. Streamed only when explicitly set (stored FRowHeightExplicit). }
+    property RowHeight: Integer read GetRowHeight write SetRowHeight stored FRowHeightExplicit;
     property OwnerData: Boolean read FOwnerData write SetOwnerData default False;
     property ItemCount: Integer read FItemCount write SetItemCount default 0;
     property Items: TTyListItems read FItems write SetItems;
@@ -793,7 +799,8 @@ begin
   FGroupView := False;
 
   FViewStyle         := lvsReport;
-  FRowHeight         := ActiveController.Metric('--row-height', TyLvRowHeight);
+  FRowHeight         := TyLvRowHeight;   { fallback; unused while FRowHeightExplicit=False }
+  FRowHeightExplicit := False;           { follow --row-height (density-aware) until set }
   FShowColumnHeaders := True;
   FGridLines         := False;
   FRowSelect         := True;
@@ -1349,7 +1356,7 @@ begin
   else
     AMetrics.LabelW := ScaleI(ActiveController.Metric('--listview-small-label-width', TyLvSmallLabelW));
   end;
-  AMetrics.RowH   := ScaleI(FRowHeight);
+  AMetrics.RowH   := ScaleI(GetRowHeight);
   if (FViewStyle = lvsReport) and FShowColumnHeaders and (hoVisible in FHeader.Options) then
     AMetrics.HeaderH := ScaleI(FHeader.Height)
   else
@@ -2128,9 +2135,21 @@ begin
     ItemsChanged;
 end;
 
+{ Effective report row height in logical px: an explicit RowHeight wins; otherwise follow
+  the theme's --row-height token, which the density pack raises for modern density. Resolved
+  live (not cached) so toggling Controller.Density re-heights the rows on the next layout. }
+function TTyListView.GetRowHeight: Integer;
+begin
+  if FRowHeightExplicit then
+    Result := FRowHeight
+  else
+    Result := ActiveController.Metric('--row-height', TyLvRowHeight);
+end;
+
 procedure TTyListView.SetRowHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
+  FRowHeightExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
   if FRowHeight = AValue then Exit;
   FRowHeight := AValue;
   UpdateScrollBars;

@@ -9,7 +9,7 @@ uses
   Classes, SysUtils, Types, Graphics, BGRABitmap, BGRABitmapTypes,
   fpcunit, testregistry,
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.CheckBox,
-  tyControls.GroupBox, tyControls.BuiltinThemes;
+  tyControls.GroupBox, tyControls.ListView, tyControls.BuiltinThemes;
 type
   TCheckBoxProbe = class(TTyCheckBox)   // expose the protected RenderTo for headless sampling
   public
@@ -19,6 +19,13 @@ type
   TGroupBoxProbe = class(TTyGroupBox)   // expose the reserved top inset (caption band)
   public
     function TopInset: Integer;
+  end;
+
+  { Exposes the protected CurrentMetrics so a test can read the row height the
+    layout/paint path actually uses. }
+  TLVMetricsAccess = class(TTyListView)
+  public
+    function RowHeightPx: Integer;
   end;
 
   TMetricTest = class(TTestCase)
@@ -39,9 +46,15 @@ type
     procedure TestDensityModernEnlargesTokens;
     procedure TestDensitySurvivesThemeSwitch;
     procedure TestDensityTogglesBackToClassic;
+    procedure TestListViewRowHeightFollowsDensity;
   end;
 
 implementation
+
+function TLVMetricsAccess.RowHeightPx: Integer;
+begin
+  Result := CurrentMetrics.RowH;
+end;
 
 procedure TCheckBoxProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -224,6 +237,40 @@ begin
 end;
 
 { 开现代:几何令牌变大(证明密度包叠上去、被读到)。 }
+{ The report row height must ride the density axis: an unset RowHeight follows the
+  --row-height token (22 classic -> 32 modern), while an explicit RowHeight pins itself
+  and ignores density. Before the fix the constructor cached --row-height once at classic
+  density, so a modern-density list stayed at 22-px rows -- the antdesign list page's
+  "Win32 grid" look. Observed through CurrentMetrics.RowH (the value layout/paint use). }
+procedure TMetricTest.TestListViewRowHeightFollowsDensity;
+var
+  c: TTyStyleController;
+  lv: TLVMetricsAccess;
+  classicH, modernH, explicitH: Integer;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  lv := TLVMetricsAccess.Create(nil);
+  try
+    c.ThemeName := 'default';
+    lv.Controller := c;
+    lv.SetBounds(0, 0, 300, 200);
+
+    c.Density := tdClassic;
+    classicH := lv.RowHeightPx;
+    c.Density := tdModern;
+    modernH := lv.RowHeightPx;
+    AssertTrue('未设 RowHeight 时,现代行高应明显高于经典', modernH > classicH + 4);
+
+    lv.RowHeight := 20;                      { explicit -> pinned, density no longer applies }
+    explicitH := lv.RowHeightPx;
+    AssertTrue('显式 RowHeight 在现代密度下仍被钉住(不跟随)', explicitH < modernH);
+  finally
+    lv.Free;
+    c.Free;
+  end;
+end;
+
 procedure TMetricTest.TestDensityModernEnlargesTokens;
 var c: TTyStyleController;
 begin
