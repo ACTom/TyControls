@@ -3,7 +3,7 @@ unit tyControls.RelativePanel;
 interface
 uses
   Classes, SysUtils, Types, Controls, LCLType,
-  tyControls.Types, tyControls.Base, tyControls.Panel;
+  tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.Panel;
 
 type
   { A single relative-layout rule flag. A child's rule set is a SET of these;
@@ -96,9 +96,11 @@ type
   private
     FItems: TFPList;          // of PRelChildRec (owned)
     FSpacing: Integer;        // px between siblings on the position rules
+    FSpacingExplicit: Boolean;// True once a host/.lfm pins Spacing; False = follow --spacing
     FInLayout: Boolean;       // reentrancy guard (SetBounds -> Resize -> PerformLayout)
     function FindRec(AControl: TControl): Pointer;   // PRelChildRec or nil
     function RemoveRec(AControl: TControl): Boolean;  // True if one was removed
+    function GetSpacing: Integer;
     procedure SetSpacing(AValue: Integer);
     function ContentRect: TRect;   // interior after theme padding, in client coords
   protected
@@ -129,7 +131,7 @@ type
   published
     { Gap in px inserted between siblings on the position rules (RightOf/LeftOf/Above/
       Below). Edge-align and parent-align rules are NOT offset by it. }
-    property Spacing: Integer read FSpacing write SetSpacing default 8;
+    property Spacing: Integer read GetSpacing write SetSpacing stored FSpacingExplicit;
     property Align;
     property Anchors;
     property StyleClass;
@@ -308,7 +310,8 @@ constructor TTyRelativePanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FItems := TFPList.Create;
-  FSpacing := 8;
+  FSpacing := 8;               { fallback; unused while FSpacingExplicit=False }
+  FSpacingExplicit := False;   { follow --spacing (density-aware) until pinned }
   Width := 240;
   Height := 160;
 end;
@@ -365,9 +368,18 @@ begin
   end;
 end;
 
+function TTyRelativePanel.GetSpacing: Integer;
+begin
+  if FSpacingExplicit then
+    Result := FSpacing
+  else
+    Result := ActiveController.Metric('--spacing', 8);
+end;
+
 procedure TTyRelativePanel.SetSpacing(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
+  FSpacingExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
   if FSpacing = AValue then Exit;
   FSpacing := AValue;
   PerformLayout;
@@ -492,7 +504,7 @@ begin
   end;
 
   cr := ContentRect;
-  positions := TyRelativeSolve(items, cr, FSpacing);
+  positions := TyRelativeSolve(items, cr, GetSpacing);
 
   FInLayout := True;
   try

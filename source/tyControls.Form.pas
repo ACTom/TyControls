@@ -179,6 +179,7 @@ type
   TTyForm = class(TForm, ITyGlassHost, ITyThemedBackground)
   private
     FTitleBar: TTyTitleBar;
+    FTitleHeightExplicit: Boolean;    // True once TitleHeight is set in code/.lfm (pins it; else follows density)
     FSurface: TTyFormSurface;         // Phase 1: runtime child content-host (covers the WS_THICKFRAME dead band)
     FMenuBar: TTyMenuBar;             // the primary menu bar (shortcut dispatch / mac global bar)
     FResizable: Boolean;              // window edge-resize opt-out (default True); see SetResizable
@@ -295,7 +296,10 @@ type
       TMainMenu is handed to the inherited Form.Menu (the global top-of-screen bar)
       and the in-window bar is hidden. Freeing the bar nils this (FreeNotification). }
     property MenuBar: TTyMenuBar read FMenuBar write SetMenuBar;
-    property TitleHeight: Integer read GetTitleHeight write SetTitleHeight default 32;
+    { Title-bar height. Unset, it follows the density axis (classic 32 / modern --control-height,
+      applied by ApplyChromeTheme); an explicit value pins it. Streamed only when explicitly set
+      (stored FTitleHeightExplicit) so a density-driven height is never baked into the .lfm. }
+    property TitleHeight: Integer read GetTitleHeight write SetTitleHeight stored FTitleHeightExplicit;
     { Whether the window can be edge-resized. Default True (the borderless window is
       resizable — the fix for the long-standing "no TTyForm could resize" bug). Setting
       False makes a fixed-size window AND disables maximize (a fixed window can't
@@ -612,7 +616,15 @@ begin
     begin
       // DrawGlyph insets ~4 logical px per side, so the glyph box must be that much
       // larger than the desired stroke extent or the icon collapses to a few pixels.
-      GlyphSize := P.Scale(18);
+      // Density axis: classic keeps the bespoke 18 logical px (byte-identical); modern reads
+      // --icon-size (20) so the caption glyphs match the roomier modern chrome. Gated on density
+      // because the classic theme DEFINES --icon-size:16 -- reading the token unconditionally would
+      // shrink the classic caption glyph from 18 to 16 (a drift). 20 keeps a healthy margin over
+      // DrawGlyph's ~4px/side inset floor.
+      if ActiveController.Density = tdModern then
+        GlyphSize := P.Scale(TyDensityMetric(ActiveController, 18, '--icon-size'))
+      else
+        GlyphSize := P.Scale(18);
       CX := R.Left + (R.Right - R.Left - GlyphSize) div 2;
       CY := R.Top + (R.Bottom - R.Top - GlyphSize) div 2;
       GlyphRect := Rect(CX, CY, CX + GlyphSize, CY + GlyphSize);
@@ -645,7 +657,10 @@ begin
   // alNone, so existing .lfm files keep writing `Align = alTop` explicitly — no change for
   // them — but a freshly dropped/created bar now snaps to the top strip on its own.)
   Align := alTop;
-  SetBounds(0, 0, 200, 32);
+  // Height follows the density axis: classic 32 (byte-identical); modern --control-height (38) when a
+  // modern controller is already active at construction. Streamed forms associate the controller AFTER
+  // this ctor, so TTyForm.ApplyChromeTheme re-derives the bar height once its controller is applied.
+  SetBounds(0, 0, 200, TyDensityHeight(ActiveController, 32));
   FMinButton := TTyCaptionButton.Create(Self);
   FMinButton.Kind := cbkMin;
   FMinButton.Parent := Self;
@@ -1507,6 +1522,7 @@ end;
 
 procedure TTyForm.SetTitleHeight(AValue: Integer);
 begin
+  FTitleHeightExplicit := True;   // an explicit set (code/.lfm) pins the height, overriding the density metric
   if (FTitleBar <> nil) and (FTitleBar.Height <> AValue) then FTitleBar.Height := AValue;
 end;
 
@@ -1762,6 +1778,13 @@ begin
     FTitleBar.MinButton.Controller := AController;
     FTitleBar.MaxButton.Controller := AController;
     FTitleBar.CloseButton.Controller := AController;
+    { Density axis: with no explicit TitleHeight, re-derive the bar height from the active
+      controller -- classic keeps 32 (byte-identical no-op), modern grows to --control-height (38).
+      Runtime only (the designer must not mutate the streamed bar's Height). DPI-scaled the same way
+      EffectiveButtonWidthPx scales its metric (MulDiv by Font.PixelsPerInch), so it agrees with the
+      HandleChangeBounds cross-monitor rescale instead of clobbering it. }
+    if (not FTitleHeightExplicit) and not (csDesigning in ComponentState) then
+      FTitleBar.Height := MulDiv(TyDensityHeight(AController, 32), FTitleBar.Font.PixelsPerInch, 96);
     { Theme the title bar's OWN LCL Color, not just the form's. A windowed control hosted on
       the bar (a theme switcher, a light/dark toggle, a ghost button in its transparent state)
       erases its unpainted background to its PARENT's LCL Color -- if that stays the default

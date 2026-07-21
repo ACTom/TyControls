@@ -161,6 +161,15 @@ function TyDefaultController: TTyStyleController;
   nil (falls back to the default controller). }
 function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): Integer;
 
+{ Density-aware value keyed on ANY length token. Classic returns AClassicVal verbatim (the
+  token is NOT consulted, so a control whose classic default differs from the token's classic
+  value does not drift); modern returns Metric(AToken, AClassicVal). Use this instead of a raw
+  ActiveController.Metric(token, default) whenever the default is a control's OWN classic size
+  that must stay byte-identical -- reading the token directly returns the token's classic value,
+  not the control's, which silently shifts classic. AController may be nil. }
+function TyDensityMetric(AController: TTyStyleController; AClassicVal: Integer;
+  const AToken: string): Integer;
+
 implementation
 
 var
@@ -574,16 +583,22 @@ begin
   Result := GDefaultController;
 end;
 
-function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): Integer;
+function TyDensityMetric(AController: TTyStyleController; AClassicVal: Integer;
+  const AToken: string): Integer;
 var
   c: TTyStyleController;
 begin
   c := AController;
   if c = nil then c := TyDefaultController;
   if c.Density = tdModern then
-    Result := c.Metric('--control-height', AClassicH)
+    Result := c.Metric(AToken, AClassicVal)
   else
-    Result := AClassicH;   { classic: keep this control's own default, byte-identical }
+    Result := AClassicVal;   { classic: keep the caller's own default, byte-identical }
+end;
+
+function TyDensityHeight(AController: TTyStyleController; AClassicH: Integer): Integer;
+begin
+  Result := TyDensityMetric(AController, AClassicH, '--control-height');
 end;
 
 finalization

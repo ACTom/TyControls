@@ -3,8 +3,8 @@ unit tyControls.Dialogs.Color;
 interface
 uses Classes, SysUtils, Types, Math, Graphics, Controls, Forms, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.ColorMath,
-  tyControls.Dialogs, tyControls.Edit, tyControls.SpinEdit, tyControls.TyLabel,
-  tyControls.StrConsts;
+  tyControls.Controller, tyControls.Dialogs, tyControls.Edit, tyControls.SpinEdit,
+  tyControls.TyLabel, tyControls.StrConsts;
 type
   TTyHSVSquare = class(TTyCustomControl)
   private
@@ -255,8 +255,9 @@ begin
   r := ContentRect;
   x0 := r.Left + TyDlgPad;
   y0 := r.Top + TyDlgPad;
-  spinW := 56; spinH := TyDlgEditH; rowH := spinH + RowGap; labelW := 14;
-  // labels are 20px tall; nudge them so their text baseline centres against the 30px spin.
+  // Spin/edit height follows the density axis: classic 30 (= TyDlgEditH), modern --control-height.
+  spinW := 56; spinH := TyDensityHeight(nil, TyDlgEditH); rowH := spinH + RowGap; labelW := 14;
+  // labels are 20px tall; nudge them so their text baseline centres against the (density) spin.
   labelTop := (spinH - 20) div 2;
   cellW := labelW + LblGap + spinW;                 // full width of one label+spin cell
 

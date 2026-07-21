@@ -219,6 +219,21 @@ uses
   tyControls.ColorBox, tyControls.ColorComboBox,
   tyControls.Dialogs.Color, tyControls.Dialogs.Font;
 
+{ Density-aware icon/indent slot (logical px). Mirrors TyDensityHeight: at CLASSIC density it
+  returns AClassic byte-identical (--icon-size is defined in the base theme as 16 and so cannot be
+  used as a fallback here without shifting the classic geometry); at MODERN density it reads the
+  --icon-size token (falling back to AClassic only if the token is somehow unset). }
+function TyDensityIconSlot(AController: TTyStyleController; AClassic: Integer): Integer;
+var c: TTyStyleController;
+begin
+  c := AController;
+  if c = nil then c := TyDefaultController;
+  if c.Density = tdModern then
+    Result := c.Metric('--icon-size', AClassic)
+  else
+    Result := AClassic;   { classic: byte-identical to the control's own constant }
+end;
+
 function TyParseFontDescriptor(const ADesc: string; out AName: string; out ASize: Integer): Boolean;
 var i, p: Integer;
 begin
@@ -239,7 +254,9 @@ end;
 
 function TTyValueEdit.RightReserve(APPI: Integer): Integer;
 begin
-  if FShowEllipsis then Result := MulDiv(18, APPI, 96) else Result := 0;
+  { The trailing "…" button slot: 18 logical px at classic, --icon-size at modern density. }
+  if FShowEllipsis then Result := MulDiv(TyDensityIconSlot(ActiveController, 18), APPI, 96)
+  else Result := 0;
 end;
 
 procedure TTyValueEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect;
@@ -487,13 +504,14 @@ begin
 end;
 
 function TTyValueListEditor.TriangleHit(AFlat, AX: Integer): Boolean;
-var tx: Integer;
+var tx, indent: Integer;
 begin
   Result := False;
   if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
   if not FFlatRow[AFlat].HasChildren then Exit;
-  tx := ContentLeftDp + FFlatLevel[AFlat] * Dp(FIndent);
-  Result := (AX >= tx) and (AX < tx + Dp(FIndent));
+  indent := Dp(TyDensityIconSlot(ActiveController, FIndent));
+  tx := ContentLeftDp + FFlatLevel[AFlat] * indent;
+  Result := (AX >= tx) and (AX < tx + indent);
 end;
 
 function TTyValueListEditor.OverSplit(AX: Integer): Boolean;
@@ -1197,7 +1215,7 @@ procedure TTyValueListEditor.PaintItemContent(P: TTyPainter; const ARowRect: TRe
   AIndex: Integer; const AStyle: TTyStyleSet);
 var
   r: TTyValueRow;
-  level, splitX, lo, hi, pad, indentX, sz, weight, imgSz, sw: Integer;
+  level, splitX, lo, hi, pad, indentX, indent, sz, weight, imgSz, sw: Integer;
   keyR, valR, tri, swR: TRect;
   divider, keyCol, valCol: TTyColor;
   ctx: TBGRACanvas2D;
@@ -1216,7 +1234,8 @@ begin
   if splitX < lo then splitX := lo;
   if splitX > hi then splitX := hi;
 
-  indentX := ARowRect.Left + level * P.Scale(FIndent);
+  indent := TyDensityIconSlot(ActiveController, FIndent);
+  indentX := ARowRect.Left + level * P.Scale(indent);
 
   // Expand / collapse triangle for rows with children.
   if r.HasChildren then
@@ -1247,7 +1266,7 @@ begin
 
   // Key label (after the triangle + indent).
   keyCol := AStyle.TextColor;
-  keyR := Rect(indentX + P.Scale(FIndent), ARowRect.Top, splitX - P.Scale(4), ARowRect.Bottom);
+  keyR := Rect(indentX + P.Scale(indent), ARowRect.Top, splitX - P.Scale(4), ARowRect.Bottom);
   P.DrawText(keyR, r.EffectiveKey, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
     keyCol, taLeftJustify, tlCenter, True);
 

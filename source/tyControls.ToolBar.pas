@@ -3,7 +3,8 @@ unit tyControls.ToolBar;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Button;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Button,
+  tyControls.Controller;
 type
   TTyToolSeparator = class(TTyCustomControl)
   protected
@@ -21,6 +22,7 @@ type
   TTyToolBar = class(TTyCustomControl)
   private
     FButtonHeight: Integer;
+    FButtonHeightExplicit: Boolean;
     FButtonSpacing: Integer;
     FIndent: Integer;
     FWrapable: Boolean;
@@ -28,6 +30,7 @@ type
     FFlat: Boolean;
     FImages: TImageList;
     FInLayout: Boolean;
+    function GetButtonHeight: Integer;
     procedure SetButtonHeight(AValue: Integer);
     procedure SetButtonSpacing(AValue: Integer);
     procedure SetIndent(AValue: Integer);
@@ -46,7 +49,9 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
-    property ButtonHeight: Integer read FButtonHeight write SetButtonHeight default 24;
+    { Density-aware: unset follows --control-height (classic 24 / modern 38). A host/.lfm value
+      pins it (streamed only when explicitly set -- stored FButtonHeightExplicit). }
+    property ButtonHeight: Integer read GetButtonHeight write SetButtonHeight stored FButtonHeightExplicit;
     property ButtonSpacing: Integer read FButtonSpacing write SetButtonSpacing default 2;
     property Indent: Integer read FIndent write SetIndent default 4;
     property Wrapable: Boolean read FWrapable write SetWrapable default True;
@@ -88,7 +93,7 @@ end;
 
 { TTyToolSeparator }
 constructor TTyToolSeparator.Create(AOwner: TComponent);
-begin inherited Create(AOwner); Width := 8; Height := 24; end;
+begin inherited Create(AOwner); Width := 8; Height := TyDensityHeight(ActiveController, 24); end;
 function TTyToolSeparator.GetStyleTypeKey: string; begin Result := 'TyToolBar'; end;  // borrows the bar's border color
 procedure TTyToolSeparator.Paint; begin RenderTo(Canvas, ClientRect, Font.PixelsPerInch); end;
 procedure TTyToolSeparator.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -113,14 +118,22 @@ constructor TTyToolBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csAcceptsControls];   // hosts the tool buttons
-  FButtonHeight := 24; FButtonSpacing := 2; FIndent := 4; FWrapable := True; FFlat := True;
+  FButtonHeight := 24; FButtonHeightExplicit := False;   // follow --control-height (density-aware) until set
+  FButtonSpacing := 2; FIndent := 4; FWrapable := True; FFlat := True;
   Align := alTop;
   Width := 300; Height := 30;
 end;
 
 function TTyToolBar.GetStyleTypeKey: string; begin Result := 'TyToolBar'; end;
 
-procedure TTyToolBar.SetButtonHeight(AValue: Integer); begin if FButtonHeight = AValue then Exit; FButtonHeight := AValue; Relayout; end;
+function TTyToolBar.GetButtonHeight: Integer;
+begin
+  if FButtonHeightExplicit then
+    Result := FButtonHeight
+  else
+    Result := TyDensityMetric(ActiveController, 24, '--control-height');
+end;
+procedure TTyToolBar.SetButtonHeight(AValue: Integer); begin FButtonHeightExplicit := True; if FButtonHeight = AValue then Exit; FButtonHeight := AValue; Relayout; end;
 procedure TTyToolBar.SetButtonSpacing(AValue: Integer); begin if FButtonSpacing = AValue then Exit; FButtonSpacing := AValue; Relayout; end;
 procedure TTyToolBar.SetIndent(AValue: Integer); begin if FIndent = AValue then Exit; FIndent := AValue; Relayout; end;
 procedure TTyToolBar.SetWrapable(AValue: Boolean); begin if FWrapable = AValue then Exit; FWrapable := AValue; Relayout; end;
@@ -152,7 +165,7 @@ var
   rects: TTyRectArray;
   ctl: TControl;
   list: array of TControl;
-  newH: Integer;
+  newH, bh: Integer;
 begin
   // re-entrancy guard: Height assignment at the end triggers another AlignControls call
   if FInLayout then Exit;
@@ -172,13 +185,14 @@ begin
       sizes[i].cx := list[i].Width;
       sizes[i].cy := list[i].Height;  // cy is not used by TyToolbarLayout (AButtonHeight governs row height)
     end;
-    rects := TyToolbarLayout(sizes, ClientWidth, FIndent, FButtonSpacing, FButtonHeight, FWrapable, rows);
+    bh := GetButtonHeight;
+    rects := TyToolbarLayout(sizes, ClientWidth, FIndent, FButtonSpacing, bh, FWrapable, rows);
     for i := 0 to n - 1 do
-      list[i].SetBounds(rects[i].Left, rects[i].Top, list[i].Width, FButtonHeight);
+      list[i].SetBounds(rects[i].Left, rects[i].Top, list[i].Width, bh);
     // grow the bar to fit the rows when alTop/alBottom
     if (Align in [alTop, alBottom]) and (rows > 0) then
     begin
-      newH := FIndent*2 + rows*FButtonHeight + (rows-1)*FButtonSpacing;
+      newH := FIndent*2 + rows*bh + (rows-1)*FButtonSpacing;
       if Height <> newH then
         Height := newH;
     end;

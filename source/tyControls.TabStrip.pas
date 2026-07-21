@@ -28,7 +28,9 @@ type
     (DoSelectTab/DoReorderTabs/RemoveTabData/GetTabClosableAt/TabsChanged). }
   TTyCustomTabStrip = class(TTyCustomControl)
   private
-    FTabHeight: Integer;      // logical px, default 28
+    FTabHeight: Integer;      // logical px, classic default 28 (fallback while not explicit)
+    FTabHeightExplicit: Boolean;  // True once a host/.lfm sets TabHeight; False = follow
+                                  // --control-height (density-aware: 28 classic / 38 modern)
     FHoverTab: Integer;       // -1 = none
     FHoverClose: Integer;     // tab index whose close (x) is hovered; -1 = none
     FOnChange: TNotifyEvent;
@@ -64,6 +66,7 @@ type
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
 
+    function  GetTabHeight: Integer;
     procedure SetTabHeight(AValue: Integer);
     procedure SetTabsClosable(AValue: Boolean);
     procedure RebuildLayout(APPI: Integer);
@@ -184,7 +187,11 @@ type
       the OnChanging veto + DoSelectTab + OnChange, and arms the header fade. }
     property TabIndex: Integer read FTabIndex write SetTabIndex;
   published
-    property TabHeight: Integer read FTabHeight write SetTabHeight default 28;
+    { Header band height in logical px, DPI-scaled at paint time. Left unset it follows
+      the theme's --control-height token, so the strip is 28 at classic density and 38 at
+      modern density automatically. Set it explicitly and that value wins and is streamed
+      (stored FTabHeightExplicit); the getter then returns what you set. }
+    property TabHeight: Integer read GetTabHeight write SetTabHeight stored FTabHeightExplicit;
     property TabsClosable: Boolean read FTabsClosable write SetTabsClosable default False;
     property OnTabClose: TTyTabCloseEvent read FOnTabClose write FOnTabClose;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
@@ -207,7 +214,8 @@ begin
   TyAccelRegister(Self);
   FTabIndex  := -1;
   FPendingTabIndex := -1;
-  FTabHeight := 28;
+  FTabHeight := 28;             { fallback; unused while FTabHeightExplicit=False }
+  FTabHeightExplicit := False;  { follow --control-height (density-aware) until set }
   FHoverTab  := -1;
   FHoverClose := -1;
   FHeaderScroll := 0;
@@ -328,9 +336,12 @@ end;
   slice of every tab caption. A NON-zero TabHeight still floors at 1px, so a tiny-but-
   present strip cannot round away to nothing at a low DPI. }
 function TTyCustomTabStrip.TabHPx(APPI: Integer): Integer;
+var
+  H: Integer;
 begin
-  if FTabHeight <= 0 then Exit(0);
-  Result := MulDiv(FTabHeight, APPI, 96);
+  H := GetTabHeight;
+  if H <= 0 then Exit(0);
+  Result := MulDiv(H, APPI, 96);
   if Result < 1 then Result := 1;
 end;
 
@@ -703,6 +714,16 @@ begin
     FOnChange(Self);
 end;
 
+{ Density-aware header height. Explicit host/.lfm value wins and is streamed; otherwise
+  follow --control-height (TyDensityHeight: 28 classic byte-identical / 38 modern). }
+function TTyCustomTabStrip.GetTabHeight: Integer;
+begin
+  if FTabHeightExplicit then
+    Result := FTabHeight
+  else
+    Result := TyDensityHeight(ActiveController, 28);
+end;
+
 procedure TTyCustomTabStrip.SetTabHeight(AValue: Integer);
 begin
   // 0 is legal and means NO header strip: the pages fill the whole control and the host
@@ -710,6 +731,7 @@ begin
   // not "hidden" — a 1px strip still paints a 1px slice of every tab caption, which reads
   // as a smear of text above the content.
   if AValue < 0 then AValue := 0;
+  FTabHeightExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
   if FTabHeight = AValue then Exit;
   FTabHeight := AValue;
   // The strip's height IS the client rect's top inset (see AdjustClientRect), so the pages

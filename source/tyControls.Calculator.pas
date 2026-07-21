@@ -207,8 +207,11 @@ begin
     b.OnClick := @ButtonClick;
     FButtons[i] := b;
   end;
-  Width := 224;
-  Height := 320;
+  { Landing size scales with density: classic keeps 224x320 byte-for-byte (ratio 30/30 = 1);
+    modern grows by --control-height/30 so the derived key cells (sized off ClientWidth/Height in
+    Resize) get proportionally taller and wider. 30 is the classic --control-height baseline. }
+  Width  := MulDiv(224, TyDensityHeight(ActiveController, 30), 30);
+  Height := MulDiv(320, TyDensityHeight(ActiveController, 30), 30);
 end;
 
 function TTyCalculator.GetStyleTypeKey: string;
@@ -410,9 +413,12 @@ var
   i, r, c, gap, cellW, cellH, x, y: Integer;
 begin
   inherited Resize;
-  FDisplayHeight := MulDiv(60, Font.PixelsPerInch, 96);   // two lines: expression + value
+  { Display strip = two text lines, each one control-height (classic 2*30 = 60); the density
+    pack raises --control-height for modern. Key spacing follows the --pad-control token
+    (classic 4px). Both stay byte-identical under the classic default theme. }
+  FDisplayHeight := MulDiv(TyDensityHeight(ActiveController, 30) * 2, Font.PixelsPerInch, 96);   // two lines: expression + value
   if FDisplayHeight > ClientHeight div 2 then FDisplayHeight := ClientHeight div 2;
-  gap := MulDiv(4, Font.PixelsPerInch, 96);
+  gap := MulDiv(ActiveController.Metric('--pad-control', 4), Font.PixelsPerInch, 96);
   cellW := (ClientWidth - gap * 5) div 4;
   cellH := (ClientHeight - FDisplayHeight - gap * 6) div 5;
   if (cellW < 1) or (cellH < 1) then Exit;

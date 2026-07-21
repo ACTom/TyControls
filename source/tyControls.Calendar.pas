@@ -3,7 +3,7 @@ unit tyControls.Calendar;
 interface
 uses
   Classes, SysUtils, Types, DateUtils, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 
 type
   TTyWeekDay = (wdSunday, wdMonday, wdTuesday, wdWednesday, wdThursday,
@@ -272,7 +272,16 @@ begin
   FViewMode     := cvmDays;
   TabStop       := True;
   Width         := 240;
-  Height        := 220;
+  { Classic keeps the 220px default verbatim. Modern derives the height from the same
+    density tokens the layout uses -- header (--control-height) + weekday row
+    (--item-height) + 6 day rows (--row-height) -- so the day grid grows roomier
+    instead of squeezing 6 taller-font rows into a classic-sized box. }
+  if ActiveController.Density = tdModern then
+    Height := TyDensityMetric(ActiveController, 28, '--control-height')
+            + TyDensityMetric(ActiveController, 20, '--item-height')
+            + 6 * TyDensityMetric(ActiveController, 29, '--row-height')
+  else
+    Height := 220;
   DecodeDate(FDate, dy, dm, dd);
   FViewYear  := dy;
   FViewMonth := dm;
@@ -386,7 +395,8 @@ var
 begin
   W := ARect.Right  - ARect.Left;
   H := ARect.Bottom - ARect.Top;
-  HeaderH := MulDiv(28, APPI, 96);
+  { Header band follows --control-height under modern density; classic keeps 28 verbatim. }
+  HeaderH := MulDiv(TyDensityHeight(ActiveController, 28), APPI, 96);
   ColW    := (W) div 4;
   if ColW < 1 then ColW := 1;
   RowH    := (H - HeaderH) div 3;
@@ -642,8 +652,14 @@ begin
     MouseDown receives ClientRect which is also 0-origin. }
   W := ARect.Right  - ARect.Left;
   H := ARect.Bottom - ARect.Top;
-  HeaderH  := MulDiv(28, APPI, 96);
-  WeekdayH := MulDiv(20, APPI, 96);
+  { Density-aware bands: header ~ --control-height, weekday-names row ~ --item-height.
+    Classic returns the original constants verbatim (byte-identical); only modern density
+    reads the roomier tokens. WkNumW stays a fixed classic width (no density token). }
+  HeaderH  := MulDiv(TyDensityHeight(ActiveController, 28), APPI, 96);
+  if ActiveController.Density = tdModern then
+    WeekdayH := MulDiv(TyDensityMetric(ActiveController, 20, '--item-height'), APPI, 96)
+  else
+    WeekdayH := MulDiv(20, APPI, 96);
   if FWeekNumbers then
     WkNumW := MulDiv(24, APPI, 96)
   else

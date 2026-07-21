@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, LCLType, LCLIntf, LazUTF8, ImgList,
   BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.ScrollBar,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.ScrollBar,
   tyControls.Columns, tyControls.Edit;
 
 type
@@ -188,7 +188,10 @@ type
     FRoot: PTyTreeNode;
     FNodeDataSize: Integer;     // -1 until set
     FNodeAllocSize: Integer;    // TreeNodeSize + Max(0, FNodeDataSize)
-    FDefaultNodeHeight: Integer;
+    FDefaultNodeHeight: Integer;         { classic fallback (18); the density value comes
+                                           from GetDefaultNodeHeight unless explicitly pinned }
+    FDefaultNodeHeightExplicit: Boolean; { True once a host/.lfm sets DefaultNodeHeight; False =
+                                           follow the theme's --item-height token (18 classic / 38 modern) }
     FOnFreeNode: TTyTreeNodeEvent;
     { B1 scroll engine }
     FCacheValid: Boolean;
@@ -313,6 +316,10 @@ type
     { B1: tree option flags }
     FOptions:          TTyTreeOptions;
     procedure SetOptions(AValue: TTyTreeOptions);
+    { density: stored-sentinel accessors for the default node/row height. Reading
+      returns the pinned value when explicit, else the --item-height token. }
+    function  GetDefaultNodeHeight: Integer;
+    procedure SetDefaultNodeHeight(AValue: Integer);
     { ③d B1: per-node row-height accessors (variable height) }
     function  GetNodeHeight(Node: PTyTreeNode): Integer;
     procedure SetNodeHeight(Node: PTyTreeNode; AValue: Integer);
@@ -573,7 +580,11 @@ type
     { B (columns): header sub-object }
     property Header: TTyHeader read FHeader write SetHeader;
     property NodeDataSize: Integer read FNodeDataSize write SetNodeDataSize default -1;
-    property DefaultNodeHeight: Integer read FDefaultNodeHeight write FDefaultNodeHeight default 18;
+    { Default node/row height in logical px. Left unset it follows the theme's
+      --item-height token, so nodes get denser rows at classic density (18) and
+      roomier ones at modern density (38) automatically. Set it explicitly and that
+      value wins and is streamed (stored FDefaultNodeHeightExplicit). }
+    property DefaultNodeHeight: Integer read GetDefaultNodeHeight write SetDefaultNodeHeight stored FDefaultNodeHeightExplicit;
     property RootNodeCount: Cardinal read GetRootNodeCount write SetRootNodeCount default 0;
     { C1: display properties }
     property Indent: Integer read FIndent write SetIndent default 16;
@@ -1706,7 +1717,7 @@ begin
 
   // ③d B1: page/wheel estimates use FDefaultNodeHeight even under
   // toVariableNodeHeight — an acceptable approximation (no per-node walk here).
-  step := 3 * FDefaultNodeHeight;
+  step := 3 * GetDefaultNodeHeight;
   if WheelDelta > 0 then Delta :=  step   // scroll up
   else                    Delta := -step;  // scroll down
 
@@ -1777,7 +1788,8 @@ begin
   inherited Create(AOwner);
   FNodeDataSize := -1;
   FNodeAllocSize := TreeNodeSize;
-  FDefaultNodeHeight := 18;
+  FDefaultNodeHeight := 18;              // classic fallback; unused while FDefaultNodeHeightExplicit=False
+  FDefaultNodeHeightExplicit := False;   // follow --item-height (density-aware) until pinned
   FRoot := MakeNewNode;                  // hidden root
   FRoot^.Parent := PTyTreeNode(Self);    // sentinel — root's Parent points back at the tree
   FRoot^.PrevSibling := FRoot;
@@ -1891,10 +1903,10 @@ function TTyTreeView.MakeNewNode: PTyTreeNode;
 begin
   Result := AllocMem(FNodeAllocSize);    // zero-filled by AllocMem
   Result^.States := [nsVisible];
-  Result^.NodeHeight := FDefaultNodeHeight;
+  Result^.NodeHeight := GetDefaultNodeHeight;
   // TotalCount and TotalHeight for a fresh leaf: count=1, height=NodeHeight
   Result^.TotalCount := 1;
-  Result^.TotalHeight := FDefaultNodeHeight;
+  Result^.TotalHeight := GetDefaultNodeHeight;
 end;
 
 procedure TTyTreeView.FreeNodeMem(Node: PTyTreeNode);
@@ -2520,10 +2532,30 @@ begin
   Result := (Node <> nil) and (nsExpanded in Node^.States);
 end;
 
+{ density: default node/row height — stored-sentinel accessors. When not pinned by a
+  host/.lfm, follow the --item-height token (18 classic / 38 modern); the classic
+  fallback 18 equals the historical default so classic rendering is byte-identical. }
+function TTyTreeView.GetDefaultNodeHeight: Integer;
+begin
+  if FDefaultNodeHeightExplicit then
+    Result := FDefaultNodeHeight
+  else
+    Result := TyDensityMetric(ActiveController, 18, '--item-height');
+end;
+
+procedure TTyTreeView.SetDefaultNodeHeight(AValue: Integer);
+begin
+  if AValue < 1 then AValue := 1;
+  FDefaultNodeHeightExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
+  if FDefaultNodeHeight = AValue then Exit;
+  FDefaultNodeHeight := AValue;
+  Invalidate;
+end;
+
 { ③d B1: per-node row-height accessors. }
 function TTyTreeView.GetNodeHeight(Node: PTyTreeNode): Integer;
 begin
-  if Node = nil then Result := FDefaultNodeHeight
+  if Node = nil then Result := GetDefaultNodeHeight
   else Result := Node^.NodeHeight;
 end;
 
@@ -5125,7 +5157,7 @@ begin
       begin
         { ③d B1: page estimate uses FDefaultNodeHeight even with variable
           heights — acceptable approximation (ScrollIntoView corrects the view). }
-        rowH  := MulDiv(FDefaultNodeHeight, Font.PixelsPerInch, 96);
+        rowH  := MulDiv(GetDefaultNodeHeight, Font.PixelsPerInch, 96);
         viewH := ContentRect.Bottom - ContentRect.Top;
         if rowH > 0 then pgRows := viewH div rowH else pgRows := 1;
         if pgRows < 1 then pgRows := 1;
@@ -5148,7 +5180,7 @@ begin
       if cur = nil then cur := GetFirstVisibleNoInit;
       if cur <> nil then
       begin
-        rowH  := MulDiv(FDefaultNodeHeight, Font.PixelsPerInch, 96);
+        rowH  := MulDiv(GetDefaultNodeHeight, Font.PixelsPerInch, 96);
         viewH := ContentRect.Bottom - ContentRect.Top;
         if rowH > 0 then pgRows := viewH div rowH else pgRows := 1;
         if pgRows < 1 then pgRows := 1;

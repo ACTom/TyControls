@@ -25,13 +25,17 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Panel;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
+  tyControls.Panel;
 
 type
   { TTyControlBar — a dockable band host (subclass of TTyPanel). }
   TTyControlBar = class(TTyPanel)
   private
     FBandHeight: Integer;
+    { True once a host/.lfm pins BandHeight; False = follow the theme's --header-control-height
+      token (density-aware: classic 26 == the original constant, modern raises it). }
+    FBandHeightExplicit: Boolean;
     FGripperWidth: Integer;
     FBandSpacing: Integer;
     FInLayout: Boolean;
@@ -41,6 +45,7 @@ type
       when set (>= 0). }
     FAssignCtl: array of TControl;
     FAssignBand: array of Integer;
+    function GetBandHeight: Integer;
     procedure SetBandHeight(AValue: Integer);
     procedure SetGripperWidth(AValue: Integer);
     procedure SetBandSpacing(AValue: Integer);
@@ -59,9 +64,12 @@ type
     function BandIndexOf(AControl: TControl): Integer;
   published
     { The uniform pixel height of each band (row). Every child is forced to this height when
-      packed. Changing it re-lays the bands. RowSize is a VCL-familiar alias. }
-    property BandHeight: Integer read FBandHeight write SetBandHeight default 26;
-    property RowSize: Integer read FBandHeight write SetBandHeight default 26;
+      packed. Changing it re-lays the bands. RowSize is a VCL-familiar alias. Left unset it
+      follows the theme's --header-control-height token, so bands pack denser at classic
+      density (26) and roomier at modern automatically; set it explicitly and that value wins
+      and is streamed (stored FBandHeightExplicit). }
+    property BandHeight: Integer read GetBandHeight write SetBandHeight stored FBandHeightExplicit;
+    property RowSize: Integer read GetBandHeight write SetBandHeight stored FBandHeightExplicit;
     { The left gripper rail width reserved on each band; children start past it. }
     property GripperWidth: Integer read FGripperWidth write SetGripperWidth default 12;
     { Vertical gap between consecutive bands. }
@@ -137,11 +145,12 @@ constructor TTyControlBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // TTyPanel already sets csAcceptsControls; keep the band host a designer container.
-  FBandHeight := 26;
+  FBandHeight := 26;             { classic fallback; unused while FBandHeightExplicit=False }
+  FBandHeightExplicit := False;  { follow --header-control-height (density-aware) until set }
   FGripperWidth := 12;
   FBandSpacing := 3;
   Width := 320;
-  Height := 32;
+  Height := TyDensityHeight(ActiveController, 32);
 end;
 
 function TTyControlBar.GetStyleTypeKey: string;
@@ -149,9 +158,22 @@ begin
   Result := 'TyPanel';   // reuse the panel frame + tokens — NO new tycss
 end;
 
+{ Effective band height in logical px: an explicit BandHeight wins; otherwise follow the
+  theme's --header-control-height token, whose classic value (26) equals the original constant
+  byte-for-byte and which the density pack raises for modern density. Resolved live (not
+  cached) so toggling Controller.Density re-heights the bands on the next layout. }
+function TTyControlBar.GetBandHeight: Integer;
+begin
+  if FBandHeightExplicit then
+    Result := FBandHeight
+  else
+    Result := ActiveController.Metric('--header-control-height', 26);
+end;
+
 procedure TTyControlBar.SetBandHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
+  FBandHeightExplicit := True;   { even if it equals the classic default, the host pinned it }
   if FBandHeight = AValue then Exit;
   FBandHeight := AValue;
   Relayout;
@@ -216,7 +238,7 @@ begin
   try
     ppi := Font.PixelsPerInch;
     // Scale the logical band metrics to device px (headless PPI=96 -> identity).
-    bandH := MulDiv(FBandHeight, ppi, 96);
+    bandH := MulDiv(GetBandHeight, ppi, 96);
     gripW := MulDiv(FGripperWidth, ppi, 96);
     spacing := MulDiv(FBandSpacing, ppi, 96);
 
@@ -333,7 +355,7 @@ begin
   inherited Paint;
   // Then overlay a gripper rail per occupied band.
   ppi := Font.PixelsPerInch;
-  bandH := MulDiv(FBandHeight, ppi, 96);
+  bandH := MulDiv(GetBandHeight, ppi, 96);
   gripW := MulDiv(FGripperWidth, ppi, 96);
   spacing := MulDiv(FBandSpacing, ppi, 96);
   if (gripW <= 0) or (bandH <= 0) then Exit;

@@ -45,6 +45,8 @@ type
     FDefaultItemIndex: Integer;
     FHoverIndex: Integer;
     FSidebarWidth: Integer;
+    FSidebarWidthExplicit: Boolean;   { True once a host/.lfm sets SidebarWidth; False = follow
+                                        the theme's --backstage-sidebar-width token (density-aware) }
     FOnCommandSelect: TTyBackstageSelectEvent;
     FOnClose: TNotifyEvent;
     procedure SetCommands(AValue: TStrings);
@@ -54,6 +56,8 @@ type
     procedure SetIconFont(AValue: TTyIconFont);
     procedure SetImages(AValue: TTyImageCollection);
     procedure SetItemIndex(AValue: Integer);
+    function GetSidebarWidth: Integer;
+    procedure SetSidebarWidth(AValue: Integer);
     procedure CommandsChanged(Sender: TObject);
     { Unified addressing across the top (Commands) + bottom (BottomCommands) blocks. }
     function TotalCount: Integer;
@@ -100,7 +104,10 @@ type
     { Auto-selected on ShowOver (Office selects Info by default so the right side isn't
       blank). -1 = no default. Point it at a CONTENT command, not an action one. }
     property DefaultItemIndex: Integer read FDefaultItemIndex write FDefaultItemIndex default -1;
-    property SidebarWidth: Integer read FSidebarWidth write FSidebarWidth default TyBackstageSidebarW;
+    { Sidebar width in logical px. Left unset it follows the theme's --backstage-sidebar-width
+      token (density-aware); set it explicitly and that value wins and is streamed (stored
+      FSidebarWidthExplicit). }
+    property SidebarWidth: Integer read GetSidebarWidth write SetSidebarWidth stored FSidebarWidthExplicit;
     property OnCommandSelect: TTyBackstageSelectEvent read FOnCommandSelect write FOnCommandSelect;
     property OnClose: TNotifyEvent read FOnClose write FOnClose;
     property Align;
@@ -190,7 +197,8 @@ begin
   FItemIndex := -1;
   FDefaultItemIndex := -1;
   FHoverIndex := TyBackstageNoRow;
-  FSidebarWidth := ActiveController.Metric('--backstage-sidebar-width', TyBackstageSidebarW);
+  FSidebarWidth := TyBackstageSidebarW;   { fallback; unused while FSidebarWidthExplicit=False }
+  FSidebarWidthExplicit := False;         { follow --backstage-sidebar-width (density-aware) until set }
   TabStop := True;
   Visible := False;
 end;
@@ -251,7 +259,7 @@ function TTyRibbonBackstage.ContentRect: TRect;
 var
   sbW: Integer;
 begin
-  sbW := MulDiv(FSidebarWidth, Font.PixelsPerInch, 96);
+  sbW := MulDiv(GetSidebarWidth, Font.PixelsPerInch, 96);
   Result := Rect(sbW, 0, ClientWidth, ClientHeight);
 end;
 
@@ -315,6 +323,23 @@ begin
   if Assigned(FOnCommandSelect) then FOnCommandSelect(Self, FItemIndex);
 end;
 
+function TTyRibbonBackstage.GetSidebarWidth: Integer;
+begin
+  if FSidebarWidthExplicit then
+    Result := FSidebarWidth
+  else
+    Result := ActiveController.Metric('--backstage-sidebar-width', TyBackstageSidebarW);
+end;
+
+procedure TTyRibbonBackstage.SetSidebarWidth(AValue: Integer);
+begin
+  if AValue < 1 then AValue := 1;
+  FSidebarWidthExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
+  if FSidebarWidth = AValue then Exit;
+  FSidebarWidth := AValue;
+  Invalidate;
+end;
+
 procedure TTyRibbonBackstage.ShowOver(AHost: TWinControl; ATopPx: Integer);
 begin
   if AHost = nil then Exit;
@@ -359,7 +384,7 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     W := ARect.Right - ARect.Left;
     H := ARect.Bottom - ARect.Top;
-    sbW := P.Scale(FSidebarWidth);
+    sbW := P.Scale(GetSidebarWidth);
     backH := P.Scale(ActiveController.Metric('--backstage-back-height', TyBackstageBackH));
     rowH := P.Scale(ActiveController.Metric('--backstage-row-height', TyBackstageRowH));
 
@@ -477,7 +502,7 @@ var
 begin
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
-  sbW := MulDiv(FSidebarWidth, Font.PixelsPerInch, 96);
+  sbW := MulDiv(GetSidebarWidth, Font.PixelsPerInch, 96);
   if X >= sbW then Exit;   // clicks in the content area do nothing here
   backH := MulDiv(ActiveController.Metric('--backstage-back-height', TyBackstageBackH), Font.PixelsPerInch, 96);
   rowH := MulDiv(ActiveController.Metric('--backstage-row-height', TyBackstageRowH), Font.PixelsPerInch, 96);
@@ -493,7 +518,7 @@ var
   sbW, backH, rowH, r: Integer;
 begin
   inherited MouseMove(Shift, X, Y);
-  sbW := MulDiv(FSidebarWidth, Font.PixelsPerInch, 96);
+  sbW := MulDiv(GetSidebarWidth, Font.PixelsPerInch, 96);
   r := TyBackstageNoRow;
   if X < sbW then
   begin

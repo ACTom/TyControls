@@ -3,7 +3,8 @@ unit tyControls.ComboEdit;
 interface
 uses
   Classes, SysUtils, Types, Controls, LCLType,
-  tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Edit;
+  tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Edit,
+  tyControls.Controller;
 
 type
   { An edit with a trailing drop-down button. Clicking the button (or calling DropDown)
@@ -13,7 +14,6 @@ type
     RightReserve/PaintTrailing hooks. }
   TTyComboEdit = class(TTyEdit)
   private
-    FButtonWidth: Integer;
     FOnDropDown: TNotifyEvent;
   protected
     function RightReserve(APPI: Integer): Integer; override;
@@ -32,12 +32,14 @@ implementation
 constructor TTyComboEdit.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FButtonWidth := 20;
 end;
 
 function TTyComboEdit.RightReserve(APPI: Integer): Integer;
 begin
-  Result := MulDiv(FButtonWidth, APPI, 96);
+  { Read the drop-button width live (like TTyComboBox.ButtonWidthLogical), so the
+    trailing chevron zone tracks the theme's density and lines up with a combo box's.
+    No constructor cache. }
+  Result := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), APPI, 96);
 end;
 
 procedure TTyComboEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet);

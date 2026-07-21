@@ -46,6 +46,7 @@ type
     FShowFileTab: Boolean;
     FFileTabCaption: string;
     FFileTabWidth: Integer;                 // logical px
+    FFileTabWidthExplicit: Boolean;         // True once a host/.lfm pins FileTabWidth; else follow --ribbon-file-tab-width
     FBackstage: TTyRibbonBackstage;
     FShowCollapseBtn: Boolean;
     FFlyout: TTyPopupSurface;        // transient page band shown while Minimized
@@ -68,6 +69,7 @@ type
     procedure SetShowFileTab(AValue: Boolean);
     procedure SetFileTabCaption(const AValue: string);
     procedure SetFileTabWidth(AValue: Integer);
+    function  GetFileTabWidth: Integer;
     procedure SetBackstage(AValue: TTyRibbonBackstage);
     procedure SetShowCollapseButton(AValue: Boolean);
     function FileTabWidthPx: Integer;
@@ -133,7 +135,10 @@ type
       it opens Backstage (if assigned) and/or fires OnFileTab — it does NOT switch pages. }
     property FileTab: Boolean read FShowFileTab write SetShowFileTab default False;
     property FileTabCaption: string read FFileTabCaption write SetFileTabCaption;
-    property FileTabWidth: Integer read FFileTabWidth write SetFileTabWidth default 52;
+    { Left File-tab width in logical px. Left unset it follows the theme's
+      --ribbon-file-tab-width token (density-aware); set it explicitly and that value wins
+      and is streamed. Streamed only when explicitly set (stored FFileTabWidthExplicit). }
+    property FileTabWidth: Integer read GetFileTabWidth write SetFileTabWidth stored FFileTabWidthExplicit;
     property Backstage: TTyRibbonBackstage read FBackstage write SetBackstage;
     { A collapse/expand chevron at the RIGHT end of the tab strip that toggles Minimized
       (like Office). Double-clicking any tab also toggles Minimized. }
@@ -220,6 +225,9 @@ type
 
 const
   TyRibbonCaptionBand = 18;   // logical px, the group's bottom title strip
+  { The ribbon's total height in logical px (tab strip + group band). Classic default; a
+    modern-density theme seeds a taller --ribbon-height for bigger buttons + caption. }
+  TyRibbonDefaultHeight = 118;
 
 { Pure geometry: the content rect (device px, (0,0)-local) a group hosts controls in
   = the full client minus the bottom caption band (scaled from APadBottomPx). }
@@ -307,12 +315,15 @@ begin
   FActiveContexts.CaseSensitive := False;
   Align := alTop;
   // Tab strip (TabHeight) + a group band tall enough for a large button + caption.
+  // The total height follows the --ribbon-height token (classic 118; a modern-density
+  // theme seeds a taller band). Absent token => 118, byte-identical to the old constant.
   Width := 600;
-  Height := 118;
-  FExpandedHeight := 118;   // restored height if Minimized is set before any resize
+  Height := ActiveController.Metric('--ribbon-height', TyRibbonDefaultHeight);
+  FExpandedHeight := Height;   // restored height if Minimized is set before any resize
   FShowFileTab := False;
   FFileTabCaption := '文件';
   FFileTabWidth := 52;
+  FFileTabWidthExplicit := False;   // follow --ribbon-file-tab-width until a host pins it
   FShowCollapseBtn := True;
   FKeyTips := True;
   TabStop := True;
@@ -575,7 +586,7 @@ end;
 
 function TTyRibbon.FileTabWidthPx: Integer;
 begin
-  Result := MulDiv(FFileTabWidth, Font.PixelsPerInch, 96);
+  Result := MulDiv(GetFileTabWidth, Font.PixelsPerInch, 96);
 end;
 
 function TTyRibbon.HeaderLeftInset: Integer;
@@ -619,10 +630,19 @@ end;
 procedure TTyRibbon.SetFileTabWidth(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
+  FFileTabWidthExplicit := True;   // even if equal to the fallback, the host meant to pin it
   if FFileTabWidth = AValue then Exit;
   FFileTabWidth := AValue;
   Realign;
   Invalidate;
+end;
+
+function TTyRibbon.GetFileTabWidth: Integer;
+begin
+  if FFileTabWidthExplicit then
+    Result := FFileTabWidth
+  else
+    Result := ActiveController.Metric('--ribbon-file-tab-width', 52);
 end;
 
 procedure TTyRibbon.SetBackstage(AValue: TTyRibbonBackstage);

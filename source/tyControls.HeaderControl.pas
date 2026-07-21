@@ -4,7 +4,7 @@ unit tyControls.HeaderControl;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, BGRACanvas2D,
-  tyControls.Types, tyControls.Painter, tyControls.Base;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
 
 const
   // Logical (96ppi) default section width, control height and the resize-grip
@@ -246,7 +246,7 @@ begin
   FHotIndex := -1;
   FResizeIndex := -1;
   Width := 300;
-  Height := ActiveController.Metric('--header-control-height', TyHeaderDefaultHeight);
+  Height := TyDensityHeight(ActiveController, TyHeaderDefaultHeight);
   TabStop := False;
 end;
 

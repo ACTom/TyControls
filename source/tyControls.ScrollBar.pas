@@ -195,7 +195,11 @@ begin
   FPosAnim.Easing := teEaseOutCubic;
   FAnimFrom := FPosition;
   FAnimTo := FPosition;
-  Width := 16;
+  // Scrollbar thickness (cross-axis) follows the density-aware --scrollbar-size
+  // token, the SAME token TTyScrollBox.ScrollbarThick reads. Classic resolves to
+  // TyScrollbarSize (12); modern density packs raise it. Height (default length)
+  // stays a plain constant.
+  Width := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), Font.PixelsPerInch, 96);
   Height := 160;
 end;
 

@@ -130,7 +130,7 @@ begin
   FWrap := False;
   FHot := 0;
   FHeldDir := 0;
-  Width := 20;
+  Width := TyDensityMetric(ActiveController, 20, '--icon-size');  // button-column width follows the icon-slot density token
   Height := TyDensityHeight(ActiveController, 34);
 end;
 
