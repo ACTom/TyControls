@@ -82,12 +82,12 @@ begin
     '  --header-section-width: 120px;' + LineEnding +
     '  --input-border-width: 1px;' + LineEnding +
     '  --listgroup-chevron-size: 18px;' + LineEnding +
-    '  --listgroup-header-height: 36px;' + LineEnding +
+    '  --listgroup-header-height: 40px;' + LineEnding +
     '  --listgroup-icon-gap: 8px;' + LineEnding +
     '  --listgroup-icon-size: 20px;' + LineEnding +
-    '  --listgroup-item-height: 34px;' + LineEnding +
+    '  --listgroup-item-height: 42px;' + LineEnding +
     '  --listgroup-item-indent: 22px;' + LineEnding +
-    '  --listgroup-item-inset: 10px;' + LineEnding +
+    '  --listgroup-item-inset: 4px;' + LineEnding +
     '  --listview-cell-padding: 4px;' + LineEnding +
     '  --listview-check-size: 18px;' + LineEnding +
     '  --listview-group-header-height: 31px;' + LineEnding +

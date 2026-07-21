@@ -67,8 +67,8 @@ object MainForm: TMainForm
       Top = 34
       Width = 216
       TabOrder = 1
-      HeaderHeight = 44
-      ItemHeight = 40
+      HeaderHeight = 48
+      ItemHeight = 44
       OnItemClick = SiderItemClick
       Align = alLeft
     end
