@@ -204,7 +204,9 @@ begin
         begin
           w := ATracks[i].Value;
           if w < 1 then w := 1;
-          Result[i] := (pool * w) div starWeight;
+          // Int64 intermediate: a pathological ColumnSizes weight (e.g. '200000*') on a
+          // wide axis would overflow a 32-bit multiply. The result itself fits in Integer.
+          Result[i] := Integer((Int64(pool) * w) div starWeight);
           Inc(given, Result[i]);
         end;
         if Result[i] < 0 then Result[i] := 0;

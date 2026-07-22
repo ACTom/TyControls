@@ -133,6 +133,7 @@ object MainForm: TMainForm
             ColumnCount = 4
             RowCount = 1
             Spacing = 12
+            Anchors = [akLeft, akTop, akRight]
             object KpiCell0: TTyGridCell
               Col = 0
               Row = 0
@@ -216,6 +217,7 @@ object MainForm: TMainForm
             RowCount = 1
             ColumnSizes = '2*, *'
             Spacing = 12
+            Anchors = [akLeft, akTop, akRight]
             object MainCell0: TTyGridCell
               Col = 0
               Row = 0

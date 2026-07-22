@@ -185,7 +185,6 @@ begin
   ApplyChromeTheme(TyDefaultController);
 end;
 
-
 procedure TMainForm.WireRelative;
 begin
   // Title centered against the top; Cancel pinned bottom-right; OK to the left of Cancel, bottom-aligned to it.
