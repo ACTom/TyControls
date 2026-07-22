@@ -11,8 +11,15 @@ uses
   tyControls.Types, tyControls.StyleModel, tyControls.Controller, tyControls.CheckBox,
   tyControls.GroupBox, tyControls.ListView, tyControls.Grid, tyControls.ExPanel,
   tyControls.Edit, tyControls.Button, tyControls.TreeView, tyControls.ToolBar,
+  tyControls.Segmented,
   tyControls.BuiltinThemes;
 type
+  TGridHdrProbe = class(TTyStringGrid)  // expose the protected header-band height for density guards
+  public
+    function HdrPx: Integer;
+    function ScalePx(AValue: Integer): Integer;
+  end;
+
   TCheckBoxProbe = class(TTyCheckBox)   // expose the protected RenderTo for headless sampling
   public
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -53,6 +60,8 @@ type
     procedure TestExPanelHeaderHeightFollowsDensity;
     procedure TestControlDefaultHeightFollowsDensity;
     procedure TestFieldHeightControlsFollowDensity;
+    procedure TestGridHeaderHeightFollowsDensity;
+    procedure TestSegmentedHeightFollowsDensity;
   end;
 
 implementation
@@ -391,6 +400,74 @@ begin
     AssertTrue('现代 ToolBar 按钮高明显变大', tb.ButtonHeight > 30);
   finally
     tv.Free; tb.Free; c.Free;
+  end;
+end;
+
+function TGridHdrProbe.HdrPx: Integer;
+begin
+  Result := HeaderHeightPx;
+end;
+
+function TGridHdrProbe.ScalePx(AValue: Integer): Integer;
+begin
+  Result := ScaleI(AValue);
+end;
+
+{ The grid's column-header band floored on Header.Height (22), classic-frozen — a modern
+  grid kept a cramped 22px head. The floor now follows --header-height (36) UNLESS the host
+  pinned Header.Height. Classic stays byte-for-byte 22; an explicit pin overrides both. }
+procedure TMetricTest.TestGridHeaderHeightFollowsDensity;
+var
+  c: TTyStyleController;
+  g: TGridHdrProbe;
+  classicPx, modernPx: Integer;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  g := TGridHdrProbe.Create(nil);
+  try
+    c.ThemeName := 'default';
+    g.Controller := c;
+    AssertFalse('未设 Header.Height 时不算显式', g.Header.HeightIsExplicit);
+    c.Density := tdClassic;
+    classicPx := g.HdrPx;
+    AssertEquals('经典表头带下限 = ScaleI(22),逐字节不漂', g.ScalePx(22), classicPx);
+    c.Density := tdModern;
+    modernPx := g.HdrPx;
+    AssertTrue('现代表头带明显高于经典', modernPx > classicPx + 4);
+    { 宿主显式钉住后,现代不再顶掉它 }
+    g.Header.Height := 20;
+    AssertTrue('设过 Header.Height 即为显式', g.Header.HeightIsExplicit);
+    AssertEquals('显式钉住的表头高,现代下仍是钉值', g.ScalePx(20), g.HdrPx);
+  finally
+    g.Free;
+    c.Free;
+  end;
+end;
+
+{ TTySegmented froze on TyDensityHeight(30)=--control-height(38); a 38px pill minus the
+  segmented + segment padding left only ~14px for 14px text, which DrawText hard-clipped
+  ("文字都看不到了"). It now reads its own --segmented-height (44); classic stays 30. }
+procedure TMetricTest.TestSegmentedHeightFollowsDensity;
+var
+  savedDensity: TTyDensity;
+  sModern, sClassic: TTySegmented;
+begin
+  TyRegisterBuiltinThemes;
+  TyDefaultController.ThemeName := 'default';
+  savedDensity := TyDefaultController.Density;
+  sModern := nil; sClassic := nil;
+  try
+    TyDefaultController.Density := tdModern;
+    sModern := TTySegmented.Create(nil);
+    AssertTrue('现代分段器高应容得下文字(> 通用 control-height 38)', sModern.Height >= 44);
+
+    TyDefaultController.Density := tdClassic;
+    sClassic := TTySegmented.Create(nil);
+    AssertEquals('经典分段器保持自身默认 30,不漂移', 30, sClassic.Height);
+  finally
+    sModern.Free; sClassic.Free;
+    TyDefaultController.Density := savedDensity;
   end;
 end;
 

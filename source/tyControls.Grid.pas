@@ -30,7 +30,7 @@ uses
   tyControls.SpinEdit, tyControls.TrackBar, tyControls.Memo, tyControls.MaskEdit,
   tyControls.CalcEdit, tyControls.Panel, tyControls.Button, tyControls.CheckBox,
   tyControls.Css.Values, tyControls.ImageCollection, tyControls.Dialogs.Color,
-  tyControls.StrConsts,
+  tyControls.StrConsts, tyControls.Controller,
   tyControls.Grid.Layout, tyControls.Grid.Csv;
 
 type
@@ -4007,7 +4007,12 @@ var
   sz: TSize;
   bmp: TBGRABitmap;
 begin
-  Result := ScaleI(FHeader.Height);
+  { The band's floor follows the density axis when the host did not pin Header.Height:
+    classic 22 / modern --header-height (36). An explicit pin is honoured verbatim. }
+  if FHeader.HeightIsExplicit then
+    Result := ScaleI(FHeader.Height)
+  else
+    Result := ScaleI(TyDensityMetric(ActiveController, FHeader.Height, '--header-height'));
   if not FHeaderAutoHeight then Exit;
   if not (hoVisible in FHeader.Options) then Exit;
   if FHeader.Columns.Count = 0 then Exit;
@@ -10499,6 +10504,8 @@ var
   sz: Integer;
 begin
   Result := Rect(0, 0, 0, 0);
+  { No fill handle outside cell-selection mode — keep "what's drawn" == "what's hit". }
+  if FSelectionMode <> gsmCell then Exit;
   b := SelectionBoundsRect;
   if IsRectEmpty(b) then Exit;
   sz := ScaleI(6);
@@ -12627,6 +12634,10 @@ var
   end;
 
 begin
+  { The cell selection frame + fill handle are a spreadsheet affordance: only the
+    default cell-selection mode gets them. Row/column selection reads as a highlighted
+    band, not a framed cell. }
+  if FSelectionMode <> gsmCell then Exit;
   b := SelectionBoundsRect;
   if IsRectEmpty(b) then Exit;
   r := ActiveSelectionRect;

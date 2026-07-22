@@ -271,7 +271,7 @@ begin
   FHasPendingIndex := False;
   TabStop := True;   // the point of the windowed base class: it takes focus and arrow keys
   Width := 240;
-  Height := TyDensityHeight(ActiveController, 30);
+  Height := TyDensityMetric(ActiveController, 30, '--segmented-height');
 end;
 
 destructor TTySegmented.Destroy;

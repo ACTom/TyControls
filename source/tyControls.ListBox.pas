@@ -766,7 +766,7 @@ begin
     if (FScrollBar <> nil) and FScrollBar.Visible then
       SBWidth := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), APPI, 96);
 
-    SH := MulDiv(FItemHeight, APPI, 96);
+    SH := MulDiv(GetItemHeight, APPI, 96);
     if SH < 1 then SH := 1;
     LastRow := FTopIndex + VisibleRows - 1;
     if LastRow >= FItems.Count - 1 then

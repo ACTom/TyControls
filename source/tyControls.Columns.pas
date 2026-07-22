@@ -171,6 +171,7 @@ type
   TTyHeader = class(TPersistent)
   private
     FHeight:        Integer;
+    FHeightExplicit: Boolean;   { True once a host/.lfm sets Height; False = follow --header-height (density) }
     FColumns:       TTyColumns;
     FMainColumn:    Integer;
     FSortColumn:    Integer;
@@ -200,6 +201,11 @@ type
 
     { Hook wired by the tree so it is notified of every header/column change. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
+
+    { True once a host/.lfm set Height explicitly. A consumer that wants the header
+      band to follow the density axis reads this: while False, size the band from
+      the '--header-height' token (classic 22 / modern 36); while True, honour the pin. }
+    property HeightIsExplicit: Boolean read FHeightExplicit;
   published
     property Height:        Integer              read FHeight        write SetHeight        default 22;
     property Columns:       TTyColumns       read FColumns;
@@ -765,6 +771,7 @@ constructor TTyHeader.Create(AColumnClass: TCollectionItemClass);
 begin
   inherited Create;
   FHeight        := 22;
+  FHeightExplicit := False;
   FMainColumn    := 0;
   FSortColumn    := NoColumn;
   FSortDirection := sdAscending;
@@ -795,6 +802,7 @@ end;
 
 procedure TTyHeader.SetHeight(AValue: Integer);
 begin
+  FHeightExplicit := True;
   if FHeight = AValue then Exit;
   FHeight := AValue;
   Changed;
@@ -856,6 +864,7 @@ begin
   begin
     Src := TTyHeader(ASource);
     FHeight        := Src.FHeight;
+    FHeightExplicit := Src.FHeightExplicit;
     FSortColumn    := Src.FSortColumn;
     FSortDirection := Src.FSortDirection;
     FAutoSizeIndex := Src.FAutoSizeIndex;

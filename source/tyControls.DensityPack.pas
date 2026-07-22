@@ -142,6 +142,7 @@ begin
     '  --ribbon-caption-band-height: 25px;' + LineEnding +
     '  --scrollbar-size: 17px;' + LineEnding +
     '  --segmented-pad: 4px;' + LineEnding +
+    '  --segmented-height: 44px;' + LineEnding +
     '  --steps-connector-gap: 12px;' + LineEnding +
     '  --steps-connector-length: 45px;' + LineEnding +
     '  --steps-gap: 12px;' + LineEnding +
