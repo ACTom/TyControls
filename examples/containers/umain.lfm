@@ -349,48 +349,61 @@ object MainForm: TMainForm
       Width = 290
       ColumnCount = 2
       RowCount = 3
+      ColumnSizes = '60, *'
       Spacing = 6
-      object LblUser: TTyLabel
-        Left = 0
-        Height = 20
-        Top = 0
-        Width = 50
-        Caption = '用户名'
+      object GfLabelCell0: TTyGridCell
+        Col = 0
+        Row = 0
+        Padding = 2
+        object LblUser: TTyLabel
+          Align = alClient
+          Caption = '用户名'
+        end
       end
-      object LblMail: TTyLabel
-        Left = 0
-        Height = 20
-        Top = 0
-        Width = 50
-        Caption = '邮箱'
+      object GfEditCell0: TTyGridCell
+        Col = 1
+        Row = 0
+        Padding = 2
+        object EditUser: TTyEdit
+          Align = alClient
+          TextHint = '登录名'
+        end
       end
-      object LblPhone: TTyLabel
-        Left = 0
-        Height = 20
-        Top = 0
-        Width = 50
-        Caption = '电话'
+      object GfLabelCell1: TTyGridCell
+        Col = 0
+        Row = 1
+        Padding = 2
+        object LblMail: TTyLabel
+          Align = alClient
+          Caption = '邮箱'
+        end
       end
-      object EditUser: TTyEdit
-        Left = 0
-        Height = 28
-        Top = 0
-        Width = 200
-        TextHint = '登录名'
+      object GfEditCell1: TTyGridCell
+        Col = 1
+        Row = 1
+        Padding = 2
+        object EditMail: TTyEdit
+          Align = alClient
+          TextHint = 'name@example.com'
+        end
       end
-      object EditMail: TTyEdit
-        Left = 0
-        Height = 28
-        Top = 0
-        Width = 200
-        TextHint = 'name@example.com'
+      object GfLabelCell2: TTyGridCell
+        Col = 0
+        Row = 2
+        Padding = 2
+        object LblPhone: TTyLabel
+          Align = alClient
+          Caption = '电话'
+        end
       end
-      object EditPhone: TTyEdit
-        Left = 0
-        Height = 28
-        Top = 0
-        Width = 200
-        TextHint = '手机号'
+      object GfEditCell2: TTyGridCell
+        Col = 1
+        Row = 2
+        Padding = 2
+        object EditPhone: TTyEdit
+          Align = alClient
+          TextHint = '手机号'
+        end
       end
     end
     object RelForm: TTyRelativePanel

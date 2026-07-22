@@ -2,7 +2,7 @@ unit umain;
 
 { Phase-5 container & layout demo. Every control is placed in the designer (umain.lfm) and
   streamed in at run time by TTyForm; the code only does the "structural assembly" -- the parts
-  that can't be expressed as .lfm properties: grid cells (SetCell), relative-layout rules
+  that can't be expressed as .lfm properties: relative-layout rules
   (SetRules), header sections (AddSection), grouped lists (AddGroup/AddItem), Rebar band widths
   (SetBandWidth), the check-group's initial checks, and theme loading. Theming goes through the
   global TyDefaultController. }
@@ -18,7 +18,7 @@ uses
   tyControls.PaintPanel, tyControls.SizeBox,
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
   tyControls.ScrollBox, tyControls.ExPanel, tyControls.Button, tyControls.CheckBox,
-  tyControls.GridPanel, tyControls.RelativePanel, tyControls.Edit,
+  tyControls.GridPanel, tyControls.GridCell, tyControls.RelativePanel, tyControls.Edit,
   tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar, tyControls.Panel,
   tyControls.HeaderControl, tyControls.ListGroupPanel,
   tyControls.BuiltinThemes, tyControls.ComboBox, tyControls.ToggleSwitch;
@@ -68,6 +68,12 @@ type
     SbBtn10: TTyButton;
     DivLayout: TTyDivider;
     GridForm: TTyGridPanel;
+    GfLabelCell0: TTyGridCell;
+    GfEditCell0: TTyGridCell;
+    GfLabelCell1: TTyGridCell;
+    GfEditCell1: TTyGridCell;
+    GfLabelCell2: TTyGridCell;
+    GfEditCell2: TTyGridCell;
     LblUser: TTyLabel;
     LblMail: TTyLabel;
     LblPhone: TTyLabel;
@@ -105,7 +111,6 @@ type
     procedure DarkSwitchChange(Sender: TObject);
     procedure PaintSurface(Sender: TObject; APainter: TTyPainter; const AContent: TRect);
   private
-    procedure WireGrid;
     procedure WireRelative;
     procedure WireBands;
     procedure WireLists;
@@ -151,7 +156,6 @@ begin
   CheckFeatures.Checked[0] := True;   // Auto-save
   CheckFeatures.Checked[2] := True;   // Dark mode
 
-  WireGrid;       // grid cells + track sizes
   WireRelative;   // relative-layout rules
   WireLists;      // header sections + grouped lists
   WireBands;      // Rebar band widths
@@ -181,15 +185,6 @@ begin
   ApplyChromeTheme(TyDefaultController);
 end;
 
-procedure TMainForm.WireGrid;
-begin
-  // Left column fixed at 56px for labels, right column star-sized for the edits; 3 rows.
-  GridForm.SetColumnStyle(0, tgtAbsolute, 56);
-  GridForm.SetColumnStyle(1, tgtStar);
-  GridForm.SetCell(LblUser, 0, 0);   GridForm.SetCell(EditUser, 1, 0);
-  GridForm.SetCell(LblMail, 0, 1);   GridForm.SetCell(EditMail, 1, 1);
-  GridForm.SetCell(LblPhone, 0, 2);  GridForm.SetCell(EditPhone, 1, 2);
-end;
 
 procedure TMainForm.WireRelative;
 begin
