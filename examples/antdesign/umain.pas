@@ -199,6 +199,10 @@ type
     BtnNavOpen: TTyButton;
     SepNav: TTyToolSeparator;
     BtnNavSave: TTyButton;
+    CardTabs: TTyCard;
+    CardSeg: TTyCard;
+    CardSteps: TTyCard;
+    CardCrumb: TTyCard;
     TabsDemo: TTyTabSet;
     TabsBody: TTyPanel;
     LblTabsBody: TTyLabel;
