@@ -17,6 +17,7 @@ type
     FPadding: Integer;
     FCol: Integer;
     FRow: Integer;
+    FProvisional: Boolean;
     procedure SetPadding(AValue: Integer);
   protected
     procedure SetParent(AParent: TWinControl); override;
@@ -25,6 +26,10 @@ type
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
+    { Transient (NON-published, never streamed): True on a cell the owning grid seeded
+      as a constructor default. A streamed load discards these once real cells arrive
+      (see TTyGridPanel.Loaded); a designer drop / code path keeps them. }
+    property Provisional: Boolean read FProvisional write FProvisional;
   published
     { Set by the owning grid; published so a streamed form re-seats the cell. }
     property Col: Integer read FCol write FCol;

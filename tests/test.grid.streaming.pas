@@ -2,8 +2,8 @@ unit test.grid.streaming;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, TypInfo, fpcunit, testregistry,
-  tyControls.Grid;
+  Classes, SysUtils, TypInfo, Controls, Forms, fpcunit, testregistry,
+  tyControls.Grid, tyControls.GridPanel, tyControls.GridCell, tyControls.Button;
 
 type
   { 拿真实的示例 .lfm 去校验控件的**发布面**。
@@ -15,6 +15,13 @@ type
   published
     procedure TestExampleLfmPropertiesAllExistOnTheControls;
     procedure TestGridPublishesStandardLayoutProperties;
+    procedure TestGridPanelCellsSurviveRoundTrip;
+  end;
+
+  { A streamable root that owns the design tree (mirrors test.pagecontrol.streaming). }
+  TGridHostForm = class(TForm)
+  published
+    Grid: TTyGridPanel;
   end;
 
 implementation
@@ -117,6 +124,63 @@ begin
   end;
 end;
 
+{ A full WriteComponent/ReadComponent round-trip (pure runtime, not just designer):
+  a 2×2 grid with a control dropped into cell (1,1) must reload with EXACTLY 4 cells
+  (not 8) and the child re-seated on the cell at (1,1). Guards the "streamed grids
+  double-create their cells" bug — the constructor seeds a default 2×2 (FPC's TReader
+  sets csLoading only AFTER Create), the streamed cells register on top, and without
+  the Loaded-time discard you get 8 cells. }
+procedure TTyGridStreamingTest.TestGridPanelCellsSurviveRoundTrip;
+var
+  Src, Dst: TGridHostForm;
+  cellObj, reCell: TTyGridCell;
+  marker: TTyButton;
+  MS: TMemoryStream;
+  i: Integer;
+  DstGrid: TTyGridPanel;
+  found: Boolean;
+begin
+  Src := TGridHostForm.CreateNew(nil);
+  Dst := TGridHostForm.CreateNew(nil);
+  MS := TMemoryStream.Create;
+  try
+    Src.Name := 'HostForm1';
+    Src.Grid := TTyGridPanel.Create(Src);
+    Src.Grid.Name := 'Grid';
+    Src.Grid.Parent := Src;
+    AssertEquals('2x2 default = 4 cells pre-stream', 4, Src.Grid.CellCount);
+    { Name the cells so they stream (the designer would; we do it explicitly). }
+    for i := 0 to Src.Grid.CellCount - 1 do
+      TTyGridCell(Src.Grid.CellAt(i)).Name := 'Cell' + IntToStr(i);
+    cellObj := TTyGridCell(Src.Grid.Cells[1, 1]);
+    AssertNotNull('cell (1,1) present pre-stream', cellObj);
+    marker := TTyButton.Create(Src);
+    marker.Name := 'Marker';
+    marker.Parent := cellObj;            { a control "dropped" into cell (1,1) }
+
+    MS.WriteComponent(Src);
+    MS.Position := 0;
+    MS.ReadComponent(Dst);               { read into a CreateNew'd root (no resource ctor) }
+
+    DstGrid := Dst.FindComponent('Grid') as TTyGridPanel;
+    AssertNotNull('grid survived', DstGrid);
+    AssertEquals('exactly 4 cells after roundtrip (no double-create)', 4, DstGrid.CellCount);
+    reCell := TTyGridCell(DstGrid.Cells[1, 1]);
+    AssertNotNull('cell (1,1) reseated', reCell);
+    { the dropped child survives on the cell at (1,1) }
+    found := False;
+    for i := 0 to reCell.ControlCount - 1 do
+      if reCell.Controls[i] is TTyButton then found := True;
+    AssertTrue('marker survived as child of cell (1,1)', found);
+  finally
+    MS.Free;
+    Dst.Free;
+    Src.Free;
+  end;
+end;
+
 initialization
+  { The reader instantiates streamed children by class name — register them. }
+  RegisterClasses([TTyGridPanel, TTyGridCell, TTyButton]);
   RegisterTest(TTyGridStreamingTest);
 end.

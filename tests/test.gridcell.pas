@@ -8,7 +8,7 @@ type
   published
     procedure TestPublishesDesignerProperties;
     procedure TestPaddingInsetsClientRect;
-    procedure TestAlClientChildConstrainedToCell;
+    procedure TestAlClientChildReceivesPaddedInterior;
   end;
 implementation
 
@@ -56,27 +56,26 @@ begin
   end;
 end;
 
-procedure TTyGridCellTest.TestAlClientChildConstrainedToCell;
-var cell: TCellAccess; child: TControl; r: TRect;
+procedure TTyGridCellTest.TestAlClientChildReceivesPaddedInterior;
+var cell: TCellAccess; r: TRect;
 begin
   { An alClient child is bounded by the cell's AdjustClientRect (the LCL alignment
-    contract). We assert that rect directly: realizing a real window handle is not
-    possible in the headless runner ("failed to create win32 control"), so — as
-    test.card / test.expanel do — we probe the constraint through AdjustClientRect. }
+    contract) — so this probes the padded interior a dropped child RECEIVES, and that
+    it never exceeds the cell. The actual child-bounds placement is realized by LCL's
+    alignment engine (needs a live window handle, which the headless runner cannot
+    create — "failed to create win32 control"); that end-to-end constraint is
+    IDE/user-verified. Here we assert the rect directly, as test.card / test.expanel do. }
   cell := TCellAccess.Create(nil);
   try
     cell.Font.PixelsPerInch := 96;
     cell.SetBounds(5, 5, 100, 80);
     cell.Padding := 8;
-    child := TControl.Create(cell);
-    child.Parent := cell;
-    child.Align := alClient;          // the scenario: a dropped, cell-filling child
     r := cell.AdjustedClient;         // the padded interior an alClient child receives
-    AssertEquals('constrained left',   8, r.Left);
-    AssertEquals('constrained top',    8, r.Top);
+    AssertEquals('interior left',   8, r.Left);
+    AssertEquals('interior top',    8, r.Top);
     AssertEquals('fills padded width',  100 - 8 - 8, r.Right - r.Left);
     AssertEquals('fills padded height', 80 - 8 - 8, r.Bottom - r.Top);
-    // "constrained" = never exceeds the cell on any side
+    // never exceeds the cell on any side
     AssertTrue('inside the cell (right)',  r.Right <= cell.Width);
     AssertTrue('inside the cell (bottom)', r.Bottom <= cell.Height);
   finally

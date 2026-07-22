@@ -3,7 +3,7 @@ unit tyControls.GridPanel;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
-  tyControls.Painter, tyControls.Base, tyControls.Panel;
+  tyControls.Painter, tyControls.Controller, tyControls.Base, tyControls.Panel;
 type
   { A track (column or row) is sized in one of three ways:
       tgtAbsolute — a fixed logical-px length (Value = the px count).
@@ -44,6 +44,7 @@ type
     FSpacing: Integer;
     FInLayout: Boolean;
     FDestroying: Boolean;
+    FHadStreamedCells: Boolean;      // a cell registered while csLoading -> streamed load
     procedure SetColumnCount(AValue: Integer);
     procedure SetRowCount(AValue: Integer);
     procedure SetColumnSizes(const AValue: string);
@@ -52,9 +53,11 @@ type
     function  GetCell(ACol, ARow: Integer): TObject;   // returns TTyGridCell or nil
     function  CellIndex(ACol, ARow: Integer): Integer;
     procedure EnsureCells;           // create/destroy cells to match Count, preserve in-bounds
+    procedure DiscardProvisionalCells;  // free the constructor-seeded default cells
     procedure Relayout;
   protected
     function  GetStyleTypeKey: string; override;
+    procedure SetController(AValue: TTyStyleController); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Resize; override;
     procedure Loaded; override;
@@ -66,6 +69,8 @@ type
     procedure RegisterCell(ACell: TObject);
     procedure UnregisterCell(ACell: TObject; AFree: Boolean);
     function  CellCount: Integer;
+    { Test/iteration accessor: the i-th registered cell (registration order), or nil. }
+    function  CellAt(AIndex: Integer): TObject;
     { Cell at (col,row), or nil. Cast the result to TTyGridCell in cell-aware code. }
     property  Cells[ACol, ARow: Integer]: TObject read GetCell;
   published
@@ -125,7 +130,7 @@ function TyParseGridTracks(const ASpec: string; ADefaultCount: Integer): TTyGrid
 implementation
 
 uses
-  tyControls.GridCell, tyControls.Controller;
+  tyControls.GridCell;
 
 { --- Pure functions -------------------------------------------------------------- }
 
@@ -305,6 +310,7 @@ end;
 { TTyGridPanel }
 
 constructor TTyGridPanel.Create(AOwner: TComponent);
+var i: Integer;
 begin
   inherited Create(AOwner);
   FColumnCount := 2;
@@ -312,8 +318,15 @@ begin
   FSpacing := 4;
   Width := 200;
   Height := 150;
-  if not (csLoading in ComponentState) then
-    EnsureCells;                    // designer/code path builds the 2x2 default
+  { Seed the default 2x2 UNCONDITIONALLY and tag the cells provisional. FPC's TReader
+    sets csLoading only AFTER Create returns (reader.inc: Create at ~952, csLoading at
+    ~959), so a `if not csLoading` guard here is a no-op during streaming — a streamed
+    grid would seed a default AND take the streamed cells (double-create). Instead we
+    always seed, then Loaded discards these provisional cells if real cells streamed in;
+    a designer palette-drop / code path keeps them. }
+  EnsureCells;
+  for i := 0 to High(FCells) do
+    TTyGridCell(FCells[i]).Provisional := True;
 end;
 
 destructor TTyGridPanel.Destroy;
@@ -325,6 +338,16 @@ end;
 function TTyGridPanel.GetStyleTypeKey: string;
 begin
   Result := 'TyPanel';              // transparent layout host; reuse the panel key
+end;
+
+procedure TTyGridPanel.SetController(AValue: TTyStyleController);
+var i: Integer;
+begin
+  inherited SetController(AValue);
+  { Re-propagate to existing cells (mirrors TTyPageControl.SetController). }
+  for i := 0 to High(FCells) do
+    if FCells[i] <> nil then
+      TTyGridCell(FCells[i]).Controller := AValue;
 end;
 
 function TTyGridPanel.CellIndex(ACol, ARow: Integer): Integer;
@@ -350,6 +373,12 @@ begin
   Result := Length(FCells);
 end;
 
+function TTyGridPanel.CellAt(AIndex: Integer): TObject;
+begin
+  if (AIndex >= 0) and (AIndex <= High(FCells)) then Result := FCells[AIndex]
+  else Result := nil;
+end;
+
 procedure TTyGridPanel.RegisterCell(ACell: TObject);
 var i: Integer;
 begin
@@ -358,6 +387,11 @@ begin
   SetLength(FCells, Length(FCells) + 1);
   FCells[High(FCells)] := ACell;
   TTyGridCell(ACell).Controller := Self.Controller;
+  { A cell registering while the GRID is csLoading is a STREAMED cell — the
+    constructor's provisional seed registers with csLoading clear. Note it so Loaded
+    can drop the provisional defaults in favour of the streamed cells. }
+  if csLoading in ComponentState then
+    FHadStreamedCells := True;
   if not (csLoading in ComponentState) then Relayout;
 end;
 
@@ -372,6 +406,20 @@ begin
   SetLength(FCells, Length(FCells) - 1);
   if AFree and (ACell <> nil) then TTyGridCell(ACell).Free;
   if not (csDestroying in ComponentState) then Relayout;
+end;
+
+procedure TTyGridPanel.DiscardProvisionalCells;
+var i: Integer; cell: TTyGridCell;
+begin
+  i := 0;
+  while i <= High(FCells) do
+  begin
+    cell := TTyGridCell(FCells[i]);
+    if (cell <> nil) and cell.Provisional then
+      UnregisterCell(cell, True)   // frees + shrinks FCells; do not Inc(i)
+    else
+      Inc(i);
+  end;
 end;
 
 procedure TTyGridPanel.EnsureCells;
@@ -466,8 +514,13 @@ end;
 procedure TTyGridPanel.Loaded;
 begin
   inherited Loaded;
-  { Cells self-registered via SetParent during streaming; FCells is populated.
-    Reconcile against ColumnCount/RowCount (a hand-edited .lfm may disagree). }
+  { Cells self-registered via SetParent during streaming; FCells now holds the streamed
+    cells PLUS the provisional 2x2 the constructor seeded. If real cells streamed in,
+    drop the provisional ones (they were only a placeholder); then reconcile against
+    ColumnCount/RowCount (covers a hand-edited .lfm with no cells, where the provisional
+    defaults are kept and grown/shrunk to match). }
+  if FHadStreamedCells then
+    DiscardProvisionalCells;
   EnsureCells;
 end;
 
