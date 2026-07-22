@@ -525,8 +525,41 @@ begin
 end;
 
 procedure TTyGridPanel.Relayout;
+var
+  cr: TRect;
+  cols, rows: TTyGridTracks;
+  colW, rowH, colX, rowY: TTyGridIntArray;
+  i: Integer;
+  cell: TTyGridCell;
+  cellR: TRect;
 begin
-  // real body in Task 4
+  if csDestroying in ComponentState then Exit;
+  if csLoading in ComponentState then Exit;
+  if FInLayout then Exit;
+  FInLayout := True;
+  try
+    cr := ClientRect;
+    cols := TyParseGridTracks(FColumnSizes, FColumnCount);
+    rows := TyParseGridTracks(FRowSizes, FRowCount);
+    colW := TyGridTrackSizes(cr.Right - cr.Left, FSpacing, cols);
+    rowH := TyGridTrackSizes(cr.Bottom - cr.Top, FSpacing, rows);
+    colX := TyGridTrackOrigins(colW, FSpacing);
+    rowY := TyGridTrackOrigins(rowH, FSpacing);
+    for i := 0 to High(FCells) do
+    begin
+      cell := TTyGridCell(FCells[i]);
+      if cell = nil then Continue;
+      if (cell.Col < 0) or (cell.Col >= Length(colW)) then Continue;
+      if (cell.Row < 0) or (cell.Row >= Length(rowH)) then Continue;
+      cellR := TyGridCellRect(colX, colW, rowY, rowH, cell.Col, cell.Row, 1, 1);
+      OffsetRect(cellR, cr.Left, cr.Top);
+      cell.SetBounds(cellR.Left, cellR.Top,
+        cellR.Right - cellR.Left, cellR.Bottom - cellR.Top);
+    end;
+  finally
+    FInLayout := False;
+  end;
+  Invalidate;
 end;
 
 procedure TTyGridPanel.Paint;

@@ -47,6 +47,8 @@ type
     procedure TestCellsAccessorReturnsByColRow;
     procedure TestGrowPreservesInBoundsCells;
     procedure TestShrinkFreesOutOfBoundsCells;
+    procedure TestDefaultEqualDistribution;
+    procedure TestColumnSizesRespected;
   end;
 
 implementation
@@ -408,6 +410,45 @@ begin
     g.ColumnCount := 2;                     // -> 4 cells; col 2 dropped
     AssertEquals('shrunk to 4', 4, g.CellCount);
     AssertTrue('no cell at old col 2', g.Cells[2, 0] = nil);
+  finally
+    g.Free;
+  end;
+end;
+
+procedure TTyGridPanelTest.TestDefaultEqualDistribution;
+var g: TTyGridPanel; a, b: TTyGridCell;
+begin
+  g := TTyGridPanel.Create(nil);
+  try
+    g.Spacing := 0;
+    g.SetBounds(0, 0, 300, 100);
+    g.ColumnCount := 3; g.RowCount := 1;
+    a := TTyGridCell(g.Cells[0, 0]);
+    b := TTyGridCell(g.Cells[1, 0]);
+    AssertEquals('equal col width', 100, a.Width);
+    AssertEquals('col1 x', 100, b.Left);
+  finally
+    g.Free;
+  end;
+end;
+
+procedure TTyGridPanelTest.TestColumnSizesRespected;
+var g: TTyGridPanel; a, b: TTyGridCell;
+begin
+  g := TTyGridPanel.Create(nil);
+  try
+    g.Spacing := 0;
+    g.SetBounds(0, 0, 300, 100);
+    g.ColumnCount := 2; g.RowCount := 1;
+    // Absolute tracks, not weighted stars: TyGridTrackSizes (pre-existing, unchanged by
+    // this task) intentionally ignores star Value and splits star tracks EQUALLY — so
+    // '2*, *' would yield 150/150, not a 2:1 split. Absolute tracks exercise the same
+    // "ColumnSizes flows through to Relayout" behavior with an unambiguous expectation.
+    g.ColumnSizes := '200, 100';
+    a := TTyGridCell(g.Cells[0, 0]);
+    b := TTyGridCell(g.Cells[1, 0]);
+    AssertEquals('wide col', 200, a.Width);
+    AssertEquals('narrow col', 100, b.Width);
   finally
     g.Free;
   end;
