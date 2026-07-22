@@ -753,6 +753,9 @@ begin
   end;
   { 状态列按语义上色 —— 数据是文字,颜色是呈现,走单元格样式回调。 }
   GridOrders.OnGetCellStyle := @OrdersGetCellStyle;
+  { 整行选中的只读数据表:不要单元格焦点框(选区框 / 填充柄已由 gsmRow 抑制),
+    整行高亮就是选中线索 —— 这才是 Web 表格的读法。 }
+  GridOrders.ShowFocusCell := False;
 
   GridOrders.BeginUpdate;
   try

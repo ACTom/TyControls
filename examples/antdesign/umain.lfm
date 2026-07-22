@@ -135,7 +135,7 @@ object MainForm: TMainForm
             object SparkVisits: TTySparkline
               Left = 16
               Height = 112
-              Top = 64
+              Top = 74
               Width = 200
               MaxValue = 100
               Align = alClient
@@ -151,7 +151,7 @@ object MainForm: TMainForm
             object SparkOrders: TTySparkline
               Left = 14
               Height = 112
-              Top = 64
+              Top = 74
               Width = 162
               Style = ssBar
               MaxValue = 100
@@ -168,7 +168,7 @@ object MainForm: TMainForm
             object CircCpu: TTyCircularProgress
               Left = 14
               Height = 112
-              Top = 64
+              Top = 74
               Width = 162
               Position = 68
               Thickness = 8
@@ -187,7 +187,7 @@ object MainForm: TMainForm
             object MeterHealth: TTyMeter
               Left = 14
               Height = 112
-              Top = 64
+              Top = 74
               Width = 162
               Max = 100
               Value = 86
@@ -205,7 +205,7 @@ object MainForm: TMainForm
             object ChartSales: TTyChart
               Left = 16
               Height = 306
-              Top = 64
+              Top = 74
               Width = 628
               ChartType = ctBar
               Series = <              
@@ -240,7 +240,7 @@ object MainForm: TMainForm
             object TagOnline: TTyTag
               Left = 16
               Height = 30
-              Top = 64
+              Top = 74
               Width = 88
               StyleClass = 'accent'
               Caption = '运行中'
@@ -248,7 +248,7 @@ object MainForm: TMainForm
             object TagBeta: TTyTag
               Left = 110
               Height = 30
-              Top = 64
+              Top = 74
               Width = 82
               Caption = 'Beta'
               Closable = True
@@ -257,7 +257,7 @@ object MainForm: TMainForm
             object TagRisk: TTyTag
               Left = 198
               Height = 30
-              Top = 64
+              Top = 74
               Width = 88
               StyleClass = 'danger'
               Caption = '待处理'
@@ -265,7 +265,7 @@ object MainForm: TMainForm
             object LblQueue: TTyLabel
               Left = 16
               Height = 58
-              Top = 104
+              Top = 114
               Width = 288
               WordWrap = True
               Caption = '积压任务(徽标挂在按钮上,不是按钮内置的)'
@@ -273,7 +273,7 @@ object MainForm: TMainForm
             object BtnQueue: TTyButton
               Left = 16
               Height = 38
-              Top = 172
+              Top = 182
               Width = 156
               TabOrder = 0
               OnClick = QueueClick
@@ -292,7 +292,7 @@ object MainForm: TMainForm
             object LblStatusNote: TTyLabel
               Left = 16
               Height = 92
-              Top = 222
+              Top = 232
               Width = 288
               WordWrap = True
               Caption = 'TTyCard / TTyTag / TTyBadge 是批 1 新落地的控件,这一页就是它们的验收面。'
@@ -302,7 +302,7 @@ object MainForm: TMainForm
             object BtnStatusDetail: TTyButton
               Left = 16
               Height = 38
-              Top = 326
+              Top = 336
               Width = 112
               TabOrder = 1
               OnClick = StatusDetailClick
@@ -459,7 +459,7 @@ object MainForm: TMainForm
             object LblName: TTyLabel
               Left = 12
               Height = 22
-              Top = 74
+              Top = 76
               Width = 84
               Caption = '标题'
             end
@@ -467,7 +467,7 @@ object MainForm: TMainForm
               Cursor = crIBeam
               Left = 104
               Height = 38
-              Top = 72
+              Top = 74
               Width = 386
               TabOrder = 0
               TabStop = True
@@ -476,7 +476,7 @@ object MainForm: TMainForm
             object LblAmount: TTyLabel
               Left = 12
               Height = 22
-              Top = 126
+              Top = 128
               Width = 84
               Caption = '金额'
             end
@@ -484,7 +484,7 @@ object MainForm: TMainForm
               Cursor = crIBeam
               Left = 104
               Height = 38
-              Top = 124
+              Top = 126
               Width = 386
               TabOrder = 1
               TabStop = True
@@ -494,14 +494,14 @@ object MainForm: TMainForm
             object LblKind: TTyLabel
               Left = 12
               Height = 22
-              Top = 178
+              Top = 180
               Width = 84
               Caption = '类型'
             end
             object CbKind: TTyComboBox
               Left = 104
               Height = 38
-              Top = 176
+              Top = 178
               Width = 386
               TabOrder = 2
               Items.Strings = (
@@ -516,7 +516,7 @@ object MainForm: TMainForm
             object LblDue: TTyLabel
               Left = 12
               Height = 22
-              Top = 230
+              Top = 232
               Width = 84
               Caption = '截止日期'
             end
@@ -524,7 +524,7 @@ object MainForm: TMainForm
               Cursor = crArrow
               Left = 104
               Height = 38
-              Top = 228
+              Top = 230
               Width = 386
               TabOrder = 3
               DateTime = 46220.9360946528
@@ -533,14 +533,14 @@ object MainForm: TMainForm
             object LblUrgent: TTyLabel
               Left = 12
               Height = 22
-              Top = 283
+              Top = 285
               Width = 84
               Caption = '加急'
             end
             object SwUrgent: TTyToggleSwitch
               Left = 104
               Height = 28
-              Top = 281
+              Top = 283
               Width = 90
               TabOrder = 4
               TabStop = True
@@ -549,14 +549,14 @@ object MainForm: TMainForm
             object LblWeight: TTyLabel
               Left = 12
               Height = 22
-              Top = 334
+              Top = 336
               Width = 84
               Caption = '权重'
             end
             object TrkWeight: TTyTrackBar
               Left = 104
               Height = 32
-              Top = 332
+              Top = 334
               Width = 386
               TabOrder = 5
               Position = 60
@@ -564,14 +564,14 @@ object MainForm: TMainForm
             object LblScore: TTyLabel
               Left = 12
               Height = 22
-              Top = 386
+              Top = 388
               Width = 84
               Caption = '满意度'
             end
             object RateScore: TTyRating
               Left = 104
               Height = 32
-              Top = 384
+              Top = 386
               Width = 150
               TabOrder = 6
               Value = 4
@@ -580,7 +580,7 @@ object MainForm: TMainForm
             object ChkNotify: TTyCheckBox
               Left = 104
               Height = 26
-              Top = 436
+              Top = 438
               Width = 180
               TabOrder = 7
               TabStop = True
@@ -591,7 +591,7 @@ object MainForm: TMainForm
             object RgChannel: TTyRadioGroup
               Left = 12
               Height = 80
-              Top = 484
+              Top = 486
               Width = 478
               TabOrder = 8
               Caption = '通知渠道'
@@ -606,14 +606,14 @@ object MainForm: TMainForm
             object LblColor: TTyLabel
               Left = 12
               Height = 22
-              Top = 590
+              Top = 592
               Width = 84
               Caption = '标记颜色'
             end
             object BtnColor: TTyColorButton
               Left = 104
               Height = 38
-              Top = 588
+              Top = 590
               Width = 152
               TabOrder = 9
               ShowText = True
@@ -622,7 +622,7 @@ object MainForm: TMainForm
             object BtnSubmit: TTyButton
               Left = 12
               Height = 40
-              Top = 640
+              Top = 642
               Width = 88
               TabOrder = 10
               OnClick = SubmitClick
@@ -632,7 +632,7 @@ object MainForm: TMainForm
             object BtnReset: TTyButton
               Left = 108
               Height = 40
-              Top = 640
+              Top = 642
               Width = 88
               TabOrder = 11
               OnClick = ResetClick
@@ -649,14 +649,14 @@ object MainForm: TMainForm
             object LblDept: TTyLabel
               Left = 12
               Height = 22
-              Top = 72
+              Top = 74
               Width = 200
               Caption = '归属部门(树形下拉)'
             end
             object TsDept: TTyTreeSelect
               Left = 12
               Height = 38
-              Top = 100
+              Top = 102
               Width = 491
               TabOrder = 0
               TextHint = '请选择归属部门'
@@ -665,14 +665,14 @@ object MainForm: TMainForm
             object LblRegion: TTyLabel
               Left = 12
               Height = 22
-              Top = 152
+              Top = 154
               Width = 200
               Caption = '所在地区(级联选择)'
             end
             object CasRegion: TTyCascader
               Left = 12
               Height = 38
-              Top = 180
+              Top = 182
               Width = 491
               TabOrder = 1
               Nodes = <              
@@ -742,14 +742,14 @@ object MainForm: TMainForm
             object LblMembers: TTyLabel
               Left = 12
               Height = 22
-              Top = 232
+              Top = 234
               Width = 200
               Caption = '通知人(穿梭框)'
             end
             object TrfMembers: TTyTransfer
               Left = 12
               Height = 230
-              Top = 260
+              Top = 262
               Width = 491
               TabOrder = 2
               Items.Strings = (
@@ -770,7 +770,7 @@ object MainForm: TMainForm
             object LblAdvPick: TTyLabel
               Left = 12
               Height = 54
-              Top = 514
+              Top = 516
               Width = 491
               Caption = '当前选择会显示在这里。'
               Layout = tlTop
@@ -779,7 +779,7 @@ object MainForm: TMainForm
             object LblFormTodoNote: TTyLabel
               Left = 12
               Height = 96
-              Top = 574
+              Top = 576
               Width = 491
               Caption = '树形下拉的层级建在代码里(虚拟树的节点是指针,.lfm 存不下);级联的选项树是 .lfm 里的嵌套集合。'
               Layout = tlTop
@@ -804,7 +804,7 @@ object MainForm: TMainForm
             object BtnMsg: TTyButton
               Left = 12
               Height = 38
-              Top = 68
+              Top = 74
               Width = 110
               TabOrder = 0
               OnClick = MsgClick
@@ -813,7 +813,7 @@ object MainForm: TMainForm
             object BtnConfirm: TTyButton
               Left = 130
               Height = 38
-              Top = 68
+              Top = 74
               Width = 110
               TabOrder = 1
               OnClick = ConfirmClick
@@ -822,7 +822,7 @@ object MainForm: TMainForm
             object BtnInput: TTyButton
               Left = 248
               Height = 38
-              Top = 68
+              Top = 74
               Width = 110
               TabOrder = 2
               OnClick = InputClick
@@ -831,7 +831,7 @@ object MainForm: TMainForm
             object LblFeedback: TTyLabel
               Left = 12
               Height = 76
-              Top = 112
+              Top = 118
               Width = 490
               Caption = '对话框结果会显示在这里。'
               Layout = tlTop
@@ -848,21 +848,21 @@ object MainForm: TMainForm
             object LblProgress: TTyLabel
               Left = 12
               Height = 20
-              Top = 68
+              Top = 74
               Width = 380
               Caption = '任务进度:45%'
             end
             object PbTask: TTyProgressBar
               Left = 12
               Height = 18
-              Top = 94
+              Top = 100
               Width = 380
               Position = 45
             end
             object BtnStep: TTyButton
               Left = 12
               Height = 38
-              Top = 122
+              Top = 128
               Width = 88
               TabOrder = 0
               OnClick = StepClick
@@ -871,13 +871,13 @@ object MainForm: TMainForm
             object Spinner: TTyActivityIndicator
               Left = 440
               Height = 56
-              Top = 76
+              Top = 82
               Width = 56
             end
             object LblSpinner: TTyLabel
               Left = 12
               Height = 84
-              Top = 162
+              Top = 168
               Width = 491
               Caption = 'TTyActivityIndicator 表示"忙但没有确定进度";TTyProgressBar 表示确定进度。'
               Layout = tlTop
@@ -886,7 +886,7 @@ object MainForm: TMainForm
           end
           object CardInline: TTyCard
             Left = 12
-            Height = 340
+            Height = 348
             Top = 294
             Width = 514
             TabOrder = 2
@@ -894,14 +894,14 @@ object MainForm: TMainForm
             object AlertInfo: TTyAlert
               Left = 12
               Height = 40
-              Top = 64
+              Top = 74
               Width = 490
               Message = '系统将于今晚 23:00 - 23:30 例行维护。'
             end
             object AlertSuccess: TTyAlert
               Left = 12
               Height = 40
-              Top = 112
+              Top = 122
               Width = 490
               AlertType = atSuccess
               Message = '工单 TY-2041 已发布。'
@@ -911,7 +911,7 @@ object MainForm: TMainForm
             object AlertWarning: TTyAlert
               Left = 12
               Height = 56
-              Top = 160
+              Top = 170
               Width = 490
               AlertType = atWarning
               Message = '归档磁盘使用率已达 86%'
@@ -920,7 +920,7 @@ object MainForm: TMainForm
             object AlertError: TTyAlert
               Left = 12
               Height = 40
-              Top = 224
+              Top = 234
               Width = 490
               AlertType = atError
               Message = '与结算服务的连接已断开。'
@@ -930,7 +930,7 @@ object MainForm: TMainForm
             object LblAlertNote: TTyLabel
               Left = 12
               Height = 66
-              Top = 272
+              Top = 282
               Width = 490
               Caption = '警告条常驻在页面里,不打断人;四种语义各自选图标 + 主题变体。点 x 先发 OnClose,未被否决才隐藏。'
               Layout = tlTop
@@ -939,7 +939,7 @@ object MainForm: TMainForm
           end
           object CardFloat: TTyCard
             Left = 538
-            Height = 340
+            Height = 348
             Top = 294
             Width = 515
             TabOrder = 3
@@ -947,7 +947,7 @@ object MainForm: TMainForm
             object BtnToast: TTyButton
               Left = 12
               Height = 38
-              Top = 64
+              Top = 74
               Width = 125
               TabOrder = 0
               OnClick = ToastClick
@@ -956,7 +956,7 @@ object MainForm: TMainForm
             object BtnToastErr: TTyButton
               Left = 148
               Height = 38
-              Top = 64
+              Top = 74
               Width = 150
               TabOrder = 1
               OnClick = ToastErrClick
@@ -965,7 +965,7 @@ object MainForm: TMainForm
             object BtnPopover: TTyButton
               Left = 12
               Height = 38
-              Top = 102
+              Top = 112
               Width = 125
               TabOrder = 2
               OnClick = PopoverClick
@@ -975,7 +975,7 @@ object MainForm: TMainForm
             object LblFloatNote: TTyLabel
               Left = 12
               Height = 116
-              Top = 142
+              Top = 152
               Width = 491
               Caption = 'TTyNotification 是角落 toast:不打断、会自己消失(Duration=0 的那条留到你关它,两条会在同一角落堆叠)。TTyPopover 是能装控件的浮层 —— 里面那两个按钮是真控件。'
               Layout = tlTop
@@ -984,7 +984,7 @@ object MainForm: TMainForm
             object PopBox: TTyPanel
               Left = 12
               Height = 96
-              Top = 240
+              Top = 250
               Width = 340
               TabOrder = 3
               object LblPopBody: TTyLabel
@@ -1027,7 +1027,7 @@ object MainForm: TMainForm
           Caption = '导航'
           object NavMenuBar: TTyMenuBar
             Left = 0
-            Height = 28
+            Height = 38
             Top = 0
             Width = 805
             TabOrder = 0
@@ -1081,7 +1081,7 @@ object MainForm: TMainForm
           end
           object CardTabs: TTyCard
             Left = 12
-            Height = 224
+            Height = 230
             Top = 88
             Width = 514
             TabOrder = 2
@@ -1089,7 +1089,7 @@ object MainForm: TMainForm
             object TabsDemo: TTyTabSet
               Left = 16
               Height = 40
-              Top = 56
+              Top = 74
               Width = 482
               TabOrder = 0
               TabHeight = 32
@@ -1103,7 +1103,7 @@ object MainForm: TMainForm
             object TabsBody: TTyPanel
               Left = 16
               Height = 108
-              Top = 104
+              Top = 122
               Width = 482
               TabOrder = 1
               object LblTabsBody: TTyLabel
@@ -1119,15 +1119,15 @@ object MainForm: TMainForm
           end
           object CardSeg: TTyCard
             Left = 538
-            Height = 224
+            Height = 230
             Top = 88
             Width = 515
             TabOrder = 3
             Title = '分段控制器(TTySegmented)'
             object SegRange: TTySegmented
               Left = 16
-              Height = 42
-              Top = 60
+              Height = 44
+              Top = 74
               Width = 280
               TabOrder = 0
               Items.Strings = (
@@ -1141,14 +1141,14 @@ object MainForm: TMainForm
             object LblSegValue: TTyLabel
               Left = 16
               Height = 26
-              Top = 118
+              Top = 132
               Width = 483
               Caption = '今日成交 1,330 笔 · 环比 +4.2%'
             end
             object LblSegTitle: TTyLabel
               Left = 16
               Height = 52
-              Top = 150
+              Top = 164
               Width = 483
               Caption = '切一个值,不是切一页 —— 分段控制器是"选一个",不承载页面。'
               Layout = tlTop
@@ -1157,7 +1157,7 @@ object MainForm: TMainForm
           end
           object CardSteps: TTyCard
             Left = 12
-            Height = 180
+            Height = 186
             Top = 328
             Width = 514
             TabOrder = 4
@@ -1165,7 +1165,7 @@ object MainForm: TMainForm
             object StepsFlow: TTySteps
               Left = 16
               Height = 64
-              Top = 56
+              Top = 74
               Width = 482
               TabOrder = 0
               Items.Strings = (
@@ -1180,7 +1180,7 @@ object MainForm: TMainForm
             object LblStepsTitle: TTyLabel
               Left = 16
               Height = 40
-              Top = 128
+              Top = 146
               Width = 482
               Caption = 'Clickable 打开了,可以点 / 方向键走。'
               Layout = tlTop
@@ -1189,7 +1189,7 @@ object MainForm: TMainForm
           end
           object CardCrumb: TTyCard
             Left = 538
-            Height = 180
+            Height = 186
             Top = 328
             Width = 515
             TabOrder = 5
@@ -1197,7 +1197,7 @@ object MainForm: TMainForm
             object NavCrumb: TTyBreadcrumb
               Left = 16
               Height = 34
-              Top = 60
+              Top = 74
               Width = 483
               Items.Strings = (
                 '首页'
@@ -1209,7 +1209,7 @@ object MainForm: TMainForm
             object LblCrumbTitle: TTyLabel
               Left = 16
               Height = 56
-              Top = 104
+              Top = 118
               Width = 483
               Caption = '与顶部条同款;最后一节是"你在哪",不是链接,点不动。'
               Layout = tlTop
@@ -1243,11 +1243,10 @@ object MainForm: TMainForm
             object DataTree: TTyTreeView
               Left = 12
               Height = 240
-              Top = 64
+              Top = 74
               Width = 231
               TabOrder = 0
               Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]
-              DefaultNodeHeight = 24
               Indent = 14
               Align = alClient
               OnGetText = DataTreeGetText
@@ -1263,7 +1262,7 @@ object MainForm: TMainForm
             object TagPublished: TTyTag
               Left = 12
               Height = 30
-              Top = 64
+              Top = 74
               Width = 76
               StyleClass = 'accent'
               Caption = '已发布'
@@ -1271,14 +1270,14 @@ object MainForm: TMainForm
             object TagDraft: TTyTag
               Left = 96
               Height = 30
-              Top = 64
+              Top = 74
               Width = 68
               Caption = '草稿'
             end
             object TagBroken: TTyTag
               Left = 172
               Height = 30
-              Top = 64
+              Top = 74
               Width = 68
               StyleClass = 'danger'
               Caption = '风险'
@@ -1286,7 +1285,7 @@ object MainForm: TMainForm
             object TagRegion: TTyTag
               Left = 12
               Height = 30
-              Top = 96
+              Top = 106
               Width = 110
               Caption = '华东区'
               Closable = True
@@ -1295,7 +1294,7 @@ object MainForm: TMainForm
             object TagOwner: TTyTag
               Left = 130
               Height = 30
-              Top = 96
+              Top = 106
               Width = 106
               Caption = '我负责'
               Closable = True
@@ -1304,21 +1303,21 @@ object MainForm: TMainForm
             object LblBadgeHint: TTyLabel
               Left = 12
               Height = 20
-              Top = 130
+              Top = 140
               Width = 230
               Caption = '独立徽标(Target = nil):'
             end
             object BdgStandalone: TTyBadge
               Left = 12
               Height = 16
-              Top = 156
+              Top = 166
               Width = 23
               Value = 12
             end
             object BdgDot: TTyBadge
               Left = 62
               Height = 8
-              Top = 156
+              Top = 166
               Width = 8
               Value = 1
               Dot = True
@@ -1326,7 +1325,7 @@ object MainForm: TMainForm
             object BtnInbox: TTyButton
               Left = 12
               Height = 38
-              Top = 192
+              Top = 202
               Width = 142
               TabOrder = 0
               StyleClass = 'ghost'
@@ -1344,7 +1343,7 @@ object MainForm: TMainForm
             object LblTagsNote: TTyLabel
               Left = 12
               Height = 84
-              Top = 234
+              Top = 244
               Width = 230
               Caption = '变体是 StyleClass(accent / danger),不是枚举;徽标 > 99 显示 99+。'
               Layout = tlTop
@@ -1361,7 +1360,7 @@ object MainForm: TMainForm
             object ImgView: TTyImageView
               Left = 12
               Height = 240
-              Top = 64
+              Top = 74
               Width = 223
               TabOrder = 0
               ZoomMin = 0.05
