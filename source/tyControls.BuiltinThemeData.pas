@@ -1943,7 +1943,13 @@ begin
     ':root {' + LineEnding +
     '  --listgroup-header-height: 36;' + LineEnding +
     '  --listgroup-item-height:   40;' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* Ant Design Pro table: the selected row is a light accent TINT with normal ink,' + LineEnding +
+    '   not a solid-blue fill — so the green/orange/blue status text still reads on it.' + LineEnding +
+    '   */' + LineEnding +
+    'TyGridCell:selected { background: alpha(var(--accent), 0.10); color: var(--on-surface); }' + LineEnding +
+    'TyGridCell:hover    { background: alpha(var(--accent), 0.05); }' + LineEnding;
 end;
 
 function SkinCss_bootstrap: string;

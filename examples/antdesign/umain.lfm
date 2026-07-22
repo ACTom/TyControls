@@ -389,6 +389,7 @@ object MainForm: TMainForm
             Width = 1041
             TabOrder = 0
             SelectionMode = gsmRow
+            GridLineStyle = glsHorizontal
             OnSelectionChanged = GridSelectionChanged
             Anchors = [akTop, akLeft, akRight]
           end

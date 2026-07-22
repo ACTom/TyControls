@@ -783,7 +783,6 @@ var
   s: string;
 begin
   if ACol <> 3 then Exit;             { 只染状态列 }
-  if ARow = GridOrders.Row then Exit; { 选中行用整行的选中态文字色,别被语义色盖成低对比 }
   s := GridOrders.Cells[3, ARow];
   if s = '已发布' then ATextColor := TyRGB(22, 163, 74)       { 绿 }
   else if s = '草稿' then ATextColor := TyRGB(217, 119, 6)    { 橙 }

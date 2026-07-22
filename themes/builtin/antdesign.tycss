@@ -213,3 +213,9 @@ TyListGroupItem:active   { background: alpha(var(--accent), 0.10); color: var(--
   --listgroup-header-height: 36;
   --listgroup-item-height:   40;
 }
+
+/* Ant Design Pro table: the selected row is a light accent TINT with normal ink,
+   not a solid-blue fill — so the green/orange/blue status text still reads on it.
+   */
+TyGridCell:selected { background: alpha(var(--accent), 0.10); color: var(--on-surface); }
+TyGridCell:hover    { background: alpha(var(--accent), 0.05); }
