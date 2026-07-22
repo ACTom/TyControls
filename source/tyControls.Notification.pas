@@ -230,9 +230,13 @@ type
     function StackGapLogical: Integer;
     function TitleWeight: Integer;
     { Split the message the way TTyBalloonHint splits its description: on line breaks only.
-      There is no auto-wrap — the card is a fixed themed width and the author decides where
-      the lines end. }
+      Splits only on the author's own line breaks. }
     procedure SplitMessage(ALines: TStrings);
+    { The physical lines actually drawn: each authored line (SplitMessage) is greedily
+      wrapped to the message column width (device px) in the card font, so a long line
+      folds instead of being ellipsised at the right edge. CJK-aware (TyWrapTextCJK).
+      The card width stays the theme's; only the height grows with the wrapped count. }
+    procedure WrapMessage(APPI, AColWidthPx: Integer; AOut: TStrings);
     { One line's height in device px at APPI, from the stable reference glyph 'Ag' (so an
       empty line still measures a full line) in the theme's card font at AWeight. }
     function LineHeightAt(APPI, AWeight: Integer): Integer;
@@ -769,6 +773,40 @@ begin
   ALines.Text := FMessage;   // splits on CR/LF; '' -> no lines at all
 end;
 
+procedure TTyNotification.WrapMessage(APPI, AColWidthPx: Integer; AOut: TStrings);
+var
+  S: TTyStyleSet;
+  Meas: TBitmap;
+  raw, one: TStringList;
+  i: Integer;
+begin
+  AOut.Clear;
+  if FMessage = '' then Exit;   // no message -> no lines, same as SplitMessage
+  S := CardStyle;
+  Meas := TBitmap.Create;
+  raw := TStringList.Create;
+  one := TStringList.Create;
+  try
+    // GDI measurement canvas carrying the card font — mirrors TTyLabel.MeasureCaption so the
+    // wrap breaks at the same widths the painter later draws.
+    Meas.SetSize(1, 1);
+    Meas.Canvas.Font.Name := TyEffectiveFontName(S.FontName);
+    Meas.Canvas.Font.Size := MulDiv(ResolveFontSize(S), APPI, 96);
+    if S.FontWeight >= 600 then
+      Meas.Canvas.Font.Style := [fsBold]
+    else
+      Meas.Canvas.Font.Style := [];
+    raw.Text := FMessage;            // authored lines (CR/LF)
+    for i := 0 to raw.Count - 1 do
+    begin
+      TyWrapTextCJK(raw[i], AColWidthPx, Meas.Canvas, one);
+      AOut.AddStrings(one);
+    end;
+  finally
+    one.Free; raw.Free; Meas.Free;
+  end;
+end;
+
 function TTyNotification.LineHeightAt(APPI, AWeight: Integer): Integer;
 { Measured with a CANVAS-LESS painter — the TTyBadge idiom: BeginPaint(nil, ...) builds only
   the painter's internal bitmap and EndPaint frees it WITHOUT blitting, so this is safe outside
@@ -801,15 +839,19 @@ function TTyNotification.MeasureAtPPI(APPI: Integer): TSize;
 var
   Lines: TStringList;
   S: TTyStyleSet;
+  provW: TRect;
 begin
   if APPI <= 0 then APPI := 96;
   S := CardStyle;
   Lines := TStringList.Create;
   try
-    SplitMessage(Lines);
-    // Width is the theme's, flat: the card does not measure its text (it does not wrap it
-    // either), so a row of toasts is a column of identical cards, as a stack must be.
+    // Width is the theme's, flat, so a row of toasts is a column of identical cards. The card
+    // does NOT measure to fit — but it DOES wrap the message to its own message column, so a
+    // long line folds (taller card) instead of clipping. Column width is height-independent,
+    // so a provisional tall layout gives it before the real height is known.
     Result.cx := MulDiv(WidthLogical, APPI, 96);
+    provW := LayoutFor(Result.cx, MaxInt div 2, APPI).MessageRect;
+    WrapMessage(APPI, provW.Right - provW.Left, Lines);
     Result.cy := TyNotificationHeight(TitleHeightAt(APPI),
       LineHeightAt(APPI, S.FontWeight), Lines.Count,
       MulDiv(S.Padding.Top, APPI, 96), MulDiv(S.Padding.Bottom, APPI, 96),
@@ -1115,7 +1157,9 @@ begin
 
     if Lay.MessageRect.Right > Lay.MessageRect.Left then
     begin
-      SplitMessage(Lines);
+      // Wrap to the SAME column MeasureAtPPI sized the card for, so drawn lines == measured
+      // lines. Long authored lines fold here instead of being ellipsised at the right edge.
+      WrapMessage(APPI, Lay.MessageRect.Right - Lay.MessageRect.Left, Lines);
       lh := LineHeightAt(APPI, S.FontWeight);
       y := Lay.MessageRect.Top;
       for i := 0 to Lines.Count - 1 do

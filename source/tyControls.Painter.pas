@@ -96,6 +96,14 @@ procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
 // few LCL-canvas caption-width measures (GroupBox/TabControl) go through this so
 // measured width matches drawn glyphs even when the theme sets no font-family.
 function TyEffectiveFontName(const AName: string): string;
+{ Greedy line wrap that understands both scripts. Western words break at spaces (runs
+  collapse to one space); CJK text carries no spaces, so each ideograph / kana / hangul
+  syllable is its own break opportunity — without this a Chinese run is one unbreakable
+  word and overflows a narrow box instead of wrapping. Walks UTF-8 by codepoint so a
+  multi-byte glyph is never split. ACanvas must already carry the target font so TextWidth
+  measures the drawn glyphs. Shared by TTyLabel and TTyNotification. }
+procedure TyWrapTextCJK(const AText: string; AMaxWidthPx: Integer;
+  ACanvas: TCanvas; ALines: TStrings);
 { Clamp a device-px corner radius to half the shorter side of a WxH rect, so an oversized
   "pill" radius (e.g. border-radius:100 on a short progress track) renders as a rounded pill
   instead of overshooting the corner arcs into a pointed lens. Exposed for tests. }
@@ -125,6 +133,122 @@ begin
     Result := TyFallbackFontName
   else
     Result := AName;
+end;
+
+procedure TyWrapTextCJK(const AText: string; AMaxWidthPx: Integer;
+  ACanvas: TCanvas; ALines: TStrings);
+var
+  cur, buf: string;
+  bufSpaceBefore, pendingSpace, firstAtom: Boolean;
+  i, cpLen: Integer;
+  cp: Cardinal;
+  s: string;
+
+  { Decode one UTF-8 codepoint at 1-based p; returns its byte length. Malformed
+    lead/truncated tail degrades to a single raw byte so we never loop forever. }
+  function DecodeCP(p: Integer; out AValue: Cardinal): Integer;
+  var k, len: Integer; bb: Byte;
+  begin
+    bb := Byte(AText[p]);
+    if bb < $80 then begin AValue := bb; Exit(1); end
+    else if (bb and $E0) = $C0 then begin AValue := bb and $1F; len := 2; end
+    else if (bb and $F0) = $E0 then begin AValue := bb and $0F; len := 3; end
+    else if (bb and $F8) = $F0 then begin AValue := bb and $07; len := 4; end
+    else begin AValue := bb; Exit(1); end;
+    if p + len - 1 > Length(AText) then begin AValue := bb; Exit(1); end;
+    for k := 1 to len - 1 do
+      AValue := (AValue shl 6) or (Byte(AText[p + k]) and $3F);
+    Result := len;
+  end;
+
+  { A codepoint that participates in inter-character line breaking: Han, kana,
+    hangul, bopomofo, CJK symbols/punctuation and the fullwidth forms. }
+  function IsCJKChar(AValue: Cardinal): Boolean;
+  begin
+    Result :=
+      ((AValue >= $1100) and (AValue <= $11FF)) or   // Hangul Jamo
+      ((AValue >= $2E80) and (AValue <= $A4CF)) or   // radicals..CJK punct..kana..Ext-A..Yi
+      ((AValue >= $AC00) and (AValue <= $D7A3)) or   // Hangul syllables
+      ((AValue >= $F900) and (AValue <= $FAFF)) or   // CJK compat ideographs
+      ((AValue >= $FE30) and (AValue <= $FE4F)) or   // CJK compat forms
+      ((AValue >= $FF00) and (AValue <= $FF60)) or   // fullwidth forms
+      ((AValue >= $FFE0) and (AValue <= $FFE6)) or   // fullwidth signs
+      ((AValue >= $20000) and (AValue <= $2FA1F));   // CJK Ext B-F (SMP)
+  end;
+
+  { Greedily append one atom (a western word or a single CJK glyph) to the
+    current line, starting a new line when it would overflow AMaxWidthPx. }
+  procedure PlaceAtom(const AAtom: string; ASpaceBefore: Boolean);
+  var t: string;
+  begin
+    if cur = '' then
+      t := AAtom
+    else if ASpaceBefore then
+      t := cur + ' ' + AAtom
+    else
+      t := cur + AAtom;
+    if (AMaxWidthPx > 0) and (cur <> '') and (ACanvas.TextWidth(t) > AMaxWidthPx) then
+    begin
+      ALines.Add(cur);
+      cur := AAtom;
+    end
+    else
+      cur := t;
+  end;
+
+  procedure FlushBuf;
+  begin
+    if buf <> '' then
+    begin
+      PlaceAtom(buf, bufSpaceBefore);
+      buf := '';
+    end;
+  end;
+
+begin
+  ALines.Clear;
+  if AText = '' then
+  begin
+    ALines.Add('');
+    Exit;
+  end;
+  cur := '';
+  buf := '';
+  bufSpaceBefore := False;
+  pendingSpace := False;
+  firstAtom := True;
+  i := 1;
+  while i <= Length(AText) do
+  begin
+    cpLen := DecodeCP(i, cp);
+    s := Copy(AText, i, cpLen);
+    Inc(i, cpLen);
+    if (cp = Ord(' ')) or (cp = 9) then          // ASCII space / tab: a break point
+    begin
+      FlushBuf;
+      pendingSpace := True;
+    end
+    else if IsCJKChar(cp) then                   // each CJK glyph is its own atom
+    begin
+      FlushBuf;
+      PlaceAtom(s, pendingSpace and not firstAtom);
+      pendingSpace := False;
+      firstAtom := False;
+    end
+    else                                         // grow the current western word
+    begin
+      if buf = '' then
+        bufSpaceBefore := pendingSpace and not firstAtom;
+      buf := buf + s;
+      pendingSpace := False;
+      firstAtom := False;
+    end;
+  end;
+  FlushBuf;
+  if cur <> '' then
+    ALines.Add(cur);
+  if ALines.Count = 0 then
+    ALines.Add(AText);
 end;
 
 procedure TyConfigureTextFont(ABmp: TBGRABitmap; const AFontName: string;
