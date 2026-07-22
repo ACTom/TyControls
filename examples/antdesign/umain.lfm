@@ -965,7 +965,7 @@ object MainForm: TMainForm
             object BtnPopover: TTyButton
               Left = 12
               Height = 38
-              Top = 112
+              Top = 124
               Width = 125
               TabOrder = 2
               OnClick = PopoverClick
@@ -975,7 +975,7 @@ object MainForm: TMainForm
             object LblFloatNote: TTyLabel
               Left = 12
               Height = 116
-              Top = 152
+              Top = 174
               Width = 491
               Caption = 'TTyNotification 是角落 toast:不打断、会自己消失(Duration=0 的那条留到你关它,两条会在同一角落堆叠)。TTyPopover 是能装控件的浮层 —— 里面那两个按钮是真控件。'
               Layout = tlTop
