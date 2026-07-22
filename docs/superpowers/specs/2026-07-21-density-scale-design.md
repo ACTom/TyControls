@@ -1,7 +1,7 @@
 # 密度尺度:经典 / 现代 两档
 
 日期:2026-07-21
-状态:设计已确认;第一期实施计划见 `plans/2026-07-21-density-scale-p1.md`
+状态:**全五期已实现**(分支 `feat/density-scale`,未合并);现代取值待真机眼校
 
 ## 一句话
 
@@ -243,9 +243,9 @@ property DropDownWidth:   Integer ... default 0;   { 0 = 跟列宽走 }
 | 0 | 修 `padding` 的 `var()` 展开顺序(多值令牌今天静默算错) | 一个测试红→绿 |
 | 1 | token 词汇表(经典值)。API 不用建,`Metric` 已存在 | 3 份 golden 逐字节不变 |
 | 2 | CSS 侧:41 条 padding 改走语义 token | 同上 |
-| 3 | Pascal 侧:约 100 处 + 66 个常量,分批迁 | 每批 golden 不变 |
-| 4 | `density-modern.tycss` + `Controller.Density` | 现代 golden;**真机看** |
-| 5 | 45 个示例加开关 + `density` 示例 | 真机看 |
+| 3 ✅ | ~110 site + 105 令牌迁到 Metric;3 控件绘制-命中单一来源化 | golden metric 段守值 |
+| 4 ✅ | DensityPack(129 令牌)+ Controller.Density;换主题不掉包 | 4 条连线守卫 |
+| 5 ✅ | theming 示例加经典/现代开关(先做一个,非 45 个) | 运行通过;**真机眼校现代比例** |
 
 **第 0 期是地基,而且已经查实是坏的**:`ParsePadding` 先按空格切分、再逐段
 求值,于是 `padding: var(--pad-tooltip)`(值为 `5px 9px`)会被当成单个长度 ——
