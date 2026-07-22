@@ -136,8 +136,8 @@ uses
 
 function TyGridTrackSizes(ATotal, ASpacing: Integer; const ATracks: TTyGridTracks): TTyGridIntArray;
 var
-  i, n, usable, gutters, used, starCount, starLast: Integer;
-  pool, per, given: Integer;
+  i, n, usable, gutters, used, starWeight, starLast: Integer;
+  pool, w, given: Integer;
 begin
   Result := nil;
   n := Length(ATracks);
@@ -152,7 +152,7 @@ begin
 
   // Pass 1 + 2: absolute then percent (both measured against the ORIGINAL usable).
   used := 0;
-  starCount := 0;
+  starWeight := 0;
   starLast := -1;
   for i := 0 to n - 1 do
   begin
@@ -178,18 +178,21 @@ begin
       tgtStar:
         begin
           Result[i] := 0;   // filled in pass 3
-          Inc(starCount);
+          // Weighted share: 'N*' has Value=N shares; '*' (Value 0/1) counts as one.
+          w := ATracks[i].Value;
+          if w < 1 then w := 1;
+          Inc(starWeight, w);
           starLast := i;
         end;
     end;
   end;
 
-  // Pass 3: split the leftover equally among the star tracks; last star gets the remainder.
+  // Pass 3: split the leftover among the star tracks IN PROPORTION to their weight;
+  // the last star absorbs the integer-division remainder so the sum is exact.
   pool := usable - used;
   if pool < 0 then pool := 0;
-  if starCount > 0 then
+  if starWeight > 0 then
   begin
-    per := pool div starCount;
     given := 0;
     for i := 0 to n - 1 do
       if ATracks[i].Kind = tgtStar then
@@ -198,8 +201,10 @@ begin
           Result[i] := pool - given   // absorb the rounding remainder
         else
         begin
-          Result[i] := per;
-          Inc(given, per);
+          w := ATracks[i].Value;
+          if w < 1 then w := 1;
+          Result[i] := (pool * w) div starWeight;
+          Inc(given, Result[i]);
         end;
         if Result[i] < 0 then Result[i] := 0;
       end;

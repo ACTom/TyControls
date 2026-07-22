@@ -17,6 +17,7 @@ type
     procedure TestPercentRounds;
     procedure TestPercentOfUsableAccountsSpacing;
     procedure TestPureStarEqualSplit;
+    procedure TestWeightedStarSplit;
     procedure TestStarLastAbsorbsRemainder;
     procedure TestMixedAbsolutePercentStar;
     procedure TestOverSubscriptionClampsStarPoolToZero;
@@ -123,6 +124,20 @@ begin
   AssertEquals('star 0', 100, r[0]);
   AssertEquals('star 1', 100, r[1]);
   AssertEquals('star 2', 100, r[2]);
+end;
+
+procedure TTyGridMathTest.TestWeightedStarSplit;
+var r: TTyGridIntArray;
+begin
+  // '2*, *' over 300 (no spacing) -> the 2-share track is twice the 1-share track: 200 / 100.
+  r := TyGridTrackSizes(300, 0, Tracks([tgtStar, tgtStar], [2, 1]));
+  AssertEquals('2* gets two shares', 200, r[0]);
+  AssertEquals('* gets one share (last absorbs remainder)', 100, r[1]);
+  // '3*, *, *' over 500 -> weights 3/1/1 of 500 -> 300 / 100 / 100.
+  r := TyGridTrackSizes(500, 0, Tracks([tgtStar, tgtStar, tgtStar], [3, 1, 1]));
+  AssertEquals('3* share', 300, r[0]);
+  AssertEquals('* share', 100, r[1]);
+  AssertEquals('last * absorbs remainder', 100, r[2]);
 end;
 
 procedure TTyGridMathTest.TestStarLastAbsorbsRemainder;
@@ -440,11 +455,10 @@ begin
     g.Spacing := 0;
     g.SetBounds(0, 0, 300, 100);
     g.ColumnCount := 2; g.RowCount := 1;
-    // Absolute tracks, not weighted stars: TyGridTrackSizes (pre-existing, unchanged by
-    // this task) intentionally ignores star Value and splits star tracks EQUALLY — so
-    // '2*, *' would yield 150/150, not a 2:1 split. Absolute tracks exercise the same
-    // "ColumnSizes flows through to Relayout" behavior with an unambiguous expectation.
-    g.ColumnSizes := '200, 100';
+    // Weighted stars flow through parse -> solve -> relayout: '2*, *' over 300px is a 2:1
+    // split (200 / 100). (TyGridTrackSizes now honours the star weight; see
+    // TTyGridMathTest.TestWeightedStarSplit for the pure-function proof.)
+    g.ColumnSizes := '2*, *';
     a := TTyGridCell(g.Cells[0, 0]);
     b := TTyGridCell(g.Cells[1, 0]);
     AssertEquals('wide col', 200, a.Width);
