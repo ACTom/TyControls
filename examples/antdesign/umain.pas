@@ -32,6 +32,7 @@ uses
   tyControls.ListGroupPanel, tyControls.ImageCollection,
   tyControls.PageControl, tyControls.TabSheet, tyControls.TabSet,
   tyControls.Card, tyControls.Tag, tyControls.Badge,
+  tyControls.GridPanel, tyControls.GridCell,
   tyControls.Sparkline, tyControls.Chart, tyControls.CircularProgress,
   tyControls.Meter, tyControls.ListView, tyControls.Columns, tyControls.Grid,
   tyControls.Edit, tyControls.NumericEdit, tyControls.DateTimePicker,
@@ -94,6 +95,14 @@ type
     MnuHelpAbout: TMenuItem;
     { 仪表盘 }
     PgDashboard: TTyTabSheet;
+    GridKPI: TTyGridPanel;
+    KpiCell0: TTyGridCell;
+    KpiCell1: TTyGridCell;
+    KpiCell2: TTyGridCell;
+    KpiCell3: TTyGridCell;
+    GridMain: TTyGridPanel;
+    MainCell0: TTyGridCell;
+    MainCell1: TTyGridCell;
     CardVisits: TTyCard;
     SparkVisits: TTySparkline;
     CardOrders: TTyCard;
