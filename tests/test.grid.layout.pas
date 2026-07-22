@@ -3,7 +3,7 @@ unit test.grid.layout;
 interface
 uses
   Classes, SysUtils, Types, Math, fpcunit, testregistry,
-  tyControls.Grid.Layout;
+  tyControls.Grid.Layout, tyControls.GridPanel;
 
 type
   TTyIntArr = array of Integer;
@@ -28,6 +28,8 @@ type
     procedure TestNinePanesTileTheViewport;
     procedure TestHeaderBandsStackAndSumToFrozenTop;
     procedure TestGridLineWidthInsetsContentButNotBoundaries;
+    // TyParseGridTracks (track-template string parsing, from tyControls.GridPanel)
+    procedure TestParseGridTracks;
   end;
 
 implementation
@@ -441,6 +443,25 @@ begin
     (fat.Right >= fat.Left) and (fat.Bottom >= fat.Top));
 end;
 
+
+procedure TTyGridLayoutTest.TestParseGridTracks;
+var t: TTyGridTracks;
+begin
+  t := TyParseGridTracks('', 3);          // empty -> N all-star
+  AssertEquals('empty count', 3, Length(t));
+  AssertTrue('empty all star', t[0].Kind = tgtStar);
+
+  t := TyParseGridTracks('2*, *, 100, 30%', 0);
+  AssertEquals('parsed count', 4, Length(t));
+  AssertTrue('star2 kind', t[0].Kind = tgtStar);
+  AssertEquals('star2 val', 2, t[0].Value);
+  AssertTrue('star1 kind', t[1].Kind = tgtStar);
+  AssertEquals('star1 val', 1, t[1].Value);
+  AssertTrue('abs kind', t[2].Kind = tgtAbsolute);
+  AssertEquals('abs val', 100, t[2].Value);
+  AssertTrue('pct kind', t[3].Kind = tgtPercent);
+  AssertEquals('pct val', 30, t[3].Value);
+end;
 
 initialization
   RegisterTest(TTyGridLayoutTest);

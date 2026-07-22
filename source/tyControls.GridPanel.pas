@@ -142,6 +142,11 @@ function TyGridCellRect(const AColX, AColW, ARowY, ARowH: TTyGridIntArray;
   control (and tests) can turn TyGridTrackSizes output into per-track positions. }
 function TyGridTrackOrigins(const ALengths: TTyGridIntArray; ASpacing: Integer): TTyGridIntArray;
 
+{ Parse a designer track-template string into tracks. Comma-separated tokens:
+  'N*' or '*' = star (N shares, default 1); 'N%' = percent; 'N' = absolute px.
+  An EMPTY string yields ADefaultCount all-star tracks (equal distribution). }
+function TyParseGridTracks(const ASpec: string; ADefaultCount: Integer): TTyGridTracks;
+
 implementation
 
 { --- Pure functions -------------------------------------------------------------- }
@@ -232,6 +237,60 @@ begin
   begin
     Result[i] := x;
     Inc(x, ALengths[i] + ASpacing);
+  end;
+end;
+
+function TyParseGridTracks(const ASpec: string; ADefaultCount: Integer): TTyGridTracks;
+var
+  parts: TStringList;
+  i, v, e: Integer;
+  tok: string;
+begin
+  Result := nil;
+  if Trim(ASpec) = '' then
+  begin
+    if ADefaultCount < 0 then ADefaultCount := 0;
+    SetLength(Result, ADefaultCount);
+    for i := 0 to ADefaultCount - 1 do
+    begin
+      Result[i].Kind := tgtStar;
+      Result[i].Value := 1;
+    end;
+    Exit;
+  end;
+  parts := TStringList.Create;
+  try
+    parts.Delimiter := ',';
+    parts.StrictDelimiter := True;
+    parts.DelimitedText := ASpec;
+    SetLength(Result, parts.Count);
+    for i := 0 to parts.Count - 1 do
+    begin
+      tok := Trim(parts[i]);
+      if (tok <> '') and (tok[Length(tok)] = '*') then
+      begin
+        Result[i].Kind := tgtStar;
+        Val(Copy(tok, 1, Length(tok) - 1), v, e);
+        if (e <> 0) or (v < 1) then v := 1;   // '*' alone -> 1 share
+        Result[i].Value := v;
+      end
+      else if (tok <> '') and (tok[Length(tok)] = '%') then
+      begin
+        Result[i].Kind := tgtPercent;
+        Val(Copy(tok, 1, Length(tok) - 1), v, e);
+        if e <> 0 then v := 0;
+        Result[i].Value := v;
+      end
+      else
+      begin
+        Result[i].Kind := tgtAbsolute;
+        Val(tok, v, e);
+        if e <> 0 then v := 0;
+        Result[i].Value := v;
+      end;
+    end;
+  finally
+    parts.Free;
   end;
 end;
 
