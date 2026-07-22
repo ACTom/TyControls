@@ -2,9 +2,8 @@ unit test.gridpanel;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms, Controls, LCLType, fpcunit, testregistry,
-  tyControls.Types, tyControls.Controller,
-  tyControls.Base, tyControls.Panel, tyControls.GridPanel;
+  Classes, SysUtils, Types, Controls, fpcunit, testregistry,
+  tyControls.GridPanel, tyControls.GridCell;
 type
   { Pure grid-math functions — the headless-tested core (no window handle). }
   TTyGridMathTest = class(TTestCase)
@@ -40,50 +39,17 @@ type
     procedure TestCellRectSingleRowCol;
   end;
 
-  { The control: track-count defaults, cell keying, FreeNotification drop, relayout math. }
+  { The control: cell-matrix lifecycle — counts create cells, accessor by (col,row),
+    grow preserves in-bounds cells + content, shrink frees out-of-bounds cells. }
   TTyGridPanelTest = class(TTestCase)
-  private
-    FForm: TForm;
-  protected
-    procedure SetUp; override;
-    procedure TearDown; override;
   published
-    procedure TestTypeKeyIsPanel;
-    procedure TestDefaultCounts;
-    procedure TestSetColumnCountPadsStar;
-    procedure TestSetColumnStyleGrows;
-    procedure TestSetCellStoresKeyed;
-    procedure TestSetCellUpdatesExisting;
-    procedure TestSetCellClampsSpan;
-    procedure TestRemoveCell;
-    procedure TestFreedChildDropsCell;
-    procedure TestLayoutPlacesChildInCell;
-    procedure TestLayoutSpanUnionRect;
-    procedure TestLayoutSpacingInset;
+    procedure TestCountCreatesCells;
+    procedure TestCellsAccessorReturnsByColRow;
+    procedure TestGrowPreservesInBoundsCells;
+    procedure TestShrinkFreesOutOfBoundsCells;
   end;
 
 implementation
-
-type
-  TGridAccess = class(TTyGridPanel)
-  public
-    function StyleTypeKey: string;
-  end;
-
-function TGridAccess.StyleTypeKey: string;
-begin
-  Result := GetStyleTypeKey;
-end;
-
-{ helper: a plain child of a given size at a given position }
-function MakeChild(AParent: TWinControl; AL, AT, AW, AH: Integer): TControl;
-var c: TTyPanel;
-begin
-  c := TTyPanel.Create(AParent);
-  c.Parent := AParent;
-  c.SetBounds(AL, AT, AW, AH);
-  Result := c;
-end;
 
 { ---------------------------------------------------------------------------- }
 { TTyGridMathTest                                                              }
@@ -388,196 +354,63 @@ end;
 { TTyGridPanelTest                                                            }
 { ---------------------------------------------------------------------------- }
 
-procedure TTyGridPanelTest.SetUp;
+procedure TTyGridPanelTest.TestCountCreatesCells;
+var g: TTyGridPanel;
 begin
-  FForm := TForm.CreateNew(nil);
+  g := TTyGridPanel.Create(nil);
+  try
+    g.ColumnCount := 3;
+    g.RowCount := 2;
+    AssertEquals('3x2 -> 6 cells', 6, g.CellCount);
+  finally
+    g.Free;
+  end;
 end;
 
-procedure TTyGridPanelTest.TearDown;
+procedure TTyGridPanelTest.TestCellsAccessorReturnsByColRow;
+var g: TTyGridPanel; c: TTyGridCell;
 begin
-  FForm.Free;
+  g := TTyGridPanel.Create(nil);
+  try
+    g.ColumnCount := 3; g.RowCount := 2;
+    c := TTyGridCell(g.Cells[2, 1]);
+    AssertTrue('cell exists', c <> nil);
+    AssertEquals('col', 2, c.Col);
+    AssertEquals('row', 1, c.Row);
+  finally
+    g.Free;
+  end;
 end;
 
-procedure TTyGridPanelTest.TestTypeKeyIsPanel;
-var G: TGridAccess;
+procedure TTyGridPanelTest.TestGrowPreservesInBoundsCells;
+var g: TTyGridPanel; keep: TTyGridCell; marker: TControl;
 begin
-  G := TGridAccess.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  AssertEquals('reuses TyPanel typeKey', 'TyPanel', G.StyleTypeKey);
+  g := TTyGridPanel.Create(nil);
+  try
+    g.ColumnCount := 2; g.RowCount := 2;
+    keep := TTyGridCell(g.Cells[1, 1]);
+    marker := TControl.Create(g);
+    marker.Parent := keep;          // content dropped into cell (1,1)
+    g.ColumnCount := 3;             // grow: (1,1) still in bounds
+    AssertSame('same cell object kept', keep, g.Cells[1, 1]);
+    AssertSame('content preserved', keep, marker.Parent);
+  finally
+    g.Free;
+  end;
 end;
 
-procedure TTyGridPanelTest.TestDefaultCounts;
-var G: TTyGridPanel;
+procedure TTyGridPanelTest.TestShrinkFreesOutOfBoundsCells;
+var g: TTyGridPanel;
 begin
-  G := TTyGridPanel.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  AssertEquals('default 2 columns', 2, G.ColumnCount);
-  AssertEquals('default 2 rows', 2, G.RowCount);
-  AssertTrue('default columns are star', G.ColumnStyle(0).Kind = tgtStar);
-  AssertTrue('default rows are star', G.RowStyle(1).Kind = tgtStar);
-end;
-
-procedure TTyGridPanelTest.TestSetColumnCountPadsStar;
-var G: TTyGridPanel;
-begin
-  G := TTyGridPanel.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  G.ColumnCount := 4;
-  AssertEquals('column count grew to 4', 4, G.ColumnCount);
-  AssertTrue('new column 3 padded as star', G.ColumnStyle(3).Kind = tgtStar);
-  G.ColumnCount := 1;
-  AssertEquals('column count shrank to 1', 1, G.ColumnCount);
-end;
-
-procedure TTyGridPanelTest.TestSetColumnStyleGrows;
-var G: TTyGridPanel;
-begin
-  G := TTyGridPanel.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  // Sizing a track beyond the current count grows the array (gap padded star).
-  G.SetColumnStyle(4, tgtAbsolute, 120);
-  AssertEquals('grew to 5 columns', 5, G.ColumnCount);
-  AssertTrue('column 4 is absolute', G.ColumnStyle(4).Kind = tgtAbsolute);
-  AssertEquals('column 4 value', 120, G.ColumnStyle(4).Value);
-  AssertTrue('gap column 3 padded star', G.ColumnStyle(3).Kind = tgtStar);
-  // out-of-range read returns a default
-  AssertTrue('out-of-range read is star default', G.ColumnStyle(99).Kind = tgtStar);
-end;
-
-procedure TTyGridPanelTest.TestSetCellStoresKeyed;
-var G: TTyGridPanel; child: TControl; c, r, cs, rs: Integer;
-begin
-  G := TTyGridPanel.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  G.SetBounds(0, 0, 200, 150);
-  child := MakeChild(G, 0, 0, 10, 10);
-  G.SetCell(child, 1, 0, 1, 1);
-  AssertEquals('one cell assigned', 1, G.CellCount);
-  AssertTrue('cell retrievable by control', G.GetCell(child, c, r, cs, rs));
-  AssertEquals('col', 1, c);
-  AssertEquals('row', 0, r);
-  AssertEquals('colspan', 1, cs);
-  AssertEquals('rowspan', 1, rs);
-end;
-
-procedure TTyGridPanelTest.TestSetCellUpdatesExisting;
-var G: TTyGridPanel; child: TControl; c, r, cs, rs: Integer;
-begin
-  G := TTyGridPanel.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  G.SetBounds(0, 0, 200, 150);
-  child := MakeChild(G, 0, 0, 10, 10);
-  G.SetCell(child, 0, 0, 1, 1);
-  G.SetCell(child, 1, 1, 2, 2);   // re-assign, must not add a second slot
-  AssertEquals('still one cell (updated in place)', 1, G.CellCount);
-  G.GetCell(child, c, r, cs, rs);
-  AssertEquals('updated col', 1, c);
-  AssertEquals('updated row', 1, r);
-  AssertEquals('updated colspan', 2, cs);
-  AssertEquals('updated rowspan', 2, rs);
-end;
-
-procedure TTyGridPanelTest.TestSetCellClampsSpan;
-var G: TTyGridPanel; child: TControl; c, r, cs, rs: Integer;
-begin
-  G := TTyGridPanel.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  child := MakeChild(G, 0, 0, 10, 10);
-  G.SetCell(child, 0, 0, 0, -3);   // spans below 1 clamp to 1
-  G.GetCell(child, c, r, cs, rs);
-  AssertEquals('colspan clamped to 1', 1, cs);
-  AssertEquals('rowspan clamped to 1', 1, rs);
-end;
-
-procedure TTyGridPanelTest.TestRemoveCell;
-var G: TTyGridPanel; child: TControl; c, r, cs, rs: Integer;
-begin
-  G := TTyGridPanel.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  child := MakeChild(G, 0, 0, 10, 10);
-  G.SetCell(child, 0, 0);
-  AssertEquals('assigned', 1, G.CellCount);
-  G.RemoveCell(child);
-  AssertEquals('removed', 0, G.CellCount);
-  AssertFalse('no longer retrievable', G.GetCell(child, c, r, cs, rs));
-  // removing again is a no-op
-  G.RemoveCell(child);
-  AssertEquals('remove twice is a no-op', 0, G.CellCount);
-end;
-
-procedure TTyGridPanelTest.TestFreedChildDropsCell;
-var G: TTyGridPanel; child: TControl;
-begin
-  G := TTyGridPanel.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  child := MakeChild(G, 0, 0, 10, 10);
-  G.SetCell(child, 0, 0);
-  AssertEquals('assigned before free', 1, G.CellCount);
-  child.Free;   // FreeNotification must drop the dangling key
-  AssertEquals('freed child dropped its cell assignment', 0, G.CellCount);
-end;
-
-procedure TTyGridPanelTest.TestLayoutPlacesChildInCell;
-var G: TTyGridPanel; child: TControl;
-begin
-  // 2x2 all-star grid, 200x150 client (no border in the default theme -> ClientRect
-  // origin 0), spacing 0 so the cell math is exact. Column 1 / row 0.
-  G := TTyGridPanel.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  G.Spacing := 0;
-  G.SetBounds(0, 0, 200, 150);
-  child := MakeChild(G, 0, 0, 10, 10);
-  G.SetCell(child, 1, 0, 1, 1);   // relayout runs inside SetCell
-  // With spacing 0, 2 star columns of 200 -> 100 each; cell (1,0) starts at x=100.
-  AssertEquals('child placed at column 1 origin', 100, child.Left);
-  AssertEquals('child placed at row 0 origin', 0, child.Top);
-  AssertEquals('child width = one column', 100, child.Width);
-  // 2 star rows of 150 -> 75 each.
-  AssertEquals('child height = one row', 75, child.Height);
-end;
-
-procedure TTyGridPanelTest.TestLayoutSpanUnionRect;
-var G: TTyGridPanel; child: TControl;
-begin
-  G := TTyGridPanel.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  G.Spacing := 0;
-  G.SetBounds(0, 0, 200, 150);
-  child := MakeChild(G, 0, 0, 10, 10);
-  G.SetCell(child, 0, 0, 2, 2);   // span the whole grid
-  AssertEquals('span left', 0, child.Left);
-  AssertEquals('span top', 0, child.Top);
-  AssertEquals('span width covers both columns', 200, child.Width);
-  AssertEquals('span height covers both rows', 150, child.Height);
-end;
-
-procedure TTyGridPanelTest.TestLayoutSpacingInset;
-var G: TTyGridPanel; child: TControl;
-begin
-  // Spacing 10 insets the cell rect by 10 on every side. Cell (0,0) in a 2-col grid:
-  // usable width = 200 - 10 (one gutter) = 190 -> col 0 = 95; cell rect x=[0..95];
-  // inset by 10 -> left 10, width 95-20 = 75.
-  G := TTyGridPanel.Create(FForm);
-  G.Parent := FForm;
-  G.Font.PixelsPerInch := 96;
-  G.Spacing := 10;
-  G.SetBounds(0, 0, 200, 150);
-  child := MakeChild(G, 0, 0, 10, 10);
-  G.SetCell(child, 0, 0, 1, 1);
-  AssertEquals('cell inset by spacing on the left', 10, child.Left);
-  AssertEquals('cell inset by spacing on the top', 10, child.Top);
-  AssertEquals('cell width = col width minus 2*spacing', 75, child.Width);
+  g := TTyGridPanel.Create(nil);
+  try
+    g.ColumnCount := 3; g.RowCount := 2;   // 6 cells
+    g.ColumnCount := 2;                     // -> 4 cells; col 2 dropped
+    AssertEquals('shrunk to 4', 4, g.CellCount);
+    AssertTrue('no cell at old col 2', g.Cells[2, 0] = nil);
+  finally
+    g.Free;
+  end;
 end;
 
 initialization

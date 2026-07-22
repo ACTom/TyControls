@@ -24,81 +24,56 @@ type
   TTyGridIntArray = array of Integer;
 
 type
-  { TTyGridPanel — a fixed grid-of-cells layout container.
+  { TTyGridPanel — a droppable N×M grid of form-owned TTyGridCell containers.
 
-    Subclasses TTyPanel (reuses the 'TyPanel' typeKey; NO new .tycss). It hosts arbitrary
-    child controls; each assigned child is placed into the union rectangle of the grid
-    cells it spans (col, row, colspan, rowspan), inset on every side by Spacing.
+    Subclasses TTyPanel (reuses the 'TyPanel' typeKey; NO new .tycss). Setting
+    ColumnCount × RowCount materialises that many TTyGridCell child containers, each
+    owned by the form and parented to the grid (mirrors TTyPageControl/TTyTabSheet);
+    a control dropped into a cell is constrained (alClient) to that cell. Track sizes
+    come from the published ColumnSizes/RowSizes strings (empty = all-star / equal),
+    solved by the pure TyGridTrackSizes/TyGridTrackOrigins/TyGridCellRect. No spanning. }
+  TTyGridCellArray = array of TObject;   // TTyGridCell; TObject avoids a cyclic uses
 
-    Track sizing (per column / per row) is one of absolute px, percent-of-total, or
-    star/auto (equal share of the leftover). Set a track via SetColumnStyle / SetRowStyle;
-    change the grid shape via ColumnCount / RowCount. A child is placed with
-    SetCell(AControl, col, row, colspan, rowspan) — its assignment is stored KEYED BY the
-    control in an internal list; FreeNotification drops a freed child's assignment.
-
-    Relayout (the pure solver TyGridTrackSizes + TyGridCellRect over every assigned child)
-    runs on Resize, on SetCell, and whenever the tracks / counts / spacing change. }
   TTyGridPanel = class(TTyPanel)
   private
-    FColumns: TTyGridTracks;
-    FRows: TTyGridTracks;
+    FCells: array of TObject;        // flat, one TTyGridCell per (col,row); index = row*Cols+col
+    FColumnCount: Integer;
+    FRowCount: Integer;
+    FColumnSizes: string;
+    FRowSizes: string;
     FSpacing: Integer;
     FInLayout: Boolean;
-    { Per-child cell assignment, keyed by the control. Parallel arrays kept in lockstep;
-      FCellCtl[i] is the child, FCellCol/Row/ColSpan/RowSpan[i] its placement. A control
-      is tracked by FreeNotification so a freed child drops its slot. }
-    FCellCtl: array of TControl;
-    FCellCol: array of Integer;
-    FCellRow: array of Integer;
-    FCellColSpan: array of Integer;
-    FCellRowSpan: array of Integer;
-    FCellCount: Integer;
+    FDestroying: Boolean;
     procedure SetColumnCount(AValue: Integer);
     procedure SetRowCount(AValue: Integer);
+    procedure SetColumnSizes(const AValue: string);
+    procedure SetRowSizes(const AValue: string);
     procedure SetSpacing(AValue: Integer);
-    function GetColumnCount: Integer;
-    function GetRowCount: Integer;
-    function IndexOfCell(AControl: TControl): Integer;
-    procedure DropCell(AIndex: Integer);
+    function  GetCell(ACol, ARow: Integer): TObject;   // returns TTyGridCell or nil
+    function  CellIndex(ACol, ARow: Integer): Integer;
+    procedure EnsureCells;           // create/destroy cells to match Count, preserve in-bounds
     procedure Relayout;
   protected
-    { NOTE: GetStyleTypeKey is INHERITED from TTyPanel ('TyPanel') — no new .tycss. }
+    function  GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Resize; override;
+    procedure Loaded; override;
+    procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
-    { --- Track sizing ------------------------------------------------------------- }
-    { Set the sizing of column / row AIndex. AIndex out of range grows the track array
-      (padding new tracks as tgtStar) so a caller can size a not-yet-declared track;
-      to change the count explicitly use ColumnCount / RowCount. Triggers a relayout. }
-    procedure SetColumnStyle(AIndex: Integer; AKind: TTyGridTrackKind; AValue: Integer = 0);
-    procedure SetRowStyle(AIndex: Integer; AKind: TTyGridTrackKind; AValue: Integer = 0);
-    { Read back a track's sizing; an out-of-range index returns a tgtStar/0 default. }
-    function ColumnStyle(AIndex: Integer): TTyGridTrack;
-    function RowStyle(AIndex: Integer): TTyGridTrack;
-    { --- Cell assignment (code-first API) ---------------------------------------- }
-    { Place AControl (must be a child — Parent = Self) into the cell at (ACol, ARow),
-      spanning AColSpan columns and ARowSpan rows. Re-calling for the same control
-      updates its placement. Spans below 1 clamp to 1. Triggers a relayout. }
-    procedure SetCell(AControl: TControl; ACol, ARow: Integer;
-      AColSpan: Integer = 1; ARowSpan: Integer = 1);
-    { Remove AControl's cell assignment (it is left where it is, no longer laid out).
-      No-op if the control was never assigned. }
-    procedure RemoveCell(AControl: TControl);
-    { True (and fills the out params) when AControl has a cell assignment. For tests. }
-    function GetCell(AControl: TControl; out ACol, ARow, AColSpan, ARowSpan: Integer): Boolean;
-    { Number of assigned children. Exposed for tests. }
-    function CellCount: Integer;
+    destructor Destroy; override;
+    { Public so TTyGridCell.SetParent (a different unit) can self-register. Idempotent. }
+    procedure RegisterCell(ACell: TObject);
+    procedure UnregisterCell(ACell: TObject; AFree: Boolean);
+    function  CellCount: Integer;
+    { Cell at (col,row), or nil. Cast the result to TTyGridCell in cell-aware code. }
+    property  Cells[ACol, ARow: Integer]: TObject read GetCell;
   published
-    { The grid dimensions. Growing pads new tracks as tgtStar; shrinking drops the tail.
-      A cell assignment outside the new bounds simply resolves to an empty rect. }
-    property ColumnCount: Integer read GetColumnCount write SetColumnCount default 2;
-    property RowCount: Integer read GetRowCount write SetRowCount default 2;
-    { The margin (logical px) inset on every side of a child within its spanned cell rect,
-      and thus also the gutter between adjacent cells. Negative clamps to 0. }
+    property ColumnCount: Integer read FColumnCount write SetColumnCount default 2;
+    property RowCount: Integer read FRowCount write SetRowCount default 2;
+    property ColumnSizes: string read FColumnSizes write SetColumnSizes;
+    property RowSizes: string read FRowSizes write SetRowSizes;
     property Spacing: Integer read FSpacing write SetSpacing default 4;
-    property Caption;
-    property Alignment;
   end;
 
 { --- Pure, headless-tested grid math --------------------------------------------- }
@@ -148,6 +123,9 @@ function TyGridTrackOrigins(const ALengths: TTyGridIntArray; ASpacing: Integer):
 function TyParseGridTracks(const ASpec: string; ADefaultCount: Integer): TTyGridTracks;
 
 implementation
+
+uses
+  tyControls.GridCell, tyControls.Controller;
 
 { --- Pure functions -------------------------------------------------------------- }
 
@@ -329,59 +307,137 @@ end;
 constructor TTyGridPanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  // csAcceptsControls is set by TTyPanel; keep it — this is a real container.
+  FColumnCount := 2;
+  FRowCount := 2;
   FSpacing := 4;
-  FCellCount := 0;
-  // Default 2x2, all-star grid.
-  SetLength(FColumns, 2);
-  FColumns[0].Kind := tgtStar; FColumns[0].Value := 0;
-  FColumns[1].Kind := tgtStar; FColumns[1].Value := 0;
-  SetLength(FRows, 2);
-  FRows[0].Kind := tgtStar; FRows[0].Value := 0;
-  FRows[1].Kind := tgtStar; FRows[1].Value := 0;
   Width := 200;
   Height := 150;
+  if not (csLoading in ComponentState) then
+    EnsureCells;                    // designer/code path builds the 2x2 default
 end;
 
-function TTyGridPanel.GetColumnCount: Integer;
+destructor TTyGridPanel.Destroy;
 begin
-  Result := Length(FColumns);
+  FDestroying := True;
+  inherited Destroy;                // cells owned by the form (or Self) freed normally
 end;
 
-function TTyGridPanel.GetRowCount: Integer;
+function TTyGridPanel.GetStyleTypeKey: string;
 begin
-  Result := Length(FRows);
+  Result := 'TyPanel';              // transparent layout host; reuse the panel key
 end;
 
-procedure TTyGridPanel.SetColumnCount(AValue: Integer);
-var
-  old, i: Integer;
+function TTyGridPanel.CellIndex(ACol, ARow: Integer): Integer;
+var i: Integer; c: TTyGridCell;
 begin
-  if AValue < 0 then AValue := 0;
-  old := Length(FColumns);
-  if old = AValue then Exit;
-  SetLength(FColumns, AValue);
-  for i := old to AValue - 1 do   // pad new tracks as star
+  Result := -1;
+  for i := 0 to High(FCells) do
   begin
-    FColumns[i].Kind := tgtStar;
-    FColumns[i].Value := 0;
+    c := TTyGridCell(FCells[i]);
+    if (c <> nil) and (c.Col = ACol) and (c.Row = ARow) then Exit(i);
   end;
+end;
+
+function TTyGridPanel.GetCell(ACol, ARow: Integer): TObject;
+var idx: Integer;
+begin
+  idx := CellIndex(ACol, ARow);
+  if idx >= 0 then Result := FCells[idx] else Result := nil;
+end;
+
+function TTyGridPanel.CellCount: Integer;
+begin
+  Result := Length(FCells);
+end;
+
+procedure TTyGridPanel.RegisterCell(ACell: TObject);
+var i: Integer;
+begin
+  for i := 0 to High(FCells) do
+    if FCells[i] = ACell then Exit;         // idempotent
+  SetLength(FCells, Length(FCells) + 1);
+  FCells[High(FCells)] := ACell;
+  TTyGridCell(ACell).Controller := Self.Controller;
+  if not (csLoading in ComponentState) then Relayout;
+end;
+
+procedure TTyGridPanel.UnregisterCell(ACell: TObject; AFree: Boolean);
+var idx, j: Integer;
+begin
+  idx := -1;
+  for j := 0 to High(FCells) do
+    if FCells[j] = ACell then begin idx := j; Break; end;
+  if idx < 0 then Exit;
+  for j := idx to High(FCells) - 1 do FCells[j] := FCells[j + 1];
+  SetLength(FCells, Length(FCells) - 1);
+  if AFree and (ACell <> nil) then TTyGridCell(ACell).Free;
+  if not (csDestroying in ComponentState) then Relayout;
+end;
+
+procedure TTyGridPanel.EnsureCells;
+var
+  col, row: Integer;
+  cell: TTyGridCell;
+  cellOwner: TComponent;
+  i: Integer;
+  wanted: TTyGridCell;
+begin
+  if csLoading in ComponentState then Exit;   // Loaded reconciles instead
+  if Owner <> nil then cellOwner := Owner else cellOwner := Self;
+  // 1) free cells now out of bounds (col>=ColumnCount or row>=RowCount)
+  i := 0;
+  while i <= High(FCells) do
+  begin
+    cell := TTyGridCell(FCells[i]);
+    if (cell = nil) or (cell.Col >= FColumnCount) or (cell.Row >= FRowCount)
+       or (cell.Col < 0) or (cell.Row < 0) then
+      UnregisterCell(cell, True)               // shrinks FCells; do not Inc(i)
+    else
+      Inc(i);
+  end;
+  // 2) create any missing (col,row) in bounds
+  for row := 0 to FRowCount - 1 do
+    for col := 0 to FColumnCount - 1 do
+    begin
+      wanted := TTyGridCell(GetCell(col, row));
+      if wanted = nil then
+      begin
+        cell := TTyGridCell.Create(cellOwner);
+        cell.Col := col;
+        cell.Row := row;
+        cell.Parent := Self;                   // SetParent -> RegisterCell
+      end;
+    end;
   Relayout;
 end;
 
-procedure TTyGridPanel.SetRowCount(AValue: Integer);
-var
-  old, i: Integer;
+procedure TTyGridPanel.SetColumnCount(AValue: Integer);
 begin
-  if AValue < 0 then AValue := 0;
-  old := Length(FRows);
-  if old = AValue then Exit;
-  SetLength(FRows, AValue);
-  for i := old to AValue - 1 do
-  begin
-    FRows[i].Kind := tgtStar;
-    FRows[i].Value := 0;
-  end;
+  if AValue < 1 then AValue := 1;
+  if FColumnCount = AValue then Exit;
+  FColumnCount := AValue;
+  EnsureCells;
+end;
+
+procedure TTyGridPanel.SetRowCount(AValue: Integer);
+begin
+  if AValue < 1 then AValue := 1;
+  if FRowCount = AValue then Exit;
+  FRowCount := AValue;
+  EnsureCells;
+end;
+
+procedure TTyGridPanel.SetColumnSizes(const AValue: string);
+begin
+  if FColumnSizes = AValue then Exit;
+  FColumnSizes := AValue;
+  Relayout;
+end;
+
+procedure TTyGridPanel.SetRowSizes(const AValue: string);
+begin
+  if FRowSizes = AValue then Exit;
+  FRowSizes := AValue;
   Relayout;
 end;
 
@@ -393,220 +449,37 @@ begin
   Relayout;
 end;
 
-procedure TTyGridPanel.SetColumnStyle(AIndex: Integer; AKind: TTyGridTrackKind; AValue: Integer);
-var
-  i, old: Integer;
-begin
-  if AIndex < 0 then Exit;
-  if AIndex >= Length(FColumns) then
-  begin
-    old := Length(FColumns);
-    SetLength(FColumns, AIndex + 1);
-    for i := old to AIndex - 1 do   // pad the gap with star tracks
-    begin
-      FColumns[i].Kind := tgtStar;
-      FColumns[i].Value := 0;
-    end;
-  end;
-  FColumns[AIndex].Kind := AKind;
-  FColumns[AIndex].Value := AValue;
-  Relayout;
-end;
-
-procedure TTyGridPanel.SetRowStyle(AIndex: Integer; AKind: TTyGridTrackKind; AValue: Integer);
-var
-  i, old: Integer;
-begin
-  if AIndex < 0 then Exit;
-  if AIndex >= Length(FRows) then
-  begin
-    old := Length(FRows);
-    SetLength(FRows, AIndex + 1);
-    for i := old to AIndex - 1 do
-    begin
-      FRows[i].Kind := tgtStar;
-      FRows[i].Value := 0;
-    end;
-  end;
-  FRows[AIndex].Kind := AKind;
-  FRows[AIndex].Value := AValue;
-  Relayout;
-end;
-
-function TTyGridPanel.ColumnStyle(AIndex: Integer): TTyGridTrack;
-begin
-  if (AIndex >= 0) and (AIndex < Length(FColumns)) then
-    Result := FColumns[AIndex]
-  else
-  begin
-    Result.Kind := tgtStar;
-    Result.Value := 0;
-  end;
-end;
-
-function TTyGridPanel.RowStyle(AIndex: Integer): TTyGridTrack;
-begin
-  if (AIndex >= 0) and (AIndex < Length(FRows)) then
-    Result := FRows[AIndex]
-  else
-  begin
-    Result.Kind := tgtStar;
-    Result.Value := 0;
-  end;
-end;
-
-function TTyGridPanel.IndexOfCell(AControl: TControl): Integer;
-var
-  i: Integer;
-begin
-  Result := -1;
-  for i := 0 to FCellCount - 1 do
-    if FCellCtl[i] = AControl then Exit(i);
-end;
-
-procedure TTyGridPanel.DropCell(AIndex: Integer);
-var
-  i: Integer;
-begin
-  if (AIndex < 0) or (AIndex >= FCellCount) then Exit;
-  // Compact the parallel arrays (order does not matter for layout).
-  for i := AIndex to FCellCount - 2 do
-  begin
-    FCellCtl[i] := FCellCtl[i + 1];
-    FCellCol[i] := FCellCol[i + 1];
-    FCellRow[i] := FCellRow[i + 1];
-    FCellColSpan[i] := FCellColSpan[i + 1];
-    FCellRowSpan[i] := FCellRowSpan[i + 1];
-  end;
-  Dec(FCellCount);
-end;
-
-procedure TTyGridPanel.SetCell(AControl: TControl; ACol, ARow: Integer;
-  AColSpan: Integer; ARowSpan: Integer);
-var
-  idx, cap: Integer;
-begin
-  if AControl = nil then Exit;
-  if AColSpan < 1 then AColSpan := 1;
-  if ARowSpan < 1 then ARowSpan := 1;
-  idx := IndexOfCell(AControl);
-  if idx < 0 then
-  begin
-    // Append a new slot; grow the parallel arrays if needed.
-    cap := Length(FCellCtl);
-    if FCellCount >= cap then
-    begin
-      if cap = 0 then cap := 4 else cap := cap * 2;
-      SetLength(FCellCtl, cap);
-      SetLength(FCellCol, cap);
-      SetLength(FCellRow, cap);
-      SetLength(FCellColSpan, cap);
-      SetLength(FCellRowSpan, cap);
-    end;
-    idx := FCellCount;
-    Inc(FCellCount);
-    FCellCtl[idx] := AControl;
-    // Track the control so a free drops its assignment (safe if already notified).
-    AControl.FreeNotification(Self);
-  end;
-  FCellCol[idx] := ACol;
-  FCellRow[idx] := ARow;
-  FCellColSpan[idx] := AColSpan;
-  FCellRowSpan[idx] := ARowSpan;
-  Relayout;
-end;
-
-procedure TTyGridPanel.RemoveCell(AControl: TControl);
-var
-  idx: Integer;
-begin
-  idx := IndexOfCell(AControl);
-  if idx < 0 then Exit;
-  DropCell(idx);
-  if AControl <> nil then AControl.RemoveFreeNotification(Self);
-  Relayout;
-end;
-
-function TTyGridPanel.GetCell(AControl: TControl;
-  out ACol, ARow, AColSpan, ARowSpan: Integer): Boolean;
-var
-  idx: Integer;
-begin
-  ACol := 0; ARow := 0; AColSpan := 0; ARowSpan := 0;
-  idx := IndexOfCell(AControl);
-  Result := idx >= 0;
-  if Result then
-  begin
-    ACol := FCellCol[idx];
-    ARow := FCellRow[idx];
-    AColSpan := FCellColSpan[idx];
-    ARowSpan := FCellRowSpan[idx];
-  end;
-end;
-
-function TTyGridPanel.CellCount: Integer;
-begin
-  Result := FCellCount;
-end;
-
 procedure TTyGridPanel.Notification(AComponent: TComponent; Operation: TOperation);
-var
-  idx: Integer;
 begin
   inherited Notification(AComponent, Operation);
-  if (Operation = opRemove) and (AComponent is TControl) then
-  begin
-    // A freed / re-parented tracked child must drop its cell assignment (no dangling key).
-    idx := IndexOfCell(TControl(AComponent));
-    if idx >= 0 then DropCell(idx);
-  end;
-end;
-
-procedure TTyGridPanel.Relayout;
-var
-  cr: TRect;
-  colW, rowH, colX, rowY: TTyGridIntArray;
-  i: Integer;
-  cellR: TRect;
-  child: TControl;
-begin
-  if csDestroying in ComponentState then Exit;
-  if FInLayout then Exit;
-  FInLayout := True;
-  try
-    cr := ClientRect;
-    // Resolve both axes over the client area.
-    colW := TyGridTrackSizes(cr.Right - cr.Left, FSpacing, FColumns);
-    rowH := TyGridTrackSizes(cr.Bottom - cr.Top, FSpacing, FRows);
-    colX := TyGridTrackOrigins(colW, FSpacing);
-    rowY := TyGridTrackOrigins(rowH, FSpacing);
-
-    for i := 0 to FCellCount - 1 do
-    begin
-      child := FCellCtl[i];
-      if child = nil then Continue;
-      if child.Parent <> Self then Continue;   // only lay out our own children
-      cellR := TyGridCellRect(colX, colW, rowY, rowH,
-        FCellCol[i], FCellRow[i], FCellColSpan[i], FCellRowSpan[i]);
-      // Inset by Spacing on every side (also produces the gutter look between cells).
-      // Fold in the client-rect origin (cr.Left/Top may be non-zero on a bordered panel).
-      InflateRect(cellR, -FSpacing, -FSpacing);
-      OffsetRect(cellR, cr.Left, cr.Top);
-      if cellR.Right < cellR.Left then cellR.Right := cellR.Left;
-      if cellR.Bottom < cellR.Top then cellR.Bottom := cellR.Top;
-      child.SetBounds(cellR.Left, cellR.Top,
-        cellR.Right - cellR.Left, cellR.Bottom - cellR.Top);
-    end;
-  finally
-    FInLayout := False;
-  end;
-  Invalidate;
+  if FDestroying then Exit;
+  if (Operation = opRemove) and (AComponent is TTyGridCell) then
+    UnregisterCell(AComponent, False);        // LCL already freeing it
 end;
 
 procedure TTyGridPanel.Resize;
 begin
   inherited Resize;
   Relayout;
+end;
+
+procedure TTyGridPanel.Loaded;
+begin
+  inherited Loaded;
+  { Cells self-registered via SetParent during streaming; FCells is populated.
+    Reconcile against ColumnCount/RowCount (a hand-edited .lfm may disagree). }
+  EnsureCells;
+end;
+
+procedure TTyGridPanel.Relayout;
+begin
+  // real body in Task 4
+end;
+
+procedure TTyGridPanel.Paint;
+begin
+  inherited Paint;
+  // design-time grid lines added in Task 5
 end;
 
 end.
