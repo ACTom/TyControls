@@ -43,7 +43,7 @@ uses
   tyControls.Bevel, tyControls.Divider, tyControls.PaintPanel, tyControls.SizeBox,
   tyControls.RadioGroup, tyControls.CheckGroup, tyControls.ToolGroupPanel,
   tyControls.ScrollBox, tyControls.ScrollPanel, tyControls.ExPanel,
-  tyControls.GridPanel, tyControls.RelativePanel,
+  tyControls.GridPanel, tyControls.GridCell, tyControls.RelativePanel,
   tyControls.ToolBarEx, tyControls.ControlBar, tyControls.CoolBar,
   tyControls.HeaderControl, tyControls.ListGroupPanel,
   tyControls.Shape, tyControls.StarShape, tyControls.Arrow,
@@ -703,6 +703,9 @@ begin
      TTyToolGroupPanel, TTyListGroupPanel,
      TTyPageControl, TTyTabSheet, TTyTabSet, TTyTitleBar,
      TTyCard, TTyEmpty]);
+  // Cells are created/owned by the grid, not dragged from the palette — register the
+  // class (for streaming + OI selection) without a palette button.
+  RegisterNoIcon([TTyGridCell]);
   // Data views + shell/file views + date/time.
   RegisterComponents('TyControls Data Views',
     [TTyTreeView, TTyListView, TTyShellListView, TTyShellTreeView, TTyPreviewBox, TTyImageView,

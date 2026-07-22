@@ -557,6 +557,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.GridPanel"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.GridCell.pas"/>
+        <UnitName Value="tyControls.GridCell"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.RelativePanel.pas"/>
         <UnitName Value="tyControls.RelativePanel"/>
       </Item>

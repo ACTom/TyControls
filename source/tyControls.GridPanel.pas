@@ -8,14 +8,14 @@ type
   { A track (column or row) is sized in one of three ways:
       tgtAbsolute — a fixed logical-px length (Value = the px count).
       tgtPercent  — a percentage (Value = 0..100) of the ORIGINAL total minus spacing.
-      tgtStar     — a "star" / auto track: shares the leftover space EQUALLY with the
-                    other star tracks (Value is ignored; every star gets an equal slice,
-                    the LAST star absorbs the integer-division rounding remainder). }
+      tgtStar     — a "star" / auto track: shares the leftover space in PROPORTION to
+                    its weight (Value = share count, floored at 1; '*' = 1, '2*' = 2×),
+                    the LAST star absorbing the integer-division rounding remainder. }
   TTyGridTrackKind = (tgtAbsolute, tgtPercent, tgtStar);
 
   TTyGridTrack = record
     Kind: TTyGridTrackKind;
-    Value: Integer;   // px for tgtAbsolute; 0..100 for tgtPercent; ignored for tgtStar
+    Value: Integer;   // px for tgtAbsolute; 0..100 for tgtPercent; share count for tgtStar (>=1)
   end;
   TTyGridTracks = array of TTyGridTrack;
 
@@ -95,8 +95,9 @@ type
     1) tgtAbsolute tracks take their Value px.
     2) tgtPercent tracks take round(Value/100 * usable), where `usable` is the axis
        length minus the gutters (the ORIGINAL usable, NOT reduced by the absolute tracks).
-    3) the leftover (usable minus absolute minus percent, floored at 0) is split EQUALLY
-       among the tgtStar tracks; the LAST star track absorbs the integer-division remainder.
+    3) the leftover (usable minus absolute minus percent, floored at 0) is split among the
+       tgtStar tracks IN PROPORTION to their weight (Value, floored at 1); the LAST star
+       track absorbs the integer-division remainder.
 
   Over-subscription (absolutes + percents exceed usable) never yields a negative track and
   never yields a negative star pool: individual lengths are clamped to >= 0. Returns an
@@ -568,9 +569,35 @@ begin
 end;
 
 procedure TTyGridPanel.Paint;
+var
+  cr: TRect;
+  cols, rows: TTyGridTracks;
+  colW, rowH, colX, rowY: TTyGridIntArray;
+  i, x, y: Integer;
 begin
   inherited Paint;
-  // design-time grid lines added in Task 5
+  if not (csDesigning in ComponentState) then Exit;   // guides are design-time only
+  cr := ClientRect;
+  cols := TyParseGridTracks(FColumnSizes, FColumnCount);
+  rows := TyParseGridTracks(FRowSizes, FRowCount);
+  colW := TyGridTrackSizes(cr.Right - cr.Left, FSpacing, cols);
+  rowH := TyGridTrackSizes(cr.Bottom - cr.Top, FSpacing, rows);
+  colX := TyGridTrackOrigins(colW, FSpacing);
+  rowY := TyGridTrackOrigins(rowH, FSpacing);
+  Canvas.Pen.Style := psDot;
+  Canvas.Pen.Color := clGray;
+  for i := 0 to High(colX) do
+  begin
+    x := cr.Left + colX[i];
+    Canvas.Line(x, cr.Top, x, cr.Bottom);
+    Canvas.Line(x + colW[i], cr.Top, x + colW[i], cr.Bottom);
+  end;
+  for i := 0 to High(rowY) do
+  begin
+    y := cr.Top + rowY[i];
+    Canvas.Line(cr.Left, y, cr.Right, y);
+    Canvas.Line(cr.Left, y + rowH[i], cr.Right, y + rowH[i]);
+  end;
 end;
 
 end.

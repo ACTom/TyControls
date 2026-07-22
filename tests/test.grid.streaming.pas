@@ -16,6 +16,7 @@ type
     procedure TestExampleLfmPropertiesAllExistOnTheControls;
     procedure TestGridPublishesStandardLayoutProperties;
     procedure TestGridPanelCellsSurviveRoundTrip;
+    procedure TestGridPanelPublishesDesignerProps;
   end;
 
   { A streamable root that owns the design tree (mirrors test.pagecontrol.streaming). }
@@ -177,6 +178,22 @@ begin
     Dst.Free;
     Src.Free;
   end;
+end;
+
+{ Direct published-surface guard: TTyGridPanel must publish these props, or any
+  form that set them in the designer will fail to stream at runtime. }
+procedure TTyGridStreamingTest.TestGridPanelPublishesDesignerProps;
+{ Visible is intentionally NOT asserted: no TTy container publishes it (TTyPanel /
+  TTyPageControl / TTyTabSheet / TTyExPanel / … all manage visibility internally), so
+  TTyGridPanel follows the house convention. }
+const cMust: array[0..6] of string =
+  ('ColumnCount', 'RowCount', 'ColumnSizes', 'RowSizes', 'Spacing',
+   'Align', 'Anchors');
+var i: Integer;
+begin
+  for i := 0 to High(cMust) do
+    AssertTrue('TTyGridPanel must publish ' + cMust[i],
+      GetPropInfo(TTyGridPanel, cMust[i]) <> nil);
 end;
 
 initialization
