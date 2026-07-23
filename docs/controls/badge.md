@@ -36,7 +36,7 @@ uses tyControls.Badge, tyControls.Button;   // 后者提供 bpTopRight 等枚举
 | `Dot` | `Boolean` | `False` | 画一颗纯圆点(直径取 `--badge-dot-size`)而非数字:表示"有东西"但不给数。是否显示仍由 `Value` / `ShowZero` 决定。 |
 | `Position` | `TTyBadgePosition` | `bpBottomRight` | 位于目标的哪个角(内缩量与内置角标一致)。默认值**与 `TTyButton.BadgePosition` 相同**。独立使用时该属性无效(没有宿主的角可吸附)。 |
 
-继承:`Anchors`(仅独立使用时有意义——挂载后位置由 `Target` / `Position` 决定)/ `StyleClass` / `StyleOverride` / `Controller` / `Enabled` / `Font` / `Hint` / `About` 等基类属性。
+继承:`Anchors`(仅独立使用时有意义——挂载后位置由 `Target` / `Position` 决定)/ `StyleClass` / `StyleOverride` / `Controller` / `Enabled` / `Font` / `Hint` / `Version` 等基类属性。
 
 **没有 `Align` / `AutoSize`:** 角标**永远是自己量出来的自然尺寸**(主题字号 + padding,或圆点直径),尺寸由内容与主题决定,不由布局决定。
 

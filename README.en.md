@@ -102,7 +102,7 @@ TyButton:disabled { opacity: 0.5; }
   dropped in the designer; `LoadTheme` re-skins every control instantly.
 - **HiDPI** — every length scales by PPI; vector drawing stays crisp.
 - **Design-time integration** — a "TyControls" component-palette page, a StyleClass property
-  drop-down, the PageControl page-manager component editor, and a read-only `About` on every control.
+  drop-down, the PageControl page-manager component editor, and a read-only `Version` on every control.
 - **2800+ unit tests**, whole suite leak-free (verified with heaptrc).
 
 ## Quick start

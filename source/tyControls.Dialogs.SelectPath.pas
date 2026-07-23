@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Dialogs, Forms, Graphics, ImgList,
   tyControls.Dialogs, tyControls.TreeView, tyControls.Button, tyControls.Edit,
-  tyControls.StrConsts, tyControls.FileSystem;
+  tyControls.StrConsts, tyControls.Component, tyControls.FileSystem;
 
 function TySubdirectories(const APath: string): TStringArray;
 function TyPathHasSubdir(const APath: string): Boolean;
@@ -71,7 +71,7 @@ function TyBuildSelectPathDialog(const ACaption, ARoot: string): TTySelectPathFo
 function TySelectDirectory(const ACaption, ARoot: string; var ADir: string): Boolean;
 
 type
-  TTySelectPathDialog = class(TComponent)
+  TTySelectPathDialog = class(TTyComponent)
   private
     FCaption, FRoot, FDirectory: string;
     FOnShow: TNotifyEvent;

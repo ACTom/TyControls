@@ -24,8 +24,8 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LCLIntf, ExtCtrls,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
-  tyControls.StyleModel,
+  tyControls.Types, tyControls.Component, tyControls.Painter, tyControls.Base,
+  tyControls.Controller, tyControls.StyleModel,
   tyControls.Alert;   // TTyAlertType + its type->variant/glyph mapping — the SAME semantics
 
 const
@@ -192,7 +192,7 @@ type
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); reintroduce;
   end;
 
-  TTyNotification = class(TComponent)
+  TTyNotification = class(TTyComponent)
   private
     FTitle: string;
     FMessage: string;

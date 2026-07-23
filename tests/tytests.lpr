@@ -49,7 +49,7 @@ uses
   test.tabsheet,
   test.pagecontrol,
   test.pagecontrol.streaming,
-  test.about,
+  test.version,
   test.windoweffects,
   test.accel,
   test.i18n,

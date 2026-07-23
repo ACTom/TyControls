@@ -6,7 +6,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Forms, LCLType,
   tyControls.Dialogs, tyControls.ProgressBar, tyControls.TyLabel,
-  tyControls.Button, tyControls.StrConsts;
+  tyControls.Button, tyControls.Component, tyControls.StrConsts;
 
 type
   TTyProgressDialog = class;
@@ -33,7 +33,7 @@ type
   { TTyProgressDialog — stateful, app-driven, modeless. The app updates it in a
     loop and calls SetProgress; SetProgress pumps the message loop so the bar
     repaints and a Cancel click is seen. OnCancel MUST NOT Free this component. }
-  TTyProgressDialog = class(TComponent)
+  TTyProgressDialog = class(TTyComponent)
   private
     FCaption: string;
     FText: string;

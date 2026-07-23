@@ -13,12 +13,16 @@
     <Description Value="A Lazarus component library with skin/style support: all controls are fully custom-drawn via BGRABitmap, their appearances are uniformly styled by lightweight CSS text themes (.tycss), delivering pixel-perfect identical UI rendering across Windows, Linux and macOS.
 
 Homepage: https://github.com/ACTom/TyControls"/>
-    <License Value="Modified LGPL (see COPYING.modifiedLGPL.txt) — same as the Lazarus LCL"/>
-    <Version Major="2" Minor="2" Release="0"/>
+    <License Value="Modified LGPL (see COPYING.modifiedLGPL.txt) —same as the Lazarus LCL"/>
+    <Version Major="2" Minor="99" Release="0"/>
     <Files>
       <Item>
         <Filename Value="source/tyControls.Types.pas"/>
         <UnitName Value="tyControls.Types"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.Component.pas"/>
+        <UnitName Value="tyControls.Component"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.StrConsts.pas"/>
@@ -207,6 +211,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
       <Item>
         <Filename Value="source/tyControls.Form.pas"/>
         <UnitName Value="tyControls.Form"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.FormSurface.pas"/>
+        <UnitName Value="tyControls.FormSurface"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.ListBox.pas"/>

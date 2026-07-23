@@ -280,10 +280,11 @@ type
       when CaptionAction = tcaRollUp. }
     procedure ToggleRollUp;
     property RolledUp: Boolean read FRolledUp;
-    function GetAbout: string;
+    function GetVersion: string;
   published
-    { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
-    property About: string read GetAbout;
+    { Read-only library version (TyVersion); the design-time editor for this property opens
+      the About dialog. }
+    property Version: string read GetVersion;
     { The style controller that themes this whole window. Assigning it applies the theme
       (the same effect as calling ApplyChromeTheme) and propagates the controller to the
       title bar + caption buttons; a streamed value is applied in Loaded once the title bar
@@ -1175,7 +1176,7 @@ begin
   // FindComponent. Creating it here (a second, code-side instance) would collide with the streamed one.
 end;
 
-function TTyForm.GetAbout: string;
+function TTyForm.GetVersion: string;
 begin
   Result := TyVersion;
 end;

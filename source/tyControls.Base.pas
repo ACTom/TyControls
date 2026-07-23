@@ -70,10 +70,11 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    function GetAbout: string;
+    function GetVersion: string;
   published
-    { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
-    property About: string read GetAbout;
+    { Read-only library version (TyVersion); the design-time editor for this property opens
+      the About dialog. }
+    property Version: string read GetVersion;
     property Enabled;
     property Font;
     property Hint;
@@ -147,10 +148,11 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    function GetAbout: string;
+    function GetVersion: string;
   published
-    { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
-    property About: string read GetAbout;
+    { Read-only library version (TyVersion); the design-time editor for this property opens
+      the About dialog. }
+    property Version: string read GetVersion;
     property Enabled;
     property Font;
     property Hint;
@@ -303,7 +305,7 @@ begin
   ActiveController.RegisterStyleable(Self);
 end;
 
-function TTyGraphicControl.GetAbout: string;
+function TTyGraphicControl.GetVersion: string;
 begin
   Result := TyVersion;
 end;
@@ -742,7 +744,7 @@ begin
   ActiveController.RegisterStyleable(Self);
 end;
 
-function TTyCustomControl.GetAbout: string;
+function TTyCustomControl.GetVersion: string;
 begin
   Result := TyVersion;
 end;

@@ -93,7 +93,7 @@ uses tyControls.Cascader;
 
 ### 继承的通用成员
 
-`TTyCascader` 继承自 `TTyCustomControl`（`tyControls.Base`），另暴露 `About` / `Enabled` / `Font` / `Hint` / `TabOrder` / `PopupMenu` / `Constraints` 及基线事件集（`OnClick` / `OnKeyDown` / `OnEnter` / `OnExit` / …），见 [../events.md](../events.md)。
+`TTyCascader` 继承自 `TTyCustomControl`（`tyControls.Base`），另暴露 `Version` / `Enabled` / `Font` / `Hint` / `TabOrder` / `PopupMenu` / `Constraints` 及基线事件集（`OnClick` / `OnKeyDown` / `OnEnter` / `OnExit` / …），见 [../events.md](../events.md)。
 
 ---
 

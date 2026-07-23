@@ -4,7 +4,7 @@ interface
 uses
   Classes, SysUtils, Controls, Forms, ExtCtrls,
   LazMethodList,
-  tyControls.Types, tyControls.StyleModel, tyControls.Painter,
+  tyControls.Types, tyControls.Component, tyControls.StyleModel, tyControls.Painter,
   tyControls.ThemeRegistry, tyControls.SystemTheme, tyControls.DensityPack;
 
 type
@@ -28,7 +28,7 @@ var
   TyAutoSystemFontFallback: Boolean = True;
 
 type
-  TTyStyleController = class(TComponent)
+  TTyStyleController = class(TTyComponent)
   private
     FModel: TTyStyleModel;
     FThemeFile: string;
@@ -115,10 +115,8 @@ type
       falling back to ADefault (logical px). Controls call this instead of a hard-coded
       constant so a skin can retune their intrinsic geometry. }
     function Metric(const AName: string; ADefault: Integer): Integer;
-    function GetAbout: string;
   published
-    { Read-only library version (TyVersion); the design-time editor opens the About dialog. }
-    property About: string read GetAbout;
+    { Version is inherited from TTyComponent — the shared non-visual base. }
     property ThemeFile: string read FThemeFile write SetThemeFile;
     { B (Phase 2): switch theme by registered NAME. Resolves via TyResolveTheme and
       loads through the §3.8 REPLACE path (LoadFromFile -> LoadInto AReplace=True +
@@ -174,11 +172,6 @@ implementation
 
 var
   GDefaultController: TTyStyleController = nil;
-
-function TTyStyleController.GetAbout: string;
-begin
-  Result := TyVersion;
-end;
 
 constructor TTyStyleController.Create(AOwner: TComponent);
 begin

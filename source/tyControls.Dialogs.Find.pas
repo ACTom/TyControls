@@ -6,7 +6,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Forms, Dialogs, LCLType,
   tyControls.Dialogs, tyControls.Edit, tyControls.CheckBox, tyControls.Button,
-  tyControls.TyLabel, tyControls.StrConsts;
+  tyControls.TyLabel, tyControls.Component, tyControls.StrConsts;
 
 type
   TTyFindChecks = record
@@ -53,7 +53,7 @@ type
 
   { TTyFindDialog — non-visual, modeless. Owns a TTyFindForm; fires OnFind when the
     user clicks Find Next (or presses Enter). LCL TFindDialog parity. }
-  TTyFindDialog = class(TComponent)
+  TTyFindDialog = class(TTyComponent)
   private
     FFindText: string;
     FReplaceText: string;        // populated by TTyReplaceDialog

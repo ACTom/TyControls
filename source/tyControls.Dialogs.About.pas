@@ -42,6 +42,12 @@ procedure TyShowAbout(const ATitle, AAppName, AVersion, ADescription,
   ACopyright, ALicense, AHomepage: string);
 
 type
+  { NOT a TTyComponent (unlike every other non-visual component in the library): its
+    published `Version` is the HOST APPLICATION's version — the string this dialog puts
+    on screen — while the shared base publishes the library's own. Inheriting would let
+    the design-time editor registered for (string, TTyComponent, 'Version') attach to
+    this app-version field and pop the TyControls About box from it, which is exactly
+    backwards. The name belongs to the app here, so this class stays on TComponent. }
   TTyAboutDialog = class(TComponent)
   private
     FTitle, FAppName, FVersion, FDescription, FCopyright, FLicense, FHomepage: string;

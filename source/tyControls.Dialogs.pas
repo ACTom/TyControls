@@ -6,7 +6,7 @@ uses
   tyControls.Types, tyControls.Form, tyControls.Base, tyControls.Controller,
   tyControls.Button, tyControls.Panel,
   tyControls.TyLabel, tyControls.Edit, tyControls.Memo, tyControls.Painter,
-  tyControls.ListBox, tyControls.StrConsts;
+  tyControls.ListBox, tyControls.Component, tyControls.StrConsts;
 
 { Right-aligns caption buttons in a bar: index 0 is the RIGHTMOST (primary), each successive
   button sits to its left, ASpacing apart, AMargin from the right edge. Pure. }
@@ -98,7 +98,7 @@ function TyMessageDlg(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgD
 function TyMessageDlgPos(const AMsg: string; ADlgType: TMsgDlgType; AButtons: TMsgDlgButtons; AHelpCtx: Longint; X, Y: Integer): TModalResult;
 
 type
-  TTyMessage = class(TComponent)
+  TTyMessage = class(TTyComponent)
   private
     FTitle, FMsg: string;
     FDlgType: TMsgDlgType;
@@ -126,7 +126,7 @@ function TyInputQuery(const ACaption, APrompt: string; var AValue: string): Bool
 function TyInputBox(const ACaption, APrompt, ADefault: string): string;
 
 type
-  TTyInputDialog = class(TComponent)
+  TTyInputDialog = class(TTyComponent)
   private
     FCaption, FPrompt, FValue: string;
     FOnShow: TNotifyEvent;
@@ -150,7 +150,7 @@ function TyPasswordBox(const ACaption, APrompt: string): string;
 function TyPasswordQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
 
 type
-  TTyPasswordDialog = class(TComponent)
+  TTyPasswordDialog = class(TTyComponent)
   private
     FCaption, FPrompt, FValue, FPasswordChar: string;
     FOnShow: TNotifyEvent;
@@ -186,7 +186,7 @@ function TyBuildTextDialog(const ACaption, APrompt, ADefault: string; out AMemo:
 function TyTextQuery(const ACaption, APrompt: string; var AValue: string): Boolean;
 
 type
-  TTyTextDialog = class(TComponent)
+  TTyTextDialog = class(TTyComponent)
   private
     FCaption, FPrompt, FValue: string;
     FOnShow: TNotifyEvent;
@@ -228,7 +228,7 @@ type
   end;
 
 type
-  TTySelectValueDialog = class(TComponent)
+  TTySelectValueDialog = class(TTyComponent)
   private
     FCaption, FPrompt: string;
     FItems: TStrings;

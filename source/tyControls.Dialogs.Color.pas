@@ -4,7 +4,7 @@ interface
 uses Classes, SysUtils, Types, Math, Graphics, Controls, Forms, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.ColorMath,
   tyControls.Controller, tyControls.Dialogs, tyControls.Edit, tyControls.SpinEdit,
-  tyControls.TyLabel, tyControls.StrConsts;
+  tyControls.TyLabel, tyControls.Component, tyControls.StrConsts;
 type
   TTyHSVSquare = class(TTyCustomControl)
   private
@@ -83,7 +83,7 @@ function TySelectColor(const ACaption: string; var AColor: TTyColor): Boolean; o
 function TySelectColor(const ACaption: string; var AColor: TColor; var AAlpha: Byte): Boolean; overload;
 
 type
-  TTyColorDialog = class(TComponent)
+  TTyColorDialog = class(TTyComponent)
   private
     FColor: TTyColor; FCaption: string;
     FOnShow: TNotifyEvent;

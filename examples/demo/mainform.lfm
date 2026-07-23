@@ -1017,7 +1017,7 @@ object DemoMainForm: TDemoMainForm
   object TyAboutDlg: TTyAboutDialog
     Title = 'TyControls About'
     AppName = 'TyControls'
-    Version = '2.2.0'
+    Version = '2.99.0'
     Description = 'A skinnable / styleable Lazarus component library'
     Copyright = 'ACTom'
     License = 'LGPL'

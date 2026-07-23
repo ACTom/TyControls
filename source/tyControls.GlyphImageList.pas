@@ -19,10 +19,10 @@ interface
 
 uses
   Classes, SysUtils, Graphics, BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.IconFont;
+  tyControls.Types, tyControls.Component, tyControls.IconFont;
 
 type
-  TTyGlyphImageList = class(TComponent)
+  TTyGlyphImageList = class(TTyComponent)
   private
     FGlyphs: TStrings;          // ordered glyph NAMES, one per line (a TStringList)
     FIconFont: TTyIconFont;

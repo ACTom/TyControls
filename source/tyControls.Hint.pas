@@ -17,7 +17,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LCLIntf,
-  tyControls.Types, tyControls.Painter, tyControls.Controller;
+  tyControls.Types, tyControls.Component, tyControls.Painter, tyControls.Controller;
 
 type
   { The themed hint window. LCL instantiates it via HintWindowClass, so it takes
@@ -34,7 +34,7 @@ type
 
   { Non-visual installer. Drop one on a form (or create at runtime); while Active
     and not designing, every control's hint uses TTyHintWindow. }
-  TTyHint = class(TComponent)
+  TTyHint = class(TTyComponent)
   private
     FActive: Boolean;
     FInstalled: Boolean;

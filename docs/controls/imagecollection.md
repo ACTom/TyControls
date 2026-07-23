@@ -58,7 +58,7 @@ uses tyControls.ImageCollection;
 
 | 成员 | 说明 |
 |------|------|
-| `property Version: Cardinal` | 每次变更(`AddBitmap` / `AddPicture` / `Clear`)自增。外部若缓存了由本集合派生的数据,可比较它来检测过期。2^32 次变更后回绕。 |
+| `property ChangeStamp: Cardinal` | 每次变更(`AddBitmap` / `AddPicture` / `Clear`)自增。外部若缓存了由本集合派生的数据,可比较它来检测过期。2^32 次变更后回绕。**2.99.0 起由 `Version` 更名**——`Version` 现在是所有组件共有的只读库版本号。 |
 | `property CacheCapacity: Integer` | 缓存条数上限(默认 `TyImageCacheDefaultCapacity` = 64),超出按最近最少使用淘汰。**调小时立即淘汰**。小于 1 夹紧为 1(上限为 0 会把 `GetCachedBitmap` 正要返回的那一条也淘汰掉)。 |
 | `function CacheCount: Integer` | 当前缓存的渲染条数。诊断 / 测试用。 |
 | `function IsCached(const AName: string; ASizePx: Integer): Boolean` | `(AName, ASizePx)` 当前是否在缓存里。**纯查询**:与 `GetCachedBitmap` 不同,它不计一次"使用",不会打乱 LRU 次序。诊断 / 测试用。 |

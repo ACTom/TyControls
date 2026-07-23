@@ -27,7 +27,7 @@ msgid "TyControls Application"
 msgstr ""
 
 #: tycontrols.design.rsdtdialogdescription
-msgid "A themed custom-drawn modal dialog (TTyDialog): borderless, close-only, non-resizable, centered — design your own dialog content and buttons."
+msgid "A themed custom-drawn modal dialog (TTyDialog): borderless, close-only, non-resizable, centered —design your own dialog content and buttons."
 msgstr ""
 
 #: tycontrols.design.rsdtdialogname
@@ -47,7 +47,7 @@ msgid "TyControls Form"
 msgstr ""
 
 #: tycontrols.design.rsdtmainformdescription
-msgid "A themed TTyForm carrying its own TTyStyleController, with the form and the title bar already associated to it — the root window for a TyControls application."
+msgid "A themed TTyForm carrying its own TTyStyleController, with the form and the title bar already associated to it —the root window for a TyControls application."
 msgstr ""
 
 #: tycontrols.design.rsdtmainformname
@@ -72,7 +72,7 @@ msgstr ""
 
 #: tycontrols.design.rsdtsurfacepurposetext
 msgid ""
-"TyFormSurface is the content host of a TTyForm — the panel every control on the form lives on.\n"
+"TyFormSurface is the content host of a TTyForm —the panel every control on the form lives on.\n"
 "\n"
 "A borderless, resizable window cannot paint its own outermost pixels: the compositor gives it a backing surface smaller than the window, which leaves an unpainted band along the right and bottom edges. A CHILD window has no such limit and paints edge to edge, so TTyForm renders its themed background onto this surface instead of onto itself.\n"
 "\n"

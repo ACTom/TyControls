@@ -6,7 +6,7 @@ uses
   tyControls.Dialogs, tyControls.ListBox, tyControls.FontListBox, tyControls.SpinEdit,
   tyControls.CheckBox, tyControls.Button, tyControls.TyLabel,
   tyControls.Painter, tyControls.ColorMath,
-  tyControls.Dialogs.Color, tyControls.StrConsts;
+  tyControls.Dialogs.Color, tyControls.Component, tyControls.StrConsts;
 type
   TTyFontChecks = record Bold, Italic, Underline, Strikeout: Boolean; end;
 function TyFontStyleToChecks(AStyle: TFontStyles): TTyFontChecks;
@@ -43,7 +43,7 @@ function TyBuildFontDialog(const ACaption: string; AFont: TFont; AFamilies: TStr
 function TyFontDialog(AFont: TFont): Boolean;
 
 type
-  TTyFontDialog = class(TComponent)
+  TTyFontDialog = class(TTyComponent)
   private
     FFont: TFont; FCaption: string;
     FOnShow: TNotifyEvent;

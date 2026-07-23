@@ -23,7 +23,7 @@ uses
   tyControls.LColorPicker, tyControls.HSColorPicker, tyControls.CheckComboBox,
   tyControls.AdvancedListBox, tyControls.AdvancedComboBox, tyControls.ValueListEditor,
   tyControls.CalcEdit, tyControls.CalcCurrencyEdit, tyControls.TyLabel,
-  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Dialogs.SelectPath, tyControls.Dialogs.About;
+  tyControls.ComboBox, tyControls.ToggleSwitch, tyControls.Dialogs.SelectPath, tyControls.Dialogs.About, tyControls.Types;
 
 type
   TMainForm = class(TTyForm)
@@ -232,7 +232,7 @@ begin
   FVLE.AddRow('字体', 'Segoe UI, 9').EditorKind := vekFont;  // leaf font → text + "…" opens the font dialog
   VR := FVLE.AddRow('数据路径', 'D:\data');         // text + "…" → the library's own path dialog (OnEditRow)
   VR.EditorKind := vekDialog;
-  VR := FVLE.AddRow('关于', 'TyControls 2.2.0');    // user-side custom: "…" opens a read-only About dialog, no write-back
+  VR := FVLE.AddRow('关于', 'TyControls ' + TyVersion);   // user-side custom: "…" opens a read-only About dialog, no write-back
   VR.EditorKind := vekDialog;
   VR := FVLE.AddRow('主题', 'light.tycss');        // read-only + display-name override (i18n)
   VR.DisplayKey := '主题(只读)';
@@ -301,7 +301,7 @@ begin
   // vekDialog = fully user-side custom: clicking "…" fires this event; each row decides what to pop up and whether to write the value back.
   if SameText(ARow.Key, '关于') then
     // Informational only (read-only content): pop the library's own read-only About dialog; leave ARow.Value unchanged.
-    TyShowAbout('关于', 'TyControls Rich Inputs 示例', 'v2.2.0',
+    TyShowAbout('关于', 'TyControls Rich Inputs 示例', 'v' + TyVersion,
       'ValueListEditor 用户侧自定义行处理演示', '© 2026 ACTom', 'MIT 许可',
       'https://github.com/ACTom/TyControls')
   else

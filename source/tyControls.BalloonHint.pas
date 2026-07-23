@@ -18,7 +18,8 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LCLIntf, ExtCtrls,
-  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.StyleModel;
+  tyControls.Types, tyControls.Component, tyControls.Painter, tyControls.Controller,
+  tyControls.StyleModel;
 
 type
   TTyBalloonIcon = (biNone, biInfo, biWarning, biError);
@@ -47,7 +48,7 @@ type
   end;
 
   { The balloon component. }
-  TTyBalloonHint = class(TComponent)
+  TTyBalloonHint = class(TTyComponent)
   private
     FTitle: string;
     FDescription: string;

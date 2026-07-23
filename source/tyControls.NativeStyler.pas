@@ -5,7 +5,7 @@ unit tyControls.NativeStyler;
 interface
 
 uses
-  Classes, SysUtils, Controls, tyControls.Controller;
+  Classes, SysUtils, Controls, tyControls.Component, tyControls.Controller;
 
 type
   { Fired for each candidate control before styling. Set AHandled := True to skip it (opt-out) or
@@ -17,7 +17,7 @@ type
     TyPanel). RTTI-generic: any control exposing a published Color/Font is themed (third-party
     included); OS-drawn classes in the deny-list keep their font but skip the background. Never
     runs at design time (would bake theme colors into the .lfm). }
-  TTyNativeStyler = class(TComponent)
+  TTyNativeStyler = class(TTyComponent)
   private
     FController: TTyStyleController;
     FRoot: TWinControl;

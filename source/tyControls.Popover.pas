@@ -32,8 +32,8 @@ interface
 
 uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LCLIntf,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
-  tyControls.StyleModel;
+  tyControls.Types, tyControls.Component, tyControls.Painter, tyControls.Base,
+  tyControls.Controller, tyControls.StyleModel;
 
 const
   { Built-in logical-px defaults (96-PPI baseline) for the popover's own metrics. A skin
@@ -220,7 +220,7 @@ type
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); reintroduce;
   end;
 
-  TTyPopover = class(TComponent)
+  TTyPopover = class(TTyComponent)
   private
     FTarget: TControl;
     FContent: TWinControl;

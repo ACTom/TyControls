@@ -24,11 +24,11 @@ type
     procedure AddPictureBuildsMaster;
     procedure ClearEmpties;
     procedure IgnoresEmptyNameAndNil;
-    { Version / render cache. }
-    procedure VersionStartsAtZero;
-    procedure VersionBumpsOnAddBitmap;
-    procedure VersionBumpsOnAddPicture;
-    procedure VersionBumpsOnClear;
+    { ChangeStamp / render cache. }
+    procedure ChangeStampStartsAtZero;
+    procedure ChangeStampBumpsOnAddBitmap;
+    procedure ChangeStampBumpsOnAddPicture;
+    procedure ChangeStampBumpsOnClear;
     procedure CachedBitmapHitReturnsSameInstance;
     procedure CachedBitmapDistinctPerSize;
     procedure CachedBitmapMissingIsNil;
@@ -378,19 +378,19 @@ end;
 
 { ---- TImageCollectionTest: version + render cache ---- }
 
-procedure TImageCollectionTest.VersionStartsAtZero;
+procedure TImageCollectionTest.ChangeStampStartsAtZero;
 var
   c: TTyImageCollection;
 begin
   c := TTyImageCollection.Create(nil);
   try
-    AssertEquals('fresh version', 0, Integer(c.Version));
+    AssertEquals('fresh change stamp', 0, Integer(c.ChangeStamp));
   finally
     c.Free;
   end;
 end;
 
-procedure TImageCollectionTest.VersionBumpsOnAddBitmap;
+procedure TImageCollectionTest.ChangeStampBumpsOnAddBitmap;
 var
   c: TTyImageCollection;
   b: TBGRABitmap;
@@ -399,19 +399,19 @@ begin
   c := TTyImageCollection.Create(nil);
   b := MakeBmp(8, 8, BGRAWhite);
   try
-    v0 := c.Version;
+    v0 := c.ChangeStamp;
     c.AddBitmap('x', b);
-    AssertTrue('add bumps', c.Version > v0);
-    v0 := c.Version;
+    AssertTrue('add bumps', c.ChangeStamp > v0);
+    v0 := c.ChangeStamp;
     c.AddBitmap('x', b);   // replacing a master must bump too
-    AssertTrue('replace bumps', c.Version > v0);
+    AssertTrue('replace bumps', c.ChangeStamp > v0);
   finally
     b.Free;
     c.Free;
   end;
 end;
 
-procedure TImageCollectionTest.VersionBumpsOnAddPicture;
+procedure TImageCollectionTest.ChangeStampBumpsOnAddPicture;
 var
   c: TTyImageCollection;
   pic: TPicture;
@@ -423,25 +423,25 @@ begin
     pic.Bitmap.SetSize(12, 12);
     pic.Bitmap.Canvas.Brush.Color := clRed;
     pic.Bitmap.Canvas.FillRect(0, 0, 12, 12);
-    v0 := c.Version;
+    v0 := c.ChangeStamp;
     c.AddPicture('pic', pic);
-    AssertTrue('addpicture bumps', c.Version > v0);
+    AssertTrue('addpicture bumps', c.ChangeStamp > v0);
   finally
     pic.Free;
     c.Free;
   end;
 end;
 
-procedure TImageCollectionTest.VersionBumpsOnClear;
+procedure TImageCollectionTest.ChangeStampBumpsOnClear;
 var
   c: TTyImageCollection;
   v0: Cardinal;
 begin
   c := TTyImageCollection.Create(nil);
   try
-    v0 := c.Version;
+    v0 := c.ChangeStamp;
     c.Clear;
-    AssertTrue('clear bumps', c.Version > v0);
+    AssertTrue('clear bumps', c.ChangeStamp > v0);
   finally
     c.Free;
   end;
@@ -593,7 +593,7 @@ begin
     got := c.GetCachedBitmap('x', 16);          // populate the cache
     AssertEquals('white cached', 255, got.GetPixel(8, 8).red);
 
-    c.AddBitmap('x', blue);                      // bumps Version under the live cache
+    c.AddBitmap('x', blue);                      // bumps ChangeStamp under the live cache
     got := c.GetCachedBitmap('x', 16);
     AssertEquals('re-rendered blue', 0, got.GetPixel(8, 8).red);
     AssertEquals('re-rendered blue', 255, got.GetPixel(8, 8).blue);

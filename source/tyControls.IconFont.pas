@@ -22,10 +22,10 @@ interface
 
 uses
   Classes, SysUtils, Types, Graphics, BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter;
+  tyControls.Types, tyControls.Component, tyControls.Painter;
 
 type
-  TTyIconFont = class(TComponent)
+  TTyIconFont = class(TTyComponent)
   private
     FGlyphs: TStringList;      // 'name=HEX' entries
     FFontFamily: string;

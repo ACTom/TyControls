@@ -30,7 +30,7 @@ TyButton:disabled { opacity: 0.5; }
 - **状态切换动画** —— `TTyToggleSwitch` 旋钮在 ON/OFF 间滑动、`TTyButton` 悬停背景淡入淡出;可逐控件 `AnimationsEnabled` 开启,纯算法内核可步进、可测试
 - **零配置默认皮肤 + 运行时热切换** —— 未加载主题或在设计器中拖放即有合理外观;`LoadTheme` 一行换肤,全部控件即时重绘
 - **HiDPI** —— 所有长度按 PPI 缩放,矢量绘制天然清晰
-- **设计期集成** —— 组件面板 "TyControls" 分页、StyleClass 属性下拉、PageControl 页管理组件编辑器、每控件只读 `About`
+- **设计期集成** —— 组件面板 "TyControls" 分页、StyleClass 属性下拉、PageControl 页管理组件编辑器、每控件只读 `Version`
 - **2800+ 个单元测试**,全套件内存零泄漏(heaptrc 验证)
 
 ## 快速开始

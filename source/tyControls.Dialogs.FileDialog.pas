@@ -31,7 +31,7 @@ uses
   tyControls.ShellComboBox, tyControls.FilterComboBox,
   tyControls.Edit, tyControls.Button, tyControls.TyLabel, tyControls.PreviewBox,
   tyControls.Panel, tyControls.Splitter,
-  tyControls.ListView, tyControls.FileSystem, tyControls.StrConsts;
+  tyControls.ListView, tyControls.FileSystem, tyControls.Component, tyControls.StrConsts;
 
 { ---------------------------------------------------------------------------
   The pure resolver -- the OK path the dialog returns. UNIT-TESTED headless.
@@ -154,7 +154,7 @@ type
   { ===================================================================
     Component wrappers -- one base + four subclasses (two flags each).
     =================================================================== }
-  TTyCustomFileDialog = class(TComponent)
+  TTyCustomFileDialog = class(TTyComponent)
   private
     FTitle, FFilter, FFileName, FInitialDir, FDefaultExt: string;
     FFilterIndex: Integer;

@@ -14,7 +14,7 @@ unit tyControls.ImageCollection;
   here, monochrome scalable glyphs live in the icon font.
 
   Scaled renders are CACHED per (name, sizePx), bounded by CacheCapacity with LRU
-  eviction, and invalidated whenever Version changes (every mutation bumps it). Two
+  eviction, and invalidated whenever ChangeStamp changes (every mutation bumps it). Two
   accessors sit on that cache:
     * GetBitmap       — a caller-OWNED copy. Free it; mutating it (e.g. tinting via
                         TyTintBitmapAlpha) is safe and cannot reach the cache.
@@ -38,7 +38,7 @@ interface
 
 uses
   Classes, SysUtils, Graphics, BGRABitmap, BGRABitmapTypes,
-  tyControls.Types;
+  tyControls.Types, tyControls.Component;
 
 { Recolor a BGRA icon bitmap's RGB to AColor while KEEPING its alpha (antialiased edges
   included), so an icon authored as an opaque alpha mask takes on any theme text color.
@@ -73,12 +73,12 @@ type
     destructor Destroy; override;
   end;
 
-  TTyImageCollection = class(TComponent)
+  TTyImageCollection = class(TTyComponent)
   private
     FItems: TStringList;   // name -> TTyImageEntry (OwnsObjects)
-    FVersion: Cardinal;    // bumped by every mutation; see Changed
+    FChangeStamp: Cardinal;   // bumped by every mutation; see Changed
     FCache: TStringList;   // 'name'#1'sizePx' -> TTyImageCacheEntry (OwnsObjects, Sorted)
-    FCacheVersion: Cardinal;
+    FCacheStamp: Cardinal;
     FCacheCapacity: Integer;
     FTick: Int64;          // monotonic LRU clock
     { Store ABmp (already owned by us) under AName, replacing any prior entry. }
@@ -153,15 +153,19 @@ type
 
     { Bumped on every mutation (AddBitmap / AddPicture / Clear). Consumers that
       cache anything derived from this collection can compare it to detect staleness.
-      Wraps at 2^32 mutations. }
-    property Version: Cardinal read FVersion;
+      Wraps at 2^32 mutations.
+      Named ChangeStamp, not Version: TTyComponent publishes `Version: string` = the
+      LIBRARY version, and one name carrying two unrelated meanings on the same class
+      is a trap — code would read the counter while the Object Inspector showed the
+      library string. (Was `Version: Cardinal` up to 2.2.x.) }
+    property ChangeStamp: Cardinal read FChangeStamp;
     { Upper bound on cached renders; least-recently-used entries are evicted past
       it. Lowering it evicts immediately. Values < 1 clamp to 1 (a cap of 0 would
       evict the very entry GetCachedBitmap is about to return). }
     property CacheCapacity: Integer read FCacheCapacity write SetCacheCapacity;
   end;
 
-  TTyVirtualImageList = class(TComponent)
+  TTyVirtualImageList = class(TTyComponent)
   private
     FCollection: TTyImageCollection;
     FNames: TStrings;          // ordered image NAMES to expose (a TStringList)
@@ -271,7 +275,7 @@ begin
   FCache.Sorted := True;         // binary-search lookup on the composite key
   FCache.Duplicates := dupError;
   FCacheCapacity := TyImageCacheDefaultCapacity;
-  FCacheVersion := FVersion;
+  FCacheStamp := FChangeStamp;
 end;
 
 destructor TTyImageCollection.Destroy;
@@ -293,18 +297,18 @@ begin
   // Monotonic; SyncCache compares it lazily on the next read. Cheaper than an
   // observer list, and a mutation that forgets to flush still cannot serve a
   // stale render.
-  Inc(FVersion);
+  Inc(FChangeStamp);
 end;
 
 procedure TTyImageCollection.FlushCache;
 begin
   FCache.Clear;   // OwnsObjects frees every render
-  FCacheVersion := FVersion;
+  FCacheStamp := FChangeStamp;
 end;
 
 procedure TTyImageCollection.SyncCache;
 begin
-  if FCacheVersion <> FVersion then
+  if FCacheStamp <> FChangeStamp then
     FlushCache;
 end;
 
