@@ -3,7 +3,8 @@ unit test.gridpanel;
 interface
 uses
   Classes, SysUtils, Types, Controls, fpcunit, testregistry,
-  tyControls.GridPanel, tyControls.GridCell;
+  tyControls.Types, tyControls.StyleModel, tyControls.Controller,
+  tyControls.BuiltinThemes, tyControls.GridPanel, tyControls.GridCell;
 type
   { Pure grid-math functions — the headless-tested core (no window handle). }
   TTyGridMathTest = class(TTestCase)
@@ -48,6 +49,7 @@ type
     procedure TestCellsAccessorReturnsByColRow;
     procedure TestGrowPreservesInBoundsCells;
     procedure TestShrinkFreesOutOfBoundsCells;
+    procedure TestGutterIsTransparentUnlessThemed;
     procedure TestDefaultEqualDistribution;
     procedure TestColumnSizesRespected;
   end;
@@ -427,6 +429,42 @@ begin
     AssertTrue('no cell at old col 2', g.Cells[2, 0] = nil);
   finally
     g.Free;
+  end;
+end;
+
+{ The grid is a LAYOUT host, not a surface: shipped themes must leave 'TyGridPanel' undefined so
+  DrawFrame falls back to TyFillParentBg and the gutters between cells take the parent's colour
+  instead of punching a white panel through whatever the grid sits on. A theme that wants a
+  visible grid surface can still opt in by defining the key. }
+procedure TTyGridPanelTest.TestGutterIsTransparentUnlessThemed;
+var
+  c: TTyStyleController;
+  i: Integer;
+  names: TStringArray;
+  st: TTyStyleSet;
+begin
+  TyRegisterBuiltinThemes;
+  c := TTyStyleController.Create(nil);
+  try
+    names := TyBuiltinThemeNames;
+    for i := 0 to High(names) do
+    begin
+      c.ThemeName := names[i];
+      st := c.Model.ResolveStyle('TyGridPanel', '', []);
+      AssertFalse('主题 ' + names[i] + ' 不该给 TyGridPanel 背景(否则间隔变白块)',
+        tpBackground in st.Present);
+    end;
+    // Contrast: TyPanel (the key the grid used to borrow) DOES carry a surface — proving the
+    // resolver isn't simply returning empty for every key.
+    c.ThemeName := 'default';
+    st := c.Model.ResolveStyle('TyPanel', '', []);
+    AssertTrue('TyPanel 本身应有背景(对照)', tpBackground in st.Present);
+    // And a theme CAN opt in to a visible grid surface.
+    c.LoadThemeCss('TyGridPanel { background: #FF0000; }');
+    st := c.Model.ResolveStyle('TyGridPanel', '', []);
+    AssertTrue('主题显式定义后应有背景', tpBackground in st.Present);
+  finally
+    c.Free;
   end;
 end;
 

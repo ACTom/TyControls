@@ -18,7 +18,7 @@
 |------|-----|-----|
 | 单元 | `tyControls.GridPanel` | `tyControls.GridPanel`(与网格同单元;`tyControls.GridCell` 是兼容再导出) |
 | 基类 | `TTyPanel`(→ `TTyCustomControl` → `TCustomControl`) | `TTyCustomControl`(→ `TCustomControl`) |
-| `GetStyleTypeKey` | `'TyPanel'`(继承,不新增 `.tycss`) | `'TyGridCell'`(默认无主题规则,**透明**) |
+| `GetStyleTypeKey` | `'TyGridPanel'`(**默认无主题规则 → 透明布局宿主**;格间距露出父容器颜色。主题可定义该键来要一个可见的网格表面) | `'TyGridCell'`(默认无主题规则,**透明**) |
 | 默认尺寸 / 网格 | 200 × 150;默认 2 × 2 全等分 | 由网格定位,不单独设尺寸 |
 | 设计器注册 | 面板:`TyControls Containers` 组 | `RegisterNoIcon`(网格自动建,不从面板单独拖) |
 

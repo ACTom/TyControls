@@ -383,7 +383,13 @@ end;
 
 function TTyGridPanel.GetStyleTypeKey: string;
 begin
-  Result := 'TyPanel';              // transparent layout host; reuse the panel key
+  { Its OWN key, deliberately left undefined by the shipped themes. The grid is a LAYOUT host:
+    with no themed background, DrawFrame's TyFillParentBg makes it take the parent's colour, so
+    the gutters between cells read as transparent instead of punching a white panel through
+    whatever the grid sits on. A theme that WANTS a visible grid surface can define
+    `TyGridPanel { background: ...; border: ... }` and gets it. (Borrowing 'TyPanel' — as this
+    did — both forced the panel surface AND left the grid unreachable from the theme layer.) }
+  Result := 'TyGridPanel';
 end;
 
 procedure TTyGridPanel.SetController(AValue: TTyStyleController);
