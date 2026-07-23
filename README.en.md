@@ -4,272 +4,269 @@ A skinnable / styleable **Lazarus component library**: every control is fully cu
 (BGRABitmap) and its appearance is driven uniformly by lightweight CSS-lite text themes
 (`.tycss`), rendering pixel-identical on Windows / Linux / macOS.
 
-> **中文:** [README.md](README.md) ·  **Changelog:** [CHANGELOG.en.md](CHANGELOG.en.md)
+> **中文:** [README.md](README.md) · **Changelog:** [CHANGELOG.en.md](CHANGELOG.en.md)
 
-```css
-:root { --accent: #3B82F6; --radius: 6px; }
-TyButton          { background: var(--surface); border-radius: var(--radius); }
-TyButton.primary  { background: var(--accent); color: #FFFFFF; }
-TyButton:hover    { background: lighten(--surface, 8%); }
-TyButton:disabled { opacity: 0.5; }
-```
+![Ant Design Pro layout example](docs/images/antd-antdesign.png)
+
+**Same program, one theme name changed:**
+
+| `classic` | `win11` | `material3` |
+|---|---|---|
+| ![classic theme](docs/images/antd-classic.png) | ![win11 theme](docs/images/antd-win11.png) | ![material3 theme](docs/images/antd-material3.png) |
+
+All four are the **same `.lfm` and the same application code** — only the theme name differs.
+Not one control hardcodes a colour, corner radius or line width; every visual value comes from
+a theme token. Look at `classic`: it isn't just recoloured — the 3D button bevels, the gradient
+header band and the square corners changed too.
+
+> Screenshots are from the Ant Design Pro example. Its UI is currently Chinese; an English
+> render will land once the examples are internationalised.
+
+---
 
 ## Features
 
-- **Three-layer architecture** — control layer / style engine / drawing primitives (`TTyPainter`);
-  controls never hard-code a colour.
-- **CSS-lite theme language** — `:root` variables, type / variant / state selectors,
-  `rgb/rgba/lighten/darken/alpha/mix` colour functions, `border` shorthand, linear gradients,
-  9-slice images, plus dual `@mode` (light/dark in one file), `@import`, and OS light/dark + accent
-  follow.
-- **20+ core custom-drawn controls** — Button, Label, Edit, Memo, SpinEdit, CheckBox (tri-state), RadioButton,
-  Panel, GroupBox, ComboBox (editable + prefix autocomplete), ListBox, ScrollBar, ProgressBar,
-  ToggleSwitch, TrackBar, PageControl (+ TabSheet), TabSet, Splitter, StatusBar, ToolBar,
-  DateTimePicker, Calendar, TitleBar, CaptionButton.
-- **Extended control families (140+ types, all custom-drawn · cross-platform)** — **instruments/charts**:
-  Gauge / Meter / Dial / AnalogClock / Sparkline / Rating / CircularProgress / activity indicators +
-  `TTyChart` (line/bar/pie); **Ribbon & navigation**: Ribbon (page/group/app-menu/QAT/Gallery/Backstage);
-  **rich inputs & pickers**: numeric/currency/mask/URL/combo/track/calculator edits, colour/font/file
-  combos, colour & HS pickers, `TTyValueListEditor` (property inspector); **containers & layout**:
-  Bevel/Divider/PaintPanel, RadioGroup/CheckGroup, ScrollBox/ExPanel, GridPanel/RelativePanel,
-  ToolBarEx/ControlBar/CoolBar, HeaderControl, ListGroupPanel; **lists/trees/shell**: `TTyListView`
-  (report/icon/tile + virtual), `TTyShellTreeView`/`TTyShellListView`/`TTyShellComboBox`/`TTyFilterComboBox`
-  (file-system-backed); **menus/effects**: MenuEx/ImagesMenu, vector primitives (Shape/Star/Arrow),
-  `TTyImageView` (pan/zoom + BGRA filters), `TTyHtmlLabel` (inline HTML subset), `tyControls.Transitions`
-  (slide/fade appearance animations).
-- **Ant Design gap controls (14, all custom-drawn · usable under all 20 themes · each documented)** —
-  **cards & markers**: `TTyCard` (title/content/actions card, `hoverable` via one `TyCard:hover` rule),
-  `TTyTag` (closable tag pill, variants via `StyleClass`), `TTyBadge` (**standalone** count/dot badge
-  that pins to any control via `Target`); **feedback**: `TTyAlert` (**inline** alert bar —
-  info/success/warning/error), `TTyNotification` (corner auto-dismiss toast), `TTyPopover` (a bubble
-  overlay that **hosts controls**); **navigation & flow**: `TTySegmented` (segmented control),
-  `TTyPagination` (pager), `TTySteps` (wizard step bar, horizontal/vertical), `TTyBreadcrumb`
-  (breadcrumb); **inputs**: `TTyTransfer` (dual-list transfer), `TTyTreeSelect` (tree dropdown),
-  `TTyCascader` (cascading select); **empty state**: `TTyEmpty` (illustration + text + optional action).
-- **Data grid `TTyStringGrid`** (three layers: `TTyCustomGrid` / `TTyDrawGrid` / `TTyStringGrid`) —
-  frozen rows/columns (four panes), virtualised rendering (a million rows paints only the visible
-  window), sparse cell storage, 2-D cursor + rectangular multi-select, embedded scrollbars,
-  variable row heights, **editing** (16 built-in editors: text / numeric / spin / slider / checkbox /
-  pick-list / date / time / colour / rating / memo / mask / password / calculator / ellipsis button,
-  per cell), **display** (text / progress bar / rating / image / button / colour swatch, orthogonal
-  to editing), click-to-sort (stable merge sort), an **Excel-style column filter** (search box,
-  per-value counts, a (Blanks) entry), group rows with collapse and **per-group subtotals**, cell
-  merging, a summary footer (sum/avg/min/max/count over the *filtered* rows), **selection outline
-  and fill handle** (copy / extrapolate / repeat), a row-number gutter, hidden columns,
-  clipboard (Excel format) + CSV import/export, column resize and drag-reorder,
-  **row dragging**, **undo/redo** (Ctrl+Z/Y -- fill colours, row heights and merge spans
-  revert with the text, and one bulk operation is one press), **physical sorting**
-  (`gsmData` moves the data the way Excel does, undoably), **multi-level grouping**
-  (indented, subtotals per level, collapse keyed by path), and **layout persistence**
-  (widths / order / visibility / sort keys / freeze counts, loaded all-or-nothing),
-  an **inline filter row** (one input per column; `>1000`, `a..b`, `;` for or),
-  **tree cells** (hierarchy supplied by the host -- the control holds no tree),
-  and undoable column add/remove/reorder.
-- **Virtual tree `TTyTreeView`** — a VirtualTreeView-class virtual tree: data-on-demand (scales to
-  millions of nodes), multi-column with a draggable header (resize / reorder / sort), checkboxes +
-  tri-state + radio nodes, multi-select (Ctrl/Shift) + full-row, variable row height, incremental
-  type-to-find, per-cell owner-draw, **inline editing** (F2 / double-click), **node drag-drop**
-  (reorder / reparent).
-- **Native window `TTyForm`** — borderless + custom-drawn title bar (associable `TTyTitleBar`):
-  native window resize on Windows (`Resizable`), maximize that respects the taskbar, OS rounded
-  corners + native drop shadow (Windows 11 DWM / macOS, opt-out via CSS). A form's controls live on
-  its content container, **`TTyFormSurface`** (named `Surface`, filling the form) — **put every
-  control inside it**; the New Form templates ship with it. See [Form structure](#form-structure).
-- **Text editing** — `TTyEdit` single-line (selection / clipboard / horizontal scroll / word-level
-  navigation), `TTyMemo` multi-line (2D navigation / cross-line editing / vertical scroll),
-  `TTySpinEdit` numeric spin; custom edits support IME (Qt6 / GTK2).
-- **Keyboard mnemonics** — `&`-accelerators with Alt-underline display and Alt+letter activation,
-  across menus and controls.
-- **Native-control harmonization `TTyNativeStyler`** — themes third-party / native LCL controls to
-  match the active theme.
-- **Dialog subsystem** — custom-drawn themed modal dialogs: `TyShowMessage` / `TyMessageDlg`
-  (mtWarning / mtError / mtConfirmation / mtInformation + full LCL button set) global functions,
-  `TTyDialog` derivable base class (Enter/Esc + right-aligned button bar), and a `TTyMessage`
-  design-time component; **input-family dialogs**: `TyInputQuery` (single-line text) /
-  `TyPasswordBox` (masked password) / `TyTextQuery` (resizable multi-line) / `TySelectValue`
-  (list single-select) / `TySelectDirectory` (folder picker); **picker dialogs**: `TySelectColor`
-  (HSV/RGB/CMYK/Alpha color picker with full bidirectional sync) / `TyFontDialog` (family, size,
-  style, color + live preview); button captions and type titles are internationalized
-  (resourcestring + zh_CN); plus **modeless** Find/Replace (`TTyFindDialog` / `TTyReplaceDialog`,
-  LCL `TFindDialog` parity) and a Progress dialog (`TTyProgressDialog`); **file dialogs**:
-  `TTyOpenDialog` / `TTySaveDialog` + Picture and Preview variants (right-hand image/text preview +
-  an `OnPreview` custom hook), a 3-tier API mirroring LCL.
-- **Internationalization (i18n)** — `resourcestring`s + English / Simplified-Chinese `.po` catalogs
-  (theme diagnostics, design-time, demo); the demo switches language at runtime.
-- **State transition animations** — `TTyToggleSwitch` knob slides between ON/OFF, `TTyButton` hover
-  background fades; per-control `AnimationsEnabled`, with a pure, steppable, testable core.
-- **Zero-config default skin + runtime hot-swap** — sensible appearance with no theme loaded or when
-  dropped in the designer; `LoadTheme` re-skins every control instantly.
+- **Fully custom-drawn** — every control is painted with BGRABitmap; nothing wraps a native
+  control. The same code is the same pixels on Windows, Linux and macOS.
+- **Appearance separated from code** — colours, radii, borders, padding, font sizes, shadows,
+  gradients and 9-slice images all live in `.tycss` text. Restyling needs no recompile;
+  `LoadTheme` hot-swaps at runtime.
+- **Structural skinning** — a theme is more than a palette: `render-style` turns a flat button
+  into a 3D bevelled one, and geometry tokens change a control's intrinsic size.
+- **Two density scales** — classic (Win32 scale) and modern (web scale) are an axis
+  **orthogonal** to colour, switched by one `Controller.Density` property.
+- **Follows the OS** — light/dark mode and accent colour can track the operating system; a
+  single-file `@mode` carries both sets of values.
+- **160 droppable controls** across 16 component-palette pages — see the [control list](#control-list).
+- **Designer-first** — every control has a palette icon, a read-only `Version` property and a
+  `StyleClass` dropdown. `TTyPageControl`'s pages and `TTyGridPanel`'s cells are **real designer
+  containers**: drop controls straight into them and they persist to the `.lfm`.
 - **HiDPI** — every length scales by PPI; vector drawing stays crisp.
-- **Design-time integration** — a "TyControls" component-palette page, a StyleClass property
-  drop-down, the PageControl page-manager component editor, and a read-only `Version` on every control.
-- **2800+ unit tests**, whole suite leak-free (verified with heaptrc).
+- **Internationalised** — the library's own UI strings go through `resourcestring` + `.po`,
+  shipped in English and Simplified Chinese.
+- **3949 unit tests**, whole suite leak-free (heaptrc-verified). Appearance additionally has a
+  pixel-level golden guard — every change to a theme's resolved styles must be deliberate.
+
+---
 
 ## Quick start
 
-```pascal
-uses tyControls.Controller, tyControls.Button;
+**1. Install the package**
 
-// Load a theme (controls with no explicit Controller use the global one)
-TyDefaultController.LoadTheme('themes/light.tycss');
+In Lazarus open `tycontrols_dt.lpk` (the design-time package) → **Use → Install**; the IDE
+recompiles and restarts. The runtime package `tycontrols.lpk` comes in automatically as a
+dependency.
 
-// Create a primary button
-Btn := TTyButton.Create(Self);
-Btn.Parent := Self;
-Btn.Caption := 'OK';
-Btn.StyleClass := 'primary';   // matches TyButton.primary in the .tycss
-```
+> Requires: Lazarus 3.x+ / FPC 3.2.2+ / **BGRABitmap** (OPM package `BGRABitmapPack`).
 
-> Note: a project `.lpr`'s `uses` must start with `Interfaces` (the usual requirement for an LCL
-> component library).
+**2. New project**
 
-Full steps (install the package, first form, theme switching) are in
-**[docs/getting-started.md](docs/getting-started.md)**.
+**File → New… → Project → TyControls Application**
+
+The template gives you a wired-up `TTyForm` main form: custom-drawn title bar, the content-host
+container `Surface`, and a `TTyStyleController`, all in place and associated. Drop controls onto
+`Surface`.
+
+> To add a form to an existing project use **File → New… → Form → TyControls Form**.
+
+**3. Switch theme**
+
+Select the `TTyStyleController` on the main form and set `ThemeName` to any built-in name
+(`default` / `system` / `win11` / `classic` / `material3` / …). The designer updates instantly;
+change the same property at runtime to hot-swap.
+
+Full steps (first form, theme switching, HiDPI, deployment) → **[docs/getting-started.md](docs/getting-started.md)**.
+
+---
 
 ## Form structure
 
-A `TTyForm`'s controls live on a content container, **`TTyFormSurface`** — exactly one per form, named `Surface`, filling the form. **Put every control inside it.**
+A `TTyForm`'s controls live on a content-host container, **`TTyFormSurface`** — exactly one per
+form, named `Surface`, filling the whole window. **Put your controls inside it.**
 
-- **New forms need no effort**: the File > New *TyControls Form / Application* templates ship with the `Surface` (title bar included), and dropping controls in the designer lands them in it.
-- **Graphic controls must go inside**: windowless graphic controls such as `TTyLabel` and `TTyShape` paint onto their parent — one placed directly on the form is hidden behind the `Surface` and **will not be visible**. The designer warns you when you do this.
-- **Non-visual components stay on the form**: style controllers, timers, dialog components, image lists, menus are unaffected.
-- **Dialogs (`TTyDialog`) have no `Surface`**: they are not resizable and do not need one — controls sit directly on the dialog, as before.
+- **New forms need no thought**: both templates ship with `Surface` already there, and dropping
+  a control in the designer lands it inside.
+- **Graphic controls MUST go inside**: windowless graphic controls like `TTyLabel` and
+  `TTyShape` paint onto their parent — placed on the form directly they are hidden behind
+  `Surface`. The designer warns you when you do this.
+- **Non-visual components stay on the form**: style controllers, timers, dialog components,
+  image lists, menus are unaffected.
+- **Dialogs (`TTyDialog`) have no `Surface`**: they are not resizable and do not need one;
+  place controls directly on them.
 
-Why it exists: a borderless resizable window cannot paint its own outermost pixels, which left an unpainted strip along the right and bottom edges; a child window paints to the true edge, so the form's themed background is rendered by the `Surface`. Select it in the designer — its `Purpose` property explains the rest.
+Why it exists: a borderless resizable window cannot paint its own outermost pixels, leaving an
+unpainted band along the right/bottom edge — but a child window can paint edge to edge, so the
+form's themed background is rendered by `Surface`. Select it in the designer; its `Purpose`
+property explains the rest.
 
-**Migrating an existing form**: move the controls that sat directly on the form into the `Surface` (leave non-visual components where they are). See [examples/button/umain.lfm](examples/button/umain.lfm).
+**Migrating an existing form**: move the controls that sat directly on the form into `Surface`
+(leave non-visual components alone). See [examples/button/umain.lfm](examples/button/umain.lfm).
 
+---
+
+## Control list
+
+160 controls you can drop from the component palette, across 16 pages. Per-control
+properties / events / states / theme keys are in **[docs/controls/](docs/controls/)**.
+
+### Core · `TyControls` (2)
+`TTyStyleController` the style controller · `TTyNativeStyler` themes native / third-party LCL controls
+
+### Buttons · `TyControls Buttons` (8)
+`TTyButton` · `TTyGlyphButton` icon button · `TTyGlyphContainerButton` · `TTySpeedButton` · `TTyDropDownButton` split · `TTyMenuButton` · `TTyColorButton` · `TTyButtonGroup` segmented bar
+
+### Labels & marks · `TyControls Labels` (7)
+`TTyLabel` · `TTyHtmlLabel` inline HTML subset · `TTyLinkLabel` · `TTyShadowLabel` · `TTyGlowLabel` · `TTyTag` closable tag · `TTyBadge` numeric / dot badge
+
+### Text & numeric input · `TyControls Edits` (13)
+`TTyEdit` · `TTyMemo` multiline · `TTySpinEdit` · `TTyNumericEdit` · `TTyCurrencyEdit` · `TTyMaskEdit` · `TTyURLEdit` · `TTyComboEdit` · `TTyTrackEdit` inline slider · `TTyCalcEdit` / `TTyCalcCurrencyEdit` inline calculator · `TTyCalculator` · `TTyUpDown`
+
+### Choices & switches · `TyControls Choices` (6)
+`TTyCheckBox` tri-state · `TTyRadioButton` · `TTyToggleSwitch` · `TTyRadioGroup` · `TTyCheckGroup` · `TTySegmented`
+
+### Lists & dropdowns · `TyControls Lists` (14)
+`TTyComboBox` editable + prefix autocomplete · `TTyListBox` · `TTyCheckListBox` · `TTyMRUComboBox` · `TTyComboBoxEx` with images · `TTyOfficeComboBox` / `TTyOfficeListBox` grouped · `TTyAdvancedComboBox` / `TTyAdvancedListBox` two-line · `TTyCheckComboBox` · `TTyValueListEditor` property grid · `TTyTransfer` · `TTyTreeSelect` · `TTyCascader`
+
+### Colour / font / file pickers · `TyControls Pickers` (11)
+`TTyColorBox` · `TTyColorComboBox` · `TTyColorListBox` · `TTyColorGrid` palette · `TTyLColorPicker` / `TTyHSColorPicker` · `TTyFontComboBox` / `TTyFontListBox` / `TTyFontSizeComboBox` · `TTyFilterComboBox` · `TTyShellComboBox`
+
+### Gauges & indicators · `TyControls Gauges` (12)
+`TTyGauge` linear / arc / ring · `TTyMeter` needle · `TTyLevelMeter` · `TTyDial` / `TTyGearDial` knobs · `TTyAnalogClock` · `TTyCircularProgress` · `TTyActivityIndicator` / `TTyActivityBar` / `TTyGearActivityIndicator` busy · `TTySparkline` · `TTyRating`
+
+### Bars · `TyControls Bars` (14)
+`TTyTrackBar` · `TTyProgressBar` · `TTyScrollBar` · `TTyStatusBar` · `TTyToolBar` + `TTyToolSeparator` · `TTyToolBarEx` overflow · `TTyControlBar` / `TTyCoolBar` draggable bands · `TTyAlert` inline banner · `TTyPagination` · `TTySteps` · `TTyBreadcrumb` · `TTyHeaderControl`
+
+### Containers & layout · `TyControls Containers` (20)
+`TTyPanel` · `TTyGroupBox` · `TTyCard` · `TTyExPanel` collapsible · `TTyScrollBox` / `TTyScrollPanel` · `TTyGridPanel` **designer grid** · `TTyRelativePanel` · `TTyPageControl` + `TTyTabSheet` **designer pager** · `TTyTabSet` pure tab strip · `TTySplitter` · `TTyBevel` · `TTyDivider` · `TTyPaintPanel` · `TTySizeBox` · `TTyToolGroupPanel` · `TTyListGroupPanel` · `TTyTitleBar` · `TTyEmpty`
+
+### Data views · `TyControls Data Views` (10)
+`TTyStringGrid` / `TTyDrawGrid` **data grid** · `TTyTreeView` **virtual tree** · `TTyListView` five views · `TTyShellTreeView` / `TTyShellListView` file system · `TTyCalendar` · `TTyDateTimePicker` · `TTyImageView` pan/zoom + filters · `TTyPreviewBox`
+
+### Menus · `TyControls Menus` (4)
+`TTyMenuBar` · `TTyPopupMenu` · `TTyImagesMenu` · `TTyMenuEx`
+
+### Ribbon · `TyControls Ribbon` (7)
+`TTyRibbon` + `TTyRibbonPage` + `TTyRibbonGroup` · `TTyRibbonAppMenu` · `TTyRibbonQuickAccess` · `TTyRibbonGallery` · `TTyRibbonBackstage`
+
+### Images & hints · `TyControls Images` (9)
+`TTyIconFont` icon font · `TTyCharImage` · `TTyImage` · `TTyGlyphImageList` · `TTyImageCollection` · `TTyVirtualImageList` · `TTyHint` · `TTyBalloonHint` · `TTyPopover` control-hosting popover
+
+### Shapes & charts · `TyControls Shapes & Charts` (4)
+`TTyShape` · `TTyStarShape` · `TTyArrow` · `TTyChart` line / bar / pie
+
+### Dialogs · `TyControls Dialogs` (19)
+`TTyMessage` · `TTyInputDialog` · `TTyPasswordDialog` · `TTyTextDialog` · `TTySelectValueDialog` · `TTySelectPathDialog` · `TTyColorDialog` · `TTyFontDialog` · `TTyFindDialog` / `TTyReplaceDialog` modeless · `TTyProgressDialog` · `TTyAboutDialog` · `TTyOpenDialog` / `TTySaveDialog` + picture + preview variants · `TTyNotification` corner toast
+
+> Three controls do far more than one list line can say:
+> **[`TTyStringGrid`](docs/controls/grid.md)** — frozen rows/cols, million-row virtualization,
+> 16 built-in editors, Excel-style column filters, group subtotals, undo/redo, clipboard & CSV;
+> **[`TTyTreeView`](docs/controls/treeview.md)** — lazy-loaded virtual tree, multi-column
+> draggable header, tri-state checks, inline edit, node drag-drop;
+> **[`TTyForm`](docs/controls/ttyform.md)** — borderless custom window with native resize,
+> system rounded corners and drop shadow.
+
+---
+
+## Themes
+
+Every built-in theme is **compiled into the binary**, so an app can switch by name with no
+`themes/` folder shipped (`TyBuiltinThemeNames` lists them all).
+
+| Theme | About |
+|---|---|
+| `default` | neutral base with `@mode` light/dark in one file |
+| `system` | follows the OS light/dark + accent |
+| `win11` `win10` `xp` `classic` `aero` | Windows generations |
+| `macos` `adwaita` `breeze` `ubuntu` | macOS and Linux desktops |
+| `material3` `fluent` `antdesign` `bootstrap` | design systems |
+| `office` | Office style |
+| `showcase` | a showpiece theme |
+
+Also `green` (an image theme, shipped as a file) and the curated palettes under
+`themes/palettes/`. All themes share one set of `:root` semantic variables, and `--accent` can
+be overridden at runtime — one theme, any brand colour.
+
+**Write your own theme** → [docs/themes.md](docs/themes.md) · **full `.tycss` reference** →
+[docs/tycss-reference.md](docs/tycss-reference.md)
+
+---
+
+## Examples
+
+Each example is a standalone buildable project: `lazbuild examples/<name>/<project>.lpi`.
+
+| Example | Shows |
+|---|---|
+| [antdesign](examples/antdesign/) | **TyControls Pro** — an Ant Design Pro-style admin (sider + 6 pages), runtime theming |
+| [demo](examples/demo/) | gallery: all controls + multiple themes + runtime language switch |
+| [grid](examples/grid/) | `TTyStringGrid` in six pages: freeze / million-row virtual / sort-filter-group / 16 editors / undo-redo |
+| [treeview](examples/treeview/) | `TTyTreeView`: million-node virtual tree / multi-column sort / tri-state checks / inline edit / node drag-drop |
+| [dialogs](examples/dialogs/) | all 11 custom-drawn dialogs (modal and modeless) |
+| [theming](examples/theming/) | a custom `.tycss` theme + runtime hot-swap |
+| [ribbon](examples/ribbon/) | Ribbon: page / group / app menu / QAT / Gallery / Backstage |
+| [containers](examples/containers/) | `TTyGridPanel` / `TTyExPanel` / `TTyScrollBox` layout containers |
+| [listview](examples/listview/) | `TTyListView`: five views / grouped collapse / 100k virtual |
+| [inputs](examples/inputs/) | rich input: numeric / currency / mask / URL / slider / calculator edits |
+| [shapes](examples/shapes/) | `TTyShape` / `TTyStarShape` / `TTyArrow` + `StyleOverride` |
+| [icons](examples/icons/) | `TTyIconFont` icon font |
+| [transitions](examples/transitions/) | slide / fade transitions |
+
+Other single-control examples (button / label / labels / edit / memo / combobox / listbox /
+spinedit / checkbox / radiobutton / panel / groupbox / scrollbar / progressbar / toggleswitch /
+trackbar / splitter / statusbar / toolbar / menu / calendar / datetimepicker / tabcontrol /
+tabset / chart / gauge / hint / htmllabel / imageview / filedialog / shell) are under
+[examples/](examples/).
+
+---
 
 ## Documentation
 
 | Doc | Contents |
 |---|---|
-| [getting-started.md](docs/getting-started.md) | Install, first form, theme load/switch, HiDPI |
-| [tycss-reference.md](docs/tycss-reference.md) | The authoritative `.tycss` reference: every property, function, selector, merge order |
-| [controls/](docs/controls/) | Per-control API (properties / events / states / theme variants / examples) |
-| [CHANGELOG.en.md](CHANGELOG.en.md) | Release changelog |
-| [KNOWN_GAPS.md](docs/KNOWN_GAPS.md) | Known limitations and planned work |
+| [getting-started.md](docs/getting-started.md) | install, first form, loading/switching themes, HiDPI |
+| [controls/](docs/controls/) | per-control API (properties / events / states / theme keys / example) |
+| [themes.md](docs/themes.md) | writing your own theme |
+| [tycss-reference.md](docs/tycss-reference.md) | the `.tycss` language reference: properties, functions, selectors, merge order, typeKey catalogue |
+| [events.md](docs/events.md) | the tiered common-event convention |
+| [CHANGELOG.en.md](CHANGELOG.en.md) | changelog |
 
-> The newer controls (`TTyTreeView`, `TTySplitter`, `TTyStatusBar`, `TTyToolBar`,
-> `TTyDateTimePicker`, `TTyCalendar`, `TTyTabSet`) ship both example projects (below) and
-> per-control [API docs](docs/controls/).
+---
 
-## Examples
+## UI language
 
-One independently-buildable minimal project per control (each form is a designed `.lfm`, not built
-in code), plus a combined gallery and a dedicated TreeView showcase:
+TyControls' own UI strings (dialog buttons, ThemeLint diagnostics, …) use a resourcestring
+catalogue **independent of the host application**, shipped in English and Simplified Chinese.
 
-| Example | What it shows |
-|---|---|
-| [examples/grid](examples/grid/) | **TTyStringGrid** (6 tabs): frozen rows/columns / a million rows from a virtual data source / sort, filter, group / 16 editor kinds / selection, clipboard and undo / event hooks |
-| [examples/treeview](examples/treeview/) | **TTyTreeView showcase**: million-node virtual tree / multi-column + sort / checkboxes + tri-state + radio / multi-select + full-row / inline editing / node drag-drop |
-| [examples/antdesign](examples/antdesign/) | **TyControls Pro**: an Ant Design Pro-style admin shell (sider + 6 pages), defaulting to the antdesign skin, with runtime skin switching |
-| [examples/demo](examples/demo/) | Combined gallery: all controls + multi-theme switch + custom window frame + runtime language switch |
-| [examples/dialogs](examples/dialogs/) | **All 11 custom-drawn dialogs**: message / input / password / text / select-value / select-path / colour / font / find / replace / progress (modal and modeless) |
-| [examples/edit](examples/edit/) | Text input, selection, clipboard, word-level navigation, mouse positioning |
-| [examples/memo](examples/memo/) | Multi-line editing, cross-line editing, 2D navigation, embedded vertical scrollbar |
-| [examples/combobox](examples/combobox/) | Items / selection / OnChange, real drop-down popup |
-| [examples/listbox](examples/listbox/) | Item list, keyboard navigation, embedded auto scrollbar |
-| [examples/spinedit](examples/spinedit/) | Numeric spin, arrow buttons / arrow keys / wheel, Min/Max/Increment |
-| [examples/tabcontrol](examples/tabcontrol/) | `TTyPageControl` + `TTyTabSheet`: multi-page container, switch ActivePage, independent per-page content |
-| [examples/tabset](examples/tabset/) | `TTyTabSet`: pure tab strip, `TabIndex` switching, OnChange |
-| [examples/calendar](examples/calendar/) | `TTyCalendar`: date picking, day/month/year drill-down, Min/MaxDate |
-| [examples/datetimepicker](examples/datetimepicker/) | `TTyDateTimePicker`: date drop-down calendar + time segment spin |
-| [examples/splitter](examples/splitter/) | `TTySplitter`: drag-resizable divider between panels |
-| [examples/statusbar](examples/statusbar/) | `TTyStatusBar`: bottom multi-panel status bar |
-| [examples/toolbar](examples/toolbar/) | `TTyToolBar` + `TTyToolSeparator`: toolbar with buttons and separators |
-| [examples/menu](examples/menu/) | `TTyMenuBar` + `TTyPopupMenu`: menu bar + right-click popup menu |
-| [examples/shapes](examples/shapes/) | `TTyShape` / `TTyStarShape` / `TTyArrow`: vector shapes, recolouring via `StyleOverride`, live sliders, theme switch |
-| [examples/listview](examples/listview/) | `TTyListView`: five view styles, sorting, multi-select + marquee, checkboxes + F2 rename, **collapsible groups**, a 100k-row virtual mode |
-| [examples/theming](examples/theming/) | A custom `.tycss` theme + runtime hot-swap |
-
-The remaining per-control examples (button / label / checkbox / radiobutton / panel / groupbox /
-scrollbar / progressbar / toggleswitch / trackbar) are under [examples/](examples/). **Every example
-form is a designed `.lfm` using the `TTyForm` + `TTyTitleBar` custom-drawn window frame, with an
-in-title-bar theme switcher for live skin changes.** Build any example with
-`lazbuild examples/<name>/<name>_example.lpi` (demo is `demo.lpi`, treeview is `treeviewshowcase.lpi`).
-
-## Build & test
-
-```bash
-# Requires: Lazarus 3.x+ / FPC 3.2.2+ / BGRABitmap (package BGRABitmapPack)
-
-lazbuild tycontrols.lpk          # runtime package
-lazbuild tycontrols_dt.lpk       # design-time package (install into the IDE)
-
-# Full build matrix (both packages + all examples + the test runner)
-bash scripts/build-matrix.sh
-
-# Run the unit tests
-lazbuild tests/tytests.lpi && ./tests/tytests -a --format=plain
-```
-
-## Layout
-
-```
-source/      runtime units (style engine / TTyPainter / controls)
-designtime/  design-time registration units
-themes/      theme sources: root auto/dark/light/green/system; builtin/ = compiled-in structural skins; palettes/ = curated palettes
-examples/    example projects (one per control + the combined demo + the treeview showcase)
-tests/       FPCUnit test suite
-docs/        documentation
-scripts/     build & release scripts
-```
-
-## Themes
-
-Every built-in theme is **compiled into the binary** — `default` (a neutral `@mode` light/dark base),
-`system` (follows the OS light/dark + accent colour), and a whole set of **structural skins**
-(`office` / `win11` / `xp` / `classic` / `macos` / `material3` …). An app switches to any of them by
-name with no `themes/` folder (`TyBuiltinThemeNames` lists them all). Each skin's `.tycss` source is
-also kept in `themes/builtin/` as a **reference for users to base their own themes on** — it is not
-read dynamically at runtime. The repo also ships `green` (an image theme, still a file) and the
-curated palettes in `themes/palettes/`. All themes share one set of `:root` semantic variables
-(`--accent` / `--surface` / `--on-surface` / `--border` / `--danger` / `--radius` …) — re-skinning
-just swaps the variables; `--accent` can be overridden at runtime (one theme in any brand colour);
-`LoadTheme` / `ThemeName` hot-swaps and every control repaints instantly.
-
-## Enabling translations
-
-TyControls' own user-facing strings (dialog buttons, labels, ThemeLint diagnostics, …) live in a
-separate resourcestring catalog from your application's. LCL's `SetDefaultLang('', LangDir)` only
-auto-loads `languages/<exe-name>.<lang>.po` — it never touches the library's catalog, so those
-strings stay at their English msgids no matter what UI language your app picks. Load the package
-catalog explicitly, right after `SetDefaultLang` and before any form is created:
+LCL's `SetDefaultLang` only loads **your app's** `.po`, not the library's — so add one more line:
 
 ```pascal
 uses ..., LCLTranslator;
-...
-SetDefaultLang('', LangDir);
-TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');
+
+SetDefaultLang('', LangDir);                                                       // your app
+TranslateUnitResourceStringsEx('', LangDir, 'tycontrols', 'tyControls.StrConsts');  // the library
 Application.CreateForm(TMainForm, MainForm);
 ```
 
-Deploy the catalog as `languages/tycontrols.<lang>.po` (built from this repo) — a **dot-free** file
-stem — next to your exe's own `languages/` folder, alongside your app's own `.po` files. Do **not**
-name it `tycontrols.strconsts.<lang>.po`: LCL's `FindLocaleFileName` runs the file stem you pass
-through `ChangeFileExt`, which treats the dot before `strconsts` as an extension separator and
-strips it, so it would search for `tycontrols.<lang>.po` regardless of what you deployed. Passing
-`'tycontrols'` as the third argument (`LocaleFileName`) keeps the file lookup dot-free, while the
-fourth argument (`LocaleUnitName`) supplies the real dotted unit name `tyControls.StrConsts` so the
-resourcestring identifiers still match. See [examples/demo](examples/demo/) for a working setup
-(`demo.lpr` + `examples/demo/languages/tycontrols.zh_CN.po`).
+Deploy `languages/tycontrols.<lang>.po` next to your own `.po` in the `languages/` folder beside
+the executable.
 
-To force Chinese output regardless of the machine's OS locale (e.g. for testing), drive the language
-explicitly instead of relying on auto-detection — `SetDefaultLang('')` and `TranslateUnitResourceStringsEx`
-with an empty `Lang` argument auto-detect the OS locale (or honor a `--lang=` command-line
-parameter, already supported by the demo/example apps). Pass `'zh_CN'` directly instead:
+> **The file's base name must not contain a dot.** The third argument must be `'tycontrols'` —
+> LCL's `FindLocaleFileName` calls `ChangeFileExt` on it, so `'tycontrols.strconsts'` would have
+> `.strconsts` stripped as an extension. The real dotted unit name `tyControls.StrConsts` goes in
+> the fourth argument.
+>
+> To force a language (bypassing OS-locale detection), pass the language name in both places:
+> `SetDefaultLang('zh_CN', LangDir)` + `TranslateUnitResourceStringsEx('zh_CN', …)`.
 
-```pascal
-SetDefaultLang('zh_CN', LangDir);
-TranslateUnitResourceStringsEx('zh_CN', LangDir, 'tycontrols', 'tyControls.StrConsts');
-```
+Full example: [examples/demo](examples/demo/).
+
+---
 
 ## License
 
-TyControls is licensed under the **modified LGPL** (the same as FPC RTL / LCL / BGRABitmap): you may
-statically link it into closed-source commercial applications; if you modify the library's own
-source, those modifications must be released under the same license.
+TyControls is licensed under the **modified LGPL** (the same as FPC RTL / LCL / BGRABitmap):
+you may statically link it into a closed-source commercial application and distribute that; if
+you modify the library's own source, the modified parts must be released under the same license.
 
-See [COPYING.modifiedLGPL.txt](COPYING.modifiedLGPL.txt) (the exception clause) and
-[COPYING.LGPL.txt](COPYING.LGPL.txt) (the LGPL body) for the full terms.
+Full terms: [COPYING.modifiedLGPL.txt](COPYING.modifiedLGPL.txt) (the exception) and
+[COPYING.LGPL.txt](COPYING.LGPL.txt) (the LGPL body).
