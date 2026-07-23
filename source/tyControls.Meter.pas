@@ -12,9 +12,12 @@ function TyMeterTickAngle(AIndex, ACount: Integer; AStartDeg, ASweepDeg: Double)
 
 type
   { An analog NEEDLE meter: a scaled arc of tick marks with a needle pointing at Value,
-    plus a hub and an optional numeric readout. Reuses the gauge theming (typeKey 'TyGauge'
-    for face/ticks/text, 'TyGaugeFill' for the needle) so no extra .tycss rules; eased needle
-    movement (snaps headless). The sweep covers the 90/120/270-deg meter variants via
+    plus a hub and an optional numeric readout. Themed as itself — 'TyMeter' (dial face +
+    numeric readout), 'TyMeterTick' (the radial rim ticks) and 'TyMeterNeedle' (needle +
+    hub). It used to borrow the gauge's keys, which welded three unrelated inks together:
+    ticks and readout shared one colour (so "faint ticks under dark numerals" was
+    unexpressible) and the needle shared the spinner's accent. Eased needle movement
+    (snaps headless). The sweep covers the 90/120/270-deg meter variants via
     StartAngle/SweepAngle. }
   TTyMeter = class(TTyGraphicControl)
   private
@@ -38,7 +41,7 @@ type
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
   protected
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyMeter' (+ 'Tick' / 'Needle' sub-parts)
     procedure Paint; override;
     function DisplayFrac: Single;
     function AdvanceAnimation(AMs: Integer): Boolean;
@@ -100,7 +103,9 @@ end;
 
 function TTyMeter.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: an analogue instrument face is a different object from a
+    progress arc, so a skin can now give the meter a cream dial while gauges stay sunk grey. }
+  Result := 'TyMeter';
 end;
 
 procedure TTyMeter.EnsureTimer;
@@ -193,7 +198,7 @@ begin if FValueFormat = AValue then Exit; FValueFormat := AValue; Invalidate; en
 procedure TTyMeter.Paint;
 var
   P: TTyPainter;
-  faceS, needleS: TTyStyleSet;
+  faceS, tickMarkS, needleS: TTyStyleSet;
   R: TRect;
   ctx: TBGRACanvas2D;
   cx, cy, radius, ang, rr: Double;
@@ -203,8 +208,10 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    faceS := CurrentStyle;                                              // TyGauge face/ticks/text
-    needleS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);
+    faceS := CurrentStyle;                                              // TyMeter face + readout
+    { Sub-part keys derived from the box key so the three can never drift apart. }
+    tickMarkS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Tick', StyleClass, []);
+    needleS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Needle', StyleClass, []);
 
     // Centre near the bottom so a top-arc meter uses the height well; radius from width/height.
     cx := (R.Left + R.Right) / 2;
@@ -215,9 +222,9 @@ begin
       ctx := P.Bitmap.Canvas2D;
       ctx.lineCap := 'round';
 
-      // Tick marks (short radial strokes at the outer edge), in the face text colour.
+      // Tick marks (short radial strokes at the outer edge), in the tick ink colour.
       ctx.lineWidth := Math.Max(1, P.Scale(2));
-      ctx.strokeStyle(TyColorToBGRA(faceS.TextColor));
+      ctx.strokeStyle(TyColorToBGRA(tickMarkS.TextColor));
       for i := 0 to FTicks - 1 do
       begin
         ang := DegToRad(TyMeterTickAngle(i, FTicks, FStartAngle, FSweepAngle));
@@ -228,7 +235,7 @@ begin
         ctx.stroke;
       end;
 
-      // Needle from the hub to the value angle, in the accent (fill) colour.
+      // Needle from the hub to the value angle, in the needle colour.
       ang := DegToRad(TyGaugeSweepEnd(FStartAngle, FSweepAngle, DisplayFrac));
       ctx.lineWidth := Math.Max(2, P.Scale(3));
       ctx.strokeStyle(TyColorToBGRA(needleS.Background.Color));

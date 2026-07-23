@@ -8,7 +8,8 @@ uses
 type
   { TTyToolGroupPanel — a titled group of TOOL BUTTONS, styled like a ribbon group
     but usable OUTSIDE a ribbon. Subclasses TTyGroupBox, so it inherits the themed
-    titled frame + the caption-band client inset (AdjustClientRect) for free. It hosts
+    titled frame + the caption-band client inset (AdjustClientRect) for free, but it
+    carries its OWN 'TyToolGroupPanel' typeKey (see GetStyleTypeKey). It hosts
     TTyButton children in a horizontal FLOW that WRAPS to a new row when the next button
     would overrun the inset client width.
 
@@ -29,7 +30,15 @@ type
     procedure SetButtonHeight(AValue: Integer);
     procedure Relayout;
   protected
-    { NOTE: GetStyleTypeKey is INHERITED from TTyGroupBox ('TyGroupBox') — no new .tycss. }
+    { Its own key, NOT the group box's. This is a different THING reusing the group
+      box's code: a ribbon-style tool group. The design system already separates the
+      two concepts — 'TyRibbonGroup' is deliberately styled unlike 'TyGroupBox'
+      (transparent, muted caption, hairline border vs. the form group box's padded,
+      radiused frame) — and pinned to 'TyGroupBox' a theme could not make a standalone
+      tool group match its own ribbon groups without restyling every form group box.
+      Caption PLACEMENT stays TTyGroupBox's top band (it is hard-coded in its RenderTo),
+      so this key buys colours/border/padding/font, not a ribbon-style bottom caption. }
+    function GetStyleTypeKey: string; override;
     procedure AlignControls(AControl: TControl; var ARect: TRect); override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -96,6 +105,11 @@ begin
   FButtonHeight := 26;
   Width := 220;
   Height := 92;
+end;
+
+function TTyToolGroupPanel.GetStyleTypeKey: string;
+begin
+  Result := 'TyToolGroupPanel';
 end;
 
 procedure TTyToolGroupPanel.SetSpacing(AValue: Integer);

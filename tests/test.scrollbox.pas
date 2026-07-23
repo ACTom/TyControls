@@ -23,7 +23,7 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
-    procedure TestTypeKeyIsPanel;
+    procedure TestTypeKeyIsScrollBox;
     procedure TestNoBarsWhenContentFits;
     procedure TestVerticalBarWhenContentTaller;
     procedure TestHorizontalBarWhenContentWider;
@@ -137,13 +137,13 @@ begin
   FForm.Free;
 end;
 
-procedure TTyScrollBoxTest.TestTypeKeyIsPanel;
+procedure TTyScrollBoxTest.TestTypeKeyIsScrollBox;
 var SB: TScrollBoxAccess;
 begin
   SB := TScrollBoxAccess.Create(FForm);
   SB.Parent := FForm;
   SB.Font.PixelsPerInch := 96;
-  AssertEquals('reuses TyPanel typeKey', 'TyPanel', SB.StyleTypeKey);
+  AssertEquals('own typeKey (a scroll well is not a panel)', 'TyScrollBox', SB.StyleTypeKey);
 end;
 
 procedure TTyScrollBoxTest.TestNoBarsWhenContentFits;

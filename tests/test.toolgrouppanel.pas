@@ -19,7 +19,7 @@ type
     procedure TestFlowRespectsClientOrigin;
     procedure TestFlowEmpty;
     // Control behaviour
-    procedure TestTypeKeyInherited;
+    procedure TestTypeKeyIsToolGroupPanel;
     procedure TestDefaultsAndPublished;
     procedure TestIsDesignerContainer;
     procedure TestAddButtonCreatesChild;
@@ -140,13 +140,14 @@ end;
 
 { ---- control behaviour ------------------------------------------------------ }
 
-procedure TToolGroupPanelTest.TestTypeKeyInherited;
+procedure TToolGroupPanelTest.TestTypeKeyIsToolGroupPanel;
 var P: TTyToolGroupPanel;
 begin
   P := TTyToolGroupPanel.Create(nil);
   try
-    // Reuses the inherited TyGroupBox token — NO new .tycss rule.
-    AssertEquals('TyGroupBox', (P as ITyStyleable).GetStyleTypeKey);
+    // Its own token: a ribbon-style tool group is not a form group box, and the design
+    // system already styles TyRibbonGroup unlike TyGroupBox.
+    AssertEquals('TyToolGroupPanel', (P as ITyStyleable).GetStyleTypeKey);
   finally
     P.Free;
   end;

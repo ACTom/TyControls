@@ -51,10 +51,21 @@ type
     function DumpTheme(const APath: string): string;
     function DumpThemeMode(const APath, AMode: string): string;
     procedure CheckGolden(const AThemeName: string);
+    procedure CheckAlias(AModel: TTyStyleModel; const ATheme, ANew, ADonor,
+      AVariant: string; ABaseStateOnly: Boolean);
   published
     procedure TestLightGolden;
     procedure TestDarkGolden;
     procedure TestShowcaseGolden;
+    { 3.0 themability pass: every key minted by splitting a borrowed one must still
+      resolve BYTE-IDENTICALLY to the key it was split from, in EVERY shipped theme —
+      the five under themes/ and all fifteen skins. This is the test that proves the
+      split moved no pixel anywhere, not just in the three themes the golden covers.
+      It also proves the base-layer claim honestly: a skin that overrides the donor key
+      does NOT automatically pass, because base-layer inheritance would hand the new key
+      light.tycss's values instead of the skin's. That is precisely why the new selectors
+      had to be added to the skins' own rules and not left to inherit. }
+    procedure TestNewKeysMatchTheirDonorInEveryTheme;
     { P3 (D7) single-file dual-mode fidelity (§7 risk-3 zero-pixel route): auto.tycss in
       'light' mode resolves byte-identically to light.tycss, and in 'dark' mode to
       dark.tycss, across the full (typeKey x variant x state) grid. This is the proof that
@@ -403,14 +414,14 @@ begin
 end;
 
 const
-  GGRID: array[0..111] of string = (
+  GGRID: array[0..167] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
     'TyCaptionButton|close', 'TyCaptionButton|min', 'TyCaptionButton|max',
     'TyListBox|', 'TyListItem|', 'TyProgressBar|', 'TyProgressFill|',
     'TyGauge|', 'TyGaugeFill|', 'TyHint|', 'TyRibbon|', 'TyRibbonGroup|',
-    'TyToggleSwitch|', 'TyToggleKnob|', 'TyTrackBar|', 'TyTrackThumb|',
+    'TyToggleSwitch|', 'TyToggleKnob|', 'TyTrackBar|', 'TyTrackThumb|', 'TyLinkLabelLink|',
     'TyGroupBox|', 'TyTabControl|', 'TyPageControl|', 'TyTabSheet|',
     'TyTab|', 'TyTabClose|', 'TySpinEdit|',
     'TyMemo|', 'TyTextSelection|', 'TyTextHint|',
@@ -437,7 +448,45 @@ const
     'TyNotificationClose|', 'TyPagination|', 'TyPaginationItem|', 'TyPopover|',
     'TyPopoverTitle|', 'TySegmented|', 'TySegmentedItem|', 'TySteps|',
     'TyStepsConnector|', 'TyStepsItem|', 'TyTag|', 'TyTagClose|',
-    'TyTransfer|', 'TyTransferTitle|');
+    'TyTransfer|', 'TyTransferTitle|',
+    { 3.0 themability pass. These keys all EXISTED in code and resolved someone else's
+      rule (13 instruments hardcoded 'TyGauge'; the list view wore the tree's clothes;
+      speed/ribbon buttons wore TyButton). Splitting them is a pure hook addition, so
+      every line they add here must be byte-identical to the line their old key already
+      dumps — that is exactly what this grid is here to prove.
+      The six that dump EMPTY (TyListViewLine/Marquee, the four TyValueListEditor part
+      keys) are guarded on purpose: their painters fall back to a state-dependent value,
+      so "still undefined" is the assertion. }
+    'TyMeter|', 'TyMeterTick|', 'TyMeterNeedle|',
+    'TyLevelMeter|', 'TyLevelMeterFill|', 'TyLevelMeterPeak|',
+    'TyDial|', 'TyDialPointer|',
+    'TyGearDial|', 'TyGearDialTeeth|', 'TyGearDialPointer|',
+    'TyAnalogClock|', 'TyAnalogClockHand|', 'TyAnalogClockSecondHand|',
+    'TyCircularProgress|', 'TyCircularProgressFill|',
+    'TyActivityIndicator|', 'TyActivityIndicatorFill|',
+    'TyActivityBar|', 'TyActivityBarFill|',
+    'TyGearActivityIndicator|', 'TyGearActivityIndicatorFill|',
+    'TySparkline|', 'TySparklineFill|', 'TySparklineDot|',
+    'TyRating|', 'TyRatingStar|',
+    'TyLColorPicker|', 'TyHSColorPicker|', 'TyColorArea|',
+    'TyScrollBox|', 'TyExPanel|', 'TyExPanelHeader|',
+    'TyToolGroupPanel|', 'TyToolSeparator|',
+    'TySpeedButton|', 'TyGlyphContainerButton|',
+    'TyRibbonAppMenu|', 'TyRibbonAppMenu|primary',
+    { NOT guarded here: the 'ghost' variant. Adding 'TySpeedButton|ghost' immediately red
+      the auto-vs-light/dark equality tests, and the cause is NOT this refactor —
+      light.tycss and dark.tycss give TyButton.ghost a rest background of
+      alpha(var(--surface-hover), 0) while auto.tycss uses var(--transparent-fill)
+      (alpha-0 white / alpha-0 black). Both are invisible at rest, but the RGB of an
+      alpha-0 fill is load-bearing: TTyButton cross-fades rest -> hover, so the ramp
+      differs. Aligning auto.tycss would MOVE PIXELS mid-fade, which this pass may not do.
+      Fix that first, then guard the variant. }
+    'TyListView|', 'TyListViewItem|', 'TyListViewHeader|',
+    'TyListViewHeaderSection|', 'TyListViewGroupHeader|', 'TyListViewCheckBox|',
+    'TyListViewLine|', 'TyListViewMarquee|',
+    'TyValueListEditor|', 'TyValueListEditorRow|', 'TyValueListEditorKey|',
+    'TyValueListEditorValue|', 'TyValueListEditorDivider|', 'TyValueListEditorExpander|',
+    'TyGridGroupRow|', 'TyGridSummaryRow|');
 
   GMETRICS: array[0..110] of string = (
     '--alert-close-gap',
@@ -652,6 +701,134 @@ begin
   darkDump := DumpTheme(ThemePath('dark.tycss'));
   AssertEquals('auto.tycss in dark mode must resolve byte-identically to dark.tycss',
     darkDump, autoDump);
+end;
+
+type
+  { One key that USED to be someone else's, plus the key it was taken from. }
+  TTyAliasPair = record
+    NewKey: string;
+    Donor: string;
+    BaseStateOnly: Boolean;   { the sub-part is resolved with an EMPTY state set, so it
+                                deliberately joined only the donor's stateless rule }
+    Variants: string;         { extra StyleClass values to check, comma separated }
+  end;
+
+const
+  { Every shipped theme: themes/*.tycss plus all fifteen skins under themes/builtin/. }
+  ALIAS_THEMES: array[0..19] of string = (
+    'light', 'dark', 'auto', 'green', 'system',
+    'adwaita', 'aero', 'antdesign', 'bootstrap', 'breeze', 'classic', 'fluent',
+    'macos', 'material3', 'office', 'showcase', 'ubuntu', 'win10', 'win11', 'xp');
+
+  ALIAS_PAIRS: array[0..44] of TTyAliasPair = (
+    { The instrument family: thirteen controls that hardcoded 'TyGauge' + 'TyGaugeFill'. }
+    (NewKey: 'TyMeter';                   Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyLevelMeter';              Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyDial';                    Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyGearDial';                Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyAnalogClock';             Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyCircularProgress';        Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyActivityIndicator';       Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyActivityBar';             Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyGearActivityIndicator';   Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TySparkline';               Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyRating';                  Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyLColorPicker';            Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyHSColorPicker';           Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
+    { Sub-parts that read the FACE, not the fill — stateless, hence base-state only. }
+    (NewKey: 'TyMeterTick';               Donor: 'TyGauge';     BaseStateOnly: True;  Variants: ''),
+    (NewKey: 'TyAnalogClockHand';         Donor: 'TyGauge';     BaseStateOnly: True;  Variants: ''),
+    (NewKey: 'TyGearDialTeeth';           Donor: 'TyGauge';     BaseStateOnly: True;  Variants: ''),
+    (NewKey: 'TyColorArea';               Donor: 'TyGauge';     BaseStateOnly: True;  Variants: ''),
+    { Sub-parts that read the accent fill. }
+    (NewKey: 'TyMeterNeedle';             Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyLevelMeterFill';          Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyLevelMeterPeak';          Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyDialPointer';             Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyGearDialPointer';         Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyAnalogClockSecondHand';   Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyCircularProgressFill';    Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyActivityIndicatorFill';   Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyActivityBarFill';         Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyGearActivityIndicatorFill'; Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TySparklineFill';           Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TySparklineDot';            Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyRatingStar';              Donor: 'TyGaugeFill'; BaseStateOnly: False; Variants: ''),
+    { Containers + toolbar. }
+    (NewKey: 'TyScrollBox';               Donor: 'TyPanel';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyExPanel';                 Donor: 'TyPanel';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyToolGroupPanel';          Donor: 'TyGroupBox';  BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyToolSeparator';           Donor: 'TyToolBar';   BaseStateOnly: False; Variants: ''),
+    { Buttons. The variants matter: a toolbar stamps 'ghost' on its children and the
+      ribbon's File tab ships with 'primary', so those are the DEFAULT renderings. }
+    (NewKey: 'TySpeedButton';             Donor: 'TyButton';    BaseStateOnly: False; Variants: 'primary,danger,ghost'),
+    (NewKey: 'TyGlyphContainerButton';    Donor: 'TyButton';    BaseStateOnly: False; Variants: 'primary,danger,ghost'),
+    (NewKey: 'TyRibbonAppMenu';           Donor: 'TyButton';    BaseStateOnly: False; Variants: 'primary,danger,ghost'),
+    { The list view, which wore the tree's clothes entirely. }
+    (NewKey: 'TyListView';                Donor: 'TyTreeView';  BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyListViewItem';            Donor: 'TyTreeNode';  BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyListViewHeader';          Donor: 'TyTreeHeader'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyListViewGroupHeader';     Donor: 'TyTreeHeader'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyListViewHeaderSection';   Donor: 'TyTreeHeaderSection'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyListViewCheckBox';        Donor: 'TyTreeCheckBox'; BaseStateOnly: False; Variants: ''),
+    { The property grid built on the list box. }
+    (NewKey: 'TyValueListEditor';         Donor: 'TyListBox';   BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyValueListEditorRow';      Donor: 'TyListItem';  BaseStateOnly: False; Variants: ''));
+
+procedure TTestThemeGolden.CheckAlias(AModel: TTyStyleModel; const ATheme, ANew,
+  ADonor, AVariant: string; ABaseStateOnly: Boolean);
+const
+  STATES: array[0..4] of TTyStateSet = ([], [tysHover], [tysActive], [tysFocused], [tysDisabled]);
+var
+  si, last: Integer;
+  tag: string;
+begin
+  if ABaseStateOnly then last := 0 else last := High(STATES);
+  for si := 0 to last do
+  begin
+    tag := ATheme + ': ' + ANew;
+    if AVariant <> '' then tag := tag + '.' + AVariant;
+    tag := tag + ' state#' + IntToStr(si) + ' must resolve exactly like ' + ADonor;
+    AssertEquals(tag,
+      GDumpStyle(AModel.ResolveStyle(ADonor, AVariant, STATES[si])),
+      GDumpStyle(AModel.ResolveStyle(ANew, AVariant, STATES[si])));
+  end;
+end;
+
+procedure TTestThemeGolden.TestNewKeysMatchTheirDonorInEveryTheme;
+var
+  ti, pi: Integer;
+  m: TTyStyleModel;
+  variants: TStringList;
+  vi: Integer;
+begin
+  for ti := 0 to High(ALIAS_THEMES) do
+  begin
+    m := TTyStyleModel.Create;
+    variants := TStringList.Create;
+    try
+      AssertTrue('theme file must exist: ' + ALIAS_THEMES[ti],
+        FileExists(ThemePath(ALIAS_THEMES[ti] + '.tycss')));
+      m.LoadFromFile(ThemePath(ALIAS_THEMES[ti] + '.tycss'));
+      m.Mode := 'light';   // dual-mode files need an active mode; no-op for single-mode
+      for pi := 0 to High(ALIAS_PAIRS) do
+      begin
+        CheckAlias(m, ALIAS_THEMES[ti], ALIAS_PAIRS[pi].NewKey,
+          ALIAS_PAIRS[pi].Donor, '', ALIAS_PAIRS[pi].BaseStateOnly);
+        if ALIAS_PAIRS[pi].Variants = '' then Continue;
+        variants.Clear;
+        variants.Delimiter := ',';
+        variants.StrictDelimiter := True;
+        variants.DelimitedText := ALIAS_PAIRS[pi].Variants;
+        for vi := 0 to variants.Count - 1 do
+          CheckAlias(m, ALIAS_THEMES[ti], ALIAS_PAIRS[pi].NewKey,
+            ALIAS_PAIRS[pi].Donor, variants[vi], ALIAS_PAIRS[pi].BaseStateOnly);
+      end;
+    finally
+      variants.Free;
+      m.Free;
+    end;
+  end;
 end;
 
 procedure TTestThemeGolden.CheckGolden(const AThemeName: string);

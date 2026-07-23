@@ -37,7 +37,7 @@ type
       each wired to HandleCommand. Owned by AOwner. }
     function MakeCommands(AOwner: TComponent; ACount: Integer): TTyPopupMenu;
   published
-    procedure TestTypeKeyReusesButton;
+    procedure TestTypeKeyIsRibbonAppMenu;
     procedure TestDefaultCaptionAndStyleClass;
     procedure TestRecentItemsRoundTrip;
     procedure TestRecentItemsNilAssignIsSafe;
@@ -96,13 +96,15 @@ begin
   end;
 end;
 
-procedure TRibbonAppMenuTest.TestTypeKeyReusesButton;
+procedure TRibbonAppMenuTest.TestTypeKeyIsRibbonAppMenu;
 var B: TTyRibbonAppMenu;
 begin
   B := TTyRibbonAppMenu.Create(nil);
   try
-    // Reuses the TyButton token (accent look comes from StyleClass, not a new typeKey).
-    AssertEquals('TyButton', (B as ITyStyleable).GetStyleTypeKey);
+    // Its own token: the File TAB is not a form button, so its accent must not be the
+    // app-wide TyButton.primary. The StyleClass stays 'primary' — it now resolves under
+    // this key (TyRibbonAppMenu.primary).
+    AssertEquals('TyRibbonAppMenu', (B as ITyStyleable).GetStyleTypeKey);
   finally
     B.Free;
   end;

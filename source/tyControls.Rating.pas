@@ -16,14 +16,17 @@ uses
 function TyRatingValueFromX(AX, AWidth, ACount: Integer; AAllowHalf: Boolean): Double;
 
 type
-  { An INTERACTIVE star rating: ACount star glyphs left-to-right, filled (accent =
-    'TyGaugeFill') up to Value with the remainder outlined in the face border/text
-    colour; a half star fills its left half. Hovering previews the value under the
-    cursor, clicking commits it, and clicking the current single-star value again
-    clears to 0. Arrow keys / Home / End also move Value. Reuses the gauge theming
-    (typeKey 'TyGauge' for face/border/text, 'TyGaugeFill' for the accent) so no
-    extra .tycss rules. Direct manipulation SNAPS (no ease) so headless render
-    tests stay pixel-stable. }
+  { An INTERACTIVE star rating: ACount star glyphs left-to-right, filled up to Value
+    with the remainder outlined in the face text colour; a half star fills its left
+    half. Hovering previews the value under the cursor, clicking commits it, and
+    clicking the current single-star value again clears to 0. Arrow keys / Home / End
+    also move Value. Themed as itself — 'TyRating' (face + empty/half outlines) and
+    'TyRatingStar' (the filled glyph). Star gold is the most theme-specific colour in a
+    UI kit and must NOT be the app accent by construction: under the old borrowed key,
+    recolouring a rating also recoloured every progress ring, spinner and clock hand.
+    The star style is resolved with :hover while the preview is live, so a skin can give
+    the preview its own colour — previously impossible, the preview reused the committed
+    fill. Direct manipulation SNAPS (no ease) so headless render tests stay pixel-stable. }
   TTyRating = class(TTyCustomControl)
   private
     FCount: Integer;
@@ -39,7 +42,7 @@ type
     procedure ApplyValue(AValue: Double);   // clamp + Invalidate + fire OnChange on real change
     function DisplayValue: Double;           // hover preview if active, else committed Value
   protected
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyRating' (+ 'Star' sub-part)
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -97,7 +100,9 @@ end;
 
 function TTyRating.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: star gold is a per-theme decision that must be settable
+    without dragging the app accent (and every gauge fill) along with it. }
+  Result := 'TyRating';
 end;
 
 procedure TTyRating.ApplyValue(AValue: Double);
@@ -202,7 +207,8 @@ end;
 procedure TTyRating.Paint;
 var
   P: TTyPainter;
-  faceS, fillS: TTyStyleSet;
+  faceS, starS: TTyStyleSet;
+  starStates: TTyStateSet;
   R: TRect;
   ctx: TBGRACanvas2D;
   cellW, size, radiusOuter, radiusInner, cx, cy, fillTo: Double;
@@ -220,8 +226,12 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    faceS := CurrentStyle;                                              // TyGauge face/border/text
-    fillS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);  // accent
+    faceS := CurrentStyle;                                              // TyRating face/border/text
+    { Sub-part key derived from the box key so the two can never drift apart. The :hover
+      state is asked for only while the preview is live (FHoverValue >= 0), which is what
+      makes "preview stars look different" writable in a skin at all. }
+    if FHoverValue >= 0 then starStates := [tysHover] else starStates := [];
+    starS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Star', StyleClass, starStates);
 
     // Windowed control (own HWND): fill the full rect with the parent/form background first, so
     // the gaps around/between the stars show the form (or the image-theme photo), not the HWND's
@@ -248,21 +258,21 @@ begin
           // Fraction of THIS star that is filled: 1 whole, 0.5 half, else 0.
           if fillTo >= i + 1 then
           begin
-            // Fully filled star in the accent colour.
+            // Fully filled star in the star colour.
             StarPath(cx, cy, radiusOuter, radiusInner);
-            ctx.fillStyle(TyColorToBGRA(fillS.Background.Color));
+            ctx.fillStyle(TyColorToBGRA(starS.Background.Color));
             ctx.fill;
           end
           else if fillTo >= i + 0.5 then
           begin
-            // Half star: outline the whole glyph, then accent-fill its left half
+            // Half star: outline the whole glyph, then star-fill its left half
             // by clipping to the left rectangle of the cell.
             ctx.save;
             ctx.beginPath;
             ctx.rect(cx - radiusOuter, cy - radiusOuter, radiusOuter, 2 * radiusOuter);
             ctx.clip;
             StarPath(cx, cy, radiusOuter, radiusInner);
-            ctx.fillStyle(TyColorToBGRA(fillS.Background.Color));
+            ctx.fillStyle(TyColorToBGRA(starS.Background.Color));
             ctx.fill;
             ctx.restore;
             StarPath(cx, cy, radiusOuter, radiusInner);

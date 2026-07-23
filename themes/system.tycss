@@ -12,7 +12,7 @@
 
 TyForm { background: var(--form-bg); }
 
-TyButton {
+TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu {
   background: var(--surface);
   color: var(--on-surface);
   border-color: var(--border);
@@ -22,17 +22,21 @@ TyButton {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
 }
-TyButton:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }
-TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
-TyButton:active   { background: var(--surface-active); }
-TyButton.primary  { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-TyButton.primary:hover    { background: var(--accent-hover); }
-TyButton.primary:active   { background: var(--accent-active); }
-TyButton.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }
-TyButton.danger:hover     { background: var(--danger-hover); }
-TyButton.danger:active    { background: var(--danger-active); }
+TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }
+TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active   { background: var(--surface-active); }
+TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary  { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+TyButton.primary:hover, TySpeedButton.primary:hover, TyGlyphContainerButton.primary:hover,
+TyRibbonAppMenu.primary:hover    { background: var(--accent-hover); }
+TyButton.primary:active, TySpeedButton.primary:active, TyGlyphContainerButton.primary:active,
+TyRibbonAppMenu.primary:active   { background: var(--accent-active); }
+TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }
+TyButton.danger:hover, TySpeedButton.danger:hover, TyGlyphContainerButton.danger:hover,
+TyRibbonAppMenu.danger:hover     { background: var(--danger-hover); }
+TyButton.danger:active, TySpeedButton.danger:active, TyGlyphContainerButton.danger:active,
+TyRibbonAppMenu.danger:active    { background: var(--danger-active); }
 /* Ghost (VS Code 风格): 平时透明,仅 hover/active/选中显示。 */
-TyButton.ghost {
+TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost {
   background: var(--transparent-fill);
   color: var(--on-surface);
   border-color: alpha(var(--border), 0);
@@ -42,11 +46,16 @@ TyButton.ghost {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
 }
-TyButton.ghost:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }
-TyButton.ghost:active   { background: var(--surface-active); }
-TyButton.ghost:selected { background: var(--surface-active); border-color: var(--accent); }
-TyButton.ghost:focus    { outline: 2px var(--focus-ring); }
-TyButton.ghost:disabled { opacity: var(--disabled-opacity); }
+TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover,
+TyRibbonAppMenu.ghost:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }
+TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active,
+TyRibbonAppMenu.ghost:active   { background: var(--surface-active); }
+TyButton.ghost:selected, TySpeedButton.ghost:selected, TyGlyphContainerButton.ghost:selected,
+TyRibbonAppMenu.ghost:selected { background: var(--surface-active); border-color: var(--accent); }
+TyButton.ghost:focus, TySpeedButton.ghost:focus, TyGlyphContainerButton.ghost:focus,
+TyRibbonAppMenu.ghost:focus    { outline: 2px var(--focus-ring); }
+TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled,
+TyRibbonAppMenu.ghost:disabled { opacity: var(--disabled-opacity); }
 
 TyLabel {
   background: var(--transparent-fill);
@@ -95,7 +104,7 @@ TyRadioButton:active   { background: var(--accent); color: var(--on-accent); }
 TyRadioButton:focus { outline: 2px var(--focus-ring); }
 TyRadioButton:disabled { opacity: var(--disabled-opacity); }
 
-TyPanel {
+TyPanel, TyScrollBox, TyExPanel {
   background: var(--surface);
   color: var(--on-surface);
   border-color: var(--border);
@@ -146,7 +155,7 @@ TyCaptionButton.close:active { background: var(--danger-press-close); color: var
 TyCaptionButton.min:hover    { background: var(--surface-caption-hover); }
 TyCaptionButton.max:hover    { background: var(--surface-caption-hover); }
 
-TyListBox {
+TyListBox, TyValueListEditor {
   background: var(--input-bg);
   color: var(--on-surface);
   border-color: var(--border);
@@ -154,18 +163,18 @@ TyListBox {
   border-radius: var(--radius);
   padding: 2px;
 }
-TyListBox:hover   { border-color: var(--input-border-hover); }
-TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
-TyListBox:disabled { opacity: var(--disabled-opacity); }
+TyListBox:hover, TyValueListEditor:hover   { border-color: var(--input-border-hover); }
+TyListBox:focus, TyValueListEditor:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }
+TyListBox:disabled, TyValueListEditor:disabled { opacity: var(--disabled-opacity); }
 
-TyListItem {
+TyListItem, TyValueListEditorRow {
   background: var(--transparent-fill);
   color: var(--on-surface);
   border-radius: var(--radius);
   padding: 4px;
 }
-TyListItem:hover  { background: var(--surface-listitem-hover); }
-TyListItem:active { background: var(--accent); color: var(--on-accent); }
+TyListItem:hover, TyValueListEditorRow:hover  { background: var(--surface-listitem-hover); }
+TyListItem:active, TyValueListEditorRow:active { background: var(--accent); color: var(--on-accent); }
 
 TyProgressBar {
   background: var(--surface-sunk);
@@ -180,16 +189,23 @@ TyProgressFill {
   border-radius: var(--radius);
 }
 
-TyGauge {
+TyGauge, TyMeter, TyLevelMeter, TyDial, TyGearDial, TyAnalogClock, TyCircularProgress,
+TyActivityIndicator, TyActivityBar, TyGearActivityIndicator, TySparkline, TyRating,
+TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth, TyColorArea {
   background: var(--surface-sunk);
   color: var(--on-surface);
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
 }
-TyGauge:disabled { opacity: var(--disabled-opacity); }
+TyGauge:disabled, TyMeter:disabled, TyLevelMeter:disabled, TyDial:disabled, TyGearDial:disabled,
+TyAnalogClock:disabled, TyCircularProgress:disabled, TyActivityIndicator:disabled,
+TyActivityBar:disabled, TyGearActivityIndicator:disabled, TySparkline:disabled,
+TyRating:disabled, TyLColorPicker:disabled, TyHSColorPicker:disabled { opacity: var(--disabled-opacity); }
 
-TyGaugeFill {
+TyGaugeFill, TyMeterNeedle, TyLevelMeterFill, TyLevelMeterPeak, TyDialPointer,
+TyGearDialPointer, TyAnalogClockSecondHand, TyCircularProgressFill, TyActivityIndicatorFill,
+TyActivityBarFill, TyGearActivityIndicatorFill, TySparklineFill, TySparklineDot, TyRatingStar {
   background: var(--accent);
   border-radius: var(--radius);
 }
@@ -248,7 +264,7 @@ TyTrackThumb {
 TyTrackThumb:hover  { background: var(--accent-hover); }
 TyTrackThumb:active { background: var(--accent-active); }
 
-TyGroupBox {
+TyGroupBox, TyToolGroupPanel {
   padding: 4px 12px;
   background: var(--transparent-fill);
   color: var(--on-surface);
@@ -356,7 +372,7 @@ TyStatusBar {
   font-weight: var(--font-weight-normal);
 }
 
-TyToolBar {
+TyToolBar, TyToolSeparator {
   background: var(--surface-chrome);
   border-color: var(--border);
   border-width: var(--input-border-width);
@@ -381,19 +397,19 @@ TyDateTimeButton:hover { background: var(--surface-hover); color: var(--accent);
 
 /* ── TreeView ──────────────────────────────────────────────────────────── */
 
-TyTreeView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 2px; font-size: var(--font-size-base); }
-TyTreeNode { background: none; color: var(--on-surface); }
-TyTreeNode:hover { background: var(--surface-hover); }
-TyTreeNode:selected { background: var(--accent); color: var(--on-accent); }
-TyTreeNode:disabled { color: var(--muted); }
-TyTreeHeader { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
-TyTreeHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }
-TyTreeHeaderSection:hover { background: var(--surface-hover); }
-TyTreeHeaderSection:selected { background: var(--surface-active); }
-TyTreeCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }
-TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-TyTreeCheckBox:disabled { color: var(--muted); }
+TyTreeView, TyListView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 2px; font-size: var(--font-size-base); }
+TyTreeNode, TyListViewItem { background: none; color: var(--on-surface); }
+TyTreeNode:hover, TyListViewItem:hover { background: var(--surface-hover); }
+TyTreeNode:selected, TyListViewItem:selected { background: var(--accent); color: var(--on-accent); }
+TyTreeNode:disabled, TyListViewItem:disabled { color: var(--muted); }
+TyTreeHeader, TyListViewHeader, TyListViewGroupHeader { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
+TyTreeHeaderSection, TyListViewHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }
+TyTreeHeaderSection:hover, TyListViewHeaderSection:hover { background: var(--surface-hover); }
+TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var(--surface-active); }
+TyTreeCheckBox, TyListViewCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }
+TyTreeCheckBox:active, TyListViewCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+TyTreeCheckBox:selected, TyListViewCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+TyTreeCheckBox:disabled, TyListViewCheckBox:disabled { color: var(--muted); }
 
 /* ── Card + Tag (Ant Design-gap batch 1) ───────────────────────────────── */
 

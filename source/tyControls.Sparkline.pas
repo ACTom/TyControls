@@ -20,9 +20,13 @@ type
     series. Feed it a sample array via SetValues; it maps each value to a point in
     the padded client rect (X evenly spread, Y via TySparklineY) and draws either an
     accent polyline (ssLine) or accent bars from the baseline (ssBar), with an
-    optional filled dot at the last point. Reuses the gauge theming (typeKey
-    'TyGauge' for the frame/baseline/text, 'TyGaugeFill' for the accent line/bars/dot)
-    so no extra .tycss rules. Data-driven — no animation. }
+    optional filled dot at the last point. Themed as itself — 'TySparkline'
+    (frame/baseline/text), 'TySparklineFill' (line or bars) and 'TySparklineDot' (the
+    last-value marker). This is a micro-CHART, not an instrument reading one value: its
+    natural family is the chart/table vocabulary (a sparkline in a grid cell must match
+    grid text, not a dial), series colour is the most commonly restyled thing in any
+    chart, and the last dot is the conventional CONTRAST marker — it had the line's own
+    colour, so it could not contrast with anything. Data-driven — no animation. }
   TTySparkline = class(TTyGraphicControl)
   private
     FValues: array of Double;
@@ -39,9 +43,9 @@ type
     procedure ResolveRange(out AMin, AMax: Double);   // effective [min,max] over the data / props
     procedure DrawLine(P: TTyPainter; const R: TRect; AMin, AMax: Double; const AFillS: TTyStyleSet);
     procedure DrawBars(P: TTyPainter; const R: TRect; AMin, AMax: Double; const AFillS: TTyStyleSet);
-    procedure DrawLastDot(P: TTyPainter; const R: TRect; AMin, AMax: Double; const AFillS: TTyStyleSet);
+    procedure DrawLastDot(P: TTyPainter; const R: TRect; AMin, AMax: Double; const ADotS: TTyStyleSet);
   protected
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TySparkline' (+ 'Fill' / 'Dot' sub-parts)
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -88,7 +92,9 @@ end;
 
 function TTySparkline.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: a data-series surface belongs with the chart/grid
+    vocabulary, so a skin can recolour the series without touching clock hands or spinners. }
+  Result := 'TySparkline';
 end;
 
 function TTySparkline.GetCount: Integer;
@@ -207,7 +213,7 @@ begin
 end;
 
 procedure TTySparkline.DrawLastDot(P: TTyPainter; const R: TRect; AMin, AMax: Double;
-  const AFillS: TTyStyleSet);
+  const ADotS: TTyStyleSet);
 var
   ctx: TBGRACanvas2D;
   n: Integer;
@@ -219,7 +225,7 @@ begin
   y := TySparklineY(FValues[n - 1], AMin, AMax, R.Top, R.Bottom - R.Top);
   rad := Math.Max(2, P.Scale(3));
   ctx := P.Bitmap.Canvas2D;
-  ctx.fillStyle(TyColorToBGRA(AFillS.Background.Color));
+  ctx.fillStyle(TyColorToBGRA(ADotS.Background.Color));
   ctx.beginPath;
   ctx.arc(x, y, rad, 0, 2 * Pi, False);
   ctx.fill;
@@ -228,7 +234,7 @@ end;
 procedure TTySparkline.Paint;
 var
   P: TTyPainter;
-  frameS, fillS: TTyStyleSet;
+  frameS, fillS, dotS: TTyStyleSet;
   R, band: TRect;
   pad, baseY: Integer;
   vmin, vmax, by: Double;
@@ -238,8 +244,10 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    frameS := CurrentStyle;                                              // TyGauge frame/baseline/text
-    fillS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);  // accent line/bars/dot
+    frameS := CurrentStyle;                                              // TySparkline frame/baseline/text
+    { Sub-part keys derived from the box key so the three can never drift apart. }
+    fillS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Fill', StyleClass, []);  // line/bars
+    dotS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Dot', StyleClass, []);    // last marker
 
     DrawFrame(P, R, frameS);   // themed background + border
 
@@ -270,7 +278,7 @@ begin
         DrawLine(P, band, vmin, vmax, fillS);
       end;
 
-      if FShowLast then DrawLastDot(P, band, vmin, vmax, fillS);
+      if FShowLast then DrawLastDot(P, band, vmin, vmax, dotS);
     end;
     P.EndPaint;
   finally

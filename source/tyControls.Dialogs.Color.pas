@@ -128,12 +128,22 @@ begin sv := TyHSVAreaToSV(Point(X, Y), ClientRect); FSat := sv.X; FVal := sv.Y; 
 // TODO(perf): the SV gradient only depends on FHue — cache the per-hue bitmap and redraw
 // just the ring on S/V change if a larger/resizable square is ever exposed. Fine at the
 // fixed 180px size for now.
+{ The chromatic field itself is DATA — every pixel is the colour it stands for, so it is
+  computed, never themed. The two things drawn ON TOP of it are chrome and must come from
+  the theme: the marker ring and the field's border. They used to be a hardcoded white
+  literal, which broke the library's own rule that no visual value lives in control code,
+  and left 'TyColorArea' as a key a skin could set with no effect whatsoever. The two
+  REGISTERED pickers (TTyHSColorPicker / TTyLColorPicker) already do this correctly with
+  the same two properties, so this reads the same way they do. }
 procedure TTyHSVSquare.Paint;
-var P: TTyPainter; bmp: TBGRABitmap; xx, yy, w, h, ix, iy: Integer; s, v: Single;
+var
+  P: TTyPainter; bmp: TBGRABitmap; xx, yy, w, h, ix, iy, mw: Integer; s, v: Single;
+  bodyS: TTyStyleSet;
 begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+    bodyS := CurrentStyle;
     bmp := P.Bitmap; w := bmp.Width; h := bmp.Height;
     if (w > 0) and (h > 0) then
     begin
@@ -143,8 +153,12 @@ begin
           s := xx / Max(1, w - 1); v := 1 - yy / Max(1, h - 1);
           bmp.SetPixel(xx, yy, TyColorToBGRA(TyHSVToRGB(FHue, s, v)));
         end;
+      { Field border, when the theme asks for one. }
+      if (tpBorderColor in bodyS.Present) and (bodyS.BorderWidth > 0) then
+        P.StrokeBorder(Rect(0, 0, w, h), 0, bodyS.BorderWidth, bodyS.BorderColor);
       ix := Round(FSat * Max(1, w - 1)); iy := Round((1 - FVal) * Max(1, h - 1));
-      P.StrokeBorder(Rect(ix - 5, iy - 5, ix + 6, iy + 6), 6, 2, TyRGB(255, 255, 255));
+      mw := Max(1, P.Scale(2));
+      P.StrokeBorder(Rect(ix - 5, iy - 5, ix + 6, iy + 6), 6, mw, bodyS.TextColor);
     end;
     P.EndPaint;
   finally P.Free; end;
@@ -173,11 +187,14 @@ procedure TTyHueBar.SetHue(AValue: Single); begin if FHue <> AValue then begin F
 procedure TTyHueBar.ApplyY(Y: Integer); begin SetHue(TyHueBarToH(Y, ClientRect)); end;
 
 procedure TTyHueBar.Paint;
-var P: TTyPainter; bmp: TBGRABitmap; xx, yy, w, h, iy: Integer; px: TBGRAPixel;
+var
+  P: TTyPainter; bmp: TBGRABitmap; xx, yy, w, h, iy: Integer; px: TBGRAPixel;
+  bodyS: TTyStyleSet;
 begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
+    bodyS := CurrentStyle;
     bmp := P.Bitmap; w := bmp.Width; h := bmp.Height;
     if (w > 0) and (h > 0) then
     begin
@@ -187,8 +204,12 @@ begin
         for xx := 0 to w - 1 do
           bmp.SetPixel(xx, yy, px);
       end;
+      { Same reasoning as TTyHSVSquare.Paint: the hue ramp is data, the cursor and the
+        border are chrome and come from the theme. }
+      if (tpBorderColor in bodyS.Present) and (bodyS.BorderWidth > 0) then
+        P.StrokeBorder(Rect(0, 0, w, h), 0, bodyS.BorderWidth, bodyS.BorderColor);
       iy := Round(FHue / 360 * Max(1, h - 1));
-      P.StrokeBorder(Rect(0, iy - 1, w, iy + 2), 0, 2, TyRGB(255, 255, 255));
+      P.StrokeBorder(Rect(0, iy - 1, w, iy + 2), 0, Max(1, P.Scale(2)), bodyS.TextColor);
     end;
     P.EndPaint;
   finally P.Free; end;

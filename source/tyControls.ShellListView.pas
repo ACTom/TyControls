@@ -10,8 +10,9 @@ unit tyControls.ShellListView;
   FEntries. It overrides only the five data accessors, CommitEdit (the F2-rename
   seam) and DoCompare (raw-value sort), plus the directory/mask/hidden plumbing.
   Paint, scroll, hit-test, marquee, multi-select, type-ahead, header-sort, the F2
-  editor, the columns and grouping are all inherited untouched. It borrows the tree
-  theme tokens (GetStyleTypeKey = 'TyTreeView', inherited); zero new theme tokens.
+  editor, the columns and grouping are all inherited untouched. Theming is inherited
+  too (GetStyleTypeKey = 'TyListView' and the TyListView* parts): an adapter that
+  draws nothing of its own must not claim a key of its own.
 
   THE SORTING TRAP (spec + plan both flag it): TTyListView.FSortKind is a single
   scalar shared across columns that parses the DISPLAY string, so a Size column

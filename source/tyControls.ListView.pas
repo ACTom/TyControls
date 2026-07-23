@@ -23,8 +23,8 @@ unit tyControls.ListView;
 
   All geometry comes from tyControls.ListView.Layout: TyListItemRect is the single
   source of a cell rect and TyListItemAt is its verified inverse — this control
-  never computes a cell rect by hand. Theme tokens are borrowed from the tree view
-  (GetStyleTypeKey = 'TyTreeView'); zero new tokens are introduced. }
+  never computes a cell rect by hand. Theming: the control owns its own key family
+  (GetStyleTypeKey = 'TyListView'); see that method for the part list. }
 interface
 uses
   Classes, SysUtils, Types, Math, DateUtils, Controls, Graphics, LCLType,
@@ -433,7 +433,7 @@ type
     procedure SetController(AValue: TTyStyleController); override;
 
     { The per-item paint seam TreeView never had. ACell is client coords; AStyle the
-      resolved 'TyTreeNode' style for AStates. }
+      resolved 'TyListViewItem' style for AStates. }
     procedure RenderItem(P: TTyPainter; AIndex: Integer; const ACell: TRect;
       const AStyle: TTyStyleSet; AStates: TTyStateSet); virtual;
 
@@ -513,15 +513,15 @@ type
     property LargeImages: TTyVirtualImageList read FLargeImages write SetLargeImages;
     property SmallImages: TTyVirtualImageList read FSmallImages write SetSmallImages;
     { Row-first checkboxes. A click on the box, or Space on the focused row, toggles the
-      check without touching the selection. Zero new theme tokens: the box resolves the
-      existing 'TyTreeCheckBox'. }
+      check without touching the selection. The box resolves this control's own
+      'TyListViewCheckBox', so a file list's boxes can differ from a tree's. }
     property Checkboxes: Boolean read FCheckboxes write SetCheckboxes default False;
     { Inline rename is opt-in, like TTyTreeView's toEditable and UNLIKE LCL
       TListView.ReadOnly=False: a file panel must not enter rename on a stray F2. }
     property ReadOnly: Boolean read FReadOnly write FReadOnly default True;
     { Grouped view. When on (and ViewStyle <> lvsList, which cannot host group bands and so
-      silently ignores it), items are partitioned into collapsible bands. Zero new theme
-      tokens: the band resolves the existing 'TyTreeHeader'. }
+      silently ignores it), items are partitioned into collapsible bands. The band resolves
+      'TyListViewGroupHeader' -- its own key, NOT the report column-header band's. }
     property GroupView: Boolean read FGroupView write SetGroupView default False;
     property Groups: TTyListGroups read FGroups write SetGroups;
 
@@ -566,10 +566,11 @@ const
   TyLvTileLabelW  = 150;
   TyLvTextMargin = 4;   { text inset inside a report cell / header cell }
   { Group-header band height in logical px (DPI-scaled at paint time). There is no theme token
-    for a band height (zero new tokens), so this is a layout constant like TyLvRowHeight; the
-    band's colours/font still come from the 'TyTreeHeader' style. }
+    for a band height, so this is a layout constant like TyLvRowHeight; the band's
+    colours/font come from the 'TyListViewGroupHeader' style. }
   TyLvGroupHeaderH = 22;
-  { Rubber-band translucency. The colour comes from the theme; see RenderMarquee. }
+  { Rubber-band translucency. The colour comes from the theme ('TyListViewMarquee'); see
+    RenderMarquee. }
   TyLvMarqueeFillAlpha = 60;
   TyLvMarqueeEdgeAlpha = 180;
 
@@ -879,8 +880,21 @@ end;
 
 function TTyListView.GetStyleTypeKey: string;
 begin
-  { Borrow the tree tokens — zero new theme tokens. }
-  Result := 'TyTreeView';
+  { Its own key, not the tree's. This control is not a tree: it draws icon / tile / small-icon
+    flow cells, a horizontally scrolling report column band, ruled grid lines, collapsible
+    group bands and a rubber band -- parts a tree has no concept of. While it rendered from
+    'TyTreeView' a skin could not make an Explorer-style file list read differently from an
+    outline tree, and could not even tell the report's COLUMN header apart from a GROUP band,
+    because both resolved the one literal 'TyTreeHeader'. Its parts are now:
+      TyListView               the frame (this key)
+      TyListViewItem           a row / flow cell, per state
+      TyListViewHeader         the report column-header band
+      TyListViewHeaderSection  one column-header cell
+      TyListViewGroupHeader    the collapsible group band (was welded to the header band)
+      TyListViewCheckBox       the row checkbox
+      TyListViewLine           the grid lines   (previously had no token at all)
+      TyListViewMarquee        the rubber band  (previously had no token at all) }
+  Result := 'TyListView';
 end;
 
 procedure TTyListView.SetController(AValue: TTyStyleController);
@@ -2398,8 +2412,9 @@ begin
     Result := ScaleI(ActiveController.Metric('--listview-check-size', TyLvCheckPx)) + ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad));
 end;
 
-{ Draw the box resolving the existing 'TyTreeCheckBox' token ([tysActive] when checked, ''
-  otherwise) — zero new tokens, no literal colours. Mirrors the checkbox path in TTyTreeView. }
+{ Draw the box resolving this control's own 'TyListViewCheckBox' token ([tysActive] when
+  checked, '' otherwise) — no literal colours. Mirrors the checkbox path in TTyTreeView, but
+  a skin can now size/tint a file list's boxes without touching the tree's. }
 procedure TTyListView.RenderCheckBox(P: TTyPainter; const ABox: TRect; AChecked: Boolean);
 var
   cb, S: TTyStyleSet;
@@ -2407,9 +2422,9 @@ begin
   if (ABox.Right <= ABox.Left) or (ABox.Bottom <= ABox.Top) then Exit;
   S := CurrentStyle;
   if AChecked then
-    cb := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
+    cb := ActiveController.Model.ResolveStyle('TyListViewCheckBox', '', [tysActive])
   else
-    cb := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', []);
+    cb := ActiveController.Model.ResolveStyle('TyListViewCheckBox', '', []);
   if tpBackground in cb.Present then
     P.FillBackground(ABox, cb.Background, cb.BorderRadius)
   else
@@ -2562,7 +2577,7 @@ end;
 procedure TTyListView.RenderItem(P: TTyPainter; AIndex: Integer; const ACell: TRect;
   const AStyle: TTyStyleSet; AStates: TTyStateSet);
 begin
-  { Highlight only selected / hovered cells (a normal TyTreeNode has no row fill). }
+  { Highlight only selected / hovered cells (a resting TyListViewItem has no row fill). }
   if ((tysSelected in AStates) or (tysHover in AStates)) and (tpBackground in AStyle.Present) then
     P.FillBackground(ACell, AStyle.Background, 0);
   if FViewStyle = lvsReport then
@@ -2582,8 +2597,11 @@ var
   useSec: Boolean;
   border: TBGRAPixel;
 begin
-  hb := ActiveController.Model.ResolveStyle('TyTreeHeader', '', []);
-  hs := ActiveController.Model.ResolveStyle('TyTreeHeaderSection', '', []);
+  { The REPORT column-header band and its cells. Distinct from the group band's key
+    ('TyListViewGroupHeader'): the two used to share one literal, so a skin that wanted a flat
+    column strip also got a flat group strip whether it wanted one or not. }
+  hb := ActiveController.Model.ResolveStyle('TyListViewHeader', '', []);
+  hs := ActiveController.Model.ResolveStyle('TyListViewHeaderSection', '', []);
   border := TyColorToBGRA(AFrame.BorderColor);
 
   { band background }
@@ -2655,9 +2673,17 @@ var
   first, last, pos, posIdx, x: Integer;
   col: TTyColumn;
   cell: TRect;
+  lineS: TTyStyleSet;
   border: TBGRAPixel;
 begin
-  border := TyColorToBGRA(AFrame.BorderColor);
+  { The rules have a token of their own now, so a report can be ruled in a colour that is NOT
+    the frame's border -- the grid family already proves the shape with 'TyGridLine'
+    (TTyCustomGrid.GridLineColor). Theme silent about it => the frame border, i.e. unchanged. }
+  lineS := ActiveController.Model.ResolveStyle('TyListViewLine', '', []);
+  if tpBackground in lineS.Present then
+    border := TyColorToBGRA(lineS.Background.Color)
+  else
+    border := TyColorToBGRA(AFrame.BorderColor);
   { horizontal lines under each visible row }
   if TyListVisibleRange(GetItemCount, M, FOffsetX, FOffsetY, first, last) then
     for pos := first to last do
@@ -2680,7 +2706,7 @@ end;
 procedure TTyListView.RenderMarquee(P: TTyPainter; const AFrame: TTyStyleSet);
 var
   box: TRect;
-  sel: TTyStyleSet;
+  mq, sel: TTyStyleSet;
   acc: TTyColor;
   t: Integer;
 begin
@@ -2688,14 +2714,22 @@ begin
   box.Top    := FMarqueeStart.Y; box.Bottom := FMarqueeCur.Y;
   if box.Left > box.Right then begin t := box.Left; box.Left := box.Right; box.Right := t; end;
   if box.Top  > box.Bottom then begin t := box.Top; box.Top := box.Bottom; box.Bottom := t; end;
-  { accent from the theme (TyTreeNode:selected bg), never a hard-coded colour }
-  sel := ActiveController.Model.ResolveStyle('TyTreeNode', '', [tysSelected]);
-  if tpBackground in sel.Present then acc := sel.Background.Color
-  else acc := AFrame.BorderColor;
-  { The HUE is the theme's; only the translucency is fixed. A rubber band has no theme
-    token of its own and this batch adds none, so the two alphas are constants -- the same
-    deviation TTyOfficeListBox makes when it derives its header band from the text colour
-    at a fixed alpha. A theme change still recolours the band. }
+  { The band has a token of its own now ('TyListViewMarquee'), so a skin can give the rubber
+    band a hue that is not the selection's -- it could not before. Silent theme => the old
+    source, the selected row's fill, then the frame border: the fallback chain is what keeps
+    this a themability change and not a repaint. }
+  mq := ActiveController.Model.ResolveStyle('TyListViewMarquee', '', []);
+  if tpBackground in mq.Present then acc := mq.Background.Color
+  else
+  begin
+    sel := ActiveController.Model.ResolveStyle('TyListViewItem', '', [tysSelected]);
+    if tpBackground in sel.Present then acc := sel.Background.Color
+    else acc := AFrame.BorderColor;
+  end;
+  { The HUE is the theme's; only the translucency is fixed. The two alphas stay constants:
+    a rubber band is a transient overlay, not a surface, and the style set has no alpha
+    token -- the same deviation TTyOfficeListBox makes when it derives its header band from
+    the text colour at a fixed alpha. A theme change still recolours the band. }
   P.Bitmap.FillRect(box.Left, box.Top, box.Right, box.Bottom,
     BGRA(TyRedOf(acc), TyGreenOf(acc), TyBlueOf(acc), TyLvMarqueeFillAlpha),
     dmDrawWithTransparency);
@@ -2763,7 +2797,7 @@ begin
   Result := True;
 end;
 
-{ One group's header band: the 'TyTreeHeader' style (zero new tokens), the caption with a
+{ One group's header band: the 'TyListViewGroupHeader' style, the caption with a
   ' (count)' suffix, and a collapse chevron (right = collapsed, down = expanded). The band is
   full-width and does not scroll horizontally; TyListGroupHeaderRect already folds in AScrollY. }
 procedure TTyListView.RenderGroupHeader(P: TTyPainter; const M: TTyListMetrics; AGroup: Integer);
@@ -2778,7 +2812,9 @@ begin
   band := TyListGroupHeaderRect(FGroupMap, AGroup, M, GroupHeaderHeightPx, FOffsetY);
   if (band.Bottom <= band.Top) or (band.Right <= band.Left) then Exit;
   S := CurrentStyle;
-  hb := ActiveController.Model.ResolveStyle('TyTreeHeader', '', []);
+  { The GROUP band's own key. It used to resolve the same literal as the report's column
+    header, so the two could never be styled apart -- inside one control. }
+  hb := ActiveController.Model.ResolveStyle('TyListViewGroupHeader', '', []);
 
   if tpBackground in hb.Present then
     P.FillBackground(band, hb.Background, 0)
@@ -2833,7 +2869,7 @@ begin
       if item < 0 then Continue;
       cell := TyListGroupItemRect(FGroupMap, g, i, M, GroupHeaderHeightPx, FOffsetX, FOffsetY);
       states := StatesFor(item);
-      rowStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', states);
+      rowStyle := ActiveController.Model.ResolveStyle('TyListViewItem', '', states);
       RenderItem(P, item, cell, rowStyle, states);
     end;
   end;
@@ -2878,7 +2914,7 @@ begin
           if item < 0 then Continue;
           cell := TyListItemRect(pos, cnt, m, FOffsetX, FOffsetY);
           states := StatesFor(item);
-          rowStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', states);
+          rowStyle := ActiveController.Model.ResolveStyle('TyListViewItem', '', states);
           RenderItem(P, item, cell, rowStyle, states);
         end;
 
@@ -3197,8 +3233,9 @@ begin
   if not (coResizable in col.Options) then Exit;
 
   SyncArrays;
-  rowS := ActiveController.Model.ResolveStyle('TyTreeNode', '', []);
-  hdrS := ActiveController.Model.ResolveStyle('TyTreeHeaderSection', '', []);
+  { Measure with the SAME styles the paint uses, or the fitted width misses the drawn text. }
+  rowS := ActiveController.Model.ResolveStyle('TyListViewItem', '', []);
+  hdrS := ActiveController.Model.ResolveStyle('TyListViewHeaderSection', '', []);
 
   iconDev := 0;
   if (AColumn = FHeader.MainColumn) and (FSmallImages <> nil) then

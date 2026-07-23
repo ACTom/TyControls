@@ -13,9 +13,12 @@ type
     Click or drag anywhere to pick (Hue, Sat); a small crosshair circle marks the
     current point, and the resulting colour is exposed as SelectedColor.
 
-    A windowed graphic control (own HWND) painted the canonical TTyPainter way;
-    reuses the 'TyGauge' theming (body/border/marker text colour) so it needs no
-    extra .tycss rule. }
+    A windowed graphic control (own HWND) painted the canonical TTyPainter way,
+    themed under its own 'TyHSColorPicker' key. Its content is GENERATED colour, so a
+    gauge's background/fill tokens mean nothing here — it consumes only color (the
+    crosshair, which must stay legible over the whole hue ramp) and border-color.
+    The dialog's internal twins already own 'TyColorArea' (tyControls.Dialogs.Color);
+    this brings the public control in line with them. }
   TTyHSColorPicker = class(TTyCustomControl)
   private
     FHue: Single;         // 0..360
@@ -35,7 +38,7 @@ type
     procedure SquareMetrics(out ASqLeft, ASqTop, ASqWidth, ASqHeight: Integer);
     procedure UpdateFromXY(AX, AY: Integer);
   protected
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyHSColorPicker'
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -73,7 +76,9 @@ end;
 
 function TTyHSColorPicker.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: darkening gauge text must no longer darken the crosshair,
+    which needs the contrast treatment the gradient underneath demands. }
+  Result := 'TyHSColorPicker';
 end;
 
 function TTyHSColorPicker.GetSelectedColor: TTyColor;
@@ -207,7 +212,7 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    bodyS := CurrentStyle;                         // TyGauge body/border/text
+    bodyS := CurrentStyle;                         // TyHSColorPicker frame + crosshair colour
     // Windowed control: fill the full rect with the parent/form background first,
     // so the margin around the square shows the form (or image-theme photo).
     TyFillParentBg(Self, P, R, bodyS);

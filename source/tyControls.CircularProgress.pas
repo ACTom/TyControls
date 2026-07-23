@@ -9,9 +9,11 @@ uses
 
 type
   { A determinate RING progress indicator — the ring sibling of TTyProgressBar.
-    Progress-familiar API (Position/Min/Max: Integer). Reuses the gauge theming
-    (typeKey 'TyGauge' for the track/text, 'TyGaugeFill' for the value ring) so it
-    tracks the same accent with no extra .tycss rules, and eases like TTyProgressBar. }
+    Progress-familiar API (Position/Min/Max: Integer). Themed as itself —
+    'TyCircularProgress' (track/text) and 'TyCircularProgressFill' (value ring) — for the
+    same reason TTyProgressBar owns TyProgressBar/TyProgressFill rather than borrowing the
+    gauge's: skins already pill or recolour the linear progress pair independently of
+    gauges, and the ring must be able to follow them. Eases like TTyProgressBar. }
   TTyCircularProgress = class(TTyGraphicControl)
   private
     FMin, FMax, FPosition: Integer;
@@ -32,7 +34,7 @@ type
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
   protected
-    function GetStyleTypeKey: string; override;   // reuse 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyCircularProgress' (+ 'Fill' sub-part)
     procedure Paint; override;
     function DisplayFrac: Single;
     function AdvanceAnimation(AMs: Integer): Boolean;
@@ -84,7 +86,10 @@ end;
 
 function TTyCircularProgress.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';   // reuse the gauge's track/text style
+  { Its own key, not the gauge's: this is "progress", and the library already ruled progress
+    and gauge separately skinnable for the linear pair. Being able to pill TyProgressFill but
+    not the ring was an inconsistency, not a design decision. }
+  Result := 'TyCircularProgress';
 end;
 
 procedure TTyCircularProgress.EnsureTimer;
@@ -197,8 +202,9 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    trackS := CurrentStyle;                                              // TyGauge track/text
-    fillS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);
+    trackS := CurrentStyle;                                              // TyCircularProgress track/text
+    { Sub-part key derived from the box key so the two can never drift apart. }
+    fillS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Fill', StyleClass, []);
     frac := DisplayFrac;
 
     th := P.Scale(FThickness);

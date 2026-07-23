@@ -94,7 +94,13 @@ end;
 { TTyToolSeparator }
 constructor TTyToolSeparator.Create(AOwner: TComponent);
 begin inherited Create(AOwner); Width := 8; Height := TyDensityHeight(ActiveController, 24); end;
-function TTyToolSeparator.GetStyleTypeKey: string; begin Result := 'TyToolBar'; end;  // borrows the bar's border color
+// Its own key, NOT the bar's. The separator draws ink the bar does not — an inset
+// vertical rule — and borrowing 'TyToolBar' made that rule the SAME colour as the bar's
+// own bottom hairline BY CONSTRUCTION, so a theme could not dim, thicken or suppress the
+// divider while keeping the bar's edge (the classic "lighter inset divider on a bordered
+// bar"). It needs background too: that fill is what keeps the separator seamless with
+// the bar it sits on.
+function TTyToolSeparator.GetStyleTypeKey: string; begin Result := 'TyToolSeparator'; end;
 procedure TTyToolSeparator.Paint; begin RenderTo(Canvas, ClientRect, Font.PixelsPerInch); end;
 procedure TTyToolSeparator.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var P: TTyPainter; S: TTyStyleSet; W, H: Integer; line: TTyFill;

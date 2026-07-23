@@ -105,9 +105,12 @@ function TTyLinkLabel.LinkColor: TTyColor;
 var
   accentS: TTyStyleSet;
 begin
-  // Reuse the gauge fill (accent) colour so no new .tycss rule is introduced.
-  accentS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);
-  Result := accentS.Background.Color;
+  { Hyperlink ink has its own key. It used to borrow 'TyGaugeFill' to avoid adding a rule —
+    which meant recolouring a gauge's fill silently recoloured every hyperlink in the app,
+    and the link colour itself could not be themed at all. Same resolved value (both are
+    var(--accent)), read off `color` because this is text ink, not a fill. }
+  accentS := ActiveController.Model.ResolveStyle('TyLinkLabelLink', StyleClass, []);
+  Result := accentS.TextColor;
   if FHover then
     Result := TyLighten(Result, 15);   // brighten slightly on hover
 end;

@@ -20,7 +20,7 @@ type
 
   TGlyphButtonTest = class(TTestCase)
   published
-    procedure TestTypeKeyReused;
+    procedure TestTypeKeys;
     procedure TestDefaultSizes;
     procedure TestGlyphDefaults;
     procedure TestPropertiesRoundTrip;
@@ -56,20 +56,22 @@ end;
 
 { ---- TGlyphButtonTest ---- }
 
-procedure TGlyphButtonTest.TestTypeKeyReused;
+procedure TGlyphButtonTest.TestTypeKeys;
 var
   B: TTyGlyphButton;
   C: TTyGlyphContainerButton;
   S: TTySpeedButton;
 begin
-  // All three REUSE the TyButton token — no new .tycss selector.
+  // The plain glyph button IS a push button and stays on TyButton. The ribbon tile
+  // and the toolbar toggle need a different FRAME from a push button, so each owns
+  // a key a skin can target without touching every button in the app.
   B := TTyGlyphButton.Create(nil);
   C := TTyGlyphContainerButton.Create(nil);
   S := TTySpeedButton.Create(nil);
   try
     AssertEquals('glyph button reuses TyButton', 'TyButton', (B as ITyStyleable).GetStyleTypeKey);
-    AssertEquals('container button reuses TyButton', 'TyButton', (C as ITyStyleable).GetStyleTypeKey);
-    AssertEquals('speed button reuses TyButton', 'TyButton', (S as ITyStyleable).GetStyleTypeKey);
+    AssertEquals('container button owns its key', 'TyGlyphContainerButton', (C as ITyStyleable).GetStyleTypeKey);
+    AssertEquals('speed button owns its key', 'TySpeedButton', (S as ITyStyleable).GetStyleTypeKey);
   finally
     B.Free; C.Free; S.Free;
   end;

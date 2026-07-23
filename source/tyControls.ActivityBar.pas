@@ -15,10 +15,13 @@ function TyActivityBarSpan(APhase: Double; ALeft, ARight, ASegW: Integer): TPoin
 type
   { An INDETERMINATE linear progress bar — a faint full-width track under two accent
     segments that march left->right (half a cycle apart, so one is always visible),
-    for "busy, unknown duration". No value; `Active` starts/stops the march. Reuses the
-    gauge theming (typeKey 'TyGauge' track + 'TyGaugeFill' accent), so no extra .tycss
-    rules. Marches only when Active AND painted (has a parent handle); headless it is
-    static, keeping render/golden tests pixel-stable. }
+    for "busy, unknown duration". No value; `Active` starts/stops the march. Themed as
+    itself — 'TyActivityBar' (track) and 'TyActivityBarFill' (marching segments). This is
+    the indeterminate sibling of TTyProgressBar, not of TTyGauge: it fills the same slot in
+    a dialog and must be able to follow whatever a skin does to TyProgressBar/TyProgressFill
+    (several builtins pill them), which wearing the gauge's key made impossible. Marches
+    only when Active AND painted (has a parent handle); headless it is static, keeping
+    render/golden tests pixel-stable. }
   TTyActivityBar = class(TTyGraphicControl)
   private
     FActive: Boolean;
@@ -29,7 +32,7 @@ type
     procedure HandleTimer(Sender: TObject);
     procedure UpdateRunning;
   protected
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyActivityBar' (+ 'Fill' sub-part)
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -95,7 +98,9 @@ end;
 
 function TTyActivityBar.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: a skin that pills or recolours the determinate progress bar
+    can now match the busy bar sitting next to it, instead of leaving it looking like a gauge. }
+  Result := 'TyActivityBar';
 end;
 
 procedure TTyActivityBar.EnsureTimer;
@@ -157,8 +162,9 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    trackS := CurrentStyle;                                             // TyGauge: track/border
-    fillS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);  // accent segments
+    trackS := CurrentStyle;                                             // TyActivityBar: track/border
+    { Sub-part key derived from the box key so the two can never drift apart. }
+    fillS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Fill', StyleClass, []);  // segments
     DrawFrame(P, R, trackS);   // track background + border (rounded)
     bw := P.Scale(trackS.BorderWidth);
     trackR := Rect(R.Left + bw, R.Top + bw, R.Right - bw, R.Bottom - bw);

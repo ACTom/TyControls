@@ -19,10 +19,13 @@ function TyDialValueFromAngle(const APt, ACenter: TPoint;
 type
   { An INTERACTIVE rotary knob: a round body with a pointer/notch from the centre
     to the rim at the value angle, plus an optional numeric readout. Drag around
-    the centre, or use the wheel / arrow keys, to change Value. Reuses the gauge
-    theming (typeKey 'TyGauge' for body/border/text, 'TyGaugeFill' for the pointer)
-    so no extra .tycss rules. Direct manipulation SNAPS (no ease) so the notch
-    tracks the pointer and headless render tests stay pixel-stable. }
+    the centre, or use the wheel / arrow keys, to change Value. Themed as itself —
+    'TyDial' (knob body/border/text) and 'TyDialPointer' (the notch). A knob is a
+    physical-object metaphor (plastic/metal body, contrasting cap); the gauge's
+    background token is a RECESSED TRACK colour, semantically wrong for a raised
+    body, and a skin could not give the cap its own colour. Direct manipulation
+    SNAPS (no ease) so the notch tracks the pointer and headless render tests stay
+    pixel-stable. }
   TTyDial = class(TTyCustomControl)
   private
     FMin, FMax, FValue: Double;
@@ -42,7 +45,7 @@ type
     procedure DragToPoint(X, Y: Integer);
   protected
     FDragging: Boolean;
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyDial' (+ 'Pointer' sub-part)
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -117,7 +120,9 @@ end;
 
 function TTyDial.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: a raised knob body and a sunk gauge track want opposite
+    surface treatments, so a skin can now style the knob without touching every gauge. }
+  Result := 'TyDial';
 end;
 
 procedure TTyDial.ApplyValue(AValue: Double);
@@ -245,8 +250,9 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    bodyS := CurrentStyle;                                              // TyGauge body/border/text
-    pointerS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);  // accent notch
+    bodyS := CurrentStyle;                                              // TyDial body/border/text
+    { Sub-part key derived from the box key so the two can never drift apart. }
+    pointerS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Pointer', StyleClass, []);
 
     // Windowed control (own HWND): fill the full rect with the parent/form background first, so
     // the square corners around the round knob show the form (or the image-theme photo), not the
@@ -267,7 +273,10 @@ begin
       ctx.arc(cx, cy, radius, 0, 2 * Pi, False);
       ctx.fillStyle(TyColorToBGRA(bodyS.Background.Color));
       ctx.fill;
-      // Subtle body border (theme border width/colour; falls back to text colour).
+      // Subtle body border: theme border WIDTH but the text colour, so the rim is chained to
+      // the label colour and TyDial's own border-color is unreachable. Left as-is here because
+      // this pass is a pure key split and must not move a pixel; switching the stroke to
+      // bodyS.BorderColor is a separate, deliberate visual change.
       bw := Math.Max(1, P.Scale(Math.Max(1, bodyS.BorderWidth)));
       ctx.lineWidth := bw;
       ctx.strokeStyle(TyColorToBGRA(bodyS.TextColor));

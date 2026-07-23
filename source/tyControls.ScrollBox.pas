@@ -9,7 +9,8 @@ uses
 type
   { TTyScrollBox — a scrolling viewport for oversized child content.
 
-    Subclasses TTyPanel (reuses the 'TyPanel' typeKey; NO new .tycss). It hosts
+    Subclasses TTyPanel for the frame + container plumbing, but carries its OWN
+    'TyScrollBox' typeKey (see GetStyleTypeKey). It hosts
     arbitrary child controls whose bounding box may exceed the viewport; a vertical
     and a horizontal TTyScrollBar (both csNoDesignVisible, owned by Self) appear ONLY
     when the content overflows on that axis.
@@ -50,6 +51,14 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { Its own key, NOT the base panel's. A scroll box is a content WELL, not a
+      decorative panel: every classic look recesses it (Win32 TScrollBox carries
+      WS_EX_CLIENTEDGE where TPanel is flat) and modern skins give a scroll region a
+      background distinct from the surrounding surface. Pinned to 'TyPanel' a theme
+      could not recess, tint or de-border the well without dragging every panel in the
+      app with it. The two embedded bars are real TTyScrollBar children, so they keep
+      resolving TyScrollBar/TyScrollThumb — no sub-part key is needed here. }
+    function GetStyleTypeKey: string; override;
     { Recompute the logical content extent from the current children + offset, then
       show/hide/position the two scrollbars and clamp the offset. Call on Resize and
       whenever the child set changes (add/remove/move). }
@@ -135,6 +144,11 @@ destructor TTyScrollBox.Destroy;
 begin
   // FVScrollBar / FHScrollBar are owned by Self (Create(Self)) -> freed by TComponent.
   inherited Destroy;
+end;
+
+function TTyScrollBox.GetStyleTypeKey: string;
+begin
+  Result := 'TyScrollBox';
 end;
 
 function TTyScrollBox.ScrollbarThick: Integer;

@@ -88,7 +88,12 @@ begin
   tr := AZone.Right - margin;
   midY := (AZone.Top + AZone.Bottom) div 2;
   if tr <= tl then Exit;
-  accentS := ActiveController.Model.ResolveStyle('TyGaugeFill', '', []);   // theme accent
+  { The thumb of an inline slider is a TRACK BAR thumb, not a gauge's lit fill. It read
+    'TyGaugeFill' only because that key happened to carry the accent — which chained this
+    control's thumb to every gauge in the app and made it unstyleable on its own. TyTrackThumb
+    already exists for exactly this part (TTyTrackBar resolves it), and carries the same
+    var(--accent), so this is the same pixel with the right owner. }
+  accentS := ActiveController.Model.ResolveStyle('TyTrackThumb', '', []);
   // Track (muted border colour), ~2 device px tall, 1-logical rounded.
   halfTrack := APainter.Scale(1);
   trackFill := Default(TTyFill);

@@ -44,7 +44,7 @@ type
 
   TScrollPanelControlTest = class(TTestCase)
   published
-    procedure TestTypeKeyInheritedTyPanel;
+    procedure TestTypeKeyInheritedTyScrollBox;
     procedure TestDefaults;
     procedure TestNegativeMarginClampsToZero;
     procedure TestNegativeSpeedClampsToZero;
@@ -213,7 +213,7 @@ end;
 
 { TScrollPanelAccess control tests }
 
-procedure TScrollPanelControlTest.TestTypeKeyInheritedTyPanel;
+procedure TScrollPanelControlTest.TestTypeKeyInheritedTyScrollBox;
 var
   F: TForm;
   Acc: TScrollPanelAccess;
@@ -222,8 +222,9 @@ begin
   try
     Acc := TScrollPanelAccess.Create(F);
     Acc.Parent := F;
-    // Reuses the TyPanel typeKey (GetStyleTypeKey not overridden past TTyScrollBox).
-    AssertEquals('TyPanel', Acc.StyleTypeKey);
+    // Inherits TTyScrollBox's key (GetStyleTypeKey not overridden past it): a scroll
+    // panel adds a gesture, not a surface, so it restyles WITH the scroll well.
+    AssertEquals('TyScrollBox', Acc.StyleTypeKey);
   finally
     F.Free;
   end;

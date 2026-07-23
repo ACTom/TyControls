@@ -34,6 +34,8 @@ $classes = @(
   'TTyShape','TTyStarShape','TTyArrow',
   # Phase 8 data views (pulled forward: Phase 7 depends on it)
   'TTyListView','TTyShellListView','TTyShellTreeView',
+  # Grids (same 'TyControls Data Views' palette group)
+  'TTyDrawGrid','TTyStringGrid',
   'TTyFilterComboBox','TTyShellComboBox',
   # Phase 7 file dialogs + preview
   'TTyOpenDialog','TTySaveDialog','TTyOpenPictureDialog','TTySavePictureDialog',
@@ -66,7 +68,9 @@ if ($missingIcon.Count -or $extraIcon.Count) {
   throw ("icon set out of sync with RegisterComponents." +
          " registered-but-no-icon: [$($missingIcon -join ', ')];" +
          " icon-but-not-registered: [$($extraIcon -join ', ')]." +
-         " Update `$classes here, genicons.lpr Glyphs[], and test.paletteicons.pas CClasses.")
+         " Update `$classes here and genicons.lpr Glyphs[]. (tests/test.paletteicons.pas needs" +
+         " no edit: it derives its population from the registrations at run time — which is what" +
+         " catches this when nobody remembers to run this script.)")
 }
 Write-Host "  OK: $($registered.Count) registered components all have icons"
 

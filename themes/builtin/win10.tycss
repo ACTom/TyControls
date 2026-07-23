@@ -114,31 +114,43 @@ TyLabel { color: var(--ink); }
 
 /* Default button: #E1E1E1 face, #ADADAD hairline border, black text, square.
    :hover — pale accent wash (#E5F1FB) with an accent border; :active — deeper wash. */
-TyButton          { render-style: flat; background: var(--button-face); color: var(--ink); border: 1px solid var(--button-border); border-radius: 0; padding: 6px; font-weight: normal; }
-TyButton:hover    { background: var(--accent-wash); color: var(--ink); border: 1px solid var(--accent); }
-TyButton:active   { background: var(--accent-wash-strong); color: var(--ink); border: 1px solid var(--accent); }
-TyButton:focus    { outline: 1 var(--accent); outline-offset: 1px; }
-TyButton:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid var(--disabled-border); }
+TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu          { render-style: flat; background: var(--button-face); color: var(--ink); border: 1px solid var(--button-border); border-radius: 0; padding: 6px; font-weight: normal; }
+TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover    { background: var(--accent-wash); color: var(--ink); border: 1px solid var(--accent); }
+TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active   { background: var(--accent-wash-strong); color: var(--ink); border: 1px solid var(--accent); }
+TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus    { outline: 1 var(--accent); outline-offset: 1px; }
+TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled,
+TyRibbonAppMenu:disabled { background: var(--surface); color: var(--ink-dim); border: 1px solid var(--disabled-border); }
 
 /* Primary button: solid accent fill, white text, accent border. Hover/press darken it. */
-TyButton.primary          { render-style: flat; background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); border-radius: 0; padding: 6px; font-weight: normal; }
-TyButton.primary:hover    { background: darken(var(--accent), 8%);  border: 1px solid darken(var(--accent), 8%);  color: on(var(--accent)); }
-TyButton.primary:active   { background: darken(var(--accent), 16%); border: 1px solid darken(var(--accent), 16%); color: on(var(--accent)); }
-TyButton.primary:focus    { outline: 1 var(--accent); outline-offset: 1px; }
-TyButton.primary:disabled { background: var(--primary-disabled-bg); color: var(--primary-disabled-ink); border: 1px solid var(--primary-disabled-bg); }
+TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary          { render-style: flat; background: var(--accent); color: on(var(--accent)); border: 1px solid var(--accent); border-radius: 0; padding: 6px; font-weight: normal; }
+TyButton.primary:hover, TySpeedButton.primary:hover, TyGlyphContainerButton.primary:hover,
+TyRibbonAppMenu.primary:hover    { background: darken(var(--accent), 8%);  border: 1px solid darken(var(--accent), 8%);  color: on(var(--accent)); }
+TyButton.primary:active, TySpeedButton.primary:active, TyGlyphContainerButton.primary:active,
+TyRibbonAppMenu.primary:active   { background: darken(var(--accent), 16%); border: 1px solid darken(var(--accent), 16%); color: on(var(--accent)); }
+TyButton.primary:focus, TySpeedButton.primary:focus, TyGlyphContainerButton.primary:focus,
+TyRibbonAppMenu.primary:focus    { outline: 1 var(--accent); outline-offset: 1px; }
+TyButton.primary:disabled, TySpeedButton.primary:disabled,
+TyGlyphContainerButton.primary:disabled, TyRibbonAppMenu.primary:disabled { background: var(--primary-disabled-bg); color: var(--primary-disabled-ink); border: 1px solid var(--primary-disabled-bg); }
 
 /* Danger button: mirrors primary in the Win10 red — solid fill, white text, red border. Hover/press darken it. */
-TyButton.danger          { render-style: flat; background: var(--danger); color: on(var(--danger)); border: 1px solid var(--danger); border-radius: 0; padding: 6px; font-weight: normal; }
-TyButton.danger:hover    { background: darken(var(--danger), 8%);  border: 1px solid darken(var(--danger), 8%);  color: on(var(--danger)); }
-TyButton.danger:active   { background: darken(var(--danger), 16%); border: 1px solid darken(var(--danger), 16%); color: on(var(--danger)); }
-TyButton.danger:focus    { outline: 1 var(--danger); outline-offset: 1px; }
-TyButton.danger:disabled { background: var(--primary-disabled-bg); color: var(--primary-disabled-ink); border: 1px solid var(--primary-disabled-bg); }
+TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger          { render-style: flat; background: var(--danger); color: on(var(--danger)); border: 1px solid var(--danger); border-radius: 0; padding: 6px; font-weight: normal; }
+TyButton.danger:hover, TySpeedButton.danger:hover, TyGlyphContainerButton.danger:hover,
+TyRibbonAppMenu.danger:hover    { background: darken(var(--danger), 8%);  border: 1px solid darken(var(--danger), 8%);  color: on(var(--danger)); }
+TyButton.danger:active, TySpeedButton.danger:active, TyGlyphContainerButton.danger:active,
+TyRibbonAppMenu.danger:active   { background: darken(var(--danger), 16%); border: 1px solid darken(var(--danger), 16%); color: on(var(--danger)); }
+TyButton.danger:focus, TySpeedButton.danger:focus, TyGlyphContainerButton.danger:focus,
+TyRibbonAppMenu.danger:focus    { outline: 1 var(--danger); outline-offset: 1px; }
+TyButton.danger:disabled, TySpeedButton.danger:disabled, TyGlyphContainerButton.danger:disabled,
+TyRibbonAppMenu.danger:disabled { background: var(--primary-disabled-bg); color: var(--primary-disabled-ink); border: 1px solid var(--primary-disabled-bg); }
 
 /* Ghost button: no chrome at rest — accent-tinted text; pale accent wash on interaction. */
-TyButton.ghost          { render-style: flat; background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 0; padding: 6px; font-weight: normal; }
-TyButton.ghost:hover    { background: var(--accent-wash); color: var(--accent); border: 1px solid transparent; }
-TyButton.ghost:active   { background: var(--accent-wash-strong); color: var(--accent); border: 1px solid transparent; }
-TyButton.ghost:disabled { background: transparent; color: var(--ink-dim); border: 1px solid transparent; }
+TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost          { render-style: flat; background: transparent; color: var(--accent); border: 1px solid transparent; border-radius: 0; padding: 6px; font-weight: normal; }
+TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover,
+TyRibbonAppMenu.ghost:hover    { background: var(--accent-wash); color: var(--accent); border: 1px solid transparent; }
+TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active,
+TyRibbonAppMenu.ghost:active   { background: var(--accent-wash-strong); color: var(--accent); border: 1px solid transparent; }
+TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled,
+TyRibbonAppMenu.ghost:disabled { background: transparent; color: var(--ink-dim); border: 1px solid transparent; }
 
 /* Fields: crisp white wells, #7A7A7A hairline border, square. Border darkens on hover,
    turns accent on focus — the Windows 10 text-box behaviour. */

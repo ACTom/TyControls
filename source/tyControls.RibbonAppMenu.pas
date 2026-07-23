@@ -7,9 +7,12 @@ unit tyControls.RibbonAppMenu;
 
   It SUBCLASSES TTyMenuButton (unit tyControls.DropButtons): the whole button is the
   drop trigger, it inherits the caption + trailing arrow drawing, and its Click fires
-  OnDropDown then pops the inherited DropDownMenu when a window handle exists. It reuses
-  the 'TyButton' style token (GetStyleTypeKey unchanged) — NO new .tycss is introduced;
-  the accent look comes entirely from StyleClass := 'primary'.
+  OnDropDown then pops the inherited DropDownMenu when a window handle exists. It carries
+  its OWN 'TyRibbonAppMenu' style token (see GetStyleTypeKey) — it is not a button but a
+  TAB in the ribbon's strip. StyleClass stays 'primary', so a theme declares the accent
+  under 'TyRibbonAppMenu.primary' (class rules are per-typeKey; there is no bare
+  '.primary'), and the File tab can take a brand colour or a ribbon-flush square edge
+  without repainting every primary button in the app.
 
   Composition without mutating anything the user owns:
     - The user sets Commands (a TTyPopupMenu — their File menu tree) and RecentItems (a
@@ -66,6 +69,11 @@ type
     procedure HandleRecentClick(Sender: TObject);
     procedure RecentItemsChanged(Sender: TObject);
   protected
+    { Its own key, NOT the plain button's. The File tab lives in the ribbon's tab strip,
+      not on a form: pinned to 'TyButton' its ENTIRE look was TyButton.primary, a class
+      shared with every accent/submit button in the app, so a theme could not give the
+      tab a brand colour or a ribbon-flush edge without dragging all of them along. }
+    function GetStyleTypeKey: string; override;
     { Rebuild FMenu from the current Commands + RecentItems WITHOUT popping anything (no
       GUI). Copies the top-level command items (Caption + forwarding OnClick), then — if
       RecentItems is non-empty — appends a separator + one item per recent entry. Exposed
@@ -114,7 +122,9 @@ begin
   FMenu := TTyPopupMenu.Create(Self);
   FRecentItems := TStringList.Create;
   TStringList(FRecentItems).OnChange := @RecentItemsChanged;
-  // Accent "File" look purely via StyleClass (no new typeKey); TTyButton draws 'primary'.
+  // Accent "File" look via StyleClass, now resolved under this control's OWN typeKey:
+  // 'TyRibbonAppMenu.primary'. Kept as a StyleClass (rather than folded into the base
+  // key) so a host can still swap the tab to any other declared variant.
   StyleClass := 'primary';
   Caption := 'File';
   // Wide + short like Office's File tab (logical px; LCL scales at paint time).
@@ -129,6 +139,11 @@ begin
   // first so nothing dangling references it during teardown.
   FreeAndNil(FMenu);
   inherited Destroy;
+end;
+
+function TTyRibbonAppMenu.GetStyleTypeKey: string;
+begin
+  Result := 'TyRibbonAppMenu';
 end;
 
 procedure TTyRibbonAppMenu.SetCommands(AValue: TTyPopupMenu);

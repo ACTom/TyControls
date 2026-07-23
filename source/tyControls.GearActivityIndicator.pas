@@ -11,8 +11,12 @@ type
   { An INDETERMINATE busy indicator: a gear that spins continuously (decorative sibling
     of TTyActivityIndicator). Reuses TTyActivityIndicator's TyActivityAdvance rotation and
     TTyGearDial's TyGearToothAngle tooth layout. No value; `Active` starts/stops the spin.
-    Reuses the gauge theming (typeKey 'TyGauge' faint centre + 'TyGaugeFill' accent gear),
-    so no extra .tycss rules. Spins only when Active AND painted (has a parent handle);
+    Themed as itself — 'TyGearActivityIndicator' (the punched-out centre HOLE) and
+    'TyGearActivityIndicatorFill' (teeth + body disc). Note the token roles are inverted
+    versus a gauge: the box key paints a hole, not a track behind a fill. Borrowing the
+    gauge's key therefore hardcoded the hole to the gauge's sunk-track colour, so on a card,
+    a toolbar or a dark overlay the gear spun with a wrongly-coloured plug in its middle and
+    no theme rule could fix it. Spins only when Active AND painted (has a parent handle);
     headless it is static, keeping render/golden tests pixel-stable. }
   TTyGearActivityIndicator = class(TTyGraphicControl)
   private
@@ -26,7 +30,7 @@ type
     procedure HandleTimer(Sender: TObject);
     procedure UpdateRunning;
   protected
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyGearActivityIndicator' (+ 'Fill' sub-part)
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -67,7 +71,9 @@ end;
 
 function TTyGearActivityIndicator.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: here the box background is the gear's HOLE, so it must match
+    whatever surface hosts the spinner. Under 'TyGauge' that was a track colour and unfixable. }
+  Result := 'TyGearActivityIndicator';
 end;
 
 procedure TTyGearActivityIndicator.EnsureTimer;
@@ -136,8 +142,9 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    trackS := CurrentStyle;                                             // TyGauge faint centre
-    fillS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);  // accent gear
+    trackS := CurrentStyle;                                             // TyGearActivityIndicator hole
+    { Sub-part key derived from the box key so the two can never drift apart. }
+    fillS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Fill', StyleClass, []);  // gear
     cx := (R.Left + R.Right) / 2;
     cy := (R.Top + R.Bottom) / 2;
     radius := Math.Min(R.Right - R.Left, R.Bottom - R.Top) / 2 - P.Scale(5);

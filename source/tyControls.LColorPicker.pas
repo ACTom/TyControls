@@ -11,8 +11,13 @@ type
     top-to-bottom V gradient at a FIXED Hue+Sat (top = V=1 bright, bottom = V=0
     dark), plus a draggable marker. Picks a scalar Position in [0..1] (= V) and
     exposes the resulting colour as SelectedColor. A windowed graphic control
-    (own HWND) painted the canonical TTyPainter way; reuses the 'TyGauge' theming
-    (body/border/text) so it needs no extra .tycss rule. }
+    (own HWND) painted the canonical TTyPainter way, themed under its own
+    'TyLColorPicker' key. Its content is GENERATED colour, so a gauge's
+    background/fill tokens mean nothing here — it consumes only color (the marker,
+    which must read over a full-saturation ramp: typically white with a dark edge)
+    and border-color. The dialog's internal twins already own 'TyColorArea'
+    (tyControls.Dialogs.Color), so the public picker wearing 'TyGauge' was simply
+    inconsistent. }
   TTyLColorPicker = class(TTyCustomControl)
   private
     FHue: Single;         // 0..360
@@ -29,7 +34,7 @@ type
     procedure BarMetrics(out ABarLeft, ABarTop, ABarWidth, ABarH: Integer);
     procedure UpdateFromY(AY: Integer);
   protected
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyLColorPicker'
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -67,7 +72,9 @@ end;
 
 function TTyLColorPicker.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: a colour-selection surface has only two levers, marker
+    colour and frame, and the marker needs contrast the gauge's on-surface text can't give. }
+  Result := 'TyLColorPicker';
 end;
 
 function TTyLColorPicker.GetSelectedColor: TTyColor;
@@ -167,7 +174,7 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    bodyS := CurrentStyle;                         // TyGauge body/border/text
+    bodyS := CurrentStyle;                         // TyLColorPicker frame + marker colour
     // Windowed control: fill the full rect with the parent/form background first,
     // so the margin around the bar shows the form (or image-theme photo).
     TyFillParentBg(Self, P, R, bodyS);

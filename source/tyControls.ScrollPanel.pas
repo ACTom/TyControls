@@ -15,7 +15,9 @@ unit tyControls.ScrollPanel;
 // ticks it and the drag/DnD wiring that feeds it a live pointer are real-machine
 // (a TTimer drives AutoPanTick at runtime; see the notes at the bottom).
 //
-// typeKey: inherited 'TyPanel' (GetStyleTypeKey NOT overridden) — no new .tycss.
+// typeKey: inherited 'TyScrollBox' (GetStyleTypeKey NOT overridden past TTyScrollBox).
+// An auto-panning scroll panel IS a scroll well — it adds a gesture, not a surface — so
+// it deliberately shares the well's key and restyles with it.
 
 interface
 

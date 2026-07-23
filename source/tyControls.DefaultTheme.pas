@@ -248,7 +248,7 @@ begin
     '/* Window/form backdrop — a soft off-white behind the white controls. */' + LineEnding +
     'TyForm { background: var(--form-bg); }' + LineEnding +
     '' + LineEnding +
-    'TyButton {' + LineEnding +
+    'TyButton, TySpeedButton, TyGlyphContainerButton, TyRibbonAppMenu {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
@@ -258,19 +258,24 @@ begin
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-normal);' + LineEnding +
     '}' + LineEnding +
-    'TyButton:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }' + LineEnding +
-    'TyButton:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyButton:active   { background: var(--surface-active); }' + LineEnding +
-    'TyButton:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
-    'TyButton.primary  { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
-    'TyButton.primary:hover    { background: var(--accent-hover); }' + LineEnding +
-    'TyButton.primary:active   { background: var(--accent-active); }' + LineEnding +
-    'TyButton.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }' + LineEnding +
-    'TyButton.danger:hover     { background: var(--danger-hover); }' + LineEnding +
-    'TyButton.danger:active    { background: var(--danger-active); }' + LineEnding +
+    'TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }' + LineEnding +
+    'TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active   { background: var(--surface-active); }' + LineEnding +
+    'TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled,' + LineEnding +
+    'TyRibbonAppMenu:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary  { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
+    'TyButton.primary:hover, TySpeedButton.primary:hover, TyGlyphContainerButton.primary:hover,' + LineEnding +
+    'TyRibbonAppMenu.primary:hover    { background: var(--accent-hover); }' + LineEnding +
+    'TyButton.primary:active, TySpeedButton.primary:active, TyGlyphContainerButton.primary:active,' + LineEnding +
+    'TyRibbonAppMenu.primary:active   { background: var(--accent-active); }' + LineEnding +
+    'TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }' + LineEnding +
+    'TyButton.danger:hover, TySpeedButton.danger:hover, TyGlyphContainerButton.danger:hover,' + LineEnding +
+    'TyRibbonAppMenu.danger:hover     { background: var(--danger-hover); }' + LineEnding +
+    'TyButton.danger:active, TySpeedButton.danger:active, TyGlyphContainerButton.danger:active,' + LineEnding +
+    'TyRibbonAppMenu.danger:active    { background: var(--danger-active); }' + LineEnding +
     '/* Ghost (VS Code 风格): 平时透明,仅 hover/active/选中显示底色与边框。透明用 alpha(...,0)' + LineEnding +
     '   保持纯色,使现有 hover 背景 alpha 淡入有效;边框透明但保留宽度,避免 hover 尺寸跳动。 */' + LineEnding +
-    'TyButton.ghost {' + LineEnding +
+    'TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost {' + LineEnding +
     '  background: alpha(var(--surface-hover), 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: alpha(var(--border), 0);' + LineEnding +
@@ -280,11 +285,16 @@ begin
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-normal);' + LineEnding +
     '}' + LineEnding +
-    'TyButton.ghost:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }' + LineEnding +
-    'TyButton.ghost:active   { background: var(--surface-active); }' + LineEnding +
-    'TyButton.ghost:selected { background: var(--surface-active); border-color: var(--accent); }' + LineEnding +
-    'TyButton.ghost:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyButton.ghost:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover,' + LineEnding +
+    'TyRibbonAppMenu.ghost:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }' + LineEnding +
+    'TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active,' + LineEnding +
+    'TyRibbonAppMenu.ghost:active   { background: var(--surface-active); }' + LineEnding +
+    'TyButton.ghost:selected, TySpeedButton.ghost:selected, TyGlyphContainerButton.ghost:selected,' + LineEnding +
+    'TyRibbonAppMenu.ghost:selected { background: var(--surface-active); border-color: var(--accent); }' + LineEnding +
+    'TyButton.ghost:focus, TySpeedButton.ghost:focus, TyGlyphContainerButton.ghost:focus,' + LineEnding +
+    'TyRibbonAppMenu.ghost:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled,' + LineEnding +
+    'TyRibbonAppMenu.ghost:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyLabel {' + LineEnding +
     '  background: alpha(#FFFFFF, 0);' + LineEnding +
@@ -333,7 +343,11 @@ begin
     'TyRadioButton:focus { outline: 2px var(--focus-ring); }' + LineEnding +
     'TyRadioButton:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
-    'TyPanel {' + LineEnding +
+    '/* TyScrollBox (the scrolling WELL, which conventionally sinks where a panel lifts) and' + LineEnding +
+    '   TyExPanel (a collapsible card) used to render as plain panels because they returned' + LineEnding +
+    '   ''TyPanel''. Same values, three separable names. TTyScrollPanel and TTyPaintPanel are' + LineEnding +
+    '   deliberately NOT here: they add no chrome of their own and keep inheriting. */' + LineEnding +
+    'TyPanel, TyScrollBox, TyExPanel {' + LineEnding +
     '  background: var(--surface);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
@@ -341,6 +355,16 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: var(--pad-container);' + LineEnding +
     '}' + LineEnding +
+    '/* The collapsible panel''s HEADER BAND — caption + chevron ink, and the band''s own hover.' + LineEnding +
+    '   Only `color` is declared, and it is TyPanel''s colour, so the caption and caret draw' + LineEnding +
+    '   exactly as they did when they read the panel''s own style. Background is left out ON' + LineEnding +
+    '   PURPOSE: the band tint is opt-in in the painter (declare one and the band fills; say' + LineEnding +
+    '   nothing and the panel''s single surface shows through un-reblended, which is what' + LineEnding +
+    '   happens today). font-size / font-weight are likewise omitted so the caption keeps' + LineEnding +
+    '   following the control''s font, as TyPanel declares neither.' + LineEnding +
+    '   '':hover'' on this key is the new axis — the control has tracked band hover all along' + LineEnding +
+    '   but had no name to repaint through. */' + LineEnding +
+    'TyExPanelHeader { color: var(--on-surface); }' + LineEnding +
     '' + LineEnding +
     'TyComboBox {' + LineEnding +
     '  background: var(--input-bg);' + LineEnding +
@@ -386,7 +410,12 @@ begin
     '' + LineEnding +
     '/* ── v1.1 controls ─────────────────────────────────────────────────────── */' + LineEnding +
     '' + LineEnding +
-    'TyListBox {' + LineEnding +
+    '/* TTyValueListEditor is a PROPERTY GRID that happens to be built on the list box, so it' + LineEnding +
+    '   gets its own frame + row keys (the other five list-box subclasses keep sharing these' + LineEnding +
+    '   two — they really are lists of strings). Its remaining parts — TyValueListEditorKey,' + LineEnding +
+    '   -Value, -Expander, -Divider — are deliberately left undefined; see the note at the end' + LineEnding +
+    '   of this file. */' + LineEnding +
+    'TyListBox, TyValueListEditor {' + LineEnding +
     '  background: var(--input-bg);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
@@ -394,18 +423,18 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: var(--pad-tight);' + LineEnding +
     '}' + LineEnding +
-    'TyListBox:hover   { border-color: var(--input-border-hover); }' + LineEnding +
-    'TyListBox:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyListBox:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyListBox:hover, TyValueListEditor:hover   { border-color: var(--input-border-hover); }' + LineEnding +
+    'TyListBox:focus, TyValueListEditor:focus   { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
+    'TyListBox:disabled, TyValueListEditor:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
-    'TyListItem {' + LineEnding +
+    'TyListItem, TyValueListEditorRow {' + LineEnding +
     '  background: alpha(#000000, 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '  padding: var(--pad-control);' + LineEnding +
     '}' + LineEnding +
-    'TyListItem:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
-    'TyListItem:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }' + LineEnding +
+    'TyListItem:hover, TyValueListEditorRow:hover  { background: var(--surface-listitem-hover); }' + LineEnding +
+    'TyListItem:active, TyValueListEditorRow:active { background: var(--accent); color: var(--on-accent); border-radius: 0; }' + LineEnding +
     '' + LineEnding +
     'TyProgressBar {' + LineEnding +
     '  background: var(--surface-sunk);' + LineEnding +
@@ -420,16 +449,38 @@ begin
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
-    'TyGauge {' + LineEnding +
+    '/* --- Instrument family -----------------------------------------------------' + LineEnding +
+    '   Fourteen unrelated controls used to HARDCODE ''TyGauge'' as their own type key, so a' + LineEnding +
+    '   skin could not tell a star rating from an analogue clock. Each now owns its key and' + LineEnding +
+    '   they share ONE rule block as a selector list: identical resolved values today, a' + LineEnding +
+    '   separable hook from today on. Override just TyRating (or just TyRatingStar) in a skin' + LineEnding +
+    '   and nothing else in the family moves.' + LineEnding +
+    '   The four selectors after TyHSColorPicker are SUB-PARTS that read the face, not the' + LineEnding +
+    '   fill: TyMeterTick + TyAnalogClockHand take `color`, TyGearDialTeeth takes `background`.' + LineEnding +
+    '   They are resolved with an empty state set, which is why they are absent from the' + LineEnding +
+    '   :disabled rule below. TyColorArea is the colour dialog''s HSV square / hue bar — the' + LineEnding +
+    '   key existed in code since v1 but no theme had ever defined it. */' + LineEnding +
+    'TyGauge, TyMeter, TyLevelMeter, TyDial, TyGearDial, TyAnalogClock, TyCircularProgress,' + LineEnding +
+    'TyActivityIndicator, TyActivityBar, TyGearActivityIndicator, TySparkline, TyRating,' + LineEnding +
+    'TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth, TyColorArea {' + LineEnding +
     '  background: var(--surface-sunk);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
-    'TyGauge:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyGauge:disabled, TyMeter:disabled, TyLevelMeter:disabled, TyDial:disabled, TyGearDial:disabled,' + LineEnding +
+    'TyAnalogClock:disabled, TyCircularProgress:disabled, TyActivityIndicator:disabled,' + LineEnding +
+    'TyActivityBar:disabled, TyGearActivityIndicator:disabled, TySparkline:disabled,' + LineEnding +
+    'TyRating:disabled, TyLColorPicker:disabled, TyHSColorPicker:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
-    'TyGaugeFill {' + LineEnding +
+    '/* The lit part of each instrument. Same story: one accent rule, thirteen reachable' + LineEnding +
+    '   names. TyRatingStar takes no :hover rule on purpose — with none it falls back to this' + LineEnding +
+    '   block, exactly as the stars painted before; a skin that WANTS a hover tint adds' + LineEnding +
+    '   ''TyRatingStar:hover'' and that is the newly-opened axis. */' + LineEnding +
+    'TyGaugeFill, TyMeterNeedle, TyLevelMeterFill, TyLevelMeterPeak, TyDialPointer,' + LineEnding +
+    'TyGearDialPointer, TyAnalogClockSecondHand, TyCircularProgressFill, TyActivityIndicatorFill,' + LineEnding +
+    'TyActivityBarFill, TyGearActivityIndicatorFill, TySparklineFill, TySparklineDot, TyRatingStar {' + LineEnding +
     '  background: var(--accent);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
     '}' + LineEnding +
@@ -488,7 +539,16 @@ begin
     'TyTrackThumb:hover  { background: var(--accent-hover); }' + LineEnding +
     'TyTrackThumb:active { background: var(--accent-active); }' + LineEnding +
     '' + LineEnding +
-    'TyGroupBox {' + LineEnding +
+    '/* Hyperlink ink for TTyLinkLabel. Its own key rather than a borrowed accent fill: a theme' + LineEnding +
+    '   that restyles gauges must not repaint every link, and a theme that wants a different link' + LineEnding +
+    '   colour must not have to repaint gauges. */' + LineEnding +
+    'TyLinkLabelLink { color: var(--accent); }' + LineEnding +
+    '' + LineEnding +
+    '' + LineEnding +
+    '/* TTyToolGroupPanel is a ribbon-style command cluster, not a form group box; it gets its' + LineEnding +
+    '   own name so a skin can flatten the cluster without flattening every group box. Caption' + LineEnding +
+    '   PLACEMENT stays TTyGroupBox''s top band — this key changes ink and chrome, not layout. */' + LineEnding +
+    'TyGroupBox, TyToolGroupPanel {' + LineEnding +
     '  padding: var(--pad-groupbox);' + LineEnding +
     '  background: alpha(#FFFFFF, 0);' + LineEnding +
     '  color: var(--on-surface);' + LineEnding +
@@ -646,7 +706,10 @@ begin
     '  font-weight: var(--font-weight-normal);' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
-    'TyToolBar {' + LineEnding +
+    '/* The separator needs BOTH declarations from this block: `border-color` draws its rule and' + LineEnding +
+    '   `background` is what keeps it seamless with the bar behind it. Sharing the block is what' + LineEnding +
+    '   makes that automatic; owning the name is what lets a skin dot/fade/hide just the rule. */' + LineEnding +
+    'TyToolBar, TyToolSeparator {' + LineEnding +
     '  background: var(--surface-chrome);' + LineEnding +
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
@@ -669,17 +732,24 @@ begin
     'TyDateTimeButton { background: var(--surface-chrome); color: var(--on-surface); }' + LineEnding +
     'TyDateTimeButton:hover { background: var(--surface-hover); color: var(--accent); }' + LineEnding +
     '' + LineEnding +
-    '/* ── TreeView ──────────────────────────────────────────────────────────── */' + LineEnding +
+    '/* ── TreeView + ListView ───────────────────────────────────────────────── */' + LineEnding +
+    '/* TTyListView used to wear the tree''s clothes entirely — frame, rows, header, checkbox —' + LineEnding +
+    '   and worse, its column-header band and its collapsible GROUP band resolved the SAME' + LineEnding +
+    '   ''TyTreeHeader'' literal, so the two could never be styled apart. Both now have names' + LineEnding +
+    '   (TyListViewHeader / TyListViewGroupHeader) and share this one rule, so today they still' + LineEnding +
+    '   look the same and a skin can finally separate them.' + LineEnding +
+    '   TyListViewLine and TyListViewMarquee are deliberately left undefined; see the note at' + LineEnding +
+    '   the end of this file. */' + LineEnding +
     '' + LineEnding +
-    'TyTreeView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-tight); font-size: var(--font-size-base); }' + LineEnding +
-    'TyTreeNode { background: none; color: var(--on-surface); }' + LineEnding +
-    'TyTreeNode:hover { background: var(--surface-hover); }' + LineEnding +
-    'TyTreeNode:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
-    'TyTreeNode:disabled { color: var(--muted); }' + LineEnding +
-    'TyTreeHeader { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }' + LineEnding +
-    'TyTreeHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
-    'TyTreeHeaderSection:hover { background: var(--surface-hover); }' + LineEnding +
-    'TyTreeHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
+    'TyTreeView, TyListView { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-tight); font-size: var(--font-size-base); }' + LineEnding +
+    'TyTreeNode, TyListViewItem { background: none; color: var(--on-surface); }' + LineEnding +
+    'TyTreeNode:hover, TyListViewItem:hover { background: var(--surface-hover); }' + LineEnding +
+    'TyTreeNode:selected, TyListViewItem:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
+    'TyTreeNode:disabled, TyListViewItem:disabled { color: var(--muted); }' + LineEnding +
+    'TyTreeHeader, TyListViewHeader, TyListViewGroupHeader { background: var(--surface-chrome); border-color: var(--border); border-width: var(--input-border-width); color: var(--on-surface); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }' + LineEnding +
+    'TyTreeHeaderSection, TyListViewHeaderSection { background: none; color: var(--on-surface); border-color: var(--border); }' + LineEnding +
+    'TyTreeHeaderSection:hover, TyListViewHeaderSection:hover { background: var(--surface-hover); }' + LineEnding +
+    'TyTreeHeaderSection:selected, TyListViewHeaderSection:selected { background: var(--surface-active); }' + LineEnding +
     '' + LineEnding +
     '/* --- 数据网格 TTyGrid ------------------------------------------------------' + LineEnding +
     '   基层给全套键,新皮肤即使一条网格规则都不写也能正常显示(基层垫在每个主题之下)。' + LineEnding +
@@ -718,6 +788,20 @@ begin
     '/* 内嵌筛选行。它是"能打字的地方",所以底色跟表面走、边框跟输入框走 ——' + LineEnding +
     '   与列头带(chrome 色)刻意区分开,否则用户看不出它可以输入。 */' + LineEnding +
     'TyGridFilterRow { background: var(--surface); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); font-size: var(--font-size-base); }' + LineEnding +
+    '/* Group band (TTyStringGrid grouping) and summary/footer band. Both keys have been' + LineEnding +
+    '   resolved by the code since grouping landed, but NO theme ever defined them, so they' + LineEnding +
+    '   fell through to an empty style: no band fill at all, and the ink borrowed the grid' + LineEnding +
+    '   frame''s colour. These two rules SAY that out loud instead of leaving it to a silent' + LineEnding +
+    '   fallback, and they say it in tokens so a skin can change it.' + LineEnding +
+    '   `background: none` is the current appearance, deliberately: giving either band the' + LineEnding +
+    '   conventional chrome tint would be an appearance change, and this pass is a pure' + LineEnding +
+    '   themability refactor. A skin wanting the tint writes `background: var(--surface-chrome)`.' + LineEnding +
+    '   Font is left undeclared on purpose (same as TyGridCell) so the bands keep following the' + LineEnding +
+    '   grid''s own font; both keys DO read font-name/-size/-weight if a skin declares them.' + LineEnding +
+    '   TyGridSummaryRow deliberately has no border-color: RenderFooter never reads one, so a' + LineEnding +
+    '   declaration here would be dead. A footer hairline needs a code change first. */' + LineEnding +
+    'TyGridGroupRow   { background: none; color: var(--on-surface); }' + LineEnding +
+    'TyGridSummaryRow { background: none; color: var(--on-surface); }' + LineEnding +
     '/* 格线与选区。格线单独成键,皮肤想去掉格子只需把它设成透明。 */' + LineEnding +
     'TyGridLine      { background: var(--border); }' + LineEnding +
     '/* 单元格图形。各自成键,不借复选框/进度条的键 —— 借来的键在外观层够不着,' + LineEnding +
@@ -735,10 +819,10 @@ begin
     'TyGridButton:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyGridButton:active   { background: var(--surface-active); }' + LineEnding +
     'TyGridSelection { background: var(--selection); border-color: var(--accent); }' + LineEnding +
-    'TyTreeCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }' + LineEnding +
-    'TyTreeCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
-    'TyTreeCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
-    'TyTreeCheckBox:disabled { color: var(--muted); }' + LineEnding +
+    'TyTreeCheckBox, TyListViewCheckBox { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius-sm); }' + LineEnding +
+    'TyTreeCheckBox:active, TyListViewCheckBox:active   { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
+    'TyTreeCheckBox:selected, TyListViewCheckBox:selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
+    'TyTreeCheckBox:disabled, TyListViewCheckBox:disabled { color: var(--muted); }' + LineEnding +
     '' + LineEnding +
     '/* ── Card + Tag (Ant Design-gap batch 1) ───────────────────────────────── */' + LineEnding +
     '' + LineEnding +
@@ -987,7 +1071,29 @@ begin
     'TyListGroupItem          { color: var(--on-surface); border-radius: var(--radius); font-size: var(--font-size-base); padding: var(--pad-group-header); }' + LineEnding +
     'TyListGroupItem:hover    { background: var(--surface-hover); }' + LineEnding +
     'TyListGroupItem:active   { background: var(--selection); color: var(--accent); }   /* selected: soft accent pill */' + LineEnding +
-    'TyListGroupItem:disabled { color: var(--muted); }' + LineEnding;
+    'TyListGroupItem:disabled { color: var(--muted); }' + LineEnding +
+    '' + LineEnding +
+    '/* ── Keys the CODE resolves that this file deliberately does NOT define ─────────────────' + LineEnding +
+    '   Not drift — each of these is an OPT-IN hook whose painter has an explicit fallback, and' + LineEnding +
+    '   in every case the fallback is STATE-DEPENDENT, so declaring a fixed value here would' + LineEnding +
+    '   move pixels rather than preserve them. A skin may declare any of them; the base layer' + LineEnding +
+    '   stays silent so the fallback keeps winning by default.' + LineEnding +
+    '' + LineEnding +
+    '     TyListViewLine        background -> else the list view frame''s border-color' + LineEnding +
+    '     TyListViewMarquee     background -> else TyListViewItem:selected''s background' + LineEnding +
+    '     TyValueListEditorKey       color -> else the ROW''s colour for the row''s current state' + LineEnding +
+    '     TyValueListEditorValue     color -> else the same' + LineEnding +
+    '     TyValueListEditorExpander  color -> else the same' + LineEnding +
+    '     TyValueListEditorDivider   background -> else the row''s colour at alpha 0x28' + LineEnding +
+    '' + LineEnding +
+    '   The row-derived four are the sharp edge: on a selected row the fallback ink is' + LineEnding +
+    '   --on-accent, so a flat `color: var(--on-surface)` here would turn a selected property' + LineEnding +
+    '   row''s key text unreadable. A skin that wants them must declare the :active/:hover' + LineEnding +
+    '   variants too.' + LineEnding +
+    '' + LineEnding +
+    '   Also undefined ON PURPOSE and NOT part of this list: TyGridPanel (transparent so the' + LineEnding +
+    '   cell gutters are not white — tests/test.gridpanel.pas asserts no theme gives it a' + LineEnding +
+    '   background) and TyFormSurface. */' + LineEnding;
 end;
 
 end.

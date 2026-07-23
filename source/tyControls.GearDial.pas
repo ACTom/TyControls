@@ -15,10 +15,13 @@ type
   { An INTERACTIVE rotary knob whose body carries GEAR TEETH around the rim. Same
     interaction model as TTyDial: drag around the centre, or use the wheel / arrow
     keys, to change Value; a single ApplyValue choke-point clamps and fires OnChange
-    only on a real change. Reuses TyDialValueFromAngle for the pointer angle math and
-    the gauge theming (typeKey 'TyGauge' for body/teeth/border/text, 'TyGaugeFill' for
-    the accent pointer/hub) so no extra .tycss rules. Direct manipulation SNAPS (no
-    ease) so the notch tracks the pointer and headless render tests stay pixel-stable. }
+    only on a real change. Reuses TyDialValueFromAngle for the pointer angle math.
+    Themed as itself — 'TyGearDial' (body/border/text), 'TyGearDialTeeth' (the rim
+    teeth) and 'TyGearDialPointer' (notch + hub). The teeth used to take the body's own
+    background, i.e. they could not be shaded at all, which is the one thing an
+    industrial skin actually wants to do to a machine-look knob. Direct manipulation
+    SNAPS (no ease) so the notch tracks the pointer and headless render tests stay
+    pixel-stable. }
   TTyGearDial = class(TTyCustomControl)
   private
     FMin, FMax, FValue: Double;
@@ -40,7 +43,7 @@ type
     procedure DragToPoint(X, Y: Integer);
   protected
     FDragging: Boolean;
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyGearDial' (+ 'Teeth' / 'Pointer' sub-parts)
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -99,7 +102,9 @@ end;
 
 function TTyGearDial.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: teeth and a machined inner ring exist in no other control,
+    so a skin can now shade them without dragging every gauge track along. }
+  Result := 'TyGearDial';
 end;
 
 procedure TTyGearDial.ApplyValue(AValue: Double);
@@ -219,7 +224,7 @@ end;
 procedure TTyGearDial.Paint;
 var
   P: TTyPainter;
-  bodyS, pointerS: TTyStyleSet;
+  bodyS, teethS, pointerS: TTyStyleSet;
   R: TRect;
   ctx: TBGRACanvas2D;
   cx, cy, radius, ang, r0, r1, rimR, tipR, halfW: Double;
@@ -230,8 +235,10 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    bodyS := CurrentStyle;                                              // TyGauge body/border/text
-    pointerS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);  // accent notch/hub
+    bodyS := CurrentStyle;                                              // TyGearDial body/border/text
+    { Sub-part keys derived from the box key so the three can never drift apart. }
+    teethS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Teeth', StyleClass, []);
+    pointerS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Pointer', StyleClass, []);
 
     // Windowed control (own HWND): fill the full rect with the parent/form background first, so
     // the square corners around the round gear show the form (or the image-theme photo), not the
@@ -248,12 +255,12 @@ begin
       ctx := P.Bitmap.Canvas2D;
       ctx.lineCap := 'round';
 
-      // Gear teeth: short radial trapezoids around the rim, in the body colour, drawn
+      // Gear teeth: short radial trapezoids around the rim, in the teeth colour, drawn
       // first so the body circle sits on top of their inner ends.
       rimR := radius;                          // tooth root sits on the body rim
       tipR := radius + P.Scale(6);             // tooth tip protrudes outward
       halfW := DegToRad(360 / Math.Max(1, FTeeth) * 0.32);  // half angular width of a tooth
-      ctx.fillStyle(TyColorToBGRA(bodyS.Background.Color));
+      ctx.fillStyle(TyColorToBGRA(teethS.Background.Color));
       for i := 0 to FTeeth - 1 do
       begin
         tAng := DegToRad(TyGearToothAngle(i, FTeeth));
@@ -271,7 +278,10 @@ begin
       ctx.arc(cx, cy, radius, 0, 2 * Pi, False);
       ctx.fillStyle(TyColorToBGRA(bodyS.Background.Color));
       ctx.fill;
-      // Body rim border (theme border width/colour; falls back to text colour).
+      // Body rim border: theme border WIDTH but the text colour, so the rim is chained to the
+      // label colour and TyGearDial's own border-color is unreachable. Left as-is here because
+      // this pass is a pure key split and must not move a pixel; switching the stroke to
+      // bodyS.BorderColor is a separate, deliberate visual change.
       bw := Math.Max(1, P.Scale(Math.Max(1, bodyS.BorderWidth)));
       ctx.lineWidth := bw;
       ctx.strokeStyle(TyColorToBGRA(bodyS.TextColor));

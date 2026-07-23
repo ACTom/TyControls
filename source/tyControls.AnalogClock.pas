@@ -18,11 +18,14 @@ function TyClockSecondAngle(ASecond: Integer): Double;
 
 type
   { An analog CLOCK face — 12 hour tick marks around the rim, an hour + minute hand
-    (in the face text colour, different lengths/widths), a thin second hand (accent =
-    'TyGaugeFill') and a centre hub. Reuses the gauge theming (typeKey 'TyGauge' for
-    face/ticks/text, 'TyGaugeFill' for the second hand) so no extra .tycss rules.
-    When Running and painted (has a parent handle) a 1s timer advances Time to Now each
-    tick; headless it is static so render tests stay pixel-stable. }
+    (different lengths/widths), a thin second hand and a centre hub. Themed as itself —
+    'TyAnalogClock' (face + rim ticks), 'TyAnalogClockHand' (hour + minute hands) and
+    'TyAnalogClockSecondHand' (second hand + hub). A clock face is the archetypal
+    skinnable object (Win7 gadget, dark cockpit, flat Swiss) and it was stapled to a
+    progress ring's tokens: ticks and hands shared one colour, so the classic "faint
+    ticks, black hands" face could not be written at all. When Running and painted (has
+    a parent handle) a 1s timer advances Time to Now each tick; headless it is static so
+    render tests stay pixel-stable. }
   TTyAnalogClock = class(TTyGraphicControl)
   private
     FTime: TDateTime;
@@ -40,7 +43,7 @@ type
     procedure DrawHand(ctx: TBGRACanvas2D; cx, cy, ADeg, ALen, AWidth: Double;
       AColor: TTyColor);
   protected
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyAnalogClock' (+ 'Hand' / 'SecondHand')
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -93,7 +96,9 @@ end;
 
 function TTyAnalogClock.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: a clock shows no value and has neither track nor fill, so
+    a skin can now restyle the face without touching every progress ring in the app. }
+  Result := 'TyAnalogClock';
 end;
 
 procedure TTyAnalogClock.EnsureTimer;
@@ -172,7 +177,7 @@ end;
 procedure TTyAnalogClock.Paint;
 var
   P: TTyPainter;
-  faceS, accentS: TTyStyleSet;
+  faceS, handS, secondS: TTyStyleSet;
   R: TRect;
   ctx: TBGRACanvas2D;
   cx, cy, radius, ang, rr: Double;
@@ -184,8 +189,10 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    faceS := CurrentStyle;                                             // TyGauge face/ticks/text
-    accentS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);
+    faceS := CurrentStyle;                                             // TyAnalogClock face + rim ticks
+    { Sub-part keys derived from the box key so the three can never drift apart. }
+    handS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Hand', StyleClass, []);
+    secondS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'SecondHand', StyleClass, []);
 
     cx := (R.Left + R.Right) / 2;
     cy := (R.Top + R.Bottom) / 2;
@@ -212,17 +219,18 @@ begin
         end;
       end;
 
-      // Hour hand: short + thick; minute hand: long + medium — both in the text colour.
-      DrawHand(ctx, cx, cy, TyClockHourAngle(h, m), radius * 0.5, P.Scale(4), faceS.TextColor);
-      DrawHand(ctx, cx, cy, TyClockMinuteAngle(m, s), radius * 0.78, P.Scale(3), faceS.TextColor);
+      // Hour hand: short + thick; minute hand: long + medium — both in the hand colour,
+      // now independent of the rim ticks above.
+      DrawHand(ctx, cx, cy, TyClockHourAngle(h, m), radius * 0.5, P.Scale(4), handS.TextColor);
+      DrawHand(ctx, cx, cy, TyClockMinuteAngle(m, s), radius * 0.78, P.Scale(3), handS.TextColor);
 
-      // Thin second hand in the accent (fill) colour.
+      // Thin second hand in the second-hand colour.
       if FShowSeconds then
         DrawHand(ctx, cx, cy, TyClockSecondAngle(s), radius * 0.85, Math.Max(1, P.Scale(1)),
-          accentS.Background.Color);
+          secondS.Background.Color);
 
-      // Centre hub, in the accent colour.
-      ctx.fillStyle(TyColorToBGRA(accentS.Background.Color));
+      // Centre hub, in the second-hand colour.
+      ctx.fillStyle(TyColorToBGRA(secondS.Background.Color));
       ctx.beginPath;
       ctx.arc(cx, cy, Math.Max(2, P.Scale(3)), 0, 2 * Pi, False);
       ctx.fill;

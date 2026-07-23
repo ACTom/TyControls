@@ -11,9 +11,13 @@ function TyActivityAdvance(ACurrentDeg: Double; AMs, APeriodMs: Integer): Double
 
 type
   { An INDETERMINATE spinner — a faint track ring under a continuously rotating accent
-    arc (a spinning "C"). No value; `Active` starts/stops the spin. Reuses the gauge
-    theming (typeKey 'TyGauge' track + 'TyGaugeFill' accent), so no extra .tycss rules.
-    Spins only when Active AND painted (has a parent handle); headless it is static. }
+    arc (a spinning "C"). No value; `Active` starts/stops the spin. Themed as itself —
+    'TyActivityIndicator' (track ring) and 'TyActivityIndicatorFill' (rotating arc). A busy
+    spinner is a different UI category from a data display: it is routinely muted, or drawn
+    on a modal dim where it must read light-on-dark, and the common flat look wants a
+    TRANSPARENT track — none of which was reachable while the ring was nailed to the
+    gauge's sunk track token. Spins only when Active AND painted (has a parent handle);
+    headless it is static. }
   TTyActivityIndicator = class(TTyGraphicControl)
   private
     FActive: Boolean;
@@ -28,7 +32,7 @@ type
     procedure HandleTimer(Sender: TObject);
     procedure UpdateRunning;
   protected
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyActivityIndicator' (+ 'Fill' sub-part)
     procedure Paint; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -79,7 +83,9 @@ end;
 
 function TTyActivityIndicator.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: a skin can now mute or fully clear the spinner's track
+    (the flat look) without flattening every gauge track in the app. }
+  Result := 'TyActivityIndicator';
 end;
 
 procedure TTyActivityIndicator.EnsureTimer;
@@ -155,8 +161,9 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    trackS := CurrentStyle;                                             // TyGauge track/text
-    fillS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);
+    trackS := CurrentStyle;                                             // TyActivityIndicator track
+    { Sub-part key derived from the box key so the two can never drift apart. }
+    fillS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Fill', StyleClass, []);
     th := P.Scale(FThickness);
     cx := (R.Left + R.Right) / 2;
     cy := (R.Top + R.Bottom) / 2;

@@ -1,8 +1,10 @@
 # Palette icon generator
 
-Draws the 20 TyControls component-palette icons (line-glyph + `#3B82F6` accent) and packs
+Draws the TyControls component-palette icons (line-glyph + `#3B82F6` accent) and packs
 them into `designtime/tycontrols_icons.lrs`, which `tyControls.Design.pas` includes via
-`{$I}` before `RegisterComponents`. The IDE shows each by class name.
+`{$I}` before `RegisterComponents`. The IDE shows each by class name — a class with no
+resource of its name gets a blank palette button, which is why
+`tests/test.paletteicons.pas` checks the packed set against the registrations on every run.
 
 Each icon is rendered at **three native sizes** for HiDPI: `<Class>` = 24px (100%),
 `<Class>_150` = 36px (150%), `<Class>_200` = 48px (200%). The IDE picks the variant

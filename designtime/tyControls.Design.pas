@@ -651,10 +651,13 @@ begin
     // `class(TTyDialog)` resolves as an ancestor and the OI shows its chrome, same as TTyForm.
     FormEditingHook.RegisterDesignerBaseClass(TTyDialog);
   end;
-  // The palette is split into functional groups so no single tab is overcrowded. NOTE: the
-  // gen-icons.ps1 drift-guard parses EVERY RegisterComponents('TyControls...', [...]) group and
-  // requires each registered class to have a generated icon —a new control must land in one of
-  // these groups (and get its icon + $classes/CClasses entry), never a standalone unlisted class.
+  // The palette is split into functional groups so no single tab is overcrowded. NOTE: both
+  // scripts/gen-icons.ps1 and tests/test.paletteicons.pas parse EVERY
+  // RegisterComponents('TyControls...', [...]) group here and require each registered class to
+  // have a generated icon —a new control must land in one of these groups (and get a glyph in
+  // genicons.lpr + the $classes entry), never a standalone unlisted class. The TEST is the guard
+  // that fires without anyone running the script: TTyDrawGrid/TTyStringGrid once reached this
+  // list with no icon and nothing noticed, because the test kept its own copy of the class list.
   // === Palette groups, organised by control TYPE (same class set as before) ===
   // Core (non-visual).
   RegisterComponents('TyControls',

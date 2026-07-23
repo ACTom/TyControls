@@ -7,7 +7,7 @@
   --radius:     8px;
 }
 
-TyButton {
+TyButton, TyGlyphContainerButton, TyRibbonAppMenu, TySpeedButton {
   background: var(--surface);
   color: var(--on-surface);
   border-color: var(--border);
@@ -17,13 +17,13 @@ TyButton {
   font-size: 10px;
   font-weight: 400;
 }
-TyButton:hover    { background: darken(--surface, 4%); }
-TyButton:focus    { border-color: var(--accent); }
-TyButton:active   { background: darken(--surface, 10%); }
-TyButton:disabled { opacity: 0.4; }
-TyButton.primary  { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
-TyButton.primary:hover  { background: lighten(--accent, 8%); }
-TyButton.primary:active { background: darken(--accent, 8%); }
+TyButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover, TySpeedButton:hover    { background: darken(--surface, 4%); }
+TyButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus, TySpeedButton:focus    { border-color: var(--accent); }
+TyButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active, TySpeedButton:active   { background: darken(--surface, 10%); }
+TyButton:disabled, TyGlyphContainerButton:disabled, TyRibbonAppMenu:disabled, TySpeedButton:disabled { opacity: 0.4; }
+TyButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary, TySpeedButton.primary  { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
+TyButton.primary:hover, TyGlyphContainerButton.primary:hover, TyRibbonAppMenu.primary:hover, TySpeedButton.primary:hover  { background: lighten(--accent, 8%); }
+TyButton.primary:active, TyGlyphContainerButton.primary:active, TyRibbonAppMenu.primary:active, TySpeedButton.primary:active { background: darken(--accent, 8%); }
 
 TyLabel {
   background: alpha(#FFFFFF, 0);
@@ -57,7 +57,7 @@ TyCheckBox:hover   { border-color: var(--accent); }
 TyCheckBox:active  { background: var(--accent); }
 TyCheckBox:disabled { opacity: 0.4; }
 
-TyPanel {
+TyPanel, TyExPanel, TyScrollBox {
   background: var(--surface);
   color: var(--on-surface);
   border-color: var(--border);

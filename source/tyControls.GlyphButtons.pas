@@ -12,9 +12,16 @@ unit tyControls.GlyphButtons;
                             by GroupIndex like a classic TSpeedButton.
 
   All three subclass TTyButton and ONLY override DrawContent (plus Click/Create
-  where noted). GetStyleTypeKey stays 'TyButton' (inherited), so the frame, hover
-  bg-fade, states, focus ring and numeric badge come for free and NO new .tycss
-  rule is introduced — the glyph simply shares the same TextColor and box.
+  where noted) — the frame, hover bg-fade, states, focus ring and numeric badge
+  come for free and the glyph simply shares the resolved TextColor and box.
+
+  TTyGlyphButton keeps the inherited 'TyButton' key: it IS a push button, just
+  with an icon in front of the caption, so it must stay in lockstep with every
+  other button. The other two do NOT — they need a different FRAME from a push
+  button (a ribbon tile is borderless, a toolbar toggle is flat), which is a
+  theme decision, so each owns a key (see the overrides below). Nothing else
+  changes: with no rule for the new keys the base layer still inherits the
+  TyButton chrome, so the default look is identical until a skin says otherwise.
 
   The shared base (TTyGlyphButtonBase) adds the glyph plumbing: an IconFont
   reference (nilled via FreeNotification), a GlyphName, a logical GlyphSize
@@ -110,6 +117,16 @@ type
 
   { Large ribbon-style button: a big glyph on TOP, caption below. }
   TTyGlyphContainerButton = class(TTyGlyphButtonBase)
+  protected
+    { Own key: this is a ribbon TILE (glTop, GlyphSize 24, 72x64 — what
+      examples/ribbon drops into a TyRibbonGroup), not a push button. Borrowing
+      'TyButton' resolved the tile's background/border/radius/padding from the
+      same rule as a dialog OK button, so a theme author could not give tiles the
+      conventional borderless, transparent-at-rest look with their own hover tint
+      without flattening every button in the app. TyRibbon and TyRibbonGroup
+      already own keys so a skin can restyle the ribbon band; this is that band's
+      missing third key. }
+    function GetStyleTypeKey: string; override;
   public
     constructor Create(AOwner: TComponent); override;
   end;
@@ -119,8 +136,7 @@ type
     clicking presses it (Down) and releases sibling TTySpeedButtons that share the
     GroupIndex. AllowAllUp lets a click on the already-down button toggle it back
     up (so the whole group can be up). Inherits the resting :selected state via
-    Down. Style it flat by giving TyButton a 'speed'/'toolbar' StyleClass (no new
-    typeKey introduced). }
+    Down. }
   TTySpeedButton = class(TTyGlyphButtonBase)
   private
     FGroupIndex: Integer;
@@ -129,6 +145,17 @@ type
     { Release (Down := False) every sibling TTySpeedButton in the same Parent that
       shares FGroupIndex, except Self. No-op when parentless. }
     procedure UnpressSiblings;
+  protected
+    { Own key: a flat toolbar TOGGLE rests flat where a push button rests framed,
+      and which one it is must be the THEME's call, not app code's. Borrowing
+      'TyButton' left only one lever — hand every speed button a 'speed'/'toolbar'
+      StyleClass — which pushes a styling decision into every app AND is
+      unreliable: TTyToolBar.ApplyToButton overwrites its children's StyleClass
+      wholesale (it owns the ghost/non-ghost class), and a speed button used
+      OUTSIDE a toolbar got full push-button chrome with no way for the theme to
+      say otherwise. With its own key a skin can state the flat resting frame
+      once, for every speed button, wherever it sits. }
+    function GetStyleTypeKey: string; override;
   public
     constructor Create(AOwner: TComponent); override;
     { Radio/toggle grouping. GroupIndex = 0 keeps the plain button behaviour
@@ -371,6 +398,11 @@ end;
 
 { TTyGlyphContainerButton }
 
+function TTyGlyphContainerButton.GetStyleTypeKey: string;
+begin
+  Result := 'TyGlyphContainerButton';
+end;
+
 constructor TTyGlyphContainerButton.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -383,6 +415,11 @@ begin
 end;
 
 { TTySpeedButton }
+
+function TTySpeedButton.GetStyleTypeKey: string;
+begin
+  Result := 'TySpeedButton';
+end;
 
 constructor TTySpeedButton.Create(AOwner: TComponent);
 begin

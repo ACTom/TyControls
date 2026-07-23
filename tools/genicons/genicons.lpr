@@ -668,6 +668,47 @@ begin
   RRect(b,10,18,20,20.6,0.7,Ink);
 end;
 
+{ The two grids share one skeleton on purpose — a frame, a tinted fixed ROW along the top and
+  a tinted fixed COLUMN down the left, and the body carved into cells. That silhouette is what
+  says "grid" at 16px (GGridPanel's cell frame has no fixed bands; GListView's header band has
+  no fixed column), and drawing both from it makes them read as siblings. Only the CELL
+  CONTENT differs, which is exactly what distinguishes the two classes. }
+
+{ TTyDrawGrid: cells you paint yourself — one accent-filled cell plus two other cells holding
+  arbitrary shapes, i.e. the owner-draw contract }
+procedure GDrawGrid(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);                      // outer frame
+  FillRRect(b,3.5,4.5,20.5,8.5,1,Faint);         // fixed row (top)
+  FillRRect(b,3.5,8.5,8.5,19.5,1,Faint);         // fixed column (left)
+  Line(b,3,8.5,21,8.5,Ink,1.1);                  // the two fixed-cell rules read as the axes
+  Line(b,8.5,4,8.5,20,Ink,1.1);
+  Line(b,3,14.2,21,14.2,Faint,1);                // body cell rules, lighter than the fixed ones
+  Line(b,14.5,8.5,14.5,20,Faint,1);
+  FillRRect(b,9.4,9.4,13.6,13.3,0.6,Acc);        // a fully painted cell
+  FillCirc(b,17.5,11.3,1.7,Ink);                 // …and two cells drawn as free shapes
+  FillPolyG(b,[PointF(11.5,15.4),PointF(13.4,18.6),PointF(9.6,18.6)],Ink);
+end;
+
+{ TTyStringGrid: the same grid holding TEXT — a text line per body cell, the current cell's in
+  accent }
+procedure GStringGrid(b: TBGRABitmap);
+begin
+  RRect(b,3,4,21,20,2,Ink);
+  FillRRect(b,3.5,4.5,20.5,8.5,1,Faint);
+  FillRRect(b,3.5,8.5,8.5,19.5,1,Faint);
+  Line(b,3,8.5,21,8.5,Ink,1.1);
+  Line(b,8.5,4,8.5,20,Ink,1.1);
+  Line(b,3,14.2,21,14.2,Faint,1);
+  Line(b,14.5,8.5,14.5,20,Faint,1);
+  Line(b,4.8,6.5,7.2,6.5,Ink,1.1);               // fixed-cell captions (row + column headers)
+  Line(b,10.2,6.5,12.8,6.5,Ink,1.1); Line(b,16.2,6.5,18.8,6.5,Ink,1.1);
+  Line(b,4.8,11.3,7.2,11.3,Ink,1.1); Line(b,4.8,17,7.2,17,Ink,1.1);
+  Line(b,9.8,11.3,13.2,11.3,Acc,1.4);            // the current cell's text
+  Line(b,15.8,11.3,19.2,11.3,Ink,1.1);           // …the rest of the cell text
+  Line(b,9.8,17,13.2,17,Ink,1.1); Line(b,15.8,17,18.4,17,Ink,1.1);
+end;
+
 { TTyFilterComboBox: a combo field with a funnel (filter) + a drop chevron }
 procedure GFilterComboBox(b: TBGRABitmap);
 begin
@@ -821,7 +862,7 @@ procedure GCascader(b: TBGRABitmap); begin RRect(b,3,3,21,10,2,Ink); PolyL(b,[Po
 procedure GPopover(b: TBGRABitmap); begin RRect(b,2,4,22,17,2,Ink); PolyL(b,[PointF(9,17),PointF(11.5,20.5),PointF(14,17)],Ink); FillRRect(b,5,7.5,10.5,13.5,1,Acc); Line(b,12.5,9,19,9,Ink,1.3); Line(b,12.5,12,17.5,12,Ink,1.3); end;
 
 const
-  Glyphs: array[0..157] of TGlyph = (
+  Glyphs: array[0..159] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -954,6 +995,8 @@ const
     (Name:'TTyListView';          Draw:@GListView),
     (Name:'TTyShellListView';     Draw:@GShellListView),
     (Name:'TTyShellTreeView';     Draw:@GShellTreeView),
+    (Name:'TTyDrawGrid';          Draw:@GDrawGrid),
+    (Name:'TTyStringGrid';        Draw:@GStringGrid),
     (Name:'TTyFilterComboBox';    Draw:@GFilterComboBox),
     (Name:'TTyShellComboBox';     Draw:@GShellComboBox),
     (Name:'TTyOpenDialog';        Draw:@GOpenDialog),

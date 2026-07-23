@@ -19,8 +19,12 @@ type
   { A VU / level bar (audio-style). A track rounded-rect with an accent-coloured lit
     portion up to Value (either a single smooth fill or N gap-separated segments), and an
     optional thin peak-hold marker at the highest value seen. Leaf TTyGraphicControl.
-    Reuses the gauge theming (typeKey 'TyGauge' for the track/text, 'TyGaugeFill' for the
-    lit accent) so no extra .tycss rules; eased value movement (snaps headless). }
+    Themed as itself — 'TyLevelMeter' (track/text), 'TyLevelMeterFill' (the lit bar or
+    segments) and 'TyLevelMeterPeak' (the peak-hold marker). A VU meter is the canonical
+    control a skin restyles away from a generic gauge; and the peak marker needs a key of
+    its own because it is drawn ON the lit bar — sharing the fill colour made it invisible
+    exactly when the signal reached it, and no theme rule could repair that. Eased value
+    movement (snaps headless). }
   TTyLevelMeter = class(TTyGraphicControl)
   private
     FMin, FMax, FValue: Double;
@@ -49,7 +53,7 @@ type
     procedure DrawSegments(P: TTyPainter; const ATrack: TRect; AFrac: Double; const AFillS: TTyStyleSet);
     procedure DrawPeak(P: TTyPainter; const ATrack: TRect; APeak: Double; AColor: TTyColor);
   protected
-    function GetStyleTypeKey: string; override;   // 'TyGauge'
+    function GetStyleTypeKey: string; override;   // 'TyLevelMeter' (+ 'Fill' / 'Peak' sub-parts)
     procedure Paint; override;
     function DisplayFrac: Single;                  // eased displayed fraction (== target at rest)
     function AdvanceAnimation(AMs: Integer): Boolean;   // steppable seam (no wall-clock)
@@ -119,7 +123,9 @@ end;
 
 function TTyLevelMeter.GetStyleTypeKey: string;
 begin
-  Result := 'TyGauge';
+  { Its own key, not the gauge's: segments and a peak-hold marker are geometry TTyGauge has
+    no code for, and a VU meter is exactly what a skin wants to restyle on its own. }
+  Result := 'TyLevelMeter';
 end;
 
 procedure TTyLevelMeter.EnsureTimer;
@@ -325,7 +331,7 @@ end;
 procedure TTyLevelMeter.Paint;
 var
   P: TTyPainter;
-  trackS, fillS: TTyStyleSet;
+  trackS, fillS, peakS: TTyStyleSet;
   R, trackR: TRect;
   frac: Double;
   bw: Integer;
@@ -334,8 +340,10 @@ begin
   try
     R := Rect(0, 0, ClientWidth, ClientHeight);
     P.BeginPaint(Canvas, ClientRect, Font.PixelsPerInch);
-    trackS := CurrentStyle;                                       // TyGauge: track/text
-    fillS := ActiveController.Model.ResolveStyle('TyGaugeFill', StyleClass, []);  // lit accent
+    trackS := CurrentStyle;                                       // TyLevelMeter: track/text
+    { Sub-part keys derived from the box key so the three can never drift apart. }
+    fillS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Fill', StyleClass, []);  // lit bar
+    peakS := ActiveController.Model.ResolveStyle(GetStyleTypeKey + 'Peak', StyleClass, []);  // peak marker
     frac := DisplayFrac;
 
     DrawFrame(P, R, trackS);   // track background + border
@@ -349,7 +357,9 @@ begin
       else
         DrawContinuous(P, trackR, frac, fillS);
       if FPeakHold then
-        DrawPeak(P, trackR, FPeakFrac, fillS.Background.Color);
+        { Its own colour, not the lit bar's: the marker sits ON the bar, so taking the fill
+          colour hid it precisely when the signal reached the peak. }
+        DrawPeak(P, trackR, FPeakFrac, peakS.Background.Color);
     end;
 
     if FShowValue then

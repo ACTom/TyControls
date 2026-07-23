@@ -53,9 +53,16 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     // Per-item content paint (default: the item text). A subclass overrides to draw a
     // swatch / glyph / checkbox before the text. ARowRect is the full row; AStyle the
-    // resolved 'TyListItem' style for the row's current state. Used by TTyColorListBox etc.
+    // resolved row style (GetItemStyleTypeKey) for the row's current state. Used by
+    // TTyColorListBox etc.
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); virtual;
+    { The theme typeKey ONE ROW resolves. Virtual because RenderTo -- not the subclass -- owns
+      the row loop, so this is the only seam through which a descendant that is NOT a plain
+      list of strings can stop rendering its rows as 'TyListItem'. TTyValueListEditor (a
+      two-column property inspector) uses it; every subclass that really does draw one line of
+      text per row keeps the shared key, which is why they can all be restyled at once. }
+    function GetItemStyleTypeKey: string; virtual;
     // Row index at client device Y (or -1 if outside any item). For subclasses that
     // hit-test rows, e.g. TTyCheckListBox's checkbox column.
     function RowAtY(AY: Integer): Integer;
@@ -152,6 +159,11 @@ end;
 function TTyListBox.GetStyleTypeKey: string;
 begin
   Result := 'TyListBox';
+end;
+
+function TTyListBox.GetItemStyleTypeKey: string;
+begin
+  Result := 'TyListItem';
 end;
 
 procedure TTyListBox.SetItems(const AValue: TStringList);
@@ -802,8 +814,8 @@ begin
       else
         Include(ItemStates, tysNormal);
 
-      // Resolve TyListItem style for this row
-      RowStyle := ActiveController.Model.ResolveStyle('TyListItem', '', ItemStates);
+      // Resolve the row style for this row ('TyListItem', or the descendant's own key)
+      RowStyle := ActiveController.Model.ResolveStyle(GetItemStyleTypeKey, '', ItemStates);
 
       // Row rect: full content width minus scrollbar, height = scaledItemHeight
       RowRect := Rect(

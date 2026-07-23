@@ -78,7 +78,10 @@ type
     triangles for nested rows) and an editable VALUE column, split by a DRAGGABLE divider. Rows
     are TTyValueRow objects (Key/DisplayKey, Value/DisplayValue, a value TYPE, per-row bold/colour/
     image, and CHILD rows). Build with AddRow (returns the row to nest / type / style) or the
-    simple InsertRow(key, value). Row layout, selection and scrolling come from TTyListBox. }
+    simple InsertRow(key, value). Row layout, selection and scrolling come from TTyListBox.
+
+    It REUSES TTyListBox's virtualised row loop but is not a list box, so it renders from its
+    own keys -- see GetStyleTypeKey / GetItemStyleTypeKey / PaintItemContent. }
   TTyValueListEditor = class(TTyListBox)
   private
     FRoot: array of TTyValueRow;      // owned root rows
@@ -151,6 +154,8 @@ type
     procedure EndEdit(ACommit: Boolean; ARestoreFocus: Boolean = False);
     procedure RepositionEditor;
   protected
+    function GetStyleTypeKey: string; override;
+    function GetItemStyleTypeKey: string; override;
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -855,6 +860,10 @@ end;
 procedure TTyValueListEditor.ConfigureDropCorners;
 begin
   FDropPopup.Controller := Controller;
+  { 'TyListBox' on purpose, NOT this control's key: the popup's CONTENT is a real TTyListBox
+    (FEnumList / FColorList), so the window mask must match the radius that list fills with.
+    Reading the inspector's own radius here would round the window to a shape its content
+    does not have. }
   FDropPopup.CornerRadiusLogical := ActiveController.Model.ResolveStyle('TyListBox', '', []).BorderRadius;
 end;
 
@@ -1211,13 +1220,35 @@ end;
 
 { ---- painting ---- }
 
+function TTyValueListEditor.GetStyleTypeKey: string;
+begin
+  { Its own key, not the ancestor's. This is a property inspector that merely reuses
+    TTyListBox's row loop: it draws two COLUMNS split by a user-draggable divider, an indented
+    key column, per-row expand/collapse triangles and a value column with swatches and a '…'
+    dialog affordance -- none of which a list of strings has. While it rendered from
+    'TyListBox'/'TyListItem' a skin could not tint the key column, colour the divider, restyle
+    the expander, or make an inspector's selection read differently from a plain list's. Its
+    parts are TyValueListEditor (frame), TyValueListEditorRow, -Key, -Value, -Divider,
+    -Expander. }
+  Result := 'TyValueListEditor';
+end;
+
+function TTyValueListEditor.GetItemStyleTypeKey: string;
+begin
+  { The inspector's rows are not list items: this is the seam that unwelds them. }
+  Result := 'TyValueListEditorRow';
+end;
+
 procedure TTyValueListEditor.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 var
   r: TTyValueRow;
   level, splitX, lo, hi, pad, indentX, indent, sz, weight, imgSz, sw: Integer;
   keyR, valR, tri, swR: TRect;
-  divider, keyCol, valCol: TTyColor;
+  { Named *Sty, not *S: 'keyS' collides with the published Keys[] property (identifiers are
+    case-insensitive), and the compiler reports it as a duplicate identifier. }
+  expSty, keySty, divSty, valSty: TTyStyleSet;
+  divider, keyCol, valCol, valDef, triCol: TTyColor;
   ctx: TBGRACanvas2D;
   bmp: TBGRABitmap;
   cy: Single;
@@ -1226,6 +1257,19 @@ begin
   r := FFlatRow[AIndex];
   level := FFlatLevel[AIndex];
   pad := P.Scale(5);
+
+  { The inspector's four sub-parts, each with a key a skin can reach: the expander triangle,
+    the key column, the column divider and the value column. Every one falls back to what it
+    took from the ROW style before, so a theme that defines none of them paints exactly as it
+    did -- these are hooks, not a repaint. Colour only: the geometry (indent, divider width,
+    swatch size) stays where the layout constants put it. }
+  expSty := ActiveController.Model.ResolveStyle('TyValueListEditorExpander', '', []);
+  keySty := ActiveController.Model.ResolveStyle('TyValueListEditorKey', '', []);
+  divSty := ActiveController.Model.ResolveStyle('TyValueListEditorDivider', '', []);
+  valSty := ActiveController.Model.ResolveStyle('TyValueListEditorValue', '', []);
+  if tpTextColor in expSty.Present then triCol := expSty.TextColor else triCol := AStyle.TextColor;
+  if tpTextColor in keySty.Present then keyCol := keySty.TextColor else keyCol := AStyle.TextColor;
+  if tpTextColor in valSty.Present then valDef := valSty.TextColor else valDef := AStyle.TextColor;
 
   splitX := ARowRect.Left + P.Scale(FKeyColumnWidth);
   lo := ARowRect.Left + P.Scale(24);
@@ -1246,7 +1290,7 @@ begin
       indentX + P.Scale(2) + sz, 0);
     tri.Bottom := tri.Top + sz;
     cy := (tri.Top + tri.Bottom) / 2;
-    ctx.fillStyle(TyColorToBGRA(AStyle.TextColor));
+    ctx.fillStyle(TyColorToBGRA(triCol));
     ctx.beginPath;
     if r.Expanded then
     begin
@@ -1265,13 +1309,15 @@ begin
   end;
 
   // Key label (after the triangle + indent).
-  keyCol := AStyle.TextColor;
   keyR := Rect(indentX + P.Scale(indent), ARowRect.Top, splitX - P.Scale(4), ARowRect.Bottom);
   P.DrawText(keyR, r.EffectiveKey, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
     keyCol, taLeftJustify, tlCenter, True);
 
-  // Column divider.
-  divider := (AStyle.TextColor and $00FFFFFF) or $28000000;
+  // Column divider. Its own key ('TyValueListEditorDivider') -- taking the colour from a
+  // background, like every other rule/line key in the library ('TyGridLine'). Silent theme =>
+  // the old derivation, the row text colour at a fixed alpha.
+  if tpBackground in divSty.Present then divider := divSty.Background.Color
+  else divider := (AStyle.TextColor and $00FFFFFF) or $28000000;
   P.Bitmap.Canvas2D.fillStyle(TyColorToBGRA(divider));
   P.Bitmap.Canvas2D.fillRect(splitX, ARowRect.Top + P.Scale(2), 1,
     (ARowRect.Bottom - ARowRect.Top) - P.Scale(4));
@@ -1285,7 +1331,7 @@ begin
     if r.EditorKind in [vekFont, vekDialog] then
     begin
       P.DrawText(Rect(valR.Right - P.Scale(16), valR.Top, valR.Right, valR.Bottom), '…',
-        AStyle.FontName, ResolveFontSize(AStyle) + 2, 700, AStyle.TextColor, taCenter, tlCenter, False);
+        AStyle.FontName, ResolveFontSize(AStyle) + 2, 700, valDef, taCenter, tlCenter, False);
       valR.Right := valR.Right - P.Scale(18);
     end;
     // colour swatch for a colour row.
@@ -1297,7 +1343,7 @@ begin
         valR.Left + sw, ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top) - sw) div 2 + sw);
       P.Bitmap.Canvas2D.fillStyle(TyColorToBGRA(TyColorFromLCL(StringToColorDef(r.Value, clBlack), 255)));
       P.Bitmap.Canvas2D.fillRect(swR.Left, swR.Top, sw, sw);
-      P.StrokeBorder(swR, 0, 1, AStyle.TextColor);
+      P.StrokeBorder(swR, 0, 1, valDef);
       valR.Left := valR.Left + sw + P.Scale(5);
     end;
     // optional image
@@ -1312,8 +1358,10 @@ begin
           dmDrawWithTransparency);
       valR.Left := valR.Left + imgSz + P.Scale(4);
     end;
+    { The per-row override still wins over the theme -- an app that colours one value red
+      means it, and the value column's key only supplies the DEFAULT. }
     if r.TextColor <> clDefault then valCol := TyColorFromLCL(r.TextColor, 255)
-    else valCol := AStyle.TextColor;
+    else valCol := valDef;
     if r.Bold then weight := 700 else weight := AStyle.FontWeight;
     P.DrawText(valR, r.EffectiveValue, AStyle.FontName, ResolveFontSize(AStyle), weight,
       valCol, taLeftJustify, tlCenter, True);

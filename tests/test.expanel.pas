@@ -16,7 +16,7 @@ type
     procedure TearDown; override;
   published
     // typeKey / defaults
-    procedure TestTypeKeyIsTyPanel;
+    procedure TestTypeKeyIsTyExPanel;
     procedure TestDefaults;
     procedure TestIsContainer;
     // pure geometry
@@ -115,15 +115,15 @@ begin
   FForm.Free;
 end;
 
-procedure TTyExPanelTest.TestTypeKeyIsTyPanel;
+procedure TTyExPanelTest.TestTypeKeyIsTyExPanel;
 var
   Acc: TExPanelAccess;
 begin
   Acc := TExPanelAccess.Create(FForm);
   Acc.Parent := FForm;
   try
-    // Reuses the base TyPanel typeKey — no new .tycss.
-    AssertEquals('TyPanel', Acc.StyleTypeKey);
+    // Its own key: the header band + chevron are ink a plain panel never draws.
+    AssertEquals('TyExPanel', Acc.StyleTypeKey);
   finally
     Acc.Free;
   end;
@@ -410,8 +410,9 @@ var
 begin
   Ctl := TTyStyleController.Create(nil);
   try
-    // A 3px border, so an off-by-one cannot pass by accident.
-    Ctl.LoadThemeCss('TyPanel { background: #FFFFFF; color: #111111; '
+    // A 3px border, so an off-by-one cannot pass by accident. Declared on the control's
+    // OWN key ('TyExPanel'), which is what AdjustClientRect resolves — not the ancestor's.
+    Ctl.LoadThemeCss('TyExPanel { background: #FFFFFF; color: #111111; '
       + 'border-color: #808080; border-width: 3px; }');
     Acc := TExPanelAccess.Create(FForm);
     Acc.Parent := FForm;

@@ -6,7 +6,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
   BGRACanvas2D,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Panel,
-  tyControls.Animation;
+  tyControls.StyleModel, tyControls.Animation;
 
 const
   // Logical (96ppi) default header-band height. Chosen to match the compact
@@ -29,9 +29,13 @@ type
     children are the user's — AdjustClientRect insets the client below the header
     so dropped controls sit in the body.
 
-    Reuses the 'TyPanel' typeKey (inherited GetStyleTypeKey) — no new .tycss. The
-    header caption uses the TyPanel resolved TextColor/FontName; the chevron uses
-    the same TextColor. All values are theme-driven. }
+    Theming: 'TyExPanel' is the surface (background/border/radius/padding — everything
+    TTyPanel's frame draws). 'TyExPanelHeader' is the header BAND: its background is an
+    opt-in tint (no background => the panel's own surface shows through, unfilled) and
+    its color/font drive BOTH the caption and the chevron, so a caret and its caption
+    always tint together. The band is also the hit zone, so it takes ':hover' while the
+    pointer is over it — that is what makes the header-hover repaint visible. Every
+    value is theme-driven. }
 
   TTyExPanel = class(TTyPanel)
   private
@@ -45,6 +49,9 @@ type
     FTimer: TTimer;                // lazy; only while actually animating
     FOnExpand: TNotifyEvent;
     FOnCollapse: TNotifyEvent;
+    { Pointer is over the header BAND (not merely over the control). Drives the
+      ':hover' state of the 'TyExPanelHeader' key — which is what makes the repaint
+      MouseMove/MouseLeave already ask for actually change something. }
     FHeaderHover: Boolean;
     procedure SetCollapsed(AValue: Boolean);
     function GetHeaderHeight: Integer;
@@ -60,6 +67,11 @@ type
       Height. With a window handle a timer eases; headless it snaps immediately. }
     procedure StartHeightAnimation(ATargetH: Integer);
   protected
+    { The resolved 'TyExPanelHeader' style — ONLY what that key itself declared, so the
+      caller can tell "the theme tinted the band" from "the band inherits the surface".
+      Its states are the panel's, except that ':hover' follows the BAND (FHeaderHover):
+      the band is the click target, so hovering the body must not light it up. }
+    function HeaderStyle: TTyStyleSet;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure AdjustClientRect(var ARect: TRect); override;
@@ -69,6 +81,11 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { Its own key, NOT the base panel's. This control paints two things a plain panel
+      never paints — an interactive header band and a chevron — and pinned to 'TyPanel'
+      a theme had no name to reach them by: it could not tint the band, weight its
+      caption or accent the caret without restyling every panel in the app. }
+    function GetStyleTypeKey: string; override;
     { The full (expanded) height. While collapsed this is the height the panel
       returns to when expanded; while expanded it tracks the live Height. }
     property ExpandedHeight: Integer read FExpandedHeight write FExpandedHeight;
@@ -179,6 +196,23 @@ begin
   // Free the timer first so its callback can never fire mid-teardown.
   FreeAndNil(FTimer);
   inherited Destroy;
+end;
+
+function TTyExPanel.GetStyleTypeKey: string;
+begin
+  Result := 'TyExPanel';
+end;
+
+function TTyExPanel.HeaderStyle: TTyStyleSet;
+var
+  states: TTyStateSet;
+begin
+  // Swap the control-wide hover for the BAND hover: TTyCustomControl sets FHover for the
+  // whole client area, but only the band is clickable, so only the band may read as hot.
+  states := CurrentStates;
+  Exclude(states, tysHover);
+  if FHeaderHover and Enabled then Include(states, tysHover);
+  Result := ActiveController.Model.ResolveStyle('TyExPanelHeader', StyleClass, states);
 end;
 
 { Effective header height: an explicit set wins; otherwise follow the theme's
@@ -355,9 +389,10 @@ end;
 procedure TTyExPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
-  S: TTyStyleSet;
-  R, hdr, textRect: TRect;
-  hdrH, chevW: Integer;
+  S, HD, HS: TTyStyleSet;
+  R, hdr, textRect, bandRect: TRect;
+  hdrH, chevW, bw, bwLogical: Integer;
+  corners, bandCorners: TTyCorners;
   tri: TTyTriangle;
   ctx: TBGRACanvas2D;
 begin
@@ -374,8 +409,45 @@ begin
     if hdrH < 1 then hdrH := 1;
     hdr := TyExPanelHeaderRect(R, hdrH);
 
-    // Chevron: a filled triangle in the TyPanel TextColor, pointing down when expanded
-    // and right when collapsed. Uses the pure point math so paint == hit geometry.
+    // The header band is its own themable part. HD holds ONLY what 'TyExPanelHeader'
+    // declared (so the tint below can stay opt-in); HS is the panel surface with those
+    // declarations laid over it — what the chevron and caption actually draw with, so a
+    // theme that names neither still gets exactly the panel's ink.
+    HD := HeaderStyle;
+    HS := S;
+    TyMergeStyleSet(HS, HD);
+
+    // Band tint is OPT-IN: only a header key that declares a background paints one. Say
+    // nothing and the panel's single surface is left exactly as DrawFrame laid it down —
+    // a second fill would re-blend the frame's antialiased corner arcs. When it IS
+    // painted, the band is pulled off the border stroke and its OUTER corners follow the
+    // panel's, so a tint can never spill into the corner arcs or over the frame.
+    if tpBackground in HD.Present then
+    begin
+      if TyBorderVisible(S) then
+      begin
+        bw := P.Scale(S.BorderWidth);   // device px: the fill inset
+        bwLogical := S.BorderWidth;     // logical px: FillBackground scales corners itself
+      end
+      else
+      begin
+        bw := 0;
+        bwLogical := 0;                 // border present-but-not-drawn keeps the full radius
+      end;
+      corners := TyEffectiveCorners(S);
+      bandCorners := Default(TTyCorners);
+      bandCorners.TL := corners.TL - bwLogical;
+      bandCorners.TR := corners.TR - bwLogical;
+      if bandCorners.TL < 0 then bandCorners.TL := 0;
+      if bandCorners.TR < 0 then bandCorners.TR := 0;
+      bandRect := Rect(hdr.Left + bw, hdr.Top + bw, hdr.Right - bw, hdr.Bottom);
+      if (bandRect.Right > bandRect.Left) and (bandRect.Bottom > bandRect.Top) then
+        P.FillBackground(bandRect, HD.Background, bandCorners);
+    end;
+
+    // Chevron: a filled triangle in the HEADER's color (caret and caption tint together —
+    // that is how a real collapse header behaves), pointing down when expanded and right
+    // when collapsed. Uses the pure point math so paint == hit geometry.
     tri := TyExPanelChevronPoints(hdr, not FCollapsed);
     ctx := P.Bitmap.Canvas2D;
     ctx.beginPath;
@@ -383,17 +455,19 @@ begin
     ctx.lineTo(tri[1].X + 0.5, tri[1].Y + 0.5);
     ctx.lineTo(tri[2].X + 0.5, tri[2].Y + 0.5);
     ctx.closePath;
-    ctx.fillStyle(TyColorToBGRA(S.TextColor));
+    ctx.fillStyle(TyColorToBGRA(HS.TextColor));
     ctx.fill;
 
     // Caption text to the right of the chevron gutter, vertically centered in the band.
     if Caption <> '' then
     begin
       chevW := hdr.Bottom - hdr.Top;   // gutter width == band height (matches chevron center)
+      // Right inset stays the PANEL's padding: the band's box is the panel's box, and only
+      // its ink (font + colour) is the header key's business.
       textRect := Rect(hdr.Left + chevW, hdr.Top,
         hdr.Right - P.Scale(S.Padding.Right), hdr.Bottom);
-      P.DrawText(textRect, Caption, S.FontName, ResolveFontSize(S), S.FontWeight,
-        S.TextColor, taLeftJustify, tlCenter, True);
+      P.DrawText(textRect, Caption, HS.FontName, ResolveFontSize(HS), HS.FontWeight,
+        HS.TextColor, taLeftJustify, tlCenter, True);
     end;
 
     P.EndPaint;
