@@ -16,7 +16,7 @@
 
 | 项目 | `TTyGridPanel` | `TTyGridCell` |
 |------|-----|-----|
-| 单元 | `tyControls.GridPanel` | `tyControls.GridCell` |
+| 单元 | `tyControls.GridPanel` | `tyControls.GridPanel`(与网格同单元;`tyControls.GridCell` 是兼容再导出) |
 | 基类 | `TTyPanel`(→ `TTyCustomControl` → `TCustomControl`) | `TTyCustomControl`(→ `TCustomControl`) |
 | `GetStyleTypeKey` | `'TyPanel'`(继承,不新增 `.tycss`) | `'TyGridCell'`(默认无主题规则,**透明**) |
 | 默认尺寸 / 网格 | 200 × 150;默认 2 × 2 全等分 | 由网格定位,不单独设尺寸 |
