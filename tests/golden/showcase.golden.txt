@@ -187,12 +187,12 @@ TyButtonGroup||0 => pres[0,1,2,3,4,5,7,8,10,] bg=k2/FFF5F3FF>FFE6E4F0@9000 ut=0 
 TyButtonGroup||1 => pres[0,1,2,3,4,5,7,8,10,] bg=k2/FFF5F3FF>FFEBE9F5@9000 ut=0 txt=FF2E1065 bd=FF894EEF/1/0 rad=10/10,10,10,10 pad=8,8,8,8 fnt=/9/700 op=1000 sh=2E000000/4/0,2 ol=00000000/0/0
 TyButtonGroup||2 => pres[0,1,2,3,4,5,7,8,10,] bg=k1/FFDCDBE6 ut=0 txt=FF2E1065 bd=FFC4B5FD/1/0 rad=10/10,10,10,10 pad=8,8,8,8 fnt=/9/700 op=1000 sh=2E000000/4/0,2 ol=00000000/0/0
 TyButtonGroup||3 => pres[0,1,2,3,4,5,7,8,10,12,] bg=k2/FFF5F3FF>FFE6E4F0@9000 ut=0 txt=FF2E1065 bd=FF7C3AED/1/0 rad=10/10,10,10,10 pad=8,8,8,8 fnt=/9/700 op=1000 sh=2E000000/4/0,2 ol=FF7C3AED/2/0
-TyButtonGroup||4 => pres[0,1,2,3,4,5,7,8,10,] bg=k2/FFF5F3FF>FFE6E4F0@9000 ut=0 txt=FF2E1065 bd=FFC4B5FD/1/0 rad=10/10,10,10,10 pad=8,8,8,8 fnt=/9/700 op=1000 sh=2E000000/4/0,2 ol=00000000/0/0
+TyButtonGroup||4 => pres[0,1,2,3,4,5,7,8,9,10,] bg=k2/FFF5F3FF>FFE6E4F0@9000 ut=0 txt=FF2E1065 bd=FFC4B5FD/1/0 rad=10/10,10,10,10 pad=8,8,8,8 fnt=/9/700 op=450 sh=2E000000/4/0,2 ol=00000000/0/0
 TyUpDown||0 => pres[0,1,2,3,4,5,7,8,10,] bg=k2/FFF5F3FF>FFE6E4F0@9000 ut=0 txt=FF2E1065 bd=FFC4B5FD/1/0 rad=10/10,10,10,10 pad=8,8,8,8 fnt=/9/700 op=1000 sh=2E000000/4/0,2 ol=00000000/0/0
 TyUpDown||1 => pres[0,1,2,3,4,5,7,8,10,] bg=k2/FFF5F3FF>FFEBE9F5@9000 ut=0 txt=FF2E1065 bd=FF894EEF/1/0 rad=10/10,10,10,10 pad=8,8,8,8 fnt=/9/700 op=1000 sh=2E000000/4/0,2 ol=00000000/0/0
 TyUpDown||2 => pres[0,1,2,3,4,5,7,8,10,] bg=k1/FFDCDBE6 ut=0 txt=FF2E1065 bd=FFC4B5FD/1/0 rad=10/10,10,10,10 pad=8,8,8,8 fnt=/9/700 op=1000 sh=2E000000/4/0,2 ol=00000000/0/0
 TyUpDown||3 => pres[0,1,2,3,4,5,7,8,10,12,] bg=k2/FFF5F3FF>FFE6E4F0@9000 ut=0 txt=FF2E1065 bd=FF7C3AED/1/0 rad=10/10,10,10,10 pad=8,8,8,8 fnt=/9/700 op=1000 sh=2E000000/4/0,2 ol=FF7C3AED/2/0
-TyUpDown||4 => pres[0,1,2,3,4,5,7,8,10,] bg=k2/FFF5F3FF>FFE6E4F0@9000 ut=0 txt=FF2E1065 bd=FFC4B5FD/1/0 rad=10/10,10,10,10 pad=8,8,8,8 fnt=/9/700 op=1000 sh=2E000000/4/0,2 ol=00000000/0/0
+TyUpDown||4 => pres[0,1,2,3,4,5,7,8,9,10,] bg=k2/FFF5F3FF>FFE6E4F0@9000 ut=0 txt=FF2E1065 bd=FFC4B5FD/1/0 rad=10/10,10,10,10 pad=8,8,8,8 fnt=/9/700 op=450 sh=2E000000/4/0,2 ol=00000000/0/0
 TyChart||0 => pres[0,1,2,3,4,5,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/1/0 rad=10/10,10,10,10 pad=10,10,10,10 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=00000000/0/0
 TyChart||1 => pres[0,1,2,3,4,5,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/1/0 rad=10/10,10,10,10 pad=10,10,10,10 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=00000000/0/0
 TyChart||2 => pres[0,1,2,3,4,5,10,] bg=k1/FFF5F3FF ut=0 txt=FF2E1065 bd=FFC4B5FD/1/0 rad=10/10,10,10,10 pad=10,10,10,10 fnt=/0/0 op=1000 sh=1F000000/3/0,1 ol=00000000/0/0

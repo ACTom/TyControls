@@ -66,6 +66,15 @@ type
       light.tycss's values instead of the skin's. That is precisely why the new selectors
       had to be added to the skins' own rules and not left to inherit. }
     procedure TestNewKeysMatchTheirDonorInEveryTheme;
+    { The same check, aimed at the two HAND-WRITTEN example themes under examples/theming/.
+      Nothing else in the suite loads them, and that blind spot is not cosmetic: they are the
+      worked examples a user copies to start their own theme, and they are the closest thing
+      in the repo to a third-party stylesheet. When a borrowed key is split, base-layer
+      resolution is all-or-nothing PER TYPEKEY — so a theme that styles the donor and has
+      never heard of the new key silently drops back to the built-in light values for it,
+      which on the image theme shows up as an opaque grey block on a photo. This test is what
+      makes that failure loud instead of a bug report six months later. }
+    procedure TestExampleThemesCoverTheNewKeys;
     { P3 (D7) single-file dual-mode fidelity (§7 risk-3 zero-pixel route): auto.tycss in
       'light' mode resolves byte-identically to light.tycss, and in 'dark' mode to
       dark.tycss, across the full (typeKey x variant x state) grid. This is the proof that
@@ -722,7 +731,7 @@ const
     'adwaita', 'aero', 'antdesign', 'bootstrap', 'breeze', 'classic', 'fluent',
     'macos', 'material3', 'office', 'showcase', 'ubuntu', 'win10', 'win11', 'xp');
 
-  ALIAS_PAIRS: array[0..44] of TTyAliasPair = (
+  ALIAS_PAIRS: array[0..71] of TTyAliasPair = (
     { The instrument family: thirteen controls that hardcoded 'TyGauge' + 'TyGaugeFill'. }
     (NewKey: 'TyMeter';                   Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
     (NewKey: 'TyLevelMeter';              Donor: 'TyGauge';     BaseStateOnly: False; Variants: ''),
@@ -775,7 +784,37 @@ const
     (NewKey: 'TyListViewCheckBox';        Donor: 'TyTreeCheckBox'; BaseStateOnly: False; Variants: ''),
     { The property grid built on the list box. }
     (NewKey: 'TyValueListEditor';         Donor: 'TyListBox';   BaseStateOnly: False; Variants: ''),
-    (NewKey: 'TyValueListEditorRow';      Donor: 'TyListItem';  BaseStateOnly: False; Variants: ''));
+    (NewKey: 'TyValueListEditorRow';      Donor: 'TyListItem';  BaseStateOnly: False; Variants: ''),
+    { The explicit-borrow population (d58eada): controls that DECLARED their own
+      GetStyleTypeKey but returned a key naming a different control. }
+    (NewKey: 'TyHtmlLabel';               Donor: 'TyLabel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyLinkLabel';               Donor: 'TyLabel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyShadowLabel';             Donor: 'TyLabel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyGlowLabel';               Donor: 'TyLabel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyDivider';                 Donor: 'TyLabel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyCharImage';               Donor: 'TyLabel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyButtonGroup';             Donor: 'TyButton';     BaseStateOnly: False; Variants: 'danger,ghost,primary'),
+    (NewKey: 'TyUpDown';                  Donor: 'TyButton';     BaseStateOnly: False; Variants: 'danger,ghost,primary'),
+    (NewKey: 'TyChart';                   Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyCalculator';              Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyBevel';                   Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TySizeBox';                 Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyControlBar';              Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyCoolBar';                 Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyColorGrid';               Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyShape';                   Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyStarShape';               Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyArrow';                   Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyImageView';               Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyImage';                   Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyPreviewBox';              Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyListGroupPanel';          Donor: 'TyPanel';      BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyRibbonBackstage';         Donor: 'TyRibbon';     BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyRibbonQuickAccess';       Donor: 'TyTitleBar';   BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyRibbonGallery';           Donor: 'TyListBox';    BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyTabSet';                  Donor: 'TyTabControl'; BaseStateOnly: False; Variants: ''),
+    (NewKey: 'TyHeaderControl';           Donor: 'TyTreeHeader'; BaseStateOnly: False; Variants: '')
+  );
 
 procedure TTestThemeGolden.CheckAlias(AModel: TTyStyleModel; const ATheme, ANew,
   ADonor, AVariant: string; ABaseStateOnly: Boolean);
@@ -794,6 +833,37 @@ begin
     AssertEquals(tag,
       GDumpStyle(AModel.ResolveStyle(ADonor, AVariant, STATES[si])),
       GDumpStyle(AModel.ResolveStyle(ANew, AVariant, STATES[si])));
+  end;
+end;
+
+{ examples/theming/*.tycss — outside themes/, so ThemePath cannot reach them. }
+function ExampleThemePath(const AName: string): string;
+begin
+  Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples' + PathDelim
+    + 'theming' + PathDelim + AName + '.tycss';
+end;
+
+procedure TTestThemeGolden.TestExampleThemesCoverTheNewKeys;
+const
+  CExampleThemes: array[0..1] of string = ('custom', 'green');
+var
+  ti, pi: Integer;
+  m: TTyStyleModel;
+begin
+  for ti := 0 to High(CExampleThemes) do
+  begin
+    m := TTyStyleModel.Create;
+    try
+      AssertTrue('example theme must exist: ' + CExampleThemes[ti],
+        FileExists(ExampleThemePath(CExampleThemes[ti])));
+      m.LoadFromFile(ExampleThemePath(CExampleThemes[ti]));
+      m.Mode := 'light';
+      for pi := 0 to High(ALIAS_PAIRS) do
+        CheckAlias(m, 'examples/theming/' + CExampleThemes[ti], ALIAS_PAIRS[pi].NewKey,
+          ALIAS_PAIRS[pi].Donor, '', ALIAS_PAIRS[pi].BaseStateOnly);
+    finally
+      m.Free;
+    end;
   end;
 end;
 

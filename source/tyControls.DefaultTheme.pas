@@ -260,19 +260,9 @@ begin
     '}' + LineEnding +
     'TyButton:hover, TySpeedButton:hover, TyGlyphContainerButton:hover, TyRibbonAppMenu:hover, TyButtonGroup:hover, TyUpDown:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }' + LineEnding +
     'TyButton:focus, TySpeedButton:focus, TyGlyphContainerButton:focus, TyRibbonAppMenu:focus, TyButtonGroup:focus, TyUpDown:focus    { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active, TyButtonGroup:active, TyUpDown:active   { background: var(--surface-active); }' + LineEnding +
-    'TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled,' + LineEnding +
-    'TyRibbonAppMenu:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
-    'TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary, TyButtonGroup.primary, TyUpDown.primary  { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }' + LineEnding +
-    'TyButton.primary:hover, TySpeedButton.primary:hover, TyGlyphContainerButton.primary:hover,' + LineEnding +
-    'TyRibbonAppMenu.primary:hover    { background: var(--accent-hover); }' + LineEnding +
-    'TyButton.primary:active, TySpeedButton.primary:active, TyGlyphContainerButton.primary:active,' + LineEnding +
-    'TyRibbonAppMenu.primary:active   { background: var(--accent-active); }' + LineEnding +
-    'TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger, TyButtonGroup.danger, TyUpDown.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }' + LineEnding +
-    'TyButton.danger:hover, TySpeedButton.danger:hover, TyGlyphContainerButton.danger:hover,' + LineEnding +
-    'TyRibbonAppMenu.danger:hover     { background: var(--danger-hover); }' + LineEnding +
-    'TyButton.danger:active, TySpeedButton.danger:active, TyGlyphContainerButton.danger:active,' + LineEnding +
-    'TyRibbonAppMenu.danger:active    { background: var(--danger-active); }' + LineEnding +
+    'TyButton:active, TySpeedButton:active, TyGlyphContainerButton:active, TyRibbonAppMenu:active, TyButtonGroup:active, TyUpDown:active   { background: var(--surface-active); }TyButton:disabled, TySpeedButton:disabled, TyGlyphContainerButton:disabled, TyRibbonAppMenu:disabled, TyButtonGroup:disabled, TyUpDown:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    'TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbonAppMenu.primary, TyButtonGroup.primary, TyUpDown.primary  { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }TyButton.primary:hover, TySpeedButton.primary:hover, TyGlyphContainerButton.primary:hover, TyRibbonAppMenu.primary:hover, TyButtonGroup.primary:hover, TyUpDown.primary:hover    { background: var(--accent-hover); }TyButton.primary:active, TySpeedButton.primary:active, TyGlyphContainerButton.primary:active, TyRibbonAppMenu.primary:active, TyButtonGroup.primary:active, TyUpDown.primary:active   { background: var(--accent-active); }' + LineEnding +
+    'TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger, TyButtonGroup.danger, TyUpDown.danger   { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }TyButton.danger:hover, TySpeedButton.danger:hover, TyGlyphContainerButton.danger:hover, TyRibbonAppMenu.danger:hover, TyButtonGroup.danger:hover, TyUpDown.danger:hover     { background: var(--danger-hover); }TyButton.danger:active, TySpeedButton.danger:active, TyGlyphContainerButton.danger:active, TyRibbonAppMenu.danger:active, TyButtonGroup.danger:active, TyUpDown.danger:active    { background: var(--danger-active); }' + LineEnding +
     '/* Ghost (VS Code 风格): 平时透明,仅 hover/active/选中显示底色与边框。透明用 alpha(...,0)' + LineEnding +
     '   保持纯色,使现有 hover 背景 alpha 淡入有效;边框透明但保留宽度,避免 hover 尺寸跳动。 */' + LineEnding +
     'TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost, TyButtonGroup.ghost, TyUpDown.ghost {' + LineEnding +
@@ -284,17 +274,7 @@ begin
     '  padding: var(--pad-button);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '  font-weight: var(--font-weight-normal);' + LineEnding +
-    '}' + LineEnding +
-    'TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover,' + LineEnding +
-    'TyRibbonAppMenu.ghost:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }' + LineEnding +
-    'TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active,' + LineEnding +
-    'TyRibbonAppMenu.ghost:active   { background: var(--surface-active); }' + LineEnding +
-    'TyButton.ghost:selected, TySpeedButton.ghost:selected, TyGlyphContainerButton.ghost:selected,' + LineEnding +
-    'TyRibbonAppMenu.ghost:selected { background: var(--surface-active); border-color: var(--accent); }' + LineEnding +
-    'TyButton.ghost:focus, TySpeedButton.ghost:focus, TyGlyphContainerButton.ghost:focus,' + LineEnding +
-    'TyRibbonAppMenu.ghost:focus    { outline: 2px var(--focus-ring); }' + LineEnding +
-    'TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled,' + LineEnding +
-    'TyRibbonAppMenu.ghost:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
+    '}TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover, TyRibbonAppMenu.ghost:hover, TyButtonGroup.ghost:hover, TyUpDown.ghost:hover    { background: var(--surface-hover); border-color: var(--input-border-hover); }TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active, TyRibbonAppMenu.ghost:active, TyButtonGroup.ghost:active, TyUpDown.ghost:active   { background: var(--surface-active); }TyButton.ghost:selected, TySpeedButton.ghost:selected, TyGlyphContainerButton.ghost:selected, TyRibbonAppMenu.ghost:selected, TyButtonGroup.ghost:selected, TyUpDown.ghost:selected { background: var(--surface-active); border-color: var(--accent); }TyButton.ghost:focus, TySpeedButton.ghost:focus, TyGlyphContainerButton.ghost:focus, TyRibbonAppMenu.ghost:focus, TyButtonGroup.ghost:focus, TyUpDown.ghost:focus    { outline: 2px var(--focus-ring); }TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled, TyRibbonAppMenu.ghost:disabled, TyButtonGroup.ghost:disabled, TyUpDown.ghost:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
     '' + LineEnding +
     'TyLabel, TyHtmlLabel, TyLinkLabel, TyShadowLabel, TyGlowLabel, TyDivider, TyCharImage {' + LineEnding +
     '  background: alpha(#FFFFFF, 0);' + LineEnding +

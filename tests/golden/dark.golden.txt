@@ -187,12 +187,12 @@ TyButtonGroup||0 => pres[0,1,2,3,4,5,7,8,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=F
 TyButtonGroup||1 => pres[0,1,2,3,4,5,7,8,] bg=k1/FF303030 ut=0 txt=FFE5E7EB bd=FF56565C/1/0 rad=6/6,6,6,6 pad=6,6,6,6 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyButtonGroup||2 => pres[0,1,2,3,4,5,7,8,] bg=k1/FF1C1C1C ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=6,6,6,6 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyButtonGroup||3 => pres[0,1,2,3,4,5,7,8,12,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF60A5FA/1/0 rad=6/6,6,6,6 pad=6,6,6,6 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=FF60A5FA/2/0
-TyButtonGroup||4 => pres[0,1,2,3,4,5,7,8,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=6,6,6,6 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyButtonGroup||4 => pres[0,1,2,3,4,5,7,8,9,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=6,6,6,6 fnt=/9/400 op=500 sh=00000000/0/0,0 ol=00000000/0/0
 TyUpDown||0 => pres[0,1,2,3,4,5,7,8,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=6,6,6,6 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyUpDown||1 => pres[0,1,2,3,4,5,7,8,] bg=k1/FF303030 ut=0 txt=FFE5E7EB bd=FF56565C/1/0 rad=6/6,6,6,6 pad=6,6,6,6 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyUpDown||2 => pres[0,1,2,3,4,5,7,8,] bg=k1/FF1C1C1C ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=6,6,6,6 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyUpDown||3 => pres[0,1,2,3,4,5,7,8,12,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF60A5FA/1/0 rad=6/6,6,6,6 pad=6,6,6,6 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=FF60A5FA/2/0
-TyUpDown||4 => pres[0,1,2,3,4,5,7,8,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=6,6,6,6 fnt=/9/400 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
+TyUpDown||4 => pres[0,1,2,3,4,5,7,8,9,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=6,6,6,6 fnt=/9/400 op=500 sh=00000000/0/0,0 ol=00000000/0/0
 TyChart||0 => pres[0,1,2,3,4,5,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=8,8,8,8 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyChart||1 => pres[0,1,2,3,4,5,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=8,8,8,8 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0
 TyChart||2 => pres[0,1,2,3,4,5,] bg=k1/FF1E1E1E ut=0 txt=FFE5E7EB bd=FF3F3F46/1/0 rad=6/6,6,6,6 pad=8,8,8,8 fnt=/0/0 op=1000 sh=00000000/0/0,0 ol=00000000/0/0

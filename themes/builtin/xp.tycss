@@ -121,15 +121,7 @@ TyButton.primary, TySpeedButton.primary, TyGlyphContainerButton.primary, TyRibbo
   border-radius: var(--radius);
   padding: 5px 12px;
   font-weight: normal;
-}
-TyButton.primary:hover, TySpeedButton.primary:hover, TyGlyphContainerButton.primary:hover,
-TyRibbonAppMenu.primary:hover    { background: linear-gradient(90deg, lighten(var(--accent), 34%) 0%, lighten(var(--accent), 8%) 100%); border-color: #E0A020; }
-TyButton.primary:active, TySpeedButton.primary:active, TyGlyphContainerButton.primary:active,
-TyRibbonAppMenu.primary:active   { background: linear-gradient(90deg, darken(var(--accent), 8%) 0%, darken(var(--accent), 18%) 100%); }
-TyButton.primary:focus, TySpeedButton.primary:focus, TyGlyphContainerButton.primary:focus,
-TyRibbonAppMenu.primary:focus    { outline: 2px var(--focus); outline-offset: 1px; }
-TyButton.primary:disabled, TySpeedButton.primary:disabled,
-TyGlyphContainerButton.primary:disabled, TyRibbonAppMenu.primary:disabled { opacity: 0.5; }
+}TyButton.primary:hover, TySpeedButton.primary:hover, TyGlyphContainerButton.primary:hover, TyRibbonAppMenu.primary:hover, TyButtonGroup.primary:hover, TyUpDown.primary:hover    { background: linear-gradient(90deg, lighten(var(--accent), 34%) 0%, lighten(var(--accent), 8%) 100%); border-color: #E0A020; }TyButton.primary:active, TySpeedButton.primary:active, TyGlyphContainerButton.primary:active, TyRibbonAppMenu.primary:active, TyButtonGroup.primary:active, TyUpDown.primary:active   { background: linear-gradient(90deg, darken(var(--accent), 8%) 0%, darken(var(--accent), 18%) 100%); }TyButton.primary:focus, TySpeedButton.primary:focus, TyGlyphContainerButton.primary:focus, TyRibbonAppMenu.primary:focus, TyButtonGroup.primary:focus, TyUpDown.primary:focus    { outline: 2px var(--focus); outline-offset: 1px; }TyButton.primary:disabled, TySpeedButton.primary:disabled, TyGlyphContainerButton.primary:disabled, TyRibbonAppMenu.primary:disabled, TyButtonGroup.primary:disabled, TyUpDown.primary:disabled { opacity: 0.5; }
 
 /* Danger = the primary button cut from the glossy Luna close-button red instead of the blue. */
 TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAppMenu.danger, TyButtonGroup.danger, TyUpDown.danger {
@@ -140,15 +132,7 @@ TyButton.danger, TySpeedButton.danger, TyGlyphContainerButton.danger, TyRibbonAp
   border-radius: var(--radius);
   padding: 5px 12px;
   font-weight: normal;
-}
-TyButton.danger:hover, TySpeedButton.danger:hover, TyGlyphContainerButton.danger:hover,
-TyRibbonAppMenu.danger:hover    { background: linear-gradient(90deg, lighten(var(--danger), 34%) 0%, lighten(var(--danger), 8%) 100%); border-color: #E0A020; }
-TyButton.danger:active, TySpeedButton.danger:active, TyGlyphContainerButton.danger:active,
-TyRibbonAppMenu.danger:active   { background: linear-gradient(90deg, darken(var(--danger), 8%) 0%, darken(var(--danger), 18%) 100%); }
-TyButton.danger:focus, TySpeedButton.danger:focus, TyGlyphContainerButton.danger:focus,
-TyRibbonAppMenu.danger:focus    { outline: 2px var(--focus); outline-offset: 1px; }
-TyButton.danger:disabled, TySpeedButton.danger:disabled, TyGlyphContainerButton.danger:disabled,
-TyRibbonAppMenu.danger:disabled { opacity: 0.5; }
+}TyButton.danger:hover, TySpeedButton.danger:hover, TyGlyphContainerButton.danger:hover, TyRibbonAppMenu.danger:hover, TyButtonGroup.danger:hover, TyUpDown.danger:hover    { background: linear-gradient(90deg, lighten(var(--danger), 34%) 0%, lighten(var(--danger), 8%) 100%); border-color: #E0A020; }TyButton.danger:active, TySpeedButton.danger:active, TyGlyphContainerButton.danger:active, TyRibbonAppMenu.danger:active, TyButtonGroup.danger:active, TyUpDown.danger:active   { background: linear-gradient(90deg, darken(var(--danger), 8%) 0%, darken(var(--danger), 18%) 100%); }TyButton.danger:focus, TySpeedButton.danger:focus, TyGlyphContainerButton.danger:focus, TyRibbonAppMenu.danger:focus, TyButtonGroup.danger:focus, TyUpDown.danger:focus    { outline: 2px var(--focus); outline-offset: 1px; }TyButton.danger:disabled, TySpeedButton.danger:disabled, TyGlyphContainerButton.danger:disabled, TyRibbonAppMenu.danger:disabled, TyButtonGroup.danger:disabled, TyUpDown.danger:disabled { opacity: 0.5; }
 
 /* Ghost: transparent with accent text; a soft blue wash on touch. */
 TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMenu.ghost, TyButtonGroup.ghost, TyUpDown.ghost {
@@ -159,17 +143,7 @@ TyButton.ghost, TySpeedButton.ghost, TyGlyphContainerButton.ghost, TyRibbonAppMe
   border-radius: var(--radius);
   padding: 5px 12px;
   font-weight: normal;
-}
-TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover,
-TyRibbonAppMenu.ghost:hover    { background: alpha(var(--accent), 0.12); border-color: alpha(var(--accent), 0.40); }
-TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active,
-TyRibbonAppMenu.ghost:active   { background: alpha(var(--accent), 0.20); }
-TyButton.ghost:selected, TySpeedButton.ghost:selected, TyGlyphContainerButton.ghost:selected,
-TyRibbonAppMenu.ghost:selected { background: alpha(var(--accent), 0.20); border-color: var(--accent); }
-TyButton.ghost:focus, TySpeedButton.ghost:focus, TyGlyphContainerButton.ghost:focus,
-TyRibbonAppMenu.ghost:focus    { outline: 2px var(--focus); outline-offset: 1px; }
-TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled,
-TyRibbonAppMenu.ghost:disabled { opacity: 0.5; }
+}TyButton.ghost:hover, TySpeedButton.ghost:hover, TyGlyphContainerButton.ghost:hover, TyRibbonAppMenu.ghost:hover, TyButtonGroup.ghost:hover, TyUpDown.ghost:hover    { background: alpha(var(--accent), 0.12); border-color: alpha(var(--accent), 0.40); }TyButton.ghost:active, TySpeedButton.ghost:active, TyGlyphContainerButton.ghost:active, TyRibbonAppMenu.ghost:active, TyButtonGroup.ghost:active, TyUpDown.ghost:active   { background: alpha(var(--accent), 0.20); }TyButton.ghost:selected, TySpeedButton.ghost:selected, TyGlyphContainerButton.ghost:selected, TyRibbonAppMenu.ghost:selected, TyButtonGroup.ghost:selected, TyUpDown.ghost:selected { background: alpha(var(--accent), 0.20); border-color: var(--accent); }TyButton.ghost:focus, TySpeedButton.ghost:focus, TyGlyphContainerButton.ghost:focus, TyRibbonAppMenu.ghost:focus, TyButtonGroup.ghost:focus, TyUpDown.ghost:focus    { outline: 2px var(--focus); outline-offset: 1px; }TyButton.ghost:disabled, TySpeedButton.ghost:disabled, TyGlyphContainerButton.ghost:disabled, TyRibbonAppMenu.ghost:disabled, TyButtonGroup.ghost:disabled, TyUpDown.ghost:disabled { opacity: 0.5; }
 
 /* Fields: crisp white wells, steel-blue border, orange focus edge. */
 TyEdit {
