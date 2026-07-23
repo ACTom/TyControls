@@ -136,7 +136,7 @@ TyTab:active { background: var(--surface); color: var(--accent); }  /* 选中：
 /* TyTabClose：关闭 × 悬停时的令牌驱动底片（--overlay-hover 填充 + --radius 圆角） */
 ```
 
-**渲染细节：** 控件顶部为高 `TabHeight` 的页签条，其下绘制内容区外框（比页签条底部上叠 1px，让选中页签与下方框体视觉衔接）。页签头宽度 = 文本宽度 + `2×padding`，最小 `TyTabMinWidth`；可关闭时右侧预留关闭 × 槽位。页签总宽超过控件宽度时，两端出现左右箭头（`tgArrowLeft`/`tgArrowRight`），支持点击箭头、滚轮、`ScrollTabIntoView` 横向滚动。关闭 × 用 `tgClose` 字形以 `TextColor` 绘制，悬停时其下垫一块 `TyTabClose` 令牌片。**只有页签头背景参与淡入动画**，文本 / 字形 / 几何不受影响。
+**渲染细节：** 控件顶部为高 `TabHeight` 的页签条，其下**只画一条基线**（用 `TyTabControl` 的 `border-color` / `border-width`，落在页签条底部上叠 1px 处），**不画内容区外框** —— 本控件不承载页面，画框只会在页签下方留一个空盒子（`Height > TabHeight` 时尤其明显）。托管页面的 `TTyPageControl` 仍然画完整外框，两者由基类 `HasPageBody` 区分。因此把 `Height` 设成等于 `TabHeight` 最干净：页签条就是控件本身，下方内容由宿主自己摆放。页签头宽度 = 文本宽度 + `2×padding`，最小 `TyTabMinWidth`；可关闭时右侧预留关闭 × 槽位。页签总宽超过控件宽度时，两端出现左右箭头（`tgArrowLeft`/`tgArrowRight`），支持点击箭头、滚轮、`ScrollTabIntoView` 横向滚动。关闭 × 用 `tgClose` 字形以 `TextColor` 绘制，悬停时其下垫一块 `TyTabClose` 令牌片。**只有页签头背景参与淡入动画**，文本 / 字形 / 几何不受影响。
 
 ---
 

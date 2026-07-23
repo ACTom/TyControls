@@ -15,6 +15,10 @@ type
     procedure TabsListChanged(Sender: TObject);
   protected
     function GetStyleTypeKey: string; override;
+    { No pages — see the class comment. Without this the header engine would frame
+      the area below the tabs as a page container, i.e. an empty box under the strip
+      (visible whenever Height > TabHeight). }
+    function HasPageBody: Boolean; override;
     function GetTabCount: Integer; override;
     function GetTabCaption(AIndex: Integer): string; override;
     procedure DoSelectTab(AIndex: Integer); override;
@@ -50,6 +54,11 @@ end;
 function TTyTabSet.GetStyleTypeKey: string;
 begin
   Result := 'TyTabControl';
+end;
+
+function TTyTabSet.HasPageBody: Boolean;
+begin
+  Result := False;
 end;
 
 function TTyTabSet.GetTabCount: Integer;

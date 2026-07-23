@@ -107,6 +107,12 @@ type
       right by this much so a subclass can draw its own leftmost element there (e.g. a
       ribbon "File" tab). Default 0. }
     function HeaderLeftInset: Integer; virtual;
+    { Does anything live BELOW the header band? A pager (TTyPageControl) hosts its
+      pages there, so the area is framed as the page container. A caption-only strip
+      (TTyTabSet) hosts nothing: framing it would draw an empty box under the tabs.
+      Strip-only mode keeps the frame's TOP border as a baseline rail — the tabs must
+      still sit on a line — and drops the rest of the box. }
+    function HasPageBody: Boolean; virtual;
     procedure SetController(AValue: TTyStyleController); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -286,6 +292,11 @@ end;
 function TTyCustomTabStrip.HeaderLeftInset: Integer;
 begin
   Result := 0;
+end;
+
+function TTyCustomTabStrip.HasPageBody: Boolean;
+begin
+  Result := True;
 end;
 
 procedure TTyCustomTabStrip.EnsureTimer;
@@ -749,7 +760,8 @@ var
   W, H, TabH, I, ContentTop: Integer;
   HdrRect, CloseRect, TextRect, BandRect, SavedClip: TRect;
   TabStates: TTyStateSet;
-  CloseHi: TTyFill;
+  CloseHi, BaseFill: TTyFill;
+  BaseW: Integer;
   FadeEased: Single;
   disp: string;
   mp: Integer;
@@ -781,7 +793,26 @@ begin
     if ContentTop < 0 then ContentTop := 0;
     if not FillSharpBackdrop(P, Rect(0, ContentTop, W, H)) then
       TyFillParentBg(Self, P, Rect(0, ContentTop, W, H), BoxStyle);
-    DrawFrame(P, Rect(0, ContentTop, W, H), BoxStyle);
+    if HasPageBody then
+      DrawFrame(P, Rect(0, ContentTop, W, H), BoxStyle)
+    else
+    begin
+      { Caption-only strip: no page container, so no box. Keep just the frame's top
+        border as a baseline the tabs sit on — same pixel row, same themed colour and
+        width, so the rail stays and only the empty body goes. Laid down as a crisp
+        fill rather than StrokeBorder's antialiased edge (a hairline rail reads
+        sharper that way, and there is no rounded box left for it to follow). Drawn
+        BEFORE the headers, as the frame was, so an active tab still merges into it. }
+      if (TabH > 0) and TyBorderVisible(BoxStyle) then
+      begin
+        BaseW := MulDiv(BoxStyle.BorderWidth, APPI, 96);
+        if BaseW < 1 then BaseW := 1;
+        BaseFill := Default(TTyFill);
+        BaseFill.Kind  := tfkSolid;
+        BaseFill.Color := BoxStyle.BorderColor;
+        P.FillBackground(Rect(0, ContentTop, W, ContentTop + BaseW), BaseFill, 0);
+      end;
+    end;
 
     { TabHeight = 0: no strip at all — skip every header. The pages already fill the control
       (AdjustClientRect adds nothing), so there is nothing to draw and nothing to clip. }

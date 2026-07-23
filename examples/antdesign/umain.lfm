@@ -1062,8 +1062,8 @@ object MainForm: TMainForm
           end
           object NavToolBar: TTyToolBar
             Left = 0
-            Height = 44
-            Top = 28
+            Height = 54
+            Top = 38
             Width = 805
             TabOrder = 1
             ButtonHeight = 38
@@ -1106,18 +1106,17 @@ object MainForm: TMainForm
           end
           object CardTabs: TTyCard
             Left = 12
-            Height = 230
-            Top = 88
+            Height = 252
+            Top = 104
             Width = 514
             TabOrder = 2
             Title = '标签页(TTyTabSet)'
             object TabsDemo: TTyTabSet
               Left = 16
-              Height = 40
+              Height = 38
               Top = 74
               Width = 482
               TabOrder = 0
-              TabHeight = 32
               OnChange = TabsDemoChange
               Tabs.Strings = (
                 '概览'
@@ -1127,8 +1126,8 @@ object MainForm: TMainForm
             end
             object TabsBody: TTyPanel
               Left = 16
-              Height = 108
-              Top = 122
+              Height = 104
+              Top = 124
               Width = 482
               TabOrder = 1
               object LblTabsBody: TTyLabel
@@ -1144,8 +1143,8 @@ object MainForm: TMainForm
           end
           object CardSeg: TTyCard
             Left = 538
-            Height = 230
-            Top = 88
+            Height = 252
+            Top = 104
             Width = 515
             TabOrder = 3
             Title = '分段控制器(TTySegmented)'
@@ -1173,7 +1172,7 @@ object MainForm: TMainForm
             object LblSegTitle: TTyLabel
               Left = 16
               Height = 52
-              Top = 164
+              Top = 170
               Width = 483
               Caption = '切一个值,不是切一页 —— 分段控制器是"选一个",不承载页面。'
               Layout = tlTop
@@ -1182,8 +1181,8 @@ object MainForm: TMainForm
           end
           object CardSteps: TTyCard
             Left = 12
-            Height = 186
-            Top = 328
+            Height = 210
+            Top = 368
             Width = 514
             TabOrder = 4
             Title = '步骤条(TTySteps)'
@@ -1214,8 +1213,8 @@ object MainForm: TMainForm
           end
           object CardCrumb: TTyCard
             Left = 538
-            Height = 186
-            Top = 328
+            Height = 210
+            Top = 368
             Width = 515
             TabOrder = 5
             Title = '面包屑(TTyBreadcrumb)'
@@ -1244,7 +1243,7 @@ object MainForm: TMainForm
           object LblNavNote: TTyLabel
             Left = 12
             Height = 90
-            Top = 528
+            Top = 590
             Width = 1041
             Caption = 'TTyPageControl 就是这块内容区本身 —— 页签条已隐藏(TabHeight=0),由左侧 Sider 的选中项切页。TTyTabSet 语义不同:它是纯页签条,不承载页面 —— 上面那块内容面板是宿主自己按 TabIndex 换的。'
             Layout = tlTop
